@@ -48,7 +48,7 @@ func (s *testFilterSuite) SetUpSuite(c *C) {
 	mock.ExpectClose()
 	con, err := db.Conn(context.Background())
 	c.Assert(err, IsNil)
-	s.baseConn = conn.NewBaseConn(con, nil)
+	s.baseConn = conn.NewBaseConnForTest(con, nil)
 }
 
 func (s *testFilterSuite) TearDownSuite(c *C) {

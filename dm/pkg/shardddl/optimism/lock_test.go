@@ -25,7 +25,7 @@ import (
 	"github.com/pingcap/tidb/parser/model"
 	"github.com/pingcap/tidb/util/mock"
 	"github.com/pingcap/tidb/util/schemacmp"
-	"github.com/pingcap/tiflow/dm/config"
+	"github.com/pingcap/tiflow/dm/config/dbconfig"
 	"github.com/pingcap/tiflow/dm/pkg/conn"
 	"github.com/pingcap/tiflow/dm/pkg/cputil"
 	"github.com/pingcap/tiflow/dm/pkg/log"
@@ -2094,7 +2094,7 @@ func (t *testLock) TestFetchTableInfo(c *C) {
 	c.Assert(ti, IsNil)
 
 	// table info not exist
-	l = NewLock(etcdTestCli, ID, task, downSchema, downTable, schemacmp.Encode(ti0), tts, &DownstreamMeta{dbConfig: &config.DBConfig{}, meta: meta})
+	l = NewLock(etcdTestCli, ID, task, downSchema, downTable, schemacmp.Encode(ti0), tts, &DownstreamMeta{dbConfig: &dbconfig.DBConfig{}, meta: meta})
 	conn.DefaultDBProvider = &conn.DefaultDBProviderImpl{}
 	mock := conn.InitMockDB(c)
 	mock.ExpectQuery(query).WithArgs(source, schema, tbls[0]).WillReturnRows(sqlmock.NewRows([]string{"table_info"}))
@@ -2103,7 +2103,7 @@ func (t *testLock) TestFetchTableInfo(c *C) {
 	c.Assert(ti, IsNil)
 
 	// null table info
-	l = NewLock(etcdTestCli, ID, task, downSchema, downTable, schemacmp.Encode(ti0), tts, &DownstreamMeta{dbConfig: &config.DBConfig{}, meta: meta})
+	l = NewLock(etcdTestCli, ID, task, downSchema, downTable, schemacmp.Encode(ti0), tts, &DownstreamMeta{dbConfig: &dbconfig.DBConfig{}, meta: meta})
 	conn.DefaultDBProvider = &conn.DefaultDBProviderImpl{}
 	mock = conn.InitMockDB(c)
 	mock.ExpectQuery(query).WithArgs(source, schema, tbls[0]).WillReturnRows(sqlmock.NewRows([]string{"table_info"}).AddRow("null"))
