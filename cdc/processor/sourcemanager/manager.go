@@ -46,6 +46,8 @@ type SourceManager struct {
 	pullers sync.Map
 	// Used to report the error to the processor.
 	errChan chan error
+	// Used to indicate whether the changefeed is in BDR mode.
+	bdrMode bool
 }
 
 // New creates a new source manager.
@@ -55,6 +57,7 @@ func New(
 	mg entry.MounterGroup,
 	engine engine.SortEngine,
 	errChan chan error,
+	bdrMode bool,
 ) *SourceManager {
 	return &SourceManager{
 		changefeedID: changefeedID,
@@ -62,12 +65,13 @@ func New(
 		mg:           mg,
 		engine:       engine,
 		errChan:      errChan,
+		bdrMode:      bdrMode,
 	}
 }
 
 // AddTable adds a table to the source manager. Start puller and register table to the engine.
 func (m *SourceManager) AddTable(ctx cdccontext.Context, tableID model.TableID, tableName string, startTs model.Ts) {
-	p := pullerwrapper.NewPullerWrapper(m.changefeedID, tableID, tableName, startTs)
+	p := pullerwrapper.NewPullerWrapper(m.changefeedID, tableID, tableName, startTs, m.bdrMode)
 	p.Start(ctx, m.up, m.engine, m.errChan)
 	m.pullers.Store(tableID, p)
 	m.engine.AddTable(tableID)
