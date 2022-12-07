@@ -233,13 +233,14 @@ func GetPosAndGs(ctx *tcontext.Context, db *BaseDB, flavor string) (
 	if err != nil {
 		return
 	}
+	if pos > math.MaxUint32 {
+		ctx.L().Warn("the pos returned by GetMasterStatus beyonds the range of uint32")
+	}
 	binlogPos = gmysql.Position{
 		Name: binlogName,
 		Pos:  uint32(pos),
 	}
-	if binlogPos.Pos > math.MaxUint32 {
-		ctx.L().Warn("binlog position beyond the range of uint32")
-	}
+
 	gs, err = gtid.ParserGTID(flavor, gtidStr)
 	return
 }
