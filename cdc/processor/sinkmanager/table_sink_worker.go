@@ -452,7 +452,7 @@ func (w *sinkWorker) fetchFromCache(
 				task.tableSink.receivedEventCount.Add(int64(popRes.pushCount))
 				w.metricRedoEventCacheHit.Add(float64(popRes.size))
 				task.tableSink.appendRowChangedEvents(popRes.events...)
-				w.memQuota.record(task.tableID, model.ResolvedTs{Ts: popRes.boundary.CommitTs}, popRes.size)
+				w.memQuota.record(task.tableID, model.ResolvedTs{Ts: popRes.boundary.CommitTs}, popRes.releaseSize)
 			}
 			err = task.tableSink.updateResolvedTs(model.ResolvedTs{Ts: popRes.boundary.CommitTs})
 			if err == nil {

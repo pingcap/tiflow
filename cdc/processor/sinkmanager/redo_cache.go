@@ -54,10 +54,11 @@ type eventAppender struct {
 }
 
 type popResult struct {
-	events    []*model.RowChangedEvent
-	size      uint64
-	pushCount int
-	success   bool
+	events      []*model.RowChangedEvent
+	size        uint64 // size of events.
+	releaseSize uint64 // size of all released events.
+	pushCount   int
+	success     bool
 	// If success, boundary is the upperBound of poped events.
 	// Otherwise, boundary is the lowerBound of cached events.
 	boundary engine.Position
@@ -146,9 +147,8 @@ func (e *eventAppender) pop(lowerBound, upperBound engine.Position) (res popResu
 		return pos.Compare(lowerBound) >= 0
 	})
 
-	deallocated := uint64(0)
 	for i := 0; i < startIdx; i++ {
-		deallocated += e.sizes[i]
+		res.releaseSize += e.sizes[i]
 	}
 
 	var endIdx int
@@ -164,7 +164,7 @@ func (e *eventAppender) pop(lowerBound, upperBound engine.Position) (res popResu
 			res.size += e.sizes[i]
 			res.pushCount += int(e.pushCounts[i])
 		}
-		deallocated += res.size
+		res.releaseSize += res.size
 	}
 
 	e.events = e.events[endIdx:]
@@ -173,8 +173,8 @@ func (e *eventAppender) pop(lowerBound, upperBound engine.Position) (res popResu
 	e.readyCount -= endIdx
 	e.lowerBound = res.boundary.Next()
 
-	atomic.AddUint64(&e.cache.allocated, ^(deallocated - 1))
-	e.cache.metricRedoEventCache.Sub(float64(deallocated))
+	atomic.AddUint64(&e.cache.allocated, ^(res.releaseSize - 1))
+	e.cache.metricRedoEventCache.Sub(float64(res.releaseSize))
 	return
 }
 
