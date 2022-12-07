@@ -33,6 +33,8 @@ const _ = proto.GoGoProtoPackageIsVersion3 // please upgrade the proto package
 //	┌─────────┐   ┌──────────┐   ┌─────────────┐
 //	│ Stopped │ <─┤ Stopping │ <─┤ Replicating │
 //	└─────────┘   └──────────┘   └─────────────┘
+//
+// TODO rename to TableSpanState.
 type TableState int32
 
 const (
@@ -239,6 +241,7 @@ func (m *Stats) GetBarrierTs() github_com_pingcap_tiflow_cdc_model.Ts {
 }
 
 // TableStatus is the running status of a table.
+// TODO rename to TableStatus.
 type TableStatus struct {
 	TableID    github_com_pingcap_tiflow_cdc_model.TableID `protobuf:"varint,1,opt,name=table_id,json=tableId,proto3,casttype=github.com/pingcap/tiflow/cdc/model.TableID" json:"table_id,omitempty"`
 	Span       Span                                        `protobuf:"bytes,5,opt,name=span,proto3" json:"span"`
