@@ -306,6 +306,7 @@ type shardGroup struct {
 	mu                  sync.RWMutex
 	normalTables        map[metadata.SourceTable]string
 	conflictTables      map[metadata.SourceTable]string
+	targetTable         metadata.TargetTable
 	tableAgent          TableAgent
 	droppedColumnsStore *metadata.DroppedColumnsStore
 	id                  frameModel.MasterID
@@ -320,6 +321,7 @@ func newShardGroup(ctx context.Context, id frameModel.MasterID, cfg *config.JobC
 ) (*shardGroup, error) {
 	g := &shardGroup{
 		tableAgent:          tableAgent,
+		targetTable:         targetTable,
 		normalTables:        make(map[metadata.SourceTable]string),
 		conflictTables:      make(map[metadata.SourceTable]string),
 		droppedColumnsStore: metadata.NewDroppedColumnsStore(kvClient, targetTable),
@@ -835,8 +837,8 @@ func (g *shardGroup) redirectDDLs(ctx context.Context, sourceTable metadata.Sour
 			continue
 		}
 		req := &dmproto.RedirectDDLRequest{
-			Schema:        tb.Schema,
-			Table:         tb.Table,
+			SourceTable:   sourceTable,
+			TargetTable:   g.targetTable,
 			ConflictStage: optimism.ConflictResolved,
 		}
 

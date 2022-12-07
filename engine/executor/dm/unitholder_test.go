@@ -352,9 +352,9 @@ func (m *mockUnitHolder) BinlogSchema(ctx context.Context, req *dmproto.BinlogSc
 }
 
 // RedirectDDL implement Holder.RedirectDDL
-func (m *mockUnitHolder) RedirectDDL(ctx context.Context, req *dmproto.RedirectDDLRequest) (string, error) {
+func (m *mockUnitHolder) RedirectDDL(ctx context.Context, req *dmproto.RedirectDDLRequest) error {
 	m.Lock()
 	defer m.Unlock()
 	args := m.Called()
-	return args.Get(0).(string), args.Error(1)
+	return args.Error(0)
 }

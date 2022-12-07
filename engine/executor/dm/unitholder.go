@@ -31,7 +31,7 @@ import (
 	"github.com/pingcap/tiflow/engine/framework"
 	frameModel "github.com/pingcap/tiflow/engine/framework/model"
 	"github.com/pingcap/tiflow/engine/jobmaster/dm/metadata"
-	dmpkg "github.com/pingcap/tiflow/engine/pkg/dm/proto"
+	dmproto "github.com/pingcap/tiflow/engine/pkg/dm/proto"
 	"github.com/pingcap/tiflow/pkg/errors"
 	"go.uber.org/zap"
 )
@@ -48,9 +48,9 @@ type unitHolder interface {
 	// if so, it will call Status.
 	// this should be an async func.
 	CheckAndUpdateStatus()
-	Binlog(ctx context.Context, req *dmpkg.BinlogTaskRequest) (string, error)
-	BinlogSchema(ctx context.Context, req *dmpkg.BinlogSchemaTaskRequest) (string, error)
-	RedirectDDL(ctx context.Context, req *dmpkg.RedirectDDLRequest) (string, error)
+	Binlog(ctx context.Context, req *dmproto.BinlogTaskRequest) (string, error)
+	BinlogSchema(ctx context.Context, req *dmproto.BinlogSchemaTaskRequest) (string, error)
+	RedirectDDL(ctx context.Context, req *dmproto.RedirectDDLRequest) error
 }
 
 var (
@@ -291,7 +291,7 @@ func (u *unitHolderImpl) CheckAndUpdateStatus() {
 }
 
 // Binlog implements the binlog api for syncer unit.
-func (u *unitHolderImpl) Binlog(ctx context.Context, req *dmpkg.BinlogTaskRequest) (string, error) {
+func (u *unitHolderImpl) Binlog(ctx context.Context, req *dmproto.BinlogTaskRequest) (string, error) {
 	syncUnit, ok := u.unit.(*syncer.Syncer)
 	if !ok {
 		return "", errors.Errorf("such operation is only available for syncer. current unit is %s", u.unit.Type())
@@ -310,7 +310,7 @@ func (u *unitHolderImpl) Binlog(ctx context.Context, req *dmpkg.BinlogTaskReques
 }
 
 // BinlogSchema implements the binlog schema api.
-func (u *unitHolderImpl) BinlogSchema(ctx context.Context, req *dmpkg.BinlogSchemaTaskRequest) (string, error) {
+func (u *unitHolderImpl) BinlogSchema(ctx context.Context, req *dmproto.BinlogSchemaTaskRequest) (string, error) {
 	syncUnit, ok := u.unit.(*syncer.Syncer)
 	if !ok {
 		return "", errors.Errorf("such operation is only available for syncer. current unit is %s", u.unit.Type())
@@ -325,15 +325,19 @@ func (u *unitHolderImpl) BinlogSchema(ctx context.Context, req *dmpkg.BinlogSche
 }
 
 // RedirectDDL implements the redirect ddl api.
-func (u *unitHolderImpl) RedirectDDL(ctx context.Context, req *dmpkg.RedirectDDLRequest) (string, error) {
-	// syncUnit, ok := u.unit.(*syncer.Syncer)
-	//
-	//	if !ok {
-	//		return "", errors.Errorf("such operation is only available for syncer. current unit is %s", u.unit.Type())
-	//	}
-	//
-	// return syncUnit.RedirectDDL(ctx, req)
-	return "", nil
+func (u *unitHolderImpl) RedirectDDL(ctx context.Context, req *dmproto.RedirectDDLRequest) error {
+	syncUnit, ok := u.unit.(*syncer.Syncer)
+
+	if !ok {
+		return errors.Errorf("such operation is only available for syncer. current unit is %s", u.unit.Type())
+	}
+
+	stage, _ := u.Stage()
+	if stage != metadata.StageRunning {
+		return errors.Errorf("current stage is %s but not running, invalid", stage)
+	}
+
+	return syncUnit.RedirectDDL(ctx, req)
 }
 
 func filterErrors(r *pb.ProcessResult) {

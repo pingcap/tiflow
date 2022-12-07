@@ -101,9 +101,9 @@ func (w *dmWorker) BinlogSchemaTask(ctx context.Context, req *dmproto.BinlogSche
 }
 
 func (w *dmWorker) RedirectDDL(ctx context.Context, req *dmproto.RedirectDDLRequest) *dmproto.CommonTaskResponse {
-	msg, err := w.unitHolder.RedirectDDL(ctx, req)
+	err := w.unitHolder.RedirectDDL(ctx, req)
 	if err != nil {
 		return &dmproto.CommonTaskResponse{ErrorMsg: err.Error()}
 	}
-	return &dmproto.CommonTaskResponse{Msg: msg}
+	return &dmproto.CommonTaskResponse{}
 }

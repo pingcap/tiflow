@@ -39,6 +39,7 @@ import (
 	"github.com/pingcap/tiflow/dm/pkg/storage"
 	"github.com/pingcap/tiflow/dm/pkg/terror"
 	"github.com/pingcap/tiflow/dm/pkg/utils"
+	"github.com/pingcap/tiflow/engine/pkg/dm/message"
 	"github.com/pingcap/tiflow/engine/pkg/promutil"
 	"github.com/pingcap/tiflow/pkg/version"
 	"go.uber.org/atomic"
@@ -173,6 +174,7 @@ type SubTaskConfig struct {
 	ExtStorage      extstorage.ExternalStorage `toml:"-" json:"-"`
 	MetricsFactory  promutil.Factory           `toml:"-" json:"-"`
 	FrameworkLogger *zap.Logger                `toml:"-" json:"-"`
+	MessageAgent    message.MessageAgent       `toml:"-" json:"-"`
 	// members below are injected by dataflow engine, UUID should be unique in
 	// one go runtime.
 	// IOTotalBytes is used build TCPConnWithIOCounter and UUID is used to as a

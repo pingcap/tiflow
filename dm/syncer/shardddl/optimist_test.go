@@ -70,7 +70,7 @@ func (t *testOptimist) TestOptimist(c *C) {
 		ID                    = fmt.Sprintf("%s-`%s`.`%s`", task, downSchema, downTable)
 
 		logger = log.L()
-		o      = NewOptimist(&logger, etcdTestCli, task, source)
+		o      = NewOptimist(&logger, etcdTestCli, nil, task, source)
 
 		p              = parser.New()
 		se             = mock.NewContext()
@@ -104,7 +104,8 @@ func (t *testOptimist) TestOptimist(c *C) {
 	c.Assert(err, IsNil)
 	c.Assert(stm, HasLen, 1)
 	c.Assert(stm[task], HasLen, 1)
-	c.Assert(stm[task][source], DeepEquals, o.tables)
+	ts := o.(*OptimistDM).tables
+	c.Assert(stm[task][source], DeepEquals, ts)
 
 	tables = o.Tables()
 	c.Assert(len(tables), Equals, 4)
@@ -182,7 +183,8 @@ func (t *testOptimist) TestOptimist(c *C) {
 	ifm, _, err = optimism.GetAllInfo(etcdTestCli)
 	c.Assert(err, IsNil)
 	c.Assert(ifm[task][source][infoDrop.UpSchema], IsNil)
-	c.Assert(o.tables.Tables[infoCreate.DownSchema][infoCreate.DownTable][infoCreate.UpSchema], IsNil)
+	ts = o.(*OptimistDM).tables
+	c.Assert(ts.Tables[infoCreate.DownSchema][infoCreate.DownTable][infoCreate.UpSchema], IsNil)
 
 	// put another info.
 	rev5, err := o.PutInfo(info2)

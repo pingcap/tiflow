@@ -215,7 +215,7 @@ type CoordinateDDLResponse struct {
 }
 
 type RedirectDDLRequest struct {
-	Schema        string
-	Table         string
+	SourceTable   metadata.SourceTable
+	TargetTable   metadata.TargetTable
 	ConflictStage optimism.ConflictStage
 }

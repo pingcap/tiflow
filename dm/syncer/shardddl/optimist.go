@@ -19,18 +19,42 @@ import (
 	"time"
 
 	"github.com/pingcap/tidb/parser/model"
+	"github.com/pingcap/tidb/util/schemacmp"
 	filter "github.com/pingcap/tidb/util/table-filter"
 	tcontext "github.com/pingcap/tiflow/dm/pkg/context"
 	"github.com/pingcap/tiflow/dm/pkg/etcdutil"
 	"github.com/pingcap/tiflow/dm/pkg/log"
 	"github.com/pingcap/tiflow/dm/pkg/shardddl/optimism"
 	"github.com/pingcap/tiflow/dm/pkg/utils"
+	"github.com/pingcap/tiflow/engine/jobmaster/dm/metadata"
+	"github.com/pingcap/tiflow/engine/pkg/dm/message"
+	dmproto "github.com/pingcap/tiflow/engine/pkg/dm/proto"
+	"github.com/pingcap/tiflow/pkg/errors"
 	clientv3 "go.etcd.io/etcd/client/v3"
 	"go.uber.org/zap"
 )
 
-// Optimist used to coordinate the shard DDL migration in optimism mode.
-type Optimist struct {
+type Optimist interface {
+	Init(sourceTables map[string]map[string]map[string]map[string]struct{}) error
+	Tables() [][]filter.Table
+	Reset()
+	ConstructInfo(upSchema, upTable, downSchema, downTable string,
+		ddls []string, tiBefore *model.TableInfo, tisAfter []*model.TableInfo,
+	) optimism.Info
+	PutInfo(info optimism.Info) (int64, error)
+	AddTable(info optimism.Info) (int64, error)
+	RemoveTable(info optimism.Info) (int64, error)
+	GetOperation(ctx context.Context, info optimism.Info, rev int64) (optimism.Operation, error)
+	GetRedirectOperation(ctx context.Context, info optimism.Info, rev int64)
+	DoneOperation(op optimism.Operation) error
+	PendingInfo() *optimism.Info
+	PendingOperation() *optimism.Operation
+	PendingRedirectOperation() (*optimism.Operation, string)
+	DoneRedirectOperation(targetTableID string)
+}
+
+// OptimistDM used to coordinate the shard DDL migration in optimism mode.
+type OptimistDM struct {
 	mu sync.RWMutex
 
 	logger log.Logger
@@ -51,8 +75,15 @@ type Optimist struct {
 }
 
 // NewOptimist creates a new Optimist instance.
-func NewOptimist(pLogger *log.Logger, cli *clientv3.Client, task, source string) *Optimist {
-	return &Optimist{
+func NewOptimist(pLogger *log.Logger, cli *clientv3.Client, messageAgent message.MessageAgent, task, source string) Optimist {
+	if messageAgent != nil {
+		return NewOptimistEngine(pLogger, messageAgent, task, source)
+	}
+	return NewOptimistDM(pLogger, cli, task, source)
+}
+
+func NewOptimistDM(pLogger *log.Logger, cli *clientv3.Client, task, source string) *OptimistDM {
+	return &OptimistDM{
 		logger: pLogger.WithFields(zap.String("component", "shard DDL optimist")),
 		cli:    cli,
 		task:   task,
@@ -63,7 +94,7 @@ func NewOptimist(pLogger *log.Logger, cli *clientv3.Client, task, source string)
 // Init initializes the optimist with source tables.
 // NOTE: this will PUT the initial source tables into etcd (and overwrite any previous existing tables).
 // NOTE: we do not remove source tables for `stop-task` now, may need to handle it for `remove-meta`.
-func (o *Optimist) Init(sourceTables map[string]map[string]map[string]map[string]struct{}) error {
+func (o *OptimistDM) Init(sourceTables map[string]map[string]map[string]map[string]struct{}) error {
 	o.tables = optimism.NewSourceTables(o.task, o.source)
 	for downSchema, downTables := range sourceTables {
 		for downTable, upSchemas := range downTables {
@@ -80,7 +111,7 @@ func (o *Optimist) Init(sourceTables map[string]map[string]map[string]map[string
 
 // Tables clone and return tables
 // first one is sourceTable, second one is targetTable.
-func (o *Optimist) Tables() [][]filter.Table {
+func (o *OptimistDM) Tables() [][]filter.Table {
 	o.mu.Lock()
 	defer o.mu.Unlock()
 
@@ -98,7 +129,7 @@ func (o *Optimist) Tables() [][]filter.Table {
 }
 
 // Reset resets the internal state of the optimist.
-func (o *Optimist) Reset() {
+func (o *OptimistDM) Reset() {
 	o.mu.Lock()
 	defer o.mu.Unlock()
 
@@ -109,14 +140,14 @@ func (o *Optimist) Reset() {
 }
 
 // ConstructInfo constructs a shard DDL info.
-func (o *Optimist) ConstructInfo(upSchema, upTable, downSchema, downTable string,
+func (o *OptimistDM) ConstructInfo(upSchema, upTable, downSchema, downTable string,
 	ddls []string, tiBefore *model.TableInfo, tisAfter []*model.TableInfo,
 ) optimism.Info {
 	return optimism.NewInfo(o.task, o.source, upSchema, upTable, downSchema, downTable, ddls, tiBefore, tisAfter)
 }
 
 // PutInfo puts the shard DDL info into etcd and returns the revision.
-func (o *Optimist) PutInfo(info optimism.Info) (int64, error) {
+func (o *OptimistDM) PutInfo(info optimism.Info) (int64, error) {
 	rev, err := optimism.PutInfo(o.cli, info)
 	if err != nil {
 		return 0, err
@@ -131,20 +162,20 @@ func (o *Optimist) PutInfo(info optimism.Info) (int64, error) {
 
 // AddTable adds the table for the info into source tables,
 // this is often called for `CREATE TABLE`.
-func (o *Optimist) AddTable(info optimism.Info) (int64, error) {
+func (o *OptimistDM) AddTable(info optimism.Info) (int64, error) {
 	o.tables.AddTable(info.UpSchema, info.UpTable, info.DownSchema, info.DownTable)
 	return optimism.PutSourceTables(o.cli, o.tables)
 }
 
 // RemoveTable removes the table for the info from source tables,
 // this is often called for `DROP TABLE`.
-func (o *Optimist) RemoveTable(info optimism.Info) (int64, error) {
+func (o *OptimistDM) RemoveTable(info optimism.Info) (int64, error) {
 	o.tables.RemoveTable(info.UpSchema, info.UpTable, info.DownSchema, info.DownTable)
 	return optimism.PutSourceTables(o.cli, o.tables)
 }
 
 // GetOperation gets the shard DDL lock operation relative to the shard DDL info.
-func (o *Optimist) GetOperation(ctx context.Context, info optimism.Info, rev int64) (optimism.Operation, error) {
+func (o *OptimistDM) GetOperation(ctx context.Context, info optimism.Info, rev int64) (optimism.Operation, error) {
 	ctx2, cancel2 := context.WithCancel(ctx)
 	defer cancel2()
 
@@ -165,7 +196,7 @@ func (o *Optimist) GetOperation(ctx context.Context, info optimism.Info, rev int
 	}
 }
 
-func (o *Optimist) GetRedirectOperation(ctx context.Context, info optimism.Info, rev int64) {
+func (o *OptimistDM) GetRedirectOperation(ctx context.Context, info optimism.Info, rev int64) {
 	ctx2, cancel2 := context.WithCancel(ctx)
 
 	ch := make(chan optimism.Operation, 1)
@@ -215,7 +246,7 @@ func (o *Optimist) GetRedirectOperation(ctx context.Context, info optimism.Info,
 }
 
 // DoneOperation marks the shard DDL lock operation as done.
-func (o *Optimist) DoneOperation(op optimism.Operation) error {
+func (o *OptimistDM) DoneOperation(op optimism.Operation) error {
 	op.Done = true
 	_, _, err := etcdutil.DoTxnWithRepeatable(o.cli, func(_ *tcontext.Context, cli *clientv3.Client) (interface{}, error) {
 		_, _, err := optimism.PutOperation(cli, false, op, 0)
@@ -234,7 +265,7 @@ func (o *Optimist) DoneOperation(op optimism.Operation) error {
 }
 
 // PendingInfo returns the shard DDL info which is pending to handle.
-func (o *Optimist) PendingInfo() *optimism.Info {
+func (o *OptimistDM) PendingInfo() *optimism.Info {
 	o.mu.RLock()
 	defer o.mu.RUnlock()
 
@@ -246,7 +277,7 @@ func (o *Optimist) PendingInfo() *optimism.Info {
 }
 
 // PendingOperation returns the shard DDL lock operation which is pending to handle.
-func (o *Optimist) PendingOperation() *optimism.Operation {
+func (o *OptimistDM) PendingOperation() *optimism.Operation {
 	o.mu.RLock()
 	defer o.mu.RUnlock()
 
@@ -258,7 +289,7 @@ func (o *Optimist) PendingOperation() *optimism.Operation {
 }
 
 // PendingRedirectOperation returns the shard DDL lock redirect operation which is pending to handle.
-func (o *Optimist) PendingRedirectOperation() (*optimism.Operation, string) {
+func (o *OptimistDM) PendingRedirectOperation() (*optimism.Operation, string) {
 	o.mu.RLock()
 	defer o.mu.RUnlock()
 
@@ -269,7 +300,7 @@ func (o *Optimist) PendingRedirectOperation() (*optimism.Operation, string) {
 }
 
 // saveRedirectOperation saves the redirect shard DDL lock operation.
-func (o *Optimist) saveRedirectOperation(targetTableID string, op *optimism.Operation) {
+func (o *OptimistDM) saveRedirectOperation(targetTableID string, op *optimism.Operation) {
 	o.logger.Info("receive redirection operation from master", zap.Stringer("op", op))
 	o.mu.Lock()
 	if _, ok := o.pendingRedirectCancelFunc[targetTableID]; ok {
@@ -280,7 +311,7 @@ func (o *Optimist) saveRedirectOperation(targetTableID string, op *optimism.Oper
 }
 
 // DoneRedirectOperation marks the redirect shard DDL lock operation as done.
-func (o *Optimist) DoneRedirectOperation(targetTableID string) {
+func (o *OptimistDM) DoneRedirectOperation(targetTableID string) {
 	o.mu.Lock()
 	if cancelFunc, ok := o.pendingRedirectCancelFunc[targetTableID]; ok {
 		cancelFunc()
@@ -294,7 +325,7 @@ func (o *Optimist) DoneRedirectOperation(targetTableID string) {
 //
 // NOTE: currently this function is not used because user will meet error at early version
 // if set unsupported case-sensitive.
-func (o *Optimist) CheckPersistentData(source string, schemas map[string]string, tables map[string]map[string]string) error {
+func (o *OptimistDM) CheckPersistentData(source string, schemas map[string]string, tables map[string]map[string]string) error {
 	if o.cli == nil {
 		return nil
 	}
@@ -314,4 +345,200 @@ func (o *Optimist) CheckPersistentData(source string, schemas map[string]string,
 	}
 
 	return optimism.CheckColumns(o.cli, source, schemas, tables)
+}
+
+type OptimistEngine struct {
+	mu     sync.RWMutex
+	logger log.Logger
+
+	task         string
+	source       string
+	messageAgent message.MessageAgent
+	jobID        string
+
+	// the shard DDL info which is pending to handle.
+	pendingInfo *optimism.Info
+	// the shard DDL lock operation which is pending to handle.
+	pendingOp          *optimism.Operation
+	pendingRedirectOps map[string]*optimism.Operation
+}
+
+func NewOptimistEngine(pLogger *log.Logger, messageAgent message.MessageAgent, task, source string) *OptimistEngine {
+	return &OptimistEngine{
+		logger:       pLogger.WithFields(zap.String("component", "shard DDL optimist")),
+		messageAgent: messageAgent,
+		task:         task,
+		source:       source,
+	}
+}
+
+func (o *OptimistEngine) Init(sourceTables map[string]map[string]map[string]map[string]struct{}) error {
+	return nil
+}
+
+func (o *OptimistEngine) Tables() [][]filter.Table {
+	return nil
+}
+
+func (o *OptimistEngine) Reset() {
+	o.mu.Lock()
+	defer o.mu.Unlock()
+
+	o.pendingInfo = nil
+	o.pendingOp = nil
+	o.pendingRedirectOps = make(map[string]*optimism.Operation)
+}
+
+func (o *OptimistEngine) ConstructInfo(upSchema, upTable, downSchema, downTable string,
+	ddls []string, tiBefore *model.TableInfo, tisAfter []*model.TableInfo,
+) optimism.Info {
+	return optimism.NewInfo(o.task, o.source, upSchema, upTable, downSchema, downTable, ddls, tiBefore, tisAfter)
+}
+
+func (o *OptimistEngine) PutInfo(info optimism.Info) (int64, error) {
+	tables := make([]string, 0, len(info.TableInfosAfter)+1)
+	tables = append(tables, schemacmp.Encode(info.TableInfoBefore).String())
+	for _, ti := range info.TableInfosAfter {
+		tables = append(tables, schemacmp.Encode(ti).String())
+	}
+	req := &dmproto.CoordinateDDLRequest{
+		TargetTable: metadata.TargetTable{Schema: info.DownSchema, Table: info.DownTable},
+		SourceTable: metadata.SourceTable{Source: info.Source, Schema: info.UpSchema, Table: info.UpTable},
+		Tables:      tables,
+		DDLs:        info.DDLs,
+		Type:        metadata.OtherDDL,
+	}
+
+	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+	defer cancel()
+	resp, err := o.messageAgent.SendRequest(ctx, o.jobID, dmproto.CoordinateDDL, req)
+	if err != nil {
+		return 0, err
+	}
+
+	coordinateResp := resp.(*dmproto.CoordinateDDLResponse)
+
+	o.mu.Lock()
+	o.pendingInfo = &info
+	o.pendingOp = &optimism.Operation{
+		ID:            utils.GenDDLLockID(info.Task, info.DownSchema, info.DownTable),
+		Task:          info.Task,
+		Source:        info.Source,
+		UpSchema:      info.UpSchema,
+		UpTable:       info.UpTable,
+		DDLs:          coordinateResp.DDLs,
+		ConflictStage: coordinateResp.ConflictStage,
+		ConflictMsg:   coordinateResp.ErrorMsg,
+		Done:          false,
+	}
+	o.mu.Unlock()
+	return 0, nil
+}
+
+func (o *OptimistEngine) AddTable(info optimism.Info) (int64, error) {
+	tables := make([]string, 0, len(info.TableInfosAfter)+1)
+	for _, ti := range info.TableInfosAfter {
+		tables = append(tables, schemacmp.Encode(ti).String())
+	}
+	req := &dmproto.CoordinateDDLRequest{
+		TargetTable: metadata.TargetTable{Schema: info.DownSchema, Table: info.DownTable},
+		SourceTable: metadata.SourceTable{Source: info.Source, Schema: info.UpSchema, Table: info.UpTable},
+		Tables:      tables,
+		DDLs:        info.DDLs,
+		Type:        metadata.CreateTable,
+	}
+
+	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+	defer cancel()
+	_, err := o.messageAgent.SendRequest(ctx, o.jobID, dmproto.CoordinateDDL, req)
+	return 0, err
+}
+
+func (o *OptimistEngine) RemoveTable(info optimism.Info) (int64, error) {
+	req := &dmproto.CoordinateDDLRequest{
+		TargetTable: metadata.TargetTable{Schema: info.DownSchema, Table: info.DownTable},
+		SourceTable: metadata.SourceTable{Source: info.Source, Schema: info.UpSchema, Table: info.UpTable},
+		DDLs:        info.DDLs,
+		Type:        metadata.DropTable,
+	}
+
+	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+	defer cancel()
+	_, err := o.messageAgent.SendRequest(ctx, o.jobID, dmproto.CoordinateDDL, req)
+	return 0, err
+}
+
+func (o *OptimistEngine) GetOperation(ctx context.Context, info optimism.Info, rev int64) (optimism.Operation, error) {
+	op := o.PendingOperation()
+	if op == nil {
+		return optimism.Operation{}, errors.New("no pending operation")
+	}
+	return *op, nil
+}
+
+func (o *OptimistEngine) DoneOperation(op optimism.Operation) error {
+	o.mu.Lock()
+	o.pendingInfo = nil
+	o.pendingOp = nil
+	o.mu.Unlock()
+	return nil
+}
+
+func (o *OptimistEngine) PendingInfo() *optimism.Info {
+	o.mu.RLock()
+	defer o.mu.RUnlock()
+
+	if o.pendingInfo == nil {
+		return nil
+	}
+	info := *o.pendingInfo
+	return &info
+}
+
+func (o *OptimistEngine) PendingOperation() *optimism.Operation {
+	o.mu.RLock()
+	defer o.mu.RUnlock()
+
+	if o.pendingOp == nil {
+		return nil
+	}
+	op := *o.pendingOp
+	return &op
+}
+
+func (o *OptimistEngine) GetRedirectOperation(ctx context.Context, info optimism.Info, rev int64) {}
+
+func (o *OptimistEngine) PendingRedirectOperation() (*optimism.Operation, string) {
+	o.mu.RLock()
+	defer o.mu.RUnlock()
+
+	for _, op := range o.pendingRedirectOps {
+		return op, op.ID
+	}
+	return nil, ""
+}
+
+func (o *OptimistEngine) DoneRedirectOperation(targetTableID string) {
+	o.mu.Lock()
+	delete(o.pendingRedirectOps, targetTableID)
+	o.mu.Unlock()
+}
+
+func (o *OptimistEngine) RedirectDDL(req *dmproto.RedirectDDLRequest) error {
+	switch req.ConflictStage {
+	case optimism.ConflictNone, optimism.ConflictDetected:
+	default:
+		return errors.Errorf("invalid conflict stage %s", req.ConflictStage)
+	}
+	o.mu.Lock()
+	o.pendingRedirectOps[utils.GenTableID(&filter.Table{Schema: req.TargetTable.Schema, Name: req.TargetTable.Table})] = &optimism.Operation{
+		ID:            utils.GenDDLLockID(o.task, req.TargetTable.Schema, req.TargetTable.Table),
+		Task:          o.task,
+		Source:        o.source,
+		UpSchema:      req.SourceTable.Schema,
+		UpTable:       req.SourceTable.Table,
+		ConflictStage: req.ConflictStage,
+	}
+	o.mu.Unlock()
+	return nil
 }

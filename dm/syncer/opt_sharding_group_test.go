@@ -98,7 +98,7 @@ func (s *optShardingGroupSuite) TestSync() {
 	syncer := Syncer{
 		osgk:       k,
 		tctx:       tcontext.Background().WithLogger(logger),
-		optimist:   shardddl.NewOptimist(&logger, nil, "", ""),
+		optimist:   shardddl.NewOptimist(&logger, nil, nil, "", ""),
 		checkpoint: &mockCheckpoint{},
 	}
 	syncer.schemaTracker, err = schema.NewTestTracker(context.Background(), s.cfg.Name, syncer.downstreamTrackConn, log.L())

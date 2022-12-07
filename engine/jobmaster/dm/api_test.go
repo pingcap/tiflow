@@ -109,8 +109,8 @@ func TestQueryStatusAPI(t *testing.T) {
 		loadStatusBytes, _ = json.Marshal(loadStatus)
 		syncStatusBytes, _ = json.Marshal(syncStatus)
 		dumpStatusResp     = &dmproto.QueryStatusResponse{Unit: frameModel.WorkerDMDump, Stage: metadata.StageRunning, Status: dumpStatusBytes, IoTotalBytes: 0}
-		loadStatusResp     = &dmproto.QueryStatusResponse{Unit: frameModel.WorkerDMLoad, Stage: metadata.StagePaused, Result: &dmpkg.ProcessResult{IsCanceled: true}, Status: loadStatusBytes, IoTotalBytes: 0}
-		syncStatusResp     = &dmproto.QueryStatusResponse{Unit: frameModel.WorkerDMSync, Stage: metadata.StageError, Result: &dmpkg.ProcessResult{Errors: []*dmpkg.ProcessError{processError}}, Status: syncStatusBytes, IoTotalBytes: 0}
+		loadStatusResp     = &dmproto.QueryStatusResponse{Unit: frameModel.WorkerDMLoad, Stage: metadata.StagePaused, Result: &dmproto.ProcessResult{IsCanceled: true}, Status: loadStatusBytes, IoTotalBytes: 0}
+		syncStatusResp     = &dmproto.QueryStatusResponse{Unit: frameModel.WorkerDMSync, Stage: metadata.StageError, Result: &dmproto.ProcessResult{Errors: []*dmproto.ProcessError{processError}}, Status: syncStatusBytes, IoTotalBytes: 0}
 		dumpTime, _        = time.Parse(time.RFC3339Nano, "2022-11-04T18:47:57.43382274+08:00")
 		loadTime, _        = time.Parse(time.RFC3339Nano, "2022-11-04T19:47:57.43382274+08:00")
 		syncTime, _        = time.Parse(time.RFC3339Nano, "2022-11-04T20:47:57.43382274+08:00")

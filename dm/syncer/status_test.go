@@ -42,7 +42,7 @@ func (t *statusSuite) TestStatusRace(c *C) {
 	s.cfg = &config.SubTaskConfig{}
 	s.checkpoint = &mockCheckpoint{}
 	s.pessimist = shardddl.NewPessimist(&l, nil, "", "")
-	s.optimist = shardddl.NewOptimist(&l, nil, "", "")
+	s.optimist = shardddl.NewOptimist(&l, nil, nil, "", "")
 	s.metricsProxies = metrics.DefaultMetricsProxies.CacheForOneTask("task", "worker", "source")
 
 	sourceStatus := &binlog.SourceStatus{

@@ -159,6 +159,7 @@ func (w *dmWorker) InitImpl(ctx context.Context) error {
 	}
 	w.cfg.MetricsFactory = w.MetricFactory()
 	w.cfg.FrameworkLogger = w.Logger()
+	w.cfg.MessageAgent = w.messageAgent
 	return w.unitHolder.Init(ctx)
 }
 
