@@ -15,6 +15,7 @@ package httputil
 
 import (
 	"context"
+	"encoding/json"
 	"fmt"
 	"io"
 	"net/http"
@@ -30,8 +31,9 @@ import (
 type JobHTTPClient interface {
 	// GetJobDetail sends http request to the specific jobmaster to get job detail
 	// path format for get job detail openapi is: 'api/v1/jobs/${JobID}/status'
-	// If no error happens and the response status code is 2XX, return the response body as the job detail
-	GetJobDetail(ctx context.Context, jobMasterAddr string, jobID string) ([]byte, error)
+	// If no error happens and the response status code is 2XX, return the response body as the job detail.
+	// Otherwise, return nil and an openapi.HTTPError with code and message.
+	GetJobDetail(ctx context.Context, jobMasterAddr string, jobID string) ([]byte, *openapi.HTTPError)
 	// Close releases the resources
 	Close()
 }
@@ -41,8 +43,8 @@ type jobHTTPClientImpl struct {
 	cli *httputil.Client
 }
 
-// NewJobHTTPClient news a jobHTTPClientImpl
-func NewJobHTTPClient(cli *httputil.Client) *jobHTTPClientImpl {
+// NewJobHTTPClient news a JobHTTPClient.
+func NewJobHTTPClient(cli *httputil.Client) JobHTTPClient {
 	return &jobHTTPClientImpl{
 		cli: cli,
 	}
@@ -52,37 +54,42 @@ func NewJobHTTPClient(cli *httputil.Client) *jobHTTPClientImpl {
 // if we get job detail from jobmaster successfully, returns job detail and nil
 // if we get a not 2XX response from jobmaster, return response body and an error
 // if we can't get response from jobmaster, return nil and an error
-func (c *jobHTTPClientImpl) GetJobDetail(ctx context.Context, jobMasterAddr string, jobID string) ([]byte, error) {
+func (c *jobHTTPClientImpl) GetJobDetail(ctx context.Context, jobMasterAddr string, jobID string) ([]byte, *openapi.HTTPError) {
 	url := fmt.Sprintf("http://%s%s", jobMasterAddr, fmt.Sprintf(openapi.JobDetailAPIFormat, jobID))
 	log.Info("get job detail from job master", zap.String("url", url))
 	resp, err := c.cli.Get(ctx, url)
 	if err != nil {
-		return nil, errors.ErrJobManagerGetJobDetailFail.Wrap(err)
+		errOut := errors.ErrJobManagerGetJobDetailFail.Wrap(err).GenWithStackByArgs()
+		return nil, openapi.NewHTTPError(errOut)
 	}
 	log.Debug("job master response", zap.Any("response status", resp.Status), zap.String("url", url))
 	defer resp.Body.Close()
 
-	// many conditions may results 404:
-	// 1. jobmaster is failover or no longer exists
-	// 2. jobmaster doesn't implements job detail openapi
-	if resp.StatusCode == http.StatusNotFound {
-		return nil, errors.ErrJobManagerRespStatusCode404.GenWithStackByArgs()
-	}
-
 	body, err := io.ReadAll(resp.Body)
 	if err != nil {
-		return nil, errors.ErrJobManagerReadRespBodyFail.Wrap(err)
+		errOut := errors.ErrJobManagerGetJobDetailFail.Wrap(err).GenWithStackByArgs()
+		return nil, openapi.NewHTTPError(errOut)
 	}
 
-	log.Debug("job master response", zap.Any("response body", string(body)), zap.String("url", url))
 	// if response code is 2XX, body should be the job detail
 	if resp.StatusCode/100 == http.StatusOK/100 {
+		log.Debug("job master response", zap.Any("response body", string(body)), zap.String("url", url))
 		return body, nil
 	}
+	log.Warn(
+		"failed to get job detail from job master",
+		zap.String("response body", string(body)),
+		zap.String("url", url),
+		zap.String("status", resp.Status),
+	)
 
-	// since we don't have the normalized response body format, return body with an error
-	log.Warn("get job detail", zap.String("job-id", jobID), zap.Any("body", body))
-	return body, errors.ErrJobManagerRespStatusCodeNot2XX.GenWithStackByArgs()
+	httpErr := &openapi.HTTPError{}
+	if err := json.Unmarshal(body, httpErr); err != nil {
+		errOut := errors.ErrJobManagerGetJobDetailFail.GenWithStack(
+			"get job detail from job master failed with wrong error format, status: %s, response body: %s", resp.Status, string(body))
+		return nil, openapi.NewHTTPError(errOut)
+	}
+	return nil, httpErr
 }
 
 // Close implements the JobHTTPClient.Close
