@@ -69,6 +69,7 @@ var AllCheckingItems = map[string]string{
 	LightningDownstreamVersionChecking:  "physical import mode downstream TiDB/PD/TiKV version checking item",
 	LightningFreeSpaceChecking:          "downstream free space checking item",
 	LightningSortingSpaceChecking:       "enough disk space for physical import mode sorting data checking item",
+	LightningCDCPiTRChecking:            "physical import mode downstream CDC/PiTR checking item",
 }
 
 // LightningPrechecks returns all checking items for lightning.
@@ -78,6 +79,7 @@ var LightningPrechecks = []string{
 	LightningDownstreamVersionChecking,
 	LightningFreeSpaceChecking,
 	LightningSortingSpaceChecking,
+	LightningCDCPiTRChecking,
 }
 
 // MaxSourceIDLength is the max length for dm-worker source id.

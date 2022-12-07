@@ -20,6 +20,7 @@ import (
 
 	"github.com/docker/go-units"
 	"github.com/pingcap/tidb/br/pkg/lightning/restore"
+	"github.com/pingcap/tiflow/dm/pkg/log"
 )
 
 func convertLightningPrecheck(
@@ -62,7 +63,7 @@ func (c *LightningEmptyRegionChecker) Name() string {
 func (c *LightningEmptyRegionChecker) Check(ctx context.Context) *Result {
 	result := &Result{
 		Name:  c.Name(),
-		Desc:  "check whether there are too many empty Regions in the TiKV under Physical import mode",
+		Desc:  "check whether there are too many empty Regions in the TiKV under physical import mode",
 		State: StateFailure,
 	}
 	convertLightningPrecheck(
@@ -94,7 +95,7 @@ func (c *LightningRegionDistributionChecker) Name() string {
 func (c *LightningRegionDistributionChecker) Check(ctx context.Context) *Result {
 	result := &Result{
 		Name:  c.Name(),
-		Desc:  "check whether the Regions in the TiKV cluster are distributed evenly under Physical import mode",
+		Desc:  "check whether the Regions in the TiKV cluster are distributed evenly under physical import mode",
 		State: StateFailure,
 	}
 	convertLightningPrecheck(
@@ -126,7 +127,7 @@ func (c *LightningClusterVersionChecker) Name() string {
 func (c *LightningClusterVersionChecker) Check(ctx context.Context) *Result {
 	result := &Result{
 		Name:  c.Name(),
-		Desc:  "check whether the downstream TiDB/PD/TiKV version meets the requirements of Physical import mode",
+		Desc:  "check whether the downstream TiDB/PD/TiKV version meets the requirements of physical import mode",
 		State: StateFailure,
 	}
 	convertLightningPrecheck(
@@ -225,7 +226,7 @@ func (c *LightningSortingSpaceChecker) Name() string {
 func (c *LightningSortingSpaceChecker) Check(ctx context.Context) *Result {
 	result := &Result{
 		Name:  c.Name(),
-		Desc:  "check whether the free space of sorting-dir-physical is enough for Physical import mode",
+		Desc:  "check whether the free space of sorting-dir-physical is enough for physical import mode",
 		State: StateFailure,
 	}
 	convertLightningPrecheck(
@@ -250,6 +251,12 @@ type LightningCDCPiTRChecker struct {
 
 // NewLightningCDCPiTRChecker creates a new LightningClusterVersionChecker.
 func NewLightningCDCPiTRChecker(lightningChecker restore.PrecheckItem) RealChecker {
+	c, ok := lightningChecker.(*restore.CDCPITRCheckItem)
+	if ok {
+		c.Instruction = "physical import mode is not compatible with them. Please switch to logical import mode then try again."
+	} else {
+		log.L().DPanic("lightningChecker is not CDCPITRCheckItem")
+	}
 	return &LightningCDCPiTRChecker{inner: lightningChecker}
 }
 
@@ -262,7 +269,7 @@ func (c *LightningCDCPiTRChecker) Name() string {
 func (c *LightningCDCPiTRChecker) Check(ctx context.Context) *Result {
 	result := &Result{
 		Name:  c.Name(),
-		Desc:  "check whether the downstream has tasks incompatible with Physical import mode",
+		Desc:  "check whether the downstream has tasks incompatible with physical import mode",
 		State: StateFailure,
 	}
 	convertLightningPrecheck(
