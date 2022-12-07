@@ -84,7 +84,7 @@ func (w *redoWorker) handleTask(ctx context.Context, task *redoTask) error {
 	var lastPos engine.Position
 	emitedCommitTs := uint64(0)
 
-	doEmitBatchEvents := func() (err error) {
+	doEmitBatchEvents := func() error {
 		if len(rows) > 0 {
 			var releaseMem func()
 			if rowsSize-cachedSize > 0 {
@@ -109,16 +109,19 @@ func (w *redoWorker) handleTask(ctx context.Context, task *redoTask) error {
 				toEmit = lastPos.CommitTs
 			} else if len(rows) > 0 && rows[len(rows)-1].CommitTs != lastPos.CommitTs {
 				toEmit = lastPos.CommitTs
+			} else {
+				toEmit = lastPos.CommitTs - 1
 			}
 			if toEmit > emitedCommitTs {
-				if err = w.redoManager.UpdateResolvedTs(ctx, task.tableID, toEmit); err == nil {
-					log.Debug("update resolved ts to redo",
-						zap.String("namespace", w.changefeedID.Namespace),
-						zap.String("changefeed", w.changefeedID.ID),
-						zap.Int64("tableID", task.tableID),
-						zap.Uint64("resolvedTs", toEmit))
-					emitedCommitTs = toEmit
+				if err := w.redoManager.UpdateResolvedTs(ctx, task.tableID, toEmit); err != nil {
+					return errors.Trace(err)
 				}
+				log.Debug("update resolved ts to redo",
+					zap.String("namespace", w.changefeedID.Namespace),
+					zap.String("changefeed", w.changefeedID.ID),
+					zap.Int64("tableID", task.tableID),
+					zap.Uint64("resolvedTs", toEmit))
+				emitedCommitTs = toEmit
 			}
 		}
 		rowsSize = 0
@@ -127,7 +130,7 @@ func (w *redoWorker) handleTask(ctx context.Context, task *redoTask) error {
 		if cap(rows) > 1024 {
 			rows = make([]*model.RowChangedEvent, 0, 1024)
 		}
-		return
+		return nil
 	}
 
 	maybeEmitBatchEvents := func(allFinished, txnFinished bool) error {

@@ -80,17 +80,18 @@ func (w *sinkWorker) handleTask(ctx context.Context, task *sinkTask) (err error)
 	// First time to run the task, we have initialized memory quota for the table.
 	availableMem := requestMemSize
 	usedMem := uint64(0)
+	batchID := uint64(1)
 
 	events := make([]*model.RowChangedEvent, 0, 1024)
 	lowerBound := task.lowerBound
 	upperBound := task.getUpperBound(task.tableSink)
 
 	if w.eventCache != nil {
-		newLowerBound, newUpperBound, err := w.fetchFromCache(task, lowerBound, upperBound)
+		newLowerBound, newUpperBound, err := w.fetchFromCache(task, lowerBound, upperBound, &batchID)
 		if err != nil {
 			return errors.Trace(err)
 		}
-		log.Debug("adjust task boundaries based on redo event cache",
+		log.Info("QP adjust task boundaries based on redo event cache",
 			zap.String("namespace", w.changefeedID.Namespace),
 			zap.String("changefeed", w.changefeedID.ID),
 			zap.Int64("tableID", task.tableID),
@@ -98,6 +99,25 @@ func (w *sinkWorker) handleTask(ctx context.Context, task *sinkTask) (err error)
 			zap.Any("upperBound", upperBound),
 			zap.Any("newLowerBound", newLowerBound),
 			zap.Any("newUpperBound", newUpperBound))
+		if newLowerBound.Compare(newUpperBound) > 0 {
+			log.Info("QP Sink task finished because cache is drained",
+				zap.String("namespace", w.changefeedID.Namespace),
+				zap.String("changefeed", w.changefeedID.ID),
+				zap.Int64("tableID", task.tableID),
+				zap.Any("lowerBound", lowerBound),
+				zap.Any("upperBound", upperBound),
+				zap.Any("nextTimeStartAt", newLowerBound))
+			w.memQuota.refund(availableMem - usedMem)
+			log.Debug("MemoryQuotaTracing: refund memory for table sink task",
+				zap.String("namespace", w.changefeedID.Namespace),
+				zap.String("changefeed", w.changefeedID.ID),
+				zap.Int64("tableID", task.tableID),
+				zap.Uint64("memory", availableMem-usedMem))
+			task.callback(newLowerBound.Prev())
+			return nil
+		}
+		lowerBound = newLowerBound
+		upperBound = newUpperBound
 	}
 
 	// Used to record the last written position.
@@ -109,7 +129,6 @@ func (w *sinkWorker) handleTask(ctx context.Context, task *sinkTask) (err error)
 	lastTxnCommitTs := uint64(0)
 	currTxnCommitTs := uint64(0)
 	lastTxnOffset := -1 // end offset of the last transaction in events.
-	batchID := uint64(1)
 
 	needEmitAndAdvance := func() bool {
 		return (w.splitTxn && committedTxnSize+pendingTxnSize >= maxUpdateIntervalSize) ||
@@ -133,7 +152,7 @@ func (w *sinkWorker) handleTask(ctx context.Context, task *sinkTask) (err error)
 				// 2. some filtered events are fetched.
 				currTxnCommitTs = lastPos.CommitTs
 			}
-			if allFinished {
+			if allFinished && lastPos.CommitTs == lastPos.StartTs+1 {
 				err = w.advanceTableSink(task, currTxnCommitTs, committedTxnSize+pendingTxnSize)
 			} else {
 				err = w.advanceTableSinkWithBatchID(task, currTxnCommitTs, committedTxnSize+pendingTxnSize, batchID)
@@ -313,6 +332,7 @@ func (w *sinkWorker) fetchFromCache(
 	task *sinkTask, // task is read-only here.
 	lowerBound engine.Position,
 	upperBound engine.Position,
+	batchID *uint64,
 ) (newLowerBound, newUpperBound engine.Position, err error) {
 	newLowerBound = lowerBound
 	newUpperBound = upperBound
@@ -321,13 +341,26 @@ func (w *sinkWorker) fetchFromCache(
 	if cache != nil {
 		popRes := cache.pop(lowerBound, upperBound)
 		if popRes.success {
+			var rts model.ResolvedTs
+			if w.splitTxn {
+				rts = model.NewResolvedTs(popRes.boundary.CommitTs)
+				if popRes.boundary.CommitTs > popRes.boundary.StartTs+1 {
+					rts = model.NewResolvedTs(popRes.boundary.CommitTs)
+					rts.Mode = model.BatchResolvedMode
+					rts.BatchID = *batchID
+					*batchID += 1
+				}
+			} else {
+				rts = model.NewResolvedTs(popRes.boundary.CommitTs - 1)
+			}
+
 			if len(popRes.events) > 0 {
 				task.tableSink.receivedEventCount.Add(int64(popRes.pushCount))
 				w.metricRedoEventCacheHit.Add(float64(popRes.size))
 				task.tableSink.appendRowChangedEvents(popRes.events...)
-				w.memQuota.record(task.tableID, model.ResolvedTs{Ts: popRes.boundary.CommitTs}, popRes.releaseSize)
+				w.memQuota.record(task.tableID, rts, popRes.releaseSize)
 			}
-			err = task.tableSink.updateResolvedTs(model.ResolvedTs{Ts: popRes.boundary.CommitTs})
+			err = task.tableSink.updateResolvedTs(rts)
 			if err == nil {
 				newLowerBound = popRes.boundary.Next()
 			}
