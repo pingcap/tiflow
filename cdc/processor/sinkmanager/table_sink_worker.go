@@ -124,6 +124,11 @@ func (w *sinkWorker) handleTask(ctx context.Context, task *sinkTask) (err error)
 				task.tableSink.appendRowChangedEvents(events...)
 				events = make([]*model.RowChangedEvent, 0, 1024)
 
+				if currTxnCommitTs == 0 {
+					// Got nothing from this task.
+					currTxnCommitTs = upperBound.CommitTs
+				}
+
 				if !allFinished {
 					err = w.advanceTableSinkWithBatchID(task, currTxnCommitTs, committedTxnSize+pendingTxnSize, batchID)
 					batchID += 1
