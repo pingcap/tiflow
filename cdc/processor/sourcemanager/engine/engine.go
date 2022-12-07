@@ -119,6 +119,21 @@ func (p Position) Next() Position {
 	}
 }
 
+// Prev can only be called on a valid Position.
+func (p Position) Prev() Position {
+    if p.StartTs == 0 {
+        return Position{
+            StartTs:  p.CommitTs-2,
+            CommitTs: p.CommitTs-1,
+        }
+    } else {
+        return Position{
+            StartTs:  p.StartTs - 1,
+            CommitTs: p.CommitTs,
+        }
+    }
+}
+
 // Compare compares 2 Position, just like strcmp in C.
 func (p Position) Compare(q Position) int {
 	if p.CommitTs < q.CommitTs {

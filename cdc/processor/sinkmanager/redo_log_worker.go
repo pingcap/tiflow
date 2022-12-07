@@ -81,10 +81,11 @@ func (w *redoWorker) handleTask(ctx context.Context, task *redoTask) error {
 	availableMemSize := requestMemSize
 	usedMemSize := uint64(0)
 
-	var lastPos, lastEmitPos engine.Position
-	maybeEmitBatchEvents := func(allFinished, txnFinished bool) error {
-		memoryHighUsage := availableMemSize < usedMemSize
-		if memoryHighUsage || rowsSize >= maxUpdateIntervalSize || allFinished {
+	var lastPos engine.Position
+	emitedCommitTs := uint64(0)
+
+	doEmitBatchEvents := func() (err error) {
+		if len(rows) > 0 {
 			var releaseMem func()
 			if rowsSize-cachedSize > 0 {
 				refundMem := rowsSize - cachedSize
@@ -101,23 +102,39 @@ func (w *redoWorker) handleTask(ctx context.Context, task *redoTask) error {
 			if err != nil {
 				return errors.Trace(err)
 			}
-			if lastPos.Valid() && lastPos.Compare(lastEmitPos) != 0 {
-				err = w.redoManager.UpdateResolvedTs(ctx, task.tableID, lastPos.CommitTs)
-				if err != nil {
-					return errors.Trace(err)
-				}
-				log.Debug("update resolved ts to redo",
-					zap.String("namespace", w.changefeedID.Namespace),
-					zap.String("changefeed", w.changefeedID.ID),
-					zap.Int64("tableID", task.tableID),
-					zap.Uint64("resolvedTs", lastPos.CommitTs))
-				lastEmitPos = lastPos
+		}
+		if lastPos.Valid() {
+			var toEmit uint64
+			if lastPos.CommitTs == lastPos.StartTs+1 {
+				toEmit = lastPos.CommitTs
+			} else if len(rows) > 0 && rows[len(rows)-1].CommitTs != lastPos.CommitTs {
+				toEmit = lastPos.CommitTs
 			}
-			rowsSize = 0
-			cachedSize = 0
-			rows = rows[:0]
-			if cap(rows) > 1024 {
-				rows = make([]*model.RowChangedEvent, 0, 1024)
+			if toEmit > emitedCommitTs {
+				if err = w.redoManager.UpdateResolvedTs(ctx, task.tableID, toEmit); err == nil {
+					log.Debug("update resolved ts to redo",
+						zap.String("namespace", w.changefeedID.Namespace),
+						zap.String("changefeed", w.changefeedID.ID),
+						zap.Int64("tableID", task.tableID),
+						zap.Uint64("resolvedTs", toEmit))
+					emitedCommitTs = toEmit
+				}
+			}
+		}
+		rowsSize = 0
+		cachedSize = 0
+		rows = rows[:0]
+		if cap(rows) > 1024 {
+			rows = make([]*model.RowChangedEvent, 0, 1024)
+		}
+		return
+	}
+
+	maybeEmitBatchEvents := func(allFinished, txnFinished bool) error {
+		memoryHighUsage := availableMemSize < usedMemSize
+		if memoryHighUsage || rowsSize >= maxUpdateIntervalSize || allFinished {
+			if err := doEmitBatchEvents(); err != nil {
+				return errors.Trace(err)
 			}
 		}
 
@@ -240,5 +257,5 @@ func (w *redoWorker) handleTask(ctx context.Context, task *redoTask) error {
 			return errors.Trace(err)
 		}
 	}
-	return nil
+	return doEmitBatchEvents()
 }

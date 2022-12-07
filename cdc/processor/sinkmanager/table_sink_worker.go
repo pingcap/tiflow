@@ -81,7 +81,6 @@ func (w *sinkWorker) handleTask(ctx context.Context, task *sinkTask) (err error)
 	availableMem := requestMemSize
 	usedMem := uint64(0)
 
-	// events := make([]*model.PolymorphicEvent, 0, 1024)
 	events := make([]*model.RowChangedEvent, 0, 1024)
 	lowerBound := task.lowerBound
 	upperBound := task.getUpperBound(task.tableSink)
@@ -116,40 +115,60 @@ func (w *sinkWorker) handleTask(ctx context.Context, task *sinkTask) (err error)
 		return (w.splitTxn && committedTxnSize+pendingTxnSize >= maxUpdateIntervalSize) ||
 			(!w.splitTxn && committedTxnSize >= maxUpdateIntervalSize)
 	}
-
-	maybeEmitAndAdvance := func(allFinished, txnFinished bool) (err error) {
-		memoryHighUsage := availableMem < usedMem
-		if memoryHighUsage || allFinished || needEmitAndAdvance() {
-			if w.splitTxn {
+	doEmitAndAdvance := func(allFinished bool) (err error) {
+		if w.splitTxn {
+			if len(events) > 0 {
 				task.tableSink.appendRowChangedEvents(events...)
-				events = make([]*model.RowChangedEvent, 0, 1024)
-
-				if currTxnCommitTs == 0 {
-					// Got nothing from this task.
-					currTxnCommitTs = upperBound.CommitTs
+				events = events[:0]
+				if cap(events) > 1024 {
+					events = make([]*model.RowChangedEvent, 0, 1024)
 				}
-
-				if !allFinished {
-					err = w.advanceTableSinkWithBatchID(task, currTxnCommitTs, committedTxnSize+pendingTxnSize, batchID)
-					batchID += 1
-					committedTxnSize = 0
-					pendingTxnSize = 0
-				} else {
-					err = w.advanceTableSink(task, currTxnCommitTs, committedTxnSize+pendingTxnSize)
-					batchID = 1
-					committedTxnSize = 0
-					pendingTxnSize = 0
-					lastTxnOffset = -1
+			}
+			if currTxnCommitTs == 0 {
+				if !lastPos.Valid() {
+					return
 				}
+				// Generally includes 2 cases:
+				// 1. nothing is fetched from the iterator;
+				// 2. some filtered events are fetched.
+				currTxnCommitTs = lastPos.CommitTs
+			}
+			if allFinished {
+				err = w.advanceTableSink(task, currTxnCommitTs, committedTxnSize+pendingTxnSize)
 			} else {
+				err = w.advanceTableSinkWithBatchID(task, currTxnCommitTs, committedTxnSize+pendingTxnSize, batchID)
+				batchID += 1
+			}
+			committedTxnSize = 0
+			pendingTxnSize = 0
+		} else {
+			if lastTxnOffset >= 0 {
 				task.tableSink.appendRowChangedEvents(events[0 : lastTxnOffset+1]...)
 				events = events[lastTxnOffset+1:]
-
-				err = w.advanceTableSink(task, lastTxnCommitTs, committedTxnSize)
-				committedTxnSize = 0
-				lastTxnOffset = -1
 			}
-			if err != nil {
+			if lastTxnCommitTs == 0 {
+				if !lastPos.Valid() {
+					return
+				}
+				// Check lastPos to know whether there could be more transactions
+				// with same CommitTs as this one.
+				if lastPos.StartTs+1 == lastPos.CommitTs {
+					lastTxnCommitTs = lastPos.CommitTs
+				} else {
+					lastTxnCommitTs = lastPos.CommitTs - 1
+				}
+			}
+			err = w.advanceTableSink(task, lastTxnCommitTs, committedTxnSize)
+			committedTxnSize = 0
+			lastTxnOffset = -1
+		}
+		return
+	}
+
+	maybeEmitAndAdvance := func(allFinished, txnFinished bool) error {
+		memoryHighUsage := availableMem < usedMem
+		if memoryHighUsage || allFinished || needEmitAndAdvance() {
+			if err := doEmitAndAdvance(allFinished); err != nil {
 				return errors.Trace(err)
 			}
 		}
@@ -195,7 +214,7 @@ func (w *sinkWorker) handleTask(ctx context.Context, task *sinkTask) (err error)
 				}
 			}
 		}
-		return
+		return nil
 	}
 
 	// lowerBound and upperBound are both closed intervals.
@@ -230,7 +249,7 @@ func (w *sinkWorker) handleTask(ctx context.Context, task *sinkTask) (err error)
 		task.callback(lastPos)
 	}()
 
-	for availableMem > usedMem && !task.isCanceled() {
+	for availableMem > usedMem {
 		e, pos, err := iter.Next(ctx)
 		if err != nil {
 			return errors.Trace(err)
@@ -287,8 +306,7 @@ func (w *sinkWorker) handleTask(ctx context.Context, task *sinkTask) (err error)
 			}
 		}
 	}
-
-	return nil
+	return doEmitAndAdvance(false)
 }
 
 func (w *sinkWorker) fetchFromCache(
@@ -314,26 +332,10 @@ func (w *sinkWorker) fetchFromCache(
 				newLowerBound = popRes.boundary.Next()
 			}
 		} else {
-			// TODO: seems should be `posRes.boundary.Prev()`.
-			newUpperBound = popRes.boundary
+			newUpperBound = popRes.boundary.Prev()
 		}
 	}
 	return
-}
-
-func (w *sinkWorker) appendEventsToTableSink(t *sinkTask, events []*model.PolymorphicEvent) (uint64, error) {
-	log.Debug("Append events to table sink",
-		zap.String("namespace", w.changefeedID.Namespace),
-		zap.String("changefeed", w.changefeedID.ID),
-		zap.Int64("tableID", t.tableID),
-		zap.Uint64("commitTs", events[len(events)-1].CRTs),
-		zap.Uint64("startTs", events[len(events)-1].StartTs))
-	rowChangedEvents, size, err := convertRowChangedEvents(w.changefeedID, t.tableID, w.enableOldValue, events...)
-	if err != nil {
-		return 0, err
-	}
-	t.tableSink.appendRowChangedEvents(rowChangedEvents...)
-	return size, nil
 }
 
 func (w *sinkWorker) advanceTableSinkWithBatchID(t *sinkTask, commitTs model.Ts, size uint64, batchID uint64) error {
