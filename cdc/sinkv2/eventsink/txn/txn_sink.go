@@ -19,6 +19,7 @@ import (
 	"sync/atomic"
 
 	"github.com/pingcap/errors"
+	"github.com/pingcap/log"
 	"github.com/pingcap/tiflow/cdc/model"
 	"github.com/pingcap/tiflow/cdc/sinkv2/eventsink"
 	"github.com/pingcap/tiflow/cdc/sinkv2/eventsink/txn/mysql"
@@ -28,6 +29,7 @@ import (
 	"github.com/pingcap/tiflow/pkg/config"
 	psink "github.com/pingcap/tiflow/pkg/sink"
 	pmysql "github.com/pingcap/tiflow/pkg/sink/mysql"
+	"go.uber.org/zap"
 )
 
 const (
@@ -104,6 +106,10 @@ func (s *sink) WriteEvents(txnEvents ...*eventsink.TxnCallbackableEvent) error {
 			continue
 		}
 
+		if txn.Event.Table.Table == "warehouse" {
+			log.Info("[AAA] txn sink received txn",
+				zap.Any("txn", txn))
+		}
 		s.conflictDetector.Add(newTxnEvent(txn))
 	}
 	return nil

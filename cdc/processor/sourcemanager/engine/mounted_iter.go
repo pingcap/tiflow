@@ -16,8 +16,10 @@ package engine
 import (
 	"context"
 
+	"github.com/pingcap/log"
 	"github.com/pingcap/tiflow/cdc/entry"
 	"github.com/pingcap/tiflow/cdc/model"
+	"go.uber.org/zap"
 )
 
 // MountedEventIter is just like EventIterator, but returns mounted events.
@@ -47,6 +49,11 @@ func NewMountedEventIter(
 
 // Next returns the next mounted event.
 func (i *MountedEventIter) Next(ctx context.Context) (event *model.PolymorphicEvent, txnFinished Position, err error) {
+	defer func() {
+		if event != nil && event.Row.Table.Table == "warehouse" {
+			log.Info("[AAA] sorter output event", zap.Any("event", event))
+		}
+	}()
 	// Check whether there are events in mounting or not.
 	for idx := i.nextToEmit; idx < i.nextToMount; idx++ {
 		if err = i.rawEvents[idx].event.WaitFinished(ctx); err == nil {
