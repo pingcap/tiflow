@@ -16,7 +16,6 @@ package checker
 import (
 	"bytes"
 	"context"
-	"database/sql"
 	"fmt"
 	"math"
 	"strings"
@@ -30,6 +29,8 @@ import (
 	"github.com/pingcap/tidb/util/dbutil"
 	"github.com/pingcap/tidb/util/filter"
 	"github.com/pingcap/tidb/util/schemacmp"
+	"github.com/pingcap/tiflow/dm/pkg/conn"
+	tcontext "github.com/pingcap/tiflow/dm/pkg/context"
 	"github.com/pingcap/tiflow/dm/pkg/log"
 	"github.com/pingcap/tiflow/dm/pkg/utils"
 	"go.uber.org/zap"
@@ -75,8 +76,8 @@ func (o *incompatibilityOption) String() string {
 // In generally we need to check definitions of columns, constraints and table options.
 // Because of the early TiDB engineering design, we did not have a complete list of check items, which are all based on experience now.
 type TablesChecker struct {
-	upstreamDBs  map[string]*sql.DB
-	downstreamDB *sql.DB
+	upstreamDBs  map[string]*conn.BaseDB
+	downstreamDB *conn.BaseDB
 	// sourceID -> downstream table -> upstream tables
 	tableMap map[string]map[filter.Table][]filter.Table
 	// downstream table -> extended column names
@@ -90,8 +91,8 @@ type TablesChecker struct {
 
 // NewTablesChecker returns a RealChecker.
 func NewTablesChecker(
-	upstreamDBs map[string]*sql.DB,
-	downstreamDB *sql.DB,
+	upstreamDBs map[string]*conn.BaseDB,
+	downstreamDB *conn.BaseDB,
 	tableMap map[string]map[filter.Table][]filter.Table,
 	extendedColumnPerTable map[filter.Table][]string,
 	dumpThreads int,
@@ -127,12 +128,12 @@ func (w *tablesCheckerWorker) handle(ctx context.Context, checkItem *checkItem) 
 	log.L().Logger.Debug("checking table", zap.String("db", table.Schema), zap.String("table", table.Name))
 	if w.lastSourceID == "" || w.lastSourceID != checkItem.sourceID {
 		w.lastSourceID = checkItem.sourceID
-		w.upstreamParser, err = dbutil.GetParserForDB(ctx, w.c.upstreamDBs[w.lastSourceID])
+		w.upstreamParser, err = dbutil.GetParserForDB(ctx, w.c.upstreamDBs[w.lastSourceID].DB)
 		if err != nil {
 			return nil, err
 		}
 	}
-	db := w.c.upstreamDBs[checkItem.sourceID]
+	db := w.c.upstreamDBs[checkItem.sourceID].DB
 	upstreamSQL, err := dbutil.GetCreateTableSQL(ctx, db, table.Schema, table.Name)
 	if err != nil {
 		// continue if table was deleted when checking
@@ -158,7 +159,7 @@ func (w *tablesCheckerWorker) handle(ctx context.Context, checkItem *checkItem) 
 	if !ok {
 		sql, err2 := dbutil.GetCreateTableSQL(
 			ctx,
-			w.c.downstreamDB,
+			w.c.downstreamDB.DB,
 			checkItem.downstreamTable.Schema,
 			checkItem.downstreamTable.Name,
 		)
@@ -222,7 +223,7 @@ func (c *TablesChecker) Check(ctx context.Context) *Result {
 
 	for i := 0; i < concurrency; i++ {
 		worker := &tablesCheckerWorker{c: c}
-		worker.downstreamParser, err = dbutil.GetParserForDB(ctx, c.downstreamDB)
+		worker.downstreamParser, err = dbutil.GetParserForDB(ctx, c.downstreamDB.DB)
 		if err != nil {
 			markCheckError(r, err)
 			return r
@@ -496,7 +497,7 @@ func (c *TablesChecker) checkTableStructurePair(
 // * check whether they have auto_increment key.
 type ShardingTablesChecker struct {
 	targetTableID                string
-	dbs                          map[string]*sql.DB
+	dbs                          map[string]*conn.BaseDB
 	tableMap                     map[string][]filter.Table // sourceID => {[table1, table2, ...]}
 	checkAutoIncrementPrimaryKey bool
 	firstCreateTableStmtNode     *ast.CreateTableStmt
@@ -510,7 +511,7 @@ type ShardingTablesChecker struct {
 // NewShardingTablesChecker returns a RealChecker.
 func NewShardingTablesChecker(
 	targetTableID string,
-	dbs map[string]*sql.DB,
+	dbs map[string]*conn.BaseDB,
 	tableMap map[string][]filter.Table,
 	checkAutoIncrementPrimaryKey bool,
 	dumpThreads int,
@@ -553,14 +554,14 @@ func (c *ShardingTablesChecker) Check(ctx context.Context) *Result {
 		return r
 	}
 
-	p, err := dbutil.GetParserForDB(ctx, db)
+	p, err := dbutil.GetParserForDB(ctx, db.DB)
 	if err != nil {
 		r.Extra = fmt.Sprintf("fail to get parser for sourceID %s on sharding %s", c.firstSourceID, c.targetTableID)
 		markCheckError(r, err)
 		return r
 	}
 	r.Extra = fmt.Sprintf("sourceID %s on sharding %s", c.firstSourceID, c.targetTableID)
-	statement, err := dbutil.GetCreateTableSQL(ctx, db, c.firstTable.Schema, c.firstTable.Name)
+	statement, err := dbutil.GetCreateTableSQL(ctx, db.DB, c.firstTable.Schema, c.firstTable.Name)
 	if err != nil {
 		markCheckError(r, err)
 		return r
@@ -611,7 +612,7 @@ func (c *ShardingTablesChecker) checkShardingTable(ctx context.Context, r *Resul
 			table := checkItem.upstreamTable
 			if len(sourceID) == 0 || sourceID != checkItem.sourceID {
 				sourceID = checkItem.sourceID
-				p, err = dbutil.GetParserForDB(ctx, c.dbs[sourceID])
+				p, err = dbutil.GetParserForDB(ctx, c.dbs[sourceID].DB)
 				if err != nil {
 					c.reMu.Lock()
 					r.Extra = fmt.Sprintf("fail to get parser for sourceID %s on sharding %s", sourceID, c.targetTableID)
@@ -620,7 +621,7 @@ func (c *ShardingTablesChecker) checkShardingTable(ctx context.Context, r *Resul
 				}
 			}
 
-			statement, err := dbutil.GetCreateTableSQL(ctx, c.dbs[sourceID], table.Schema, table.Name)
+			statement, err := dbutil.GetCreateTableSQL(ctx, c.dbs[sourceID].DB, table.Schema, table.Name)
 			if err != nil {
 				// continue if table was deleted when checking
 				if isMySQLError(err, mysql.ErrNoSuchTable) {
@@ -767,7 +768,7 @@ func (c *ShardingTablesChecker) Name() string {
 // * check whether they have compatible column list.
 type OptimisticShardingTablesChecker struct {
 	targetTableID string
-	dbs           map[string]*sql.DB
+	dbs           map[string]*conn.BaseDB
 	tableMap      map[string][]filter.Table // sourceID => [table1, table2, ...]
 	reMu          sync.Mutex
 	joinedMu      sync.Mutex
@@ -779,7 +780,7 @@ type OptimisticShardingTablesChecker struct {
 // NewOptimisticShardingTablesChecker returns a RealChecker.
 func NewOptimisticShardingTablesChecker(
 	targetTableID string,
-	dbs map[string]*sql.DB,
+	dbs map[string]*conn.BaseDB,
 	tableMap map[string][]filter.Table,
 	dumpThreads int,
 ) RealChecker {
@@ -850,7 +851,7 @@ func (c *OptimisticShardingTablesChecker) checkTable(ctx context.Context, r *Res
 			table := checkItem.upstreamTable
 			if len(sourceID) == 0 || sourceID != checkItem.sourceID {
 				sourceID = checkItem.sourceID
-				p, err = dbutil.GetParserForDB(ctx, c.dbs[sourceID])
+				p, err = dbutil.GetParserForDB(ctx, c.dbs[sourceID].DB)
 				if err != nil {
 					c.reMu.Lock()
 					r.Extra = fmt.Sprintf("fail to get parser for sourceID %s on sharding %s", sourceID, c.targetTableID)
@@ -859,7 +860,7 @@ func (c *OptimisticShardingTablesChecker) checkTable(ctx context.Context, r *Res
 				}
 			}
 
-			statement, err := dbutil.GetCreateTableSQL(ctx, c.dbs[sourceID], table.Schema, table.Name)
+			statement, err := dbutil.GetCreateTableSQL(ctx, c.dbs[sourceID].DB, table.Schema, table.Name)
 			if err != nil {
 				// continue if table was deleted when checking
 				if isMySQLError(err, mysql.ErrNoSuchTable) {
@@ -949,14 +950,14 @@ func dispatchTableItemWithDownstreamTable(
 
 // GetConcurrency gets the concurrency of workers that we can randomly dispatch
 // tasks on any sources to any of them, where each task needs a SQL connection.
-func GetConcurrency(ctx context.Context, sourceIDs []string, dbs map[string]*sql.DB, dumpThreads int) (int, error) {
+func GetConcurrency(ctx context.Context, sourceIDs []string, dbs map[string]*conn.BaseDB, dumpThreads int) (int, error) {
 	concurrency := dumpThreads
 	for _, sourceID := range sourceIDs {
 		db, ok := dbs[sourceID]
 		if !ok {
 			return 0, errors.NotFoundf("SQL connection for sourceID %s", sourceID)
 		}
-		maxConnections, err := utils.GetMaxConnections(ctx, db)
+		maxConnections, err := conn.GetMaxConnections(tcontext.NewContext(ctx, log.L()), db)
 		if err != nil {
 			return 0, err
 		}

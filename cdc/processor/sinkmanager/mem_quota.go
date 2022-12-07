@@ -61,6 +61,7 @@ func newMemQuota(changefeedID model.ChangeFeedID, totalBytes uint64) *memQuota {
 	}
 	m.blockAcquireCond = sync.NewCond(&m.mu)
 	m.metricTotal.Set(float64(totalBytes))
+	m.metricUsed.Set(float64(0))
 
 	return m
 }
@@ -143,11 +144,9 @@ func (m *memQuota) release(tableID model.TableID, resolved model.ResolvedTs) {
 	m.mu.Lock()
 	defer m.mu.Unlock()
 	if _, ok := m.tableMemory[tableID]; !ok {
-		// This can happen when the table has no data and never been recorded.
-		log.Debug("Table consumed memory records not found.",
-			zap.String("namespace", m.changefeedID.Namespace),
-			zap.String("changefeed", m.changefeedID.ID),
-			zap.Int64("tableID", tableID))
+		// This can happen when
+		// 1. the table has no data and never been recorded.
+		// 2. the table is in async removing.
 		return
 	}
 	records := m.tableMemory[tableID]

@@ -26,9 +26,9 @@ import (
 	pb "github.com/pingcap/tiflow/engine/enginepb"
 	"github.com/pingcap/tiflow/engine/executor/server"
 	"github.com/pingcap/tiflow/engine/executor/worker"
-	"github.com/pingcap/tiflow/engine/framework/fake"
 	frameModel "github.com/pingcap/tiflow/engine/framework/model"
 	"github.com/pingcap/tiflow/engine/framework/registry"
+	"github.com/pingcap/tiflow/engine/jobmaster/fakejob"
 	"github.com/pingcap/tiflow/engine/model"
 	"github.com/pingcap/tiflow/engine/pkg/client"
 	dcontext "github.com/pingcap/tiflow/engine/pkg/context"
@@ -239,7 +239,7 @@ func TestConvertMakeTaskError(t *testing.T) {
 
 	register := registry.NewRegistry()
 	ok := register.RegisterWorkerType(frameModel.FakeJobMaster,
-		registry.NewSimpleWorkerFactory(fake.NewFakeMaster))
+		registry.NewSimpleWorkerFactory(fakejob.NewFakeMaster))
 	require.True(t, ok)
 
 	testCases := []struct {
@@ -267,7 +267,7 @@ func TestPrecheckMasterMeta(t *testing.T) {
 
 	register := registry.NewRegistry()
 	ok := register.RegisterWorkerType(frameModel.FakeJobMaster,
-		registry.NewSimpleWorkerFactory(fake.NewFakeMaster))
+		registry.NewSimpleWorkerFactory(fakejob.NewFakeMaster))
 	require.True(t, ok)
 
 	ormCli, err := pkgOrm.NewMockClient()

@@ -19,13 +19,11 @@ import (
 	"testing"
 	"time"
 
-	"github.com/golang/mock/gomock"
 	"github.com/pingcap/tiflow/cdc/entry"
 	"github.com/pingcap/tiflow/cdc/model"
 	"github.com/pingcap/tiflow/cdc/processor/sourcemanager"
 	"github.com/pingcap/tiflow/cdc/processor/sourcemanager/engine"
 	"github.com/pingcap/tiflow/cdc/processor/sourcemanager/engine/memory"
-	mockengine "github.com/pingcap/tiflow/cdc/processor/sourcemanager/engine/mock"
 	"github.com/pingcap/tiflow/cdc/processor/tablepb"
 	"github.com/pingcap/tiflow/pkg/config"
 	"github.com/pingcap/tiflow/pkg/upstream"
@@ -57,28 +55,7 @@ func createManagerWithMemEngine(
 ) (*SinkManager, engine.SortEngine) {
 	sortEngine := memory.New(context.Background())
 	up := upstream.NewUpstream4Test(&mockPD{})
-	sm := sourcemanager.New(changefeedID, up, &entry.MockMountGroup{}, sortEngine, errChan)
-	manager, err := New(
-		ctx, changefeedID, changefeedInfo, up,
-		nil, sm,
-		errChan, prometheus.NewCounter(prometheus.CounterOpts{}))
-	require.NoError(t, err)
-	return manager, sortEngine
-}
-
-// nolint:revive
-// In test it is ok move the ctx to the second parameter.
-func createManagerWithMockEngine(
-	t *testing.T,
-	ctx context.Context,
-	changefeedID model.ChangeFeedID,
-	changefeedInfo *model.ChangeFeedInfo,
-	errChan chan error,
-) (*SinkManager, *mockengine.MockSortEngine) {
-	ctrl := gomock.NewController(t)
-	sortEngine := mockengine.NewMockSortEngine(ctrl)
-	up := upstream.NewUpstream4Test(&mockPD{})
-	sm := sourcemanager.New(changefeedID, up, &entry.MockMountGroup{}, sortEngine, errChan)
+	sm := sourcemanager.New(changefeedID, up, &entry.MockMountGroup{}, sortEngine, errChan, false)
 	manager, err := New(
 		ctx, changefeedID, changefeedInfo, up,
 		nil, sm,
@@ -365,47 +342,4 @@ func TestClose(t *testing.T) {
 
 	err := manager.Close()
 	require.NoError(t, err)
-}
-
-func TestGetTableStats(t *testing.T) {
-	t.Parallel()
-
-	ctx, cancel := context.WithCancel(context.Background())
-	defer cancel()
-
-	changefeedInfo := getChangefeedInfo()
-	manager, mockEngine := createManagerWithMockEngine(t, ctx, model.DefaultChangeFeedID("1"), changefeedInfo, make(chan error, 1))
-
-	defer func() {
-		err := manager.Close()
-		require.NoError(t, err)
-	}()
-	tableID := model.TableID(1)
-	mockEngine.EXPECT().AddTable(tableID)
-	mockEngine.EXPECT().Add(gomock.Any(), gomock.Any()).AnyTimes()
-	mockEngine.EXPECT().FetchByTable(gomock.Any(), gomock.Any(), gomock.Any()).AnyTimes()
-	mockEngine.EXPECT().GetResolvedTs(tableID).AnyTimes()
-
-	manager.AddTable(tableID, 1, 100)
-	addTableAndAddEventsToSortEngine(t, mockEngine, tableID)
-	// This would happen when the table just added to this node and redo log is enabled.
-	// So there is possibility that the resolved ts is smaller than the global barrier ts.
-	manager.UpdateBarrierTs(4)
-	manager.UpdateReceivedSorterResolvedTs(tableID, 3)
-	manager.StartTable(tableID, 0)
-
-	require.Eventually(t, func() bool {
-		tableSink, ok := manager.tableSinks.Load(tableID)
-		require.True(t, ok)
-		checkpointTS := tableSink.(*tableSinkWrapper).getCheckpointTs()
-		return checkpointTS.ResolvedMark() == 3
-	}, 5*time.Second, 10*time.Millisecond)
-
-	cleanPos := engine.Position{
-		StartTs:  2,
-		CommitTs: 3,
-	}
-	mockEngine.EXPECT().CleanByTable(tableID, cleanPos).Times(1)
-	stats := manager.GetTableStats(tableID)
-	require.Equal(t, uint64(3), stats.CheckpointTs)
 }

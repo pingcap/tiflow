@@ -23,6 +23,7 @@ import (
 	"github.com/DATA-DOG/go-sqlmock"
 	"github.com/pingcap/log"
 	dmconfig "github.com/pingcap/tiflow/dm/config"
+	"github.com/pingcap/tiflow/dm/config/dbconfig"
 	"github.com/pingcap/tiflow/dm/pkg/conn"
 	frameModel "github.com/pingcap/tiflow/engine/framework/model"
 	"github.com/pingcap/tiflow/engine/jobmaster/dm/config"
@@ -48,7 +49,7 @@ func TestCheckpoint(t *testing.T) {
 	require.NoError(t, err)
 	defer db.Close()
 	mock.ExpectExec(regexp.QuoteMeta(fmt.Sprintf(`CREATE DATABASE IF NOT EXISTS %s`, "`meta`"))).WillReturnResult(sqlmock.NewResult(1, 1))
-	require.NoError(t, createMetaDatabase(context.Background(), jobCfg, conn.NewBaseDB(db)))
+	require.NoError(t, createMetaDatabase(context.Background(), jobCfg, conn.NewBaseDBForTest(db)))
 
 	mock.ExpectExec(regexp.QuoteMeta(fmt.Sprintf(`CREATE TABLE IF NOT EXISTS %s (
 		task_name varchar(255) NOT NULL,
@@ -56,7 +57,7 @@ func TestCheckpoint(t *testing.T) {
 		status varchar(10) NOT NULL DEFAULT 'init' COMMENT 'init,running,finished',
 		PRIMARY KEY (task_name, source_name)
 	);`, "`meta`.`test_lightning_checkpoint_list`"))).WillReturnResult(sqlmock.NewResult(1, 1))
-	require.NoError(t, createLoadCheckpointTable(context.Background(), jobID, jobCfg, conn.NewBaseDB(db)))
+	require.NoError(t, createLoadCheckpointTable(context.Background(), jobID, jobCfg, conn.NewBaseDBForTest(db)))
 
 	mock.ExpectExec(regexp.QuoteMeta(fmt.Sprintf(`CREATE TABLE IF NOT EXISTS %s (
 		id VARCHAR(32) NOT NULL,
@@ -74,15 +75,15 @@ func TestCheckpoint(t *testing.T) {
 		update_time timestamp NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
 		UNIQUE KEY uk_id_schema_table (id, cp_schema, cp_table)
 	)`, "`meta`.`test_syncer_checkpoint`"))).WillReturnResult(sqlmock.NewResult(1, 1))
-	require.NoError(t, createSyncCheckpointTable(context.Background(), jobID, jobCfg, conn.NewBaseDB(db)))
+	require.NoError(t, createSyncCheckpointTable(context.Background(), jobID, jobCfg, conn.NewBaseDBForTest(db)))
 
 	mock.ExpectExec(regexp.QuoteMeta("DROP TABLE IF EXISTS `meta`.`test_lightning_checkpoint_list`")).WillReturnResult(sqlmock.NewResult(1, 1))
-	require.NoError(t, dropLoadCheckpointTable(context.Background(), jobID, jobCfg, conn.NewBaseDB(db)))
+	require.NoError(t, dropLoadCheckpointTable(context.Background(), jobID, jobCfg, conn.NewBaseDBForTest(db)))
 
 	mock.ExpectExec(regexp.QuoteMeta("DROP TABLE IF EXISTS `meta`.`test_syncer_checkpoint`")).WillReturnResult(sqlmock.NewResult(1, 1))
 	mock.ExpectExec(regexp.QuoteMeta("DROP TABLE IF EXISTS `meta`.`test_syncer_sharding_meta`")).WillReturnResult(sqlmock.NewResult(1, 1))
 	mock.ExpectExec(regexp.QuoteMeta("DROP TABLE IF EXISTS `meta`.`test_onlineddl`")).WillReturnResult(sqlmock.NewResult(1, 1))
-	require.NoError(t, dropSyncCheckpointTable(context.Background(), jobID, jobCfg, conn.NewBaseDB(db)))
+	require.NoError(t, dropSyncCheckpointTable(context.Background(), jobID, jobCfg, conn.NewBaseDBForTest(db)))
 }
 
 func TestCheckpointLifeCycle(t *testing.T) {
@@ -197,7 +198,7 @@ func TestIsFresh(t *testing.T) {
 				MySQLInstance: dmconfig.MySQLInstance{
 					SourceID: source1,
 				},
-				DBCfg: &dmconfig.DBConfig{},
+				DBCfg: &dbconfig.DBConfig{},
 			},
 		},
 	}
