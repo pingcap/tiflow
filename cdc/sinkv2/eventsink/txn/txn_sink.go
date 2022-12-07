@@ -105,9 +105,10 @@ func (s *sink) WriteEvents(txnEvents ...*eventsink.TxnCallbackableEvent) error {
 			txn.Callback()
 			continue
 		}
-
-		log.Info("[AAA] txn sink received txn",
-			zap.Any("txn", txn))
+		if txn.Event.Table.Table == "customer" {
+			log.Info("[AAA] txn sink received txn",
+				zap.Any("txn", txn))
+		}
 		s.conflictDetector.Add(newTxnEvent(txn))
 	}
 	return nil
