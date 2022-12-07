@@ -43,17 +43,17 @@ type TableExecutor interface {
 	// return true and corresponding checkpoint otherwise.
 	IsRemoveTableFinished(span tablepb.Span) (model.Ts, bool)
 
-	// GetAllCurrentTables should return all tables that are being run,
+	// GetTableCount should return the number of tables that are being run,
 	// being added and being removed.
 	//
 	// NOTE: two subsequent calls to the method should return the same
 	// result, unless there is a call to AddTable, RemoveTable, IsAddTableFinished
 	// or IsRemoveTableFinished in between two calls to this method.
-	GetAllCurrentTables() int
+	GetTableCount() int
 
 	// GetCheckpoint returns the local checkpoint-ts and resolved-ts of
 	// the processor. Its calculation should take into consideration all
-	// tables that would have been returned if GetAllCurrentTables had been
+	// tables that would have been returned if GetTableCount had been
 	// called immediately before.
 	GetCheckpoint() (checkpointTs, resolvedTs model.Ts)
 

@@ -295,9 +295,9 @@ func (tm *tableManager) poll(ctx context.Context) ([]*schedulepb.Message, error)
 	var err error
 	toBeDropped := []tablepb.Span{}
 	tm.tables.Ascend(func(span tablepb.Span, table *table) bool {
-		message, err := table.poll(ctx)
+		message, err1 := table.poll(ctx)
 		if err != nil {
-			err = errors.Trace(err)
+			err = errors.Trace(err1)
 			return false
 		}
 

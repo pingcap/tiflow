@@ -249,7 +249,7 @@ type mockAgent struct {
 }
 
 func (a *mockAgent) Tick(_ context.Context) error {
-	if a.executor.GetAllCurrentTables() == 0 {
+	if a.executor.GetTableCount() == 0 {
 		return nil
 	}
 	a.lastCheckpointTs, _ = a.executor.GetCheckpoint()

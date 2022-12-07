@@ -447,8 +447,8 @@ func (p *processor) IsRemoveTableFinished(span tablepb.Span) (model.Ts, bool) {
 	return checkpointTs, true
 }
 
-// GetAllCurrentTables implements TableExecutor interface.
-func (p *processor) GetAllCurrentTables() int {
+// GetTableCount implements TableExecutor interface.
+func (p *processor) GetTableCount() int {
 	if p.pullBasedSinking {
 		return len(p.sinkManager.GetAllCurrentTableIDs())
 	}

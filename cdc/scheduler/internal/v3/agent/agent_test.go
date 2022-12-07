@@ -1073,8 +1073,8 @@ func (e *MockTableExecutor) IsRemoveTableFinished(tableID tablepb.Span) (model.T
 	return model.Ts(args.Int(0)), args.Bool(1)
 }
 
-// GetAllCurrentTables returns all tables that are currently being adding, running, or removing.
-func (e *MockTableExecutor) GetAllCurrentTables() int {
+// GetTableCount returns all tables that are currently being adding, running, or removing.
+func (e *MockTableExecutor) GetTableCount() int {
 	var result int
 	e.tables.Ascend(func(span tablepb.Span, value tablepb.TableState) bool {
 		result++
