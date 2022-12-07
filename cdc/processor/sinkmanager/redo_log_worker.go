@@ -175,7 +175,7 @@ func (w *redoWorker) handleTask(ctx context.Context, task *redoTask) error {
 		task.tableSink.updateRangeEventCounts(eventCount)
 
 		if err := iter.Close(); err != nil {
-			log.Error("sink redo worker fails to close iterator",
+			log.Error("redo worker fails to close iterator",
 				zap.String("namespace", w.changefeedID.Namespace),
 				zap.String("changefeed", w.changefeedID.ID),
 				zap.Int64("tableID", task.tableID),

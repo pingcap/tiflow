@@ -193,6 +193,7 @@ func (suite *workerSuite) TestHandleTaskWithSplitTxnAndGotSomeFilteredEvents() {
 		}, lastWritePos.Next())
 		cancel()
 	}
+	w.memQuota.forceAcquire(requestMemSize)
 	taskChan <- &sinkTask{
 		tableID:       tableID,
 		lowerBound:    lowerBoundPos,
@@ -299,6 +300,7 @@ func (suite *workerSuite) TestHandleTaskWithSplitTxnAndAbortWhenNoMemAndOneTxnFi
 		}, lastWritePos.Next())
 		cancel()
 	}
+	w.memQuota.forceAcquire(requestMemSize)
 	taskChan <- &sinkTask{
 		tableID:       tableID,
 		lowerBound:    lowerBoundPos,
@@ -554,6 +556,7 @@ func (suite *workerSuite) TestHandleTaskWithSplitTxnAndOnlyAdvanceTableSinkWhenR
 		}, lastWritePos.Next())
 		cancel()
 	}
+	w.memQuota.forceAcquire(requestMemSize)
 	taskChan <- &sinkTask{
 		tableID:       tableID,
 		lowerBound:    lowerBoundPos,
@@ -680,6 +683,7 @@ func (suite *workerSuite) TestHandleTaskWithoutSplitTxnAndAbortWhenNoMemAndForce
 		}, lastWritePos.Next())
 		cancel()
 	}
+	w.memQuota.forceAcquire(requestMemSize)
 	taskChan <- &sinkTask{
 		tableID:       tableID,
 		lowerBound:    lowerBoundPos,
@@ -805,6 +809,7 @@ func (suite *workerSuite) TestHandleTaskWithoutSplitTxnOnlyAdvanceTableSinkWhenR
 		}, lastWritePos.Next())
 		cancel()
 	}
+	w.memQuota.forceAcquire(requestMemSize)
 	taskChan <- &sinkTask{
 		tableID:       tableID,
 		lowerBound:    lowerBoundPos,
@@ -922,6 +927,7 @@ func (suite *workerSuite) TestHandleTaskWithSplitTxnAndDoNotAdvanceTableUntilMee
 			CommitTs: 2,
 		}, lastWritePos.Next())
 	}
+	w.memQuota.forceAcquire(requestMemSize)
 	taskChan <- &sinkTask{
 		tableID:       tableID,
 		lowerBound:    lowerBoundPos,
@@ -1006,6 +1012,7 @@ func (suite *workerSuite) TestHandleTaskWithSplitTxnAndAdvanceTableUntilTaskIsFi
 			CommitTs: 1,
 		}, lastWritePos.Next())
 	}
+	w.memQuota.forceAcquire(requestMemSize)
 	taskChan <- &sinkTask{
 		tableID:       tableID,
 		lowerBound:    lowerBoundPos,

@@ -14,6 +14,7 @@
 package sinkmanager
 
 import (
+    "fmt"
 	"context"
 	"math"
 	"testing"
@@ -306,6 +307,8 @@ func TestGetTableStatsToReleaseMemQuota(t *testing.T) {
 
 	require.Eventually(t, func() bool {
 		s := manager.GetTableStats(tableID)
+        fmt.Printf("usedBytes: %d, CheckpointTs: %d\n", manager.memQuota.getUsedBytes(),
+        s.CheckpointTs)
 		return manager.memQuota.getUsedBytes() == 0 && s.CheckpointTs == 4
 	}, 5*time.Second, 10*time.Millisecond)
 }
