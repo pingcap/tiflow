@@ -241,13 +241,11 @@ func (w *sinkWorker) handleTask(ctx context.Context, task *sinkTask) (err error)
 			}
 			availableMem += int(requestMemSize)
 		}
-		if e.Row.Table.Table == "warehouse" {
-			log.Info("[AAA] worker output event",
-				zap.String("namespace", w.changefeedID.Namespace),
-				zap.String("changefeed", w.changefeedID.ID),
-				zap.Int64("tableID", task.tableID),
-				zap.Any("event", e))
-		}
+		log.Info("[AAA] worker output event",
+			zap.String("namespace", w.changefeedID.Namespace),
+			zap.String("changefeed", w.changefeedID.ID),
+			zap.Int64("tableID", task.tableID),
+			zap.Any("event", e))
 		availableMem -= eventSize
 		events = append(events, e)
 		currentCommitTs = e.CRTs
@@ -383,7 +381,6 @@ func (w *sinkWorker) handleTask(ctx context.Context, task *sinkTask) (err error)
 			zap.Uint64("memory", cleanedBytes),
 			zap.Bool("splitTxn", w.splitTxn),
 		)
-
 	} else {
 		// This happens when:
 		// 1. We just leave the last txn in the events.
@@ -474,13 +471,11 @@ func (w *sinkWorker) appendEventsToTableSink(t *sinkTask, events []*model.Polymo
 		return 0, err
 	}
 	for i := range rowChangedEvents {
-		if rowChangedEvents[i].Table.Table == "warehouse" {
-			log.Info("[AAA] worker converted event",
-				zap.String("namespace", w.changefeedID.Namespace),
-				zap.String("changefeed", w.changefeedID.ID),
-				zap.Int64("tableID", t.tableID),
-				zap.Any("event", rowChangedEvents[i]))
-		}
+		log.Info("[AAA] worker converted event",
+			zap.String("namespace", w.changefeedID.Namespace),
+			zap.String("changefeed", w.changefeedID.ID),
+			zap.Int64("tableID", t.tableID),
+			zap.Any("event", rowChangedEvents[i]))
 	}
 	t.tableSink.appendRowChangedEvents(rowChangedEvents...)
 	return size, nil
