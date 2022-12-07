@@ -85,10 +85,18 @@ func (w *sinkWorker) handleTask(ctx context.Context, task *sinkTask) (err error)
 	upperBound := task.getUpperBound(task.tableSink)
 
 	if w.eventCache != nil {
-		lowerBound, err = w.fetchFromCache(task, lowerBound, upperBound)
+		newLowerBound, newUpperBound, err := w.fetchFromCache(task, lowerBound, upperBound)
 		if err != nil {
 			return errors.Trace(err)
 		}
+		log.Debug("adjust task boundaries based on redo event cache",
+			zap.String("namespace", w.changefeedID.Namespace),
+			zap.String("changefeed", w.changefeedID.ID),
+			zap.Int64("tableID", task.tableID),
+			zap.Any("lowerBound", lowerBound),
+			zap.Any("upperBound", upperBound),
+			zap.Any("newLowerBound", newLowerBound),
+			zap.Any("newUpperBound", newUpperBound))
 	}
 
 	// Used to record the last written position.
@@ -432,27 +440,30 @@ func (w *sinkWorker) fetchFromCache(
 	task *sinkTask, // task is read-only here.
 	lowerBound engine.Position,
 	upperBound engine.Position,
-) (engine.Position, error) {
-	// Is it possible that after fetching something from cache, more events are
-	// pushed into cache immediately? It's unlikely and if it happens, new events
-	// are only available after resolvedTs has been advanced. So, here just pop one
-	// time is ok.
-	rawEventCount := 0
-	rows, size, pos := w.eventCache.pop(task.tableID, &rawEventCount, upperBound)
-	task.tableSink.receivedEventCount.Add(int64(rawEventCount))
-	if size > 0 {
-		w.metricRedoEventCacheHit.Add(float64(size))
-	}
-	if len(rows) > 0 {
-		task.tableSink.appendRowChangedEvents(rows...)
-		w.memQuota.record(task.tableID, model.ResolvedTs{Ts: pos.CommitTs}, size)
-		err := task.tableSink.updateResolvedTs(model.ResolvedTs{Ts: pos.CommitTs})
-		if err != nil {
-			return engine.Position{}, err
+) (newLowerBound, newUpperBound engine.Position, err error) {
+	newLowerBound = lowerBound
+	newUpperBound = upperBound
+
+	cache := w.eventCache.getAppender(task.tableID)
+	if cache != nil {
+		popRes := cache.pop(lowerBound, upperBound)
+		if popRes.success {
+			if len(popRes.events) > 0 {
+				task.tableSink.receivedEventCount.Add(int64(popRes.pushCount))
+				w.metricRedoEventCacheHit.Add(float64(popRes.size))
+				task.tableSink.appendRowChangedEvents(popRes.events...)
+				w.memQuota.record(task.tableID, model.ResolvedTs{Ts: popRes.boundary.CommitTs}, popRes.size)
+			}
+			err = task.tableSink.updateResolvedTs(model.ResolvedTs{Ts: popRes.boundary.CommitTs})
+			if err == nil {
+				newLowerBound = popRes.boundary.Next()
+			}
+		} else {
+			// TODO: seems should be `posRes.boundary.Prev()`.
+			newUpperBound = popRes.boundary
 		}
-		return pos.Next(), nil
 	}
-	return lowerBound, nil
+	return
 }
 
 func (w *sinkWorker) appendEventsToTableSink(t *sinkTask, events []*model.PolymorphicEvent) (uint64, error) {
