@@ -37,7 +37,7 @@ func (t *testTErrorSuite) TestDBAdapter(c *check.C) {
 	}
 
 	for _, tc := range testCases {
-		err := DBErrorAdapt(tc.err, defaultErr)
+		err := DBErrorAdapt(tc.err, ScopeNotSet, defaultErr)
 		if tc.expect == nil {
 			c.Assert(err, check.IsNil)
 		} else {

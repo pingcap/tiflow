@@ -76,6 +76,8 @@ message TableStatus {
         (gogoproto.casttype) = "github.com/pingcap/tiflow/cdc/model.TableID",
         (gogoproto.customname) = "TableID"
     ];
+    Span span = 5 [(gogoproto.nullable) = false];
+
     TableState state = 2;
     Checkpoint checkpoint = 3 [(gogoproto.nullable) = false];
     Stats stats = 4 [(gogoproto.nullable) = false];

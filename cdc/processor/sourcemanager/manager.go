@@ -15,6 +15,7 @@ package sourcemanager
 
 import (
 	"sync"
+	"time"
 
 	"github.com/pingcap/log"
 	"github.com/pingcap/tiflow/cdc/entry"
@@ -45,6 +46,8 @@ type SourceManager struct {
 	pullers sync.Map
 	// Used to report the error to the processor.
 	errChan chan error
+	// Used to indicate whether the changefeed is in BDR mode.
+	bdrMode bool
 }
 
 // New creates a new source manager.
@@ -54,6 +57,7 @@ func New(
 	mg entry.MounterGroup,
 	engine engine.SortEngine,
 	errChan chan error,
+	bdrMode bool,
 ) *SourceManager {
 	return &SourceManager{
 		changefeedID: changefeedID,
@@ -61,12 +65,13 @@ func New(
 		mg:           mg,
 		engine:       engine,
 		errChan:      errChan,
+		bdrMode:      bdrMode,
 	}
 }
 
 // AddTable adds a table to the source manager. Start puller and register table to the engine.
 func (m *SourceManager) AddTable(ctx cdccontext.Context, tableID model.TableID, tableName string, startTs model.Ts) {
-	p := pullerwrapper.NewPullerWrapper(m.changefeedID, tableID, tableName, startTs)
+	p := pullerwrapper.NewPullerWrapper(m.changefeedID, tableID, tableName, startTs, m.bdrMode)
 	p.Start(ctx, m.up, m.engine, m.errChan)
 	m.pullers.Store(tableID, p)
 	m.engine.AddTable(tableID)
@@ -126,12 +131,24 @@ func (m *SourceManager) ReceivedEvents() int64 {
 
 // Close closes the source manager. Stop all pullers and close the engine.
 func (m *SourceManager) Close() error {
+	log.Info("Closing source manager",
+		zap.String("namespace", m.changefeedID.Namespace),
+		zap.String("changefeed", m.changefeedID.ID))
+	start := time.Now()
 	m.pullers.Range(func(key, value interface{}) bool {
 		value.(*pullerwrapper.Wrapper).Close()
 		return true
 	})
+	log.Info("All pullers have been closed",
+		zap.String("namespace", m.changefeedID.Namespace),
+		zap.String("changefeed", m.changefeedID.ID),
+		zap.Duration("cost", time.Since(start)))
 	if err := m.engine.Close(); err != nil {
 		return cerrors.Trace(err)
 	}
+	log.Info("Closed source manager",
+		zap.String("namespace", m.changefeedID.Namespace),
+		zap.String("changefeed", m.changefeedID.ID),
+		zap.Duration("cost", time.Since(start)))
 	return nil
 }
