@@ -173,21 +173,6 @@ var (
 		errors.RFCCodeText("DFLOW:ErrJobManagerGetJobDetailFail"),
 	)
 
-	ErrJobManagerReadRespBodyFail = errors.Normalize(
-		"failed to read response body",
-		errors.RFCCodeText("DFLOW:ErrJobManagerReadRespBodyFail"),
-	)
-
-	ErrJobManagerRespStatusCode404 = errors.Normalize(
-		"get job detail response status code is 404",
-		errors.RFCCodeText("DFLOW:ErrJobManagerRespStatusCode404"),
-	)
-
-	ErrJobManagerRespStatusCodeNot2XX = errors.Normalize(
-		"get job detail response status code is not 2XX",
-		errors.RFCCodeText("DFLOW:ErrJobManagerRespStatusCodeNot2XX"),
-	)
-
 	// master etcd related errors
 	ErrMasterEtcdEpochFail = errors.Normalize(
 		"server master generate epoch fail",
