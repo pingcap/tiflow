@@ -242,6 +242,7 @@ fmt: tools/bin/gofumports tools/bin/shfmt tools/bin/gci
 	tools/bin/shfmt -d -w .
 	@echo "check log style"
 	scripts/check-log-style.sh
+	@make check-diff-line-width
 
 errdoc: tools/bin/errdoc-gen
 	@echo "generator errors.toml"
