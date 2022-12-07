@@ -77,10 +77,15 @@ func newRedoEventCache(changefeedID model.ChangeFeedID, capacity uint64) *redoEv
 
 func (r *redoEventCache) removeTable(tableID model.TableID) {
 	r.mu.Lock()
-	defer r.mu.Unlock()
 	item, exists := r.tables[tableID]
+	defer r.mu.Unlock()
 	if exists {
 		item.mu.Lock()
+		totalSize := uint64(0)
+		for _, size := range item.sizes {
+			totalSize += size
+		}
+		r.metricRedoEventCache.Sub(float64(totalSize))
 		item.events = nil
 		item.sizes = nil
 		item.pushCounts = nil
