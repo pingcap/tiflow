@@ -26,37 +26,37 @@ import (
 // to adapt the current Processor implementation to it.
 // TODO find a way to make the semantics easier to understand.
 type TableExecutor interface {
-	// AddTable add a new table with `startTs`
+	// AddTableSpan add a new table span with `startTs`
 	// if `isPrepare` is true, the 1st phase of the 2 phase scheduling protocol.
 	// if `isPrepare` is false, the 2nd phase.
-	AddTable(
+	AddTableSpan(
 		ctx context.Context, span tablepb.Span, startTs model.Ts, isPrepare bool,
 	) (done bool, err error)
 
-	// IsAddTableFinished make sure the requested table is in the proper status
-	IsAddTableFinished(span tablepb.Span, isPrepare bool) (done bool)
+	// IsAddTableSpanFinished make sure the requested table span is in the proper status
+	IsAddTableSpanFinished(span tablepb.Span, isPrepare bool) (done bool)
 
-	// RemoveTable remove the table, return true if the table is already removed
-	RemoveTable(span tablepb.Span) (done bool)
-	// IsRemoveTableFinished convince the table is fully stopped.
+	// RemoveTableSpan remove the table, return true if the table is already removed
+	RemoveTableSpan(span tablepb.Span) (done bool)
+	// IsRemoveTableSpanFinished convince the table is fully stopped.
 	// return false if table is not stopped
 	// return true and corresponding checkpoint otherwise.
-	IsRemoveTableFinished(span tablepb.Span) (model.Ts, bool)
+	IsRemoveTableSpanFinished(span tablepb.Span) (model.Ts, bool)
 
-	// GetTableCount should return the number of tables that are being run,
+	// GetTableSpanCount should return the number of table spans that are being run,
 	// being added and being removed.
 	//
 	// NOTE: two subsequent calls to the method should return the same
 	// result, unless there is a call to AddTable, RemoveTable, IsAddTableFinished
-	// or IsRemoveTableFinished in between two calls to this method.
-	GetTableCount() int
+	// or IsRemoveTableSpanFinished in between two calls to this method.
+	GetTableSpanCount() int
 
 	// GetCheckpoint returns the local checkpoint-ts and resolved-ts of
 	// the processor. Its calculation should take into consideration all
-	// tables that would have been returned if GetTableCount had been
+	// tables that would have been returned if GetTableSpanCount had been
 	// called immediately before.
 	GetCheckpoint() (checkpointTs, resolvedTs model.Ts)
 
-	// GetTableStatus return the checkpoint and resolved ts for the given table
-	GetTableStatus(span tablepb.Span) tablepb.TableStatus
+	// GetTableSpanStatus return the checkpoint and resolved ts for the given table span.
+	GetTableSpanStatus(span tablepb.Span) tablepb.TableStatus
 }

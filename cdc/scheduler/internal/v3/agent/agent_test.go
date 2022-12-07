@@ -144,7 +144,7 @@ func TestAgentHandleMessageDispatchTable(t *testing.T) {
 
 	a := newAgent4Test()
 	mockTableExecutor := newMockTableExecutor()
-	a.tableM = newTableManager(model.ChangeFeedID{}, mockTableExecutor)
+	a.tableM = newTableSpanManager(model.ChangeFeedID{}, mockTableExecutor)
 
 	removeTableRequest := &schedulepb.DispatchTableRequest{
 		Request: &schedulepb.DispatchTableRequest_RemoveTable{
@@ -174,7 +174,7 @@ func TestAgentHandleMessageDispatchTable(t *testing.T) {
 	// addTableRequest should be not ignored even if it's stopping.
 	a.handleLivenessUpdate(model.LivenessCaptureStopping)
 	require.Equal(t, model.LivenessCaptureStopping, a.liveness.Load())
-	mockTableExecutor.On("AddTable", mock.Anything, mock.Anything,
+	mockTableExecutor.On("AddTableSpan", mock.Anything, mock.Anything,
 		mock.Anything, mock.Anything).Return(false, nil)
 	a.handleMessageDispatchTableRequest(addTableRequest, processorEpoch)
 	responses, err = a.tableM.poll(ctx)
@@ -192,16 +192,16 @@ func TestAgentHandleMessageDispatchTable(t *testing.T) {
 	*a.liveness = model.LivenessCaptureAlive
 	require.Equal(t, model.LivenessCaptureAlive, a.liveness.Load())
 	mockTableExecutor.ExpectedCalls = nil
-	mockTableExecutor.On("AddTable", mock.Anything, mock.Anything,
+	mockTableExecutor.On("AddTableSpan", mock.Anything, mock.Anything,
 		mock.Anything, mock.Anything).Return(true, nil)
-	mockTableExecutor.On("IsAddTableFinished", mock.Anything,
+	mockTableExecutor.On("IsAddTableSpanFinished", mock.Anything,
 		mock.Anything, mock.Anything).Return(false, nil)
 	a.handleMessageDispatchTableRequest(addTableRequest, processorEpoch)
 	_, err = a.tableM.poll(ctx)
 	require.NoError(t, err)
 
 	mockTableExecutor.ExpectedCalls = mockTableExecutor.ExpectedCalls[:1]
-	mockTableExecutor.On("IsAddTableFinished", mock.Anything,
+	mockTableExecutor.On("IsAddTableSpanFinished", mock.Anything,
 		mock.Anything, mock.Anything).Return(true, nil)
 	a.handleMessageDispatchTableRequest(addTableRequest, processorEpoch)
 	responses, err = a.tableM.poll(ctx)
@@ -219,9 +219,10 @@ func TestAgentHandleMessageDispatchTable(t *testing.T) {
 	addTableRequest.Request.(*schedulepb.DispatchTableRequest_AddTable).
 		AddTable.IsSecondary = false
 
-	// only mock `IsAddTableFinished`, since `AddTable` by start a prepared table always success.
+	// only mock `IsAddTableSpanFinished`, since `AddTable` by start a prepared
+	// table span always success.
 	mockTableExecutor.ExpectedCalls = nil
-	mockTableExecutor.On("IsAddTableFinished", mock.Anything,
+	mockTableExecutor.On("IsAddTableSpanFinished", mock.Anything,
 		mock.Anything, mock.Anything).Return(false, nil)
 
 	a.handleMessageDispatchTableRequest(addTableRequest, processorEpoch)
@@ -237,7 +238,7 @@ func TestAgentHandleMessageDispatchTable(t *testing.T) {
 	require.True(t, a.tableM.tables.Has(spanz.TableIDToComparableSpan(1)))
 
 	mockTableExecutor.ExpectedCalls = nil
-	mockTableExecutor.On("IsAddTableFinished", mock.Anything,
+	mockTableExecutor.On("IsAddTableSpanFinished", mock.Anything,
 		mock.Anything, mock.Anything).Return(true, nil)
 	a.handleMessageDispatchTableRequest(addTableRequest, processorEpoch)
 	responses, err = a.tableM.poll(ctx)
@@ -251,7 +252,7 @@ func TestAgentHandleMessageDispatchTable(t *testing.T) {
 	require.Equal(t, tablepb.TableStateReplicating, addTableResponse.AddTable.Status.State)
 	require.True(t, a.tableM.tables.Has(spanz.TableIDToComparableSpan(1)))
 
-	mockTableExecutor.On("RemoveTable", mock.Anything, mock.Anything).
+	mockTableExecutor.On("RemoveTableSpan", mock.Anything, mock.Anything).
 		Return(false)
 	// remove table in the replicating state failed, should still in replicating.
 	a.handleMessageDispatchTableRequest(removeTableRequest, processorEpoch)
@@ -266,9 +267,9 @@ func TestAgentHandleMessageDispatchTable(t *testing.T) {
 	require.True(t, a.tableM.tables.Has(spanz.TableIDToComparableSpan(1)))
 
 	mockTableExecutor.ExpectedCalls = nil
-	mockTableExecutor.On("RemoveTable", mock.Anything, mock.Anything).
+	mockTableExecutor.On("RemoveTableSpan", mock.Anything, mock.Anything).
 		Return(true)
-	mockTableExecutor.On("IsRemoveTableFinished", mock.Anything, mock.Anything).
+	mockTableExecutor.On("IsRemoveTableSpanFinished", mock.Anything, mock.Anything).
 		Return(3, false)
 	// remove table in the replicating state failed, should still in replicating.
 	a.handleMessageDispatchTableRequest(removeTableRequest, processorEpoch)
@@ -282,7 +283,7 @@ func TestAgentHandleMessageDispatchTable(t *testing.T) {
 	require.Equal(t, tablepb.TableStateStopping, removeTableResponse.RemoveTable.Status.State)
 
 	mockTableExecutor.ExpectedCalls = mockTableExecutor.ExpectedCalls[:1]
-	mockTableExecutor.On("IsRemoveTableFinished", mock.Anything, mock.Anything).
+	mockTableExecutor.On("IsRemoveTableSpanFinished", mock.Anything, mock.Anything).
 		Return(3, true)
 	// remove table in the replicating state success, should in stopped
 	a.handleMessageDispatchTableRequest(removeTableRequest, processorEpoch)
@@ -303,10 +304,10 @@ func TestAgentHandleMessageHeartbeat(t *testing.T) {
 
 	a := newAgent4Test()
 	mockTableExecutor := newMockTableExecutor()
-	a.tableM = newTableManager(model.ChangeFeedID{}, mockTableExecutor)
+	a.tableM = newTableSpanManager(model.ChangeFeedID{}, mockTableExecutor)
 
 	for i := 0; i < 5; i++ {
-		a.tableM.addTable(spanz.TableIDToComparableSpan(int64(i)))
+		a.tableM.addTableSpan(spanz.TableIDToComparableSpan(int64(i)))
 	}
 
 	a.tableM.tables.GetV(spanz.TableIDToComparableSpan(0)).state = tablepb.TableStatePreparing
@@ -393,7 +394,7 @@ func TestAgentPermuteMessages(t *testing.T) {
 
 	a := newAgent4Test()
 	mockTableExecutor := newMockTableExecutor()
-	a.tableM = newTableManager(model.ChangeFeedID{}, mockTableExecutor)
+	a.tableM = newTableSpanManager(model.ChangeFeedID{}, mockTableExecutor)
 
 	trans := transport.NewMockTrans()
 	a.trans = trans
@@ -501,10 +502,10 @@ func TestAgentPermuteMessages(t *testing.T) {
 				switch message.DispatchTableRequest.Request.(type) {
 				case *schedulepb.DispatchTableRequest_AddTable:
 					for _, ok := range []bool{false, true} {
-						mockTableExecutor.On("AddTable", mock.Anything, mock.Anything,
+						mockTableExecutor.On("AddTableSpan", mock.Anything, mock.Anything,
 							mock.Anything, mock.Anything).Return(ok, nil)
 						for _, ok1 := range []bool{false, true} {
-							mockTableExecutor.On("IsAddTableFinished", mock.Anything,
+							mockTableExecutor.On("IsAddTableSpanFinished", mock.Anything,
 								mock.Anything, mock.Anything).Return(ok1, nil)
 
 							trans.RecvBuffer = append(trans.RecvBuffer, message)
@@ -518,11 +519,11 @@ func TestAgentPermuteMessages(t *testing.T) {
 					}
 				case *schedulepb.DispatchTableRequest_RemoveTable:
 					for _, ok := range []bool{false, true} {
-						mockTableExecutor.On("RemoveTable", mock.Anything,
+						mockTableExecutor.On("RemoveTableSpan", mock.Anything,
 							mock.Anything).Return(ok)
 						for _, ok1 := range []bool{false, true} {
 							trans.RecvBuffer = append(trans.RecvBuffer, message)
-							mockTableExecutor.On("IsRemoveTableFinished",
+							mockTableExecutor.On("IsRemoveTableSpanFinished",
 								mock.Anything, mock.Anything).Return(0, ok1)
 							err := a.Tick(ctx)
 							require.NoError(t, err)
@@ -555,7 +556,7 @@ func TestAgentHandleMessage(t *testing.T) {
 	t.Parallel()
 
 	mockTableExecutor := newMockTableExecutor()
-	tableM := newTableManager(model.ChangeFeedID{}, mockTableExecutor)
+	tableM := newTableSpanManager(model.ChangeFeedID{}, mockTableExecutor)
 	a := newAgent4Test()
 	a.tableM = tableM
 
@@ -649,7 +650,7 @@ func TestAgentTick(t *testing.T) {
 	trans := transport.NewMockTrans()
 	mockTableExecutor := newMockTableExecutor()
 	a.trans = trans
-	a.tableM = newTableManager(model.ChangeFeedID{}, mockTableExecutor)
+	a.tableM = newTableSpanManager(model.ChangeFeedID{}, mockTableExecutor)
 
 	heartbeat := &schedulepb.Message{
 		Header: &schedulepb.Message_Header{
@@ -716,9 +717,9 @@ func TestAgentTick(t *testing.T) {
 	messages = append(messages, removeTableRequest)
 	trans.RecvBuffer = append(trans.RecvBuffer, messages...)
 
-	mockTableExecutor.On("AddTable", mock.Anything,
+	mockTableExecutor.On("AddTableSpan", mock.Anything,
 		mock.Anything, mock.Anything, mock.Anything).Return(true, nil)
-	mockTableExecutor.On("IsAddTableFinished", mock.Anything,
+	mockTableExecutor.On("IsAddTableSpanFinished", mock.Anything,
 		mock.Anything, mock.Anything).Return(false, nil)
 	require.NoError(t, a.Tick(ctx))
 	trans.SendBuffer = trans.SendBuffer[:0]
@@ -726,7 +727,7 @@ func TestAgentTick(t *testing.T) {
 	trans.RecvBuffer = append(trans.RecvBuffer, addTableRequest)
 
 	mockTableExecutor.ExpectedCalls = mockTableExecutor.ExpectedCalls[:1]
-	mockTableExecutor.On("IsAddTableFinished", mock.Anything,
+	mockTableExecutor.On("IsAddTableSpanFinished", mock.Anything,
 		mock.Anything, mock.Anything).Return(true, nil)
 	require.NoError(t, a.Tick(ctx))
 	responses := trans.SendBuffer[:len(trans.SendBuffer)]
@@ -746,7 +747,7 @@ func TestAgentHandleLivenessUpdate(t *testing.T) {
 
 	// Test liveness via heartbeat.
 	mockTableExecutor := newMockTableExecutor()
-	tableM := newTableManager(model.ChangeFeedID{}, mockTableExecutor)
+	tableM := newTableSpanManager(model.ChangeFeedID{}, mockTableExecutor)
 	a := newAgent4Test()
 	a.tableM = tableM
 	require.Equal(t, model.LivenessCaptureAlive, a.liveness.Load())
@@ -773,7 +774,7 @@ func TestAgentCommitAddTableDuringStopping(t *testing.T) {
 
 	a := newAgent4Test()
 	mockTableExecutor := newMockTableExecutor()
-	a.tableM = newTableManager(model.ChangeFeedID{}, mockTableExecutor)
+	a.tableM = newTableSpanManager(model.ChangeFeedID{}, mockTableExecutor)
 	trans := transport.NewMockTrans()
 	a.trans = trans
 
@@ -799,20 +800,20 @@ func TestAgentCommitAddTableDuringStopping(t *testing.T) {
 
 	// Prepare add table is still in-progress.
 	mockTableExecutor.
-		On("AddTable", mock.Anything, mock.Anything, mock.Anything, mock.Anything).
+		On("AddTableSpan", mock.Anything, mock.Anything, mock.Anything, mock.Anything).
 		Return(true, nil).Once()
 	mockTableExecutor.
-		On("IsAddTableFinished", mock.Anything, mock.Anything, mock.Anything, mock.Anything).
+		On("IsAddTableSpanFinished", mock.Anything, mock.Anything, mock.Anything, mock.Anything).
 		Return(false, nil).Once()
 	err := a.Tick(context.Background())
 	require.Nil(t, err)
 	require.Len(t, trans.SendBuffer, 0)
 
 	mockTableExecutor.
-		On("AddTable", mock.Anything, mock.Anything, mock.Anything, mock.Anything).
+		On("AddTableSpan", mock.Anything, mock.Anything, mock.Anything, mock.Anything).
 		Return(true, nil).Once()
 	mockTableExecutor.
-		On("IsAddTableFinished", mock.Anything, mock.Anything, mock.Anything, mock.Anything).
+		On("IsAddTableSpanFinished", mock.Anything, mock.Anything, mock.Anything, mock.Anything).
 		Return(true, nil).Once()
 	err = a.Tick(context.Background())
 	require.Nil(t, err)
@@ -841,10 +842,10 @@ func TestAgentCommitAddTableDuringStopping(t *testing.T) {
 	trans.RecvBuffer = []*schedulepb.Message{commitTableMsg}
 	trans.SendBuffer = []*schedulepb.Message{}
 	mockTableExecutor.
-		On("AddTable", mock.Anything, mock.Anything, mock.Anything, mock.Anything).
+		On("AddTableSpan", mock.Anything, mock.Anything, mock.Anything, mock.Anything).
 		Return(true, nil).Once()
 	mockTableExecutor.
-		On("IsAddTableFinished", mock.Anything, mock.Anything, mock.Anything, mock.Anything).
+		On("IsAddTableSpanFinished", mock.Anything, mock.Anything, mock.Anything, mock.Anything).
 		Return(false, nil).Once()
 	// Set liveness to stopping.
 	a.liveness.Store(model.LivenessCaptureStopping)
@@ -855,7 +856,7 @@ func TestAgentCommitAddTableDuringStopping(t *testing.T) {
 	trans.RecvBuffer = []*schedulepb.Message{}
 	trans.SendBuffer = []*schedulepb.Message{}
 	mockTableExecutor.
-		On("IsAddTableFinished", mock.Anything, mock.Anything, mock.Anything, mock.Anything).
+		On("IsAddTableSpanFinished", mock.Anything, mock.Anything, mock.Anything, mock.Anything).
 		Return(true, nil).Once()
 	err = a.Tick(context.Background())
 	require.Nil(t, err)
@@ -870,7 +871,7 @@ func TestAgentTransportCompat(t *testing.T) {
 
 	a := newAgent4Test()
 	mockTableExecutor := newMockTableExecutor()
-	a.tableM = newTableManager(model.ChangeFeedID{}, mockTableExecutor)
+	a.tableM = newTableSpanManager(model.ChangeFeedID{}, mockTableExecutor)
 	trans := transport.NewMockTrans()
 	a.trans = trans
 	a.compat = compat.New(&config.SchedulerConfig{
@@ -969,11 +970,11 @@ func newMockTableExecutor() *MockTableExecutor {
 	}
 }
 
-// AddTable adds a table to the executor.
-func (e *MockTableExecutor) AddTable(
+// AddTableSpan adds a table span to the executor.
+func (e *MockTableExecutor) AddTableSpan(
 	ctx context.Context, tableID tablepb.Span, startTs model.Ts, isPrepare bool,
 ) (bool, error) {
-	log.Info("AddTable",
+	log.Info("AddTableSpan",
 		zap.Stringer("span", &tableID),
 		zap.Any("startTs", startTs),
 		zap.Bool("isPrepare", isPrepare))
@@ -1001,8 +1002,8 @@ func (e *MockTableExecutor) AddTable(
 	return args.Bool(0), args.Error(1)
 }
 
-// IsAddTableFinished determines if the table has been added.
-func (e *MockTableExecutor) IsAddTableFinished(tableID tablepb.Span, isPrepare bool) bool {
+// IsAddTableSpanFinished determines if the table span has been added.
+func (e *MockTableExecutor) IsAddTableSpanFinished(tableID tablepb.Span, isPrepare bool) bool {
 	_, ok := e.tables.Get(tableID)
 	if !ok {
 		log.Panic("table which was added is not found",
@@ -1027,8 +1028,8 @@ func (e *MockTableExecutor) IsAddTableFinished(tableID tablepb.Span, isPrepare b
 	return false
 }
 
-// RemoveTable removes a table from the executor.
-func (e *MockTableExecutor) RemoveTable(tableID tablepb.Span) bool {
+// RemoveTableSpan removes a table span from the executor.
+func (e *MockTableExecutor) RemoveTableSpan(tableID tablepb.Span) bool {
 	state, ok := e.tables.Get(tableID)
 	if !ok {
 		log.Warn("table to be remove is not found", zap.Stringer("span", &tableID))
@@ -1041,7 +1042,7 @@ func (e *MockTableExecutor) RemoveTable(tableID tablepb.Span) bool {
 	default:
 	}
 	// the current `processor implementation, does not consider table's state
-	log.Info("RemoveTable", zap.Stringer("span", &tableID), zap.Any("state", state))
+	log.Info("RemoveTableSpan", zap.Stringer("span", &tableID), zap.Any("state", state))
 
 	args := e.Called(tableID)
 	if args.Bool(0) {
@@ -1050,8 +1051,8 @@ func (e *MockTableExecutor) RemoveTable(tableID tablepb.Span) bool {
 	return args.Bool(0)
 }
 
-// IsRemoveTableFinished determines if the table has been removed.
-func (e *MockTableExecutor) IsRemoveTableFinished(tableID tablepb.Span) (model.Ts, bool) {
+// IsRemoveTableSpanFinished determines if the table span has been removed.
+func (e *MockTableExecutor) IsRemoveTableSpanFinished(tableID tablepb.Span) (model.Ts, bool) {
 	state, ok := e.tables.Get(tableID)
 	if !ok {
 		// the real `table executor` processor, would panic in such case.
@@ -1073,8 +1074,8 @@ func (e *MockTableExecutor) IsRemoveTableFinished(tableID tablepb.Span) (model.T
 	return model.Ts(args.Int(0)), args.Bool(1)
 }
 
-// GetTableCount returns all tables that are currently being adding, running, or removing.
-func (e *MockTableExecutor) GetTableCount() int {
+// GetTableSpanCount returns all tables that are currently being adding, running, or removing.
+func (e *MockTableExecutor) GetTableSpanCount() int {
 	var result int
 	e.tables.Ascend(func(span tablepb.Span, value tablepb.TableState) bool {
 		result++
@@ -1089,8 +1090,8 @@ func (e *MockTableExecutor) GetCheckpoint() (checkpointTs, resolvedTs model.Ts) 
 	return args.Get(0).(model.Ts), args.Get(1).(model.Ts)
 }
 
-// GetTableStatus implements TableExecutor interface
-func (e *MockTableExecutor) GetTableStatus(span tablepb.Span) tablepb.TableStatus {
+// GetTableSpanStatus implements TableExecutor interface
+func (e *MockTableExecutor) GetTableSpanStatus(span tablepb.Span) tablepb.TableStatus {
 	state, ok := e.tables.Get(span)
 	if !ok {
 		state = tablepb.TableStateAbsent

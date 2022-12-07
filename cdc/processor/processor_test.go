@@ -39,7 +39,6 @@ import (
 )
 
 // processor needs to implement TableExecutor.
-var _ scheduler.TableExecutor = (*processor)(nil)
 
 func newProcessor4Test(
 	t *testing.T,
@@ -249,7 +248,7 @@ type mockAgent struct {
 }
 
 func (a *mockAgent) Tick(_ context.Context) error {
-	if a.executor.GetTableCount() == 0 {
+	if a.executor.GetTableSpanCount() == 0 {
 		return nil
 	}
 	a.lastCheckpointTs, _ = a.executor.GetCheckpoint()
@@ -288,7 +287,7 @@ func TestTableExecutorAddingTableIndirectly(t *testing.T) {
 	tester.MustApplyPatches()
 
 	// table-1: `preparing` -> `prepared` -> `replicating`
-	ok, err := p.AddTable(ctx, spanz.TableIDToComparableSpan(1), 20, true)
+	ok, err := p.AddTableSpan(ctx, spanz.TableIDToComparableSpan(1), 20, true)
 	require.NoError(t, err)
 	require.True(t, ok)
 
@@ -302,7 +301,7 @@ func TestTableExecutorAddingTableIndirectly(t *testing.T) {
 	checkpointTs := p.agent.GetLastSentCheckpointTs()
 	require.Equal(t, checkpointTs, model.Ts(0))
 
-	done := p.IsAddTableFinished(spanz.TableIDToComparableSpan(1), true)
+	done := p.IsAddTableSpanFinished(spanz.TableIDToComparableSpan(1), true)
 	require.False(t, done)
 	require.Equal(t, tablepb.TableStatePreparing, table1.State())
 
@@ -313,7 +312,7 @@ func TestTableExecutorAddingTableIndirectly(t *testing.T) {
 	require.Nil(t, err)
 	tester.MustApplyPatches()
 
-	done = p.IsAddTableFinished(spanz.TableIDToComparableSpan(1), true)
+	done = p.IsAddTableSpanFinished(spanz.TableIDToComparableSpan(1), true)
 	require.True(t, done)
 	require.Equal(t, tablepb.TableStatePrepared, table1.State())
 
@@ -321,12 +320,12 @@ func TestTableExecutorAddingTableIndirectly(t *testing.T) {
 	checkpointTs = p.agent.GetLastSentCheckpointTs()
 	require.Equal(t, checkpointTs, model.Ts(20))
 
-	ok, err = p.AddTable(ctx, spanz.TableIDToComparableSpan(1), 30, true)
+	ok, err = p.AddTableSpan(ctx, spanz.TableIDToComparableSpan(1), 30, true)
 	require.NoError(t, err)
 	require.True(t, ok)
 	require.Equal(t, model.Ts(0), table1.sinkStartTs)
 
-	ok, err = p.AddTable(ctx, spanz.TableIDToComparableSpan(1), 30, false)
+	ok, err = p.AddTableSpan(ctx, spanz.TableIDToComparableSpan(1), 30, false)
 	require.NoError(t, err)
 	require.True(t, ok)
 	require.Equal(t, model.Ts(30), table1.sinkStartTs)
@@ -337,7 +336,7 @@ func TestTableExecutorAddingTableIndirectly(t *testing.T) {
 	require.Nil(t, err)
 	tester.MustApplyPatches()
 
-	done = p.IsAddTableFinished(spanz.TableIDToComparableSpan(1), false)
+	done = p.IsAddTableSpanFinished(spanz.TableIDToComparableSpan(1), false)
 	require.True(t, done)
 	require.Equal(t, tablepb.TableStateReplicating, table1.State())
 
@@ -371,33 +370,33 @@ func TestTableExecutorAddingTableDirectly(t *testing.T) {
 	require.NoError(t, err)
 	tester.MustApplyPatches()
 
-	ok, err := p.AddTable(ctx, spanz.TableIDToComparableSpan(1), 20, false)
+	ok, err := p.AddTableSpan(ctx, spanz.TableIDToComparableSpan(1), 20, false)
 	require.NoError(t, err)
 	require.True(t, ok)
 
 	table1 := p.tables[1].(*mockTablePipeline)
 	require.Equal(t, model.Ts(20), table1.sinkStartTs)
 	require.Equal(t, tablepb.TableStatePreparing, table1.state)
-	meta := p.GetTableStatus(spanz.TableIDToComparableSpan(1))
+	meta := p.GetTableSpanStatus(spanz.TableIDToComparableSpan(1))
 	require.Equal(t, model.TableID(1), meta.TableID)
 	require.Equal(t, spanz.TableIDToComparableSpan(1), meta.Span)
 	require.Equal(t, tablepb.TableStatePreparing, meta.State)
 
-	ok, err = p.AddTable(ctx, spanz.TableIDToComparableSpan(2), 20, false)
+	ok, err = p.AddTableSpan(ctx, spanz.TableIDToComparableSpan(2), 20, false)
 	require.NoError(t, err)
 	require.True(t, ok)
 	table2 := p.tables[2].(*mockTablePipeline)
 	require.Equal(t, model.Ts(20), table2.sinkStartTs)
 	require.Equal(t, tablepb.TableStatePreparing, table2.state)
 
-	ok, err = p.AddTable(ctx, spanz.TableIDToComparableSpan(3), 20, false)
+	ok, err = p.AddTableSpan(ctx, spanz.TableIDToComparableSpan(3), 20, false)
 	require.NoError(t, err)
 	require.True(t, ok)
 	table3 := p.tables[3].(*mockTablePipeline)
 	require.Equal(t, model.Ts(20), table3.sinkStartTs)
 	require.Equal(t, tablepb.TableStatePreparing, table3.state)
 
-	ok, err = p.AddTable(ctx, spanz.TableIDToComparableSpan(4), 20, false)
+	ok, err = p.AddTableSpan(ctx, spanz.TableIDToComparableSpan(4), 20, false)
 	require.NoError(t, err)
 	require.True(t, ok)
 	table4 := p.tables[4].(*mockTablePipeline)
@@ -409,16 +408,16 @@ func TestTableExecutorAddingTableDirectly(t *testing.T) {
 	checkpointTs := p.agent.GetLastSentCheckpointTs()
 	require.Equal(t, checkpointTs, model.Ts(0))
 
-	done := p.IsAddTableFinished(spanz.TableIDToComparableSpan(1), false)
+	done := p.IsAddTableSpanFinished(spanz.TableIDToComparableSpan(1), false)
 	require.False(t, done)
 	require.Equal(t, tablepb.TableStatePreparing, table1.State())
-	done = p.IsAddTableFinished(spanz.TableIDToComparableSpan(2), false)
+	done = p.IsAddTableSpanFinished(spanz.TableIDToComparableSpan(2), false)
 	require.False(t, done)
 	require.Equal(t, tablepb.TableStatePreparing, table2.State())
-	done = p.IsAddTableFinished(spanz.TableIDToComparableSpan(3), false)
+	done = p.IsAddTableSpanFinished(spanz.TableIDToComparableSpan(3), false)
 	require.False(t, done)
 	require.Equal(t, tablepb.TableStatePreparing, table3.State())
-	done = p.IsAddTableFinished(spanz.TableIDToComparableSpan(4), false)
+	done = p.IsAddTableSpanFinished(spanz.TableIDToComparableSpan(4), false)
 	require.False(t, done)
 	require.Equal(t, tablepb.TableStatePreparing, table4.State())
 	require.Len(t, p.tables, 4)
@@ -438,16 +437,16 @@ func TestTableExecutorAddingTableDirectly(t *testing.T) {
 	table3.checkpointTs = 30
 	table4.checkpointTs = 30
 
-	done = p.IsAddTableFinished(spanz.TableIDToComparableSpan(1), false)
+	done = p.IsAddTableSpanFinished(spanz.TableIDToComparableSpan(1), false)
 	require.True(t, done)
 	require.Equal(t, tablepb.TableStateReplicating, table1.State())
-	done = p.IsAddTableFinished(spanz.TableIDToComparableSpan(2), false)
+	done = p.IsAddTableSpanFinished(spanz.TableIDToComparableSpan(2), false)
 	require.True(t, done)
 	require.Equal(t, tablepb.TableStateReplicating, table2.State())
-	done = p.IsAddTableFinished(spanz.TableIDToComparableSpan(3), false)
+	done = p.IsAddTableSpanFinished(spanz.TableIDToComparableSpan(3), false)
 	require.True(t, done)
 	require.Equal(t, tablepb.TableStateReplicating, table3.State())
-	done = p.IsAddTableFinished(spanz.TableIDToComparableSpan(4), false)
+	done = p.IsAddTableSpanFinished(spanz.TableIDToComparableSpan(4), false)
 	require.True(t, done)
 	require.Equal(t, tablepb.TableStateReplicating, table4.State())
 
@@ -473,7 +472,7 @@ func TestTableExecutorAddingTableDirectly(t *testing.T) {
 	require.NoError(t, err)
 	tester.MustApplyPatches()
 
-	ok = p.RemoveTable(spanz.TableIDToComparableSpan(3))
+	ok = p.RemoveTableSpan(spanz.TableIDToComparableSpan(3))
 	require.True(t, ok)
 
 	err = p.Tick(ctx)
@@ -485,7 +484,7 @@ func TestTableExecutorAddingTableDirectly(t *testing.T) {
 	require.False(t, table3.canceled)
 	require.Equal(t, model.Ts(60), table3.CheckpointTs())
 
-	checkpointTs, done = p.IsRemoveTableFinished(spanz.TableIDToComparableSpan(3))
+	checkpointTs, done = p.IsRemoveTableSpanFinished(spanz.TableIDToComparableSpan(3))
 	require.False(t, done)
 	require.Equal(t, model.Ts(0), checkpointTs)
 
@@ -508,10 +507,10 @@ func TestTableExecutorAddingTableDirectly(t *testing.T) {
 	require.Len(t, p.tables, 4)
 	require.False(t, table3.canceled)
 
-	checkpointTs, done = p.IsRemoveTableFinished(spanz.TableIDToComparableSpan(3))
+	checkpointTs, done = p.IsRemoveTableSpanFinished(spanz.TableIDToComparableSpan(3))
 	require.True(t, done)
 	require.Equal(t, model.Ts(65), checkpointTs)
-	meta = p.GetTableStatus(spanz.TableIDToComparableSpan(3))
+	meta = p.GetTableSpanStatus(spanz.TableIDToComparableSpan(3))
 	require.Equal(t, model.TableID(3), meta.TableID)
 	require.Equal(t, spanz.TableIDToComparableSpan(3), meta.Span)
 	require.Equal(t, tablepb.TableStateAbsent, meta.State)
@@ -605,10 +604,10 @@ func TestProcessorClose(t *testing.T) {
 	tester.MustApplyPatches()
 
 	// add tables
-	done, err := p.AddTable(ctx, spanz.TableIDToComparableSpan(1), 20, false)
+	done, err := p.AddTableSpan(ctx, spanz.TableIDToComparableSpan(1), 20, false)
 	require.Nil(t, err)
 	require.True(t, done)
-	done, err = p.AddTable(ctx, spanz.TableIDToComparableSpan(2), 30, false)
+	done, err = p.AddTableSpan(ctx, spanz.TableIDToComparableSpan(2), 30, false)
 	require.Nil(t, err)
 	require.True(t, done)
 
@@ -645,10 +644,10 @@ func TestProcessorClose(t *testing.T) {
 	tester.MustApplyPatches()
 
 	// add tables
-	done, err = p.AddTable(ctx, spanz.TableIDToComparableSpan(1), 20, false)
+	done, err = p.AddTableSpan(ctx, spanz.TableIDToComparableSpan(1), 20, false)
 	require.Nil(t, err)
 	require.True(t, done)
-	done, err = p.AddTable(ctx, spanz.TableIDToComparableSpan(2), 30, false)
+	done, err = p.AddTableSpan(ctx, spanz.TableIDToComparableSpan(2), 30, false)
 	require.Nil(t, err)
 	require.True(t, done)
 	err = p.Tick(ctx)
@@ -678,10 +677,10 @@ func TestPositionDeleted(t *testing.T) {
 	p, tester := initProcessor4Test(ctx, t, &liveness)
 	var err error
 	// add table
-	done, err := p.AddTable(ctx, spanz.TableIDToComparableSpan(1), 30, false)
+	done, err := p.AddTableSpan(ctx, spanz.TableIDToComparableSpan(1), 30, false)
 	require.Nil(t, err)
 	require.True(t, done)
-	done, err = p.AddTable(ctx, spanz.TableIDToComparableSpan(2), 40, false)
+	done, err = p.AddTableSpan(ctx, spanz.TableIDToComparableSpan(2), 40, false)
 	require.Nil(t, err)
 	require.True(t, done)
 	// init tick
@@ -798,7 +797,7 @@ func TestUpdateBarrierTs(t *testing.T) {
 	})
 	p.schemaStorage.(*mockSchemaStorage).resolvedTs = 10
 
-	done, err := p.AddTable(ctx, spanz.TableIDToComparableSpan(1), 5, false)
+	done, err := p.AddTableSpan(ctx, spanz.TableIDToComparableSpan(1), 5, false)
 	require.True(t, done)
 	require.Nil(t, err)
 	err = p.Tick(ctx)

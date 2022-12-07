@@ -42,7 +42,7 @@ type agent struct {
 	trans  transport.Transport
 	compat *compat.Compat
 
-	tableM *tableManager
+	tableM *tableSpanManager
 
 	ownerInfo ownerInfo
 
@@ -92,7 +92,7 @@ func newAgent(
 ) (internal.Agent, error) {
 	result := &agent{
 		agentInfo: newAgentInfo(changeFeedID, captureID),
-		tableM:    newTableManager(changeFeedID, tableExecutor),
+		tableM:    newTableSpanManager(changeFeedID, tableExecutor),
 		liveness:  liveness,
 		compat:    compat.New(cfg, map[model.CaptureID]*model.CaptureInfo{}),
 	}
@@ -259,10 +259,10 @@ func (a *agent) handleMessage(msg []*schedulepb.Message) []*schedulepb.Message {
 }
 
 func (a *agent) handleMessageHeartbeat(request *schedulepb.Heartbeat) *schedulepb.Message {
-	allTables := a.tableM.getAllTables()
+	allTables := a.tableM.getAllTableSpans()
 	result := make([]tablepb.TableStatus, 0, allTables.Len())
-	allTables.Ascend(func(span tablepb.Span, table *table) bool {
-		status := table.getTableStatus()
+	allTables.Ascend(func(span tablepb.Span, table *tableSpan) bool {
+		status := table.getTableSpanStatus()
 		if table.task != nil && table.task.IsRemove {
 			status.State = tablepb.TableStateStopping
 		}
@@ -271,7 +271,7 @@ func (a *agent) handleMessageHeartbeat(request *schedulepb.Heartbeat) *schedulep
 	})
 	for _, span := range request.GetSpans() {
 		if _, ok := allTables.Get(span); !ok {
-			status := a.tableM.getTableStatus(span)
+			status := a.tableM.getTableSpanStatus(span)
 			result = append(result, status)
 		}
 	}
@@ -329,7 +329,7 @@ func (a *agent) handleMessageDispatchTableRequest(
 		return
 	}
 	var (
-		table *table
+		table *tableSpan
 		task  *dispatchTableTask
 		ok    bool
 	)
@@ -346,10 +346,10 @@ func (a *agent) handleMessageDispatchTableRequest(
 			Epoch:     epoch,
 			status:    dispatchTableTaskReceived,
 		}
-		table = a.tableM.addTable(span)
+		table = a.tableM.addTableSpan(span)
 	case *schedulepb.DispatchTableRequest_RemoveTable:
 		span := req.RemoveTable.GetSpan()
-		table, ok = a.tableM.getTable(span)
+		table, ok = a.tableM.getTableSpan(span)
 		if !ok {
 			log.Warn("schedulerv3: agent ignore remove table request, "+
 				"since the table not found",

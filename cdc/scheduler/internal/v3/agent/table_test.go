@@ -28,12 +28,12 @@ func TestTableManager(t *testing.T) {
 	// pretend there are 4 tables
 	mockTableExecutor := newMockTableExecutor()
 
-	tableM := newTableManager(model.ChangeFeedID{}, mockTableExecutor)
+	tableM := newTableSpanManager(model.ChangeFeedID{}, mockTableExecutor)
 
 	span1 := spanz.TableIDToComparableSpan(1)
-	tableM.addTable(span1)
+	tableM.addTableSpan(span1)
 	require.Equal(t, tablepb.TableStateAbsent, tableM.tables.GetV(span1).state)
 
-	tableM.dropTable(span1)
+	tableM.dropTableSpan(span1)
 	require.False(t, tableM.tables.Has(span1))
 }

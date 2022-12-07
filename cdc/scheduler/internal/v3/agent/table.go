@@ -26,9 +26,9 @@ import (
 	"go.uber.org/zap"
 )
 
-// table is a state machine that manage the table's state,
+// tableSpan is a state machine that manage the tableSpan's state,
 // also tracking its progress by utilize the `TableExecutor`
-type table struct {
+type tableSpan struct {
 	changefeedID model.ChangeFeedID
 	span         tablepb.Span
 
@@ -38,10 +38,10 @@ type table struct {
 	task *dispatchTableTask
 }
 
-func newTable(
+func newTableSpan(
 	changefeed model.ChangeFeedID, span tablepb.Span, executor internal.TableExecutor,
-) *table {
-	return &table{
+) *tableSpan {
+	return &tableSpan{
 		changefeedID: changefeed,
 		span:         span,
 		state:        tablepb.TableStateAbsent, // use `absent` as the default state.
@@ -50,11 +50,11 @@ func newTable(
 	}
 }
 
-// getAndUpdateTableState get the table' state, return true if the table state changed
-func (t *table) getAndUpdateTableState() (tablepb.TableState, bool) {
+// getAndUpdateTableSpanState get the table span' state, return true if the table state changed
+func (t *tableSpan) getAndUpdateTableSpanState() (tablepb.TableState, bool) {
 	oldState := t.state
 
-	meta := t.executor.GetTableStatus(t.span)
+	meta := t.executor.GetTableSpanStatus(t.span)
 	t.state = meta.State
 
 	if oldState != t.state {
@@ -69,8 +69,8 @@ func (t *table) getAndUpdateTableState() (tablepb.TableState, bool) {
 	return t.state, false
 }
 
-func (t *table) getTableStatus() tablepb.TableStatus {
-	return t.executor.GetTableStatus(t.span)
+func (t *tableSpan) getTableSpanStatus() tablepb.TableStatus {
+	return t.executor.GetTableSpanStatus(t.span)
 }
 
 func newAddTableResponseMessage(status tablepb.TableStatus) *schedulepb.Message {
@@ -103,8 +103,8 @@ func newRemoveTableResponseMessage(status tablepb.TableStatus) *schedulepb.Messa
 	return message
 }
 
-func (t *table) handleRemoveTableTask() *schedulepb.Message {
-	state, _ := t.getAndUpdateTableState()
+func (t *tableSpan) handleRemoveTableTask() *schedulepb.Message {
+	state, _ := t.getAndUpdateTableSpanState()
 	changed := true
 	for changed {
 		switch state {
@@ -114,33 +114,33 @@ func (t *table) handleRemoveTableTask() *schedulepb.Message {
 				zap.String("changefeed", t.changefeedID.ID),
 				zap.Int64("tableID", t.span.TableID))
 			t.task = nil
-			return newRemoveTableResponseMessage(t.getTableStatus())
+			return newRemoveTableResponseMessage(t.getTableSpanStatus())
 		case tablepb.TableStateStopping, // stopping now is useless
 			tablepb.TableStateStopped:
 			// release table resource, and get the latest checkpoint
-			// this will let the table become `absent`
-			checkpointTs, done := t.executor.IsRemoveTableFinished(t.span)
+			// this will let the table span become `absent`
+			checkpointTs, done := t.executor.IsRemoveTableSpanFinished(t.span)
 			if !done {
 				// actually, this should never be hit, since we know that table is stopped.
-				status := t.getTableStatus()
+				status := t.getTableSpanStatus()
 				status.State = tablepb.TableStateStopping
 				return newRemoveTableResponseMessage(status)
 			}
 			t.task = nil
-			status := t.getTableStatus()
+			status := t.getTableSpanStatus()
 			status.State = tablepb.TableStateStopped
 			status.Checkpoint.CheckpointTs = checkpointTs
 			return newRemoveTableResponseMessage(status)
 		case tablepb.TableStatePreparing,
 			tablepb.TableStatePrepared,
 			tablepb.TableStateReplicating:
-			done := t.executor.RemoveTable(t.task.Span)
+			done := t.executor.RemoveTableSpan(t.task.Span)
 			if !done {
-				status := t.getTableStatus()
+				status := t.getTableSpanStatus()
 				status.State = tablepb.TableStateStopping
 				return newRemoveTableResponseMessage(status)
 			}
-			state, changed = t.getAndUpdateTableState()
+			state, changed = t.getAndUpdateTableSpanState()
 		default:
 			log.Panic("schedulerv3: unknown table state",
 				zap.String("namespace", t.changefeedID.Namespace),
@@ -151,30 +151,32 @@ func (t *table) handleRemoveTableTask() *schedulepb.Message {
 	return nil
 }
 
-func (t *table) handleAddTableTask(ctx context.Context) (result *schedulepb.Message, err error) {
-	state, _ := t.getAndUpdateTableState()
+func (t *tableSpan) handleAddTableTask(
+	ctx context.Context,
+) (result *schedulepb.Message, err error) {
+	state, _ := t.getAndUpdateTableSpanState()
 	changed := true
 	for changed {
 		switch state {
 		case tablepb.TableStateAbsent:
-			done, err := t.executor.AddTable(ctx, t.task.Span, t.task.StartTs, t.task.IsPrepare)
+			done, err := t.executor.AddTableSpan(ctx, t.task.Span, t.task.StartTs, t.task.IsPrepare)
 			if err != nil || !done {
 				log.Warn("schedulerv3: agent add table failed",
 					zap.String("namespace", t.changefeedID.Namespace),
 					zap.String("changefeed", t.changefeedID.ID),
 					zap.Int64("tableID", t.span.TableID), zap.Any("task", t.task),
 					zap.Error(err))
-				status := t.getTableStatus()
+				status := t.getTableSpanStatus()
 				return newAddTableResponseMessage(status), errors.Trace(err)
 			}
-			state, changed = t.getAndUpdateTableState()
+			state, changed = t.getAndUpdateTableSpanState()
 		case tablepb.TableStateReplicating:
 			log.Info("schedulerv3: table is replicating",
 				zap.String("namespace", t.changefeedID.Namespace),
 				zap.String("changefeed", t.changefeedID.ID),
 				zap.Int64("tableID", t.span.TableID), zap.Stringer("state", state))
 			t.task = nil
-			status := t.getTableStatus()
+			status := t.getTableSpanStatus()
 			return newAddTableResponseMessage(status), nil
 		case tablepb.TableStatePrepared:
 			if t.task.IsPrepare {
@@ -184,36 +186,36 @@ func (t *table) handleAddTableTask(ctx context.Context) (result *schedulepb.Mess
 					zap.String("changefeed", t.changefeedID.ID),
 					zap.Int64("tableID", t.span.TableID), zap.Stringer("state", state))
 				t.task = nil
-				return newAddTableResponseMessage(t.getTableStatus()), nil
+				return newAddTableResponseMessage(t.getTableSpanStatus()), nil
 			}
 
 			if t.task.status == dispatchTableTaskReceived {
-				done, err := t.executor.AddTable(ctx, t.task.Span, t.task.StartTs, false)
+				done, err := t.executor.AddTableSpan(ctx, t.task.Span, t.task.StartTs, false)
 				if err != nil || !done {
 					log.Warn("schedulerv3: agent add table failed",
 						zap.String("namespace", t.changefeedID.Namespace),
 						zap.String("changefeed", t.changefeedID.ID),
 						zap.Int64("tableID", t.span.TableID), zap.Stringer("state", state),
 						zap.Error(err))
-					status := t.getTableStatus()
+					status := t.getTableSpanStatus()
 					return newAddTableResponseMessage(status), errors.Trace(err)
 				}
 				t.task.status = dispatchTableTaskProcessed
 			}
 
-			done := t.executor.IsAddTableFinished(t.task.Span, false)
+			done := t.executor.IsAddTableSpanFinished(t.task.Span, false)
 			if !done {
-				return newAddTableResponseMessage(t.getTableStatus()), nil
+				return newAddTableResponseMessage(t.getTableSpanStatus()), nil
 			}
-			state, changed = t.getAndUpdateTableState()
+			state, changed = t.getAndUpdateTableSpanState()
 		case tablepb.TableStatePreparing:
 			// `preparing` is not stable state and would last a long time,
 			// it's no need to return such a state, to make the coordinator become burdensome.
-			done := t.executor.IsAddTableFinished(t.task.Span, t.task.IsPrepare)
+			done := t.executor.IsAddTableSpanFinished(t.task.Span, t.task.IsPrepare)
 			if !done {
 				return nil, nil
 			}
-			state, changed = t.getAndUpdateTableState()
+			state, changed = t.getAndUpdateTableSpanState()
 			log.Info("schedulerv3: add table finished",
 				zap.String("namespace", t.changefeedID.Namespace),
 				zap.String("changefeed", t.changefeedID.ID),
@@ -225,7 +227,7 @@ func (t *table) handleAddTableTask(ctx context.Context) (result *schedulepb.Mess
 				zap.String("changefeed", t.changefeedID.ID),
 				zap.Int64("tableID", t.span.TableID))
 			t.task = nil
-			return newAddTableResponseMessage(t.getTableStatus()), nil
+			return newAddTableResponseMessage(t.getTableSpanStatus()), nil
 		default:
 			log.Panic("schedulerv3: unknown table state",
 				zap.String("namespace", t.changefeedID.Namespace),
@@ -237,7 +239,7 @@ func (t *table) handleAddTableTask(ctx context.Context) (result *schedulepb.Mess
 	return nil, nil
 }
 
-func (t *table) injectDispatchTableTask(task *dispatchTableTask) {
+func (t *tableSpan) injectDispatchTableTask(task *dispatchTableTask) {
 	if !t.span.Eq(&task.Span) {
 		log.Panic("schedulerv3: tableID not match",
 			zap.String("namespace", t.changefeedID.Namespace),
@@ -263,7 +265,7 @@ func (t *table) injectDispatchTableTask(task *dispatchTableTask) {
 		zap.Any("ignoredTask", task))
 }
 
-func (t *table) poll(ctx context.Context) (*schedulepb.Message, error) {
+func (t *tableSpan) poll(ctx context.Context) (*schedulepb.Message, error) {
 	if t.task == nil {
 		return nil, nil
 	}
@@ -273,35 +275,35 @@ func (t *table) poll(ctx context.Context) (*schedulepb.Message, error) {
 	return t.handleAddTableTask(ctx)
 }
 
-type tableManager struct {
-	tables   *spanz.Map[*table]
+type tableSpanManager struct {
+	tables   *spanz.Map[*tableSpan]
 	executor internal.TableExecutor
 
 	changefeedID model.ChangeFeedID
 }
 
-func newTableManager(
+func newTableSpanManager(
 	changefeed model.ChangeFeedID, executor internal.TableExecutor,
-) *tableManager {
-	return &tableManager{
-		tables:       spanz.NewMap[*table](),
+) *tableSpanManager {
+	return &tableSpanManager{
+		tables:       spanz.NewMap[*tableSpan](),
 		executor:     executor,
 		changefeedID: changefeed,
 	}
 }
 
-func (tm *tableManager) poll(ctx context.Context) ([]*schedulepb.Message, error) {
+func (tm *tableSpanManager) poll(ctx context.Context) ([]*schedulepb.Message, error) {
 	result := make([]*schedulepb.Message, 0)
 	var err error
 	toBeDropped := []tablepb.Span{}
-	tm.tables.Ascend(func(span tablepb.Span, table *table) bool {
+	tm.tables.Ascend(func(span tablepb.Span, table *tableSpan) bool {
 		message, err1 := table.poll(ctx)
 		if err != nil {
 			err = errors.Trace(err1)
 			return false
 		}
 
-		state, _ := table.getAndUpdateTableState()
+		state, _ := table.getAndUpdateTableSpanState()
 		if state == tablepb.TableStateAbsent {
 			toBeDropped = append(toBeDropped, span)
 		}
@@ -313,26 +315,26 @@ func (tm *tableManager) poll(ctx context.Context) ([]*schedulepb.Message, error)
 		return true
 	})
 	for _, span := range toBeDropped {
-		tm.dropTable(span)
+		tm.dropTableSpan(span)
 	}
 	return result, err
 }
 
-func (tm *tableManager) getAllTables() *spanz.Map[*table] {
+func (tm *tableSpanManager) getAllTableSpans() *spanz.Map[*tableSpan] {
 	return tm.tables
 }
 
-// addTable add the target table, and return it.
-func (tm *tableManager) addTable(span tablepb.Span) *table {
+// addTableSpan add the target table span, and return it.
+func (tm *tableSpanManager) addTableSpan(span tablepb.Span) *tableSpan {
 	table, ok := tm.tables.Get(span)
 	if !ok {
-		table = newTable(tm.changefeedID, span, tm.executor)
+		table = newTableSpan(tm.changefeedID, span, tm.executor)
 		tm.tables.ReplaceOrInsert(span, table)
 	}
 	return table
 }
 
-func (tm *tableManager) getTable(span tablepb.Span) (*table, bool) {
+func (tm *tableSpanManager) getTableSpan(span tablepb.Span) (*tableSpan, bool) {
 	table, ok := tm.tables.Get(span)
 	if ok {
 		return table, true
@@ -340,7 +342,7 @@ func (tm *tableManager) getTable(span tablepb.Span) (*table, bool) {
 	return nil, false
 }
 
-func (tm *tableManager) dropTable(span tablepb.Span) {
+func (tm *tableSpanManager) dropTableSpan(span tablepb.Span) {
 	table, ok := tm.tables.Get(span)
 	if !ok {
 		log.Warn("schedulerv3: tableManager drop table not found",
@@ -349,7 +351,7 @@ func (tm *tableManager) dropTable(span tablepb.Span) {
 			zap.Stringer("span", &span))
 		return
 	}
-	state, _ := table.getAndUpdateTableState()
+	state, _ := table.getAndUpdateTableSpanState()
 	if state != tablepb.TableStateAbsent {
 		log.Panic("schedulerv3: tableManager drop table undesired",
 			zap.String("namespace", tm.changefeedID.Namespace),
@@ -365,10 +367,10 @@ func (tm *tableManager) dropTable(span tablepb.Span) {
 	tm.tables.Delete(span)
 }
 
-func (tm *tableManager) getTableStatus(span tablepb.Span) tablepb.TableStatus {
-	table, ok := tm.getTable(span)
+func (tm *tableSpanManager) getTableSpanStatus(span tablepb.Span) tablepb.TableStatus {
+	table, ok := tm.getTableSpan(span)
 	if ok {
-		return table.getTableStatus()
+		return table.getTableSpanStatus()
 	}
 
 	return tablepb.TableStatus{

@@ -28,13 +28,13 @@ func benchmarkHeartbeatResponse(b *testing.B, bench func(b *testing.B, a *agent)
 		tableExec := newMockTableExecutor()
 		liveness := model.LivenessCaptureAlive
 		a := &agent{
-			tableM:   newTableManager(model.ChangeFeedID{}, tableExec),
+			tableM:   newTableSpanManager(model.ChangeFeedID{}, tableExec),
 			liveness: &liveness,
 		}
 
 		for j := 0; j < size; j++ {
 			span := spanz.TableIDToComparableSpan(model.TableID(10000 + j))
-			_ = a.tableM.addTable(span)
+			_ = a.tableM.addTableSpan(span)
 		}
 
 		b.ResetTimer()

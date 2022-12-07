@@ -120,12 +120,12 @@ func (p *processor) checkReadyForMessages() bool {
 
 var _ scheduler.TableExecutor = (*processor)(nil)
 
-// AddTable implements TableExecutor interface.
-// AddTable may cause by the following scenario
+// AddTableSpan implements TableExecutor interface.
+// AddTableSpan may cause by the following scenario
 // 1. `Create Table`, a new table dispatched to the processor, `isPrepare` should be false
 // 2. Prepare phase for 2 phase scheduling, `isPrepare` should be true.
 // 3. Replicating phase for 2 phase scheduling, `isPrepare` should be false
-func (p *processor) AddTable(
+func (p *processor) AddTableSpan(
 	ctx context.Context, span tablepb.Span, startTs model.Ts, isPrepare bool,
 ) (bool, error) {
 	if !p.checkReadyForMessages() {
@@ -249,8 +249,8 @@ func (p *processor) AddTable(
 	return true, nil
 }
 
-// RemoveTable implements TableExecutor interface.
-func (p *processor) RemoveTable(span tablepb.Span) bool {
+// RemoveTableSpan implements TableExecutor interface.
+func (p *processor) RemoveTableSpan(span tablepb.Span) bool {
 	if !p.checkReadyForMessages() {
 		return false
 	}
@@ -291,8 +291,8 @@ func (p *processor) RemoveTable(span tablepb.Span) bool {
 	return true
 }
 
-// IsAddTableFinished implements TableExecutor interface.
-func (p *processor) IsAddTableFinished(span tablepb.Span, isPrepare bool) bool {
+// IsAddTableSpanFinished implements TableExecutor interface.
+func (p *processor) IsAddTableSpanFinished(span tablepb.Span, isPrepare bool) bool {
 	if !p.checkReadyForMessages() {
 		return false
 	}
@@ -372,8 +372,8 @@ func (p *processor) IsAddTableFinished(span tablepb.Span, isPrepare bool) bool {
 	return true
 }
 
-// IsRemoveTableFinished implements TableExecutor interface.
-func (p *processor) IsRemoveTableFinished(span tablepb.Span) (model.Ts, bool) {
+// IsRemoveTableSpanFinished implements TableExecutor interface.
+func (p *processor) IsRemoveTableSpanFinished(span tablepb.Span) (model.Ts, bool) {
 	if !p.checkReadyForMessages() {
 		return 0, false
 	}
@@ -448,8 +448,8 @@ func (p *processor) IsRemoveTableFinished(span tablepb.Span) (model.Ts, bool) {
 	return checkpointTs, true
 }
 
-// GetTableCount implements TableExecutor interface.
-func (p *processor) GetTableCount() int {
+// GetTableSpanCount implements TableExecutor interface.
+func (p *processor) GetTableSpanCount() int {
 	if p.pullBasedSinking {
 		return len(p.sinkManager.GetAllCurrentTableIDs())
 	}
@@ -461,8 +461,8 @@ func (p *processor) GetCheckpoint() (checkpointTs, resolvedTs model.Ts) {
 	return p.checkpointTs, p.resolvedTs
 }
 
-// GetTableStatus implements TableExecutor interface
-func (p *processor) GetTableStatus(span tablepb.Span) tablepb.TableStatus {
+// GetTableSpanStatus implements TableExecutor interface
+func (p *processor) GetTableSpanStatus(span tablepb.Span) tablepb.TableStatus {
 	if p.pullBasedSinking {
 		state, exist := p.sinkManager.GetTableState(span.TableID)
 		if !exist {
