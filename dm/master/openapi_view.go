@@ -445,7 +445,7 @@ func (s *Server) getBaseDBBySourceName(sourceName string) (*conn.BaseDB, error) 
 		return nil, terror.ErrSchedulerSourceCfgNotExist.Generate(sourceName)
 	}
 	dbCfg := sourceCfg.GenerateDBConfig()
-	return conn.DefaultDBProvider.Apply(dbCfg)
+	return conn.GetUpstreamDB(dbCfg)
 }
 
 // DMAPICreateTask url is:(POST /api/v1/tasks).

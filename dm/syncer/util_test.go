@@ -146,7 +146,7 @@ func TestGetDDLStatusFromTiDB(t *testing.T) {
 	require.NoError(t, err)
 	conn1, err := db.Conn(context.Background())
 	require.NoError(t, err)
-	dbConn := dbconn.NewDBConn(cfg, conn.NewBaseConn(conn1, nil))
+	dbConn := dbconn.NewDBConn(cfg, conn.NewBaseConnForTest(conn1, nil))
 
 	// test 1
 	mock.ExpectQuery(adminShowDDLJobsSQL1).WillReturnRows(sqlmock.NewRows([]string{"JOB_ID", "DB_NAME", "TABLE_NAME", "JOB_TYPE", "SCHEMA_STATE", "SCHEMA_ID", "TABLE_ID", "ROW_COUNT", "CREATE_TIME", "START_TIME", "END_TIME", "STATE"}).

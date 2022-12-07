@@ -26,7 +26,7 @@ import (
 	"time"
 
 	"github.com/BurntSushi/toml"
-	"github.com/pingcap/tiflow/dm/config"
+	"github.com/pingcap/tiflow/dm/config/security"
 	"github.com/pingcap/tiflow/dm/pkg/log"
 	"github.com/pingcap/tiflow/dm/pkg/terror"
 	"github.com/pingcap/tiflow/dm/pkg/utils"
@@ -137,7 +137,7 @@ type Config struct {
 	V1SourcesPath string `toml:"v1-sources-path" json:"v1-sources-path"`
 
 	// tls config
-	config.Security
+	security.Security
 
 	printVersion      bool
 	printSampleConfig bool

@@ -40,7 +40,7 @@ func TestDBAdapter(t *testing.T) {
 	}
 
 	for _, tc := range testCases {
-		err := DBErrorAdapt(tc.err, defaultErr)
+		err := DBErrorAdapt(tc.err, ScopeNotSet, defaultErr)
 		if tc.expect == nil {
 			require.NoError(t, err)
 		} else {
