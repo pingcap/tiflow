@@ -16,6 +16,7 @@ package conn
 import (
 	"context"
 	"fmt"
+	"math"
 	"strconv"
 	"strings"
 
@@ -94,11 +95,11 @@ func getVariable(ctx *tcontext.Context, conn *BaseConn, variable string, isGloba
 // GetMasterStatus gets status from master.
 // When the returned error is nil, the gtid must be not nil.
 func GetMasterStatus(ctx *tcontext.Context, db *BaseDB, flavor string) (
-	string, uint32, string, string, string, error,
+	string, uint64, string, string, string, error,
 ) {
 	var (
 		binlogName     string
-		pos            uint32
+		pos            uint64
 		binlogDoDB     string
 		binlogIgnoreDB string
 		gtidStr        string
@@ -154,13 +155,13 @@ func GetMasterStatus(ctx *tcontext.Context, db *BaseDB, flavor string) (
 			return binlogName, pos, binlogDoDB, binlogIgnoreDB, gtidStr, err
 		default:
 			binlogName = rowsResult[0][0]
-			var posInt int64
-			posInt, err = strconv.ParseInt(rowsResult[0][1], 10, 64)
+			var posInt uint64
+			posInt, err = strconv.ParseUint(rowsResult[0][1], 10, 64)
 			if err != nil {
 				err = terror.DBErrorAdapt(err, db.Scope, terror.ErrDBDriverError)
 				return binlogName, pos, binlogDoDB, binlogIgnoreDB, gtidStr, err
 			}
-			pos = uint32(posInt)
+			pos = posInt
 			binlogDoDB = rowsResult[0][2]
 			binlogIgnoreDB = rowsResult[0][3]
 			gtidStr = rowsResult[0][4]
@@ -182,13 +183,13 @@ func GetMasterStatus(ctx *tcontext.Context, db *BaseDB, flavor string) (
 			return binlogName, pos, binlogDoDB, binlogIgnoreDB, gtidStr, err
 		default:
 			binlogName = rowsResult[0][0]
-			var posInt int64
-			posInt, err = strconv.ParseInt(rowsResult[0][1], 10, 64)
+			var posInt uint64
+			posInt, err = strconv.ParseUint(rowsResult[0][1], 10, 64)
 			if err != nil {
 				err = terror.DBErrorAdapt(err, db.Scope, terror.ErrDBDriverError)
 				return binlogName, pos, binlogDoDB, binlogIgnoreDB, gtidStr, err
 			}
-			pos = uint32(posInt)
+			pos = posInt
 			binlogDoDB = rowsResult[0][2]
 			binlogIgnoreDB = rowsResult[0][3]
 		}
@@ -226,9 +227,12 @@ func GetPosAndGs(ctx *tcontext.Context, db *BaseDB, flavor string) (
 	if err != nil {
 		return
 	}
+	if pos > math.MaxUint32 {
+		ctx.L().Warn("the pos returned by GetMasterStatus beyonds the range of uint32")
+	}
 	binlogPos = gmysql.Position{
 		Name: binlogName,
-		Pos:  pos,
+		Pos:  uint32(pos),
 	}
 
 	gs, err = gtid.ParserGTID(flavor, gtidStr)
