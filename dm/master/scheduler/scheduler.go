@@ -22,6 +22,8 @@ import (
 	"github.com/pingcap/errors"
 	"github.com/pingcap/failpoint"
 	"github.com/pingcap/tiflow/dm/config"
+	"github.com/pingcap/tiflow/dm/config/dbconfig"
+	"github.com/pingcap/tiflow/dm/config/security"
 	"github.com/pingcap/tiflow/dm/master/metrics"
 	"github.com/pingcap/tiflow/dm/master/workerrpc"
 	"github.com/pingcap/tiflow/dm/pb"
@@ -196,11 +198,11 @@ type Scheduler struct {
 	// task -> source -> worker
 	loadTasks map[string]map[string]string
 
-	securityCfg config.Security
+	securityCfg security.Security
 }
 
 // NewScheduler creates a new scheduler instance.
-func NewScheduler(pLogger *log.Logger, securityCfg config.Security) *Scheduler {
+func NewScheduler(pLogger *log.Logger, securityCfg security.Security) *Scheduler {
 	return &Scheduler{
 		logger:            pLogger.WithFields(zap.String("component", "scheduler")),
 		subtaskLatch:      newLatches(),
@@ -1109,7 +1111,7 @@ func (s *Scheduler) getSubTaskCfgByTaskSource(task, source string) *config.SubTa
 }
 
 // GetDownstreamMetaByTask gets downstream db config and meta config by task name.
-func (s *Scheduler) GetDownstreamMetaByTask(task string) (*config.DBConfig, string) {
+func (s *Scheduler) GetDownstreamMetaByTask(task string) (*dbconfig.DBConfig, string) {
 	v, ok := s.subTaskCfgs.Load(task)
 	if !ok {
 		return nil, ""

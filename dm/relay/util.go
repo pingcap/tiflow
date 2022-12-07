@@ -15,22 +15,24 @@ package relay
 
 import (
 	"context"
-	"database/sql"
 	"io"
 	"strings"
 
 	"github.com/pingcap/errors"
+	"github.com/pingcap/tiflow/dm/pkg/conn"
+	tcontext "github.com/pingcap/tiflow/dm/pkg/context"
+	"github.com/pingcap/tiflow/dm/pkg/log"
 	"github.com/pingcap/tiflow/dm/pkg/terror"
 	"github.com/pingcap/tiflow/dm/pkg/utils"
 )
 
 // isNewServer checks whether is connecting to a new server.
-func isNewServer(ctx context.Context, prevUUID string, db *sql.DB, flavor string) (bool, error) {
+func isNewServer(ctx context.Context, prevUUID string, db *conn.BaseDB, flavor string) (bool, error) {
 	if len(prevUUID) == 0 {
 		// no sub dir exists before
 		return true, nil
 	}
-	uuid, err := utils.GetServerUUID(ctx, db, flavor)
+	uuid, err := conn.GetServerUUID(tcontext.NewContext(ctx, log.L()), db, flavor)
 	if err != nil {
 		return false, err
 	}

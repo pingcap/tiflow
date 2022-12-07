@@ -18,9 +18,10 @@ import (
 
 	cvstask "github.com/pingcap/tiflow/engine/executor/cvs"
 	dmtask "github.com/pingcap/tiflow/engine/executor/dm"
-	"github.com/pingcap/tiflow/engine/framework/fake"
+	fakejobTask "github.com/pingcap/tiflow/engine/executor/fakejob"
 	cvs "github.com/pingcap/tiflow/engine/jobmaster/cvsjob"
 	"github.com/pingcap/tiflow/engine/jobmaster/dm"
+	"github.com/pingcap/tiflow/engine/jobmaster/fakejob"
 )
 
 // registerWorkerOnce guards calling registerWorkers.
@@ -31,5 +32,6 @@ func registerWorkers() {
 	cvs.RegisterWorker()
 	dm.RegisterWorker()
 	dmtask.RegisterWorker()
-	fake.RegisterWorker()
+	fakejob.RegisterWorker()
+	fakejobTask.RegisterWorker()
 }

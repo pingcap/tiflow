@@ -31,7 +31,6 @@ import (
 	dmconfig "github.com/pingcap/tiflow/dm/config"
 	"github.com/pingcap/tiflow/dm/pkg/conn"
 	"github.com/pingcap/tiflow/dm/pkg/cputil"
-	"github.com/pingcap/tiflow/dm/pkg/utils"
 	"github.com/pingcap/tiflow/engine/framework"
 	frameModel "github.com/pingcap/tiflow/engine/framework/model"
 	"github.com/pingcap/tiflow/engine/jobmaster/dm/bootstrap"
@@ -108,7 +107,7 @@ func NewAgentImpl(jobID string, pLogger *zap.Logger) Agent {
 // move these codes to tiflow later.
 func (c *AgentImpl) Create(ctx context.Context, cfg *config.JobCfg) error {
 	c.logger.Info("create checkpoint")
-	db, err := conn.DefaultDBProvider.Apply(cfg.TargetDB)
+	db, err := conn.GetDownstreamDB(cfg.TargetDB)
 	if err != nil {
 		return err
 	}
@@ -134,7 +133,7 @@ func (c *AgentImpl) Create(ctx context.Context, cfg *config.JobCfg) error {
 // Remove implements Agent.Remove
 func (c *AgentImpl) Remove(ctx context.Context, cfg *config.JobCfg) error {
 	c.logger.Info("remove checkpoint")
-	db, err := conn.DefaultDBProvider.Apply(cfg.TargetDB)
+	db, err := conn.GetDownstreamDB(cfg.TargetDB)
 	if err != nil {
 		return err
 	}
@@ -152,7 +151,7 @@ func (c *AgentImpl) IsFresh(ctx context.Context, workerType framework.WorkerType
 		return true, nil
 	}
 
-	db, err := conn.DefaultDBProvider.Apply(task.Cfg.TargetDB)
+	db, err := conn.GetDownstreamDB(task.Cfg.TargetDB)
 	if err != nil {
 		return false, err
 	}
@@ -196,14 +195,14 @@ func (c *AgentImpl) FetchAllDoTables(ctx context.Context, cfg *config.JobCfg) (m
 		}
 
 		g.Go(func() error {
-			db, err := conn.DefaultDBProvider.Apply(up.DBCfg)
+			db, err := conn.DefaultDBProvider.Apply(conn.UpstreamDBConfig(up.DBCfg))
 			if err != nil {
 				return err
 			}
 			defer db.Close()
 
 			// fetch all do tables
-			sourceTables, err := utils.FetchAllDoTables(gCtx, db.DB, baList)
+			sourceTables, err := conn.FetchAllDoTables(gCtx, db, baList)
 			if err != nil {
 				return err
 			}
@@ -233,7 +232,7 @@ func (c *AgentImpl) FetchAllDoTables(ctx context.Context, cfg *config.JobCfg) (m
 // TODO(https://github.com/pingcap/tiflow/issues/5334): save create table statement to checkpoint instead of table info.
 func (c *AgentImpl) FetchTableStmt(ctx context.Context, jobID string, cfg *config.JobCfg, sourceTable metadata.SourceTable) (string, error) {
 	c.logger.Info("fetch table info from checkpoint")
-	db, err := conn.DefaultDBProvider.Apply(cfg.TargetDB)
+	db, err := conn.DefaultDBProvider.Apply(conn.DownstreamDBConfig(cfg.TargetDB))
 	if err != nil {
 		return "", err
 	}

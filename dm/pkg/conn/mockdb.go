@@ -29,7 +29,6 @@ import (
 	"github.com/pingcap/tidb/server"
 	"github.com/pingcap/tidb/session"
 	"github.com/pingcap/tidb/store/mockstore"
-	"github.com/pingcap/tiflow/dm/config"
 	"github.com/tikv/client-go/v2/testutils"
 )
 
@@ -42,11 +41,11 @@ type mockDBProvider struct {
 }
 
 // Apply will build BaseDB with DBConfig.
-func (d *mockDBProvider) Apply(config *config.DBConfig) (*BaseDB, error) {
+func (d *mockDBProvider) Apply(config ScopedDBConfig) (*BaseDB, error) {
 	if d.verDB != nil {
 		if err := d.verDB.Ping(); err == nil {
 			// nolint:nilerr
-			return NewBaseDB(d.verDB), nil
+			return NewBaseDBForTest(d.verDB), nil
 		}
 	}
 	if d.customDB != nil {
@@ -55,7 +54,7 @@ func (d *mockDBProvider) Apply(config *config.DBConfig) (*BaseDB, error) {
 			return NewMockDB(d.customDB), nil
 		}
 	}
-	return NewBaseDB(d.db), nil
+	return NewBaseDBForTest(d.db), nil
 }
 
 // InitMockDB return a mocked db for unit test.

@@ -23,9 +23,9 @@ import (
 	"github.com/pingcap/tidb/parser/model"
 	"github.com/pingcap/tidb/parser/mysql"
 	"github.com/pingcap/tidb/util/schemacmp"
+	"github.com/pingcap/tiflow/dm/pkg/conn"
 	"github.com/pingcap/tiflow/dm/pkg/log"
 	"github.com/pingcap/tiflow/dm/pkg/shardddl/optimism"
-	"github.com/pingcap/tiflow/dm/pkg/utils"
 	frameModel "github.com/pingcap/tiflow/engine/framework/model"
 	"github.com/pingcap/tiflow/engine/jobmaster/dm/config"
 	"github.com/pingcap/tiflow/engine/jobmaster/dm/metadata"
@@ -811,7 +811,7 @@ func (g *shardGroup) showTables() map[metadata.SourceTable]ShardTable {
 }
 
 func genCmpTable(createStmt string) schemacmp.Table {
-	p, _ := utils.GetParserFromSQLModeStr(mysql.DefaultSQLMode)
+	p, _ := conn.GetParserFromSQLModeStr(mysql.DefaultSQLMode)
 	stmtNode, _ := p.ParseOneStmt(createStmt, "", "")
 	ti, _ := ddl.BuildTableInfoFromAST(stmtNode.(*ast.CreateTableStmt))
 	ti.State = model.StatePublic
@@ -829,7 +829,7 @@ func contains(s []string, e string) bool {
 
 // getColumnNames and return columns' names for create table stmt.
 func getColumnNames(createStmt string) []string {
-	p, _ := utils.GetParserFromSQLModeStr(mysql.DefaultSQLMode)
+	p, _ := conn.GetParserFromSQLModeStr(mysql.DefaultSQLMode)
 	stmtNode, _ := p.ParseOneStmt(createStmt, "", "")
 	s := stmtNode.(*ast.CreateTableStmt)
 

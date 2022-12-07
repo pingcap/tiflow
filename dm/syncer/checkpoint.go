@@ -32,6 +32,7 @@ import (
 	"github.com/pingcap/tidb/util/dbutil"
 	"github.com/pingcap/tidb/util/filter"
 	"github.com/pingcap/tiflow/dm/config"
+	"github.com/pingcap/tiflow/dm/config/dbconfig"
 	"github.com/pingcap/tiflow/dm/pkg/binlog"
 	"github.com/pingcap/tiflow/dm/pkg/conn"
 	tcontext "github.com/pingcap/tiflow/dm/pkg/context"
@@ -43,7 +44,6 @@ import (
 	"github.com/pingcap/tiflow/dm/pkg/schema"
 	"github.com/pingcap/tiflow/dm/pkg/storage"
 	"github.com/pingcap/tiflow/dm/pkg/terror"
-	"github.com/pingcap/tiflow/dm/pkg/utils"
 	"github.com/pingcap/tiflow/dm/syncer/dbconn"
 	"github.com/pingcap/tiflow/dm/syncer/metrics"
 	"github.com/uber-go/atomic"
@@ -469,8 +469,8 @@ func (cp *RemoteCheckPoint) Init(tctx *tcontext.Context) (err error) {
 	}()
 
 	checkPointDB := cp.cfg.To
-	checkPointDB.RawDBCfg = config.DefaultRawDBConfig().SetReadTimeout(maxCheckPointTimeout)
-	db, dbConns, err = dbconn.CreateConns(tctx, cp.cfg, &checkPointDB, 1)
+	checkPointDB.RawDBCfg = dbconfig.DefaultRawDBConfig().SetReadTimeout(maxCheckPointTimeout)
+	db, dbConns, err = dbconn.CreateConns(tctx, cp.cfg, conn.DownstreamDBConfig(&checkPointDB), 1)
 	if err != nil {
 		return
 	}
@@ -840,7 +840,7 @@ func (cp *RemoteCheckPoint) FlushPointsWithTableInfos(tctx *tcontext.Context, ta
 			points = append(points, point)
 		}
 		// use a new context apart from syncer, to make sure when syncer call `cancel` checkpoint could update
-		tctx2, cancel := tctx.WithContext(context.Background()).WithTimeout(utils.DefaultDBTimeout)
+		tctx2, cancel := tctx.WithContext(context.Background()).WithTimeout(conn.DefaultDBTimeout)
 		defer cancel()
 		_, err := cp.dbConn.ExecuteSQL(tctx2, cp.metricProxies, sqls, args...)
 		if err != nil {
@@ -1052,7 +1052,7 @@ func (cp *RemoteCheckPoint) Load(tctx *tcontext.Context) error {
 	for rows.Next() {
 		err := rows.Scan(&cpSchema, &cpTable, &binlogName, &binlogPos, &binlogGTIDSet, &exitSafeBinlogName, &exitSafeBinlogPos, &exitSafeBinlogGTIDSet, &tiBytes, &isGlobal)
 		if err != nil {
-			return terror.WithScope(terror.DBErrorAdapt(err, terror.ErrDBDriverError), terror.ScopeDownstream)
+			return terror.DBErrorAdapt(err, cp.dbConn.Scope(), terror.ErrDBDriverError)
 		}
 
 		gset, err := gtid.ParserGTID(cp.cfg.Flavor, binlogGTIDSet.String) // default to "".
@@ -1120,7 +1120,7 @@ func (cp *RemoteCheckPoint) Load(tctx *tcontext.Context) error {
 		mSchema[cpTable] = newBinlogPoint(location, location, ti, ti, cp.cfg.EnableGTID)
 	}
 
-	return terror.WithScope(terror.DBErrorAdapt(rows.Err(), terror.ErrDBDriverError), terror.ScopeDownstream)
+	return terror.DBErrorAdapt(rows.Err(), cp.dbConn.Scope(), terror.ErrDBDriverError)
 }
 
 // LoadIntoSchemaTracker loads table infos of all points into schema tracker.

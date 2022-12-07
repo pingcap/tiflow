@@ -17,14 +17,17 @@ import (
 	"encoding/binary"
 	"hash/fnv"
 	"math"
+	"strconv"
 	"sync"
 	"sync/atomic"
+	"time"
 
 	"github.com/cockroachdb/pebble"
 	"github.com/pingcap/log"
 	"github.com/pingcap/tiflow/cdc/model"
 	"github.com/pingcap/tiflow/cdc/processor/sourcemanager/engine"
 	"github.com/pingcap/tiflow/cdc/processor/sourcemanager/engine/pebble/encoding"
+	metrics "github.com/pingcap/tiflow/cdc/sorter/db"
 	"github.com/pingcap/tiflow/pkg/chann"
 	"go.uber.org/zap"
 )
@@ -67,7 +70,7 @@ type EventIter struct {
 func New(ID model.ChangeFeedID, dbs []*pebble.DB) *EventSorter {
 	channs := make([]*chann.Chann[eventWithTableID], 0, len(dbs))
 	for i := 0; i < len(dbs); i++ {
-		channs = append(channs, chann.New[eventWithTableID](chann.Cap(-1)))
+		channs = append(channs, chann.New[eventWithTableID](chann.Cap(128)))
 	}
 
 	eventSorter := &EventSorter{
@@ -83,7 +86,7 @@ func New(ID model.ChangeFeedID, dbs []*pebble.DB) *EventSorter {
 		eventSorter.wg.Add(1)
 		go func(x int) {
 			defer eventSorter.wg.Done()
-			eventSorter.handleEvents(dbs[x], channs[x].Out())
+			eventSorter.handleEvents(x, dbs[x], channs[x].Out())
 		}(i)
 	}
 
@@ -366,7 +369,11 @@ type tableState struct {
 	cleaned engine.Position
 }
 
-func (s *EventSorter) handleEvents(db *pebble.DB, inputCh <-chan eventWithTableID) {
+func (s *EventSorter) handleEvents(id int, db *pebble.DB, inputCh <-chan eventWithTableID) {
+	idstr := strconv.Itoa(id + 1)
+	writeDuration := metrics.SorterWriteDuration().WithLabelValues(idstr)
+	writeBytes := metrics.SorterWriteBytes().WithLabelValues(idstr)
+
 	batch := db.NewBatch()
 	writeOpts := &pebble.WriteOptions{Sync: false}
 	newResolved := make(map[model.TableID]model.Ts)
@@ -388,7 +395,7 @@ func (s *EventSorter) handleEvents(db *pebble.DB, inputCh <-chan eventWithTableI
 				zap.String("namespace", s.changefeedID.Namespace),
 				zap.String("changefeed", s.changefeedID.ID))
 		}
-		return batch.Count() >= batchCommitCount
+		return batch.Count() >= batchCommitCount || len(batch.Repr()) >= batchCommitSize
 	}
 
 	for {
@@ -413,12 +420,17 @@ func (s *EventSorter) handleEvents(db *pebble.DB, inputCh <-chan eventWithTableI
 			}
 		}
 	CommitBatch:
-		if err := batch.Commit(writeOpts); err != nil {
-			log.Panic("failed to commit pebble batch", zap.Error(err),
-				zap.String("namespace", s.changefeedID.Namespace),
-				zap.String("changefeed", s.changefeedID.ID))
+		if batch.Count() > 0 {
+			writeBytes.Observe(float64(len(batch.Repr())))
+			start := time.Now()
+			if err := batch.Commit(writeOpts); err != nil {
+				log.Panic("failed to commit pebble batch", zap.Error(err),
+					zap.String("namespace", s.changefeedID.Namespace),
+					zap.String("changefeed", s.changefeedID.ID))
+			}
+			writeDuration.Observe(time.Since(start).Seconds())
+			batch = db.NewBatch()
 		}
-		batch = db.NewBatch()
 
 		for table, resolved := range newResolved {
 			s.mu.RLock()
@@ -475,7 +487,10 @@ func (s *EventSorter) cleanTable(state *tableState, tableID model.TableID, upper
 }
 
 // ----- Some internal variable and functions -----
-const batchCommitCount uint32 = 1024
+const (
+	batchCommitCount uint32 = 1024
+	batchCommitSize  int    = 16 * 1024 * 1024
+)
 
 var uniqueIDGen uint32 = 0
 

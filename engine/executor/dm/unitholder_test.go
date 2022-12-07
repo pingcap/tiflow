@@ -175,7 +175,7 @@ func TestUnitHolderCheckAndUpdateStatus(t *testing.T) {
 	unitHolder.unit = u
 	db, mock, err := conn.InitMockDBFull()
 	require.NoError(t, err)
-	unitHolder.upstreamDB = conn.NewBaseDB(db)
+	unitHolder.upstreamDB = conn.NewBaseDBForTest(db)
 
 	u.On("Status").Return(&pb.DumpStatus{})
 	mock.ExpectQuery("SHOW MASTER STATUS").WillReturnRows(
@@ -204,7 +204,7 @@ func TestUnitHolderCheckAndUpdateStatus(t *testing.T) {
 		sourceStatusRefreshInterval = backup
 	}()
 
-	unitHolder.upstreamDB = conn.NewBaseDB(db)
+	unitHolder.upstreamDB = conn.NewBaseDBForTest(db)
 	lastUpdateTime := unitHolder.sourceStatus.UpdateTime
 	mock.ExpectQuery("SHOW MASTER STATUS").WillReturnRows(
 		sqlmock.NewRows([]string{"File", "Position", "Binlog_Do_DB", "Binlog_Ignore_DB", "Executed_Gtid_Set"}).
