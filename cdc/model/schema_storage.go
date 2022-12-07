@@ -66,9 +66,10 @@ func WrapTableInfo(schemaID int64, schemaName string, version uint64, info *mode
 		TableInfo: info,
 		SchemaID:  schemaID,
 		TableName: TableName{
-			Schema:  schemaName,
-			Table:   info.Name.O,
-			TableID: info.ID,
+			Schema:      schemaName,
+			Table:       info.Name.O,
+			TableID:     info.ID,
+			IsPartition: info.GetPartitionInfo() != nil,
 		},
 		Version:          version,
 		columnsOffset:    make(map[int64]int, len(info.Columns)),
