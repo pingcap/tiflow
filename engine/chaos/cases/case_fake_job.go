@@ -21,7 +21,7 @@ import (
 
 	"github.com/pingcap/log"
 	pb "github.com/pingcap/tiflow/engine/enginepb"
-	"github.com/pingcap/tiflow/engine/framework/fake"
+	"github.com/pingcap/tiflow/engine/jobmaster/fakejob"
 	"github.com/pingcap/tiflow/engine/pkg/tenant"
 	"github.com/pingcap/tiflow/engine/test/e2e"
 	"github.com/pingcap/tiflow/pkg/errors"
@@ -35,7 +35,7 @@ func runFakeJobCase(ctx context.Context, cfg *config) error {
 	businessMetaEndpoints := []string{cfg.BusinessMetaAddr}
 	etcdEndpoints := []string{cfg.EtcdAddr}
 
-	jobCfg := &fake.Config{
+	jobCfg := &fakejob.Config{
 		JobName:     "fake-job-case",
 		WorkerCount: 8,
 		// use a large enough target tick to ensure the fake job long running

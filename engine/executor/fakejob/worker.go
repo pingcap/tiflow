@@ -11,11 +11,10 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-package fake
+package fakejob
 
 import (
 	"context"
-	"encoding/json"
 	"fmt"
 	"sync"
 	"time"
@@ -24,6 +23,7 @@ import (
 	"github.com/pingcap/tiflow/engine/framework"
 	frameModel "github.com/pingcap/tiflow/engine/framework/model"
 	dcontext "github.com/pingcap/tiflow/engine/pkg/context"
+	fakejobPkg "github.com/pingcap/tiflow/engine/pkg/fakejob"
 	"github.com/pingcap/tiflow/engine/pkg/p2p"
 	"github.com/pingcap/tiflow/pkg/errors"
 	"go.etcd.io/etcd/api/v3/mvccpb"
@@ -40,26 +40,13 @@ type (
 	// Worker is exposed for unit test
 	Worker = dummyWorker
 
-	// WorkerConfig defines config of fake worker
-	WorkerConfig struct {
-		ID         int   `json:"id"`
-		TargetTick int64 `json:"target-tick"`
-
-		EtcdWatchEnable     bool          `json:"etcd-watch-enable"`
-		EtcdEndpoints       []string      `json:"etcd-endpoints"`
-		EtcdWatchPrefix     string        `json:"etcd-watch-prefix"`
-		InjectErrorInterval time.Duration `json:"inject-error-interval"`
-
-		Checkpoint workerCheckpoint `json:"checkpoint"`
-	}
-
 	dummyWorker struct {
 		framework.BaseWorker
 
 		init      bool
 		cancel    context.CancelFunc
-		status    *dummyWorkerStatus
-		config    *WorkerConfig
+		status    *fakejobPkg.DummyWorkerStatus
+		config    *fakejobPkg.WorkerConfig
 		errCh     chan error
 		closed    *atomic.Bool
 		canceling *atomic.Bool
@@ -74,41 +61,6 @@ type (
 		startTime time.Time
 	}
 )
-
-type dummyWorkerStatus struct {
-	rwm        sync.RWMutex
-	BusinessID int               `json:"business-id"`
-	Tick       int64             `json:"tick"`
-	Checkpoint *workerCheckpoint `json:"checkpoint"`
-}
-
-func (s *dummyWorkerStatus) tick() {
-	s.rwm.Lock()
-	defer s.rwm.Unlock()
-	s.Tick++
-}
-
-func (s *dummyWorkerStatus) getEtcdCheckpoint() workerCheckpoint {
-	s.rwm.RLock()
-	defer s.rwm.RUnlock()
-	return *s.Checkpoint
-}
-
-func (s *dummyWorkerStatus) setEtcdCheckpoint(ckpt *workerCheckpoint) {
-	s.rwm.Lock()
-	defer s.rwm.Unlock()
-	s.Checkpoint = ckpt
-}
-
-func (s *dummyWorkerStatus) Marshal() ([]byte, error) {
-	s.rwm.RLock()
-	defer s.rwm.RUnlock()
-	return json.Marshal(s)
-}
-
-func (s *dummyWorkerStatus) Unmarshal(data []byte) error {
-	return json.Unmarshal(data, s)
-}
 
 func (d *dummyWorker) InitImpl(_ context.Context) error {
 	if !d.init {
@@ -137,7 +89,7 @@ func (d *dummyWorker) Tick(ctx context.Context) error {
 	default:
 	}
 
-	d.status.tick()
+	d.status.DoTick()
 
 	if d.statusRateLimiter.Allow() {
 		log.Info("FakeWorker: Tick", zap.String("worker-id", d.ID()), zap.Int64("tick", d.status.Tick))
@@ -260,7 +212,7 @@ watchLoop:
 		default:
 		}
 		opts := make([]clientv3.OpOption, 0)
-		revision := d.status.getEtcdCheckpoint().Revision
+		revision := d.status.GetEtcdCheckpoint().Revision
 		if revision > 0 {
 			opts = append(opts, clientv3.WithRev(revision+1))
 		}
@@ -276,7 +228,7 @@ watchLoop:
 			for _, event := range resp.Events {
 				// no concurrent write of this checkpoint, so it is safe to read
 				// old value, change it and overwrite.
-				ckpt := d.status.getEtcdCheckpoint()
+				ckpt := d.status.GetEtcdCheckpoint()
 				ckpt.MvccCount++
 				ckpt.Revision = event.Kv.ModRevision
 				switch event.Type {
@@ -285,7 +237,7 @@ watchLoop:
 				case mvccpb.DELETE:
 					ckpt.Value = ""
 				}
-				d.status.setEtcdCheckpoint(&ckpt)
+				d.status.SetEtcdCheckpoint(&ckpt)
 			}
 		}
 	}
@@ -295,12 +247,12 @@ watchLoop:
 func NewDummyWorker(
 	ctx *dcontext.Context,
 	id frameModel.WorkerID, masterID frameModel.MasterID,
-	wcfg *WorkerConfig,
+	wcfg *fakejobPkg.WorkerConfig,
 ) framework.WorkerImpl {
-	status := &dummyWorkerStatus{
+	status := &fakejobPkg.DummyWorkerStatus{
 		BusinessID: wcfg.ID,
 		Tick:       wcfg.Checkpoint.Tick,
-		Checkpoint: &workerCheckpoint{
+		Checkpoint: &fakejobPkg.WorkerCheckpoint{
 			Revision:  wcfg.Checkpoint.Revision,
 			MvccCount: wcfg.Checkpoint.MvccCount,
 			Value:     wcfg.Checkpoint.Value,

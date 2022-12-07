@@ -187,8 +187,8 @@ function run() {
 	init_tracker_test
 	failpoints=(
 		# 1152 is ErrAbortingConnection
-		"github.com/pingcap/tiflow/dm/pkg/utils/FetchTargetDoTablesFailed=return(1152)"
-		"github.com/pingcap/tiflow/dm/pkg/utils/FetchAllDoTablesFailed=return(1152)"
+		"github.com/pingcap/tiflow/dm/pkg/conn/FetchTargetDoTablesFailed=return(1152)"
+		"github.com/pingcap/tiflow/dm/pkg/conn/FetchAllDoTablesFailed=return(1152)"
 	)
 
 	for ((i = 0; i < ${#failpoints[@]}; i++)); do

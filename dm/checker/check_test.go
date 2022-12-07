@@ -52,6 +52,10 @@ func ignoreExcept(itemMap map[string]struct{}) []string {
 		config.OnlineDDLChecking,
 		config.BinlogDBChecking,
 		config.TargetDBPrivilegeChecking,
+		config.LightningFreeSpaceChecking,
+		config.LightningDownstreamVersionChecking,
+		config.LightningRegionDistributionChecking,
+		config.LightningEmptyRegionChecking,
 	}
 	ignoreCheckingItems := make([]string, 0, len(items)-len(itemMap))
 	for _, i := range items {

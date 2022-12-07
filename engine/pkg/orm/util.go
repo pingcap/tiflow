@@ -21,7 +21,7 @@ import (
 
 	"github.com/glebarez/sqlite"
 	"github.com/pingcap/failpoint"
-	dmutils "github.com/pingcap/tiflow/dm/pkg/utils" // TODO: move it to pkg
+	dmutils "github.com/pingcap/tiflow/dm/pkg/conn"
 	metaModel "github.com/pingcap/tiflow/engine/pkg/meta/model"
 	ormModel "github.com/pingcap/tiflow/engine/pkg/orm/model"
 	"github.com/pingcap/tiflow/pkg/errors"

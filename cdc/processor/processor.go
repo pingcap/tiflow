@@ -214,11 +214,11 @@ func (p *processor) AddTable(
 	}
 
 	if p.pullBasedSinking {
-		p.sourceManager.AddTable(ctx.(cdcContext.Context), tableID, p.getTableName(ctx, tableID), startTs)
+		p.sinkManager.AddTable(tableID, startTs, p.changefeed.Info.TargetTs)
 		if p.redoManager.Enabled() {
 			p.redoManager.AddTable(tableID, startTs)
 		}
-		p.sinkManager.AddTable(tableID, startTs, p.changefeed.Info.TargetTs)
+		p.sourceManager.AddTable(ctx.(cdcContext.Context), tableID, p.getTableName(ctx, tableID), startTs)
 		if !isPrepare {
 			if err := p.sinkManager.StartTable(tableID, startTs); err != nil {
 				return false, errors.Trace(err)
@@ -414,11 +414,11 @@ func (p *processor) IsRemoveTableFinished(tableID model.TableID) (model.Ts, bool
 
 	if p.pullBasedSinking {
 		stats := p.sinkManager.GetTableStats(tableID)
-		p.sourceManager.RemoveTable(tableID)
-		p.sinkManager.RemoveTable(tableID)
 		if p.redoManager.Enabled() {
 			p.redoManager.RemoveTable(tableID)
 		}
+		p.sinkManager.RemoveTable(tableID)
+		p.sourceManager.RemoveTable(tableID)
 		log.Info("table removed",
 			zap.String("captureID", p.captureInfo.ID),
 			zap.String("namespace", p.changefeedID.Namespace),
@@ -650,7 +650,12 @@ func (p *processor) Tick(ctx cdcContext.Context) error {
 	}
 
 	p.metricProcessorTickDuration.Observe(costTime.Seconds())
-	p.refreshMetrics()
+
+	// we should check if this error is nil,
+	// otherwise the function called below may panic.
+	if err == nil {
+		p.refreshMetrics()
+	}
 
 	return p.handleErr(err)
 }
@@ -846,20 +851,21 @@ func (p *processor) lazyInitImpl(ctx cdcContext.Context) error {
 				zap.Duration("duration", time.Since(start)))
 			return errors.Trace(err)
 		}
-		p.sourceManager = sourcemanager.New(p.changefeedID, p.upstream, p.mg, sortEngine, p.errCh)
-		sinkManager, err := sinkmanager.New(stdCtx, p.changefeedID, p.changefeed.Info, p.upstream, p.redoManager,
+		p.sourceManager = sourcemanager.New(p.changefeedID, p.upstream, p.mg, sortEngine, p.errCh, p.changefeed.Info.Config.BDRMode)
+		p.sinkManager, err = sinkmanager.New(stdCtx, p.changefeedID, p.changefeed.Info, p.upstream, p.redoManager,
 			p.sourceManager, p.errCh, p.metricsTableSinkTotalRows)
-		// Bind them so that sourceManager can notify sinkManager.
-		p.sourceManager.OnResolve(sinkManager.UpdateReceivedSorterResolvedTs)
 		if err != nil {
-			log.Info("Processor creates sink manager",
+			log.Info("Processor creates sink manager fail",
 				zap.String("namespace", p.changefeedID.Namespace),
 				zap.String("changefeed", p.changefeedID.ID),
 				zap.Error(err),
 				zap.Duration("duration", time.Since(start)))
+			p.sourceManager = nil
+			_ = engineFactory.Drop(p.changefeedID)
 			return errors.Trace(err)
 		}
-		p.sinkManager = sinkManager
+		// Bind them so that sourceManager can notify sinkManager.
+		p.sourceManager.OnResolve(p.sinkManager.UpdateReceivedSorterResolvedTs)
 	} else {
 		if !conf.Debug.EnableNewSink {
 			log.Info("Try to create sinkV1")
@@ -1210,15 +1216,16 @@ func (p *processor) createTablePipelineImpl(
 }
 
 func (p *processor) removeTable(table tablepb.TablePipeline, tableID model.TableID) {
+	if p.redoManager.Enabled() {
+		p.redoManager.RemoveTable(tableID)
+	}
 	if p.pullBasedSinking {
 		p.sinkManager.RemoveTable(tableID)
+		p.sourceManager.RemoveTable(tableID)
 	} else {
 		table.Cancel()
 		table.Wait()
 		delete(p.tables, tableID)
-	}
-	if p.redoManager.Enabled() {
-		p.redoManager.RemoveTable(tableID)
 	}
 }
 
@@ -1279,18 +1286,12 @@ func (p *processor) Close(ctx cdcContext.Context) error {
 	log.Info("processor closing ...",
 		zap.String("namespace", p.changefeedID.Namespace),
 		zap.String("changefeed", p.changefeedID.ID))
+	p.cancel()
 	if p.pullBasedSinking {
-		if p.sourceManager != nil {
-			if err := p.sourceManager.Close(); err != nil {
-				log.Error("Failed to close source manager",
-					zap.String("namespace", p.changefeedID.Namespace),
-					zap.String("changefeed", p.changefeedID.ID),
-					zap.Error(err))
-				return errors.Trace(err)
-			}
-			p.sourceManager = nil
-		}
 		if p.sinkManager != nil {
+			log.Info("Processor try to close sink manager",
+				zap.String("namespace", p.changefeedID.Namespace),
+				zap.String("changefeed", p.changefeedID.ID))
 			if err := p.sinkManager.Close(); err != nil {
 				log.Error("Failed to close sink manager",
 					zap.String("namespace", p.changefeedID.Namespace),
@@ -1298,7 +1299,26 @@ func (p *processor) Close(ctx cdcContext.Context) error {
 					zap.Error(err))
 				return errors.Trace(err)
 			}
+			log.Info("Processor closed sink manager successfully",
+				zap.String("namespace", p.changefeedID.Namespace),
+				zap.String("changefeed", p.changefeedID.ID))
 			p.sinkManager = nil
+		}
+		if p.sourceManager != nil {
+			log.Info("Processor try to close source manager",
+				zap.String("namespace", p.changefeedID.Namespace),
+				zap.String("changefeed", p.changefeedID.ID))
+			if err := p.sourceManager.Close(); err != nil {
+				log.Error("Failed to close source manager",
+					zap.String("namespace", p.changefeedID.Namespace),
+					zap.String("changefeed", p.changefeedID.ID),
+					zap.Error(err))
+				return errors.Trace(err)
+			}
+			log.Info("Processor closed source manager successfully",
+				zap.String("namespace", p.changefeedID.Namespace),
+				zap.String("changefeed", p.changefeedID.ID))
+			p.sourceManager = nil
 		}
 		engineFactory := ctx.GlobalVars().SortEngineFactory
 		if engineFactory != nil {
@@ -1309,6 +1329,9 @@ func (p *processor) Close(ctx cdcContext.Context) error {
 					zap.Error(err))
 				return errors.Trace(err)
 			}
+			log.Info("Processor drop sort engine successfully",
+				zap.String("namespace", p.changefeedID.Namespace),
+				zap.String("changefeed", p.changefeedID.ID))
 		}
 	} else {
 		for _, tbl := range p.tables {
@@ -1317,19 +1340,6 @@ func (p *processor) Close(ctx cdcContext.Context) error {
 		for _, tbl := range p.tables {
 			tbl.Wait()
 		}
-	}
-
-	p.cancel()
-	p.wg.Wait()
-
-	if p.agent != nil {
-		if err := p.agent.Close(); err != nil {
-			log.Warn("close agent meet error", zap.Error(err))
-		}
-		p.agent = nil
-	}
-
-	if !p.pullBasedSinking {
 		// sink close might be time-consuming, do it the last.
 		if p.sinkV1 != nil {
 			// pass a canceled context is ok here, since we don't need to wait Close
@@ -1367,6 +1377,20 @@ func (p *processor) Close(ctx cdcContext.Context) error {
 				zap.String("changefeed", p.changefeedID.ID),
 				zap.Duration("duration", time.Since(start)))
 		}
+	}
+	p.wg.Wait()
+
+	if p.agent != nil {
+		log.Info("Processor try to close agent",
+			zap.String("namespace", p.changefeedID.Namespace),
+			zap.String("changefeed", p.changefeedID.ID))
+		if err := p.agent.Close(); err != nil {
+			log.Warn("close agent meet error", zap.Error(err))
+		}
+		log.Info("Processor closed agent successfully",
+			zap.String("namespace", p.changefeedID.Namespace),
+			zap.String("changefeed", p.changefeedID.ID))
+		p.agent = nil
 	}
 
 	// mark tables share the same cdcContext with its original table, don't need to cancel

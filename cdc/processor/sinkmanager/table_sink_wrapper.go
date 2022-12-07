@@ -15,12 +15,16 @@ package sinkmanager
 
 import (
 	"context"
+	"sort"
+	"sync"
 	"sync/atomic"
+	"time"
 
 	"github.com/pingcap/errors"
 	"github.com/pingcap/log"
 	"github.com/pingcap/tiflow/cdc/model"
 	"github.com/pingcap/tiflow/cdc/processor/pipeline"
+	"github.com/pingcap/tiflow/cdc/processor/sourcemanager/engine"
 	"github.com/pingcap/tiflow/cdc/processor/tablepb"
 	sinkv2 "github.com/pingcap/tiflow/cdc/sinkv2/tablesink"
 	"go.uber.org/zap"
@@ -52,6 +56,21 @@ type tableSinkWrapper struct {
 	receivedSorterCommitTs atomic.Uint64
 	// receivedEventCount is the number of events received from the sorter.
 	receivedEventCount atomic.Int64
+	// lastCleanTime indicates the last time the table has been cleaned.
+	lastCleanTime time.Time
+	// checkpointTs is the checkpoint ts of the table sink.
+	checkpointTs atomic.Uint64
+
+	// rangeEventCounts is for clean the table engine.
+	// If rangeEventCounts[i].events is greater than 0, it means there must be
+	// events in the range (rangeEventCounts[i-1].pos, rangeEventCounts[i].pos].
+	rangeEventCounts   []rangeEventCount
+	rangeEventCountsMu sync.Mutex
+}
+
+type rangeEventCount struct {
+	pos    engine.Position
+	events int
 }
 
 func newTableSinkWrapper(
@@ -72,13 +91,17 @@ func newTableSinkWrapper(
 	}
 }
 
-func (t *tableSinkWrapper) start(replicateTs model.Ts) {
+func (t *tableSinkWrapper) start(startTs model.Ts, replicateTs model.Ts) {
 	log.Info("Sink is started",
 		zap.String("namespace", t.changefeed.Namespace),
 		zap.String("changefeed", t.changefeed.ID),
 		zap.Int64("tableID", t.tableID),
 		zap.Uint64("replicateTs", replicateTs),
 	)
+	// This start ts maybe greater than the initial start ts of the table sink.
+	// Because in two phase scheduling, the table sink may be advanced to a later ts.
+	// And we can just continue to replicate the table sink from the new start ts.
+	t.checkpointTs.Store(startTs)
 	t.replicateTs = replicateTs
 	t.state.Store(tablepb.TableStateReplicating)
 }
@@ -108,7 +131,12 @@ func (t *tableSinkWrapper) updateResolvedTs(ts model.ResolvedTs) error {
 }
 
 func (t *tableSinkWrapper) getCheckpointTs() model.ResolvedTs {
-	return t.tableSink.GetCheckpointTs()
+	currentCheckpointTs := t.checkpointTs.Load()
+	newCheckpointTs := t.tableSink.GetCheckpointTs()
+	if currentCheckpointTs > newCheckpointTs.ResolvedMark() {
+		return model.NewResolvedTs(currentCheckpointTs)
+	}
+	return newCheckpointTs
 }
 
 func (t *tableSinkWrapper) getReceivedSorterResolvedTs() model.Ts {
@@ -136,6 +164,43 @@ func (t *tableSinkWrapper) close(ctx context.Context) {
 		zap.Int64("tableID", t.tableID),
 		zap.String("namespace", t.changefeed.Namespace),
 		zap.String("changefeed", t.changefeed.ID))
+}
+
+func (t *tableSinkWrapper) updateRangeEventCounts(eventCount rangeEventCount) {
+	t.rangeEventCountsMu.Lock()
+	defer t.rangeEventCountsMu.Unlock()
+
+	if len(t.rangeEventCounts) == 0 ||
+		t.rangeEventCounts[len(t.rangeEventCounts)-1].pos.Compare(eventCount.pos) < 0 {
+		t.rangeEventCounts = append(t.rangeEventCounts, eventCount)
+	}
+}
+
+func (t *tableSinkWrapper) cleanRangeEventCounts(upperBound engine.Position, minEvents int) bool {
+	t.rangeEventCountsMu.Lock()
+	defer t.rangeEventCountsMu.Unlock()
+
+	idx := sort.Search(len(t.rangeEventCounts), func(i int) bool {
+		return t.rangeEventCounts[i].pos.Compare(upperBound) > 0
+	})
+	if len(t.rangeEventCounts) == 0 || idx == 0 {
+		return false
+	}
+
+	count := 0
+	for _, events := range t.rangeEventCounts[0:idx] {
+		count += events.events
+	}
+	shouldClean := count >= minEvents
+
+	if !shouldClean {
+		// To reduce engine.CleanByTable calls.
+		t.rangeEventCounts[idx-1].events = count
+		t.rangeEventCounts = t.rangeEventCounts[idx-1:]
+	} else {
+		t.rangeEventCounts = t.rangeEventCounts[idx:]
+	}
+	return shouldClean
 }
 
 // convertRowChangedEvents uses to convert RowChangedEvents to TableSinkRowChangedEvents.
