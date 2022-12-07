@@ -178,10 +178,15 @@ func (d *dmlWorker) backgroundFlushMsgs(ctx context.Context) {
 	}()
 }
 
-// In order to avoid spending so much time lookuping directory and getting last write point (i.e. which dir and which file)
-// when the changefeed is restarted, we'd rather switch to a new dir and start writing. In this case,
-// schema file should be created in the new dir if it hasn't been created when a DDL event was executed.
-func (d *dmlWorker) writeSchemaFile(ctx context.Context, table versionedTable, tableInfo *model.TableInfo) error {
+// In order to avoid spending so much time lookuping directory and getting last write point
+// (i.e. which dir and which file) when the changefeed is restarted, we'd rather switch to
+// a new dir and start writing. In this case, schema file should be created in the new dir
+// if it hasn't been created when a DDL event was executed.
+func (d *dmlWorker) writeSchemaFile(
+	ctx context.Context,
+	table versionedTable,
+	tableInfo *model.TableInfo,
+) error {
 	if _, ok := d.fileIndex[table]; !ok {
 		var tableDetail cloudstorage.TableDefinition
 		tableDetail.FromTableInfo(tableInfo)
