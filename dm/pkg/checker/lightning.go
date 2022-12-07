@@ -242,3 +242,35 @@ func (c *LightningSortingSpaceChecker) Check(ctx context.Context) *Result {
 	}
 	return result
 }
+
+// LightningCDCPiTRChecker checks whether the cluster has running CDC PiTR tasks.
+type LightningCDCPiTRChecker struct {
+	inner restore.PrecheckItem
+}
+
+// NewLightningCDCPiTRChecker creates a new LightningClusterVersionChecker.
+func NewLightningCDCPiTRChecker(lightningChecker restore.PrecheckItem) RealChecker {
+	return &LightningCDCPiTRChecker{inner: lightningChecker}
+}
+
+// Name implements the RealChecker interface.
+func (c *LightningCDCPiTRChecker) Name() string {
+	return "lightning_downstream_cdc_pitr"
+}
+
+// Check implements the RealChecker interface.
+func (c *LightningCDCPiTRChecker) Check(ctx context.Context) *Result {
+	result := &Result{
+		Name:  c.Name(),
+		Desc:  "check whether the downstream has tasks incompatible with Physical import mode",
+		State: StateFailure,
+	}
+	convertLightningPrecheck(
+		ctx,
+		result,
+		c.inner,
+		StateFailure,
+		`you can switch to logical import mode which has no requirements on this`,
+	)
+	return result
+}

@@ -43,6 +43,7 @@ const (
 	LightningDownstreamVersionChecking  = "downstream_version"
 	LightningFreeSpaceChecking          = "free_space"
 	LightningSortingSpaceChecking       = "enough_sorting_space"
+	LightningCDCPiTRChecking            = "cdc_pitr"
 )
 
 // AllCheckingItems contains all checking items.
