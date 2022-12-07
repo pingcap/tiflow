@@ -411,11 +411,11 @@ func (jm *JobManagerImpl) tryQueryJobDetail(ctx context.Context, jobMasterAddr s
 	if job.State != pb.Job_Running || jm.JobFsm.QueryOnlineJob(job.Id) == nil {
 		return
 	}
-	detail, err := jm.jobHTTPClient.GetJobDetail(ctx, jobMasterAddr, job.Id)
-	if err != nil {
+	detail, httpErr := jm.jobHTTPClient.GetJobDetail(ctx, jobMasterAddr, job.Id)
+	if httpErr != nil {
 		job.Error = &pb.Job_Error{
-			Code:    "", // TODO: extract error code from err.
-			Message: err.Error(),
+			Code:    httpErr.Code,
+			Message: httpErr.Message,
 		}
 	} else {
 		job.Detail = detail

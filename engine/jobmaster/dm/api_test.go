@@ -107,9 +107,9 @@ func TestQueryStatusAPI(t *testing.T) {
 		dumpStatusBytes, _ = json.Marshal(dumpStatus)
 		loadStatusBytes, _ = json.Marshal(loadStatus)
 		syncStatusBytes, _ = json.Marshal(syncStatus)
-		dumpStatusResp     = &dmpkg.QueryStatusResponse{Unit: frameModel.WorkerDMDump, Stage: metadata.StageRunning, Status: dumpStatusBytes}
-		loadStatusResp     = &dmpkg.QueryStatusResponse{Unit: frameModel.WorkerDMLoad, Stage: metadata.StagePaused, Result: &dmpkg.ProcessResult{IsCanceled: true}, Status: loadStatusBytes}
-		syncStatusResp     = &dmpkg.QueryStatusResponse{Unit: frameModel.WorkerDMSync, Stage: metadata.StageError, Result: &dmpkg.ProcessResult{Errors: []*dmpkg.ProcessError{processError}}, Status: syncStatusBytes}
+		dumpStatusResp     = &dmpkg.QueryStatusResponse{Unit: frameModel.WorkerDMDump, Stage: metadata.StageRunning, Status: dumpStatusBytes, IoTotalBytes: 0}
+		loadStatusResp     = &dmpkg.QueryStatusResponse{Unit: frameModel.WorkerDMLoad, Stage: metadata.StagePaused, Result: &dmpkg.ProcessResult{IsCanceled: true}, Status: loadStatusBytes, IoTotalBytes: 0}
+		syncStatusResp     = &dmpkg.QueryStatusResponse{Unit: frameModel.WorkerDMSync, Stage: metadata.StageError, Result: &dmpkg.ProcessResult{Errors: []*dmpkg.ProcessError{processError}}, Status: syncStatusBytes, IoTotalBytes: 0}
 		dumpTime, _        = time.Parse(time.RFC3339Nano, "2022-11-04T18:47:57.43382274+08:00")
 		loadTime, _        = time.Parse(time.RFC3339Nano, "2022-11-04T19:47:57.43382274+08:00")
 		syncTime, _        = time.Parse(time.RFC3339Nano, "2022-11-04T20:47:57.43382274+08:00")
@@ -241,7 +241,8 @@ func TestQueryStatusAPI(t *testing.T) {
 				"unit": "",
 				"stage": "",
 				"result": null,
-				"status": null
+				"status": null,
+				"io_total_bytes": 0
 			},
 			"duration": 1000000000
 		},
@@ -254,7 +255,8 @@ func TestQueryStatusAPI(t *testing.T) {
 				"unit": "",
 				"stage": "",
 				"result": null,
-				"status": null
+				"status": null,
+				"io_total_bytes": 0
 			},
 			"duration": 1000000000
 		},
@@ -267,7 +269,8 @@ func TestQueryStatusAPI(t *testing.T) {
 				"unit": "",
 				"stage": "",
 				"result": null,
-				"status": null
+				"status": null,
+				"io_total_bytes": 0
 			},
 			"duration": 1000000000
 		},
@@ -288,7 +291,8 @@ func TestQueryStatusAPI(t *testing.T) {
 					"estimateTotalRows": 1000,
 					"bps": 1000,
 					"progress": "20.00 %"
-				}
+				},
+				"io_total_bytes": 0
 			},
 			"duration": 1000000000
 		},
@@ -310,7 +314,8 @@ func TestQueryStatusAPI(t *testing.T) {
 					"metaBinlog": "mysql-bin.000002, 8",
 					"metaBinlogGTID": "1-2-3",
 					"bps": 1000
-				}
+				},
+				"io_total_bytes": 0
 			},
 			"duration": 1000000000
 		},
@@ -348,7 +353,8 @@ func TestQueryStatusAPI(t *testing.T) {
 					"totalRows": 10,
 					"totalRps": 10,
 					"recentRps": 10
-				}
+				},
+				"io_total_bytes": 0
 			},
 			"duration": 1000000000
 		},
@@ -361,7 +367,8 @@ func TestQueryStatusAPI(t *testing.T) {
 				"unit": "",
 				"stage": "",
 				"result": null,
-				"status": null
+				"status": null,
+				"io_total_bytes": 0
 			},
 			"duration": 1000000000
 		}
