@@ -33,7 +33,7 @@ import (
 func createWorker(changefeedID model.ChangeFeedID, memQuota uint64, splitTxn bool) (*sinkWorker, engine.SortEngine) {
 	sortEngine := memory.New(context.Background())
 	sm := sourcemanager.New(changefeedID, upstream.NewUpstream4Test(&mockPD{}),
-		&entry.MockMountGroup{}, sortEngine, make(chan error, 1))
+		&entry.MockMountGroup{}, sortEngine, make(chan error, 1), false)
 	quota := newMemQuota(changefeedID, memQuota)
 	return newSinkWorker(changefeedID, sm, quota, nil, splitTxn, false), sortEngine
 }
@@ -940,7 +940,157 @@ func (suite *workerSuite) TestHandleTaskWithSplitTxnAndDoNotAdvanceTableUntilMee
 	receivedEvents[1].Callback()
 	receivedEvents[2].Callback()
 	require.Len(suite.T(), sink.GetEvents(), 3, "No more events should be sent to sink")
-	require.Equal(suite.T(), uint64(2), wrapper.getCheckpointTs().ResolvedMark(), "Only can advance resolved mark to 1")
+	require.Equal(suite.T(), uint64(2), wrapper.getCheckpointTs().ResolvedMark(),
+		"Only can advance resolved mark to 2")
+}
+
+// Test the case that the worker will advance the table sink only when task is finished.
+func (suite *workerSuite) TestHandleTaskWithSplitTxnAndAdvanceTableUntilTaskIsFinished() {
+	changefeedID := model.DefaultChangeFeedID("1")
+	tableID := model.TableID(1)
+	ctx, cancel := context.WithCancel(context.Background())
+
+	// Only for three events.
+	// NOTICE: Do not forget the initial memory quota in the worker first time running.
+	eventSize := uint64(218 * 2)
+
+	events := []*model.PolymorphicEvent{
+		{
+			StartTs: 1,
+			CRTs:    1,
+			RawKV: &model.RawKVEntry{
+				OpType:  model.OpTypePut,
+				StartTs: 1,
+				CRTs:    1,
+			},
+			Row: genRowChangedEvent(1, 1, tableID),
+		},
+		{
+			CRTs: 4,
+			RawKV: &model.RawKVEntry{
+				OpType: model.OpTypeResolved,
+				CRTs:   4,
+			},
+		},
+	}
+	w, e := createWorker(changefeedID, eventSize, true)
+	addEventsToSortEngine(suite.T(), events, e, tableID)
+
+	taskChan := make(chan *sinkTask)
+	var wg sync.WaitGroup
+	wg.Add(1)
+	go func() {
+		defer wg.Done()
+		err := w.handleTasks(ctx, taskChan)
+		require.ErrorIs(suite.T(), err, context.Canceled)
+	}()
+
+	wrapper, sink := createTableSinkWrapper(changefeedID, tableID)
+	lowerBoundPos := engine.Position{
+		StartTs:  0,
+		CommitTs: 1,
+	}
+	upperBoundGetter := func(_ *tableSinkWrapper) engine.Position {
+		return engine.Position{
+			StartTs:  3,
+			CommitTs: 4,
+		}
+	}
+	callback := func(lastWritePos engine.Position) {
+		require.Equal(suite.T(), engine.Position{
+			StartTs:  1,
+			CommitTs: 1,
+		}, lastWritePos)
+		require.Equal(suite.T(), engine.Position{
+			StartTs:  2,
+			CommitTs: 1,
+		}, lastWritePos.Next())
+	}
+	taskChan <- &sinkTask{
+		tableID:       tableID,
+		lowerBound:    lowerBoundPos,
+		getUpperBound: upperBoundGetter,
+		tableSink:     wrapper,
+		callback:      callback,
+		isCanceled:    func() bool { return false },
+	}
+	require.Eventually(suite.T(), func() bool {
+		return len(sink.GetEvents()) == 1
+	}, 5*time.Second, 10*time.Millisecond)
+	cancel()
+	wg.Wait()
+	receivedEvents := sink.GetEvents()
+	receivedEvents[0].Callback()
+	require.Len(suite.T(), sink.GetEvents(), 1, "No more events should be sent to sink")
+	require.Equal(suite.T(), uint64(1), wrapper.getCheckpointTs().ResolvedMark(),
+		"Only can advance resolved mark to 1")
+}
+
+// Test the case that the worker will advance the table sink directly when there are no events.
+func (suite *workerSuite) TestHandleTaskWithSplitTxnAndAdvanceTableIfNoWorkload() {
+	changefeedID := model.DefaultChangeFeedID("1")
+	tableID := model.TableID(1)
+	ctx, cancel := context.WithCancel(context.Background())
+
+	// Only for three events.
+	// NOTICE: Do not forget the initial memory quota in the worker first time running.
+	eventSize := uint64(218 * 2)
+
+	events := []*model.PolymorphicEvent{
+		{
+			CRTs: 4,
+			RawKV: &model.RawKVEntry{
+				OpType: model.OpTypeResolved,
+				CRTs:   4,
+			},
+		},
+	}
+	w, e := createWorker(changefeedID, eventSize, true)
+	addEventsToSortEngine(suite.T(), events, e, tableID)
+
+	taskChan := make(chan *sinkTask)
+	var wg sync.WaitGroup
+	wg.Add(1)
+	go func() {
+		defer wg.Done()
+		err := w.handleTasks(ctx, taskChan)
+		require.ErrorIs(suite.T(), err, context.Canceled)
+	}()
+
+	wrapper, _ := createTableSinkWrapper(changefeedID, tableID)
+	lowerBoundPos := engine.Position{
+		StartTs:  0,
+		CommitTs: 1,
+	}
+	upperBoundGetter := func(_ *tableSinkWrapper) engine.Position {
+		return engine.Position{
+			StartTs:  3,
+			CommitTs: 4,
+		}
+	}
+	callback := func(lastWritePos engine.Position) {
+		require.Equal(suite.T(), engine.Position{
+			StartTs:  3,
+			CommitTs: 4,
+		}, lastWritePos)
+		require.Equal(suite.T(), engine.Position{
+			StartTs:  4,
+			CommitTs: 4,
+		}, lastWritePos.Next())
+	}
+	taskChan <- &sinkTask{
+		tableID:       tableID,
+		lowerBound:    lowerBoundPos,
+		getUpperBound: upperBoundGetter,
+		tableSink:     wrapper,
+		callback:      callback,
+		isCanceled:    func() bool { return false },
+	}
+	require.Eventually(suite.T(), func() bool {
+		return wrapper.getCheckpointTs().ResolvedMark() == 4
+	}, 5*time.Second, 10*time.Millisecond, "Directly advance resolved mark to 4")
+	cancel()
+	wg.Wait()
 }
 
 func TestWorkerSuite(t *testing.T) {

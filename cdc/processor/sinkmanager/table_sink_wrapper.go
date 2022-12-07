@@ -58,6 +58,8 @@ type tableSinkWrapper struct {
 	receivedEventCount atomic.Int64
 	// lastCleanTime indicates the last time the table has been cleaned.
 	lastCleanTime time.Time
+	// checkpointTs is the checkpoint ts of the table sink.
+	checkpointTs atomic.Uint64
 
 	// rangeEventCounts is for clean the table engine.
 	// If rangeEventCounts[i].events is greater than 0, it means there must be
@@ -89,13 +91,17 @@ func newTableSinkWrapper(
 	}
 }
 
-func (t *tableSinkWrapper) start(replicateTs model.Ts) {
+func (t *tableSinkWrapper) start(startTs model.Ts, replicateTs model.Ts) {
 	log.Info("Sink is started",
 		zap.String("namespace", t.changefeed.Namespace),
 		zap.String("changefeed", t.changefeed.ID),
 		zap.Int64("tableID", t.tableID),
 		zap.Uint64("replicateTs", replicateTs),
 	)
+	// This start ts maybe greater than the initial start ts of the table sink.
+	// Because in two phase scheduling, the table sink may be advanced to a later ts.
+	// And we can just continue to replicate the table sink from the new start ts.
+	t.checkpointTs.Store(startTs)
 	t.replicateTs = replicateTs
 	t.state.Store(tablepb.TableStateReplicating)
 }
@@ -125,7 +131,12 @@ func (t *tableSinkWrapper) updateResolvedTs(ts model.ResolvedTs) error {
 }
 
 func (t *tableSinkWrapper) getCheckpointTs() model.ResolvedTs {
-	return t.tableSink.GetCheckpointTs()
+	currentCheckpointTs := t.checkpointTs.Load()
+	newCheckpointTs := t.tableSink.GetCheckpointTs()
+	if currentCheckpointTs > newCheckpointTs.ResolvedMark() {
+		return model.NewResolvedTs(currentCheckpointTs)
+	}
+	return newCheckpointTs
 }
 
 func (t *tableSinkWrapper) getReceivedSorterResolvedTs() model.Ts {
