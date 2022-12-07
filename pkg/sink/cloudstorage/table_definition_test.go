@@ -318,7 +318,7 @@ func TestTableCol(t *testing.T) {
 		require.JSONEq(t, tc.expected, string(encodedCol), tc.name)
 
 		_, err = tableCol.ToTiColumnInfo()
-		require.Nil(t, err)
+		require.NoError(t, err)
 	}
 }
 
@@ -357,7 +357,7 @@ func TestTableDefinition(t *testing.T) {
 	tableInfo.TableInfo = &timodel.TableInfo{Columns: columns}
 	def.FromTableInfo(tableInfo)
 	encodedDef, err := json.MarshalIndent(def, "", "    ")
-	require.Nil(t, err)
+	require.NoError(t, err)
 	require.JSONEq(t, `{
 		"Table": "table1",
 		"Schema": "test",
@@ -400,7 +400,7 @@ func TestTableDefinition(t *testing.T) {
 	}
 	def.FromDDLEvent(event)
 	encodedDef, err = json.MarshalIndent(def, "", "    ")
-	require.Nil(t, err)
+	require.NoError(t, err)
 	require.JSONEq(t, `{
 		"Table": "table1",
 		"Schema": "test",
@@ -436,10 +436,10 @@ func TestTableDefinition(t *testing.T) {
 	}`, string(encodedDef))
 
 	tableInfo, err = def.ToTableInfo()
-	require.Nil(t, err)
+	require.NoError(t, err)
 	require.Len(t, tableInfo.Columns, 4)
 
 	event, err = def.ToDDLEvent()
-	require.Nil(t, err)
+	require.NoError(t, err)
 	require.Equal(t, timodel.ActionAddColumn, event.Type)
 }

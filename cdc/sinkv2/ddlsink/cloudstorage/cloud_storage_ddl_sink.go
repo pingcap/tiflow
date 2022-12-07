@@ -68,7 +68,7 @@ func NewCloudStorageDDLSink(ctx context.Context, sinkURI *url.URL) (*ddlSink, er
 	return d, nil
 }
 
-func (d *ddlSink) generateSchemaPath(def cloudstorage.TableDefinition) string {
+func generateSchemaPath(def cloudstorage.TableDefinition) string {
 	return fmt.Sprintf("%s/%s/%d/schema.json", def.Schema, def.Table, def.TableVersion)
 }
 
@@ -85,7 +85,7 @@ func (d *ddlSink) WriteDDLEvent(ctx context.Context, ddl *model.DDLEvent) error 
 		return errors.Trace(err)
 	}
 
-	path := d.generateSchemaPath(def)
+	path := generateSchemaPath(def)
 	err = d.statistics.RecordDDLExecution(func() error {
 		err1 := d.storage.WriteFile(ctx, path, encodedDef)
 		if err1 != nil {

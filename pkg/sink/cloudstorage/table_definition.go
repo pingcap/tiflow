@@ -187,7 +187,7 @@ func (t *TableDefinition) ToDDLEvent() (*model.DDLEvent, error) {
 	}, nil
 }
 
-// FromTableInfo converts from TableInfo to TableDetail.
+// FromTableInfo converts from TableInfo to TableDefinition.
 func (t *TableDefinition) FromTableInfo(info *model.TableInfo) {
 	t.Table = info.TableName.Table
 	t.Schema = info.TableName.Schema
