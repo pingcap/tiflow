@@ -404,8 +404,8 @@ func TestTableDefinition(t *testing.T) {
 	require.JSONEq(t, `{
 		"Table": "table1",
 		"Schema": "test",
-		"Version": 100,
-		"TableVersion": 1,
+		"Version": 1,
+		"TableVersion": 100,
 		"Query": "alter table test.table1 add Birthday date",
 		"Type": 5,
 		"TableColumns": [
