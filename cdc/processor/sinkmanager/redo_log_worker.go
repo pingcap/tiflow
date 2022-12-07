@@ -123,8 +123,8 @@ func (w *redoWorker) handleTask(ctx context.Context, task *redoTask) error {
 
 		// If used memory size exceeds the required limit, do a block require.
 		if memoryHighUsage {
-			w.memQuota.blockAcquire(usedMemSize - availableMemSize)
-			log.Debug("MemoryQuotaTracing: block acquire memory for redo log task",
+			w.memQuota.forceAcquire(usedMemSize - availableMemSize)
+			log.Debug("MemoryQuotaTracing: force acquire memory for redo log task",
 				zap.String("namespace", w.changefeedID.Namespace),
 				zap.String("changefeed", w.changefeedID.ID),
 				zap.Int64("tableID", task.tableID),
