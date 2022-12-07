@@ -15,6 +15,7 @@ package conn
 
 import (
 	"fmt"
+	"math"
 	"strconv"
 	"strings"
 	"time"
@@ -236,7 +237,9 @@ func GetPosAndGs(ctx *tcontext.Context, db *BaseDB, flavor string) (
 		Name: binlogName,
 		Pos:  uint32(pos),
 	}
-	ctx.L().Warn("Convert the pos type returned by GetMasterStatus to uint32 to fit binlog position")
+	if binlogPos.Pos > math.MaxUint32 {
+		ctx.L().Warn("binlog position beyond the range of uint32")
+	}
 	gs, err = gtid.ParserGTID(flavor, gtidStr)
 	return
 }
