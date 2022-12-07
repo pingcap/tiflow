@@ -27,7 +27,7 @@ import (
 )
 
 func TestBaseConn(t *testing.T) {
-	baseConn := NewBaseConn(nil, nil)
+	baseConn := NewBaseConnForTest(nil, nil)
 
 	tctx := tcontext.Background()
 	err := baseConn.SetRetryStrategy(nil)
@@ -45,7 +45,7 @@ func TestBaseConn(t *testing.T) {
 	dbConn, err := db.Conn(tctx.Context())
 	require.NoError(t, err)
 
-	baseConn = &BaseConn{dbConn, nil}
+	baseConn = &BaseConn{dbConn, terror.ScopeNotSet, nil}
 
 	err = baseConn.SetRetryStrategy(&retry.FiniteRetryStrategy{})
 	require.NoError(t, err)
@@ -101,7 +101,7 @@ func TestBaseConn(t *testing.T) {
 	require.Equal(t, 1, affected)
 
 	require.NoError(t, mock.ExpectationsWereMet())
-	require.NoError(t, baseConn.close())
+	require.NoError(t, baseConn.forceClose())
 }
 
 func TestAutoSplit4TxnTooLarge(t *testing.T) {
@@ -111,7 +111,7 @@ func TestAutoSplit4TxnTooLarge(t *testing.T) {
 	dbConn, err := db.Conn(tctx.Context())
 	require.NoError(t, err)
 
-	baseConn := &BaseConn{dbConn, nil}
+	baseConn := &BaseConn{dbConn, terror.ScopeNotSet, nil}
 
 	errTxnTooLarge := &mysql.MySQLError{
 		Number:  errno.ErrTxnTooLarge,

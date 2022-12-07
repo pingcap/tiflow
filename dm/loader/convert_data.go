@@ -26,10 +26,10 @@ import (
 	cm "github.com/pingcap/tidb-tools/pkg/column-mapping"
 	"github.com/pingcap/tidb/parser/ast"
 	regexprrouter "github.com/pingcap/tidb/util/regexpr-router"
+	"github.com/pingcap/tiflow/dm/pkg/conn"
 	tcontext "github.com/pingcap/tiflow/dm/pkg/context"
 	parserpkg "github.com/pingcap/tiflow/dm/pkg/parser"
 	"github.com/pingcap/tiflow/dm/pkg/terror"
-	"github.com/pingcap/tiflow/dm/pkg/utils"
 )
 
 func bytes2str(bs []byte) string {
@@ -239,7 +239,7 @@ func parseTable(ctx *tcontext.Context, r *regexprrouter.RouteTable, schema, tabl
 		return nil, err
 	}
 
-	parser2, err := utils.GetParserFromSQLModeStr(sqlMode)
+	parser2, err := conn.GetParserFromSQLModeStr(sqlMode)
 	if err != nil {
 		return nil, err
 	}

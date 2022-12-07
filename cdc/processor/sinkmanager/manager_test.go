@@ -55,7 +55,7 @@ func createManagerWithMemEngine(
 ) (*SinkManager, engine.SortEngine) {
 	sortEngine := memory.New(context.Background())
 	up := upstream.NewUpstream4Test(&mockPD{})
-	sm := sourcemanager.New(changefeedID, up, &entry.MockMountGroup{}, sortEngine, errChan)
+	sm := sourcemanager.New(changefeedID, up, &entry.MockMountGroup{}, sortEngine, errChan, false)
 	manager, err := New(
 		ctx, changefeedID, changefeedInfo, up,
 		nil, sm,
