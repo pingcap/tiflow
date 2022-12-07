@@ -79,7 +79,6 @@ func TestMemQuotaClose(t *testing.T) {
 	m := newMemQuota(model.DefaultChangeFeedID("1"), 100)
 
 	err := m.blockAcquire(100)
-	require.Equal(t, uint64(100), m.usedBytes)
 	require.NoError(t, err)
 	m.record(1, model.NewResolvedTs(2), 100)
 
