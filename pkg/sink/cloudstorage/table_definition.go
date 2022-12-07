@@ -165,12 +165,14 @@ type TableDefinition struct {
 	TotalColumns int                `json:"TableColumnsTotal"`
 }
 
+// FromDDLEvent converts from DDLEvent to TableDefinition.
 func (t *TableDefinition) FromDDLEvent(event *model.DDLEvent) {
 	t.FromTableInfo(event.TableInfo)
 	t.Query = event.Query
 	t.Type = event.Type
 }
 
+// ToDDLEvent converts from TableDefinition to DDLEvent.
 func (t *TableDefinition) ToDDLEvent() (*model.DDLEvent, error) {
 	tableInfo, err := t.ToTableInfo()
 	if err != nil {
