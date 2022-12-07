@@ -181,7 +181,7 @@ func (t *TableDefinition) ToDDLEvent() (*model.DDLEvent, error) {
 
 	return &model.DDLEvent{
 		TableInfo: tableInfo,
-		CommitTs:  t.Version,
+		CommitTs:  t.TableVersion,
 		Type:      t.Type,
 		Query:     t.Query,
 	}, nil

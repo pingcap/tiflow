@@ -442,4 +442,5 @@ func TestTableDefinition(t *testing.T) {
 	event, err = def.ToDDLEvent()
 	require.NoError(t, err)
 	require.Equal(t, timodel.ActionAddColumn, event.Type)
+	require.Equal(t, uint64(100), event.CommitTs)
 }
