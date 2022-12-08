@@ -85,7 +85,7 @@ func (m *Dumpling) Init(ctx context.Context) error {
 				Subsystem: "dumpling",
 				Name:      "exit_with_error_count",
 				Help:      "counter for dumpling exit with error",
-			}, []string{"task", "source_id"},
+			}, []string{"task", "source_id", "resumable_err"},
 		)
 		m.dumpConfig.PromFactory = promutil.NewWrappingFactory(
 			m.cfg.MetricsFactory,
@@ -113,7 +113,8 @@ func (m *Dumpling) Init(ctx context.Context) error {
 
 // Process implements Unit.Process.
 func (m *Dumpling) Process(ctx context.Context, pr chan pb.ProcessResult) {
-	m.metricProxies.dumplingExitWithErrorCounter.WithLabelValues(m.cfg.Name, m.cfg.SourceID).Add(0)
+	m.metricProxies.dumplingExitWithErrorCounter.WithLabelValues(m.cfg.Name, m.cfg.SourceID, "true").Add(0)
+	m.metricProxies.dumplingExitWithErrorCounter.WithLabelValues(m.cfg.Name, m.cfg.SourceID, "false").Add(0)
 
 	failpoint.Inject("dumpUnitProcessWithError", func(val failpoint.Value) {
 		m.logger.Info("dump unit runs with injected error", zap.String("failpoint", "dumpUnitProcessWithError"), zap.Reflect("error", val))
@@ -187,8 +188,10 @@ func (m *Dumpling) Process(ctx context.Context, pr chan pb.ProcessResult) {
 		if utils.IsContextCanceledError(err) {
 			m.logger.Info("filter out error caused by user cancel")
 		} else {
-			m.metricProxies.dumplingExitWithErrorCounter.WithLabelValues(m.cfg.Name, m.cfg.SourceID).Inc()
-			errs = append(errs, unit.NewProcessError(terror.ErrDumpUnitRuntime.Delegate(err, "")))
+			processError := unit.NewProcessError(terror.ErrDumpUnitRuntime.Delegate(err, ""))
+			resumable := fmt.Sprintf("%t", unit.IsResumableError(processError))
+			m.metricProxies.dumplingExitWithErrorCounter.WithLabelValues(m.cfg.Name, m.cfg.SourceID, resumable).Inc()
+			errs = append(errs, processError)
 		}
 	}
 

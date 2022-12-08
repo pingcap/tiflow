@@ -15,6 +15,7 @@ package loader
 
 import (
 	"context"
+	"fmt"
 	"path/filepath"
 	"strings"
 	"sync"
@@ -392,9 +393,11 @@ func (l *LightningLoader) Process(ctx context.Context, pr chan pb.ProcessResult)
 
 	binlog, gtid, err := getMydumpMetadata(ctx, l.cli, l.cfg, l.workerName)
 	if err != nil {
-		loaderExitWithErrorCounter.WithLabelValues(l.cfg.Name, l.cfg.SourceID).Inc()
+		processError := unit.NewProcessError(err)
+		resumable := fmt.Sprintf("%t", unit.IsResumableError(processError))
+		loaderExitWithErrorCounter.WithLabelValues(l.cfg.Name, l.cfg.SourceID, resumable).Inc()
 		pr <- pb.ProcessResult{
-			Errors: []*pb.ProcessError{unit.NewProcessError(err)},
+			Errors: []*pb.ProcessError{processError},
 		}
 		return
 	}

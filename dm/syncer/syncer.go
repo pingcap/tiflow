@@ -687,7 +687,8 @@ func (s *Syncer) resetDBs(tctx *tcontext.Context) error {
 
 // Process implements the dm.Unit interface.
 func (s *Syncer) Process(ctx context.Context, pr chan pb.ProcessResult) {
-	s.metricsProxies.Metrics.SyncerExitWithErrorCounter.Add(0)
+	s.metricsProxies.Metrics.ExitWithResumableErrorCounter.Add(0)
+	s.metricsProxies.Metrics.ExitWithNonResumableErrorCounter.Add(0)
 
 	newCtx, cancel := context.WithCancel(ctx)
 	defer cancel()
@@ -718,7 +719,11 @@ func (s *Syncer) Process(ctx context.Context, pr chan pb.ProcessResult) {
 				return
 			}
 			cancel() // cancel s.Run
-			s.metricsProxies.Metrics.SyncerExitWithErrorCounter.Inc()
+			if unit.IsResumableError(err) {
+				s.metricsProxies.Metrics.ExitWithResumableErrorCounter.Inc()
+			} else {
+				s.metricsProxies.Metrics.ExitWithNonResumableErrorCounter.Inc()
+			}
 			errsMu.Lock()
 			errs = append(errs, err)
 			errsMu.Unlock()
@@ -745,9 +750,14 @@ func (s *Syncer) Process(ctx context.Context, pr chan pb.ProcessResult) {
 			s.tctx.L().Info("filter out error caused by user cancel", log.ShortError(err))
 		} else {
 			s.tctx.L().Debug("unit syncer quits with error", zap.Error(err))
-			s.metricsProxies.Metrics.SyncerExitWithErrorCounter.Inc()
+			processError := unit.NewProcessError(err)
+			if unit.IsResumableError(processError) {
+				s.metricsProxies.Metrics.ExitWithResumableErrorCounter.Inc()
+			} else {
+				s.metricsProxies.Metrics.ExitWithNonResumableErrorCounter.Inc()
+			}
 			errsMu.Lock()
-			errs = append(errs, unit.NewProcessError(err))
+			errs = append(errs, processError)
 			errsMu.Unlock()
 		}
 	}

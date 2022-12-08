@@ -21,6 +21,7 @@ import (
 	"github.com/pingcap/tiflow/dm/config"
 	"github.com/pingcap/tiflow/dm/pb"
 	"github.com/pingcap/tiflow/dm/pkg/binlog"
+	"github.com/pingcap/tiflow/dm/pkg/retry"
 	"github.com/pingcap/tiflow/dm/pkg/terror"
 )
 
@@ -106,4 +107,41 @@ func JoinProcessErrors(errors []*pb.ProcessError) string {
 		serrs = append(serrs, serr.String())
 	}
 	return strings.Join(serrs, ", ")
+}
+
+// IsResumableError checks the error message and returns whether we need to
+// resume the task and retry.
+func IsResumableError(err *pb.ProcessError) bool {
+	if err == nil {
+		return true
+	}
+
+	// not elegant code, because TiDB doesn't expose some error
+	for _, msg := range retry.UnsupportedDDLMsgs {
+		if strings.Contains(strings.ToLower(err.RawCause), strings.ToLower(msg)) {
+			return false
+		}
+	}
+	for _, msg := range retry.UnsupportedDMLMsgs {
+		if strings.Contains(strings.ToLower(err.RawCause), strings.ToLower(msg)) {
+			return false
+		}
+	}
+	for _, msg := range retry.ReplicationErrMsgs {
+		if strings.Contains(strings.ToLower(err.RawCause), strings.ToLower(msg)) {
+			return false
+		}
+	}
+	if err.ErrCode == int32(terror.ErrParserParseRelayLog.Code()) {
+		for _, msg := range retry.ParseRelayLogErrMsgs {
+			if strings.Contains(strings.ToLower(err.Message), strings.ToLower(msg)) {
+				return false
+			}
+		}
+	}
+	if _, ok := retry.UnresumableErrCodes[err.ErrCode]; ok {
+		return false
+	}
+
+	return true
 }
