@@ -21,24 +21,17 @@ import (
 	"testing"
 
 	"github.com/go-mysql-org/go-mysql/mysql"
-	. "github.com/pingcap/check"
 	"github.com/pingcap/tidb/dumpling/export"
 	"github.com/pingcap/tiflow/dm/pkg/gtid"
 	"github.com/pingcap/tiflow/dm/pkg/log"
 	"github.com/pingcap/tiflow/dm/pkg/terror"
+	"github.com/stretchr/testify/require"
 )
 
-var _ = Suite(&testSuite{})
-
-func TestSuite(t *testing.T) {
-	TestingT(t)
-}
-
-type testSuite struct{}
-
-func (t *testSuite) TestParseMetaData(c *C) {
+func TestParseMetaData(t *testing.T) {
+	t.Parallel()
 	f, err := os.CreateTemp("", "metadata")
-	c.Assert(err, IsNil)
+	require.NoError(t, err)
 	defer os.Remove(f.Name())
 	fdir := path.Dir(f.Name())
 	fname := path.Base(f.Name())
@@ -123,7 +116,7 @@ Finished dump at: 2020-05-21 18:14:49`,
 SHOW MASTER STATUS:
 		Log: mysql-bin.000003
 		Pos: 1274
-		GTID:5b5a8e4e-9b43-11ea-900d-0242ac170002:1-10,
+		 GTID:5b5a8e4e-9b43-11ea-900d-0242ac170002:1-10,
 5b642cb6-9b43-11ea-8914-0242ac170003:1-7,
 97b5142f-e19c-11e8-808c-0242ac110005:1-13
 Finished dump at: 2020-05-21 18:02:44`,
@@ -238,18 +231,18 @@ Finished dump at: 2020-09-30 12:16:49
 	ctx := context.Background()
 	for _, tc := range testCases {
 		err2 := os.WriteFile(f.Name(), []byte(tc.source), 0o644)
-		c.Assert(err2, IsNil)
+		require.NoError(t, err2)
 		loc, loc2, err2 := ParseMetaData(ctx, fdir, fname, "mysql", nil)
-		c.Assert(err2, IsNil)
-		c.Assert(loc.Position, DeepEquals, tc.pos)
+		require.NoError(t, err2)
+		require.Equal(t, tc.pos, loc.Position)
 		gs, _ := gtid.ParserGTID("mysql", tc.gsetStr)
-		c.Assert(loc.GetGTID(), DeepEquals, gs)
+		require.Equal(t, gs, loc.GetGTID())
 		if tc.loc2 {
-			c.Assert(loc2.Position, DeepEquals, tc.pos2)
+			require.Equal(t, tc.pos2, loc2.Position)
 			gs2, _ := gtid.ParserGTID("mysql", tc.gsetStr2)
-			c.Assert(loc2.GetGTID(), DeepEquals, gs2)
+			require.Equal(t, gs2, loc2.GetGTID())
 		} else {
-			c.Assert(loc2, IsNil)
+			require.Nil(t, loc2)
 		}
 	}
 
@@ -257,71 +250,72 @@ Finished dump at: 2020-09-30 12:16:49
 Finished dump at: 2020-12-02 17:13:56
 `
 	err = os.WriteFile(f.Name(), []byte(noBinlogLoc), 0o644)
-	c.Assert(err, IsNil)
+	require.NoError(t, err)
 	_, _, err = ParseMetaData(ctx, fdir, fname, "mysql", nil)
-	c.Assert(terror.ErrMetadataNoBinlogLoc.Equal(err), IsTrue)
+	require.True(t, terror.ErrMetadataNoBinlogLoc.Equal(err))
 }
 
-func (t *testSuite) TestParseArgs(c *C) {
+func TestParseArgs(t *testing.T) {
+	t.Parallel()
 	logger := log.L()
 
 	exportCfg := export.DefaultConfig()
 	extraArgs := `--statement-size=100 --where t>10 --threads 8 -F 50B`
 	err := ParseExtraArgs(&logger, exportCfg, strings.Fields(extraArgs))
-	c.Assert(err, IsNil)
-	c.Assert(exportCfg.StatementSize, Equals, uint64(100))
-	c.Assert(exportCfg.Where, Equals, "t>10")
-	c.Assert(exportCfg.Threads, Equals, 8)
-	c.Assert(exportCfg.FileSize, Equals, uint64(50))
+	require.NoError(t, err)
+	require.Equal(t, uint64(100), exportCfg.StatementSize)
+	require.Equal(t, "t>10", exportCfg.Where)
+	require.Equal(t, 8, exportCfg.Threads)
+	require.Equal(t, uint64(50), exportCfg.FileSize)
 
 	extraArgs = `--threads 16 --skip-tz-utc`
 	err = ParseExtraArgs(&logger, exportCfg, strings.Fields(extraArgs))
-	c.Assert(err, NotNil)
-	c.Assert(exportCfg.Threads, Equals, 16)
-	c.Assert(exportCfg.StatementSize, Equals, uint64(100))
+	require.Error(t, err)
+	require.Equal(t, 16, exportCfg.Threads)
+	require.Equal(t, uint64(100), exportCfg.StatementSize)
 
 	// no `--tables-list` or `--filter` specified, match anything
-	c.Assert(exportCfg.TableFilter.MatchTable("foo", "bar"), IsTrue)
-	c.Assert(exportCfg.TableFilter.MatchTable("bar", "foo"), IsTrue)
+	require.True(t, exportCfg.TableFilter.MatchTable("foo", "bar"))
+	require.True(t, exportCfg.TableFilter.MatchTable("bar", "foo"))
 
 	// specify `--tables-list`.
 	extraArgs = `--threads 16 --tables-list=foo.bar`
 	err = ParseExtraArgs(&logger, exportCfg, strings.Fields(extraArgs))
-	c.Assert(err, IsNil)
-	c.Assert(exportCfg.TableFilter.MatchTable("foo", "bar"), IsTrue)
-	c.Assert(exportCfg.TableFilter.MatchTable("bar", "foo"), IsFalse)
+	require.NoError(t, err)
+	require.True(t, exportCfg.TableFilter.MatchTable("foo", "bar"))
+	require.False(t, exportCfg.TableFilter.MatchTable("bar", "foo"))
 
 	// specify `--tables-list` and `--filter`
 	extraArgs = `--threads 16 --tables-list=foo.bar --filter=*.foo`
 	err = ParseExtraArgs(&logger, exportCfg, strings.Fields(extraArgs))
-	c.Assert(err, ErrorMatches, ".*--tables-list and --filter together.*")
+	require.Regexp(t, ".*--tables-list and --filter together.*", err)
 
 	// only specify `--filter`.
 	extraArgs = `--threads 16 --filter=*.foo`
 	err = ParseExtraArgs(&logger, exportCfg, strings.Fields(extraArgs))
-	c.Assert(err, IsNil)
-	c.Assert(exportCfg.TableFilter.MatchTable("foo", "bar"), IsFalse)
-	c.Assert(exportCfg.TableFilter.MatchTable("bar", "foo"), IsTrue)
+	require.NoError(t, err)
+	require.False(t, exportCfg.TableFilter.MatchTable("foo", "bar"))
+	require.True(t, exportCfg.TableFilter.MatchTable("bar", "foo"))
 
 	// compatibility for `--no-locks`
 	extraArgs = `--no-locks`
 	err = ParseExtraArgs(&logger, exportCfg, strings.Fields(extraArgs))
-	c.Assert(err, IsNil)
-	c.Assert(exportCfg.Consistency, Equals, "none")
+	require.NoError(t, err)
+	require.Equal(t, "none", exportCfg.Consistency)
 
 	// compatibility for `--no-locks`
 	extraArgs = `--no-locks --consistency none`
 	err = ParseExtraArgs(&logger, exportCfg, strings.Fields(extraArgs))
-	c.Assert(err, IsNil)
-	c.Assert(exportCfg.Consistency, Equals, "none")
+	require.NoError(t, err)
+	require.Equal(t, "none", exportCfg.Consistency)
 
 	extraArgs = `--consistency lock`
 	err = ParseExtraArgs(&logger, exportCfg, strings.Fields(extraArgs))
-	c.Assert(err, IsNil)
-	c.Assert(exportCfg.Consistency, Equals, "lock")
+	require.NoError(t, err)
+	require.Equal(t, "lock", exportCfg.Consistency)
 
 	// compatibility for `--no-locks`
 	extraArgs = `--no-locks --consistency lock`
 	err = ParseExtraArgs(&logger, exportCfg, strings.Fields(extraArgs))
-	c.Assert(err.Error(), Equals, "cannot both specify `--no-locks` and `--consistency` other than `none`")
+	require.Equal(t, "cannot both specify `--no-locks` and `--consistency` other than `none`", err.Error())
 }

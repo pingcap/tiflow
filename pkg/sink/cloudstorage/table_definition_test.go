@@ -14,7 +14,6 @@ package cloudstorage
 
 import (
 	"encoding/json"
-	"fmt"
 	"math"
 	"testing"
 
@@ -319,13 +318,13 @@ func TestTableCol(t *testing.T) {
 		require.JSONEq(t, tc.expected, string(encodedCol), tc.name)
 
 		_, err = tableCol.ToTiColumnInfo()
-		require.Nil(t, err)
+		require.NoError(t, err)
 	}
 }
 
-func TestTableDetail(t *testing.T) {
+func TestTableDefinition(t *testing.T) {
 	var columns []*timodel.ColumnInfo
-	var def TableDetail
+	var def TableDefinition
 
 	tableInfo := &model.TableInfo{
 		Version: 100,
@@ -358,12 +357,57 @@ func TestTableDetail(t *testing.T) {
 	tableInfo.TableInfo = &timodel.TableInfo{Columns: columns}
 	def.FromTableInfo(tableInfo)
 	encodedDef, err := json.MarshalIndent(def, "", "    ")
-	require.Nil(t, err)
-	fmt.Println(string(encodedDef))
+	require.NoError(t, err)
 	require.JSONEq(t, `{
 		"Table": "table1",
 		"Schema": "test",
-		"Version": 100,
+		"Version": 1,
+		"TableVersion": 100,
+		"Query": "",
+		"Type": 0,
+		"TableColumns": [
+			{
+				"ColumnName": "Id",
+				"ColumnType": "INT",
+				"ColumnPrecision": "11",
+				"ColumnNullable": "false",
+				"ColumnIsPk": "true"
+			},
+			{
+				"ColumnName": "LastName",
+				"ColumnType": "VARCHAR",
+				"ColumnPrecision": "128",
+				"ColumnNullable": "false"
+			},
+			{
+				"ColumnName": "FirstName",
+				"ColumnType": "VARCHAR",
+				"ColumnPrecision": "64"
+			},
+			{
+				"ColumnName": "Birthday",
+				"ColumnType": "DATETIME"
+			}
+		],
+		"TableColumnsTotal": 4
+	}`, string(encodedDef))
+
+	def = TableDefinition{}
+	event := &model.DDLEvent{
+		Type:      timodel.ActionAddColumn,
+		Query:     "alter table test.table1 add Birthday date",
+		TableInfo: tableInfo,
+	}
+	def.FromDDLEvent(event)
+	encodedDef, err = json.MarshalIndent(def, "", "    ")
+	require.NoError(t, err)
+	require.JSONEq(t, `{
+		"Table": "table1",
+		"Schema": "test",
+		"Version": 1,
+		"TableVersion": 100,
+		"Query": "alter table test.table1 add Birthday date",
+		"Type": 5,
 		"TableColumns": [
 			{
 				"ColumnName": "Id",
@@ -392,6 +436,11 @@ func TestTableDetail(t *testing.T) {
 	}`, string(encodedDef))
 
 	tableInfo, err = def.ToTableInfo()
-	require.Nil(t, err)
+	require.NoError(t, err)
 	require.Len(t, tableInfo.Columns, 4)
+
+	event, err = def.ToDDLEvent()
+	require.NoError(t, err)
+	require.Equal(t, timodel.ActionAddColumn, event.Type)
+	require.Equal(t, uint64(100), event.CommitTs)
 }

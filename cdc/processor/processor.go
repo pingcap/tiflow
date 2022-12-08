@@ -118,13 +118,15 @@ func (p *processor) checkReadyForMessages() bool {
 	return p.changefeed != nil && p.changefeed.Status != nil
 }
 
-// AddTable implements TableExecutor interface.
-// AddTable may cause by the following scenario
+var _ scheduler.TableExecutor = (*processor)(nil)
+
+// AddTableSpan implements TableExecutor interface.
+// AddTableSpan may cause by the following scenario
 // 1. `Create Table`, a new table dispatched to the processor, `isPrepare` should be false
 // 2. Prepare phase for 2 phase scheduling, `isPrepare` should be true.
 // 3. Replicating phase for 2 phase scheduling, `isPrepare` should be false
-func (p *processor) AddTable(
-	ctx context.Context, tableID model.TableID, startTs model.Ts, isPrepare bool,
+func (p *processor) AddTableSpan(
+	ctx context.Context, span tablepb.Span, startTs model.Ts, isPrepare bool,
 ) (bool, error) {
 	if !p.checkReadyForMessages() {
 		return false, nil
@@ -135,7 +137,7 @@ func (p *processor) AddTable(
 			zap.String("captureID", p.captureInfo.ID),
 			zap.String("namespace", p.changefeedID.Namespace),
 			zap.String("changefeed", p.changefeedID.ID),
-			zap.Int64("tableID", tableID),
+			zap.Int64("tableID", span.TableID),
 			zap.Uint64("checkpointTs", startTs),
 			zap.Bool("isPrepare", isPrepare))
 	}
@@ -143,9 +145,9 @@ func (p *processor) AddTable(
 	var alreadyExist bool
 	var state tablepb.TableState
 	if p.pullBasedSinking {
-		state, alreadyExist = p.sinkManager.GetTableState(tableID)
+		state, alreadyExist = p.sinkManager.GetTableState(span.TableID)
 	} else {
-		table, ok := p.tables[tableID]
+		table, ok := p.tables[span.TableID]
 		if ok {
 			alreadyExist = true
 			state = table.State()
@@ -161,7 +163,7 @@ func (p *processor) AddTable(
 				zap.String("captureID", p.captureInfo.ID),
 				zap.String("namespace", p.changefeedID.Namespace),
 				zap.String("changefeed", p.changefeedID.ID),
-				zap.Int64("tableID", tableID),
+				zap.Int64("tableID", span.TableID),
 				zap.Uint64("checkpointTs", startTs),
 				zap.Bool("isPrepare", isPrepare))
 			return true, nil
@@ -170,11 +172,11 @@ func (p *processor) AddTable(
 			// be stopped on original capture already, it's safe to start replicating data now.
 			if !isPrepare {
 				if p.pullBasedSinking {
-					if err := p.sinkManager.StartTable(tableID, startTs); err != nil {
+					if err := p.sinkManager.StartTable(span.TableID, startTs); err != nil {
 						return false, errors.Trace(err)
 					}
 				} else {
-					p.tables[tableID].Start(startTs)
+					p.tables[span.TableID].Start(startTs)
 				}
 			}
 			return true, nil
@@ -183,7 +185,7 @@ func (p *processor) AddTable(
 				zap.String("captureID", p.captureInfo.ID),
 				zap.String("namespace", p.changefeedID.Namespace),
 				zap.String("changefeed", p.changefeedID.ID),
-				zap.Int64("tableID", tableID),
+				zap.Int64("tableID", span.TableID),
 				zap.Uint64("checkpointTs", startTs),
 				zap.Bool("isPrepare", isPrepare))
 			return true, nil
@@ -192,10 +194,10 @@ func (p *processor) AddTable(
 				zap.String("captureID", p.captureInfo.ID),
 				zap.String("namespace", p.changefeedID.Namespace),
 				zap.String("changefeed", p.changefeedID.ID),
-				zap.Int64("tableID", tableID),
+				zap.Int64("tableID", span.TableID),
 				zap.Uint64("checkpointTs", startTs),
 				zap.Bool("isPrepare", isPrepare))
-			p.removeTable(p.tables[tableID], tableID)
+			p.removeTable(p.tables[span.TableID], span.TableID)
 		}
 	}
 
@@ -208,36 +210,38 @@ func (p *processor) AddTable(
 			zap.String("captureID", p.captureInfo.ID),
 			zap.String("namespace", p.changefeedID.Namespace),
 			zap.String("changefeed", p.changefeedID.ID),
-			zap.Int64("tableID", tableID),
+			zap.Int64("tableID", span.TableID),
 			zap.Uint64("checkpointTs", startTs),
 			zap.Bool("isPrepare", isPrepare))
 	}
 
 	if p.pullBasedSinking {
-		p.sourceManager.AddTable(ctx.(cdcContext.Context), tableID, p.getTableName(ctx, tableID), startTs)
+		p.sinkManager.AddTable(
+			span.TableID, startTs, p.changefeed.Info.TargetTs)
 		if p.redoManager.Enabled() {
-			p.redoManager.AddTable(tableID, startTs)
+			p.redoManager.AddTable(span.TableID, startTs)
 		}
-		p.sinkManager.AddTable(tableID, startTs, p.changefeed.Info.TargetTs)
+		p.sourceManager.AddTable(
+			ctx.(cdcContext.Context), span.TableID, p.getTableName(ctx, span.TableID), startTs)
 		if !isPrepare {
-			if err := p.sinkManager.StartTable(tableID, startTs); err != nil {
+			if err := p.sinkManager.StartTable(span.TableID, startTs); err != nil {
 				return false, errors.Trace(err)
 			}
 		}
 	} else {
 		table, err := p.createTablePipeline(
-			ctx.(cdcContext.Context), tableID, &model.TableReplicaInfo{StartTs: startTs})
+			ctx.(cdcContext.Context), span.TableID, &model.TableReplicaInfo{StartTs: startTs})
 		if err != nil {
 			return false, errors.Trace(err)
 		}
-		p.tables[tableID] = table
+		p.tables[span.TableID] = table
 		if !isPrepare {
 			table.Start(startTs)
 			log.Debug("start table",
 				zap.String("captureID", p.captureInfo.ID),
 				zap.String("namespace", p.changefeedID.Namespace),
 				zap.String("changefeed", p.changefeedID.ID),
-				zap.Int64("tableID", tableID),
+				zap.Int64("tableID", span.TableID),
 				zap.Uint64("startTs", startTs))
 		}
 	}
@@ -245,32 +249,32 @@ func (p *processor) AddTable(
 	return true, nil
 }
 
-// RemoveTable implements TableExecutor interface.
-func (p *processor) RemoveTable(tableID model.TableID) bool {
+// RemoveTableSpan implements TableExecutor interface.
+func (p *processor) RemoveTableSpan(span tablepb.Span) bool {
 	if !p.checkReadyForMessages() {
 		return false
 	}
 
 	if p.pullBasedSinking {
-		_, exist := p.sinkManager.GetTableState(tableID)
+		_, exist := p.sinkManager.GetTableState(span.TableID)
 		if !exist {
 			log.Warn("Table which will be deleted is not found",
 				zap.String("capture", p.captureInfo.ID),
 				zap.String("namespace", p.changefeedID.Namespace),
 				zap.String("changefeed", p.changefeedID.ID),
-				zap.Int64("tableID", tableID))
+				zap.Int64("tableID", span.TableID))
 			return true
 		}
-		p.sinkManager.AsyncStopTable(tableID)
+		p.sinkManager.AsyncStopTable(span.TableID)
 		return true
 	}
-	table, ok := p.tables[tableID]
+	table, ok := p.tables[span.TableID]
 	if !ok {
 		log.Warn("table which will be deleted is not found",
 			zap.String("capture", p.captureInfo.ID),
 			zap.String("namespace", p.changefeedID.Namespace),
 			zap.String("changefeed", p.changefeedID.ID),
-			zap.Int64("tableID", tableID))
+			zap.Int64("tableID", span.TableID))
 		return true
 	}
 	if !table.AsyncStop() {
@@ -281,14 +285,14 @@ func (p *processor) RemoveTable(tableID model.TableID) bool {
 			zap.String("namespace", p.changefeedID.Namespace),
 			zap.String("changefeed", p.changefeedID.ID),
 			zap.Uint64("checkpointTs", table.CheckpointTs()),
-			zap.Int64("tableID", tableID))
+			zap.Int64("tableID", span.TableID))
 		return false
 	}
 	return true
 }
 
-// IsAddTableFinished implements TableExecutor interface.
-func (p *processor) IsAddTableFinished(tableID model.TableID, isPrepare bool) bool {
+// IsAddTableSpanFinished implements TableExecutor interface.
+func (p *processor) IsAddTableSpanFinished(span tablepb.Span, isPrepare bool) bool {
 	if !p.checkReadyForMessages() {
 		return false
 	}
@@ -303,14 +307,14 @@ func (p *processor) IsAddTableFinished(tableID model.TableID, isPrepare bool) bo
 	done := func() bool {
 		var alreadyExist bool
 		if p.pullBasedSinking {
-			state, alreadyExist = p.sinkManager.GetTableState(tableID)
+			state, alreadyExist = p.sinkManager.GetTableState(span.TableID)
 			if alreadyExist {
-				stats := p.sinkManager.GetTableStats(tableID)
+				stats := p.sinkManager.GetTableStats(span.TableID)
 				tableResolvedTs = stats.ResolvedTs
 				tableCheckpointTs = stats.CheckpointTs
 			}
 		} else {
-			table, ok := p.tables[tableID]
+			table, ok := p.tables[span.TableID]
 			if ok {
 				alreadyExist = true
 				state = table.State()
@@ -324,7 +328,7 @@ func (p *processor) IsAddTableFinished(tableID model.TableID, isPrepare bool) bo
 				zap.String("captureID", p.captureInfo.ID),
 				zap.String("namespace", p.changefeedID.Namespace),
 				zap.String("changefeed", p.changefeedID.ID),
-				zap.Int64("tableID", tableID),
+				zap.Int64("tableID", span.TableID),
 				zap.Bool("isPrepare", isPrepare))
 		}
 
@@ -340,7 +344,7 @@ func (p *processor) IsAddTableFinished(tableID model.TableID, isPrepare bool) bo
 			zap.String("captureID", p.captureInfo.ID),
 			zap.String("namespace", p.changefeedID.Namespace),
 			zap.String("changefeed", p.changefeedID.ID),
-			zap.Int64("tableID", tableID),
+			zap.Int64("tableID", span.TableID),
 			zap.Uint64("tableResolvedTs", tableResolvedTs),
 			zap.Uint64("localResolvedTs", localResolvedTs),
 			zap.Uint64("globalResolvedTs", globalResolvedTs),
@@ -356,7 +360,7 @@ func (p *processor) IsAddTableFinished(tableID model.TableID, isPrepare bool) bo
 		zap.String("captureID", p.captureInfo.ID),
 		zap.String("namespace", p.changefeedID.Namespace),
 		zap.String("changefeed", p.changefeedID.ID),
-		zap.Int64("tableID", tableID),
+		zap.Int64("tableID", span.TableID),
 		zap.Uint64("tableResolvedTs", tableResolvedTs),
 		zap.Uint64("localResolvedTs", localResolvedTs),
 		zap.Uint64("globalResolvedTs", globalResolvedTs),
@@ -368,8 +372,8 @@ func (p *processor) IsAddTableFinished(tableID model.TableID, isPrepare bool) bo
 	return true
 }
 
-// IsRemoveTableFinished implements TableExecutor interface.
-func (p *processor) IsRemoveTableFinished(tableID model.TableID) (model.Ts, bool) {
+// IsRemoveTableSpanFinished implements TableExecutor interface.
+func (p *processor) IsRemoveTableSpanFinished(span tablepb.Span) (model.Ts, bool) {
 	if !p.checkReadyForMessages() {
 		return 0, false
 	}
@@ -378,13 +382,13 @@ func (p *processor) IsRemoveTableFinished(tableID model.TableID) (model.Ts, bool
 	var state tablepb.TableState
 	var tableCheckpointTs uint64
 	if p.pullBasedSinking {
-		state, alreadyExist = p.sinkManager.GetTableState(tableID)
+		state, alreadyExist = p.sinkManager.GetTableState(span.TableID)
 		if alreadyExist {
-			stats := p.sinkManager.GetTableStats(tableID)
+			stats := p.sinkManager.GetTableStats(span.TableID)
 			tableCheckpointTs = stats.CheckpointTs
 		}
 	} else {
-		table, ok := p.tables[tableID]
+		table, ok := p.tables[span.TableID]
 		if ok {
 			alreadyExist = true
 			state = table.State()
@@ -397,7 +401,7 @@ func (p *processor) IsRemoveTableFinished(tableID model.TableID) (model.Ts, bool
 			zap.String("captureID", p.captureInfo.ID),
 			zap.String("namespace", p.changefeedID.Namespace),
 			zap.String("changefeed", p.changefeedID.ID),
-			zap.Int64("tableID", tableID))
+			zap.Int64("tableID", span.TableID))
 		return 0, true
 	}
 
@@ -407,53 +411,49 @@ func (p *processor) IsRemoveTableFinished(tableID model.TableID) (model.Ts, bool
 			zap.String("namespace", p.changefeedID.Namespace),
 			zap.String("changefeed", p.changefeedID.ID),
 			zap.Uint64("checkpointTs", tableCheckpointTs),
-			zap.Int64("tableID", tableID),
+			zap.Int64("tableID", span.TableID),
 			zap.Any("tableStatus", state))
 		return 0, false
 	}
 
 	if p.pullBasedSinking {
-		stats := p.sinkManager.GetTableStats(tableID)
-		p.sourceManager.RemoveTable(tableID)
-		p.sinkManager.RemoveTable(tableID)
+		stats := p.sinkManager.GetTableStats(span.TableID)
 		if p.redoManager.Enabled() {
-			p.redoManager.RemoveTable(tableID)
+			p.redoManager.RemoveTable(span.TableID)
 		}
+		p.sinkManager.RemoveTable(span.TableID)
+		p.sourceManager.RemoveTable(span.TableID)
 		log.Info("table removed",
 			zap.String("captureID", p.captureInfo.ID),
 			zap.String("namespace", p.changefeedID.Namespace),
 			zap.String("changefeed", p.changefeedID.ID),
-			zap.Int64("tableID", tableID),
+			zap.Int64("tableID", span.TableID),
 			zap.Uint64("checkpointTs", stats.CheckpointTs))
 
 		return stats.CheckpointTs, true
 	}
-	table := p.tables[tableID]
+	table := p.tables[span.TableID]
 	p.metricRemainKVEventGauge.Sub(float64(table.RemainEvents()))
 	table.Cancel()
 	table.Wait()
-	delete(p.tables, tableID)
+	delete(p.tables, span.TableID)
 
 	checkpointTs := table.CheckpointTs()
 	log.Info("table removed",
 		zap.String("captureID", p.captureInfo.ID),
 		zap.String("namespace", p.changefeedID.Namespace),
 		zap.String("changefeed", p.changefeedID.ID),
-		zap.Int64("tableID", tableID),
+		zap.Int64("tableID", span.TableID),
 		zap.Uint64("checkpointTs", checkpointTs))
 	return checkpointTs, true
 }
 
-// GetAllCurrentTables implements TableExecutor interface.
-func (p *processor) GetAllCurrentTables() []model.TableID {
+// GetTableSpanCount implements TableExecutor interface.
+func (p *processor) GetTableSpanCount() int {
 	if p.pullBasedSinking {
-		return p.sinkManager.GetAllCurrentTableIDs()
+		return len(p.sinkManager.GetAllCurrentTableIDs())
 	}
-	ret := make([]model.TableID, 0, len(p.tables))
-	for tableID := range p.tables {
-		ret = append(ret, tableID)
-	}
-	return ret
+	return len(p.tables)
 }
 
 // GetCheckpoint implements TableExecutor interface.
@@ -461,36 +461,40 @@ func (p *processor) GetCheckpoint() (checkpointTs, resolvedTs model.Ts) {
 	return p.checkpointTs, p.resolvedTs
 }
 
-// GetTableStatus implements TableExecutor interface
-func (p *processor) GetTableStatus(tableID model.TableID) tablepb.TableStatus {
+// GetTableSpanStatus implements TableExecutor interface
+func (p *processor) GetTableSpanStatus(span tablepb.Span) tablepb.TableStatus {
 	if p.pullBasedSinking {
-		state, exist := p.sinkManager.GetTableState(tableID)
+		state, exist := p.sinkManager.GetTableState(span.TableID)
 		if !exist {
 			return tablepb.TableStatus{
-				TableID: tableID,
+				TableID: span.TableID,
+				Span:    span,
 				State:   tablepb.TableStateAbsent,
 			}
 		}
-		sinkStats := p.sinkManager.GetTableStats(tableID)
+		sinkStats := p.sinkManager.GetTableStats(span.TableID)
 		return tablepb.TableStatus{
-			TableID: tableID,
+			TableID: span.TableID,
+			Span:    span,
 			Checkpoint: tablepb.Checkpoint{
 				CheckpointTs: sinkStats.CheckpointTs,
 				ResolvedTs:   sinkStats.ResolvedTs,
 			},
 			State: state,
-			Stats: p.getStatsFromSourceManagerAndSinkManager(tableID, sinkStats),
+			Stats: p.getStatsFromSourceManagerAndSinkManager(span.TableID, sinkStats),
 		}
 	}
-	table, ok := p.tables[tableID]
+	table, ok := p.tables[span.TableID]
 	if !ok {
 		return tablepb.TableStatus{
-			TableID: tableID,
+			TableID: span.TableID,
+			Span:    span,
 			State:   tablepb.TableStateAbsent,
 		}
 	}
 	return tablepb.TableStatus{
-		TableID: tableID,
+		TableID: span.TableID,
+		Span:    span,
 		Checkpoint: tablepb.Checkpoint{
 			CheckpointTs: table.CheckpointTs(),
 			ResolvedTs:   table.ResolvedTs(),
@@ -650,7 +654,12 @@ func (p *processor) Tick(ctx cdcContext.Context) error {
 	}
 
 	p.metricProcessorTickDuration.Observe(costTime.Seconds())
-	p.refreshMetrics()
+
+	// we should check if this error is nil,
+	// otherwise the function called below may panic.
+	if err == nil {
+		p.refreshMetrics()
+	}
 
 	return p.handleErr(err)
 }
@@ -846,20 +855,21 @@ func (p *processor) lazyInitImpl(ctx cdcContext.Context) error {
 				zap.Duration("duration", time.Since(start)))
 			return errors.Trace(err)
 		}
-		p.sourceManager = sourcemanager.New(p.changefeedID, p.upstream, p.mg, sortEngine, p.errCh)
-		sinkManager, err := sinkmanager.New(stdCtx, p.changefeedID, p.changefeed.Info, p.upstream, p.redoManager,
+		p.sourceManager = sourcemanager.New(p.changefeedID, p.upstream, p.mg, sortEngine, p.errCh, p.changefeed.Info.Config.BDRMode)
+		p.sinkManager, err = sinkmanager.New(stdCtx, p.changefeedID, p.changefeed.Info, p.upstream, p.redoManager,
 			p.sourceManager, p.errCh, p.metricsTableSinkTotalRows)
-		// Bind them so that sourceManager can notify sinkManager.
-		p.sourceManager.OnResolve(sinkManager.UpdateReceivedSorterResolvedTs)
 		if err != nil {
-			log.Info("Processor creates sink manager",
+			log.Info("Processor creates sink manager fail",
 				zap.String("namespace", p.changefeedID.Namespace),
 				zap.String("changefeed", p.changefeedID.ID),
 				zap.Error(err),
 				zap.Duration("duration", time.Since(start)))
+			p.sourceManager = nil
+			_ = engineFactory.Drop(p.changefeedID)
 			return errors.Trace(err)
 		}
-		p.sinkManager = sinkManager
+		// Bind them so that sourceManager can notify sinkManager.
+		p.sourceManager.OnResolve(p.sinkManager.UpdateReceivedSorterResolvedTs)
 	} else {
 		if !conf.Debug.EnableNewSink {
 			log.Info("Try to create sinkV1")
@@ -924,9 +934,10 @@ func (p *processor) newAgentImpl(
 	messageRouter := ctx.GlobalVars().MessageRouter
 	etcdClient := ctx.GlobalVars().EtcdClient
 	captureID := ctx.GlobalVars().CaptureInfo.ID
+	cfg := config.GetGlobalServerConfig().Debug.Scheduler
 	ret, err = scheduler.NewAgent(
 		ctx, captureID, liveness,
-		messageServer, messageRouter, etcdClient, p, p.changefeedID)
+		messageServer, messageRouter, etcdClient, p, p.changefeedID, cfg)
 	return ret, errors.Trace(err)
 }
 
@@ -1210,15 +1221,16 @@ func (p *processor) createTablePipelineImpl(
 }
 
 func (p *processor) removeTable(table tablepb.TablePipeline, tableID model.TableID) {
+	if p.redoManager.Enabled() {
+		p.redoManager.RemoveTable(tableID)
+	}
 	if p.pullBasedSinking {
 		p.sinkManager.RemoveTable(tableID)
+		p.sourceManager.RemoveTable(tableID)
 	} else {
 		table.Cancel()
 		table.Wait()
 		delete(p.tables, tableID)
-	}
-	if p.redoManager.Enabled() {
-		p.redoManager.RemoveTable(tableID)
 	}
 }
 
@@ -1281,22 +1293,6 @@ func (p *processor) Close(ctx cdcContext.Context) error {
 		zap.String("changefeed", p.changefeedID.ID))
 	p.cancel()
 	if p.pullBasedSinking {
-		if p.sourceManager != nil {
-			log.Info("Processor try to close source manager",
-				zap.String("namespace", p.changefeedID.Namespace),
-				zap.String("changefeed", p.changefeedID.ID))
-			if err := p.sourceManager.Close(); err != nil {
-				log.Error("Failed to close source manager",
-					zap.String("namespace", p.changefeedID.Namespace),
-					zap.String("changefeed", p.changefeedID.ID),
-					zap.Error(err))
-				return errors.Trace(err)
-			}
-			log.Info("Processor closed source manager successfully",
-				zap.String("namespace", p.changefeedID.Namespace),
-				zap.String("changefeed", p.changefeedID.ID))
-			p.sourceManager = nil
-		}
 		if p.sinkManager != nil {
 			log.Info("Processor try to close sink manager",
 				zap.String("namespace", p.changefeedID.Namespace),
@@ -1313,6 +1309,22 @@ func (p *processor) Close(ctx cdcContext.Context) error {
 				zap.String("changefeed", p.changefeedID.ID))
 			p.sinkManager = nil
 		}
+		if p.sourceManager != nil {
+			log.Info("Processor try to close source manager",
+				zap.String("namespace", p.changefeedID.Namespace),
+				zap.String("changefeed", p.changefeedID.ID))
+			if err := p.sourceManager.Close(); err != nil {
+				log.Error("Failed to close source manager",
+					zap.String("namespace", p.changefeedID.Namespace),
+					zap.String("changefeed", p.changefeedID.ID),
+					zap.Error(err))
+				return errors.Trace(err)
+			}
+			log.Info("Processor closed source manager successfully",
+				zap.String("namespace", p.changefeedID.Namespace),
+				zap.String("changefeed", p.changefeedID.ID))
+			p.sourceManager = nil
+		}
 		engineFactory := ctx.GlobalVars().SortEngineFactory
 		if engineFactory != nil {
 			if err := engineFactory.Drop(p.changefeedID); err != nil {
@@ -1322,6 +1334,9 @@ func (p *processor) Close(ctx cdcContext.Context) error {
 					zap.Error(err))
 				return errors.Trace(err)
 			}
+			log.Info("Processor drop sort engine successfully",
+				zap.String("namespace", p.changefeedID.Namespace),
+				zap.String("changefeed", p.changefeedID.ID))
 		}
 	} else {
 		for _, tbl := range p.tables {
