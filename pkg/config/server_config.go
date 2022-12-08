@@ -109,7 +109,7 @@ var defaultServerConfig = &ServerConfig{
 	Sorter: &SorterConfig{
 		NumConcurrentWorker:    4,
 		ChunkSizeLimit:         128 * 1024 * 1024,       // 128MB
-		MaxMemoryPercentage:    30,                      // 30% is safe on machines with memory capacity <= 16GB
+		MaxMemoryPercentage:    10,                      // 10% is safe on machines with memory capacity <= 16GB
 		MaxMemoryConsumption:   16 * 1024 * 1024 * 1024, // 16GB
 		NumWorkerPoolGoroutine: 16,
 		SortDir:                DefaultSortDir,
