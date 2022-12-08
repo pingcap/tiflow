@@ -24,6 +24,7 @@ import (
 
 	"github.com/google/btree"
 	"github.com/pingcap/log"
+	"github.com/pingcap/tiflow/cdc/processor/tablepb"
 	"go.uber.org/zap"
 )
 
@@ -250,7 +251,7 @@ func (l *RegionRangeLock) tryLockRange(startKey, endKey []byte, regionID, versio
 		}
 	}
 	if isStale {
-		retryRanges := make([]ComparableSpan, 0)
+		retryRanges := make([]tablepb.Span, 0)
 		currentRangeStartKey := startKey
 
 		log.Info("try lock range staled",
@@ -269,12 +270,12 @@ func (l *RegionRangeLock) tryLockRange(startKey, endKey []byte, regionID, versio
 			// The rest should come from range searching and is sorted in increasing order, and they
 			// must intersect with the current given range.
 			if bytes.Compare(currentRangeStartKey, r.startKey) < 0 {
-				retryRanges = append(retryRanges, ComparableSpan{StartKey: currentRangeStartKey, EndKey: r.startKey})
+				retryRanges = append(retryRanges, tablepb.Span{StartKey: currentRangeStartKey, EndKey: r.startKey})
 			}
 			currentRangeStartKey = r.endKey
 		}
 		if bytes.Compare(currentRangeStartKey, endKey) < 0 {
-			retryRanges = append(retryRanges, ComparableSpan{StartKey: currentRangeStartKey, EndKey: endKey})
+			retryRanges = append(retryRanges, tablepb.Span{StartKey: currentRangeStartKey, EndKey: endKey})
 		}
 
 		return LockRangeResult{
@@ -417,5 +418,5 @@ type LockRangeResult struct {
 	Status       int
 	CheckpointTs uint64
 	WaitFn       func() LockRangeResult
-	RetryRanges  []ComparableSpan
+	RetryRanges  []tablepb.Span
 }

@@ -17,6 +17,7 @@ import (
 	"testing"
 
 	"github.com/pingcap/kvproto/pkg/metapb"
+	"github.com/pingcap/tiflow/cdc/processor/tablepb"
 	"github.com/stretchr/testify/require"
 )
 
@@ -25,28 +26,28 @@ func TestCheckRegionsLeftCover(t *testing.T) {
 
 	cases := []struct {
 		regions []*metapb.Region
-		span    ComparableSpan
+		span    tablepb.Span
 		cover   bool
 	}{
-		{[]*metapb.Region{}, ComparableSpan{0, []byte{1}, []byte{2}}, false},
-		{[]*metapb.Region{{StartKey: nil, EndKey: nil}}, ComparableSpan{0, []byte{1}, []byte{2}}, true},
-		{[]*metapb.Region{{StartKey: []byte{1}, EndKey: []byte{2}}}, ComparableSpan{0, []byte{1}, []byte{2}}, true},
-		{[]*metapb.Region{{StartKey: []byte{0}, EndKey: []byte{4}}}, ComparableSpan{0, []byte{1}, []byte{2}}, true},
+		{[]*metapb.Region{}, tablepb.Span{0, []byte{1}, []byte{2}}, false},
+		{[]*metapb.Region{{StartKey: nil, EndKey: nil}}, tablepb.Span{0, []byte{1}, []byte{2}}, true},
+		{[]*metapb.Region{{StartKey: []byte{1}, EndKey: []byte{2}}}, tablepb.Span{0, []byte{1}, []byte{2}}, true},
+		{[]*metapb.Region{{StartKey: []byte{0}, EndKey: []byte{4}}}, tablepb.Span{0, []byte{1}, []byte{2}}, true},
 		{[]*metapb.Region{
 			{StartKey: []byte{1}, EndKey: []byte{2}},
 			{StartKey: []byte{2}, EndKey: []byte{3}},
-		}, ComparableSpan{0, []byte{1}, []byte{3}}, true},
+		}, tablepb.Span{0, []byte{1}, []byte{3}}, true},
 		{[]*metapb.Region{
 			{StartKey: []byte{1}, EndKey: []byte{2}},
 			{StartKey: []byte{3}, EndKey: []byte{4}},
-		}, ComparableSpan{0, []byte{1}, []byte{4}}, false},
+		}, tablepb.Span{0, []byte{1}, []byte{4}}, false},
 		{[]*metapb.Region{
 			{StartKey: []byte{1}, EndKey: []byte{2}},
 			{StartKey: []byte{2}, EndKey: []byte{3}},
-		}, ComparableSpan{0, []byte{1}, []byte{4}}, true},
+		}, tablepb.Span{0, []byte{1}, []byte{4}}, true},
 		{[]*metapb.Region{
 			{StartKey: []byte{2}, EndKey: []byte{3}},
-		}, ComparableSpan{0, []byte{1}, []byte{3}}, false},
+		}, tablepb.Span{0, []byte{1}, []byte{3}}, false},
 	}
 
 	for _, tc := range cases {

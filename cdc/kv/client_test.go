@@ -34,10 +34,10 @@ import (
 	"github.com/pingcap/tidb/kv"
 	"github.com/pingcap/tidb/store/mockstore/mockcopr"
 	"github.com/pingcap/tiflow/cdc/model"
+	"github.com/pingcap/tiflow/cdc/processor/tablepb"
 	"github.com/pingcap/tiflow/pkg/config"
 	cerror "github.com/pingcap/tiflow/pkg/errors"
 	"github.com/pingcap/tiflow/pkg/pdutil"
-	"github.com/pingcap/tiflow/pkg/regionspan"
 	"github.com/pingcap/tiflow/pkg/retry"
 	"github.com/pingcap/tiflow/pkg/security"
 	"github.com/pingcap/tiflow/pkg/txnutil"
@@ -328,7 +328,7 @@ func TestConnectOfflineTiKV(t *testing.T) {
 	go func() {
 		defer wg.Done()
 		err := cdcClient.EventFeed(ctx,
-			regionspan.ComparableSpan{StartKey: []byte("a"), EndKey: []byte("b")},
+			tablepb.Span{StartKey: []byte("a"), EndKey: []byte("b")},
 			1, lockResolver, eventCh)
 		require.Equal(t, context.Canceled, errors.Cause(err))
 	}()
@@ -428,7 +428,7 @@ func TestRecvLargeMessageSize(t *testing.T) {
 	go func() {
 		defer wg.Done()
 		err := cdcClient.EventFeed(ctx,
-			regionspan.ComparableSpan{StartKey: []byte("a"), EndKey: []byte("b")},
+			tablepb.Span{StartKey: []byte("a"), EndKey: []byte("b")},
 			1, lockResolver, eventCh)
 		require.Equal(t, context.Canceled, errors.Cause(err))
 	}()
@@ -528,7 +528,7 @@ func TestHandleError(t *testing.T) {
 	go func() {
 		defer wg.Done()
 		err := cdcClient.EventFeed(ctx,
-			regionspan.ComparableSpan{StartKey: []byte("a"), EndKey: []byte("d")},
+			tablepb.Span{StartKey: []byte("a"), EndKey: []byte("d")},
 			100, lockResolver, eventCh)
 		require.Equal(t, context.Canceled, errors.Cause(err))
 	}()
@@ -688,7 +688,7 @@ func TestCompatibilityWithSameConn(t *testing.T) {
 	go func() {
 		defer wg2.Done()
 		err := cdcClient.EventFeed(ctx,
-			regionspan.ComparableSpan{StartKey: []byte("a"), EndKey: []byte("b")},
+			tablepb.Span{StartKey: []byte("a"), EndKey: []byte("b")},
 			100, lockResolver, eventCh)
 		require.True(t, cerror.ErrVersionIncompatible.Equal(err))
 	}()
@@ -756,7 +756,7 @@ func TestClusterIDMismatch(t *testing.T) {
 	go func() {
 		defer wg2.Done()
 		err := cdcClient.EventFeed(ctx,
-			regionspan.ComparableSpan{StartKey: []byte("a"), EndKey: []byte("b")},
+			tablepb.Span{StartKey: []byte("a"), EndKey: []byte("b")},
 			100, lockResolver, eventCh)
 		require.True(t, cerror.ErrClusterIDMismatch.Equal(err))
 	}()
@@ -823,7 +823,7 @@ func testHandleFeedEvent(t *testing.T) {
 	go func() {
 		defer wg.Done()
 		err := cdcClient.EventFeed(ctx,
-			regionspan.ComparableSpan{StartKey: []byte("a"), EndKey: []byte("b")},
+			tablepb.Span{StartKey: []byte("a"), EndKey: []byte("b")},
 			100, lockResolver, eventCh)
 		require.Equal(t, context.Canceled, errors.Cause(err))
 	}()
@@ -1082,7 +1082,7 @@ func testHandleFeedEvent(t *testing.T) {
 		{
 			Resolved: &model.ResolvedSpans{
 				Spans: []model.RegionComparableSpan{{
-					Span:   regionspan.ComparableSpan{StartKey: []byte("a"), EndKey: []byte("b")},
+					Span:   tablepb.Span{StartKey: []byte("a"), EndKey: []byte("b")},
 					Region: 3,
 				}}, ResolvedTs: 100,
 			},
@@ -1155,7 +1155,7 @@ func testHandleFeedEvent(t *testing.T) {
 		{
 			Resolved: &model.ResolvedSpans{
 				Spans: []model.RegionComparableSpan{{
-					Span:   regionspan.ComparableSpan{StartKey: []byte("a"), EndKey: []byte("b")},
+					Span:   tablepb.Span{StartKey: []byte("a"), EndKey: []byte("b")},
 					Region: 3,
 				}}, ResolvedTs: 135,
 			},
@@ -1163,7 +1163,7 @@ func testHandleFeedEvent(t *testing.T) {
 		{
 			Resolved: &model.ResolvedSpans{
 				Spans: []model.RegionComparableSpan{{
-					Span:   regionspan.ComparableSpan{StartKey: []byte("a"), EndKey: []byte("b")},
+					Span:   tablepb.Span{StartKey: []byte("a"), EndKey: []byte("b")},
 					Region: 3,
 				}}, ResolvedTs: 145,
 			},
@@ -1177,7 +1177,7 @@ func testHandleFeedEvent(t *testing.T) {
 	}
 	for i := range multipleExpected.Resolved.Spans {
 		multipleExpected.Resolved.Spans[i] = model.RegionComparableSpan{
-			Span:   regionspan.ComparableSpan{StartKey: []byte("a"), EndKey: []byte("b")},
+			Span:   tablepb.Span{StartKey: []byte("a"), EndKey: []byte("b")},
 			Region: 3,
 		}
 	}
@@ -1284,7 +1284,7 @@ func TestStreamSendWithError(t *testing.T) {
 	go func() {
 		defer wg.Done()
 		err := cdcClient.EventFeed(ctx,
-			regionspan.ComparableSpan{StartKey: []byte("a"), EndKey: []byte("c")},
+			tablepb.Span{StartKey: []byte("a"), EndKey: []byte("c")},
 			100, lockerResolver, eventCh)
 		require.Equal(t, context.Canceled, errors.Cause(err))
 	}()
@@ -1396,7 +1396,7 @@ func testStreamRecvWithError(t *testing.T, failpointStr string) {
 	go func() {
 		defer wg.Done()
 		err := cdcClient.EventFeed(ctx,
-			regionspan.ComparableSpan{StartKey: []byte("a"), EndKey: []byte("b")},
+			tablepb.Span{StartKey: []byte("a"), EndKey: []byte("b")},
 			100, lockResolver, eventCh)
 		require.Equal(t, context.Canceled, errors.Cause(err))
 	}()
@@ -1442,7 +1442,7 @@ func testStreamRecvWithError(t *testing.T, failpointStr string) {
 		{
 			Resolved: &model.ResolvedSpans{
 				Spans: []model.RegionComparableSpan{{
-					Span:   regionspan.ComparableSpan{StartKey: []byte("a"), EndKey: []byte("b")},
+					Span:   tablepb.Span{StartKey: []byte("a"), EndKey: []byte("b")},
 					Region: regionID,
 				}}, ResolvedTs: 120,
 			},
@@ -1450,7 +1450,7 @@ func testStreamRecvWithError(t *testing.T, failpointStr string) {
 		{
 			Resolved: &model.ResolvedSpans{
 				Spans: []model.RegionComparableSpan{{
-					Span:   regionspan.ComparableSpan{StartKey: []byte("a"), EndKey: []byte("b")},
+					Span:   tablepb.Span{StartKey: []byte("a"), EndKey: []byte("b")},
 					Region: regionID,
 				}}, ResolvedTs: 120,
 			},
@@ -1530,7 +1530,7 @@ func TestStreamRecvWithErrorAndResolvedGoBack(t *testing.T) {
 		defer wg.Done()
 		defer close(eventCh)
 		err := cdcClient.EventFeed(ctx,
-			regionspan.ComparableSpan{StartKey: []byte("a"), EndKey: []byte("b")},
+			tablepb.Span{StartKey: []byte("a"), EndKey: []byte("b")},
 			100, lockResolver, eventCh)
 		require.Equal(t, context.Canceled, errors.Cause(err))
 	}()
@@ -1739,7 +1739,7 @@ func TestIncompatibleTiKV(t *testing.T) {
 	go func() {
 		defer wg.Done()
 		err := cdcClient.EventFeed(ctx,
-			regionspan.ComparableSpan{StartKey: []byte("a"), EndKey: []byte("b")},
+			tablepb.Span{StartKey: []byte("a"), EndKey: []byte("b")},
 			100, lockResolver, eventCh)
 		require.Equal(t, context.Canceled, errors.Cause(err))
 	}()
@@ -1816,7 +1816,7 @@ func TestNoPendingRegionError(t *testing.T) {
 	go func() {
 		defer wg.Done()
 		err := cdcClient.EventFeed(ctx,
-			regionspan.ComparableSpan{StartKey: []byte("a"), EndKey: []byte("b")},
+			tablepb.Span{StartKey: []byte("a"), EndKey: []byte("b")},
 			100, lockResolver, eventCh)
 		require.Equal(t, context.Canceled, errors.Cause(err))
 	}()
@@ -1894,7 +1894,7 @@ func TestDropStaleRequest(t *testing.T) {
 	go func() {
 		defer wg.Done()
 		err := cdcClient.EventFeed(ctx,
-			regionspan.ComparableSpan{StartKey: []byte("a"), EndKey: []byte("b")},
+			tablepb.Span{StartKey: []byte("a"), EndKey: []byte("b")},
 			100, lockResolver, eventCh)
 		require.Equal(t, context.Canceled, errors.Cause(err))
 	}()
@@ -1925,7 +1925,7 @@ func TestDropStaleRequest(t *testing.T) {
 		{
 			Resolved: &model.ResolvedSpans{
 				Spans: []model.RegionComparableSpan{{
-					Span:   regionspan.ComparableSpan{StartKey: []byte("a"), EndKey: []byte("b")},
+					Span:   tablepb.Span{StartKey: []byte("a"), EndKey: []byte("b")},
 					Region: regionID,
 				}}, ResolvedTs: 100,
 			},
@@ -1933,7 +1933,7 @@ func TestDropStaleRequest(t *testing.T) {
 		{
 			Resolved: &model.ResolvedSpans{
 				Spans: []model.RegionComparableSpan{{
-					Span:   regionspan.ComparableSpan{StartKey: []byte("a"), EndKey: []byte("b")},
+					Span:   tablepb.Span{StartKey: []byte("a"), EndKey: []byte("b")},
 					Region: regionID,
 				}}, ResolvedTs: 120,
 			},
@@ -1941,7 +1941,7 @@ func TestDropStaleRequest(t *testing.T) {
 		{
 			Resolved: &model.ResolvedSpans{
 				Spans: []model.RegionComparableSpan{{
-					Span:   regionspan.ComparableSpan{StartKey: []byte("a"), EndKey: []byte("b")},
+					Span:   tablepb.Span{StartKey: []byte("a"), EndKey: []byte("b")},
 					Region: regionID,
 				}}, ResolvedTs: 130,
 			},
@@ -2008,7 +2008,7 @@ func TestResolveLock(t *testing.T) {
 	go func() {
 		defer wg.Done()
 		err := cdcClient.EventFeed(ctx,
-			regionspan.ComparableSpan{StartKey: []byte("a"), EndKey: []byte("b")},
+			tablepb.Span{StartKey: []byte("a"), EndKey: []byte("b")},
 			100, lockResolver, eventCh)
 		require.Equal(t, context.Canceled, errors.Cause(err))
 	}()
@@ -2031,7 +2031,7 @@ func TestResolveLock(t *testing.T) {
 		{
 			Resolved: &model.ResolvedSpans{
 				Spans: []model.RegionComparableSpan{{
-					Span:   regionspan.ComparableSpan{StartKey: []byte("a"), EndKey: []byte("b")},
+					Span:   tablepb.Span{StartKey: []byte("a"), EndKey: []byte("b")},
 					Region: regionID,
 				}}, ResolvedTs: 100,
 			},
@@ -2039,7 +2039,7 @@ func TestResolveLock(t *testing.T) {
 		{
 			Resolved: &model.ResolvedSpans{
 				Spans: []model.RegionComparableSpan{{
-					Span:   regionspan.ComparableSpan{StartKey: []byte("a"), EndKey: []byte("b")},
+					Span:   tablepb.Span{StartKey: []byte("a"), EndKey: []byte("b")},
 					Region: regionID,
 				}}, ResolvedTs: tso,
 			},
@@ -2114,7 +2114,7 @@ func testEventCommitTsFallback(t *testing.T, events []*cdcpb.ChangeDataEvent) {
 	go func() {
 		defer clientWg.Done()
 		err := cdcClient.EventFeed(ctx,
-			regionspan.ComparableSpan{StartKey: []byte("a"), EndKey: []byte("b")},
+			tablepb.Span{StartKey: []byte("a"), EndKey: []byte("b")},
 			100, lockResolver, eventCh)
 		require.Equal(t, errUnreachable, err)
 	}()
@@ -2266,7 +2266,7 @@ func testEventAfterFeedStop(t *testing.T) {
 	go func() {
 		defer wg.Done()
 		err := cdcClient.EventFeed(ctx,
-			regionspan.ComparableSpan{StartKey: []byte("a"), EndKey: []byte("b")},
+			tablepb.Span{StartKey: []byte("a"), EndKey: []byte("b")},
 			100, lockResolver, eventCh)
 		require.Equal(t, context.Canceled, errors.Cause(err))
 	}()
@@ -2367,7 +2367,7 @@ func testEventAfterFeedStop(t *testing.T) {
 		{
 			Resolved: &model.ResolvedSpans{
 				Spans: []model.RegionComparableSpan{{
-					Span:   regionspan.ComparableSpan{StartKey: []byte("a"), EndKey: []byte("b")},
+					Span:   tablepb.Span{StartKey: []byte("a"), EndKey: []byte("b")},
 					Region: regionID,
 				}}, ResolvedTs: 100,
 			},
@@ -2376,7 +2376,7 @@ func testEventAfterFeedStop(t *testing.T) {
 		{
 			Resolved: &model.ResolvedSpans{
 				Spans: []model.RegionComparableSpan{{
-					Span:   regionspan.ComparableSpan{StartKey: []byte("a"), EndKey: []byte("b")},
+					Span:   tablepb.Span{StartKey: []byte("a"), EndKey: []byte("b")},
 					Region: regionID,
 				}}, ResolvedTs: 100,
 			},
@@ -2396,7 +2396,7 @@ func testEventAfterFeedStop(t *testing.T) {
 		{
 			Resolved: &model.ResolvedSpans{
 				Spans: []model.RegionComparableSpan{{
-					Span:   regionspan.ComparableSpan{StartKey: []byte("a"), EndKey: []byte("b")},
+					Span:   tablepb.Span{StartKey: []byte("a"), EndKey: []byte("b")},
 					Region: regionID,
 				}}, ResolvedTs: 120,
 			},
@@ -2453,7 +2453,7 @@ func TestOutOfRegionRangeEvent(t *testing.T) {
 	go func() {
 		defer wg.Done()
 		err := cdcClient.EventFeed(ctx,
-			regionspan.ComparableSpan{StartKey: []byte("a"), EndKey: []byte("b")},
+			tablepb.Span{StartKey: []byte("a"), EndKey: []byte("b")},
 			100, lockResolver, eventCh)
 		require.Equal(t, context.Canceled, errors.Cause(err))
 	}()
@@ -2573,7 +2573,7 @@ func TestOutOfRegionRangeEvent(t *testing.T) {
 		{
 			Resolved: &model.ResolvedSpans{
 				Spans: []model.RegionComparableSpan{{
-					Span:   regionspan.ComparableSpan{StartKey: []byte("a"), EndKey: []byte("b")},
+					Span:   tablepb.Span{StartKey: []byte("a"), EndKey: []byte("b")},
 					Region: 3,
 				}}, ResolvedTs: 100,
 			},
@@ -2603,7 +2603,7 @@ func TestOutOfRegionRangeEvent(t *testing.T) {
 		{
 			Resolved: &model.ResolvedSpans{
 				Spans: []model.RegionComparableSpan{{
-					Span:   regionspan.ComparableSpan{StartKey: []byte("a"), EndKey: []byte("b")},
+					Span:   tablepb.Span{StartKey: []byte("a"), EndKey: []byte("b")},
 					Region: 3,
 				}}, ResolvedTs: 145,
 			},
@@ -2671,7 +2671,7 @@ func TestResolveLockNoCandidate(t *testing.T) {
 	go func() {
 		defer wg.Done()
 		err := cdcClient.EventFeed(ctx,
-			regionspan.ComparableSpan{StartKey: []byte("a"), EndKey: []byte("b")},
+			tablepb.Span{StartKey: []byte("a"), EndKey: []byte("b")},
 			100, lockResolver, eventCh)
 		require.Equal(t, context.Canceled, errors.Cause(err))
 	}()
@@ -2767,7 +2767,7 @@ func TestFailRegionReentrant(t *testing.T) {
 	go func() {
 		defer wg.Done()
 		err := cdcClient.EventFeed(ctx,
-			regionspan.ComparableSpan{StartKey: []byte("a"), EndKey: []byte("b")},
+			tablepb.Span{StartKey: []byte("a"), EndKey: []byte("b")},
 			100, lockResolver, eventCh)
 		require.Equal(t, context.Canceled, errors.Cause(err))
 	}()
@@ -2850,7 +2850,7 @@ func TestClientV1UnlockRangeReentrant(t *testing.T) {
 	go func() {
 		defer wg.Done()
 		err := cdcClient.EventFeed(ctx,
-			regionspan.ComparableSpan{StartKey: []byte("a"), EndKey: []byte("c")},
+			tablepb.Span{StartKey: []byte("a"), EndKey: []byte("c")},
 			100, lockResolver, eventCh)
 		require.Equal(t, context.Canceled, errors.Cause(err))
 	}()
@@ -2918,7 +2918,7 @@ func testClientErrNoPendingRegion(t *testing.T) {
 	go func() {
 		defer wg.Done()
 		err := cdcClient.EventFeed(ctx,
-			regionspan.ComparableSpan{StartKey: []byte("a"), EndKey: []byte("c")},
+			tablepb.Span{StartKey: []byte("a"), EndKey: []byte("c")},
 			100, lockResolver, eventCh)
 		require.Equal(t, context.Canceled, errors.Cause(err))
 	}()
@@ -2996,7 +2996,7 @@ func testKVClientForceReconnect(t *testing.T) {
 	go func() {
 		defer wg.Done()
 		err := cdcClient.EventFeed(ctx,
-			regionspan.ComparableSpan{StartKey: []byte("a"), EndKey: []byte("c")},
+			tablepb.Span{StartKey: []byte("a"), EndKey: []byte("c")},
 			100, lockResolver, eventCh)
 		require.Equal(t, context.Canceled, errors.Cause(err))
 	}()
@@ -3060,7 +3060,7 @@ func testKVClientForceReconnect(t *testing.T) {
 	expected := model.RegionFeedEvent{
 		Resolved: &model.ResolvedSpans{
 			Spans: []model.RegionComparableSpan{{
-				Span:   regionspan.ComparableSpan{StartKey: []byte("a"), EndKey: []byte("c")},
+				Span:   tablepb.Span{StartKey: []byte("a"), EndKey: []byte("c")},
 				Region: regionID3,
 			}}, ResolvedTs: 135,
 		},
@@ -3147,7 +3147,7 @@ func TestConcurrentProcessRangeRequest(t *testing.T) {
 	go func() {
 		defer wg.Done()
 		err := cdcClient.EventFeed(ctx,
-			regionspan.ComparableSpan{StartKey: []byte("a"), EndKey: []byte("z")},
+			tablepb.Span{StartKey: []byte("a"), EndKey: []byte("z")},
 			100, lockResolver, eventCh)
 		require.Equal(t, context.Canceled, errors.Cause(err))
 	}()
@@ -3264,7 +3264,7 @@ func TestEvTimeUpdate(t *testing.T) {
 	go func() {
 		defer wg.Done()
 		err := cdcClient.EventFeed(ctx,
-			regionspan.ComparableSpan{StartKey: []byte("a"), EndKey: []byte("b")},
+			tablepb.Span{StartKey: []byte("a"), EndKey: []byte("b")},
 			100, lockResolver, eventCh)
 		require.Equal(t, context.Canceled, errors.Cause(err))
 	}()
@@ -3300,7 +3300,7 @@ func TestEvTimeUpdate(t *testing.T) {
 		{
 			Resolved: &model.ResolvedSpans{
 				Spans: []model.RegionComparableSpan{{
-					Span:   regionspan.ComparableSpan{StartKey: []byte("a"), EndKey: []byte("b")},
+					Span:   tablepb.Span{StartKey: []byte("a"), EndKey: []byte("b")},
 					Region: 3,
 				}}, ResolvedTs: 100,
 			},
@@ -3390,7 +3390,7 @@ func TestRegionWorkerExitWhenIsIdle(t *testing.T) {
 	go func() {
 		defer wg.Done()
 		err := cdcClient.EventFeed(ctx,
-			regionspan.ComparableSpan{StartKey: []byte("a"), EndKey: []byte("b")},
+			tablepb.Span{StartKey: []byte("a"), EndKey: []byte("b")},
 			100, lockResolver, eventCh)
 		require.Equal(t, context.Canceled, errors.Cause(err))
 	}()
@@ -3484,7 +3484,7 @@ func TestPrewriteNotMatchError(t *testing.T) {
 	go func() {
 		defer wg.Done()
 		err = cdcClient.EventFeed(ctx,
-			regionspan.ComparableSpan{StartKey: []byte("a"), EndKey: []byte("c")},
+			tablepb.Span{StartKey: []byte("a"), EndKey: []byte("c")},
 			100, lockResolver, eventCh)
 		require.Equal(t, context.Canceled, errors.Cause(err))
 	}()
@@ -3562,7 +3562,7 @@ func createFakeEventFeedSession(ctx context.Context) *eventFeedSession {
 			regionLimiters: defaultRegionEventFeedLimiters,
 			config:         config.GetDefaultServerConfig().KVClient,
 		},
-		regionspan.ComparableSpan{StartKey: []byte("a"), EndKey: []byte("b")},
+		tablepb.Span{StartKey: []byte("a"), EndKey: []byte("b")},
 		nil, /*lockResolver*/
 		100, /*startTs*/
 		nil, /*eventCh*/

@@ -17,7 +17,7 @@ import (
 	"fmt"
 	"testing"
 
-	"github.com/pingcap/tiflow/pkg/regionspan"
+	"github.com/pingcap/tiflow/cdc/processor/tablepb"
 )
 
 func toCMPBytes(i int) []byte {
@@ -40,9 +40,9 @@ func BenchmarkSpanFrontier(b *testing.B) {
 		n := test.n
 
 		b.Run(test.name, func(b *testing.B) {
-			spans := make([]regionspan.ComparableSpan, 0, n)
+			spans := make([]tablepb.Span, 0, n)
 			for i := 0; i < n; i++ {
-				span := regionspan.ComparableSpan{
+				span := tablepb.Span{
 					StartKey: toCMPBytes(i),
 					EndKey:   toCMPBytes(i + 1),
 				}
@@ -78,14 +78,14 @@ func BenchmarkSpanFrontierOverlap(b *testing.B) {
 
 		for _, step := range steps {
 			b.Run(fmt.Sprintf("%s_%d", test.name, step), func(b *testing.B) {
-				spans := make([]regionspan.ComparableSpan, 0, n)
-				forward := make([]regionspan.ComparableSpan, 0, n)
+				spans := make([]tablepb.Span, 0, n)
+				forward := make([]tablepb.Span, 0, n)
 				for i := 0; i < n; i++ {
-					spans = append(spans, regionspan.ComparableSpan{
+					spans = append(spans, tablepb.Span{
 						StartKey: toCMPBytes(i),
 						EndKey:   toCMPBytes(i + 1),
 					})
-					forward = append(forward, regionspan.ComparableSpan{
+					forward = append(forward, tablepb.Span{
 						StartKey: toCMPBytes(i),
 						EndKey:   toCMPBytes(i + step),
 					})

@@ -19,6 +19,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/pingcap/tiflow/cdc/processor/tablepb"
 	"github.com/stretchr/testify/require"
 )
 
@@ -27,7 +28,7 @@ func mustSuccess(t *testing.T, res LockRangeResult, expectedCheckpointTs uint64)
 	require.Equal(t, expectedCheckpointTs, res.CheckpointTs)
 }
 
-func mustStale(t *testing.T, res LockRangeResult, expectedRetryRanges ...ComparableSpan) {
+func mustStale(t *testing.T, res LockRangeResult, expectedRetryRanges ...tablepb.Span) {
 	require.Equal(t, LockRangeStatusStale, res.Status)
 	require.Equal(t, expectedRetryRanges, res.RetryRanges)
 }
@@ -59,9 +60,9 @@ func mustLockRangeStale(
 	expectRetrySpans ...string,
 ) {
 	res := l.LockRange(ctx, []byte(startKey), []byte(endKey), regionID, version)
-	spans := make([]ComparableSpan, 0)
+	spans := make([]tablepb.Span, 0)
 	for i := 0; i < len(expectRetrySpans); i += 2 {
-		spans = append(spans, ComparableSpan{StartKey: []byte(expectRetrySpans[i]), EndKey: []byte(expectRetrySpans[i+1])})
+		spans = append(spans, tablepb.Span{StartKey: []byte(expectRetrySpans[i]), EndKey: []byte(expectRetrySpans[i+1])})
 	}
 	mustStale(t, res, spans...)
 }

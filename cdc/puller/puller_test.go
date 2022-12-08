@@ -29,9 +29,9 @@ import (
 	"github.com/pingcap/tiflow/pkg/config"
 	cerrors "github.com/pingcap/tiflow/pkg/errors"
 	"github.com/pingcap/tiflow/pkg/pdutil"
-	"github.com/pingcap/tiflow/pkg/regionspan"
 	"github.com/pingcap/tiflow/pkg/retry"
 	"github.com/pingcap/tiflow/pkg/security"
+	"github.com/pingcap/tiflow/pkg/spanz"
 	"github.com/pingcap/tiflow/pkg/txnutil"
 	"github.com/stretchr/testify/require"
 	"github.com/tikv/client-go/v2/tikv"
@@ -76,7 +76,7 @@ func newMockCDCKVClient(
 
 func (mc *mockCDCKVClient) EventFeed(
 	ctx context.Context,
-	span regionspan.ComparableSpan,
+	span tablepb.Span,
 	ts uint64,
 	lockResolver txnutil.LockResolver,
 	eventCh chan<- model.RegionFeedEvent,
@@ -152,8 +152,8 @@ func newPullerForTest(
 func TestPullerResolvedForward(t *testing.T) {
 	spans := []tablepb.Span{
 		{
-			StartKey: regionspan.ToComparableKey([]byte("t_a")),
-			EndKey:   regionspan.ToComparableKey([]byte("t_e")),
+			StartKey: spanz.ToComparableKey([]byte("t_a")),
+			EndKey:   spanz.ToComparableKey([]byte("t_e")),
 		},
 	}
 	checkpointTs := uint64(996)
@@ -162,21 +162,21 @@ func TestPullerResolvedForward(t *testing.T) {
 	plr.cli.Returns(model.RegionFeedEvent{
 		Resolved: &model.ResolvedSpans{
 			Spans: []model.RegionComparableSpan{{
-				Span: regionspan.ToComparableSpan(regionspan.LegacySpan{StartKey: []byte("t_a"), EndKey: []byte("t_c")}),
+				Span: spanz.ToSpan([]byte("t_a"), []byte("t_c")),
 			}}, ResolvedTs: uint64(1001),
 		},
 	})
 	plr.cli.Returns(model.RegionFeedEvent{
 		Resolved: &model.ResolvedSpans{
 			Spans: []model.RegionComparableSpan{{
-				Span: regionspan.ToComparableSpan(regionspan.LegacySpan{StartKey: []byte("t_c"), EndKey: []byte("t_d")}),
+				Span: spanz.ToSpan([]byte("t_c"), []byte("t_d")),
 			}}, ResolvedTs: uint64(1002),
 		},
 	})
 	plr.cli.Returns(model.RegionFeedEvent{
 		Resolved: &model.ResolvedSpans{
 			Spans: []model.RegionComparableSpan{{
-				Span: regionspan.ToComparableSpan(regionspan.LegacySpan{StartKey: []byte("t_d"), EndKey: []byte("t_e")}),
+				Span: spanz.ToSpan([]byte("t_d"), []byte("t_e")),
 			}}, ResolvedTs: uint64(1000),
 		},
 	})
@@ -201,8 +201,8 @@ func TestPullerResolvedForward(t *testing.T) {
 func TestPullerRawKV(t *testing.T) {
 	spans := []tablepb.Span{
 		{
-			StartKey: regionspan.ToComparableKey([]byte("c")),
-			EndKey:   regionspan.ToComparableKey([]byte("e")),
+			StartKey: spanz.ToComparableKey([]byte("c")),
+			EndKey:   spanz.ToComparableKey([]byte("e")),
 		},
 	}
 	checkpointTs := uint64(996)

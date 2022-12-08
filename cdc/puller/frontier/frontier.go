@@ -19,7 +19,7 @@ import (
 	"math"
 	"strings"
 
-	"github.com/pingcap/tiflow/pkg/regionspan"
+	"github.com/pingcap/tiflow/cdc/processor/tablepb"
 	"github.com/prometheus/client_golang/prometheus"
 )
 
@@ -29,7 +29,7 @@ const fakeRegionID = 0
 
 // Frontier checks resolved event of spans and moves the global resolved ts ahead
 type Frontier interface {
-	Forward(regionID uint64, span regionspan.ComparableSpan, ts uint64)
+	Forward(regionID uint64, span tablepb.Span, ts uint64)
 	Frontier() uint64
 	String() string
 }
@@ -51,7 +51,7 @@ type spanFrontier struct {
 // End key bigger than util.UpperBoundKey
 func NewFrontier(checkpointTs uint64,
 	metricResolvedRegionMissedCounter prometheus.Counter,
-	spans ...regionspan.ComparableSpan,
+	spans ...tablepb.Span,
 ) Frontier {
 	s := &spanFrontier{
 		spanList:       *newSpanList(),
@@ -80,7 +80,7 @@ func (s *spanFrontier) Frontier() uint64 {
 }
 
 // Forward advances the timestamp for a span.
-func (s *spanFrontier) Forward(regionID uint64, span regionspan.ComparableSpan, ts uint64) {
+func (s *spanFrontier) Forward(regionID uint64, span tablepb.Span, ts uint64) {
 	// it's the fast part to detect if the region is split or merged,
 	// if not we can update the minTsHeap with use new ts directly
 	if n, ok := s.cachedRegions[regionID]; ok && n.regionID != fakeRegionID && n.end != nil {
@@ -93,7 +93,7 @@ func (s *spanFrontier) Forward(regionID uint64, span regionspan.ComparableSpan, 
 	s.insert(regionID, span, ts)
 }
 
-func (s *spanFrontier) insert(regionID uint64, span regionspan.ComparableSpan, ts uint64) {
+func (s *spanFrontier) insert(regionID uint64, span tablepb.Span, ts uint64) {
 	// clear the  seek result
 	for i := 0; i < len(s.seekTempResult); i++ {
 		s.seekTempResult[i] = nil

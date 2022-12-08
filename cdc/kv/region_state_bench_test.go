@@ -19,7 +19,7 @@ import (
 	"sync"
 	"testing"
 
-	"github.com/pingcap/tiflow/pkg/regionspan"
+	"github.com/pingcap/tiflow/pkg/spanz"
 	"github.com/tikv/client-go/v2/tikv"
 )
 
@@ -73,10 +73,9 @@ func (rsm *regionStateManagerWithSyncMap) delState(regionID uint64) {
 }
 
 func benchmarkGetRegionState(b *testing.B, bench func(b *testing.B, sm regionStateManagerInterface, count int)) {
-	span := regionspan.LegacySpan{StartKey: []byte{}, EndKey: regionspan.UpperBoundKey}
 	state := newRegionFeedState(newSingleRegionInfo(
 		tikv.RegionVerID{},
-		regionspan.ToComparableSpan(span),
+		spanz.ToSpan([]byte{}, spanz.UpperBoundKey),
 		0, &tikv.RPCContext{}), 0)
 
 	regionCount := []int{100, 1000, 10000, 20000, 40000, 80000, 160000, 320000}

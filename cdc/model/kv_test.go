@@ -16,7 +16,7 @@ package model
 import (
 	"testing"
 
-	"github.com/pingcap/tiflow/pkg/regionspan"
+	"github.com/pingcap/tiflow/cdc/processor/tablepb"
 	"github.com/stretchr/testify/require"
 )
 
@@ -29,7 +29,7 @@ func TestRegionFeedEvent(t *testing.T) {
 	}
 	resolved := &ResolvedSpans{
 		Spans: []RegionComparableSpan{{
-			Span: regionspan.ComparableSpan{StartKey: []byte("a"), EndKey: []byte("b")},
+			Span: tablepb.Span{StartKey: []byte("a"), EndKey: []byte("b")},
 		}}, ResolvedTs: 111,
 	}
 

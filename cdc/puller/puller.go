@@ -28,7 +28,7 @@ import (
 	"github.com/pingcap/tiflow/cdc/puller/frontier"
 	"github.com/pingcap/tiflow/pkg/config"
 	"github.com/pingcap/tiflow/pkg/pdutil"
-	"github.com/pingcap/tiflow/pkg/regionspan"
+	"github.com/pingcap/tiflow/pkg/spanz"
 	"github.com/pingcap/tiflow/pkg/txnutil"
 	"github.com/tikv/client-go/v2/oracle"
 	"github.com/tikv/client-go/v2/tikv"
@@ -63,7 +63,7 @@ type Puller interface {
 type pullerImpl struct {
 	kvCli     kv.CDCKVClient
 	kvStorage tikv.Storage
-	spans     []regionspan.ComparableSpan
+	spans     []tablepb.Span
 	outputCh  chan *model.RawKVEntry
 	tsTracker frontier.Frontier
 	// The commit ts of the latest raw kv event that puller has sent.
@@ -95,13 +95,6 @@ func New(ctx context.Context,
 	if !ok {
 		log.Panic("can't create puller for non-tikv storage")
 	}
-	comparableSpans := make([]regionspan.ComparableSpan, len(spans))
-	for i := range spans {
-		comparableSpans[i] = regionspan.ComparableSpan{
-			StartKey: spans[i].StartKey,
-			EndKey:   spans[i].EndKey,
-		}
-	}
 	// To make puller level resolved ts initialization distinguishable, we set
 	// the initial ts for frontier to 0. Once the puller level resolved ts
 	// initialized, the ts should advance to a non-zero value.
@@ -111,14 +104,14 @@ func New(ctx context.Context,
 	}
 	metricMissedRegionCollectCounter := missedRegionCollectCounter.
 		WithLabelValues(changefeed.Namespace, changefeed.ID, pullerType)
-	tsTracker := frontier.NewFrontier(0, metricMissedRegionCollectCounter, comparableSpans...)
+	tsTracker := frontier.NewFrontier(0, metricMissedRegionCollectCounter, spans...)
 	kvCli := kv.NewCDCKVClient(
 		ctx, pdCli, grpcPool, regionCache, pdClock, cfg, changefeed, tableID, tableName, filterLoop)
 	p := &pullerImpl{
 		kvCli:        kvCli,
 		kvStorage:    tikvStorage,
 		checkpointTs: checkpointTs,
-		spans:        comparableSpans,
+		spans:        spans,
 		outputCh:     make(chan *model.RawKVEntry, defaultPullerOutputChanSize),
 		tsTracker:    tsTracker,
 		resolvedTs:   checkpointTs,
@@ -224,7 +217,7 @@ func (p *pullerImpl) Run(ctx context.Context) error {
 			if e.Resolved != nil {
 				metricTxnCollectCounterResolved.Add(float64(len(e.Resolved.Spans)))
 				for _, resolvedSpan := range e.Resolved.Spans {
-					if !regionspan.IsSubSpan(resolvedSpan.Span, p.spans...) {
+					if !spanz.IsSubSpan(resolvedSpan.Span, p.spans...) {
 						log.Panic("the resolved span is not in the total span",
 							zap.String("namespace", p.changefeed.Namespace),
 							zap.String("changefeed", p.changefeed.ID),

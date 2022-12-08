@@ -16,13 +16,11 @@ package spanz
 import (
 	"sort"
 
-	"github.com/pingcap/tiflow/cdc/model"
 	"github.com/pingcap/tiflow/cdc/processor/tablepb"
-	"github.com/pingcap/tiflow/pkg/regionspan"
 )
 
 // ArrayToSpan converts an array of TableID to an array of Span.
-func ArrayToSpan(in []model.TableID) []tablepb.Span {
+func ArrayToSpan(in []tablepb.TableID) []tablepb.Span {
 	out := make([]tablepb.Span, 0, len(in))
 	for _, tableID := range in {
 		out = append(out, tablepb.Span{TableID: tableID})
@@ -32,18 +30,18 @@ func ArrayToSpan(in []model.TableID) []tablepb.Span {
 
 // TableIDToComparableSpan converts a TableID to a Span whose
 // StartKey and EndKey are encoded in Comparable format.
-func TableIDToComparableSpan(tableID model.TableID) tablepb.Span {
-	tableSpan := regionspan.ToComparableSpan(regionspan.GetTableSpan(tableID))
+func TableIDToComparableSpan(tableID tablepb.TableID) tablepb.Span {
+	startKey, endKey := GetTableRange(tableID)
 	return tablepb.Span{
 		TableID:  tableID,
-		StartKey: tableSpan.StartKey,
-		EndKey:   tableSpan.EndKey,
+		StartKey: ToComparableKey(startKey),
+		EndKey:   ToComparableKey(endKey),
 	}
 }
 
 // TableIDToComparableRange returns a range of a table,
 // start and end are encoded in Comparable format.
-func TableIDToComparableRange(tableID model.TableID) (start, end tablepb.Span) {
+func TableIDToComparableRange(tableID tablepb.TableID) (start, end tablepb.Span) {
 	tableSpan := TableIDToComparableSpan(tableID)
 	start = tableSpan
 	start.EndKey = nil
