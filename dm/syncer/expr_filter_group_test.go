@@ -501,4 +501,9 @@ create table t (
 		require.NoError(t, err)
 		require.Equal(t, len(oldExprs), len(newExprs))
 	}
+	g := NewExprFilterGroup(tcontext.Background(), sessCtx, cases)
+	oldExprs, newExprs, err := g.GetUpdateExprs(table, tableInfo)
+	require.NoError(t, err)
+	require.Equal(t, len(oldExprs), len(newExprs))
+	require.Len(t, oldExprs, 3)
 }
