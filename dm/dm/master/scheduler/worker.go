@@ -46,15 +46,19 @@ type WorkerStage string
 //   - Relay -> Offline, lost keep-alive.
 //   - Relay -> Free, stop relay.
 //   - Relay -> Bound, old bound worker becomes offline so bind source to this worker, which has started relay.
+//
 // invalid transformation:
 //   - Offline -> Bound, must become Free first.
 //   - Offline -> Relay, must become Free first.
+//
 // in Bound stage relay can be turned on/off, the difference with Bound-Relay transformation is
 //   - Bound stage turning on/off represents a bound DM worker receives start-relay/stop-relay, source bound relation is
 //     not changed.
 //   - Bound-Relay transformation represents source bound relation is changed.
+//
 // caller should ensure the correctness when invoke below transformation methods successively. For example, call ToBound
-//   twice with different arguments.
+//
+//	twice with different arguments.
 const (
 	WorkerOffline WorkerStage = "offline" // the worker is not online yet.
 	WorkerFree    WorkerStage = "free"    // the worker is online, but no upstream source assigned to it yet.

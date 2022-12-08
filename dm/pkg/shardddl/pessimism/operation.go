@@ -78,13 +78,16 @@ func operationFromJSON(s string) (o Operation, err error) {
 // if `skipDone` is `true`:
 //   - PUT: all of kvs ("not exist" or "the `done` field is not `true`")
 //   - skip PUT: any of kvs ("exist" and "the `done` field is `true`")
+//
 // NOTE:
-//   `clientv3.Value` has a strange behavior for *not-exist* kv,
-//   see https://github.com/etcd-io/etcd/issues/10566.
-//   In addition, etcd compare has no `OR` operator now,
-//   see https://github.com/etcd-io/etcd/issues/10571.
-//   So, it's hard to do our `skipDone` logic in one txn.
-//   We break the logic into two txn, but this may lead to problem when PUT operations concurrently.
+//
+//	`clientv3.Value` has a strange behavior for *not-exist* kv,
+//	see https://github.com/etcd-io/etcd/issues/10566.
+//	In addition, etcd compare has no `OR` operator now,
+//	see https://github.com/etcd-io/etcd/issues/10571.
+//	So, it's hard to do our `skipDone` logic in one txn.
+//	We break the logic into two txn, but this may lead to problem when PUT operations concurrently.
+//
 // This function should often be called by DM-master.
 func PutOperations(cli *clientv3.Client, skipDone bool, ops ...Operation) (rev int64, putted bool, err error) {
 	cmpsNotExist := make([]clientv3.Cmp, 0, len(ops))

@@ -25,12 +25,12 @@ import (
 	cerror "github.com/pingcap/tiflow/pkg/errors"
 )
 
-/// create string from byte slice without copying
+// / create string from byte slice without copying
 func unsafeBytesToString(b []byte) string {
 	return *(*string)(unsafe.Pointer(&b))
 }
 
-/// Primitive type decoders
+// / Primitive type decoders
 func decodeUint8(bits []byte) ([]byte, byte, error) {
 	if len(bits) < 1 {
 		return bits, 0, cerror.ErrCraftCodecInvalidData.GenWithStack("buffer underflow")
