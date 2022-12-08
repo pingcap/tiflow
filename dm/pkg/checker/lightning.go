@@ -205,12 +205,6 @@ func (c *LightningFreeSpaceChecker) Check(ctx context.Context) *Result {
 	return result
 }
 
-// LightningSortingSpaceChecker checks the local disk has enough space for physical
-// import mode sorting data.
-type LightningSortingSpaceChecker struct {
-	inner restore.PrecheckItem
-}
-
 // LightningCDCPiTRChecker checks whether the cluster has running CDC PiTR tasks.
 type LightningCDCPiTRChecker struct {
 	inner restore.PrecheckItem
