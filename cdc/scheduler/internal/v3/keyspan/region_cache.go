@@ -21,7 +21,7 @@ import (
 	"github.com/tikv/client-go/v2/tikv"
 )
 
-// RegionCache is an simplified interface of tikv.RegionCache.
+// RegionCache is a simplified interface of tikv.RegionCache.
 // It is useful to restrict RegionCache usage and mocking in tests.
 type RegionCache interface {
 	// ListRegionIDsInKeyRange lists ids of regions in [startKey,endKey].

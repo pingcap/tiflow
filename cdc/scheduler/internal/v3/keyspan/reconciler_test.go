@@ -88,7 +88,7 @@ func TestSplitSpan(t *testing.T) {
 
 	for i, cs := range cases {
 		cfg := &config.SchedulerConfig{RegionPerSpan: cs.regionPerSpan}
-		reconciler := NewReconciler(model.ChangeFeedID{}, cache, cfg)
+		reconciler := NewReconciler(model.ChangeFeedID{}, cache, cfg.RegionPerSpan)
 		spans := reconciler.splitSpan(context.Background(), cs.span)
 		require.Equalf(t, cs.expectSpans, spans, "%d %s", i, &cs.span)
 	}
@@ -103,7 +103,7 @@ func TestSplitSpanRegionOutOfOrder(t *testing.T) {
 	cache.regions.ReplaceOrInsert(tablepb.Span{StartKey: []byte("t1_2"), EndKey: []byte("t1_3")}, 3)
 
 	cfg := &config.SchedulerConfig{RegionPerSpan: 1}
-	reconciler := NewReconciler(model.ChangeFeedID{}, cache, cfg)
+	reconciler := NewReconciler(model.ChangeFeedID{}, cache, cfg.RegionPerSpan)
 	span := tablepb.Span{TableID: 1, StartKey: []byte("t1"), EndKey: []byte("t2")}
 	spans := reconciler.splitSpan(context.Background(), span)
 	require.Equal(
@@ -154,8 +154,8 @@ func TestReconcile(t *testing.T) {
 
 	// Test 1. changefeed initialization.
 	reps := spanz.NewMap[*replication.ReplicationSet]()
-	reconciler := NewReconciler(model.ChangeFeedID{}, cache, cfg)
-	spans := reconciler.Reconcile(ctx, 0, []model.TableID{1}, reps, compat)
+	reconciler := NewReconciler(model.ChangeFeedID{}, cache, cfg.RegionPerSpan)
+	spans := reconciler.Reconcile(ctx, []model.TableID{1}, reps, compat)
 	require.Equal(t, allSpan[:4], spans)
 	require.Equal(t, allSpan[:4], reconciler.tableSpans[1])
 	require.Equal(t, 1, len(reconciler.tableSpans))
@@ -164,14 +164,14 @@ func TestReconcile(t *testing.T) {
 	for _, span := range reconciler.tableSpans[1] {
 		reps.ReplaceOrInsert(span, nil)
 	}
-	reconciler = NewReconciler(model.ChangeFeedID{}, cache, cfg)
-	spans = reconciler.Reconcile(ctx, 0, []model.TableID{1}, reps, compat)
+	reconciler = NewReconciler(model.ChangeFeedID{}, cache, cfg.RegionPerSpan)
+	spans = reconciler.Reconcile(ctx, []model.TableID{1}, reps, compat)
 	require.Equal(t, allSpan[:4], spans)
 	require.Equal(t, allSpan[:4], reconciler.tableSpans[1])
 	require.Equal(t, 1, len(reconciler.tableSpans))
 
 	// Test 3. add table 2.
-	spans = reconciler.Reconcile(ctx, 0, []model.TableID{1, 2}, reps, compat)
+	spans = reconciler.Reconcile(ctx, []model.TableID{1, 2}, reps, compat)
 	spanz.Sort(spans)
 	require.Equal(t, allSpan, spans)
 	require.Equal(t, allSpan[:4], reconciler.tableSpans[1])
@@ -182,7 +182,7 @@ func TestReconcile(t *testing.T) {
 	for _, span := range reconciler.tableSpans[2] {
 		reps.ReplaceOrInsert(span, nil)
 	}
-	spans = reconciler.Reconcile(ctx, 0, []model.TableID{1}, reps, compat)
+	spans = reconciler.Reconcile(ctx, []model.TableID{1}, reps, compat)
 	require.Equal(t, allSpan[:4], spans)
 	require.Equal(t, allSpan[:4], reconciler.tableSpans[1])
 	require.Equal(t, 1, len(reconciler.tableSpans))
@@ -190,7 +190,7 @@ func TestReconcile(t *testing.T) {
 	// Test 2. Owner switch and some captures fail.
 	// Start span is missing.
 	reps.Delete(allSpan[0])
-	spans = reconciler.Reconcile(ctx, 0, []model.TableID{1}, reps, compat)
+	spans = reconciler.Reconcile(ctx, []model.TableID{1}, reps, compat)
 	spanz.Sort(spans)
 	require.Equal(t, allSpan[:4], spans)
 	spanz.Sort(reconciler.tableSpans[1])
@@ -200,7 +200,7 @@ func TestReconcile(t *testing.T) {
 	// End spans is missing.
 	reps.ReplaceOrInsert(allSpan[0], nil)
 	reps.Delete(allSpan[3])
-	spans = reconciler.Reconcile(ctx, 0, []model.TableID{1}, reps, compat)
+	spans = reconciler.Reconcile(ctx, []model.TableID{1}, reps, compat)
 	spanz.Sort(spans)
 	require.Equal(t, allSpan[:4], spans)
 	spanz.Sort(reconciler.tableSpans[1])
@@ -211,7 +211,7 @@ func TestReconcile(t *testing.T) {
 	reps.ReplaceOrInsert(allSpan[3], nil)
 	reps.Delete(allSpan[1])
 	reps.Delete(allSpan[2])
-	spans = reconciler.Reconcile(ctx, 0, []model.TableID{1}, reps, compat)
+	spans = reconciler.Reconcile(ctx, []model.TableID{1}, reps, compat)
 	expectedSpan := allSpan[:1]
 	expectedSpan = append(expectedSpan, tablepb.Span{
 		TableID:  1,
@@ -246,8 +246,8 @@ func TestCompatDisable(t *testing.T) {
 	require.False(t, cm.CheckSpanReplicationEnabled())
 	ctx := context.Background()
 	reps := spanz.NewMap[*replication.ReplicationSet]()
-	reconciler := NewReconciler(model.ChangeFeedID{}, cache, cfg)
-	spans := reconciler.Reconcile(ctx, 0, []model.TableID{1}, reps, cm)
+	reconciler := NewReconciler(model.ChangeFeedID{}, cache, cfg.RegionPerSpan)
+	spans := reconciler.Reconcile(ctx, []model.TableID{1}, reps, cm)
 	require.Equal(t, []tablepb.Span{spanz.TableIDToComparableSpan(1)}, spans)
 	require.Equal(t, 1, len(reconciler.tableSpans))
 	reps.ReplaceOrInsert(spanz.TableIDToComparableSpan(1), nil)
@@ -257,7 +257,7 @@ func TestCompatDisable(t *testing.T) {
 		"2": {Version: compat.SpanReplicationMinVersion.String()},
 	})
 	require.True(t, cm.CheckSpanReplicationEnabled())
-	spans = reconciler.Reconcile(ctx, 0, []model.TableID{1, 2}, reps, cm)
+	spans = reconciler.Reconcile(ctx, []model.TableID{1, 2}, reps, cm)
 	spanz.Sort(spans)
 	require.Equal(t, spanz.TableIDToComparableSpan(1), spans[0])
 	require.Equal(t, allSpan[4:], spans[1:])

@@ -22,7 +22,6 @@ import (
 	"github.com/pingcap/tiflow/cdc/processor/tablepb"
 	"github.com/pingcap/tiflow/cdc/scheduler/internal/v3/compat"
 	"github.com/pingcap/tiflow/cdc/scheduler/internal/v3/replication"
-	"github.com/pingcap/tiflow/pkg/config"
 	"github.com/pingcap/tiflow/pkg/spanz"
 	"github.com/tikv/client-go/v2/tikv"
 	"go.uber.org/zap"
@@ -42,85 +41,88 @@ type Reconciler struct {
 // NewReconciler returns a Reconciler.
 func NewReconciler(
 	changefeedID model.ChangeFeedID, regionCache RegionCache,
-	cfg *config.SchedulerConfig,
+	maxRegionPerSpan int,
 ) *Reconciler {
 	return &Reconciler{
 		tableSpans:       make(map[int64][]tablepb.Span),
 		regionCache:      regionCache,
-		maxRegionPerSpan: cfg.RegionPerSpan,
+		changefeedID:     changefeedID,
+		maxRegionPerSpan: maxRegionPerSpan,
 	}
 }
 
 // Reconcile spans that need to be replicated based on current cluster status.
 // It handles following cases:
 // 1. Changefeed initialization
-// 2. owner switch.
+// 2. Owner switch.
 // 3. Owner switch after some captures fail.
 // 4. Add table by DDL.
 // 5. Drop table by DDL.
 // 6. Some captures fail, does NOT affect spans.
 func (m *Reconciler) Reconcile(
 	ctx context.Context,
-	checkpointTs model.Ts,
 	currentTables []model.TableID,
 	replications *spanz.Map[*replication.ReplicationSet],
 	compat *compat.Compat,
 ) []tablepb.Span {
 	tablesLenEqual := len(currentTables) == len(m.tableSpans)
-	tablesAllFind := true
+	allTablesFound := true
 	updateCache := false
 	for _, tableID := range currentTables {
 		if _, ok := m.tableSpans[tableID]; !ok {
 			// Find a new table.
-			tablesAllFind = false
+			allTablesFound = false
 			updateCache = true
 		}
 
 		// Reconcile spans from current replications.
 		tableStart, tableEnd := spanz.TableIDToComparableRange(tableID)
-		found, holes := replications.FindHole(tableStart, tableEnd)
-		if len(found) == 0 {
+		coveredSpans, holes := replications.FindHoles(tableStart, tableEnd)
+		if len(coveredSpans) == 0 {
 			// No such spans in replications.
-			if _, ok := m.tableSpans[tableID]; !ok {
-				// And we have not seen such spans before, maybe:
-				// 1. it's a table being added when starting a changefeed
-				//    or after owner switch.
-				// 4. it's a new table being created by DDL when a changefeed is running.
-				tableSpan := spanz.TableIDToComparableSpan(tableID)
-				if compat.CheckSpanReplicationEnabled() {
-					m.tableSpans[tableID] = m.splitSpan(ctx, tableSpan)
-				} else {
-					// Do not split table if span replication is not enabled.
-					m.tableSpans[tableID] = []tablepb.Span{tableSpan}
-				}
-				updateCache = true
-			} else {
+			if _, ok := m.tableSpans[tableID]; ok {
 				// We have seen such spans before, it is impossible.
 				log.Panic("schedulerv3: impossible spans",
+					zap.String("changefeed", m.changefeedID.ID),
+					zap.String("namespace", m.changefeedID.Namespace),
 					zap.Int64("tableID", tableID),
 					zap.Stringer("spanStart", &tableStart),
 					zap.Stringer("spanEnd", &tableEnd))
 			}
+			// And we have not seen such spans before, maybe:
+			// 1. it's a table being added when starting a changefeed
+			//    or after owner switch.
+			// 4. it's a new table being created by DDL when a changefeed is running.
+			tableSpan := spanz.TableIDToComparableSpan(tableID)
+			if compat.CheckSpanReplicationEnabled() {
+				m.tableSpans[tableID] = m.splitSpan(ctx, tableSpan)
+			} else {
+				// Do not split table if span replication is not enabled.
+				m.tableSpans[tableID] = []tablepb.Span{tableSpan}
+			}
+			updateCache = true
 		} else if len(holes) != 0 {
 			// There are some holes in the table span, maybe:
 			// 3. owner switch after some captures failed.
 			log.Info("schedulerv3: detect owner switch after captures fail",
+				zap.String("changefeed", m.changefeedID.ID),
+				zap.String("namespace", m.changefeedID.Namespace),
 				zap.Int64("tableID", tableID),
 				zap.Int("holes", len(holes)),
 				zap.Stringer("spanStart", &tableStart),
 				zap.Stringer("spanEnd", &tableEnd),
-				zap.Stringer("foundStart", &found[0]),
-				zap.Stringer("foundEnd", &found[len(found)-1]))
+				zap.Stringer("foundStart", &coveredSpans[0]),
+				zap.Stringer("foundEnd", &coveredSpans[len(coveredSpans)-1]))
 			for i := range holes {
 				holes[i].TableID = tableID
-				m.tableSpans[tableID] = append(found, holes[i])
+				m.tableSpans[tableID] = append(coveredSpans, holes[i])
 				// TODO: maybe we should split holes too.
 			}
 			updateCache = true
 		} else {
 			// Found and no hole, maybe:
 			// 2. owner switch and no capture fails.
-			m.tableSpans[tableID] = found
+			m.tableSpans[tableID] = coveredSpans
 		}
 	}
 
@@ -130,18 +132,15 @@ func (m *Reconciler) Reconcile(
 	// Fast path for check whether two sets are identical:
 	// If the length of currentTables and tableSpan are equal,
 	// and for all tables in currentTables have a record in tableSpan.
-	if !tablesLenEqual || !tablesAllFind {
+	if !tablesLenEqual || !allTablesFound {
 		// The two sets are not identical. We need to find removed tables.
-		intersectionTable := make(map[model.TableID]struct{}, len(currentTables))
+		// Build a tableID hash set to improve performance.
+		currentTableSet := make(map[model.TableID]struct{}, len(currentTables))
 		for _, tableID := range currentTables {
-			_, ok := m.tableSpans[tableID]
-			if !ok {
-				continue
-			}
-			intersectionTable[tableID] = struct{}{}
+			currentTableSet[tableID] = struct{}{}
 		}
 		for tableID := range m.tableSpans {
-			_, ok := intersectionTable[tableID]
+			_, ok := currentTableSet[tableID]
 			if !ok {
 				// Found dropped table.
 				delete(m.tableSpans, tableID)
