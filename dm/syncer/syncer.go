@@ -685,6 +685,14 @@ func (s *Syncer) resetDBs(tctx *tcontext.Context) error {
 	return nil
 }
 
+func (s *Syncer) handleExitErrMetric(err *pb.ProcessError) {
+	if unit.IsResumableError(err) {
+		s.metricsProxies.Metrics.ExitWithResumableErrorCounter.Inc()
+	} else {
+		s.metricsProxies.Metrics.ExitWithNonResumableErrorCounter.Inc()
+	}
+}
+
 // Process implements the dm.Unit interface.
 func (s *Syncer) Process(ctx context.Context, pr chan pb.ProcessResult) {
 	s.metricsProxies.Metrics.ExitWithResumableErrorCounter.Add(0)
@@ -719,11 +727,7 @@ func (s *Syncer) Process(ctx context.Context, pr chan pb.ProcessResult) {
 				return
 			}
 			cancel() // cancel s.Run
-			if unit.IsResumableError(err) {
-				s.metricsProxies.Metrics.ExitWithResumableErrorCounter.Inc()
-			} else {
-				s.metricsProxies.Metrics.ExitWithNonResumableErrorCounter.Inc()
-			}
+			s.handleExitErrMetric(err)
 			errsMu.Lock()
 			errs = append(errs, err)
 			errsMu.Unlock()
@@ -751,11 +755,7 @@ func (s *Syncer) Process(ctx context.Context, pr chan pb.ProcessResult) {
 		} else {
 			s.tctx.L().Debug("unit syncer quits with error", zap.Error(err))
 			processError := unit.NewProcessError(err)
-			if unit.IsResumableError(processError) {
-				s.metricsProxies.Metrics.ExitWithResumableErrorCounter.Inc()
-			} else {
-				s.metricsProxies.Metrics.ExitWithNonResumableErrorCounter.Inc()
-			}
+			s.handleExitErrMetric(processError)
 			errsMu.Lock()
 			errs = append(errs, processError)
 			errsMu.Unlock()
@@ -3175,10 +3175,12 @@ func (s *Syncer) Resume(ctx context.Context, pr chan pb.ProcessResult) {
 	var err error
 	defer func() {
 		if err != nil {
+			processError := unit.NewProcessError(err)
+			s.handleExitErrMetric(processError)
 			pr <- pb.ProcessResult{
 				IsCanceled: false,
 				Errors: []*pb.ProcessError{
-					unit.NewProcessError(err),
+					processError,
 				},
 			}
 		}
