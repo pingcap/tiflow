@@ -130,17 +130,28 @@ func (m *memQuota) addTable(tableID model.TableID) {
 }
 
 // record records the memory usage of a table.
-func (m *memQuota) record(tableID model.TableID, resolved model.ResolvedTs, size uint64) {
+func (m *memQuota) record(tableID model.TableID, resolved model.ResolvedTs, nBytes uint64) {
+	if nBytes == 0 {
+		return
+	}
 	m.mu.Lock()
 	defer m.mu.Unlock()
 	if _, ok := m.tableMemory[tableID]; !ok {
 		// Can't find the table record, the table must be removed.
-		m.refund(size)
+		if m.usedBytes < nBytes {
+			log.Panic("memQuota.refund fail",
+				zap.Uint64("used", m.usedBytes), zap.Uint64("refund", nBytes))
+		}
+		m.usedBytes -= nBytes
+		m.metricUsed.Set(float64(m.usedBytes))
+		if m.usedBytes < m.totalBytes {
+			m.blockAcquireCond.Broadcast()
+		}
 		return
 	}
 	m.tableMemory[tableID] = append(m.tableMemory[tableID], &memConsumeRecord{
 		resolvedTs: resolved,
-		size:       size,
+		size:       nBytes,
 	})
 }
 

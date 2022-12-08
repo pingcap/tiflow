@@ -86,6 +86,8 @@ func (w *redoWorker) handleTask(ctx context.Context, task *redoTask) error {
 
 	var lastPos engine.Position
 	emitedCommitTs := uint64(0)
+	lastTxnCommitTs := uint64(0)
+	currTxnCommitTs := uint64(0)
 
 	doEmitBatchEvents := func() error {
 		if len(rows) > 0 {
@@ -105,15 +107,17 @@ func (w *redoWorker) handleTask(ctx context.Context, task *redoTask) error {
 			if err != nil {
 				return errors.Trace(err)
 			}
+			rowsSize = 0
+			cachedSize = 0
+			rows = rows[:0]
+			if cap(rows) > 1024 {
+				rows = make([]*model.RowChangedEvent, 0, 1024)
+			}
 		}
-		if lastPos.Valid() {
-			var toEmit uint64
-			if lastPos.CommitTs == lastPos.StartTs+1 {
-				toEmit = lastPos.CommitTs
-			} else if len(rows) > 0 && rows[len(rows)-1].CommitTs != lastPos.CommitTs {
-				toEmit = lastPos.CommitTs
-			} else {
-				toEmit = lastPos.CommitTs - 1
+		if currTxnCommitTs > 0 {
+			toEmit := lastTxnCommitTs
+			if currTxnCommitTs == lastPos.CommitTs && lastPos.CommitTs == lastPos.StartTs+1 {
+				toEmit = currTxnCommitTs
 			}
 			if toEmit > emitedCommitTs {
 				if err := w.redoManager.UpdateResolvedTs(ctx, task.tableID, toEmit); err != nil {
@@ -126,12 +130,6 @@ func (w *redoWorker) handleTask(ctx context.Context, task *redoTask) error {
 					zap.Uint64("resolvedTs", toEmit))
 				emitedCommitTs = toEmit
 			}
-		}
-		rowsSize = 0
-		cachedSize = 0
-		rows = rows[:0]
-		if cap(rows) > 1024 {
-			rows = make([]*model.RowChangedEvent, 0, 1024)
 		}
 		return nil
 	}
@@ -219,8 +217,14 @@ func (w *redoWorker) handleTask(ctx context.Context, task *redoTask) error {
 		if err != nil {
 			return errors.Trace(err)
 		}
+		// There is no more data. It means that we finish this scan task.
 		if e == nil {
-			// There is no more data.
+			if currTxnCommitTs == 0 {
+				currTxnCommitTs = upperBound.CommitTs
+			}
+			if lastTxnCommitTs == 0 {
+				lastTxnCommitTs = upperBound.CommitTs
+			}
 			if !lastPos.Valid() {
 				lastPos = upperBound
 			}
@@ -230,11 +234,18 @@ func (w *redoWorker) handleTask(ctx context.Context, task *redoTask) error {
 			return nil
 		}
 		allEventCount += 1
+		task.tableSink.updateReceivedSorterCommitTs(e.CRTs)
+
+		if currTxnCommitTs != e.CRTs {
+			if currTxnCommitTs != 0 {
+				lastTxnCommitTs = currTxnCommitTs
+			}
+			currTxnCommitTs = e.CRTs
+		}
 		if pos.Valid() {
 			lastPos = pos
 		}
 
-		task.tableSink.updateReceivedSorterCommitTs(e.CRTs)
 		if e.Row == nil {
 			// NOTICE: This could happen when the event is filtered by the event filter.
 			continue
@@ -259,7 +270,7 @@ func (w *redoWorker) handleTask(ctx context.Context, task *redoTask) error {
 				cachedSize -= brokenSize
 			}
 		}
-		if err = maybeEmitBatchEvents(false, pos.Valid()); err != nil {
+		if err := maybeEmitBatchEvents(false, pos.Valid()); err != nil {
 			return errors.Trace(err)
 		}
 	}

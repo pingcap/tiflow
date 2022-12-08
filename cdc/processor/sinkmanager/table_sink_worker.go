@@ -310,7 +310,6 @@ func (w *sinkWorker) handleTask(ctx context.Context, task *sinkTask) (err error)
 
 		if e.Row == nil {
 			// NOTICE: This could happen when the event is filtered by the event filter.
-			// Maybe we just ignore the last event. So we need to record the last position.
 			continue
 		}
 		// For all rows, we add table replicate ts, so mysql sink can
