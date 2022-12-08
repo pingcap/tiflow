@@ -93,3 +93,21 @@ func TestIsResumableError(t *testing.T) {
 		require.Equal(t, tc.resumable, IsResumableError(err))
 	}
 }
+
+func TestIsResumableRelayError(t *testing.T) {
+	testCases := []struct {
+		err       error
+		resumable bool
+	}{
+		{terror.ErrRelayUUIDSuffixNotValid, false},
+		{terror.ErrRelayUUIDSuffixLessThanPrev, false},
+		{terror.ErrRelayBinlogNameNotValid, false},
+		{terror.ErrRelayNoCurrentUUID, false},
+		{terror.ErrDBBadConn, true},
+	}
+
+	for _, tc := range testCases {
+		err := NewProcessError(tc.err)
+		require.Equal(t, tc.resumable, IsResumableRelayError(err))
+	}
+}

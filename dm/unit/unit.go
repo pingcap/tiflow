@@ -110,7 +110,7 @@ func JoinProcessErrors(errors []*pb.ProcessError) string {
 }
 
 // IsResumableError checks the error message and returns whether we need to
-// resume the task and retry.
+// resume the task unit and retry.
 func IsResumableError(err *pb.ProcessError) bool {
 	if err == nil {
 		return true
@@ -143,5 +143,14 @@ func IsResumableError(err *pb.ProcessError) bool {
 		return false
 	}
 
+	return true
+}
+
+// IsResumableRelayError return whether we need resume relay on error
+// since relay impl unit interface too, so we put it here
+func IsResumableRelayError(err *pb.ProcessError) bool {
+	if _, ok := retry.UnresumableRelayErrCodes[err.ErrCode]; ok {
+		return false
+	}
 	return true
 }

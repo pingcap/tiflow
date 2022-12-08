@@ -24,7 +24,6 @@ import (
 	"github.com/pingcap/tiflow/dm/pb"
 	"github.com/pingcap/tiflow/dm/pkg/backoff"
 	"github.com/pingcap/tiflow/dm/pkg/log"
-	"github.com/pingcap/tiflow/dm/pkg/retry"
 	"github.com/pingcap/tiflow/dm/pkg/terror"
 	"github.com/pingcap/tiflow/dm/unit"
 	"go.uber.org/atomic"
@@ -251,7 +250,7 @@ func (i *AutoResumeInfo) checkResumeRelay(
 	}
 
 	for _, err := range relayStatus.Result.Errors {
-		if _, ok := retry.UnresumableRelayErrCodes[err.ErrCode]; ok {
+		if !unit.IsResumableRelayError(err) {
 			return ResumeNoSense
 		}
 	}

@@ -156,10 +156,12 @@ func (r *Relay) Process(ctx context.Context) pb.ProcessResult {
 	errs := make([]*pb.ProcessError, 0, 1)
 	err := r.process(ctx)
 	if err != nil && errors.Cause(err) != replication.ErrSyncClosed {
-		relayExitWithErrorCounter.Inc()
 		r.logger.Error("process exit", zap.Error(err))
 		// TODO: add specified error type instead of pb.ErrorType_UnknownError
-		errs = append(errs, unit.NewProcessError(err))
+		processError := unit.NewProcessError(err)
+		resumable := fmt.Sprintf("%t", unit.IsResumableRelayError(processError))
+		relayExitWithErrorCounter.WithLabelValues(resumable).Inc()
+		errs = append(errs, processError)
 	}
 
 	isCanceled := false
