@@ -29,6 +29,7 @@ import (
 	"github.com/pingcap/tiflow/cdc/sink/codec/common"
 	"github.com/pingcap/tiflow/cdc/sinkv2/eventsink"
 	"github.com/pingcap/tiflow/cdc/sinkv2/metrics"
+	"github.com/pingcap/tiflow/engine/pkg/clock"
 	"github.com/pingcap/tiflow/pkg/chann"
 	"github.com/pingcap/tiflow/pkg/config"
 	"github.com/pingcap/tiflow/pkg/sink"
@@ -55,10 +56,11 @@ func testDMLWorker(ctx context.Context, t *testing.T, dir string) *dmlWorker {
 	return d
 }
 
-func TestGenerateCloudStoragePath(t *testing.T) {
+func TestGenerateDataFilePath(t *testing.T) {
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
-	w := testDMLWorker(ctx, t, t.TempDir())
+	dir := t.TempDir()
+	w := testDMLWorker(ctx, t, dir)
 	table := versionedTable{
 		TableName: model.TableName{
 			Schema: "test",
@@ -66,10 +68,64 @@ func TestGenerateCloudStoragePath(t *testing.T) {
 		},
 		version: 5,
 	}
+
+	// date-separator: none
 	path := w.generateDataFilePath(table)
 	require.Equal(t, "test/table1/5/CDC000001.json", path)
 	path = w.generateDataFilePath(table)
 	require.Equal(t, "test/table1/5/CDC000002.json", path)
+
+	// date-separator: year
+	mockClock := clock.NewMock()
+	w = testDMLWorker(ctx, t, dir)
+	w.config.DateSeparator = config.DateSeparatorYear.String()
+	w.clock = mockClock
+	mockClock.Set(time.Date(2022, 12, 31, 23, 59, 59, 0, time.UTC))
+	path = w.generateDataFilePath(table)
+	require.Equal(t, "test/table1/5/2022/CDC000001.json", path)
+	path = w.generateDataFilePath(table)
+	require.Equal(t, "test/table1/5/2022/CDC000002.json", path)
+	// year changed
+	mockClock.Set(time.Date(2023, 1, 1, 0, 0, 20, 0, time.UTC))
+	path = w.generateDataFilePath(table)
+	require.Equal(t, "test/table1/5/2023/CDC000001.json", path)
+	path = w.generateDataFilePath(table)
+	require.Equal(t, "test/table1/5/2023/CDC000002.json", path)
+
+	// date-separator: month
+	mockClock = clock.NewMock()
+	w = testDMLWorker(ctx, t, dir)
+	w.config.DateSeparator = config.DateSeparatorMonth.String()
+	w.clock = mockClock
+	mockClock.Set(time.Date(2022, 12, 31, 23, 59, 59, 0, time.UTC))
+	path = w.generateDataFilePath(table)
+	require.Equal(t, "test/table1/5/2022-12/CDC000001.json", path)
+	path = w.generateDataFilePath(table)
+	require.Equal(t, "test/table1/5/2022-12/CDC000002.json", path)
+	// month changed
+	mockClock.Set(time.Date(2023, 1, 1, 0, 0, 20, 0, time.UTC))
+	path = w.generateDataFilePath(table)
+	require.Equal(t, "test/table1/5/2023-01/CDC000001.json", path)
+	path = w.generateDataFilePath(table)
+	require.Equal(t, "test/table1/5/2023-01/CDC000002.json", path)
+
+	// date-separator: day
+	mockClock = clock.NewMock()
+	w = testDMLWorker(ctx, t, dir)
+	w.config.DateSeparator = config.DateSeparatorDay.String()
+	w.clock = mockClock
+	mockClock.Set(time.Date(2022, 12, 31, 23, 59, 59, 0, time.UTC))
+	path = w.generateDataFilePath(table)
+	require.Equal(t, "test/table1/5/2022-12-31/CDC000001.json", path)
+	path = w.generateDataFilePath(table)
+	require.Equal(t, "test/table1/5/2022-12-31/CDC000002.json", path)
+	// day changed
+	mockClock.Set(time.Date(2023, 1, 1, 0, 0, 20, 0, time.UTC))
+	path = w.generateDataFilePath(table)
+	require.Equal(t, "test/table1/5/2023-01-01/CDC000001.json", path)
+	path = w.generateDataFilePath(table)
+	require.Equal(t, "test/table1/5/2023-01-01/CDC000002.json", path)
+
 	w.close()
 }
 
@@ -80,7 +136,6 @@ func TestDMLWorkerRun(t *testing.T) {
 	d := testDMLWorker(ctx, t, parentDir)
 	fragCh := chann.New[eventFragment]()
 	table1Dir := path.Join(parentDir, "test/table1/99")
-	os.MkdirAll(table1Dir, 0o755)
 	d.run(ctx, fragCh)
 	// assume table1 and table2 are dispatched to the same DML worker
 	table1 := model.TableName{

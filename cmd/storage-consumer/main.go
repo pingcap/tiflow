@@ -387,7 +387,7 @@ func (c *consumer) getNewFiles(ctx context.Context) (map[dmlPathKey]fileIndexRan
 func (c *consumer) emitDMLEvents(ctx context.Context, tableID int64, pathKey dmlPathKey, content []byte) error {
 	var (
 		events      []*model.RowChangedEvent
-		tableDetail cloudstorage.TableDetail
+		tableDetail cloudstorage.TableDefinition
 		decoder     codec.EventBatchDecoder
 		err         error
 	)
