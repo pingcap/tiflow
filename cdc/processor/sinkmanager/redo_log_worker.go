@@ -70,7 +70,10 @@ func (w *redoWorker) handleTasks(ctx context.Context, taskChan <-chan *redoTask)
 
 func (w *redoWorker) handleTask(ctx context.Context, task *redoTask) error {
 	rows := make([]*model.RowChangedEvent, 0, 1024)
-	cache := w.eventCache.maybeCreateAppender(task.tableID, task.lowerBound)
+	var cache *eventAppender
+	if w.eventCache != nil {
+		cache = w.eventCache.maybeCreateAppender(task.tableID, task.lowerBound)
+	}
 
 	// Events are pushed into redoEventCache if possible. Otherwise, their memory will
 	// be released after they are written into redo files. Then we need to release their

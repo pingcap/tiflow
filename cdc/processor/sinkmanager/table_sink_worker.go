@@ -30,6 +30,7 @@ type sinkWorker struct {
 	sourceManager *sourcemanager.SourceManager
 	memQuota      *memQuota
 	eventCache    *redoEventCache
+	redoEnabled   bool
 	// splitTxn indicates whether to split the transaction into multiple batches.
 	splitTxn bool
 	// enableOldValue indicates whether to enable the old value feature.
@@ -46,6 +47,7 @@ func newSinkWorker(
 	sourceManager *sourcemanager.SourceManager,
 	quota *memQuota,
 	eventCache *redoEventCache,
+	redoEnabled bool,
 	splitTxn bool,
 	enableOldValue bool,
 ) *sinkWorker {
@@ -54,6 +56,7 @@ func newSinkWorker(
 		sourceManager:  sourceManager,
 		memQuota:       quota,
 		eventCache:     eventCache,
+		redoEnabled:    redoEnabled,
 		splitTxn:       splitTxn,
 		enableOldValue: enableOldValue,
 
@@ -86,7 +89,7 @@ func (w *sinkWorker) handleTask(ctx context.Context, task *sinkTask) (err error)
 	lowerBound := task.lowerBound
 	upperBound := task.getUpperBound(task.tableSink)
 
-	if w.eventCache != nil {
+	if w.redoEnabled && w.eventCache != nil {
 		newLowerBound, newUpperBound, err := w.fetchFromCache(task, lowerBound, upperBound, &batchID)
 		if err != nil {
 			return errors.Trace(err)
@@ -242,7 +245,7 @@ func (w *sinkWorker) handleTask(ctx context.Context, task *sinkTask) (err error)
 	iter := w.sourceManager.FetchByTable(task.tableID, lowerBound, upperBound)
 	defer func() {
 		w.metricRedoEventCacheMiss.Add(float64(allEventSize))
-		if w.eventCache == nil {
+		if !w.redoEnabled {
 			eventCount := rangeEventCount{pos: lastPos, events: allEventCount}
 			task.tableSink.updateRangeEventCounts(eventCount)
 		}
@@ -292,7 +295,7 @@ func (w *sinkWorker) handleTask(ctx context.Context, task *sinkTask) (err error)
 
 		// If redo log is enabled, we do not need to update this value.
 		// Because it already has been updated in the redo log worker.
-		if w.eventCache == nil {
+		if !w.redoEnabled {
 			task.tableSink.updateReceivedSorterCommitTs(e.CRTs)
 		}
 
