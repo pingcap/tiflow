@@ -42,8 +42,7 @@ const (
 	LightningRegionDistributionChecking = "region_distribution"
 	LightningDownstreamVersionChecking  = "downstream_version"
 	LightningFreeSpaceChecking          = "free_space"
-	LightningSortingSpaceChecking       = "enough_sorting_space"
-	LightningCDCPiTRChecking            = "cdc_pitr"
+	LightningMutexFeatureChecking       = "check_mutex_features"
 )
 
 // AllCheckingItems contains all checking items.
@@ -68,8 +67,7 @@ var AllCheckingItems = map[string]string{
 	LightningRegionDistributionChecking: "physical import mode region distribution checking item",
 	LightningDownstreamVersionChecking:  "physical import mode downstream TiDB/PD/TiKV version checking item",
 	LightningFreeSpaceChecking:          "downstream free space checking item",
-	LightningSortingSpaceChecking:       "enough disk space for physical import mode sorting data checking item",
-	LightningCDCPiTRChecking:            "physical import mode downstream CDC/PiTR checking item",
+	LightningMutexFeatureChecking:       "physical import mode downstream incompatible feature checking item",
 }
 
 // LightningPrechecks returns all checking items for lightning.
@@ -78,8 +76,7 @@ var LightningPrechecks = []string{
 	LightningRegionDistributionChecking,
 	LightningDownstreamVersionChecking,
 	LightningFreeSpaceChecking,
-	LightningSortingSpaceChecking,
-	LightningCDCPiTRChecking,
+	LightningMutexFeatureChecking,
 }
 
 // MaxSourceIDLength is the max length for dm-worker source id.

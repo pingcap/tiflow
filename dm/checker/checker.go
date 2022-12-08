@@ -476,14 +476,7 @@ func (c *Checker) Init(ctx context.Context) (err error) {
 			}
 			c.checkList = append(c.checkList, checker.NewLightningClusterVersionChecker(lChecker))
 		}
-		if _, ok := c.checkingItems[config.LightningSortingSpaceChecking]; ok {
-			lChecker, err := builder.BuildPrecheckItem(restore.CheckLocalTempKVDir)
-			if err != nil {
-				return err
-			}
-			c.checkList = append(c.checkList, checker.NewLightningSortingSpaceChecker(lChecker))
-		}
-		if _, ok := c.checkingItems[config.LightningCDCPiTRChecking]; ok {
+		if _, ok := c.checkingItems[config.LightningMutexFeatureChecking]; ok {
 			lChecker, err := builder.BuildPrecheckItem(restore.CheckTargetUsingCDCPITR)
 			if err != nil {
 				return err

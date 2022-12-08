@@ -43,8 +43,7 @@ function run() {
 	run_dm_ctl $WORK_DIR "127.0.0.1:$MASTER_PORT" \
 		"check-task $cur/conf/dm-task.yaml" \
 		"Downstream doesn't have enough space" 1 \
-		"but we need 4EiB" 1 \
-		"local disk space may not enough to finish import, estimate sorted data size is 4EiB" 1
+		"but we need 4EiB" 1
 
 	export GO_FAILPOINTS=''
 	kill_dm_master

@@ -16,7 +16,6 @@ package checker
 import (
 	"context"
 	"fmt"
-	"strings"
 
 	"github.com/docker/go-units"
 	"github.com/pingcap/tidb/br/pkg/lightning/restore"
@@ -212,38 +211,6 @@ type LightningSortingSpaceChecker struct {
 	inner restore.PrecheckItem
 }
 
-// NewLightningSortingSpaceChecker creates a new LightningSortingSpaceChecker.
-func NewLightningSortingSpaceChecker(lightningChecker restore.PrecheckItem) RealChecker {
-	return &LightningSortingSpaceChecker{inner: lightningChecker}
-}
-
-// Name implements the RealChecker interface.
-func (c *LightningSortingSpaceChecker) Name() string {
-	return "lightning_enough_sorting_space"
-}
-
-// Check implements the RealChecker interface.
-func (c *LightningSortingSpaceChecker) Check(ctx context.Context) *Result {
-	result := &Result{
-		Name:  c.Name(),
-		Desc:  "check whether the free space of sorting-dir-physical is enough for physical import mode",
-		State: StateFailure,
-	}
-	convertLightningPrecheck(
-		ctx,
-		result,
-		c.inner,
-		StateWarning,
-		`you can change sorting-dir-physical to another mounting disk or set disk-quota-physical`,
-	)
-	// don't expose lightning's config name in message
-	if len(result.Errors) > 0 {
-		result.Errors[0].ShortErr = strings.ReplaceAll(result.Errors[0].ShortErr, "tikv-importer.disk-quota", "disk-quota-physical")
-		result.Errors[0].ShortErr = strings.ReplaceAll(result.Errors[0].ShortErr, "mydumper.sorted-kv-dir", "sorting-dir-physical")
-	}
-	return result
-}
-
 // LightningCDCPiTRChecker checks whether the cluster has running CDC PiTR tasks.
 type LightningCDCPiTRChecker struct {
 	inner restore.PrecheckItem
@@ -262,7 +229,7 @@ func NewLightningCDCPiTRChecker(lightningChecker restore.PrecheckItem) RealCheck
 
 // Name implements the RealChecker interface.
 func (c *LightningCDCPiTRChecker) Name() string {
-	return "lightning_downstream_cdc_pitr"
+	return "lightning_downstream_mutex_features"
 }
 
 // Check implements the RealChecker interface.
