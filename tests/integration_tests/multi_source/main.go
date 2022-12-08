@@ -283,13 +283,13 @@ func addDropColumnDDL(ctx context.Context, db *sql.DB) {
 }
 
 // addDropColumnDDL2 tests the following scenario:
-// 1. Create a table, executing DML of this table in background
-// 2. alter table add column v1 varchar(20) default "xxx" not null
-// 3. Some rows could have no data for column v1, however when we decode them,
-//    we could use the new table schema (which has the column of v1, caused by
-//    online DDL). Since the column data doesn't exist, the tidb library will
-//    fill in a default value, which is a string type. That's why we can get
-//    either []byte or a string of a column.Value
+//  1. Create a table, executing DML of this table in background
+//  2. alter table add column v1 varchar(20) default "xxx" not null
+//  3. Some rows could have no data for column v1, however when we decode them,
+//     we could use the new table schema (which has the column of v1, caused by
+//     online DDL). Since the column data doesn't exist, the tidb library will
+//     fill in a default value, which is a string type. That's why we can get
+//     either []byte or a string of a column.Value
 func addDropColumnDDL2(ctx context.Context, db *sql.DB) {
 	testName := getFunctionName(addDropColumnDDL2)
 	mustCreateTable(db, testName)

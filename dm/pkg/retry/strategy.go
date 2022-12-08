@@ -60,7 +60,8 @@ func NewParams(retryCount int, firstRetryDuration time.Duration, backoffStrategy
 }
 
 // OperateFunc the function we can retry
-//   return: (result of operation, error of operation)
+//
+//	return: (result of operation, error of operation)
 type OperateFunc func(*tcontext.Context) (interface{}, error)
 
 // Strategy define different kind of retry strategy.
