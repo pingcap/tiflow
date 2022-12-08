@@ -42,7 +42,7 @@ const (
 	LightningRegionDistributionChecking = "region_distribution"
 	LightningDownstreamVersionChecking  = "downstream_version"
 	LightningFreeSpaceChecking          = "free_space"
-	LightningMutexFeatureChecking       = "check_mutex_features"
+	LightningMutexFeatureChecking       = "downstream_mutex_features"
 )
 
 // AllCheckingItems contains all checking items.
