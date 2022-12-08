@@ -1041,7 +1041,9 @@ func (s *mysqlSink) execDMLs(ctx context.Context, txns []*model.SingleTableTxn, 
 		time.Sleep(time.Second * 2)
 		failpoint.Return(errors.Trace(dmysql.ErrInvalidConn))
 	})
-	s.statistics.ObserveRows(txns...)
+	for _, txn := range txns {
+		s.statistics.ObserveRows(txn.Rows...)
+	}
 	dmls := s.prepareDMLs(txns, replicaID, bucket)
 	log.Debug("prepare DMLs", zap.Any("txns", txns), zap.Strings("sqls", dmls.sqls), zap.Any("values", dmls.values))
 	if err := s.execDMLWithMaxRetries(ctx, dmls, bucket); err != nil {
