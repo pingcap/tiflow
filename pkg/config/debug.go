@@ -22,7 +22,7 @@ import (
 type DebugConfig struct {
 	TableActor *TableActorConfig `toml:"table-actor" json:"table-actor"`
 
-	// EnablePullBasedSink enables pull-based sink, true by default.
+	// EnablePullBasedSink enables pull-based sink, false by default.
 	//
 	// NOTE: currently it can only be enabled with EnableDBSorter, because unified
 	// sorter hasn't been transformed into the new interface.

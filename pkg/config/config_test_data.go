@@ -106,7 +106,6 @@ const (
     "table-actor": {
       "event-batch-size": 32
     },
-    "enable-pull-based-sink": true,
     "enable-db-sorter": true,
     "db": {
       "count": 8,
