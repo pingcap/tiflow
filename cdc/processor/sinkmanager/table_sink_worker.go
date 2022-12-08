@@ -83,13 +83,19 @@ func (w *sinkWorker) handleTask(ctx context.Context, task *sinkTask) (err error)
 	// First time to run the task, we have initialized memory quota for the table.
 	availableMem := requestMemSize
 	usedMem := uint64(0)
-	batchID := uint64(1)
 
-	events := make([]*model.RowChangedEvent, 0, 1024)
 	lowerBound := task.lowerBound
 	upperBound := task.getUpperBound(task.tableSink)
+	if upperBound.CommitTs != upperBound.StartTs+1 {
+		log.Panic("sink task upperbound must be a ResolvedTs",
+			zap.String("namespace", w.changefeedID.Namespace),
+			zap.String("changefeed", w.changefeedID.ID),
+			zap.Int64("tableID", task.tableID),
+			zap.Any("upperBound", upperBound))
+	}
 
 	if w.redoEnabled && w.eventCache != nil {
+		batchID := uint64(1)
 		newLowerBound, newUpperBound, err := w.fetchFromCache(task, lowerBound, upperBound, &batchID)
 		if err != nil {
 			return errors.Trace(err)
@@ -127,35 +133,30 @@ func (w *sinkWorker) handleTask(ctx context.Context, task *sinkTask) (err error)
 	// We need to use it to update the lower bound of the table sink.
 	var lastPos engine.Position
 
+	events := make([]*model.RowChangedEvent, 0, 1024)
 	committedTxnSize := uint64(0)
 	pendingTxnSize := uint64(0)
 	lastTxnCommitTs := uint64(0)
 	currTxnCommitTs := uint64(0)
-	lastTxnOffset := -1 // end offset of the last transaction in events.
+	batchID := uint64(1)
 
 	needEmitAndAdvance := func() bool {
 		return (w.splitTxn && committedTxnSize+pendingTxnSize >= maxUpdateIntervalSize) ||
 			(!w.splitTxn && committedTxnSize >= maxUpdateIntervalSize)
 	}
 	doEmitAndAdvance := func(allFinished bool) (err error) {
+		if len(events) > 0 {
+			task.tableSink.appendRowChangedEvents(events...)
+			events = events[:0]
+			if cap(events) > 1024 {
+				events = make([]*model.RowChangedEvent, 0, 1024)
+			}
+		}
 		if w.splitTxn {
-			if len(events) > 0 {
-				task.tableSink.appendRowChangedEvents(events...)
-				events = events[:0]
-				if cap(events) > 1024 {
-					events = make([]*model.RowChangedEvent, 0, 1024)
-				}
-			}
 			if currTxnCommitTs == 0 {
-				if !lastPos.Valid() {
-					return
-				}
-				// Generally includes 2 cases:
-				// 1. nothing is fetched from the iterator;
-				// 2. some filtered events are fetched.
-				currTxnCommitTs = lastPos.CommitTs
+				return
 			}
-			if allFinished && lastPos.CommitTs == lastPos.StartTs+1 {
+			if allFinished {
 				err = w.advanceTableSink(task, currTxnCommitTs, committedTxnSize+pendingTxnSize)
 			} else {
 				err = w.advanceTableSinkWithBatchID(task, currTxnCommitTs, committedTxnSize+pendingTxnSize, batchID)
@@ -164,25 +165,11 @@ func (w *sinkWorker) handleTask(ctx context.Context, task *sinkTask) (err error)
 			committedTxnSize = 0
 			pendingTxnSize = 0
 		} else {
-			if lastTxnOffset >= 0 {
-				task.tableSink.appendRowChangedEvents(events[0 : lastTxnOffset+1]...)
-				events = events[lastTxnOffset+1:]
-			}
 			if lastTxnCommitTs == 0 {
-				if !lastPos.Valid() {
-					return
-				}
-				// Check lastPos to know whether there could be more transactions
-				// with same CommitTs as this one.
-				if lastPos.StartTs+1 == lastPos.CommitTs {
-					lastTxnCommitTs = lastPos.CommitTs
-				} else {
-					lastTxnCommitTs = lastPos.CommitTs - 1
-				}
+				return
 			}
 			err = w.advanceTableSink(task, lastTxnCommitTs, committedTxnSize)
 			committedTxnSize = 0
-			lastTxnOffset = -1
 		}
 		return
 	}
@@ -268,6 +255,14 @@ func (w *sinkWorker) handleTask(ctx context.Context, task *sinkTask) (err error)
 			zap.Uint64("commitTs", lastPos.CommitTs),
 			zap.Uint64("startTs", lastPos.StartTs),
 		)
+		if committedTxnSize+pendingTxnSize > 0 {
+			w.memQuota.refund(committedTxnSize + pendingTxnSize)
+			log.Debug("MemoryQuotaTracing: refund memory for table sink task",
+				zap.String("namespace", w.changefeedID.Namespace),
+				zap.String("changefeed", w.changefeedID.ID),
+				zap.Int64("tableID", task.tableID),
+				zap.Uint64("memory", committedTxnSize+pendingTxnSize))
+		}
 		task.callback(lastPos)
 	}()
 
@@ -276,8 +271,14 @@ func (w *sinkWorker) handleTask(ctx context.Context, task *sinkTask) (err error)
 		if err != nil {
 			return errors.Trace(err)
 		}
-		// There is no more data. It means that we finish this time scan task.
+		// There is no more data. It means that we finish this scan task.
 		if e == nil {
+			if currTxnCommitTs == 0 {
+				currTxnCommitTs = upperBound.CommitTs
+			}
+			if lastTxnCommitTs == 0 {
+				lastTxnCommitTs = upperBound.CommitTs
+			}
 			if !lastPos.Valid() {
 				lastPos = upperBound
 			}
@@ -286,17 +287,25 @@ func (w *sinkWorker) handleTask(ctx context.Context, task *sinkTask) (err error)
 			}
 			return nil
 		}
-
-		task.tableSink.receivedEventCount.Add(1)
 		allEventCount += 1
-		if pos.Valid() {
-			lastPos = pos
-		}
-
+		task.tableSink.receivedEventCount.Add(1)
 		// If redo log is enabled, we do not need to update this value.
 		// Because it already has been updated in the redo log worker.
 		if !w.redoEnabled {
 			task.tableSink.updateReceivedSorterCommitTs(e.CRTs)
+		}
+
+		if currTxnCommitTs != e.CRTs {
+			if currTxnCommitTs != 0 {
+				lastTxnCommitTs = currTxnCommitTs
+				committedTxnSize += pendingTxnSize
+				pendingTxnSize = 0
+				batchID = 1
+			}
+			currTxnCommitTs = e.CRTs
+		}
+		if pos.Valid() {
+			lastPos = pos
 		}
 
 		if e.Row == nil {
@@ -304,6 +313,9 @@ func (w *sinkWorker) handleTask(ctx context.Context, task *sinkTask) (err error)
 			// Maybe we just ignore the last event. So we need to record the last position.
 			continue
 		}
+		// For all rows, we add table replicate ts, so mysql sink can
+		// determine when to turn off safe-mode.
+		e.Row.ReplicatingTs = task.tableSink.replicateTs
 
 		x, size, err := convertRowChangedEvents(w.changefeedID, task.tableID, w.enableOldValue, e)
 		if err != nil {
@@ -311,21 +323,11 @@ func (w *sinkWorker) handleTask(ctx context.Context, task *sinkTask) (err error)
 		}
 		allEventSize += size
 		usedMem += size
-		if len(x) > 0 {
-			currTxnCommitTs = x[0].CommitTs
-			if len(events) > 0 && events[len(events)-1].CommitTs != currTxnCommitTs {
-				lastTxnCommitTs = events[len(events)-1].CommitTs
-				committedTxnSize += pendingTxnSize
-				pendingTxnSize = size
-				lastTxnOffset = len(events) - 1
-				batchID = 1
-			} else {
-				pendingTxnSize += size
-			}
-			events = append(events, x...)
-			if err := maybeEmitAndAdvance(false, pos.Valid()); err != nil {
-				return errors.Trace(err)
-			}
+
+		pendingTxnSize += size
+		events = append(events, x...)
+		if err := maybeEmitAndAdvance(false, pos.Valid()); err != nil {
+			return errors.Trace(err)
 		}
 	}
 	return doEmitAndAdvance(false)
