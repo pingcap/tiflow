@@ -334,3 +334,8 @@ func (jm *JobMaster) CoordinateDDL(ctx context.Context, req *dmproto.CoordinateD
 	}
 	return resp
 }
+
+// Redirect is the function declaration for message agent to receive redirect ddl response.
+func (jm *JobMaster) RedirectDDL(ctx context.Context) *dmproto.CommonTaskResponse {
+	return nil
+}

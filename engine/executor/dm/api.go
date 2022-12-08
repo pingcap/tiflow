@@ -23,6 +23,7 @@ import (
 	"github.com/pingcap/tiflow/engine/framework"
 	dmproto "github.com/pingcap/tiflow/engine/pkg/dm/proto"
 	"github.com/pingcap/tiflow/pkg/errors"
+	"go.uber.org/zap"
 )
 
 // QueryStatus implements the api of query status request.
@@ -100,7 +101,15 @@ func (w *dmWorker) BinlogSchemaTask(ctx context.Context, req *dmproto.BinlogSche
 	return &dmproto.CommonTaskResponse{Msg: msg}
 }
 
+// CoordinateDDL is the function declaration for message agent to receive coordinate ddl response.
+func (w *dmWorker) CoordinateDDL(ctx context.Context) *dmproto.CoordinateDDLResponse {
+	return nil
+}
+
+// RedirectDDL implements the api of redirect ddl request.
+// RedirectDDL is called by refection of commandHandler.
 func (w *dmWorker) RedirectDDL(ctx context.Context, req *dmproto.RedirectDDLRequest) *dmproto.CommonTaskResponse {
+	w.Logger().Info("receive a redirect DDL request", zap.Any("req", req))
 	err := w.unitHolder.RedirectDDL(ctx, req)
 	if err != nil {
 		return &dmproto.CommonTaskResponse{ErrorMsg: err.Error()}

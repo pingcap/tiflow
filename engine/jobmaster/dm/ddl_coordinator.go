@@ -218,6 +218,8 @@ func (c *DDLCoordinator) Coordinate(ctx context.Context, item *metadata.DDLItem)
 	defer c.pendings.Done()
 	c.mu.Unlock()
 
+	c.logger.Info("receive a ddl item", zap.Any("item", item))
+
 	jobCfg, err := c.jobStore.GetJobCfg(ctx)
 	if err != nil {
 		return nil, optimism.ConflictError, err
@@ -283,7 +285,7 @@ func (c *DDLCoordinator) loadOrCreateShardGroup(ctx context.Context, targetTable
 		return g, nil
 	}
 
-	newGroup, err := newShardGroup(ctx, c.jobID, jobCfg, targetTable, c.tables[targetTable], c.kvClient, c.tableAgent, c.messageAgent)
+	newGroup, err := newShardGroup(ctx, c.jobID, jobCfg, targetTable, c.tables[targetTable], c.kvClient, c.tableAgent, c.messageAgent, c.logger)
 	if err != nil {
 		return nil, err
 	}
@@ -313,11 +315,12 @@ type shardGroup struct {
 	cfg                 *config.JobCfg
 	deleted             bool
 	messageAgent        message.MessageAgent
+	logger              *zap.Logger
 }
 
 func newShardGroup(ctx context.Context, id frameModel.MasterID, cfg *config.JobCfg,
 	targetTable metadata.TargetTable, sourceTables map[metadata.SourceTable]struct{},
-	kvClient metaModel.KVClient, tableAgent TableAgent, messageAgent message.MessageAgent,
+	kvClient metaModel.KVClient, tableAgent TableAgent, messageAgent message.MessageAgent, logger *zap.Logger,
 ) (*shardGroup, error) {
 	g := &shardGroup{
 		tableAgent:          tableAgent,
@@ -328,6 +331,7 @@ func newShardGroup(ctx context.Context, id frameModel.MasterID, cfg *config.JobC
 		id:                  id,
 		cfg:                 cfg,
 		messageAgent:        messageAgent,
+		logger:              logger,
 	}
 	for sourceTable := range sourceTables {
 		stmt, err := g.tableAgent.FetchTableStmt(ctx, id, cfg, sourceTable)
@@ -383,7 +387,7 @@ func (g *shardGroup) handle(ctx context.Context, item *metadata.DDLItem) ([]stri
 func (g *shardGroup) handleCreateTable(item *metadata.DDLItem) {
 	stmt, ok := g.normalTables[item.SourceTable]
 	if ok && stmt != "" {
-		log.L().Warn("create table already exists", zap.Any("source table", item.SourceTable))
+		g.logger.Warn("create table already exists", zap.Any("source table", item.SourceTable))
 	}
 
 	g.normalTables[item.SourceTable] = item.Tables[0]
@@ -395,7 +399,7 @@ func (g *shardGroup) handleCreateTable(item *metadata.DDLItem) {
 func (g *shardGroup) handleDropTable(ctx context.Context, item *metadata.DDLItem) bool {
 	_, ok := g.normalTables[item.SourceTable]
 	if !ok {
-		log.L().Warn("drop table does not exist", zap.Any("source table", item.SourceTable))
+		g.logger.Warn("drop table does not exist", zap.Any("source table", item.SourceTable))
 		return false
 	}
 
@@ -414,9 +418,16 @@ func (g *shardGroup) handleDropTable(ctx context.Context, item *metadata.DDLItem
 func (g *shardGroup) handleDDLs(ctx context.Context, item *metadata.DDLItem) (newDDLs []string, conflictStage optimism.ConflictStage, err error) {
 	stmt, ok := g.normalTables[item.SourceTable]
 	if !ok || stmt == "" {
-		log.L().Warn("table does not exist", zap.Any("source table", item.SourceTable))
+		g.logger.Warn("table does not exist", zap.Any("source table", item.SourceTable))
 		g.normalTables[item.SourceTable] = item.Tables[0]
 	}
+	defer func() {
+		// only update table info if no error
+		if err != nil {
+			g.normalTables[item.SourceTable] = item.Tables[0]
+			delete(g.conflictTables, item.SourceTable)
+		}
+	}()
 
 	dropCols := make([]string, 0, len(item.DDLs))
 
@@ -467,7 +478,7 @@ func (g *shardGroup) handleDDL(ctx context.Context, sourceTable metadata.SourceT
 		if cmp, err := postTable.Compare(currTable); err == nil && cmp == 0 {
 			idempotent = true
 		}
-		log.L().Warn("prev-table not equal table saved in master", zap.Stringer("master-table", currTable), zap.Stringer("prev-table", prevTable))
+		g.logger.Warn("prev-table not equal table saved in master", zap.Stringer("master-table", currTable), zap.Stringer("prev-table", prevTable))
 		g.normalTables[sourceTable] = prevTableStmt
 	}
 
@@ -483,9 +494,9 @@ func (g *shardGroup) handleDDL(ctx context.Context, sourceTable metadata.SourceT
 			// if a normal DDL let all final tables become no conflict
 			// return ConflictNone
 			if len(g.conflictTables) > 0 && g.noConflictForTables(final) {
-				log.L().Info("all conflict resolved for the DDL", zap.Any("source table", sourceTable), zap.String("prevTable", prevTableStmt), zap.String("postTable", postTableStmt))
+				g.logger.Info("all conflict resolved for the DDL", zap.Any("source table", sourceTable), zap.String("prevTable", prevTableStmt), zap.String("postTable", postTableStmt))
 				if err := g.redirectDDLs(ctx, sourceTable); err != nil {
-					log.L().Error("redirect DDLs failed", zap.Error(err))
+					g.logger.Error("redirect DDLs failed", zap.Error(err))
 					return false, optimism.ConflictNeedRestart
 				}
 				g.resolveTables()
@@ -504,10 +515,10 @@ func (g *shardGroup) handleDDL(ctx context.Context, sourceTable metadata.SourceT
 		}
 	}
 
-	log.L().Info("found conflict for DDL", zap.Any("source table", sourceTable), zap.String("prevTable", prevTableStmt), zap.String("postTable", postTableStmt), log.ShortError(tableErr))
+	g.logger.Info("found conflict for DDL", zap.Any("source table", sourceTable), zap.String("prevTable", prevTableStmt), zap.String("postTable", postTableStmt), log.ShortError(tableErr))
 
 	if idempotent || g.noConflictWithOneNormalTable(sourceTable, prevTable, postTable) {
-		log.L().Info("directly return conflict DDL", zap.Bool("idempotent", idempotent), zap.Any("source", sourceTable), zap.Stringer("prevTable", prevTable), zap.Stringer("postTable", postTable))
+		g.logger.Info("directly return conflict DDL", zap.Bool("idempotent", idempotent), zap.Any("source", sourceTable), zap.Stringer("prevTable", prevTable), zap.Stringer("postTable", postTable))
 		g.normalTables[sourceTable] = postTableStmt
 		return true, optimism.ConflictNone
 	}
@@ -519,20 +530,20 @@ func (g *shardGroup) handleDDL(ctx context.Context, sourceTable metadata.SourceT
 	// if any conflict happened between conflict DDLs, return error
 	// e.g. tb1: "ALTER TABLE RENAME a TO b", tb2: "ALTER TABLE RENAME c TO d"
 	if !g.noConflictForTables(conflict) {
-		log.L().Error("conflict happened with other conflict tables", zap.Any("source table", sourceTable), zap.String("prevTable", prevTableStmt), zap.String("postTable", postTableStmt))
+		g.logger.Error("conflict happened with other conflict tables", zap.Any("source table", sourceTable), zap.String("prevTable", prevTableStmt), zap.String("postTable", postTableStmt))
 		return false, optimism.ConflictDetected
 	}
 
 	if g.noConflictForTables(final) {
-		log.L().Info("all conflict resolved for the DDL", zap.Any("source table", sourceTable), zap.String("prevTable", prevTableStmt), zap.String("postTable", postTableStmt))
+		g.logger.Info("all conflict resolved for the DDL", zap.Any("source table", sourceTable), zap.String("prevTable", prevTableStmt), zap.String("postTable", postTableStmt))
 		if err := g.redirectDDLs(ctx, sourceTable); err != nil {
-			log.L().Error("redirect DDLs failed", zap.Error(err))
+			g.logger.Error("redirect DDLs failed", zap.Error(err))
 			return false, optimism.ConflictNeedRestart
 		}
 		g.resolveTables()
 		return true, optimism.ConflictNone
 	}
-	log.L().Info("conflict hasn't been resolved", zap.Any("source table", sourceTable), zap.Stringer("prevTable", prevTable), zap.Stringer("postTable", postTable))
+	g.logger.Info("conflict hasn't been resolved", zap.Any("source table", sourceTable), zap.Stringer("prevTable", prevTable), zap.Stringer("postTable", postTable))
 	return false, optimism.ConflictSkipWaitRedirect
 }
 
@@ -836,8 +847,9 @@ func (g *shardGroup) redirectDDLs(ctx context.Context, sourceTable metadata.Sour
 			// no redirect for caller table
 			continue
 		}
+		g.logger.Info("put redirect operation for table", zap.Any("source_table", tb))
 		req := &dmproto.RedirectDDLRequest{
-			SourceTable:   sourceTable,
+			SourceTable:   tb,
 			TargetTable:   g.targetTable,
 			ConflictStage: optimism.ConflictResolved,
 		}
@@ -850,7 +862,6 @@ func (g *shardGroup) redirectDDLs(ctx context.Context, sourceTable metadata.Sour
 		if len(errMsg) != 0 {
 			return errors.New(errMsg)
 		}
-		log.L().Info("put redirect operation for table", zap.Any("source_table", tb))
 	}
 	return nil
 }

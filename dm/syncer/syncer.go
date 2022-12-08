@@ -258,7 +258,7 @@ func NewSyncer(cfg *config.SubTaskConfig, etcdClient *clientv3.Client, relay rel
 
 	syncer := &Syncer{
 		pessimist: shardddl.NewPessimist(&logger, etcdClient, cfg.Name, cfg.SourceID),
-		optimist:  shardddl.NewOptimist(&logger, etcdClient, nil, cfg.Name, cfg.SourceID),
+		optimist:  shardddl.NewOptimist(&logger, etcdClient, cfg.MessageAgent, cfg.Name, cfg.SourceID, cfg.Name),
 	}
 	syncer.cfg = cfg
 	syncer.tctx = tcontext.Background().WithLogger(logger)

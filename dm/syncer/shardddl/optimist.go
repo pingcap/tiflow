@@ -75,9 +75,9 @@ type OptimistDM struct {
 }
 
 // NewOptimist creates a new Optimist instance.
-func NewOptimist(pLogger *log.Logger, cli *clientv3.Client, messageAgent message.MessageAgent, task, source string) Optimist {
+func NewOptimist(pLogger *log.Logger, cli *clientv3.Client, messageAgent message.MessageAgent, task, source, jobID string) Optimist {
 	if messageAgent != nil {
-		return NewOptimistEngine(pLogger, messageAgent, task, source)
+		return NewOptimistEngine(pLogger, messageAgent, task, source, jobID)
 	}
 	return NewOptimistDM(pLogger, cli, task, source)
 }
@@ -353,22 +353,24 @@ type OptimistEngine struct {
 
 	task         string
 	source       string
-	messageAgent message.MessageAgent
 	jobID        string
+	messageAgent message.MessageAgent
 
 	// the shard DDL info which is pending to handle.
 	pendingInfo *optimism.Info
 	// the shard DDL lock operation which is pending to handle.
 	pendingOp          *optimism.Operation
 	pendingRedirectOps map[string]*optimism.Operation
+	waitingRedirectOps map[metadata.SourceTable]struct{}
 }
 
-func NewOptimistEngine(pLogger *log.Logger, messageAgent message.MessageAgent, task, source string) *OptimistEngine {
+func NewOptimistEngine(pLogger *log.Logger, messageAgent message.MessageAgent, task, source, jobID string) *OptimistEngine {
 	return &OptimistEngine{
 		logger:       pLogger.WithFields(zap.String("component", "shard DDL optimist")),
 		messageAgent: messageAgent,
 		task:         task,
 		source:       source,
+		jobID:        jobID,
 	}
 }
 
@@ -387,6 +389,7 @@ func (o *OptimistEngine) Reset() {
 	o.pendingInfo = nil
 	o.pendingOp = nil
 	o.pendingRedirectOps = make(map[string]*optimism.Operation)
+	o.waitingRedirectOps = make(map[metadata.SourceTable]struct{})
 }
 
 func (o *OptimistEngine) ConstructInfo(upSchema, upTable, downSchema, downTable string,
@@ -506,14 +509,19 @@ func (o *OptimistEngine) PendingOperation() *optimism.Operation {
 	return &op
 }
 
-func (o *OptimistEngine) GetRedirectOperation(ctx context.Context, info optimism.Info, rev int64) {}
+func (o *OptimistEngine) GetRedirectOperation(ctx context.Context, info optimism.Info, rev int64) {
+	o.mu.Lock()
+	defer o.mu.Unlock()
+	o.logger.Info("waiting redirect operation", zap.Stringer("info", info))
+	o.waitingRedirectOps[metadata.SourceTable{Source: info.Source, Schema: info.UpSchema, Table: info.UpTable}] = struct{}{}
+}
 
 func (o *OptimistEngine) PendingRedirectOperation() (*optimism.Operation, string) {
 	o.mu.RLock()
 	defer o.mu.RUnlock()
 
-	for _, op := range o.pendingRedirectOps {
-		return op, op.ID
+	for targetTableID, op := range o.pendingRedirectOps {
+		return op, targetTableID
 	}
 	return nil, ""
 }
@@ -526,11 +534,17 @@ func (o *OptimistEngine) DoneRedirectOperation(targetTableID string) {
 
 func (o *OptimistEngine) RedirectDDL(req *dmproto.RedirectDDLRequest) error {
 	switch req.ConflictStage {
-	case optimism.ConflictNone, optimism.ConflictDetected:
+	case optimism.ConflictNone, optimism.ConflictResolved:
 	default:
 		return errors.Errorf("invalid conflict stage %s", req.ConflictStage)
 	}
 	o.mu.Lock()
+	defer o.mu.Unlock()
+	if _, ok := o.waitingRedirectOps[req.SourceTable]; !ok {
+		o.logger.Info("ignore redirect ddl request", zap.Any("source_table", req.SourceTable))
+		return nil
+	}
+	delete(o.waitingRedirectOps, req.SourceTable)
 	o.pendingRedirectOps[utils.GenTableID(&filter.Table{Schema: req.TargetTable.Schema, Name: req.TargetTable.Table})] = &optimism.Operation{
 		ID:            utils.GenDDLLockID(o.task, req.TargetTable.Schema, req.TargetTable.Table),
 		Task:          o.task,
@@ -539,6 +553,5 @@ func (o *OptimistEngine) RedirectDDL(req *dmproto.RedirectDDLRequest) error {
 		UpTable:       req.SourceTable.Table,
 		ConflictStage: req.ConflictStage,
 	}
-	o.mu.Unlock()
 	return nil
 }
