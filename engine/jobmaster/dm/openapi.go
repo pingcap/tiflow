@@ -64,6 +64,8 @@ func (jm *JobMaster) initOpenAPI(router *gin.RouterGroup) {
 	router.GET("/status", wrapper.DMAPIGetJobStatus)
 
 	router.PUT("/status", wrapper.DMAPIOperateJob)
+
+	router.GET("/ddl_locks", wrapper.DMAPIGetDDLLocks)
 }
 
 // DMAPIGetJobStatus implements the api of get job status.
@@ -335,5 +337,11 @@ func (jm *JobMaster) DMAPISetSchema(c *gin.Context, taskName string) {
 		FromTarget: fromTarget,
 	}
 	resp := jm.BinlogSchema(c.Request.Context(), r)
+	c.IndentedJSON(http.StatusOK, resp)
+}
+
+// DMAPIGetDDLLocks implements the api of get ddl locks.
+func (jm *JobMaster) DMAPIGetDDLLocks(c *gin.Context) {
+	resp := jm.ShowDDLLocks(c.Request.Context())
 	c.IndentedJSON(http.StatusOK, resp)
 }

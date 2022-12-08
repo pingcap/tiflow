@@ -251,6 +251,25 @@ paths:
             "application/json":
               schema:
                 $ref: "#/components/schemas/ErrorWithMessage"
+  /ddl_locks:
+    get:
+      tags:
+        - job
+      summary: "get sharding ddl locks"
+      operationId: "DMAPIGetDDLLocks"
+      responses:
+        "200":
+          description: "success"
+          content:
+            "application/json":
+              schema:
+                type: json
+        "500":
+          description: "failed"
+          content:
+            "application/json":
+              schema:
+                $ref: "#/components/schemas/ErrorWithMessage"
 
 components:
   schemas:
