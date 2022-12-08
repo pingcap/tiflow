@@ -69,11 +69,11 @@ func NewAgent(
 	etcdClient etcd.CDCEtcdClient,
 	executor TableExecutor,
 	changefeedID model.ChangeFeedID,
+	cfg *config.SchedulerConfig,
 ) (Agent, error) {
 	return v3agent.NewAgent(
 		ctx, captureID, liveness, changefeedID,
-		messageServer, messageRouter, etcdClient, executor,
-	)
+		messageServer, messageRouter, etcdClient, executor, cfg)
 }
 
 // NewScheduler returns two-phase scheduler.
