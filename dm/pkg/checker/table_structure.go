@@ -231,7 +231,7 @@ func (c *TablesChecker) Check(ctx context.Context) *Result {
 		pool.Go(worker.handle)
 	}
 
-	dispatchTableItemWithDownstreamTable(c.tableMap, pool.PutJob)
+	dispatchTableItemWithDownstreamTable(c.tableMap, pool)
 
 	if err := pool.Wait(); err != nil {
 		markCheckError(r, err)
@@ -930,12 +930,12 @@ func dispatchTableItem(ctx context.Context, tableMap map[string][]filter.Table, 
 
 func dispatchTableItemWithDownstreamTable(
 	tableMaps map[string]map[filter.Table][]filter.Table,
-	putJobFn func(*checkItem) bool,
+	pool *WorkerPool[*checkItem, []*incompatibilityOption],
 ) {
 	for sourceID, tableMap := range tableMaps {
 		for downTable, upTables := range tableMap {
 			for _, upTable := range upTables {
-				ok := putJobFn(&checkItem{
+				ok := pool.PutJob(&checkItem{
 					upstreamTable:   upTable,
 					downstreamTable: downTable,
 					sourceID:        sourceID,
