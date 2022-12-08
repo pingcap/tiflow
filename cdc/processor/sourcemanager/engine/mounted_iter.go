@@ -50,7 +50,7 @@ func NewMountedEventIter(
 // Next returns the next mounted event.
 func (i *MountedEventIter) Next(ctx context.Context) (event *model.PolymorphicEvent, txnFinished Position, err error) {
 	defer func() {
-		if event != nil && event.Row.Table.Table == "customer" {
+		if event != nil && event.Row.Table.Table == "orders" {
 			log.Info("[AAA] sorter output event", zap.Any("event", event))
 		}
 	}()

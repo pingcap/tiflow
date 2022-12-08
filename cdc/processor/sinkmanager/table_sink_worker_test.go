@@ -1093,6 +1093,97 @@ func (suite *workerSuite) TestHandleTaskWithSplitTxnAndAdvanceTableIfNoWorkload(
 	wg.Wait()
 }
 
+func (suite *workerSuite) TestHandleTaskWithSplitTxnBug() {
+	changefeedID := model.DefaultChangeFeedID("1")
+	tableID := model.TableID(1)
+	ctx, cancel := context.WithCancel(context.Background())
+
+	// Only for three events.
+	// NOTICE: Do not forget the initial memory quota in the worker first time running.
+	eventSize := uint64(218 * 2)
+
+	events := []*model.PolymorphicEvent{
+		{
+			StartTs: 1,
+			CRTs:    2,
+			RawKV: &model.RawKVEntry{
+				OpType:  model.OpTypePut,
+				StartTs: 1,
+				CRTs:    2,
+			},
+			Row: genRowChangedEvent(1, 2, tableID),
+		},
+		{
+			StartTs: 2,
+			CRTs:    2,
+			RawKV: &model.RawKVEntry{
+				OpType:  model.OpTypePut,
+				StartTs: 2,
+				CRTs:    2,
+			},
+			Row: genRowChangedEvent(1, 2, tableID),
+		},
+		{
+			CRTs: 4,
+			RawKV: &model.RawKVEntry{
+				OpType: model.OpTypeResolved,
+				CRTs:   4,
+			},
+		},
+	}
+	w, e := createWorker(changefeedID, eventSize, true)
+	addEventsToSortEngine(suite.T(), events, e, tableID)
+
+	taskChan := make(chan *sinkTask)
+	var wg sync.WaitGroup
+	wg.Add(1)
+	go func() {
+		defer wg.Done()
+		err := w.handleTasks(ctx, taskChan)
+		require.ErrorIs(suite.T(), err, context.Canceled)
+	}()
+
+	wrapper, sink := createTableSinkWrapper(changefeedID, tableID)
+	lowerBoundPos := engine.Position{
+		StartTs:  0,
+		CommitTs: 1,
+	}
+	upperBoundGetter := func(_ *tableSinkWrapper) engine.Position {
+		return engine.Position{
+			StartTs:  1,
+			CommitTs: 2,
+		}
+	}
+	callback := func(lastWritePos engine.Position) {
+		require.Equal(suite.T(), engine.Position{
+			StartTs:  1,
+			CommitTs: 2,
+		}, lastWritePos)
+		require.Equal(suite.T(), engine.Position{
+			StartTs:  2,
+			CommitTs: 2,
+		}, lastWritePos.Next())
+	}
+	taskChan <- &sinkTask{
+		tableID:       tableID,
+		lowerBound:    lowerBoundPos,
+		getUpperBound: upperBoundGetter,
+		tableSink:     wrapper,
+		callback:      callback,
+		isCanceled:    func() bool { return false },
+	}
+	require.Eventually(suite.T(), func() bool {
+		return len(sink.GetEvents()) == 1
+	}, 5*time.Second, 10*time.Millisecond)
+	cancel()
+	wg.Wait()
+	receivedEvents := sink.GetEvents()
+	receivedEvents[0].Callback()
+	require.Len(suite.T(), sink.GetEvents(), 1, "No more events should be sent to sink")
+	require.Equal(suite.T(), uint64(2), wrapper.getCheckpointTs().ResolvedMark(),
+		"Only can advance resolved mark to 2")
+}
+
 func TestWorkerSuite(t *testing.T) {
 	suite.Run(t, new(workerSuite))
 }

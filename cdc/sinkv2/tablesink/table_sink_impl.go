@@ -75,7 +75,7 @@ func New[E eventsink.TableEvent](
 // AppendRowChangedEvents appends row changed or txn events to the table sink.
 func (e *EventTableSink[E]) AppendRowChangedEvents(rows ...*model.RowChangedEvent) {
 	for i := range rows {
-		if rows[i].Table.Table == "customer" {
+		if rows[i].Table.Table == "orders" {
 			log.Info("[AAA] table sink append event",
 				zap.String("namespace", e.changefeedID.Namespace),
 				zap.String("changefeed", e.changefeedID.ID),
