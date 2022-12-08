@@ -139,10 +139,10 @@ func (r *reader) outputBufferedResolvedEvents(buffer *outputBuffer) {
 // them later.
 //
 // It returns:
-//   * a bool to indicate whether it has read the last Next or not.
-//   * an uint64, if it is not 0, it means all resolved events before the ts
+//   - a bool to indicate whether it has read the last Next or not.
+//   - an uint64, if it is not 0, it means all resolved events before the ts
 //     are outputted.
-//   * an error if it occurs.
+//   - an error if it occurs.
 //
 // Note: outputBuffer must be empty.
 func (r *reader) outputIterEvents(

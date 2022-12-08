@@ -34,14 +34,15 @@ type DDLDMLResult struct {
 
 // GenCommonFileHeader generates a common binlog file header.
 // for MySQL:
-//   1. BinLogFileHeader, [ fe `bin` ]
-//   2. FormatDescriptionEvent
-//   3. PreviousGTIDsEvent, depends on genGTID
+//  1. BinLogFileHeader, [ fe `bin` ]
+//  2. FormatDescriptionEvent
+//  3. PreviousGTIDsEvent, depends on genGTID
+//
 // for MariaDB:
-//   1. BinLogFileHeader, [ fe `bin` ]
-//   2. FormatDescriptionEvent
-//   3. MariadbGTIDListEvent, depends on genGTID
-//   -. MariadbBinlogCheckPointEvent, not added yet
+//  1. BinLogFileHeader, [ fe `bin` ]
+//  2. FormatDescriptionEvent
+//  3. MariadbGTIDListEvent, depends on genGTID
+//     -. MariadbBinlogCheckPointEvent, not added yet
 func GenCommonFileHeader(flavor string, serverID uint32, gSet gtid.Set, genGTID bool, ts int64) ([]*replication.BinlogEvent, []byte, error) {
 	if ts == 0 {
 		ts = time.Now().Unix()

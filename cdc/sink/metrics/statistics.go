@@ -127,12 +127,14 @@ func (b *Statistics) AddRowsCount(count int) {
 }
 
 // ObserveRows record the size of all received `RowChangedEvent`
-func (b *Statistics) ObserveRows(rows ...*model.RowChangedEvent) {
-	for _, row := range rows {
-		// only track row with data size larger than `rowSizeLowBound` to reduce
-		// the overhead of calling `Observe` method.
-		if row.ApproximateDataSize >= rowSizeLowBound {
-			b.metricRowSizesHis.Observe(float64(row.ApproximateDataSize))
+func (b *Statistics) ObserveRows(txns ...*model.SingleTableTxn) {
+	for _, txn := range txns {
+		for _, row := range txn.Rows {
+			// only track row with data size larger than `rowSizeLowBound` to reduce
+			// the overhead of calling `Observe` method.
+			if row.ApproximateDataSize >= rowSizeLowBound {
+				b.metricRowSizesHis.Observe(float64(row.ApproximateDataSize))
+			}
 		}
 	}
 }

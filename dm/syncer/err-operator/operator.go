@@ -143,7 +143,9 @@ func (h *Holder) IsInject(startLocation binlog.Location) bool {
 
 // GetEvent return a replace binlog event
 // for example:
-//			startLocation		endLocation
+//
+//	startLocation		endLocation
+//
 // event 1		1000, 0			1010, 0
 // event 2		1010, 0			1020, 0	<--replace it with event a,b,c
 // replace event a	1010, 0			1010, 1

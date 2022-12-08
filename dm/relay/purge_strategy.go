@@ -54,8 +54,9 @@ func (s strategyType) String() string {
 
 // PurgeStrategy represents a relay log purge strategy
 // two purge behaviors
-//   1. purge in the background
-//   2. do one time purge process
+//  1. purge in the background
+//  2. do one time purge process
+//
 // a strategy can support both or one of them.
 type PurgeStrategy interface {
 	// Check checks whether need to do the purge in the background automatically
@@ -187,8 +188,8 @@ func (ia *inactiveArgs) String() string {
 
 // inactiveStrategy represents a relay purge strategy which purge all inactive relay log files
 // definition of inactive relay log files:
-//   * not writing by relay unit
-//   * not reading by sync unit and will not be read by any running tasks
+//   - not writing by relay unit
+//   - not reading by sync unit and will not be read by any running tasks
 //     TODO zxc: judge tasks are running dumper / loader
 type inactiveStrategy struct {
 	purging atomic.Bool

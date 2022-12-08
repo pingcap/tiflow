@@ -51,37 +51,45 @@ const (
 // Cases trigger a source-to-worker bound try:
 // - a worker from Offline to Free:
 //   - receive keep-alive.
+//
 // - a worker from Bound to Free:
 //   - trigger by unbound: `a source removed`.
+//
 // - a new source added:
 //   - add source request from user.
+//
 // - a source unbound from another worker:
 //   - trigger by unbound: `a worker from Bound to Offline`.
 //   - TODO(csuzhangxc): design a strategy to ensure the old worker already shutdown its work.
+//
 // Cases trigger a source-to-worker unbound try.
 // - a worker from Bound to Offline:
 //   - lost keep-alive.
+//
 // - a source removed:
 //   - remove source request from user.
+//
 // TODO: try to handle the return `err` of etcd operations,
-//   because may put into etcd, but the response to the etcd client interrupted.
+//
+//	because may put into etcd, but the response to the etcd client interrupted.
+//
 // Relay scheduling:
-// - scheduled by source
-//   DM-worker will enable relay according to its bound source, in current implementation, it will read `enable-relay`
-//   of source config and decide whether to enable relay.
-//   turn on `enable-relay`:
+//   - scheduled by source
+//     DM-worker will enable relay according to its bound source, in current implementation, it will read `enable-relay`
+//     of source config and decide whether to enable relay.
+//     turn on `enable-relay`:
 //   - use `enable-relay: true` when create source
 //   - `start-relay -s source` to dynamically change `enable-relay`
-//   turn off `enable-relay`:
+//     turn off `enable-relay`:
 //   - use `enable-relay: false` when create source
 //   - `stop-relay -s source` to dynamically change `enable-relay`
 //   - found conflict schedule type with (source, worker) when scheduler bootstrap
-// - scheduled by (source, worker)
-//   DM-worker will check if relay is assigned to it no matter it's bound or not. In current implementation, it will
-//   read UpstreamRelayWorkerKeyAdapter in etcd.
-//   add UpstreamRelayWorkerKeyAdapter:
+//   - scheduled by (source, worker)
+//     DM-worker will check if relay is assigned to it no matter it's bound or not. In current implementation, it will
+//     read UpstreamRelayWorkerKeyAdapter in etcd.
+//     add UpstreamRelayWorkerKeyAdapter:
 //   - use `start-relay -s source -w worker`
-//   remove UpstreamRelayWorkerKeyAdapter:
+//     remove UpstreamRelayWorkerKeyAdapter:
 //   - use `stop-relay -s source -w worker`
 //   - remove worker by `offline-member`
 type Scheduler struct {
