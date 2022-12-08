@@ -84,7 +84,7 @@ const (
   "sorter": {
     "num-concurrent-worker": 4,
     "chunk-size-limit": 999,
-    "max-memory-percentage": 30,
+    "max-memory-percentage": 10,
     "max-memory-consumption": 17179869184,
     "num-workerpool-goroutine": 16,
     "sort-dir": "/tmp/sorter"
