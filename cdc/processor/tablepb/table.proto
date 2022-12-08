@@ -43,6 +43,7 @@ message Span {
 //  ┌─────────┐   ┌──────────┐   ┌─────────────┐
 //  │ Stopped │ <─┤ Stopping │ <─┤ Replicating │
 //  └─────────┘   └──────────┘   └─────────────┘
+// TODO rename to TableSpanState.
 enum TableState {
     Unknown = 0 [(gogoproto.enumvalue_customname) = "TableStateUnknown"];
     Absent = 1 [(gogoproto.enumvalue_customname) = "TableStateAbsent"];
@@ -71,6 +72,7 @@ message Stats {
 }
 
 // TableStatus is the running status of a table.
+// TODO rename to TableStatus.
 message TableStatus {
     int64 table_id = 1 [
         (gogoproto.casttype) = "github.com/pingcap/tiflow/cdc/model.TableID",

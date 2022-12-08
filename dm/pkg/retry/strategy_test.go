@@ -18,21 +18,14 @@ import (
 	"testing"
 	"time"
 
-	. "github.com/pingcap/check"
 	"github.com/pingcap/tidb/util/dbutil"
 	tcontext "github.com/pingcap/tiflow/dm/pkg/context"
 	"github.com/pingcap/tiflow/dm/pkg/terror"
+	"github.com/stretchr/testify/require"
 )
 
-func TestSuite(t *testing.T) {
-	TestingT(t)
-}
-
-var _ = Suite(&testStrategySuite{})
-
-type testStrategySuite struct{}
-
-func (t *testStrategySuite) TestFiniteRetryStrategy(c *C) {
+func TestFiniteRetryStrategy(t *testing.T) {
+	t.Parallel()
 	strategy := &FiniteRetryStrategy{}
 
 	params := Params{
@@ -50,21 +43,21 @@ func (t *testStrategySuite) TestFiniteRetryStrategy(c *C) {
 	}
 
 	_, opCount, err := strategy.Apply(ctx, params, operateFn)
-	c.Assert(opCount, Equals, 0)
-	c.Assert(terror.ErrDBDriverError.Equal(err), IsTrue)
+	require.Equal(t, 0, opCount)
+	require.True(t, terror.ErrDBDriverError.Equal(err))
 
 	params.IsRetryableFn = func(int, error) bool {
 		return true
 	}
 	_, opCount, err = strategy.Apply(ctx, params, operateFn)
-	c.Assert(opCount, Equals, params.RetryCount)
-	c.Assert(terror.ErrDBDriverError.Equal(err), IsTrue)
+	require.Equal(t, params.RetryCount, opCount)
+	require.True(t, terror.ErrDBDriverError.Equal(err))
 
 	params.RetryCount = 3
 
 	_, opCount, err = strategy.Apply(ctx, params, operateFn)
-	c.Assert(opCount, Equals, params.RetryCount)
-	c.Assert(terror.ErrDBDriverError.Equal(err), IsTrue)
+	require.Equal(t, params.RetryCount, opCount)
+	require.True(t, terror.ErrDBDriverError.Equal(err))
 
 	// invalid connection will return ErrInvalidConn immediately no matter how many retries left
 	params.IsRetryableFn = func(int, error) bool {
@@ -75,22 +68,22 @@ func (t *testStrategySuite) TestFiniteRetryStrategy(c *C) {
 		return nil, terror.ErrDBInvalidConn.Delegate(mysqlErr, "test invalid connection")
 	}
 	_, opCount, err = strategy.Apply(ctx, params, operateFn)
-	c.Assert(opCount, Equals, 0)
-	c.Assert(terror.ErrDBInvalidConn.Equal(err), IsTrue)
+	require.Equal(t, 0, opCount)
+	require.True(t, terror.ErrDBInvalidConn.Equal(err))
 
 	params.IsRetryableFn = func(int, error) bool {
 		return IsConnectionError(err)
 	}
 	_, opCount, err = strategy.Apply(ctx, params, operateFn)
-	c.Assert(opCount, Equals, 3)
-	c.Assert(terror.ErrDBInvalidConn.Equal(err), IsTrue)
+	require.Equal(t, 3, opCount)
+	require.True(t, terror.ErrDBInvalidConn.Equal(err))
 
 	retValue := "success"
 	operateFn = func(*tcontext.Context) (interface{}, error) {
 		return retValue, nil
 	}
 	ret, opCount, err := strategy.Apply(ctx, params, operateFn)
-	c.Assert(ret.(string), Equals, retValue)
-	c.Assert(opCount, Equals, 0)
-	c.Assert(err, IsNil)
+	require.Equal(t, retValue, ret.(string))
+	require.Equal(t, 0, opCount)
+	require.NoError(t, err)
 }

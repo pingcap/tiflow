@@ -24,6 +24,7 @@ mysql-instances:
     loader-config-name: "global"
     syncer-config-name: "global"
     filter-rules: ["user-filter-1"]
+    route-rules: ["dup"]
 
   - source-id: "mysql-replica-02"
     block-allow-list:  "instance"
@@ -43,6 +44,13 @@ filters:                     # filter rules, mysql instance can ref rules in it
     table-pattern: "*"        # pattern of the upstream table name, wildcard characters (*?) are supported
     events: ["truncate table", "drop table"]  # ignore truncate/drop table ddl
     action: Ignore
+
+routes:
+  dup:
+    schema-pattern: "lightning_mode"
+    table-pattern: "dup*"
+    target-schema: lightning_mode
+    target-table: dup
 
 mydumpers:
   global:
