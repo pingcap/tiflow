@@ -13,6 +13,7 @@ function run() {
 
 	run_downstream_cluster $WORK_DIR
 
+	run_sql_tidb "drop database if exists lightning_mode;"
 	export GO_FAILPOINTS='github.com/pingcap/tiflow/dm/pkg/conn/VeryLargeTable=return("t1")'
 
 	run_sql_both_source "SET @@GLOBAL.SQL_MODE='ANSI_QUOTES,NO_AUTO_VALUE_ON_ZERO'"
@@ -50,6 +51,18 @@ function run() {
 	kill_dm_master
 	run_dm_master_info_log $WORK_DIR/master $MASTER_PORT $cur/conf/dm-master.toml
 	check_rpc_alive $cur/../bin/check_master_online 127.0.0.1:$MASTER_PORT
+
+	# start DM task only
+	dmctl_start_task "$cur/conf/dm-task-dup.yaml" "--remove-meta"
+	run_dm_ctl_with_retry $WORK_DIR "127.0.0.1:$MASTER_PORT" \
+		"query-status test" \
+		"\"stage\": \"Paused\"" 1 \
+		'"progress": "100.00 %"' 1 \
+		"please check \`dm_meta_test\`.\`conflict_error_v1\` to see the duplication" 1
+	run_dm_ctl $WORK_DIR "127.0.0.1:$MASTER_PORT" \
+		"stop-task test" \
+		"\"result\": true" 3
+	run_sql_tidb "drop database if exists lightning_mode;"
 
 	dmctl_start_task "$cur/conf/dm-task.yaml" "--remove-meta"
 
