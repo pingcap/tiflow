@@ -123,7 +123,9 @@ func initProcessor4Test(
 	})
 }
 
-func newMockTablePipeline(ctx cdcContext.Context, span tablepb.Span, replicaInfo *model.TableReplicaInfo) (tablepb.TablePipeline, error) {
+func newMockTablePipeline(
+	ctx cdcContext.Context, span tablepb.Span, replicaInfo *model.TableReplicaInfo,
+) (tablepb.TablePipeline, error) {
 	return &mockTablePipeline{
 		span:         span,
 		name:         fmt.Sprintf("`test`.`table%d`", span.TableID),
@@ -671,8 +673,10 @@ func TestProcessorClose(t *testing.T) {
 		Code:    "CDC:ErrSinkURIInvalid",
 		Message: "[CDC:ErrSinkURIInvalid]sink uri invalid '%s'",
 	})
-	require.True(t, p.tableSpans.GetV(spanz.TableIDToComparableSpan(1)).(*mockTablePipeline).canceled)
-	require.True(t, p.tableSpans.GetV(spanz.TableIDToComparableSpan(2)).(*mockTablePipeline).canceled)
+	require.True(
+		t, p.tableSpans.GetV(spanz.TableIDToComparableSpan(1)).(*mockTablePipeline).canceled)
+	require.True(
+		t, p.tableSpans.GetV(spanz.TableIDToComparableSpan(2)).(*mockTablePipeline).canceled)
 }
 
 func TestPositionDeleted(t *testing.T) {

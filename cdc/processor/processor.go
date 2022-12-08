@@ -1202,7 +1202,8 @@ func (p *processor) createTablePipelineImpl(
 			return nil, errors.Trace(err)
 		}
 	} else {
-		s := p.sinkV2Factory.CreateTableSink(p.changefeedID, span.TableID, p.metricsTableSinkTotalRows)
+		s := p.sinkV2Factory.CreateTableSink(
+			p.changefeedID, span.TableID, p.metricsTableSinkTotalRows)
 		table, err = pipeline.NewTableActor(
 			ctx,
 			p.upstream,
@@ -1456,7 +1457,8 @@ func (p *processor) WriteDebugInfo(w io.Writer) error {
 	} else {
 		p.tableSpans.Ascend(func(span tablepb.Span, tablePipeline tablepb.TablePipeline) bool {
 			fmt.Fprintf(w, "span: %s, tableName: %s, resolvedTs: %d, checkpointTs: %d, state: %s\n",
-				&span, tablePipeline.Name(), tablePipeline.ResolvedTs(), tablePipeline.CheckpointTs(), tablePipeline.State())
+				&span, tablePipeline.Name(), tablePipeline.ResolvedTs(),
+				tablePipeline.CheckpointTs(), tablePipeline.State())
 			return true
 		})
 	}
