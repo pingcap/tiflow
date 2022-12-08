@@ -66,4 +66,5 @@ type redoTask struct {
 	getUpperBound upperBoundGetter
 	tableSink     *tableSinkWrapper
 	callback      writeSuccessCallback
+	isCanceled    isCanceled
 }

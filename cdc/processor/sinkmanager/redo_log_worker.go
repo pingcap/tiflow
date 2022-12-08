@@ -214,7 +214,7 @@ func (w *redoWorker) handleTask(ctx context.Context, task *redoTask) error {
 		task.callback(lastPos)
 	}()
 
-	for availableMemSize > usedMemSize {
+	for availableMemSize > usedMemSize && !task.isCanceled() {
 		e, pos, err := iter.Next(ctx)
 		if err != nil {
 			return errors.Trace(err)

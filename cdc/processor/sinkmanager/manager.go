@@ -559,6 +559,9 @@ func (m *SinkManager) generateRedoTasks() error {
 					default:
 					}
 				},
+				isCanceled: func() bool {
+					return tableSink.getState() != tablepb.TableStateReplicating
+				},
 			}
 			select {
 			case <-m.ctx.Done():
@@ -649,6 +652,7 @@ func (m *SinkManager) AddTable(tableID model.TableID, startTs model.Ts, targetTs
 			zap.Int64("tableID", tableID))
 		return
 	}
+	m.memQuota.addTable(tableID)
 	log.Info("Add table sink",
 		zap.String("namespace", m.changefeedID.Namespace),
 		zap.String("changefeed", m.changefeedID.ID),

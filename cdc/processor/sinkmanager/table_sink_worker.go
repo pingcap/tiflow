@@ -94,7 +94,7 @@ func (w *sinkWorker) handleTask(ctx context.Context, task *sinkTask) (err error)
 		if err != nil {
 			return errors.Trace(err)
 		}
-		log.Info("QP adjust task boundaries based on redo event cache",
+		log.Debug("adjust task boundaries based on redo event cache",
 			zap.String("namespace", w.changefeedID.Namespace),
 			zap.String("changefeed", w.changefeedID.ID),
 			zap.Int64("tableID", task.tableID),
@@ -103,7 +103,7 @@ func (w *sinkWorker) handleTask(ctx context.Context, task *sinkTask) (err error)
 			zap.Any("newLowerBound", newLowerBound),
 			zap.Any("newUpperBound", newUpperBound))
 		if newLowerBound.Compare(newUpperBound) > 0 {
-			log.Info("QP Sink task finished because cache is drained",
+			log.Debug("Sink task finished because cache is drained",
 				zap.String("namespace", w.changefeedID.Namespace),
 				zap.String("changefeed", w.changefeedID.ID),
 				zap.Int64("tableID", task.tableID),
@@ -271,7 +271,7 @@ func (w *sinkWorker) handleTask(ctx context.Context, task *sinkTask) (err error)
 		task.callback(lastPos)
 	}()
 
-	for availableMem > usedMem {
+	for availableMem > usedMem && !task.isCanceled() {
 		e, pos, err := iter.Next(ctx)
 		if err != nil {
 			return errors.Trace(err)

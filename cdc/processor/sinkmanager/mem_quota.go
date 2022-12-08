@@ -123,24 +123,25 @@ func (m *memQuota) refund(nBytes uint64) {
 	}
 }
 
+func (m *memQuota) addTable(tableID model.TableID) {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	m.tableMemory[tableID] = make([]*memConsumeRecord, 0, 2)
+}
+
 // record records the memory usage of a table.
 func (m *memQuota) record(tableID model.TableID, resolved model.ResolvedTs, size uint64) {
 	m.mu.Lock()
 	defer m.mu.Unlock()
 	if _, ok := m.tableMemory[tableID]; !ok {
-		m.tableMemory[tableID] = make([]*memConsumeRecord, 0, 2)
+		// Can't find the table record, the table must be removed.
+		m.refund(size)
+		return
 	}
 	m.tableMemory[tableID] = append(m.tableMemory[tableID], &memConsumeRecord{
 		resolvedTs: resolved,
 		size:       size,
 	})
-}
-
-// hasAvailable returns true if the memory quota is available, otherwise returns false.
-func (m *memQuota) hasAvailable(nBytes uint64) bool {
-	m.mu.Lock()
-	defer m.mu.Unlock()
-	return m.usedBytes+nBytes <= m.totalBytes
 }
 
 // release try to use resolvedTs to release the memory quota.
@@ -211,7 +212,6 @@ func (m *memQuota) close() {
 	m.mu.Lock()
 	defer m.mu.Unlock()
 	m.tableMemory = make(map[model.TableID][]*memConsumeRecord)
-	m.usedBytes = 0
 	m.metricUsed.Set(float64(0))
 	m.isClosed.Store(true)
 	m.blockAcquireCond.Broadcast()
