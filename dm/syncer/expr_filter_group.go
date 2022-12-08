@@ -46,18 +46,6 @@ type ExprFilterGroup struct {
 // NewExprFilterGroup creates an ExprFilterGroup.
 func NewExprFilterGroup(ctx sessionctx.Context, exprConfig []*config.ExpressionFilter) *ExprFilterGroup {
 	ret := &ExprFilterGroup{
-<<<<<<< HEAD
-		configs:            map[string][]*config.ExpressionFilter{},
-		insertExprs:        map[string][]expression.Expression{},
-		updateOldExprs:     map[string][]expression.Expression{},
-		updateNewExprs:     map[string][]expression.Expression{},
-		deleteExprs:        map[string][]expression.Expression{},
-		hasInsertFilter:    map[string]struct{}{},
-		hasUpdateOldFilter: map[string]struct{}{},
-		hasUpdateNewFilter: map[string]struct{}{},
-		hasDeleteFilter:    map[string]struct{}{},
-		ctx:                ctx,
-=======
 		configs:         map[string][]*config.ExpressionFilter{},
 		insertExprs:     map[string][]expression.Expression{},
 		updateOldExprs:  map[string][]expression.Expression{},
@@ -66,9 +54,7 @@ func NewExprFilterGroup(ctx sessionctx.Context, exprConfig []*config.ExpressionF
 		hasInsertFilter: map[string]struct{}{},
 		hasUpdateFilter: map[string]struct{}{},
 		hasDeleteFilter: map[string]struct{}{},
-		tidbCtx:         tidbCtx,
-		logCtx:          logCtx,
->>>>>>> 387b81aad9 (expression_filter(dm): fix updateOldExprs and updateNewExprs length not same (#7779))
+		ctx:             ctx,
 	}
 	for _, c := range exprConfig {
 		tableName := dbutil.TableName(c.Schema, c.Table)
