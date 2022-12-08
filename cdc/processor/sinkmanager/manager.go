@@ -374,6 +374,10 @@ func (m *SinkManager) generateSinkTasks() error {
 				continue
 			}
 			tableSink := value.(*tableSinkWrapper)
+			if tableSink.version != slowestTableProgress.version {
+				// The progress maybe stale.
+				continue
+			}
 
 			tableState := tableSink.getState()
 			// It means table sink is stopping or stopped.
@@ -422,7 +426,11 @@ func (m *SinkManager) generateSinkTasks() error {
 				getUpperBound: getUpperBound,
 				tableSink:     tableSink,
 				callback: func(lastWrittenPos engine.Position) {
-					p := &progress{tableID: tableSink.tableID, nextLowerBoundPos: lastWrittenPos.Next()}
+					p := &progress{
+						tableID:           tableSink.tableID,
+						nextLowerBoundPos: lastWrittenPos.Next(),
+						version:           slowestTableProgress.version,
+					}
 					m.sinkProgressHeap.push(p)
 					select {
 					case m.sinkWorkerAvailable <- struct{}{}:
@@ -504,6 +512,10 @@ func (m *SinkManager) generateRedoTasks() error {
 				continue
 			}
 			tableSink := value.(*tableSinkWrapper)
+			if tableSink.version != slowestTableProgress.version {
+				// The progress maybe stale.
+				continue
+			}
 
 			tableState := tableSink.getState()
 			// It means table sink is stopping or stopped.
@@ -552,7 +564,11 @@ func (m *SinkManager) generateRedoTasks() error {
 				getUpperBound: getUpperBound,
 				tableSink:     tableSink,
 				callback: func(lastWrittenPos engine.Position) {
-					p := &progress{tableID: tableSink.tableID, nextLowerBoundPos: lastWrittenPos.Next()}
+					p := &progress{
+						tableID:           tableSink.tableID,
+						nextLowerBoundPos: lastWrittenPos.Next(),
+						version:           slowestTableProgress.version,
+					}
 					m.redoProgressHeap.push(p)
 					select {
 					case m.redoWorkerAvailable <- struct{}{}:
@@ -657,7 +673,8 @@ func (m *SinkManager) AddTable(tableID model.TableID, startTs model.Ts, targetTs
 		zap.String("namespace", m.changefeedID.Namespace),
 		zap.String("changefeed", m.changefeedID.ID),
 		zap.Int64("tableID", tableID),
-		zap.Uint64("startTs", startTs))
+		zap.Uint64("startTs", startTs),
+		zap.Uint64("version", sinkWrapper.version))
 }
 
 // StartTable sets the table(TableSink) state to replicating.
@@ -701,11 +718,13 @@ func (m *SinkManager) StartTable(tableID model.TableID, startTs model.Ts) error 
 	m.sinkProgressHeap.push(&progress{
 		tableID:           tableID,
 		nextLowerBoundPos: engine.Position{StartTs: startTs - 1, CommitTs: startTs},
+		version:           tableSink.(*tableSinkWrapper).version,
 	})
 	if m.redoManager != nil {
 		m.redoProgressHeap.push(&progress{
 			tableID:           tableID,
 			nextLowerBoundPos: engine.Position{StartTs: startTs - 1, CommitTs: startTs},
+			version:           tableSink.(*tableSinkWrapper).version,
 		})
 	}
 	return nil
