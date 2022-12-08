@@ -74,11 +74,11 @@ func TestIntersect(t *testing.T) {
 		// Set nil for non-intersect
 		res *ComparableSpan
 	}{
-		{ComparableSpan{nil, []byte{1}}, ComparableSpan{[]byte{1}, nil}, nil},
-		{ComparableSpan{nil, nil}, ComparableSpan{nil, nil}, &ComparableSpan{nil, nil}},
-		{ComparableSpan{nil, nil}, ComparableSpan{[]byte{1}, []byte{2}}, &ComparableSpan{[]byte{1}, []byte{2}}},
-		{ComparableSpan{[]byte{0}, []byte{3}}, ComparableSpan{[]byte{1}, []byte{2}}, &ComparableSpan{[]byte{1}, []byte{2}}},
-		{ComparableSpan{[]byte{0}, []byte{2}}, ComparableSpan{[]byte{1}, []byte{2}}, &ComparableSpan{[]byte{1}, []byte{2}}},
+		{ComparableSpan{0, nil, []byte{1}}, ComparableSpan{0, []byte{1}, nil}, nil},
+		{ComparableSpan{0, nil, nil}, ComparableSpan{0, nil, nil}, &ComparableSpan{0, nil, nil}},
+		{ComparableSpan{0, nil, nil}, ComparableSpan{0, []byte{1}, []byte{2}}, &ComparableSpan{0, []byte{1}, []byte{2}}},
+		{ComparableSpan{0, []byte{0}, []byte{3}}, ComparableSpan{0, []byte{1}, []byte{2}}, &ComparableSpan{0, []byte{1}, []byte{2}}},
+		{ComparableSpan{0, []byte{0}, []byte{2}}, ComparableSpan{0, []byte{1}, []byte{2}}, &ComparableSpan{0, []byte{1}, []byte{2}}},
 	}
 
 	for _, test := range tests {
@@ -104,9 +104,9 @@ func TestGetTableSpan(t *testing.T) {
 	t.Parallel()
 
 	span := GetTableSpan(123)
-	require.Equal(t, -1, bytes.Compare(span.Start, span.End))
+	require.Equal(t, -1, bytes.Compare(span.StartKey, span.EndKey))
 	prefix := []byte(tablecodec.GenTableRecordPrefix(123))
-	require.GreaterOrEqual(t, 0, bytes.Compare(span.Start, prefix))
+	require.GreaterOrEqual(t, 0, bytes.Compare(span.StartKey, prefix))
 	prefix[len(prefix)-1]++
-	require.LessOrEqual(t, 0, bytes.Compare(span.End, prefix))
+	require.LessOrEqual(t, 0, bytes.Compare(span.EndKey, prefix))
 }

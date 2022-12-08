@@ -269,12 +269,12 @@ func (l *RegionRangeLock) tryLockRange(startKey, endKey []byte, regionID, versio
 			// The rest should come from range searching and is sorted in increasing order, and they
 			// must intersect with the current given range.
 			if bytes.Compare(currentRangeStartKey, r.startKey) < 0 {
-				retryRanges = append(retryRanges, ComparableSpan{Start: currentRangeStartKey, End: r.startKey})
+				retryRanges = append(retryRanges, ComparableSpan{StartKey: currentRangeStartKey, EndKey: r.startKey})
 			}
 			currentRangeStartKey = r.endKey
 		}
 		if bytes.Compare(currentRangeStartKey, endKey) < 0 {
-			retryRanges = append(retryRanges, ComparableSpan{Start: currentRangeStartKey, End: endKey})
+			retryRanges = append(retryRanges, ComparableSpan{StartKey: currentRangeStartKey, EndKey: endKey})
 		}
 
 		return LockRangeResult{

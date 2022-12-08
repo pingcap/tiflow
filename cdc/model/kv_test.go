@@ -29,7 +29,7 @@ func TestRegionFeedEvent(t *testing.T) {
 	}
 	resolved := &ResolvedSpans{
 		Spans: []RegionComparableSpan{{
-			Span: regionspan.ComparableSpan{Start: []byte("a"), End: []byte("b")},
+			Span: regionspan.ComparableSpan{StartKey: []byte("a"), EndKey: []byte("b")},
 		}}, ResolvedTs: 111,
 	}
 

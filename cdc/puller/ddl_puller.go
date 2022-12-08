@@ -476,8 +476,8 @@ func NewDDLJobPuller(
 		cs := regionspan.ToComparableSpan(s)
 		spans = append(spans, tablepb.Span{
 			TableID:  -1,
-			StartKey: cs.Start,
-			EndKey:   cs.End,
+			StartKey: cs.StartKey,
+			EndKey:   cs.EndKey,
 		})
 	}
 	return &ddlJobPullerImpl{

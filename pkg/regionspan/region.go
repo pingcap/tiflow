@@ -28,7 +28,7 @@ func CheckRegionsLeftCover(regions []*metapb.Region, span ComparableSpan) bool {
 		return StartCompare(regions[i].StartKey, regions[j].StartKey) == -1
 	})
 
-	if StartCompare(regions[0].StartKey, span.Start) == 1 {
+	if StartCompare(regions[0].StartKey, span.StartKey) == 1 {
 		return false
 	}
 

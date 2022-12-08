@@ -162,21 +162,21 @@ func TestPullerResolvedForward(t *testing.T) {
 	plr.cli.Returns(model.RegionFeedEvent{
 		Resolved: &model.ResolvedSpans{
 			Spans: []model.RegionComparableSpan{{
-				Span: regionspan.ToComparableSpan(regionspan.Span{Start: []byte("t_a"), End: []byte("t_c")}),
+				Span: regionspan.ToComparableSpan(regionspan.LegacySpan{StartKey: []byte("t_a"), EndKey: []byte("t_c")}),
 			}}, ResolvedTs: uint64(1001),
 		},
 	})
 	plr.cli.Returns(model.RegionFeedEvent{
 		Resolved: &model.ResolvedSpans{
 			Spans: []model.RegionComparableSpan{{
-				Span: regionspan.ToComparableSpan(regionspan.Span{Start: []byte("t_c"), End: []byte("t_d")}),
+				Span: regionspan.ToComparableSpan(regionspan.LegacySpan{StartKey: []byte("t_c"), EndKey: []byte("t_d")}),
 			}}, ResolvedTs: uint64(1002),
 		},
 	})
 	plr.cli.Returns(model.RegionFeedEvent{
 		Resolved: &model.ResolvedSpans{
 			Spans: []model.RegionComparableSpan{{
-				Span: regionspan.ToComparableSpan(regionspan.Span{Start: []byte("t_d"), End: []byte("t_e")}),
+				Span: regionspan.ToComparableSpan(regionspan.LegacySpan{StartKey: []byte("t_d"), EndKey: []byte("t_e")}),
 			}}, ResolvedTs: uint64(1000),
 		},
 	})

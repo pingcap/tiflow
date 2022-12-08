@@ -428,7 +428,7 @@ func newEventFeedSession(
 ) *eventFeedSession {
 	id := strconv.FormatUint(allocID(), 10)
 	rangeLock := regionspan.NewRegionRangeLock(
-		totalSpan.Start, totalSpan.End, startTs,
+		totalSpan.StartKey, totalSpan.EndKey, startTs,
 		changefeed.Namespace+"."+changefeed.ID)
 	return &eventFeedSession{
 		client:            client,
@@ -594,18 +594,18 @@ func (s *eventFeedSession) scheduleRegionRequest(ctx context.Context, sri single
 		}
 	}
 
-	res := s.rangeLock.LockRange(ctx, sri.span.Start, sri.span.End, sri.verID.GetID(), sri.verID.GetVer())
+	res := s.rangeLock.LockRange(ctx, sri.span.StartKey, sri.span.EndKey, sri.verID.GetID(), sri.verID.GetVer())
 	failpoint.Inject("kvClientMockRangeLock", func(val failpoint.Value) {
 		// short sleep to wait region has split
 		time.Sleep(time.Second)
-		s.rangeLock.UnlockRange(sri.span.Start, sri.span.End,
+		s.rangeLock.UnlockRange(sri.span.StartKey, sri.span.EndKey,
 			sri.verID.GetID(), sri.verID.GetVer(), sri.resolvedTs)
 		regionNum := val.(int)
 		retryRanges := make([]regionspan.ComparableSpan, 0, regionNum)
 		start := []byte("a")
 		end := []byte("b1001")
 		for i := 0; i < regionNum; i++ {
-			span := regionspan.Span{Start: start, End: end}
+			span := regionspan.LegacySpan{StartKey: start, EndKey: end}
 			retryRanges = append(retryRanges, regionspan.ToComparableSpan(span))
 			start = end
 			end = []byte(fmt.Sprintf("b%d", 1002+i))
@@ -627,7 +627,7 @@ func (s *eventFeedSession) scheduleRegionRequest(ctx context.Context, sri single
 // error handling. This function is non-blocking even if error channel is full.
 // CAUTION: Note that this should only be called in a context that the region has locked its range.
 func (s *eventFeedSession) onRegionFail(ctx context.Context, errorInfo regionErrorInfo, revokeToken bool) {
-	s.rangeLock.UnlockRange(errorInfo.span.Start, errorInfo.span.End,
+	s.rangeLock.UnlockRange(errorInfo.span.StartKey, errorInfo.span.EndKey,
 		errorInfo.verID.GetID(), errorInfo.verID.GetVer(), errorInfo.resolvedTs)
 	if revokeToken {
 		s.regionRouter.Release(errorInfo.rpcCtx.Addr)
@@ -676,8 +676,8 @@ func (s *eventFeedSession) requestRegionToStore(
 			RequestId:    requestID,
 			RegionEpoch:  regionEpoch,
 			CheckpointTs: sri.resolvedTs,
-			StartKey:     sri.span.Start,
-			EndKey:       sri.span.End,
+			StartKey:     sri.span.StartKey,
+			EndKey:       sri.span.EndKey,
 			ExtraOp:      extraOp,
 			FilterLoop:   s.client.filterLoop,
 		}
@@ -901,7 +901,7 @@ func (s *eventFeedSession) divideAndSendEventFeedToRegions(
 		retryErr := retry.Do(ctx, func() error {
 			bo := tikv.NewBackoffer(ctx, tikvRequestMaxBackoff)
 			start := time.Now()
-			regions, err = s.client.regionCache.BatchLoadRegionsWithKeyRange(bo, nextSpan.Start, nextSpan.End, limit)
+			regions, err = s.client.regionCache.BatchLoadRegionsWithKeyRange(bo, nextSpan.StartKey, nextSpan.EndKey, limit)
 			scanRegionsDuration.Observe(time.Since(start).Seconds())
 			if err != nil {
 				return cerror.WrapError(cerror.ErrPDBatchLoadRegions, err)
@@ -930,18 +930,18 @@ func (s *eventFeedSession) divideAndSendEventFeedToRegions(
 
 		for _, tiRegion := range regions {
 			region := tiRegion.GetMeta()
-			partialSpan, err := regionspan.Intersect(s.totalSpan, regionspan.ComparableSpan{Start: region.StartKey, End: region.EndKey})
+			partialSpan, err := regionspan.Intersect(s.totalSpan, regionspan.ComparableSpan{StartKey: region.StartKey, EndKey: region.EndKey})
 			if err != nil {
 				return errors.Trace(err)
 			}
-			nextSpan.Start = region.EndKey
+			nextSpan.StartKey = region.EndKey
 			// the End key return by the PD API will be nil to represent the biggest key,
 			partialSpan = partialSpan.Hack()
 
 			sri := newSingleRegionInfo(tiRegion.VerID(), partialSpan, ts, nil)
 			s.scheduleRegionRequest(ctx, sri)
 			// return if no more regions
-			if regionspan.EndCompare(nextSpan.Start, span.End) >= 0 {
+			if regionspan.EndCompare(nextSpan.StartKey, span.EndKey) >= 0 {
 				return nil
 			}
 		}

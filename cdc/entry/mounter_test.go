@@ -440,7 +440,7 @@ func walkTableSpanInStore(t *testing.T, store tidbkv.Storage, tableID int64, f f
 	require.Nil(t, err)
 	defer txn.Rollback() //nolint:errcheck
 	tableSpan := regionspan.GetTableSpan(tableID)
-	kvIter, err := txn.Iter(tableSpan.Start, tableSpan.End)
+	kvIter, err := txn.Iter(tableSpan.StartKey, tableSpan.EndKey)
 	require.Nil(t, err)
 	defer kvIter.Close()
 	for kvIter.Valid() {

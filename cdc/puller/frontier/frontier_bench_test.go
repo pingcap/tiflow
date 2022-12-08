@@ -43,8 +43,8 @@ func BenchmarkSpanFrontier(b *testing.B) {
 			spans := make([]regionspan.ComparableSpan, 0, n)
 			for i := 0; i < n; i++ {
 				span := regionspan.ComparableSpan{
-					Start: toCMPBytes(i),
-					End:   toCMPBytes(i + 1),
+					StartKey: toCMPBytes(i),
+					EndKey:   toCMPBytes(i + 1),
 				}
 				spans = append(spans, span)
 			}
@@ -82,12 +82,12 @@ func BenchmarkSpanFrontierOverlap(b *testing.B) {
 				forward := make([]regionspan.ComparableSpan, 0, n)
 				for i := 0; i < n; i++ {
 					spans = append(spans, regionspan.ComparableSpan{
-						Start: toCMPBytes(i),
-						End:   toCMPBytes(i + 1),
+						StartKey: toCMPBytes(i),
+						EndKey:   toCMPBytes(i + 1),
 					})
 					forward = append(forward, regionspan.ComparableSpan{
-						Start: toCMPBytes(i),
-						End:   toCMPBytes(i + step),
+						StartKey: toCMPBytes(i),
+						EndKey:   toCMPBytes(i + step),
 					})
 				}
 

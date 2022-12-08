@@ -36,8 +36,8 @@ func TableIDToComparableSpan(tableID model.TableID) tablepb.Span {
 	tableSpan := regionspan.ToComparableSpan(regionspan.GetTableSpan(tableID))
 	return tablepb.Span{
 		TableID:  tableID,
-		StartKey: tableSpan.Start,
-		EndKey:   tableSpan.End,
+		StartKey: tableSpan.StartKey,
+		EndKey:   tableSpan.EndKey,
 	}
 }
 

@@ -28,25 +28,25 @@ func TestCheckRegionsLeftCover(t *testing.T) {
 		span    ComparableSpan
 		cover   bool
 	}{
-		{[]*metapb.Region{}, ComparableSpan{[]byte{1}, []byte{2}}, false},
-		{[]*metapb.Region{{StartKey: nil, EndKey: nil}}, ComparableSpan{[]byte{1}, []byte{2}}, true},
-		{[]*metapb.Region{{StartKey: []byte{1}, EndKey: []byte{2}}}, ComparableSpan{[]byte{1}, []byte{2}}, true},
-		{[]*metapb.Region{{StartKey: []byte{0}, EndKey: []byte{4}}}, ComparableSpan{[]byte{1}, []byte{2}}, true},
+		{[]*metapb.Region{}, ComparableSpan{0, []byte{1}, []byte{2}}, false},
+		{[]*metapb.Region{{StartKey: nil, EndKey: nil}}, ComparableSpan{0, []byte{1}, []byte{2}}, true},
+		{[]*metapb.Region{{StartKey: []byte{1}, EndKey: []byte{2}}}, ComparableSpan{0, []byte{1}, []byte{2}}, true},
+		{[]*metapb.Region{{StartKey: []byte{0}, EndKey: []byte{4}}}, ComparableSpan{0, []byte{1}, []byte{2}}, true},
 		{[]*metapb.Region{
 			{StartKey: []byte{1}, EndKey: []byte{2}},
 			{StartKey: []byte{2}, EndKey: []byte{3}},
-		}, ComparableSpan{[]byte{1}, []byte{3}}, true},
+		}, ComparableSpan{0, []byte{1}, []byte{3}}, true},
 		{[]*metapb.Region{
 			{StartKey: []byte{1}, EndKey: []byte{2}},
 			{StartKey: []byte{3}, EndKey: []byte{4}},
-		}, ComparableSpan{[]byte{1}, []byte{4}}, false},
+		}, ComparableSpan{0, []byte{1}, []byte{4}}, false},
 		{[]*metapb.Region{
 			{StartKey: []byte{1}, EndKey: []byte{2}},
 			{StartKey: []byte{2}, EndKey: []byte{3}},
-		}, ComparableSpan{[]byte{1}, []byte{4}}, true},
+		}, ComparableSpan{0, []byte{1}, []byte{4}}, true},
 		{[]*metapb.Region{
 			{StartKey: []byte{2}, EndKey: []byte{3}},
-		}, ComparableSpan{[]byte{1}, []byte{3}}, false},
+		}, ComparableSpan{0, []byte{1}, []byte{3}}, false},
 	}
 
 	for _, tc := range cases {

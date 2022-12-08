@@ -98,8 +98,8 @@ func New(ctx context.Context,
 	comparableSpans := make([]regionspan.ComparableSpan, len(spans))
 	for i := range spans {
 		comparableSpans[i] = regionspan.ComparableSpan{
-			Start: spans[i].StartKey,
-			End:   spans[i].EndKey,
+			StartKey: spans[i].StartKey,
+			EndKey:   spans[i].EndKey,
 		}
 	}
 	// To make puller level resolved ts initialization distinguishable, we set

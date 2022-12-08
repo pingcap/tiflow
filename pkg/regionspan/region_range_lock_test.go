@@ -61,7 +61,7 @@ func mustLockRangeStale(
 	res := l.LockRange(ctx, []byte(startKey), []byte(endKey), regionID, version)
 	spans := make([]ComparableSpan, 0)
 	for i := 0; i < len(expectRetrySpans); i += 2 {
-		spans = append(spans, ComparableSpan{Start: []byte(expectRetrySpans[i]), End: []byte(expectRetrySpans[i+1])})
+		spans = append(spans, ComparableSpan{StartKey: []byte(expectRetrySpans[i]), EndKey: []byte(expectRetrySpans[i+1])})
 	}
 	mustStale(t, res, spans...)
 }

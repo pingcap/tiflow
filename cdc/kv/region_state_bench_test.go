@@ -73,7 +73,7 @@ func (rsm *regionStateManagerWithSyncMap) delState(regionID uint64) {
 }
 
 func benchmarkGetRegionState(b *testing.B, bench func(b *testing.B, sm regionStateManagerInterface, count int)) {
-	span := regionspan.Span{Start: []byte{}, End: regionspan.UpperBoundKey}
+	span := regionspan.LegacySpan{StartKey: []byte{}, EndKey: regionspan.UpperBoundKey}
 	state := newRegionFeedState(newSingleRegionInfo(
 		tikv.RegionVerID{},
 		regionspan.ToComparableSpan(span),
