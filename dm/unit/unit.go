@@ -147,7 +147,7 @@ func IsResumableError(err *pb.ProcessError) bool {
 }
 
 // IsResumableRelayError return whether we need resume relay on error
-// since relay impl unit interface too, so we put it here
+// since relay impl unit interface too, so we put it here.
 func IsResumableRelayError(err *pb.ProcessError) bool {
 	if _, ok := retry.UnresumableRelayErrCodes[err.ErrCode]; ok {
 		return false
