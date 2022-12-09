@@ -160,7 +160,7 @@ func TestAddTable(t *testing.T) {
 		tableID: tableID,
 		nextLowerBoundPos: engine.Position{
 			StartTs:  0,
-			CommitTs: 1,
+			CommitTs: 2,
 		},
 	}, manager.sinkProgressHeap.pop())
 }
@@ -342,4 +342,19 @@ func TestClose(t *testing.T) {
 
 	err := manager.Close()
 	require.NoError(t, err)
+}
+
+// This could happen when closing the sink manager and source manager.
+// We close the sink manager first, and then close the source manager.
+// So probably the source manager calls the sink manager to update the resolved ts to a removed table.
+func TestUpdateReceivedSorterResolvedTsOfNonExistTable(t *testing.T) {
+	t.Parallel()
+
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+
+	changefeedInfo := getChangefeedInfo()
+	manager, _ := createManagerWithMemEngine(t, ctx, model.DefaultChangeFeedID("1"), changefeedInfo, make(chan error, 1))
+
+	manager.UpdateReceivedSorterResolvedTs(model.TableID(1), 1)
 }
