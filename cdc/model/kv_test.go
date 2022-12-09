@@ -56,6 +56,6 @@ func (s *kvSuite) TestRawKVEntry(c *check.C) {
 		Value:   []byte("345"),
 	}
 
-	c.Assert(raw.String(), check.Equals, "OpType: 1, Key: 123, Value: 345, StartTs: 100, CRTs: 101, RegionID: 0")
+	c.Assert(raw.String(), check.Equals, "OpType: 1, Key: 123, Value: 345, OldValue: , StartTs: 100, CRTs: 101, RegionID: 0")
 	c.Assert(raw.ApproximateSize(), check.Equals, int64(6))
 }

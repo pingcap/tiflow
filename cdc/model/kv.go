@@ -34,6 +34,7 @@ const (
 
 // RegionFeedEvent from the kv layer.
 // Only one of the event will be setted.
+//
 //msgp:ignore RegionFeedEvent
 type RegionFeedEvent struct {
 	Val      *RawKVEntry
@@ -56,6 +57,7 @@ func (e *RegionFeedEvent) GetValue() interface{} {
 
 // ResolvedSpan guarantees all the KV value event
 // with commit ts less than ResolvedTs has been emitted.
+//
 //msgp:ignore ResolvedSpan
 type ResolvedSpan struct {
 	Span       regionspan.ComparableSpan
@@ -84,8 +86,10 @@ type RawKVEntry struct {
 }
 
 func (v *RawKVEntry) String() string {
-	return fmt.Sprintf("OpType: %v, Key: %s, Value: %s, StartTs: %d, CRTs: %d, RegionID: %d",
-		v.OpType, string(v.Key), string(v.Value), v.StartTs, v.CRTs, v.RegionID)
+	// TODO: redact values.
+	return fmt.Sprintf(
+		"OpType: %v, Key: %s, Value: %s, OldValue: %s, StartTs: %d, CRTs: %d, RegionID: %d",
+		v.OpType, string(v.Key), string(v.Value), string(v.OldValue), v.StartTs, v.CRTs, v.RegionID)
 }
 
 // ApproximateSize calculate the approximate size of this event
