@@ -604,6 +604,7 @@ func (m *SinkManager) UpdateReceivedSorterResolvedTs(tableID model.TableID, ts m
 			zap.String("namespace", m.changefeedID.Namespace),
 			zap.String("changefeed", m.changefeedID.ID),
 			zap.Int64("tableID", tableID))
+		return
 	}
 	tableSink.(*tableSinkWrapper).updateReceivedSorterResolvedTs(ts)
 }
