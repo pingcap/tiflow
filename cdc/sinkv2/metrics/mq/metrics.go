@@ -26,7 +26,7 @@ var (
 			Subsystem: "sinkv2",
 			Name:      "mq_worker_send_message_duration",
 			Help:      "Send Message duration(s) for MQ worker.",
-			Buckets:   prometheus.ExponentialBuckets(0.001, 2, 20), // 1ms~1000s
+			Buckets:   prometheus.ExponentialBuckets(0.001, 2, 20), // 1ms~524s
 		}, []string{"namespace", "changefeed"})
 	// WorkerBatchSize record the size of each batched messages.
 	WorkerBatchSize = prometheus.NewHistogramVec(
