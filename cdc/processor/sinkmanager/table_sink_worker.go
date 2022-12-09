@@ -124,6 +124,7 @@ func (w *sinkWorker) handleTask(ctx context.Context, task *sinkTask) (finalErr e
 	}
 
 	needEmitAndAdvance := func() bool {
+		// For splitTxn is enabled or not, sizes of events can be advanced will be different.
 		return (w.splitTxn && committedTxnSize+pendingTxnSize >= maxUpdateIntervalSize) ||
 			(!w.splitTxn && committedTxnSize >= maxUpdateIntervalSize)
 	}
