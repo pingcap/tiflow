@@ -80,7 +80,6 @@ func (w *sinkWorker) handleTasks(ctx context.Context, taskChan <-chan *sinkTask)
 }
 
 func (w *sinkWorker) handleTask(ctx context.Context, task *sinkTask) (err error) {
-	fmt.Printf("handleTask, splitTxn: %t\n", w.splitTxn)
 	lowerBound := task.lowerBound
 	upperBound := task.getUpperBound(task.tableSink)
 	if !upperBound.IsCommitFence() {
