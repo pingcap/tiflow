@@ -24,6 +24,7 @@ import (
 	"github.com/pingcap/tiflow/cdc/contextutil"
 	"github.com/pingcap/tiflow/cdc/kv"
 	"github.com/pingcap/tiflow/cdc/model"
+	"github.com/pingcap/tiflow/cdc/processor/tablepb"
 	"github.com/pingcap/tiflow/cdc/puller/frontier"
 	"github.com/pingcap/tiflow/pkg/config"
 	"github.com/pingcap/tiflow/pkg/pdutil"
@@ -83,7 +84,7 @@ func New(ctx context.Context,
 	kvStorage tidbkv.Storage,
 	pdClock pdutil.Clock,
 	checkpointTs uint64,
-	spans []regionspan.Span,
+	spans []tablepb.Span,
 	cfg *config.KVClientConfig,
 	changefeed model.ChangeFeedID,
 	tableID model.TableID,
@@ -96,7 +97,10 @@ func New(ctx context.Context,
 	}
 	comparableSpans := make([]regionspan.ComparableSpan, len(spans))
 	for i := range spans {
-		comparableSpans[i] = regionspan.ToComparableSpan(spans[i])
+		comparableSpans[i] = regionspan.ComparableSpan{
+			Start: spans[i].StartKey,
+			End:   spans[i].EndKey,
+		}
 	}
 	// To make puller level resolved ts initialization distinguishable, we set
 	// the initial ts for frontier to 0. Once the puller level resolved ts
