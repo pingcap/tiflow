@@ -86,7 +86,7 @@ type tableActor struct {
 	sinkStopped uberatomic.Bool
 
 	// TODO: try to reduce these config fields below in the future
-	tableID        int64
+	span           tablepb.Span
 	targetTs       model.Ts
 	memoryQuota    uint64
 	replicaInfo    *model.TableReplicaInfo
@@ -112,7 +112,7 @@ func NewTableActor(
 	cdcCtx cdcContext.Context,
 	up *upstream.Upstream,
 	mg entry.MounterGroup,
-	tableID model.TableID,
+	span tablepb.Span,
 	tableName string,
 	replicaInfo *model.TableReplicaInfo,
 	sinkV1 sinkv1.Sink,
@@ -139,7 +139,7 @@ func NewTableActor(
 		cancel:    cancel,
 
 		state:         tablepb.TableStatePreparing,
-		tableID:       tableID,
+		span:          span,
 		tableName:     tableName,
 		memoryQuota:   serverConfig.GetGlobalServerConfig().PerTableMemoryQuota,
 		upstream:      up,
@@ -175,7 +175,7 @@ func NewTableActor(
 	log.Info("table actor started",
 		zap.String("namespace", table.changefeedID.Namespace),
 		zap.String("changefeed", table.changefeedID.ID),
-		zap.Int64("tableID", tableID),
+		zap.Stringer("span", &span),
 		zap.String("tableName", tableName),
 		zap.Uint64("checkpointTs", replicaInfo.StartTs),
 		zap.Uint64("quota", table.memoryQuota),
@@ -212,7 +212,7 @@ func (t *tableActor) Poll(ctx context.Context, msgs []message.Message[pmessage.M
 		if err != nil {
 			log.Error("failed to process message, stop table actor ",
 				zap.String("tableName", t.tableName),
-				zap.Int64("tableID", t.tableID),
+				zap.Stringer("span", &t.span),
 				zap.Any("message", msgs[i]),
 				zap.Error(err))
 			t.handleError(err)
@@ -224,7 +224,7 @@ func (t *tableActor) Poll(ctx context.Context, msgs []message.Message[pmessage.M
 			if err := t.handleDataMsg(ctx); err != nil {
 				log.Error("failed to process message, stop table actor ",
 					zap.String("tableName", t.tableName),
-					zap.Int64("tableID", t.tableID), zap.Error(err))
+					zap.Stringer("span", &t.span), zap.Error(err))
 				t.handleError(err)
 				break
 			}
@@ -235,7 +235,7 @@ func (t *tableActor) Poll(ctx context.Context, msgs []message.Message[pmessage.M
 			zap.String("namespace", t.changefeedID.Namespace),
 			zap.String("changefeed", t.changefeedID.ID),
 			zap.String("tableName", t.tableName),
-			zap.Int64("tableID", t.tableID))
+			zap.Stringer("span", &t.span))
 		return false
 	}
 	return true
@@ -289,7 +289,7 @@ func (t *tableActor) start(sdtTableContext context.Context) error {
 		log.Panic("start an already started table",
 			zap.String("namespace", t.changefeedID.Namespace),
 			zap.String("changefeed", t.changefeedID.ID),
-			zap.Int64("tableID", t.tableID),
+			zap.Stringer("span", &t.span),
 			zap.String("tableName", t.tableName))
 	}
 
@@ -297,7 +297,7 @@ func (t *tableActor) start(sdtTableContext context.Context) error {
 
 	flowController := flowcontrol.NewTableFlowController(t.memoryQuota,
 		t.redoManager.Enabled(), splitTxn)
-	sorterNode := newSorterNode(t.tableName, t.tableID,
+	sorterNode := newSorterNode(t.tableName, t.span.TableID,
 		t.replicaInfo.StartTs, flowController,
 		t.mg, &t.state, t.changefeedID, t.redoManager.Enabled(),
 		t.upstream.PDClient,
@@ -310,12 +310,12 @@ func (t *tableActor) start(sdtTableContext context.Context) error {
 	if err := startSorter(t, sortActorNodeContext); err != nil {
 		log.Error("sorter fails to start",
 			zap.String("tableName", t.tableName),
-			zap.Int64("tableID", t.tableID),
+			zap.Stringer("span", &t.span),
 			zap.Error(err))
 		return err
 	}
 
-	pullerNode := newPullerNode(t.tableID, t.replicaInfo.StartTs, t.tableName, t.changefeedVars.ID)
+	pullerNode := newPullerNode(t.span, t.replicaInfo.StartTs, t.tableName, t.changefeedVars.ID)
 	pullerActorNodeContext := newContext(sdtTableContext,
 		t.tableName,
 		t.globalVars.TableActorSystem.Router(),
@@ -324,7 +324,7 @@ func (t *tableActor) start(sdtTableContext context.Context) error {
 	if err := startPuller(t, pullerActorNodeContext); err != nil {
 		log.Error("puller fails to start",
 			zap.String("tableName", t.tableName),
-			zap.Int64("tableID", t.tableID),
+			zap.Stringer("span", &t.span),
 			zap.Error(err))
 		return err
 	}
@@ -333,7 +333,7 @@ func (t *tableActor) start(sdtTableContext context.Context) error {
 	}
 
 	actorSinkNode := newSinkNode(
-		t.tableID,
+		t.span.TableID,
 		t.tableSinkV1,
 		t.tableSinkV2,
 		t.replicaInfo.StartTs, t.targetTs, flowController, t.redoManager,
@@ -394,7 +394,7 @@ func (t *tableActor) stop() {
 		zap.String("namespace", t.changefeedID.Namespace),
 		zap.String("changefeed", t.changefeedID.ID),
 		zap.String("tableName", t.tableName),
-		zap.Int64("tableID", t.tableID))
+		zap.Stringer("span", &t.span))
 }
 
 // handleError stops the table actor at first and then reports the error to processor
@@ -414,7 +414,7 @@ func (t *tableActor) ResolvedTs() model.Ts {
 	// another replication barrier for consistent replication instead of reusing
 	// the global resolved-ts.
 	if t.redoManager.Enabled() {
-		return t.redoManager.GetResolvedTs(t.tableID)
+		return t.redoManager.GetResolvedTs(t.span.TableID)
 	}
 	return t.sortNode.ResolvedTs()
 }
@@ -436,7 +436,7 @@ func (t *tableActor) UpdateBarrierTs(ts model.Ts) {
 			log.Warn("send fails",
 				zap.Any("msg", msg),
 				zap.String("tableName", t.tableName),
-				zap.Int64("tableID", t.tableID),
+				zap.Stringer("span", &t.span),
 				zap.Error(err))
 		}
 	}
@@ -506,7 +506,7 @@ func (t *tableActor) State() tablepb.TableState {
 
 // ID returns the ID of source table and mark table
 func (t *tableActor) ID() int64 {
-	return t.tableID
+	return t.span.TableID
 }
 
 // Name returns the quoted schema and table name
@@ -524,7 +524,7 @@ func (t *tableActor) Cancel() {
 	if err := t.router.Send(t.mb.ID(), message.ValueMessage(msg)); err != nil {
 		log.Warn("fails to send Stop message",
 			zap.String("tableName", t.tableName),
-			zap.Int64("tableID", t.tableID),
+			zap.Stringer("span", &t.span),
 			zap.Error(err))
 	}
 }
@@ -556,7 +556,7 @@ var startPuller = func(t *tableActor, ctx *actorNodeContext) error {
 }
 
 var startSorter = func(t *tableActor, ctx *actorNodeContext) error {
-	eventSorter, err := createSorter(ctx, t.tableName, t.tableID)
+	eventSorter, err := createSorter(ctx, t.tableName, t.span.TableID)
 	if err != nil {
 		return errors.Trace(err)
 	}

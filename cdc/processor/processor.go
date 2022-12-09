@@ -46,6 +46,7 @@ import (
 	"github.com/pingcap/tiflow/pkg/orchestrator"
 	"github.com/pingcap/tiflow/pkg/pdutil"
 	"github.com/pingcap/tiflow/pkg/retry"
+	"github.com/pingcap/tiflow/pkg/spanz"
 	"github.com/pingcap/tiflow/pkg/upstream"
 	"github.com/pingcap/tiflow/pkg/util"
 	"github.com/prometheus/client_golang/prometheus"
@@ -73,7 +74,7 @@ type processor struct {
 	pullBasedSinking bool
 
 	// These fields are used to sinking data in non-pull-based mode.
-	tables        map[model.TableID]tablepb.TablePipeline
+	tableSpans    *spanz.Map[tablepb.TablePipeline]
 	sinkV1        sinkv1.Sink
 	sinkV2Factory *factory.SinkFactory
 
@@ -89,8 +90,10 @@ type processor struct {
 	wg          sync.WaitGroup
 
 	lazyInit            func(ctx cdcContext.Context) error
-	createTablePipeline func(ctx cdcContext.Context, tableID model.TableID, replicaInfo *model.TableReplicaInfo) (tablepb.TablePipeline, error)
-	newAgent            func(cdcContext.Context, *model.Liveness) (scheduler.Agent, error)
+	createTablePipeline func(
+		ctx cdcContext.Context, span tablepb.Span, replicaInfo *model.TableReplicaInfo,
+	) (tablepb.TablePipeline, error)
+	newAgent func(cdcContext.Context, *model.Liveness) (scheduler.Agent, error)
 
 	liveness     *model.Liveness
 	agent        scheduler.Agent
@@ -137,7 +140,7 @@ func (p *processor) AddTableSpan(
 			zap.String("captureID", p.captureInfo.ID),
 			zap.String("namespace", p.changefeedID.Namespace),
 			zap.String("changefeed", p.changefeedID.ID),
-			zap.Int64("tableID", span.TableID),
+			zap.Stringer("span", &span),
 			zap.Uint64("checkpointTs", startTs),
 			zap.Bool("isPrepare", isPrepare))
 	}
@@ -147,7 +150,7 @@ func (p *processor) AddTableSpan(
 	if p.pullBasedSinking {
 		state, alreadyExist = p.sinkManager.GetTableState(span.TableID)
 	} else {
-		table, ok := p.tables[span.TableID]
+		table, ok := p.tableSpans.Get(span)
 		if ok {
 			alreadyExist = true
 			state = table.State()
@@ -163,7 +166,7 @@ func (p *processor) AddTableSpan(
 				zap.String("captureID", p.captureInfo.ID),
 				zap.String("namespace", p.changefeedID.Namespace),
 				zap.String("changefeed", p.changefeedID.ID),
-				zap.Int64("tableID", span.TableID),
+				zap.Stringer("span", &span),
 				zap.Uint64("checkpointTs", startTs),
 				zap.Bool("isPrepare", isPrepare))
 			return true, nil
@@ -176,7 +179,7 @@ func (p *processor) AddTableSpan(
 						return false, errors.Trace(err)
 					}
 				} else {
-					p.tables[span.TableID].Start(startTs)
+					p.tableSpans.GetV(span).Start(startTs)
 				}
 			}
 			return true, nil
@@ -185,7 +188,7 @@ func (p *processor) AddTableSpan(
 				zap.String("captureID", p.captureInfo.ID),
 				zap.String("namespace", p.changefeedID.Namespace),
 				zap.String("changefeed", p.changefeedID.ID),
-				zap.Int64("tableID", span.TableID),
+				zap.Stringer("span", &span),
 				zap.Uint64("checkpointTs", startTs),
 				zap.Bool("isPrepare", isPrepare))
 			return true, nil
@@ -194,10 +197,10 @@ func (p *processor) AddTableSpan(
 				zap.String("captureID", p.captureInfo.ID),
 				zap.String("namespace", p.changefeedID.Namespace),
 				zap.String("changefeed", p.changefeedID.ID),
-				zap.Int64("tableID", span.TableID),
+				zap.Stringer("span", &span),
 				zap.Uint64("checkpointTs", startTs),
 				zap.Bool("isPrepare", isPrepare))
-			p.removeTable(p.tables[span.TableID], span.TableID)
+			p.removeTable(p.tableSpans.GetV(span), span)
 		}
 	}
 
@@ -210,7 +213,7 @@ func (p *processor) AddTableSpan(
 			zap.String("captureID", p.captureInfo.ID),
 			zap.String("namespace", p.changefeedID.Namespace),
 			zap.String("changefeed", p.changefeedID.ID),
-			zap.Int64("tableID", span.TableID),
+			zap.Stringer("span", &span),
 			zap.Uint64("checkpointTs", startTs),
 			zap.Bool("isPrepare", isPrepare))
 	}
@@ -225,11 +228,11 @@ func (p *processor) AddTableSpan(
 			ctx.(cdcContext.Context), span.TableID, p.getTableName(ctx, span.TableID), startTs)
 	} else {
 		table, err := p.createTablePipeline(
-			ctx.(cdcContext.Context), span.TableID, &model.TableReplicaInfo{StartTs: startTs})
+			ctx.(cdcContext.Context), span, &model.TableReplicaInfo{StartTs: startTs})
 		if err != nil {
 			return false, errors.Trace(err)
 		}
-		p.tables[span.TableID] = table
+		p.tableSpans.ReplaceOrInsert(span, table)
 	}
 
 	return true, nil
@@ -248,19 +251,19 @@ func (p *processor) RemoveTableSpan(span tablepb.Span) bool {
 				zap.String("capture", p.captureInfo.ID),
 				zap.String("namespace", p.changefeedID.Namespace),
 				zap.String("changefeed", p.changefeedID.ID),
-				zap.Int64("tableID", span.TableID))
+				zap.Stringer("span", &span))
 			return true
 		}
 		p.sinkManager.AsyncStopTable(span.TableID)
 		return true
 	}
-	table, ok := p.tables[span.TableID]
+	table, ok := p.tableSpans.Get(span)
 	if !ok {
 		log.Warn("table which will be deleted is not found",
 			zap.String("capture", p.captureInfo.ID),
 			zap.String("namespace", p.changefeedID.Namespace),
 			zap.String("changefeed", p.changefeedID.ID),
-			zap.Int64("tableID", span.TableID))
+			zap.Stringer("span", &span))
 		return true
 	}
 	if !table.AsyncStop() {
@@ -271,7 +274,7 @@ func (p *processor) RemoveTableSpan(span tablepb.Span) bool {
 			zap.String("namespace", p.changefeedID.Namespace),
 			zap.String("changefeed", p.changefeedID.ID),
 			zap.Uint64("checkpointTs", table.CheckpointTs()),
-			zap.Int64("tableID", span.TableID))
+			zap.Stringer("span", &span))
 		return false
 	}
 	return true
@@ -300,7 +303,7 @@ func (p *processor) IsAddTableSpanFinished(span tablepb.Span, isPrepare bool) bo
 				tableCheckpointTs = stats.CheckpointTs
 			}
 		} else {
-			table, ok := p.tables[span.TableID]
+			table, ok := p.tableSpans.Get(span)
 			if ok {
 				alreadyExist = true
 				state = table.State()
@@ -314,7 +317,7 @@ func (p *processor) IsAddTableSpanFinished(span tablepb.Span, isPrepare bool) bo
 				zap.String("captureID", p.captureInfo.ID),
 				zap.String("namespace", p.changefeedID.Namespace),
 				zap.String("changefeed", p.changefeedID.ID),
-				zap.Int64("tableID", span.TableID),
+				zap.Stringer("span", &span),
 				zap.Bool("isPrepare", isPrepare))
 		}
 
@@ -330,7 +333,7 @@ func (p *processor) IsAddTableSpanFinished(span tablepb.Span, isPrepare bool) bo
 			zap.String("captureID", p.captureInfo.ID),
 			zap.String("namespace", p.changefeedID.Namespace),
 			zap.String("changefeed", p.changefeedID.ID),
-			zap.Int64("tableID", span.TableID),
+			zap.Stringer("span", &span),
 			zap.Uint64("tableResolvedTs", tableResolvedTs),
 			zap.Uint64("localResolvedTs", localResolvedTs),
 			zap.Uint64("globalResolvedTs", globalResolvedTs),
@@ -346,7 +349,7 @@ func (p *processor) IsAddTableSpanFinished(span tablepb.Span, isPrepare bool) bo
 		zap.String("captureID", p.captureInfo.ID),
 		zap.String("namespace", p.changefeedID.Namespace),
 		zap.String("changefeed", p.changefeedID.ID),
-		zap.Int64("tableID", span.TableID),
+		zap.Stringer("span", &span),
 		zap.Uint64("tableResolvedTs", tableResolvedTs),
 		zap.Uint64("localResolvedTs", localResolvedTs),
 		zap.Uint64("globalResolvedTs", globalResolvedTs),
@@ -374,7 +377,7 @@ func (p *processor) IsRemoveTableSpanFinished(span tablepb.Span) (model.Ts, bool
 			tableCheckpointTs = stats.CheckpointTs
 		}
 	} else {
-		table, ok := p.tables[span.TableID]
+		table, ok := p.tableSpans.Get(span)
 		if ok {
 			alreadyExist = true
 			state = table.State()
@@ -387,7 +390,7 @@ func (p *processor) IsRemoveTableSpanFinished(span tablepb.Span) (model.Ts, bool
 			zap.String("captureID", p.captureInfo.ID),
 			zap.String("namespace", p.changefeedID.Namespace),
 			zap.String("changefeed", p.changefeedID.ID),
-			zap.Int64("tableID", span.TableID))
+			zap.Stringer("span", &span))
 		return 0, true
 	}
 
@@ -397,7 +400,7 @@ func (p *processor) IsRemoveTableSpanFinished(span tablepb.Span) (model.Ts, bool
 			zap.String("namespace", p.changefeedID.Namespace),
 			zap.String("changefeed", p.changefeedID.ID),
 			zap.Uint64("checkpointTs", tableCheckpointTs),
-			zap.Int64("tableID", span.TableID),
+			zap.Stringer("span", &span),
 			zap.Any("tableStatus", state))
 		return 0, false
 	}
@@ -413,23 +416,23 @@ func (p *processor) IsRemoveTableSpanFinished(span tablepb.Span) (model.Ts, bool
 			zap.String("captureID", p.captureInfo.ID),
 			zap.String("namespace", p.changefeedID.Namespace),
 			zap.String("changefeed", p.changefeedID.ID),
-			zap.Int64("tableID", span.TableID),
+			zap.Stringer("span", &span),
 			zap.Uint64("checkpointTs", stats.CheckpointTs))
 
 		return stats.CheckpointTs, true
 	}
-	table := p.tables[span.TableID]
+	table := p.tableSpans.GetV(span)
 	p.metricRemainKVEventGauge.Sub(float64(table.RemainEvents()))
 	table.Cancel()
 	table.Wait()
-	delete(p.tables, span.TableID)
+	p.tableSpans.Delete(span)
 
 	checkpointTs := table.CheckpointTs()
 	log.Info("table removed",
 		zap.String("captureID", p.captureInfo.ID),
 		zap.String("namespace", p.changefeedID.Namespace),
 		zap.String("changefeed", p.changefeedID.ID),
-		zap.Int64("tableID", span.TableID),
+		zap.Stringer("span", &span),
 		zap.Uint64("checkpointTs", checkpointTs))
 	return checkpointTs, true
 }
@@ -439,7 +442,7 @@ func (p *processor) GetTableSpanCount() int {
 	if p.pullBasedSinking {
 		return len(p.sinkManager.GetAllCurrentTableIDs())
 	}
-	return len(p.tables)
+	return p.tableSpans.Len()
 }
 
 // GetCheckpoint implements TableExecutor interface.
@@ -470,7 +473,7 @@ func (p *processor) GetTableSpanStatus(span tablepb.Span) tablepb.TableStatus {
 			Stats: p.getStatsFromSourceManagerAndSinkManager(span.TableID, sinkStats),
 		}
 	}
-	table, ok := p.tables[span.TableID]
+	table, ok := p.tableSpans.Get(span)
 	if !ok {
 		return tablepb.TableStatus{
 			TableID: span.TableID,
@@ -538,7 +541,7 @@ func newProcessor(
 	p := &processor{
 		changefeed:   state,
 		upstream:     up,
-		tables:       make(map[model.TableID]tablepb.TablePipeline),
+		tableSpans:   spanz.NewMap[tablepb.TablePipeline](),
 		errCh:        make(chan error, 1),
 		changefeedID: changefeedID,
 		captureInfo:  captureInfo,
@@ -1072,21 +1075,19 @@ func (p *processor) handlePosition(currentTs int64) {
 			}
 		}
 	} else {
-		for _, table := range p.tables {
-			ts := table.ResolvedTs()
-			if ts < minResolvedTs {
-				minResolvedTs = ts
+		p.tableSpans.Ascend(func(span tablepb.Span, table tablepb.TablePipeline) bool {
+			rts := table.ResolvedTs()
+			if rts < minResolvedTs {
+				minResolvedTs = rts
 				minResolvedTableID = table.ID()
 			}
-		}
-
-		for _, table := range p.tables {
-			ts := table.CheckpointTs()
-			if ts < minCheckpointTs {
-				minCheckpointTs = ts
+			cts := table.CheckpointTs()
+			if cts < minCheckpointTs {
+				minCheckpointTs = cts
 				minCheckpointTableID = table.ID()
 			}
-		}
+			return true
+		})
 	}
 
 	resolvedPhyTs := oracle.ExtractPhysical(minResolvedTs)
@@ -1117,9 +1118,10 @@ func (p *processor) pushResolvedTs2Table() {
 	if p.pullBasedSinking {
 		p.sinkManager.UpdateBarrierTs(resolvedTs)
 	} else {
-		for _, table := range p.tables {
+		p.tableSpans.Ascend(func(span tablepb.Span, table tablepb.TablePipeline) bool {
 			table.UpdateBarrierTs(resolvedTs)
-		}
+			return true
+		})
 	}
 }
 
@@ -1148,7 +1150,7 @@ func (p *processor) getTableName(ctx context.Context, tableID model.TableID) str
 
 func (p *processor) createTablePipelineImpl(
 	ctx cdcContext.Context,
-	tableID model.TableID,
+	span tablepb.Span,
 	replicaInfo *model.TableReplicaInfo,
 ) (table tablepb.TablePipeline, err error) {
 	ctx = cdcContext.WithErrorHandler(ctx, func(err error) error {
@@ -1161,13 +1163,13 @@ func (p *processor) createTablePipelineImpl(
 	})
 
 	if p.redoManager.Enabled() {
-		p.redoManager.AddTable(tableID, replicaInfo.StartTs)
+		p.redoManager.AddTable(span.TableID, replicaInfo.StartTs)
 	}
 
-	tableName := p.getTableName(ctx, tableID)
+	tableName := p.getTableName(ctx, span.TableID)
 
 	if p.sinkV1 != nil {
-		s, err := sinkv1.NewTableSink(p.sinkV1, tableID, p.metricsTableSinkTotalRows)
+		s, err := sinkv1.NewTableSink(p.sinkV1, span.TableID, p.metricsTableSinkTotalRows)
 		if err != nil {
 			return nil, errors.Trace(err)
 		}
@@ -1175,7 +1177,7 @@ func (p *processor) createTablePipelineImpl(
 			ctx,
 			p.upstream,
 			p.mg,
-			tableID,
+			span,
 			tableName,
 			replicaInfo,
 			s,
@@ -1186,12 +1188,13 @@ func (p *processor) createTablePipelineImpl(
 			return nil, errors.Trace(err)
 		}
 	} else {
-		s := p.sinkV2Factory.CreateTableSink(p.changefeedID, tableID, p.metricsTableSinkTotalRows)
+		s := p.sinkV2Factory.CreateTableSink(
+			p.changefeedID, span.TableID, p.metricsTableSinkTotalRows)
 		table, err = pipeline.NewTableActor(
 			ctx,
 			p.upstream,
 			p.mg,
-			tableID,
+			span,
 			tableName,
 			replicaInfo,
 			nil,
@@ -1206,17 +1209,17 @@ func (p *processor) createTablePipelineImpl(
 	return table, nil
 }
 
-func (p *processor) removeTable(table tablepb.TablePipeline, tableID model.TableID) {
+func (p *processor) removeTable(table tablepb.TablePipeline, span tablepb.Span) {
 	if p.redoManager.Enabled() {
-		p.redoManager.RemoveTable(tableID)
+		p.redoManager.RemoveTable(span.TableID)
 	}
 	if p.pullBasedSinking {
-		p.sinkManager.RemoveTable(tableID)
-		p.sourceManager.RemoveTable(tableID)
+		p.sinkManager.RemoveTable(span.TableID)
+		p.sourceManager.RemoveTable(span.TableID)
 	} else {
 		table.Cancel()
 		table.Wait()
-		delete(p.tables, tableID)
+		p.tableSpans.Delete(span)
 	}
 }
 
@@ -1258,7 +1261,7 @@ func (p *processor) refreshMetrics() {
 	} else {
 		var totalConsumed uint64
 		var totalEvents int64
-		for _, table := range p.tables {
+		p.tableSpans.Ascend(func(span tablepb.Span, table tablepb.TablePipeline) bool {
 			consumed := table.MemoryConsumption()
 			p.metricsTableMemoryHistogram.Observe(float64(consumed))
 			totalConsumed += consumed
@@ -1266,9 +1269,11 @@ func (p *processor) refreshMetrics() {
 			if events > 0 {
 				totalEvents += events
 			}
-		}
+			return true
+		})
+
 		p.metricsProcessorMemoryGauge.Set(float64(totalConsumed))
-		p.metricSyncTableNumGauge.Set(float64(len(p.tables)))
+		p.metricSyncTableNumGauge.Set(float64(p.tableSpans.Len()))
 		p.metricRemainKVEventGauge.Set(float64(totalEvents))
 	}
 }
@@ -1325,12 +1330,14 @@ func (p *processor) Close(ctx cdcContext.Context) error {
 				zap.String("changefeed", p.changefeedID.ID))
 		}
 	} else {
-		for _, tbl := range p.tables {
-			tbl.Cancel()
-		}
-		for _, tbl := range p.tables {
-			tbl.Wait()
-		}
+		p.tableSpans.Ascend(func(span tablepb.Span, table tablepb.TablePipeline) bool {
+			table.Cancel()
+			return true
+		})
+		p.tableSpans.Ascend(func(span tablepb.Span, table tablepb.TablePipeline) bool {
+			table.Wait()
+			return true
+		})
 		// sink close might be time-consuming, do it the last.
 		if p.sinkV1 != nil {
 			// pass a canceled context is ok here, since we don't need to wait Close
@@ -1434,10 +1441,12 @@ func (p *processor) WriteDebugInfo(w io.Writer) error {
 				tableID, stats.ResolvedTs, stats.CheckpointTs, state)
 		}
 	} else {
-		for tableID, tablePipeline := range p.tables {
-			fmt.Fprintf(w, "tableID: %d, tableName: %s, resolvedTs: %d, checkpointTs: %d, state: %s\n",
-				tableID, tablePipeline.Name(), tablePipeline.ResolvedTs(), tablePipeline.CheckpointTs(), tablePipeline.State())
-		}
+		p.tableSpans.Ascend(func(span tablepb.Span, tablePipeline tablepb.TablePipeline) bool {
+			fmt.Fprintf(w, "span: %s, tableName: %s, resolvedTs: %d, checkpointTs: %d, state: %s\n",
+				&span, tablePipeline.Name(), tablePipeline.ResolvedTs(),
+				tablePipeline.CheckpointTs(), tablePipeline.State())
+			return true
+		})
 	}
 	return nil
 }
