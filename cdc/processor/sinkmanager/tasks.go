@@ -31,7 +31,6 @@ const (
 var (
 	requestMemSize        = defaultRequestMemSize
 	maxUpdateIntervalSize = defaultMaxUpdateIntervalSize
-	maxBigTxnBatchSize    = defaultMaxBigTxnBatchSize
 )
 
 // Used to record the progress of the table.
