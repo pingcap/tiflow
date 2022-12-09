@@ -89,7 +89,6 @@ type workerSuite struct {
 func (suite *workerSuite) SetupSuite() {
 	requestMemSize = 218
 	// For one batch size.
-	maxBigTxnBatchSize = 218 * 2
 	// Advance table sink per 2 events.
 	maxUpdateIntervalSize = 218 * 2
 }
@@ -97,7 +96,6 @@ func (suite *workerSuite) SetupSuite() {
 func (suite *workerSuite) TearDownSuite() {
 	requestMemSize = defaultRequestMemSize
 	maxUpdateIntervalSize = defaultMaxUpdateIntervalSize
-	maxBigTxnBatchSize = defaultMaxBigTxnBatchSize
 }
 
 // Test the case that the worker will stop when no memory quota and meet the txn boundary.
