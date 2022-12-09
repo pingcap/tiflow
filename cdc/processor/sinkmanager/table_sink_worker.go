@@ -98,11 +98,12 @@ func (w *sinkWorker) handleTask(ctx context.Context, task *sinkTask) (finalErr e
 	// We need to use it to update the lower bound of the table sink.
 	var lastPos engine.Position
 
+	// To advance table sink in different cases: splitTxn is true or not.
+	committedTxnSize := uint64(0) // Can be used in `advanceTableSink`.
+	pendingTxnSize := uint64(0)   // Can be used in `advanceTableSinkWithBatchID`.
+	lastTxnCommitTs := uint64(0)  // Can be used in `advanceTableSink`
+	currTxnCommitTs := uint64(0)  // Can be used in `advanceTableSinkWithBatchID`.
 	events := make([]*model.RowChangedEvent, 0, 1024)
-	committedTxnSize := uint64(0)
-	pendingTxnSize := uint64(0)
-	lastTxnCommitTs := uint64(0)
-	currTxnCommitTs := uint64(0)
 	batchID := uint64(1)
 
 	if w.redoEnabled && w.eventCache != nil {
@@ -134,13 +135,24 @@ func (w *sinkWorker) handleTask(ctx context.Context, task *sinkTask) (finalErr e
 				events = make([]*model.RowChangedEvent, 0, 1024)
 			}
 		}
+		log.Debug("check should advance or not",
+			zap.String("namespace", w.changefeedID.Namespace),
+			zap.String("changefeed", w.changefeedID.ID),
+			zap.Int64("tableID", task.tableID),
+			zap.Bool("splitTxn", w.splitTxn),
+			zap.Uint64("currTxnCommitTs", currTxnCommitTs),
+			zap.Uint64("lastTxnCommitTs", lastTxnCommitTs),
+			zap.Bool("isLastTime", isLastTime))
 		if w.splitTxn {
 			if currTxnCommitTs == 0 {
 				return
 			}
 			if currTxnCommitTs == lastPos.CommitTs && lastPos.IsCommitFence() {
+				// All transactions before currTxnCommitTs are resolved.
 				err = w.advanceTableSink(task, currTxnCommitTs, committedTxnSize+pendingTxnSize)
 			} else {
+				// This will advance some complete transactions before currTxnCommitTs,
+				// and one partail transaction with `batchID`.
 				err = w.advanceTableSinkWithBatchID(task, currTxnCommitTs, committedTxnSize+pendingTxnSize, batchID)
 				batchID += 1
 			}
@@ -152,6 +164,8 @@ func (w *sinkWorker) handleTask(ctx context.Context, task *sinkTask) (finalErr e
 			}
 			err = w.advanceTableSink(task, lastTxnCommitTs, committedTxnSize)
 			committedTxnSize = 0
+			// It's the last time we call `doEmitAndAdvance`, but `pendingTxnSize`
+			// hasn't been recorded yet. To avoid losing it, record it manually.
 			if isLastTime && pendingTxnSize > 0 {
 				w.memQuota.record(task.tableID, model.NewResolvedTs(currTxnCommitTs), pendingTxnSize)
 			}
@@ -161,6 +175,11 @@ func (w *sinkWorker) handleTask(ctx context.Context, task *sinkTask) (finalErr e
 
 	maybeEmitAndAdvance := func(allFinished, txnFinished bool) error {
 		memoryHighUsage := availableMem < usedMem
+
+		// Do emit in such situations:
+		// 1. we use more memory than we required;
+		// 2. the pending batch size exceeds maxUpdateIntervalSize;
+		// 3. all events are received.
 		if memoryHighUsage || allFinished || needEmitAndAdvance() {
 			if err := doEmitAndAdvance(false); err != nil {
 				return errors.Trace(err)
@@ -291,22 +310,22 @@ func (w *sinkWorker) handleTask(ctx context.Context, task *sinkTask) (finalErr e
 			pendingTxnSize = 0
 		}
 
-		if e.Row == nil {
-			continue
-		}
-		// For all rows, we add table replicate ts, so mysql sink can determine safe-mode.
-		e.Row.ReplicatingTs = task.tableSink.replicateTs
-		x, size, err := convertRowChangedEvents(w.changefeedID, task.tableID, w.enableOldValue, e)
-		if err != nil {
-			return err
-		}
-		events = append(events, x...)
-		allEventSize += size
-		usedMem += size
-		if pos.IsCommitFence() {
-			committedTxnSize += size
-		} else {
-			pendingTxnSize += size
+		// NOTICE: The event can be filtered by the event filter.
+		if e.Row != nil {
+			// For all rows, we add table replicate ts, so mysql sink can determine safe-mode.
+			e.Row.ReplicatingTs = task.tableSink.replicateTs
+			x, size, err := convertRowChangedEvents(w.changefeedID, task.tableID, w.enableOldValue, e)
+			if err != nil {
+				return err
+			}
+			events = append(events, x...)
+			allEventSize += size
+			usedMem += size
+			if pos.IsCommitFence() {
+				committedTxnSize += size
+			} else {
+				pendingTxnSize += size
+			}
 		}
 
 		if err := maybeEmitAndAdvance(false, pos.Valid()); err != nil {

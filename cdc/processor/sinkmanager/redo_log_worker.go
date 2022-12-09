@@ -97,9 +97,9 @@ func (w *redoWorker) handleTask(ctx context.Context, task *redoTask) (finalErr e
 	var lastPos engine.Position
 
 	// To calculate advance the downstream to where.
-	emitedCommitTs := uint64(0)
-	lastTxnCommitTs := uint64(0)
-	currTxnCommitTs := uint64(0)
+	emitedCommitTs := uint64(0)  // Has been sent by `redoManager.UpdateResolvedTs`.
+	lastTxnCommitTs := uint64(0) // Can be used in next `redoManager.UpdateResolvedTs`.
+	currTxnCommitTs := uint64(0) // Still in pulling, not complete.
 
 	doEmitBatchEvents := func() error {
 		if len(rows) > 0 {
@@ -126,28 +126,27 @@ func (w *redoWorker) handleTask(ctx context.Context, task *redoTask) (finalErr e
 				rows = make([]*model.RowChangedEvent, 0, 1024)
 			}
 		}
-		if currTxnCommitTs > 0 {
-			toEmit := lastTxnCommitTs
-			if currTxnCommitTs == lastPos.CommitTs && lastPos.IsCommitFence() {
-				toEmit = currTxnCommitTs
+		if lastTxnCommitTs > emitedCommitTs {
+			if err := w.redoManager.UpdateResolvedTs(ctx, task.tableID, lastTxnCommitTs); err != nil {
+				return errors.Trace(err)
 			}
-			if toEmit > emitedCommitTs {
-				if err := w.redoManager.UpdateResolvedTs(ctx, task.tableID, toEmit); err != nil {
-					return errors.Trace(err)
-				}
-				log.Debug("update resolved ts to redo",
-					zap.String("namespace", w.changefeedID.Namespace),
-					zap.String("changefeed", w.changefeedID.ID),
-					zap.Int64("tableID", task.tableID),
-					zap.Uint64("resolvedTs", toEmit))
-				emitedCommitTs = toEmit
-			}
+			log.Debug("update resolved ts to redo",
+				zap.String("namespace", w.changefeedID.Namespace),
+				zap.String("changefeed", w.changefeedID.ID),
+				zap.Int64("tableID", task.tableID),
+				zap.Uint64("resolvedTs", lastTxnCommitTs))
+			emitedCommitTs = lastTxnCommitTs
 		}
 		return nil
 	}
 
 	maybeEmitBatchEvents := func(allFinished, txnFinished bool) error {
 		memoryHighUsage := availableMemSize < usedMemSize
+
+		// Do emit in such situations:
+		// 1. we use more memory than we required;
+		// 2. the pending batch size exceeds maxUpdateIntervalSize;
+		// 3. all events are received.
 		if memoryHighUsage || rowsSize >= maxUpdateIntervalSize || allFinished {
 			if err := doEmitBatchEvents(); err != nil {
 				return errors.Trace(err)
@@ -188,14 +187,16 @@ func (w *redoWorker) handleTask(ctx context.Context, task *redoTask) (finalErr e
 			} else {
 				// NOTE: it's not required to use `forceAcquire` even if splitTxn is false.
 				// It's because memory will finally be `refund` after redo-logs are written.
-				if w.memQuota.blockAcquire(requestMemSize) == nil {
-					availableMemSize += requestMemSize
-					log.Debug("MemoryQuotaTracing: block acquire memory for redo log task",
-						zap.String("namespace", w.changefeedID.Namespace),
-						zap.String("changefeed", w.changefeedID.ID),
-						zap.Int64("tableID", task.tableID),
-						zap.Uint64("memory", requestMemSize))
+				err := w.memQuota.blockAcquire(requestMemSize)
+				if err != nil {
+					return errors.Trace(err)
 				}
+				availableMemSize += requestMemSize
+				log.Debug("MemoryQuotaTracing: block acquire memory for redo log task",
+					zap.String("namespace", w.changefeedID.Namespace),
+					zap.String("changefeed", w.changefeedID.ID),
+					zap.Int64("tableID", task.tableID),
+					zap.Uint64("memory", requestMemSize))
 			}
 		}
 
@@ -255,26 +256,25 @@ func (w *redoWorker) handleTask(ctx context.Context, task *redoTask) (finalErr e
 			lastTxnCommitTs = currTxnCommitTs
 		}
 
-		if e.Row == nil {
-			// NOTICE: This could happen when the event is filtered by the event filter.
-			continue
-		}
-		// For all rows, we add table replicate ts, so mysql sink can determine safe-mode.
-		e.Row.ReplicatingTs = task.tableSink.replicateTs
-		x, size, err := convertRowChangedEvents(w.changefeedID, task.tableID, w.enableOldValue, e)
-		if err != nil {
-			return errors.Trace(err)
-		}
-		usedMemSize += size
+		// NOTICE: The event can be filtered by the event filter.
+		if e.Row != nil {
+			// For all rows, we add table replicate ts, so mysql sink can determine safe-mode.
+			e.Row.ReplicatingTs = task.tableSink.replicateTs
+			x, size, err := convertRowChangedEvents(w.changefeedID, task.tableID, w.enableOldValue, e)
+			if err != nil {
+				return errors.Trace(err)
+			}
+			usedMemSize += size
 
-		rows = append(rows, x...)
-		rowsSize += size
-		if cache != nil {
-			cached, brokenSize := cache.pushBatch(x, size, pos)
-			if cached {
-				cachedSize += size
-			} else {
-				cachedSize -= brokenSize
+			rows = append(rows, x...)
+			rowsSize += size
+			if cache != nil {
+				cached, brokenSize := cache.pushBatch(x, size, pos)
+				if cached {
+					cachedSize += size
+				} else {
+					cachedSize -= brokenSize
+				}
 			}
 		}
 
@@ -282,5 +282,7 @@ func (w *redoWorker) handleTask(ctx context.Context, task *redoTask) (finalErr e
 			return errors.Trace(err)
 		}
 	}
+	// Even if task is canceled we still call this again, to avoid somethings
+	// are left and leak forever.
 	return doEmitBatchEvents()
 }

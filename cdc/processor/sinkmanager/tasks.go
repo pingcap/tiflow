@@ -23,8 +23,6 @@ const (
 	defaultRequestMemSize = uint64(10 * 1024 * 1024) // 10MB
 	// Avoid update resolved ts too frequently, if there are too many small transactions.
 	defaultMaxUpdateIntervalSize = uint64(1024 * 256) // 256KB
-	// Limit the maximum size of a group of one batch, if there is a big translation.
-	defaultMaxBigTxnBatchSize = defaultMaxUpdateIntervalSize * 20 // 5MB
 )
 
 // Make these values be variables, so that we can mock them in unit tests.
