@@ -160,7 +160,7 @@ func TestAddTable(t *testing.T) {
 		tableID: tableID,
 		nextLowerBoundPos: engine.Position{
 			StartTs:  0,
-			CommitTs: 1,
+			CommitTs: 2,
 		},
 	}, manager.sinkProgressHeap.pop())
 }
