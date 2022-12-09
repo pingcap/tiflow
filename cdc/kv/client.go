@@ -30,12 +30,12 @@ import (
 	"github.com/pingcap/kvproto/pkg/kvrpcpb"
 	"github.com/pingcap/kvproto/pkg/metapb"
 	"github.com/pingcap/log"
+	"github.com/pingcap/tiflow/cdc/kv/regionlock"
 	"github.com/pingcap/tiflow/cdc/model"
 	"github.com/pingcap/tiflow/cdc/processor/tablepb"
 	"github.com/pingcap/tiflow/pkg/config"
 	cerror "github.com/pingcap/tiflow/pkg/errors"
 	"github.com/pingcap/tiflow/pkg/pdutil"
-	"github.com/pingcap/tiflow/pkg/regionspan"
 	"github.com/pingcap/tiflow/pkg/retry"
 	"github.com/pingcap/tiflow/pkg/spanz"
 	"github.com/pingcap/tiflow/pkg/txnutil"
@@ -395,7 +395,7 @@ type eventFeedSession struct {
 	// The queue is used to store region that reaches limit
 	rateLimitQueue []regionErrorInfo
 
-	rangeLock *regionspan.RegionRangeLock
+	rangeLock *regionlock.RegionRangeLock
 
 	// To identify metrics of different eventFeedSession
 	id                string
@@ -429,7 +429,7 @@ func newEventFeedSession(
 	tableName string,
 ) *eventFeedSession {
 	id := strconv.FormatUint(allocID(), 10)
-	rangeLock := regionspan.NewRegionRangeLock(
+	rangeLock := regionlock.NewRegionRangeLock(
 		totalSpan.StartKey, totalSpan.EndKey, startTs,
 		changefeed.Namespace+"."+changefeed.ID)
 	return &eventFeedSession{
@@ -567,16 +567,16 @@ func (s *eventFeedSession) scheduleDivideRegionAndRequest(ctx context.Context, s
 // scheduleRegionRequest locks the region's range and schedules sending ChangeData request to the region.
 // This function is blocking until the region range is locked successfully
 func (s *eventFeedSession) scheduleRegionRequest(ctx context.Context, sri singleRegionInfo) {
-	handleResult := func(res regionspan.LockRangeResult) {
+	handleResult := func(res regionlock.LockRangeResult) {
 		switch res.Status {
-		case regionspan.LockRangeStatusSuccess:
+		case regionlock.LockRangeStatusSuccess:
 			sri.resolvedTs = res.CheckpointTs
 			select {
 			case s.regionCh <- sri:
 				s.regionChSizeGauge.Inc()
 			case <-ctx.Done():
 			}
-		case regionspan.LockRangeStatusStale:
+		case regionlock.LockRangeStatusStale:
 			log.Info("request expired",
 				zap.String("namespace", s.changefeed.Namespace),
 				zap.String("changefeed", s.changefeed.ID),
@@ -589,7 +589,7 @@ func (s *eventFeedSession) scheduleRegionRequest(ctx context.Context, sri single
 				// goroutine, it won't block the caller of `schedulerRegionRequest`.
 				s.scheduleDivideRegionAndRequest(ctx, r, sri.resolvedTs)
 			}
-		case regionspan.LockRangeStatusCancel:
+		case regionlock.LockRangeStatusCancel:
 			return
 		default:
 			panic("unreachable")
@@ -612,13 +612,13 @@ func (s *eventFeedSession) scheduleRegionRequest(ctx context.Context, sri single
 			start = end
 			end = []byte(fmt.Sprintf("b%d", 1002+i))
 		}
-		res = regionspan.LockRangeResult{
-			Status:      regionspan.LockRangeStatusStale,
+		res = regionlock.LockRangeResult{
+			Status:      regionlock.LockRangeStatusStale,
 			RetryRanges: retryRanges,
 		}
 	})
 
-	if res.Status == regionspan.LockRangeStatusWait {
+	if res.Status == regionlock.LockRangeStatusWait {
 		res = res.WaitFn()
 	}
 
@@ -915,7 +915,7 @@ func (s *eventFeedSession) divideAndSendEventFeedToRegions(
 				}
 				metas = append(metas, region.GetMeta())
 			}
-			if !regionspan.CheckRegionsLeftCover(metas, nextSpan) {
+			if !regionlock.CheckRegionsLeftCover(metas, nextSpan) {
 				return cerror.ErrRegionsNotCoverSpan.FastGenByArgs(nextSpan, metas)
 			}
 			return nil
