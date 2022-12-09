@@ -850,7 +850,7 @@ func TestReduceReplace(t *testing.T) {
 	}{
 		{
 			replaces: map[string][][]interface{}{
-				"REPLACE INTO `test`.`t1`(`a`,`b`) VALUES ": {
+				"REPLACE INTO `test`.`t1` (`a`,`b`) VALUES ": {
 					[]interface{}{1, "1"},
 					[]interface{}{2, "2"},
 					[]interface{}{3, "3"},
@@ -859,9 +859,9 @@ func TestReduceReplace(t *testing.T) {
 			batchSize: 1,
 			sort:      false,
 			expectSQLs: []string{
-				"REPLACE INTO `test`.`t1`(`a`,`b`) VALUES (?,?)",
-				"REPLACE INTO `test`.`t1`(`a`,`b`) VALUES (?,?)",
-				"REPLACE INTO `test`.`t1`(`a`,`b`) VALUES (?,?)",
+				"REPLACE INTO `test`.`t1` (`a`,`b`) VALUES (?,?)",
+				"REPLACE INTO `test`.`t1` (`a`,`b`) VALUES (?,?)",
+				"REPLACE INTO `test`.`t1` (`a`,`b`) VALUES (?,?)",
 			},
 			expectArgs: [][]interface{}{
 				{1, "1"},
@@ -871,7 +871,7 @@ func TestReduceReplace(t *testing.T) {
 		},
 		{
 			replaces: map[string][][]interface{}{
-				"REPLACE INTO `test`.`t1`(`a`,`b`) VALUES ": {
+				"REPLACE INTO `test`.`t1` (`a`,`b`) VALUES ": {
 					[]interface{}{1, "1"},
 					[]interface{}{2, "2"},
 					[]interface{}{3, "3"},
@@ -882,8 +882,8 @@ func TestReduceReplace(t *testing.T) {
 			batchSize: 3,
 			sort:      false,
 			expectSQLs: []string{
-				"REPLACE INTO `test`.`t1`(`a`,`b`) VALUES (?,?),(?,?),(?,?)",
-				"REPLACE INTO `test`.`t1`(`a`,`b`) VALUES (?,?),(?,?)",
+				"REPLACE INTO `test`.`t1` (`a`,`b`) VALUES (?,?),(?,?),(?,?)",
+				"REPLACE INTO `test`.`t1` (`a`,`b`) VALUES (?,?),(?,?)",
 			},
 			expectArgs: [][]interface{}{
 				{1, "1", 2, "2", 3, "3"},
@@ -892,7 +892,7 @@ func TestReduceReplace(t *testing.T) {
 		},
 		{
 			replaces: map[string][][]interface{}{
-				"REPLACE INTO `test`.`t1`(`a`,`b`) VALUES ": {
+				"REPLACE INTO `test`.`t1` (`a`,`b`) VALUES ": {
 					[]interface{}{1, "1"},
 					[]interface{}{2, "2"},
 					[]interface{}{3, "3"},
@@ -903,7 +903,7 @@ func TestReduceReplace(t *testing.T) {
 			batchSize: 10,
 			sort:      false,
 			expectSQLs: []string{
-				"REPLACE INTO `test`.`t1`(`a`,`b`) VALUES (?,?),(?,?),(?,?),(?,?),(?,?)",
+				"REPLACE INTO `test`.`t1` (`a`,`b`) VALUES (?,?),(?,?),(?,?),(?,?),(?,?)",
 			},
 			expectArgs: [][]interface{}{
 				{1, "1", 2, "2", 3, "3", 4, "3", 5, "5"},
@@ -911,7 +911,7 @@ func TestReduceReplace(t *testing.T) {
 		},
 		{
 			replaces: map[string][][]interface{}{
-				"REPLACE INTO `test`.`t1`(`a`,`b`) VALUES ": {
+				"REPLACE INTO `test`.`t1` (`a`,`b`) VALUES ": {
 					[]interface{}{1, "1"},
 					[]interface{}{2, "2"},
 					[]interface{}{3, "3"},
@@ -919,7 +919,7 @@ func TestReduceReplace(t *testing.T) {
 					[]interface{}{5, "5"},
 					[]interface{}{6, "6"},
 				},
-				"REPLACE INTO `test`.`t2`(`a`,`b`) VALUES ": {
+				"REPLACE INTO `test`.`t2` (`a`,`b`) VALUES ": {
 					[]interface{}{7, ""},
 					[]interface{}{8, ""},
 					[]interface{}{9, ""},
@@ -928,9 +928,9 @@ func TestReduceReplace(t *testing.T) {
 			batchSize: 3,
 			sort:      true,
 			expectSQLs: []string{
-				"REPLACE INTO `test`.`t1`(`a`,`b`) VALUES (?,?),(?,?),(?,?)",
-				"REPLACE INTO `test`.`t1`(`a`,`b`) VALUES (?,?),(?,?),(?,?)",
-				"REPLACE INTO `test`.`t2`(`a`,`b`) VALUES (?,?),(?,?),(?,?)",
+				"REPLACE INTO `test`.`t1` (`a`,`b`) VALUES (?,?),(?,?),(?,?)",
+				"REPLACE INTO `test`.`t1` (`a`,`b`) VALUES (?,?),(?,?),(?,?)",
+				"REPLACE INTO `test`.`t2` (`a`,`b`) VALUES (?,?),(?,?),(?,?)",
 			},
 			expectArgs: [][]interface{}{
 				{1, "1", 2, "2", 3, "3"},
@@ -1120,12 +1120,12 @@ func TestNewMySQLSinkExecDML(t *testing.T) {
 		db, mock, err := sqlmock.New(sqlmock.QueryMatcherOption(sqlmock.QueryMatcherEqual))
 		require.Nil(t, err)
 		mock.ExpectBegin()
-		mock.ExpectExec("INSERT INTO `s1`.`t1`(`a`,`b`) VALUES (?,?),(?,?)").
+		mock.ExpectExec("INSERT INTO `s1`.`t1` (`a`,`b`) VALUES (?,?),(?,?)").
 			WithArgs(1, "test", 2, "test").
 			WillReturnResult(sqlmock.NewResult(2, 2))
 		mock.ExpectCommit()
 		mock.ExpectBegin()
-		mock.ExpectExec("INSERT INTO `s1`.`t2`(`a`,`b`) VALUES (?,?),(?,?)").
+		mock.ExpectExec("INSERT INTO `s1`.`t2` (`a`,`b`) VALUES (?,?),(?,?)").
 			WithArgs(1, "test", 2, "test").
 			WillReturnResult(sqlmock.NewResult(2, 2))
 		mock.ExpectCommit()
@@ -1332,7 +1332,7 @@ func TestExecDMLRollbackErrDatabaseNotExists(t *testing.T) {
 		db, mock, err := sqlmock.New(sqlmock.QueryMatcherOption(sqlmock.QueryMatcherEqual))
 		require.Nil(t, err)
 		mock.ExpectBegin()
-		mock.ExpectExec("REPLACE INTO `s1`.`t1`(`a`) VALUES (?),(?)").
+		mock.ExpectExec("REPLACE INTO `s1`.`t1` (`a`) VALUES (?),(?)").
 			WithArgs(1, 2).
 			WillReturnError(errDatabaseNotExists)
 		mock.ExpectRollback()
@@ -1415,7 +1415,7 @@ func TestExecDMLRollbackErrTableNotExists(t *testing.T) {
 		db, mock, err := sqlmock.New(sqlmock.QueryMatcherOption(sqlmock.QueryMatcherEqual))
 		require.Nil(t, err)
 		mock.ExpectBegin()
-		mock.ExpectExec("REPLACE INTO `s1`.`t1`(`a`) VALUES (?),(?)").
+		mock.ExpectExec("REPLACE INTO `s1`.`t1` (`a`) VALUES (?),(?)").
 			WithArgs(1, 2).
 			WillReturnError(errTableNotExists)
 		mock.ExpectRollback()
@@ -1499,7 +1499,7 @@ func TestExecDMLRollbackErrRetryable(t *testing.T) {
 		require.Nil(t, err)
 		for i := 0; i < int(defaultDMLMaxRetry); i++ {
 			mock.ExpectBegin()
-			mock.ExpectExec("REPLACE INTO `s1`.`t1`(`a`) VALUES (?),(?)").
+			mock.ExpectExec("REPLACE INTO `s1`.`t1` (`a`) VALUES (?),(?)").
 				WithArgs(1, 2).
 				WillReturnError(errLockDeadlock)
 			mock.ExpectRollback()
@@ -1575,7 +1575,7 @@ func TestMysqlSinkNotRetryErrDupEntry(t *testing.T) {
 		db, mock, err := sqlmock.New(sqlmock.QueryMatcherOption(sqlmock.QueryMatcherEqual))
 		require.Nil(t, err)
 		mock.ExpectBegin()
-		mock.ExpectExec("INSERT INTO `s1`.`t1`(`a`) VALUES (?)").
+		mock.ExpectExec("INSERT INTO `s1`.`t1` (`a`) VALUES (?)").
 			WithArgs(1).
 			WillReturnResult(sqlmock.NewResult(1, 1))
 		mock.ExpectCommit().
@@ -1893,12 +1893,12 @@ func TestMySQLSinkFlushResolvedTs(t *testing.T) {
 		// normal db
 		db, mock, err := sqlmock.New(sqlmock.QueryMatcherOption(sqlmock.QueryMatcherEqual))
 		mock.ExpectBegin()
-		mock.ExpectExec("REPLACE INTO `s1`.`t1`(`a`) VALUES (?)").
+		mock.ExpectExec("REPLACE INTO `s1`.`t1` (`a`) VALUES (?)").
 			WithArgs(1).
 			WillReturnResult(sqlmock.NewResult(1, 1))
 		mock.ExpectCommit()
 		mock.ExpectBegin()
-		mock.ExpectExec("REPLACE INTO `s1`.`t2`(`a`) VALUES (?)").
+		mock.ExpectExec("REPLACE INTO `s1`.`t2` (`a`) VALUES (?)").
 			WithArgs(1).
 			WillReturnResult(sqlmock.NewResult(1, 1))
 		mock.ExpectCommit()
@@ -2097,7 +2097,7 @@ func TestMySQLSinkExecDMLError(t *testing.T) {
 		db, mock, err := sqlmock.New(sqlmock.QueryMatcherOption(sqlmock.QueryMatcherEqual))
 		require.Nil(t, err)
 		mock.ExpectBegin()
-		mock.ExpectExec("REPLACE INTO `s1`.`t1`(`a`,`b`) VALUES (?,?)").
+		mock.ExpectExec("REPLACE INTO `s1`.`t1` (`a`,`b`) VALUES (?,?)").
 			WillDelayFor(1 * time.Second).
 			WillReturnError(&dmysql.MySQLError{Number: mysql.ErrNoSuchTable})
 		return db, nil

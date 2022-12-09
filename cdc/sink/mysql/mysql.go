@@ -812,7 +812,6 @@ func (s *mysqlSink) groupRowsByType(
 	tableInfo *timodel.TableInfo,
 	spiltUpdate bool,
 ) (insertRows, updateRows, deleteRows [][]*sqlmodel.RowChange) {
-
 	preAllocateSize := len(singleTxnDMLs)
 	if preAllocateSize > s.params.maxTxnRow {
 		preAllocateSize = s.params.maxTxnRow
