@@ -185,11 +185,7 @@ func (m *SinkManager) startWorkers(splitTxn bool, enableOldValue bool) {
 					zap.Error(err))
 				select {
 				case m.errChan <- err:
-				default:
-					log.Error("Failed to send error to error channel, error channel is full",
-						zap.String("namespace", m.changefeedID.Namespace),
-						zap.String("changefeed", m.changefeedID.ID),
-						zap.Error(err))
+				case <-m.ctx.Done():
 				}
 			}
 		}()
@@ -214,11 +210,7 @@ func (m *SinkManager) startWorkers(splitTxn bool, enableOldValue bool) {
 					zap.Error(err))
 				select {
 				case m.errChan <- err:
-				default:
-					log.Error("Failed to send error to error channel, error channel is full",
-						zap.String("namespace", m.changefeedID.Namespace),
-						zap.String("changefeed", m.changefeedID.ID),
-						zap.Error(err))
+				case <-m.ctx.Done():
 				}
 			}
 		}()
@@ -238,11 +230,7 @@ func (m *SinkManager) startGenerateTasks() {
 				zap.Error(err))
 			select {
 			case m.errChan <- err:
-			default:
-				log.Error("Failed to send error to error channel, error channel is full",
-					zap.String("namespace", m.changefeedID.Namespace),
-					zap.String("changefeed", m.changefeedID.ID),
-					zap.Error(err))
+			case <-m.ctx.Done():
 			}
 		}
 	}()
@@ -262,11 +250,7 @@ func (m *SinkManager) startGenerateTasks() {
 				zap.Error(err))
 			select {
 			case m.errChan <- err:
-			default:
-				log.Error("Failed to send error to error channel, error channel is full",
-					zap.String("namespace", m.changefeedID.Namespace),
-					zap.String("changefeed", m.changefeedID.ID),
-					zap.Error(err))
+			case <-m.ctx.Done():
 			}
 		}
 	}()

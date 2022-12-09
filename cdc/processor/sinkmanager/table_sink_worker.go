@@ -79,7 +79,7 @@ func (w *sinkWorker) handleTasks(ctx context.Context, taskChan <-chan *sinkTask)
 	}
 }
 
-func (w *sinkWorker) handleTask(ctx context.Context, task *sinkTask) (err error) {
+func (w *sinkWorker) handleTask(ctx context.Context, task *sinkTask) (finalErr error) {
 	lowerBound := task.lowerBound
 	upperBound := task.getUpperBound(task.tableSink)
 	if !upperBound.IsCommitFence() {
@@ -198,7 +198,19 @@ func (w *sinkWorker) handleTask(ctx context.Context, task *sinkTask) (err error)
 						zap.Uint64("memory", requestMemSize))
 				}
 			} else {
-				if w.memQuota.blockAcquire(requestMemSize) == nil {
+				if !w.splitTxn {
+					w.memQuota.forceAcquire(requestMemSize)
+					availableMem += requestMemSize
+					log.Debug("MemoryQuotaTracing: force acquire memory for table sink task",
+						zap.String("namespace", w.changefeedID.Namespace),
+						zap.String("changefeed", w.changefeedID.ID),
+						zap.Int64("tableID", task.tableID),
+						zap.Uint64("memory", requestMemSize))
+				} else {
+					if err := w.memQuota.blockAcquire(requestMemSize); err != nil {
+						return errors.Trace(err)
+					}
+					// NOTE: if splitTxn is true it's not required to force acquire memory.
 					availableMem += requestMemSize
 					log.Debug("MemoryQuotaTracing: block acquire memory for table sink task",
 						zap.String("namespace", w.changefeedID.Namespace),
@@ -240,7 +252,11 @@ func (w *sinkWorker) handleTask(ctx context.Context, task *sinkTask) (err error)
 			zap.Any("upperBound", upperBound),
 			zap.Bool("splitTxn", w.splitTxn),
 			zap.Any("lastPos", lastPos))
-		task.callback(lastPos)
+
+		if finalErr == nil {
+			// Otherwise we can't ensure all events before `lastPos` are emited.
+			task.callback(lastPos)
+		}
 	}()
 
 	for availableMem > usedMem && !task.isCanceled() {
@@ -251,39 +267,35 @@ func (w *sinkWorker) handleTask(ctx context.Context, task *sinkTask) (err error)
 		// There is no more data. It means that we finish this scan task.
 		if e == nil {
 			lastPos = upperBound
-			if currTxnCommitTs == 0 {
-				currTxnCommitTs = upperBound.CommitTs
-			}
+			currTxnCommitTs = upperBound.CommitTs
 			lastTxnCommitTs = upperBound.CommitTs
 			committedTxnSize += pendingTxnSize
 			pendingTxnSize = 0
 			return maybeEmitAndAdvance(true, true)
 		}
 		allEventCount += 1
-		// If redo log is enabled, we do not need to update this value.
-		// Because it already has been updated in the redo log worker.
 
 		if pos.Valid() {
 			lastPos = pos
 		}
 		if currTxnCommitTs != e.CRTs {
-			if currTxnCommitTs != 0 {
-				lastTxnCommitTs = currTxnCommitTs
-				committedTxnSize += pendingTxnSize
-				pendingTxnSize = 0
-				batchID = 1
-			}
+			lastTxnCommitTs = currTxnCommitTs
 			currTxnCommitTs = e.CRTs
+			committedTxnSize += pendingTxnSize
+			pendingTxnSize = 0
+			batchID = 1
+		}
+		if pos.IsCommitFence() {
+			lastTxnCommitTs = currTxnCommitTs
+			committedTxnSize += pendingTxnSize
+			pendingTxnSize = 0
 		}
 
 		if e.Row == nil {
-			// NOTICE: This could happen when the event is filtered by the event filter.
 			continue
 		}
-		// For all rows, we add table replicate ts, so mysql sink can
-		// determine when to turn off safe-mode.
+		// For all rows, we add table replicate ts, so mysql sink can determine safe-mode.
 		e.Row.ReplicatingTs = task.tableSink.replicateTs
-
 		x, size, err := convertRowChangedEvents(w.changefeedID, task.tableID, w.enableOldValue, e)
 		if err != nil {
 			return err
@@ -291,7 +303,12 @@ func (w *sinkWorker) handleTask(ctx context.Context, task *sinkTask) (err error)
 		allEventSize += size
 		usedMem += size
 
-		pendingTxnSize += size
+		if pos.IsCommitFence() {
+			committedTxnSize += size
+		} else {
+			pendingTxnSize += size
+		}
+
 		events = append(events, x...)
 		if err := maybeEmitAndAdvance(false, pos.Valid()); err != nil {
 			return errors.Trace(err)

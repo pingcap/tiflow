@@ -186,6 +186,8 @@ func (w *redoWorker) handleTask(ctx context.Context, task *redoTask) error {
 						zap.Uint64("memory", requestMemSize))
 				}
 			} else {
+				// NOTE: it's not required to use `forceAcquire` even if splitTxn is false.
+				// It's because memory will finally be `refund` after redo-logs are writen.
 				if w.memQuota.blockAcquire(requestMemSize) == nil {
 					availableMemSize += requestMemSize
 					log.Debug("MemoryQuotaTracing: block acquire memory for redo log task",
@@ -234,9 +236,7 @@ func (w *redoWorker) handleTask(ctx context.Context, task *redoTask) error {
 		// There is no more data. It means that we finish this scan task.
 		if e == nil {
 			lastPos = upperBound
-			if currTxnCommitTs == 0 {
-				currTxnCommitTs = upperBound.CommitTs
-			}
+			currTxnCommitTs = upperBound.CommitTs
 			lastTxnCommitTs = upperBound.CommitTs
 			return maybeEmitBatchEvents(true, true)
 		}

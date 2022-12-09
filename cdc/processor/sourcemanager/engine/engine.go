@@ -154,7 +154,7 @@ func (p Position) Compare(q Position) int {
 // If IsCommitFence is true it means all transactions with same CommitTs are
 // less than the position.
 func (p Position) IsCommitFence() bool {
-	return p.StartTs+1 >= p.CommitTs
+	return p.CommitTs > 0 && p.StartTs+1 >= p.CommitTs
 }
 
 // TableStats of a sort engine.
