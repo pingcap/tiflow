@@ -68,7 +68,7 @@ func (w *redoWorker) handleTasks(ctx context.Context, taskChan <-chan *redoTask)
 	}
 }
 
-func (w *redoWorker) handleTask(ctx context.Context, task *redoTask) error {
+func (w *redoWorker) handleTask(ctx context.Context, task *redoTask) (finalErr error) {
 	upperBound := task.getUpperBound(task.tableSink)
 	if !upperBound.IsCommitFence() {
 		log.Panic("redo task upperbound must be a ResolvedTs",
@@ -206,7 +206,6 @@ func (w *redoWorker) handleTask(ctx context.Context, task *redoTask) error {
 	allEventCount := 0
 	defer func() {
 		task.tableSink.updateReceivedSorterCommitTs(lastTxnCommitTs)
-
 		eventCount := rangeEventCount{pos: lastPos, events: allEventCount}
 		task.tableSink.updateRangeEventCounts(eventCount)
 
@@ -225,7 +224,10 @@ func (w *redoWorker) handleTask(ctx context.Context, task *redoTask) error {
 			zap.Any("lowerBound", task.lowerBound),
 			zap.Any("upperBound", upperBound),
 			zap.Any("lastPos", lastPos))
-		task.callback(lastPos)
+		if finalErr == nil {
+			// Otherwise we can't ensure all events before `lastPos` are emited.
+			task.callback(lastPos)
+		}
 	}()
 
 	for availableMemSize > usedMemSize && !task.isCanceled() {
@@ -246,20 +248,19 @@ func (w *redoWorker) handleTask(ctx context.Context, task *redoTask) error {
 			lastPos = pos
 		}
 		if currTxnCommitTs != e.CRTs {
-			if currTxnCommitTs != 0 {
-				lastTxnCommitTs = currTxnCommitTs
-			}
+			lastTxnCommitTs = currTxnCommitTs
 			currTxnCommitTs = e.CRTs
+		}
+		if pos.IsCommitFence() {
+			lastTxnCommitTs = currTxnCommitTs
 		}
 
 		if e.Row == nil {
 			// NOTICE: This could happen when the event is filtered by the event filter.
 			continue
 		}
-		// For all rows, we add table replicate ts, so mysql sink can
-		// determine when to turn off safe-mode.
+		// For all rows, we add table replicate ts, so mysql sink can determine safe-mode.
 		e.Row.ReplicatingTs = task.tableSink.replicateTs
-
 		x, size, err := convertRowChangedEvents(w.changefeedID, task.tableID, w.enableOldValue, e)
 		if err != nil {
 			return errors.Trace(err)
@@ -276,6 +277,7 @@ func (w *redoWorker) handleTask(ctx context.Context, task *redoTask) error {
 				cachedSize -= brokenSize
 			}
 		}
+
 		if err := maybeEmitBatchEvents(false, pos.Valid()); err != nil {
 			return errors.Trace(err)
 		}

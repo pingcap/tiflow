@@ -207,10 +207,10 @@ func (w *sinkWorker) handleTask(ctx context.Context, task *sinkTask) (finalErr e
 						zap.Int64("tableID", task.tableID),
 						zap.Uint64("memory", requestMemSize))
 				} else {
+					// NOTE: if splitTxn is true it's not required to force acquire memory.
 					if err := w.memQuota.blockAcquire(requestMemSize); err != nil {
 						return errors.Trace(err)
 					}
-					// NOTE: if splitTxn is true it's not required to force acquire memory.
 					availableMem += requestMemSize
 					log.Debug("MemoryQuotaTracing: block acquire memory for table sink task",
 						zap.String("namespace", w.changefeedID.Namespace),
@@ -300,16 +300,15 @@ func (w *sinkWorker) handleTask(ctx context.Context, task *sinkTask) (finalErr e
 		if err != nil {
 			return err
 		}
+		events = append(events, x...)
 		allEventSize += size
 		usedMem += size
-
 		if pos.IsCommitFence() {
 			committedTxnSize += size
 		} else {
 			pendingTxnSize += size
 		}
 
-		events = append(events, x...)
 		if err := maybeEmitAndAdvance(false, pos.Valid()); err != nil {
 			return errors.Trace(err)
 		}
