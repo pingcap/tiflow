@@ -19,21 +19,98 @@ import (
 	"path/filepath"
 	"strconv"
 	"strings"
+	"testing"
 	"time"
 
 	"github.com/golang/mock/gomock"
 	. "github.com/pingcap/check"
 	filter "github.com/pingcap/tidb-tools/pkg/binlog-filter"
 	"github.com/pingcap/tiflow/dm/config"
+	"github.com/pingcap/tiflow/dm/master/workerrpc"
 	"github.com/pingcap/tiflow/dm/pb"
 	"github.com/pingcap/tiflow/dm/pbmock"
 	tcontext "github.com/pingcap/tiflow/dm/pkg/context"
+	"github.com/pingcap/tiflow/dm/pkg/ha"
 	"github.com/pingcap/tiflow/dm/pkg/log"
 	"github.com/pingcap/tiflow/dm/pkg/terror"
+	clientv3 "go.etcd.io/etcd/client/v3"
+	"go.etcd.io/etcd/tests/v3/integration"
 )
 
+type testMaster struct {
+	workerClients     map[string]workerrpc.Client
+	saveMaxRetryNum   int
+	electionTTLBackup int
+	testT             *testing.T
+
+	testEtcdCluster *integration.ClusterV3
+	etcdTestCli     *clientv3.Client
+}
+
+var testSuite = SerialSuites(&testMaster{})
+
+func TestMaster(t *testing.T) {
+	err := log.InitLogger(&log.Config{})
+	if err != nil {
+		t.Fatal(err)
+	}
+	pwd, err = os.Getwd()
+	if err != nil {
+		t.Fatal(err)
+	}
+	integration.BeforeTestExternal(t)
+	// inject *testing.T to testMaster
+	s := testSuite.(*testMaster)
+	s.testT = t
+
+	TestingT(t)
+}
+
+func (t *testMaster) SetUpSuite(c *C) {
+	c.Assert(log.InitLogger(&log.Config{}), IsNil)
+	t.workerClients = make(map[string]workerrpc.Client)
+	t.saveMaxRetryNum = maxRetryNum
+	t.electionTTLBackup = electionTTL
+	electionTTL = 3
+	maxRetryNum = 2
+	checkAndAdjustSourceConfigForDMCtlFunc = checkAndNoAdjustSourceConfigMock
+}
+
+func (t *testMaster) TearDownSuite(c *C) {
+	maxRetryNum = t.saveMaxRetryNum
+	electionTTL = t.electionTTLBackup
+	checkAndAdjustSourceConfigForDMCtlFunc = checkAndAdjustSourceConfig
+}
+
+func (t *testMaster) SetUpTest(c *C) {
+	t.testEtcdCluster = integration.NewClusterV3(t.testT, &integration.ClusterConfig{Size: 1})
+	t.etcdTestCli = t.testEtcdCluster.RandClient()
+	t.clearEtcdEnv(c)
+}
+
+func (t *testMaster) TearDownTest(c *C) {
+	t.clearEtcdEnv(c)
+	t.testEtcdCluster.Terminate(t.testT)
+}
+
+func (t *testMaster) clearEtcdEnv(c *C) {
+	c.Assert(ha.ClearTestInfoOperation(t.etcdTestCli), IsNil)
+}
+
+func testDefaultMasterServerWithC(c *C) *Server {
+	cfg := NewConfig()
+	err := cfg.FromContent(SampleConfig)
+	c.Assert(err, IsNil)
+	cfg.DataDir = c.MkDir()
+	server := NewServer(cfg)
+	server.leader.Store(oneselfLeader)
+	go server.ap.Start(context.Background())
+
+	return server
+}
+
 func (t *testMaster) TestCollectSourceConfigFilesV1Import(c *C) {
-	s := testDefaultMasterServer(c)
+	s := testDefaultMasterServerWithC(c)
 	defer s.Close()
 	s.cfg.V1SourcesPath = c.MkDir()
 
@@ -113,7 +190,7 @@ func (t *testMaster) TestWaitWorkersReadyV1Import(c *C) {
 
 	tctx := tcontext.NewContext(ctx, log.L())
 
-	s := testDefaultMasterServer(c)
+	s := testDefaultMasterServerWithC(c)
 	defer s.Close()
 	s.cfg.V1SourcesPath = c.MkDir()
 	c.Assert(s.scheduler.Start(ctx, t.etcdTestCli), IsNil)
@@ -210,7 +287,7 @@ func (t *testMaster) TestSubtaskCfgsStagesV1Import(c *C) {
 	defer cancel()
 	tctx := tcontext.NewContext(ctx, log.L())
 
-	s := testDefaultMasterServer(c)
+	s := testDefaultMasterServerWithC(c)
 	defer s.Close()
 	s.cfg.V1SourcesPath = c.MkDir()
 	c.Assert(s.scheduler.Start(ctx, t.etcdTestCli), IsNil)

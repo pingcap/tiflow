@@ -1712,7 +1712,13 @@ tags = ["internal", "high"]
 message = ""
 description = ""
 workaround = ""
-tags = ["not-set", "high"]
+tags = ["internal", "high"]
+
+[error.DM-load-unit-34020]
+message = "physical import finished but the data has duplication, please check `%s`.`%s` to see the duplication"
+description = ""
+workaround = "You can refer to https://docs.pingcap.com/tidb/stable/tidb-lightning-physical-import-mode-usage#conflict-detection to manually insert data and resume the task."
+tags = ["internal", "medium"]
 
 [error.DM-sync-unit-36001]
 message = "panic error: %v"
