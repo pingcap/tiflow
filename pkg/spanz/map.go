@@ -99,61 +99,61 @@ func (m *Map[T]) Ascend(iterator ItemIterator[T]) {
 }
 
 // AscendRange calls the iterator for every value in the tree within the range
-// [greaterOrEqual, lessThan), until iterator returns false.
-func (m *Map[T]) AscendRange(greaterOrEqual, lessThan tablepb.Span, iterator ItemIterator[T]) {
-	m.tree.AscendRange(spanItem[T]{Span: greaterOrEqual}, spanItem[T]{Span: lessThan},
+// [start, end), until iterator returns false.
+func (m *Map[T]) AscendRange(start, end tablepb.Span, iterator ItemIterator[T]) {
+	m.tree.AscendRange(spanItem[T]{Span: start}, spanItem[T]{Span: end},
 		func(item spanItem[T]) bool {
 			return iterator(item.Span, item.Value)
 		})
 }
 
-// FindHole returns an array of Span that are not covered in the range
-// [greaterOrEqual, lessThan).
+// FindHoles returns an array of Span that are not covered in the range
+// [start, end).
 // Note: Table ID is not set in returned holes.
-func (m *Map[T]) FindHole(greaterOrEqual, lessThan tablepb.Span) (found, holes []tablepb.Span) {
-	if bytes.Compare(greaterOrEqual.StartKey, lessThan.StartKey) >= 0 {
-		log.Panic("greaterOrEqual muse be larger than lessThan",
-			zap.Stringer("greaterOrEqual", &greaterOrEqual),
-			zap.Stringer("lessThan", &lessThan))
+func (m *Map[T]) FindHoles(start, end tablepb.Span) (coveredSpans, holes []tablepb.Span) {
+	if bytes.Compare(start.StartKey, end.StartKey) >= 0 {
+		log.Panic("start muse be larger than end",
+			zap.Stringer("start", &start),
+			zap.Stringer("end", &end))
 	}
 	firstSpan := true
 	var lastSpan tablepb.Span
-	m.AscendRange(greaterOrEqual, lessThan, func(span tablepb.Span, _ T) bool {
+	m.AscendRange(start, end, func(current tablepb.Span, _ T) bool {
 		if firstSpan {
-			ord := bytes.Compare(greaterOrEqual.StartKey, span.StartKey)
+			ord := bytes.Compare(start.StartKey, current.StartKey)
 			if ord < 0 {
 				holes = append(holes, tablepb.Span{
-					StartKey: greaterOrEqual.StartKey,
-					EndKey:   span.StartKey,
+					StartKey: start.StartKey,
+					EndKey:   current.StartKey,
 				})
 			} else if ord > 0 {
 				log.Panic("map is out of order",
-					zap.Stringer("startSpan", &greaterOrEqual),
-					zap.Stringer("span", &span))
+					zap.Stringer("start", &start),
+					zap.Stringer("current", &current))
 			}
 			firstSpan = false
-		} else if !bytes.Equal(lastSpan.EndKey, span.StartKey) {
+		} else if !bytes.Equal(lastSpan.EndKey, current.StartKey) {
 			// Find a hole.
 			holes = append(holes, tablepb.Span{
 				StartKey: lastSpan.EndKey,
-				EndKey:   span.StartKey,
+				EndKey:   current.StartKey,
 			})
 		}
-		lastSpan = span
-		found = append(found, span)
+		lastSpan = current
+		coveredSpans = append(coveredSpans, current)
 		return true
 	})
-	if len(found) == 0 {
+	if len(coveredSpans) == 0 {
 		// No such span in the map.
-		return found, []tablepb.Span{
-			{StartKey: greaterOrEqual.StartKey, EndKey: lessThan.StartKey},
+		return coveredSpans, []tablepb.Span{
+			{StartKey: start.StartKey, EndKey: end.StartKey},
 		}
 	}
 	// Check if there is a hole in the end.
-	if !bytes.Equal(lastSpan.EndKey, lessThan.StartKey) {
+	if !bytes.Equal(lastSpan.EndKey, end.StartKey) {
 		holes = append(holes, tablepb.Span{
 			StartKey: lastSpan.EndKey,
-			EndKey:   lessThan.StartKey,
+			EndKey:   end.StartKey,
 		})
 	}
 	return
