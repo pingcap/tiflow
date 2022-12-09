@@ -25,6 +25,7 @@ import (
 	"github.com/pingcap/tidb/br/pkg/lightning"
 	"github.com/pingcap/tidb/br/pkg/lightning/checkpoints"
 	lcfg "github.com/pingcap/tidb/br/pkg/lightning/config"
+	"github.com/pingcap/tidb/br/pkg/lightning/errormanager"
 	"github.com/pingcap/tidb/dumpling/export"
 	tidbpromutil "github.com/pingcap/tidb/util/promutil"
 	"github.com/pingcap/tiflow/dm/config"
@@ -268,6 +269,11 @@ func (l *LightningLoader) runLightning(ctx context.Context, cfg *lcfg.Config) er
 		opts = append(opts, lightning.WithLogger(l.logger.Logger))
 	}
 
+	var hasDup atomic.Bool
+	if l.cfg.LoaderConfig.ImportMode == config.LoadModePhysical {
+		opts = append(opts, lightning.WithDupIndicator(&hasDup))
+	}
+
 	err = l.core.RunOnceWithOptions(taskCtx, cfg, opts...)
 	failpoint.Inject("LoadDataSlowDown", nil)
 	failpoint.Inject("LoadDataSlowDownByTask", func(val failpoint.Value) {
@@ -280,7 +286,18 @@ func (l *LightningLoader) runLightning(ctx context.Context, cfg *lcfg.Config) er
 			}
 		}
 	})
-	return terror.ErrLoadLightningRuntime.Delegate(err)
+	if err != nil {
+		return terror.ErrLoadLightningRuntime.Delegate(err)
+	}
+	if hasDup.Load() {
+		return terror.ErrLoadLightningHasDup.Generate(cfg.App.TaskInfoSchemaName, errormanager.ConflictErrorTableName)
+	}
+	return nil
+}
+
+// GetTaskInfoSchemaName is used to assign to TikvImporter.DuplicateResolution in lightning config.
+func GetTaskInfoSchemaName(dmMetaSchema, taskName string) string {
+	return dmMetaSchema + "_" + taskName
 }
 
 // GetLightningConfig returns the lightning task config for the lightning global config and DM subtask config.
@@ -306,6 +323,13 @@ func GetLightningConfig(globalCfg *lcfg.GlobalConfig, subtaskCfg *config.SubTask
 	cfg.Checkpoint.KeepAfterSuccess = lcfg.CheckpointOrigin
 
 	cfg.TikvImporter.OnDuplicate = string(subtaskCfg.OnDuplicateLogical)
+	switch subtaskCfg.OnDuplicatePhysical {
+	case config.OnDuplicateManual:
+		cfg.TikvImporter.DuplicateResolution = lcfg.DupeResAlgRemove
+		cfg.App.TaskInfoSchemaName = GetTaskInfoSchemaName(subtaskCfg.MetaSchema, subtaskCfg.Name)
+	case config.OnDuplicateNone:
+		cfg.TikvImporter.DuplicateResolution = lcfg.DupeResAlgNone
+	}
 	cfg.TiDB.Vars = make(map[string]string)
 	cfg.Routes = subtaskCfg.RouteRules
 	if subtaskCfg.To.Session != nil {
