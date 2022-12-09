@@ -233,9 +233,7 @@ func (w *redoWorker) handleTask(ctx context.Context, task *redoTask) error {
 		}
 		// There is no more data. It means that we finish this scan task.
 		if e == nil {
-			if !lastPos.Valid() {
-				lastPos = upperBound
-			}
+			lastPos = upperBound
 			if currTxnCommitTs == 0 {
 				currTxnCommitTs = upperBound.CommitTs
 			}

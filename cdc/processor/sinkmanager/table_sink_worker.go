@@ -80,6 +80,7 @@ func (w *sinkWorker) handleTasks(ctx context.Context, taskChan <-chan *sinkTask)
 }
 
 func (w *sinkWorker) handleTask(ctx context.Context, task *sinkTask) (err error) {
+	fmt.Printf("handleTask, splitTxn: %t\n", w.splitTxn)
 	lowerBound := task.lowerBound
 	upperBound := task.getUpperBound(task.tableSink)
 	if !upperBound.IsCommitFence() {
@@ -250,9 +251,7 @@ func (w *sinkWorker) handleTask(ctx context.Context, task *sinkTask) (err error)
 		}
 		// There is no more data. It means that we finish this scan task.
 		if e == nil {
-			if !lastPos.Valid() {
-				lastPos = upperBound
-			}
+			lastPos = upperBound
 			if currTxnCommitTs == 0 {
 				currTxnCommitTs = upperBound.CommitTs
 			}

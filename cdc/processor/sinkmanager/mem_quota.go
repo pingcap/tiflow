@@ -235,3 +235,10 @@ func (m *memQuota) getUsedBytes() uint64 {
 	defer m.mu.Unlock()
 	return m.usedBytes
 }
+
+// hasAvailable returns true if the memory quota is available, otherwise returns false.
+func (m *memQuota) hasAvailable(nBytes uint64) bool {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	return m.usedBytes+nBytes <= m.totalBytes
+}
