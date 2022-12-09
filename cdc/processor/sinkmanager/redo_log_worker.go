@@ -239,7 +239,6 @@ func (w *redoWorker) handleTask(ctx context.Context, task *redoTask) (finalErr e
 		// There is no more data. It means that we finish this scan task.
 		if e == nil {
 			lastPos = upperBound
-			currTxnCommitTs = upperBound.CommitTs
 			lastTxnCommitTs = upperBound.CommitTs
 			return maybeEmitBatchEvents(true, true)
 		}
