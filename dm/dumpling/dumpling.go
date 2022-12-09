@@ -111,6 +111,11 @@ func (m *Dumpling) Init(ctx context.Context) error {
 	return nil
 }
 
+func (m *Dumpling) handleExitErrMetric(err *pb.ProcessError) {
+	resumable := fmt.Sprintf("%t", unit.IsResumableError(err))
+	m.metricProxies.dumplingExitWithErrorCounter.WithLabelValues(m.cfg.Name, m.cfg.SourceID, resumable).Inc()
+}
+
 // Process implements Unit.Process.
 func (m *Dumpling) Process(ctx context.Context, pr chan pb.ProcessResult) {
 	m.metricProxies.dumplingExitWithErrorCounter.WithLabelValues(m.cfg.Name, m.cfg.SourceID, "true").Add(0)
@@ -149,7 +154,9 @@ func (m *Dumpling) Process(ctx context.Context, pr chan pb.ProcessResult) {
 		err := storage.RemoveAll(ctx, m.cfg.Dir, nil)
 		if err != nil {
 			m.logger.Error("fail to remove output directory", zap.String("directory", m.cfg.Dir), log.ShortError(err))
-			errs = append(errs, unit.NewProcessError(terror.ErrDumpUnitRuntime.Delegate(err, "fail to remove output directory: "+m.cfg.Dir)))
+			processError := unit.NewProcessError(terror.ErrDumpUnitRuntime.Delegate(err, "fail to remove output directory: "+m.cfg.Dir))
+			m.handleExitErrMetric(processError)
+			errs = append(errs, processError)
 			pr <- pb.ProcessResult{
 				IsCanceled: false,
 				Errors:     errs,
@@ -189,8 +196,7 @@ func (m *Dumpling) Process(ctx context.Context, pr chan pb.ProcessResult) {
 			m.logger.Info("filter out error caused by user cancel")
 		} else {
 			processError := unit.NewProcessError(terror.ErrDumpUnitRuntime.Delegate(err, ""))
-			resumable := fmt.Sprintf("%t", unit.IsResumableError(processError))
-			m.metricProxies.dumplingExitWithErrorCounter.WithLabelValues(m.cfg.Name, m.cfg.SourceID, resumable).Inc()
+			m.handleExitErrMetric(processError)
 			errs = append(errs, processError)
 		}
 	}

@@ -582,6 +582,11 @@ func (l *Loader) Init(ctx context.Context) (err error) {
 	return nil
 }
 
+func (l *Loader) handleExitErrMetric(err *pb.ProcessError) {
+	resumable := fmt.Sprintf("%t", unit.IsResumableError(err))
+	loaderExitWithErrorCounter.WithLabelValues(l.cfg.Name, l.cfg.SourceID, resumable).Inc()
+}
+
 // Process implements Unit.Process.
 func (l *Loader) Process(ctx context.Context, pr chan pb.ProcessResult) {
 	loaderExitWithErrorCounter.WithLabelValues(l.cfg.Name, l.cfg.SourceID, "true").Add(0)
@@ -594,8 +599,7 @@ func (l *Loader) Process(ctx context.Context, pr chan pb.ProcessResult) {
 	binlog, gtid, err := getMydumpMetadata(ctx, l.cli, l.cfg, l.workerName)
 	if err != nil {
 		processError := unit.NewProcessError(err)
-		resumable := fmt.Sprintf("%t", unit.IsResumableError(processError))
-		loaderExitWithErrorCounter.WithLabelValues(l.cfg.Name, l.cfg.SourceID, resumable).Inc()
+		l.handleExitErrMetric(processError)
 		pr <- pb.ProcessResult{
 			Errors: []*pb.ProcessError{processError},
 		}
@@ -642,8 +646,7 @@ func (l *Loader) Process(ctx context.Context, pr chan pb.ProcessResult) {
 			l.logger.Info("filter out error caused by user cancel")
 		} else {
 			processError := unit.NewProcessError(err)
-			resumable := fmt.Sprintf("%t", unit.IsResumableError(processError))
-			loaderExitWithErrorCounter.WithLabelValues(l.cfg.Name, l.cfg.SourceID, resumable).Inc()
+			l.handleExitErrMetric(processError)
 			errs = append(errs, processError)
 		}
 	}

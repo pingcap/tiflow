@@ -403,6 +403,11 @@ func (l *LightningLoader) restore(ctx context.Context) error {
 	return err
 }
 
+func (l *LightningLoader) handleExitErrMetric(err *pb.ProcessError) {
+	resumable := fmt.Sprintf("%t", unit.IsResumableError(err))
+	loaderExitWithErrorCounter.WithLabelValues(l.cfg.Name, l.cfg.SourceID, resumable).Inc()
+}
+
 // Process implements Unit.Process.
 func (l *LightningLoader) Process(ctx context.Context, pr chan pb.ProcessResult) {
 	l.logger.Info("lightning load start")
@@ -418,8 +423,7 @@ func (l *LightningLoader) Process(ctx context.Context, pr chan pb.ProcessResult)
 	binlog, gtid, err := getMydumpMetadata(ctx, l.cli, l.cfg, l.workerName)
 	if err != nil {
 		processError := unit.NewProcessError(err)
-		resumable := fmt.Sprintf("%t", unit.IsResumableError(processError))
-		loaderExitWithErrorCounter.WithLabelValues(l.cfg.Name, l.cfg.SourceID, resumable).Inc()
+		l.handleExitErrMetric(processError)
 		pr <- pb.ProcessResult{
 			Errors: []*pb.ProcessError{processError},
 		}
@@ -434,7 +438,9 @@ func (l *LightningLoader) Process(ctx context.Context, pr chan pb.ProcessResult)
 
 	if err := l.restore(ctx); err != nil && !utils.IsContextCanceledError(err) {
 		l.logger.Error("process error", zap.Error(err))
-		errs = append(errs, unit.NewProcessError(err))
+		processError := unit.NewProcessError(err)
+		l.handleExitErrMetric(processError)
+		errs = append(errs, processError)
 	}
 	isCanceled := false
 	select {
