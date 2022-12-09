@@ -43,7 +43,7 @@ func (t *testDMJobmasterSuite) TestUpdateTaskStatus() {
 	jobCfg.TaskMode = dmconfig.ModeFull
 	job := metadata.NewJob(jobCfg)
 	jobStore := metadata.NewJobStore(kvmock.NewMetaMock(), log.L())
-	taskManager := NewTaskManager(nil, jobStore, nil, log.L(), promutil.NewFactory4Test(t.T().TempDir()))
+	taskManager := NewTaskManager("test-job", nil, jobStore, nil, log.L(), promutil.NewFactory4Test(t.T().TempDir()))
 
 	require.Len(t.T(), taskManager.TaskStatus(), 0)
 	require.False(t.T(), taskManager.allFinished(context.Background()))
@@ -113,7 +113,7 @@ func (t *testDMJobmasterSuite) TestUpdateTaskStatus() {
 	for _, taskStatus := range taskStatusMap {
 		taskStatusList = append(taskStatusList, taskStatus)
 	}
-	taskManager = NewTaskManager(taskStatusList, jobStore, nil, log.L(), promutil.NewFactory4Test(t.T().TempDir()))
+	taskManager = NewTaskManager("test-job", taskStatusList, jobStore, nil, log.L(), promutil.NewFactory4Test(t.T().TempDir()))
 	taskStatusMap = taskManager.TaskStatus()
 	require.Len(t.T(), taskStatusMap, 2)
 	require.Contains(t.T(), taskStatusMap, jobCfg.Upstreams[0].SourceID)
@@ -137,7 +137,7 @@ func (t *testDMJobmasterSuite) TestOperateTask() {
 	jobCfg := &config.JobCfg{}
 	require.NoError(t.T(), jobCfg.DecodeFile(jobTemplatePath))
 	jobStore := metadata.NewJobStore(kvmock.NewMetaMock(), log.L())
-	taskManager := NewTaskManager(nil, jobStore, &dmpkg.MockMessageAgent{}, log.L(), promutil.NewFactory4Test(t.T().TempDir()))
+	taskManager := NewTaskManager("test-job", nil, jobStore, &dmpkg.MockMessageAgent{}, log.L(), promutil.NewFactory4Test(t.T().TempDir()))
 
 	source1 := jobCfg.Upstreams[0].SourceID
 	source2 := jobCfg.Upstreams[1].SourceID
@@ -190,7 +190,7 @@ func (t *testDMJobmasterSuite) TestOperateTask() {
 }
 
 func (t *testDMJobmasterSuite) TestClearTaskStatus() {
-	taskManager := NewTaskManager(nil, nil, nil, log.L(), promutil.NewFactory4Test(t.T().TempDir()))
+	taskManager := NewTaskManager("test-job", nil, nil, nil, log.L(), promutil.NewFactory4Test(t.T().TempDir()))
 	syncStatus1 := runtime.TaskStatus{
 		Unit:  frameModel.WorkerDMSync,
 		Task:  "source1",
@@ -320,7 +320,7 @@ func (t *testDMJobmasterSuite) TestCheckAndOperateTasks() {
 	require.NoError(t.T(), jobCfg.DecodeFile(jobTemplatePath))
 	job := metadata.NewJob(jobCfg)
 	mockAgent := &dmpkg.MockMessageAgent{}
-	taskManager := NewTaskManager(nil, nil, mockAgent, log.L(), promutil.NewFactory4Test(t.T().TempDir()))
+	taskManager := NewTaskManager("test-job", nil, nil, mockAgent, log.L(), promutil.NewFactory4Test(t.T().TempDir()))
 
 	require.EqualError(t.T(), taskManager.checkAndOperateTasks(context.Background(), job), "get task running status failed")
 
@@ -369,7 +369,7 @@ func (t *testDMJobmasterSuite) TestTaskManager() {
 	require.NoError(t.T(), jobStore.Put(context.Background(), job))
 
 	mockAgent := &dmpkg.MockMessageAgent{}
-	taskManager := NewTaskManager(nil, jobStore, mockAgent, log.L(), promutil.NewFactory4Test(t.T().TempDir()))
+	taskManager := NewTaskManager("test-job", nil, jobStore, mockAgent, log.L(), promutil.NewFactory4Test(t.T().TempDir()))
 	source1 := jobCfg.Upstreams[0].SourceID
 	source2 := jobCfg.Upstreams[1].SourceID
 
