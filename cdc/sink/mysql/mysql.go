@@ -807,72 +807,107 @@ func convertBinaryToString(row *model.RowChangedEvent) {
 }
 
 // TODO: Find a way to make batch delete dmls more efficient.
-func groupRowsByType(
+func (s *mysqlSink) groupRowsByType(
 	singleTxnDMLs []*model.RowChangedEvent,
 	tableInfo *timodel.TableInfo,
 	spiltUpdate bool,
-) (insertRows, updateRows, deleteRows []*sqlmodel.RowChange) {
+) (insertRows, updateRows, deleteRows [][]*sqlmodel.RowChange) {
+	insertRow := make([]*sqlmodel.RowChange, 0, s.params.maxTxnRow)
+	updateRow := make([]*sqlmodel.RowChange, 0, s.params.maxTxnRow)
+	deleteRow := make([]*sqlmodel.RowChange, 0, s.params.maxTxnRow)
+
 	for _, row := range singleTxnDMLs {
 		convertBinaryToString(row)
+
 		if row.IsInsert() {
-			insertRows = append(
-				insertRows,
+			insertRow = append(
+				insertRow,
 				convert2RowChanges(row, tableInfo, sqlmodel.RowChangeInsert))
-		} else if row.IsDelete() {
-			deleteRows = append(
-				deleteRows,
+			if len(insertRow) >= s.params.maxTxnRow {
+				insertRows = append(insertRows, insertRow)
+				insertRow = make([]*sqlmodel.RowChange, 0, s.params.maxTxnRow)
+			}
+		}
+
+		if row.IsDelete() {
+			deleteRow = append(
+				deleteRow,
 				convert2RowChanges(row, tableInfo, sqlmodel.RowChangeDelete))
-		} else if row.IsUpdate() {
+			if len(deleteRow) >= s.params.maxTxnRow {
+				deleteRows = append(deleteRows, deleteRow)
+				deleteRow = make([]*sqlmodel.RowChange, 0, s.params.maxTxnRow)
+			}
+		}
+
+		if row.IsUpdate() {
 			if spiltUpdate {
-				deleteRows = append(
-					deleteRows,
+				deleteRow = append(
+					deleteRow,
 					convert2RowChanges(row, tableInfo, sqlmodel.RowChangeDelete))
-				insertRows = append(
-					insertRows,
+				if len(deleteRow) >= s.params.maxTxnRow {
+					deleteRows = append(deleteRows, deleteRow)
+					deleteRow = make([]*sqlmodel.RowChange, 0, s.params.maxTxnRow)
+				}
+				insertRow = append(
+					insertRow,
 					convert2RowChanges(row, tableInfo, sqlmodel.RowChangeInsert))
+				if len(insertRow) >= s.params.maxTxnRow {
+					insertRows = append(insertRows, insertRow)
+					insertRow = make([]*sqlmodel.RowChange, 0, s.params.maxTxnRow)
+				}
 			} else {
-				updateRows = append(
-					updateRows,
+				updateRow = append(
+					updateRow,
 					convert2RowChanges(row, tableInfo, sqlmodel.RowChangeUpdate))
+				if len(updateRow) >= s.params.maxTxnRow {
+					updateRows = append(updateRows, updateRow)
+					updateRow = make([]*sqlmodel.RowChange, 0, s.params.maxTxnRow)
+				}
 			}
 		}
 	}
 	return
 }
 
-func batchSingleTxnDmls(
+func (s *mysqlSink) batchSingleTxnDmls(
 	singleTxnDMLs []*model.RowChangedEvent,
 	tableInfo *timodel.TableInfo,
 	translateToInsert bool,
 ) (sqls []string, values [][]interface{}) {
-	insertRows, updateRows, deleteRows := groupRowsByType(singleTxnDMLs, tableInfo, !translateToInsert)
+	insertRows, updateRows, deleteRows := s.groupRowsByType(singleTxnDMLs, tableInfo, !translateToInsert)
 
 	if len(deleteRows) > 0 {
-		sql, value := sqlmodel.GenDeleteSQL(deleteRows...)
-		sqls = append(sqls, sql)
-		values = append(values, value)
-	}
-
-	// handle insert
-	if len(insertRows) > 0 {
-		if translateToInsert {
-			sql, value := sqlmodel.GenInsertSQL(sqlmodel.DMLInsert, insertRows...)
-			sqls = append(sqls, sql)
-			values = append(values, value)
-		} else {
-			sql, value := sqlmodel.GenInsertSQL(sqlmodel.DMLReplace, insertRows...)
+		for _, rows := range deleteRows {
+			sql, value := sqlmodel.GenDeleteSQL(rows...)
 			sqls = append(sqls, sql)
 			values = append(values, value)
 		}
 	}
 
+	// handle insert
+	if len(insertRows) > 0 {
+		for _, rows := range insertRows {
+			if translateToInsert {
+				sql, value := sqlmodel.GenInsertSQL(sqlmodel.DMLInsert, rows...)
+				sqls = append(sqls, sql)
+				values = append(values, value)
+			} else {
+				sql, value := sqlmodel.GenInsertSQL(sqlmodel.DMLReplace, rows...)
+				sqls = append(sqls, sql)
+				values = append(values, value)
+			}
+		}
+	}
+
 	// handle update
 	if len(updateRows) > 0 {
-		// TODO: do a testing on update performance.
-		sql, value := sqlmodel.GenUpdateSQL(updateRows...)
-		sqls = append(sqls, sql)
-		values = append(values, value)
+		for _, rows := range updateRows {
+			sql, value := sqlmodel.GenUpdateSQL(rows...)
+			sqls = append(sqls, sql)
+			values = append(values, value)
+		}
 	}
+
 	return
 }
 
@@ -942,7 +977,7 @@ func (s *mysqlSink) prepareDMLs(txns []*model.SingleTableTxn, replicaID uint64, 
 				rowCount += len(txn.Rows)
 				// TODO(dongmen): find a better way to get table info.
 				tableInfo := model.BuildTiDBTableInfo(tableColumns, firstRow.IndexColumns)
-				sql, value := batchSingleTxnDmls(txn.Rows, tableInfo, translateToInsert)
+				sql, value := s.batchSingleTxnDmls(txn.Rows, tableInfo, translateToInsert)
 				sqls = append(sqls, sql...)
 				values = append(values, value...)
 				continue
