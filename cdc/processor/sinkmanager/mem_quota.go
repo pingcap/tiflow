@@ -35,6 +35,9 @@ type memQuota struct {
 	// totalBytes is the total memory quota for one changefeed.
 	totalBytes uint64
 
+	// blockAcquireCond is used to notify the blocked acquire.
+	blockAcquireCond *sync.Cond
+
 	// mu protects the following fields.
 	mu sync.Mutex
 	// usedBytes is the memory usage of one changefeed.
@@ -43,8 +46,6 @@ type memQuota struct {
 	tableMemory map[model.TableID][]*memConsumeRecord
 	// isClosed is used to indicate whether the mem quota is closed.
 	isClosed atomic.Bool
-	// blockAcquireCond is used to notify the blocked acquire.
-	blockAcquireCond *sync.Cond
 
 	metricTotal prometheus.Gauge
 	metricUsed  prometheus.Gauge
@@ -82,7 +83,6 @@ func (m *memQuota) tryAcquire(nBytes uint64) bool {
 func (m *memQuota) forceAcquire(nBytes uint64) {
 	m.mu.Lock()
 	defer m.mu.Unlock()
-
 	m.usedBytes += nBytes
 	m.metricUsed.Set(float64(m.usedBytes))
 }
@@ -112,29 +112,47 @@ func (m *memQuota) refund(nBytes uint64) {
 	}
 	m.mu.Lock()
 	defer m.mu.Unlock()
+	if m.usedBytes < nBytes {
+		log.Panic("memQuota.refund fail",
+			zap.Uint64("used", m.usedBytes), zap.Uint64("refund", nBytes))
+	}
 	m.usedBytes -= nBytes
 	m.metricUsed.Set(float64(m.usedBytes))
-	m.blockAcquireCond.Signal()
+	if m.usedBytes < m.totalBytes {
+		m.blockAcquireCond.Broadcast()
+	}
+}
+
+func (m *memQuota) addTable(tableID model.TableID) {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	m.tableMemory[tableID] = make([]*memConsumeRecord, 0, 2)
 }
 
 // record records the memory usage of a table.
-func (m *memQuota) record(tableID model.TableID, resolved model.ResolvedTs, size uint64) {
+func (m *memQuota) record(tableID model.TableID, resolved model.ResolvedTs, nBytes uint64) {
+	if nBytes == 0 {
+		return
+	}
 	m.mu.Lock()
 	defer m.mu.Unlock()
 	if _, ok := m.tableMemory[tableID]; !ok {
-		m.tableMemory[tableID] = make([]*memConsumeRecord, 0, 2)
+		// Can't find the table record, the table must be removed.
+		if m.usedBytes < nBytes {
+			log.Panic("memQuota.refund fail",
+				zap.Uint64("used", m.usedBytes), zap.Uint64("refund", nBytes))
+		}
+		m.usedBytes -= nBytes
+		m.metricUsed.Set(float64(m.usedBytes))
+		if m.usedBytes < m.totalBytes {
+			m.blockAcquireCond.Broadcast()
+		}
+		return
 	}
 	m.tableMemory[tableID] = append(m.tableMemory[tableID], &memConsumeRecord{
 		resolvedTs: resolved,
-		size:       size,
+		size:       nBytes,
 	})
-}
-
-// hasAvailable returns true if the memory quota is available, otherwise returns false.
-func (m *memQuota) hasAvailable(nBytes uint64) bool {
-	m.mu.Lock()
-	defer m.mu.Unlock()
-	return m.usedBytes+nBytes <= m.totalBytes
 }
 
 // release try to use resolvedTs to release the memory quota.
@@ -153,17 +171,22 @@ func (m *memQuota) release(tableID model.TableID, resolved model.ResolvedTs) {
 	i := sort.Search(len(records), func(i int) bool {
 		return records[i].resolvedTs.Greater(resolved)
 	})
-	if i == 0 {
+	var toRelease uint64 = 0
+	for j := 0; j < i; j++ {
+		toRelease += records[j].size
+	}
+	m.tableMemory[tableID] = records[i:]
+	if toRelease == 0 {
 		return
 	}
-	for j := 0; j < i; j++ {
-		m.usedBytes -= records[j].size
+	if m.usedBytes < toRelease {
+		log.Panic("memQuota.release fail",
+			zap.Uint64("used", m.usedBytes), zap.Uint64("release", toRelease))
 	}
+	m.usedBytes -= toRelease
 	m.metricUsed.Set(float64(m.usedBytes))
-	m.tableMemory[tableID] = append(make([]*memConsumeRecord, 0, len(records[i:])), records[i:]...)
-
 	if m.usedBytes < m.totalBytes {
-		m.blockAcquireCond.Signal()
+		m.blockAcquireCond.Broadcast()
 	}
 }
 
@@ -197,6 +220,10 @@ func (m *memQuota) clean(tableID model.TableID) uint64 {
 
 // close the mem quota and notify the blocked acquire.
 func (m *memQuota) close() {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	// NOTE: m.usedBytes is not reset, because refund can still be called after closed.
+	m.tableMemory = make(map[model.TableID][]*memConsumeRecord)
 	m.metricUsed.Set(float64(0))
 	m.isClosed.Store(true)
 	m.blockAcquireCond.Broadcast()
@@ -207,4 +234,11 @@ func (m *memQuota) getUsedBytes() uint64 {
 	m.mu.Lock()
 	defer m.mu.Unlock()
 	return m.usedBytes
+}
+
+// hasAvailable returns true if the memory quota is available, otherwise returns false.
+func (m *memQuota) hasAvailable(nBytes uint64) bool {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	return m.usedBytes+nBytes <= m.totalBytes
 }
