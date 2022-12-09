@@ -812,9 +812,15 @@ func (s *mysqlSink) groupRowsByType(
 	tableInfo *timodel.TableInfo,
 	spiltUpdate bool,
 ) (insertRows, updateRows, deleteRows [][]*sqlmodel.RowChange) {
-	insertRow := make([]*sqlmodel.RowChange, 0, s.params.maxTxnRow)
-	updateRow := make([]*sqlmodel.RowChange, 0, s.params.maxTxnRow)
-	deleteRow := make([]*sqlmodel.RowChange, 0, s.params.maxTxnRow)
+
+	preAllocateSize := len(singleTxnDMLs)
+	if preAllocateSize > s.params.maxTxnRow {
+		preAllocateSize = s.params.maxTxnRow
+	}
+
+	insertRow := make([]*sqlmodel.RowChange, 0, preAllocateSize)
+	updateRow := make([]*sqlmodel.RowChange, 0, preAllocateSize)
+	deleteRow := make([]*sqlmodel.RowChange, 0, preAllocateSize)
 
 	for _, row := range singleTxnDMLs {
 		convertBinaryToString(row)
@@ -825,7 +831,7 @@ func (s *mysqlSink) groupRowsByType(
 				convert2RowChanges(row, tableInfo, sqlmodel.RowChangeInsert))
 			if len(insertRow) >= s.params.maxTxnRow {
 				insertRows = append(insertRows, insertRow)
-				insertRow = make([]*sqlmodel.RowChange, 0, s.params.maxTxnRow)
+				insertRow = make([]*sqlmodel.RowChange, 0, preAllocateSize)
 			}
 		}
 
@@ -835,7 +841,7 @@ func (s *mysqlSink) groupRowsByType(
 				convert2RowChanges(row, tableInfo, sqlmodel.RowChangeDelete))
 			if len(deleteRow) >= s.params.maxTxnRow {
 				deleteRows = append(deleteRows, deleteRow)
-				deleteRow = make([]*sqlmodel.RowChange, 0, s.params.maxTxnRow)
+				deleteRow = make([]*sqlmodel.RowChange, 0, preAllocateSize)
 			}
 		}
 
@@ -866,6 +872,17 @@ func (s *mysqlSink) groupRowsByType(
 			}
 		}
 	}
+
+	if len(insertRow) > 0 {
+		insertRows = append(insertRows, insertRow)
+	}
+	if len(updateRow) > 0 {
+		updateRows = append(updateRows, updateRow)
+	}
+	if len(deleteRow) > 0 {
+		deleteRows = append(deleteRows, deleteRow)
+	}
+
 	return
 }
 
