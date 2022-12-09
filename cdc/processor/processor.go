@@ -219,11 +219,6 @@ func (p *processor) AddTable(
 			p.redoManager.AddTable(tableID, startTs)
 		}
 		p.sourceManager.AddTable(ctx.(cdcContext.Context), tableID, p.getTableName(ctx, tableID), startTs)
-		if !isPrepare {
-			if err := p.sinkManager.StartTable(tableID, startTs); err != nil {
-				return false, errors.Trace(err)
-			}
-		}
 	} else {
 		table, err := p.createTablePipeline(
 			ctx.(cdcContext.Context), tableID, &model.TableReplicaInfo{StartTs: startTs})
@@ -231,15 +226,6 @@ func (p *processor) AddTable(
 			return false, errors.Trace(err)
 		}
 		p.tables[tableID] = table
-		if !isPrepare {
-			table.Start(startTs)
-			log.Debug("start table",
-				zap.String("captureID", p.captureInfo.ID),
-				zap.String("namespace", p.changefeedID.Namespace),
-				zap.String("changefeed", p.changefeedID.ID),
-				zap.Int64("tableID", tableID),
-				zap.Uint64("startTs", startTs))
-		}
 	}
 
 	return true, nil
