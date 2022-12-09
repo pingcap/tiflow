@@ -226,11 +226,6 @@ func (p *processor) AddTableSpan(
 		}
 		p.sourceManager.AddTable(
 			ctx.(cdcContext.Context), span.TableID, p.getTableName(ctx, span.TableID), startTs)
-		if !isPrepare {
-			if err := p.sinkManager.StartTable(span.TableID, startTs); err != nil {
-				return false, errors.Trace(err)
-			}
-		}
 	} else {
 		table, err := p.createTablePipeline(
 			ctx.(cdcContext.Context), span, &model.TableReplicaInfo{StartTs: startTs})
@@ -238,15 +233,6 @@ func (p *processor) AddTableSpan(
 			return false, errors.Trace(err)
 		}
 		p.tableSpans.ReplaceOrInsert(span, table)
-		if !isPrepare {
-			table.Start(startTs)
-			log.Debug("start table",
-				zap.String("captureID", p.captureInfo.ID),
-				zap.String("namespace", p.changefeedID.Namespace),
-				zap.String("changefeed", p.changefeedID.ID),
-				zap.Stringer("span", &span),
-				zap.Uint64("startTs", startTs))
-		}
 	}
 
 	return true, nil
