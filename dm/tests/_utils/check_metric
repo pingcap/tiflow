@@ -21,7 +21,7 @@ while [ $counter -lt $retry_count ]; do
 		exit 0
 	fi
 	((counter += 1))
-	echo "wait for valid metric for $counter-th time, got value: '$metric'"
+	echo "wait for valid metric of $metric_name for $counter-th time, got value: '$metric'"
 	sleep 1
 done
 
