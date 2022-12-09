@@ -156,13 +156,11 @@ func TestAddTable(t *testing.T) {
 	err := manager.StartTable(tableID, 1)
 	require.NoError(t, err)
 	require.Equal(t, uint64(0x7ffffffffffbffff), tableSink.(*tableSinkWrapper).replicateTs)
-	require.Equal(t, &progress{
-		tableID: tableID,
-		nextLowerBoundPos: engine.Position{
-			StartTs:  0,
-			CommitTs: 2,
-		},
-	}, manager.sinkProgressHeap.pop())
+
+	progress := manager.sinkProgressHeap.pop()
+	require.Equal(t, tableID, progress.tableID)
+	require.Equal(t, uint64(0), progress.nextLowerBoundPos.StartTs)
+	require.Equal(t, uint64(2), progress.nextLowerBoundPos.CommitTs)
 }
 
 func TestRemoveTable(t *testing.T) {
