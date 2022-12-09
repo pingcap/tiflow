@@ -254,7 +254,7 @@ func (w *sinkWorker) handleTask(ctx context.Context, task *sinkTask) (finalErr e
 			zap.Any("lastPos", lastPos))
 
 		if finalErr == nil {
-			// Otherwise we can't ensure all events before `lastPos` are emited.
+			// Otherwise we can't ensure all events before `lastPos` are emitted.
 			task.callback(lastPos)
 		}
 	}()

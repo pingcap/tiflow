@@ -187,7 +187,7 @@ func (w *redoWorker) handleTask(ctx context.Context, task *redoTask) (finalErr e
 				}
 			} else {
 				// NOTE: it's not required to use `forceAcquire` even if splitTxn is false.
-				// It's because memory will finally be `refund` after redo-logs are writen.
+				// It's because memory will finally be `refund` after redo-logs are written.
 				if w.memQuota.blockAcquire(requestMemSize) == nil {
 					availableMemSize += requestMemSize
 					log.Debug("MemoryQuotaTracing: block acquire memory for redo log task",
@@ -225,7 +225,7 @@ func (w *redoWorker) handleTask(ctx context.Context, task *redoTask) (finalErr e
 			zap.Any("upperBound", upperBound),
 			zap.Any("lastPos", lastPos))
 		if finalErr == nil {
-			// Otherwise we can't ensure all events before `lastPos` are emited.
+			// Otherwise we can't ensure all events before `lastPos` are emitted.
 			task.callback(lastPos)
 		}
 	}()
