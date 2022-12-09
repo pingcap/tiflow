@@ -121,17 +121,17 @@ func (p Position) Next() Position {
 
 // Prev can only be called on a valid Position.
 func (p Position) Prev() Position {
-    if p.StartTs == 0 {
-        return Position{
-            StartTs:  p.CommitTs-2,
-            CommitTs: p.CommitTs-1,
-        }
-    } else {
-        return Position{
-            StartTs:  p.StartTs - 1,
-            CommitTs: p.CommitTs,
-        }
-    }
+	if p.StartTs == 0 {
+		return Position{
+			StartTs:  p.CommitTs - 2,
+			CommitTs: p.CommitTs - 1,
+		}
+	} else {
+		return Position{
+			StartTs:  p.StartTs - 1,
+			CommitTs: p.CommitTs,
+		}
+	}
 }
 
 // Compare compares 2 Position, just like strcmp in C.
@@ -149,6 +149,12 @@ func (p Position) Compare(q Position) int {
 	} else {
 		return 1
 	}
+}
+
+// If IsCommitFence is true it means all transactions with same CommitTs are
+// less than the position.
+func (p Position) IsCommitFence() bool {
+	return p.StartTs+1 >= p.CommitTs
 }
 
 // TableStats of a sort engine.

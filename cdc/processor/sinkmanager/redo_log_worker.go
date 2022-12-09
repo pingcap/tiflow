@@ -69,7 +69,15 @@ func (w *redoWorker) handleTasks(ctx context.Context, taskChan <-chan *redoTask)
 }
 
 func (w *redoWorker) handleTask(ctx context.Context, task *redoTask) error {
-	rows := make([]*model.RowChangedEvent, 0, 1024)
+	upperBound := task.getUpperBound(task.tableSink)
+	if !upperBound.IsCommitFence() {
+		log.Panic("redo task upperbound must be a ResolvedTs",
+			zap.String("namespace", w.changefeedID.Namespace),
+			zap.String("changefeed", w.changefeedID.ID),
+			zap.Int64("tableID", task.tableID),
+			zap.Any("upperBound", upperBound))
+	}
+
 	var cache *eventAppender
 	if w.eventCache != nil {
 		cache = w.eventCache.maybeCreateAppender(task.tableID, task.lowerBound)
@@ -80,11 +88,15 @@ func (w *redoWorker) handleTask(ctx context.Context, task *redoTask) error {
 	// memory quota, which can be calculated based on rowsSize and cachedSize.
 	rowsSize := uint64(0)
 	cachedSize := uint64(0)
+	rows := make([]*model.RowChangedEvent, 0, 1024)
 
 	availableMemSize := requestMemSize
 	usedMemSize := uint64(0)
 
+	// Only used to calculate lowerBound when next time the table is scheduled.
 	var lastPos engine.Position
+
+	// To calculate advance the downstream to where.
 	emitedCommitTs := uint64(0)
 	lastTxnCommitTs := uint64(0)
 	currTxnCommitTs := uint64(0)
@@ -116,7 +128,7 @@ func (w *redoWorker) handleTask(ctx context.Context, task *redoTask) error {
 		}
 		if currTxnCommitTs > 0 {
 			toEmit := lastTxnCommitTs
-			if currTxnCommitTs == lastPos.CommitTs && lastPos.CommitTs == lastPos.StartTs+1 {
+			if currTxnCommitTs == lastPos.CommitTs && lastPos.IsCommitFence() {
 				toEmit = currTxnCommitTs
 			}
 			if toEmit > emitedCommitTs {
@@ -188,10 +200,11 @@ func (w *redoWorker) handleTask(ctx context.Context, task *redoTask) error {
 		return nil
 	}
 
-	upperBound := task.getUpperBound(task.tableSink)
 	iter := w.sourceManager.FetchByTable(task.tableID, task.lowerBound, upperBound)
 	allEventCount := 0
 	defer func() {
+		task.tableSink.updateReceivedSorterCommitTs(lastTxnCommitTs)
+
 		eventCount := rangeEventCount{pos: lastPos, events: allEventCount}
 		task.tableSink.updateRangeEventCounts(eventCount)
 
@@ -207,8 +220,9 @@ func (w *redoWorker) handleTask(ctx context.Context, task *redoTask) error {
 			zap.String("namespace", w.changefeedID.Namespace),
 			zap.String("changefeed", w.changefeedID.ID),
 			zap.Int64("tableID", task.tableID),
-			zap.Uint64("commitTs", lastPos.CommitTs),
-			zap.Uint64("startTs", lastPos.StartTs))
+			zap.Any("lowerBound", task.lowerBound),
+			zap.Any("upperBound", upperBound),
+			zap.Any("lastPos", lastPos))
 		task.callback(lastPos)
 	}()
 
@@ -219,31 +233,25 @@ func (w *redoWorker) handleTask(ctx context.Context, task *redoTask) error {
 		}
 		// There is no more data. It means that we finish this scan task.
 		if e == nil {
-			if currTxnCommitTs == 0 {
-				currTxnCommitTs = upperBound.CommitTs
-			}
-			if lastTxnCommitTs == 0 {
-				lastTxnCommitTs = upperBound.CommitTs
-			}
 			if !lastPos.Valid() {
 				lastPos = upperBound
 			}
-			if err = maybeEmitBatchEvents(true, true); e != nil {
-				return errors.Trace(err)
+			if currTxnCommitTs == 0 {
+				currTxnCommitTs = upperBound.CommitTs
 			}
-			return nil
+			lastTxnCommitTs = upperBound.CommitTs
+			return maybeEmitBatchEvents(true, true)
 		}
 		allEventCount += 1
-		task.tableSink.updateReceivedSorterCommitTs(e.CRTs)
 
+		if pos.Valid() {
+			lastPos = pos
+		}
 		if currTxnCommitTs != e.CRTs {
 			if currTxnCommitTs != 0 {
 				lastTxnCommitTs = currTxnCommitTs
 			}
 			currTxnCommitTs = e.CRTs
-		}
-		if pos.Valid() {
-			lastPos = pos
 		}
 
 		if e.Row == nil {

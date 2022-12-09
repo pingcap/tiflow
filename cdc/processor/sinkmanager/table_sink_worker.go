@@ -80,13 +80,9 @@ func (w *sinkWorker) handleTasks(ctx context.Context, taskChan <-chan *sinkTask)
 }
 
 func (w *sinkWorker) handleTask(ctx context.Context, task *sinkTask) (err error) {
-	// First time to run the task, we have initialized memory quota for the table.
-	availableMem := requestMemSize
-	usedMem := uint64(0)
-
 	lowerBound := task.lowerBound
 	upperBound := task.getUpperBound(task.tableSink)
-	if upperBound.CommitTs != upperBound.StartTs+1 {
+	if !upperBound.IsCommitFence() {
 		log.Panic("sink task upperbound must be a ResolvedTs",
 			zap.String("namespace", w.changefeedID.Namespace),
 			zap.String("changefeed", w.changefeedID.ID),
@@ -94,40 +90,9 @@ func (w *sinkWorker) handleTask(ctx context.Context, task *sinkTask) (err error)
 			zap.Any("upperBound", upperBound))
 	}
 
-	if w.redoEnabled && w.eventCache != nil {
-		batchID := uint64(1)
-		newLowerBound, newUpperBound, err := w.fetchFromCache(task, lowerBound, upperBound, &batchID)
-		if err != nil {
-			return errors.Trace(err)
-		}
-		log.Debug("adjust task boundaries based on redo event cache",
-			zap.String("namespace", w.changefeedID.Namespace),
-			zap.String("changefeed", w.changefeedID.ID),
-			zap.Int64("tableID", task.tableID),
-			zap.Any("lowerBound", lowerBound),
-			zap.Any("upperBound", upperBound),
-			zap.Any("newLowerBound", newLowerBound),
-			zap.Any("newUpperBound", newUpperBound))
-		if newLowerBound.Compare(newUpperBound) > 0 {
-			log.Debug("Sink task finished because cache is drained",
-				zap.String("namespace", w.changefeedID.Namespace),
-				zap.String("changefeed", w.changefeedID.ID),
-				zap.Int64("tableID", task.tableID),
-				zap.Any("lowerBound", lowerBound),
-				zap.Any("upperBound", upperBound),
-				zap.Any("nextTimeStartAt", newLowerBound))
-			w.memQuota.refund(availableMem - usedMem)
-			log.Debug("MemoryQuotaTracing: refund memory for table sink task",
-				zap.String("namespace", w.changefeedID.Namespace),
-				zap.String("changefeed", w.changefeedID.ID),
-				zap.Int64("tableID", task.tableID),
-				zap.Uint64("memory", availableMem-usedMem))
-			task.callback(newLowerBound.Prev())
-			return nil
-		}
-		lowerBound = newLowerBound
-		upperBound = newUpperBound
-	}
+	// First time to run the task, we have initialized memory quota for the table.
+	availableMem := requestMemSize
+	usedMem := uint64(0)
 
 	// Used to record the last written position.
 	// We need to use it to update the lower bound of the table sink.
@@ -140,11 +105,28 @@ func (w *sinkWorker) handleTask(ctx context.Context, task *sinkTask) (err error)
 	currTxnCommitTs := uint64(0)
 	batchID := uint64(1)
 
+	if w.redoEnabled && w.eventCache != nil {
+		drained, err := w.fetchFromCache(task, &lowerBound, &upperBound, &batchID)
+		if err != nil {
+			return errors.Trace(err)
+		}
+		if drained {
+			w.memQuota.refund(availableMem - usedMem)
+			log.Debug("MemoryQuotaTracing: refund memory for table sink task",
+				zap.String("namespace", w.changefeedID.Namespace),
+				zap.String("changefeed", w.changefeedID.ID),
+				zap.Int64("tableID", task.tableID),
+				zap.Uint64("memory", availableMem-usedMem))
+			task.callback(lowerBound.Prev())
+			return nil
+		}
+	}
+
 	needEmitAndAdvance := func() bool {
 		return (w.splitTxn && committedTxnSize+pendingTxnSize >= maxUpdateIntervalSize) ||
 			(!w.splitTxn && committedTxnSize >= maxUpdateIntervalSize)
 	}
-	doEmitAndAdvance := func(allFinished bool) (err error) {
+	doEmitAndAdvance := func(isLastTime bool) (err error) {
 		if len(events) > 0 {
 			task.tableSink.appendRowChangedEvents(events...)
 			events = events[:0]
@@ -156,7 +138,7 @@ func (w *sinkWorker) handleTask(ctx context.Context, task *sinkTask) (err error)
 			if currTxnCommitTs == 0 {
 				return
 			}
-			if allFinished {
+			if currTxnCommitTs == lastPos.CommitTs && lastPos.IsCommitFence() {
 				err = w.advanceTableSink(task, currTxnCommitTs, committedTxnSize+pendingTxnSize)
 			} else {
 				err = w.advanceTableSinkWithBatchID(task, currTxnCommitTs, committedTxnSize+pendingTxnSize, batchID)
@@ -170,6 +152,9 @@ func (w *sinkWorker) handleTask(ctx context.Context, task *sinkTask) (err error)
 			}
 			err = w.advanceTableSink(task, lastTxnCommitTs, committedTxnSize)
 			committedTxnSize = 0
+			if isLastTime && pendingTxnSize > 0 {
+				w.memQuota.record(task.tableID, model.NewResolvedTs(currTxnCommitTs), pendingTxnSize)
+			}
 		}
 		return
 	}
@@ -177,7 +162,7 @@ func (w *sinkWorker) handleTask(ctx context.Context, task *sinkTask) (err error)
 	maybeEmitAndAdvance := func(allFinished, txnFinished bool) error {
 		memoryHighUsage := availableMem < usedMem
 		if memoryHighUsage || allFinished || needEmitAndAdvance() {
-			if err := doEmitAndAdvance(allFinished); err != nil {
+			if err := doEmitAndAdvance(false); err != nil {
 				return errors.Trace(err)
 			}
 		}
@@ -232,7 +217,9 @@ func (w *sinkWorker) handleTask(ctx context.Context, task *sinkTask) (err error)
 	iter := w.sourceManager.FetchByTable(task.tableID, lowerBound, upperBound)
 	defer func() {
 		w.metricRedoEventCacheMiss.Add(float64(allEventSize))
+		task.tableSink.receivedEventCount.Add(int64(allEventCount))
 		if !w.redoEnabled {
+			task.tableSink.updateReceivedSorterCommitTs(currTxnCommitTs)
 			eventCount := rangeEventCount{pos: lastPos, events: allEventCount}
 			task.tableSink.updateRangeEventCounts(eventCount)
 		}
@@ -252,17 +239,7 @@ func (w *sinkWorker) handleTask(ctx context.Context, task *sinkTask) (err error)
 			zap.Any("lowerBound", lowerBound),
 			zap.Any("upperBound", upperBound),
 			zap.Bool("splitTxn", w.splitTxn),
-			zap.Uint64("commitTs", lastPos.CommitTs),
-			zap.Uint64("startTs", lastPos.StartTs),
-		)
-		if committedTxnSize+pendingTxnSize > 0 {
-			w.memQuota.refund(committedTxnSize + pendingTxnSize)
-			log.Debug("MemoryQuotaTracing: refund memory for table sink task",
-				zap.String("namespace", w.changefeedID.Namespace),
-				zap.String("changefeed", w.changefeedID.ID),
-				zap.Int64("tableID", task.tableID),
-				zap.Uint64("memory", committedTxnSize+pendingTxnSize))
-		}
+			zap.Any("lastPos", lastPos))
 		task.callback(lastPos)
 	}()
 
@@ -273,28 +250,24 @@ func (w *sinkWorker) handleTask(ctx context.Context, task *sinkTask) (err error)
 		}
 		// There is no more data. It means that we finish this scan task.
 		if e == nil {
-			if currTxnCommitTs == 0 {
-				currTxnCommitTs = upperBound.CommitTs
-			}
-			if lastTxnCommitTs == 0 {
-				lastTxnCommitTs = upperBound.CommitTs
-			}
 			if !lastPos.Valid() {
 				lastPos = upperBound
 			}
-			if err := maybeEmitAndAdvance(true, true); err != nil {
-				return errors.Trace(err)
+			if currTxnCommitTs == 0 {
+				currTxnCommitTs = upperBound.CommitTs
 			}
-			return nil
+			lastTxnCommitTs = upperBound.CommitTs
+			committedTxnSize += pendingTxnSize
+			pendingTxnSize = 0
+			return maybeEmitAndAdvance(true, true)
 		}
 		allEventCount += 1
-		task.tableSink.receivedEventCount.Add(1)
 		// If redo log is enabled, we do not need to update this value.
 		// Because it already has been updated in the redo log worker.
-		if !w.redoEnabled {
-			task.tableSink.updateReceivedSorterCommitTs(e.CRTs)
-		}
 
+		if pos.Valid() {
+			lastPos = pos
+		}
 		if currTxnCommitTs != e.CRTs {
 			if currTxnCommitTs != 0 {
 				lastTxnCommitTs = currTxnCommitTs
@@ -303,9 +276,6 @@ func (w *sinkWorker) handleTask(ctx context.Context, task *sinkTask) (err error)
 				batchID = 1
 			}
 			currTxnCommitTs = e.CRTs
-		}
-		if pos.Valid() {
-			lastPos = pos
 		}
 
 		if e.Row == nil {
@@ -329,49 +299,68 @@ func (w *sinkWorker) handleTask(ctx context.Context, task *sinkTask) (err error)
 			return errors.Trace(err)
 		}
 	}
-	return doEmitAndAdvance(false)
+	return doEmitAndAdvance(true)
 }
 
 func (w *sinkWorker) fetchFromCache(
 	task *sinkTask, // task is read-only here.
-	lowerBound engine.Position,
-	upperBound engine.Position,
+	lowerBound *engine.Position,
+	upperBound *engine.Position,
 	batchID *uint64,
-) (newLowerBound, newUpperBound engine.Position, err error) {
-	newLowerBound = lowerBound
-	newUpperBound = upperBound
+) (cacheDrained bool, err error) {
+	newLowerBound := *lowerBound
+	newUpperBound := *upperBound
 
 	cache := w.eventCache.getAppender(task.tableID)
-	if cache != nil {
-		popRes := cache.pop(lowerBound, upperBound)
-		if popRes.success {
-			var rts model.ResolvedTs
-			if w.splitTxn {
-				rts = model.NewResolvedTs(popRes.boundary.CommitTs)
-				if popRes.boundary.CommitTs > popRes.boundary.StartTs+1 {
-					rts = model.NewResolvedTs(popRes.boundary.CommitTs)
-					rts.Mode = model.BatchResolvedMode
-					rts.BatchID = *batchID
-					*batchID += 1
-				}
-			} else {
-				rts = model.NewResolvedTs(popRes.boundary.CommitTs - 1)
-			}
+	if cache == nil {
+		return
+	}
+	popRes := cache.pop(*lowerBound, *upperBound)
+	if popRes.success {
+		if len(popRes.events) > 0 {
+			task.tableSink.receivedEventCount.Add(int64(popRes.pushCount))
+			w.metricRedoEventCacheHit.Add(float64(popRes.size))
+			task.tableSink.appendRowChangedEvents(popRes.events...)
+		}
 
-			if len(popRes.events) > 0 {
-				task.tableSink.receivedEventCount.Add(int64(popRes.pushCount))
-				w.metricRedoEventCacheHit.Add(float64(popRes.size))
-				task.tableSink.appendRowChangedEvents(popRes.events...)
-				w.memQuota.record(task.tableID, rts, popRes.releaseSize)
-			}
-			err = task.tableSink.updateResolvedTs(rts)
-			if err == nil {
-				newLowerBound = popRes.boundary.Next()
+		var resolvedTs model.ResolvedTs
+		isCommitFence := popRes.boundary.IsCommitFence()
+		if w.splitTxn {
+			resolvedTs = model.NewResolvedTs(popRes.boundary.CommitTs)
+			if !isCommitFence {
+				resolvedTs.Mode = model.BatchResolvedMode
+				resolvedTs.BatchID = *batchID
+				*batchID += 1
 			}
 		} else {
-			newUpperBound = popRes.boundary.Prev()
+			if isCommitFence {
+				resolvedTs = model.NewResolvedTs(popRes.boundary.CommitTs)
+			} else {
+				resolvedTs = model.NewResolvedTs(popRes.boundary.CommitTs - 1)
+			}
 		}
+		// NOTE: the recorded size can be not accurate, but let it be.
+		w.memQuota.record(task.tableID, resolvedTs, popRes.releaseSize)
+		if err = task.tableSink.updateResolvedTs(resolvedTs); err == nil {
+			newLowerBound = popRes.boundary.Next()
+		}
+	} else {
+		newUpperBound = popRes.boundary.Prev()
 	}
+	cacheDrained = newLowerBound.Compare(newUpperBound) > 0
+	log.Debug("fetchFromCache is performed",
+		zap.String("namespace", w.changefeedID.Namespace),
+		zap.String("changefeed", w.changefeedID.ID),
+		zap.Int64("tableID", task.tableID),
+		zap.Bool("success", popRes.success),
+		zap.Bool("cacheDrained", cacheDrained),
+		zap.Any("lowerBound", lowerBound),
+		zap.Any("upperBound", upperBound),
+		zap.Any("newLowerBound", newLowerBound),
+		zap.Any("newUpperBound", newUpperBound),
+	)
+	*lowerBound = newLowerBound
+	*upperBound = newUpperBound
 	return
 }
 

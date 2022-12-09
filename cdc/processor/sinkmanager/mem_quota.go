@@ -222,6 +222,7 @@ func (m *memQuota) clean(tableID model.TableID) uint64 {
 func (m *memQuota) close() {
 	m.mu.Lock()
 	defer m.mu.Unlock()
+	// NOTE: m.usedBytes is not reset, because refund can still be called after closed.
 	m.tableMemory = make(map[model.TableID][]*memConsumeRecord)
 	m.metricUsed.Set(float64(0))
 	m.isClosed.Store(true)
