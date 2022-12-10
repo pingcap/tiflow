@@ -143,7 +143,7 @@ func (r *progressTracker) addResolvedTs(resolvedTs model.ResolvedTs) {
 	r.mu.Lock()
 	defer r.mu.Unlock()
 
-	if r.nextEventID == 0 {
+	if r.nextEventID == 0 || r.nextToResolvePos >= r.nextEventID {
 		r.lastMinResolvedTs = resolvedTs
 		return
 	}
