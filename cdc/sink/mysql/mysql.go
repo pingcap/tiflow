@@ -34,7 +34,7 @@ import (
 	"github.com/pingcap/tiflow/cdc/contextutil"
 	"github.com/pingcap/tiflow/cdc/model"
 	"github.com/pingcap/tiflow/cdc/sink/metrics"
-	dmutils "github.com/pingcap/tiflow/dm/pkg/utils"
+	dmutils "github.com/pingcap/tiflow/dm/pkg/conn"
 	"github.com/pingcap/tiflow/pkg/config"
 	cerror "github.com/pingcap/tiflow/pkg/errors"
 	"github.com/pingcap/tiflow/pkg/errorutil"
@@ -132,7 +132,7 @@ func NewMySQLSink(
 	dsn.Params["writeTimeout"] = params.writeTimeout
 	dsn.Params["timeout"] = params.dialTimeout
 
-	testDB, err := pmysql.CheckAndAdjustPassword(ctx, dsn, GetDBConnImpl)
+	testDB, err := pmysql.GetTestDB(ctx, dsn, GetDBConnImpl)
 	if err != nil {
 		return nil, err
 	}

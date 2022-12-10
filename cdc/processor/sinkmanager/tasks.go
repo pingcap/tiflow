@@ -23,22 +23,19 @@ const (
 	defaultRequestMemSize = uint64(10 * 1024 * 1024) // 10MB
 	// Avoid update resolved ts too frequently, if there are too many small transactions.
 	defaultMaxUpdateIntervalSize = uint64(1024 * 256) // 256KB
-	// Limit the maximum size of a group of one batch, if there is a big translation.
-	defaultMaxBigTxnBatchSize = defaultMaxUpdateIntervalSize * 20 // 5MB
 )
 
 // Make these values be variables, so that we can mock them in unit tests.
 var (
 	requestMemSize        = defaultRequestMemSize
 	maxUpdateIntervalSize = defaultMaxUpdateIntervalSize
-	maxBigTxnBatchSize    = defaultMaxBigTxnBatchSize
 )
 
 // Used to record the progress of the table.
 type writeSuccessCallback func(lastWrittenPos engine.Position)
 
 // Used to get an upper bound.
-type upperBoundGetter func() engine.Position
+type upperBoundGetter func(*tableSinkWrapper) engine.Position
 
 // Used to abort the task processing of the table.
 type isCanceled func() bool
@@ -66,4 +63,5 @@ type redoTask struct {
 	getUpperBound upperBoundGetter
 	tableSink     *tableSinkWrapper
 	callback      writeSuccessCallback
+	isCanceled    isCanceled
 }

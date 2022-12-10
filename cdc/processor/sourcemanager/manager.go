@@ -15,8 +15,10 @@ package sourcemanager
 
 import (
 	"sync"
+	"time"
 
 	"github.com/pingcap/log"
+	"github.com/pingcap/tiflow/cdc/entry"
 	"github.com/pingcap/tiflow/cdc/model"
 	"github.com/pingcap/tiflow/cdc/processor/sourcemanager/engine"
 	pullerwrapper "github.com/pingcap/tiflow/cdc/processor/sourcemanager/puller"
@@ -27,6 +29,8 @@ import (
 	"go.uber.org/zap"
 )
 
+const defaultMaxBatchSize = 256
+
 // SourceManager is the manager of the source engine and puller.
 type SourceManager struct {
 	// changefeedID is the changefeed ID.
@@ -34,37 +38,40 @@ type SourceManager struct {
 	changefeedID model.ChangeFeedID
 	// up is the upstream of the puller.
 	up *upstream.Upstream
+	// mg is the mounter group for mount the raw kv entry.
+	mg entry.MounterGroup
 	// engine is the source engine.
 	engine engine.SortEngine
 	// pullers is the puller wrapper map.
 	pullers sync.Map
 	// Used to report the error to the processor.
 	errChan chan error
+	// Used to indicate whether the changefeed is in BDR mode.
+	bdrMode bool
 }
 
 // New creates a new source manager.
 func New(
 	changefeedID model.ChangeFeedID,
 	up *upstream.Upstream,
+	mg entry.MounterGroup,
 	engine engine.SortEngine,
 	errChan chan error,
+	bdrMode bool,
 ) *SourceManager {
 	return &SourceManager{
 		changefeedID: changefeedID,
 		up:           up,
+		mg:           mg,
 		engine:       engine,
 		errChan:      errChan,
+		bdrMode:      bdrMode,
 	}
-}
-
-// IsTableBased just wrap the engine's IsTableBased method.
-func (m *SourceManager) IsTableBased() bool {
-	return m.engine.IsTableBased()
 }
 
 // AddTable adds a table to the source manager. Start puller and register table to the engine.
 func (m *SourceManager) AddTable(ctx cdccontext.Context, tableID model.TableID, tableName string, startTs model.Ts) {
-	p := pullerwrapper.NewPullerWrapper(m.changefeedID, tableID, tableName, startTs)
+	p := pullerwrapper.NewPullerWrapper(m.changefeedID, tableID, tableName, startTs, m.bdrMode)
 	p.Start(ctx, m.up, m.engine, m.errChan)
 	m.pullers.Store(tableID, p)
 	m.engine.AddTable(tableID)
@@ -85,13 +92,9 @@ func (m *SourceManager) OnResolve(action func(model.TableID, model.Ts)) {
 }
 
 // FetchByTable just wrap the engine's FetchByTable method.
-func (m *SourceManager) FetchByTable(tableID model.TableID, lowerBound, upperBound engine.Position) engine.EventIterator {
-	return m.engine.FetchByTable(tableID, lowerBound, upperBound)
-}
-
-// FetchAllTables just wrap the engine's FetchAllTables method.
-func (m *SourceManager) FetchAllTables(lowerBound engine.Position) engine.EventIterator {
-	return m.engine.FetchAllTables(lowerBound)
+func (m *SourceManager) FetchByTable(tableID model.TableID, lowerBound, upperBound engine.Position) *engine.MountedEventIter {
+	iter := m.engine.FetchByTable(tableID, lowerBound, upperBound)
+	return engine.NewMountedEventIter(iter, m.mg, defaultMaxBatchSize)
 }
 
 // CleanByTable just wrap the engine's CleanByTable method.
@@ -99,9 +102,9 @@ func (m *SourceManager) CleanByTable(tableID model.TableID, upperBound engine.Po
 	return m.engine.CleanByTable(tableID, upperBound)
 }
 
-// CleanAllTables just wrap the engine's CleanAllTables method.
-func (m *SourceManager) CleanAllTables(upperBound engine.Position) error {
-	return m.engine.CleanAllTables(upperBound)
+// GetTableResolvedTs returns the resolved ts of the table.
+func (m *SourceManager) GetTableResolvedTs(tableID model.TableID) model.Ts {
+	return m.engine.GetResolvedTs(tableID)
 }
 
 // GetTablePullerStats returns the puller stats of the table.
@@ -116,14 +119,36 @@ func (m *SourceManager) GetTablePullerStats(tableID model.TableID) puller.Stats 
 	return p.(*pullerwrapper.Wrapper).GetStats()
 }
 
+// GetTableSorterStats returns the sorter stats of the table.
+func (m *SourceManager) GetTableSorterStats(tableID model.TableID) engine.TableStats {
+	return m.engine.GetStatsByTable(tableID)
+}
+
+// ReceivedEvents returns the number of events in the engine that have not been sent to the sink.
+func (m *SourceManager) ReceivedEvents() int64 {
+	return m.engine.ReceivedEvents()
+}
+
 // Close closes the source manager. Stop all pullers and close the engine.
 func (m *SourceManager) Close() error {
+	log.Info("Closing source manager",
+		zap.String("namespace", m.changefeedID.Namespace),
+		zap.String("changefeed", m.changefeedID.ID))
+	start := time.Now()
 	m.pullers.Range(func(key, value interface{}) bool {
 		value.(*pullerwrapper.Wrapper).Close()
 		return true
 	})
+	log.Info("All pullers have been closed",
+		zap.String("namespace", m.changefeedID.Namespace),
+		zap.String("changefeed", m.changefeedID.ID),
+		zap.Duration("cost", time.Since(start)))
 	if err := m.engine.Close(); err != nil {
 		return cerrors.Trace(err)
 	}
+	log.Info("Closed source manager",
+		zap.String("namespace", m.changefeedID.Namespace),
+		zap.String("changefeed", m.changefeedID.ID),
+		zap.Duration("cost", time.Since(start)))
 	return nil
 }

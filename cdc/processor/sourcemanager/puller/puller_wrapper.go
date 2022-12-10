@@ -17,14 +17,16 @@ import (
 	"context"
 	"sync"
 
+	"github.com/pingcap/failpoint"
 	"github.com/pingcap/tiflow/cdc/contextutil"
 	"github.com/pingcap/tiflow/cdc/model"
 	"github.com/pingcap/tiflow/cdc/processor/sourcemanager/engine"
+	"github.com/pingcap/tiflow/cdc/processor/tablepb"
 	"github.com/pingcap/tiflow/cdc/puller"
 	"github.com/pingcap/tiflow/pkg/config"
 	cdccontext "github.com/pingcap/tiflow/pkg/context"
 	cerrors "github.com/pingcap/tiflow/pkg/errors"
-	"github.com/pingcap/tiflow/pkg/regionspan"
+	"github.com/pingcap/tiflow/pkg/spanz"
 	"github.com/pingcap/tiflow/pkg/upstream"
 	"github.com/pingcap/tiflow/pkg/util"
 )
@@ -39,7 +41,8 @@ type Wrapper struct {
 	// cancel is used to cancel the puller when remove or close the table.
 	cancel context.CancelFunc
 	// wg is used to wait the puller to exit.
-	wg sync.WaitGroup
+	wg      sync.WaitGroup
+	bdrMode bool
 }
 
 // NewPullerWrapper creates a new puller wrapper.
@@ -48,21 +51,20 @@ func NewPullerWrapper(
 	tableID model.TableID,
 	tableName string,
 	startTs model.Ts,
+	bdrMode bool,
 ) *Wrapper {
 	return &Wrapper{
 		changefeed: changefeed,
 		tableID:    tableID,
 		tableName:  tableName,
 		startTs:    startTs,
+		bdrMode:    bdrMode,
 	}
 }
 
 // tableSpan returns the table span with the table ID.
-func (n *Wrapper) tableSpan() []regionspan.Span {
-	// start table puller
-	spans := make([]regionspan.Span, 0, 4)
-	spans = append(spans, regionspan.GetTableSpan(n.tableID))
-	return spans
+func (n *Wrapper) tableSpan() []tablepb.Span {
+	return []tablepb.Span{spanz.TableIDToComparableSpan(n.tableID)}
 }
 
 // Start the puller wrapper.
@@ -73,6 +75,9 @@ func (n *Wrapper) Start(
 	eventSortEngine engine.SortEngine,
 	errChan chan<- error,
 ) {
+	failpoint.Inject("ProcessorAddTableError", func() {
+		errChan <- cerrors.New("processor add table injected error")
+	})
 	ctxC, cancel := context.WithCancel(ctx)
 	ctxC = contextutil.PutCaptureAddrInCtx(ctxC, ctx.GlobalVars().CaptureInfo.AdvertiseAddr)
 	ctxC = contextutil.PutRoleInCtx(ctxC, util.RoleProcessor)
@@ -92,6 +97,7 @@ func (n *Wrapper) Start(
 		n.changefeed,
 		n.tableID,
 		n.tableName,
+		n.bdrMode,
 	)
 	n.wg.Add(1)
 	go func() {

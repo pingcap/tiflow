@@ -78,7 +78,7 @@ func TestPreCheckSinkURI(t *testing.T) {
 		test := tt
 		t.Run(test.name, func(t *testing.T) {
 			t.Parallel()
-			err := preCheckSinkURI(test.uri)
+			_, err := preCheckSinkURI(test.uri)
 			if test.err != "" {
 				require.Contains(t, err.Error(), test.err)
 			} else {

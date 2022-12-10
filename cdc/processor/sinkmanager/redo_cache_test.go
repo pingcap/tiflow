@@ -22,33 +22,54 @@ import (
 )
 
 func TestRedoEventCache(t *testing.T) {
-	cache := newRedoEventCache(1000)
+	cache := newRedoEventCache(model.ChangeFeedID{}, 1000)
+	var ok bool
+	var broken uint64
+	var popRes popResult
 
-	appender := cache.getAppender(3)
-	require.True(t, appender.push(&model.RowChangedEvent{StartTs: 1, CommitTs: 2}, 100, false))
-	require.True(t, appender.push(&model.RowChangedEvent{StartTs: 1, CommitTs: 2}, 200, true))
-	require.True(t, appender.push(&model.RowChangedEvent{StartTs: 3, CommitTs: 4}, 300, true))
-	// Append a unfinished transaction, which can't be popped.
-	require.True(t, appender.push(&model.RowChangedEvent{StartTs: 5, CommitTs: 6}, 400, false))
-	// Append beyond capacity, can't success.
-	require.False(t, appender.push(&model.RowChangedEvent{StartTs: 5, CommitTs: 6}, 100, false))
+	appender := cache.maybeCreateAppender(3, engine.Position{StartTs: 1, CommitTs: 2})
 
-	events, _, _ := cache.pop(1)
-	require.Nil(t, events)
+	appender.push(&model.RowChangedEvent{StartTs: 1, CommitTs: 2}, 100, engine.Position{})
+	appender.push(&model.RowChangedEvent{StartTs: 1, CommitTs: 2}, 200, engine.Position{})
+	appender.push(&model.RowChangedEvent{StartTs: 3, CommitTs: 4}, 300, engine.Position{StartTs: 3, CommitTs: 4})
+	appender.push(&model.RowChangedEvent{StartTs: 5, CommitTs: 6}, 400, engine.Position{})
+	require.Equal(t, uint64(1000), cache.allocated)
 
-	events, size, pos := cache.pop(3)
-	require.Equal(t, 3, len(events))
-	require.Equal(t, uint64(600), size)
-	require.Equal(t, 0, pos.Compare(engine.Position{StartTs: 3, CommitTs: 4}))
-
-	require.Equal(t, uint64(400), cache.allocated)
-
-	// Still can't push into the appender, because it's broken.
-	require.False(t, appender.push(&model.RowChangedEvent{StartTs: 5, CommitTs: 6}, 100, false))
-
-	// Clean broken events, and then push again.
+	ok, broken = appender.push(&model.RowChangedEvent{StartTs: 5, CommitTs: 6}, 400, engine.Position{StartTs: 3, CommitTs: 4})
+	require.False(t, ok)
+	require.Equal(t, uint64(400), broken)
 	require.True(t, appender.broken)
-	require.Equal(t, uint64(400), appender.cleanBrokenEvents())
-	require.Equal(t, uint64(0), cache.allocated)
-	require.True(t, appender.push(&model.RowChangedEvent{StartTs: 5, CommitTs: 6}, 100, false))
+	require.Equal(t, uint64(3), appender.upperBound.StartTs)
+	require.Equal(t, uint64(4), appender.upperBound.CommitTs)
+
+	popRes = appender.pop(engine.Position{StartTs: 0, CommitTs: 1}, engine.Position{StartTs: 5, CommitTs: 6})
+	require.False(t, popRes.success)
+	require.Equal(t, uint64(1), popRes.boundary.StartTs)
+	require.Equal(t, uint64(2), popRes.boundary.CommitTs)
+
+	popRes = appender.pop(engine.Position{StartTs: 1, CommitTs: 2}, engine.Position{StartTs: 1, CommitTs: 2})
+	require.True(t, popRes.success)
+	require.Equal(t, 2, len(popRes.events))
+	require.Equal(t, uint64(300), popRes.size)
+	require.Equal(t, 2, popRes.pushCount)
+	require.Equal(t, uint64(1), popRes.boundary.StartTs)
+	require.Equal(t, uint64(2), popRes.boundary.CommitTs)
+
+	popRes = appender.pop(engine.Position{StartTs: 1, CommitTs: 2}, engine.Position{StartTs: 1, CommitTs: 2})
+	require.False(t, popRes.success)
+
+	popRes = appender.pop(engine.Position{StartTs: 2, CommitTs: 2}, engine.Position{StartTs: 7, CommitTs: 8})
+	require.True(t, popRes.success)
+	require.Equal(t, 1, len(popRes.events))
+	require.Equal(t, uint64(300), popRes.size)
+	require.Equal(t, 1, popRes.pushCount)
+	require.Equal(t, uint64(3), popRes.boundary.StartTs)
+	require.Equal(t, uint64(4), popRes.boundary.CommitTs)
+	require.Equal(t, 0, len(appender.events))
+	require.True(t, appender.broken)
+
+	appender = cache.maybeCreateAppender(3, engine.Position{StartTs: 11, CommitTs: 12})
+	require.False(t, appender.broken)
+	require.Equal(t, uint64(0), appender.upperBound.StartTs)
+	require.Equal(t, uint64(0), appender.upperBound.CommitTs)
 }

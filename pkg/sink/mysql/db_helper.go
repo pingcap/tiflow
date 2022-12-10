@@ -27,7 +27,7 @@ import (
 	"github.com/pingcap/log"
 	"github.com/pingcap/tidb/parser/charset"
 	tmysql "github.com/pingcap/tidb/parser/mysql"
-	dmutils "github.com/pingcap/tiflow/dm/pkg/utils"
+	dmutils "github.com/pingcap/tiflow/dm/pkg/conn"
 	cerror "github.com/pingcap/tiflow/pkg/errors"
 	"go.uber.org/zap"
 )
@@ -55,40 +55,13 @@ func CreateMySQLDBConn(ctx context.Context, dsnStr string) (*sql.DB, error) {
 func GenerateDSN(ctx context.Context, sinkURI *url.URL, cfg *Config, dbConnFactory Factory) (dsnStr string, err error) {
 	// dsn format of the driver:
 	// [username[:password]@][protocol[(address)]]/dbname[?param1=value1&...&paramN=valueN]
-	username := sinkURI.User.Username()
-	if username == "" {
-		username = "root"
+	dsn, err := GenBasicDSN(sinkURI, cfg)
+	if err != nil {
+		return "", err
 	}
-	password, _ := sinkURI.User.Password()
-
-	hostName := sinkURI.Hostname()
-	port := sinkURI.Port()
-	if port == "" {
-		port = "4000"
-	}
-
-	// This will handle the IPv6 address format.
-	var dsn *dmysql.Config
-	host := net.JoinHostPort(hostName, port)
-	dsnStr = fmt.Sprintf("%s:%s@tcp(%s)/%s", username, password, host, cfg.TLS)
-	if dsn, err = dmysql.ParseDSN(dsnStr); err != nil {
-		return
-	}
-
-	// create test db used for parameter detection
-	// Refer https://github.com/go-sql-driver/mysql#parameters
-	if dsn.Params == nil {
-		dsn.Params = make(map[string]string, 1)
-	}
-	if cfg.Timezone != "" {
-		dsn.Params["time_zone"] = cfg.Timezone
-	}
-	dsn.Params["readTimeout"] = cfg.ReadTimeout
-	dsn.Params["writeTimeout"] = cfg.WriteTimeout
-	dsn.Params["timeout"] = cfg.DialTimeout
 
 	var testDB *sql.DB
-	testDB, err = CheckAndAdjustPassword(ctx, dsn, dbConnFactory)
+	testDB, err = GetTestDB(ctx, dsn, dbConnFactory)
 	if err != nil {
 		return
 	}
@@ -120,7 +93,7 @@ func GenerateDSN(ctx context.Context, sinkURI *url.URL, cfg *Config, dbConnFacto
 	if !gbkSupported {
 		log.Warn("GBK charset is not supported by the downstream. "+
 			"Some types of DDLs may fail to execute",
-			zap.String("hostname", hostName), zap.String("port", port))
+			zap.String("host", dsn.Addr))
 	}
 
 	return
@@ -242,9 +215,9 @@ func checkTiDBVariable(ctx context.Context, db *sql.DB, variableName, defaultVal
 	return "", nil
 }
 
-// CheckAndAdjustPassword checks and adjusts the password of the given DSN,
+// GetTestDB checks and adjusts the password of the given DSN,
 // it will return a DB instance opened with the adjusted password.
-func CheckAndAdjustPassword(ctx context.Context, dbConfig *dmysql.Config, dbConnFactory Factory) (*sql.DB, error) {
+func GetTestDB(ctx context.Context, dbConfig *dmysql.Config, dbConnFactory Factory) (*sql.DB, error) {
 	password := dbConfig.Passwd
 	if dbConnFactory == nil {
 		dbConnFactory = CreateMySQLDBConn
@@ -256,13 +229,87 @@ func CheckAndAdjustPassword(ctx context.Context, dbConfig *dmysql.Config, dbConn
 			if dePassword, decodeErr := base64.StdEncoding.DecodeString(password); decodeErr == nil && string(dePassword) != password {
 				dbConfig.Passwd = string(dePassword)
 				testDB, err = dbConnFactory(ctx, dbConfig.FormatDSN())
-				if err != nil {
-					return testDB, err
-				}
 			}
-		} else {
-			return nil, err
 		}
 	}
-	return testDB, nil
+	return testDB, err
+}
+
+// GenBasicDSN generates a basic DSN from the given config.
+func GenBasicDSN(sinkURI *url.URL, cfg *Config) (*dmysql.Config, error) {
+	// dsn format of the driver:
+	// [username[:password]@][protocol[(address)]]/dbname[?param1=value1&...&paramN=valueN]
+	username := sinkURI.User.Username()
+	if username == "" {
+		username = "root"
+	}
+	password, _ := sinkURI.User.Password()
+
+	hostName := sinkURI.Hostname()
+	port := sinkURI.Port()
+	if port == "" {
+		port = "4000"
+	}
+
+	// This will handle the IPv6 address format.
+	var dsn *dmysql.Config
+	var err error
+	host := net.JoinHostPort(hostName, port)
+	dsnStr := fmt.Sprintf("%s:%s@tcp(%s)/%s", username, password, host, cfg.TLS)
+	if dsn, err = dmysql.ParseDSN(dsnStr); err != nil {
+		return nil, errors.Trace(err)
+	}
+
+	// create test db used for parameter detection
+	// Refer https://github.com/go-sql-driver/mysql#parameters
+	if dsn.Params == nil {
+		dsn.Params = make(map[string]string, 1)
+	}
+	if cfg.Timezone != "" {
+		dsn.Params["time_zone"] = cfg.Timezone
+	}
+	dsn.Params["readTimeout"] = cfg.ReadTimeout
+	dsn.Params["writeTimeout"] = cfg.WriteTimeout
+	dsn.Params["timeout"] = cfg.DialTimeout
+	return dsn, nil
+}
+
+// CheckIfBDRModeIsSupported checks if the downstream supports BDR mode.
+func CheckIfBDRModeIsSupported(ctx context.Context, db *sql.DB) (bool, error) {
+	isTiDB, err := CheckIsTiDB(ctx, db)
+	if err != nil || !isTiDB {
+		return false, err
+	}
+	testSourceID := 1
+	// downstream is TiDB, set system variables.
+	// We should always try to set this variable, and ignore the error if
+	// downstream does not support this variable, it is by design.
+	query := fmt.Sprintf("SET SESSION %s = %d", "tidb_cdc_write_source", testSourceID)
+	_, err = db.ExecContext(ctx, query)
+	if err != nil {
+		if mysqlErr, ok := errors.Cause(err).(*dmysql.MySQLError); ok &&
+			mysqlErr.Number == tmysql.ErrUnknownSystemVariable {
+			return false, nil
+		}
+		return false, err
+	}
+	return true, nil
+}
+
+// CheckIsTiDB checks if the downstream is TiDB.
+func CheckIsTiDB(ctx context.Context, db *sql.DB) (bool, error) {
+	var tidbVer string
+	// check if downstream is TiDB
+	row := db.QueryRowContext(ctx, "select tidb_version()")
+	err := row.Scan(&tidbVer)
+	if err != nil {
+		log.Error("check tidb version error", zap.Error(err))
+		// downstream is not TiDB, do nothing
+		if mysqlErr, ok := errors.Cause(err).(*dmysql.MySQLError); ok && (mysqlErr.Number == tmysql.ErrNoDB ||
+			mysqlErr.Number == tmysql.ErrSpDoesNotExist) {
+			return false, nil
+		}
+		return false, errors.Trace(err)
+	}
+	return true, nil
 }

@@ -25,6 +25,7 @@ import (
 type progress struct {
 	tableID           model.TableID
 	nextLowerBoundPos engine.Position
+	version           uint64
 }
 
 // Assert progressHeap implements heap.Interface

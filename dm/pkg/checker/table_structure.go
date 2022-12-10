@@ -16,7 +16,6 @@ package checker
 import (
 	"bytes"
 	"context"
-	"database/sql"
 	"fmt"
 	"math"
 	"strings"
@@ -30,6 +29,8 @@ import (
 	"github.com/pingcap/tidb/util/dbutil"
 	"github.com/pingcap/tidb/util/filter"
 	"github.com/pingcap/tidb/util/schemacmp"
+	"github.com/pingcap/tiflow/dm/pkg/conn"
+	tcontext "github.com/pingcap/tiflow/dm/pkg/context"
 	"github.com/pingcap/tiflow/dm/pkg/log"
 	"github.com/pingcap/tiflow/dm/pkg/utils"
 	"go.uber.org/zap"
@@ -75,15 +76,12 @@ func (o *incompatibilityOption) String() string {
 // In generally we need to check definitions of columns, constraints and table options.
 // Because of the early TiDB engineering design, we did not have a complete list of check items, which are all based on experience now.
 type TablesChecker struct {
-	upstreamDBs  map[string]*sql.DB
-	downstreamDB *sql.DB
+	upstreamDBs  map[string]*conn.BaseDB
+	downstreamDB *conn.BaseDB
 	// sourceID -> downstream table -> upstream tables
 	tableMap map[string]map[filter.Table][]filter.Table
 	// downstream table -> extended column names
 	extendedColumnPerTable map[filter.Table][]string
-	reMu                   sync.Mutex
-	inCh                   chan *checkItem
-	optCh                  chan *incompatibilityOption
 	dumpThreads            int
 	// a simple cache for downstream table structure
 	// filter.Table -> *ast.CreateTableStmt
@@ -93,8 +91,8 @@ type TablesChecker struct {
 
 // NewTablesChecker returns a RealChecker.
 func NewTablesChecker(
-	upstreamDBs map[string]*sql.DB,
-	downstreamDB *sql.DB,
+	upstreamDBs map[string]*conn.BaseDB,
+	downstreamDB *conn.BaseDB,
 	tableMap map[string]map[filter.Table][]filter.Table,
 	extendedColumnPerTable map[filter.Table][]string,
 	dumpThreads int,
@@ -110,9 +108,95 @@ func NewTablesChecker(
 		dumpThreads:            dumpThreads,
 	}
 	log.L().Logger.Debug("check table structure", zap.Int("channel pool size", dumpThreads))
-	c.inCh = make(chan *checkItem, dumpThreads)
-	c.optCh = make(chan *incompatibilityOption, dumpThreads)
 	return c
+}
+
+type tablesCheckerWorker struct {
+	c                *TablesChecker
+	downstreamParser *parser.Parser
+
+	lastSourceID   string
+	upstreamParser *parser.Parser
+}
+
+func (w *tablesCheckerWorker) handle(ctx context.Context, checkItem *checkItem) ([]*incompatibilityOption, error) {
+	var (
+		err   error
+		ret   = make([]*incompatibilityOption, 0, 1)
+		table = checkItem.upstreamTable
+	)
+	log.L().Logger.Debug("checking table", zap.String("db", table.Schema), zap.String("table", table.Name))
+	if w.lastSourceID == "" || w.lastSourceID != checkItem.sourceID {
+		w.lastSourceID = checkItem.sourceID
+		w.upstreamParser, err = dbutil.GetParserForDB(ctx, w.c.upstreamDBs[w.lastSourceID].DB)
+		if err != nil {
+			return nil, err
+		}
+	}
+	db := w.c.upstreamDBs[checkItem.sourceID].DB
+	upstreamSQL, err := dbutil.GetCreateTableSQL(ctx, db, table.Schema, table.Name)
+	if err != nil {
+		// continue if table was deleted when checking
+		if isMySQLError(err, mysql.ErrNoSuchTable) {
+			return nil, nil
+		}
+		return nil, err
+	}
+
+	upstreamStmt, err := getCreateTableStmt(w.upstreamParser, upstreamSQL)
+	if err != nil {
+		opt := &incompatibilityOption{
+			state:      StateWarning,
+			tableID:    dbutil.TableName(table.Schema, table.Name),
+			errMessage: err.Error(),
+		}
+		ret = append(ret, opt)
+		// nolint:nilerr
+		return ret, nil
+	}
+
+	downstreamStmt, ok := w.c.downstreamTables.Load(checkItem.downstreamTable)
+	if !ok {
+		sql, err2 := dbutil.GetCreateTableSQL(
+			ctx,
+			w.c.downstreamDB.DB,
+			checkItem.downstreamTable.Schema,
+			checkItem.downstreamTable.Name,
+		)
+		if err2 != nil && !isMySQLError(err2, mysql.ErrNoSuchTable) {
+			return nil, err2
+		}
+		if sql == "" {
+			downstreamStmt = (*ast.CreateTableStmt)(nil)
+		} else {
+			downstreamStmt, err2 = getCreateTableStmt(w.downstreamParser, sql)
+			if err2 != nil {
+				opt := &incompatibilityOption{
+					state:      StateWarning,
+					tableID:    dbutil.TableName(table.Schema, table.Name),
+					errMessage: err2.Error(),
+				}
+				ret = append(ret, opt)
+			}
+		}
+		w.c.downstreamTables.Store(checkItem.downstreamTable, downstreamStmt)
+	}
+
+	downstreamTable := filter.Table{
+		Schema: checkItem.downstreamTable.Schema,
+		Name:   checkItem.downstreamTable.Name,
+	}
+	opts := w.c.checkAST(
+		upstreamStmt,
+		downstreamStmt.(*ast.CreateTableStmt),
+		w.c.extendedColumnPerTable[downstreamTable],
+	)
+	for _, opt := range opts {
+		opt.tableID = table.String()
+		ret = append(ret, opt)
+	}
+	log.L().Logger.Debug("finish checking table", zap.String("db", table.Schema), zap.String("table", table.Name))
+	return ret, nil
 }
 
 // Check implements RealChecker interface.
@@ -125,35 +209,35 @@ func (c *TablesChecker) Check(ctx context.Context) *Result {
 
 	startTime := time.Now()
 	sourceIDs := maps.Keys(c.tableMap)
-	concurrency, err := getConcurrency(ctx, sourceIDs, c.upstreamDBs, c.dumpThreads)
+	concurrency, err := GetConcurrency(ctx, sourceIDs, c.upstreamDBs, c.dumpThreads)
 	if err != nil {
 		markCheckError(r, err)
 		return r
 	}
-	eg, checkCtx := errgroup.WithContext(ctx)
-	for i := 0; i < concurrency; i++ {
-		eg.Go(func() error {
-			return c.startWorker(checkCtx)
-		})
-	}
-	// start consuming results before dispatching
-	// or the dispatching thread could be blocked when
-	// the output channel is full.
-	var optWg sync.WaitGroup
-	optWg.Add(1)
-	go func() {
-		defer optWg.Done()
-		c.handleOpts(ctx, r)
-	}()
 
-	dispatchTableItemWithDownstreamTable(checkCtx, c.tableMap, c.inCh)
-	if err := eg.Wait(); err != nil {
-		c.reMu.Lock()
-		markCheckError(r, err)
-		c.reMu.Unlock()
+	everyOptHandler, finalHandler := c.handleOpts(r)
+
+	pool := NewWorkerPoolWithContext[*checkItem, []*incompatibilityOption](
+		ctx, everyOptHandler,
+	)
+
+	for i := 0; i < concurrency; i++ {
+		worker := &tablesCheckerWorker{c: c}
+		worker.downstreamParser, err = dbutil.GetParserForDB(ctx, c.downstreamDB.DB)
+		if err != nil {
+			markCheckError(r, err)
+			return r
+		}
+		pool.Go(worker.handle)
 	}
-	close(c.optCh)
-	optWg.Wait()
+
+	dispatchTableItemWithDownstreamTable(c.tableMap, pool)
+
+	if err := pool.Wait(); err != nil {
+		markCheckError(r, err)
+		return r
+	}
+	finalHandler()
 
 	log.L().Logger.Info("check table structure over", zap.Duration("spend time", time.Since(startTime)))
 	return r
@@ -164,144 +248,41 @@ func (c *TablesChecker) Name() string {
 	return "table structure compatibility check"
 }
 
-func (c *TablesChecker) handleOpts(ctx context.Context, r *Result) {
+// handleOpts returns a handler that should be called on every
+// incompatibilityOption, and a second handler that should be called once after
+// all incompatibilityOption.
+func (c *TablesChecker) handleOpts(r *Result) (func(options []*incompatibilityOption), func()) {
 	// extract same instruction from Errors to Result.Instruction
-	resultInstructions := map[string]interface{}{}
-	defer func() {
-		c.reMu.Lock()
-		for k := range resultInstructions {
-			r.Instruction += k + "; "
-		}
-		c.reMu.Unlock()
-	}()
-	for {
-		select {
-		case <-ctx.Done():
-			return
-		case opt, ok := <-c.optCh:
-			if !ok {
-				return
-			}
-			tableMsg := "table " + opt.tableID + " "
-			c.reMu.Lock()
-			switch opt.state {
-			case StateWarning:
-				if r.State != StateFailure {
-					r.State = StateWarning
-				}
-				e := NewError(tableMsg + opt.errMessage)
-				e.Severity = StateWarning
-				if _, ok := resultInstructions[opt.instruction]; !ok && opt.instruction != "" {
-					resultInstructions[opt.instruction] = ""
-				}
-				r.Errors = append(r.Errors, e)
-			case StateFailure:
-				r.State = StateFailure
-				e := NewError(tableMsg + opt.errMessage)
-				if _, ok := resultInstructions[opt.instruction]; !ok && opt.instruction != "" {
-					resultInstructions[opt.instruction] = ""
-				}
-				r.Errors = append(r.Errors, e)
-			}
-			c.reMu.Unlock()
-		}
-	}
-}
+	resultInstructions := map[string]struct{}{}
 
-func (c *TablesChecker) startWorker(ctx context.Context) error {
-	var (
-		sourceID         string
-		upstreamParser   *parser.Parser
-		downstreamParser *parser.Parser
-		err              error
-	)
-
-	downstreamParser, err = dbutil.GetParserForDB(ctx, c.downstreamDB)
-	if err != nil {
-		return err
-	}
-
-	for {
-		select {
-		case <-ctx.Done():
-			return context.Canceled
-		case checkItem, ok := <-c.inCh:
-			if !ok {
-				return nil
-			}
-			table := checkItem.upstreamTable
-			log.L().Logger.Debug("checking table", zap.String("db", table.Schema), zap.String("table", table.Name))
-			if len(sourceID) == 0 || sourceID != checkItem.sourceID {
-				sourceID = checkItem.sourceID
-				upstreamParser, err = dbutil.GetParserForDB(ctx, c.upstreamDBs[sourceID])
-				if err != nil {
-					return err
-				}
-			}
-			db := c.upstreamDBs[checkItem.sourceID]
-			upstreamSQL, err := dbutil.GetCreateTableSQL(ctx, db, table.Schema, table.Name)
-			if err != nil {
-				// continue if table was deleted when checking
-				if isMySQLError(err, mysql.ErrNoSuchTable) {
-					continue
-				}
-				return err
-			}
-
-			upstreamStmt, err := getCreateTableStmt(upstreamParser, upstreamSQL)
-			if err != nil {
-				opt := &incompatibilityOption{
-					state:      StateWarning,
-					tableID:    dbutil.TableName(table.Schema, table.Name),
-					errMessage: err.Error(),
-				}
-				c.optCh <- opt
-				continue
-			}
-
-			downstreamStmt, ok := c.downstreamTables.Load(checkItem.downstreamTable)
-			if !ok {
-				sql, err2 := dbutil.GetCreateTableSQL(
-					ctx,
-					c.downstreamDB,
-					checkItem.downstreamTable.Schema,
-					checkItem.downstreamTable.Name,
-				)
-				if err2 != nil && !isMySQLError(err2, mysql.ErrNoSuchTable) {
-					return err2
-				}
-				if sql == "" {
-					downstreamStmt = (*ast.CreateTableStmt)(nil)
-				} else {
-					downstreamStmt, err2 = getCreateTableStmt(downstreamParser, sql)
-					if err2 != nil {
-						opt := &incompatibilityOption{
-							state:      StateWarning,
-							tableID:    dbutil.TableName(table.Schema, table.Name),
-							errMessage: err2.Error(),
-						}
-						c.optCh <- opt
+	return func(options []*incompatibilityOption) {
+			for _, opt := range options {
+				tableMsg := "table " + opt.tableID + " "
+				switch opt.state {
+				case StateWarning:
+					if r.State != StateFailure {
+						r.State = StateWarning
 					}
+					e := NewError(tableMsg + opt.errMessage)
+					e.Severity = StateWarning
+					if _, ok := resultInstructions[opt.instruction]; !ok && opt.instruction != "" {
+						resultInstructions[opt.instruction] = struct{}{}
+					}
+					r.Errors = append(r.Errors, e)
+				case StateFailure:
+					r.State = StateFailure
+					e := NewError(tableMsg + opt.errMessage)
+					if _, ok := resultInstructions[opt.instruction]; !ok && opt.instruction != "" {
+						resultInstructions[opt.instruction] = struct{}{}
+					}
+					r.Errors = append(r.Errors, e)
 				}
-				c.downstreamTables.Store(checkItem.downstreamTable, downstreamStmt)
 			}
-
-			downstreamTable := filter.Table{
-				Schema: checkItem.downstreamTable.Schema,
-				Name:   checkItem.downstreamTable.Name,
+		}, func() {
+			for k := range resultInstructions {
+				r.Instruction += k + "; "
 			}
-			opts := c.checkAST(
-				upstreamStmt,
-				downstreamStmt.(*ast.CreateTableStmt),
-				c.extendedColumnPerTable[downstreamTable],
-			)
-			for _, opt := range opts {
-				opt.tableID = table.String()
-				c.optCh <- opt
-			}
-			log.L().Logger.Debug("finish checking table", zap.String("db", table.Schema), zap.String("table", table.Name))
 		}
-	}
 }
 
 func (c *TablesChecker) checkAST(
@@ -516,7 +497,7 @@ func (c *TablesChecker) checkTableStructurePair(
 // * check whether they have auto_increment key.
 type ShardingTablesChecker struct {
 	targetTableID                string
-	dbs                          map[string]*sql.DB
+	dbs                          map[string]*conn.BaseDB
 	tableMap                     map[string][]filter.Table // sourceID => {[table1, table2, ...]}
 	checkAutoIncrementPrimaryKey bool
 	firstCreateTableStmtNode     *ast.CreateTableStmt
@@ -530,7 +511,7 @@ type ShardingTablesChecker struct {
 // NewShardingTablesChecker returns a RealChecker.
 func NewShardingTablesChecker(
 	targetTableID string,
-	dbs map[string]*sql.DB,
+	dbs map[string]*conn.BaseDB,
 	tableMap map[string][]filter.Table,
 	checkAutoIncrementPrimaryKey bool,
 	dumpThreads int,
@@ -573,14 +554,14 @@ func (c *ShardingTablesChecker) Check(ctx context.Context) *Result {
 		return r
 	}
 
-	p, err := dbutil.GetParserForDB(ctx, db)
+	p, err := dbutil.GetParserForDB(ctx, db.DB)
 	if err != nil {
 		r.Extra = fmt.Sprintf("fail to get parser for sourceID %s on sharding %s", c.firstSourceID, c.targetTableID)
 		markCheckError(r, err)
 		return r
 	}
 	r.Extra = fmt.Sprintf("sourceID %s on sharding %s", c.firstSourceID, c.targetTableID)
-	statement, err := dbutil.GetCreateTableSQL(ctx, db, c.firstTable.Schema, c.firstTable.Name)
+	statement, err := dbutil.GetCreateTableSQL(ctx, db.DB, c.firstTable.Schema, c.firstTable.Name)
 	if err != nil {
 		markCheckError(r, err)
 		return r
@@ -593,7 +574,7 @@ func (c *ShardingTablesChecker) Check(ctx context.Context) *Result {
 	}
 
 	sourceIDs := maps.Keys(c.tableMap)
-	concurrency, err := getConcurrency(ctx, sourceIDs, c.dbs, c.dumpThreads)
+	concurrency, err := GetConcurrency(ctx, sourceIDs, c.dbs, c.dumpThreads)
 	if err != nil {
 		markCheckError(r, err)
 		return r
@@ -631,7 +612,7 @@ func (c *ShardingTablesChecker) checkShardingTable(ctx context.Context, r *Resul
 			table := checkItem.upstreamTable
 			if len(sourceID) == 0 || sourceID != checkItem.sourceID {
 				sourceID = checkItem.sourceID
-				p, err = dbutil.GetParserForDB(ctx, c.dbs[sourceID])
+				p, err = dbutil.GetParserForDB(ctx, c.dbs[sourceID].DB)
 				if err != nil {
 					c.reMu.Lock()
 					r.Extra = fmt.Sprintf("fail to get parser for sourceID %s on sharding %s", sourceID, c.targetTableID)
@@ -640,7 +621,7 @@ func (c *ShardingTablesChecker) checkShardingTable(ctx context.Context, r *Resul
 				}
 			}
 
-			statement, err := dbutil.GetCreateTableSQL(ctx, c.dbs[sourceID], table.Schema, table.Name)
+			statement, err := dbutil.GetCreateTableSQL(ctx, c.dbs[sourceID].DB, table.Schema, table.Name)
 			if err != nil {
 				// continue if table was deleted when checking
 				if isMySQLError(err, mysql.ErrNoSuchTable) {
@@ -787,7 +768,7 @@ func (c *ShardingTablesChecker) Name() string {
 // * check whether they have compatible column list.
 type OptimisticShardingTablesChecker struct {
 	targetTableID string
-	dbs           map[string]*sql.DB
+	dbs           map[string]*conn.BaseDB
 	tableMap      map[string][]filter.Table // sourceID => [table1, table2, ...]
 	reMu          sync.Mutex
 	joinedMu      sync.Mutex
@@ -799,7 +780,7 @@ type OptimisticShardingTablesChecker struct {
 // NewOptimisticShardingTablesChecker returns a RealChecker.
 func NewOptimisticShardingTablesChecker(
 	targetTableID string,
-	dbs map[string]*sql.DB,
+	dbs map[string]*conn.BaseDB,
 	tableMap map[string][]filter.Table,
 	dumpThreads int,
 ) RealChecker {
@@ -832,7 +813,7 @@ func (c *OptimisticShardingTablesChecker) Check(ctx context.Context) *Result {
 
 	startTime := time.Now()
 	sourceIDs := maps.Keys(c.tableMap)
-	concurrency, err := getConcurrency(ctx, sourceIDs, c.dbs, c.dumpThreads)
+	concurrency, err := GetConcurrency(ctx, sourceIDs, c.dbs, c.dumpThreads)
 	if err != nil {
 		markCheckError(r, err)
 		return r
@@ -870,7 +851,7 @@ func (c *OptimisticShardingTablesChecker) checkTable(ctx context.Context, r *Res
 			table := checkItem.upstreamTable
 			if len(sourceID) == 0 || sourceID != checkItem.sourceID {
 				sourceID = checkItem.sourceID
-				p, err = dbutil.GetParserForDB(ctx, c.dbs[sourceID])
+				p, err = dbutil.GetParserForDB(ctx, c.dbs[sourceID].DB)
 				if err != nil {
 					c.reMu.Lock()
 					r.Extra = fmt.Sprintf("fail to get parser for sourceID %s on sharding %s", sourceID, c.targetTableID)
@@ -879,7 +860,7 @@ func (c *OptimisticShardingTablesChecker) checkTable(ctx context.Context, r *Res
 				}
 			}
 
-			statement, err := dbutil.GetCreateTableSQL(ctx, c.dbs[sourceID], table.Schema, table.Name)
+			statement, err := dbutil.GetCreateTableSQL(ctx, c.dbs[sourceID].DB, table.Schema, table.Name)
 			if err != nil {
 				// continue if table was deleted when checking
 				if isMySQLError(err, mysql.ErrNoSuchTable) {
@@ -948,33 +929,35 @@ func dispatchTableItem(ctx context.Context, tableMap map[string][]filter.Table, 
 }
 
 func dispatchTableItemWithDownstreamTable(
-	ctx context.Context,
 	tableMaps map[string]map[filter.Table][]filter.Table,
-	inCh chan *checkItem,
+	pool *WorkerPool[*checkItem, []*incompatibilityOption],
 ) {
 	for sourceID, tableMap := range tableMaps {
 		for downTable, upTables := range tableMap {
 			for _, upTable := range upTables {
-				select {
-				case <-ctx.Done():
-					log.L().Logger.Warn("ctx canceled before input tables completely")
+				ok := pool.PutJob(&checkItem{
+					upstreamTable:   upTable,
+					downstreamTable: downTable,
+					sourceID:        sourceID,
+				})
+				if !ok {
 					return
-				case inCh <- &checkItem{upstreamTable: upTable, downstreamTable: downTable, sourceID: sourceID}:
 				}
 			}
 		}
 	}
-	close(inCh)
 }
 
-func getConcurrency(ctx context.Context, sourceIDs []string, dbs map[string]*sql.DB, dumpThreads int) (int, error) {
+// GetConcurrency gets the concurrency of workers that we can randomly dispatch
+// tasks on any sources to any of them, where each task needs a SQL connection.
+func GetConcurrency(ctx context.Context, sourceIDs []string, dbs map[string]*conn.BaseDB, dumpThreads int) (int, error) {
 	concurrency := dumpThreads
 	for _, sourceID := range sourceIDs {
 		db, ok := dbs[sourceID]
 		if !ok {
-			return 0, errors.NotFoundf("client for sourceID %s", sourceID)
+			return 0, errors.NotFoundf("SQL connection for sourceID %s", sourceID)
 		}
-		maxConnections, err := utils.GetMaxConnections(ctx, db)
+		maxConnections, err := conn.GetMaxConnections(tcontext.NewContext(ctx, log.L()), db)
 		if err != nil {
 			return 0, err
 		}

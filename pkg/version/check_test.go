@@ -24,6 +24,7 @@ import (
 
 	"github.com/coreos/go-semver/semver"
 	"github.com/pingcap/kvproto/pkg/metapb"
+	"github.com/pingcap/tidb/util/engine"
 	"github.com/pingcap/tiflow/pkg/httputil"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -171,6 +172,24 @@ func TestCheckClusterVersion(t *testing.T) {
 		require.Nil(t, err)
 	}
 
+	// Skip checking TiFlash.
+	{
+		mock.getPDVersion = func() string {
+			return minPDVersion.String()
+		}
+
+		tiflashStore := &metapb.Store{
+			Version: maxTiKVVersion.String(),
+			Labels:  []*metapb.StoreLabel{{Key: "engine", Value: "tiflash"}},
+		}
+		require.True(t, engine.IsTiFlash(tiflashStore))
+		mock.getAllStores = func() []*metapb.Store {
+			return []*metapb.Store{tiflashStore}
+		}
+		err := CheckClusterVersion(context.Background(), &mock, pdAddrs, nil, true)
+		require.Nil(t, err)
+	}
+
 	// Check maximum supported TiKV version
 	{
 		mock.getPDVersion = func() string {
@@ -196,19 +215,19 @@ func TestCheckClusterVersion(t *testing.T) {
 
 func TestCompareVersion(t *testing.T) {
 	// build on master branch, `vx.y.z-master`
-	masterVersion := semver.New(removeVAndHash("v6.3.0-master"))
+	masterVersion := semver.New(SanitizeVersion("v6.3.0-master"))
 	require.Equal(t, 1, masterVersion.Compare(*MinTiCDCVersion))
 
 	// pre-release version, `vx.y.z-alpha-nightly-yyyymmdd`
-	alphaVersion := semver.New(removeVAndHash("v6.3.0-alpha-nightly-20220202"))
+	alphaVersion := semver.New(SanitizeVersion("v6.3.0-alpha-nightly-20220202"))
 	require.Equal(t, 1, alphaVersion.Compare(*MinTiCDCVersion))
 
 	// release version, `vx.y.z.`
-	releaseVersion := semver.New(removeVAndHash("v6.3.0"))
+	releaseVersion := semver.New(SanitizeVersion("v6.3.0"))
 	require.Equal(t, 1, releaseVersion.Compare(*MinTiCDCVersion))
 
 	// build with uncommitted changes, `vx.y.z-dirty`
-	dirtyVersion := semver.New(removeVAndHash("v6.3.0-dirty"))
+	dirtyVersion := semver.New(SanitizeVersion("v6.3.0-dirty"))
 	require.Equal(t, 1, dirtyVersion.Compare(*MinTiCDCVersion))
 	require.Equal(t, 0, dirtyVersion.Compare(*semver.New("6.3.0")))
 }

@@ -17,6 +17,7 @@ import (
 	"encoding/json"
 
 	"github.com/pingcap/tiflow/dm/config"
+	"github.com/pingcap/tiflow/dm/config/dbconfig"
 	"github.com/pingcap/tiflow/dm/pkg/log"
 )
 
@@ -24,12 +25,12 @@ import (
 type Config struct {
 	EnableGTID bool `toml:"enable-gtid" json:"enable-gtid"`
 	// deprecated
-	AutoFixGTID bool            `toml:"auto-fix-gtid" json:"auto-fix-gtid"`
-	RelayDir    string          `toml:"relay-dir" json:"relay-dir"`
-	ServerID    uint32          `toml:"server-id" json:"server-id"`
-	Flavor      string          `toml:"flavor" json:"flavor"`
-	Charset     string          `toml:"charset" json:"charset"`
-	From        config.DBConfig `toml:"data-source" json:"data-source"`
+	AutoFixGTID bool              `toml:"auto-fix-gtid" json:"auto-fix-gtid"`
+	RelayDir    string            `toml:"relay-dir" json:"relay-dir"`
+	ServerID    uint32            `toml:"server-id" json:"server-id"`
+	Flavor      string            `toml:"flavor" json:"flavor"`
+	Charset     string            `toml:"charset" json:"charset"`
+	From        dbconfig.DBConfig `toml:"data-source" json:"data-source"`
 
 	// synchronous start point (if no meta saved before)
 	// do not need to specify binlog-pos, because relay will fetch the whole file

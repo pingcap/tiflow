@@ -17,7 +17,7 @@ import (
 	"flag"
 	"time"
 
-	config2 "github.com/pingcap/tiflow/dm/config"
+	"github.com/pingcap/tiflow/dm/config/dbconfig"
 )
 
 // config is used to run chaos tests.
@@ -31,10 +31,10 @@ type config struct {
 	MasterCount int `toml:"master-count" yaml:"master-count" json:"master-count"`
 	WorkerCount int `toml:"worker-count" yaml:"worker-count" json:"worker-count"`
 
-	Source1 config2.DBConfig `toml:"source-1" yaml:"source-1" json:"source-1"`
-	Source2 config2.DBConfig `toml:"source-2" yaml:"source-2" json:"source-2"`
-	Source3 config2.DBConfig `toml:"source-3" yaml:"source-3" json:"source-3"`
-	Target  config2.DBConfig `toml:"target" yaml:"target" json:"target"`
+	Source1 dbconfig.DBConfig `toml:"source-1" yaml:"source-1" json:"source-1"`
+	Source2 dbconfig.DBConfig `toml:"source-2" yaml:"source-2" json:"source-2"`
+	Source3 dbconfig.DBConfig `toml:"source-3" yaml:"source-3" json:"source-3"`
+	Target  dbconfig.DBConfig `toml:"target" yaml:"target" json:"target"`
 }
 
 // newConfig creates a config for this chaos testing suite.

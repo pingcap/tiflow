@@ -19,6 +19,7 @@ import (
 	"github.com/pingcap/check"
 	bf "github.com/pingcap/tidb-tools/pkg/binlog-filter"
 	"github.com/pingcap/tidb/util/filter"
+	"github.com/pingcap/tiflow/dm/config/dbconfig"
 	"github.com/pingcap/tiflow/dm/openapi"
 	"github.com/pingcap/tiflow/dm/openapi/fixtures"
 	"github.com/pingcap/tiflow/dm/pkg/terror"
@@ -58,7 +59,7 @@ func testNoShardTaskToSubTaskConfigs(c *check.C) {
 	source1Name := task.SourceConfig.SourceConf[0].SourceName
 	sourceCfg1.SourceID = task.SourceConfig.SourceConf[0].SourceName
 	sourceCfgMap := map[string]*SourceConfig{source1Name: sourceCfg1}
-	toDBCfg := &DBConfig{
+	toDBCfg := &dbconfig.DBConfig{
 		Host:     task.TargetConfig.Host,
 		Port:     task.TargetConfig.Port,
 		User:     task.TargetConfig.User,
@@ -130,7 +131,7 @@ func testShardAndFilterTaskToSubTaskConfigs(c *check.C) {
 	source2Name := task.SourceConfig.SourceConf[1].SourceName
 	sourceCfg2.SourceID = source2Name
 
-	toDBCfg := &DBConfig{
+	toDBCfg := &dbconfig.DBConfig{
 		Host:     task.TargetConfig.Host,
 		Port:     task.TargetConfig.Port,
 		User:     task.TargetConfig.User,
@@ -269,7 +270,7 @@ func testNoShardSubTaskConfigsToOpenAPITask(c *check.C) {
 	source1Name := task.SourceConfig.SourceConf[0].SourceName
 	sourceCfg1.SourceID = task.SourceConfig.SourceConf[0].SourceName
 	sourceCfgMap := map[string]*SourceConfig{source1Name: sourceCfg1}
-	toDBCfg := &DBConfig{
+	toDBCfg := &dbconfig.DBConfig{
 		Host:     task.TargetConfig.Host,
 		Port:     task.TargetConfig.Port,
 		User:     task.TargetConfig.User,
@@ -302,7 +303,7 @@ func testShardAndFilterSubTaskConfigsToOpenAPITask(c *check.C) {
 	source2Name := task.SourceConfig.SourceConf[1].SourceName
 	sourceCfg2.SourceID = source2Name
 
-	toDBCfg := &DBConfig{
+	toDBCfg := &dbconfig.DBConfig{
 		Host:     task.TargetConfig.Host,
 		Port:     task.TargetConfig.Port,
 		User:     task.TargetConfig.User,
@@ -355,7 +356,7 @@ func TestConvertWithIgnoreCheckItems(t *testing.T) {
 	source1Name := task.SourceConfig.SourceConf[0].SourceName
 	sourceCfg1.SourceID = task.SourceConfig.SourceConf[0].SourceName
 	sourceCfgMap := map[string]*SourceConfig{source1Name: sourceCfg1}
-	toDBCfg := &DBConfig{
+	toDBCfg := &dbconfig.DBConfig{
 		Host:     task.TargetConfig.Host,
 		Port:     task.TargetConfig.Port,
 		User:     task.TargetConfig.User,
