@@ -23,6 +23,13 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
+// Only for test.
+func (r *progressTracker) pendingResolvedTsEventsCount() int {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	return len(r.resolvedTsCache)
+}
+
 func TestNewProgressTracker(t *testing.T) {
 	t.Parallel()
 
@@ -230,4 +237,28 @@ func TestClosedTrackerDoNotAdvanceCheckpointTs(t *testing.T) {
 		return tracker.trackingCount() == 0
 	}, 3*time.Second, 100*time.Millisecond, "all events should be removed")
 	require.Equal(t, currentTs, tracker.advance(), "checkpointTs should not be advanced")
+}
+
+func TestOnlyResolvedTsShouldDirectlyAdvanceCheckpointTs(t *testing.T) {
+	t.Parallel()
+
+	tracker := newProgressTracker(1, defaultBufferSize)
+	cb1 := tracker.addEvent()
+	tracker.addResolvedTs(model.NewResolvedTs(1))
+	cb2 := tracker.addEvent()
+	tracker.addResolvedTs(model.NewResolvedTs(2))
+	cb3 := tracker.addEvent()
+	tracker.addResolvedTs(model.NewResolvedTs(3))
+	require.Equal(t, 3, tracker.trackingCount(), "Events should be added")
+	cb1()
+	cb2()
+	cb3()
+	require.Equal(t, uint64(3), tracker.advance().Ts, "CheckpointTs should be advanced")
+	require.Equal(t, 0, tracker.trackingCount(), "All events should be removed")
+	require.Equal(t, 0, tracker.pendingResolvedTsEventsCount(), "All resolvedTs events should be removed")
+	tracker.addResolvedTs(model.NewResolvedTs(4))
+	tracker.addResolvedTs(model.NewResolvedTs(5))
+	tracker.addResolvedTs(model.NewResolvedTs(6))
+	require.Equal(t, 0, tracker.pendingResolvedTsEventsCount(), "ResolvedTsCache should be empty")
+	require.Equal(t, uint64(6), tracker.advance().Ts, "CheckpointTs should be advanced")
 }
