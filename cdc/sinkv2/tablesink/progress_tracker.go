@@ -145,8 +145,10 @@ func (r *progressTracker) addResolvedTs(resolvedTs model.ResolvedTs) {
 
 	// If there is no event or all events are flushed, we can update the resolved ts directly.
 	if r.nextEventID == 0 || r.nextToResolvePos >= r.nextEventID {
-		// Update the checkpoint ts.
-		r.lastMinResolvedTs = resolvedTs
+		if !r.frozen && !r.closed {
+			// Update the checkpoint ts.
+			r.lastMinResolvedTs = resolvedTs
+		}
 		return
 	}
 
@@ -208,6 +210,8 @@ func (r *progressTracker) advance() model.ResolvedTs {
 				if !r.frozen && !r.closed {
 					r.lastMinResolvedTs = cached.resolvedTs
 				}
+				// Use zero value to release the memory.
+				r.resolvedTsCache[0] = pendingResolvedTs{}
 				r.resolvedTsCache = r.resolvedTsCache[1:]
 				if len(r.resolvedTsCache) == 0 {
 					r.resolvedTsCache = nil
@@ -221,6 +225,8 @@ func (r *progressTracker) advance() model.ResolvedTs {
 	// If a buffer is finished, release it.
 	for r.nextToResolvePos-r.nextToReleasePos >= r.bufferSize*64 {
 		r.nextToReleasePos += r.bufferSize * 64
+		// Use zero value to release the memory.
+		r.pendingEvents[0] = nil
 		r.pendingEvents = r.pendingEvents[1:]
 		if len(r.pendingEvents) == 0 {
 			r.pendingEvents = nil
