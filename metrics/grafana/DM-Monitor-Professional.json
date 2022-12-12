@@ -1014,11 +1014,12 @@
           },
           "yaxes": [
             {
-              "format": "s",
+              "decimals": 0,
+              "format": "none",
               "label": null,
               "logBase": 1,
               "max": null,
-              "min": null,
+              "min": "0",
               "show": true
             },
             {
