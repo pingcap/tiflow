@@ -251,7 +251,6 @@ func TestOnlyResolvedTsShouldDirectlyAdvanceCheckpointTs(t *testing.T) {
 	cb3 := tracker.addEvent()
 	tracker.addResolvedTs(model.NewResolvedTs(4))
 	tracker.addResolvedTs(model.NewResolvedTs(5))
-
 	require.Equal(t, 3, tracker.trackingCount(), "Events should be added")
 	cb1()
 	cb2()
@@ -266,4 +265,27 @@ func TestOnlyResolvedTsShouldDirectlyAdvanceCheckpointTs(t *testing.T) {
 	tracker.addResolvedTs(model.NewResolvedTs(9))
 	require.Equal(t, 0, tracker.pendingResolvedTsEventsCount(), "ResolvedTsCache should be empty")
 	require.Equal(t, uint64(9), tracker.advance().Ts, "CheckpointTs should be advanced")
+}
+
+func TestShouldDirectlyUpdateResolvedTsIfNoMoreEvents(t *testing.T) {
+	t.Parallel()
+
+	tracker := newProgressTracker(1, defaultBufferSize)
+	cb1 := tracker.addEvent()
+	tracker.addResolvedTs(model.NewResolvedTs(1))
+	cb2 := tracker.addEvent()
+	tracker.addResolvedTs(model.NewResolvedTs(2))
+	tracker.addResolvedTs(model.NewResolvedTs(3))
+	require.Equal(t, 2, tracker.pendingResolvedTsEventsCount(), "ResolvedTsCache should only have 2 events")
+	cb3 := tracker.addEvent()
+	tracker.addResolvedTs(model.NewResolvedTs(4))
+	tracker.addResolvedTs(model.NewResolvedTs(5))
+	tracker.addResolvedTs(model.NewResolvedTs(6))
+	cb1()
+	cb2()
+	require.Equal(t, uint64(3), tracker.advance().Ts, "CheckpointTs should be advanced")
+	require.Equal(t, 1, tracker.pendingResolvedTsEventsCount(), "ResolvedTsCache should only have one event")
+	cb3()
+	require.Equal(t, uint64(6), tracker.advance().Ts, "CheckpointTs should be advanced")
+	require.Equal(t, 0, tracker.pendingResolvedTsEventsCount(), "ResolvedTsCache should be empty")
 }

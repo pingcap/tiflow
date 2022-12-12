@@ -84,7 +84,7 @@ type progressTracker struct {
 	// The position that the next event which should be check in `advance`.
 	nextToResolvePos uint64
 
-	resolvedTsCache []*pendingResolvedTs
+	resolvedTsCache []pendingResolvedTs
 
 	lastMinResolvedTs model.ResolvedTs
 }
@@ -154,7 +154,19 @@ func (r *progressTracker) addResolvedTs(resolvedTs model.ResolvedTs) {
 		return
 	}
 
-	r.resolvedTsCache = append(r.resolvedTsCache, &pendingResolvedTs{
+	// Sometimes, if there are no events for a long time and a lot of resolved ts are received,
+	// we can update the last resolved ts directly.
+	tsCacheLen := len(r.resolvedTsCache)
+	if tsCacheLen > 0 {
+		// The offset of the last resolved ts is the last event ID.
+		// It means no event is adding. We can update the resolved ts directly.
+		if r.resolvedTsCache[tsCacheLen-1].offset+1 == r.nextEventID {
+			r.resolvedTsCache[tsCacheLen-1].resolvedTs = resolvedTs
+			return
+		}
+	}
+
+	r.resolvedTsCache = append(r.resolvedTsCache, pendingResolvedTs{
 		offset:     r.nextEventID - 1,
 		resolvedTs: resolvedTs,
 	})
@@ -212,8 +224,6 @@ func (r *progressTracker) advance() model.ResolvedTs {
 				if !r.frozen && !r.closed {
 					r.lastMinResolvedTs = cached.resolvedTs
 				}
-				// Use zero value to release the memory.
-				r.resolvedTsCache[0] = nil
 				r.resolvedTsCache = r.resolvedTsCache[1:]
 				if len(r.resolvedTsCache) == 0 {
 					r.resolvedTsCache = nil
