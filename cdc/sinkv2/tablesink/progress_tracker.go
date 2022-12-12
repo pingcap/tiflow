@@ -32,7 +32,7 @@ const (
 	// warnDuration is the duration to warn the progress tracker is not closed.
 	warnDuration = 3 * time.Minute
 	// A progressTracker contains several internal fixed-length buffers.
-	defaultBufferSize uint64 = 1024 * 1024
+	defaultBufferSize uint64 = 256
 )
 
 // A pendingResolvedTs is received by progressTracker but hasn't been flushed yet.
