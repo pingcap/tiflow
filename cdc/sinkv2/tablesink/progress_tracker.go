@@ -32,7 +32,9 @@ const (
 	// warnDuration is the duration to warn the progress tracker is not closed.
 	warnDuration = 3 * time.Minute
 	// A progressTracker contains several internal fixed-length buffers.
-	defaultBufferSize uint64 = 256
+	// NOTICE: the buffer size must be aligned to 8 bytes.
+	// It shouldn't be too large, otherwise it will consume too much memory.
+	defaultBufferSize uint64 = 4096
 )
 
 // A pendingResolvedTs is received by progressTracker but hasn't been flushed yet.
@@ -82,7 +84,7 @@ type progressTracker struct {
 	// The position that the next event which should be check in `advance`.
 	nextToResolvePos uint64
 
-	resolvedTsCache []pendingResolvedTs
+	resolvedTsCache []*pendingResolvedTs
 
 	lastMinResolvedTs model.ResolvedTs
 }
@@ -144,7 +146,7 @@ func (r *progressTracker) addResolvedTs(resolvedTs model.ResolvedTs) {
 	defer r.mu.Unlock()
 
 	// If there is no event or all events are flushed, we can update the resolved ts directly.
-	if r.nextEventID == 0 || r.nextToResolvePos >= r.nextEventID {
+	if r.nextEventID == 0 || r.nextToResolvePos == r.nextEventID {
 		if !r.frozen && !r.closed {
 			// Update the checkpoint ts.
 			r.lastMinResolvedTs = resolvedTs
@@ -152,7 +154,7 @@ func (r *progressTracker) addResolvedTs(resolvedTs model.ResolvedTs) {
 		return
 	}
 
-	r.resolvedTsCache = append(r.resolvedTsCache, pendingResolvedTs{
+	r.resolvedTsCache = append(r.resolvedTsCache, &pendingResolvedTs{
 		offset:     r.nextEventID - 1,
 		resolvedTs: resolvedTs,
 	})
@@ -211,7 +213,7 @@ func (r *progressTracker) advance() model.ResolvedTs {
 					r.lastMinResolvedTs = cached.resolvedTs
 				}
 				// Use zero value to release the memory.
-				r.resolvedTsCache[0] = pendingResolvedTs{}
+				r.resolvedTsCache[0] = nil
 				r.resolvedTsCache = r.resolvedTsCache[1:]
 				if len(r.resolvedTsCache) == 0 {
 					r.resolvedTsCache = nil
