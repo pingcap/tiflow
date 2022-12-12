@@ -121,7 +121,9 @@ func newSorterNode(
 	}
 }
 
-func createSorter(ctx pipeline.NodeContext, tableName string, span tablepb.Span) (sorter.EventSorter, error) {
+func createSorter(
+	ctx pipeline.NodeContext, tableName string, span tablepb.Span,
+) (sorter.EventSorter, error) {
 	sortEngine := ctx.ChangefeedVars().Info.Engine
 	switch sortEngine {
 	// `file` and `memory` become aliases of `unified` for backward compatibility.
@@ -162,7 +164,8 @@ func createSorter(ctx pipeline.NodeContext, tableName string, span tablepb.Span)
 		// Sorter dir has been set and checked when server starts.
 		// See https://github.com/pingcap/tiflow/blob/9dad09/cdc/server.go#L275
 		sortDir := config.GetGlobalServerConfig().Sorter.SortDir
-		unifiedSorter, err := unified.NewUnifiedSorter(sortDir, ctx.ChangefeedVars().ID, tableName, span.TableID)
+		unifiedSorter, err := unified.NewUnifiedSorter(
+			sortDir, ctx.ChangefeedVars().ID, tableName, span.TableID)
 		if err != nil {
 			return nil, err
 		}
