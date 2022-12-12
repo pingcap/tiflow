@@ -264,6 +264,6 @@ func TestOnlyResolvedTsShouldDirectlyAdvanceCheckpointTs(t *testing.T) {
 	tracker.addResolvedTs(model.NewResolvedTs(7))
 	tracker.addResolvedTs(model.NewResolvedTs(8))
 	tracker.addResolvedTs(model.NewResolvedTs(9))
-	require.Equal(t, 3, tracker.pendingResolvedTsEventsCount(), "ResolvedTsCache should be empty")
+	require.Equal(t, 0, tracker.pendingResolvedTsEventsCount(), "ResolvedTsCache should be empty")
 	require.Equal(t, uint64(9), tracker.advance().Ts, "CheckpointTs should be advanced")
 }
