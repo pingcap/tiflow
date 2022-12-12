@@ -71,6 +71,7 @@ func New(
 
 // AddTable adds a table to the source manager. Start puller and register table to the engine.
 func (m *SourceManager) AddTable(ctx cdccontext.Context, tableID model.TableID, tableName string, startTs model.Ts) {
+	// Add table to the engine first, so that the engine can receive the events from the puller.
 	m.engine.AddTable(tableID)
 	p := pullerwrapper.NewPullerWrapper(m.changefeedID, tableID, tableName, startTs, m.bdrMode)
 	p.Start(ctx, m.up, m.engine, m.errChan)
