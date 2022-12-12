@@ -173,3 +173,49 @@ func TestRegionRangeLockCanBeCancelled(t *testing.T) {
 	lockResult := wait()
 	require.Equal(t, LockRangeStatusCancel, lockResult.Status)
 }
+
+func TestRangeTsMap(t *testing.T) {
+	t.Parallel()
+
+	m := newRangeTsMap([]byte("a"), []byte("z"), math.MaxUint64)
+
+	mustGetMin := func(startKey, endKey string, expectedTs uint64) {
+		ts := m.GetMin([]byte(startKey), []byte(endKey))
+		require.Equal(t, expectedTs, ts)
+	}
+	set := func(startKey, endKey string, ts uint64) {
+		m.Set([]byte(startKey), []byte(endKey), ts)
+	}
+
+	mustGetMin("a", "z", math.MaxUint64)
+	set("b", "e", 100)
+	mustGetMin("a", "z", 100)
+	mustGetMin("b", "e", 100)
+	mustGetMin("a", "c", 100)
+	mustGetMin("d", "f", 100)
+	mustGetMin("a", "b", math.MaxUint64)
+	mustGetMin("e", "f", math.MaxUint64)
+	mustGetMin("a", "b\x00", 100)
+
+	set("d", "g", 80)
+	mustGetMin("d", "g", 80)
+	mustGetMin("a", "z", 80)
+	mustGetMin("d", "e", 80)
+	mustGetMin("a", "d", 100)
+
+	set("c", "f", 120)
+	mustGetMin("c", "f", 120)
+	mustGetMin("c", "d", 120)
+	mustGetMin("d", "e", 120)
+	mustGetMin("e", "f", 120)
+	mustGetMin("b", "e", 100)
+	mustGetMin("a", "z", 80)
+
+	set("c", "f", 130)
+	mustGetMin("c", "f", 130)
+	mustGetMin("c", "d", 130)
+	mustGetMin("d", "e", 130)
+	mustGetMin("e", "f", 130)
+	mustGetMin("b", "e", 100)
+	mustGetMin("a", "z", 80)
+}
