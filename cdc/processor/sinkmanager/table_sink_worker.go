@@ -30,7 +30,6 @@ type sinkWorker struct {
 	sourceManager *sourcemanager.SourceManager
 	memQuota      *memQuota
 	eventCache    *redoEventCache
-	redoEnabled   bool
 	// splitTxn indicates whether to split the transaction into multiple batches.
 	splitTxn bool
 	// enableOldValue indicates whether to enable the old value feature.
@@ -47,7 +46,6 @@ func newSinkWorker(
 	sourceManager *sourcemanager.SourceManager,
 	quota *memQuota,
 	eventCache *redoEventCache,
-	redoEnabled bool,
 	splitTxn bool,
 	enableOldValue bool,
 ) *sinkWorker {
@@ -56,7 +54,6 @@ func newSinkWorker(
 		sourceManager:  sourceManager,
 		memQuota:       quota,
 		eventCache:     eventCache,
-		redoEnabled:    redoEnabled,
 		splitTxn:       splitTxn,
 		enableOldValue: enableOldValue,
 
@@ -106,7 +103,7 @@ func (w *sinkWorker) handleTask(ctx context.Context, task *sinkTask) (finalErr e
 	events := make([]*model.RowChangedEvent, 0, 1024)
 	batchID := uint64(1)
 
-	if w.redoEnabled && w.eventCache != nil {
+	if w.eventCache != nil {
 		drained, err := w.fetchFromCache(task, &lowerBound, &upperBound, &batchID)
 		if err != nil {
 			return errors.Trace(err)
@@ -250,7 +247,7 @@ func (w *sinkWorker) handleTask(ctx context.Context, task *sinkTask) (finalErr e
 	defer func() {
 		w.metricRedoEventCacheMiss.Add(float64(allEventSize))
 		task.tableSink.receivedEventCount.Add(int64(allEventCount))
-		if !w.redoEnabled {
+		if w.eventCache == nil {
 			task.tableSink.updateReceivedSorterCommitTs(currTxnCommitTs)
 			eventCount := rangeEventCount{pos: lastPos, events: allEventCount}
 			task.tableSink.updateRangeEventCounts(eventCount)
@@ -351,6 +348,7 @@ func (w *sinkWorker) fetchFromCache(
 	}
 	popRes := cache.pop(*lowerBound, *upperBound)
 	if popRes.success {
+		newLowerBound = popRes.boundary.Next()
 		if len(popRes.events) > 0 {
 			task.tableSink.receivedEventCount.Add(int64(popRes.pushCount))
 			w.metricRedoEventCacheHit.Add(float64(popRes.size))
@@ -376,8 +374,12 @@ func (w *sinkWorker) fetchFromCache(
 		// NOTE: the recorded size can be not accurate, but let it be.
 		w.memQuota.record(task.tableID, resolvedTs, popRes.releaseSize)
 		if err = task.tableSink.updateResolvedTs(resolvedTs); err == nil {
-			newLowerBound = popRes.boundary.Next()
 		}
+		log.Debug("Advance table sink",
+			zap.String("namespace", w.changefeedID.Namespace),
+			zap.String("changefeed", w.changefeedID.ID),
+			zap.Int64("tableID", task.tableID),
+			zap.Any("resolvedTs", resolvedTs))
 	} else {
 		newUpperBound = popRes.boundary.Prev()
 	}
@@ -387,12 +389,12 @@ func (w *sinkWorker) fetchFromCache(
 		zap.String("changefeed", w.changefeedID.ID),
 		zap.Int64("tableID", task.tableID),
 		zap.Bool("success", popRes.success),
+		zap.Int("events", len(popRes.events)),
 		zap.Bool("cacheDrained", cacheDrained),
 		zap.Any("lowerBound", lowerBound),
 		zap.Any("upperBound", upperBound),
 		zap.Any("newLowerBound", newLowerBound),
-		zap.Any("newUpperBound", newUpperBound),
-	)
+		zap.Any("newUpperBound", newUpperBound))
 	*lowerBound = newLowerBound
 	*upperBound = newUpperBound
 	return

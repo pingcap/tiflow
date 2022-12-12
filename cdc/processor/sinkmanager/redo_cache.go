@@ -40,11 +40,11 @@ type eventAppender struct {
 
 	mu sync.Mutex
 	// If an eventAppender is broken, it means it missed some events.
-	broken     bool
-	events     []*model.RowChangedEvent
-	sizes      []uint64
-	readyCount int // Count of ready events
-
+	broken bool
+	events []*model.RowChangedEvent
+	sizes  []uint64
+	// Count of ready events.
+	readyCount int
 	// Several RowChangedEvent can come from one PolymorphicEvent.
 	pushCounts []byte
 
@@ -114,6 +114,7 @@ func (r *redoEventCache) maybeCreateAppender(tableID model.TableID, lowerBound e
 	if item.broken {
 		if item.readyCount == 0 {
 			item.broken = false
+			item.events = nil
 			item.lowerBound = lowerBound
 			item.upperBound = engine.Position{}
 		} else {
@@ -139,6 +140,11 @@ func (e *eventAppender) pop(lowerBound, upperBound engine.Position) (res popResu
 		res.boundary = e.lowerBound
 		return
 	}
+	if !e.upperBound.Valid() {
+		res.success = false
+		res.boundary = upperBound.Next()
+		return
+	}
 
 	res.success = true
 	if upperBound.Compare(e.upperBound) > 0 {
@@ -162,7 +168,7 @@ func (e *eventAppender) pop(lowerBound, upperBound engine.Position) (res popResu
 	} else {
 		endIdx = sort.Search(e.readyCount, func(i int) bool {
 			pos := engine.Position{CommitTs: e.events[i].CommitTs, StartTs: e.events[i].StartTs}
-			return pos.Compare(upperBound) > 0
+			return pos.Compare(res.boundary) > 0
 		})
 		res.events = e.events[startIdx:endIdx]
 		for i := startIdx; i < endIdx; i++ {
@@ -177,6 +183,9 @@ func (e *eventAppender) pop(lowerBound, upperBound engine.Position) (res popResu
 	e.pushCounts = e.pushCounts[endIdx:]
 	e.readyCount -= endIdx
 	e.lowerBound = res.boundary.Next()
+	if e.lowerBound.Compare(e.upperBound) > 0 {
+		e.upperBound = engine.Position{}
+	}
 
 	atomic.AddUint64(&e.cache.allocated, ^(res.releaseSize - 1))
 	e.cache.metricRedoEventCache.Sub(float64(res.releaseSize))

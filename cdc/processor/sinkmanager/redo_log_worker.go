@@ -240,6 +240,9 @@ func (w *redoWorker) handleTask(ctx context.Context, task *redoTask) (finalErr e
 		if e == nil {
 			lastPos = upperBound
 			lastTxnCommitTs = upperBound.CommitTs
+			if cache != nil {
+				cache.pushBatch(nil, 0, lastPos)
+			}
 			return maybeEmitBatchEvents(true, true)
 		}
 		allEventCount += 1
@@ -256,24 +259,25 @@ func (w *redoWorker) handleTask(ctx context.Context, task *redoTask) (finalErr e
 		}
 
 		// NOTICE: The event can be filtered by the event filter.
+		var x []*model.RowChangedEvent
+		var size uint64
 		if e.Row != nil {
 			// For all rows, we add table replicate ts, so mysql sink can determine safe-mode.
 			e.Row.ReplicatingTs = task.tableSink.replicateTs
-			x, size, err := convertRowChangedEvents(w.changefeedID, task.tableID, w.enableOldValue, e)
+			x, size, err = convertRowChangedEvents(w.changefeedID, task.tableID, w.enableOldValue, e)
 			if err != nil {
 				return errors.Trace(err)
 			}
 			usedMemSize += size
-
 			rows = append(rows, x...)
 			rowsSize += size
-			if cache != nil {
-				cached, brokenSize := cache.pushBatch(x, size, pos)
-				if cached {
-					cachedSize += size
-				} else {
-					cachedSize -= brokenSize
-				}
+		}
+		if cache != nil {
+			cached, brokenSize := cache.pushBatch(x, size, pos)
+			if cached {
+				cachedSize += size
+			} else {
+				cachedSize -= brokenSize
 			}
 		}
 
