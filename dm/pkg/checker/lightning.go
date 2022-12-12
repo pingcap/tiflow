@@ -62,7 +62,7 @@ func (c *LightningEmptyRegionChecker) Name() string {
 func (c *LightningEmptyRegionChecker) Check(ctx context.Context) *Result {
 	result := &Result{
 		Name:  c.Name(),
-		Desc:  "check whether there are too many empty Regions in the TiKV under physical import mode",
+		Desc:  "check whether there are too many empty regions in the TiKV under physical import mode",
 		State: StateFailure,
 	}
 	convertLightningPrecheck(
@@ -210,7 +210,7 @@ type LightningCDCPiTRChecker struct {
 	inner restore.PrecheckItem
 }
 
-// NewLightningCDCPiTRChecker creates a new LightningClusterVersionChecker.
+// NewLightningCDCPiTRChecker creates a new LightningCDCPiTRChecker.
 func NewLightningCDCPiTRChecker(lightningChecker restore.PrecheckItem) RealChecker {
 	c, ok := lightningChecker.(*restore.CDCPITRCheckItem)
 	if ok {
