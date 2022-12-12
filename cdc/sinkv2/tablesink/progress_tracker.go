@@ -145,12 +145,16 @@ func (r *progressTracker) addResolvedTs(resolvedTs model.ResolvedTs) {
 	r.mu.Lock()
 	defer r.mu.Unlock()
 
+	// NOTICE: We should **NOT** update the `lastMinResolvedTs` when tracker is closed or frozened.
+	// So there is no need to try to append the resolved ts to `resolvedTsCache`.
+	if r.frozen || r.closed {
+		return
+	}
+
 	// If there is no event or all events are flushed, we can update the resolved ts directly.
 	if r.nextEventID == 0 || r.nextToResolvePos >= r.nextEventID {
-		if !r.frozen && !r.closed {
-			// Update the checkpoint ts.
-			r.lastMinResolvedTs = resolvedTs
-		}
+		// Update the checkpoint ts.
+		r.lastMinResolvedTs = resolvedTs
 		return
 	}
 
