@@ -553,9 +553,11 @@ func (s *eventFeedSession) eventFeed(ctx context.Context, ts uint64, regionCount
 	return g.Wait()
 }
 
-// scheduleDivideRegionAndRequest schedules a range to be divided by regions, and these regions will be then scheduled
-// to send ChangeData requests.
-func (s *eventFeedSession) scheduleDivideRegionAndRequest(ctx context.Context, span tablepb.Span, ts uint64) {
+// scheduleDivideRegionAndRequest schedules a range to be divided by regions,
+// and these regions will be then scheduled to send ChangeData requests.
+func (s *eventFeedSession) scheduleDivideRegionAndRequest(
+	ctx context.Context, span tablepb.Span, ts uint64,
+) {
 	task := rangeRequestTask{span: span, ts: ts}
 	select {
 	case s.requestRangeCh <- task:
@@ -903,7 +905,8 @@ func (s *eventFeedSession) divideAndSendEventFeedToRegions(
 		retryErr := retry.Do(ctx, func() error {
 			bo := tikv.NewBackoffer(ctx, tikvRequestMaxBackoff)
 			start := time.Now()
-			regions, err = s.client.regionCache.BatchLoadRegionsWithKeyRange(bo, nextSpan.StartKey, nextSpan.EndKey, limit)
+			regions, err = s.client.regionCache.BatchLoadRegionsWithKeyRange(
+				bo, nextSpan.StartKey, nextSpan.EndKey, limit)
 			scanRegionsDuration.Observe(time.Since(start).Seconds())
 			if err != nil {
 				return cerror.WrapError(cerror.ErrPDBatchLoadRegions, err)
@@ -932,7 +935,8 @@ func (s *eventFeedSession) divideAndSendEventFeedToRegions(
 
 		for _, tiRegion := range regions {
 			region := tiRegion.GetMeta()
-			partialSpan, err := spanz.Intersect(s.totalSpan, tablepb.Span{StartKey: region.StartKey, EndKey: region.EndKey})
+			partialSpan, err := spanz.Intersect(
+				s.totalSpan, tablepb.Span{StartKey: region.StartKey, EndKey: region.EndKey})
 			if err != nil {
 				return errors.Trace(err)
 			}

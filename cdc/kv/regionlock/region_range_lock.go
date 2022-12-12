@@ -45,8 +45,8 @@ func rangeTsEntryLess(a, b *rangeTsEntry) bool {
 	return bytes.Compare(a.startKey, b.startKey) < 0
 }
 
-// rangeTsMap represents a map from key range to a timestamp. It supports range set and calculating min value among a
-// a specified range.
+// rangeTsMap represents a map from key range to a timestamp. It supports
+// range set and calculating min value among a specified range.
 type rangeTsMap struct {
 	m *btree.BTreeG[*rangeTsEntry]
 }
@@ -270,12 +270,14 @@ func (l *RegionRangeLock) tryLockRange(startKey, endKey []byte, regionID, versio
 			// The rest should come from range searching and is sorted in increasing order, and they
 			// must intersect with the current given range.
 			if bytes.Compare(currentRangeStartKey, r.startKey) < 0 {
-				retryRanges = append(retryRanges, tablepb.Span{StartKey: currentRangeStartKey, EndKey: r.startKey})
+				retryRanges = append(retryRanges,
+					tablepb.Span{StartKey: currentRangeStartKey, EndKey: r.startKey})
 			}
 			currentRangeStartKey = r.endKey
 		}
 		if bytes.Compare(currentRangeStartKey, endKey) < 0 {
-			retryRanges = append(retryRanges, tablepb.Span{StartKey: currentRangeStartKey, EndKey: endKey})
+			retryRanges = append(retryRanges,
+				tablepb.Span{StartKey: currentRangeStartKey, EndKey: endKey})
 		}
 
 		return LockRangeResult{

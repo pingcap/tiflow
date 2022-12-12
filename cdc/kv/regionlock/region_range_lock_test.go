@@ -62,7 +62,9 @@ func mustLockRangeStale(
 	res := l.LockRange(ctx, []byte(startKey), []byte(endKey), regionID, version)
 	spans := make([]tablepb.Span, 0)
 	for i := 0; i < len(expectRetrySpans); i += 2 {
-		spans = append(spans, tablepb.Span{StartKey: []byte(expectRetrySpans[i]), EndKey: []byte(expectRetrySpans[i+1])})
+		spans = append(spans, tablepb.Span{
+			StartKey: []byte(expectRetrySpans[i]), EndKey: []byte(expectRetrySpans[i+1]),
+		})
 	}
 	mustStale(t, res, spans...)
 }

@@ -103,7 +103,8 @@ func (s *spanFrontier) insert(regionID uint64, span tablepb.Span, ts uint64) {
 	// We just need to update the ts corresponding to the span in list
 	next := seekRes.Node().Next()
 	if next != nil {
-		if bytes.Equal(seekRes.Node().Key(), span.StartKey) && bytes.Equal(next.Key(), span.EndKey) {
+		if bytes.Equal(seekRes.Node().Key(), span.StartKey) &&
+			bytes.Equal(next.Key(), span.EndKey) {
 			s.minTsHeap.UpdateKey(seekRes.Node().Value(), ts)
 			if regionID != fakeRegionID {
 				s.cachedRegions[regionID] = seekRes.Node()

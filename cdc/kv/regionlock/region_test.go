@@ -30,9 +30,15 @@ func TestCheckRegionsLeftCover(t *testing.T) {
 		cover   bool
 	}{
 		{[]*metapb.Region{}, tablepb.Span{0, []byte{1}, []byte{2}}, false},
-		{[]*metapb.Region{{StartKey: nil, EndKey: nil}}, tablepb.Span{0, []byte{1}, []byte{2}}, true},
-		{[]*metapb.Region{{StartKey: []byte{1}, EndKey: []byte{2}}}, tablepb.Span{0, []byte{1}, []byte{2}}, true},
-		{[]*metapb.Region{{StartKey: []byte{0}, EndKey: []byte{4}}}, tablepb.Span{0, []byte{1}, []byte{2}}, true},
+		{[]*metapb.Region{
+			{StartKey: nil, EndKey: nil},
+		}, tablepb.Span{0, []byte{1}, []byte{2}}, true},
+		{[]*metapb.Region{
+			{StartKey: []byte{1}, EndKey: []byte{2}},
+		}, tablepb.Span{0, []byte{1}, []byte{2}}, true},
+		{[]*metapb.Region{
+			{StartKey: []byte{0}, EndKey: []byte{4}},
+		}, tablepb.Span{0, []byte{1}, []byte{2}}, true},
 		{[]*metapb.Region{
 			{StartKey: []byte{1}, EndKey: []byte{2}},
 			{StartKey: []byte{2}, EndKey: []byte{3}},
