@@ -146,7 +146,7 @@ func (r *progressTracker) addResolvedTs(resolvedTs model.ResolvedTs) {
 	defer r.mu.Unlock()
 
 	// If there is no event or all events are flushed, we can update the resolved ts directly.
-	if r.nextEventID == 0 || r.nextToResolvePos == r.nextEventID {
+	if r.nextEventID == 0 {
 		if !r.frozen && !r.closed {
 			// Update the checkpoint ts.
 			r.lastMinResolvedTs = resolvedTs
