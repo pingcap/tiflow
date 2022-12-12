@@ -376,6 +376,9 @@ func (n *sorterNode) start(
 				lastCRTs = e.CRTs
 				ctx.SendToNextNode(pmessage.PolymorphicEventMessage(e))
 			}
+			for i := 0; i < index; i++ {
+				events[i] = nil
+			}
 		}
 	})
 	return nil
