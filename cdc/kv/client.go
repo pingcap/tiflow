@@ -1338,8 +1338,10 @@ func (s *eventFeedSession) sendResolvedTs(
 		// Allocate a buffer with 1.5x length than average to reduce reallocate.
 		buffLen := len(resolvedTs.Regions) / worker.concurrency * 2
 		ev := s.resolvedTsPool.Get().(*regionStatefulEvent)
+		// must reset fields to prevent dirty data
 		ev.resolvedTsEvent.resolvedTs = resolvedTs.Ts
 		ev.resolvedTsEvent.regions = make([]*regionFeedState, 0, buffLen)
+		ev.finishedCallbackCh = nil
 		statefulEvents[i] = ev
 	}
 
