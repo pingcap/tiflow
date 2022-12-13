@@ -23,6 +23,7 @@ import (
 	"github.com/pingcap/failpoint"
 	"github.com/pingcap/tidb/br/pkg/lightning"
 	"github.com/pingcap/tidb/br/pkg/lightning/checkpoints"
+	"github.com/pingcap/tidb/br/pkg/lightning/common"
 	lcfg "github.com/pingcap/tidb/br/pkg/lightning/config"
 	"github.com/pingcap/tidb/br/pkg/lightning/errormanager"
 	"github.com/pingcap/tidb/dumpling/export"
@@ -286,6 +287,10 @@ func (l *LightningLoader) runLightning(ctx context.Context, cfg *lcfg.Config) er
 		}
 	})
 	if err != nil {
+		if errors.Cause(err) == common.ErrChecksumMismatch {
+			// TODO
+			return terror.ErrLoadLightningChecksum
+		}
 		return terror.ErrLoadLightningRuntime.Delegate(err)
 	}
 	if hasDup.Load() {
@@ -328,6 +333,14 @@ func GetLightningConfig(globalCfg *lcfg.GlobalConfig, subtaskCfg *config.SubTask
 		cfg.App.TaskInfoSchemaName = GetTaskInfoSchemaName(subtaskCfg.MetaSchema, subtaskCfg.Name)
 	case config.OnDuplicateNone:
 		cfg.TikvImporter.DuplicateResolution = lcfg.DupeResAlgNone
+	}
+	switch subtaskCfg.ChecksumPhysical {
+	case config.ChecksumRequired:
+		cfg.PostRestore.Checksum = lcfg.OpLevelRequired
+	case config.ChecksumOptional:
+		cfg.PostRestore.Checksum = lcfg.OpLevelOptional
+	case config.ChecksumOff:
+		cfg.PostRestore.Checksum = lcfg.OpLevelOff
 	}
 	cfg.TiDB.Vars = make(map[string]string)
 	cfg.Routes = subtaskCfg.RouteRules
