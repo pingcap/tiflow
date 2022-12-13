@@ -16,6 +16,7 @@ package loader
 import (
 	"context"
 	"path/filepath"
+	"regexp"
 	"strings"
 	"sync"
 
@@ -287,16 +288,26 @@ func (l *LightningLoader) runLightning(ctx context.Context, cfg *lcfg.Config) er
 		}
 	})
 	if err != nil {
-		if errors.Cause(err) == common.ErrChecksumMismatch {
-			// TODO
-			return terror.ErrLoadLightningChecksum
-		}
-		return terror.ErrLoadLightningRuntime.Delegate(err)
+		return convertLightningError(err)
 	}
 	if hasDup.Load() {
 		return terror.ErrLoadLightningHasDup.Generate(cfg.App.TaskInfoSchemaName, errormanager.ConflictErrorTableName)
 	}
 	return nil
+}
+
+var checksumErrorPattern = regexp.MustCompile(`total_kvs: (\d*) vs (\d*)`)
+
+func convertLightningError(err error) error {
+	if common.ErrChecksumMismatch.Equal(err) {
+		lErr := errors.Cause(err).(*errors.Error)
+		msg := lErr.GetMsg()
+		matches := checksumErrorPattern.FindStringSubmatch(msg)
+		if len(matches) == 3 {
+			return terror.ErrLoadLightningChecksum.Generate(matches[1], matches[2])
+		}
+	}
+	return terror.ErrLoadLightningRuntime.Delegate(err)
 }
 
 // GetTaskInfoSchemaName is used to assign to TikvImporter.DuplicateResolution in lightning config.
