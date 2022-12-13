@@ -1163,6 +1163,7 @@ func (p *processor) createTablePipelineImpl(
 	})
 
 	if p.redoManager.Enabled() {
+		// FIXME: make span-level replication compatible with redo log.
 		p.redoManager.AddTable(span.TableID, replicaInfo.StartTs)
 	}
 
