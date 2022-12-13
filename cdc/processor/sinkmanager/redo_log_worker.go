@@ -241,6 +241,7 @@ func (w *redoWorker) handleTask(ctx context.Context, task *redoTask) (finalErr e
 			lastPos = upperBound
 			lastTxnCommitTs = upperBound.CommitTs
 			if cache != nil {
+				// Still need to update cache upper boundary even if no events.
 				cache.pushBatch(nil, 0, lastPos)
 			}
 			return maybeEmitBatchEvents(true, true)
