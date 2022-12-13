@@ -109,8 +109,8 @@ func TestWriterPoll(t *testing.T) {
 		},
 
 		expectWrites: [][]byte{
-			encoding.EncodeKey(c.uid, c.tableID, newTestEvent(3, 1, 0)),
-			encoding.EncodeKey(c.uid, c.tableID, newTestEvent(3, 1, 1)),
+			encoding.EncodeKey(c.uid, uint64(c.span.TableID), newTestEvent(3, 1, 0)),
+			encoding.EncodeKey(c.uid, uint64(c.span.TableID), newTestEvent(3, 1, 1)),
 		},
 		expectMaxCommitTs:   3,
 		expectMaxResolvedTs: 2,
@@ -124,8 +124,8 @@ func TestWriterPoll(t *testing.T) {
 		},
 
 		expectWrites: [][]byte{
-			encoding.EncodeKey(c.uid, c.tableID, newTestEvent(4, 2, 0)),
-			encoding.EncodeKey(c.uid, c.tableID, newTestEvent(6, 3, 0)),
+			encoding.EncodeKey(c.uid, uint64(c.span.TableID), newTestEvent(4, 2, 0)),
+			encoding.EncodeKey(c.uid, uint64(c.span.TableID), newTestEvent(6, 3, 0)),
 		},
 		expectMaxCommitTs:   6,
 		expectMaxResolvedTs: 3,
@@ -137,7 +137,7 @@ func TestWriterPoll(t *testing.T) {
 		},
 
 		expectWrites: [][]byte{
-			encoding.EncodeKey(c.uid, c.tableID, newTestEvent(6, 3, 0)),
+			encoding.EncodeKey(c.uid, uint64(c.span.TableID), newTestEvent(6, 3, 0)),
 		},
 		expectMaxCommitTs:   6,
 		expectMaxResolvedTs: 3,
@@ -150,9 +150,9 @@ func TestWriterPoll(t *testing.T) {
 		},
 
 		expectWrites: [][]byte{
-			encoding.EncodeKey(c.uid, c.tableID, newTestEvent(4, 3, 0)),
-			encoding.EncodeKey(c.uid, c.tableID, newTestEvent(5, 3, 0)),
-			encoding.EncodeKey(c.uid, c.tableID, newTestEvent(4, 2, 0)),
+			encoding.EncodeKey(c.uid, uint64(c.span.TableID), newTestEvent(4, 3, 0)),
+			encoding.EncodeKey(c.uid, uint64(c.span.TableID), newTestEvent(5, 3, 0)),
+			encoding.EncodeKey(c.uid, uint64(c.span.TableID), newTestEvent(4, 2, 0)),
 		},
 		expectMaxCommitTs:   6,
 		expectMaxResolvedTs: 3,
