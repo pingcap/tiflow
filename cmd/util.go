@@ -33,7 +33,7 @@ import (
 	"github.com/pingcap/log"
 	"github.com/pingcap/tidb/store/tikv/oracle"
 	"github.com/pingcap/tiflow/cdc"
-	"github.com/pingcap/tiflow/cdc/entry"
+	"github.com/pingcap/tiflow/cdc/entry/schema"
 	"github.com/pingcap/tiflow/cdc/kv"
 	"github.com/pingcap/tiflow/cdc/model"
 	"github.com/pingcap/tiflow/cdc/sink"
@@ -256,25 +256,22 @@ func verifyTables(credential *security.Credential, cfg *config.ReplicaConfig, st
 		return nil, nil, errors.Trace(err)
 	}
 
-	snap, err := entry.NewSingleSchemaSnapshotFromMeta(meta, startTs, false /* explicitTables */)
+	snap, err := schema.NewSingleSnapshotFromMeta(meta, startTs, false /* explicitTables */)
 	if err != nil {
 		return nil, nil, errors.Trace(err)
 	}
 
-	for tID, tableName := range snap.CloneTables() {
-		tableInfo, exist := snap.TableByID(tID)
-		if !exist {
-			return nil, nil, errors.NotFoundf("table %d", tID)
-		}
-		if filter.ShouldIgnoreTable(tableName.Schema, tableName.Table) {
-			continue
+    snap.IterTables(true, func(tableInfo *model.TableInfo) {
+		if filter.ShouldIgnoreTable(tableInfo.TableName.Schema, tableInfo.TableName.Table) {
+            return
 		}
 		if !tableInfo.IsEligible(false /* forceReplicate */) {
-			ineligibleTables = append(ineligibleTables, tableName)
+			ineligibleTables = append(ineligibleTables, tableInfo.TableName)
 		} else {
-			eligibleTables = append(eligibleTables, tableName)
+			eligibleTables = append(eligibleTables, tableInfo.TableName)
 		}
-	}
+    })
+
 	return
 }
 

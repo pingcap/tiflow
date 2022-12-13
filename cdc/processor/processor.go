@@ -469,7 +469,8 @@ func (p *processor) createAndDriveSchemaStorage(ctx cdcContext.Context) (entry.S
 	if err != nil {
 		return nil, errors.Trace(err)
 	}
-	schemaStorage, err := entry.NewSchemaStorage(meta, checkpointTs, p.filter, p.changefeed.Info.Config.ForceReplicate)
+	schemaStorage, err := entry.NewSchemaStorage(meta, checkpointTs, p.filter,
+    p.changefeed.Info.Config.ForceReplicate, p.changefeedID)
 	if err != nil {
 		return nil, errors.Trace(err)
 	}
@@ -698,10 +699,10 @@ func (p *processor) createTablePipelineImpl(ctx cdcContext.Context, tableID mode
 	})
 	var tableName *model.TableName
 	retry.Do(ctx, func() error { //nolint:errcheck
-		if name, ok := p.schemaStorage.GetLastSnapshot().GetTableNameByID(tableID); ok {
-			tableName = &name
+        if table, ok := p.schemaStorage.GetLastSnapshot().PhysicalTableByID(tableID); ok {
+			tableName = &table.TableName
 			return nil
-		}
+        }
 		return errors.Errorf("failed to get table name, fallback to use table id: %d", tableID)
 	}, retry.WithBackoffBaseDelay(backoffBaseDelayInMs), retry.WithMaxTries(maxTries), retry.WithIsRetryableErr(cerror.IsRetryableError))
 	if p.changefeed.Info.Config.Cyclic.IsEnabled() {
@@ -709,14 +710,14 @@ func (p *processor) createTablePipelineImpl(ctx cdcContext.Context, tableID mode
 		var markTableID model.TableID
 		err := retry.Do(context.Background(), func() error {
 			if tableName == nil {
-				name, exist := p.schemaStorage.GetLastSnapshot().GetTableNameByID(tableID)
+                table, exist := p.schemaStorage.GetLastSnapshot().PhysicalTableByID(tableID); 
 				if !exist {
 					return cerror.ErrProcessorTableNotFound.GenWithStack("normal table(%s)", tableID)
 				}
-				tableName = &name
+                tableName = &table.TableName
 			}
 			markTableSchemaName, markTableTableName := mark.GetMarkTableName(tableName.Schema, tableName.Table)
-			tableInfo, exist := p.schemaStorage.GetLastSnapshot().GetTableByName(markTableSchemaName, markTableTableName)
+			tableInfo, exist := p.schemaStorage.GetLastSnapshot().TableByName(markTableSchemaName, markTableTableName)
 			if !exist {
 				return cerror.ErrProcessorTableNotFound.GenWithStack("normal table(%s) and mark table not match", tableName.String())
 			}

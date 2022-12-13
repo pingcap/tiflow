@@ -19,7 +19,7 @@ import (
 	timodel "github.com/pingcap/parser/model"
 	tidbkv "github.com/pingcap/tidb/kv"
 	timeta "github.com/pingcap/tidb/meta"
-	"github.com/pingcap/tiflow/cdc/entry"
+	"github.com/pingcap/tiflow/cdc/entry/schema"
 	"github.com/pingcap/tiflow/cdc/kv"
 	"github.com/pingcap/tiflow/cdc/model"
 	"github.com/pingcap/tiflow/pkg/config"
@@ -29,7 +29,7 @@ import (
 )
 
 type schemaWrap4Owner struct {
-	schemaSnapshot *entry.SingleSchemaSnapshot
+	schemaSnapshot *schema.Snapshot
 	filter         *filter.Filter
 	config         *config.ReplicaConfig
 
@@ -46,7 +46,7 @@ func newSchemaWrap4Owner(kvStorage tidbkv.Storage, startTs model.Ts, config *con
 			return nil, errors.Trace(err)
 		}
 	}
-	schemaSnap, err := entry.NewSingleSchemaSnapshotFromMeta(meta, startTs, config.ForceReplicate)
+	schemaSnap, err := schema.NewSingleSnapshotFromMeta(meta, startTs, config.ForceReplicate)
 	if err != nil {
 		return nil, errors.Trace(err)
 	}
@@ -67,13 +67,13 @@ func (s *schemaWrap4Owner) AllPhysicalTables() []model.TableID {
 	if s.allPhysicalTablesCache != nil {
 		return s.allPhysicalTablesCache
 	}
-	tables := s.schemaSnapshot.Tables()
-	s.allPhysicalTablesCache = make([]model.TableID, 0, len(tables))
-	for _, tblInfo := range tables {
+	// NOTE: it's better to pre-allocate the vector. However in the current implementation
+	// we can't know how many valid tables in the snapshot.
+	s.allPhysicalTablesCache = make([]model.TableID, 0)
+	s.schemaSnapshot.IterTables(true, func(tblInfo *model.TableInfo) {
 		if s.shouldIgnoreTable(tblInfo) {
-			continue
+			return
 		}
-
 		if pi := tblInfo.GetPartitionInfo(); pi != nil {
 			for _, partition := range pi.Definitions {
 				s.allPhysicalTablesCache = append(s.allPhysicalTablesCache, partition.ID)
@@ -81,7 +81,7 @@ func (s *schemaWrap4Owner) AllPhysicalTables() []model.TableID {
 		} else {
 			s.allPhysicalTablesCache = append(s.allPhysicalTablesCache, tblInfo.ID)
 		}
-	}
+	})
 	return s.allPhysicalTablesCache
 }
 
@@ -118,23 +118,10 @@ func (s *schemaWrap4Owner) BuildDDLEvent(job *timodel.Job) (*model.DDLEvent, err
 
 func (s *schemaWrap4Owner) SinkTableInfos() []*model.SimpleTableInfo {
 	var sinkTableInfos []*model.SimpleTableInfo
-	for tableID := range s.schemaSnapshot.CloneTables() {
-		tblInfo, ok := s.schemaSnapshot.TableByID(tableID)
-		if !ok {
-			log.Panic("table not found for table ID", zap.Int64("tid", tableID))
-		}
-		if s.shouldIgnoreTable(tblInfo) {
-			continue
-		}
-		dbInfo, ok := s.schemaSnapshot.SchemaByTableID(tableID)
-		if !ok {
-			log.Panic("schema not found for table ID", zap.Int64("tid", tableID))
-		}
-
-		// TODO separate function for initializing SimpleTableInfo
+    var schemaIDs []int64
+    s.schemaSnapshot.IterTables(true, func (tblInfo *model.TableInfo) {
 		sinkTableInfo := new(model.SimpleTableInfo)
-		sinkTableInfo.Schema = dbInfo.Name.O
-		sinkTableInfo.TableID = tableID
+		sinkTableInfo.TableID = tblInfo.ID
 		sinkTableInfo.Table = tblInfo.TableName.Table
 		sinkTableInfo.ColumnInfo = make([]*model.ColumnInfo, len(tblInfo.Cols()))
 		for i, colInfo := range tblInfo.Cols() {
@@ -142,7 +129,23 @@ func (s *schemaWrap4Owner) SinkTableInfos() []*model.SimpleTableInfo {
 			sinkTableInfo.ColumnInfo[i].FromTiColumnInfo(colInfo)
 		}
 		sinkTableInfos = append(sinkTableInfos, sinkTableInfo)
-	}
+        schemaIDs = append(schemaIDs, tblInfo.SchemaID)
+    })
+
+    schemaNames := make(map[int64]string)
+    for i, schemaID := range schemaIDs {
+        if name, exists := schemaNames[schemaID]; exists {
+            sinkTableInfos[i].Schema = name
+        } else {
+            schema, exists := s.schemaSnapshot.SchemaByID(schemaID)
+            if !exists {
+                log.Panic("schema not found", zap.Int64("schemaID", schemaID))
+            }
+            schemaNames[schemaID] = schema.Name.O
+            sinkTableInfos[i].Schema = schema.Name.O
+        }
+
+    }
 	return sinkTableInfos
 }
 
