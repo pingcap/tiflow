@@ -235,7 +235,7 @@ func (o *ownerImpl) Tick(stdCtx context.Context, rawState orchestrator.ReactorSt
 		}
 		return state, cerror.ErrReactorFinished.GenWithStackByArgs()
 	}
-	// close upstream
+
 	if err := o.upstreamManager.Tick(stdCtx, state); err != nil {
 		return state, errors.Trace(err)
 	}
