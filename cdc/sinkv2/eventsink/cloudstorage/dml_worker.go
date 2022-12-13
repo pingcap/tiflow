@@ -150,7 +150,7 @@ func (d *dmlWorker) backgroundFlushMsgs(ctx context.Context) {
 					d.tableEvents.mu.Lock()
 					events := make([]eventFragment, len(d.tableEvents.fragments[table]))
 					copy(events, d.tableEvents.fragments[table])
-					d.tableEvents.fragments[table] = make([]eventFragment, 0, 16)
+					d.tableEvents.fragments[table] = nil
 					d.tableEvents.mu.Unlock()
 					if len(events) == 0 {
 						continue
