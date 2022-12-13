@@ -45,7 +45,7 @@ type eventAppender struct {
 	sizes  []uint64
 	// Count of ready events.
 	readyCount int
-	// Several RowChangedEvent can come from one PolymorphicEvent.
+	// Multiple RowChangedEvents can come from one PolymorphicEvent.
 	pushCounts []byte
 
 	// Both of them are included.
@@ -136,11 +136,13 @@ func (e *eventAppender) pop(lowerBound, upperBound engine.Position) (res popResu
 	defer e.mu.Unlock()
 
 	if lowerBound.Compare(e.lowerBound) < 0 {
+		// NOTE: the caller will fetch events [lowerBound, res.boundary) from engine.
 		res.success = false
 		res.boundary = e.lowerBound
 		return
 	}
 	if !e.upperBound.Valid() {
+		// NOTE: the caller will fetch events [lowerBound, res.boundary) from engine.
 		res.success = false
 		res.boundary = upperBound.Next()
 		return
@@ -182,6 +184,7 @@ func (e *eventAppender) pop(lowerBound, upperBound engine.Position) (res popResu
 	e.sizes = e.sizes[endIdx:]
 	e.pushCounts = e.pushCounts[endIdx:]
 	e.readyCount -= endIdx
+	// Update boundaries. Set upperBound to invalid if the range has been drained.
 	e.lowerBound = res.boundary.Next()
 	if e.lowerBound.Compare(e.upperBound) > 0 {
 		e.upperBound = engine.Position{}

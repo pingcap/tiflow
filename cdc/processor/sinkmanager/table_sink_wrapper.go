@@ -27,6 +27,7 @@ import (
 	"github.com/pingcap/tiflow/cdc/processor/sourcemanager/engine"
 	"github.com/pingcap/tiflow/cdc/processor/tablepb"
 	sinkv2 "github.com/pingcap/tiflow/cdc/sinkv2/tablesink"
+	"github.com/tikv/client-go/v2/oracle"
 	"go.uber.org/zap"
 )
 
@@ -186,9 +187,20 @@ func (t *tableSinkWrapper) updateRangeEventCounts(eventCount rangeEventCount) {
 	t.rangeEventCountsMu.Lock()
 	defer t.rangeEventCountsMu.Unlock()
 
-	if len(t.rangeEventCounts) == 0 ||
-		t.rangeEventCounts[len(t.rangeEventCounts)-1].pos.Compare(eventCount.pos) < 0 {
+	countsLen := len(t.rangeEventCounts)
+	if countsLen == 0 {
 		t.rangeEventCounts = append(t.rangeEventCounts, eventCount)
+		return
+	}
+	if t.rangeEventCounts[countsLen-1].pos.Compare(eventCount.pos) < 0 {
+		lastPhy := oracle.ExtractPhysical(t.rangeEventCounts[countsLen-1].pos.CommitTs)
+		currPhy := oracle.ExtractPhysical(eventCount.pos.CommitTs)
+		if (currPhy - lastPhy) >= 1000 { // 1000 means 1000ms.
+			t.rangeEventCounts = append(t.rangeEventCounts, eventCount)
+		} else {
+			t.rangeEventCounts[countsLen-1].pos = eventCount.pos
+			t.rangeEventCounts[countsLen-1].events += eventCount.events
+		}
 	}
 }
 
