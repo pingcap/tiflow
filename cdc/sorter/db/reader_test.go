@@ -904,14 +904,28 @@ func TestReaderPoll(t *testing.T) {
 			}
 			msg := actormsg.ValueMessage(message.Task{ReadTs: cs.inputReadTs})
 			require.True(t, r.Poll(ctx, []actormsg.Message[message.Task]{msg}))
-			require.EqualValues(t, cs.expectEvents, r.state.outputBuf.resolvedEvents, "case #%d[%d], %v", i, j, cs)
-			require.EqualValues(t, cs.expectDeleteKeys, r.state.outputBuf.deleteKeys, "case #%d[%d], %v", i, j, cs)
-			require.EqualValues(t, cs.expectMaxCommitTs, r.state.maxCommitTs, "case #%d[%d], %v", i, j, cs)
-			require.EqualValues(t, cs.expectMaxResolvedTs, r.state.maxResolvedTs, "case #%d[%d], %v", i, j, cs)
-			require.EqualValues(t, cs.expectExhaustedRTs, r.state.position.exhaustedResolvedTs, "case #%d[%d], %v", i, j, cs)
-			require.EqualValues(t, cs.expectPartialTxnKey, r.state.position.partialTxnKey, "case #%d[%d], %v", i, j, cs)
+			require.EqualValues(
+				t, cs.expectEvents, r.state.outputBuf.resolvedEvents,
+				"case #%d[%d], %v", i, j, cs)
+			require.EqualValues(
+				t, cs.expectDeleteKeys, r.state.outputBuf.deleteKeys,
+				"case #%d[%d], %v", i, j, cs)
+			require.EqualValues(
+				t, cs.expectMaxCommitTs, r.state.maxCommitTs,
+				"case #%d[%d], %v", i, j, cs)
+			require.EqualValues(
+				t, cs.expectMaxResolvedTs, r.state.maxResolvedTs,
+				"case #%d[%d], %v", i, j, cs)
+			require.EqualValues(
+				t, cs.expectExhaustedRTs, r.state.position.exhaustedResolvedTs,
+				"case #%d[%d], %v", i, j, cs)
+			require.EqualValues(
+				t, cs.expectPartialTxnKey, r.state.position.partialTxnKey,
+				"case #%d[%d], %v", i, j, cs)
 			outputEvents := receiveOutputEvents(r.outputCh)
-			require.EqualValues(t, cs.expectOutputs, outputEvents, "case #%d[%d], %v", i, j, cs)
+			require.EqualValues(
+				t, cs.expectOutputs, outputEvents,
+				"case #%d[%d], %v", i, j, cs)
 
 			select {
 			case err := <-r.errCh:

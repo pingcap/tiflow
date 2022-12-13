@@ -147,11 +147,7 @@ func (r *reader) outputBufferedResolvedEvents(buffer *outputBuffer) {
 // later, and appends resolved events to outputBuffer resolvedEvents to send
 // them later.
 //
-// It returns:
-//   - a bool to indicate whether it has read the last Next or not.
-//   - an uint64, if it is not 0, it means all resolved events before the ts
-//     are outputted.
-//   - an error if it occurs.
+// It returns a new read position.
 //
 // Note: outputBuffer must be empty.
 func (r *reader) outputIterEvents(
