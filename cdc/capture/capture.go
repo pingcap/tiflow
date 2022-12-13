@@ -49,8 +49,6 @@ import (
 
 const cleanMetaDuration = 10 * time.Second
 
-type createEtcdClientFunc func() (etcd.CDCEtcdClient, error)
-
 // Capture represents a Capture server, it monitors the changefeed
 // information in etcd and schedules Task on it.
 type Capture interface {
@@ -68,16 +66,15 @@ type Capture interface {
 	WriteDebugInfo(ctx context.Context, w io.Writer)
 
 	GetUpstreamManager() (*upstream.Manager, error)
-	GetEtcdClient() (etcd.CDCEtcdClient, error)
+	GetEtcdClient() etcd.CDCEtcdClient
 	// IsReady returns if the cdc server is ready
 	// currently only check if ettcd data migration is done
 	IsReady() bool
 }
 
 type captureImpl struct {
-	// captureMu is used to protect the capture info, processorManager and isReset.
+	// captureMu is used to protect the capture info and processorManager.
 	captureMu        sync.Mutex
-	initialized      bool
 	info             *model.CaptureInfo
 	processorManager processor.Manager
 	liveness         model.Liveness
@@ -92,8 +89,6 @@ type captureImpl struct {
 	session  *concurrency.Session
 	election election
 
-	// createEtcdClient used to create etcd client when capture restarts
-	createEtcdClient createEtcdClientFunc
 	EtcdClient       etcd.CDCEtcdClient
 	tableActorSystem *system.System
 
@@ -132,16 +127,17 @@ type captureImpl struct {
 
 // NewCapture returns a new Capture instance
 func NewCapture(pdEndpoints []string,
-	createEtcdClient createEtcdClientFunc,
+	etcdClient etcd.CDCEtcdClient,
 	grpcService *p2p.ServerWrapper,
 	tableActorSystem *system.System,
 	sortEngineMangerFactory *factory.SortEngineFactory,
 	sorterSystem *ssystem.System,
 ) Capture {
+	conf := config.GetGlobalServerConfig()
 	return &captureImpl{
 		config:              config.GetGlobalServerConfig(),
 		liveness:            model.LivenessCaptureAlive,
-		initialized:         false,
+		EtcdClient:          etcdClient,
 		grpcService:         grpcService,
 		cancel:              func() {},
 		pdEndpoints:         pdEndpoints,
@@ -149,11 +145,12 @@ func NewCapture(pdEndpoints []string,
 		newProcessorManager: processor.NewManager,
 		newOwner:            owner.NewOwner,
 		info:                &model.CaptureInfo{},
-		createEtcdClient:    createEtcdClient,
 
 		useSortEngine:     sortEngineMangerFactory != nil,
 		sortEngineFactory: sortEngineMangerFactory,
 		sorterSystem:      sorterSystem,
+
+		migrator: migrate.NewMigrator(etcdClient, pdEndpoints, conf),
 	}
 }
 
@@ -165,9 +162,8 @@ func NewCapture4Test(o owner.Owner) *captureImpl {
 			AdvertiseAddr: "127.0.0.1",
 			Version:       "test",
 		},
-		initialized: true,
-		migrator:    &migrate.NoOpMigrator{},
-		config:      config.GetGlobalServerConfig(),
+		migrator: &migrate.NoOpMigrator{},
+		config:   config.GetGlobalServerConfig(),
 	}
 	res.owner = o
 	return res
@@ -191,32 +187,16 @@ func (c *captureImpl) GetUpstreamManager() (*upstream.Manager, error) {
 	return c.upstreamManager, nil
 }
 
-func (c *captureImpl) GetEtcdClient() (etcd.CDCEtcdClient, error) {
-	c.captureMu.Lock()
-	defer c.captureMu.Unlock()
-	if !c.initialized {
-		return nil, cerror.ErrCaptureNotInitialized.GenWithStackByArgs()
-	}
-	return c.EtcdClient, nil
+func (c *captureImpl) GetEtcdClient() etcd.CDCEtcdClient {
+	return c.EtcdClient
 }
 
 // reset the capture before run it.
 func (c *captureImpl) reset(ctx context.Context) error {
-	etcdClient, err := c.createEtcdClient()
-	if err != nil {
-		return cerror.WrapError(cerror.ErrNewCaptureFailed, err)
-	}
-
-	c.captureMu.Lock()
-	defer c.captureMu.Unlock()
-	c.EtcdClient = etcdClient
-	c.migrator = migrate.NewMigrator(c.EtcdClient, c.pdEndpoints, c.config)
-
 	lease, err := c.EtcdClient.GetEtcdClient().Grant(ctx, int64(c.config.CaptureSessionTTL))
 	if err != nil {
 		return cerror.WrapError(cerror.ErrNewCaptureFailed, err)
 	}
-
 	sess, err := concurrency.NewSession(
 		c.EtcdClient.GetEtcdClient().Unwrap(),
 		concurrency.WithLease(lease.ID))
@@ -224,6 +204,8 @@ func (c *captureImpl) reset(ctx context.Context) error {
 		return cerror.WrapError(cerror.ErrNewCaptureFailed, err)
 	}
 
+	c.captureMu.Lock()
+	defer c.captureMu.Unlock()
 	c.info = &model.CaptureInfo{
 		ID:            uuid.New().String(),
 		AdvertiseAddr: c.config.AdvertiseAddr,
@@ -268,7 +250,6 @@ func (c *captureImpl) reset(ctx context.Context) error {
 
 	c.MessageRouter = p2p.NewMessageRouter(c.info.ID, c.config.Security, messageClientConfig)
 
-	c.initialized = true
 	log.Info("capture initialized", zap.Any("capture", c.info))
 	return nil
 }
@@ -317,10 +298,17 @@ func (c *captureImpl) run(stdCtx context.Context) error {
 	if err != nil {
 		return errors.Trace(err)
 	}
+	defer func() {
+		timeoutCtx, cancel := context.WithTimeout(context.Background(), cleanMetaDuration)
+		if err := c.EtcdClient.DeleteCaptureInfo(timeoutCtx, c.info.ID); err != nil {
+			log.Warn("failed to delete capture info when capture exited",
+				zap.String("captureID", c.info.ID),
+				zap.Error(err))
+		}
+		cancel()
+	}()
 
 	defer func() {
-		// Before call `AsyncClose`, we must wait all routine to exit.
-		// So we close etcd client safely.
 		c.AsyncClose()
 		c.grpcService.Reset(nil)
 	}()
@@ -363,6 +351,7 @@ func (c *captureImpl) run(stdCtx context.Context) error {
 		globalState.SetOnCaptureRemoved(func(captureID model.CaptureID) {
 			c.MessageRouter.RemovePeer(captureID)
 		})
+
 		// when the etcd worker of processor returns an error, it means that the processor throws an unrecoverable serious errors
 		// (recoverable errors are intercepted in the processor tick)
 		// so we should also stop the processor and let capture restart or exit
@@ -481,6 +470,24 @@ func (c *captureImpl) campaignOwner(ctx cdcContext.Context) error {
 		c.owner.AsyncStop()
 		c.setOwner(nil)
 
+		// if owner exits, resign the owner key,
+		// use a new context to prevent the context from being cancelled.
+		resignCtx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+		if resignErr := c.resign(resignCtx); resignErr != nil {
+			if errors.Cause(resignErr) != context.DeadlineExceeded {
+				log.Info("owner resign failed", zap.String("captureID", c.info.ID),
+					zap.Error(resignErr), zap.Int64("ownerRev", ownerRev))
+				cancel()
+				return errors.Trace(resignErr)
+			}
+
+			log.Warn("owner resign timeout", zap.String("captureID", c.info.ID),
+				zap.Error(resignErr), zap.Int64("ownerRev", ownerRev))
+		}
+		cancel()
+
+		log.Info("owner resigned successfully",
+			zap.String("captureID", c.info.ID), zap.Int64("ownerRev", ownerRev))
 		if err != nil {
 			log.Warn("run owner exited with error",
 				zap.String("captureID", c.info.ID), zap.Int64("ownerRev", ownerRev),
@@ -491,12 +498,6 @@ func (c *captureImpl) campaignOwner(ctx cdcContext.Context) error {
 		// if owner exits normally, continue the campaign loop and try to election owner again
 		log.Info("run owner exited normally",
 			zap.String("captureID", c.info.ID), zap.Int64("ownerRev", ownerRev))
-		// before a new cycle starts, we need resign
-		if err := c.resign(ctx); err != nil {
-			log.Info("owner resign failed", zap.String("captureID", c.info.ID),
-				zap.Error(err), zap.Int64("ownerRev", ownerRev))
-			return err
-		}
 	}
 }
 
@@ -612,31 +613,6 @@ func (c *captureImpl) AsyncClose() {
 		c.MessageRouter = nil
 	}
 	log.Info("message router closed", zap.String("captureID", c.info.ID))
-
-	if c.EtcdClient != nil {
-		timeoutCtx, cancel := context.WithTimeout(context.Background(), cleanMetaDuration)
-		if err := c.resign(timeoutCtx); err != nil {
-			log.Warn("failed to regin", zap.String("captureID", c.info.ID),
-				zap.Error(err))
-		}
-		cancel()
-
-		timeoutCtx, cancel = context.WithTimeout(context.Background(), cleanMetaDuration)
-		if err := c.EtcdClient.DeleteCaptureInfo(timeoutCtx, c.info.ID); err != nil {
-			log.Warn("failed to delete capture info when capture exited",
-				zap.String("captureID", c.info.ID),
-				zap.Error(err))
-		}
-		cancel()
-
-		err := c.EtcdClient.Close()
-		if err != nil {
-			log.Warn("failed to close etcd client", zap.Error(err))
-		}
-		c.EtcdClient = nil
-		c.migrator = nil
-	}
-	c.initialized = false
 }
 
 // Drain removes tables in the current TiCDC instance.
@@ -710,12 +686,6 @@ func (c *captureImpl) IsOwner() bool {
 
 // GetOwnerCaptureInfo return the owner capture info of current TiCDC cluster
 func (c *captureImpl) GetOwnerCaptureInfo(ctx context.Context) (*model.CaptureInfo, error) {
-	c.ownerMu.Lock()
-	defer c.ownerMu.Unlock()
-	if !c.initialized {
-		return nil, cerror.ErrCaptureNotInitialized.GenWithStackByArgs()
-	}
-
 	_, captureInfos, err := c.EtcdClient.GetCaptures(ctx)
 	if err != nil {
 		return nil, err
@@ -745,7 +715,5 @@ func (c *captureImpl) StatusProvider() owner.StatusProvider {
 }
 
 func (c *captureImpl) IsReady() bool {
-	c.captureMu.Lock()
-	defer c.captureMu.Unlock()
-	return c.initialized && c.migrator.IsMigrateDone()
+	return c.migrator.IsMigrateDone()
 }

@@ -76,17 +76,13 @@ func verifyCreateChangefeedConfig(
 		}
 		changefeedConfig.StartTS = oracle.ComposeTS(ts, logical)
 	}
-	etcdClient, err := capture.GetEtcdClient()
-	if err != nil {
-		return nil, err
-	}
 
 	// Ensure the start ts is valid in the next 1 hour.
 	const ensureTTL = 60 * 60
 	if err := gc.EnsureChangefeedStartTsSafety(
 		ctx,
 		up.PDClient,
-		etcdClient.GetEnsureGCServiceID(gc.EnsureGCServiceCreating),
+		capture.GetEtcdClient().GetEnsureGCServiceID(gc.EnsureGCServiceCreating),
 		model.DefaultChangeFeedID(changefeedConfig.ID),
 		ensureTTL, changefeedConfig.StartTS); err != nil {
 		if !cerror.ErrStartTsBeforeGC.Equal(err) {
