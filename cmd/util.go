@@ -261,16 +261,16 @@ func verifyTables(credential *security.Credential, cfg *config.ReplicaConfig, st
 		return nil, nil, errors.Trace(err)
 	}
 
-    snap.IterTables(true, func(tableInfo *model.TableInfo) {
+	snap.IterTables(true, func(tableInfo *model.TableInfo) {
 		if filter.ShouldIgnoreTable(tableInfo.TableName.Schema, tableInfo.TableName.Table) {
-            return
+			return
 		}
 		if !tableInfo.IsEligible(false /* forceReplicate */) {
 			ineligibleTables = append(ineligibleTables, tableInfo.TableName)
 		} else {
 			eligibleTables = append(eligibleTables, tableInfo.TableName)
 		}
-    })
+	})
 
 	return
 }

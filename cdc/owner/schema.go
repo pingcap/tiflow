@@ -118,8 +118,8 @@ func (s *schemaWrap4Owner) BuildDDLEvent(job *timodel.Job) (*model.DDLEvent, err
 
 func (s *schemaWrap4Owner) SinkTableInfos() []*model.SimpleTableInfo {
 	var sinkTableInfos []*model.SimpleTableInfo
-    var schemaIDs []int64
-    s.schemaSnapshot.IterTables(true, func (tblInfo *model.TableInfo) {
+	var schemaIDs []int64
+	s.schemaSnapshot.IterTables(true, func(tblInfo *model.TableInfo) {
 		sinkTableInfo := new(model.SimpleTableInfo)
 		sinkTableInfo.TableID = tblInfo.ID
 		sinkTableInfo.Table = tblInfo.TableName.Table
@@ -129,23 +129,22 @@ func (s *schemaWrap4Owner) SinkTableInfos() []*model.SimpleTableInfo {
 			sinkTableInfo.ColumnInfo[i].FromTiColumnInfo(colInfo)
 		}
 		sinkTableInfos = append(sinkTableInfos, sinkTableInfo)
-        schemaIDs = append(schemaIDs, tblInfo.SchemaID)
-    })
+		schemaIDs = append(schemaIDs, tblInfo.SchemaID)
+	})
 
-    schemaNames := make(map[int64]string)
-    for i, schemaID := range schemaIDs {
-        if name, exists := schemaNames[schemaID]; exists {
-            sinkTableInfos[i].Schema = name
-        } else {
-            schema, exists := s.schemaSnapshot.SchemaByID(schemaID)
-            if !exists {
-                log.Panic("schema not found", zap.Int64("schemaID", schemaID))
-            }
-            schemaNames[schemaID] = schema.Name.O
-            sinkTableInfos[i].Schema = schema.Name.O
-        }
-
-    }
+	schemaNames := make(map[int64]string)
+	for i, schemaID := range schemaIDs {
+		if name, exists := schemaNames[schemaID]; exists {
+			sinkTableInfos[i].Schema = name
+		} else {
+			schema, exists := s.schemaSnapshot.SchemaByID(schemaID)
+			if !exists {
+				log.Panic("schema not found", zap.Int64("schemaID", schemaID))
+			}
+			schemaNames[schemaID] = schema.Name.O
+			sinkTableInfos[i].Schema = schema.Name.O
+		}
+	}
 	return sinkTableInfos
 }
 

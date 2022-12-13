@@ -25,8 +25,8 @@ import (
 	"github.com/pingcap/tiflow/cdc/model"
 	"go.uber.org/zap"
 
-	timeta "github.com/pingcap/tidb/meta"
 	timodel "github.com/pingcap/parser/model"
+	timeta "github.com/pingcap/tidb/meta"
 	cerror "github.com/pingcap/tiflow/pkg/errors"
 )
 
