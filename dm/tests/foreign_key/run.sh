@@ -30,7 +30,7 @@ function run() {
 	# use sync_diff_inspector to check full dump loader
 	check_sync_diff $WORK_DIR $cur/conf/diff_config.toml
 
-	# close foreign_key to check upstream and downstream data inconsistencies
+	# close foreign_key_checks
 	run_sql_tidb "set @@foreign_key_checks=0;"
 
 	run_sql_file $cur/data/db1.increment.sql $MYSQL_HOST1 $MYSQL_PORT1 $MYSQL_PASSWORD1
@@ -41,7 +41,7 @@ function run() {
 		"\"unit\": \"Sync\"" 1 \
 		"\"stage\": \"Running\"" 2
 
-	#	check incremental data
+	# check upstream and downstream data are inconsistent
 	run_sql_source1 "select count(1) from foreign_key.t2"
 	check_contains "count(1): 4"
 	run_sql_tidb_with_retry "select count(2) from foreign_key.t2"
