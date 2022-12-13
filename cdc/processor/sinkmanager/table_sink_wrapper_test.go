@@ -64,7 +64,9 @@ func (m *mockSink) Close() error {
 }
 
 //nolint:unparam
-func createTableSinkWrapper(changefeedID model.ChangeFeedID, span tablepb.Span) (*tableSinkWrapper, *mockSink) {
+func createTableSinkWrapper(
+	changefeedID model.ChangeFeedID, span tablepb.Span,
+) (*tableSinkWrapper, *mockSink) {
 	tableState := tablepb.TableStatePreparing
 	sink := newMockSink()
 	innerTableSink := tablesink.New[*model.RowChangedEvent](

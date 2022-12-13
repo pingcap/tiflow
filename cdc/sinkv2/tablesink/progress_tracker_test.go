@@ -243,7 +243,7 @@ func TestClosedTrackerDoNotAdvanceCheckpointTs(t *testing.T) {
 func TestOnlyResolvedTsShouldDirectlyAdvanceCheckpointTs(t *testing.T) {
 	t.Parallel()
 
-	tracker := newProgressTracker(1, defaultBufferSize)
+	tracker := newProgressTracker(spanz.TableIDToComparableSpan(1), defaultBufferSize)
 	cb1 := tracker.addEvent()
 	tracker.addResolvedTs(model.NewResolvedTs(1))
 	cb2 := tracker.addEvent()
@@ -271,7 +271,7 @@ func TestOnlyResolvedTsShouldDirectlyAdvanceCheckpointTs(t *testing.T) {
 func TestShouldDirectlyUpdateResolvedTsIfNoMoreEvents(t *testing.T) {
 	t.Parallel()
 
-	tracker := newProgressTracker(1, defaultBufferSize)
+	tracker := newProgressTracker(spanz.TableIDToComparableSpan(1), defaultBufferSize)
 	cb1 := tracker.addEvent()
 	tracker.addResolvedTs(model.NewResolvedTs(1))
 	cb2 := tracker.addEvent()
