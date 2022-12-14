@@ -120,6 +120,9 @@ func (s *schemaWrap4Owner) SinkTableInfos() []*model.SimpleTableInfo {
 	var sinkTableInfos []*model.SimpleTableInfo
 	var schemaIDs []int64
 	s.schemaSnapshot.IterTables(true, func(tblInfo *model.TableInfo) {
+		if s.shouldIgnoreTable(tblInfo) {
+			return
+		}
 		sinkTableInfo := new(model.SimpleTableInfo)
 		sinkTableInfo.TableID = tblInfo.ID
 		sinkTableInfo.Table = tblInfo.TableName.Table
