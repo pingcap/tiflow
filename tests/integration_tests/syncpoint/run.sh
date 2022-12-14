@@ -177,6 +177,7 @@ function run() {
 	run_sql "SELECT primary_ts, secondary_ts FROM tidb_cdc.syncpoint_v1;" ${DOWN_TIDB_HOST} ${DOWN_TIDB_PORT}
 	echo "____________________________________"
 	cat "$OUT_DIR/sql_res.$TEST_NAME.txt"
+	run_sql "SET GLOBAL tidb_enable_external_ts_read = off;" ${DOWN_TIDB_HOST} ${DOWN_TIDB_PORT}
 	checkDiff
 	check_sync_diff $WORK_DIR $CUR/conf/diff_config_final.toml
 
