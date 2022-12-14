@@ -27,7 +27,6 @@ import (
 	"github.com/pingcap/kvproto/pkg/cdcpb"
 	"github.com/pingcap/log"
 	"github.com/pingcap/tiflow/cdc/model"
-	"github.com/pingcap/tiflow/cdc/processor/tablepb"
 	"github.com/pingcap/tiflow/pkg/config"
 	cerror "github.com/pingcap/tiflow/pkg/errors"
 	"github.com/pingcap/tiflow/pkg/spanz"
@@ -746,7 +745,7 @@ func (w *regionWorker) handleResolvedTs(
 		}
 		// emit a resolvedTs
 		resolvedSpans = append(resolvedSpans, model.RegionComparableSpan{
-			Span:   tablepb.Span(state.sri.span),
+			Span:   state.sri.span,
 			Region: regionID,
 		})
 	}

@@ -43,7 +43,6 @@ func HackSpan(span tablepb.Span) {
 	if span.EndKey == nil {
 		span.EndKey = UpperBoundKey
 	}
-	return
 }
 
 // GetTableRange returns the span to watch for the specified table

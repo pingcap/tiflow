@@ -76,29 +76,29 @@ func TestIntersect(t *testing.T) {
 		res *tablepb.Span
 	}{
 		{
-			tablepb.Span{0, nil, []byte{1}},
-			tablepb.Span{0, []byte{1}, nil},
-			nil,
+			lhs: tablepb.Span{StartKey: nil, EndKey: []byte{1}},
+			rhs: tablepb.Span{StartKey: []byte{1}, EndKey: nil},
+			res: nil,
 		},
 		{
-			tablepb.Span{0, nil, nil},
-			tablepb.Span{0, nil, nil},
-			&tablepb.Span{0, nil, nil},
+			lhs: tablepb.Span{StartKey: nil, EndKey: nil},
+			rhs: tablepb.Span{StartKey: nil, EndKey: nil},
+			res: &tablepb.Span{StartKey: nil, EndKey: nil},
 		},
 		{
-			tablepb.Span{0, nil, nil},
-			tablepb.Span{0, []byte{1}, []byte{2}},
-			&tablepb.Span{0, []byte{1}, []byte{2}},
+			lhs: tablepb.Span{StartKey: nil, EndKey: nil},
+			rhs: tablepb.Span{StartKey: []byte{1}, EndKey: []byte{2}},
+			res: &tablepb.Span{StartKey: []byte{1}, EndKey: []byte{2}},
 		},
 		{
-			tablepb.Span{0, []byte{0}, []byte{3}},
-			tablepb.Span{0, []byte{1}, []byte{2}},
-			&tablepb.Span{0, []byte{1}, []byte{2}},
+			lhs: tablepb.Span{StartKey: []byte{0}, EndKey: []byte{3}},
+			rhs: tablepb.Span{StartKey: []byte{1}, EndKey: []byte{2}},
+			res: &tablepb.Span{StartKey: []byte{1}, EndKey: []byte{2}},
 		},
 		{
-			tablepb.Span{0, []byte{0}, []byte{2}},
-			tablepb.Span{0, []byte{1}, []byte{2}},
-			&tablepb.Span{0, []byte{1}, []byte{2}},
+			lhs: tablepb.Span{StartKey: []byte{0}, EndKey: []byte{2}},
+			rhs: tablepb.Span{StartKey: []byte{1}, EndKey: []byte{2}},
+			res: &tablepb.Span{StartKey: []byte{1}, EndKey: []byte{2}},
 		},
 	}
 

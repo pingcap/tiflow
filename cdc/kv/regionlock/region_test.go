@@ -29,31 +29,34 @@ func TestCheckRegionsLeftCover(t *testing.T) {
 		span    tablepb.Span
 		cover   bool
 	}{
-		{[]*metapb.Region{}, tablepb.Span{0, []byte{1}, []byte{2}}, false},
-		{[]*metapb.Region{
+		{
+			regions: []*metapb.Region{},
+			span:    tablepb.Span{StartKey: []byte{1}, EndKey: []byte{2}}, cover: false,
+		},
+		{regions: []*metapb.Region{
 			{StartKey: nil, EndKey: nil},
-		}, tablepb.Span{0, []byte{1}, []byte{2}}, true},
-		{[]*metapb.Region{
+		}, span: tablepb.Span{StartKey: []byte{1}, EndKey: []byte{2}}, cover: true},
+		{regions: []*metapb.Region{
 			{StartKey: []byte{1}, EndKey: []byte{2}},
-		}, tablepb.Span{0, []byte{1}, []byte{2}}, true},
-		{[]*metapb.Region{
+		}, span: tablepb.Span{StartKey: []byte{1}, EndKey: []byte{2}}, cover: true},
+		{regions: []*metapb.Region{
 			{StartKey: []byte{0}, EndKey: []byte{4}},
-		}, tablepb.Span{0, []byte{1}, []byte{2}}, true},
-		{[]*metapb.Region{
+		}, span: tablepb.Span{StartKey: []byte{1}, EndKey: []byte{2}}, cover: true},
+		{regions: []*metapb.Region{
 			{StartKey: []byte{1}, EndKey: []byte{2}},
 			{StartKey: []byte{2}, EndKey: []byte{3}},
-		}, tablepb.Span{0, []byte{1}, []byte{3}}, true},
-		{[]*metapb.Region{
+		}, span: tablepb.Span{StartKey: []byte{1}, EndKey: []byte{3}}, cover: true},
+		{regions: []*metapb.Region{
 			{StartKey: []byte{1}, EndKey: []byte{2}},
 			{StartKey: []byte{3}, EndKey: []byte{4}},
-		}, tablepb.Span{0, []byte{1}, []byte{4}}, false},
-		{[]*metapb.Region{
+		}, span: tablepb.Span{StartKey: []byte{1}, EndKey: []byte{4}}, cover: false},
+		{regions: []*metapb.Region{
 			{StartKey: []byte{1}, EndKey: []byte{2}},
 			{StartKey: []byte{2}, EndKey: []byte{3}},
-		}, tablepb.Span{0, []byte{1}, []byte{4}}, true},
-		{[]*metapb.Region{
+		}, span: tablepb.Span{StartKey: []byte{1}, EndKey: []byte{4}}, cover: true},
+		{regions: []*metapb.Region{
 			{StartKey: []byte{2}, EndKey: []byte{3}},
-		}, tablepb.Span{0, []byte{1}, []byte{3}}, false},
+		}, span: tablepb.Span{StartKey: []byte{1}, EndKey: []byte{3}}, cover: false},
 	}
 
 	for _, tc := range cases {
