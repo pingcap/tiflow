@@ -241,7 +241,7 @@ func testMounterDisableOldValue(c *check.C, tc struct {
 
 	jobs, err := getAllHistoryDDLJob(store)
 	c.Assert(err, check.IsNil)
-	scheamStorage, err := NewSchemaStorage(nil, 0, nil, false)
+	scheamStorage, err := NewSchemaStorage(nil, 0, nil, false, "")
 	c.Assert(err, check.IsNil)
 	for _, job := range jobs {
 		err := scheamStorage.HandleDDLJob(job)
