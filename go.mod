@@ -17,7 +17,7 @@ require (
 	github.com/edwingeng/deque v0.0.0-20191220032131-8596380dee17
 	github.com/fatih/color v1.10.0
 	github.com/frankban/quicktest v1.11.1 // indirect
-	github.com/go-sql-driver/mysql v1.5.0
+	github.com/go-sql-driver/mysql v1.6.0
 	github.com/golang-jwt/jwt v3.2.2+incompatible // indirect
 	github.com/golang/protobuf v1.3.4
 	github.com/golang/snappy v0.0.2 // indirect
@@ -39,31 +39,30 @@ require (
 	github.com/philhofer/fwd v1.0.0 // indirect
 	github.com/pingcap/br v5.0.0-nightly.0.20210419090151-03762465b589+incompatible
 	github.com/pingcap/check v0.0.0-20200212061837-5e12011dc712
-	github.com/pingcap/errors v0.11.5-0.20201126102027-b0a155152ca3
+	github.com/pingcap/errors v0.11.5-0.20210425183316-da1aaba5fb63
 	github.com/pingcap/failpoint v0.0.0-20210316064728-7acb0f0a3dfd
 	github.com/pingcap/kvproto v0.0.0-20210429093846-65f54a202d7e
-	github.com/pingcap/log v0.0.0-20210317133921-96f4fcab92a4
+	github.com/pingcap/log v0.0.0-20210625125904-98ed8e2eb1c7
 	github.com/pingcap/parser v0.0.0-20210427084954-8e8ed7927bde
 	github.com/pingcap/tidb v1.1.0-beta.0.20210508083641-8ed1d9d4a798
 	github.com/pingcap/tidb-tools v4.0.9-0.20201127090955-2707c97b3853+incompatible
+	github.com/pingcap/tidb/parser v0.0.0-20221213174653-d2eca727f5c8
 	github.com/prometheus/client_golang v1.5.1
 	github.com/r3labs/diff v1.1.0
 	github.com/spf13/cobra v1.0.0
 	github.com/spf13/pflag v1.0.5
-	github.com/stretchr/testify v1.6.1
+	github.com/stretchr/testify v1.7.0
 	github.com/tikv/pd v1.1.0-beta.0.20210323121136-78679e5e209d
 	github.com/tinylib/msgp v1.1.0
 	github.com/uber-go/atomic v1.4.0
 	github.com/xdg/scram v0.0.0-20180814205039-7eeb5667e42c
 	go.etcd.io/bbolt v1.3.4 // indirect
 	go.etcd.io/etcd v0.5.0-alpha.5.0.20200824191128-ae9734ed278b
-	go.uber.org/zap v1.16.0
-	golang.org/x/crypto v0.0.0-20201016220609-9e8e0b390897 // indirect
-	golang.org/x/exp v0.0.0-20200513190911-00229845015e // indirect
+	go.uber.org/zap v1.18.1
 	golang.org/x/lint v0.0.0-20200302205851-738671d3881b // indirect
-	golang.org/x/net v0.0.0-20210316092652-d523dce5a7f4
-	golang.org/x/sync v0.0.0-20201020160332-67f06af15bc9
-	golang.org/x/text v0.3.6
+	golang.org/x/net v0.0.0-20211015210444-4f30a5c0130f
+	golang.org/x/sync v0.0.0-20210220032951-036812b2e83c
+	golang.org/x/text v0.3.7
 	golang.org/x/time v0.0.0-20191024005414-555d28b269f0
 	google.golang.org/grpc v1.27.1
 	gopkg.in/mgo.v2 v2.0.0-20190816093944-a6b53ec6cb22 // indirect
@@ -73,5 +72,3 @@ require (
 
 // Fix CVE-2020-26160.
 replace github.com/dgrijalva/jwt-go v3.2.0+incompatible => github.com/golang-jwt/jwt v3.2.1+incompatible
-
-replace github.com/tikv/pd/client v0.0.0-20221031025758-80f0d8ca4d07 => github.com/tikv/pd v1.1.0-beta.0.20210323121136-78679e5e209d
