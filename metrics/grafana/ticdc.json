@@ -7038,7 +7038,7 @@
           "dashLength": 10,
           "dashes": false,
           "datasource": "${DS_TEST-CLUSTER}",
-          "description": "Size of large rows (size >= 128K).",
+          "description": "Size of large rows (size >= 2K).",
           "fieldConfig": {
             "defaults": {},
             "overrides": []

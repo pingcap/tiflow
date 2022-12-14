@@ -30,6 +30,7 @@ import (
 	cdcContext "github.com/pingcap/tiflow/pkg/context"
 	"github.com/pingcap/tiflow/pkg/pipeline"
 	pmessage "github.com/pingcap/tiflow/pkg/pipeline/message"
+	"github.com/pingcap/tiflow/pkg/spanz"
 	"github.com/stretchr/testify/require"
 	"github.com/tikv/client-go/v2/oracle"
 	pd "github.com/tikv/pd/client"
@@ -57,7 +58,7 @@ func TestUnifiedSorterFileLockConflict(t *testing.T) {
 	ctx.ChangefeedVars().Info.Engine = model.SortUnified
 	ctx.ChangefeedVars().Info.SortDir = dir
 	nodeCtx := pipeline.MockNodeContext4Test(ctx, pmessage.Message{}, nil)
-	_, err = createSorter(nodeCtx, "", 0)
+	_, err = createSorter(nodeCtx, "", spanz.TableIDToComparableSpan(0))
 	require.True(t, strings.Contains(err.Error(), "file lock conflict"))
 }
 
