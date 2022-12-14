@@ -144,10 +144,7 @@ func TestIsSinkCompatibleWithSpanReplication(t *testing.T) {
 	}
 
 	for _, tt := range tests {
-		test := tt
-		t.Run(test.name, func(t *testing.T) {
-			compatible := IsSinkCompatibleWithSpanReplication(test.uri)
-			require.Equal(t, compatible, tt.compatible)
-		})
+		compatible := IsSinkCompatibleWithSpanReplication(tt.uri)
+		require.Equal(t, compatible, tt.compatible, tt.name)
 	}
 }
