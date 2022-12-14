@@ -727,7 +727,6 @@ func (s *Syncer) Process(ctx context.Context, pr chan pb.ProcessResult) {
 				return
 			}
 			cancel() // cancel s.Run
-			s.handleExitErrMetric(err)
 			errsMu.Lock()
 			errs = append(errs, err)
 			errsMu.Unlock()
@@ -754,10 +753,8 @@ func (s *Syncer) Process(ctx context.Context, pr chan pb.ProcessResult) {
 			s.tctx.L().Info("filter out error caused by user cancel", log.ShortError(err))
 		} else {
 			s.tctx.L().Debug("unit syncer quits with error", zap.Error(err))
-			processError := unit.NewProcessError(err)
-			s.handleExitErrMetric(processError)
 			errsMu.Lock()
-			errs = append(errs, processError)
+			errs = append(errs, unit.NewProcessError(err))
 			errsMu.Unlock()
 		}
 	}
@@ -769,6 +766,9 @@ func (s *Syncer) Process(ctx context.Context, pr chan pb.ProcessResult) {
 	default:
 	}
 
+	for _, processError := range errs {
+		s.handleExitErrMetric(processError)
+	}
 	pr <- pb.ProcessResult{
 		IsCanceled: isCanceled,
 		Errors:     errs,
