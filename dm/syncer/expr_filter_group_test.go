@@ -440,6 +440,70 @@ create table t (
 	c.Assert(err, IsNil)
 	c.Assert(skip, Equals, false)
 	skip, err = SkipDMLByExpression(sessCtx, []interface{}{2}, expr, ti.Columns)
+<<<<<<< HEAD
 	c.Assert(err, IsNil)
 	c.Assert(skip, Equals, false)
+=======
+	require.NoError(t, err)
+	require.False(t, skip)
+}
+
+func TestGetUpdateExprsSameLength(t *testing.T) {
+	var (
+		dbName  = "test"
+		tblName = "t"
+		table   = &filter.Table{
+			Schema: dbName,
+			Name:   tblName,
+		}
+		tableStr = `
+create table t (
+	c varchar(20)
+);`
+		exprStr = "c > 1"
+		sessCtx = utils.NewSessionCtx(map[string]string{"time_zone": "UTC"})
+	)
+
+	cases := []*config.ExpressionFilter{
+		{
+			Schema:          dbName,
+			Table:           tblName,
+			InsertValueExpr: exprStr,
+		},
+		{
+			Schema:             dbName,
+			Table:              tblName,
+			UpdateOldValueExpr: exprStr,
+		},
+		{
+			Schema:             dbName,
+			Table:              tblName,
+			UpdateNewValueExpr: exprStr,
+		},
+		{
+			Schema:             dbName,
+			Table:              tblName,
+			UpdateOldValueExpr: exprStr,
+			UpdateNewValueExpr: exprStr,
+		},
+	}
+
+	stmt, err := parseSQL(tableStr)
+	require.NoError(t, err)
+	tableInfo, err := ddl2.BuildTableInfoFromAST(stmt.(*ast.CreateTableStmt))
+	require.NoError(t, err)
+
+	for i, c := range cases {
+		t.Logf("case #%d", i)
+		g := NewExprFilterGroup(tcontext.Background(), sessCtx, []*config.ExpressionFilter{c})
+		oldExprs, newExprs, err2 := g.GetUpdateExprs(table, tableInfo)
+		require.NoError(t, err2)
+		require.Equal(t, len(oldExprs), len(newExprs))
+	}
+	g := NewExprFilterGroup(tcontext.Background(), sessCtx, cases)
+	oldExprs, newExprs, err := g.GetUpdateExprs(table, tableInfo)
+	require.NoError(t, err)
+	require.Equal(t, len(oldExprs), len(newExprs))
+	require.Len(t, oldExprs, 3)
+>>>>>>> 099da1e08f (expression_filter(dm): fix append update filter for non-update item (#7851))
 }
