@@ -21,11 +21,12 @@ import (
 	"github.com/pingcap/tiflow/cdc/contextutil"
 	"github.com/pingcap/tiflow/cdc/model"
 	"github.com/pingcap/tiflow/cdc/processor/sourcemanager/engine"
+	"github.com/pingcap/tiflow/cdc/processor/tablepb"
 	"github.com/pingcap/tiflow/cdc/puller"
 	"github.com/pingcap/tiflow/pkg/config"
 	cdccontext "github.com/pingcap/tiflow/pkg/context"
 	cerrors "github.com/pingcap/tiflow/pkg/errors"
-	"github.com/pingcap/tiflow/pkg/regionspan"
+	"github.com/pingcap/tiflow/pkg/spanz"
 	"github.com/pingcap/tiflow/pkg/upstream"
 	"github.com/pingcap/tiflow/pkg/util"
 )
@@ -62,11 +63,8 @@ func NewPullerWrapper(
 }
 
 // tableSpan returns the table span with the table ID.
-func (n *Wrapper) tableSpan() []regionspan.Span {
-	// start table puller
-	spans := make([]regionspan.Span, 0, 4)
-	spans = append(spans, regionspan.GetTableSpan(n.tableID))
-	return spans
+func (n *Wrapper) tableSpan() []tablepb.Span {
+	return []tablepb.Span{spanz.TableIDToComparableSpan(n.tableID)}
 }
 
 // Start the puller wrapper.

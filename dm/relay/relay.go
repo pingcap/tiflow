@@ -712,10 +712,12 @@ func (r *Relay) handleEvents(
 
 		relayLogWriteSizeHistogram.Observe(float64(e.Header.EventSize))
 		relayPosGauge.Set(float64(lastPos.Pos))
-		if index, err2 := utils.GetFilenameIndex(lastPos.Name); err2 != nil {
-			r.logger.Error("parse binlog file name", zap.String("file name", lastPos.Name), log.ShortError(err2))
-		} else {
-			relayFileGauge.Set(float64(index))
+		if e.Header.EventType == replication.FORMAT_DESCRIPTION_EVENT {
+			if index, err2 := utils.GetFilenameIndex(lastPos.Name); err2 != nil {
+				r.logger.Error("parse binlog file name", zap.String("file name", lastPos.Name), log.ShortError(err2))
+			} else {
+				relayFileGauge.Set(float64(index))
+			}
 		}
 
 		if needSavePos {

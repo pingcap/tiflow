@@ -21,6 +21,7 @@ import (
 	"github.com/pingcap/errors"
 	"github.com/pingcap/log"
 	"github.com/pingcap/tiflow/cdc/model"
+	"github.com/pingcap/tiflow/cdc/processor/tablepb"
 	"github.com/pingcap/tiflow/cdc/sorter"
 	"github.com/pingcap/tiflow/cdc/sorter/db/message"
 	"github.com/pingcap/tiflow/cdc/sorter/encoding"
@@ -74,7 +75,7 @@ func (r *reader) setTaskDelete(task *message.Task, deleteKeys []message.Key) {
 
 	// Delete events that less than the last delete keys' commit ts.
 	task.DeleteReq = &message.DeleteRequest{}
-	task.DeleteReq.Range[0] = encoding.EncodeTsKey(r.uid, r.tableID, 0)
+	task.DeleteReq.Range[0] = encoding.EncodeTsKey(r.uid, uint64(r.span.TableID), 0)
 	task.DeleteReq.Range[1] = []byte(deleteKeys[len(deleteKeys)-1])
 	task.DeleteReq.Count = totalDelete + len(deleteKeys)
 }
@@ -127,7 +128,7 @@ func (r *reader) outputBufferedResolvedEvents(buffer *outputBuffer) {
 		lastCommitTs = event.CRTs
 
 		// Delete sent events.
-		key := encoding.EncodeKey(r.uid, r.tableID, event)
+		key := encoding.EncodeKey(r.uid, uint64(r.span.TableID), event)
 		buffer.appendDeleteKey(message.Key(key))
 		remainIdx = idx + 1
 	}
@@ -244,6 +245,7 @@ func (r *reader) outputIterEvents(
 
 // TODO: inline the struct to reader.
 type pollState struct {
+	span tablepb.Span
 	// Buffer for resolved events and to-be-deleted events.
 	outputBuf *outputBuffer
 	// The maximum commit ts for all events.
@@ -362,9 +364,9 @@ func (state *pollState) tryGetIterator(uid uint32, tableID uint64) (*message.Ite
 				// Notify itself that iterator has acquired.
 				_ = readerRouter.Send(readerID, actormsg.ValueMessage(
 					message.Task{
-						UID:     uid,
-						TableID: tableID,
-						ReadTs:  message.ReadTs{},
+						UID:    uid,
+						Span:   &state.span,
+						ReadTs: message.ReadTs{},
 					}))
 			},
 		}, false
@@ -451,7 +453,7 @@ func (r *reader) Poll(ctx context.Context, msgs []actormsg.Message[message.Task]
 		lenResolvedEvents, _ = r.state.outputBuf.len()
 	}
 	// Build task for new events and delete sent keys.
-	task := message.Task{UID: r.uid, TableID: r.tableID}
+	task := message.Task{UID: r.uid, Span: &r.span}
 	r.setTaskDelete(&task, r.state.outputBuf.deleteKeys)
 	// Reset buffer as delete keys are scheduled.
 	r.state.outputBuf.resetDeleteKey()
@@ -491,7 +493,7 @@ func (r *reader) Poll(ctx context.Context, msgs []actormsg.Message[message.Task]
 	}
 
 	var hasIter bool
-	task.IterReq, hasIter = r.state.tryGetIterator(r.uid, r.tableID)
+	task.IterReq, hasIter = r.state.tryGetIterator(r.uid, uint64(r.span.TableID))
 	// Send delete/read task to db.
 	err := r.dbRouter.SendB(ctx, r.dbActorID, actormsg.ValueMessage(task))
 	if err != nil {
