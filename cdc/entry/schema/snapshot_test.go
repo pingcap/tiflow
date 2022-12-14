@@ -136,7 +136,7 @@ func TestTable(t *testing.T) {
 
 		// createTable should check whether the schema or table exist or not.
 		require.Error(t, snap.inner.createTable(newTbInfo(1, "DB_1", 11), 100))
-		snap.inner.createSchema(newDBInfo(1), 110)
+		_ = snap.inner.createSchema(newDBInfo(1), 110)
 		require.Nil(t, snap.inner.createTable(newTbInfo(1, "DB_1", 11), 120))
 		require.Error(t, snap.inner.createTable(newTbInfo(1, "DB_1", 11), 130))
 		_, ok = snap.PhysicalTableByID(11)
