@@ -44,8 +44,7 @@ function run() {
 	# check upstream and downstream data are inconsistent
 	run_sql_source1 "select count(1) from foreign_key.t2"
 	check_contains "count(1): 4"
-	run_sql_tidb_with_retry "select count(2) from foreign_key.t2"
-	check_contains "count(2): 5"
+	run_sql_tidb_with_retry "select count(2) from foreign_key.t2" "count(2): 5"
 }
 
 cleanup_data foreign_key
