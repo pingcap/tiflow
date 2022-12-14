@@ -34,6 +34,7 @@ import (
 	cerror "github.com/pingcap/tiflow/pkg/errors"
 	"github.com/pingcap/tiflow/pkg/p2p"
 	"github.com/pingcap/tiflow/pkg/pdutil"
+	"github.com/pingcap/tiflow/pkg/spanz"
 	"github.com/pingcap/tiflow/pkg/version"
 	"go.uber.org/zap"
 )
@@ -143,7 +144,8 @@ func (c *coordinator) MoveTable(tableID model.TableID, target model.CaptureID) {
 		return
 	}
 
-	c.schedulerM.MoveTable(tablepb.Span{TableID: tableID}, target)
+	span := spanz.TableIDToComparableSpan(tableID)
+	c.schedulerM.MoveTable(span, target)
 }
 
 // Rebalance implement the scheduler interface
