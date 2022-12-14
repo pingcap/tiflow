@@ -152,6 +152,7 @@ function run() {
 	start_tidb_cluster --workdir $WORK_DIR
 
 	cd $WORK_DIR
+	run_sql "SET GLOBAL tidb_enable_external_ts_read = on;" ${DOWN_TIDB_HOST} ${DOWN_TIDB_PORT}
 	run_sql "CREATE DATABASE testSync;"
 	run_sql "CREATE DATABASE testSync;" ${DOWN_TIDB_HOST} ${DOWN_TIDB_PORT}
 
