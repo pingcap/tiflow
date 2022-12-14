@@ -148,9 +148,9 @@ func (r *Manager) HandleCaptureChanges(
 		}
 		var err error
 		spanStatusMap.Ascend(func(span tablepb.Span, status map[string]*tablepb.TableStatus) bool {
-			table, err := NewReplicationSet(span, checkpointTs, status, r.changefeedID)
+			table, err1 := NewReplicationSet(span, checkpointTs, status, r.changefeedID)
 			if err != nil {
-				err = errors.Trace(err)
+				err = errors.Trace(err1)
 				return false
 			}
 			r.spans.ReplaceOrInsert(table.Span, table)
@@ -165,9 +165,9 @@ func (r *Manager) HandleCaptureChanges(
 		var err error
 		r.spans.Ascend(func(span tablepb.Span, table *ReplicationSet) bool {
 			for captureID := range removed {
-				msgs, affected, err := table.handleCaptureShutdown(captureID)
+				msgs, affected, err1 := table.handleCaptureShutdown(captureID)
 				if err != nil {
-					err = errors.Trace(err)
+					err = errors.Trace(err1)
 					return false
 				}
 				sentMsgs = append(sentMsgs, msgs...)
