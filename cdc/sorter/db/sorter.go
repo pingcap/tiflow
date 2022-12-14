@@ -142,10 +142,9 @@ func NewSorter(
 		state: pollState{
 			outputBuf: newOutputBuffer(batchReceiveEventSize),
 
-			maxCommitTs:         uint64(0),
-			maxResolvedTs:       uint64(0),
-			exhaustedResolvedTs: uint64(0),
-			startTs:             uint64(0),
+			maxCommitTs:   uint64(0),
+			maxResolvedTs: uint64(0),
+			startTs:       uint64(0),
 
 			readerID:     actorID,
 			readerRouter: readerRouter,
