@@ -14,13 +14,20 @@
 package kv
 
 import (
+	"context"
 	"math/rand"
 	"runtime"
 	"sync"
+	"testing"
 
 	"github.com/pingcap/check"
+	"github.com/pingcap/kvproto/pkg/cdcpb"
+	"github.com/pingcap/tidb/store/tikv"
+	"github.com/pingcap/tiflow/cdc/model"
 	"github.com/pingcap/tiflow/pkg/config"
+	"github.com/pingcap/tiflow/pkg/regionspan"
 	"github.com/pingcap/tiflow/pkg/util/testleak"
+	"github.com/stretchr/testify/require"
 )
 
 type regionWorkerSuite struct{}
@@ -134,4 +141,133 @@ func (s *regionWorkerSuite) TestRegionWorkerPoolSize(c *check.C) {
 	conf.KVClient.WorkerPoolSize = maxWorkerPoolSize + 1
 	size = getWorkerPoolSize()
 	c.Assert(size, check.Equals, maxWorkerPoolSize)
+}
+
+func TestRegionWokerHandleEventEntryEventOutOfOrder(t *testing.T) {
+	// For UPDATE SQL, its prewrite event has both value and old value.
+	// It is possible that TiDB prewrites multiple times for the same row when
+	// there are other transactions it conflicts with. For this case,
+	// if the value is not "short", only the first prewrite contains the value.
+	//
+	// TiKV may output events for the UPDATE SQL as following:
+	//
+	// TiDB: [Prwrite1]    [Prewrite2]      [Commit]
+	//       v             v                v                                   Time
+	// ---------------------------------------------------------------------------->
+	//         ^            ^    ^           ^     ^       ^     ^          ^     ^
+	// TiKV:   [Scan Start] [Send Prewrite2] [Send Commit] [Send Prewrite1] [Send Init]
+	// TiCDC:                    [Recv Prewrite2]  [Recv Commit] [Recv Prewrite1] [Recv Init]
+
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+	eventCh := make(chan model.RegionFeedEvent, 2)
+	s := createFakeEventFeedSession(ctx)
+	s.enableOldValue = true
+	s.eventCh = eventCh
+	span := regionspan.Span{}.Hack()
+	state := newRegionFeedState(newSingleRegionInfo(
+		tikv.RegionVerID{},
+		regionspan.ToComparableSpan(span),
+		0, &tikv.RPCContext{}), 0)
+	state.start()
+	worker := newRegionWorker(s, "")
+	worker.initMetrics(ctx)
+	require.Equal(t, 2, cap(worker.outputCh))
+
+	// Receive prewrite2 with empty value.
+	events := &cdcpb.Event_Entries_{
+		Entries: &cdcpb.Event_Entries{
+			Entries: []*cdcpb.Event_Row{{
+				StartTs:  1,
+				Type:     cdcpb.Event_PREWRITE,
+				OpType:   cdcpb.Event_Row_PUT,
+				Key:      []byte("key"),
+				Value:    nil,
+				OldValue: []byte("oldvalue"),
+			}},
+		},
+	}
+	err := worker.handleEventEntry(ctx, events, state)
+	require.Nil(t, err)
+
+	// Receive commit.
+	events = &cdcpb.Event_Entries_{
+		Entries: &cdcpb.Event_Entries{
+			Entries: []*cdcpb.Event_Row{{
+				StartTs:  1,
+				CommitTs: 2,
+				Type:     cdcpb.Event_COMMIT,
+				OpType:   cdcpb.Event_Row_PUT,
+				Key:      []byte("key"),
+			}},
+		},
+	}
+	err = worker.handleEventEntry(context.Background(), events, state)
+	require.Nil(t, err)
+
+	// Must not output event.
+	var event model.RegionFeedEvent
+	var ok bool
+	select {
+	case event, ok = <-eventCh:
+	default:
+	}
+	require.Falsef(t, ok, "%v", event)
+	require.EqualValuesf(t, model.RegionFeedEvent{}, event, "%v", event)
+
+	// Receive prewrite1 with actual value.
+	events = &cdcpb.Event_Entries_{
+		Entries: &cdcpb.Event_Entries{
+			Entries: []*cdcpb.Event_Row{{
+				StartTs:  1,
+				Type:     cdcpb.Event_PREWRITE,
+				OpType:   cdcpb.Event_Row_PUT,
+				Key:      []byte("key"),
+				Value:    []byte("value"),
+				OldValue: []byte("oldvalue"),
+			}},
+		},
+	}
+	err = worker.handleEventEntry(ctx, events, state)
+	require.Nil(t, err)
+
+	// Must not output event.
+	select {
+	case event, ok = <-eventCh:
+	default:
+	}
+	require.Falsef(t, ok, "%v", event)
+	require.EqualValuesf(t, model.RegionFeedEvent{}, event, "%v", event)
+
+	// Receive prewrite1 with actual value.
+	events = &cdcpb.Event_Entries_{
+		Entries: &cdcpb.Event_Entries{
+			Entries: []*cdcpb.Event_Row{
+				{
+					Type: cdcpb.Event_INITIALIZED,
+				},
+			},
+		},
+	}
+	err = worker.handleEventEntry(ctx, events, state)
+	require.Nil(t, err)
+
+	// Must output event.
+	select {
+	case event, ok = <-eventCh:
+	default:
+	}
+	require.Truef(t, ok, "%v", event)
+	require.EqualValuesf(t, model.RegionFeedEvent{
+		RegionID: 0,
+		Val: &model.RawKVEntry{
+			OpType:   model.OpTypePut,
+			Key:      []byte("key"),
+			Value:    []byte("value"),
+			StartTs:  1,
+			CRTs:     2,
+			RegionID: 0,
+			OldValue: []byte("oldvalue"),
+		},
+	}, event, "%v", event)
 }
