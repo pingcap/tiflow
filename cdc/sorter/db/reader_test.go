@@ -29,6 +29,7 @@ import (
 	actormsg "github.com/pingcap/tiflow/pkg/actor/message"
 	"github.com/pingcap/tiflow/pkg/config"
 	"github.com/pingcap/tiflow/pkg/db"
+	"github.com/pingcap/tiflow/pkg/spanz"
 	"github.com/prometheus/client_golang/prometheus"
 	"github.com/stretchr/testify/require"
 	"golang.org/x/sync/semaphore"
@@ -49,9 +50,9 @@ func newTestReader() *reader {
 		common: common{
 			dbActorID: 1,
 			// dbRouter:  dbRouter,
-			uid:     2,
-			tableID: uint64(3),
-			serde:   &encoding.MsgPackGenSerde{},
+			uid:   2,
+			span:  spanz.TableIDToComparableSpan(3),
+			serde: &encoding.MsgPackGenSerde{},
 		},
 		state: pollState{
 			metricIterRequest: metricIterDuration.WithLabelValues("request"),
@@ -86,21 +87,21 @@ func TestReaderSetTaskDelete(t *testing.T) {
 		// 1 delete key does not set delete.
 		{
 			deleteKeys: []message.Key{
-				message.Key(encoding.EncodeKey(r.uid, r.tableID,
+				message.Key(encoding.EncodeKey(r.uid, uint64(r.span.TableID),
 					model.NewPolymorphicEvent(&model.RawKVEntry{CRTs: 2}))),
 			},
 		},
 		// One more delete key sets delete.
 		{
 			deleteKeys: []message.Key{
-				message.Key(encoding.EncodeKey(r.uid, r.tableID,
+				message.Key(encoding.EncodeKey(r.uid, uint64(r.span.TableID),
 					model.NewPolymorphicEvent(&model.RawKVEntry{CRTs: 1}))),
 			},
 			expectDelete: &message.DeleteRequest{
 				Count: 2,
 				Range: [2][]byte{
-					encoding.EncodeTsKey(r.uid, r.tableID, 0),
-					encoding.EncodeKey(r.uid, r.tableID,
+					encoding.EncodeTsKey(r.uid, uint64(r.span.TableID), 0),
+					encoding.EncodeKey(r.uid, uint64(r.span.TableID),
 						model.NewPolymorphicEvent(&model.RawKVEntry{CRTs: 1})),
 				},
 			},
@@ -108,15 +109,15 @@ func TestReaderSetTaskDelete(t *testing.T) {
 		// Waiting long period sets delete.
 		{
 			deleteKeys: []message.Key{
-				message.Key(encoding.EncodeKey(r.uid, r.tableID,
+				message.Key(encoding.EncodeKey(r.uid, uint64(r.span.TableID),
 					model.NewPolymorphicEvent(&model.RawKVEntry{CRTs: 3}))),
 			},
 			sleep: 4 * time.Second,
 			expectDelete: &message.DeleteRequest{
 				Count: 1,
 				Range: [2][]byte{
-					encoding.EncodeTsKey(r.uid, r.tableID, 0),
-					encoding.EncodeKey(r.uid, r.tableID,
+					encoding.EncodeTsKey(r.uid, uint64(r.span.TableID), 0),
+					encoding.EncodeKey(r.uid, uint64(r.span.TableID),
 						model.NewPolymorphicEvent(&model.RawKVEntry{CRTs: 3})),
 				},
 			},
@@ -196,7 +197,7 @@ func TestReaderOutputBufferedResolvedEvents(t *testing.T) {
 
 			expectEvents: []*model.PolymorphicEvent{},
 			expectDeleteKeys: []message.Key{
-				message.Key(encoding.EncodeKey(r.uid, r.tableID,
+				message.Key(encoding.EncodeKey(r.uid, uint64(r.span.TableID),
 					model.NewPolymorphicEvent(&model.RawKVEntry{CRTs: 1}))),
 			},
 			expectOutputs: []*model.PolymorphicEvent{
@@ -210,13 +211,13 @@ func TestReaderOutputBufferedResolvedEvents(t *testing.T) {
 			outputChCap: 2,
 			inputEvents: []*model.PolymorphicEvent{},
 			inputDeleteKeys: []message.Key{
-				message.Key(encoding.EncodeKey(r.uid, r.tableID,
+				message.Key(encoding.EncodeKey(r.uid, uint64(r.span.TableID),
 					model.NewPolymorphicEvent(&model.RawKVEntry{CRTs: 1}))),
 			},
 
 			expectEvents: []*model.PolymorphicEvent{},
 			expectDeleteKeys: []message.Key{
-				message.Key(encoding.EncodeKey(r.uid, r.tableID,
+				message.Key(encoding.EncodeKey(r.uid, uint64(r.span.TableID),
 					model.NewPolymorphicEvent(&model.RawKVEntry{CRTs: 1}))),
 			},
 			expectOutputs: []*model.PolymorphicEvent{},
@@ -228,15 +229,15 @@ func TestReaderOutputBufferedResolvedEvents(t *testing.T) {
 				model.NewPolymorphicEvent(&model.RawKVEntry{CRTs: 2}),
 			},
 			inputDeleteKeys: []message.Key{
-				message.Key(encoding.EncodeKey(r.uid, r.tableID,
+				message.Key(encoding.EncodeKey(r.uid, uint64(r.span.TableID),
 					model.NewPolymorphicEvent(&model.RawKVEntry{CRTs: 1}))),
 			},
 
 			expectEvents: []*model.PolymorphicEvent{},
 			expectDeleteKeys: []message.Key{
-				message.Key(encoding.EncodeKey(r.uid, r.tableID,
+				message.Key(encoding.EncodeKey(r.uid, uint64(r.span.TableID),
 					model.NewPolymorphicEvent(&model.RawKVEntry{CRTs: 1}))),
-				message.Key(encoding.EncodeKey(r.uid, r.tableID,
+				message.Key(encoding.EncodeKey(r.uid, uint64(r.span.TableID),
 					model.NewPolymorphicEvent(&model.RawKVEntry{CRTs: 2}))),
 			},
 			expectOutputs: []*model.PolymorphicEvent{
@@ -259,9 +260,9 @@ func TestReaderOutputBufferedResolvedEvents(t *testing.T) {
 				model.NewPolymorphicEvent(&model.RawKVEntry{CRTs: 3, RegionID: 3}),
 			},
 			expectDeleteKeys: []message.Key{
-				message.Key(encoding.EncodeKey(r.uid, r.tableID,
+				message.Key(encoding.EncodeKey(r.uid, uint64(r.span.TableID),
 					model.NewPolymorphicEvent(&model.RawKVEntry{CRTs: 3, RegionID: 1}))),
-				message.Key(encoding.EncodeKey(r.uid, r.tableID,
+				message.Key(encoding.EncodeKey(r.uid, uint64(r.span.TableID),
 					model.NewPolymorphicEvent(&model.RawKVEntry{CRTs: 3, RegionID: 2}))),
 			},
 			expectOutputs: []*model.PolymorphicEvent{
@@ -322,7 +323,7 @@ func prepareTxnData(
 	for i := 1; i < txnCount+1; i++ { // txns.
 		for j := 0; j < txnSize; j++ { // events.
 			event := newTestEvent(uint64(i)+2, uint64(i), j)
-			key := encoding.EncodeKey(r.uid, r.tableID, event)
+			key := encoding.EncodeKey(r.uid, uint64(r.span.TableID), event)
 			value, err := r.serde.Marshal(event, []byte{})
 			require.Nil(t, err)
 			t.Logf("key: %s, value: %s\n", message.Key(key), hex.EncodeToString(value))
@@ -338,6 +339,7 @@ func TestReaderOutputIterEvents(t *testing.T) {
 
 	capacity := 4
 	r := newTestReader()
+	tableID := r.span.TableID
 
 	// Prepare data, 3 txns, 3 events for each.
 	// CRTs 3, StartTs 1, keys (0|1|2)
@@ -376,9 +378,9 @@ func TestReaderOutputIterEvents(t *testing.T) {
 
 			expectEvents: []*model.PolymorphicEvent{},
 			expectDeleteKeys: []message.Key{
-				message.Key(encoding.EncodeKey(r.uid, r.tableID, newTestEvent(3, 1, 0))),
-				message.Key(encoding.EncodeKey(r.uid, r.tableID, newTestEvent(3, 1, 1))),
-				message.Key(encoding.EncodeKey(r.uid, r.tableID, newTestEvent(3, 1, 2))),
+				message.Key(encoding.EncodeKey(r.uid, uint64(tableID), newTestEvent(3, 1, 0))),
+				message.Key(encoding.EncodeKey(r.uid, uint64(tableID), newTestEvent(3, 1, 1))),
+				message.Key(encoding.EncodeKey(r.uid, uint64(tableID), newTestEvent(3, 1, 2))),
 			},
 			expectOutputs: []*model.PolymorphicEvent{
 				newTestEvent(3, 1, 0),
@@ -395,8 +397,8 @@ func TestReaderOutputIterEvents(t *testing.T) {
 
 			expectEvents: []*model.PolymorphicEvent{newTestEvent(4, 2, 2)},
 			expectDeleteKeys: []message.Key{
-				message.Key(encoding.EncodeKey(r.uid, r.tableID, newTestEvent(4, 2, 0))),
-				message.Key(encoding.EncodeKey(r.uid, r.tableID, newTestEvent(4, 2, 1))),
+				message.Key(encoding.EncodeKey(r.uid, uint64(tableID), newTestEvent(4, 2, 0))),
+				message.Key(encoding.EncodeKey(r.uid, uint64(tableID), newTestEvent(4, 2, 1))),
 			},
 			expectOutputs: []*model.PolymorphicEvent{
 				newTestEvent(4, 2, 0),
@@ -413,7 +415,7 @@ func TestReaderOutputIterEvents(t *testing.T) {
 
 			expectEvents: []*model.PolymorphicEvent{},
 			expectDeleteKeys: []message.Key{
-				message.Key(encoding.EncodeKey(r.uid, r.tableID, newTestEvent(4, 2, 2))),
+				message.Key(encoding.EncodeKey(r.uid, uint64(tableID), newTestEvent(4, 2, 2))),
 			},
 			expectOutputs: []*model.PolymorphicEvent{
 				newTestEvent(4, 2, 2),
@@ -433,10 +435,10 @@ func TestReaderOutputIterEvents(t *testing.T) {
 				newTestEvent(6, 4, 2),
 			},
 			expectDeleteKeys: []message.Key{
-				message.Key(encoding.EncodeKey(r.uid, r.tableID, newTestEvent(5, 3, 0))),
-				message.Key(encoding.EncodeKey(r.uid, r.tableID, newTestEvent(5, 3, 1))),
-				message.Key(encoding.EncodeKey(r.uid, r.tableID, newTestEvent(5, 3, 2))),
-				message.Key(encoding.EncodeKey(r.uid, r.tableID, newTestEvent(6, 4, 0))),
+				message.Key(encoding.EncodeKey(r.uid, uint64(tableID), newTestEvent(5, 3, 0))),
+				message.Key(encoding.EncodeKey(r.uid, uint64(tableID), newTestEvent(5, 3, 1))),
+				message.Key(encoding.EncodeKey(r.uid, uint64(tableID), newTestEvent(5, 3, 2))),
+				message.Key(encoding.EncodeKey(r.uid, uint64(tableID), newTestEvent(6, 4, 0))),
 			},
 			expectOutputs: []*model.PolymorphicEvent{
 				newTestEvent(5, 3, 0),
@@ -457,11 +459,11 @@ func TestReaderOutputIterEvents(t *testing.T) {
 
 			expectEvents: []*model.PolymorphicEvent{},
 			expectDeleteKeys: []message.Key{
-				message.Key(encoding.EncodeKey(r.uid, r.tableID, newTestEvent(6, 4, 1))),
-				message.Key(encoding.EncodeKey(r.uid, r.tableID, newTestEvent(6, 4, 2))),
-				message.Key(encoding.EncodeKey(r.uid, r.tableID, newTestEvent(7, 5, 0))),
-				message.Key(encoding.EncodeKey(r.uid, r.tableID, newTestEvent(7, 5, 1))),
-				message.Key(encoding.EncodeKey(r.uid, r.tableID, newTestEvent(7, 5, 2))),
+				message.Key(encoding.EncodeKey(r.uid, uint64(tableID), newTestEvent(6, 4, 1))),
+				message.Key(encoding.EncodeKey(r.uid, uint64(tableID), newTestEvent(6, 4, 2))),
+				message.Key(encoding.EncodeKey(r.uid, uint64(tableID), newTestEvent(7, 5, 0))),
+				message.Key(encoding.EncodeKey(r.uid, uint64(tableID), newTestEvent(7, 5, 1))),
+				message.Key(encoding.EncodeKey(r.uid, uint64(tableID), newTestEvent(7, 5, 2))),
 			},
 			expectOutputs: []*model.PolymorphicEvent{
 				newTestEvent(6, 4, 1),
@@ -494,8 +496,8 @@ func TestReaderOutputIterEvents(t *testing.T) {
 		buf := newOutputBuffer(capacity)
 
 		iter := db.Iterator(
-			encoding.EncodeTsKey(r.uid, r.tableID, 0),
-			encoding.EncodeTsKey(r.uid, r.tableID, cs.maxResolvedTs+1),
+			encoding.EncodeTsKey(r.uid, uint64(tableID), 0),
+			encoding.EncodeTsKey(r.uid, uint64(tableID), cs.maxResolvedTs+1),
 			0, math.MaxUint64)
 		iter.Seek([]byte{})
 		require.Nil(t, iter.Error(), "case #%d, %v", i, cs)
@@ -642,6 +644,7 @@ func TestReaderPoll(t *testing.T) {
 	r.common.dbRouter = router
 	r.common.dbActorID = dbMb.ID()
 	r.outputCh = make(chan *model.PolymorphicEvent, sorterOutputCap)
+	tableID := r.span.TableID
 
 	// Prepare data, 3 txns, 3 events for each.
 	// CRTs 3, StartTs 1, keys (0|1|2)
@@ -823,9 +826,9 @@ func TestReaderPoll(t *testing.T) {
 
 			expectEvents: []*model.PolymorphicEvent{},
 			expectDeleteKeys: []message.Key{
-				message.Key(encoding.EncodeKey(r.uid, r.tableID, newTestEvent(3, 1, 0))),
-				message.Key(encoding.EncodeKey(r.uid, r.tableID, newTestEvent(3, 1, 1))),
-				message.Key(encoding.EncodeKey(r.uid, r.tableID, newTestEvent(3, 1, 2))),
+				message.Key(encoding.EncodeKey(r.uid, uint64(tableID), newTestEvent(3, 1, 0))),
+				message.Key(encoding.EncodeKey(r.uid, uint64(tableID), newTestEvent(3, 1, 1))),
+				message.Key(encoding.EncodeKey(r.uid, uint64(tableID), newTestEvent(3, 1, 2))),
 			},
 			expectOutputs: []*model.PolymorphicEvent{
 				newTestEvent(3, 1, 0),
