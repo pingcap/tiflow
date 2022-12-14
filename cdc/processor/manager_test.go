@@ -50,7 +50,8 @@ func NewManager4Test(
 	liveness *model.Liveness,
 ) *managerImpl {
 	captureInfo := &model.CaptureInfo{ID: "capture-test", AdvertiseAddr: "127.0.0.1:0000"}
-	m := NewManager(captureInfo, upstream.NewManager4Test(nil), liveness).(*managerImpl)
+	cfg := config.NewDefaultSchedulerConfig()
+	m := NewManager(captureInfo, upstream.NewManager4Test(nil), liveness, cfg).(*managerImpl)
 	m.newProcessor = func(
 		state *orchestrator.ChangefeedReactorState,
 		captureInfo *model.CaptureInfo,
@@ -237,7 +238,8 @@ func TestClose(t *testing.T) {
 
 func TestSendCommandError(t *testing.T) {
 	liveness := model.LivenessCaptureAlive
-	m := NewManager(&model.CaptureInfo{ID: "capture-test"}, nil, &liveness).(*managerImpl)
+	cfg := config.NewDefaultSchedulerConfig()
+	m := NewManager(&model.CaptureInfo{ID: "capture-test"}, nil, &liveness, cfg).(*managerImpl)
 	ctx, cancel := context.WithCancel(context.TODO())
 	cancel()
 	// Use unbuffered channel to stable test.
@@ -299,7 +301,8 @@ func TestManagerLiveness(t *testing.T) {
 
 func TestQueryTableCount(t *testing.T) {
 	liveness := model.LivenessCaptureAlive
-	m := NewManager(&model.CaptureInfo{ID: "capture-test"}, nil, &liveness).(*managerImpl)
+	cfg := config.NewDefaultSchedulerConfig()
+	m := NewManager(&model.CaptureInfo{ID: "capture-test"}, nil, &liveness, cfg).(*managerImpl)
 	ctx := context.TODO()
 	// Add some tables to processor.
 	tables := spanz.NewMap[tablepb.TablePipeline]()

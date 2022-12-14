@@ -138,6 +138,7 @@ func newChangefeed(
 	id model.ChangeFeedID,
 	state *orchestrator.ChangefeedReactorState,
 	up *upstream.Upstream,
+	cfg *config.SchedulerConfig,
 ) *changefeed {
 	c := &changefeed{
 		id:    id,
@@ -155,6 +156,7 @@ func newChangefeed(
 		newSink:      newDDLSink,
 	}
 	c.newScheduler = newScheduler
+	c.cfg = cfg
 	return c
 }
 
@@ -171,7 +173,8 @@ func newChangefeed4Test(
 		ctx cdcContext.Context, up *upstream.Upstream, cfg *config.SchedulerConfig,
 	) (scheduler.Scheduler, error),
 ) *changefeed {
-	c := newChangefeed(id, state, up)
+	cfg := config.NewDefaultSchedulerConfig()
+	c := newChangefeed(id, state, up, cfg)
 	c.newDDLPuller = newDDLPuller
 	c.newSink = newSink
 	c.newScheduler = newScheduler

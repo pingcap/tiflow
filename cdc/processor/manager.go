@@ -85,6 +85,7 @@ func NewManager(
 	captureInfo *model.CaptureInfo,
 	upstreamManager *upstream.Manager,
 	liveness *model.Liveness,
+	cfg *config.SchedulerConfig,
 ) Manager {
 	return &managerImpl{
 		captureInfo:                  captureInfo,
@@ -94,6 +95,7 @@ func NewManager(
 		upstreamManager:              upstreamManager,
 		newProcessor:                 newProcessor,
 		metricProcessorCloseDuration: processorCloseDuration,
+		cfg:                          cfg,
 	}
 }
 

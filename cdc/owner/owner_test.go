@@ -68,13 +68,14 @@ func newOwner4Test(
 	pdClient pd.Client,
 ) Owner {
 	m := upstream.NewManager4Test(pdClient)
-	o := NewOwner(m).(*ownerImpl)
+	o := NewOwner(m, config.NewDefaultSchedulerConfig()).(*ownerImpl)
 	// Most tests do not need to test bootstrap.
 	o.bootstrapped = true
 	o.newChangefeed = func(
 		id model.ChangeFeedID,
 		state *orchestrator.ChangefeedReactorState,
 		up *upstream.Upstream,
+		cfg *config.SchedulerConfig,
 	) *changefeed {
 		return newChangefeed4Test(id, state, up, newDDLPuller, newSink, newScheduler)
 	}
@@ -419,7 +420,7 @@ func TestAdminJob(t *testing.T) {
 func TestUpdateGCSafePoint(t *testing.T) {
 	mockPDClient := &gc.MockPDClient{}
 	m := upstream.NewManager4Test(mockPDClient)
-	o := NewOwner(m).(*ownerImpl)
+	o := NewOwner(m, config.NewDefaultSchedulerConfig()).(*ownerImpl)
 	ctx := cdcContext.NewBackendContext4Test(true)
 	ctx, cancel := cdcContext.WithCancel(ctx)
 	defer cancel()
