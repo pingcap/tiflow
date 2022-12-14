@@ -28,6 +28,7 @@ import (
 	cerror "github.com/pingcap/tiflow/pkg/errors"
 	"github.com/pingcap/tiflow/pkg/sink"
 	"github.com/pingcap/tiflow/pkg/sink/kafka"
+	"github.com/pingcap/tiflow/pkg/spanz"
 	"github.com/prometheus/client_golang/prometheus"
 	"github.com/stretchr/testify/require"
 )
@@ -106,7 +107,7 @@ func TestSinkFactory(t *testing.T) {
 	require.NotNil(t, sinkFactory.rowSink)
 
 	tableSink := sinkFactory.CreateTableSink(model.DefaultChangeFeedID("1"),
-		1, prometheus.NewCounter(prometheus.CounterOpts{}))
+		spanz.TableIDToComparableSpan(1), prometheus.NewCounter(prometheus.CounterOpts{}))
 	require.NotNil(t, tableSink, "table sink can be created")
 
 	err = sinkFactory.Close()

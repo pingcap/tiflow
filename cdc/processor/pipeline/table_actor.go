@@ -556,7 +556,7 @@ var startPuller = func(t *tableActor, ctx *actorNodeContext) error {
 }
 
 var startSorter = func(t *tableActor, ctx *actorNodeContext) error {
-	eventSorter, err := createSorter(ctx, t.tableName, t.span.TableID)
+	eventSorter, err := createSorter(ctx, t.tableName, t.span)
 	if err != nil {
 		return errors.Trace(err)
 	}
