@@ -495,16 +495,17 @@ func TestReaderOutputIterEvents(t *testing.T) {
 			encoding.EncodeTsKey(r.uid, r.tableID, cs.maxResolvedTs+1))
 		iter.Seek([]byte{})
 		require.Nil(t, iter.Error(), "case #%d, %v", i, cs)
-		hasReadLastNext, exhaustedRTs, err := r.outputIterEvents(
-			iter, cs.hasReadNext, buf, cs.maxResolvedTs)
+		pos, err := r.outputIterEvents(
+			iter, readPosition{iterHasRead: cs.hasReadNext}, buf, cs.maxResolvedTs)
 		require.Nil(t, err, "case #%d, %v", i, cs)
-		require.EqualValues(t, cs.expectExhaustedRTs, exhaustedRTs, "case #%d, %v", i, cs)
+		require.EqualValues(
+			t, cs.expectExhaustedRTs, pos.exhaustedResolvedTs, "case #%d, %v", i, cs)
 		for _, k := range buf.deleteKeys {
 			fmt.Printf("%s\n", k)
 		}
 		require.EqualValues(t, cs.expectDeleteKeys, buf.deleteKeys, "case #%d, %v", i, cs)
 		require.EqualValues(t, cs.expectEvents, buf.resolvedEvents, "case #%d, %v", i, cs)
-		require.EqualValues(t, cs.expectHasReadNext, hasReadLastNext, "case #%d, %v", i, cs)
+		require.EqualValues(t, cs.expectHasReadNext, pos.iterHasRead, "case #%d, %v", i, cs)
 		outputEvents := receiveOutputEvents(r.outputCh)
 		require.EqualValues(t, cs.expectOutputs, outputEvents, "case #%d, %v", i, cs)
 
@@ -571,7 +572,7 @@ func TestReaderStateIterator(t *testing.T) {
 
 	// Release an invalid iterator.
 	require.False(t, state.iter.Valid())
-	require.Nil(t, state.tryReleaseIterator())
+	require.Nil(t, state.tryReleaseIterator(false))
 	require.Nil(t, state.iter)
 
 	// Release an outdated iterator.
@@ -583,11 +584,11 @@ func TestReaderStateIterator(t *testing.T) {
 	require.True(t, state.iter.Seek([]byte{}))
 	state.iterAliveTime = time.Now()
 	time.Sleep(2 * state.iterMaxAliveDuration)
-	require.Nil(t, state.tryReleaseIterator())
+	require.Nil(t, state.tryReleaseIterator(false))
 	require.Nil(t, state.iter)
 
 	// Release empty iterator.
-	require.Nil(t, state.tryReleaseIterator())
+	require.Nil(t, state.tryReleaseIterator(false))
 
 	// Slow first must send a compaction task.
 	req3, ok := state.tryGetIterator(1, 1)
@@ -614,7 +615,7 @@ func TestReaderStateIterator(t *testing.T) {
 	require.True(t, ok)
 	// Release iterator.
 	time.Sleep(2 * state.iterMaxAliveDuration)
-	require.Nil(t, state.tryReleaseIterator())
+	require.Nil(t, state.tryReleaseIterator(false))
 	require.Nil(t, state.iter)
 
 	require.Nil(t, db.Close())
@@ -637,6 +638,7 @@ func TestReaderPoll(t *testing.T) {
 	r.common.dbRouter = router
 	r.common.dbActorID = dbMb.ID()
 	r.outputCh = make(chan *model.PolymorphicEvent, sorterOutputCap)
+	tableID := r.tableID
 
 	// Prepare data, 3 txns, 3 events for each.
 	// CRTs 3, StartTs 1, keys (0|1|2)
@@ -645,14 +647,16 @@ func TestReaderPoll(t *testing.T) {
 
 	// We need to poll twice to read resolved events, so we need a slice of
 	// two cases.
-	cases := [][2]struct {
+	cases := [][]struct {
 		inputReadTs message.ReadTs
 		inputIter   func([2][]byte) *message.LimitedIterator
 		state       pollState
+		releaseIter bool
 
 		expectEvents        []*model.PolymorphicEvent
 		expectDeleteKeys    []message.Key
 		expectOutputs       []*model.PolymorphicEvent
+		expectPartialTxnKey []byte
 		expectMaxCommitTs   uint64
 		expectMaxResolvedTs uint64
 		expectExhaustedRTs  uint64
@@ -712,11 +716,12 @@ func TestReaderPoll(t *testing.T) {
 			// exhaustedResolvedTs must advance if there is no resolved event.
 			expectExhaustedRTs: 2,
 		}},
-		// exhaustedResolvedTs must advance if all resolved events are outputted.
+		// exhaustedResolvedTs must not advance if a txn is partially read.
 		// Output: CRTs 3, StartTs 1, keys (0|1|2)
 		{{ // The first poll
 			inputReadTs: message.ReadTs{MaxResolvedTs: 3, MaxCommitTs: 3},
 			state: pollState{
+				// A smaller buffer so that it can not hold all txn events.
 				outputBuf: newOutputBuffer(1),
 			},
 			inputIter: newIterator(ctx, t, db, sema),
@@ -734,9 +739,90 @@ func TestReaderPoll(t *testing.T) {
 
 			expectEvents: []*model.PolymorphicEvent{},
 			expectDeleteKeys: []message.Key{
-				message.Key(encoding.EncodeKey(r.uid, r.tableID, newTestEvent(3, 1, 0))),
-				message.Key(encoding.EncodeKey(r.uid, r.tableID, newTestEvent(3, 1, 1))),
-				message.Key(encoding.EncodeKey(r.uid, r.tableID, newTestEvent(3, 1, 2))),
+				message.Key(encoding.EncodeKey(r.uid, uint64(tableID), newTestEvent(3, 1, 0))),
+			},
+			expectOutputs: []*model.PolymorphicEvent{
+				newTestEvent(3, 1, 0),
+			},
+			expectPartialTxnKey: encoding.EncodeKey(r.uid, uint64(tableID), newTestEvent(3, 1, 1)),
+			expectMaxCommitTs:   3,
+			expectMaxResolvedTs: 3,
+			// exhaustedResolvedTs must not advance if a txn is partially read.
+			expectExhaustedRTs: 0,
+		}, { // The third poll
+			inputReadTs: message.ReadTs{MaxResolvedTs: 3},
+			// state is inherited from the first poll.
+			inputIter: nil, // no need to make an iterator.
+
+			expectEvents: []*model.PolymorphicEvent{},
+			expectDeleteKeys: []message.Key{
+				message.Key(encoding.EncodeKey(r.uid, uint64(tableID), newTestEvent(3, 1, 1))),
+			},
+			expectOutputs: []*model.PolymorphicEvent{
+				newTestEvent(3, 1, 1),
+			},
+			expectPartialTxnKey: encoding.EncodeKey(r.uid, uint64(tableID), newTestEvent(3, 1, 2)),
+			expectMaxCommitTs:   3,
+			expectMaxResolvedTs: 3,
+			// exhaustedResolvedTs must not advance if a txn is partially read.
+			expectExhaustedRTs: 0,
+		}, { // The fourth poll, mock releasing iterator during read.
+			inputReadTs: message.ReadTs{MaxResolvedTs: 3},
+			// Release iterator to make reader request iter again.
+			releaseIter: true,
+			inputIter:   newIterator(ctx, t, db, sema),
+
+			expectEvents:        []*model.PolymorphicEvent{},
+			expectDeleteKeys:    []message.Key{},
+			expectOutputs:       []*model.PolymorphicEvent{},
+			expectPartialTxnKey: encoding.EncodeKey(r.uid, uint64(tableID), newTestEvent(3, 1, 2)),
+			expectMaxCommitTs:   3,
+			expectMaxResolvedTs: 3,
+			// exhaustedResolvedTs must advance if a txn is completely read.
+			expectExhaustedRTs: 0,
+		}, { // The fifth poll, all events read.
+			inputReadTs: message.ReadTs{MaxResolvedTs: 3},
+			// state is inherited from the fourth poll.
+			inputIter: nil,
+
+			expectEvents: []*model.PolymorphicEvent{},
+			expectDeleteKeys: []message.Key{
+				message.Key(encoding.EncodeKey(r.uid, uint64(tableID), newTestEvent(3, 1, 2))),
+			},
+			expectOutputs: []*model.PolymorphicEvent{
+				newTestEvent(3, 1, 2),
+				model.NewResolvedPolymorphicEvent(0, 3),
+			},
+			expectMaxCommitTs:   3,
+			expectMaxResolvedTs: 3,
+			// exhaustedResolvedTs must advance if a txn is completely read.
+			expectExhaustedRTs: 3,
+		}},
+		// exhaustedResolvedTs must advance if all resolved events are outputted.
+		// Output: CRTs 3, StartTs 1, keys (0|1|2)
+		{{ // The first poll
+			inputReadTs: message.ReadTs{MaxResolvedTs: 3, MaxCommitTs: 3},
+			state: pollState{
+				outputBuf: newOutputBuffer(3),
+			},
+			inputIter: newIterator(ctx, t, db, sema),
+
+			expectEvents:        []*model.PolymorphicEvent{},
+			expectDeleteKeys:    []message.Key{},
+			expectOutputs:       []*model.PolymorphicEvent{},
+			expectMaxCommitTs:   3,
+			expectMaxResolvedTs: 3,
+			expectExhaustedRTs:  0,
+		}, { // The second poll
+			inputReadTs: message.ReadTs{MaxResolvedTs: 3},
+			// state is inherited from the first poll.
+			inputIter: nil, // no need to make an iterator.
+
+			expectEvents: []*model.PolymorphicEvent{},
+			expectDeleteKeys: []message.Key{
+				message.Key(encoding.EncodeKey(r.uid, uint64(tableID), newTestEvent(3, 1, 0))),
+				message.Key(encoding.EncodeKey(r.uid, uint64(tableID), newTestEvent(3, 1, 1))),
+				message.Key(encoding.EncodeKey(r.uid, uint64(tableID), newTestEvent(3, 1, 2))),
 			},
 			expectOutputs: []*model.PolymorphicEvent{
 				newTestEvent(3, 1, 0),
@@ -809,15 +895,33 @@ func TestReaderPoll(t *testing.T) {
 		r.state.metricIterRelease = metricIterDuration.WithLabelValues("release")
 		for j, cs := range css {
 			t.Logf("test case #%d[%d], %v", i, j, cs)
+			if cs.releaseIter {
+				require.Nil(t, r.state.tryReleaseIterator(true))
+			}
 			msg := actormsg.ValueMessage(message.Task{ReadTs: cs.inputReadTs})
 			require.True(t, r.Poll(ctx, []actormsg.Message[message.Task]{msg}))
-			require.EqualValues(t, cs.expectEvents, r.state.outputBuf.resolvedEvents, "case #%d[%d], %v", i, j, cs)
-			require.EqualValues(t, cs.expectDeleteKeys, r.state.outputBuf.deleteKeys, "case #%d[%d], %v", i, j, cs)
-			require.EqualValues(t, cs.expectMaxCommitTs, r.state.maxCommitTs, "case #%d[%d], %v", i, j, cs)
-			require.EqualValues(t, cs.expectMaxResolvedTs, r.state.maxResolvedTs, "case #%d[%d], %v", i, j, cs)
-			require.EqualValues(t, cs.expectExhaustedRTs, r.state.exhaustedResolvedTs, "case #%d[%d], %v", i, j, cs)
+			require.EqualValues(
+				t, cs.expectEvents, r.state.outputBuf.resolvedEvents,
+				"case #%d[%d], %v", i, j, cs)
+			require.EqualValues(
+				t, cs.expectDeleteKeys, r.state.outputBuf.deleteKeys,
+				"case #%d[%d], %v", i, j, cs)
+			require.EqualValues(
+				t, cs.expectMaxCommitTs, r.state.maxCommitTs,
+				"case #%d[%d], %v", i, j, cs)
+			require.EqualValues(
+				t, cs.expectMaxResolvedTs, r.state.maxResolvedTs,
+				"case #%d[%d], %v", i, j, cs)
+			require.EqualValues(
+				t, cs.expectExhaustedRTs, r.state.position.exhaustedResolvedTs,
+				"case #%d[%d], %v", i, j, cs)
+			require.EqualValues(
+				t, cs.expectPartialTxnKey, r.state.position.partialTxnKey,
+				"case #%d[%d], %v", i, j, cs)
 			outputEvents := receiveOutputEvents(r.outputCh)
-			require.EqualValues(t, cs.expectOutputs, outputEvents, "case #%d[%d], %v", i, j, cs)
+			require.EqualValues(
+				t, cs.expectOutputs, outputEvents,
+				"case #%d[%d], %v", i, j, cs)
 
 			select {
 			case err := <-r.errCh:
@@ -862,7 +966,7 @@ func newIterator(
 ) func(rg [2][]byte) *message.LimitedIterator {
 	return func(rg [2][]byte) *message.LimitedIterator {
 		require.Nil(t, sema.Acquire(ctx, 1))
-		fmt.Printf("newIterator %s %s\n", message.Key(rg[0]), message.Key(rg[1]))
+		t.Logf("newIterator %s %s\n", message.Key(rg[0]), message.Key(rg[1]))
 		return &message.LimitedIterator{
 			Iterator: db.Iterator(rg[0], rg[1]),
 			Sema:     sema,

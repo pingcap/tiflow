@@ -89,3 +89,28 @@ func TestOutputBufferShiftResolvedEvents(t *testing.T) {
 		require.EqualValues(t, buf.resolvedEvents, events[i:])
 	}
 }
+
+func TestOutputBufferTryAppendResolvedEvent(t *testing.T) {
+	t.Parallel()
+
+	advisedCapacity := 2
+	buf := newOutputBuffer(advisedCapacity)
+	require.False(t, buf.partialReadTxn)
+
+	require.True(t, buf.tryAppendResolvedEvent(&model.PolymorphicEvent{}))
+	require.False(t, buf.partialReadTxn)
+	require.True(t, buf.tryAppendResolvedEvent(&model.PolymorphicEvent{}))
+	require.False(t, buf.partialReadTxn)
+
+	// Failed append sets partialReadTxn
+	require.False(t, buf.tryAppendResolvedEvent(&model.PolymorphicEvent{}))
+	require.True(t, buf.partialReadTxn)
+
+	buf.shiftResolvedEvents(2)
+	l, _ := buf.len()
+	require.Equal(t, 0, l)
+
+	// A successful append resets partialReadTxn
+	require.True(t, buf.tryAppendResolvedEvent(&model.PolymorphicEvent{}))
+	require.False(t, buf.partialReadTxn)
+}
