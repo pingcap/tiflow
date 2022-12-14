@@ -20,22 +20,22 @@ import (
 	"testing"
 
 	"github.com/pingcap/errors"
+	timodel "github.com/pingcap/parser/model"
 	ticonfig "github.com/pingcap/tidb/config"
 	"github.com/pingcap/tidb/domain"
 	tidbkv "github.com/pingcap/tidb/kv"
 	timeta "github.com/pingcap/tidb/meta"
-	timodel "github.com/pingcap/parser/model"
 	"github.com/pingcap/tidb/parser/mysql"
 	"github.com/pingcap/tidb/session"
 	"github.com/pingcap/tidb/sessionctx"
 	"github.com/pingcap/tidb/store/mockstore"
-	"github.com/pingcap/tidb/util/testkit"
+	"github.com/pingcap/tidb/store/tikv/oracle"
 	"github.com/pingcap/tidb/types"
+	"github.com/pingcap/tidb/util/testkit"
 	"github.com/pingcap/tiflow/cdc/entry/schema"
 	"github.com/pingcap/tiflow/cdc/kv"
 	"github.com/pingcap/tiflow/cdc/model"
 	"github.com/stretchr/testify/require"
-	"github.com/pingcap/tidb/store/tikv/oracle"
 )
 
 func TestSchema(t *testing.T) {
