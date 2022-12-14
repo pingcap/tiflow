@@ -196,6 +196,8 @@ func TestCheckMultipleCDCClusterExist(t *testing.T) {
 		"/test-key"
 	_, err = rawEtcdClient.Put(ctx, newClusterKey, "test-value")
 	require.NoError(t, err)
+	t.Log("newClusterKey", newClusterKey)
+	t.Log("len of newClusterKey", len(newClusterKey))
 
 	err = s.client.CheckMultipleCDCClusterExist(ctx)
 	require.Error(t, err)
