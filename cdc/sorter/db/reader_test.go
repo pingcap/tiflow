@@ -742,12 +742,12 @@ func TestReaderPoll(t *testing.T) {
 
 			expectEvents: []*model.PolymorphicEvent{},
 			expectDeleteKeys: []message.Key{
-				message.Key(encoding.EncodeKey(r.uid, r.tableID, newTestEvent(3, 1, 0))),
+				message.Key(encoding.EncodeKey(r.uid, uint64(tableID), newTestEvent(3, 1, 0))),
 			},
 			expectOutputs: []*model.PolymorphicEvent{
 				newTestEvent(3, 1, 0),
 			},
-			expectPartialTxnKey: encoding.EncodeKey(r.uid, r.tableID, newTestEvent(3, 1, 1)),
+			expectPartialTxnKey: encoding.EncodeKey(r.uid, uint64(tableID), newTestEvent(3, 1, 1)),
 			expectMaxCommitTs:   3,
 			expectMaxResolvedTs: 3,
 			// exhaustedResolvedTs must not advance if a txn is partially read.
@@ -759,12 +759,12 @@ func TestReaderPoll(t *testing.T) {
 
 			expectEvents: []*model.PolymorphicEvent{},
 			expectDeleteKeys: []message.Key{
-				message.Key(encoding.EncodeKey(r.uid, r.tableID, newTestEvent(3, 1, 1))),
+				message.Key(encoding.EncodeKey(r.uid, uint64(tableID), newTestEvent(3, 1, 1))),
 			},
 			expectOutputs: []*model.PolymorphicEvent{
 				newTestEvent(3, 1, 1),
 			},
-			expectPartialTxnKey: encoding.EncodeKey(r.uid, r.tableID, newTestEvent(3, 1, 2)),
+			expectPartialTxnKey: encoding.EncodeKey(r.uid, uint64(tableID), newTestEvent(3, 1, 2)),
 			expectMaxCommitTs:   3,
 			expectMaxResolvedTs: 3,
 			// exhaustedResolvedTs must not advance if a txn is partially read.
@@ -778,7 +778,7 @@ func TestReaderPoll(t *testing.T) {
 			expectEvents:        []*model.PolymorphicEvent{},
 			expectDeleteKeys:    []message.Key{},
 			expectOutputs:       []*model.PolymorphicEvent{},
-			expectPartialTxnKey: encoding.EncodeKey(r.uid, r.tableID, newTestEvent(3, 1, 2)),
+			expectPartialTxnKey: encoding.EncodeKey(r.uid, uint64(tableID), newTestEvent(3, 1, 2)),
 			expectMaxCommitTs:   3,
 			expectMaxResolvedTs: 3,
 			// exhaustedResolvedTs must advance if a txn is completely read.
@@ -790,7 +790,7 @@ func TestReaderPoll(t *testing.T) {
 
 			expectEvents: []*model.PolymorphicEvent{},
 			expectDeleteKeys: []message.Key{
-				message.Key(encoding.EncodeKey(r.uid, r.tableID, newTestEvent(3, 1, 2))),
+				message.Key(encoding.EncodeKey(r.uid, uint64(tableID), newTestEvent(3, 1, 2))),
 			},
 			expectOutputs: []*model.PolymorphicEvent{
 				newTestEvent(3, 1, 2),
