@@ -73,3 +73,5 @@ require (
 
 // Fix CVE-2020-26160.
 replace github.com/dgrijalva/jwt-go v3.2.0+incompatible => github.com/golang-jwt/jwt v3.2.1+incompatible
+
+replace github.com/tikv/pd/client v0.0.0-20221031025758-80f0d8ca4d07 => github.com/tikv/pd v1.1.0-beta.0.20210323121136-78679e5e209d
