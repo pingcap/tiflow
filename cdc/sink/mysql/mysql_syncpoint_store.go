@@ -25,6 +25,7 @@ import (
 	gmysql "github.com/go-sql-driver/mysql"
 	"github.com/pingcap/errors"
 	"github.com/pingcap/log"
+	"github.com/pingcap/tidb/parser/mysql"
 	"github.com/pingcap/tiflow/cdc/contextutil"
 	"github.com/pingcap/tiflow/cdc/model"
 	"github.com/pingcap/tiflow/pkg/config"
@@ -209,6 +210,19 @@ func (s *mysqlSyncPointStore) SinkSyncPoint(ctx context.Context,
 		log.Error("sync table: begin Tx fail", zap.Error(err))
 		return cerror.WrapError(cerror.ErrMySQLTxnError, err)
 	}
+
+	// we set `tidb_enable_external_ts_read` = off for each txn,
+	// otherwise TiCDC may not be able to write data to downstream TiDB when
+	// the downstream tidb_enable_external_ts_read = on.
+	if err = s.setTidbEnableExternalTsReadOff(ctx, tx); err != nil {
+		log.Info("`set tidb_enable_external_ts_read = off` fail", zap.Error(err))
+		err2 := tx.Rollback()
+		if err2 != nil {
+			log.Error("failed to write syncpoint table", zap.Error(err))
+		}
+		return cerror.WrapError(cerror.ErrMySQLTxnError, err)
+	}
+
 	row := tx.QueryRow("select @@tidb_current_ts")
 	var secondaryTs string
 	err = row.Scan(&secondaryTs)
@@ -276,4 +290,21 @@ func (s *mysqlSyncPointStore) SinkSyncPoint(ctx context.Context,
 func (s *mysqlSyncPointStore) Close() error {
 	err := s.db.Close()
 	return cerror.WrapError(cerror.ErrMySQLConnectionError, err)
+}
+
+func (s *mysqlSyncPointStore) setTidbEnableExternalTsReadOff(
+	ctx context.Context, txn *sql.Tx,
+) error {
+	// We should always try to set this variable, and ignore the error if
+	// downstream does not support this variable, it is by design.
+	query := fmt.Sprintf("SET SESSION %s = %d", "tidb_enable_external_ts_read", "off")
+	_, err := txn.ExecContext(ctx, query)
+	if err != nil {
+		if mysqlErr, ok := errors.Cause(err).(*gmysql.MySQLError); ok &&
+			mysqlErr.Number == mysql.ErrUnknownSystemVariable {
+			return nil
+		}
+		return err
+	}
+	return nil
 }
