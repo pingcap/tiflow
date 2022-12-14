@@ -15,7 +15,6 @@ package owner
 
 import (
 	"context"
-	"fmt"
 	"io"
 	"net/url"
 	"os"
@@ -320,15 +319,14 @@ func (o *ownerImpl) ValidateChangefeed(info *model.ChangeFeedInfo) error {
 	if ok {
 		remain := recreateChangefeedDelayLimit - time.Since(t)
 		if remain >= 0 {
-			return cerror.ErrInternalServerError.GenWithStackByArgs(fmt.Sprintf(
-				"changefeed with same ID was just removed, please wait %s", remain))
+			return cerror.ErrAPIInvalidParam.GenWithStack(
+				"changefeed with same ID was just removed, please wait %s", remain)
 		}
 	}
 
 	sinkURI, err := url.Parse(info.SinkURI)
 	if err != nil {
-		return cerror.ErrInternalServerError.GenWithStackByArgs(
-			fmt.Sprintf("invalid sink URI %s", err))
+		return cerror.ErrAPIInvalidParam.GenWithStack("invalid sink URI %s", err)
 	}
 	t, ok = o.removedSinkURI[url.URL{
 		Scheme: sinkURI.Scheme,
@@ -337,8 +335,8 @@ func (o *ownerImpl) ValidateChangefeed(info *model.ChangeFeedInfo) error {
 	if ok {
 		remain := recreateChangefeedDelayLimit - time.Since(t)
 		if remain >= 0 {
-			return cerror.ErrInternalServerError.GenWithStackByArgs(fmt.Sprintf(
-				"changefeed with same sink URI was just removed, please wait %s", remain))
+			return cerror.ErrAPIInvalidParam.GenWithStack(
+				"changefeed with same sink URI was just removed, please wait %s", remain)
 		}
 	}
 	return nil
