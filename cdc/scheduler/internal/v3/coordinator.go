@@ -324,7 +324,7 @@ func (c *coordinator) recvMsgs(ctx context.Context) ([]*schedulepb.Message, erro
 	n := 0
 	for _, val := range recvMsgs {
 		// Filter stale messages and lost messages.
-		if val.Header.OwnerRevision == c.revision && val.To == c.captureID {
+		if val.Header.OwnerRevision.Revision == c.revision.Revision && val.To == c.captureID {
 			recvMsgs[n] = val
 			n++
 		}
