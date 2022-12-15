@@ -26,6 +26,8 @@ type outputBuffer struct {
 	deleteKeys []message.Key
 	// A slice of resolved events that have the same commit ts.
 	resolvedEvents []*model.PolymorphicEvent
+	// partialReadTxn is set to true when a transaction is partially read.
+	partialReadTxn bool
 
 	advisedCapacity int
 }
@@ -74,16 +76,27 @@ func (b *outputBuffer) shiftResolvedEvents(index int) {
 	}
 }
 
-// appendResolvedEvent appends resolved events to the buffer.
-func (b *outputBuffer) appendResolvedEvent(event *model.PolymorphicEvent) {
+// tryAppendResolvedEvent try to append resolved events to the buffer.
+// Return false if the buffer is full and append fails.
+func (b *outputBuffer) tryAppendResolvedEvent(event *model.PolymorphicEvent) bool {
 	if len(b.resolvedEvents) > 0 {
 		if b.resolvedEvents[0].CRTs != event.CRTs {
 			log.Panic("commit ts must be equal",
 				zap.Uint64("newCommitTs", event.CRTs),
 				zap.Uint64("commitTs", b.resolvedEvents[0].CRTs))
 		}
+	} else if len(b.resolvedEvents) == 0 {
+		// Reset if it appends a new transaction.
+		b.partialReadTxn = false
+	}
+	if len(b.resolvedEvents) >= b.advisedCapacity {
+		// buffer is full, and the commit ts of event is the same,
+		// we must be in the middle of a transaction.
+		b.partialReadTxn = true
+		return false
 	}
 	b.resolvedEvents = append(b.resolvedEvents, event)
+	return true
 }
 
 // appendDeleteKey appends to-be-deleted keys to the buffer.
