@@ -1727,7 +1727,7 @@ workaround = "You can refer to https://docs.pingcap.com/tidb/stable/tidb-lightni
 tags = ["internal", "medium"]
 
 [error.DM-load-unit-34021]
-message = "checksum mismatched, KV number in source files: %s KV number in TiDB cluster: %s"
+message = "checksum mismatched, KV number in source files: %s, KV number in TiDB cluster: %s"
 description = ""
 workaround = "If TiDB cluster has more KV, please check if the migrated tables are empty before the task. If source files have more KV, please set `on-duplicate-physical` and restart the task to see data duplication. You can resume the task to ignore the error if you want."
 tags = ["internal", "medium"]

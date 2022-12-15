@@ -77,6 +77,7 @@ type LightningLoader struct {
 	closed         atomic.Bool
 	metaBinlog     atomic.String
 	metaBinlogGTID atomic.String
+	lastErr        error
 
 	speedRecorder *export.SpeedRecorder
 }
@@ -213,14 +214,14 @@ func (l *LightningLoader) ignoreCheckpointError(ctx context.Context, cfg *lcfg.C
 	return errors.Trace(cpdb.IgnoreErrorCheckpoint(ctx, "all"))
 }
 
-func (l *LightningLoader) runLightning(ctx context.Context, cfg *lcfg.Config) error {
+func (l *LightningLoader) runLightning(ctx context.Context, cfg *lcfg.Config) (err error) {
 	taskCtx, cancel := context.WithCancel(ctx)
 	l.Lock()
 	l.cancel = cancel
 	l.Unlock()
 
 	// always try to skill all checkpoint errors so we can resume this phase.
-	err := l.ignoreCheckpointError(ctx, cfg)
+	err = l.ignoreCheckpointError(ctx, cfg)
 	if err != nil {
 		l.logger.Warn("check lightning checkpoint status failed, skip this error", log.ShortError(err))
 	}
@@ -287,6 +288,9 @@ func (l *LightningLoader) runLightning(ctx context.Context, cfg *lcfg.Config) er
 			}
 		}
 	})
+	defer func() {
+		l.lastErr = err
+	}()
 	if err != nil {
 		return convertLightningError(err)
 	}
@@ -388,6 +392,22 @@ func (l *LightningLoader) restore(ctx context.Context) error {
 	status, err := l.checkPointList.taskStatus(ctx)
 	if err != nil {
 		return err
+	}
+
+	// if we are resuming from
+	switch {
+	case terror.ErrLoadLightningHasDup.Equal(l.lastErr),
+		terror.ErrLoadLightningChecksum.Equal(l.lastErr):
+		l.logger.Info("manually resume from error, DM will skip the error and continue to next unit",
+			zap.Error(l.lastErr))
+
+		l.finish.Store(true)
+		err = l.checkPointList.UpdateStatus(ctx, lightningStatusFinished)
+		if err != nil {
+			l.logger.Error("failed to update checkpoint status", zap.Error(err))
+			return err
+		}
+		status = lightningStatusFinished
 	}
 
 	if status < lightningStatusFinished {
