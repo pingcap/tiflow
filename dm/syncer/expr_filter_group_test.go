@@ -497,8 +497,13 @@ create table t (
 	for i, c := range cases {
 		t.Logf("case #%d", i)
 		g := NewExprFilterGroup(tcontext.Background(), sessCtx, []*config.ExpressionFilter{c})
-		oldExprs, newExprs, err := g.GetUpdateExprs(table, tableInfo)
-		require.NoError(t, err)
+		oldExprs, newExprs, err2 := g.GetUpdateExprs(table, tableInfo)
+		require.NoError(t, err2)
 		require.Equal(t, len(oldExprs), len(newExprs))
 	}
+	g := NewExprFilterGroup(tcontext.Background(), sessCtx, cases)
+	oldExprs, newExprs, err := g.GetUpdateExprs(table, tableInfo)
+	require.NoError(t, err)
+	require.Equal(t, len(oldExprs), len(newExprs))
+	require.Len(t, oldExprs, 3)
 }

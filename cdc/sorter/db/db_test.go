@@ -22,12 +22,14 @@ import (
 	"testing"
 	"time"
 
+	"github.com/pingcap/tiflow/cdc/processor/tablepb"
 	"github.com/pingcap/tiflow/cdc/sorter/db/message"
 	"github.com/pingcap/tiflow/pkg/actor"
 	actormsg "github.com/pingcap/tiflow/pkg/actor/message"
 	"github.com/pingcap/tiflow/pkg/config"
 	"github.com/pingcap/tiflow/pkg/db"
 	"github.com/pingcap/tiflow/pkg/leakutil"
+	"github.com/pingcap/tiflow/pkg/spanz"
 	"github.com/stretchr/testify/require"
 )
 
@@ -156,6 +158,7 @@ func makeTask(
 		}
 	}
 	return []actormsg.Message[message.Task]{actormsg.ValueMessage(message.Task{
+		Span:     &tablepb.Span{},
 		WriteReq: writes,
 		IterReq:  iterReq,
 	})}, iterCh
@@ -248,9 +251,11 @@ func TestAcquireIterators(t *testing.T) {
 
 	// Poll two tasks.
 	tasks, iterCh1 := makeTask(make(map[message.Key][]byte), [][]byte{{0x00}, {0xff}})
-	tasks[0].Value.TableID = 1
+	span1 := spanz.TableIDToComparableSpan(1)
+	tasks[0].Value.Span = &span1
 	tasks2, iterCh2 := makeTask(make(map[message.Key][]byte), [][]byte{{0x00}, {0xff}})
-	tasks2[0].Value.TableID = 2
+	span2 := spanz.TableIDToComparableSpan(2)
+	tasks2[0].Value.Span = &span2
 	tasks = append(tasks, tasks2...)
 	closed := !ldb.Poll(ctx, tasks)
 	require.False(t, closed)
@@ -383,8 +388,8 @@ func TestModelChecking(t *testing.T) {
 			}
 		}
 
-		tasks, iterCh := makeTask(map[message.Key][]byte{},
-			[][]byte{[]byte(minKey), []byte(maxKey)})
+		tasks, iterCh := makeTask(
+			map[message.Key][]byte{}, [][]byte{[]byte(minKey), []byte(maxKey)})
 		closed := !ldb.Poll(ctx, tasks)
 		require.False(t, closed)
 		iter := <-iterCh

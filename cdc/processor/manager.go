@@ -140,7 +140,6 @@ func (m *managerImpl) Tick(stdCtx context.Context, state orchestrator.ReactorSta
 		}
 	}
 
-	// close upstream
 	if err := m.upstreamManager.Tick(stdCtx, globalState); err != nil {
 		return state, errors.Trace(err)
 	}
@@ -243,7 +242,7 @@ func (m *managerImpl) handleCommand(ctx cdcContext.Context) error {
 	case commandTpQueryTableCount:
 		count := 0
 		for _, p := range m.processors {
-			count += len(p.GetAllCurrentTables())
+			count += p.GetTableSpanCount()
 		}
 		select {
 		case cmd.payload.(chan int) <- count:

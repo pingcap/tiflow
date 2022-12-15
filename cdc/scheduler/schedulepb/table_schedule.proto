@@ -20,6 +20,9 @@ import "processor/tablepb/table.proto";
 
 option(gogoproto.goproto_enum_prefix_all) = false;
 
+// TODO rename XXTableRequest to XXTableSpanRequest respectively.
+// TODO rename XXTableResponse to XXTableSpanResponse respectively.
+
 message AddTableRequest {
     int64 table_id = 1 [
         (gogoproto.casttype) = "github.com/pingcap/tiflow/cdc/model.TableID",

@@ -34,6 +34,36 @@ type redoEventCache struct {
 	metricRedoEventCache prometheus.Gauge
 }
 
+type eventAppender struct {
+	capacity uint64
+	cache    *redoEventCache
+
+	mu sync.Mutex
+	// If an eventAppender is broken, it means it missed some events.
+	broken     bool
+	events     []*model.RowChangedEvent
+	sizes      []uint64
+	readyCount int // Count of ready events
+
+	// Several RowChangedEvent can come from one PolymorphicEvent.
+	pushCounts []byte
+
+	// Both of them are included.
+	lowerBound engine.Position
+	upperBound engine.Position
+}
+
+type popResult struct {
+	events      []*model.RowChangedEvent
+	size        uint64 // size of events.
+	releaseSize uint64 // size of all released events.
+	pushCount   int
+	success     bool
+	// If success, boundary is the upperBound of poped events.
+	// Otherwise, boundary is the lowerBound of cached events.
+	boundary engine.Position
+}
+
 // newRedoEventCache creates a redoEventCache instance.
 func newRedoEventCache(changefeedID model.ChangeFeedID, capacity uint64) *redoEventCache {
 	return &redoEventCache{
@@ -45,129 +75,149 @@ func newRedoEventCache(changefeedID model.ChangeFeedID, capacity uint64) *redoEv
 	}
 }
 
-// getAppender returns an eventAppender instance which can be used to
-// append events into the cache.
-func (r *redoEventCache) getAppender(tableID model.TableID) *eventAppender {
+func (r *redoEventCache) removeTable(tableID model.TableID) {
+	r.mu.Lock()
+	item, exists := r.tables[tableID]
+	defer r.mu.Unlock()
+	if exists {
+		item.mu.Lock()
+		totalSize := uint64(0)
+		for _, size := range item.sizes {
+			totalSize += size
+		}
+		r.metricRedoEventCache.Sub(float64(totalSize))
+		item.events = nil
+		item.sizes = nil
+		item.pushCounts = nil
+		item.mu.Unlock()
+		delete(r.tables, tableID)
+	}
+}
+
+func (r *redoEventCache) maybeCreateAppender(tableID model.TableID, lowerBound engine.Position) *eventAppender {
 	r.mu.Lock()
 	defer r.mu.Unlock()
+
 	item, exists := r.tables[tableID]
 	if !exists {
-		item = &eventAppender{capacity: r.capacity, cache: r}
+		item = &eventAppender{
+			capacity:   r.capacity,
+			cache:      r,
+			lowerBound: lowerBound,
+		}
 		r.tables[tableID] = item
+		return item
+	}
+
+	item.mu.Lock()
+	defer item.mu.Unlock()
+	if item.broken {
+		if item.readyCount == 0 {
+			item.broken = false
+			item.lowerBound = lowerBound
+			item.upperBound = engine.Position{}
+		} else {
+			// The appender is still broken.
+			item = nil
+		}
 	}
 	return item
 }
 
-// pop some events from the cache.
-func (r *redoEventCache) pop(
-	tableID model.TableID,
-	pushCount *int, // poped events come from how many `pushBatch` calls
-	upperBound ...engine.Position,
-) ([]*model.RowChangedEvent, uint64, engine.Position) {
-	r.mu.Lock()
-	item, exists := r.tables[tableID]
-	if !exists {
-		r.mu.Unlock()
-		return nil, 0, engine.Position{}
-	}
-	r.mu.Unlock()
-
-	item.mu.RLock()
-	defer item.mu.RUnlock()
-	if len(item.events) == 0 || item.readyCount == 0 {
-		return nil, 0, engine.Position{}
-	}
-
-	fetchCount := item.readyCount
-	if len(upperBound) > 0 {
-		fetchCount = sort.Search(item.readyCount, func(i int) bool {
-			pos := engine.Position{
-				CommitTs: item.events[i].CommitTs,
-				StartTs:  item.events[i].StartTs,
-			}
-			return pos.Compare(upperBound[0]) > 0
-		})
-		if fetchCount == 0 {
-			return nil, 0, engine.Position{}
-		}
-	}
-
-	events := item.events[0:fetchCount]
-	var size uint64 = 0
-	for _, x := range item.sizes[0:fetchCount] {
-		size += x
-	}
-	if pushCount != nil {
-		for _, x := range item.pushCounts[0:fetchCount] {
-			*pushCount += int(x)
-		}
-	}
-	pos := engine.Position{
-		CommitTs: item.events[fetchCount-1].CommitTs,
-		StartTs:  item.events[fetchCount-1].StartTs,
-	}
-
-	item.events = item.events[fetchCount:]
-	item.sizes = item.sizes[fetchCount:]
-	item.pushCounts = item.pushCounts[fetchCount:]
-	if len(item.events) == 0 {
-		r.mu.Lock()
-		delete(r.tables, tableID)
-		r.mu.Unlock()
-	} else {
-		item.readyCount -= fetchCount
-	}
-
-	atomic.AddUint64(&r.allocated, ^(size - 1))
-	r.metricRedoEventCache.Sub(float64(size))
-	return events, size, pos
-}
-
-func (r *redoEventCache) removeTable(tableID model.TableID) {
+func (r *redoEventCache) getAppender(tableID model.TableID) *eventAppender {
 	r.mu.Lock()
 	defer r.mu.Unlock()
-	item, exists := r.tables[tableID]
-	if exists {
-		item.mu.Lock()
-		defer item.mu.Unlock()
-		delete(r.tables, tableID)
-		item.events = nil
-		item.sizes = nil
-		item.pushCounts = nil
-	}
+	return r.tables[tableID]
 }
 
-type eventAppender struct {
-	capacity uint64
-	cache    *redoEventCache
+func (e *eventAppender) pop(lowerBound, upperBound engine.Position) (res popResult) {
+	e.mu.Lock()
+	defer e.mu.Unlock()
 
-	broken bool
+	if lowerBound.Compare(e.lowerBound) < 0 {
+		res.success = false
+		res.boundary = e.lowerBound
+		return
+	}
 
-	mu         sync.RWMutex
-	events     []*model.RowChangedEvent
-	sizes      []uint64
-	readyCount int // Count of ready events
+	res.success = true
+	if upperBound.Compare(e.upperBound) > 0 {
+		res.boundary = e.upperBound
+	} else {
+		res.boundary = upperBound
+	}
 
-	// Several RowChangedEvent can come from one PolymorphicEvent.
-	pushCounts []byte
+	startIdx := sort.Search(e.readyCount, func(i int) bool {
+		pos := engine.Position{CommitTs: e.events[i].CommitTs, StartTs: e.events[i].StartTs}
+		return pos.Compare(lowerBound) >= 0
+	})
+
+	for i := 0; i < startIdx; i++ {
+		res.releaseSize += e.sizes[i]
+	}
+
+	var endIdx int
+	if startIdx == e.readyCount {
+		endIdx = startIdx
+	} else {
+		endIdx = sort.Search(e.readyCount, func(i int) bool {
+			pos := engine.Position{CommitTs: e.events[i].CommitTs, StartTs: e.events[i].StartTs}
+			return pos.Compare(upperBound) > 0
+		})
+		res.events = e.events[startIdx:endIdx]
+		for i := startIdx; i < endIdx; i++ {
+			res.size += e.sizes[i]
+			res.pushCount += int(e.pushCounts[i])
+		}
+		res.releaseSize += res.size
+	}
+
+	e.events = e.events[endIdx:]
+	e.sizes = e.sizes[endIdx:]
+	e.pushCounts = e.pushCounts[endIdx:]
+	e.readyCount -= endIdx
+	e.lowerBound = res.boundary.Next()
+
+	atomic.AddUint64(&e.cache.allocated, ^(res.releaseSize - 1))
+	e.cache.metricRedoEventCache.Sub(float64(res.releaseSize))
+	return
+}
+
+// All events should come from one PolymorphicEvent.
+func (e *eventAppender) pushBatch(events []*model.RowChangedEvent, size uint64, txnFinished engine.Position) (bool, uint64) {
+	if len(events) == 0 {
+		return e.push(nil, size, txnFinished)
+	}
+	return e.push(events[0], size, txnFinished, events[1:]...)
 }
 
 func (e *eventAppender) push(
-	event *model.RowChangedEvent, size uint64,
-	txnFinished bool,
+	event *model.RowChangedEvent,
+	size uint64,
+	txnFinished engine.Position,
 	eventsInSameBatch ...*model.RowChangedEvent,
-) bool {
-	// At most only one client can call push on a given eventAppender instance,
-	// so lock is unnecessary.
+) (success bool, brokenSize uint64) {
+	e.mu.Lock()
+	defer e.mu.Unlock()
+
 	if e.broken {
-		return false
+		return false, 0
+	}
+
+	// The caller just wants to update the upperbound.
+	if event == nil {
+		if txnFinished.Valid() {
+			e.upperBound = txnFinished
+		}
+		return true, 0
 	}
 
 	for {
 		allocated := atomic.LoadUint64(&e.cache.allocated)
 		if allocated >= e.capacity {
 			e.broken = true
-			return false
+			brokenSize := e.onBroken()
+			return false, brokenSize
 		}
 		if atomic.CompareAndSwapUint64(&e.cache.allocated, allocated, allocated+size) {
 			e.cache.metricRedoEventCache.Add(float64(size))
@@ -175,8 +225,6 @@ func (e *eventAppender) push(
 		}
 	}
 
-	e.mu.Lock()
-	defer e.mu.Unlock()
 	e.events = append(e.events, event)
 	e.sizes = append(e.sizes, size)
 	e.pushCounts = append(e.pushCounts, 1)
@@ -185,36 +233,26 @@ func (e *eventAppender) push(
 		e.sizes = append(e.sizes, 0)
 		e.pushCounts = append(e.pushCounts, 0)
 	}
-	if txnFinished {
+	if txnFinished.Valid() {
 		e.readyCount = len(e.events)
+		e.upperBound = txnFinished
 	}
-	return true
+	return true, 0
 }
 
-// All events should come from one PolymorphicEvent.
-func (e *eventAppender) pushBatch(events []*model.RowChangedEvent, size uint64, txnFinished bool) bool {
-	if len(events) == 0 {
-		return true
+func (e *eventAppender) onBroken() (pendingSize uint64) {
+	if e.readyCount < len(e.events) {
+		for i := e.readyCount; i < len(e.events); i++ {
+			pendingSize += e.sizes[i]
+			e.events[i] = nil
+		}
+
+		e.events = e.events[0:e.readyCount]
+		e.sizes = e.sizes[0:e.readyCount]
+		e.pushCounts = e.pushCounts[0:e.readyCount]
+
+		atomic.AddUint64(&e.cache.allocated, ^(pendingSize - 1))
+		e.cache.metricRedoEventCache.Sub(float64(pendingSize))
 	}
-	return e.push(events[0], size, txnFinished, events[1:]...)
-}
-
-func (e *eventAppender) cleanBrokenEvents() (pendingSize uint64) {
-	e.mu.Lock()
-	defer e.mu.Unlock()
-
-	for i := e.readyCount; i < len(e.events); i++ {
-		pendingSize += e.sizes[i]
-		e.events[i] = nil
-	}
-
-	e.events = e.events[0:e.readyCount]
-	e.sizes = e.sizes[0:e.readyCount]
-	e.pushCounts = e.pushCounts[0:e.readyCount]
-
-	e.broken = false
-	atomic.AddUint64(&e.cache.allocated, ^(pendingSize - 1))
-	e.cache.metricRedoEventCache.Sub(float64(pendingSize))
-
 	return
 }
