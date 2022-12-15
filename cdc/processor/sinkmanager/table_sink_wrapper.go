@@ -74,8 +74,18 @@ type tableSinkWrapper struct {
 }
 
 type rangeEventCount struct {
-	pos    engine.Position
-	events int
+	// firstPos and lastPos are used to merge many rangeEventCount into one.
+	firstPos engine.Position
+	lastPos  engine.Position
+	events   int
+}
+
+func newRangeEventCount(pos engine.Position, events int) rangeEventCount {
+	return rangeEventCount{
+		firstPos: pos,
+		lastPos:  pos,
+		events:   events,
+	}
 }
 
 func newTableSinkWrapper(
@@ -192,13 +202,13 @@ func (t *tableSinkWrapper) updateRangeEventCounts(eventCount rangeEventCount) {
 		t.rangeEventCounts = append(t.rangeEventCounts, eventCount)
 		return
 	}
-	if t.rangeEventCounts[countsLen-1].pos.Compare(eventCount.pos) < 0 {
-		lastPhy := oracle.ExtractPhysical(t.rangeEventCounts[countsLen-1].pos.CommitTs)
-		currPhy := oracle.ExtractPhysical(eventCount.pos.CommitTs)
+	if t.rangeEventCounts[countsLen-1].lastPos.Compare(eventCount.lastPos) < 0 {
+		lastPhy := oracle.ExtractPhysical(t.rangeEventCounts[countsLen-1].firstPos.CommitTs)
+		currPhy := oracle.ExtractPhysical(eventCount.lastPos.CommitTs)
 		if (currPhy - lastPhy) >= 1000 { // 1000 means 1000ms.
 			t.rangeEventCounts = append(t.rangeEventCounts, eventCount)
 		} else {
-			t.rangeEventCounts[countsLen-1].pos = eventCount.pos
+			t.rangeEventCounts[countsLen-1].lastPos = eventCount.lastPos
 			t.rangeEventCounts[countsLen-1].events += eventCount.events
 		}
 	}
@@ -209,7 +219,7 @@ func (t *tableSinkWrapper) cleanRangeEventCounts(upperBound engine.Position, min
 	defer t.rangeEventCountsMu.Unlock()
 
 	idx := sort.Search(len(t.rangeEventCounts), func(i int) bool {
-		return t.rangeEventCounts[i].pos.Compare(upperBound) > 0
+		return t.rangeEventCounts[i].lastPos.Compare(upperBound) > 0
 	})
 	if len(t.rangeEventCounts) == 0 || idx == 0 {
 		return false
