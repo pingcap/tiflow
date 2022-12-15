@@ -40,7 +40,7 @@ func (c *coordinator) GetTaskStatuses() (map[model.CaptureID]*model.TaskStatus, 
 			Tables: make(map[model.TableID]*model.TableReplicaInfo),
 		}
 		for _, s := range status.Tables {
-			taskStatus.Tables[s.TableID] = &model.TableReplicaInfo{
+			taskStatus.Tables[s.TableId] = &model.TableReplicaInfo{
 				StartTs: s.Checkpoint.CheckpointTs,
 			}
 		}

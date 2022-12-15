@@ -48,7 +48,7 @@ type coordinator struct {
 	mu sync.Mutex
 
 	version      string
-	revision     schedulepb.OwnerRevision
+	revision     *schedulepb.OwnerRevision
 	captureID    model.CaptureID
 	trans        transport.Transport
 	replicationM *replication.Manager
@@ -88,7 +88,7 @@ func newCoordinator(
 	ownerRevision int64,
 	cfg *config.SchedulerConfig,
 ) *coordinator {
-	revision := schedulepb.OwnerRevision{Revision: ownerRevision}
+	revision := &schedulepb.OwnerRevision{Revision: ownerRevision}
 
 	return &coordinator{
 		version:   version.ReleaseSemver(),
@@ -336,14 +336,14 @@ func (c *coordinator) sendMsgs(ctx context.Context, msgs []*schedulepb.Message) 
 	for i := range msgs {
 		m := msgs[i]
 		// Correctness check.
-		if len(m.To) == 0 || m.MsgType == schedulepb.MsgUnknown {
+		if len(m.To) == 0 || m.MsgType == schedulepb.MessageType_MsgUnknown {
 			log.Panic("invalid message no destination or unknown message type",
 				zap.String("namespace", c.changefeedID.Namespace),
 				zap.String("changefeed", c.changefeedID.ID),
 				zap.Any("message", m))
 		}
 
-		epoch := schedulepb.ProcessorEpoch{}
+		epoch := &schedulepb.ProcessorEpoch{}
 		if capture := c.captureM.Captures[m.To]; capture != nil {
 			epoch = capture.Epoch
 		}

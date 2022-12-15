@@ -57,11 +57,11 @@ type agentInfo struct {
 	Version      string
 	CaptureID    model.CaptureID
 	ChangeFeedID model.ChangeFeedID
-	Epoch        schedulepb.ProcessorEpoch
+	Epoch        *schedulepb.ProcessorEpoch
 }
 
 func (a agentInfo) resetEpoch() {
-	a.Epoch = schedulepb.ProcessorEpoch{Epoch: uuid.New().String()}
+	a.Epoch = &schedulepb.ProcessorEpoch{Epoch: uuid.New().String()}
 }
 
 func newAgentInfo(changefeedID model.ChangeFeedID, captureID model.CaptureID) agentInfo {
@@ -69,7 +69,7 @@ func newAgentInfo(changefeedID model.ChangeFeedID, captureID model.CaptureID) ag
 		Version:      version.ReleaseSemver(),
 		CaptureID:    captureID,
 		ChangeFeedID: changefeedID,
-		Epoch:        schedulepb.ProcessorEpoch{},
+		Epoch:        &schedulepb.ProcessorEpoch{},
 	}
 	result.resetEpoch()
 
@@ -78,7 +78,7 @@ func newAgentInfo(changefeedID model.ChangeFeedID, captureID model.CaptureID) ag
 
 type ownerInfo struct {
 	model.CaptureInfo
-	Revision schedulepb.OwnerRevision
+	Revision *schedulepb.OwnerRevision
 }
 
 func newAgent(
@@ -160,7 +160,7 @@ func newAgent(
 	// new owner elected. To avoid confusion, just leave it empty.
 	ownerCaptureInfo.AdvertiseAddr = ""
 	result.ownerInfo = ownerInfo{
-		Revision:    schedulepb.OwnerRevision{Revision: revision},
+		Revision:    &schedulepb.OwnerRevision{Revision: revision},
 		CaptureInfo: *ownerCaptureInfo,
 	}
 	return result, nil
@@ -242,10 +242,10 @@ func (a *agent) handleMessage(msg []*schedulepb.Message) []*schedulepb.Message {
 		}
 
 		switch message.GetMsgType() {
-		case schedulepb.MsgHeartbeat:
+		case schedulepb.MessageType_MsgHeartbeat:
 			response := a.handleMessageHeartbeat(message.GetHeartbeat())
 			result = append(result, response)
-		case schedulepb.MsgDispatchTableRequest:
+		case schedulepb.MessageType_MsgDispatchTableRequest:
 			a.handleMessageDispatchTableRequest(message.DispatchTableRequest, processorEpoch)
 		default:
 			log.Warn("schedulerv3: unknown message received",
@@ -260,11 +260,11 @@ func (a *agent) handleMessage(msg []*schedulepb.Message) []*schedulepb.Message {
 
 func (a *agent) handleMessageHeartbeat(request *schedulepb.Heartbeat) *schedulepb.Message {
 	allTables := a.tableM.getAllTableSpans()
-	result := make([]tablepb.TableStatus, 0, allTables.Len())
-	allTables.Ascend(func(span tablepb.Span, table *tableSpan) bool {
+	result := make([]*tablepb.TableStatus, 0, allTables.Len())
+	allTables.Ascend(func(span *tablepb.Span, table *tableSpan) bool {
 		status := table.getTableSpanStatus()
 		if table.task != nil && table.task.IsRemove {
-			status.State = tablepb.TableStateStopping
+			status.State = tablepb.TableState_Stopping
 		}
 		result = append(result, status)
 		return true
@@ -281,11 +281,11 @@ func (a *agent) handleMessageHeartbeat(request *schedulepb.Heartbeat) *schedulep
 	}
 	response := &schedulepb.HeartbeatResponse{
 		Tables:   result,
-		Liveness: a.liveness.Load(),
+		Liveness: int32(a.liveness.Load()),
 	}
 
 	message := &schedulepb.Message{
-		MsgType:           schedulepb.MsgHeartbeatResponse,
+		MsgType:           schedulepb.MessageType_MsgHeartbeat,
 		HeartbeatResponse: response,
 	}
 
@@ -306,17 +306,17 @@ const (
 )
 
 type dispatchTableTask struct {
-	Span      tablepb.Span
+	Span      *tablepb.Span
 	StartTs   model.Ts
 	IsRemove  bool
 	IsPrepare bool
-	Epoch     schedulepb.ProcessorEpoch
+	Epoch     *schedulepb.ProcessorEpoch
 	status    dispatchTableTaskStatus
 }
 
 func (a *agent) handleMessageDispatchTableRequest(
 	request *schedulepb.DispatchTableRequest,
-	epoch schedulepb.ProcessorEpoch,
+	epoch *schedulepb.ProcessorEpoch,
 ) {
 	if a.Epoch != epoch {
 		log.Info("schedulerv3: agent receive dispatch table request "+
@@ -356,7 +356,7 @@ func (a *agent) handleMessageDispatchTableRequest(
 				zap.String("capture", a.CaptureID),
 				zap.String("namespace", a.ChangeFeedID.Namespace),
 				zap.String("changefeed", a.ChangeFeedID.ID),
-				zap.Stringer("span", &span),
+				zap.Stringer("span", span),
 				zap.Any("request", request))
 			return
 		}
@@ -442,7 +442,7 @@ func (a *agent) handleOwnerInfo(id model.CaptureID, revision int64, version stri
 				ID:      id,
 				Version: version,
 			},
-			Revision: schedulepb.OwnerRevision{Revision: revision},
+			Revision: &schedulepb.OwnerRevision{Revision: revision},
 		}),
 		zap.Any("owner", a.ownerInfo),
 		zap.Any("agent", a.agentInfo))
@@ -471,7 +471,7 @@ func (a *agent) recvMsgs(ctx context.Context) ([]*schedulepb.Message, error) {
 func (a *agent) sendMsgs(ctx context.Context, msgs []*schedulepb.Message) error {
 	for i := range msgs {
 		m := msgs[i]
-		if m.MsgType == schedulepb.MsgUnknown {
+		if m.MsgType == schedulepb.MessageType_MsgUnknown {
 			log.Panic("schedulerv3: invalid message no destination or unknown message type",
 				zap.String("capture", a.CaptureID),
 				zap.String("namespace", a.ChangeFeedID.Namespace),

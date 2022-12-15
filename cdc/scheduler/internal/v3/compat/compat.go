@@ -105,30 +105,30 @@ func (c *Compat) BeforeTransportSend(msgs []*schedulepb.Message) {
 	//   - tableID = span.TableID
 	for i := range msgs {
 		switch msgs[i].MsgType {
-		case schedulepb.MsgDispatchTableRequest:
+		case schedulepb.MessageType_MsgDispatchTableRequest:
 			switch req := msgs[i].DispatchTableRequest.Request.(type) {
 			case *schedulepb.DispatchTableRequest_AddTable:
-				req.AddTable.TableID = req.AddTable.Span.TableID
+				req.AddTable.TableId = req.AddTable.Span.TableId
 			case *schedulepb.DispatchTableRequest_RemoveTable:
-				req.RemoveTable.TableID = req.RemoveTable.Span.TableID
+				req.RemoveTable.TableId = req.RemoveTable.Span.TableId
 			}
-		case schedulepb.MsgDispatchTableResponse:
+		case schedulepb.MessageType_MsgDispatchTableResponse:
 			switch resp := msgs[i].DispatchTableResponse.Response.(type) {
 			case *schedulepb.DispatchTableResponse_AddTable:
-				resp.AddTable.Status.TableID = resp.AddTable.Status.Span.TableID
+				resp.AddTable.Status.TableId = resp.AddTable.Status.Span.TableId
 			case *schedulepb.DispatchTableResponse_RemoveTable:
-				resp.RemoveTable.Status.TableID = resp.RemoveTable.Status.Span.TableID
+				resp.RemoveTable.Status.TableId = resp.RemoveTable.Status.Span.TableId
 			}
-		case schedulepb.MsgHeartbeat:
+		case schedulepb.MessageType_MsgHeartbeat:
 			tableIDs := make([]model.TableID, 0, len(msgs[i].Heartbeat.Spans))
 			for _, span := range msgs[i].Heartbeat.Spans {
-				tableIDs = append(tableIDs, span.TableID)
+				tableIDs = append(tableIDs, span.TableId)
 			}
-			msgs[i].Heartbeat.TableIDs = tableIDs
-		case schedulepb.MsgHeartbeatResponse:
+			msgs[i].Heartbeat.TableIds = tableIDs
+		case schedulepb.MessageType_MsgHeartbeatResponse:
 			resp := msgs[i].HeartbeatResponse
 			for i := range resp.Tables {
-				resp.Tables[i].TableID = resp.Tables[i].Span.TableID
+				resp.Tables[i].TableId = resp.Tables[i].Span.TableId
 			}
 		}
 	}
@@ -147,47 +147,47 @@ func (c *Compat) AfterTransportReceive(msgs []*schedulepb.Message) {
 	//   - Fill span based on table ID if span is empty
 	for i := range msgs {
 		switch msgs[i].MsgType {
-		case schedulepb.MsgDispatchTableRequest:
+		case schedulepb.MessageType_MsgDispatchTableRequest:
 			switch req := msgs[i].DispatchTableRequest.Request.(type) {
 			case *schedulepb.DispatchTableRequest_AddTable:
-				if req.AddTable.Span.TableID == 0 {
+				if req.AddTable.Span.TableId == 0 {
 					// Only set span if it is not set before.
 					req.AddTable.Span = spanz.TableIDToComparableSpan(
-						req.AddTable.TableID)
+						req.AddTable.TableId)
 				}
 			case *schedulepb.DispatchTableRequest_RemoveTable:
-				if req.RemoveTable.Span.TableID == 0 {
+				if req.RemoveTable.Span.TableId == 0 {
 					req.RemoveTable.Span = spanz.TableIDToComparableSpan(
-						req.RemoveTable.TableID)
+						req.RemoveTable.TableId)
 				}
 			}
-		case schedulepb.MsgDispatchTableResponse:
+		case schedulepb.MessageType_MsgDispatchTableResponse:
 			switch resp := msgs[i].DispatchTableResponse.Response.(type) {
 			case *schedulepb.DispatchTableResponse_AddTable:
-				if resp.AddTable.Status.Span.TableID == 0 {
+				if resp.AddTable.Status.Span.TableId == 0 {
 					resp.AddTable.Status.Span = spanz.TableIDToComparableSpan(
-						resp.AddTable.Status.TableID)
+						resp.AddTable.Status.TableId)
 				}
 			case *schedulepb.DispatchTableResponse_RemoveTable:
-				if resp.RemoveTable.Status.Span.TableID == 0 {
+				if resp.RemoveTable.Status.Span.TableId == 0 {
 					resp.RemoveTable.Status.Span = spanz.TableIDToComparableSpan(
-						resp.RemoveTable.Status.TableID)
+						resp.RemoveTable.Status.TableId)
 				}
 			}
-		case schedulepb.MsgHeartbeat:
+		case schedulepb.MessageType_MsgHeartbeat:
 			if len(msgs[i].Heartbeat.Spans) == 0 {
-				spans := make([]tablepb.Span, 0, len(msgs[i].Heartbeat.TableIDs))
-				for _, tableID := range msgs[i].Heartbeat.TableIDs {
+				spans := make([]*tablepb.Span, 0, len(msgs[i].Heartbeat.TableIds))
+				for _, tableID := range msgs[i].Heartbeat.TableIds {
 					spans = append(spans, spanz.TableIDToComparableSpan(tableID))
 				}
 				msgs[i].Heartbeat.Spans = spans
 			}
-		case schedulepb.MsgHeartbeatResponse:
+		case schedulepb.MessageType_MsgHeartbeatResponse:
 			resp := msgs[i].HeartbeatResponse
 			for j := range resp.Tables {
-				if resp.Tables[j].Span.TableID == 0 {
+				if resp.Tables[j].Span.TableId == 0 {
 					resp.Tables[j].Span = spanz.TableIDToComparableSpan(
-						resp.Tables[j].TableID)
+						resp.Tables[j].TableId)
 				}
 			}
 		}

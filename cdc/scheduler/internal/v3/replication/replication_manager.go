@@ -127,8 +127,8 @@ func NewReplicationManager(
 
 // HandleCaptureChanges handles capture changes.
 func (r *Manager) HandleCaptureChanges(
-	init map[model.CaptureID][]tablepb.TableStatus,
-	removed map[model.CaptureID][]tablepb.TableStatus,
+	init map[model.CaptureID][]*tablepb.TableStatus,
+	removed map[model.CaptureID][]*tablepb.TableStatus,
 	checkpointTs model.Ts,
 ) ([]*schedulepb.Message, error) {
 	if init != nil {
@@ -142,10 +142,10 @@ func (r *Manager) HandleCaptureChanges(
 		for captureID, tables := range init {
 			for i := range tables {
 				table := tables[i]
-				if _, ok := tableStatus[table.TableID]; !ok {
-					tableStatus[table.TableID] = map[model.CaptureID]*tablepb.TableStatus{}
+				if _, ok := tableStatus[table.TableId]; !ok {
+					tableStatus[table.TableId] = map[model.CaptureID]*tablepb.TableStatus{}
 				}
-				tableStatus[table.TableID][captureID] = &table
+				tableStatus[table.TableId][captureID] = table
 			}
 		}
 		for tableID, status := range tableStatus {
@@ -184,13 +184,13 @@ func (r *Manager) HandleMessage(
 	for i := range msgs {
 		msg := msgs[i]
 		switch msg.MsgType {
-		case schedulepb.MsgDispatchTableResponse:
+		case schedulepb.MessageType_MsgDispatchTableResponse:
 			msgs, err := r.handleMessageDispatchTableResponse(msg.From, msg.DispatchTableResponse)
 			if err != nil {
 				return nil, errors.Trace(err)
 			}
 			sentMsgs = append(sentMsgs, msgs...)
-		case schedulepb.MsgHeartbeatResponse:
+		case schedulepb.MessageType_MsgHeartbeatResponse:
 			msgs, err := r.handleMessageHeartbeatResponse(msg.From, msg.HeartbeatResponse)
 			if err != nil {
 				return nil, errors.Trace(err)
@@ -211,7 +211,7 @@ func (r *Manager) handleMessageHeartbeatResponse(
 ) ([]*schedulepb.Message, error) {
 	sentMsgs := make([]*schedulepb.Message, 0)
 	for _, status := range msg.Tables {
-		table, ok := r.tables[status.TableID]
+		table, ok := r.tables[status.TableId]
 		if !ok {
 			log.Info("schedulerv3: ignore table status no table found",
 				zap.String("namespace", r.changefeedID.Namespace),
@@ -219,7 +219,7 @@ func (r *Manager) handleMessageHeartbeatResponse(
 				zap.Any("message", status))
 			continue
 		}
-		msgs, err := table.handleTableStatus(from, &status)
+		msgs, err := table.handleTableStatus(from, status)
 		if err != nil {
 			return nil, errors.Trace(err)
 		}
@@ -227,8 +227,8 @@ func (r *Manager) handleMessageHeartbeatResponse(
 			log.Info("schedulerv3: table has removed",
 				zap.String("namespace", r.changefeedID.Namespace),
 				zap.String("changefeed", r.changefeedID.ID),
-				zap.Int64("tableID", status.TableID))
-			delete(r.tables, status.TableID)
+				zap.Int64("tableID", status.TableId))
+			delete(r.tables, status.TableId)
 		}
 		sentMsgs = append(sentMsgs, msgs...)
 	}
@@ -252,7 +252,7 @@ func (r *Manager) handleMessageDispatchTableResponse(
 		return nil, nil
 	}
 
-	table, ok := r.tables[status.TableID]
+	table, ok := r.tables[status.TableId]
 	if !ok {
 		log.Info("schedulerv3: ignore table status no table found",
 			zap.String("namespace", r.changefeedID.Namespace),
@@ -268,8 +268,8 @@ func (r *Manager) handleMessageDispatchTableResponse(
 		log.Info("schedulerv3: table has removed",
 			zap.String("namespace", r.changefeedID.Namespace),
 			zap.String("changefeed", r.changefeedID.ID),
-			zap.Int64("tableID", status.TableID))
-		delete(r.tables, status.TableID)
+			zap.Int64("tableID", status.TableId))
+		delete(r.tables, status.TableId)
 	}
 	return msgs, nil
 }

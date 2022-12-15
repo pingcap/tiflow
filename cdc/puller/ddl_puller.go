@@ -471,11 +471,11 @@ func NewDDLJobPuller(
 	if err != nil {
 		return nil, errors.Trace(err)
 	}
-	spans := []tablepb.Span{}
+	spans := []*tablepb.Span{}
 	for _, s := range regionspan.GetAllDDLSpan() {
 		cs := regionspan.ToComparableSpan(s)
-		spans = append(spans, tablepb.Span{
-			TableID:  -1,
+		spans = append(spans, &tablepb.Span{
+			TableId:  -1,
 			StartKey: cs.Start,
 			EndKey:   cs.End,
 		})

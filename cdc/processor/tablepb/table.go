@@ -19,8 +19,6 @@ import (
 	"encoding/hex"
 	"encoding/json"
 	"fmt"
-	"strconv"
-	"strings"
 	"sync/atomic"
 
 	"github.com/pingcap/tiflow/cdc/model"
@@ -55,7 +53,7 @@ type TablePipeline interface {
 	Start(ts model.Ts)
 
 	// Stats returns statistic for a table.
-	Stats() Stats
+	Stats() *Stats
 	// State returns the state of this table pipeline
 	State() TableState
 	// Cancel stops this table pipeline immediately and destroy all resources created by this table pipeline
@@ -93,24 +91,25 @@ func (k Key) MarshalJSON() ([]byte, error) {
 }
 
 var (
-	_ encoding.TextMarshaler = Span{}
+	_ encoding.TextMarshaler = &Span{}
 	_ encoding.TextMarshaler = (*Span)(nil)
 )
 
 // MarshalText implements encoding.TextMarshaler (used in proto.CompactTextString).
 // It is helpful to format span in log.
-func (s Span) MarshalText() ([]byte, error) {
+func (s *Span) MarshalText() ([]byte, error) {
 	return []byte(s.String()), nil
 }
 
+/*
 func (s *Span) String() string {
 	length := len("{table_id:,start_key:,end_key:}")
-	length += 8 // for TableID
+	length += 8 // for TableId
 	length += len(s.StartKey) + len(s.EndKey)
 	b := strings.Builder{}
 	b.Grow(length)
 	b.Write([]byte("{table_id:"))
-	b.Write([]byte(strconv.Itoa(int(s.TableID))))
+	b.Write([]byte(strconv.Itoa(int(s.TableId))))
 	if len(s.StartKey) > 0 {
 		b.Write([]byte(",start_key:"))
 		b.Write([]byte(s.StartKey.String()))
@@ -122,10 +121,11 @@ func (s *Span) String() string {
 	b.Write([]byte("}"))
 	return b.String()
 }
+*/
 
 // Less compares two Spans, defines the order between spans.
 func (s *Span) Less(b *Span) bool {
-	if s.TableID < b.TableID {
+	if s.TableId < b.TableId {
 		return true
 	}
 	if bytes.Compare(s.StartKey, b.StartKey) < 0 {
@@ -136,7 +136,7 @@ func (s *Span) Less(b *Span) bool {
 
 // Eq compares two Spans, defines the equality between spans.
 func (s *Span) Eq(b *Span) bool {
-	return s.TableID == b.TableID &&
+	return s.TableId == b.TableId &&
 		bytes.Equal(s.StartKey, b.StartKey) &&
 		bytes.Equal(s.EndKey, b.EndKey)
 }

@@ -74,7 +74,7 @@ func TestReplicationManagerHandleAddTableTask(t *testing.T) {
 				AddTable: &schedulepb.AddTableResponse{
 					Status: &tablepb.TableStatus{
 						TableID: 1,
-						State:   tablepb.TableStatePrepared,
+						State:   tablepb.TableState_Prepared,
 					},
 				},
 			},
@@ -109,7 +109,7 @@ func TestReplicationManagerHandleAddTableTask(t *testing.T) {
 		HeartbeatResponse: &schedulepb.HeartbeatResponse{
 			Tables: []tablepb.TableStatus{{
 				TableID: 1,
-				State:   tablepb.TableStateReplicating,
+				State:   tablepb.TableState_Replicating,
 			}},
 		},
 	}})
@@ -142,7 +142,7 @@ func TestReplicationManagerRemoveTable(t *testing.T) {
 
 	// Add the table.
 	tbl, err := NewReplicationSet(1, 0, map[string]*tablepb.TableStatus{
-		"1": {TableID: 1, State: tablepb.TableStateReplicating},
+		"1": {TableID: 1, State: tablepb.TableState_Replicating},
 	}, model.ChangeFeedID{})
 	require.Nil(t, err)
 	require.Equal(t, ReplicationSetStateReplicating, tbl.State)
@@ -237,7 +237,7 @@ func TestReplicationManagerMoveTable(t *testing.T) {
 
 	// Add the table.
 	tbl, err := NewReplicationSet(1, 0, map[string]*tablepb.TableStatus{
-		source: {TableID: 1, State: tablepb.TableStateReplicating},
+		source: {TableID: 1, State: tablepb.TableState_Replicating},
 	}, model.ChangeFeedID{})
 	require.Nil(t, err)
 	require.Equal(t, ReplicationSetStateReplicating, tbl.State)
@@ -288,7 +288,7 @@ func TestReplicationManagerMoveTable(t *testing.T) {
 				AddTable: &schedulepb.AddTableResponse{
 					Status: &tablepb.TableStatus{
 						TableID: 1,
-						State:   tablepb.TableStatePrepared,
+						State:   tablepb.TableState_Prepared,
 					},
 				},
 			},
@@ -342,7 +342,7 @@ func TestReplicationManagerMoveTable(t *testing.T) {
 				AddTable: &schedulepb.AddTableResponse{
 					Status: &tablepb.TableStatus{
 						TableID: 1,
-						State:   tablepb.TableStateReplicating,
+						State:   tablepb.TableState_Replicating,
 					},
 				},
 			},
@@ -411,7 +411,7 @@ func TestReplicationManagerBurstBalance(t *testing.T) {
 
 	// Add a new table.
 	r.tables[5], err = NewReplicationSet(5, 0, map[string]*tablepb.TableStatus{
-		"5": {TableID: 5, State: tablepb.TableStateReplicating},
+		"5": {TableID: 5, State: tablepb.TableState_Replicating},
 	}, model.ChangeFeedID{})
 	require.Nil(t, err)
 
@@ -474,12 +474,12 @@ func TestReplicationManagerBurstBalanceMoveTables(t *testing.T) {
 	var err error
 	// Two tables in "1".
 	r.tables[1], err = NewReplicationSet(1, 0, map[string]*tablepb.TableStatus{
-		"1": {TableID: 1, State: tablepb.TableStateReplicating},
+		"1": {TableID: 1, State: tablepb.TableState_Replicating},
 	}, model.ChangeFeedID{})
 	require.Nil(t, err)
 	r.tables[2], err = NewReplicationSet(2, 0, map[string]*tablepb.TableStatus{
 		"1": {
-			TableID: 2, State: tablepb.TableStateReplicating,
+			TableID: 2, State: tablepb.TableState_Replicating,
 			Checkpoint: tablepb.Checkpoint{CheckpointTs: 1},
 		},
 	}, model.ChangeFeedID{})
@@ -564,7 +564,7 @@ func TestReplicationManagerAdvanceCheckpoint(t *testing.T) {
 		map[model.CaptureID]*tablepb.TableStatus{
 			"1": {
 				TableID: model.TableID(1),
-				State:   tablepb.TableStateReplicating,
+				State:   tablepb.TableState_Replicating,
 				Checkpoint: tablepb.Checkpoint{
 					CheckpointTs: model.Ts(10),
 					ResolvedTs:   model.Ts(20),
@@ -578,7 +578,7 @@ func TestReplicationManagerAdvanceCheckpoint(t *testing.T) {
 		map[model.CaptureID]*tablepb.TableStatus{
 			"2": {
 				TableID: model.TableID(2),
-				State:   tablepb.TableStateReplicating,
+				State:   tablepb.TableState_Replicating,
 				Checkpoint: tablepb.Checkpoint{
 					CheckpointTs: model.Ts(15),
 					ResolvedTs:   model.Ts(30),
@@ -604,7 +604,7 @@ func TestReplicationManagerAdvanceCheckpoint(t *testing.T) {
 		map[model.CaptureID]*tablepb.TableStatus{
 			"1": {
 				TableID: model.TableID(3),
-				State:   tablepb.TableStateReplicating,
+				State:   tablepb.TableState_Replicating,
 				Checkpoint: tablepb.Checkpoint{
 					CheckpointTs: model.Ts(5),
 					ResolvedTs:   model.Ts(40),
@@ -612,7 +612,7 @@ func TestReplicationManagerAdvanceCheckpoint(t *testing.T) {
 			},
 			"2": {
 				TableID: model.TableID(3),
-				State:   tablepb.TableStatePreparing,
+				State:   tablepb.TableState_Preparing,
 				Checkpoint: tablepb.Checkpoint{
 					CheckpointTs: model.Ts(5),
 					ResolvedTs:   model.Ts(40),
@@ -630,7 +630,7 @@ func TestReplicationManagerAdvanceCheckpoint(t *testing.T) {
 		map[model.CaptureID]*tablepb.TableStatus{
 			"1": {
 				TableID: model.TableID(4),
-				State:   tablepb.TableStatePrepared,
+				State:   tablepb.TableState_Prepared,
 				Checkpoint: tablepb.Checkpoint{
 					CheckpointTs: model.Ts(3),
 					ResolvedTs:   model.Ts(10),
@@ -649,11 +649,11 @@ func TestReplicationManagerHandleCaptureChanges(t *testing.T) {
 
 	r := NewReplicationManager(1, model.ChangeFeedID{})
 	init := map[model.CaptureID][]tablepb.TableStatus{
-		"1": {{TableID: 1, State: tablepb.TableStateReplicating}},
-		"2": {{TableID: 2, State: tablepb.TableStateReplicating}},
+		"1": {{TableID: 1, State: tablepb.TableState_Replicating}},
+		"2": {{TableID: 2, State: tablepb.TableState_Replicating}},
 		"3": {
-			{TableID: 3, State: tablepb.TableStateReplicating},
-			{TableID: 2, State: tablepb.TableStatePreparing},
+			{TableID: 3, State: tablepb.TableState_Replicating},
+			{TableID: 2, State: tablepb.TableState_Preparing},
 		},
 		"4": {{TableID: 4, State: tablepb.TableStateStopping}},
 		"5": {{TableID: 5, State: tablepb.TableStateStopped}},
@@ -669,7 +669,7 @@ func TestReplicationManagerHandleCaptureChanges(t *testing.T) {
 	require.Equal(t, ReplicationSetStateAbsent, r.tables[5].State)
 
 	removed := map[string][]tablepb.TableStatus{
-		"1": {{TableID: 1, State: tablepb.TableStateReplicating}},
+		"1": {{TableID: 1, State: tablepb.TableState_Replicating}},
 	}
 	msgs, err = r.HandleCaptureChanges(nil, removed, 0)
 	require.Nil(t, err)
@@ -700,7 +700,7 @@ func TestReplicationManagerHandleCaptureChangesDuringAddTable(t *testing.T) {
 	require.Equal(t, 1, <-addTableCh)
 
 	removed := map[string][]tablepb.TableStatus{
-		"1": {{TableID: 1, State: tablepb.TableStatePreparing}},
+		"1": {{TableID: 1, State: tablepb.TableState_Preparing}},
 	}
 	msgs, err = r.HandleCaptureChanges(nil, removed, 0)
 	require.Nil(t, err)

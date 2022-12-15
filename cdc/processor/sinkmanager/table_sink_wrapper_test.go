@@ -67,7 +67,7 @@ func (m *mockSink) Close() error {
 func createTableSinkWrapper(
 	changefeedID model.ChangeFeedID, span tablepb.Span,
 ) (*tableSinkWrapper, *mockSink) {
-	tableState := tablepb.TableStatePreparing
+	tableState := tablepb.TableState_Preparing
 	sink := newMockSink()
 	innerTableSink := tablesink.New[*model.RowChangedEvent](
 		changefeedID, span,
@@ -88,7 +88,7 @@ func TestTableSinkWrapperClose(t *testing.T) {
 
 	wrapper, _ := createTableSinkWrapper(
 		model.DefaultChangeFeedID("1"), spanz.TableIDToComparableSpan(1))
-	require.Equal(t, tablepb.TableStatePreparing, wrapper.getState())
+	require.Equal(t, tablepb.TableState_Preparing, wrapper.getState())
 	wrapper.close(context.Background())
 	require.Equal(t, tablepb.TableStateStopped, wrapper.getState(), "table sink state should be stopped")
 }
@@ -100,7 +100,7 @@ func TestUpdateReceivedSorterResolvedTs(t *testing.T) {
 		model.DefaultChangeFeedID("1"), spanz.TableIDToComparableSpan(1))
 	wrapper.updateReceivedSorterResolvedTs(100)
 	require.Equal(t, uint64(100), wrapper.getReceivedSorterResolvedTs())
-	require.Equal(t, tablepb.TableStatePrepared, wrapper.getState())
+	require.Equal(t, tablepb.TableState_Prepared, wrapper.getState())
 }
 
 func TestConvertNilRowChangedEvents(t *testing.T) {

@@ -75,7 +75,7 @@ func (r *reader) setTaskDelete(task *message.Task, deleteKeys []message.Key) {
 
 	// Delete events that less than the last delete keys' commit ts.
 	task.DeleteReq = &message.DeleteRequest{}
-	task.DeleteReq.Range[0] = encoding.EncodeTsKey(r.uid, uint64(r.span.TableID), 0)
+	task.DeleteReq.Range[0] = encoding.EncodeTsKey(r.uid, uint64(r.span.TableId), 0)
 	task.DeleteReq.Range[1] = []byte(deleteKeys[len(deleteKeys)-1])
 	task.DeleteReq.Count = totalDelete + len(deleteKeys)
 }
@@ -128,7 +128,7 @@ func (r *reader) outputBufferedResolvedEvents(buffer *outputBuffer) {
 		lastCommitTs = event.CRTs
 
 		// Delete sent events.
-		key := encoding.EncodeKey(r.uid, uint64(r.span.TableID), event)
+		key := encoding.EncodeKey(r.uid, uint64(r.span.TableId), event)
 		buffer.appendDeleteKey(message.Key(key))
 		remainIdx = idx + 1
 	}
@@ -479,7 +479,7 @@ func (r *reader) Poll(ctx context.Context, msgs []actormsg.Message[message.Task]
 		lenResolvedEvents, _ = r.state.outputBuf.len()
 	}
 	// Build task for new events and delete sent keys.
-	task := message.Task{UID: r.uid, Span: &r.span}
+	task := message.Task{UID: r.uid, Span: r.span}
 	r.setTaskDelete(&task, r.state.outputBuf.deleteKeys)
 	// Reset buffer as delete keys are scheduled.
 	r.state.outputBuf.resetDeleteKey()
@@ -519,7 +519,7 @@ func (r *reader) Poll(ctx context.Context, msgs []actormsg.Message[message.Task]
 	}
 
 	var hasIter bool
-	task.IterReq, hasIter = r.state.tryGetIterator(r.uid, uint64(r.span.TableID))
+	task.IterReq, hasIter = r.state.tryGetIterator(r.uid, uint64(r.span.TableId))
 	// Send delete/read task to db.
 	err := r.dbRouter.SendB(ctx, r.dbActorID, actormsg.ValueMessage(task))
 	if err != nil {

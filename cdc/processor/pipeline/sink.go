@@ -110,9 +110,9 @@ func (n *sinkNode) getCheckpointTs() model.ResolvedTs {
 // In this method, the builtin table sink will be closed by calling `Close`, and
 // no more events can be sent to this sink node afterwards.
 func (n *sinkNode) stop(ctx context.Context) (err error) {
-	n.state.Store(tablepb.TableStateStopping)
+	n.state.Store(tablepb.TableState_Stopping)
 	// table stopped state must be set after underlying sink is closed
-	defer n.state.Store(tablepb.TableStateStopped)
+	defer n.state.Store(tablepb.TableState_Stopped)
 	n.flowController.Abort()
 	return n.closeTableSink(ctx)
 }
@@ -122,7 +122,7 @@ func (n *sinkNode) stop(ctx context.Context) (err error) {
 func (n *sinkNode) flushSink(ctx context.Context, resolved model.ResolvedTs) (err error) {
 	defer func() {
 		if err != nil {
-			n.state.Store(tablepb.TableStateStopped)
+			n.state.Store(tablepb.TableState_Stopped)
 			return
 		}
 		if n.CheckpointTs() >= n.targetTs {
@@ -324,7 +324,7 @@ func SplitUpdateEvent(updateEvent *model.PolymorphicEvent) (*model.PolymorphicEv
 }
 
 func (n *sinkNode) HandleMessage(ctx context.Context, msg pmessage.Message) (bool, error) {
-	if n.state.Load() == tablepb.TableStateStopped {
+	if n.state.Load() == tablepb.TableState_Stopped {
 		return false, cerror.ErrTableProcessorStoppedSafely.GenWithStackByArgs()
 	}
 	switch msg.Tp {

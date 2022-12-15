@@ -63,8 +63,8 @@ func NewPullerWrapper(
 }
 
 // tableSpan returns the table span with the table ID.
-func (n *Wrapper) tableSpan() []tablepb.Span {
-	return []tablepb.Span{spanz.TableIDToComparableSpan(n.tableID)}
+func (n *Wrapper) tableSpan() []*tablepb.Span {
+	return []*tablepb.Span{spanz.TableIDToComparableSpan(n.tableID)}
 }
 
 // Start the puller wrapper.

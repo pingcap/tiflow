@@ -64,17 +64,17 @@ func TestUnifiedSorterFileLockConflict(t *testing.T) {
 
 func TestSorterResolvedTs(t *testing.T) {
 	t.Parallel()
-	state := tablepb.TableStatePreparing
+	state := tablepb.TableState_Preparing
 	sn := newSorterNode("tableName", 1, 1, nil, nil, &state,
 		model.DefaultChangeFeedID("changefeed-id-test"), false, &mockPD{})
 	sn.sorter = memory.NewEntrySorter()
 	require.Equal(t, model.Ts(1), sn.ResolvedTs())
-	require.Equal(t, tablepb.TableStatePreparing, sn.State())
+	require.Equal(t, tablepb.TableState_Preparing, sn.State())
 
 	msg := model.NewResolvedPolymorphicEvent(0, 2)
 	sn.handleRawEvent(context.Background(), msg)
 	require.EqualValues(t, model.Ts(2), sn.ResolvedTs())
-	require.Equal(t, tablepb.TableStatePrepared, sn.State())
+	require.Equal(t, tablepb.TableState_Prepared, sn.State())
 }
 
 type checkSorter struct {
@@ -156,13 +156,13 @@ func TestSorterReplicateTs(t *testing.T) {
 
 	p := &mockPD{ts: 1}
 	ts := oracle.ComposeTS(1, 1)
-	state := tablepb.TableStatePreparing
+	state := tablepb.TableState_Preparing
 	sn := newSorterNode(t.Name(), 1, 1, &mockFlowController{}, mockMounter{}, &state,
 		model.DefaultChangeFeedID(t.Name()), false, p)
 	sn.sorter = memory.NewEntrySorter()
 
 	require.Equal(t, model.Ts(1), sn.ResolvedTs())
-	require.Equal(t, tablepb.TableStatePreparing, sn.State())
+	require.Equal(t, tablepb.TableState_Preparing, sn.State())
 
 	eg := &errgroup.Group{}
 	router := actor.NewRouter[pmessage.Message](t.Name())
@@ -193,7 +193,7 @@ func TestSorterReplicateTs(t *testing.T) {
 	}
 
 	// Preparing -> Prepared.
-	sn.state.Store(tablepb.TableStatePrepared)
+	sn.state.Store(tablepb.TableState_Prepared)
 	close(sn.preparedCh)
 	// Prepared -> Replicating.
 	sn.startTsCh <- 1
@@ -209,7 +209,7 @@ func TestSorterResolvedTsLessEqualBarrierTs(t *testing.T) {
 	t.Parallel()
 	sch := make(chan *model.PolymorphicEvent, 1)
 	s := &checkSorter{ch: sch}
-	state := tablepb.TableStatePreparing
+	state := tablepb.TableState_Preparing
 	sn := newSorterNode("tableName", 1, 1, nil, nil, &state,
 		model.DefaultChangeFeedID("changefeed-id-test"), false, &mockPD{})
 	sn.sorter = s
@@ -219,7 +219,7 @@ func TestSorterResolvedTsLessEqualBarrierTs(t *testing.T) {
 	resolvedTs1 := model.NewResolvedPolymorphicEvent(0, 1)
 	sn.handleRawEvent(context.Background(), resolvedTs1)
 	require.EqualValues(t, model.NewResolvedPolymorphicEvent(0, 1), <-sch)
-	require.Equal(t, tablepb.TableStatePrepared, sn.State())
+	require.Equal(t, tablepb.TableState_Prepared, sn.State())
 
 	// Advance barrier ts.
 	sn.updateBarrierTs(2)

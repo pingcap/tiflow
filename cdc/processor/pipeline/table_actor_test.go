@@ -54,7 +54,7 @@ func TestAsyncStopFailed(t *testing.T) {
 		redoManager: redo.NewDisabledManager(),
 		cancel:      func() {},
 		reportErr:   func(err error) {},
-		state:       tablepb.TableStatePreparing,
+		state:       tablepb.TableState_Preparing,
 		upstream:    upstream.NewUpstream4Test(&mockPD{}),
 	}
 	tbl.sinkNode = newSinkNode(1, mocksink.NewNormalMockSink(), nil,
@@ -75,7 +75,7 @@ func TestTableActorInterface(t *testing.T) {
 		span:        spanz.TableIDToComparableSpan(1),
 		redoManager: redo.NewDisabledManager(),
 		tableName:   "t1",
-		state:       tablepb.TableStatePreparing,
+		state:       tablepb.TableState_Preparing,
 		replicaConfig: &config.ReplicaConfig{
 			Consistent: &config.ConsistentConfig{
 				Level: "node",
@@ -89,10 +89,10 @@ func TestTableActorInterface(t *testing.T) {
 	tableID := table.ID()
 	require.Equal(t, int64(1), tableID)
 	require.Equal(t, "t1", table.Name())
-	require.Equal(t, tablepb.TableStatePreparing, table.State())
+	require.Equal(t, tablepb.TableState_Preparing, table.State())
 
-	table.sortNode.state.Store(tablepb.TableStatePrepared)
-	require.Equal(t, tablepb.TableStatePrepared, table.State())
+	table.sortNode.state.Store(tablepb.TableState_Prepared)
+	require.Equal(t, tablepb.TableState_Prepared, table.State())
 
 	table.sinkNode.checkpointTs.Store(model.NewResolvedTs(3))
 	require.Equal(t, model.Ts(3), table.CheckpointTs())
@@ -123,7 +123,7 @@ func TestTableActorCancel(t *testing.T) {
 	}()
 
 	tbl := &tableActor{
-		state:       tablepb.TableStatePreparing,
+		state:       tablepb.TableState_Preparing,
 		stopped:     0,
 		span:        spanz.TableIDToComparableSpan(1),
 		redoManager: redo.NewDisabledManager(),
@@ -175,7 +175,7 @@ func TestHandleError(t *testing.T) {
 			reporterErr = true
 		},
 
-		state:   tablepb.TableStateReplicating,
+		state:   tablepb.TableState_Replicating,
 		stopped: stopped,
 	}
 	flowController := &mockFlowController{}
@@ -190,7 +190,7 @@ func TestHandleError(t *testing.T) {
 
 	// table is already stopped
 	table.handleError(nil)
-	require.Equal(t, tablepb.TableStateReplicating, table.sinkNode.state.Load())
+	require.Equal(t, tablepb.TableState_Replicating, table.sinkNode.state.Load())
 	require.False(t, canceled)
 	require.True(t, reporterErr)
 
@@ -216,7 +216,7 @@ func TestPollStoppedActor(t *testing.T) {
 func TestPollTickMessage(t *testing.T) {
 	startTime := time.Now().Add(-sinkFlushInterval)
 	table := tableActor{
-		state:             tablepb.TableStatePreparing,
+		state:             tablepb.TableState_Preparing,
 		lastFlushSinkTime: time.Now().Add(-2 * sinkFlushInterval),
 		cancel:            func() {},
 		reportErr:         func(err error) {},
@@ -249,7 +249,7 @@ func TestPollTickMessage(t *testing.T) {
 
 func TestPollStopMessageAndSinkNodeStopReentrant(t *testing.T) {
 	tbl := tableActor{
-		state:     tablepb.TableStateReplicating,
+		state:     tablepb.TableState_Replicating,
 		cancel:    func() {},
 		reportErr: func(err error) {},
 	}
@@ -316,7 +316,7 @@ func TestPollDataFailed(t *testing.T) {
 		return false, errors.New("error")
 	}
 	tbl := tableActor{
-		state:             tablepb.TableStatePreparing,
+		state:             tablepb.TableState_Preparing,
 		cancel:            func() {},
 		reportErr:         func(err error) {},
 		lastFlushSinkTime: time.Now(),
@@ -415,7 +415,7 @@ func TestNewTableActor(t *testing.T) {
 		}, mocksink.NewNormalMockSink(), nil, redo.NewDisabledManager(), 10)
 	require.NotNil(t, tbl)
 	require.Nil(t, err)
-	require.Equal(t, tablepb.TableStatePreparing, tbl.State())
+	require.Equal(t, tablepb.TableState_Preparing, tbl.State())
 	require.NotPanics(t, func() {
 		tbl.UpdateBarrierTs(model.Ts(5))
 	})

@@ -71,7 +71,7 @@ func (w *writer) Poll(ctx context.Context, msgs []actormsg.Message[message.Task]
 		}
 		kvEventCount++
 
-		key := encoding.EncodeKey(w.uid, uint64(w.span.TableID), ev)
+		key := encoding.EncodeKey(w.uid, uint64(w.span.TableId), ev)
 		value := []byte{}
 		var err error
 		value, err = w.serde.Marshal(ev, value)
@@ -91,7 +91,7 @@ func (w *writer) Poll(ctx context.Context, msgs []actormsg.Message[message.Task]
 
 	if len(writes) != 0 {
 		// Send write task to db.
-		task := message.Task{UID: w.uid, Span: &w.span, WriteReq: writes}
+		task := message.Task{UID: w.uid, Span: w.span, WriteReq: writes}
 		err := w.dbRouter.SendB(ctx, w.dbActorID, actormsg.ValueMessage(task))
 		if err != nil {
 			w.reportError("failed to send write request", err)
@@ -113,7 +113,7 @@ func (w *writer) Poll(ctx context.Context, msgs []actormsg.Message[message.Task]
 	//   3. Before db takes iterator, it flushes all buffered writes.
 	msg := actormsg.ValueMessage(message.Task{
 		UID:  w.uid,
-		Span: &w.span,
+		Span: w.span,
 		ReadTs: message.ReadTs{
 			// The maxCommitTs and maxResolvedTs must be sent together,
 			// otherwise reader may output resolved ts wrongly.

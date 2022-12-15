@@ -51,7 +51,7 @@ type common struct {
 	dbRouter  *actor.Router[message.Task]
 
 	uid      uint32
-	span     tablepb.Span
+	span     *tablepb.Span
 	serde    *encoding.MsgPackGenSerde
 	errCh    chan error
 	closedWg *sync.WaitGroup
@@ -61,7 +61,7 @@ type common struct {
 func (c *common) reportError(msg string, err error) {
 	if errors.Cause(err) != context.Canceled {
 		log.L().WithOptions(zap.AddCallerSkip(1)).
-			Warn(msg, zap.Stringer("span", &c.span), zap.Error(err))
+			Warn(msg, zap.Stringer("span", c.span), zap.Error(err))
 	}
 	select {
 	case c.errCh <- err:
@@ -88,7 +88,7 @@ type Sorter struct {
 
 // NewSorter creates a new Sorter
 func NewSorter(
-	ctx context.Context, changefeedID model.ChangeFeedID, span tablepb.Span, startTs uint64,
+	ctx context.Context, changefeedID model.ChangeFeedID, span *tablepb.Span, startTs uint64,
 	dbRouter *actor.Router[message.Task], dbActorID actor.ID,
 	writerSystem *actor.System[message.Task], writerRouter *actor.Router[message.Task],
 	readerSystem *actor.System[message.Task], readerRouter *actor.Router[message.Task],
@@ -220,7 +220,7 @@ func (ls *Sorter) AddEntry(ctx context.Context, event *model.PolymorphicEvent) {
 	}
 	msg := actormsg.ValueMessage(message.Task{
 		UID:        ls.uid,
-		Span:       &ls.span,
+		Span:       ls.span,
 		InputEvent: event,
 	})
 	_ = ls.writerRouter.SendB(ctx, ls.writerActorID, msg)
@@ -231,7 +231,7 @@ func (ls *Sorter) Output() <-chan *model.PolymorphicEvent {
 	// Notify reader to read sorted events
 	msg := actormsg.ValueMessage(message.Task{
 		UID:    ls.uid,
-		Span:   &ls.span,
+		Span:   ls.span,
 		ReadTs: message.ReadTs{},
 	})
 	// It's ok to ignore error, as reader is either channel full or stopped.
@@ -246,13 +246,13 @@ func (ls *Sorter) Output() <-chan *model.PolymorphicEvent {
 
 // cleanup cleans up sorter's data.
 func (ls *Sorter) cleanup(ctx context.Context) error {
-	task := message.Task{UID: ls.uid, Span: &ls.span}
+	task := message.Task{UID: ls.uid, Span: ls.span}
 	task.DeleteReq = &message.DeleteRequest{
 		// We do not set task.Delete.Count, because we don't know
 		// how many key-value pairs in the range.
 		Range: [2][]byte{
-			encoding.EncodeTsKey(ls.uid, uint64(ls.span.TableID), 0),
-			encoding.EncodeTsKey(ls.uid, uint64(ls.span.TableID)+1, 0),
+			encoding.EncodeTsKey(ls.uid, uint64(ls.span.TableId), 0),
+			encoding.EncodeTsKey(ls.uid, uint64(ls.span.TableId)+1, 0),
 		},
 	}
 	return ls.dbRouter.SendB(ctx, ls.dbActorID, actormsg.ValueMessage(task))
@@ -262,7 +262,7 @@ func (ls *Sorter) cleanup(ctx context.Context) error {
 func (ls *Sorter) EmitStartTs(ctx context.Context, ts uint64) {
 	msg := actormsg.ValueMessage(message.Task{
 		UID:     ls.uid,
-		Span:    &ls.span,
+		Span:    ls.span,
 		StartTs: ts,
 	})
 	_ = ls.readerRouter.SendB(ctx, ls.ReaderActorID, msg)
