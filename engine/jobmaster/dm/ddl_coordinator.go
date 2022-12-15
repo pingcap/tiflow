@@ -32,6 +32,7 @@ import (
 	metaModel "github.com/pingcap/tiflow/engine/pkg/meta/model"
 	"github.com/pingcap/tiflow/pkg/errors"
 	"go.uber.org/zap"
+	"golang.org/x/exp/slices"
 )
 
 // Workflow:
@@ -300,7 +301,9 @@ func (c *DDLCoordinator) removeShardGroup(ctx context.Context, targetTable metad
 
 type shardGroup struct {
 	mu                  sync.RWMutex
+	// normalTables represents upstream table info record in checkpoint.
 	normalTables        map[metadata.SourceTable]string
+	// conflictTables represents upstream table info after executing conflict DDL.
 	conflictTables      map[metadata.SourceTable]string
 	tableAgent          TableAgent
 	droppedColumnsStore *metadata.DroppedColumnsStore
@@ -705,7 +708,7 @@ func (g *shardGroup) checkAddDroppedColumn(ctx context.Context, sourceTable meta
 		} else if _, err2 = optimism.AddDifferentFieldLenColumns("", ddl, postTable, newJoined); err2 != nil {
 			// check for add column with a smaller field len
 			return "", err2
-		} else if len(col) > 0 && (g.droppedColumnsStore.HasDroppedColumn(ctx, col, sourceTable) || contains(newDroppedColumns, col)) {
+		} else if len(col) > 0 && (g.droppedColumnsStore.HasDroppedColumn(ctx, col, sourceTable) || slices.Contains(newDroppedColumns, col)) {
 			return "", errors.Errorf("add column %s that wasn't fully dropped in downstream. ddl: %s", col, ddl)
 		}
 	}
@@ -737,7 +740,7 @@ OutLoop:
 			if tbStmt == "" {
 				continue
 			}
-			if cols := getColumnNames(tbStmt); contains(cols, col) {
+			if cols := getColumnNames(tbStmt); slices.Contains(cols, col) {
 				continue OutLoop
 			}
 		}
@@ -754,7 +757,7 @@ OutLoop:
 				}
 			}
 
-			if cols := getColumnNames(tbStmt); contains(cols, col) {
+			if cols := getColumnNames(tbStmt); slices.Contains(cols, col) {
 				continue OutLoop
 			}
 		}
@@ -765,6 +768,10 @@ OutLoop:
 	return nil
 }
 
+// isResoved means all tables in the group are resolved.
+// 1. no conflict ddls waiting
+// 2. all dropped column has done
+// 3. all shard tables stmts are same.
 func (g *shardGroup) isResolved(ctx context.Context) bool {
 	if len(g.conflictTables) != 0 {
 		return false
@@ -816,15 +823,6 @@ func genCmpTable(createStmt string) schemacmp.Table {
 	ti, _ := ddl.BuildTableInfoFromAST(stmtNode.(*ast.CreateTableStmt))
 	ti.State = model.StatePublic
 	return schemacmp.Encode(ti)
-}
-
-func contains(s []string, e string) bool {
-	for _, a := range s {
-		if a == e {
-			return true
-		}
-	}
-	return false
 }
 
 // getColumnNames and return columns' names for create table stmt.
