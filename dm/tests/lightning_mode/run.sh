@@ -70,9 +70,14 @@ function run() {
 	dmctl_start_task "$WORK_DIR/dm-task-dup.yaml" "--remove-meta"
 	# TODO: only one worker is paused. all workers should be paused!
 	run_dm_ctl_with_retry $WORK_DIR "127.0.0.1:$MASTER_PORT" \
-    "query-status test" \
-    "checksum mismatched, KV number in source files: 3, KV number in TiDB cluster: 6" 1
-  # TODO: resume can't skip
+		"query-status test" \
+		"checksum mismatched, KV number in source files: 3, KV number in TiDB cluster: 6" 1
+	run_dm_ctl $WORK_DIR "127.0.0.1:$MASTER_PORT" \
+		"resume-task test" \
+		"\"result\": true" 3
+	run_dm_ctl_with_retry $WORK_DIR "127.0.0.1:$MASTER_PORT" \
+		"query-status test" \
+		'unit": "Sync"' 2
 
 	read -p 123
 	run_dm_ctl $WORK_DIR "127.0.0.1:$MASTER_PORT" \
