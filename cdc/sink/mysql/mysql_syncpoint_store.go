@@ -209,7 +209,6 @@ func (s *mysqlSyncPointStore) SinkSyncPoint(ctx context.Context,
 		log.Error("sync table: begin Tx fail", zap.Error(err))
 		return cerror.WrapError(cerror.ErrMySQLTxnError, err)
 	}
-
 	row := tx.QueryRow("select @@tidb_current_ts")
 	var secondaryTs string
 	err = row.Scan(&secondaryTs)
