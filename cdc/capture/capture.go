@@ -574,6 +574,9 @@ func (c *captureImpl) resign(ctx context.Context) error {
 	failpoint.Inject("capture-resign-failed", func() {
 		failpoint.Return(errors.New("capture resign failed"))
 	})
+	if c.election == nil {
+		return nil
+	}
 	return cerror.WrapError(cerror.ErrCaptureResignOwner, c.election.resign(ctx))
 }
 
