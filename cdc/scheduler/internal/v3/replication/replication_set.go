@@ -135,7 +135,7 @@ type ReplicationSet struct { //nolint:revive
 	// NB: Invariant, 1) at most one primary, 2) primary capture must be in
 	//     CaptureRolePrimary.
 	Captures   map[model.CaptureID]Role
-	Checkpoint tablepb.Checkpoint
+	Checkpoint *tablepb.Checkpoint
 	Stats      *tablepb.Stats
 }
 
@@ -150,7 +150,7 @@ func NewReplicationSet(
 		Changefeed: changefeed,
 		TableID:    tableID,
 		Captures:   make(map[string]Role),
-		Checkpoint: tablepb.Checkpoint{
+		Checkpoint: &tablepb.Checkpoint{
 			CheckpointTs: checkpoint,
 			ResolvedTs:   checkpoint,
 		},
@@ -465,7 +465,7 @@ func (r *ReplicationSet) pollOnPrepare(
 						AddTable: &schedulepb.AddTableRequest{
 							TableId:     r.TableID,
 							IsSecondary: true,
-							Checkpoint:  &r.Checkpoint,
+							Checkpoint:  r.Checkpoint,
 						},
 					},
 				},
@@ -577,7 +577,7 @@ func (r *ReplicationSet) pollOnCommit(
 						AddTable: &schedulepb.AddTableRequest{
 							TableId:     r.TableID,
 							IsSecondary: false,
-							Checkpoint:  &r.Checkpoint,
+							Checkpoint:  r.Checkpoint,
 						},
 					},
 				},
@@ -617,7 +617,7 @@ func (r *ReplicationSet) pollOnCommit(
 						AddTable: &schedulepb.AddTableRequest{
 							TableId:     r.TableID,
 							IsSecondary: false,
-							Checkpoint:  &r.Checkpoint,
+							Checkpoint:  r.Checkpoint,
 						},
 					},
 				},
