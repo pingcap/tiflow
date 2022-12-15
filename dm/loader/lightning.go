@@ -395,7 +395,8 @@ func (l *LightningLoader) restore(ctx context.Context) error {
 		return err
 	}
 
-	// if we are resuming from
+	// we have disabled auto-resume for below errors, so if lightning is resuming
+	// it means user wants to skip this error.
 	switch {
 	case terror.ErrLoadLightningHasDup.Equal(l.lastErr),
 		terror.ErrLoadLightningChecksum.Equal(l.lastErr):
