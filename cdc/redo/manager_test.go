@@ -107,7 +107,7 @@ func TestLogManagerInProcessor(t *testing.T) {
 	}
 
 	// check emit row changed events can move forward resolved ts
-	tables := []tablepb.Span{
+	spans := []tablepb.Span{
 		spanz.TableIDToComparableSpan(53),
 		spanz.TableIDToComparableSpan(55),
 		spanz.TableIDToComparableSpan(57),
@@ -115,15 +115,15 @@ func TestLogManagerInProcessor(t *testing.T) {
 	}
 
 	startTs := uint64(100)
-	for _, tableID := range tables {
-		logMgr.AddTable(tableID, startTs)
+	for _, span := range spans {
+		logMgr.AddTable(span, startTs)
 	}
 	testCases := []struct {
-		tableID tablepb.Span
-		rows    []*model.RowChangedEvent
+		span tablepb.Span
+		rows []*model.RowChangedEvent
 	}{
 		{
-			tableID: spanz.TableIDToComparableSpan(53),
+			span: spanz.TableIDToComparableSpan(53),
 			rows: []*model.RowChangedEvent{
 				{CommitTs: 120, Table: &model.TableName{TableID: 53}},
 				{CommitTs: 125, Table: &model.TableName{TableID: 53}},
@@ -131,20 +131,20 @@ func TestLogManagerInProcessor(t *testing.T) {
 			},
 		},
 		{
-			tableID: spanz.TableIDToComparableSpan(55),
+			span: spanz.TableIDToComparableSpan(55),
 			rows: []*model.RowChangedEvent{
 				{CommitTs: 130, Table: &model.TableName{TableID: 55}},
 				{CommitTs: 135, Table: &model.TableName{TableID: 55}},
 			},
 		},
 		{
-			tableID: spanz.TableIDToComparableSpan(57),
+			span: spanz.TableIDToComparableSpan(57),
 			rows: []*model.RowChangedEvent{
 				{CommitTs: 130, Table: &model.TableName{TableID: 57}},
 			},
 		},
 		{
-			tableID: spanz.TableIDToComparableSpan(59),
+			span: spanz.TableIDToComparableSpan(59),
 			rows: []*model.RowChangedEvent{
 				{CommitTs: 128, Table: &model.TableName{TableID: 59}},
 				{CommitTs: 130, Table: &model.TableName{TableID: 59}},
@@ -153,25 +153,25 @@ func TestLogManagerInProcessor(t *testing.T) {
 		},
 	}
 	for _, tc := range testCases {
-		err := logMgr.EmitRowChangedEvents(ctx, tc.tableID, nil, tc.rows...)
+		err := logMgr.EmitRowChangedEvents(ctx, tc.span, nil, tc.rows...)
 		require.Nil(t, err)
 	}
 
 	// check UpdateResolvedTs can move forward the resolved ts when there is not row event.
 	flushResolvedTs := uint64(150)
-	for _, tableID := range tables {
-		err := logMgr.UpdateResolvedTs(ctx, tableID, flushResolvedTs)
+	for _, span := range spans {
+		err := logMgr.UpdateResolvedTs(ctx, span, flushResolvedTs)
 		require.Nil(t, err)
 	}
 	checkResolvedTs(logMgr, flushResolvedTs)
 
 	// check remove table can work normally
-	removeTable := tables[len(tables)-1]
-	tables = tables[:len(tables)-1]
+	removeTable := spans[len(spans)-1]
+	spans = spans[:len(spans)-1]
 	logMgr.RemoveTable(removeTable)
 	flushResolvedTs = uint64(200)
-	for _, tableID := range tables {
-		err := logMgr.UpdateResolvedTs(ctx, tableID, flushResolvedTs)
+	for _, span := range spans {
+		err := logMgr.UpdateResolvedTs(ctx, span, flushResolvedTs)
 		require.Nil(t, err)
 	}
 	checkResolvedTs(logMgr, flushResolvedTs)
@@ -347,11 +347,11 @@ func TestManagerError(t *testing.T) {
 	go logMgr.bgUpdateLog(ctx, errCh)
 
 	testCases := []struct {
-		tableID tablepb.Span
-		rows    []*model.RowChangedEvent
+		span tablepb.Span
+		rows []*model.RowChangedEvent
 	}{
 		{
-			tableID: spanz.TableIDToComparableSpan(53),
+			span: spanz.TableIDToComparableSpan(53),
 			rows: []*model.RowChangedEvent{
 				{CommitTs: 120, Table: &model.TableName{TableID: 53}},
 				{CommitTs: 125, Table: &model.TableName{TableID: 53}},
@@ -360,7 +360,7 @@ func TestManagerError(t *testing.T) {
 		},
 	}
 	for _, tc := range testCases {
-		err := logMgr.EmitRowChangedEvents(ctx, tc.tableID, nil, tc.rows...)
+		err := logMgr.EmitRowChangedEvents(ctx, tc.span, nil, tc.rows...)
 		require.Nil(t, err)
 	}
 
