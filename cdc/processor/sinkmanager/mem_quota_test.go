@@ -158,6 +158,7 @@ func TestMemQuotaRecordAndRelease(t *testing.T) {
 
 	m := newMemQuota(model.DefaultChangeFeedID("1"), 300)
 	defer m.close()
+	m.addTable(1)
 
 	require.True(t, m.tryAcquire(100))
 	m.record(1, model.NewResolvedTs(100), 100)
@@ -186,6 +187,7 @@ func TestMemQuotaRecordAndReleaseWithBatchID(t *testing.T) {
 
 	m := newMemQuota(model.DefaultChangeFeedID("1"), 300)
 	defer m.close()
+	m.addTable(1)
 
 	require.True(t, m.tryAcquire(100))
 	resolvedTs := model.ResolvedTs{
@@ -229,6 +231,7 @@ func TestMemQuotaRecordAndClean(t *testing.T) {
 
 	m := newMemQuota(model.DefaultChangeFeedID("1"), 300)
 	defer m.close()
+	m.addTable(1)
 
 	require.True(t, m.tryAcquire(100))
 	m.record(1, model.NewResolvedTs(100), 100)
