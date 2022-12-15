@@ -13,7 +13,9 @@
 
 package p2p
 
-import "encoding/json"
+import (
+	"encoding/json"
+)
 
 // Serializable is an interface for defining custom serialization methods
 // for peer messages.
@@ -22,9 +24,17 @@ type Serializable interface {
 	Unmarshal(data []byte) error
 }
 
+type VT interface {
+	MarshalVT() ([]byte, error)
+	UnmarshalVT([]byte) error
+}
+
 func marshalMessage(value interface{}) ([]byte, error) {
 	if value, ok := value.(Serializable); ok {
 		return value.Marshal()
+	}
+	if value, ok := value.(VT); ok {
+		return value.MarshalVT()
 	}
 	return json.Marshal(value)
 }
@@ -32,6 +42,9 @@ func marshalMessage(value interface{}) ([]byte, error) {
 func unmarshalMessage(data []byte, value interface{}) error {
 	if value, ok := value.(Serializable); ok {
 		return value.Unmarshal(data)
+	}
+	if value, ok := value.(VT); ok {
+		return value.UnmarshalVT(data)
 	}
 	return json.Unmarshal(data, value)
 }
