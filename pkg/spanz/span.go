@@ -35,7 +35,7 @@ const (
 var UpperBoundKey = []byte{255, 255, 255, 255, 255}
 
 // HackSpan will set End as UpperBoundKey if End is Nil.
-func HackSpan(span tablepb.Span) {
+func HackSpan(span tablepb.Span) tablepb.Span {
 	if span.StartKey == nil {
 		span.StartKey = []byte{}
 	}
@@ -43,6 +43,7 @@ func HackSpan(span tablepb.Span) {
 	if span.EndKey == nil {
 		span.EndKey = UpperBoundKey
 	}
+	return span
 }
 
 // GetTableRange returns the span to watch for the specified table

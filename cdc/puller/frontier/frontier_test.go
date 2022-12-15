@@ -207,11 +207,11 @@ func TestMinMax(t *testing.T) {
 	keyMid := []byte("m")
 
 	spMinMid := tablepb.Span{StartKey: keyMin, EndKey: keyMid}
-	spanz.HackSpan(spMinMid)
+	spMinMid = spanz.HackSpan(spMinMid)
 	spMidMax := tablepb.Span{StartKey: keyMid, EndKey: keyMax}
-	spanz.HackSpan(spMidMax)
+	spMidMax = spanz.HackSpan(spMidMax)
 	spMinMax := tablepb.Span{StartKey: keyMin, EndKey: keyMax}
-	spanz.HackSpan(spMinMax)
+	spMinMax = spanz.HackSpan(spMinMax)
 
 	f := NewFrontier(0, c, spMinMax)
 	require.Equal(t, uint64(0), f.Frontier())

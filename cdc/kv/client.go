@@ -942,7 +942,7 @@ func (s *eventFeedSession) divideAndSendEventFeedToRegions(
 			}
 			nextSpan.StartKey = region.EndKey
 			// the End key return by the PD API will be nil to represent the biggest key,
-			spanz.HackSpan(partialSpan)
+			partialSpan = spanz.HackSpan(partialSpan)
 
 			sri := newSingleRegionInfo(tiRegion.VerID(), partialSpan, ts, nil)
 			s.scheduleRegionRequest(ctx, sri)
