@@ -24,9 +24,11 @@ import (
 	"github.com/pingcap/log"
 	"github.com/pingcap/tiflow/cdc/contextutil"
 	"github.com/pingcap/tiflow/cdc/model"
+	"github.com/pingcap/tiflow/cdc/processor/tablepb"
 	"github.com/pingcap/tiflow/cdc/redo/writer"
 	"github.com/pingcap/tiflow/pkg/chann"
 	"github.com/pingcap/tiflow/pkg/config"
+	"github.com/pingcap/tiflow/pkg/spanz"
 	"github.com/stretchr/testify/require"
 	"go.uber.org/zap"
 )
@@ -105,17 +107,23 @@ func TestLogManagerInProcessor(t *testing.T) {
 	}
 
 	// check emit row changed events can move forward resolved ts
-	tables := []model.TableID{53, 55, 57, 59}
+	tables := []tablepb.Span{
+		spanz.TableIDToComparableSpan(53),
+		spanz.TableIDToComparableSpan(55),
+		spanz.TableIDToComparableSpan(57),
+		spanz.TableIDToComparableSpan(59),
+	}
+
 	startTs := uint64(100)
 	for _, tableID := range tables {
 		logMgr.AddTable(tableID, startTs)
 	}
 	testCases := []struct {
-		tableID model.TableID
+		tableID tablepb.Span
 		rows    []*model.RowChangedEvent
 	}{
 		{
-			tableID: 53,
+			tableID: spanz.TableIDToComparableSpan(53),
 			rows: []*model.RowChangedEvent{
 				{CommitTs: 120, Table: &model.TableName{TableID: 53}},
 				{CommitTs: 125, Table: &model.TableName{TableID: 53}},
@@ -123,20 +131,20 @@ func TestLogManagerInProcessor(t *testing.T) {
 			},
 		},
 		{
-			tableID: 55,
+			tableID: spanz.TableIDToComparableSpan(55),
 			rows: []*model.RowChangedEvent{
 				{CommitTs: 130, Table: &model.TableName{TableID: 55}},
 				{CommitTs: 135, Table: &model.TableName{TableID: 55}},
 			},
 		},
 		{
-			tableID: 57,
+			tableID: spanz.TableIDToComparableSpan(57),
 			rows: []*model.RowChangedEvent{
 				{CommitTs: 130, Table: &model.TableName{TableID: 57}},
 			},
 		},
 		{
-			tableID: 59,
+			tableID: spanz.TableIDToComparableSpan(59),
 			rows: []*model.RowChangedEvent{
 				{CommitTs: 128, Table: &model.TableName{TableID: 59}},
 				{CommitTs: 130, Table: &model.TableName{TableID: 59}},
@@ -213,21 +221,24 @@ func BenchmarkRedoManagerWaitFlush(b *testing.B) {
 	}
 }
 
-func runBenchTest(ctx context.Context, b *testing.B) (LogManager, map[model.TableID]*model.Ts) {
+func runBenchTest(
+	ctx context.Context, b *testing.B,
+) (LogManager, map[spanz.HashableSpan]*model.Ts) {
 	logMgr, err := NewMockManager(ctx)
 	require.Nil(b, err)
 
 	// Init tables
 	numOfTables := 200
 	tables := make([]model.TableID, 0, numOfTables)
-	maxTsMap := make(map[model.TableID]*model.Ts, numOfTables)
+	maxTsMap := make(map[spanz.HashableSpan]*model.Ts, numOfTables)
 	startTs := uint64(100)
 	for i := 0; i < numOfTables; i++ {
 		tableID := model.TableID(i)
 		tables = append(tables, tableID)
+		span := spanz.TableIDToComparableSpan(tableID)
 		ts := startTs
-		maxTsMap[tableID] = &ts
-		logMgr.AddTable(tableID, startTs)
+		maxTsMap[spanz.ToHashableSpan(span)] = &ts
+		logMgr.AddTable(span, startTs)
 	}
 
 	maxRowCount := 100000
@@ -235,27 +246,27 @@ func runBenchTest(ctx context.Context, b *testing.B) (LogManager, map[model.Tabl
 	b.ResetTimer()
 	for _, tableID := range tables {
 		wg.Add(1)
-		go func(tableID model.TableID) {
+		go func(span tablepb.Span) {
 			defer wg.Done()
-			maxCommitTs := maxTsMap[tableID]
+			maxCommitTs := maxTsMap[spanz.ToHashableSpan(span)]
 			rows := []*model.RowChangedEvent{}
 			for i := 0; i < maxRowCount; i++ {
 				if i%100 == 0 {
-					logMgr.UpdateResolvedTs(ctx, tableID, *maxCommitTs)
+					logMgr.UpdateResolvedTs(ctx, span, *maxCommitTs)
 					// prepare new row change events
 					b.StopTimer()
 					*maxCommitTs += rand.Uint64() % 10
 					rows = []*model.RowChangedEvent{
-						{CommitTs: *maxCommitTs, Table: &model.TableName{TableID: tableID}},
-						{CommitTs: *maxCommitTs, Table: &model.TableName{TableID: tableID}},
-						{CommitTs: *maxCommitTs, Table: &model.TableName{TableID: tableID}},
+						{CommitTs: *maxCommitTs, Table: &model.TableName{TableID: span.TableID}},
+						{CommitTs: *maxCommitTs, Table: &model.TableName{TableID: span.TableID}},
+						{CommitTs: *maxCommitTs, Table: &model.TableName{TableID: span.TableID}},
 					}
 
 					b.StartTimer()
 				}
-				logMgr.EmitRowChangedEvents(ctx, tableID, nil, rows...)
+				logMgr.EmitRowChangedEvents(ctx, span, nil, rows...)
 			}
-		}(tableID)
+		}(spanz.TableIDToComparableSpan(tableID))
 	}
 
 	wg.Wait()
@@ -272,7 +283,7 @@ func TestManagerRtsMap(t *testing.T) {
 	require.Nil(t, err)
 	defer logMgr.Cleanup(ctx)
 
-	var tables map[model.TableID]model.Ts
+	var tables map[spanz.HashableSpan]model.Ts
 	var minTs model.Ts
 
 	tables, minTs = logMgr.prepareForFlush()
@@ -281,9 +292,11 @@ func TestManagerRtsMap(t *testing.T) {
 	logMgr.postFlush(tables, minTs)
 	require.Equal(t, uint64(math.MaxInt64), logMgr.GetMinResolvedTs())
 
+	span1 := spanz.TableIDToComparableSpan(1)
+	span2 := spanz.TableIDToComparableSpan(2)
 	// Add a table.
-	logMgr.AddTable(model.TableID(1), model.Ts(10))
-	logMgr.AddTable(model.TableID(2), model.Ts(20))
+	logMgr.AddTable(span1, model.Ts(10))
+	logMgr.AddTable(span2, model.Ts(20))
 	tables, minTs = logMgr.prepareForFlush()
 	require.Equal(t, 2, len(tables))
 	require.Equal(t, uint64(10), minTs)
@@ -291,15 +304,15 @@ func TestManagerRtsMap(t *testing.T) {
 	require.Equal(t, uint64(10), logMgr.GetMinResolvedTs())
 
 	// Remove a table.
-	logMgr.RemoveTable(model.TableID(1))
+	logMgr.RemoveTable(span1)
 	require.Equal(t, uint64(20), logMgr.GetMinResolvedTs())
 
 	// Add the table back, GetMinResolvedTs can regress.
-	logMgr.AddTable(model.TableID(1), model.Ts(10))
+	logMgr.AddTable(span1, model.Ts(10))
 	require.Equal(t, uint64(10), logMgr.GetMinResolvedTs())
 
 	// Received some timestamps, some tables may not be updated.
-	logMgr.onResolvedTsMsg(model.TableID(1), model.Ts(30))
+	logMgr.onResolvedTsMsg(span1, model.Ts(30))
 	tables, minTs = logMgr.prepareForFlush()
 	require.Equal(t, 2, len(tables))
 	require.Equal(t, uint64(20), minTs)
@@ -307,8 +320,8 @@ func TestManagerRtsMap(t *testing.T) {
 	require.Equal(t, uint64(20), logMgr.GetMinResolvedTs())
 
 	// Remove all tables.
-	logMgr.RemoveTable(model.TableID(1))
-	logMgr.RemoveTable(model.TableID(2))
+	logMgr.RemoveTable(span1)
+	logMgr.RemoveTable(span2)
 	require.Equal(t, uint64(math.MaxInt64), logMgr.GetMinResolvedTs())
 }
 
@@ -334,11 +347,11 @@ func TestManagerError(t *testing.T) {
 	go logMgr.bgUpdateLog(ctx, errCh)
 
 	testCases := []struct {
-		tableID model.TableID
+		tableID tablepb.Span
 		rows    []*model.RowChangedEvent
 	}{
 		{
-			tableID: 53,
+			tableID: spanz.TableIDToComparableSpan(53),
 			rows: []*model.RowChangedEvent{
 				{CommitTs: 120, Table: &model.TableName{TableID: 53}},
 				{CommitTs: 125, Table: &model.TableName{TableID: 53}},
@@ -417,6 +430,7 @@ func TestReuseWritter(t *testing.T) {
 	// After the manager is closed, APIs can return errors instead of panic.
 	cancels[1]()
 	time.Sleep(time.Duration(100) * time.Millisecond)
-	err := mgrs[1].UpdateResolvedTs(context.Background(), 1, 1)
+	span := spanz.TableIDToComparableSpan(1)
+	err := mgrs[1].UpdateResolvedTs(context.Background(), span, 1)
 	require.Error(t, err)
 }

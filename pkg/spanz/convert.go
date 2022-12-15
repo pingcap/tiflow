@@ -63,3 +63,28 @@ func (a sortableSpans) Less(i, j int) bool { return a[i].Less(&a[j]) }
 func Sort(spans []tablepb.Span) {
 	sort.Sort(sortableSpans(spans))
 }
+
+// HashableSpan is a hashable span, which can be used as a map key.
+type HashableSpan struct {
+	TableID  model.TableID
+	StartKey string
+	EndKey   string
+}
+
+// ToHashableSpan converts a Span to a hashable span.
+func ToHashableSpan(span tablepb.Span) HashableSpan {
+	return HashableSpan{
+		TableID:  span.TableID,
+		StartKey: string(span.StartKey),
+		EndKey:   string(span.EndKey),
+	}
+}
+
+// ToSpan converts to Span.
+func (h HashableSpan) ToSpan() tablepb.Span {
+	return tablepb.Span{
+		TableID:  h.TableID,
+		StartKey: []byte(h.StartKey),
+		EndKey:   []byte(h.EndKey),
+	}
+}

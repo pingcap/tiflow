@@ -26,11 +26,13 @@ import (
 	"github.com/pingcap/tidb/br/pkg/storage"
 	"github.com/pingcap/tiflow/cdc/contextutil"
 	"github.com/pingcap/tiflow/cdc/model"
+	"github.com/pingcap/tiflow/cdc/processor/tablepb"
 	"github.com/pingcap/tiflow/cdc/redo/common"
 	"github.com/pingcap/tiflow/cdc/redo/writer"
 	"github.com/pingcap/tiflow/pkg/chann"
 	"github.com/pingcap/tiflow/pkg/config"
 	cerror "github.com/pingcap/tiflow/pkg/errors"
+	"github.com/pingcap/tiflow/pkg/spanz"
 	"github.com/prometheus/client_golang/prometheus"
 	"go.uber.org/zap"
 )
@@ -100,14 +102,18 @@ type LogManager interface {
 	Enabled() bool
 
 	// The following APIs are called from processor only.
-	AddTable(tableID model.TableID, startTs uint64)
-	RemoveTable(tableID model.TableID)
-	GetResolvedTs(tableID model.TableID) model.Ts
+	AddTable(span tablepb.Span, startTs uint64)
+	RemoveTable(span tablepb.Span)
+	GetResolvedTs(span tablepb.Span) model.Ts
 	// Min resolvedTs for all tables. If there is no tables, return math.MaxInt64.
 	GetMinResolvedTs() uint64
-	EmitRowChangedEvents(ctx context.Context, tableID model.TableID,
-		releaseRowsMemory func(), rows ...*model.RowChangedEvent) error
-	UpdateResolvedTs(ctx context.Context, tableID model.TableID, resolvedTs uint64) error
+	EmitRowChangedEvents(
+		ctx context.Context,
+		span tablepb.Span,
+		releaseRowsMemory func(),
+		rows ...*model.RowChangedEvent,
+	) error
+	UpdateResolvedTs(ctx context.Context, span tablepb.Span, resolvedTs uint64) error
 	// Update checkpoint so that it can GC stale files.
 	UpdateCheckpointTs(checkpointTs model.Ts)
 
@@ -121,7 +127,7 @@ type LogManager interface {
 }
 
 type cacheEvents struct {
-	tableID    model.TableID
+	span       tablepb.Span
 	rows       []*model.RowChangedEvent
 	resolvedTs model.Ts
 	eventType  model.MessageType
@@ -170,7 +176,7 @@ type ManagerImpl struct {
 	opts *ManagerOptions
 
 	// rtsMap stores flushed and unflushed resolved timestamps for all tables.
-	// it's just like map[tableID]*statefulRts.
+	// it's just like map[span]*statefulRts.
 	// For a given statefulRts, unflushed is updated in routine bgUpdateLog,
 	// and flushed is updated in flushLog.
 	rtsMap sync.Map
@@ -339,7 +345,7 @@ func (m *ManagerImpl) Enabled() bool {
 // design may have performance issue.
 func (m *ManagerImpl) EmitRowChangedEvents(
 	ctx context.Context,
-	tableID model.TableID,
+	span tablepb.Span,
 	releaseRowsMemory func(),
 	rows ...*model.RowChangedEvent,
 ) error {
@@ -348,7 +354,7 @@ func (m *ManagerImpl) EmitRowChangedEvents(
 		case <-ctx.Done():
 			return errors.Trace(ctx.Err())
 		case m.logBuffer.In() <- cacheEvents{
-			tableID:       tableID,
+			span:          span,
 			rows:          rows,
 			releaseMemory: releaseRowsMemory,
 			eventType:     model.MessageTypeRow,
@@ -361,7 +367,7 @@ func (m *ManagerImpl) EmitRowChangedEvents(
 // UpdateResolvedTs asynchronously updates resolved ts of a single table.
 func (m *ManagerImpl) UpdateResolvedTs(
 	ctx context.Context,
-	tableID model.TableID,
+	span tablepb.Span,
 	resolvedTs uint64,
 ) error {
 	return m.withLock(func(m *ManagerImpl) error {
@@ -369,7 +375,7 @@ func (m *ManagerImpl) UpdateResolvedTs(
 		case <-ctx.Done():
 			return errors.Trace(ctx.Err())
 		case m.logBuffer.In() <- cacheEvents{
-			tableID:    tableID,
+			span:       span,
 			resolvedTs: resolvedTs,
 			eventType:  model.MessageTypeResolved,
 		}:
@@ -394,8 +400,8 @@ func (m *ManagerImpl) EmitDDLEvent(ctx context.Context, ddl *model.DDLEvent) err
 }
 
 // GetResolvedTs returns the resolved ts of a table
-func (m *ManagerImpl) GetResolvedTs(tableID model.TableID) model.Ts {
-	if value, ok := m.rtsMap.Load(tableID); ok {
+func (m *ManagerImpl) GetResolvedTs(span tablepb.Span) model.Ts {
+	if value, ok := m.rtsMap.Load(spanz.ToHashableSpan(span)); ok {
 		return value.(*statefulRts).getFlushed()
 	}
 	panic("GetResolvedTs is called on an invalid table")
@@ -419,10 +425,11 @@ func (m *ManagerImpl) GetFlushedMeta(checkpointTs, resolvedTs *model.Ts) {
 }
 
 // AddTable adds a new table in redo log manager
-func (m *ManagerImpl) AddTable(tableID model.TableID, startTs uint64) {
-	_, loaded := m.rtsMap.LoadOrStore(tableID, &statefulRts{flushed: startTs, unflushed: startTs})
+func (m *ManagerImpl) AddTable(span tablepb.Span, startTs uint64) {
+	_, loaded := m.rtsMap.LoadOrStore(
+		spanz.ToHashableSpan(span), &statefulRts{flushed: startTs, unflushed: startTs})
 	if loaded {
-		log.Warn("add duplicated table in redo log manager", zap.Int64("tableID", tableID))
+		log.Warn("add duplicated table in redo log manager", zap.Stringer("span", &span))
 		return
 	}
 
@@ -435,11 +442,11 @@ func (m *ManagerImpl) AddTable(tableID model.TableID, startTs uint64) {
 }
 
 // RemoveTable removes a table from redo log manager
-func (m *ManagerImpl) RemoveTable(tableID model.TableID) {
+func (m *ManagerImpl) RemoveTable(span tablepb.Span) {
 	var v interface{}
 	var ok bool
-	if v, ok = m.rtsMap.LoadAndDelete(tableID); !ok {
-		log.Warn("remove a table not maintained in redo log manager", zap.Int64("tableID", tableID))
+	if v, ok = m.rtsMap.LoadAndDelete(spanz.ToHashableSpan(span)); !ok {
+		log.Warn("remove a table not maintained in redo log manager", zap.Stringer("span", &span))
 		return
 	}
 
@@ -474,22 +481,24 @@ func (m *ManagerImpl) Cleanup(ctx context.Context) error {
 	return m.withLock(func(m *ManagerImpl) error { return m.writer.DeleteAllLogs(ctx) })
 }
 
-func (m *ManagerImpl) prepareForFlush() (tableRtsMap map[model.TableID]model.Ts, minResolvedTs model.Ts) {
+func (m *ManagerImpl) prepareForFlush() (
+	tableRtsMap map[spanz.HashableSpan]model.Ts, minResolvedTs model.Ts,
+) {
 	if !m.opts.EmitRowEvents {
 		return
 	}
 
-	tableRtsMap = make(map[model.TableID]model.Ts)
+	tableRtsMap = make(map[spanz.HashableSpan]model.Ts)
 	minResolvedTs = math.MaxUint64
 	m.rtsMap.Range(func(key interface{}, value interface{}) bool {
-		tableID := key.(model.TableID)
+		span := key.(spanz.HashableSpan)
 		rts := value.(*statefulRts)
 		unflushed := rts.getUnflushed()
 		flushed := rts.getFlushed()
 		if unflushed > flushed {
 			flushed = unflushed
 		}
-		tableRtsMap[tableID] = flushed
+		tableRtsMap[span] = flushed
 		if flushed < minResolvedTs {
 			minResolvedTs = flushed
 		}
@@ -502,7 +511,7 @@ func (m *ManagerImpl) prepareForFlush() (tableRtsMap map[model.TableID]model.Ts,
 	return
 }
 
-func (m *ManagerImpl) postFlush(tableRtsMap map[model.TableID]model.Ts, minResolvedTs model.Ts) {
+func (m *ManagerImpl) postFlush(tableRtsMap map[spanz.HashableSpan]model.Ts, minResolvedTs model.Ts) {
 	if !m.opts.EmitRowEvents {
 		return
 	}
@@ -510,8 +519,8 @@ func (m *ManagerImpl) postFlush(tableRtsMap map[model.TableID]model.Ts, minResol
 		// m.minResolvedTs is only updated in flushLog, so no other one can change it.
 		atomic.StoreUint64(&m.minResolvedTs, minResolvedTs)
 	}
-	for tableID, flushed := range tableRtsMap {
-		if value, loaded := m.rtsMap.Load(tableID); loaded {
+	for span, flushed := range tableRtsMap {
+		if value, loaded := m.rtsMap.Load(span); loaded {
 			value.(*statefulRts).setFlushed(flushed)
 		}
 	}
@@ -570,8 +579,8 @@ func (m *ManagerImpl) flushLog(ctx context.Context, handleErr func(err error)) {
 	}()
 }
 
-func (m *ManagerImpl) onResolvedTsMsg(tableID model.TableID, resolvedTs model.Ts) {
-	value, loaded := m.rtsMap.Load(tableID)
+func (m *ManagerImpl) onResolvedTsMsg(span tablepb.Span, resolvedTs model.Ts) {
+	value, loaded := m.rtsMap.Load(spanz.ToHashableSpan(span))
 	if !loaded {
 		panic("onResolvedTsMsg is called for an invalid table")
 	}
@@ -613,7 +622,7 @@ func (m *ManagerImpl) bgUpdateLog(ctx context.Context, errCh chan<- error) {
 
 	var err error
 	logs := make([]*model.RedoRowChangedEvent, 0, 1024*1024)
-	rtsMap := make(map[model.TableID]model.Ts)
+	rtsMap := make(map[spanz.HashableSpan]model.Ts)
 	releaseMemoryCbs := make([]func(), 0, 1024)
 
 	emitBatch := func() {
@@ -645,15 +654,16 @@ func (m *ManagerImpl) bgUpdateLog(ctx context.Context, errCh chan<- error) {
 			}
 		}
 		if len(rtsMap) > 0 {
-			for tableID, resolvedTs := range rtsMap {
-				m.onResolvedTsMsg(tableID, resolvedTs)
+			for hs, resolvedTs := range rtsMap {
+				span := hs.ToSpan()
+				m.onResolvedTsMsg(span, resolvedTs)
 				log.Debug("redo manager writes resolvedTs",
 					zap.String("namespace", m.changeFeedID.Namespace),
 					zap.String("changefeed", m.changeFeedID.ID),
-					zap.Int64("tableID", tableID),
+					zap.Stringer("span", &span),
 					zap.Uint64("resolvedTs", resolvedTs))
 			}
-			rtsMap = make(map[model.TableID]model.Ts)
+			rtsMap = make(map[spanz.HashableSpan]model.Ts)
 		}
 	}
 
@@ -678,8 +688,8 @@ func (m *ManagerImpl) bgUpdateLog(ctx context.Context, errCh chan<- error) {
 						releaseMemoryCbs = append(releaseMemoryCbs, cache.releaseMemory)
 					}
 				case model.MessageTypeResolved:
-					if rtsMap[cache.tableID] < cache.resolvedTs {
-						rtsMap[cache.tableID] = cache.resolvedTs
+					if rtsMap[spanz.ToHashableSpan(cache.span)] < cache.resolvedTs {
+						rtsMap[spanz.ToHashableSpan(cache.span)] = cache.resolvedTs
 					}
 				default:
 					log.Panic("redo manager receives unknown event type")
@@ -708,8 +718,8 @@ func (m *ManagerImpl) bgUpdateLog(ctx context.Context, errCh chan<- error) {
 						releaseMemoryCbs = append(releaseMemoryCbs, cache.releaseMemory)
 					}
 				case model.MessageTypeResolved:
-					if rtsMap[cache.tableID] < cache.resolvedTs {
-						rtsMap[cache.tableID] = cache.resolvedTs
+					if rtsMap[spanz.ToHashableSpan(cache.span)] < cache.resolvedTs {
+						rtsMap[spanz.ToHashableSpan(cache.span)] = cache.resolvedTs
 					}
 				default:
 					log.Panic("redo manager receives unknown event type")
