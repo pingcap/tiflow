@@ -180,6 +180,7 @@ function run() {
 	cat "$OUT_DIR/sql_res.$TEST_NAME.txt"
 	checkDiff
 	check_sync_diff $WORK_DIR $CUR/conf/diff_config_final.toml
+
 	cleanup_process $CDC_BINARY
 }
 
