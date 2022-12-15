@@ -26,7 +26,7 @@ import (
 	bstorage "github.com/pingcap/tidb/br/pkg/storage"
 )
 
-// AdjustPath adjust rawURL, add uniqueId as path suffix, returns a new path and will not change rawURL.
+// AdjustPath adjust rawURL, add uniqueId as path suffix, returns a new path.
 // This function supports both local dir or s3 path. It can be used like the following:
 // 1. adjust subtask's `LoaderConfig.Dir`, uniqueID like `.test-mysql01`.
 // 2. add Lightning checkpoint's fileName to rawURL, uniqueID like `/tidb_lightning_checkpoint.pb`.
@@ -76,7 +76,7 @@ func TrimPath(rawURL string, uniqueID string) (string, error) {
 	return u.String(), err
 }
 
-// isS3Path judges if rawURL is s3 path.
+// IsS3Path judges if rawURL is s3 path.
 func IsS3Path(rawURL string) bool {
 	if rawURL == "" {
 		return false
@@ -86,6 +86,18 @@ func IsS3Path(rawURL string) bool {
 		return false
 	}
 	return u.Scheme == "s3"
+}
+
+// IsLocalDiskPath judges if path is local disk path.
+func IsLocalDiskPath(rawURL string) bool {
+	if rawURL == "" {
+		return false
+	}
+	u, err := bstorage.ParseRawURL(rawURL)
+	if err != nil {
+		return false
+	}
+	return u.Scheme == "" || u.Scheme == "file"
 }
 
 // CreateStorage creates ExternalStore.

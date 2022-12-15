@@ -21,6 +21,7 @@ import (
 	"encoding/json"
 	"flag"
 	"fmt"
+	"path/filepath"
 	"regexp"
 	"strconv"
 	"strings"
@@ -333,6 +334,12 @@ func (c *SubTaskConfig) Adjust(verifyDecryptPassword bool) error {
 			return terror.ErrConfigLoaderDirInvalid.Delegate(err, c.LoaderConfig.Dir)
 		}
 		c.LoaderConfig.Dir = newDir
+
+		if storage.IsLocalDiskPath(newDir) {
+			c.LoaderConfig.SortingDirPhysical = filepath.Join(newDir, "sorting")
+		} else {
+			c.LoaderConfig.SortingDirPhysical = "./sorting/" + c.Name
+		}
 	}
 
 	if c.SyncerConfig.QueueSize == 0 {
