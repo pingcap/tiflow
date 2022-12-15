@@ -226,7 +226,7 @@ func (p *processor) AddTableSpan(
 			p.redoManager.AddTable(span, startTs)
 		}
 		p.sourceManager.AddTable(
-			ctx.(cdcContext.Context), span.TableID, p.getTableName(ctx, span.TableID), startTs)
+			ctx.(cdcContext.Context), span, p.getTableName(ctx, span.TableID), startTs)
 	} else {
 		table, err := p.createTablePipeline(
 			ctx.(cdcContext.Context), span, &model.TableReplicaInfo{StartTs: startTs})
@@ -412,7 +412,7 @@ func (p *processor) IsRemoveTableSpanFinished(span tablepb.Span) (model.Ts, bool
 			p.redoManager.RemoveTable(span)
 		}
 		p.sinkManager.RemoveTable(span.TableID)
-		p.sourceManager.RemoveTable(span.TableID)
+		p.sourceManager.RemoveTable(span)
 		log.Info("table removed",
 			zap.String("captureID", p.captureInfo.ID),
 			zap.String("namespace", p.changefeedID.Namespace),
@@ -471,7 +471,7 @@ func (p *processor) GetTableSpanStatus(span tablepb.Span) tablepb.TableStatus {
 				ResolvedTs:   sinkStats.ResolvedTs,
 			},
 			State: state,
-			Stats: p.getStatsFromSourceManagerAndSinkManager(span.TableID, sinkStats),
+			Stats: p.getStatsFromSourceManagerAndSinkManager(span, sinkStats),
 		}
 	}
 	table, ok := p.tableSpans.Get(span)
@@ -494,8 +494,10 @@ func (p *processor) GetTableSpanStatus(span tablepb.Span) tablepb.TableStatus {
 	}
 }
 
-func (p *processor) getStatsFromSourceManagerAndSinkManager(tableID model.TableID, sinkStats sinkmanager.TableStats) tablepb.Stats {
-	pullerStats := p.sourceManager.GetTablePullerStats(tableID)
+func (p *processor) getStatsFromSourceManagerAndSinkManager(
+	span tablepb.Span, sinkStats sinkmanager.TableStats,
+) tablepb.Stats {
+	pullerStats := p.sourceManager.GetTablePullerStats(span)
 	now, _ := p.upstream.PDClock.CurrentTime()
 
 	stats := tablepb.Stats{
@@ -518,7 +520,7 @@ func (p *processor) getStatsFromSourceManagerAndSinkManager(tableID model.TableI
 		},
 	}
 
-	sortStats := p.sourceManager.GetTableSorterStats(tableID)
+	sortStats := p.sourceManager.GetTableSorterStats(span)
 	stats.StageCheckpoints["sorter-ingress"] = tablepb.Checkpoint{
 		CheckpointTs: sortStats.ReceivedMaxCommitTs,
 		ResolvedTs:   sortStats.ReceivedMaxResolvedTs,
@@ -1218,7 +1220,7 @@ func (p *processor) removeTable(table tablepb.TablePipeline, span tablepb.Span) 
 	}
 	if p.pullBasedSinking {
 		p.sinkManager.RemoveTable(span.TableID)
-		p.sourceManager.RemoveTable(span.TableID)
+		p.sourceManager.RemoveTable(span)
 	} else {
 		table.Cancel()
 		table.Wait()

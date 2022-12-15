@@ -22,6 +22,7 @@ import (
 	"github.com/pingcap/log"
 	"github.com/pingcap/tiflow/cdc/model"
 	"github.com/pingcap/tiflow/cdc/processor/sourcemanager/engine"
+	"github.com/pingcap/tiflow/cdc/processor/tablepb"
 	"go.uber.org/zap"
 )
 
@@ -30,13 +31,27 @@ var (
 	_ engine.EventIterator = (*EventIter)(nil)
 )
 
+type hashableSpan struct {
+	TableID  model.TableID
+	StartKey string
+	EndKey   string
+}
+
+func toHashableSpan(span tablepb.Span) hashableSpan {
+	return hashableSpan{
+		TableID:  span.TableID,
+		StartKey: string(span.StartKey),
+		EndKey:   string(span.EndKey),
+	}
+}
+
 // EventSorter accepts out-of-order raw kv entries and output sorted entries.
 type EventSorter struct {
-	// Just like map[model.TableID]*tableSorter.
+	// Just like map[tablepb.Span]*tableSorter.
 	tables sync.Map
 
 	mu         sync.RWMutex
-	onResolves []func(model.TableID, model.Ts)
+	onResolves []func(tablepb.Span, model.Ts)
 }
 
 // EventIter implements sorter.EventIterator.
@@ -56,24 +71,24 @@ func (s *EventSorter) IsTableBased() bool {
 }
 
 // AddTable implements engine.SortEngine.
-func (s *EventSorter) AddTable(tableID model.TableID) {
-	if _, exists := s.tables.LoadOrStore(tableID, &tableSorter{}); exists {
-		log.Panic("add an exist table", zap.Int64("tableID", tableID))
+func (s *EventSorter) AddTable(span tablepb.Span) {
+	if _, exists := s.tables.LoadOrStore(toHashableSpan(span), &tableSorter{}); exists {
+		log.Panic("add an exist table", zap.Stringer("span", &span))
 	}
 }
 
 // RemoveTable implements engine.SortEngine.
-func (s *EventSorter) RemoveTable(tableID model.TableID) {
-	if _, exists := s.tables.LoadAndDelete(tableID); !exists {
-		log.Panic("remove an unexist table", zap.Int64("tableID", tableID))
+func (s *EventSorter) RemoveTable(span tablepb.Span) {
+	if _, exists := s.tables.LoadAndDelete(toHashableSpan(span)); !exists {
+		log.Panic("remove an unexist table", zap.Stringer("span", &span))
 	}
 }
 
 // Add implements engine.SortEngine.
-func (s *EventSorter) Add(tableID model.TableID, events ...*model.PolymorphicEvent) (err error) {
-	value, exists := s.tables.Load(tableID)
+func (s *EventSorter) Add(span tablepb.Span, events ...*model.PolymorphicEvent) (err error) {
+	value, exists := s.tables.Load(toHashableSpan(span))
 	if !exists {
-		log.Panic("add events into an unexist table", zap.Int64("tableID", tableID))
+		log.Panic("add events into an unexist table", zap.Stringer("span", &span))
 	}
 
 	resolvedTs, hasNewResolved := value.(*tableSorter).add(events...)
@@ -81,37 +96,37 @@ func (s *EventSorter) Add(tableID model.TableID, events ...*model.PolymorphicEve
 		s.mu.RLock()
 		defer s.mu.RUnlock()
 		for _, onResolve := range s.onResolves {
-			onResolve(tableID, resolvedTs)
+			onResolve(span, resolvedTs)
 		}
 	}
 	return nil
 }
 
 // GetResolvedTs implements engine.SortEngine.
-func (s *EventSorter) GetResolvedTs(tableID model.TableID) model.Ts {
-	value, exists := s.tables.Load(tableID)
+func (s *EventSorter) GetResolvedTs(span tablepb.Span) model.Ts {
+	value, exists := s.tables.Load(toHashableSpan(span))
 	if !exists {
-		log.Panic("get resolved ts from an unexist table", zap.Int64("tableID", tableID))
+		log.Panic("get resolved ts from an unexist table", zap.Stringer("span", &span))
 	}
 
 	return value.(*tableSorter).getResolvedTs()
 }
 
 // OnResolve implements engine.SortEngine.
-func (s *EventSorter) OnResolve(action func(model.TableID, model.Ts)) {
+func (s *EventSorter) OnResolve(action func(tablepb.Span, model.Ts)) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	s.onResolves = append(s.onResolves, action)
 }
 
 // FetchByTable implements engine.SortEngine.
-func (s *EventSorter) FetchByTable(tableID model.TableID, lowerBound, upperBound engine.Position) engine.EventIterator {
-	value, exists := s.tables.Load(tableID)
+func (s *EventSorter) FetchByTable(span tablepb.Span, lowerBound, upperBound engine.Position) engine.EventIterator {
+	value, exists := s.tables.Load(toHashableSpan(span))
 	if !exists {
-		log.Panic("fetch events from an unexist table", zap.Int64("tableID", tableID))
+		log.Panic("fetch events from an unexist table", zap.Stringer("span", &span))
 	}
 
-	return value.(*tableSorter).fetch(tableID, lowerBound, upperBound)
+	return value.(*tableSorter).fetch(span, lowerBound, upperBound)
 }
 
 // FetchAllTables implements engine.SortEngine.
@@ -121,13 +136,13 @@ func (s *EventSorter) FetchAllTables(lowerBound engine.Position) engine.EventIte
 }
 
 // CleanByTable implements engine.SortEngine.
-func (s *EventSorter) CleanByTable(tableID model.TableID, upperBound engine.Position) error {
-	value, exists := s.tables.Load(tableID)
+func (s *EventSorter) CleanByTable(span tablepb.Span, upperBound engine.Position) error {
+	value, exists := s.tables.Load(toHashableSpan(span))
 	if !exists {
-		log.Panic("clean an unexist table", zap.Int64("tableID", tableID))
+		log.Panic("clean an unexist table", zap.Stringer("span", &span))
 	}
 
-	value.(*tableSorter).clean(tableID, upperBound)
+	value.(*tableSorter).clean(span, upperBound)
 	return nil
 }
 
@@ -138,7 +153,7 @@ func (s *EventSorter) CleanAllTables(upperBound engine.Position) error {
 }
 
 // GetStatsByTable implements engine.SortEngine.
-func (s *EventSorter) GetStatsByTable(tableID model.TableID) engine.TableStats {
+func (s *EventSorter) GetStatsByTable(span tablepb.Span) engine.TableStats {
 	log.Panic("GetStatsByTable should never be called")
 	return engine.TableStats{}
 }
@@ -228,13 +243,13 @@ func (s *tableSorter) getResolvedTs() model.Ts {
 	return *s.resolvedTs
 }
 
-func (s *tableSorter) fetch(tableID model.TableID, lowerBound, upperBound engine.Position) engine.EventIterator {
+func (s *tableSorter) fetch(span tablepb.Span, lowerBound, upperBound engine.Position) engine.EventIterator {
 	s.mu.RLock()
 	defer s.mu.RUnlock()
 
 	iter := &EventIter{}
 	if s.resolvedTs == nil || upperBound.CommitTs > *s.resolvedTs {
-		log.Panic("fetch unresolved events", zap.Int64("tableID", tableID))
+		log.Panic("fetch unresolved events", zap.Stringer("span", &span))
 	}
 
 	startIdx := sort.Search(len(s.resolved), func(idx int) bool {
@@ -251,11 +266,11 @@ func (s *tableSorter) fetch(tableID model.TableID, lowerBound, upperBound engine
 	return iter
 }
 
-func (s *tableSorter) clean(tableID model.TableID, upperBound engine.Position) {
+func (s *tableSorter) clean(span tablepb.Span, upperBound engine.Position) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	if s.resolvedTs == nil || upperBound.CommitTs > *s.resolvedTs {
-		log.Panic("clean unresolved events", zap.Int64("tableID", tableID))
+		log.Panic("clean unresolved events", zap.Stringer("span", &span))
 	}
 
 	startIdx := sort.Search(len(s.resolved), func(idx int) bool {
