@@ -20,6 +20,7 @@ import (
 	"time"
 
 	"github.com/pingcap/tiflow/cdc/model"
+	"github.com/pingcap/tiflow/pkg/spanz"
 	"github.com/stretchr/testify/require"
 )
 
@@ -33,7 +34,7 @@ func (r *progressTracker) pendingResolvedTsEventsCount() int {
 func TestNewProgressTracker(t *testing.T) {
 	t.Parallel()
 
-	tracker := newProgressTracker(1, defaultBufferSize)
+	tracker := newProgressTracker(spanz.TableIDToComparableSpan(1), defaultBufferSize)
 	require.Equal(
 		t,
 		uint64(0),
@@ -45,7 +46,7 @@ func TestNewProgressTracker(t *testing.T) {
 func TestAddEvent(t *testing.T) {
 	t.Parallel()
 
-	tracker := newProgressTracker(1, defaultBufferSize)
+	tracker := newProgressTracker(spanz.TableIDToComparableSpan(1), defaultBufferSize)
 	tracker.addEvent()
 	tracker.addEvent()
 	tracker.addEvent()
@@ -56,7 +57,7 @@ func TestAddResolvedTs(t *testing.T) {
 	t.Parallel()
 
 	// There is no event in the tracker.
-	tracker := newProgressTracker(1, defaultBufferSize)
+	tracker := newProgressTracker(spanz.TableIDToComparableSpan(1), defaultBufferSize)
 	tracker.addResolvedTs(model.NewResolvedTs(1))
 	tracker.addResolvedTs(model.NewResolvedTs(2))
 	tracker.addResolvedTs(model.NewResolvedTs(3))
@@ -64,7 +65,7 @@ func TestAddResolvedTs(t *testing.T) {
 	require.Equal(t, uint64(3), tracker.advance().Ts, "lastMinResolvedTs should be 3")
 
 	// There is an event in the tracker.
-	tracker = newProgressTracker(1, defaultBufferSize)
+	tracker = newProgressTracker(spanz.TableIDToComparableSpan(1), defaultBufferSize)
 	tracker.addEvent()
 	tracker.addResolvedTs(model.NewResolvedTs(2))
 	tracker.addResolvedTs(model.NewResolvedTs(3))
@@ -77,7 +78,7 @@ func TestRemove(t *testing.T) {
 	var cb1, cb2, cb4, cb5 func()
 
 	// Only event.
-	tracker := newProgressTracker(1, defaultBufferSize)
+	tracker := newProgressTracker(spanz.TableIDToComparableSpan(1), defaultBufferSize)
 	tracker.addEvent()
 	cb2 = tracker.addEvent()
 	tracker.addEvent()
@@ -86,7 +87,7 @@ func TestRemove(t *testing.T) {
 	require.Equal(t, 3, tracker.trackingCount(), "not advanced")
 
 	// Both event and resolved ts.
-	tracker = newProgressTracker(1, defaultBufferSize)
+	tracker = newProgressTracker(spanz.TableIDToComparableSpan(1), defaultBufferSize)
 	cb1 = tracker.addEvent()
 	cb2 = tracker.addEvent()
 	tracker.addResolvedTs(model.NewResolvedTs(3))
@@ -120,7 +121,7 @@ func TestRemove(t *testing.T) {
 func TestCloseTracker(t *testing.T) {
 	t.Parallel()
 
-	tracker := newProgressTracker(1, defaultBufferSize)
+	tracker := newProgressTracker(spanz.TableIDToComparableSpan(1), defaultBufferSize)
 	cb1 := tracker.addEvent()
 	tracker.addResolvedTs(model.NewResolvedTs(1))
 	cb2 := tracker.addEvent()
@@ -149,7 +150,7 @@ func TestCloseTracker(t *testing.T) {
 func TestCloseTrackerCancellable(t *testing.T) {
 	t.Parallel()
 
-	tracker := newProgressTracker(1, defaultBufferSize)
+	tracker := newProgressTracker(spanz.TableIDToComparableSpan(1), defaultBufferSize)
 	tracker.addEvent()
 	tracker.addResolvedTs(model.NewResolvedTs(1))
 	tracker.addEvent()
@@ -174,7 +175,7 @@ func TestCloseTrackerCancellable(t *testing.T) {
 func TestTrackerBufferBoundary(t *testing.T) {
 	t.Parallel()
 
-	tracker := newProgressTracker(1, 8)
+	tracker := newProgressTracker(spanz.TableIDToComparableSpan(1), 8)
 
 	cbs := make([]func(), 0)
 	for i := 0; i < 65; i++ {
@@ -207,7 +208,7 @@ func TestTrackerBufferBoundary(t *testing.T) {
 func TestClosedTrackerDoNotAdvanceCheckpointTs(t *testing.T) {
 	t.Parallel()
 
-	tracker := newProgressTracker(1, defaultBufferSize)
+	tracker := newProgressTracker(spanz.TableIDToComparableSpan(1), defaultBufferSize)
 	cb1 := tracker.addEvent()
 	tracker.addResolvedTs(model.NewResolvedTs(1))
 	cb2 := tracker.addEvent()
@@ -242,7 +243,7 @@ func TestClosedTrackerDoNotAdvanceCheckpointTs(t *testing.T) {
 func TestOnlyResolvedTsShouldDirectlyAdvanceCheckpointTs(t *testing.T) {
 	t.Parallel()
 
-	tracker := newProgressTracker(1, defaultBufferSize)
+	tracker := newProgressTracker(spanz.TableIDToComparableSpan(1), defaultBufferSize)
 	cb1 := tracker.addEvent()
 	tracker.addResolvedTs(model.NewResolvedTs(1))
 	cb2 := tracker.addEvent()
@@ -270,7 +271,7 @@ func TestOnlyResolvedTsShouldDirectlyAdvanceCheckpointTs(t *testing.T) {
 func TestShouldDirectlyUpdateResolvedTsIfNoMoreEvents(t *testing.T) {
 	t.Parallel()
 
-	tracker := newProgressTracker(1, defaultBufferSize)
+	tracker := newProgressTracker(spanz.TableIDToComparableSpan(1), defaultBufferSize)
 	cb1 := tracker.addEvent()
 	tracker.addResolvedTs(model.NewResolvedTs(1))
 	cb2 := tracker.addEvent()
