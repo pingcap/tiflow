@@ -68,7 +68,7 @@ type tableSinkWrapper struct {
 
 	// rangeEventCounts is for clean the table engine.
 	// If rangeEventCounts[i].events is greater than 0, it means there must be
-	// events in the range (rangeEventCounts[i-1].pos, rangeEventCounts[i].pos].
+	// events in the range (rangeEventCounts[i-1].lastPos, rangeEventCounts[i].lastPos].
 	rangeEventCounts   []rangeEventCount
 	rangeEventCountsMu sync.Mutex
 }
