@@ -150,13 +150,13 @@ func (c *Compat) AfterTransportReceive(msgs []*schedulepb.Message) {
 		case schedulepb.MessageType_MsgDispatchTableRequest:
 			switch req := msgs[i].DispatchTableRequest.Request.(type) {
 			case *schedulepb.DispatchTableRequest_AddTable:
-				if req.AddTable.Span.TableId == 0 {
+				if req.AddTable.Span == nil {
 					// Only set span if it is not set before.
 					req.AddTable.Span = spanz.TableIDToComparableSpan(
 						req.AddTable.TableId)
 				}
 			case *schedulepb.DispatchTableRequest_RemoveTable:
-				if req.RemoveTable.Span.TableId == 0 {
+				if req.RemoveTable.Span == nil {
 					req.RemoveTable.Span = spanz.TableIDToComparableSpan(
 						req.RemoveTable.TableId)
 				}
@@ -164,12 +164,12 @@ func (c *Compat) AfterTransportReceive(msgs []*schedulepb.Message) {
 		case schedulepb.MessageType_MsgDispatchTableResponse:
 			switch resp := msgs[i].DispatchTableResponse.Response.(type) {
 			case *schedulepb.DispatchTableResponse_AddTable:
-				if resp.AddTable.Status.Span.TableId == 0 {
+				if resp.AddTable.Status.Span == nil {
 					resp.AddTable.Status.Span = spanz.TableIDToComparableSpan(
 						resp.AddTable.Status.TableId)
 				}
 			case *schedulepb.DispatchTableResponse_RemoveTable:
-				if resp.RemoveTable.Status.Span.TableId == 0 {
+				if resp.RemoveTable.Status.Span == nil {
 					resp.RemoveTable.Status.Span = spanz.TableIDToComparableSpan(
 						resp.RemoveTable.Status.TableId)
 				}
@@ -185,7 +185,7 @@ func (c *Compat) AfterTransportReceive(msgs []*schedulepb.Message) {
 		case schedulepb.MessageType_MsgHeartbeatResponse:
 			resp := msgs[i].HeartbeatResponse
 			for j := range resp.Tables {
-				if resp.Tables[j].Span.TableId == 0 {
+				if resp.Tables[j].Span == nil {
 					resp.Tables[j].Span = spanz.TableIDToComparableSpan(
 						resp.Tables[j].TableId)
 				}

@@ -909,6 +909,9 @@ func (r *ReplicationSet) handleCaptureShutdown(
 func (r *ReplicationSet) updateCheckpointAndStats(
 	checkpoint *tablepb.Checkpoint, stats *tablepb.Stats,
 ) {
+	if r.Checkpoint == nil {
+		r.Checkpoint = &tablepb.Checkpoint{}
+	}
 	if r.Checkpoint.CheckpointTs < checkpoint.CheckpointTs {
 		r.Checkpoint.CheckpointTs = checkpoint.CheckpointTs
 	}

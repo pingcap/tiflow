@@ -318,7 +318,7 @@ func (a *agent) handleMessageDispatchTableRequest(
 	request *schedulepb.DispatchTableRequest,
 	epoch *schedulepb.ProcessorEpoch,
 ) {
-	if a.Epoch != epoch {
+	if a.Epoch.Epoch != epoch.Epoch {
 		log.Info("schedulerv3: agent receive dispatch table request "+
 			"epoch does not match, ignore it",
 			zap.String("capture", a.CaptureID),

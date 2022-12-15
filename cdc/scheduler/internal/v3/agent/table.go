@@ -129,6 +129,9 @@ func (t *tableSpan) handleRemoveTableTask() *schedulepb.Message {
 			t.task = nil
 			status := t.getTableSpanStatus()
 			status.State = tablepb.TableState_Stopped
+			if status.Checkpoint == nil {
+				status.Checkpoint = &tablepb.Checkpoint{}
+			}
 			status.Checkpoint.CheckpointTs = checkpointTs
 			return newRemoveTableResponseMessage(status)
 		case tablepb.TableState_Preparing,
