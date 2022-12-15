@@ -227,19 +227,19 @@ func (ldb *Actor) Poll(ctx context.Context, tasks []actormsg.Message[message.Tas
 				// Force write pending write batch before delete range.
 				if err := ldb.maybeWrite(true); err != nil {
 					log.Panic("db error",
-						zap.Error(err), zap.Uint64("tableID", task.TableID))
+						zap.Error(err), zap.Stringer("span", task.Span))
 				}
 				start, end := task.DeleteReq.Range[0], task.DeleteReq.Range[1]
 				if err := ldb.db.DeleteRange(start, end); err != nil {
 					log.Panic("db error",
-						zap.Error(err), zap.Uint64("tableID", task.TableID))
+						zap.Error(err), zap.Stringer("span", task.Span))
 				}
 				ldb.tryScheduleCompact()
 			}
 		}
 		if task.IterReq != nil {
 			// Append to slice for later batch acquiring iterators.
-			ldb.iterQ.push(task.UID, task.TableID, task.IterReq)
+			ldb.iterQ.push(task.UID, uint64(task.Span.TableID), task.IterReq)
 			requireIter = true
 		}
 		if task.Test != nil {
