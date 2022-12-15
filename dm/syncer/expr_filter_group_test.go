@@ -18,7 +18,6 @@ import (
 
 	. "github.com/pingcap/check"
 	"github.com/pingcap/tidb/util/filter"
-
 	"github.com/pingcap/tiflow/dm/dm/config"
 	"github.com/pingcap/tiflow/dm/pkg/log"
 	"github.com/pingcap/tiflow/dm/pkg/schema"
@@ -440,16 +439,13 @@ create table t (
 	c.Assert(err, IsNil)
 	c.Assert(skip, Equals, false)
 	skip, err = SkipDMLByExpression(sessCtx, []interface{}{2}, expr, ti.Columns)
-<<<<<<< HEAD
 	c.Assert(err, IsNil)
 	c.Assert(skip, Equals, false)
-=======
-	require.NoError(t, err)
-	require.False(t, skip)
 }
 
-func TestGetUpdateExprsSameLength(t *testing.T) {
+func (s *testFilterSuite) TestGetUpdateExprsSameLength(c *C) {
 	var (
+		ctx     = context.Background()
 		dbName  = "test"
 		tblName = "t"
 		table   = &filter.Table{
@@ -488,22 +484,25 @@ create table t (
 		},
 	}
 
-	stmt, err := parseSQL(tableStr)
-	require.NoError(t, err)
-	tableInfo, err := ddl2.BuildTableInfoFromAST(stmt.(*ast.CreateTableStmt))
-	require.NoError(t, err)
+	dbConn := dbconn.NewDBConn(&config.SubTaskConfig{}, s.baseConn)
+	schemaTracker, err := schema.NewTracker(ctx, "unit-test", defaultTestSessionCfg, dbConn)
+	c.Assert(err, IsNil)
+	c.Assert(schemaTracker.CreateSchemaIfNotExists(dbName), IsNil)
+	c.Assert(schemaTracker.Exec(ctx, dbName, tableStr), IsNil)
 
-	for i, c := range cases {
-		t.Logf("case #%d", i)
-		g := NewExprFilterGroup(tcontext.Background(), sessCtx, []*config.ExpressionFilter{c})
+	tableInfo, err := schemaTracker.GetTableInfo(table)
+	c.Assert(err, IsNil)
+
+	for i, ca := range cases {
+		c.Logf("case #%d", i)
+		g := NewExprFilterGroup(sessCtx, []*config.ExpressionFilter{ca})
 		oldExprs, newExprs, err2 := g.GetUpdateExprs(table, tableInfo)
-		require.NoError(t, err2)
-		require.Equal(t, len(oldExprs), len(newExprs))
+		c.Assert(err2, IsNil)
+		c.Assert(len(oldExprs), Equals, len(newExprs))
 	}
-	g := NewExprFilterGroup(tcontext.Background(), sessCtx, cases)
+	g := NewExprFilterGroup(sessCtx, cases)
 	oldExprs, newExprs, err := g.GetUpdateExprs(table, tableInfo)
-	require.NoError(t, err)
-	require.Equal(t, len(oldExprs), len(newExprs))
-	require.Len(t, oldExprs, 3)
->>>>>>> 099da1e08f (expression_filter(dm): fix append update filter for non-update item (#7851))
+	c.Assert(err, IsNil)
+	c.Assert(len(oldExprs), Equals, len(newExprs))
+	c.Assert(len(oldExprs), Equals, 3)
 }
