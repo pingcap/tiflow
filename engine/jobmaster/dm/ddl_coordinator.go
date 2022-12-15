@@ -300,9 +300,9 @@ func (c *DDLCoordinator) removeShardGroup(ctx context.Context, targetTable metad
 }
 
 type shardGroup struct {
-	mu                  sync.RWMutex
+	mu sync.RWMutex
 	// normalTables represents upstream table info record in checkpoint.
-	normalTables        map[metadata.SourceTable]string
+	normalTables map[metadata.SourceTable]string
 	// conflictTables represents upstream table info after executing conflict DDL.
 	conflictTables      map[metadata.SourceTable]string
 	tableAgent          TableAgent
