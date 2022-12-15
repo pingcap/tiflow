@@ -29,6 +29,7 @@ import (
 	"github.com/pingcap/tiflow/cdc/sinkv2/eventsink/factory"
 	cerrors "github.com/pingcap/tiflow/pkg/errors"
 	"github.com/pingcap/tiflow/pkg/retry"
+	"github.com/pingcap/tiflow/pkg/spanz"
 	"github.com/pingcap/tiflow/pkg/upstream"
 	"github.com/prometheus/client_golang/prometheus"
 	"github.com/tikv/client-go/v2/oracle"
@@ -639,7 +640,8 @@ func (m *SinkManager) AddTable(tableID model.TableID, startTs model.Ts, targetTs
 	sinkWrapper := newTableSinkWrapper(
 		m.changefeedID,
 		tableID,
-		m.sinkFactory.CreateTableSink(m.changefeedID, tableID, m.metricsTableSinkTotalRows),
+		m.sinkFactory.CreateTableSink(
+			m.changefeedID, spanz.TableIDToComparableSpan(tableID), m.metricsTableSinkTotalRows),
 		tablepb.TableStatePreparing,
 		startTs,
 		targetTs,
