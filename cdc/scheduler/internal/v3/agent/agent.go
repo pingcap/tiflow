@@ -285,7 +285,7 @@ func (a *agent) handleMessageHeartbeat(request *schedulepb.Heartbeat) *schedulep
 	}
 
 	message := &schedulepb.Message{
-		MsgType:           schedulepb.MessageType_MsgHeartbeat,
+		MsgType:           schedulepb.MessageType_MsgHeartbeatResponse,
 		HeartbeatResponse: response,
 	}
 
