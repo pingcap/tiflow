@@ -125,6 +125,11 @@ func TestGenerateDSNByConfig(t *testing.T) {
 				sqlmock.NewRows(columns).
 					AddRow("tidb_placement_mode", "IGNORE"),
 			)
+		mock.ExpectQuery("show session variables like 'tidb_enable_external_ts_read';").
+			WillReturnRows(
+				sqlmock.NewRows(columns).
+					AddRow("tidb_enable_external_ts_read", "OFF"),
+			)
 		dsnStr, err = generateDSNByConfig(context.TODO(), dsn, cfg, db)
 		require.Nil(t, err)
 		expectedCfg := []string{
@@ -148,6 +153,11 @@ func TestGenerateDSNByConfig(t *testing.T) {
 			WillReturnRows(
 				sqlmock.NewRows(columns).
 					AddRow("tidb_placement_mode", "IGNORE"),
+			)
+		mock.ExpectQuery("show session variables like 'tidb_enable_external_ts_read';").
+			WillReturnRows(
+				sqlmock.NewRows(columns).
+					AddRow("tidb_enable_external_ts_read", "OFF"),
 			)
 		dsnStr, err = generateDSNByConfig(context.TODO(), dsn, cfg, db)
 		require.Nil(t, err)
