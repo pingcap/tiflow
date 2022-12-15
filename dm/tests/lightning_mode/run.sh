@@ -60,6 +60,12 @@ function run() {
 		'"progress": "100.00 %"' 1 \
 		"please check \`dm_meta_test\`.\`conflict_error_v1\` to see the duplication" 1
 	run_dm_ctl $WORK_DIR "127.0.0.1:$MASTER_PORT" \
+		"resume-task test" \
+		"\"result\": true" 3
+	run_dm_ctl_with_retry $WORK_DIR "127.0.0.1:$MASTER_PORT" \
+		"query-status test" \
+		'unit": "Sync"' 2
+	run_dm_ctl $WORK_DIR "127.0.0.1:$MASTER_PORT" \
 		"stop-task test" \
 		"\"result\": true" 3
 	run_sql_tidb "drop database if exists lightning_mode;"
@@ -79,7 +85,6 @@ function run() {
 		"query-status test" \
 		'unit": "Sync"' 2
 
-	read -p 123
 	run_dm_ctl $WORK_DIR "127.0.0.1:$MASTER_PORT" \
 		"stop-task test" \
 		"\"result\": true" 3

@@ -341,6 +341,7 @@ func GetLightningConfig(globalCfg *lcfg.GlobalConfig, subtaskCfg *config.SubTask
 	cfg.Checkpoint.DSN = cpPath
 	cfg.Checkpoint.KeepAfterSuccess = lcfg.CheckpointOrigin
 
+	cfg.TikvImporter.DiskQuota = subtaskCfg.LoaderConfig.DiskQuotaPhysical
 	cfg.TikvImporter.OnDuplicate = string(subtaskCfg.OnDuplicateLogical)
 	switch subtaskCfg.OnDuplicatePhysical {
 	case config.OnDuplicateManual:
