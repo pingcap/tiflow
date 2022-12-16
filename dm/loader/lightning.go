@@ -15,6 +15,7 @@ package loader
 
 import (
 	"context"
+	"os"
 	"path/filepath"
 	"strings"
 	"sync"
@@ -271,6 +272,11 @@ func (l *LightningLoader) runLightning(ctx context.Context, cfg *lcfg.Config) er
 	var hasDup atomic.Bool
 	if l.cfg.LoaderConfig.ImportMode == config.LoadModePhysical {
 		opts = append(opts, lightning.WithDupIndicator(&hasDup))
+	}
+
+	if cfg.TikvImporter.Backend == lcfg.BackendLocal {
+		// create the directory in advance to avoid the error
+		_ = os.MkdirAll(cfg.TikvImporter.SortedKVDir, 0o600)
 	}
 
 	err = l.core.RunOnceWithOptions(taskCtx, cfg, opts...)

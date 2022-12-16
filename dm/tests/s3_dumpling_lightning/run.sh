@@ -137,7 +137,7 @@ function run_test() {
 		task=${2}
 	fi
 	if $1; then
-		check_dump_s3_exist $db1 $tb1 $2 $SOURCE_ID1
+		check_dump_s3_exist $db1 $tb1 $task $SOURCE_ID1
 	else
 		dir_should_not_exist "${s3_DBPATH}/${dumpPath}/${task}.${SOURCE_ID1}"
 	fi
