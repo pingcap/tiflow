@@ -404,7 +404,6 @@ func (w *sinkWorker) fetchFromCache(
 }
 
 func (w *sinkWorker) advanceTableSinkWithBatchID(t *sinkTask, commitTs model.Ts, size uint64, batchID uint64) error {
-
 	resolvedTs := model.NewResolvedTs(commitTs)
 	resolvedTs.Mode = model.BatchResolvedMode
 	resolvedTs.BatchID = batchID
