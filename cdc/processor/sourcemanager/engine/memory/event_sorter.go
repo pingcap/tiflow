@@ -23,6 +23,7 @@ import (
 	"github.com/pingcap/tiflow/cdc/model"
 	"github.com/pingcap/tiflow/cdc/processor/sourcemanager/engine"
 	"github.com/pingcap/tiflow/cdc/processor/tablepb"
+	"github.com/pingcap/tiflow/pkg/spanz"
 	"go.uber.org/zap"
 )
 
@@ -30,20 +31,6 @@ var (
 	_ engine.SortEngine    = (*EventSorter)(nil)
 	_ engine.EventIterator = (*EventIter)(nil)
 )
-
-type hashableSpan struct {
-	TableID  model.TableID
-	StartKey string
-	EndKey   string
-}
-
-func toHashableSpan(span tablepb.Span) hashableSpan {
-	return hashableSpan{
-		TableID:  span.TableID,
-		StartKey: string(span.StartKey),
-		EndKey:   string(span.EndKey),
-	}
-}
 
 // EventSorter accepts out-of-order raw kv entries and output sorted entries.
 type EventSorter struct {
@@ -72,21 +59,21 @@ func (s *EventSorter) IsTableBased() bool {
 
 // AddTable implements engine.SortEngine.
 func (s *EventSorter) AddTable(span tablepb.Span) {
-	if _, exists := s.tables.LoadOrStore(toHashableSpan(span), &tableSorter{}); exists {
+	if _, exists := s.tables.LoadOrStore(spanz.ToHashableSpan(span), &tableSorter{}); exists {
 		log.Panic("add an exist table", zap.Stringer("span", &span))
 	}
 }
 
 // RemoveTable implements engine.SortEngine.
 func (s *EventSorter) RemoveTable(span tablepb.Span) {
-	if _, exists := s.tables.LoadAndDelete(toHashableSpan(span)); !exists {
+	if _, exists := s.tables.LoadAndDelete(spanz.ToHashableSpan(span)); !exists {
 		log.Panic("remove an unexist table", zap.Stringer("span", &span))
 	}
 }
 
 // Add implements engine.SortEngine.
 func (s *EventSorter) Add(span tablepb.Span, events ...*model.PolymorphicEvent) (err error) {
-	value, exists := s.tables.Load(toHashableSpan(span))
+	value, exists := s.tables.Load(spanz.ToHashableSpan(span))
 	if !exists {
 		log.Panic("add events into an unexist table", zap.Stringer("span", &span))
 	}
@@ -104,7 +91,7 @@ func (s *EventSorter) Add(span tablepb.Span, events ...*model.PolymorphicEvent) 
 
 // GetResolvedTs implements engine.SortEngine.
 func (s *EventSorter) GetResolvedTs(span tablepb.Span) model.Ts {
-	value, exists := s.tables.Load(toHashableSpan(span))
+	value, exists := s.tables.Load(spanz.ToHashableSpan(span))
 	if !exists {
 		log.Panic("get resolved ts from an unexist table", zap.Stringer("span", &span))
 	}
@@ -121,7 +108,7 @@ func (s *EventSorter) OnResolve(action func(tablepb.Span, model.Ts)) {
 
 // FetchByTable implements engine.SortEngine.
 func (s *EventSorter) FetchByTable(span tablepb.Span, lowerBound, upperBound engine.Position) engine.EventIterator {
-	value, exists := s.tables.Load(toHashableSpan(span))
+	value, exists := s.tables.Load(spanz.ToHashableSpan(span))
 	if !exists {
 		log.Panic("fetch events from an unexist table", zap.Stringer("span", &span))
 	}
@@ -137,7 +124,7 @@ func (s *EventSorter) FetchAllTables(lowerBound engine.Position) engine.EventIte
 
 // CleanByTable implements engine.SortEngine.
 func (s *EventSorter) CleanByTable(span tablepb.Span, upperBound engine.Position) error {
-	value, exists := s.tables.Load(toHashableSpan(span))
+	value, exists := s.tables.Load(spanz.ToHashableSpan(span))
 	if !exists {
 		log.Panic("clean an unexist table", zap.Stringer("span", &span))
 	}

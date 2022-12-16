@@ -84,7 +84,7 @@ func (w *sinkWorker) handleTask(ctx context.Context, task *sinkTask) (finalErr e
 		log.Panic("sink task upperbound must be a ResolvedTs",
 			zap.String("namespace", w.changefeedID.Namespace),
 			zap.String("changefeed", w.changefeedID.ID),
-			zap.Int64("tableID", task.tableID),
+			zap.Stringer("span", &task.span),
 			zap.Any("upperBound", upperBound))
 	}
 
@@ -114,7 +114,7 @@ func (w *sinkWorker) handleTask(ctx context.Context, task *sinkTask) (finalErr e
 			log.Debug("MemoryQuotaTracing: refund memory for table sink task",
 				zap.String("namespace", w.changefeedID.Namespace),
 				zap.String("changefeed", w.changefeedID.ID),
-				zap.Int64("tableID", task.tableID),
+				zap.Stringer("span", &task.span),
 				zap.Uint64("memory", availableMem-usedMem))
 			task.callback(lowerBound.Prev())
 			return nil
@@ -137,7 +137,7 @@ func (w *sinkWorker) handleTask(ctx context.Context, task *sinkTask) (finalErr e
 		log.Debug("check should advance or not",
 			zap.String("namespace", w.changefeedID.Namespace),
 			zap.String("changefeed", w.changefeedID.ID),
-			zap.Int64("tableID", task.tableID),
+			zap.Stringer("span", &task.span),
 			zap.Bool("splitTxn", w.splitTxn),
 			zap.Uint64("currTxnCommitTs", currTxnCommitTs),
 			zap.Uint64("lastTxnCommitTs", lastTxnCommitTs),
@@ -166,7 +166,7 @@ func (w *sinkWorker) handleTask(ctx context.Context, task *sinkTask) (finalErr e
 			// It's the last time we call `doEmitAndAdvance`, but `pendingTxnSize`
 			// hasn't been recorded yet. To avoid losing it, record it manually.
 			if isLastTime && pendingTxnSize > 0 {
-				w.memQuota.record(task.tableID, model.NewResolvedTs(currTxnCommitTs), pendingTxnSize)
+				w.memQuota.record(task.span, model.NewResolvedTs(currTxnCommitTs), pendingTxnSize)
 			}
 		}
 		return
@@ -190,7 +190,7 @@ func (w *sinkWorker) handleTask(ctx context.Context, task *sinkTask) (finalErr e
 			log.Debug("MemoryQuotaTracing: force acquire memory for table sink task",
 				zap.String("namespace", w.changefeedID.Namespace),
 				zap.String("changefeed", w.changefeedID.ID),
-				zap.Int64("tableID", task.tableID),
+				zap.Stringer("span", &task.span),
 				zap.Uint64("memory", usedMem-availableMem))
 			availableMem = usedMem
 		}
@@ -205,7 +205,7 @@ func (w *sinkWorker) handleTask(ctx context.Context, task *sinkTask) (finalErr e
 					log.Debug("MemoryQuotaTracing: try acquire memory for table sink task",
 						zap.String("namespace", w.changefeedID.Namespace),
 						zap.String("changefeed", w.changefeedID.ID),
-						zap.Int64("tableID", task.tableID),
+						zap.Stringer("span", &task.span),
 						zap.Uint64("memory", requestMemSize))
 				}
 			} else {
@@ -215,7 +215,7 @@ func (w *sinkWorker) handleTask(ctx context.Context, task *sinkTask) (finalErr e
 					log.Debug("MemoryQuotaTracing: force acquire memory for table sink task",
 						zap.String("namespace", w.changefeedID.Namespace),
 						zap.String("changefeed", w.changefeedID.ID),
-						zap.Int64("tableID", task.tableID),
+						zap.Stringer("span", &task.span),
 						zap.Uint64("memory", requestMemSize))
 				} else {
 					// NOTE: if splitTxn is true it's not required to force acquire memory.
@@ -226,7 +226,7 @@ func (w *sinkWorker) handleTask(ctx context.Context, task *sinkTask) (finalErr e
 					log.Debug("MemoryQuotaTracing: block acquire memory for table sink task",
 						zap.String("namespace", w.changefeedID.Namespace),
 						zap.String("changefeed", w.changefeedID.ID),
-						zap.Int64("tableID", task.tableID),
+						zap.Stringer("span", &task.span),
 						zap.Uint64("memory", requestMemSize))
 				}
 			}
@@ -237,7 +237,7 @@ func (w *sinkWorker) handleTask(ctx context.Context, task *sinkTask) (finalErr e
 	// lowerBound and upperBound are both closed intervals.
 	allEventSize := uint64(0)
 	allEventCount := 0
-	iter := w.sourceManager.FetchByTable(task.tableID, lowerBound, upperBound)
+	iter := w.sourceManager.FetchByTable(task.span, lowerBound, upperBound)
 	defer func() {
 		w.metricRedoEventCacheMiss.Add(float64(allEventSize))
 		task.tableSink.receivedEventCount.Add(int64(allEventCount))
@@ -257,14 +257,14 @@ func (w *sinkWorker) handleTask(ctx context.Context, task *sinkTask) (finalErr e
 			log.Error("Sink worker fails to close iterator",
 				zap.String("namespace", w.changefeedID.Namespace),
 				zap.String("changefeed", w.changefeedID.ID),
-				zap.Int64("tableID", task.tableID),
+				zap.Stringer("span", &task.span),
 				zap.Error(err))
 		}
 
 		log.Debug("Sink task finished",
 			zap.String("namespace", w.changefeedID.Namespace),
 			zap.String("changefeed", w.changefeedID.ID),
-			zap.Int64("tableID", task.tableID),
+			zap.Stringer("span", &task.span),
 			zap.Any("lowerBound", lowerBound),
 			zap.Any("upperBound", upperBound),
 			zap.Bool("splitTxn", w.splitTxn),
@@ -281,7 +281,7 @@ func (w *sinkWorker) handleTask(ctx context.Context, task *sinkTask) (finalErr e
 			log.Debug("MemoryQuotaTracing: refund memory for table sink task",
 				zap.String("namespace", w.changefeedID.Namespace),
 				zap.String("changefeed", w.changefeedID.ID),
-				zap.Int64("tableID", task.tableID),
+				zap.Stringer("span", &task.span),
 				zap.Uint64("memory", availableMem-usedMem))
 		}
 	}()
@@ -322,7 +322,7 @@ func (w *sinkWorker) handleTask(ctx context.Context, task *sinkTask) (finalErr e
 		if e.Row != nil {
 			// For all rows, we add table replicate ts, so mysql sink can determine safe-mode.
 			e.Row.ReplicatingTs = task.tableSink.replicateTs
-			x, size, err := convertRowChangedEvents(w.changefeedID, task.tableID, w.enableOldValue, e)
+			x, size, err := convertRowChangedEvents(w.changefeedID, task.span, w.enableOldValue, e)
 			if err != nil {
 				return err
 			}
@@ -352,7 +352,7 @@ func (w *sinkWorker) fetchFromCache(
 	newLowerBound := *lowerBound
 	newUpperBound := *upperBound
 
-	cache := w.eventCache.getAppender(task.tableID)
+	cache := w.eventCache.getAppender(task.span)
 	if cache == nil {
 		return
 	}
@@ -387,13 +387,13 @@ func (w *sinkWorker) fetchFromCache(
 			}
 		}
 		// NOTE: the recorded size can be not accurate, but let it be.
-		w.memQuota.record(task.tableID, resolvedTs, popRes.releaseSize)
+		w.memQuota.record(task.span, resolvedTs, popRes.releaseSize)
 		if err = task.tableSink.updateResolvedTs(resolvedTs); err == nil {
 		}
 		log.Debug("Advance table sink",
 			zap.String("namespace", w.changefeedID.Namespace),
 			zap.String("changefeed", w.changefeedID.ID),
-			zap.Int64("tableID", task.tableID),
+			zap.Stringer("span", &task.span),
 			zap.Any("resolvedTs", resolvedTs))
 	} else {
 		newUpperBound = popRes.boundary.Prev()
@@ -402,7 +402,7 @@ func (w *sinkWorker) fetchFromCache(
 	log.Debug("fetchFromCache is performed",
 		zap.String("namespace", w.changefeedID.Namespace),
 		zap.String("changefeed", w.changefeedID.ID),
-		zap.Int64("tableID", task.tableID),
+		zap.Stringer("span", &task.span),
 		zap.Bool("success", popRes.success),
 		zap.Int("eventsLen", len(popRes.events)),
 		zap.Bool("cacheDrained", cacheDrained),
@@ -422,11 +422,11 @@ func (w *sinkWorker) advanceTableSinkWithBatchID(t *sinkTask, commitTs model.Ts,
 	log.Debug("Advance table sink with batch ID",
 		zap.String("namespace", w.changefeedID.Namespace),
 		zap.String("changefeed", w.changefeedID.ID),
-		zap.Int64("tableID", t.tableID),
+		zap.Stringer("span", &t.span),
 		zap.Any("resolvedTs", resolvedTs),
 		zap.Uint64("size", size))
 	if size > 0 {
-		w.memQuota.record(t.tableID, resolvedTs, size)
+		w.memQuota.record(t.span, resolvedTs, size)
 	}
 	return t.tableSink.updateResolvedTs(resolvedTs)
 }
@@ -436,11 +436,11 @@ func (w *sinkWorker) advanceTableSink(t *sinkTask, commitTs model.Ts, size uint6
 	log.Debug("Advance table sink without batch ID",
 		zap.String("namespace", w.changefeedID.Namespace),
 		zap.String("changefeed", w.changefeedID.ID),
-		zap.Int64("tableID", t.tableID),
+		zap.Stringer("span", &t.span),
 		zap.Any("resolvedTs", resolvedTs),
 		zap.Uint64("size", size))
 	if size > 0 {
-		w.memQuota.record(t.tableID, resolvedTs, size)
+		w.memQuota.record(t.span, resolvedTs, size)
 	}
 	return t.tableSink.updateResolvedTs(resolvedTs)
 }

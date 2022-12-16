@@ -42,7 +42,7 @@ type tableSinkWrapper struct {
 	// changefeed used for logging.
 	changefeed model.ChangeFeedID
 	// tableID used for logging.
-	tableID model.TableID
+	span tablepb.Span
 	// tableSink is the underlying sink.
 	tableSink sinkv2.TableSink
 	// state used to control the lifecycle of the table.
@@ -90,7 +90,7 @@ func newRangeEventCount(pos engine.Position, events int) rangeEventCount {
 
 func newTableSinkWrapper(
 	changefeed model.ChangeFeedID,
-	tableID model.TableID,
+	span tablepb.Span,
 	tableSink sinkv2.TableSink,
 	state tablepb.TableState,
 	startTs model.Ts,
@@ -99,7 +99,7 @@ func newTableSinkWrapper(
 	res := &tableSinkWrapper{
 		version:    atomic.AddUint64(&version, 1),
 		changefeed: changefeed,
-		tableID:    tableID,
+		span:       span,
 		tableSink:  tableSink,
 		state:      &state,
 		startTs:    startTs,
@@ -115,7 +115,7 @@ func (t *tableSinkWrapper) start(startTs model.Ts, replicateTs model.Ts) {
 		log.Panic("The table sink has already started",
 			zap.String("namespace", t.changefeed.Namespace),
 			zap.String("changefeed", t.changefeed.ID),
-			zap.Int64("tableID", t.tableID),
+			zap.Stringer("span", &t.span),
 			zap.Uint64("startTs", startTs),
 			zap.Uint64("replicateTs", replicateTs),
 			zap.Uint64("oldReplicateTs", t.replicateTs),
@@ -124,7 +124,7 @@ func (t *tableSinkWrapper) start(startTs model.Ts, replicateTs model.Ts) {
 	log.Info("Sink is started",
 		zap.String("namespace", t.changefeed.Namespace),
 		zap.String("changefeed", t.changefeed.ID),
-		zap.Int64("tableID", t.tableID),
+		zap.Stringer("span", &t.span),
 		zap.Uint64("startTs", startTs),
 		zap.Uint64("replicateTs", replicateTs),
 	)
@@ -205,7 +205,7 @@ func (t *tableSinkWrapper) close(ctx context.Context) {
 	defer t.state.Store(tablepb.TableStateStopped)
 	t.tableSink.Close(ctx)
 	log.Info("Sink is closed",
-		zap.Int64("tableID", t.tableID),
+		zap.Stringer("span", &t.span),
 		zap.String("namespace", t.changefeed.Namespace),
 		zap.String("changefeed", t.changefeed.ID))
 }
@@ -264,7 +264,7 @@ func (t *tableSinkWrapper) cleanRangeEventCounts(upperBound engine.Position, min
 
 // convertRowChangedEvents uses to convert RowChangedEvents to TableSinkRowChangedEvents.
 // It will deal with the old value compatibility.
-func convertRowChangedEvents(changefeed model.ChangeFeedID, tableID model.TableID, enableOldValue bool, events ...*model.PolymorphicEvent) ([]*model.RowChangedEvent, uint64, error) {
+func convertRowChangedEvents(changefeed model.ChangeFeedID, span tablepb.Span, enableOldValue bool, events ...*model.PolymorphicEvent) ([]*model.RowChangedEvent, uint64, error) {
 	size := 0
 	rowChangedEvents := make([]*model.RowChangedEvent, 0, len(events))
 	for _, e := range events {
@@ -272,7 +272,7 @@ func convertRowChangedEvents(changefeed model.ChangeFeedID, tableID model.TableI
 			log.Warn("skip emit nil event",
 				zap.String("namespace", changefeed.Namespace),
 				zap.String("changefeed", changefeed.ID),
-				zap.Int64("tableID", tableID),
+				zap.Stringer("span", &span),
 				zap.Any("event", e))
 			continue
 		}
@@ -284,7 +284,7 @@ func convertRowChangedEvents(changefeed model.ChangeFeedID, tableID model.TableI
 		// Just ignore these row changed events.
 		if colLen == 0 && preColLen == 0 {
 			log.Warn("skip emit empty row event",
-				zap.Int64("tableID", tableID),
+				zap.Stringer("span", &span),
 				zap.String("namespace", changefeed.Namespace),
 				zap.String("changefeed", changefeed.ID),
 				zap.Any("event", e))
