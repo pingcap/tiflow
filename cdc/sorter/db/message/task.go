@@ -19,6 +19,7 @@ import (
 
 	"github.com/pingcap/errors"
 	"github.com/pingcap/tiflow/cdc/model"
+	"github.com/pingcap/tiflow/cdc/processor/tablepb"
 	"github.com/pingcap/tiflow/cdc/sorter/encoding"
 	"github.com/pingcap/tiflow/pkg/db"
 	"golang.org/x/sync/semaphore"
@@ -26,8 +27,8 @@ import (
 
 // Task is a db actor task. It carries write and read request.
 type Task struct {
-	UID     uint32
-	TableID uint64
+	UID  uint32
+	Span *tablepb.Span
 
 	// Input unsorted event for writers.
 	// Sorter.AddEntry -> writer.

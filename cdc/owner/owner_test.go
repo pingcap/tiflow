@@ -956,6 +956,31 @@ func TestValidateChangefeed(t *testing.T) {
 		SinkURI: "wrong uri\n\t",
 	}))
 
+	// Test limit hit.
+	o.removedChangefeed[id] = time.Now()
+	o.removedSinkURI[url.URL{
+		Scheme: "mysql",
+		Host:   "host:1234",
+	}] = time.Now()
+
+	err := o.ValidateChangefeed(&model.ChangeFeedInfo{
+		ID:        id.ID,
+		Namespace: id.Namespace,
+	})
+	require.Regexp(t,
+		".*changefeed with same ID was just removed, please wait .*",
+		err.Error(),
+	)
+	err = o.ValidateChangefeed(&model.ChangeFeedInfo{
+		ID:        "unknown",
+		Namespace: "unknown",
+		SinkURI:   sinkURI,
+	})
+	require.Regexp(t,
+		".*changefeed with same sink URI was just removed, please wait .*",
+		err.Error(),
+	)
+
 	// Test limit passed.
 	o.removedChangefeed[id] = time.Now().Add(-2 * recreateChangefeedDelayLimit)
 	o.removedSinkURI[url.URL{

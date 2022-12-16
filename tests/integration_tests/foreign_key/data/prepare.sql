@@ -1,4 +1,3 @@
-set @@global.tidb_enable_foreign_key=1;
 set @@foreign_key_checks=1;
 drop database if exists `foreign_key`;
 create database `foreign_key`;
