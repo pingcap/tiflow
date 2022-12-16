@@ -209,6 +209,11 @@ func (c *captureImpl) reset(ctx context.Context) error {
 
 	c.captureMu.Lock()
 	defer c.captureMu.Unlock()
+	c.info = &model.CaptureInfo{
+		ID:            uuid.New().String(),
+		AdvertiseAddr: c.config.AdvertiseAddr,
+		Version:       version.ReleaseVersion,
+	}
 	c.EtcdClient = etcdClient
 	c.migrator = migrate.NewMigrator(c.EtcdClient, c.pdEndpoints, c.config)
 
@@ -222,12 +227,6 @@ func (c *captureImpl) reset(ctx context.Context) error {
 		concurrency.WithLease(lease.ID))
 	if err != nil {
 		return cerror.WrapError(cerror.ErrNewCaptureFailed, err)
-	}
-
-	c.info = &model.CaptureInfo{
-		ID:            uuid.New().String(),
-		AdvertiseAddr: c.config.AdvertiseAddr,
-		Version:       version.ReleaseVersion,
 	}
 
 	if c.upstreamManager != nil {
