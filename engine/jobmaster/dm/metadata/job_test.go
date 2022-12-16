@@ -131,6 +131,9 @@ func TestJobStore(t *testing.T) {
 func TestTaskStage(t *testing.T) {
 	t.Parallel()
 	for i, s := range typesStringify {
+		if len(s) == 0 {
+			continue
+		}
 		ts, ok := toTaskStage[s]
 		require.True(t, ok)
 		bs, err := json.Marshal(ts)
@@ -163,4 +166,6 @@ func TestTaskStageValue(t *testing.T) {
 
 	require.Equal(t, 15, int(StageError))
 	require.Equal(t, 16, int(StageUnscheduled))
+
+	require.Equal(t, 0, int(toTaskStage[""]))
 }

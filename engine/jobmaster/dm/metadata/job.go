@@ -30,8 +30,9 @@ import (
 
 // TaskStage represents internal stage of a task.
 // TODO: use Stage in lib or move Stage to lib.
-// we need to use same value for same stage in dmpb.Stage in order to make grafana dashboard label correct,
+// we need to use same value for stage with same name in dmpb.Stage in order to make grafana dashboard label correct,
 // since we use the same grafana dashboard for OP and engine.
+// there's no need for them to have same meaning, just for grafana display.
 type TaskStage int
 
 // These stages may be updated in later pr.
@@ -62,7 +63,11 @@ var toTaskStage map[string]TaskStage
 
 func init() {
 	toTaskStage = make(map[string]TaskStage, len(typesStringify))
+	toTaskStage[""] = TaskStage(0)
 	for i, s := range typesStringify {
+		if len(s) == 0 {
+			continue
+		}
 		toTaskStage[s] = TaskStage(i)
 	}
 }
