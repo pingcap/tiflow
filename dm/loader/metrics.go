@@ -95,7 +95,7 @@ var (
 			Subsystem: "loader",
 			Name:      "exit_with_error_count",
 			Help:      "counter for loader exits with error",
-		}, []string{"task", "source_id"})
+		}, []string{"task", "source_id", "resumable_err"})
 
 	remainingTimeGauge = f.NewGaugeVec(
 		prometheus.GaugeOpts{

@@ -265,9 +265,11 @@ function test_relay_operations() {
 
 	# worker1 and worker2 has one relay job and worker3 have none.
 	check_metric $WORKER1_PORT "dm_relay_binlog_file{node=\"relay\"}" 3 0 2
-	check_metric $WORKER1_PORT "dm_relay_exit_with_error_count" 3 -1 1
+	check_metric $WORKER1_PORT "dm_relay_exit_with_error_count{resumable_err=\"true\"}" 3 -1 1
+	check_metric $WORKER1_PORT "dm_relay_exit_with_error_count{resumable_err=\"false\"}" 3 -1 1
 	check_metric $WORKER2_PORT "dm_relay_binlog_file{node=\"relay\"}" 3 0 2
-	check_metric $WORKER2_PORT "dm_relay_exit_with_error_count" 3 -1 1
+	check_metric $WORKER2_PORT "dm_relay_exit_with_error_count{resumable_err=\"true\"}" 3 -1 1
+	check_metric $WORKER2_PORT "dm_relay_exit_with_error_count{resumable_err=\"false\"}" 3 -1 1
 	check_metric_not_contains $WORKER3_PORT "dm_relay_binlog_file" 3
 
 	dmctl_start_task_standalone $cur/conf/dm-task.yaml "--remove-meta"
