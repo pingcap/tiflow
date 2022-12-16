@@ -83,7 +83,7 @@ func (jm *JobMaster) QueryJobStatus(ctx context.Context, tasks []string) (*JobSt
 	if err != nil && errors.Cause(err) != metadata.ErrStateNotFound {
 		return nil, err
 	}
-	_, existUnitState = state.(*metadata.UnitState)
+	unitState, existUnitState = state.(*metadata.UnitState)
 	for _, task := range tasks {
 		taskID := task
 		wg.Add(1)
