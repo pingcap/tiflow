@@ -239,7 +239,7 @@ func (ldb *Actor) Poll(ctx context.Context, tasks []actormsg.Message[message.Tas
 		}
 		if task.IterReq != nil {
 			// Append to slice for later batch acquiring iterators.
-			ldb.iterQ.push(task.UID, uint64(task.Span.TableID), task.IterReq)
+			ldb.iterQ.push(task.UID, uint64(task.Span.TableId), task.IterReq)
 			requireIter = true
 		}
 		if task.Test != nil {

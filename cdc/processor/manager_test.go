@@ -70,7 +70,7 @@ func (s *managerTester) resetSuit(ctx cdcContext.Context, t *testing.T) {
 		return &mockTablePipeline{
 			span:         span,
 			name:         fmt.Sprintf("`test`.`table%d`", span),
-			state:        tablepb.TableStateReplicating,
+			state:        tablepb.TableState_Replicating,
 			resolvedTs:   replicaInfo.StartTs,
 			checkpointTs: replicaInfo.StartTs,
 		}, nil

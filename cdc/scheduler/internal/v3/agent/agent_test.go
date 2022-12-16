@@ -212,7 +212,7 @@ func TestAgentHandleMessageDispatchTable(t *testing.T) {
 		Response.(*schedulepb.DispatchTableResponse_AddTable)
 	require.True(t, ok)
 	require.Equal(t, model.TableID(1), addTableResponse.AddTable.Status.Span.TableID)
-	require.Equal(t, tablepb.TableStatePrepared, addTableResponse.AddTable.Status.State)
+	require.Equal(t, tablepb.TableState_Prepared, addTableResponse.AddTable.Status.State)
 	require.True(t, a.tableM.tables.Has(spanz.TableIDToComparableSpan(1)))
 
 	// let the prepared table become replicating, by set `IsSecondary` to false.
@@ -234,7 +234,7 @@ func TestAgentHandleMessageDispatchTable(t *testing.T) {
 		Response.(*schedulepb.DispatchTableResponse_AddTable)
 	require.True(t, ok)
 	require.Equal(t, model.TableID(1), addTableResponse.AddTable.Status.Span.TableID)
-	require.Equal(t, tablepb.TableStatePrepared, addTableResponse.AddTable.Status.State)
+	require.Equal(t, tablepb.TableState_Prepared, addTableResponse.AddTable.Status.State)
 	require.True(t, a.tableM.tables.Has(spanz.TableIDToComparableSpan(1)))
 
 	mockTableExecutor.ExpectedCalls = nil
@@ -249,7 +249,7 @@ func TestAgentHandleMessageDispatchTable(t *testing.T) {
 		Response.(*schedulepb.DispatchTableResponse_AddTable)
 	require.True(t, ok)
 	require.Equal(t, model.TableID(1), addTableResponse.AddTable.Status.Span.TableID)
-	require.Equal(t, tablepb.TableStateReplicating, addTableResponse.AddTable.Status.State)
+	require.Equal(t, tablepb.TableState_Replicating, addTableResponse.AddTable.Status.State)
 	require.True(t, a.tableM.tables.Has(spanz.TableIDToComparableSpan(1)))
 
 	mockTableExecutor.On("RemoveTableSpan", mock.Anything, mock.Anything).
@@ -310,18 +310,18 @@ func TestAgentHandleMessageHeartbeat(t *testing.T) {
 		a.tableM.addTableSpan(spanz.TableIDToComparableSpan(int64(i)))
 	}
 
-	a.tableM.tables.GetV(spanz.TableIDToComparableSpan(0)).state = tablepb.TableStatePreparing
-	a.tableM.tables.GetV(spanz.TableIDToComparableSpan(1)).state = tablepb.TableStatePrepared
-	a.tableM.tables.GetV(spanz.TableIDToComparableSpan(2)).state = tablepb.TableStateReplicating
+	a.tableM.tables.GetV(spanz.TableIDToComparableSpan(0)).state = tablepb.TableState_Preparing
+	a.tableM.tables.GetV(spanz.TableIDToComparableSpan(1)).state = tablepb.TableState_Prepared
+	a.tableM.tables.GetV(spanz.TableIDToComparableSpan(2)).state = tablepb.TableState_Replicating
 	a.tableM.tables.GetV(spanz.TableIDToComparableSpan(3)).state = tablepb.TableStateStopping
 	a.tableM.tables.GetV(spanz.TableIDToComparableSpan(4)).state = tablepb.TableStateStopped
 
 	mockTableExecutor.tables.ReplaceOrInsert(
-		spanz.TableIDToComparableSpan(0), tablepb.TableStatePreparing)
+		spanz.TableIDToComparableSpan(0), tablepb.TableState_Preparing)
 	mockTableExecutor.tables.ReplaceOrInsert(
-		spanz.TableIDToComparableSpan(1), tablepb.TableStatePrepared)
+		spanz.TableIDToComparableSpan(1), tablepb.TableState_Prepared)
 	mockTableExecutor.tables.ReplaceOrInsert(
-		spanz.TableIDToComparableSpan(2), tablepb.TableStateReplicating)
+		spanz.TableIDToComparableSpan(2), tablepb.TableState_Replicating)
 	mockTableExecutor.tables.ReplaceOrInsert(
 		spanz.TableIDToComparableSpan(3), tablepb.TableStateStopping)
 	mockTableExecutor.tables.ReplaceOrInsert(
@@ -360,9 +360,9 @@ func TestAgentHandleMessageHeartbeat(t *testing.T) {
 		return result[i].Span.Less(&result[j].Span)
 	})
 
-	require.Equal(t, tablepb.TableStatePreparing, result[0].State)
-	require.Equal(t, tablepb.TableStatePrepared, result[1].State)
-	require.Equal(t, tablepb.TableStateReplicating, result[2].State)
+	require.Equal(t, tablepb.TableState_Preparing, result[0].State)
+	require.Equal(t, tablepb.TableState_Prepared, result[1].State)
+	require.Equal(t, tablepb.TableState_Replicating, result[2].State)
 	require.Equal(t, tablepb.TableStateStopping, result[3].State)
 	require.Equal(t, tablepb.TableStateStopped, result[4].State)
 	for i := 5; i < 10; i++ {
@@ -454,9 +454,9 @@ func TestAgentPermuteMessages(t *testing.T) {
 
 	states := []tablepb.TableState{
 		tablepb.TableStateAbsent,
-		tablepb.TableStatePreparing,
-		tablepb.TableStatePrepared,
-		tablepb.TableStateReplicating,
+		tablepb.TableState_Preparing,
+		tablepb.TableState_Prepared,
+		tablepb.TableState_Replicating,
 		tablepb.TableStateStopping,
 		tablepb.TableStateStopped,
 	}
@@ -466,15 +466,15 @@ func TestAgentPermuteMessages(t *testing.T) {
 		iterPermutation([]int{0, 1, 2, 3}, func(sequence []int) {
 			t.Logf("test %v, %v", state, sequence)
 			switch state {
-			case tablepb.TableStatePreparing:
+			case tablepb.TableState_Preparing:
 				mockTableExecutor.tables.ReplaceOrInsert(
-					spanz.TableIDToComparableSpan(tableID), tablepb.TableStatePreparing)
-			case tablepb.TableStatePrepared:
+					spanz.TableIDToComparableSpan(tableID), tablepb.TableState_Preparing)
+			case tablepb.TableState_Prepared:
 				mockTableExecutor.tables.ReplaceOrInsert(
-					spanz.TableIDToComparableSpan(tableID), tablepb.TableStatePrepared)
-			case tablepb.TableStateReplicating:
+					spanz.TableIDToComparableSpan(tableID), tablepb.TableState_Prepared)
+			case tablepb.TableState_Replicating:
 				mockTableExecutor.tables.ReplaceOrInsert(
-					spanz.TableIDToComparableSpan(tableID), tablepb.TableStateReplicating)
+					spanz.TableIDToComparableSpan(tableID), tablepb.TableState_Replicating)
 			case tablepb.TableStateStopping:
 				mockTableExecutor.tables.ReplaceOrInsert(
 					spanz.TableIDToComparableSpan(tableID), tablepb.TableStateStopping)
@@ -737,7 +737,7 @@ func TestAgentTick(t *testing.T) {
 	resp, ok := responses[0].DispatchTableResponse.
 		Response.(*schedulepb.DispatchTableResponse_AddTable)
 	require.True(t, ok)
-	require.Equal(t, tablepb.TableStatePrepared, resp.AddTable.Status.State)
+	require.Equal(t, tablepb.TableState_Prepared, resp.AddTable.Status.State)
 
 	require.NoError(t, a.Close())
 }
@@ -863,7 +863,7 @@ func TestAgentCommitAddTableDuringStopping(t *testing.T) {
 	require.Len(t, trans.SendBuffer, 1)
 	require.Equal(t, schedulepb.MsgDispatchTableResponse, trans.SendBuffer[0].MsgType)
 	addTableResp := trans.SendBuffer[0].DispatchTableResponse.GetAddTable()
-	require.Equal(t, tablepb.TableStateReplicating, addTableResp.Status.State)
+	require.Equal(t, tablepb.TableState_Replicating, addTableResp.Status.State)
 }
 
 func TestAgentTransportCompat(t *testing.T) {
@@ -982,14 +982,14 @@ func (e *MockTableExecutor) AddTableSpan(
 	state, ok := e.tables.Get(tableID)
 	if ok {
 		switch state {
-		case tablepb.TableStatePreparing:
+		case tablepb.TableState_Preparing:
 			return true, nil
-		case tablepb.TableStatePrepared:
+		case tablepb.TableState_Prepared:
 			if !isPrepare {
-				e.tables.ReplaceOrInsert(tableID, tablepb.TableStateReplicating)
+				e.tables.ReplaceOrInsert(tableID, tablepb.TableState_Replicating)
 			}
 			return true, nil
-		case tablepb.TableStateReplicating:
+		case tablepb.TableState_Replicating:
 			return true, nil
 		case tablepb.TableStateStopped:
 			e.tables.Delete(tableID)
@@ -997,7 +997,7 @@ func (e *MockTableExecutor) AddTableSpan(
 	}
 	args := e.Called(ctx, tableID, startTs, isPrepare)
 	if args.Bool(0) {
-		e.tables.ReplaceOrInsert(tableID, tablepb.TableStatePreparing)
+		e.tables.ReplaceOrInsert(tableID, tablepb.TableState_Preparing)
 	}
 	return args.Bool(0), args.Error(1)
 }
@@ -1013,16 +1013,16 @@ func (e *MockTableExecutor) IsAddTableSpanFinished(tableID tablepb.Span, isPrepa
 
 	args := e.Called(tableID, isPrepare)
 	if args.Bool(0) {
-		e.tables.ReplaceOrInsert(tableID, tablepb.TableStatePrepared)
+		e.tables.ReplaceOrInsert(tableID, tablepb.TableState_Prepared)
 		if !isPrepare {
-			e.tables.ReplaceOrInsert(tableID, tablepb.TableStateReplicating)
+			e.tables.ReplaceOrInsert(tableID, tablepb.TableState_Replicating)
 		}
 		return true
 	}
 
-	e.tables.ReplaceOrInsert(tableID, tablepb.TableStatePreparing)
+	e.tables.ReplaceOrInsert(tableID, tablepb.TableState_Preparing)
 	if !isPrepare {
-		e.tables.ReplaceOrInsert(tableID, tablepb.TableStatePrepared)
+		e.tables.ReplaceOrInsert(tableID, tablepb.TableState_Prepared)
 	}
 
 	return false
@@ -1038,7 +1038,7 @@ func (e *MockTableExecutor) RemoveTableSpan(tableID tablepb.Span) bool {
 	switch state {
 	case tablepb.TableStateStopping, tablepb.TableStateStopped:
 		return true
-	case tablepb.TableStatePreparing, tablepb.TableStatePrepared, tablepb.TableStateReplicating:
+	case tablepb.TableState_Preparing, tablepb.TableState_Prepared, tablepb.TableState_Replicating:
 	default:
 	}
 	// the current `processor implementation, does not consider table's state
@@ -1068,7 +1068,7 @@ func (e *MockTableExecutor) IsRemoveTableSpanFinished(tableID tablepb.Span) (mod
 	} else {
 		// revert the state back to old state, assume it's `replicating`,
 		// but `preparing` / `prepared` can also be removed.
-		e.tables.ReplaceOrInsert(tableID, tablepb.TableStateReplicating)
+		e.tables.ReplaceOrInsert(tableID, tablepb.TableState_Replicating)
 	}
 
 	return model.Ts(args.Int(0)), args.Bool(1)

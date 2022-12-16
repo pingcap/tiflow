@@ -103,10 +103,10 @@ func NewSystem(dir string, memPercentage float64, cfg *config.DBConfig) *System 
 }
 
 // DBActorID returns an DBActorID correspond with tableID.
-func (s *System) DBActorID(span tablepb.Span) actor.ID {
+func (s *System) DBActorID(span *tablepb.Span) actor.ID {
 	h := fnv.New64()
 	b := [8]byte{}
-	binary.LittleEndian.PutUint64(b[:], uint64(span.TableID))
+	binary.LittleEndian.PutUint64(b[:], uint64(span.TableId))
 	h.Write(b[:])
 	h.Write(span.StartKey)
 	h.Write(span.EndKey)

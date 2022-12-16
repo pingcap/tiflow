@@ -94,7 +94,7 @@ func New(ctx context.Context,
 
 // CreateTableSink creates a TableSink by schema.
 func (s *SinkFactory) CreateTableSink(
-	changefeedID model.ChangeFeedID, span tablepb.Span, totalRowsCounter prometheus.Counter,
+	changefeedID model.ChangeFeedID, span *tablepb.Span, totalRowsCounter prometheus.Counter,
 ) tablesink.TableSink {
 	switch s.sinkType {
 	case sink.RowSink:

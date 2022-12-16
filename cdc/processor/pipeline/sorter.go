@@ -122,7 +122,7 @@ func newSorterNode(
 }
 
 func createSorter(
-	ctx pipeline.NodeContext, tableName string, span tablepb.Span,
+	ctx pipeline.NodeContext, tableName string, span *tablepb.Span,
 ) (sorter.EventSorter, error) {
 	sortEngine := ctx.ChangefeedVars().Info.Engine
 	switch sortEngine {
@@ -165,7 +165,7 @@ func createSorter(
 		// See https://github.com/pingcap/tiflow/blob/9dad09/cdc/server.go#L275
 		sortDir := config.GetGlobalServerConfig().Sorter.SortDir
 		unifiedSorter, err := unified.NewUnifiedSorter(
-			sortDir, ctx.ChangefeedVars().ID, tableName, span.TableID)
+			sortDir, ctx.ChangefeedVars().ID, tableName, span.TableId)
 		if err != nil {
 			return nil, err
 		}
@@ -327,7 +327,7 @@ func (n *sorterNode) start(
 			n.startTs = startTs
 		}
 
-		n.state.Store(tablepb.TableStateReplicating)
+		n.state.Store(tablepb.TableState_Replicating)
 		n.sorter.EmitStartTs(stdCtx, startTs)
 
 		events := make([]*model.PolymorphicEvent, defaultBatchReadSize)
@@ -461,13 +461,13 @@ func (n *sorterNode) handleRawEvent(ctx context.Context, event *model.Polymorphi
 		// startTs (which is used to initialize the `sorterNode.resolvedTs`) received,
 		// this indicates that all regions connected,
 		// and sorter have data can be consumed by downstream.
-		if n.state.Load() == tablepb.TableStatePreparing {
+		if n.state.Load() == tablepb.TableState_Preparing {
 			log.Debug("sorterNode, first resolved event received",
 				zap.String("namespace", n.changefeed.Namespace),
 				zap.String("changefeed", n.changefeed.ID),
 				zap.Int64("tableID", n.tableID),
 				zap.Uint64("resolvedTs", resolvedTs))
-			n.state.Store(tablepb.TableStatePrepared)
+			n.state.Store(tablepb.TableState_Prepared)
 			close(n.preparedCh)
 		}
 	} else {

@@ -119,7 +119,7 @@ func (t *tableSinkWrapper) start(startTs model.Ts, replicateTs model.Ts) {
 	// And we can just continue to replicate the table sink from the new start ts.
 	t.checkpointTs.Store(startTs)
 	t.replicateTs = replicateTs
-	t.state.Store(tablepb.TableStateReplicating)
+	t.state.Store(tablepb.TableState_Replicating)
 }
 
 func (t *tableSinkWrapper) appendRowChangedEvents(events ...*model.RowChangedEvent) {
@@ -127,8 +127,8 @@ func (t *tableSinkWrapper) appendRowChangedEvents(events ...*model.RowChangedEve
 }
 
 func (t *tableSinkWrapper) updateReceivedSorterResolvedTs(ts model.Ts) {
-	if t.state.Load() == tablepb.TableStatePreparing && ts > t.startTs {
-		t.state.Store(tablepb.TableStatePrepared)
+	if t.state.Load() == tablepb.TableState_Preparing && ts > t.startTs {
+		t.state.Store(tablepb.TableState_Prepared)
 	}
 	t.receivedSorterResolvedTs.Store(ts)
 }
@@ -172,9 +172,9 @@ func (t *tableSinkWrapper) getState() tablepb.TableState {
 }
 
 func (t *tableSinkWrapper) close(ctx context.Context) {
-	t.state.Store(tablepb.TableStateStopping)
+	t.state.Store(tablepb.TableState_Stopping)
 	// table stopped state must be set after underlying sink is closed
-	defer t.state.Store(tablepb.TableStateStopped)
+	defer t.state.Store(tablepb.TableState_Stopped)
 	t.tableSink.Close(ctx)
 	log.Info("Sink is closed",
 		zap.Int64("tableID", t.tableID),

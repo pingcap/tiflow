@@ -39,7 +39,7 @@ func benchmarkMessageHeartbeatResponse(
 			msg.HeartbeatResponse.Tables = append(msg.HeartbeatResponse.Tables,
 				tablepb.TableStatus{
 					TableID: model.TableID(10000 + i),
-					State:   tablepb.TableStateReplicating,
+					State:   tablepb.TableState_Replicating,
 					Checkpoint: tablepb.Checkpoint{
 						CheckpointTs: 433331421532337260,
 						ResolvedTs:   433331421532337261,

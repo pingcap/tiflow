@@ -32,7 +32,7 @@ type pullerNode struct {
 	tableName string // quoted schema and table, used in metircs only
 
 	plr        puller.Puller
-	span       tablepb.Span
+	span       *tablepb.Span
 	startTs    model.Ts
 	changefeed model.ChangeFeedID
 	cancel     context.CancelFunc
@@ -40,7 +40,7 @@ type pullerNode struct {
 }
 
 func newPullerNode(
-	tableID tablepb.Span,
+	tableID *tablepb.Span,
 	startTs model.Ts,
 	tableName string,
 	changefeed model.ChangeFeedID,
@@ -72,10 +72,10 @@ func (n *pullerNode) startWithSorterNode(ctx pipeline.NodeContext,
 		up.KVStorage,
 		up.PDClock,
 		n.startTs,
-		[]tablepb.Span{n.span},
+		[]*tablepb.Span{n.span},
 		kvCfg,
 		n.changefeed,
-		n.span.TableID,
+		n.span.TableId,
 		n.tableName,
 		filterLoop,
 	)

@@ -30,18 +30,18 @@ type TableExecutor interface {
 	// if `isPrepare` is true, the 1st phase of the 2 phase scheduling protocol.
 	// if `isPrepare` is false, the 2nd phase.
 	AddTableSpan(
-		ctx context.Context, span tablepb.Span, startTs model.Ts, isPrepare bool,
+		ctx context.Context, span *tablepb.Span, startTs model.Ts, isPrepare bool,
 	) (done bool, err error)
 
 	// IsAddTableSpanFinished make sure the requested table span is in the proper status
-	IsAddTableSpanFinished(span tablepb.Span, isPrepare bool) (done bool)
+	IsAddTableSpanFinished(span *tablepb.Span, isPrepare bool) (done bool)
 
 	// RemoveTableSpan remove the table, return true if the table is already removed
-	RemoveTableSpan(span tablepb.Span) (done bool)
+	RemoveTableSpan(span *tablepb.Span) (done bool)
 	// IsRemoveTableSpanFinished convince the table is fully stopped.
 	// return false if table is not stopped
 	// return true and corresponding checkpoint otherwise.
-	IsRemoveTableSpanFinished(span tablepb.Span) (model.Ts, bool)
+	IsRemoveTableSpanFinished(span *tablepb.Span) (model.Ts, bool)
 
 	// GetTableSpanCount should return the number of table spans that are being run,
 	// being added and being removed.
@@ -58,5 +58,5 @@ type TableExecutor interface {
 	GetCheckpoint() (checkpointTs, resolvedTs model.Ts)
 
 	// GetTableSpanStatus return the checkpoint and resolved ts for the given table span.
-	GetTableSpanStatus(span tablepb.Span) tablepb.TableStatus
+	GetTableSpanStatus(span *tablepb.Span) *tablepb.TableStatus
 }

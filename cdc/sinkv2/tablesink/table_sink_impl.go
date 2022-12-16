@@ -37,7 +37,7 @@ var (
 // EventTableSink is a table sink that can write events.
 type EventTableSink[E eventsink.TableEvent] struct {
 	changefeedID    model.ChangeFeedID
-	span            tablepb.Span
+	span            *tablepb.Span
 	eventID         uint64
 	maxResolvedTs   model.ResolvedTs
 	backendSink     eventsink.EventSink[E]
@@ -54,7 +54,7 @@ type EventTableSink[E eventsink.TableEvent] struct {
 // New an eventTableSink with given backendSink and event appender.
 func New[E eventsink.TableEvent](
 	changefeedID model.ChangeFeedID,
-	span tablepb.Span,
+	span *tablepb.Span,
 	backendSink eventsink.EventSink[E],
 	appender eventsink.Appender[E],
 	totalRowsCounter prometheus.Counter,
@@ -131,7 +131,7 @@ func (e *EventTableSink[E]) Close(ctx context.Context) {
 		log.Warn(fmt.Sprintf("Table sink is already %s", currentState.String()),
 			zap.String("namespace", e.changefeedID.Namespace),
 			zap.String("changefeed", e.changefeedID.ID),
-			zap.Stringer("span", &e.span))
+			zap.Stringer("span", e.span))
 		return
 	}
 
@@ -147,7 +147,7 @@ func (e *EventTableSink[E]) Close(ctx context.Context) {
 	log.Info("Stopping table sink",
 		zap.String("namespace", e.changefeedID.Namespace),
 		zap.String("changefeed", e.changefeedID.ID),
-		zap.Stringer("span", &e.span),
+		zap.Stringer("span", e.span),
 		zap.Uint64("checkpointTs", stoppingCheckpointTs.Ts))
 	e.progressTracker.close(ctx)
 	e.state.Store(state.TableSinkStopped)
@@ -155,7 +155,7 @@ func (e *EventTableSink[E]) Close(ctx context.Context) {
 	log.Info("Table sink stopped",
 		zap.String("namespace", e.changefeedID.Namespace),
 		zap.String("changefeed", e.changefeedID.ID),
-		zap.Stringer("span", &e.span),
+		zap.Stringer("span", e.span),
 		zap.Uint64("checkpointTs", stoppedCheckpointTs.Ts),
 		zap.Duration("duration", time.Since(start)))
 }

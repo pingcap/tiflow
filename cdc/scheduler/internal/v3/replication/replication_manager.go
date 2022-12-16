@@ -127,8 +127,8 @@ func NewReplicationManager(
 
 // HandleCaptureChanges handles capture changes.
 func (r *Manager) HandleCaptureChanges(
-	init map[model.CaptureID][]tablepb.TableStatus,
-	removed map[model.CaptureID][]tablepb.TableStatus,
+	init map[model.CaptureID][]*tablepb.TableStatus,
+	removed map[model.CaptureID][]*tablepb.TableStatus,
 	checkpointTs model.Ts,
 ) ([]*schedulepb.Message, error) {
 	if init != nil {
@@ -142,10 +142,10 @@ func (r *Manager) HandleCaptureChanges(
 		for captureID, tables := range init {
 			for i := range tables {
 				table := tables[i]
-				if _, ok := tableStatus[table.TableID]; !ok {
-					tableStatus[table.TableID] = map[model.CaptureID]*tablepb.TableStatus{}
+				if _, ok := tableStatus[table.TableId]; !ok {
+					tableStatus[table.TableId] = map[model.CaptureID]*tablepb.TableStatus{}
 				}
-				tableStatus[table.TableID][captureID] = &table
+				tableStatus[table.TableId][captureID] = table
 			}
 		}
 		for tableID, status := range tableStatus {
@@ -184,13 +184,13 @@ func (r *Manager) HandleMessage(
 	for i := range msgs {
 		msg := msgs[i]
 		switch msg.MsgType {
-		case schedulepb.MsgDispatchTableResponse:
+		case schedulepb.MessageType_MsgDispatchTableResponse:
 			msgs, err := r.handleMessageDispatchTableResponse(msg.From, msg.DispatchTableResponse)
 			if err != nil {
 				return nil, errors.Trace(err)
 			}
 			sentMsgs = append(sentMsgs, msgs...)
-		case schedulepb.MsgHeartbeatResponse:
+		case schedulepb.MessageType_MsgHeartbeatResponse:
 			msgs, err := r.handleMessageHeartbeatResponse(msg.From, msg.HeartbeatResponse)
 			if err != nil {
 				return nil, errors.Trace(err)
@@ -211,7 +211,7 @@ func (r *Manager) handleMessageHeartbeatResponse(
 ) ([]*schedulepb.Message, error) {
 	sentMsgs := make([]*schedulepb.Message, 0)
 	for _, status := range msg.Tables {
-		table, ok := r.tables[status.TableID]
+		table, ok := r.tables[status.TableId]
 		if !ok {
 			log.Info("schedulerv3: ignore table status no table found",
 				zap.String("namespace", r.changefeedID.Namespace),
@@ -219,7 +219,7 @@ func (r *Manager) handleMessageHeartbeatResponse(
 				zap.Any("message", status))
 			continue
 		}
-		msgs, err := table.handleTableStatus(from, &status)
+		msgs, err := table.handleTableStatus(from, status)
 		if err != nil {
 			return nil, errors.Trace(err)
 		}
@@ -227,8 +227,8 @@ func (r *Manager) handleMessageHeartbeatResponse(
 			log.Info("schedulerv3: table has removed",
 				zap.String("namespace", r.changefeedID.Namespace),
 				zap.String("changefeed", r.changefeedID.ID),
-				zap.Int64("tableID", status.TableID))
-			delete(r.tables, status.TableID)
+				zap.Int64("tableID", status.TableId))
+			delete(r.tables, status.TableId)
 		}
 		sentMsgs = append(sentMsgs, msgs...)
 	}
@@ -252,7 +252,7 @@ func (r *Manager) handleMessageDispatchTableResponse(
 		return nil, nil
 	}
 
-	table, ok := r.tables[status.TableID]
+	table, ok := r.tables[status.TableId]
 	if !ok {
 		log.Info("schedulerv3: ignore table status no table found",
 			zap.String("namespace", r.changefeedID.Namespace),
@@ -268,8 +268,8 @@ func (r *Manager) handleMessageDispatchTableResponse(
 		log.Info("schedulerv3: table has removed",
 			zap.String("namespace", r.changefeedID.Namespace),
 			zap.String("changefeed", r.changefeedID.ID),
-			zap.Int64("tableID", status.TableID))
-		delete(r.tables, status.TableID)
+			zap.Int64("tableID", status.TableId))
+		delete(r.tables, status.TableId)
 	}
 	return msgs, nil
 }
@@ -578,40 +578,42 @@ func (r *Manager) CollectMetrics() {
 			WithLabelValues(cf.Namespace, cf.ID).Set(float64(phyRTs))
 
 		// Slow table latency metrics.
-		phyCurrentTs := oracle.ExtractPhysical(table.Stats.CurrentTs)
-		for stage, checkpoint := range table.Stats.StageCheckpoints {
-			// Checkpoint ts
-			phyCkpTs := oracle.ExtractPhysical(checkpoint.CheckpointTs)
-			slowestTableStageCheckpointTsGaugeVec.
-				WithLabelValues(cf.Namespace, cf.ID, stage).Set(float64(phyCkpTs))
-			checkpointLag := float64(phyCurrentTs-phyCkpTs) / 1e3
-			slowestTableStageCheckpointTsLagGaugeVec.
-				WithLabelValues(cf.Namespace, cf.ID, stage).Set(checkpointLag)
-			slowestTableStageCheckpointTsLagHistogramVec.
-				WithLabelValues(cf.Namespace, cf.ID, stage).Observe(checkpointLag)
-			// Resolved ts
-			phyRTs := oracle.ExtractPhysical(checkpoint.ResolvedTs)
+		if table.Stats != nil {
+			phyCurrentTs := oracle.ExtractPhysical(table.Stats.CurrentTs)
+			for stage, checkpoint := range table.Stats.StageCheckpoints {
+				// Checkpoint ts
+				phyCkpTs := oracle.ExtractPhysical(checkpoint.CheckpointTs)
+				slowestTableStageCheckpointTsGaugeVec.
+					WithLabelValues(cf.Namespace, cf.ID, stage).Set(float64(phyCkpTs))
+				checkpointLag := float64(phyCurrentTs-phyCkpTs) / 1e3
+				slowestTableStageCheckpointTsLagGaugeVec.
+					WithLabelValues(cf.Namespace, cf.ID, stage).Set(checkpointLag)
+				slowestTableStageCheckpointTsLagHistogramVec.
+					WithLabelValues(cf.Namespace, cf.ID, stage).Observe(checkpointLag)
+				// Resolved ts
+				phyRTs := oracle.ExtractPhysical(checkpoint.ResolvedTs)
+				slowestTableStageResolvedTsGaugeVec.
+					WithLabelValues(cf.Namespace, cf.ID, stage).Set(float64(phyRTs))
+				resolvedTsLag := float64(phyCurrentTs-phyRTs) / 1e3
+				slowestTableStageResolvedTsLagGaugeVec.
+					WithLabelValues(cf.Namespace, cf.ID, stage).Set(resolvedTsLag)
+				slowestTableStageResolvedTsLagHistogramVec.
+					WithLabelValues(cf.Namespace, cf.ID, stage).Observe(resolvedTsLag)
+			}
+			// Barrier ts
+			stage := "barrier"
+			phyBTs := oracle.ExtractPhysical(table.Stats.BarrierTs)
 			slowestTableStageResolvedTsGaugeVec.
-				WithLabelValues(cf.Namespace, cf.ID, stage).Set(float64(phyRTs))
-			resolvedTsLag := float64(phyCurrentTs-phyRTs) / 1e3
+				WithLabelValues(cf.Namespace, cf.ID, stage).Set(float64(phyBTs))
+			barrierTsLag := float64(phyCurrentTs-phyBTs) / 1e3
 			slowestTableStageResolvedTsLagGaugeVec.
-				WithLabelValues(cf.Namespace, cf.ID, stage).Set(resolvedTsLag)
+				WithLabelValues(cf.Namespace, cf.ID, stage).Set(barrierTsLag)
 			slowestTableStageResolvedTsLagHistogramVec.
-				WithLabelValues(cf.Namespace, cf.ID, stage).Observe(resolvedTsLag)
+				WithLabelValues(cf.Namespace, cf.ID, stage).Observe(barrierTsLag)
+			// Region count
+			slowestTableRegionGaugeVec.
+				WithLabelValues(cf.Namespace, cf.ID).Set(float64(table.Stats.RegionCount))
 		}
-		// Barrier ts
-		stage := "barrier"
-		phyBTs := oracle.ExtractPhysical(table.Stats.BarrierTs)
-		slowestTableStageResolvedTsGaugeVec.
-			WithLabelValues(cf.Namespace, cf.ID, stage).Set(float64(phyBTs))
-		barrierTsLag := float64(phyCurrentTs-phyBTs) / 1e3
-		slowestTableStageResolvedTsLagGaugeVec.
-			WithLabelValues(cf.Namespace, cf.ID, stage).Set(barrierTsLag)
-		slowestTableStageResolvedTsLagHistogramVec.
-			WithLabelValues(cf.Namespace, cf.ID, stage).Observe(barrierTsLag)
-		// Region count
-		slowestTableRegionGaugeVec.
-			WithLabelValues(cf.Namespace, cf.ID).Set(float64(table.Stats.RegionCount))
 	}
 	metricAcceptScheduleTask := acceptScheduleTaskCounter.MustCurryWith(map[string]string{
 		"namespace": cf.Namespace, "changefeed": cf.ID,

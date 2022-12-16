@@ -58,7 +58,7 @@ type pendingResolvedTs struct {
 // can be regarded as the event's offset in `pendingEvents`.
 type progressTracker struct {
 	// span is the span of the table sink.
-	span tablepb.Span
+	span *tablepb.Span
 
 	// Internal Buffer size. Modified in tests only.
 	bufferSize uint64
@@ -93,7 +93,7 @@ type progressTracker struct {
 // newProgressTracker is used to create a new progress tracker.
 // The last min resolved ts is set to 0.
 // It means that the table sink has not started yet.
-func newProgressTracker(span tablepb.Span, bufferSize uint64) *progressTracker {
+func newProgressTracker(span *tablepb.Span, bufferSize uint64) *progressTracker {
 	if bufferSize%8 != 0 {
 		panic("bufferSize must be align to 8 bytes")
 	}
@@ -288,7 +288,7 @@ func (r *progressTracker) close(ctx context.Context) {
 			return
 		case <-blockTicker.C:
 			log.Warn("Close process doesn't return in time, may be stuck",
-				zap.Stringer("span", &r.span),
+				zap.Stringer("span", r.span),
 				zap.Int("trackingCount", r.trackingCount()),
 				zap.Any("lastMinResolvedTs", r.advance()),
 			)

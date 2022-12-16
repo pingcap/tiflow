@@ -25,17 +25,17 @@ import (
 func ArrayToSpan(in []model.TableID) []tablepb.Span {
 	out := make([]tablepb.Span, 0, len(in))
 	for _, tableID := range in {
-		out = append(out, tablepb.Span{TableID: tableID})
+		out = append(out, tablepb.Span{TableId: tableID})
 	}
 	return out
 }
 
 // TableIDToComparableSpan converts a TableID to a Span whose
 // StartKey and EndKey are encoded in Comparable format.
-func TableIDToComparableSpan(tableID model.TableID) tablepb.Span {
+func TableIDToComparableSpan(tableID model.TableID) *tablepb.Span {
 	tableSpan := regionspan.ToComparableSpan(regionspan.GetTableSpan(tableID))
-	return tablepb.Span{
-		TableID:  tableID,
+	return &tablepb.Span{
+		TableId:  tableID,
 		StartKey: tableSpan.Start,
 		EndKey:   tableSpan.End,
 	}
@@ -43,7 +43,7 @@ func TableIDToComparableSpan(tableID model.TableID) tablepb.Span {
 
 // TableIDToComparableRange returns a range of a table,
 // start and end are encoded in Comparable format.
-func TableIDToComparableRange(tableID model.TableID) (start, end tablepb.Span) {
+func TableIDToComparableRange(tableID model.TableID) (start, end *tablepb.Span) {
 	tableSpan := TableIDToComparableSpan(tableID)
 	start = tableSpan
 	start.EndKey = nil
@@ -53,13 +53,13 @@ func TableIDToComparableRange(tableID model.TableID) (start, end tablepb.Span) {
 	return
 }
 
-type sortableSpans []tablepb.Span
+type sortableSpans []*tablepb.Span
 
 func (a sortableSpans) Len() int           { return len(a) }
 func (a sortableSpans) Swap(i, j int)      { a[i], a[j] = a[j], a[i] }
-func (a sortableSpans) Less(i, j int) bool { return a[i].Less(&a[j]) }
+func (a sortableSpans) Less(i, j int) bool { return a[i].Less(a[j]) }
 
 // Sort sorts a slice of Span.
-func Sort(spans []tablepb.Span) {
+func Sort(spans []*tablepb.Span) {
 	sort.Sort(sortableSpans(spans))
 }

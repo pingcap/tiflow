@@ -77,7 +77,7 @@ func TestNewReplicationSet(t *testing.T) {
 			checkpoint: 2,
 			tableStatus: map[model.CaptureID]*tablepb.TableStatus{
 				"1": {
-					State: tablepb.TableStateReplicating,
+					State: tablepb.TableState_Replicating,
 					Checkpoint: tablepb.Checkpoint{
 						CheckpointTs: 1, ResolvedTs: 1,
 					},
@@ -92,7 +92,7 @@ func TestNewReplicationSet(t *testing.T) {
 			},
 			tableStatus: map[model.CaptureID]*tablepb.TableStatus{
 				"1": {
-					State:      tablepb.TableStatePreparing,
+					State:      tablepb.TableState_Preparing,
 					Checkpoint: tablepb.Checkpoint{},
 				},
 			},
@@ -109,11 +109,11 @@ func TestNewReplicationSet(t *testing.T) {
 			},
 			tableStatus: map[model.CaptureID]*tablepb.TableStatus{
 				"1": {
-					State:      tablepb.TableStatePreparing,
+					State:      tablepb.TableState_Preparing,
 					Checkpoint: tablepb.Checkpoint{CheckpointTs: 1},
 				},
 				"2": {
-					State:      tablepb.TableStateReplicating,
+					State:      tablepb.TableState_Replicating,
 					Checkpoint: tablepb.Checkpoint{CheckpointTs: 2},
 				},
 			},
@@ -129,11 +129,11 @@ func TestNewReplicationSet(t *testing.T) {
 			},
 			tableStatus: map[model.CaptureID]*tablepb.TableStatus{
 				"1": {
-					State:      tablepb.TableStatePrepared,
+					State:      tablepb.TableState_Prepared,
 					Checkpoint: tablepb.Checkpoint{},
 				},
 				"2": {
-					State:      tablepb.TableStateReplicating,
+					State:      tablepb.TableState_Replicating,
 					Checkpoint: tablepb.Checkpoint{},
 				},
 			},
@@ -148,7 +148,7 @@ func TestNewReplicationSet(t *testing.T) {
 			},
 			tableStatus: map[model.CaptureID]*tablepb.TableStatus{
 				"1": {
-					State:      tablepb.TableStatePrepared,
+					State:      tablepb.TableState_Prepared,
 					Checkpoint: tablepb.Checkpoint{},
 				},
 				"2": {
@@ -165,7 +165,7 @@ func TestNewReplicationSet(t *testing.T) {
 			},
 			tableStatus: map[model.CaptureID]*tablepb.TableStatus{
 				"1": {
-					State:      tablepb.TableStatePrepared,
+					State:      tablepb.TableState_Prepared,
 					Checkpoint: tablepb.Checkpoint{},
 				},
 				"2": {
@@ -198,11 +198,11 @@ func TestNewReplicationSet(t *testing.T) {
 			set: nil,
 			tableStatus: map[model.CaptureID]*tablepb.TableStatus{
 				"1": {
-					State:      tablepb.TableStateReplicating,
+					State:      tablepb.TableState_Replicating,
 					Checkpoint: tablepb.Checkpoint{},
 				},
 				"2": {
-					State:      tablepb.TableStateReplicating,
+					State:      tablepb.TableState_Replicating,
 					Checkpoint: tablepb.Checkpoint{},
 				},
 			},
@@ -228,7 +228,7 @@ func TestReplicationSetPoll(t *testing.T) {
 	var testcases []map[string]tablepb.TableState
 	for state1 := range tablepb.TableState_name {
 		for state2 := range tablepb.TableState_name {
-			if state1 == state2 && state1 == int32(tablepb.TableStateReplicating) {
+			if state1 == state2 && state1 == int32(tablepb.TableState_Replicating) {
 				continue
 			}
 			tc := map[string]tablepb.TableState{
@@ -291,7 +291,7 @@ func TestReplicationSetPollUnknownCapture(t *testing.T) {
 	r, err := NewReplicationSet(tableID, 0, map[model.CaptureID]*tablepb.TableStatus{
 		"1": {
 			TableID:    tableID,
-			State:      tablepb.TableStateReplicating,
+			State:      tablepb.TableState_Replicating,
 			Checkpoint: tablepb.Checkpoint{},
 		},
 	}, model.ChangeFeedID{})
@@ -299,7 +299,7 @@ func TestReplicationSetPollUnknownCapture(t *testing.T) {
 
 	msgs, err := r.poll(&tablepb.TableStatus{
 		TableID: tableID,
-		State:   tablepb.TableStateReplicating,
+		State:   tablepb.TableState_Replicating,
 	}, "unknown")
 	require.Nil(t, msgs)
 	require.Nil(t, err)
@@ -313,7 +313,7 @@ func TestReplicationSetPollUnknownCapture(t *testing.T) {
 
 	msgs, err = r.poll(&tablepb.TableStatus{
 		TableID: tableID,
-		State:   tablepb.TableStateReplicating,
+		State:   tablepb.TableState_Replicating,
 	}, "unknown")
 	require.Len(t, msgs, 0)
 	require.Nil(t, err)
@@ -378,7 +378,7 @@ func TestReplicationSetAddTable(t *testing.T) {
 	// Prepare is in-progress.
 	msgs, err = r.handleTableStatus(from, &tablepb.TableStatus{
 		TableID: tableID,
-		State:   tablepb.TableStatePreparing,
+		State:   tablepb.TableState_Preparing,
 	})
 	require.Nil(t, err)
 	require.Len(t, msgs, 0)
@@ -388,7 +388,7 @@ func TestReplicationSetAddTable(t *testing.T) {
 	// Prepare -> Commit.
 	msgs, err = r.handleTableStatus(from, &tablepb.TableStatus{
 		TableID: tableID,
-		State:   tablepb.TableStatePrepared,
+		State:   tablepb.TableState_Prepared,
 	})
 	require.Nil(t, err)
 	require.Len(t, msgs, 1)
@@ -411,7 +411,7 @@ func TestReplicationSetAddTable(t *testing.T) {
 	// The secondary AddTable request may be lost.
 	msgs, err = r.handleTableStatus(from, &tablepb.TableStatus{
 		TableID: tableID,
-		State:   tablepb.TableStatePrepared,
+		State:   tablepb.TableState_Prepared,
 	})
 	require.Nil(t, err)
 	require.Len(t, msgs, 1)
@@ -435,7 +435,7 @@ func TestReplicationSetAddTable(t *testing.T) {
 	// Commit -> Replicating
 	msgs, err = r.handleTableStatus(from, &tablepb.TableStatus{
 		TableID: tableID,
-		State:   tablepb.TableStateReplicating,
+		State:   tablepb.TableState_Replicating,
 	})
 	require.Nil(t, err)
 	require.Len(t, msgs, 0)
@@ -446,7 +446,7 @@ func TestReplicationSetAddTable(t *testing.T) {
 	// Replicating -> Replicating
 	msgs, err = r.handleTableStatus(from, &tablepb.TableStatus{
 		TableID: tableID,
-		State:   tablepb.TableStateReplicating,
+		State:   tablepb.TableState_Replicating,
 		Checkpoint: tablepb.Checkpoint{
 			CheckpointTs: 3,
 			ResolvedTs:   4,
@@ -591,7 +591,7 @@ func TestReplicationSetMoveTable(t *testing.T) {
 	// Source primary sends heartbeat response
 	msgs, err = r.handleTableStatus(source, &tablepb.TableStatus{
 		TableID: tableID,
-		State:   tablepb.TableStateReplicating,
+		State:   tablepb.TableState_Replicating,
 		Checkpoint: tablepb.Checkpoint{
 			CheckpointTs: 1,
 			ResolvedTs:   1,
@@ -630,7 +630,7 @@ func TestReplicationSetMoveTable(t *testing.T) {
 	// Prepare -> Commit.
 	msgs, err = r.handleTableStatus(dest, &tablepb.TableStatus{
 		TableID: tableID,
-		State:   tablepb.TableStatePrepared,
+		State:   tablepb.TableState_Prepared,
 	})
 	require.Nil(t, err)
 	require.Len(t, msgs, 1)
@@ -650,7 +650,7 @@ func TestReplicationSetMoveTable(t *testing.T) {
 	// Source updates it's table status
 	msgs, err = r.handleTableStatus(source, &tablepb.TableStatus{
 		TableID: tableID,
-		State:   tablepb.TableStateReplicating,
+		State:   tablepb.TableState_Replicating,
 		Checkpoint: tablepb.Checkpoint{
 			CheckpointTs: 2,
 			ResolvedTs:   3,
@@ -762,7 +762,7 @@ func TestReplicationSetMoveTable(t *testing.T) {
 	// Commit -> Replicating
 	msgs, err = r.handleTableStatus(dest, &tablepb.TableStatus{
 		TableID: tableID,
-		State:   tablepb.TableStateReplicating,
+		State:   tablepb.TableState_Replicating,
 	})
 	require.Nil(t, err)
 	require.Len(t, msgs, 0)
@@ -817,7 +817,7 @@ func TestReplicationSetCaptureShutdown(t *testing.T) {
 	// Add table, Prepare -> Commit
 	msgs, err = r.handleTableStatus(from, &tablepb.TableStatus{
 		TableID: tableID,
-		State:   tablepb.TableStatePrepared,
+		State:   tablepb.TableState_Prepared,
 	})
 	require.Nil(t, err)
 	require.Len(t, msgs, 1)
@@ -841,7 +841,7 @@ func TestReplicationSetCaptureShutdown(t *testing.T) {
 	// Add table, Commit -> Replicating
 	msgs, err = r.handleTableStatus(from, &tablepb.TableStatus{
 		TableID: tableID,
-		State:   tablepb.TableStateReplicating,
+		State:   tablepb.TableState_Replicating,
 	})
 	require.Nil(t, err)
 	require.Len(t, msgs, 0)
@@ -911,7 +911,7 @@ func TestReplicationSetCaptureShutdown(t *testing.T) {
 	// Move table, Prepare -> Commit
 	msgs, err = r.handleTableStatus(dest, &tablepb.TableStatus{
 		TableID: tableID,
-		State:   tablepb.TableStatePrepared,
+		State:   tablepb.TableState_Prepared,
 	})
 	require.Nil(t, err)
 	require.Len(t, msgs, 1)
@@ -973,7 +973,7 @@ func TestReplicationSetCaptureShutdown(t *testing.T) {
 			rClone1 := clone(rClone)
 			msgs, err = rClone1.handleTableStatus(rClone1.Primary, &tablepb.TableStatus{
 				TableID: 1,
-				State:   tablepb.TableStateReplicating,
+				State:   tablepb.TableState_Replicating,
 			})
 			require.Nil(t, err)
 			require.Len(t, msgs, 0)
@@ -1054,7 +1054,7 @@ func TestReplicationSetCaptureShutdown(t *testing.T) {
 	// Commit -> Replicating
 	msgs, err = r.handleTableStatus(dest, &tablepb.TableStatus{
 		TableID: tableID,
-		State:   tablepb.TableStateReplicating,
+		State:   tablepb.TableState_Replicating,
 	})
 	require.Nil(t, err)
 	require.Len(t, msgs, 0)
@@ -1080,7 +1080,7 @@ func TestReplicationSetCaptureShutdownAfterReconstructCommitState(t *testing.T) 
 	from := "1"
 	tableID := model.TableID(1)
 	tableStatus := map[model.CaptureID]*tablepb.TableStatus{
-		from: {TableID: tableID, State: tablepb.TableStatePrepared},
+		from: {TableID: tableID, State: tablepb.TableState_Prepared},
 	}
 	r, err := NewReplicationSet(tableID, 0, tableStatus, model.ChangeFeedID{})
 	require.Nil(t, err)
@@ -1122,7 +1122,7 @@ func TestReplicationSetMoveTableWithHeartbeatResponse(t *testing.T) {
 	// Prepare -> Commit.
 	msgs, err = r.handleTableStatus(dest, &tablepb.TableStatus{
 		TableID: tableID,
-		State:   tablepb.TableStatePrepared,
+		State:   tablepb.TableState_Prepared,
 	})
 	require.Nil(t, err)
 	require.Len(t, msgs, 1)
@@ -1168,7 +1168,7 @@ func TestReplicationSetMoveTableWithHeartbeatResponse(t *testing.T) {
 	// Commit -> Replicating
 	msgs, err = r.handleTableStatus(dest, &tablepb.TableStatus{
 		TableID: tableID,
-		State:   tablepb.TableStateReplicating,
+		State:   tablepb.TableState_Replicating,
 	})
 	require.Nil(t, err)
 	require.Len(t, msgs, 0)
@@ -1213,7 +1213,7 @@ func TestReplicationSetCommitRestart(t *testing.T) {
 	// Primary has received remove table message and is currently stopping.
 	tableStatus := map[model.CaptureID]*tablepb.TableStatus{
 		"1": {
-			State:      tablepb.TableStatePrepared,
+			State:      tablepb.TableState_Prepared,
 			Checkpoint: tablepb.Checkpoint{},
 		},
 		"2": {
@@ -1231,7 +1231,7 @@ func TestReplicationSetCommitRestart(t *testing.T) {
 	// Can not promote to primary as there are other captures.
 	msgs, err := r.handleTableStatus("1", &tablepb.TableStatus{
 		TableID: 0,
-		State:   tablepb.TableStatePrepared,
+		State:   tablepb.TableState_Prepared,
 	})
 	require.Nil(t, err)
 	require.Len(t, msgs, 0)
@@ -1278,7 +1278,7 @@ func TestReplicationSetCommitRestart(t *testing.T) {
 	// No other captures, promote secondary.
 	msgs, err = r.handleTableStatus("1", &tablepb.TableStatus{
 		TableID: 0,
-		State:   tablepb.TableStatePrepared,
+		State:   tablepb.TableState_Prepared,
 	})
 	require.Nil(t, err)
 	require.Len(t, msgs, 1)

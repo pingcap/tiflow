@@ -55,17 +55,17 @@ func (s CaptureState) String() string {
 
 // CaptureStatus represent capture's status.
 type CaptureStatus struct {
-	OwnerRev schedulepb.OwnerRevision
-	Epoch    schedulepb.ProcessorEpoch
+	OwnerRev *schedulepb.OwnerRevision
+	Epoch    *schedulepb.ProcessorEpoch
 	State    CaptureState
-	Tables   []tablepb.TableStatus
+	Tables   []*tablepb.TableStatus
 	ID       model.CaptureID
 	Addr     string
 	IsOwner  bool
 }
 
 func newCaptureStatus(
-	rev schedulepb.OwnerRevision, id model.CaptureID, addr string, isOwner bool,
+	rev *schedulepb.OwnerRevision, id model.CaptureID, addr string, isOwner bool,
 ) *CaptureStatus {
 	return &CaptureStatus{
 		OwnerRev: rev,
@@ -77,7 +77,7 @@ func newCaptureStatus(
 }
 
 func (c *CaptureStatus) handleHeartbeatResponse(
-	resp *schedulepb.HeartbeatResponse, epoch schedulepb.ProcessorEpoch,
+	resp *schedulepb.HeartbeatResponse, epoch *schedulepb.ProcessorEpoch,
 ) {
 	// Check epoch for initialized captures.
 	if c.State != CaptureStateUninitialized && c.Epoch.Epoch != epoch.Epoch {
@@ -97,7 +97,7 @@ func (c *CaptureStatus) handleHeartbeatResponse(
 			zap.String("capture", c.ID),
 			zap.String("captureAddr", c.Addr))
 	}
-	if resp.Liveness == model.LivenessCaptureStopping {
+	if resp.Liveness == int32(model.LivenessCaptureStopping) {
 		c.State = CaptureStateStopping
 		log.Info("schedulerv3: capture stopping",
 			zap.String("capture", c.ID),
@@ -108,13 +108,13 @@ func (c *CaptureStatus) handleHeartbeatResponse(
 
 // CaptureChanges wraps changes of captures.
 type CaptureChanges struct {
-	Init    map[model.CaptureID][]tablepb.TableStatus
-	Removed map[model.CaptureID][]tablepb.TableStatus
+	Init    map[model.CaptureID][]*tablepb.TableStatus
+	Removed map[model.CaptureID][]*tablepb.TableStatus
 }
 
 // CaptureManager manages capture status.
 type CaptureManager struct {
-	OwnerRev schedulepb.OwnerRevision
+	OwnerRev *schedulepb.OwnerRevision
 	Captures map[model.CaptureID]*CaptureStatus
 
 	initialized bool
@@ -131,7 +131,7 @@ type CaptureManager struct {
 // NewCaptureManager returns a new capture manager.
 func NewCaptureManager(
 	ownerID model.CaptureID, changefeedID model.ChangeFeedID,
-	rev schedulepb.OwnerRevision, heartbeatTick int,
+	rev *schedulepb.OwnerRevision, heartbeatTick int,
 ) *CaptureManager {
 	return &CaptureManager{
 		OwnerRev:      rev,
@@ -180,9 +180,9 @@ func (c *CaptureManager) Tick(
 	for to := range c.Captures {
 		msgs = append(msgs, &schedulepb.Message{
 			To:      to,
-			MsgType: schedulepb.MsgHeartbeat,
+			MsgType: schedulepb.MessageType_MsgHeartbeat,
 			Heartbeat: &schedulepb.Heartbeat{
-				TableIDs: tables[to],
+				TableIds: tables[to],
 				// IsStopping let the receiver capture know that it should be stopping now.
 				// At the moment, this is triggered by `DrainCapture` scheduler.
 				IsStopping: drainingCapture == to,
@@ -197,7 +197,7 @@ func (c *CaptureManager) HandleMessage(
 	msgs []*schedulepb.Message,
 ) {
 	for _, msg := range msgs {
-		if msg.MsgType == schedulepb.MsgHeartbeatResponse {
+		if msg.MsgType == schedulepb.MessageType_MsgHeartbeatResponse {
 			captureStatus, ok := c.Captures[msg.From]
 			if !ok {
 				log.Warn("schedulerv3: heartbeat response from unknown capture",
@@ -225,7 +225,7 @@ func (c *CaptureManager) HandleAliveCaptureUpdate(
 				zap.String("capture", id))
 			msgs = append(msgs, &schedulepb.Message{
 				To:        id,
-				MsgType:   schedulepb.MsgHeartbeat,
+				MsgType:   schedulepb.MessageType_MsgHeartbeat,
 				Heartbeat: &schedulepb.Heartbeat{},
 			})
 		}
@@ -247,7 +247,7 @@ func (c *CaptureManager) HandleAliveCaptureUpdate(
 				c.changes = &CaptureChanges{}
 			}
 			if c.changes.Removed == nil {
-				c.changes.Removed = make(map[string][]tablepb.TableStatus)
+				c.changes.Removed = make(map[string][]*tablepb.TableStatus)
 			}
 			c.changes.Removed[id] = capture.Tables
 
@@ -258,7 +258,7 @@ func (c *CaptureManager) HandleAliveCaptureUpdate(
 
 	// Check if this is the first time all captures are initialized.
 	if !c.initialized && c.checkAllCaptureInitialized() {
-		c.changes = &CaptureChanges{Init: make(map[string][]tablepb.TableStatus)}
+		c.changes = &CaptureChanges{Init: make(map[string][]*tablepb.TableStatus)}
 		for id, capture := range c.Captures {
 			c.changes.Init[id] = capture.Tables
 		}

@@ -129,7 +129,7 @@ func newMockTablePipeline(
 	return &mockTablePipeline{
 		span:         span,
 		name:         fmt.Sprintf("`test`.`table%d`", span.TableID),
-		state:        tablepb.TableStatePreparing,
+		state:        tablepb.TableState_Preparing,
 		resolvedTs:   replicaInfo.StartTs,
 		checkpointTs: replicaInfo.StartTs,
 	}, nil
@@ -184,18 +184,18 @@ func (m *mockTablePipeline) State() tablepb.TableState {
 		return m.state
 	}
 
-	if m.state == tablepb.TableStatePreparing {
+	if m.state == tablepb.TableState_Preparing {
 		// `resolvedTs` and `checkpointTs` is initialized by the same `start-ts`
 		// once `resolvedTs` > `checkpointTs`, is means the sorter received the first
 		// resolved event, let it become prepared.
 		if m.resolvedTs > m.checkpointTs {
-			m.state = tablepb.TableStatePrepared
+			m.state = tablepb.TableState_Prepared
 		}
 	}
 
 	if m.sinkStartTs != model.Ts(0) {
 		if m.checkpointTs > m.sinkStartTs {
-			m.state = tablepb.TableStateReplicating
+			m.state = tablepb.TableState_Replicating
 		}
 	}
 	return m.state
@@ -307,7 +307,7 @@ func TestTableExecutorAddingTableIndirectly(t *testing.T) {
 
 	done := p.IsAddTableSpanFinished(spanz.TableIDToComparableSpan(1), true)
 	require.False(t, done)
-	require.Equal(t, tablepb.TableStatePreparing, table1.State())
+	require.Equal(t, tablepb.TableState_Preparing, table1.State())
 
 	// push the resolved ts, mock that sorterNode receive first resolved event
 	table1.resolvedTs = 101
@@ -318,7 +318,7 @@ func TestTableExecutorAddingTableIndirectly(t *testing.T) {
 
 	done = p.IsAddTableSpanFinished(spanz.TableIDToComparableSpan(1), true)
 	require.True(t, done)
-	require.Equal(t, tablepb.TableStatePrepared, table1.State())
+	require.Equal(t, tablepb.TableState_Prepared, table1.State())
 
 	// no table is `replicating`
 	checkpointTs = p.agent.GetLastSentCheckpointTs()
@@ -342,7 +342,7 @@ func TestTableExecutorAddingTableIndirectly(t *testing.T) {
 
 	done = p.IsAddTableSpanFinished(spanz.TableIDToComparableSpan(1), false)
 	require.True(t, done)
-	require.Equal(t, tablepb.TableStateReplicating, table1.State())
+	require.Equal(t, tablepb.TableState_Replicating, table1.State())
 
 	checkpointTs = p.agent.GetLastSentCheckpointTs()
 	require.Equal(t, table1.CheckpointTs(), checkpointTs)

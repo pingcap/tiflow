@@ -367,7 +367,7 @@ func (m *SinkManager) generateSinkTasks() error {
 			// It means table sink is stopping or stopped.
 			// We should skip it and do not push it back.
 			// Because there is no case that stopping/stopped -> replicating.
-			if tableState != tablepb.TableStateReplicating {
+			if tableState != tablepb.TableState_Replicating {
 				log.Info("Table sink is not replicating, skip it",
 					zap.String("namespace", m.changefeedID.Namespace),
 					zap.String("changefeed", m.changefeedID.ID),
@@ -422,7 +422,7 @@ func (m *SinkManager) generateSinkTasks() error {
 					}
 				},
 				isCanceled: func() bool {
-					return tableSink.getState() != tablepb.TableStateReplicating
+					return tableSink.getState() != tablepb.TableState_Replicating
 				},
 			}
 			select {
@@ -505,7 +505,7 @@ func (m *SinkManager) generateRedoTasks() error {
 			// It means table sink is stopping or stopped.
 			// We should skip it and do not push it back.
 			// Because there is no case that stopping/stopped -> replicating.
-			if tableState != tablepb.TableStateReplicating {
+			if tableState != tablepb.TableState_Replicating {
 				log.Info("Table sink is not replicating, skip it",
 					zap.String("namespace", m.changefeedID.Namespace),
 					zap.String("changefeed", m.changefeedID.ID),
@@ -560,7 +560,7 @@ func (m *SinkManager) generateRedoTasks() error {
 					}
 				},
 				isCanceled: func() bool {
-					return tableSink.getState() != tablepb.TableStateReplicating
+					return tableSink.getState() != tablepb.TableState_Replicating
 				},
 			}
 			select {
@@ -642,7 +642,7 @@ func (m *SinkManager) AddTable(tableID model.TableID, startTs model.Ts, targetTs
 		tableID,
 		m.sinkFactory.CreateTableSink(
 			m.changefeedID, spanz.TableIDToComparableSpan(tableID), m.metricsTableSinkTotalRows),
-		tablepb.TableStatePreparing,
+		tablepb.TableState_Preparing,
 		startTs,
 		targetTs,
 	)
@@ -790,7 +790,7 @@ func (m *SinkManager) GetTableState(tableID model.TableID) (tablepb.TableState, 
 			zap.String("namespace", m.changefeedID.Namespace),
 			zap.String("changefeed", m.changefeedID.ID),
 			zap.Int64("tableID", tableID))
-		return tablepb.TableStateAbsent, false
+		return tablepb.TableState_Absent, false
 	}
 	return tableSink.(*tableSinkWrapper).getState(), true
 }

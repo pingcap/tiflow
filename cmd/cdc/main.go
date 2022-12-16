@@ -16,6 +16,7 @@ package main
 import (
 	_ "github.com/pingcap/tidb/types/parser_driver"
 	"github.com/pingcap/tiflow/pkg/cmd"
+	_ "github.com/pingcap/tiflow/pkg/vtcodec"
 )
 
 func main() {
