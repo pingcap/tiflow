@@ -159,7 +159,7 @@ function run() {
 	# make suer no panic happen when the syncpoint enable and the ddl sink initializing slowly
 	export GO_FAILPOINTS='github.com/pingcap/tiflow/cdc/owner/DDLSinkInitializeSlowly=return(true)'
 	start_ts=$(run_cdc_cli_tso_query ${UP_PD_HOST_1} ${UP_PD_PORT_1})
-	run_cdc_server --workdir $WORK_DIR --binary $CDC_BINARY --config $CUR/conf/server.toml
+	run_cdc_server --workdir $WORK_DIR --binary $CDC_BINARY
 
 	# this test contains `set global tidb_external_ts = ?` , which requires super privilege, so we
 	# can't use the normal user
@@ -172,6 +172,7 @@ function run() {
 	check_table_exists "testSync.simple1" ${DOWN_TIDB_HOST} ${DOWN_TIDB_PORT}
 	check_table_exists "testSync.simple2" ${DOWN_TIDB_HOST} ${DOWN_TIDB_PORT}
 
+  run_sql "SET GLOBAL tidb_enable_external_ts_read = on;" ${DOWN_TIDB_HOST} ${DOWN_TIDB_PORT}
 	sleep 60
 
 	run_sql "SELECT primary_ts, secondary_ts FROM tidb_cdc.syncpoint_v1;" ${DOWN_TIDB_HOST} ${DOWN_TIDB_PORT}
