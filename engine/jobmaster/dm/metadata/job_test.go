@@ -21,6 +21,7 @@ import (
 	"github.com/pingcap/log"
 	dmconfig "github.com/pingcap/tiflow/dm/config"
 	dmmaster "github.com/pingcap/tiflow/dm/master"
+	dmpb "github.com/pingcap/tiflow/dm/pb"
 	"github.com/pingcap/tiflow/engine/jobmaster/dm/config"
 	"github.com/pingcap/tiflow/engine/pkg/adapter"
 	"github.com/pingcap/tiflow/engine/pkg/meta/mock"
@@ -149,4 +150,17 @@ func TestTaskStage(t *testing.T) {
 	var ts2 TaskStage
 	require.EqualError(t, json.Unmarshal(bs, &ts2), "Unknown TaskStage Unknown TaskStage 1000")
 	require.Equal(t, TaskStage(0), ts2)
+}
+
+func TestTaskStageValue(t *testing.T) {
+	require.Equal(t, int(dmpb.Stage_New), int(StageInit))
+	require.Equal(t, int(dmpb.Stage_Running), int(StageRunning))
+	require.Equal(t, int(dmpb.Stage_Paused), int(StagePaused))
+	require.Equal(t, int(dmpb.Stage_Finished), int(StageFinished))
+	require.Equal(t, int(dmpb.Stage_Pausing), int(StagePausing))
+	require.Greater(t, int(StageError), int(dmpb.Stage_Stopping))
+	require.Greater(t, int(StageUnscheduled), int(dmpb.Stage_Stopping))
+
+	require.Equal(t, 15, int(StageError))
+	require.Equal(t, 16, int(StageUnscheduled))
 }
