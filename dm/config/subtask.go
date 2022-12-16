@@ -21,7 +21,6 @@ import (
 	"encoding/json"
 	"flag"
 	"fmt"
-	"path/filepath"
 	"regexp"
 	"strconv"
 	"strings"
@@ -336,7 +335,8 @@ func (c *SubTaskConfig) Adjust(verifyDecryptPassword bool) error {
 		c.LoaderConfig.Dir = newDir
 
 		if storage.IsLocalDiskPath(newDir) {
-			c.LoaderConfig.SortingDirPhysical = filepath.Join(newDir, "sorting")
+			// lightning will not recursively create directories, so we use same level dir
+			c.LoaderConfig.SortingDirPhysical = newDir + ".sorting"
 		} else {
 			c.LoaderConfig.SortingDirPhysical = "./sorting/" + c.Name
 		}
