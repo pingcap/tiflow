@@ -29,6 +29,7 @@ import (
 	"github.com/pingcap/tiflow/cdc/sinkv2/eventsink/factory"
 	cerrors "github.com/pingcap/tiflow/pkg/errors"
 	"github.com/pingcap/tiflow/pkg/retry"
+	"github.com/pingcap/tiflow/pkg/spanz"
 	"github.com/pingcap/tiflow/pkg/upstream"
 	"github.com/prometheus/client_golang/prometheus"
 	"github.com/tikv/client-go/v2/oracle"
@@ -151,7 +152,8 @@ func New(
 		m.redoWorkers = make([]*redoWorker, 0, redoWorkerNum)
 		m.redoTaskChan = make(chan *redoTask)
 		m.redoWorkerAvailable = make(chan struct{}, 1)
-		// TODO: maybe should use at most 1/3 memory quota for redo event cache.
+		// Use 3/4 memory quota as redo event cache. A large value is helpful to cache hit ratio.
+		m.eventCache = newRedoEventCache(changefeedID, changefeedInfo.Config.MemoryQuota/4*3)
 	}
 
 	m.startWorkers(changefeedInfo.Config.Sink.TxnAtomicity.ShouldSplitTxn(), changefeedInfo.Config.EnableOldValue)
@@ -168,10 +170,9 @@ func New(
 
 // start all workers and report the error to the error channel.
 func (m *SinkManager) startWorkers(splitTxn bool, enableOldValue bool) {
-	redoEnabled := m.redoManager != nil && m.redoManager.Enabled()
 	for i := 0; i < sinkWorkerNum; i++ {
 		w := newSinkWorker(m.changefeedID, m.sourceManager, m.memQuota,
-			m.eventCache, redoEnabled, splitTxn, enableOldValue)
+			m.eventCache, splitTxn, enableOldValue)
 		m.sinkWorkers = append(m.sinkWorkers, w)
 		m.wg.Add(1)
 		go func() {
@@ -639,7 +640,8 @@ func (m *SinkManager) AddTable(tableID model.TableID, startTs model.Ts, targetTs
 	sinkWrapper := newTableSinkWrapper(
 		m.changefeedID,
 		tableID,
-		m.sinkFactory.CreateTableSink(m.changefeedID, tableID, m.metricsTableSinkTotalRows),
+		m.sinkFactory.CreateTableSink(
+			m.changefeedID, spanz.TableIDToComparableSpan(tableID), m.metricsTableSinkTotalRows),
 		tablepb.TableStatePreparing,
 		startTs,
 		targetTs,

@@ -25,6 +25,7 @@ import (
 	"github.com/pingcap/tiflow/cdc/processor/sourcemanager/engine"
 	"github.com/pingcap/tiflow/cdc/processor/sourcemanager/engine/memory"
 	cerrors "github.com/pingcap/tiflow/pkg/errors"
+	"github.com/pingcap/tiflow/pkg/spanz"
 	"github.com/pingcap/tiflow/pkg/upstream"
 	"github.com/stretchr/testify/require"
 	"github.com/stretchr/testify/suite"
@@ -47,7 +48,7 @@ func createWorker(
 		quota.addTable(tableID)
 	}
 
-	return newSinkWorker(changefeedID, sm, quota, nil, false, splitTxn, false), sortEngine
+	return newSinkWorker(changefeedID, sm, quota, nil, splitTxn, false), sortEngine
 }
 
 // nolint:unparam
@@ -183,7 +184,8 @@ func (suite *workerSuite) TestHandleTaskWithSplitTxnAndGotSomeFilteredEvents() {
 		require.Equal(suite.T(), context.Canceled, err)
 	}()
 
-	wrapper, sink := createTableSinkWrapper(changefeedID, tableID)
+	wrapper, sink := createTableSinkWrapper(
+		changefeedID, spanz.TableIDToComparableSpan(tableID))
 	lowerBoundPos := engine.Position{
 		StartTs:  0,
 		CommitTs: 1,
@@ -289,7 +291,8 @@ func (suite *workerSuite) TestHandleTaskWithSplitTxnAndAbortWhenNoMemAndOneTxnFi
 		require.Equal(suite.T(), context.Canceled, err)
 	}()
 
-	wrapper, sink := createTableSinkWrapper(changefeedID, tableID)
+	wrapper, sink := createTableSinkWrapper(
+		changefeedID, spanz.TableIDToComparableSpan(tableID))
 	lowerBoundPos := engine.Position{
 		StartTs:  0,
 		CommitTs: 1,
@@ -394,7 +397,8 @@ func (suite *workerSuite) TestHandleTaskWithSplitTxnAndAbortWhenNoMemAndBlocked(
 		require.ErrorIs(suite.T(), err, cerrors.ErrFlowControllerAborted)
 	}()
 
-	wrapper, sink := createTableSinkWrapper(changefeedID, tableID)
+	wrapper, sink := createTableSinkWrapper(
+		changefeedID, spanz.TableIDToComparableSpan(tableID))
 	lowerBoundPos := engine.Position{
 		StartTs:  0,
 		CommitTs: 1,
@@ -520,7 +524,8 @@ func (suite *workerSuite) TestHandleTaskWithSplitTxnAndOnlyAdvanceTableSinkWhenR
 		require.ErrorIs(suite.T(), err, context.Canceled)
 	}()
 
-	wrapper, sink := createTableSinkWrapper(changefeedID, tableID)
+	wrapper, sink := createTableSinkWrapper(
+		changefeedID, spanz.TableIDToComparableSpan(tableID))
 	lowerBoundPos := engine.Position{
 		StartTs:  0,
 		CommitTs: 1,
@@ -647,7 +652,8 @@ func (suite *workerSuite) TestHandleTaskWithoutSplitTxnAndAbortWhenNoMemAndForce
 		require.Equal(suite.T(), context.Canceled, err)
 	}()
 
-	wrapper, sink := createTableSinkWrapper(changefeedID, tableID)
+	wrapper, sink := createTableSinkWrapper(
+		changefeedID, spanz.TableIDToComparableSpan(tableID))
 	lowerBoundPos := engine.Position{
 		StartTs:  0,
 		CommitTs: 1,
@@ -774,7 +780,8 @@ func (suite *workerSuite) TestHandleTaskWithoutSplitTxnOnlyAdvanceTableSinkWhenR
 		require.Equal(suite.T(), context.Canceled, err)
 	}()
 
-	wrapper, sink := createTableSinkWrapper(changefeedID, tableID)
+	wrapper, sink := createTableSinkWrapper(
+		changefeedID, spanz.TableIDToComparableSpan(tableID))
 	lowerBoundPos := engine.Position{
 		StartTs:  0,
 		CommitTs: 1,
@@ -892,7 +899,8 @@ func (suite *workerSuite) TestHandleTaskWithSplitTxnAndDoNotAdvanceTableUntilMee
 		require.ErrorIs(suite.T(), err, context.Canceled)
 	}()
 
-	wrapper, sink := createTableSinkWrapper(changefeedID, tableID)
+	wrapper, sink := createTableSinkWrapper(
+		changefeedID, spanz.TableIDToComparableSpan(tableID))
 	lowerBoundPos := engine.Position{
 		StartTs:  0,
 		CommitTs: 1,
@@ -976,7 +984,8 @@ func (suite *workerSuite) TestHandleTaskWithSplitTxnAndAdvanceTableUntilTaskIsFi
 		require.ErrorIs(suite.T(), err, context.Canceled)
 	}()
 
-	wrapper, sink := createTableSinkWrapper(changefeedID, tableID)
+	wrapper, sink := createTableSinkWrapper(
+		changefeedID, spanz.TableIDToComparableSpan(tableID))
 	lowerBoundPos := engine.Position{
 		StartTs:  0,
 		CommitTs: 1,
@@ -1047,7 +1056,8 @@ func (suite *workerSuite) TestHandleTaskWithSplitTxnAndAdvanceTableIfNoWorkload(
 		require.ErrorIs(suite.T(), err, context.Canceled)
 	}()
 
-	wrapper, _ := createTableSinkWrapper(changefeedID, tableID)
+	wrapper, _ := createTableSinkWrapper(
+		changefeedID, spanz.TableIDToComparableSpan(tableID))
 	lowerBoundPos := engine.Position{
 		StartTs:  0,
 		CommitTs: 1,
