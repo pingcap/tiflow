@@ -19,9 +19,11 @@ import (
 
 	"github.com/pingcap/log"
 	"github.com/pingcap/tiflow/cdc/model"
+	"github.com/pingcap/tiflow/cdc/processor/tablepb"
 	"github.com/pingcap/tiflow/cdc/scheduler/internal/v3/member"
 	"github.com/pingcap/tiflow/cdc/scheduler/internal/v3/replication"
 	"github.com/pingcap/tiflow/pkg/config"
+	"github.com/pingcap/tiflow/pkg/spanz"
 	"go.uber.org/zap"
 )
 
@@ -63,22 +65,22 @@ func NewSchedulerManager(
 // Schedule generates schedule tasks based on the inputs.
 func (sm *Manager) Schedule(
 	checkpointTs model.Ts,
-	currentTables []model.TableID,
+	currentSpans []tablepb.Span,
 	aliveCaptures map[model.CaptureID]*member.CaptureStatus,
-	replications map[model.TableID]*replication.ReplicationSet,
-	runTasking map[model.TableID]*replication.ScheduleTask,
+	replications *spanz.Map[*replication.ReplicationSet],
+	runTasking *spanz.Map[*replication.ScheduleTask],
 ) []*replication.ScheduleTask {
 	for sid, scheduler := range sm.schedulers {
 		// Basic scheduler bypasses max task check, because it handles the most
 		// critical scheduling, e.g. add table via CREATE TABLE DDL.
 		if sid != int(schedulerPriorityBasic) {
-			if len(runTasking) >= sm.maxTaskConcurrency {
+			if runTasking.Len() >= sm.maxTaskConcurrency {
 				// Do not generate more scheduling tasks if there are too many
 				// running tasks.
 				return nil
 			}
 		}
-		tasks := scheduler.Schedule(checkpointTs, currentTables, aliveCaptures, replications)
+		tasks := scheduler.Schedule(checkpointTs, currentSpans, aliveCaptures, replications)
 		for _, t := range tasks {
 			name := struct {
 				scheduler, task string
@@ -99,7 +101,7 @@ func (sm *Manager) Schedule(
 }
 
 // MoveTable moves a table to the target capture.
-func (sm *Manager) MoveTable(tableID model.TableID, target model.CaptureID) {
+func (sm *Manager) MoveTable(span tablepb.Span, target model.CaptureID) {
 	scheduler := sm.schedulers[schedulerPriorityMoveTable]
 	moveTableScheduler, ok := scheduler.(*moveTableScheduler)
 	if !ok {
@@ -107,12 +109,12 @@ func (sm *Manager) MoveTable(tableID model.TableID, target model.CaptureID) {
 			zap.String("namespace", sm.changefeedID.Namespace),
 			zap.String("changefeed", sm.changefeedID.ID))
 	}
-	if !moveTableScheduler.addTask(tableID, target) {
+	if !moveTableScheduler.addTask(span, target) {
 		log.Info("schedulerv3: manual move Table task ignored, "+
 			"since the last triggered task not finished",
 			zap.String("namespace", sm.changefeedID.Namespace),
 			zap.String("changefeed", sm.changefeedID.ID),
-			zap.Int64("tableID", tableID),
+			zap.Stringer("span", &span),
 			zap.String("targetCapture", target))
 	}
 }
