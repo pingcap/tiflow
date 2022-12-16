@@ -203,6 +203,10 @@ func (t *tableSinkWrapper) updateRangeEventCounts(eventCount rangeEventCount) {
 		return
 	}
 	if t.rangeEventCounts[countsLen-1].lastPos.Compare(eventCount.lastPos) < 0 {
+		// If two rangeEventCounts are close enough, we can merge them into one record
+		// to save memory usage. When merging B into A, A.lastPos will be updated but
+		// A.firstPos will be kept so that we can determine whether to continue to merge
+		// more events or not based on timeDiff(C.lastPos, A.firstPos).
 		lastPhy := oracle.ExtractPhysical(t.rangeEventCounts[countsLen-1].firstPos.CommitTs)
 		currPhy := oracle.ExtractPhysical(eventCount.lastPos.CommitTs)
 		if (currPhy - lastPhy) >= 1000 { // 1000 means 1000ms.

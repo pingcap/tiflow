@@ -392,7 +392,7 @@ func (w *sinkWorker) fetchFromCache(
 		zap.String("changefeed", w.changefeedID.ID),
 		zap.Int64("tableID", task.tableID),
 		zap.Bool("success", popRes.success),
-		zap.Int("events", len(popRes.events)),
+		zap.Int("eventsLen", len(popRes.events)),
 		zap.Bool("cacheDrained", cacheDrained),
 		zap.Any("lowerBound", lowerBound),
 		zap.Any("upperBound", upperBound),
