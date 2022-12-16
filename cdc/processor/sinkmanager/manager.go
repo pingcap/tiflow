@@ -152,7 +152,7 @@ func New(
 		m.redoWorkers = make([]*redoWorker, 0, redoWorkerNum)
 		m.redoTaskChan = make(chan *redoTask)
 		m.redoWorkerAvailable = make(chan struct{}, 1)
-		// Use 3/4 memory quota as redo event cache.
+		// Use 3/4 memory quota as redo event cache. A large value is helpful to cache hit ratio.
 		m.eventCache = newRedoEventCache(changefeedID, changefeedInfo.Config.MemoryQuota/4*3)
 	}
 
