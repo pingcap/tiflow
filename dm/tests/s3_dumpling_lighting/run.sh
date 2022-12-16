@@ -247,9 +247,8 @@ function run() {
 	echo "run s3 test with special task-name and without check dump files success"
 	run_error_check
 	echo "run s3 test error check success"
-	# # TODO local special name will be resolved after fix https://github.com/pingcap/tidb/issues/32549
-	# test_local_special_name
-	# echo "run local special task-name success"
+	test_local_special_name
+	echo "run local special task-name success"
 }
 
 cleanup_data $TEST_NAME
