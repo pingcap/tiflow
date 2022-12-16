@@ -165,16 +165,9 @@ func (w *redoWorker) handleTask(ctx context.Context, task *redoTask) (finalErr e
 		}
 
 		if allFinished {
-			// There is no more events and some required memory isn't used.
-			if availableMemSize > usedMemSize {
-				w.memQuota.refund(availableMemSize - usedMemSize)
-				log.Debug("MemoryQuotaTracing: refund memory for redo log task",
-					zap.String("namespace", w.changefeedID.Namespace),
-					zap.String("changefeed", w.changefeedID.ID),
-					zap.Int64("tableID", task.tableID),
-					zap.Uint64("memory", availableMemSize-usedMemSize))
-			}
-		} else if usedMemSize >= availableMemSize {
+			return nil
+		}
+		if usedMemSize >= availableMemSize {
 			if txnFinished {
 				if w.memQuota.tryAcquire(requestMemSize) {
 					availableMemSize += requestMemSize
@@ -228,6 +221,16 @@ func (w *redoWorker) handleTask(ctx context.Context, task *redoTask) (finalErr e
 		if finalErr == nil {
 			// Otherwise we can't ensure all events before `lastPos` are emitted.
 			task.callback(lastPos)
+		}
+
+		// There is no more events and some required memory isn't used.
+		if availableMemSize > usedMemSize {
+			w.memQuota.refund(availableMemSize - usedMemSize)
+			log.Debug("MemoryQuotaTracing: refund memory for redo log task",
+				zap.String("namespace", w.changefeedID.Namespace),
+				zap.String("changefeed", w.changefeedID.ID),
+				zap.Int64("tableID", task.tableID),
+				zap.Uint64("memory", availableMemSize-usedMemSize))
 		}
 	}()
 

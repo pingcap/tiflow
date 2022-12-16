@@ -195,16 +195,9 @@ func (w *sinkWorker) handleTask(ctx context.Context, task *sinkTask) (finalErr e
 		}
 
 		if allFinished {
-			// There is no more events and some required memory isn't used.
-			if availableMem > usedMem {
-				w.memQuota.refund(availableMem - usedMem)
-				log.Debug("MemoryQuotaTracing: refund memory for table sink task",
-					zap.String("namespace", w.changefeedID.Namespace),
-					zap.String("changefeed", w.changefeedID.ID),
-					zap.Int64("tableID", task.tableID),
-					zap.Uint64("memory", availableMem-usedMem))
-			}
-		} else if usedMem >= availableMem {
+			return nil
+		}
+		if usedMem >= availableMem {
 			if txnFinished {
 				if w.memQuota.tryAcquire(requestMemSize) {
 					availableMem += requestMemSize
@@ -273,6 +266,16 @@ func (w *sinkWorker) handleTask(ctx context.Context, task *sinkTask) (finalErr e
 		if finalErr == nil {
 			// Otherwise we can't ensure all events before `lastPos` are emitted.
 			task.callback(lastPos)
+		}
+
+		// The task is finished and some required memory isn't used.
+		if availableMem > usedMem {
+			w.memQuota.refund(availableMem - usedMem)
+			log.Debug("MemoryQuotaTracing: refund memory for table sink task",
+				zap.String("namespace", w.changefeedID.Namespace),
+				zap.String("changefeed", w.changefeedID.ID),
+				zap.Int64("tableID", task.tableID),
+				zap.Uint64("memory", availableMem-usedMem))
 		}
 	}()
 
@@ -401,17 +404,16 @@ func (w *sinkWorker) fetchFromCache(
 }
 
 func (w *sinkWorker) advanceTableSinkWithBatchID(t *sinkTask, commitTs model.Ts, size uint64, batchID uint64) error {
-	log.Debug("Advance table sink with batch ID",
-		zap.String("namespace", w.changefeedID.Namespace),
-		zap.String("changefeed", w.changefeedID.ID),
-		zap.Int64("tableID", t.tableID),
-		zap.Uint64("commitTs", commitTs),
-		zap.Uint64("batchID", batchID),
-	)
 
 	resolvedTs := model.NewResolvedTs(commitTs)
 	resolvedTs.Mode = model.BatchResolvedMode
 	resolvedTs.BatchID = batchID
+	log.Debug("Advance table sink with batch ID",
+		zap.String("namespace", w.changefeedID.Namespace),
+		zap.String("changefeed", w.changefeedID.ID),
+		zap.Int64("tableID", t.tableID),
+		zap.Any("resolvedTs", resolvedTs),
+		zap.Uint64("size", size))
 	if size > 0 {
 		w.memQuota.record(t.tableID, resolvedTs, size)
 	}
@@ -419,14 +421,13 @@ func (w *sinkWorker) advanceTableSinkWithBatchID(t *sinkTask, commitTs model.Ts,
 }
 
 func (w *sinkWorker) advanceTableSink(t *sinkTask, commitTs model.Ts, size uint64) error {
+	resolvedTs := model.NewResolvedTs(commitTs)
 	log.Debug("Advance table sink without batch ID",
 		zap.String("namespace", w.changefeedID.Namespace),
 		zap.String("changefeed", w.changefeedID.ID),
 		zap.Int64("tableID", t.tableID),
-		zap.Uint64("commitTs", commitTs),
-	)
-
-	resolvedTs := model.NewResolvedTs(commitTs)
+		zap.Any("resolvedTs", resolvedTs),
+		zap.Uint64("size", size))
 	if size > 0 {
 		w.memQuota.record(t.tableID, resolvedTs, size)
 	}
