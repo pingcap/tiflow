@@ -126,13 +126,13 @@ var (
 		})
 
 	// should alert.
-	relayExitWithErrorCounter = prometheus.NewCounter(
+	relayExitWithErrorCounter = prometheus.NewCounterVec(
 		prometheus.CounterOpts{
 			Namespace: "dm",
 			Subsystem: "relay",
 			Name:      "exit_with_error_count",
 			Help:      "counter of relay unit exits with error",
-		})
+		}, []string{"resumable_err"})
 )
 
 // RegisterMetrics register metrics.
