@@ -12,7 +12,6 @@ upstreams:
       password: ''
     source-id: mysql-01
     block-allow-list: global
-    loader-config-name: "global"
   - db-config:
       host: host.docker.internal
       port: 3307
@@ -20,10 +19,6 @@ upstreams:
       password: ''
     source-id: mysql-02
     block-allow-list: global
-    loader-config-name: "global"
 block-allow-list:
   global:
     do-dbs: ["sql_mode"]
-loaders:
-  global:
-    import-mode: "physical"

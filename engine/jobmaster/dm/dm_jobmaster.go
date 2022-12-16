@@ -402,12 +402,7 @@ func (jm *JobMaster) preCheck(ctx context.Context, cfg *config.JobCfg) error {
 	taskCfgs := cfg.ToTaskCfgs()
 	dmSubtaskCfgs := make([]*dmconfig.SubTaskConfig, 0, len(taskCfgs))
 	for _, taskCfg := range taskCfgs {
-		dmSubtaskCfg := taskCfg.ToDMSubTaskCfg(jm.ID())
-		err := dmSubtaskCfg.Adjust(false)
-		if err != nil {
-			return errors.Trace(err)
-		}
-		dmSubtaskCfgs = append(dmSubtaskCfgs, dmSubtaskCfg)
+		dmSubtaskCfgs = append(dmSubtaskCfgs, taskCfg.ToDMSubTaskCfg(jm.ID()))
 	}
 
 	msg, err := checker.CheckSyncConfigFunc(ctx, dmSubtaskCfgs, ctlcommon.DefaultErrorCnt, ctlcommon.DefaultWarnCnt)
