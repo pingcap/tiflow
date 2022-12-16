@@ -20,13 +20,21 @@ import (
 	"time"
 
 	"github.com/pingcap/tiflow/cdc/model"
+	"github.com/pingcap/tiflow/pkg/spanz"
 	"github.com/stretchr/testify/require"
 )
+
+// Only for test.
+func (r *progressTracker) pendingResolvedTsEventsCount() int {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	return len(r.resolvedTsCache)
+}
 
 func TestNewProgressTracker(t *testing.T) {
 	t.Parallel()
 
-	tracker := newProgressTracker(1, defaultBufferSize)
+	tracker := newProgressTracker(spanz.TableIDToComparableSpan(1), defaultBufferSize)
 	require.Equal(
 		t,
 		uint64(0),
@@ -38,7 +46,7 @@ func TestNewProgressTracker(t *testing.T) {
 func TestAddEvent(t *testing.T) {
 	t.Parallel()
 
-	tracker := newProgressTracker(1, defaultBufferSize)
+	tracker := newProgressTracker(spanz.TableIDToComparableSpan(1), defaultBufferSize)
 	tracker.addEvent()
 	tracker.addEvent()
 	tracker.addEvent()
@@ -49,7 +57,7 @@ func TestAddResolvedTs(t *testing.T) {
 	t.Parallel()
 
 	// There is no event in the tracker.
-	tracker := newProgressTracker(1, defaultBufferSize)
+	tracker := newProgressTracker(spanz.TableIDToComparableSpan(1), defaultBufferSize)
 	tracker.addResolvedTs(model.NewResolvedTs(1))
 	tracker.addResolvedTs(model.NewResolvedTs(2))
 	tracker.addResolvedTs(model.NewResolvedTs(3))
@@ -57,7 +65,7 @@ func TestAddResolvedTs(t *testing.T) {
 	require.Equal(t, uint64(3), tracker.advance().Ts, "lastMinResolvedTs should be 3")
 
 	// There is an event in the tracker.
-	tracker = newProgressTracker(1, defaultBufferSize)
+	tracker = newProgressTracker(spanz.TableIDToComparableSpan(1), defaultBufferSize)
 	tracker.addEvent()
 	tracker.addResolvedTs(model.NewResolvedTs(2))
 	tracker.addResolvedTs(model.NewResolvedTs(3))
@@ -70,7 +78,7 @@ func TestRemove(t *testing.T) {
 	var cb1, cb2, cb4, cb5 func()
 
 	// Only event.
-	tracker := newProgressTracker(1, defaultBufferSize)
+	tracker := newProgressTracker(spanz.TableIDToComparableSpan(1), defaultBufferSize)
 	tracker.addEvent()
 	cb2 = tracker.addEvent()
 	tracker.addEvent()
@@ -79,7 +87,7 @@ func TestRemove(t *testing.T) {
 	require.Equal(t, 3, tracker.trackingCount(), "not advanced")
 
 	// Both event and resolved ts.
-	tracker = newProgressTracker(1, defaultBufferSize)
+	tracker = newProgressTracker(spanz.TableIDToComparableSpan(1), defaultBufferSize)
 	cb1 = tracker.addEvent()
 	cb2 = tracker.addEvent()
 	tracker.addResolvedTs(model.NewResolvedTs(3))
@@ -113,7 +121,7 @@ func TestRemove(t *testing.T) {
 func TestCloseTracker(t *testing.T) {
 	t.Parallel()
 
-	tracker := newProgressTracker(1, defaultBufferSize)
+	tracker := newProgressTracker(spanz.TableIDToComparableSpan(1), defaultBufferSize)
 	cb1 := tracker.addEvent()
 	tracker.addResolvedTs(model.NewResolvedTs(1))
 	cb2 := tracker.addEvent()
@@ -142,7 +150,7 @@ func TestCloseTracker(t *testing.T) {
 func TestCloseTrackerCancellable(t *testing.T) {
 	t.Parallel()
 
-	tracker := newProgressTracker(1, defaultBufferSize)
+	tracker := newProgressTracker(spanz.TableIDToComparableSpan(1), defaultBufferSize)
 	tracker.addEvent()
 	tracker.addResolvedTs(model.NewResolvedTs(1))
 	tracker.addEvent()
@@ -167,7 +175,7 @@ func TestCloseTrackerCancellable(t *testing.T) {
 func TestTrackerBufferBoundary(t *testing.T) {
 	t.Parallel()
 
-	tracker := newProgressTracker(1, 8)
+	tracker := newProgressTracker(spanz.TableIDToComparableSpan(1), 8)
 
 	cbs := make([]func(), 0)
 	for i := 0; i < 65; i++ {
@@ -200,7 +208,7 @@ func TestTrackerBufferBoundary(t *testing.T) {
 func TestClosedTrackerDoNotAdvanceCheckpointTs(t *testing.T) {
 	t.Parallel()
 
-	tracker := newProgressTracker(1, defaultBufferSize)
+	tracker := newProgressTracker(spanz.TableIDToComparableSpan(1), defaultBufferSize)
 	cb1 := tracker.addEvent()
 	tracker.addResolvedTs(model.NewResolvedTs(1))
 	cb2 := tracker.addEvent()
@@ -230,4 +238,55 @@ func TestClosedTrackerDoNotAdvanceCheckpointTs(t *testing.T) {
 		return tracker.trackingCount() == 0
 	}, 3*time.Second, 100*time.Millisecond, "all events should be removed")
 	require.Equal(t, currentTs, tracker.advance(), "checkpointTs should not be advanced")
+}
+
+func TestOnlyResolvedTsShouldDirectlyAdvanceCheckpointTs(t *testing.T) {
+	t.Parallel()
+
+	tracker := newProgressTracker(spanz.TableIDToComparableSpan(1), defaultBufferSize)
+	cb1 := tracker.addEvent()
+	tracker.addResolvedTs(model.NewResolvedTs(1))
+	cb2 := tracker.addEvent()
+	tracker.addResolvedTs(model.NewResolvedTs(2))
+	tracker.addResolvedTs(model.NewResolvedTs(3))
+	cb3 := tracker.addEvent()
+	tracker.addResolvedTs(model.NewResolvedTs(4))
+	tracker.addResolvedTs(model.NewResolvedTs(5))
+	require.Equal(t, 3, tracker.trackingCount(), "Events should be added")
+	cb1()
+	cb2()
+	tracker.addResolvedTs(model.NewResolvedTs(6))
+	require.Equal(t, uint64(3), tracker.advance().Ts, "CheckpointTs should be advanced")
+	require.Equal(t, 1, tracker.trackingCount(), "Only one event should be left")
+	require.Equal(t, uint64(3), tracker.advance().Ts, "CheckpointTs still should be 3")
+	cb3()
+	require.Equal(t, uint64(6), tracker.advance().Ts, "CheckpointTs should be advanced")
+	tracker.addResolvedTs(model.NewResolvedTs(7))
+	tracker.addResolvedTs(model.NewResolvedTs(8))
+	tracker.addResolvedTs(model.NewResolvedTs(9))
+	require.Equal(t, 0, tracker.pendingResolvedTsEventsCount(), "ResolvedTsCache should be empty")
+	require.Equal(t, uint64(9), tracker.advance().Ts, "CheckpointTs should be advanced")
+}
+
+func TestShouldDirectlyUpdateResolvedTsIfNoMoreEvents(t *testing.T) {
+	t.Parallel()
+
+	tracker := newProgressTracker(spanz.TableIDToComparableSpan(1), defaultBufferSize)
+	cb1 := tracker.addEvent()
+	tracker.addResolvedTs(model.NewResolvedTs(1))
+	cb2 := tracker.addEvent()
+	tracker.addResolvedTs(model.NewResolvedTs(2))
+	tracker.addResolvedTs(model.NewResolvedTs(3))
+	require.Equal(t, 2, tracker.pendingResolvedTsEventsCount(), "ResolvedTsCache should only have 2 events")
+	cb3 := tracker.addEvent()
+	tracker.addResolvedTs(model.NewResolvedTs(4))
+	tracker.addResolvedTs(model.NewResolvedTs(5))
+	tracker.addResolvedTs(model.NewResolvedTs(6))
+	cb1()
+	cb2()
+	require.Equal(t, uint64(3), tracker.advance().Ts, "CheckpointTs should be advanced")
+	require.Equal(t, 1, tracker.pendingResolvedTsEventsCount(), "ResolvedTsCache should only have one event")
+	cb3()
+	require.Equal(t, uint64(6), tracker.advance().Ts, "CheckpointTs should be advanced")
+	require.Equal(t, 0, tracker.pendingResolvedTsEventsCount(), "ResolvedTsCache should be empty")
 }

@@ -44,7 +44,7 @@ spec:
     spec:
       initContainers:
         - name: wait-mysql
-          image: busybox
+          image: busybox:1.34.0
           command: ['sh', '-c', 'until nslookup {{ include "tiflow.name" . }}-metastore-mysql; do echo waiting for mysql; sleep 2; done;']
 {{- if .Values.imagePullSecrets }}
       imagePullSecrets:
