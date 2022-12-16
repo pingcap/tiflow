@@ -1,6 +1,6 @@
 #!/bin/bash
 
-set -eux
+set -eu
 
 cur=$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)
 source $cur/../_utils/test_prepare
@@ -237,6 +237,12 @@ function test_local_special_name() {
 }
 
 function run() {
+	killall tidb-server 2>/dev/null || true
+	killall tikv-server 2>/dev/null || true
+	killall pd-server 2>/dev/null || true
+
+	run_downstream_cluster $WORK_DIR
+
 	run_test true $TASK_NAME
 	echo "run s3 test with check dump files success"
 	run_test false $TASK_NAME
@@ -249,6 +255,13 @@ function run() {
 	echo "run s3 test error check success"
 	test_local_special_name
 	echo "run local special task-name success"
+
+	# restart to standalone tidb
+	killall -9 tidb-server 2>/dev/null || true
+	killall -9 tikv-server 2>/dev/null || true
+	killall -9 pd-server 2>/dev/null || true
+	rm -rf /tmp/tidb || true
+	run_tidb_server 4000 $TIDB_PASSWORD
 }
 
 cleanup_data $TEST_NAME
