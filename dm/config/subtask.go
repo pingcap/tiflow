@@ -324,10 +324,10 @@ func (c *SubTaskConfig) Adjust(verifyDecryptPassword bool) error {
 		var dirSuffix string
 		if isS3 {
 			// we will dump files to s3 dir's subdirectory
-			dirSuffix = "/" + url.PathEscape(c.Name) + "." + url.PathEscape(c.SourceID)
+			dirSuffix = "/" + c.Name + "." + c.SourceID
 		} else {
 			// TODO we will dump local file to dir's subdirectory, but it may have risk of compatibility, we will fix in other pr
-			dirSuffix = "." + url.PathEscape(c.Name)
+			dirSuffix = "." + c.Name
 		}
 		newDir, err := storage.AdjustPath(c.LoaderConfig.Dir, dirSuffix)
 		if err != nil {
