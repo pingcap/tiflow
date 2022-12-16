@@ -131,15 +131,10 @@ function run_test() {
 	run_sql_tidb_with_retry "select count(1) from ${db}.${tb};" "count(1): 25"
 
 	# check dump file
-	if [ ${2} == ${SPECIAL_TASK_NAME} ]; then
-		task="ab%3Fc%2Fb%25c%C3%8Bd"
-	else
-		task=${2}
-	fi
 	if $1; then
-		check_dump_s3_exist $db1 $tb1 $task $SOURCE_ID1
+		check_dump_s3_exist $db1 $tb1 $2 $SOURCE_ID1
 	else
-		dir_should_not_exist "${s3_DBPATH}/${dumpPath}/${task}.${SOURCE_ID1}"
+		dir_should_not_exist "${s3_DBPATH}/${dumpPath}/${2}.${SOURCE_ID1}"
 	fi
 
 	cleanup_s3
