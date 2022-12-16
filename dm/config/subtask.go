@@ -338,7 +338,7 @@ func (c *SubTaskConfig) Adjust(verifyDecryptPassword bool) error {
 			// lightning will not recursively create directories, so we use same level dir
 			c.LoaderConfig.SortingDirPhysical = newDir + ".sorting"
 		} else {
-			c.LoaderConfig.SortingDirPhysical = "./sorting/" + c.Name
+			c.LoaderConfig.SortingDirPhysical = "./sorting." + c.Name
 		}
 	}
 

@@ -241,7 +241,8 @@ function run() {
 	killall tikv-server 2>/dev/null || true
 	killall pd-server 2>/dev/null || true
 
-	run_downstream_cluster $WORK_DIR
+	mkdir -p "$WORK_DIR.downstream"
+	run_downstream_cluster "$WORK_DIR.downstream"
 
 	run_test true $TASK_NAME
 	echo "run s3 test with check dump files success"
