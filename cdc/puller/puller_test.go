@@ -25,6 +25,7 @@ import (
 	"github.com/pingcap/tidb/store/mockstore"
 	"github.com/pingcap/tiflow/cdc/kv"
 	"github.com/pingcap/tiflow/cdc/model"
+	"github.com/pingcap/tiflow/cdc/processor/tablepb"
 	"github.com/pingcap/tiflow/pkg/config"
 	cerrors "github.com/pingcap/tiflow/pkg/errors"
 	"github.com/pingcap/tiflow/pkg/pdutil"
@@ -111,7 +112,7 @@ func (mc *mockCDCKVClient) Returns(ev model.RegionFeedEvent) {
 
 func newPullerForTest(
 	t *testing.T,
-	spans []regionspan.Span,
+	spans []tablepb.Span,
 	checkpointTs uint64,
 ) (*mockInjectedPuller, context.CancelFunc, *sync.WaitGroup, tidbkv.Storage) {
 	var wg sync.WaitGroup
@@ -149,8 +150,11 @@ func newPullerForTest(
 }
 
 func TestPullerResolvedForward(t *testing.T) {
-	spans := []regionspan.Span{
-		{Start: []byte("t_a"), End: []byte("t_e")},
+	spans := []tablepb.Span{
+		{
+			StartKey: regionspan.ToComparableKey([]byte("t_a")),
+			EndKey:   regionspan.ToComparableKey([]byte("t_e")),
+		},
 	}
 	checkpointTs := uint64(996)
 	plr, cancel, wg, store := newPullerForTest(t, spans, checkpointTs)
@@ -195,8 +199,11 @@ func TestPullerResolvedForward(t *testing.T) {
 }
 
 func TestPullerRawKV(t *testing.T) {
-	spans := []regionspan.Span{
-		{Start: []byte("c"), End: []byte("e")},
+	spans := []tablepb.Span{
+		{
+			StartKey: regionspan.ToComparableKey([]byte("c")),
+			EndKey:   regionspan.ToComparableKey([]byte("e")),
+		},
 	}
 	checkpointTs := uint64(996)
 	plr, cancel, wg, store := newPullerForTest(t, spans, checkpointTs)

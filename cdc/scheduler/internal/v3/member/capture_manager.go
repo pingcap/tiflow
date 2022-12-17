@@ -19,6 +19,7 @@ import (
 	"github.com/pingcap/tiflow/cdc/processor/tablepb"
 	"github.com/pingcap/tiflow/cdc/scheduler/internal/v3/replication"
 	"github.com/pingcap/tiflow/cdc/scheduler/schedulepb"
+	"github.com/pingcap/tiflow/pkg/spanz"
 	"go.uber.org/zap"
 )
 
@@ -163,26 +164,27 @@ func (c *CaptureManager) checkAllCaptureInitialized() bool {
 // Tick advances the logical lock of capture manager and produce heartbeat when
 // necessary.
 func (c *CaptureManager) Tick(
-	reps map[model.TableID]*replication.ReplicationSet, drainingCapture model.CaptureID,
+	reps *spanz.Map[*replication.ReplicationSet], drainingCapture model.CaptureID,
 ) []*schedulepb.Message {
 	c.tickCounter++
 	if c.tickCounter < c.heartbeatTick {
 		return nil
 	}
 	c.tickCounter = 0
-	tables := make(map[model.CaptureID][]model.TableID)
-	for tableID, rep := range reps {
+	tables := make(map[model.CaptureID][]tablepb.Span)
+	reps.Ascend(func(span tablepb.Span, rep *replication.ReplicationSet) bool {
 		for captureID := range rep.Captures {
-			tables[captureID] = append(tables[captureID], tableID)
+			tables[captureID] = append(tables[captureID], span)
 		}
-	}
+		return true
+	})
 	msgs := make([]*schedulepb.Message, 0, len(c.Captures))
 	for to := range c.Captures {
 		msgs = append(msgs, &schedulepb.Message{
 			To:      to,
 			MsgType: schedulepb.MsgHeartbeat,
 			Heartbeat: &schedulepb.Heartbeat{
-				TableIDs: tables[to],
+				Spans: tables[to],
 				// IsStopping let the receiver capture know that it should be stopping now.
 				// At the moment, this is triggered by `DrainCapture` scheduler.
 				IsStopping: drainingCapture == to,

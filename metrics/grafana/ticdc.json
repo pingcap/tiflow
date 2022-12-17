@@ -15832,7 +15832,7 @@
           ],
           "timeFrom": null,
           "timeShift": null,
-          "title": "EtcdWorker exec etcd txn duration",
+          "title": "EtcdWorker tick reactor duration",
           "tooltip": {
             "show": true,
             "showHistogram": true

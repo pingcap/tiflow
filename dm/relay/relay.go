@@ -153,13 +153,17 @@ func (r *Relay) Init(ctx context.Context) (err error) {
 
 // Process implements the dm.Unit interface.
 func (r *Relay) Process(ctx context.Context) pb.ProcessResult {
+	relayExitWithErrorCounter.WithLabelValues("true").Add(0)
+	relayExitWithErrorCounter.WithLabelValues("false").Add(0)
 	errs := make([]*pb.ProcessError, 0, 1)
 	err := r.process(ctx)
 	if err != nil && errors.Cause(err) != replication.ErrSyncClosed {
-		relayExitWithErrorCounter.Inc()
 		r.logger.Error("process exit", zap.Error(err))
 		// TODO: add specified error type instead of pb.ErrorType_UnknownError
-		errs = append(errs, unit.NewProcessError(err))
+		processError := unit.NewProcessError(err)
+		resumable := fmt.Sprintf("%t", unit.IsResumableRelayError(processError))
+		relayExitWithErrorCounter.WithLabelValues(resumable).Inc()
+		errs = append(errs, processError)
 	}
 
 	isCanceled := false
@@ -708,10 +712,12 @@ func (r *Relay) handleEvents(
 
 		relayLogWriteSizeHistogram.Observe(float64(e.Header.EventSize))
 		relayPosGauge.Set(float64(lastPos.Pos))
-		if index, err2 := utils.GetFilenameIndex(lastPos.Name); err2 != nil {
-			r.logger.Error("parse binlog file name", zap.String("file name", lastPos.Name), log.ShortError(err2))
-		} else {
-			relayFileGauge.Set(float64(index))
+		if e.Header.EventType == replication.FORMAT_DESCRIPTION_EVENT {
+			if index, err2 := utils.GetFilenameIndex(lastPos.Name); err2 != nil {
+				r.logger.Error("parse binlog file name", zap.String("file name", lastPos.Name), log.ShortError(err2))
+			} else {
+				relayFileGauge.Set(float64(index))
+			}
 		}
 
 		if needSavePos {

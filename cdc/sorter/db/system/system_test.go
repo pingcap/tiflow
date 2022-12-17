@@ -24,6 +24,7 @@ import (
 	"github.com/pingcap/tiflow/pkg/actor"
 	actormsg "github.com/pingcap/tiflow/pkg/actor/message"
 	"github.com/pingcap/tiflow/pkg/config"
+	"github.com/pingcap/tiflow/pkg/spanz"
 	"github.com/stretchr/testify/require"
 )
 
@@ -70,8 +71,8 @@ func TestDBActorID(t *testing.T) {
 
 	sys := NewSystem(t.TempDir(), 1, cfg)
 	require.Nil(t, sys.Start(ctx))
-	id1 := sys.DBActorID(1)
-	id2 := sys.DBActorID(1)
+	id1 := sys.DBActorID(spanz.TableIDToComparableSpan(1))
+	id2 := sys.DBActorID(spanz.TableIDToComparableSpan(1))
 	// tableID to actor ID must be deterministic.
 	require.Equal(t, id1, id2)
 	sys.Stop()
@@ -124,10 +125,11 @@ func TestSystemStopWithManyTablesAndFewStragglers(t *testing.T) {
 	ss := make([]*db.Sorter, 0, 1000)
 	scancels := make([]context.CancelFunc, 0, 1000)
 	for i := uint64(0); i < 1000; i++ {
-		dbActorID := sys.DBActorID(i)
+		dbActorID := sys.DBActorID(spanz.TableIDToComparableSpan(int64(i)))
 		s, err := db.NewSorter(
 			ctx, model.ChangeFeedID4Test("test", "test"),
-			int64(i), i, sys.DBRouter, dbActorID,
+			spanz.TableIDToComparableSpan(int64(i)),
+			i, sys.DBRouter, dbActorID,
 			sys.WriterSystem, sys.WriterRouter,
 			sys.ReaderSystem, sys.ReaderRouter,
 			sys.CompactScheduler(), cfg)

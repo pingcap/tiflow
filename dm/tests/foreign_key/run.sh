@@ -7,7 +7,6 @@ source $cur/../_utils/test_prepare
 WORK_DIR=$TEST_DIR/$TEST_NAME
 
 function run() {
-	run_sql_tidb "set @@global.tidb_enable_foreign_key=1;"
 	run_sql_tidb "set @@global.foreign_key_checks=1;"
 	run_sql_file $cur/data/db1.prepare.sql $MYSQL_HOST1 $MYSQL_PORT1 $MYSQL_PASSWORD1
 	# start DM worker and master

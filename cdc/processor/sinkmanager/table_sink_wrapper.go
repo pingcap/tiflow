@@ -27,13 +27,18 @@ import (
 	"github.com/pingcap/tiflow/cdc/processor/sourcemanager/engine"
 	"github.com/pingcap/tiflow/cdc/processor/tablepb"
 	sinkv2 "github.com/pingcap/tiflow/cdc/sinkv2/tablesink"
+	"github.com/tikv/client-go/v2/oracle"
 	"go.uber.org/zap"
 )
+
+var version uint64 = 0
 
 // tableSinkWrapper is a wrapper of TableSink, it is used in SinkManager to manage TableSink.
 // Because in the SinkManager, we write data to TableSink and RedoManager concurrently,
 // so current sink node can not be reused.
 type tableSinkWrapper struct {
+	version uint64
+
 	// changefeed used for logging.
 	changefeed model.ChangeFeedID
 	// tableID used for logging.
@@ -63,14 +68,24 @@ type tableSinkWrapper struct {
 
 	// rangeEventCounts is for clean the table engine.
 	// If rangeEventCounts[i].events is greater than 0, it means there must be
-	// events in the range (rangeEventCounts[i-1].pos, rangeEventCounts[i].pos].
+	// events in the range (rangeEventCounts[i-1].lastPos, rangeEventCounts[i].lastPos].
 	rangeEventCounts   []rangeEventCount
 	rangeEventCountsMu sync.Mutex
 }
 
 type rangeEventCount struct {
-	pos    engine.Position
-	events int
+	// firstPos and lastPos are used to merge many rangeEventCount into one.
+	firstPos engine.Position
+	lastPos  engine.Position
+	events   int
+}
+
+func newRangeEventCount(pos engine.Position, events int) rangeEventCount {
+	return rangeEventCount{
+		firstPos: pos,
+		lastPos:  pos,
+		events:   events,
+	}
 }
 
 func newTableSinkWrapper(
@@ -82,6 +97,7 @@ func newTableSinkWrapper(
 	targetTs model.Ts,
 ) *tableSinkWrapper {
 	return &tableSinkWrapper{
+		version:    atomic.AddUint64(&version, 1),
 		changefeed: changefeed,
 		tableID:    tableID,
 		tableSink:  tableSink,
@@ -181,9 +197,24 @@ func (t *tableSinkWrapper) updateRangeEventCounts(eventCount rangeEventCount) {
 	t.rangeEventCountsMu.Lock()
 	defer t.rangeEventCountsMu.Unlock()
 
-	if len(t.rangeEventCounts) == 0 ||
-		t.rangeEventCounts[len(t.rangeEventCounts)-1].pos.Compare(eventCount.pos) < 0 {
+	countsLen := len(t.rangeEventCounts)
+	if countsLen == 0 {
 		t.rangeEventCounts = append(t.rangeEventCounts, eventCount)
+		return
+	}
+	if t.rangeEventCounts[countsLen-1].lastPos.Compare(eventCount.lastPos) < 0 {
+		// If two rangeEventCounts are close enough, we can merge them into one record
+		// to save memory usage. When merging B into A, A.lastPos will be updated but
+		// A.firstPos will be kept so that we can determine whether to continue to merge
+		// more events or not based on timeDiff(C.lastPos, A.firstPos).
+		lastPhy := oracle.ExtractPhysical(t.rangeEventCounts[countsLen-1].firstPos.CommitTs)
+		currPhy := oracle.ExtractPhysical(eventCount.lastPos.CommitTs)
+		if (currPhy - lastPhy) >= 1000 { // 1000 means 1000ms.
+			t.rangeEventCounts = append(t.rangeEventCounts, eventCount)
+		} else {
+			t.rangeEventCounts[countsLen-1].lastPos = eventCount.lastPos
+			t.rangeEventCounts[countsLen-1].events += eventCount.events
+		}
 	}
 }
 
@@ -192,7 +223,7 @@ func (t *tableSinkWrapper) cleanRangeEventCounts(upperBound engine.Position, min
 	defer t.rangeEventCountsMu.Unlock()
 
 	idx := sort.Search(len(t.rangeEventCounts), func(i int) bool {
-		return t.rangeEventCounts[i].pos.Compare(upperBound) > 0
+		return t.rangeEventCounts[i].lastPos.Compare(upperBound) > 0
 	})
 	if len(t.rangeEventCounts) == 0 || idx == 0 {
 		return false
