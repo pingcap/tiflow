@@ -232,6 +232,7 @@ func testSimpleAllModeTask(
 		jobStatus, err = queryStatus(ctx, httpClient, jobID, nil)
 		for _, task := range jobStatus.TaskStatus {
 			require.Greater(t, task.Status.IoTotalBytes, uint64(0))
+			require.Greater(t, task.Status.DumpIOTotalBytes, uint64(0))
 		}
 		require.NoError(t, err)
 		return jobStatus.TaskStatus[source1].Status.Stage == metadata.StagePaused

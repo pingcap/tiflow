@@ -179,6 +179,11 @@ type SubTaskConfig struct {
 	// key to let MySQL driver to find the right TCPConnWithIOCounter.
 	UUID         string         `toml:"-" json:"-"`
 	IOTotalBytes *atomic.Uint64 `toml:"-" json:"-"`
+
+	// meter network from dump unit
+	// the network usage is from upstream
+	// we should separate it from IOTotalBytes
+	DumpIOTotalBytes *atomic.Uint64 `toml:"-" json:"-"`
 }
 
 // SampleSubtaskConfig is the content of subtask.toml in current folder.

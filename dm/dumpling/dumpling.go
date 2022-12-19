@@ -67,12 +67,12 @@ func NewDumpling(cfg *config.SubTaskConfig) *Dumpling {
 		logger: logger.WithFields(zap.String("task", cfg.Name), zap.String("unit", "dump")),
 	}
 	failpoint.Inject("SetIOTotalBytes", func(_ failpoint.Value) {
-		m.cfg.IOTotalBytes = atomic.NewUint64(0)
+		m.cfg.DumpIOTotalBytes = atomic.NewUint64(0)
 		m.cfg.UUID = uuid.NewString()
 		go func() {
 			for {
 				time.Sleep(10 * time.Millisecond)
-				m.logger.Info("dump io", zap.Uint64("IOTotalBytes", m.cfg.IOTotalBytes.Load()))
+				m.logger.Info("dump io", zap.Uint64("IOTotalBytes", m.cfg.DumpIOTotalBytes.Load()))
 			}
 		}()
 	})
@@ -85,8 +85,8 @@ func (m *Dumpling) Init(ctx context.Context) error {
 	if m.dumpConfig, err = m.constructArgs(ctx); err != nil {
 		return err
 	}
-	if m.cfg.IOTotalBytes != nil {
-		m.dumpConfig.IOTotalBytes = m.cfg.IOTotalBytes
+	if m.cfg.DumpIOTotalBytes != nil {
+		m.dumpConfig.IOTotalBytes = m.cfg.DumpIOTotalBytes
 		m.dumpConfig.Net = m.cfg.UUID
 	}
 	if m.cfg.MetricsFactory != nil {

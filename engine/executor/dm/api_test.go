@@ -91,24 +91,27 @@ func TestQueryStatusAPI(t *testing.T) {
 		loadStatusBytes, _ = mar.MarshalToString(loadStatus)
 		syncStatusBytes, _ = mar.MarshalToString(syncStatus)
 		dumpStatusResp     = &dmpkg.QueryStatusResponse{
-			Unit:         frameModel.WorkerDMDump,
-			Stage:        metadata.StageRunning,
-			Status:       []byte(dumpStatusBytes),
-			IoTotalBytes: 0,
+			Unit:             frameModel.WorkerDMDump,
+			Stage:            metadata.StageRunning,
+			Status:           []byte(dumpStatusBytes),
+			IoTotalBytes:     0,
+			DumpIOTotalBytes: 0,
 		}
 		loadStatusResp = &dmpkg.QueryStatusResponse{
-			Unit:         frameModel.WorkerDMLoad,
-			Stage:        metadata.StageFinished,
-			Result:       &dmpkg.ProcessResult{IsCanceled: false},
-			Status:       []byte(loadStatusBytes),
-			IoTotalBytes: 0,
+			Unit:             frameModel.WorkerDMLoad,
+			Stage:            metadata.StageFinished,
+			Result:           &dmpkg.ProcessResult{IsCanceled: false},
+			Status:           []byte(loadStatusBytes),
+			IoTotalBytes:     0,
+			DumpIOTotalBytes: 0,
 		}
 		syncStatusResp = &dmpkg.QueryStatusResponse{
-			Unit:         frameModel.WorkerDMSync,
-			Stage:        metadata.StagePaused,
-			Result:       &dmpkg.ProcessResult{Errors: []*dmpkg.ProcessError{processError}},
-			Status:       []byte(syncStatusBytes),
-			IoTotalBytes: 0,
+			Unit:             frameModel.WorkerDMSync,
+			Stage:            metadata.StagePaused,
+			Result:           &dmpkg.ProcessResult{Errors: []*dmpkg.ProcessError{processError}},
+			Status:           []byte(syncStatusBytes),
+			IoTotalBytes:     0,
+			DumpIOTotalBytes: 0,
 		}
 		taskCfg = &config.TaskCfg{
 			JobCfg: config.JobCfg{
