@@ -168,4 +168,12 @@ func TestTaskStageValue(t *testing.T) {
 	require.Equal(t, 16, int(StageUnscheduled))
 
 	require.Equal(t, 0, int(toTaskStage[""]))
+
+	require.Equal(t, "Initing", StageInit.String())
+	require.Equal(t, "Running", StageRunning.String())
+	require.Equal(t, "Paused", StagePaused.String())
+	require.Equal(t, "Finished", StageFinished.String())
+	require.Equal(t, "Error", StageError.String())
+	require.Equal(t, "Pausing", StagePausing.String())
+	require.Equal(t, "Unscheduled", StageUnscheduled.String())
 }
