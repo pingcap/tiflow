@@ -186,7 +186,14 @@ func testSimpleAllModeTask(
 	// TODO: check checkpoint deleted after frameworker support StopImpl
 	require.Eventually(t, func() bool {
 		job, err := e2e.QueryJobViaHTTP(ctx, masterAddr, tenantID, projectID, jobID)
-		return err == nil && job.State == pb.Job_Finished
+		require.NoError(t, err)
+		require.Equal(t, pb.Job_Finished, job.State)
+		jobStatus, err := queryStatus(ctx, httpClient, jobID, nil)
+		require.NoError(t, err)
+		for _, task := range jobStatus.TaskStatus {
+			require.Greater(t, task.Status.DumpIOTotalBytes, uint64(0))
+		}
+		return true
 	}, time.Second*30, time.Millisecond*100)
 
 	source1 := "mysql-replica-01"
@@ -232,7 +239,6 @@ func testSimpleAllModeTask(
 		jobStatus, err = queryStatus(ctx, httpClient, jobID, nil)
 		for _, task := range jobStatus.TaskStatus {
 			require.Greater(t, task.Status.IoTotalBytes, uint64(0))
-			require.Greater(t, task.Status.DumpIOTotalBytes, uint64(0))
 		}
 		require.NoError(t, err)
 		return jobStatus.TaskStatus[source1].Status.Stage == metadata.StagePaused
