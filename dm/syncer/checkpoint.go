@@ -470,7 +470,7 @@ func (cp *RemoteCheckPoint) Init(tctx *tcontext.Context) (err error) {
 
 	checkPointDB := cp.cfg.To
 	checkPointDB.RawDBCfg = dbconfig.DefaultRawDBConfig().SetReadTimeout(maxCheckPointTimeout)
-	db, dbConns, err = dbconn.CreateConns(tctx, cp.cfg, conn.DownstreamDBConfig(&checkPointDB), 1)
+	db, dbConns, err = dbconn.CreateConns(tctx, cp.cfg, conn.DownstreamDBConfig(&checkPointDB), 1, cp.cfg.IOTotalBytes)
 	if err != nil {
 		return
 	}

@@ -32,6 +32,7 @@ import (
 	"github.com/pingcap/tiflow/dm/pkg/utils"
 	"github.com/pingcap/tiflow/dm/syncer/metrics"
 	"github.com/prometheus/client_golang/prometheus"
+	"go.uber.org/atomic"
 	"go.uber.org/zap"
 )
 
@@ -265,8 +266,8 @@ func (conn *DBConn) retryableFn(tctx *tcontext.Context, queries, args any) func(
 }
 
 // CreateConns returns a opened DB from dbCfg and number of `count` connections of that DB.
-func CreateConns(tctx *tcontext.Context, cfg *config.SubTaskConfig, dbCfg conn.ScopedDBConfig, count int) (*conn.BaseDB, []*DBConn, error) {
-	if cfg.IOTotalBytes != nil {
+func CreateConns(tctx *tcontext.Context, cfg *config.SubTaskConfig, dbCfg conn.ScopedDBConfig, count int, ioCounter *atomic.Uint64) (*conn.BaseDB, []*DBConn, error) {
+	if ioCounter != nil {
 		tctx.L().Debug("create connection with io total bytes")
 		mysql.RegisterDialContext(cfg.UUID, func(ctx context.Context, addr string) (net.Conn, error) {
 			d := &net.Dialer{}
@@ -280,7 +281,7 @@ func CreateConns(tctx *tcontext.Context, cfg *config.SubTaskConfig, dbCfg conn.S
 			if err != nil {
 				tctx.L().Warn("set TCP keep alive failed", zap.Error(err))
 			}
-			return NewTCPConnWithIOCounter(tcpConn, cfg.IOTotalBytes), nil
+			return NewTCPConnWithIOCounter(tcpConn, ioCounter), nil
 		})
 		dbCfg.Net = cfg.UUID
 	}
