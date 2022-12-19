@@ -22,6 +22,7 @@ import (
 
 	"github.com/go-sql-driver/mysql"
 	"github.com/pingcap/failpoint"
+	tidbutil "github.com/pingcap/tidb/util"
 	"github.com/pingcap/tidb/util/dbutil"
 	"github.com/pingcap/tiflow/dm/config"
 	"github.com/pingcap/tiflow/dm/pkg/conn"
@@ -280,7 +281,7 @@ func CreateConns(tctx *tcontext.Context, cfg *config.SubTaskConfig, dbCfg conn.S
 			if err != nil {
 				tctx.L().Warn("set TCP keep alive failed", zap.Error(err))
 			}
-			return NewTCPConnWithIOCounter(tcpConn, cfg.IOTotalBytes), nil
+			return tidbutil.NewTCPConnWithIOCounter(tcpConn, cfg.IOTotalBytes), nil
 		})
 		dbCfg.Net = cfg.UUID
 	}

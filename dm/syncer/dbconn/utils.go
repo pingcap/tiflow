@@ -15,7 +15,6 @@ package dbconn
 
 import (
 	"fmt"
-	"net"
 	"strconv"
 	"strings"
 
@@ -26,7 +25,6 @@ import (
 	tcontext "github.com/pingcap/tiflow/dm/pkg/context"
 	"github.com/pingcap/tiflow/dm/pkg/log"
 	"github.com/pingcap/tiflow/dm/pkg/terror"
-	"go.uber.org/atomic"
 	"go.uber.org/zap"
 )
 
@@ -97,31 +95,4 @@ func getSessionVariable(tctx *tcontext.Context, conn *DBConn, variable string) (
 		return "", terror.DBErrorAdapt(rows.Err(), conn.Scope(), terror.ErrDBDriverError)
 	}
 	return value, nil
-}
-
-// TCPConnWithIOCounter is a wrapper of net.TCPConn with counter that accumulates
-// the bytes this connection reads/writes.
-type TCPConnWithIOCounter struct {
-	*net.TCPConn
-	c *atomic.Uint64
-}
-
-// NewTCPConnWithIOCounter creates a new TCPConnWithIOCounter.
-func NewTCPConnWithIOCounter(conn *net.TCPConn, c *atomic.Uint64) net.Conn {
-	return &TCPConnWithIOCounter{
-		TCPConn: conn,
-		c:       c,
-	}
-}
-
-func (t *TCPConnWithIOCounter) Read(b []byte) (n int, err error) {
-	n, err = t.TCPConn.Read(b)
-	t.c.Add(uint64(n))
-	return n, err
-}
-
-func (t *TCPConnWithIOCounter) Write(b []byte) (n int, err error) {
-	n, err = t.TCPConn.Write(b)
-	t.c.Add(uint64(n))
-	return n, err
 }

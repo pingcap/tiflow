@@ -18,7 +18,9 @@ import (
 	"path/filepath"
 	"strings"
 	"sync"
+	"time"
 
+	"github.com/google/uuid"
 	"github.com/pingcap/errors"
 	"github.com/pingcap/failpoint"
 	"github.com/pingcap/tidb/br/pkg/lightning"
@@ -95,6 +97,16 @@ func NewLightning(cfg *config.SubTaskConfig, cli *clientv3.Client, workerName st
 		logger:                logger.WithFields(zap.String("task", cfg.Name), zap.String("unit", "lightning-load")),
 		speedRecorder:         export.NewSpeedRecorder(),
 	}
+	failpoint.Inject("SetIOTotalBytes", func(_ failpoint.Value) {
+		loader.cfg.IOTotalBytes = atomic.NewUint64(0)
+		loader.cfg.UUID = uuid.NewString()
+		go func() {
+			for {
+				time.Sleep(10 * time.Millisecond)
+				loader.logger.Info("lightning io", zap.Uint64("IOTotalBytes", loader.cfg.IOTotalBytes.Load()))
+			}
+		}()
+	})
 	return loader
 }
 
@@ -353,6 +365,10 @@ func (l *LightningLoader) getLightningConfig() (*lcfg.Config, error) {
 	}
 	cfg.TiDB.StrSQLMode = l.sqlMode
 	cfg.TiDB.Vars["time_zone"] = l.timeZone
+	if l.cfg.IOTotalBytes != nil {
+		cfg.TiDB.IOTotalBytes = l.cfg.IOTotalBytes
+		cfg.TiDB.UUID = l.cfg.UUID
+	}
 	return cfg, nil
 }
 

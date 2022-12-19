@@ -20,6 +20,7 @@ import (
 	"sync"
 	"time"
 
+	"github.com/google/uuid"
 	"github.com/pingcap/errors"
 	"github.com/pingcap/failpoint"
 	"github.com/pingcap/tidb/dumpling/export"
@@ -65,6 +66,16 @@ func NewDumpling(cfg *config.SubTaskConfig) *Dumpling {
 		cfg:    cfg,
 		logger: logger.WithFields(zap.String("task", cfg.Name), zap.String("unit", "dump")),
 	}
+	failpoint.Inject("SetIOTotalBytes", func(_ failpoint.Value) {
+		m.cfg.IOTotalBytes = atomic.NewUint64(0)
+		m.cfg.UUID = uuid.NewString()
+		go func() {
+			for {
+				time.Sleep(10 * time.Millisecond)
+				m.logger.Info("dump io", zap.Uint64("IOTotalBytes", m.cfg.IOTotalBytes.Load()))
+			}
+		}()
+	})
 	return m
 }
 
@@ -73,6 +84,10 @@ func (m *Dumpling) Init(ctx context.Context) error {
 	var err error
 	if m.dumpConfig, err = m.constructArgs(ctx); err != nil {
 		return err
+	}
+	if m.cfg.IOTotalBytes != nil {
+		m.dumpConfig.IOTotalBytes = m.cfg.IOTotalBytes
+		m.dumpConfig.Net = m.cfg.UUID
 	}
 	if m.cfg.MetricsFactory != nil {
 		// this branch means dataflow engine has set a Factory, the Factory itself

@@ -226,10 +226,50 @@ function run() {
 	run_sql_both_source "SET @@GLOBAL.TIME_ZONE='SYSTEM';"
 }
 
+function test_network_metering() {
+	run_sql_file $cur/data/db1.prepare.sql $MYSQL_HOST1 $MYSQL_PORT1 $MYSQL_PASSWORD1
+	check_contains 'Query OK, 2 rows affected'
+	run_sql_file $cur/data/db2.prepare.sql $MYSQL_HOST2 $MYSQL_PORT2 $MYSQL_PASSWORD2
+	check_contains 'Query OK, 3 rows affected'
+	run_sql_source1 "create table full_mode.bigtable(a int primary key, b int);"
+	for i in $(seq 1 10); do
+		run_sql_source1 "insert into full_mode.bigtable values($i, $i);"
+	done
+	# test dump
+	export GO_FAILPOINTS='github.com/pingcap/tiflow/dm/dumpling/SetIOTotalBytes=return(1)'
+	init_cluster
+	dmctl_start_task "$cur/conf/dm-task.yaml" "--remove-meta"
+	run_dm_ctl_with_retry $WORK_DIR "127.0.0.1:$MASTER_PORT" \
+		"query-status test" \
+		"\"stage\": \"Finished\"" 2
+	grep 'dump io' $WORK_DIR/worker1/log/dm-worker.log | grep -v 'IOTotalBytes=0'
+	run_dm_ctl $WORK_DIR "127.0.0.1:$MASTER_PORT" \
+		"stop-task test" \
+		"\"result\": true" 3
+	run_dm_ctl $WORK_DIR "127.0.0.1:$MASTER_PORT" \
+		"operate-source stop $SOURCE_ID1" \
+		"\"result\": true" 2
+	run_dm_ctl $WORK_DIR "127.0.0.1:$MASTER_PORT" \
+		"operate-source stop $SOURCE_ID2" \
+		"\"result\": true" 2
+	cleanup_process $*
+	sleep 5
+	# test lightning
+	export GO_FAILPOINTS='github.com/pingcap/tiflow/dm/loader/SetIOTotalBytes=return(1)'
+	init_cluster
+	dmctl_start_task "$cur/conf/dm-task.yaml" "--remove-meta"
+	run_dm_ctl $WORK_DIR "127.0.0.1:$MASTER_PORT" \
+		"query-status test" \
+		"\"stage\": \"Finished\"" 2
+	grep 'lightning io' $WORK_DIR/worker1/log/dm-worker.log | grep -v 'IOTotalBytes=0'
+	cleanup_process $*
+}
+
 cleanup_data full_mode
 # also cleanup dm processes in case of last run failed
 cleanup_process $*
 run $*
 cleanup_process $*
+test_network_metering
 
 echo "[$(date)] <<<<<< test case $TEST_NAME success! >>>>>>"
