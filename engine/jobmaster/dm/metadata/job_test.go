@@ -21,6 +21,7 @@ import (
 	"github.com/pingcap/log"
 	dmconfig "github.com/pingcap/tiflow/dm/config"
 	dmmaster "github.com/pingcap/tiflow/dm/master"
+	dmpb "github.com/pingcap/tiflow/dm/pb"
 	"github.com/pingcap/tiflow/engine/jobmaster/dm/config"
 	"github.com/pingcap/tiflow/engine/pkg/adapter"
 	"github.com/pingcap/tiflow/engine/pkg/meta/mock"
@@ -130,6 +131,9 @@ func TestJobStore(t *testing.T) {
 func TestTaskStage(t *testing.T) {
 	t.Parallel()
 	for i, s := range typesStringify {
+		if len(s) == 0 {
+			continue
+		}
 		ts, ok := toTaskStage[s]
 		require.True(t, ok)
 		bs, err := json.Marshal(ts)
@@ -149,4 +153,27 @@ func TestTaskStage(t *testing.T) {
 	var ts2 TaskStage
 	require.EqualError(t, json.Unmarshal(bs, &ts2), "Unknown TaskStage Unknown TaskStage 1000")
 	require.Equal(t, TaskStage(0), ts2)
+}
+
+func TestTaskStageValue(t *testing.T) {
+	require.Equal(t, int(dmpb.Stage_New), int(StageInit))
+	require.Equal(t, int(dmpb.Stage_Running), int(StageRunning))
+	require.Equal(t, int(dmpb.Stage_Paused), int(StagePaused))
+	require.Equal(t, int(dmpb.Stage_Finished), int(StageFinished))
+	require.Equal(t, int(dmpb.Stage_Pausing), int(StagePausing))
+	require.Greater(t, int(StageError), int(dmpb.Stage_Stopping))
+	require.Greater(t, int(StageUnscheduled), int(dmpb.Stage_Stopping))
+
+	require.Equal(t, 15, int(StageError))
+	require.Equal(t, 16, int(StageUnscheduled))
+
+	require.Equal(t, 0, int(toTaskStage[""]))
+
+	require.Equal(t, "Initing", StageInit.String())
+	require.Equal(t, "Running", StageRunning.String())
+	require.Equal(t, "Paused", StagePaused.String())
+	require.Equal(t, "Finished", StageFinished.String())
+	require.Equal(t, "Error", StageError.String())
+	require.Equal(t, "Pausing", StagePausing.String())
+	require.Equal(t, "Unscheduled", StageUnscheduled.String())
 }

@@ -16,7 +16,6 @@ package worker
 import (
 	"context"
 	"fmt"
-	"strings"
 	"sync"
 	"time"
 
@@ -25,8 +24,8 @@ import (
 	"github.com/pingcap/tiflow/dm/pb"
 	"github.com/pingcap/tiflow/dm/pkg/backoff"
 	"github.com/pingcap/tiflow/dm/pkg/log"
-	"github.com/pingcap/tiflow/dm/pkg/retry"
 	"github.com/pingcap/tiflow/dm/pkg/terror"
+	"github.com/pingcap/tiflow/dm/unit"
 	"go.uber.org/atomic"
 	"go.uber.org/zap"
 )
@@ -201,43 +200,6 @@ func (tsc *realTaskStatusChecker) run() {
 	}
 }
 
-// isResumableError checks the error message and returns whether we need to
-// resume the task and retry.
-func isResumableError(err *pb.ProcessError) bool {
-	if err == nil {
-		return true
-	}
-
-	// not elegant code, because TiDB doesn't expose some error
-	for _, msg := range retry.UnsupportedDDLMsgs {
-		if strings.Contains(strings.ToLower(err.RawCause), strings.ToLower(msg)) {
-			return false
-		}
-	}
-	for _, msg := range retry.UnsupportedDMLMsgs {
-		if strings.Contains(strings.ToLower(err.RawCause), strings.ToLower(msg)) {
-			return false
-		}
-	}
-	for _, msg := range retry.ReplicationErrMsgs {
-		if strings.Contains(strings.ToLower(err.RawCause), strings.ToLower(msg)) {
-			return false
-		}
-	}
-	if err.ErrCode == int32(terror.ErrParserParseRelayLog.Code()) {
-		for _, msg := range retry.ParseRelayLogErrMsgs {
-			if strings.Contains(strings.ToLower(err.Message), strings.ToLower(msg)) {
-				return false
-			}
-		}
-	}
-	if _, ok := retry.UnresumableErrCodes[err.ErrCode]; ok {
-		return false
-	}
-
-	return true
-}
-
 // CheckResumeSubtask updates info and returns ResumeStrategy for a subtask.
 // When ResumeDispatch and the subtask is successfully resumed at caller, caller
 // should update LatestResumeTime and backoff.
@@ -258,7 +220,7 @@ func (i *AutoResumeInfo) CheckResumeSubtask(
 	// TODO: use different strategies based on the error detail
 	for _, processErr := range stStatus.Result.Errors {
 		pErr := processErr
-		if !isResumableError(processErr) {
+		if !unit.IsResumableError(processErr) {
 			failpoint.Inject("TaskCheckInterval", func(_ failpoint.Value) {
 				log.L().Info("error is not resumable", zap.Stringer("error", pErr))
 			})
@@ -288,7 +250,7 @@ func (i *AutoResumeInfo) checkResumeRelay(
 	}
 
 	for _, err := range relayStatus.Result.Errors {
-		if _, ok := retry.UnresumableRelayErrCodes[err.ErrCode]; ok {
+		if !unit.IsResumableRelayError(err) {
 			return ResumeNoSense
 		}
 	}
