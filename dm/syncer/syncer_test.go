@@ -752,18 +752,7 @@ func (s *testSyncerSuite) TestRun(c *C) {
 			{Schema: "test_1", Name: "t_2"},
 		},
 	}
-
-	s.cfg.ColumnMappingRules = []*cm.Rule{
-		{
-			PatternSchema: "test_*",
-			PatternTable:  "t_*",
-			SourceColumn:  "id",
-			TargetColumn:  "id",
-			Expression:    cm.PartitionID,
-			Arguments:     []string{"1", "test_", "t_"},
-		},
-	}
-
+	
 	s.cfg.Batch = 1000
 	s.cfg.WorkerCount = 2
 	s.cfg.MaxRetry = 1
@@ -802,8 +791,6 @@ func (s *testSyncerSuite) TestRun(c *C) {
 	syncer.exprFilterGroup = NewExprFilterGroup(tcontext.Background(), utils.NewSessionCtx(nil), nil)
 	c.Assert(syncer.Type(), Equals, pb.UnitType_Sync)
 
-	syncer.columnMapping, err = cm.NewMapping(s.cfg.CaseSensitive, s.cfg.ColumnMappingRules)
-	c.Assert(err, IsNil)
 	c.Assert(syncer.genRouter(), IsNil)
 
 	syncer.metricsProxies = metrics.DefaultMetricsProxies.CacheForOneTask("task", "worker", "source")
