@@ -33,7 +33,6 @@ import (
 	"github.com/pingcap/tiflow/dm/pb"
 	"github.com/pingcap/tiflow/dm/pkg/binlog"
 	"github.com/pingcap/tiflow/dm/pkg/conn"
-	tcontext "github.com/pingcap/tiflow/dm/pkg/context"
 	"github.com/pingcap/tiflow/dm/pkg/log"
 	"github.com/pingcap/tiflow/dm/pkg/storage"
 	"github.com/pingcap/tiflow/dm/pkg/terror"
@@ -68,8 +67,7 @@ type LightningLoader struct {
 	core   *lightning.Lightning
 	cancel context.CancelFunc // for per task context, which maybe different from lightning context
 
-	toDBConns []*DBConn
-	toDB      *conn.BaseDB
+	toDB *conn.BaseDB
 
 	workerName     string
 	finish         atomic.Bool
@@ -132,12 +130,7 @@ func (l *LightningLoader) Type() pb.UnitType {
 // Init initializes loader for a load task, but not start Process.
 // if fail, it should not call l.Close.
 func (l *LightningLoader) Init(ctx context.Context) (err error) {
-	tctx := tcontext.NewContext(ctx, l.logger)
-	toCfg, err := l.cfg.Clone()
-	if err != nil {
-		return err
-	}
-	l.toDB, l.toDBConns, err = createConns(tctx, l.cfg, toCfg.Name, toCfg.SourceID, 1)
+	l.toDB, err = conn.GetDownstreamDB(&l.cfg.To)
 	if err != nil {
 		return err
 	}
