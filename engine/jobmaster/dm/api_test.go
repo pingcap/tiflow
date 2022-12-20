@@ -110,9 +110,9 @@ func TestQueryStatusAPI(t *testing.T) {
 		dumpStatusResp     = &dmpkg.QueryStatusResponse{Unit: frameModel.WorkerDMDump, Stage: metadata.StageRunning, Status: dumpStatusBytes, IoTotalBytes: 0}
 		loadStatusResp     = &dmpkg.QueryStatusResponse{Unit: frameModel.WorkerDMLoad, Stage: metadata.StagePaused, Result: &dmpkg.ProcessResult{IsCanceled: true}, Status: loadStatusBytes, IoTotalBytes: 0}
 		syncStatusResp     = &dmpkg.QueryStatusResponse{Unit: frameModel.WorkerDMSync, Stage: metadata.StageError, Result: &dmpkg.ProcessResult{Errors: []*dmpkg.ProcessError{processError}}, Status: syncStatusBytes, IoTotalBytes: 0}
-		dumpTime, _        = time.Parse(time.RFC3339Nano, "2022-11-04T18:47:57.43382274+08:00")
-		loadTime, _        = time.Parse(time.RFC3339Nano, "2022-11-04T19:47:57.43382274+08:00")
-		syncTime, _        = time.Parse(time.RFC3339Nano, "2022-11-04T20:47:57.43382274+08:00")
+		dumpTime, _        = time.Parse(time.RFC3339Nano, "2020-11-04T18:47:57.43382274+08:00")
+		loadTime, _        = time.Parse(time.RFC3339Nano, "2020-11-04T19:47:57.43382274+08:00")
+		syncTime, _        = time.Parse(time.RFC3339Nano, "2020-11-04T20:47:57.43382274+08:00")
 		dumpDuration       = time.Hour
 		loadDuration       = time.Minute
 		unitState          = &metadata.UnitState{
@@ -214,15 +214,13 @@ func TestQueryStatusAPI(t *testing.T) {
 
 	jobStatus, err = jm.QueryJobStatus(ctx, nil)
 	require.NoError(t, err)
+	require.Len(t, jobStatus.TaskStatus, 7)
 
 	for task, currentStatus := range jobStatus.TaskStatus {
-		switch currentStatus.Status.Unit {
-		case frameModel.WorkerDMDump:
-			require.True(t, currentStatus.Duration-time.Since(dumpTime) < time.Second)
-		case frameModel.WorkerDMLoad:
-			require.True(t, currentStatus.Duration-time.Since(loadTime) < time.Second)
-		case frameModel.WorkerDMSync:
-			require.True(t, currentStatus.Duration-time.Since(syncTime) < time.Second)
+		// start-time is fixed at 2020-11-04 except task1 which is paused and don't have current status,
+		// we just check that it's > 24h （now it's 2022-12-16)
+		if task != "task1" {
+			require.Greater(t, currentStatus.Duration, 24*time.Hour)
 		}
 		// this is for passing follow test, because we can't offer the precise duration in advance
 		currentStatus.Duration = time.Second
@@ -380,7 +378,7 @@ func TestQueryStatusAPI(t *testing.T) {
 				"Task": "task2",
 				"Stage": "Finished",
 				"CfgModRevision": 3,
-				"StageUpdatedTime": "2022-11-04T19:47:57.43382274+08:00",
+				"StageUpdatedTime": "2020-11-04T19:47:57.43382274+08:00",
 				"Result": null,
 				"Status": {
 					"totalTables": 10,
@@ -398,7 +396,7 @@ func TestQueryStatusAPI(t *testing.T) {
 				"Task": "task2",
 				"Stage": "Finished",
 				"CfgModRevision": 3,
-				"StageUpdatedTime": "2022-11-04T20:47:57.43382274+08:00",
+				"StageUpdatedTime": "2020-11-04T20:47:57.43382274+08:00",
 				"Result": null,
 				"Status": {
 					"finishedBytes": 4,
@@ -417,7 +415,7 @@ func TestQueryStatusAPI(t *testing.T) {
 				"Task": "task7",
 				"Stage": "Finished",
 				"CfgModRevision": 4,
-				"StageUpdatedTime": "2022-11-04T19:47:57.43382274+08:00",
+				"StageUpdatedTime": "2020-11-04T19:47:57.43382274+08:00",
 				"Result": null,
 				"Status": {
 					"totalTables": 10,
@@ -435,7 +433,7 @@ func TestQueryStatusAPI(t *testing.T) {
 				"Task": "task7",
 				"Stage": "Finished",
 				"CfgModRevision": 4,
-				"StageUpdatedTime": "2022-11-04T20:47:57.43382274+08:00",
+				"StageUpdatedTime": "2020-11-04T20:47:57.43382274+08:00",
 				"Result": null,
 				"Status": {
 					"finishedBytes": 4,

@@ -20,6 +20,7 @@ import (
 	"net"
 	"net/url"
 	"strconv"
+	"strings"
 	"sync"
 	"sync/atomic"
 
@@ -134,11 +135,19 @@ func (d *DefaultDBProviderImpl) Apply(config ScopedDBConfig) (*BaseDB, error) {
 		maxIdleConns = rawCfg.MaxIdleConns
 	}
 
+	var setFK bool
 	for key, val := range config.Session {
 		// for num such as 1/"1", format as key='1'
 		// for string, format as key='string'
 		// both are valid for mysql and tidb
+		if strings.ToLower(key) == "foreign_key_checks" {
+			setFK = true
+		}
 		dsn += fmt.Sprintf("&%s='%s'", key, url.QueryEscape(val))
+	}
+
+	if !setFK {
+		dsn += "&foreign_key_checks=0"
 	}
 
 	db, err := sql.Open("mysql", dsn)
