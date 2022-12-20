@@ -15,7 +15,7 @@ package cli
 
 import (
 	"bytes"
-	"io/ioutil"
+	"io"
 	"os"
 	"testing"
 
@@ -83,7 +83,7 @@ func TestChangefeedQueryCli(t *testing.T) {
 	b := bytes.NewBufferString("")
 	cmd.SetOut(b)
 	require.Nil(t, o.run(cmd))
-	out, err := ioutil.ReadAll(b)
+	out, err := io.ReadAll(b)
 	require.Nil(t, err)
 	// make sure config is printed
 	require.Contains(t, string(out), "config")
