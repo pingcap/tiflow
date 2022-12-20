@@ -48,6 +48,8 @@ var (
 	regionWorkerInputChanSize = 32
 	// From benchmark, batch size ranges from 1 to 64(where 64 is in the extreme
 	// incremental scan scenario or single region hotspot).
+	// `batchEventsFactor * regionWorkerInputChanSize` equals to the count of
+	// events that are hold in channel.
 	batchEventsFactor         = 8
 	regionWorkerLowWatermark  = int(float64(batchEventsFactor*regionWorkerInputChanSize) * 0.2)
 	regionWorkerHighWatermark = int(float64(batchEventsFactor*regionWorkerInputChanSize) * 0.7)
