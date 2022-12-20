@@ -727,11 +727,10 @@ func (s *testSyncerSuite) TestcheckpointID(c *C) {
 // TODO: add `TestSharding` later.
 
 func (s *testSyncerSuite) TestRun(c *C) {
-	// 1. run syncer with column mapping
-	// 2. execute some sqls which will trigger causality
-	// 3. check the generated jobs
-	// 4. update config, add route rules, and update syncer
-	// 5. execute some sqls and then check jobs generated
+	// 1. execute some sqls which will trigger causality
+	// 2. check the generated jobs
+	// 3. update config, add route rules, and update syncer
+	// 4. execute some sqls and then check jobs generated
 
 	db, mock, err := sqlmock.New()
 	c.Assert(err, IsNil)
@@ -866,7 +865,7 @@ func (s *testSyncerSuite) TestRun(c *C) {
 		}, {
 			dml,
 			[]string{"REPLACE INTO `test_1`.`t_1` (`id`,`name`) VALUES (?,?)"},
-			[][]interface{}{{int64(580981944116838401), "a"}},
+			[][]interface{}{{int64(1), "a"}},
 		}, {
 			flush,
 			nil,
@@ -878,16 +877,16 @@ func (s *testSyncerSuite) TestRun(c *C) {
 		}, {
 			dml,
 			[]string{"REPLACE INTO `test_1`.`t_1` (`id`,`name`) VALUES (?,?)"},
-			[][]interface{}{{int64(580981944116838402), "b"}},
+			[][]interface{}{{int64(2), "b"}},
 		}, {
 			dml,
 			[]string{"DELETE FROM `test_1`.`t_1` WHERE `id` = ? LIMIT 1"},
-			[][]interface{}{{int64(580981944116838401)}},
+			[][]interface{}{{int64(1)}},
 		}, {
 			// safe mode is true, will split update to delete + replace
 			dml,
 			[]string{"DELETE FROM `test_1`.`t_1` WHERE `id` = ? LIMIT 1", "REPLACE INTO `test_1`.`t_1` (`id`,`name`) VALUES (?,?)"},
-			[][]interface{}{{int64(580981944116838402)}, {int64(580981944116838401), "b"}},
+			[][]interface{}{{int64(2)}, {int64(1), "b"}},
 		}, {
 			flush,
 			nil,
