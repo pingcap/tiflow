@@ -26,54 +26,6 @@ import (
 	"go.uber.org/zap"
 )
 
-// CheckPoint represents checkpoint status.
-type CheckPoint interface {
-	// Load loads all checkpoints recorded before.
-	// because of no checkpoints updated in memory when error occurred
-	// when resuming, Load will be called again to load checkpoints
-	Load(tctx *tcontext.Context) error
-
-	// GetRestoringFileInfo get restoring data files for table
-	GetRestoringFileInfo(db, table string) map[string][]int64
-
-	// GetAllRestoringFileInfo return all restoring files position
-	GetAllRestoringFileInfo() map[string][]int64
-
-	// IsTableCreated checks if db / table was created. set `table` to "" when check db
-	IsTableCreated(db, table string) bool
-
-	// IsTableFinished query if table has finished
-	IsTableFinished(db, table string) bool
-
-	// CalcProgress calculate which table has finished and which table partial restored
-	CalcProgress(allFiles map[string]Tables2DataFiles) error
-
-	// Init initialize checkpoint data in tidb
-	Init(tctx *tcontext.Context, filename string, endpos int64) error
-
-	// ResetConn resets database connections owned by the Checkpoint
-	ResetConn(tctx *tcontext.Context) error
-
-	// Close closes the CheckPoint
-	Close()
-
-	// Clear clears all recorded checkpoints
-	Clear(tctx *tcontext.Context) error
-
-	// Count returns recorded checkpoints' count
-	Count(tctx *tcontext.Context) (int, error)
-
-	// GenSQL generates sql to update checkpoint to DB
-	GenSQL(filename string, offset int64) string
-
-	// UpdateOffset keeps `cp.restoringFiles` in memory same with checkpoint in DB,
-	// should be called after update checkpoint in DB
-	UpdateOffset(filename string, offset int64) error
-
-	// AllFinished returns `true` when all restoring job are finished
-	AllFinished() bool
-}
-
 type lightingLoadStatus int
 
 const (
