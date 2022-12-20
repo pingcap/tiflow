@@ -232,6 +232,9 @@ func (h *OpenAPIV2) updateChangefeed(c *gin.Context) {
 		_ = c.Error(err)
 		return
 	}
+	if cfInfo.Namespace == "" {
+		cfInfo.Namespace = model.DefaultNamespace
+	}
 	upInfo, err := etcdClient.GetUpstreamInfo(ctx, cfInfo.UpstreamID,
 		cfInfo.Namespace)
 	if err != nil {
