@@ -129,7 +129,7 @@ func MakeGlobalConfig(cfg *config.SubTaskConfig) *lcfg.GlobalConfig {
 	}
 	lightningCfg.PostRestore.Checksum = lcfg.OpLevelOff
 	if lightningCfg.TikvImporter.Backend == lcfg.BackendLocal {
-		lightningCfg.TikvImporter.SortedKVDir = cfg.Dir
+		lightningCfg.TikvImporter.SortedKVDir = cfg.SortingDirPhysical
 	}
 	lightningCfg.Mydumper.SourceDir = cfg.Dir
 	lightningCfg.App.Config.File = "" // make lightning not init logger, see more in https://github.com/pingcap/tidb/pull/29291

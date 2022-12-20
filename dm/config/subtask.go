@@ -21,6 +21,7 @@ import (
 	"encoding/json"
 	"flag"
 	"fmt"
+	"net/url"
 	"regexp"
 	"strconv"
 	"strings"
@@ -339,6 +340,13 @@ func (c *SubTaskConfig) Adjust(verifyDecryptPassword bool) error {
 			return terror.ErrConfigLoaderDirInvalid.Delegate(err, c.LoaderConfig.Dir)
 		}
 		c.LoaderConfig.Dir = newDir
+
+		if storage.IsLocalDiskPath(newDir) {
+			// lightning will not recursively create directories, so we use same level dir
+			c.LoaderConfig.SortingDirPhysical = newDir + ".sorting"
+		} else {
+			c.LoaderConfig.SortingDirPhysical = "./sorting." + url.PathEscape(c.Name)
+		}
 	}
 
 	if c.SyncerConfig.QueueSize == 0 {
