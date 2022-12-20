@@ -25,9 +25,7 @@ import (
 	"github.com/pingcap/tiflow/dm/pkg/log"
 )
 
-var (
-	_ = Suite(&lightningCpListSuite{})
-)
+var _ = Suite(&lightningCpListSuite{})
 
 type lightningCpListSuite struct {
 	mock   sqlmock.Sqlmock
