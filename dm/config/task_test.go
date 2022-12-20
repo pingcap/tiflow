@@ -214,7 +214,7 @@ mysql-instances:
 `
 	taskConfig = NewTaskConfig()
 	err = taskConfig.Decode(errorTaskConfig)
-	require.ErrorContains(t, err, "The configurations as following [column-mapping-rule-2 expr-1 filter-rule-2 route-rule-2] are set in global configuration")
+	require.ErrorContains(t, err, "The configurations as following [expr-1 filter-rule-2 route-rule-2] are set in global configuration")
 }
 
 func TestName(t *testing.T) {

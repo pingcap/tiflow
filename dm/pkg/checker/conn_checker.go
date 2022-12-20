@@ -173,8 +173,6 @@ func (l *LoaderConnNumberChecker) Check(ctx context.Context) *Result {
 		mysql.SuperPriv: {needGlobal: true},
 	})
 	if !l.unlimitedConn && result.State == StateFailure {
-		// if the max_connections is set as a specific number
-		// and we failed because of the number connecions needed is smaller than max_connections
 		// if we're using lightning, this error should be omitted
 		// because lightning doesn't need to keep connections while restoring.
 		result.Errors = append(
