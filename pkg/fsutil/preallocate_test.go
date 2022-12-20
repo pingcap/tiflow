@@ -13,7 +13,6 @@
 package fsutil
 
 import (
-	"io/ioutil"
 	"os"
 	"testing"
 
@@ -21,7 +20,7 @@ import (
 )
 
 func TestPreAllocate(t *testing.T) {
-	f, err := ioutil.TempFile("", "preallocate-test")
+	f, err := os.CreateTemp("", "preallocate-test")
 	defer os.Remove(f.Name())
 	require.Nil(t, err)
 

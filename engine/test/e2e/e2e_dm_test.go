@@ -20,7 +20,6 @@ import (
 	"encoding/json"
 	"fmt"
 	"io"
-	"io/ioutil"
 	"net/http"
 	"net/url"
 	"os"
@@ -384,7 +383,7 @@ func queryStatus(ctx context.Context, client *httputil.Client, jobID string, tas
 		return nil, err
 	}
 
-	respBody, err := ioutil.ReadAll(resp.Body)
+	respBody, err := io.ReadAll(resp.Body)
 	if err != nil {
 		return nil, err
 	}
@@ -431,7 +430,7 @@ func getJobCfg(ctx context.Context, client *httputil.Client, jobID string) (stri
 		return "", err
 	}
 
-	respBody, err := ioutil.ReadAll(resp.Body)
+	respBody, err := io.ReadAll(resp.Body)
 	if err != nil {
 		return "", err
 	}
@@ -472,7 +471,7 @@ func getBinlogOperator(ctx context.Context, client *httputil.Client, jobID strin
 		return nil, err
 	}
 
-	respBody, err := ioutil.ReadAll(resp.Body)
+	respBody, err := io.ReadAll(resp.Body)
 	if err != nil {
 		return nil, err
 	}
@@ -534,7 +533,7 @@ func getBinlogSchema(ctx context.Context, client *httputil.Client, jobID string,
 		return nil, err
 	}
 
-	respBody, err := ioutil.ReadAll(resp.Body)
+	respBody, err := io.ReadAll(resp.Body)
 	if err != nil {
 		return nil, err
 	}
