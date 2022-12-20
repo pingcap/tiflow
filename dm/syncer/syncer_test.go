@@ -752,7 +752,7 @@ func (s *testSyncerSuite) TestRun(c *C) {
 			{Schema: "test_1", Name: "t_2"},
 		},
 	}
-	
+
 	s.cfg.Batch = 1000
 	s.cfg.WorkerCount = 2
 	s.cfg.MaxRetry = 1
