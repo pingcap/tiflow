@@ -171,34 +171,3 @@ func (c *testTLSConfig) TestClone() {
 	clone.CertAllowedCN[0] = "g"
 	c.Require().NotEqual(s, clone)
 }
-
-func (c *testTLSConfig) TestLoadDumpTLSContent() {
-	s := &security.Security{
-		SSLCA:   caFilePath,
-		SSLCert: certFilePath,
-		SSLKey:  keyFilePath,
-	}
-	err := s.LoadTLSContent()
-	c.Require().NoError(err)
-	c.Require().Greater(len(s.SSLCABytes), 0)
-	c.Require().Greater(len(s.SSLCertBytes), 0)
-	c.Require().Greater(len(s.SSLKeyBytes), 0)
-
-	// cert file not exist
-	s.SSLCA += ".new"
-	s.SSLCert += ".new"
-	s.SSLKey += ".new"
-	c.Require().NoError(s.DumpTLSContent(c.T().TempDir()))
-	c.Require().FileExists(s.SSLCA)
-	c.Require().FileExists(s.SSLCert)
-	c.Require().FileExists(s.SSLKey)
-
-	// user not specify cert file
-	s.SSLCA = ""
-	s.SSLCert = ""
-	s.SSLKey = ""
-	c.Require().NoError(s.DumpTLSContent(c.T().TempDir()))
-	c.Require().FileExists(s.SSLCA)
-	c.Require().FileExists(s.SSLCert)
-	c.Require().FileExists(s.SSLKey)
-}

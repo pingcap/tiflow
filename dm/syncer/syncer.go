@@ -2516,10 +2516,7 @@ func (s *Syncer) handleRowsEvent(ev *replication.RowsEvent, ec eventContext) (*f
 	if err != nil {
 		return nil, terror.WithScope(err, terror.ScopeDownstream)
 	}
-	originRows, err := s.mappingDML(sourceTable, tableInfo, ev.Rows)
-	if err != nil {
-		return nil, err
-	}
+	originRows := ev.Rows
 	if err2 := checkLogColumns(ev.SkippedColumns); err2 != nil {
 		return nil, err2
 	}
