@@ -175,19 +175,14 @@ func (l *LoaderConnNumberChecker) Check(ctx context.Context) *Result {
 	if !l.unlimitedConn && result.State == StateFailure {
 		// if the max_connections is set as a specific number
 		// and we failed because of the number connecions needed is smaller than max_connections
-		for _, stCfg := range l.stCfgs {
-			if stCfg.NeedUseLightning() {
-				// if we're using lightning, this error should be omitted
-				// because lightning doesn't need to keep connections while restoring.
-				result.Errors = append(
-					result.Errors,
-					NewWarn("task precheck cannot accurately check the number of connection needed for Lightning."),
-				)
-				result.State = StateWarning
-				result.Instruction = "You need to set a larger connection for TiDB."
-				break
-			}
-		}
+		// if we're using lightning, this error should be omitted
+		// because lightning doesn't need to keep connections while restoring.
+		result.Errors = append(
+			result.Errors,
+			NewWarn("task precheck cannot accurately check the number of connection needed for Lightning."),
+		)
+		result.State = StateWarning
+		result.Instruction = "You need to set a larger connection for TiDB."
 	}
 	return result
 }

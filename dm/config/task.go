@@ -137,9 +137,10 @@ func (m *Meta) Verify() error {
 // MySQLInstance represents a sync config of a MySQL instance.
 type MySQLInstance struct {
 	// it represents a MySQL/MariaDB instance or a replica group
-	SourceID           string   `yaml:"source-id"`
-	Meta               *Meta    `yaml:"meta"`
-	FilterRules        []string `yaml:"filter-rules"`
+	SourceID    string   `yaml:"source-id"`
+	Meta        *Meta    `yaml:"meta"`
+	FilterRules []string `yaml:"filter-rules"`
+	// deprecated
 	ColumnMappingRules []string `yaml:"column-mapping-rules"`
 	RouteRules         []string `yaml:"route-rules"`
 	ExpressionFilters  []string `yaml:"expression-filters"`
@@ -243,13 +244,13 @@ const (
 	// LoadModeSQL means write data by sql statements, uses tidb-lightning tidb backend to load data.
 	// deprecated, use LoadModeLogical instead.
 	LoadModeSQL LoadMode = "sql"
-	// LoadModeLoader is the legacy sql mode, use loader to load data. this should be replaced by sql mode in new version.
-	// deprecated, loader will be removed in future.
-	LoadModeLoader = "loader"
+	// LoadModeLoader is the legacy sql mode, use loader to load data. this should be replaced by LoadModeLogical mode.
+	// deprecated, use LoadModeLogical instead.
+	LoadModeLoader LoadMode = "loader"
 	// LoadModeLogical means use tidb backend of lightning to load data, which uses SQL to load data.
-	LoadModeLogical = "logical"
+	LoadModeLogical LoadMode = "logical"
 	// LoadModePhysical means use local backend of lightning to load data, which ingest SST files to load data.
-	LoadModePhysical = "physical"
+	LoadModePhysical LoadMode = "physical"
 )
 
 // LogicalDuplicateResolveType defines the duplication resolution when meet duplicate rows for logical import.
@@ -315,7 +316,8 @@ func (m *LoaderConfig) adjust() error {
 	if m.ImportMode == "" {
 		m.ImportMode = LoadModeLogical
 	}
-	if strings.EqualFold(string(m.ImportMode), string(LoadModeSQL)) {
+	if strings.EqualFold(string(m.ImportMode), string(LoadModeSQL)) ||
+		strings.EqualFold(string(m.ImportMode), string(LoadModeLoader)) {
 		m.ImportMode = LoadModeLogical
 	}
 	m.ImportMode = LoadMode(strings.ToLower(string(m.ImportMode)))
@@ -508,10 +510,11 @@ type TaskConfig struct {
 	// deprecated
 	OnlineDDLScheme string `yaml:"online-ddl-scheme" toml:"online-ddl-scheme" json:"online-ddl-scheme"`
 
-	Routes         map[string]*router.TableRule   `yaml:"routes" toml:"routes" json:"routes"`
-	Filters        map[string]*bf.BinlogEventRule `yaml:"filters" toml:"filters" json:"filters"`
-	ColumnMappings map[string]*column.Rule        `yaml:"column-mappings" toml:"column-mappings" json:"column-mappings"`
-	ExprFilter     map[string]*ExpressionFilter   `yaml:"expression-filter" toml:"expression-filter" json:"expression-filter"`
+	Routes  map[string]*router.TableRule   `yaml:"routes" toml:"routes" json:"routes"`
+	Filters map[string]*bf.BinlogEventRule `yaml:"filters" toml:"filters" json:"filters"`
+	// deprecated
+	ColumnMappings map[string]*column.Rule      `yaml:"column-mappings" toml:"column-mappings" json:"column-mappings"`
+	ExprFilter     map[string]*ExpressionFilter `yaml:"expression-filter" toml:"expression-filter" json:"expression-filter"`
 
 	// black-white-list is deprecated, use block-allow-list instead
 	BWList map[string]*filter.Rules `yaml:"black-white-list" toml:"black-white-list" json:"black-white-list"`
@@ -613,12 +616,11 @@ func (c *TaskConfig) RawDecode(data string) error {
 }
 
 // find unused items in config.
-var configRefPrefixes = []string{"RouteRules", "FilterRules", "ColumnMappingRules", "Mydumper", "Loader", "Syncer", "ExprFilter", "Validator"}
+var configRefPrefixes = []string{"RouteRules", "FilterRules", "Mydumper", "Loader", "Syncer", "ExprFilter", "Validator"}
 
 const (
 	routeRulesIdx = iota
 	filterRulesIdx
-	columnMappingIdx
 	mydumperIdx
 	loaderIdx
 	syncerIdx
@@ -649,6 +651,10 @@ func (c *TaskConfig) adjust() error {
 		return terror.ErrConfigShardModeNotSupport.Generate(c.ShardMode)
 	} else if c.ShardMode == "" && c.IsSharding {
 		c.ShardMode = ShardPessimistic // use the pessimistic mode as default for back compatible.
+	}
+
+	if len(c.ColumnMappings) > 0 {
+		return terror.ErrConfigColumnMappingDeprecated.Generate()
 	}
 
 	if c.CollationCompatible != "" && c.CollationCompatible != LooseCollationCompatible && c.CollationCompatible != StrictCollationCompatible {
@@ -761,12 +767,6 @@ func (c *TaskConfig) adjust() error {
 				return terror.ErrConfigFilterRuleNotFound.Generate(i, name)
 			}
 			globalConfigReferCount[configRefPrefixes[filterRulesIdx]+name]++
-		}
-		for _, name := range inst.ColumnMappingRules {
-			if _, ok := c.ColumnMappings[name]; !ok {
-				return terror.ErrConfigColumnMappingNotFound.Generate(i, name)
-			}
-			globalConfigReferCount[configRefPrefixes[columnMappingIdx]+name]++
 		}
 
 		// only when BAList is empty use BWList
@@ -918,11 +918,6 @@ func (c *TaskConfig) adjust() error {
 	for filter := range c.Filters {
 		if globalConfigReferCount[configRefPrefixes[filterRulesIdx]+filter] == 0 {
 			unusedConfigs = append(unusedConfigs, filter)
-		}
-	}
-	for columnMapping := range c.ColumnMappings {
-		if globalConfigReferCount[configRefPrefixes[columnMappingIdx]+columnMapping] == 0 {
-			unusedConfigs = append(unusedConfigs, columnMapping)
 		}
 	}
 	for mydumper := range c.Mydumpers {

@@ -19,6 +19,7 @@ import (
 	"path/filepath"
 	"strings"
 	"sync"
+	"time"
 
 	"github.com/pingcap/errors"
 	"github.com/pingcap/failpoint"
@@ -49,7 +50,6 @@ const (
 	// checkpoint file name for lightning loader
 	// this file is used to store the real checkpoint data for lightning.
 	lightningCheckpointFileName = "tidb_lightning_checkpoint.pb"
-	TmpTLSConfigPath            = "lightning_tls"
 )
 
 // LightningLoader can load your mydumper data into TiDB database.
@@ -435,6 +435,13 @@ func (l *LightningLoader) Process(ctx context.Context, pr chan pb.ProcessResult)
 	if gtid != "" {
 		l.metaBinlogGTID.Store(gtid)
 	}
+
+	failpoint.Inject("longLoadProcess", func(val failpoint.Value) {
+		if sec, ok := val.(int); ok {
+			l.logger.Info("long loader unit", zap.Int("second", sec))
+			time.Sleep(time.Duration(sec) * time.Second)
+		}
+	})
 
 	if err := l.restore(ctx); err != nil && !utils.IsContextCanceledError(err) {
 		l.logger.Error("process error", zap.Error(err))
