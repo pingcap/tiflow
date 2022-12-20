@@ -64,22 +64,6 @@ filters:
     events: ["all dml"]
     action: Do
 
-column-mappings:
-  column-mapping-rule-1:
-    schema-pattern: "test_*"
-    table-pattern: "t_*"
-    expression: "partition id"
-    source-column: "id"
-    target-column: "id"
-    arguments: ["1", "test", "t", "_"]
-  column-mapping-rule-2:
-    schema-pattern: "test_*"
-    table-pattern: "t_*"
-    expression: "partition id"
-    source-column: "id"
-    target-column: "id"
-    arguments: ["2", "test", "t", "_"]
-
 mydumpers:
   global1:
     threads: 4
@@ -122,7 +106,6 @@ mysql-instances:
   - source-id: "mysql-replica-01"
     route-rules: ["route-rule-2"]
     filter-rules: ["filter-rule-2"]
-    column-mapping-rules: ["column-mapping-rule-2"]
     mydumper-config-name: "global1"
     loader-config-name: "global1"
     syncer-config-name: "global1"
@@ -131,7 +114,6 @@ mysql-instances:
   - source-id: "mysql-replica-02"
     route-rules: ["route-rule-1"]
     filter-rules: ["filter-rule-1"]
-    column-mapping-rules: ["column-mapping-rule-1"]
     mydumper-config-name: "global2"
     loader-config-name: "global2"
     syncer-config-name: "global2"
@@ -177,22 +159,6 @@ filters:
     events: ["all dml"]
     action: Do
 
-column-mappings:
-  column-mapping-rule-1:
-    schema-pattern: "test_*"
-    table-pattern: "t_*"
-    expression: "partition id"
-    source-column: "id"
-    target-column: "id"
-    arguments: ["1", "test", "t", "_"]
-  column-mapping-rule-2:
-    schema-pattern: "test_*"
-    table-pattern: "t_*"
-    expression: "partition id"
-    source-column: "id"
-    target-column: "id"
-    arguments: ["2", "test", "t", "_"]
-
 mydumpers:
   global1:
     threads: 4
@@ -235,7 +201,6 @@ mysql-instances:
   - source-id: "mysql-replica-01"
     route-rules: ["route-rule-1"]
     filter-rules: ["filter-rule-1"]
-    column-mapping-rules: ["column-mapping-rule-1"]
     mydumper-config-name: "global1"
     loader-config-name: "global1"
     syncer-config-name: "global1"
@@ -243,7 +208,6 @@ mysql-instances:
   - source-id: "mysql-replica-02"
     route-rules: ["route-rule-1"]
     filter-rules: ["filter-rule-1"]
-    column-mapping-rules: ["column-mapping-rule-1"]
     mydumper-config-name: "global2"
     loader-config-name: "global2"
     syncer-config-name: "global2"
@@ -276,7 +240,6 @@ mysql-instances:
     server-id: 101
     block-allow-list:  "instance"
     route-rules: ["sharding-route-rules-table", "sharding-route-rules-schema"]
-    column-mapping-rules: ["instance-1"]
     mydumper-config-name: "global"
     loader-config-name: "global"
     syncer-config-name: "global"
@@ -301,7 +264,6 @@ mysql-instances:
   - source-id: "mysql-replica-01"
     block-allow-list:  "instance"
     route-rules: ["sharding-route-rules-table", "sharding-route-rules-schema"]
-    column-mapping-rules: ["instance-1"]
     mydumper-config-name: "global"
     loader-config-name: "global"
     syncer-config-name: "global"

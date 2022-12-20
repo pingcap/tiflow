@@ -32,7 +32,6 @@ import (
 	"github.com/pingcap/errors"
 	"github.com/pingcap/failpoint"
 	bf "github.com/pingcap/tidb-tools/pkg/binlog-filter"
-	cm "github.com/pingcap/tidb-tools/pkg/column-mapping"
 	"github.com/pingcap/tidb/parser"
 	"github.com/pingcap/tidb/parser/ast"
 	"github.com/pingcap/tidb/parser/model"
@@ -161,7 +160,6 @@ type Syncer struct {
 
 	tableRouter     *regexprrouter.RouteTable
 	binlogFilter    *bf.BinlogEvent
-	columnMapping   *cm.Mapping
 	baList          *filter.Filter
 	exprFilterGroup *ExprFilterGroup
 	sessCtx         sessionctx.Context
@@ -410,13 +408,6 @@ func (s *Syncer) Init(ctx context.Context) (err error) {
 	s.exprFilterGroup = NewExprFilterGroup(s.tctx, s.sessCtx, s.cfg.ExprFilter)
 	// create an empty Tracker and will be initialized in `Run`
 	s.schemaTracker = schema.NewTracker()
-
-	if len(s.cfg.ColumnMappingRules) > 0 {
-		s.columnMapping, err = cm.NewMapping(s.cfg.CaseSensitive, s.cfg.ColumnMappingRules)
-		if err != nil {
-			return terror.ErrSyncerUnitGenColumnMapping.Delegate(err)
-		}
-	}
 
 	if s.cfg.OnlineDDL {
 		s.onlineDDL, err = onlineddl.NewRealOnlinePlugin(tctx, s.cfg, s.metricsProxies)
@@ -3257,11 +3248,10 @@ func (s *Syncer) Update(ctx context.Context, cfg *config.SubTaskConfig) error {
 	}
 
 	var (
-		err              error
-		oldBaList        *filter.Filter
-		oldTableRouter   *regexprrouter.RouteTable
-		oldBinlogFilter  *bf.BinlogEvent
-		oldColumnMapping *cm.Mapping
+		err             error
+		oldBaList       *filter.Filter
+		oldTableRouter  *regexprrouter.RouteTable
+		oldBinlogFilter *bf.BinlogEvent
 	)
 
 	defer func() {
@@ -3276,9 +3266,6 @@ func (s *Syncer) Update(ctx context.Context, cfg *config.SubTaskConfig) error {
 		}
 		if oldBinlogFilter != nil {
 			s.binlogFilter = oldBinlogFilter
-		}
-		if oldColumnMapping != nil {
-			s.columnMapping = oldColumnMapping
 		}
 	}()
 
@@ -3301,13 +3288,6 @@ func (s *Syncer) Update(ctx context.Context, cfg *config.SubTaskConfig) error {
 	s.binlogFilter, err = bf.NewBinlogEvent(cfg.CaseSensitive, cfg.FilterRules)
 	if err != nil {
 		return terror.ErrSyncerUnitGenBinlogEventFilter.Delegate(err)
-	}
-
-	// update column-mappings
-	oldColumnMapping = s.columnMapping
-	s.columnMapping, err = cm.NewMapping(cfg.CaseSensitive, cfg.ColumnMappingRules)
-	if err != nil {
-		return terror.ErrSyncerUnitGenColumnMapping.Delegate(err)
 	}
 
 	switch s.cfg.ShardMode {
