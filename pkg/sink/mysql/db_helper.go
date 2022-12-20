@@ -160,6 +160,14 @@ func generateDSNByConfig(
 	if tidbPlacementMode != "" {
 		dsnCfg.Params["tidb_placement_mode"] = fmt.Sprintf(`"%s"`, tidbPlacementMode)
 	}
+	tidbEnableExternalTSRead, err := checkTiDBVariable(ctx, testDB, "tidb_enable_external_ts_read", "OFF")
+	if err != nil {
+		return "", err
+	}
+	if tidbEnableExternalTSRead != "" {
+		// set the `tidb_enable_external_ts_read` to `OFF`, so cdc could write to the sink
+		dsnCfg.Params["tidb_enable_external_ts_read"] = fmt.Sprintf(`"%s"`, tidbEnableExternalTSRead)
+	}
 	dsnClone := dsnCfg.Clone()
 	dsnClone.Passwd = "******"
 	log.Info("sink uri is configured", zap.String("dsn", dsnClone.FormatDSN()))

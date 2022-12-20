@@ -24,11 +24,11 @@ groups:
       summary: DM remain storage of relay log
 
   - alert: DM_relay_process_exits_with_error
-    expr: changes(dm_relay_exit_with_error_count[1m]) > 0
+    expr: changes(dm_relay_exit_with_error_count{resumable_err="false"}[1m]) > 0 or on(instance, job) increase(dm_relay_exit_with_error_count{resumable_err="true"}[2m]) > 3
     labels:
       env: ENV_LABELS_ENV
       level: critical
-      expr: changes(dm_relay_exit_with_error_count[1m]) > 0
+      expr: changes(dm_relay_exit_with_error_count{resumable_err="false"}[1m]) > 0 or on(instance, job) increase(dm_relay_exit_with_error_count{resumable_err="true"}[2m]) > 3
     annotations:
       description: 'cluster: ENV_LABELS_ENV, instance: {{ $labels.instance }}, values: {{ $value }}'
       value: '{{ $value }}'
@@ -68,33 +68,33 @@ groups:
       summary: DM fail to write relay log
 
   - alert: DM_dump_process_exists_with_error
-    expr: changes(dm_mydumper_exit_with_error_count[1m]) > 0
+    expr: changes(dm_mydumper_exit_with_error_count{resumable_err="false"}[1m]) > 0 or on(source_id, task) increase(dm_mydumper_exit_with_error_count{resumable_err="true"}[2m]) > 3
     labels:
       env: ENV_LABELS_ENV
       level: critical
-      expr: changes(dm_mydumper_exit_with_error_count[1m]) > 0
+      expr: changes(dm_mydumper_exit_with_error_count{resumable_err="false"}[1m]) > 0 or on(source_id, task) increase(dm_mydumper_exit_with_error_count{resumable_err="true"}[2m]) > 3
     annotations:
       description: 'cluster: ENV_LABELS_ENV, instance: {{ $labels.instance }}, task: {{ $labels.task }}, values: {{ $value }}'
       value: '{{ $value }}'
       summary: DM dump process exists with error
 
   - alert: DM_load_process_exists_with_error
-    expr: changes(dm_loader_exit_with_error_count[1m]) > 0
+    expr: changes(dm_loader_exit_with_error_count{resumable_err="false"}[1m]) > 0 or on(source_id, task) increase(dm_loader_exit_with_error_count{resumable_err="true"}[2m]) > 3
     labels:
       env: ENV_LABELS_ENV
       level: critical
-      expr: changes(dm_loader_exit_with_error_count[1m]) > 0
+      expr: changes(dm_loader_exit_with_error_count{resumable_err="false"}[1m]) > 0 or on(source_id, task) increase(dm_loader_exit_with_error_count{resumable_err="true"}[2m]) > 3
     annotations:
       description: 'cluster: ENV_LABELS_ENV, instance: {{ $labels.instance }}, task: {{ $labels.task }}, values: {{ $value }}'
       value: '{{ $value }}'
       summary: DM load process exists with error
 
   - alert: DM_sync_process_exists_with_error
-    expr: changes(dm_syncer_exit_with_error_count[1m]) > 0
+    expr: changes(dm_syncer_exit_with_error_count{resumable_err="false"}[1m]) > 0 or on(source_id, task) increase(dm_syncer_exit_with_error_count{resumable_err="true"}[2m]) > 3
     labels:
       env: ENV_LABELS_ENV
       level: critical
-      expr: changes(dm_syncer_exit_with_error_count[1m]) > 0
+      expr: changes(dm_syncer_exit_with_error_count{resumable_err="false"}[1m]) > 0 or on(source_id, task) increase(dm_syncer_exit_with_error_count{resumable_err="true"}[2m]) > 3
     annotations:
       description: 'cluster: ENV_LABELS_ENV, instance: {{ $labels.instance }}, task: {{ $labels.task }}, values: {{ $value }}'
       value: '{{ $value }}'
