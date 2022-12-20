@@ -104,6 +104,7 @@ func TestTaskCfg(t *testing.T) {
 		require.Greater(t, len(subTaskCfg.UUID), 0)
 		// don't check uuid's value
 		expectCfg.UUID = subTaskCfg.UUID
+		expectCfg.DumpUUID = subTaskCfg.DumpUUID
 		require.EqualValues(t, expectCfg, subTaskCfg)
 	}
 }

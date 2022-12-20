@@ -327,6 +327,7 @@ func (c *TaskCfg) ToDMSubTaskCfg(jobID string) *dmconfig.SubTaskConfig {
 	cfg.IOTotalBytes = atomic.NewUint64(0)
 	cfg.DumpIOTotalBytes = atomic.NewUint64(0)
 	cfg.UUID = uuid.NewString()
+	cfg.DumpUUID = uuid.NewString()
 
 	return cfg
 }

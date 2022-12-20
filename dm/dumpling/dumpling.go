@@ -68,7 +68,7 @@ func NewDumpling(cfg *config.SubTaskConfig) *Dumpling {
 	}
 	failpoint.Inject("SetIOTotalBytes", func(_ failpoint.Value) {
 		m.cfg.DumpIOTotalBytes = atomic.NewUint64(0)
-		m.cfg.UUID = uuid.NewString()
+		m.cfg.DumpUUID = uuid.NewString()
 		go func() {
 			for {
 				time.Sleep(10 * time.Millisecond)
@@ -87,7 +87,7 @@ func (m *Dumpling) Init(ctx context.Context) error {
 	}
 	if m.cfg.DumpIOTotalBytes != nil {
 		m.dumpConfig.IOTotalBytes = m.cfg.DumpIOTotalBytes
-		m.dumpConfig.Net = m.cfg.UUID
+		m.dumpConfig.Net = m.cfg.DumpUUID
 	}
 	if m.cfg.MetricsFactory != nil {
 		// this branch means dataflow engine has set a Factory, the Factory itself

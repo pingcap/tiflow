@@ -184,6 +184,7 @@ type SubTaskConfig struct {
 	// the network usage is from upstream
 	// we should separate it from IOTotalBytes
 	DumpIOTotalBytes *atomic.Uint64 `toml:"-" json:"-"`
+	DumpUUID         string         `toml:"-" json:"-"`
 }
 
 // SampleSubtaskConfig is the content of subtask.toml in current folder.
