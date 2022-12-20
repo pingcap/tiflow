@@ -30,7 +30,6 @@ type sinkWorker struct {
 	sourceManager *sourcemanager.SourceManager
 	memQuota      *memQuota
 	eventCache    *redoEventCache
-	redoEnabled   bool
 	// splitTxn indicates whether to split the transaction into multiple batches.
 	splitTxn bool
 	// enableOldValue indicates whether to enable the old value feature.
@@ -47,7 +46,6 @@ func newSinkWorker(
 	sourceManager *sourcemanager.SourceManager,
 	quota *memQuota,
 	eventCache *redoEventCache,
-	redoEnabled bool,
 	splitTxn bool,
 	enableOldValue bool,
 ) *sinkWorker {
@@ -56,7 +54,6 @@ func newSinkWorker(
 		sourceManager:  sourceManager,
 		memQuota:       quota,
 		eventCache:     eventCache,
-		redoEnabled:    redoEnabled,
 		splitTxn:       splitTxn,
 		enableOldValue: enableOldValue,
 
@@ -106,7 +103,7 @@ func (w *sinkWorker) handleTask(ctx context.Context, task *sinkTask) (finalErr e
 	events := make([]*model.RowChangedEvent, 0, 1024)
 	batchID := uint64(1)
 
-	if w.redoEnabled && w.eventCache != nil {
+	if w.eventCache != nil {
 		drained, err := w.fetchFromCache(task, &lowerBound, &upperBound, &batchID)
 		if err != nil {
 			return errors.Trace(err)
@@ -198,16 +195,9 @@ func (w *sinkWorker) handleTask(ctx context.Context, task *sinkTask) (finalErr e
 		}
 
 		if allFinished {
-			// There is no more events and some required memory isn't used.
-			if availableMem > usedMem {
-				w.memQuota.refund(availableMem - usedMem)
-				log.Debug("MemoryQuotaTracing: refund memory for table sink task",
-					zap.String("namespace", w.changefeedID.Namespace),
-					zap.String("changefeed", w.changefeedID.ID),
-					zap.Int64("tableID", task.tableID),
-					zap.Uint64("memory", availableMem-usedMem))
-			}
-		} else if usedMem >= availableMem {
+			return nil
+		}
+		if usedMem >= availableMem {
 			if txnFinished {
 				if w.memQuota.tryAcquire(requestMemSize) {
 					availableMem += requestMemSize
@@ -250,9 +240,9 @@ func (w *sinkWorker) handleTask(ctx context.Context, task *sinkTask) (finalErr e
 	defer func() {
 		w.metricRedoEventCacheMiss.Add(float64(allEventSize))
 		task.tableSink.receivedEventCount.Add(int64(allEventCount))
-		if !w.redoEnabled {
+		if w.eventCache == nil {
 			task.tableSink.updateReceivedSorterCommitTs(currTxnCommitTs)
-			eventCount := rangeEventCount{pos: lastPos, events: allEventCount}
+			eventCount := newRangeEventCount(lastPos, allEventCount)
 			task.tableSink.updateRangeEventCounts(eventCount)
 		}
 
@@ -276,6 +266,16 @@ func (w *sinkWorker) handleTask(ctx context.Context, task *sinkTask) (finalErr e
 		if finalErr == nil {
 			// Otherwise we can't ensure all events before `lastPos` are emitted.
 			task.callback(lastPos)
+		}
+
+		// The task is finished and some required memory isn't used.
+		if availableMem > usedMem {
+			w.memQuota.refund(availableMem - usedMem)
+			log.Debug("MemoryQuotaTracing: refund memory for table sink task",
+				zap.String("namespace", w.changefeedID.Namespace),
+				zap.String("changefeed", w.changefeedID.ID),
+				zap.Int64("tableID", task.tableID),
+				zap.Uint64("memory", availableMem-usedMem))
 		}
 	}()
 
@@ -351,6 +351,7 @@ func (w *sinkWorker) fetchFromCache(
 	}
 	popRes := cache.pop(*lowerBound, *upperBound)
 	if popRes.success {
+		newLowerBound = popRes.boundary.Next()
 		if len(popRes.events) > 0 {
 			task.tableSink.receivedEventCount.Add(int64(popRes.pushCount))
 			w.metricRedoEventCacheHit.Add(float64(popRes.size))
@@ -376,8 +377,12 @@ func (w *sinkWorker) fetchFromCache(
 		// NOTE: the recorded size can be not accurate, but let it be.
 		w.memQuota.record(task.tableID, resolvedTs, popRes.releaseSize)
 		if err = task.tableSink.updateResolvedTs(resolvedTs); err == nil {
-			newLowerBound = popRes.boundary.Next()
 		}
+		log.Debug("Advance table sink",
+			zap.String("namespace", w.changefeedID.Namespace),
+			zap.String("changefeed", w.changefeedID.ID),
+			zap.Int64("tableID", task.tableID),
+			zap.Any("resolvedTs", resolvedTs))
 	} else {
 		newUpperBound = popRes.boundary.Prev()
 	}
@@ -387,29 +392,27 @@ func (w *sinkWorker) fetchFromCache(
 		zap.String("changefeed", w.changefeedID.ID),
 		zap.Int64("tableID", task.tableID),
 		zap.Bool("success", popRes.success),
+		zap.Int("eventsLen", len(popRes.events)),
 		zap.Bool("cacheDrained", cacheDrained),
 		zap.Any("lowerBound", lowerBound),
 		zap.Any("upperBound", upperBound),
 		zap.Any("newLowerBound", newLowerBound),
-		zap.Any("newUpperBound", newUpperBound),
-	)
+		zap.Any("newUpperBound", newUpperBound))
 	*lowerBound = newLowerBound
 	*upperBound = newUpperBound
 	return
 }
 
 func (w *sinkWorker) advanceTableSinkWithBatchID(t *sinkTask, commitTs model.Ts, size uint64, batchID uint64) error {
+	resolvedTs := model.NewResolvedTs(commitTs)
+	resolvedTs.Mode = model.BatchResolvedMode
+	resolvedTs.BatchID = batchID
 	log.Debug("Advance table sink with batch ID",
 		zap.String("namespace", w.changefeedID.Namespace),
 		zap.String("changefeed", w.changefeedID.ID),
 		zap.Int64("tableID", t.tableID),
-		zap.Uint64("commitTs", commitTs),
-		zap.Uint64("batchID", batchID),
-	)
-
-	resolvedTs := model.NewResolvedTs(commitTs)
-	resolvedTs.Mode = model.BatchResolvedMode
-	resolvedTs.BatchID = batchID
+		zap.Any("resolvedTs", resolvedTs),
+		zap.Uint64("size", size))
 	if size > 0 {
 		w.memQuota.record(t.tableID, resolvedTs, size)
 	}
@@ -417,14 +420,13 @@ func (w *sinkWorker) advanceTableSinkWithBatchID(t *sinkTask, commitTs model.Ts,
 }
 
 func (w *sinkWorker) advanceTableSink(t *sinkTask, commitTs model.Ts, size uint64) error {
+	resolvedTs := model.NewResolvedTs(commitTs)
 	log.Debug("Advance table sink without batch ID",
 		zap.String("namespace", w.changefeedID.Namespace),
 		zap.String("changefeed", w.changefeedID.ID),
 		zap.Int64("tableID", t.tableID),
-		zap.Uint64("commitTs", commitTs),
-	)
-
-	resolvedTs := model.NewResolvedTs(commitTs)
+		zap.Any("resolvedTs", resolvedTs),
+		zap.Uint64("size", size))
 	if size > 0 {
 		w.memQuota.record(t.tableID, resolvedTs, size)
 	}

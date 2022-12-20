@@ -329,10 +329,6 @@ func (m *LoaderConfig) adjust() error {
 		m.PoolSize = defaultPoolSize
 	}
 
-	if m.Dir != "" && m.SortingDirPhysical == "" {
-		m.SortingDirPhysical = m.Dir
-	}
-
 	if m.OnDuplicateLogical == "" && m.OnDuplicate != "" {
 		m.OnDuplicateLogical = m.OnDuplicate
 	}

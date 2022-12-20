@@ -15,6 +15,7 @@ package loader
 
 import (
 	"context"
+	"fmt"
 	"path/filepath"
 	"strings"
 	"sync"
@@ -116,7 +117,7 @@ func MakeGlobalConfig(cfg *config.SubTaskConfig) *lcfg.GlobalConfig {
 	}
 	lightningCfg.PostRestore.Checksum = lcfg.OpLevelOff
 	if lightningCfg.TikvImporter.Backend == lcfg.BackendLocal {
-		lightningCfg.TikvImporter.SortedKVDir = cfg.Dir
+		lightningCfg.TikvImporter.SortedKVDir = cfg.SortingDirPhysical
 	}
 	lightningCfg.Mydumper.SourceDir = cfg.Dir
 	lightningCfg.App.Config.File = "" // make lightning not init logger, see more in https://github.com/pingcap/tidb/pull/29291
@@ -402,6 +403,11 @@ func (l *LightningLoader) restore(ctx context.Context) error {
 	return err
 }
 
+func (l *LightningLoader) handleExitErrMetric(err *pb.ProcessError) {
+	resumable := fmt.Sprintf("%t", unit.IsResumableError(err))
+	loaderExitWithErrorCounter.WithLabelValues(l.cfg.Name, l.cfg.SourceID, resumable).Inc()
+}
+
 // Process implements Unit.Process.
 func (l *LightningLoader) Process(ctx context.Context, pr chan pb.ProcessResult) {
 	l.logger.Info("lightning load start")
@@ -416,9 +422,10 @@ func (l *LightningLoader) Process(ctx context.Context, pr chan pb.ProcessResult)
 
 	binlog, gtid, err := getMydumpMetadata(ctx, l.cli, l.cfg, l.workerName)
 	if err != nil {
-		loaderExitWithErrorCounter.WithLabelValues(l.cfg.Name, l.cfg.SourceID).Inc()
+		processError := unit.NewProcessError(err)
+		l.handleExitErrMetric(processError)
 		pr <- pb.ProcessResult{
-			Errors: []*pb.ProcessError{unit.NewProcessError(err)},
+			Errors: []*pb.ProcessError{processError},
 		}
 		return
 	}
@@ -431,7 +438,9 @@ func (l *LightningLoader) Process(ctx context.Context, pr chan pb.ProcessResult)
 
 	if err := l.restore(ctx); err != nil && !utils.IsContextCanceledError(err) {
 		l.logger.Error("process error", zap.Error(err))
-		errs = append(errs, unit.NewProcessError(err))
+		processError := unit.NewProcessError(err)
+		l.handleExitErrMetric(processError)
+		errs = append(errs, processError)
 	}
 	isCanceled := false
 	select {

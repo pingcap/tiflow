@@ -146,7 +146,7 @@ loaders:
   load-01:
     pool-size: 16
     dir: ./dumped_data
-    sorting-dir-physical: ./dumped_data.test
+    sorting-dir-physical: ./dumped_data.test.sorting
     import-mode: logical
     on-duplicate: ""
     on-duplicate-logical: replace

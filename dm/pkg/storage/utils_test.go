@@ -33,28 +33,68 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
-func TestIsS3(t *testing.T) {
-	testPaths := []string{
-		"",
-		"1invalid:",
-		"file:///tmp/storage",
-		"/tmp/storage",
-		"./tmp/storage",
-		"tmp/storage",
-		"s3:///bucket/more/prefix",
-		"s3://bucket2/prefix",
-		"s3://bucket3/prefix/path?endpoint=https://127.0.0.1:9000&force_path_style=0&SSE=aws:kms&sse-kms-key-id=TestKey&xyz=abc",
-		// git secrets will report error when it's a real AK, so we use a truncated one
-		"s3://bucket4/prefix/path?access-key=NXN7IOSAAKDEEOLF&secret-access-key=nRE/7Dt+PaIbYKrK/ExCiX=XMLPNw",
+func TestIsS3OrLocalDisk(t *testing.T) {
+	cases := []struct {
+		path  string
+		s3    bool
+		local bool
+	}{
+		{
+			path:  "",
+			s3:    false,
+			local: false,
+		},
+		{
+			path:  "1invalid:",
+			s3:    false,
+			local: false,
+		},
+		{
+			path:  "file:///tmp/storage",
+			s3:    false,
+			local: true,
+		},
+		{
+			path:  "/tmp/storage",
+			s3:    false,
+			local: true,
+		},
+		{
+			path:  "./tmp/storage",
+			s3:    false,
+			local: true,
+		},
+		{
+			path:  "tmp/storage",
+			s3:    false,
+			local: true,
+		},
+		{
+			path:  "s3:///bucket/more/prefix",
+			s3:    true,
+			local: false,
+		},
+		{
+			path:  "s3://bucket2/prefix",
+			s3:    true,
+			local: false,
+		},
+		{
+			path:  "s3://bucket3/prefix/path?endpoint=https://127.0.0.1:9000&force_path_style=0&SSE=aws:kms&sse-kms-key-id=TestKey&xyz=abc",
+			s3:    true,
+			local: false,
+		},
+		{
+			// git secrets will report error when it's a real AK, so we use a truncated one
+			path:  "s3://bucket4/prefix/path?access-key=NXN7IOSAAKDEEOLF&secret-access-key=nRE/7Dt+PaIbYKrK/ExCiX=XMLPNw",
+			s3:    true,
+			local: false,
+		},
 	}
 
-	testIsS3Results := []bool{
-		false, false, false, false, false, false, true, true, true, true,
-	}
-
-	for i, testPath := range testPaths {
-		isS3 := IsS3Path(testPath)
-		require.Equal(t, testIsS3Results[i], isS3)
+	for _, c := range cases {
+		require.Equal(t, c.s3, IsS3Path(c.path))
+		require.Equal(t, c.local, IsLocalDiskPath(c.path))
 	}
 }
 

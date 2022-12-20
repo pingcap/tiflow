@@ -2,7 +2,7 @@ checkpoint_transaction
 lightning_mode
 slow_relay_writer
 sync_collation
-s3_dumpling_lighting
+s3_dumpling_lightning
 async_checkpoint_flush
 tracker_ignored_ddl
 extend_column

@@ -28,19 +28,22 @@ import (
 	"go.uber.org/zap"
 )
 
-// TaskStage represents internal stage of a task
+// TaskStage represents internal stage of a task.
 // TODO: use Stage in lib or move Stage to lib.
+// we need to use same value for stage with same name in dmpb.Stage in order to make grafana dashboard label correct,
+// since we use the same grafana dashboard for OP and engine.
+// there's no need for them to have same meaning, just for grafana display.
 type TaskStage int
 
 // These stages may be updated in later pr.
 const (
-	StageInit TaskStage = iota + 1
-	StageRunning
-	StagePaused
-	StageFinished
-	StageError
-	StagePausing
-	// UnScheduled means the task is not scheduled.
+	StageInit     TaskStage = iota + 1  // = 1 = dmpb.Stage_New
+	StageRunning                        // = 2 = dmpb.Stage_Running
+	StagePaused                         // = 3 ~= dmpb.Stage_Paused. in engine this stage means paused by user, if it's auto-paused by error, it's StageError
+	StageFinished TaskStage = iota + 2  // = 5 = dmpb.Stage_Finished. skip 4 - Stopped, no such stage in engine, see dm/worker/metrics.go
+	StagePausing                        // = 6 = dmpb.Stage_Pausing
+	StageError    TaskStage = iota + 10 // = 15, leave some value space for extension of dmpb.Stage
+	// StageUnscheduled means the task is not scheduled.
 	// This usually happens when the worker is offline.
 	StageUnscheduled
 )
@@ -60,7 +63,11 @@ var toTaskStage map[string]TaskStage
 
 func init() {
 	toTaskStage = make(map[string]TaskStage, len(typesStringify))
+	toTaskStage[""] = TaskStage(0)
 	for i, s := range typesStringify {
+		if len(s) == 0 {
+			continue
+		}
 		toTaskStage[s] = TaskStage(i)
 	}
 }
