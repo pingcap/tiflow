@@ -319,6 +319,8 @@ function run() {
 		"stop-task test_incremental_no_source_meta" \
 		"\"result\": true" 3
 	run_sql_tidb "DROP DATABASE if exists dmctl;"
+	run_sql_tidb "CREATE DATABASE dmctl;"
+	run_sql_tidb "CREATE DATABASE dmctl.t_target(id bigint, b int, c varchar(20), d varchar(10), c_table varchar(255), c_source varchar(255), primary key id(id, c_table, c_source), unique key b(b));"
 	# start task
 	dmctl_start_task
 	check_sync_diff $WORK_DIR $cur/conf/diff_config.toml
@@ -412,8 +414,8 @@ function run() {
 	md5_new_worker2=$(md5sum $dm_worker2_conf | awk '{print $1}')
 	md5_old_worker1=$(md5sum $cur/conf/dm-worker1.toml | awk '{print $1}')
 	md5_old_worker2=$(md5sum $cur/conf/dm-worker2.toml | awk '{print $1}')
-	[ "md5_new_worker1" != "md5_old_worker1" ]
-	[ "md5_new_worker2" != "md5_old_worker2" ]
+	[ "$md5_new_worker1" != "$md5_old_worker1" ]
+	[ "$md5_new_worker2" != "$md5_old_worker2" ]
 
 	#    update_master_config_success $dm_master_conf
 	#    cmp $dm_master_conf $cur/conf/dm-master.toml
