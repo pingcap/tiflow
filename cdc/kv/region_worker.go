@@ -29,7 +29,7 @@ import (
 	"github.com/pingcap/tiflow/cdc/model"
 	"github.com/pingcap/tiflow/pkg/config"
 	cerror "github.com/pingcap/tiflow/pkg/errors"
-	"github.com/pingcap/tiflow/pkg/regionspan"
+	"github.com/pingcap/tiflow/pkg/spanz"
 	"github.com/pingcap/tiflow/pkg/workerpool"
 	"github.com/prometheus/client_golang/prometheus"
 	"github.com/tikv/client-go/v2/oracle"
@@ -199,7 +199,7 @@ func (w *regionWorker) handleSingleRegionError(err error, state *regionFeedState
 		zap.String("changefeed", w.session.client.changefeed.ID),
 		zap.Uint64("regionID", regionID),
 		zap.Uint64("requestID", state.requestID),
-		zap.Stringer("span", state.sri.span),
+		zap.Stringer("span", &state.sri.span),
 		zap.Uint64("resolvedTs", state.sri.resolvedTs),
 		zap.Error(err))
 	// if state is already marked stopped, it must have been or would be processed by `onRegionFail`
@@ -330,7 +330,7 @@ func (w *regionWorker) resolveLock(ctx context.Context) error {
 							zap.String("changefeed", w.session.client.changefeed.ID),
 							zap.String("addr", w.storeAddr),
 							zap.Uint64("regionID", rts.regionID),
-							zap.Stringer("span", state.sri.span),
+							zap.Stringer("span", &state.sri.span),
 							zap.Duration("duration", sinceLastResolvedTs),
 							zap.Duration("lastEvent", sinceLastEvent),
 							zap.Uint64("resolvedTs", lastResolvedTs),
@@ -623,10 +623,10 @@ func (w *regionWorker) handleEventEntry(
 		// if a region with kv range [a, z), and we only want the get [b, c) from this region,
 		// tikv will return all key events in the region, although specified [b, c) int the request.
 		// we can make tikv only return the events about the keys in the specified range.
-		comparableKey := regionspan.ToComparableKey(entry.GetKey())
+		comparableKey := spanz.ToComparableKey(entry.GetKey())
 		// key for initialized event is nil
 		if entry.Type != cdcpb.Event_INITIALIZED &&
-			!regionspan.KeyInSpan(comparableKey, regionSpan) {
+			!spanz.KeyInSpan(comparableKey, regionSpan) {
 			w.metrics.metricDroppedEventSize.Observe(float64(entry.Size()))
 			continue
 		}
