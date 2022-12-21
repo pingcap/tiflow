@@ -52,8 +52,6 @@ function run() {
 	check_rpc_alive $cur/../bin/check_worker_online 127.0.0.1:$WORKER2_PORT
 	dmctl_operate_source create $WORK_DIR/source2.yaml $SOURCE_ID2
 
-	run_sql_tidb "create database if not exists db_target;"
-	run_sql_tidb "create table db_target.t_target (id bigint auto_increment, uid int, name varchar(80), info varchar(100), c_table varchar(255), c_source varchar(255), primary key (id, c_table, c_source), unique key(uid)) DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_bin;"
 	# start DM task only
 	dmctl_start_task "$cur/conf/dm-task.yaml" "--remove-meta"
 	run_dm_ctl_with_retry $WORK_DIR "127.0.0.1:$MASTER_PORT" \

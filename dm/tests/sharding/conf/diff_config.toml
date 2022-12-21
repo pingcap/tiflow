@@ -4,8 +4,6 @@ check-thread-count = 4
 
 export-fix-sql = true
 
-check-data-only = true
-
 [task]
     output-dir = "/tmp/ticdc_dm_test/output"
 
@@ -34,7 +32,7 @@ target-table = "t_target"
 [table-configs.config1]
 target-tables = ["db_target.t_target"]
 # currently sync_diff does not support json fields well
-ignore-columns = ["info_json", "c_table", "c_source"]
+ignore-columns = ["info_json"]
 index-fields = ["uid"]
 # range-placeholder
 
