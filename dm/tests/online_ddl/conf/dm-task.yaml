@@ -45,12 +45,24 @@ routes:
     table-pattern: gho_t*
     target-schema: online_ddl
     target-table: gho_t_target
+    extract-table:
+      table-regexp: "(.*)"
+      target-column: "c_table"
+    extract-source:
+      source-regexp: "(.*)"
+      target-column: "c_source"
 
   pt-sharding-route-rules-table:
     schema-pattern: online_ddl
     table-pattern: pt_t*
     target-schema: online_ddl
     target-table: pt_t_target
+    extract-table:
+      table-regexp: "(.*)"
+      target-column: "c_table"
+    extract-source:
+      source-regexp: "(.*)"
+      target-column: "c_source"
 
   sharding-route-rules-schema:
     schema-pattern: online_ddl

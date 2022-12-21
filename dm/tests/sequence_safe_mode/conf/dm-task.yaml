@@ -39,6 +39,12 @@ routes:
     table-pattern: t*
     target-schema: sequence_safe_mode_target
     target-table: t_target
+    extract-table:
+      table-regexp: "(.*)"
+      target-column: "c_table"
+    extract-source:
+      source-regexp: "(.*)"
+      target-column: "c_source"
 
   sharding-route-rules-schema:
     schema-pattern: sequence_safe_mode_test
