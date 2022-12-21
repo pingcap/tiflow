@@ -19,6 +19,7 @@ import (
 
 	"github.com/pingcap/errors"
 	timodel "github.com/pingcap/tidb/parser/model"
+	"github.com/pingcap/tiflow/cdc/processor/tablepb"
 	cerror "github.com/pingcap/tiflow/pkg/errors"
 )
 
@@ -236,13 +237,10 @@ func (ts *TaskStatus) Clone() *TaskStatus {
 }
 
 // TableID is the ID of the table
-type TableID = int64
-
-// SchemaID is the ID of the schema
-type SchemaID = int64
+type TableID = tablepb.TableID
 
 // Ts is the timestamp with a logical count
-type Ts = uint64
+type Ts = tablepb.Ts
 
 // ProcessorsInfos maps from capture IDs to TaskStatus
 type ProcessorsInfos map[CaptureID]*TaskStatus
