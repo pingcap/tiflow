@@ -83,11 +83,23 @@ func New(ID model.ChangeFeedID, dbs []*pebble.DB) *EventSorter {
 	}
 
 	for i := range eventSorter.dbs {
+		fetchTokens := make(chan struct{}, 1)
+		ioTokens := make(chan struct{}, 1)
+		fetchTokens <- struct{}{}
+		ioTokens <- struct{}{}
+
+		// Start 2 goroutines for every db instance. When one goroutine is busy on I/O,
+		// the another one can still keep retrieving events.
 		eventSorter.wg.Add(1)
-		go func(x int) {
+		go func(x int, fetchTokens, ioTokens chan struct{}) {
 			defer eventSorter.wg.Done()
-			eventSorter.handleEvents(x, dbs[x], channs[x].Out())
-		}(i)
+			eventSorter.handleEvents(x, dbs[x], channs[x].Out(), fetchTokens, ioTokens)
+		}(i, fetchTokens, ioTokens)
+		eventSorter.wg.Add(1)
+		go func(x int, fetchTokens, ioTokens chan struct{}) {
+			defer eventSorter.wg.Done()
+			eventSorter.handleEvents(x, dbs[x], channs[x].Out(), fetchTokens, ioTokens)
+		}(i, fetchTokens, ioTokens)
 	}
 
 	return eventSorter
@@ -369,7 +381,10 @@ type tableState struct {
 	cleaned engine.Position
 }
 
-func (s *EventSorter) handleEvents(id int, db *pebble.DB, inputCh <-chan eventWithTableID) {
+func (s *EventSorter) handleEvents(
+	id int, db *pebble.DB, inputCh <-chan eventWithTableID,
+	fetchTokens, ioTokens chan struct{},
+) {
 	idstr := strconv.Itoa(id + 1)
 	writeDuration := metrics.SorterWriteDuration().WithLabelValues(idstr)
 	writeBytes := metrics.SorterWriteBytes().WithLabelValues(idstr)
@@ -378,10 +393,10 @@ func (s *EventSorter) handleEvents(id int, db *pebble.DB, inputCh <-chan eventWi
 	writeOpts := &pebble.WriteOptions{Sync: false}
 	newResolved := make(map[model.TableID]model.Ts)
 
-	handleItem := func(item eventWithTableID) bool {
+	handleItem := func(item eventWithTableID) {
 		if item.event.IsResolved() {
 			newResolved[item.tableID] = item.event.CRTs
-			return false
+			return
 		}
 		key := encoding.EncodeKey(s.uniqueID, uint64(item.tableID), item.event)
 		value, err := s.serde.Marshal(item.event, []byte{})
@@ -395,34 +410,52 @@ func (s *EventSorter) handleEvents(id int, db *pebble.DB, inputCh <-chan eventWi
 				zap.String("namespace", s.changefeedID.Namespace),
 				zap.String("changefeed", s.changefeedID.ID))
 		}
-		return batch.Count() >= batchCommitCount || len(batch.Repr()) >= batchCommitSize
 	}
 
 	for {
+		<-fetchTokens
+		startToCollectBatch := time.Now()
 		select {
 		case item := <-inputCh:
-			if handleItem(item) {
-				goto CommitBatch
-			}
+			handleItem(item)
 		case <-s.closed:
 			return
 		}
-		for {
+	LOOP1: // Keep retrieving events until a batch is collected.
+		for len(batch.Repr()) < batchCommitSize && time.Since(startToCollectBatch) < batchCommitInterval {
 			select {
 			case item := <-inputCh:
-				if handleItem(item) {
-					goto CommitBatch
-				}
+				handleItem(item)
 			case <-s.closed:
 				return
 			default:
-				goto CommitBatch
+				break LOOP1
 			}
 		}
-	CommitBatch:
+	LOOP2: // Keep retrieving events until an io token is available.
+		for {
+			if len(batch.Repr()) < batchCommitSize {
+				select {
+				case <-ioTokens:
+					break LOOP2
+				default:
+				}
+				select {
+				case <-ioTokens:
+					break LOOP2
+				case item := <-inputCh:
+					handleItem(item)
+				}
+			} else {
+				<-ioTokens
+				break LOOP2
+			}
+		}
+
+		fetchTokens <- struct{}{}
+		start := time.Now()
 		if batch.Count() > 0 {
 			writeBytes.Observe(float64(len(batch.Repr())))
-			start := time.Now()
 			if err := batch.Commit(writeOpts); err != nil {
 				log.Panic("failed to commit pebble batch", zap.Error(err),
 					zap.String("namespace", s.changefeedID.Namespace),
@@ -451,6 +484,7 @@ func (s *EventSorter) handleEvents(id int, db *pebble.DB, inputCh <-chan eventWi
 			s.mu.RUnlock()
 		}
 		newResolved = make(map[model.TableID]model.Ts)
+		ioTokens <- struct{}{}
 	}
 }
 
@@ -488,8 +522,8 @@ func (s *EventSorter) cleanTable(state *tableState, tableID model.TableID, upper
 
 // ----- Some internal variable and functions -----
 const (
-	batchCommitCount uint32 = 1024
-	batchCommitSize  int    = 16 * 1024 * 1024
+	batchCommitSize     int           = 16 * 1024 * 1024
+	batchCommitInterval time.Duration = 20 * time.Millisecond
 )
 
 var uniqueIDGen uint32 = 0
