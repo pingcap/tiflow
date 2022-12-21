@@ -46,12 +46,6 @@ routes:
     table-pattern: t_*
     target-schema: dmctl
     target-table: t_target
-    extract-table:
-      table-regexp: "(.*)"
-      target-column: "c_table"
-    extract-source:
-      source-regexp: "(.*)"
-      target-column: "c_source"
 
   sharding-route-rules-schema:
     schema-pattern: dmctl

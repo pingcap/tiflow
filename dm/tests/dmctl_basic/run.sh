@@ -278,8 +278,6 @@ function run() {
 	query_status_with_no_tasks
 
 	echo "dmctl_check_task"
-	run_sql_tidb "CREATE DATABASE dmctl;"
-	run_sql_tidb "CREATE TABLE dmctl.t_target(id bigint, b int, c varchar(20), d varchar(10), c_table varchar(255), c_source varchar(255), primary key id(id, c_table, c_source), unique key b(b));"
 	check_task_pass $TASK_CONF
 	check_task_wrong_no_source_meta $cur/conf/dm-task7.yaml
 	check_task_wrong_start_time_format $cur/conf/dm-task3.yaml
@@ -321,8 +319,6 @@ function run() {
 		"stop-task test_incremental_no_source_meta" \
 		"\"result\": true" 3
 	run_sql_tidb "DROP DATABASE if exists dmctl;"
-	run_sql_tidb "CREATE DATABASE dmctl;"
-	run_sql_tidb "CREATE TABLE dmctl.t_target(id bigint, b int, c varchar(20), d varchar(10), c_table varchar(255), c_source varchar(255), primary key id(id, c_table, c_source), unique key b(b));"
 	# start task
 	dmctl_start_task
 	check_sync_diff $WORK_DIR $cur/conf/diff_config.toml
