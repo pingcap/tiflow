@@ -413,7 +413,13 @@ func (s *EventSorter) handleEvents(
 	}
 
 	for {
-		<-fetchTokens
+		// Wait for a fetch token.
+		select {
+		case <-fetchTokens:
+		case <-s.closed:
+			return
+		}
+
 		startToCollectBatch := time.Now()
 		select {
 		case item := <-inputCh:
@@ -438,17 +444,25 @@ func (s *EventSorter) handleEvents(
 				select {
 				case <-ioTokens:
 					break LOOP2
+				case <-s.closed:
+					return
 				default:
 				}
 				select {
 				case <-ioTokens:
 					break LOOP2
+				case <-s.closed:
+					return
 				case item := <-inputCh:
 					handleItem(item)
 				}
 			} else {
-				<-ioTokens
-				break LOOP2
+				select {
+				case <-ioTokens:
+					break LOOP2
+				case <-s.closed:
+					return
+				}
 			}
 		}
 
