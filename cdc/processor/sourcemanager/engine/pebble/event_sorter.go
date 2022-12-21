@@ -467,9 +467,9 @@ func (s *EventSorter) handleEvents(
 		}
 
 		fetchTokens <- struct{}{}
-		start := time.Now()
 		if batch.Count() > 0 {
 			writeBytes.Observe(float64(len(batch.Repr())))
+			start := time.Now()
 			if err := batch.Commit(writeOpts); err != nil {
 				log.Panic("failed to commit pebble batch", zap.Error(err),
 					zap.String("namespace", s.changefeedID.Namespace),
