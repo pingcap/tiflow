@@ -103,7 +103,7 @@ func TestExecutorManagerWatch(t *testing.T) {
 
 	metaClient := mock.NewMockClient(gomock.NewController(t))
 
-	heartbeatTTL := time.Millisecond * 400
+	heartbeatTTL := time.Second
 	checkInterval := time.Millisecond * 50
 	ctx, cancel := context.WithCancel(context.Background())
 	mgr := NewExecutorManagerImpl(metaClient, heartbeatTTL, checkInterval)
