@@ -27,7 +27,7 @@ message Span {
     option(gogoproto.goproto_getters) = false;
 
     int64 table_id = 1 [
-        (gogoproto.casttype) = "github.com/pingcap/tiflow/cdc/model.TableID",
+        (gogoproto.casttype) = "TableID",
         (gogoproto.customname) = "TableID"
     ];
     bytes start_key = 2 [(gogoproto.casttype) = "Key"];
@@ -55,8 +55,8 @@ enum TableState {
 }
 
 message Checkpoint {
-    uint64 checkpoint_ts = 1 [(gogoproto.casttype) = "github.com/pingcap/tiflow/cdc/model.Ts"];
-    uint64 resolved_ts = 2 [(gogoproto.casttype) = "github.com/pingcap/tiflow/cdc/model.Ts"];
+    uint64 checkpoint_ts = 1 [(gogoproto.casttype) = "Ts"];
+    uint64 resolved_ts = 2 [(gogoproto.casttype) = "Ts"];
 }
 
 // Stats holds a statistic for a table.
@@ -64,18 +64,18 @@ message Stats {
     // Number of captured regions.
     uint64 region_count = 1;
     // The current timestamp from the table's point of view.
-    uint64 current_ts = 2 [(gogoproto.casttype) = "github.com/pingcap/tiflow/cdc/model.Ts"];
+    uint64 current_ts = 2 [(gogoproto.casttype) = "Ts"];
     // Checkponits at each stage.
     map<string, Checkpoint> stage_checkpoints = 3 [(gogoproto.nullable) = false];
     // The barrier timestamp of the table.
-    uint64 barrier_ts = 4 [(gogoproto.casttype) = "github.com/pingcap/tiflow/cdc/model.Ts"];
+    uint64 barrier_ts = 4 [(gogoproto.casttype) = "Ts"];
 }
 
 // TableStatus is the running status of a table.
 // TODO rename to TableStatus.
 message TableStatus {
     int64 table_id = 1 [
-        (gogoproto.casttype) = "github.com/pingcap/tiflow/cdc/model.TableID",
+        (gogoproto.casttype) = "TableID",
         (gogoproto.customname) = "TableID"
     ];
     Span span = 5 [(gogoproto.nullable) = false];
