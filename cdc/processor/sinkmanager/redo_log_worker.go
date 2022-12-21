@@ -22,6 +22,7 @@ import (
 	"github.com/pingcap/tiflow/cdc/processor/sourcemanager"
 	"github.com/pingcap/tiflow/cdc/processor/sourcemanager/engine"
 	"github.com/pingcap/tiflow/cdc/redo"
+	"github.com/pingcap/tiflow/pkg/spanz"
 	"go.uber.org/zap"
 )
 
@@ -115,7 +116,8 @@ func (w *redoWorker) handleTask(ctx context.Context, task *redoTask) (finalErr e
 						zap.Uint64("memory", refundMem))
 				}
 			}
-			err := w.redoManager.EmitRowChangedEvents(ctx, task.tableID, releaseMem, rows...)
+			err := w.redoManager.EmitRowChangedEvents(
+				ctx, spanz.TableIDToComparableSpan(task.tableID), releaseMem, rows...)
 			if err != nil {
 				return errors.Trace(err)
 			}
@@ -127,7 +129,8 @@ func (w *redoWorker) handleTask(ctx context.Context, task *redoTask) (finalErr e
 			}
 		}
 		if lastTxnCommitTs > emitedCommitTs {
-			if err := w.redoManager.UpdateResolvedTs(ctx, task.tableID, lastTxnCommitTs); err != nil {
+			if err := w.redoManager.UpdateResolvedTs(
+				ctx, spanz.TableIDToComparableSpan(task.tableID), lastTxnCommitTs); err != nil {
 				return errors.Trace(err)
 			}
 			log.Debug("update resolved ts to redo",
