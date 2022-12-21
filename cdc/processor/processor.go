@@ -1166,6 +1166,7 @@ func (p *processor) createTablePipelineImpl(
 	})
 
 	if p.redoManager.Enabled() {
+		// FIXME: make span-level replication compatible with redo log.
 		p.redoManager.AddTable(span.TableID, replicaInfo.StartTs)
 	}
 
@@ -1191,8 +1192,7 @@ func (p *processor) createTablePipelineImpl(
 			return nil, errors.Trace(err)
 		}
 	} else {
-		s := p.sinkV2Factory.CreateTableSink(
-			p.changefeedID, span.TableID, p.metricsTableSinkTotalRows)
+		s := p.sinkV2Factory.CreateTableSink(p.changefeedID, span, p.metricsTableSinkTotalRows)
 		table, err = pipeline.NewTableActor(
 			ctx,
 			p.upstream,

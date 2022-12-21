@@ -137,6 +137,14 @@
               "to": "",
               "type": 1,
               "value": "5"
+            },
+            {
+              "from": "",
+              "id": 7,
+              "text": "Error",
+              "to": "",
+              "type": 1,
+              "value": "15"
             }
           ],
           "min": 0,
@@ -232,7 +240,7 @@
           "dashes": false,
           "datasource": "${DS_TEST-CLUSTER}",
           "decimals": 1,
-          "description": "The data import process percentage of Dumpling. The value is an estimated value and may exceed less than 100%.",
+          "description": "The data import process percentage of dump unit. The value is an estimated value and may exceed less than 100%.",
           "fieldConfig": {
             "defaults": {},
             "overrides": []
@@ -335,7 +343,7 @@
           "dashLength": 10,
           "dashes": false,
           "datasource": "${DS_TEST-CLUSTER}",
-          "description": "The data import process percentage of Loader. The value range is 0% ~ 100%",
+          "description": "The data import process percentage of load unit. The value range is 0% ~ 100%",
           "fieldConfig": {
             "defaults": {},
             "overrides": []
@@ -380,7 +388,7 @@
           "targets": [
             {
               "exemplar": true,
-              "expr": "dm_loader_progress{job_id=~\"$job_id\",task=~\"$task\",source_id=~\"$source\"}",
+              "expr": "lightning_chunks{job_id=~\"$job_id\",task=~\"$task\",source_id=~\"$source\",state=\"finished\"} / ignoring(state) lightning_chunks{job_id=~\"$job_id\",task=~\"$task\",source_id=~\"$source\",state=\"estimated\"}",
               "format": "time_series",
               "interval": "$interval",
               "intervalFactor": 2,
@@ -437,11 +445,9 @@
           "dashLength": 10,
           "dashes": false,
           "datasource": "${DS_TEST-CLUSTER}",
-          "description": "The predicted remaining time it takes Syncer to be completely synchronized with the master (in seconds)",
+          "description": "The checksum process percentage of load unit. The value range is 0% ~ 100%",
           "fieldConfig": {
-            "defaults": {
-              "unit": "s"
-            },
+            "defaults": {},
             "overrides": []
           },
           "fill": 1,
@@ -486,7 +492,7 @@
           "targets": [
             {
               "exemplar": true,
-              "expr": "sum by (task,source_id) (dm_loader_remaining_time{job_id=~\"$job_id\",task=~\"$task\", source_id=~\"$source\"})",
+              "expr": "lightning_tables{job_id=~\"$job_id\",task=~\"$task\",source_id=~\"$source\",state=\"completed\"} / ignoring(state) lightning_tables{job_id=~\"$job_id\",task=~\"$task\",source_id=~\"$source\",state=\"pending\"}",
               "format": "time_series",
               "interval": "",
               "intervalFactor": 2,
@@ -498,7 +504,7 @@
           "timeFrom": null,
           "timeRegions": [],
           "timeShift": null,
-          "title": "remaining time to loader",
+          "title": "checksum progress",
           "tooltip": {
             "shared": true,
             "sort": 0,
@@ -514,11 +520,11 @@
           },
           "yaxes": [
             {
-              "decimals": 0,
-              "format": "s",
+              "decimals": 1,
+              "format": "percentunit",
               "label": null,
               "logBase": 1,
-              "max": null,
+              "max": "1",
               "min": "0",
               "show": true
             },
@@ -642,7 +648,7 @@
           "dashLength": 10,
           "dashes": false,
           "datasource": "${DS_TEST-CLUSTER}",
-          "description": "Loader encounters an error within the DM-worker and exits",
+          "description": "load unit encounters an error within the DM-worker and exits",
           "fieldConfig": {
             "defaults": {},
             "overrides": []
@@ -741,128 +747,7 @@
           "dashes": false,
           "datasource": "${DS_TEST-CLUSTER}",
           "decimals": 1,
-          "description": "The time it takes loader to execute every statement to the downstream (in seconds)",
-          "fieldConfig": {
-            "defaults": {},
-            "overrides": []
-          },
-          "fill": 1,
-          "fillGradient": 0,
-          "gridPos": {
-            "h": 7,
-            "w": 8,
-            "x": 16,
-            "y": 15
-          },
-          "hiddenSeries": false,
-          "id": 34,
-          "legend": {
-            "alignAsTable": true,
-            "avg": false,
-            "current": true,
-            "max": true,
-            "min": true,
-            "rightSide": false,
-            "show": true,
-            "total": false,
-            "values": true
-          },
-          "lines": true,
-          "linewidth": 1,
-          "links": [],
-          "nullPointMode": "null",
-          "options": {
-            "alertThreshold": true
-          },
-          "percentage": false,
-          "pluginVersion": "7.5.7",
-          "pointradius": 5,
-          "points": false,
-          "renderer": "flot",
-          "seriesOverrides": [],
-          "spaceLength": 10,
-          "stack": false,
-          "steppedLine": false,
-          "targets": [
-            {
-              "expr": "histogram_quantile(0.90, sum(rate(dm_loader_stmt_duration_time_bucket{job_id=~\"$job_id\",task=~\"$task\", type=\"begin\", instance=~\"$instance\"}[1m])) by (le))",
-              "format": "time_series",
-              "intervalFactor": 2,
-              "legendFormat": "begin",
-              "refId": "A"
-            },
-            {
-              "expr": "histogram_quantile(0.90, sum(rate(dm_loader_stmt_duration_time_bucket{job_id=~\"$job_id\",task=~\"$task\", type=\"stmt\", instance=~\"$instance\"}[1m])) by (le))",
-              "format": "time_series",
-              "intervalFactor": 2,
-              "legendFormat": "stmt",
-              "refId": "B"
-            },
-            {
-              "expr": "histogram_quantile(0.90, sum(rate(dm_loader_stmt_duration_time_bucket{job_id=~\"$job_id\",task=~\"$task\", type=\"commit\", instance=~\"$instance\"}[1m])) by (le))",
-              "format": "time_series",
-              "intervalFactor": 2,
-              "legendFormat": "commit",
-              "refId": "C"
-            },
-            {
-              "expr": "histogram_quantile(0.90, sum(rate(dm_loader_stmt_duration_time_bucket{job_id=~\"$job_id\",task=~\"$task\", type=\"rollback\", instance=~\"$instance\"}[1m])) by (le))",
-              "format": "time_series",
-              "intervalFactor": 2,
-              "legendFormat": "rollback",
-              "refId": "D"
-            }
-          ],
-          "thresholds": [],
-          "timeFrom": null,
-          "timeRegions": [],
-          "timeShift": null,
-          "title": "statement execution latency - 90",
-          "tooltip": {
-            "shared": true,
-            "sort": 0,
-            "value_type": "individual"
-          },
-          "type": "graph",
-          "xaxis": {
-            "buckets": null,
-            "mode": "time",
-            "name": null,
-            "show": true,
-            "values": []
-          },
-          "yaxes": [
-            {
-              "decimals": 1,
-              "format": "s",
-              "label": null,
-              "logBase": 1,
-              "max": null,
-              "min": 0,
-              "show": true
-            },
-            {
-              "format": "short",
-              "label": null,
-              "logBase": 1,
-              "max": null,
-              "min": null,
-              "show": false
-            }
-          ],
-          "yaxis": {
-            "align": false,
-            "alignLevel": null
-          }
-        },
-        {
-          "aliasColors": {},
-          "bars": false,
-          "dashLength": 10,
-          "dashes": false,
-          "datasource": "${DS_TEST-CLUSTER}",
-          "decimals": 1,
-          "description": "number of sql executed per second",
+          "description": "idle load unit workers",
           "fieldConfig": {
             "defaults": {},
             "overrides": []
@@ -908,12 +793,10 @@
           "steppedLine": false,
           "targets": [
             {
-              "exemplar": true,
-              "expr": "sum(rate(dm_loader_txn_duration_time_count{job_id=~\"$job_id\",task=~\"$task\", source_id=~\"$source\"}[1m])) by (le,worker,task,target_schema,target_table)",
+              "expr": "lightning_idle_workers{job_id=~\"$job_id\",task=~\"$task\",source_id=~\"$source\"}",
               "format": "time_series",
-              "interval": "",
               "intervalFactor": 2,
-              "legendFormat": "{{worker}}-{{task}}-{{target_schema}}-{{target_table}}",
+              "legendFormat": "{{name}} - {{task}} - {{source_id}}",
               "refId": "A"
             }
           ],
@@ -921,7 +804,7 @@
           "timeFrom": null,
           "timeRegions": [],
           "timeShift": null,
-          "title": "transaction execution QPS",
+          "title": "Idle workers",
           "tooltip": {
             "shared": true,
             "sort": 0,
@@ -937,12 +820,12 @@
           },
           "yaxes": [
             {
-              "decimals": 1,
-              "format": "short",
+              "decimals": 0,
+              "format": "none",
               "label": null,
               "logBase": 1,
               "max": null,
-              "min": 0,
+              "min": "0",
               "show": true
             },
             {
@@ -951,13 +834,9 @@
               "logBase": 1,
               "max": null,
               "min": null,
-              "show": false
+              "show": true
             }
-          ],
-          "yaxis": {
-            "align": false,
-            "alignLevel": null
-          }
+          ]
         },
         {
           "aliasColors": {},
@@ -965,7 +844,7 @@
           "dashLength": 10,
           "dashes": false,
           "datasource": "${DS_TEST-CLUSTER}",
-          "description": "The duration that Loader executes a transaction (in seconds)",
+          "description": "The duration that load unit process a chunk (in seconds)",
           "fieldConfig": {
             "defaults": {},
             "overrides": []
@@ -1010,33 +889,19 @@
           "targets": [
             {
               "exemplar": true,
-              "expr": "histogram_quantile(0.90, sum(rate(dm_loader_txn_duration_time_bucket{job_id=~\"$job_id\",task=~\"$task\", source_id=~\"$source\"}[1m])) by (le))",
+              "expr": "1/rate(lightning_chunks{job_id=~\"$job_id\",task=~\"$task\", source_id=~\"$source\",state=\"finished\"}[1m])",
               "format": "time_series",
               "interval": "",
               "intervalFactor": 2,
-              "legendFormat": "90",
+              "legendFormat": "{{task}} - {{source_id}}",
               "refId": "A"
-            },
-            {
-              "expr": "histogram_quantile(0.95, sum(rate(dm_loader_txn_duration_time_bucket{job_id=~\"$job_id\",task=~\"$task\", source_id=~\"$source\"}[1m])) by (le))",
-              "format": "time_series",
-              "intervalFactor": 2,
-              "legendFormat": "95",
-              "refId": "B"
-            },
-            {
-              "expr": "histogram_quantile(0.99, sum(rate(dm_loader_txn_duration_time_bucket{job_id=~\"$job_id\",task=~\"$task\", source_id=~\"$source\"}[1m])) by (le))",
-              "format": "time_series",
-              "intervalFactor": 2,
-              "legendFormat": "99",
-              "refId": "C"
             }
           ],
           "thresholds": [],
           "timeFrom": null,
           "timeRegions": [],
           "timeShift": null,
-          "title": "transaction execution latency",
+          "title": "Chunk process duration",
           "tooltip": {
             "shared": true,
             "sort": 0,
@@ -1081,7 +946,7 @@
           "dashLength": 10,
           "dashes": false,
           "datasource": "${DS_TEST-CLUSTER}",
-          "description": "The total number of tables in the full data imported by Loader",
+          "description": "The number of external resources used by load unit",
           "fieldConfig": {
             "defaults": {},
             "overrides": []
@@ -1090,7 +955,7 @@
           "fillGradient": 0,
           "gridPos": {
             "h": 7,
-            "w": 8,
+            "w": 12,
             "x": 0,
             "y": 29
           },
@@ -1123,19 +988,25 @@
           "steppedLine": false,
           "targets": [
             {
-              "expr": "dm_loader_table_gauge{job_id=~\"$job_id\",task=~\"$task\",source_id=~\"$source\"}",
+              "expr": "lightning_kv_encoder{job_id=~\"$job_id\",task=~\"$task\",source_id=~\"$source\", type=\"open\"} - ignoring(type) lightning_kv_encoder{job_id=~\"$job_id\",task=~\"$task\",source_id=~\"$source\", type=\"closed\"}",
               "format": "time_series",
-              "interval": "$interval",
               "intervalFactor": 2,
-              "legendFormat": "{{task}} - {{source_id}}",
+              "legendFormat": "KV Encoder",
               "refId": "A"
+            },
+            {
+              "expr": "lightning_importer_engine{job_id=~\"$job_id\",task=~\"$task\",source_id=~\"$source\", type=\"open\"} - ignoring(type) lightning_importer_engine{job_id=~\"$job_id\",task=~\"$task\",source_id=~\"$source\", type=\"closed\"}",
+              "format": "time_series",
+              "intervalFactor": 2,
+              "legendFormat": "Importer Engines (via Lightning)",
+              "refId": "B"
             }
           ],
           "thresholds": [],
           "timeFrom": null,
           "timeRegions": [],
           "timeShift": null,
-          "title": "table count",
+          "title": "External resources",
           "tooltip": {
             "shared": true,
             "sort": 0,
@@ -1152,8 +1023,8 @@
           "yaxes": [
             {
               "decimals": 0,
-              "format": "short",
-              "label": "",
+              "format": "none",
+              "label": null,
               "logBase": 1,
               "max": null,
               "min": "0",
@@ -1167,11 +1038,7 @@
               "min": null,
               "show": true
             }
-          ],
-          "yaxis": {
-            "align": false,
-            "alignLevel": null
-          }
+          ]
         },
         {
           "aliasColors": {},
@@ -1180,7 +1047,7 @@
           "dashLength": 10,
           "dashes": false,
           "datasource": "${DS_TEST-CLUSTER}",
-          "description": "The total number of data files in the full data imported by Loader (including the `INSERT INTO` statement)",
+          "description": "The statistic of bytes in different status of data files processed by load unit",
           "fieldConfig": {
             "defaults": {},
             "overrides": []
@@ -1190,8 +1057,8 @@
           "gridPos": {
             "h": 7,
             "w": 8,
-            "x": 8,
-            "y": 29
+            "x": 16,
+            "y": 15
           },
           "hiddenSeries": false,
           "id": 17,
@@ -1222,19 +1089,25 @@
           "steppedLine": false,
           "targets": [
             {
-              "expr": "dm_loader_data_file_gauge{job_id=~\"$job_id\",task=~\"$task\",source_id=~\"$source\"}",
+              "expr": "lightning_row_read_bytes_sum{job_id=~\"$job_id\",task=~\"$task\",source_id=~\"$source\"}",
               "format": "time_series",
-              "interval": "$interval",
               "intervalFactor": 2,
-              "legendFormat": "{{task}} - {{source_id}}",
+              "legendFormat": "parser read size - {{task}} - {{source_id}}",
               "refId": "A"
+            },
+            {
+              "expr": "lightning_block_deliver_bytes_sum{job_id=~\"$job_id\",task=~\"$task\",source_id=~\"$source\"}",
+              "format": "time_series",
+              "intervalFactor": 2,
+              "legendFormat": "{{kind}} deliver size - {{task}} - {{source_id}}",
+              "refId": "B"
             }
           ],
           "thresholds": [],
           "timeFrom": null,
           "timeRegions": [],
           "timeShift": null,
-          "title": "data file count",
+          "title": "Total bytes for load unit",
           "tooltip": {
             "shared": true,
             "sort": 0,
@@ -1250,12 +1123,11 @@
           },
           "yaxes": [
             {
-              "decimals": 0,
-              "format": "short",
+              "format": "decbytes",
               "label": null,
               "logBase": 1,
               "max": null,
-              "min": "0",
+              "min": null,
               "show": true
             },
             {
@@ -1266,11 +1138,7 @@
               "min": null,
               "show": true
             }
-          ],
-          "yaxis": {
-            "align": false,
-            "alignLevel": null
-          }
+          ]
         },
         {
           "aliasColors": {},
@@ -1279,7 +1147,7 @@
           "dashLength": 10,
           "dashes": false,
           "datasource": "${DS_TEST-CLUSTER}",
-          "description": "The total size of the data files in the full data imported by Loader (including the `INSERT INTO` statement)",
+          "description": "The speed of load unit processing source files internally",
           "fieldConfig": {
             "defaults": {},
             "overrides": []
@@ -1288,8 +1156,8 @@
           "fillGradient": 0,
           "gridPos": {
             "h": 7,
-            "w": 8,
-            "x": 16,
+            "w": 12,
+            "x": 12,
             "y": 29
           },
           "hiddenSeries": false,
@@ -1321,23 +1189,22 @@
           "steppedLine": false,
           "targets": [
             {
-              "expr": "dm_loader_data_size_gauge{job_id=~\"$job_id\",task=~\"$task\",source_id=~\"$source\"}",
+              "expr": "rate(lightning_block_deliver_bytes_sum{job_id=~\"$job_id\",task=~\"$task\",source_id=~\"$source\"}[30s])",
               "format": "time_series",
               "intervalFactor": 2,
-              "legendFormat": "{{task}} - {{source_id}}",
+              "legendFormat": "{{kind}} deliver rate {{task}} - {{source_id}}",
+              "refId": "B"
+            },
+            {
+              "exemplar": true,
+              "expr": "sum(rate(lightning_block_deliver_bytes_sum{job_id=~\"$job_id\",task=~\"$task\",source_id=~\"$source\"}[30s]))",
+              "format": "time_series",
+              "intervalFactor": 2,
+              "legendFormat": "total deliver rate {{task}} - {{source_id}}",
               "refId": "A"
             }
           ],
-          "thresholds": [],
-          "timeFrom": null,
-          "timeRegions": [],
-          "timeShift": null,
-          "title": "data file size",
-          "tooltip": {
-            "shared": true,
-            "sort": 0,
-            "value_type": "individual"
-          },
+          "title": "SQL process rate",
           "type": "graph",
           "xaxis": {
             "buckets": null,
@@ -1348,12 +1215,11 @@
           },
           "yaxes": [
             {
-              "decimals": 1,
-              "format": "bytes",
+              "format": "Bps",
               "label": null,
               "logBase": 1,
               "max": null,
-              "min": "0",
+              "min": null,
               "show": true
             },
             {
@@ -1364,11 +1230,7 @@
               "min": null,
               "show": true
             }
-          ],
-          "yaxis": {
-            "align": false,
-            "alignLevel": null
-          }
+          ]
         }
       ],
       "repeat": null,

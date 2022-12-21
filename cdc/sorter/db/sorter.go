@@ -22,6 +22,7 @@ import (
 	"github.com/pingcap/errors"
 	"github.com/pingcap/log"
 	"github.com/pingcap/tiflow/cdc/model"
+	"github.com/pingcap/tiflow/cdc/processor/tablepb"
 	"github.com/pingcap/tiflow/cdc/sorter"
 	"github.com/pingcap/tiflow/cdc/sorter/db/message"
 	"github.com/pingcap/tiflow/cdc/sorter/encoding"
@@ -50,7 +51,7 @@ type common struct {
 	dbRouter  *actor.Router[message.Task]
 
 	uid      uint32
-	tableID  uint64
+	span     tablepb.Span
 	serde    *encoding.MsgPackGenSerde
 	errCh    chan error
 	closedWg *sync.WaitGroup
@@ -60,7 +61,7 @@ type common struct {
 func (c *common) reportError(msg string, err error) {
 	if errors.Cause(err) != context.Canceled {
 		log.L().WithOptions(zap.AddCallerSkip(1)).
-			Warn(msg, zap.Uint64("tableID", c.tableID), zap.Error(err))
+			Warn(msg, zap.Stringer("span", &c.span), zap.Error(err))
 	}
 	select {
 	case c.errCh <- err:
@@ -87,7 +88,7 @@ type Sorter struct {
 
 // NewSorter creates a new Sorter
 func NewSorter(
-	ctx context.Context, changefeedID model.ChangeFeedID, tableID int64, startTs uint64,
+	ctx context.Context, changefeedID model.ChangeFeedID, span tablepb.Span, startTs uint64,
 	dbRouter *actor.Router[message.Task], dbActorID actor.ID,
 	writerSystem *actor.System[message.Task], writerRouter *actor.Router[message.Task],
 	readerSystem *actor.System[message.Task], readerRouter *actor.Router[message.Task],
@@ -114,7 +115,7 @@ func NewSorter(
 		dbActorID: dbActorID,
 		dbRouter:  dbRouter,
 		uid:       uid,
-		tableID:   uint64(tableID),
+		span:      span,
 		serde:     &encoding.MsgPackGenSerde{},
 		errCh:     make(chan error, 1),
 		closedWg:  &sync.WaitGroup{},
@@ -141,10 +142,9 @@ func NewSorter(
 		state: pollState{
 			outputBuf: newOutputBuffer(batchReceiveEventSize),
 
-			maxCommitTs:         uint64(0),
-			maxResolvedTs:       uint64(0),
-			exhaustedResolvedTs: uint64(0),
-			startTs:             uint64(0),
+			maxCommitTs:   uint64(0),
+			maxResolvedTs: uint64(0),
+			startTs:       uint64(0),
 
 			readerID:     actorID,
 			readerRouter: readerRouter,
@@ -220,7 +220,7 @@ func (ls *Sorter) AddEntry(ctx context.Context, event *model.PolymorphicEvent) {
 	}
 	msg := actormsg.ValueMessage(message.Task{
 		UID:        ls.uid,
-		TableID:    ls.tableID,
+		Span:       &ls.span,
 		InputEvent: event,
 	})
 	_ = ls.writerRouter.SendB(ctx, ls.writerActorID, msg)
@@ -230,9 +230,9 @@ func (ls *Sorter) AddEntry(ctx context.Context, event *model.PolymorphicEvent) {
 func (ls *Sorter) Output() <-chan *model.PolymorphicEvent {
 	// Notify reader to read sorted events
 	msg := actormsg.ValueMessage(message.Task{
-		UID:     ls.uid,
-		TableID: ls.tableID,
-		ReadTs:  message.ReadTs{},
+		UID:    ls.uid,
+		Span:   &ls.span,
+		ReadTs: message.ReadTs{},
 	})
 	// It's ok to ignore error, as reader is either channel full or stopped.
 	// If it's channel full, it has been notified by others, and caller will
@@ -246,13 +246,13 @@ func (ls *Sorter) Output() <-chan *model.PolymorphicEvent {
 
 // cleanup cleans up sorter's data.
 func (ls *Sorter) cleanup(ctx context.Context) error {
-	task := message.Task{UID: ls.uid, TableID: ls.tableID}
+	task := message.Task{UID: ls.uid, Span: &ls.span}
 	task.DeleteReq = &message.DeleteRequest{
 		// We do not set task.Delete.Count, because we don't know
 		// how many key-value pairs in the range.
 		Range: [2][]byte{
-			encoding.EncodeTsKey(ls.uid, ls.tableID, 0),
-			encoding.EncodeTsKey(ls.uid, ls.tableID+1, 0),
+			encoding.EncodeTsKey(ls.uid, uint64(ls.span.TableID), 0),
+			encoding.EncodeTsKey(ls.uid, uint64(ls.span.TableID)+1, 0),
 		},
 	}
 	return ls.dbRouter.SendB(ctx, ls.dbActorID, actormsg.ValueMessage(task))
@@ -262,7 +262,7 @@ func (ls *Sorter) cleanup(ctx context.Context) error {
 func (ls *Sorter) EmitStartTs(ctx context.Context, ts uint64) {
 	msg := actormsg.ValueMessage(message.Task{
 		UID:     ls.uid,
-		TableID: ls.tableID,
+		Span:    &ls.span,
 		StartTs: ts,
 	})
 	_ = ls.readerRouter.SendB(ctx, ls.ReaderActorID, msg)

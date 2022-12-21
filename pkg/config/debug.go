@@ -15,6 +15,7 @@ package config
 
 import (
 	"github.com/pingcap/errors"
+	cerror "github.com/pingcap/tiflow/pkg/errors"
 	cerrors "github.com/pingcap/tiflow/pkg/errors"
 )
 
@@ -60,6 +61,16 @@ func (c *DebugConfig) ValidateAndAdjust() error {
 	}
 	if err := c.Scheduler.ValidateAndAdjust(); err != nil {
 		return errors.Trace(err)
+	}
+	if c.Scheduler.RegionPerSpan != 0 {
+		if c.EnablePullBasedSink || !c.EnableNewSink {
+			// TODO: Removing this check once pull based sink is compatible with
+			//       span replication.
+			return cerror.ErrInvalidServerOption.GenWithStackByArgs(
+				"enabling span replication requires setting " +
+					"`debug.enable-new-sink` to be true and " +
+					"`debug.enable-pull-based-sink` to be false")
+		}
 	}
 	if c.EnablePullBasedSink {
 		if !c.EnableDBSorter {

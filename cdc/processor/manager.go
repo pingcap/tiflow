@@ -154,7 +154,6 @@ func (m *managerImpl) Tick(stdCtx context.Context, state orchestrator.ReactorSta
 		}
 	}
 
-	// close upstream
 	if err := m.upstreamManager.Tick(stdCtx, globalState); err != nil {
 		return state, errors.Trace(err)
 	}

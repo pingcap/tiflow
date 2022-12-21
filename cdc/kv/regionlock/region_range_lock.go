@@ -11,7 +11,7 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-package regionspan
+package regionlock
 
 import (
 	"bytes"
@@ -24,6 +24,7 @@ import (
 
 	"github.com/google/btree"
 	"github.com/pingcap/log"
+	"github.com/pingcap/tiflow/cdc/processor/tablepb"
 	"go.uber.org/zap"
 )
 
@@ -44,23 +45,23 @@ func rangeTsEntryLess(a, b *rangeTsEntry) bool {
 	return bytes.Compare(a.startKey, b.startKey) < 0
 }
 
-// RangeTsMap represents a map from key range to a timestamp. It supports range set and calculating min value among a
-// a specified range.
-type RangeTsMap struct {
+// rangeTsMap represents a map from key range to a timestamp. It supports
+// range set and calculating min value among a specified range.
+type rangeTsMap struct {
 	m *btree.BTreeG[*rangeTsEntry]
 }
 
-// NewRangeTsMap creates a RangeTsMap.
-func NewRangeTsMap(startKey, endKey []byte, startTs uint64) *RangeTsMap {
-	m := &RangeTsMap{
-		m: btree.NewG[*rangeTsEntry](16, rangeTsEntryLess),
+// newRangeTsMap creates a RangeTsMap.
+func newRangeTsMap(startKey, endKey []byte, startTs uint64) *rangeTsMap {
+	m := &rangeTsMap{
+		m: btree.NewG(16, rangeTsEntryLess),
 	}
 	m.Set(startKey, endKey, startTs)
 	return m
 }
 
 // Set sets the corresponding ts of the given range to the specified value.
-func (m *RangeTsMap) Set(startKey, endKey []byte, ts uint64) {
+func (m *rangeTsMap) Set(startKey, endKey []byte, ts uint64) {
 	if _, ok := m.m.Get(rangeTsEntryWithKey(endKey)); !ok {
 		// To calculate the minimal ts, the default value is math.MaxUint64
 		tailTs := uint64(math.MaxUint64)
@@ -92,7 +93,7 @@ func (m *RangeTsMap) Set(startKey, endKey []byte, ts uint64) {
 }
 
 // GetMin gets the min ts value among the given range. endKey must be greater than startKey.
-func (m *RangeTsMap) GetMin(startKey, endKey []byte) uint64 {
+func (m *rangeTsMap) GetMin(startKey, endKey []byte) uint64 {
 	var ts uint64 = math.MaxUint64
 	m.m.DescendLessOrEqual(rangeTsEntryWithKey(startKey), func(i *rangeTsEntry) bool {
 		ts = i.ts
@@ -149,7 +150,7 @@ func allocID() uint64 {
 type RegionRangeLock struct {
 	changefeedLogInfo string
 	mu                sync.Mutex
-	rangeCheckpointTs *RangeTsMap
+	rangeCheckpointTs *rangeTsMap
 	rangeLock         *btree.BTreeG[*rangeLockEntry]
 	regionIDLock      map[uint64]*rangeLockEntry
 	// ID to identify different RegionRangeLock instances, so logs of different instances can be distinguished.
@@ -162,8 +163,8 @@ func NewRegionRangeLock(
 ) *RegionRangeLock {
 	return &RegionRangeLock{
 		changefeedLogInfo: changefeedLogInfo,
-		rangeCheckpointTs: NewRangeTsMap(startKey, endKey, startTs),
-		rangeLock:         btree.NewG[*rangeLockEntry](16, rangeLockEntryLess),
+		rangeCheckpointTs: newRangeTsMap(startKey, endKey, startTs),
+		rangeLock:         btree.NewG(16, rangeLockEntryLess),
 		regionIDLock:      make(map[uint64]*rangeLockEntry),
 		id:                allocID(),
 	}
@@ -250,7 +251,7 @@ func (l *RegionRangeLock) tryLockRange(startKey, endKey []byte, regionID, versio
 		}
 	}
 	if isStale {
-		retryRanges := make([]ComparableSpan, 0)
+		retryRanges := make([]tablepb.Span, 0)
 		currentRangeStartKey := startKey
 
 		log.Info("try lock range staled",
@@ -269,12 +270,14 @@ func (l *RegionRangeLock) tryLockRange(startKey, endKey []byte, regionID, versio
 			// The rest should come from range searching and is sorted in increasing order, and they
 			// must intersect with the current given range.
 			if bytes.Compare(currentRangeStartKey, r.startKey) < 0 {
-				retryRanges = append(retryRanges, ComparableSpan{Start: currentRangeStartKey, End: r.startKey})
+				retryRanges = append(retryRanges,
+					tablepb.Span{StartKey: currentRangeStartKey, EndKey: r.startKey})
 			}
 			currentRangeStartKey = r.endKey
 		}
 		if bytes.Compare(currentRangeStartKey, endKey) < 0 {
-			retryRanges = append(retryRanges, ComparableSpan{Start: currentRangeStartKey, End: endKey})
+			retryRanges = append(retryRanges,
+				tablepb.Span{StartKey: currentRangeStartKey, EndKey: endKey})
 		}
 
 		return LockRangeResult{
@@ -417,5 +420,5 @@ type LockRangeResult struct {
 	Status       int
 	CheckpointTs uint64
 	WaitFn       func() LockRangeResult
-	RetryRanges  []ComparableSpan
+	RetryRanges  []tablepb.Span
 }
