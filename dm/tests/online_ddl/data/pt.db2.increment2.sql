@@ -1,8 +1,8 @@
 use online_ddl;
 insert into pt_t3 (uid, name, info) values (30004, 'name of 30004', '{"age": 30004}');
 insert into pt_t2 (uid, name, info) values (50002, 'name of 50002', '{"age": 50002}');
-alter table pt_t3 add column address varchar(255);
-alter table pt_t2 add column address varchar(255);
+alter table pt_t3 add column address varchar(255) after name;
+alter table pt_t2 add column address varchar(255) after name;
 alter table pt_t2 add key address (address);
 alter table pt_t3 add key address (address);
 insert into pt_t2 (uid, name, info, address) values (50003, 'name of 50003', '{"age": 50003}', 'address of 50003');

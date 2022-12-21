@@ -1,8 +1,8 @@
 use online_ddl;
 insert into gho_t1 (uid, name, info) values (10006, 'name of 10006', '{"age": 10006}');
 insert into gho_t2 (uid, name, info) values (20008, 'name of 20008', '{"age": 20008}');
-alter table gho_t1 add column address varchar(255);
-alter table gho_t2 add column address varchar(255);
+alter table gho_t1 add column address varchar(255) after name;
+alter table gho_t2 add column address varchar(255) after name;
 alter table gho_t1 add key address (address);
 alter table gho_t2 add key address (address);
 insert into gho_t2 (uid, name, info, address) values (20009, 'name of 20009', '{"age": 20009}', 'address of 20009');
