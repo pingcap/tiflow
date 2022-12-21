@@ -258,13 +258,13 @@ func (c *AgentImpl) FetchTableStmt(ctx context.Context, jobID string, cfg *confi
 		return "", errors.Errorf("table info not found %v", sourceTable)
 	}
 	if err := json.Unmarshal(tiBytes, &ti); err != nil {
-		return "", err
+		return "", errors.Trace(err)
 	}
 
 	result := bytes.NewBuffer(make([]byte, 0, 512))
 	err = executor.ConstructResultOfShowCreateTable(mock.NewContext(), ti, autoid.Allocators{}, result)
 	if err != nil {
-		return "", err
+		return "", errors.Trace(err)
 	}
 	return conn.CreateTableSQLToOneRow(result.String()), nil
 }

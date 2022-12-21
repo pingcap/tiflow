@@ -344,7 +344,7 @@ func (jm *JobMaster) StopImpl(ctx context.Context) {
 	if err := jm.removeCheckpoint(ctx); err != nil {
 		jm.Logger().Error("failed to remove checkpoint", zap.Error(err))
 	}
-	if err := jm.ddlCoordinator.Clear(ctx); err != nil {
+	if err := jm.ddlCoordinator.ClearMetadata(ctx); err != nil {
 		jm.Logger().Error("failed to clear ddl metadata", zap.Error(err))
 	}
 	if err := jm.taskManager.OperateTask(ctx, dmpkg.Delete, nil, nil); err != nil {
