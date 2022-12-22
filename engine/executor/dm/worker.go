@@ -376,6 +376,7 @@ func (w *dmWorker) discardResource4Syncer(ctx context.Context) {
 		return
 	}
 
+	w.Logger().Info("discard storage", zap.String("task-id", w.taskID), zap.String("path", w.storageWriteHandle.ID()))
 	if err := w.storageWriteHandle.Discard(ctx); err != nil {
 		w.Logger().Error("failed to discard storage", zap.Error(err))
 		return

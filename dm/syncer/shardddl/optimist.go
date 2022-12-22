@@ -14,13 +14,18 @@
 package shardddl
 
 import (
+	"bytes"
 	"context"
 	"sync"
 	"time"
 
+	"github.com/pingcap/tidb/executor"
+	"github.com/pingcap/tidb/meta/autoid"
 	"github.com/pingcap/tidb/parser/model"
+	"github.com/pingcap/tidb/util/mock"
 	"github.com/pingcap/tidb/util/schemacmp"
 	filter "github.com/pingcap/tidb/util/table-filter"
+	"github.com/pingcap/tiflow/dm/pkg/conn"
 	tcontext "github.com/pingcap/tiflow/dm/pkg/context"
 	"github.com/pingcap/tiflow/dm/pkg/etcdutil"
 	"github.com/pingcap/tiflow/dm/pkg/log"
@@ -400,9 +405,17 @@ func (o *OptimistEngine) ConstructInfo(upSchema, upTable, downSchema, downTable 
 
 func (o *OptimistEngine) PutInfo(info optimism.Info) (int64, error) {
 	tables := make([]string, 0, len(info.TableInfosAfter)+1)
-	tables = append(tables, schemacmp.Encode(info.TableInfoBefore).String())
+	buf := bytes.NewBuffer(make([]byte, 0, 512))
+	if err := executor.ConstructResultOfShowCreateTable(mock.NewContext(), info.TableInfoBefore, autoid.Allocators{}, buf); err != nil {
+		return 0, err
+	}
+	tables = append(tables, conn.CreateTableSQLToOneRow(buf.String()))
 	for _, ti := range info.TableInfosAfter {
-		tables = append(tables, schemacmp.Encode(ti).String())
+		buf.Reset()
+		if err := executor.ConstructResultOfShowCreateTable(mock.NewContext(), ti, autoid.Allocators{}, buf); err != nil {
+			return 0, err
+		}
+		tables = append(tables, conn.CreateTableSQLToOneRow(buf.String()))
 	}
 	req := &dmproto.CoordinateDDLRequest{
 		TargetTable: metadata.TargetTable{Schema: info.DownSchema, Table: info.DownTable},

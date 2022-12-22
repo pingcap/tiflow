@@ -19,12 +19,12 @@ function run() {
 	# prepare full data
 	run_sql --port 3306 "drop database if exists dm_shardddl;"
 	run_sql --port 3307 "drop database if exists dm_shardddl;"
-	run_sql --port 3306 "create database dm_shardddl character set utf8;"
-	run_sql --port 3307 "create database dm_shardddl character set utf8;"
-	run_sql --port 3306 "create table dm_shardddl.t1 (id int, name varchar(20), primary key(id)) character set utf8;"
-	run_sql --port 3306 "create table dm_shardddl.t2 (id int, name varchar(20), primary key(id)) character set utf8;"
-	run_sql --port 3307 "create table dm_shardddl.t1 (id int, name varchar(20), primary key(id)) character set utf8;"
-	run_sql --port 3307 "create table dm_shardddl.t2 (id int, name varchar(20), primary key(id)) character set utf8;"
+	run_sql --port 3306 "create database dm_shardddl character set utf8mb4 collate utf8mb4_bin;"
+	run_sql --port 3307 "create database dm_shardddl character set utf8mb4 collate utf8mb4_bin;"
+	run_sql --port 3306 "create table dm_shardddl.t1 (id int, name varchar(20), primary key(id)) character set utf8mb4 collate utf8mb4_bin;"
+	run_sql --port 3306 "create table dm_shardddl.t2 (id int, name varchar(20), primary key(id)) character set utf8mb4 collate utf8mb4_bin;"
+	run_sql --port 3307 "create table dm_shardddl.t1 (id int, name varchar(20), primary key(id)) character set utf8mb4 collate utf8mb4_bin;"
+	run_sql --port 3307 "create table dm_shardddl.t2 (id int, name varchar(20), primary key(id)) character set utf8mb4 collate utf8mb4_bin;"
 	run_sql --port 3306 "insert into dm_shardddl.t1 values(1,'aaa');"
 	run_sql --port 3306 "insert into dm_shardddl.t2 values(2,'bbb');"
 	run_sql --port 3307 "insert into dm_shardddl.t1 values(3,'ccc');"
@@ -47,8 +47,8 @@ function run() {
 	run_sql --port 3306 "alter table dm_shardddl.t1 add column new_col1 int;"
 	run_sql --port 3306 "alter table dm_shardddl.t2 add column new_col1 int;"
 	run_sql --port 3307 "alter table dm_shardddl.t1 add column new_col1 int;"
-	exec_with_retry --count 30 "curl http://127.0.0.1:10245/api/v1/jobs/$job_id/ddl_locks | tee /dev/stderr | grep -c 'CREATE TABLE \`tbl\`(\`id\` INT(11) NOT NULL, \`name\` VARCHAR(20) CHARACTER SET UTF8 COLLATE utf8_bin, \`new_col1\` INT(11), PRIMARY KEY (\`id\`)) CHARSET UTF8 COLLATE UTF8_BIN' | grep 3"
-	exec_with_retry --count 30 "curl http://127.0.0.1:10245/api/v1/jobs/$job_id/ddl_locks | tee /dev/stderr | grep -c 'CREATE TABLE \`tbl\`(\`id\` INT(11) NOT NULL, \`name\` VARCHAR(20) CHARACTER SET UTF8 COLLATE utf8_bin, PRIMARY KEY (\`id\`)) CHARSET UTF8 COLLATE UTF8_BIN' | grep 1"
+	exec_with_retry --count 30 "curl http://127.0.0.1:10245/api/v1/jobs/$job_id/ddl_locks | tee /dev/stderr | grep -c 'CREATE TABLE \`t.\` ( \`id\` int(11) NOT NULL, \`name\` varchar(20) DEFAULT NULL, \`new_col1\` int(11) DEFAULT NULL, PRIMARY KEY (\`id\`)' | grep 3"
+	exec_with_retry --count 30 "curl http://127.0.0.1:10245/api/v1/jobs/$job_id/ddl_locks | tee /dev/stderr | grep -c 'CREATE TABLE \`t.\` ( \`id\` int(11) NOT NULL, \`name\` varchar(20) DEFAULT NULL, PRIMARY KEY (\`id\`)' | grep 1"
 	run_sql --port 3307 "alter table dm_shardddl.t2 add column new_col1 int;"
 	exec_with_retry --count 30 "curl http://127.0.0.1:10245/api/v1/jobs/$job_id/ddl_locks | tee /dev/stderr | jq -e '.Locks | keys | length == 0'"
 
@@ -62,8 +62,8 @@ function run() {
 	# drop column
 	run_sql --port 3306 "alter table dm_shardddl.t1 drop column new_col1;"
 	run_sql --port 3306 "alter table dm_shardddl.t2 drop column new_col1;"
-	exec_with_retry --count 30 "curl http://127.0.0.1:10245/api/v1/jobs/$job_id/ddl_locks | tee /dev/stderr | grep -c 'CREATE TABLE \`tbl\`(\`id\` INT(11) NOT NULL, \`name\` VARCHAR(20) CHARACTER SET UTF8 COLLATE utf8_bin, \`new_col1\` INT(11), PRIMARY KEY (\`id\`)) CHARSET UTF8 COLLATE UTF8_BIN' | grep 2"
-	exec_with_retry --count 30 "curl http://127.0.0.1:10245/api/v1/jobs/$job_id/ddl_locks | tee /dev/stderr | grep -c 'CREATE TABLE \`tbl\`(\`id\` INT(11) NOT NULL, \`name\` VARCHAR(20) CHARACTER SET UTF8 COLLATE utf8_bin, PRIMARY KEY (\`id\`)) CHARSET UTF8 COLLATE UTF8_BIN' | grep 2"
+	exec_with_retry --count 30 "curl http://127.0.0.1:10245/api/v1/jobs/$job_id/ddl_locks | tee /dev/stderr | grep -c 'CREATE TABLE \`t.\` ( \`id\` int(11) NOT NULL, \`name\` varchar(20) DEFAULT NULL, \`new_col1\` int(11) DEFAULT NULL, PRIMARY KEY (\`id\`)' | grep 2"
+	exec_with_retry --count 30 "curl http://127.0.0.1:10245/api/v1/jobs/$job_id/ddl_locks | tee /dev/stderr | grep -c 'CREATE TABLE \`t.\` ( \`id\` int(11) NOT NULL, \`name\` varchar(20) DEFAULT NULL, PRIMARY KEY (\`id\`)' | grep 2"
 	run_sql --port 3307 "alter table dm_shardddl.t1 drop column new_col1;"
 	run_sql --port 3307 "alter table dm_shardddl.t2 drop column new_col1;"
 	run_sql --port 3306 "insert into dm_shardddl.t1 values(13,'mmm');"
@@ -77,8 +77,8 @@ function run() {
 	# rename column
 	run_sql --port 3306 "alter table dm_shardddl.t1 change column name new_name varchar(20);"
 	run_sql --port 3306 "alter table dm_shardddl.t2 change column name new_name varchar(20);"
-	exec_with_retry --count 30 "curl http://127.0.0.1:10245/api/v1/jobs/$job_id/ddl_locks | tee /dev/stderr | grep -c 'CREATE TABLE \`tbl\`(\`id\` INT(11) NOT NULL, \`name\` VARCHAR(20) CHARACTER SET UTF8 COLLATE utf8_bin, PRIMARY KEY (\`id\`)) CHARSET UTF8 COLLATE UTF8_BIN' | grep 4"
-	exec_with_retry --count 30 "curl http://127.0.0.1:10245/api/v1/jobs/$job_id/ddl_locks | tee /dev/stderr | grep -c 'CREATE TABLE \`tbl\`(\`id\` INT(11) NOT NULL, \`new_name\` VARCHAR(20) CHARACTER SET UTF8 COLLATE utf8_bin, PRIMARY KEY (\`id\`)) CHARSET UTF8 COLLATE UTF8_BIN' | grep 2"
+	exec_with_retry --count 30 "curl http://127.0.0.1:10245/api/v1/jobs/$job_id/ddl_locks | tee /dev/stderr | grep -c 'CREATE TABLE \`t.\` ( \`id\` int(11) NOT NULL, \`name\` varchar(20) DEFAULT NULL, PRIMARY KEY (\`id\`)' | grep 4"
+	exec_with_retry --count 30 "curl http://127.0.0.1:10245/api/v1/jobs/$job_id/ddl_locks | tee /dev/stderr | grep -c 'CREATE TABLE \`t.\` ( \`id\` int(11) NOT NULL, \`new_name\` varchar(20) DEFAULT NULL, PRIMARY KEY (\`id\`)' | grep 2"
 	run_sql --port 3307 "alter table dm_shardddl.t1 change column name new_name varchar(20);"
 	run_sql --port 3307 "alter table dm_shardddl.t2 change column name new_name varchar(20);"
 
@@ -119,8 +119,8 @@ function run() {
 
 	# drop one table
 	run_sql --port 3307 "drop table dm_shardddl.new_t2;"
-	exec_with_retry --count 30 "curl http://127.0.0.1:10245/api/v1/jobs/$job_id/ddl_locks | tee /dev/stderr | grep -c 'CREATE TABLE \`tbl\`(\`id\` INT(11) NOT NULL, PRIMARY KEY (\`id\`)) CHARSET UTF8 COLLATE UTF8_BIN' | grep 2"
-	exec_with_retry --count 30 "curl http://127.0.0.1:10245/api/v1/jobs/$job_id/ddl_locks | tee /dev/stderr | grep -c 'CREATE TABLE \`tbl\`(\`id\` INT(11) NOT NULL, \`name\` VARCHAR(20) CHARACTER SET UTF8 COLLATE utf8_bin, PRIMARY KEY (\`id\`)) CHARSET UTF8 COLLATE UTF8_BIN' | grep 1"
+	exec_with_retry --count 30 "curl http://127.0.0.1:10245/api/v1/jobs/$job_id/ddl_locks | tee /dev/stderr | grep -c 'CREATE TABLE \`new_t.\` ( \`id\` int(11) NOT NULL, PRIMARY KEY (\`id\`)' | grep 2"
+	exec_with_retry --count 30 "curl http://127.0.0.1:10245/api/v1/jobs/$job_id/ddl_locks | tee /dev/stderr | grep -c 'CREATE TABLE \`new_t.\` ( \`id\` int(11) NOT NULL, \`name\` varchar(20) DEFAULT NULL, PRIMARY KEY (\`id\`)' | grep 1"
 	# drop column(name) of remain table
 	run_sql --port 3307 "alter table dm_shardddl.new_t1 drop column name;"
 	run_sql --port 3307 "insert into dm_shardddl.new_t1 values(9);"

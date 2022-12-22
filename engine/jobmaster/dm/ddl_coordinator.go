@@ -287,6 +287,9 @@ func (c *DDLCoordinator) ShowDDLLocks(ctx context.Context) ShowDDLLocksResponse 
 	defer c.mu.Unlock()
 	ddlLocks := make(map[metadata.TargetTable]DDLLock)
 	for targetTable, g := range c.shardGroups {
+		if g.allShardTablesSame() {
+			continue
+		}
 		tbs := g.showTables()
 		ddlLocks[targetTable] = DDLLock{ShardTables: tbs}
 	}
@@ -332,6 +335,7 @@ type shardGroup struct {
 	id                  frameModel.MasterID
 	cfg                 *config.JobCfg
 	deleted             bool
+	inRedirect          bool
 	messageAgent        message.MessageAgent
 	logger              *zap.Logger
 }
@@ -367,7 +371,13 @@ func newShardGroup(ctx context.Context, id frameModel.MasterID, cfg *config.JobC
 
 func (g *shardGroup) handle(ctx context.Context, item *metadata.DDLItem) ([]string, optimism.ConflictStage, error) {
 	// nolint:errcheck
-	g.gcDroppedColumns(ctx)
+	if err := g.gcDroppedColumns(ctx); err != nil {
+		g.logger.Error("failed to gc dropped columns", zap.Error(err))
+	}
+	// nolint:errcheck
+	if err := g.gcInRedirect(ctx); err != nil {
+		g.logger.Error("failed to gc in-redirect shard group", zap.Error(err))
+	}
 
 	var (
 		ddls          []string
@@ -805,18 +815,35 @@ OutLoop:
 	return nil
 }
 
-// isResoved means all tables in the group are resolved.
-// 1. no conflict ddls waiting
-// 2. all dropped column has done
-// 3. all shard tables stmts are same.
-func (g *shardGroup) isResolved(ctx context.Context) bool {
+func (g *shardGroup) gcInRedirect(ctx context.Context) error {
+	if !g.inRedirect {
+		return nil
+	}
+
+	// if any table alreay finish redirect(checkpoint==normaltable)
+	// we can mark the inRedirect to false
+	for sourceTable, stmt := range g.normalTables {
+		tbStmt, err := g.tableAgent.FetchTableStmt(ctx, g.id, g.cfg, sourceTable)
+		if err != nil {
+			if strings.HasPrefix(err.Error(), "table info not found") {
+				continue
+			}
+			return err
+		}
+		lhs := genCmpTable(stmt)
+		rhs := genCmpTable(tbStmt)
+		if cmp, err := lhs.Compare(rhs); err != nil && cmp == 0 {
+			g.inRedirect = false
+			return nil
+		}
+	}
+	return nil
+}
+
+func (g *shardGroup) allShardTablesSame() bool {
 	if len(g.conflictTables) != 0 {
 		return false
 	}
-	if _, err := g.droppedColumnsStore.Get(ctx); errors.Cause(err) != metadata.ErrStateNotFound {
-		return false
-	}
-
 	var (
 		prevTable schemacmp.Table
 		first     = true
@@ -837,6 +864,25 @@ func (g *shardGroup) isResolved(ctx context.Context) bool {
 		prevTable = currTable
 	}
 	return true
+}
+
+// isResoved means all tables in the group are resolved.
+// 1. no conflict ddls waiting
+// 2. all dropped column has done
+// 3. all shard tables stmts are same.
+// 4. non in-redirect
+func (g *shardGroup) isResolved(ctx context.Context) bool {
+	if len(g.conflictTables) != 0 {
+		return false
+	}
+	if g.inRedirect {
+		return false
+	}
+	if _, err := g.droppedColumnsStore.Get(ctx); errors.Cause(err) != metadata.ErrStateNotFound {
+		return false
+	}
+
+	return g.allShardTablesSame()
 }
 
 func (g *shardGroup) clear(ctx context.Context) error {
@@ -879,6 +925,7 @@ func (g *shardGroup) redirectDDLs(ctx context.Context, sourceTable metadata.Sour
 			return errors.New(errMsg)
 		}
 	}
+	g.inRedirect = true
 	return nil
 }
 
