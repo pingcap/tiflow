@@ -105,6 +105,9 @@ func newTableSinkWrapper(
 		startTs:    startTs,
 		targetTs:   targetTs,
 	}
+	// This start ts maybe greater than the initial start ts of the table sink.
+	// Because in two phase scheduling, the table sink may be advanced to a later ts.
+	// And we can just continue to replicate the table sink from the new start ts.
 	res.checkpointTs.Store(startTs)
 	return res
 }
@@ -127,10 +130,7 @@ func (t *tableSinkWrapper) start(startTs model.Ts, replicateTs model.Ts) {
 		zap.Uint64("startTs", startTs),
 		zap.Uint64("replicateTs", replicateTs),
 	)
-	// This start ts maybe greater than the initial start ts of the table sink.
-	// Because in two phase scheduling, the table sink may be advanced to a later ts.
-	// And we can just continue to replicate the table sink from the new start ts.
-	t.checkpointTs.Store(startTs)
+
 	t.replicateTs = replicateTs
 	t.state.Store(tablepb.TableStateReplicating)
 }
