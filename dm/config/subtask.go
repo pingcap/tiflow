@@ -21,6 +21,7 @@ import (
 	"encoding/json"
 	"flag"
 	"fmt"
+	"net/url"
 	"regexp"
 	"strconv"
 	"strings"
@@ -181,6 +182,11 @@ type SubTaskConfig struct {
 	// key to let MySQL driver to find the right TCPConnWithIOCounter.
 	UUID         string         `toml:"-" json:"-"`
 	IOTotalBytes *atomic.Uint64 `toml:"-" json:"-"`
+
+	// meter network usage from upstream
+	// e.g., pulling binlog
+	DumpUUID         string         `toml:"-" json:"-"`
+	DumpIOTotalBytes *atomic.Uint64 `toml:"-" json:"-"`
 }
 
 // SampleSubtaskConfig is the content of subtask.toml in current folder.
@@ -335,6 +341,13 @@ func (c *SubTaskConfig) Adjust(verifyDecryptPassword bool) error {
 			return terror.ErrConfigLoaderDirInvalid.Delegate(err, c.LoaderConfig.Dir)
 		}
 		c.LoaderConfig.Dir = newDir
+
+		if storage.IsLocalDiskPath(newDir) {
+			// lightning will not recursively create directories, so we use same level dir
+			c.LoaderConfig.SortingDirPhysical = newDir + ".sorting"
+		} else {
+			c.LoaderConfig.SortingDirPhysical = "./sorting." + url.PathEscape(c.Name)
+		}
 	}
 
 	if c.SyncerConfig.QueueSize == 0 {

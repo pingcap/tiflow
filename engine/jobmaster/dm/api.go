@@ -97,6 +97,12 @@ func (jm *JobMaster) QueryJobStatus(ctx context.Context, tasks []string) (*JobSt
 		existUnitState bool
 	)
 
+	// need to get unit state here, so we calculate duration
+	state, err := jm.metadata.UnitStateStore().Get(ctx)
+	if err != nil && errors.Cause(err) != metadata.ErrStateNotFound {
+		return nil, err
+	}
+	unitState, existUnitState = state.(*metadata.UnitState)
 	for _, task := range tasks {
 		taskID := task
 		wg.Add(1)
@@ -152,7 +158,7 @@ func (jm *JobMaster) QueryJobStatus(ctx context.Context, tasks []string) (*JobSt
 
 	// should be done after we get current task-status, since some unit status might be missing if
 	// current unit finish between we get finished unit status and get current task-status
-	state, err := jm.metadata.UnitStateStore().Get(ctx)
+	state, err = jm.metadata.UnitStateStore().Get(ctx)
 	if err != nil && errors.Cause(err) != metadata.ErrStateNotFound {
 		return nil, err
 	}

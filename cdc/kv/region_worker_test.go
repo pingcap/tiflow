@@ -23,7 +23,7 @@ import (
 	"github.com/pingcap/kvproto/pkg/cdcpb"
 	"github.com/pingcap/tiflow/cdc/model"
 	"github.com/pingcap/tiflow/pkg/config"
-	"github.com/pingcap/tiflow/pkg/regionspan"
+	"github.com/pingcap/tiflow/pkg/spanz"
 	"github.com/stretchr/testify/require"
 	"github.com/tikv/client-go/v2/tikv"
 )
@@ -147,10 +147,9 @@ func TestRegionWokerHandleEventEntryEventOutOfOrder(t *testing.T) {
 	eventCh := make(chan model.RegionFeedEvent, 2)
 	s := createFakeEventFeedSession(ctx)
 	s.eventCh = eventCh
-	span := regionspan.Span{Start: []byte{}, End: regionspan.UpperBoundKey}
 	state := newRegionFeedState(newSingleRegionInfo(
 		tikv.RegionVerID{},
-		regionspan.ToComparableSpan(span),
+		spanz.ToSpan([]byte{}, spanz.UpperBoundKey),
 		0, &tikv.RPCContext{}), 0)
 	state.start()
 	worker := newRegionWorker(model.ChangeFeedID{}, s, "")

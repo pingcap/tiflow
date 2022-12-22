@@ -116,7 +116,7 @@ func (jm *JobMaster) initComponents() error {
 	jm.metadata = metadata.NewMetaData(jm.MetaKVClient(), jm.Logger())
 	jm.messageAgent = message.NewMessageAgent(jm.ID(), jm, jm.messageHandlerManager, jm.Logger())
 	jm.checkpointAgent = checkpoint.NewCheckpointAgent(jm.ID(), jm.Logger())
-	jm.taskManager = NewTaskManager(taskStatus, jm.metadata.JobStore(), jm.messageAgent, jm.Logger(), jm.MetricFactory())
+	jm.taskManager = NewTaskManager(jm.ID(), taskStatus, jm.metadata.JobStore(), jm.messageAgent, jm.Logger(), jm.MetricFactory())
 	jm.workerManager = NewWorkerManager(jm.ID(), workerStatus, jm.metadata.JobStore(), jm.metadata.UnitStateStore(),
 		jm, jm.messageAgent, jm.checkpointAgent, jm.Logger(), jm.IsS3StorageEnabled())
 	jm.ddlCoordinator = NewDDLCoordinator(jm.ID(), jm.MetaKVClient(), jm.checkpointAgent, jm.metadata.JobStore(), jm.Logger(), jm.messageAgent)
@@ -353,7 +353,7 @@ func (jm *JobMaster) StopImpl(ctx context.Context) {
 	if err := jm.removeCheckpoint(ctx); err != nil {
 		jm.Logger().Error("failed to remove checkpoint", zap.Error(err))
 	}
-	if err := jm.ddlCoordinator.Clear(ctx); err != nil {
+	if err := jm.ddlCoordinator.ClearMetadata(ctx); err != nil {
 		jm.Logger().Error("failed to clear ddl metadata", zap.Error(err))
 	}
 	if err := jm.taskManager.OperateTask(ctx, dmproto.Delete, nil, nil); err != nil {

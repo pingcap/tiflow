@@ -7,7 +7,6 @@ source $cur/../_utils/test_prepare
 WORK_DIR=$TEST_DIR/$TEST_NAME
 
 function run() {
-	run_sql_tidb "set @@global.tidb_enable_foreign_key=1;"
 	run_sql_tidb "set @@global.foreign_key_checks=1;"
 	run_sql_file $cur/data/db1.prepare.sql $MYSQL_HOST1 $MYSQL_PORT1 $MYSQL_PASSWORD1
 	# start DM worker and master
@@ -29,6 +28,19 @@ function run() {
 
 	# use sync_diff_inspector to check full dump loader
 	check_sync_diff $WORK_DIR $cur/conf/diff_config.toml
+
+	run_sql_file $cur/data/db1.increment.sql $MYSQL_HOST1 $MYSQL_PORT1 $MYSQL_PASSWORD1
+
+	run_dm_ctl_with_retry $WORK_DIR "127.0.0.1:$MASTER_PORT" \
+		"query-status test" \
+		"\"result\": true" 2 \
+		"\"unit\": \"Sync\"" 1 \
+		"\"stage\": \"Running\"" 2
+
+	# check upstream and downstream data are inconsistent
+	run_sql_source1 "select count(1) from foreign_key.t2"
+	check_contains "count(1): 4"
+	run_sql_tidb_with_retry "select count(2) from foreign_key.t2" "count(2): 5"
 }
 
 cleanup_data foreign_key

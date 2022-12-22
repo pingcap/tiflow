@@ -307,5 +307,5 @@ func TestFetchTableStmt(t *testing.T) {
 	mockDB.ExpectQuery(regexp.QuoteMeta("SELECT table_info FROM `meta`.`job_id_syncer_checkpoint` WHERE id = ? AND cp_schema = ? AND cp_table = ?")).WithArgs(source, database, table).WillReturnRows(sqlmock.NewRows([]string{"table_info"}).AddRow(bs))
 	tbStmt, err := agent.FetchTableStmt(context.Background(), "job_id", &config.JobCfg{MetaSchema: "meta"}, metadata.SourceTable{Source: source, Schema: database, Table: table})
 	require.NoError(t, err)
-	require.Equal(t, "CREATE TABLE `tbl`(`id` INT(11)) CHARSET LATIN1 COLLATE LATIN1_BIN", tbStmt)
+	require.Equal(t, "CREATE TABLE `table` ( `id` int(11) DEFAULT NULL) ENGINE=InnoDB DEFAULT CHARSET=latin1 COLLATE=latin1_bin", tbStmt)
 }

@@ -23,6 +23,7 @@ import (
 	"github.com/pingcap/errors"
 	"github.com/pingcap/log"
 	"github.com/pingcap/tidb/util/memory"
+	"github.com/pingcap/tiflow/cdc/processor/tablepb"
 	dbsorter "github.com/pingcap/tiflow/cdc/sorter/db"
 	"github.com/pingcap/tiflow/cdc/sorter/db/message"
 	"github.com/pingcap/tiflow/pkg/actor"
@@ -102,11 +103,13 @@ func NewSystem(dir string, memPercentage float64, cfg *config.DBConfig) *System 
 }
 
 // DBActorID returns an DBActorID correspond with tableID.
-func (s *System) DBActorID(tableID uint64) actor.ID {
+func (s *System) DBActorID(span tablepb.Span) actor.ID {
 	h := fnv.New64()
 	b := [8]byte{}
-	binary.LittleEndian.PutUint64(b[:], tableID)
+	binary.LittleEndian.PutUint64(b[:], uint64(span.TableID))
 	h.Write(b[:])
+	h.Write(span.StartKey)
+	h.Write(span.EndKey)
 	return actor.ID(h.Sum64() % uint64(s.cfg.Count))
 }
 

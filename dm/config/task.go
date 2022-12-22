@@ -282,9 +282,8 @@ type LoaderConfig struct {
 	SQLMode            string   `yaml:"-" toml:"-" json:"-"` // wrote by dump unit (DM op) or jobmaster (DM in engine)
 	ImportMode         LoadMode `yaml:"import-mode" toml:"import-mode" json:"import-mode"`
 	// deprecated, use OnDuplicateLogical instead.
-	OnDuplicate        LogicalDuplicateResolveType `yaml:"on-duplicate" toml:"on-duplicate" json:"on-duplicate"`
-	OnDuplicateLogical LogicalDuplicateResolveType `yaml:"on-duplicate-logical" toml:"on-duplicate-logical" json:"on-duplicate-logical"`
-	// TODO: OnDuplicatePhysical has no effects now
+	OnDuplicate         LogicalDuplicateResolveType  `yaml:"on-duplicate" toml:"on-duplicate" json:"on-duplicate"`
+	OnDuplicateLogical  LogicalDuplicateResolveType  `yaml:"on-duplicate-logical" toml:"on-duplicate-logical" json:"on-duplicate-logical"`
 	OnDuplicatePhysical PhysicalDuplicateResolveType `yaml:"on-duplicate-physical" toml:"on-duplicate-physical" json:"on-duplicate-physical"`
 	DiskQuotaPhysical   config.ByteSize              `yaml:"disk-quota-physical" toml:"disk-quota-physical" json:"disk-quota-physical"`
 }
@@ -328,10 +327,6 @@ func (m *LoaderConfig) adjust() error {
 
 	if m.PoolSize == 0 {
 		m.PoolSize = defaultPoolSize
-	}
-
-	if m.Dir != "" && m.SortingDirPhysical == "" {
-		m.SortingDirPhysical = m.Dir
 	}
 
 	if m.OnDuplicateLogical == "" && m.OnDuplicate != "" {

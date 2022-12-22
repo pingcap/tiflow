@@ -70,7 +70,7 @@ func (t *testOptimist) TestOptimist(c *C) {
 		ID                    = fmt.Sprintf("%s-`%s`.`%s`", task, downSchema, downTable)
 
 		logger = log.L()
-		o      = NewOptimist(&logger, etcdTestCli, nil, task, source,"")
+		o      = NewOptimist(&logger, etcdTestCli, nil, task, source, "")
 
 		p              = parser.New()
 		se             = mock.NewContext()

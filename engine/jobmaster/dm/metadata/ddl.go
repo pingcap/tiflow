@@ -74,9 +74,10 @@ const (
 type DDLItem struct {
 	TargetTable TargetTable
 	SourceTable SourceTable
-	Tables      []string
-	DDLs        []string
-	Type        DDLType
+	// Tables is the table stmts in order before and after the DDL executed
+	Tables []string
+	DDLs   []string
+	Type   DDLType
 }
 
 // DroppedColumns represents the state of dropped columns

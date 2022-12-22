@@ -62,7 +62,6 @@ type MiddlewareFunc func(c *gin.Context)
 
 // DMAPIDeleteBinlogOperator operation middleware
 func (siw *ServerInterfaceWrapper) DMAPIDeleteBinlogOperator(c *gin.Context) {
-
 	var err error
 
 	// ------------- Path parameter "task-name" -------------
@@ -79,7 +78,6 @@ func (siw *ServerInterfaceWrapper) DMAPIDeleteBinlogOperator(c *gin.Context) {
 
 	// ------------- Optional query parameter "binlog_pos" -------------
 	if paramValue := c.Query("binlog_pos"); paramValue != "" {
-
 	}
 
 	err = runtime.BindQueryParameter("form", true, false, "binlog_pos", c.Request.URL.Query(), &params.BinlogPos)
@@ -97,7 +95,6 @@ func (siw *ServerInterfaceWrapper) DMAPIDeleteBinlogOperator(c *gin.Context) {
 
 // DMAPIGetBinlogOperator operation middleware
 func (siw *ServerInterfaceWrapper) DMAPIGetBinlogOperator(c *gin.Context) {
-
 	var err error
 
 	// ------------- Path parameter "task-name" -------------
@@ -114,7 +111,6 @@ func (siw *ServerInterfaceWrapper) DMAPIGetBinlogOperator(c *gin.Context) {
 
 	// ------------- Optional query parameter "binlog_pos" -------------
 	if paramValue := c.Query("binlog_pos"); paramValue != "" {
-
 	}
 
 	err = runtime.BindQueryParameter("form", true, false, "binlog_pos", c.Request.URL.Query(), &params.BinlogPos)
@@ -132,7 +128,6 @@ func (siw *ServerInterfaceWrapper) DMAPIGetBinlogOperator(c *gin.Context) {
 
 // DMAPISetBinlogOperator operation middleware
 func (siw *ServerInterfaceWrapper) DMAPISetBinlogOperator(c *gin.Context) {
-
 	var err error
 
 	// ------------- Path parameter "task-name" -------------
@@ -153,7 +148,6 @@ func (siw *ServerInterfaceWrapper) DMAPISetBinlogOperator(c *gin.Context) {
 
 // DMAPIGetJobConfig operation middleware
 func (siw *ServerInterfaceWrapper) DMAPIGetJobConfig(c *gin.Context) {
-
 	for _, middleware := range siw.HandlerMiddlewares {
 		middleware(c)
 	}
@@ -163,7 +157,6 @@ func (siw *ServerInterfaceWrapper) DMAPIGetJobConfig(c *gin.Context) {
 
 // DMAPIUpdateJobConfig operation middleware
 func (siw *ServerInterfaceWrapper) DMAPIUpdateJobConfig(c *gin.Context) {
-
 	for _, middleware := range siw.HandlerMiddlewares {
 		middleware(c)
 	}
@@ -173,7 +166,6 @@ func (siw *ServerInterfaceWrapper) DMAPIUpdateJobConfig(c *gin.Context) {
 
 // DMAPIGetDDLLocks operation middleware
 func (siw *ServerInterfaceWrapper) DMAPIGetDDLLocks(c *gin.Context) {
-
 	for _, middleware := range siw.HandlerMiddlewares {
 		middleware(c)
 	}
@@ -183,7 +175,6 @@ func (siw *ServerInterfaceWrapper) DMAPIGetDDLLocks(c *gin.Context) {
 
 // DMAPIGetSchema operation middleware
 func (siw *ServerInterfaceWrapper) DMAPIGetSchema(c *gin.Context) {
-
 	var err error
 
 	// ------------- Path parameter "task-name" -------------
@@ -200,7 +191,6 @@ func (siw *ServerInterfaceWrapper) DMAPIGetSchema(c *gin.Context) {
 
 	// ------------- Optional query parameter "database" -------------
 	if paramValue := c.Query("database"); paramValue != "" {
-
 	}
 
 	err = runtime.BindQueryParameter("form", true, false, "database", c.Request.URL.Query(), &params.Database)
@@ -211,7 +201,6 @@ func (siw *ServerInterfaceWrapper) DMAPIGetSchema(c *gin.Context) {
 
 	// ------------- Optional query parameter "table" -------------
 	if paramValue := c.Query("table"); paramValue != "" {
-
 	}
 
 	err = runtime.BindQueryParameter("form", true, false, "table", c.Request.URL.Query(), &params.Table)
@@ -222,7 +211,6 @@ func (siw *ServerInterfaceWrapper) DMAPIGetSchema(c *gin.Context) {
 
 	// ------------- Optional query parameter "target" -------------
 	if paramValue := c.Query("target"); paramValue != "" {
-
 	}
 
 	err = runtime.BindQueryParameter("form", true, false, "target", c.Request.URL.Query(), &params.Target)
@@ -240,7 +228,6 @@ func (siw *ServerInterfaceWrapper) DMAPIGetSchema(c *gin.Context) {
 
 // DMAPISetSchema operation middleware
 func (siw *ServerInterfaceWrapper) DMAPISetSchema(c *gin.Context) {
-
 	var err error
 
 	// ------------- Path parameter "task-name" -------------
@@ -261,7 +248,6 @@ func (siw *ServerInterfaceWrapper) DMAPISetSchema(c *gin.Context) {
 
 // DMAPIGetJobStatus operation middleware
 func (siw *ServerInterfaceWrapper) DMAPIGetJobStatus(c *gin.Context) {
-
 	var err error
 
 	// Parameter object where we will unmarshal all parameters from the context
@@ -269,7 +255,6 @@ func (siw *ServerInterfaceWrapper) DMAPIGetJobStatus(c *gin.Context) {
 
 	// ------------- Optional query parameter "tasks" -------------
 	if paramValue := c.Query("tasks"); paramValue != "" {
-
 	}
 
 	err = runtime.BindQueryParameter("form", true, false, "tasks", c.Request.URL.Query(), &params.Tasks)
@@ -287,7 +272,6 @@ func (siw *ServerInterfaceWrapper) DMAPIGetJobStatus(c *gin.Context) {
 
 // DMAPIOperateJob operation middleware
 func (siw *ServerInterfaceWrapper) DMAPIOperateJob(c *gin.Context) {
-
 	for _, middleware := range siw.HandlerMiddlewares {
 		middleware(c)
 	}
@@ -338,7 +322,6 @@ func RegisterHandlersWithOptions(router *gin.Engine, si ServerInterface, options
 
 // Base64 encoded, gzipped, json marshaled Swagger object
 var swaggerSpec = []string{
-
 	"H4sIAAAAAAAC/+RYTW/jNhP+K8S871G7dtvtRbduUxRb7KJFg6KHhRFQ0khmQpE0Pw6Gof9ekJRky6YV",
 	"G6i7QXJJZHI4n88MH2kHpWyVFCisgXwHplxjS8PjL1pL/Tez6y9oDG3Qr1VoSs2UZVJADlKhpv6ZoJeF",
 	"DJT2a5Zh0FDKKnEqyJKwl4HdKoQcmLDYoIYugwotZTycZxbb8NBLGauZaLxQv0C1plv/uz3nYjQ2bGfH",
@@ -389,7 +372,7 @@ func decodeSpecCached() func() ([]byte, error) {
 
 // Constructs a synthetic filesystem for resolving external references when loading openapi specifications.
 func PathToRawSpec(pathToFile string) map[string]func() ([]byte, error) {
-	var res = make(map[string]func() ([]byte, error))
+	res := make(map[string]func() ([]byte, error))
 	if len(pathToFile) > 0 {
 		res[pathToFile] = rawSpec
 	}
@@ -403,12 +386,12 @@ func PathToRawSpec(pathToFile string) map[string]func() ([]byte, error) {
 // Externally referenced files must be embedded in the corresponding golang packages.
 // Urls can be supported but this task was out of the scope.
 func GetSwagger() (swagger *openapi3.T, err error) {
-	var resolvePath = PathToRawSpec("")
+	resolvePath := PathToRawSpec("")
 
 	loader := openapi3.NewLoader()
 	loader.IsExternalRefsAllowed = true
 	loader.ReadFromURIFunc = func(loader *openapi3.Loader, url *url.URL) ([]byte, error) {
-		var pathToFile = url.String()
+		pathToFile := url.String()
 		pathToFile = path.Clean(pathToFile)
 		getSpec, ok := resolvePath[pathToFile]
 		if !ok {

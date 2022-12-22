@@ -19,11 +19,10 @@ import (
 	"sync"
 
 	"github.com/pingcap/tidb/ddl"
+	"github.com/pingcap/tidb/parser"
 	"github.com/pingcap/tidb/parser/ast"
 	"github.com/pingcap/tidb/parser/model"
-	"github.com/pingcap/tidb/parser/mysql"
 	"github.com/pingcap/tidb/util/schemacmp"
-	"github.com/pingcap/tiflow/dm/pkg/conn"
 	"github.com/pingcap/tiflow/dm/pkg/log"
 	"github.com/pingcap/tiflow/dm/pkg/shardddl/optimism"
 	frameModel "github.com/pingcap/tiflow/engine/framework/model"
@@ -34,6 +33,7 @@ import (
 	metaModel "github.com/pingcap/tiflow/engine/pkg/meta/model"
 	"github.com/pingcap/tiflow/pkg/errors"
 	"go.uber.org/zap"
+	"golang.org/x/exp/slices"
 )
 
 // Workflow:
@@ -129,8 +129,11 @@ import (
 type tableType int
 
 const (
+	// normal represents the type of shardGroup.normalTables.
 	normal tableType = iota
+	// conflict represents the type of shardGroup.conflictTables.
 	conflict
+	// final represents the type of shardGroup.conflictTables if exist else shardGroup.normalTables.
 	final
 )
 
@@ -169,8 +172,8 @@ func NewDDLCoordinator(jobID string, kvClient metaModel.KVClient, tableAgent Tab
 	}
 }
 
-// Clear clears metadata.
-func (c *DDLCoordinator) Clear(ctx context.Context) error {
+// ClearMetadata clears metadata.
+func (c *DDLCoordinator) ClearMetadata(ctx context.Context) error {
 	c.mu.Lock()
 	defer c.mu.Unlock()
 	// wait all pending ddls coordinated.
@@ -179,7 +182,7 @@ func (c *DDLCoordinator) Clear(ctx context.Context) error {
 	return metadata.DelAllDroppedColumns(ctx, c.kvClient)
 }
 
-// Reset resets the shard group.
+// Reset resets the ddl coordinator.
 func (c *DDLCoordinator) Reset(ctx context.Context) error {
 	c.mu.Lock()
 	defer c.mu.Unlock()
@@ -194,7 +197,7 @@ func (c *DDLCoordinator) Reset(ctx context.Context) error {
 		c.logger.Info("non-shard-mode, skip reset")
 		return nil
 	}
-	c.logger.Info("reset shard group")
+	c.logger.Info("reset ddl coordinator")
 
 	// fetch all tables which need to be coordinated.
 	tables, err := c.tableAgent.FetchAllDoTables(ctx, jobCfg)
@@ -227,42 +230,55 @@ func (c *DDLCoordinator) Coordinate(ctx context.Context, item *metadata.DDLItem)
 		return nil, optimism.ConflictError, errors.New("coordinate error with non-shard-mode")
 	}
 
-	// create shard group if not exists.
-	g, err := c.loadOrCreateShardGroup(ctx, item.TargetTable, jobCfg)
-	if err != nil {
-		return nil, optimism.ConflictError, err
-	}
+	for {
+		// create shard group if not exists.
+		g, err := c.loadOrCreateShardGroup(ctx, item.TargetTable, jobCfg)
+		if err != nil {
+			return nil, optimism.ConflictError, err
+		}
 
-	ddls, conflictStage, deleted, err := g.handle(ctx, item)
-	if err != nil {
+		// each group only processes one item at a time
+		g.mu.Lock()
+		// if the group is deleted by another DDLItem, we should recreate it.
+		if g.deleted {
+			g.mu.Unlock()
+			continue
+		}
+		ddls, conflictStage, err := g.handle(ctx, item)
+		if err != nil {
+			g.mu.Unlock()
+			return ddls, conflictStage, err
+		}
+
+		g.deleted = g.isResolved(ctx)
+		// if all source table is deleted or the shard group is resolved, we should remove the shard group.
+		if g.deleted {
+			c.removeShardGroup(ctx, item.TargetTable)
+		}
+
+		// handle table level ddl
+		switch item.Type {
+		case metadata.CreateTable:
+			c.mu.Lock()
+			tables, ok := c.tables[item.TargetTable]
+			if !ok {
+				c.tables[item.TargetTable] = make(map[metadata.SourceTable]struct{}, 0)
+				tables = c.tables[item.TargetTable]
+			}
+			tables[item.SourceTable] = struct{}{}
+			c.mu.Unlock()
+		case metadata.DropTable:
+			c.mu.Lock()
+			delete(c.tables[item.TargetTable], item.SourceTable)
+			if len(c.tables[item.TargetTable]) == 0 {
+				delete(c.tables, item.TargetTable)
+			}
+			c.mu.Unlock()
+		}
+
+		g.mu.Unlock()
 		return ddls, conflictStage, err
 	}
-
-	// if all source table is deleted, we should remove the shard group.
-	if deleted {
-		c.removeShardGroup(ctx, item.TargetTable)
-	}
-
-	// handle table level ddl
-	switch item.Type {
-	case metadata.CreateTable:
-		c.mu.Lock()
-		tables, ok := c.tables[item.TargetTable]
-		if !ok {
-			c.tables[item.TargetTable] = make(map[metadata.SourceTable]struct{}, 0)
-			tables = c.tables[item.TargetTable]
-		}
-		tables[item.SourceTable] = struct{}{}
-		c.mu.Unlock()
-	case metadata.DropTable:
-		c.mu.Lock()
-		delete(c.tables[item.TargetTable], item.SourceTable)
-		if len(c.tables[item.TargetTable]) == 0 {
-			delete(c.tables, item.TargetTable)
-		}
-		c.mu.Unlock()
-	}
-	return ddls, conflictStage, err
 }
 
 // ShowDDLLocks show ddl locks.
@@ -305,8 +321,10 @@ func (c *DDLCoordinator) removeShardGroup(ctx context.Context, targetTable metad
 }
 
 type shardGroup struct {
-	mu                  sync.RWMutex
-	normalTables        map[metadata.SourceTable]string
+	mu sync.RWMutex
+	// normalTables represents upstream table info record in checkpoint.
+	normalTables map[metadata.SourceTable]string
+	// conflictTables represents upstream table info after executing conflict DDL.
 	conflictTables      map[metadata.SourceTable]string
 	targetTable         metadata.TargetTable
 	tableAgent          TableAgent
@@ -347,21 +365,12 @@ func newShardGroup(ctx context.Context, id frameModel.MasterID, cfg *config.JobC
 	return g, nil
 }
 
-func (g *shardGroup) handle(ctx context.Context, item *metadata.DDLItem) ([]string, optimism.ConflictStage, bool, error) {
-	// each group only processes one item at a time
-	g.mu.Lock()
-	defer g.mu.Unlock()
-
-	if g.deleted {
-		return nil, optimism.ConflictError, false, errors.Errorf("shard group for target table %v is deleted", item.TargetTable)
-	}
-
+func (g *shardGroup) handle(ctx context.Context, item *metadata.DDLItem) ([]string, optimism.ConflictStage, error) {
 	// nolint:errcheck
 	g.gcDroppedColumns(ctx)
 
 	var (
 		ddls          []string
-		needDeleted   bool
 		err           error
 		conflictStage optimism.ConflictStage = optimism.ConflictNone
 	)
@@ -371,15 +380,15 @@ func (g *shardGroup) handle(ctx context.Context, item *metadata.DDLItem) ([]stri
 		g.handleCreateTable(item)
 		ddls = append(ddls, item.DDLs...)
 	case metadata.DropTable:
-		needDeleted = g.handleDropTable(ctx, item)
+		g.handleDropTable(ctx, item)
 		ddls = append(ddls, item.DDLs...)
 	case metadata.OtherDDL:
 		ddls, conflictStage, err = g.handleDDLs(ctx, item)
 	default:
-		return nil, optimism.ConflictError, false, errors.Errorf("unknown ddl type %v", item.Type)
+		return nil, optimism.ConflictError, errors.Errorf("unknown ddl type %v", item.Type)
 	}
 
-	return ddls, conflictStage, needDeleted || g.isResolved(ctx), err
+	return ddls, conflictStage, err
 }
 
 // handleCreateTable handles create table ddl.
@@ -396,22 +405,17 @@ func (g *shardGroup) handleCreateTable(item *metadata.DDLItem) {
 // handleDropTable handles drop table ddl.
 // remove source table from shard group.
 // mark shard group as deleted if all source tables are deleted.
-func (g *shardGroup) handleDropTable(ctx context.Context, item *metadata.DDLItem) bool {
+func (g *shardGroup) handleDropTable(ctx context.Context, item *metadata.DDLItem) {
 	_, ok := g.normalTables[item.SourceTable]
 	if !ok {
 		g.logger.Warn("drop table does not exist", zap.Any("source table", item.SourceTable))
-		return false
+		return
 	}
 
 	delete(g.normalTables, item.SourceTable)
 	delete(g.conflictTables, item.SourceTable)
 	// nolint:errcheck
 	g.droppedColumnsStore.DelDroppedColumnForTable(ctx, item.SourceTable)
-	if len(g.normalTables) == 0 {
-		g.deleted = true
-		return true
-	}
-	return false
 }
 
 // handleDDLs handles ddl.
@@ -466,6 +470,7 @@ func (g *shardGroup) handleDDLs(ctx context.Context, item *metadata.DDLItem) (ne
 }
 
 func (g *shardGroup) handleDDL(ctx context.Context, sourceTable metadata.SourceTable, prevTableStmt, postTableStmt string) (bool, optimism.ConflictStage) {
+	// for a new ddl, we ignore the original conflict table, just use the normal table and new ddl to calculate the ConfictStage.
 	delete(g.conflictTables, sourceTable)
 
 	prevTable := genCmpTable(prevTableStmt)
@@ -478,6 +483,7 @@ func (g *shardGroup) handleDDL(ctx context.Context, sourceTable metadata.SourceT
 		if cmp, err := postTable.Compare(currTable); err == nil && cmp == 0 {
 			idempotent = true
 		}
+		// this usually happened when worker restarts and the shard group is not reset.
 		g.logger.Warn("prev-table not equal table saved in master", zap.Stringer("master-table", currTable), zap.Stringer("prev-table", prevTable))
 		g.normalTables[sourceTable] = prevTableStmt
 	}
@@ -736,7 +742,7 @@ func (g *shardGroup) checkAddDroppedColumn(ctx context.Context, sourceTable meta
 		} else if _, err2 = optimism.AddDifferentFieldLenColumns("", ddl, postTable, newJoined); err2 != nil {
 			// check for add column with a smaller field len
 			return "", err2
-		} else if len(col) > 0 && (g.droppedColumnsStore.HasDroppedColumn(ctx, col, sourceTable) || contains(newDroppedColumns, col)) {
+		} else if len(col) > 0 && (g.droppedColumnsStore.HasDroppedColumn(ctx, col, sourceTable) || slices.Contains(newDroppedColumns, col)) {
 			return "", errors.Errorf("add column %s that wasn't fully dropped in downstream. ddl: %s", col, ddl)
 		}
 	}
@@ -764,15 +770,17 @@ func (g *shardGroup) gcDroppedColumns(ctx context.Context) error {
 	cacheStmts := make(map[metadata.SourceTable]string)
 OutLoop:
 	for col := range droppedColumns.Cols {
+		// firstly, check the tables recorded in the ddl coordinator
 		for _, tbStmt := range g.normalTables {
 			if tbStmt == "" {
 				continue
 			}
-			if cols := getColumnNames(tbStmt); contains(cols, col) {
+			if cols := getColumnNames(tbStmt); slices.Contains(cols, col) {
 				continue OutLoop
 			}
 		}
 
+		// secondly, check the tables from checkpoint
 		for sourceTable := range g.normalTables {
 			tbStmt, ok := cacheStmts[sourceTable]
 			if !ok {
@@ -783,9 +791,10 @@ OutLoop:
 					}
 					return err
 				}
+				cacheStmts[sourceTable] = tbStmt
 			}
 
-			if cols := getColumnNames(tbStmt); contains(cols, col) {
+			if cols := getColumnNames(tbStmt); slices.Contains(cols, col) {
 				continue OutLoop
 			}
 		}
@@ -796,29 +805,36 @@ OutLoop:
 	return nil
 }
 
+// isResoved means all tables in the group are resolved.
+// 1. no conflict ddls waiting
+// 2. all dropped column has done
+// 3. all shard tables stmts are same.
 func (g *shardGroup) isResolved(ctx context.Context) bool {
 	if len(g.conflictTables) != 0 {
 		return false
 	}
-	if _, err := g.droppedColumnsStore.Get(ctx); err == nil || errors.Cause(err) != metadata.ErrStateNotFound {
+	if _, err := g.droppedColumnsStore.Get(ctx); errors.Cause(err) != metadata.ErrStateNotFound {
 		return false
 	}
 
-	var previousTable string
+	var (
+		prevTable schemacmp.Table
+		first     = true
+	)
 	for _, tbStmt := range g.normalTables {
 		if tbStmt == "" {
 			continue
 		}
-		if previousTable == "" {
-			previousTable = tbStmt
+		if first {
+			prevTable = genCmpTable(tbStmt)
+			first = false
 			continue
 		}
-		lhs := genCmpTable(previousTable)
-		rhs := genCmpTable(tbStmt)
-		if cmp, err := lhs.Compare(rhs); err != nil || cmp != 0 {
+		currTable := genCmpTable(tbStmt)
+		if cmp, err := prevTable.Compare(currTable); err != nil || cmp != 0 {
 			return false
 		}
-		previousTable = tbStmt
+		prevTable = currTable
 	}
 	return true
 }
@@ -867,25 +883,16 @@ func (g *shardGroup) redirectDDLs(ctx context.Context, sourceTable metadata.Sour
 }
 
 func genCmpTable(createStmt string) schemacmp.Table {
-	p, _ := conn.GetParserFromSQLModeStr(mysql.DefaultSQLMode)
+	p := parser.New()
 	stmtNode, _ := p.ParseOneStmt(createStmt, "", "")
 	ti, _ := ddl.BuildTableInfoFromAST(stmtNode.(*ast.CreateTableStmt))
 	ti.State = model.StatePublic
 	return schemacmp.Encode(ti)
 }
 
-func contains(s []string, e string) bool {
-	for _, a := range s {
-		if a == e {
-			return true
-		}
-	}
-	return false
-}
-
 // getColumnNames and return columns' names for create table stmt.
 func getColumnNames(createStmt string) []string {
-	p, _ := conn.GetParserFromSQLModeStr(mysql.DefaultSQLMode)
+	p := parser.New()
 	stmtNode, _ := p.ParseOneStmt(createStmt, "", "")
 	s := stmtNode.(*ast.CreateTableStmt)
 

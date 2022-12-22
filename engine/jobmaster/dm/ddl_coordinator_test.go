@@ -170,7 +170,7 @@ func TestDDLCoordinator(t *testing.T) {
 	require.Contains(t, ddlCoordinator.tables, targetTable)
 	require.Len(t, ddlCoordinator.tables[targetTable], 1)
 
-	require.NoError(t, ddlCoordinator.Clear(context.Background()))
+	require.NoError(t, ddlCoordinator.ClearMetadata(context.Background()))
 
 	checkpointAgent.AssertExpectations(t)
 }
@@ -254,18 +254,18 @@ func TestHandle(t *testing.T) {
 		Tables:      []string{genCreateStmt("col1 int", "col2 int")},
 	}
 
-	ddls, conflictStage, needDeleted, err := g.handle(context.Background(), item)
+	ddls, conflictStage, err := g.handle(context.Background(), item)
 	require.EqualError(t, err, fmt.Sprintf("unknown ddl type %v", item.Type))
 	require.Len(t, ddls, 0)
 	require.Equal(t, optimism.ConflictError, conflictStage)
-	require.False(t, needDeleted)
+	require.True(t, g.isResolved(context.Background()))
 
 	item.Type = metadata.CreateTable
-	ddls, conflictStage, needDeleted, err = g.handle(context.Background(), item)
+	ddls, conflictStage, err = g.handle(context.Background(), item)
 	require.NoError(t, err)
 	require.Equal(t, item.DDLs, ddls)
 	require.Equal(t, optimism.ConflictNone, conflictStage)
-	require.True(t, needDeleted)
+	require.True(t, g.isResolved(context.Background()))
 
 	item = &metadata.DDLItem{
 		SourceTable: tb1,
@@ -273,22 +273,22 @@ func TestHandle(t *testing.T) {
 		Tables:      []string{genCreateStmt("col1 int", "col2 int"), genCreateStmt("col1 int", "col2 varchar(255)")},
 		Type:        metadata.OtherDDL,
 	}
-	ddls, conflictStage, needDeleted, err = g.handle(context.Background(), item)
+	ddls, conflictStage, err = g.handle(context.Background(), item)
 	require.NoError(t, err)
 	require.Len(t, ddls, 0)
 	require.Equal(t, optimism.ConflictSkipWaitRedirect, conflictStage)
-	require.False(t, needDeleted)
+	require.False(t, g.isResolved(context.Background()))
 
 	item = &metadata.DDLItem{
 		SourceTable: tb1,
 		DDLs:        []string{"drop table tb1"},
 		Type:        metadata.DropTable,
 	}
-	ddls, conflictStage, needDeleted, err = g.handle(context.Background(), item)
+	ddls, conflictStage, err = g.handle(context.Background(), item)
 	require.NoError(t, err)
 	require.Equal(t, item.DDLs, ddls)
 	require.Equal(t, optimism.ConflictNone, conflictStage)
-	require.True(t, needDeleted)
+	require.True(t, g.isResolved(context.Background()))
 
 	item = &metadata.DDLItem{
 		SourceTable: tb2,
@@ -296,11 +296,11 @@ func TestHandle(t *testing.T) {
 		Tables:      []string{genCreateStmt("col1 int", "col2 int", "col3 int"), genCreateStmt("col1 int", "col3 int")},
 		Type:        metadata.OtherDDL,
 	}
-	ddls, conflictStage, needDeleted, err = g.handle(context.Background(), item)
+	ddls, conflictStage, err = g.handle(context.Background(), item)
 	require.NoError(t, err)
 	require.Equal(t, item.DDLs, ddls)
 	require.Equal(t, optimism.ConflictNone, conflictStage)
-	require.False(t, needDeleted)
+	require.False(t, g.isResolved(context.Background()))
 
 	item = &metadata.DDLItem{
 		SourceTable: tb2,
@@ -308,22 +308,11 @@ func TestHandle(t *testing.T) {
 		Type:        metadata.DropTable,
 	}
 	tableAgent.On("FetchTableStmt").Return(genCreateStmt("col1 int", "col3 int"), nil).Once()
-	ddls, conflictStage, needDeleted, err = g.handle(context.Background(), item)
+	ddls, conflictStage, err = g.handle(context.Background(), item)
 	require.NoError(t, err)
 	require.Equal(t, item.DDLs, ddls)
 	require.Equal(t, optimism.ConflictNone, conflictStage)
-	require.True(t, needDeleted)
-
-	item = &metadata.DDLItem{
-		SourceTable: tb2,
-		DDLs:        []string{"drop table tb2"},
-		Type:        metadata.DropTable,
-	}
-	ddls, conflictStage, needDeleted, err = g.handle(context.Background(), item)
-	require.EqualError(t, err, fmt.Sprintf("shard group for target table %v is deleted", item.TargetTable))
-	require.Len(t, ddls, 0)
-	require.Equal(t, optimism.ConflictError, conflictStage)
-	require.False(t, needDeleted)
+	require.True(t, g.isResolved(context.Background()))
 }
 
 func TestHandleCreateTable(t *testing.T) {
@@ -372,19 +361,19 @@ func TestHandleDropTable(t *testing.T) {
 		SourceTable: metadata.SourceTable{},
 		Tables:      []string{genCreateStmt("col1 int", "col2 int")},
 	}
-	require.False(t, g.handleDropTable(context.Background(), item))
+	g.handleDropTable(context.Background(), item)
 	require.Len(t, g.normalTables, 2)
 
 	item.SourceTable = tb1
-	require.False(t, g.handleDropTable(context.Background(), item))
+	g.handleDropTable(context.Background(), item)
 	require.Len(t, g.normalTables, 1)
 
 	item.SourceTable = tb2
-	require.True(t, g.handleDropTable(context.Background(), item))
+	g.handleDropTable(context.Background(), item)
 	require.Len(t, g.normalTables, 0)
 
 	item.SourceTable = tb1
-	require.False(t, g.handleDropTable(context.Background(), item))
+	g.handleDropTable(context.Background(), item)
 	require.Len(t, g.normalTables, 0)
 }
 

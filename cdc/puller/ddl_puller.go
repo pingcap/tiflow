@@ -36,7 +36,7 @@ import (
 	cerror "github.com/pingcap/tiflow/pkg/errors"
 	"github.com/pingcap/tiflow/pkg/filter"
 	"github.com/pingcap/tiflow/pkg/pdutil"
-	"github.com/pingcap/tiflow/pkg/regionspan"
+	"github.com/pingcap/tiflow/pkg/spanz"
 	"github.com/pingcap/tiflow/pkg/upstream"
 	"github.com/pingcap/tiflow/pkg/util"
 	"github.com/prometheus/client_golang/prometheus"
@@ -470,6 +470,10 @@ func NewDDLJobPuller(
 	if err != nil {
 		return nil, errors.Trace(err)
 	}
+	spans := spanz.GetAllDDLSpan()
+	for i := range spans {
+		spans[i].TableID = -1
+	}
 	return &ddlJobPullerImpl{
 		changefeedID:   changefeed,
 		filter:         f,
@@ -482,7 +486,7 @@ func NewDDLJobPuller(
 			kvStorage,
 			pdClock,
 			checkpointTs,
-			regionspan.GetAllDDLSpan(),
+			spans,
 			cfg,
 			changefeed,
 			-1, DDLPullerTableName,
