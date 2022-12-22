@@ -35,6 +35,9 @@ type ServerInterface interface {
 	// update job config
 	// (PUT /config)
 	DMAPIUpdateJobConfig(c *gin.Context)
+	// delete sharding ddl locks
+	// (DELETE /ddl_locks)
+	DMAPIDeleteDDLLocks(c *gin.Context)
 	// get sharding ddl locks
 	// (GET /ddl_locks)
 	DMAPIGetDDLLocks(c *gin.Context)
@@ -162,6 +165,15 @@ func (siw *ServerInterfaceWrapper) DMAPIUpdateJobConfig(c *gin.Context) {
 	}
 
 	siw.Handler.DMAPIUpdateJobConfig(c)
+}
+
+// DMAPIDeleteDDLLocks operation middleware
+func (siw *ServerInterfaceWrapper) DMAPIDeleteDDLLocks(c *gin.Context) {
+	for _, middleware := range siw.HandlerMiddlewares {
+		middleware(c)
+	}
+
+	siw.Handler.DMAPIDeleteDDLLocks(c)
 }
 
 // DMAPIGetDDLLocks operation middleware
@@ -307,6 +319,8 @@ func RegisterHandlersWithOptions(router *gin.Engine, si ServerInterface, options
 
 	router.PUT(options.BaseURL+"/config", wrapper.DMAPIUpdateJobConfig)
 
+	router.DELETE(options.BaseURL+"/ddl_locks", wrapper.DMAPIDeleteDDLLocks)
+
 	router.GET(options.BaseURL+"/ddl_locks", wrapper.DMAPIGetDDLLocks)
 
 	router.GET(options.BaseURL+"/schema/tasks/:task-name", wrapper.DMAPIGetSchema)
@@ -322,22 +336,23 @@ func RegisterHandlersWithOptions(router *gin.Engine, si ServerInterface, options
 
 // Base64 encoded, gzipped, json marshaled Swagger object
 var swaggerSpec = []string{
-	"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",
+	"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",
+	"76bQFwAA",
 }
 
 // GetSwagger returns the content of the embedded swagger specification file

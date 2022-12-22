@@ -66,6 +66,8 @@ func (jm *JobMaster) initOpenAPI(router *gin.RouterGroup) {
 	router.PUT("/status", wrapper.DMAPIOperateJob)
 
 	router.GET("/ddl_locks", wrapper.DMAPIGetDDLLocks)
+
+	router.DELETE("/ddl_locks", wrapper.DMAPIDeleteDDLLocks)
 }
 
 // DMAPIGetJobStatus implements the api of get job status.
@@ -344,4 +346,15 @@ func (jm *JobMaster) DMAPISetSchema(c *gin.Context, taskName string) {
 func (jm *JobMaster) DMAPIGetDDLLocks(c *gin.Context) {
 	resp := jm.ShowDDLLocks(c.Request.Context())
 	c.IndentedJSON(http.StatusOK, resp)
+}
+
+// DMAPIDeleteDDLLocks implements the api of delete ddl locks.
+func (jm *JobMaster) DMAPIDeleteDDLLocks(c *gin.Context) {
+	err := jm.DeleteDDLLocks(c.Request.Context())
+	if err != nil {
+		// nolint:errcheck
+		_ = c.Error(err)
+		return
+	}
+	c.Status(http.StatusNoContent)
 }

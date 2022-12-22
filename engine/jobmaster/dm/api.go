@@ -321,6 +321,21 @@ func (jm *JobMaster) ShowDDLLocks(ctx context.Context) ShowDDLLocksResponse {
 	return jm.ddlCoordinator.ShowDDLLocks(ctx)
 }
 
+// DeleteDDLLocks implements the api of delete ddl locks request.
+func (jm *JobMaster) DeleteDDLLocks(ctx context.Context) error {
+	if err := jm.ddlCoordinator.Reset(ctx); err != nil {
+		return err
+	}
+	if needed, err := jm.needRestartAllWorkers(ctx); err != nil {
+		return errors.Trace(err)
+	} else if needed {
+		if err := jm.restartAllWorkers(ctx); err != nil {
+			return errors.Trace(err)
+		}
+	}
+	return nil
+}
+
 // CoordinateDDL implements the api of coordinate ddl request.
 func (jm *JobMaster) CoordinateDDL(ctx context.Context, req *dmproto.CoordinateDDLRequest) *dmproto.CoordinateDDLResponse {
 	ddls, conflictStage, err := jm.ddlCoordinator.Coordinate(ctx, (*metadata.DDLItem)(req))
