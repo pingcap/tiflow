@@ -90,19 +90,19 @@ func (s *Security) DumpTLSContent(baseDirPath string) error {
 			}
 		}
 	}
-	if isSSLCANotExist {
+	if isSSLCANotExist && len(s.SSLCABytes) > 0 {
 		s.SSLCA = path.Join(baseDirPath, "ca.pem")
 		if err := utils.WriteFileAtomic(s.SSLCA, s.SSLCABytes, 0o600); err != nil {
 			return err
 		}
 	}
-	if isSSLCertNotExist {
+	if isSSLCertNotExist && len(s.SSLCertBytes) > 0 {
 		s.SSLCert = path.Join(baseDirPath, "cert.pem")
 		if err := utils.WriteFileAtomic(s.SSLCert, s.SSLCertBytes, 0o600); err != nil {
 			return err
 		}
 	}
-	if isSSLKeyNotExist {
+	if isSSLKeyNotExist && len(s.SSLKEYBytes) > 0 {
 		s.SSLKey = path.Join(baseDirPath, "key.pem")
 		if err := utils.WriteFileAtomic(s.SSLKey, s.SSLKEYBytes, 0o600); err != nil {
 			return err
