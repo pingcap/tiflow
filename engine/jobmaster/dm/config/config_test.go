@@ -99,10 +99,13 @@ func TestTaskCfg(t *testing.T) {
 		_, err := toml.DecodeFile(fmt.Sprintf("%s/dm_subtask_%d.toml", subtaskTemplateDir, taskCfg.Upstreams[0].DBCfg.Port), expectCfg)
 		require.NoError(t, err)
 		expectCfg.IOTotalBytes = atomic.NewUint64(0)
+		expectCfg.DumpIOTotalBytes = atomic.NewUint64(0)
 		// require uuid is set
 		require.Greater(t, len(subTaskCfg.UUID), 0)
+		require.Greater(t, len(subTaskCfg.DumpUUID), 0)
 		// don't check uuid's value
 		expectCfg.UUID = subTaskCfg.UUID
+		expectCfg.DumpUUID = subTaskCfg.DumpUUID
 		require.EqualValues(t, expectCfg, subTaskCfg)
 	}
 }
