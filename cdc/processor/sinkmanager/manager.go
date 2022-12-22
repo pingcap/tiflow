@@ -813,6 +813,13 @@ func (m *SinkManager) GetTableStats(tableID model.TableID) TableStats {
 	} else {
 		resolvedTs = m.sourceManager.GetTableResolvedTs(tableID)
 	}
+
+	// If the resolved ts is less than checkpointTs
+	// it means that the table is not started yet.
+	if resolvedTs < checkpointTs.Ts {
+		resolvedTs = checkpointTs.Ts
+	}
+
 	return TableStats{
 		CheckpointTs:          checkpointTs.ResolvedMark(),
 		ResolvedTs:            resolvedTs,
