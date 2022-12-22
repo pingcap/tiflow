@@ -19,7 +19,7 @@ import (
 	"sync/atomic"
 	"time"
 
-	"github.com/pingcap/tiflow/pkg/regionspan"
+	"github.com/pingcap/tiflow/cdc/processor/tablepb"
 	"github.com/tikv/client-go/v2/tikv"
 )
 
@@ -30,14 +30,14 @@ const (
 
 type singleRegionInfo struct {
 	verID      tikv.RegionVerID
-	span       regionspan.ComparableSpan
+	span       tablepb.Span
 	resolvedTs uint64
 	rpcCtx     *tikv.RPCContext
 }
 
 func newSingleRegionInfo(
 	verID tikv.RegionVerID,
-	span regionspan.ComparableSpan,
+	span tablepb.Span,
 	ts uint64,
 	rpcCtx *tikv.RPCContext,
 ) singleRegionInfo {
@@ -118,7 +118,7 @@ func (s *regionFeedState) getRegionInfo() singleRegionInfo {
 	return s.sri
 }
 
-func (s *regionFeedState) getRegionMeta() (uint64, regionspan.ComparableSpan, time.Time, string) {
+func (s *regionFeedState) getRegionMeta() (uint64, tablepb.Span, time.Time, string) {
 	return s.sri.verID.GetID(), s.sri.span, s.startFeedTime, s.sri.rpcCtx.Addr
 }
 

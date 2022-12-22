@@ -704,6 +704,9 @@ func (m *ManagerImpl) bgUpdateLog(ctx context.Context, errCh chan<- error) {
 					for _, row := range cache.rows {
 						logs = append(logs, RowToRedo(row))
 					}
+					if cache.releaseMemory != nil {
+						releaseMemoryCbs = append(releaseMemoryCbs, cache.releaseMemory)
+					}
 				case model.MessageTypeResolved:
 					if rtsMap[cache.tableID] < cache.resolvedTs {
 						rtsMap[cache.tableID] = cache.resolvedTs

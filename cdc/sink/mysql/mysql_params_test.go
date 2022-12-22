@@ -155,6 +155,11 @@ func TestGenerateDSNByParams(t *testing.T) {
 				sqlmock.NewRows(columns).
 					AddRow("tidb_placement_mode", "IGNORE"),
 			)
+		mock.ExpectQuery("show session variables like 'tidb_enable_external_ts_read';").
+			WillReturnRows(
+				sqlmock.NewRows(columns).
+					AddRow("tidb_enable_external_ts_read", "OFF"),
+			)
 		dsnStr, err = generateDSNByParams(context.TODO(), dsn, params, db)
 		require.Nil(t, err)
 		expectedParams := []string{
@@ -178,6 +183,11 @@ func TestGenerateDSNByParams(t *testing.T) {
 			WillReturnRows(
 				sqlmock.NewRows(columns).
 					AddRow("tidb_placement_mode", "IGNORE"),
+			)
+		mock.ExpectQuery("show session variables like 'tidb_enable_external_ts_read';").
+			WillReturnRows(
+				sqlmock.NewRows(columns).
+					AddRow("tidb_enable_external_ts_read", "OFF"),
 			)
 		dsnStr, err = generateDSNByParams(context.TODO(), dsn, params, db)
 		require.Nil(t, err)

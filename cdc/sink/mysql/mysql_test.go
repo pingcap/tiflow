@@ -973,6 +973,11 @@ func mockTestDB(adjustSQLMode bool) (*sql.DB, error) {
 			sqlmock.NewRows(columns).
 				AddRow("tidb_placement_mode", "IGNORE"),
 		)
+	mock.ExpectQuery("show session variables like 'tidb_enable_external_ts_read';").
+		WillReturnRows(
+			sqlmock.NewRows(columns).
+				AddRow("tidb_enable_external_ts_read", "OFF"),
+		)
 	mock.ExpectQuery("select character_set_name from information_schema.character_sets " +
 		"where character_set_name = 'gbk';").WillReturnRows(
 		sqlmock.NewRows([]string{"character_set_name"}).AddRow("gbk"),

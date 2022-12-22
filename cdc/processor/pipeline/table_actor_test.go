@@ -30,6 +30,7 @@ import (
 	"github.com/pingcap/tiflow/pkg/config"
 	cdcContext "github.com/pingcap/tiflow/pkg/context"
 	pmessage "github.com/pingcap/tiflow/pkg/pipeline/message"
+	"github.com/pingcap/tiflow/pkg/spanz"
 	"github.com/pingcap/tiflow/pkg/upstream"
 	"github.com/stretchr/testify/require"
 	"go.uber.org/atomic"
@@ -48,7 +49,7 @@ func TestAsyncStopFailed(t *testing.T) {
 
 	tbl := &tableActor{
 		stopped:     0,
-		tableID:     1,
+		span:        spanz.TableIDToComparableSpan(1),
 		router:      tableActorRouter,
 		redoManager: redo.NewDisabledManager(),
 		cancel:      func() {},
@@ -71,7 +72,7 @@ func TestAsyncStopFailed(t *testing.T) {
 
 func TestTableActorInterface(t *testing.T) {
 	table := &tableActor{
-		tableID:     1,
+		span:        spanz.TableIDToComparableSpan(1),
 		redoManager: redo.NewDisabledManager(),
 		tableName:   "t1",
 		state:       tablepb.TableStatePreparing,
@@ -100,9 +101,9 @@ func TestTableActorInterface(t *testing.T) {
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 	table.redoManager, _ = redo.NewMockManager(ctx)
-	table.redoManager.AddTable(table.tableID, 0)
+	table.redoManager.AddTable(table.span.TableID, 0)
 	require.Equal(t, model.Ts(0), table.ResolvedTs())
-	table.redoManager.UpdateResolvedTs(ctx, table.tableID, model.Ts(6))
+	table.redoManager.UpdateResolvedTs(ctx, table.span.TableID, model.Ts(6))
 	require.Eventually(t, func() bool { return table.ResolvedTs() == model.Ts(6) },
 		time.Second*5, time.Millisecond*500)
 	table.redoManager.Cleanup(ctx)
@@ -124,7 +125,7 @@ func TestTableActorCancel(t *testing.T) {
 	tbl := &tableActor{
 		state:       tablepb.TableStatePreparing,
 		stopped:     0,
-		tableID:     1,
+		span:        spanz.TableIDToComparableSpan(1),
 		redoManager: redo.NewDisabledManager(),
 		router:      tableActorRouter,
 		cancel:      func() {},
@@ -406,7 +407,9 @@ func TestNewTableActor(t *testing.T) {
 	startSorter = func(t *tableActor, ctx *actorNodeContext) error {
 		return nil
 	}
-	tbl, err := NewTableActor(cctx, upstream.NewUpstream4Test(&mockPD{}), nil, 1, "t1",
+	tbl, err := NewTableActor(
+		cctx, upstream.NewUpstream4Test(&mockPD{}), nil,
+		spanz.TableIDToComparableSpan(1), "t1",
 		&model.TableReplicaInfo{
 			StartTs: 0,
 		}, mocksink.NewNormalMockSink(), nil, redo.NewDisabledManager(), 10)
@@ -422,7 +425,9 @@ func TestNewTableActor(t *testing.T) {
 		return errors.New("failed to start puller")
 	}
 
-	tbl, err = NewTableActor(cctx, upstream.NewUpstream4Test(&mockPD{}), nil, 1, "t1",
+	tbl, err = NewTableActor(
+		cctx, upstream.NewUpstream4Test(&mockPD{}), nil,
+		spanz.TableIDToComparableSpan(1), "t1",
 		&model.TableReplicaInfo{
 			StartTs: 0,
 		}, mocksink.NewNormalMockSink(), nil, redo.NewDisabledManager(), 10)

@@ -212,7 +212,7 @@ func TestMapFindHole(t *testing.T) {
 		for _, span := range cs.spans {
 			m.ReplaceOrInsert(span, struct{}{})
 		}
-		found, holes := m.FindHole(cs.rang[0], cs.rang[1])
+		found, holes := m.FindHoles(cs.rang[0], cs.rang[1])
 		require.Equalf(t, cs.expectedFound, found, "case %d, %#v", i, cs)
 		require.Equalf(t, cs.expectedHole, holes, "case %d, %#v", i, cs)
 	}

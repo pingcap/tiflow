@@ -18,9 +18,9 @@ import (
 	"crypto/x509"
 	"encoding/pem"
 	"os"
+	"strings"
 
-	"github.com/pingcap/tidb-tools/pkg/utils"
-	cerror "github.com/pingcap/tiflow/pkg/errors"
+	"github.com/pingcap/tiflow/pkg/errors"
 	pd "github.com/tikv/pd/client"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/credentials"
@@ -64,15 +64,15 @@ func (s *Credential) ToGRPCDialOption() (grpc.DialOption, error) {
 
 // ToTLSConfig generates tls's config from *Security
 func (s *Credential) ToTLSConfig() (*tls.Config, error) {
-	cfg, err := utils.ToTLSConfig(s.CAPath, s.CertPath, s.KeyPath)
-	return cfg, cerror.WrapError(cerror.ErrToTLSConfigFailed, err)
+	cfg, err := ToTLSConfigWithVerify(s.CAPath, s.CertPath, s.KeyPath, nil)
+	return cfg, errors.WrapError(errors.ErrToTLSConfigFailed, err)
 }
 
 // ToTLSConfigWithVerify generates tls's config from *Security and requires
 // the remote common name to be verified.
 func (s *Credential) ToTLSConfigWithVerify() (*tls.Config, error) {
-	cfg, err := utils.ToTLSConfigWithVerify(s.CAPath, s.CertPath, s.KeyPath, s.CertAllowedCN)
-	return cfg, cerror.WrapError(cerror.ErrToTLSConfigFailed, err)
+	cfg, err := ToTLSConfigWithVerify(s.CAPath, s.CertPath, s.KeyPath, s.CertAllowedCN)
+	return cfg, errors.WrapError(errors.ErrToTLSConfigFailed, err)
 }
 
 func (s *Credential) getSelfCommonName() (string, error) {
@@ -81,15 +81,16 @@ func (s *Credential) getSelfCommonName() (string, error) {
 	}
 	data, err := os.ReadFile(s.CertPath)
 	if err != nil {
-		return "", cerror.WrapError(cerror.ErrToTLSConfigFailed, err)
+		return "", errors.WrapError(errors.ErrToTLSConfigFailed, err)
 	}
 	block, _ := pem.Decode(data)
 	if block == nil || block.Type != "CERTIFICATE" {
-		return "", cerror.ErrToTLSConfigFailed.GenWithStack("failed to decode PEM block to certificate")
+		return "", errors.ErrToTLSConfigFailed.
+			GenWithStack("failed to decode PEM block to certificate")
 	}
 	certificate, err := x509.ParseCertificate(block.Bytes)
 	if err != nil {
-		return "", cerror.WrapError(cerror.ErrToTLSConfigFailed, err)
+		return "", errors.WrapError(errors.ErrToTLSConfigFailed, err)
 	}
 	return certificate.Subject.CommonName, nil
 }
@@ -106,4 +107,81 @@ func (s *Credential) AddSelfCommonName() error {
 	}
 	s.CertAllowedCN = append(s.CertAllowedCN, cn)
 	return nil
+}
+
+// ToTLSConfigWithVerify constructs a `*tls.Config` from the CA, certification and key
+// paths, and add verify for CN.
+//
+// If the CA path is empty, returns nil.
+func ToTLSConfigWithVerify(
+	caPath, certPath, keyPath string, verifyCN []string,
+) (*tls.Config, error) {
+	if len(caPath) == 0 {
+		return nil, nil
+	}
+
+	// Create a certificate pool from CA
+	certPool := x509.NewCertPool()
+	ca, err := os.ReadFile(caPath)
+	if err != nil {
+		return nil, errors.Annotate(err, "could not read ca certificate")
+	}
+
+	// Append the certificates from the CA
+	if !certPool.AppendCertsFromPEM(ca) {
+		return nil, errors.New("failed to append ca certs")
+	}
+
+	tlsCfg := &tls.Config{
+		RootCAs:    certPool,
+		ClientCAs:  certPool,
+		NextProtos: []string{"h2", "http/1.1"}, // specify `h2` to let Go use HTTP/2.
+		MinVersion: tls.VersionTLS12,
+	}
+
+	if len(certPath) != 0 && len(keyPath) != 0 {
+		loadCert := func() (*tls.Certificate, error) {
+			cert, err := tls.LoadX509KeyPair(certPath, keyPath)
+			if err != nil {
+				return nil, errors.Annotate(err, "could not load client key pair")
+			}
+			return &cert, nil
+		}
+		tlsCfg.GetClientCertificate = func(*tls.CertificateRequestInfo) (*tls.Certificate, error) {
+			return loadCert()
+		}
+		tlsCfg.GetCertificate = func(info *tls.ClientHelloInfo) (*tls.Certificate, error) {
+			return loadCert()
+		}
+	}
+
+	addVerifyPeerCertificate(tlsCfg, verifyCN)
+	return tlsCfg, nil
+}
+
+func addVerifyPeerCertificate(tlsCfg *tls.Config, verifyCN []string) {
+	if len(verifyCN) != 0 {
+		checkCN := make(map[string]struct{})
+		for _, cn := range verifyCN {
+			cn = strings.TrimSpace(cn)
+			checkCN[cn] = struct{}{}
+		}
+		tlsCfg.ClientAuth = tls.RequireAndVerifyClientCert
+		tlsCfg.VerifyPeerCertificate = func(
+			rawCerts [][]byte, verifiedChains [][]*x509.Certificate,
+		) error {
+			cns := make([]string, 0, len(verifiedChains))
+			for _, chains := range verifiedChains {
+				for _, chain := range chains {
+					cns = append(cns, chain.Subject.CommonName)
+					if _, match := checkCN[chain.Subject.CommonName]; match {
+						return nil
+					}
+				}
+			}
+			return errors.Errorf("client certificate authentication failed. "+
+				"The Common Name from the client certificate %v was not found "+
+				"in the configuration cluster-verify-cn with value: %s", cns, verifyCN)
+		}
+	}
 }
