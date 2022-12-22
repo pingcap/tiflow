@@ -808,12 +808,13 @@ func (m *SinkManager) GetTableStats(tableID model.TableID) TableStats {
 
 	checkpointTs := tableSink.getCheckpointTs()
 	m.memQuota.release(tableID, checkpointTs)
+
 	var resolvedTs model.Ts
 	// If redo log is enabled, we have to use redo log's resolved ts to calculate processor's min resolved ts.
 	if m.redoManager != nil {
 		resolvedTs = m.redoManager.GetResolvedTs(tableID)
 	} else {
-		resolvedTs = m.sourceManager.GetTableResolvedTs(tableID)
+		resolvedTs = tableSink.getReceivedSorterResolvedTs()
 	}
 
 	stats := TableStats{
