@@ -18,6 +18,7 @@ import (
 	"context"
 	"fmt"
 	"sync"
+	"sync/atomic"
 	"testing"
 
 	"github.com/pingcap/errors"
@@ -184,7 +185,7 @@ func TestPullerResolvedForward(t *testing.T) {
 	require.Equal(t, model.OpTypeResolved, ev.OpType)
 	require.Equal(t, uint64(1000), ev.CRTs)
 	err := retry.Do(context.Background(), func() error {
-		ts := plr.Puller.(*pullerImpl).resolvedTs
+		ts := atomic.LoadUint64(&(plr.Puller.(*pullerImpl).resolvedTs))
 		if ts != uint64(1000) {
 			return errors.Errorf("resolved ts %d of puller does not forward to 1000", ts)
 		}
