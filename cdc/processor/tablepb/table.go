@@ -22,8 +22,6 @@ import (
 	"strconv"
 	"strings"
 	"sync/atomic"
-
-	"github.com/pingcap/tiflow/cdc/model"
 )
 
 // Load TableState with THREAD-SAFE
@@ -39,20 +37,20 @@ func (s *TableState) Store(new TableState) {
 // TablePipeline is a pipeline which capture the change log from tikv in a table
 type TablePipeline interface {
 	// ID returns the ID of source table and mark table
-	ID() (tableID int64)
+	ID() (tableID TableID)
 	// Name returns the quoted schema and table name
 	Name() string
 	// ResolvedTs returns the resolved ts in this table pipeline
-	ResolvedTs() model.Ts
+	ResolvedTs() Ts
 	// CheckpointTs returns the checkpoint ts in this table pipeline
-	CheckpointTs() model.Ts
+	CheckpointTs() Ts
 	// UpdateBarrierTs updates the barrier ts in this table pipeline
-	UpdateBarrierTs(ts model.Ts)
+	UpdateBarrierTs(ts Ts)
 	// AsyncStop tells the pipeline to stop, and returns true is the pipeline is already stopped.
 	AsyncStop() bool
 
 	// Start the sink consume data from the given `ts`
-	Start(ts model.Ts)
+	Start(ts Ts)
 
 	// Stats returns statistic for a table.
 	Stats() Stats
@@ -69,7 +67,13 @@ type TablePipeline interface {
 	RemainEvents() int64
 }
 
-// Key is a custom type for bytes in proto.
+// TableID is the ID of the table
+type TableID = int64
+
+// Ts is the timestamp with a logical count
+type Ts = uint64
+
+// Key is a custom type for bytes encoded in memcomparable format.
 type Key []byte
 
 var (

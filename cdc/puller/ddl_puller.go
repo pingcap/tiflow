@@ -31,13 +31,12 @@ import (
 	"github.com/pingcap/tiflow/cdc/entry/schema"
 	"github.com/pingcap/tiflow/cdc/kv"
 	"github.com/pingcap/tiflow/cdc/model"
-	"github.com/pingcap/tiflow/cdc/processor/tablepb"
 	"github.com/pingcap/tiflow/cdc/sorter/memory"
 	"github.com/pingcap/tiflow/pkg/config"
 	cerror "github.com/pingcap/tiflow/pkg/errors"
 	"github.com/pingcap/tiflow/pkg/filter"
 	"github.com/pingcap/tiflow/pkg/pdutil"
-	"github.com/pingcap/tiflow/pkg/regionspan"
+	"github.com/pingcap/tiflow/pkg/spanz"
 	"github.com/pingcap/tiflow/pkg/upstream"
 	"github.com/pingcap/tiflow/pkg/util"
 	"github.com/prometheus/client_golang/prometheus"
@@ -471,14 +470,9 @@ func NewDDLJobPuller(
 	if err != nil {
 		return nil, errors.Trace(err)
 	}
-	spans := []tablepb.Span{}
-	for _, s := range regionspan.GetAllDDLSpan() {
-		cs := regionspan.ToComparableSpan(s)
-		spans = append(spans, tablepb.Span{
-			TableID:  -1,
-			StartKey: cs.Start,
-			EndKey:   cs.End,
-		})
+	spans := spanz.GetAllDDLSpan()
+	for i := range spans {
+		spans[i].TableID = -1
 	}
 	return &ddlJobPullerImpl{
 		changefeedID:   changefeed,

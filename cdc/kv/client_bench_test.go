@@ -26,9 +26,9 @@ import (
 	"github.com/pingcap/log"
 	"github.com/pingcap/tidb/store/mockstore/mockcopr"
 	"github.com/pingcap/tiflow/cdc/model"
+	"github.com/pingcap/tiflow/cdc/processor/tablepb"
 	"github.com/pingcap/tiflow/pkg/config"
 	"github.com/pingcap/tiflow/pkg/pdutil"
-	"github.com/pingcap/tiflow/pkg/regionspan"
 	"github.com/pingcap/tiflow/pkg/retry"
 	"github.com/pingcap/tiflow/pkg/security"
 	"github.com/pingcap/tiflow/pkg/txnutil"
@@ -201,7 +201,7 @@ func prepareBenchMultiStore(b *testing.B, storeNum, regionNum int) (
 	wg.Add(1)
 	go func() {
 		err := cdcClient.EventFeed(ctx,
-			regionspan.ComparableSpan{Start: []byte("a"), End: []byte("b")},
+			tablepb.Span{StartKey: []byte("a"), EndKey: []byte("b")},
 			100, lockResolver, eventCh)
 		if errors.Cause(err) != context.Canceled {
 			b.Error(err)
@@ -295,7 +295,7 @@ func prepareBench(b *testing.B, regionNum int) (
 	wg.Add(1)
 	go func() {
 		err := cdcClient.EventFeed(ctx,
-			regionspan.ComparableSpan{Start: []byte("a"), End: []byte("z")},
+			tablepb.Span{StartKey: []byte("a"), EndKey: []byte("z")},
 			100, lockResolver, eventCh)
 		if errors.Cause(err) != context.Canceled {
 			b.Error(err)
