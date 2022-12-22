@@ -13,6 +13,7 @@ mysql-instances:
     black-white-list: "instance"
     expression-filters:
       - "even_c"
+      - "always_false"
       - "future_date"
       - "pythagorean"
       - "update_old_lt_100"
@@ -26,6 +27,11 @@ expression-filter:
     schema: "expr_filter"
     table: "t2"
     insert-value-expr: "c % 2 = 0"
+  always_false:
+    schema: "expr_filter"
+    table: "t2"
+    update-old-value-expr: "1 = 0"
+    update-new-value-expr: "1 = 0"
   future_date:
     schema: "expr_filter"
     table: "t3"

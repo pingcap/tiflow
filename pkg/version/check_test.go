@@ -24,6 +24,7 @@ import (
 
 	"github.com/coreos/go-semver/semver"
 	"github.com/pingcap/kvproto/pkg/metapb"
+	"github.com/pingcap/tidb/br/pkg/version"
 	"github.com/pingcap/tiflow/pkg/httputil"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -157,7 +158,25 @@ func TestCheckClusterVersion(t *testing.T) {
 		require.Nil(t, err)
 	}
 
-	// Check maximum compatible TiKV.
+	// Skip checking TiFlash.
+	{
+		mock.getVersion = func() string {
+			return minPDVersion.String()
+		}
+
+		tiflashStore := &metapb.Store{
+			Version: maxTiKVVersion.String(),
+			Labels:  []*metapb.StoreLabel{{Key: "engine", Value: "tiflash"}},
+		}
+		require.True(t, version.IsTiFlash(tiflashStore))
+		mock.getAllStores = func() []*metapb.Store {
+			return []*metapb.Store{tiflashStore}
+		}
+		err := CheckClusterVersion(context.Background(), &mock, pdAddrs, nil, true)
+		require.Nil(t, err)
+	}
+
+	// Check maximum supported TiKV version
 	{
 		mock.getVersion = func() string {
 			return minPDVersion.String()
