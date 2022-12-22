@@ -64,6 +64,10 @@ func newMemQuota(changefeedID model.ChangeFeedID, totalBytes uint64) *memQuota {
 	m.metricTotal.Set(float64(totalBytes))
 	m.metricUsed.Set(float64(0))
 
+	log.Info("New memory quota",
+		zap.String("namespace", changefeedID.Namespace),
+		zap.String("changefeed", changefeedID.ID),
+		zap.Uint64("total", totalBytes))
 	return m
 }
 
