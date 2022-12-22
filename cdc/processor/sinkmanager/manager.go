@@ -817,17 +817,13 @@ func (m *SinkManager) GetTableStats(tableID model.TableID) TableStats {
 		resolvedTs = tableSink.getReceivedSorterResolvedTs()
 	}
 
-	stats := TableStats{
+	return TableStats{
 		CheckpointTs:          checkpointTs.ResolvedMark(),
 		ResolvedTs:            resolvedTs,
 		BarrierTs:             m.lastBarrierTs.Load(),
 		ReceivedMaxCommitTs:   tableSink.getReceivedSorterCommitTs(),
 		ReceivedMaxResolvedTs: tableSink.getReceivedSorterResolvedTs(),
 	}
-	if stats.ResolvedTs < stats.CheckpointTs {
-		stats.ResolvedTs = stats.CheckpointTs
-	}
-	return stats
 }
 
 // ReceivedEvents returns the number of events received by all table sinks.

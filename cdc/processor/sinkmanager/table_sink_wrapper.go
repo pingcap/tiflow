@@ -106,6 +106,7 @@ func newTableSinkWrapper(
 		targetTs:   targetTs,
 	}
 	res.checkpointTs.Store(startTs)
+	res.receivedSorterResolvedTs.Store(startTs)
 	return res
 }
 
@@ -131,6 +132,7 @@ func (t *tableSinkWrapper) start(startTs model.Ts, replicateTs model.Ts) {
 	// Because in two phase scheduling, the table sink may be advanced to a later ts.
 	// And we can just continue to replicate the table sink from the new start ts.
 	t.checkpointTs.Store(startTs)
+	t.receivedSorterResolvedTs.Store(startTs)
 	t.replicateTs = replicateTs
 	t.state.Store(tablepb.TableStateReplicating)
 }
