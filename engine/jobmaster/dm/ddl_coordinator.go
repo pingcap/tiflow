@@ -19,11 +19,10 @@ import (
 	"sync"
 
 	"github.com/pingcap/tidb/ddl"
+	"github.com/pingcap/tidb/parser"
 	"github.com/pingcap/tidb/parser/ast"
 	"github.com/pingcap/tidb/parser/model"
-	"github.com/pingcap/tidb/parser/mysql"
 	"github.com/pingcap/tidb/util/schemacmp"
-	"github.com/pingcap/tiflow/dm/pkg/conn"
 	"github.com/pingcap/tiflow/dm/pkg/log"
 	"github.com/pingcap/tiflow/dm/pkg/shardddl/optimism"
 	frameModel "github.com/pingcap/tiflow/engine/framework/model"
@@ -740,6 +739,7 @@ func (g *shardGroup) gcDroppedColumns(ctx context.Context) error {
 	cacheStmts := make(map[metadata.SourceTable]string)
 OutLoop:
 	for col := range droppedColumns.Cols {
+		// firstly, check the tables recorded in the ddl coordinator
 		for _, tbStmt := range g.normalTables {
 			if tbStmt == "" {
 				continue
@@ -749,6 +749,7 @@ OutLoop:
 			}
 		}
 
+		// secondly, check the tables from checkpoint
 		for sourceTable := range g.normalTables {
 			tbStmt, ok := cacheStmts[sourceTable]
 			if !ok {
@@ -759,6 +760,7 @@ OutLoop:
 					}
 					return err
 				}
+				cacheStmts[sourceTable] = tbStmt
 			}
 
 			if cols := getColumnNames(tbStmt); slices.Contains(cols, col) {
@@ -780,25 +782,28 @@ func (g *shardGroup) isResolved(ctx context.Context) bool {
 	if len(g.conflictTables) != 0 {
 		return false
 	}
-	if _, err := g.droppedColumnsStore.Get(ctx); err == nil || errors.Cause(err) != metadata.ErrStateNotFound {
+	if _, err := g.droppedColumnsStore.Get(ctx); errors.Cause(err) != metadata.ErrStateNotFound {
 		return false
 	}
 
-	var previousTable string
+	var (
+		prevTable schemacmp.Table
+		first     = true
+	)
 	for _, tbStmt := range g.normalTables {
 		if tbStmt == "" {
 			continue
 		}
-		if previousTable == "" {
-			previousTable = tbStmt
+		if first {
+			prevTable = genCmpTable(tbStmt)
+			first = false
 			continue
 		}
-		lhs := genCmpTable(previousTable)
-		rhs := genCmpTable(tbStmt)
-		if cmp, err := lhs.Compare(rhs); err != nil || cmp != 0 {
+		currTable := genCmpTable(tbStmt)
+		if cmp, err := prevTable.Compare(currTable); err != nil || cmp != 0 {
 			return false
 		}
-		previousTable = tbStmt
+		prevTable = currTable
 	}
 	return true
 }
@@ -822,7 +827,7 @@ func (g *shardGroup) showTables() map[metadata.SourceTable]ShardTable {
 }
 
 func genCmpTable(createStmt string) schemacmp.Table {
-	p, _ := conn.GetParserFromSQLModeStr(mysql.DefaultSQLMode)
+	p := parser.New()
 	stmtNode, _ := p.ParseOneStmt(createStmt, "", "")
 	ti, _ := ddl.BuildTableInfoFromAST(stmtNode.(*ast.CreateTableStmt))
 	ti.State = model.StatePublic
@@ -831,7 +836,7 @@ func genCmpTable(createStmt string) schemacmp.Table {
 
 // getColumnNames and return columns' names for create table stmt.
 func getColumnNames(createStmt string) []string {
-	p, _ := conn.GetParserFromSQLModeStr(mysql.DefaultSQLMode)
+	p := parser.New()
 	stmtNode, _ := p.ParseOneStmt(createStmt, "", "")
 	s := stmtNode.(*ast.CreateTableStmt)
 
