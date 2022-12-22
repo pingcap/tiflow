@@ -55,7 +55,6 @@ type Stats struct {
 type Puller interface {
 	// Run the puller, continually fetch event from TiKV and add event into buffer.
 	Run(ctx context.Context) error
-	GetResolvedTs() uint64
 	Output() <-chan *model.RawKVEntry
 	Stats() Stats
 }
@@ -260,10 +259,6 @@ func (p *pullerImpl) Run(ctx context.Context) error {
 		}
 	})
 	return g.Wait()
-}
-
-func (p *pullerImpl) GetResolvedTs() uint64 {
-	return atomic.LoadUint64(&p.resolvedTs)
 }
 
 func (p *pullerImpl) Output() <-chan *model.RawKVEntry {
