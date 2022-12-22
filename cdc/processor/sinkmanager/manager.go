@@ -797,14 +797,16 @@ func (m *SinkManager) GetTableState(tableID model.TableID) (tablepb.TableState, 
 
 // GetTableStats returns the state of the table.
 func (m *SinkManager) GetTableStats(tableID model.TableID) TableStats {
-	tableSink, ok := m.tableSinks.Load(tableID)
+	value, ok := m.tableSinks.Load(tableID)
 	if !ok {
 		log.Panic("Table sink not found when getting table stats",
 			zap.String("namespace", m.changefeedID.Namespace),
 			zap.String("changefeed", m.changefeedID.ID),
 			zap.Int64("tableID", tableID))
 	}
-	checkpointTs := tableSink.(*tableSinkWrapper).getCheckpointTs()
+	tableSink := value.(*tableSinkWrapper)
+
+	checkpointTs := tableSink.getCheckpointTs()
 	m.memQuota.release(tableID, checkpointTs)
 	var resolvedTs model.Ts
 	// If redo log is enabled, we have to use redo log's resolved ts to calculate processor's min resolved ts.
@@ -813,13 +815,21 @@ func (m *SinkManager) GetTableStats(tableID model.TableID) TableStats {
 	} else {
 		resolvedTs = m.sourceManager.GetTableResolvedTs(tableID)
 	}
-	return TableStats{
+
+	stats := TableStats{
 		CheckpointTs:          checkpointTs.ResolvedMark(),
 		ResolvedTs:            resolvedTs,
 		BarrierTs:             m.lastBarrierTs.Load(),
 		ReceivedMaxCommitTs:   tableSink.(*tableSinkWrapper).getReceivedSorterCommitTs(),
 		ReceivedMaxResolvedTs: tableSink.(*tableSinkWrapper).getReceivedSorterResolvedTs(),
 	}
+	if stats.CheckpointTs < tableSink.startTs {
+		stats.CheckpointTs = tableSink.startTs
+	}
+	if stats.ResolvedTs < tableSink.startTs {
+		stats.ResolvedTs = tableSink.startTs
+	}
+	return stats
 }
 
 // ReceivedEvents returns the number of events received by all table sinks.
