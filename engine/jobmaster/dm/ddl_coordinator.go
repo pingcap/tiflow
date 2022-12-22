@@ -153,13 +153,13 @@ type DDLCoordinator struct {
 
 	kvClient     metaModel.KVClient
 	tableAgent   TableAgent
-	messageAgent message.MessageAgent
+	messageAgent message.Agent
 	jobID        string
 	jobStore     *metadata.JobStore
 }
 
 // NewDDLCoordinator creates a new DDLCoordinator.
-func NewDDLCoordinator(jobID string, kvClient metaModel.KVClient, tableAgent TableAgent, jobStore *metadata.JobStore, pLogger *zap.Logger, messageAgent message.MessageAgent) *DDLCoordinator {
+func NewDDLCoordinator(jobID string, kvClient metaModel.KVClient, tableAgent TableAgent, jobStore *metadata.JobStore, pLogger *zap.Logger, messageAgent message.Agent) *DDLCoordinator {
 	return &DDLCoordinator{
 		tableAgent:   tableAgent,
 		tables:       make(map[metadata.TargetTable]map[metadata.SourceTable]struct{}),
@@ -336,13 +336,13 @@ type shardGroup struct {
 	cfg                 *config.JobCfg
 	deleted             bool
 	inRedirect          bool
-	messageAgent        message.MessageAgent
+	messageAgent        message.Agent
 	logger              *zap.Logger
 }
 
 func newShardGroup(ctx context.Context, id frameModel.MasterID, cfg *config.JobCfg,
 	targetTable metadata.TargetTable, sourceTables map[metadata.SourceTable]struct{},
-	kvClient metaModel.KVClient, tableAgent TableAgent, messageAgent message.MessageAgent, logger *zap.Logger,
+	kvClient metaModel.KVClient, tableAgent TableAgent, messageAgent message.Agent, logger *zap.Logger,
 ) (*shardGroup, error) {
 	g := &shardGroup{
 		tableAgent:          tableAgent,

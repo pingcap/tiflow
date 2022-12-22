@@ -129,7 +129,7 @@ func (t *testDMJobmasterSuite) TestUpdateWorkerStatus() {
 }
 
 func (t *testDMJobmasterSuite) TestClearWorkerStatus() {
-	messageAgent := &message.MockMessageAgent{}
+	messageAgent := &message.MockAgent{}
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 	source1 := "source1"
@@ -466,7 +466,7 @@ func (t *testDMJobmasterSuite) TestWorkerManager() {
 	unitStore := metadata.NewUnitStateStore(kvmock.NewMetaMock())
 	checkpointAgent := &MockCheckpointAgent{}
 	workerAgent := &MockWorkerAgent{}
-	messageAgent := &message.MockMessageAgent{}
+	messageAgent := &message.MockAgent{}
 	workerManager := NewWorkerManager("job_id", nil, jobStore, unitStore, workerAgent, messageAgent, checkpointAgent, log.L(), false)
 	source1 := jobCfg.Upstreams[0].SourceID
 	source2 := jobCfg.Upstreams[1].SourceID

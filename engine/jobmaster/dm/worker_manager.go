@@ -62,7 +62,7 @@ type WorkerManager struct {
 	jobStore        *metadata.JobStore
 	unitStore       *metadata.UnitStateStore
 	workerAgent     WorkerAgent
-	messageAgent    message.MessageAgent
+	messageAgent    message.Agent
 	checkpointAgent CheckpointAgent
 	logger          *zap.Logger
 
@@ -80,7 +80,7 @@ func NewWorkerManager(
 	jobStore *metadata.JobStore,
 	unitStore *metadata.UnitStateStore,
 	workerAgent WorkerAgent,
-	messageAgent message.MessageAgent,
+	messageAgent message.Agent,
 	checkpointAgent CheckpointAgent,
 	pLogger *zap.Logger,
 	isS3StorageEnabled bool,

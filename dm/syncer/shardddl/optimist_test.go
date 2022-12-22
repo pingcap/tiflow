@@ -243,7 +243,7 @@ func (t *testOptimistSuite) TestOptimistEngine() {
 		ID                    = fmt.Sprintf("%s-`%s`.`%s`", task, downSchema, downTable)
 
 		logger           = log.L()
-		mockMessageAgent = &message.MockMessageAgent{}
+		mockMessageAgent = &message.MockAgent{}
 		o                = NewOptimist(&logger, nil, mockMessageAgent, task, source, jobID)
 
 		p              = parser.New()

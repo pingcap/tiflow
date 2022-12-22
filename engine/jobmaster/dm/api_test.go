@@ -180,7 +180,7 @@ func TestQueryStatusAPI(t *testing.T) {
 			},
 		}
 	)
-	messageAgent := &message.MockMessageAgent{}
+	messageAgent := &message.MockAgent{}
 	jm.messageAgent = messageAgent
 	jm.workerManager = NewWorkerManager(mockBaseJobmaster.ID(), nil, jm.metadata.JobStore(), jm.metadata.UnitStateStore(), nil, nil, nil, jm.Logger(), false)
 	jm.taskManager = NewTaskManager("test-job", nil, nil, nil, jm.Logger(), promutil.NewFactory4Test(t.TempDir()))
@@ -492,7 +492,7 @@ func TestUpdateJobCfg(t *testing.T) {
 		mockBaseJobmaster   = &MockBaseJobmaster{t: t}
 		metaKVClient        = kvmock.NewMetaMock()
 		mockCheckpointAgent = &MockCheckpointAgent{}
-		messageAgent        = &message.MockMessageAgent{}
+		messageAgent        = &message.MockAgent{}
 		jobCfg              = &config.JobCfg{}
 		jm                  = &JobMaster{
 			BaseJobMaster:   mockBaseJobmaster,
@@ -537,7 +537,7 @@ func TestUpdateJobCfg(t *testing.T) {
 
 func TestBinlog(t *testing.T) {
 	kvClient := kvmock.NewMetaMock()
-	messageAgent := &message.MockMessageAgent{}
+	messageAgent := &message.MockAgent{}
 	jm := &JobMaster{
 		metadata:     metadata.NewMetaData(kvClient, log.L()),
 		messageAgent: messageAgent,
@@ -563,7 +563,7 @@ func TestBinlog(t *testing.T) {
 }
 
 func TestBinlogSchema(t *testing.T) {
-	messageAgent := &message.MockMessageAgent{}
+	messageAgent := &message.MockAgent{}
 	jm := &JobMaster{
 		messageAgent: messageAgent,
 	}

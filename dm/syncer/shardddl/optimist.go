@@ -80,7 +80,7 @@ type OptimistDM struct {
 }
 
 // NewOptimist creates a new Optimist instance.
-func NewOptimist(pLogger *log.Logger, cli *clientv3.Client, messageAgent message.MessageAgent, task, source, jobID string) Optimist {
+func NewOptimist(pLogger *log.Logger, cli *clientv3.Client, messageAgent message.Agent, task, source, jobID string) Optimist {
 	if messageAgent != nil {
 		return NewOptimistEngine(pLogger, messageAgent, task, source, jobID)
 	}
@@ -359,7 +359,7 @@ type OptimistEngine struct {
 	task         string
 	source       string
 	jobID        string
-	messageAgent message.MessageAgent
+	messageAgent message.Agent
 
 	// the shard DDL info which is pending to handle.
 	pendingInfo *optimism.Info
@@ -369,7 +369,7 @@ type OptimistEngine struct {
 	waitingRedirectOps map[metadata.SourceTable]struct{}
 }
 
-func NewOptimistEngine(pLogger *log.Logger, messageAgent message.MessageAgent, task, source, jobID string) *OptimistEngine {
+func NewOptimistEngine(pLogger *log.Logger, messageAgent message.Agent, task, source, jobID string) *OptimistEngine {
 	return &OptimistEngine{
 		logger:       pLogger.WithFields(zap.String("component", "shard DDL optimist")),
 		messageAgent: messageAgent,

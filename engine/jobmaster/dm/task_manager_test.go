@@ -138,7 +138,7 @@ func (t *testDMJobmasterSuite) TestOperateTask() {
 	jobCfg := &config.JobCfg{}
 	require.NoError(t.T(), jobCfg.DecodeFile(jobTemplatePath))
 	jobStore := metadata.NewJobStore(kvmock.NewMetaMock(), log.L())
-	taskManager := NewTaskManager("test-job", nil, jobStore, &message.MockMessageAgent{}, log.L(), promutil.NewFactory4Test(t.T().TempDir()))
+	taskManager := NewTaskManager("test-job", nil, jobStore, &message.MockAgent{}, log.L(), promutil.NewFactory4Test(t.T().TempDir()))
 
 	source1 := jobCfg.Upstreams[0].SourceID
 	source2 := jobCfg.Upstreams[1].SourceID
@@ -320,7 +320,7 @@ func (t *testDMJobmasterSuite) TestCheckAndOperateTasks() {
 	jobCfg := &config.JobCfg{}
 	require.NoError(t.T(), jobCfg.DecodeFile(jobTemplatePath))
 	job := metadata.NewJob(jobCfg)
-	mockAgent := &message.MockMessageAgent{}
+	mockAgent := &message.MockAgent{}
 	taskManager := NewTaskManager("test-job", nil, nil, mockAgent, log.L(), promutil.NewFactory4Test(t.T().TempDir()))
 
 	require.EqualError(t.T(), taskManager.checkAndOperateTasks(context.Background(), job), "get task running status failed")
@@ -369,7 +369,7 @@ func (t *testDMJobmasterSuite) TestTaskManager() {
 	jobStore := metadata.NewJobStore(kvmock.NewMetaMock(), log.L())
 	require.NoError(t.T(), jobStore.Put(context.Background(), job))
 
-	mockAgent := &message.MockMessageAgent{}
+	mockAgent := &message.MockAgent{}
 	taskManager := NewTaskManager("test-job", nil, jobStore, mockAgent, log.L(), promutil.NewFactory4Test(t.T().TempDir()))
 	source1 := jobCfg.Upstreams[0].SourceID
 	source2 := jobCfg.Upstreams[1].SourceID

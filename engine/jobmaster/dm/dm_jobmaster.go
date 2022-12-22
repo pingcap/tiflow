@@ -56,7 +56,7 @@ type JobMaster struct {
 	workerManager         *WorkerManager
 	taskManager           *TaskManager
 	ddlCoordinator        *DDLCoordinator
-	messageAgent          message.MessageAgent
+	messageAgent          message.Agent
 	checkpointAgent       checkpoint.Agent
 	messageHandlerManager p2p.MessageHandlerManager
 }
@@ -114,7 +114,7 @@ func (jm *JobMaster) initComponents() error {
 	jm.Logger().Info("initializing the dm jobmaster components")
 	taskStatus, workerStatus, err := jm.getInitStatus()
 	jm.metadata = metadata.NewMetaData(jm.MetaKVClient(), jm.Logger())
-	jm.messageAgent = message.NewMessageAgent(jm.ID(), jm, jm.messageHandlerManager, jm.Logger())
+	jm.messageAgent = message.NewAgent(jm.ID(), jm, jm.messageHandlerManager, jm.Logger())
 	jm.checkpointAgent = checkpoint.NewCheckpointAgent(jm.ID(), jm.Logger())
 	jm.taskManager = NewTaskManager(jm.ID(), taskStatus, jm.metadata.JobStore(), jm.messageAgent, jm.Logger(), jm.MetricFactory())
 	jm.workerManager = NewWorkerManager(jm.ID(), workerStatus, jm.metadata.JobStore(), jm.metadata.UnitStateStore(),
