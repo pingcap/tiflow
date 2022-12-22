@@ -18,6 +18,7 @@ import (
 	"context"
 	"fmt"
 	"math"
+	"net/url"
 	"testing"
 	"time"
 
@@ -591,4 +592,78 @@ func TestCalculateGCSafepointTs(t *testing.T) {
 
 	require.Equal(t, expectMinTsMap, minCheckpoinTsMap)
 	require.Equal(t, expectForceUpdateMap, forceUpdateMap)
+}
+
+func TestValidateChangefeed(t *testing.T) {
+	t.Parallel()
+
+	// Test `ValidateChangefeed` by setting `hasCIEnv` to false.
+	//
+	// FIXME: We need a better way to enable following tests
+	//        Changing global variable in a unit test is BAD practice.
+	hasCIEnv = false
+
+	o := &ownerImpl{
+		changefeeds: make(map[model.ChangeFeedID]*changefeed),
+		// logLimiter:  rate.NewLimiter(1, 1),
+		removedChangefeed: make(map[model.ChangeFeedID]time.Time),
+		removedSinkURI:    make(map[url.URL]time.Time),
+	}
+
+	id := model.ChangeFeedID{Namespace: "a", ID: "b"}
+	sinkURI := "mysql://host:1234/"
+	o.changefeeds[id] = &changefeed{
+		state: &orchestrator.ChangefeedReactorState{
+			Info: &model.ChangeFeedInfo{SinkURI: sinkURI},
+		},
+		feedStateManager: &feedStateManager{},
+	}
+
+	o.pushOwnerJob(&ownerJob{
+		Tp:           ownerJobTypeAdminJob,
+		ChangefeedID: id,
+		AdminJob: &model.AdminJob{
+			CfID: id,
+			Type: model.AdminRemove,
+		},
+		done: make(chan<- error, 1),
+	})
+	o.handleJobs()
+
+	require.Error(t, o.ValidateChangefeed(&model.ChangefeedConfig{
+		ID:        id.ID,
+		Namespace: id.Namespace,
+	}))
+	require.Error(t, o.ValidateChangefeed(&model.ChangefeedConfig{
+		ID:        "unknown",
+		Namespace: "unknown",
+		SinkURI:   sinkURI,
+	}))
+
+	// Test invalid sink URI
+	require.Error(t, o.ValidateChangefeed(&model.ChangefeedConfig{
+		SinkURI: "wrong uri\n\t",
+	}))
+
+	// Test limit passed.
+	o.removedChangefeed[id] = time.Now().Add(-2 * recreateChangefeedDelayLimit)
+	o.removedSinkURI[url.URL{
+		Scheme: "mysql",
+		Host:   "host:1234",
+	}] = time.Now().Add(-2 * recreateChangefeedDelayLimit)
+
+	require.Nil(t, o.ValidateChangefeed(&model.ChangefeedConfig{
+		ID:        id.ID,
+		Namespace: id.Namespace,
+	}))
+	require.Nil(t, o.ValidateChangefeed(&model.ChangefeedConfig{
+		ID:        "unknown",
+		Namespace: "unknown",
+		SinkURI:   sinkURI,
+	}))
+
+	// Test GC.
+	o.handleJobs()
+	require.Equal(t, 0, len(o.removedChangefeed))
+	require.Equal(t, 0, len(o.removedSinkURI))
 }

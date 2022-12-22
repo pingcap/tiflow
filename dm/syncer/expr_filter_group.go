@@ -112,6 +112,9 @@ func (g *ExprFilterGroup) GetUpdateExprs(table *filter.Table, ti *model.TableInf
 
 	if _, ok := g.hasUpdateFilter[tableID]; ok {
 		for _, c := range g.configs[tableID] {
+			if c.UpdateOldValueExpr == "" && c.UpdateNewValueExpr == "" {
+				continue
+			}
 			if c.UpdateOldValueExpr != "" {
 				expr, err := getSimpleExprOfTable(g.ctx, c.UpdateOldValueExpr, ti)
 				if err != nil {
