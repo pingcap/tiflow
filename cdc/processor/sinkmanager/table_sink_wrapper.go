@@ -96,7 +96,7 @@ func newTableSinkWrapper(
 	startTs model.Ts,
 	targetTs model.Ts,
 ) *tableSinkWrapper {
-	return &tableSinkWrapper{
+	res := &tableSinkWrapper{
 		version:    atomic.AddUint64(&version, 1),
 		changefeed: changefeed,
 		tableID:    tableID,
@@ -105,6 +105,8 @@ func newTableSinkWrapper(
 		startTs:    startTs,
 		targetTs:   targetTs,
 	}
+	res.checkpointTs.Store(startTs)
+	return res
 }
 
 func (t *tableSinkWrapper) start(startTs model.Ts, replicateTs model.Ts) {

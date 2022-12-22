@@ -823,11 +823,8 @@ func (m *SinkManager) GetTableStats(tableID model.TableID) TableStats {
 		ReceivedMaxCommitTs:   tableSink.getReceivedSorterCommitTs(),
 		ReceivedMaxResolvedTs: tableSink.getReceivedSorterResolvedTs(),
 	}
-	if stats.CheckpointTs < tableSink.startTs {
-		stats.CheckpointTs = tableSink.startTs
-	}
-	if stats.ResolvedTs < tableSink.startTs {
-		stats.ResolvedTs = tableSink.startTs
+	if stats.ResolvedTs < stats.CheckpointTs {
+		stats.ResolvedTs = stats.CheckpointTs
 	}
 	return stats
 }
