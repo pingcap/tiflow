@@ -163,12 +163,13 @@ func NewProcessResultFromPB(result *pb.ProcessResult) *ProcessResult {
 
 // QueryStatusResponse is query status response
 type QueryStatusResponse struct {
-	ErrorMsg     string                `json:"error_message"`
-	Unit         frameModel.WorkerType `json:"unit"`
-	Stage        metadata.TaskStage    `json:"stage"`
-	Result       *ProcessResult        `json:"result"`
-	Status       json.RawMessage       `json:"status"`
-	IoTotalBytes uint64                `json:"io_total_bytes"`
+	ErrorMsg         string                `json:"error_message"`
+	Unit             frameModel.WorkerType `json:"unit"`
+	Stage            metadata.TaskStage    `json:"stage"`
+	Result           *ProcessResult        `json:"result"`
+	Status           json.RawMessage       `json:"status"`
+	IoTotalBytes     uint64                `json:"io_total_bytes"`
+	DumpIoTotalBytes uint64                `json:"dump_io_total_bytes"`
 }
 
 // BinlogRequest is binlog request
