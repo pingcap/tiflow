@@ -10,7 +10,7 @@ target-database:
   user: "root"
   password: ""
   security:
-    ssl-ca: "task-ca.pem"
+    ssl-ca: "dir-placeholer/task-ca.pem"
 
 
 mysql-instances:
