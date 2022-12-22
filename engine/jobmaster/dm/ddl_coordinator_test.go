@@ -138,6 +138,7 @@ func TestDDLCoordinator(t *testing.T) {
 		TargetTable: targetTable,
 		Type:        metadata.OtherDDL,
 	}
+	checkpointAgent.On("FetchTableStmt").Return(genCreateStmt("col1 int", "col2 int"), nil).Once()
 	ddls, conflictStage, err = ddlCoordinator.Coordinate(context.Background(), item)
 	require.NoError(t, err)
 	require.Equal(t, item.DDLs, ddls)
@@ -239,6 +240,7 @@ func TestHandle(t *testing.T) {
 		tb         = metadata.TargetTable{Schema: "schema", Table: "tb"}
 		tableAgent = &MockCheckpointAgent{}
 		g          = &shardGroup{
+			logger: log.L(),
 			normalTables: map[metadata.SourceTable]string{
 				tb1: "",
 			},
@@ -319,6 +321,7 @@ func TestHandleCreateTable(t *testing.T) {
 	var (
 		tb1 = metadata.SourceTable{Source: "source", Schema: "schema", Table: "tb1"}
 		g   = &shardGroup{
+			logger:       log.L(),
 			normalTables: make(map[metadata.SourceTable]string),
 		}
 	)
@@ -349,6 +352,7 @@ func TestHandleDropTable(t *testing.T) {
 		tb1 = metadata.SourceTable{Source: "source", Schema: "schema", Table: "tb1"}
 		tb2 = metadata.SourceTable{Source: "source", Schema: "schema", Table: "tb2"}
 		g   = &shardGroup{
+			logger: log.L(),
 			normalTables: map[metadata.SourceTable]string{
 				tb1: genCreateStmt("col1 int", "col2 int"),
 				tb2: "",
@@ -384,6 +388,7 @@ func TestHandleDDLs(t *testing.T) {
 		tb3 = metadata.SourceTable{Source: "source", Schema: "schema", Table: "tb3"}
 		tb  = metadata.TargetTable{Schema: "schema", Table: "tb"}
 		g   = &shardGroup{
+			logger: log.L(),
 			normalTables: map[metadata.SourceTable]string{
 				tb1: "",
 				tb3: genCreateStmt("col1 int", "col2 int"),
@@ -432,6 +437,7 @@ func TestHandleDDL(t *testing.T) {
 		tb3          = metadata.SourceTable{Source: "source", Schema: "schema", Table: "tb3"}
 		messageAgent = &message.MockMessageAgent{}
 		g            = &shardGroup{
+			logger: log.L(),
 			normalTables: map[metadata.SourceTable]string{
 				tb1: "",
 				tb2: genCreateStmt("col1 int"),
