@@ -41,10 +41,6 @@ function run() {
 	run_sql_file $cur/data/pt.db2.prepare.sql $MYSQL_HOST2 $MYSQL_PORT2 $MYSQL_PASSWORD2
 	check_contains 'Query OK, 3 rows affected'
 
-	run_sql_tidb "create database if not exists online_ddl;"
-	run_sql_tidb "create table online_ddl.pt_t_target (id bigint auto_increment, uid int, name varchar(80), info varchar(100), c_table varchar(255), c_source varchar(255), primary key (id, c_table, c_source), unique key(uid)) DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_bin;"
-	run_sql_tidb "create table online_ddl.gho_t_target (id bigint auto_increment, uid int, name varchar(80), info varchar(100), c_table varchar(255), c_source varchar(255), primary key (id, c_table, c_source), unique key(uid)) DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_bin;"
-
 	inject_points=(
 		"github.com/pingcap/tiflow/dm/syncer/online-ddl-tools/ExitAfterSaveOnlineDDL=return()"
 		"github.com/pingcap/tiflow/dm/syncer/ExitAfterSaveOnlineDDL=return()"
