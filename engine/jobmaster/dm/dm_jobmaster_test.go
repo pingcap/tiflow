@@ -192,12 +192,12 @@ func (t *testDMJobmasterSuite) TestDMJobmaster() {
 	mockCheckpointAgent := &MockCheckpointAgent{}
 	checkpoint.NewCheckpointAgent = func(string, *zap.Logger) checkpoint.Agent { return mockCheckpointAgent }
 	mockMessageAgent := &message.MockMessageAgent{}
-	message.NewMessageAgent = func(id string, commandHandler interface{}, messageHandlerManager p2p.MessageHandlerManager, pLogger *zap.Logger) message.MessageAgent {
+	message.NewAgent = func(id string, commandHandler interface{}, messageHandlerManager p2p.MessageHandlerManager, pLogger *zap.Logger) message.Agent {
 		return mockMessageAgent
 	}
 	defer func() {
 		checkpoint.NewCheckpointAgent = checkpoint.NewAgentImpl
-		message.NewMessageAgent = message.NewMessageAgentImpl
+		message.NewAgent = message.NewAgentImpl
 	}()
 	jobCfg := &config.JobCfg{}
 	require.NoError(t.T(), jobCfg.DecodeFile(jobTemplatePath))
@@ -448,12 +448,12 @@ func TestDuplicateFinishedState(t *testing.T) {
 	mockCheckpointAgent := &MockCheckpointAgent{}
 	checkpoint.NewCheckpointAgent = func(string, *zap.Logger) checkpoint.Agent { return mockCheckpointAgent }
 	mockMessageAgent := &message.MockMessageAgent{}
-	message.NewMessageAgent = func(id string, commandHandler interface{}, messageHandlerManager p2p.MessageHandlerManager, pLogger *zap.Logger) message.MessageAgent {
+	message.NewAgent = func(id string, commandHandler interface{}, messageHandlerManager p2p.MessageHandlerManager, pLogger *zap.Logger) message.Agent {
 		return mockMessageAgent
 	}
 	defer func() {
 		checkpoint.NewCheckpointAgent = checkpoint.NewAgentImpl
-		message.NewMessageAgent = message.NewMessageAgentImpl
+		message.NewAgent = message.NewAgentImpl
 	}()
 	jm := &JobMaster{
 		BaseJobMaster: mockBaseJobmaster,

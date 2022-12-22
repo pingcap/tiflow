@@ -43,7 +43,7 @@ type TaskManager struct {
 
 	jobID        string
 	jobStore     *metadata.JobStore
-	messageAgent message.MessageAgent
+	messageAgent message.Agent
 	logger       *zap.Logger
 	// tasks record the runtime task status
 	// taskID -> TaskStatus
@@ -57,7 +57,7 @@ func NewTaskManager(
 	jobID string,
 	initTaskStatus []runtime.TaskStatus,
 	jobStore *metadata.JobStore,
-	messageAgent message.MessageAgent,
+	messageAgent message.Agent,
 	pLogger *zap.Logger,
 	metricFactory promutil.Factory,
 ) *TaskManager {

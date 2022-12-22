@@ -27,7 +27,7 @@ type MockMessageAgent struct {
 	mock.Mock
 }
 
-var _ MessageAgent = &MockMessageAgent{}
+var _ Agent = &MockMessageAgent{}
 
 // GenerateTopic generate mock message topic.
 func GenerateTopic(senderID, receiverID string) string {

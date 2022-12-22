@@ -175,7 +175,7 @@ type SubTaskConfig struct {
 	ExtStorage      extstorage.ExternalStorage `toml:"-" json:"-"`
 	MetricsFactory  promutil.Factory           `toml:"-" json:"-"`
 	FrameworkLogger *zap.Logger                `toml:"-" json:"-"`
-	MessageAgent    message.MessageAgent       `toml:"-" json:"-"`
+	MessageAgent    message.Agent              `toml:"-" json:"-"`
 	// members below are injected by dataflow engine, UUID should be unique in
 	// one go runtime.
 	// IOTotalBytes is used build TCPConnWithIOCounter and UUID is used to as a
