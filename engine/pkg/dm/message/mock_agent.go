@@ -21,13 +21,13 @@ import (
 	"github.com/stretchr/testify/mock"
 )
 
-// MockMessageAgent implement MessageAgent
-type MockMessageAgent struct {
+// MockAgent implement Agent
+type MockAgent struct {
 	sync.Mutex
 	mock.Mock
 }
 
-var _ Agent = &MockMessageAgent{}
+var _ Agent = &MockAgent{}
 
 // GenerateTopic generate mock message topic.
 func GenerateTopic(senderID, receiverID string) string {
@@ -45,27 +45,27 @@ func GenerateResponse(id messageID, command string, msg interface{}) interface{}
 	return &resp2
 }
 
-// Tick implement MessageAgent.Tick.
-func (m *MockMessageAgent) Tick(ctx context.Context) error { return nil }
+// Tick implement Agent.Tick.
+func (m *MockAgent) Tick(ctx context.Context) error { return nil }
 
-// Close implement MessageAgent.Close.
-func (m *MockMessageAgent) Close(ctx context.Context) error { return nil }
+// Close implement Agent.Close.
+func (m *MockAgent) Close(ctx context.Context) error { return nil }
 
-// UpdateClient implement MessageAgent.UpdateClient.
-func (m *MockMessageAgent) UpdateClient(clientID string, client client) error { return nil }
+// UpdateClient implement Agent.UpdateClient.
+func (m *MockAgent) UpdateClient(clientID string, client client) error { return nil }
 
-// RemoveClient implement MessageAgent.RemoveClient.
-func (m *MockMessageAgent) RemoveClient(clientID string) error { return nil }
+// RemoveClient implement Agent.RemoveClient.
+func (m *MockAgent) RemoveClient(clientID string) error { return nil }
 
-// SendMessage implement MessageAgent.SendMessage.
-func (m *MockMessageAgent) SendMessage(ctx context.Context, clientID string, command string, msg interface{}) error {
+// SendMessage implement Agent.SendMessage.
+func (m *MockAgent) SendMessage(ctx context.Context, clientID string, command string, msg interface{}) error {
 	m.Lock()
 	defer m.Unlock()
 	return m.Called().Error(0)
 }
 
-// SendRequest implement MessageAgent.SendRequest.
-func (m *MockMessageAgent) SendRequest(ctx context.Context, clientID string, command string, req interface{}) (interface{}, error) {
+// SendRequest implement Agent.SendRequest.
+func (m *MockAgent) SendRequest(ctx context.Context, clientID string, command string, req interface{}) (interface{}, error) {
 	m.Lock()
 	defer m.Unlock()
 	args := m.Called(ctx, clientID, command, req)

@@ -435,7 +435,7 @@ func TestHandleDDL(t *testing.T) {
 		tb1          = metadata.SourceTable{Source: "source", Schema: "schema", Table: "tb1"}
 		tb2          = metadata.SourceTable{Source: "source", Schema: "schema", Table: "tb2"}
 		tb3          = metadata.SourceTable{Source: "source", Schema: "schema", Table: "tb3"}
-		messageAgent = &message.MockMessageAgent{}
+		messageAgent = &message.MockAgent{}
 		g            = &shardGroup{
 			logger: log.L(),
 			normalTables: map[metadata.SourceTable]string{

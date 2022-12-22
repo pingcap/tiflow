@@ -191,7 +191,7 @@ func (t *testDMJobmasterSuite) TestDMJobmaster() {
 	mockBaseJobmaster := &MockBaseJobmaster{t: t.T()}
 	mockCheckpointAgent := &MockCheckpointAgent{}
 	checkpoint.NewCheckpointAgent = func(string, *zap.Logger) checkpoint.Agent { return mockCheckpointAgent }
-	mockMessageAgent := &message.MockMessageAgent{}
+	mockMessageAgent := &message.MockAgent{}
 	message.NewAgent = func(id string, commandHandler interface{}, messageHandlerManager p2p.MessageHandlerManager, pLogger *zap.Logger) message.Agent {
 		return mockMessageAgent
 	}
@@ -447,7 +447,7 @@ func TestDuplicateFinishedState(t *testing.T) {
 	mockBaseJobmaster := &MockBaseJobmaster{t: t}
 	mockCheckpointAgent := &MockCheckpointAgent{}
 	checkpoint.NewCheckpointAgent = func(string, *zap.Logger) checkpoint.Agent { return mockCheckpointAgent }
-	mockMessageAgent := &message.MockMessageAgent{}
+	mockMessageAgent := &message.MockAgent{}
 	message.NewAgent = func(id string, commandHandler interface{}, messageHandlerManager p2p.MessageHandlerManager, pLogger *zap.Logger) message.Agent {
 		return mockMessageAgent
 	}

@@ -56,7 +56,7 @@ type testDMOpenAPISuite struct {
 	suite.Suite
 	jm              *JobMaster
 	engine          *gin.Engine
-	messageAgent    *message.MockMessageAgent
+	messageAgent    *message.MockAgent
 	checkpointAnget *MockCheckpointAgent
 	funcBackup      func(ctx context.Context, cfg *dmconfig.SourceConfig) error
 }
@@ -64,7 +64,7 @@ type testDMOpenAPISuite struct {
 func (t *testDMOpenAPISuite) SetupSuite() {
 	var (
 		mockBaseJobmaster   = &MockBaseJobmaster{t: t.T()}
-		mockMessageAgent    = &message.MockMessageAgent{}
+		mockMessageAgent    = &message.MockAgent{}
 		mockCheckpointAgent = &MockCheckpointAgent{}
 		metaClient          = mock.NewMetaMock()
 		jm                  = &JobMaster{
