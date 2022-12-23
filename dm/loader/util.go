@@ -21,6 +21,7 @@ import (
 	"path"
 	"path/filepath"
 	"strings"
+	"time"
 
 	"github.com/pingcap/failpoint"
 	"github.com/pingcap/tiflow/dm/config"
@@ -224,4 +225,42 @@ func getLoadTask(cli *clientv3.Client, task, sourceID string) (string, error) {
 	}
 	name, _, err := ha.GetLoadTask(cli, task, sourceID)
 	return name, err
+}
+
+// readyAndWait updates the lightning status of this worker to LightningReady and
+// waits for all workers' status not LightningNotReady.
+// Only works for physical import.
+func readyAndWait(ctx context.Context, cli *clientv3.Client, cfg *config.SubTaskConfig) error {
+	if cli == nil || cfg.LoaderConfig.ImportMode != config.LoadModePhysical {
+		return nil
+	}
+	_, err := ha.PutLightningStatus(cli, cfg.Name, cfg.SourceID, ha.LightningReady)
+	if err != nil {
+		return err
+	}
+
+	ticker := time.NewTicker(5 * time.Second)
+	defer ticker.Stop()
+WaitLoop:
+	for {
+		select {
+		case <-ctx.Done():
+			return ctx.Err()
+		case <-ticker.C:
+			status, err := ha.GetAllLightningStatus(cli, cfg.Name)
+			if err != nil {
+				return err
+			}
+			for _, s := range status {
+				if s == ha.LightningNotReady {
+					continue WaitLoop
+				}
+			}
+			return nil
+		}
+	}
+}
+
+func finishAndWait() {
+	
 }
