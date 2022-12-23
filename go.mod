@@ -26,11 +26,7 @@ require (
 	github.com/gin-gonic/gin v1.7.4
 	github.com/glebarez/go-sqlite v1.17.3
 	github.com/glebarez/sqlite v1.4.6
-<<<<<<< HEAD
-	github.com/go-mysql-org/go-mysql v1.6.1-0.20221116091419-49d58c4c3e4c
-=======
 	github.com/go-mysql-org/go-mysql v1.6.1-0.20221223014230-81966e15b9c5
->>>>>>> d94c297eb4 (bug-fix: update go-mysql to fix mariadb panic (#7970))
 	github.com/go-ozzo/ozzo-validation/v4 v4.3.0
 	github.com/go-sql-driver/mysql v1.6.0
 	github.com/goccy/go-json v0.9.11
