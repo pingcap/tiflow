@@ -17,6 +17,7 @@ import (
 	"context"
 	"fmt"
 	"path/filepath"
+	"regexp"
 	"strings"
 	"sync"
 
@@ -24,6 +25,7 @@ import (
 	"github.com/pingcap/failpoint"
 	"github.com/pingcap/tidb/br/pkg/lightning"
 	"github.com/pingcap/tidb/br/pkg/lightning/checkpoints"
+	"github.com/pingcap/tidb/br/pkg/lightning/common"
 	lcfg "github.com/pingcap/tidb/br/pkg/lightning/config"
 	"github.com/pingcap/tidb/br/pkg/lightning/errormanager"
 	"github.com/pingcap/tidb/dumpling/export"
@@ -76,6 +78,7 @@ type LightningLoader struct {
 	closed         atomic.Bool
 	metaBinlog     atomic.String
 	metaBinlogGTID atomic.String
+	lastErr        error
 
 	speedRecorder *export.SpeedRecorder
 }
@@ -212,14 +215,14 @@ func (l *LightningLoader) ignoreCheckpointError(ctx context.Context, cfg *lcfg.C
 	return errors.Trace(cpdb.IgnoreErrorCheckpoint(ctx, "all"))
 }
 
-func (l *LightningLoader) runLightning(ctx context.Context, cfg *lcfg.Config) error {
+func (l *LightningLoader) runLightning(ctx context.Context, cfg *lcfg.Config) (err error) {
 	taskCtx, cancel := context.WithCancel(ctx)
 	l.Lock()
 	l.cancel = cancel
 	l.Unlock()
 
 	// always try to skill all checkpoint errors so we can resume this phase.
-	err := l.ignoreCheckpointError(ctx, cfg)
+	err = l.ignoreCheckpointError(ctx, cfg)
 	if err != nil {
 		l.logger.Warn("check lightning checkpoint status failed, skip this error", log.ShortError(err))
 	}
@@ -286,13 +289,30 @@ func (l *LightningLoader) runLightning(ctx context.Context, cfg *lcfg.Config) er
 			}
 		}
 	})
+	defer func() {
+		l.lastErr = err
+	}()
 	if err != nil {
-		return terror.ErrLoadLightningRuntime.Delegate(err)
+		return convertLightningError(err)
 	}
 	if hasDup.Load() {
 		return terror.ErrLoadLightningHasDup.Generate(cfg.App.TaskInfoSchemaName, errormanager.ConflictErrorTableName)
 	}
 	return nil
+}
+
+var checksumErrorPattern = regexp.MustCompile(`total_kvs: (\d*) vs (\d*)`)
+
+func convertLightningError(err error) error {
+	if common.ErrChecksumMismatch.Equal(err) {
+		lErr := errors.Cause(err).(*errors.Error)
+		msg := lErr.GetMsg()
+		matches := checksumErrorPattern.FindStringSubmatch(msg)
+		if len(matches) == 3 {
+			return terror.ErrLoadLightningChecksum.Generate(matches[2], matches[1])
+		}
+	}
+	return terror.ErrLoadLightningRuntime.Delegate(err)
 }
 
 // GetTaskInfoSchemaName is used to assign to TikvImporter.DuplicateResolution in lightning config.
@@ -322,6 +342,7 @@ func GetLightningConfig(globalCfg *lcfg.GlobalConfig, subtaskCfg *config.SubTask
 	cfg.Checkpoint.DSN = cpPath
 	cfg.Checkpoint.KeepAfterSuccess = lcfg.CheckpointOrigin
 
+	cfg.TikvImporter.DiskQuota = subtaskCfg.LoaderConfig.DiskQuotaPhysical
 	cfg.TikvImporter.OnDuplicate = string(subtaskCfg.OnDuplicateLogical)
 	switch subtaskCfg.OnDuplicatePhysical {
 	case config.OnDuplicateManual:
@@ -329,6 +350,14 @@ func GetLightningConfig(globalCfg *lcfg.GlobalConfig, subtaskCfg *config.SubTask
 		cfg.App.TaskInfoSchemaName = GetTaskInfoSchemaName(subtaskCfg.MetaSchema, subtaskCfg.Name)
 	case config.OnDuplicateNone:
 		cfg.TikvImporter.DuplicateResolution = lcfg.DupeResAlgNone
+	}
+	switch subtaskCfg.ChecksumPhysical {
+	case config.ChecksumRequired:
+		cfg.PostRestore.Checksum = lcfg.OpLevelRequired
+	case config.ChecksumOptional:
+		cfg.PostRestore.Checksum = lcfg.OpLevelOptional
+	case config.ChecksumOff:
+		cfg.PostRestore.Checksum = lcfg.OpLevelOff
 	}
 	cfg.TiDB.Vars = make(map[string]string)
 	cfg.Routes = subtaskCfg.RouteRules
@@ -365,6 +394,23 @@ func (l *LightningLoader) restore(ctx context.Context) error {
 	status, err := l.checkPointList.taskStatus(ctx)
 	if err != nil {
 		return err
+	}
+
+	// we have disabled auto-resume for below errors, so if lightning is resuming
+	// it means user wants to skip this error.
+	switch {
+	case terror.ErrLoadLightningHasDup.Equal(l.lastErr),
+		terror.ErrLoadLightningChecksum.Equal(l.lastErr):
+		l.logger.Info("manually resume from error, DM will skip the error and continue to next unit",
+			zap.Error(l.lastErr))
+
+		l.finish.Store(true)
+		err = l.checkPointList.UpdateStatus(ctx, lightningStatusFinished)
+		if err != nil {
+			l.logger.Error("failed to update checkpoint status", zap.Error(err))
+			return err
+		}
+		status = lightningStatusFinished
 	}
 
 	if status < lightningStatusFinished {
