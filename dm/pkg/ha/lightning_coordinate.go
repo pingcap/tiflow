@@ -1,4 +1,4 @@
-// Copyright 2021 PingCAP, Inc.
+// Copyright 2022 PingCAP, Inc.
 //
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -71,4 +71,32 @@ func PutLightningNotReadyForAllSources(cli *clientv3.Client, task string, source
 		return 0, err
 	}
 	return rev, nil
+}
+
+// DeleteLightningStatusForTask deletes the status for all sources of the task.
+func DeleteLightningStatusForTask(cli *clientv3.Client, task string) (int64, error) {
+	key := common.LightningCoordinationKeyAdapter.Encode(task)
+	_, rev, err := etcdutil.DoTxnWithRepeatable(cli, etcdutil.ThenOpFunc(clientv3.OpDelete(key, clientv3.WithPrefix())))
+	if err != nil {
+		return 0, err
+	}
+	return rev, nil
+}
+
+// GetAllLightningStatus gets the status for all source of the task.
+func GetAllLightningStatus(cli *clientv3.Client, task string) ([]string, error) {
+	key := common.LightningCoordinationKeyAdapter.Encode(task)
+	resp, err := cli.Get(cli.Ctx(), key, clientv3.WithPrefix())
+	if err != nil {
+		return nil, err
+	}
+	ret := make([]string, 0, len(resp.Kvs))
+	for _, kv := range resp.Kvs {
+		var s string
+		if err2 := json.Unmarshal(kv.Value, &s); err2 != nil {
+			return nil, err2
+		}
+		ret = append(ret, s)
+	}
+	return ret, nil
 }
