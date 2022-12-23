@@ -168,16 +168,9 @@ func (w *redoWorker) handleTask(ctx context.Context, task *redoTask) (finalErr e
 		}
 
 		if allFinished {
-			// There is no more events and some required memory isn't used.
-			if availableMemSize > usedMemSize {
-				w.memQuota.refund(availableMemSize - usedMemSize)
-				log.Debug("MemoryQuotaTracing: refund memory for redo log task",
-					zap.String("namespace", w.changefeedID.Namespace),
-					zap.String("changefeed", w.changefeedID.ID),
-					zap.Int64("tableID", task.tableID),
-					zap.Uint64("memory", availableMemSize-usedMemSize))
-			}
-		} else if usedMemSize >= availableMemSize {
+			return nil
+		}
+		if usedMemSize >= availableMemSize {
 			if txnFinished {
 				if w.memQuota.tryAcquire(requestMemSize) {
 					availableMemSize += requestMemSize
@@ -210,7 +203,7 @@ func (w *redoWorker) handleTask(ctx context.Context, task *redoTask) (finalErr e
 	allEventCount := 0
 	defer func() {
 		task.tableSink.updateReceivedSorterCommitTs(lastTxnCommitTs)
-		eventCount := rangeEventCount{pos: lastPos, events: allEventCount}
+		eventCount := newRangeEventCount(lastPos, allEventCount)
 		task.tableSink.updateRangeEventCounts(eventCount)
 
 		if err := iter.Close(); err != nil {
@@ -232,6 +225,16 @@ func (w *redoWorker) handleTask(ctx context.Context, task *redoTask) (finalErr e
 			// Otherwise we can't ensure all events before `lastPos` are emitted.
 			task.callback(lastPos)
 		}
+
+		// There is no more events and some required memory isn't used.
+		if availableMemSize > usedMemSize {
+			w.memQuota.refund(availableMemSize - usedMemSize)
+			log.Debug("MemoryQuotaTracing: refund memory for redo log task",
+				zap.String("namespace", w.changefeedID.Namespace),
+				zap.String("changefeed", w.changefeedID.ID),
+				zap.Int64("tableID", task.tableID),
+				zap.Uint64("memory", availableMemSize-usedMemSize))
+		}
 	}()
 
 	for availableMemSize > usedMemSize && !task.isCanceled() {
@@ -243,6 +246,10 @@ func (w *redoWorker) handleTask(ctx context.Context, task *redoTask) (finalErr e
 		if e == nil {
 			lastPos = upperBound
 			lastTxnCommitTs = upperBound.CommitTs
+			if cache != nil {
+				// Still need to update cache upper boundary even if no events.
+				cache.pushBatch(nil, 0, lastPos)
+			}
 			return maybeEmitBatchEvents(true, true)
 		}
 		allEventCount += 1
@@ -259,24 +266,25 @@ func (w *redoWorker) handleTask(ctx context.Context, task *redoTask) (finalErr e
 		}
 
 		// NOTICE: The event can be filtered by the event filter.
+		var x []*model.RowChangedEvent
+		var size uint64
 		if e.Row != nil {
 			// For all rows, we add table replicate ts, so mysql sink can determine safe-mode.
 			e.Row.ReplicatingTs = task.tableSink.replicateTs
-			x, size, err := convertRowChangedEvents(w.changefeedID, task.tableID, w.enableOldValue, e)
+			x, size, err = convertRowChangedEvents(w.changefeedID, task.tableID, w.enableOldValue, e)
 			if err != nil {
 				return errors.Trace(err)
 			}
 			usedMemSize += size
-
 			rows = append(rows, x...)
 			rowsSize += size
-			if cache != nil {
-				cached, brokenSize := cache.pushBatch(x, size, pos)
-				if cached {
-					cachedSize += size
-				} else {
-					cachedSize -= brokenSize
-				}
+		}
+		if cache != nil {
+			cached, brokenSize := cache.pushBatch(x, size, pos)
+			if cached {
+				cachedSize += size
+			} else {
+				cachedSize -= brokenSize
 			}
 		}
 

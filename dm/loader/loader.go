@@ -18,6 +18,7 @@ import (
 	"bytes"
 	"context"
 	"encoding/hex"
+	"fmt"
 	"io"
 	"os"
 	"path/filepath"
@@ -581,9 +582,15 @@ func (l *Loader) Init(ctx context.Context) (err error) {
 	return nil
 }
 
+func (l *Loader) handleExitErrMetric(err *pb.ProcessError) {
+	resumable := fmt.Sprintf("%t", unit.IsResumableError(err))
+	loaderExitWithErrorCounter.WithLabelValues(l.cfg.Name, l.cfg.SourceID, resumable).Inc()
+}
+
 // Process implements Unit.Process.
 func (l *Loader) Process(ctx context.Context, pr chan pb.ProcessResult) {
-	loaderExitWithErrorCounter.WithLabelValues(l.cfg.Name, l.cfg.SourceID).Add(0)
+	loaderExitWithErrorCounter.WithLabelValues(l.cfg.Name, l.cfg.SourceID, "true").Add(0)
+	loaderExitWithErrorCounter.WithLabelValues(l.cfg.Name, l.cfg.SourceID, "false").Add(0)
 
 	newCtx, cancel := context.WithCancel(ctx)
 	defer cancel()
@@ -591,9 +598,10 @@ func (l *Loader) Process(ctx context.Context, pr chan pb.ProcessResult) {
 	l.newFileJobQueue()
 	binlog, gtid, err := getMydumpMetadata(ctx, l.cli, l.cfg, l.workerName)
 	if err != nil {
-		loaderExitWithErrorCounter.WithLabelValues(l.cfg.Name, l.cfg.SourceID).Inc()
+		processError := unit.NewProcessError(err)
+		l.handleExitErrMetric(processError)
 		pr <- pb.ProcessResult{
-			Errors: []*pb.ProcessError{unit.NewProcessError(err)},
+			Errors: []*pb.ProcessError{processError},
 		}
 		return
 	}
@@ -637,8 +645,9 @@ func (l *Loader) Process(ctx context.Context, pr chan pb.ProcessResult) {
 		if utils.IsContextCanceledError(err) {
 			l.logger.Info("filter out error caused by user cancel")
 		} else {
-			loaderExitWithErrorCounter.WithLabelValues(l.cfg.Name, l.cfg.SourceID).Inc()
-			errs = append(errs, unit.NewProcessError(err))
+			processError := unit.NewProcessError(err)
+			l.handleExitErrMetric(processError)
+			errs = append(errs, processError)
 		}
 	}
 

@@ -685,9 +685,18 @@ func (s *Syncer) resetDBs(tctx *tcontext.Context) error {
 	return nil
 }
 
+func (s *Syncer) handleExitErrMetric(err *pb.ProcessError) {
+	if unit.IsResumableError(err) {
+		s.metricsProxies.Metrics.ExitWithResumableErrorCounter.Inc()
+	} else {
+		s.metricsProxies.Metrics.ExitWithNonResumableErrorCounter.Inc()
+	}
+}
+
 // Process implements the dm.Unit interface.
 func (s *Syncer) Process(ctx context.Context, pr chan pb.ProcessResult) {
-	s.metricsProxies.Metrics.SyncerExitWithErrorCounter.Add(0)
+	s.metricsProxies.Metrics.ExitWithResumableErrorCounter.Add(0)
+	s.metricsProxies.Metrics.ExitWithNonResumableErrorCounter.Add(0)
 
 	newCtx, cancel := context.WithCancel(ctx)
 	defer cancel()
@@ -718,7 +727,6 @@ func (s *Syncer) Process(ctx context.Context, pr chan pb.ProcessResult) {
 				return
 			}
 			cancel() // cancel s.Run
-			s.metricsProxies.Metrics.SyncerExitWithErrorCounter.Inc()
 			errsMu.Lock()
 			errs = append(errs, err)
 			errsMu.Unlock()
@@ -745,7 +753,6 @@ func (s *Syncer) Process(ctx context.Context, pr chan pb.ProcessResult) {
 			s.tctx.L().Info("filter out error caused by user cancel", log.ShortError(err))
 		} else {
 			s.tctx.L().Debug("unit syncer quits with error", zap.Error(err))
-			s.metricsProxies.Metrics.SyncerExitWithErrorCounter.Inc()
 			errsMu.Lock()
 			errs = append(errs, unit.NewProcessError(err))
 			errsMu.Unlock()
@@ -759,6 +766,9 @@ func (s *Syncer) Process(ctx context.Context, pr chan pb.ProcessResult) {
 	default:
 	}
 
+	for _, processError := range errs {
+		s.handleExitErrMetric(processError)
+	}
 	pr <- pb.ProcessResult{
 		IsCanceled: isCanceled,
 		Errors:     errs,
@@ -2971,7 +2981,7 @@ func (s *Syncer) createDBs(ctx context.Context) error {
 	var err error
 	dbCfg := s.cfg.From
 	dbCfg.RawDBCfg = dbconfig.DefaultRawDBConfig().SetReadTimeout(maxDMLConnectionTimeout)
-	fromDB, fromConns, err := dbconn.CreateConns(s.tctx, s.cfg, conn.UpstreamDBConfig(&dbCfg), 1)
+	fromDB, fromConns, err := dbconn.CreateConns(s.tctx, s.cfg, conn.UpstreamDBConfig(&dbCfg), 1, s.cfg.DumpIOTotalBytes, s.cfg.DumpUUID)
 	if err != nil {
 		return err
 	}
@@ -3016,7 +3026,7 @@ func (s *Syncer) createDBs(ctx context.Context) error {
 		SetReadTimeout(maxDMLConnectionTimeout).
 		SetMaxIdleConns(s.cfg.WorkerCount)
 
-	s.toDB, s.toDBConns, err = dbconn.CreateConns(s.tctx, s.cfg, conn.DownstreamDBConfig(&dbCfg), s.cfg.WorkerCount)
+	s.toDB, s.toDBConns, err = dbconn.CreateConns(s.tctx, s.cfg, conn.DownstreamDBConfig(&dbCfg), s.cfg.WorkerCount, s.cfg.IOTotalBytes, s.cfg.UUID)
 	if err != nil {
 		dbconn.CloseUpstreamConn(s.tctx, s.fromDB) // release resources acquired before return with error
 		return err
@@ -3026,7 +3036,7 @@ func (s *Syncer) createDBs(ctx context.Context) error {
 	dbCfg.RawDBCfg = dbconfig.DefaultRawDBConfig().SetReadTimeout(maxDDLConnectionTimeout)
 
 	var ddlDBConns []*dbconn.DBConn
-	s.ddlDB, ddlDBConns, err = dbconn.CreateConns(s.tctx, s.cfg, conn.DownstreamDBConfig(&dbCfg), 2)
+	s.ddlDB, ddlDBConns, err = dbconn.CreateConns(s.tctx, s.cfg, conn.DownstreamDBConfig(&dbCfg), 2, s.cfg.IOTotalBytes, s.cfg.UUID)
 	if err != nil {
 		dbconn.CloseUpstreamConn(s.tctx, s.fromDB)
 		dbconn.CloseBaseDB(s.tctx, s.toDB)
@@ -3165,10 +3175,12 @@ func (s *Syncer) Resume(ctx context.Context, pr chan pb.ProcessResult) {
 	var err error
 	defer func() {
 		if err != nil {
+			processError := unit.NewProcessError(err)
+			s.handleExitErrMetric(processError)
 			pr <- pb.ProcessResult{
 				IsCanceled: false,
 				Errors: []*pb.ProcessError{
-					unit.NewProcessError(err),
+					processError,
 				},
 			}
 		}
