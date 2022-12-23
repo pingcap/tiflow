@@ -64,7 +64,7 @@ func Sort(spans []tablepb.Span) {
 
 // HashableSpan is a hashable span, which can be used as a map key.
 type HashableSpan struct {
-	TableID  model.TableID
+	TableID  tablepb.TableID
 	StartKey string
 	EndKey   string
 }

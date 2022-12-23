@@ -251,7 +251,8 @@ func TestManyTs(t *testing.T) {
 	defer cancel()
 	state := tablepb.TableStatePrepared
 	sink := mocksink.NewNormalMockSink()
-	node := newSinkNode(spanz.TableIDToComparableSpan(1), sink, nil, 0, 10, &mockFlowController{}, redo.NewDisabledManager(),
+	span := spanz.TableIDToComparableSpan(1)
+	node := newSinkNode(span, sink, nil, 0, 10, &mockFlowController{}, redo.NewDisabledManager(),
 		&state, model.DefaultChangeFeedID("changefeed-id-test"), true, false)
 	require.Equal(t, tablepb.TableStatePrepared, node.State())
 
@@ -410,7 +411,8 @@ func TestIgnoreEmptyRowChangeEvent(t *testing.T) {
 	defer cancel()
 	state := tablepb.TableStatePreparing
 	sink := mocksink.NewNormalMockSink()
-	node := newSinkNode(spanz.TableIDToComparableSpan(1), sink, nil, 0, 10, &mockFlowController{}, redo.NewDisabledManager(),
+	span := spanz.TableIDToComparableSpan(1)
+	node := newSinkNode(span, sink, nil, 0, 10, &mockFlowController{}, redo.NewDisabledManager(),
 		&state, model.DefaultChangeFeedID("changefeed-id-test"), true, false)
 
 	// empty row, no Columns and PreColumns.
@@ -429,7 +431,8 @@ func TestSplitUpdateEventWhenEnableOldValue(t *testing.T) {
 	defer cancel()
 	state := tablepb.TableStatePreparing
 	sink := mocksink.NewNormalMockSink()
-	node := newSinkNode(spanz.TableIDToComparableSpan(1), sink, nil, 0, 10, &mockFlowController{}, redo.NewDisabledManager(),
+	span := spanz.TableIDToComparableSpan(1)
+	node := newSinkNode(span, sink, nil, 0, 10, &mockFlowController{}, redo.NewDisabledManager(),
 		&state, model.DefaultChangeFeedID("changefeed-id-test"), true, false)
 
 	// nil row.
@@ -484,7 +487,8 @@ func TestSplitUpdateEventWhenDisableOldValue(t *testing.T) {
 	state := tablepb.TableStatePreparing
 	sink := mocksink.NewNormalMockSink()
 	enableOldValue := false
-	node := newSinkNode(spanz.TableIDToComparableSpan(1), sink, nil, 0, 10, &mockFlowController{}, redo.NewDisabledManager(),
+	span := spanz.TableIDToComparableSpan(1)
+	node := newSinkNode(span, sink, nil, 0, 10, &mockFlowController{}, redo.NewDisabledManager(),
 		&state, model.DefaultChangeFeedID("changefeed-id-test"), enableOldValue, false)
 
 	// nil row.
@@ -616,7 +620,8 @@ func TestFlushSinkReleaseFlowController(t *testing.T) {
 	flowController := &flushFlowController{}
 	sink := mocksink.NewMockFlushSink()
 	// sNode is a sinkNode
-	sNode := newSinkNode(spanz.TableIDToComparableSpan(1), sink, nil, 0, 10, flowController, redo.NewDisabledManager(),
+	span := spanz.TableIDToComparableSpan(1)
+	sNode := newSinkNode(span, sink, nil, 0, 10, flowController, redo.NewDisabledManager(),
 		&state, model.DefaultChangeFeedID("changefeed-id-test"), true, false)
 	sNode.barrierTs = 10
 
@@ -638,7 +643,8 @@ func TestSplitTxn(t *testing.T) {
 	flowController := &flushFlowController{}
 	sink := mocksink.NewMockFlushSink()
 	// sNode is a sinkNode
-	sNode := newSinkNode(spanz.TableIDToComparableSpan(1), sink, nil, 0, 10, flowController, redo.NewDisabledManager(),
+	span := spanz.TableIDToComparableSpan(1)
+	sNode := newSinkNode(span, sink, nil, 0, 10, flowController, redo.NewDisabledManager(),
 		&state, model.DefaultChangeFeedID("changefeed-id-test"), true, false)
 	msg := pmessage.PolymorphicEventMessage(&model.PolymorphicEvent{
 		CRTs:  1,
@@ -685,7 +691,8 @@ func TestSinkStatsRace(t *testing.T) {
 	flowController := &flushFlowController{}
 	sink := mocksink.NewMockFlushSink()
 	// sNode is a sinkNode
-	sNode := newSinkNode(spanz.TableIDToComparableSpan(1), sink, nil, 0, 10, flowController, redo.NewDisabledManager(),
+	span := spanz.TableIDToComparableSpan(1)
+	sNode := newSinkNode(span, sink, nil, 0, 10, flowController, redo.NewDisabledManager(),
 		&state, model.DefaultChangeFeedID("changefeed-id-test"), true, false)
 
 	ctx, cancel := context.WithCancel(context.Background())

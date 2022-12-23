@@ -511,7 +511,9 @@ func (m *ManagerImpl) prepareForFlush() (
 	return
 }
 
-func (m *ManagerImpl) postFlush(tableRtsMap map[spanz.HashableSpan]model.Ts, minResolvedTs model.Ts) {
+func (m *ManagerImpl) postFlush(
+	tableRtsMap map[spanz.HashableSpan]model.Ts, minResolvedTs model.Ts,
+) {
 	if !m.opts.EmitRowEvents {
 		return
 	}
