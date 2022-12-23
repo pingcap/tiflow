@@ -128,6 +128,7 @@ func (t *testSchedulerSuite) testSchedulerProgress(restart int) {
 	require.NoError(t.T(), subtaskCfg1.Decode(config.SampleSubtaskConfig, true))
 	subtaskCfg1.SourceID = sourceID1
 	subtaskCfg1.Name = taskName1
+	subtaskCfg1.LoaderConfig.ImportMode = config.LoadModePhysical
 	require.NoError(t.T(), subtaskCfg1.Adjust(true))
 	subtaskCfg21 := subtaskCfg1
 	subtaskCfg21.Name = taskName2
@@ -263,6 +264,10 @@ func (t *testSchedulerSuite) testSchedulerProgress(restart int) {
 	t.subTaskStageMatch(s, taskName1, sourceID1, pb.Stage_Running)
 	t.downstreamMetaExist(s, taskName1, subtaskCfg1.To, subtaskCfg1.MetaSchema)
 	t.downstreamMetaNotExist(s, taskName2)
+	// check lightning status is written to etcd
+	status, err := ha.GetAllLightningStatus(t.etcdTestCli, taskName1)
+	require.NoError(t.T(), err)
+	require.Equal(t.T(), []string{ha.LightningNotReady}, status)
 
 	// try start a task with two sources, some sources not bound.
 	require.True(t.T(), terror.ErrSchedulerSourcesUnbound.Equal(s.AddSubTasks(false, pb.Stage_Running, subtaskCfg21, subtaskCfg22)))
@@ -422,6 +427,10 @@ func (t *testSchedulerSuite) testSchedulerProgress(restart int) {
 	t.subTaskStageMatch(s, taskName2, sourceID1, pb.Stage_Running)
 	t.subTaskStageMatch(s, taskName2, sourceID2, pb.Stage_Running)
 	t.validatorStageMatch(s, taskName2, sourceID2, pb.Stage_Running)
+	// check lightning status is written to etcd
+	status, err = ha.GetAllLightningStatus(t.etcdTestCli, taskName2)
+	require.NoError(t.T(), err)
+	require.Equal(t.T(), []string{ha.LightningNotReady, ha.LightningNotReady}, status)
 	rebuildScheduler(ctx)
 
 	// CASE 4.4.2 fail to stop any task.

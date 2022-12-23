@@ -89,6 +89,7 @@ function escape_schema() {
 	check_rpc_alive $cur/../bin/check_master_online 127.0.0.1:$MASTER_PORT
 	run_dm_worker $WORK_DIR/worker1 $WORKER1_PORT $cur/conf/dm-worker1.toml
 	check_rpc_alive $cur/../bin/check_worker_online 127.0.0.1:$WORKER1_PORT
+  export GO_FAILPOINTS=''
 	run_dm_worker $WORK_DIR/worker2 $WORKER2_PORT $cur/conf/dm-worker2.toml
 	check_rpc_alive $cur/../bin/check_worker_online 127.0.0.1:$WORKER2_PORT
 	# operate mysql config to worker
@@ -103,6 +104,8 @@ function escape_schema() {
 	dmctl_start_task "$WORK_DIR/dm-task.yaml" "--remove-meta"
 	check_metric $WORKER1_PORT 'dumpling_dump_finished_tables' 3 0 3
 	check_sync_diff $WORK_DIR $WORK_DIR/diff_config.toml
+
+	read -p 123
 
 	check_log_contain_with_retry 'clean dump files' $WORK_DIR/worker1/log/dm-worker.log
 	check_log_contain_with_retry 'clean dump files' $WORK_DIR/worker2/log/dm-worker.log
