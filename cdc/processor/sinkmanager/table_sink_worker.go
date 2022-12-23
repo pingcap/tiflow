@@ -21,6 +21,7 @@ import (
 	"github.com/pingcap/tiflow/cdc/model"
 	"github.com/pingcap/tiflow/cdc/processor/sourcemanager"
 	"github.com/pingcap/tiflow/cdc/processor/sourcemanager/engine"
+	metrics "github.com/pingcap/tiflow/cdc/sorter"
 	"github.com/prometheus/client_golang/prometheus"
 	"go.uber.org/zap"
 )
@@ -250,7 +251,17 @@ func (w *sinkWorker) handleTask(ctx context.Context, task *sinkTask) (finalErr e
 	defer func() {
 		w.metricRedoEventCacheMiss.Add(float64(allEventSize))
 		task.tableSink.receivedEventCount.Add(int64(allEventCount))
+<<<<<<< HEAD
 		if !w.redoEnabled {
+=======
+		metrics.OutputEventCount.WithLabelValues(
+			task.tableSink.changefeed.Namespace,
+			task.tableSink.changefeed.ID,
+			"kv",
+		).Add(float64(allEventCount))
+
+		if w.eventCache == nil {
+>>>>>>> a75fdc0b9e (sinkv2(cdc): make pebble engine write smoothly (#7952))
 			task.tableSink.updateReceivedSorterCommitTs(currTxnCommitTs)
 			eventCount := rangeEventCount{pos: lastPos, events: allEventCount}
 			task.tableSink.updateRangeEventCounts(eventCount)
@@ -353,6 +364,11 @@ func (w *sinkWorker) fetchFromCache(
 	if popRes.success {
 		if len(popRes.events) > 0 {
 			task.tableSink.receivedEventCount.Add(int64(popRes.pushCount))
+			metrics.OutputEventCount.WithLabelValues(
+				task.tableSink.changefeed.Namespace,
+				task.tableSink.changefeed.ID,
+				"kv",
+			).Add(float64(popRes.pushCount))
 			w.metricRedoEventCacheHit.Add(float64(popRes.size))
 			task.tableSink.appendRowChangedEvents(popRes.events...)
 		}
