@@ -27,10 +27,15 @@ import (
 	"go.uber.org/zap"
 )
 
+type splitSpans struct {
+	byAddTable bool
+	spans      []tablepb.Span
+}
+
 // Reconciler reconciles span and table mapping, make sure spans are in
 // a desired state and covers all table ranges.
 type Reconciler struct {
-	tableSpans map[model.TableID][]tablepb.Span
+	tableSpans map[model.TableID]splitSpans
 	spanCache  []tablepb.Span
 
 	regionCache      RegionCache
@@ -44,7 +49,7 @@ func NewReconciler(
 	maxRegionPerSpan int,
 ) *Reconciler {
 	return &Reconciler{
-		tableSpans:       make(map[int64][]tablepb.Span),
+		tableSpans:       make(map[int64]splitSpans),
 		regionCache:      regionCache,
 		changefeedID:     changefeedID,
 		maxRegionPerSpan: maxRegionPerSpan,
@@ -81,28 +86,32 @@ func (m *Reconciler) Reconcile(
 		if len(coveredSpans) == 0 {
 			// No such spans in replications.
 			if _, ok := m.tableSpans[tableID]; ok {
-				// We have seen such spans before, it is impossible.
-				log.Panic("schedulerv3: impossible spans",
-					zap.String("changefeed", m.changefeedID.ID),
-					zap.String("namespace", m.changefeedID.Namespace),
-					zap.Int64("tableID", tableID),
-					zap.Stringer("spanStart", &tableStart),
-					zap.Stringer("spanEnd", &tableEnd))
+				// And we have seen such spans before, it means these spans are
+				// not yet be scheduled due to basic scheduler's batch add task
+				// rate limit.
+				continue
 			}
 			// And we have not seen such spans before, maybe:
 			// 1. it's a table being added when starting a changefeed
 			//    or after owner switch.
 			// 4. it's a new table being created by DDL when a changefeed is running.
 			tableSpan := spanz.TableIDToComparableSpan(tableID)
+			spans := []tablepb.Span{tableSpan}
 			if compat.CheckSpanReplicationEnabled() {
-				m.tableSpans[tableID] = m.splitSpan(ctx, tableSpan)
-			} else {
-				// Do not split table if span replication is not enabled.
-				m.tableSpans[tableID] = []tablepb.Span{tableSpan}
+				spans = m.splitSpan(ctx, tableSpan)
+			}
+			m.tableSpans[tableID] = splitSpans{
+				byAddTable: true,
+				spans:      spans,
 			}
 			updateCache = true
 		} else if len(holes) != 0 {
 			// There are some holes in the table span, maybe:
+			if spans, ok := m.tableSpans[tableID]; ok && spans.byAddTable {
+				// These spans are split by reconciler add table. It may be
+				// still in progress because of basic scheduler rate limit.
+				continue
+			}
 			// 3. owner switch after some captures failed.
 			log.Info("schedulerv3: detect owner switch after captures fail",
 				zap.String("changefeed", m.changefeedID.ID),
@@ -115,14 +124,21 @@ func (m *Reconciler) Reconcile(
 				zap.Stringer("foundEnd", &coveredSpans[len(coveredSpans)-1]))
 			for i := range holes {
 				holes[i].TableID = tableID
-				m.tableSpans[tableID] = append(coveredSpans, holes[i])
+				coveredSpans = append(coveredSpans, holes[i])
 				// TODO: maybe we should split holes too.
+			}
+			m.tableSpans[tableID] = splitSpans{
+				byAddTable: false,
+				spans:      coveredSpans,
 			}
 			updateCache = true
 		} else {
 			// Found and no hole, maybe:
 			// 2. owner switch and no capture fails.
-			m.tableSpans[tableID] = coveredSpans
+			m.tableSpans[tableID] = splitSpans{
+				byAddTable: false,
+				spans:      coveredSpans,
+			}
 		}
 	}
 
@@ -151,8 +167,8 @@ func (m *Reconciler) Reconcile(
 
 	if updateCache {
 		m.spanCache = make([]tablepb.Span, 0)
-		for _, spans := range m.tableSpans {
-			m.spanCache = append(m.spanCache, spans...)
+		for _, ss := range m.tableSpans {
+			m.spanCache = append(m.spanCache, ss.spans...)
 		}
 	}
 	return m.spanCache
