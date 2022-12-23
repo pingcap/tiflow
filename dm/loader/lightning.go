@@ -309,7 +309,7 @@ func convertLightningError(err error) error {
 		msg := lErr.GetMsg()
 		matches := checksumErrorPattern.FindStringSubmatch(msg)
 		if len(matches) == 3 {
-			return terror.ErrLoadLightningChecksum.Generate(matches[1], matches[2])
+			return terror.ErrLoadLightningChecksum.Generate(matches[2], matches[1])
 		}
 	}
 	return terror.ErrLoadLightningRuntime.Delegate(err)

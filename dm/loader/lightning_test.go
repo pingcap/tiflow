@@ -43,5 +43,5 @@ func TestConvertLightningError(t *testing.T) {
 	err := common.ErrChecksumMismatch.GenWithStackByArgs(1, 2, 3, 4, 5, 6)
 	converted := convertLightningError(errors.Trace(err))
 	require.True(t, terror.ErrLoadLightningChecksum.Equal(converted))
-	require.Contains(t, converted.Error(), "checksum mismatched, KV number in source files: 3, KV number in TiDB cluster: 4")
+	require.Contains(t, converted.Error(), "checksum mismatched, KV number in source files: 4, KV number in TiDB cluster: 3")
 }

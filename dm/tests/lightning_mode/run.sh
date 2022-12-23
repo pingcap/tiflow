@@ -76,7 +76,7 @@ function run() {
 	# TODO: only one worker is paused. all workers should be paused!
 	run_dm_ctl_with_retry $WORK_DIR "127.0.0.1:$MASTER_PORT" \
 		"query-status test" \
-		"checksum mismatched, KV number in source files: 3, KV number in TiDB cluster: 6" 1
+		"checksum mismatched, KV number in source files: 6, KV number in TiDB cluster: 3" 1
 	run_dm_ctl $WORK_DIR "127.0.0.1:$MASTER_PORT" \
 		"resume-task test" \
 		"\"result\": true" 3
