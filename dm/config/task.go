@@ -275,6 +275,15 @@ const (
 	OnDuplicateManual PhysicalDuplicateResolveType = "manual"
 )
 
+// PhysicalChecksumType defines the configuration of checksum of physical import.
+type PhysicalChecksumType string
+
+const (
+	ChecksumRequired = "required"
+	ChecksumOptional = "optional"
+	ChecksumOff      = "off"
+)
+
 // LoaderConfig represents loader process unit's specific config.
 type LoaderConfig struct {
 	PoolSize           int      `yaml:"pool-size" toml:"pool-size" json:"pool-size"`
@@ -287,6 +296,7 @@ type LoaderConfig struct {
 	OnDuplicateLogical  LogicalDuplicateResolveType  `yaml:"on-duplicate-logical" toml:"on-duplicate-logical" json:"on-duplicate-logical"`
 	OnDuplicatePhysical PhysicalDuplicateResolveType `yaml:"on-duplicate-physical" toml:"on-duplicate-physical" json:"on-duplicate-physical"`
 	DiskQuotaPhysical   config.ByteSize              `yaml:"disk-quota-physical" toml:"disk-quota-physical" json:"disk-quota-physical"`
+	ChecksumPhysical    PhysicalChecksumType         `yaml:"checksum-physical" toml:"checksum-physical" json:"checksum-physical"`
 }
 
 // DefaultLoaderConfig return default loader config for task.
@@ -331,10 +341,6 @@ func (m *LoaderConfig) adjust() error {
 		m.PoolSize = defaultPoolSize
 	}
 
-	if m.Dir != "" && m.SortingDirPhysical == "" {
-		m.SortingDirPhysical = m.Dir
-	}
-
 	if m.OnDuplicateLogical == "" && m.OnDuplicate != "" {
 		m.OnDuplicateLogical = m.OnDuplicate
 	}
@@ -356,6 +362,16 @@ func (m *LoaderConfig) adjust() error {
 	case OnDuplicateNone, OnDuplicateManual:
 	default:
 		return terror.ErrConfigInvalidPhysicalDuplicateResolution.Generate(m.OnDuplicatePhysical)
+	}
+
+	if m.ChecksumPhysical == "" {
+		m.ChecksumPhysical = ChecksumRequired
+	}
+	m.ChecksumPhysical = PhysicalChecksumType(strings.ToLower(string(m.ChecksumPhysical)))
+	switch m.ChecksumPhysical {
+	case ChecksumRequired, ChecksumOptional, ChecksumOff:
+	default:
+		return terror.ErrConfigInvalidPhysicalChecksum.Generate(m.ChecksumPhysical)
 	}
 
 	return nil

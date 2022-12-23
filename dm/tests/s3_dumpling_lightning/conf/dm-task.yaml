@@ -53,7 +53,8 @@ loaders:
   global:
     pool-size: 16
     dir: placeholder
-    import-mode: "sql"
+    import-mode: "physical"
+    checksum-physical: off # TODO: enable this after lightning coordinate across multiple DM-workers
 
 syncers:
   global:

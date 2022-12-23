@@ -232,6 +232,8 @@ func (h *OpenAPIV2) updateChangefeed(c *gin.Context) {
 		_ = c.Error(err)
 		return
 	}
+	cfInfo.Namespace = changefeedID.Namespace
+	cfInfo.ID = changefeedID.ID
 	upInfo, err := etcdClient.GetUpstreamInfo(ctx, cfInfo.UpstreamID,
 		cfInfo.Namespace)
 	if err != nil {
