@@ -106,12 +106,7 @@ func newTableSinkWrapper(
 		targetTs:   targetTs,
 	}
 	res.checkpointTs.Store(startTs)
-	for {
-		old := res.receivedSorterResolvedTs.Load()
-		if startTs <= old || res.receivedSorterResolvedTs.CompareAndSwap(old, startTs) {
-			break
-		}
-	}
+	res.receivedSorterResolvedTs.Store(startTs)
 	return res
 }
 
