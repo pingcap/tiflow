@@ -40,8 +40,10 @@ function complex_behaviour() {
 		"\"result\": true" 2 \
 		"\"synced\": true" 1
 
-	run_sql_tidb "select count(1) from expr_filter.t2"
-	check_contains "count(1): 5"
+	run_sql_tidb "select count(0) from expr_filter.t2"
+	check_contains "count(0): 6"
+	run_sql_tidb "select count(1) from expr_filter.t2 where should_skip = 0"
+	check_contains "count(1): 6"
 	run_sql_tidb "select count(2) from expr_filter.t2 where should_skip = 1"
 	check_contains "count(2): 0"
 

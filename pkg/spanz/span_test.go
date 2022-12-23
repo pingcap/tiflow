@@ -11,13 +11,14 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-package regionspan
+package spanz
 
 import (
 	"bytes"
 	"testing"
 
 	"github.com/pingcap/tidb/tablecodec"
+	"github.com/pingcap/tiflow/cdc/processor/tablepb"
 	"github.com/stretchr/testify/require"
 )
 
@@ -69,16 +70,36 @@ func TestIntersect(t *testing.T) {
 	t.Parallel()
 
 	tests := []struct {
-		lhs ComparableSpan
-		rhs ComparableSpan
+		lhs tablepb.Span
+		rhs tablepb.Span
 		// Set nil for non-intersect
-		res *ComparableSpan
+		res *tablepb.Span
 	}{
-		{ComparableSpan{nil, []byte{1}}, ComparableSpan{[]byte{1}, nil}, nil},
-		{ComparableSpan{nil, nil}, ComparableSpan{nil, nil}, &ComparableSpan{nil, nil}},
-		{ComparableSpan{nil, nil}, ComparableSpan{[]byte{1}, []byte{2}}, &ComparableSpan{[]byte{1}, []byte{2}}},
-		{ComparableSpan{[]byte{0}, []byte{3}}, ComparableSpan{[]byte{1}, []byte{2}}, &ComparableSpan{[]byte{1}, []byte{2}}},
-		{ComparableSpan{[]byte{0}, []byte{2}}, ComparableSpan{[]byte{1}, []byte{2}}, &ComparableSpan{[]byte{1}, []byte{2}}},
+		{
+			lhs: tablepb.Span{StartKey: nil, EndKey: []byte{1}},
+			rhs: tablepb.Span{StartKey: []byte{1}, EndKey: nil},
+			res: nil,
+		},
+		{
+			lhs: tablepb.Span{StartKey: nil, EndKey: nil},
+			rhs: tablepb.Span{StartKey: nil, EndKey: nil},
+			res: &tablepb.Span{StartKey: nil, EndKey: nil},
+		},
+		{
+			lhs: tablepb.Span{StartKey: nil, EndKey: nil},
+			rhs: tablepb.Span{StartKey: []byte{1}, EndKey: []byte{2}},
+			res: &tablepb.Span{StartKey: []byte{1}, EndKey: []byte{2}},
+		},
+		{
+			lhs: tablepb.Span{StartKey: []byte{0}, EndKey: []byte{3}},
+			rhs: tablepb.Span{StartKey: []byte{1}, EndKey: []byte{2}},
+			res: &tablepb.Span{StartKey: []byte{1}, EndKey: []byte{2}},
+		},
+		{
+			lhs: tablepb.Span{StartKey: []byte{0}, EndKey: []byte{2}},
+			rhs: tablepb.Span{StartKey: []byte{1}, EndKey: []byte{2}},
+			res: &tablepb.Span{StartKey: []byte{1}, EndKey: []byte{2}},
+		},
 	}
 
 	for _, test := range tests {
@@ -100,13 +121,13 @@ func TestIntersect(t *testing.T) {
 	}
 }
 
-func TestGetTableSpan(t *testing.T) {
+func TestGetTableRange(t *testing.T) {
 	t.Parallel()
 
-	span := GetTableSpan(123)
-	require.Equal(t, -1, bytes.Compare(span.Start, span.End))
+	startKey, endKey := GetTableRange(123)
+	require.Equal(t, -1, bytes.Compare(startKey, endKey))
 	prefix := []byte(tablecodec.GenTableRecordPrefix(123))
-	require.GreaterOrEqual(t, 0, bytes.Compare(span.Start, prefix))
+	require.GreaterOrEqual(t, 0, bytes.Compare(startKey, prefix))
 	prefix[len(prefix)-1]++
-	require.LessOrEqual(t, 0, bytes.Compare(span.End, prefix))
+	require.LessOrEqual(t, 0, bytes.Compare(endKey, prefix))
 }

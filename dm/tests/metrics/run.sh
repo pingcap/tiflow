@@ -8,8 +8,8 @@ WORK_DIR=$TEST_DIR/$TEST_NAME
 
 function check_dashboard_datasource() {
 	echo "check dashboard data source"
-	check_grafana_dashboard_datasource "metrics/grafana/DM-Monitor-Standard.json"
-	check_grafana_dashboard_datasource "metrics/grafana/DM-Monitor-Professional.json"
+	check_grafana_dashboard_datasource "../metrics/grafana/DM-Monitor-Standard.json"
+	check_grafana_dashboard_datasource "../metrics/grafana/DM-Monitor-Professional.json"
 	echo "check dashboard data source success"
 }
 

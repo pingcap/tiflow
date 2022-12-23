@@ -89,6 +89,7 @@ type ChangefeedConfig struct {
 
 // ReplicaConfig is a duplicate of  config.ReplicaConfig
 type ReplicaConfig struct {
+	MemoryQuota           uint64            `json:"memory_quota"`
 	CaseSensitive         bool              `json:"case_sensitive"`
 	EnableOldValue        bool              `json:"enable_old_value"`
 	ForceReplicate        bool              `json:"force_replicate"`
@@ -107,6 +108,7 @@ type ReplicaConfig struct {
 // ToInternalReplicaConfig coverts *v2.ReplicaConfig into *config.ReplicaConfig
 func (c *ReplicaConfig) ToInternalReplicaConfig() *config.ReplicaConfig {
 	res := config.GetDefaultReplicaConfig()
+	res.MemoryQuota = c.MemoryQuota
 	res.CaseSensitive = c.CaseSensitive
 	res.EnableOldValue = c.EnableOldValue
 	res.ForceReplicate = c.ForceReplicate
@@ -215,6 +217,7 @@ func (c *ReplicaConfig) ToInternalReplicaConfig() *config.ReplicaConfig {
 func ToAPIReplicaConfig(c *config.ReplicaConfig) *ReplicaConfig {
 	cloned := c.Clone()
 	res := &ReplicaConfig{
+		MemoryQuota:           cloned.MemoryQuota,
 		CaseSensitive:         cloned.CaseSensitive,
 		EnableOldValue:        cloned.EnableOldValue,
 		ForceReplicate:        cloned.ForceReplicate,

@@ -17,8 +17,10 @@ import (
 	"testing"
 
 	"github.com/pingcap/tiflow/cdc/model"
+	"github.com/pingcap/tiflow/cdc/processor/tablepb"
 	"github.com/pingcap/tiflow/cdc/scheduler/internal/v3/member"
 	"github.com/pingcap/tiflow/cdc/scheduler/internal/v3/replication"
+	"github.com/pingcap/tiflow/pkg/spanz"
 	"github.com/stretchr/testify/require"
 )
 
@@ -30,8 +32,8 @@ func TestDrainCapture(t *testing.T) {
 
 	var checkpointTs model.Ts
 	captures := make(map[model.CaptureID]*member.CaptureStatus)
-	currentTables := make([]model.TableID, 0)
-	replications := make(map[model.TableID]*replication.ReplicationSet)
+	currentTables := make([]tablepb.Span, 0)
+	replications := mapToSpanMap(make(map[model.TableID]*replication.ReplicationSet))
 
 	tasks := scheduler.Schedule(checkpointTs, currentTables, captures, replications)
 	require.Len(t, tasks, 0)
@@ -54,8 +56,8 @@ func TestDrainCapture(t *testing.T) {
 	require.Equal(t, captureIDNotDraining, scheduler.target)
 
 	captures["b"] = &member.CaptureStatus{}
-	currentTables = []model.TableID{1, 2, 3, 4, 5, 6, 7}
-	replications = map[model.TableID]*replication.ReplicationSet{
+	currentTables = spanz.ArrayToSpan([]model.TableID{1, 2, 3, 4, 5, 6, 7})
+	replications = mapToSpanMap(map[model.TableID]*replication.ReplicationSet{
 		1: {
 			State: replication.ReplicationSetStateReplicating, Primary: "a",
 			Captures: map[string]replication.Role{
@@ -98,7 +100,7 @@ func TestDrainCapture(t *testing.T) {
 				"b": replication.RoleSecondary,
 			},
 		},
-	}
+	})
 
 	ok = scheduler.setTarget("a")
 	require.True(t, ok)
@@ -107,14 +109,14 @@ func TestDrainCapture(t *testing.T) {
 	require.Equal(t, "a", scheduler.target)
 	require.Len(t, tasks, 0)
 
-	replications = map[model.TableID]*replication.ReplicationSet{
+	replications = mapToSpanMap(map[model.TableID]*replication.ReplicationSet{
 		1: {State: replication.ReplicationSetStateReplicating, Primary: "a"},
 		2: {State: replication.ReplicationSetStateReplicating, Primary: "a"},
 		3: {State: replication.ReplicationSetStateReplicating, Primary: "a"},
 		4: {State: replication.ReplicationSetStateReplicating, Primary: "b"},
 		6: {State: replication.ReplicationSetStateReplicating, Primary: "b"},
 		7: {State: replication.ReplicationSetStateReplicating, Primary: "b"},
-	}
+	})
 
 	tasks = scheduler.Schedule(checkpointTs, currentTables, captures, replications)
 	require.Equal(t, "a", scheduler.target)
@@ -132,8 +134,8 @@ func TestDrainStoppingCapture(t *testing.T) {
 
 	var checkpointTs model.Ts
 	captures := make(map[model.CaptureID]*member.CaptureStatus)
-	currentTables := make([]model.TableID, 0)
-	replications := make(map[model.TableID]*replication.ReplicationSet)
+	currentTables := make([]tablepb.Span, 0)
+	replications := mapToSpanMap(make(map[model.TableID]*replication.ReplicationSet))
 	scheduler := newDrainCaptureScheduler(10, model.ChangeFeedID{})
 
 	tasks := scheduler.Schedule(checkpointTs, currentTables, captures, replications)
@@ -141,13 +143,13 @@ func TestDrainStoppingCapture(t *testing.T) {
 
 	captures["a"] = &member.CaptureStatus{}
 	captures["b"] = &member.CaptureStatus{State: member.CaptureStateStopping}
-	replications = map[model.TableID]*replication.ReplicationSet{
+	replications = mapToSpanMap(map[model.TableID]*replication.ReplicationSet{
 		1: {State: replication.ReplicationSetStateReplicating, Primary: "a"},
 		2: {State: replication.ReplicationSetStateReplicating, Primary: "b"},
-	}
+	})
 	tasks = scheduler.Schedule(checkpointTs, currentTables, captures, replications)
 	require.Len(t, tasks, 1)
-	require.EqualValues(t, 2, tasks[0].MoveTable.TableID)
+	require.EqualValues(t, 2, tasks[0].MoveTable.Span.TableID)
 	require.EqualValues(t, "a", tasks[0].MoveTable.DestCapture)
 	require.EqualValues(t, "b", scheduler.getTarget())
 }
@@ -156,15 +158,15 @@ func TestDrainSkipOwner(t *testing.T) {
 	t.Parallel()
 
 	var checkpointTs model.Ts
-	currentTables := make([]model.TableID, 0)
+	currentTables := make([]tablepb.Span, 0)
 	captures := map[model.CaptureID]*member.CaptureStatus{
 		"a": {},
 		"b": {IsOwner: true, State: member.CaptureStateStopping},
 	}
-	replications := map[model.TableID]*replication.ReplicationSet{
+	replications := mapToSpanMap(map[model.TableID]*replication.ReplicationSet{
 		1: {State: replication.ReplicationSetStateReplicating, Primary: "a"},
 		2: {State: replication.ReplicationSetStateReplicating, Primary: "b"},
-	}
+	})
 	scheduler := newDrainCaptureScheduler(10, model.ChangeFeedID{})
 	tasks := scheduler.Schedule(checkpointTs, currentTables, captures, replications)
 	require.Len(t, tasks, 0)
@@ -175,15 +177,15 @@ func TestDrainImbalanceCluster(t *testing.T) {
 	t.Parallel()
 
 	var checkpointTs model.Ts
-	currentTables := make([]model.TableID, 0)
+	currentTables := make([]tablepb.Span, 0)
 	captures := map[model.CaptureID]*member.CaptureStatus{
 		"a": {State: member.CaptureStateInitialized},
 		"b": {IsOwner: true, State: member.CaptureStateInitialized},
 	}
-	replications := map[model.TableID]*replication.ReplicationSet{
+	replications := mapToSpanMap(map[model.TableID]*replication.ReplicationSet{
 		1: {State: replication.ReplicationSetStateReplicating, Primary: "a"},
 		2: {State: replication.ReplicationSetStateReplicating, Primary: "a"},
-	}
+	})
 	scheduler := newDrainCaptureScheduler(10, model.ChangeFeedID{})
 	scheduler.setTarget("a")
 	tasks := scheduler.Schedule(checkpointTs, currentTables, captures, replications)
@@ -195,18 +197,18 @@ func TestDrainEvenlyDistributedTables(t *testing.T) {
 	t.Parallel()
 
 	var checkpointTs model.Ts
-	currentTables := make([]model.TableID, 0)
+	currentTables := make([]tablepb.Span, 0)
 	captures := map[model.CaptureID]*member.CaptureStatus{
 		"a": {State: member.CaptureStateInitialized},
 		"b": {IsOwner: true, State: member.CaptureStateInitialized},
 		"c": {State: member.CaptureStateInitialized},
 	}
-	replications := map[model.TableID]*replication.ReplicationSet{
+	replications := mapToSpanMap(map[model.TableID]*replication.ReplicationSet{
 		1: {State: replication.ReplicationSetStateReplicating, Primary: "a"},
 		2: {State: replication.ReplicationSetStateReplicating, Primary: "a"},
 		3: {State: replication.ReplicationSetStateReplicating, Primary: "a"},
 		6: {State: replication.ReplicationSetStateReplicating, Primary: "b"},
-	}
+	})
 	scheduler := newDrainCaptureScheduler(10, model.ChangeFeedID{})
 	scheduler.setTarget("a")
 	tasks := scheduler.Schedule(checkpointTs, currentTables, captures, replications)

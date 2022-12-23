@@ -31,7 +31,7 @@ var defaultMetricProxies = &metricProxies{
 			Subsystem: "dumpling",
 			Name:      "exit_with_error_count",
 			Help:      "counter for dumpling exit with error",
-		}, []string{"task", "source_id"}),
+		}, []string{"task", "source_id", "resumable_err"}),
 }
 
 // RegisterMetrics registers metrics and saves the given registry for later use.
