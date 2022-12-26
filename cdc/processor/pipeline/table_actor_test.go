@@ -57,7 +57,7 @@ func TestAsyncStopFailed(t *testing.T) {
 		state:       tablepb.TableStatePreparing,
 		upstream:    upstream.NewUpstream4Test(&mockPD{}),
 	}
-	tbl.sinkNode = newSinkNode(1, mocksink.NewNormalMockSink(), nil,
+	tbl.sinkNode = newSinkNode(spanz.TableIDToComparableSpan(1), mocksink.NewNormalMockSink(), nil,
 		0, 0, &mockFlowController{}, tbl.redoManager,
 		&tbl.state, model.DefaultChangeFeedID("changefeed-test"), true, false)
 	require.True(t, tbl.AsyncStop())
@@ -101,9 +101,9 @@ func TestTableActorInterface(t *testing.T) {
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 	table.redoManager, _ = redo.NewMockManager(ctx)
-	table.redoManager.AddTable(table.span.TableID, 0)
+	table.redoManager.AddTable(table.span, 0)
 	require.Equal(t, model.Ts(0), table.ResolvedTs())
-	table.redoManager.UpdateResolvedTs(ctx, table.span.TableID, model.Ts(6))
+	table.redoManager.UpdateResolvedTs(ctx, table.span, model.Ts(6))
 	require.Eventually(t, func() bool { return table.ResolvedTs() == model.Ts(6) },
 		time.Second*5, time.Millisecond*500)
 	table.redoManager.Cleanup(ctx)

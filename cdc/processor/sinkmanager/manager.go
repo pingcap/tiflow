@@ -812,7 +812,7 @@ func (m *SinkManager) GetTableStats(tableID model.TableID) TableStats {
 	var resolvedTs model.Ts
 	// If redo log is enabled, we have to use redo log's resolved ts to calculate processor's min resolved ts.
 	if m.redoManager != nil {
-		resolvedTs = m.redoManager.GetResolvedTs(tableID)
+		resolvedTs = m.redoManager.GetResolvedTs(spanz.TableIDToComparableSpan(tableID))
 	} else {
 		resolvedTs = tableSink.getReceivedSorterResolvedTs()
 	}

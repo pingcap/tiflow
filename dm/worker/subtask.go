@@ -59,26 +59,18 @@ func createRealUnits(cfg *config.SubTaskConfig, etcdClient *clientv3.Client, wor
 	switch cfg.Mode {
 	case config.ModeAll:
 		us = append(us, dumpling.NewDumpling(cfg))
-		us = append(us, newLoadUnit(cfg, etcdClient, workerName))
+		us = append(us, loader.NewLightning(cfg, etcdClient, workerName))
 		us = append(us, syncer.NewSyncer(cfg, etcdClient, relay))
 	case config.ModeFull:
 		// NOTE: maybe need another checker in the future?
 		us = append(us, dumpling.NewDumpling(cfg))
-		us = append(us, newLoadUnit(cfg, etcdClient, workerName))
+		us = append(us, loader.NewLightning(cfg, etcdClient, workerName))
 	case config.ModeIncrement:
 		us = append(us, syncer.NewSyncer(cfg, etcdClient, relay))
 	default:
 		log.L().Error("unsupported task mode", zap.String("subtask", cfg.Name), zap.String("task mode", cfg.Mode))
 	}
 	return us
-}
-
-func newLoadUnit(cfg *config.SubTaskConfig, etcdClient *clientv3.Client, workerName string) unit.Unit {
-	// tidb-lightning doesn't support column mapping currently
-	if !cfg.NeedUseLightning() || len(cfg.ColumnMappingRules) > 0 {
-		return loader.NewLoader(cfg, etcdClient, workerName)
-	}
-	return loader.NewLightning(cfg, etcdClient, workerName)
 }
 
 // SubTask represents a sub task of data migration.
@@ -139,13 +131,6 @@ func NewSubTaskWithStage(cfg *config.SubTaskConfig, stage pb.Stage, etcdClient *
 
 // initUnits initializes the sub task processing units.
 func (st *SubTask) initUnits(relay relay.Process) error {
-	// NOTE: because lightning not support init tls with raw certs bytes, we write the certs data to a file.
-	if st.cfg.NeedUseLightning() && st.cfg.To.Security != nil {
-		// NOTE: LoaderConfig.Dir may be a s3 path, but Lightning just supports local tls files, we need to use a new local dir.
-		if err := st.cfg.To.Security.DumpTLSContent("./" + loader.TmpTLSConfigPath + "_" + st.cfg.Name); err != nil {
-			return terror.Annotatef(err, "fail to dump tls cert data for lightning, subtask %s ", st.cfg.Name)
-		}
-	}
 	st.units = createUnits(st.cfg, st.etcdClient, st.workerName, relay)
 	if len(st.units) < 1 {
 		return terror.ErrWorkerNoAvailUnits.Generate(st.cfg.Name, st.cfg.Mode)

@@ -154,20 +154,7 @@ function run() {
 	fi
 }
 
-function checktask_full_mode_conn() {
-	# full mode
-	# dumpers: (2 + 2) for each
-	# loaders: 5 + 1 = 6
-	run_sql_source1 "set @@GLOBAL.max_connections=3;"
-	check_task_not_pass $cur/conf/dm-task3.yaml # dumper threads too few
-	run_sql_source1 "set @@GLOBAL.max_connections=4;"
-	check_task_pass $cur/conf/dm-task3.yaml
-
-	run_sql_tidb "set @@GLOBAL.max_connections=5;" # loader threads too few
-	check_task_not_pass $cur/conf/dm-task3.yaml
-	run_sql_tidb "set @@GLOBAL.max_connections=6;"
-	check_task_pass $cur/conf/dm-task3.yaml
-
+function check_privilege() {
 	# test no enough privilege
 	cp $cur/conf/dm-task3.yaml $WORK_DIR/temp.yaml
 	sed -i "s/  user: \"root\"/  user: \"test1\"/g" $WORK_DIR/temp.yaml
@@ -197,38 +184,6 @@ function check_task_lightning() {
 	run_dm_ctl $WORK_DIR "127.0.0.1:$MASTER_PORT" \
 		"check-task $cur/conf/dm-task2.yaml" \
 		"task precheck cannot accurately check the number of connection needed for Lightning" 1
-}
-
-function check_full_mode_conn() {
-	# TODO: currently, pool-size are not efficacious for Lightning
-	# which simply determines the concurrency by hardware conditions.
-	# This should be solved in the future.
-	run_sql_tidb "set @@GLOBAL.max_connections=151;"
-	run_sql_source1 "set @@GLOBAL.max_connections=151;"
-	run_sql_source2 "set @@GLOBAL.max_connections=151;"
-	run_sql_tidb "drop database if exists dmctl_conn"
-	run_sql_both_source "drop database if exists dmctl_conn"
-	run_sql_both_source "create database dmctl_conn"
-	# ref: many_tables/run.sh
-	for ((i = 0; i <= 1000; ++i)); do
-		run_sql_source1 "create table dmctl_conn.test_$i(id int primary key)"
-		run_sql_source1 "insert into dmctl_conn.test_$i values (1),(2),(3),(4),(5)"
-	done
-	dmctl_start_task_standalone "$cur/conf/dm-task3.yaml" --remove-meta
-	run_sql_source1 'SHOW PROCESSLIST;'
-	check_rows_equal 5 # 4 + 1 for SHOWPROCESSLIST
-
-	run_dm_ctl_with_retry $WORK_DIR "127.0.0.1:$MASTER_PORT" \
-		"query-status test" \
-		"Load" 1
-	run_sql_tidb 'SHOW PROCESSLIST;'
-	check_rows_equal 7 # (5 + 1) + 1 for SHOW PROCESSLIST= 7
-
-	run_dm_ctl $WORK_DIR "127.0.0.1:$MASTER_PORT" \
-		"stop-task test" \
-		"\"result\": true" 2
-	run_sql_tidb "drop database if exists dm_meta" # cleanup checkpoint
-	run_sql_tidb "drop database if exists dmctl_conn"
 }
 
 function run_validation_start_stop_cmd {
@@ -763,8 +718,7 @@ function run_check_task() {
 	run_sql_source1 "set @@GLOBAL.max_connections=151;"
 	run_sql_source2 "set @@GLOBAL.max_connections=151;"
 	check_task_lightning
-	check_full_mode_conn
-	checktask_full_mode_conn
+	check_privilege
 	run_sql_source1 "set @@GLOBAL.max_connections=151;"
 	run_sql_source2 "set @@GLOBAL.max_connections=151;"
 	run_sql_tidb "set @@GLOBAL.max_connections=0;" # set default (unlimited), or other tests will fail

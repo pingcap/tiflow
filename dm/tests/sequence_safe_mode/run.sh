@@ -27,6 +27,8 @@ function run() {
 	dmctl_operate_source create $WORK_DIR/source1.yaml $SOURCE_ID1
 	dmctl_operate_source create $WORK_DIR/source2.yaml $SOURCE_ID2
 
+	run_sql_tidb "create database if not exists sequence_safe_mode_target;"
+	run_sql_tidb "create table sequence_safe_mode_target.t_target (id bigint auto_increment, uid int, name varchar(80), c_table varchar(255), c_source varchar(255), primary key (id, c_table, c_source), unique key(uid)) DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_bin;"
 	dmctl_start_task "$cur/conf/dm-task.yaml" "--remove-meta"
 	check_sync_diff $WORK_DIR $cur/conf/diff_config.toml
 
