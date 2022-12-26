@@ -317,14 +317,14 @@ func (s *mysqlBackend) groupRowsByType(
 					convert2RowChanges(row, tableInfo, sqlmodel.RowChangeDelete))
 				if len(deleteRow) >= s.cfg.MaxTxnRow {
 					deleteRows = append(deleteRows, deleteRow)
-					deleteRow = make([]*sqlmodel.RowChange, 0, s.cfg.MaxTxnRow)
+					deleteRow = make([]*sqlmodel.RowChange, 0, preAllocateSize)
 				}
 				insertRow = append(
 					insertRow,
 					convert2RowChanges(row, tableInfo, sqlmodel.RowChangeInsert))
 				if len(insertRow) >= s.cfg.MaxTxnRow {
 					insertRows = append(insertRows, insertRow)
-					insertRow = make([]*sqlmodel.RowChange, 0, s.cfg.MaxTxnRow)
+					insertRow = make([]*sqlmodel.RowChange, 0, preAllocateSize)
 				}
 			} else {
 				updateRow = append(
@@ -332,7 +332,7 @@ func (s *mysqlBackend) groupRowsByType(
 					convert2RowChanges(row, tableInfo, sqlmodel.RowChangeUpdate))
 				if len(updateRow) >= s.cfg.MaxTxnRow {
 					updateRows = append(updateRows, updateRow)
-					updateRow = make([]*sqlmodel.RowChange, 0, s.cfg.MaxTxnRow)
+					updateRow = make([]*sqlmodel.RowChange, 0, preAllocateSize)
 				}
 			}
 		}
