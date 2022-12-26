@@ -27,7 +27,6 @@ import (
 	"github.com/DATA-DOG/go-sqlmock"
 	dmysql "github.com/go-sql-driver/mysql"
 	"github.com/pingcap/errors"
-	"github.com/pingcap/failpoint"
 	"github.com/pingcap/log"
 	"github.com/pingcap/tidb/infoschema"
 	"github.com/pingcap/tidb/parser/mysql"
@@ -1445,15 +1444,4 @@ func TestPrepareBatchDMLs(t *testing.T) {
 		dmls := ms.prepareDMLs()
 		require.Equal(t, tc.expected, dmls)
 	}
-}
-
-func TestNetworkPartition(t *testing.T) {
-	ctx := context.Background()
-	ms := newMySQLBackendWithoutDB(ctx)
-	ms.cfg.WriteTimeout = "1s"
-	_ = failpoint.Enable("github.com/pingcap/tiflow/cdc/sinkv2/eventsink/txn/mysql/MySQLSinkHangLongTime", "return")
-	defer failpoint.Disable("github.com/pingcap/tiflow/cdc/sinkv2/eventsink/txn/mysql/MySQLSinkHangLongTime")
-
-	err := ms.execDMLWithMaxRetries(ctx, &preparedDMLs{})
-	require.Equal(t, context.Canceled, err)
 }
