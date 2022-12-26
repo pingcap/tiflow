@@ -333,7 +333,7 @@ func (t *tableActor) start(sdtTableContext context.Context) error {
 	}
 
 	actorSinkNode := newSinkNode(
-		t.span.TableID,
+		t.span,
 		t.tableSinkV1,
 		t.tableSinkV2,
 		t.replicaInfo.StartTs, t.targetTs, flowController, t.redoManager,
@@ -414,7 +414,7 @@ func (t *tableActor) ResolvedTs() model.Ts {
 	// another replication barrier for consistent replication instead of reusing
 	// the global resolved-ts.
 	if t.redoManager.Enabled() {
-		return t.redoManager.GetResolvedTs(t.span.TableID)
+		return t.redoManager.GetResolvedTs(t.span)
 	}
 	return t.sortNode.ResolvedTs()
 }

@@ -268,6 +268,7 @@ const (
 	codeConfigConfictSafeModeDurationAndSafeMode
 	codeConfigInvalidLoadPhysicalDuplicateResolution
 	codeConfigInvalidLoadPhysicalChecksum
+	codeConfigColumnMappingDeprecated
 )
 
 // Binlog operation error code list.
@@ -977,6 +978,7 @@ var (
 	ErrConfigConfictSafeModeDurationAndSafeMode = New(codeConfigConfictSafeModeDurationAndSafeMode, ClassConfig, ScopeInternal, LevelLow, "safe-mode(true) conflicts with safe-mode-duration(0s)", "Please set safe-mode to false or safe-mode-duration to non-zero.")
 	ErrConfigInvalidPhysicalDuplicateResolution = New(codeConfigInvalidLoadPhysicalDuplicateResolution, ClassConfig, ScopeInternal, LevelMedium, "invalid load on-duplicate-physical option '%s'", "Please choose a valid value in ['none', 'manual'] or leave it empty.")
 	ErrConfigInvalidPhysicalChecksum            = New(codeConfigInvalidLoadPhysicalChecksum, ClassConfig, ScopeInternal, LevelMedium, "invalid load checksum-physical option '%s'", "Please choose a valid value in ['required', 'optional', 'off'] or leave it empty.")
+	ErrConfigColumnMappingDeprecated            = New(codeConfigColumnMappingDeprecated, ClassConfig, ScopeInternal, LevelHigh, "column-mapping is not supported since v6.6.0", "Please use extract-table/extract-schema/extract-source to handle data conflict when merge tables. See https://docs.pingcap.com/tidb/v6.4/task-configuration-file-full#task-configuration-file-template-advanced")
 
 	// Binlog operation error.
 	ErrBinlogExtractPosition = New(codeBinlogExtractPosition, ClassBinlogOp, ScopeInternal, LevelHigh, "", "")

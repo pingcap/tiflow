@@ -96,7 +96,7 @@ func newTableSinkWrapper(
 	startTs model.Ts,
 	targetTs model.Ts,
 ) *tableSinkWrapper {
-	return &tableSinkWrapper{
+	res := &tableSinkWrapper{
 		version:    atomic.AddUint64(&version, 1),
 		changefeed: changefeed,
 		tableID:    tableID,
@@ -105,6 +105,9 @@ func newTableSinkWrapper(
 		startTs:    startTs,
 		targetTs:   targetTs,
 	}
+	res.checkpointTs.Store(startTs)
+	res.receivedSorterResolvedTs.Store(startTs)
+	return res
 }
 
 func (t *tableSinkWrapper) start(startTs model.Ts, replicateTs model.Ts) {
@@ -129,6 +132,12 @@ func (t *tableSinkWrapper) start(startTs model.Ts, replicateTs model.Ts) {
 	// Because in two phase scheduling, the table sink may be advanced to a later ts.
 	// And we can just continue to replicate the table sink from the new start ts.
 	t.checkpointTs.Store(startTs)
+	for {
+		old := t.receivedSorterResolvedTs.Load()
+		if startTs <= old || t.receivedSorterResolvedTs.CompareAndSwap(old, startTs) {
+			break
+		}
+	}
 	t.replicateTs = replicateTs
 	t.state.Store(tablepb.TableStateReplicating)
 }
@@ -138,10 +147,18 @@ func (t *tableSinkWrapper) appendRowChangedEvents(events ...*model.RowChangedEve
 }
 
 func (t *tableSinkWrapper) updateReceivedSorterResolvedTs(ts model.Ts) {
-	if t.state.Load() == tablepb.TableStatePreparing && ts > t.startTs {
-		t.state.Store(tablepb.TableStatePrepared)
+	for {
+		old := t.receivedSorterResolvedTs.Load()
+		if ts <= old {
+			return
+		}
+		if t.receivedSorterResolvedTs.CompareAndSwap(old, ts) {
+			if t.state.Load() == tablepb.TableStatePreparing {
+				t.state.Store(tablepb.TableStatePrepared)
+			}
+			return
+		}
 	}
-	t.receivedSorterResolvedTs.Store(ts)
 }
 
 func (t *tableSinkWrapper) updateReceivedSorterCommitTs(ts model.Ts) {

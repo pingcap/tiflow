@@ -8,4 +8,3 @@ full_mode
 sequence_sharding_optimistic
 sequence_sharding_removemeta
 gtid
-only_dml

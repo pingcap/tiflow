@@ -94,6 +94,7 @@ type processor struct {
 		ctx cdcContext.Context, span tablepb.Span, replicaInfo *model.TableReplicaInfo,
 	) (tablepb.TablePipeline, error)
 	newAgent func(cdcContext.Context, *model.Liveness) (scheduler.Agent, error)
+	cfg      *config.SchedulerConfig
 
 	liveness     *model.Liveness
 	agent        scheduler.Agent
@@ -222,7 +223,7 @@ func (p *processor) AddTableSpan(
 		p.sinkManager.AddTable(
 			span.TableID, startTs, p.changefeed.Info.TargetTs)
 		if p.redoManager.Enabled() {
-			p.redoManager.AddTable(span.TableID, startTs)
+			p.redoManager.AddTable(span, startTs)
 		}
 		p.sourceManager.AddTable(
 			ctx.(cdcContext.Context), span.TableID, p.getTableName(ctx, span.TableID), startTs)
@@ -408,7 +409,7 @@ func (p *processor) IsRemoveTableSpanFinished(span tablepb.Span) (model.Ts, bool
 	if p.pullBasedSinking {
 		stats := p.sinkManager.GetTableStats(span.TableID)
 		if p.redoManager.Enabled() {
-			p.redoManager.RemoveTable(span.TableID)
+			p.redoManager.RemoveTable(span)
 		}
 		p.sinkManager.RemoveTable(span.TableID)
 		p.sourceManager.RemoveTable(span.TableID)
@@ -537,6 +538,7 @@ func newProcessor(
 	changefeedID model.ChangeFeedID,
 	up *upstream.Upstream,
 	liveness *model.Liveness,
+	cfg *config.SchedulerConfig,
 ) *processor {
 	p := &processor{
 		changefeed:   state,
@@ -580,6 +582,7 @@ func newProcessor(
 	p.createTablePipeline = p.createTablePipelineImpl
 	p.lazyInit = p.lazyInitImpl
 	p.newAgent = p.newAgentImpl
+	p.cfg = cfg
 	return p
 }
 
@@ -1164,7 +1167,7 @@ func (p *processor) createTablePipelineImpl(
 
 	if p.redoManager.Enabled() {
 		// FIXME: make span-level replication compatible with redo log.
-		p.redoManager.AddTable(span.TableID, replicaInfo.StartTs)
+		p.redoManager.AddTable(span, replicaInfo.StartTs)
 	}
 
 	tableName := p.getTableName(ctx, span.TableID)
@@ -1211,7 +1214,7 @@ func (p *processor) createTablePipelineImpl(
 
 func (p *processor) removeTable(table tablepb.TablePipeline, span tablepb.Span) {
 	if p.redoManager.Enabled() {
-		p.redoManager.RemoveTable(span.TableID)
+		p.redoManager.RemoveTable(span)
 	}
 	if p.pullBasedSinking {
 		p.sinkManager.RemoveTable(span.TableID)
