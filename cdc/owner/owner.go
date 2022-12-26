@@ -27,6 +27,7 @@ import (
 	"github.com/pingcap/log"
 	"github.com/pingcap/tiflow/cdc/model"
 	"github.com/pingcap/tiflow/cdc/scheduler"
+	"github.com/pingcap/tiflow/pkg/config"
 	cdcContext "github.com/pingcap/tiflow/pkg/context"
 	cerror "github.com/pingcap/tiflow/pkg/errors"
 	"github.com/pingcap/tiflow/pkg/orchestrator"
@@ -131,7 +132,9 @@ type ownerImpl struct {
 		id model.ChangeFeedID,
 		state *orchestrator.ChangefeedReactorState,
 		up *upstream.Upstream,
+		cfg *config.SchedulerConfig,
 	) *changefeed
+	cfg *config.SchedulerConfig
 
 	// removedChangefeed is a workload of https://github.com/pingcap/tiflow/issues/7657
 	// by delaying recreate changefeed with the same ID.
@@ -141,7 +144,10 @@ type ownerImpl struct {
 }
 
 // NewOwner creates a new Owner
-func NewOwner(upstreamManager *upstream.Manager) Owner {
+func NewOwner(
+	upstreamManager *upstream.Manager,
+	cfg *config.SchedulerConfig,
+) Owner {
 	return &ownerImpl{
 		upstreamManager:   upstreamManager,
 		changefeeds:       make(map[model.ChangeFeedID]*changefeed),
@@ -150,6 +156,7 @@ func NewOwner(upstreamManager *upstream.Manager) Owner {
 		logLimiter:        rate.NewLimiter(versionInconsistentLogRate, versionInconsistentLogRate),
 		removedChangefeed: make(map[model.ChangeFeedID]time.Time),
 		removedSinkURI:    make(map[url.URL]time.Time),
+		cfg:               cfg,
 	}
 }
 
@@ -206,7 +213,7 @@ func (o *ownerImpl) Tick(stdCtx context.Context, rawState orchestrator.ReactorSt
 				upstreamInfo := state.Upstreams[changefeedState.Info.UpstreamID]
 				up = o.upstreamManager.AddUpstream(upstreamInfo)
 			}
-			cfReactor = o.newChangefeed(changefeedID, changefeedState, up)
+			cfReactor = o.newChangefeed(changefeedID, changefeedState, up, o.cfg)
 			o.changefeeds[changefeedID] = cfReactor
 		}
 		ctx = cdcContext.WithChangefeedVars(ctx, &cdcContext.ChangefeedVars{
