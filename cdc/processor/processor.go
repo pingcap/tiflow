@@ -441,7 +441,7 @@ func (p *processor) IsRemoveTableSpanFinished(span tablepb.Span) (model.Ts, bool
 // GetTableSpanCount implements TableExecutor interface.
 func (p *processor) GetTableSpanCount() int {
 	if p.pullBasedSinking {
-		return len(p.sinkManager.GetAllCurrentTableIDs())
+		return len(p.sinkManager.GetAllCurrentTableSpans())
 	}
 	return p.tableSpans.Len()
 }
@@ -1062,7 +1062,7 @@ func (p *processor) handlePosition(currentTs int64) {
 	minCheckpointTs := minResolvedTs
 	minCheckpointTableID := int64(0)
 	if p.pullBasedSinking {
-		spans := p.sinkManager.GetAllCurrentTableIDs()
+		spans := p.sinkManager.GetAllCurrentTableSpans()
 		for _, span := range spans {
 			stats := p.sinkManager.GetTableStats(span)
 			log.Debug("sink manager gets table stats",
@@ -1258,7 +1258,7 @@ func (p *processor) doGCSchemaStorage() {
 
 func (p *processor) refreshMetrics() {
 	if p.pullBasedSinking {
-		tables := p.sinkManager.GetAllCurrentTableIDs()
+		tables := p.sinkManager.GetAllCurrentTableSpans()
 		p.metricSyncTableNumGauge.Set(float64(len(tables)))
 		sortEngineReceivedEvents := p.sourceManager.ReceivedEvents()
 		tableSinksReceivedEvents := p.sinkManager.ReceivedEvents()
@@ -1437,13 +1437,13 @@ func (p *processor) cleanupMetrics() {
 func (p *processor) WriteDebugInfo(w io.Writer) error {
 	fmt.Fprintf(w, "%+v\n", *p.changefeed)
 	if p.pullBasedSinking {
-		tables := p.sinkManager.GetAllCurrentTableIDs()
-		for _, tableID := range tables {
-			state, _ := p.sinkManager.GetTableState(tableID)
-			stats := p.sinkManager.GetTableStats(tableID)
+		spans := p.sinkManager.GetAllCurrentTableSpans()
+		for _, span := range spans {
+			state, _ := p.sinkManager.GetTableState(span)
+			stats := p.sinkManager.GetTableStats(span)
 			// TODO: add table name.
-			fmt.Fprintf(w, "tableID: %d, resolvedTs: %d, checkpointTs: %d, state: %s\n",
-				tableID, stats.ResolvedTs, stats.CheckpointTs, state)
+			fmt.Fprintf(w, "span: %s, resolvedTs: %d, checkpointTs: %d, state: %s\n",
+				&span, stats.ResolvedTs, stats.CheckpointTs, state)
 		}
 	} else {
 		p.tableSpans.Ascend(func(span tablepb.Span, tablePipeline tablepb.TablePipeline) bool {

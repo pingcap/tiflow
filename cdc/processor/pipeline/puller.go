@@ -40,13 +40,13 @@ type pullerNode struct {
 }
 
 func newPullerNode(
-	tableID tablepb.Span,
+	span tablepb.Span,
 	startTs model.Ts,
 	tableName string,
 	changefeed model.ChangeFeedID,
 ) *pullerNode {
 	return &pullerNode{
-		span:       tableID,
+		span:       span,
 		startTs:    startTs,
 		tableName:  tableName,
 		changefeed: changefeed,

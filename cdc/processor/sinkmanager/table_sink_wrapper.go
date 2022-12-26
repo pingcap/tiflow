@@ -264,7 +264,10 @@ func (t *tableSinkWrapper) cleanRangeEventCounts(upperBound engine.Position, min
 
 // convertRowChangedEvents uses to convert RowChangedEvents to TableSinkRowChangedEvents.
 // It will deal with the old value compatibility.
-func convertRowChangedEvents(changefeed model.ChangeFeedID, span tablepb.Span, enableOldValue bool, events ...*model.PolymorphicEvent) ([]*model.RowChangedEvent, uint64, error) {
+func convertRowChangedEvents(
+	changefeed model.ChangeFeedID, span tablepb.Span, enableOldValue bool,
+	events ...*model.PolymorphicEvent,
+) ([]*model.RowChangedEvent, uint64, error) {
 	size := 0
 	rowChangedEvents := make([]*model.RowChangedEvent, 0, len(events))
 	for _, e := range events {

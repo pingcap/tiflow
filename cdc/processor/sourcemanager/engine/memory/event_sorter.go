@@ -107,7 +107,9 @@ func (s *EventSorter) OnResolve(action func(tablepb.Span, model.Ts)) {
 }
 
 // FetchByTable implements engine.SortEngine.
-func (s *EventSorter) FetchByTable(span tablepb.Span, lowerBound, upperBound engine.Position) engine.EventIterator {
+func (s *EventSorter) FetchByTable(
+	span tablepb.Span, lowerBound, upperBound engine.Position,
+) engine.EventIterator {
 	value, exists := s.tables.Load(spanz.ToHashableSpan(span))
 	if !exists {
 		log.Panic("fetch events from an unexist table", zap.Stringer("span", &span))
@@ -230,7 +232,9 @@ func (s *tableSorter) getResolvedTs() model.Ts {
 	return *s.resolvedTs
 }
 
-func (s *tableSorter) fetch(span tablepb.Span, lowerBound, upperBound engine.Position) engine.EventIterator {
+func (s *tableSorter) fetch(
+	span tablepb.Span, lowerBound, upperBound engine.Position,
+) engine.EventIterator {
 	s.mu.RLock()
 	defer s.mu.RUnlock()
 

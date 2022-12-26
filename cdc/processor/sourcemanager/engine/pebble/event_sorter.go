@@ -514,7 +514,9 @@ func (s *EventSorter) handleEvents(
 }
 
 // cleanTable uses DeleteRange to clean data of the given table.
-func (s *EventSorter) cleanTable(state *tableState, span tablepb.Span, upperBound ...engine.Position) error {
+func (s *EventSorter) cleanTable(
+	state *tableState, span tablepb.Span, upperBound ...engine.Position,
+) error {
 	var toClean engine.Position
 	var start, end []byte
 

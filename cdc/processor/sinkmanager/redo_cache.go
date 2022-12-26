@@ -96,7 +96,9 @@ func (r *redoEventCache) removeTable(span tablepb.Span) {
 	}
 }
 
-func (r *redoEventCache) maybeCreateAppender(span tablepb.Span, lowerBound engine.Position) *eventAppender {
+func (r *redoEventCache) maybeCreateAppender(
+	span tablepb.Span, lowerBound engine.Position,
+) *eventAppender {
 	r.mu.Lock()
 	defer r.mu.Unlock()
 

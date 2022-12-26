@@ -771,8 +771,8 @@ func (m *SinkManager) RemoveTable(span tablepb.Span) {
 	}
 }
 
-// GetAllCurrentTableIDs returns all the table IDs in the sink manager.
-func (m *SinkManager) GetAllCurrentTableIDs() []tablepb.Span {
+// GetAllCurrentTableSpans returns all spans in the sink manager.
+func (m *SinkManager) GetAllCurrentTableSpans() []tablepb.Span {
 	var spans []tablepb.Span
 	m.tableSinks.Range(func(key tablepb.Span, value interface{}) bool {
 		spans = append(spans, key)

@@ -71,7 +71,9 @@ func New(
 }
 
 // AddTable adds a table to the source manager. Start puller and register table to the engine.
-func (m *SourceManager) AddTable(ctx cdccontext.Context, span tablepb.Span, tableName string, startTs model.Ts) {
+func (m *SourceManager) AddTable(
+	ctx cdccontext.Context, span tablepb.Span, tableName string, startTs model.Ts,
+) {
 	// Add table to the engine first, so that the engine can receive the events from the puller.
 	m.engine.AddTable(span)
 	p := pullerwrapper.NewPullerWrapper(m.changefeedID, span, tableName, startTs, m.bdrMode)
@@ -94,7 +96,9 @@ func (m *SourceManager) OnResolve(action func(tablepb.Span, model.Ts)) {
 }
 
 // FetchByTable just wrap the engine's FetchByTable method.
-func (m *SourceManager) FetchByTable(span tablepb.Span, lowerBound, upperBound engine.Position) *engine.MountedEventIter {
+func (m *SourceManager) FetchByTable(
+	span tablepb.Span, lowerBound, upperBound engine.Position,
+) *engine.MountedEventIter {
 	iter := m.engine.FetchByTable(span, lowerBound, upperBound)
 	return engine.NewMountedEventIter(iter, m.mg, defaultMaxBatchSize)
 }
