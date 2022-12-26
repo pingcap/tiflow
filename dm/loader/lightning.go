@@ -344,6 +344,7 @@ func GetLightningConfig(globalCfg *lcfg.GlobalConfig, subtaskCfg *config.SubTask
 
 	cfg.TikvImporter.DiskQuota = subtaskCfg.LoaderConfig.DiskQuotaPhysical
 	cfg.TikvImporter.OnDuplicate = string(subtaskCfg.OnDuplicateLogical)
+	cfg.TikvImporter.IncrementalImport = true
 	switch subtaskCfg.OnDuplicatePhysical {
 	case config.OnDuplicateManual:
 		cfg.TikvImporter.DuplicateResolution = lcfg.DupeResAlgRemove
