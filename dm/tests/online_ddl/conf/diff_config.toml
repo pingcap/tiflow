@@ -32,7 +32,6 @@ target-table = "pt_t_target"
 [table-configs]
 [table-configs.config1]
 target-tables = ["online_ddl.*"]
-ignore-columns = ["id"]
 
 [data-sources]
 [data-sources.mysql1]

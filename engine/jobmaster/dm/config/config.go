@@ -311,11 +311,6 @@ func (c *TaskCfg) ToDMSubTaskCfg(jobID string) *dmconfig.SubTaskConfig {
 		cfg.FilterRules[j] = c.Filters[name]
 	}
 
-	cfg.ColumnMappingRules = make([]*column.Rule, len(c.Upstreams[0].ColumnMappingRules))
-	for j, name := range c.Upstreams[0].ColumnMappingRules {
-		cfg.ColumnMappingRules[j] = c.ColumnMappings[name]
-	}
-
 	cfg.ExprFilter = make([]*dmconfig.ExpressionFilter, len(c.Upstreams[0].ExpressionFilters))
 	for j, name := range c.Upstreams[0].ExpressionFilters {
 		cfg.ExprFilter[j] = c.ExprFilter[name]
