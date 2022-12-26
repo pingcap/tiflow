@@ -126,8 +126,9 @@ type captureImpl struct {
 		captureInfo *model.CaptureInfo,
 		upstreamManager *upstream.Manager,
 		liveness *model.Liveness,
+		cfg *config.SchedulerConfig,
 	) processor.Manager
-	newOwner func(upstreamManager *upstream.Manager) owner.Owner
+	newOwner func(upstreamManager *upstream.Manager, cfg *config.SchedulerConfig) owner.Owner
 }
 
 // NewCapture returns a new Capture instance
@@ -238,7 +239,8 @@ func (c *captureImpl) reset(ctx context.Context) error {
 		return cerror.WrapError(cerror.ErrNewCaptureFailed, err)
 	}
 
-	c.processorManager = c.newProcessorManager(c.info, c.upstreamManager, &c.liveness)
+	c.processorManager = c.newProcessorManager(
+		c.info, c.upstreamManager, &c.liveness, c.config.Debug.Scheduler)
 	if c.session != nil {
 		// It can't be handled even after it fails, so we ignore it.
 		_ = c.session.Close()
@@ -462,7 +464,7 @@ func (c *captureImpl) campaignOwner(ctx cdcContext.Context) error {
 			zap.String("captureID", c.info.ID),
 			zap.Int64("ownerRev", ownerRev))
 
-		owner := c.newOwner(c.upstreamManager)
+		owner := c.newOwner(c.upstreamManager, c.config.Debug.Scheduler)
 		c.setOwner(owner)
 
 		globalState := orchestrator.NewGlobalState(c.EtcdClient.GetClusterID())
