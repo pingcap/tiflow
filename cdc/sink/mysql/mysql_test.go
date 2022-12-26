@@ -2772,7 +2772,8 @@ func TestPrepareBatchDMLs(t *testing.T) {
 }
 
 func TestGroupRowsByType(t *testing.T) {
-	ctx := context.Background()
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
 	ms := newMySQLSink4Test(ctx, t)
 	testCases := []struct {
 		input     []*model.RowChangedEvent
