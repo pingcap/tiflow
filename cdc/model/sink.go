@@ -507,6 +507,12 @@ func BuildTiDBTableInfo(columns []*Column, indexColumns [][]int) *model.TableInf
 			State: model.StatePublic,
 		}
 		firstCol := columns[colOffsets[0]]
+		if firstCol == nil {
+			// when the referenced column is nil, we already have a handle index,
+			// so we can skip this index.
+			// only happens for DELETE event and old value feature is disabled
+			continue
+		}
 		if firstCol.Flag.IsPrimaryKey() {
 			indexInfo.Primary = true
 			indexInfo.Unique = true
