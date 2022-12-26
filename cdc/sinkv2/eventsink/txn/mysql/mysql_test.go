@@ -1462,10 +1462,12 @@ func TestGroupRowsByType(t *testing.T) {
 	ctx := context.Background()
 	ms := newMySQLBackendWithoutDB(ctx)
 	testCases := []struct {
+		name      string
 		input     []*model.RowChangedEvent
 		maxTxnRow int
 	}{
-		{ // delete event
+		{
+			name: "delete",
 			input: []*model.RowChangedEvent{
 				{
 					StartTs:  418658114257813514,
@@ -1546,7 +1548,8 @@ func TestGroupRowsByType(t *testing.T) {
 			},
 			maxTxnRow: 2,
 		},
-		{ // insert event
+		{
+			name: "insert",
 			input: []*model.RowChangedEvent{
 				{
 					StartTs:  418658114257813516,
@@ -1667,24 +1670,26 @@ func TestGroupRowsByType(t *testing.T) {
 		},
 	}
 	for _, tc := range testCases {
-		event := &eventsink.TxnCallbackableEvent{
-			Event: &model.SingleTableTxn{Rows: testCases[0].input},
-		}
-		colums := tc.input[0].Columns
-		if len(colums) == 0 {
-			colums = tc.input[0].PreColumns
-		}
-		tableInfo := model.BuildTiDBTableInfo(colums, tc.input[0].IndexColumns)
-		ms.cfg.MaxTxnRow = tc.maxTxnRow
-		inserts, updates, deletes := ms.groupRowsByType(event, tableInfo, false)
-		for _, rows := range inserts {
-			require.LessOrEqual(t, len(rows), tc.maxTxnRow)
-		}
-		for _, rows := range updates {
-			require.LessOrEqual(t, len(rows), tc.maxTxnRow)
-		}
-		for _, rows := range deletes {
-			require.LessOrEqual(t, len(rows), tc.maxTxnRow)
-		}
+		t.Run(tc.name, func(t *testing.T) {
+			event := &eventsink.TxnCallbackableEvent{
+				Event: &model.SingleTableTxn{Rows: testCases[0].input},
+			}
+			colums := tc.input[0].Columns
+			if len(colums) == 0 {
+				colums = tc.input[0].PreColumns
+			}
+			tableInfo := model.BuildTiDBTableInfo(colums, tc.input[0].IndexColumns)
+			ms.cfg.MaxTxnRow = tc.maxTxnRow
+			inserts, updates, deletes := ms.groupRowsByType(event, tableInfo, false)
+			for _, rows := range inserts {
+				require.LessOrEqual(t, len(rows), tc.maxTxnRow)
+			}
+			for _, rows := range updates {
+				require.LessOrEqual(t, len(rows), tc.maxTxnRow)
+			}
+			for _, rows := range deletes {
+				require.LessOrEqual(t, len(rows), tc.maxTxnRow)
+			}
+		})
 	}
 }
