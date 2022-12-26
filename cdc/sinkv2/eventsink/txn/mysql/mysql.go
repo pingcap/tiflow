@@ -273,7 +273,6 @@ func convertBinaryToString(row *model.RowChangedEvent) {
 	}
 }
 
-// TODO: Find a way to make batch delete dmls more efficient.
 func (s *mysqlBackend) groupRowsByType(
 	event *eventsink.TxnCallbackableEvent,
 	tableInfo *timodel.TableInfo,
