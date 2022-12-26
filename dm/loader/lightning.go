@@ -422,9 +422,10 @@ func (l *LightningLoader) restore(ctx context.Context) error {
 		if err != nil {
 			return err
 		}
-		// TODO wait all ready
+		if err2 := readyAndWait(ctx, l.cli, l.cfg); err2 != nil {
+			return err2
+		}
 		err = l.runLightning(ctx, cfg)
-		// TODO wait all finish
 		if err == nil {
 			l.finish.Store(true)
 			err = l.checkPointList.UpdateStatus(ctx, lightningStatusFinished)
@@ -447,6 +448,7 @@ func (l *LightningLoader) restore(ctx context.Context) error {
 		if l.cfg.CleanDumpFile {
 			cleanDumpFiles(ctx, l.cfg)
 		}
+		return finishAndWait(ctx, l.cli, l.cfg)
 	}
 	return err
 }
