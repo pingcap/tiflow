@@ -202,8 +202,8 @@ func (r *Request) WithMaxRetries(maxRetries uint64) *Request {
 
 // WithBody makes http request use obj as its body.
 // only supports two types now:
-//   1. io.Reader
-//   2. type which can be json marshalled
+//  1. io.Reader
+//  2. type which can be json marshalled
 func (r *Request) WithBody(obj interface{}) *Request {
 	if r.err != nil {
 		return r
