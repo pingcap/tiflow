@@ -96,15 +96,22 @@ func (s *Slots[E]) Free(elem E, keys []uint64) {
 		slotIdx := getSlot(key, s.numSlots)
 		if lastSlot != slotIdx {
 			s.slots[slotIdx].mu.Lock()
+			lastSlot = slotIdx
 		}
 		if tail, ok := s.slots[slotIdx].nodes[key]; ok && tail.NodeID() == elem.NodeID() {
 			delete(s.slots[slotIdx].nodes, key)
 		}
+	}
+
+	lastSlot = math.MaxUint64
+	for _, key := range keys {
+		slotIdx := getSlot(key, s.numSlots)
 		if lastSlot != slotIdx {
 			s.slots[slotIdx].mu.Unlock()
 			lastSlot = slotIdx
 		}
 	}
+
 	elem.Free()
 }
 
