@@ -231,10 +231,31 @@ func getLoadTask(cli *clientv3.Client, task, sourceID string) (string, error) {
 // waits for all workers' status not LightningNotReady.
 // Only works for physical import.
 func readyAndWait(ctx context.Context, cli *clientv3.Client, cfg *config.SubTaskConfig) error {
+	return putAndWait(ctx, cli, cfg, ha.LightningReady, func(s string) bool {
+		return s == ha.LightningNotReady
+	})
+}
+
+// finishAndWait updates the lightning status of this worker to LightningFinished
+// and waits for all workers' status LightningFinished.
+// Only works for physical import.
+func finishAndWait(ctx context.Context, cli *clientv3.Client, cfg *config.SubTaskConfig) error {
+	return putAndWait(ctx, cli, cfg, ha.LightningFinished, func(s string) bool {
+		return s != ha.LightningFinished
+	})
+}
+
+func putAndWait(
+	ctx context.Context,
+	cli *clientv3.Client,
+	cfg *config.SubTaskConfig,
+	putStatus string,
+	failFn func(string) bool,
+) error {
 	if cli == nil || cfg.LoaderConfig.ImportMode != config.LoadModePhysical {
 		return nil
 	}
-	_, err := ha.PutLightningStatus(cli, cfg.Name, cfg.SourceID, ha.LightningReady)
+	_, err := ha.PutLightningStatus(cli, cfg.Name, cfg.SourceID, putStatus)
 	if err != nil {
 		return err
 	}
@@ -252,15 +273,11 @@ WaitLoop:
 				return err
 			}
 			for _, s := range status {
-				if s == ha.LightningNotReady {
+				if failFn(s) {
 					continue WaitLoop
 				}
 			}
 			return nil
 		}
 	}
-}
-
-func finishAndWait() {
-	
 }
