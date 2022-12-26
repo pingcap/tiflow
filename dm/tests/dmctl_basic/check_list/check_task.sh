@@ -17,7 +17,6 @@ function check_task_pass() {
 	run_dm_ctl $WORK_DIR "127.0.0.1:$MASTER_PORT" \
 		"check-task $task_conf" \
 		"\"result\": true" 1
-	# "\"passed\": true" 1 delete this because sometimes precheck will only return 'pre-check is passed. '
 }
 
 function check_task_not_pass() {

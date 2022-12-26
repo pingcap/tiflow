@@ -28,8 +28,6 @@ upstreams:
     source-id: mysql-replica-01
     #filter-rules:
     #- filter-01
-    #column-mapping-rules:
-    #- cm-01
     #route-rules:
     #- route-01
     #- route-02
@@ -56,8 +54,6 @@ upstreams:
 #  meta: null
 #  filter-rules:
 #  - filter-02
-#  column-mapping-rules:
-#  - cm-02
 #  route-rules:
 #  - route-01
 #  - route-02
@@ -104,31 +100,6 @@ upstreams:
 #    sql-pattern:
 #    - alter table .* add column aaa int
 #    action: Ignore
-#column-mappings:
-#  cm-01:
-#    schema-pattern: dmctl
-#    table-pattern: t_*
-#    source-column: id
-#    target-column: id
-#    expression: partition id
-#    arguments:
-#    - "1"
-#    - ""
-#    - t_
-#    - ""
-#    create-table-query: ""
-#  cm-02:
-#    schema-pattern: dmctl
-#    table-pattern: t_*
-#    source-column: id
-#    target-column: id
-#    expression: partition id
-#    arguments:
-#    - "2"
-#    - ""
-#    - t_
-#    - ""
-#    create-table-query: ""
 #expression-filter: {}
 #black-white-list: {}
 block-allow-list:
