@@ -384,12 +384,58 @@ function test_master_ha_when_enable_tidb_and_only_ca_source_tls() {
 	echo "============================== test_master_ha_when_enable_tidb_and_only_ca_source_tls success =================================="
 }
 
+function test_source_and_target_when_only_ca_task() {
+	prepare_test
+
+	cp $cur/conf/source-no-tls.yaml $WORK_DIR/
+	cp $cur/conf/dm-master-no-tls.toml $WORK_DIR/
+	cp $cur/conf/dm-worker-no-tls.toml $WORK_DIR/
+	cp $cur/conf/dm-task-only-ca.yaml $WORK_DIR/
+
+	sed -i "s%dir-placeholer%$cur\/conf%g" $WORK_DIR/dm-task-only-ca.yaml
+
+	# start DM worker and master
+	run_dm_master $WORK_DIR/master $MASTER_PORT $WORK_DIR/dm-master-no-tls.toml
+	check_rpc_alive $cur/../bin/check_master_online 127.0.0.1:$MASTER_PORT
+	run_dm_worker $WORK_DIR/worker3 $WORKER3_PORT $WORK_DIR/dm-worker-no-tls.toml
+	check_rpc_alive $cur/../bin/check_worker_online 127.0.0.1:$WORKER3_PORT
+
+	# operate mysql config to worker
+	run_dm_ctl_with_retry $WORK_DIR "127.0.0.1:$MASTER_PORT" \
+		"operate-source create $WORK_DIR/source-no-tls.yaml" \
+		"\"result\": true" 2 \
+		"\"source\": \"$SOURCE_ID1\"" 1
+
+	echo "check master alive"
+	run_dm_ctl_with_retry $WORK_DIR "127.0.0.1:$MASTER_PORT" \
+		"list-member" \
+		"\"alive\": true" 1
+
+	echo "start task and check stage"
+	run_dm_ctl_with_retry $WORK_DIR "127.0.0.1:$MASTER_PORT" \
+		"start-task $WORK_DIR/dm-task-only-ca.yaml --remove-meta=true" \
+		"\"result\": true" 2
+
+	run_dm_ctl_with_retry $WORK_DIR "127.0.0.1:$MASTER_PORT" \
+		"query-status test" \
+		"\"result\": true" 2 \
+		"\"unit\": \"Sync\"" 1
+
+	run_sql 'INSERT INTO tls.t VALUES (99,9999999);' $MYSQL_PORT1 $MYSQL_PASSWORD1
+
+	echo "check data"
+	check_sync_diff $WORK_DIR $cur/conf/diff_config.toml
+
+	echo "============================== test_source_and_target_when_only_ca_task success =================================="
+}
+
 function run() {
 	test_master_ha_when_enable_tidb_and_only_ca_source_tls
 
 	test_worker_handle_multi_tls_tasks
 	test_worker_download_certs_from_master
 	test_worker_ha_when_enable_source_tls
+	test_source_and_target_when_only_ca_task
 }
 
 cleanup_data tls
