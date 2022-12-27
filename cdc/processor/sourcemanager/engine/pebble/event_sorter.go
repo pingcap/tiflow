@@ -329,6 +329,8 @@ func (s *EventSorter) Close() error {
 
 	var err error
 	s.tables.Ascend(func(span tablepb.Span, state *tableState) bool {
+		// TODO: maybe we can use a unified prefix for a changefeed,
+		//       so that we can speed up it when closing a changefeed.
 		if err1 := s.cleanTable(state, span); err1 != nil {
 			err = err1
 			return false
