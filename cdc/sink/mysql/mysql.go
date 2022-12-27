@@ -977,13 +977,23 @@ func (s *mysqlSink) prepareDMLs(txns []*model.SingleTableTxn, replicaID uint64, 
 		}
 
 		firstRow := txn.Rows[0]
+
 		// A row can be translated in to INSERT, when it was committed after
 		// the table it belongs to been replicating by TiCDC, which means it must not be
 		// replicated before, and there is no such row in downstream MySQL.
-		translateToInsert = translateToInsert && firstRow.CommitTs > firstRow.ReplicatingTs
+		for _, row := range txn.Rows {
+			if !translateToInsert {
+				break
+			}
+			// It can be translated in to INSERT, if the row is committed after
+			// we starting replicating the table, which means it must not be
+			// replicated before, and there is no such row in downstream MySQL.
+			translateToInsert = row.CommitTs > row.ReplicatingTs
+		}
 
 		// Determine whether to use batch dml feature here.
 		if s.params.batchDMLEnable {
+			log.Info("fizz batch dml enabled", zap.Int("bucket", bucket))
 			tableColumns := firstRow.Columns
 			if firstRow.IsDelete() {
 				tableColumns = firstRow.PreColumns
