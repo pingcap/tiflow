@@ -1000,8 +1000,8 @@ func (s *mysqlSink) prepareDMLs(txns []*model.SingleTableTxn, replicaID uint64, 
 			}
 		}
 
-		quoteTable := firstRow.Table.QuoteString()
 		for _, row := range txn.Rows {
+			quoteTable := row.Table.QuoteString()
 			var query string
 			var args []interface{}
 			// If the old value is enabled, is not in safe mode and is an update event, then translate to UPDATE.
