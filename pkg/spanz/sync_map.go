@@ -31,6 +31,11 @@ func (m *SyncMap) Load(key tablepb.Span) (value any, ok bool) {
 	return m.m.Load(ToHashableSpan(key))
 }
 
+// Store sets the value for a key.
+func (m *SyncMap) Store(key tablepb.Span, value any) {
+	m.m.Store(ToHashableSpan(key), value)
+}
+
 // LoadOrStore returns the existing value for the key if present.
 // Otherwise, it stores and returns the given value.
 // The loaded result is true if the value was loaded, false if stored.

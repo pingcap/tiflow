@@ -14,7 +14,6 @@
 package sourcemanager
 
 import (
-	"sync"
 	"time"
 
 	"github.com/pingcap/log"
@@ -26,6 +25,7 @@ import (
 	"github.com/pingcap/tiflow/cdc/puller"
 	cdccontext "github.com/pingcap/tiflow/pkg/context"
 	cerrors "github.com/pingcap/tiflow/pkg/errors"
+	"github.com/pingcap/tiflow/pkg/spanz"
 	"github.com/pingcap/tiflow/pkg/upstream"
 	"go.uber.org/zap"
 )
@@ -44,7 +44,7 @@ type SourceManager struct {
 	// engine is the source engine.
 	engine engine.SortEngine
 	// pullers is the puller wrapper map.
-	pullers sync.Map
+	pullers spanz.SyncMap
 	// Used to report the error to the processor.
 	errChan chan error
 	// Used to indicate whether the changefeed is in BDR mode.
@@ -141,7 +141,7 @@ func (m *SourceManager) Close() error {
 		zap.String("namespace", m.changefeedID.Namespace),
 		zap.String("changefeed", m.changefeedID.ID))
 	start := time.Now()
-	m.pullers.Range(func(key, value interface{}) bool {
+	m.pullers.Range(func(span tablepb.Span, value interface{}) bool {
 		value.(*pullerwrapper.Wrapper).Close()
 		return true
 	})
