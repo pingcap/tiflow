@@ -244,9 +244,12 @@ func (c *DDLCoordinator) Coordinate(ctx context.Context, item *metadata.DDLItem)
 			return ddls, conflictStage, err
 		}
 
-		g.deleted = g.isResolved(ctx)
+		deleted := g.isResolved(ctx)
+		g.deleted = deleted
+		g.mu.Unlock()
+
 		// if all source table is deleted or the shard group is resolved, we should remove the shard group.
-		if g.deleted {
+		if deleted {
 			c.removeShardGroup(ctx, item.TargetTable)
 		}
 
@@ -269,8 +272,6 @@ func (c *DDLCoordinator) Coordinate(ctx context.Context, item *metadata.DDLItem)
 			}
 			c.mu.Unlock()
 		}
-
-		g.mu.Unlock()
 		return ddls, conflictStage, err
 	}
 }
