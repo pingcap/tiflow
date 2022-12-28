@@ -291,8 +291,6 @@ func (w *sinkWorker) handleTask(ctx context.Context, task *sinkTask) (finalErr e
 			lastPos = upperBound
 			currTxnCommitTs = upperBound.CommitTs
 			lastTxnCommitTs = upperBound.CommitTs
-			committedTxnSize += pendingTxnSize
-			pendingTxnSize = 0
 			return maybeEmitAndAdvance(true, true)
 		}
 		allEventCount += 1
@@ -307,11 +305,6 @@ func (w *sinkWorker) handleTask(ctx context.Context, task *sinkTask) (finalErr e
 			pendingTxnSize = 0
 			batchID = 1
 		}
-		if pos.IsCommitFence() {
-			lastTxnCommitTs = currTxnCommitTs
-			committedTxnSize += pendingTxnSize
-			pendingTxnSize = 0
-		}
 
 		// NOTICE: The event can be filtered by the event filter.
 		if e.Row != nil {
@@ -324,11 +317,7 @@ func (w *sinkWorker) handleTask(ctx context.Context, task *sinkTask) (finalErr e
 			events = append(events, x...)
 			allEventSize += size
 			usedMem += size
-			if pos.IsCommitFence() {
-				committedTxnSize += size
-			} else {
-				pendingTxnSize += size
-			}
+			pendingTxnSize += size
 		}
 
 		if err := maybeEmitAndAdvance(false, pos.Valid()); err != nil {
