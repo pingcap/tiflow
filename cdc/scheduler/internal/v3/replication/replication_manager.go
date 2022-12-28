@@ -500,15 +500,16 @@ func (r *Manager) RunningTasks() *spanz.Map[*ScheduleTask] {
 
 // AdvanceCheckpoint tries to advance checkpoint and returns current checkpoint.
 func (r *Manager) AdvanceCheckpoint(
-	currentTables []model.TableID, currentPDTime time.Time,
+	currentTables *TableRanges, currentPDTime time.Time,
 ) (newCheckpointTs, newResolvedTs model.Ts) {
 	newCheckpointTs, newResolvedTs = math.MaxUint64, math.MaxUint64
 	slowestRange := tablepb.Span{}
-	for _, tableID := range currentTables {
-		tableStart, tableEnd := spanz.TableIDToComparableRange(tableID)
+	cannotProceed := false
+	lastSpan := tablepb.Span{}
+	currentTables.Iter(func(tableID model.TableID, tableStart, tableEnd tablepb.Span) bool {
 		tableSpanFound, tableHasHole := false, false
 		tableSpanStartFound, tableSpanEndFound := false, false
-		var lastSpan tablepb.Span
+		lastSpan = tablepb.Span{}
 		r.spans.AscendRange(tableStart, tableEnd,
 			func(span tablepb.Span, table *ReplicationSet) bool {
 				if lastSpan.TableID != 0 && !bytes.Equal(lastSpan.EndKey, span.StartKey) {
@@ -540,13 +541,18 @@ func (r *Manager) AdvanceCheckpoint(
 				return true
 			})
 		if !tableSpanFound || !tableSpanStartFound || !tableSpanEndFound || tableHasHole {
-			// Can not advance checkpoint there is a table missing.
+			// Can not advance checkpoint there is a span missing.
 			log.Warn("schedulerv3: cannot advance checkpoint since missing span",
 				zap.String("namespace", r.changefeedID.Namespace),
 				zap.String("changefeed", r.changefeedID.ID),
 				zap.Int64("tableID", tableID))
-			return checkpointCannotProceed, checkpointCannotProceed
+			cannotProceed = true
+			return false
 		}
+		return true
+	})
+	if cannotProceed {
+		return checkpointCannotProceed, checkpointCannotProceed
 	}
 	if slowestRange.TableID != 0 {
 		r.slowestTableID = slowestRange
@@ -722,4 +728,44 @@ func (r *Manager) SetReplicationSetForTests(rs *ReplicationSet) {
 // GetReplicationSetForTests is only used in tests.
 func (r *Manager) GetReplicationSetForTests() *spanz.Map[*ReplicationSet] {
 	return r.spans
+}
+
+// TableRanges wraps current tables and their ranges.
+type TableRanges struct {
+	currentTables []model.TableID
+	cache         struct {
+		tableRange map[model.TableID]struct{ start, end tablepb.Span }
+		lastGC     time.Time
+	}
+}
+
+// UpdateTables current tables.
+func (t *TableRanges) UpdateTables(currentTables []model.TableID) {
+	if time.Since(t.cache.lastGC) > 10*time.Minute {
+		t.cache.tableRange = make(map[model.TableID]struct {
+			start tablepb.Span
+			end   tablepb.Span
+		})
+		t.cache.lastGC = time.Now()
+	}
+	t.currentTables = currentTables
+}
+
+// Len returns the length of current tables.
+func (t *TableRanges) Len() int {
+	return len(t.currentTables)
+}
+
+// Iter iterate current tables.
+func (t *TableRanges) Iter(fn func(tableID model.TableID, tableStart, tableEnd tablepb.Span) bool) {
+	for _, tableID := range t.currentTables {
+		tableRange, ok := t.cache.tableRange[tableID]
+		if !ok {
+			tableRange.start, tableRange.end = spanz.TableIDToComparableRange(tableID)
+			t.cache.tableRange[tableID] = tableRange
+		}
+		if !fn(tableID, tableRange.start, tableRange.end) {
+			break
+		}
+	}
 }
