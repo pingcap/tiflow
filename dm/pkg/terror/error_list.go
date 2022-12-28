@@ -267,6 +267,8 @@ const (
 	codeConfigInvalidSafeModeDuration
 	codeConfigConfictSafeModeDurationAndSafeMode
 	codeConfigInvalidLoadPhysicalDuplicateResolution
+	codeConfigInvalidLoadPhysicalChecksum
+	codeConfigColumnMappingDeprecated
 )
 
 // Binlog operation error code list.
@@ -384,6 +386,7 @@ const (
 	codeLoadCheckPointNotMatch
 	codeLoadLightningRuntime
 	codeLoadLightningHasDup
+	codeLoadLightningChecksum
 )
 
 // Sync unit error code.
@@ -974,6 +977,8 @@ var (
 	ErrConfigInvalidSafeModeDuration            = New(codeConfigInvalidSafeModeDuration, ClassConfig, ScopeInternal, LevelMedium, "safe-mode-duration '%s' parsed failed: %v", "Please check the `safe-mode-duration` is correct.")
 	ErrConfigConfictSafeModeDurationAndSafeMode = New(codeConfigConfictSafeModeDurationAndSafeMode, ClassConfig, ScopeInternal, LevelLow, "safe-mode(true) conflicts with safe-mode-duration(0s)", "Please set safe-mode to false or safe-mode-duration to non-zero.")
 	ErrConfigInvalidPhysicalDuplicateResolution = New(codeConfigInvalidLoadPhysicalDuplicateResolution, ClassConfig, ScopeInternal, LevelMedium, "invalid load on-duplicate-physical option '%s'", "Please choose a valid value in ['none', 'manual'] or leave it empty.")
+	ErrConfigInvalidPhysicalChecksum            = New(codeConfigInvalidLoadPhysicalChecksum, ClassConfig, ScopeInternal, LevelMedium, "invalid load checksum-physical option '%s'", "Please choose a valid value in ['required', 'optional', 'off'] or leave it empty.")
+	ErrConfigColumnMappingDeprecated            = New(codeConfigColumnMappingDeprecated, ClassConfig, ScopeInternal, LevelHigh, "column-mapping is not supported since v6.6.0", "Please use extract-table/extract-schema/extract-source to handle data conflict when merge tables. See https://docs.pingcap.com/tidb/v6.4/task-configuration-file-full#task-configuration-file-template-advanced")
 
 	// Binlog operation error.
 	ErrBinlogExtractPosition = New(codeBinlogExtractPosition, ClassBinlogOp, ScopeInternal, LevelHigh, "", "")
@@ -1077,6 +1082,7 @@ var (
 	ErrLoadTaskCheckPointNotMatch  = New(codeLoadCheckPointNotMatch, ClassFunctional, ScopeInternal, LevelHigh, "inconsistent checkpoints between loader and target database", "If you want to redo the whole task, please check that you have not forgotten to add -remove-meta flag for start-task command.")
 	ErrLoadLightningRuntime        = New(codeLoadLightningRuntime, ClassLoadUnit, ScopeInternal, LevelHigh, "", "")
 	ErrLoadLightningHasDup         = New(codeLoadLightningHasDup, ClassLoadUnit, ScopeInternal, LevelMedium, "physical import finished but the data has duplication, please check `%s`.`%s` to see the duplication", "You can refer to https://docs.pingcap.com/tidb/stable/tidb-lightning-physical-import-mode-usage#conflict-detection to manually insert data and resume the task.")
+	ErrLoadLightningChecksum       = New(codeLoadLightningChecksum, ClassLoadUnit, ScopeInternal, LevelMedium, "checksum mismatched, KV number in source files: %s, KV number in TiDB cluster: %s", "If TiDB cluster has more KV, please check if the migrated tables are empty before the task. If source files have more KV, please set `on-duplicate-physical` and restart the task to see data duplication. You can resume the task to ignore the error if you want.")
 
 	// Sync unit error.
 	ErrSyncerUnitPanic                   = New(codeSyncerUnitPanic, ClassSyncUnit, ScopeInternal, LevelHigh, "panic error: %v", "")

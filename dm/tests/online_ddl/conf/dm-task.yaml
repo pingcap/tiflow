@@ -16,7 +16,6 @@ mysql-instances:
   - source-id: "mysql-replica-01"
     block-allow-list:  "instance"
     route-rules: ["gho-sharding-route-rules-table", "pt-sharding-route-rules-table", "sharding-route-rules-schema"]
-    column-mapping-rules: ["gho-instance-1", "pt-instance-1"]
     mydumper-config-name: "global"
     loader-config-name: "global"
     syncer-config-name: "global"
@@ -28,7 +27,6 @@ mysql-instances:
       binlog-pos: 4
     block-allow-list:  "instance"
     route-rules: ["gho-sharding-route-rules-table", "pt-sharding-route-rules-table", "sharding-route-rules-schema"]
-    column-mapping-rules: ["gho-instance-2", "pt-instance-2"]
     mydumper-config-name: "global"
     loader-config-name: "global"
     syncer-config-name: "global"
@@ -57,39 +55,6 @@ routes:
   sharding-route-rules-schema:
     schema-pattern: online_ddl
     target-schema: online_ddl
-
-column-mappings:
-  gho-instance-1:
-    schema-pattern: "online_ddl"
-    table-pattern: "gho_t*"
-    expression: "partition id"
-    source-column: "id"
-    target-column: "id"
-    arguments: ["1", "", "gho_t"]
-
-  pt-instance-1:
-    schema-pattern: "online_ddl"
-    table-pattern: "pt_t*"
-    expression: "partition id"
-    source-column: "id"
-    target-column: "id"
-    arguments: ["1", "", "pt_t"]
-  
-  gho-instance-2:
-    schema-pattern: "online_ddl"
-    table-pattern: "gho_t*"
-    expression: "partition id"
-    source-column: "id"
-    target-column: "id"
-    arguments: ["2", "", "gho_t"]
-
-  pt-instance-2:
-    schema-pattern: "online_ddl"
-    table-pattern: "pt_t*"
-    expression: "partition id"
-    source-column: "id"
-    target-column: "id"
-    arguments: ["2", "", "pt_t"]
   
 filters:
   filter-rule-index:

@@ -39,10 +39,10 @@ const (
 )
 
 type sinkNode struct {
-	sinkV1  sinkv1.Sink
-	sinkV2  sinkv2.TableSink
-	state   *tablepb.TableState
-	tableID model.TableID
+	sinkV1 sinkv1.Sink
+	sinkV2 sinkv2.TableSink
+	state  *tablepb.TableState
+	span   tablepb.Span
 
 	// atomic operations for model.ResolvedTs
 	resolvedTs   atomic.Value
@@ -60,7 +60,7 @@ type sinkNode struct {
 }
 
 func newSinkNode(
-	tableID model.TableID,
+	span tablepb.Span,
 	sinkV1 sinkv1.Sink,
 	sinkV2 sinkv2.TableSink,
 	startTs model.Ts, targetTs model.Ts,
@@ -74,7 +74,7 @@ func newSinkNode(
 	sn := &sinkNode{
 		sinkV1:         sinkV1,
 		sinkV2:         sinkV2,
-		tableID:        tableID,
+		span:           span,
 		state:          state,
 		targetTs:       targetTs,
 		barrierTs:      startTs,
@@ -138,7 +138,7 @@ func (n *sinkNode) flushSink(ctx context.Context, resolved model.ResolvedTs) (er
 		// redo log do not support batch resolve mode, hence we
 		// use `ResolvedMark` to restore a normal resolved ts
 		resolved = model.NewResolvedTs(resolved.ResolvedMark())
-		err = n.redoManager.UpdateResolvedTs(ctx, n.tableID, resolved.Ts)
+		err = n.redoManager.UpdateResolvedTs(ctx, n.span, resolved.Ts)
 	}
 
 	// Flush sink with barrierTs, which is broadcast by owner.
@@ -147,7 +147,7 @@ func (n *sinkNode) flushSink(ctx context.Context, resolved model.ResolvedTs) (er
 		resolved = model.NewResolvedTs(barrierTs)
 	}
 	if n.redoManager != nil && n.redoManager.Enabled() {
-		redoFlushed := n.redoManager.GetResolvedTs(n.tableID)
+		redoFlushed := n.redoManager.GetResolvedTs(n.span)
 		if barrierTs > redoFlushed {
 			// NOTE: How can barrierTs be greater than redoFlushed?
 			// When scheduler moves a table from one place to another place, the table
@@ -155,7 +155,7 @@ func (n *sinkNode) flushSink(ctx context.Context, resolved model.ResolvedTs) (er
 			// redoTs can be less than barrierTs.
 			if n.logLimiter.Allow() {
 				log.Info("redo flushedTs is less than current barrierTs",
-					zap.Int64("tableID", n.tableID),
+					zap.Stringer("span", &n.span),
 					zap.Uint64("barrierTs", barrierTs),
 					zap.Uint64("tableRedoFlushed", redoFlushed))
 			}
@@ -172,7 +172,7 @@ func (n *sinkNode) flushSink(ctx context.Context, resolved model.ResolvedTs) (er
 
 	var checkpoint model.ResolvedTs
 	if n.sinkV1 != nil {
-		checkpoint, err = n.sinkV1.FlushRowChangedEvents(ctx, n.tableID, resolved)
+		checkpoint, err = n.sinkV1.FlushRowChangedEvents(ctx, n.span.TableID, resolved)
 		if err != nil {
 			return errors.Trace(err)
 		}
@@ -208,7 +208,7 @@ func (n *sinkNode) emitRowToSink(ctx context.Context, event *model.PolymorphicEv
 
 	emitRows := func(rows ...*model.RowChangedEvent) error {
 		if n.redoManager != nil && n.redoManager.Enabled() {
-			err := n.redoManager.EmitRowChangedEvents(ctx, n.tableID, nil, rows...)
+			err := n.redoManager.EmitRowChangedEvents(ctx, n.span, nil, rows...)
 			if err != nil {
 				return err
 			}
@@ -222,7 +222,7 @@ func (n *sinkNode) emitRowToSink(ctx context.Context, event *model.PolymorphicEv
 
 	if event == nil || event.Row == nil {
 		log.Warn("skip emit nil event",
-			zap.Int64("tableID", n.tableID),
+			zap.Stringer("span", &n.span),
 			zap.String("namespace", n.changefeed.Namespace),
 			zap.String("changefeed", n.changefeed.ID),
 			zap.Any("event", event))
@@ -236,7 +236,7 @@ func (n *sinkNode) emitRowToSink(ctx context.Context, event *model.PolymorphicEv
 	// Just ignore these row changed events.
 	if colLen == 0 && preColLen == 0 {
 		log.Warn("skip emit empty row event",
-			zap.Int64("tableID", n.tableID),
+			zap.Stringer("span", &n.span),
 			zap.String("namespace", n.changefeed.Namespace),
 			zap.String("changefeed", n.changefeed.ID),
 			zap.Any("event", event))
@@ -385,7 +385,7 @@ func (n *sinkNode) closeTableSink(ctx context.Context) (err error) {
 			return
 		}
 		log.Info("sinkV1 is closed",
-			zap.Int64("tableID", n.tableID),
+			zap.Stringer("span", &n.span),
 			zap.String("namespace", n.changefeed.Namespace),
 			zap.String("changefeed", n.changefeed.ID))
 		err = cerror.ErrTableProcessorStoppedSafely.GenWithStackByArgs()
@@ -393,7 +393,7 @@ func (n *sinkNode) closeTableSink(ctx context.Context) (err error) {
 	}
 	n.sinkV2.Close(ctx)
 	log.Info("sinkV2 is closed",
-		zap.Int64("tableID", n.tableID),
+		zap.Stringer("span", &n.span),
 		zap.String("namespace", n.changefeed.Namespace),
 		zap.String("changefeed", n.changefeed.ID))
 	err = cerror.ErrTableProcessorStoppedSafely.GenWithStackByArgs()

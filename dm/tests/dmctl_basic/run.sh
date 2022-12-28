@@ -412,8 +412,8 @@ function run() {
 	md5_new_worker2=$(md5sum $dm_worker2_conf | awk '{print $1}')
 	md5_old_worker1=$(md5sum $cur/conf/dm-worker1.toml | awk '{print $1}')
 	md5_old_worker2=$(md5sum $cur/conf/dm-worker2.toml | awk '{print $1}')
-	[ "md5_new_worker1" != "md5_old_worker1" ]
-	[ "md5_new_worker2" != "md5_old_worker2" ]
+	[ "$md5_new_worker1" != "$md5_old_worker1" ]
+	[ "$md5_new_worker2" != "$md5_old_worker2" ]
 
 	#    update_master_config_success $dm_master_conf
 	#    cmp $dm_master_conf $cur/conf/dm-master.toml

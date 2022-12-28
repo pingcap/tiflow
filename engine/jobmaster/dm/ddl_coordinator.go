@@ -145,10 +145,9 @@ type TableAgent interface {
 
 // DDLCoordinator is a coordinator for ddl.
 type DDLCoordinator struct {
-	mu          sync.Mutex
+	mu          sync.RWMutex
 	tables      map[metadata.TargetTable]map[metadata.SourceTable]struct{}
 	shardGroups map[metadata.TargetTable]*shardGroup
-	pendings    sync.WaitGroup
 	logger      *zap.Logger
 
 	kvClient     metaModel.KVClient
@@ -176,9 +175,6 @@ func NewDDLCoordinator(jobID string, kvClient metaModel.KVClient, tableAgent Tab
 func (c *DDLCoordinator) ClearMetadata(ctx context.Context) error {
 	c.mu.Lock()
 	defer c.mu.Unlock()
-	// wait all pending ddls coordinated.
-	c.pendings.Wait()
-
 	return metadata.DelAllDroppedColumns(ctx, c.kvClient)
 }
 
@@ -186,9 +182,6 @@ func (c *DDLCoordinator) ClearMetadata(ctx context.Context) error {
 func (c *DDLCoordinator) Reset(ctx context.Context) error {
 	c.mu.Lock()
 	defer c.mu.Unlock()
-	// wait all pending ddls coordinated.
-	c.pendings.Wait()
-
 	jobCfg, err := c.jobStore.GetJobCfg(ctx)
 	if err != nil {
 		return err
@@ -217,12 +210,8 @@ func (c *DDLCoordinator) Reset(ctx context.Context) error {
 // Coordinate coordinates ddls.
 func (c *DDLCoordinator) Coordinate(ctx context.Context, item *metadata.DDLItem) ([]string, optimism.ConflictStage, error) {
 	c.mu.Lock()
-	c.pendings.Add(1)
-	defer c.pendings.Done()
-	c.mu.Unlock()
-
+	defer c.mu.Unlock()
 	c.logger.Info("receive a ddl item", zap.Any("item", item))
-
 	jobCfg, err := c.jobStore.GetJobCfg(ctx)
 	if err != nil {
 		return nil, optimism.ConflictError, err
@@ -230,61 +219,44 @@ func (c *DDLCoordinator) Coordinate(ctx context.Context, item *metadata.DDLItem)
 		return nil, optimism.ConflictError, errors.New("coordinate error with non-shard-mode")
 	}
 
-	for {
-		// create shard group if not exists.
-		g, err := c.loadOrCreateShardGroup(ctx, item.TargetTable, jobCfg)
-		if err != nil {
-			return nil, optimism.ConflictError, err
-		}
+	// create shard group if not exists.
+	g, err := c.loadOrCreateShardGroup(ctx, item.TargetTable, jobCfg)
+	if err != nil {
+		return nil, optimism.ConflictError, err
+	}
 
-		// each group only processes one item at a time
-		g.mu.Lock()
-		// if the group is deleted by another DDLItem, we should recreate it.
-		if g.deleted {
-			g.mu.Unlock()
-			continue
-		}
-		ddls, conflictStage, err := g.handle(ctx, item)
-		if err != nil {
-			g.mu.Unlock()
-			return ddls, conflictStage, err
-		}
-
-		g.deleted = g.isResolved(ctx)
-		// if all source table is deleted or the shard group is resolved, we should remove the shard group.
-		if g.deleted {
-			c.removeShardGroup(ctx, item.TargetTable)
-		}
-
-		// handle table level ddl
-		switch item.Type {
-		case metadata.CreateTable:
-			c.mu.Lock()
-			tables, ok := c.tables[item.TargetTable]
-			if !ok {
-				c.tables[item.TargetTable] = make(map[metadata.SourceTable]struct{}, 0)
-				tables = c.tables[item.TargetTable]
-			}
-			tables[item.SourceTable] = struct{}{}
-			c.mu.Unlock()
-		case metadata.DropTable:
-			c.mu.Lock()
-			delete(c.tables[item.TargetTable], item.SourceTable)
-			if len(c.tables[item.TargetTable]) == 0 {
-				delete(c.tables, item.TargetTable)
-			}
-			c.mu.Unlock()
-		}
-
-		g.mu.Unlock()
+	ddls, conflictStage, err := g.handle(ctx, item)
+	if err != nil {
 		return ddls, conflictStage, err
 	}
+
+	// if all source table is deleted or the shard group is resolved, we should remove the shard group.
+	if g.isResolved(ctx) {
+		c.removeShardGroup(ctx, item.TargetTable)
+	}
+
+	// handle table level ddl
+	switch item.Type {
+	case metadata.CreateTable:
+		tables, ok := c.tables[item.TargetTable]
+		if !ok {
+			c.tables[item.TargetTable] = make(map[metadata.SourceTable]struct{}, 0)
+			tables = c.tables[item.TargetTable]
+		}
+		tables[item.SourceTable] = struct{}{}
+	case metadata.DropTable:
+		delete(c.tables[item.TargetTable], item.SourceTable)
+		if len(c.tables[item.TargetTable]) == 0 {
+			delete(c.tables, item.TargetTable)
+		}
+	}
+	return ddls, conflictStage, err
 }
 
 // ShowDDLLocks show ddl locks.
 func (c *DDLCoordinator) ShowDDLLocks(ctx context.Context) ShowDDLLocksResponse {
-	c.mu.Lock()
-	defer c.mu.Unlock()
+	c.mu.RLock()
+	defer c.mu.RUnlock()
 	ddlLocks := make(map[metadata.TargetTable]DDLLock)
 	for targetTable, g := range c.shardGroups {
 		if g.allShardTablesSame() {
@@ -297,9 +269,6 @@ func (c *DDLCoordinator) ShowDDLLocks(ctx context.Context) ShowDDLLocksResponse 
 }
 
 func (c *DDLCoordinator) loadOrCreateShardGroup(ctx context.Context, targetTable metadata.TargetTable, jobCfg *config.JobCfg) (*shardGroup, error) {
-	c.mu.Lock()
-	defer c.mu.Unlock()
-
 	if g, ok := c.shardGroups[targetTable]; ok {
 		return g, nil
 	}
@@ -313,8 +282,6 @@ func (c *DDLCoordinator) loadOrCreateShardGroup(ctx context.Context, targetTable
 }
 
 func (c *DDLCoordinator) removeShardGroup(ctx context.Context, targetTable metadata.TargetTable) {
-	c.mu.Lock()
-	defer c.mu.Unlock()
 	if g, ok := c.shardGroups[targetTable]; ok {
 		if err := g.clear(ctx); err != nil {
 			c.logger.Error("clear shard group failed", zap.Error(err))
@@ -324,7 +291,6 @@ func (c *DDLCoordinator) removeShardGroup(ctx context.Context, targetTable metad
 }
 
 type shardGroup struct {
-	mu sync.RWMutex
 	// normalTables represents upstream table info record in checkpoint.
 	normalTables map[metadata.SourceTable]string
 	// conflictTables represents upstream table info after executing conflict DDL.
@@ -334,7 +300,6 @@ type shardGroup struct {
 	droppedColumnsStore *metadata.DroppedColumnsStore
 	id                  frameModel.MasterID
 	cfg                 *config.JobCfg
-	deleted             bool
 	inRedirect          bool
 	messageAgent        message.Agent
 	logger              *zap.Logger
@@ -362,7 +327,7 @@ func newShardGroup(ctx context.Context, id frameModel.MasterID, cfg *config.JobC
 		// we skip these tables in handleDDL.
 		// TODO: better error handling
 		if err != nil && !strings.HasPrefix(err.Error(), "table info not found") {
-			return nil, err
+			return nil, errors.Errorf("fetch table stmt from checkpoint failed, sourceTable: %s, err: %v", sourceTable, err)
 		}
 		g.normalTables[sourceTable] = stmt
 	}
@@ -890,8 +855,6 @@ func (g *shardGroup) clear(ctx context.Context) error {
 }
 
 func (g *shardGroup) showTables() map[metadata.SourceTable]ShardTable {
-	g.mu.RLock()
-	defer g.mu.RUnlock()
 	tables := make(map[metadata.SourceTable]ShardTable, 0)
 	for sourceTable, stmt := range g.normalTables {
 		tables[sourceTable] = ShardTable{
