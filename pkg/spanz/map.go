@@ -40,8 +40,10 @@ type Map[T any] struct {
 
 // NewMap returns a new SpanMap.
 func NewMap[T any]() *Map[T] {
+	// Map is read heavy map, many Ascend.
+	const defaultDegree = 256
 	return &Map[T]{
-		tree: btree.NewG(2, lessSpanItem[T]),
+		tree: btree.NewG(defaultDegree, lessSpanItem[T]),
 	}
 }
 
