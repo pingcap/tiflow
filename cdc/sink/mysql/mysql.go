@@ -648,8 +648,6 @@ func (s *mysqlSink) execDMLWithMaxRetries(pctx context.Context, dmls *preparedDM
 	return retry.Do(pctx, func() error {
 		writeTimeout, _ := time.ParseDuration(s.params.writeTimeout)
 		writeTimeout += networkDriftDuration
-		ctx, cancelFunc := context.WithTimeout(pctx, writeTimeout)
-		defer cancelFunc()
 
 		failpoint.Inject("MySQLSinkTxnRandomError", func() {
 			failpoint.Return(
@@ -661,7 +659,7 @@ func (s *mysqlSink) execDMLWithMaxRetries(pctx context.Context, dmls *preparedDM
 			time.Sleep(time.Hour)
 		})
 		err := s.statistics.RecordBatchExecution(func() (int, error) {
-			tx, err := s.db.BeginTx(ctx, nil)
+			tx, err := s.db.BeginTx(pctx, nil)
 			if err != nil {
 				return 0, logDMLTxnErr(
 					cerror.WrapError(cerror.ErrMySQLTxnError, err),
@@ -671,6 +669,7 @@ func (s *mysqlSink) execDMLWithMaxRetries(pctx context.Context, dmls *preparedDM
 			for i, query := range dmls.sqls {
 				args := dmls.values[i]
 				log.Debug("exec row", zap.String("sql", query), zap.Any("args", args))
+				ctx, cancelFunc := context.WithTimeout(pctx, writeTimeout)
 				if _, err := tx.ExecContext(ctx, query, args...); err != nil {
 					if rbErr := tx.Rollback(); rbErr != nil {
 						if errors.Cause(rbErr) != context.Canceled {
@@ -680,10 +679,12 @@ func (s *mysqlSink) execDMLWithMaxRetries(pctx context.Context, dmls *preparedDM
 								start, s.params.changefeedID, query, dmls.rowCount, dmls.startTs)
 						}
 					}
+					cancelFunc()
 					return 0, logDMLTxnErr(
 						cerror.WrapError(cerror.ErrMySQLTxnError, err),
 						start, s.params.changefeedID, query, dmls.rowCount, dmls.startTs)
 				}
+				cancelFunc()
 			}
 
 			if err = tx.Commit(); err != nil {
