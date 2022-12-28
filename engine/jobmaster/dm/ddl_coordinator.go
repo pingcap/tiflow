@@ -309,7 +309,7 @@ func newShardGroup(ctx context.Context, id frameModel.MasterID, cfg *config.JobC
 		// we skip these tables in handleDDL.
 		// TODO: better error handling
 		if err != nil && !strings.HasPrefix(err.Error(), "table info not found") {
-			return nil, err
+			return nil, errors.Errorf("fetch table stmt from checkpoint failed, sourceTable: %s, err: %v", sourceTable, err)
 		}
 		g.normalTables[sourceTable] = stmt
 	}
