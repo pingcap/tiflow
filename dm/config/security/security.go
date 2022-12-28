@@ -17,9 +17,6 @@ import (
 	"encoding/base64"
 	"fmt"
 	"os"
-	"path"
-
-	"github.com/pingcap/tiflow/dm/pkg/utils"
 )
 
 // Security config.
@@ -79,42 +76,6 @@ func (s *Security) LoadTLSContent() error {
 	convertAndAssign(s.SSLKey, os.ReadFile, &s.SSLKeyBytes)
 	convertAndAssign(s.SSLCert, os.ReadFile, &s.SSLCertBytes)
 	return firstErr
-}
-
-// DumpTLSContent dump tls certs data to file.
-// if user specified the path for certs but the cert doesn't exist or user didn't specify the path for certs
-// dump certs to dm-worker folder and change the cert path.
-// see more here https://github.com/pingcap/tiflow/pull/3260#discussion_r749052994
-func (s *Security) DumpTLSContent(baseDirPath string) error {
-	isSSLCANotExist := s.SSLCA == "" || !utils.IsFileExists(s.SSLCA)
-	isSSLCertNotExist := s.SSLCert == "" || !utils.IsFileExists(s.SSLCert)
-	isSSLKeyNotExist := s.SSLKey == "" || !utils.IsFileExists(s.SSLKey)
-	if isSSLCANotExist || isSSLCertNotExist || isSSLKeyNotExist {
-		if !utils.IsDirExists(baseDirPath) {
-			if err := os.MkdirAll(baseDirPath, 0o700); err != nil {
-				return err
-			}
-		}
-	}
-	if isSSLCANotExist {
-		s.SSLCA = path.Join(baseDirPath, "ca.pem")
-		if err := utils.WriteFileAtomic(s.SSLCA, s.SSLCABytes, 0o600); err != nil {
-			return err
-		}
-	}
-	if isSSLCertNotExist {
-		s.SSLCert = path.Join(baseDirPath, "cert.pem")
-		if err := utils.WriteFileAtomic(s.SSLCert, s.SSLCertBytes, 0o600); err != nil {
-			return err
-		}
-	}
-	if isSSLKeyNotExist {
-		s.SSLKey = path.Join(baseDirPath, "key.pem")
-		if err := utils.WriteFileAtomic(s.SSLKey, s.SSLKeyBytes, 0o600); err != nil {
-			return err
-		}
-	}
-	return nil
 }
 
 // ClearSSLBytesData clear all tls config bytes data.
