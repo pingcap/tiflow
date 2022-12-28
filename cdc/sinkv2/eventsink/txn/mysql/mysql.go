@@ -508,8 +508,6 @@ func (s *mysqlBackend) execDMLWithMaxRetries(pctx context.Context, dmls *prepare
 	return retry.Do(pctx, func() error {
 		writeTimeout, _ := time.ParseDuration(s.cfg.WriteTimeout)
 		writeTimeout += networkDriftDuration
-		ctx, cancelFunc := context.WithTimeout(pctx, writeTimeout)
-		defer cancelFunc()
 
 		failpoint.Inject("MySQLSinkTxnRandomError", func() {
 			fmt.Printf("start to random error")
@@ -517,19 +515,11 @@ func (s *mysqlBackend) execDMLWithMaxRetries(pctx context.Context, dmls *prepare
 			failpoint.Return(err)
 		})
 		failpoint.Inject("MySQLSinkHangLongTime", func() {
-			timer := time.NewTimer(time.Hour)
-			select {
-			case <-timer.C:
-			case <-ctx.Done():
-				if !timer.Stop() {
-					<-timer.C
-				}
-				failpoint.Return(context.Canceled)
-			}
+			time.Sleep(time.Hour)
 		})
 
 		err := s.statistics.RecordBatchExecution(func() (int, error) {
-			tx, err := s.db.BeginTx(ctx, nil)
+			tx, err := s.db.BeginTx(pctx, nil)
 			if err != nil {
 				return 0, logDMLTxnErr(
 					cerror.WrapError(cerror.ErrMySQLTxnError, err),
@@ -540,6 +530,7 @@ func (s *mysqlBackend) execDMLWithMaxRetries(pctx context.Context, dmls *prepare
 				args := dmls.values[i]
 				log.Debug("exec row", zap.Int("workerID", s.workerID),
 					zap.String("sql", query), zap.Any("args", args))
+				ctx, cancelFunc := context.WithTimeout(pctx, writeTimeout)
 				if _, err := tx.ExecContext(ctx, query, args...); err != nil {
 					err := logDMLTxnErr(
 						cerror.WrapError(cerror.ErrMySQLTxnError, err),
@@ -549,13 +540,15 @@ func (s *mysqlBackend) execDMLWithMaxRetries(pctx context.Context, dmls *prepare
 							log.Warn("failed to rollback txn", zap.Error(rbErr))
 						}
 					}
+					cancelFunc()
 					return 0, err
 				}
+				cancelFunc()
 			}
 
 			// we set write source for each txn,
 			// so we can use it to trace the data source
-			if err = s.setWriteSource(ctx, tx); err != nil {
+			if err = s.setWriteSource(pctx, tx); err != nil {
 				err := logDMLTxnErr(
 					cerror.WrapError(cerror.ErrMySQLTxnError, err),
 					start, s.changefeed,
