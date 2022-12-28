@@ -91,19 +91,13 @@ func (s *Slots[E]) Add(elem E, keys []uint64) {
 
 // Free removes an element from the Slots.
 func (s *Slots[E]) Free(elem E, keys []uint64) {
-	var lastSlot uint64 = math.MaxUint64
 	for _, key := range keys {
 		slotIdx := getSlot(key, s.numSlots)
-		if lastSlot != slotIdx {
-			s.slots[slotIdx].mu.Lock()
-		}
+		s.slots[slotIdx].mu.Lock()
 		if tail, ok := s.slots[slotIdx].nodes[key]; ok && tail.NodeID() == elem.NodeID() {
 			delete(s.slots[slotIdx].nodes, key)
 		}
-		if lastSlot != slotIdx {
-			s.slots[slotIdx].mu.Unlock()
-			lastSlot = slotIdx
-		}
+		s.slots[slotIdx].mu.Unlock()
 	}
 	elem.Free()
 }
