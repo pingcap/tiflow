@@ -78,7 +78,7 @@ func TestDDLCoordinator(t *testing.T) {
 	}
 	checkpointAgent.On("FetchTableStmt").Return("", context.DeadlineExceeded).Once()
 	ddls, conflictStage, err = ddlCoordinator.Coordinate(context.Background(), item)
-	require.EqualError(t, err, context.DeadlineExceeded.Error())
+	require.EqualError(t, err, "fetch table stmt from checkpoint failed, sourceTable: {source schema tb1}, err: context deadline exceeded")
 	require.Len(t, ddls, 0)
 	require.Equal(t, optimism.ConflictError, conflictStage)
 	require.Len(t, ddlCoordinator.tables[targetTable], 1)
