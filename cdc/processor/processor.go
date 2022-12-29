@@ -1258,8 +1258,8 @@ func (p *processor) doGCSchemaStorage() {
 
 func (p *processor) refreshMetrics() {
 	if p.pullBasedSinking {
-		tables := p.sinkManager.GetAllCurrentTableSpans()
-		p.metricSyncTableNumGauge.Set(float64(len(tables)))
+		tableSpans := p.sinkManager.GetAllCurrentTableSpans()
+		p.metricSyncTableNumGauge.Set(float64(len(tableSpans)))
 		sortEngineReceivedEvents := p.sourceManager.ReceivedEvents()
 		tableSinksReceivedEvents := p.sinkManager.ReceivedEvents()
 		p.metricRemainKVEventGauge.Set(float64(sortEngineReceivedEvents - tableSinksReceivedEvents))
