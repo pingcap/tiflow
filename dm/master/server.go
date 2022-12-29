@@ -1675,7 +1675,7 @@ func (s *Server) generateSubTask(
 		if firstMode == "" {
 			firstMode = stCfg.LoaderConfig.ImportMode
 		} else if firstMode != stCfg.LoaderConfig.ImportMode {
-			return nil, nil, terror.ErrConfigInvalidLoadMode.Generatef("found two import-mode %s and %s in task config, DM only support one value", firstMode, stCfg.LoaderConfig.ImportMode)
+			return nil, nil, terror.ErrConfigInvalidLoadMode.Generatef("found two import-mode %s and %s in task config, DM only supports one value", firstMode, stCfg.LoaderConfig.ImportMode)
 		}
 	}
 	return cfg, stCfgs, nil
