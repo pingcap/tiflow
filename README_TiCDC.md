@@ -1,8 +1,6 @@
 # TiCDC
 
-**TiCDC** is [TiDB](https://docs.pingcap.com/tidb/stable)'s change data capture framework.
-It supports replicating change data to various downstreams, including MySQL protocol-compatible databases
-and [Kafka](https://kafka.apache.org/).
+**TiCDC** is [TiDB](https://docs.pingcap.com/tidb/stable)'s change data capture framework. It replicates change data to various downstream systems, such as MySQL protocol-compatible databases and [Kafka](https://kafka.apache.org/).
 
 ## Architecture
 
@@ -13,14 +11,14 @@ See a detailed introduction to [the TiCDC architecture](https://docs.pingcap.com
 ## Documentation
 
 - [English](https://docs.pingcap.com/tidb/stable/ticdc-overview)
-- [Chinese](https://docs.pingcap.com/zh/tidb/stable/ticdc-overview)
+- [简体中文](https://docs.pingcap.com/zh/tidb/stable/ticdc-overview)
 
 ## Blog
 
 - [English](https://pingcap.com/blog/)
-- [Chinese](https://pingcap.com/blog-cn/)
+- [简体中文](https://cn.pingcap.com/blog/)
 
-## Building
+## Build
 
 To check the source code, run test cases and build binaries, you can simply run:
 
@@ -29,19 +27,18 @@ $ make cdc
 $ make test
 ```
 
-Note that TiCDC supports building with Go version `Go >= 1.19`.
+Note that TiCDC supports building with the Go version `Go >= 1.19`.
 
-When TiCDC is built successfully, you can find binary in the `bin` directory. Instructions for unit test and integration
-test can be found in [Running tests](./tests/integration_tests/README.md).
+When TiCDC is built successfully, you can find binary in the `bin` directory. Instructions for unit test and integration test can be found in [Running tests](./tests/integration_tests/README.md).
 
-## Deployment
+## Deploy
 
 You can set up a CDC cluster for replication test manually as following:
 
 1. Set up a TiDB cluster.
 2. Start a CDC cluster, which contains one or more CDC servers. The command to start on CDC server
    is `cdc server --pd http://10.0.10.25:2379`, where `http://10.0.10.25:2379` is the client-url of pd-server.
-3. Start a replication changefeed by `cdc cli changefeed create --pd http://10.0.10.25:2379 --start-ts 413105904441098240 --sink-uri mysql://root:123456@127.0.0.1:3306/`. The TSO is TiDB `timestamp oracle`. If it is not provided or set to zero, the TSO of start time will be used. Currently, we support MySQL protocol-compatible databases as downstream sinks only, and will add more sink types in the future.
+3. Start a replication changefeed by `cdc cli changefeed create --pd http://10.0.10.25:2379 --start-ts 413105904441098240 --sink-uri mysql://root:123456@127.0.0.1:3306/`. The TSO is TiDB `timestamp oracle`. If it is not provided or set to zero, the TSO of start time will be used. Currently, TiCDC supports MySQL protocol-compatible databases as downstream sinks only, and we will add more sink types in the future.
 
 For details, see [Deploy TiCDC](https://docs.pingcap.com/tidb/stable/deploy-ticdc).
 
@@ -69,5 +66,5 @@ $ mysql -h 127.0.0.1 -P 5000 -u root -e "SELECT COUNT(*) FROM test.sbtest1"
 
 ## Contributing
 
-Contributions are welcomed and greatly appreciated. See [CONTRIBUTING.md](./CONTRIBUTING.md)
+We welcome and greatly appreciate contributions. See [CONTRIBUTING.md](./CONTRIBUTING.md)
 for details on submitting patches and the contribution workflow.
