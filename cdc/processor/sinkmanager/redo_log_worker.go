@@ -116,18 +116,15 @@ func (w *redoWorker) handleTask(ctx context.Context, task *redoTask) (finalErr e
 						zap.Uint64("memory", refundMem))
 				}
 			}
-			sendRows := rows[0:]
 			err := w.redoManager.EmitRowChangedEvents(
-				ctx, spanz.TableIDToComparableSpan(task.tableID), releaseMem, sendRows...)
+				ctx, spanz.TableIDToComparableSpan(task.tableID), releaseMem, rows...)
 			if err != nil {
 				return errors.Trace(err)
 			}
+			// Should always re-allocate space because EmitRowChangedEvents is asynchronous.
+			rows = make([]*model.RowChangedEvent, 0, 1024)
 			rowsSize = 0
 			cachedSize = 0
-			rows = rows[:0]
-			if cap(rows) > 1024 {
-				rows = make([]*model.RowChangedEvent, 0, 1024)
-			}
 		}
 		if lastTxnCommitTs > emitedCommitTs {
 			if err := w.redoManager.UpdateResolvedTs(
