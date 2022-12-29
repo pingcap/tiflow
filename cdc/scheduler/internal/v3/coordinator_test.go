@@ -46,7 +46,8 @@ func TestCoordinatorSendMsgs(t *testing.T) {
 	coord.version = "6.2.0"
 	coord.revision = schedulepb.OwnerRevision{Revision: 3}
 	coord.captureID = "0"
-	coord.captureM = member.NewCaptureManager("", model.ChangeFeedID{}, coord.revision, 0)
+	cfg := config.NewDefaultSchedulerConfig()
+	coord.captureM = member.NewCaptureManager("", model.ChangeFeedID{}, coord.revision, cfg)
 	coord.sendMsgs(
 		ctx, []*schedulepb.Message{{To: "1", MsgType: schedulepb.MsgDispatchTableRequest}})
 
@@ -354,7 +355,8 @@ func TestCoordinatorDrainCapture(t *testing.T) {
 		revision:  schedulepb.OwnerRevision{Revision: 3},
 		captureID: "a",
 	}
-	coord.captureM = member.NewCaptureManager("", model.ChangeFeedID{}, coord.revision, 0)
+	cfg := config.NewDefaultSchedulerConfig()
+	coord.captureM = member.NewCaptureManager("", model.ChangeFeedID{}, coord.revision, cfg)
 
 	coord.captureM.SetInitializedForTests(true)
 	coord.captureM.Captures["a"] = &member.CaptureStatus{State: member.CaptureStateUninitialized}

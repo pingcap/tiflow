@@ -208,6 +208,7 @@ func TestParseCfg(t *testing.T) {
 			},
 			Scheduler: &config.SchedulerConfig{
 				HeartbeatTick:        2,
+				CollectStatsTick:     200,
 				MaxTaskConcurrency:   10,
 				CheckBalanceInterval: 60000000000,
 				AddTableBatchSize:    50,
@@ -282,6 +283,7 @@ server-ack-interval = "1s"
 server-worker-pool-size = 16
 [debug.scheduler]
 heartbeat-tick = 3
+collect-stats-tick = 201
 max-task-concurrency = 11
 check-balance-interval = "10s"
 `, dataDir)
@@ -365,6 +367,7 @@ check-balance-interval = "10s"
 			},
 			Scheduler: &config.SchedulerConfig{
 				HeartbeatTick:        3,
+				CollectStatsTick:     201,
 				MaxTaskConcurrency:   11,
 				CheckBalanceInterval: config.TomlDuration(10 * time.Second),
 				AddTableBatchSize:    50,
@@ -514,6 +517,7 @@ cert-allowed-cn = ["dd","ee"]
 			},
 			Scheduler: &config.SchedulerConfig{
 				HeartbeatTick:        2,
+				CollectStatsTick:     200,
 				MaxTaskConcurrency:   10,
 				CheckBalanceInterval: 60000000000,
 				AddTableBatchSize:    50,
@@ -580,6 +584,7 @@ unknown3 = 3
 		},
 		Scheduler: &config.SchedulerConfig{
 			HeartbeatTick:        2,
+			CollectStatsTick:     200,
 			MaxTaskConcurrency:   10,
 			CheckBalanceInterval: 60000000000,
 			AddTableBatchSize:    50,
