@@ -564,6 +564,7 @@ func (g *shardGroup) noConflictWithOneNormalTable(sourceTable metadata.SourceTab
 	return false
 }
 
+// see dm/pkg/shardddl/optimism/lock.go:allTableSmaller for more detail
 func (g *shardGroup) allTableSmaller(tp tableType) bool {
 	var (
 		joined schemacmp.Table
@@ -584,6 +585,7 @@ func (g *shardGroup) allTableSmaller(tp tableType) bool {
 	return true
 }
 
+// see dm/pkg/shardddl/optimism/lock.go:allTableLarger for more detail
 func (g *shardGroup) allTableLarger(tp tableType) bool {
 	for sourceTable, conflictTableStmt := range g.conflictTables {
 		conflictTable := genCmpTable(conflictTableStmt)
