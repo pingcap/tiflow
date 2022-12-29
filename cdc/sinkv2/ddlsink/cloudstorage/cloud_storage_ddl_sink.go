@@ -23,11 +23,11 @@ import (
 	"github.com/pingcap/tidb/br/pkg/storage"
 	"github.com/pingcap/tiflow/cdc/contextutil"
 	"github.com/pingcap/tiflow/cdc/model"
-	"github.com/pingcap/tiflow/cdc/redo/common"
 	"github.com/pingcap/tiflow/cdc/sinkv2/ddlsink"
 	"github.com/pingcap/tiflow/cdc/sinkv2/metrics"
 	"github.com/pingcap/tiflow/pkg/sink"
 	"github.com/pingcap/tiflow/pkg/sink/cloudstorage"
+	"github.com/pingcap/tiflow/pkg/util"
 )
 
 // Assert DDLEventSink implementation
@@ -52,7 +52,7 @@ func NewCloudStorageDDLSink(ctx context.Context, sinkURI *url.URL) (*ddlSink, er
 	// create an external storage.
 	storage, err := storage.New(ctx, bs, &storage.ExternalStorageOptions{
 		SendCredentials: false,
-		S3Retryer:       common.DefaultS3Retryer(),
+		S3Retryer:       util.DefaultS3Retryer(),
 	})
 	if err != nil {
 		return nil, err
