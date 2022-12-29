@@ -102,6 +102,11 @@ func (w *sinkWorker) handleTask(ctx context.Context, task *sinkTask) (finalErr e
 	lastTxnCommitTs := uint64(0)  // Can be used in `advanceTableSink`
 	currTxnCommitTs := uint64(0)  // Can be used in `advanceTableSinkWithBatchID`.
 	events := make([]*model.RowChangedEvent, 0, 1024)
+
+	// batchID is used to advance table sink with a given CommitTs, even if not all
+	// transactions with the same CommitTs are collected, regardless of whether splitTxn
+	// is enabled or not. We split 2 transctions with the same CommitTs even if splitTxn
+	// is false, and it won't break transaction atomicity to downstreams.
 	batchID := uint64(1)
 
 	if w.eventCache != nil {
