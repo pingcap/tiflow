@@ -56,7 +56,7 @@ function run() {
 	run_sql "show create table ddl_attributes.ttl_t3;" ${DOWN_TIDB_HOST} ${DOWN_TIDB_PORT} &&
     check_contains "$CREATE_TTL_SQL_CONTAINS"
 	run_sql "show create table ddl_attributes.ttl_t4;" ${DOWN_TIDB_HOST} ${DOWN_TIDB_PORT} &&
-    check_not_contains "TTL_ENABLE"
+    check_not_contains "TTL_ENABLE" &&
     check_not_contains "TTL="
 }
 
