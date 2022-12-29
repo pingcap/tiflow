@@ -41,6 +41,12 @@ const (
 	metricsCollectInterval = 15 * time.Second
 )
 
+var (
+	// Use singleton to be compatible with test cases.
+	factoryMu sync.Mutex
+	factory   *SortEngineFactory = nil
+)
+
 // SortEngineFactory is a manager to create or drop SortEngine.
 type SortEngineFactory struct {
 	// Read-only fields.
@@ -122,18 +128,21 @@ func (f *SortEngineFactory) Close() (err error) {
 
 // NewForPebble will create a SortEngineFactory for the pebble implementation.
 func NewForPebble(dir string, memQuotaInBytes uint64, cfg *config.DBConfig) *SortEngineFactory {
-	manager := &SortEngineFactory{
-		engineType:      pebbleEngine,
-		dir:             dir,
-		memQuotaInBytes: memQuotaInBytes,
-		engines:         make(map[model.ChangeFeedID]engine.SortEngine),
-		closed:          make(chan struct{}),
-		pebbleConfig:    cfg,
-		dbInitialized:   atomic.NewBool(false),
+	factoryMu.Lock()
+	defer factoryMu.Unlock()
+	if factory == nil {
+		factory = &SortEngineFactory{
+			engineType:      pebbleEngine,
+			dir:             dir,
+			memQuotaInBytes: memQuotaInBytes,
+			engines:         make(map[model.ChangeFeedID]engine.SortEngine),
+			closed:          make(chan struct{}),
+			pebbleConfig:    cfg,
+			dbInitialized:   atomic.NewBool(false),
+		}
+		factory.startMetricsCollector()
 	}
-
-	manager.startMetricsCollector()
-	return manager
+	return factory
 }
 
 func (f *SortEngineFactory) startMetricsCollector() {

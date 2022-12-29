@@ -116,8 +116,9 @@ func (w *redoWorker) handleTask(ctx context.Context, task *redoTask) (finalErr e
 						zap.Uint64("memory", refundMem))
 				}
 			}
+			sendRows := rows[0:]
 			err := w.redoManager.EmitRowChangedEvents(
-				ctx, spanz.TableIDToComparableSpan(task.tableID), releaseMem, rows...)
+				ctx, spanz.TableIDToComparableSpan(task.tableID), releaseMem, sendRows...)
 			if err != nil {
 				return errors.Trace(err)
 			}
