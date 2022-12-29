@@ -28,7 +28,7 @@ require (
 	github.com/glebarez/sqlite v1.4.6
 	github.com/go-mysql-org/go-mysql v1.6.1-0.20221223014230-81966e15b9c5
 	github.com/go-ozzo/ozzo-validation/v4 v4.3.0
-	github.com/go-sql-driver/mysql v1.6.0
+	github.com/go-sql-driver/mysql v1.7.0
 	github.com/goccy/go-json v0.9.11
 	github.com/gogo/gateway v1.1.0
 	github.com/gogo/protobuf v1.3.2
@@ -53,13 +53,13 @@ require (
 	github.com/modern-go/reflect2 v1.0.2
 	github.com/phayes/freeport v0.0.0-20180830031419-95f893ade6f2
 	github.com/pingcap/check v0.0.0-20211026125417-57bd13f7b5f0
-	github.com/pingcap/errors v0.11.5-0.20220729040631-518f63d66278
+	github.com/pingcap/errors v0.11.5-0.20221009092201-b66cddb77c32
 	github.com/pingcap/failpoint v0.0.0-20220423142525-ae43b7f4e5c3
-	github.com/pingcap/kvproto v0.0.0-20221130022225-6c56ac56fe5f
+	github.com/pingcap/kvproto v0.0.0-20221213093948-9ccc6beaf0aa
 	github.com/pingcap/log v1.1.1-0.20221116035753-734d527bc87c
-	github.com/pingcap/tidb v1.1.0-beta.0.20221201110602-e307642d9fa5
+	github.com/pingcap/tidb v1.1.0-beta.0.20221229083021-cf349414012c
 	github.com/pingcap/tidb-tools v6.1.1-0.20220715000306-1d2f00da8c3e+incompatible
-	github.com/pingcap/tidb/parser v0.0.0-20221201110602-e307642d9fa5
+	github.com/pingcap/tidb/parser v0.0.0-20221229083021-cf349414012c
 	github.com/prometheus/client_golang v1.13.0
 	github.com/prometheus/client_model v0.2.0
 	github.com/r3labs/diff v1.1.0
@@ -73,7 +73,7 @@ require (
 	github.com/swaggo/gin-swagger v1.2.0
 	github.com/swaggo/swag v1.6.6-0.20200529100950-7c765ddd0476
 	github.com/syndtr/goleveldb v1.0.1-0.20210305035536-64b5b1c73954
-	github.com/tikv/client-go/v2 v2.0.3-0.20221129032117-857772dd0907
+	github.com/tikv/client-go/v2 v2.0.4-0.20221226080148-018c59dbd837
 	github.com/tikv/pd v1.1.0-beta.0.20220303060546-3695d8164800
 	github.com/tikv/pd/client v0.0.0-20221031025758-80f0d8ca4d07
 	github.com/tinylib/msgp v1.1.6
@@ -90,15 +90,15 @@ require (
 	go.uber.org/atomic v1.10.0
 	go.uber.org/dig v1.13.0
 	go.uber.org/goleak v1.2.0
-	go.uber.org/multierr v1.8.0
+	go.uber.org/multierr v1.9.0
 	go.uber.org/ratelimit v0.2.0
-	go.uber.org/zap v1.23.0
-	golang.org/x/exp v0.0.0-20221023144134-a1e5550cf13e
-	golang.org/x/net v0.2.0
+	go.uber.org/zap v1.24.0
+	golang.org/x/exp v0.0.0-20221227203929-1b447090c38c
+	golang.org/x/net v0.4.0
 	golang.org/x/sync v0.1.0
-	golang.org/x/sys v0.2.0
-	golang.org/x/text v0.4.0
-	golang.org/x/time v0.2.0
+	golang.org/x/sys v0.3.0
+	golang.org/x/text v0.5.0
+	golang.org/x/time v0.3.0
 	google.golang.org/genproto v0.0.0-20220719170305-83ca9fad585f
 	google.golang.org/grpc v1.48.0
 	google.golang.org/protobuf v1.28.1
@@ -239,6 +239,7 @@ require (
 	github.com/stathat/consistent v1.0.0 // indirect
 	github.com/stretchr/objx v0.4.0 // indirect
 	github.com/tiancaiamao/appdash v0.0.0-20181126055449-889f96f722a2 // indirect
+	github.com/tiancaiamao/gp v0.0.0-20221221095600-1a473d1f9b4b // indirect
 	github.com/tklauser/go-sysconf v0.3.10 // indirect
 	github.com/tklauser/numcpus v0.4.0 // indirect
 	github.com/tmc/grpc-websocket-proxy v0.0.0-20201229170055-e5319fda7802 // indirect
@@ -269,8 +270,8 @@ require (
 	go.opentelemetry.io/otel/trace v0.20.0 // indirect
 	go.opentelemetry.io/proto/otlp v0.7.0 // indirect
 	golang.org/x/crypto v0.1.0 // indirect
-	golang.org/x/oauth2 v0.2.0 // indirect
-	golang.org/x/term v0.2.0 // indirect
+	golang.org/x/oauth2 v0.3.0 // indirect
+	golang.org/x/term v0.3.0 // indirect
 	golang.org/x/tools v0.2.0 // indirect
 	golang.org/x/xerrors v0.0.0-20220609144429-65e65417b02f // indirect
 	google.golang.org/api v0.84.0 // indirect

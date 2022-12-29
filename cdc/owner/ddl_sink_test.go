@@ -390,6 +390,30 @@ func TestAddSpecialComment(t *testing.T) {
 				"REGIONS='us-east-1,us-east-2,us-west-1';",
 			"",
 		},
+		{
+			"CREATE TABLE t1(t datetime) TTL=`t` + INTERVAL 1 DAY",
+			"CREATE TABLE `t1` (`t` DATETIME) /*T![ttl] TTL = `t` + INTERVAL 1 DAY */ /*T![ttl] TTL_ENABLE = 'OFF' */",
+		},
+		{
+			"CREATE TABLE t1(t datetime) TTL=`t` + INTERVAL 1 DAY TTL_ENABLE='ON'",
+			"CREATE TABLE `t1` (`t` DATETIME) /*T![ttl] TTL = `t` + INTERVAL 1 DAY */ /*T![ttl] TTL_ENABLE = 'OFF' */",
+		},
+		{
+			"ALTER TABLE t1 TTL=`t` + INTERVAL 1 DAY",
+			"ALTER TABLE `t1` /*T![ttl] TTL = `t` + INTERVAL 1 DAY */ /*T![ttl] TTL_ENABLE = 'OFF' */",
+		},
+		{
+			"ALTER TABLE t1 TTL=`t` + INTERVAL 1 DAY TTL_ENABLE='ON'",
+			"ALTER TABLE `t1` /*T![ttl] TTL = `t` + INTERVAL 1 DAY */ /*T![ttl] TTL_ENABLE = 'OFF' */",
+		},
+		{
+			"ALTER TABLE t1 TTL_ENABLE='ON'",
+			"ALTER TABLE `t1`",
+		},
+		{
+			"ALTER TABLE t1 TTL_ENABLE='OFF'",
+			"ALTER TABLE `t1`",
+		},
 	}
 	for _, ca := range testCase {
 		re, err := addSpecialComment(ca.input)
