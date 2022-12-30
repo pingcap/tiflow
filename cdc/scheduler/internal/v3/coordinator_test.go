@@ -203,6 +203,7 @@ func TestCoordinatorHeartbeat(t *testing.T) {
 
 	coord, trans := newTestCoordinator(&config.SchedulerConfig{
 		HeartbeatTick:      math.MaxInt,
+		CollectStatsTick:   math.MaxInt,
 		MaxTaskConcurrency: 1,
 		AddTableBatchSize:  50,
 	})
@@ -259,6 +260,7 @@ func TestCoordinatorAddCapture(t *testing.T) {
 	t.Parallel()
 	coord, trans := newTestCoordinator(&config.SchedulerConfig{
 		HeartbeatTick:      math.MaxInt,
+		CollectStatsTick:   math.MaxInt,
 		MaxTaskConcurrency: 1,
 	})
 
@@ -313,6 +315,7 @@ func TestCoordinatorRemoveCapture(t *testing.T) {
 
 	coord, trans := newTestCoordinator(&config.SchedulerConfig{
 		HeartbeatTick:      math.MaxInt,
+		CollectStatsTick:   math.MaxInt,
 		MaxTaskConcurrency: 1,
 		AddTableBatchSize:  50,
 	})
@@ -403,6 +406,7 @@ func TestCoordinatorAdvanceCheckpoint(t *testing.T) {
 
 	coord, trans := newTestCoordinator(&config.SchedulerConfig{
 		HeartbeatTick:      math.MaxInt,
+		CollectStatsTick:   math.MaxInt,
 		MaxTaskConcurrency: 1,
 	})
 
