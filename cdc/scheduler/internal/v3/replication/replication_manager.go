@@ -516,8 +516,8 @@ func (r *Manager) AdvanceCheckpoint(
 					log.Warn("schedulerv3: span hole detected, skip advance checkpoint",
 						zap.String("namespace", r.changefeedID.Namespace),
 						zap.String("changefeed", r.changefeedID.ID),
-						zap.Stringer("lastSpan", &lastSpan),
-						zap.Stringer("span", &span))
+						zap.String("lastSpan", lastSpan.String()),
+						zap.String("span", span.String()))
 					tableHasHole = true
 					return false
 				}
