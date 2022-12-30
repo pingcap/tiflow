@@ -4,13 +4,13 @@ This document outlines some of the conventions on development workflow, commit
 message formatting, contact points and other resources to make it easier to get
 your contribution accepted.
 
-## Getting started
+## Get started
 
 - Fork the repository on GitHub.
 - Read the README.md for build instructions.
 - Play with the project, submit bugs, submit patches!
 
-## Building TiDB-CDC
+## Build TiDB-CDC
 
 Developing TiDB-CDC requires:
 
@@ -23,22 +23,22 @@ Simply run `make` to build the program.
 make
 ```
 
-### Running tests
+### Run tests
 
 This project contains unit tests and integration tests with coverage collection.
 See [tests/integration_tests/README.md](./tests/integration_tests/README.md) for how to execute and add tests.
 
 For more information on how to trigger these tests, please see the [command help](./docs/ci/command.md).
 
-### Debug with [delve](https://github.com/go-delve/delve)
+### Debug with [Delve](https://github.com/go-delve/delve)
+
 ```shell
 dlv debug --build-flags="-ldflags='-X github.com/pingcap/tiflow/pkg/version.ReleaseVersion=$(git describe --tags)'" ./cmd/cdc -- server
 ```
 
-### Updating dependencies
+### Update dependencies
 
-TiDB-CDC uses [Go Modules](https://github.com/golang/go/wiki/Modules) to manage dependencies. To add or update a
-dependency: use the `go mod edit` command to change the dependency.
+TiDB-CDC uses [Go Modules](https://github.com/golang/go/wiki/Modules) to manage dependencies. To add or update a dependency: use the `go mod edit` command to change the dependency.
 
 ## Contribution flow
 
@@ -56,12 +56,11 @@ Thanks for your contributions!
 
 ### Code style
 
-The coding style suggested by the Golang community is used in TiDB-CDC.
-See the [style doc](https://github.com/golang/go/wiki/CodeReviewComments) for details.
+The coding style suggested by the Golang community is used in TiDB-CDC. See the [style doc](https://github.com/golang/go/wiki/CodeReviewComments) for details.
 
 Please follow this style to make TiDB-CDC easy to review, maintain and develop.
 
-### Format of the Commit Message
+### Commit message format
 
 We follow a rough convention for commit messages that is designed to answer two
 questions: what changed and why. The subject line should feature the what and
@@ -83,18 +82,13 @@ The format can be described more formally as follows:
 <footer>(optional)
 ```
 
-The first line is the subject and should be no longer than 70 characters, the second line is always blank, and other
-lines should be wrapped at 80 characters. This allows the message to be easier to read on GitHub as well as in various
-git tools.
+The first line is the subject and should be no longer than 70 characters, the second line is always blank, and other lines should be wrapped at 80 characters. This allows the message to be easier to read on GitHub as well as in various git tools.
 
-If the change affects more than one subsystem, you can use comma to separate them like ```capture,puller:```. If the
-change affects many subsystems, you can use ```*``` instead, like ```*:```.
+- If the change affects more than one subsystem, use a comma to separate them like ```capture,puller:```.
+- If the change affects many subsystems, use ```*``` instead, like ```*:```.
+- If the change affects only TiCDC, use ```<subsystem>(ticdc):```.
+- If the change affects only DM, use ```<subsystem>(dm):```.
+- If the change affects only the dataflow engine, use ```<subsystem>(engine):```.
+- If the change involves code that is used by all products, use ```<subsystem>(all):```.
 
-If this change only affects ticdc, fill in ```<subsystem>(ticdc)```,
-if it only affects dm, fill in ```<subsystem>(dm)```,
-if it only affects dataflow engine, fill in ```<subsystem>(engine)```.
-If it involves a code that is used by all products, fill in ```<subsystem>(all)```.
-
-For the why part, if no specific reason for the change, you can use one of some generic reasons like "Improve
-documentation.",
-"Improve performance.", "Improve robustness.", "Improve test coverage."
+For the why part, if no specific reason for the change, you can use one of some generic reasons like "Improve documentation.", "Improve performance.", "Improve robustness.", "Improve test coverage."

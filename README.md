@@ -10,15 +10,12 @@
 
 ## Introduction
 
-**TiFlow** is a unified data replication platform around [TiDB](https://docs.pingcap.com/tidb/stable),
-including two main components:
+**TiFlow** is a unified data replication platform for [TiDB](https://docs.pingcap.com/tidb/stable) that consists of two main components: TiDB Data Migration (DM) and TiCDC.
 
-* DM supports full data migration and incremental data replication from MySQL/MariaDB
-  into [TiDB](https://docs.pingcap.com/tidb/stable).
-* TiCDC supports replicating change data to various downstreams, including MySQL protocol-compatible databases
-  and [Kafka](https://kafka.apache.org/).
+* DM enables full data migration and incremental data replication from MySQL or MariaDB to TiDB.
+* TiCDC replicates change data to various downstream systems, such as MySQL protocol-compatible databases and [Kafka](https://kafka.apache.org/).
 
-More details can be found in [DM README](./README_DM.md) and [TiCDC README](./README_TiCDC.md).
+For more details, see [DM README](./README_DM.md) and [TiCDC README](./README_TiCDC.md).
 
 ## License
 
