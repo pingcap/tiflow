@@ -123,8 +123,8 @@ func (m *Map[T]) AscendRange(start, end tablepb.Span, iterator ItemIterator[T]) 
 func (m *Map[T]) FindHoles(start, end tablepb.Span) ([]tablepb.Span, []tablepb.Span) {
 	if bytes.Compare(start.StartKey, end.StartKey) >= 0 {
 		log.Panic("start muse be larger than end",
-			zap.Stringer("start", &start),
-			zap.Stringer("end", &end))
+			zap.String("start", start.String()),
+			zap.String("end", end.String()))
 	}
 	if m.cache == nil || time.Since(m.cache.lastGC) > time.Minute {
 		m.cache = &struct {
@@ -148,8 +148,8 @@ func (m *Map[T]) FindHoles(start, end tablepb.Span) ([]tablepb.Span, []tablepb.S
 				})
 			} else if ord > 0 {
 				log.Panic("map is out of order",
-					zap.Stringer("start", &start),
-					zap.Stringer("current", &current))
+					zap.String("start", start.String()),
+					zap.String("current", current.String()))
 			}
 			firstSpan = false
 		} else if !bytes.Equal(lastSpan.EndKey, current.StartKey) {
