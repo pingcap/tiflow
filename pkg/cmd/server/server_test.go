@@ -205,6 +205,7 @@ func TestParseCfg(t *testing.T) {
 				ServerMaxPendingMessageCount: 102400,
 				ServerAckInterval:            config.TomlDuration(time.Millisecond * 100),
 				ServerWorkerPoolSize:         4,
+				MaxRecvMsgSize:               268435456,
 			},
 			Scheduler: &config.SchedulerConfig{
 				HeartbeatTick:        2,
@@ -280,6 +281,7 @@ client-retry-rate-limit = 100.0
 server-max-pending-message-count = 1024
 server-ack-interval = "1s"
 server-worker-pool-size = 16
+max-recv-msg-size = 4
 [debug.scheduler]
 heartbeat-tick = 3
 max-task-concurrency = 11
@@ -362,6 +364,7 @@ check-balance-interval = "10s"
 				ServerMaxPendingMessageCount: 1024,
 				ServerAckInterval:            config.TomlDuration(1 * time.Second),
 				ServerWorkerPoolSize:         16,
+				MaxRecvMsgSize:               4,
 			},
 			Scheduler: &config.SchedulerConfig{
 				HeartbeatTick:        3,
@@ -511,6 +514,7 @@ cert-allowed-cn = ["dd","ee"]
 				ServerMaxPendingMessageCount: 102400,
 				ServerAckInterval:            config.TomlDuration(time.Millisecond * 100),
 				ServerWorkerPoolSize:         4,
+				MaxRecvMsgSize:               268435456,
 			},
 			Scheduler: &config.SchedulerConfig{
 				HeartbeatTick:        2,
@@ -577,6 +581,7 @@ unknown3 = 3
 			ServerMaxPendingMessageCount: 102400,
 			ServerAckInterval:            config.TomlDuration(time.Millisecond * 100),
 			ServerWorkerPoolSize:         4,
+			MaxRecvMsgSize:               268435456,
 		},
 		Scheduler: &config.SchedulerConfig{
 			HeartbeatTick:        2,

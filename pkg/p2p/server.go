@@ -57,6 +57,8 @@ type MessageServerConfig struct {
 	MaxPeerCount int
 	// Semver of the server. Empty string means no version check.
 	ServerVersion string
+	// MaxRecvMsgSize is the maximum message size in bytes TiCDC can receive.
+	MaxRecvMsgSize int
 
 	// The maximum time duration to wait before forcefully removing a handler.
 	//
