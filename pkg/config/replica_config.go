@@ -187,6 +187,9 @@ func (c *ReplicaConfig) ValidateAndAdjust(sinkURI *url.URL) error {
 						minSyncPointRetention.String()))
 		}
 	}
+	if c.MemoryQuota == uint64(0) {
+		c.MemoryQuota = DefaultChangefeedMemoryQuota
+	}
 
 	return nil
 }
