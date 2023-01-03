@@ -140,7 +140,7 @@ func TestReplicaConfigValidate(t *testing.T) {
 
 	conf.MemoryQuota = uint64(1024)
 	err = conf.ValidateAndAdjust(nil)
-	require.Nil(t, err)
+	require.NoError(t, err)
 	require.Equal(t, uint64(1024), conf.MemoryQuota)
 }
 
