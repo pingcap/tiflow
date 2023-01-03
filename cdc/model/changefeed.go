@@ -436,5 +436,5 @@ func (info *ChangeFeedInfo) HasFastFailError() bool {
 }
 
 func (info *ChangeFeedInfo) fixMemoryQuota() {
-	info.Config.MemoryQuota = config.DefaultChangefeedMemoryQuota
+	info.Config.FixMemoryQuota()
 }
