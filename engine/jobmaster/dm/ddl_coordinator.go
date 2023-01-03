@@ -742,7 +742,7 @@ OutLoop:
 	return nil
 }
 
-// isResoved means all tables in the group are resolved.
+// isResolved means all tables in the group are resolved.
 // 1. no conflict ddls waiting
 // 2. all dropped column has done
 // 3. all shard tables stmts are same.
