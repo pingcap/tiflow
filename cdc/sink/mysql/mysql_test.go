@@ -945,6 +945,10 @@ func TestReduceReplace(t *testing.T) {
 }
 
 func mockTestDB(adjustSQLMode bool) (*sql.DB, error) {
+	return mockTestDBWithSQLMode(adjustSQLMode, "ONLY_FULL_GROUP_BY,STRICT_TRANS_TABLES,NO_ZERO_IN_DATE,NO_ZERO_DATE")
+}
+
+func mockTestDBWithSQLMode(adjustSQLMode bool, sqlMode interface{}) (*sql.DB, error) {
 	// mock for test db, which is used querying TiDB session variable
 	db, mock, err := sqlmock.New()
 	if err != nil {
@@ -953,7 +957,7 @@ func mockTestDB(adjustSQLMode bool) (*sql.DB, error) {
 	if adjustSQLMode {
 		mock.ExpectQuery("SELECT @@SESSION.sql_mode;").
 			WillReturnRows(sqlmock.NewRows([]string{"@@SESSION.sql_mode"}).
-				AddRow("ONLY_FULL_GROUP_BY,STRICT_TRANS_TABLES,NO_ZERO_IN_DATE,NO_ZERO_DATE"))
+				AddRow(sqlMode))
 	}
 
 	columns := []string{"Variable_name", "Value"}
@@ -991,7 +995,7 @@ func TestAdjustSQLMode(t *testing.T) {
 		}()
 		if dbIndex == 0 {
 			// test db
-			db, err := mockTestDB(true)
+			db, err := mockTestDBWithSQLMode(true, nil)
 			require.Nil(t, err)
 			return db, nil
 		}
