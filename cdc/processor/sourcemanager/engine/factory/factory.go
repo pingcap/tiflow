@@ -111,6 +111,10 @@ func (f *SortEngineFactory) Drop(ID model.ChangeFeedID) error {
 
 // Close will close all created engines and release all resources.
 func (f *SortEngineFactory) Close() (err error) {
+	factoryMu.Lock()
+	defer factoryMu.Unlock()
+	factory = nil
+
 	f.mu.Lock()
 	defer f.mu.Unlock()
 
