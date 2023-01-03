@@ -67,7 +67,7 @@ var (
 	StageValidatorKeyAdapter KeyAdapter = keyHexEncoderDecoder("/dm-master/stage/validator/")
 	// LightningCoordinationKeyAdapter is used to store the coordination information of lightning.
 	// k/v: Encode(task-name, source-id) -> lightning status.
-	LightningCoordinationKeyAdapter KeyAdapter = keyHexEncoderDecoder("/dm-master/lightning/")
+	LightningCoordinationKeyAdapter KeyAdapter = keyHexEncoderDecoder("/dm-master/lightning-coord/")
 	// ShardDDLPessimismInfoKeyAdapter is used to store shard DDL info in pessimistic model.
 	// k/v: Encode(task-name, source-id) -> shard DDL info.
 	ShardDDLPessimismInfoKeyAdapter KeyAdapter = keyHexEncoderDecoder("/dm-master/shardddl-pessimism/info/")
