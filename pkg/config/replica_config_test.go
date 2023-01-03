@@ -135,7 +135,7 @@ func TestReplicaConfigValidate(t *testing.T) {
 	conf = GetDefaultReplicaConfig()
 	conf.MemoryQuota = 0
 	err = conf.ValidateAndAdjust(nil)
-	require.Nil(t, err)
+	require.NoError(t, err)
 	require.Equal(t, uint64(DefaultChangefeedMemoryQuota), conf.MemoryQuota)
 
 	conf.MemoryQuota = uint64(1024)
