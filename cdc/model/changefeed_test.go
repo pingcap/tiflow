@@ -702,6 +702,53 @@ func TestFixMQSinkProtocol(t *testing.T) {
 	}
 }
 
+func TestFixMemoryQuotaIncompatible(t *testing.T) {
+	t.Parallel()
+
+	testCases := []struct {
+		info                *ChangeFeedInfo
+		expectedMemoryQuota uint64
+	}{
+		{
+			info: &ChangeFeedInfo{
+				CreatorVersion: "",
+				SinkURI:        "mysql://root:test@127.0.0.1:3306/",
+				Config: &config.ReplicaConfig{
+					Sink: &config.SinkConfig{Protocol: config.ProtocolDefault.String()},
+				},
+			},
+			expectedMemoryQuota: config.DefaultChangefeedMemoryQuota,
+		},
+		{
+			info: &ChangeFeedInfo{
+				CreatorVersion: "6.5.0",
+				SinkURI:        "mysql://root:test@127.0.0.1:3306/",
+				Config: &config.ReplicaConfig{
+					MemoryQuota: 0,
+					Sink:        &config.SinkConfig{Protocol: config.ProtocolDefault.String()},
+				},
+			},
+			expectedMemoryQuota: config.DefaultChangefeedMemoryQuota,
+		},
+		{
+			info: &ChangeFeedInfo{
+				CreatorVersion: "6.5.0",
+				SinkURI:        "mysql://root:test@127.0.0.1:3306/",
+				Config: &config.ReplicaConfig{
+					MemoryQuota: 10485760,
+					Sink:        &config.SinkConfig{Protocol: config.ProtocolDefault.String()},
+				},
+			},
+			expectedMemoryQuota: 10485760,
+		},
+	}
+
+	for _, tc := range testCases {
+		tc.info.FixIncompatible()
+		require.Equal(t, tc.expectedMemoryQuota, tc.info.Config.MemoryQuota)
+	}
+}
+
 func TestChangeFeedInfoClone(t *testing.T) {
 	t.Parallel()
 
