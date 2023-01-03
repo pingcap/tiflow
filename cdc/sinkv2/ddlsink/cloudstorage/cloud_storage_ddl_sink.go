@@ -43,22 +43,12 @@ type ddlSink struct {
 
 // NewCloudStorageDDLSink creates a ddl sink for cloud storage.
 func NewCloudStorageDDLSink(ctx context.Context, sinkURI *url.URL) (*ddlSink, error) {
-	// parse backend storage from sinkURI
-	bs, err := storage.ParseBackend(sinkURI.String(), nil)
+	storage, err := util.GetExternalStorageFromURI(ctx, sinkURI.String())
 	if err != nil {
 		return nil, err
 	}
 
-	// create an external storage.
-	storage, err := storage.New(ctx, bs, &storage.ExternalStorageOptions{
-		SendCredentials: false,
-		S3Retryer:       util.DefaultS3Retryer(),
-	})
-	if err != nil {
-		return nil, err
-	}
 	changefeedID := contextutil.ChangefeedIDFromCtx(ctx)
-
 	d := &ddlSink{
 		id:         changefeedID,
 		storage:    storage,

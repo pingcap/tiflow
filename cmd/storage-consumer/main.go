@@ -264,16 +264,8 @@ func newConsumer(ctx context.Context) (*consumer, error) {
 	}
 
 	extension := sinkutil.GetFileExtension(protocol)
-	bs, err := storage.ParseBackend(upstreamURIStr, nil)
-	if err != nil {
-		log.Error("failed to parse storage backend", zap.Error(err))
-		return nil, err
-	}
 
-	storage, err := storage.New(ctx, bs, &storage.ExternalStorageOptions{
-		SendCredentials: false,
-		S3Retryer:       putil.DefaultS3Retryer(),
-	})
+	storage, err := putil.GetExternalStorageFromURI(ctx, upstreamURIStr)
 	if err != nil {
 		log.Error("failed to create external storage", zap.Error(err))
 		return nil, err
