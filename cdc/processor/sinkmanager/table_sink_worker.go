@@ -241,7 +241,7 @@ func (w *sinkWorker) handleTask(ctx context.Context, task *sinkTask) (finalErr e
 	defer func() {
 		w.metricRedoEventCacheMiss.Add(float64(allEventSize))
 		task.tableSink.receivedEventCount.Add(int64(allEventCount))
-    metrics.OutputEventCount.WithLabelValues(
+		metrics.OutputEventCount.WithLabelValues(
 			task.tableSink.changefeed.Namespace,
 			task.tableSink.changefeed.ID,
 			"kv",
