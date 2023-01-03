@@ -41,6 +41,7 @@ var clientConfig4Testing = &MessageClientConfig{
 	MaxBatchBytes:           8192,
 	RetryRateLimitPerSecond: 10.0, // using 10.0 instead of 1.0 to accelerate testing
 	DialTimeout:             time.Second * 3,
+	MaxRecvMsgSize:          4 * 1024 * 1024, // 4MB
 }
 
 type serverConfigOpt = func(config *MessageServerConfig)
