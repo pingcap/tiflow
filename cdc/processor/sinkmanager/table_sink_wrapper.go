@@ -27,6 +27,7 @@ import (
 	"github.com/pingcap/tiflow/cdc/processor/sourcemanager/engine"
 	"github.com/pingcap/tiflow/cdc/processor/tablepb"
 	sinkv2 "github.com/pingcap/tiflow/cdc/sinkv2/tablesink"
+	"github.com/tikv/client-go/v2/oracle"
 	"go.uber.org/zap"
 )
 
@@ -67,14 +68,24 @@ type tableSinkWrapper struct {
 
 	// rangeEventCounts is for clean the table engine.
 	// If rangeEventCounts[i].events is greater than 0, it means there must be
-	// events in the range (rangeEventCounts[i-1].pos, rangeEventCounts[i].pos].
+	// events in the range (rangeEventCounts[i-1].lastPos, rangeEventCounts[i].lastPos].
 	rangeEventCounts   []rangeEventCount
 	rangeEventCountsMu sync.Mutex
 }
 
 type rangeEventCount struct {
-	pos    engine.Position
-	events int
+	// firstPos and lastPos are used to merge many rangeEventCount into one.
+	firstPos engine.Position
+	lastPos  engine.Position
+	events   int
+}
+
+func newRangeEventCount(pos engine.Position, events int) rangeEventCount {
+	return rangeEventCount{
+		firstPos: pos,
+		lastPos:  pos,
+		events:   events,
+	}
 }
 
 func newTableSinkWrapper(
@@ -85,7 +96,7 @@ func newTableSinkWrapper(
 	startTs model.Ts,
 	targetTs model.Ts,
 ) *tableSinkWrapper {
-	return &tableSinkWrapper{
+	res := &tableSinkWrapper{
 		version:    atomic.AddUint64(&version, 1),
 		changefeed: changefeed,
 		tableID:    tableID,
@@ -94,6 +105,9 @@ func newTableSinkWrapper(
 		startTs:    startTs,
 		targetTs:   targetTs,
 	}
+	res.checkpointTs.Store(startTs)
+	res.receivedSorterResolvedTs.Store(startTs)
+	return res
 }
 
 func (t *tableSinkWrapper) start(startTs model.Ts, replicateTs model.Ts) {
@@ -118,6 +132,12 @@ func (t *tableSinkWrapper) start(startTs model.Ts, replicateTs model.Ts) {
 	// Because in two phase scheduling, the table sink may be advanced to a later ts.
 	// And we can just continue to replicate the table sink from the new start ts.
 	t.checkpointTs.Store(startTs)
+	for {
+		old := t.receivedSorterResolvedTs.Load()
+		if startTs <= old || t.receivedSorterResolvedTs.CompareAndSwap(old, startTs) {
+			break
+		}
+	}
 	t.replicateTs = replicateTs
 	t.state.Store(tablepb.TableStateReplicating)
 }
@@ -127,10 +147,18 @@ func (t *tableSinkWrapper) appendRowChangedEvents(events ...*model.RowChangedEve
 }
 
 func (t *tableSinkWrapper) updateReceivedSorterResolvedTs(ts model.Ts) {
-	if t.state.Load() == tablepb.TableStatePreparing && ts > t.startTs {
-		t.state.Store(tablepb.TableStatePrepared)
+	for {
+		old := t.receivedSorterResolvedTs.Load()
+		if ts <= old {
+			return
+		}
+		if t.receivedSorterResolvedTs.CompareAndSwap(old, ts) {
+			if t.state.Load() == tablepb.TableStatePreparing {
+				t.state.Store(tablepb.TableStatePrepared)
+			}
+			return
+		}
 	}
-	t.receivedSorterResolvedTs.Store(ts)
 }
 
 func (t *tableSinkWrapper) updateReceivedSorterCommitTs(ts model.Ts) {
@@ -186,9 +214,24 @@ func (t *tableSinkWrapper) updateRangeEventCounts(eventCount rangeEventCount) {
 	t.rangeEventCountsMu.Lock()
 	defer t.rangeEventCountsMu.Unlock()
 
-	if len(t.rangeEventCounts) == 0 ||
-		t.rangeEventCounts[len(t.rangeEventCounts)-1].pos.Compare(eventCount.pos) < 0 {
+	countsLen := len(t.rangeEventCounts)
+	if countsLen == 0 {
 		t.rangeEventCounts = append(t.rangeEventCounts, eventCount)
+		return
+	}
+	if t.rangeEventCounts[countsLen-1].lastPos.Compare(eventCount.lastPos) < 0 {
+		// If two rangeEventCounts are close enough, we can merge them into one record
+		// to save memory usage. When merging B into A, A.lastPos will be updated but
+		// A.firstPos will be kept so that we can determine whether to continue to merge
+		// more events or not based on timeDiff(C.lastPos, A.firstPos).
+		lastPhy := oracle.ExtractPhysical(t.rangeEventCounts[countsLen-1].firstPos.CommitTs)
+		currPhy := oracle.ExtractPhysical(eventCount.lastPos.CommitTs)
+		if (currPhy - lastPhy) >= 1000 { // 1000 means 1000ms.
+			t.rangeEventCounts = append(t.rangeEventCounts, eventCount)
+		} else {
+			t.rangeEventCounts[countsLen-1].lastPos = eventCount.lastPos
+			t.rangeEventCounts[countsLen-1].events += eventCount.events
+		}
 	}
 }
 
@@ -197,7 +240,7 @@ func (t *tableSinkWrapper) cleanRangeEventCounts(upperBound engine.Position, min
 	defer t.rangeEventCountsMu.Unlock()
 
 	idx := sort.Search(len(t.rangeEventCounts), func(i int) bool {
-		return t.rangeEventCounts[i].pos.Compare(upperBound) > 0
+		return t.rangeEventCounts[i].lastPos.Compare(upperBound) > 0
 	})
 	if len(t.rangeEventCounts) == 0 || idx == 0 {
 		return false
