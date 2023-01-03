@@ -187,8 +187,16 @@ func (c *ReplicaConfig) ValidateAndAdjust(sinkURI *url.URL) error {
 						minSyncPointRetention.String()))
 		}
 	}
+	if c.MemoryQuota == uint64(0) {
+		c.FixMemoryQuota()
+	}
 
 	return nil
+}
+
+// FixMemoryQuota adjusts memory quota to default value
+func (c *ReplicaConfig) FixMemoryQuota() {
+	c.MemoryQuota = DefaultChangefeedMemoryQuota
 }
 
 // GetSinkURIAndAdjustConfigWithSinkURI parses sinkURI as a URI and adjust config with sinkURI.
