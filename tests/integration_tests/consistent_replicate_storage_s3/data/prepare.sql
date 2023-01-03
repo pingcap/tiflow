@@ -1,4 +1,4 @@
-use `consistent_replicate_s3`;
+use `consistent_replicate_storage_s3`;
 set @@global.tidb_enable_exchange_partition=on;
 
 create table t1 (a int primary key) PARTITION BY RANGE ( a ) ( PARTITION p0 VALUES LESS THAN (6),PARTITION p1 VALUES LESS THAN (11),PARTITION p2 VALUES LESS THAN (21));
