@@ -251,9 +251,6 @@ func (w *sinkWorker) handleTask(ctx context.Context, task *sinkTask) (finalErr e
 	defer func() {
 		w.metricRedoEventCacheMiss.Add(float64(allEventSize))
 		task.tableSink.receivedEventCount.Add(int64(allEventCount))
-<<<<<<< HEAD
-		if !w.redoEnabled {
-=======
 		metrics.OutputEventCount.WithLabelValues(
 			task.tableSink.changefeed.Namespace,
 			task.tableSink.changefeed.ID,
@@ -261,7 +258,6 @@ func (w *sinkWorker) handleTask(ctx context.Context, task *sinkTask) (finalErr e
 		).Add(float64(allEventCount))
 
 		if w.eventCache == nil {
->>>>>>> a75fdc0b9e (sinkv2(cdc): make pebble engine write smoothly (#7952))
 			task.tableSink.updateReceivedSorterCommitTs(currTxnCommitTs)
 			eventCount := rangeEventCount{pos: lastPos, events: allEventCount}
 			task.tableSink.updateRangeEventCounts(eventCount)
