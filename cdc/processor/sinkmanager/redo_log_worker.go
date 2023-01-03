@@ -121,12 +121,10 @@ func (w *redoWorker) handleTask(ctx context.Context, task *redoTask) (finalErr e
 			if err != nil {
 				return errors.Trace(err)
 			}
+			// Should always re-allocate space because EmitRowChangedEvents is asynchronous.
+			rows = make([]*model.RowChangedEvent, 0, 1024)
 			rowsSize = 0
 			cachedSize = 0
-			rows = rows[:0]
-			if cap(rows) > 1024 {
-				rows = make([]*model.RowChangedEvent, 0, 1024)
-			}
 		}
 		if lastTxnCommitTs > emitedCommitTs {
 			if err := w.redoManager.UpdateResolvedTs(
