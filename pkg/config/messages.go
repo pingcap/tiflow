@@ -130,7 +130,7 @@ func (c *MessagesConfig) ValidateAndAdjust() error {
 	if c.MaxRecvMsgSize == 0 {
 		c.MaxRecvMsgSize = defaultMaxRecvMsgSize
 	}
-	if c.MaxRecvMsgSize <= 0 {
+	if c.MaxRecvMsgSize < 0 {
 		return cerrors.ErrInvalidServerOption.GenWithStackByArgs(
 			"max-recv-msg-size must be larger than 0")
 	}
