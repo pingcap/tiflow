@@ -795,28 +795,32 @@ func (m *SinkManager) GetTableState(tableID model.TableID) (tablepb.TableState, 
 
 // GetTableStats returns the state of the table.
 func (m *SinkManager) GetTableStats(tableID model.TableID) TableStats {
-	tableSink, ok := m.tableSinks.Load(tableID)
+	value, ok := m.tableSinks.Load(tableID)
 	if !ok {
 		log.Panic("Table sink not found when getting table stats",
 			zap.String("namespace", m.changefeedID.Namespace),
 			zap.String("changefeed", m.changefeedID.ID),
 			zap.Int64("tableID", tableID))
 	}
-	checkpointTs := tableSink.(*tableSinkWrapper).getCheckpointTs()
+	tableSink := value.(*tableSinkWrapper)
+
+	checkpointTs := tableSink.getCheckpointTs()
 	m.memQuota.release(tableID, checkpointTs)
+
 	var resolvedTs model.Ts
 	// If redo log is enabled, we have to use redo log's resolved ts to calculate processor's min resolved ts.
 	if m.redoManager != nil {
 		resolvedTs = m.redoManager.GetResolvedTs(tableID)
 	} else {
-		resolvedTs = m.sourceManager.GetTableResolvedTs(tableID)
+		resolvedTs = tableSink.getReceivedSorterResolvedTs()
 	}
+
 	return TableStats{
 		CheckpointTs:          checkpointTs.ResolvedMark(),
 		ResolvedTs:            resolvedTs,
 		BarrierTs:             m.lastBarrierTs.Load(),
-		ReceivedMaxCommitTs:   tableSink.(*tableSinkWrapper).getReceivedSorterCommitTs(),
-		ReceivedMaxResolvedTs: tableSink.(*tableSinkWrapper).getReceivedSorterResolvedTs(),
+		ReceivedMaxCommitTs:   tableSink.getReceivedSorterCommitTs(),
+		ReceivedMaxResolvedTs: tableSink.getReceivedSorterResolvedTs(),
 	}
 }
 
