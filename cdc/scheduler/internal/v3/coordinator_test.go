@@ -45,7 +45,8 @@ func TestCoordinatorSendMsgs(t *testing.T) {
 		captureID: "0",
 		trans:     trans,
 	}
-	coord.captureM = member.NewCaptureManager("", model.ChangeFeedID{}, coord.revision, 0)
+	cfg := config.NewDefaultSchedulerConfig()
+	coord.captureM = member.NewCaptureManager("", model.ChangeFeedID{}, coord.revision, cfg)
 	coord.sendMsgs(
 		ctx, []*schedulepb.Message{{To: "1", MsgType: schedulepb.MsgDispatchTableRequest}})
 
@@ -120,6 +121,7 @@ func TestCoordinatorHeartbeat(t *testing.T) {
 
 	coord := newCoordinator("a", model.ChangeFeedID{}, 1, &config.SchedulerConfig{
 		HeartbeatTick:      math.MaxInt,
+		CollectStatsTick:   math.MaxInt,
 		MaxTaskConcurrency: 1,
 		AddTableBatchSize:  50,
 	})
@@ -178,6 +180,7 @@ func TestCoordinatorAddCapture(t *testing.T) {
 	t.Parallel()
 	coord := newCoordinator("a", model.ChangeFeedID{}, 1, &config.SchedulerConfig{
 		HeartbeatTick:      math.MaxInt,
+		CollectStatsTick:   math.MaxInt,
 		MaxTaskConcurrency: 1,
 	})
 	trans := transport.NewMockTrans()
@@ -234,6 +237,7 @@ func TestCoordinatorRemoveCapture(t *testing.T) {
 
 	coord := newCoordinator("a", model.ChangeFeedID{}, 1, &config.SchedulerConfig{
 		HeartbeatTick:      math.MaxInt,
+		CollectStatsTick:   math.MaxInt,
 		MaxTaskConcurrency: 1,
 		AddTableBatchSize:  50,
 	})
@@ -278,7 +282,8 @@ func TestCoordinatorDrainCapture(t *testing.T) {
 		revision:  schedulepb.OwnerRevision{Revision: 3},
 		captureID: "a",
 	}
-	coord.captureM = member.NewCaptureManager("", model.ChangeFeedID{}, coord.revision, 0)
+	cfg := config.NewDefaultSchedulerConfig()
+	coord.captureM = member.NewCaptureManager("", model.ChangeFeedID{}, coord.revision, cfg)
 
 	coord.captureM.SetInitializedForTests(true)
 	coord.captureM.Captures["a"] = &member.CaptureStatus{State: member.CaptureStateUninitialized}
@@ -325,6 +330,7 @@ func TestCoordinatorAdvanceCheckpoint(t *testing.T) {
 
 	coord := newCoordinator("a", model.ChangeFeedID{}, 1, &config.SchedulerConfig{
 		HeartbeatTick:      math.MaxInt,
+		CollectStatsTick:   math.MaxInt,
 		MaxTaskConcurrency: 1,
 	})
 	trans := transport.NewMockTrans()

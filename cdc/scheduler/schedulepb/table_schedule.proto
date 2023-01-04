@@ -66,6 +66,10 @@ message Heartbeat {
         (gogoproto.customname) = "TableIDs"
     ];
     bool is_stopping = 2;
+    bool collect_stats = 4;
+
+    // "spans" and tag 3 are used since v6.6.0
+    // repeated processor.tablepb.Span spans = 3 [(gogoproto.nullable) = false];
 }
 
 message HeartbeatResponse {

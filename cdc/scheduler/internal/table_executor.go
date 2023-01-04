@@ -57,6 +57,6 @@ type TableExecutor interface {
 	// called immediately before.
 	GetCheckpoint() (checkpointTs, resolvedTs model.Ts)
 
-	// GetTableStatus return the checkpoint and resolved ts for the given table
-	GetTableStatus(tableID model.TableID) tablepb.TableStatus
+	// GetTableStatus return the checkpoint and resolved ts for the given table.
+	GetTableStatus(tableID model.TableID, collectStat bool) tablepb.TableStatus
 }
