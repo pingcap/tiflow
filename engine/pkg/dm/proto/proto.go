@@ -11,13 +11,14 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-package dm
+package proto
 
 import (
 	"encoding/json"
 	"fmt"
 
 	"github.com/pingcap/tiflow/dm/pb"
+	"github.com/pingcap/tiflow/dm/pkg/shardddl/optimism"
 	frameModel "github.com/pingcap/tiflow/engine/framework/model"
 	"github.com/pingcap/tiflow/engine/jobmaster/dm/metadata"
 	"github.com/pingcap/tiflow/engine/pkg/p2p"
@@ -36,6 +37,8 @@ const (
 	// internal
 	BinlogTask       p2p.Topic = "BinlogTask"
 	BinlogSchemaTask p2p.Topic = "BinlogSchemaTask"
+	CoordinateDDL    p2p.Topic = "CoordinateDDL"
+	RedirectDDL      p2p.Topic = "RedirectDDL"
 )
 
 // OperateType represents internal operate type in DM
@@ -200,4 +203,20 @@ type BinlogSchemaTaskRequest pb.OperateWorkerSchemaRequest
 type CommonTaskResponse struct {
 	ErrorMsg string
 	Msg      string
+}
+
+// CoordinateDDLRequest is coordinate DDL request
+type CoordinateDDLRequest metadata.DDLItem
+
+// CoordinateDDLResponse is coordinate DDL response
+type CoordinateDDLResponse struct {
+	ErrorMsg      string
+	DDLs          []string
+	ConflictStage optimism.ConflictStage
+}
+
+type RedirectDDLRequest struct {
+	SourceTable   metadata.SourceTable
+	TargetTable   metadata.TargetTable
+	ConflictStage optimism.ConflictStage
 }

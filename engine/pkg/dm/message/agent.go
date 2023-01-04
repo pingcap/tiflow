@@ -11,7 +11,7 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-package dm
+package message
 
 import (
 	"context"
@@ -38,8 +38,8 @@ var (
 	defaultResponseTimeOut = time.Second * 10
 	defaultHandlerTimeOut  = time.Second * 30
 
-	// NewMessageAgent creates a new MessageAgent instance.
-	NewMessageAgent = NewMessageAgentImpl
+	// NewAgent creates a new Agent instance.
+	NewAgent = NewAgentImpl
 )
 
 // generateTopic generate dm message topic with hex encoding.
@@ -152,8 +152,8 @@ func (m *messageMatcher) onResponse(id messageID, resp interface{}) error {
 	return errors.Errorf("duplicated response of request %d, and the last response is not consumed", id)
 }
 
-// MessageAgent defines interface for message communication.
-type MessageAgent interface {
+// Agent defines interface for message communication.
+type Agent interface {
 	Tick(ctx context.Context) error
 	Close(ctx context.Context) error
 	// UpdateClient updates the client status.
@@ -175,8 +175,8 @@ type clientGroup struct {
 	cancels map[string]context.CancelFunc
 }
 
-// MessageAgentImpl implements the message processing mechanism.
-type MessageAgentImpl struct {
+// AgentImpl implements the message processing mechanism.
+type AgentImpl struct {
 	ctx                   context.Context
 	cancel                context.CancelFunc
 	logger                *zap.Logger
@@ -192,14 +192,14 @@ type MessageAgentImpl struct {
 	id             string
 }
 
-// NewMessageAgentImpl creates a new MessageAgent instance.
+// NewAgentImpl creates a new Agent instance.
 // message agent will call the method of commandHandler by command name automatically.
 // The type of method of commandHandler should follow one of below:
 // MessageFuncType: func(ctx context.Context, msg *interface{}) error {}
 // RequestFuncType(1): func(ctx context.Context, req *interface{}) (resp *interface{}, err error) {}
 // RequestFuncType(2): func(ctx context.Context, req *interface{}) (resp *interface{}) {}
-func NewMessageAgentImpl(id string, commandHandler interface{}, messageHandlerManager p2p.MessageHandlerManager, pLogger *zap.Logger) MessageAgent {
-	agent := &MessageAgentImpl{
+func NewAgentImpl(id string, commandHandler interface{}, messageHandlerManager p2p.MessageHandlerManager, pLogger *zap.Logger) Agent {
+	agent := &AgentImpl{
 		messageMatcher: newMessageMatcher(),
 		clients: clientGroup{
 			clients: map[string]client{},
@@ -232,13 +232,13 @@ func NewMessageAgentImpl(id string, commandHandler interface{}, messageHandlerMa
 	return agent
 }
 
-// Tick implements MessageAgent.Tick
-func (agent *MessageAgentImpl) Tick(ctx context.Context) error {
+// Tick implements Agent.Tick
+func (agent *AgentImpl) Tick(ctx context.Context) error {
 	return agent.messageRouter.Tick(ctx)
 }
 
 // Close closes message agent.
-func (agent *MessageAgentImpl) Close(ctx context.Context) error {
+func (agent *AgentImpl) Close(ctx context.Context) error {
 	if agent.cancel != nil {
 		agent.cancel()
 	}
@@ -247,8 +247,8 @@ func (agent *MessageAgentImpl) Close(ctx context.Context) error {
 	return nil
 }
 
-// UpdateClient implements MessageAgent.UpdateClient.
-func (agent *MessageAgentImpl) UpdateClient(clientID string, client client) error {
+// UpdateClient implements Agent.UpdateClient.
+func (agent *AgentImpl) UpdateClient(clientID string, client client) error {
 	agent.clients.mu.Lock()
 	defer agent.clients.mu.Unlock()
 
@@ -277,8 +277,8 @@ func (agent *MessageAgentImpl) UpdateClient(clientID string, client client) erro
 	return nil
 }
 
-// RemoveClient implements MessageAgent.RemoveClient.
-func (agent *MessageAgentImpl) RemoveClient(clientID string) error {
+// RemoveClient implements Agent.RemoveClient.
+func (agent *AgentImpl) RemoveClient(clientID string) error {
 	agent.clients.mu.Lock()
 	defer agent.clients.mu.Unlock()
 
@@ -296,7 +296,7 @@ func (agent *MessageAgentImpl) RemoveClient(clientID string) error {
 	return nil
 }
 
-func (agent *MessageAgentImpl) getClient(clientID string) (client, error) {
+func (agent *AgentImpl) getClient(clientID string) (client, error) {
 	agent.clients.mu.RLock()
 	defer agent.clients.mu.RUnlock()
 
@@ -308,7 +308,7 @@ func (agent *MessageAgentImpl) getClient(clientID string) (client, error) {
 }
 
 // SendMessage send message asynchronously.
-func (agent *MessageAgentImpl) SendMessage(ctx context.Context, clientID string, command string, msg interface{}) error {
+func (agent *AgentImpl) SendMessage(ctx context.Context, clientID string, command string, msg interface{}) error {
 	client, err := agent.getClient(clientID)
 	if err != nil {
 		return err
@@ -322,7 +322,7 @@ func (agent *MessageAgentImpl) SendMessage(ctx context.Context, clientID string,
 // SendRequest send request synchronously.
 // caller should add its own retry mechanism if needed.
 // caller should persist the request itself if needed.
-func (agent *MessageAgentImpl) SendRequest(ctx context.Context, clientID string, command string, req interface{}) (interface{}, error) {
+func (agent *AgentImpl) SendRequest(ctx context.Context, clientID string, command string, req interface{}) (interface{}, error) {
 	agent.clients.mu.RLock()
 	client, ok := agent.clients.clients[clientID]
 	clientCtx, ok2 := agent.clients.ctxs[clientID]
@@ -341,7 +341,7 @@ func (agent *MessageAgentImpl) SendRequest(ctx context.Context, clientID string,
 }
 
 // sendResponse send response asynchronously.
-func (agent *MessageAgentImpl) sendResponse(ctx context.Context, clientID string, msgID messageID, command string, resp interface{}) error {
+func (agent *AgentImpl) sendResponse(ctx context.Context, clientID string, msgID messageID, command string, resp interface{}) error {
 	client, err := agent.getClient(clientID)
 	if err != nil {
 		return err
@@ -356,7 +356,7 @@ func (agent *MessageAgentImpl) sendResponse(ctx context.Context, clientID string
 // Forward the response to the corresponding request.
 // According to the command, the corresponding message processing function of commandHandler will be called.
 // According to the command, the corresponding request processing function of commandHandler will be called, and send the response to caller.
-func (agent *MessageAgentImpl) onMessage(topic string, msg interface{}) error {
+func (agent *AgentImpl) onMessage(topic string, msg interface{}) error {
 	agent.logger.Debug("on message", zap.String("topic", topic), zap.Any("msg", msg))
 	m, ok := msg.(*message)
 	if !ok {
@@ -375,7 +375,7 @@ func (agent *MessageAgentImpl) onMessage(topic string, msg interface{}) error {
 }
 
 // handleResponse receive response.
-func (agent *MessageAgentImpl) handleResponse(id messageID, command string, resp interface{}) error {
+func (agent *AgentImpl) handleResponse(id messageID, command string, resp interface{}) error {
 	handler := reflect.ValueOf(agent.commandHandler).MethodByName(command)
 	if !handler.IsValid() {
 		return errors.Errorf("response handler for command %s not found", command)
@@ -394,7 +394,7 @@ func (agent *MessageAgentImpl) handleResponse(id messageID, command string, resp
 }
 
 // handleRequest receive request, call request handler and send response.
-func (agent *MessageAgentImpl) handleRequest(clientID string, msgID messageID, command string, req interface{}) error {
+func (agent *AgentImpl) handleRequest(clientID string, msgID messageID, command string, req interface{}) error {
 	handler := reflect.ValueOf(agent.commandHandler).MethodByName(command)
 	if !handler.IsValid() {
 		return errors.Errorf("request handler for command %s not found", command)
@@ -425,7 +425,7 @@ func (agent *MessageAgentImpl) handleRequest(clientID string, msgID messageID, c
 }
 
 // handle message receive message and call message handler.
-func (agent *MessageAgentImpl) handleMessage(command string, msg interface{}) error {
+func (agent *AgentImpl) handleMessage(command string, msg interface{}) error {
 	handler := reflect.ValueOf(agent.commandHandler).MethodByName(command)
 	if !handler.IsValid() {
 		return errors.Errorf("message handler for command %s not found", command)
@@ -453,7 +453,7 @@ func (agent *MessageAgentImpl) handleMessage(command string, msg interface{}) er
 }
 
 // registerTopic register p2p topic.
-func (agent *MessageAgentImpl) registerTopic(ctx context.Context, clientID string) error {
+func (agent *AgentImpl) registerTopic(ctx context.Context, clientID string) error {
 	topic := generateTopic(clientID, agent.id)
 	agent.logger.Debug("register topic", zap.String("topic", topic))
 	_, err := agent.messageHandlerManager.RegisterHandler(
@@ -469,7 +469,7 @@ func (agent *MessageAgentImpl) registerTopic(ctx context.Context, clientID strin
 }
 
 // unregisterTopic unregister p2p topic.
-func (agent *MessageAgentImpl) unregisterTopic(ctx context.Context, clientID string) error {
+func (agent *AgentImpl) unregisterTopic(ctx context.Context, clientID string) error {
 	agent.logger.Debug("unregister topic", zap.String("topic", generateTopic(clientID, agent.id)))
 	_, err := agent.messageHandlerManager.UnregisterHandler(ctx, generateTopic(clientID, agent.id))
 	return err

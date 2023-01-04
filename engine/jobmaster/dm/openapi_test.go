@@ -33,7 +33,8 @@ import (
 	"github.com/pingcap/tiflow/engine/jobmaster/dm/config"
 	"github.com/pingcap/tiflow/engine/jobmaster/dm/metadata"
 	"github.com/pingcap/tiflow/engine/jobmaster/dm/openapi"
-	dmpkg "github.com/pingcap/tiflow/engine/pkg/dm"
+	"github.com/pingcap/tiflow/engine/pkg/dm/message"
+	dmproto "github.com/pingcap/tiflow/engine/pkg/dm/proto"
 	"github.com/pingcap/tiflow/engine/pkg/meta/mock"
 	engineOpenAPI "github.com/pingcap/tiflow/engine/pkg/openapi"
 	"github.com/pingcap/tiflow/engine/pkg/promutil"
@@ -55,7 +56,7 @@ type testDMOpenAPISuite struct {
 	suite.Suite
 	jm              *JobMaster
 	engine          *gin.Engine
-	messageAgent    *dmpkg.MockMessageAgent
+	messageAgent    *message.MockAgent
 	checkpointAnget *MockCheckpointAgent
 	funcBackup      func(ctx context.Context, cfg *dmconfig.SourceConfig) error
 }
@@ -63,17 +64,19 @@ type testDMOpenAPISuite struct {
 func (t *testDMOpenAPISuite) SetupSuite() {
 	var (
 		mockBaseJobmaster   = &MockBaseJobmaster{t: t.T()}
-		mockMessageAgent    = &dmpkg.MockMessageAgent{}
+		mockMessageAgent    = &message.MockAgent{}
 		mockCheckpointAgent = &MockCheckpointAgent{}
+		metaClient          = mock.NewMetaMock()
 		jm                  = &JobMaster{
 			BaseJobMaster:   mockBaseJobmaster,
-			metadata:        metadata.NewMetaData(mock.NewMetaMock(), log.L()),
+			metadata:        metadata.NewMetaData(metaClient, log.L()),
 			messageAgent:    mockMessageAgent,
 			checkpointAgent: mockCheckpointAgent,
 		}
 	)
 	jm.taskManager = NewTaskManager("test-job", nil, jm.metadata.JobStore(), jm.messageAgent, jm.Logger(), promutil.NewFactory4Test(t.T().TempDir()))
 	jm.workerManager = NewWorkerManager(mockBaseJobmaster.ID(), nil, jm.metadata.JobStore(), jm.metadata.UnitStateStore(), nil, jm.messageAgent, nil, jm.Logger(), false)
+	jm.ddlCoordinator = NewDDLCoordinator(mockBaseJobmaster.ID(), metaClient, mockCheckpointAgent, jm.metadata.JobStore(), jm.Logger(), mockMessageAgent)
 	jm.initialized.Store(true)
 
 	engine := gin.New()
@@ -106,7 +109,7 @@ func (t *testDMOpenAPISuite) TestDMAPIGetJobConfig() {
 
 	jobCfg := &config.JobCfg{}
 	require.NoError(t.T(), jobCfg.DecodeFile(jobTemplatePath))
-	require.NoError(t.T(), t.jm.taskManager.OperateTask(context.Background(), dmpkg.Create, jobCfg, nil))
+	require.NoError(t.T(), t.jm.taskManager.OperateTask(context.Background(), dmproto.Create, jobCfg, nil))
 	w = httptest.NewRecorder()
 	r = httptest.NewRequest("GET", baseURL+"config", nil)
 	t.engine.ServeHTTP(w, r)
@@ -118,7 +121,7 @@ func (t *testDMOpenAPISuite) TestDMAPIGetJobConfig() {
 	require.NoError(t.T(), err)
 	require.Equal(t.T(), sortString(string(bs)), sortString(cfgStr))
 
-	require.NoError(t.T(), t.jm.taskManager.OperateTask(context.Background(), dmpkg.Delete, nil, nil))
+	require.NoError(t.T(), t.jm.taskManager.OperateTask(context.Background(), dmproto.Delete, nil, nil))
 }
 
 func (t *testDMOpenAPISuite) TestDMAPIUpdateJobCfg() {
@@ -147,7 +150,7 @@ func (t *testDMOpenAPISuite) TestDMAPIUpdateJobCfg() {
 	t.engine.ServeHTTP(w, r)
 	require.Equal(t.T(), http.StatusInternalServerError, w.Code)
 
-	require.NoError(t.T(), t.jm.taskManager.OperateTask(context.Background(), dmpkg.Create, &config.JobCfg{}, nil))
+	require.NoError(t.T(), t.jm.taskManager.OperateTask(context.Background(), dmproto.Create, &config.JobCfg{}, nil))
 	t.checkpointAnget.On("Update").Return(nil)
 	verDB := conn.InitVersionDB()
 	verDB.ExpectQuery("SHOW GLOBAL VARIABLES LIKE 'version'").WillReturnRows(sqlmock.NewRows([]string{"Variable_name", "Value"}).
@@ -155,6 +158,7 @@ func (t *testDMOpenAPISuite) TestDMAPIUpdateJobCfg() {
 	checker.CheckSyncConfigFunc = func(_ context.Context, _ []*dmconfig.SubTaskConfig, _, _ int64) (string, error) {
 		return "check pass", nil
 	}
+	t.checkpointAnget.On("FetchAllDoTables").Return(nil, nil)
 	w = httptest.NewRecorder()
 	r = httptest.NewRequest("PUT", baseURL+"config", bytes.NewReader(bs))
 	r.Header.Set("Content-Type", "application/json")
@@ -180,7 +184,7 @@ func (t *testDMOpenAPISuite) TestDMAPIGetJobStatus() {
 	require.Equal(t.T(), http.StatusInternalServerError, w.Code)
 	equalError(t.T(), "state not found", w.Body)
 
-	require.NoError(t.T(), t.jm.taskManager.OperateTask(context.Background(), dmpkg.Create, &config.JobCfg{}, nil))
+	require.NoError(t.T(), t.jm.taskManager.OperateTask(context.Background(), dmproto.Create, &config.JobCfg{}, nil))
 	w = httptest.NewRecorder()
 	r = httptest.NewRequest("GET", baseURL+"status", nil)
 	t.engine.ServeHTTP(w, r)
@@ -202,7 +206,7 @@ func (t *testDMOpenAPISuite) TestDMAPIGetJobStatus() {
 	require.Equal(t.T(), "task task1 for job not found", jobStatus2.TaskStatus["task1"].Status.ErrorMsg)
 	require.Equal(t.T(), "task task2 for job not found", jobStatus2.TaskStatus["task2"].Status.ErrorMsg)
 
-	require.NoError(t.T(), t.jm.taskManager.OperateTask(context.Background(), dmpkg.Delete, nil, nil))
+	require.NoError(t.T(), t.jm.taskManager.OperateTask(context.Background(), dmproto.Delete, nil, nil))
 }
 
 func (t *testDMOpenAPISuite) TestDMAPIOperateJob() {
@@ -233,7 +237,7 @@ func (t *testDMOpenAPISuite) TestDMAPIOperateJob() {
 
 	jobCfg := &config.JobCfg{}
 	require.NoError(t.T(), jobCfg.DecodeFile(jobTemplatePath))
-	require.NoError(t.T(), t.jm.taskManager.OperateTask(context.Background(), dmpkg.Create, jobCfg, nil))
+	require.NoError(t.T(), t.jm.taskManager.OperateTask(context.Background(), dmproto.Create, jobCfg, nil))
 	req.Op = openapi.OperateJobRequestOpResume
 	req.Tasks = nil
 	bs, err = json.Marshal(req)
@@ -244,7 +248,7 @@ func (t *testDMOpenAPISuite) TestDMAPIOperateJob() {
 	t.engine.ServeHTTP(w, r)
 	require.Equal(t.T(), http.StatusOK, w.Code)
 
-	require.NoError(t.T(), t.jm.taskManager.OperateTask(context.Background(), dmpkg.Delete, nil, nil))
+	require.NoError(t.T(), t.jm.taskManager.OperateTask(context.Background(), dmproto.Delete, nil, nil))
 }
 
 func (t *testDMOpenAPISuite) TestDMAPIGetBinlogOperator() {
@@ -258,7 +262,7 @@ func (t *testDMOpenAPISuite) TestDMAPIGetBinlogOperator() {
 	r = httptest.NewRequest("GET", baseURL+"binlog/tasks/"+"task1"+"?binlog_pos='mysql-bin.000001,4'", nil)
 	t.engine.ServeHTTP(w, r)
 	require.Equal(t.T(), http.StatusOK, w.Code)
-	var binlogResp dmpkg.BinlogResponse
+	var binlogResp dmproto.BinlogResponse
 	require.NoError(t.T(), json.Unmarshal(w.Body.Bytes(), &binlogResp))
 	require.Equal(t.T(), "", binlogResp.ErrorMsg)
 	require.Equal(t.T(), "binlog operator not found", binlogResp.Results["task1"].ErrorMsg)
@@ -291,7 +295,7 @@ func (t *testDMOpenAPISuite) TestDMAPISetBinlogOperator() {
 	}
 	bs, err = json.Marshal(req)
 	require.NoError(t.T(), err)
-	t.messageAgent.On("SendRequest", tmock.Anything, tmock.Anything, tmock.Anything, tmock.Anything).Return(&dmpkg.CommonTaskResponse{
+	t.messageAgent.On("SendRequest", tmock.Anything, tmock.Anything, tmock.Anything, tmock.Anything).Return(&dmproto.CommonTaskResponse{
 		Msg: "binlog operator set success",
 	}, nil).Once()
 	w = httptest.NewRecorder()
@@ -299,7 +303,7 @@ func (t *testDMOpenAPISuite) TestDMAPISetBinlogOperator() {
 	r.Header.Set("Content-Type", "application/json")
 	t.engine.ServeHTTP(w, r)
 	require.Equal(t.T(), http.StatusCreated, w.Code)
-	var binlogResp dmpkg.BinlogResponse
+	var binlogResp dmproto.BinlogResponse
 	require.NoError(t.T(), json.Unmarshal(w.Body.Bytes(), &binlogResp))
 	require.Equal(t.T(), "", binlogResp.ErrorMsg)
 	require.Equal(t.T(), "binlog operator set success", binlogResp.Results["task1"].Msg)
@@ -309,7 +313,7 @@ func (t *testDMOpenAPISuite) TestDMAPISetBinlogOperator() {
 	}
 	bs, err = json.Marshal(req)
 	require.NoError(t.T(), err)
-	t.messageAgent.On("SendRequest", tmock.Anything, tmock.Anything, tmock.Anything, tmock.Anything).Return(&dmpkg.CommonTaskResponse{
+	t.messageAgent.On("SendRequest", tmock.Anything, tmock.Anything, tmock.Anything, tmock.Anything).Return(&dmproto.CommonTaskResponse{
 		ErrorMsg: "no binlog error",
 	}, nil).Once()
 	w = httptest.NewRecorder()
@@ -326,7 +330,7 @@ func (t *testDMOpenAPISuite) TestDMAPISetBinlogOperator() {
 	}
 	bs, err = json.Marshal(req)
 	require.NoError(t.T(), err)
-	t.messageAgent.On("SendRequest", tmock.Anything, tmock.Anything, tmock.Anything, tmock.Anything).Return(&dmpkg.CommonTaskResponse{
+	t.messageAgent.On("SendRequest", tmock.Anything, tmock.Anything, tmock.Anything, tmock.Anything).Return(&dmproto.CommonTaskResponse{
 		ErrorMsg: "no binlog error",
 	}, nil).Once()
 	w = httptest.NewRecorder()
@@ -350,12 +354,12 @@ func (t *testDMOpenAPISuite) TestDMAPIDeleteBinlogOperator() {
 	r = httptest.NewRequest("DELETE", baseURL+"binlog/tasks/"+"task1"+"?binlog_pos='mysql-bin.000001,4'", nil)
 	t.engine.ServeHTTP(w, r)
 	require.Equal(t.T(), http.StatusOK, w.Code)
-	var binlogResp dmpkg.BinlogResponse
+	var binlogResp dmproto.BinlogResponse
 	require.NoError(t.T(), json.Unmarshal(w.Body.Bytes(), &binlogResp))
 	require.Equal(t.T(), "", binlogResp.ErrorMsg)
 	require.Equal(t.T(), "binlog operator not found", binlogResp.Results["task1"].ErrorMsg)
 
-	t.messageAgent.On("SendRequest", tmock.Anything, tmock.Anything, tmock.Anything, tmock.Anything).Return(&dmpkg.CommonTaskResponse{}, nil).Once()
+	t.messageAgent.On("SendRequest", tmock.Anything, tmock.Anything, tmock.Anything, tmock.Anything).Return(&dmproto.CommonTaskResponse{}, nil).Once()
 	w = httptest.NewRecorder()
 	r = httptest.NewRequest("DELETE", baseURL+"binlog/tasks/"+"task1"+"?binlog_pos='mysql-bin.000001,4'", nil)
 	t.engine.ServeHTTP(w, r)
@@ -368,19 +372,19 @@ func (t *testDMOpenAPISuite) TestDMAPIGetSchema() {
 	t.engine.ServeHTTP(w, r)
 	require.Equal(t.T(), http.StatusNotFound, w.Code)
 
-	t.messageAgent.On("SendRequest", tmock.Anything, tmock.Anything, tmock.Anything, tmock.Anything).Return(&dmpkg.CommonTaskResponse{
+	t.messageAgent.On("SendRequest", tmock.Anything, tmock.Anything, tmock.Anything, tmock.Anything).Return(&dmproto.CommonTaskResponse{
 		Msg: "targets",
 	}, nil).Once()
 	w = httptest.NewRecorder()
 	r = httptest.NewRequest("GET", baseURL+"schema/tasks/"+"task1"+"?target=true", nil)
 	t.engine.ServeHTTP(w, r)
 	require.Equal(t.T(), http.StatusOK, w.Code)
-	var binlogSchemaResp dmpkg.BinlogSchemaResponse
+	var binlogSchemaResp dmproto.BinlogSchemaResponse
 	require.NoError(t.T(), json.Unmarshal(w.Body.Bytes(), &binlogSchemaResp))
 	require.Equal(t.T(), "", binlogSchemaResp.ErrorMsg)
 	require.Equal(t.T(), "targets", binlogSchemaResp.Results["task1"].Msg)
 
-	t.messageAgent.On("SendRequest", tmock.Anything, tmock.Anything, tmock.Anything, tmock.Anything).Return(&dmpkg.CommonTaskResponse{
+	t.messageAgent.On("SendRequest", tmock.Anything, tmock.Anything, tmock.Anything, tmock.Anything).Return(&dmproto.CommonTaskResponse{
 		Msg: "tables",
 	}, nil).Once()
 	w = httptest.NewRecorder()
@@ -391,7 +395,7 @@ func (t *testDMOpenAPISuite) TestDMAPIGetSchema() {
 	require.Equal(t.T(), "", binlogSchemaResp.ErrorMsg)
 	require.Equal(t.T(), "tables", binlogSchemaResp.Results["task1"].Msg)
 
-	t.messageAgent.On("SendRequest", tmock.Anything, tmock.Anything, tmock.Anything, tmock.Anything).Return(&dmpkg.CommonTaskResponse{
+	t.messageAgent.On("SendRequest", tmock.Anything, tmock.Anything, tmock.Anything, tmock.Anything).Return(&dmproto.CommonTaskResponse{
 		Msg: "table",
 	}, nil).Once()
 	w = httptest.NewRecorder()
@@ -402,7 +406,7 @@ func (t *testDMOpenAPISuite) TestDMAPIGetSchema() {
 	require.Equal(t.T(), "", binlogSchemaResp.ErrorMsg)
 	require.Equal(t.T(), "table", binlogSchemaResp.Results["task1"].Msg)
 
-	t.messageAgent.On("SendRequest", tmock.Anything, tmock.Anything, tmock.Anything, tmock.Anything).Return(&dmpkg.CommonTaskResponse{
+	t.messageAgent.On("SendRequest", tmock.Anything, tmock.Anything, tmock.Anything, tmock.Anything).Return(&dmproto.CommonTaskResponse{
 		Msg: "databases",
 	}, nil).Once()
 	w = httptest.NewRecorder()
@@ -436,12 +440,12 @@ func (t *testDMOpenAPISuite) TestDMAPISetSchema() {
 	r.Header.Set("Content-Type", "application/json")
 	t.engine.ServeHTTP(w, r)
 	require.Equal(t.T(), http.StatusOK, w.Code)
-	var binlogSchemaResp dmpkg.BinlogSchemaResponse
+	var binlogSchemaResp dmproto.BinlogSchemaResponse
 	require.NoError(t.T(), json.Unmarshal(w.Body.Bytes(), &binlogSchemaResp))
 	require.Equal(t.T(), "", binlogSchemaResp.ErrorMsg)
 	require.Equal(t.T(), "task not paused", binlogSchemaResp.Results["task1"].ErrorMsg)
 
-	t.messageAgent.On("SendRequest", tmock.Anything, tmock.Anything, tmock.Anything, tmock.Anything).Return(&dmpkg.CommonTaskResponse{
+	t.messageAgent.On("SendRequest", tmock.Anything, tmock.Anything, tmock.Anything, tmock.Anything).Return(&dmproto.CommonTaskResponse{
 		Msg: "success",
 	}, nil).Once()
 	req = openapi.SetBinlogSchemaRequest{Database: "db", Table: "tb", FromTarget: &from}

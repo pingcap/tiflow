@@ -21,7 +21,7 @@ import (
 	"github.com/pingcap/tiflow/dm/pkg/terror"
 	"github.com/pingcap/tiflow/engine/jobmaster/dm/config"
 	"github.com/pingcap/tiflow/engine/jobmaster/dm/openapi"
-	dmpkg "github.com/pingcap/tiflow/engine/pkg/dm"
+	dmproto "github.com/pingcap/tiflow/engine/pkg/dm/proto"
 	engineOpenAPI "github.com/pingcap/tiflow/engine/pkg/openapi"
 	"github.com/pingcap/tiflow/pkg/errors"
 )
@@ -64,6 +64,10 @@ func (jm *JobMaster) initOpenAPI(router *gin.RouterGroup) {
 	router.GET("/status", wrapper.DMAPIGetJobStatus)
 
 	router.PUT("/status", wrapper.DMAPIOperateJob)
+
+	router.GET("/ddl_locks", wrapper.DMAPIGetDDLLocks)
+
+	router.DELETE("/ddl_locks", wrapper.DMAPIDeleteDDLLocks)
 }
 
 // DMAPIGetJobStatus implements the api of get job status.
@@ -157,12 +161,12 @@ func (jm *JobMaster) DMAPIOperateJob(c *gin.Context) {
 		return
 	}
 
-	var op dmpkg.OperateType
+	var op dmproto.OperateType
 	switch req.Op {
 	case openapi.OperateJobRequestOpPause:
-		op = dmpkg.Pause
+		op = dmproto.Pause
 	case openapi.OperateJobRequestOpResume:
-		op = dmpkg.Resume
+		op = dmproto.Resume
 	default:
 		// nolint:errcheck
 		_ = c.Error(errors.Errorf("unsupported op type '%s' for operate task", req.Op))
@@ -185,7 +189,7 @@ func (jm *JobMaster) DMAPIOperateJob(c *gin.Context) {
 // DMAPIGetBinlogOperator implements the api of get binlog operator.
 // TODO: pagination support if needed
 func (jm *JobMaster) DMAPIGetBinlogOperator(c *gin.Context, taskName string, params openapi.DMAPIGetBinlogOperatorParams) {
-	req := &dmpkg.BinlogRequest{
+	req := &dmproto.BinlogRequest{
 		Op:      pb.ErrorOp_List,
 		Sources: []string{taskName},
 	}
@@ -210,7 +214,7 @@ func (jm *JobMaster) DMAPISetBinlogOperator(c *gin.Context, taskName string) {
 		return
 	}
 
-	r := &dmpkg.BinlogRequest{
+	r := &dmproto.BinlogRequest{
 		Sources: []string{taskName},
 	}
 	if req.BinlogPos != nil {
@@ -242,7 +246,7 @@ func (jm *JobMaster) DMAPISetBinlogOperator(c *gin.Context, taskName string) {
 
 // DMAPIDeleteBinlogOperator implements the api of delete binlog operator.
 func (jm *JobMaster) DMAPIDeleteBinlogOperator(c *gin.Context, taskName string, params openapi.DMAPIDeleteBinlogOperatorParams) {
-	req := &dmpkg.BinlogRequest{
+	req := &dmproto.BinlogRequest{
 		Op:      pb.ErrorOp_Revert,
 		Sources: []string{taskName},
 	}
@@ -297,7 +301,7 @@ func (jm *JobMaster) DMAPIGetSchema(c *gin.Context, taskname string, params open
 		return
 	}
 
-	r := &dmpkg.BinlogSchemaRequest{
+	r := &dmproto.BinlogSchemaRequest{
 		Op:       op,
 		Sources:  []string{taskname},
 		Database: database,
@@ -325,7 +329,7 @@ func (jm *JobMaster) DMAPISetSchema(c *gin.Context, taskName string) {
 	if req.FromTarget != nil {
 		fromTarget = *req.FromTarget
 	}
-	r := &dmpkg.BinlogSchemaRequest{
+	r := &dmproto.BinlogSchemaRequest{
 		Op:         pb.SchemaOp_SetSchema,
 		Sources:    []string{taskName},
 		Database:   req.Database,
@@ -336,4 +340,21 @@ func (jm *JobMaster) DMAPISetSchema(c *gin.Context, taskName string) {
 	}
 	resp := jm.BinlogSchema(c.Request.Context(), r)
 	c.IndentedJSON(http.StatusOK, resp)
+}
+
+// DMAPIGetDDLLocks implements the api of get ddl locks.
+func (jm *JobMaster) DMAPIGetDDLLocks(c *gin.Context) {
+	resp := jm.ShowDDLLocks(c.Request.Context())
+	c.IndentedJSON(http.StatusOK, resp)
+}
+
+// DMAPIDeleteDDLLocks implements the api of delete ddl locks.
+func (jm *JobMaster) DMAPIDeleteDDLLocks(c *gin.Context) {
+	err := jm.DeleteDDLLocks(c.Request.Context())
+	if err != nil {
+		// nolint:errcheck
+		_ = c.Error(err)
+		return
+	}
+	c.Status(http.StatusNoContent)
 }

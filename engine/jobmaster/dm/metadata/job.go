@@ -222,6 +222,14 @@ func (jobStore *JobStore) UpdateConfig(ctx context.Context, jobCfg *config.JobCf
 		oldVersion = task.Cfg.ModRevision
 		break
 	}
+
+	// if new config is empty, we will use the old config.
+	if jobCfg == nil {
+		jobCfg, err = jobStore.GetJobCfg(ctx)
+		if err != nil {
+			return errors.Trace(err)
+		}
+	}
 	jobCfg.ModRevision = oldVersion + 1
 	newJob := NewJob(jobCfg)
 
@@ -252,4 +260,18 @@ func (jobStore *JobStore) MarkDeleting(ctx context.Context) error {
 // UpgradeFuncs implement the Upgrader interface.
 func (jobStore *JobStore) UpgradeFuncs() []bootstrap.UpgradeFunc {
 	return nil
+}
+
+// GetJobCfg gets the job config.
+func (jobStore *JobStore) GetJobCfg(ctx context.Context) (*config.JobCfg, error) {
+	state, err := jobStore.Get(ctx)
+	if err != nil {
+		return nil, err
+	}
+	job := state.(*Job)
+	taskCfg := make([]*config.TaskCfg, 0, len(job.Tasks))
+	for _, task := range job.Tasks {
+		taskCfg = append(taskCfg, task.Cfg)
+	}
+	return config.FromTaskCfgs(taskCfg), nil
 }

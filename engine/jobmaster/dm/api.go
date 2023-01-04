@@ -19,21 +19,23 @@ import (
 	"sync"
 	"time"
 
+	"github.com/pingcap/tiflow/dm/pkg/shardddl/optimism"
 	frameModel "github.com/pingcap/tiflow/engine/framework/model"
 	"github.com/pingcap/tiflow/engine/jobmaster/dm/config"
 	"github.com/pingcap/tiflow/engine/jobmaster/dm/metadata"
 	"github.com/pingcap/tiflow/engine/jobmaster/dm/runtime"
-	dmpkg "github.com/pingcap/tiflow/engine/pkg/dm"
+	dmproto "github.com/pingcap/tiflow/engine/pkg/dm/proto"
 	"github.com/pingcap/tiflow/pkg/errors"
+	"go.uber.org/zap"
 )
 
 // TaskStatus represents status of a task
 type TaskStatus struct {
-	ExpectedStage  metadata.TaskStage         `json:"expected_stage"`
-	WorkerID       frameModel.WorkerID        `json:"worker_id"`
-	ConfigOutdated bool                       `json:"config_outdated"`
-	Status         *dmpkg.QueryStatusResponse `json:"status"`
-	Duration       time.Duration              `json:"duration"`
+	ExpectedStage  metadata.TaskStage           `json:"expected_stage"`
+	WorkerID       frameModel.WorkerID          `json:"worker_id"`
+	ConfigOutdated bool                         `json:"config_outdated"`
+	Status         *dmproto.QueryStatusResponse `json:"status"`
+	Duration       time.Duration                `json:"duration"`
 }
 
 // JobStatus represents status of a job
@@ -44,6 +46,23 @@ type JobStatus struct {
 	// FinishedUnitStatus records the finished unit status of a task. This field
 	// is not atomic with TaskStatus (current status).
 	FinishedUnitStatus map[string][]*metadata.FinishedTaskStatus `json:"finished_unit_status,omitempty"`
+}
+
+// ShardTable represents create table statements of a source table.
+type ShardTable struct {
+	Current string
+	Next    string
+}
+
+// DDLLock represents ddl lock of a target table.
+type DDLLock struct {
+	// source table -> [current table, pending table(conflict table)]
+	ShardTables map[metadata.SourceTable]ShardTable
+}
+
+// ShowDDLLocksResponse represents response of show ddl locks.
+type ShowDDLLocksResponse struct {
+	Locks map[metadata.TargetTable]DDLLock
 }
 
 // QueryJobStatus is the api of query job status.
@@ -91,7 +110,7 @@ func (jm *JobMaster) QueryJobStatus(ctx context.Context, tasks []string) (*JobSt
 			defer wg.Done()
 
 			var (
-				queryStatusResp *dmpkg.QueryStatusResponse
+				queryStatusResp *dmproto.QueryStatusResponse
 				workerID        string
 				cfgModRevision  uint64
 				expectedStage   metadata.TaskStage
@@ -101,13 +120,13 @@ func (jm *JobMaster) QueryJobStatus(ctx context.Context, tasks []string) (*JobSt
 
 			// task not exist
 			if t, ok := job.Tasks[taskID]; !ok {
-				queryStatusResp = &dmpkg.QueryStatusResponse{ErrorMsg: fmt.Sprintf("task %s for job not found", taskID)}
+				queryStatusResp = &dmproto.QueryStatusResponse{ErrorMsg: fmt.Sprintf("task %s for job not found", taskID)}
 			} else {
 				expectedStage = t.Stage
 				workerStatus, ok := workerStatusMap[taskID]
 				if !ok {
 					// worker unscheduled
-					queryStatusResp = &dmpkg.QueryStatusResponse{ErrorMsg: fmt.Sprintf("worker for task %s not found", taskID)}
+					queryStatusResp = &dmproto.QueryStatusResponse{ErrorMsg: fmt.Sprintf("worker for task %s not found", taskID)}
 				} else if workerStatus.Stage != runtime.WorkerFinished {
 					workerID = workerStatus.ID
 					cfgModRevision = workerStatus.CfgModRevision
@@ -152,21 +171,21 @@ func (jm *JobMaster) QueryJobStatus(ctx context.Context, tasks []string) (*JobSt
 }
 
 // QueryStatus query status for a task
-func (jm *JobMaster) QueryStatus(ctx context.Context, taskID string) *dmpkg.QueryStatusResponse {
-	req := &dmpkg.QueryStatusRequest{
+func (jm *JobMaster) QueryStatus(ctx context.Context, taskID string) *dmproto.QueryStatusResponse {
+	req := &dmproto.QueryStatusRequest{
 		Task: taskID,
 	}
-	resp, err := jm.messageAgent.SendRequest(ctx, taskID, dmpkg.QueryStatus, req)
+	resp, err := jm.messageAgent.SendRequest(ctx, taskID, dmproto.QueryStatus, req)
 	if err != nil {
-		return &dmpkg.QueryStatusResponse{ErrorMsg: err.Error()}
+		return &dmproto.QueryStatusResponse{ErrorMsg: err.Error()}
 	}
-	return resp.(*dmpkg.QueryStatusResponse)
+	return resp.(*dmproto.QueryStatusResponse)
 }
 
 // operateTask operate task.
-func (jm *JobMaster) operateTask(ctx context.Context, op dmpkg.OperateType, cfg *config.JobCfg, tasks []string) error {
+func (jm *JobMaster) operateTask(ctx context.Context, op dmproto.OperateType, cfg *config.JobCfg, tasks []string) error {
 	switch op {
-	case dmpkg.Resume, dmpkg.Pause, dmpkg.Update:
+	case dmproto.Resume, dmproto.Pause, dmproto.Update:
 		return jm.taskManager.OperateTask(ctx, op, cfg, tasks)
 	default:
 		return errors.Errorf("unsupported op type %d for operate task", op)
@@ -175,17 +194,7 @@ func (jm *JobMaster) operateTask(ctx context.Context, op dmpkg.OperateType, cfg 
 
 // GetJobCfg gets job config.
 func (jm *JobMaster) GetJobCfg(ctx context.Context) (*config.JobCfg, error) {
-	state, err := jm.metadata.JobStore().Get(ctx)
-	if err != nil {
-		return nil, err
-	}
-	job := state.(*metadata.Job)
-
-	taskCfgs := make([]*config.TaskCfg, 0, len(job.Tasks))
-	for _, task := range job.Tasks {
-		taskCfgs = append(taskCfgs, task.Cfg)
-	}
-	return config.FromTaskCfgs(taskCfgs), nil
+	return jm.metadata.JobStore().GetJobCfg(ctx)
 }
 
 // UpdateJobCfg updates job config.
@@ -193,11 +202,14 @@ func (jm *JobMaster) UpdateJobCfg(ctx context.Context, cfg *config.JobCfg) error
 	if err := jm.preCheck(ctx, cfg); err != nil {
 		return err
 	}
-	if err := jm.operateTask(ctx, dmpkg.Update, cfg, nil); err != nil {
+	if err := jm.operateTask(ctx, dmproto.Update, cfg, nil); err != nil {
 		return err
 	}
 	// we don't know whether we can remove the old checkpoint, so we just create new checkpoint when update.
 	if err := jm.checkpointAgent.Create(ctx, cfg); err != nil {
+		return err
+	}
+	if err := jm.ddlCoordinator.Reset(ctx); err != nil {
 		return err
 	}
 
@@ -206,7 +218,7 @@ func (jm *JobMaster) UpdateJobCfg(ctx context.Context, cfg *config.JobCfg) error
 }
 
 // Binlog implements the api of binlog request.
-func (jm *JobMaster) Binlog(ctx context.Context, req *dmpkg.BinlogRequest) (*dmpkg.BinlogResponse, error) {
+func (jm *JobMaster) Binlog(ctx context.Context, req *dmproto.BinlogRequest) (*dmproto.BinlogResponse, error) {
 	if len(req.Sources) == 0 {
 		state, err := jm.metadata.JobStore().Get(ctx)
 		if err != nil {
@@ -221,8 +233,8 @@ func (jm *JobMaster) Binlog(ctx context.Context, req *dmpkg.BinlogRequest) (*dmp
 	var (
 		wg         sync.WaitGroup
 		mu         sync.Mutex
-		binlogResp = &dmpkg.BinlogResponse{
-			Results: make(map[string]*dmpkg.CommonTaskResponse, len(req.Sources)),
+		binlogResp = &dmproto.BinlogResponse{
+			Results: make(map[string]*dmproto.CommonTaskResponse, len(req.Sources)),
 		}
 	)
 	for _, task := range req.Sources {
@@ -230,7 +242,7 @@ func (jm *JobMaster) Binlog(ctx context.Context, req *dmpkg.BinlogRequest) (*dmp
 		wg.Add(1)
 		go func() {
 			defer wg.Done()
-			req := &dmpkg.BinlogTaskRequest{
+			req := &dmproto.BinlogTaskRequest{
 				Op:        req.Op,
 				BinlogPos: req.BinlogPos,
 				Sqls:      req.Sqls,
@@ -246,26 +258,26 @@ func (jm *JobMaster) Binlog(ctx context.Context, req *dmpkg.BinlogRequest) (*dmp
 }
 
 // BinlogTask implements the api of binlog task request.
-func (jm *JobMaster) BinlogTask(ctx context.Context, taskID string, req *dmpkg.BinlogTaskRequest) *dmpkg.CommonTaskResponse {
+func (jm *JobMaster) BinlogTask(ctx context.Context, taskID string, req *dmproto.BinlogTaskRequest) *dmproto.CommonTaskResponse {
 	// TODO: we may check the workerType via TaskManager/WorkerManger to reduce request connection.
-	resp, err := jm.messageAgent.SendRequest(ctx, taskID, dmpkg.BinlogTask, req)
+	resp, err := jm.messageAgent.SendRequest(ctx, taskID, dmproto.BinlogTask, req)
 	if err != nil {
-		return &dmpkg.CommonTaskResponse{ErrorMsg: err.Error()}
+		return &dmproto.CommonTaskResponse{ErrorMsg: err.Error()}
 	}
-	return resp.(*dmpkg.CommonTaskResponse)
+	return resp.(*dmproto.CommonTaskResponse)
 }
 
 // BinlogSchema implements the api of binlog schema request.
-func (jm *JobMaster) BinlogSchema(ctx context.Context, req *dmpkg.BinlogSchemaRequest) *dmpkg.BinlogSchemaResponse {
+func (jm *JobMaster) BinlogSchema(ctx context.Context, req *dmproto.BinlogSchemaRequest) *dmproto.BinlogSchemaResponse {
 	if len(req.Sources) == 0 {
-		return &dmpkg.BinlogSchemaResponse{ErrorMsg: "must specify at least one source"}
+		return &dmproto.BinlogSchemaResponse{ErrorMsg: "must specify at least one source"}
 	}
 
 	var (
 		mu                   sync.Mutex
 		wg                   sync.WaitGroup
-		binlogSchemaResponse = &dmpkg.BinlogSchemaResponse{
-			Results: make(map[string]*dmpkg.CommonTaskResponse, len(req.Sources)),
+		binlogSchemaResponse = &dmproto.BinlogSchemaResponse{
+			Results: make(map[string]*dmproto.CommonTaskResponse, len(req.Sources)),
 		}
 	)
 	for _, task := range req.Sources {
@@ -273,7 +285,7 @@ func (jm *JobMaster) BinlogSchema(ctx context.Context, req *dmpkg.BinlogSchemaRe
 		wg.Add(1)
 		go func() {
 			defer wg.Done()
-			req := &dmpkg.BinlogSchemaTaskRequest{
+			req := &dmproto.BinlogSchemaTaskRequest{
 				Op:         req.Op,
 				Source:     taskID,
 				Database:   req.Database,
@@ -295,11 +307,56 @@ func (jm *JobMaster) BinlogSchema(ctx context.Context, req *dmpkg.BinlogSchemaRe
 }
 
 // BinlogSchemaTask implements the api of binlog schema task request.
-func (jm *JobMaster) BinlogSchemaTask(ctx context.Context, taskID string, req *dmpkg.BinlogSchemaTaskRequest) *dmpkg.CommonTaskResponse {
+func (jm *JobMaster) BinlogSchemaTask(ctx context.Context, taskID string, req *dmproto.BinlogSchemaTaskRequest) *dmproto.CommonTaskResponse {
 	// TODO: we may check the workerType via TaskManager/WorkerManger to reduce request connection.
-	resp, err := jm.messageAgent.SendRequest(ctx, taskID, dmpkg.BinlogSchemaTask, req)
+	resp, err := jm.messageAgent.SendRequest(ctx, taskID, dmproto.BinlogSchemaTask, req)
 	if err != nil {
-		return &dmpkg.CommonTaskResponse{ErrorMsg: err.Error()}
+		return &dmproto.CommonTaskResponse{ErrorMsg: err.Error()}
 	}
-	return resp.(*dmpkg.CommonTaskResponse)
+	return resp.(*dmproto.CommonTaskResponse)
+}
+
+// ShowDDLLocks implements the api of show ddl locks request.
+func (jm *JobMaster) ShowDDLLocks(ctx context.Context) ShowDDLLocksResponse {
+	return jm.ddlCoordinator.ShowDDLLocks(ctx)
+}
+
+// DeleteDDLLocks implements the api of delete ddl locks request.
+func (jm *JobMaster) DeleteDDLLocks(ctx context.Context) error {
+	if err := jm.ddlCoordinator.Reset(ctx); err != nil {
+		return err
+	}
+	if needed, err := jm.needRestartAllWorkers(ctx); err != nil {
+		return errors.Trace(err)
+	} else if needed {
+		if err := jm.restartAllWorkers(ctx); err != nil {
+			return errors.Trace(err)
+		}
+	}
+	return nil
+}
+
+// CoordinateDDL implements the api of coordinate ddl request.
+func (jm *JobMaster) CoordinateDDL(ctx context.Context, req *dmproto.CoordinateDDLRequest) *dmproto.CoordinateDDLResponse {
+	ddls, conflictStage, err := jm.ddlCoordinator.Coordinate(ctx, (*metadata.DDLItem)(req))
+	if conflictStage == optimism.ConflictNeedRestart {
+		if err := jm.restartAllWorkers(ctx); err != nil {
+			jm.Logger().Error("fail to restart all workers", zap.Error(err))
+		} else if err := jm.ddlCoordinator.Reset(ctx); err != nil {
+			jm.Logger().Error("fail to restart coordinate ddl", zap.Error(err))
+		}
+	}
+	resp := &dmproto.CoordinateDDLResponse{
+		DDLs:          ddls,
+		ConflictStage: conflictStage,
+	}
+	if err != nil {
+		resp.ErrorMsg = err.Error()
+	}
+	return resp
+}
+
+// Redirect is the function declaration for message agent to receive redirect ddl response.
+func (jm *JobMaster) RedirectDDL(ctx context.Context) *dmproto.CommonTaskResponse {
+	return nil
 }

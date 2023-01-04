@@ -35,7 +35,8 @@ import (
 	"github.com/pingcap/tiflow/engine/jobmaster/dm/metadata"
 	"github.com/pingcap/tiflow/engine/jobmaster/dm/runtime"
 	dcontext "github.com/pingcap/tiflow/engine/pkg/context"
-	dmpkg "github.com/pingcap/tiflow/engine/pkg/dm"
+	"github.com/pingcap/tiflow/engine/pkg/dm/message"
+	dmproto "github.com/pingcap/tiflow/engine/pkg/dm/proto"
 	"github.com/pingcap/tiflow/engine/pkg/p2p"
 	"github.com/pingcap/tiflow/pkg/errors"
 	"go.uber.org/zap"
@@ -54,7 +55,8 @@ type JobMaster struct {
 	metadata              *metadata.MetaData
 	workerManager         *WorkerManager
 	taskManager           *TaskManager
-	messageAgent          dmpkg.MessageAgent
+	ddlCoordinator        *DDLCoordinator
+	messageAgent          message.Agent
 	checkpointAgent       checkpoint.Agent
 	messageHandlerManager p2p.MessageHandlerManager
 }
@@ -112,11 +114,12 @@ func (jm *JobMaster) initComponents() error {
 	jm.Logger().Info("initializing the dm jobmaster components")
 	taskStatus, workerStatus, err := jm.getInitStatus()
 	jm.metadata = metadata.NewMetaData(jm.MetaKVClient(), jm.Logger())
-	jm.messageAgent = dmpkg.NewMessageAgent(jm.ID(), jm, jm.messageHandlerManager, jm.Logger())
+	jm.messageAgent = message.NewAgent(jm.ID(), jm, jm.messageHandlerManager, jm.Logger())
 	jm.checkpointAgent = checkpoint.NewCheckpointAgent(jm.ID(), jm.Logger())
 	jm.taskManager = NewTaskManager(jm.ID(), taskStatus, jm.metadata.JobStore(), jm.messageAgent, jm.Logger(), jm.MetricFactory())
 	jm.workerManager = NewWorkerManager(jm.ID(), workerStatus, jm.metadata.JobStore(), jm.metadata.UnitStateStore(),
 		jm, jm.messageAgent, jm.checkpointAgent, jm.Logger(), jm.IsS3StorageEnabled())
+	jm.ddlCoordinator = NewDDLCoordinator(jm.ID(), jm.MetaKVClient(), jm.checkpointAgent, jm.metadata.JobStore(), jm.Logger(), jm.messageAgent)
 	return errors.Trace(err)
 }
 
@@ -135,8 +138,11 @@ func (jm *JobMaster) InitImpl(ctx context.Context) error {
 	if err := jm.checkpointAgent.Create(ctx, jm.initJobCfg); err != nil {
 		return errors.Trace(err)
 	}
-	if err := jm.taskManager.OperateTask(ctx, dmpkg.Create, jm.initJobCfg, nil); err != nil {
+	if err := jm.taskManager.OperateTask(ctx, dmproto.Create, jm.initJobCfg, nil); err != nil {
 		return errors.Trace(err)
+	}
+	if err := jm.ddlCoordinator.Reset(ctx); err != nil {
+		return err
 	}
 	jm.initialized.Store(true)
 	return nil
@@ -152,6 +158,17 @@ func (jm *JobMaster) OnMasterRecovered(ctx context.Context) error {
 	if err := jm.bootstrap(ctx); err != nil {
 		return errors.Trace(err)
 	}
+	if err := jm.ddlCoordinator.Reset(ctx); err != nil {
+		return errors.Trace(err)
+	}
+	if needed, err := jm.needRestartAllWorkers(ctx); err != nil {
+		return errors.Trace(err)
+	} else if needed {
+		if err := jm.restartAllWorkers(ctx); err != nil {
+			return errors.Trace(err)
+		}
+	}
+
 	jm.initialized.Store(true)
 	return nil
 }
@@ -336,7 +353,10 @@ func (jm *JobMaster) StopImpl(ctx context.Context) {
 	if err := jm.removeCheckpoint(ctx); err != nil {
 		jm.Logger().Error("failed to remove checkpoint", zap.Error(err))
 	}
-	if err := jm.taskManager.OperateTask(ctx, dmpkg.Delete, nil, nil); err != nil {
+	if err := jm.ddlCoordinator.ClearMetadata(ctx); err != nil {
+		jm.Logger().Error("failed to clear ddl metadata", zap.Error(err))
+	}
+	if err := jm.taskManager.OperateTask(ctx, dmproto.Delete, nil, nil); err != nil {
 		jm.Logger().Error("failed to delete task", zap.Error(err))
 	}
 }
@@ -443,7 +463,7 @@ func (jm *JobMaster) cancel(ctx context.Context, code frameModel.WorkerState) er
 		detail = status.ExtBytes
 	}
 
-	if err := jm.taskManager.OperateTask(ctx, dmpkg.Deleting, nil, nil); err != nil {
+	if err := jm.taskManager.OperateTask(ctx, dmproto.Deleting, nil, nil); err != nil {
 		// would not recover again
 		jm.Logger().Warn("failed to mark task deleting", zap.Error(err))
 		return jm.Exit(ctx, framework.ExitReasonCanceled, err, detail)
@@ -510,5 +530,22 @@ func (jm *JobMaster) bootstrap(ctx context.Context) error {
 	if clusterInfo.Version.LessThan(*internalVersion) {
 		return clusterInfoStore.UpdateVersion(ctx, *internalVersion)
 	}
+	return nil
+}
+
+func (jm *JobMaster) needRestartAllWorkers(ctx context.Context) (bool, error) {
+	jobCfg, err := jm.GetJobCfg(ctx)
+	if err != nil {
+		return false, err
+	}
+	// restart all workers if in shard-mode
+	return jobCfg.ShardMode != "", nil
+}
+
+func (jm *JobMaster) restartAllWorkers(ctx context.Context) error {
+	if err := jm.taskManager.OperateTask(ctx, dmproto.Update, nil, nil); err != nil {
+		return err
+	}
+	jm.workerManager.SetNextCheckTime(time.Now())
 	return nil
 }

@@ -186,7 +186,7 @@ type Optimist struct {
 	osgk          *OptShardingGroupKeeper // optimistic ddl's keeper to keep all sharding (sub) group in this syncer
 	getTableInfo  func(tctx *tcontext.Context, sourceTable, targetTable *filter.Table) (*model.TableInfo, error)
 	execError     *atomic.Error
-	optimist      *shardddl.Optimist // shard DDL optimist
+	optimist      shardddl.Optimist // shard DDL optimist
 }
 
 func NewOptimistDDL(pLogger *log.Logger, syncer *Syncer) *Optimist {

@@ -25,7 +25,8 @@ import (
 	"github.com/pingcap/tiflow/engine/jobmaster/dm/config"
 	"github.com/pingcap/tiflow/engine/jobmaster/dm/metadata"
 	"github.com/pingcap/tiflow/engine/jobmaster/dm/runtime"
-	dmpkg "github.com/pingcap/tiflow/engine/pkg/dm"
+	"github.com/pingcap/tiflow/engine/pkg/dm/message"
+	dmproto "github.com/pingcap/tiflow/engine/pkg/dm/proto"
 	"github.com/pingcap/tiflow/engine/pkg/dm/ticker"
 	resModel "github.com/pingcap/tiflow/engine/pkg/externalresource/model"
 	"go.uber.org/zap"
@@ -61,7 +62,7 @@ type WorkerManager struct {
 	jobStore        *metadata.JobStore
 	unitStore       *metadata.UnitStateStore
 	workerAgent     WorkerAgent
-	messageAgent    dmpkg.MessageAgent
+	messageAgent    message.Agent
 	checkpointAgent CheckpointAgent
 	logger          *zap.Logger
 
@@ -79,7 +80,7 @@ func NewWorkerManager(
 	jobStore *metadata.JobStore,
 	unitStore *metadata.UnitStateStore,
 	workerAgent WorkerAgent,
-	messageAgent dmpkg.MessageAgent,
+	messageAgent message.Agent,
 	checkpointAgent CheckpointAgent,
 	pLogger *zap.Logger,
 	isS3StorageEnabled bool,
@@ -398,10 +399,10 @@ func (wm *WorkerManager) createWorker(
 func (wm *WorkerManager) stopWorker(ctx context.Context, taskID string, workerID frameModel.WorkerID) error {
 	wm.logger.Info("start to stop worker", zap.String("task_id", taskID), zap.String("worker_id", workerID))
 
-	msg := &dmpkg.StopWorkerMessage{
+	msg := &dmproto.StopWorkerMessage{
 		Task: taskID,
 	}
-	if err := wm.messageAgent.SendMessage(ctx, taskID, dmpkg.StopWorker, msg); err != nil {
+	if err := wm.messageAgent.SendMessage(ctx, taskID, dmproto.StopWorker, msg); err != nil {
 		wm.logger.Error("failed to stop worker", zap.String("task_id", taskID), zap.String("worker_id", workerID), zap.Error(err))
 		return err
 	}

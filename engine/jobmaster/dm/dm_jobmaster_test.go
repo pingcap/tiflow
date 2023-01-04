@@ -42,7 +42,8 @@ import (
 	"github.com/pingcap/tiflow/engine/pkg/client"
 	dcontext "github.com/pingcap/tiflow/engine/pkg/context"
 	"github.com/pingcap/tiflow/engine/pkg/deps"
-	dmpkg "github.com/pingcap/tiflow/engine/pkg/dm"
+	"github.com/pingcap/tiflow/engine/pkg/dm/message"
+	dmproto "github.com/pingcap/tiflow/engine/pkg/dm/proto"
 	"github.com/pingcap/tiflow/engine/pkg/externalresource/broker"
 	kvmock "github.com/pingcap/tiflow/engine/pkg/meta/mock"
 	metaModel "github.com/pingcap/tiflow/engine/pkg/meta/model"
@@ -136,14 +137,16 @@ func (t *testDMJobmasterSuite) TestRunDMJobMaster() {
 	require.NoError(t.T(), err)
 
 	// Init
-	verDB := conn.InitVersionDB()
-	verDB.ExpectQuery("SHOW GLOBAL VARIABLES LIKE 'version'").WillReturnRows(sqlmock.NewRows([]string{"Variable_name", "Value"}).
-		AddRow("version", "5.7.25-TiDB-v6.1.0"))
-	_, mockDB, err := conn.InitMockDBFull()
+	db, mockDB, err := conn.InitMockDBNotClose()
 	require.NoError(t.T(), err)
+	defer db.Close()
+	mockDB.ExpectQuery("SHOW GLOBAL VARIABLES LIKE 'version'").WillReturnRows(sqlmock.NewRows([]string{"Variable_name", "Value"}).
+		AddRow("version", "5.7.25-TiDB-v6.1.0"))
 	mockDB.ExpectExec(".*").WillReturnResult(sqlmock.NewResult(1, 1))
 	mockDB.ExpectExec(".*").WillReturnResult(sqlmock.NewResult(1, 1))
 	mockDB.ExpectExec(".*").WillReturnResult(sqlmock.NewResult(1, 1))
+	mockDB.ExpectQuery("SHOW DATABASES").WillReturnRows(sqlmock.NewRows([]string{"Database"}))
+	mockDB.ExpectQuery("SHOW DATABASES").WillReturnRows(sqlmock.NewRows([]string{"Database"}))
 	checker.CheckSyncConfigFunc = func(_ context.Context, _ []*dmconfig.SubTaskConfig, _, _ int64) (string, error) {
 		return "check pass", nil
 	}
@@ -156,14 +159,13 @@ func (t *testDMJobmasterSuite) TestRunDMJobMaster() {
 		dctx, frameModel.DMJobMaster, "dm-jobmaster", libMetadata.JobManagerUUID,
 		cfgBytes, int64(2))
 	require.NoError(t.T(), err)
-	verDB = conn.InitVersionDB()
-	verDB.ExpectQuery("SHOW GLOBAL VARIABLES LIKE 'version'").WillReturnRows(sqlmock.NewRows([]string{"Variable_name", "Value"}).
+	mockDB.ExpectQuery("SHOW GLOBAL VARIABLES LIKE 'version'").WillReturnRows(sqlmock.NewRows([]string{"Variable_name", "Value"}).
 		AddRow("version", "5.7.26-log"))
-	_, mockDB, err = conn.InitMockDBFull()
-	require.NoError(t.T(), err)
 	mockDB.ExpectExec(".*").WillReturnResult(sqlmock.NewResult(1, 1))
 	mockDB.ExpectExec(".*").WillReturnResult(sqlmock.NewResult(1, 1))
 	mockDB.ExpectExec(".*").WillReturnResult(sqlmock.NewResult(1, 1))
+	mockDB.ExpectQuery("SHOW DATABASES").WillReturnRows(sqlmock.NewRows([]string{"Database"}))
+	mockDB.ExpectQuery("SHOW DATABASES").WillReturnRows(sqlmock.NewRows([]string{"Database"}))
 	require.NoError(t.T(), jobmaster.Init(context.Background()))
 
 	// Poll
@@ -189,13 +191,13 @@ func (t *testDMJobmasterSuite) TestDMJobmaster() {
 	mockBaseJobmaster := &MockBaseJobmaster{t: t.T()}
 	mockCheckpointAgent := &MockCheckpointAgent{}
 	checkpoint.NewCheckpointAgent = func(string, *zap.Logger) checkpoint.Agent { return mockCheckpointAgent }
-	mockMessageAgent := &dmpkg.MockMessageAgent{}
-	dmpkg.NewMessageAgent = func(id string, commandHandler interface{}, messageHandlerManager p2p.MessageHandlerManager, pLogger *zap.Logger) dmpkg.MessageAgent {
+	mockMessageAgent := &message.MockAgent{}
+	message.NewAgent = func(id string, commandHandler interface{}, messageHandlerManager p2p.MessageHandlerManager, pLogger *zap.Logger) message.Agent {
 		return mockMessageAgent
 	}
 	defer func() {
 		checkpoint.NewCheckpointAgent = checkpoint.NewAgentImpl
-		dmpkg.NewMessageAgent = dmpkg.NewMessageAgentImpl
+		message.NewAgent = message.NewAgentImpl
 	}()
 	jobCfg := &config.JobCfg{}
 	require.NoError(t.T(), jobCfg.DecodeFile(jobTemplatePath))
@@ -240,6 +242,7 @@ func (t *testDMJobmasterSuite) TestDMJobmaster() {
 		AddRow("version", "5.7.26-log"))
 	mockBaseJobmaster.On("MetaKVClient").Return(metaKVClient)
 	mockBaseJobmaster.On("GetWorkers").Return(map[string]framework.WorkerHandle{}).Once()
+	mockCheckpointAgent.On("FetchAllDoTables").Return(nil, nil).Once()
 	require.NoError(t.T(), jm.InitImpl(context.Background()))
 
 	// recover
@@ -247,6 +250,7 @@ func (t *testDMJobmasterSuite) TestDMJobmaster() {
 		BaseJobMaster: mockBaseJobmaster,
 	}
 	mockBaseJobmaster.On("GetWorkers").Return(map[string]framework.WorkerHandle{}).Once()
+	mockCheckpointAgent.On("FetchAllDoTables").Return(nil, nil).Once()
 	jm.OnMasterRecovered(context.Background())
 
 	// tick
@@ -260,12 +264,14 @@ func (t *testDMJobmasterSuite) TestDMJobmaster() {
 	require.NoError(t.T(), jm.Tick(context.Background()))
 	// make sure workerHandle1 bound to task status1, workerHandle2 bound to task status2.
 	taskStatus1 := runtime.TaskStatus{
-		Unit:  frameModel.WorkerDMDump,
-		Stage: metadata.StageRunning,
+		Unit:           frameModel.WorkerDMDump,
+		Stage:          metadata.StageRunning,
+		CfgModRevision: 1,
 	}
 	taskStatus2 := runtime.TaskStatus{
-		Unit:  frameModel.WorkerDMDump,
-		Stage: metadata.StageRunning,
+		Unit:           frameModel.WorkerDMDump,
+		Stage:          metadata.StageRunning,
+		CfgModRevision: 1,
 	}
 	loadStatus := &dmpb.LoadStatus{
 		FinishedBytes:  4,
@@ -351,12 +357,40 @@ func (t *testDMJobmasterSuite) TestDMJobmaster() {
 		BaseJobMaster:   mockBaseJobmaster,
 		checkpointAgent: mockCheckpointAgent,
 	}
-	mockBaseJobmaster.On("GetWorkers").Return(map[string]framework.WorkerHandle{worker4: workerHandle1, worker3: workerHandle2}).Once()
+	mockBaseJobmaster.On("GetWorkers").Return(map[string]framework.WorkerHandle{worker5: workerHandle1, worker3: workerHandle2}).Once()
 	workerHandle1.On("Status").Return(&frameModel.WorkerStatus{ExtBytes: bytes1}).Once()
 	workerHandle2.On("Status").Return(&frameModel.WorkerStatus{ExtBytes: bytes2}).Once()
 	workerHandle1.On("IsTombStone").Return(false).Once()
 	workerHandle2.On("IsTombStone").Return(false).Once()
+	mockCheckpointAgent.On("FetchAllDoTables").Return(nil, nil).Once()
 	jm.OnMasterRecovered(context.Background())
+	// stop and re-create worker
+	mockMessageAgent.On("SendMessage").Return(nil).Twice()
+	require.NoError(t.T(), jm.Tick(context.Background()))
+	workerHandle1.On("Status").Return(&frameModel.WorkerStatus{ExtBytes: bytes1}).Once()
+	workerHandle2.On("Status").Return(&frameModel.WorkerStatus{ExtBytes: bytes2}).Once()
+	mockCheckpointAgent.On("IsFresh").Return(true, nil).Once()
+	mockCheckpointAgent.On("IsFresh").Return(false, nil).Once()
+	mockCheckpointAgent.On("IsFresh").Return(true, nil).Times(3)
+	mockBaseJobmaster.On("CreateWorker", mock.Anything, mock.Anything, mock.Anything).Return(worker5, nil).Once()
+	mockBaseJobmaster.On("CreateWorker", mock.Anything, mock.Anything, mock.Anything).Return(worker3, nil).Once()
+	jm.OnWorkerOffline(workerHandle1, nil)
+	jm.OnWorkerOffline(workerHandle2, nil)
+	// stop worker
+	require.NoError(t.T(), jm.Tick(context.Background()))
+	taskStatus1.CfgModRevision++
+	taskStatus2.CfgModRevision++
+	bytes1, err = json.Marshal(taskStatus1)
+	require.NoError(t.T(), err)
+	bytes2, err = json.Marshal(taskStatus2)
+	require.NoError(t.T(), err)
+	workerHandle1.On("Status").Return(&frameModel.WorkerStatus{ExtBytes: bytes1}).Once()
+	workerHandle1.On("IsTombStone").Return(false).Once()
+	jm.OnWorkerStatusUpdated(workerHandle1, &frameModel.WorkerStatus{State: frameModel.WorkerStateNormal, ExtBytes: bytes1})
+	workerHandle2.On("Status").Return(&frameModel.WorkerStatus{ExtBytes: bytes2}).Once()
+	workerHandle2.On("IsTombStone").Return(false).Once()
+	jm.OnWorkerStatusUpdated(workerHandle2, &frameModel.WorkerStatus{State: frameModel.WorkerStateNormal, ExtBytes: bytes2})
+	// create worker
 	require.NoError(t.T(), jm.Tick(context.Background()))
 
 	workerHandle1.On("Status").Return(&frameModel.WorkerStatus{ExtBytes: bytes1}).Once()
@@ -373,7 +407,7 @@ func (t *testDMJobmasterSuite) TestDMJobmaster() {
 	jm.CloseImpl(context.Background())
 
 	// OnCancel
-	mockMessageAgent.On("SendRequest", mock.Anything, mock.Anything, mock.Anything, mock.Anything).Return(&dmpkg.QueryStatusResponse{Unit: frameModel.WorkerDMSync, Stage: metadata.StageRunning, Status: bytes1}, nil).Twice()
+	mockMessageAgent.On("SendRequest", mock.Anything, mock.Anything, mock.Anything, mock.Anything).Return(&dmproto.QueryStatusResponse{Unit: frameModel.WorkerDMSync, Stage: metadata.StageRunning, Status: bytes1}, nil).Twice()
 	mockMessageAgent.On("SendMessage").Return(nil).Twice()
 	mockBaseJobmaster.On("Exit").Return(nil).Once()
 	var wg sync.WaitGroup
@@ -413,13 +447,13 @@ func TestDuplicateFinishedState(t *testing.T) {
 	mockBaseJobmaster := &MockBaseJobmaster{t: t}
 	mockCheckpointAgent := &MockCheckpointAgent{}
 	checkpoint.NewCheckpointAgent = func(string, *zap.Logger) checkpoint.Agent { return mockCheckpointAgent }
-	mockMessageAgent := &dmpkg.MockMessageAgent{}
-	dmpkg.NewMessageAgent = func(id string, commandHandler interface{}, messageHandlerManager p2p.MessageHandlerManager, pLogger *zap.Logger) dmpkg.MessageAgent {
+	mockMessageAgent := &message.MockAgent{}
+	message.NewAgent = func(id string, commandHandler interface{}, messageHandlerManager p2p.MessageHandlerManager, pLogger *zap.Logger) message.Agent {
 		return mockMessageAgent
 	}
 	defer func() {
 		checkpoint.NewCheckpointAgent = checkpoint.NewAgentImpl
-		dmpkg.NewMessageAgent = dmpkg.NewMessageAgentImpl
+		message.NewAgent = message.NewAgentImpl
 	}()
 	jm := &JobMaster{
 		BaseJobMaster: mockBaseJobmaster,
@@ -571,4 +605,21 @@ func (m *MockCheckpointAgent) IsFresh(ctx context.Context, workerType framework.
 
 func (m *MockCheckpointAgent) Upgrade(ctx context.Context, preVer semver.Version) error {
 	return nil
+}
+
+func (m *MockCheckpointAgent) FetchAllDoTables(ctx context.Context, cfg *config.JobCfg) (map[metadata.TargetTable][]metadata.SourceTable, error) {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	args := m.Called()
+	if args.Get(0) == nil {
+		return nil, args.Error(1)
+	}
+	return args.Get(0).(map[metadata.TargetTable][]metadata.SourceTable), args.Error(1)
+}
+
+func (m *MockCheckpointAgent) FetchTableStmt(ctx context.Context, jobID string, cfg *config.JobCfg, sourceTable metadata.SourceTable) (string, error) {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	args := m.Called()
+	return args.Get(0).(string), args.Error(1)
 }
