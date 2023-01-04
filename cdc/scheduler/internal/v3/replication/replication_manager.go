@@ -114,8 +114,11 @@ type Manager struct { //nolint:revive
 func NewReplicationManager(
 	maxTaskConcurrency int, changefeedID model.ChangeFeedID,
 ) *Manager {
+	// degreeReadHeavy is a degree optimized for read heavy map, many Ascend.
+	// There may be a large number of tables.
+	const degreeReadHeavy = 256
 	return &Manager{
-		spans:              spanz.NewBtreeMap[*ReplicationSet](),
+		spans:              spanz.NewBtreeMapWithDegree[*ReplicationSet](degreeReadHeavy),
 		runningTasks:       spanz.NewBtreeMap[*ScheduleTask](),
 		maxTaskConcurrency: maxTaskConcurrency,
 		changefeedID:       changefeedID,

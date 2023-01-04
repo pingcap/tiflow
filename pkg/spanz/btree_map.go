@@ -46,10 +46,14 @@ type BtreeMap[T any] struct {
 
 // NewBtreeMap returns a new BtreeMap.
 func NewBtreeMap[T any]() *BtreeMap[T] {
-	// Map is read heavy map, many Ascend.
-	const defaultDegree = 256
+	const defaultDegree = 16
+	return NewBtreeMapWithDegree[T](defaultDegree)
+}
+
+// NewBtreeMapWithDegree returns a new BtreeMap with the given degree.
+func NewBtreeMapWithDegree[T any](degree int) *BtreeMap[T] {
 	return &BtreeMap[T]{
-		tree: btree.NewG(defaultDegree, lessSpanItem[T]),
+		tree: btree.NewG(degree, lessSpanItem[T]),
 	}
 }
 
