@@ -341,7 +341,7 @@ func GetDefaultReplicaConfig() *ReplicaConfig {
 		Consistent: &ConsistentConfig{
 			Level:             "none",
 			MaxLogSize:        64,
-			FlushIntervalInMs: 1000,
+			FlushIntervalInMs: config.MinFlushIntervalInMs,
 			Storage:           "",
 		},
 	}
