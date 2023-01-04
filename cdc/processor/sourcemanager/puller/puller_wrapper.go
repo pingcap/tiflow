@@ -26,7 +26,6 @@ import (
 	"github.com/pingcap/tiflow/pkg/config"
 	cdccontext "github.com/pingcap/tiflow/pkg/context"
 	cerrors "github.com/pingcap/tiflow/pkg/errors"
-	"github.com/pingcap/tiflow/pkg/spanz"
 	"github.com/pingcap/tiflow/pkg/upstream"
 	"github.com/pingcap/tiflow/pkg/util"
 )
@@ -34,7 +33,7 @@ import (
 // Wrapper is a wrapper of puller used by source manager.
 type Wrapper struct {
 	changefeed model.ChangeFeedID
-	tableID    model.TableID
+	span       tablepb.Span
 	tableName  string // quoted schema and table, used in metircs only
 	p          puller.Puller
 	startTs    model.Ts
@@ -48,23 +47,18 @@ type Wrapper struct {
 // NewPullerWrapper creates a new puller wrapper.
 func NewPullerWrapper(
 	changefeed model.ChangeFeedID,
-	tableID model.TableID,
+	span tablepb.Span,
 	tableName string,
 	startTs model.Ts,
 	bdrMode bool,
 ) *Wrapper {
 	return &Wrapper{
 		changefeed: changefeed,
-		tableID:    tableID,
+		span:       span,
 		tableName:  tableName,
 		startTs:    startTs,
 		bdrMode:    bdrMode,
 	}
-}
-
-// tableSpan returns the table span with the table ID.
-func (n *Wrapper) tableSpan() []tablepb.Span {
-	return []tablepb.Span{spanz.TableIDToComparableSpan(n.tableID)}
 }
 
 // Start the puller wrapper.
@@ -92,10 +86,10 @@ func (n *Wrapper) Start(
 		up.KVStorage,
 		up.PDClock,
 		n.startTs,
-		n.tableSpan(),
+		[]tablepb.Span{n.span},
 		kvCfg,
 		n.changefeed,
-		n.tableID,
+		n.span.TableID,
 		n.tableName,
 		n.bdrMode,
 	)
@@ -119,7 +113,7 @@ func (n *Wrapper) Start(
 					continue
 				}
 				pEvent := model.NewPolymorphicEvent(rawKV)
-				if err := eventSortEngine.Add(n.tableID, pEvent); err != nil {
+				if err := eventSortEngine.Add(n.span, pEvent); err != nil {
 					errChan <- err
 				}
 			}
