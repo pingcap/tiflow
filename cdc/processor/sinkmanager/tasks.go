@@ -14,8 +14,8 @@
 package sinkmanager
 
 import (
-	"github.com/pingcap/tiflow/cdc/model"
 	"github.com/pingcap/tiflow/cdc/processor/sourcemanager/engine"
+	"github.com/pingcap/tiflow/cdc/processor/tablepb"
 )
 
 const (
@@ -43,7 +43,7 @@ type isCanceled func() bool
 // sinkTask is a task for a table sink.
 // It only considers how to control the table sink.
 type sinkTask struct {
-	tableID model.TableID
+	span tablepb.Span
 	// lowerBound indicates the lower bound of the task.
 	// It is a closed interval.
 	lowerBound engine.Position
@@ -58,7 +58,7 @@ type sinkTask struct {
 
 // redoTask is a task for the redo log.
 type redoTask struct {
-	tableID       model.TableID
+	span          tablepb.Span
 	lowerBound    engine.Position
 	getUpperBound upperBoundGetter
 	tableSink     *tableSinkWrapper

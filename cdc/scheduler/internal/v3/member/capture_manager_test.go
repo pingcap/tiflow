@@ -20,6 +20,7 @@ import (
 	"github.com/pingcap/tiflow/cdc/processor/tablepb"
 	"github.com/pingcap/tiflow/cdc/scheduler/internal/v3/replication"
 	"github.com/pingcap/tiflow/cdc/scheduler/schedulepb"
+	"github.com/pingcap/tiflow/pkg/config"
 	"github.com/pingcap/tiflow/pkg/spanz"
 	"github.com/stretchr/testify/require"
 )
@@ -59,7 +60,7 @@ func TestCaptureManagerHandleAliveCaptureUpdate(t *testing.T) {
 	t.Parallel()
 
 	rev := schedulepb.OwnerRevision{}
-	cm := NewCaptureManager("1", model.ChangeFeedID{}, rev, 2)
+	cm := NewCaptureManager("1", model.ChangeFeedID{}, rev, config.NewDefaultSchedulerConfig())
 	ms := map[model.CaptureID]*model.CaptureInfo{
 		"1": {}, "2": {}, "3": {},
 	}
@@ -134,7 +135,7 @@ func TestCaptureManagerHandleMessages(t *testing.T) {
 		"1": {},
 		"2": {},
 	}
-	cm := NewCaptureManager("", model.ChangeFeedID{}, rev, 2)
+	cm := NewCaptureManager("", model.ChangeFeedID{}, rev, config.NewDefaultSchedulerConfig())
 	require.False(t, cm.CheckAllCaptureInitialized())
 
 	// Initial handle alive captures.
@@ -182,7 +183,7 @@ func TestCaptureManagerTick(t *testing.T) {
 	t.Parallel()
 
 	rev := schedulepb.OwnerRevision{}
-	cm := NewCaptureManager("", model.ChangeFeedID{}, rev, 2)
+	cm := NewCaptureManager("", model.ChangeFeedID{}, rev, config.NewDefaultSchedulerConfig())
 
 	// No heartbeat if there is no capture.
 	msgs := cm.Tick(spanz.NewMap[*replication.ReplicationSet](), captureIDNotDraining)
@@ -252,5 +253,37 @@ func TestCaptureManagerTick(t *testing.T) {
 			[]tablepb.Span{{TableID: 2}, {TableID: 3}}, msgs[0].Heartbeat.Spans)
 		require.ElementsMatch(t,
 			[]tablepb.Span{{TableID: 1}, {TableID: 2}}, msgs[1].Heartbeat.Spans)
+	}
+}
+
+func TestCaptureManagerCollectStatsTick(t *testing.T) {
+	t.Parallel()
+
+	rev := schedulepb.OwnerRevision{}
+	cfg := config.NewDefaultSchedulerConfig()
+	cfg.HeartbeatTick = 2
+	cfg.CollectStatsTick = 3
+	cm := NewCaptureManager("", model.ChangeFeedID{}, rev, cfg)
+
+	ms := map[model.CaptureID]*model.CaptureInfo{
+		"1": {},
+		"2": {},
+	}
+	cm.HandleAliveCaptureUpdate(ms)
+	cm.SetInitializedForTests(true)
+
+	// tick      : 1 2 3 4 5 6 7 8
+	// heartbeat :   x   x   x   x
+	// collect   :     x     x
+	for i := 1; i <= 8; i++ {
+		msgs := cm.Tick(spanz.NewMap[*replication.ReplicationSet](), captureIDNotDraining)
+		if i%2 == 0 {
+			require.Len(t, msgs, 2)
+			collect := i == 4 || i == 6
+			require.EqualValues(t, msgs[0].Heartbeat.CollectStats, collect, i)
+			require.EqualValues(t, msgs[1].Heartbeat.CollectStats, collect, i)
+		} else {
+			require.Len(t, msgs, 0)
+		}
 	}
 }

@@ -996,11 +996,6 @@ error = '''
 s3 storage api
 '''
 
-["CDC:ErrS3StorageInitialize"]
-error = '''
-new s3 storage for redo log
-'''
-
 ["CDC:ErrScanLockFailed"]
 error = '''
 scan lock failed
@@ -1109,6 +1104,11 @@ start a stopped db system
 ["CDC:ErrStartTsBeforeGC"]
 error = '''
 fail to create or maintain changefeed because start-ts %d is earlier than or equal to GC safepoint at %d
+'''
+
+["CDC:ErrStorageInitialize"]
+error = '''
+fail to open storage for redo log
 '''
 
 ["CDC:ErrStorageSinkInvalidDateSeparator"]

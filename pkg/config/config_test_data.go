@@ -130,10 +130,12 @@ const (
       "client-retry-rate-limit": 1,
       "server-max-pending-message-count": 102400,
       "server-ack-interval": 100000000,
-      "server-worker-pool-size": 4
+      "server-worker-pool-size": 4,
+      "max-recv-msg-size": 268435456
     },
     "scheduler": {
       "heartbeat-tick": 2,
+      "collect-stats-tick": 200,
       "max-task-concurrency": 10,
       "check-balance-interval": 60000000000,
       "add-table-batch-size": 50,
