@@ -105,8 +105,7 @@ func newCoordinator(
 		captureID: captureID,
 		replicationM: replication.NewReplicationManager(
 			cfg.MaxTaskConcurrency, changefeedID),
-		captureM: member.NewCaptureManager(
-			captureID, changefeedID, revision, cfg.HeartbeatTick),
+		captureM:     member.NewCaptureManager(captureID, changefeedID, revision, cfg),
 		schedulerM:   scheduler.NewSchedulerManager(changefeedID, cfg),
 		changefeedID: changefeedID,
 		compat:       compat.New(cfg, map[model.CaptureID]*model.CaptureInfo{}),

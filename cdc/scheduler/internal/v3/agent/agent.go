@@ -262,7 +262,7 @@ func (a *agent) handleMessageHeartbeat(request *schedulepb.Heartbeat) *schedulep
 	allTables := a.tableM.getAllTableSpans()
 	result := make([]tablepb.TableStatus, 0, allTables.Len())
 	allTables.Ascend(func(span tablepb.Span, table *tableSpan) bool {
-		status := table.getTableSpanStatus()
+		status := table.getTableSpanStatus(request.CollectStats)
 		if table.task != nil && table.task.IsRemove {
 			status.State = tablepb.TableStateStopping
 		}
@@ -271,7 +271,7 @@ func (a *agent) handleMessageHeartbeat(request *schedulepb.Heartbeat) *schedulep
 	})
 	for _, span := range request.GetSpans() {
 		if _, ok := allTables.Get(span); !ok {
-			status := a.tableM.getTableSpanStatus(span)
+			status := a.tableM.getTableSpanStatus(span, request.CollectStats)
 			result = append(result, status)
 		}
 	}

@@ -22,7 +22,9 @@ import (
 	"github.com/cockroachdb/pebble"
 	"github.com/pingcap/tiflow/cdc/model"
 	"github.com/pingcap/tiflow/cdc/processor/sourcemanager/engine"
+	"github.com/pingcap/tiflow/cdc/processor/tablepb"
 	"github.com/pingcap/tiflow/pkg/config"
+	"github.com/pingcap/tiflow/pkg/spanz"
 	"github.com/stretchr/testify/require"
 )
 
@@ -38,13 +40,14 @@ func TestTableOperations(t *testing.T) {
 
 	require.True(t, s.IsTableBased())
 
-	s.AddTable(1)
-	s.AddTable(1)
+	span := spanz.TableIDToComparableSpan(1)
+	s.AddTable(span)
+	s.AddTable(span)
 
-	require.Equal(t, model.Ts(0), s.GetResolvedTs(1))
+	require.Equal(t, model.Ts(0), s.GetResolvedTs(span))
 
-	s.RemoveTable(1)
-	s.RemoveTable(1)
+	s.RemoveTable(span)
+	s.RemoveTable(span)
 }
 
 // TestNoResolvedTs tests resolved timestamps shouldn't be emitted.
@@ -60,15 +63,16 @@ func TestNoResolvedTs(t *testing.T) {
 
 	require.True(t, s.IsTableBased())
 
-	s.AddTable(1)
+	span := spanz.TableIDToComparableSpan(1)
+	s.AddTable(span)
 	resolvedTs := make(chan model.Ts)
-	s.OnResolve(func(_ model.TableID, ts model.Ts) { resolvedTs <- ts })
+	s.OnResolve(func(_ tablepb.Span, ts model.Ts) { resolvedTs <- ts })
 
-	s.Add(model.TableID(1), model.NewResolvedPolymorphicEvent(0, 1))
+	s.Add(span, model.NewResolvedPolymorphicEvent(0, 1))
 	timer := time.NewTimer(100 * time.Millisecond)
 	select {
 	case ts := <-resolvedTs:
-		iter := s.FetchByTable(model.TableID(1), engine.Position{}, engine.Position{CommitTs: ts})
+		iter := s.FetchByTable(span, engine.Position{}, engine.Position{CommitTs: ts})
 		event, _, err := iter.Next()
 		require.Nil(t, event)
 		require.Nil(t, err)
@@ -90,9 +94,10 @@ func TestEventFetch(t *testing.T) {
 
 	require.True(t, s.IsTableBased())
 
-	s.AddTable(1)
+	span := spanz.TableIDToComparableSpan(1)
+	s.AddTable(span)
 	resolvedTs := make(chan model.Ts)
-	s.OnResolve(func(_ model.TableID, ts model.Ts) { resolvedTs <- ts })
+	s.OnResolve(func(_ tablepb.Span, ts model.Ts) { resolvedTs <- ts })
 
 	inputEvents := []*model.PolymorphicEvent{
 		model.NewPolymorphicEvent(&model.RawKVEntry{
@@ -121,8 +126,8 @@ func TestEventFetch(t *testing.T) {
 		}),
 	}
 
-	s.Add(1, inputEvents...)
-	s.Add(model.TableID(1), model.NewResolvedPolymorphicEvent(0, 4))
+	s.Add(span, inputEvents...)
+	s.Add(span, model.NewResolvedPolymorphicEvent(0, 4))
 
 	sortedEvents := make([]*model.PolymorphicEvent, 0, len(inputEvents))
 	sortedPositions := make([]engine.Position, 0, len(inputEvents))
@@ -130,7 +135,8 @@ func TestEventFetch(t *testing.T) {
 	timer := time.NewTimer(100 * time.Millisecond)
 	select {
 	case ts := <-resolvedTs:
-		iter := s.FetchByTable(model.TableID(1), engine.Position{}, engine.Position{CommitTs: ts, StartTs: ts - 1})
+		iter := s.FetchByTable(
+			span, engine.Position{}, engine.Position{CommitTs: ts, StartTs: ts - 1})
 		for {
 			event, pos, err := iter.Next()
 			require.Nil(t, err)
@@ -171,7 +177,10 @@ func TestCleanData(t *testing.T) {
 
 	require.True(t, s.IsTableBased())
 
-	s.AddTable(1)
-	require.Panics(t, func() { s.CleanByTable(2, engine.Position{}) })
-	require.Nil(t, s.CleanByTable(1, engine.Position{}))
+	span := spanz.TableIDToComparableSpan(1)
+	s.AddTable(span)
+	require.Panics(t, func() {
+		s.CleanByTable(spanz.TableIDToComparableSpan(2), engine.Position{})
+	})
+	require.Nil(t, s.CleanByTable(span, engine.Position{}))
 }
