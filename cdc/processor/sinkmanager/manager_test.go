@@ -26,6 +26,7 @@ import (
 	"github.com/pingcap/tiflow/cdc/processor/sourcemanager/engine/memory"
 	"github.com/pingcap/tiflow/cdc/processor/tablepb"
 	"github.com/pingcap/tiflow/pkg/config"
+	"github.com/pingcap/tiflow/pkg/spanz"
 	"github.com/pingcap/tiflow/pkg/upstream"
 	"github.com/prometheus/client_golang/prometheus"
 	"github.com/stretchr/testify/require"
@@ -77,9 +78,9 @@ func getChangefeedInfo() *model.ChangeFeedInfo {
 func addTableAndAddEventsToSortEngine(
 	t *testing.T,
 	engine engine.SortEngine,
-	tableID model.TableID,
+	span tablepb.Span,
 ) {
-	engine.AddTable(tableID)
+	engine.AddTable(span)
 	events := []*model.PolymorphicEvent{
 		{
 			StartTs: 1,
@@ -89,7 +90,7 @@ func addTableAndAddEventsToSortEngine(
 				StartTs: 1,
 				CRTs:    1,
 			},
-			Row: genRowChangedEvent(1, 1, tableID),
+			Row: genRowChangedEvent(1, 1, span),
 		},
 		{
 			StartTs: 1,
@@ -99,7 +100,7 @@ func addTableAndAddEventsToSortEngine(
 				StartTs: 1,
 				CRTs:    2,
 			},
-			Row: genRowChangedEvent(1, 2, tableID),
+			Row: genRowChangedEvent(1, 2, span),
 		},
 		{
 			StartTs: 1,
@@ -109,7 +110,7 @@ func addTableAndAddEventsToSortEngine(
 				StartTs: 1,
 				CRTs:    3,
 			},
-			Row: genRowChangedEvent(1, 3, tableID),
+			Row: genRowChangedEvent(1, 3, span),
 		},
 		{
 			StartTs: 2,
@@ -119,7 +120,7 @@ func addTableAndAddEventsToSortEngine(
 				StartTs: 2,
 				CRTs:    4,
 			},
-			Row: genRowChangedEvent(2, 4, tableID),
+			Row: genRowChangedEvent(2, 4, span),
 		},
 		{
 			CRTs: 4,
@@ -130,7 +131,7 @@ func addTableAndAddEventsToSortEngine(
 		},
 	}
 	for _, event := range events {
-		err := engine.Add(tableID, event)
+		err := engine.Add(span, event)
 		require.NoError(t, err)
 	}
 }
@@ -147,18 +148,18 @@ func TestAddTable(t *testing.T) {
 		err := manager.Close()
 		require.NoError(t, err)
 	}()
-	tableID := model.TableID(1)
-	manager.AddTable(tableID, 1, 100)
-	tableSink, ok := manager.tableSinks.Load(tableID)
+	span := spanz.TableIDToComparableSpan(1)
+	manager.AddTable(span, 1, 100)
+	tableSink, ok := manager.tableSinks.Load(span)
 	require.True(t, ok)
 	require.NotNil(t, tableSink)
 	require.Equal(t, 0, manager.sinkProgressHeap.len(), "Not started table shout not in progress heap")
-	err := manager.StartTable(tableID, 1)
+	err := manager.StartTable(span, 1)
 	require.NoError(t, err)
 	require.Equal(t, uint64(0x7ffffffffffbffff), tableSink.(*tableSinkWrapper).replicateTs)
 
 	progress := manager.sinkProgressHeap.pop()
-	require.Equal(t, tableID, progress.tableID)
+	require.Equal(t, span, progress.span)
 	require.Equal(t, uint64(0), progress.nextLowerBoundPos.StartTs)
 	require.Equal(t, uint64(2), progress.nextLowerBoundPos.CommitTs)
 }
@@ -175,32 +176,32 @@ func TestRemoveTable(t *testing.T) {
 		err := manager.Close()
 		require.NoError(t, err)
 	}()
-	tableID := model.TableID(1)
-	manager.AddTable(tableID, 1, 100)
-	tableSink, ok := manager.tableSinks.Load(tableID)
+	span := spanz.TableIDToComparableSpan(1)
+	manager.AddTable(span, 1, 100)
+	tableSink, ok := manager.tableSinks.Load(span)
 	require.True(t, ok)
 	require.NotNil(t, tableSink)
-	err := manager.StartTable(tableID, 0)
+	err := manager.StartTable(span, 0)
 	require.NoError(t, err)
-	addTableAndAddEventsToSortEngine(t, e, tableID)
+	addTableAndAddEventsToSortEngine(t, e, span)
 	manager.UpdateBarrierTs(4)
-	manager.UpdateReceivedSorterResolvedTs(tableID, 5)
+	manager.UpdateReceivedSorterResolvedTs(span, 5)
 
 	// Check all the events are sent to sink and record the memory usage.
 	require.Eventually(t, func() bool {
 		return manager.memQuota.getUsedBytes() == 872
 	}, 5*time.Second, 10*time.Millisecond)
 
-	manager.AsyncStopTable(tableID)
+	manager.AsyncStopTable(span)
 	require.Eventually(t, func() bool {
-		state, ok := manager.GetTableState(tableID)
+		state, ok := manager.GetTableState(span)
 		require.True(t, ok)
 		return state == tablepb.TableStateStopped
 	}, 5*time.Second, 10*time.Millisecond)
 
-	manager.RemoveTable(tableID)
+	manager.RemoveTable(span)
 
-	_, ok = manager.tableSinks.Load(tableID)
+	_, ok = manager.tableSinks.Load(span)
 	require.False(t, ok)
 	require.Equal(t, uint64(0), manager.memQuota.getUsedBytes(), "After remove table, the memory usage should be 0.")
 }
@@ -235,16 +236,16 @@ func TestGenerateTableSinkTaskWithBarrierTs(t *testing.T) {
 		err := manager.Close()
 		require.NoError(t, err)
 	}()
-	tableID := model.TableID(1)
-	manager.AddTable(tableID, 1, 100)
-	addTableAndAddEventsToSortEngine(t, e, tableID)
+	span := spanz.TableIDToComparableSpan(1)
+	manager.AddTable(span, 1, 100)
+	addTableAndAddEventsToSortEngine(t, e, span)
 	manager.UpdateBarrierTs(4)
-	manager.UpdateReceivedSorterResolvedTs(tableID, 5)
-	err := manager.StartTable(tableID, 0)
+	manager.UpdateReceivedSorterResolvedTs(span, 5)
+	err := manager.StartTable(span, 0)
 	require.NoError(t, err)
 
 	require.Eventually(t, func() bool {
-		tableSink, ok := manager.tableSinks.Load(tableID)
+		tableSink, ok := manager.tableSinks.Load(span)
 		require.True(t, ok)
 		checkpointTS := tableSink.(*tableSinkWrapper).getCheckpointTs()
 		return checkpointTS.ResolvedMark() == 4
@@ -263,18 +264,18 @@ func TestGenerateTableSinkTaskWithResolvedTs(t *testing.T) {
 		err := manager.Close()
 		require.NoError(t, err)
 	}()
-	tableID := model.TableID(1)
-	manager.AddTable(tableID, 1, 100)
-	addTableAndAddEventsToSortEngine(t, e, tableID)
+	span := spanz.TableIDToComparableSpan(1)
+	manager.AddTable(span, 1, 100)
+	addTableAndAddEventsToSortEngine(t, e, span)
 	// This would happen when the table just added to this node and redo log is enabled.
 	// So there is possibility that the resolved ts is smaller than the global barrier ts.
 	manager.UpdateBarrierTs(4)
-	manager.UpdateReceivedSorterResolvedTs(tableID, 3)
-	err := manager.StartTable(tableID, 0)
+	manager.UpdateReceivedSorterResolvedTs(span, 3)
+	err := manager.StartTable(span, 0)
 	require.NoError(t, err)
 
 	require.Eventually(t, func() bool {
-		tableSink, ok := manager.tableSinks.Load(tableID)
+		tableSink, ok := manager.tableSinks.Load(span)
 		require.True(t, ok)
 		checkpointTS := tableSink.(*tableSinkWrapper).getCheckpointTs()
 		return checkpointTS.ResolvedMark() == 3
@@ -293,17 +294,17 @@ func TestGetTableStatsToReleaseMemQuota(t *testing.T) {
 		err := manager.Close()
 		require.NoError(t, err)
 	}()
-	tableID := model.TableID(1)
-	manager.AddTable(tableID, 1, 100)
-	addTableAndAddEventsToSortEngine(t, e, tableID)
+	span := spanz.TableIDToComparableSpan(1)
+	manager.AddTable(span, 1, 100)
+	addTableAndAddEventsToSortEngine(t, e, span)
 
 	manager.UpdateBarrierTs(4)
-	manager.UpdateReceivedSorterResolvedTs(tableID, 5)
-	err := manager.StartTable(tableID, 0)
+	manager.UpdateReceivedSorterResolvedTs(span, 5)
+	err := manager.StartTable(span, 0)
 	require.NoError(t, err)
 
 	require.Eventually(t, func() bool {
-		s := manager.GetTableStats(tableID)
+		s := manager.GetTableStats(span)
 		return manager.memQuota.getUsedBytes() == 0 && s.CheckpointTs == 4
 	}, 5*time.Second, 10*time.Millisecond)
 }
@@ -316,14 +317,14 @@ func TestDoNotGenerateTableSinkTaskWhenTableIsNotReplicating(t *testing.T) {
 
 	changefeedInfo := getChangefeedInfo()
 	manager, e := createManagerWithMemEngine(t, ctx, model.DefaultChangeFeedID("1"), changefeedInfo, make(chan error, 1))
-	tableID := model.TableID(1)
-	manager.AddTable(tableID, 1, 100)
-	addTableAndAddEventsToSortEngine(t, e, tableID)
+	span := spanz.TableIDToComparableSpan(1)
+	manager.AddTable(span, 1, 100)
+	addTableAndAddEventsToSortEngine(t, e, span)
 	manager.UpdateBarrierTs(4)
-	manager.UpdateReceivedSorterResolvedTs(tableID, 5)
+	manager.UpdateReceivedSorterResolvedTs(span, 5)
 
 	require.Equal(t, uint64(0), manager.memQuota.getUsedBytes())
-	tableSink, ok := manager.tableSinks.Load(tableID)
+	tableSink, ok := manager.tableSinks.Load(span)
 	require.True(t, ok)
 	require.NotNil(t, tableSink)
 	require.Equal(t, uint64(1), tableSink.(*tableSinkWrapper).getCheckpointTs().Ts)
@@ -354,5 +355,5 @@ func TestUpdateReceivedSorterResolvedTsOfNonExistTable(t *testing.T) {
 	changefeedInfo := getChangefeedInfo()
 	manager, _ := createManagerWithMemEngine(t, ctx, model.DefaultChangeFeedID("1"), changefeedInfo, make(chan error, 1))
 
-	manager.UpdateReceivedSorterResolvedTs(model.TableID(1), 1)
+	manager.UpdateReceivedSorterResolvedTs(spanz.TableIDToComparableSpan(1), 1)
 }

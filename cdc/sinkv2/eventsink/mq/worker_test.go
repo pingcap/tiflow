@@ -148,7 +148,7 @@ func TestBatchEncode_Batch(t *testing.T) {
 
 	// Test batching returns when the events count is equal to the batch size.
 	batch := make([]mqEvent, 512)
-	endIndex, err := worker.batch(ctx, batch)
+	endIndex, err := worker.batch(ctx, batch, time.Minute)
 	require.NoError(t, err)
 	require.Equal(t, 512, endIndex)
 }
