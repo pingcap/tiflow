@@ -122,7 +122,7 @@ func (m *Map[T]) AscendRange(start, end tablepb.Span, iterator ItemIterator[T]) 
 // * Returned slice is read only and will be changed on next FindHoles.
 func (m *Map[T]) FindHoles(start, end tablepb.Span) ([]tablepb.Span, []tablepb.Span) {
 	if bytes.Compare(start.StartKey, end.StartKey) >= 0 {
-		log.Panic("start muse be larger than end",
+		log.Panic("start must be larger than end",
 			zap.String("start", start.String()),
 			zap.String("end", end.String()))
 	}
