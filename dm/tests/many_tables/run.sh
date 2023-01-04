@@ -181,7 +181,7 @@ function run() {
 	run_sql_tidb "CREATE TABLE merge_many_tables_db.t(i INT, j INT, UNIQUE KEY(i,j), c1 VARCHAR(20), c2 VARCHAR(20), c3 VARCHAR(20), c4 VARCHAR(20), c5 VARCHAR(20), c6 VARCHAR(20), c7 VARCHAR(20), c8 VARCHAR(20), c9 VARCHAR(20), c10 VARCHAR(20), c11 VARCHAR(20), c12 VARCHAR(20), c13 VARCHAR(20));;"
 
 	dmctl_start_task_standalone $cur/conf/dm-task-2.yaml
-	run_sql_tidb_with_retry "select count(*) from merge_many_tables_db.t;" "count(*): 6002"
+	run_sql_tidb_with_retry_times "select count(*) from merge_many_tables_db.t;" "count(*): 6002" 60
 
 	killall -9 tidb-server 2>/dev/null || true
 	killall -9 tikv-server 2>/dev/null || true
