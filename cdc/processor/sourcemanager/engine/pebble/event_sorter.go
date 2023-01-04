@@ -55,7 +55,7 @@ type EventSorter struct {
 	mu         sync.RWMutex
 	isClosed   bool
 	onResolves []func(tablepb.Span, model.Ts)
-	tables     *spanz.Map[*tableState]
+	tables     *spanz.HashMap[*tableState]
 }
 
 // EventIter implements sorter.EventIterator.
@@ -79,7 +79,7 @@ func New(ID model.ChangeFeedID, dbs []*pebble.DB) *EventSorter {
 		dbs:          dbs,
 		channs:       channs,
 		closed:       make(chan struct{}),
-		tables:       spanz.NewMap[*tableState](),
+		tables:       spanz.NewHashMap[*tableState](),
 	}
 
 	for i := range eventSorter.dbs {
@@ -299,7 +299,7 @@ func (s *EventSorter) ReceivedEvents() int64 {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	totalReceivedEvents := int64(0)
-	s.tables.Ascend(func(_ tablepb.Span, state *tableState) bool {
+	s.tables.Iter(func(_ tablepb.Span, state *tableState) bool {
 		totalReceivedEvents += state.receivedEvents.Load()
 		return true
 	})
@@ -328,7 +328,7 @@ func (s *EventSorter) Close() error {
 	defer s.mu.RUnlock()
 
 	var err error
-	s.tables.Ascend(func(span tablepb.Span, state *tableState) bool {
+	s.tables.Iter(func(span tablepb.Span, state *tableState) bool {
 		// TODO: maybe we can use a unified prefix for a changefeed,
 		//       so that we can speed up it when closing a changefeed.
 		if err1 := s.cleanTable(state, span); err1 != nil {
@@ -403,7 +403,7 @@ func (s *EventSorter) handleEvents(
 
 	batch := db.NewBatch()
 	writeOpts := &pebble.WriteOptions{Sync: false}
-	newResolved := spanz.NewMap[model.Ts]()
+	newResolved := spanz.NewHashMap[model.Ts]()
 
 	handleItem := func(item eventWithTableID) {
 		if item.event.IsResolved() {
@@ -491,7 +491,7 @@ func (s *EventSorter) handleEvents(
 			batch = db.NewBatch()
 		}
 
-		newResolved.Ascend(func(span tablepb.Span, resolved uint64) bool {
+		newResolved.Iter(func(span tablepb.Span, resolved uint64) bool {
 			s.mu.RLock()
 			ts, ok := s.tables.Get(span)
 			if !ok {
@@ -510,7 +510,7 @@ func (s *EventSorter) handleEvents(
 			s.mu.RUnlock()
 			return true
 		})
-		newResolved = spanz.NewMap[model.Ts]()
+		newResolved = spanz.NewHashMap[model.Ts]()
 		ioTokens <- struct{}{}
 	}
 }

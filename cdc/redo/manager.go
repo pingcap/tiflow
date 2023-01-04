@@ -122,7 +122,7 @@ type ManagerImpl struct {
 	// it's just like map[span]*statefulRts.
 	// For a given statefulRts, unflushed is updated in routine bgUpdateLog,
 	// and flushed is updated in flushLog.
-	rtsMap sync.Map
+	rtsMap spanz.SyncMap
 
 	// A fast way to get min flushed timestamp in rtsMap. It can be updated
 	// in redo-flush goroutine and AddTable/RemoveTable.
@@ -163,7 +163,7 @@ func NewManager(ctx context.Context, cfg *config.ConsistentConfig, opts *Manager
 		changeFeedID:  contextutil.ChangefeedIDFromCtx(ctx),
 		enabled:       true,
 		opts:          opts,
-		rtsMap:        sync.Map{},
+		rtsMap:        spanz.SyncMap{},
 		minResolvedTs: math.MaxInt64,
 		writer:        writer,
 	}
@@ -295,7 +295,7 @@ func (m *ManagerImpl) EmitDDLEvent(ctx context.Context, ddl *model.DDLEvent) err
 
 // GetResolvedTs returns the resolved ts of a table
 func (m *ManagerImpl) GetResolvedTs(span tablepb.Span) model.Ts {
-	if value, ok := m.rtsMap.Load(spanz.ToHashableSpan(span)); ok {
+	if value, ok := m.rtsMap.Load(span); ok {
 		return value.(*statefulRts).getFlushed()
 	}
 	panic("GetResolvedTs is called on an invalid table")
@@ -321,7 +321,7 @@ func (m *ManagerImpl) GetFlushedMeta(checkpointTs, resolvedTs *model.Ts) {
 // AddTable adds a new table in redo log manager
 func (m *ManagerImpl) AddTable(span tablepb.Span, startTs uint64) {
 	_, loaded := m.rtsMap.LoadOrStore(
-		spanz.ToHashableSpan(span), &statefulRts{flushed: startTs, unflushed: startTs})
+		span, &statefulRts{flushed: startTs, unflushed: startTs})
 	if loaded {
 		log.Warn("add duplicated table in redo log manager", zap.Stringer("span", &span))
 		return
@@ -339,7 +339,7 @@ func (m *ManagerImpl) AddTable(span tablepb.Span, startTs uint64) {
 func (m *ManagerImpl) RemoveTable(span tablepb.Span) {
 	var v interface{}
 	var ok bool
-	if v, ok = m.rtsMap.LoadAndDelete(spanz.ToHashableSpan(span)); !ok {
+	if v, ok = m.rtsMap.LoadAndDelete(span); !ok {
 		log.Warn("remove a table not maintained in redo log manager", zap.Stringer("span", &span))
 		return
 	}
@@ -351,7 +351,7 @@ func (m *ManagerImpl) RemoveTable(span tablepb.Span) {
 			break
 		}
 		newMin := uint64(math.MaxInt64)
-		m.rtsMap.Range(func(key interface{}, value interface{}) bool {
+		m.rtsMap.Range(func(key tablepb.Span, value interface{}) bool {
 			rts := value.(*statefulRts)
 			flushed := rts.getFlushed()
 			if flushed < newMin {
@@ -376,23 +376,22 @@ func (m *ManagerImpl) Cleanup(ctx context.Context) error {
 }
 
 func (m *ManagerImpl) prepareForFlush() (
-	tableRtsMap map[spanz.HashableSpan]model.Ts, minResolvedTs model.Ts,
+	tableRtsMap *spanz.HashMap[model.Ts], minResolvedTs model.Ts,
 ) {
 	if !m.opts.EmitRowEvents {
 		return
 	}
 
-	tableRtsMap = make(map[spanz.HashableSpan]model.Ts)
+	tableRtsMap = spanz.NewHashMap[model.Ts]()
 	minResolvedTs = math.MaxUint64
-	m.rtsMap.Range(func(key interface{}, value interface{}) bool {
-		span := key.(spanz.HashableSpan)
+	m.rtsMap.Range(func(span tablepb.Span, value interface{}) bool {
 		rts := value.(*statefulRts)
 		unflushed := rts.getUnflushed()
 		flushed := rts.getFlushed()
 		if unflushed > flushed {
 			flushed = unflushed
 		}
-		tableRtsMap[span] = flushed
+		tableRtsMap.ReplaceOrInsert(span, flushed)
 		if flushed < minResolvedTs {
 			minResolvedTs = flushed
 		}
@@ -406,7 +405,7 @@ func (m *ManagerImpl) prepareForFlush() (
 }
 
 func (m *ManagerImpl) postFlush(
-	tableRtsMap map[spanz.HashableSpan]model.Ts, minResolvedTs model.Ts,
+	tableRtsMap *spanz.HashMap[model.Ts], minResolvedTs model.Ts,
 ) {
 	if !m.opts.EmitRowEvents {
 		return
@@ -415,11 +414,13 @@ func (m *ManagerImpl) postFlush(
 		// m.minResolvedTs is only updated in flushLog, so no other one can change it.
 		atomic.StoreUint64(&m.minResolvedTs, minResolvedTs)
 	}
-	for span, flushed := range tableRtsMap {
+
+	tableRtsMap.Iter(func(span tablepb.Span, flushed uint64) bool {
 		if value, loaded := m.rtsMap.Load(span); loaded {
 			value.(*statefulRts).setFlushed(flushed)
 		}
-	}
+		return true
+	})
 }
 
 func (m *ManagerImpl) prepareForFlushMeta() (metaCheckpoint, metaResolved model.Ts) {
@@ -476,7 +477,7 @@ func (m *ManagerImpl) flushLog(ctx context.Context, handleErr func(err error)) {
 }
 
 func (m *ManagerImpl) onResolvedTsMsg(span tablepb.Span, resolvedTs model.Ts) {
-	value, loaded := m.rtsMap.Load(spanz.ToHashableSpan(span))
+	value, loaded := m.rtsMap.Load(span)
 	if !loaded {
 		panic("onResolvedTsMsg is called for an invalid table")
 	}
@@ -520,7 +521,7 @@ func (m *ManagerImpl) bgUpdateLog(
 
 	var err error
 	logs := make([]*model.RedoRowChangedEvent, 0, 1024*1024)
-	rtsMap := make(map[spanz.HashableSpan]model.Ts)
+	rtsMap := spanz.NewHashMap[model.Ts]()
 	releaseMemoryCbs := make([]func(), 0, 1024)
 
 	emitBatch := func() {
@@ -551,22 +552,22 @@ func (m *ManagerImpl) bgUpdateLog(
 				releaseMemoryCbs = releaseMemoryCbs[:0]
 			}
 		}
-		if len(rtsMap) > 0 {
-			for hs, resolvedTs := range rtsMap {
-				span := hs.ToSpan()
+		if rtsMap.Len() > 0 {
+			rtsMap.Iter(func(span tablepb.Span, resolvedTs uint64) bool {
 				m.onResolvedTsMsg(span, resolvedTs)
 				log.Debug("redo manager writes resolvedTs",
 					zap.String("namespace", m.changeFeedID.Namespace),
 					zap.String("changefeed", m.changeFeedID.ID),
 					zap.Stringer("span", &span),
 					zap.Uint64("resolvedTs", resolvedTs))
-			}
-			rtsMap = make(map[spanz.HashableSpan]model.Ts)
+				return true
+			})
+			rtsMap = spanz.NewHashMap[model.Ts]()
 		}
 	}
 
 	for {
-		if len(logs) > 0 || len(rtsMap) > 0 {
+		if len(logs) > 0 || rtsMap.Len() > 0 {
 			select {
 			case <-ctx.Done():
 				return
@@ -586,8 +587,8 @@ func (m *ManagerImpl) bgUpdateLog(
 						releaseMemoryCbs = append(releaseMemoryCbs, cache.releaseMemory)
 					}
 				case model.MessageTypeResolved:
-					if rtsMap[spanz.ToHashableSpan(cache.span)] < cache.resolvedTs {
-						rtsMap[spanz.ToHashableSpan(cache.span)] = cache.resolvedTs
+					if rtsMap.GetV(cache.span) < cache.resolvedTs {
+						rtsMap.ReplaceOrInsert(cache.span, cache.resolvedTs)
 					}
 				default:
 					log.Panic("redo manager receives unknown event type")
@@ -616,8 +617,8 @@ func (m *ManagerImpl) bgUpdateLog(
 						releaseMemoryCbs = append(releaseMemoryCbs, cache.releaseMemory)
 					}
 				case model.MessageTypeResolved:
-					if rtsMap[spanz.ToHashableSpan(cache.span)] < cache.resolvedTs {
-						rtsMap[spanz.ToHashableSpan(cache.span)] = cache.resolvedTs
+					if rtsMap.GetV(cache.span) < cache.resolvedTs {
+						rtsMap.ReplaceOrInsert(cache.span, cache.resolvedTs)
 					}
 				default:
 					log.Panic("redo manager receives unknown event type")

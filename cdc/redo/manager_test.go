@@ -209,11 +209,12 @@ func BenchmarkRedoManagerWaitFlush(b *testing.B) {
 	logMgr, maxTsMap := runBenchTest(ctx, b)
 
 	var minResolvedTs model.Ts = math.MaxUint64
-	for _, tp := range maxTsMap {
+	maxTsMap.Iter(func(span tablepb.Span, tp *uint64) bool {
 		if *tp < minResolvedTs {
 			minResolvedTs = *tp
 		}
-	}
+		return true
+	})
 
 	for t := logMgr.GetMinResolvedTs(); t != minResolvedTs; {
 		time.Sleep(time.Millisecond * 200)
@@ -224,21 +225,21 @@ func BenchmarkRedoManagerWaitFlush(b *testing.B) {
 
 func runBenchTest(
 	ctx context.Context, b *testing.B,
-) (LogManager, map[spanz.HashableSpan]*model.Ts) {
+) (LogManager, *spanz.HashMap[*model.Ts]) {
 	logMgr, err := NewMockManager(ctx)
 	require.Nil(b, err)
 
 	// Init tables
 	numOfTables := 200
 	tables := make([]model.TableID, 0, numOfTables)
-	maxTsMap := make(map[spanz.HashableSpan]*model.Ts, numOfTables)
+	maxTsMap := spanz.NewHashMap[*model.Ts]()
 	startTs := uint64(100)
 	for i := 0; i < numOfTables; i++ {
 		tableID := model.TableID(i)
 		tables = append(tables, tableID)
 		span := spanz.TableIDToComparableSpan(tableID)
 		ts := startTs
-		maxTsMap[spanz.ToHashableSpan(span)] = &ts
+		maxTsMap.ReplaceOrInsert(span, &ts)
 		logMgr.AddTable(span, startTs)
 	}
 
@@ -249,7 +250,7 @@ func runBenchTest(
 		wg.Add(1)
 		go func(span tablepb.Span) {
 			defer wg.Done()
-			maxCommitTs := maxTsMap[spanz.ToHashableSpan(span)]
+			maxCommitTs := maxTsMap.GetV(span)
 			rows := []*model.RowChangedEvent{}
 			for i := 0; i < maxRowCount; i++ {
 				if i%100 == 0 {
@@ -284,11 +285,11 @@ func TestManagerRtsMap(t *testing.T) {
 	require.Nil(t, err)
 	defer logMgr.Cleanup(ctx)
 
-	var tables map[spanz.HashableSpan]model.Ts
+	tables := spanz.NewHashMap[model.Ts]()
 	var minTs model.Ts
 
 	tables, minTs = logMgr.prepareForFlush()
-	require.Equal(t, 0, len(tables))
+	require.Equal(t, 0, tables.Len())
 	require.Equal(t, uint64(0), minTs)
 	logMgr.postFlush(tables, minTs)
 	require.Equal(t, uint64(math.MaxInt64), logMgr.GetMinResolvedTs())
@@ -299,7 +300,7 @@ func TestManagerRtsMap(t *testing.T) {
 	logMgr.AddTable(span1, model.Ts(10))
 	logMgr.AddTable(span2, model.Ts(20))
 	tables, minTs = logMgr.prepareForFlush()
-	require.Equal(t, 2, len(tables))
+	require.Equal(t, 2, tables.Len())
 	require.Equal(t, uint64(10), minTs)
 	logMgr.postFlush(tables, minTs)
 	require.Equal(t, uint64(10), logMgr.GetMinResolvedTs())
@@ -315,7 +316,7 @@ func TestManagerRtsMap(t *testing.T) {
 	// Received some timestamps, some tables may not be updated.
 	logMgr.onResolvedTsMsg(span1, model.Ts(30))
 	tables, minTs = logMgr.prepareForFlush()
-	require.Equal(t, 2, len(tables))
+	require.Equal(t, 2, tables.Len())
 	require.Equal(t, uint64(20), minTs)
 	logMgr.postFlush(tables, minTs)
 	require.Equal(t, uint64(20), logMgr.GetMinResolvedTs())

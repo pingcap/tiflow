@@ -62,24 +62,24 @@ func Sort(spans []tablepb.Span) {
 	sort.Sort(sortableSpans(spans))
 }
 
-// HashableSpan is a hashable span, which can be used as a map key.
-type HashableSpan struct {
+// hashableSpan is a hashable span, which can be used as a map key.
+type hashableSpan struct {
 	TableID  tablepb.TableID
 	StartKey string
 	EndKey   string
 }
 
-// ToHashableSpan converts a Span to a hashable span.
-func ToHashableSpan(span tablepb.Span) HashableSpan {
-	return HashableSpan{
+// toHashableSpan converts a Span to a hashable span.
+func toHashableSpan(span tablepb.Span) hashableSpan {
+	return hashableSpan{
 		TableID:  span.TableID,
 		StartKey: string(span.StartKey),
 		EndKey:   string(span.EndKey),
 	}
 }
 
-// ToSpan converts to Span.
-func (h HashableSpan) ToSpan() tablepb.Span {
+// toSpan converts to Span.
+func (h hashableSpan) toSpan() tablepb.Span {
 	return tablepb.Span{
 		TableID:  h.TableID,
 		StartKey: []byte(h.StartKey),

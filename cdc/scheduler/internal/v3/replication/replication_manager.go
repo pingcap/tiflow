@@ -94,9 +94,9 @@ func (s *ScheduleTask) Name() string {
 
 // Manager manages replications and running scheduling tasks.
 type Manager struct { //nolint:revive
-	spans *spanz.Map[*ReplicationSet]
+	spans *spanz.BtreeMap[*ReplicationSet]
 
-	runningTasks       *spanz.Map[*ScheduleTask]
+	runningTasks       *spanz.BtreeMap[*ScheduleTask]
 	maxTaskConcurrency int
 
 	changefeedID           model.ChangeFeedID
@@ -115,8 +115,8 @@ func NewReplicationManager(
 	maxTaskConcurrency int, changefeedID model.ChangeFeedID,
 ) *Manager {
 	return &Manager{
-		spans:              spanz.NewMap[*ReplicationSet](),
-		runningTasks:       spanz.NewMap[*ScheduleTask](),
+		spans:              spanz.NewBtreeMap[*ReplicationSet](),
+		runningTasks:       spanz.NewBtreeMap[*ScheduleTask](),
 		maxTaskConcurrency: maxTaskConcurrency,
 		changefeedID:       changefeedID,
 	}
@@ -135,7 +135,7 @@ func (r *Manager) HandleCaptureChanges(
 				zap.String("changefeed", r.changefeedID.ID),
 				zap.Any("init", init), zap.Any("tablesCount", r.spans.Len()))
 		}
-		spanStatusMap := spanz.NewMap[map[model.CaptureID]*tablepb.TableStatus]()
+		spanStatusMap := spanz.NewBtreeMap[map[model.CaptureID]*tablepb.TableStatus]()
 		for captureID, spans := range init {
 			for i := range spans {
 				table := spans[i]
@@ -488,13 +488,13 @@ func (r *Manager) handleBurstBalanceTasks(
 
 // ReplicationSets return all tracking replication set
 // Caller must not modify the returned map.
-func (r *Manager) ReplicationSets() *spanz.Map[*ReplicationSet] {
+func (r *Manager) ReplicationSets() *spanz.BtreeMap[*ReplicationSet] {
 	return r.spans
 }
 
 // RunningTasks return running tasks.
 // Caller must not modify the returned map.
-func (r *Manager) RunningTasks() *spanz.Map[*ScheduleTask] {
+func (r *Manager) RunningTasks() *spanz.BtreeMap[*ScheduleTask] {
 	return r.runningTasks
 }
 
@@ -726,7 +726,7 @@ func (r *Manager) SetReplicationSetForTests(rs *ReplicationSet) {
 }
 
 // GetReplicationSetForTests is only used in tests.
-func (r *Manager) GetReplicationSetForTests() *spanz.Map[*ReplicationSet] {
+func (r *Manager) GetReplicationSetForTests() *spanz.BtreeMap[*ReplicationSet] {
 	return r.spans
 }
 

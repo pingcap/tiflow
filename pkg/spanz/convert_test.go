@@ -23,10 +23,10 @@ func TestHashableSpan(t *testing.T) {
 	t.Parallel()
 
 	// Make sure it can be a map key.
-	m := make(map[HashableSpan]int)
-	m[HashableSpan{}] = 1
-	require.Equal(t, 1, m[HashableSpan{}])
+	m := make(map[hashableSpan]int)
+	m[hashableSpan{}] = 1
+	require.Equal(t, 1, m[hashableSpan{}])
 
-	span := ToHashableSpan(TableIDToComparableSpan(1))
-	require.EqualValues(t, TableIDToComparableSpan(1), span.ToSpan())
+	span := toHashableSpan(TableIDToComparableSpan(1))
+	require.EqualValues(t, TableIDToComparableSpan(1), span.toSpan())
 }
