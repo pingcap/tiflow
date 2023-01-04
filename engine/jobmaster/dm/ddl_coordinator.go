@@ -515,7 +515,9 @@ func (g *shardGroup) joinTables(tp tableType) (schemacmp.Table, error) {
 	return joined, nil
 }
 
-// noConflictForTables checks if there is no conflict for tables by tableType(conflict/final).
+// noConflictForTables checks if there is no conflict for tables by tableType(conflictTable/finalTable).
+// if there is conflict for conflictTables, we should report error to user.
+// if there is no conflict for finalTables, we should report conflict resolved to worker.
 func (g *shardGroup) noConflictForTables(tp tableType) bool {
 	if _, err := g.joinTables(tp); err != nil {
 		return false
