@@ -452,7 +452,7 @@ func (p *processor) GetCheckpoint() (checkpointTs, resolvedTs model.Ts) {
 }
 
 // GetTableSpanStatus implements TableExecutor interface
-func (p *processor) GetTableSpanStatus(span tablepb.Span) tablepb.TableStatus {
+func (p *processor) GetTableSpanStatus(span tablepb.Span, collectStat bool) tablepb.TableStatus {
 	if p.pullBasedSinking {
 		state, exist := p.sinkManager.GetTableState(span.TableID)
 		if !exist {
@@ -463,6 +463,10 @@ func (p *processor) GetTableSpanStatus(span tablepb.Span) tablepb.TableStatus {
 			}
 		}
 		sinkStats := p.sinkManager.GetTableStats(span.TableID)
+		stats := tablepb.Stats{}
+		if collectStat {
+			stats = p.getStatsFromSourceManagerAndSinkManager(span.TableID, sinkStats)
+		}
 		return tablepb.TableStatus{
 			TableID: span.TableID,
 			Span:    span,
@@ -471,7 +475,7 @@ func (p *processor) GetTableSpanStatus(span tablepb.Span) tablepb.TableStatus {
 				ResolvedTs:   sinkStats.ResolvedTs,
 			},
 			State: state,
-			Stats: p.getStatsFromSourceManagerAndSinkManager(span.TableID, sinkStats),
+			Stats: stats,
 		}
 	}
 	table, ok := p.tableSpans.Get(span)
@@ -482,6 +486,10 @@ func (p *processor) GetTableSpanStatus(span tablepb.Span) tablepb.TableStatus {
 			State:   tablepb.TableStateAbsent,
 		}
 	}
+	stats := tablepb.Stats{}
+	if collectStat {
+		stats = table.Stats()
+	}
 	return tablepb.TableStatus{
 		TableID: span.TableID,
 		Span:    span,
@@ -490,7 +498,7 @@ func (p *processor) GetTableSpanStatus(span tablepb.Span) tablepb.TableStatus {
 			ResolvedTs:   table.ResolvedTs(),
 		},
 		State: table.State(),
-		Stats: table.Stats(),
+		Stats: stats,
 	}
 }
 
