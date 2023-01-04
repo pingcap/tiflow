@@ -47,7 +47,7 @@ func createWorker(
 		quota.addTable(tableID)
 	}
 
-	return newSinkWorker(changefeedID, sm, quota, nil, false, splitTxn, false), sortEngine
+	return newSinkWorker(changefeedID, sm, quota, nil, splitTxn, false), sortEngine
 }
 
 // nolint:unparam
