@@ -24,9 +24,9 @@ import (
 	"time"
 
 	"github.com/pingcap/tiflow/cdc/model"
-	"github.com/pingcap/tiflow/cdc/redo/common"
 	"github.com/pingcap/tiflow/cdc/redo/writer"
 	"github.com/pingcap/tiflow/pkg/leakutil"
+	"github.com/pingcap/tiflow/pkg/redo"
 	"github.com/pingcap/tiflow/pkg/uuid"
 	"github.com/stretchr/testify/require"
 	"golang.org/x/net/context"
@@ -57,8 +57,7 @@ func TestReaderRead(t *testing.T) {
 		Dir:          dir,
 		ChangeFeedID: model.DefaultChangeFeedID("test-cf"),
 		CaptureID:    "cp",
-		FileType:     common.DefaultRowLogFileType,
-		CreateTime:   time.Date(2000, 1, 1, 1, 1, 1, 1, &time.Location{}),
+		FileType:     redo.RedoRowLogFileType,
 	}
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
@@ -79,9 +78,9 @@ func TestReaderRead(t *testing.T) {
 	err = w.Close()
 	require.Nil(t, err)
 	require.True(t, !w.IsRunning())
-	fileName := fmt.Sprintf(common.RedoLogFileFormatV1, cfg.CaptureID,
+	fileName := fmt.Sprintf(redo.RedoLogFileFormatV1, cfg.CaptureID,
 		cfg.ChangeFeedID.ID,
-		cfg.FileType, 11, uuidGen.NewString(), common.LogEXT)
+		cfg.FileType, 11, uuidGen.NewString(), redo.LogEXT)
 	path := filepath.Join(cfg.Dir, fileName)
 	info, err := os.Stat(path)
 	require.Nil(t, err)
@@ -91,7 +90,7 @@ func TestReaderRead(t *testing.T) {
 		dir:      dir,
 		startTs:  1,
 		endTs:    12,
-		fileType: common.DefaultRowLogFileType,
+		fileType: redo.RedoRowLogFileType,
 	})
 	require.Nil(t, err)
 	require.Equal(t, 1, len(r))
@@ -115,9 +114,9 @@ func TestReaderOpenSelectedFiles(t *testing.T) {
 		Dir:        dir,
 	}
 	uuidGen := uuid.NewGenerator()
-	fileName := fmt.Sprintf(common.RedoLogFileFormatV2, "cp",
-		"default", "test-cf", common.DefaultDDLLogFileType, 11,
-		uuidGen.NewString(), common.LogEXT+common.TmpEXT)
+	fileName := fmt.Sprintf(redo.RedoLogFileFormatV2, "cp",
+		"default", "test-cf", redo.RedoDDLLogFileType, 11,
+		uuidGen.NewString(), redo.LogEXT+redo.TmpEXT)
 	w, err := writer.NewWriter(ctx, cfg, writer.WithLogFileName(func() string {
 		return fileName
 	}))
@@ -143,26 +142,24 @@ func TestReaderOpenSelectedFiles(t *testing.T) {
 	require.Nil(t, err)
 
 	// no data, wil not open
-	fileName = fmt.Sprintf(common.RedoLogFileFormatV2, "cp",
-		"default", "test-cf11", common.DefaultDDLLogFileType, 10,
-		uuidGen.NewString(), common.LogEXT)
+	fileName = fmt.Sprintf(redo.RedoLogFileFormatV2, "cp",
+		"default", "test-cf11", redo.RedoDDLLogFileType, 10,
+		uuidGen.NewString(), redo.LogEXT)
 	path = filepath.Join(dir, fileName)
 	_, err = os.Create(path)
 	require.Nil(t, err)
 
 	// SortLogEXT, wil open
-	fileName = fmt.Sprintf(common.RedoLogFileFormatV2, "cp", "default",
-		"test-cf111", common.DefaultDDLLogFileType, 10, uuidGen.NewString(),
-		common.LogEXT) + common.SortLogEXT
+	fileName = fmt.Sprintf(redo.RedoLogFileFormatV2, "cp", "default",
+		"test-cf111", redo.RedoDDLLogFileType, 10, uuidGen.NewString(),
+		redo.LogEXT) + redo.SortLogEXT
 	path = filepath.Join(dir, fileName)
 	f1, err := os.Create(path)
 	require.Nil(t, err)
 
-	dir1, err := ioutil.TempDir("", "redo-openSelectedFiles1")
-	require.Nil(t, err)
-	defer os.RemoveAll(dir1) //nolint:errcheck
-	fileName = fmt.Sprintf(common.RedoLogFileFormatV2, "cp", "default", "test-cf",
-		common.DefaultDDLLogFileType, 11, uuidGen.NewString(), common.LogEXT+"test")
+	dir1 := t.TempDir()
+	fileName = fmt.Sprintf(redo.RedoLogFileFormatV2, "cp", "default", "test-cf",
+		redo.RedoDDLLogFileType, 11, uuidGen.NewString(), redo.LogEXT+"test")
 	path = filepath.Join(dir1, fileName)
 	_, err = os.Create(path)
 	require.Nil(t, err)
@@ -182,7 +179,7 @@ func TestReaderOpenSelectedFiles(t *testing.T) {
 			name: "dir not exist",
 			args: arg{
 				dir:       dir + "test",
-				fixedName: common.DefaultDDLLogFileType,
+				fixedName: redo.RedoDDLLogFileType,
 				startTs:   0,
 			},
 			wantErr: ".*CDC:ErrRedoFileOp*.",
@@ -191,7 +188,7 @@ func TestReaderOpenSelectedFiles(t *testing.T) {
 			name: "happy",
 			args: arg{
 				dir:       dir,
-				fixedName: common.DefaultDDLLogFileType,
+				fixedName: redo.RedoDDLLogFileType,
 				startTs:   0,
 			},
 			wantRet: []io.ReadCloser{f, f1},
@@ -200,7 +197,7 @@ func TestReaderOpenSelectedFiles(t *testing.T) {
 			name: "wrong ts",
 			args: arg{
 				dir:       dir,
-				fixedName: common.DefaultDDLLogFileType,
+				fixedName: redo.RedoDDLLogFileType,
 				startTs:   12,
 			},
 			wantRet: []io.ReadCloser{f},
@@ -209,7 +206,7 @@ func TestReaderOpenSelectedFiles(t *testing.T) {
 			name: "wrong fixedName",
 			args: arg{
 				dir:       dir,
-				fixedName: common.DefaultDDLLogFileType + "test",
+				fixedName: redo.RedoDDLLogFileType + "test",
 				startTs:   0,
 			},
 		},
@@ -217,7 +214,7 @@ func TestReaderOpenSelectedFiles(t *testing.T) {
 			name: "wrong ext",
 			args: arg{
 				dir:       dir1,
-				fixedName: common.DefaultDDLLogFileType,
+				fixedName: redo.RedoDDLLogFileType,
 				startTs:   0,
 			},
 		},
@@ -230,8 +227,8 @@ func TestReaderOpenSelectedFiles(t *testing.T) {
 			require.Equal(t, len(tt.wantRet), len(ret), tt.name)
 			for _, closer := range tt.wantRet {
 				name := closer.(*os.File).Name()
-				if filepath.Ext(name) != common.SortLogEXT {
-					name += common.SortLogEXT
+				if filepath.Ext(name) != redo.SortLogEXT {
+					name += redo.SortLogEXT
 				}
 				contains := false
 				for _, r := range ret {

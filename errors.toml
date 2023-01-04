@@ -386,6 +386,11 @@ error = '''
 invalid record key - %q
 '''
 
+["CDC:ErrInvalidReplicaConfig"]
+error = '''
+invalid replica config, %s
+'''
+
 ["CDC:ErrInvalidS3URI"]
 error = '''
 invalid s3 uri: %s
@@ -876,11 +881,6 @@ error = '''
 s3 storage api
 '''
 
-["CDC:ErrS3StorageInitialize"]
-error = '''
-new s3 storage for redo log
-'''
-
 ["CDC:ErrScanLockFailed"]
 error = '''
 scan lock failed
@@ -974,6 +974,11 @@ start a stopped leveldb system
 ["CDC:ErrStartTsBeforeGC"]
 error = '''
 fail to create or maintain changefeed because start-ts %d is earlier than or equal to GC safepoint at %d
+'''
+
+["CDC:ErrStorageInitialize"]
+error = '''
+fail to open storage for redo log
 '''
 
 ["CDC:ErrSupportGetOnly"]
@@ -1119,6 +1124,11 @@ wrong table info in unflatten, table id %d, index table id: %d
 ["CDC:ErrZeroLengthResponseBody"]
 error = '''
 0-length response with status code: %d
+'''
+
+["DFLOW:ErrFailToCreateExternalStorage"]
+error = '''
+failed to create external storage
 '''
 
 ["ErrConflictingFileLocks"]
