@@ -26,6 +26,7 @@ import (
 	"github.com/pingcap/tiflow/cdc/scheduler/internal/v3/replication"
 	"github.com/pingcap/tiflow/cdc/scheduler/internal/v3/transport"
 	"github.com/pingcap/tiflow/cdc/scheduler/schedulepb"
+	"github.com/pingcap/tiflow/pkg/config"
 	"go.uber.org/zap/zapcore"
 )
 
@@ -69,12 +70,14 @@ func BenchmarkCoordinatorInit(b *testing.B) {
 		for i := 0; i < total; i++ {
 			currentTables = append(currentTables, int64(10000+i))
 		}
+		// Disable heartbeat.
+		cfg := config.NewDefaultSchedulerConfig()
+		cfg.HeartbeatTick = math.MaxInt
 		coord = &coordinator{
 			trans:        transport.NewMockTrans(),
 			replicationM: replication.NewReplicationManager(10, model.ChangeFeedID{}),
-			// Disable heartbeat.
 			captureM: member.NewCaptureManager(
-				"", model.ChangeFeedID{}, schedulepb.OwnerRevision{}, math.MaxInt),
+				"", model.ChangeFeedID{}, schedulepb.OwnerRevision{}, cfg),
 		}
 		name = fmt.Sprintf("InitTable %d", total)
 		return name, coord, currentTables, captures
@@ -91,8 +94,10 @@ func BenchmarkCoordinatorHeartbeat(b *testing.B) {
 		const captureCount = 8
 		captures = map[model.CaptureID]*model.CaptureInfo{}
 		// Always heartbeat.
+		cfg := config.NewDefaultSchedulerConfig()
+		cfg.HeartbeatTick = 1
 		captureM := member.NewCaptureManager(
-			"", model.ChangeFeedID{}, schedulepb.OwnerRevision{}, 0)
+			"", model.ChangeFeedID{}, schedulepb.OwnerRevision{}, cfg)
 		captureM.SetInitializedForTests(true)
 		for i := 0; i < captureCount; i++ {
 			captures[fmt.Sprint(i)] = &model.CaptureInfo{}
@@ -124,8 +129,10 @@ func BenchmarkCoordinatorHeartbeatResponse(b *testing.B) {
 		const captureCount = 8
 		captures = map[model.CaptureID]*model.CaptureInfo{}
 		// Disable heartbeat.
+		cfg := config.NewDefaultSchedulerConfig()
+		cfg.HeartbeatTick = math.MaxInt
 		captureM := member.NewCaptureManager(
-			"", model.ChangeFeedID{}, schedulepb.OwnerRevision{}, math.MaxInt)
+			"", model.ChangeFeedID{}, schedulepb.OwnerRevision{}, cfg)
 		captureM.SetInitializedForTests(true)
 		for i := 0; i < captureCount; i++ {
 			captures[fmt.Sprint(i)] = &model.CaptureInfo{}
