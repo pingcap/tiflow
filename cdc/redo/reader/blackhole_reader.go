@@ -22,8 +22,8 @@ import (
 // BlackHoleReader is a blockHole storage which implements LogReader interface
 type BlackHoleReader struct{}
 
-// NewBlackHoleReader creates a new BlackHoleReader
-func NewBlackHoleReader() *BlackHoleReader {
+// newBlackHoleReader creates a new BlackHoleReader
+func newBlackHoleReader() *BlackHoleReader {
 	return &BlackHoleReader{}
 }
 

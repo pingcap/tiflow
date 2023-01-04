@@ -303,9 +303,9 @@ var (
 		"s3 storage api",
 		errors.RFCCodeText("CDC:ErrS3StorageAPI"),
 	)
-	ErrS3StorageInitialize = errors.Normalize(
-		"new s3 storage for redo log",
-		errors.RFCCodeText("CDC:ErrS3StorageInitialize"),
+	ErrStorageInitialize = errors.Normalize(
+		"fail to open storage for redo log",
+		errors.RFCCodeText("CDC:ErrStorageInitialize"),
 	)
 	ErrCodecInvalidConfig = errors.Normalize(
 		"Codec invalid config",
