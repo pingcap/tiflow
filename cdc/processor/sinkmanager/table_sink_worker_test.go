@@ -24,6 +24,7 @@ import (
 	"github.com/pingcap/tiflow/cdc/processor/sourcemanager"
 	"github.com/pingcap/tiflow/cdc/processor/sourcemanager/engine"
 	"github.com/pingcap/tiflow/cdc/processor/sourcemanager/engine/memory"
+	"github.com/pingcap/tiflow/cdc/processor/tablepb"
 	cerrors "github.com/pingcap/tiflow/pkg/errors"
 	"github.com/pingcap/tiflow/pkg/spanz"
 	"github.com/pingcap/tiflow/pkg/upstream"
@@ -35,7 +36,7 @@ func createWorker(
 	changefeedID model.ChangeFeedID,
 	memQuota uint64,
 	splitTxn bool,
-	tableIDs ...model.TableID,
+	spans ...tablepb.Span,
 ) (*sinkWorker, engine.SortEngine) {
 	sortEngine := memory.New(context.Background())
 	sm := sourcemanager.New(changefeedID, upstream.NewUpstream4Test(&mockPD{}),
@@ -44,8 +45,8 @@ func createWorker(
 	// To avoid refund or release panics.
 	quota := newMemQuota(changefeedID, memQuota+1024*1024*1024)
 	quota.forceAcquire(1024 * 1024 * 1024)
-	for _, tableID := range tableIDs {
-		quota.addTable(tableID)
+	for _, span := range spans {
+		quota.addTable(span)
 	}
 
 	return newSinkWorker(changefeedID, sm, quota, nil, splitTxn, false), sortEngine
@@ -53,10 +54,13 @@ func createWorker(
 
 // nolint:unparam
 // It is ok to use the same tableID in test.
-func addEventsToSortEngine(t *testing.T, events []*model.PolymorphicEvent, sortEngine engine.SortEngine, tableID model.TableID) {
-	sortEngine.AddTable(tableID)
+func addEventsToSortEngine(
+	t *testing.T, events []*model.PolymorphicEvent,
+	sortEngine engine.SortEngine, span tablepb.Span,
+) {
+	sortEngine.AddTable(span)
 	for _, event := range events {
-		err := sortEngine.Add(tableID, event)
+		err := sortEngine.Add(span, event)
 		require.NoError(t, err)
 	}
 }
@@ -64,14 +68,14 @@ func addEventsToSortEngine(t *testing.T, events []*model.PolymorphicEvent, sortE
 // It is ok to use the same tableID in test.
 //
 //nolint:unparam
-func genRowChangedEvent(startTs, commitTs uint64, tableID model.TableID) *model.RowChangedEvent {
+func genRowChangedEvent(startTs, commitTs uint64, span tablepb.Span) *model.RowChangedEvent {
 	return &model.RowChangedEvent{
 		StartTs:  startTs,
 		CommitTs: commitTs,
 		Table: &model.TableName{
 			Schema:      "table",
 			Table:       "table",
-			TableID:     tableID,
+			TableID:     span.TableID,
 			IsPartition: false,
 		},
 		Columns: []*model.Column{
@@ -104,7 +108,7 @@ func (suite *workerSuite) TestHandleTaskWithSplitTxnAndGotSomeFilteredEvents() {
 	suite.T().Skip("need to be fixed")
 
 	changefeedID := model.DefaultChangeFeedID("1")
-	tableID := model.TableID(1)
+	span := spanz.TableIDToComparableSpan(1)
 	ctx, cancel := context.WithCancel(context.Background())
 
 	// Only for three events.
@@ -120,7 +124,7 @@ func (suite *workerSuite) TestHandleTaskWithSplitTxnAndGotSomeFilteredEvents() {
 				StartTs: 1,
 				CRTs:    1,
 			},
-			Row: genRowChangedEvent(1, 1, tableID),
+			Row: genRowChangedEvent(1, 1, span),
 		},
 		// This event will be filtered, so its Row will be nil.
 		{
@@ -151,7 +155,7 @@ func (suite *workerSuite) TestHandleTaskWithSplitTxnAndGotSomeFilteredEvents() {
 				StartTs: 1,
 				CRTs:    2,
 			},
-			Row: genRowChangedEvent(1, 2, tableID),
+			Row: genRowChangedEvent(1, 2, span),
 		},
 		{
 			StartTs: 1,
@@ -161,7 +165,7 @@ func (suite *workerSuite) TestHandleTaskWithSplitTxnAndGotSomeFilteredEvents() {
 				StartTs: 1,
 				CRTs:    3,
 			},
-			Row: genRowChangedEvent(1, 3, tableID),
+			Row: genRowChangedEvent(1, 3, span),
 		},
 		{
 			CRTs: 4,
@@ -173,7 +177,7 @@ func (suite *workerSuite) TestHandleTaskWithSplitTxnAndGotSomeFilteredEvents() {
 	}
 
 	w, e := createWorker(changefeedID, eventSize, true)
-	addEventsToSortEngine(suite.T(), events, e, tableID)
+	addEventsToSortEngine(suite.T(), events, e, span)
 
 	taskChan := make(chan *sinkTask)
 	var wg sync.WaitGroup
@@ -184,8 +188,7 @@ func (suite *workerSuite) TestHandleTaskWithSplitTxnAndGotSomeFilteredEvents() {
 		require.Equal(suite.T(), context.Canceled, err)
 	}()
 
-	wrapper, sink := createTableSinkWrapper(
-		changefeedID, spanz.TableIDToComparableSpan(tableID))
+	wrapper, sink := createTableSinkWrapper(changefeedID, span)
 	lowerBoundPos := engine.Position{
 		StartTs:  0,
 		CommitTs: 1,
@@ -208,7 +211,7 @@ func (suite *workerSuite) TestHandleTaskWithSplitTxnAndGotSomeFilteredEvents() {
 		cancel()
 	}
 	taskChan <- &sinkTask{
-		tableID:       tableID,
+		span:          span,
 		lowerBound:    lowerBoundPos,
 		getUpperBound: upperBoundGetter,
 		tableSink:     wrapper,
@@ -222,7 +225,7 @@ func (suite *workerSuite) TestHandleTaskWithSplitTxnAndGotSomeFilteredEvents() {
 // Test the case that the worker will stop when no memory quota and meet the txn boundary.
 func (suite *workerSuite) TestHandleTaskWithSplitTxnAndAbortWhenNoMemAndOneTxnFinished() {
 	changefeedID := model.DefaultChangeFeedID("1")
-	tableID := model.TableID(1)
+	span := spanz.TableIDToComparableSpan(1)
 	ctx, cancel := context.WithCancel(context.Background())
 
 	// Only for three events.
@@ -238,7 +241,7 @@ func (suite *workerSuite) TestHandleTaskWithSplitTxnAndAbortWhenNoMemAndOneTxnFi
 				StartTs: 1,
 				CRTs:    1,
 			},
-			Row: genRowChangedEvent(1, 1, tableID),
+			Row: genRowChangedEvent(1, 1, span),
 		},
 		{
 			StartTs: 1,
@@ -248,7 +251,7 @@ func (suite *workerSuite) TestHandleTaskWithSplitTxnAndAbortWhenNoMemAndOneTxnFi
 				StartTs: 1,
 				CRTs:    2,
 			},
-			Row: genRowChangedEvent(1, 2, tableID),
+			Row: genRowChangedEvent(1, 2, span),
 		},
 		{
 			StartTs: 1,
@@ -258,7 +261,7 @@ func (suite *workerSuite) TestHandleTaskWithSplitTxnAndAbortWhenNoMemAndOneTxnFi
 				StartTs: 1,
 				CRTs:    3,
 			},
-			Row: genRowChangedEvent(1, 3, tableID),
+			Row: genRowChangedEvent(1, 3, span),
 		},
 		{
 			StartTs: 2,
@@ -268,7 +271,7 @@ func (suite *workerSuite) TestHandleTaskWithSplitTxnAndAbortWhenNoMemAndOneTxnFi
 				StartTs: 2,
 				CRTs:    4,
 			},
-			Row: genRowChangedEvent(2, 4, tableID),
+			Row: genRowChangedEvent(2, 4, span),
 		},
 		{
 			CRTs: 4,
@@ -279,8 +282,8 @@ func (suite *workerSuite) TestHandleTaskWithSplitTxnAndAbortWhenNoMemAndOneTxnFi
 		},
 	}
 
-	w, e := createWorker(changefeedID, eventSize, true, tableID)
-	addEventsToSortEngine(suite.T(), events, e, tableID)
+	w, e := createWorker(changefeedID, eventSize, true, span)
+	addEventsToSortEngine(suite.T(), events, e, span)
 
 	taskChan := make(chan *sinkTask)
 	var wg sync.WaitGroup
@@ -291,8 +294,7 @@ func (suite *workerSuite) TestHandleTaskWithSplitTxnAndAbortWhenNoMemAndOneTxnFi
 		require.Equal(suite.T(), context.Canceled, err)
 	}()
 
-	wrapper, sink := createTableSinkWrapper(
-		changefeedID, spanz.TableIDToComparableSpan(tableID))
+	wrapper, sink := createTableSinkWrapper(changefeedID, span)
 	lowerBoundPos := engine.Position{
 		StartTs:  0,
 		CommitTs: 1,
@@ -315,7 +317,7 @@ func (suite *workerSuite) TestHandleTaskWithSplitTxnAndAbortWhenNoMemAndOneTxnFi
 		cancel()
 	}
 	taskChan <- &sinkTask{
-		tableID:       tableID,
+		span:          span,
 		lowerBound:    lowerBoundPos,
 		getUpperBound: upperBoundGetter,
 		tableSink:     wrapper,
@@ -329,7 +331,7 @@ func (suite *workerSuite) TestHandleTaskWithSplitTxnAndAbortWhenNoMemAndOneTxnFi
 // Test the case that worker will block when no memory quota until the mem quota is aborted.
 func (suite *workerSuite) TestHandleTaskWithSplitTxnAndAbortWhenNoMemAndBlocked() {
 	changefeedID := model.DefaultChangeFeedID("1")
-	tableID := model.TableID(1)
+	span := spanz.TableIDToComparableSpan(1)
 	ctx, cancel := context.WithCancel(context.Background())
 
 	// Only for three events.
@@ -345,7 +347,7 @@ func (suite *workerSuite) TestHandleTaskWithSplitTxnAndAbortWhenNoMemAndBlocked(
 				StartTs: 1,
 				CRTs:    10,
 			},
-			Row: genRowChangedEvent(1, 10, tableID),
+			Row: genRowChangedEvent(1, 10, span),
 		},
 		{
 			StartTs: 1,
@@ -355,7 +357,7 @@ func (suite *workerSuite) TestHandleTaskWithSplitTxnAndAbortWhenNoMemAndBlocked(
 				StartTs: 1,
 				CRTs:    10,
 			},
-			Row: genRowChangedEvent(1, 10, tableID),
+			Row: genRowChangedEvent(1, 10, span),
 		},
 		{
 			StartTs: 1,
@@ -365,7 +367,7 @@ func (suite *workerSuite) TestHandleTaskWithSplitTxnAndAbortWhenNoMemAndBlocked(
 				StartTs: 1,
 				CRTs:    10,
 			},
-			Row: genRowChangedEvent(1, 10, tableID),
+			Row: genRowChangedEvent(1, 10, span),
 		},
 		{
 			StartTs: 1,
@@ -375,7 +377,7 @@ func (suite *workerSuite) TestHandleTaskWithSplitTxnAndAbortWhenNoMemAndBlocked(
 				StartTs: 1,
 				CRTs:    10,
 			},
-			Row: genRowChangedEvent(1, 10, tableID),
+			Row: genRowChangedEvent(1, 10, span),
 		},
 		{
 			CRTs: 14,
@@ -385,8 +387,8 @@ func (suite *workerSuite) TestHandleTaskWithSplitTxnAndAbortWhenNoMemAndBlocked(
 			},
 		},
 	}
-	w, e := createWorker(changefeedID, eventSize, true, tableID)
-	addEventsToSortEngine(suite.T(), events, e, tableID)
+	w, e := createWorker(changefeedID, eventSize, true, span)
+	addEventsToSortEngine(suite.T(), events, e, span)
 
 	taskChan := make(chan *sinkTask)
 	var wg sync.WaitGroup
@@ -397,8 +399,7 @@ func (suite *workerSuite) TestHandleTaskWithSplitTxnAndAbortWhenNoMemAndBlocked(
 		require.ErrorIs(suite.T(), err, cerrors.ErrFlowControllerAborted)
 	}()
 
-	wrapper, sink := createTableSinkWrapper(
-		changefeedID, spanz.TableIDToComparableSpan(tableID))
+	wrapper, sink := createTableSinkWrapper(changefeedID, span)
 	lowerBoundPos := engine.Position{
 		StartTs:  0,
 		CommitTs: 1,
@@ -416,7 +417,7 @@ func (suite *workerSuite) TestHandleTaskWithSplitTxnAndAbortWhenNoMemAndBlocked(
 		}, lastWritePos)
 	}
 	taskChan <- &sinkTask{
-		tableID:       tableID,
+		span:          span,
 		lowerBound:    lowerBoundPos,
 		getUpperBound: upperBoundGetter,
 		tableSink:     wrapper,
@@ -436,7 +437,7 @@ func (suite *workerSuite) TestHandleTaskWithSplitTxnAndAbortWhenNoMemAndBlocked(
 // Test the case that worker will advance the table sink only when it reaches the batch size.
 func (suite *workerSuite) TestHandleTaskWithSplitTxnAndOnlyAdvanceTableSinkWhenReachOneBatchSize() {
 	changefeedID := model.DefaultChangeFeedID("1")
-	tableID := model.TableID(1)
+	span := spanz.TableIDToComparableSpan(1)
 	ctx, cancel := context.WithCancel(context.Background())
 
 	// For five events.
@@ -452,7 +453,7 @@ func (suite *workerSuite) TestHandleTaskWithSplitTxnAndOnlyAdvanceTableSinkWhenR
 				StartTs: 1,
 				CRTs:    2,
 			},
-			Row: genRowChangedEvent(1, 2, tableID),
+			Row: genRowChangedEvent(1, 2, span),
 		},
 		{
 			StartTs: 1,
@@ -462,7 +463,7 @@ func (suite *workerSuite) TestHandleTaskWithSplitTxnAndOnlyAdvanceTableSinkWhenR
 				StartTs: 1,
 				CRTs:    2,
 			},
-			Row: genRowChangedEvent(1, 2, tableID),
+			Row: genRowChangedEvent(1, 2, span),
 		},
 		{
 			StartTs: 1,
@@ -472,7 +473,7 @@ func (suite *workerSuite) TestHandleTaskWithSplitTxnAndOnlyAdvanceTableSinkWhenR
 				StartTs: 1,
 				CRTs:    2,
 			},
-			Row: genRowChangedEvent(1, 2, tableID),
+			Row: genRowChangedEvent(1, 2, span),
 		},
 		{
 			StartTs: 1,
@@ -482,7 +483,7 @@ func (suite *workerSuite) TestHandleTaskWithSplitTxnAndOnlyAdvanceTableSinkWhenR
 				StartTs: 1,
 				CRTs:    2,
 			},
-			Row: genRowChangedEvent(1, 2, tableID),
+			Row: genRowChangedEvent(1, 2, span),
 		},
 		{
 			StartTs: 1,
@@ -492,7 +493,7 @@ func (suite *workerSuite) TestHandleTaskWithSplitTxnAndOnlyAdvanceTableSinkWhenR
 				StartTs: 1,
 				CRTs:    2,
 			},
-			Row: genRowChangedEvent(1, 2, tableID),
+			Row: genRowChangedEvent(1, 2, span),
 		},
 		{
 			StartTs: 1,
@@ -502,7 +503,7 @@ func (suite *workerSuite) TestHandleTaskWithSplitTxnAndOnlyAdvanceTableSinkWhenR
 				StartTs: 1,
 				CRTs:    3,
 			},
-			Row: genRowChangedEvent(1, 3, tableID),
+			Row: genRowChangedEvent(1, 3, span),
 		},
 		{
 			CRTs: 4,
@@ -512,8 +513,8 @@ func (suite *workerSuite) TestHandleTaskWithSplitTxnAndOnlyAdvanceTableSinkWhenR
 			},
 		},
 	}
-	w, e := createWorker(changefeedID, eventSize, true, tableID)
-	addEventsToSortEngine(suite.T(), events, e, tableID)
+	w, e := createWorker(changefeedID, eventSize, true, span)
+	addEventsToSortEngine(suite.T(), events, e, span)
 
 	taskChan := make(chan *sinkTask)
 	var wg sync.WaitGroup
@@ -524,8 +525,7 @@ func (suite *workerSuite) TestHandleTaskWithSplitTxnAndOnlyAdvanceTableSinkWhenR
 		require.ErrorIs(suite.T(), err, context.Canceled)
 	}()
 
-	wrapper, sink := createTableSinkWrapper(
-		changefeedID, spanz.TableIDToComparableSpan(tableID))
+	wrapper, sink := createTableSinkWrapper(changefeedID, span)
 	lowerBoundPos := engine.Position{
 		StartTs:  0,
 		CommitTs: 1,
@@ -548,7 +548,7 @@ func (suite *workerSuite) TestHandleTaskWithSplitTxnAndOnlyAdvanceTableSinkWhenR
 		cancel()
 	}
 	taskChan <- &sinkTask{
-		tableID:       tableID,
+		span:          span,
 		lowerBound:    lowerBoundPos,
 		getUpperBound: upperBoundGetter,
 		tableSink:     wrapper,
@@ -563,7 +563,7 @@ func (suite *workerSuite) TestHandleTaskWithSplitTxnAndOnlyAdvanceTableSinkWhenR
 // Test the case that the worker will force consume only one Txn when the memory quota is not enough.
 func (suite *workerSuite) TestHandleTaskWithoutSplitTxnAndAbortWhenNoMemAndForceConsume() {
 	changefeedID := model.DefaultChangeFeedID("1")
-	tableID := model.TableID(1)
+	span := spanz.TableIDToComparableSpan(1)
 	ctx, cancel := context.WithCancel(context.Background())
 
 	// Only for three events.
@@ -579,7 +579,7 @@ func (suite *workerSuite) TestHandleTaskWithoutSplitTxnAndAbortWhenNoMemAndForce
 				StartTs: 1,
 				CRTs:    2,
 			},
-			Row: genRowChangedEvent(1, 2, tableID),
+			Row: genRowChangedEvent(1, 2, span),
 		},
 		{
 			StartTs: 1,
@@ -589,7 +589,7 @@ func (suite *workerSuite) TestHandleTaskWithoutSplitTxnAndAbortWhenNoMemAndForce
 				StartTs: 1,
 				CRTs:    2,
 			},
-			Row: genRowChangedEvent(1, 2, tableID),
+			Row: genRowChangedEvent(1, 2, span),
 		},
 		{
 			StartTs: 1,
@@ -599,7 +599,7 @@ func (suite *workerSuite) TestHandleTaskWithoutSplitTxnAndAbortWhenNoMemAndForce
 				StartTs: 1,
 				CRTs:    2,
 			},
-			Row: genRowChangedEvent(1, 2, tableID),
+			Row: genRowChangedEvent(1, 2, span),
 		},
 		{
 			StartTs: 1,
@@ -609,7 +609,7 @@ func (suite *workerSuite) TestHandleTaskWithoutSplitTxnAndAbortWhenNoMemAndForce
 				StartTs: 1,
 				CRTs:    2,
 			},
-			Row: genRowChangedEvent(1, 2, tableID),
+			Row: genRowChangedEvent(1, 2, span),
 		},
 		{
 			StartTs: 1,
@@ -619,7 +619,7 @@ func (suite *workerSuite) TestHandleTaskWithoutSplitTxnAndAbortWhenNoMemAndForce
 				StartTs: 1,
 				CRTs:    2,
 			},
-			Row: genRowChangedEvent(1, 2, tableID),
+			Row: genRowChangedEvent(1, 2, span),
 		},
 		{
 			StartTs: 1,
@@ -629,7 +629,7 @@ func (suite *workerSuite) TestHandleTaskWithoutSplitTxnAndAbortWhenNoMemAndForce
 				StartTs: 1,
 				CRTs:    4,
 			},
-			Row: genRowChangedEvent(1, 4, tableID),
+			Row: genRowChangedEvent(1, 4, span),
 		},
 		{
 			CRTs: 5,
@@ -639,9 +639,9 @@ func (suite *workerSuite) TestHandleTaskWithoutSplitTxnAndAbortWhenNoMemAndForce
 			},
 		},
 	}
-	w, e := createWorker(changefeedID, eventSize, false, tableID)
+	w, e := createWorker(changefeedID, eventSize, false, span)
 	w.splitTxn = false
-	addEventsToSortEngine(suite.T(), events, e, tableID)
+	addEventsToSortEngine(suite.T(), events, e, span)
 
 	taskChan := make(chan *sinkTask)
 	var wg sync.WaitGroup
@@ -652,8 +652,7 @@ func (suite *workerSuite) TestHandleTaskWithoutSplitTxnAndAbortWhenNoMemAndForce
 		require.Equal(suite.T(), context.Canceled, err)
 	}()
 
-	wrapper, sink := createTableSinkWrapper(
-		changefeedID, spanz.TableIDToComparableSpan(tableID))
+	wrapper, sink := createTableSinkWrapper(changefeedID, span)
 	lowerBoundPos := engine.Position{
 		StartTs:  0,
 		CommitTs: 1,
@@ -676,7 +675,7 @@ func (suite *workerSuite) TestHandleTaskWithoutSplitTxnAndAbortWhenNoMemAndForce
 		cancel()
 	}
 	taskChan <- &sinkTask{
-		tableID:       tableID,
+		span:          span,
 		lowerBound:    lowerBoundPos,
 		getUpperBound: upperBoundGetter,
 		tableSink:     wrapper,
@@ -692,7 +691,7 @@ func (suite *workerSuite) TestHandleTaskWithoutSplitTxnOnlyAdvanceTableSinkWhenR
 	suite.T().Skip("need to be fixed")
 
 	changefeedID := model.DefaultChangeFeedID("1")
-	tableID := model.TableID(1)
+	span := spanz.TableIDToComparableSpan(1)
 	ctx, cancel := context.WithCancel(context.Background())
 
 	// Only for three events.
@@ -708,7 +707,7 @@ func (suite *workerSuite) TestHandleTaskWithoutSplitTxnOnlyAdvanceTableSinkWhenR
 				StartTs: 1,
 				CRTs:    1,
 			},
-			Row: genRowChangedEvent(1, 1, tableID),
+			Row: genRowChangedEvent(1, 1, span),
 		},
 		{
 			StartTs: 1,
@@ -718,7 +717,7 @@ func (suite *workerSuite) TestHandleTaskWithoutSplitTxnOnlyAdvanceTableSinkWhenR
 				StartTs: 1,
 				CRTs:    2,
 			},
-			Row: genRowChangedEvent(1, 2, tableID),
+			Row: genRowChangedEvent(1, 2, span),
 		},
 		{
 			StartTs: 1,
@@ -728,7 +727,7 @@ func (suite *workerSuite) TestHandleTaskWithoutSplitTxnOnlyAdvanceTableSinkWhenR
 				StartTs: 1,
 				CRTs:    3,
 			},
-			Row: genRowChangedEvent(1, 3, tableID),
+			Row: genRowChangedEvent(1, 3, span),
 		},
 		{
 			StartTs: 1,
@@ -738,7 +737,7 @@ func (suite *workerSuite) TestHandleTaskWithoutSplitTxnOnlyAdvanceTableSinkWhenR
 				StartTs: 1,
 				CRTs:    3,
 			},
-			Row: genRowChangedEvent(1, 3, tableID),
+			Row: genRowChangedEvent(1, 3, span),
 		},
 		{
 			StartTs: 1,
@@ -748,7 +747,7 @@ func (suite *workerSuite) TestHandleTaskWithoutSplitTxnOnlyAdvanceTableSinkWhenR
 				StartTs: 1,
 				CRTs:    3,
 			},
-			Row: genRowChangedEvent(1, 3, tableID),
+			Row: genRowChangedEvent(1, 3, span),
 		},
 		{
 			StartTs: 1,
@@ -758,7 +757,7 @@ func (suite *workerSuite) TestHandleTaskWithoutSplitTxnOnlyAdvanceTableSinkWhenR
 				StartTs: 1,
 				CRTs:    4,
 			},
-			Row: genRowChangedEvent(1, 4, tableID),
+			Row: genRowChangedEvent(1, 4, span),
 		},
 		{
 			CRTs: 5,
@@ -769,7 +768,7 @@ func (suite *workerSuite) TestHandleTaskWithoutSplitTxnOnlyAdvanceTableSinkWhenR
 		},
 	}
 	w, e := createWorker(changefeedID, eventSize, false)
-	addEventsToSortEngine(suite.T(), events, e, tableID)
+	addEventsToSortEngine(suite.T(), events, e, span)
 
 	taskChan := make(chan *sinkTask)
 	var wg sync.WaitGroup
@@ -780,8 +779,7 @@ func (suite *workerSuite) TestHandleTaskWithoutSplitTxnOnlyAdvanceTableSinkWhenR
 		require.Equal(suite.T(), context.Canceled, err)
 	}()
 
-	wrapper, sink := createTableSinkWrapper(
-		changefeedID, spanz.TableIDToComparableSpan(tableID))
+	wrapper, sink := createTableSinkWrapper(changefeedID, span)
 	lowerBoundPos := engine.Position{
 		StartTs:  0,
 		CommitTs: 1,
@@ -804,7 +802,7 @@ func (suite *workerSuite) TestHandleTaskWithoutSplitTxnOnlyAdvanceTableSinkWhenR
 		cancel()
 	}
 	taskChan <- &sinkTask{
-		tableID:       tableID,
+		span:          span,
 		lowerBound:    lowerBoundPos,
 		getUpperBound: upperBoundGetter,
 		tableSink:     wrapper,
@@ -819,7 +817,7 @@ func (suite *workerSuite) TestHandleTaskWithoutSplitTxnOnlyAdvanceTableSinkWhenR
 // Test the case that the worker will advance the table sink only when meet the new commit ts.
 func (suite *workerSuite) TestHandleTaskWithSplitTxnAndDoNotAdvanceTableUntilMeetNewCommitTs() {
 	changefeedID := model.DefaultChangeFeedID("1")
-	tableID := model.TableID(1)
+	span := spanz.TableIDToComparableSpan(1)
 	ctx, cancel := context.WithCancel(context.Background())
 
 	// Only for three events.
@@ -835,7 +833,7 @@ func (suite *workerSuite) TestHandleTaskWithSplitTxnAndDoNotAdvanceTableUntilMee
 				StartTs: 1,
 				CRTs:    1,
 			},
-			Row: genRowChangedEvent(1, 1, tableID),
+			Row: genRowChangedEvent(1, 1, span),
 		},
 		// Although the commit ts is 2, the event is not sent to sink because the commit ts is not changed.
 		{
@@ -846,7 +844,7 @@ func (suite *workerSuite) TestHandleTaskWithSplitTxnAndDoNotAdvanceTableUntilMee
 				StartTs: 1,
 				CRTs:    2,
 			},
-			Row: genRowChangedEvent(1, 2, tableID),
+			Row: genRowChangedEvent(1, 2, span),
 		},
 		{
 			StartTs: 1,
@@ -856,7 +854,7 @@ func (suite *workerSuite) TestHandleTaskWithSplitTxnAndDoNotAdvanceTableUntilMee
 				StartTs: 1,
 				CRTs:    2,
 			},
-			Row: genRowChangedEvent(1, 2, tableID),
+			Row: genRowChangedEvent(1, 2, span),
 		},
 		// We will block at this event.
 		{
@@ -867,7 +865,7 @@ func (suite *workerSuite) TestHandleTaskWithSplitTxnAndDoNotAdvanceTableUntilMee
 				StartTs: 1,
 				CRTs:    3,
 			},
-			Row: genRowChangedEvent(1, 2, tableID),
+			Row: genRowChangedEvent(1, 2, span),
 		},
 		{
 			StartTs: 1,
@@ -877,7 +875,7 @@ func (suite *workerSuite) TestHandleTaskWithSplitTxnAndDoNotAdvanceTableUntilMee
 				StartTs: 1,
 				CRTs:    3,
 			},
-			Row: genRowChangedEvent(1, 3, tableID),
+			Row: genRowChangedEvent(1, 3, span),
 		},
 		{
 			CRTs: 4,
@@ -887,8 +885,8 @@ func (suite *workerSuite) TestHandleTaskWithSplitTxnAndDoNotAdvanceTableUntilMee
 			},
 		},
 	}
-	w, e := createWorker(changefeedID, eventSize, true, tableID)
-	addEventsToSortEngine(suite.T(), events, e, tableID)
+	w, e := createWorker(changefeedID, eventSize, true, span)
+	addEventsToSortEngine(suite.T(), events, e, span)
 
 	taskChan := make(chan *sinkTask)
 	var wg sync.WaitGroup
@@ -899,8 +897,7 @@ func (suite *workerSuite) TestHandleTaskWithSplitTxnAndDoNotAdvanceTableUntilMee
 		require.ErrorIs(suite.T(), err, context.Canceled)
 	}()
 
-	wrapper, sink := createTableSinkWrapper(
-		changefeedID, spanz.TableIDToComparableSpan(tableID))
+	wrapper, sink := createTableSinkWrapper(changefeedID, span)
 	lowerBoundPos := engine.Position{
 		StartTs:  0,
 		CommitTs: 1,
@@ -922,7 +919,7 @@ func (suite *workerSuite) TestHandleTaskWithSplitTxnAndDoNotAdvanceTableUntilMee
 		}, lastWritePos.Next())
 	}
 	taskChan <- &sinkTask{
-		tableID:       tableID,
+		span:          span,
 		lowerBound:    lowerBoundPos,
 		getUpperBound: upperBoundGetter,
 		tableSink:     wrapper,
@@ -946,7 +943,7 @@ func (suite *workerSuite) TestHandleTaskWithSplitTxnAndDoNotAdvanceTableUntilMee
 // Test the case that the worker will advance the table sink only when task is finished.
 func (suite *workerSuite) TestHandleTaskWithSplitTxnAndAdvanceTableUntilTaskIsFinished() {
 	changefeedID := model.DefaultChangeFeedID("1")
-	tableID := model.TableID(1)
+	span := spanz.TableIDToComparableSpan(1)
 	ctx, cancel := context.WithCancel(context.Background())
 
 	// Only for three events.
@@ -962,7 +959,7 @@ func (suite *workerSuite) TestHandleTaskWithSplitTxnAndAdvanceTableUntilTaskIsFi
 				StartTs: 1,
 				CRTs:    1,
 			},
-			Row: genRowChangedEvent(1, 1, tableID),
+			Row: genRowChangedEvent(1, 1, span),
 		},
 		{
 			CRTs: 4,
@@ -972,8 +969,8 @@ func (suite *workerSuite) TestHandleTaskWithSplitTxnAndAdvanceTableUntilTaskIsFi
 			},
 		},
 	}
-	w, e := createWorker(changefeedID, eventSize, true, tableID)
-	addEventsToSortEngine(suite.T(), events, e, tableID)
+	w, e := createWorker(changefeedID, eventSize, true, span)
+	addEventsToSortEngine(suite.T(), events, e, span)
 
 	taskChan := make(chan *sinkTask)
 	var wg sync.WaitGroup
@@ -984,8 +981,7 @@ func (suite *workerSuite) TestHandleTaskWithSplitTxnAndAdvanceTableUntilTaskIsFi
 		require.ErrorIs(suite.T(), err, context.Canceled)
 	}()
 
-	wrapper, sink := createTableSinkWrapper(
-		changefeedID, spanz.TableIDToComparableSpan(tableID))
+	wrapper, sink := createTableSinkWrapper(changefeedID, span)
 	lowerBoundPos := engine.Position{
 		StartTs:  0,
 		CommitTs: 1,
@@ -1007,7 +1003,7 @@ func (suite *workerSuite) TestHandleTaskWithSplitTxnAndAdvanceTableUntilTaskIsFi
 		}, lastWritePos.Next())
 	}
 	taskChan <- &sinkTask{
-		tableID:       tableID,
+		span:          span,
 		lowerBound:    lowerBoundPos,
 		getUpperBound: upperBoundGetter,
 		tableSink:     wrapper,
@@ -1028,7 +1024,7 @@ func (suite *workerSuite) TestHandleTaskWithSplitTxnAndAdvanceTableUntilTaskIsFi
 // Test the case that the worker will advance the table sink directly when there are no events.
 func (suite *workerSuite) TestHandleTaskWithSplitTxnAndAdvanceTableIfNoWorkload() {
 	changefeedID := model.DefaultChangeFeedID("1")
-	tableID := model.TableID(1)
+	span := spanz.TableIDToComparableSpan(1)
 	ctx, cancel := context.WithCancel(context.Background())
 
 	// Only for three events.
@@ -1044,8 +1040,8 @@ func (suite *workerSuite) TestHandleTaskWithSplitTxnAndAdvanceTableIfNoWorkload(
 			},
 		},
 	}
-	w, e := createWorker(changefeedID, eventSize, true, tableID)
-	addEventsToSortEngine(suite.T(), events, e, tableID)
+	w, e := createWorker(changefeedID, eventSize, true, span)
+	addEventsToSortEngine(suite.T(), events, e, span)
 
 	taskChan := make(chan *sinkTask)
 	var wg sync.WaitGroup
@@ -1056,8 +1052,7 @@ func (suite *workerSuite) TestHandleTaskWithSplitTxnAndAdvanceTableIfNoWorkload(
 		require.ErrorIs(suite.T(), err, context.Canceled)
 	}()
 
-	wrapper, _ := createTableSinkWrapper(
-		changefeedID, spanz.TableIDToComparableSpan(tableID))
+	wrapper, _ := createTableSinkWrapper(changefeedID, span)
 	lowerBoundPos := engine.Position{
 		StartTs:  0,
 		CommitTs: 1,
@@ -1079,7 +1074,7 @@ func (suite *workerSuite) TestHandleTaskWithSplitTxnAndAdvanceTableIfNoWorkload(
 		}, lastWritePos.Next())
 	}
 	taskChan <- &sinkTask{
-		tableID:       tableID,
+		span:          span,
 		lowerBound:    lowerBoundPos,
 		getUpperBound: upperBoundGetter,
 		tableSink:     wrapper,

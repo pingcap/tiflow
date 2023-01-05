@@ -28,6 +28,7 @@ import (
 	"github.com/pingcap/tiflow/cdc/redo/writer"
 	"github.com/pingcap/tiflow/pkg/chann"
 	"github.com/pingcap/tiflow/pkg/config"
+	"github.com/pingcap/tiflow/pkg/redo"
 	"github.com/pingcap/tiflow/pkg/spanz"
 	"github.com/stretchr/testify/require"
 	"go.uber.org/zap"
@@ -45,7 +46,7 @@ func TestConsistentConfig(t *testing.T) {
 		{"", false},
 	}
 	for _, lc := range levelCases {
-		require.Equal(t, lc.valid, IsValidConsistentLevel(lc.level))
+		require.Equal(t, lc.valid, redo.IsValidConsistentLevel(lc.level))
 	}
 
 	levelEnableCases := []struct {
@@ -57,7 +58,7 @@ func TestConsistentConfig(t *testing.T) {
 		{"eventual", true},
 	}
 	for _, lc := range levelEnableCases {
-		require.Equal(t, lc.consistent, IsConsistentEnabled(lc.level))
+		require.Equal(t, lc.consistent, redo.IsConsistentEnabled(lc.level))
 	}
 
 	storageCases := []struct {
@@ -72,7 +73,7 @@ func TestConsistentConfig(t *testing.T) {
 		{"", false},
 	}
 	for _, sc := range storageCases {
-		require.Equal(t, sc.valid, IsValidConsistentStorage(sc.storage))
+		require.Equal(t, sc.valid, redo.IsValidConsistentStorage(sc.storage))
 	}
 
 	s3StorageCases := []struct {
@@ -85,7 +86,7 @@ func TestConsistentConfig(t *testing.T) {
 		{"blackhole", false},
 	}
 	for _, sc := range s3StorageCases {
-		require.Equal(t, sc.s3Enabled, IsS3StorageEnabled(sc.storage))
+		require.Equal(t, sc.s3Enabled, redo.IsExternalStorage(sc.storage))
 	}
 }
 
@@ -101,7 +102,7 @@ func TestLogManagerInProcessor(t *testing.T) {
 	defer logMgr.Cleanup(ctx)
 
 	checkResolvedTs := func(mgr LogManager, expectedRts uint64) {
-		time.Sleep(time.Duration(flushIntervalInMs+200) * time.Millisecond)
+		time.Sleep(time.Duration(config.MinFlushIntervalInMs+200) * time.Millisecond)
 		resolvedTs := mgr.GetMinResolvedTs()
 		require.Equal(t, expectedRts, resolvedTs)
 	}
@@ -332,8 +333,9 @@ func TestManagerError(t *testing.T) {
 	defer cancel()
 
 	cfg := &config.ConsistentConfig{
-		Level:   string(ConsistentLevelEventual),
-		Storage: "blackhole://",
+		Level:             string(redo.ConsistentLevelEventual),
+		Storage:           "blackhole://",
+		FlushIntervalInMs: config.MinFlushIntervalInMs,
 	}
 
 	errCh := make(chan error, 1)
@@ -344,7 +346,7 @@ func TestManagerError(t *testing.T) {
 	require.Nil(t, err)
 	logMgr.writer = writer.NewInvalidBlackHoleWriter(logMgr.writer)
 	logMgr.logBuffer = chann.New[cacheEvents]()
-	go logMgr.bgUpdateLog(ctx, errCh)
+	go logMgr.bgUpdateLog(ctx, cfg.FlushIntervalInMs, errCh)
 
 	testCases := []struct {
 		span tablepb.Span
@@ -377,7 +379,7 @@ func TestManagerError(t *testing.T) {
 	require.Nil(t, err)
 	logMgr.writer = writer.NewInvalidBlackHoleWriter(logMgr.writer)
 	logMgr.logBuffer = chann.New[cacheEvents]()
-	go logMgr.bgUpdateLog(ctx, errCh)
+	go logMgr.bgUpdateLog(ctx, cfg.FlushIntervalInMs, errCh)
 
 	// bgUpdateLog exists because of writer.FlushLog failure.
 	select {
@@ -396,8 +398,9 @@ func TestReuseWritter(t *testing.T) {
 
 	dir := t.TempDir()
 	cfg := &config.ConsistentConfig{
-		Level:   string(ConsistentLevelEventual),
-		Storage: "local://" + dir,
+		Level:             string(redo.ConsistentLevelEventual),
+		Storage:           "local://" + dir,
+		FlushIntervalInMs: config.MinFlushIntervalInMs,
 	}
 
 	errCh := make(chan error, 1)

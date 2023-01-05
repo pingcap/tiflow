@@ -33,7 +33,6 @@ import (
 	"github.com/pingcap/log"
 	"github.com/pingcap/tidb/br/pkg/storage"
 	"github.com/pingcap/tiflow/cdc/model"
-	rcommon "github.com/pingcap/tiflow/cdc/redo/common"
 	"github.com/pingcap/tiflow/cdc/sink"
 	"github.com/pingcap/tiflow/cdc/sink/codec"
 	"github.com/pingcap/tiflow/cdc/sink/codec/canal"
@@ -46,6 +45,7 @@ import (
 	"github.com/pingcap/tiflow/pkg/quotes"
 	psink "github.com/pingcap/tiflow/pkg/sink"
 	"github.com/pingcap/tiflow/pkg/sink/cloudstorage"
+	putil "github.com/pingcap/tiflow/pkg/util"
 	"go.uber.org/zap"
 )
 
@@ -264,16 +264,8 @@ func newConsumer(ctx context.Context) (*consumer, error) {
 	}
 
 	extension := sinkutil.GetFileExtension(protocol)
-	bs, err := storage.ParseBackend(upstreamURIStr, nil)
-	if err != nil {
-		log.Error("failed to parse storage backend", zap.Error(err))
-		return nil, err
-	}
 
-	storage, err := storage.New(ctx, bs, &storage.ExternalStorageOptions{
-		SendCredentials: false,
-		S3Retryer:       rcommon.DefaultS3Retryer(),
-	})
+	storage, err := putil.GetExternalStorageFromURI(ctx, upstreamURIStr)
 	if err != nil {
 		log.Error("failed to create external storage", zap.Error(err))
 		return nil, err

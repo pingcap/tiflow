@@ -556,6 +556,9 @@ func (g *shardGroup) joinTables(tp tableType) (schemacmp.Table, error) {
 	return joined, nil
 }
 
+// noConflictForTables checks if there is no conflict for tables by tableType(conflictTable/finalTable).
+// if there is conflict for conflictTables, we should report error to user.
+// if there is no conflict for finalTables, we should report conflict resolved to worker.
 func (g *shardGroup) noConflictForTables(tp tableType) bool {
 	if _, err := g.joinTables(tp); err != nil {
 		return false
@@ -605,6 +608,7 @@ func (g *shardGroup) noConflictWithOneNormalTable(sourceTable metadata.SourceTab
 	return false
 }
 
+// see dm/pkg/shardddl/optimism/lock.go:allTableSmaller for more detail
 func (g *shardGroup) allTableSmaller(tp tableType) bool {
 	var (
 		joined schemacmp.Table
@@ -625,6 +629,7 @@ func (g *shardGroup) allTableSmaller(tp tableType) bool {
 	return true
 }
 
+// see dm/pkg/shardddl/optimism/lock.go:allTableLarger for more detail
 func (g *shardGroup) allTableLarger(tp tableType) bool {
 	for sourceTable, conflictTableStmt := range g.conflictTables {
 		conflictTable := genCmpTable(conflictTableStmt)

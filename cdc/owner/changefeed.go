@@ -33,6 +33,7 @@ import (
 	cerror "github.com/pingcap/tiflow/pkg/errors"
 	"github.com/pingcap/tiflow/pkg/orchestrator"
 	"github.com/pingcap/tiflow/pkg/pdutil"
+	redoCfg "github.com/pingcap/tiflow/pkg/redo"
 	"github.com/pingcap/tiflow/pkg/txnutil/gc"
 	"github.com/pingcap/tiflow/pkg/upstream"
 	"github.com/prometheus/client_golang/prometheus"
@@ -674,7 +675,7 @@ func (c *changefeed) cleanupRedoManager(ctx context.Context) {
 			log.Warn("changefeed is removed, but state is not complete", zap.Any("state", c.state))
 			return
 		}
-		if !redo.IsConsistentEnabled(c.state.Info.Config.Consistent.Level) {
+		if !redoCfg.IsConsistentEnabled(c.state.Info.Config.Consistent.Level) {
 			return
 		}
 		// when removing a paused changefeed, the redo manager is nil, create a new one

@@ -54,7 +54,6 @@ loaders:
     pool-size: 16
     dir: placeholder
     import-mode: "physical"
-    checksum-physical: off # TODO: enable this after lightning coordinate across multiple DM-workers
 
 syncers:
   global:

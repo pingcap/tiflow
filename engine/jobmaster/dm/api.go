@@ -316,11 +316,6 @@ func (jm *JobMaster) BinlogSchemaTask(ctx context.Context, taskID string, req *d
 	return resp.(*dmproto.CommonTaskResponse)
 }
 
-// ShowDDLLocks implements the api of show ddl locks request.
-func (jm *JobMaster) ShowDDLLocks(ctx context.Context) ShowDDLLocksResponse {
-	return jm.ddlCoordinator.ShowDDLLocks(ctx)
-}
-
 // CoordinateDDL implements the api of coordinate ddl request.
 func (jm *JobMaster) CoordinateDDL(ctx context.Context, req *dmproto.CoordinateDDLRequest) *dmproto.CoordinateDDLResponse {
 	ddls, conflictStage, err := jm.ddlCoordinator.Coordinate(ctx, (*metadata.DDLItem)(req))
@@ -341,7 +336,12 @@ func (jm *JobMaster) CoordinateDDL(ctx context.Context, req *dmproto.CoordinateD
 	return resp
 }
 
-// Redirect is the function declaration for message agent to receive redirect ddl response.
+// RedirectDDL is the function declaration for message agent to receive redirect ddl response.
 func (jm *JobMaster) RedirectDDL(ctx context.Context) *dmproto.CommonTaskResponse {
 	return nil
+}
+
+// ShowDDLLocks implements the api of show ddl locks request.
+func (jm *JobMaster) ShowDDLLocks(ctx context.Context) ShowDDLLocksResponse {
+	return jm.ddlCoordinator.ShowDDLLocks(ctx)
 }

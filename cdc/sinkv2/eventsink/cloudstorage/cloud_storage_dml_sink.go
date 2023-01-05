@@ -19,10 +19,8 @@ import (
 	"sync/atomic"
 
 	"github.com/pingcap/errors"
-	"github.com/pingcap/tidb/br/pkg/storage"
 	"github.com/pingcap/tiflow/cdc/contextutil"
 	"github.com/pingcap/tiflow/cdc/model"
-	rcommon "github.com/pingcap/tiflow/cdc/redo/common"
 	"github.com/pingcap/tiflow/cdc/sink/codec/builder"
 	"github.com/pingcap/tiflow/cdc/sink/codec/common"
 	"github.com/pingcap/tiflow/cdc/sinkv2/eventsink"
@@ -33,6 +31,7 @@ import (
 	cerror "github.com/pingcap/tiflow/pkg/errors"
 	"github.com/pingcap/tiflow/pkg/sink"
 	"github.com/pingcap/tiflow/pkg/sink/cloudstorage"
+	putil "github.com/pingcap/tiflow/pkg/util"
 )
 
 const (
@@ -95,17 +94,8 @@ func NewCloudStorageSink(ctx context.Context,
 		return nil, err
 	}
 
-	// parse backend storage from sinkURI.
-	bs, err := storage.ParseBackend(sinkURI.String(), nil)
-	if err != nil {
-		return nil, err
-	}
-
 	// create an external storage.
-	storage, err := storage.New(ctx, bs, &storage.ExternalStorageOptions{
-		SendCredentials: false,
-		S3Retryer:       rcommon.DefaultS3Retryer(),
-	})
+	storage, err := putil.GetExternalStorageFromURI(ctx, sinkURI.String())
 	if err != nil {
 		return nil, err
 	}
