@@ -45,9 +45,14 @@ var (
 	// other components in TiCDC, including worker pool task chan size, mounter
 	// chan size etc.
 	// TODO: unified channel buffer mechanism
-	regionWorkerInputChanSize = 128
-	regionWorkerLowWatermark  = int(float64(regionWorkerInputChanSize) * 0.2)
-	regionWorkerHighWatermark = int(float64(regionWorkerInputChanSize) * 0.7)
+	regionWorkerInputChanSize = 32
+	// From benchmark, batch size ranges from 1 to 64(where 64 is in the extreme
+	// incremental scan scenario or single region hotspot).
+	// `batchEventsFactor * regionWorkerInputChanSize` equals to the count of
+	// events that are hold in channel.
+	batchEventsFactor         = 8
+	regionWorkerLowWatermark  = int(float64(batchEventsFactor*regionWorkerInputChanSize) * 0.2)
+	regionWorkerHighWatermark = int(float64(batchEventsFactor*regionWorkerInputChanSize) * 0.7)
 )
 
 const (

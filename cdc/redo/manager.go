@@ -16,14 +16,12 @@ package redo
 import (
 	"context"
 	"math"
-	"path/filepath"
 	"sync"
 	"sync/atomic"
 	"time"
 
 	"github.com/pingcap/errors"
 	"github.com/pingcap/log"
-	"github.com/pingcap/tidb/br/pkg/storage"
 	"github.com/pingcap/tiflow/cdc/contextutil"
 	"github.com/pingcap/tiflow/cdc/model"
 	"github.com/pingcap/tiflow/cdc/redo/common"
@@ -31,68 +29,15 @@ import (
 	"github.com/pingcap/tiflow/pkg/chann"
 	"github.com/pingcap/tiflow/pkg/config"
 	cerror "github.com/pingcap/tiflow/pkg/errors"
+	"github.com/pingcap/tiflow/pkg/redo"
 	"github.com/prometheus/client_golang/prometheus"
 	"go.uber.org/zap"
 )
 
-var (
-	// flushIntervalInMs is the minimum value of flush interval
-	flushIntervalInMs int64 = 2000 // 2 seconds
-	flushTimeout            = time.Second * 20
+const redoFlushWarnDuration = time.Second * 20
 
-	// Redo Manager GC interval. It can be changed in tests.
-	defaultGCIntervalInMs = 5000 // 5 seconds
-)
-
-// ConsistentLevelType is the level of redo log consistent level.
-type ConsistentLevelType string
-
-const (
-	// ConsistentLevelNone no consistent guarantee.
-	ConsistentLevelNone ConsistentLevelType = "none"
-	// ConsistentLevelEventual eventual consistent.
-	ConsistentLevelEventual ConsistentLevelType = "eventual"
-)
-
-type consistentStorage string
-
-const (
-	consistentStorageLocal     consistentStorage = "local"
-	consistentStorageNFS       consistentStorage = "nfs"
-	consistentStorageS3        consistentStorage = "s3"
-	consistentStorageBlackhole consistentStorage = "blackhole"
-)
-
-// IsValidConsistentLevel checks whether a given consistent level is valid
-func IsValidConsistentLevel(level string) bool {
-	switch ConsistentLevelType(level) {
-	case ConsistentLevelNone, ConsistentLevelEventual:
-		return true
-	default:
-		return false
-	}
-}
-
-// IsValidConsistentStorage checks whether a give consistent storage is valid
-func IsValidConsistentStorage(storage string) bool {
-	switch consistentStorage(storage) {
-	case consistentStorageLocal, consistentStorageNFS,
-		consistentStorageS3, consistentStorageBlackhole:
-		return true
-	default:
-		return false
-	}
-}
-
-// IsConsistentEnabled returns whether the consistent feature is enabled
-func IsConsistentEnabled(level string) bool {
-	return IsValidConsistentLevel(level) && ConsistentLevelType(level) != ConsistentLevelNone
-}
-
-// IsS3StorageEnabled returns whether s3 storage is enabled
-func IsS3StorageEnabled(storage string) bool {
-	return consistentStorage(storage) == consistentStorageS3
-}
+// Redo Manager GC interval. It can be changed in tests.
+var defaultGCIntervalInMs = 5000 // 5 seconds
 
 // LogManager defines an interface that is used to manage redo log
 type LogManager interface {
@@ -164,8 +109,6 @@ func (s *statefulRts) checkAndSetUnflushed(unflushed model.Ts) {
 type ManagerImpl struct {
 	changeFeedID model.ChangeFeedID
 	enabled      bool
-	level        ConsistentLevelType
-	storageType  consistentStorage
 
 	opts *ManagerOptions
 
@@ -201,93 +144,41 @@ type ManagerImpl struct {
 // NewManager creates a new Manager
 func NewManager(ctx context.Context, cfg *config.ConsistentConfig, opts *ManagerOptions) (*ManagerImpl, error) {
 	// return a disabled Manager if no consistent config or normal consistent level
-	if cfg == nil || ConsistentLevelType(cfg.Level) == ConsistentLevelNone {
+	if cfg == nil || !redo.IsConsistentEnabled(cfg.Level) {
 		return &ManagerImpl{enabled: false}, nil
 	}
-	if cfg.FlushIntervalInMs > flushIntervalInMs {
-		flushIntervalInMs = cfg.FlushIntervalInMs
-	}
 
-	uri, err := storage.ParseRawURL(cfg.Storage)
+	writer, err := writer.NewRedoLogWriter(ctx, cfg, opts.FileTypeConfig)
 	if err != nil {
 		return nil, err
 	}
 
-	changeFeedID := contextutil.ChangefeedIDFromCtx(ctx)
 	m := &ManagerImpl{
-		changeFeedID:  changeFeedID,
+		changeFeedID:  contextutil.ChangefeedIDFromCtx(ctx),
 		enabled:       true,
-		level:         ConsistentLevelType(cfg.Level),
-		storageType:   consistentStorage(uri.Scheme),
 		opts:          opts,
 		rtsMap:        sync.Map{},
 		minResolvedTs: math.MaxInt64,
-
-		metricWriteLogDuration: common.RedoWriteLogDurationHistogram.
-			WithLabelValues(changeFeedID.Namespace, changeFeedID.ID),
-		metricFlushLogDuration: common.RedoFlushLogDurationHistogram.
-			WithLabelValues(changeFeedID.Namespace, changeFeedID.ID),
+		writer:        writer,
 	}
 
-	switch m.storageType {
-	case consistentStorageBlackhole:
-		m.writer = writer.NewBlackHoleWriter()
-	case consistentStorageLocal, consistentStorageNFS, consistentStorageS3:
-		globalConf := config.GetGlobalServerConfig()
-		// When an external storage such S3 is used, we use redoDir as a temporary dir to store redo logs
-		// before we flush them to S3.
-		var redoDir string
-		if changeFeedID.Namespace == model.DefaultNamespace {
-			redoDir = filepath.Join(globalConf.DataDir,
-				config.DefaultRedoDir, changeFeedID.ID)
-		} else {
-			redoDir = filepath.Join(globalConf.DataDir,
-				config.DefaultRedoDir,
-				changeFeedID.Namespace, changeFeedID.ID)
-		}
-
-		// When local storage or NFS is used, we use redoDir as the final storage path.
-		if m.storageType == consistentStorageLocal || m.storageType == consistentStorageNFS {
-			redoDir = uri.Path
-		}
-
-		writerCfg := &writer.LogWriterConfig{
-			Dir:               redoDir,
-			CaptureID:         contextutil.CaptureAddrFromCtx(ctx),
-			ChangeFeedID:      changeFeedID,
-			CreateTime:        time.Now(),
-			MaxLogSize:        cfg.MaxLogSize,
-			FlushIntervalInMs: cfg.FlushIntervalInMs,
-			S3Storage:         m.storageType == consistentStorageS3,
-
-			EmitMeta:      m.opts.EmitMeta,
-			EmitRowEvents: m.opts.EmitRowEvents,
-			EmitDDLEvents: m.opts.EmitDDLEvents,
-		}
-		if writerCfg.S3Storage {
-			writerCfg.S3URI = *uri
-		}
-		writer, err := writer.NewLogWriter(ctx, writerCfg)
-		if err != nil {
-			return nil, err
-		}
-		m.writer = writer
-
-		if m.opts.EmitMeta {
-			checkpointTs, resolvedTs := m.writer.GetMeta()
-			m.metaCheckpointTs.flushed = checkpointTs
-			m.metaCheckpointTs.unflushed = checkpointTs
-			m.metaResolvedTs.flushed = resolvedTs
-			m.metaResolvedTs.unflushed = resolvedTs
-		}
-	default:
-		return nil, cerror.ErrConsistentStorage.GenWithStackByArgs(m.storageType)
+	if m.opts.EmitMeta {
+		checkpointTs, resolvedTs := m.writer.GetMeta()
+		m.metaCheckpointTs.flushed = checkpointTs
+		m.metaCheckpointTs.unflushed = checkpointTs
+		m.metaResolvedTs.flushed = resolvedTs
+		m.metaResolvedTs.unflushed = resolvedTs
 	}
+
+	m.metricWriteLogDuration = common.RedoWriteLogDurationHistogram.
+		WithLabelValues(m.changeFeedID.Namespace, m.changeFeedID.ID)
+	m.metricFlushLogDuration = common.RedoFlushLogDurationHistogram.
+		WithLabelValues(m.changeFeedID.Namespace, m.changeFeedID.ID)
 
 	// TODO: better to wait background goroutines after the context is canceled.
 	if m.opts.EnableBgRunner {
 		m.logBuffer = chann.New[cacheEvents]()
-		go m.bgUpdateLog(ctx, opts.ErrCh)
+		go m.bgUpdateLog(ctx, cfg.FlushIntervalInMs, opts.ErrCh)
 	}
 	if m.opts.EnableGCRunner {
 		go m.bgGC(ctx)
@@ -304,8 +195,9 @@ func NewDisabledManager() *ManagerImpl {
 // NewMockManager returns a mock redo manager instance, used in test only
 func NewMockManager(ctx context.Context) (*ManagerImpl, error) {
 	cfg := &config.ConsistentConfig{
-		Level:   string(ConsistentLevelEventual),
-		Storage: "blackhole://",
+		Level:             string(redo.ConsistentLevelEventual),
+		Storage:           "blackhole://",
+		FlushIntervalInMs: config.MinFlushIntervalInMs,
 	}
 
 	errCh := make(chan error, 1)
@@ -390,7 +282,9 @@ func (m *ManagerImpl) UpdateCheckpointTs(ckpt model.Ts) {
 
 // EmitDDLEvent sends DDL event to redo log writer
 func (m *ManagerImpl) EmitDDLEvent(ctx context.Context, ddl *model.DDLEvent) error {
-	return m.withLock(func(m *ManagerImpl) error { return m.writer.SendDDL(ctx, DDLToRedo(ddl)) })
+	return m.withLock(func(m *ManagerImpl) error {
+		return m.writer.SendDDL(ctx, common.DDLToRedo(ddl))
+	})
 }
 
 // GetResolvedTs returns the resolved ts of a table
@@ -538,7 +432,7 @@ func (m *ManagerImpl) flushLog(ctx context.Context, handleErr func(err error)) {
 	if !atomic.CompareAndSwapInt64(&m.flushing, 0, 1) {
 		log.Debug("Fail to update flush flag, " +
 			"the previous flush operation hasn't finished yet")
-		if time.Since(m.lastFlushTime) > flushTimeout {
+		if time.Since(m.lastFlushTime) > redoFlushWarnDuration {
 			log.Warn("flushLog blocking too long, the redo manager may be stuck",
 				zap.Duration("duration", time.Since(m.lastFlushTime)),
 				zap.Any("changfeed", m.changeFeedID))
@@ -578,7 +472,9 @@ func (m *ManagerImpl) onResolvedTsMsg(tableID model.TableID, resolvedTs model.Ts
 	value.(*statefulRts).checkAndSetUnflushed(resolvedTs)
 }
 
-func (m *ManagerImpl) bgUpdateLog(ctx context.Context, errCh chan<- error) {
+func (m *ManagerImpl) bgUpdateLog(
+	ctx context.Context, flushIntervalInMs int64, errCh chan<- error,
+) {
 	// logErrCh is used to retrieve errors from log flushing goroutines.
 	// if the channel is full, it's better to block subsequent flushing goroutines.
 	logErrCh := make(chan error, 1)
@@ -672,7 +568,7 @@ func (m *ManagerImpl) bgUpdateLog(ctx context.Context, errCh chan<- error) {
 				switch cache.eventType {
 				case model.MessageTypeRow:
 					for _, row := range cache.rows {
-						logs = append(logs, RowToRedo(row))
+						logs = append(logs, common.RowToRedo(row))
 					}
 					if cache.releaseMemory != nil {
 						releaseMemoryCbs = append(releaseMemoryCbs, cache.releaseMemory)
@@ -702,7 +598,10 @@ func (m *ManagerImpl) bgUpdateLog(ctx context.Context, errCh chan<- error) {
 				switch cache.eventType {
 				case model.MessageTypeRow:
 					for _, row := range cache.rows {
-						logs = append(logs, RowToRedo(row))
+						logs = append(logs, common.RowToRedo(row))
+					}
+					if cache.releaseMemory != nil {
+						releaseMemoryCbs = append(releaseMemoryCbs, cache.releaseMemory)
 					}
 				case model.MessageTypeResolved:
 					if rtsMap[cache.tableID] < cache.resolvedTs {

@@ -151,8 +151,8 @@ func New(
 		m.redoWorkers = make([]*redoWorker, 0, redoWorkerNum)
 		m.redoTaskChan = make(chan *redoTask)
 		m.redoWorkerAvailable = make(chan struct{}, 1)
-		// Use at most 1/3 memory quota for redo event cache.
-		m.eventCache = newRedoEventCache(changefeedID, changefeedInfo.Config.MemoryQuota/3)
+		// Use 3/4 memory quota as redo event cache. A large value is helpful to cache hit ratio.
+		m.eventCache = newRedoEventCache(changefeedID, changefeedInfo.Config.MemoryQuota/4*3)
 	}
 
 	m.startWorkers(changefeedInfo.Config.Sink.TxnAtomicity.ShouldSplitTxn(), changefeedInfo.Config.EnableOldValue)
@@ -184,11 +184,7 @@ func (m *SinkManager) startWorkers(splitTxn bool, enableOldValue bool) {
 					zap.Error(err))
 				select {
 				case m.errChan <- err:
-				default:
-					log.Error("Failed to send error to error channel, error channel is full",
-						zap.String("namespace", m.changefeedID.Namespace),
-						zap.String("changefeed", m.changefeedID.ID),
-						zap.Error(err))
+				case <-m.ctx.Done():
 				}
 			}
 		}()
@@ -213,11 +209,7 @@ func (m *SinkManager) startWorkers(splitTxn bool, enableOldValue bool) {
 					zap.Error(err))
 				select {
 				case m.errChan <- err:
-				default:
-					log.Error("Failed to send error to error channel, error channel is full",
-						zap.String("namespace", m.changefeedID.Namespace),
-						zap.String("changefeed", m.changefeedID.ID),
-						zap.Error(err))
+				case <-m.ctx.Done():
 				}
 			}
 		}()
@@ -237,11 +229,7 @@ func (m *SinkManager) startGenerateTasks() {
 				zap.Error(err))
 			select {
 			case m.errChan <- err:
-			default:
-				log.Error("Failed to send error to error channel, error channel is full",
-					zap.String("namespace", m.changefeedID.Namespace),
-					zap.String("changefeed", m.changefeedID.ID),
-					zap.Error(err))
+			case <-m.ctx.Done():
 			}
 		}
 	}()
@@ -261,11 +249,7 @@ func (m *SinkManager) startGenerateTasks() {
 				zap.Error(err))
 			select {
 			case m.errChan <- err:
-			default:
-				log.Error("Failed to send error to error channel, error channel is full",
-					zap.String("namespace", m.changefeedID.Namespace),
-					zap.String("changefeed", m.changefeedID.ID),
-					zap.Error(err))
+			case <-m.ctx.Done():
 			}
 		}
 	}()
@@ -373,6 +357,10 @@ func (m *SinkManager) generateSinkTasks() error {
 				continue
 			}
 			tableSink := value.(*tableSinkWrapper)
+			if tableSink.version != slowestTableProgress.version {
+				// The progress maybe stale.
+				continue
+			}
 
 			tableState := tableSink.getState()
 			// It means table sink is stopping or stopped.
@@ -409,7 +397,7 @@ func (m *SinkManager) generateSinkTasks() error {
 				break LOOP
 			}
 
-			log.Debug("MemoryQuotaTracing: Acquire memory for table sink task",
+			log.Debug("MemoryQuotaTracing: try acquire memory for table sink task",
 				zap.String("namespace", m.changefeedID.Namespace),
 				zap.String("changefeed", m.changefeedID.ID),
 				zap.Int64("tableID", tableSink.tableID),
@@ -421,7 +409,11 @@ func (m *SinkManager) generateSinkTasks() error {
 				getUpperBound: getUpperBound,
 				tableSink:     tableSink,
 				callback: func(lastWrittenPos engine.Position) {
-					p := &progress{tableID: tableSink.tableID, nextLowerBoundPos: lastWrittenPos.Next()}
+					p := &progress{
+						tableID:           tableSink.tableID,
+						nextLowerBoundPos: lastWrittenPos.Next(),
+						version:           slowestTableProgress.version,
+					}
 					m.sinkProgressHeap.push(p)
 					select {
 					case m.sinkWorkerAvailable <- struct{}{}:
@@ -444,6 +436,11 @@ func (m *SinkManager) generateSinkTasks() error {
 					zap.Any("currentUpperBound", upperBound))
 			default:
 				m.memQuota.refund(requestMemSize)
+				log.Debug("MemoryQuotaTracing: refund memory for table sink task",
+					zap.String("namespace", m.changefeedID.Namespace),
+					zap.String("changefeed", m.changefeedID.ID),
+					zap.Int64("tableID", tableSink.tableID),
+					zap.Uint64("memory", requestMemSize))
 				break LOOP
 			}
 		}
@@ -498,6 +495,10 @@ func (m *SinkManager) generateRedoTasks() error {
 				continue
 			}
 			tableSink := value.(*tableSinkWrapper)
+			if tableSink.version != slowestTableProgress.version {
+				// The progress maybe stale.
+				continue
+			}
 
 			tableState := tableSink.getState()
 			// It means table sink is stopping or stopped.
@@ -534,7 +535,7 @@ func (m *SinkManager) generateRedoTasks() error {
 				break LOOP
 			}
 
-			log.Debug("MemoryQuotaTracing: Acquire memory for redo log task",
+			log.Debug("MemoryQuotaTracing: try acquire memory for redo log task",
 				zap.String("namespace", m.changefeedID.Namespace),
 				zap.String("changefeed", m.changefeedID.ID),
 				zap.Int64("tableID", tableSink.tableID),
@@ -546,12 +547,19 @@ func (m *SinkManager) generateRedoTasks() error {
 				getUpperBound: getUpperBound,
 				tableSink:     tableSink,
 				callback: func(lastWrittenPos engine.Position) {
-					p := &progress{tableID: tableSink.tableID, nextLowerBoundPos: lastWrittenPos.Next()}
+					p := &progress{
+						tableID:           tableSink.tableID,
+						nextLowerBoundPos: lastWrittenPos.Next(),
+						version:           slowestTableProgress.version,
+					}
 					m.redoProgressHeap.push(p)
 					select {
 					case m.redoWorkerAvailable <- struct{}{}:
 					default:
 					}
+				},
+				isCanceled: func() bool {
+					return tableSink.getState() != tablepb.TableStateReplicating
 				},
 			}
 			select {
@@ -566,6 +574,11 @@ func (m *SinkManager) generateRedoTasks() error {
 					zap.Any("currentUpperBound", upperBound))
 			default:
 				m.memQuota.refund(requestMemSize)
+				log.Debug("MemoryQuotaTracing: refund memory for redo log task",
+					zap.String("namespace", m.changefeedID.Namespace),
+					zap.String("changefeed", m.changefeedID.ID),
+					zap.Int64("tableID", tableSink.tableID),
+					zap.Uint64("memory", requestMemSize))
 				break LOOP
 			}
 		}
@@ -604,6 +617,7 @@ func (m *SinkManager) UpdateReceivedSorterResolvedTs(tableID model.TableID, ts m
 			zap.String("namespace", m.changefeedID.Namespace),
 			zap.String("changefeed", m.changefeedID.ID),
 			zap.Int64("tableID", tableID))
+		return
 	}
 	tableSink.(*tableSinkWrapper).updateReceivedSorterResolvedTs(ts)
 }
@@ -638,11 +652,13 @@ func (m *SinkManager) AddTable(tableID model.TableID, startTs model.Ts, targetTs
 			zap.Int64("tableID", tableID))
 		return
 	}
+	m.memQuota.addTable(tableID)
 	log.Info("Add table sink",
 		zap.String("namespace", m.changefeedID.Namespace),
 		zap.String("changefeed", m.changefeedID.ID),
 		zap.Int64("tableID", tableID),
-		zap.Uint64("startTs", startTs))
+		zap.Uint64("startTs", startTs),
+		zap.Uint64("version", sinkWrapper.version))
 }
 
 // StartTable sets the table(TableSink) state to replicating.
@@ -685,12 +701,14 @@ func (m *SinkManager) StartTable(tableID model.TableID, startTs model.Ts) error 
 	tableSink.(*tableSinkWrapper).start(startTs, replicateTs)
 	m.sinkProgressHeap.push(&progress{
 		tableID:           tableID,
-		nextLowerBoundPos: engine.Position{StartTs: startTs - 1, CommitTs: startTs},
+		nextLowerBoundPos: engine.Position{StartTs: 0, CommitTs: startTs + 1},
+		version:           tableSink.(*tableSinkWrapper).version,
 	})
 	if m.redoManager != nil {
 		m.redoProgressHeap.push(&progress{
 			tableID:           tableID,
-			nextLowerBoundPos: engine.Position{StartTs: startTs - 1, CommitTs: startTs},
+			nextLowerBoundPos: engine.Position{StartTs: 0, CommitTs: startTs + 1},
+			version:           tableSink.(*tableSinkWrapper).version,
 		})
 	}
 	return nil
@@ -777,28 +795,32 @@ func (m *SinkManager) GetTableState(tableID model.TableID) (tablepb.TableState, 
 
 // GetTableStats returns the state of the table.
 func (m *SinkManager) GetTableStats(tableID model.TableID) TableStats {
-	tableSink, ok := m.tableSinks.Load(tableID)
+	value, ok := m.tableSinks.Load(tableID)
 	if !ok {
 		log.Panic("Table sink not found when getting table stats",
 			zap.String("namespace", m.changefeedID.Namespace),
 			zap.String("changefeed", m.changefeedID.ID),
 			zap.Int64("tableID", tableID))
 	}
-	checkpointTs := tableSink.(*tableSinkWrapper).getCheckpointTs()
+	tableSink := value.(*tableSinkWrapper)
+
+	checkpointTs := tableSink.getCheckpointTs()
 	m.memQuota.release(tableID, checkpointTs)
+
 	var resolvedTs model.Ts
 	// If redo log is enabled, we have to use redo log's resolved ts to calculate processor's min resolved ts.
 	if m.redoManager != nil {
 		resolvedTs = m.redoManager.GetResolvedTs(tableID)
 	} else {
-		resolvedTs = m.sourceManager.GetTableResolvedTs(tableID)
+		resolvedTs = tableSink.getReceivedSorterResolvedTs()
 	}
+
 	return TableStats{
 		CheckpointTs:          checkpointTs.ResolvedMark(),
 		ResolvedTs:            resolvedTs,
 		BarrierTs:             m.lastBarrierTs.Load(),
-		ReceivedMaxCommitTs:   tableSink.(*tableSinkWrapper).getReceivedSorterCommitTs(),
-		ReceivedMaxResolvedTs: tableSink.(*tableSinkWrapper).getReceivedSorterResolvedTs(),
+		ReceivedMaxCommitTs:   tableSink.getReceivedSorterCommitTs(),
+		ReceivedMaxResolvedTs: tableSink.getReceivedSorterResolvedTs(),
 	}
 }
 
@@ -830,7 +852,9 @@ func (m *SinkManager) Close() error {
 	m.tableSinks.Range(func(key, value interface{}) bool {
 		sink := value.(*tableSinkWrapper)
 		sink.close(m.ctx)
-		m.memQuota.clean(sink.tableID)
+		if m.eventCache != nil {
+			m.eventCache.removeTable(sink.tableID)
+		}
 		return true
 	})
 	log.Info("All table sinks closed",
