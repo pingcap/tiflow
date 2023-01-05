@@ -151,7 +151,8 @@ func New(
 		m.redoWorkers = make([]*redoWorker, 0, redoWorkerNum)
 		m.redoTaskChan = make(chan *redoTask)
 		m.redoWorkerAvailable = make(chan struct{}, 1)
-		// TODO: maybe should use at most 1/3 memory quota for redo event cache.
+		// Use 3/4 memory quota as redo event cache. A large value is helpful to cache hit ratio.
+		m.eventCache = newRedoEventCache(changefeedID, changefeedInfo.Config.MemoryQuota/4*3)
 	}
 
 	m.startWorkers(changefeedInfo.Config.Sink.TxnAtomicity.ShouldSplitTxn(), changefeedInfo.Config.EnableOldValue)
@@ -168,10 +169,9 @@ func New(
 
 // start all workers and report the error to the error channel.
 func (m *SinkManager) startWorkers(splitTxn bool, enableOldValue bool) {
-	redoEnabled := m.redoManager != nil && m.redoManager.Enabled()
 	for i := 0; i < sinkWorkerNum; i++ {
 		w := newSinkWorker(m.changefeedID, m.sourceManager, m.memQuota,
-			m.eventCache, redoEnabled, splitTxn, enableOldValue)
+			m.eventCache, splitTxn, enableOldValue)
 		m.sinkWorkers = append(m.sinkWorkers, w)
 		m.wg.Add(1)
 		go func() {
@@ -795,28 +795,32 @@ func (m *SinkManager) GetTableState(tableID model.TableID) (tablepb.TableState, 
 
 // GetTableStats returns the state of the table.
 func (m *SinkManager) GetTableStats(tableID model.TableID) TableStats {
-	tableSink, ok := m.tableSinks.Load(tableID)
+	value, ok := m.tableSinks.Load(tableID)
 	if !ok {
 		log.Panic("Table sink not found when getting table stats",
 			zap.String("namespace", m.changefeedID.Namespace),
 			zap.String("changefeed", m.changefeedID.ID),
 			zap.Int64("tableID", tableID))
 	}
-	checkpointTs := tableSink.(*tableSinkWrapper).getCheckpointTs()
+	tableSink := value.(*tableSinkWrapper)
+
+	checkpointTs := tableSink.getCheckpointTs()
 	m.memQuota.release(tableID, checkpointTs)
+
 	var resolvedTs model.Ts
 	// If redo log is enabled, we have to use redo log's resolved ts to calculate processor's min resolved ts.
 	if m.redoManager != nil {
 		resolvedTs = m.redoManager.GetResolvedTs(tableID)
 	} else {
-		resolvedTs = m.sourceManager.GetTableResolvedTs(tableID)
+		resolvedTs = tableSink.getReceivedSorterResolvedTs()
 	}
+
 	return TableStats{
 		CheckpointTs:          checkpointTs.ResolvedMark(),
 		ResolvedTs:            resolvedTs,
 		BarrierTs:             m.lastBarrierTs.Load(),
-		ReceivedMaxCommitTs:   tableSink.(*tableSinkWrapper).getReceivedSorterCommitTs(),
-		ReceivedMaxResolvedTs: tableSink.(*tableSinkWrapper).getReceivedSorterResolvedTs(),
+		ReceivedMaxCommitTs:   tableSink.getReceivedSorterCommitTs(),
+		ReceivedMaxResolvedTs: tableSink.getReceivedSorterResolvedTs(),
 	}
 }
 

@@ -299,6 +299,12 @@ func (info *ChangeFeedInfo) FixIncompatible() {
 		info.fixMySQLSinkProtocol()
 		log.Info("Fix incompatibility changefeed sink uri completed", zap.String("changefeed", info.String()))
 	}
+
+	if info.Config.MemoryQuota == uint64(0) {
+		log.Info("Start fixing incompatible memory quota", zap.String("changefeed", info.String()))
+		info.fixMemoryQuota()
+		log.Info("Fix incompatible memory quota completed", zap.String("changefeed", info.String()))
+	}
 }
 
 // fixState attempts to fix state loss from upgrading the old owner to the new owner.
@@ -427,4 +433,8 @@ func (info *ChangeFeedInfo) HasFastFailError() bool {
 		return false
 	}
 	return cerror.IsChangefeedFastFailErrorCode(errors.RFCErrorCode(info.Error.Code))
+}
+
+func (info *ChangeFeedInfo) fixMemoryQuota() {
+	info.Config.FixMemoryQuota()
 }

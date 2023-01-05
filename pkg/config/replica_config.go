@@ -62,7 +62,7 @@ var defaultReplicaConfig = &ReplicaConfig{
 	Consistent: &ConsistentConfig{
 		Level:             "none",
 		MaxLogSize:        64,
-		FlushIntervalInMs: 2000,
+		FlushIntervalInMs: MinFlushIntervalInMs,
 		Storage:           "",
 	},
 }
@@ -170,6 +170,13 @@ func (c *ReplicaConfig) ValidateAndAdjust(sinkURI *url.URL) error {
 			return err
 		}
 	}
+	if c.Consistent != nil {
+		err := c.Consistent.ValidateAndAdjust()
+		if err != nil {
+			return err
+		}
+	}
+
 	// check sync point config
 	if c.EnableSyncPoint {
 		if c.SyncPointInterval < minSyncPointInterval {
@@ -187,8 +194,16 @@ func (c *ReplicaConfig) ValidateAndAdjust(sinkURI *url.URL) error {
 						minSyncPointRetention.String()))
 		}
 	}
+	if c.MemoryQuota == uint64(0) {
+		c.FixMemoryQuota()
+	}
 
 	return nil
+}
+
+// FixMemoryQuota adjusts memory quota to default value
+func (c *ReplicaConfig) FixMemoryQuota() {
+	c.MemoryQuota = DefaultChangefeedMemoryQuota
 }
 
 // GetSinkURIAndAdjustConfigWithSinkURI parses sinkURI as a URI and adjust config with sinkURI.
