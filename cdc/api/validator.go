@@ -188,22 +188,32 @@ func verifyUpdateChangefeedConfig(ctx context.Context, changefeedConfig model.Ch
 		}
 	}
 
+	var sinkConfigUpdated, sinkURIUpdated bool
 	if len(changefeedConfig.IgnoreTxnStartTs) != 0 {
 		newInfo.Config.Filter.IgnoreTxnStartTs = changefeedConfig.IgnoreTxnStartTs
 	}
-
 	if changefeedConfig.MounterWorkerNum != 0 {
 		newInfo.Config.Mounter.WorkerNum = changefeedConfig.MounterWorkerNum
 	}
-
 	if changefeedConfig.SinkConfig != nil {
+		sinkConfigUpdated = true
 		newInfo.Config.Sink = changefeedConfig.SinkConfig
 	}
-
-	// verify sink_uri
 	if changefeedConfig.SinkURI != "" {
+		sinkURIUpdated = true
 		newInfo.SinkURI = changefeedConfig.SinkURI
-		if err := sink.Validate(ctx, changefeedConfig.SinkURI, newInfo.Config, newInfo.Opts); err != nil {
+	}
+
+	if sinkConfigUpdated || sinkURIUpdated {
+		// check sink config is compatible with sinkURI
+		newCfg := newInfo.Config.Sink
+		oldCfg := oldInfo.Config.Sink
+		err := newCfg.CheckCompatibilityWithSinkURI(oldCfg, newInfo.SinkURI)
+		if err != nil {
+			return nil, cerror.ErrChangefeedUpdateRefused.GenWithStackByCause(err)
+		}
+
+		if err := sink.Validate(ctx, newInfo.SinkURI, newInfo.Config, newInfo.Opts); err != nil {
 			return nil, cerror.ErrChangefeedUpdateRefused.GenWithStackByCause(err)
 		}
 	}

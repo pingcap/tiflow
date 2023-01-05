@@ -156,8 +156,9 @@ const (
     "worker-num": 3
   },
   "sink": {
-    "dispatchers": null,
+    "transaction-atomicity": "",
     "protocol": "open-protocol",
+    "dispatchers": null,
     "column-selectors": [
       {
         "matcher": [
@@ -170,7 +171,6 @@ const (
       }
     ],
     "schema-registry": "",
-    "transaction-atomicity": "",
     "encoder-concurrency": 16
   },
   "cyclic-replication": {
