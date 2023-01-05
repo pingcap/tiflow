@@ -450,6 +450,8 @@ func (h *OpenAPI) UpdateChangefeed(c *gin.Context) {
 		_ = c.Error(cerror.ErrChangefeedUpdateRefused.GenWithStackByArgs("can only update changefeed config when it is stopped"))
 		return
 	}
+	info.ID = changefeedID.ID
+	info.Namespace = changefeedID.Namespace
 
 	// can only update target-ts, sink-uri
 	// filter_rules, ignore_txn_start_ts, mounter_worker_num, sink_config

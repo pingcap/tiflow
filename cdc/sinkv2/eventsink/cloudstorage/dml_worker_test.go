@@ -21,7 +21,6 @@ import (
 	"testing"
 	"time"
 
-	"github.com/pingcap/tidb/br/pkg/storage"
 	timodel "github.com/pingcap/tidb/parser/model"
 	"github.com/pingcap/tidb/parser/mysql"
 	"github.com/pingcap/tidb/parser/types"
@@ -34,14 +33,13 @@ import (
 	"github.com/pingcap/tiflow/pkg/config"
 	"github.com/pingcap/tiflow/pkg/sink"
 	"github.com/pingcap/tiflow/pkg/sink/cloudstorage"
+	"github.com/pingcap/tiflow/pkg/util"
 	"github.com/stretchr/testify/require"
 )
 
 func testDMLWorker(ctx context.Context, t *testing.T, dir string) *dmlWorker {
 	uri := fmt.Sprintf("file:///%s?flush-interval=2s", dir)
-	bs, err := storage.ParseBackend(uri, &storage.BackendOptions{})
-	require.Nil(t, err)
-	storage, err := storage.New(ctx, bs, nil)
+	storage, err := util.GetExternalStorageFromURI(ctx, uri)
 	require.Nil(t, err)
 	errCh := make(chan error, 1)
 	sinkURI, err := url.Parse(uri)
