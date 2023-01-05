@@ -463,6 +463,28 @@ def unsafe_apis():
     assert resp.status_code != rq.codes.not_found
     print("pass test: resolve lock")
 
+def delete_changefeed_v2():
+    # remove changefeed
+    url = BASE_URL0_V2+"/changefeeds/changefeed-test4"
+    resp = rq.delete(url, cert=CERT, verify=VERIFY)
+    assert resp.status_code == rq.codes.no_content
+
+    # check if remove changefeed success
+    url = BASE_URL0+"/changefeeds/changefeed-test4"
+    for i in range(RETRY_TIME):
+        resp = rq.get(url, cert=CERT, verify=VERIFY)
+        if resp.status_code == rq.codes.bad_request:
+            break
+        time.sleep(1)
+    assert resp.status_code == rq.codes.bad_request
+    assert resp.json()["error_code"] == "CDC:ErrChangeFeedNotExists"
+
+    # test remove changefeed not exists
+    url = BASE_URL0+"/changefeeds/changefeed-not-exists"
+    resp = rq.delete(url, cert=CERT, verify=VERIFY)
+    assert (resp.status_code == rq.codes.no_content)
+
+    print("pass test: remove changefeed")
 
 # util functions define belows
 
