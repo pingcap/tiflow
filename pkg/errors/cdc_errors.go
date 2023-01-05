@@ -320,7 +320,8 @@ var (
 		errors.RFCCodeText("CDC:ErrSinkURIInvalid"),
 	)
 	ErrIncompatibleSinkConfig = errors.Normalize(
-		"incompatible configuration in sink uri(%s) and config file(%s)",
+		"incompatible configuration in sink uri(%s) and config file(%s), "+
+			"please try to update the configuration only through sink uri",
 		errors.RFCCodeText("CDC:ErrIncompatibleSinkConfig"),
 	)
 	ErrSinkUnknownProtocol = errors.Normalize(
