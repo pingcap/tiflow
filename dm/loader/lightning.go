@@ -94,7 +94,7 @@ func NewLightning(cfg *config.SubTaskConfig, cli *clientv3.Client, workerName st
 		workerName:            workerName,
 		lightningGlobalConfig: lightningCfg,
 		core:                  lightning.New(lightningCfg),
-		logger:                logger.WithFields(zap.String("task", cfg.Name), zap.String("unit", "lightning-load")),
+		logger:                logger.WithFields(zap.String("task", cfg.Name), zap.String("source", cfg.SourceID), zap.String("unit", "lightning-load")),
 		speedRecorder:         export.NewSpeedRecorder(),
 	}
 	return loader

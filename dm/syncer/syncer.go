@@ -245,6 +245,7 @@ type Syncer struct {
 func NewSyncer(cfg *config.SubTaskConfig, etcdClient *clientv3.Client, relay relay.Process) *Syncer {
 	logFields := []zap.Field{
 		zap.String("task", cfg.Name),
+		zap.String("source", cfg.SourceID),
 		zap.String("unit", "binlog replication"),
 	}
 	var logger log.Logger
