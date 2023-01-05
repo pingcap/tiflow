@@ -19,7 +19,7 @@ import (
 	"path/filepath"
 	"sync"
 
-	"github.com/pingcap/tiflow/cdc/redo/common"
+	"github.com/pingcap/tiflow/pkg/redo"
 )
 
 // FileAllocator has two functionalities:
@@ -84,7 +84,7 @@ func (fl *FileAllocator) alloc() (f *os.File, err error) {
 	}
 
 	filePath := filepath.Join(fl.dir, fmt.Sprintf("%s_%d.tmp", fl.prefix, fl.count%2))
-	f, err = os.OpenFile(filePath, os.O_CREATE|os.O_WRONLY, common.DefaultFileMode)
+	f, err = os.OpenFile(filePath, os.O_CREATE|os.O_WRONLY, redo.DefaultFileMode)
 	if err != nil {
 		return nil, err
 	}
