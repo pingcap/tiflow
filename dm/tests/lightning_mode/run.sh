@@ -56,7 +56,7 @@ function run() {
 	run_dm_ctl_with_retry $WORK_DIR "127.0.0.1:$MASTER_PORT" \
 		"query-status test" \
 		"\"stage\": \"Paused\"" 1 \
-		'"progress": "100.00 %"' 1 \
+		'"progress": "100.00 %"' 2 \
 		"please check \`dm_meta_test\`.\`conflict_error_v1\` to see the duplication" 1
 	run_dm_ctl $WORK_DIR "127.0.0.1:$MASTER_PORT" \
 		"resume-task test" \
@@ -73,10 +73,10 @@ function run() {
 	cp $cur/conf/dm-task-dup.yaml $WORK_DIR/dm-task-dup.yaml
 	sed -i "/on-duplicate-physical/d" $WORK_DIR/dm-task-dup.yaml
 	dmctl_start_task "$WORK_DIR/dm-task-dup.yaml" "--remove-meta"
-	# TODO: only one worker is paused. all workers should be paused!
 	run_dm_ctl_with_retry $WORK_DIR "127.0.0.1:$MASTER_PORT" \
 		"query-status test" \
-		"checksum mismatched, KV number in source files: 6, KV number in TiDB cluster: 3" 1
+		"checksum mismatched, KV number in source files: 6, KV number in TiDB cluster: 3" 1 \
+		'"unit": "Load"' 2
 	run_dm_ctl $WORK_DIR "127.0.0.1:$MASTER_PORT" \
 		"resume-task test" \
 		"\"result\": true" 3

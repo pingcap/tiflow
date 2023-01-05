@@ -58,5 +58,5 @@ type TableExecutor interface {
 	GetCheckpoint() (checkpointTs, resolvedTs model.Ts)
 
 	// GetTableSpanStatus return the checkpoint and resolved ts for the given table span.
-	GetTableSpanStatus(span tablepb.Span) tablepb.TableStatus
+	GetTableSpanStatus(span tablepb.Span, collectStat bool) tablepb.TableStatus
 }

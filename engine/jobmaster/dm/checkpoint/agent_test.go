@@ -16,15 +16,20 @@ package checkpoint
 import (
 	"context"
 	"database/sql"
+	"encoding/json"
 	"fmt"
 	"regexp"
 	"testing"
 
 	"github.com/DATA-DOG/go-sqlmock"
 	"github.com/pingcap/log"
+	"github.com/pingcap/tidb/parser"
+	filter "github.com/pingcap/tidb/util/table-filter"
 	dmconfig "github.com/pingcap/tiflow/dm/config"
 	"github.com/pingcap/tiflow/dm/config/dbconfig"
 	"github.com/pingcap/tiflow/dm/pkg/conn"
+	dlog "github.com/pingcap/tiflow/dm/pkg/log"
+	"github.com/pingcap/tiflow/dm/pkg/schema"
 	frameModel "github.com/pingcap/tiflow/engine/framework/model"
 	"github.com/pingcap/tiflow/engine/jobmaster/dm/config"
 	"github.com/pingcap/tiflow/engine/jobmaster/dm/metadata"
@@ -268,4 +273,39 @@ func TestIsFresh(t *testing.T) {
 	isFresh, err = checkpointAgent.IsFresh(context.Background(), frameModel.WorkerDMSync, &metadata.Task{Cfg: taskCfg})
 	require.Error(t, err)
 	require.False(t, isFresh)
+}
+
+func TestFetchTableStmt(t *testing.T) {
+	var (
+		source   = "source"
+		database = "db"
+		table    = "table"
+	)
+	agent := NewAgentImpl("job_id", log.L())
+	db, mockDB, err := conn.InitMockDBNotClose()
+	require.NoError(t, err)
+	defer db.Close()
+
+	p := parser.New()
+	tracker, err := schema.NewTestTracker(context.Background(), "test-tracker", nil, dlog.L())
+	require.NoError(t, err)
+	stmt := "CREATE DATABASE `db`"
+	ret, err := p.ParseOneStmt(stmt, "", "")
+	require.NoError(t, err)
+	require.NoError(t, tracker.Exec(context.Background(), database, ret))
+
+	stmt = "CREATE TABLE `table` ( `id` int(11) DEFAULT NULL) ENGINE=InnoDB DEFAULT CHARSET=latin1"
+	ret, err = p.ParseOneStmt(stmt, "", "")
+	require.NoError(t, err)
+	require.NoError(t, tracker.Exec(context.Background(), database, ret))
+
+	tbInfo, err := tracker.GetTableInfo(&filter.Table{Schema: database, Name: table})
+	require.NoError(t, err)
+	bs, err := json.Marshal(tbInfo)
+	require.NoError(t, err)
+
+	mockDB.ExpectQuery(regexp.QuoteMeta("SELECT table_info FROM `meta`.`job_id_syncer_checkpoint` WHERE id = ? AND cp_schema = ? AND cp_table = ?")).WithArgs(source, database, table).WillReturnRows(sqlmock.NewRows([]string{"table_info"}).AddRow(bs))
+	tbStmt, err := agent.FetchTableStmt(context.Background(), "job_id", &config.JobCfg{MetaSchema: "meta"}, metadata.SourceTable{Source: source, Schema: database, Table: table})
+	require.NoError(t, err)
+	require.Equal(t, "CREATE TABLE `table` ( `id` int(11) DEFAULT NULL) ENGINE=InnoDB DEFAULT CHARSET=latin1 COLLATE=latin1_bin", tbStmt)
 }

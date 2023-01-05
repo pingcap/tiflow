@@ -23,6 +23,8 @@ import (
 type SchedulerConfig struct {
 	// HeartbeatTick is the number of owner tick to initial a heartbeat to captures.
 	HeartbeatTick int `toml:"heartbeat-tick" json:"heartbeat-tick"`
+	// CollectStatsTick is the number of owner tick to collect stats.
+	CollectStatsTick int `toml:"collect-stats-tick" json:"collect-stats-tick"`
 	// MaxTaskConcurrency the maximum of concurrent running schedule tasks.
 	MaxTaskConcurrency int `toml:"max-task-concurrency" json:"max-task-concurrency"`
 	// CheckBalanceInterval the interval of balance tables between each capture.
@@ -43,7 +45,10 @@ type SchedulerConfig struct {
 // NewDefaultSchedulerConfig return the default scheduler configuration.
 func NewDefaultSchedulerConfig() *SchedulerConfig {
 	return &SchedulerConfig{
-		HeartbeatTick:      2,
+		HeartbeatTick: 2,
+		// By default, owner ticks every 50ms, we want to low the frequency of
+		// collecting stats to reduce memory allocation and CPU usage.
+		CollectStatsTick:   200, // 200 * 50ms = 10s.
 		MaxTaskConcurrency: 10,
 		// TODO: no need to check balance each minute, relax the interval.
 		CheckBalanceInterval: TomlDuration(time.Minute),
@@ -57,6 +62,10 @@ func (c *SchedulerConfig) ValidateAndAdjust() error {
 	if c.HeartbeatTick <= 0 {
 		return cerror.ErrInvalidServerOption.GenWithStackByArgs(
 			"heartbeat-tick must be larger than 0")
+	}
+	if c.CollectStatsTick <= 0 {
+		return cerror.ErrInvalidServerOption.GenWithStackByArgs(
+			"collect-stats-tick must be larger than 0")
 	}
 	if c.MaxTaskConcurrency <= 0 {
 		return cerror.ErrInvalidServerOption.GenWithStackByArgs(

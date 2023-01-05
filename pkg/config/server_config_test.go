@@ -120,6 +120,12 @@ func TestSchedulerConfigValidateAndAdjust(t *testing.T) {
 	require.Error(t, conf.ValidateAndAdjust())
 
 	conf = GetDefaultServerConfig().Clone().Debug.Scheduler
+	conf.CollectStatsTick = -1
+	require.Error(t, conf.ValidateAndAdjust())
+	conf.CollectStatsTick = 0
+	require.Error(t, conf.ValidateAndAdjust())
+
+	conf = GetDefaultServerConfig().Clone().Debug.Scheduler
 	conf.MaxTaskConcurrency = -1
 	require.Error(t, conf.ValidateAndAdjust())
 	conf.MaxTaskConcurrency = 0
@@ -162,7 +168,7 @@ func TestIsValidClusterID(t *testing.T) {
 		{"default", true},
 	}
 	for _, c := range cases {
-		println(c.id)
+		t.Log(c.id)
 		require.Equal(t, c.valid, isValidClusterID(c.id))
 	}
 }
