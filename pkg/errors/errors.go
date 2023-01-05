@@ -291,9 +291,13 @@ var (
 		"s3 storage api",
 		errors.RFCCodeText("CDC:ErrS3StorageAPI"),
 	)
-	ErrS3StorageInitialize = errors.Normalize(
-		"new s3 storage for redo log",
-		errors.RFCCodeText("CDC:ErrS3StorageInitialize"),
+	ErrFailToCreateExternalStorage = errors.Normalize(
+		"failed to create external storage",
+		errors.RFCCodeText("DFLOW:ErrFailToCreateExternalStorage"),
+	)
+	ErrStorageInitialize = errors.Normalize(
+		"fail to open storage for redo log",
+		errors.RFCCodeText("CDC:ErrStorageInitialize"),
 	)
 	ErrMQCodecInvalidConfig = errors.Normalize(
 		"MQ Codec invalid config",
@@ -1001,5 +1005,11 @@ var (
 	ErrUpStreamNotFound = errors.Normalize(
 		"upStram not found, cluster-id: %d",
 		errors.RFCCodeText("CDC:ErrUpStreamNotFound"),
+	)
+
+	// changefeed config error
+	ErrInvalidReplicaConfig = errors.Normalize(
+		"invalid replica config, %s",
+		errors.RFCCodeText("CDC:ErrInvalidReplicaConfig"),
 	)
 )
