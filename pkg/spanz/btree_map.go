@@ -100,6 +100,7 @@ func (m *BtreeMap[T]) ReplaceOrInsert(span tablepb.Span, value T) (T, bool) {
 
 // ItemIterator allows callers of Ascend to iterate in-order over portions of
 // the tree. Similar to btree.ItemIterator.
+// Note: The span must not be mutated.
 type ItemIterator[T any] func(span tablepb.Span, value T) bool
 
 // Ascend calls the iterator for every value in the tree within the range

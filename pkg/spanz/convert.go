@@ -14,9 +14,13 @@
 package spanz
 
 import (
+	"reflect"
 	"sort"
+	"unsafe"
 
+	"github.com/pingcap/log"
 	"github.com/pingcap/tiflow/cdc/processor/tablepb"
+	"go.uber.org/zap"
 )
 
 // ArrayToSpan converts an array of TableID to an array of Span.
@@ -73,8 +77,8 @@ type hashableSpan struct {
 func toHashableSpan(span tablepb.Span) hashableSpan {
 	return hashableSpan{
 		TableID:  span.TableID,
-		StartKey: string(span.StartKey),
-		EndKey:   string(span.EndKey),
+		StartKey: unsafeBytesToString(span.StartKey),
+		EndKey:   unsafeBytesToString(span.EndKey),
 	}
 }
 
@@ -82,7 +86,30 @@ func toHashableSpan(span tablepb.Span) hashableSpan {
 func (h hashableSpan) toSpan() tablepb.Span {
 	return tablepb.Span{
 		TableID:  h.TableID,
-		StartKey: []byte(h.StartKey),
-		EndKey:   []byte(h.EndKey),
+		StartKey: unsafeStringToBytes(h.StartKey),
+		EndKey:   unsafeStringToBytes(h.EndKey),
 	}
+}
+
+// unsafeStringToBytes converts string to byte without memory allocation.
+// The []byte must not be mutated.
+// See: https://cs.opensource.google/go/go/+/refs/tags/go1.19.4:src/strings/builder.go;l=48
+func unsafeBytesToString(b []byte) string {
+	return *(*string)(unsafe.Pointer(&b))
+}
+
+// unsafeStringToBytes converts string to byte without memory allocation.
+// The returned []byte must not be mutated.
+// See: https://groups.google.com/g/golang-nuts/c/Zsfk-VMd_fU/m/O1ru4fO-BgAJ
+func unsafeStringToBytes(s string) []byte {
+	if len(s) == 0 {
+		return []byte{}
+	}
+	const maxCap = 0x7fff0000
+	if len(s) > maxCap {
+		log.Panic("string is too large", zap.Int("len", len(s)))
+	}
+	return (*[maxCap]byte)(unsafe.Pointer(
+		(*reflect.StringHeader)(unsafe.Pointer(&s)).Data),
+	)[:len(s):len(s)]
 }

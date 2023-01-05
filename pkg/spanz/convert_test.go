@@ -16,6 +16,7 @@ package spanz
 import (
 	"testing"
 
+	"github.com/pingcap/tiflow/cdc/processor/tablepb"
 	"github.com/stretchr/testify/require"
 )
 
@@ -29,4 +30,36 @@ func TestHashableSpan(t *testing.T) {
 
 	span := toHashableSpan(TableIDToComparableSpan(1))
 	require.EqualValues(t, TableIDToComparableSpan(1), span.toSpan())
+}
+
+func TestHashableSpanHeapAlloc(t *testing.T) {
+	span := tablepb.Span{TableID: 1}
+	for i := 0; i < 10; i++ {
+		span.StartKey = append(span.StartKey, byte(i))
+		span.EndKey = append(span.EndKey, byte(i))
+	}
+
+	results := testing.Benchmark(func(b *testing.B) {
+		b.ReportAllocs()
+		b.ResetTimer()
+		for i := 0; i < b.N; i++ {
+			hspan := toHashableSpan(span)
+			span = hspan.toSpan()
+		}
+	})
+	require.EqualValues(t, 0, results.MemAllocs)
+}
+
+func TestUnsafeStringByte(t *testing.T) {
+	b := []byte("unsafe bytes")
+	s := "unsafe bytes"
+
+	us := unsafeBytesToString(b)
+	require.EqualValues(t, s, us)
+	require.EqualValues(t, len(b), len(us))
+
+	ub := unsafeStringToBytes(s)
+	require.EqualValues(t, b, ub)
+	require.EqualValues(t, len(s), len(ub))
+	require.EqualValues(t, len(s), cap(ub))
 }
