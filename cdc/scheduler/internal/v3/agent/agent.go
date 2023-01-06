@@ -356,7 +356,7 @@ func (a *agent) handleMessageDispatchTableRequest(
 				zap.String("capture", a.CaptureID),
 				zap.String("namespace", a.ChangeFeedID.Namespace),
 				zap.String("changefeed", a.ChangeFeedID.ID),
-				zap.Stringer("span", &span),
+				zap.String("span", span.String()),
 				zap.Any("request", request))
 			return
 		}
