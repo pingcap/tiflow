@@ -741,5 +741,9 @@ func TestDeleteChangefeed(t *testing.T) {
 	req, _ = http.NewRequestWithContext(context.Background(), remove.method,
 		fmt.Sprintf(remove.url, validID), nil)
 	router.ServeHTTP(w, req)
+	respErr = model.HTTPError{}
+	err = json.NewDecoder(w.Body).Decode(&respErr)
+	require.Nil(t, err)
+	require.Contains(t, respErr.Code, "ErrReachMaxTry")
 	require.Equal(t, http.StatusInternalServerError, w.Code)
 }
