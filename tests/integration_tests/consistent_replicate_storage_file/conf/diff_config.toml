@@ -7,13 +7,13 @@ export-fix-sql = true
 check-struct-only = false
 
 [task]
-    output-dir = "/tmp/tidb_cdc_test/consistent_replicate_s3/sync_diff/output"
+    output-dir = "/tmp/tidb_cdc_test/consistent_replicate_storage_file/sync_diff/output"
 
     source-instances = ["mysql1"]
 
     target-instance = "tidb0"
 
-    target-check-tables = ["consistent_replicate_s3.usertable*","consistent_replicate_s3.t*"]
+    target-check-tables = ["consistent_replicate_storage_file.usertable*","consistent_replicate_storage_file.t*"]
 
 [data-sources]
 [data-sources.mysql1]
