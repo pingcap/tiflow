@@ -56,14 +56,12 @@ func TestMountedEventIter(t *testing.T) {
 		require.NotNil(t, event)
 		require.Nil(t, err)
 	}
-	require.Equal(t, iter.nextToMount, 3)
 	require.Equal(t, iter.nextToEmit, 3)
 
 	rawIter.repeatItem = func() *model.PolymorphicEvent { return nil }
 	event, _, err := iter.Next(context.Background())
 	require.Nil(t, event)
 	require.Nil(t, err)
-	require.Equal(t, iter.nextToMount, 0)
 	require.Equal(t, iter.nextToEmit, 0)
 	require.Nil(t, iter.iter)
 }
