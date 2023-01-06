@@ -49,8 +49,7 @@ func (i *MountedEventIter) Next(ctx context.Context) (event *model.PolymorphicEv
 	// There are no events in mounting. Fetch more events and mounting them.
 	// The batch size is determined by `maxBatchSize`.
 	if i.nextToEmit >= len(i.rawEvents) {
-		err = i.readBatch(ctx)
-		if err != nil {
+		if err = i.readBatch(ctx); err != nil {
 			return
 		}
 	}
@@ -58,11 +57,12 @@ func (i *MountedEventIter) Next(ctx context.Context) (event *model.PolymorphicEv
 	// Check whether there are events in mounting or not.
 	if i.nextToEmit < len(i.rawEvents) {
 		idx := i.nextToEmit
-		if err = i.rawEvents[idx].event.WaitFinished(ctx); err == nil {
-			event = i.rawEvents[idx].event
-			txnFinished = i.rawEvents[idx].txnFinished
-			i.nextToEmit += 1
+		if err = i.rawEvents[idx].event.WaitFinished(ctx); err != nil {
+			return
 		}
+		event = i.rawEvents[idx].event
+		txnFinished = i.rawEvents[idx].txnFinished
+		i.nextToEmit += 1
 	}
 	return
 }
