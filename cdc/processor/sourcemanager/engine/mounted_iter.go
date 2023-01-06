@@ -27,7 +27,6 @@ type MountedEventIter struct {
 	maxBatchSize int
 
 	rawEvents      []rawEvent
-	nextToMount    int
 	nextToEmit     int
 	savedIterError error
 }
@@ -47,54 +46,59 @@ func NewMountedEventIter(
 
 // Next returns the next mounted event.
 func (i *MountedEventIter) Next(ctx context.Context) (event *model.PolymorphicEvent, txnFinished Position, err error) {
+	// There are no events in mounting. Fetch more events and mounting them.
+	// The batch size is determined by `maxBatchSize`.
+	if i.nextToEmit >= len(i.rawEvents) {
+		err = i.readBatch(ctx)
+		if err != nil {
+			return
+		}
+	}
+
 	// Check whether there are events in mounting or not.
-	for idx := i.nextToEmit; idx < i.nextToMount; idx++ {
+	if i.nextToEmit < len(i.rawEvents) {
+		idx := i.nextToEmit
 		if err = i.rawEvents[idx].event.WaitFinished(ctx); err == nil {
 			event = i.rawEvents[idx].event
 			txnFinished = i.rawEvents[idx].txnFinished
 			i.nextToEmit += 1
 		}
-		return
-	}
-
-	// There are no events in mounting. Fetch more events and mounting them.
-	// The batch size is determined by `maxBatchSize`.
-	if i.mg != nil && i.iter != nil {
-		i.nextToMount = 0
-		i.nextToEmit = 0
-		if cap(i.rawEvents) == 0 {
-			i.rawEvents = make([]rawEvent, 0, i.maxBatchSize)
-		} else {
-			i.rawEvents = i.rawEvents[:0]
-		}
-
-		for len(i.rawEvents) < cap(i.rawEvents) {
-			event, txnFinished, err = i.iter.Next()
-			if err != nil {
-				return
-			}
-			if event == nil {
-				i.savedIterError = i.iter.Close()
-				i.iter = nil
-				break
-			}
-			i.rawEvents = append(i.rawEvents, rawEvent{event, txnFinished})
-		}
-		for idx := i.nextToMount; idx < len(i.rawEvents); idx++ {
-			i.rawEvents[idx].event.SetUpFinishedCh()
-			if err = i.mg.AddEvent(ctx, i.rawEvents[idx].event); err != nil {
-				i.mg = nil
-				return
-			}
-			i.nextToMount += 1
-		}
-
-		// More events are fetched and in mounting. So re-call this function to wait them.
-		if i.nextToEmit < i.nextToMount {
-			return i.Next(ctx)
-		}
 	}
 	return
+}
+
+func (i *MountedEventIter) readBatch(ctx context.Context) error {
+	if i.mg == nil || i.iter == nil {
+		return nil
+	}
+
+	i.nextToEmit = 0
+	if cap(i.rawEvents) == 0 {
+		i.rawEvents = make([]rawEvent, 0, i.maxBatchSize)
+	} else {
+		i.rawEvents = i.rawEvents[:0]
+	}
+
+	for len(i.rawEvents) < cap(i.rawEvents) {
+		event, txnFinished, err := i.iter.Next()
+		if err != nil {
+			return err
+		}
+		if event == nil {
+			i.savedIterError = i.iter.Close()
+			i.iter = nil
+			break
+		}
+		i.rawEvents = append(i.rawEvents, rawEvent{event, txnFinished})
+	}
+	for idx := 0; idx < len(i.rawEvents); idx++ {
+		i.rawEvents[idx].event.SetUpFinishedCh()
+		if err := i.mg.AddEvent(ctx, i.rawEvents[idx].event); err != nil {
+			i.mg = nil
+			return err
+		}
+	}
+	return nil
 }
 
 // Close implements sorter.EventIterator.
