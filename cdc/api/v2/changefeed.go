@@ -368,7 +368,7 @@ func (h *OpenAPIV2) getChangeFeedMetaInfo(c *gin.Context) {
 	c.JSON(http.StatusOK, toAPIModel(info, false))
 }
 
-// resumeChangefeed handles update changefeed request.
+// resumeChangefeed handles resume changefeed request.
 func (h *OpenAPIV2) resumeChangefeed(c *gin.Context) {
 	ctx := c.Request.Context()
 	changefeedID := model.DefaultChangeFeedID(c.Param(apiOpVarChangefeedID))
@@ -455,6 +455,35 @@ func (h *OpenAPIV2) resumeChangefeed(c *gin.Context) {
 		return
 	}
 	c.Status(http.StatusOK)
+}
+
+// pauseChangefeed handles pause changeffed request
+func (h *OpenAPIV2) pauseChangefeed(c *gin.Context) {
+	ctx := c.Request.Context()
+
+	changefeedID := model.DefaultChangeFeedID(c.Param(apiOpVarChangefeedID))
+	if err := model.ValidateChangefeedID(changefeedID.ID); err != nil {
+		_ = c.Error(cerror.ErrAPIInvalidParam.GenWithStack("invalid changefeed_id: %s",
+			changefeedID.ID))
+		return
+	}
+	// check if the changefeed exists
+	_, err := h.capture.StatusProvider().GetChangeFeedStatus(ctx, changefeedID)
+	if err != nil {
+		_ = c.Error(err)
+		return
+	}
+
+	job := model.AdminJob{
+		CfID: changefeedID,
+		Type: model.AdminStop,
+	}
+
+	if err := api.HandleOwnerJob(ctx, h.capture, job); err != nil {
+		_ = c.Error(err)
+		return
+	}
+	c.JSON(http.StatusOK, &EmptyResponse{})
 }
 
 func toAPIModel(info *model.ChangeFeedInfo, maskSinkURI bool) *ChangeFeedInfo {
