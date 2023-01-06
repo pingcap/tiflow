@@ -92,6 +92,7 @@ func (n *Wrapper) Start(
 		n.span.TableID,
 		n.tableName,
 		n.bdrMode,
+		false,
 	)
 	n.wg.Add(1)
 	go func() {
