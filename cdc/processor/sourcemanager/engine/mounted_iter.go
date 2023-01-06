@@ -89,14 +89,12 @@ func (i *MountedEventIter) readBatch(ctx context.Context) error {
 			i.iter = nil
 			break
 		}
-		i.rawEvents = append(i.rawEvents, rawEvent{event, txnFinished})
-	}
-	for idx := 0; idx < len(i.rawEvents); idx++ {
-		i.rawEvents[idx].event.SetUpFinishedCh()
-		if err := i.mg.AddEvent(ctx, i.rawEvents[idx].event); err != nil {
+		event.SetUpFinishedCh()
+		if err := i.mg.AddEvent(ctx, event); err != nil {
 			i.mg = nil
 			return err
 		}
+		i.rawEvents = append(i.rawEvents, rawEvent{event, txnFinished})
 	}
 	return nil
 }
