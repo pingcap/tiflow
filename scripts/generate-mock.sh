@@ -32,6 +32,7 @@ fi
 "$MOCKGEN" -source cdc/capture/capture.go -destination cdc/capture/mock/capture_mock.go
 "$MOCKGEN" -source pkg/cmd/factory/factory.go -destination pkg/cmd/factory/mock/factory_mock.go -package mock_factory
 "$MOCKGEN" -source cdc/processor/sourcemanager/engine/engine.go -destination cdc/processor/sourcemanager/engine/mock/engine_mock.go
+"$MOCKGEN" -source pkg/api/v2/status.go -destination pkg/api/v2/mock/status_mock.go -package mock
 
 # DM mock
 "$MOCKGEN" -package pbmock -destination dm/pbmock/dmmaster.go github.com/pingcap/tiflow/dm/pb MasterClient,MasterServer
