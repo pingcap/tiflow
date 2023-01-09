@@ -133,6 +133,10 @@ func NewKafkaDMLProducer(
 					// todo: how to handle this ?
 					return
 				case errCh <- err:
+					log.Warn("send message failed, send error to channel",
+						zap.String("namespace", changefeedID.Namespace),
+						zap.String("changefeed", changefeedID.ID),
+						zap.Error(err))
 					// what happen if the errCh is full ?
 				default:
 					log.Warn("send message failed, and error channel is full.")
@@ -145,7 +149,10 @@ func NewKafkaDMLProducer(
 				meta := msg.Metadata.(messageMetaData)
 				meta.callback()
 			}
-
+			log.Info("send message success, all messages callback committed",
+				zap.String("namespace", changefeedID.Namespace),
+				zap.String("changefeed", changefeedID.ID),
+				zap.Int("messagesCount", len(messages)))
 		},
 
 		Compression: compress.None,
