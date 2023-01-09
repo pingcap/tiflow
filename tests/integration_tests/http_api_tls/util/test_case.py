@@ -525,6 +525,7 @@ if __name__ == "__main__":
         "get_tso": get_tso,
         "verify_table": verify_table,
         "create_changefeed_v2": create_changefeed_v2,
+        "delete_changefeed_v2": delete_changefeed_v2,
         "unsafe_apis": unsafe_apis
     }
 
