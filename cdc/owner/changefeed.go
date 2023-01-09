@@ -34,6 +34,7 @@ import (
 	"github.com/pingcap/tiflow/pkg/orchestrator"
 	"github.com/pingcap/tiflow/pkg/pdutil"
 	redoCfg "github.com/pingcap/tiflow/pkg/redo"
+	"github.com/pingcap/tiflow/pkg/sink/observer"
 	"github.com/pingcap/tiflow/pkg/txnutil/gc"
 	"github.com/pingcap/tiflow/pkg/upstream"
 	"github.com/prometheus/client_golang/prometheus"
@@ -119,6 +120,9 @@ type changefeed struct {
 
 	metricsChangefeedBarrierTsGauge prometheus.Gauge
 	metricsChangefeedTickDuration   prometheus.Observer
+
+	backendObserver  observer.Observer
+	observerLastTick time.Time
 
 	newDDLPuller func(ctx context.Context,
 		replicaConfig *config.ReplicaConfig,
@@ -403,6 +407,13 @@ func (c *changefeed) tick(ctx cdcContext.Context, captures map[model.CaptureID]*
 		}
 	})
 
+	if time.Since(c.observerLastTick) > backendObserverTickDuration {
+		if err := c.backendObserver.Tick(ctx); err != nil {
+			log.Error("backend observer tick error", zap.Error(err))
+		}
+		c.observerLastTick = time.Now()
+	}
+
 	c.updateStatus(newCheckpointTs, newResolvedTs)
 	c.updateMetrics(currentTs, newCheckpointTs, metricsResolvedTs)
 
@@ -532,6 +543,11 @@ LOOP:
 		defer c.ddlWg.Done()
 		ctx.Throw(c.ddlPuller.Run(cancelCtx))
 	}()
+
+	c.backendObserver, err = observer.NewObserver(ctx, c.state.Info.SinkURI, c.state.Info.Config)
+	if err != nil {
+		return err
+	}
 
 	stdCtx := contextutil.PutChangefeedIDInCtx(cancelCtx, c.id)
 	redoManagerOpts := redo.NewOwnerManagerOptions(c.errCh)
