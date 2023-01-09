@@ -348,7 +348,7 @@ func (tm *tableSpanManager) dropTableSpan(span tablepb.Span) {
 		log.Warn("schedulerv3: tableManager drop table not found",
 			zap.String("namespace", tm.changefeedID.Namespace),
 			zap.String("changefeed", tm.changefeedID.ID),
-			zap.Stringer("span", &span))
+			zap.String("span", span.String()))
 		return
 	}
 	state, _ := table.getAndUpdateTableSpanState()
@@ -356,14 +356,14 @@ func (tm *tableSpanManager) dropTableSpan(span tablepb.Span) {
 		log.Panic("schedulerv3: tableManager drop table undesired",
 			zap.String("namespace", tm.changefeedID.Namespace),
 			zap.String("changefeed", tm.changefeedID.ID),
-			zap.Stringer("span", &span),
+			zap.String("span", span.String()),
 			zap.Stringer("state", table.state))
 	}
 
 	log.Debug("schedulerv3: tableManager drop table",
 		zap.String("namespace", tm.changefeedID.Namespace),
 		zap.String("changefeed", tm.changefeedID.ID),
-		zap.Stringer("span", &span))
+		zap.String("span", span.String()))
 	tm.tables.Delete(span)
 }
 

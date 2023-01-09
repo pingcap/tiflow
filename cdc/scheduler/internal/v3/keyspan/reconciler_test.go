@@ -155,7 +155,9 @@ func TestReconcile(t *testing.T) {
 	// Test 1. changefeed initialization.
 	reps := spanz.NewMap[*replication.ReplicationSet]()
 	reconciler := NewReconciler(model.ChangeFeedID{}, cache, cfg.RegionPerSpan)
-	spans := reconciler.Reconcile(ctx, []model.TableID{1}, reps, compat)
+	currentTables := &replication.TableRanges{}
+	currentTables.UpdateTables([]model.TableID{1})
+	spans := reconciler.Reconcile(ctx, currentTables, reps, compat)
 	require.Equal(t, allSpan[:4], spans)
 	require.Equal(t, allSpan[:4], reconciler.tableSpans[1].spans)
 	require.Equal(t, 1, len(reconciler.tableSpans))
@@ -165,13 +167,15 @@ func TestReconcile(t *testing.T) {
 		reps.ReplaceOrInsert(span, nil)
 	}
 	reconciler = NewReconciler(model.ChangeFeedID{}, cache, cfg.RegionPerSpan)
-	spans = reconciler.Reconcile(ctx, []model.TableID{1}, reps, compat)
+	currentTables.UpdateTables([]model.TableID{1})
+	spans = reconciler.Reconcile(ctx, currentTables, reps, compat)
 	require.Equal(t, allSpan[:4], spans)
 	require.Equal(t, allSpan[:4], reconciler.tableSpans[1].spans)
 	require.Equal(t, 1, len(reconciler.tableSpans))
 
 	// Test 3. add table 2.
-	spans = reconciler.Reconcile(ctx, []model.TableID{1, 2}, reps, compat)
+	currentTables.UpdateTables([]model.TableID{1, 2})
+	spans = reconciler.Reconcile(ctx, currentTables, reps, compat)
 	spanz.Sort(spans)
 	require.Equal(t, allSpan, spans)
 	require.Equal(t, allSpan[:4], reconciler.tableSpans[1].spans)
@@ -182,7 +186,8 @@ func TestReconcile(t *testing.T) {
 	for _, span := range reconciler.tableSpans[2].spans {
 		reps.ReplaceOrInsert(span, nil)
 	}
-	spans = reconciler.Reconcile(ctx, []model.TableID{1}, reps, compat)
+	currentTables.UpdateTables([]model.TableID{1})
+	spans = reconciler.Reconcile(ctx, currentTables, reps, compat)
 	require.Equal(t, allSpan[:4], spans)
 	require.Equal(t, allSpan[:4], reconciler.tableSpans[1].spans)
 	require.Equal(t, 1, len(reconciler.tableSpans))
@@ -190,7 +195,8 @@ func TestReconcile(t *testing.T) {
 	// Test 2. Owner switch and some captures fail.
 	// Start span is missing.
 	reps.Delete(allSpan[0])
-	spans = reconciler.Reconcile(ctx, []model.TableID{1}, reps, compat)
+	currentTables.UpdateTables([]model.TableID{1})
+	spans = reconciler.Reconcile(ctx, currentTables, reps, compat)
 	spanz.Sort(spans)
 	require.Equal(t, allSpan[:4], spans)
 	spanz.Sort(reconciler.tableSpans[1].spans)
@@ -200,7 +206,8 @@ func TestReconcile(t *testing.T) {
 	// End spans is missing.
 	reps.ReplaceOrInsert(allSpan[0], nil)
 	reps.Delete(allSpan[3])
-	spans = reconciler.Reconcile(ctx, []model.TableID{1}, reps, compat)
+	currentTables.UpdateTables([]model.TableID{1})
+	spans = reconciler.Reconcile(ctx, currentTables, reps, compat)
 	spanz.Sort(spans)
 	require.Equal(t, allSpan[:4], spans)
 	spanz.Sort(reconciler.tableSpans[1].spans)
@@ -211,7 +218,8 @@ func TestReconcile(t *testing.T) {
 	reps.ReplaceOrInsert(allSpan[3], nil)
 	reps.Delete(allSpan[1])
 	reps.Delete(allSpan[2])
-	spans = reconciler.Reconcile(ctx, []model.TableID{1}, reps, compat)
+	currentTables.UpdateTables([]model.TableID{1})
+	spans = reconciler.Reconcile(ctx, currentTables, reps, compat)
 	expectedSpan := allSpan[:1]
 	expectedSpan = append(expectedSpan, tablepb.Span{
 		TableID:  1,
@@ -247,7 +255,9 @@ func TestCompatDisable(t *testing.T) {
 	ctx := context.Background()
 	reps := spanz.NewMap[*replication.ReplicationSet]()
 	reconciler := NewReconciler(model.ChangeFeedID{}, cache, cfg.RegionPerSpan)
-	spans := reconciler.Reconcile(ctx, []model.TableID{1}, reps, cm)
+	currentTables := &replication.TableRanges{}
+	currentTables.UpdateTables([]model.TableID{1})
+	spans := reconciler.Reconcile(ctx, currentTables, reps, cm)
 	require.Equal(t, []tablepb.Span{spanz.TableIDToComparableSpan(1)}, spans)
 	require.Equal(t, 1, len(reconciler.tableSpans))
 	reps.ReplaceOrInsert(spanz.TableIDToComparableSpan(1), nil)
@@ -257,7 +267,8 @@ func TestCompatDisable(t *testing.T) {
 		"2": {Version: compat.SpanReplicationMinVersion.String()},
 	})
 	require.True(t, cm.CheckSpanReplicationEnabled())
-	spans = reconciler.Reconcile(ctx, []model.TableID{1, 2}, reps, cm)
+	currentTables.UpdateTables([]model.TableID{1, 2})
+	spans = reconciler.Reconcile(ctx, currentTables, reps, cm)
 	spanz.Sort(spans)
 	require.Equal(t, spanz.TableIDToComparableSpan(1), spans[0])
 	require.Equal(t, allSpan[4:], spans[1:])
@@ -280,19 +291,23 @@ func TestBatchAddRateLimit(t *testing.T) {
 	// Add table 2.
 	reps := spanz.NewMap[*replication.ReplicationSet]()
 	reconciler := NewReconciler(model.ChangeFeedID{}, cache, cfg.RegionPerSpan)
-	spans := reconciler.Reconcile(ctx, []model.TableID{2}, reps, compat)
+	currentTables := &replication.TableRanges{}
+	currentTables.UpdateTables([]model.TableID{2})
+	spans := reconciler.Reconcile(ctx, currentTables, reps, compat)
 	require.Equal(t, allSpan, spans)
 	require.Equal(t, allSpan, reconciler.tableSpans[2].spans)
 	require.Equal(t, 1, len(reconciler.tableSpans))
 
 	// Simulate batch add rate limited
-	spans = reconciler.Reconcile(ctx, []model.TableID{2}, reps, compat)
+	currentTables.UpdateTables([]model.TableID{2})
+	spans = reconciler.Reconcile(ctx, currentTables, reps, compat)
 	require.Equal(t, allSpan, spans)
 	require.Equal(t, allSpan, reconciler.tableSpans[2].spans)
 	require.Equal(t, 1, len(reconciler.tableSpans))
 
 	reps.ReplaceOrInsert(allSpan[0], nil)
-	spans = reconciler.Reconcile(ctx, []model.TableID{2}, reps, compat)
+	currentTables.UpdateTables([]model.TableID{2})
+	spans = reconciler.Reconcile(ctx, currentTables, reps, compat)
 	require.Equal(t, allSpan, spans)
 	require.Equal(t, allSpan, reconciler.tableSpans[2].spans)
 	require.Equal(t, 1, len(reconciler.tableSpans))
