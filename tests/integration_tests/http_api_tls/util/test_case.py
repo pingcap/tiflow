@@ -480,7 +480,7 @@ def delete_changefeed_v2():
     assert resp.json()["error_code"] == "CDC:ErrChangeFeedNotExists"
 
     # test remove changefeed not exists
-    url = BASE_URL0+"/changefeeds/changefeed-not-exists"
+    url = BASE_URL0_V2+"/changefeeds/changefeed-not-exists"
     resp = rq.delete(url, cert=CERT, verify=VERIFY)
     assert (resp.status_code == rq.codes.no_content)
 
