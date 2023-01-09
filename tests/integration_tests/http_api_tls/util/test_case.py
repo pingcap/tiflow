@@ -21,7 +21,7 @@ physicalShiftBits = 18
 def create_changefeed(sink_uri):
     url = BASE_URL1+"/changefeeds"
     # create changefeed
-    for i in range(1, 4):
+    for i in range(1, 5):
         data = {
             "changefeed_id": "changefeed-test"+str(i),
             "sink_uri": "blackhole://",
@@ -484,7 +484,7 @@ def delete_changefeed_v2():
     resp = rq.delete(url, cert=CERT, verify=VERIFY)
     assert (resp.status_code == rq.codes.no_content)
 
-    print("pass test: remove changefeed")
+    print("pass test: remove changefeed v2")
 
 # util functions define belows
 
