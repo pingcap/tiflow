@@ -285,7 +285,7 @@ func TestManagerRtsMap(t *testing.T) {
 	require.Nil(t, err)
 	defer logMgr.Cleanup(ctx)
 
-	tables := spanz.NewHashMap[model.Ts]()
+	var tables *spanz.HashMap[model.Ts]
 	var minTs model.Ts
 
 	tables, minTs = logMgr.prepareForFlush()
