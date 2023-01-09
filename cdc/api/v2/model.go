@@ -26,6 +26,10 @@ import (
 	"github.com/pingcap/tiflow/pkg/security"
 )
 
+// EmptyResponse return a {} to http
+type EmptyResponse struct {
+}
+
 // Tso contains timestamp get from PD
 type Tso struct {
 	Timestamp int64 `json:"timestamp"`
