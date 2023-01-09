@@ -18,6 +18,7 @@ import (
 
 	"github.com/Shopify/sarama"
 	"github.com/pingcap/tiflow/cdc/sink/codec/common"
+	kafka2 "github.com/pingcap/tiflow/cdc/sink/mq/producer/kafka"
 	"github.com/pingcap/tiflow/pkg/sink/kafka"
 )
 
@@ -39,4 +40,4 @@ type DMLProducer interface {
 // So we let the GC close errCh.
 // It's usually a buffered channel.
 type Factory func(ctx context.Context, client sarama.Client,
-	adminClient kafka.ClusterAdminClient, errCh chan error) (DMLProducer, error)
+	adminClient kafka.ClusterAdminClient, config *kafka2.Config, errCh chan error) (DMLProducer, error)

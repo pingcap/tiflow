@@ -25,11 +25,14 @@ import (
 	"github.com/pingcap/tiflow/cdc/contextutil"
 	"github.com/pingcap/tiflow/cdc/model"
 	"github.com/pingcap/tiflow/cdc/sink/codec/common"
+	kafkaV1 "github.com/pingcap/tiflow/cdc/sink/mq/producer/kafka"
 	"github.com/pingcap/tiflow/cdc/sinkv2/eventsink"
 	collector "github.com/pingcap/tiflow/cdc/sinkv2/metrics/mq/kafka"
 	cerror "github.com/pingcap/tiflow/pkg/errors"
 	pkafka "github.com/pingcap/tiflow/pkg/sink/kafka"
 	"github.com/pingcap/tiflow/pkg/util"
+	kafka "github.com/segmentio/kafka-go"
+	"github.com/segmentio/kafka-go/compress"
 	"go.uber.org/zap"
 )
 
@@ -47,7 +50,7 @@ type kafkaDMLProducer struct {
 	// We hold the client to make close operation faster.
 	// Please see the comment of Close().
 	client sarama.Client
-	// asyncProducer is used to send messages to kafka asynchronously.
+	// // asyncProducer is used to send messages to kafka asynchronously.
 	asyncProducer sarama.AsyncProducer
 	// collector is used to report metrics.
 	collector *collector.Collector
@@ -62,6 +65,8 @@ type kafkaDMLProducer struct {
 	// failpointCh is used to inject failpoints to the run loop.
 	// Only used in test.
 	failpointCh chan error
+
+	writer *kafka.Writer
 }
 
 // NewKafkaDMLProducer creates a new kafka producer.
@@ -69,6 +74,7 @@ func NewKafkaDMLProducer(
 	ctx context.Context,
 	client sarama.Client,
 	adminClient pkafka.ClusterAdminClient,
+	config *kafkaV1.Config,
 	errCh chan error,
 ) (DMLProducer, error) {
 	changefeedID := contextutil.ChangefeedIDFromCtx(ctx)
@@ -98,6 +104,55 @@ func NewKafkaDMLProducer(
 		return nil, cerror.WrapError(cerror.ErrKafkaNewSaramaProducer, err)
 	}
 
+	writer := &kafka.Writer{
+		Addr:     kafka.TCP(config.BrokerEndpoints...),
+		Balancer: &kafka.RoundRobin{},
+
+		MaxAttempts: 10,
+
+		WriteBackoffMin: 100 * time.Millisecond,
+		WriteBackoffMax: 1 * time.Second,
+
+		BatchSize:  100,
+		BatchBytes: 1048576,
+
+		BatchTimeout: 1 * time.Second,
+
+		ReadTimeout:  10 * time.Second,
+		WriteTimeout: 10 * time.Second,
+
+		RequiredAcks: kafka.RequireAll,
+
+		Async: true,
+
+		Completion: func(messages []kafka.Message, err error) {
+			if err != nil {
+				select {
+				case <-ctx.Done():
+					// send message error and context canceled.
+					// todo: how to handle this ?
+					return
+				case errCh <- err:
+					// what happen if the errCh is full ?
+				default:
+					log.Warn("send message failed, and error channel is full.")
+				}
+
+				return
+			}
+
+			for _, msg := range messages {
+				meta := msg.Metadata.(messageMetaData)
+				meta.callback()
+			}
+
+		},
+
+		Compression: compress.None,
+
+		AllowAutoTopicCreation: false,
+	}
+
 	collector := collector.New(changefeedID, util.RoleProcessor,
 		adminClient, client.Config().MetricRegistry)
 
@@ -109,6 +164,8 @@ func NewKafkaDMLProducer(
 		closed:        false,
 		closedChan:    make(chan struct{}),
 		failpointCh:   make(chan error, 1),
+
+		writer: writer,
 	}
 
 	// Start collecting metrics.
@@ -158,20 +215,29 @@ func (k *kafkaDMLProducer) AsyncSendMessage(
 		failpoint.Return(nil)
 	})
 
-	msg := &sarama.ProducerMessage{
+	err := k.writer.WriteMessages(ctx, kafka.Message{
 		Topic:     topic,
-		Partition: partition,
-		Key:       sarama.StringEncoder(message.Key),
-		Value:     sarama.ByteEncoder(message.Value),
+		Partition: int(partition),
+		Key:       message.Key,
+		Value:     message.Value,
 		Metadata:  messageMetaData{callback: message.Callback},
-	}
+	})
+	return err
 
-	select {
-	case <-ctx.Done():
-		return errors.Trace(ctx.Err())
-	case k.asyncProducer.Input() <- msg:
-	}
-	return nil
+	// msg := &sarama.ProducerMessage{
+	// 	Topic:     topic,
+	// 	Partition: partition,
+	// 	Key:       sarama.StringEncoder(message.Key),
+	// 	Value:     sarama.ByteEncoder(message.Value),
+	// 	Metadata:  messageMetaData{callback: message.Callback},
+	// }
+
+	// select {
+	// case <-ctx.Done():
+	// 	return errors.Trace(ctx.Err())
+	// case k.asyncProducer.Input() <- msg:
+	// }
+	// return nil
 }
 
 func (k *kafkaDMLProducer) Close() {
@@ -240,6 +306,13 @@ func (k *kafkaDMLProducer) Close() {
 		// Finally, close the metric collector.
 		k.collector.Close()
 	}()
+
+	if err := k.writer.Close(); err != nil {
+		log.Warn("close kafka writer meet error, ignore it",
+			zap.String("namespace", k.id.Namespace),
+			zap.String("changefeed", k.id.ID),
+			zap.Error(err))
+	}
 }
 
 func (k *kafkaDMLProducer) run(ctx context.Context) error {

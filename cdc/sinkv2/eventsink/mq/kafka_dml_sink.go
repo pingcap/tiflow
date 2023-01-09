@@ -84,7 +84,7 @@ func NewKafkaDMLSink(
 
 	log.Info("Try to create a DML sink producer",
 		zap.Any("baseConfig", baseConfig))
-	p, err := producerCreator(ctx, client, adminClient, errCh)
+	p, err := producerCreator(ctx, client, adminClient, baseConfig, errCh)
 	if err != nil {
 		return nil, cerror.WrapError(cerror.ErrKafkaNewSaramaProducer, err)
 	}
