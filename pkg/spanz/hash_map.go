@@ -29,25 +29,25 @@ func NewHashMap[T any]() *HashMap[T] {
 	}
 }
 
-// Len returns the number of items currently in the tree.
+// Len returns the number of items currently in the map.
 func (m *HashMap[T]) Len() int {
 	return len(m.hashMap)
 }
 
-// Has returns true if the given key is in the tree.
+// Has returns true if the given key is in the map.
 func (m *HashMap[T]) Has(span tablepb.Span) bool {
 	_, ok := m.hashMap[toHashableSpan(span)]
 	return ok
 }
 
-// Get looks for the key item in the tree, returning it.
+// Get looks for the key item in the map, returning it.
 // It returns (zeroValue, false) if unable to find that item.
 func (m *HashMap[T]) Get(span tablepb.Span) (T, bool) {
 	item, ok := m.hashMap[toHashableSpan(span)]
 	return item, ok
 }
 
-// GetV looks for the key item in the tree, returning it.
+// GetV looks for the key item in the map, returning it.
 // It returns zeroValue if unable to find that item.
 func (m *HashMap[T]) GetV(span tablepb.Span) T {
 	item := m.hashMap[toHashableSpan(span)]
@@ -59,18 +59,14 @@ func (m *HashMap[T]) Delete(span tablepb.Span) {
 	delete(m.hashMap, toHashableSpan(span))
 }
 
-// ReplaceOrInsert adds the given item to the tree.  If an item in the tree
-// already equals the given one, it is removed from the tree and returned,
-// and the second return value is true.  Otherwise, (zeroValue, false)
-//
-// nil cannot be added to the tree (will panic).
+// ReplaceOrInsert adds the given item to the map.
 func (m *HashMap[T]) ReplaceOrInsert(span tablepb.Span, value T) {
 	m.hashMap[toHashableSpan(span)] = value
 }
 
-// Iter calls the iterator for every value in the tree until iterator returns
+// Range calls the iterator for every value in the map until iterator returns
 // false.
-func (m *HashMap[T]) Iter(iterator ItemIterator[T]) {
+func (m *HashMap[T]) Range(iterator ItemIterator[T]) {
 	for k, v := range m.hashMap {
 		ok := iterator(k.toSpan(), v)
 		if !ok {

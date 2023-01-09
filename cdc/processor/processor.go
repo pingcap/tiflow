@@ -1088,7 +1088,7 @@ func (p *processor) handlePosition(currentTs int64) {
 			}
 		}
 	} else {
-		p.tableSpans.Iter(func(span tablepb.Span, table tablepb.TablePipeline) bool {
+		p.tableSpans.Range(func(span tablepb.Span, table tablepb.TablePipeline) bool {
 			rts := table.ResolvedTs()
 			if rts < minResolvedTs {
 				minResolvedTs = rts
@@ -1131,7 +1131,7 @@ func (p *processor) pushResolvedTs2Table() {
 	if p.pullBasedSinking {
 		p.sinkManager.UpdateBarrierTs(resolvedTs)
 	} else {
-		p.tableSpans.Iter(func(span tablepb.Span, table tablepb.TablePipeline) bool {
+		p.tableSpans.Range(func(span tablepb.Span, table tablepb.TablePipeline) bool {
 			table.UpdateBarrierTs(resolvedTs)
 			return true
 		})
@@ -1274,7 +1274,7 @@ func (p *processor) refreshMetrics() {
 	} else {
 		var totalConsumed uint64
 		var totalEvents int64
-		p.tableSpans.Iter(func(span tablepb.Span, table tablepb.TablePipeline) bool {
+		p.tableSpans.Range(func(span tablepb.Span, table tablepb.TablePipeline) bool {
 			consumed := table.MemoryConsumption()
 			p.metricsTableMemoryHistogram.Observe(float64(consumed))
 			totalConsumed += consumed
@@ -1343,11 +1343,11 @@ func (p *processor) Close(ctx cdcContext.Context) error {
 				zap.String("changefeed", p.changefeedID.ID))
 		}
 	} else {
-		p.tableSpans.Iter(func(span tablepb.Span, table tablepb.TablePipeline) bool {
+		p.tableSpans.Range(func(span tablepb.Span, table tablepb.TablePipeline) bool {
 			table.Cancel()
 			return true
 		})
-		p.tableSpans.Iter(func(span tablepb.Span, table tablepb.TablePipeline) bool {
+		p.tableSpans.Range(func(span tablepb.Span, table tablepb.TablePipeline) bool {
 			table.Wait()
 			return true
 		})
@@ -1454,7 +1454,7 @@ func (p *processor) WriteDebugInfo(w io.Writer) error {
 				&span, stats.ResolvedTs, stats.CheckpointTs, state)
 		}
 	} else {
-		p.tableSpans.Iter(func(span tablepb.Span, tablePipeline tablepb.TablePipeline) bool {
+		p.tableSpans.Range(func(span tablepb.Span, tablePipeline tablepb.TablePipeline) bool {
 			fmt.Fprintf(w, "span: %s, tableName: %s, resolvedTs: %d, checkpointTs: %d, state: %s\n",
 				&span, tablePipeline.Name(), tablePipeline.ResolvedTs(),
 				tablePipeline.CheckpointTs(), tablePipeline.State())

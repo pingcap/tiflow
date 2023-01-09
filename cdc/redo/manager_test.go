@@ -209,7 +209,7 @@ func BenchmarkRedoManagerWaitFlush(b *testing.B) {
 	logMgr, maxTsMap := runBenchTest(ctx, b)
 
 	var minResolvedTs model.Ts = math.MaxUint64
-	maxTsMap.Iter(func(span tablepb.Span, tp *uint64) bool {
+	maxTsMap.Range(func(span tablepb.Span, tp *uint64) bool {
 		if *tp < minResolvedTs {
 			minResolvedTs = *tp
 		}

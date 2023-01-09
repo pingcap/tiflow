@@ -299,7 +299,7 @@ func (s *EventSorter) ReceivedEvents() int64 {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	totalReceivedEvents := int64(0)
-	s.tables.Iter(func(_ tablepb.Span, state *tableState) bool {
+	s.tables.Range(func(_ tablepb.Span, state *tableState) bool {
 		totalReceivedEvents += state.receivedEvents.Load()
 		return true
 	})
@@ -328,7 +328,7 @@ func (s *EventSorter) Close() error {
 	defer s.mu.RUnlock()
 
 	var err error
-	s.tables.Iter(func(span tablepb.Span, state *tableState) bool {
+	s.tables.Range(func(span tablepb.Span, state *tableState) bool {
 		// TODO: maybe we can use a unified prefix for a changefeed,
 		//       so that we can speed up it when closing a changefeed.
 		if err1 := s.cleanTable(state, span); err1 != nil {
@@ -491,7 +491,7 @@ func (s *EventSorter) handleEvents(
 			batch = db.NewBatch()
 		}
 
-		newResolved.Iter(func(span tablepb.Span, resolved uint64) bool {
+		newResolved.Range(func(span tablepb.Span, resolved uint64) bool {
 			s.mu.RLock()
 			ts, ok := s.tables.Get(span)
 			if !ok {

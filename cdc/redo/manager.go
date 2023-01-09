@@ -415,7 +415,7 @@ func (m *ManagerImpl) postFlush(
 		atomic.StoreUint64(&m.minResolvedTs, minResolvedTs)
 	}
 
-	tableRtsMap.Iter(func(span tablepb.Span, flushed uint64) bool {
+	tableRtsMap.Range(func(span tablepb.Span, flushed uint64) bool {
 		if value, loaded := m.rtsMap.Load(span); loaded {
 			value.(*statefulRts).setFlushed(flushed)
 		}
@@ -553,7 +553,7 @@ func (m *ManagerImpl) bgUpdateLog(
 			}
 		}
 		if rtsMap.Len() > 0 {
-			rtsMap.Iter(func(span tablepb.Span, resolvedTs uint64) bool {
+			rtsMap.Range(func(span tablepb.Span, resolvedTs uint64) bool {
 				m.onResolvedTsMsg(span, resolvedTs)
 				log.Debug("redo manager writes resolvedTs",
 					zap.String("namespace", m.changeFeedID.Namespace),

@@ -278,7 +278,7 @@ func (m *SinkManager) backgroundGC() {
 					return true
 				})
 
-				tableSinks.Iter(func(span tablepb.Span, sink *tableSinkWrapper) bool {
+				tableSinks.Range(func(span tablepb.Span, sink *tableSinkWrapper) bool {
 					if time.Since(sink.lastCleanTime) < cleanTableInterval {
 						return true
 					}

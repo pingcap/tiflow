@@ -79,7 +79,7 @@ func TestHashMapIter(t *testing.T) {
 	}
 
 	j := 0
-	m.Iter(func(span tablepb.Span, value int) bool {
+	m.Range(func(span tablepb.Span, value int) bool {
 		_, ok := m.Get(span)
 		require.True(t, ok)
 		j++
@@ -88,7 +88,7 @@ func TestHashMapIter(t *testing.T) {
 	require.Equal(t, 4, j)
 
 	j = 0
-	m.Iter(func(span tablepb.Span, value int) bool {
+	m.Range(func(span tablepb.Span, value int) bool {
 		ok := m.Has(span)
 		require.True(t, ok)
 		j++
