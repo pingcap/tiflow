@@ -697,14 +697,17 @@ func (s *mysqlSink) execDMLWithMaxRetries(pctx context.Context, dmls *preparedDM
 						cerror.WrapError(cerror.ErrMySQLTxnError, err),
 						start, s.params.changefeedID, query, dmls.rowCount)
 				}
+				cancelFunc()
 			}
 
 			if len(dmls.markSQL) != 0 {
 				log.Debug("exec row", zap.String("sql", dmls.markSQL))
+				ctx, cancelFunc := context.WithTimeout(pctx, writeTimeout)
 				if _, err := tx.ExecContext(ctx, dmls.markSQL); err != nil {
 					if rbErr := tx.Rollback(); rbErr != nil {
 						log.Warn("failed to rollback txn", zap.Error(err))
 					}
+					cancelFunc()
 					return 0, logDMLTxnErr(
 						cerror.WrapError(cerror.ErrMySQLTxnError, err),
 						start, s.params.changefeedID, dmls.markSQL, dmls.rowCount)
