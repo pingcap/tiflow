@@ -1670,6 +1670,14 @@ func (s *Server) generateSubTask(
 		return nil, nil, terror.WithClass(err, terror.ClassDMMaster)
 	}
 
+	var firstMode config.LoadMode
+	for _, stCfg := range stCfgs {
+		if firstMode == "" {
+			firstMode = stCfg.LoaderConfig.ImportMode
+		} else if firstMode != stCfg.LoaderConfig.ImportMode {
+			return nil, nil, terror.ErrConfigInvalidLoadMode.Generatef("found two import-mode %s and %s in task config, DM only supports one value", firstMode, stCfg.LoaderConfig.ImportMode)
+		}
+	}
 	return cfg, stCfgs, nil
 }
 
@@ -1721,7 +1729,7 @@ func (s *Server) removeMetaData(ctx context.Context, taskName, metaSchema string
 	if err != nil {
 		return err
 	}
-	err = s.scheduler.RemoveLoadTask(taskName)
+	err = s.scheduler.RemoveLoadTaskAndLightningStatus(taskName)
 	if err != nil {
 		return err
 	}

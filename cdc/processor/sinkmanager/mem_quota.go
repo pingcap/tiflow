@@ -20,7 +20,9 @@ import (
 
 	"github.com/pingcap/log"
 	"github.com/pingcap/tiflow/cdc/model"
+	"github.com/pingcap/tiflow/cdc/processor/tablepb"
 	cerrors "github.com/pingcap/tiflow/pkg/errors"
+	"github.com/pingcap/tiflow/pkg/spanz"
 	"github.com/prometheus/client_golang/prometheus"
 	"go.uber.org/zap"
 )
@@ -43,7 +45,7 @@ type memQuota struct {
 	// usedBytes is the memory usage of one changefeed.
 	usedBytes uint64
 	// tableMemory is the memory usage of each table.
-	tableMemory map[model.TableID][]*memConsumeRecord
+	tableMemory *spanz.Map[[]*memConsumeRecord]
 	// isClosed is used to indicate whether the mem quota is closed.
 	isClosed atomic.Bool
 
@@ -56,7 +58,7 @@ func newMemQuota(changefeedID model.ChangeFeedID, totalBytes uint64) *memQuota {
 		changefeedID: changefeedID,
 		totalBytes:   totalBytes,
 		usedBytes:    0,
-		tableMemory:  make(map[model.TableID][]*memConsumeRecord),
+		tableMemory:  spanz.NewMap[[]*memConsumeRecord](),
 		metricTotal:  MemoryQuota.WithLabelValues(changefeedID.Namespace, changefeedID.ID, "total"),
 		metricUsed:   MemoryQuota.WithLabelValues(changefeedID.Namespace, changefeedID.ID, "used"),
 	}
@@ -64,6 +66,10 @@ func newMemQuota(changefeedID model.ChangeFeedID, totalBytes uint64) *memQuota {
 	m.metricTotal.Set(float64(totalBytes))
 	m.metricUsed.Set(float64(0))
 
+	log.Info("New memory quota",
+		zap.String("namespace", changefeedID.Namespace),
+		zap.String("changefeed", changefeedID.ID),
+		zap.Uint64("total", totalBytes))
 	return m
 }
 
@@ -123,20 +129,20 @@ func (m *memQuota) refund(nBytes uint64) {
 	}
 }
 
-func (m *memQuota) addTable(tableID model.TableID) {
+func (m *memQuota) addTable(span tablepb.Span) {
 	m.mu.Lock()
 	defer m.mu.Unlock()
-	m.tableMemory[tableID] = make([]*memConsumeRecord, 0, 2)
+	m.tableMemory.ReplaceOrInsert(span, make([]*memConsumeRecord, 0, 2))
 }
 
 // record records the memory usage of a table.
-func (m *memQuota) record(tableID model.TableID, resolved model.ResolvedTs, nBytes uint64) {
+func (m *memQuota) record(span tablepb.Span, resolved model.ResolvedTs, nBytes uint64) {
 	if nBytes == 0 {
 		return
 	}
 	m.mu.Lock()
 	defer m.mu.Unlock()
-	if _, ok := m.tableMemory[tableID]; !ok {
+	if _, ok := m.tableMemory.Get(span); !ok {
 		// Can't find the table record, the table must be removed.
 		if m.usedBytes < nBytes {
 			log.Panic("memQuota.refund fail",
@@ -149,25 +155,25 @@ func (m *memQuota) record(tableID model.TableID, resolved model.ResolvedTs, nByt
 		}
 		return
 	}
-	m.tableMemory[tableID] = append(m.tableMemory[tableID], &memConsumeRecord{
+	m.tableMemory.ReplaceOrInsert(span, append(m.tableMemory.GetV(span), &memConsumeRecord{
 		resolvedTs: resolved,
 		size:       nBytes,
-	})
+	}))
 }
 
 // release try to use resolvedTs to release the memory quota.
 // Because we append records in order, we can use binary search to find the first record
 // that is greater than resolvedTs, and release the memory quota of the records before it.
-func (m *memQuota) release(tableID model.TableID, resolved model.ResolvedTs) {
+func (m *memQuota) release(span tablepb.Span, resolved model.ResolvedTs) {
 	m.mu.Lock()
 	defer m.mu.Unlock()
-	if _, ok := m.tableMemory[tableID]; !ok {
+	if _, ok := m.tableMemory.Get(span); !ok {
 		// This can happen when
 		// 1. the table has no data and never been recorded.
 		// 2. the table is in async removing.
 		return
 	}
-	records := m.tableMemory[tableID]
+	records := m.tableMemory.GetV(span)
 	i := sort.Search(len(records), func(i int) bool {
 		return records[i].resolvedTs.Greater(resolved)
 	})
@@ -175,7 +181,7 @@ func (m *memQuota) release(tableID model.TableID, resolved model.ResolvedTs) {
 	for j := 0; j < i; j++ {
 		toRelease += records[j].size
 	}
-	m.tableMemory[tableID] = records[i:]
+	m.tableMemory.ReplaceOrInsert(span, records[i:])
 	if toRelease == 0 {
 		return
 	}
@@ -192,26 +198,26 @@ func (m *memQuota) release(tableID model.TableID, resolved model.ResolvedTs) {
 
 // clean all records of the table.
 // Return the cleaned memory quota.
-func (m *memQuota) clean(tableID model.TableID) uint64 {
+func (m *memQuota) clean(span tablepb.Span) uint64 {
 	m.mu.Lock()
 	defer m.mu.Unlock()
 
-	if _, ok := m.tableMemory[tableID]; !ok {
+	if _, ok := m.tableMemory.Get(span); !ok {
 		// This can happen when the table has no data and never been recorded.
 		log.Warn("Table consumed memory records not found",
 			zap.String("namespace", m.changefeedID.Namespace),
 			zap.String("changefeed", m.changefeedID.ID),
-			zap.Int64("tableID", tableID))
+			zap.Stringer("span", &span))
 		return 0
 	}
 	cleaned := uint64(0)
-	records := m.tableMemory[tableID]
+	records := m.tableMemory.GetV(span)
 	for _, record := range records {
 		cleaned += record.size
 	}
 	m.usedBytes -= cleaned
 	m.metricUsed.Set(float64(m.usedBytes))
-	delete(m.tableMemory, tableID)
+	m.tableMemory.Delete(span)
 	if m.usedBytes < m.totalBytes {
 		m.blockAcquireCond.Broadcast()
 	}
@@ -223,7 +229,7 @@ func (m *memQuota) close() {
 	m.mu.Lock()
 	defer m.mu.Unlock()
 	// NOTE: m.usedBytes is not reset, because refund can still be called after closed.
-	m.tableMemory = make(map[model.TableID][]*memConsumeRecord)
+	m.tableMemory = spanz.NewMap[[]*memConsumeRecord]()
 	m.metricUsed.Set(float64(0))
 	m.isClosed.Store(true)
 	m.blockAcquireCond.Broadcast()

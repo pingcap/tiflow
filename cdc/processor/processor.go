@@ -94,6 +94,7 @@ type processor struct {
 		ctx cdcContext.Context, span tablepb.Span, replicaInfo *model.TableReplicaInfo,
 	) (tablepb.TablePipeline, error)
 	newAgent func(cdcContext.Context, *model.Liveness) (scheduler.Agent, error)
+	cfg      *config.SchedulerConfig
 
 	liveness     *model.Liveness
 	agent        scheduler.Agent
@@ -148,7 +149,7 @@ func (p *processor) AddTableSpan(
 	var alreadyExist bool
 	var state tablepb.TableState
 	if p.pullBasedSinking {
-		state, alreadyExist = p.sinkManager.GetTableState(span.TableID)
+		state, alreadyExist = p.sinkManager.GetTableState(span)
 	} else {
 		table, ok := p.tableSpans.Get(span)
 		if ok {
@@ -175,7 +176,7 @@ func (p *processor) AddTableSpan(
 			// be stopped on original capture already, it's safe to start replicating data now.
 			if !isPrepare {
 				if p.pullBasedSinking {
-					if err := p.sinkManager.StartTable(span.TableID, startTs); err != nil {
+					if err := p.sinkManager.StartTable(span, startTs); err != nil {
 						return false, errors.Trace(err)
 					}
 				} else {
@@ -220,12 +221,12 @@ func (p *processor) AddTableSpan(
 
 	if p.pullBasedSinking {
 		p.sinkManager.AddTable(
-			span.TableID, startTs, p.changefeed.Info.TargetTs)
+			span, startTs, p.changefeed.Info.TargetTs)
 		if p.redoManager.Enabled() {
-			p.redoManager.AddTable(span.TableID, startTs)
+			p.redoManager.AddTable(span, startTs)
 		}
 		p.sourceManager.AddTable(
-			ctx.(cdcContext.Context), span.TableID, p.getTableName(ctx, span.TableID), startTs)
+			ctx.(cdcContext.Context), span, p.getTableName(ctx, span.TableID), startTs)
 	} else {
 		table, err := p.createTablePipeline(
 			ctx.(cdcContext.Context), span, &model.TableReplicaInfo{StartTs: startTs})
@@ -245,7 +246,7 @@ func (p *processor) RemoveTableSpan(span tablepb.Span) bool {
 	}
 
 	if p.pullBasedSinking {
-		_, exist := p.sinkManager.GetTableState(span.TableID)
+		_, exist := p.sinkManager.GetTableState(span)
 		if !exist {
 			log.Warn("Table which will be deleted is not found",
 				zap.String("capture", p.captureInfo.ID),
@@ -254,7 +255,7 @@ func (p *processor) RemoveTableSpan(span tablepb.Span) bool {
 				zap.Stringer("span", &span))
 			return true
 		}
-		p.sinkManager.AsyncStopTable(span.TableID)
+		p.sinkManager.AsyncStopTable(span)
 		return true
 	}
 	table, ok := p.tableSpans.Get(span)
@@ -296,9 +297,9 @@ func (p *processor) IsAddTableSpanFinished(span tablepb.Span, isPrepare bool) bo
 	done := func() bool {
 		var alreadyExist bool
 		if p.pullBasedSinking {
-			state, alreadyExist = p.sinkManager.GetTableState(span.TableID)
+			state, alreadyExist = p.sinkManager.GetTableState(span)
 			if alreadyExist {
-				stats := p.sinkManager.GetTableStats(span.TableID)
+				stats := p.sinkManager.GetTableStats(span)
 				tableResolvedTs = stats.ResolvedTs
 				tableCheckpointTs = stats.CheckpointTs
 			}
@@ -371,9 +372,9 @@ func (p *processor) IsRemoveTableSpanFinished(span tablepb.Span) (model.Ts, bool
 	var state tablepb.TableState
 	var tableCheckpointTs uint64
 	if p.pullBasedSinking {
-		state, alreadyExist = p.sinkManager.GetTableState(span.TableID)
+		state, alreadyExist = p.sinkManager.GetTableState(span)
 		if alreadyExist {
-			stats := p.sinkManager.GetTableStats(span.TableID)
+			stats := p.sinkManager.GetTableStats(span)
 			tableCheckpointTs = stats.CheckpointTs
 		}
 	} else {
@@ -406,12 +407,12 @@ func (p *processor) IsRemoveTableSpanFinished(span tablepb.Span) (model.Ts, bool
 	}
 
 	if p.pullBasedSinking {
-		stats := p.sinkManager.GetTableStats(span.TableID)
+		stats := p.sinkManager.GetTableStats(span)
 		if p.redoManager.Enabled() {
-			p.redoManager.RemoveTable(span.TableID)
+			p.redoManager.RemoveTable(span)
 		}
-		p.sinkManager.RemoveTable(span.TableID)
-		p.sourceManager.RemoveTable(span.TableID)
+		p.sinkManager.RemoveTable(span)
+		p.sourceManager.RemoveTable(span)
 		log.Info("table removed",
 			zap.String("captureID", p.captureInfo.ID),
 			zap.String("namespace", p.changefeedID.Namespace),
@@ -440,7 +441,7 @@ func (p *processor) IsRemoveTableSpanFinished(span tablepb.Span) (model.Ts, bool
 // GetTableSpanCount implements TableExecutor interface.
 func (p *processor) GetTableSpanCount() int {
 	if p.pullBasedSinking {
-		return len(p.sinkManager.GetAllCurrentTableIDs())
+		return len(p.sinkManager.GetAllCurrentTableSpans())
 	}
 	return p.tableSpans.Len()
 }
@@ -451,9 +452,9 @@ func (p *processor) GetCheckpoint() (checkpointTs, resolvedTs model.Ts) {
 }
 
 // GetTableSpanStatus implements TableExecutor interface
-func (p *processor) GetTableSpanStatus(span tablepb.Span) tablepb.TableStatus {
+func (p *processor) GetTableSpanStatus(span tablepb.Span, collectStat bool) tablepb.TableStatus {
 	if p.pullBasedSinking {
-		state, exist := p.sinkManager.GetTableState(span.TableID)
+		state, exist := p.sinkManager.GetTableState(span)
 		if !exist {
 			return tablepb.TableStatus{
 				TableID: span.TableID,
@@ -461,7 +462,11 @@ func (p *processor) GetTableSpanStatus(span tablepb.Span) tablepb.TableStatus {
 				State:   tablepb.TableStateAbsent,
 			}
 		}
-		sinkStats := p.sinkManager.GetTableStats(span.TableID)
+		sinkStats := p.sinkManager.GetTableStats(span)
+		stats := tablepb.Stats{}
+		if collectStat {
+			stats = p.getStatsFromSourceManagerAndSinkManager(span, sinkStats)
+		}
 		return tablepb.TableStatus{
 			TableID: span.TableID,
 			Span:    span,
@@ -470,7 +475,7 @@ func (p *processor) GetTableSpanStatus(span tablepb.Span) tablepb.TableStatus {
 				ResolvedTs:   sinkStats.ResolvedTs,
 			},
 			State: state,
-			Stats: p.getStatsFromSourceManagerAndSinkManager(span.TableID, sinkStats),
+			Stats: stats,
 		}
 	}
 	table, ok := p.tableSpans.Get(span)
@@ -481,6 +486,10 @@ func (p *processor) GetTableSpanStatus(span tablepb.Span) tablepb.TableStatus {
 			State:   tablepb.TableStateAbsent,
 		}
 	}
+	stats := tablepb.Stats{}
+	if collectStat {
+		stats = table.Stats()
+	}
 	return tablepb.TableStatus{
 		TableID: span.TableID,
 		Span:    span,
@@ -489,12 +498,14 @@ func (p *processor) GetTableSpanStatus(span tablepb.Span) tablepb.TableStatus {
 			ResolvedTs:   table.ResolvedTs(),
 		},
 		State: table.State(),
-		Stats: table.Stats(),
+		Stats: stats,
 	}
 }
 
-func (p *processor) getStatsFromSourceManagerAndSinkManager(tableID model.TableID, sinkStats sinkmanager.TableStats) tablepb.Stats {
-	pullerStats := p.sourceManager.GetTablePullerStats(tableID)
+func (p *processor) getStatsFromSourceManagerAndSinkManager(
+	span tablepb.Span, sinkStats sinkmanager.TableStats,
+) tablepb.Stats {
+	pullerStats := p.sourceManager.GetTablePullerStats(span)
 	now, _ := p.upstream.PDClock.CurrentTime()
 
 	stats := tablepb.Stats{
@@ -517,7 +528,7 @@ func (p *processor) getStatsFromSourceManagerAndSinkManager(tableID model.TableI
 		},
 	}
 
-	sortStats := p.sourceManager.GetTableSorterStats(tableID)
+	sortStats := p.sourceManager.GetTableSorterStats(span)
 	stats.StageCheckpoints["sorter-ingress"] = tablepb.Checkpoint{
 		CheckpointTs: sortStats.ReceivedMaxCommitTs,
 		ResolvedTs:   sortStats.ReceivedMaxResolvedTs,
@@ -537,6 +548,7 @@ func newProcessor(
 	changefeedID model.ChangeFeedID,
 	up *upstream.Upstream,
 	liveness *model.Liveness,
+	cfg *config.SchedulerConfig,
 ) *processor {
 	p := &processor{
 		changefeed:   state,
@@ -580,6 +592,7 @@ func newProcessor(
 	p.createTablePipeline = p.createTablePipelineImpl
 	p.lazyInit = p.lazyInitImpl
 	p.newAgent = p.newAgentImpl
+	p.cfg = cfg
 	return p
 }
 
@@ -1057,21 +1070,21 @@ func (p *processor) handlePosition(currentTs int64) {
 	minCheckpointTs := minResolvedTs
 	minCheckpointTableID := int64(0)
 	if p.pullBasedSinking {
-		tableIDs := p.sinkManager.GetAllCurrentTableIDs()
-		for _, tableID := range tableIDs {
-			stats := p.sinkManager.GetTableStats(tableID)
+		spans := p.sinkManager.GetAllCurrentTableSpans()
+		for _, span := range spans {
+			stats := p.sinkManager.GetTableStats(span)
 			log.Debug("sink manager gets table stats",
 				zap.String("namespace", p.changefeedID.Namespace),
 				zap.String("changefeed", p.changefeedID.ID),
-				zap.Int64("tableID", tableID),
+				zap.Stringer("span", &span),
 				zap.Any("stats", stats))
 			if stats.ResolvedTs < minResolvedTs {
 				minResolvedTs = stats.ResolvedTs
-				minResolvedTableID = tableID
+				minResolvedTableID = span.TableID
 			}
 			if stats.CheckpointTs < minCheckpointTs {
 				minCheckpointTs = stats.CheckpointTs
-				minCheckpointTableID = tableID
+				minCheckpointTableID = span.TableID
 			}
 		}
 	} else {
@@ -1164,7 +1177,7 @@ func (p *processor) createTablePipelineImpl(
 
 	if p.redoManager.Enabled() {
 		// FIXME: make span-level replication compatible with redo log.
-		p.redoManager.AddTable(span.TableID, replicaInfo.StartTs)
+		p.redoManager.AddTable(span, replicaInfo.StartTs)
 	}
 
 	tableName := p.getTableName(ctx, span.TableID)
@@ -1211,11 +1224,11 @@ func (p *processor) createTablePipelineImpl(
 
 func (p *processor) removeTable(table tablepb.TablePipeline, span tablepb.Span) {
 	if p.redoManager.Enabled() {
-		p.redoManager.RemoveTable(span.TableID)
+		p.redoManager.RemoveTable(span)
 	}
 	if p.pullBasedSinking {
-		p.sinkManager.RemoveTable(span.TableID)
-		p.sourceManager.RemoveTable(span.TableID)
+		p.sinkManager.RemoveTable(span)
+		p.sourceManager.RemoveTable(span)
 	} else {
 		table.Cancel()
 		table.Wait()
@@ -1253,8 +1266,8 @@ func (p *processor) doGCSchemaStorage() {
 
 func (p *processor) refreshMetrics() {
 	if p.pullBasedSinking {
-		tables := p.sinkManager.GetAllCurrentTableIDs()
-		p.metricSyncTableNumGauge.Set(float64(len(tables)))
+		tableSpans := p.sinkManager.GetAllCurrentTableSpans()
+		p.metricSyncTableNumGauge.Set(float64(len(tableSpans)))
 		sortEngineReceivedEvents := p.sourceManager.ReceivedEvents()
 		tableSinksReceivedEvents := p.sinkManager.ReceivedEvents()
 		p.metricRemainKVEventGauge.Set(float64(sortEngineReceivedEvents - tableSinksReceivedEvents))
@@ -1432,13 +1445,13 @@ func (p *processor) cleanupMetrics() {
 func (p *processor) WriteDebugInfo(w io.Writer) error {
 	fmt.Fprintf(w, "%+v\n", *p.changefeed)
 	if p.pullBasedSinking {
-		tables := p.sinkManager.GetAllCurrentTableIDs()
-		for _, tableID := range tables {
-			state, _ := p.sinkManager.GetTableState(tableID)
-			stats := p.sinkManager.GetTableStats(tableID)
+		spans := p.sinkManager.GetAllCurrentTableSpans()
+		for _, span := range spans {
+			state, _ := p.sinkManager.GetTableState(span)
+			stats := p.sinkManager.GetTableStats(span)
 			// TODO: add table name.
-			fmt.Fprintf(w, "tableID: %d, resolvedTs: %d, checkpointTs: %d, state: %s\n",
-				tableID, stats.ResolvedTs, stats.CheckpointTs, state)
+			fmt.Fprintf(w, "span: %s, resolvedTs: %d, checkpointTs: %d, state: %s\n",
+				&span, stats.ResolvedTs, stats.CheckpointTs, state)
 		}
 	} else {
 		p.tableSpans.Ascend(func(span tablepb.Span, tablePipeline tablepb.TablePipeline) bool {

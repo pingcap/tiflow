@@ -38,7 +38,7 @@ import (
 	"github.com/pingcap/tiflow/cdc/model"
 	"github.com/pingcap/tiflow/pkg/config"
 	pfilter "github.com/pingcap/tiflow/pkg/filter"
-	"github.com/pingcap/tiflow/pkg/regionspan"
+	"github.com/pingcap/tiflow/pkg/spanz"
 	"github.com/pingcap/tiflow/pkg/sqlmodel"
 	"github.com/stretchr/testify/require"
 	"github.com/tikv/client-go/v2/oracle"
@@ -439,8 +439,8 @@ func walkTableSpanInStore(t *testing.T, store tidbkv.Storage, tableID int64, f f
 	txn, err := store.Begin()
 	require.Nil(t, err)
 	defer txn.Rollback() //nolint:errcheck
-	tableSpan := regionspan.GetTableSpan(tableID)
-	kvIter, err := txn.Iter(tableSpan.Start, tableSpan.End)
+	startKey, endKey := spanz.GetTableRange(tableID)
+	kvIter, err := txn.Iter(startKey, endKey)
 	require.Nil(t, err)
 	defer kvIter.Close()
 	for kvIter.Valid() {

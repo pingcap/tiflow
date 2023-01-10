@@ -63,13 +63,10 @@ func (c *DebugConfig) ValidateAndAdjust() error {
 		return errors.Trace(err)
 	}
 	if c.Scheduler.RegionPerSpan != 0 {
-		if c.EnablePullBasedSink || !c.EnableNewSink {
-			// TODO: Removing this check once pull based sink is compatible with
-			//       span replication.
+		if !c.EnableNewSink {
 			return cerror.ErrInvalidServerOption.GenWithStackByArgs(
 				"enabling span replication requires setting " +
-					"`debug.enable-new-sink` to be true and " +
-					"`debug.enable-pull-based-sink` to be false")
+					"`debug.enable-new-sink` to be true")
 		}
 	}
 	if c.EnablePullBasedSink {

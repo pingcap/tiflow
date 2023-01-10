@@ -61,6 +61,7 @@ type coordinator struct {
 	reconciler   *keyspan.Reconciler
 	compat       *compat.Compat
 	pdClock      pdutil.Clock
+	tableRanges  replication.TableRanges
 
 	lastCollectTime time.Time
 	changefeedID    model.ChangeFeedID
@@ -104,8 +105,7 @@ func newCoordinator(
 		captureID: captureID,
 		replicationM: replication.NewReplicationManager(
 			cfg.MaxTaskConcurrency, changefeedID),
-		captureM: member.NewCaptureManager(
-			captureID, changefeedID, revision, cfg.HeartbeatTick),
+		captureM:     member.NewCaptureManager(captureID, changefeedID, revision, cfg),
 		schedulerM:   scheduler.NewSchedulerManager(changefeedID, cfg),
 		changefeedID: changefeedID,
 		compat:       compat.New(cfg, map[model.CaptureID]*model.CaptureInfo{}),
@@ -290,10 +290,11 @@ func (c *coordinator) poll(
 		}
 	}
 
+	c.tableRanges.UpdateTables(currentTables)
 	if !c.captureM.CheckAllCaptureInitialized() {
 		// Skip generating schedule tasks for replication manager,
 		// as not all capture are initialized.
-		newCheckpointTs, newResolvedTs = c.replicationM.AdvanceCheckpoint(currentTables, pdTime)
+		newCheckpointTs, newResolvedTs = c.replicationM.AdvanceCheckpoint(&c.tableRanges, pdTime)
 		return newCheckpointTs, newResolvedTs, c.sendMsgs(ctx, msgBuf)
 	}
 
@@ -310,7 +311,7 @@ func (c *coordinator) poll(
 	// Generate schedule tasks based on the current status.
 	replications := c.replicationM.ReplicationSets()
 	runningTasks := c.replicationM.RunningTasks()
-	currentSpans := c.reconciler.Reconcile(ctx, currentTables, replications, c.compat)
+	currentSpans := c.reconciler.Reconcile(ctx, &c.tableRanges, replications, c.compat)
 	allTasks := c.schedulerM.Schedule(
 		checkpointTs, currentSpans, c.captureM.Captures, replications, runningTasks)
 
@@ -328,7 +329,7 @@ func (c *coordinator) poll(
 	}
 
 	// Checkpoint calculation
-	newCheckpointTs, newResolvedTs = c.replicationM.AdvanceCheckpoint(currentTables, pdTime)
+	newCheckpointTs, newResolvedTs = c.replicationM.AdvanceCheckpoint(&c.tableRanges, pdTime)
 	return newCheckpointTs, newResolvedTs, nil
 }
 

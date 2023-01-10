@@ -16,13 +16,11 @@ package spanz
 import (
 	"sort"
 
-	"github.com/pingcap/tiflow/cdc/model"
 	"github.com/pingcap/tiflow/cdc/processor/tablepb"
-	"github.com/pingcap/tiflow/pkg/regionspan"
 )
 
 // ArrayToSpan converts an array of TableID to an array of Span.
-func ArrayToSpan(in []model.TableID) []tablepb.Span {
+func ArrayToSpan(in []tablepb.TableID) []tablepb.Span {
 	out := make([]tablepb.Span, 0, len(in))
 	for _, tableID := range in {
 		out = append(out, tablepb.Span{TableID: tableID})
@@ -32,18 +30,18 @@ func ArrayToSpan(in []model.TableID) []tablepb.Span {
 
 // TableIDToComparableSpan converts a TableID to a Span whose
 // StartKey and EndKey are encoded in Comparable format.
-func TableIDToComparableSpan(tableID model.TableID) tablepb.Span {
-	tableSpan := regionspan.ToComparableSpan(regionspan.GetTableSpan(tableID))
+func TableIDToComparableSpan(tableID tablepb.TableID) tablepb.Span {
+	startKey, endKey := GetTableRange(tableID)
 	return tablepb.Span{
 		TableID:  tableID,
-		StartKey: tableSpan.Start,
-		EndKey:   tableSpan.End,
+		StartKey: ToComparableKey(startKey),
+		EndKey:   ToComparableKey(endKey),
 	}
 }
 
 // TableIDToComparableRange returns a range of a table,
 // start and end are encoded in Comparable format.
-func TableIDToComparableRange(tableID model.TableID) (start, end tablepb.Span) {
+func TableIDToComparableRange(tableID tablepb.TableID) (start, end tablepb.Span) {
 	tableSpan := TableIDToComparableSpan(tableID)
 	start = tableSpan
 	start.EndKey = nil
@@ -62,4 +60,29 @@ func (a sortableSpans) Less(i, j int) bool { return a[i].Less(&a[j]) }
 // Sort sorts a slice of Span.
 func Sort(spans []tablepb.Span) {
 	sort.Sort(sortableSpans(spans))
+}
+
+// HashableSpan is a hashable span, which can be used as a map key.
+type HashableSpan struct {
+	TableID  tablepb.TableID
+	StartKey string
+	EndKey   string
+}
+
+// ToHashableSpan converts a Span to a hashable span.
+func ToHashableSpan(span tablepb.Span) HashableSpan {
+	return HashableSpan{
+		TableID:  span.TableID,
+		StartKey: string(span.StartKey),
+		EndKey:   string(span.EndKey),
+	}
+}
+
+// ToSpan converts to Span.
+func (h HashableSpan) ToSpan() tablepb.Span {
+	return tablepb.Span{
+		TableID:  h.TableID,
+		StartKey: []byte(h.StartKey),
+		EndKey:   []byte(h.EndKey),
+	}
 }

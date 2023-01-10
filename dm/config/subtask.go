@@ -130,10 +130,11 @@ type SubTaskConfig struct {
 	From     dbconfig.DBConfig `toml:"from" json:"from"`
 	To       dbconfig.DBConfig `toml:"to" json:"to"`
 
-	RouteRules         []*router.TableRule   `toml:"route-rules" json:"route-rules"`
-	FilterRules        []*bf.BinlogEventRule `toml:"filter-rules" json:"filter-rules"`
-	ColumnMappingRules []*column.Rule        `toml:"mapping-rule" json:"mapping-rule"`
-	ExprFilter         []*ExpressionFilter   `yaml:"expression-filter" toml:"expression-filter" json:"expression-filter"`
+	RouteRules  []*router.TableRule   `toml:"route-rules" json:"route-rules"`
+	FilterRules []*bf.BinlogEventRule `toml:"filter-rules" json:"filter-rules"`
+	// deprecated
+	ColumnMappingRules []*column.Rule      `toml:"mapping-rule" json:"mapping-rule"`
+	ExprFilter         []*ExpressionFilter `yaml:"expression-filter" toml:"expression-filter" json:"expression-filter"`
 
 	// black-white-list is deprecated, use block-allow-list instead
 	BWList *filter.Rules `toml:"black-white-list" json:"black-white-list"`
@@ -180,6 +181,11 @@ type SubTaskConfig struct {
 	// key to let MySQL driver to find the right TCPConnWithIOCounter.
 	UUID         string         `toml:"-" json:"-"`
 	IOTotalBytes *atomic.Uint64 `toml:"-" json:"-"`
+
+	// meter network usage from upstream
+	// e.g., pulling binlog
+	DumpUUID         string         `toml:"-" json:"-"`
+	DumpIOTotalBytes *atomic.Uint64 `toml:"-" json:"-"`
 }
 
 // SampleSubtaskConfig is the content of subtask.toml in current folder.
@@ -281,6 +287,10 @@ func (c *SubTaskConfig) Adjust(verifyDecryptPassword bool) error {
 		return terror.ErrConfigShardModeNotSupport.Generate(c.ShardMode)
 	} else if c.ShardMode == "" && c.IsSharding {
 		c.ShardMode = ShardPessimistic // use the pessimistic mode as default for back compatible.
+	}
+
+	if len(c.ColumnMappingRules) > 0 {
+		return terror.ErrConfigColumnMappingDeprecated.Generate()
 	}
 
 	if c.OnlineDDLScheme != "" && c.OnlineDDLScheme != PT && c.OnlineDDLScheme != GHOST {
@@ -475,10 +485,4 @@ func (c *SubTaskConfig) Clone() (*SubTaskConfig, error) {
 	}
 
 	return clone, nil
-}
-
-// NeedUseLightning returns whether need to use lightning loader.
-func (c *SubTaskConfig) NeedUseLightning() bool {
-	// TODO: return true after remove loader
-	return (c.Mode == ModeAll || c.Mode == ModeFull) && c.ImportMode != LoadModeLoader
 }

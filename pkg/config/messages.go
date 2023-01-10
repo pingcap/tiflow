@@ -20,6 +20,8 @@ import (
 	"github.com/pingcap/tiflow/pkg/p2p"
 )
 
+const defaultMaxRecvMsgSize = 256 * 1024 * 1024 // 256MB
+
 // MessagesConfig configs MessageServer and MessageClient.
 type MessagesConfig struct {
 	ClientMaxBatchInterval TomlDuration `toml:"client-max-batch-interval" json:"client-max-batch-interval"`
@@ -30,6 +32,9 @@ type MessagesConfig struct {
 	ServerMaxPendingMessageCount int          `toml:"server-max-pending-message-count" json:"server-max-pending-message-count"`
 	ServerAckInterval            TomlDuration `toml:"server-ack-interval" json:"server-ack-interval"`
 	ServerWorkerPoolSize         int          `toml:"server-worker-pool-size" json:"server-worker-pool-size"`
+
+	// MaxRecvMsgSize is the maximum message size in bytes TiCDC can receive.
+	MaxRecvMsgSize int `toml:"max-recv-msg-size" json:"max-recv-msg-size"`
 }
 
 // read only
@@ -42,6 +47,7 @@ var defaultMessageConfig = &MessagesConfig{
 	ServerMaxPendingMessageCount: 102400,
 	ServerAckInterval:            TomlDuration(time.Millisecond * 100),
 	ServerWorkerPoolSize:         4,
+	MaxRecvMsgSize:               defaultMaxRecvMsgSize,
 }
 
 const (
@@ -121,6 +127,14 @@ func (c *MessagesConfig) ValidateAndAdjust() error {
 		return cerrors.ErrInvalidServerOption.GenWithStackByArgs("server-worker-pool-size is larger than 32")
 	}
 
+	if c.MaxRecvMsgSize == 0 {
+		c.MaxRecvMsgSize = defaultMaxRecvMsgSize
+	}
+	if c.MaxRecvMsgSize < 0 {
+		return cerrors.ErrInvalidServerOption.GenWithStackByArgs(
+			"max-recv-msg-size must be larger than 0")
+	}
+
 	return nil
 }
 
@@ -134,6 +148,7 @@ func (c *MessagesConfig) Clone() *MessagesConfig {
 		ServerMaxPendingMessageCount: c.ServerMaxPendingMessageCount,
 		ServerAckInterval:            c.ServerAckInterval,
 		ServerWorkerPoolSize:         c.ServerWorkerPoolSize,
+		MaxRecvMsgSize:               c.MaxRecvMsgSize,
 	}
 }
 
@@ -146,6 +161,7 @@ func (c *MessagesConfig) ToMessageClientConfig() *p2p.MessageClientConfig {
 		MaxBatchCount:           c.ClientMaxBatchCount,
 		RetryRateLimitPerSecond: c.ClientRetryRateLimit,
 		DialTimeout:             clientDialTimeout,
+		MaxRecvMsgSize:          c.MaxRecvMsgSize,
 	}
 }
 
@@ -160,5 +176,6 @@ func (c *MessagesConfig) ToMessageServerConfig() *p2p.MessageServerConfig {
 		MaxPeerCount:                         maxPeerCount,
 		WaitUnregisterHandleTimeoutThreshold: unregisterHandleTimeout,
 		SendRateLimitPerStream:               serverSendRateLimit,
+		MaxRecvMsgSize:                       c.MaxRecvMsgSize,
 	}
 }

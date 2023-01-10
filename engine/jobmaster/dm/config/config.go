@@ -311,11 +311,6 @@ func (c *TaskCfg) ToDMSubTaskCfg(jobID string) *dmconfig.SubTaskConfig {
 		cfg.FilterRules[j] = c.Filters[name]
 	}
 
-	cfg.ColumnMappingRules = make([]*column.Rule, len(c.Upstreams[0].ColumnMappingRules))
-	for j, name := range c.Upstreams[0].ColumnMappingRules {
-		cfg.ColumnMappingRules[j] = c.ColumnMappings[name]
-	}
-
 	cfg.ExprFilter = make([]*dmconfig.ExpressionFilter, len(c.Upstreams[0].ExpressionFilters))
 	for j, name := range c.Upstreams[0].ExpressionFilters {
 		cfg.ExprFilter[j] = c.ExprFilter[name]
@@ -325,7 +320,9 @@ func (c *TaskCfg) ToDMSubTaskCfg(jobID string) *dmconfig.SubTaskConfig {
 	cfg.LoaderConfig = *c.Upstreams[0].Loader
 	cfg.SyncerConfig = *c.Upstreams[0].Syncer
 	cfg.IOTotalBytes = atomic.NewUint64(0)
+	cfg.DumpIOTotalBytes = atomic.NewUint64(0)
 	cfg.UUID = uuid.NewString()
+	cfg.DumpUUID = uuid.NewString()
 
 	return cfg
 }

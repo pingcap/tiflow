@@ -215,7 +215,7 @@ func createChangefeed4Test(ctx cdcContext.Context, t *testing.T,
 		},
 		// new scheduler
 		func(
-			ctx cdcContext.Context, up *upstream.Upstream,
+			ctx cdcContext.Context, up *upstream.Upstream, cfg *config.SchedulerConfig,
 		) (scheduler.Scheduler, error) {
 			return &mockScheduler{}, nil
 		})
@@ -484,8 +484,9 @@ func TestRemoveChangefeed(t *testing.T) {
 	info := ctx.ChangefeedVars().Info
 	dir := t.TempDir()
 	info.Config.Consistent = &config.ConsistentConfig{
-		Level:   "eventual",
-		Storage: filepath.Join("nfs://", dir),
+		Level:             "eventual",
+		Storage:           filepath.Join("nfs://", dir),
+		FlushIntervalInMs: config.MinFlushIntervalInMs,
 	}
 	ctx = cdcContext.WithChangefeedVars(ctx, &cdcContext.ChangefeedVars{
 		ID:   ctx.ChangefeedVars().ID,

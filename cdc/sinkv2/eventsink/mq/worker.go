@@ -173,7 +173,7 @@ func (w *worker) batchEncodeRun(ctx context.Context) (retErr error) {
 	eventsBuf := make([]mqEvent, flushBatchSize)
 	for {
 		start := time.Now()
-		endIndex, err := w.batch(ctx, eventsBuf)
+		endIndex, err := w.batch(ctx, eventsBuf, flushInterval)
 		if err != nil {
 			return errors.Trace(err)
 		}
@@ -195,7 +195,7 @@ func (w *worker) batchEncodeRun(ctx context.Context) (retErr error) {
 
 // batch collects a batch of messages to be sent to the DML producer.
 func (w *worker) batch(
-	ctx context.Context, events []mqEvent,
+	ctx context.Context, events []mqEvent, flushInterval time.Duration,
 ) (int, error) {
 	index := 0
 	max := len(events)

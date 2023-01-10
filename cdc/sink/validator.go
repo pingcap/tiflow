@@ -16,6 +16,7 @@ package sink
 import (
 	"context"
 	"net/url"
+	"strings"
 
 	"github.com/pingcap/tiflow/cdc/contextutil"
 	"github.com/pingcap/tiflow/cdc/model"
@@ -142,4 +143,12 @@ func checkBDRMode(ctx context.Context, sinkURI *url.URL, replicaConfig *config.R
 				"please check your config, sink uri: %s", maskSinkURI)
 	}
 	return nil
+}
+
+// IsSinkCompatibleWithSpanReplication returns true if the sink uri is
+// compatible with span replication.
+func IsSinkCompatibleWithSpanReplication(sinkURI string) bool {
+	u, err := url.Parse(sinkURI)
+	return err == nil &&
+		(strings.Contains(u.Scheme, "kafka") || strings.Contains(u.Scheme, "blackhole"))
 }

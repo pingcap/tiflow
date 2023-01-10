@@ -51,13 +51,39 @@ function run() {
 	run_dm_master_info_log $WORK_DIR/master $MASTER_PORT $cur/conf/dm-master.toml
 	check_rpc_alive $cur/../bin/check_master_online 127.0.0.1:$MASTER_PORT
 
-	# start DM task only
+	# start DM task
 	dmctl_start_task "$cur/conf/dm-task-dup.yaml" "--remove-meta"
 	run_dm_ctl_with_retry $WORK_DIR "127.0.0.1:$MASTER_PORT" \
 		"query-status test" \
 		"\"stage\": \"Paused\"" 1 \
-		'"progress": "100.00 %"' 1 \
+		'"progress": "100.00 %"' 2 \
 		"please check \`dm_meta_test\`.\`conflict_error_v1\` to see the duplication" 1
+	run_dm_ctl $WORK_DIR "127.0.0.1:$MASTER_PORT" \
+		"resume-task test" \
+		"\"result\": true" 3
+	run_dm_ctl_with_retry $WORK_DIR "127.0.0.1:$MASTER_PORT" \
+		"query-status test" \
+		'unit": "Sync"' 2
+	run_dm_ctl $WORK_DIR "127.0.0.1:$MASTER_PORT" \
+		"stop-task test" \
+		"\"result\": true" 3
+	run_sql_tidb "drop database if exists lightning_mode;"
+
+	# if not set duplicate detection, checksum will fail
+	cp $cur/conf/dm-task-dup.yaml $WORK_DIR/dm-task-dup.yaml
+	sed -i "/on-duplicate-physical/d" $WORK_DIR/dm-task-dup.yaml
+	dmctl_start_task "$WORK_DIR/dm-task-dup.yaml" "--remove-meta"
+	run_dm_ctl_with_retry $WORK_DIR "127.0.0.1:$MASTER_PORT" \
+		"query-status test" \
+		"checksum mismatched, KV number in source files: 6, KV number in TiDB cluster: 3" 1 \
+		'"unit": "Load"' 2
+	run_dm_ctl $WORK_DIR "127.0.0.1:$MASTER_PORT" \
+		"resume-task test" \
+		"\"result\": true" 3
+	run_dm_ctl_with_retry $WORK_DIR "127.0.0.1:$MASTER_PORT" \
+		"query-status test" \
+		'unit": "Sync"' 2
+
 	run_dm_ctl $WORK_DIR "127.0.0.1:$MASTER_PORT" \
 		"stop-task test" \
 		"\"result\": true" 3

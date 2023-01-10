@@ -32,7 +32,6 @@ import (
 	"github.com/pingcap/errors"
 	"github.com/pingcap/failpoint"
 	bf "github.com/pingcap/tidb-tools/pkg/binlog-filter"
-	cm "github.com/pingcap/tidb-tools/pkg/column-mapping"
 	"github.com/pingcap/tidb/parser"
 	"github.com/pingcap/tidb/parser/ast"
 	"github.com/pingcap/tidb/parser/model"
@@ -161,7 +160,6 @@ type Syncer struct {
 
 	tableRouter     *regexprrouter.RouteTable
 	binlogFilter    *bf.BinlogEvent
-	columnMapping   *cm.Mapping
 	baList          *filter.Filter
 	exprFilterGroup *ExprFilterGroup
 	sessCtx         sessionctx.Context
@@ -410,13 +408,6 @@ func (s *Syncer) Init(ctx context.Context) (err error) {
 	s.exprFilterGroup = NewExprFilterGroup(s.tctx, s.sessCtx, s.cfg.ExprFilter)
 	// create an empty Tracker and will be initialized in `Run`
 	s.schemaTracker = schema.NewTracker()
-
-	if len(s.cfg.ColumnMappingRules) > 0 {
-		s.columnMapping, err = cm.NewMapping(s.cfg.CaseSensitive, s.cfg.ColumnMappingRules)
-		if err != nil {
-			return terror.ErrSyncerUnitGenColumnMapping.Delegate(err)
-		}
-	}
 
 	if s.cfg.OnlineDDL {
 		s.onlineDDL, err = onlineddl.NewRealOnlinePlugin(tctx, s.cfg, s.metricsProxies)
@@ -2520,15 +2511,11 @@ func (s *Syncer) handleRowsEvent(ev *replication.RowsEvent, ec eventContext) (*f
 		return nil, nil
 	}
 
-	// TODO(csuzhangxc): check performance of `getTable` from schema tracker.
 	tableInfo, err := s.getTableInfo(ec.tctx, sourceTable, targetTable)
 	if err != nil {
 		return nil, terror.WithScope(err, terror.ScopeDownstream)
 	}
-	originRows, err := s.mappingDML(sourceTable, tableInfo, ev.Rows)
-	if err != nil {
-		return nil, err
-	}
+	originRows := ev.Rows
 	if err2 := checkLogColumns(ev.SkippedColumns); err2 != nil {
 		return nil, err2
 	}
@@ -2981,7 +2968,7 @@ func (s *Syncer) createDBs(ctx context.Context) error {
 	var err error
 	dbCfg := s.cfg.From
 	dbCfg.RawDBCfg = dbconfig.DefaultRawDBConfig().SetReadTimeout(maxDMLConnectionTimeout)
-	fromDB, fromConns, err := dbconn.CreateConns(s.tctx, s.cfg, conn.UpstreamDBConfig(&dbCfg), 1)
+	fromDB, fromConns, err := dbconn.CreateConns(s.tctx, s.cfg, conn.UpstreamDBConfig(&dbCfg), 1, s.cfg.DumpIOTotalBytes, s.cfg.DumpUUID)
 	if err != nil {
 		return err
 	}
@@ -3026,7 +3013,7 @@ func (s *Syncer) createDBs(ctx context.Context) error {
 		SetReadTimeout(maxDMLConnectionTimeout).
 		SetMaxIdleConns(s.cfg.WorkerCount)
 
-	s.toDB, s.toDBConns, err = dbconn.CreateConns(s.tctx, s.cfg, conn.DownstreamDBConfig(&dbCfg), s.cfg.WorkerCount)
+	s.toDB, s.toDBConns, err = dbconn.CreateConns(s.tctx, s.cfg, conn.DownstreamDBConfig(&dbCfg), s.cfg.WorkerCount, s.cfg.IOTotalBytes, s.cfg.UUID)
 	if err != nil {
 		dbconn.CloseUpstreamConn(s.tctx, s.fromDB) // release resources acquired before return with error
 		return err
@@ -3036,7 +3023,7 @@ func (s *Syncer) createDBs(ctx context.Context) error {
 	dbCfg.RawDBCfg = dbconfig.DefaultRawDBConfig().SetReadTimeout(maxDDLConnectionTimeout)
 
 	var ddlDBConns []*dbconn.DBConn
-	s.ddlDB, ddlDBConns, err = dbconn.CreateConns(s.tctx, s.cfg, conn.DownstreamDBConfig(&dbCfg), 2)
+	s.ddlDB, ddlDBConns, err = dbconn.CreateConns(s.tctx, s.cfg, conn.DownstreamDBConfig(&dbCfg), 2, s.cfg.IOTotalBytes, s.cfg.UUID)
 	if err != nil {
 		dbconn.CloseUpstreamConn(s.tctx, s.fromDB)
 		dbconn.CloseBaseDB(s.tctx, s.toDB)
@@ -3257,11 +3244,10 @@ func (s *Syncer) Update(ctx context.Context, cfg *config.SubTaskConfig) error {
 	}
 
 	var (
-		err              error
-		oldBaList        *filter.Filter
-		oldTableRouter   *regexprrouter.RouteTable
-		oldBinlogFilter  *bf.BinlogEvent
-		oldColumnMapping *cm.Mapping
+		err             error
+		oldBaList       *filter.Filter
+		oldTableRouter  *regexprrouter.RouteTable
+		oldBinlogFilter *bf.BinlogEvent
 	)
 
 	defer func() {
@@ -3276,9 +3262,6 @@ func (s *Syncer) Update(ctx context.Context, cfg *config.SubTaskConfig) error {
 		}
 		if oldBinlogFilter != nil {
 			s.binlogFilter = oldBinlogFilter
-		}
-		if oldColumnMapping != nil {
-			s.columnMapping = oldColumnMapping
 		}
 	}()
 
@@ -3301,13 +3284,6 @@ func (s *Syncer) Update(ctx context.Context, cfg *config.SubTaskConfig) error {
 	s.binlogFilter, err = bf.NewBinlogEvent(cfg.CaseSensitive, cfg.FilterRules)
 	if err != nil {
 		return terror.ErrSyncerUnitGenBinlogEventFilter.Delegate(err)
-	}
-
-	// update column-mappings
-	oldColumnMapping = s.columnMapping
-	s.columnMapping, err = cm.NewMapping(cfg.CaseSensitive, cfg.ColumnMappingRules)
-	if err != nil {
-		return terror.ErrSyncerUnitGenColumnMapping.Delegate(err)
 	}
 
 	switch s.cfg.ShardMode {

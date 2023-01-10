@@ -20,7 +20,6 @@ check-struct-only = false
 [table-configs]
 [table-configs.config1]
 target-tables = ["dmctl.t_target"]
-ignore-columns = ["id"]
 
 [routes.rule1]
 schema-pattern = "dmctl"

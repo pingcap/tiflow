@@ -27,11 +27,13 @@ import (
 	"github.com/pingcap/tiflow/cdc/puller"
 	"github.com/pingcap/tiflow/cdc/redo"
 	"github.com/pingcap/tiflow/cdc/scheduler"
+	"github.com/pingcap/tiflow/cdc/sink"
 	"github.com/pingcap/tiflow/pkg/config"
 	cdcContext "github.com/pingcap/tiflow/pkg/context"
 	cerror "github.com/pingcap/tiflow/pkg/errors"
 	"github.com/pingcap/tiflow/pkg/orchestrator"
 	"github.com/pingcap/tiflow/pkg/pdutil"
+	redoCfg "github.com/pingcap/tiflow/pkg/redo"
 	"github.com/pingcap/tiflow/pkg/txnutil/gc"
 	"github.com/pingcap/tiflow/pkg/upstream"
 	"github.com/prometheus/client_golang/prometheus"
@@ -42,24 +44,23 @@ import (
 // newSchedulerFromCtx creates a new scheduler from context.
 // This function is factored out to facilitate unit testing.
 func newSchedulerFromCtx(
-	ctx cdcContext.Context, up *upstream.Upstream,
+	ctx cdcContext.Context, up *upstream.Upstream, cfg *config.SchedulerConfig,
 ) (ret scheduler.Scheduler, err error) {
 	changeFeedID := ctx.ChangefeedVars().ID
 	messageServer := ctx.GlobalVars().MessageServer
 	messageRouter := ctx.GlobalVars().MessageRouter
 	ownerRev := ctx.GlobalVars().OwnerRevision
 	captureID := ctx.GlobalVars().CaptureInfo.ID
-	cfg := config.GetGlobalServerConfig().Debug
 	ret, err = scheduler.NewScheduler(
 		ctx, captureID, changeFeedID,
-		messageServer, messageRouter, ownerRev, up.RegionCache, up.PDClock, cfg.Scheduler)
+		messageServer, messageRouter, ownerRev, up.RegionCache, up.PDClock, cfg)
 	return ret, errors.Trace(err)
 }
 
 func newScheduler(
-	ctx cdcContext.Context, up *upstream.Upstream,
+	ctx cdcContext.Context, up *upstream.Upstream, cfg *config.SchedulerConfig,
 ) (scheduler.Scheduler, error) {
-	return newSchedulerFromCtx(ctx, up)
+	return newSchedulerFromCtx(ctx, up, cfg)
 }
 
 type changefeed struct {
@@ -68,6 +69,7 @@ type changefeed struct {
 	state *orchestrator.ChangefeedReactorState
 
 	upstream  *upstream.Upstream
+	cfg       *config.SchedulerConfig
 	scheduler scheduler.Scheduler
 	// barriers will be created when a changefeed is initialized
 	// and will be destroyed when a changefeed is closed.
@@ -126,7 +128,9 @@ type changefeed struct {
 	) (puller.DDLPuller, error)
 
 	newSink      func(changefeedID model.ChangeFeedID, info *model.ChangeFeedInfo, reportErr func(error)) DDLSink
-	newScheduler func(ctx cdcContext.Context, up *upstream.Upstream) (scheduler.Scheduler, error)
+	newScheduler func(
+		ctx cdcContext.Context, up *upstream.Upstream, cfg *config.SchedulerConfig,
+	) (scheduler.Scheduler, error)
 
 	lastDDLTs uint64 // Timestamp of the last executed DDL. Only used for tests.
 }
@@ -135,6 +139,7 @@ func newChangefeed(
 	id model.ChangeFeedID,
 	state *orchestrator.ChangefeedReactorState,
 	up *upstream.Upstream,
+	cfg *config.SchedulerConfig,
 ) *changefeed {
 	c := &changefeed{
 		id:    id,
@@ -152,6 +157,7 @@ func newChangefeed(
 		newSink:      newDDLSink,
 	}
 	c.newScheduler = newScheduler
+	c.cfg = cfg
 	return c
 }
 
@@ -164,9 +170,12 @@ func newChangefeed4Test(
 		changefeed model.ChangeFeedID,
 	) (puller.DDLPuller, error),
 	newSink func(changefeedID model.ChangeFeedID, info *model.ChangeFeedInfo, reportErr func(err error)) DDLSink,
-	newScheduler func(ctx cdcContext.Context, up *upstream.Upstream) (scheduler.Scheduler, error),
+	newScheduler func(
+		ctx cdcContext.Context, up *upstream.Upstream, cfg *config.SchedulerConfig,
+	) (scheduler.Scheduler, error),
 ) *changefeed {
-	c := newChangefeed(id, state, up)
+	cfg := config.NewDefaultSchedulerConfig()
+	c := newChangefeed(id, state, up, cfg)
 	c.newDDLPuller = newDDLPuller
 	c.newSink = newSink
 	c.newScheduler = newScheduler
@@ -539,7 +548,12 @@ LOOP:
 		zap.String("changefeed", c.id.ID))
 
 	// create scheduler
-	c.scheduler, err = c.newScheduler(ctx, c.upstream)
+	// TODO: Remove the hack once span replication is compatible with all sinks.
+	cfg := *c.cfg
+	if !sink.IsSinkCompatibleWithSpanReplication(c.state.Info.SinkURI) {
+		cfg.RegionPerSpan = 0
+	}
+	c.scheduler, err = c.newScheduler(ctx, c.upstream, &cfg)
 	if err != nil {
 		return errors.Trace(err)
 	}
@@ -661,7 +675,7 @@ func (c *changefeed) cleanupRedoManager(ctx context.Context) {
 			log.Warn("changefeed is removed, but state is not complete", zap.Any("state", c.state))
 			return
 		}
-		if !redo.IsConsistentEnabled(c.state.Info.Config.Consistent.Level) {
+		if !redoCfg.IsConsistentEnabled(c.state.Info.Config.Consistent.Level) {
 			return
 		}
 		// when removing a paused changefeed, the redo manager is nil, create a new one

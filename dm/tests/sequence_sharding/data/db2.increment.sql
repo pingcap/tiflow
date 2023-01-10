@@ -1,5 +1,5 @@
 use sharding_seq;
-delete from t3 where id = 400002;
+delete from t3 where uid = 400002;
 insert into t4 (uid,name) values(500005,'`.`'),(500006,'exit');
 alter table t2 add column c int;
 alter table t2 add index c(c);

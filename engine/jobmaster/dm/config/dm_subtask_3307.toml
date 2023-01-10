@@ -89,15 +89,6 @@ ansi-quotes = false
   sql-pattern = ["alter table .* add column aaa int"]
   action = "Ignore"
 
-[[mapping-rule]]
-  schema-pattern = "dmctl"
-  table-pattern = "t_*"
-  source-column = "id"
-  target-column = "id"
-  expression = "partition id"
-  arguments = ["2", "", "t_", ""]
-  create-table-query = ""
-
 [[expression-filter]]
   schema = "expr_filter"
   table = "t1"

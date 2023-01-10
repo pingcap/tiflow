@@ -83,7 +83,7 @@ type SinkManager struct {
 	// sinkFactory used to create table sink.
 	sinkFactory *factory.SinkFactory
 	// tableSinks is a map from tableID to tableSink.
-	tableSinks sync.Map
+	tableSinks spanz.SyncMap
 	// lastBarrierTs is the last barrier ts.
 	lastBarrierTs atomic.Uint64
 
@@ -271,15 +271,14 @@ func (m *SinkManager) backgroundGC() {
 					zap.String("changefeed", m.changefeedID.ID))
 				return
 			case <-ticker.C:
-				tableSinks := make(map[model.TableID]*tableSinkWrapper)
-				m.tableSinks.Range(func(key, value any) bool {
-					tableID := key.(model.TableID)
+				tableSinks := make(map[spanz.HashableSpan]*tableSinkWrapper)
+				m.tableSinks.Range(func(key tablepb.Span, value any) bool {
 					wrapper := value.(*tableSinkWrapper)
-					tableSinks[tableID] = wrapper
+					tableSinks[spanz.ToHashableSpan(key)] = wrapper
 					return true
 				})
 
-				for tableID, sink := range tableSinks {
+				for hspan, sink := range tableSinks {
 					if time.Since(sink.lastCleanTime) < cleanTableInterval {
 						continue
 					}
@@ -294,11 +293,12 @@ func (m *SinkManager) backgroundGC() {
 						continue
 					}
 
-					if err := m.sourceManager.CleanByTable(tableID, cleanPos); err != nil {
+					span := hspan.ToSpan()
+					if err := m.sourceManager.CleanByTable(span, cleanPos); err != nil {
 						log.Error("Failed to clean table in sort engine",
 							zap.String("namespace", m.changefeedID.Namespace),
 							zap.String("changefeed", m.changefeedID.ID),
-							zap.Int64("tableID", tableID),
+							zap.Stringer("span", &span),
 							zap.Error(err))
 						select {
 						case m.errChan <- err:
@@ -308,7 +308,7 @@ func (m *SinkManager) backgroundGC() {
 						log.Debug("table stale data has been cleaned",
 							zap.String("namespace", m.changefeedID.Namespace),
 							zap.String("changefeed", m.changefeedID.ID),
-							zap.Int64("tableID", tableID),
+							zap.Stringer("span", &span),
 							zap.Any("upperBound", cleanPos))
 					}
 					sink.lastCleanTime = time.Now()
@@ -345,14 +345,14 @@ func (m *SinkManager) generateSinkTasks() error {
 		// Collect some table progresses.
 		for len(tables) < sinkWorkerNum && m.sinkProgressHeap.len() > 0 {
 			slowestTableProgress := m.sinkProgressHeap.pop()
-			tableID := slowestTableProgress.tableID
+			span := slowestTableProgress.span
 
-			value, ok := m.tableSinks.Load(tableID)
+			value, ok := m.tableSinks.Load(span)
 			if !ok {
 				log.Info("Table sink not found, probably already removed",
 					zap.String("namespace", m.changefeedID.Namespace),
 					zap.String("changefeed", m.changefeedID.ID),
-					zap.Int64("tableID", tableID))
+					zap.Stringer("span", &span))
 				// Maybe the table sink is removed by the processor.(Scheduled the table to other nodes.)
 				// So we do **not** need add it back to the heap.
 				continue
@@ -371,7 +371,7 @@ func (m *SinkManager) generateSinkTasks() error {
 				log.Info("Table sink is not replicating, skip it",
 					zap.String("namespace", m.changefeedID.Namespace),
 					zap.String("changefeed", m.changefeedID.ID),
-					zap.Int64("tableID", tableID),
+					zap.Stringer("span", &span),
 					zap.String("tableState", tableState.String()))
 				continue
 			}
@@ -401,17 +401,17 @@ func (m *SinkManager) generateSinkTasks() error {
 			log.Debug("MemoryQuotaTracing: try acquire memory for table sink task",
 				zap.String("namespace", m.changefeedID.Namespace),
 				zap.String("changefeed", m.changefeedID.ID),
-				zap.Int64("tableID", tableSink.tableID),
+				zap.Stringer("span", &tableSink.span),
 				zap.Uint64("memory", requestMemSize))
 
 			t := &sinkTask{
-				tableID:       tableSink.tableID,
+				span:          tableSink.span,
 				lowerBound:    lowerBound,
 				getUpperBound: getUpperBound,
 				tableSink:     tableSink,
 				callback: func(lastWrittenPos engine.Position) {
 					p := &progress{
-						tableID:           tableSink.tableID,
+						span:              tableSink.span,
 						nextLowerBoundPos: lastWrittenPos.Next(),
 						version:           slowestTableProgress.version,
 					}
@@ -432,7 +432,7 @@ func (m *SinkManager) generateSinkTasks() error {
 				log.Debug("Generate sink task",
 					zap.String("namespace", m.changefeedID.Namespace),
 					zap.String("changefeed", m.changefeedID.ID),
-					zap.Int64("tableID", tableSink.tableID),
+					zap.Stringer("span", &tableSink.span),
 					zap.Any("lowerBound", lowerBound),
 					zap.Any("currentUpperBound", upperBound))
 			default:
@@ -440,7 +440,7 @@ func (m *SinkManager) generateSinkTasks() error {
 				log.Debug("MemoryQuotaTracing: refund memory for table sink task",
 					zap.String("namespace", m.changefeedID.Namespace),
 					zap.String("changefeed", m.changefeedID.ID),
-					zap.Int64("tableID", tableSink.tableID),
+					zap.Stringer("span", &tableSink.span),
 					zap.Uint64("memory", requestMemSize))
 				break LOOP
 			}
@@ -483,14 +483,14 @@ func (m *SinkManager) generateRedoTasks() error {
 
 		for len(tables) < redoWorkerNum && m.redoProgressHeap.len() > 0 {
 			slowestTableProgress := m.redoProgressHeap.pop()
-			tableID := slowestTableProgress.tableID
+			span := slowestTableProgress.span
 
-			value, ok := m.tableSinks.Load(tableID)
+			value, ok := m.tableSinks.Load(span)
 			if !ok {
 				log.Info("Table sink not found, probably already removed",
 					zap.String("namespace", m.changefeedID.Namespace),
 					zap.String("changefeed", m.changefeedID.ID),
-					zap.Int64("tableID", tableID))
+					zap.Stringer("span", &span))
 				// Maybe the table sink is removed by the processor.(Scheduled the table to other nodes.)
 				// So we do **not** need add it back to the heap.
 				continue
@@ -509,7 +509,7 @@ func (m *SinkManager) generateRedoTasks() error {
 				log.Info("Table sink is not replicating, skip it",
 					zap.String("namespace", m.changefeedID.Namespace),
 					zap.String("changefeed", m.changefeedID.ID),
-					zap.Int64("tableID", tableID),
+					zap.Stringer("span", &span),
 					zap.String("tableState", tableState.String()))
 				continue
 			}
@@ -539,17 +539,17 @@ func (m *SinkManager) generateRedoTasks() error {
 			log.Debug("MemoryQuotaTracing: try acquire memory for redo log task",
 				zap.String("namespace", m.changefeedID.Namespace),
 				zap.String("changefeed", m.changefeedID.ID),
-				zap.Int64("tableID", tableSink.tableID),
+				zap.Stringer("span", &tableSink.span),
 				zap.Uint64("memory", requestMemSize))
 
 			t := &redoTask{
-				tableID:       tableSink.tableID,
+				span:          tableSink.span,
 				lowerBound:    lowerBound,
 				getUpperBound: getUpperBound,
 				tableSink:     tableSink,
 				callback: func(lastWrittenPos engine.Position) {
 					p := &progress{
-						tableID:           tableSink.tableID,
+						span:              tableSink.span,
 						nextLowerBoundPos: lastWrittenPos.Next(),
 						version:           slowestTableProgress.version,
 					}
@@ -570,7 +570,7 @@ func (m *SinkManager) generateRedoTasks() error {
 				log.Debug("Generate redo task",
 					zap.String("namespace", m.changefeedID.Namespace),
 					zap.String("changefeed", m.changefeedID.ID),
-					zap.Int64("tableID", tableSink.tableID),
+					zap.Stringer("span", &tableSink.span),
 					zap.Any("lowerBound", lowerBound),
 					zap.Any("currentUpperBound", upperBound))
 			default:
@@ -578,7 +578,7 @@ func (m *SinkManager) generateRedoTasks() error {
 				log.Debug("MemoryQuotaTracing: refund memory for redo log task",
 					zap.String("namespace", m.changefeedID.Namespace),
 					zap.String("changefeed", m.changefeedID.ID),
-					zap.Int64("tableID", tableSink.tableID),
+					zap.Stringer("span", &tableSink.span),
 					zap.Uint64("memory", requestMemSize))
 				break LOOP
 			}
@@ -610,14 +610,14 @@ func (m *SinkManager) generateRedoTasks() error {
 // UpdateReceivedSorterResolvedTs updates the received sorter resolved ts for the table.
 // NOTE: it's still possible to be called during m.Close is in calling, so Close should
 // take care of this.
-func (m *SinkManager) UpdateReceivedSorterResolvedTs(tableID model.TableID, ts model.Ts) {
-	tableSink, ok := m.tableSinks.Load(tableID)
+func (m *SinkManager) UpdateReceivedSorterResolvedTs(span tablepb.Span, ts model.Ts) {
+	tableSink, ok := m.tableSinks.Load(span)
 	if !ok {
 		// It's possible that the table is in removing.
 		log.Debug("Table sink not found when updating resolved ts",
 			zap.String("namespace", m.changefeedID.Namespace),
 			zap.String("changefeed", m.changefeedID.ID),
-			zap.Int64("tableID", tableID))
+			zap.Stringer("span", &span))
 		return
 	}
 	tableSink.(*tableSinkWrapper).updateReceivedSorterResolvedTs(ts)
@@ -636,47 +636,46 @@ func (m *SinkManager) UpdateBarrierTs(ts model.Ts) {
 }
 
 // AddTable adds a table(TableSink) to the sink manager.
-func (m *SinkManager) AddTable(tableID model.TableID, startTs model.Ts, targetTs model.Ts) {
+func (m *SinkManager) AddTable(span tablepb.Span, startTs model.Ts, targetTs model.Ts) {
 	sinkWrapper := newTableSinkWrapper(
 		m.changefeedID,
-		tableID,
-		m.sinkFactory.CreateTableSink(
-			m.changefeedID, spanz.TableIDToComparableSpan(tableID), m.metricsTableSinkTotalRows),
+		span,
+		m.sinkFactory.CreateTableSink(m.changefeedID, span, m.metricsTableSinkTotalRows),
 		tablepb.TableStatePreparing,
 		startTs,
 		targetTs,
 	)
-	_, loaded := m.tableSinks.LoadOrStore(tableID, sinkWrapper)
+	_, loaded := m.tableSinks.LoadOrStore(span, sinkWrapper)
 	if loaded {
 		log.Panic("Add an exists table sink",
 			zap.String("namespace", m.changefeedID.Namespace),
 			zap.String("changefeed", m.changefeedID.ID),
-			zap.Int64("tableID", tableID))
+			zap.Stringer("span", &span))
 		return
 	}
-	m.memQuota.addTable(tableID)
+	m.memQuota.addTable(span)
 	log.Info("Add table sink",
 		zap.String("namespace", m.changefeedID.Namespace),
 		zap.String("changefeed", m.changefeedID.ID),
-		zap.Int64("tableID", tableID),
+		zap.Stringer("span", &span),
 		zap.Uint64("startTs", startTs),
 		zap.Uint64("version", sinkWrapper.version))
 }
 
 // StartTable sets the table(TableSink) state to replicating.
-func (m *SinkManager) StartTable(tableID model.TableID, startTs model.Ts) error {
+func (m *SinkManager) StartTable(span tablepb.Span, startTs model.Ts) error {
 	log.Info("Start table sink",
 		zap.String("namespace", m.changefeedID.Namespace),
 		zap.String("changefeed", m.changefeedID.ID),
-		zap.Int64("tableID", tableID),
+		zap.Stringer("span", &span),
 		zap.Uint64("startTs", startTs),
 	)
-	tableSink, ok := m.tableSinks.Load(tableID)
+	tableSink, ok := m.tableSinks.Load(span)
 	if !ok {
 		log.Panic("Table sink not found when starting table stats",
 			zap.String("namespace", m.changefeedID.Namespace),
 			zap.String("changefeed", m.changefeedID.ID),
-			zap.Int64("tableID", tableID))
+			zap.Stringer("span", &span))
 	}
 	backoffBaseDelayInMs := int64(100)
 	totalRetryDuration := 10 * time.Second
@@ -690,7 +689,7 @@ func (m *SinkManager) StartTable(tableID model.TableID, startTs model.Ts) error 
 		log.Debug("Set replicate ts",
 			zap.String("namespace", m.changefeedID.Namespace),
 			zap.String("changefeed", m.changefeedID.ID),
-			zap.Int64("tableID", tableID),
+			zap.Stringer("span", &span),
 			zap.Uint64("replicateTs", replicateTs),
 		)
 		return nil
@@ -702,13 +701,13 @@ func (m *SinkManager) StartTable(tableID model.TableID, startTs model.Ts) error 
 	}
 	tableSink.(*tableSinkWrapper).start(startTs, replicateTs)
 	m.sinkProgressHeap.push(&progress{
-		tableID:           tableID,
+		span:              span,
 		nextLowerBoundPos: engine.Position{StartTs: 0, CommitTs: startTs + 1},
 		version:           tableSink.(*tableSinkWrapper).version,
 	})
 	if m.redoManager != nil {
 		m.redoProgressHeap.push(&progress{
-			tableID:           tableID,
+			span:              span,
 			nextLowerBoundPos: engine.Position{StartTs: 0, CommitTs: startTs + 1},
 			version:           tableSink.(*tableSinkWrapper).version,
 		})
@@ -717,115 +716,118 @@ func (m *SinkManager) StartTable(tableID model.TableID, startTs model.Ts) error 
 }
 
 // AsyncStopTable sets the table(TableSink) state to stopped.
-func (m *SinkManager) AsyncStopTable(tableID model.TableID) {
+func (m *SinkManager) AsyncStopTable(span tablepb.Span) {
 	m.wg.Add(1)
 	go func() {
 		defer m.wg.Done()
 		log.Info("Async stop table sink",
 			zap.String("namespace", m.changefeedID.Namespace),
 			zap.String("changefeed", m.changefeedID.ID),
-			zap.Int64("tableID", tableID),
+			zap.Stringer("span", &span),
 		)
-		tableSink, ok := m.tableSinks.Load(tableID)
+		tableSink, ok := m.tableSinks.Load(span)
 		if !ok {
 			log.Panic("Table sink not found when removing table",
 				zap.String("namespace", m.changefeedID.Namespace),
 				zap.String("changefeed", m.changefeedID.ID),
-				zap.Int64("tableID", tableID))
+				zap.Stringer("span", &span))
 		}
 		tableSink.(*tableSinkWrapper).close(m.ctx)
-		cleanedBytes := m.memQuota.clean(tableID)
+		cleanedBytes := m.memQuota.clean(span)
 		log.Debug("MemoryQuotaTracing: Clean up memory quota for table sink task when removing table",
 			zap.String("namespace", m.changefeedID.Namespace),
 			zap.String("changefeed", m.changefeedID.ID),
-			zap.Int64("tableID", tableID),
+			zap.Stringer("span", &span),
 			zap.Uint64("memory", cleanedBytes),
 		)
 		log.Info("Table sink closed asynchronously",
 			zap.String("namespace", m.changefeedID.Namespace),
 			zap.String("changefeed", m.changefeedID.ID),
-			zap.Int64("tableID", tableID),
+			zap.Stringer("span", &span),
 		)
 	}()
 }
 
 // RemoveTable removes a table(TableSink) from the sink manager.
-func (m *SinkManager) RemoveTable(tableID model.TableID) {
+func (m *SinkManager) RemoveTable(span tablepb.Span) {
 	// NOTICE: It is safe to only remove the table sink from the map.
 	// Because if we found the table sink is closed, we will not add it back to the heap.
 	// Also, no need to GC the SortEngine. Because the SortEngine also removes this table.
-	value, exists := m.tableSinks.LoadAndDelete(tableID)
+	value, exists := m.tableSinks.LoadAndDelete(span)
 	if !exists {
 		log.Panic("Remove an unexist table sink",
 			zap.String("namespace", m.changefeedID.Namespace),
 			zap.String("changefeed", m.changefeedID.ID),
-			zap.Int64("tableID", tableID))
+			zap.Stringer("span", &span))
 	}
 	sink := value.(*tableSinkWrapper)
 	log.Info("Remove table sink successfully",
 		zap.String("namespace", m.changefeedID.Namespace),
 		zap.String("changefeed", m.changefeedID.ID),
-		zap.Int64("tableID", tableID),
+		zap.Stringer("span", &span),
 		zap.Uint64("checkpointTs", sink.getCheckpointTs().Ts))
 	if m.eventCache != nil {
-		m.eventCache.removeTable(tableID)
+		m.eventCache.removeTable(span)
 	}
 }
 
-// GetAllCurrentTableIDs returns all the table IDs in the sink manager.
-func (m *SinkManager) GetAllCurrentTableIDs() []model.TableID {
-	var tableIDs []model.TableID
-	m.tableSinks.Range(func(key, value interface{}) bool {
-		tableIDs = append(tableIDs, key.(model.TableID))
+// GetAllCurrentTableSpans returns all spans in the sink manager.
+func (m *SinkManager) GetAllCurrentTableSpans() []tablepb.Span {
+	var spans []tablepb.Span
+	m.tableSinks.Range(func(key tablepb.Span, value interface{}) bool {
+		spans = append(spans, key)
 		return true
 	})
-	return tableIDs
+	return spans
 }
 
 // GetTableState returns the table(TableSink) state.
-func (m *SinkManager) GetTableState(tableID model.TableID) (tablepb.TableState, bool) {
-	tableSink, ok := m.tableSinks.Load(tableID)
+func (m *SinkManager) GetTableState(span tablepb.Span) (tablepb.TableState, bool) {
+	tableSink, ok := m.tableSinks.Load(span)
 	if !ok {
 		log.Debug("Table sink not found when getting table state",
 			zap.String("namespace", m.changefeedID.Namespace),
 			zap.String("changefeed", m.changefeedID.ID),
-			zap.Int64("tableID", tableID))
+			zap.Stringer("span", &span))
 		return tablepb.TableStateAbsent, false
 	}
 	return tableSink.(*tableSinkWrapper).getState(), true
 }
 
 // GetTableStats returns the state of the table.
-func (m *SinkManager) GetTableStats(tableID model.TableID) TableStats {
-	tableSink, ok := m.tableSinks.Load(tableID)
+func (m *SinkManager) GetTableStats(span tablepb.Span) TableStats {
+	value, ok := m.tableSinks.Load(span)
 	if !ok {
 		log.Panic("Table sink not found when getting table stats",
 			zap.String("namespace", m.changefeedID.Namespace),
 			zap.String("changefeed", m.changefeedID.ID),
-			zap.Int64("tableID", tableID))
+			zap.Stringer("span", &span))
 	}
-	checkpointTs := tableSink.(*tableSinkWrapper).getCheckpointTs()
-	m.memQuota.release(tableID, checkpointTs)
+	tableSink := value.(*tableSinkWrapper)
+
+	checkpointTs := tableSink.getCheckpointTs()
+	m.memQuota.release(span, checkpointTs)
 	var resolvedTs model.Ts
 	// If redo log is enabled, we have to use redo log's resolved ts to calculate processor's min resolved ts.
 	if m.redoManager != nil {
-		resolvedTs = m.redoManager.GetResolvedTs(tableID)
+		resolvedTs = m.redoManager.GetResolvedTs(span)
 	} else {
-		resolvedTs = m.sourceManager.GetTableResolvedTs(tableID)
+		resolvedTs = m.sourceManager.GetTableResolvedTs(span)
 	}
+
 	return TableStats{
 		CheckpointTs:          checkpointTs.ResolvedMark(),
 		ResolvedTs:            resolvedTs,
 		BarrierTs:             m.lastBarrierTs.Load(),
-		ReceivedMaxCommitTs:   tableSink.(*tableSinkWrapper).getReceivedSorterCommitTs(),
-		ReceivedMaxResolvedTs: tableSink.(*tableSinkWrapper).getReceivedSorterResolvedTs(),
+		ReceivedMaxCommitTs:   tableSink.getReceivedSorterCommitTs(),
+		ReceivedMaxResolvedTs: tableSink.getReceivedSorterResolvedTs(),
 	}
 }
 
 // ReceivedEvents returns the number of events received by all table sinks.
 func (m *SinkManager) ReceivedEvents() int64 {
 	totalReceivedEvents := int64(0)
-	m.tableSinks.Range(func(_, value interface{}) bool {
+	m.tableSinks.Range(func(_ tablepb.Span, value interface{}) bool {
 		totalReceivedEvents += value.(*tableSinkWrapper).getReceivedEventCount()
 		return true
 	})
@@ -847,11 +849,11 @@ func (m *SinkManager) Close() error {
 	if err != nil {
 		return errors.Trace(err)
 	}
-	m.tableSinks.Range(func(key, value interface{}) bool {
+	m.tableSinks.Range(func(_ tablepb.Span, value interface{}) bool {
 		sink := value.(*tableSinkWrapper)
 		sink.close(m.ctx)
 		if m.eventCache != nil {
-			m.eventCache.removeTable(sink.tableID)
+			m.eventCache.removeTable(sink.span)
 		}
 		return true
 	})

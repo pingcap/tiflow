@@ -40,13 +40,13 @@ type pullerNode struct {
 }
 
 func newPullerNode(
-	tableID tablepb.Span,
+	span tablepb.Span,
 	startTs model.Ts,
 	tableName string,
 	changefeed model.ChangeFeedID,
 ) *pullerNode {
 	return &pullerNode{
-		span:       tableID,
+		span:       span,
 		startTs:    startTs,
 		tableName:  tableName,
 		changefeed: changefeed,
@@ -78,6 +78,7 @@ func (n *pullerNode) startWithSorterNode(ctx pipeline.NodeContext,
 		n.span.TableID,
 		n.tableName,
 		filterLoop,
+		false,
 	)
 	n.wg.Go(func() error {
 		ctx.Throw(errors.Trace(n.plr.Run(ctxC)))

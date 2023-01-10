@@ -16,11 +16,16 @@ package loader
 import (
 	"testing"
 
+	"github.com/pingcap/errors"
+	"github.com/pingcap/tidb/br/pkg/lightning/common"
 	"github.com/pingcap/tiflow/dm/config"
+	"github.com/pingcap/tiflow/dm/pkg/terror"
 	"github.com/stretchr/testify/require"
 )
 
 func TestSetLightningConfig(t *testing.T) {
+	t.Parallel()
+
 	stCfg := &config.SubTaskConfig{
 		LoaderConfig: config.LoaderConfig{
 			PoolSize: 10,
@@ -30,4 +35,13 @@ func TestSetLightningConfig(t *testing.T) {
 	cfg, err := l.getLightningConfig()
 	require.NoError(t, err)
 	require.Equal(t, stCfg.LoaderConfig.PoolSize, cfg.App.RegionConcurrency)
+}
+
+func TestConvertLightningError(t *testing.T) {
+	t.Parallel()
+
+	err := common.ErrChecksumMismatch.GenWithStackByArgs(1, 2, 3, 4, 5, 6)
+	converted := convertLightningError(errors.Trace(err))
+	require.True(t, terror.ErrLoadLightningChecksum.Equal(converted))
+	require.Contains(t, converted.Error(), "checksum mismatched, KV number in source files: 4, KV number in TiDB cluster: 3")
 }

@@ -15,6 +15,7 @@ package spanz
 
 import (
 	"bytes"
+	"time"
 
 	"github.com/google/btree"
 	"github.com/pingcap/log"
@@ -36,12 +37,19 @@ func lessSpanItem[T any](a, b spanItem[T]) bool {
 // Map is a specialized btree map that map a Span to a value.
 type Map[T any] struct {
 	tree *btree.BTreeG[spanItem[T]]
+
+	cache *struct {
+		coveredSpans, holes []tablepb.Span
+		lastGC              time.Time
+	}
 }
 
 // NewMap returns a new SpanMap.
 func NewMap[T any]() *Map[T] {
+	// Map is read heavy map, many Ascend.
+	const defaultDegree = 256
 	return &Map[T]{
-		tree: btree.NewG(2, lessSpanItem[T]),
+		tree: btree.NewG(defaultDegree, lessSpanItem[T]),
 	}
 }
 
@@ -109,52 +117,65 @@ func (m *Map[T]) AscendRange(start, end tablepb.Span, iterator ItemIterator[T]) 
 
 // FindHoles returns an array of Span that are not covered in the range
 // [start, end).
-// Note: Table ID is not set in returned holes.
-func (m *Map[T]) FindHoles(start, end tablepb.Span) (coveredSpans, holes []tablepb.Span) {
+// Note:
+// * Table ID is not set in returned holes.
+// * Returned slice is read only and will be changed on next FindHoles.
+func (m *Map[T]) FindHoles(start, end tablepb.Span) ([]tablepb.Span, []tablepb.Span) {
 	if bytes.Compare(start.StartKey, end.StartKey) >= 0 {
-		log.Panic("start muse be larger than end",
-			zap.Stringer("start", &start),
-			zap.Stringer("end", &end))
+		log.Panic("start must be larger than end",
+			zap.String("start", start.String()),
+			zap.String("end", end.String()))
 	}
+	if m.cache == nil || time.Since(m.cache.lastGC) > time.Minute {
+		m.cache = &struct {
+			coveredSpans []tablepb.Span
+			holes        []tablepb.Span
+			lastGC       time.Time
+		}{lastGC: time.Now()}
+	}
+	m.cache.coveredSpans = m.cache.coveredSpans[:0]
+	m.cache.holes = m.cache.holes[:0]
+
 	firstSpan := true
 	var lastSpan tablepb.Span
 	m.AscendRange(start, end, func(current tablepb.Span, _ T) bool {
 		if firstSpan {
 			ord := bytes.Compare(start.StartKey, current.StartKey)
 			if ord < 0 {
-				holes = append(holes, tablepb.Span{
+				m.cache.holes = append(m.cache.holes, tablepb.Span{
 					StartKey: start.StartKey,
 					EndKey:   current.StartKey,
 				})
 			} else if ord > 0 {
 				log.Panic("map is out of order",
-					zap.Stringer("start", &start),
-					zap.Stringer("current", &current))
+					zap.String("start", start.String()),
+					zap.String("current", current.String()))
 			}
 			firstSpan = false
 		} else if !bytes.Equal(lastSpan.EndKey, current.StartKey) {
 			// Find a hole.
-			holes = append(holes, tablepb.Span{
+			m.cache.holes = append(m.cache.holes, tablepb.Span{
 				StartKey: lastSpan.EndKey,
 				EndKey:   current.StartKey,
 			})
 		}
 		lastSpan = current
-		coveredSpans = append(coveredSpans, current)
+		m.cache.coveredSpans = append(m.cache.coveredSpans, current)
 		return true
 	})
-	if len(coveredSpans) == 0 {
+	if len(m.cache.coveredSpans) == 0 {
 		// No such span in the map.
-		return coveredSpans, []tablepb.Span{
-			{StartKey: start.StartKey, EndKey: end.StartKey},
-		}
+		m.cache.holes = append(m.cache.holes, tablepb.Span{
+			StartKey: start.StartKey, EndKey: end.StartKey,
+		})
+		return m.cache.coveredSpans, m.cache.holes
 	}
 	// Check if there is a hole in the end.
 	if !bytes.Equal(lastSpan.EndKey, end.StartKey) {
-		holes = append(holes, tablepb.Span{
+		m.cache.holes = append(m.cache.holes, tablepb.Span{
 			StartKey: lastSpan.EndKey,
 			EndKey:   end.StartKey,
 		})
 	}
-	return
+	return m.cache.coveredSpans, m.cache.holes
 }
