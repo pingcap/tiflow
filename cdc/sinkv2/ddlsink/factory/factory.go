@@ -43,6 +43,9 @@ func New(
 	schema := strings.ToLower(sinkURI.Scheme)
 	switch schema {
 	case sink.KafkaScheme, sink.KafkaSSLScheme:
+		if config.GetGlobalServerConfig().Debug.EnableKafkaSinkV2 {
+			return mq.NewKafkaDDLSinkV2(ctx, sinkURI, cfg)
+		}
 		return mq.NewKafkaDDLSink(ctx, sinkURI, cfg,
 			kafka.NewAdminClientImpl, ddlproducer.NewKafkaDDLProducer)
 	case sink.BlackHoleScheme:
