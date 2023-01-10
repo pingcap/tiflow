@@ -44,6 +44,7 @@ func TestSinkParamsClone(t *testing.T) {
 		writeTimeout:        defaultWriteTimeout,
 		dialTimeout:         defaultDialTimeout,
 		safeMode:            defaultSafeMode,
+		batchDMLEnable:      defaultBatchDMLEnable,
 	}, param1)
 	require.Equal(t, &sinkParams{
 		changefeedID:        model.DefaultChangeFeedID("123"),
@@ -56,6 +57,7 @@ func TestSinkParamsClone(t *testing.T) {
 		writeTimeout:        defaultWriteTimeout,
 		dialTimeout:         defaultDialTimeout,
 		safeMode:            defaultSafeMode,
+		batchDMLEnable:      defaultBatchDMLEnable,
 	}, param2)
 }
 

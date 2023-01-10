@@ -156,16 +156,16 @@ func TestApplyDMLs(t *testing.T) {
 		db, mock, err := sqlmock.New(sqlmock.QueryMatcherOption(sqlmock.QueryMatcherEqual))
 		require.Nil(t, err)
 		mock.ExpectBegin()
-		mock.ExpectExec("REPLACE INTO `test`.`t1`(`a`,`b`) VALUES (?,?)").
+		mock.ExpectExec("REPLACE INTO `test`.`t1` (`a`,`b`) VALUES (?,?)").
 			WithArgs(1, "2").
 			WillReturnResult(sqlmock.NewResult(1, 1))
 		mock.ExpectCommit()
 
 		mock.ExpectBegin()
-		mock.ExpectExec("DELETE FROM `test`.`t1` WHERE `a` = ? LIMIT 1;").
+		mock.ExpectExec("DELETE FROM `test`.`t1` WHERE (`a`) IN ((?))").
 			WithArgs(1).
 			WillReturnResult(sqlmock.NewResult(1, 1))
-		mock.ExpectExec("REPLACE INTO `test`.`t1`(`a`,`b`) VALUES (?,?)").
+		mock.ExpectExec("REPLACE INTO `test`.`t1` (`a`,`b`) VALUES (?,?)").
 			WithArgs(2, "3").
 			WillReturnResult(sqlmock.NewResult(1, 1))
 		mock.ExpectCommit()
@@ -198,6 +198,7 @@ func TestApplyDMLs(t *testing.T) {
 					Flag:  0,
 				},
 			},
+			IndexColumns: [][]int{{0}},
 		},
 		{
 			StartTs:  1200,
@@ -207,7 +208,7 @@ func TestApplyDMLs(t *testing.T) {
 				{
 					Name:  "a",
 					Value: 1,
-					Flag:  model.HandleKeyFlag,
+					Flag:  model.HandleKeyFlag | model.UniqueKeyFlag | model.PrimaryKeyFlag,
 				}, {
 					Name:  "b",
 					Value: "2",
@@ -218,13 +219,14 @@ func TestApplyDMLs(t *testing.T) {
 				{
 					Name:  "a",
 					Value: 2,
-					Flag:  model.HandleKeyFlag,
+					Flag:  model.HandleKeyFlag | model.UniqueKeyFlag | model.PrimaryKeyFlag,
 				}, {
 					Name:  "b",
 					Value: "3",
 					Flag:  0,
 				},
 			},
+			IndexColumns: [][]int{{0}},
 		},
 	}
 	for _, dml := range dmls {

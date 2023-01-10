@@ -181,9 +181,13 @@ func TestMysqlSinkWorker(t *testing.T) {
 			metrics.BucketSizeCounter.
 				WithLabelValues("default", "changefeed", "1"),
 			receiver,
-			func(ctx context.Context, events []*model.RowChangedEvent, replicaID uint64, bucket int) error {
-				rows := make([]*model.RowChangedEvent, len(events))
-				copy(rows, events)
+			func(ctx context.Context, events []*model.SingleTableTxn, replicaID uint64, bucket int) error {
+				rows := make([]*model.RowChangedEvent, 0)
+				for _, event := range events {
+					if len(event.Rows) != 0 {
+						rows = append(rows, event.Rows...)
+					}
+				}
 				outputRows = append(outputRows, rows)
 				outputReplicaIDs = append(outputReplicaIDs, replicaID)
 				return nil
@@ -264,7 +268,7 @@ func TestMySQLSinkWorkerExitWithError(t *testing.T) {
 		metrics.
 			BucketSizeCounter.WithLabelValues("default", "changefeed", "1"),
 		receiver,
-		func(ctx context.Context, events []*model.RowChangedEvent, replicaID uint64, bucket int) error {
+		func(ctx context.Context, events []*model.SingleTableTxn, replicaID uint64, bucket int) error {
 			return errExecFailed
 		})
 	errg, cctx := errgroup.WithContext(cctx)
@@ -341,7 +345,7 @@ func TestMySQLSinkWorkerExitCleanup(t *testing.T) {
 		metrics.
 			BucketSizeCounter.WithLabelValues("default", "changefeed", "1"),
 		receiver,
-		func(ctx context.Context, events []*model.RowChangedEvent, replicaID uint64, bucket int) error {
+		func(ctx context.Context, events []*model.SingleTableTxn, replicaID uint64, bucket int) error {
 			return errExecFailed
 		})
 	errg, cctx := errgroup.WithContext(cctx)
