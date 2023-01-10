@@ -1,4 +1,4 @@
-//  Copyright 2021 PingCAP, Inc.
+//  Copyright 2022 PingCAP, Inc.
 //
 //  Licensed under the Apache License, Version 2.0 (the "License");
 //  you may not use this file except in compliance with the License.
@@ -11,31 +11,30 @@
 //  See the License for the specific language governing permissions and
 //  limitations under the License.
 
+//go:generate msgp
+
 package common
 
 import (
-	"fmt"
-	"strings"
-
 	"github.com/pingcap/tiflow/cdc/model"
 )
 
-// FilterChangefeedFiles return the files that match to the changefeed.
-func FilterChangefeedFiles(files []string, changefeedID model.ChangeFeedID) []string {
-	var (
-		matcher string
-		res     []string
-	)
+// LogMeta is used for store meta info.
+type LogMeta struct {
+	CheckpointTs uint64 `msg:"checkpointTs"`
+	ResolvedTs   uint64 `msg:"resolvedTs"`
+}
 
-	if changefeedID.Namespace == "default" {
-		matcher = fmt.Sprintf("_%s_", changefeedID.ID)
-	} else {
-		matcher = fmt.Sprintf("_%s_%s_", changefeedID.Namespace, changefeedID.ID)
-	}
-	for _, file := range files {
-		if strings.Contains(file, matcher) {
-			res = append(res, file)
+// ParseMeta parses meta.
+func ParseMeta(metas []*LogMeta, checkpointTs, resolvedTs *model.Ts) {
+	*checkpointTs = 0
+	*resolvedTs = 0
+	for _, meta := range metas {
+		if *checkpointTs < meta.CheckpointTs {
+			*checkpointTs = meta.CheckpointTs
+		}
+		if *resolvedTs < meta.ResolvedTs {
+			*resolvedTs = meta.ResolvedTs
 		}
 	}
-	return res
 }

@@ -21,7 +21,6 @@ import (
 
 	"github.com/pingcap/tiflow/cdc/entry"
 	"github.com/pingcap/tiflow/cdc/model"
-	"github.com/pingcap/tiflow/cdc/redo"
 	"github.com/pingcap/tiflow/cdc/sorter"
 	"github.com/pingcap/tiflow/cdc/sorter/memory"
 	"github.com/pingcap/tiflow/cdc/sorter/unified"
@@ -30,6 +29,7 @@ import (
 	cdcContext "github.com/pingcap/tiflow/pkg/context"
 	"github.com/pingcap/tiflow/pkg/pipeline"
 	pmessage "github.com/pingcap/tiflow/pkg/pipeline/message"
+	"github.com/pingcap/tiflow/pkg/redo"
 	"github.com/stretchr/testify/require"
 	"github.com/tikv/client-go/v2/oracle"
 	pd "github.com/tikv/pd/client"

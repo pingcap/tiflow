@@ -32,16 +32,17 @@ import (
 	"github.com/pingcap/tiflow/cdc/model"
 	"github.com/pingcap/tiflow/cdc/redo/common"
 	"github.com/pingcap/tiflow/cdc/redo/writer"
+	"github.com/pingcap/tiflow/pkg/redo"
 	"github.com/stretchr/testify/mock"
 	"github.com/stretchr/testify/require"
 	"go.uber.org/multierr"
 )
 
 func TestNewLogReader(t *testing.T) {
-	_, err := NewLogReader(context.Background(), nil)
+	_, err := newLogReader(context.Background(), nil)
 	require.NotNil(t, err)
 
-	_, err = NewLogReader(context.Background(), &LogReaderConfig{})
+	_, err = newLogReader(context.Background(), &LogReaderConfig{})
 	require.Nil(t, err)
 
 	dir, err := ioutil.TempDir("", "redo-NewLogReader")
@@ -51,23 +52,25 @@ func TestNewLogReader(t *testing.T) {
 	s3URI, err := url.Parse("s3://logbucket/test-changefeed?endpoint=http://111/")
 	require.Nil(t, err)
 
-	origin := common.InitS3storage
+	origin := redo.InitExternalStorage
 	defer func() {
-		common.InitS3storage = origin
+		redo.InitExternalStorage = origin
 	}()
 	controller := gomock.NewController(t)
 	mockStorage := mockstorage.NewMockExternalStorage(controller)
 	// no file to download
 	mockStorage.EXPECT().WalkDir(gomock.Any(), gomock.Any(), gomock.Any()).Return(nil)
-	common.InitS3storage = func(ctx context.Context, uri url.URL) (storage.ExternalStorage, error) {
+	redo.InitExternalStorage = func(
+		ctx context.Context, uri url.URL,
+	) (storage.ExternalStorage, error) {
 		return mockStorage, nil
 	}
 
 	// after init should rm the dir
-	_, err = NewLogReader(context.Background(), &LogReaderConfig{
-		S3Storage: true,
-		Dir:       dir,
-		S3URI:     *s3URI,
+	_, err = newLogReader(context.Background(), &LogReaderConfig{
+		UseExternalStorage: true,
+		Dir:                dir,
+		URI:                *s3URI,
 	})
 	require.Nil(t, err)
 	_, err = os.Stat(dir)
@@ -85,9 +88,9 @@ func TestLogReaderResetReader(t *testing.T) {
 		MaxLogSize: 100000,
 		Dir:        dir,
 	}
-	fileName := fmt.Sprintf(common.RedoLogFileFormatV2, "cp",
+	fileName := fmt.Sprintf(redo.RedoLogFileFormatV2, "cp",
 		"default", "test-cf100",
-		common.DefaultDDLLogFileType, 100, uuid.New().String(), common.LogEXT)
+		redo.RedoDDLLogFileType, 100, uuid.NewString(), redo.LogEXT)
 	w, err := writer.NewWriter(ctx, cfg, writer.WithLogFileName(func() string {
 		return fileName
 	}))
@@ -106,9 +109,9 @@ func TestLogReaderResetReader(t *testing.T) {
 	f, err := os.Open(path)
 	require.Nil(t, err)
 
-	fileName = fmt.Sprintf(common.RedoLogFileFormatV2, "cp",
+	fileName = fmt.Sprintf(redo.RedoLogFileFormatV2, "cp",
 		"default", "test-cf10",
-		common.DefaultRowLogFileType, 10, uuid.New().String(), common.LogEXT)
+		redo.RedoRowLogFileType, 10, uuid.NewString(), redo.LogEXT)
 	w, err = writer.NewWriter(ctx, cfg, writer.WithLogFileName(func() string {
 		return fileName
 	}))
@@ -229,8 +232,10 @@ func TestLogReaderResetReader(t *testing.T) {
 		} else {
 			require.Nil(t, err, tt.name)
 			mockReader.AssertNumberOfCalls(t, "Close", 2)
-			require.Equal(t, tt.rowFleName+common.SortLogEXT, r.rowReader[0].(*reader).fileName, tt.name)
-			require.Equal(t, tt.ddlFleName+common.SortLogEXT, r.ddlReader[0].(*reader).fileName, tt.name)
+			require.Equal(t, tt.rowFleName+redo.SortLogEXT,
+				r.rowReader[0].(*reader).fileName, tt.name)
+			require.Equal(t, tt.ddlFleName+redo.SortLogEXT,
+				r.ddlReader[0].(*reader).fileName, tt.name)
 			require.Equal(t, tt.wantStartTs, r.cfg.startTs, tt.name)
 			require.Equal(t, tt.wantEndTs, r.cfg.endTs, tt.name)
 
@@ -246,7 +251,7 @@ func TestLogReaderReadMeta(t *testing.T) {
 
 	fileName := fmt.Sprintf("%s_%s_%d_%s%s", "cp",
 		"test-changefeed",
-		time.Now().Unix(), common.DefaultMetaFileType, common.MetaEXT)
+		time.Now().Unix(), redo.RedoMetaFileType, redo.MetaEXT)
 	path := filepath.Join(dir, fileName)
 	f, err := os.Create(path)
 	require.Nil(t, err)
@@ -261,7 +266,7 @@ func TestLogReaderReadMeta(t *testing.T) {
 
 	fileName = fmt.Sprintf("%s_%s_%d_%s%s", "cp1",
 		"test-changefeed",
-		time.Now().Unix(), common.DefaultMetaFileType, common.MetaEXT)
+		time.Now().Unix(), redo.RedoMetaFileType, redo.MetaEXT)
 	path = filepath.Join(dir, fileName)
 	f, err = os.Create(path)
 	require.Nil(t, err)

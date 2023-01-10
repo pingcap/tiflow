@@ -66,8 +66,8 @@ level = "none"
 # file size of single redo log, unit is MB
 max-log-size = 64
 # 刷新或上传 redo log 至 S3 的间隔，单位毫秒
-# interval to flush or upload redo log, default is 1000ms, unit is microseconds
-flush-interval = 1000
+# interval to flush or upload redo log, default is 2000ms, unit is microseconds
+flush-interval = 2000
 # 存储 redo log 的形式，包括 nfs（NFS 目录），S3（上传至S3），blackhole（测试用）
 # storage type for redo log
 # nfs: store redo logs in nfs directly
