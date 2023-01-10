@@ -28,6 +28,7 @@ import (
 	kafkaV1 "github.com/pingcap/tiflow/cdc/sink/mq/producer/kafka"
 	"github.com/pingcap/tiflow/cdc/sinkv2/eventsink"
 	collector "github.com/pingcap/tiflow/cdc/sinkv2/metrics/mq/kafka"
+	"github.com/pingcap/tiflow/pkg/config"
 	cerror "github.com/pingcap/tiflow/pkg/errors"
 	pkafka "github.com/pingcap/tiflow/pkg/sink/kafka"
 	"github.com/pingcap/tiflow/pkg/util"
@@ -74,7 +75,7 @@ func NewKafkaDMLProducer(
 	ctx context.Context,
 	client sarama.Client,
 	adminClient pkafka.ClusterAdminClient,
-	config *kafkaV1.Config,
+	cfg *kafkaV1.Config,
 	errCh chan error,
 ) (DMLProducer, error) {
 	changefeedID := contextutil.ChangefeedIDFromCtx(ctx)
@@ -105,7 +106,7 @@ func NewKafkaDMLProducer(
 	}
 
 	writer := &kafka.Writer{
-		Addr:     kafka.TCP(config.BrokerEndpoints...),
+		Addr:     kafka.TCP(cfg.BrokerEndpoints...),
 		Balancer: &kafka.RoundRobin{},
 
 		MaxAttempts: 10,
@@ -114,7 +115,7 @@ func NewKafkaDMLProducer(
 		WriteBackoffMax: 1 * time.Second,
 
 		BatchSize:  100,
-		BatchBytes: 1048576,
+		BatchBytes: config.DefaultMaxMessageBytes,
 
 		BatchTimeout: 1 * time.Second,
 
