@@ -43,23 +43,6 @@ stop() {
 
 s3cmd --access_key=$MINIO_ACCESS_KEY --secret_key=$MINIO_SECRET_KEY --host=$S3_ENDPOINT --host-bucket=$S3_ENDPOINT --no-ssl mb s3://logbucket
 
-# check resolved ts has been persisted in redo log meta
-function check_resolved_ts() {
-	export AWS_ACCESS_KEY_ID=$MINIO_ACCESS_KEY
-	export AWS_SECRET_ACCESS_KEY=$MINIO_SECRET_KEY
-	changefeedid=$1
-	check_tso=$2
-	read_dir=$3
-	rts=$(cdc redo meta --storage="s3://logbucket/test-changefeed?endpoint=http://127.0.0.1:24927/" --tmp-dir="$read_dir" | grep -oE "resolved-ts:[0-9]+" | awk -F: '{print $2}')
-	if [[ "$rts" -gt "$check_tso" ]]; then
-		return
-	fi
-	echo "global resolved ts $rts not forward to $check_tso"
-	exit 1
-}
-
-export -f check_resolved_ts
-
 function run() {
 	# we only support eventually consistent replication with MySQL sink
 	if [ "$SINK_TYPE" == "kafka" ]; then
@@ -93,15 +76,17 @@ function run() {
 	# to ensure row changed events have been replicated to TiCDC
 	sleep 10
 
+	storage_path="s3://logbucket/test-changefeed?endpoint=http://127.0.0.1:24927/"
+	tmp_download_path=$WORK_DIR/cdc_data/redo/$changefeed_id
 	current_tso=$(cdc cli tso query --pd=http://$UP_PD_HOST_1:$UP_PD_PORT_1)
-	ensure 50 check_resolved_ts $changefeed_id $current_tso $WORK_DIR/redo/meta
+	ensure 50 check_redo_resolved_ts $changefeed_id $current_tso $storage_path $tmp_download_path/meta
 	cleanup_process $CDC_BINARY
 
 	export GO_FAILPOINTS=''
 	export AWS_ACCESS_KEY_ID=$MINIO_ACCESS_KEY
 	export AWS_SECRET_ACCESS_KEY=$MINIO_SECRET_KEY
-	cdc redo apply --tmp-dir="$WORK_DIR/redo/apply" \
-		--storage="s3://logbucket/test-changefeed?endpoint=http://127.0.0.1:24927/" \
+	cdc redo apply --tmp-dir="$tmp_download_path/apply" \
+		--storage="$storage_path" \
 		--sink-uri="mysql://normal:123456@127.0.0.1:3306/"
 	check_sync_diff $WORK_DIR $CUR/conf/diff_config.toml
 }

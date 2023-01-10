@@ -22,7 +22,7 @@ import (
 	"github.com/DATA-DOG/go-sqlmock"
 	"github.com/phayes/freeport"
 	"github.com/pingcap/tiflow/cdc/model"
-	"github.com/pingcap/tiflow/cdc/redo"
+	"github.com/pingcap/tiflow/cdc/redo/common"
 	"github.com/pingcap/tiflow/cdc/redo/reader"
 	"github.com/pingcap/tiflow/cdc/sink/mysql"
 	"github.com/stretchr/testify/require"
@@ -230,7 +230,7 @@ func TestApplyDMLs(t *testing.T) {
 		},
 	}
 	for _, dml := range dmls {
-		redoLogCh <- redo.RowToRedo(dml)
+		redoLogCh <- common.RowToRedo(dml)
 	}
 	close(redoLogCh)
 	close(ddlEventCh)

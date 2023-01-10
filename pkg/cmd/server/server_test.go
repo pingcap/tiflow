@@ -208,6 +208,7 @@ func TestParseCfg(t *testing.T) {
 				ServerMaxPendingMessageCount: 102400,
 				ServerAckInterval:            config.TomlDuration(time.Millisecond * 100),
 				ServerWorkerPoolSize:         4,
+				MaxRecvMsgSize:               256 * 1024 * 1024,
 			},
 		},
 	}, o.serverConfig)
@@ -273,6 +274,7 @@ client-retry-rate-limit = 100.0
 server-max-pending-message-count = 1024
 server-ack-interval = "1s"
 server-worker-pool-size = 16
+max-recv-msg-size = 4
 `, dataDir)
 	err := os.WriteFile(configPath, []byte(configContent), 0o644)
 	require.Nil(t, err)
@@ -354,6 +356,7 @@ server-worker-pool-size = 16
 				ServerMaxPendingMessageCount: 1024,
 				ServerAckInterval:            config.TomlDuration(1 * time.Second),
 				ServerWorkerPoolSize:         16,
+				MaxRecvMsgSize:               4,
 			},
 		},
 	}, o.serverConfig)
@@ -497,6 +500,7 @@ cert-allowed-cn = ["dd","ee"]
 				ServerMaxPendingMessageCount: 102400,
 				ServerAckInterval:            config.TomlDuration(time.Millisecond * 100),
 				ServerWorkerPoolSize:         4,
+				MaxRecvMsgSize:               256 * 1024 * 1024,
 			},
 		},
 	}, o.serverConfig)
@@ -557,6 +561,7 @@ unknown3 = 3
 			ServerMaxPendingMessageCount: 102400,
 			ServerAckInterval:            config.TomlDuration(time.Millisecond * 100),
 			ServerWorkerPoolSize:         4,
+			MaxRecvMsgSize:               256 * 1024 * 1024,
 		},
 	}, o.serverConfig.Debug)
 }

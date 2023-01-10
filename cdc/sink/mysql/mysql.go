@@ -408,13 +408,17 @@ func needSwitchDB(ddl *model.DDLEvent) bool {
 	return true
 }
 
-func querySQLMode(ctx context.Context, db *sql.DB) (sqlMode string, err error) {
+func querySQLMode(ctx context.Context, db *sql.DB) (string, error) {
 	row := db.QueryRowContext(ctx, "SELECT @@SESSION.sql_mode;")
-	err = row.Scan(&sqlMode)
+	var sqlMode sql.NullString
+	err := row.Scan(&sqlMode)
 	if err != nil {
 		err = cerror.WrapError(cerror.ErrMySQLQueryError, err)
 	}
-	return
+	if !sqlMode.Valid {
+		sqlMode.String = ""
+	}
+	return sqlMode.String, err
 }
 
 // check whether the target charset is supported
@@ -665,8 +669,6 @@ func (s *mysqlSink) execDMLWithMaxRetries(pctx context.Context, dmls *preparedDM
 	return retry.Do(pctx, func() error {
 		writeTimeout, _ := time.ParseDuration(s.params.writeTimeout)
 		writeTimeout += networkDriftDuration
-		ctx, cancelFunc := context.WithTimeout(pctx, writeTimeout)
-		defer cancelFunc()
 
 		failpoint.Inject("MySQLSinkTxnRandomError", func() {
 			failpoint.Return(
@@ -678,7 +680,7 @@ func (s *mysqlSink) execDMLWithMaxRetries(pctx context.Context, dmls *preparedDM
 			time.Sleep(time.Hour)
 		})
 		err := s.statistics.RecordBatchExecution(func() (int, error) {
-			tx, err := s.db.BeginTx(ctx, nil)
+			tx, err := s.db.BeginTx(pctx, nil)
 			if err != nil {
 				return 0, logDMLTxnErr(
 					cerror.WrapError(cerror.ErrMySQLTxnError, err),
@@ -688,6 +690,7 @@ func (s *mysqlSink) execDMLWithMaxRetries(pctx context.Context, dmls *preparedDM
 			for i, query := range dmls.sqls {
 				args := dmls.values[i]
 				log.Debug("exec row", zap.String("sql", query), zap.Any("args", args))
+				ctx, cancelFunc := context.WithTimeout(pctx, writeTimeout)
 				if _, err := tx.ExecContext(ctx, query, args...); err != nil {
 					if rbErr := tx.Rollback(); rbErr != nil {
 						log.Warn("failed to rollback txn", zap.Error(err))
@@ -695,22 +698,27 @@ func (s *mysqlSink) execDMLWithMaxRetries(pctx context.Context, dmls *preparedDM
 							cerror.WrapError(cerror.ErrMySQLTxnError, err),
 							start, s.params.changefeedID, query, dmls.rowCount)
 					}
+					cancelFunc()
 					return 0, logDMLTxnErr(
 						cerror.WrapError(cerror.ErrMySQLTxnError, err),
 						start, s.params.changefeedID, query, dmls.rowCount)
 				}
+				cancelFunc()
 			}
 
 			if len(dmls.markSQL) != 0 {
 				log.Debug("exec row", zap.String("sql", dmls.markSQL))
+				ctx, cancelFunc := context.WithTimeout(pctx, writeTimeout)
 				if _, err := tx.ExecContext(ctx, dmls.markSQL); err != nil {
 					if rbErr := tx.Rollback(); rbErr != nil {
 						log.Warn("failed to rollback txn", zap.Error(err))
 					}
+					cancelFunc()
 					return 0, logDMLTxnErr(
 						cerror.WrapError(cerror.ErrMySQLTxnError, err),
 						start, s.params.changefeedID, dmls.markSQL, dmls.rowCount)
 				}
+				cancelFunc()
 			}
 
 			if err = tx.Commit(); err != nil {

@@ -45,7 +45,7 @@ var defaultReplicaConfig = &ReplicaConfig{
 	Consistent: &ConsistentConfig{
 		Level:             "none",
 		MaxLogSize:        64,
-		FlushIntervalInMs: 2000,
+		FlushIntervalInMs: MinFlushIntervalInMs,
 		Storage:           "",
 	},
 }
@@ -129,6 +129,12 @@ func (c *replicaConfig) fillFromV1(v1 *outdated.ReplicaConfigV1) {
 func (c *ReplicaConfig) ValidateAndAdjust(sinkURI *url.URL) error {
 	if c.Sink != nil {
 		err := c.Sink.validateAndAdjust(sinkURI, c.EnableOldValue)
+		if err != nil {
+			return err
+		}
+	}
+	if c.Consistent != nil {
+		err := c.Consistent.ValidateAndAdjust()
 		if err != nil {
 			return err
 		}
