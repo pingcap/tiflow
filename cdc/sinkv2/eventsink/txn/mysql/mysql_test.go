@@ -1446,17 +1446,6 @@ func TestPrepareBatchDMLs(t *testing.T) {
 	}
 }
 
-<<<<<<< HEAD
-func TestNetworkPartition(t *testing.T) {
-	ctx := context.Background()
-	ms := newMySQLBackendWithoutDB(ctx)
-	ms.cfg.WriteTimeout = "1s"
-	_ = failpoint.Enable("github.com/pingcap/tiflow/cdc/sinkv2/eventsink/txn/mysql/MySQLSinkHangLongTime", "return")
-	defer failpoint.Disable("github.com/pingcap/tiflow/cdc/sinkv2/eventsink/txn/mysql/MySQLSinkHangLongTime")
-
-	err := ms.execDMLWithMaxRetries(ctx, &preparedDMLs{})
-	require.Equal(t, context.Canceled, err)
-=======
 func TestGroupRowsByType(t *testing.T) {
 	ctx := context.Background()
 	ms := newMySQLBackendWithoutDB(ctx)
@@ -1691,5 +1680,4 @@ func TestGroupRowsByType(t *testing.T) {
 			}
 		})
 	}
->>>>>>> f71045fc12 (sink(ticdc): use separate ctx for each DML (#7981))
 }
