@@ -13,9 +13,197 @@
 
 package v2
 
+import (
+	"github.com/pingcap/log"
+	"github.com/pingcap/tiflow/pkg/context"
+	"github.com/segmentio/kafka-go"
+	"go.uber.org/zap"
+)
+
 type admin struct {
+	client *kafka.Client
+
+	conn *kafka.Conn
 }
 
-func NewAdmin(endpoints []string) *admin {
-	return &admin{}
+func NewAdmin(ctx context.Context, endpoints []string) *admin {
+	client := &kafka.Client{
+		Addr: kafka.TCP(endpoints...),
+		// todo: set transport
+		Transport: nil,
+	}
+	//return &Client{
+	//	Addr:      w.Addr,
+	//	Transport: w.Transport,
+	//	Timeout:   timeout,
+	//}
+
+	return &admin{
+		client: client,
+	}
+}
+
+func (a *admin) CreateTopic(ctx context.Context, topic string, numPartitions, replicationFactor int, validateOnly bool) error {
+	request := &kafka.CreateTopicsRequest{
+		Addr: a.client.Addr,
+		Topics: []kafka.TopicConfig{{
+			Topic:             topic,
+			NumPartitions:     numPartitions,
+			ReplicationFactor: replicationFactor,
+		}},
+		ValidateOnly: validateOnly,
+	}
+
+	_, err := a.client.CreateTopics(ctx, request)
+	if err != nil {
+		return err
+	}
+
+	return nil
+}
+
+type TopicDetails struct {
+	NumPartitions int32
+}
+
+func (a *admin) ListTopics(ctx context.Context) (map[string]TopicDetails, error) {
+	//resp, err := a.client.DescribeConfigs(ctx,
+	//	&kafka.DescribeConfigsRequest{
+	//		Addr:      a.client.Addr,
+	//		Resources: []kafka.DescribeConfigRequestResource{{}},
+	//	})
+	//describeResp, err := client.DescribeConfigs(context.Background(), &DescribeConfigsRequest{
+	//	Resources: []DescribeConfigRequestResource{{
+	//		ResourceType: ResourceTypeTopic,
+	//		ResourceName: topic,
+	//		ConfigNames:  []string{MaxMessageBytes},
+	//	}},
+	//})
+	//
+	//if err != nil {
+	//	t.Fatal(err)
+	//}
+	//
+	//maxMessageBytesValue := "0"
+	//for _, resource := range describeResp.Resources {
+	//	if resource.ResourceType == int8(ResourceTypeTopic) && resource.ResourceName == topic {
+	//		for _, entry := range resource.ConfigEntries {
+	//			if entry.ConfigName == MaxMessageBytes {
+	//				maxMessageBytesValue = entry.ConfigValue
+	//			}
+	//		}
+	//	}
+	//}
+	//assert.Equal(t, maxMessageBytesValue, MaxMessageBytesValue)
+	return nil, nil
+}
+
+type broker struct {
+	ID int
+}
+
+func (a *admin) DescribeCluster(ctx context.Context) (brokers []broker, controllerID int32, err error) {
+	return nil, 0, nil
+	//controller, err := a.client.Controller(ctx)
+	//return nil, 0, nil
+
+	// to create topics when auto.create.topics.enable='false'
+	//topic := "my-topic"
+	//
+	//
+	//controller, err := conn.Controller()
+	//if err != nil {
+	//	panic(err.Error())
+	//}
+	//var controllerConn *kafka.Conn
+	//controllerConn, err = kafka.Dial("tcp", net.JoinHostPort(controller.Host, strconv.Itoa(controller.Port)))
+	//if err != nil {
+	//	panic(err.Error())
+	//}
+	//defer controllerConn.Close()
+	//
+	//
+	//topicConfigs := []kafka.TopicConfig{
+	//	{
+	//		Topic:             topic,
+	//		NumPartitions:     1,
+	//		ReplicationFactor: 1,
+	//	},
+	//}
+	//
+	//err = controllerConn.CreateTopics(topicConfigs...)
+	//if err != nil {
+	//	panic(err.Error())
+	//}
+}
+
+type configEntry struct {
+	Name  string
+	Value string
+}
+
+func (a *admin) DescribeConfig(ctx context.Context, resource kafka.DescribeConfigRequestResource) ([]configEntry, error) {
+	var resources []kafka.DescribeConfigRequestResource
+	resources = append(resources, resource)
+	request := &kafka.DescribeConfigsRequest{
+		Addr:      a.client.Addr,
+		Resources: resources,
+	}
+
+	response, err := a.client.DescribeConfigs(ctx, request)
+	if err != nil {
+		return nil, err
+	}
+
+	var entries []configEntry
+	for _, respResource := range response.Resources {
+		if respResource.ResourceName == resource.ResourceName {
+			if respResource.Error != nil {
+				// todo: wrap this into a cdc rfc error.
+				return nil, respResource.Error
+			}
+			for _, entry := range respResource.ConfigEntries {
+				entries = append(entries, configEntry{
+					Name:  entry.ConfigName,
+					Value: entry.ConfigValue,
+				})
+			}
+		}
+	}
+
+	return entries, nil
+}
+
+func (a *admin) DescribeTopics(ctx context.Context, topics []string) ([]string, error) {
+	var resources []kafka.DescribeConfigRequestResource
+	for _, topic := range topics {
+		resources = append(resources, kafka.DescribeConfigRequestResource{
+			ResourceType: kafka.ResourceTypeTopic,
+			ResourceName: topic,
+		})
+	}
+
+	request := &kafka.DescribeConfigsRequest{
+		Resources: resources,
+	}
+
+	response, err := a.client.DescribeConfigs(ctx, request)
+	if err != nil {
+		return nil, err
+	}
+
+	var result []string
+	for _, resp := range response.Resources {
+		if resp.Error != nil {
+			log.Warn("describe topic failed",
+				zap.Error(err))
+			return nil, err
+		}
+		result = append(result, resp.ResourceName)
+	}
+	return result, nil
+}
+
+func (a *admin) Close() error {
+	return nil
 }
