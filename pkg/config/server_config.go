@@ -152,6 +152,9 @@ var defaultServerConfig = &ServerConfig{
 		Scheduler:           NewDefaultSchedulerConfig(),
 		EnableNewSink:       true,
 		EnablePullBasedSink: true,
+
+		// todo: set this to false before merge to master.
+		EnableKafkaSinkV2: true,
 	},
 	ClusterID: "default",
 }
