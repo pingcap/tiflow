@@ -18,10 +18,12 @@ import (
 	"net/url"
 
 	"github.com/pingcap/errors"
+	"github.com/pingcap/tiflow/cdc/contextutil"
 	"github.com/pingcap/tiflow/cdc/sink/mq/producer/kafka"
 	"github.com/pingcap/tiflow/cdc/sinkv2/util"
 	"github.com/pingcap/tiflow/pkg/config"
 	cerror "github.com/pingcap/tiflow/pkg/errors"
+	v2 "github.com/pingcap/tiflow/pkg/sink/kafka/v2"
 )
 
 // NewKafkaDDLSinkV2 will verify the config and create a Kafka DDL Sink.
@@ -39,6 +41,17 @@ func NewKafkaDDLSinkV2(
 	if err := baseConfig.Apply(sinkURI); err != nil {
 		return nil, cerror.WrapError(cerror.ErrKafkaInvalidConfig, err)
 	}
+
+	config, err := v2.NewConfig(baseConfig, "owner",
+		contextutil.CaptureAddrFromCtx(ctx), contextutil.ChangefeedIDFromCtx(ctx))
+	if err != nil {
+		return nil, cerror.WrapError(cerror.ErrKafkaInvalidConfig, err)
+	}
+
+	admin := v2.NewAdmin(baseConfig.BrokerEndpoints)
+	//if err != nil {
+	//	return nil, cerror.WrapError(cerror.ErrKafkaInvalidConfig, err)
+	//}
 
 	//saramaConfig, err := kafka.NewSaramaConfig(ctx, baseConfig)
 	//if err != nil {
@@ -64,11 +77,11 @@ func NewKafkaDDLSinkV2(
 	//	return nil, cerror.WrapError(cerror.ErrKafkaNewSaramaProducer, err)
 	//}
 	//
-	//protocol, err := util.GetProtocol(replicaConfig.Sink.Protocol)
-	//if err != nil {
-	//	return nil, errors.Trace(err)
-	//}
-	//
+	protocol, err := util.GetProtocol(replicaConfig.Sink.Protocol)
+	if err != nil {
+		return nil, errors.Trace(err)
+	}
+
 	//client, err := sarama.NewClient(baseConfig.BrokerEndpoints, saramaConfig)
 	//if err != nil {
 	//	return nil, cerror.WrapError(cerror.ErrKafkaNewSaramaProducer, err)
