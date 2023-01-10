@@ -387,13 +387,17 @@ func needSwitchDB(ddl *model.DDLEvent) bool {
 	return true
 }
 
-func querySQLMode(ctx context.Context, db *sql.DB) (sqlMode string, err error) {
+func querySQLMode(ctx context.Context, db *sql.DB) (string, error) {
 	row := db.QueryRowContext(ctx, "SELECT @@SESSION.sql_mode;")
-	err = row.Scan(&sqlMode)
+	var sqlMode sql.NullString
+	err := row.Scan(&sqlMode)
 	if err != nil {
 		err = cerror.WrapError(cerror.ErrMySQLQueryError, err)
 	}
-	return
+	if !sqlMode.Valid {
+		sqlMode.String = ""
+	}
+	return sqlMode.String, err
 }
 
 // check whether the target charset is supported

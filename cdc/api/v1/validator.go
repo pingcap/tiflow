@@ -136,6 +136,8 @@ func verifyCreateChangefeedConfig(
 
 	// init ChangefeedInfo
 	info := &model.ChangeFeedInfo{
+		Namespace:      model.DefaultNamespace,
+		ID:             changefeedConfig.ID,
 		UpstreamID:     up.ID,
 		SinkURI:        changefeedConfig.SinkURI,
 		CreateTime:     time.Now(),

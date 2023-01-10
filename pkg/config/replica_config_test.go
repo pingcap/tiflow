@@ -130,6 +130,18 @@ func TestReplicaConfigValidate(t *testing.T) {
 	require.Equal(t, "d1", rules[0].PartitionRule)
 	require.Equal(t, "p1", rules[1].PartitionRule)
 	require.Equal(t, "", rules[2].PartitionRule)
+
+	// Test memory quota can be adjusted
+	conf = GetDefaultReplicaConfig()
+	conf.MemoryQuota = 0
+	err = conf.ValidateAndAdjust(nil)
+	require.NoError(t, err)
+	require.Equal(t, uint64(DefaultChangefeedMemoryQuota), conf.MemoryQuota)
+
+	conf.MemoryQuota = uint64(1024)
+	err = conf.ValidateAndAdjust(nil)
+	require.NoError(t, err)
+	require.Equal(t, uint64(1024), conf.MemoryQuota)
 }
 
 func TestValidateAndAdjust(t *testing.T) {

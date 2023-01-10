@@ -121,7 +121,7 @@ func New(pdEndpoints []string) (*server, error) {
 
 	s := &server{
 		pdEndpoints: pdEndpoints,
-		grpcService: p2p.NewServerWrapper(),
+		grpcService: p2p.NewServerWrapper(debugConfig.Messages.ToMessageServerConfig()),
 		tcpServer:   tcpServer,
 
 		useEventSortEngine: useEventSortEngine,
@@ -377,7 +377,7 @@ func (s *server) run(ctx context.Context) (err error) {
 	}
 
 	if conf.Debug.EnableNewScheduler {
-		grpcServer := grpc.NewServer()
+		grpcServer := grpc.NewServer(s.grpcService.ServerOptions()...)
 		p2pProto.RegisterCDCPeerToPeerServer(grpcServer, s.grpcService)
 
 		wg.Go(func() error {

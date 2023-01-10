@@ -27,13 +27,12 @@ import (
 	"github.com/pingcap/tiflow/cdc/model"
 	"github.com/pingcap/tiflow/cdc/redo/common"
 	cerror "github.com/pingcap/tiflow/pkg/errors"
+	"github.com/pingcap/tiflow/pkg/redo"
 	"go.uber.org/multierr"
 	"go.uber.org/zap"
 )
 
 // RedoLogReader is a reader abstraction for redo log storage layer
-//
-//go:generate mockery --name=RedoLogReader --inpackage --quiet
 type RedoLogReader interface {
 	io.Closer
 
@@ -51,20 +50,37 @@ type RedoLogReader interface {
 	ReadMeta(ctx context.Context) (checkpointTs, resolvedTs uint64, err error)
 }
 
+// NewRedoLogReader creates a new redo log reader
+func NewRedoLogReader(
+	ctx context.Context, storageType string, cfg *LogReaderConfig,
+) (rd RedoLogReader, err error) {
+	if !redo.IsValidConsistentStorage(storageType) {
+		return nil, cerror.ErrConsistentStorage.GenWithStackByArgs(storageType)
+	}
+	if redo.IsBlackholeStorage(storageType) {
+		return newBlackHoleReader(), nil
+	}
+	return newLogReader(ctx, cfg)
+}
+
 // LogReaderConfig is the config for LogReader
 type LogReaderConfig struct {
+	startTs uint64
+	endTs   uint64
+
 	// Dir is the folder contains the redo logs need to apply when OP environment or
-	// the folder used to download redo logs to if s3 enabled
-	Dir       string
-	S3Storage bool
-	// S3URI should be like S3URI="s3://logbucket/test-changefeed?endpoint=http://$S3_ENDPOINT/"
-	S3URI url.URL
+	// the folder used to download redo logs to if using external storage, such as s3
+	// and gcs.
+	Dir string
+
+	// URI should be like "s3://logbucket/test-changefeed?endpoint=http://$S3_ENDPOINT/"
+	URI                url.URL
+	UseExternalStorage bool
+
 	// WorkerNums is the num of workers used to sort the log file to sorted file,
 	// will load the file to memory first then write the sorted file to disk
 	// the memory used is WorkerNums * defaultMaxLogSize (64 * megabyte) total
 	WorkerNums int
-	startTs    uint64
-	endTs      uint64
 }
 
 // LogReader implement RedoLogReader interface
@@ -81,10 +97,11 @@ type LogReader struct {
 	sync.Mutex
 }
 
-// NewLogReader creates a LogReader instance. Need the client to guarantee only one LogReader per changefeed
+// newLogReader creates a LogReader instance.
+// Need the client to guarantee only one LogReader per changefeed
 // currently support rewind operation by ResetReader api
 // if s3 will download logs first, if OP environment need fetch the redo logs to local dir first
-func NewLogReader(ctx context.Context, cfg *LogReaderConfig) (*LogReader, error) {
+func newLogReader(ctx context.Context, cfg *LogReaderConfig) (*LogReader, error) {
 	if cfg == nil {
 		return nil, cerror.WrapError(cerror.ErrRedoConfigInvalid, errors.New("LogReaderConfig can not be nil"))
 	}
@@ -92,8 +109,8 @@ func NewLogReader(ctx context.Context, cfg *LogReaderConfig) (*LogReader, error)
 	logReader := &LogReader{
 		cfg: cfg,
 	}
-	if cfg.S3Storage {
-		s3storage, err := common.InitS3storage(ctx, cfg.S3URI)
+	if cfg.UseExternalStorage {
+		extStorage, err := redo.InitExternalStorage(ctx, cfg.URI)
 		if err != nil {
 			return nil, err
 		}
@@ -102,7 +119,7 @@ func NewLogReader(ctx context.Context, cfg *LogReaderConfig) (*LogReader, error)
 		if err != nil {
 			return nil, cerror.WrapError(cerror.ErrRedoFileOp, err)
 		}
-		err = downLoadToLocal(ctx, cfg.Dir, s3storage, common.DefaultMetaFileType)
+		err = downLoadToLocal(ctx, cfg.Dir, extStorage, redo.RedoMetaFileType)
 		if err != nil {
 			return nil, cerror.WrapError(cerror.ErrRedoDownloadFailed, err)
 		}
@@ -154,13 +171,13 @@ func (l *LogReader) setUpRowReader(ctx context.Context, startTs, endTs uint64) e
 	}
 
 	rowCfg := &readerConfig{
-		dir:        l.cfg.Dir,
-		fileType:   common.DefaultRowLogFileType,
-		startTs:    startTs,
-		endTs:      endTs,
-		s3Storage:  l.cfg.S3Storage,
-		s3URI:      l.cfg.S3URI,
-		workerNums: l.cfg.WorkerNums,
+		startTs:            startTs,
+		endTs:              endTs,
+		dir:                l.cfg.Dir,
+		fileType:           redo.RedoRowLogFileType,
+		uri:                l.cfg.URI,
+		useExternalStorage: l.cfg.UseExternalStorage,
+		workerNums:         l.cfg.WorkerNums,
 	}
 	l.rowReader, err = newReader(ctx, rowCfg)
 	if err != nil {
@@ -183,13 +200,13 @@ func (l *LogReader) setUpDDLReader(ctx context.Context, startTs, endTs uint64) e
 	}
 
 	ddlCfg := &readerConfig{
-		dir:        l.cfg.Dir,
-		fileType:   common.DefaultDDLLogFileType,
-		startTs:    startTs,
-		endTs:      endTs,
-		s3Storage:  l.cfg.S3Storage,
-		s3URI:      l.cfg.S3URI,
-		workerNums: l.cfg.WorkerNums,
+		startTs:            startTs,
+		endTs:              endTs,
+		dir:                l.cfg.Dir,
+		fileType:           redo.RedoDDLLogFileType,
+		uri:                l.cfg.URI,
+		useExternalStorage: l.cfg.UseExternalStorage,
+		workerNums:         l.cfg.WorkerNums,
 	}
 	l.ddlReader, err = newReader(ctx, ddlCfg)
 	if err != nil {
@@ -350,7 +367,7 @@ func (l *LogReader) ReadMeta(ctx context.Context) (checkpointTs, resolvedTs uint
 
 	metas := make([]*common.LogMeta, 0, 64)
 	for _, file := range files {
-		if filepath.Ext(file.Name()) == common.MetaEXT {
+		if filepath.Ext(file.Name()) == redo.MetaEXT {
 			path := filepath.Join(l.cfg.Dir, file.Name())
 			fileData, err := os.ReadFile(path)
 			if err != nil {

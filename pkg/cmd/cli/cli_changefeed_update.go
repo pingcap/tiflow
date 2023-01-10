@@ -128,7 +128,7 @@ func (o *updateChangefeedOptions) run(cmd *cobra.Command) error {
 	}
 
 	changefeedConfig := o.getChangefeedConfig(cmd, newInfo)
-	info, err := o.apiV2Client.Changefeeds().Update(ctx, changefeedConfig, newInfo.ID)
+	info, err := o.apiV2Client.Changefeeds().Update(ctx, changefeedConfig, o.changefeedID)
 	if err != nil {
 		return err
 	}

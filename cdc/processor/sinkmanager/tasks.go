@@ -20,7 +20,7 @@ import (
 
 const (
 	// defaultRequestMemSize is the default memory usage for a request.
-	defaultRequestMemSize = uint64(10 * 1024 * 1024) // 10MB
+	defaultRequestMemSize = uint64(1024 * 1024) // 1MB
 	// Avoid update resolved ts too frequently, if there are too many small transactions.
 	defaultMaxUpdateIntervalSize = uint64(1024 * 256) // 256KB
 )
