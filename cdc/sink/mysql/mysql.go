@@ -993,7 +993,6 @@ func (s *mysqlSink) prepareDMLs(txns []*model.SingleTableTxn, replicaID uint64, 
 
 		// Determine whether to use batch dml feature here.
 		if s.params.batchDMLEnable {
-			log.Info("fizz batch dml enabled", zap.Int("bucket", bucket))
 			tableColumns := firstRow.Columns
 			if firstRow.IsDelete() {
 				tableColumns = firstRow.PreColumns
