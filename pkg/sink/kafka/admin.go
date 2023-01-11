@@ -15,6 +15,7 @@ package kafka
 
 import (
 	"context"
+	"strings"
 
 	"github.com/Shopify/sarama"
 	"github.com/pingcap/tiflow/cdc/sink/mq/producer/kafka"
@@ -38,19 +39,19 @@ func NewSaramaAdminClient(ctx context.Context, config *kafka.Config) (ClusterAdm
 	return &admin{client: client}, nil
 }
 
-func (a *admin) ListTopics() (map[string]*TopicDetail, error) {
+func (a *admin) ListTopics() (map[string]TopicDetail, error) {
 	topics, err := a.client.ListTopics()
 	if err != nil {
 		return nil, err
 	}
 
-	result := make(map[string]*TopicDetail, len(topics))
+	result := make(map[string]TopicDetail, len(topics))
 	for topic, detail := range topics {
 		configEntries := make(map[string]string, len(detail.ConfigEntries))
 		for name, value := range detail.ConfigEntries {
 			configEntries[name] = *value
 		}
-		result[topic] = &TopicDetail{
+		result[topic] = TopicDetail{
 			NumPartitions:     detail.NumPartitions,
 			ReplicationFactor: detail.ReplicationFactor,
 			ConfigEntries:     configEntries,
@@ -61,10 +62,15 @@ func (a *admin) ListTopics() (map[string]*TopicDetail, error) {
 }
 
 func (a *admin) CreateTopic(topic string, detail *TopicDetail, validateOnly bool) error {
-	return a.client.CreateTopic(topic, &sarama.TopicDetail{
+	err := a.client.CreateTopic(topic, &sarama.TopicDetail{
 		NumPartitions:     detail.NumPartitions,
 		ReplicationFactor: detail.ReplicationFactor,
 	}, validateOnly)
+	// Ignore the already exists error because it's not harmful.
+	if err != nil && !strings.Contains(err.Error(), sarama.ErrTopicAlreadyExists.Error()) {
+		return err
+	}
+	return nil
 }
 
 func (a *admin) DescribeCluster() ([]Broker, int32, error) {

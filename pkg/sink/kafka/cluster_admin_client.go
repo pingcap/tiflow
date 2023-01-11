@@ -14,6 +14,8 @@
 package kafka
 
 import (
+	"context"
+
 	"github.com/pingcap/tiflow/cdc/sink/mq/producer/kafka"
 )
 
@@ -70,7 +72,7 @@ type PartitionMetadata struct {
 // brokers, configurations and ACLs.
 type ClusterAdminClient interface {
 	// ListTopics list the topics available in the cluster with the default options.
-	ListTopics() (map[string]*TopicDetail, error)
+	ListTopics() (map[string]TopicDetail, error)
 	// DescribeCluster gets information about the nodes in the cluster
 	DescribeCluster() (brokers []Broker, controllerID int32, err error)
 	// DescribeConfig gets the configuration for the specified resources.
@@ -84,9 +86,9 @@ type ClusterAdminClient interface {
 }
 
 // ClusterAdminClientCreator defines the type of cluster admin client crater.
-type ClusterAdminClientCreator func([]string, *kafka.Config) (ClusterAdminClient, error)
+type ClusterAdminClientCreator func(context.Context, *kafka.Config) (ClusterAdminClient, error)
 
 // NewMockAdminClient constructs a ClusterAdminClient with mock implementation.
-func NewMockAdminClient(_ []string, _ *kafka.Config) (ClusterAdminClient, error) {
+func NewMockAdminClient(_ context.Context, _ *kafka.Config) (ClusterAdminClient, error) {
 	return NewClusterAdminClientMockImpl(), nil
 }

@@ -90,10 +90,10 @@ func NewClusterAdminClientMockImpl() *ClusterAdminClientMockImpl {
 }
 
 // ListTopics returns all topics directly.
-func (c *ClusterAdminClientMockImpl) ListTopics() (map[string]*TopicDetail, error) {
-	topicsDetailsMap := make(map[string]*TopicDetail)
+func (c *ClusterAdminClientMockImpl) ListTopics() (map[string]TopicDetail, error) {
+	topicsDetailsMap := make(map[string]TopicDetail)
 	for topic, detail := range c.topics {
-		topicsDetailsMap[topic] = &detail.TopicDetail
+		topicsDetailsMap[topic] = detail.TopicDetail
 	}
 	return topicsDetailsMap, nil
 }

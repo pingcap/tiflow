@@ -53,7 +53,7 @@ func NewKafkaDMLSink(
 		return nil, errors.Trace(err)
 	}
 
-	adminClient, err := adminClientCreator(baseConfig.BrokerEndpoints, saramaConfig)
+	adminClient, err := adminClientCreator(ctx, baseConfig)
 	if err != nil {
 		return nil, cerror.WrapError(cerror.ErrKafkaNewSaramaProducer, err)
 	}

@@ -16,7 +16,6 @@ package manager
 import (
 	"context"
 	"fmt"
-	"strings"
 	"sync"
 	"time"
 
@@ -279,8 +278,7 @@ func (m *kafkaTopicManager) createTopic(topicName string) (int32, error) {
 		NumPartitions:     m.cfg.PartitionNum,
 		ReplicationFactor: m.cfg.ReplicationFactor,
 	}, false)
-	// Ignore the already exists error because it's not harmful.
-	if err != nil && !strings.Contains(err.Error(), sarama.ErrTopicAlreadyExists.Error()) {
+	if err != nil {
 		log.Error(
 			"Kafka admin client create the topic failed",
 			zap.String("topic", topicName),
@@ -289,7 +287,7 @@ func (m *kafkaTopicManager) createTopic(topicName string) (int32, error) {
 			zap.Error(err),
 			zap.Duration("duration", time.Since(start)),
 		)
-		return 0, cerror.WrapError(cerror.ErrKafkaNewSaramaProducer, err)
+		return 0, cerror.WrapError(cerror.ErrKafkaCreateTopic, err)
 	}
 
 	log.Info(
