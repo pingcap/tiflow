@@ -15,11 +15,21 @@ package causality
 
 import (
 	"sync"
+	"time"
 
 	"github.com/pingcap/tiflow/engine/pkg/containers"
 	"github.com/pingcap/tiflow/pkg/causality/internal"
+	"github.com/prometheus/client_golang/prometheus"
 	"go.uber.org/atomic"
 )
+
+// Metrics contains some metrics of the associated ConflictDetector.
+type Metrics struct {
+	// Busy ratio of the associated ConflictDetector's background goroutine.
+	// BackgroundWorkerBusyRatio.Add(100) means in the last 1 second, 100ms
+	// is used for handling tasks.
+	BackgroundWorkerBusyRatio prometheus.Counter
+}
 
 // ConflictDetector implements a logic that dispatches transaction
 // to different workers in a way that transactions modifying the same
@@ -41,6 +51,8 @@ type ConflictDetector[Worker worker[Txn], Txn txnEvent] struct {
 	garbageNodes  *containers.SliceQueue[txnFinishedEvent]
 	wg            sync.WaitGroup
 	closeCh       chan struct{}
+
+	metrics *Metrics
 }
 
 type txnFinishedEvent struct {
@@ -48,10 +60,20 @@ type txnFinishedEvent struct {
 	conflictKeys []uint64
 }
 
-// NewConflictDetector creates a new ConflictDetector.
+// NewConflictDetector creates a new ConflictDetector with a changefeedID in ctx.
 func NewConflictDetector[Worker worker[Txn], Txn txnEvent](
 	workers []Worker,
 	numSlots uint64,
+) *ConflictDetector[Worker, Txn] {
+	return NewConflictDetectorWithMetrics[Worker, Txn](workers, numSlots, nil)
+}
+
+// NewConflictDetectorWithMetrics is like NewConflictDetector but is associated with
+// a given Metrics.
+func NewConflictDetectorWithMetrics[Worker worker[Txn], Txn txnEvent](
+	workers []Worker,
+	numSlots uint64,
+	metrics *Metrics,
 ) *ConflictDetector[Worker, Txn] {
 	ret := &ConflictDetector[Worker, Txn]{
 		workers:       workers,
@@ -60,6 +82,7 @@ func NewConflictDetector[Worker worker[Txn], Txn txnEvent](
 		notifiedNodes: containers.NewSliceQueue[func()](),
 		garbageNodes:  containers.NewSliceQueue[txnFinishedEvent](),
 		closeCh:       make(chan struct{}),
+		metrics:       metrics,
 	}
 
 	ret.wg.Add(1)
@@ -96,11 +119,16 @@ func (d *ConflictDetector[Worker, Txn]) Close() {
 }
 
 func (d *ConflictDetector[Worker, Txn]) runBackgroundTasks() {
+	var notifiedNodesDuration, garbageNodesDuration time.Duration
+	overseerTimer := time.NewTicker(time.Second)
+	defer overseerTimer.Stop()
+	startToWork := time.Now()
 	for {
 		select {
 		case <-d.closeCh:
 			return
 		case <-d.notifiedNodes.C:
+			start := time.Now()
 			for {
 				notifiyCallback, ok := d.notifiedNodes.Pop()
 				if !ok {
@@ -108,13 +136,26 @@ func (d *ConflictDetector[Worker, Txn]) runBackgroundTasks() {
 				}
 				notifiyCallback()
 			}
+			notifiedNodesDuration += time.Since(start)
 		case <-d.garbageNodes.C:
+			start := time.Now()
 			for {
 				event, ok := d.garbageNodes.Pop()
 				if !ok {
 					break
 				}
 				d.slots.Free(event.node, event.conflictKeys)
+			}
+			garbageNodesDuration += time.Since(start)
+		case now := <-overseerTimer.C:
+			if d.metrics != nil {
+				totalTimeSlice := now.Sub(startToWork)
+				totalHandleSlice := notifiedNodesDuration + garbageNodesDuration
+				busyRatio := totalHandleSlice.Seconds() / totalTimeSlice.Seconds() * 1000
+				d.metrics.BackgroundWorkerBusyRatio.Add(busyRatio)
+				startToWork = now
+				notifiedNodesDuration = 0
+				garbageNodesDuration = 0
 			}
 		}
 	}

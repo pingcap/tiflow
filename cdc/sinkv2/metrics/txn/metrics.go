@@ -27,6 +27,14 @@ var (
 			Buckets:   prometheus.ExponentialBuckets(0.001, 2, 20), // 1ms~524s
 		}, []string{"namespace", "changefeed"})
 
+	ConflictDetectorBusyRatio = prometheus.NewCounterVec(
+		prometheus.CounterOpts{
+			Namespace: "ticdc",
+			Subsystem: "sinkv2",
+			Name:      "txn_conflict_detector_busy_ratio",
+			Help:      "Busy ratio (X ms in 1s) for conflict detector background goroutine.",
+		}, []string{"namespace", "changefeed"})
+
 	WorkerFlushDuration = prometheus.NewHistogramVec(
 		prometheus.HistogramOpts{
 			Namespace: "ticdc",
@@ -74,6 +82,7 @@ var (
 // InitMetrics registers all metrics in this file.
 func InitMetrics(registry *prometheus.Registry) {
 	registry.MustRegister(ConflictDetectDuration)
+	registry.MustRegister(ConflictDetectorBusyRatio)
 	registry.MustRegister(WorkerFlushDuration)
 	registry.MustRegister(WorkerBusyRatio)
 	registry.MustRegister(WorkerHandledRows)

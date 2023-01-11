@@ -19,10 +19,12 @@ import (
 	"sync/atomic"
 
 	"github.com/pingcap/errors"
+	"github.com/pingcap/tiflow/cdc/contextutil"
 	"github.com/pingcap/tiflow/cdc/model"
 	"github.com/pingcap/tiflow/cdc/sinkv2/eventsink"
 	"github.com/pingcap/tiflow/cdc/sinkv2/eventsink/txn/mysql"
 	"github.com/pingcap/tiflow/cdc/sinkv2/metrics"
+	txnMetrics "github.com/pingcap/tiflow/cdc/sinkv2/metrics/txn"
 	"github.com/pingcap/tiflow/cdc/sinkv2/tablesink/state"
 	"github.com/pingcap/tiflow/pkg/causality"
 	"github.com/pingcap/tiflow/pkg/config"
@@ -57,7 +59,16 @@ func newSink(ctx context.Context, backends []backend, errCh chan<- error, confli
 		w.runBackgroundLoop()
 		workers = append(workers, w)
 	}
-	detector := causality.NewConflictDetector[*worker, *txnEvent](workers, conflictDetectorSlots)
+
+	changefeedID := contextutil.ChangefeedIDFromCtx(ctx)
+	causalityMetrics := &causality.Metrics{
+		BackgroundWorkerBusyRatio: txnMetrics.ConflictDetectorBusyRatio.WithLabelValues(
+			changefeedID.Namespace, changefeedID.ID,
+		),
+	}
+	detector := causality.NewConflictDetectorWithMetrics[*worker, *txnEvent](
+		workers, conflictDetectorSlots, causalityMetrics,
+	)
 	return &sink{conflictDetector: detector, workers: workers}
 }
 
