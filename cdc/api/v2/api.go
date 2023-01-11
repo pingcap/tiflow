@@ -50,6 +50,7 @@ func RegisterOpenAPIV2Routes(router *gin.Engine, api OpenAPIV2) {
 	changefeedGroup.Use(middleware.ForwardToOwnerMiddleware(api.capture))
 	changefeedGroup.POST("", api.createChangefeed)
 	changefeedGroup.PUT("/:changefeed_id", api.updateChangefeed)
+	changefeedGroup.DELETE("/:changefeed_id", api.deleteChangefeed)
 	changefeedGroup.GET("/:changefeed_id/meta_info", api.getChangeFeedMetaInfo)
 	changefeedGroup.POST("/:changefeed_id/resume", api.resumeChangefeed)
 

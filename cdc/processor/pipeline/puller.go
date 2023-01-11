@@ -78,6 +78,7 @@ func (n *pullerNode) startWithSorterNode(ctx pipeline.NodeContext,
 		n.span.TableID,
 		n.tableName,
 		filterLoop,
+		false,
 	)
 	n.wg.Go(func() error {
 		ctx.Throw(errors.Trace(n.plr.Run(ctxC)))

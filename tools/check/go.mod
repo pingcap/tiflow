@@ -120,8 +120,8 @@ require (
 	github.com/kulti/thelper v0.6.3 // indirect
 	github.com/kunwardeep/paralleltest v1.0.6 // indirect
 	github.com/kyoh86/exportloopref v0.1.8 // indirect
-	github.com/labstack/echo/v4 v4.2.1 // indirect
-	github.com/labstack/gommon v0.3.0 // indirect
+	github.com/labstack/echo/v4 v4.9.0 // indirect
+	github.com/labstack/gommon v0.3.1 // indirect
 	github.com/ldez/gomoddirectives v0.2.3 // indirect
 	github.com/ldez/tagliatelle v0.3.1 // indirect
 	github.com/leonklingele/grouper v1.1.0 // indirect
