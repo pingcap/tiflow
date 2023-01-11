@@ -130,9 +130,9 @@ func (c *ClusterAdminClientMockImpl) SetRemainingFetchesUntilTopicVisible(topicN
 
 // DescribeTopics fetches metadata from some topics.
 func (c *ClusterAdminClientMockImpl) DescribeTopics(topics []string) (
-	metadata []TopicMetadata, err error,
+	metadata []*TopicMetadata, err error,
 ) {
-	topicDescriptions := make(map[string]TopicMetadata)
+	topicDescriptions := make(map[string]*TopicMetadata)
 
 	for _, requestedTopic := range topics {
 		for topicName, topicDetail := range c.topics {
@@ -141,7 +141,7 @@ func (c *ClusterAdminClientMockImpl) DescribeTopics(topics []string) (
 					topicDetail.fetchesRemainingUntilVisible--
 					continue
 				} else {
-					topicDescriptions[topicName] = TopicMetadata{
+					topicDescriptions[topicName] = &TopicMetadata{
 						Name:       topicName,
 						Partitions: make([]*PartitionMetadata, topicDetail.NumPartitions),
 					}
@@ -151,7 +151,7 @@ func (c *ClusterAdminClientMockImpl) DescribeTopics(topics []string) (
 		}
 
 		if _, ok := topicDescriptions[requestedTopic]; !ok {
-			topicDescriptions[requestedTopic] = TopicMetadata{
+			topicDescriptions[requestedTopic] = &TopicMetadata{
 				Name: requestedTopic,
 				// todo: make this error not related to the sarama.
 				Err: sarama.ErrUnknownTopicOrPartition,
@@ -159,7 +159,7 @@ func (c *ClusterAdminClientMockImpl) DescribeTopics(topics []string) (
 		}
 	}
 
-	metadataRes := make([]TopicMetadata, 0)
+	metadataRes := make([]*TopicMetadata, 0)
 	for _, meta := range topicDescriptions {
 		metadataRes = append(metadataRes, meta)
 	}

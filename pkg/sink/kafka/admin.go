@@ -103,15 +103,15 @@ func (a *admin) DescribeConfig(resource ConfigResource) (map[string]string, erro
 	return result, nil
 }
 
-func (a *admin) DescribeTopics(topics []string) ([]TopicMetadata, error) {
+func (a *admin) DescribeTopics(topics []string) ([]*TopicMetadata, error) {
 	meta, err := a.client.DescribeTopics(topics)
 	if err != nil {
 		return nil, err
 	}
 
-	result := make([]TopicMetadata, 0, len(meta))
+	result := make([]*TopicMetadata, 0, len(meta))
 	for _, topic := range meta {
-		result = append(result, TopicMetadata{
+		result = append(result, &TopicMetadata{
 			Name: topic.Name,
 			Err:  topic.Err,
 		})
@@ -121,4 +121,17 @@ func (a *admin) DescribeTopics(topics []string) ([]TopicMetadata, error) {
 
 func (a *admin) Close() error {
 	return a.client.Close()
+}
+
+func configResourceType4Sarama(resourceType ConfigResourceType) sarama.ConfigResourceType {
+	switch resourceType {
+	case TopicResource:
+		return sarama.TopicResource
+	case BrokerResource:
+		return sarama.BrokerResource
+	case BrokerLoggerResource:
+		return sarama.BrokerLoggerResource
+	default:
+		return sarama.UnknownResource
+	}
 }

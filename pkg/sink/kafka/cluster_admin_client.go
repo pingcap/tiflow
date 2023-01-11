@@ -14,7 +14,7 @@
 package kafka
 
 import (
-	"github.com/Shopify/sarama"
+	"github.com/pingcap/tiflow/cdc/sink/mq/producer/kafka"
 )
 
 type TopicDetail struct {
@@ -43,19 +43,6 @@ const (
 	// BrokerLoggerResource constant type
 	BrokerLoggerResource ConfigResourceType = 8
 )
-
-func configResourceType4Sarama(resourceType ConfigResourceType) sarama.ConfigResourceType {
-	switch resourceType {
-	case TopicResource:
-		return sarama.TopicResource
-	case BrokerResource:
-		return sarama.BrokerResource
-	case BrokerLoggerResource:
-		return sarama.BrokerLoggerResource
-	default:
-		return sarama.UnknownResource
-	}
-}
 
 type ConfigResource struct {
 	Type        ConfigResourceType
@@ -89,7 +76,7 @@ type ClusterAdminClient interface {
 	// DescribeConfig gets the configuration for the specified resources.
 	DescribeConfig(resource ConfigResource) (map[string]string, error)
 	// DescribeTopics fetches metadata from some topics.
-	DescribeTopics(topics []string) (metadata []TopicMetadata, err error)
+	DescribeTopics(topics []string) (metadata []*TopicMetadata, err error)
 	// CreateTopic creates a new topic.
 	CreateTopic(topic string, detail *TopicDetail, validateOnly bool) error
 	// Close shuts down the admin and closes underlying client.
@@ -97,9 +84,9 @@ type ClusterAdminClient interface {
 }
 
 // ClusterAdminClientCreator defines the type of cluster admin client crater.
-type ClusterAdminClientCreator func([]string, *sarama.Config) (ClusterAdminClient, error)
+type ClusterAdminClientCreator func([]string, *kafka.Config) (ClusterAdminClient, error)
 
 // NewMockAdminClient constructs a ClusterAdminClient with mock implementation.
-func NewMockAdminClient(_ []string, _ *sarama.Config) (ClusterAdminClient, error) {
+func NewMockAdminClient(_ []string, _ *kafka.Config) (ClusterAdminClient, error) {
 	return NewClusterAdminClientMockImpl(), nil
 }

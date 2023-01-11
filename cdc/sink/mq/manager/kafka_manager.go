@@ -128,7 +128,7 @@ func (m *kafkaTopicManager) tryUpdatePartitionsAndLogging(topic string, partitio
 	}
 }
 
-func (m *kafkaTopicManager) getMetadataOfTopics() ([]*sarama.TopicMetadata, error) {
+func (m *kafkaTopicManager) getMetadataOfTopics() ([]*kafka.TopicMetadata, error) {
 	var topicList []string
 
 	m.topics.Range(func(key, value any) bool {
@@ -275,7 +275,7 @@ func (m *kafkaTopicManager) createTopic(topicName string) (int32, error) {
 	}
 
 	start := time.Now()
-	err = m.admin.CreateTopic(topicName, &sarama.TopicDetail{
+	err = m.admin.CreateTopic(topicName, &kafka.TopicDetail{
 		NumPartitions:     m.cfg.PartitionNum,
 		ReplicationFactor: m.cfg.ReplicationFactor,
 	}, false)
