@@ -20,6 +20,8 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
+type genSQLFunc func(changes ...*RowChange) (string, []interface{})
+
 func TestGenDeleteMultiRows(t *testing.T) {
 	t.Parallel()
 
@@ -41,7 +43,30 @@ func TestGenDeleteMultiRows(t *testing.T) {
 
 func TestGenUpdateMultiRows(t *testing.T) {
 	t.Parallel()
+	testGenUpdateMultiRows(t, GenUpdateSQL)
+	testGenUpdateMultiRows(t, GenUpdateSQLFast)
+}
+func TestGenUpdateMultiRowsOneColPK(t *testing.T) {
+	t.Parallel()
+	testGenUpdateMultiRowsOneColPK(t, GenUpdateSQL)
+	testGenUpdateMultiRowsOneColPK(t, GenUpdateSQLFast)
+}
 
+func TestGenUpdateMultiRowsWithVirtualGeneratedColumn(t *testing.T) {
+	t.Parallel()
+	testGenUpdateMultiRowsWithVirtualGeneratedColumn(t, GenUpdateSQL)
+	testGenUpdateMultiRowsWithVirtualGeneratedColumn(t, GenUpdateSQLFast)
+	testGenUpdateMultiRowsWithVirtualGeneratedColumns(t, GenUpdateSQL)
+	testGenUpdateMultiRowsWithVirtualGeneratedColumns(t, GenUpdateSQLFast)
+}
+
+func TestGenUpdateMultiRowsWithStoredGeneratedColumn(t *testing.T) {
+	t.Parallel()
+	testGenUpdateMultiRowsWithStoredGeneratedColumn(t, GenUpdateSQL)
+	testGenUpdateMultiRowsWithStoredGeneratedColumn(t, GenUpdateSQLFast)
+}
+
+func testGenUpdateMultiRows(t *testing.T, genUpdate genSQLFunc) {
 	source1 := &cdcmodel.TableName{Schema: "db", Table: "tb1"}
 	source2 := &cdcmodel.TableName{Schema: "db", Table: "tb2"}
 	target := &cdcmodel.TableName{Schema: "db", Table: "tb"}
@@ -52,7 +77,7 @@ func TestGenUpdateMultiRows(t *testing.T) {
 
 	change1 := NewRowChange(source1, target, []interface{}{1, 2, 3}, []interface{}{10, 20, 30}, sourceTI1, targetTI, nil)
 	change2 := NewRowChange(source2, target, []interface{}{4, 5, 6}, []interface{}{40, 50, 60}, sourceTI2, targetTI, nil)
-	sql, args := GenUpdateSQL(change1, change2)
+	sql, args := genUpdate(change1, change2)
 
 	expectedSQL := "UPDATE `db`.`tb` SET " +
 		"`c`=CASE WHEN ROW(`c`,`c2`)=ROW(?,?) THEN ? WHEN ROW(`c`,`c2`)=ROW(?,?) THEN ? END, " +
@@ -70,9 +95,7 @@ func TestGenUpdateMultiRows(t *testing.T) {
 	require.Equal(t, expectedArgs, args)
 }
 
-func TestGenUpdateMultiRowsOneColPK(t *testing.T) {
-	t.Parallel()
-
+func testGenUpdateMultiRowsOneColPK(t *testing.T, genUpdate genSQLFunc) {
 	source1 := &cdcmodel.TableName{Schema: "db", Table: "tb1"}
 	source2 := &cdcmodel.TableName{Schema: "db", Table: "tb2"}
 	target := &cdcmodel.TableName{Schema: "db", Table: "tb"}
@@ -83,7 +106,7 @@ func TestGenUpdateMultiRowsOneColPK(t *testing.T) {
 
 	change1 := NewRowChange(source1, target, []interface{}{1, 2, 3}, []interface{}{10, 20, 30}, sourceTI1, targetTI, nil)
 	change2 := NewRowChange(source2, target, []interface{}{4, 5, 6}, []interface{}{40, 50, 60}, sourceTI2, targetTI, nil)
-	sql, args := GenUpdateSQL(change1, change2)
+	sql, args := genUpdate(change1, change2)
 
 	expectedSQL := "UPDATE `db`.`tb` SET " +
 		"`c`=CASE WHEN `c`=? THEN ? WHEN `c`=? THEN ? END, " +
@@ -101,8 +124,7 @@ func TestGenUpdateMultiRowsOneColPK(t *testing.T) {
 	require.Equal(t, expectedArgs, args)
 }
 
-func TestGenUpdateMultiRowsWithVirtualGeneratedColumn(t *testing.T) {
-	t.Parallel()
+func testGenUpdateMultiRowsWithVirtualGeneratedColumn(t *testing.T, genUpdate genSQLFunc) {
 	source := &cdcmodel.TableName{Schema: "db", Table: "tb"}
 	target := &cdcmodel.TableName{Schema: "db", Table: "tb"}
 
@@ -112,7 +134,7 @@ func TestGenUpdateMultiRowsWithVirtualGeneratedColumn(t *testing.T) {
 	change1 := NewRowChange(source, target, []interface{}{1, 101, 2, 3}, []interface{}{10, 110, 20, 30}, sourceTI, targetTI, nil)
 	change2 := NewRowChange(source, target, []interface{}{4, 104, 5, 6}, []interface{}{40, 140, 50, 60}, sourceTI, targetTI, nil)
 	change3 := NewRowChange(source, target, []interface{}{7, 107, 8, 9}, []interface{}{70, 170, 80, 90}, sourceTI, targetTI, nil)
-	sql, args := GenUpdateSQL(change1, change2, change3)
+	sql, args := genUpdate(change1, change2, change3)
 
 	expectedSQL := "UPDATE `db`.`tb` SET " +
 		"`c`=CASE WHEN `c`=? THEN ? WHEN `c`=? THEN ? WHEN `c`=? THEN ? END, " +
@@ -130,8 +152,38 @@ func TestGenUpdateMultiRowsWithVirtualGeneratedColumn(t *testing.T) {
 	require.Equal(t, expectedArgs, args)
 }
 
-func TestGenUpdateMultiRowsWithStoredGeneratedColumn(t *testing.T) {
-	t.Parallel()
+// multiple generated columns test case
+func testGenUpdateMultiRowsWithVirtualGeneratedColumns(t *testing.T, genUpdate genSQLFunc) {
+	source := &cdcmodel.TableName{Schema: "db", Table: "tb"}
+	target := &cdcmodel.TableName{Schema: "db", Table: "tb"}
+
+	sourceTI := mockTableInfo(t, `CREATE TABLE tb1 (c0 int as (c4*c4) virtual not null,
+	c1 int as (c+100) virtual not null, c2 INT, c3 INT, c4 INT, PRIMARY KEY (c4))`)
+	targetTI := mockTableInfo(t, `CREATE TABLE tb (c0 int as (c4*c4) virtual not null,
+	c1 int as (c+100) virtual not null, c2 INT, c3 INT, c4 INT, PRIMARY KEY (c4))`)
+
+	change1 := NewRowChange(source, target, []interface{}{1, 101, 2, 3, 1}, []interface{}{100, 110, 20, 30, 10}, sourceTI, targetTI, nil)
+	change2 := NewRowChange(source, target, []interface{}{16, 104, 5, 6, 4}, []interface{}{1600, 140, 50, 60, 40}, sourceTI, targetTI, nil)
+	change3 := NewRowChange(source, target, []interface{}{49, 107, 8, 9, 7}, []interface{}{4900, 170, 80, 90, 70}, sourceTI, targetTI, nil)
+	sql, args := genUpdate(change1, change2, change3)
+
+	expectedSQL := "UPDATE `db`.`tb` SET " +
+		"`c2`=CASE WHEN `c4`=? THEN ? WHEN `c4`=? THEN ? WHEN `c4`=? THEN ? END, " +
+		"`c3`=CASE WHEN `c4`=? THEN ? WHEN `c4`=? THEN ? WHEN `c4`=? THEN ? END, " +
+		"`c4`=CASE WHEN `c4`=? THEN ? WHEN `c4`=? THEN ? WHEN `c4`=? THEN ? END " +
+		"WHERE `c4` IN (?,?,?)"
+	expectedArgs := []interface{}{
+		1, 20, 4, 50, 7, 80,
+		1, 30, 4, 60, 7, 90,
+		1, 10, 4, 40, 7, 70,
+		1, 4, 7,
+	}
+
+	require.Equal(t, expectedSQL, sql)
+	require.Equal(t, expectedArgs, args)
+}
+
+func testGenUpdateMultiRowsWithStoredGeneratedColumn(t *testing.T, genUpdate genSQLFunc) {
 	source := &cdcmodel.TableName{Schema: "db", Table: "tb"}
 	target := &cdcmodel.TableName{Schema: "db", Table: "tb"}
 
@@ -141,7 +193,7 @@ func TestGenUpdateMultiRowsWithStoredGeneratedColumn(t *testing.T) {
 	change1 := NewRowChange(source, target, []interface{}{1, 101, 2, 3}, []interface{}{10, 110, 20, 30}, sourceTI, targetTI, nil)
 	change2 := NewRowChange(source, target, []interface{}{4, 104, 5, 6}, []interface{}{40, 140, 50, 60}, sourceTI, targetTI, nil)
 	change3 := NewRowChange(source, target, []interface{}{7, 107, 8, 9}, []interface{}{70, 170, 80, 90}, sourceTI, targetTI, nil)
-	sql, args := GenUpdateSQL(change1, change2, change3)
+	sql, args := genUpdate(change1, change2, change3)
 
 	expectedSQL := "UPDATE `db`.`tb` SET " +
 		"`c`=CASE WHEN `c1`=? THEN ? WHEN `c1`=? THEN ? WHEN `c1`=? THEN ? END, " +
