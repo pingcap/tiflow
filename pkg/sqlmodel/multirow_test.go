@@ -111,18 +111,19 @@ func TestGenUpdateMultiRowsWithVirtualGeneratedColumn(t *testing.T) {
 
 	change1 := NewRowChange(source, target, []interface{}{1, 101, 2, 3}, []interface{}{10, 110, 20, 30}, sourceTI, targetTI, nil)
 	change2 := NewRowChange(source, target, []interface{}{4, 104, 5, 6}, []interface{}{40, 140, 50, 60}, sourceTI, targetTI, nil)
-	sql, args := GenUpdateSQL(change1, change2)
+	change3 := NewRowChange(source, target, []interface{}{7, 107, 8, 9}, []interface{}{70, 170, 80, 90}, sourceTI, targetTI, nil)
+	sql, args := GenUpdateSQL(change1, change2, change3)
 
 	expectedSQL := "UPDATE `db`.`tb` SET " +
-		"`c`=CASE WHEN `c`=? THEN ? WHEN `c`=? THEN ? END, " +
-		"`c2`=CASE WHEN `c`=? THEN ? WHEN `c`=? THEN ? END, " +
-		"`c3`=CASE WHEN `c`=? THEN ? WHEN `c`=? THEN ? END " +
-		"WHERE `c` IN (?,?)"
+		"`c`=CASE WHEN `c`=? THEN ? WHEN `c`=? THEN ? WHEN `c`=? THEN ? END, " +
+		"`c2`=CASE WHEN `c`=? THEN ? WHEN `c`=? THEN ? WHEN `c`=? THEN ? END, " +
+		"`c3`=CASE WHEN `c`=? THEN ? WHEN `c`=? THEN ? WHEN `c`=? THEN ? END " +
+		"WHERE `c` IN (?,?,?)"
 	expectedArgs := []interface{}{
-		1, 10, 4, 40,
-		1, 20, 4, 50,
-		1, 30, 4, 60,
-		1, 4,
+		1, 10, 4, 40, 7, 70,
+		1, 20, 4, 50, 7, 80,
+		1, 30, 4, 60, 7, 90,
+		1, 4, 7,
 	}
 
 	require.Equal(t, expectedSQL, sql)
@@ -139,18 +140,19 @@ func TestGenUpdateMultiRowsWithStoredGeneratedColumn(t *testing.T) {
 
 	change1 := NewRowChange(source, target, []interface{}{1, 101, 2, 3}, []interface{}{10, 110, 20, 30}, sourceTI, targetTI, nil)
 	change2 := NewRowChange(source, target, []interface{}{4, 104, 5, 6}, []interface{}{40, 140, 50, 60}, sourceTI, targetTI, nil)
-	sql, args := GenUpdateSQL(change1, change2)
+	change3 := NewRowChange(source, target, []interface{}{7, 107, 8, 9}, []interface{}{70, 170, 80, 90}, sourceTI, targetTI, nil)
+	sql, args := GenUpdateSQL(change1, change2, change3)
 
 	expectedSQL := "UPDATE `db`.`tb` SET " +
-		"`c`=CASE WHEN `c1`=? THEN ? WHEN `c1`=? THEN ? END, " +
-		"`c2`=CASE WHEN `c1`=? THEN ? WHEN `c1`=? THEN ? END, " +
-		"`c3`=CASE WHEN `c1`=? THEN ? WHEN `c1`=? THEN ? END " +
-		"WHERE `c1` IN (?,?)"
+		"`c`=CASE WHEN `c1`=? THEN ? WHEN `c1`=? THEN ? WHEN `c1`=? THEN ? END, " +
+		"`c2`=CASE WHEN `c1`=? THEN ? WHEN `c1`=? THEN ? WHEN `c1`=? THEN ? END, " +
+		"`c3`=CASE WHEN `c1`=? THEN ? WHEN `c1`=? THEN ? WHEN `c1`=? THEN ? END " +
+		"WHERE `c1` IN (?,?,?)"
 	expectedArgs := []interface{}{
-		101, 10, 104, 40,
-		101, 20, 104, 50,
-		101, 30, 104, 60,
-		101, 104,
+		101, 10, 104, 40, 107, 70,
+		101, 20, 104, 50, 107, 80,
+		101, 30, 104, 60, 107, 90,
+		101, 104, 107,
 	}
 
 	require.Equal(t, expectedSQL, sql)
