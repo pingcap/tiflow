@@ -456,7 +456,7 @@ func (h *OpenAPIV2) resumeChangefeed(c *gin.Context) {
 	c.Status(http.StatusOK)
 }
 
-// pauseChangefeed handles pause changeffed request
+// pauseChangefeed handles pause changefeed request
 func (h *OpenAPIV2) pauseChangefeed(c *gin.Context) {
 	ctx := c.Request.Context()
 
