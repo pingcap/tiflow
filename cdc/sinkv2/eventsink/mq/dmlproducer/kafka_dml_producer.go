@@ -46,7 +46,7 @@ type kafkaDMLProducer struct {
 	id model.ChangeFeedID
 	// We hold the client to make close operation faster.
 	// Please see the comment of Close().
-	client sarama.Client
+	client pkafka.Client
 	// asyncProducer is used to send messages to kafka asynchronously.
 	asyncProducer sarama.AsyncProducer
 	// collector is used to report metrics.
@@ -67,7 +67,7 @@ type kafkaDMLProducer struct {
 // NewKafkaDMLProducer creates a new kafka producer.
 func NewKafkaDMLProducer(
 	ctx context.Context,
-	client sarama.Client,
+	client pkafka.Client,
 	adminClient pkafka.ClusterAdminClient,
 	errCh chan error,
 ) (DMLProducer, error) {
@@ -76,7 +76,7 @@ func NewKafkaDMLProducer(
 		zap.String("namespace", changefeedID.Namespace),
 		zap.String("changefeed", changefeedID.ID))
 
-	asyncProducer, err := sarama.NewAsyncProducerFromClient(client)
+	asyncProducer, err := client.AsyncProducer()
 	if err != nil {
 		// Close the client to prevent the goroutine leak.
 		// Because it may be a long time to close the client,
@@ -99,7 +99,7 @@ func NewKafkaDMLProducer(
 	}
 
 	collector := collector.New(changefeedID, util.RoleProcessor,
-		adminClient, client.Config().MetricRegistry)
+		adminClient, client.MetricRegistry())
 
 	k := &kafkaDMLProducer{
 		id:            changefeedID,
