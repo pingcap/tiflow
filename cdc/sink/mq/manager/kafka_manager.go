@@ -161,9 +161,10 @@ func (m *kafkaTopicManager) getMetadataOfTopics() ([]*kafka.TopicMetadata, error
 // topics have been created.
 // See https://kafka.apache.org/23/javadoc/org/apache/kafka/clients/admin/AdminClient.html
 func (m *kafkaTopicManager) waitUntilTopicVisible(topicName string) error {
+	topics := []string{topicName}
 	err := retry.Do(context.Background(), func() error {
 		start := time.Now()
-		topicMetaList, err := m.admin.DescribeTopics([]string{topicName})
+		topicMetaList, err := m.admin.DescribeTopics(topics)
 		if err != nil {
 			log.Error("Kafka admin client describe topic failed",
 				zap.String("topic", topicName),

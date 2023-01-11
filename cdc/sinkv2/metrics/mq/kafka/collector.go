@@ -104,7 +104,7 @@ func (m *Collector) updateBrokers() {
 	}
 
 	for _, b := range brokers {
-		m.brokers[b.ID()] = struct{}{}
+		m.brokers[b.ID] = struct{}{}
 	}
 }
 

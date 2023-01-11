@@ -241,7 +241,7 @@ func (sm *saramaMetricsMonitor) collectBrokers() {
 	}
 
 	for _, b := range brokers {
-		sm.brokers[b.ID()] = struct{}{}
+		sm.brokers[b.ID] = struct{}{}
 	}
 }
 
