@@ -22,7 +22,6 @@ import (
 	"github.com/Shopify/sarama"
 	"github.com/pingcap/errors"
 	"github.com/pingcap/log"
-	kafkaconfig "github.com/pingcap/tiflow/cdc/sink/mq/producer/kafka"
 	cerror "github.com/pingcap/tiflow/pkg/errors"
 	"github.com/pingcap/tiflow/pkg/retry"
 	"github.com/pingcap/tiflow/pkg/sink/kafka"
@@ -35,7 +34,7 @@ type kafkaTopicManager struct {
 	client kafka.Client
 	admin  kafka.ClusterAdminClient
 
-	cfg *kafkaconfig.AutoCreateTopicConfig
+	cfg *kafka.AutoCreateTopicConfig
 
 	topics sync.Map
 
@@ -46,7 +45,7 @@ type kafkaTopicManager struct {
 func NewKafkaTopicManager(
 	client kafka.Client,
 	admin kafka.ClusterAdminClient,
-	cfg *kafkaconfig.AutoCreateTopicConfig,
+	cfg *kafka.AutoCreateTopicConfig,
 ) (*kafkaTopicManager, error) {
 	mgr := &kafkaTopicManager{
 		client: client,

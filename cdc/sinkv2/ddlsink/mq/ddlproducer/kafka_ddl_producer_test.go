@@ -21,7 +21,6 @@ import (
 
 	"github.com/Shopify/sarama"
 	"github.com/pingcap/tiflow/cdc/sink/codec/common"
-	kafkav1 "github.com/pingcap/tiflow/cdc/sink/mq/producer/kafka"
 	cerror "github.com/pingcap/tiflow/pkg/errors"
 	"github.com/pingcap/tiflow/pkg/sink/kafka"
 	"github.com/stretchr/testify/require"
@@ -52,8 +51,8 @@ func initBroker(t *testing.T, withPartitionResponse int) (*sarama.MockBroker, st
 	return leader, topic
 }
 
-func getConfig(addr string) *kafkav1.Config {
-	config := kafkav1.NewConfig()
+func getConfig(addr string) *kafka.Options {
+	config := kafka.NewOptions()
 	// Because the sarama mock broker is not compatible with version larger than 1.0.0.
 	// We use a smaller version in the following producer tests.
 	// Ref: https://github.com/Shopify/sarama/blob/89707055369768913defac
@@ -74,7 +73,7 @@ func TestSyncBroadcastMessage(t *testing.T) {
 
 	ctx, cancel := context.WithCancel(context.Background())
 	config := getConfig(leader.Addr())
-	saramaConfig, err := kafkav1.NewSaramaConfig(context.Background(), config)
+	saramaConfig, err := kafka.NewSaramaConfig(context.Background(), config)
 	require.Nil(t, err)
 	saramaConfig.Producer.Flush.MaxMessages = 1
 
@@ -104,7 +103,7 @@ func TestSyncSendMessage(t *testing.T) {
 
 	ctx, cancel := context.WithCancel(context.Background())
 	config := getConfig(leader.Addr())
-	saramaConfig, err := kafkav1.NewSaramaConfig(context.Background(), config)
+	saramaConfig, err := kafka.NewSaramaConfig(context.Background(), config)
 	require.Nil(t, err)
 	saramaConfig.Producer.Flush.MaxMessages = 1
 
@@ -133,7 +132,7 @@ func TestProducerSendMsgFailed(t *testing.T) {
 	ctx, cancel := context.WithTimeout(context.Background(), time.Second*10)
 	defer cancel()
 	config := getConfig(leader.Addr())
-	saramaConfig, err := kafkav1.NewSaramaConfig(context.Background(), config)
+	saramaConfig, err := kafka.NewSaramaConfig(context.Background(), config)
 	require.Nil(t, err)
 	saramaConfig.Producer.Flush.MaxMessages = 1
 	saramaConfig.Producer.Retry.Max = 1
@@ -161,7 +160,7 @@ func TestProducerDoubleClose(t *testing.T) {
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 	config := getConfig(leader.Addr())
-	saramaConfig, err := kafkav1.NewSaramaConfig(context.Background(), config)
+	saramaConfig, err := kafka.NewSaramaConfig(context.Background(), config)
 	require.Nil(t, err)
 	saramaConfig.Producer.Flush.MaxMessages = 1
 

@@ -35,6 +35,7 @@ import (
 	"github.com/pingcap/tiflow/pkg/chann"
 	"github.com/pingcap/tiflow/pkg/config"
 	cerror "github.com/pingcap/tiflow/pkg/errors"
+	kafka2 "github.com/pingcap/tiflow/pkg/sink/kafka"
 	"github.com/pingcap/tiflow/pkg/util"
 	"go.uber.org/zap"
 	"golang.org/x/sync/errgroup"
@@ -387,12 +388,12 @@ func NewKafkaSaramaSink(ctx context.Context, sinkURI *url.URL,
 		return nil, cerror.ErrKafkaInvalidConfig.GenWithStack("no topic is specified in sink-uri")
 	}
 
-	baseConfig := kafka.NewConfig()
+	baseConfig := kafka2.NewOptions()
 	if err := baseConfig.Apply(sinkURI); err != nil {
 		return nil, cerror.WrapError(cerror.ErrKafkaInvalidConfig, err)
 	}
 
-	saramaConfig, err := kafka.NewSaramaConfig(ctx, baseConfig)
+	saramaConfig, err := kafka2.NewSaramaConfig(ctx, baseConfig)
 	if err != nil {
 		return nil, errors.Trace(err)
 	}

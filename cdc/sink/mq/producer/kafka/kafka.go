@@ -16,7 +16,6 @@ package kafka
 import (
 	"context"
 	"fmt"
-	"regexp"
 	"strconv"
 	"sync"
 	"sync/atomic"
@@ -322,7 +321,7 @@ func NewKafkaSaramaProducer(
 	ctx context.Context,
 	client sarama.Client,
 	admin kafka.ClusterAdminClient,
-	config *Config,
+	config *kafka.Options,
 	saramaConfig *sarama.Config,
 	errCh chan error,
 	changefeedID model.ChangeFeedID,
@@ -372,38 +371,16 @@ func NewKafkaSaramaProducer(
 	return k, nil
 }
 
-var (
-	validClientID     = regexp.MustCompile(`\A[A-Za-z0-9._-]+\z`)
-	commonInvalidChar = regexp.MustCompile(`[\?:,"]`)
-)
-
-func kafkaClientID(role, captureAddr string,
-	changefeedID model.ChangeFeedID,
-	configuredClientID string,
-) (clientID string, err error) {
-	if configuredClientID != "" {
-		clientID = configuredClientID
-	} else {
-		clientID = fmt.Sprintf("TiCDC_sarama_producer_%s_%s_%s_%s",
-			role, captureAddr, changefeedID.Namespace, changefeedID.ID)
-		clientID = commonInvalidChar.ReplaceAllString(clientID, "_")
-	}
-	if !validClientID.MatchString(clientID) {
-		return "", cerror.ErrKafkaInvalidClientID.GenWithStackByArgs(clientID)
-	}
-	return
-}
-
-// AdjustConfig adjust the `Config` and `sarama.Config` by condition.
+// AdjustConfig adjust the `Options` and `sarama.Config` by condition.
 func AdjustConfig(
-	admin kafka.ClusterAdminClient, config *Config, saramaConfig *sarama.Config, topic string,
+	admin kafka.ClusterAdminClient, options *kafka.Options, saramaConfig *sarama.Config, topic string,
 ) error {
 	topics, err := admin.ListTopics()
 	if err != nil {
 		return errors.Trace(err)
 	}
 
-	err = validateMinInsyncReplicas(admin, topics, topic, int(config.ReplicationFactor))
+	err = validateMinInsyncReplicas(admin, topics, topic, int(options.ReplicationFactor))
 	if err != nil {
 		return errors.Trace(err)
 	}
@@ -422,21 +399,21 @@ func AdjustConfig(
 			return errors.Trace(err)
 		}
 
-		if topicMaxMessageBytes < config.MaxMessageBytes {
+		if topicMaxMessageBytes < options.MaxMessageBytes {
 			log.Warn("topic's `max.message.bytes` less than the `max-message-bytes`,"+
 				"use topic's `max.message.bytes` to initialize the Kafka producer",
 				zap.Int("max.message.bytes", topicMaxMessageBytes),
-				zap.Int("max-message-bytes", config.MaxMessageBytes))
+				zap.Int("max-message-bytes", options.MaxMessageBytes))
 			saramaConfig.Producer.MaxMessageBytes = topicMaxMessageBytes
 		}
 
 		// no need to create the topic, but we would have to log user if they found enter wrong topic name later
-		if config.AutoCreate {
+		if options.AutoCreate {
 			log.Warn("topic already exist, TiCDC will not create the topic",
 				zap.String("topic", topic), zap.Any("detail", info))
 		}
 
-		if err := config.setPartitionNum(info.NumPartitions); err != nil {
+		if err := options.SetPartitionNum(info.NumPartitions); err != nil {
 			return errors.Trace(err)
 		}
 
@@ -457,19 +434,19 @@ func AdjustConfig(
 	// it would use broker's `message.max.bytes` to set topic's `max.message.bytes`.
 	// TiCDC need to make sure that the producer's `MaxMessageBytes` won't larger than
 	// broker's `message.max.bytes`.
-	if brokerMessageMaxBytes < config.MaxMessageBytes {
+	if brokerMessageMaxBytes < options.MaxMessageBytes {
 		log.Warn("broker's `message.max.bytes` less than the `max-message-bytes`,"+
 			"use broker's `message.max.bytes` to initialize the Kafka producer",
 			zap.Int("message.max.bytes", brokerMessageMaxBytes),
-			zap.Int("max-message-bytes", config.MaxMessageBytes))
+			zap.Int("max-message-bytes", options.MaxMessageBytes))
 		saramaConfig.Producer.MaxMessageBytes = brokerMessageMaxBytes
 	}
 
 	// topic not exists yet, and user does not specify the `partition-num` in the sink uri.
-	if config.PartitionNum == 0 {
-		config.PartitionNum = defaultPartitionNum
+	if options.PartitionNum == 0 {
+		options.PartitionNum = defaultPartitionNum
 		log.Warn("partition-num is not set, use the default partition count",
-			zap.String("topic", topic), zap.Int32("partitions", config.PartitionNum))
+			zap.String("topic", topic), zap.Int32("partitions", options.PartitionNum))
 	}
 	return nil
 }

@@ -18,7 +18,6 @@ import (
 	"strings"
 
 	"github.com/Shopify/sarama"
-	"github.com/pingcap/tiflow/cdc/sink/mq/producer/kafka"
 )
 
 type admin struct {
@@ -26,8 +25,8 @@ type admin struct {
 }
 
 // NewSaramaAdminClient constructs a ClusterAdminClient with sarama.
-func NewSaramaAdminClient(ctx context.Context, config *kafka.Config) (ClusterAdminClient, error) {
-	saramaConfig, err := kafka.NewSaramaConfig(ctx, config)
+func NewSaramaAdminClient(ctx context.Context, config *Options) (ClusterAdminClient, error) {
+	saramaConfig, err := NewSaramaConfig(ctx, config)
 	if err != nil {
 		return nil, err
 	}

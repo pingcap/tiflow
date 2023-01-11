@@ -44,16 +44,16 @@ func NewKafkaDDLSink(
 		return nil, errors.Trace(err)
 	}
 
-	baseConfig := kafka.NewConfig()
-	if err := baseConfig.Apply(sinkURI); err != nil {
+	options := pkafka.NewOptions()
+	if err := options.Apply(sinkURI); err != nil {
 		return nil, cerror.WrapError(cerror.ErrKafkaInvalidConfig, err)
 	}
-	saramaConfig, err := kafka.NewSaramaConfig(ctx, baseConfig)
+	saramaConfig, err := pkafka.NewSaramaConfig(ctx, options)
 	if err != nil {
 		return nil, errors.Trace(err)
 	}
 
-	adminClient, err := adminClientCreator(baseConfig.BrokerEndpoints, saramaConfig)
+	adminClient, err := adminClientCreator(ctx, options)
 	if err != nil {
 		return nil, cerror.WrapError(cerror.ErrKafkaNewSaramaProducer, err)
 	}
@@ -68,7 +68,7 @@ func NewKafkaDDLSink(
 		}
 	}()
 
-	if err := kafka.AdjustConfig(adminClient, baseConfig, saramaConfig, topic); err != nil {
+	if err := kafka.AdjustConfig(adminClient, options, saramaConfig, topic); err != nil {
 		return nil, cerror.WrapError(cerror.ErrKafkaNewSaramaProducer, err)
 	}
 
@@ -77,14 +77,14 @@ func NewKafkaDDLSink(
 		return nil, errors.Trace(err)
 	}
 
-	client, err := sarama.NewClient(baseConfig.BrokerEndpoints, saramaConfig)
+	client, err := sarama.NewClient(options.BrokerEndpoints, saramaConfig)
 	if err != nil {
 		return nil, cerror.WrapError(cerror.ErrKafkaNewSaramaProducer, err)
 	}
 
 	start := time.Now()
 	log.Info("Try to create a DDL sink producer",
-		zap.Any("baseConfig", baseConfig))
+		zap.Any("options", options))
 	p, err := producerCreator(ctx, client, adminClient)
 	log.Info("DDL sink producer client created", zap.Duration("duration", time.Since(start)))
 	if err != nil {
@@ -100,7 +100,7 @@ func NewKafkaDDLSink(
 
 	topicManager, err := util.GetTopicManagerAndTryCreateTopic(
 		topic,
-		baseConfig.DeriveTopicConfig(),
+		options.DeriveTopicConfig(),
 		client,
 		adminClient,
 	)

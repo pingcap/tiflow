@@ -15,8 +15,6 @@ package kafka
 
 import (
 	"context"
-
-	"github.com/pingcap/tiflow/cdc/sink/mq/producer/kafka"
 )
 
 type TopicDetail struct {
@@ -86,9 +84,9 @@ type ClusterAdminClient interface {
 }
 
 // ClusterAdminClientCreator defines the type of cluster admin client crater.
-type ClusterAdminClientCreator func(context.Context, *kafka.Config) (ClusterAdminClient, error)
+type ClusterAdminClientCreator func(context.Context, *Options) (ClusterAdminClient, error)
 
 // NewMockAdminClient constructs a ClusterAdminClient with mock implementation.
-func NewMockAdminClient(_ context.Context, _ *kafka.Config) (ClusterAdminClient, error) {
+func NewMockAdminClient(_ context.Context, _ *Options) (ClusterAdminClient, error) {
 	return NewClusterAdminClientMockImpl(), nil
 }

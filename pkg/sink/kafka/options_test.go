@@ -25,16 +25,16 @@ import (
 	"github.com/pingcap/errors"
 	"github.com/pingcap/tiflow/cdc/contextutil"
 	"github.com/pingcap/tiflow/cdc/sink/codec/common"
+	"github.com/pingcap/tiflow/cdc/sink/mq/producer/kafka"
 	"github.com/pingcap/tiflow/pkg/config"
 	cerror "github.com/pingcap/tiflow/pkg/errors"
 	"github.com/pingcap/tiflow/pkg/security"
-	"github.com/pingcap/tiflow/pkg/sink/kafka"
 	"github.com/stretchr/testify/require"
 )
 
 func TestNewSaramaConfig(t *testing.T) {
 	ctx := context.Background()
-	config := NewConfig()
+	config := NewOptions()
 	config.Version = "invalid"
 	_, err := NewSaramaConfig(ctx, config)
 	require.Regexp(t, "invalid version.*", errors.Cause(err))
@@ -72,7 +72,7 @@ func TestNewSaramaConfig(t *testing.T) {
 	_, err = NewSaramaConfig(ctx, config)
 	require.Regexp(t, ".*no such file or directory", errors.Cause(err))
 
-	saslConfig := NewConfig()
+	saslConfig := NewOptions()
 	saslConfig.Version = "2.6.0"
 	saslConfig.ClientID = "test-sasl-scram"
 	saslConfig.SASL = &security.SASL{
@@ -90,7 +90,7 @@ func TestNewSaramaConfig(t *testing.T) {
 }
 
 func TestConfigTimeouts(t *testing.T) {
-	cfg := NewConfig()
+	cfg := NewOptions()
 	require.Equal(t, 10*time.Second, cfg.DialTimeout)
 	require.Equal(t, 10*time.Second, cfg.ReadTimeout)
 	require.Equal(t, 10*time.Second, cfg.WriteTimeout)
@@ -121,7 +121,7 @@ func TestConfigTimeouts(t *testing.T) {
 }
 
 func TestCompleteConfigByOpts(t *testing.T) {
-	cfg := NewConfig()
+	cfg := NewOptions()
 
 	// Normal config.
 	uriTemplate := "kafka://127.0.0.1:9092/kafka-test?kafka-version=2.6.0&max-batch-size=5" +
@@ -143,7 +143,7 @@ func TestCompleteConfigByOpts(t *testing.T) {
 	uri = "kafka://127.0.0.1:9092,127.0.0.1:9091,127.0.0.1:9090/kafka-test?"
 	sinkURI, err = url.Parse(uri)
 	require.Nil(t, err)
-	cfg = NewConfig()
+	cfg = NewOptions()
 	err = cfg.Apply(sinkURI)
 	require.Nil(t, err)
 	require.Len(t, cfg.BrokerEndpoints, 3)
@@ -152,7 +152,7 @@ func TestCompleteConfigByOpts(t *testing.T) {
 	uri = "kafka://127.0.0.1:9092/abc?kafka-version=2.6.0&replication-factor=a"
 	sinkURI, err = url.Parse(uri)
 	require.Nil(t, err)
-	cfg = NewConfig()
+	cfg = NewOptions()
 	err = cfg.Apply(sinkURI)
 	require.Regexp(t, ".*invalid syntax.*", errors.Cause(err))
 
@@ -160,7 +160,7 @@ func TestCompleteConfigByOpts(t *testing.T) {
 	uri = "kafka://127.0.0.1:9092/abc?kafka-version=2.6.0&max-message-bytes=a"
 	sinkURI, err = url.Parse(uri)
 	require.Nil(t, err)
-	cfg = NewConfig()
+	cfg = NewOptions()
 	err = cfg.Apply(sinkURI)
 	require.Regexp(t, ".*invalid syntax.*", errors.Cause(err))
 
@@ -168,7 +168,7 @@ func TestCompleteConfigByOpts(t *testing.T) {
 	uri = "kafka://127.0.0.1:9092/abc?kafka-version=2.6.0&partition-num=a"
 	sinkURI, err = url.Parse(uri)
 	require.Nil(t, err)
-	cfg = NewConfig()
+	cfg = NewOptions()
 	err = cfg.Apply(sinkURI)
 	require.Regexp(t, ".*invalid syntax.*", errors.Cause(err))
 
@@ -176,31 +176,31 @@ func TestCompleteConfigByOpts(t *testing.T) {
 	uri = "kafka://127.0.0.1:9092/abc?kafka-version=2.6.0&partition-num=0"
 	sinkURI, err = url.Parse(uri)
 	require.Nil(t, err)
-	cfg = NewConfig()
+	cfg = NewOptions()
 	err = cfg.Apply(sinkURI)
 	require.Regexp(t, ".*invalid partition num.*", errors.Cause(err))
 }
 
 func TestSetPartitionNum(t *testing.T) {
-	cfg := NewConfig()
-	err := cfg.setPartitionNum(2)
+	cfg := NewOptions()
+	err := cfg.SetPartitionNum(2)
 	require.Nil(t, err)
 	require.Equal(t, int32(2), cfg.PartitionNum)
 
 	cfg.PartitionNum = 1
-	err = cfg.setPartitionNum(2)
+	err = cfg.SetPartitionNum(2)
 	require.Nil(t, err)
 	require.Equal(t, int32(1), cfg.PartitionNum)
 
 	cfg.PartitionNum = 3
-	err = cfg.setPartitionNum(2)
+	err = cfg.SetPartitionNum(2)
 	require.True(t, cerror.ErrKafkaInvalidPartitionNum.Equal(err))
 }
 
 func TestConfigurationCombinations(t *testing.T) {
-	NewAdminClientImpl = kafka.NewMockAdminClient
+	kafka.NewAdminClientImpl = NewMockAdminClient
 	defer func() {
-		NewAdminClientImpl = kafka.NewSaramaAdminClient
+		kafka.NewAdminClientImpl = NewSaramaAdminClient
 	}()
 
 	combinations := []struct {
@@ -216,9 +216,9 @@ func TestConfigurationCombinations(t *testing.T) {
 		{
 			"kafka://127.0.0.1:9092/%s",
 			[]interface{}{"not-exist-topic"},
-			kafka.BrokerMessageMaxBytes,
-			kafka.TopicMaxMessageBytes,
-			kafka.BrokerMessageMaxBytes,
+			BrokerMessageMaxBytes,
+			TopicMaxMessageBytes,
+			BrokerMessageMaxBytes,
 		},
 		// topic not created,
 		// `max-message-bytes` not set, `message.max.bytes` = `max-message-bytes`
@@ -227,7 +227,7 @@ func TestConfigurationCombinations(t *testing.T) {
 			"kafka://127.0.0.1:9092/%s",
 			[]interface{}{"not-exist-topic"},
 			strconv.Itoa(config.DefaultMaxMessageBytes),
-			kafka.TopicMaxMessageBytes,
+			TopicMaxMessageBytes,
 			strconv.Itoa(config.DefaultMaxMessageBytes),
 		},
 		// topic not created,
@@ -237,7 +237,7 @@ func TestConfigurationCombinations(t *testing.T) {
 			"kafka://127.0.0.1:9092/%s",
 			[]interface{}{"no-params"},
 			strconv.Itoa(config.DefaultMaxMessageBytes + 1),
-			kafka.TopicMaxMessageBytes,
+			TopicMaxMessageBytes,
 			strconv.Itoa(config.DefaultMaxMessageBytes),
 		},
 
@@ -246,8 +246,8 @@ func TestConfigurationCombinations(t *testing.T) {
 		{
 			"kafka://127.0.0.1:9092/%s?max-message-bytes=%s",
 			[]interface{}{"not-created-topic", strconv.Itoa(1024*1024 - 1)},
-			kafka.BrokerMessageMaxBytes,
-			kafka.TopicMaxMessageBytes,
+			BrokerMessageMaxBytes,
+			TopicMaxMessageBytes,
 			strconv.Itoa(1024*1024 - 1),
 		},
 		// topic not created
@@ -256,7 +256,7 @@ func TestConfigurationCombinations(t *testing.T) {
 			"kafka://127.0.0.1:9092/%s?max-message-bytes=%s",
 			[]interface{}{"not-created-topic", strconv.Itoa(config.DefaultMaxMessageBytes - 1)},
 			strconv.Itoa(config.DefaultMaxMessageBytes + 1),
-			kafka.TopicMaxMessageBytes,
+			TopicMaxMessageBytes,
 			strconv.Itoa(config.DefaultMaxMessageBytes - 1),
 		},
 		// topic not created
@@ -264,18 +264,18 @@ func TestConfigurationCombinations(t *testing.T) {
 		{
 			"kafka://127.0.0.1:9092/%s?max-message-bytes=%s",
 			[]interface{}{"not-created-topic", strconv.Itoa(1024*1024 + 1)},
-			kafka.BrokerMessageMaxBytes,
-			kafka.TopicMaxMessageBytes,
-			kafka.BrokerMessageMaxBytes,
+			BrokerMessageMaxBytes,
+			TopicMaxMessageBytes,
+			BrokerMessageMaxBytes,
 		},
 		// topic not created
 		// `message.max.bytes` < default `max-message-bytes` < user set `max-message-bytes`
 		{
 			"kafka://127.0.0.1:9092/%s?max-message-bytes=%s",
 			[]interface{}{"not-created-topic", strconv.Itoa(config.DefaultMaxMessageBytes + 1)},
-			kafka.BrokerMessageMaxBytes,
-			kafka.TopicMaxMessageBytes,
-			kafka.BrokerMessageMaxBytes,
+			BrokerMessageMaxBytes,
+			TopicMaxMessageBytes,
+			BrokerMessageMaxBytes,
 		},
 		// topic not created
 		// default `max-message-bytes` < user set `max-message-bytes` < `message.max.bytes`
@@ -283,7 +283,7 @@ func TestConfigurationCombinations(t *testing.T) {
 			"kafka://127.0.0.1:9092/%s?max-message-bytes=%s",
 			[]interface{}{"not-created-topic", strconv.Itoa(config.DefaultMaxMessageBytes + 1)},
 			strconv.Itoa(config.DefaultMaxMessageBytes + 2),
-			kafka.TopicMaxMessageBytes,
+			TopicMaxMessageBytes,
 			strconv.Itoa(config.DefaultMaxMessageBytes + 1),
 		},
 		// topic not created
@@ -292,7 +292,7 @@ func TestConfigurationCombinations(t *testing.T) {
 			"kafka://127.0.0.1:9092/%s?max-message-bytes=%s",
 			[]interface{}{"not-created-topic", strconv.Itoa(config.DefaultMaxMessageBytes + 2)},
 			strconv.Itoa(config.DefaultMaxMessageBytes + 1),
-			kafka.TopicMaxMessageBytes,
+			TopicMaxMessageBytes,
 			strconv.Itoa(config.DefaultMaxMessageBytes + 1),
 		},
 
@@ -301,17 +301,17 @@ func TestConfigurationCombinations(t *testing.T) {
 		// expected = min(`max-message-bytes`, `max.message.bytes`) = `max.message.bytes`
 		{
 			"kafka://127.0.0.1:9092/%s",
-			[]interface{}{kafka.DefaultMockTopicName},
-			kafka.BrokerMessageMaxBytes,
-			kafka.TopicMaxMessageBytes,
-			kafka.TopicMaxMessageBytes,
+			[]interface{}{DefaultMockTopicName},
+			BrokerMessageMaxBytes,
+			TopicMaxMessageBytes,
+			TopicMaxMessageBytes,
 		},
 		// `max-message-bytes` not set, topic created, topic's `max.message.bytes` = `max-message-bytes`
 		// expected = min(`max-message-bytes`, `max.message.bytes`) = `max-message-bytes`
 		{
 			"kafka://127.0.0.1:9092/%s",
-			[]interface{}{kafka.DefaultMockTopicName},
-			kafka.BrokerMessageMaxBytes,
+			[]interface{}{DefaultMockTopicName},
+			BrokerMessageMaxBytes,
 			strconv.Itoa(config.DefaultMaxMessageBytes),
 			strconv.Itoa(config.DefaultMaxMessageBytes),
 		},
@@ -319,8 +319,8 @@ func TestConfigurationCombinations(t *testing.T) {
 		// expected = min(`max-message-bytes`, `max.message.bytes`) = `max-message-bytes`
 		{
 			"kafka://127.0.0.1:9092/%s",
-			[]interface{}{kafka.DefaultMockTopicName},
-			kafka.BrokerMessageMaxBytes,
+			[]interface{}{DefaultMockTopicName},
+			BrokerMessageMaxBytes,
 			strconv.Itoa(config.DefaultMaxMessageBytes + 1),
 			strconv.Itoa(config.DefaultMaxMessageBytes),
 		},
@@ -329,17 +329,17 @@ func TestConfigurationCombinations(t *testing.T) {
 		// user set `max-message-bytes` < `max.message.bytes` < default `max-message-bytes`
 		{
 			"kafka://127.0.0.1:9092/%s?max-message-bytes=%s",
-			[]interface{}{kafka.DefaultMockTopicName, strconv.Itoa(1024*1024 - 1)},
-			kafka.BrokerMessageMaxBytes,
-			kafka.TopicMaxMessageBytes,
+			[]interface{}{DefaultMockTopicName, strconv.Itoa(1024*1024 - 1)},
+			BrokerMessageMaxBytes,
+			TopicMaxMessageBytes,
 			strconv.Itoa(1024*1024 - 1),
 		},
 		// topic created
 		// user set `max-message-bytes` < default `max-message-bytes` < `max.message.bytes`
 		{
 			"kafka://127.0.0.1:9092/%s?max-message-bytes=%s",
-			[]interface{}{kafka.DefaultMockTopicName, strconv.Itoa(config.DefaultMaxMessageBytes - 1)},
-			kafka.BrokerMessageMaxBytes,
+			[]interface{}{DefaultMockTopicName, strconv.Itoa(config.DefaultMaxMessageBytes - 1)},
+			BrokerMessageMaxBytes,
 			strconv.Itoa(config.DefaultMaxMessageBytes + 1),
 			strconv.Itoa(config.DefaultMaxMessageBytes - 1),
 		},
@@ -347,26 +347,26 @@ func TestConfigurationCombinations(t *testing.T) {
 		// `max.message.bytes` < user set `max-message-bytes` < default `max-message-bytes`
 		{
 			"kafka://127.0.0.1:9092/%s?max-message-bytes=%s",
-			[]interface{}{kafka.DefaultMockTopicName, strconv.Itoa(1024*1024 + 1)},
-			kafka.BrokerMessageMaxBytes,
-			kafka.TopicMaxMessageBytes,
-			kafka.TopicMaxMessageBytes,
+			[]interface{}{DefaultMockTopicName, strconv.Itoa(1024*1024 + 1)},
+			BrokerMessageMaxBytes,
+			TopicMaxMessageBytes,
+			TopicMaxMessageBytes,
 		},
 		// topic created
 		// `max.message.bytes` < default `max-message-bytes` < user set `max-message-bytes`
 		{
 			"kafka://127.0.0.1:9092/%s?max-message-bytes=%s",
-			[]interface{}{kafka.DefaultMockTopicName, strconv.Itoa(config.DefaultMaxMessageBytes + 1)},
-			kafka.BrokerMessageMaxBytes,
-			kafka.TopicMaxMessageBytes,
-			kafka.TopicMaxMessageBytes,
+			[]interface{}{DefaultMockTopicName, strconv.Itoa(config.DefaultMaxMessageBytes + 1)},
+			BrokerMessageMaxBytes,
+			TopicMaxMessageBytes,
+			TopicMaxMessageBytes,
 		},
 		// topic created
 		// default `max-message-bytes` < user set `max-message-bytes` < `max.message.bytes`
 		{
 			"kafka://127.0.0.1:9092/%s?max-message-bytes=%s",
-			[]interface{}{kafka.DefaultMockTopicName, strconv.Itoa(config.DefaultMaxMessageBytes + 1)},
-			kafka.BrokerMessageMaxBytes,
+			[]interface{}{DefaultMockTopicName, strconv.Itoa(config.DefaultMaxMessageBytes + 1)},
+			BrokerMessageMaxBytes,
 			strconv.Itoa(config.DefaultMaxMessageBytes + 2),
 			strconv.Itoa(config.DefaultMaxMessageBytes + 1),
 		},
@@ -374,35 +374,35 @@ func TestConfigurationCombinations(t *testing.T) {
 		// default `max-message-bytes` < `max.message.bytes` < user set `max-message-bytes`
 		{
 			"kafka://127.0.0.1:9092/%s?max-message-bytes=%s",
-			[]interface{}{kafka.DefaultMockTopicName, strconv.Itoa(config.DefaultMaxMessageBytes + 2)},
-			kafka.BrokerMessageMaxBytes,
+			[]interface{}{DefaultMockTopicName, strconv.Itoa(config.DefaultMaxMessageBytes + 2)},
+			BrokerMessageMaxBytes,
 			strconv.Itoa(config.DefaultMaxMessageBytes + 1),
 			strconv.Itoa(config.DefaultMaxMessageBytes + 1),
 		},
 	}
 
 	for _, a := range combinations {
-		kafka.BrokerMessageMaxBytes = a.brokerMessageMaxBytes
-		kafka.TopicMaxMessageBytes = a.topicMaxMessageBytes
+		BrokerMessageMaxBytes = a.brokerMessageMaxBytes
+		TopicMaxMessageBytes = a.topicMaxMessageBytes
 
 		uri := fmt.Sprintf(a.uriTemplate, a.uriParams...)
 		sinkURI, err := url.Parse(uri)
 		require.Nil(t, err)
 
-		baseConfig := NewConfig()
+		baseConfig := NewOptions()
 		err = baseConfig.Apply(sinkURI)
 		require.Nil(t, err)
 
 		saramaConfig, err := NewSaramaConfig(context.Background(), baseConfig)
 		require.Nil(t, err)
 
-		adminClient, err := NewAdminClientImpl([]string{sinkURI.Host}, saramaConfig)
+		adminClient, err := kafka.NewAdminClientImpl([]string{sinkURI.Host}, saramaConfig)
 		require.Nil(t, err)
 
 		topic, ok := a.uriParams[0].(string)
 		require.True(t, ok)
 		require.NotEqual(t, "", topic)
-		err = AdjustConfig(adminClient, baseConfig, saramaConfig, topic)
+		err = kafka.AdjustConfig(adminClient, baseConfig, saramaConfig, topic)
 		require.Nil(t, err)
 
 		encoderConfig := common.NewConfig(config.ProtocolOpen)
@@ -486,7 +486,7 @@ func TestApplySASL(t *testing.T) {
 	for _, test := range tests {
 		t.Run(test.name, func(t *testing.T) {
 			t.Parallel()
-			cfg := NewConfig()
+			cfg := NewOptions()
 			sinkURI, err := url.Parse(test.URI)
 			require.Nil(t, err)
 			if test.exceptErr == "" {
@@ -551,7 +551,7 @@ func TestApplyTLS(t *testing.T) {
 	for _, test := range tests {
 		t.Run(test.name, func(t *testing.T) {
 			t.Parallel()
-			cfg := NewConfig()
+			cfg := NewOptions()
 			sinkURI, err := url.Parse(test.URI)
 			require.Nil(t, err)
 			if test.exceptErr == "" {
@@ -568,7 +568,7 @@ func TestCompleteSaramaSASLConfig(t *testing.T) {
 	t.Parallel()
 
 	// Test that SASL is turned on correctly.
-	cfg := NewConfig()
+	cfg := NewOptions()
 	cfg.SASL = &security.SASL{
 		SASLUser:      "user",
 		SASLPassword:  "password",
@@ -582,7 +582,7 @@ func TestCompleteSaramaSASLConfig(t *testing.T) {
 	completeSaramaSASLConfig(saramaConfig, cfg)
 	require.True(t, saramaConfig.Net.SASL.Enable)
 	// Test that the SCRAMClientGeneratorFunc is set up correctly.
-	cfg = NewConfig()
+	cfg = NewOptions()
 	cfg.SASL = &security.SASL{
 		SASLUser:      "user",
 		SASLPassword:  "password",
