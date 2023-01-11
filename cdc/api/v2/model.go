@@ -27,8 +27,7 @@ import (
 )
 
 // EmptyResponse return a {} to http
-type EmptyResponse struct {
-}
+type EmptyResponse struct{}
 
 // Tso contains timestamp get from PD
 type Tso struct {
