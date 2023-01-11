@@ -96,7 +96,7 @@ var (
 	) b ON a.instance = b.instance AND a.type = b.type AND a.time = b.time;`
 )
 
-// TiDBDiagnoser is a tidb performance observer
+// TiDBObserver is a tidb performance observer
 type TiDBObserver struct {
 	db *sql.DB
 }
