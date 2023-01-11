@@ -17,7 +17,6 @@ import (
 	"sync"
 	stdatomic "sync/atomic"
 
-	"github.com/google/btree"
 	"go.uber.org/atomic"
 )
 
@@ -31,16 +30,7 @@ const (
 	invalidNodeID = int64(-1)
 )
 
-var (
-	nextNodeID = atomic.NewInt64(0)
-
-	// btreeFreeList is a shared free list used by all
-	// btrees in order to lessen the burden of GC.
-	//
-	// Experiment shows increasing the capacity beyond 1024 yields little
-	// performance improvement.
-	btreeFreeList = btree.NewFreeListG[*Node](1024)
-)
+var nextNodeID = atomic.NewInt64(0)
 
 // Node is a node in the dependency graph used
 // in conflict detection.
@@ -78,7 +68,8 @@ type Node struct {
 	//     if an unordered set were used.
 	// (2) Google's btree package is selected because it seems to be
 	//     the most popular production-grade ordered set implementation in Go.
-	dependers *btree.BTreeG[*Node]
+	// dependers *btree.BTreeG[*Node]
+	dependers []*Node
 }
 
 // NewNode creates a new node.
@@ -135,9 +126,9 @@ func (n *Node) DependOn(unresolvedDeps map[int64]*Node, resolvedDeps int) {
 		if target.removed {
 			// The target has already been removed.
 			removedDependees = stdatomic.AddInt32(&n.removedDependees, 1)
-		} else if _, exist := target.getOrCreateDependers().ReplaceOrInsert(n); exist {
-			// Should never depend on a target redundantly.
-			panic("should never exist")
+		} else {
+			// Should never depend on a target redundantly, but won't check it here.
+			target.dependers = append(target.dependers, n)
 		}
 	}
 
@@ -168,16 +159,12 @@ func (n *Node) Remove() {
 	defer n.mu.Unlock()
 
 	n.removed = true
-	if n.dependers != nil {
-		// `mu` must be holded during accessing dependers.
-		n.dependers.Ascend(func(node *Node) bool {
-			removedDependees := stdatomic.AddInt32(&node.removedDependees, 1)
-			node.maybeResolve(0, removedDependees)
-			return true
-		})
-		n.dependers.Clear(true)
-		n.dependers = nil
+	// `n.mu` must be holded during accessing dependers.
+	for _, node := range n.dependers {
+		removedDependees := stdatomic.AddInt32(&node.removedDependees, 1)
+		node.maybeResolve(0, removedDependees)
 	}
+	n.dependers = nil
 }
 
 // Free implements interface internal.SlotNode.
@@ -214,14 +201,11 @@ func (n *Node) assignTo(workerID int64) bool {
 		n.OnResolved = nil
 	}
 
-	if n.dependers != nil {
-		// `mu` must be holded during accessing dependers.
-		n.dependers.Ascend(func(node *Node) bool {
-			resolvedDependees := stdatomic.AddInt32(&node.resolvedDependees, 1)
-			stdatomic.StoreInt64(&node.resolvedList[resolvedDependees-1], n.assignedTo)
-			node.maybeResolve(resolvedDependees, 0)
-			return true
-		})
+	// `n.mu` must be holded during accessing dependers.
+	for _, node := range n.dependers {
+		resolvedDependees := stdatomic.AddInt32(&node.resolvedDependees, 1)
+		stdatomic.StoreInt64(&node.resolvedList[resolvedDependees-1], n.assignedTo)
+		node.maybeResolve(resolvedDependees, 0)
 	}
 
 	return true
@@ -283,25 +267,12 @@ func (n *Node) doResolve(resolvedDependees, removedDependees int32) (int64, bool
 	return unassigned, false
 }
 
-func (n *Node) getOrCreateDependers() *btree.BTreeG[*Node] {
-	if n.dependers == nil {
-		n.dependers = btree.NewWithFreeListG(8, func(a, b *Node) bool {
-			return a.id < b.id
-		}, btreeFreeList)
-	}
-	return n.dependers
-}
-
 // dependerCount returns the number of dependers the node has.
 // NOTE: dependerCount is used for unit tests only.
 func (n *Node) dependerCount() int {
 	n.mu.Lock()
 	defer n.mu.Unlock()
-
-	if n.dependers == nil {
-		return 0
-	}
-	return n.dependers.Len()
+	return len(n.dependers)
 }
 
 // assignedWorkerID returns the worker ID that the node has been assigned to.
