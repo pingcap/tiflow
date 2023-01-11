@@ -91,8 +91,6 @@ func TestJobManagerCreateJob(t *testing.T) {
 	}
 	job, err := mgr.CreateJob(ctx, req)
 	require.NoError(t, err)
-	err = mockMaster.Poll(ctx)
-	require.NoError(t, err)
 
 	require.Eventually(t, func() bool {
 		return mgr.JobFsm.QueryJob(job.Id) != nil
