@@ -315,6 +315,15 @@ var (
 		"unknown '%s' protocol for Message Queue sink",
 		errors.RFCCodeText("CDC:ErrMQSinkUnknownProtocol"),
 	)
+	ErrIncompatibleSinkConfig = errors.Normalize(
+		"incompatible configuration in sink uri(%s) and config file(%s), "+
+			"please try to update the configuration only through sink uri",
+		errors.RFCCodeText("CDC:ErrIncompatibleSinkConfig"),
+	)
+	ErrSinkUnknownProtocol = errors.Normalize(
+		"unknown '%s' message protocol for sink",
+		errors.RFCCodeText("CDC:ErrSinkUnknownProtocol"),
+	)
 	ErrMySQLTxnError = errors.Normalize(
 		"MySQL txn error",
 		errors.RFCCodeText("CDC:ErrMySQLTxnError"),
