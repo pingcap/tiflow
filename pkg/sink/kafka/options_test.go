@@ -389,20 +389,21 @@ func TestConfigurationCombinations(t *testing.T) {
 		sinkURI, err := url.Parse(uri)
 		require.Nil(t, err)
 
-		baseConfig := NewOptions()
-		err = baseConfig.Apply(sinkURI)
+		options := NewOptions()
+		err = options.Apply(sinkURI)
 		require.Nil(t, err)
 
-		saramaConfig, err := NewSaramaConfig(context.Background(), baseConfig)
+		ctx := context.Background()
+		saramaConfig, err := NewSaramaConfig(ctx, options)
 		require.Nil(t, err)
 
-		adminClient, err := kafka.NewAdminClientImpl([]string{sinkURI.Host}, saramaConfig)
+		adminClient, err := kafka.NewAdminClientImpl(ctx, options)
 		require.Nil(t, err)
 
 		topic, ok := a.uriParams[0].(string)
 		require.True(t, ok)
 		require.NotEqual(t, "", topic)
-		err = kafka.AdjustConfig(adminClient, baseConfig, saramaConfig, topic)
+		err = kafka.AdjustConfig(adminClient, options, saramaConfig, topic)
 		require.Nil(t, err)
 
 		encoderConfig := common.NewConfig(config.ProtocolOpen)
