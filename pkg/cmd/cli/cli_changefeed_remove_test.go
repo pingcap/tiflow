@@ -21,6 +21,7 @@ import (
 	"github.com/pingcap/errors"
 	"github.com/pingcap/tiflow/cdc/model"
 	"github.com/pingcap/tiflow/pkg/api/v1/mock"
+	mock_v2 "github.com/pingcap/tiflow/pkg/api/v2/mock"
 	cerror "github.com/pingcap/tiflow/pkg/errors"
 	"github.com/stretchr/testify/require"
 )
@@ -29,12 +30,13 @@ func TestChangefeedRemoveCli(t *testing.T) {
 	ctrl := gomock.NewController(t)
 	defer ctrl.Finish()
 	cf := mock.NewMockChangefeedInterface(ctrl)
-	f := &mockFactory{changefeeds: cf}
+	cfv2 := mock_v2.NewMockChangefeedInterface(ctrl)
+	f := &mockFactory{changefeeds: cf, changefeedsv2: cfv2}
 
 	cmd := newCmdRemoveChangefeed(f)
 
 	cf.EXPECT().Get(gomock.Any(), "abc").Return(&model.ChangefeedDetail{}, nil)
-	cf.EXPECT().Delete(gomock.Any(), "abc").Return(nil)
+	cfv2.EXPECT().Delete(gomock.Any(), "abc").Return(nil)
 	cf.EXPECT().Get(gomock.Any(), "abc").Return(nil,
 		cerror.ErrChangeFeedNotExists.GenWithStackByArgs("abc"))
 	os.Args = []string{"remove", "--changefeed-id=abc"}
