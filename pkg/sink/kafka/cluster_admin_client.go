@@ -17,30 +17,87 @@ import (
 	"github.com/Shopify/sarama"
 )
 
+type TopicDetail struct {
+	NumPartitions     int32
+	ReplicationFactor int16
+	ConfigEntries     map[string]string
+}
+
+type Broker struct {
+	ID int32
+}
+
+// ConfigResourceType is a type for resources that have configs.
+type ConfigResourceType int8
+
+// Taken from:
+// https://github.com/apache/kafka/blob/ed7c071e07f1f90e4c2895582f61ca090ced3c42/clients/src/main/java/org/apache/kafka/common/config/ConfigResource.java#L32-L55
+
+const (
+	// UnknownResource constant type
+	UnknownResource ConfigResourceType = 0
+	// TopicResource constant type
+	TopicResource ConfigResourceType = 2
+	// BrokerResource constant type
+	BrokerResource ConfigResourceType = 4
+	// BrokerLoggerResource constant type
+	BrokerLoggerResource ConfigResourceType = 8
+)
+
+func configResourceType4Sarama(resourceType ConfigResourceType) sarama.ConfigResourceType {
+	switch resourceType {
+	case TopicResource:
+		return sarama.TopicResource
+	case BrokerResource:
+		return sarama.BrokerResource
+	case BrokerLoggerResource:
+		return sarama.BrokerLoggerResource
+	default:
+		return sarama.UnknownResource
+	}
+}
+
+type ConfigResource struct {
+	Type        ConfigResourceType
+	Name        string
+	ConfigNames []string
+}
+
+type TopicMetadata struct {
+	Name string
+	Err  error
+
+	Partitions []*PartitionMetadata
+}
+
+type PartitionMetadata struct {
+	Err             error
+	ID              int32
+	Leader          int32
+	Replicas        []int32
+	Isr             []int32
+	OfflineReplicas []int32
+}
+
 // ClusterAdminClient is the administrative client for Kafka, which supports managing and inspecting topics,
 // brokers, configurations and ACLs.
 type ClusterAdminClient interface {
 	// ListTopics list the topics available in the cluster with the default options.
-	ListTopics() (map[string]sarama.TopicDetail, error)
+	ListTopics() (map[string]*TopicDetail, error)
 	// DescribeCluster gets information about the nodes in the cluster
-	DescribeCluster() (brokers []*sarama.Broker, controllerID int32, err error)
+	DescribeCluster() (brokers []Broker, controllerID int32, err error)
 	// DescribeConfig gets the configuration for the specified resources.
-	DescribeConfig(resource sarama.ConfigResource) ([]sarama.ConfigEntry, error)
+	DescribeConfig(resource ConfigResource) (map[string]string, error)
 	// DescribeTopics fetches metadata from some topics.
-	DescribeTopics(topics []string) (metadata []*sarama.TopicMetadata, err error)
+	DescribeTopics(topics []string) (metadata []TopicMetadata, err error)
 	// CreateTopic creates a new topic.
-	CreateTopic(topic string, detail *sarama.TopicDetail, validateOnly bool) error
+	CreateTopic(topic string, detail *TopicDetail, validateOnly bool) error
 	// Close shuts down the admin and closes underlying client.
 	Close() error
 }
 
 // ClusterAdminClientCreator defines the type of cluster admin client crater.
 type ClusterAdminClientCreator func([]string, *sarama.Config) (ClusterAdminClient, error)
-
-// NewSaramaAdminClient constructs a ClusterAdminClient with sarama.
-func NewSaramaAdminClient(addrs []string, conf *sarama.Config) (ClusterAdminClient, error) {
-	return sarama.NewClusterAdmin(addrs, conf)
-}
 
 // NewMockAdminClient constructs a ClusterAdminClient with mock implementation.
 func NewMockAdminClient(_ []string, _ *sarama.Config) (ClusterAdminClient, error) {
