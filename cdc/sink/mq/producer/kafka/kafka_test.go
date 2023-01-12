@@ -117,7 +117,7 @@ func TestNewSaramaProducer(t *testing.T) {
 	saramaConfig, err := NewSaramaConfig(ctx, config)
 	require.Nil(t, err)
 	saramaConfig.Producer.Flush.MaxMessages = 1
-	client, err := sarama.NewClient(config.BrokerEndpoints, saramaConfig)
+	client, err := NewClientImpl(config.BrokerEndpoints, saramaConfig)
 	require.Nil(t, err)
 	adminClient, err := NewAdminClientImpl(config.BrokerEndpoints, saramaConfig)
 	require.Nil(t, err)
@@ -406,7 +406,7 @@ func TestProducerSendMessageFailed(t *testing.T) {
 	saramaConfig.Producer.Retry.Max = 2
 	saramaConfig.Producer.MaxMessageBytes = 8
 
-	client, err := sarama.NewClient(config.BrokerEndpoints, saramaConfig)
+	client, err := NewClientImpl(config.BrokerEndpoints, saramaConfig)
 	require.Nil(t, err)
 	adminClient, err := NewAdminClientImpl(config.BrokerEndpoints, saramaConfig)
 	require.Nil(t, err)
@@ -489,7 +489,7 @@ func TestProducerDoubleClose(t *testing.T) {
 	ctx = contextutil.PutRoleInCtx(ctx, util.RoleTester)
 	saramaConfig, err := NewSaramaConfig(context.Background(), config)
 	require.Nil(t, err)
-	client, err := sarama.NewClient(config.BrokerEndpoints, saramaConfig)
+	client, err := NewClientImpl(config.BrokerEndpoints, saramaConfig)
 	require.Nil(t, err)
 	adminClient, err := NewAdminClientImpl(config.BrokerEndpoints, saramaConfig)
 	require.Nil(t, err)
