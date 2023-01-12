@@ -46,6 +46,7 @@ func TestGenUpdateMultiRows(t *testing.T) {
 	testGenUpdateMultiRows(t, GenUpdateSQL)
 	testGenUpdateMultiRows(t, GenUpdateSQLFast)
 }
+
 func TestGenUpdateMultiRowsOneColPK(t *testing.T) {
 	t.Parallel()
 	testGenUpdateMultiRowsOneColPK(t, GenUpdateSQL)
