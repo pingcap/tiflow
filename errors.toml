@@ -341,6 +341,11 @@ error = '''
 illegal parameter for sorter: %s
 '''
 
+["CDC:ErrIncompatibleSinkConfig"]
+error = '''
+incompatible configuration in sink uri(%s) and config file(%s), please try to update the configuration only through sink uri
+'''
+
 ["CDC:ErrIndexKeyTableNotFound"]
 error = '''
 table not found with index ID %d in index kv
@@ -384,6 +389,11 @@ host must be a URL or a host:port pair: %q
 ["CDC:ErrInvalidRecordKey"]
 error = '''
 invalid record key - %q
+'''
+
+["CDC:ErrInvalidReplicaConfig"]
+error = '''
+invalid replica config, %s
 '''
 
 ["CDC:ErrInvalidS3URI"]
@@ -876,11 +886,6 @@ error = '''
 s3 storage api
 '''
 
-["CDC:ErrS3StorageInitialize"]
-error = '''
-new s3 storage for redo log
-'''
-
 ["CDC:ErrScanLockFailed"]
 error = '''
 scan lock failed
@@ -936,6 +941,11 @@ error = '''
 sink uri invalid '%s'
 '''
 
+["CDC:ErrSinkUnknownProtocol"]
+error = '''
+unknown '%s' message protocol for sink
+'''
+
 ["CDC:ErrSnapshotLostByGC"]
 error = '''
 fail to create or maintain changefeed due to snapshot loss caused by GC. checkpoint-ts %d is earlier than or equal to GC safepoint at %d
@@ -974,6 +984,11 @@ start a stopped leveldb system
 ["CDC:ErrStartTsBeforeGC"]
 error = '''
 fail to create or maintain changefeed because start-ts %d is earlier than or equal to GC safepoint at %d
+'''
+
+["CDC:ErrStorageInitialize"]
+error = '''
+fail to open storage for redo log
 '''
 
 ["CDC:ErrSupportGetOnly"]
@@ -1119,6 +1134,11 @@ wrong table info in unflatten, table id %d, index table id: %d
 ["CDC:ErrZeroLengthResponseBody"]
 error = '''
 0-length response with status code: %d
+'''
+
+["DFLOW:ErrFailToCreateExternalStorage"]
+error = '''
+failed to create external storage
 '''
 
 ["ErrConflictingFileLocks"]

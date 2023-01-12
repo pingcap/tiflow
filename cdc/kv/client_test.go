@@ -2766,10 +2766,10 @@ func TestResolveLockNoCandidate(t *testing.T) {
 // TestFailRegionReentrant tests one region could be failover multiple times,
 // kv client must avoid duplicated `onRegionFail` call for the same region.
 // In this test
-// 1. An `unknownErr` is sent to kv client first to trigger `handleSingleRegionError` in region worker.
-// 2. We delay the kv client to re-create a new region request by 500ms via failpoint.
-// 3. Before new region request is fired, simulate kv client `stream.Recv` returns an error, the stream
-//    handler will signal region worker to exit, which will evict all active region states then.
+//  1. An `unknownErr` is sent to kv client first to trigger `handleSingleRegionError` in region worker.
+//  2. We delay the kv client to re-create a new region request by 500ms via failpoint.
+//  3. Before new region request is fired, simulate kv client `stream.Recv` returns an error, the stream
+//     handler will signal region worker to exit, which will evict all active region states then.
 func TestFailRegionReentrant(t *testing.T) {
 	ctx, cancel := context.WithCancel(context.Background())
 	wg := &sync.WaitGroup{}
@@ -2849,17 +2849,17 @@ func TestFailRegionReentrant(t *testing.T) {
 
 // TestClientV1UnlockRangeReentrant tests clientV1 can handle region reconnection
 // with unstable TiKV store correctly. The test workflow is as follows:
-// 1. kv client establishes two regions request, naming region-1, region-2, they
-//    belong to the same TiKV store.
-// 2. The region-1 is firstly established, yet region-2 has some delay after its
-//    region state is inserted into `pendingRegions`
-// 3. At this time the TiKV store crashes and `stream.Recv` returns error. In the
-//    defer function of `receiveFromStream`, all pending regions will be cleaned
-//    up, which means the region lock will be unlocked once for these regions.
-// 4. In step-2, the region-2 continues to run, it can't get store stream which
-//    has been deleted in step-3, so it will create new stream but fails because
-//    of unstable TiKV store, at this point, the kv client should handle with the
-//    pending region correctly.
+//  1. kv client establishes two regions request, naming region-1, region-2, they
+//     belong to the same TiKV store.
+//  2. The region-1 is firstly established, yet region-2 has some delay after its
+//     region state is inserted into `pendingRegions`
+//  3. At this time the TiKV store crashes and `stream.Recv` returns error. In the
+//     defer function of `receiveFromStream`, all pending regions will be cleaned
+//     up, which means the region lock will be unlocked once for these regions.
+//  4. In step-2, the region-2 continues to run, it can't get store stream which
+//     has been deleted in step-3, so it will create new stream but fails because
+//     of unstable TiKV store, at this point, the kv client should handle with the
+//     pending region correctly.
 func TestClientV1UnlockRangeReentrant(t *testing.T) {
 	ctx, cancel := context.WithCancel(context.Background())
 	wg := &sync.WaitGroup{}

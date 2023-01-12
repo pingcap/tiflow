@@ -308,6 +308,19 @@ func (h *openAPI) CreateChangefeed(c *gin.Context) {
 		return
 	}
 
+	o, err := h.capture.GetOwner()
+	if err != nil {
+		needRemoveGCSafePoint = true
+		_ = c.Error(err)
+		return
+	}
+	err = o.ValidateChangefeed(&changefeedConfig)
+	if err != nil {
+		needRemoveGCSafePoint = true
+		_ = c.Error(err)
+		return
+	}
+
 	err = h.capture.EtcdClient.CreateChangefeedInfo(ctx, info,
 		model.DefaultChangeFeedID(changefeedConfig.ID))
 	if err != nil {

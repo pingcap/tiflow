@@ -488,8 +488,9 @@ func TestRemoveChangefeed(t *testing.T) {
 	require.NoError(t, err)
 	defer os.RemoveAll(dir)
 	info.Config.Consistent = &config.ConsistentConfig{
-		Level:   "eventual",
-		Storage: filepath.Join("nfs://", dir),
+		Level:             "eventual",
+		Storage:           filepath.Join("nfs://", dir),
+		FlushIntervalInMs: config.MinFlushIntervalInMs,
 	}
 	ctx = cdcContext.WithChangefeedVars(ctx, &cdcContext.ChangefeedVars{
 		ID:   ctx.ChangefeedVars().ID,

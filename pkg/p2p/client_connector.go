@@ -35,7 +35,8 @@ type clientConnectOptions struct {
 	// credential is used to setup the connection to the gRPC server.
 	credential *security.Credential
 	// timeout specifies the DialTimeout of the connection.
-	timeout time.Duration
+	timeout        time.Duration
+	maxRecvMsgSize int
 }
 
 type cancelFn = func()
@@ -63,6 +64,7 @@ func (c *clientConnectorImpl) Connect(opts clientConnectOptions) (proto.CDCPeerT
 	conn, err := grpc.Dial(
 		opts.addr,
 		securityOption,
+		grpc.WithDefaultCallOptions(grpc.MaxCallRecvMsgSize(opts.maxRecvMsgSize)),
 		grpc.WithContextDialer(func(ctx context.Context, s string) (net.Conn, error) {
 			return net.DialTimeout(opts.network, s, opts.timeout)
 		}),

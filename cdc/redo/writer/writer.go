@@ -20,23 +20,24 @@ import (
 	"os"
 	"path/filepath"
 	"sync"
-	"time"
 
 	"github.com/aws/aws-sdk-go/aws/awserr"
 	"github.com/aws/aws-sdk-go/service/s3"
 	"github.com/pingcap/errors"
 	"github.com/pingcap/log"
 	"github.com/pingcap/tidb/br/pkg/storage"
+	"github.com/pingcap/tiflow/cdc/contextutil"
 	"github.com/pingcap/tiflow/cdc/model"
 	"github.com/pingcap/tiflow/cdc/redo/common"
+	"github.com/pingcap/tiflow/pkg/config"
 	cerror "github.com/pingcap/tiflow/pkg/errors"
+	"github.com/pingcap/tiflow/pkg/redo"
 	"github.com/prometheus/client_golang/prometheus"
 	"go.uber.org/multierr"
 	"go.uber.org/zap"
 	"golang.org/x/sync/errgroup"
 )
 
-//go:generate mockery --name=RedoLogWriter --inpackage
 // RedoLogWriter defines the interfaces used to write redo log, all operations are thread-safe.
 type RedoLogWriter interface {
 	// WriteLog writer RedoRowChangedEvent to row log file.
@@ -69,82 +70,121 @@ var redoLogPool = sync.Pool{
 	},
 }
 
-// LogWriterConfig is the configuration used by a Writer.
-type LogWriterConfig struct {
-	Dir          string
-	ChangeFeedID model.ChangeFeedID
-	CaptureID    string
-	CreateTime   time.Time
-	// MaxLogSize is the maximum size of log in megabyte, defaults to defaultMaxLogSize.
-	MaxLogSize        int64
-	FlushIntervalInMs int64
-	S3Storage         bool
-	// S3URI should be like S3URI="s3://logbucket/test-changefeed?endpoint=http://$S3_ENDPOINT/"
-	S3URI url.URL
+// NewRedoLogWriter creates a new RedoLogWriter.
+func NewRedoLogWriter(
+	ctx context.Context,
+	cfg *config.ConsistentConfig,
+	fileTypeConfig redo.FileTypeConfig,
+) (RedoLogWriter, error) {
+	uri, err := storage.ParseRawURL(cfg.Storage)
+	if err != nil {
+		return nil, err
+	}
 
-	EmitMeta      bool
-	EmitRowEvents bool
-	EmitDDLEvents bool
+	scheme := uri.Scheme
+	if !redo.IsValidConsistentStorage(scheme) {
+		return nil, cerror.ErrConsistentStorage.GenWithStackByArgs(scheme)
+	}
+	if redo.IsBlackholeStorage(scheme) {
+		return NewBlackHoleWriter(), nil
+	}
+
+	lwCfg := &logWriterConfig{
+		FileTypeConfig:     fileTypeConfig,
+		CaptureID:          contextutil.CaptureAddrFromCtx(ctx),
+		ChangeFeedID:       contextutil.ChangefeedIDFromCtx(ctx),
+		URI:                *uri,
+		UseExternalStorage: redo.IsExternalStorage(scheme),
+		MaxLogSize:         cfg.MaxLogSize,
+	}
+
+	if lwCfg.UseExternalStorage {
+		// When an external storage is used, we use redoDir as a temporary dir to store redo logs
+		// before we flush them to S3.
+		changeFeedID := contextutil.ChangefeedIDFromCtx(ctx)
+		dataDir := config.GetGlobalServerConfig().DataDir
+		if changeFeedID.Namespace == model.DefaultNamespace {
+			lwCfg.Dir = filepath.Join(dataDir, config.DefaultRedoDir, changeFeedID.ID)
+		} else {
+			lwCfg.Dir = filepath.Join(dataDir, config.DefaultRedoDir,
+				changeFeedID.Namespace, changeFeedID.ID)
+		}
+	} else {
+		// When local storage or NFS is used, we use redoDir as the final storage path.
+		lwCfg.Dir = uri.Path
+	}
+
+	return newLogWriter(ctx, lwCfg)
 }
 
-// LogWriter implement the RedoLogWriter interface
-type LogWriter struct {
-	cfg       *LogWriterConfig
+type logWriterConfig struct {
+	redo.FileTypeConfig
+	CaptureID    string
+	ChangeFeedID model.ChangeFeedID
+
+	URI                url.URL
+	UseExternalStorage bool
+
+	// MaxLogSize is the maximum size of log in megabyte, defaults to defaultMaxLogSize.
+	MaxLogSize int64
+	Dir        string
+}
+
+// logWriter implement the RedoLogWriter interface
+type logWriter struct {
+	cfg       *logWriterConfig
 	rowWriter fileWriter
 	ddlWriter fileWriter
-	// storage in LogWriter is used to write meta and clean up
+	// extStorage in LogWriter is used to write meta and clean up
 	// the redo log files when changefeed is created or deleted.
-	storage storage.ExternalStorage
+	extStorage storage.ExternalStorage
 
 	meta *common.LogMeta
 
 	metricTotalRowsCount prometheus.Gauge
 }
 
-// NewLogWriter creates a LogWriter instance. It is guaranteed only one LogWriter per changefeed
-func NewLogWriter(
-	ctx context.Context, cfg *LogWriterConfig, opts ...Option,
-) (logWriter *LogWriter, err error) {
+func newLogWriter(
+	ctx context.Context, cfg *logWriterConfig, opts ...Option,
+) (lw *logWriter, err error) {
 	if cfg == nil {
 		return nil, cerror.WrapError(cerror.ErrRedoConfigInvalid, errors.New("LogWriterConfig can not be nil"))
 	}
 
-	logWriter = &LogWriter{cfg: cfg}
+	lw = &logWriter{cfg: cfg}
 
-	if logWriter.cfg.EmitRowEvents {
+	if lw.cfg.EmitRowEvents {
 		writerCfg := &FileWriterConfig{
-			Dir:          cfg.Dir,
-			ChangeFeedID: cfg.ChangeFeedID,
-			CaptureID:    cfg.CaptureID,
-			FileType:     common.DefaultRowLogFileType,
-			CreateTime:   cfg.CreateTime,
-			MaxLogSize:   cfg.MaxLogSize,
-			S3Storage:    cfg.S3Storage,
-			S3URI:        cfg.S3URI,
+			FileType:           redo.RedoRowLogFileType,
+			ChangeFeedID:       cfg.ChangeFeedID,
+			CaptureID:          cfg.CaptureID,
+			URI:                cfg.URI,
+			UseExternalStorage: cfg.UseExternalStorage,
+			MaxLogSize:         cfg.MaxLogSize,
+			Dir:                cfg.Dir,
 		}
-		if logWriter.rowWriter, err = NewWriter(ctx, writerCfg, opts...); err != nil {
+		if lw.rowWriter, err = NewWriter(ctx, writerCfg, opts...); err != nil {
 			return
 		}
 	}
 
-	if logWriter.cfg.EmitDDLEvents {
+	if lw.cfg.EmitDDLEvents {
 		writerCfg := &FileWriterConfig{
-			Dir:          cfg.Dir,
-			ChangeFeedID: cfg.ChangeFeedID,
-			CaptureID:    cfg.CaptureID,
-			FileType:     common.DefaultDDLLogFileType,
-			CreateTime:   cfg.CreateTime,
-			MaxLogSize:   cfg.MaxLogSize,
-			S3Storage:    cfg.S3Storage,
-			S3URI:        cfg.S3URI,
+			FileType:           redo.RedoDDLLogFileType,
+			ChangeFeedID:       cfg.ChangeFeedID,
+			CaptureID:          cfg.CaptureID,
+			URI:                cfg.URI,
+			UseExternalStorage: cfg.UseExternalStorage,
+			MaxLogSize:         cfg.MaxLogSize,
+			Dir:                cfg.Dir,
 		}
-		if logWriter.ddlWriter, err = NewWriter(ctx, writerCfg, opts...); err != nil {
+		if lw.ddlWriter, err = NewWriter(ctx, writerCfg, opts...); err != nil {
 			return
 		}
 	}
 
-	if logWriter.cfg.EmitMeta {
-		if err = logWriter.initMeta(ctx); err != nil {
+	if lw.cfg.EmitMeta {
+		if err = lw.initMeta(ctx); err != nil {
 			log.Warn("init redo meta fail",
 				zap.String("namespace", cfg.ChangeFeedID.Namespace),
 				zap.String("changefeed", cfg.ChangeFeedID.ID),
@@ -153,25 +193,25 @@ func NewLogWriter(
 		}
 	}
 
-	if cfg.S3Storage {
-		logWriter.storage, err = common.InitS3storage(ctx, cfg.S3URI)
+	if cfg.UseExternalStorage {
+		lw.extStorage, err = redo.InitExternalStorage(ctx, cfg.URI)
 		if err != nil {
 			return nil, err
 		}
 		// since other process get the remove changefeed job async, may still write some logs after owner delete the log
-		err = logWriter.preCleanUpS3(ctx)
+		err = lw.preCleanUpS3(ctx)
 		if err != nil {
 			return nil, err
 		}
 	}
 
-	logWriter.metricTotalRowsCount = common.RedoTotalRowsCountGauge.
+	lw.metricTotalRowsCount = common.RedoTotalRowsCountGauge.
 		WithLabelValues(cfg.ChangeFeedID.Namespace, cfg.ChangeFeedID.ID)
 	return
 }
 
-func (l *LogWriter) preCleanUpS3(ctx context.Context) error {
-	ret, err := l.storage.FileExists(ctx, l.getDeletedChangefeedMarker())
+func (l *logWriter) preCleanUpS3(ctx context.Context) error {
+	ret, err := l.extStorage.FileExists(ctx, l.getDeletedChangefeedMarker())
 	if err != nil {
 		return cerror.WrapError(cerror.ErrS3StorageAPI, err)
 	}
@@ -194,7 +234,7 @@ func (l *LogWriter) preCleanUpS3(ctx context.Context) error {
 	if err != nil {
 		return err
 	}
-	err = l.storage.DeleteFile(ctx, l.getDeletedChangefeedMarker())
+	err = l.extStorage.DeleteFile(ctx, l.getDeletedChangefeedMarker())
 	if !isNotExistInS3(err) {
 		return cerror.WrapError(cerror.ErrS3StorageAPI, err)
 	}
@@ -202,7 +242,7 @@ func (l *LogWriter) preCleanUpS3(ctx context.Context) error {
 	return nil
 }
 
-func (l *LogWriter) initMeta(ctx context.Context) error {
+func (l *logWriter) initMeta(ctx context.Context) error {
 	select {
 	case <-ctx.Done():
 		return errors.Trace(ctx.Err())
@@ -228,7 +268,7 @@ func (l *LogWriter) initMeta(ctx context.Context) error {
 }
 
 // GC implement GC api
-func (l *LogWriter) GC(ctx context.Context, ts model.Ts) error {
+func (l *logWriter) GC(ctx context.Context, ts model.Ts) error {
 	var err error
 	if l.cfg.EmitRowEvents {
 		err = multierr.Append(err, l.rowWriter.GC(ts))
@@ -240,7 +280,9 @@ func (l *LogWriter) GC(ctx context.Context, ts model.Ts) error {
 }
 
 // WriteLog implement WriteLog api
-func (l *LogWriter) WriteLog(ctx context.Context, tableID int64, rows []*model.RedoRowChangedEvent) error {
+func (l *logWriter) WriteLog(
+	ctx context.Context, tableID int64, rows []*model.RedoRowChangedEvent,
+) error {
 	select {
 	case <-ctx.Done():
 		return errors.Trace(ctx.Err())
@@ -282,7 +324,7 @@ func (l *LogWriter) WriteLog(ctx context.Context, tableID int64, rows []*model.R
 }
 
 // SendDDL implement SendDDL api
-func (l *LogWriter) SendDDL(ctx context.Context, ddl *model.RedoDDLEvent) error {
+func (l *logWriter) SendDDL(ctx context.Context, ddl *model.RedoDDLEvent) error {
 	select {
 	case <-ctx.Done():
 		return errors.Trace(ctx.Err())
@@ -313,7 +355,7 @@ func (l *LogWriter) SendDDL(ctx context.Context, ddl *model.RedoDDLEvent) error 
 }
 
 // FlushLog implement FlushLog api
-func (l *LogWriter) FlushLog(ctx context.Context, checkpointTs, resolvedTs model.Ts) error {
+func (l *logWriter) FlushLog(ctx context.Context, checkpointTs, resolvedTs model.Ts) error {
 	select {
 	case <-ctx.Done():
 		return errors.Trace(ctx.Err())
@@ -328,7 +370,7 @@ func (l *LogWriter) FlushLog(ctx context.Context, checkpointTs, resolvedTs model
 }
 
 // GetMeta implement GetMeta api
-func (l *LogWriter) GetMeta() (checkpointTs, resolvedTs model.Ts) {
+func (l *logWriter) GetMeta() (checkpointTs, resolvedTs model.Ts) {
 	return l.meta.CheckpointTs, l.meta.ResolvedTs
 }
 
@@ -336,7 +378,7 @@ func (l *LogWriter) GetMeta() (checkpointTs, resolvedTs model.Ts) {
 // FIXME: currently only owner will call this. We need to split it into 2 functions:
 //  1. cleanLocalStorage, which should be called on processors;
 //  2. cleanRemoteStorage, which should be called on owner.
-func (l *LogWriter) DeleteAllLogs(ctx context.Context) (err error) {
+func (l *logWriter) DeleteAllLogs(ctx context.Context) (err error) {
 	if err = l.Close(); err != nil {
 		return
 	}
@@ -377,7 +419,7 @@ func (l *LogWriter) DeleteAllLogs(ctx context.Context) (err error) {
 		}
 	}
 
-	if !l.cfg.S3Storage {
+	if !l.cfg.UseExternalStorage {
 		return
 	}
 
@@ -401,23 +443,24 @@ func (l *LogWriter) DeleteAllLogs(ctx context.Context) (err error) {
 	return
 }
 
-func (l *LogWriter) getDeletedChangefeedMarker() string {
+func (l *logWriter) getDeletedChangefeedMarker() string {
 	if l.cfg.ChangeFeedID.Namespace == model.DefaultNamespace {
 		return fmt.Sprintf("delete_%s", l.cfg.ChangeFeedID.ID)
 	}
 	return fmt.Sprintf("delete_%s_%s", l.cfg.ChangeFeedID.Namespace, l.cfg.ChangeFeedID.ID)
 }
 
-func (l *LogWriter) writeDeletedMarkerToS3(ctx context.Context) error {
-	return cerror.WrapError(cerror.ErrS3StorageAPI, l.storage.WriteFile(ctx, l.getDeletedChangefeedMarker(), []byte("D")))
+func (l *logWriter) writeDeletedMarkerToS3(ctx context.Context) error {
+	return cerror.WrapError(cerror.ErrS3StorageAPI,
+		l.extStorage.WriteFile(ctx, l.getDeletedChangefeedMarker(), []byte("D")))
 }
 
-func (l *LogWriter) deleteFilesInS3(ctx context.Context, files []string) error {
+func (l *logWriter) deleteFilesInS3(ctx context.Context, files []string) error {
 	eg, eCtx := errgroup.WithContext(ctx)
 	for _, f := range files {
 		name := f
 		eg.Go(func() error {
-			err := l.storage.DeleteFile(eCtx, name)
+			err := l.extStorage.DeleteFile(eCtx, name)
 			if err != nil {
 				// if fail then retry, may end up with notExit err, ignore the error
 				if !isNotExistInS3(err) {
@@ -442,9 +485,9 @@ func isNotExistInS3(err error) bool {
 	return false
 }
 
-var getAllFilesInS3 = func(ctx context.Context, l *LogWriter) ([]string, error) {
+var getAllFilesInS3 = func(ctx context.Context, l *logWriter) ([]string, error) {
 	files := []string{}
-	err := l.storage.WalkDir(ctx, &storage.WalkOption{}, func(path string, _ int64) error {
+	err := l.extStorage.WalkDir(ctx, &storage.WalkOption{}, func(path string, _ int64) error {
 		files = append(files, path)
 		return nil
 	})
@@ -456,7 +499,7 @@ var getAllFilesInS3 = func(ctx context.Context, l *LogWriter) ([]string, error) 
 }
 
 // Close implements RedoLogWriter.Close.
-func (l *LogWriter) Close() (err error) {
+func (l *logWriter) Close() (err error) {
 	common.RedoTotalRowsCountGauge.
 		DeleteLabelValues(l.cfg.ChangeFeedID.Namespace, l.cfg.ChangeFeedID.ID)
 
@@ -470,7 +513,7 @@ func (l *LogWriter) Close() (err error) {
 }
 
 // flush flushes all the buffered data to the disk.
-func (l *LogWriter) flush(checkpointTs, resolvedTs model.Ts) (err error) {
+func (l *logWriter) flush(checkpointTs, resolvedTs model.Ts) (err error) {
 	if l.cfg.EmitDDLEvents {
 		err = multierr.Append(err, l.ddlWriter.Flush())
 	}
@@ -483,7 +526,7 @@ func (l *LogWriter) flush(checkpointTs, resolvedTs model.Ts) (err error) {
 	return
 }
 
-func (l *LogWriter) isStopped() bool {
+func (l *logWriter) isStopped() bool {
 	var rowStopped, ddlStopped bool
 	if l.cfg.EmitRowEvents {
 		rowStopped = !l.rowWriter.IsRunning()
@@ -494,17 +537,17 @@ func (l *LogWriter) isStopped() bool {
 	return rowStopped || ddlStopped
 }
 
-func (l *LogWriter) getMetafileName() string {
+func (l *logWriter) getMetafileName() string {
 	if model.DefaultNamespace == l.cfg.ChangeFeedID.Namespace {
 		return fmt.Sprintf("%s_%s_%s%s", l.cfg.CaptureID, l.cfg.ChangeFeedID.ID,
-			common.DefaultMetaFileType, common.MetaEXT)
+			redo.RedoMetaFileType, redo.MetaEXT)
 	}
 	return fmt.Sprintf("%s_%s_%s_%s%s", l.cfg.CaptureID,
 		l.cfg.ChangeFeedID.Namespace, l.cfg.ChangeFeedID.ID,
-		common.DefaultMetaFileType, common.MetaEXT)
+		redo.RedoMetaFileType, redo.MetaEXT)
 }
 
-func (l *LogWriter) maybeUpdateMeta(checkpointTs, resolvedTs uint64) ([]byte, error) {
+func (l *logWriter) maybeUpdateMeta(checkpointTs, resolvedTs uint64) ([]byte, error) {
 	// NOTE: both checkpoint and resolved can regress if a cdc instance restarts.
 	hasChange := false
 	if checkpointTs > l.meta.CheckpointTs {
@@ -539,7 +582,7 @@ func (l *LogWriter) maybeUpdateMeta(checkpointTs, resolvedTs uint64) ([]byte, er
 	return data, err
 }
 
-func (l *LogWriter) flushLogMeta(checkpointTs, resolvedTs uint64) error {
+func (l *logWriter) flushLogMeta(checkpointTs, resolvedTs uint64) error {
 	data, err := l.maybeUpdateMeta(checkpointTs, resolvedTs)
 	if err != nil {
 		return err
@@ -548,13 +591,13 @@ func (l *LogWriter) flushLogMeta(checkpointTs, resolvedTs uint64) error {
 		return nil
 	}
 
-	err = os.MkdirAll(l.cfg.Dir, common.DefaultDirMode)
+	err = os.MkdirAll(l.cfg.Dir, redo.DefaultDirMode)
 	if err != nil {
 		return cerror.WrapError(cerror.ErrRedoFileOp, errors.Annotate(err, "can't make dir for new redo logfile"))
 	}
 
 	// we will create a temp metadata file and then atomically rename it.
-	tmpFileName := l.filePath() + common.MetaTmpEXT
+	tmpFileName := l.filePath() + redo.MetaTmpEXT
 	tmpFile, err := openTruncFile(tmpFileName)
 	if err != nil {
 		return cerror.WrapError(cerror.ErrRedoFileOp, err)
@@ -586,7 +629,7 @@ func (l *LogWriter) flushLogMeta(checkpointTs, resolvedTs uint64) error {
 		return cerror.WrapError(cerror.ErrRedoFileOp, err)
 	}
 
-	if !l.cfg.S3Storage {
+	if !l.cfg.UseExternalStorage {
 		return nil
 	}
 
@@ -595,23 +638,23 @@ func (l *LogWriter) flushLogMeta(checkpointTs, resolvedTs uint64) error {
 	return l.writeMetaToS3(ctx)
 }
 
-func (l *LogWriter) writeMetaToS3(ctx context.Context) error {
+func (l *logWriter) writeMetaToS3(ctx context.Context) error {
 	name := l.filePath()
 	fileData, err := os.ReadFile(name)
 	if err != nil {
 		return cerror.WrapError(cerror.ErrRedoFileOp, err)
 	}
 
-	return cerror.WrapError(cerror.ErrS3StorageAPI, l.storage.WriteFile(ctx, l.getMetafileName(), fileData))
+	return cerror.WrapError(cerror.ErrS3StorageAPI,
+		l.extStorage.WriteFile(ctx, l.getMetafileName(), fileData))
 }
 
-func (l *LogWriter) filePath() string {
+func (l *logWriter) filePath() string {
 	return filepath.Join(l.cfg.Dir, l.getMetafileName())
 }
 
-func (cfg LogWriterConfig) String() string {
-	return fmt.Sprintf("%s:%s:%s:%s:%d:%d:%s:%t",
-		cfg.ChangeFeedID.Namespace, cfg.ChangeFeedID.ID,
-		cfg.CaptureID, cfg.Dir, cfg.MaxLogSize,
-		cfg.FlushIntervalInMs, cfg.S3URI.String(), cfg.S3Storage)
+func (cfg logWriterConfig) String() string {
+	return fmt.Sprintf("%s:%s:%s:%s:%d:%s:%t",
+		cfg.ChangeFeedID.Namespace, cfg.ChangeFeedID.ID, cfg.CaptureID,
+		cfg.Dir, cfg.MaxLogSize, cfg.URI.String(), cfg.UseExternalStorage)
 }

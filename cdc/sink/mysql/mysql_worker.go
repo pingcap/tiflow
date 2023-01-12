@@ -32,7 +32,7 @@ type mysqlSinkWorker struct {
 	txnCh            chan *model.SingleTableTxn
 	maxTxnRow        int
 	bucket           int
-	execDMLs         func(context.Context, []*model.RowChangedEvent, uint64, int) error
+	execDMLs         func(context.Context, []*model.SingleTableTxn, uint64, int) error
 	metricBucketSize prometheus.Counter
 	receiver         *notify.Receiver
 	closedCh         chan struct{}
@@ -44,7 +44,7 @@ func newMySQLSinkWorker(
 	bucket int,
 	metricBucketSize prometheus.Counter,
 	receiver *notify.Receiver,
-	execDMLs func(context.Context, []*model.RowChangedEvent, uint64, int) error,
+	execDMLs func(context.Context, []*model.SingleTableTxn, uint64, int) error,
 ) *mysqlSinkWorker {
 	return &mysqlSinkWorker{
 		txnCh:            make(chan *model.SingleTableTxn, 1024),
@@ -82,9 +82,10 @@ func (w *mysqlSinkWorker) isNormal() bool {
 
 func (w *mysqlSinkWorker) run(ctx context.Context) (err error) {
 	var (
-		toExecRows []*model.RowChangedEvent
+		toExecTxns []*model.SingleTableTxn
 		replicaID  uint64
 		txnNum     int
+		rowNum     int
 	)
 
 	// mark FinishWg before worker exits, all data txns can be omitted.
@@ -112,17 +113,18 @@ func (w *mysqlSinkWorker) run(ctx context.Context) (err error) {
 	}()
 
 	flushRows := func() error {
-		if len(toExecRows) == 0 {
+		if len(toExecTxns) == 0 {
 			return nil
 		}
-		err := w.execDMLs(ctx, toExecRows, replicaID, w.bucket)
+		err := w.execDMLs(ctx, toExecTxns, replicaID, w.bucket)
 		if err != nil {
 			txnNum = 0
 			return err
 		}
-		toExecRows = toExecRows[:0]
+		toExecTxns = toExecTxns[:0]
 		w.metricBucketSize.Add(float64(txnNum))
 		txnNum = 0
+		rowNum = 0
 		return nil
 	}
 
@@ -143,7 +145,7 @@ func (w *mysqlSinkWorker) run(ctx context.Context) (err error) {
 				txn.FinishWg.Done()
 				continue
 			}
-			if txn.ReplicaID != replicaID || len(toExecRows)+len(txn.Rows) > w.maxTxnRow {
+			if txn.ReplicaID != replicaID || rowNum+len(txn.Rows) > w.maxTxnRow {
 				if err := flushRows(); err != nil {
 					w.hasError.Store(true)
 					txnNum++
@@ -151,7 +153,8 @@ func (w *mysqlSinkWorker) run(ctx context.Context) (err error) {
 				}
 			}
 			replicaID = txn.ReplicaID
-			toExecRows = append(toExecRows, txn.Rows...)
+			toExecTxns = append(toExecTxns, txn)
+			rowNum += len(txn.Rows)
 			txnNum++
 		case <-w.receiver.C:
 			if err := flushRows(); err != nil {

@@ -18,7 +18,6 @@ import (
 
 	. "github.com/pingcap/check"
 	"github.com/pingcap/tidb/util/filter"
-
 	"github.com/pingcap/tiflow/dm/dm/config"
 	"github.com/pingcap/tiflow/dm/pkg/log"
 	"github.com/pingcap/tiflow/dm/pkg/schema"
@@ -442,4 +441,68 @@ create table t (
 	skip, err = SkipDMLByExpression(sessCtx, []interface{}{2}, expr, ti.Columns)
 	c.Assert(err, IsNil)
 	c.Assert(skip, Equals, false)
+}
+
+func (s *testFilterSuite) TestGetUpdateExprsSameLength(c *C) {
+	var (
+		ctx     = context.Background()
+		dbName  = "test"
+		tblName = "t"
+		table   = &filter.Table{
+			Schema: dbName,
+			Name:   tblName,
+		}
+		tableStr = `
+create table t (
+	c varchar(20)
+);`
+		exprStr = "c > 1"
+		sessCtx = utils.NewSessionCtx(map[string]string{"time_zone": "UTC"})
+	)
+
+	cases := []*config.ExpressionFilter{
+		{
+			Schema:          dbName,
+			Table:           tblName,
+			InsertValueExpr: exprStr,
+		},
+		{
+			Schema:             dbName,
+			Table:              tblName,
+			UpdateOldValueExpr: exprStr,
+		},
+		{
+			Schema:             dbName,
+			Table:              tblName,
+			UpdateNewValueExpr: exprStr,
+		},
+		{
+			Schema:             dbName,
+			Table:              tblName,
+			UpdateOldValueExpr: exprStr,
+			UpdateNewValueExpr: exprStr,
+		},
+	}
+
+	dbConn := dbconn.NewDBConn(&config.SubTaskConfig{}, s.baseConn)
+	schemaTracker, err := schema.NewTracker(ctx, "unit-test", defaultTestSessionCfg, dbConn)
+	c.Assert(err, IsNil)
+	c.Assert(schemaTracker.CreateSchemaIfNotExists(dbName), IsNil)
+	c.Assert(schemaTracker.Exec(ctx, dbName, tableStr), IsNil)
+
+	tableInfo, err := schemaTracker.GetTableInfo(table)
+	c.Assert(err, IsNil)
+
+	for i, ca := range cases {
+		c.Logf("case #%d", i)
+		g := NewExprFilterGroup(sessCtx, []*config.ExpressionFilter{ca})
+		oldExprs, newExprs, err2 := g.GetUpdateExprs(table, tableInfo)
+		c.Assert(err2, IsNil)
+		c.Assert(len(oldExprs), Equals, len(newExprs))
+	}
+	g := NewExprFilterGroup(sessCtx, cases)
+	oldExprs, newExprs, err := g.GetUpdateExprs(table, tableInfo)
+	c.Assert(err, IsNil)
+	c.Assert(len(oldExprs), Equals, len(newExprs))
+	c.Assert(len(oldExprs), Equals, 3)
 }

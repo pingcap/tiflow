@@ -14,21 +14,6 @@ stop() {
 	stop_tidb_cluster
 }
 
-# check resolved ts has been persisted in redo log meta
-function check_resolved_ts() {
-	changefeedid=$1
-	check_tso=$2
-	redo_dir=$3
-	rts=$(cdc redo meta --storage="nfs:///tmp/tidb_cdc_test/consistent_replicate_nfs/nfs/redo" --tmp-dir="$redo_dir" | grep -oE "resolved-ts:[0-9]+" | awk -F: '{print $2}')
-	if [[ "$rts" -gt "$check_tso" ]]; then
-		return
-	fi
-	echo "global resolved ts $rts not forward to $check_tso"
-	exit 1
-}
-
-export -f check_resolved_ts
-
 function run() {
 	# we only support eventually consistent replication with MySQL sink
 	if [ "$SINK_TYPE" == "kafka" ]; then
@@ -64,13 +49,14 @@ function run() {
 	# to ensure row changed events have been replicated to TiCDC
 	sleep 10
 
-	nfs_download_path=$WORK_DIR/cdc_data/redo/$changefeed_id
+	storage_path="nfs://$WORK_DIR/nfs/redo"
+	tmp_download_path=$WORK_DIR/cdc_data/redo/$changefeed_id
 	current_tso=$(cdc cli tso query --pd=http://$UP_PD_HOST_1:$UP_PD_PORT_1)
-	ensure 50 check_resolved_ts $changefeed_id $current_tso $nfs_download_path
+	ensure 50 check_redo_resolved_ts $changefeed_id $current_tso $storage_path $tmp_download_path/meta
 	cleanup_process $CDC_BINARY
 
 	export GO_FAILPOINTS=''
-	cdc redo apply --tmp-dir="$nfs_download_path" --storage="nfs://$WORK_DIR/nfs/redo" --sink-uri="mysql://normal:123456@127.0.0.1:3306/"
+	cdc redo apply --tmp-dir="$tmp_download_path/apply" --storage="$storage_path" --sink-uri="mysql://normal:123456@127.0.0.1:3306/"
 	check_sync_diff $WORK_DIR $CUR/conf/diff_config.toml
 }
 

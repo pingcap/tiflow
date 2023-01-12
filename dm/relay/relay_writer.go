@@ -43,11 +43,11 @@ type WResult struct {
 
 // Writer writes binlog events into disk or any other memory structure.
 // The writer should support:
-//   1. write binlog events and report the operation result
-//   2. skip any obsolete binlog events
-//   3. generate dummy events to fill the gap if needed
-//   4. rotate binlog(relay) file if needed
-//   5. rollback/discard unfinished binlog entries(events or transactions)
+//  1. write binlog events and report the operation result
+//  2. skip any obsolete binlog events
+//  3. generate dummy events to fill the gap if needed
+//  4. rotate binlog(relay) file if needed
+//  5. rollback/discard unfinished binlog entries(events or transactions)
 type Writer interface {
 	// Init inits the writer, should be called before any other method
 	Init(uuid, filename string)
@@ -113,10 +113,10 @@ func (w *FileWriter) offset() int64 {
 }
 
 // handle FormatDescriptionEvent:
-//   1. close the previous binlog file
-//   2. open/create a new binlog file
-//   3. write the binlog file header if not exists
-//   4. write the FormatDescriptionEvent if not exists one
+//  1. close the previous binlog file
+//  2. open/create a new binlog file
+//  3. write the binlog file header if not exists
+//  4. write the FormatDescriptionEvent if not exists one
 func (w *FileWriter) handleFormatDescriptionEvent(ev *replication.BinlogEvent) (WResult, error) {
 	// close the previous binlog file
 	w.logger.Info("closing previous underlying binlog writer", zap.Reflect("status", w.out.Status()))
@@ -171,13 +171,17 @@ func (w *FileWriter) handleFormatDescriptionEvent(ev *replication.BinlogEvent) (
 }
 
 // handle RotateEvent:
-//   1. update binlog filename if needed
-//   2. write the RotateEvent if not fake
+//  1. update binlog filename if needed
+//  2. write the RotateEvent if not fake
+//
 // NOTE: we only see fake event for RotateEvent in MySQL source code,
-//       if see fake event for other event type, then handle them.
+//
+//	if see fake event for other event type, then handle them.
+//
 // NOTE: we do not create a new binlog file when received a RotateEvent,
-//       instead, we create a new binlog file when received a FormatDescriptionEvent.
-//       because a binlog file without any events has no meaning.
+//
+//	instead, we create a new binlog file when received a FormatDescriptionEvent.
+//	because a binlog file without any events has no meaning.
 func (w *FileWriter) handleRotateEvent(ev *replication.BinlogEvent) (result WResult, err error) {
 	rotateEv, ok := ev.Event.(*replication.RotateEvent)
 	if !ok {
@@ -226,9 +230,9 @@ func (w *FileWriter) handleRotateEvent(ev *replication.BinlogEvent) (result WRes
 }
 
 // handle non-special event:
-//   1. handle a potential hole if exists
-//   2. handle any duplicate events if exist
-//   3. write the non-duplicate event
+//  1. handle a potential hole if exists
+//  2. handle any duplicate events if exist
+//  3. write the non-duplicate event
 func (w *FileWriter) handleEventDefault(ev *replication.BinlogEvent) (WResult, error) {
 	result, err := w.handlePotentialHoleOrDuplicate(ev)
 	if err != nil {

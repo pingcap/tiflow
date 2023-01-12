@@ -21,13 +21,14 @@ import (
 	"github.com/pingcap/log"
 	"github.com/pingcap/tiflow/cdc/contextutil"
 	"github.com/pingcap/tiflow/cdc/model"
-	"github.com/pingcap/tiflow/cdc/redo"
+	"github.com/pingcap/tiflow/cdc/redo/common"
 	"github.com/pingcap/tiflow/cdc/redo/reader"
 	"github.com/pingcap/tiflow/cdc/sink"
 	"github.com/pingcap/tiflow/cdc/sink/mysql"
 	"github.com/pingcap/tiflow/pkg/config"
 	cerror "github.com/pingcap/tiflow/pkg/errors"
 	"github.com/pingcap/tiflow/pkg/filter"
+	"github.com/pingcap/tiflow/pkg/redo"
 	"github.com/pingcap/tiflow/pkg/util"
 	"go.uber.org/zap"
 	"golang.org/x/sync/errgroup"
@@ -71,12 +72,12 @@ func (rac *RedoApplierConfig) toLogReaderConfig() (string, *reader.LogReaderConf
 		return "", nil, cerror.WrapError(cerror.ErrConsistentStorage, err)
 	}
 	cfg := &reader.LogReaderConfig{
-		Dir:       uri.Path,
-		S3Storage: redo.IsS3StorageEnabled(uri.Scheme),
+		Dir:                uri.Path,
+		UseExternalStorage: redo.IsExternalStorage(uri.Scheme),
 	}
-	if cfg.S3Storage {
-		cfg.S3URI = *uri
-		// If use s3 as backend, applier will download redo logs to local dir.
+	if cfg.UseExternalStorage {
+		cfg.URI = *uri
+		// If use external storage as backend, applier will download redo logs to local dir.
 		cfg.Dir = rac.Dir
 	}
 	return uri.Scheme, cfg, nil
@@ -163,7 +164,7 @@ func (ra *RedoApplier) consumeLogs(ctx context.Context) error {
 				}
 				cachedRows = make([]*model.RowChangedEvent, 0, emitBatch)
 			}
-			cachedRows = append(cachedRows, redo.LogToRow(redoLog))
+			cachedRows = append(cachedRows, common.LogToRow(redoLog))
 
 			if redoLog.Row.CommitTs > tableResolvedTsMap[tableID] {
 				tableResolvedTsMap[tableID], lastResolvedTs = lastResolvedTs, redoLog.Row.CommitTs
@@ -202,7 +203,7 @@ func createRedoReaderImpl(ctx context.Context, cfg *RedoApplierConfig) (reader.R
 	if err != nil {
 		return nil, err
 	}
-	return redo.NewRedoReader(ctx, storageType, readerCfg)
+	return reader.NewRedoLogReader(ctx, storageType, readerCfg)
 }
 
 // ReadMeta creates a new redo applier and read meta from reader

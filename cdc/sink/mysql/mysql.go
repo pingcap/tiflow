@@ -25,6 +25,8 @@ import (
 	"sync"
 	"time"
 
+	"github.com/pingcap/tiflow/pkg/sqlmodel"
+
 	dmysql "github.com/go-sql-driver/mysql"
 	"github.com/pingcap/errors"
 	"github.com/pingcap/failpoint"
@@ -406,13 +408,17 @@ func needSwitchDB(ddl *model.DDLEvent) bool {
 	return true
 }
 
-func querySQLMode(ctx context.Context, db *sql.DB) (sqlMode string, err error) {
+func querySQLMode(ctx context.Context, db *sql.DB) (string, error) {
 	row := db.QueryRowContext(ctx, "SELECT @@SESSION.sql_mode;")
-	err = row.Scan(&sqlMode)
+	var sqlMode sql.NullString
+	err := row.Scan(&sqlMode)
 	if err != nil {
 		err = cerror.WrapError(cerror.ErrMySQLQueryError, err)
 	}
-	return
+	if !sqlMode.Valid {
+		sqlMode.String = ""
+	}
+	return sqlMode.String, err
 }
 
 // check whether the target charset is supported
@@ -663,8 +669,6 @@ func (s *mysqlSink) execDMLWithMaxRetries(pctx context.Context, dmls *preparedDM
 	return retry.Do(pctx, func() error {
 		writeTimeout, _ := time.ParseDuration(s.params.writeTimeout)
 		writeTimeout += networkDriftDuration
-		ctx, cancelFunc := context.WithTimeout(pctx, writeTimeout)
-		defer cancelFunc()
 
 		failpoint.Inject("MySQLSinkTxnRandomError", func() {
 			failpoint.Return(
@@ -676,7 +680,7 @@ func (s *mysqlSink) execDMLWithMaxRetries(pctx context.Context, dmls *preparedDM
 			time.Sleep(time.Hour)
 		})
 		err := s.statistics.RecordBatchExecution(func() (int, error) {
-			tx, err := s.db.BeginTx(ctx, nil)
+			tx, err := s.db.BeginTx(pctx, nil)
 			if err != nil {
 				return 0, logDMLTxnErr(
 					cerror.WrapError(cerror.ErrMySQLTxnError, err),
@@ -686,6 +690,7 @@ func (s *mysqlSink) execDMLWithMaxRetries(pctx context.Context, dmls *preparedDM
 			for i, query := range dmls.sqls {
 				args := dmls.values[i]
 				log.Debug("exec row", zap.String("sql", query), zap.Any("args", args))
+				ctx, cancelFunc := context.WithTimeout(pctx, writeTimeout)
 				if _, err := tx.ExecContext(ctx, query, args...); err != nil {
 					if rbErr := tx.Rollback(); rbErr != nil {
 						log.Warn("failed to rollback txn", zap.Error(err))
@@ -693,22 +698,27 @@ func (s *mysqlSink) execDMLWithMaxRetries(pctx context.Context, dmls *preparedDM
 							cerror.WrapError(cerror.ErrMySQLTxnError, err),
 							start, s.params.changefeedID, query, dmls.rowCount)
 					}
+					cancelFunc()
 					return 0, logDMLTxnErr(
 						cerror.WrapError(cerror.ErrMySQLTxnError, err),
 						start, s.params.changefeedID, query, dmls.rowCount)
 				}
+				cancelFunc()
 			}
 
 			if len(dmls.markSQL) != 0 {
 				log.Debug("exec row", zap.String("sql", dmls.markSQL))
+				ctx, cancelFunc := context.WithTimeout(pctx, writeTimeout)
 				if _, err := tx.ExecContext(ctx, dmls.markSQL); err != nil {
 					if rbErr := tx.Rollback(); rbErr != nil {
 						log.Warn("failed to rollback txn", zap.Error(err))
 					}
+					cancelFunc()
 					return 0, logDMLTxnErr(
 						cerror.WrapError(cerror.ErrMySQLTxnError, err),
 						start, s.params.changefeedID, dmls.markSQL, dmls.rowCount)
 				}
+				cancelFunc()
 			}
 
 			if err = tx.Commit(); err != nil {
@@ -733,6 +743,210 @@ func (s *mysqlSink) execDMLWithMaxRetries(pctx context.Context, dmls *preparedDM
 		retry.WithIsRetryableErr(isRetryableDMLError))
 }
 
+// convert2RowChanges is a helper function that convert the row change representation
+// of CDC into a general one.
+func convert2RowChanges(
+	row *model.RowChangedEvent,
+	tableInfo *timodel.TableInfo,
+	changeType sqlmodel.RowChangeType,
+) *sqlmodel.RowChange {
+	preValues := make([]interface{}, 0, len(row.PreColumns))
+	for _, col := range row.PreColumns {
+		if col == nil {
+			// will not use this value, just append a dummy value
+			preValues = append(preValues, "omitted value")
+			continue
+		}
+		preValues = append(preValues, col.Value)
+	}
+
+	postValues := make([]interface{}, 0, len(row.Columns))
+	for _, col := range row.Columns {
+		if col == nil {
+			postValues = append(postValues, "omitted value")
+			continue
+		}
+		postValues = append(postValues, col.Value)
+	}
+
+	var res *sqlmodel.RowChange
+
+	switch changeType {
+	case sqlmodel.RowChangeInsert:
+		res = sqlmodel.NewRowChange(
+			row.Table,
+			nil,
+			nil,
+			postValues,
+			tableInfo,
+			nil, nil)
+	case sqlmodel.RowChangeUpdate:
+		res = sqlmodel.NewRowChange(
+			row.Table,
+			nil,
+			preValues,
+			postValues,
+			tableInfo,
+			nil, nil)
+	case sqlmodel.RowChangeDelete:
+		res = sqlmodel.NewRowChange(
+			row.Table,
+			nil,
+			preValues,
+			nil,
+			tableInfo,
+			nil, nil)
+	}
+	return res
+}
+
+func convertBinaryToString(row *model.RowChangedEvent) {
+	for i, col := range row.Columns {
+		if col == nil {
+			continue
+		}
+		if col.Charset != "" && col.Charset != charset.CharsetBin {
+			colValBytes, ok := col.Value.([]byte)
+			if ok {
+				row.Columns[i].Value = string(colValBytes)
+			}
+		}
+	}
+}
+
+// TODO: Find a way to make batch delete dmls more efficient.
+func (s *mysqlSink) groupRowsByType(
+	singleTxnDMLs []*model.RowChangedEvent,
+	tableInfo *timodel.TableInfo,
+	spiltUpdate bool,
+) (insertRows, updateRows, deleteRows [][]*sqlmodel.RowChange) {
+	preAllocateSize := len(singleTxnDMLs)
+	if preAllocateSize > s.params.maxTxnRow {
+		preAllocateSize = s.params.maxTxnRow
+	}
+
+	insertRow := make([]*sqlmodel.RowChange, 0, preAllocateSize)
+	updateRow := make([]*sqlmodel.RowChange, 0, preAllocateSize)
+	deleteRow := make([]*sqlmodel.RowChange, 0, preAllocateSize)
+
+	for _, row := range singleTxnDMLs {
+		convertBinaryToString(row)
+
+		if row.IsInsert() {
+			insertRow = append(
+				insertRow,
+				convert2RowChanges(row, tableInfo, sqlmodel.RowChangeInsert))
+			if len(insertRow) >= s.params.maxTxnRow {
+				insertRows = append(insertRows, insertRow)
+				insertRow = make([]*sqlmodel.RowChange, 0, preAllocateSize)
+			}
+		}
+
+		if row.IsDelete() {
+			deleteRow = append(
+				deleteRow,
+				convert2RowChanges(row, tableInfo, sqlmodel.RowChangeDelete))
+			if len(deleteRow) >= s.params.maxTxnRow {
+				deleteRows = append(deleteRows, deleteRow)
+				deleteRow = make([]*sqlmodel.RowChange, 0, preAllocateSize)
+			}
+		}
+
+		if row.IsUpdate() {
+			if spiltUpdate {
+				deleteRow = append(
+					deleteRow,
+					convert2RowChanges(row, tableInfo, sqlmodel.RowChangeDelete))
+				if len(deleteRow) >= s.params.maxTxnRow {
+					deleteRows = append(deleteRows, deleteRow)
+					deleteRow = make([]*sqlmodel.RowChange, 0, s.params.maxTxnRow)
+				}
+				insertRow = append(
+					insertRow,
+					convert2RowChanges(row, tableInfo, sqlmodel.RowChangeInsert))
+				if len(insertRow) >= s.params.maxTxnRow {
+					insertRows = append(insertRows, insertRow)
+					insertRow = make([]*sqlmodel.RowChange, 0, s.params.maxTxnRow)
+				}
+			} else {
+				updateRow = append(
+					updateRow,
+					convert2RowChanges(row, tableInfo, sqlmodel.RowChangeUpdate))
+				if len(updateRow) >= s.params.maxTxnRow {
+					updateRows = append(updateRows, updateRow)
+					updateRow = make([]*sqlmodel.RowChange, 0, s.params.maxTxnRow)
+				}
+			}
+		}
+	}
+
+	if len(insertRow) > 0 {
+		insertRows = append(insertRows, insertRow)
+	}
+	if len(updateRow) > 0 {
+		updateRows = append(updateRows, updateRow)
+	}
+	if len(deleteRow) > 0 {
+		deleteRows = append(deleteRows, deleteRow)
+	}
+
+	return
+}
+
+func (s *mysqlSink) batchSingleTxnDmls(
+	singleTxnDMLs []*model.RowChangedEvent,
+	tableInfo *timodel.TableInfo,
+	translateToInsert bool,
+) (sqls []string, values [][]interface{}) {
+	insertRows, updateRows, deleteRows := s.groupRowsByType(singleTxnDMLs, tableInfo, !translateToInsert)
+
+	if len(deleteRows) > 0 {
+		for _, rows := range deleteRows {
+			sql, value := sqlmodel.GenDeleteSQL(rows...)
+			sqls = append(sqls, sql)
+			values = append(values, value)
+		}
+	}
+
+	// handle insert
+	if len(insertRows) > 0 {
+		for _, rows := range insertRows {
+			if translateToInsert {
+				sql, value := sqlmodel.GenInsertSQL(sqlmodel.DMLInsert, rows...)
+				sqls = append(sqls, sql)
+				values = append(values, value)
+			} else {
+				sql, value := sqlmodel.GenInsertSQL(sqlmodel.DMLReplace, rows...)
+				sqls = append(sqls, sql)
+				values = append(values, value)
+			}
+		}
+	}
+
+	// handle update
+	if len(updateRows) > 0 {
+		for _, rows := range updateRows {
+			sql, value := sqlmodel.GenUpdateSQL(rows...)
+			sqls = append(sqls, sql)
+			values = append(values, value)
+		}
+	}
+
+	return
+}
+
+func hasHandleKey(cols []*model.Column) bool {
+	for _, col := range cols {
+		if col == nil {
+			continue
+		}
+		if col.Flag.IsHandleKey() {
+			return true
+		}
+	}
+	return false
+}
+
 type preparedDMLs struct {
 	sqls     []string
 	values   [][]interface{}
@@ -741,22 +955,17 @@ type preparedDMLs struct {
 }
 
 // prepareDMLs converts model.RowChangedEvent list to query string list and args list
-func (s *mysqlSink) prepareDMLs(rows []*model.RowChangedEvent, replicaID uint64, bucket int) *preparedDMLs {
-	sqls := make([]string, 0, len(rows))
-	values := make([][]interface{}, 0, len(rows))
-	replaces := make(map[string][][]interface{})
-	rowCount := 0
-	// translateToInsert control the update and insert behavior
-	translateToInsert := s.params.enableOldValue && !s.params.safeMode
-	for _, row := range rows {
-		if !translateToInsert {
-			break
-		}
-		// It can be translated in to INSERT, if the row is committed after
-		// we starting replicating the table, which means it must not be
-		// replicated before, and there is no such row in downstream MySQL.
-		translateToInsert = row.CommitTs > row.ReplicatingTs
+func (s *mysqlSink) prepareDMLs(txns []*model.SingleTableTxn, replicaID uint64, bucket int) *preparedDMLs {
+	inRowCount := 0
+	for _, txn := range txns {
+		inRowCount += len(txn.Rows)
 	}
+
+	sqls := make([]string, 0, inRowCount)
+	values := make([][]interface{}, 0, inRowCount)
+	replaces := make(map[string][][]interface{})
+
+	rowCount := 0
 
 	// flush cached batch replace or insert, to keep the sequence of DMLs
 	flushCacheDMLs := func() {
@@ -768,77 +977,117 @@ func (s *mysqlSink) prepareDMLs(rows []*model.RowChangedEvent, replicaID uint64,
 		}
 	}
 
-	for _, row := range rows {
-		var query string
-		var args []interface{}
-		quoteTable := quotes.QuoteSchema(row.Table.Schema, row.Table.Table)
-
-		// If the old value is enabled, is not in safe mode and is an update event, then translate to UPDATE.
-		// NOTICE: Only update events with the old value feature enabled will have both columns and preColumns.
-		if translateToInsert && len(row.PreColumns) != 0 && len(row.Columns) != 0 {
-			flushCacheDMLs()
-			query, args = prepareUpdate(quoteTable, row.PreColumns, row.Columns, s.forceReplicate)
-			if query != "" {
-				sqls = append(sqls, query)
-				values = append(values, args)
-				rowCount++
-			}
+	// translateToInsert control the update and insert behavior
+	translateToInsert := s.params.enableOldValue && !s.params.safeMode
+	for _, txn := range txns {
+		if len(txn.Rows) == 0 {
 			continue
 		}
 
-		// Case for update event or delete event.
-		// For update event:
-		// If old value is disabled or in safe mode, update will be translated to DELETE + REPLACE SQL.
-		// So we will prepare a DELETE SQL here.
-		// For delete event:
-		// It will be translated directly into a DELETE SQL.
-		if len(row.PreColumns) != 0 {
-			flushCacheDMLs()
-			query, args = prepareDelete(quoteTable, row.PreColumns, s.forceReplicate)
-			if query != "" {
-				sqls = append(sqls, query)
-				values = append(values, args)
-				rowCount++
+		firstRow := txn.Rows[0]
+
+		// A row can be translated in to INSERT, when it was committed after
+		// the table it belongs to been replicating by TiCDC, which means it must not be
+		// replicated before, and there is no such row in downstream MySQL.
+		for _, row := range txn.Rows {
+			if !translateToInsert {
+				break
+			}
+			// It can be translated in to INSERT, if the row is committed after
+			// we starting replicating the table, which means it must not be
+			// replicated before, and there is no such row in downstream MySQL.
+			translateToInsert = row.CommitTs > row.ReplicatingTs
+		}
+
+		// Determine whether to use batch dml feature here.
+		if s.params.batchDMLEnable {
+			tableColumns := firstRow.Columns
+			if firstRow.IsDelete() {
+				tableColumns = firstRow.PreColumns
+			}
+			// only use batch dml when the table has a handle key
+			if hasHandleKey(tableColumns) {
+				rowCount += len(txn.Rows)
+				// TODO(dongmen): find a better way to get table info.
+				tableInfo := model.BuildTiDBTableInfo(tableColumns, firstRow.IndexColumns)
+				sql, value := s.batchSingleTxnDmls(txn.Rows, tableInfo, translateToInsert)
+				sqls = append(sqls, sql...)
+				values = append(values, value...)
+				continue
 			}
 		}
 
-		// Case for update event or insert event.
-		// For update event:
-		// If old value is disabled or in safe mode, update will be translated to DELETE + REPLACE SQL.
-		// So we will prepare a REPLACE SQL here.
-		// For insert event:
-		// It will be translated directly into a
-		// INSERT(old value is enabled and not in safe mode)
-		// or REPLACE(old value is disabled or in safe mode) SQL.
-		if len(row.Columns) != 0 {
-			if s.params.batchReplaceEnabled {
-				query, args = prepareReplace(quoteTable, row.Columns, false /* appendPlaceHolder */, translateToInsert)
+		for _, row := range txn.Rows {
+			quoteTable := row.Table.QuoteString()
+			var query string
+			var args []interface{}
+			// If the old value is enabled, is not in safe mode and is an update event, then translate to UPDATE.
+			// NOTICE: Only update events with the old value feature enabled will have both columns and preColumns.
+			if translateToInsert && len(row.PreColumns) != 0 && len(row.Columns) != 0 {
+				flushCacheDMLs()
+				query, args = prepareUpdate(quoteTable, row.PreColumns, row.Columns, s.forceReplicate)
 				if query != "" {
-					if _, ok := replaces[query]; !ok {
-						replaces[query] = make([][]interface{}, 0)
-					}
-					replaces[query] = append(replaces[query], args)
+					sqls = append(sqls, query)
+					values = append(values, args)
 					rowCount++
 				}
-			} else {
-				query, args = prepareReplace(quoteTable, row.Columns, true /* appendPlaceHolder */, translateToInsert)
+				continue
+			}
+
+			// Case for update event or delete event.
+			// For update event:
+			// If old value is disabled or in safe mode, update will be translated to DELETE + REPLACE SQL.
+			// So we will prepare a DELETE SQL here.
+			// For delete event:
+			// It will be translated directly into a DELETE SQL.
+			if len(row.PreColumns) != 0 {
+				flushCacheDMLs()
+				query, args = prepareDelete(quoteTable, row.PreColumns, s.forceReplicate)
 				if query != "" {
 					sqls = append(sqls, query)
 					values = append(values, args)
 					rowCount++
 				}
 			}
+
+			// Case for update event or insert event.
+			// For update event:
+			// If old value is disabled or in safe mode, update will be translated to DELETE + REPLACE SQL.
+			// So we will prepare a REPLACE SQL here.
+			// For insert event:
+			// It will be translated directly into a
+			// INSERT(old value is enabled and not in safe mode)
+			// or REPLACE(old value is disabled or in safe mode) SQL.
+			if len(row.Columns) != 0 {
+				if s.params.batchReplaceEnabled {
+					query, args = prepareReplace(quoteTable, row.Columns, false /* appendPlaceHolder */, translateToInsert)
+					if query != "" {
+						if _, ok := replaces[query]; !ok {
+							replaces[query] = make([][]interface{}, 0)
+						}
+						replaces[query] = append(replaces[query], args)
+						rowCount++
+					}
+				} else {
+					query, args = prepareReplace(quoteTable, row.Columns, true /* appendPlaceHolder */, translateToInsert)
+					if query != "" {
+						sqls = append(sqls, query)
+						values = append(values, args)
+						rowCount++
+					}
+				}
+			}
 		}
 	}
 	flushCacheDMLs()
-
 	dmls := &preparedDMLs{
 		sqls:   sqls,
 		values: values,
 	}
-	if s.cyclic != nil && len(rows) > 0 {
+
+	if s.cyclic != nil && inRowCount > 0 {
 		// Write mark table with the current replica ID.
-		row := rows[0]
+		row := txns[0].Rows[0]
 		updateMark := s.cyclic.UdpateSourceTableCyclicMark(
 			row.Table.Schema, row.Table.Table, uint64(bucket), replicaID, row.StartTs)
 		dmls.markSQL = updateMark
@@ -849,7 +1098,7 @@ func (s *mysqlSink) prepareDMLs(rows []*model.RowChangedEvent, replicaID uint64,
 	return dmls
 }
 
-func (s *mysqlSink) execDMLs(ctx context.Context, rows []*model.RowChangedEvent, replicaID uint64, bucket int) error {
+func (s *mysqlSink) execDMLs(ctx context.Context, txns []*model.SingleTableTxn, replicaID uint64, bucket int) error {
 	failpoint.Inject("SinkFlushDMLPanic", func() {
 		time.Sleep(time.Second)
 		log.Fatal("SinkFlushDMLPanic")
@@ -860,9 +1109,11 @@ func (s *mysqlSink) execDMLs(ctx context.Context, rows []*model.RowChangedEvent,
 		time.Sleep(time.Second * 2)
 		failpoint.Return(errors.Trace(dmysql.ErrInvalidConn))
 	})
-	s.statistics.ObserveRows(rows...)
-	dmls := s.prepareDMLs(rows, replicaID, bucket)
-	log.Debug("prepare DMLs", zap.Any("rows", rows), zap.Strings("sqls", dmls.sqls), zap.Any("values", dmls.values))
+	for _, txn := range txns {
+		s.statistics.ObserveRows(txn.Rows...)
+	}
+	dmls := s.prepareDMLs(txns, replicaID, bucket)
+	log.Debug("prepare DMLs", zap.Any("txns", txns), zap.Strings("sqls", dmls.sqls), zap.Any("values", dmls.values))
 	if err := s.execDMLWithMaxRetries(ctx, dmls, bucket); err != nil {
 		log.Error("execute DMLs failed", zap.String("err", err.Error()))
 		return errors.Trace(err)
