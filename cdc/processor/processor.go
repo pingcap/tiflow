@@ -17,7 +17,6 @@ import (
 	"context"
 	"fmt"
 	"io"
-	"math"
 	"strconv"
 	"sync"
 	"time"
@@ -92,25 +91,17 @@ type processor struct {
 	createTablePipeline func(ctx cdcContext.Context, tableID model.TableID, replicaInfo *model.TableReplicaInfo) (tablepb.TablePipeline, error)
 	newAgent            func(cdcContext.Context, *model.Liveness) (scheduler.Agent, error)
 
-	liveness     *model.Liveness
-	agent        scheduler.Agent
-	checkpointTs model.Ts
-	resolvedTs   model.Ts
+	liveness *model.Liveness
+	agent    scheduler.Agent
 
-	metricResolvedTsGauge           prometheus.Gauge
-	metricResolvedTsLagGauge        prometheus.Gauge
-	metricMinResolvedTableIDGauge   prometheus.Gauge
-	metricCheckpointTsGauge         prometheus.Gauge
-	metricCheckpointTsLagGauge      prometheus.Gauge
-	metricMinCheckpointTableIDGauge prometheus.Gauge
-	metricSyncTableNumGauge         prometheus.Gauge
-	metricSchemaStorageGcTsGauge    prometheus.Gauge
-	metricProcessorErrorCounter     prometheus.Counter
-	metricProcessorTickDuration     prometheus.Observer
-	metricsTableSinkTotalRows       prometheus.Counter
-	metricsTableMemoryHistogram     prometheus.Observer
-	metricsProcessorMemoryGauge     prometheus.Gauge
-	metricRemainKVEventGauge        prometheus.Gauge
+	metricSyncTableNumGauge      prometheus.Gauge
+	metricSchemaStorageGcTsGauge prometheus.Gauge
+	metricProcessorErrorCounter  prometheus.Counter
+	metricProcessorTickDuration  prometheus.Observer
+	metricsTableSinkTotalRows    prometheus.Counter
+	metricsTableMemoryHistogram  prometheus.Observer
+	metricsProcessorMemoryGauge  prometheus.Gauge
+	metricRemainKVEventGauge     prometheus.Gauge
 }
 
 // checkReadyForMessages checks whether all necessary Etcd keys have been established.
@@ -279,9 +270,7 @@ func (p *processor) IsAddTableFinished(tableID model.TableID, isPrepare bool) bo
 		return false
 	}
 
-	localResolvedTs := p.resolvedTs
 	globalResolvedTs := p.changefeed.Status.ResolvedTs
-	localCheckpointTs := p.agent.GetLastSentCheckpointTs()
 	globalCheckpointTs := p.changefeed.Status.CheckpointTs
 
 	var tableResolvedTs, tableCheckpointTs uint64
@@ -328,10 +317,8 @@ func (p *processor) IsAddTableFinished(tableID model.TableID, isPrepare bool) bo
 			zap.String("changefeed", p.changefeedID.ID),
 			zap.Int64("tableID", tableID),
 			zap.Uint64("tableResolvedTs", tableResolvedTs),
-			zap.Uint64("localResolvedTs", localResolvedTs),
 			zap.Uint64("globalResolvedTs", globalResolvedTs),
 			zap.Uint64("tableCheckpointTs", tableCheckpointTs),
-			zap.Uint64("localCheckpointTs", localCheckpointTs),
 			zap.Uint64("globalCheckpointTs", globalCheckpointTs),
 			zap.Any("state", state),
 			zap.Bool("isPrepare", isPrepare))
@@ -344,10 +331,8 @@ func (p *processor) IsAddTableFinished(tableID model.TableID, isPrepare bool) bo
 		zap.String("changefeed", p.changefeedID.ID),
 		zap.Int64("tableID", tableID),
 		zap.Uint64("tableResolvedTs", tableResolvedTs),
-		zap.Uint64("localResolvedTs", localResolvedTs),
 		zap.Uint64("globalResolvedTs", globalResolvedTs),
 		zap.Uint64("tableCheckpointTs", tableCheckpointTs),
-		zap.Uint64("localCheckpointTs", localCheckpointTs),
 		zap.Uint64("globalCheckpointTs", globalCheckpointTs),
 		zap.Any("state", state),
 		zap.Bool("isPrepare", isPrepare))
@@ -442,6 +427,7 @@ func (p *processor) GetAllCurrentTables() []model.TableID {
 	return ret
 }
 
+<<<<<<< HEAD
 // GetCheckpoint implements TableExecutor interface.
 func (p *processor) GetCheckpoint() (checkpointTs, resolvedTs model.Ts) {
 	return p.checkpointTs, p.resolvedTs
@@ -449,6 +435,10 @@ func (p *processor) GetCheckpoint() (checkpointTs, resolvedTs model.Ts) {
 
 // GetTableStatus implements TableExecutor interface
 func (p *processor) GetTableStatus(tableID model.TableID, collectStat bool) tablepb.TableStatus {
+=======
+// GetTableSpanStatus implements TableExecutor interface
+func (p *processor) GetTableSpanStatus(span tablepb.Span, collectStat bool) tablepb.TableStatus {
+>>>>>>> a7600c4f08 (processor,scheduler(ticdc): clean up unused method and metrics (#8049))
 	if p.pullBasedSinking {
 		state, exist := p.sinkManager.GetTableState(tableID)
 		if !exist {
@@ -549,18 +539,6 @@ func newProcessor(
 		cancel:       func() {},
 		liveness:     liveness,
 
-		metricResolvedTsGauge: resolvedTsGauge.
-			WithLabelValues(changefeedID.Namespace, changefeedID.ID),
-		metricResolvedTsLagGauge: resolvedTsLagGauge.
-			WithLabelValues(changefeedID.Namespace, changefeedID.ID),
-		metricMinResolvedTableIDGauge: resolvedTsMinTableIDGauge.
-			WithLabelValues(changefeedID.Namespace, changefeedID.ID),
-		metricCheckpointTsGauge: checkpointTsGauge.
-			WithLabelValues(changefeedID.Namespace, changefeedID.ID),
-		metricCheckpointTsLagGauge: checkpointTsLagGauge.
-			WithLabelValues(changefeedID.Namespace, changefeedID.ID),
-		metricMinCheckpointTableIDGauge: checkpointTsMinTableIDGauge.
-			WithLabelValues(changefeedID.Namespace, changefeedID.ID),
 		metricSyncTableNumGauge: syncTableNumGauge.
 			WithLabelValues(changefeedID.Namespace, changefeedID.ID),
 		metricProcessorErrorCounter: processorErrorCounter.
@@ -709,10 +687,6 @@ func (p *processor) tick(ctx cdcContext.Context) error {
 		return errors.Trace(err)
 	}
 	p.pushResolvedTs2Table()
-	// it is no need to check the error here, because we will use
-	// local time when an error return, which is acceptable
-	pdTime, _ := p.upstream.PDClock.CurrentTime()
-	p.handlePosition(oracle.GetPhysical(pdTime))
 
 	p.doGCSchemaStorage()
 	if err := p.agent.Tick(ctx); err != nil {
@@ -1047,6 +1021,7 @@ func (p *processor) sendError(err error) {
 	}
 }
 
+<<<<<<< HEAD
 // handlePosition calculates the local resolved ts and local checkpoint ts.
 // resolvedTs = min(schemaStorage's resolvedTs, all table's resolvedTs).
 // table's resolvedTs = redo's resolvedTs if redo enable, else sorter's resolvedTs.
@@ -1109,6 +1084,8 @@ func (p *processor) handlePosition(currentTs int64) {
 	p.resolvedTs = minResolvedTs
 }
 
+=======
+>>>>>>> a7600c4f08 (processor,scheduler(ticdc): clean up unused method and metrics (#8049))
 // pushResolvedTs2Table sends global resolved ts to all the table pipelines.
 func (p *processor) pushResolvedTs2Table() {
 	resolvedTs := p.changefeed.Status.ResolvedTs
@@ -1396,14 +1373,6 @@ func (p *processor) Close(ctx cdcContext.Context) error {
 }
 
 func (p *processor) cleanupMetrics() {
-	resolvedTsGauge.DeleteLabelValues(p.changefeedID.Namespace, p.changefeedID.ID)
-	resolvedTsLagGauge.DeleteLabelValues(p.changefeedID.Namespace, p.changefeedID.ID)
-	resolvedTsMinTableIDGauge.DeleteLabelValues(p.changefeedID.Namespace, p.changefeedID.ID)
-
-	checkpointTsGauge.DeleteLabelValues(p.changefeedID.Namespace, p.changefeedID.ID)
-	checkpointTsLagGauge.DeleteLabelValues(p.changefeedID.Namespace, p.changefeedID.ID)
-	checkpointTsMinTableIDGauge.DeleteLabelValues(p.changefeedID.Namespace, p.changefeedID.ID)
-
 	syncTableNumGauge.DeleteLabelValues(p.changefeedID.Namespace, p.changefeedID.ID)
 	processorErrorCounter.DeleteLabelValues(p.changefeedID.Namespace, p.changefeedID.ID)
 	processorSchemaStorageGcTsGauge.DeleteLabelValues(p.changefeedID.Namespace, p.changefeedID.ID)

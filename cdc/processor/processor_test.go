@@ -241,22 +241,16 @@ type mockAgent struct {
 	// dummy to satisfy the interface
 	scheduler.Agent
 
-	executor         scheduler.TableExecutor
-	lastCheckpointTs model.Ts
-	liveness         *model.Liveness
-	isClosed         bool
+	executor scheduler.TableExecutor
+	liveness *model.Liveness
+	isClosed bool
 }
 
 func (a *mockAgent) Tick(_ context.Context) error {
 	if len(a.executor.GetAllCurrentTables()) == 0 {
 		return nil
 	}
-	a.lastCheckpointTs, _ = a.executor.GetCheckpoint()
 	return nil
-}
-
-func (a *mockAgent) GetLastSentCheckpointTs() (checkpointTs model.Ts) {
-	return a.lastCheckpointTs
 }
 
 func (a *mockAgent) Close() error {
@@ -298,10 +292,14 @@ func TestTableExecutorAddingTableIndirectly(t *testing.T) {
 
 	require.Len(t, p.tables, 1)
 
+<<<<<<< HEAD
 	checkpointTs := p.agent.GetLastSentCheckpointTs()
 	require.Equal(t, checkpointTs, model.Ts(0))
 
 	done := p.IsAddTableFinished(1, true)
+=======
+	done := p.IsAddTableSpanFinished(spanz.TableIDToComparableSpan(1), true)
+>>>>>>> a7600c4f08 (processor,scheduler(ticdc): clean up unused method and metrics (#8049))
 	require.False(t, done)
 	require.Equal(t, tablepb.TableStatePreparing, table1.State())
 
@@ -316,11 +314,15 @@ func TestTableExecutorAddingTableIndirectly(t *testing.T) {
 	require.True(t, done)
 	require.Equal(t, tablepb.TableStatePrepared, table1.State())
 
+<<<<<<< HEAD
 	// no table is `replicating`
 	checkpointTs = p.agent.GetLastSentCheckpointTs()
 	require.Equal(t, checkpointTs, model.Ts(20))
 
 	ok, err = p.AddTable(ctx, 1, 30, true)
+=======
+	ok, err = p.AddTableSpan(ctx, spanz.TableIDToComparableSpan(1), 30, true)
+>>>>>>> a7600c4f08 (processor,scheduler(ticdc): clean up unused method and metrics (#8049))
 	require.NoError(t, err)
 	require.True(t, ok)
 	require.Equal(t, model.Ts(0), table1.sinkStartTs)
@@ -339,9 +341,6 @@ func TestTableExecutorAddingTableIndirectly(t *testing.T) {
 	done = p.IsAddTableFinished(1, false)
 	require.True(t, done)
 	require.Equal(t, tablepb.TableStateReplicating, table1.State())
-
-	checkpointTs = p.agent.GetLastSentCheckpointTs()
-	require.Equal(t, table1.CheckpointTs(), checkpointTs)
 
 	err = p.Close(ctx)
 	require.Nil(t, err)
@@ -439,15 +438,16 @@ func TestProcessorClose(t *testing.T) {
 		return status, true, nil
 	})
 	tester.MustApplyPatches()
+<<<<<<< HEAD
 	p.tables[1].(*mockTablePipeline).resolvedTs = 110
 	p.tables[2].(*mockTablePipeline).resolvedTs = 90
 	p.tables[1].(*mockTablePipeline).checkpointTs = 90
 	p.tables[2].(*mockTablePipeline).checkpointTs = 95
+=======
+>>>>>>> a7600c4f08 (processor,scheduler(ticdc): clean up unused method and metrics (#8049))
 	err = p.Tick(ctx)
 	require.Nil(t, err)
 	tester.MustApplyPatches()
-	require.EqualValues(t, p.checkpointTs, 90)
-	require.EqualValues(t, p.resolvedTs, 90)
 	require.Contains(t, p.changefeed.TaskPositions, p.captureInfo.ID)
 
 	require.Nil(t, p.Close(ctx))
@@ -505,6 +505,7 @@ func TestPositionDeleted(t *testing.T) {
 	err = p.Tick(ctx)
 	require.Nil(t, err)
 	tester.MustApplyPatches()
+<<<<<<< HEAD
 
 	table1 := p.tables[1].(*mockTablePipeline)
 	table2 := p.tables[2].(*mockTablePipeline)
@@ -522,6 +523,8 @@ func TestPositionDeleted(t *testing.T) {
 
 	require.Equal(t, model.Ts(31), p.checkpointTs)
 	require.Equal(t, model.Ts(31), p.resolvedTs)
+=======
+>>>>>>> a7600c4f08 (processor,scheduler(ticdc): clean up unused method and metrics (#8049))
 	require.Contains(t, p.changefeed.TaskPositions, p.captureInfo.ID)
 
 	// some others delete the task position
@@ -530,18 +533,12 @@ func TestPositionDeleted(t *testing.T) {
 			return nil, true, nil
 		})
 	tester.MustApplyPatches()
+
 	// position created again
 	err = p.Tick(ctx)
 	require.Nil(t, err)
 	tester.MustApplyPatches()
 	require.Equal(t, &model.TaskPosition{}, p.changefeed.TaskPositions[p.captureInfo.ID])
-
-	// cal position
-	err = p.Tick(ctx)
-	require.Nil(t, err)
-	tester.MustApplyPatches()
-	require.Equal(t, model.Ts(31), p.checkpointTs)
-	require.Equal(t, model.Ts(31), p.resolvedTs)
 	require.Contains(t, p.changefeed.TaskPositions, p.captureInfo.ID)
 }
 
