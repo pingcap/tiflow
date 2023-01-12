@@ -53,7 +53,7 @@ func NewDefaultSchedulerConfig() *SchedulerConfig {
 		// TODO: no need to check balance each minute, relax the interval.
 		CheckBalanceInterval: TomlDuration(time.Minute),
 		AddTableBatchSize:    50,
-		RegionPerSpan:        0,
+		RegionPerSpan:        10000,
 	}
 }
 

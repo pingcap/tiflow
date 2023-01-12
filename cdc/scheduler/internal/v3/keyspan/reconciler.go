@@ -16,6 +16,7 @@ package keyspan
 import (
 	"bytes"
 	"context"
+	"math"
 
 	"github.com/pingcap/log"
 	"github.com/pingcap/tiflow/cdc/model"
@@ -195,8 +196,14 @@ func (m *Reconciler) splitSpan(ctx context.Context, span tablepb.Span) []tablepb
 		return []tablepb.Span{span}
 	}
 
-	spans := make([]tablepb.Span, 0, len(regions)/m.maxRegionPerSpan+1)
-	start, end := 0, m.maxRegionPerSpan
+	regionPerSpan := m.maxRegionPerSpan
+	spanCount, remain := len(regions)/regionPerSpan, len(regions)%regionPerSpan
+	if remain > 0 {
+		// Evenly distributes the remaining regions.
+		regionPerSpan += int(math.Ceil(float64(remain) / float64(spanCount)))
+	}
+	spans := make([]tablepb.Span, 0, spanCount)
+	start, end := 0, regionPerSpan
 	for {
 		startRegion, err := m.regionCache.LocateRegionByID(bo, regions[start])
 		if err != nil {
@@ -233,8 +240,8 @@ func (m *Reconciler) splitSpan(ctx context.Context, span tablepb.Span) []tablepb
 			break
 		}
 		start = end
-		if end+m.maxRegionPerSpan < len(regions) {
-			end = end + m.maxRegionPerSpan
+		if end+regionPerSpan < len(regions) {
+			end = end + regionPerSpan
 		} else {
 			end = len(regions)
 		}
