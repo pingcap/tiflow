@@ -79,7 +79,7 @@ func TestProducerAck(t *testing.T) {
 	require.Nil(t, err)
 	saramaConfig.Producer.Flush.MaxMessages = 1
 
-	client, err := sarama.NewClient(options.BrokerEndpoints, saramaConfig)
+	client, err := kafka.NewSaramaClient(options.BrokerEndpoints, saramaConfig)
 	require.Nil(t, err)
 	adminClient, err := kafka.NewMockAdminClient(options.BrokerEndpoints, saramaConfig)
 	require.Nil(t, err)
@@ -145,7 +145,7 @@ func TestProducerSendMsgFailed(t *testing.T) {
 	// This will make the first send failed.
 	saramaConfig.Producer.MaxMessageBytes = 8
 
-	client, err := sarama.NewClient(options.BrokerEndpoints, saramaConfig)
+	client, err := kafka.NewSaramaClient(options.BrokerEndpoints, saramaConfig)
 	require.Nil(t, err)
 	adminClient, err := kafka.NewMockAdminClient(options.BrokerEndpoints, saramaConfig)
 	require.Nil(t, err)
@@ -206,7 +206,7 @@ func TestProducerDoubleClose(t *testing.T) {
 	saramaConfig, err := kafka.NewSaramaConfig(context.Background(), options)
 	require.Nil(t, err)
 	saramaConfig.Producer.Flush.MaxMessages = 1
-	client, err := sarama.NewClient(options.BrokerEndpoints, saramaConfig)
+	client, err := kafka.NewSaramaClient(options.BrokerEndpoints, saramaConfig)
 	require.Nil(t, err)
 	adminClient, err := kafka.NewMockAdminClient(options.BrokerEndpoints, saramaConfig)
 	require.Nil(t, err)
