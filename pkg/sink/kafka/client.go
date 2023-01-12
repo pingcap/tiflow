@@ -105,7 +105,7 @@ func (c *saramaKafkaClient) SyncProducer() (SyncProducer, error) {
 	if err != nil {
 		return nil, err
 	}
-	return &syncProducer{producer: p}, nil
+	return &saramaSyncProducer{producer: p}, nil
 }
 
 func (c *saramaKafkaClient) AsyncProducer() (AsyncProducer, error) {
@@ -113,7 +113,7 @@ func (c *saramaKafkaClient) AsyncProducer() (AsyncProducer, error) {
 	if err != nil {
 		return nil, err
 	}
-	return &asyncProducer{producer: p}, nil
+	return &saramaAsyncProducer{producer: p}, nil
 }
 
 func (c *saramaKafkaClient) MetricRegistry() metrics.Registry {
@@ -124,11 +124,11 @@ func (c *saramaKafkaClient) Close() error {
 	return c.client.Close()
 }
 
-type syncProducer struct {
+type saramaSyncProducer struct {
 	producer sarama.SyncProducer
 }
 
-func (p *syncProducer) SendMessage(topic string,
+func (p *saramaSyncProducer) SendMessage(topic string,
 	partitionNum int32, key []byte, value []byte,
 ) error {
 	_, _, err := p.producer.SendMessage(&sarama.ProducerMessage{
@@ -140,7 +140,7 @@ func (p *syncProducer) SendMessage(topic string,
 	return err
 }
 
-func (p *syncProducer) SendMessages(topic string,
+func (p *saramaSyncProducer) SendMessages(topic string,
 	partitionNum int32, key []byte, value []byte,
 ) error {
 	msgs := make([]*sarama.ProducerMessage, partitionNum)
@@ -155,33 +155,33 @@ func (p *syncProducer) SendMessages(topic string,
 	return p.producer.SendMessages(msgs)
 }
 
-func (p *syncProducer) Close() error {
+func (p *saramaSyncProducer) Close() error {
 	return p.producer.Close()
 }
 
-type asyncProducer struct {
+type saramaAsyncProducer struct {
 	producer sarama.AsyncProducer
 }
 
-func (p *asyncProducer) AsyncClose() {
+func (p *saramaAsyncProducer) AsyncClose() {
 	p.producer.AsyncClose()
 }
 
-func (p *asyncProducer) Close() error {
+func (p *saramaAsyncProducer) Close() error {
 	return p.producer.Close()
 }
 
 // Input is the input channel for the user to write messages to that they
 // wish to send.
-func (p *asyncProducer) Input() chan<- *sarama.ProducerMessage {
+func (p *saramaAsyncProducer) Input() chan<- *sarama.ProducerMessage {
 	return p.producer.Input()
 }
 
-func (p *asyncProducer) Successes() <-chan *sarama.ProducerMessage {
+func (p *saramaAsyncProducer) Successes() <-chan *sarama.ProducerMessage {
 	return p.producer.Successes()
 }
 
-func (p *asyncProducer) Errors() <-chan *sarama.ProducerError {
+func (p *saramaAsyncProducer) Errors() <-chan *sarama.ProducerError {
 	return p.producer.Errors()
 }
 

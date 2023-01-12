@@ -59,12 +59,12 @@ func (c *ClientMockImpl) DeleteTopic(topicName string) {
 
 // SyncProducer creates a sync producer
 func (c *ClientMockImpl) SyncProducer() (SyncProducer, error) {
-	return &syncProducer{}, nil
+	return &saramaSyncProducer{}, nil
 }
 
 // AsyncProducer creates an async producer
 func (c *ClientMockImpl) AsyncProducer() (AsyncProducer, error) {
-	return &asyncProducer{}, nil
+	return &saramaAsyncProducer{}, nil
 }
 
 // MetricRegistry returns the metric registry
