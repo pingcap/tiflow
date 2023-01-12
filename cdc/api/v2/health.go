@@ -18,7 +18,6 @@ import (
 
 	"github.com/gin-gonic/gin"
 	"github.com/pingcap/tiflow/cdc/api/middleware"
-	"github.com/pingcap/tiflow/cdc/model"
 	cerror "github.com/pingcap/tiflow/pkg/errors"
 )
 
@@ -31,12 +30,12 @@ func (h *OpenAPIV2) health(c *gin.Context) {
 	ctx := c.Request.Context()
 	health, err := h.capture.StatusProvider().IsHealthy(ctx)
 	if err != nil {
-		c.IndentedJSON(http.StatusInternalServerError, model.NewHTTPError(err))
+		_ = c.Error(err)
 		return
 	}
 	if !health {
 		err = cerror.ErrClusterIsUnhealthy.FastGenByArgs()
-		c.IndentedJSON(http.StatusInternalServerError, model.NewHTTPError(err))
+		_ = c.Error(err)
 		return
 	}
 	c.JSON(http.StatusOK, &EmptyResponse{})
