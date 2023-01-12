@@ -48,7 +48,7 @@ type kafkaDMLProducer struct {
 	// Please see the comment of Close().
 	client pkafka.Client
 	// asyncProducer is used to send messages to kafka asynchronously.
-	asyncProducer sarama.AsyncProducer
+	asyncProducer pkafka.AsyncProducer
 	// collector is used to report metrics.
 	collector *collector.Collector
 	// closedMu is used to protect `closed`.
