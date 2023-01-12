@@ -57,18 +57,8 @@ type Node struct {
 	assignedTo workerID
 	removed    bool
 
-	// dependers is an ordered set for all nodes that
-	// conflict with the current node.
-	//
-	// Notes:
-	// (1) An ordered data structure is preferred because
-	//     if we can unblock conflicting transactions in the
-	//     order that they have come in, the out-of-order-ness
-	//     observed downstream will be less than what would have been
-	//     if an unordered set were used.
-	// (2) Google's btree package is selected because it seems to be
-	//     the most popular production-grade ordered set implementation in Go.
-	// dependers *btree.BTreeG[*Node]
+	// If there are two nodes A and B depends on C, and A comes before than B,
+	// a slice can ensure A will always be earlier to be notified than B.
 	dependers []*Node
 }
 
