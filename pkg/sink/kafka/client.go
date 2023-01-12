@@ -156,7 +156,7 @@ func (p *syncProducer) SendMessages(topic string,
 }
 
 func (p *syncProducer) Close() error {
-	return nil
+	return p.producer.Close()
 }
 
 type asyncProducer struct {
