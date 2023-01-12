@@ -52,6 +52,7 @@ func RegisterOpenAPIV2Routes(router *gin.Engine, api OpenAPIV2) {
 	changefeedGroup.DELETE("/:changefeed_id", api.deleteChangefeed)
 	changefeedGroup.GET("/:changefeed_id/meta_info", api.getChangeFeedMetaInfo)
 	changefeedGroup.POST("/:changefeed_id/resume", api.resumeChangefeed)
+	changefeedGroup.POST("/:changefeed_id/pause", api.pauseChangefeed)
 
 	verifyTableGroup := v2.Group("/verify_table")
 	verifyTableGroup.Use(middleware.ForwardToOwnerMiddleware(api.capture))
