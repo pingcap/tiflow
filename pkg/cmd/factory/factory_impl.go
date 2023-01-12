@@ -148,7 +148,7 @@ func (f *factoryImpl) EtcdClient() (*etcd.CDCEtcdClientImpl, error) {
 }
 
 // PdClient creates new pd client.
-func (f factoryImpl) PdClient() (pd.Client, error) {
+func (f *factoryImpl) PdClient() (pd.Client, error) {
 	ctx := cmdconetxt.GetDefaultContext()
 
 	credential := f.GetCredential()
@@ -207,11 +207,14 @@ func (f *factoryImpl) APIV1Client() (apiv1client.APIV1Interface, error) {
 		return nil, errors.Trace(err)
 	}
 	log.Info(serverAddr)
-	client, err := apiv1client.NewAPIClient(serverAddr, f.clientGetter.GetCredential())
+	client, err := apiv2client.NewAPIClient(serverAddr, f.clientGetter.GetCredential())
 	if err != nil {
 		return nil, errors.Trace(err)
 	}
-	return client, checkCDCVersion(client)
+	if err := checkCDCVersion(client); err != nil {
+		return nil, errors.Trace(err)
+	}
+	return apiv1client.NewAPIClient(serverAddr, f.clientGetter.GetCredential())
 }
 
 // APIV2Client returns cdc api v2 client.
@@ -221,14 +224,11 @@ func (f *factoryImpl) APIV2Client() (apiv2client.APIV2Interface, error) {
 		return nil, errors.Trace(err)
 	}
 	log.Info(serverAddr)
-	client, err := apiv1client.NewAPIClient(serverAddr, f.clientGetter.GetCredential())
+	client, err := apiv2client.NewAPIClient(serverAddr, f.clientGetter.GetCredential())
 	if err != nil {
 		return nil, errors.Trace(err)
 	}
-	if err := checkCDCVersion(client); err != nil {
-		return nil, errors.Trace(err)
-	}
-	return apiv2client.NewAPIClient(serverAddr, f.clientGetter.GetCredential())
+	return client, checkCDCVersion(client)
 }
 
 // findServerAddr find the cdc server address by the following logic
@@ -299,7 +299,7 @@ func (f *factoryImpl) findServerAddr() (string, error) {
 	return "", errors.New("no capture is found")
 }
 
-func checkCDCVersion(client apiv1client.APIV1Interface) error {
+func checkCDCVersion(client apiv2client.APIV2Interface) error {
 	serverStatus, err := client.Status().Get(cmdconetxt.GetDefaultContext())
 	if err != nil {
 		return errors.Trace(err)
