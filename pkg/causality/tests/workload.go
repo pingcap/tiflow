@@ -23,10 +23,14 @@ type workloadGenerator interface {
 	Next() []uint64
 }
 
+// uniformGenerator is used to generate conflict keys.
 type uniformGenerator struct {
+	// Conflict keys will be in range [0, workingSetSize).
 	workingSetSize int64
-	batchSize      int
-	numSlots       uint64
+	// Calling `Next` will generate batchSize keys at most.
+	batchSize int
+	// Used to sort generated keys.
+	numSlots uint64
 }
 
 func newUniformGenerator(workingSetSize int64, batchSize int, numSlots uint64) *uniformGenerator {

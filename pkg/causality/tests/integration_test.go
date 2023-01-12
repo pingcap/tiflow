@@ -68,7 +68,7 @@ func BenchmarkLowConflicts(b *testing.B) {
 		batchSize      = 8
 	)
 
-	totalBatches := b.N / 8
+	totalBatches := b.N
 	driver := newConflictTestDriver(
 		numWorkers,
 		numSlots,
@@ -94,7 +94,7 @@ func BenchmarkMediumConflicts(b *testing.B) {
 		batchSize      = 8
 	)
 
-	totalBatches := b.N / 8
+	totalBatches := b.N
 	driver := newConflictTestDriver(
 		numWorkers,
 		numSlots,
@@ -120,7 +120,33 @@ func BenchmarkHighConflicts(b *testing.B) {
 		batchSize      = 8
 	)
 
-	totalBatches := b.N / 8
+	totalBatches := b.N
+	driver := newConflictTestDriver(
+		numWorkers,
+		numSlots,
+		newUniformGenerator(workingSetSize, batchSize, numSlots))
+	if err := driver.Run(ctx, totalBatches); err != nil {
+		panic(err)
+	}
+	driver.Close()
+}
+
+func BenchmarkHighConflictsWithManyKeys(b *testing.B) {
+	log.SetLevel(zapcore.WarnLevel)
+	defer log.SetLevel(zapcore.InfoLevel)
+
+	ctx, cancel := context.WithTimeout(context.Background(), 120*time.Second)
+	defer cancel()
+
+	const (
+		numWorkers = 8
+		numSlots   = 1024 * 1024
+		// Expected conflict rate = 0.41
+		workingSetSize = 12800
+		batchSize      = 800
+	)
+
+	totalBatches := b.N
 	driver := newConflictTestDriver(
 		numWorkers,
 		numSlots,
