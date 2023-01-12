@@ -276,7 +276,7 @@ func (t *tableSpan) poll(ctx context.Context) (*schedulepb.Message, error) {
 }
 
 type tableSpanManager struct {
-	tables   *spanz.Map[*tableSpan]
+	tables   *spanz.BtreeMap[*tableSpan]
 	executor internal.TableExecutor
 
 	changefeedID model.ChangeFeedID
@@ -286,7 +286,7 @@ func newTableSpanManager(
 	changefeed model.ChangeFeedID, executor internal.TableExecutor,
 ) *tableSpanManager {
 	return &tableSpanManager{
-		tables:       spanz.NewMap[*tableSpan](),
+		tables:       spanz.NewBtreeMap[*tableSpan](),
 		executor:     executor,
 		changefeedID: changefeed,
 	}
@@ -320,7 +320,7 @@ func (tm *tableSpanManager) poll(ctx context.Context) ([]*schedulepb.Message, er
 	return result, err
 }
 
-func (tm *tableSpanManager) getAllTableSpans() *spanz.Map[*tableSpan] {
+func (tm *tableSpanManager) getAllTableSpans() *spanz.BtreeMap[*tableSpan] {
 	return tm.tables
 }
 

@@ -67,7 +67,7 @@ func NewReconciler(
 func (m *Reconciler) Reconcile(
 	ctx context.Context,
 	currentTables *replication.TableRanges,
-	replications *spanz.Map[*replication.ReplicationSet],
+	replications *spanz.BtreeMap[*replication.ReplicationSet],
 	compat *compat.Compat,
 ) []tablepb.Span {
 	tablesLenEqual := currentTables.Len() == len(m.tableSpans)
