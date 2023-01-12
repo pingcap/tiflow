@@ -117,6 +117,20 @@ func (mr *MockChangefeedInterfaceMockRecorder) GetInfo(ctx, name interface{}) *g
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetInfo", reflect.TypeOf((*MockChangefeedInterface)(nil).GetInfo), ctx, name)
 }
 
+// Pause mocks base method.
+func (m *MockChangefeedInterface) Pause(ctx context.Context, name string) error {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "Pause", ctx, name)
+	ret0, _ := ret[0].(error)
+	return ret0
+}
+
+// Pause indicates an expected call of Pause.
+func (mr *MockChangefeedInterfaceMockRecorder) Pause(ctx, name interface{}) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "Pause", reflect.TypeOf((*MockChangefeedInterface)(nil).Pause), ctx, name)
+}
+
 // Resume mocks base method.
 func (m *MockChangefeedInterface) Resume(ctx context.Context, cfg *v2.ResumeChangefeedConfig, name string) error {
 	m.ctrl.T.Helper()
