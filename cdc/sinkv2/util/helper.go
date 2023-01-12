@@ -17,7 +17,6 @@ import (
 	"net/url"
 	"strings"
 
-	"github.com/Shopify/sarama"
 	"github.com/pingcap/tiflow/cdc/sink/codec/common"
 	"github.com/pingcap/tiflow/cdc/sink/mq/manager"
 	"github.com/pingcap/tiflow/cdc/sink/mq/producer/kafka"
@@ -91,7 +90,7 @@ func GetEncoderConfig(
 func GetTopicManagerAndTryCreateTopic(
 	topic string,
 	topicCfg *kafka.AutoCreateTopicConfig,
-	client sarama.Client,
+	client pkafka.Client,
 	adminClient pkafka.ClusterAdminClient,
 ) (manager.TopicManager, error) {
 	topicManager, err := manager.NewKafkaTopicManager(

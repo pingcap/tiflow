@@ -17,7 +17,6 @@ import (
 	"context"
 	"net/url"
 
-	"github.com/Shopify/sarama"
 	"github.com/pingcap/errors"
 	"github.com/pingcap/log"
 	"github.com/pingcap/tiflow/cdc/sink/mq/dispatcher"
@@ -37,6 +36,7 @@ func NewKafkaDMLSink(
 	replicaConfig *config.ReplicaConfig,
 	errCh chan error,
 	adminClientCreator pkafka.ClusterAdminClientCreator,
+	clientCreator pkafka.ClientCreator,
 	producerCreator dmlproducer.Factory,
 ) (_ *dmlSink, err error) {
 	topic, err := util.GetTopic(sinkURI)
@@ -77,7 +77,7 @@ func NewKafkaDMLSink(
 		return nil, errors.Trace(err)
 	}
 
-	client, err := sarama.NewClient(baseConfig.BrokerEndpoints, saramaConfig)
+	client, err := clientCreator(baseConfig.BrokerEndpoints, saramaConfig)
 	if err != nil {
 		return nil, cerror.WrapError(cerror.ErrKafkaNewSaramaProducer, err)
 	}
