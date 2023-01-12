@@ -336,10 +336,10 @@ func (c *Options) DeriveTopicConfig() *AutoCreateTopicConfig {
 }
 
 // NewSaramaConfig return the default config and set the according version and metrics
-func NewSaramaConfig(ctx context.Context, c *Options) (*sarama.Config, error) {
+func NewSaramaConfig(ctx context.Context, o *Options) (*sarama.Config, error) {
 	config := sarama.NewConfig()
 
-	version, err := sarama.ParseKafkaVersion(c.Version)
+	version, err := sarama.ParseKafkaVersion(o.Version)
 	if err != nil {
 		return nil, cerror.WrapError(cerror.ErrKafkaInvalidVersion, err)
 	}
@@ -352,7 +352,7 @@ func NewSaramaConfig(ctx context.Context, c *Options) (*sarama.Config, error) {
 	captureAddr := contextutil.CaptureAddrFromCtx(ctx)
 	changefeedID := contextutil.ChangefeedIDFromCtx(ctx)
 
-	config.ClientID, err = newKafkaClientID(role, captureAddr, changefeedID, c.ClientID)
+	config.ClientID, err = newKafkaClientID(role, captureAddr, changefeedID, o.ClientID)
 	if err != nil {
 		return nil, errors.Trace(err)
 	}
@@ -387,16 +387,16 @@ func NewSaramaConfig(ctx context.Context, c *Options) (*sarama.Config, error) {
 	config.Producer.Flush.Messages = 0
 	config.Producer.Flush.Frequency = time.Duration(0)
 
-	config.Net.DialTimeout = c.DialTimeout
-	config.Net.WriteTimeout = c.WriteTimeout
-	config.Net.ReadTimeout = c.ReadTimeout
+	config.Net.DialTimeout = o.DialTimeout
+	config.Net.WriteTimeout = o.WriteTimeout
+	config.Net.ReadTimeout = o.ReadTimeout
 
 	config.Producer.Partitioner = sarama.NewManualPartitioner
-	config.Producer.MaxMessageBytes = c.MaxMessageBytes
+	config.Producer.MaxMessageBytes = o.MaxMessageBytes
 	config.Producer.Return.Successes = true
 	config.Producer.Return.Errors = true
 	config.Producer.RequiredAcks = sarama.WaitForAll
-	compression := strings.ToLower(strings.TrimSpace(c.Compression))
+	compression := strings.ToLower(strings.TrimSpace(o.Compression))
 	switch compression {
 	case "none":
 		config.Producer.Compression = sarama.CompressionNone
@@ -409,14 +409,14 @@ func NewSaramaConfig(ctx context.Context, c *Options) (*sarama.Config, error) {
 	case "zstd":
 		config.Producer.Compression = sarama.CompressionZSTD
 	default:
-		log.Warn("Unsupported compression algorithm", zap.String("compression", c.Compression))
+		log.Warn("Unsupported compression algorithm", zap.String("compression", o.Compression))
 		config.Producer.Compression = sarama.CompressionNone
 	}
 	if config.Producer.Compression != sarama.CompressionNone {
 		log.Info("Kafka producer uses " + compression + " compression algorithm")
 	}
 
-	if c.EnableTLS {
+	if o.EnableTLS {
 		// for SSL encryption with a trust CA certificate, we must populate the
 		// following two params of config.Net.TLS
 		config.Net.TLS.Enable = true
@@ -426,49 +426,49 @@ func NewSaramaConfig(ctx context.Context, c *Options) (*sarama.Config, error) {
 		}
 
 		// for SSL encryption with self-signed CA certificate, we reassign the
-		// config.Net.TLS.Options using the relevant credential files.
-		if c.Credential != nil && c.Credential.IsTLSEnabled() {
-			config.Net.TLS.Config, err = c.Credential.ToTLSConfig()
+		// config.Net.TLS.Config using the relevant credential files.
+		if o.Credential != nil && o.Credential.IsTLSEnabled() {
+			config.Net.TLS.Config, err = o.Credential.ToTLSConfig()
 			if err != nil {
 				return nil, errors.Trace(err)
 			}
 		}
 	}
 
-	completeSaramaSASLConfig(config, c)
+	completeSaramaSASLConfig(config, o)
 
 	return config, err
 }
 
-func completeSaramaSASLConfig(config *sarama.Config, c *Options) {
-	if c.SASL != nil && c.SASL.SASLMechanism != "" {
+func completeSaramaSASLConfig(config *sarama.Config, o *Options) {
+	if o.SASL != nil && o.SASL.SASLMechanism != "" {
 		config.Net.SASL.Enable = true
-		config.Net.SASL.Mechanism = sarama.SASLMechanism(c.SASL.SASLMechanism)
-		switch c.SASL.SASLMechanism {
+		config.Net.SASL.Mechanism = sarama.SASLMechanism(o.SASL.SASLMechanism)
+		switch o.SASL.SASLMechanism {
 		case sarama.SASLTypeSCRAMSHA256, sarama.SASLTypeSCRAMSHA512, sarama.SASLTypePlaintext:
-			config.Net.SASL.User = c.SASL.SASLUser
-			config.Net.SASL.Password = c.SASL.SASLPassword
-			if strings.EqualFold(string(c.SASL.SASLMechanism), sarama.SASLTypeSCRAMSHA256) {
+			config.Net.SASL.User = o.SASL.SASLUser
+			config.Net.SASL.Password = o.SASL.SASLPassword
+			if strings.EqualFold(string(o.SASL.SASLMechanism), sarama.SASLTypeSCRAMSHA256) {
 				config.Net.SASL.SCRAMClientGeneratorFunc = func() sarama.SCRAMClient {
 					return &security.XDGSCRAMClient{HashGeneratorFcn: security.SHA256}
 				}
-			} else if strings.EqualFold(string(c.SASL.SASLMechanism), sarama.SASLTypeSCRAMSHA512) {
+			} else if strings.EqualFold(string(o.SASL.SASLMechanism), sarama.SASLTypeSCRAMSHA512) {
 				config.Net.SASL.SCRAMClientGeneratorFunc = func() sarama.SCRAMClient {
 					return &security.XDGSCRAMClient{HashGeneratorFcn: security.SHA512}
 				}
 			}
 		case sarama.SASLTypeGSSAPI:
-			config.Net.SASL.GSSAPI.AuthType = int(c.SASL.GSSAPI.AuthType)
-			config.Net.SASL.GSSAPI.Username = c.SASL.GSSAPI.Username
-			config.Net.SASL.GSSAPI.ServiceName = c.SASL.GSSAPI.ServiceName
-			config.Net.SASL.GSSAPI.KerberosConfigPath = c.SASL.GSSAPI.KerberosConfigPath
-			config.Net.SASL.GSSAPI.Realm = c.SASL.GSSAPI.Realm
-			config.Net.SASL.GSSAPI.DisablePAFXFAST = c.SASL.GSSAPI.DisablePAFXFAST
-			switch c.SASL.GSSAPI.AuthType {
+			config.Net.SASL.GSSAPI.AuthType = int(o.SASL.GSSAPI.AuthType)
+			config.Net.SASL.GSSAPI.Username = o.SASL.GSSAPI.Username
+			config.Net.SASL.GSSAPI.ServiceName = o.SASL.GSSAPI.ServiceName
+			config.Net.SASL.GSSAPI.KerberosConfigPath = o.SASL.GSSAPI.KerberosConfigPath
+			config.Net.SASL.GSSAPI.Realm = o.SASL.GSSAPI.Realm
+			config.Net.SASL.GSSAPI.DisablePAFXFAST = o.SASL.GSSAPI.DisablePAFXFAST
+			switch o.SASL.GSSAPI.AuthType {
 			case security.UserAuth:
-				config.Net.SASL.GSSAPI.Password = c.SASL.GSSAPI.Password
+				config.Net.SASL.GSSAPI.Password = o.SASL.GSSAPI.Password
 			case security.KeyTabAuth:
-				config.Net.SASL.GSSAPI.KeyTabPath = c.SASL.GSSAPI.KeyTabPath
+				config.Net.SASL.GSSAPI.KeyTabPath = o.SASL.GSSAPI.KeyTabPath
 			}
 		}
 	}
