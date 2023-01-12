@@ -58,7 +58,9 @@ func RegisterOpenAPIV2Routes(router *gin.Engine, api OpenAPIV2) {
 
 	// capture apis
 	captureGroup := v2.Group("/captures")
+	captureGroup.Use(middleware.ForwardToOwnerMiddleware(api.capture))
 	captureGroup.POST("/:capture_id/drain", api.drainCapture)
+	captureGroup.GET("", api.listCaptures)
 
 	verifyTableGroup := v2.Group("/verify_table")
 	verifyTableGroup.Use(middleware.ForwardToOwnerMiddleware(api.capture))

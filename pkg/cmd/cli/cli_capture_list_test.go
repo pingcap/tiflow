@@ -30,13 +30,13 @@ import (
 
 type mockAPIV1Client struct {
 	apiv1client.APIV1Interface
-	captures    apiv1client.CaptureInterface
+	captures    apiv2client.CaptureInterface
 	changefeeds apiv1client.ChangefeedInterface
 	processor   apiv1client.ProcessorInterface
 	status      apiv2client.StatusInterface
 }
 
-func (f *mockAPIV1Client) Captures() apiv1client.CaptureInterface {
+func (f *mockAPIV1Client) Captures() apiv2client.CaptureInterface {
 	return f.captures
 }
 
@@ -69,7 +69,7 @@ func (f *mockAPIV2Client) Unsafe() apiv2client.UnsafeInterface {
 
 type mockFactory struct {
 	factory.Factory
-	captures    *mock.MockCaptureInterface
+	captures    *v2mock.MockCaptureInterface
 	changefeeds *mock.MockChangefeedInterface
 	processor   *mock.MockProcessorInterface
 	status      *v2mock.MockStatusInterface
@@ -80,7 +80,7 @@ type mockFactory struct {
 }
 
 func newMockFactory(ctrl *gomock.Controller) *mockFactory {
-	cps := mock.NewMockCaptureInterface(ctrl)
+	cps := v2mock.NewMockCaptureInterface(ctrl)
 	processor := mock.NewMockProcessorInterface(ctrl)
 	cf := mock.NewMockChangefeedInterface(ctrl)
 	status := v2mock.NewMockStatusInterface(ctrl)
@@ -118,10 +118,10 @@ func (f *mockFactory) APIV2Client() (apiv2client.APIV2Interface, error) {
 func TestCaptureListCli(t *testing.T) {
 	ctrl := gomock.NewController(t)
 	defer ctrl.Finish()
-	cf := mock.NewMockCaptureInterface(ctrl)
+	cf := v2mock.NewMockCaptureInterface(ctrl)
 	f := &mockFactory{captures: cf}
 	cmd := newCmdListCapture(f)
-	cf.EXPECT().List(gomock.Any()).Return(&[]model.Capture{
+	cf.EXPECT().List(gomock.Any()).Return([]model.Capture{
 		{
 			ID:            "owner",
 			IsOwner:       true,

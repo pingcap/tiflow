@@ -29,6 +29,11 @@ import (
 // EmptyResponse return empty {} to http client
 type EmptyResponse struct{}
 
+type ListResponse[T any] struct {
+	Total int `json:"total"`
+	Items []T `json:"items"`
+}
+
 // Tso contains timestamp get from PD
 type Tso struct {
 	Timestamp int64 `json:"timestamp"`
