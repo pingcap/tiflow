@@ -1084,12 +1084,6 @@ func (e *MockTableExecutor) GetTableSpanCount() int {
 	return result
 }
 
-// GetCheckpoint returns the last checkpoint.
-func (e *MockTableExecutor) GetCheckpoint() (checkpointTs, resolvedTs model.Ts) {
-	args := e.Called()
-	return args.Get(0).(model.Ts), args.Get(1).(model.Ts)
-}
-
 // GetTableSpanStatus implements TableExecutor interface
 func (e *MockTableExecutor) GetTableSpanStatus(
 	span tablepb.Span, collectStat bool,
