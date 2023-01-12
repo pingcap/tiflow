@@ -373,7 +373,10 @@ func NewKafkaSaramaProducer(
 
 // AdjustConfig adjust the `Options` and `sarama.Config` by condition.
 func AdjustConfig(
-	admin kafka.ClusterAdminClient, options *kafka.Options, saramaConfig *sarama.Config, topic string,
+	admin kafka.ClusterAdminClient,
+	options *kafka.Options,
+	saramaConfig *sarama.Config,
+	topic string,
 ) error {
 	topics, err := admin.ListTopics()
 	if err != nil {

@@ -277,7 +277,12 @@ func TestAdjustConfigMinInsyncReplicas(t *testing.T) {
 	saramaConfig, err := kafka.NewSaramaConfig(context.Background(), options)
 	require.Nil(t, err)
 	adminClient.SetMinInsyncReplicas("2")
-	err = AdjustConfig(adminClient, options, saramaConfig, "create-new-fail-invalid-min-insync-replicas")
+	err = AdjustConfig(
+		adminClient,
+		options,
+		saramaConfig,
+		"create-new-fail-invalid-min-insync-replicas",
+	)
 	require.Regexp(
 		t,
 		".*`replication-factor` is smaller than the `min.insync.replicas` of broker.*",
