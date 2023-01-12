@@ -53,14 +53,19 @@ type memQuota struct {
 	metricUsed  prometheus.Gauge
 }
 
-func newMemQuota(changefeedID model.ChangeFeedID, totalBytes uint64) *memQuota {
+func newMemQuota(changefeedID model.ChangeFeedID, totalBytes uint64, component ...string) *memQuota {
+	var comp string
+	if len(component) > 0 {
+		comp = component[0]
+	}
+
 	m := &memQuota{
 		changefeedID: changefeedID,
 		totalBytes:   totalBytes,
 		usedBytes:    0,
 		tableMemory:  spanz.NewMap[[]*memConsumeRecord](),
-		metricTotal:  MemoryQuota.WithLabelValues(changefeedID.Namespace, changefeedID.ID, "total"),
-		metricUsed:   MemoryQuota.WithLabelValues(changefeedID.Namespace, changefeedID.ID, "used"),
+		metricTotal:  MemoryQuota.WithLabelValues(changefeedID.Namespace, changefeedID.ID, "total", comp),
+		metricUsed:   MemoryQuota.WithLabelValues(changefeedID.Namespace, changefeedID.ID, "used", comp),
 	}
 	m.blockAcquireCond = sync.NewCond(&m.mu)
 	m.metricTotal.Set(float64(totalBytes))
