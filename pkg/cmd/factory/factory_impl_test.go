@@ -20,8 +20,8 @@ import (
 	"github.com/golang/mock/gomock"
 	"github.com/pingcap/errors"
 	"github.com/pingcap/tiflow/cdc/model"
-	apiv1client "github.com/pingcap/tiflow/pkg/api/v1"
-	"github.com/pingcap/tiflow/pkg/api/v1/mock"
+	v2 "github.com/pingcap/tiflow/pkg/api/v2"
+	"github.com/pingcap/tiflow/pkg/api/v2/mock"
 	cmdcontext "github.com/pingcap/tiflow/pkg/cmd/context"
 	mock_factory "github.com/pingcap/tiflow/pkg/cmd/factory/mock"
 	"github.com/pingcap/tiflow/pkg/security"
@@ -75,11 +75,11 @@ func TestFactoryImplPdClient(t *testing.T) {
 }
 
 type mockAPIClient struct {
-	apiv1client.APIV1Interface
-	status apiv1client.StatusInterface
+	v2.APIV2Interface
+	status v2.StatusInterface
 }
 
-func (c *mockAPIClient) Status() apiv1client.StatusInterface {
+func (c *mockAPIClient) Status() v2.StatusInterface {
 	return c.status
 }
 
