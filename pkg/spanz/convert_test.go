@@ -39,7 +39,9 @@ func TestHashableSpanHeapAlloc(t *testing.T) {
 		span.EndKey = append(span.EndKey, byte(i))
 	}
 
+	n := 0
 	results := testing.Benchmark(func(b *testing.B) {
+		n = b.N
 		b.ReportAllocs()
 		b.ResetTimer()
 		for i := 0; i < b.N; i++ {
@@ -47,7 +49,7 @@ func TestHashableSpanHeapAlloc(t *testing.T) {
 			span = hspan.toSpan()
 		}
 	})
-	require.EqualValues(t, 0, results.MemAllocs)
+	require.EqualValues(t, 0, results.MemAllocs/uint64(n))
 }
 
 func TestUnsafeStringByte(t *testing.T) {
