@@ -52,9 +52,9 @@ type kafkaSaramaProducer struct {
 	clientLock sync.RWMutex
 	// This admin mainly used by `metricsMonitor` to fetch broker info.
 	admin         kafka.ClusterAdminClient
-	client        sarama.Client
+	client        kafka.Client
 	asyncProducer sarama.AsyncProducer
-	syncProducer  sarama.SyncProducer
+	syncProducer  kafka.SyncProducer
 
 	// producersReleased records whether asyncProducer and syncProducer have been closed properly
 	producersReleased bool
@@ -130,22 +130,13 @@ func (k *kafkaSaramaProducer) SyncBroadcastMessage(
 ) error {
 	k.clientLock.RLock()
 	defer k.clientLock.RUnlock()
-	msgs := make([]*sarama.ProducerMessage, partitionsNum)
-	for i := 0; i < int(partitionsNum); i++ {
-		msgs[i] = &sarama.ProducerMessage{
-			Topic:     topic,
-			Key:       sarama.ByteEncoder(message.Key),
-			Value:     sarama.ByteEncoder(message.Value),
-			Partition: int32(i),
-		}
-	}
 	select {
 	case <-ctx.Done():
 		return ctx.Err()
 	case <-k.closeCh:
 		return nil
 	default:
-		err := k.syncProducer.SendMessages(msgs)
+		err := k.syncProducer.SendMessages(topic, partitionsNum, message.Key, message.Value)
 		return cerror.WrapError(cerror.ErrKafkaSendMessage, err)
 	}
 }
@@ -317,10 +308,13 @@ func (k *kafkaSaramaProducer) run(ctx context.Context) error {
 // NewAdminClientImpl specifies the build method for the admin client.
 var NewAdminClientImpl kafka.ClusterAdminClientCreator = kafka.NewSaramaAdminClient
 
+// NewClientImpl specifies the build method for the  client.
+var NewClientImpl kafka.ClientCreator = kafka.NewSaramaClient
+
 // NewKafkaSaramaProducer creates a kafka sarama producer
 func NewKafkaSaramaProducer(
 	ctx context.Context,
-	client sarama.Client,
+	client kafka.Client,
 	admin kafka.ClusterAdminClient,
 	config *Config,
 	saramaConfig *sarama.Config,
@@ -332,12 +326,12 @@ func NewKafkaSaramaProducer(
 		zap.String("namespace", changefeedID.Namespace),
 		zap.String("changefeed", changefeedID.ID), zap.Any("role", role))
 
-	asyncProducer, err := sarama.NewAsyncProducerFromClient(client)
+	asyncProducer, err := client.AsyncProducer()
 	if err != nil {
 		return nil, cerror.WrapError(cerror.ErrKafkaNewSaramaProducer, err)
 	}
 
-	syncProducer, err := sarama.NewSyncProducerFromClient(client)
+	syncProducer, err := client.SyncProducer()
 	if err != nil {
 		return nil, cerror.WrapError(cerror.ErrKafkaNewSaramaProducer, err)
 	}
