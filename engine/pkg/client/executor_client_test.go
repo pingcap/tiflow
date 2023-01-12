@@ -14,6 +14,7 @@
 package client
 
 import (
+	"os"
 	"testing"
 	"time"
 
@@ -34,10 +35,15 @@ func TestNewExecutorClientNotBlocking(t *testing.T) {
 func TestExecutorClientFactoryIllegalCredentials(t *testing.T) {
 	t.Parallel()
 
+	dir := t.TempDir()
+	caPath := dir + "/ca.pem"
+	err := os.WriteFile(caPath, []byte("invalid ca pem"), 0o600)
+	require.NoError(t, err)
+
 	credentials := &security.Credential{
-		CAPath: "/dev/null", // illegal CA path to trigger an error
+		CAPath: caPath, // illegal CA path to trigger an error
 	}
 	factory := newExecutorClientFactory(credentials, nil)
-	_, err := factory.NewExecutorClient("127.0.0.1:1234")
+	_, err = factory.NewExecutorClient("127.0.0.1:1234")
 	require.Error(t, err)
 }

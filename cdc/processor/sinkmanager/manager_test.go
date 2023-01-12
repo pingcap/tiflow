@@ -326,7 +326,7 @@ func TestDoNotGenerateTableSinkTaskWhenTableIsNotReplicating(t *testing.T) {
 	tableSink, ok := manager.tableSinks.Load(tableID)
 	require.True(t, ok)
 	require.NotNil(t, tableSink)
-	require.Equal(t, uint64(0), tableSink.(*tableSinkWrapper).getCheckpointTs().Ts)
+	require.Equal(t, uint64(1), tableSink.(*tableSinkWrapper).getCheckpointTs().Ts)
 }
 
 func TestClose(t *testing.T) {
