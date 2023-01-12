@@ -26,7 +26,7 @@ import (
 	"github.com/pingcap/tiflow/pkg/security"
 )
 
-// EmptyResponse return a {} to http
+// EmptyResponse return empty {} to http client
 type EmptyResponse struct{}
 
 // Tso contains timestamp get from PD
