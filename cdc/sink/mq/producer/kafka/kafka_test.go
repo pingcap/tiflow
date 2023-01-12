@@ -30,52 +30,6 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
-func TestClientID(t *testing.T) {
-	testCases := []struct {
-		role         string
-		addr         string
-		changefeedID string
-		configuredID string
-		hasError     bool
-		expected     string
-	}{
-		{
-			"owner", "domain:1234", "123-121-121-121",
-			"", false,
-			"TiCDC_sarama_producer_owner_domain_1234_default_123-121-121-121",
-		},
-		{
-			"owner", "127.0.0.1:1234", "123-121-121-121",
-			"", false,
-			"TiCDC_sarama_producer_owner_127.0.0.1_1234_default_123-121-121-121",
-		},
-		{
-			"owner", "127.0.0.1:1234?:,\"", "123-121-121-121",
-			"", false,
-			"TiCDC_sarama_producer_owner_127.0.0.1_1234_____default_123-121-121-121",
-		},
-		{
-			"owner", "中文", "123-121-121-121",
-			"", true, "",
-		},
-		{
-			"owner", "127.0.0.1:1234",
-			"123-121-121-121", "cdc-changefeed-1", false,
-			"cdc-changefeed-1",
-		},
-	}
-	for _, tc := range testCases {
-		id, err := kafkaClientID(tc.role, tc.addr,
-			model.DefaultChangeFeedID(tc.changefeedID), tc.configuredID)
-		if tc.hasError {
-			require.Error(t, err)
-		} else {
-			require.Nil(t, err)
-			require.Equal(t, tc.expected, id)
-		}
-	}
-}
-
 func TestNewSaramaProducer(t *testing.T) {
 	ctx, cancel := context.WithCancel(context.Background())
 
@@ -99,14 +53,14 @@ func TestNewSaramaProducer(t *testing.T) {
 	}
 
 	errCh := make(chan error, 1)
-	config := kafka.NewConfig()
+	options := kafka.NewOptions()
 	// Because the sarama mock broker is not compatible with version larger than 1.0.0
 	// We use a smaller version in the following producer tests.
 	// Ref: https://github.com/Shopify/sarama/blob/89707055369768913defac030c15cf08e9e57925/async_producer_test.go#L1445-L1447
-	config.Version = "0.9.0.0"
-	config.PartitionNum = int32(2)
-	config.AutoCreate = false
-	config.BrokerEndpoints = strings.Split(leader.Addr(), ",")
+	options.Version = "0.9.0.0"
+	options.PartitionNum = int32(2)
+	options.AutoCreate = false
+	options.BrokerEndpoints = strings.Split(leader.Addr(), ",")
 
 	NewAdminClientImpl = kafka.NewMockAdminClient
 	defer func() {
@@ -114,12 +68,12 @@ func TestNewSaramaProducer(t *testing.T) {
 	}()
 
 	ctx = contextutil.PutRoleInCtx(ctx, util.RoleTester)
-	saramaConfig, err := kafka.NewSaramaConfig(ctx, config)
+	saramaConfig, err := kafka.NewSaramaConfig(ctx, options)
 	require.Nil(t, err)
 	saramaConfig.Producer.Flush.MaxMessages = 1
-	client, err := sarama.NewClient(config.BrokerEndpoints, saramaConfig)
+	client, err := sarama.NewClient(options.BrokerEndpoints, saramaConfig)
 	require.Nil(t, err)
-	adminClient, err := NewAdminClientImpl(config.BrokerEndpoints, saramaConfig)
+	adminClient, err := NewAdminClientImpl(options.BrokerEndpoints, saramaConfig)
 	require.Nil(t, err)
 
 	changefeedID := model.DefaultChangeFeedID("changefeed-test")
@@ -127,7 +81,7 @@ func TestNewSaramaProducer(t *testing.T) {
 		ctx,
 		client,
 		adminClient,
-		config,
+		options,
 		saramaConfig,
 		errCh,
 		changefeedID,
@@ -200,36 +154,36 @@ func TestAdjustConfigTopicNotExist(t *testing.T) {
 		_ = adminClient.Close()
 	}()
 
-	config := kafka.NewConfig()
-	config.BrokerEndpoints = []string{"127.0.0.1:9092"}
+	options := kafka.NewOptions()
+	options.BrokerEndpoints = []string{"127.0.0.1:9092"}
 
 	// When the topic does not exist, use the broker's configuration to create the topic.
 	// topic not exist, `max-message-bytes` = `message.max.bytes`
-	config.MaxMessageBytes = adminClient.GetBrokerMessageMaxBytes()
-	saramaConfig, err := kafka.NewSaramaConfig(context.Background(), config)
+	options.MaxMessageBytes = adminClient.GetBrokerMessageMaxBytes()
+	saramaConfig, err := kafka.NewSaramaConfig(context.Background(), options)
 	require.Nil(t, err)
 
-	err = AdjustConfig(adminClient, config, saramaConfig, "create-random1")
+	err = AdjustConfig(adminClient, options, saramaConfig, "create-random1")
 	require.Nil(t, err)
-	expectedSaramaMaxMessageBytes := config.MaxMessageBytes
+	expectedSaramaMaxMessageBytes := options.MaxMessageBytes
 	require.Equal(t, expectedSaramaMaxMessageBytes, saramaConfig.Producer.MaxMessageBytes)
 
 	// topic not exist, `max-message-bytes` > `message.max.bytes`
-	config.MaxMessageBytes = adminClient.GetBrokerMessageMaxBytes() + 1
-	saramaConfig, err = kafka.NewSaramaConfig(context.Background(), config)
+	options.MaxMessageBytes = adminClient.GetBrokerMessageMaxBytes() + 1
+	saramaConfig, err = kafka.NewSaramaConfig(context.Background(), options)
 	require.Nil(t, err)
-	err = AdjustConfig(adminClient, config, saramaConfig, "create-random2")
+	err = AdjustConfig(adminClient, options, saramaConfig, "create-random2")
 	require.Nil(t, err)
 	expectedSaramaMaxMessageBytes = adminClient.GetBrokerMessageMaxBytes()
 	require.Equal(t, expectedSaramaMaxMessageBytes, saramaConfig.Producer.MaxMessageBytes)
 
 	// topic not exist, `max-message-bytes` < `message.max.bytes`
-	config.MaxMessageBytes = adminClient.GetBrokerMessageMaxBytes() - 1
-	saramaConfig, err = kafka.NewSaramaConfig(context.Background(), config)
+	options.MaxMessageBytes = adminClient.GetBrokerMessageMaxBytes() - 1
+	saramaConfig, err = kafka.NewSaramaConfig(context.Background(), options)
 	require.Nil(t, err)
-	err = AdjustConfig(adminClient, config, saramaConfig, "create-random3")
+	err = AdjustConfig(adminClient, options, saramaConfig, "create-random3")
 	require.Nil(t, err)
-	expectedSaramaMaxMessageBytes = config.MaxMessageBytes
+	expectedSaramaMaxMessageBytes = options.MaxMessageBytes
 	require.Equal(t, expectedSaramaMaxMessageBytes, saramaConfig.Producer.MaxMessageBytes)
 }
 
@@ -239,40 +193,40 @@ func TestAdjustConfigTopicExist(t *testing.T) {
 		_ = adminClient.Close()
 	}()
 
-	config := kafka.NewConfig()
-	config.BrokerEndpoints = []string{"127.0.0.1:9092"}
+	options := kafka.NewOptions()
+	options.BrokerEndpoints = []string{"127.0.0.1:9092"}
 
 	// topic exists, `max-message-bytes` = `max.message.bytes`.
-	config.MaxMessageBytes = adminClient.GetTopicMaxMessageBytes()
-	saramaConfig, err := kafka.NewSaramaConfig(context.Background(), config)
+	options.MaxMessageBytes = adminClient.GetTopicMaxMessageBytes()
+	saramaConfig, err := kafka.NewSaramaConfig(context.Background(), options)
 	require.Nil(t, err)
 
-	err = AdjustConfig(adminClient, config, saramaConfig, adminClient.GetDefaultMockTopicName())
+	err = AdjustConfig(adminClient, options, saramaConfig, adminClient.GetDefaultMockTopicName())
 	require.Nil(t, err)
 
-	expectedSaramaMaxMessageBytes := config.MaxMessageBytes
+	expectedSaramaMaxMessageBytes := options.MaxMessageBytes
 	require.Equal(t, expectedSaramaMaxMessageBytes, saramaConfig.Producer.MaxMessageBytes)
 
 	// topic exists, `max-message-bytes` > `max.message.bytes`
-	config.MaxMessageBytes = adminClient.GetTopicMaxMessageBytes() + 1
-	saramaConfig, err = kafka.NewSaramaConfig(context.Background(), config)
+	options.MaxMessageBytes = adminClient.GetTopicMaxMessageBytes() + 1
+	saramaConfig, err = kafka.NewSaramaConfig(context.Background(), options)
 	require.Nil(t, err)
 
-	err = AdjustConfig(adminClient, config, saramaConfig, adminClient.GetDefaultMockTopicName())
+	err = AdjustConfig(adminClient, options, saramaConfig, adminClient.GetDefaultMockTopicName())
 	require.Nil(t, err)
 
 	expectedSaramaMaxMessageBytes = adminClient.GetTopicMaxMessageBytes()
 	require.Equal(t, expectedSaramaMaxMessageBytes, saramaConfig.Producer.MaxMessageBytes)
 
 	// topic exists, `max-message-bytes` < `max.message.bytes`
-	config.MaxMessageBytes = adminClient.GetTopicMaxMessageBytes() - 1
-	saramaConfig, err = kafka.NewSaramaConfig(context.Background(), config)
+	options.MaxMessageBytes = adminClient.GetTopicMaxMessageBytes() - 1
+	saramaConfig, err = kafka.NewSaramaConfig(context.Background(), options)
 	require.Nil(t, err)
 
-	err = AdjustConfig(adminClient, config, saramaConfig, adminClient.GetDefaultMockTopicName())
+	err = AdjustConfig(adminClient, options, saramaConfig, adminClient.GetDefaultMockTopicName())
 	require.Nil(t, err)
 
-	expectedSaramaMaxMessageBytes = config.MaxMessageBytes
+	expectedSaramaMaxMessageBytes = options.MaxMessageBytes
 	require.Equal(t, expectedSaramaMaxMessageBytes, saramaConfig.Producer.MaxMessageBytes)
 
 	// When the topic exists, but the topic does not have `max.message.bytes`
@@ -286,24 +240,24 @@ func TestAdjustConfigTopicExist(t *testing.T) {
 	err = adminClient.CreateTopic(topicName, detail, false)
 	require.Nil(t, err)
 
-	config.MaxMessageBytes = adminClient.GetBrokerMessageMaxBytes() - 1
-	saramaConfig, err = kafka.NewSaramaConfig(context.Background(), config)
+	options.MaxMessageBytes = adminClient.GetBrokerMessageMaxBytes() - 1
+	saramaConfig, err = kafka.NewSaramaConfig(context.Background(), options)
 	require.Nil(t, err)
 
-	err = AdjustConfig(adminClient, config, saramaConfig, topicName)
+	err = AdjustConfig(adminClient, options, saramaConfig, topicName)
 	require.Nil(t, err)
 
 	// since `max.message.bytes` cannot found, use broker's `message.max.bytes` instead.
-	expectedSaramaMaxMessageBytes = config.MaxMessageBytes
+	expectedSaramaMaxMessageBytes = options.MaxMessageBytes
 	require.Equal(t, expectedSaramaMaxMessageBytes, saramaConfig.Producer.MaxMessageBytes)
 
 	// When the topic exists, but the topic doesn't have `max.message.bytes`
 	// `max-message-bytes` > `message.max.bytes`
-	config.MaxMessageBytes = adminClient.GetBrokerMessageMaxBytes() + 1
-	saramaConfig, err = kafka.NewSaramaConfig(context.Background(), config)
+	options.MaxMessageBytes = adminClient.GetBrokerMessageMaxBytes() + 1
+	saramaConfig, err = kafka.NewSaramaConfig(context.Background(), options)
 	require.Nil(t, err)
 
-	err = AdjustConfig(adminClient, config, saramaConfig, topicName)
+	err = AdjustConfig(adminClient, options, saramaConfig, topicName)
 	require.Nil(t, err)
 	expectedSaramaMaxMessageBytes = adminClient.GetBrokerMessageMaxBytes()
 	require.Equal(t, expectedSaramaMaxMessageBytes, saramaConfig.Producer.MaxMessageBytes)
@@ -315,15 +269,15 @@ func TestAdjustConfigMinInsyncReplicas(t *testing.T) {
 		_ = adminClient.Close()
 	}()
 
-	config := kafka.NewConfig()
-	config.BrokerEndpoints = []string{"127.0.0.1:9092"}
+	options := kafka.NewOptions()
+	options.BrokerEndpoints = []string{"127.0.0.1:9092"}
 
 	// Report an error if the replication-factor is less than min.insync.replicas
 	// when the topic does not exist.
-	saramaConfig, err := kafka.NewSaramaConfig(context.Background(), config)
+	saramaConfig, err := kafka.NewSaramaConfig(context.Background(), options)
 	require.Nil(t, err)
 	adminClient.SetMinInsyncReplicas("2")
-	err = AdjustConfig(adminClient, config, saramaConfig, "create-new-fail-invalid-min-insync-replicas")
+	err = AdjustConfig(adminClient, options, saramaConfig, "create-new-fail-invalid-min-insync-replicas")
 	require.Regexp(
 		t,
 		".*`replication-factor` is smaller than the `min.insync.replicas` of broker.*",
@@ -333,29 +287,29 @@ func TestAdjustConfigMinInsyncReplicas(t *testing.T) {
 	// topic not exist, and `min.insync.replicas` not found in broker's configuration
 	adminClient.DropBrokerConfig(kafka.MinInsyncReplicasConfigName)
 	topicName := "no-topic-no-min-insync-replicas"
-	err = AdjustConfig(adminClient, config, saramaConfig, "no-topic-no-min-insync-replicas")
+	err = AdjustConfig(adminClient, options, saramaConfig, "no-topic-no-min-insync-replicas")
 	require.Nil(t, err)
 	err = adminClient.CreateTopic(topicName, &sarama.TopicDetail{ReplicationFactor: 1}, false)
 	require.ErrorIs(t, err, sarama.ErrPolicyViolation)
 
 	// Report an error if the replication-factor is less than min.insync.replicas
 	// when the topic does exist.
-	saramaConfig, err = kafka.NewSaramaConfig(context.Background(), config)
+	saramaConfig, err = kafka.NewSaramaConfig(context.Background(), options)
 	require.Nil(t, err)
 
 	// topic exist, but `min.insync.replicas` not found in topic and broker configuration
-	topicName = "topic-no-config-entry"
+	topicName = "topic-no-options-entry"
 	err = adminClient.CreateTopic(topicName, &sarama.TopicDetail{
 		ReplicationFactor: 3,
 		NumPartitions:     3,
 	}, false)
 	require.Nil(t, err)
-	err = AdjustConfig(adminClient, config, saramaConfig, topicName)
+	err = AdjustConfig(adminClient, options, saramaConfig, topicName)
 	require.Nil(t, err)
 
 	// topic found, and have `min.insync.replicas`, but set to 2, larger than `replication-factor`.
 	adminClient.SetMinInsyncReplicas("2")
-	err = AdjustConfig(adminClient, config, saramaConfig, adminClient.GetDefaultMockTopicName())
+	err = AdjustConfig(adminClient, options, saramaConfig, adminClient.GetDefaultMockTopicName())
 	require.Regexp(t,
 		".*`replication-factor` is smaller than the `min.insync.replicas` of topic.*",
 		errors.Cause(err),
@@ -363,9 +317,9 @@ func TestAdjustConfigMinInsyncReplicas(t *testing.T) {
 }
 
 func TestCreateProducerFailed(t *testing.T) {
-	config := kafka.NewConfig()
-	config.Version = "invalid"
-	saramaConfig, err := kafka.NewSaramaConfig(context.Background(), config)
+	options := kafka.NewOptions()
+	options.Version = "invalid"
+	saramaConfig, err := kafka.NewSaramaConfig(context.Background(), options)
 	require.Regexp(t, "invalid version.*", errors.Cause(err))
 	require.Nil(t, saramaConfig)
 }
@@ -384,14 +338,14 @@ func TestProducerSendMessageFailed(t *testing.T) {
 	// Response for `sarama.NewClient`
 	leader.Returns(metadataResponse)
 
-	config := kafka.NewConfig()
+	options := kafka.NewOptions()
 	// Because the sarama mock broker is not compatible with version larger than 1.0.0
 	// We use a smaller version in the following producer tests.
 	// Ref: https://github.com/Shopify/sarama/blob/89707055369768913defac030c15cf08e9e57925/async_producer_test.go#L1445-L1447
-	config.Version = "0.9.0.0"
-	config.PartitionNum = int32(2)
-	config.AutoCreate = false
-	config.BrokerEndpoints = strings.Split(leader.Addr(), ",")
+	options.Version = "0.9.0.0"
+	options.PartitionNum = int32(2)
+	options.AutoCreate = false
+	options.BrokerEndpoints = strings.Split(leader.Addr(), ",")
 
 	NewAdminClientImpl = kafka.NewMockAdminClient
 	defer func() {
@@ -400,15 +354,15 @@ func TestProducerSendMessageFailed(t *testing.T) {
 
 	errCh := make(chan error, 1)
 	ctx = contextutil.PutRoleInCtx(ctx, util.RoleTester)
-	saramaConfig, err := kafka.NewSaramaConfig(context.Background(), config)
+	saramaConfig, err := kafka.NewSaramaConfig(context.Background(), options)
 	require.Nil(t, err)
 	saramaConfig.Producer.Flush.MaxMessages = 1
 	saramaConfig.Producer.Retry.Max = 2
 	saramaConfig.Producer.MaxMessageBytes = 8
 
-	client, err := sarama.NewClient(config.BrokerEndpoints, saramaConfig)
+	client, err := sarama.NewClient(options.BrokerEndpoints, saramaConfig)
 	require.Nil(t, err)
-	adminClient, err := NewAdminClientImpl(config.BrokerEndpoints, saramaConfig)
+	adminClient, err := NewAdminClientImpl(options.BrokerEndpoints, saramaConfig)
 	require.Nil(t, err)
 
 	changefeedID := model.DefaultChangeFeedID("changefeed-test")
@@ -416,7 +370,7 @@ func TestProducerSendMessageFailed(t *testing.T) {
 		ctx,
 		client,
 		adminClient,
-		config,
+		options,
 		saramaConfig,
 		errCh,
 		changefeedID,
@@ -471,14 +425,14 @@ func TestProducerDoubleClose(t *testing.T) {
 	// Response for `sarama.NewClient`
 	leader.Returns(metadataResponse)
 
-	config := kafka.NewConfig()
+	options := kafka.NewOptions()
 	// Because the sarama mock broker is not compatible with version larger than 1.0.0
 	// We use a smaller version in the following producer tests.
 	// Ref: https://github.com/Shopify/sarama/blob/89707055369768913defac030c15cf08e9e57925/async_producer_test.go#L1445-L1447
-	config.Version = "0.9.0.0"
-	config.PartitionNum = int32(2)
-	config.AutoCreate = false
-	config.BrokerEndpoints = strings.Split(leader.Addr(), ",")
+	options.Version = "0.9.0.0"
+	options.PartitionNum = int32(2)
+	options.AutoCreate = false
+	options.BrokerEndpoints = strings.Split(leader.Addr(), ",")
 
 	NewAdminClientImpl = kafka.NewMockAdminClient
 	defer func() {
@@ -487,11 +441,11 @@ func TestProducerDoubleClose(t *testing.T) {
 
 	errCh := make(chan error, 1)
 	ctx = contextutil.PutRoleInCtx(ctx, util.RoleTester)
-	saramaConfig, err := kafka.NewSaramaConfig(context.Background(), config)
+	saramaConfig, err := kafka.NewSaramaConfig(context.Background(), options)
 	require.Nil(t, err)
-	client, err := sarama.NewClient(config.BrokerEndpoints, saramaConfig)
+	client, err := sarama.NewClient(options.BrokerEndpoints, saramaConfig)
 	require.Nil(t, err)
-	adminClient, err := NewAdminClientImpl(config.BrokerEndpoints, saramaConfig)
+	adminClient, err := NewAdminClientImpl(options.BrokerEndpoints, saramaConfig)
 	require.Nil(t, err)
 
 	changefeedID := model.DefaultChangeFeedID("changefeed-test")
@@ -499,7 +453,7 @@ func TestProducerDoubleClose(t *testing.T) {
 		ctx,
 		client,
 		adminClient,
-		config,
+		options,
 		saramaConfig,
 		errCh,
 		changefeedID,

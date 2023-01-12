@@ -34,8 +34,8 @@ import (
 	"go.uber.org/zap"
 )
 
-// Config stores user specified Kafka producer configuration
-type Config struct {
+// Options stores user specified configurations
+type Options struct {
 	BrokerEndpoints []string
 	PartitionNum    int32
 
@@ -58,9 +58,9 @@ type Config struct {
 	ReadTimeout  time.Duration
 }
 
-// NewConfig returns a default Kafka configuration
-func NewConfig() *Config {
-	return &Config{
+// NewOptions returns a default Kafka configuration
+func NewOptions() *Options {
+	return &Options{
 		Version: "2.4.0",
 		// MaxMessageBytes will be used to initialize producer
 		MaxMessageBytes:   config.DefaultMaxMessageBytes,
@@ -76,7 +76,7 @@ func NewConfig() *Config {
 }
 
 // SetPartitionNum set the partition-num by the topic's partition count.
-func (c *Config) SetPartitionNum(realPartitionCount int32) error {
+func (c *Options) SetPartitionNum(realPartitionCount int32) error {
 	// user does not specify the `partition-num` in the sink-uri
 	if c.PartitionNum == 0 {
 		c.PartitionNum = realPartitionCount
@@ -104,8 +104,8 @@ func (c *Config) SetPartitionNum(realPartitionCount int32) error {
 	return nil
 }
 
-// Apply the sinkURI to update Config
-func (c *Config) Apply(sinkURI *url.URL) error {
+// Apply the sinkURI to update Options
+func (c *Options) Apply(sinkURI *url.URL) error {
 	c.BrokerEndpoints = strings.Split(sinkURI.Host, ",")
 	params := sinkURI.Query()
 	s := params.Get("partition-num")
@@ -199,7 +199,7 @@ func (c *Config) Apply(sinkURI *url.URL) error {
 	return nil
 }
 
-func (c *Config) applyTLS(params url.Values) error {
+func (c *Options) applyTLS(params url.Values) error {
 	s := params.Get("ca")
 	if s != "" {
 		c.Credential.CAPath = s
@@ -248,7 +248,7 @@ func (c *Config) applyTLS(params url.Values) error {
 	return nil
 }
 
-func (c *Config) applySASL(params url.Values) error {
+func (c *Options) applySASL(params url.Values) error {
 	s := params.Get("sasl-user")
 	if s != "" {
 		c.SASL.SASLUser = s
@@ -326,8 +326,8 @@ type AutoCreateTopicConfig struct {
 	ReplicationFactor int16
 }
 
-// DeriveTopicConfig derive a `topicConfig` from the `Config`
-func (c *Config) DeriveTopicConfig() *AutoCreateTopicConfig {
+// DeriveTopicConfig derive a `topicConfig` from the `Options`
+func (c *Options) DeriveTopicConfig() *AutoCreateTopicConfig {
 	return &AutoCreateTopicConfig{
 		AutoCreate:        c.AutoCreate,
 		PartitionNum:      c.PartitionNum,
@@ -336,7 +336,7 @@ func (c *Config) DeriveTopicConfig() *AutoCreateTopicConfig {
 }
 
 // NewSaramaConfig return the default config and set the according version and metrics
-func NewSaramaConfig(ctx context.Context, c *Config) (*sarama.Config, error) {
+func NewSaramaConfig(ctx context.Context, c *Options) (*sarama.Config, error) {
 	config := sarama.NewConfig()
 
 	version, err := sarama.ParseKafkaVersion(c.Version)
@@ -426,7 +426,7 @@ func NewSaramaConfig(ctx context.Context, c *Config) (*sarama.Config, error) {
 		}
 
 		// for SSL encryption with self-signed CA certificate, we reassign the
-		// config.Net.TLS.Config using the relevant credential files.
+		// config.Net.TLS.Options using the relevant credential files.
 		if c.Credential != nil && c.Credential.IsTLSEnabled() {
 			config.Net.TLS.Config, err = c.Credential.ToTLSConfig()
 			if err != nil {
@@ -440,7 +440,7 @@ func NewSaramaConfig(ctx context.Context, c *Config) (*sarama.Config, error) {
 	return config, err
 }
 
-func completeSaramaSASLConfig(config *sarama.Config, c *Config) {
+func completeSaramaSASLConfig(config *sarama.Config, c *Options) {
 	if c.SASL != nil && c.SASL.SASLMechanism != "" {
 		config.Net.SASL.Enable = true
 		config.Net.SASL.Mechanism = sarama.SASLMechanism(c.SASL.SASLMechanism)

@@ -35,7 +35,7 @@ import (
 	"github.com/pingcap/tiflow/pkg/chann"
 	"github.com/pingcap/tiflow/pkg/config"
 	cerror "github.com/pingcap/tiflow/pkg/errors"
-	kafka2 "github.com/pingcap/tiflow/pkg/sink/kafka"
+	pkafka "github.com/pingcap/tiflow/pkg/sink/kafka"
 	"github.com/pingcap/tiflow/pkg/util"
 	"go.uber.org/zap"
 	"golang.org/x/sync/errgroup"
@@ -388,17 +388,17 @@ func NewKafkaSaramaSink(ctx context.Context, sinkURI *url.URL,
 		return nil, cerror.ErrKafkaInvalidConfig.GenWithStack("no topic is specified in sink-uri")
 	}
 
-	baseConfig := kafka2.NewConfig()
-	if err := baseConfig.Apply(sinkURI); err != nil {
+	options := pkafka.NewOptions()
+	if err := options.Apply(sinkURI); err != nil {
 		return nil, cerror.WrapError(cerror.ErrKafkaInvalidConfig, err)
 	}
 
-	saramaConfig, err := kafka2.NewSaramaConfig(ctx, baseConfig)
+	saramaConfig, err := pkafka.NewSaramaConfig(ctx, options)
 	if err != nil {
 		return nil, errors.Trace(err)
 	}
 
-	adminClient, err := kafka.NewAdminClientImpl(baseConfig.BrokerEndpoints, saramaConfig)
+	adminClient, err := kafka.NewAdminClientImpl(options.BrokerEndpoints, saramaConfig)
 	if err != nil {
 		return nil, cerror.WrapError(cerror.ErrKafkaNewSaramaProducer, err)
 	}
@@ -411,7 +411,7 @@ func NewKafkaSaramaSink(ctx context.Context, sinkURI *url.URL,
 		}
 	}()
 
-	if err := kafka.AdjustConfig(adminClient, baseConfig, saramaConfig, topic); err != nil {
+	if err := kafka.AdjustConfig(adminClient, options, saramaConfig, topic); err != nil {
 		return nil, cerror.WrapError(cerror.ErrKafkaNewSaramaProducer, err)
 	}
 
@@ -432,7 +432,7 @@ func NewKafkaSaramaSink(ctx context.Context, sinkURI *url.URL,
 		return nil, cerror.WrapError(cerror.ErrKafkaInvalidConfig, err)
 	}
 
-	client, err := sarama.NewClient(baseConfig.BrokerEndpoints, saramaConfig)
+	client, err := sarama.NewClient(options.BrokerEndpoints, saramaConfig)
 	if err != nil {
 		return nil, cerror.WrapError(cerror.ErrKafkaNewSaramaProducer, err)
 	}
@@ -440,7 +440,7 @@ func NewKafkaSaramaSink(ctx context.Context, sinkURI *url.URL,
 	topicManager, err := manager.NewKafkaTopicManager(
 		client,
 		adminClient,
-		baseConfig.DeriveTopicConfig(),
+		options.DeriveTopicConfig(),
 	)
 	if err != nil {
 		return nil, cerror.WrapError(cerror.ErrKafkaNewSaramaProducer, err)
@@ -454,7 +454,7 @@ func NewKafkaSaramaSink(ctx context.Context, sinkURI *url.URL,
 		ctx,
 		client,
 		adminClient,
-		baseConfig,
+		options,
 		saramaConfig,
 		errCh,
 		changefeedID,

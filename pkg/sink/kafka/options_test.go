@@ -24,6 +24,7 @@ import (
 	"github.com/Shopify/sarama"
 	"github.com/pingcap/errors"
 	"github.com/pingcap/tiflow/cdc/contextutil"
+	"github.com/pingcap/tiflow/cdc/model"
 	"github.com/pingcap/tiflow/cdc/sink/codec/common"
 	"github.com/pingcap/tiflow/cdc/sink/mq/producer/kafka"
 	"github.com/pingcap/tiflow/pkg/config"
@@ -34,17 +35,17 @@ import (
 
 func TestNewSaramaConfig(t *testing.T) {
 	ctx := context.Background()
-	config := NewConfig()
-	config.Version = "invalid"
-	_, err := NewSaramaConfig(ctx, config)
+	options := NewOptions()
+	options.Version = "invalid"
+	_, err := NewSaramaConfig(ctx, options)
 	require.Regexp(t, "invalid version.*", errors.Cause(err))
 	ctx = contextutil.SetOwnerInCtx(ctx)
-	config.Version = "2.6.0"
-	config.ClientID = "^invalid$"
-	_, err = NewSaramaConfig(ctx, config)
+	options.Version = "2.6.0"
+	options.ClientID = "^invalid$"
+	_, err = NewSaramaConfig(ctx, options)
 	require.True(t, cerror.ErrKafkaInvalidClientID.Equal(err))
 
-	config.ClientID = "test-kafka-client"
+	options.ClientID = "test-kafka-client"
 	compressionCases := []struct {
 		algorithm string
 		expected  sarama.CompressionCodec
@@ -57,31 +58,31 @@ func TestNewSaramaConfig(t *testing.T) {
 		{"others", sarama.CompressionNone},
 	}
 	for _, cc := range compressionCases {
-		config.Compression = cc.algorithm
-		cfg, err := NewSaramaConfig(ctx, config)
+		options.Compression = cc.algorithm
+		cfg, err := NewSaramaConfig(ctx, options)
 		require.Nil(t, err)
 		require.Equal(t, cc.expected, cfg.Producer.Compression)
 	}
 
-	config.EnableTLS = true
-	config.Credential = &security.Credential{
+	options.EnableTLS = true
+	options.Credential = &security.Credential{
 		CAPath:   "/invalid/ca/path",
 		CertPath: "/invalid/cert/path",
 		KeyPath:  "/invalid/key/path",
 	}
-	_, err = NewSaramaConfig(ctx, config)
+	_, err = NewSaramaConfig(ctx, options)
 	require.Regexp(t, ".*no such file or directory", errors.Cause(err))
 
-	saslConfig := NewConfig()
-	saslConfig.Version = "2.6.0"
-	saslConfig.ClientID = "test-sasl-scram"
-	saslConfig.SASL = &security.SASL{
+	saslOptions := NewOptions()
+	saslOptions.Version = "2.6.0"
+	saslOptions.ClientID = "test-sasl-scram"
+	saslOptions.SASL = &security.SASL{
 		SASLUser:      "user",
 		SASLPassword:  "password",
 		SASLMechanism: sarama.SASLTypeSCRAMSHA256,
 	}
 
-	cfg, err := NewSaramaConfig(ctx, saslConfig)
+	cfg, err := NewSaramaConfig(ctx, saslOptions)
 	require.Nil(t, err)
 	require.NotNil(t, cfg)
 	require.Equal(t, "user", cfg.Net.SASL.User)
@@ -90,30 +91,30 @@ func TestNewSaramaConfig(t *testing.T) {
 }
 
 func TestConfigTimeouts(t *testing.T) {
-	cfg := NewConfig()
-	require.Equal(t, 10*time.Second, cfg.DialTimeout)
-	require.Equal(t, 10*time.Second, cfg.ReadTimeout)
-	require.Equal(t, 10*time.Second, cfg.WriteTimeout)
+	options := NewOptions()
+	require.Equal(t, 10*time.Second, options.DialTimeout)
+	require.Equal(t, 10*time.Second, options.ReadTimeout)
+	require.Equal(t, 10*time.Second, options.WriteTimeout)
 
-	saramaConfig, err := NewSaramaConfig(context.Background(), cfg)
+	saramaConfig, err := NewSaramaConfig(context.Background(), options)
 	require.Nil(t, err)
-	require.Equal(t, cfg.DialTimeout, saramaConfig.Net.DialTimeout)
-	require.Equal(t, cfg.WriteTimeout, saramaConfig.Net.WriteTimeout)
-	require.Equal(t, cfg.ReadTimeout, saramaConfig.Net.ReadTimeout)
+	require.Equal(t, options.DialTimeout, saramaConfig.Net.DialTimeout)
+	require.Equal(t, options.WriteTimeout, saramaConfig.Net.WriteTimeout)
+	require.Equal(t, options.ReadTimeout, saramaConfig.Net.ReadTimeout)
 
 	uri := "kafka://127.0.0.1:9092/kafka-test?dial-timeout=5s&read-timeout=1000ms" +
 		"&write-timeout=2m"
 	sinkURI, err := url.Parse(uri)
 	require.Nil(t, err)
 
-	err = cfg.Apply(sinkURI)
+	err = options.Apply(sinkURI)
 	require.Nil(t, err)
 
-	require.Equal(t, 5*time.Second, cfg.DialTimeout)
-	require.Equal(t, 1000*time.Millisecond, cfg.ReadTimeout)
-	require.Equal(t, 2*time.Minute, cfg.WriteTimeout)
+	require.Equal(t, 5*time.Second, options.DialTimeout)
+	require.Equal(t, 1000*time.Millisecond, options.ReadTimeout)
+	require.Equal(t, 2*time.Minute, options.WriteTimeout)
 
-	saramaConfig, err = NewSaramaConfig(context.Background(), cfg)
+	saramaConfig, err = NewSaramaConfig(context.Background(), options)
 	require.Nil(t, err)
 	require.Equal(t, 5*time.Second, saramaConfig.Net.DialTimeout)
 	require.Equal(t, 1000*time.Millisecond, saramaConfig.Net.ReadTimeout)
@@ -121,7 +122,7 @@ func TestConfigTimeouts(t *testing.T) {
 }
 
 func TestCompleteConfigByOpts(t *testing.T) {
-	cfg := NewConfig()
+	options := NewOptions()
 
 	// Normal config.
 	uriTemplate := "kafka://127.0.0.1:9092/kafka-test?kafka-version=2.6.0&max-batch-size=5" +
@@ -132,68 +133,68 @@ func TestCompleteConfigByOpts(t *testing.T) {
 	sinkURI, err := url.Parse(uri)
 	require.Nil(t, err)
 
-	err = cfg.Apply(sinkURI)
+	err = options.Apply(sinkURI)
 	require.Nil(t, err)
-	require.Equal(t, int32(1), cfg.PartitionNum)
-	require.Equal(t, int16(3), cfg.ReplicationFactor)
-	require.Equal(t, "2.6.0", cfg.Version)
-	require.Equal(t, 4096, cfg.MaxMessageBytes)
+	require.Equal(t, int32(1), options.PartitionNum)
+	require.Equal(t, int16(3), options.ReplicationFactor)
+	require.Equal(t, "2.6.0", options.Version)
+	require.Equal(t, 4096, options.MaxMessageBytes)
 
 	// multiple kafka broker endpoints
 	uri = "kafka://127.0.0.1:9092,127.0.0.1:9091,127.0.0.1:9090/kafka-test?"
 	sinkURI, err = url.Parse(uri)
 	require.Nil(t, err)
-	cfg = NewConfig()
-	err = cfg.Apply(sinkURI)
+	options = NewOptions()
+	err = options.Apply(sinkURI)
 	require.Nil(t, err)
-	require.Len(t, cfg.BrokerEndpoints, 3)
+	require.Len(t, options.BrokerEndpoints, 3)
 
 	// Illegal replication-factor.
 	uri = "kafka://127.0.0.1:9092/abc?kafka-version=2.6.0&replication-factor=a"
 	sinkURI, err = url.Parse(uri)
 	require.Nil(t, err)
-	cfg = NewConfig()
-	err = cfg.Apply(sinkURI)
+	options = NewOptions()
+	err = options.Apply(sinkURI)
 	require.Regexp(t, ".*invalid syntax.*", errors.Cause(err))
 
 	// Illegal max-message-bytes.
 	uri = "kafka://127.0.0.1:9092/abc?kafka-version=2.6.0&max-message-bytes=a"
 	sinkURI, err = url.Parse(uri)
 	require.Nil(t, err)
-	cfg = NewConfig()
-	err = cfg.Apply(sinkURI)
+	options = NewOptions()
+	err = options.Apply(sinkURI)
 	require.Regexp(t, ".*invalid syntax.*", errors.Cause(err))
 
 	// Illegal partition-num.
 	uri = "kafka://127.0.0.1:9092/abc?kafka-version=2.6.0&partition-num=a"
 	sinkURI, err = url.Parse(uri)
 	require.Nil(t, err)
-	cfg = NewConfig()
-	err = cfg.Apply(sinkURI)
+	options = NewOptions()
+	err = options.Apply(sinkURI)
 	require.Regexp(t, ".*invalid syntax.*", errors.Cause(err))
 
 	// Out of range partition-num.
 	uri = "kafka://127.0.0.1:9092/abc?kafka-version=2.6.0&partition-num=0"
 	sinkURI, err = url.Parse(uri)
 	require.Nil(t, err)
-	cfg = NewConfig()
-	err = cfg.Apply(sinkURI)
+	options = NewOptions()
+	err = options.Apply(sinkURI)
 	require.Regexp(t, ".*invalid partition num.*", errors.Cause(err))
 }
 
 func TestSetPartitionNum(t *testing.T) {
-	cfg := NewConfig()
-	err := cfg.SetPartitionNum(2)
+	options := NewOptions()
+	err := options.SetPartitionNum(2)
 	require.Nil(t, err)
-	require.Equal(t, int32(2), cfg.PartitionNum)
+	require.Equal(t, int32(2), options.PartitionNum)
 
-	cfg.PartitionNum = 1
-	err = cfg.SetPartitionNum(2)
+	options.PartitionNum = 1
+	err = options.SetPartitionNum(2)
 	require.Nil(t, err)
-	require.Equal(t, int32(1), cfg.PartitionNum)
+	require.Equal(t, int32(1), options.PartitionNum)
 
-	cfg.PartitionNum = 3
-	err = cfg.SetPartitionNum(2)
+	options.PartitionNum = 3
+	err = options.SetPartitionNum(2)
 	require.True(t, cerror.ErrKafkaInvalidPartitionNum.Equal(err))
 }
 
@@ -389,11 +390,11 @@ func TestConfigurationCombinations(t *testing.T) {
 		sinkURI, err := url.Parse(uri)
 		require.Nil(t, err)
 
-		baseConfig := NewConfig()
-		err = baseConfig.Apply(sinkURI)
+		options := NewOptions()
+		err = options.Apply(sinkURI)
 		require.Nil(t, err)
 
-		saramaConfig, err := NewSaramaConfig(context.Background(), baseConfig)
+		saramaConfig, err := NewSaramaConfig(context.Background(), options)
 		require.Nil(t, err)
 
 		adminClient, err := kafka.NewAdminClientImpl([]string{sinkURI.Host}, saramaConfig)
@@ -402,7 +403,7 @@ func TestConfigurationCombinations(t *testing.T) {
 		topic, ok := a.uriParams[0].(string)
 		require.True(t, ok)
 		require.NotEqual(t, "", topic)
-		err = kafka.AdjustConfig(adminClient, baseConfig, saramaConfig, topic)
+		err = kafka.AdjustConfig(adminClient, options, saramaConfig, topic)
 		require.Nil(t, err)
 
 		encoderConfig := common.NewConfig(config.ProtocolOpen)
@@ -486,13 +487,13 @@ func TestApplySASL(t *testing.T) {
 	for _, test := range tests {
 		t.Run(test.name, func(t *testing.T) {
 			t.Parallel()
-			cfg := NewConfig()
+			options := NewOptions()
 			sinkURI, err := url.Parse(test.URI)
 			require.Nil(t, err)
 			if test.exceptErr == "" {
-				require.Nil(t, cfg.applySASL(sinkURI.Query()))
+				require.Nil(t, options.applySASL(sinkURI.Query()))
 			} else {
-				require.Regexp(t, test.exceptErr, cfg.applySASL(sinkURI.Query()).Error())
+				require.Regexp(t, test.exceptErr, options.applySASL(sinkURI.Query()).Error())
 			}
 		})
 	}
@@ -551,15 +552,15 @@ func TestApplyTLS(t *testing.T) {
 	for _, test := range tests {
 		t.Run(test.name, func(t *testing.T) {
 			t.Parallel()
-			cfg := NewConfig()
+			options := NewOptions()
 			sinkURI, err := url.Parse(test.URI)
 			require.Nil(t, err)
 			if test.exceptErr == "" {
-				require.Nil(t, cfg.applyTLS(sinkURI.Query()))
+				require.Nil(t, options.applyTLS(sinkURI.Query()))
 			} else {
-				require.Regexp(t, test.exceptErr, cfg.applyTLS(sinkURI.Query()).Error())
+				require.Regexp(t, test.exceptErr, options.applyTLS(sinkURI.Query()).Error())
 			}
-			require.Equal(t, test.tlsEnabled, cfg.EnableTLS)
+			require.Equal(t, test.tlsEnabled, options.EnableTLS)
 		})
 	}
 }
@@ -568,31 +569,77 @@ func TestCompleteSaramaSASLConfig(t *testing.T) {
 	t.Parallel()
 
 	// Test that SASL is turned on correctly.
-	cfg := NewConfig()
-	cfg.SASL = &security.SASL{
+	options := NewOptions()
+	options.SASL = &security.SASL{
 		SASLUser:      "user",
 		SASLPassword:  "password",
 		SASLMechanism: "",
 		GSSAPI:        security.GSSAPI{},
 	}
 	saramaConfig := sarama.NewConfig()
-	completeSaramaSASLConfig(saramaConfig, cfg)
+	completeSaramaSASLConfig(saramaConfig, options)
 	require.False(t, saramaConfig.Net.SASL.Enable)
-	cfg.SASL.SASLMechanism = "plain"
-	completeSaramaSASLConfig(saramaConfig, cfg)
+	options.SASL.SASLMechanism = "plain"
+	completeSaramaSASLConfig(saramaConfig, options)
 	require.True(t, saramaConfig.Net.SASL.Enable)
 	// Test that the SCRAMClientGeneratorFunc is set up correctly.
-	cfg = NewConfig()
-	cfg.SASL = &security.SASL{
+	options = NewOptions()
+	options.SASL = &security.SASL{
 		SASLUser:      "user",
 		SASLPassword:  "password",
 		SASLMechanism: "plain",
 		GSSAPI:        security.GSSAPI{},
 	}
 	saramaConfig = sarama.NewConfig()
-	completeSaramaSASLConfig(saramaConfig, cfg)
+	completeSaramaSASLConfig(saramaConfig, options)
 	require.Nil(t, saramaConfig.Net.SASL.SCRAMClientGeneratorFunc)
-	cfg.SASL.SASLMechanism = "SCRAM-SHA-512"
-	completeSaramaSASLConfig(saramaConfig, cfg)
+	options.SASL.SASLMechanism = "SCRAM-SHA-512"
+	completeSaramaSASLConfig(saramaConfig, options)
 	require.NotNil(t, saramaConfig.Net.SASL.SCRAMClientGeneratorFunc)
+}
+
+func TestClientID(t *testing.T) {
+	testCases := []struct {
+		role         string
+		addr         string
+		changefeedID string
+		configuredID string
+		hasError     bool
+		expected     string
+	}{
+		{
+			"owner", "domain:1234", "123-121-121-121",
+			"", false,
+			"TiCDC_sarama_producer_owner_domain_1234_default_123-121-121-121",
+		},
+		{
+			"owner", "127.0.0.1:1234", "123-121-121-121",
+			"", false,
+			"TiCDC_sarama_producer_owner_127.0.0.1_1234_default_123-121-121-121",
+		},
+		{
+			"owner", "127.0.0.1:1234?:,\"", "123-121-121-121",
+			"", false,
+			"TiCDC_sarama_producer_owner_127.0.0.1_1234_____default_123-121-121-121",
+		},
+		{
+			"owner", "中文", "123-121-121-121",
+			"", true, "",
+		},
+		{
+			"owner", "127.0.0.1:1234",
+			"123-121-121-121", "cdc-changefeed-1", false,
+			"cdc-changefeed-1",
+		},
+	}
+	for _, tc := range testCases {
+		id, err := newKafkaClientID(tc.role, tc.addr,
+			model.DefaultChangeFeedID(tc.changefeedID), tc.configuredID)
+		if tc.hasError {
+			require.Error(t, err)
+		} else {
+			require.Nil(t, err)
+			require.Equal(t, tc.expected, id)
+		}
+	}
 }
