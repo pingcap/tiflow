@@ -16,7 +16,9 @@ package kafka
 import (
 	"context"
 	"crypto/tls"
+	"fmt"
 	"net/url"
+	"regexp"
 	"strconv"
 	"strings"
 	"time"
@@ -25,6 +27,7 @@ import (
 	"github.com/pingcap/errors"
 	"github.com/pingcap/log"
 	"github.com/pingcap/tiflow/cdc/contextutil"
+	"github.com/pingcap/tiflow/cdc/model"
 	"github.com/pingcap/tiflow/pkg/config"
 	cerror "github.com/pingcap/tiflow/pkg/errors"
 	"github.com/pingcap/tiflow/pkg/security"
@@ -72,8 +75,8 @@ func NewConfig() *Config {
 	}
 }
 
-// set the partition-num by the topic's partition count.
-func (c *Config) setPartitionNum(realPartitionCount int32) error {
+// SetPartitionNum set the partition-num by the topic's partition count.
+func (c *Config) SetPartitionNum(realPartitionCount int32) error {
 	// user does not specify the `partition-num` in the sink-uri
 	if c.PartitionNum == 0 {
 		c.PartitionNum = realPartitionCount
@@ -349,7 +352,7 @@ func NewSaramaConfig(ctx context.Context, c *Config) (*sarama.Config, error) {
 	captureAddr := contextutil.CaptureAddrFromCtx(ctx)
 	changefeedID := contextutil.ChangefeedIDFromCtx(ctx)
 
-	config.ClientID, err = kafkaClientID(role, captureAddr, changefeedID, c.ClientID)
+	config.ClientID, err = newKafkaClientID(role, captureAddr, changefeedID, c.ClientID)
 	if err != nil {
 		return nil, errors.Trace(err)
 	}
@@ -469,4 +472,26 @@ func completeSaramaSASLConfig(config *sarama.Config, c *Config) {
 			}
 		}
 	}
+}
+
+var (
+	validClientID     = regexp.MustCompile(`\A[A-Za-z0-9._-]+\z`)
+	commonInvalidChar = regexp.MustCompile(`[\?:,"]`)
+)
+
+func newKafkaClientID(role, captureAddr string,
+	changefeedID model.ChangeFeedID,
+	configuredClientID string,
+) (clientID string, err error) {
+	if configuredClientID != "" {
+		clientID = configuredClientID
+	} else {
+		clientID = fmt.Sprintf("TiCDC_producer_%s_%s_%s_%s",
+			role, captureAddr, changefeedID.Namespace, changefeedID.ID)
+		clientID = commonInvalidChar.ReplaceAllString(clientID, "_")
+	}
+	if !validClientID.MatchString(clientID) {
+		return "", cerror.ErrKafkaInvalidClientID.GenWithStackByArgs(clientID)
+	}
+	return
 }

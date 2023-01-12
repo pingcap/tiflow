@@ -44,11 +44,11 @@ func NewKafkaDDLSink(
 		return nil, errors.Trace(err)
 	}
 
-	baseConfig := kafka.NewConfig()
+	baseConfig := pkafka.NewConfig()
 	if err := baseConfig.Apply(sinkURI); err != nil {
 		return nil, cerror.WrapError(cerror.ErrKafkaInvalidConfig, err)
 	}
-	saramaConfig, err := kafka.NewSaramaConfig(ctx, baseConfig)
+	saramaConfig, err := pkafka.NewSaramaConfig(ctx, baseConfig)
 	if err != nil {
 		return nil, errors.Trace(err)
 	}

@@ -16,7 +16,6 @@ package kafka
 import (
 	"context"
 	"fmt"
-	"regexp"
 	"strconv"
 	"sync"
 	"sync/atomic"
@@ -322,7 +321,7 @@ func NewKafkaSaramaProducer(
 	ctx context.Context,
 	client sarama.Client,
 	admin kafka.ClusterAdminClient,
-	config *Config,
+	config *kafka.Config,
 	saramaConfig *sarama.Config,
 	errCh chan error,
 	changefeedID model.ChangeFeedID,
@@ -372,31 +371,9 @@ func NewKafkaSaramaProducer(
 	return k, nil
 }
 
-var (
-	validClientID     = regexp.MustCompile(`\A[A-Za-z0-9._-]+\z`)
-	commonInvalidChar = regexp.MustCompile(`[\?:,"]`)
-)
-
-func kafkaClientID(role, captureAddr string,
-	changefeedID model.ChangeFeedID,
-	configuredClientID string,
-) (clientID string, err error) {
-	if configuredClientID != "" {
-		clientID = configuredClientID
-	} else {
-		clientID = fmt.Sprintf("TiCDC_sarama_producer_%s_%s_%s_%s",
-			role, captureAddr, changefeedID.Namespace, changefeedID.ID)
-		clientID = commonInvalidChar.ReplaceAllString(clientID, "_")
-	}
-	if !validClientID.MatchString(clientID) {
-		return "", cerror.ErrKafkaInvalidClientID.GenWithStackByArgs(clientID)
-	}
-	return
-}
-
 // AdjustConfig adjust the `Config` and `sarama.Config` by condition.
 func AdjustConfig(
-	admin kafka.ClusterAdminClient, config *Config, saramaConfig *sarama.Config, topic string,
+	admin kafka.ClusterAdminClient, config *kafka.Config, saramaConfig *sarama.Config, topic string,
 ) error {
 	topics, err := admin.ListTopics()
 	if err != nil {
@@ -436,7 +413,7 @@ func AdjustConfig(
 				zap.String("topic", topic), zap.Any("detail", info))
 		}
 
-		if err := config.setPartitionNum(info.NumPartitions); err != nil {
+		if err := config.SetPartitionNum(info.NumPartitions); err != nil {
 			return errors.Trace(err)
 		}
 
