@@ -73,9 +73,10 @@ func MaskSinkURI(uri string) (string, error) {
 		log.Error("failed to parse sink URI", zap.Error(err))
 		return "", err
 	}
-	if uriParsed.User != nil && uriParsed.User.String() != "" {
-		uriParsed.User = url.UserPassword(uriParsed.User.Username(), "xxxx")
+	queries := uriParsed.Query()
+	if queries.Has("sasl-password") {
+		queries.Set("sasl-password", "xxxxx")
+		uriParsed.RawQuery = queries.Encode()
 	}
-
-	return uriParsed.String(), nil
+	return uriParsed.Redacted(), nil
 }
