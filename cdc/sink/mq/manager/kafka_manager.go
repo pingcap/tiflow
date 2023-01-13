@@ -136,7 +136,7 @@ func (m *kafkaTopicManager) getMetadataOfTopics() (map[string]kafka.TopicDetail,
 	})
 
 	start := time.Now()
-	topicMetaList, err := m.admin.GetTopicsMeta(topicList, false)
+	topicMetaList, err := m.admin.GetTopicsMeta(topicList, true)
 	if err != nil {
 		log.Warn(
 			"Kafka admin client describe topics failed",
@@ -202,8 +202,8 @@ func (m *kafkaTopicManager) listTopics() error {
 
 	// Now that we have access to the latest topics' information,
 	// we need to update it here immediately.
-	for _, detail := range topics {
-		m.tryUpdatePartitionsAndLogging(detail.Name, detail.NumPartitions)
+	for topic, detail := range topics {
+		m.tryUpdatePartitionsAndLogging(topic, detail.NumPartitions)
 	}
 	m.lastMetadataRefresh.Store(time.Now().Unix())
 
@@ -220,26 +220,17 @@ func (m *kafkaTopicManager) createTopic(topicName string) (int32, error) {
 
 	// Now that we have access to the latest topics' information,
 	// we need to update it here immediately.
-	var (
-		targetTopicFound        bool
-		targetTopicPartitionNum int32
-	)
-	for _, topic := range topicMetaList {
-		if topic.Name == topicName {
-			targetTopicFound = true
-			targetTopicPartitionNum = topic.NumPartitions
-		}
-		m.tryUpdatePartitionsAndLogging(topic.Name, topic.NumPartitions)
+	for topic, detail := range topicMetaList {
+		m.tryUpdatePartitionsAndLogging(topic, detail.NumPartitions)
 	}
-	m.lastMetadataRefresh.Store(time.Now().Unix())
 
-	// Maybe our cache has expired information, so we just return it.
+	detail, targetTopicFound := topicMetaList[topicName]
 	if targetTopicFound {
 		log.Info(
 			"topic already exists and the cached information has expired",
 			zap.String("topic", topicName),
 		)
-		return targetTopicPartitionNum, nil
+		return detail.NumPartitions, nil
 	}
 
 	if !m.cfg.AutoCreate {
