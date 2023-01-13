@@ -54,16 +54,7 @@ type TopicMetadata struct {
 	Name string
 	Err  error
 
-	Partitions []*PartitionMetadata
-}
-
-type PartitionMetadata struct {
-	Err             error
-	ID              int32
-	Leader          int32
-	Replicas        []int32
-	Isr             []int32
-	OfflineReplicas []int32
+	NumPartition int32
 }
 
 // ClusterAdminClient is the administrative client for Kafka, which supports managing and inspecting topics,
@@ -83,11 +74,8 @@ type ClusterAdminClient interface {
 	// CreateTopic creates a new topic.
 	CreateTopic(topic string, detail *TopicDetail, validateOnly bool) error
 
-	// DescribeTopics fetches metadata from some topics.
-	DescribeTopics(topics []string) (metadata []*TopicMetadata, err error)
-
 	// GetTopicMeta return a topic's metadata
-	GetTopicMeta(topic string) (*TopicMetadata, error)
+	GetTopicMeta(topics []string) ([]*TopicMetadata, error)
 
 	// Close shuts down the admin and closes underlying client.
 	Close() error

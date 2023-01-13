@@ -137,7 +137,7 @@ func (m *kafkaTopicManager) getMetadataOfTopics() ([]*kafka.TopicMetadata, error
 	})
 
 	start := time.Now()
-	topicMetaList, err := m.admin.DescribeTopics(topicList)
+	topicMetaList, err := m.admin.GetTopicMeta(topicList)
 	if err != nil {
 		log.Warn(
 			"Kafka admin client describe topics failed",
@@ -160,9 +160,10 @@ func (m *kafkaTopicManager) getMetadataOfTopics() ([]*kafka.TopicMetadata, error
 // topics have been created.
 // See https://kafka.apache.org/23/javadoc/org/apache/kafka/clients/admin/AdminClient.html
 func (m *kafkaTopicManager) waitUntilTopicVisible(topicName string) error {
+	topics := []string{topicName}
 	err := retry.Do(context.Background(), func() error {
 		start := time.Now()
-		meta, err := m.admin.GetTopicMeta(topicName)
+		meta, err := m.admin.GetTopicMeta(topics)
 		if err != nil {
 			log.Warn(" topic not found, retry it",
 				zap.Error(err),
@@ -170,10 +171,9 @@ func (m *kafkaTopicManager) waitUntilTopicVisible(topicName string) error {
 			)
 			return err
 		}
-		g
 		log.Info("topic found",
 			zap.String("topic", topicName),
-			zap.Int("partitionNumber", len(meta.Partitions)),
+			zap.Int32("partitionNumber", meta[0].NumPartition),
 			zap.Duration("duration", time.Since(start)))
 		return nil
 	}, retry.WithBackoffBaseDelay(500),
@@ -221,8 +221,10 @@ func (m *kafkaTopicManager) createTopic(topicName string) (int32, error) {
 
 	// Now that we have access to the latest topics' information,
 	// we need to update it here immediately.
-	targetTopicFound := false
-	targetTopicPartitionNum := 0
+	var (
+		targetTopicFound        bool
+		targetTopicPartitionNum int32
+	)
 	for _, topic := range topicMetaList {
 		if topic.Err != sarama.ErrNoError {
 			log.Error("Kafka admin client fetch topic metadata failed.",
@@ -233,9 +235,9 @@ func (m *kafkaTopicManager) createTopic(topicName string) (int32, error) {
 
 		if topic.Name == topicName {
 			targetTopicFound = true
-			targetTopicPartitionNum = len(topic.Partitions)
+			targetTopicPartitionNum = topic.NumPartition
 		}
-		m.tryUpdatePartitionsAndLogging(topic.Name, int32(len(topic.Partitions)))
+		m.tryUpdatePartitionsAndLogging(topic.Name, topic.NumPartition)
 	}
 	m.lastMetadataRefresh.Store(time.Now().Unix())
 

@@ -124,46 +124,7 @@ func (c *ClusterAdminClientMockImpl) SetRemainingFetchesUntilTopicVisible(topicN
 	return nil
 }
 
-// DescribeTopics fetches metadata from some topics.
-func (c *ClusterAdminClientMockImpl) DescribeTopics(topics []string) (
-	metadata []*TopicMetadata, err error,
-) {
-	topicDescriptions := make(map[string]*TopicMetadata)
-
-	for _, requestedTopic := range topics {
-		for topicName, topicDetail := range c.topics {
-			if topicName == requestedTopic {
-				if topicDetail.fetchesRemainingUntilVisible > 0 {
-					topicDetail.fetchesRemainingUntilVisible--
-					continue
-				} else {
-					topicDescriptions[topicName] = &TopicMetadata{
-						Name:       topicName,
-						Partitions: make([]*PartitionMetadata, topicDetail.NumPartitions),
-					}
-					break
-				}
-			}
-		}
-
-		if _, ok := topicDescriptions[requestedTopic]; !ok {
-			topicDescriptions[requestedTopic] = &TopicMetadata{
-				Name: requestedTopic,
-				// todo: make this error not related to the sarama.
-				Err: sarama.ErrUnknownTopicOrPartition,
-			}
-		}
-	}
-
-	metadataRes := make([]*TopicMetadata, 0)
-	for _, meta := range topicDescriptions {
-		metadataRes = append(metadataRes, meta)
-	}
-
-	return metadataRes, nil
-}
-
-func (c *ClusterAdminClientMockImpl) GetTopicMeta(topic string) (*TopicMetadata, error) {
+func (c *ClusterAdminClientMockImpl) GetTopicMeta(topics []string) ([]*TopicMetadata, error) {
 	return nil, nil
 }
 

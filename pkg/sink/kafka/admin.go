@@ -126,45 +126,25 @@ func (a *admin) GetBrokerConfig(configName string) (string, error) {
 	return configEntries[0].Value, nil
 }
 
-func (a *admin) DescribeTopics(topics []string) ([]*TopicMetadata, error) {
-	meta, err := a.client.DescribeTopics(topics)
+func (a *admin) GetTopicMeta(topics []string) ([]*TopicMetadata, error) {
+	metaList, err := a.client.DescribeTopics(topics)
 	if err != nil {
 		return nil, err
 	}
 
-	result := make([]*TopicMetadata, 0, len(meta))
-	for _, topic := range meta {
+	result := make([]*TopicMetadata, 0, len(metaList))
+	for _, meta := range metaList {
+		if meta.Err != sarama.ErrNoError {
+			return nil, meta.Err
+		}
 		result = append(result, &TopicMetadata{
-			Name: topic.Name,
-			Err:  topic.Err,
+			Name:         meta.Name,
+			Err:          meta.Err,
+			NumPartition: int32(len(meta.Partitions)),
 		})
 	}
+
 	return result, nil
-}
-
-func (a *admin) GetTopicMeta(topic string) (*TopicMetadata, error) {
-	metaList, err := a.client.DescribeTopics([]string{topic})
-	if err != nil {
-		return nil, err
-	}
-
-	if len(metaList) == 0 {
-		return nil, cerror.ErrKafkaTopicNotExists.GenWithStack("topic %s not found", topic)
-	}
-
-	meta := metaList[0]
-	if meta.Name != topic {
-		return nil, cerror.ErrKafkaTopicNotExists.GenWithStack("topic %s not found", topic)
-	}
-
-	if meta.Err != sarama.ErrNoError {
-		return nil, meta.Err
-	}
-
-	return &TopicMetadata{
-		Name: meta.Name,
-		Err:  meta.Err,
-	}, nil
 }
 
 func (a *admin) Close() error {
