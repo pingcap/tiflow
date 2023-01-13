@@ -18,6 +18,7 @@ import (
 	"strconv"
 
 	"github.com/Shopify/sarama"
+	"github.com/pingcap/tiflow/pkg/errors"
 )
 
 const (
@@ -110,7 +111,12 @@ func (c *ClusterAdminClientMockImpl) GetCoordinator() (int32, error) {
 
 // GetBrokerConfig implement the ClusterAdminClient interface
 func (c *ClusterAdminClientMockImpl) GetBrokerConfig(configName string) (string, error) {
-	return c.brokerConfigs[configName], nil
+	value, ok := c.brokerConfigs[configName]
+	if !ok {
+		return "", errors.ErrKafkaBrokerConfigNotFound.GenWithStack(
+			"cannot find the `%s` from the broker's configuration", configName)
+	}
+	return value, nil
 }
 
 // SetRemainingFetchesUntilTopicVisible is used to control the visibility of a specific topic.
