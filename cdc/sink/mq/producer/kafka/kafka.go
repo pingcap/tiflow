@@ -507,7 +507,7 @@ func validateMinInsyncReplicas(
 
 // getBrokerConfig gets broker config by name.
 func getBrokerConfig(admin kafka.ClusterAdminClient, brokerConfigName string) (string, error) {
-	_, controllerID, err := admin.DescribeCluster()
+	controllerID, err := admin.GetCoordinator()
 	if err != nil {
 		return "", err
 	}

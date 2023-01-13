@@ -48,7 +48,9 @@ func (a *admin) ListTopics() (map[string]TopicDetail, error) {
 	for topic, detail := range topics {
 		configEntries := make(map[string]string, len(detail.ConfigEntries))
 		for name, value := range detail.ConfigEntries {
-			configEntries[name] = *value
+			if value != nil {
+				configEntries[name] = *value
+			}
 		}
 		result[topic] = TopicDetail{
 			NumPartitions:     detail.NumPartitions,
@@ -72,10 +74,10 @@ func (a *admin) CreateTopic(topic string, detail *TopicDetail, validateOnly bool
 	return nil
 }
 
-func (a *admin) DescribeCluster() ([]Broker, int32, error) {
-	brokers, controllerID, err := a.client.DescribeCluster()
+func (a *admin) GetAllBrokers() ([]Broker, error) {
+	brokers, _, err := a.client.DescribeCluster()
 	if err != nil {
-		return nil, 0, err
+		return nil, err
 	}
 
 	result := make([]Broker, 0, len(brokers))
@@ -85,7 +87,15 @@ func (a *admin) DescribeCluster() ([]Broker, int32, error) {
 		})
 	}
 
-	return result, controllerID, nil
+	return result, nil
+}
+
+func (a *admin) GetCoordinator() (int32, error) {
+	_, controllerID, err := a.client.DescribeCluster()
+	if err != nil {
+		return 0, err
+	}
+	return controllerID, nil
 }
 
 func (a *admin) DescribeConfig(resource ConfigResource) (map[string]string, error) {

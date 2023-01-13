@@ -98,9 +98,12 @@ func (c *ClusterAdminClientMockImpl) ListTopics() (map[string]TopicDetail, error
 	return topicsDetailsMap, nil
 }
 
-// DescribeCluster returns the controller ID.
-func (c *ClusterAdminClientMockImpl) DescribeCluster() (brokers []Broker, controllerID int32, err error) {
-	return nil, c.controllerID, nil
+func (c *ClusterAdminClientMockImpl) GetAllBrokers() ([]Broker, error) {
+	return nil, nil
+}
+
+func (c *ClusterAdminClientMockImpl) GetCoordinator() (int32, error) {
+	return c.controllerID, nil
 }
 
 // DescribeConfig return brokerConfigs directly.

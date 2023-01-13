@@ -69,10 +69,15 @@ type PartitionMetadata struct {
 // ClusterAdminClient is the administrative client for Kafka, which supports managing and inspecting topics,
 // brokers, configurations and ACLs.
 type ClusterAdminClient interface {
+	// GetAllBrokers return all brokers among the cluster
+	GetAllBrokers() ([]Broker, error)
+
+	// GetCoordinator return the coordinator's broker id for the cluster
+	GetCoordinator() (controllerID int32, err error)
+
 	// ListTopics list the topics available in the cluster with the default options.
 	ListTopics() (map[string]TopicDetail, error)
-	// DescribeCluster gets information about the nodes in the cluster
-	DescribeCluster() (brokers []Broker, controllerID int32, err error)
+
 	// DescribeConfig gets the configuration for the specified resources.
 	DescribeConfig(resource ConfigResource) (map[string]string, error)
 	// DescribeTopics fetches metadata from some topics.
