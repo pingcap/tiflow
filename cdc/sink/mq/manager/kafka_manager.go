@@ -136,6 +136,7 @@ func (m *kafkaTopicManager) getMetadataOfTopics() (map[string]kafka.TopicDetail,
 	})
 
 	start := time.Now()
+	// ignore the topic with error, return a subset of all topics.
 	topicMetaList, err := m.admin.GetTopicsMeta(topicList, true)
 	if err != nil {
 		log.Warn(

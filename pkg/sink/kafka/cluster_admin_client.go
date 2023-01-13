@@ -30,27 +30,28 @@ type Broker struct {
 	ID int32
 }
 
-// ClusterAdminClient is the administrative client for Kafka, which supports managing and inspecting topics,
-// brokers, configurations and ACLs.
+// ClusterAdminClient is the administrative client for Kafka,
+// which supports managing and inspecting topics, brokers, configurations and ACLs.
 type ClusterAdminClient interface {
 	// GetAllBrokers return all brokers among the cluster
 	GetAllBrokers() ([]Broker, error)
 
-	// GetCoordinator return the coordinator's broker id for the cluster
+	// GetCoordinator return the coordinator's broker id of the cluster
 	GetCoordinator() (controllerID int32, err error)
 
+	// GetBrokerConfig return the broker level configuration with the `configName`
 	GetBrokerConfig(configName string) (string, error)
 
 	// GetAllTopicsMeta return all topics' metadata
 	// which available in the cluster with the default options.
 	GetAllTopicsMeta() (map[string]TopicDetail, error)
 
-	// CreateTopic creates a new topic.
-	CreateTopic(topic string, detail *TopicDetail, validateOnly bool) error
-
 	// GetTopicsMeta return all target topics' metadata
 	// if `ignoreTopicError` is true, ignore the topic error and return the metadata of valid topics
 	GetTopicsMeta(topics []string, ignoreTopicError bool) (map[string]TopicDetail, error)
+
+	// CreateTopic creates a new topic.
+	CreateTopic(topic string, detail *TopicDetail, validateOnly bool) error
 
 	// Close shuts down the admin and closes underlying client.
 	Close() error

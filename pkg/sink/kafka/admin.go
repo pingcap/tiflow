@@ -42,43 +42,6 @@ func NewSaramaAdminClient(ctx context.Context, config *Options) (ClusterAdminCli
 	return &admin{client: client}, nil
 }
 
-func (a *admin) GetAllTopicsMeta() (map[string]TopicDetail, error) {
-	topics, err := a.client.ListTopics()
-	if err != nil {
-		return nil, err
-	}
-
-	result := make(map[string]TopicDetail, len(topics))
-	for topic, detail := range topics {
-		configEntries := make(map[string]string, len(detail.ConfigEntries))
-		for name, value := range detail.ConfigEntries {
-			if value != nil {
-				configEntries[name] = *value
-			}
-		}
-		result[topic] = TopicDetail{
-			Name:              topic,
-			NumPartitions:     detail.NumPartitions,
-			ReplicationFactor: detail.ReplicationFactor,
-			ConfigEntries:     configEntries,
-		}
-	}
-
-	return result, nil
-}
-
-func (a *admin) CreateTopic(topic string, detail *TopicDetail, validateOnly bool) error {
-	err := a.client.CreateTopic(topic, &sarama.TopicDetail{
-		NumPartitions:     detail.NumPartitions,
-		ReplicationFactor: detail.ReplicationFactor,
-	}, validateOnly)
-	// Ignore the already exists error because it's not harmful.
-	if err != nil && !strings.Contains(err.Error(), sarama.ErrTopicAlreadyExists.Error()) {
-		return err
-	}
-	return nil
-}
-
 func (a *admin) GetAllBrokers() ([]Broker, error) {
 	brokers, _, err := a.client.DescribeCluster()
 	if err != nil {
@@ -127,6 +90,31 @@ func (a *admin) GetBrokerConfig(configName string) (string, error) {
 	return configEntries[0].Value, nil
 }
 
+func (a *admin) GetAllTopicsMeta() (map[string]TopicDetail, error) {
+	topics, err := a.client.ListTopics()
+	if err != nil {
+		return nil, err
+	}
+
+	result := make(map[string]TopicDetail, len(topics))
+	for topic, detail := range topics {
+		configEntries := make(map[string]string, len(detail.ConfigEntries))
+		for name, value := range detail.ConfigEntries {
+			if value != nil {
+				configEntries[name] = *value
+			}
+		}
+		result[topic] = TopicDetail{
+			Name:              topic,
+			NumPartitions:     detail.NumPartitions,
+			ReplicationFactor: detail.ReplicationFactor,
+			ConfigEntries:     configEntries,
+		}
+	}
+
+	return result, nil
+}
+
 func (a *admin) GetTopicsMeta(
 	topics []string,
 	ignoreTopicError bool,
@@ -142,6 +130,10 @@ func (a *admin) GetTopicsMeta(
 			if !ignoreTopicError {
 				return nil, meta.Err
 			}
+			log.Warn("fetch topic meta failed",
+				zap.String("topic", meta.Name),
+				zap.Error(meta.Err))
+			continue
 		}
 		result[meta.Name] = TopicDetail{
 			Name:          meta.Name,
@@ -150,6 +142,18 @@ func (a *admin) GetTopicsMeta(
 	}
 
 	return result, nil
+}
+
+func (a *admin) CreateTopic(topic string, detail *TopicDetail, validateOnly bool) error {
+	err := a.client.CreateTopic(topic, &sarama.TopicDetail{
+		NumPartitions:     detail.NumPartitions,
+		ReplicationFactor: detail.ReplicationFactor,
+	}, validateOnly)
+	// Ignore the already exists error because it's not harmful.
+	if err != nil && !strings.Contains(err.Error(), sarama.ErrTopicAlreadyExists.Error()) {
+		return err
+	}
+	return nil
 }
 
 func (a *admin) Close() error {
