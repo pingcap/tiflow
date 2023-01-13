@@ -18,7 +18,6 @@ import (
 	"sync"
 	"time"
 
-	"github.com/Shopify/sarama"
 	"github.com/pingcap/errors"
 	"github.com/pingcap/log"
 	"github.com/pingcap/tiflow/cdc/contextutil"
@@ -40,11 +39,11 @@ type kafkaDDLProducer struct {
 	id model.ChangeFeedID
 	// We hold the client to make close operation faster.
 	// Please see the comment of Close().
-	client sarama.Client
+	client pkafka.Client
 	// collector is used to report metrics.
 	collector *collector.Collector
 	// asyncProducer is used to send messages to kafka synchronously.
-	syncProducer sarama.SyncProducer
+	syncProducer pkafka.SyncProducer
 	// closedMu is used to protect `closed`.
 	// We need to ensure that closed producers are never written to.
 	closedMu sync.RWMutex
@@ -54,12 +53,12 @@ type kafkaDDLProducer struct {
 }
 
 // NewKafkaDDLProducer creates a new kafka producer for replicating DDL.
-func NewKafkaDDLProducer(ctx context.Context, client sarama.Client,
+func NewKafkaDDLProducer(ctx context.Context, client pkafka.Client,
 	adminClient pkafka.ClusterAdminClient,
 ) (DDLProducer, error) {
 	changefeedID := contextutil.ChangefeedIDFromCtx(ctx)
 
-	syncProducer, err := sarama.NewSyncProducerFromClient(client)
+	syncProducer, err := client.SyncProducer()
 	if err != nil {
 		// Close the client to prevent the goroutine leak.
 		// Because it may be a long time to close the client,
@@ -82,7 +81,7 @@ func NewKafkaDDLProducer(ctx context.Context, client sarama.Client,
 		return nil, cerror.WrapError(cerror.ErrKafkaNewSaramaProducer, err)
 	}
 	collector := collector.New(changefeedID, util.RoleOwner,
-		adminClient, client.Config().MetricRegistry)
+		adminClient, client.MetricRegistry())
 
 	p := &kafkaDDLProducer{
 		id:           changefeedID,
@@ -108,20 +107,11 @@ func (k *kafkaDDLProducer) SyncBroadcastMessage(ctx context.Context, topic strin
 		return cerror.ErrKafkaProducerClosed.GenWithStackByArgs()
 	}
 
-	msgs := make([]*sarama.ProducerMessage, totalPartitionsNum)
-	for i := 0; i < int(totalPartitionsNum); i++ {
-		msgs[i] = &sarama.ProducerMessage{
-			Topic:     topic,
-			Key:       sarama.ByteEncoder(message.Key),
-			Value:     sarama.ByteEncoder(message.Value),
-			Partition: int32(i),
-		}
-	}
 	select {
 	case <-ctx.Done():
 		return ctx.Err()
 	default:
-		err := k.syncProducer.SendMessages(msgs)
+		err := k.syncProducer.SendMessages(topic, totalPartitionsNum, message.Key, message.Value)
 		return cerror.WrapError(cerror.ErrKafkaSendMessage, err)
 	}
 }
@@ -136,17 +126,11 @@ func (k *kafkaDDLProducer) SyncSendMessage(ctx context.Context, topic string,
 		return cerror.ErrKafkaProducerClosed.GenWithStackByArgs()
 	}
 
-	msg := &sarama.ProducerMessage{
-		Topic:     topic,
-		Key:       sarama.ByteEncoder(message.Key),
-		Value:     sarama.ByteEncoder(message.Value),
-		Partition: partitionNum,
-	}
 	select {
 	case <-ctx.Done():
 		return errors.Trace(ctx.Err())
 	default:
-		_, _, err := k.syncProducer.SendMessage(msg)
+		err := k.syncProducer.SendMessage(topic, partitionNum, message.Key, message.Value)
 		return cerror.WrapError(cerror.ErrKafkaSendMessage, err)
 	}
 }

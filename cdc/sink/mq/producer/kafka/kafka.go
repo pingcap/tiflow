@@ -51,9 +51,9 @@ type kafkaSaramaProducer struct {
 	clientLock sync.RWMutex
 	// This admin mainly used by `metricsMonitor` to fetch broker info.
 	admin         kafka.ClusterAdminClient
-	client        sarama.Client
+	client        kafka.Client
 	asyncProducer sarama.AsyncProducer
-	syncProducer  sarama.SyncProducer
+	syncProducer  kafka.SyncProducer
 
 	// producersReleased records whether asyncProducer and syncProducer have been closed properly
 	producersReleased bool
@@ -129,22 +129,13 @@ func (k *kafkaSaramaProducer) SyncBroadcastMessage(
 ) error {
 	k.clientLock.RLock()
 	defer k.clientLock.RUnlock()
-	msgs := make([]*sarama.ProducerMessage, partitionsNum)
-	for i := 0; i < int(partitionsNum); i++ {
-		msgs[i] = &sarama.ProducerMessage{
-			Topic:     topic,
-			Key:       sarama.ByteEncoder(message.Key),
-			Value:     sarama.ByteEncoder(message.Value),
-			Partition: int32(i),
-		}
-	}
 	select {
 	case <-ctx.Done():
 		return ctx.Err()
 	case <-k.closeCh:
 		return nil
 	default:
-		err := k.syncProducer.SendMessages(msgs)
+		err := k.syncProducer.SendMessages(topic, partitionsNum, message.Key, message.Value)
 		return cerror.WrapError(cerror.ErrKafkaSendMessage, err)
 	}
 }
@@ -316,27 +307,30 @@ func (k *kafkaSaramaProducer) run(ctx context.Context) error {
 // NewAdminClientImpl specifies the build method for the admin client.
 var NewAdminClientImpl kafka.ClusterAdminClientCreator = kafka.NewSaramaAdminClient
 
+// NewClientImpl specifies the build method for the  client.
+var NewClientImpl kafka.ClientCreator = kafka.NewSaramaClient
+
 // NewKafkaSaramaProducer creates a kafka sarama producer
 func NewKafkaSaramaProducer(
 	ctx context.Context,
-	client sarama.Client,
+	client kafka.Client,
 	admin kafka.ClusterAdminClient,
-	config *kafka.Options,
+	options *kafka.Options,
 	saramaConfig *sarama.Config,
 	errCh chan error,
 	changefeedID model.ChangeFeedID,
 ) (*kafkaSaramaProducer, error) {
 	role := contextutil.RoleFromCtx(ctx)
-	log.Info("Starting kafka sarama producer ...", zap.Any("config", config),
+	log.Info("Starting kafka sarama producer ...", zap.Any("options", options),
 		zap.String("namespace", changefeedID.Namespace),
 		zap.String("changefeed", changefeedID.ID), zap.Any("role", role))
 
-	asyncProducer, err := sarama.NewAsyncProducerFromClient(client)
+	asyncProducer, err := client.AsyncProducer()
 	if err != nil {
 		return nil, cerror.WrapError(cerror.ErrKafkaNewSaramaProducer, err)
 	}
 
-	syncProducer, err := sarama.NewSyncProducerFromClient(client)
+	syncProducer, err := client.SyncProducer()
 	if err != nil {
 		return nil, cerror.WrapError(cerror.ErrKafkaNewSaramaProducer, err)
 	}
@@ -373,7 +367,10 @@ func NewKafkaSaramaProducer(
 
 // AdjustConfig adjust the `Options` and `sarama.Config` by condition.
 func AdjustConfig(
-	admin kafka.ClusterAdminClient, options *kafka.Options, saramaConfig *sarama.Config, topic string,
+	admin kafka.ClusterAdminClient,
+	options *kafka.Options,
+	saramaConfig *sarama.Config,
+	topic string,
 ) error {
 	topics, err := admin.ListTopics()
 	if err != nil {

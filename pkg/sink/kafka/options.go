@@ -14,8 +14,6 @@
 package kafka
 
 import (
-	"context"
-	"crypto/tls"
 	"fmt"
 	"net/url"
 	"regexp"
@@ -23,10 +21,8 @@ import (
 	"strings"
 	"time"
 
-	"github.com/Shopify/sarama"
 	"github.com/pingcap/errors"
 	"github.com/pingcap/log"
-	"github.com/pingcap/tiflow/cdc/contextutil"
 	"github.com/pingcap/tiflow/cdc/model"
 	"github.com/pingcap/tiflow/pkg/config"
 	cerror "github.com/pingcap/tiflow/pkg/errors"
@@ -34,7 +30,7 @@ import (
 	"go.uber.org/zap"
 )
 
-// Options stores user specified Kafka producer configuration
+// Options stores user specified configurations
 type Options struct {
 	BrokerEndpoints []string
 	PartitionNum    int32
@@ -52,7 +48,7 @@ type Options struct {
 	// control whether to create topic
 	AutoCreate bool
 
-	// Timeout for sarama `config.Net` configurations, default to `10s`
+	// Timeout for network configurations, default to `10s`
 	DialTimeout  time.Duration
 	WriteTimeout time.Duration
 	ReadTimeout  time.Duration
@@ -75,7 +71,7 @@ func NewOptions() *Options {
 	}
 }
 
-// set the partition-num by the topic's partition count.
+// SetPartitionNum set the partition-num by the topic's partition count.
 func (c *Options) SetPartitionNum(realPartitionCount int32) error {
 	// user does not specify the `partition-num` in the sink-uri
 	if c.PartitionNum == 0 {
@@ -332,145 +328,6 @@ func (c *Options) DeriveTopicConfig() *AutoCreateTopicConfig {
 		AutoCreate:        c.AutoCreate,
 		PartitionNum:      c.PartitionNum,
 		ReplicationFactor: c.ReplicationFactor,
-	}
-}
-
-// NewSaramaConfig return the default config and set the according version and metrics
-func NewSaramaConfig(ctx context.Context, c *Options) (*sarama.Config, error) {
-	config := sarama.NewConfig()
-
-	version, err := sarama.ParseKafkaVersion(c.Version)
-	if err != nil {
-		return nil, cerror.WrapError(cerror.ErrKafkaInvalidVersion, err)
-	}
-	var role string
-	if contextutil.IsOwnerFromCtx(ctx) {
-		role = "owner"
-	} else {
-		role = "processor"
-	}
-	captureAddr := contextutil.CaptureAddrFromCtx(ctx)
-	changefeedID := contextutil.ChangefeedIDFromCtx(ctx)
-
-	config.ClientID, err = newKafkaClientID(role, captureAddr, changefeedID, c.ClientID)
-	if err != nil {
-		return nil, errors.Trace(err)
-	}
-	config.Version = version
-
-	// Producer fetch metadata from brokers frequently, if metadata cannot be
-	// refreshed easily, this would indicate the network condition between the
-	// capture server and kafka broker is not good.
-	// In the scenario that cannot get response from Kafka server, this default
-	// setting can help to get response more quickly.
-	config.Metadata.Retry.Max = 1
-	config.Metadata.Retry.Backoff = 100 * time.Millisecond
-	// This Timeout is useless if the `RefreshMetadata` time cost is less than it.
-	config.Metadata.Timeout = 1 * time.Minute
-
-	// Admin.Retry take effect on `ClusterAdmin` related operations,
-	// only `CreateTopic` for cdc now. set the `Timeout` to `1m` to make CI stable.
-	config.Admin.Retry.Max = 5
-	config.Admin.Retry.Backoff = 100 * time.Millisecond
-	config.Admin.Timeout = 1 * time.Minute
-
-	// Producer.Retry take effect when the producer try to send message to kafka
-	// brokers. If kafka cluster is healthy, just the default value should be enough.
-	// For kafka cluster with a bad network condition, producer should not try to
-	// waster too much time on sending a message, get response no matter success
-	// or fail as soon as possible is preferred.
-	config.Producer.Retry.Max = 3
-	config.Producer.Retry.Backoff = 100 * time.Millisecond
-
-	// make sure sarama producer flush messages as soon as possible.
-	config.Producer.Flush.Bytes = 0
-	config.Producer.Flush.Messages = 0
-	config.Producer.Flush.Frequency = time.Duration(0)
-
-	config.Net.DialTimeout = c.DialTimeout
-	config.Net.WriteTimeout = c.WriteTimeout
-	config.Net.ReadTimeout = c.ReadTimeout
-
-	config.Producer.Partitioner = sarama.NewManualPartitioner
-	config.Producer.MaxMessageBytes = c.MaxMessageBytes
-	config.Producer.Return.Successes = true
-	config.Producer.Return.Errors = true
-	config.Producer.RequiredAcks = sarama.WaitForAll
-	compression := strings.ToLower(strings.TrimSpace(c.Compression))
-	switch compression {
-	case "none":
-		config.Producer.Compression = sarama.CompressionNone
-	case "gzip":
-		config.Producer.Compression = sarama.CompressionGZIP
-	case "snappy":
-		config.Producer.Compression = sarama.CompressionSnappy
-	case "lz4":
-		config.Producer.Compression = sarama.CompressionLZ4
-	case "zstd":
-		config.Producer.Compression = sarama.CompressionZSTD
-	default:
-		log.Warn("Unsupported compression algorithm", zap.String("compression", c.Compression))
-		config.Producer.Compression = sarama.CompressionNone
-	}
-	if config.Producer.Compression != sarama.CompressionNone {
-		log.Info("Kafka producer uses " + compression + " compression algorithm")
-	}
-
-	if c.EnableTLS {
-		// for SSL encryption with a trust CA certificate, we must populate the
-		// following two params of config.Net.TLS
-		config.Net.TLS.Enable = true
-		config.Net.TLS.Config = &tls.Config{
-			MinVersion: tls.VersionTLS12,
-			NextProtos: []string{"h2", "http/1.1"},
-		}
-
-		// for SSL encryption with self-signed CA certificate, we reassign the
-		// config.Net.TLS.Options using the relevant credential files.
-		if c.Credential != nil && c.Credential.IsTLSEnabled() {
-			config.Net.TLS.Config, err = c.Credential.ToTLSConfig()
-			if err != nil {
-				return nil, errors.Trace(err)
-			}
-		}
-	}
-
-	completeSaramaSASLConfig(config, c)
-
-	return config, err
-}
-
-func completeSaramaSASLConfig(config *sarama.Config, c *Options) {
-	if c.SASL != nil && c.SASL.SASLMechanism != "" {
-		config.Net.SASL.Enable = true
-		config.Net.SASL.Mechanism = sarama.SASLMechanism(c.SASL.SASLMechanism)
-		switch c.SASL.SASLMechanism {
-		case sarama.SASLTypeSCRAMSHA256, sarama.SASLTypeSCRAMSHA512, sarama.SASLTypePlaintext:
-			config.Net.SASL.User = c.SASL.SASLUser
-			config.Net.SASL.Password = c.SASL.SASLPassword
-			if strings.EqualFold(string(c.SASL.SASLMechanism), sarama.SASLTypeSCRAMSHA256) {
-				config.Net.SASL.SCRAMClientGeneratorFunc = func() sarama.SCRAMClient {
-					return &security.XDGSCRAMClient{HashGeneratorFcn: security.SHA256}
-				}
-			} else if strings.EqualFold(string(c.SASL.SASLMechanism), sarama.SASLTypeSCRAMSHA512) {
-				config.Net.SASL.SCRAMClientGeneratorFunc = func() sarama.SCRAMClient {
-					return &security.XDGSCRAMClient{HashGeneratorFcn: security.SHA512}
-				}
-			}
-		case sarama.SASLTypeGSSAPI:
-			config.Net.SASL.GSSAPI.AuthType = int(c.SASL.GSSAPI.AuthType)
-			config.Net.SASL.GSSAPI.Username = c.SASL.GSSAPI.Username
-			config.Net.SASL.GSSAPI.ServiceName = c.SASL.GSSAPI.ServiceName
-			config.Net.SASL.GSSAPI.KerberosConfigPath = c.SASL.GSSAPI.KerberosConfigPath
-			config.Net.SASL.GSSAPI.Realm = c.SASL.GSSAPI.Realm
-			config.Net.SASL.GSSAPI.DisablePAFXFAST = c.SASL.GSSAPI.DisablePAFXFAST
-			switch c.SASL.GSSAPI.AuthType {
-			case security.UserAuth:
-				config.Net.SASL.GSSAPI.Password = c.SASL.GSSAPI.Password
-			case security.KeyTabAuth:
-				config.Net.SASL.GSSAPI.KeyTabPath = c.SASL.GSSAPI.KeyTabPath
-			}
-		}
 	}
 }
 

@@ -1,4 +1,4 @@
-// Copyright 2021 PingCAP, Inc.
+// Copyright 2023 PingCAP, Inc.
 //
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -14,114 +14,19 @@
 package kafka
 
 import (
-	"context"
 	"fmt"
 	"net/url"
-	"strconv"
 	"testing"
 	"time"
 
-	"github.com/Shopify/sarama"
 	"github.com/pingcap/errors"
-	"github.com/pingcap/tiflow/cdc/contextutil"
-	"github.com/pingcap/tiflow/cdc/sink/codec/common"
-	"github.com/pingcap/tiflow/cdc/sink/mq/producer/kafka"
-	"github.com/pingcap/tiflow/pkg/config"
+	"github.com/pingcap/tiflow/cdc/model"
 	cerror "github.com/pingcap/tiflow/pkg/errors"
-	"github.com/pingcap/tiflow/pkg/security"
 	"github.com/stretchr/testify/require"
 )
 
-func TestNewSaramaConfig(t *testing.T) {
-	ctx := context.Background()
-	config := NewOptions()
-	config.Version = "invalid"
-	_, err := NewSaramaConfig(ctx, config)
-	require.Regexp(t, "invalid version.*", errors.Cause(err))
-	ctx = contextutil.SetOwnerInCtx(ctx)
-	config.Version = "2.6.0"
-	config.ClientID = "^invalid$"
-	_, err = NewSaramaConfig(ctx, config)
-	require.True(t, cerror.ErrKafkaInvalidClientID.Equal(err))
-
-	config.ClientID = "test-kafka-client"
-	compressionCases := []struct {
-		algorithm string
-		expected  sarama.CompressionCodec
-	}{
-		{"none", sarama.CompressionNone},
-		{"gzip", sarama.CompressionGZIP},
-		{"snappy", sarama.CompressionSnappy},
-		{"lz4", sarama.CompressionLZ4},
-		{"zstd", sarama.CompressionZSTD},
-		{"others", sarama.CompressionNone},
-	}
-	for _, cc := range compressionCases {
-		config.Compression = cc.algorithm
-		cfg, err := NewSaramaConfig(ctx, config)
-		require.Nil(t, err)
-		require.Equal(t, cc.expected, cfg.Producer.Compression)
-	}
-
-	config.EnableTLS = true
-	config.Credential = &security.Credential{
-		CAPath:   "/invalid/ca/path",
-		CertPath: "/invalid/cert/path",
-		KeyPath:  "/invalid/key/path",
-	}
-	_, err = NewSaramaConfig(ctx, config)
-	require.Regexp(t, ".*no such file or directory", errors.Cause(err))
-
-	saslConfig := NewOptions()
-	saslConfig.Version = "2.6.0"
-	saslConfig.ClientID = "test-sasl-scram"
-	saslConfig.SASL = &security.SASL{
-		SASLUser:      "user",
-		SASLPassword:  "password",
-		SASLMechanism: sarama.SASLTypeSCRAMSHA256,
-	}
-
-	cfg, err := NewSaramaConfig(ctx, saslConfig)
-	require.Nil(t, err)
-	require.NotNil(t, cfg)
-	require.Equal(t, "user", cfg.Net.SASL.User)
-	require.Equal(t, "password", cfg.Net.SASL.Password)
-	require.Equal(t, sarama.SASLMechanism("SCRAM-SHA-256"), cfg.Net.SASL.Mechanism)
-}
-
-func TestConfigTimeouts(t *testing.T) {
-	cfg := NewOptions()
-	require.Equal(t, 10*time.Second, cfg.DialTimeout)
-	require.Equal(t, 10*time.Second, cfg.ReadTimeout)
-	require.Equal(t, 10*time.Second, cfg.WriteTimeout)
-
-	saramaConfig, err := NewSaramaConfig(context.Background(), cfg)
-	require.Nil(t, err)
-	require.Equal(t, cfg.DialTimeout, saramaConfig.Net.DialTimeout)
-	require.Equal(t, cfg.WriteTimeout, saramaConfig.Net.WriteTimeout)
-	require.Equal(t, cfg.ReadTimeout, saramaConfig.Net.ReadTimeout)
-
-	uri := "kafka://127.0.0.1:9092/kafka-test?dial-timeout=5s&read-timeout=1000ms" +
-		"&write-timeout=2m"
-	sinkURI, err := url.Parse(uri)
-	require.Nil(t, err)
-
-	err = cfg.Apply(sinkURI)
-	require.Nil(t, err)
-
-	require.Equal(t, 5*time.Second, cfg.DialTimeout)
-	require.Equal(t, 1000*time.Millisecond, cfg.ReadTimeout)
-	require.Equal(t, 2*time.Minute, cfg.WriteTimeout)
-
-	saramaConfig, err = NewSaramaConfig(context.Background(), cfg)
-	require.Nil(t, err)
-	require.Equal(t, 5*time.Second, saramaConfig.Net.DialTimeout)
-	require.Equal(t, 1000*time.Millisecond, saramaConfig.Net.ReadTimeout)
-	require.Equal(t, 2*time.Minute, saramaConfig.Net.WriteTimeout)
-}
-
-func TestCompleteConfigByOpts(t *testing.T) {
-	cfg := NewOptions()
+func TestCompleteOptions(t *testing.T) {
+	options := NewOptions()
 
 	// Normal config.
 	uriTemplate := "kafka://127.0.0.1:9092/kafka-test?kafka-version=2.6.0&max-batch-size=5" +
@@ -130,470 +35,134 @@ func TestCompleteConfigByOpts(t *testing.T) {
 	maxMessageSize := "4096" // 4kb
 	uri := fmt.Sprintf(uriTemplate, maxMessageSize)
 	sinkURI, err := url.Parse(uri)
-	require.Nil(t, err)
+	require.NoError(t, err)
 
-	err = cfg.Apply(sinkURI)
-	require.Nil(t, err)
-	require.Equal(t, int32(1), cfg.PartitionNum)
-	require.Equal(t, int16(3), cfg.ReplicationFactor)
-	require.Equal(t, "2.6.0", cfg.Version)
-	require.Equal(t, 4096, cfg.MaxMessageBytes)
+	err = options.Apply(sinkURI)
+	require.NoError(t, err)
+	require.Equal(t, int32(1), options.PartitionNum)
+	require.Equal(t, int16(3), options.ReplicationFactor)
+	require.Equal(t, "2.6.0", options.Version)
+	require.Equal(t, 4096, options.MaxMessageBytes)
 
 	// multiple kafka broker endpoints
 	uri = "kafka://127.0.0.1:9092,127.0.0.1:9091,127.0.0.1:9090/kafka-test?"
 	sinkURI, err = url.Parse(uri)
-	require.Nil(t, err)
-	cfg = NewOptions()
-	err = cfg.Apply(sinkURI)
-	require.Nil(t, err)
-	require.Len(t, cfg.BrokerEndpoints, 3)
+	require.NoError(t, err)
+	options = NewOptions()
+	err = options.Apply(sinkURI)
+	require.NoError(t, err)
+	require.Len(t, options.BrokerEndpoints, 3)
 
 	// Illegal replication-factor.
 	uri = "kafka://127.0.0.1:9092/abc?kafka-version=2.6.0&replication-factor=a"
 	sinkURI, err = url.Parse(uri)
-	require.Nil(t, err)
-	cfg = NewOptions()
-	err = cfg.Apply(sinkURI)
+	require.NoError(t, err)
+	options = NewOptions()
+	err = options.Apply(sinkURI)
 	require.Regexp(t, ".*invalid syntax.*", errors.Cause(err))
 
 	// Illegal max-message-bytes.
 	uri = "kafka://127.0.0.1:9092/abc?kafka-version=2.6.0&max-message-bytes=a"
 	sinkURI, err = url.Parse(uri)
-	require.Nil(t, err)
-	cfg = NewOptions()
-	err = cfg.Apply(sinkURI)
+	require.NoError(t, err)
+	options = NewOptions()
+	err = options.Apply(sinkURI)
 	require.Regexp(t, ".*invalid syntax.*", errors.Cause(err))
 
 	// Illegal partition-num.
 	uri = "kafka://127.0.0.1:9092/abc?kafka-version=2.6.0&partition-num=a"
 	sinkURI, err = url.Parse(uri)
-	require.Nil(t, err)
-	cfg = NewOptions()
-	err = cfg.Apply(sinkURI)
+	require.NoError(t, err)
+	options = NewOptions()
+	err = options.Apply(sinkURI)
 	require.Regexp(t, ".*invalid syntax.*", errors.Cause(err))
 
 	// Out of range partition-num.
 	uri = "kafka://127.0.0.1:9092/abc?kafka-version=2.6.0&partition-num=0"
 	sinkURI, err = url.Parse(uri)
-	require.Nil(t, err)
-	cfg = NewOptions()
-	err = cfg.Apply(sinkURI)
+	require.NoError(t, err)
+	options = NewOptions()
+	err = options.Apply(sinkURI)
 	require.Regexp(t, ".*invalid partition num.*", errors.Cause(err))
 }
 
 func TestSetPartitionNum(t *testing.T) {
-	cfg := NewOptions()
-	err := cfg.SetPartitionNum(2)
-	require.Nil(t, err)
-	require.Equal(t, int32(2), cfg.PartitionNum)
+	options := NewOptions()
+	err := options.SetPartitionNum(2)
+	require.NoError(t, err)
+	require.Equal(t, int32(2), options.PartitionNum)
 
-	cfg.PartitionNum = 1
-	err = cfg.SetPartitionNum(2)
-	require.Nil(t, err)
-	require.Equal(t, int32(1), cfg.PartitionNum)
+	options.PartitionNum = 1
+	err = options.SetPartitionNum(2)
+	require.NoError(t, err)
+	require.Equal(t, int32(1), options.PartitionNum)
 
-	cfg.PartitionNum = 3
-	err = cfg.SetPartitionNum(2)
+	options.PartitionNum = 3
+	err = options.SetPartitionNum(2)
 	require.True(t, cerror.ErrKafkaInvalidPartitionNum.Equal(err))
 }
 
-func TestConfigurationCombinations(t *testing.T) {
-	kafka.NewAdminClientImpl = NewMockAdminClient
-	defer func() {
-		kafka.NewAdminClientImpl = NewSaramaAdminClient
-	}()
-
-	combinations := []struct {
-		uriTemplate             string
-		uriParams               []interface{}
-		brokerMessageMaxBytes   string
-		topicMaxMessageBytes    string
-		expectedMaxMessageBytes string
+func TestClientID(t *testing.T) {
+	testCases := []struct {
+		role         string
+		addr         string
+		changefeedID string
+		configuredID string
+		hasError     bool
+		expected     string
 	}{
-		// topic not created,
-		// `max-message-bytes` not set, `message.max.bytes` < `max-message-bytes`
-		// expected = min(`max-message-bytes`, `message.max.bytes`) = `message.max.bytes`
 		{
-			"kafka://127.0.0.1:9092/%s",
-			[]interface{}{"not-exist-topic"},
-			BrokerMessageMaxBytes,
-			TopicMaxMessageBytes,
-			BrokerMessageMaxBytes,
+			"owner", "domain:1234", "123-121-121-121",
+			"", false,
+			"TiCDC_producer_owner_domain_1234_default_123-121-121-121",
 		},
-		// topic not created,
-		// `max-message-bytes` not set, `message.max.bytes` = `max-message-bytes`
-		// expected = min(`max-message-bytes`, `message.max.bytes`) = `max-message-bytes`
 		{
-			"kafka://127.0.0.1:9092/%s",
-			[]interface{}{"not-exist-topic"},
-			strconv.Itoa(config.DefaultMaxMessageBytes),
-			TopicMaxMessageBytes,
-			strconv.Itoa(config.DefaultMaxMessageBytes),
+			"owner", "127.0.0.1:1234", "123-121-121-121",
+			"", false,
+			"TiCDC_producer_owner_127.0.0.1_1234_default_123-121-121-121",
 		},
-		// topic not created,
-		// `max-message-bytes` not set, broker `message.max.bytes` > `max-message-bytes`
-		// expected = min(`max-message-bytes`, `message.max.bytes`) = `max-message-bytes`
 		{
-			"kafka://127.0.0.1:9092/%s",
-			[]interface{}{"no-params"},
-			strconv.Itoa(config.DefaultMaxMessageBytes + 1),
-			TopicMaxMessageBytes,
-			strconv.Itoa(config.DefaultMaxMessageBytes),
+			"owner", "127.0.0.1:1234?:,\"", "123-121-121-121",
+			"", false,
+			"TiCDC_producer_owner_127.0.0.1_1234_____default_123-121-121-121",
 		},
-
-		// topic not created
-		// user set `max-message-bytes` < `message.max.bytes` < default `max-message-bytes`
 		{
-			"kafka://127.0.0.1:9092/%s?max-message-bytes=%s",
-			[]interface{}{"not-created-topic", strconv.Itoa(1024*1024 - 1)},
-			BrokerMessageMaxBytes,
-			TopicMaxMessageBytes,
-			strconv.Itoa(1024*1024 - 1),
+			"owner", "中文", "123-121-121-121",
+			"", true, "",
 		},
-		// topic not created
-		// user set `max-message-bytes` < default `max-message-bytes` < `message.max.bytes`
 		{
-			"kafka://127.0.0.1:9092/%s?max-message-bytes=%s",
-			[]interface{}{"not-created-topic", strconv.Itoa(config.DefaultMaxMessageBytes - 1)},
-			strconv.Itoa(config.DefaultMaxMessageBytes + 1),
-			TopicMaxMessageBytes,
-			strconv.Itoa(config.DefaultMaxMessageBytes - 1),
-		},
-		// topic not created
-		// `message.max.bytes` < user set `max-message-bytes` < default `max-message-bytes`
-		{
-			"kafka://127.0.0.1:9092/%s?max-message-bytes=%s",
-			[]interface{}{"not-created-topic", strconv.Itoa(1024*1024 + 1)},
-			BrokerMessageMaxBytes,
-			TopicMaxMessageBytes,
-			BrokerMessageMaxBytes,
-		},
-		// topic not created
-		// `message.max.bytes` < default `max-message-bytes` < user set `max-message-bytes`
-		{
-			"kafka://127.0.0.1:9092/%s?max-message-bytes=%s",
-			[]interface{}{"not-created-topic", strconv.Itoa(config.DefaultMaxMessageBytes + 1)},
-			BrokerMessageMaxBytes,
-			TopicMaxMessageBytes,
-			BrokerMessageMaxBytes,
-		},
-		// topic not created
-		// default `max-message-bytes` < user set `max-message-bytes` < `message.max.bytes`
-		{
-			"kafka://127.0.0.1:9092/%s?max-message-bytes=%s",
-			[]interface{}{"not-created-topic", strconv.Itoa(config.DefaultMaxMessageBytes + 1)},
-			strconv.Itoa(config.DefaultMaxMessageBytes + 2),
-			TopicMaxMessageBytes,
-			strconv.Itoa(config.DefaultMaxMessageBytes + 1),
-		},
-		// topic not created
-		// default `max-message-bytes` < `message.max.bytes` < user set `max-message-bytes`
-		{
-			"kafka://127.0.0.1:9092/%s?max-message-bytes=%s",
-			[]interface{}{"not-created-topic", strconv.Itoa(config.DefaultMaxMessageBytes + 2)},
-			strconv.Itoa(config.DefaultMaxMessageBytes + 1),
-			TopicMaxMessageBytes,
-			strconv.Itoa(config.DefaultMaxMessageBytes + 1),
-		},
-
-		// topic created,
-		// `max-message-bytes` not set, topic's `max.message.bytes` < `max-message-bytes`
-		// expected = min(`max-message-bytes`, `max.message.bytes`) = `max.message.bytes`
-		{
-			"kafka://127.0.0.1:9092/%s",
-			[]interface{}{DefaultMockTopicName},
-			BrokerMessageMaxBytes,
-			TopicMaxMessageBytes,
-			TopicMaxMessageBytes,
-		},
-		// `max-message-bytes` not set, topic created, topic's `max.message.bytes` = `max-message-bytes`
-		// expected = min(`max-message-bytes`, `max.message.bytes`) = `max-message-bytes`
-		{
-			"kafka://127.0.0.1:9092/%s",
-			[]interface{}{DefaultMockTopicName},
-			BrokerMessageMaxBytes,
-			strconv.Itoa(config.DefaultMaxMessageBytes),
-			strconv.Itoa(config.DefaultMaxMessageBytes),
-		},
-		// `max-message-bytes` not set, topic created, topic's `max.message.bytes` > `max-message-bytes`
-		// expected = min(`max-message-bytes`, `max.message.bytes`) = `max-message-bytes`
-		{
-			"kafka://127.0.0.1:9092/%s",
-			[]interface{}{DefaultMockTopicName},
-			BrokerMessageMaxBytes,
-			strconv.Itoa(config.DefaultMaxMessageBytes + 1),
-			strconv.Itoa(config.DefaultMaxMessageBytes),
-		},
-
-		// topic created
-		// user set `max-message-bytes` < `max.message.bytes` < default `max-message-bytes`
-		{
-			"kafka://127.0.0.1:9092/%s?max-message-bytes=%s",
-			[]interface{}{DefaultMockTopicName, strconv.Itoa(1024*1024 - 1)},
-			BrokerMessageMaxBytes,
-			TopicMaxMessageBytes,
-			strconv.Itoa(1024*1024 - 1),
-		},
-		// topic created
-		// user set `max-message-bytes` < default `max-message-bytes` < `max.message.bytes`
-		{
-			"kafka://127.0.0.1:9092/%s?max-message-bytes=%s",
-			[]interface{}{DefaultMockTopicName, strconv.Itoa(config.DefaultMaxMessageBytes - 1)},
-			BrokerMessageMaxBytes,
-			strconv.Itoa(config.DefaultMaxMessageBytes + 1),
-			strconv.Itoa(config.DefaultMaxMessageBytes - 1),
-		},
-		// topic created
-		// `max.message.bytes` < user set `max-message-bytes` < default `max-message-bytes`
-		{
-			"kafka://127.0.0.1:9092/%s?max-message-bytes=%s",
-			[]interface{}{DefaultMockTopicName, strconv.Itoa(1024*1024 + 1)},
-			BrokerMessageMaxBytes,
-			TopicMaxMessageBytes,
-			TopicMaxMessageBytes,
-		},
-		// topic created
-		// `max.message.bytes` < default `max-message-bytes` < user set `max-message-bytes`
-		{
-			"kafka://127.0.0.1:9092/%s?max-message-bytes=%s",
-			[]interface{}{DefaultMockTopicName, strconv.Itoa(config.DefaultMaxMessageBytes + 1)},
-			BrokerMessageMaxBytes,
-			TopicMaxMessageBytes,
-			TopicMaxMessageBytes,
-		},
-		// topic created
-		// default `max-message-bytes` < user set `max-message-bytes` < `max.message.bytes`
-		{
-			"kafka://127.0.0.1:9092/%s?max-message-bytes=%s",
-			[]interface{}{DefaultMockTopicName, strconv.Itoa(config.DefaultMaxMessageBytes + 1)},
-			BrokerMessageMaxBytes,
-			strconv.Itoa(config.DefaultMaxMessageBytes + 2),
-			strconv.Itoa(config.DefaultMaxMessageBytes + 1),
-		},
-		// topic created
-		// default `max-message-bytes` < `max.message.bytes` < user set `max-message-bytes`
-		{
-			"kafka://127.0.0.1:9092/%s?max-message-bytes=%s",
-			[]interface{}{DefaultMockTopicName, strconv.Itoa(config.DefaultMaxMessageBytes + 2)},
-			BrokerMessageMaxBytes,
-			strconv.Itoa(config.DefaultMaxMessageBytes + 1),
-			strconv.Itoa(config.DefaultMaxMessageBytes + 1),
+			"owner", "127.0.0.1:1234",
+			"123-121-121-121", "cdc-changefeed-1", false,
+			"cdc-changefeed-1",
 		},
 	}
-
-	for _, a := range combinations {
-		BrokerMessageMaxBytes = a.brokerMessageMaxBytes
-		TopicMaxMessageBytes = a.topicMaxMessageBytes
-
-		uri := fmt.Sprintf(a.uriTemplate, a.uriParams...)
-		sinkURI, err := url.Parse(uri)
-		require.Nil(t, err)
-
-		options := NewOptions()
-		err = options.Apply(sinkURI)
-		require.Nil(t, err)
-
-		ctx := context.Background()
-		saramaConfig, err := NewSaramaConfig(ctx, options)
-		require.Nil(t, err)
-
-		adminClient, err := kafka.NewAdminClientImpl(ctx, options)
-		require.Nil(t, err)
-
-		topic, ok := a.uriParams[0].(string)
-		require.True(t, ok)
-		require.NotEqual(t, "", topic)
-		err = kafka.AdjustConfig(adminClient, options, saramaConfig, topic)
-		require.Nil(t, err)
-
-		encoderConfig := common.NewConfig(config.ProtocolOpen)
-		err = encoderConfig.Apply(sinkURI, &config.ReplicaConfig{})
-		require.Nil(t, err)
-		encoderConfig.WithMaxMessageBytes(saramaConfig.Producer.MaxMessageBytes)
-
-		err = encoderConfig.Validate()
-		require.Nil(t, err)
-
-		// producer's `MaxMessageBytes` = encoder's `MaxMessageBytes`.
-		require.Equal(t, encoderConfig.MaxMessageBytes, saramaConfig.Producer.MaxMessageBytes)
-
-		expected, err := strconv.Atoi(a.expectedMaxMessageBytes)
-		require.Nil(t, err)
-		require.Equal(t, expected, saramaConfig.Producer.MaxMessageBytes)
-
-		_ = adminClient.Close()
+	for _, tc := range testCases {
+		id, err := newKafkaClientID(tc.role, tc.addr,
+			model.DefaultChangeFeedID(tc.changefeedID), tc.configuredID)
+		if tc.hasError {
+			require.Error(t, err)
+		} else {
+			require.NoError(t, err)
+			require.Equal(t, tc.expected, id)
+		}
 	}
 }
 
-func TestApplySASL(t *testing.T) {
-	t.Parallel()
+func TestTimeout(t *testing.T) {
+	options := NewOptions()
+	require.Equal(t, 10*time.Second, options.DialTimeout)
+	require.Equal(t, 10*time.Second, options.ReadTimeout)
+	require.Equal(t, 10*time.Second, options.WriteTimeout)
 
-	tests := []struct {
-		name      string
-		URI       string
-		exceptErr string
-	}{
-		{
-			name:      "no params",
-			URI:       "kafka://127.0.0.1:9092/abc",
-			exceptErr: "",
-		},
-		{
-			name: "valid PLAIN SASL",
-			URI: "kafka://127.0.0.1:9092/abc?kafka-version=2.6.0&partition-num=0" +
-				"&sasl-user=user&sasl-password=password&sasl-mechanism=plain",
-			exceptErr: "",
-		},
-		{
-			name: "valid SCRAM SASL",
-			URI: "kafka://127.0.0.1:9092/abc?kafka-version=2.6.0&partition-num=0" +
-				"&sasl-user=user&sasl-password=password&sasl-mechanism=SCRAM-SHA-512",
-			exceptErr: "",
-		},
-		{
-			name: "valid GSSAPI user auth SASL",
-			URI: "kafka://127.0.0.1:9092/abc?kafka-version=2.6.0&partition-num=0" +
-				"&sasl-mechanism=GSSAPI&sasl-gssapi-auth-type=USER" +
-				"&sasl-gssapi-kerberos-config-path=/root/config" +
-				"&sasl-gssapi-service-name=a&sasl-gssapi-user=user" +
-				"&sasl-gssapi-password=pwd" +
-				"&sasl-gssapi-realm=realm&sasl-gssapi-disable-pafxfast=false",
-			exceptErr: "",
-		},
-		{
-			name: "valid GSSAPI keytab auth SASL",
-			URI: "kafka://127.0.0.1:9092/abc?kafka-version=2.6.0&partition-num=0" +
-				"&sasl-mechanism=GSSAPI&sasl-gssapi-auth-type=keytab" +
-				"&sasl-gssapi-kerberos-config-path=/root/config" +
-				"&sasl-gssapi-service-name=a&sasl-gssapi-user=user" +
-				"&sasl-gssapi-keytab-path=/root/keytab" +
-				"&sasl-gssapi-realm=realm&sasl-gssapi-disable-pafxfast=false",
-			exceptErr: "",
-		},
-		{
-			name: "invalid mechanism",
-			URI: "kafka://127.0.0.1:9092/abc?kafka-version=2.6.0&partition-num=0" +
-				"&sasl-mechanism=a",
-			exceptErr: "unknown a SASL mechanism",
-		},
-		{
-			name: "invalid GSSAPI auth type",
-			URI: "kafka://127.0.0.1:9092/abc?kafka-version=2.6.0&partition-num=0" +
-				"&sasl-mechanism=gssapi&sasl-gssapi-auth-type=keyta1b",
-			exceptErr: "unknown keyta1b auth type",
-		},
-	}
+	uri := "kafka://127.0.0.1:9092/kafka-test?dial-timeout=5s&read-timeout=1000ms" +
+		"&write-timeout=2m"
+	sinkURI, err := url.Parse(uri)
+	require.NoError(t, err)
 
-	for _, test := range tests {
-		t.Run(test.name, func(t *testing.T) {
-			t.Parallel()
-			cfg := NewOptions()
-			sinkURI, err := url.Parse(test.URI)
-			require.Nil(t, err)
-			if test.exceptErr == "" {
-				require.Nil(t, cfg.applySASL(sinkURI.Query()))
-			} else {
-				require.Regexp(t, test.exceptErr, cfg.applySASL(sinkURI.Query()).Error())
-			}
-		})
-	}
-}
+	err = options.Apply(sinkURI)
+	require.NoError(t, err)
 
-func TestApplyTLS(t *testing.T) {
-	t.Parallel()
-
-	tests := []struct {
-		name       string
-		URI        string
-		tlsEnabled bool
-		exceptErr  string
-	}{
-		{
-			name: "tls config with 'enable-tls' set to true",
-			URI: "kafka://127.0.0.1:9092/abc?kafka-version=2.6.0&partition-num=0" +
-				"&sasl-user=user&sasl-password=password&sasl-mechanism=plain&enable-tls=true",
-			tlsEnabled: true,
-			exceptErr:  "",
-		},
-		{
-			name: "tls config with no 'enable-tls', and credential files are supplied",
-			URI: "kafka://127.0.0.1:9092/abc?kafka-version=2.6.0&partition-num=0" +
-				"&sasl-user=user&sasl-password=password&sasl-mechanism=plain" +
-				"&ca=/root/ca.file&cert=/root/cert.file&key=/root/key.file",
-			tlsEnabled: true,
-			exceptErr:  "",
-		},
-		{
-			name: "tls config with no 'enable-tls', and credential files are not supplied",
-			URI: "kafka://127.0.0.1:9092/abc?kafka-version=2.6.0&partition-num=0" +
-				"&sasl-user=user&sasl-password=password&sasl-mechanism=plain",
-			tlsEnabled: false,
-			exceptErr:  "",
-		},
-		{
-			name: "tls config with 'enable-tls' set to false, and credential files are supplied",
-			URI: "kafka://127.0.0.1:9092/abc?kafka-version=2.6.0&partition-num=0" +
-				"&sasl-user=user&sasl-password=password&sasl-mechanism=plain&enable-tls=false" +
-				"&ca=/root/ca&cert=/root/cert&key=/root/key",
-			tlsEnabled: false,
-			exceptErr:  "credential files are supplied, but 'enable-tls' is set to false",
-		},
-		{
-			name: "tls config with 'enable-tls' set to true, and some of " +
-				"the credential files are not supplied ",
-			URI: "kafka://127.0.0.1:9092/abc?kafka-version=2.6.0&partition-num=0" +
-				"&sasl-user=user&sasl-password=password&sasl-mechanism=plain&enable-tls=true" +
-				"&ca=/root/ca&cert=/root/cert&",
-			tlsEnabled: false,
-			exceptErr:  "ca, cert and key files should all be supplied",
-		},
-	}
-
-	for _, test := range tests {
-		t.Run(test.name, func(t *testing.T) {
-			t.Parallel()
-			cfg := NewOptions()
-			sinkURI, err := url.Parse(test.URI)
-			require.Nil(t, err)
-			if test.exceptErr == "" {
-				require.Nil(t, cfg.applyTLS(sinkURI.Query()))
-			} else {
-				require.Regexp(t, test.exceptErr, cfg.applyTLS(sinkURI.Query()).Error())
-			}
-			require.Equal(t, test.tlsEnabled, cfg.EnableTLS)
-		})
-	}
-}
-
-func TestCompleteSaramaSASLConfig(t *testing.T) {
-	t.Parallel()
-
-	// Test that SASL is turned on correctly.
-	cfg := NewOptions()
-	cfg.SASL = &security.SASL{
-		SASLUser:      "user",
-		SASLPassword:  "password",
-		SASLMechanism: "",
-		GSSAPI:        security.GSSAPI{},
-	}
-	saramaConfig := sarama.NewConfig()
-	completeSaramaSASLConfig(saramaConfig, cfg)
-	require.False(t, saramaConfig.Net.SASL.Enable)
-	cfg.SASL.SASLMechanism = "plain"
-	completeSaramaSASLConfig(saramaConfig, cfg)
-	require.True(t, saramaConfig.Net.SASL.Enable)
-	// Test that the SCRAMClientGeneratorFunc is set up correctly.
-	cfg = NewOptions()
-	cfg.SASL = &security.SASL{
-		SASLUser:      "user",
-		SASLPassword:  "password",
-		SASLMechanism: "plain",
-		GSSAPI:        security.GSSAPI{},
-	}
-	saramaConfig = sarama.NewConfig()
-	completeSaramaSASLConfig(saramaConfig, cfg)
-	require.Nil(t, saramaConfig.Net.SASL.SCRAMClientGeneratorFunc)
-	cfg.SASL.SASLMechanism = "SCRAM-SHA-512"
-	completeSaramaSASLConfig(saramaConfig, cfg)
-	require.NotNil(t, saramaConfig.Net.SASL.SCRAMClientGeneratorFunc)
+	require.Equal(t, 5*time.Second, options.DialTimeout)
+	require.Equal(t, 1000*time.Millisecond, options.ReadTimeout)
+	require.Equal(t, 2*time.Minute, options.WriteTimeout)
 }

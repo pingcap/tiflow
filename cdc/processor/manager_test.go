@@ -305,7 +305,7 @@ func TestQueryTableCount(t *testing.T) {
 	m := NewManager(&model.CaptureInfo{ID: "capture-test"}, nil, &liveness, cfg).(*managerImpl)
 	ctx := context.TODO()
 	// Add some tables to processor.
-	tables := spanz.NewMap[tablepb.TablePipeline]()
+	tables := spanz.NewHashMap[tablepb.TablePipeline]()
 	tables.ReplaceOrInsert(spanz.TableIDToComparableSpan(1), nil)
 	tables.ReplaceOrInsert(spanz.TableIDToComparableSpan(2), nil)
 	m.processors[model.ChangeFeedID{ID: "test"}] = &processor{tableSpans: tables}

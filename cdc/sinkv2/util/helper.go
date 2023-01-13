@@ -17,12 +17,11 @@ import (
 	"net/url"
 	"strings"
 
-	"github.com/Shopify/sarama"
 	"github.com/pingcap/tiflow/cdc/sink/codec/common"
 	"github.com/pingcap/tiflow/cdc/sink/mq/manager"
 	"github.com/pingcap/tiflow/pkg/config"
 	cerror "github.com/pingcap/tiflow/pkg/errors"
-	pkafka "github.com/pingcap/tiflow/pkg/sink/kafka"
+	"github.com/pingcap/tiflow/pkg/sink/kafka"
 )
 
 // GetTopic returns the topic name from the sink URI.
@@ -89,9 +88,9 @@ func GetEncoderConfig(
 // GetTopicManagerAndTryCreateTopic returns the topic manager and try to create the topic.
 func GetTopicManagerAndTryCreateTopic(
 	topic string,
-	topicCfg *pkafka.AutoCreateTopicConfig,
-	client sarama.Client,
-	adminClient pkafka.ClusterAdminClient,
+	topicCfg *kafka.AutoCreateTopicConfig,
+	client kafka.Client,
+	adminClient kafka.ClusterAdminClient,
 ) (manager.TopicManager, error) {
 	topicManager, err := manager.NewKafkaTopicManager(
 		client,
