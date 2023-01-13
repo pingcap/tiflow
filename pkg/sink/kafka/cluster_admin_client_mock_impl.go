@@ -90,12 +90,12 @@ func NewClusterAdminClientMockImpl() *ClusterAdminClientMockImpl {
 }
 
 // GetAllTopicsMeta returns all topics directly.
-func (c *ClusterAdminClientMockImpl) GetAllTopicsMeta() ([]TopicDetail, error) {
-	result := make([]TopicDetail, 0, len(c.topics))
-	for _, topic := range c.topics {
-		result = append(result, topic.TopicDetail)
+func (c *ClusterAdminClientMockImpl) GetAllTopicsMeta() (map[string]TopicDetail, error) {
+	topicsDetailsMap := make(map[string]TopicDetail)
+	for topic, detail := range c.topics {
+		topicsDetailsMap[topic] = detail.TopicDetail
 	}
-	return result, nil
+	return topicsDetailsMap, nil
 }
 
 func (c *ClusterAdminClientMockImpl) GetAllBrokers() ([]Broker, error) {
@@ -124,7 +124,7 @@ func (c *ClusterAdminClientMockImpl) SetRemainingFetchesUntilTopicVisible(topicN
 	return nil
 }
 
-func (c *ClusterAdminClientMockImpl) GetTopicsMeta(topics []string, ignoreTopicError bool) ([]TopicDetail, error) {
+func (c *ClusterAdminClientMockImpl) GetTopicsMeta(topics []string, ignoreTopicError bool) (map[string]TopicDetail, error) {
 	return nil, nil
 }
 

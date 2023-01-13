@@ -42,13 +42,13 @@ func NewSaramaAdminClient(ctx context.Context, config *Options) (ClusterAdminCli
 	return &admin{client: client}, nil
 }
 
-func (a *admin) GetAllTopicsMeta() ([]TopicDetail, error) {
+func (a *admin) GetAllTopicsMeta() (map[string]TopicDetail, error) {
 	topics, err := a.client.ListTopics()
 	if err != nil {
 		return nil, err
 	}
 
-	result := make([]TopicDetail, len(topics))
+	result := make(map[string]TopicDetail, len(topics))
 	for topic, detail := range topics {
 		configEntries := make(map[string]string, len(detail.ConfigEntries))
 		for name, value := range detail.ConfigEntries {
@@ -56,12 +56,12 @@ func (a *admin) GetAllTopicsMeta() ([]TopicDetail, error) {
 				configEntries[name] = *value
 			}
 		}
-		result = append(result, TopicDetail{
+		result[topic] = TopicDetail{
 			Name:              topic,
 			NumPartitions:     detail.NumPartitions,
 			ReplicationFactor: detail.ReplicationFactor,
 			ConfigEntries:     configEntries,
-		})
+		}
 	}
 
 	return result, nil
@@ -127,23 +127,23 @@ func (a *admin) GetBrokerConfig(configName string) (string, error) {
 	return configEntries[0].Value, nil
 }
 
-func (a *admin) GetTopicsMeta(topics []string, ignoreTopicError bool) ([]TopicDetail, error) {
+func (a *admin) GetTopicsMeta(topics []string, ignoreTopicError bool) (map[string]TopicDetail, error) {
 	metaList, err := a.client.DescribeTopics(topics)
 	if err != nil {
 		return nil, err
 	}
 
-	result := make([]TopicDetail, 0, len(metaList))
+	result := make(map[string]TopicDetail, len(metaList))
 	for _, meta := range metaList {
 		if meta.Err != sarama.ErrNoError {
 			if !ignoreTopicError {
 				return nil, meta.Err
 			}
 		}
-		result = append(result, TopicDetail{
+		result[meta.Name] = TopicDetail{
 			Name:          meta.Name,
 			NumPartitions: int32(len(meta.Partitions)),
-		})
+		}
 	}
 
 	return result, nil

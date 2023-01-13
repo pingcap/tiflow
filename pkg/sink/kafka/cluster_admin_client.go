@@ -64,14 +64,14 @@ type ClusterAdminClient interface {
 
 	// GetAllTopicsMeta return all topics' metadata
 	// which available in the cluster with the default options.
-	GetAllTopicsMeta() ([]TopicDetail, error)
+	GetAllTopicsMeta() (map[string]TopicDetail, error)
 
 	// CreateTopic creates a new topic.
 	CreateTopic(topic string, detail *TopicDetail, validateOnly bool) error
 
 	// GetTopicsMeta return all target topics' metadata
 	// if `ignoreTopicError` is true, ignore the topic error and return the metadata of valid topics
-	GetTopicsMeta(topics []string, ignoreTopicError bool) ([]TopicDetail, error)
+	GetTopicsMeta(topics []string, ignoreTopicError bool) (map[string]TopicDetail, error)
 
 	// Close shuts down the admin and closes underlying client.
 	Close() error

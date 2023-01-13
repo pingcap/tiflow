@@ -125,7 +125,7 @@ func (m *kafkaTopicManager) tryUpdatePartitionsAndLogging(topic string, partitio
 	}
 }
 
-func (m *kafkaTopicManager) getMetadataOfTopics() ([]kafka.TopicDetail, error) {
+func (m *kafkaTopicManager) getMetadataOfTopics() (map[string]kafka.TopicDetail, error) {
 	var topicList []string
 
 	m.topics.Range(func(key, value any) bool {
@@ -172,7 +172,7 @@ func (m *kafkaTopicManager) waitUntilTopicVisible(topicName string) error {
 		}
 		log.Info("topic found",
 			zap.String("topic", topicName),
-			zap.Int32("partitionNumber", meta[0].NumPartitions),
+			zap.Int32("partitionNumber", meta[topicName].NumPartitions),
 			zap.Duration("duration", time.Since(start)))
 		return nil
 	}, retry.WithBackoffBaseDelay(500),
@@ -239,7 +239,7 @@ func (m *kafkaTopicManager) createTopic(topicName string) (int32, error) {
 			"topic already exists and the cached information has expired",
 			zap.String("topic", topicName),
 		)
-		return int32(targetTopicPartitionNum), nil
+		return targetTopicPartitionNum, nil
 	}
 
 	if !m.cfg.AutoCreate {
