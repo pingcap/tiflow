@@ -15,7 +15,7 @@ package cli
 
 import (
 	"bytes"
-	"io/ioutil"
+	"io"
 	"os"
 	"testing"
 
@@ -88,7 +88,7 @@ func TestChangefeedListCli(t *testing.T) {
 	// when --all=false, should contains StateNormal, StateError, StateFailed, StateStopped changefeed
 	os.Args = []string{"list", "--all=false"}
 	require.Nil(t, cmd.Execute())
-	out, err := ioutil.ReadAll(b)
+	out, err := io.ReadAll(b)
 	require.Nil(t, err)
 	require.Contains(t, string(out), "error-1")
 	require.Contains(t, string(out), "normal-2")
@@ -98,7 +98,7 @@ func TestChangefeedListCli(t *testing.T) {
 	// when --all=true, should contains all changefeed
 	os.Args = []string{"list", "--all=true"}
 	require.Nil(t, cmd.Execute())
-	out, err = ioutil.ReadAll(b)
+	out, err = io.ReadAll(b)
 	require.Nil(t, err)
 	require.Contains(t, string(out), "error-1")
 	require.Contains(t, string(out), "normal-2")

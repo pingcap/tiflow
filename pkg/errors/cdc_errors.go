@@ -303,9 +303,9 @@ var (
 		"s3 storage api",
 		errors.RFCCodeText("CDC:ErrS3StorageAPI"),
 	)
-	ErrS3StorageInitialize = errors.Normalize(
-		"new s3 storage for redo log",
-		errors.RFCCodeText("CDC:ErrS3StorageInitialize"),
+	ErrStorageInitialize = errors.Normalize(
+		"fail to open storage for redo log",
+		errors.RFCCodeText("CDC:ErrStorageInitialize"),
 	)
 	ErrCodecInvalidConfig = errors.Normalize(
 		"Codec invalid config",
@@ -318,6 +318,11 @@ var (
 	ErrSinkURIInvalid = errors.Normalize(
 		"sink uri invalid '%s'",
 		errors.RFCCodeText("CDC:ErrSinkURIInvalid"),
+	)
+	ErrIncompatibleSinkConfig = errors.Normalize(
+		"incompatible configuration in sink uri(%s) and config file(%s), "+
+			"please try to update the configuration only through sink uri",
+		errors.RFCCodeText("CDC:ErrIncompatibleSinkConfig"),
 	)
 	ErrSinkUnknownProtocol = errors.Normalize(
 		"unknown '%s' message protocol for sink",
@@ -926,6 +931,12 @@ var (
 	ErrSorterClosed = errors.Normalize(
 		"sorter is closed",
 		errors.RFCCodeText("CDC:ErrSorterClosed"),
+	)
+
+	// Pull based sink config error.
+	ErrInvalidPullBasedSinkConfig = errors.Normalize(
+		"invalid pull based sink config: %s",
+		errors.RFCCodeText("CDC:ErrInvalidPullBasedSinkConfig"),
 	)
 
 	// processor errors

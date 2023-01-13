@@ -55,16 +55,19 @@ func TestCreateChangefeed(t *testing.T) {
 	apiV2 := NewOpenAPIV2ForTest(cp, helpers)
 	router := newRouter(apiV2)
 
+	o := mock_owner.NewMockOwner(gomock.NewController(t))
 	mockUpManager := upstream.NewManager4Test(pdClient)
 	statusProvider := &mockStatusProvider{}
 	etcdClient.EXPECT().
 		GetEnsureGCServiceID(gomock.Any()).
 		Return(etcd.GcServiceIDForTest()).AnyTimes()
 	cp.EXPECT().StatusProvider().Return(statusProvider).AnyTimes()
-	cp.EXPECT().GetEtcdClient().Return(etcdClient).AnyTimes()
+	cp.EXPECT().GetEtcdClient().Return(etcdClient, nil).AnyTimes()
 	cp.EXPECT().GetUpstreamManager().Return(mockUpManager, nil).AnyTimes()
 	cp.EXPECT().IsReady().Return(true).AnyTimes()
 	cp.EXPECT().IsOwner().Return(true).AnyTimes()
+	cp.EXPECT().GetOwner().Return(o, nil).AnyTimes()
+	o.EXPECT().ValidateChangefeed(gomock.Any()).Return(nil).AnyTimes()
 
 	// case 1: json format mismatches with the spec.
 	errConfig := struct {
@@ -283,7 +286,7 @@ func TestUpdateChangefeed(t *testing.T) {
 	etcdClient.EXPECT().
 		GetUpstreamInfo(gomock.Any(), gomock.Eq(uint64(100)), gomock.Any()).
 		Return(nil, cerrors.ErrUpstreamNotFound).Times(1)
-	cp.EXPECT().GetEtcdClient().Return(etcdClient).AnyTimes()
+	cp.EXPECT().GetEtcdClient().Return(etcdClient, nil).AnyTimes()
 
 	w = httptest.NewRecorder()
 	req, _ = http.NewRequestWithContext(context.Background(), update.method,
@@ -300,7 +303,7 @@ func TestUpdateChangefeed(t *testing.T) {
 	etcdClient.EXPECT().
 		GetUpstreamInfo(gomock.Any(), gomock.Eq(uint64(1)), gomock.Any()).
 		Return(nil, nil).AnyTimes()
-	cp.EXPECT().GetEtcdClient().Return(etcdClient).AnyTimes()
+	cp.EXPECT().GetEtcdClient().Return(etcdClient, nil).AnyTimes()
 
 	w = httptest.NewRecorder()
 	req, _ = http.NewRequestWithContext(context.Background(), update.method,
@@ -564,7 +567,7 @@ func TestResumeChangefeed(t *testing.T) {
 		GetEnsureGCServiceID(gomock.Any()).
 		Return(etcd.GcServiceIDForTest()).AnyTimes()
 	cp.EXPECT().StatusProvider().Return(statusProvider).AnyTimes()
-	cp.EXPECT().GetEtcdClient().Return(etcdClient).AnyTimes()
+	cp.EXPECT().GetEtcdClient().Return(etcdClient, nil).AnyTimes()
 	cp.EXPECT().GetUpstreamManager().Return(mockUpManager, nil).AnyTimes()
 	cp.EXPECT().IsReady().Return(true).AnyTimes()
 	cp.EXPECT().IsOwner().Return(true).AnyTimes()
@@ -656,4 +659,91 @@ func TestResumeChangefeed(t *testing.T) {
 		fmt.Sprintf(resume.url, validID), bytes.NewReader(body))
 	router.ServeHTTP(w, req)
 	require.Equal(t, http.StatusOK, w.Code)
+}
+
+func TestDeleteChangefeed(t *testing.T) {
+	remove := testCase{url: "/api/v2/changefeeds/%s", method: "DELETE"}
+	helpers := NewMockAPIV2Helpers(gomock.NewController(t))
+	cp := mock_capture.NewMockCapture(gomock.NewController(t))
+	owner := mock_owner.NewMockOwner(gomock.NewController(t))
+	apiV2 := NewOpenAPIV2ForTest(cp, helpers)
+	router := newRouter(apiV2)
+
+	pdClient := &mockPDClient{}
+	etcdClient := mock_etcd.NewMockCDCEtcdClient(gomock.NewController(t))
+	mockUpManager := upstream.NewManager4Test(pdClient)
+	statusProvider := mock_owner.NewMockStatusProvider(gomock.NewController(t))
+
+	etcdClient.EXPECT().
+		GetEnsureGCServiceID(gomock.Any()).
+		Return(etcd.GcServiceIDForTest()).AnyTimes()
+	cp.EXPECT().StatusProvider().Return(statusProvider).AnyTimes()
+	cp.EXPECT().GetEtcdClient().Return(etcdClient, nil).AnyTimes()
+	cp.EXPECT().GetUpstreamManager().Return(mockUpManager, nil).AnyTimes()
+	cp.EXPECT().IsReady().Return(true).AnyTimes()
+	cp.EXPECT().IsOwner().Return(true).AnyTimes()
+	cp.EXPECT().GetOwner().Return(owner, nil).AnyTimes()
+	owner.EXPECT().EnqueueJob(gomock.Any(), gomock.Any()).
+		Do(func(adminJob model.AdminJob, done chan<- error) {
+			require.EqualValues(t, changeFeedID, adminJob.CfID)
+			require.EqualValues(t, model.AdminRemove, adminJob.Type)
+			close(done)
+		}).AnyTimes()
+
+	// case 1: invalid changefeed id
+	w := httptest.NewRecorder()
+	invalidID := "@^Invalid"
+	req, _ := http.NewRequestWithContext(context.Background(),
+		remove.method, fmt.Sprintf(remove.url, invalidID), nil)
+	router.ServeHTTP(w, req)
+	respErr := model.HTTPError{}
+	err := json.NewDecoder(w.Body).Decode(&respErr)
+	require.Nil(t, err)
+	require.Contains(t, respErr.Code, "ErrAPIInvalidParam")
+
+	// case 2: changefeed not exists
+	validID := changeFeedID.ID
+	statusProvider.EXPECT().GetChangeFeedStatus(gomock.Any(), gomock.Any()).Return(
+		nil, cerrors.ErrChangeFeedNotExists.GenWithStackByArgs(validID))
+	w = httptest.NewRecorder()
+	req, _ = http.NewRequestWithContext(context.Background(), remove.method,
+		fmt.Sprintf(remove.url, validID), nil)
+	router.ServeHTTP(w, req)
+	require.Equal(t, http.StatusNoContent, w.Code)
+
+	// case 3: query changefeed error
+	statusProvider.EXPECT().GetChangeFeedStatus(gomock.Any(), gomock.Any()).Return(
+		nil, cerrors.ErrChangefeedUpdateRefused.GenWithStackByArgs(validID))
+	w = httptest.NewRecorder()
+	req, _ = http.NewRequestWithContext(context.Background(), remove.method,
+		fmt.Sprintf(remove.url, validID), nil)
+	router.ServeHTTP(w, req)
+	respErr = model.HTTPError{}
+	err = json.NewDecoder(w.Body).Decode(&respErr)
+	require.Nil(t, err)
+	require.Contains(t, respErr.Code, "ErrChangefeedUpdateRefused")
+
+	// case 4: remove changefeed
+	statusProvider.EXPECT().GetChangeFeedStatus(gomock.Any(), gomock.Any()).Return(
+		&model.ChangeFeedStatus{}, nil)
+	statusProvider.EXPECT().GetChangeFeedStatus(gomock.Any(), gomock.Any()).Return(
+		nil, cerrors.ErrChangeFeedNotExists.GenWithStackByArgs(validID))
+	w = httptest.NewRecorder()
+	req, _ = http.NewRequestWithContext(context.Background(), remove.method,
+		fmt.Sprintf(remove.url, validID), nil)
+	router.ServeHTTP(w, req)
+	require.Equal(t, http.StatusNoContent, w.Code)
+
+	// case 5: remove changefeed failed
+	statusProvider.EXPECT().GetChangeFeedStatus(gomock.Any(), gomock.Any()).AnyTimes().Return(
+		&model.ChangeFeedStatus{}, nil)
+	w = httptest.NewRecorder()
+	req, _ = http.NewRequestWithContext(context.Background(), remove.method,
+		fmt.Sprintf(remove.url, validID), nil)
+	router.ServeHTTP(w, req)
+	respErr = model.HTTPError{}
+	err = json.NewDecoder(w.Body).Decode(&respErr)
+	require.Nil(t, err)
+	require.Contains(t, respErr.Code, "ErrReachMaxTry")
+	require.Equal(t, http.StatusInternalServerError, w.Code)
 }

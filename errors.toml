@@ -441,6 +441,11 @@ error = '''
 illegal parameter for sorter: %s
 '''
 
+["CDC:ErrIncompatibleSinkConfig"]
+error = '''
+incompatible configuration in sink uri(%s) and config file(%s), please try to update the configuration only through sink uri
+'''
+
 ["CDC:ErrIndexKeyTableNotFound"]
 error = '''
 table not found with index ID %d in index kv
@@ -494,6 +499,11 @@ invalid ignore event type: '%s'
 ["CDC:ErrInvalidNamespace"]
 error = '''
 bad namespace, please match the pattern "^[a-zA-Z0-9]+(\-[a-zA-Z0-9]+)*$", the length should no more than %d, eg, "simple-namespace-test",
+'''
+
+["CDC:ErrInvalidPullBasedSinkConfig"]
+error = '''
+invalid pull based sink config: %s
 '''
 
 ["CDC:ErrInvalidRecordKey"]
@@ -991,11 +1001,6 @@ error = '''
 s3 storage api
 '''
 
-["CDC:ErrS3StorageInitialize"]
-error = '''
-new s3 storage for redo log
-'''
-
 ["CDC:ErrScanLockFailed"]
 error = '''
 scan lock failed
@@ -1104,6 +1109,11 @@ start a stopped db system
 ["CDC:ErrStartTsBeforeGC"]
 error = '''
 fail to create or maintain changefeed because start-ts %d is earlier than or equal to GC safepoint at %d
+'''
+
+["CDC:ErrStorageInitialize"]
+error = '''
+fail to open storage for redo log
 '''
 
 ["CDC:ErrStorageSinkInvalidDateSeparator"]
@@ -1276,11 +1286,6 @@ error = '''
 0-length response with status code: %d
 '''
 
-["DFLOW:ErrCapacityNotEnough"]
-error = '''
-capacity not enough
-'''
-
 ["DFLOW:ErrCleaningLocalTempFiles"]
 error = '''
 errors is encountered when cleaning local temp files
@@ -1309,6 +1314,11 @@ create worker is terminated
 ["DFLOW:ErrDecodeEtcdKeyFail"]
 error = '''
 failed to decode etcd key: %s
+'''
+
+["DFLOW:ErrDeserializeConfig"]
+error = '''
+deserialize config failed
 '''
 
 ["DFLOW:ErrDispatchTaskRequestIDNotFound"]
@@ -1371,11 +1381,6 @@ error = '''
 filter % returns no result
 '''
 
-["DFLOW:ErrGrpcBuildConn"]
-error = '''
-dial grpc connection to %s failed
-'''
-
 ["DFLOW:ErrHeartbeat"]
 error = '''
 heartbeat error type: %s
@@ -1424,21 +1429,6 @@ job %s already exists
 ["DFLOW:ErrJobManagerGetJobDetailFail"]
 error = '''
 failed to get job detail from job master
-'''
-
-["DFLOW:ErrJobManagerReadRespBodyFail"]
-error = '''
-failed to read response body
-'''
-
-["DFLOW:ErrJobManagerRespStatusCode404"]
-error = '''
-get job detail response status code is 404
-'''
-
-["DFLOW:ErrJobManagerRespStatusCodeNot2XX"]
-error = '''
-get job detail response status code is not 2XX
 '''
 
 ["DFLOW:ErrJobNotFound"]
@@ -1506,6 +1496,11 @@ error = '''
 invalid master meta data: %s
 '''
 
+["DFLOW:ErrMasterNoLeader"]
+error = '''
+master has no leader
+'''
+
 ["DFLOW:ErrMasterNotFound"]
 error = '''
 master is not found: master ID %s
@@ -1514,11 +1509,6 @@ master is not found: master ID %s
 ["DFLOW:ErrMasterNotReady"]
 error = '''
 master is not ready
-'''
-
-["DFLOW:ErrMasterRPCNotForward"]
-error = '''
-server grpc is not forwarded to leader
 '''
 
 ["DFLOW:ErrMasterTooManyPendingEvents"]
@@ -1586,9 +1576,9 @@ error = '''
 metastore %s does not exist
 '''
 
-["DFLOW:ErrNoRPCClient"]
+["DFLOW:ErrNoQualifiedExecutor"]
 error = '''
-no available RPC client
+no executor is available for scheduling
 '''
 
 ["DFLOW:ErrReadLocalFileDirectoryFailed"]

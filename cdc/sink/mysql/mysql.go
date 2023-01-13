@@ -34,13 +34,14 @@ import (
 	"github.com/pingcap/tiflow/cdc/contextutil"
 	"github.com/pingcap/tiflow/cdc/model"
 	"github.com/pingcap/tiflow/cdc/sink/metrics"
-	dmutils "github.com/pingcap/tiflow/dm/pkg/utils"
+	dmutils "github.com/pingcap/tiflow/dm/pkg/conn"
 	"github.com/pingcap/tiflow/pkg/config"
 	cerror "github.com/pingcap/tiflow/pkg/errors"
 	"github.com/pingcap/tiflow/pkg/errorutil"
 	"github.com/pingcap/tiflow/pkg/notify"
 	"github.com/pingcap/tiflow/pkg/quotes"
 	"github.com/pingcap/tiflow/pkg/retry"
+	pmysql "github.com/pingcap/tiflow/pkg/sink/mysql"
 	"github.com/prometheus/client_golang/prometheus"
 	"go.uber.org/atomic"
 	"go.uber.org/zap"
@@ -50,6 +51,9 @@ const (
 	backoffBaseDelayInMs = 500
 	// in previous/backoff retry pkg, the DefaultMaxInterval = 60 * time.Second
 	backoffMaxDelayInMs = 60 * 1000
+
+	// networkDriftDuration is used to construct a context timeout for database operations.
+	networkDriftDuration = 5 * time.Second
 )
 
 type mysqlSink struct {
@@ -101,6 +105,7 @@ func NewMySQLSink(
 		username = "root"
 	}
 	password, _ := sinkURI.User.Password()
+
 	hostName := sinkURI.Hostname()
 	port := sinkURI.Port()
 	if port == "" {
@@ -126,7 +131,8 @@ func NewMySQLSink(
 	dsn.Params["readTimeout"] = params.readTimeout
 	dsn.Params["writeTimeout"] = params.writeTimeout
 	dsn.Params["timeout"] = params.dialTimeout
-	testDB, err := GetDBConnImpl(ctx, dsn.FormatDSN())
+
+	testDB, err := pmysql.GetTestDB(ctx, dsn, GetDBConnImpl)
 	if err != nil {
 		return nil, err
 	}
@@ -321,7 +327,12 @@ func (s *mysqlSink) execDDLWithMaxRetries(ctx context.Context, ddl *model.DDLEve
 		retry.WithIsRetryableErr(errorutil.IsRetryableDDLError))
 }
 
-func (s *mysqlSink) execDDL(ctx context.Context, ddl *model.DDLEvent) error {
+func (s *mysqlSink) execDDL(pctx context.Context, ddl *model.DDLEvent) error {
+	writeTimeout, _ := time.ParseDuration(s.params.writeTimeout)
+	writeTimeout += networkDriftDuration
+	ctx, cancelFunc := context.WithTimeout(pctx, writeTimeout)
+	defer cancelFunc()
+
 	shouldSwitchDB := needSwitchDB(ddl)
 
 	failpoint.Inject("MySQLSinkExecDDLDelay", func() {
@@ -376,13 +387,17 @@ func needSwitchDB(ddl *model.DDLEvent) bool {
 	return true
 }
 
-func querySQLMode(ctx context.Context, db *sql.DB) (sqlMode string, err error) {
+func querySQLMode(ctx context.Context, db *sql.DB) (string, error) {
 	row := db.QueryRowContext(ctx, "SELECT @@SESSION.sql_mode;")
-	err = row.Scan(&sqlMode)
+	var sqlMode sql.NullString
+	err := row.Scan(&sqlMode)
 	if err != nil {
 		err = cerror.WrapError(cerror.ErrMySQLQueryError, err)
 	}
-	return
+	if !sqlMode.Valid {
+		sqlMode.String = ""
+	}
+	return sqlMode.String, err
 }
 
 // check whether the target charset is supported
@@ -626,7 +641,7 @@ func logDMLTxnErr(
 	return err
 }
 
-func (s *mysqlSink) execDMLWithMaxRetries(ctx context.Context, dmls *preparedDMLs, bucket int) error {
+func (s *mysqlSink) execDMLWithMaxRetries(pctx context.Context, dmls *preparedDMLs, bucket int) error {
 	if len(dmls.sqls) != len(dmls.values) {
 		log.Panic("unexpected number of sqls and values",
 			zap.Strings("sqls", dmls.sqls),
@@ -634,7 +649,10 @@ func (s *mysqlSink) execDMLWithMaxRetries(ctx context.Context, dmls *preparedDML
 	}
 
 	start := time.Now()
-	return retry.Do(ctx, func() error {
+	return retry.Do(pctx, func() error {
+		writeTimeout, _ := time.ParseDuration(s.params.writeTimeout)
+		writeTimeout += networkDriftDuration
+
 		failpoint.Inject("MySQLSinkTxnRandomError", func() {
 			failpoint.Return(
 				logDMLTxnErr(
@@ -645,7 +663,7 @@ func (s *mysqlSink) execDMLWithMaxRetries(ctx context.Context, dmls *preparedDML
 			time.Sleep(time.Hour)
 		})
 		err := s.statistics.RecordBatchExecution(func() (int, error) {
-			tx, err := s.db.BeginTx(ctx, nil)
+			tx, err := s.db.BeginTx(pctx, nil)
 			if err != nil {
 				return 0, logDMLTxnErr(
 					cerror.WrapError(cerror.ErrMySQLTxnError, err),
@@ -655,6 +673,7 @@ func (s *mysqlSink) execDMLWithMaxRetries(ctx context.Context, dmls *preparedDML
 			for i, query := range dmls.sqls {
 				args := dmls.values[i]
 				log.Debug("exec row", zap.String("sql", query), zap.Any("args", args))
+				ctx, cancelFunc := context.WithTimeout(pctx, writeTimeout)
 				if _, err := tx.ExecContext(ctx, query, args...); err != nil {
 					if rbErr := tx.Rollback(); rbErr != nil {
 						if errors.Cause(rbErr) != context.Canceled {
@@ -664,10 +683,12 @@ func (s *mysqlSink) execDMLWithMaxRetries(ctx context.Context, dmls *preparedDML
 								start, s.params.changefeedID, query, dmls.rowCount, dmls.startTs)
 						}
 					}
+					cancelFunc()
 					return 0, logDMLTxnErr(
 						cerror.WrapError(cerror.ErrMySQLTxnError, err),
 						start, s.params.changefeedID, query, dmls.rowCount, dmls.startTs)
 				}
+				cancelFunc()
 			}
 
 			if err = tx.Commit(); err != nil {

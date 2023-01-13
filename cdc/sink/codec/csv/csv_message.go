@@ -26,6 +26,7 @@ import (
 	"github.com/pingcap/tidb/types"
 	"github.com/pingcap/tidb/util/rowcodec"
 	"github.com/pingcap/tiflow/cdc/model"
+	"github.com/pingcap/tiflow/cdc/sink/codec/common"
 	"github.com/pingcap/tiflow/pkg/config"
 	cerror "github.com/pingcap/tiflow/pkg/errors"
 )
@@ -72,8 +73,8 @@ func (o *operation) FromString(op string) error {
 }
 
 type csvMessage struct {
-	// csvConfig hold the csv configuration items.
-	csvConfig *config.CSVConfig
+	// config hold the codec configuration items.
+	config *common.Config
 	// opType denotes the specific operation type.
 	opType     operation
 	tableName  string
@@ -84,9 +85,9 @@ type csvMessage struct {
 	newRecord bool
 }
 
-func newCSVMessage(config *config.CSVConfig) *csvMessage {
+func newCSVMessage(config *common.Config) *csvMessage {
 	return &csvMessage{
-		csvConfig: config,
+		config:    config,
 		newRecord: true,
 	}
 }
@@ -102,17 +103,18 @@ func (c *csvMessage) encode() []byte {
 	c.formatValue(c.opType.String(), strBuilder)
 	c.formatValue(c.tableName, strBuilder)
 	c.formatValue(c.schemaName, strBuilder)
-	if c.csvConfig.IncludeCommitTs {
+	if c.config.IncludeCommitTs {
 		c.formatValue(c.commitTs, strBuilder)
 	}
 	for _, col := range c.columns {
 		c.formatValue(col, strBuilder)
 	}
-	strBuilder.WriteString(c.csvConfig.Terminator)
+	strBuilder.WriteString(c.config.Terminator)
 	return []byte(strBuilder.String())
 }
 
 func (c *csvMessage) decode(datums []types.Datum) error {
+	var dataColIdx int
 	if len(datums) < minimumColsCnt {
 		return cerror.WrapError(cerror.ErrCSVDecodeFailed,
 			errors.New("the csv row should have at least four columns"+
@@ -122,21 +124,25 @@ func (c *csvMessage) decode(datums []types.Datum) error {
 	if err := c.opType.FromString(datums[0].GetString()); err != nil {
 		return cerror.WrapError(cerror.ErrCSVDecodeFailed, err)
 	}
+	dataColIdx++
 	c.tableName = datums[1].GetString()
+	dataColIdx++
 	c.schemaName = datums[2].GetString()
-	if c.csvConfig.IncludeCommitTs {
+	dataColIdx++
+	if c.config.IncludeCommitTs {
 		commitTs, err := strconv.ParseUint(datums[3].GetString(), 10, 64)
 		if err != nil {
 			return cerror.WrapError(cerror.ErrCSVDecodeFailed,
 				fmt.Errorf("the 4th column(%s) of csv row should be a valid commit-ts", datums[3].GetString()))
 		}
 		c.commitTs = commitTs
+		dataColIdx++
 	} else {
 		c.commitTs = 0
 	}
 	c.columns = c.columns[:0]
 
-	for i := 4; i < len(datums); i++ {
+	for i := dataColIdx; i < len(datums); i++ {
 		if datums[i].IsNull() {
 			c.columns = append(c.columns, nil)
 		} else {
@@ -152,7 +158,7 @@ func (c *csvMessage) decode(datums []types.Datum) error {
 // appearing inside a field must be escaped by preceding it with
 // another double quote.
 func (c *csvMessage) formatWithQuotes(value string, strBuilder *strings.Builder) {
-	quote := c.csvConfig.Quote
+	quote := c.config.Quote
 
 	strBuilder.WriteString(quote)
 	// replace any quote in csv column with two quotes.
@@ -163,7 +169,7 @@ func (c *csvMessage) formatWithQuotes(value string, strBuilder *strings.Builder)
 // formatWithEscapes escapes the csv column if necessary.
 func (c *csvMessage) formatWithEscapes(value string, strBuilder *strings.Builder) {
 	lastPos := 0
-	delimiter := c.csvConfig.Delimiter
+	delimiter := c.config.Delimiter
 
 	for i := 0; i < len(value); i++ {
 		ch := value[i]
@@ -184,7 +190,7 @@ func (c *csvMessage) formatWithEscapes(value string, strBuilder *strings.Builder
 
 			// escape each characters in delimiter.
 			if isDelimiterStart {
-				for k := 1; k < len(c.csvConfig.Delimiter); k++ {
+				for k := 1; k < len(c.config.Delimiter); k++ {
 					strBuilder.WriteRune(config.Backslash)
 					strBuilder.WriteRune(rune(delimiter[k]))
 				}
@@ -205,11 +211,11 @@ func (c *csvMessage) formatValue(value any, strBuilder *strings.Builder) {
 	}()
 
 	if !c.newRecord {
-		strBuilder.WriteString(c.csvConfig.Delimiter)
+		strBuilder.WriteString(c.config.Delimiter)
 	}
 
 	if value == nil {
-		strBuilder.WriteString(c.csvConfig.NullString)
+		strBuilder.WriteString(c.config.NullString)
 		return
 	}
 
@@ -217,7 +223,7 @@ func (c *csvMessage) formatValue(value any, strBuilder *strings.Builder) {
 	case string:
 		// if quote is configured, format the csv column with quotes,
 		// otherwise escape this csv column.
-		if len(c.csvConfig.Quote) != 0 {
+		if len(c.config.Quote) != 0 {
 			c.formatWithQuotes(v, strBuilder)
 		} else {
 			c.formatWithEscapes(v, strBuilder)
@@ -305,11 +311,11 @@ func fromColValToCsvVal(col *model.Column, ft *types.FieldType) (any, error) {
 }
 
 // rowChangedEvent2CSVMsg converts a RowChangedEvent to a csv record.
-func rowChangedEvent2CSVMsg(csvConfig *config.CSVConfig, e *model.RowChangedEvent) (*csvMessage, error) {
+func rowChangedEvent2CSVMsg(csvConfig *common.Config, e *model.RowChangedEvent) (*csvMessage, error) {
 	var err error
 
 	csvMsg := &csvMessage{
-		csvConfig:  csvConfig,
+		config:     csvConfig,
 		tableName:  e.Table.Table,
 		schemaName: e.Table.Schema,
 		commitTs:   e.CommitTs,

@@ -21,7 +21,6 @@ import (
 	"github.com/pingcap/tiflow/engine/model"
 	resModel "github.com/pingcap/tiflow/engine/pkg/externalresource/model"
 	pkgOrm "github.com/pingcap/tiflow/engine/pkg/orm"
-	"github.com/pingcap/tiflow/engine/pkg/rpcutil"
 	"github.com/pingcap/tiflow/engine/pkg/tenant"
 	"github.com/pingcap/tiflow/pkg/errors"
 	"go.uber.org/zap"
@@ -34,14 +33,12 @@ var _ pb.ResourceManagerServer = (*Service)(nil)
 // Service implements pb.ResourceManagerServer
 type Service struct {
 	metaclient pkgOrm.Client
-	preRPCHook rpcutil.PreRPCHook
 }
 
 // NewService creates a new externalresource manage service
-func NewService(metaclient pkgOrm.Client, preRPCHook rpcutil.PreRPCHook) *Service {
+func NewService(metaclient pkgOrm.Client) *Service {
 	return &Service{
 		metaclient: metaclient,
-		preRPCHook: preRPCHook,
 	}
 }
 
@@ -50,12 +47,6 @@ func (s *Service) QueryResource(
 	ctx context.Context,
 	request *pb.QueryResourceRequest,
 ) (*pb.QueryResourceResponse, error) {
-	var resp2 *pb.QueryResourceResponse
-	shouldRet, err := s.preRPCHook.PreRPC(ctx, request, &resp2)
-	if shouldRet {
-		return resp2, err
-	}
-
 	jobID := request.GetResourceKey().GetJobId()
 	resourceID := request.GetResourceKey().GetResourceId()
 
@@ -83,12 +74,6 @@ func (s *Service) CreateResource(
 	ctx context.Context,
 	request *pb.CreateResourceRequest,
 ) (*pb.CreateResourceResponse, error) {
-	var resp2 *pb.CreateResourceResponse
-	shouldRet, err := s.preRPCHook.PreRPC(ctx, request, &resp2)
-	if shouldRet {
-		return resp2, err
-	}
-
 	if err := checkArguments(request.GetResourceId(), request.GetJobId()); err != nil {
 		return nil, err
 	}
@@ -102,7 +87,7 @@ func (s *Service) CreateResource(
 		Deleted:   false,
 	}
 
-	err = s.metaclient.CreateResource(ctx, resourceRecord)
+	err := s.metaclient.CreateResource(ctx, resourceRecord)
 	if errors.Is(err, errors.ErrDuplicateResourceID) {
 		return nil, errors.ErrResourceAlreadyExists.GenWithStackByArgs(request.GetResourceId())
 	}
@@ -118,12 +103,6 @@ func (s *Service) RemoveResource(
 	ctx context.Context,
 	request *pb.RemoveResourceRequest,
 ) (*pb.RemoveResourceResponse, error) {
-	var resp2 *pb.RemoveResourceResponse
-	shouldRet, err := s.preRPCHook.PreRPC(ctx, request, &resp2)
-	if shouldRet {
-		return resp2, err
-	}
-
 	jobID := request.GetResourceKey().GetJobId()
 	resourceID := request.GetResourceKey().GetResourceId()
 	if err := checkArguments(resourceID, jobID); err != nil {
@@ -159,7 +138,7 @@ func (s *Service) GetPlacementConstraint(
 	ctx context.Context,
 	resourceKey resModel.ResourceKey,
 ) (resModel.ExecutorID, bool, error) {
-	logger := log.With(
+	logger := log.L().With(
 		zap.String("job-id", resourceKey.JobID),
 		zap.String("resource-id", resourceKey.ID))
 

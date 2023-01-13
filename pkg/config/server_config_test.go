@@ -113,23 +113,38 @@ func TestSchedulerConfigValidateAndAdjust(t *testing.T) {
 	conf := GetDefaultServerConfig().Clone().Debug.Scheduler
 	require.Nil(t, conf.ValidateAndAdjust())
 
+	conf = GetDefaultServerConfig().Clone().Debug.Scheduler
 	conf.HeartbeatTick = -1
 	require.Error(t, conf.ValidateAndAdjust())
 	conf.HeartbeatTick = 0
 	require.Error(t, conf.ValidateAndAdjust())
-	conf.HeartbeatTick = 1
 
+	conf = GetDefaultServerConfig().Clone().Debug.Scheduler
+	conf.CollectStatsTick = -1
+	require.Error(t, conf.ValidateAndAdjust())
+	conf.CollectStatsTick = 0
+	require.Error(t, conf.ValidateAndAdjust())
+
+	conf = GetDefaultServerConfig().Clone().Debug.Scheduler
 	conf.MaxTaskConcurrency = -1
 	require.Error(t, conf.ValidateAndAdjust())
 	conf.MaxTaskConcurrency = 0
 	require.Error(t, conf.ValidateAndAdjust())
 
+	conf = GetDefaultServerConfig().Clone().Debug.Scheduler
 	conf.CheckBalanceInterval = -1
 	require.Error(t, conf.ValidateAndAdjust())
 	conf.CheckBalanceInterval = TomlDuration(time.Second)
 	require.Error(t, conf.ValidateAndAdjust())
 
+	conf = GetDefaultServerConfig().Clone().Debug.Scheduler
 	conf.AddTableBatchSize = 0
+	require.Error(t, conf.ValidateAndAdjust())
+
+	conf = GetDefaultServerConfig().Clone().Debug.Scheduler
+	conf.RegionPerSpan = 0
+	require.Nil(t, conf.ValidateAndAdjust())
+	conf.RegionPerSpan = 999
 	require.Error(t, conf.ValidateAndAdjust())
 }
 
@@ -153,7 +168,7 @@ func TestIsValidClusterID(t *testing.T) {
 		{"default", true},
 	}
 	for _, c := range cases {
-		println(c.id)
+		t.Log(c.id)
 		require.Equal(t, c.valid, isValidClusterID(c.id))
 	}
 }

@@ -39,8 +39,10 @@ func TestWriteDDLEvent(t *testing.T) {
 	require.Nil(t, err)
 
 	ddlEvent := &model.DDLEvent{
+		Type:  timodel.ActionAddColumn,
+		Query: "alter table test.table1 add col2 varchar(64)",
 		TableInfo: &model.TableInfo{
-			TableInfoVersion: 100,
+			Version: 100,
 			TableName: model.TableName{
 				Schema:  "test",
 				Table:   "table1",
@@ -70,7 +72,10 @@ func TestWriteDDLEvent(t *testing.T) {
 	require.JSONEq(t, `{
 		"Table": "table1",
 		"Schema": "test",
-		"Version": 100,
+		"Version": 1,
+		"TableVersion": 100,
+		"Query": "alter table test.table1 add col2 varchar(64)",
+		"Type": 5,
 		"TableColumns": [
 			{
 				"ColumnName": "col1",
@@ -98,7 +103,7 @@ func TestWriteCheckpointTs(t *testing.T) {
 	require.Nil(t, err)
 	tables := []*model.TableInfo{
 		{
-			TableInfoVersion: 100,
+			Version: 100,
 			TableName: model.TableName{
 				Schema:  "test",
 				Table:   "table1",
@@ -122,8 +127,6 @@ func TestWriteCheckpointTs(t *testing.T) {
 	os.MkdirAll(table1Dir, 0o755)
 
 	err = sink.WriteCheckpointTs(ctx, 100, tables)
-	require.Nil(t, err)
-	_, err = os.Stat(path.Join(table1Dir, "schema.json"))
 	require.Nil(t, err)
 	metadata, err := os.ReadFile(path.Join(parentDir, "metadata"))
 	require.Nil(t, err)

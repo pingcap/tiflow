@@ -31,6 +31,7 @@ import (
 	"github.com/pingcap/tiflow/cdc/capture"
 	"github.com/pingcap/tiflow/cdc/kv"
 	"github.com/pingcap/tiflow/cdc/processor/pipeline/system"
+	"github.com/pingcap/tiflow/cdc/processor/sourcemanager/engine/factory"
 	ssystem "github.com/pingcap/tiflow/cdc/sorter/db/system"
 	"github.com/pingcap/tiflow/cdc/sorter/unified"
 	"github.com/pingcap/tiflow/pkg/config"
@@ -39,7 +40,6 @@ import (
 	"github.com/pingcap/tiflow/pkg/fsutil"
 	"github.com/pingcap/tiflow/pkg/p2p"
 	"github.com/pingcap/tiflow/pkg/pdutil"
-	sortmgr "github.com/pingcap/tiflow/pkg/sorter/manager"
 	"github.com/pingcap/tiflow/pkg/tcpserver"
 	p2pProto "github.com/pingcap/tiflow/proto/p2p"
 	pd "github.com/tikv/pd/client"
@@ -89,7 +89,7 @@ type server struct {
 
 	// If it's true sortEngineManager will be used, otherwise sorterSystem will be used.
 	useEventSortEngine bool
-	sortEngineManager  *sortmgr.EventSortEngineManager
+	sortEngineFactory  *factory.SortEngineFactory
 	sorterSystem       *ssystem.System
 }
 
@@ -121,7 +121,7 @@ func New(pdEndpoints []string) (*server, error) {
 
 	s := &server{
 		pdEndpoints: pdEndpoints,
-		grpcService: p2p.NewServerWrapper(),
+		grpcService: p2p.NewServerWrapper(debugConfig.Messages.ToMessageServerConfig()),
 		tcpServer:   tcpServer,
 
 		useEventSortEngine: useEventSortEngine,
@@ -149,41 +149,42 @@ func (s *server) prepare(ctx context.Context) error {
 	logConfig := logutil.DefaultZapLoggerConfig
 	logConfig.Level = zap.NewAtomicLevelAt(zapcore.ErrorLevel)
 
-	// we do not pass a `context` to the etcd client,
-	// to prevent it's cancelled when the server is closing.
-	// For example, when the non-owner node goes offline,
-	// it would resign the campaign key which was put by call `campaign`,
-	// if this is not done due to the passed context cancelled,
-	// the key will be kept for the lease TTL, which is 10 seconds,
-	// then cause the new owner cannot be elected immediately after the old owner offline.
-	// see https://github.com/etcd-io/etcd/blob/525d53bd41/client/v3/concurrency/election.go#L98
-	etcdCli, err := clientv3.New(clientv3.Config{
-		Endpoints:   s.pdEndpoints,
-		TLS:         tlsConfig,
-		LogConfig:   &logConfig,
-		DialTimeout: 5 * time.Second,
-		DialOptions: []grpc.DialOption{
-			grpcTLSOption,
-			grpc.WithBlock(),
-			grpc.WithConnectParams(grpc.ConnectParams{
-				Backoff: backoff.Config{
-					BaseDelay:  time.Second,
-					Multiplier: 1.1,
-					Jitter:     0.1,
-					MaxDelay:   3 * time.Second,
-				},
-				MinConnectTimeout: 3 * time.Second,
-			}),
-		},
-	})
+	createEtcdClient := func() (etcd.CDCEtcdClient, error) {
+		etcdCli, err := clientv3.New(clientv3.Config{
+			Endpoints:   s.pdEndpoints,
+			TLS:         tlsConfig,
+			LogConfig:   &logConfig,
+			DialTimeout: 5 * time.Second,
+			DialOptions: []grpc.DialOption{
+				grpcTLSOption,
+				grpc.WithBlock(),
+				grpc.WithConnectParams(grpc.ConnectParams{
+					Backoff: backoff.Config{
+						BaseDelay:  time.Second,
+						Multiplier: 1.1,
+						Jitter:     0.1,
+						MaxDelay:   3 * time.Second,
+					},
+					MinConnectTimeout: 3 * time.Second,
+				}),
+			},
+		})
+		if err != nil {
+			return nil, cerror.WrapError(cerror.ErrNewCaptureFailed, err)
+		}
+		cdcEtcdClient, err := etcd.NewCDCEtcdClient(ctx, etcdCli, conf.ClusterID)
+		if err != nil {
+			etcdCli.Close()
+			return nil, cerror.WrapError(cerror.ErrNewCaptureFailed, err)
+		}
+		return cdcEtcdClient, nil
+	}
+
+	cdcEtcdClient, err := createEtcdClient()
 	if err != nil {
 		return cerror.WrapError(cerror.ErrNewCaptureFailed, err)
 	}
 
-	cdcEtcdClient, err := etcd.NewCDCEtcdClient(ctx, etcdCli, conf.ClusterID)
-	if err != nil {
-		return cerror.WrapError(cerror.ErrNewCaptureFailed, err)
-	}
 	s.etcdClient = cdcEtcdClient
 
 	err = s.initDir(ctx)
@@ -196,8 +197,8 @@ func (s *server) prepare(ctx context.Context) error {
 	}
 
 	s.capture = capture.NewCapture(
-		s.pdEndpoints, cdcEtcdClient, s.grpcService,
-		s.tableActorSystem, s.sortEngineManager, s.sorterSystem)
+		s.pdEndpoints, createEtcdClient, s.grpcService,
+		s.tableActorSystem, s.sortEngineFactory, s.sorterSystem)
 
 	return nil
 }
@@ -214,11 +215,11 @@ func (s *server) startActorSystems(ctx context.Context) error {
 		return nil
 	}
 
-	if s.useEventSortEngine && s.sortEngineManager != nil {
-		if err := s.sortEngineManager.Close(); err != nil {
+	if s.useEventSortEngine && s.sortEngineFactory != nil {
+		if err := s.sortEngineFactory.Close(); err != nil {
 			log.Error("fails to close sort engine manager", zap.Error(err))
 		}
-		s.sortEngineManager = nil
+		s.sortEngineFactory = nil
 	}
 	if !s.useEventSortEngine && s.sorterSystem != nil {
 		s.sorterSystem.Stop()
@@ -236,7 +237,7 @@ func (s *server) startActorSystems(ctx context.Context) error {
 		memPercentage := float64(conf.Sorter.MaxMemoryPercentage) / 100
 		memInBytes := uint64(float64(totalMemory) * memPercentage)
 		if config.GetGlobalServerConfig().Debug.EnableDBSorter {
-			s.sortEngineManager = sortmgr.NewForPebble(sortDir, memInBytes, conf.Debug.DB)
+			s.sortEngineFactory = factory.NewForPebble(sortDir, memInBytes, conf.Debug.DB)
 		} else {
 			panic("only pebble is transformed to EventSortEngine")
 		}
@@ -376,7 +377,7 @@ func (s *server) run(ctx context.Context) (err error) {
 	}
 
 	if conf.Debug.EnableNewScheduler {
-		grpcServer := grpc.NewServer()
+		grpcServer := grpc.NewServer(s.grpcService.ServerOptions()...)
 		p2pProto.RegisterCDCPeerToPeerServer(grpcServer, s.grpcService)
 
 		wg.Go(func() error {
@@ -430,8 +431,8 @@ func (s *server) stopActorSystems() {
 	log.Info("table actor system closed", zap.Duration("duration", time.Since(start)))
 
 	start = time.Now()
-	if s.useEventSortEngine && s.sortEngineManager != nil {
-		if err := s.sortEngineManager.Close(); err != nil {
+	if s.useEventSortEngine && s.sortEngineFactory != nil {
+		if err := s.sortEngineFactory.Close(); err != nil {
 			log.Error("fails to close sort engine manager", zap.Error(err))
 		}
 		log.Info("sort engine manager closed", zap.Duration("duration", time.Since(start)))

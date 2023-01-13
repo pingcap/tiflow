@@ -16,13 +16,11 @@ package csv
 import (
 	"bytes"
 	"context"
-	"errors"
 
 	"github.com/pingcap/tiflow/cdc/model"
 	"github.com/pingcap/tiflow/cdc/sink/codec"
 	"github.com/pingcap/tiflow/cdc/sink/codec/common"
 	"github.com/pingcap/tiflow/pkg/config"
-	cerror "github.com/pingcap/tiflow/pkg/errors"
 )
 
 // BatchEncoder encodes the events into the byte of a batch into.
@@ -30,7 +28,7 @@ type BatchEncoder struct {
 	valueBuf    *bytes.Buffer
 	callbackBuf []func()
 	batchSize   int
-	csvConfig   *config.CSVConfig
+	config      *common.Config
 }
 
 // AppendRowChangedEvent implements the EventBatchEncoder interface
@@ -40,12 +38,7 @@ func (b *BatchEncoder) AppendRowChangedEvent(
 	e *model.RowChangedEvent,
 	callback func(),
 ) error {
-	if b.csvConfig == nil {
-		return cerror.WrapError(cerror.ErrSinkInvalidConfig,
-			errors.New("no csv config provided"))
-	}
-
-	row, err := rowChangedEvent2CSVMsg(b.csvConfig, e)
+	row, err := rowChangedEvent2CSVMsg(b.config, e)
 	if err != nil {
 		return err
 	}
@@ -84,14 +77,15 @@ func (b *BatchEncoder) Build() (messages []*common.Message) {
 		}
 		b.valueBuf.Reset()
 		b.callbackBuf = make([]func(), 0)
+		b.batchSize = 0
 	}
 	return []*common.Message{ret}
 }
 
 // newBatchEncoder creates a new csv BatchEncoder.
-func newBatchEncoder(config *config.CSVConfig) codec.EventBatchEncoder {
+func newBatchEncoder(config *common.Config) codec.EventBatchEncoder {
 	return &BatchEncoder{
-		csvConfig:   config,
+		config:      config,
 		valueBuf:    &bytes.Buffer{},
 		callbackBuf: make([]func(), 0),
 	}
@@ -108,5 +102,5 @@ func NewBatchEncoderBuilder(config *common.Config) codec.EncoderBuilder {
 
 // Build a csv BatchEncoder
 func (b *batchEncoderBuilder) Build() codec.EventBatchEncoder {
-	return newBatchEncoder(b.config.CSVConfig)
+	return newBatchEncoder(b.config)
 }

@@ -26,6 +26,7 @@ type APIV2Interface interface {
 	ChangefeedsGetter
 	TsoGetter
 	UnsafeGetter
+	StatusGetter
 }
 
 // APIV2Client implements APIV1Interface and it is used to interact with cdc owner http api.
@@ -64,6 +65,14 @@ func (c *APIV2Client) Changefeeds() ChangefeedInterface {
 		return nil
 	}
 	return newChangefeeds(c)
+}
+
+// Status returns a StatusInterface to communicate with cdc api
+func (c *APIV2Client) Status() StatusInterface {
+	if c == nil {
+		return nil
+	}
+	return newStatus(c)
 }
 
 // NewAPIClient creates a new APIV1Client.

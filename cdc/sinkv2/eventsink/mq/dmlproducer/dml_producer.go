@@ -16,7 +16,6 @@ package dmlproducer
 import (
 	"context"
 
-	"github.com/Shopify/sarama"
 	"github.com/pingcap/tiflow/cdc/sink/codec/common"
 	"github.com/pingcap/tiflow/pkg/sink/kafka"
 )
@@ -38,5 +37,5 @@ type DMLProducer interface {
 // there is no way to safely close errCh by the sender.
 // So we let the GC close errCh.
 // It's usually a buffered channel.
-type Factory func(ctx context.Context, client sarama.Client,
+type Factory func(ctx context.Context, client kafka.Client,
 	adminClient kafka.ClusterAdminClient, errCh chan error) (DMLProducer, error)

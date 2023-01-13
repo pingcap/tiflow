@@ -51,6 +51,11 @@ func ignoreExcept(itemMap map[string]struct{}) []string {
 		config.ShardAutoIncrementIDChecking,
 		config.OnlineDDLChecking,
 		config.BinlogDBChecking,
+		config.TargetDBPrivilegeChecking,
+		config.LightningFreeSpaceChecking,
+		config.LightningDownstreamVersionChecking,
+		config.LightningRegionDistributionChecking,
+		config.LightningEmptyRegionChecking,
 	}
 	ignoreCheckingItems := make([]string, 0, len(items)-len(itemMap))
 	for _, i := range items {
@@ -162,6 +167,46 @@ func TestReplicationPrivilegeChecking(t *testing.T) {
 	}, cfgs)
 }
 
+func TestTargetDBPrivilegeChecking(t *testing.T) {
+	cfgs := []*config.SubTaskConfig{
+		{
+			IgnoreCheckingItems: ignoreExcept(map[string]struct{}{config.TargetDBPrivilegeChecking: {}}),
+		},
+	}
+
+	// test not enough privileges
+
+	mock := initMockDB(t)
+	mock.ExpectQuery("SHOW GRANTS").WillReturnRows(sqlmock.NewRows([]string{"Grants for User"}).
+		AddRow("GRANT SELECT,UPDATE,CREATE,DELETE,INSERT,ALTER ON *.* TO 'test'@'%'"))
+	msg, err := CheckSyncConfig(context.Background(), cfgs, common.DefaultErrorCnt, common.DefaultWarnCnt)
+	require.NoError(t, err)
+	require.Contains(t, msg, "lack of Drop global (*.*) privilege; lack of Index global (*.*) privilege; ")
+
+	mock = initMockDB(t)
+	mock.ExpectQuery("SHOW GRANTS").WillReturnRows(sqlmock.NewRows([]string{"Grants for User"}).
+		AddRow("GRANT SELECT,UPDATE,CREATE,DELETE,INSERT,ALTER ON *.* TO 'test'@'%'"))
+	result, err := RunCheckOnConfigs(context.Background(), cfgs, false)
+	require.NoError(t, err)
+	require.Equal(t, int64(1), result.Summary.Warning)
+	require.Contains(t, result.Results[0].Errors[0].ShortErr, "lack of Drop global (*.*) privilege")
+	require.Contains(t, result.Results[0].Errors[0].ShortErr, "lack of Index global (*.*) privilege")
+
+	// happy path
+
+	checkHappyPath(t, func() {
+		mock := initMockDB(t)
+		mock.ExpectQuery("SHOW GRANTS").WillReturnRows(sqlmock.NewRows([]string{"Grants for User"}).
+			AddRow("GRANT SELECT,UPDATE,CREATE,DELETE,INSERT,ALTER,INDEX,DROP ON *.* TO 'test'@'%'"))
+	}, cfgs)
+
+	checkHappyPath(t, func() {
+		mock := initMockDB(t)
+		mock.ExpectQuery("SHOW GRANTS").WillReturnRows(sqlmock.NewRows([]string{"Grants for User"}).
+			AddRow("GRANT ALL PRIVILEGES ON *.* TO 'test'@'%'"))
+	}, cfgs)
+}
+
 func TestVersionChecking(t *testing.T) {
 	cfgs := []*config.SubTaskConfig{
 		{
@@ -184,7 +229,7 @@ func TestVersionChecking(t *testing.T) {
 		AddRow("version", "10.1.29-MariaDB"))
 	msg, err := CheckSyncConfig(context.Background(), cfgs, common.DefaultErrorCnt, common.DefaultWarnCnt)
 	require.NoError(t, err)
-	require.Contains(t, msg, "Migrating from MariaDB is experimentally supported")
+	require.Contains(t, msg, "Migrating from MariaDB is still experimental")
 
 	mock = initMockDB(t)
 	mock.ExpectQuery("SHOW GLOBAL VARIABLES LIKE 'version'").WillReturnRows(sqlmock.NewRows([]string{"Variable_name", "Value"}).
@@ -193,7 +238,7 @@ func TestVersionChecking(t *testing.T) {
 	require.NoError(t, err)
 	require.True(t, result.Summary.Passed)
 	require.Equal(t, int64(1), result.Summary.Warning)
-	require.Contains(t, result.Results[0].Errors[0].ShortErr, "Migrating from MariaDB is experimentally supported")
+	require.Contains(t, result.Results[0].Errors[0].ShortErr, "Migrating from MariaDB is still experimental.")
 
 	// too low MySQL version
 
@@ -228,7 +273,7 @@ func TestServerIDChecking(t *testing.T) {
 		AddRow("server_id", "0"))
 	msg, err := CheckSyncConfig(context.Background(), cfgs, common.DefaultErrorCnt, common.DefaultWarnCnt)
 	require.NoError(t, err)
-	require.Contains(t, msg, "please set server_id greater than 0")
+	require.Contains(t, msg, "Set server_id greater than 0")
 
 	mock = initMockDB(t)
 	mock.ExpectQuery("SHOW GLOBAL VARIABLES LIKE 'server_id'").WillReturnRows(sqlmock.NewRows([]string{"Variable_name", "Value"}).
@@ -236,7 +281,7 @@ func TestServerIDChecking(t *testing.T) {
 	result, err := RunCheckOnConfigs(context.Background(), cfgs, false)
 	require.NoError(t, err)
 	require.True(t, result.Summary.Passed)
-	require.Contains(t, result.Results[0].Instruction, "please set server_id greater than 0")
+	require.Contains(t, result.Results[0].Instruction, "Set server_id greater than 0")
 
 	// happy path
 

@@ -29,6 +29,7 @@ import (
 	"github.com/pingcap/tidb/util/filter"
 	cdcmodel "github.com/pingcap/tiflow/cdc/model"
 	"github.com/pingcap/tiflow/dm/config"
+	"github.com/pingcap/tiflow/dm/config/dbconfig"
 	"github.com/pingcap/tiflow/dm/pb"
 	"github.com/pingcap/tiflow/dm/pkg/binlog"
 	"github.com/pingcap/tiflow/dm/pkg/conn"
@@ -273,16 +274,16 @@ func (v *DataValidator) initialize() error {
 	}()
 
 	dbCfg := v.cfg.From
-	dbCfg.RawDBCfg = config.DefaultRawDBConfig().SetReadTimeout(maxDMLConnectionTimeout).SetMaxIdleConns(1)
-	v.fromDB, err = dbconn.CreateBaseDB(&dbCfg)
+	dbCfg.RawDBCfg = dbconfig.DefaultRawDBConfig().SetReadTimeout(maxDMLConnectionTimeout).SetMaxIdleConns(1)
+	v.fromDB, err = conn.GetUpstreamDB(&dbCfg)
 	if err != nil {
 		return err
 	}
 
 	dbCfg = v.cfg.To
 	// worker count + checkpoint connection, others concurrent access can create it on the fly
-	dbCfg.RawDBCfg = config.DefaultRawDBConfig().SetReadTimeout(maxDMLConnectionTimeout).SetMaxIdleConns(v.workerCnt + 1)
-	v.toDB, err = dbconn.CreateBaseDB(&dbCfg)
+	dbCfg.RawDBCfg = dbconfig.DefaultRawDBConfig().SetReadTimeout(maxDMLConnectionTimeout).SetMaxIdleConns(v.workerCnt + 1)
+	v.toDB, err = conn.GetDownstreamDB(&dbCfg)
 	if err != nil {
 		return err
 	}
@@ -295,16 +296,16 @@ func (v *DataValidator) initialize() error {
 	failpoint.Inject("ValidatorMockUpstreamTZ", func() {
 		defaultUpstreamTZ = "UTC"
 	})
-	v.upstreamTZ, _, err = str2TimezoneOrFromDB(newCtx, defaultUpstreamTZ, &v.cfg.From)
+	v.upstreamTZ, _, err = str2TimezoneOrFromDB(newCtx, defaultUpstreamTZ, conn.UpstreamDBConfig(&v.cfg.From))
 	if err != nil {
 		return err
 	}
-	v.timezone, _, err = str2TimezoneOrFromDB(newCtx, v.cfg.Timezone, &v.cfg.To)
+	v.timezone, _, err = str2TimezoneOrFromDB(newCtx, v.cfg.Timezone, conn.DownstreamDBConfig(&v.cfg.To))
 	if err != nil {
 		return err
 	}
 
-	v.syncCfg, err = subtaskCfg2BinlogSyncerCfg(v.cfg, v.timezone)
+	v.syncCfg, err = subtaskCfg2BinlogSyncerCfg(v.cfg, v.timezone, v.syncer.baList)
 	if err != nil {
 		return err
 	}
@@ -1245,7 +1246,7 @@ func (v *DataValidator) GetValidatorError(errState pb.ValidateErrorState) ([]*pb
 	var (
 		toDB  *conn.BaseDB
 		err   error
-		dbCfg config.DBConfig
+		dbCfg dbconfig.DBConfig
 	)
 	ctx, cancel := context.WithTimeout(context.Background(), validatorDmctlOpTimeout)
 	tctx := tcontext.NewContext(ctx, v.L)
@@ -1255,8 +1256,8 @@ func (v *DataValidator) GetValidatorError(errState pb.ValidateErrorState) ([]*pb
 		failpoint.Return(v.persistHelper.loadError(tctx, toDB, errState))
 	})
 	dbCfg = v.cfg.To
-	dbCfg.RawDBCfg = config.DefaultRawDBConfig().SetMaxIdleConns(1)
-	toDB, err = dbconn.CreateBaseDB(&dbCfg)
+	dbCfg.RawDBCfg = dbconfig.DefaultRawDBConfig().SetMaxIdleConns(1)
+	toDB, err = conn.GetDownstreamDB(&dbCfg)
 	if err != nil {
 		v.L.Warn("failed to create downstream db", zap.Error(err))
 		return nil, err
@@ -1274,7 +1275,7 @@ func (v *DataValidator) OperateValidatorError(validateOp pb.ValidationErrOp, err
 	var (
 		toDB  *conn.BaseDB
 		err   error
-		dbCfg config.DBConfig
+		dbCfg dbconfig.DBConfig
 	)
 	ctx, cancel := context.WithTimeout(context.Background(), validatorDmctlOpTimeout)
 	tctx := tcontext.NewContext(ctx, v.L)
@@ -1284,8 +1285,8 @@ func (v *DataValidator) OperateValidatorError(validateOp pb.ValidationErrOp, err
 		failpoint.Return(v.persistHelper.operateError(tctx, toDB, validateOp, errID, isAll))
 	})
 	dbCfg = v.cfg.To
-	dbCfg.RawDBCfg = config.DefaultRawDBConfig().SetMaxIdleConns(1)
-	toDB, err = dbconn.CreateBaseDB(&dbCfg)
+	dbCfg.RawDBCfg = dbconfig.DefaultRawDBConfig().SetMaxIdleConns(1)
+	toDB, err = conn.GetDownstreamDB(&dbCfg)
 	if err != nil {
 		return err
 	}
@@ -1300,9 +1301,9 @@ func (v *DataValidator) getErrorRowCount(timeout time.Duration) ([errorStateType
 
 	// use a separate db to get error count, since validator maybe stopped or initializing
 	dbCfg := v.cfg.To
-	dbCfg.RawDBCfg = config.DefaultRawDBConfig().SetMaxIdleConns(1)
+	dbCfg.RawDBCfg = dbconfig.DefaultRawDBConfig().SetMaxIdleConns(1)
 	countMap := map[pb.ValidateErrorState]int64{}
-	toDB, err := dbconn.CreateBaseDB(&dbCfg)
+	toDB, err := conn.GetDownstreamDB(&dbCfg)
 	if err != nil {
 		v.L.Warn("failed to create downstream db", zap.Error(err))
 	} else {

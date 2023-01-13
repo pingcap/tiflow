@@ -15,7 +15,7 @@ package config
 
 const (
 	testCfgTestReplicaConfigOutDated = `{
-  "memory-quota": 2147483648,
+  "memory-quota": 268435456,
   "case-sensitive": false,
   "enable-old-value": true,
   "force-replicate": true,
@@ -34,6 +34,7 @@ const (
   },
   "sink": {
     "encoder-concurrency": 16,
+    "terminator": "\r\n",
     "dispatch-rules": [
       {
         "db-name": "a",
@@ -83,7 +84,7 @@ const (
   "sorter": {
     "num-concurrent-worker": 4,
     "chunk-size-limit": 999,
-    "max-memory-percentage": 30,
+    "max-memory-percentage": 10,
     "max-memory-consumption": 17179869184,
     "num-workerpool-goroutine": 16,
     "sort-dir": "/tmp/sorter"
@@ -105,7 +106,7 @@ const (
     "table-actor": {
       "event-batch-size": 32
     },
-    "enable-pull-based-sink": false,
+    "enable-pull-based-sink": true,
     "enable-db-sorter": true,
     "db": {
       "count": 8,
@@ -129,14 +130,16 @@ const (
       "client-retry-rate-limit": 1,
       "server-max-pending-message-count": 102400,
       "server-ack-interval": 100000000,
-      "server-worker-pool-size": 4
+      "server-worker-pool-size": 4,
+      "max-recv-msg-size": 268435456
     },
-    "enable-scheduler-v3": true,
     "scheduler": {
       "heartbeat-tick": 2,
+      "collect-stats-tick": 200,
       "max-task-concurrency": 10,
       "check-balance-interval": 60000000000,
-      "add-table-batch-size": 50
+      "add-table-batch-size": 50,
+      "region-per-span": 0
     },
     "enable-new-sink": true
   },
@@ -144,12 +147,13 @@ const (
 }`
 
 	testCfgTestReplicaConfigMarshal1 = `{
-  "memory-quota": 2147483648,
+  "memory-quota": 268435456,
   "case-sensitive": false,
   "enable-old-value": true,
   "force-replicate": true,
   "check-gc-safe-point": true,
   "enable-sync-point": false,
+  "bdr-mode": false,
   "sync-point-interval": 600000000000,
   "sync-point-retention": 86400000000000,
   "filter": {
@@ -181,12 +185,13 @@ const (
     "csv": {
       "delimiter": ",",
       "quote": "\"",
-      "terminator": "",
       "null": "\\N",
-      "date-separator": "month",
       "include-commit-ts": true
     },
-    "transaction-atomicity": ""
+    "transaction-atomicity": "",
+    "terminator": "",
+    "date-separator": "month",
+    "enable-partition-separator": true
   },
   "consistent": {
     "level": "none",
@@ -197,12 +202,13 @@ const (
 }`
 
 	testCfgTestReplicaConfigMarshal2 = `{
-  "memory-quota": 2147483648,
+  "memory-quota": 268435456,
   "case-sensitive": false,
   "enable-old-value": true,
   "force-replicate": true,
   "check-gc-safe-point": true,
   "enable-sync-point": false,
+  "bdr-mode": false,
   "sync-point-interval": 600000000000,
   "sync-point-retention": 86400000000000,
   "filter": {
@@ -232,11 +238,12 @@ const (
     "csv": {
       "delimiter": ",",
       "quote": "\"",
-      "terminator": "",
       "null": "\\N",
-      "date-separator": "month",
       "include-commit-ts": true
-    }
+    },
+    "terminator": "",
+    "date-separator": "month",
+    "enable-partition-separator": true
   },
   "consistent": {
     "level": "none",

@@ -14,7 +14,10 @@
 package replication
 
 import (
+	"bytes"
+	"container/heap"
 	"math"
+	"time"
 
 	"github.com/pingcap/errors"
 	"github.com/pingcap/log"
@@ -22,12 +25,17 @@ import (
 	"github.com/pingcap/tiflow/cdc/processor/tablepb"
 	"github.com/pingcap/tiflow/cdc/scheduler/internal"
 	"github.com/pingcap/tiflow/cdc/scheduler/schedulepb"
+	"github.com/pingcap/tiflow/pkg/spanz"
 	"github.com/tikv/client-go/v2/oracle"
 	"go.uber.org/zap"
 )
 
 const (
 	checkpointCannotProceed = internal.CheckpointCannotProceed
+
+	defaultSlowTableHeapSize  = 4
+	logSlowTablesLagThreshold = 30 * time.Second
+	logSlowTablesInterval     = 1 * time.Minute
 )
 
 // Callback is invoked when something is done.
@@ -43,20 +51,20 @@ type BurstBalance struct {
 
 // MoveTable is a schedule task for moving a table.
 type MoveTable struct {
-	TableID     model.TableID
+	Span        tablepb.Span
 	DestCapture model.CaptureID
 }
 
 // AddTable is a schedule task for adding a table.
 type AddTable struct {
-	TableID      model.TableID
+	Span         tablepb.Span
 	CaptureID    model.CaptureID
 	CheckpointTs model.Ts
 }
 
 // RemoveTable is a schedule task for removing a table.
 type RemoveTable struct {
-	TableID   model.TableID
+	Span      tablepb.Span
 	CaptureID model.CaptureID
 }
 
@@ -86,26 +94,32 @@ func (s *ScheduleTask) Name() string {
 
 // Manager manages replications and running scheduling tasks.
 type Manager struct { //nolint:revive
-	tables map[model.TableID]*ReplicationSet
+	spans *spanz.BtreeMap[*ReplicationSet]
 
-	runningTasks       map[model.TableID]*ScheduleTask
+	runningTasks       *spanz.BtreeMap[*ScheduleTask]
 	maxTaskConcurrency int
 
 	changefeedID           model.ChangeFeedID
-	slowestTableID         model.TableID
+	slowestTableID         tablepb.Span
 	acceptAddTableTask     int
 	acceptRemoveTableTask  int
 	acceptMoveTableTask    int
 	acceptBurstBalanceTask int
+
+	slowTableHeap         SetHeap
+	lastLogSlowTablesTime time.Time
 }
 
 // NewReplicationManager returns a new replication manager.
 func NewReplicationManager(
 	maxTaskConcurrency int, changefeedID model.ChangeFeedID,
 ) *Manager {
+	// degreeReadHeavy is a degree optimized for read heavy map, many Ascend.
+	// There may be a large number of tables.
+	const degreeReadHeavy = 256
 	return &Manager{
-		tables:             make(map[int64]*ReplicationSet),
-		runningTasks:       make(map[int64]*ScheduleTask),
+		spans:              spanz.NewBtreeMapWithDegree[*ReplicationSet](degreeReadHeavy),
+		runningTasks:       spanz.NewBtreeMap[*ScheduleTask](),
 		maxTaskConcurrency: maxTaskConcurrency,
 		changefeedID:       changefeedID,
 	}
@@ -118,45 +132,57 @@ func (r *Manager) HandleCaptureChanges(
 	checkpointTs model.Ts,
 ) ([]*schedulepb.Message, error) {
 	if init != nil {
-		if len(r.tables) != 0 {
+		if r.spans.Len() != 0 {
 			log.Panic("schedulerv3: init again",
 				zap.String("namespace", r.changefeedID.Namespace),
 				zap.String("changefeed", r.changefeedID.ID),
-				zap.Any("init", init), zap.Any("tables", r.tables))
+				zap.Any("init", init), zap.Any("tablesCount", r.spans.Len()))
 		}
-		tableStatus := map[model.TableID]map[model.CaptureID]*tablepb.TableStatus{}
-		for captureID, tables := range init {
-			for i := range tables {
-				table := tables[i]
-				if _, ok := tableStatus[table.TableID]; !ok {
-					tableStatus[table.TableID] = map[model.CaptureID]*tablepb.TableStatus{}
+		spanStatusMap := spanz.NewBtreeMap[map[model.CaptureID]*tablepb.TableStatus]()
+		for captureID, spans := range init {
+			for i := range spans {
+				table := spans[i]
+				if _, ok := spanStatusMap.Get(table.Span); !ok {
+					spanStatusMap.ReplaceOrInsert(
+						table.Span, map[model.CaptureID]*tablepb.TableStatus{})
 				}
-				tableStatus[table.TableID][captureID] = &table
+				spanStatusMap.GetV(table.Span)[captureID] = &table
 			}
 		}
-		for tableID, status := range tableStatus {
-			table, err := NewReplicationSet(
-				tableID, checkpointTs, status, r.changefeedID)
+		var err error
+		spanStatusMap.Ascend(func(span tablepb.Span, status map[string]*tablepb.TableStatus) bool {
+			table, err1 := NewReplicationSet(span, checkpointTs, status, r.changefeedID)
 			if err != nil {
-				return nil, errors.Trace(err)
+				err = errors.Trace(err1)
+				return false
 			}
-			r.tables[tableID] = table
+			r.spans.ReplaceOrInsert(table.Span, table)
+			return true
+		})
+		if err != nil {
+			return nil, errors.Trace(err)
 		}
 	}
 	sentMsgs := make([]*schedulepb.Message, 0)
 	if removed != nil {
-		for _, table := range r.tables {
+		var err error
+		r.spans.Ascend(func(span tablepb.Span, table *ReplicationSet) bool {
 			for captureID := range removed {
-				msgs, affected, err := table.handleCaptureShutdown(captureID)
+				msgs, affected, err1 := table.handleCaptureShutdown(captureID)
 				if err != nil {
-					return nil, errors.Trace(err)
+					err = errors.Trace(err1)
+					return false
 				}
 				sentMsgs = append(sentMsgs, msgs...)
 				if affected {
 					// Cleanup its running task.
-					delete(r.runningTasks, table.TableID)
+					r.runningTasks.Delete(table.Span)
 				}
 			}
+			return true
+		})
+		if err != nil {
+			return nil, errors.Trace(err)
 		}
 	}
 	return sentMsgs, nil
@@ -197,7 +223,7 @@ func (r *Manager) handleMessageHeartbeatResponse(
 ) ([]*schedulepb.Message, error) {
 	sentMsgs := make([]*schedulepb.Message, 0)
 	for _, status := range msg.Tables {
-		table, ok := r.tables[status.TableID]
+		table, ok := r.spans.Get(status.Span)
 		if !ok {
 			log.Info("schedulerv3: ignore table status no table found",
 				zap.String("namespace", r.changefeedID.Namespace),
@@ -213,8 +239,8 @@ func (r *Manager) handleMessageHeartbeatResponse(
 			log.Info("schedulerv3: table has removed",
 				zap.String("namespace", r.changefeedID.Namespace),
 				zap.String("changefeed", r.changefeedID.ID),
-				zap.Int64("tableID", status.TableID))
-			delete(r.tables, status.TableID)
+				zap.Int64("tableID", status.Span.TableID))
+			r.spans.Delete(status.Span)
 		}
 		sentMsgs = append(sentMsgs, msgs...)
 	}
@@ -238,7 +264,7 @@ func (r *Manager) handleMessageDispatchTableResponse(
 		return nil, nil
 	}
 
-	table, ok := r.tables[status.TableID]
+	table, ok := r.spans.Get(status.Span)
 	if !ok {
 		log.Info("schedulerv3: ignore table status no table found",
 			zap.String("namespace", r.changefeedID.Namespace),
@@ -254,8 +280,8 @@ func (r *Manager) handleMessageDispatchTableResponse(
 		log.Info("schedulerv3: table has removed",
 			zap.String("namespace", r.changefeedID.Namespace),
 			zap.String("changefeed", r.changefeedID.ID),
-			zap.Int64("tableID", status.TableID))
-		delete(r.tables, status.TableID)
+			zap.Int64("tableID", status.Span.TableID))
+		r.spans.Delete(status.Span)
 	}
 	return msgs, nil
 }
@@ -265,17 +291,22 @@ func (r *Manager) HandleTasks(
 	tasks []*ScheduleTask,
 ) ([]*schedulepb.Message, error) {
 	// Check if a running task is finished.
-	for tableID := range r.runningTasks {
-		if table, ok := r.tables[tableID]; ok {
+	toBeDeleted := []tablepb.Span{}
+	r.runningTasks.Ascend(func(span tablepb.Span, task *ScheduleTask) bool {
+		if table, ok := r.spans.Get(span); ok {
 			// If table is back to Replicating or Removed,
 			// the running task is finished.
 			if table.State == ReplicationSetStateReplicating || table.hasRemoved() {
-				delete(r.runningTasks, tableID)
+				toBeDeleted = append(toBeDeleted, span)
 			}
 		} else {
 			// No table found, remove the task
-			delete(r.runningTasks, tableID)
+			toBeDeleted = append(toBeDeleted, span)
 		}
+		return true
+	})
+	for _, span := range toBeDeleted {
+		r.runningTasks.Delete(span)
 	}
 
 	sentMsgs := make([]*schedulepb.Message, 0)
@@ -294,7 +325,7 @@ func (r *Manager) HandleTasks(
 		}
 
 		// Check if accepting one more task exceeds maxTaskConcurrency.
-		if len(r.runningTasks) == r.maxTaskConcurrency {
+		if r.runningTasks.Len() == r.maxTaskConcurrency {
 			log.Debug("schedulerv3: too many running task",
 				zap.String("namespace", r.changefeedID.Namespace),
 				zap.String("changefeed", r.changefeedID.ID))
@@ -303,25 +334,25 @@ func (r *Manager) HandleTasks(
 			continue
 		}
 
-		var tableID model.TableID
+		var span tablepb.Span
 		if task.AddTable != nil {
-			tableID = task.AddTable.TableID
+			span = task.AddTable.Span
 		} else if task.RemoveTable != nil {
-			tableID = task.RemoveTable.TableID
+			span = task.RemoveTable.Span
 		} else if task.MoveTable != nil {
-			tableID = task.MoveTable.TableID
+			span = task.MoveTable.Span
 		}
 
 		// Skip task if the table is already running a task,
 		// or the table has removed.
-		if _, ok := r.runningTasks[tableID]; ok {
+		if _, ok := r.runningTasks.Get(span); ok {
 			log.Info("schedulerv3: ignore task, already exists",
 				zap.String("namespace", r.changefeedID.Namespace),
 				zap.String("changefeed", r.changefeedID.ID),
 				zap.Any("task", task))
 			continue
 		}
-		if _, ok := r.tables[tableID]; !ok && task.AddTable == nil {
+		if _, ok := r.spans.Get(span); !ok && task.AddTable == nil {
 			log.Info("schedulerv3: ignore task, table not found",
 				zap.String("namespace", r.changefeedID.Namespace),
 				zap.String("changefeed", r.changefeedID.ID),
@@ -342,7 +373,7 @@ func (r *Manager) HandleTasks(
 			return nil, errors.Trace(err)
 		}
 		sentMsgs = append(sentMsgs, msgs...)
-		r.runningTasks[tableID] = task
+		r.runningTasks.ReplaceOrInsert(span, task)
 		if task.Accept != nil {
 			task.Accept()
 		}
@@ -355,14 +386,13 @@ func (r *Manager) handleAddTableTask(
 ) ([]*schedulepb.Message, error) {
 	r.acceptAddTableTask++
 	var err error
-	table := r.tables[task.TableID]
-	if table == nil {
-		table, err = NewReplicationSet(
-			task.TableID, task.CheckpointTs, nil, r.changefeedID)
+	table, ok := r.spans.Get(task.Span)
+	if !ok {
+		table, err = NewReplicationSet(task.Span, task.CheckpointTs, nil, r.changefeedID)
 		if err != nil {
 			return nil, errors.Trace(err)
 		}
-		r.tables[task.TableID] = table
+		r.spans.ReplaceOrInsert(task.Span, table)
 	}
 	return table.handleAddTable(task.CaptureID)
 }
@@ -371,13 +401,13 @@ func (r *Manager) handleRemoveTableTask(
 	task *RemoveTable,
 ) ([]*schedulepb.Message, error) {
 	r.acceptRemoveTableTask++
-	table := r.tables[task.TableID]
+	table, _ := r.spans.Get(task.Span)
 	if table.hasRemoved() {
 		log.Info("schedulerv3: table has removed",
 			zap.String("namespace", r.changefeedID.Namespace),
 			zap.String("changefeed", r.changefeedID.ID),
-			zap.Int64("tableID", task.TableID))
-		delete(r.tables, task.TableID)
+			zap.Int64("tableID", task.Span.TableID))
+		r.spans.Delete(task.Span)
 		return nil, nil
 	}
 	return table.handleRemoveTable()
@@ -387,7 +417,7 @@ func (r *Manager) handleMoveTableTask(
 	task *MoveTable,
 ) ([]*schedulepb.Message, error) {
 	r.acceptMoveTableTask++
-	table := r.tables[task.TableID]
+	table, _ := r.spans.Get(task.Span)
 	return table.handleMoveTable(task.DestCapture)
 }
 
@@ -416,7 +446,7 @@ func (r *Manager) handleBurstBalanceTasks(
 	sentMsgs := make([]*schedulepb.Message, 0, len(task.AddTables))
 	for i := range task.AddTables {
 		addTable := task.AddTables[i]
-		if r.runningTasks[addTable.TableID] != nil {
+		if _, ok := r.runningTasks.Get(addTable.Span); ok {
 			// Skip add table if the table is already running a task.
 			continue
 		}
@@ -426,11 +456,11 @@ func (r *Manager) handleBurstBalanceTasks(
 		}
 		sentMsgs = append(sentMsgs, msgs...)
 		// Just for place holding.
-		r.runningTasks[addTable.TableID] = &ScheduleTask{}
+		r.runningTasks.ReplaceOrInsert(addTable.Span, &ScheduleTask{})
 	}
 	for i := range task.RemoveTables {
 		removeTable := task.RemoveTables[i]
-		if r.runningTasks[removeTable.TableID] != nil {
+		if _, ok := r.runningTasks.Get(removeTable.Span); ok {
 			// Skip add table if the table is already running a task.
 			continue
 		}
@@ -440,11 +470,11 @@ func (r *Manager) handleBurstBalanceTasks(
 		}
 		sentMsgs = append(sentMsgs, msgs...)
 		// Just for place holding.
-		r.runningTasks[removeTable.TableID] = &ScheduleTask{}
+		r.runningTasks.ReplaceOrInsert(removeTable.Span, &ScheduleTask{})
 	}
 	for i := range task.MoveTables {
 		moveTable := task.MoveTables[i]
-		if r.runningTasks[moveTable.TableID] != nil {
+		if _, ok := r.runningTasks.Get(moveTable.Span); ok {
 			// Skip add table if the table is already running a task.
 			continue
 		}
@@ -454,62 +484,132 @@ func (r *Manager) handleBurstBalanceTasks(
 		}
 		sentMsgs = append(sentMsgs, msgs...)
 		// Just for place holding.
-		r.runningTasks[moveTable.TableID] = &ScheduleTask{}
+		r.runningTasks.ReplaceOrInsert(moveTable.Span, &ScheduleTask{})
 	}
 	return sentMsgs, nil
 }
 
 // ReplicationSets return all tracking replication set
 // Caller must not modify the returned map.
-func (r *Manager) ReplicationSets() map[model.TableID]*ReplicationSet {
-	return r.tables
+func (r *Manager) ReplicationSets() *spanz.BtreeMap[*ReplicationSet] {
+	return r.spans
 }
 
 // RunningTasks return running tasks.
 // Caller must not modify the returned map.
-func (r *Manager) RunningTasks() map[model.TableID]*ScheduleTask {
+func (r *Manager) RunningTasks() *spanz.BtreeMap[*ScheduleTask] {
 	return r.runningTasks
 }
 
 // AdvanceCheckpoint tries to advance checkpoint and returns current checkpoint.
 func (r *Manager) AdvanceCheckpoint(
-	currentTables []model.TableID,
+	currentTables *TableRanges, currentPDTime time.Time,
 ) (newCheckpointTs, newResolvedTs model.Ts) {
 	newCheckpointTs, newResolvedTs = math.MaxUint64, math.MaxUint64
-	slowestTableID := int64(0)
-	for _, tableID := range currentTables {
-		table, ok := r.tables[tableID]
-		if !ok {
-			// Can not advance checkpoint there is a table missing.
-			log.Warn("schedulerv3: cannot advance checkpoint since missing table",
+	slowestRange := tablepb.Span{}
+	cannotProceed := false
+	lastSpan := tablepb.Span{}
+	currentTables.Iter(func(tableID model.TableID, tableStart, tableEnd tablepb.Span) bool {
+		tableSpanFound, tableHasHole := false, false
+		tableSpanStartFound, tableSpanEndFound := false, false
+		lastSpan = tablepb.Span{}
+		r.spans.AscendRange(tableStart, tableEnd,
+			func(span tablepb.Span, table *ReplicationSet) bool {
+				if lastSpan.TableID != 0 && !bytes.Equal(lastSpan.EndKey, span.StartKey) {
+					log.Warn("schedulerv3: span hole detected, skip advance checkpoint",
+						zap.String("namespace", r.changefeedID.Namespace),
+						zap.String("changefeed", r.changefeedID.ID),
+						zap.String("lastSpan", lastSpan.String()),
+						zap.String("span", span.String()))
+					tableHasHole = true
+					return false
+				}
+				lastSpan = span
+				tableSpanFound = true
+				if bytes.Equal(span.StartKey, tableStart.StartKey) {
+					tableSpanStartFound = true
+				}
+				if bytes.Equal(span.EndKey, tableEnd.StartKey) {
+					tableSpanEndFound = true
+				}
+
+				// Find the minimum checkpoint ts and resolved ts.
+				if newCheckpointTs > table.Checkpoint.CheckpointTs {
+					newCheckpointTs = table.Checkpoint.CheckpointTs
+					slowestRange = span
+				}
+				if newResolvedTs > table.Checkpoint.ResolvedTs {
+					newResolvedTs = table.Checkpoint.ResolvedTs
+				}
+				return true
+			})
+		if !tableSpanFound || !tableSpanStartFound || !tableSpanEndFound || tableHasHole {
+			// Can not advance checkpoint there is a span missing.
+			log.Warn("schedulerv3: cannot advance checkpoint since missing span",
 				zap.String("namespace", r.changefeedID.Namespace),
 				zap.String("changefeed", r.changefeedID.ID),
 				zap.Int64("tableID", tableID))
-			return checkpointCannotProceed, checkpointCannotProceed
+			cannotProceed = true
+			return false
 		}
-		// Find the minimum checkpoint ts and resolved ts.
-		if newCheckpointTs > table.Checkpoint.CheckpointTs {
-			newCheckpointTs = table.Checkpoint.CheckpointTs
-			slowestTableID = tableID
-		}
-		if newResolvedTs > table.Checkpoint.ResolvedTs {
-			newResolvedTs = table.Checkpoint.ResolvedTs
-		}
+		return true
+	})
+	if cannotProceed {
+		return checkpointCannotProceed, checkpointCannotProceed
 	}
-	if slowestTableID != 0 {
-		r.slowestTableID = slowestTableID
+	if slowestRange.TableID != 0 {
+		r.slowestTableID = slowestRange
 	}
+
+	// If changefeed's checkpoint lag is larger than 30s,
+	// log the 4 slowlest table infos every minute, which can
+	// help us find the problematic tables.
+	checkpointLag := currentPDTime.Sub(oracle.GetTimeFromTS(newCheckpointTs))
+	if checkpointLag > logSlowTablesLagThreshold &&
+		time.Since(r.lastLogSlowTablesTime) > logSlowTablesInterval {
+		r.logSlowTableInfo(currentPDTime)
+		r.lastLogSlowTablesTime = time.Now()
+	}
+
 	return newCheckpointTs, newResolvedTs
+}
+
+func (r *Manager) logSlowTableInfo(currentPDTime time.Time) {
+	// find the slow tables
+	r.spans.Ascend(func(span tablepb.Span, table *ReplicationSet) bool {
+		lag := currentPDTime.Sub(oracle.GetTimeFromTS(table.Checkpoint.CheckpointTs))
+		if lag > logSlowTablesLagThreshold {
+			heap.Push(&r.slowTableHeap, table)
+			if r.slowTableHeap.Len() > defaultSlowTableHeapSize {
+				heap.Pop(&r.slowTableHeap)
+			}
+		}
+		return true
+	})
+
+	num := r.slowTableHeap.Len()
+	for i := 0; i < num; i++ {
+		table := heap.Pop(&r.slowTableHeap).(*ReplicationSet)
+		log.Info("schedulerv3: slow table",
+			zap.String("namespace", r.changefeedID.Namespace),
+			zap.String("changefeed", r.changefeedID.ID),
+			zap.Int64("tableID", table.Span.TableID),
+			zap.String("tableStatus", table.Stats.String()),
+			zap.Uint64("checkpointTs", table.Checkpoint.CheckpointTs),
+			zap.Uint64("resolvedTs", table.Checkpoint.ResolvedTs),
+			zap.Duration("checkpointLag", currentPDTime.
+				Sub(oracle.GetTimeFromTS(table.Checkpoint.CheckpointTs))))
+	}
 }
 
 // CollectMetrics collects metrics.
 func (r *Manager) CollectMetrics() {
 	cf := r.changefeedID
 	tableGauge.
-		WithLabelValues(cf.Namespace, cf.ID).Set(float64(len(r.tables)))
-	if table, ok := r.tables[r.slowestTableID]; ok {
+		WithLabelValues(cf.Namespace, cf.ID).Set(float64(r.spans.Len()))
+	if table, ok := r.spans.Get(r.slowestTableID); ok {
 		slowestTableIDGauge.
-			WithLabelValues(cf.Namespace, cf.ID).Set(float64(r.slowestTableID))
+			WithLabelValues(cf.Namespace, cf.ID).Set(float64(r.slowestTableID.TableID))
 		slowestTableStateGauge.
 			WithLabelValues(cf.Namespace, cf.ID).Set(float64(table.State))
 		phyCkpTs := oracle.ExtractPhysical(table.Checkpoint.CheckpointTs)
@@ -567,9 +667,9 @@ func (r *Manager) CollectMetrics() {
 	metricAcceptScheduleTask.WithLabelValues("burstBalance").Add(float64(r.acceptBurstBalanceTask))
 	r.acceptBurstBalanceTask = 0
 	runningScheduleTaskGauge.
-		WithLabelValues(cf.Namespace, cf.ID).Set(float64(len(r.runningTasks)))
+		WithLabelValues(cf.Namespace, cf.ID).Set(float64(r.runningTasks.Len()))
 	var stateCounters [6]int
-	for _, table := range r.tables {
+	r.spans.Ascend(func(span tablepb.Span, table *ReplicationSet) bool {
 		switch table.State {
 		case ReplicationSetStateUnknown:
 			stateCounters[ReplicationSetStateUnknown]++
@@ -584,7 +684,8 @@ func (r *Manager) CollectMetrics() {
 		case ReplicationSetStateRemoving:
 			stateCounters[ReplicationSetStateRemoving]++
 		}
-	}
+		return true
+	})
 	for s, counter := range stateCounters {
 		tableStateGauge.
 			WithLabelValues(cf.Namespace, cf.ID, ReplicationSetState(s).String()).
@@ -609,22 +710,6 @@ func (r *Manager) CleanMetrics() {
 	metricAcceptScheduleTask.DeleteLabelValues("moveTable")
 	metricAcceptScheduleTask.DeleteLabelValues("burstBalance")
 	var stateCounters [6]int
-	for _, table := range r.tables {
-		switch table.State {
-		case ReplicationSetStateUnknown:
-			stateCounters[ReplicationSetStateUnknown]++
-		case ReplicationSetStateAbsent:
-			stateCounters[ReplicationSetStateAbsent]++
-		case ReplicationSetStatePrepare:
-			stateCounters[ReplicationSetStatePrepare]++
-		case ReplicationSetStateCommit:
-			stateCounters[ReplicationSetStateCommit]++
-		case ReplicationSetStateReplicating:
-			stateCounters[ReplicationSetStateReplicating]++
-		case ReplicationSetStateRemoving:
-			stateCounters[ReplicationSetStateRemoving]++
-		}
-	}
 	for s := range stateCounters {
 		tableStateGauge.
 			DeleteLabelValues(cf.Namespace, cf.ID, ReplicationSetState(s).String())
@@ -640,10 +725,50 @@ func (r *Manager) CleanMetrics() {
 
 // SetReplicationSetForTests is only used in tests.
 func (r *Manager) SetReplicationSetForTests(rs *ReplicationSet) {
-	r.tables[rs.TableID] = rs
+	r.spans.ReplaceOrInsert(rs.Span, rs)
 }
 
 // GetReplicationSetForTests is only used in tests.
-func (r *Manager) GetReplicationSetForTests() map[model.TableID]*ReplicationSet {
-	return r.tables
+func (r *Manager) GetReplicationSetForTests() *spanz.BtreeMap[*ReplicationSet] {
+	return r.spans
+}
+
+// TableRanges wraps current tables and their ranges.
+type TableRanges struct {
+	currentTables []model.TableID
+	cache         struct {
+		tableRange map[model.TableID]struct{ start, end tablepb.Span }
+		lastGC     time.Time
+	}
+}
+
+// UpdateTables current tables.
+func (t *TableRanges) UpdateTables(currentTables []model.TableID) {
+	if time.Since(t.cache.lastGC) > 10*time.Minute {
+		t.cache.tableRange = make(map[model.TableID]struct {
+			start tablepb.Span
+			end   tablepb.Span
+		})
+		t.cache.lastGC = time.Now()
+	}
+	t.currentTables = currentTables
+}
+
+// Len returns the length of current tables.
+func (t *TableRanges) Len() int {
+	return len(t.currentTables)
+}
+
+// Iter iterate current tables.
+func (t *TableRanges) Iter(fn func(tableID model.TableID, tableStart, tableEnd tablepb.Span) bool) {
+	for _, tableID := range t.currentTables {
+		tableRange, ok := t.cache.tableRange[tableID]
+		if !ok {
+			tableRange.start, tableRange.end = spanz.TableIDToComparableRange(tableID)
+			t.cache.tableRange[tableID] = tableRange
+		}
+		if !fn(tableID, tableRange.start, tableRange.end) {
+			break
+		}
+	}
 }

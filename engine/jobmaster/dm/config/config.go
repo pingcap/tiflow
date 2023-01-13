@@ -19,13 +19,16 @@ import (
 	"time"
 
 	"github.com/dustin/go-humanize"
+	"github.com/google/uuid"
 	bf "github.com/pingcap/tidb-tools/pkg/binlog-filter"
 	"github.com/pingcap/tidb-tools/pkg/column-mapping"
 	"github.com/pingcap/tidb/util/filter"
 	router "github.com/pingcap/tidb/util/table-router"
 	dmconfig "github.com/pingcap/tiflow/dm/config"
+	"github.com/pingcap/tiflow/dm/config/dbconfig"
 	"github.com/pingcap/tiflow/dm/master"
 	"github.com/pingcap/tiflow/pkg/errors"
+	"go.uber.org/atomic"
 	"gopkg.in/yaml.v2"
 )
 
@@ -33,7 +36,7 @@ import (
 // of DM task config.
 type UpstreamCfg struct {
 	dmconfig.MySQLInstance `yaml:",inline" toml:",inline" json:",inline"`
-	DBCfg                  *dmconfig.DBConfig `yaml:"db-config" toml:"db-config" json:"db-config"`
+	DBCfg                  *dbconfig.DBConfig `yaml:"db-config" toml:"db-config" json:"db-config"`
 	ServerID               uint32             `yaml:"server-id" toml:"server-id" json:"server-id"`
 	Flavor                 string             `yaml:"flavor" toml:"flavor" json:"flavor"`
 	EnableGTID             bool               `yaml:"enable-gtid" toml:"enable-gtid" json:"enable-gtid"`
@@ -80,7 +83,7 @@ type JobCfg struct {
 	IgnoreCheckingItems []string                              `yaml:"ignore-checking-items" toml:"ignore-checking-items" json:"ignore-checking-items"`
 	Timezone            string                                `yaml:"timezone" toml:"timezone" json:"timezone"`
 	CollationCompatible string                                `yaml:"collation_compatible" toml:"collation_compatible" json:"collation_compatible"`
-	TargetDB            *dmconfig.DBConfig                    `yaml:"target-database" toml:"target-database" json:"target-database"`
+	TargetDB            *dbconfig.DBConfig                    `yaml:"target-database" toml:"target-database" json:"target-database"`
 	ShadowTableRules    []string                              `yaml:"shadow-table-rules" toml:"shadow-table-rules" json:"shadow-table-rules"`
 	TrashTableRules     []string                              `yaml:"trash-table-rules" toml:"trash-table-rules" json:"trash-table-rules"`
 	Filters             map[string]*bf.BinlogEventRule        `yaml:"filters" toml:"filters" json:"filters"`
@@ -308,11 +311,6 @@ func (c *TaskCfg) ToDMSubTaskCfg(jobID string) *dmconfig.SubTaskConfig {
 		cfg.FilterRules[j] = c.Filters[name]
 	}
 
-	cfg.ColumnMappingRules = make([]*column.Rule, len(c.Upstreams[0].ColumnMappingRules))
-	for j, name := range c.Upstreams[0].ColumnMappingRules {
-		cfg.ColumnMappingRules[j] = c.ColumnMappings[name]
-	}
-
 	cfg.ExprFilter = make([]*dmconfig.ExpressionFilter, len(c.Upstreams[0].ExpressionFilters))
 	for j, name := range c.Upstreams[0].ExpressionFilters {
 		cfg.ExprFilter[j] = c.ExprFilter[name]
@@ -321,6 +319,10 @@ func (c *TaskCfg) ToDMSubTaskCfg(jobID string) *dmconfig.SubTaskConfig {
 	cfg.MydumperConfig = *c.Upstreams[0].Mydumper
 	cfg.LoaderConfig = *c.Upstreams[0].Loader
 	cfg.SyncerConfig = *c.Upstreams[0].Syncer
+	cfg.IOTotalBytes = atomic.NewUint64(0)
+	cfg.DumpIOTotalBytes = atomic.NewUint64(0)
+	cfg.UUID = uuid.NewString()
+	cfg.DumpUUID = uuid.NewString()
 
 	return cfg
 }

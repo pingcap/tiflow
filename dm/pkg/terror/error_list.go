@@ -266,6 +266,9 @@ const (
 	codeConfigLoaderS3NotSupport
 	codeConfigInvalidSafeModeDuration
 	codeConfigConfictSafeModeDurationAndSafeMode
+	codeConfigInvalidLoadPhysicalDuplicateResolution
+	codeConfigInvalidLoadPhysicalChecksum
+	codeConfigColumnMappingDeprecated
 )
 
 // Binlog operation error code list.
@@ -382,6 +385,8 @@ const (
 	codeLoadTaskWorkerNotMatch
 	codeLoadCheckPointNotMatch
 	codeLoadLightningRuntime
+	codeLoadLightningHasDup
+	codeLoadLightningChecksum
 )
 
 // Sync unit error code.
@@ -963,7 +968,7 @@ var (
 	ErrOpenAPITaskConfigNotExist                = New(codeConfigOpenAPITaskConfigNotExist, ClassConfig, ScopeInternal, LevelLow, "the openapi task config for '%s' does not exist", "")
 	ErrConfigCollationCompatibleNotSupport      = New(codeCollationCompatibleNotSupport, ClassConfig, ScopeInternal, LevelMedium, "collation compatible %s not supported", "Please check the `collation_compatible` config in task configuration file, which can be set to `loose`/`strict`.")
 	ErrConfigInvalidLoadMode                    = New(codeConfigInvalidLoadMode, ClassConfig, ScopeInternal, LevelMedium, "invalid load mode '%s'", "Please choose a valid value in ['logical', 'physical']")
-	ErrConfigInvalidDuplicateResolution         = New(codeConfigInvalidLoadDuplicateResolution, ClassConfig, ScopeInternal, LevelMedium, "invalid load on-duplicate '%s'", "Please choose a valid value in ['replace', 'error', 'ignore']")
+	ErrConfigInvalidDuplicateResolution         = New(codeConfigInvalidLoadDuplicateResolution, ClassConfig, ScopeInternal, LevelMedium, "invalid load on-duplicate-logical or on-duplicate option '%s'", "Please choose a valid value in ['replace', 'error', 'ignore'] or leave it empty.")
 	ErrConfigValidationMode                     = New(codeConfigValidationMode, ClassConfig, ScopeInternal, LevelHigh, "invalid validation mode", "Please check `validation-mode` config in task configuration file.")
 	ErrContinuousValidatorCfgNotFound           = New(codeContinuousValidatorCfgNotFound, ClassConfig, ScopeInternal, LevelMedium, "mysql-instance(%d)'s continuous validator config %s not exist", "Please check the `validator-config-name` config in task configuration file.")
 	ErrConfigStartTimeTooLate                   = New(codeConfigStartTimeTooLate, ClassConfig, ScopeInternal, LevelHigh, "start-time %s is too late, no binlog location matches it", "Please check the `--start-time` is expected or try again later.")
@@ -971,6 +976,9 @@ var (
 	ErrConfigLoaderS3NotSupport                 = New(codeConfigLoaderS3NotSupport, ClassConfig, ScopeInternal, LevelHigh, "loader's dir %s is s3 dir, but s3 is not supported", "Please check the `dir` config in task configuration file and you can use `Lightning` by set config `import-mode` be `sql` which supports s3 instead.")
 	ErrConfigInvalidSafeModeDuration            = New(codeConfigInvalidSafeModeDuration, ClassConfig, ScopeInternal, LevelMedium, "safe-mode-duration '%s' parsed failed: %v", "Please check the `safe-mode-duration` is correct.")
 	ErrConfigConfictSafeModeDurationAndSafeMode = New(codeConfigConfictSafeModeDurationAndSafeMode, ClassConfig, ScopeInternal, LevelLow, "safe-mode(true) conflicts with safe-mode-duration(0s)", "Please set safe-mode to false or safe-mode-duration to non-zero.")
+	ErrConfigInvalidPhysicalDuplicateResolution = New(codeConfigInvalidLoadPhysicalDuplicateResolution, ClassConfig, ScopeInternal, LevelMedium, "invalid load on-duplicate-physical option '%s'", "Please choose a valid value in ['none', 'manual'] or leave it empty.")
+	ErrConfigInvalidPhysicalChecksum            = New(codeConfigInvalidLoadPhysicalChecksum, ClassConfig, ScopeInternal, LevelMedium, "invalid load checksum-physical option '%s'", "Please choose a valid value in ['required', 'optional', 'off'] or leave it empty.")
+	ErrConfigColumnMappingDeprecated            = New(codeConfigColumnMappingDeprecated, ClassConfig, ScopeInternal, LevelHigh, "column-mapping is not supported since v6.6.0", "Please use extract-table/extract-schema/extract-source to handle data conflict when merge tables. See https://docs.pingcap.com/tidb/v6.4/task-configuration-file-full#task-configuration-file-template-advanced")
 
 	// Binlog operation error.
 	ErrBinlogExtractPosition = New(codeBinlogExtractPosition, ClassBinlogOp, ScopeInternal, LevelHigh, "", "")
@@ -1072,7 +1080,9 @@ var (
 	ErrLoadUnitGenBAList           = New(codeLoadUnitGenBAList, ClassLoadUnit, ScopeInternal, LevelHigh, "generate block allow list", "Please check the `block-allow-list` config in task configuration file.")
 	ErrLoadTaskWorkerNotMatch      = New(codeLoadTaskWorkerNotMatch, ClassFunctional, ScopeInternal, LevelHigh, "different worker in load stage, previous worker: %s, current worker: %s", "Please check if the previous worker is online.")
 	ErrLoadTaskCheckPointNotMatch  = New(codeLoadCheckPointNotMatch, ClassFunctional, ScopeInternal, LevelHigh, "inconsistent checkpoints between loader and target database", "If you want to redo the whole task, please check that you have not forgotten to add -remove-meta flag for start-task command.")
-	ErrLoadLightningRuntime        = New(codeLoadLightningRuntime, ClassLoadUnit, ScopeNotSet, LevelHigh, "", "")
+	ErrLoadLightningRuntime        = New(codeLoadLightningRuntime, ClassLoadUnit, ScopeInternal, LevelHigh, "", "")
+	ErrLoadLightningHasDup         = New(codeLoadLightningHasDup, ClassLoadUnit, ScopeInternal, LevelMedium, "physical import finished but the data has duplication, please check `%s`.`%s` to see the duplication", "You can refer to https://docs.pingcap.com/tidb/stable/tidb-lightning-physical-import-mode-usage#conflict-detection to manually insert data and resume the task.")
+	ErrLoadLightningChecksum       = New(codeLoadLightningChecksum, ClassLoadUnit, ScopeInternal, LevelMedium, "checksum mismatched, KV number in source files: %s, KV number in TiDB cluster: %s", "If TiDB cluster has more KV, please check if the migrated tables are empty before the task. If source files have more KV, please set `on-duplicate-physical` and restart the task to see data duplication. You can resume the task to ignore the error if you want.")
 
 	// Sync unit error.
 	ErrSyncerUnitPanic                   = New(codeSyncerUnitPanic, ClassSyncUnit, ScopeInternal, LevelHigh, "panic error: %v", "")

@@ -26,6 +26,7 @@ import (
 	"github.com/pingcap/tidb-tools/pkg/diff"
 	"github.com/pingcap/tidb/errno"
 	"github.com/pingcap/tidb/util/dbutil"
+	"github.com/pingcap/tiflow/dm/pkg/conn"
 	sqlconfig "github.com/pingcap/tiflow/dm/simulator/config"
 	"github.com/pingcap/tiflow/dm/simulator/mcp"
 	sqlgen "github.com/pingcap/tiflow/dm/simulator/sqlgen"
@@ -89,13 +90,13 @@ func NewCase(ctx context.Context, addr string, name string, cfgPath string) (*Ca
 		result:     make([]int, 3),
 	}
 	for _, upstream := range jobCfg.Upstreams {
-		source, err := newDBConn(ctx, upstream.DBCfg, name)
+		source, err := newDBConn(ctx, conn.UpstreamDBConfig(upstream.DBCfg), name)
 		if err != nil {
 			return nil, err
 		}
 		c.sources = append(c.sources, source)
 	}
-	target, err := newDBConn(ctx, jobCfg.TargetDB, name)
+	target, err := newDBConn(ctx, conn.DownstreamDBConfig(jobCfg.TargetDB), name)
 	if err != nil {
 		return nil, err
 	}
@@ -184,7 +185,9 @@ func (c *Case) genFullData() error {
 	log.L().Info("start generate full data", zap.String("name", c.name), zap.String("job_id", c.jobID))
 	for source, generators := range c.generators {
 		for table, generator := range generators {
-			if _, err := c.sources[source].ExecuteSQLs("CREATE DATABASE IF NOT EXISTS "+c.name+" CHARSET latin1", "USE "+c.name); err != nil {
+			if _, err := c.sources[source].ExecuteSQLs(
+				"CREATE DATABASE IF NOT EXISTS "+c.name+" CHARSET utf8mb4 COLLATE utf8mb4_general_ci",
+				"USE "+c.name); err != nil {
 				return err
 			}
 			if _, err := c.sources[source].ExecuteSQLs(generator.GenCreateTable()); err != nil {

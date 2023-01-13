@@ -22,6 +22,8 @@ import (
 	"github.com/pingcap/errors"
 	"github.com/pingcap/failpoint"
 	"github.com/pingcap/tiflow/dm/config"
+	"github.com/pingcap/tiflow/dm/config/dbconfig"
+	"github.com/pingcap/tiflow/dm/config/security"
 	"github.com/pingcap/tiflow/dm/master/metrics"
 	"github.com/pingcap/tiflow/dm/master/workerrpc"
 	"github.com/pingcap/tiflow/dm/pb"
@@ -196,11 +198,11 @@ type Scheduler struct {
 	// task -> source -> worker
 	loadTasks map[string]map[string]string
 
-	securityCfg config.Security
+	securityCfg security.Security
 }
 
 // NewScheduler creates a new scheduler instance.
-func NewScheduler(pLogger *log.Logger, securityCfg config.Security) *Scheduler {
+func NewScheduler(pLogger *log.Logger, securityCfg security.Security) *Scheduler {
 	return &Scheduler{
 		logger:            pLogger.WithFields(zap.String("component", "scheduler")),
 		subtaskLatch:      newLatches(),
@@ -850,6 +852,7 @@ func (s *Scheduler) AddSubTasks(latched bool, expectStage pb.Stage, cfgs ...conf
 	var (
 		taskNamesM    = make(map[string]struct{}, 1)
 		existSourcesM = make(map[string]struct{}, len(cfgs))
+		allSources    = make([]string, 0, len(cfgs))
 	)
 
 	for _, cfg := range cfgs {
@@ -871,6 +874,7 @@ func (s *Scheduler) AddSubTasks(latched bool, expectStage pb.Stage, cfgs ...conf
 
 	// 1. check whether exists.
 	for _, cfg := range cfgs {
+		allSources = append(allSources, cfg.SourceID)
 		v, ok := s.subTaskCfgs.Load(cfg.Name)
 		if !ok {
 			continue
@@ -917,7 +921,17 @@ func (s *Scheduler) AddSubTasks(latched bool, expectStage pb.Stage, cfgs ...conf
 		return terror.ErrSchedulerSourcesUnbound.Generate(unbounds)
 	}
 
-	// 4. put the configs and stages into etcd.
+	// 4. put the lightning status, configs and stages into etcd.
+	if cfgs[0].Mode != config.ModeIncrement && cfgs[0].LoaderConfig.ImportMode == config.LoadModePhysical {
+		if len(existSources) > 0 {
+			// don't support add new lightning subtask when some subtasks already exist.
+			return terror.ErrSchedulerSubTaskExist.Generate(taskNames[0], existSources)
+		}
+		_, err := ha.PutLightningNotReadyForAllSources(s.etcdCli, taskNames[0], allSources)
+		if err != nil {
+			return err
+		}
+	}
 	_, err := ha.PutSubTaskCfgStage(s.etcdCli, newCfgs, newStages, validatorStages)
 	if err != nil {
 		return err
@@ -1109,7 +1123,7 @@ func (s *Scheduler) getSubTaskCfgByTaskSource(task, source string) *config.SubTa
 }
 
 // GetDownstreamMetaByTask gets downstream db config and meta config by task name.
-func (s *Scheduler) GetDownstreamMetaByTask(task string) (*config.DBConfig, string) {
+func (s *Scheduler) GetDownstreamMetaByTask(task string) (*dbconfig.DBConfig, string) {
 	v, ok := s.subTaskCfgs.Load(task)
 	if !ok {
 		return nil, ""
@@ -2565,8 +2579,8 @@ func (s *Scheduler) observeLoadTask(ctx context.Context, rev int64) error {
 	}
 }
 
-// RemoveLoadTask removes the loadtask by task.
-func (s *Scheduler) RemoveLoadTask(task string) error {
+// RemoveLoadTaskAndLightningStatus removes the loadtask and lightning status by task.
+func (s *Scheduler) RemoveLoadTaskAndLightningStatus(task string) error {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 
@@ -2578,7 +2592,8 @@ func (s *Scheduler) RemoveLoadTask(task string) error {
 		return err
 	}
 	delete(s.loadTasks, task)
-	return nil
+	_, err = ha.DeleteLightningStatusForTask(s.etcdCli, task)
+	return err
 }
 
 // getTransferWorkerAndSource tries to get transfer worker and source.

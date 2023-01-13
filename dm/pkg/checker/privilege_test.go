@@ -334,3 +334,147 @@ func TestVerifyReplicationPrivileges(t *testing.T) {
 		}
 	}
 }
+
+func TestVerifyPrivilegesWildcard(t *testing.T) {
+	cases := []struct {
+		grants           []string
+		checkTables      []filter.Table
+		replicationState State
+		errStr           string
+	}{
+		{
+			grants: []string{
+				"GRANT SELECT ON `demo\\_foobar`.* TO `dmuser`@`%`",
+			},
+			checkTables: []filter.Table{
+				{Schema: "demo_foobar", Name: "t1"},
+			},
+			replicationState: StateSuccess,
+		},
+		{
+			grants: []string{
+				"GRANT SELECT ON `demo\\_foobar`.* TO `dmuser`@`%`",
+			},
+			checkTables: []filter.Table{
+				{Schema: "demo2foobar", Name: "t1"},
+			},
+			replicationState: StateFailure,
+			errStr:           "lack of Select privilege: {`demo2foobar`.`t1`}; ",
+		},
+		{
+			grants: []string{
+				"GRANT SELECT ON `demo_`.* TO `dmuser`@`%`",
+			},
+			checkTables: []filter.Table{
+				{Schema: "demo1", Name: "t1"},
+				{Schema: "demo2", Name: "t1"},
+			},
+			replicationState: StateSuccess,
+		},
+		{
+			grants: []string{
+				"GRANT SELECT ON `demo%`.* TO `dmuser`@`%`",
+			},
+			checkTables: []filter.Table{
+				{Schema: "demo_some", Name: "t1"},
+				{Schema: "block_db", Name: "t1"},
+			},
+			replicationState: StateFailure,
+			errStr:           "lack of Select privilege: {`block_db`.`t1`}; ",
+		},
+		{
+			grants: []string{
+				"GRANT SELECT ON `demo_db`.`t1` TO `dmuser`@`%`",
+			},
+			checkTables: []filter.Table{
+				{Schema: "demo_db", Name: "t1"},
+				{Schema: "demo2db", Name: "t1"},
+			},
+			replicationState: StateFailure,
+			errStr:           "lack of Select privilege: {`demo2db`.`t1`}; ",
+		},
+	}
+
+	for i, cs := range cases {
+		t.Logf("case %d", i)
+		result := &Result{
+			State: StateFailure,
+		}
+		requiredPrivs := map[mysql.PrivilegeType]priv{
+			mysql.SelectPriv: {
+				dbs: genTableLevelPrivs(cs.checkTables),
+			},
+		}
+		err := verifyPrivilegesWithResult(result, cs.grants, requiredPrivs)
+		if cs.replicationState == StateSuccess {
+			require.Nil(t, err, "grants: %v", cs.grants)
+		} else {
+			require.NotNil(t, err, "grants: %v", cs.grants)
+			require.Equal(t, cs.errStr, err.ShortErr, "grants: %v", cs.grants)
+		}
+	}
+}
+
+func TestVerifyTargetPrivilege(t *testing.T) {
+	cases := []struct {
+		grants     []string
+		checkState State
+		errStr     string
+	}{
+		{
+			grants:     nil, // non grants
+			checkState: StateWarning,
+			errStr:     "there is no such grant defined for current user on host '%'",
+		},
+		{
+			grants:     []string{"invalid SQL statement"},
+			checkState: StateWarning,
+			errStr:     "line 1 column 7 near \"invalid SQL statement\" ",
+		},
+		{
+			grants:     []string{"CREATE DATABASE db1"}, // non GRANT statement
+			checkState: StateWarning,
+			errStr:     "CREATE DATABASE db1 is not grant statement",
+		},
+		{
+			grants: []string{
+				"GRANT ALL PRIVILEGES ON *.* TO 'user'@'%'",
+			},
+			checkState: StateSuccess,
+		},
+		{
+			grants: []string{
+				"GRANT SELECT, CREATE, INSERT, UPDATE, DELETE, ALTER, DROP ON *.* TO 'root'@'%'",
+			},
+			checkState: StateSuccess,
+		},
+		{
+			grants: []string{
+				"GRANT SELECT, INSERT, DELETE, ALTER, DROP ON *.* TO 'root'@'%'",
+			},
+			checkState: StateWarning,
+			errStr:     "lack of Create global (*.*) privilege; lack of Update global (*.*) privilege; ",
+		},
+	}
+	for _, cs := range cases {
+		result := &Result{
+			State: StateWarning,
+		}
+		replRequiredPrivs := map[mysql.PrivilegeType]priv{
+			mysql.CreatePriv: {needGlobal: true},
+			mysql.SelectPriv: {needGlobal: true},
+			mysql.InsertPriv: {needGlobal: true},
+			mysql.UpdatePriv: {needGlobal: true},
+			mysql.DeletePriv: {needGlobal: true},
+			mysql.AlterPriv:  {needGlobal: true},
+			mysql.DropPriv:   {needGlobal: true},
+		}
+		err := verifyPrivilegesWithResult(result, cs.grants, replRequiredPrivs)
+		if cs.checkState == StateSuccess {
+			require.Nil(t, err, "grants: %v", cs.grants)
+		} else {
+			require.NotNil(t, err, "grants: %v", cs.grants)
+			require.Equal(t, cs.errStr, err.ShortErr, "grants: %v", cs.grants)
+		}
+	}
+}

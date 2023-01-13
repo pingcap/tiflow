@@ -24,7 +24,7 @@ import (
 	"github.com/pingcap/tidb/tablecodec"
 	"github.com/pingcap/tidb/util/codec"
 	cerror "github.com/pingcap/tiflow/pkg/errors"
-	"github.com/pingcap/tiflow/pkg/regionspan"
+	"github.com/pingcap/tiflow/pkg/spanz"
 	"github.com/stretchr/testify/require"
 	pd "github.com/tikv/pd/client"
 )
@@ -155,10 +155,10 @@ func TestMetaLabelDecodeJSON(t *testing.T) {
 	_, startKey, err = codec.DecodeBytes(startKey, nil)
 	require.Nil(t, err)
 	require.EqualValues(
-		t, regionspan.JobTableID, tablecodec.DecodeTableID(startKey), keys["start_key"].(string))
+		t, spanz.JobTableID, tablecodec.DecodeTableID(startKey), keys["start_key"].(string))
 
 	_, endKey, err = codec.DecodeBytes(endKey, nil)
 	require.Nil(t, err)
 	require.EqualValues(
-		t, regionspan.JobTableID+1, tablecodec.DecodeTableID(endKey), keys["end_key"].(string))
+		t, spanz.JobTableID+1, tablecodec.DecodeTableID(endKey), keys["end_key"].(string))
 }

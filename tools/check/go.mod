@@ -8,7 +8,7 @@ require (
 	github.com/daixiang0/gci v0.8.1
 	github.com/deepmap/oapi-codegen v1.9.0
 	github.com/gogo/protobuf v1.3.2
-	github.com/golang/mock v1.6.0
+	github.com/golang/mock v1.7.0-rc.1
 	github.com/golangci/golangci-lint v1.50.1
 	github.com/grpc-ecosystem/grpc-gateway v1.16.0
 	github.com/grpc-ecosystem/grpc-gateway/v2 v2.11.0
@@ -17,6 +17,7 @@ require (
 	github.com/pingcap/failpoint v0.0.0-20210316064728-7acb0f0a3dfd
 	github.com/swaggo/swag v1.7.8
 	github.com/tinylib/msgp v1.1.6
+	github.com/vektra/mockery/v2 v2.14.1
 	github.com/zhouqiang-cl/gocovmerge v0.0.0-20190125174600-5256314471af
 	golang.org/x/tools v0.2.0
 	google.golang.org/grpc/cmd/protoc-gen-go-grpc v1.1.0
@@ -119,8 +120,8 @@ require (
 	github.com/kulti/thelper v0.6.3 // indirect
 	github.com/kunwardeep/paralleltest v1.0.6 // indirect
 	github.com/kyoh86/exportloopref v0.1.8 // indirect
-	github.com/labstack/echo/v4 v4.2.1 // indirect
-	github.com/labstack/gommon v0.3.0 // indirect
+	github.com/labstack/echo/v4 v4.9.0 // indirect
+	github.com/labstack/gommon v0.3.1 // indirect
 	github.com/ldez/gomoddirectives v0.2.3 // indirect
 	github.com/ldez/tagliatelle v0.3.1 // indirect
 	github.com/leonklingele/grouper v1.1.0 // indirect
@@ -160,6 +161,7 @@ require (
 	github.com/quasilyte/gogrep v0.0.0-20220828223005-86e4605de09f // indirect
 	github.com/quasilyte/regex/syntax v0.0.0-20200407221936-30656e2c4a95 // indirect
 	github.com/quasilyte/stdinfo v0.0.0-20220114132959-f7386bf02567 // indirect
+	github.com/rs/zerolog v1.27.0 // indirect
 	github.com/russross/blackfriday/v2 v2.1.0 // indirect
 	github.com/ryancurrah/gomodguard v1.2.4 // indirect
 	github.com/ryanrolds/sqlclosecheck v0.3.0 // indirect

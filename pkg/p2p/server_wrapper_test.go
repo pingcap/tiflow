@@ -68,7 +68,10 @@ func newServerWrapperForTesting(t *testing.T) (server *ServerWrapper, newClient 
 	var opts []grpc.ServerOption
 	grpcServer := grpc.NewServer(opts...)
 
-	server = NewServerWrapper()
+	cfg := &MessageServerConfig{
+		MaxRecvMsgSize: 4 * 1024 * 1024, // 4MB
+	}
+	server = NewServerWrapper(cfg)
 	p2p.RegisterCDCPeerToPeerServer(grpcServer, server)
 
 	var wg sync.WaitGroup

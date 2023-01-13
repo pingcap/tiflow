@@ -26,9 +26,9 @@ import (
 	pb "github.com/pingcap/tiflow/engine/enginepb"
 	"github.com/pingcap/tiflow/engine/executor/server"
 	"github.com/pingcap/tiflow/engine/executor/worker"
-	"github.com/pingcap/tiflow/engine/framework/fake"
 	frameModel "github.com/pingcap/tiflow/engine/framework/model"
 	"github.com/pingcap/tiflow/engine/framework/registry"
+	"github.com/pingcap/tiflow/engine/jobmaster/fakejob"
 	"github.com/pingcap/tiflow/engine/model"
 	"github.com/pingcap/tiflow/engine/pkg/client"
 	dcontext "github.com/pingcap/tiflow/engine/pkg/context"
@@ -239,14 +239,14 @@ func TestConvertMakeTaskError(t *testing.T) {
 
 	register := registry.NewRegistry()
 	ok := register.RegisterWorkerType(frameModel.FakeJobMaster,
-		registry.NewSimpleWorkerFactory(fake.NewFakeMaster))
+		registry.NewSimpleWorkerFactory(fakejob.NewFakeMaster))
 	require.True(t, ok)
 
 	testCases := []struct {
 		err         error
 		isRetryable bool
 	}{
-		{fake.NewJobUnRetryableError(errors.New("inner err")), false},
+		{errors.ErrDeserializeConfig.GenWithStackByArgs(), false},
 		{errors.New("normal error"), true},
 	}
 
@@ -267,7 +267,7 @@ func TestPrecheckMasterMeta(t *testing.T) {
 
 	register := registry.NewRegistry()
 	ok := register.RegisterWorkerType(frameModel.FakeJobMaster,
-		registry.NewSimpleWorkerFactory(fake.NewFakeMaster))
+		registry.NewSimpleWorkerFactory(fakejob.NewFakeMaster))
 	require.True(t, ok)
 
 	ormCli, err := pkgOrm.NewMockClient()
@@ -303,7 +303,7 @@ func TestPrecheckMasterMeta(t *testing.T) {
 	require.NoError(t, err)
 
 	// no retry on unretryable error
-	fakeJobErr := fake.NewJobUnRetryableError(errors.New("inner error"))
+	fakeJobErr := errors.ErrDeserializeConfig.GenWithStackByArgs()
 	masterMeta.ErrorMsg = fakeJobErr.Error()
 	err = ormCli.UpsertJob(ctx, masterMeta)
 	require.NoError(t, err)

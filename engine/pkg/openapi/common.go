@@ -37,16 +37,21 @@ type HTTPError struct {
 	Message string `json:"message"`
 }
 
-// WriteHTTPError writes error to http response with normalized error format.
-func WriteHTTPError(w http.ResponseWriter, err error) {
+// NewHTTPError creates a new HTTPError.
+func NewHTTPError(err error) *HTTPError {
 	rfcCode, ok := errors.RFCCode(err)
 	if !ok {
 		rfcCode = errors.ErrUnknown.RFCCode()
 	}
-	httpErr := &HTTPError{
+	return &HTTPError{
 		Code:    string(rfcCode),
 		Message: strings.TrimPrefix(err.Error(), fmt.Sprintf("[%s]", rfcCode)),
 	}
+}
+
+// WriteHTTPError writes error to http response with normalized error format.
+func WriteHTTPError(w http.ResponseWriter, err error) {
+	httpErr := NewHTTPError(err)
 	w.Header().Set("Content-Type", "application/json")
 	w.WriteHeader(errors.HTTPStatusCode(err))
 	if err := json.NewEncoder(w).Encode(httpErr); err != nil {

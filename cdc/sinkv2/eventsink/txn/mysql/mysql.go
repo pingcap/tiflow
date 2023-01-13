@@ -25,6 +25,8 @@ import (
 	"github.com/pingcap/errors"
 	"github.com/pingcap/failpoint"
 	"github.com/pingcap/log"
+	"github.com/pingcap/tidb/parser/charset"
+	timodel "github.com/pingcap/tidb/parser/model"
 	"github.com/pingcap/tidb/parser/mysql"
 	"github.com/pingcap/tiflow/cdc/contextutil"
 	"github.com/pingcap/tiflow/cdc/model"
@@ -33,9 +35,9 @@ import (
 	"github.com/pingcap/tiflow/cdc/sinkv2/metrics/txn"
 	"github.com/pingcap/tiflow/pkg/config"
 	cerror "github.com/pingcap/tiflow/pkg/errors"
-	"github.com/pingcap/tiflow/pkg/quotes"
 	"github.com/pingcap/tiflow/pkg/retry"
 	pmysql "github.com/pingcap/tiflow/pkg/sink/mysql"
+	"github.com/pingcap/tiflow/pkg/sqlmodel"
 	"github.com/prometheus/client_golang/prometheus"
 	"go.uber.org/zap"
 )
@@ -43,6 +45,9 @@ import (
 const (
 	// Max interval for flushing transactions to the downstream.
 	maxFlushInterval = 10 * time.Millisecond
+
+	// networkDriftDuration is used to construct a context timeout for database operations.
+	networkDriftDuration = 5 * time.Second
 
 	defaultDMLMaxRetry uint64 = 8
 )
@@ -88,6 +93,12 @@ func NewMySQLBackends(
 	if err != nil {
 		return nil, err
 	}
+
+	cfg.IsTiDB, err = pmysql.CheckIsTiDB(ctx, db)
+	if err != nil {
+		return nil, err
+	}
+
 	db.SetMaxIdleConns(cfg.WorkerCount)
 	db.SetMaxOpenConns(cfg.WorkerCount)
 
@@ -191,6 +202,209 @@ type preparedDMLs struct {
 	rowCount  int
 }
 
+// convert2RowChanges is a helper function that convert the row change representation
+// of CDC into a general one.
+func convert2RowChanges(
+	row *model.RowChangedEvent,
+	tableInfo *timodel.TableInfo,
+	changeType sqlmodel.RowChangeType,
+) *sqlmodel.RowChange {
+	preValues := make([]interface{}, 0, len(row.PreColumns))
+	for _, col := range row.PreColumns {
+		if col == nil {
+			// will not use this value, just append a dummy value
+			preValues = append(preValues, "omitted value")
+			continue
+		}
+		preValues = append(preValues, col.Value)
+	}
+
+	postValues := make([]interface{}, 0, len(row.Columns))
+	for _, col := range row.Columns {
+		if col == nil {
+			postValues = append(postValues, "omitted value")
+			continue
+		}
+		postValues = append(postValues, col.Value)
+	}
+
+	var res *sqlmodel.RowChange
+
+	switch changeType {
+	case sqlmodel.RowChangeInsert:
+		res = sqlmodel.NewRowChange(
+			row.Table,
+			nil,
+			nil,
+			postValues,
+			tableInfo,
+			nil, nil)
+	case sqlmodel.RowChangeUpdate:
+		res = sqlmodel.NewRowChange(
+			row.Table,
+			nil,
+			preValues,
+			postValues,
+			tableInfo,
+			nil, nil)
+	case sqlmodel.RowChangeDelete:
+		res = sqlmodel.NewRowChange(
+			row.Table,
+			nil,
+			preValues,
+			nil,
+			tableInfo,
+			nil, nil)
+	}
+	return res
+}
+
+func convertBinaryToString(row *model.RowChangedEvent) {
+	for i, col := range row.Columns {
+		if col == nil {
+			continue
+		}
+		if col.Charset != "" && col.Charset != charset.CharsetBin {
+			colValBytes, ok := col.Value.([]byte)
+			if ok {
+				row.Columns[i].Value = string(colValBytes)
+			}
+		}
+	}
+}
+
+func (s *mysqlBackend) groupRowsByType(
+	event *eventsink.TxnCallbackableEvent,
+	tableInfo *timodel.TableInfo,
+	spiltUpdate bool,
+) (insertRows, updateRows, deleteRows [][]*sqlmodel.RowChange) {
+	preAllocateSize := len(event.Event.Rows)
+	if preAllocateSize > s.cfg.MaxTxnRow {
+		preAllocateSize = s.cfg.MaxTxnRow
+	}
+
+	insertRow := make([]*sqlmodel.RowChange, 0, preAllocateSize)
+	updateRow := make([]*sqlmodel.RowChange, 0, preAllocateSize)
+	deleteRow := make([]*sqlmodel.RowChange, 0, preAllocateSize)
+
+	for _, row := range event.Event.Rows {
+		convertBinaryToString(row)
+
+		if row.IsInsert() {
+			insertRow = append(
+				insertRow,
+				convert2RowChanges(row, tableInfo, sqlmodel.RowChangeInsert))
+			if len(insertRow) >= s.cfg.MaxTxnRow {
+				insertRows = append(insertRows, insertRow)
+				insertRow = make([]*sqlmodel.RowChange, 0, preAllocateSize)
+			}
+		}
+
+		if row.IsDelete() {
+			deleteRow = append(
+				deleteRow,
+				convert2RowChanges(row, tableInfo, sqlmodel.RowChangeDelete))
+			if len(deleteRow) >= s.cfg.MaxTxnRow {
+				deleteRows = append(deleteRows, deleteRow)
+				deleteRow = make([]*sqlmodel.RowChange, 0, preAllocateSize)
+			}
+		}
+
+		if row.IsUpdate() {
+			if spiltUpdate {
+				deleteRow = append(
+					deleteRow,
+					convert2RowChanges(row, tableInfo, sqlmodel.RowChangeDelete))
+				if len(deleteRow) >= s.cfg.MaxTxnRow {
+					deleteRows = append(deleteRows, deleteRow)
+					deleteRow = make([]*sqlmodel.RowChange, 0, preAllocateSize)
+				}
+				insertRow = append(
+					insertRow,
+					convert2RowChanges(row, tableInfo, sqlmodel.RowChangeInsert))
+				if len(insertRow) >= s.cfg.MaxTxnRow {
+					insertRows = append(insertRows, insertRow)
+					insertRow = make([]*sqlmodel.RowChange, 0, preAllocateSize)
+				}
+			} else {
+				updateRow = append(
+					updateRow,
+					convert2RowChanges(row, tableInfo, sqlmodel.RowChangeUpdate))
+				if len(updateRow) >= s.cfg.MaxTxnRow {
+					updateRows = append(updateRows, updateRow)
+					updateRow = make([]*sqlmodel.RowChange, 0, preAllocateSize)
+				}
+			}
+		}
+	}
+
+	if len(insertRow) > 0 {
+		insertRows = append(insertRows, insertRow)
+	}
+	if len(updateRow) > 0 {
+		updateRows = append(updateRows, updateRow)
+	}
+	if len(deleteRow) > 0 {
+		deleteRows = append(deleteRows, deleteRow)
+	}
+
+	return
+}
+
+func (s *mysqlBackend) batchSingleTxnDmls(
+	event *eventsink.TxnCallbackableEvent,
+	tableInfo *timodel.TableInfo,
+	translateToInsert bool,
+) (sqls []string, values [][]interface{}) {
+	insertRows, updateRows, deleteRows := s.groupRowsByType(event, tableInfo, !translateToInsert)
+
+	if len(deleteRows) > 0 {
+		for _, rows := range deleteRows {
+			sql, value := sqlmodel.GenDeleteSQL(rows...)
+			sqls = append(sqls, sql)
+			values = append(values, value)
+		}
+	}
+
+	// handle insert
+	if len(insertRows) > 0 {
+		for _, rows := range insertRows {
+			if translateToInsert {
+				sql, value := sqlmodel.GenInsertSQL(sqlmodel.DMLInsert, rows...)
+				sqls = append(sqls, sql)
+				values = append(values, value)
+			} else {
+				sql, value := sqlmodel.GenInsertSQL(sqlmodel.DMLReplace, rows...)
+				sqls = append(sqls, sql)
+				values = append(values, value)
+			}
+		}
+	}
+
+	// handle update
+	if len(updateRows) > 0 {
+		for _, rows := range updateRows {
+			sql, value := sqlmodel.GenUpdateSQL(rows...)
+			sqls = append(sqls, sql)
+			values = append(values, value)
+		}
+	}
+
+	return
+}
+
+func hasHandleKey(cols []*model.Column) bool {
+	for _, col := range cols {
+		if col == nil {
+			continue
+		}
+		if col.Flag.IsHandleKey() {
+			return true
+		}
+	}
+	return false
+}
+
 // prepareDMLs converts model.RowChangedEvent list to query string list and args list
 func (s *mysqlBackend) prepareDMLs() *preparedDMLs {
 	// TODO: use a sync.Pool to reduce allocations.
@@ -214,33 +428,55 @@ func (s *mysqlBackend) prepareDMLs() *preparedDMLs {
 	// translateToInsert control the update and insert behavior
 	// we only translate into insert when old value is enabled and safe mode is disabled
 	translateToInsert := s.cfg.EnableOldValue && !s.cfg.SafeMode
-	for _, event := range s.events {
-		for _, row := range event.Event.Rows {
-			if !translateToInsert {
-				break
-			}
-			// A row can be translated in to INSERT, when it was committed after
-			// the table it belongs to been replicating by TiCDC, which means it must not be
-			// replicated before, and there is no such row in downstream MySQL.
-			translateToInsert = row.CommitTs > row.ReplicatingTs
-		}
-	}
 
 	rowCount := 0
 	for _, event := range s.events {
+		if len(event.Event.Rows) == 0 {
+			continue
+		}
+		rowCount += len(event.Event.Rows)
+
+		firstRow := event.Event.Rows[0]
+		if len(startTs) == 0 || startTs[len(startTs)-1] != firstRow.StartTs {
+			startTs = append(startTs, firstRow.StartTs)
+		}
+
+		// A row can be translated in to INSERT, when it was committed after
+		// the table it belongs to been replicating by TiCDC, which means it must not be
+		// replicated before, and there is no such row in downstream MySQL.
+		translateToInsert = translateToInsert && firstRow.CommitTs > firstRow.ReplicatingTs
+		log.Debug("translate to insert",
+			zap.Bool("translateToInsert", translateToInsert),
+			zap.Uint64("firstRowCommitTs", firstRow.CommitTs),
+			zap.Uint64("firstRowReplicatingTs", firstRow.ReplicatingTs),
+			zap.Bool("enableOldValue", s.cfg.EnableOldValue),
+			zap.Bool("safeMode", s.cfg.SafeMode))
+
 		if event.Callback != nil {
 			callbacks = append(callbacks, event.Callback)
 		}
 
-		for _, row := range event.Event.Rows {
-			if len(startTs) == 0 || startTs[len(startTs)-1] != row.StartTs {
-				startTs = append(startTs, row.StartTs)
+		// Determine whether to use batch dml feature here.
+		if s.cfg.BatchDMLEnable {
+			tableColumns := firstRow.Columns
+			if firstRow.IsDelete() {
+				tableColumns = firstRow.PreColumns
 			}
+			// only use batch dml when the table has a handle key
+			if hasHandleKey(tableColumns) {
+				// TODO(dongmen): find a better way to get table info.
+				tableInfo := model.BuildTiDBTableInfo(tableColumns, firstRow.IndexColumns)
+				sql, value := s.batchSingleTxnDmls(event, tableInfo, translateToInsert)
+				sqls = append(sqls, sql...)
+				values = append(values, value...)
+				continue
+			}
+		}
 
+		quoteTable := firstRow.Table.QuoteString()
+		for _, row := range event.Event.Rows {
 			var query string
 			var args []interface{}
-			quoteTable := quotes.QuoteSchema(row.Table.Schema, row.Table.Table)
-
 			// If the old value is enabled, is not in safe mode and is an update event, then translate to UPDATE.
 			// NOTICE: Only update events with the old value feature enabled will have both columns and preColumns.
 			if translateToInsert && len(row.PreColumns) != 0 && len(row.Columns) != 0 {
@@ -249,7 +485,6 @@ func (s *mysqlBackend) prepareDMLs() *preparedDMLs {
 				if query != "" {
 					sqls = append(sqls, query)
 					values = append(values, args)
-					rowCount++
 				}
 				continue
 			}
@@ -266,7 +501,6 @@ func (s *mysqlBackend) prepareDMLs() *preparedDMLs {
 				if query != "" {
 					sqls = append(sqls, query)
 					values = append(values, args)
-					rowCount++
 				}
 			}
 
@@ -286,14 +520,12 @@ func (s *mysqlBackend) prepareDMLs() *preparedDMLs {
 							replaces[query] = make([][]interface{}, 0)
 						}
 						replaces[query] = append(replaces[query], args)
-						rowCount++
 					}
 				} else {
 					query, args = prepareReplace(quoteTable, row.Columns, true /* appendPlaceHolder */, translateToInsert)
 					if query != "" {
 						sqls = append(sqls, query)
 						values = append(values, args)
-						rowCount++
 					}
 				}
 			}
@@ -314,7 +546,7 @@ func (s *mysqlBackend) prepareDMLs() *preparedDMLs {
 	}
 }
 
-func (s *mysqlBackend) execDMLWithMaxRetries(ctx context.Context, dmls *preparedDMLs) error {
+func (s *mysqlBackend) execDMLWithMaxRetries(pctx context.Context, dmls *preparedDMLs) error {
 	if len(dmls.sqls) != len(dmls.values) {
 		log.Panic("unexpected number of sqls and values",
 			zap.Strings("sqls", dmls.sqls),
@@ -322,8 +554,12 @@ func (s *mysqlBackend) execDMLWithMaxRetries(ctx context.Context, dmls *prepared
 	}
 
 	start := time.Now()
-	return retry.Do(ctx, func() error {
+	return retry.Do(pctx, func() error {
+		writeTimeout, _ := time.ParseDuration(s.cfg.WriteTimeout)
+		writeTimeout += networkDriftDuration
+
 		failpoint.Inject("MySQLSinkTxnRandomError", func() {
+			fmt.Printf("start to random error")
 			err := logDMLTxnErr(errors.Trace(driver.ErrBadConn), start, s.changefeed, "failpoint", 0, nil)
 			failpoint.Return(err)
 		})
@@ -332,7 +568,7 @@ func (s *mysqlBackend) execDMLWithMaxRetries(ctx context.Context, dmls *prepared
 		})
 
 		err := s.statistics.RecordBatchExecution(func() (int, error) {
-			tx, err := s.db.BeginTx(ctx, nil)
+			tx, err := s.db.BeginTx(pctx, nil)
 			if err != nil {
 				return 0, logDMLTxnErr(
 					cerror.WrapError(cerror.ErrMySQLTxnError, err),
@@ -343,6 +579,7 @@ func (s *mysqlBackend) execDMLWithMaxRetries(ctx context.Context, dmls *prepared
 				args := dmls.values[i]
 				log.Debug("exec row", zap.Int("workerID", s.workerID),
 					zap.String("sql", query), zap.Any("args", args))
+				ctx, cancelFunc := context.WithTimeout(pctx, writeTimeout)
 				if _, err := tx.ExecContext(ctx, query, args...); err != nil {
 					err := logDMLTxnErr(
 						cerror.WrapError(cerror.ErrMySQLTxnError, err),
@@ -352,8 +589,27 @@ func (s *mysqlBackend) execDMLWithMaxRetries(ctx context.Context, dmls *prepared
 							log.Warn("failed to rollback txn", zap.Error(rbErr))
 						}
 					}
+					cancelFunc()
 					return 0, err
 				}
+				cancelFunc()
+			}
+
+			// we set write source for each txn,
+			// so we can use it to trace the data source
+			if err = s.setWriteSource(pctx, tx); err != nil {
+				err := logDMLTxnErr(
+					cerror.WrapError(cerror.ErrMySQLTxnError, err),
+					start, s.changefeed,
+					fmt.Sprintf("SET SESSION %s = %d", "tidb_cdc_write_source",
+						s.cfg.SourceID),
+					dmls.rowCount, dmls.startTs)
+				if rbErr := tx.Rollback(); rbErr != nil {
+					if errors.Cause(rbErr) != context.Canceled {
+						log.Warn("failed to rollback txn", zap.Error(rbErr))
+					}
+				}
+				return 0, err
 			}
 
 			if err = tx.Commit(); err != nil {
@@ -361,7 +617,6 @@ func (s *mysqlBackend) execDMLWithMaxRetries(ctx context.Context, dmls *prepared
 					cerror.WrapError(cerror.ErrMySQLTxnError, err),
 					start, s.changefeed, "COMMIT", dmls.rowCount, dmls.startTs)
 			}
-
 			return dmls.rowCount, nil
 		})
 		if err != nil {
@@ -426,4 +681,25 @@ func getSQLErrCode(err error) (errors.ErrCode, bool) {
 // Only for testing.
 func (s *mysqlBackend) setDMLMaxRetry(maxRetry uint64) {
 	s.dmlMaxRetry = maxRetry
+}
+
+// setWriteSource sets write source for the transaction.
+func (s *mysqlBackend) setWriteSource(ctx context.Context, txn *sql.Tx) error {
+	// we only set write source when donwstream is TiDB
+	if !s.cfg.IsTiDB {
+		return nil
+	}
+	// downstream is TiDB, set system variables.
+	// We should always try to set this variable, and ignore the error if
+	// downstream does not support this variable, it is by design.
+	query := fmt.Sprintf("SET SESSION %s = %d", "tidb_cdc_write_source", s.cfg.SourceID)
+	_, err := txn.ExecContext(ctx, query)
+	if err != nil {
+		if mysqlErr, ok := errors.Cause(err).(*dmysql.MySQLError); ok &&
+			mysqlErr.Number == mysql.ErrUnknownSystemVariable {
+			return nil
+		}
+		return err
+	}
+	return nil
 }

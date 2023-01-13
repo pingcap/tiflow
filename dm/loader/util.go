@@ -21,6 +21,7 @@ import (
 	"path"
 	"path/filepath"
 	"strings"
+	"time"
 
 	"github.com/pingcap/failpoint"
 	"github.com/pingcap/tiflow/dm/config"
@@ -73,17 +74,6 @@ func percent(a int64, b int64, finish bool) string {
 		return "0.00 %"
 	}
 	return fmt.Sprintf("%.2f %%", float64(a)/float64(b)*100)
-}
-
-// progress calculates progress of a/b.
-func progress(a int64, b int64, finish bool) float64 {
-	if b == 0 {
-		if finish {
-			return 1
-		}
-		return 0
-	}
-	return float64(a) / float64(b)
 }
 
 func generateSchemaCreateFile(dir string, schema string) error {
@@ -224,4 +214,59 @@ func getLoadTask(cli *clientv3.Client, task, sourceID string) (string, error) {
 	}
 	name, _, err := ha.GetLoadTask(cli, task, sourceID)
 	return name, err
+}
+
+// readyAndWait updates the lightning status of this worker to LightningReady and
+// waits for all workers' status not LightningNotReady.
+// Only works for physical import.
+func readyAndWait(ctx context.Context, cli *clientv3.Client, cfg *config.SubTaskConfig) error {
+	return putAndWait(ctx, cli, cfg, ha.LightningReady, func(s string) bool {
+		return s == ha.LightningNotReady
+	})
+}
+
+// finishAndWait updates the lightning status of this worker to LightningFinished
+// and waits for all workers' status LightningFinished.
+// Only works for physical import.
+func finishAndWait(ctx context.Context, cli *clientv3.Client, cfg *config.SubTaskConfig) error {
+	return putAndWait(ctx, cli, cfg, ha.LightningFinished, func(s string) bool {
+		return s != ha.LightningFinished
+	})
+}
+
+func putAndWait(
+	ctx context.Context,
+	cli *clientv3.Client,
+	cfg *config.SubTaskConfig,
+	putStatus string,
+	failFn func(string) bool,
+) error {
+	if cli == nil || cfg.LoaderConfig.ImportMode != config.LoadModePhysical {
+		return nil
+	}
+	_, err := ha.PutLightningStatus(cli, cfg.Name, cfg.SourceID, putStatus)
+	if err != nil {
+		return err
+	}
+
+	ticker := time.NewTicker(5 * time.Second)
+	defer ticker.Stop()
+WaitLoop:
+	for {
+		select {
+		case <-ctx.Done():
+			return ctx.Err()
+		case <-ticker.C:
+			status, err := ha.GetAllLightningStatus(cli, cfg.Name)
+			if err != nil {
+				return err
+			}
+			for _, s := range status {
+				if failFn(s) {
+					continue WaitLoop
+				}
+			}
+			return nil
+		}
+	}
 }

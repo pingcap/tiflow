@@ -36,6 +36,7 @@ import (
 	"github.com/pingcap/tidb/util/filter"
 	"github.com/pingcap/tidb/util/mock"
 	"github.com/pingcap/tidb/util/sqlexec"
+	"github.com/pingcap/tiflow/dm/pkg/conn"
 	tcontext "github.com/pingcap/tiflow/dm/pkg/context"
 	fr "github.com/pingcap/tiflow/dm/pkg/func-rollback"
 	"github.com/pingcap/tiflow/dm/pkg/log"
@@ -160,7 +161,7 @@ func NewTestTracker(
 	logger log.Logger,
 ) (*Tracker, error) {
 	tr := NewTracker()
-	err := tr.Init(ctx, task, int(utils.LCTableNamesSensitive), downstreamConn, logger)
+	err := tr.Init(ctx, task, int(conn.LCTableNamesSensitive), downstreamConn, logger)
 	if err != nil {
 		return nil, err
 	}
@@ -214,11 +215,7 @@ func (tr *Tracker) GetTableInfo(table *filter.Table) (*model.TableInfo, error) {
 	if tr.closed.Load() {
 		return nil, dmterror.ErrSchemaTrackerIsClosed.New("fail to get table info")
 	}
-	ti, err := tr.upstreamTracker.TableByName(model.NewCIStr(table.Schema), model.NewCIStr(table.Name))
-	if err != nil {
-		return nil, err
-	}
-	return ti.Clone(), nil
+	return tr.upstreamTracker.TableByName(model.NewCIStr(table.Schema), model.NewCIStr(table.Name))
 }
 
 // GetCreateTable returns the `CREATE TABLE` statement of the table.
@@ -232,7 +229,7 @@ func (tr *Tracker) GetCreateTable(ctx context.Context, table *filter.Table) (str
 	if err != nil {
 		return "", err
 	}
-	return utils.CreateTableSQLToOneRow(result.String()), nil
+	return conn.CreateTableSQLToOneRow(result.String()), nil
 }
 
 // AllSchemas returns all schemas visible to the tracker (excluding system tables).
@@ -483,7 +480,7 @@ func (dt *downstreamTracker) initDownStreamSQLModeAndParser(tctx *tcontext.Conte
 	if err != nil {
 		return dmterror.ErrSchemaTrackerCannotSetDownstreamSQLMode.Delegate(err, mysql.DefaultSQLMode)
 	}
-	stmtParser, err := utils.GetParserFromSQLModeStr(mysql.DefaultSQLMode)
+	stmtParser, err := conn.GetParserFromSQLModeStr(mysql.DefaultSQLMode)
 	if err != nil {
 		return dmterror.ErrSchemaTrackerCannotInitDownstreamParser.Delegate(err, mysql.DefaultSQLMode)
 	}

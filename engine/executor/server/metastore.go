@@ -138,14 +138,15 @@ func (m *metastoreManagerImpl) initFrameworkStore(ctx context.Context, discovery
 	if err != nil {
 		return errors.Trace(err)
 	}
-	log.Info("Obtained framework metastore endpoint", zap.String("addr", resp.Address))
 
-	conf := parseStoreConfig([]byte(resp.Address))
+	conf := parseStoreConfig(resp.Config)
 	cc, err := m.creator.CreateClientConnForFramework(ctx, conf)
 	if err != nil {
 		return err
 	}
 
+	log.Info("Obtained framework metastore endpoint", zap.Any("endpoints", conf.Endpoints),
+		zap.Any("schema", conf.Schema), zap.Any("username", conf.User))
 	m.frameworkClientConn = cc
 	return nil
 }
@@ -158,14 +159,15 @@ func (m *metastoreManagerImpl) initBusinessStore(ctx context.Context, discoveryC
 	if err != nil {
 		return err
 	}
-	log.Info("Obtained business metastore endpoint", zap.String("addr", resp.Address))
 
-	conf := parseStoreConfig([]byte(resp.Address))
+	conf := parseStoreConfig(resp.Config)
 	cc, err := m.creator.CreateClientConnForBusiness(ctx, conf)
 	if err != nil {
 		return err
 	}
 
+	log.Info("Obtained framework metastore endpoint", zap.Any("endpoints", conf.Endpoints),
+		zap.Any("schema", conf.Schema), zap.Any("username", conf.User))
 	m.businessClientConn = cc
 	return nil
 }
@@ -207,8 +209,7 @@ func parseStoreConfig(rawBytes []byte) metaModel.StoreConfig {
 		return conf
 	}
 
-	log.Info("Could not unmarshal metastore config, fallback to treating it as an endpoint list",
-		zap.ByteString("raw-bytes", rawBytes))
+	log.Info("Could not unmarshal metastore config, fallback to treating it as an endpoint list")
 
 	conf.SetEndpoints(string(rawBytes))
 	return conf

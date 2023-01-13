@@ -34,25 +34,28 @@ import (
 	cerror "github.com/pingcap/tiflow/pkg/errors"
 	"github.com/pingcap/tiflow/pkg/etcd"
 	"github.com/pingcap/tiflow/pkg/orchestrator"
+	"github.com/pingcap/tiflow/pkg/spanz"
 	"github.com/pingcap/tiflow/pkg/upstream"
 	"github.com/stretchr/testify/require"
 )
 
 // processor needs to implement TableExecutor.
-var _ scheduler.TableExecutor = (*processor)(nil)
 
 func newProcessor4Test(
 	t *testing.T,
 	state *orchestrator.ChangefeedReactorState,
 	captureInfo *model.CaptureInfo,
-	createTablePipeline func(ctx cdcContext.Context, tableID model.TableID, replicaInfo *model.TableReplicaInfo) (tablepb.TablePipeline, error),
+	createTablePipeline func(
+		ctx cdcContext.Context, span tablepb.Span, replicaInfo *model.TableReplicaInfo,
+	) (tablepb.TablePipeline, error),
 	liveness *model.Liveness,
+	cfg *config.SchedulerConfig,
 ) *processor {
 	up := upstream.NewUpstream4Test(nil)
 	p := newProcessor(
 		state,
 		captureInfo,
-		model.ChangeFeedID4Test("processor-test", "processor-test"), up, liveness)
+		model.ChangeFeedID4Test("processor-test", "processor-test"), up, liveness, cfg)
 	p.lazyInit = func(ctx cdcContext.Context) error {
 		p.agent = &mockAgent{executor: p}
 		p.sinkV1 = mocksink.NewNormalMockSink()
@@ -105,7 +108,8 @@ func initProcessor4Test(
 	changefeed := orchestrator.NewChangefeedReactorState(
 		etcd.DefaultCDCClusterID, ctx.ChangefeedVars().ID)
 	captureInfo := &model.CaptureInfo{ID: "capture-test", AdvertiseAddr: "127.0.0.1:0000"}
-	p := newProcessor4Test(t, changefeed, captureInfo, newMockTablePipeline, liveness)
+	cfg := config.NewDefaultSchedulerConfig()
+	p := newProcessor4Test(t, changefeed, captureInfo, newMockTablePipeline, liveness, cfg)
 
 	captureID := ctx.GlobalVars().CaptureInfo.ID
 	changefeedID := ctx.ChangefeedVars().ID
@@ -122,10 +126,12 @@ func initProcessor4Test(
 	})
 }
 
-func newMockTablePipeline(ctx cdcContext.Context, tableID model.TableID, replicaInfo *model.TableReplicaInfo) (tablepb.TablePipeline, error) {
+func newMockTablePipeline(
+	ctx cdcContext.Context, span tablepb.Span, replicaInfo *model.TableReplicaInfo,
+) (tablepb.TablePipeline, error) {
 	return &mockTablePipeline{
-		tableID:      tableID,
-		name:         fmt.Sprintf("`test`.`table%d`", tableID),
+		span:         span,
+		name:         fmt.Sprintf("`test`.`table%d`", span.TableID),
 		state:        tablepb.TableStatePreparing,
 		resolvedTs:   replicaInfo.StartTs,
 		checkpointTs: replicaInfo.StartTs,
@@ -133,7 +139,7 @@ func newMockTablePipeline(ctx cdcContext.Context, tableID model.TableID, replica
 }
 
 type mockTablePipeline struct {
-	tableID      model.TableID
+	span         tablepb.Span
 	name         string
 	resolvedTs   model.Ts
 	checkpointTs model.Ts
@@ -145,7 +151,7 @@ type mockTablePipeline struct {
 }
 
 func (m *mockTablePipeline) ID() int64 {
-	return m.tableID
+	return m.span.TableID
 }
 
 func (m *mockTablePipeline) Name() string {
@@ -242,22 +248,16 @@ type mockAgent struct {
 	// dummy to satisfy the interface
 	scheduler.Agent
 
-	executor         scheduler.TableExecutor
-	lastCheckpointTs model.Ts
-	liveness         *model.Liveness
-	isClosed         bool
+	executor scheduler.TableExecutor
+	liveness *model.Liveness
+	isClosed bool
 }
 
 func (a *mockAgent) Tick(_ context.Context) error {
-	if len(a.executor.GetAllCurrentTables()) == 0 {
+	if a.executor.GetTableSpanCount() == 0 {
 		return nil
 	}
-	a.lastCheckpointTs, _ = a.executor.GetCheckpoint()
 	return nil
-}
-
-func (a *mockAgent) GetLastSentCheckpointTs() (checkpointTs model.Ts) {
-	return a.lastCheckpointTs
 }
 
 func (a *mockAgent) Close() error {
@@ -269,10 +269,6 @@ func TestTableExecutorAddingTableIndirectly(t *testing.T) {
 	ctx := cdcContext.NewBackendContext4Test(true)
 	liveness := model.LivenessCaptureAlive
 	p, tester := initProcessor4Test(ctx, t, &liveness)
-
-	// since add table indirectly, `preparing` -> `prepared` -> `replicating`
-	// is only support by `SchedulerV3`, enable it.
-	config.GetGlobalServerConfig().Debug.EnableSchedulerV3 = true
 
 	var err error
 	// init tick
@@ -292,21 +288,18 @@ func TestTableExecutorAddingTableIndirectly(t *testing.T) {
 	tester.MustApplyPatches()
 
 	// table-1: `preparing` -> `prepared` -> `replicating`
-	ok, err := p.AddTable(ctx, 1, 20, true)
+	ok, err := p.AddTableSpan(ctx, spanz.TableIDToComparableSpan(1), 20, true)
 	require.NoError(t, err)
 	require.True(t, ok)
 
-	table1 := p.tables[1].(*mockTablePipeline)
+	table1 := p.tableSpans.GetV(spanz.TableIDToComparableSpan(1)).(*mockTablePipeline)
 	require.Equal(t, model.Ts(20), table1.resolvedTs)
 	require.Equal(t, model.Ts(20), table1.checkpointTs)
 	require.Equal(t, model.Ts(0), table1.sinkStartTs)
 
-	require.Len(t, p.tables, 1)
+	require.Equal(t, 1, p.tableSpans.Len())
 
-	checkpointTs := p.agent.GetLastSentCheckpointTs()
-	require.Equal(t, checkpointTs, model.Ts(0))
-
-	done := p.IsAddTableFinished(1, true)
+	done := p.IsAddTableSpanFinished(spanz.TableIDToComparableSpan(1), true)
 	require.False(t, done)
 	require.Equal(t, tablepb.TableStatePreparing, table1.State())
 
@@ -317,20 +310,16 @@ func TestTableExecutorAddingTableIndirectly(t *testing.T) {
 	require.Nil(t, err)
 	tester.MustApplyPatches()
 
-	done = p.IsAddTableFinished(1, true)
+	done = p.IsAddTableSpanFinished(spanz.TableIDToComparableSpan(1), true)
 	require.True(t, done)
 	require.Equal(t, tablepb.TableStatePrepared, table1.State())
 
-	// no table is `replicating`
-	checkpointTs = p.agent.GetLastSentCheckpointTs()
-	require.Equal(t, checkpointTs, model.Ts(20))
-
-	ok, err = p.AddTable(ctx, 1, 30, true)
+	ok, err = p.AddTableSpan(ctx, spanz.TableIDToComparableSpan(1), 30, true)
 	require.NoError(t, err)
 	require.True(t, ok)
 	require.Equal(t, model.Ts(0), table1.sinkStartTs)
 
-	ok, err = p.AddTable(ctx, 1, 30, false)
+	ok, err = p.AddTableSpan(ctx, spanz.TableIDToComparableSpan(1), 30, false)
 	require.NoError(t, err)
 	require.True(t, ok)
 	require.Equal(t, model.Ts(30), table1.sinkStartTs)
@@ -341,195 +330,12 @@ func TestTableExecutorAddingTableIndirectly(t *testing.T) {
 	require.Nil(t, err)
 	tester.MustApplyPatches()
 
-	done = p.IsAddTableFinished(1, false)
+	done = p.IsAddTableSpanFinished(spanz.TableIDToComparableSpan(1), false)
 	require.True(t, done)
 	require.Equal(t, tablepb.TableStateReplicating, table1.State())
-
-	checkpointTs = p.agent.GetLastSentCheckpointTs()
-	require.Equal(t, table1.CheckpointTs(), checkpointTs)
 
 	err = p.Close(ctx)
 	require.Nil(t, err)
-	require.Nil(t, p.agent)
-}
-
-func TestTableExecutorAddingTableDirectly(t *testing.T) {
-	ctx := cdcContext.NewBackendContext4Test(true)
-	liveness := model.LivenessCaptureAlive
-	p, tester := initProcessor4Test(ctx, t, &liveness)
-
-	var err error
-	// init tick
-	err = p.Tick(ctx)
-	require.NoError(t, err)
-	tester.MustApplyPatches()
-	p.changefeed.PatchStatus(func(status *model.ChangeFeedStatus) (*model.ChangeFeedStatus, bool, error) {
-		status.CheckpointTs = 20
-		status.ResolvedTs = 20
-		return status, true, nil
-	})
-	tester.MustApplyPatches()
-
-	// no operation
-	err = p.Tick(ctx)
-	require.NoError(t, err)
-	tester.MustApplyPatches()
-
-	ok, err := p.AddTable(ctx, 1, 20, false)
-	require.NoError(t, err)
-	require.True(t, ok)
-
-	table1 := p.tables[1].(*mockTablePipeline)
-	require.Equal(t, model.Ts(20), table1.sinkStartTs)
-	require.Equal(t, tablepb.TableStatePreparing, table1.state)
-	meta := p.GetTableStatus(model.TableID(1))
-	require.Equal(t, model.TableID(1), meta.TableID)
-	require.Equal(t, tablepb.TableStatePreparing, meta.State)
-
-	ok, err = p.AddTable(ctx, 2, 20, false)
-	require.NoError(t, err)
-	require.True(t, ok)
-	table2 := p.tables[2].(*mockTablePipeline)
-	require.Equal(t, model.Ts(20), table2.sinkStartTs)
-	require.Equal(t, tablepb.TableStatePreparing, table2.state)
-
-	ok, err = p.AddTable(ctx, 3, 20, false)
-	require.NoError(t, err)
-	require.True(t, ok)
-	table3 := p.tables[3].(*mockTablePipeline)
-	require.Equal(t, model.Ts(20), table3.sinkStartTs)
-	require.Equal(t, tablepb.TableStatePreparing, table3.state)
-
-	ok, err = p.AddTable(ctx, 4, 20, false)
-	require.NoError(t, err)
-	require.True(t, ok)
-	table4 := p.tables[4].(*mockTablePipeline)
-	require.Equal(t, model.Ts(20), table4.sinkStartTs)
-	require.Equal(t, tablepb.TableStatePreparing, table4.state)
-
-	require.Len(t, p.tables, 4)
-
-	checkpointTs := p.agent.GetLastSentCheckpointTs()
-	require.Equal(t, checkpointTs, model.Ts(0))
-
-	done := p.IsAddTableFinished(1, false)
-	require.False(t, done)
-	require.Equal(t, tablepb.TableStatePreparing, table1.State())
-	done = p.IsAddTableFinished(2, false)
-	require.False(t, done)
-	require.Equal(t, tablepb.TableStatePreparing, table2.State())
-	done = p.IsAddTableFinished(3, false)
-	require.False(t, done)
-	require.Equal(t, tablepb.TableStatePreparing, table3.State())
-	done = p.IsAddTableFinished(4, false)
-	require.False(t, done)
-	require.Equal(t, tablepb.TableStatePreparing, table4.State())
-	require.Len(t, p.tables, 4)
-
-	err = p.Tick(ctx)
-	require.NoError(t, err)
-	tester.MustApplyPatches()
-
-	// push the resolved ts, mock that sorterNode receive first resolved event
-	table1.resolvedTs = 101
-	table2.resolvedTs = 101
-	table3.resolvedTs = 102
-	table4.resolvedTs = 103
-
-	table1.checkpointTs = 30
-	table2.checkpointTs = 30
-	table3.checkpointTs = 30
-	table4.checkpointTs = 30
-
-	done = p.IsAddTableFinished(1, false)
-	require.True(t, done)
-	require.Equal(t, tablepb.TableStateReplicating, table1.State())
-	done = p.IsAddTableFinished(2, false)
-	require.True(t, done)
-	require.Equal(t, tablepb.TableStateReplicating, table2.State())
-	done = p.IsAddTableFinished(3, false)
-	require.True(t, done)
-	require.Equal(t, tablepb.TableStateReplicating, table3.State())
-	done = p.IsAddTableFinished(4, false)
-	require.True(t, done)
-	require.Equal(t, tablepb.TableStateReplicating, table4.State())
-
-	err = p.Tick(ctx)
-	require.NoError(t, err)
-	tester.MustApplyPatches()
-
-	table1.checkpointTs = 75
-	table2.checkpointTs = 75
-	table3.checkpointTs = 60
-	table4.checkpointTs = 75
-
-	err = p.Tick(ctx)
-	require.NoError(t, err)
-	tester.MustApplyPatches()
-
-	checkpointTs = p.agent.GetLastSentCheckpointTs()
-	require.Equal(t, table3.CheckpointTs(), checkpointTs)
-
-	updateChangeFeedPosition(t, tester, ctx.ChangefeedVars().ID, 103, 60)
-
-	err = p.Tick(ctx)
-	require.NoError(t, err)
-	tester.MustApplyPatches()
-
-	ok = p.RemoveTable(3)
-	require.True(t, ok)
-
-	err = p.Tick(ctx)
-	require.NoError(t, err)
-
-	tester.MustApplyPatches()
-
-	require.Len(t, p.tables, 4)
-	require.False(t, table3.canceled)
-	require.Equal(t, model.Ts(60), table3.CheckpointTs())
-
-	checkpointTs, done = p.IsRemoveTableFinished(3)
-	require.False(t, done)
-	require.Equal(t, model.Ts(0), checkpointTs)
-
-	err = p.Tick(ctx)
-	require.NoError(t, err)
-	tester.MustApplyPatches()
-
-	checkpointTs = p.agent.GetLastSentCheckpointTs()
-	require.Equal(t, model.Ts(60), checkpointTs)
-
-	// finish remove operations
-	table3.state = tablepb.TableStateStopped
-	table3.checkpointTs = 65
-
-	err = p.Tick(ctx)
-	require.NoError(t, err)
-
-	tester.MustApplyPatches()
-
-	require.Len(t, p.tables, 4)
-	require.False(t, table3.canceled)
-
-	checkpointTs, done = p.IsRemoveTableFinished(3)
-	require.True(t, done)
-	require.Equal(t, model.Ts(65), checkpointTs)
-	meta = p.GetTableStatus(model.TableID(3))
-	require.Equal(t, model.TableID(3), meta.TableID)
-	require.Equal(t, tablepb.TableStateAbsent, meta.State)
-
-	require.Len(t, p.tables, 3)
-	require.True(t, table3.canceled)
-
-	err = p.Tick(ctx)
-	require.NoError(t, err)
-	tester.MustApplyPatches()
-
-	checkpointTs = p.agent.GetLastSentCheckpointTs()
-	require.Equal(t, model.Ts(75), checkpointTs)
-
-	err = p.Close(ctx)
-	require.NoError(t, err)
 	require.Nil(t, p.agent)
 }
 
@@ -607,10 +413,10 @@ func TestProcessorClose(t *testing.T) {
 	tester.MustApplyPatches()
 
 	// add tables
-	done, err := p.AddTable(ctx, model.TableID(1), 20, false)
+	done, err := p.AddTableSpan(ctx, spanz.TableIDToComparableSpan(1), 20, false)
 	require.Nil(t, err)
 	require.True(t, done)
-	done, err = p.AddTable(ctx, model.TableID(2), 30, false)
+	done, err = p.AddTableSpan(ctx, spanz.TableIDToComparableSpan(2), 30, false)
 	require.Nil(t, err)
 	require.True(t, done)
 
@@ -624,21 +430,17 @@ func TestProcessorClose(t *testing.T) {
 		return status, true, nil
 	})
 	tester.MustApplyPatches()
-	p.tables[1].(*mockTablePipeline).resolvedTs = 110
-	p.tables[2].(*mockTablePipeline).resolvedTs = 90
-	p.tables[1].(*mockTablePipeline).checkpointTs = 90
-	p.tables[2].(*mockTablePipeline).checkpointTs = 95
 	err = p.Tick(ctx)
 	require.Nil(t, err)
 	tester.MustApplyPatches()
-	require.EqualValues(t, p.checkpointTs, 90)
-	require.EqualValues(t, p.resolvedTs, 90)
 	require.Contains(t, p.changefeed.TaskPositions, p.captureInfo.ID)
 
 	require.Nil(t, p.Close(ctx))
 	tester.MustApplyPatches()
-	require.True(t, p.tables[1].(*mockTablePipeline).canceled)
-	require.True(t, p.tables[2].(*mockTablePipeline).canceled)
+	require.True(t,
+		p.tableSpans.GetV(spanz.TableIDToComparableSpan(1)).(*mockTablePipeline).canceled)
+	require.True(t,
+		p.tableSpans.GetV(spanz.TableIDToComparableSpan(2)).(*mockTablePipeline).canceled)
 
 	p, tester = initProcessor4Test(ctx, t, &liveness)
 	// init tick
@@ -647,10 +449,10 @@ func TestProcessorClose(t *testing.T) {
 	tester.MustApplyPatches()
 
 	// add tables
-	done, err = p.AddTable(ctx, model.TableID(1), 20, false)
+	done, err = p.AddTableSpan(ctx, spanz.TableIDToComparableSpan(1), 20, false)
 	require.Nil(t, err)
 	require.True(t, done)
-	done, err = p.AddTable(ctx, model.TableID(2), 30, false)
+	done, err = p.AddTableSpan(ctx, spanz.TableIDToComparableSpan(2), 30, false)
 	require.Nil(t, err)
 	require.True(t, done)
 	err = p.Tick(ctx)
@@ -670,8 +472,10 @@ func TestProcessorClose(t *testing.T) {
 		Code:    "CDC:ErrSinkURIInvalid",
 		Message: "[CDC:ErrSinkURIInvalid]sink uri invalid '%s'",
 	})
-	require.True(t, p.tables[1].(*mockTablePipeline).canceled)
-	require.True(t, p.tables[2].(*mockTablePipeline).canceled)
+	require.True(
+		t, p.tableSpans.GetV(spanz.TableIDToComparableSpan(1)).(*mockTablePipeline).canceled)
+	require.True(
+		t, p.tableSpans.GetV(spanz.TableIDToComparableSpan(2)).(*mockTablePipeline).canceled)
 }
 
 func TestPositionDeleted(t *testing.T) {
@@ -680,33 +484,16 @@ func TestPositionDeleted(t *testing.T) {
 	p, tester := initProcessor4Test(ctx, t, &liveness)
 	var err error
 	// add table
-	done, err := p.AddTable(ctx, model.TableID(1), 30, false)
+	done, err := p.AddTableSpan(ctx, spanz.TableIDToComparableSpan(1), 30, false)
 	require.Nil(t, err)
 	require.True(t, done)
-	done, err = p.AddTable(ctx, model.TableID(2), 40, false)
+	done, err = p.AddTableSpan(ctx, spanz.TableIDToComparableSpan(2), 40, false)
 	require.Nil(t, err)
 	require.True(t, done)
 	// init tick
 	err = p.Tick(ctx)
 	require.Nil(t, err)
 	tester.MustApplyPatches()
-
-	table1 := p.tables[1].(*mockTablePipeline)
-	table2 := p.tables[2].(*mockTablePipeline)
-
-	table1.resolvedTs += 1
-	table2.resolvedTs += 1
-
-	table1.checkpointTs += 1
-	table2.checkpointTs += 1
-
-	// cal position
-	err = p.Tick(ctx)
-	require.Nil(t, err)
-	tester.MustApplyPatches()
-
-	require.Equal(t, model.Ts(31), p.checkpointTs)
-	require.Equal(t, model.Ts(31), p.resolvedTs)
 	require.Contains(t, p.changefeed.TaskPositions, p.captureInfo.ID)
 
 	// some others delete the task position
@@ -715,18 +502,12 @@ func TestPositionDeleted(t *testing.T) {
 			return nil, true, nil
 		})
 	tester.MustApplyPatches()
+
 	// position created again
 	err = p.Tick(ctx)
 	require.Nil(t, err)
 	tester.MustApplyPatches()
 	require.Equal(t, &model.TaskPosition{}, p.changefeed.TaskPositions[p.captureInfo.ID])
-
-	// cal position
-	err = p.Tick(ctx)
-	require.Nil(t, err)
-	tester.MustApplyPatches()
-	require.Equal(t, model.Ts(31), p.checkpointTs)
-	require.Equal(t, model.Ts(31), p.resolvedTs)
 	require.Contains(t, p.changefeed.TaskPositions, p.captureInfo.ID)
 }
 
@@ -800,7 +581,7 @@ func TestUpdateBarrierTs(t *testing.T) {
 	})
 	p.schemaStorage.(*mockSchemaStorage).resolvedTs = 10
 
-	done, err := p.AddTable(ctx, model.TableID(1), 5, false)
+	done, err := p.AddTableSpan(ctx, spanz.TableIDToComparableSpan(1), 5, false)
 	require.True(t, done)
 	require.Nil(t, err)
 	err = p.Tick(ctx)
@@ -815,7 +596,7 @@ func TestUpdateBarrierTs(t *testing.T) {
 	err = p.Tick(ctx)
 	require.Nil(t, err)
 	tester.MustApplyPatches()
-	tb := p.tables[model.TableID(1)].(*mockTablePipeline)
+	tb := p.tableSpans.GetV(spanz.TableIDToComparableSpan(1)).(*mockTablePipeline)
 	require.Equal(t, tb.barrierTs, uint64(10))
 
 	// Schema storage has advanced too.
@@ -823,7 +604,7 @@ func TestUpdateBarrierTs(t *testing.T) {
 	err = p.Tick(ctx)
 	require.Nil(t, err)
 	tester.MustApplyPatches()
-	tb = p.tables[model.TableID(1)].(*mockTablePipeline)
+	tb = p.tableSpans.GetV(spanz.TableIDToComparableSpan(1)).(*mockTablePipeline)
 	require.Equal(t, tb.barrierTs, uint64(15))
 }
 

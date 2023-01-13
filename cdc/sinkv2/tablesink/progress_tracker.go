@@ -20,9 +20,9 @@ import (
 	"sync/atomic"
 	"time"
 
-	"github.com/pingcap/errors"
 	"github.com/pingcap/log"
 	"github.com/pingcap/tiflow/cdc/model"
+	"github.com/pingcap/tiflow/cdc/processor/tablepb"
 	"go.uber.org/zap"
 )
 
@@ -33,7 +33,9 @@ const (
 	// warnDuration is the duration to warn the progress tracker is not closed.
 	warnDuration = 3 * time.Minute
 	// A progressTracker contains several internal fixed-length buffers.
-	defaultBufferSize uint64 = 1024 * 1024
+	// NOTICE: the buffer size must be aligned to 8 bytes.
+	// It shouldn't be too large, otherwise it will consume too much memory.
+	defaultBufferSize uint64 = 4096
 )
 
 // A pendingResolvedTs is received by progressTracker but hasn't been flushed yet.
@@ -55,8 +57,8 @@ type pendingResolvedTs struct {
 // Every event is associated with a `eventID` which is a continuous number. `eventID`
 // can be regarded as the event's offset in `pendingEvents`.
 type progressTracker struct {
-	// tableID is the table ID of the table sink.
-	tableID model.TableID
+	// span is the span of the table sink.
+	span tablepb.Span
 
 	// Internal Buffer size. Modified in tests only.
 	bufferSize uint64
@@ -91,13 +93,13 @@ type progressTracker struct {
 // newProgressTracker is used to create a new progress tracker.
 // The last min resolved ts is set to 0.
 // It means that the table sink has not started yet.
-func newProgressTracker(tableID model.TableID, bufferSize uint64) *progressTracker {
+func newProgressTracker(span tablepb.Span, bufferSize uint64) *progressTracker {
 	if bufferSize%8 != 0 {
 		panic("bufferSize must be align to 8 bytes")
 	}
 
 	return &progressTracker{
-		tableID:    tableID,
+		span:       span,
 		bufferSize: bufferSize / 8,
 		// It means the start of the table.
 		// It's Ok to use 0 here.
@@ -144,9 +146,29 @@ func (r *progressTracker) addResolvedTs(resolvedTs model.ResolvedTs) {
 	r.mu.Lock()
 	defer r.mu.Unlock()
 
-	if r.nextEventID == 0 {
+	// NOTICE: We should **NOT** update the `lastMinResolvedTs` when tracker is closed or frozened.
+	// So there is no need to try to append the resolved ts to `resolvedTsCache`.
+	if r.frozen || r.closed {
+		return
+	}
+
+	// If there is no event or all events are flushed, we can update the resolved ts directly.
+	if r.nextEventID == 0 || r.nextToResolvePos >= r.nextEventID {
+		// Update the checkpoint ts.
 		r.lastMinResolvedTs = resolvedTs
 		return
+	}
+
+	// Sometimes, if there are no events for a long time and a lot of resolved ts are received,
+	// we can update the last resolved ts directly.
+	tsCacheLen := len(r.resolvedTsCache)
+	if tsCacheLen > 0 {
+		// The offset of the last resolved ts is the last event ID.
+		// It means no event is adding. We can update the resolved ts directly.
+		if r.resolvedTsCache[tsCacheLen-1].offset+1 == r.nextEventID {
+			r.resolvedTsCache[tsCacheLen-1].resolvedTs = resolvedTs
+			return
+		}
 	}
 
 	r.resolvedTsCache = append(r.resolvedTsCache, pendingResolvedTs{
@@ -220,6 +242,8 @@ func (r *progressTracker) advance() model.ResolvedTs {
 	// If a buffer is finished, release it.
 	for r.nextToResolvePos-r.nextToReleasePos >= r.bufferSize*64 {
 		r.nextToReleasePos += r.bufferSize * 64
+		// Use zero value to release the memory.
+		r.pendingEvents[0] = nil
 		r.pendingEvents = r.pendingEvents[1:]
 		if len(r.pendingEvents) == 0 {
 			r.pendingEvents = nil
@@ -245,10 +269,10 @@ func (r *progressTracker) freezeProcess() {
 }
 
 // close is used to close the progress tracker.
-func (r *progressTracker) close(ctx context.Context) error {
+func (r *progressTracker) close(ctx context.Context) {
 	r.mu.Lock()
 	if !r.frozen {
-		panic("the progress tracker should be frozen before closing")
+		log.Panic("the progress tracker should be frozen before closing")
 	}
 	r.closed = true
 	r.mu.Unlock()
@@ -260,17 +284,18 @@ func (r *progressTracker) close(ctx context.Context) error {
 	for {
 		select {
 		case <-ctx.Done():
-			return errors.Trace(ctx.Err())
+			// If the context is canceled, we should return immediately.
+			return
 		case <-blockTicker.C:
 			log.Warn("Close process doesn't return in time, may be stuck",
-				zap.Int64("tableID", r.tableID),
+				zap.Stringer("span", &r.span),
 				zap.Int("trackingCount", r.trackingCount()),
 				zap.Any("lastMinResolvedTs", r.advance()),
 			)
 		case <-waitingTicker.C:
 			r.advance()
 			if r.trackingCount() == 0 {
-				return nil
+				return
 			}
 		}
 	}

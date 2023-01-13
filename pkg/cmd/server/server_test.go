@@ -179,8 +179,9 @@ func TestParseCfg(t *testing.T) {
 			TableActor: &config.TableActorConfig{
 				EventBatchSize: 32,
 			},
-			EnableDBSorter:     true,
-			EnableNewScheduler: true,
+			EnableDBSorter:      true,
+			EnableNewScheduler:  true,
+			EnablePullBasedSink: true,
 			DB: &config.DBConfig{
 				Count:                       8,
 				Concurrency:                 128,
@@ -204,13 +205,15 @@ func TestParseCfg(t *testing.T) {
 				ServerMaxPendingMessageCount: 102400,
 				ServerAckInterval:            config.TomlDuration(time.Millisecond * 100),
 				ServerWorkerPoolSize:         4,
+				MaxRecvMsgSize:               256 * 1024 * 1024,
 			},
-			EnableSchedulerV3: true,
 			Scheduler: &config.SchedulerConfig{
 				HeartbeatTick:        2,
+				CollectStatsTick:     200,
 				MaxTaskConcurrency:   10,
 				CheckBalanceInterval: 60000000000,
 				AddTableBatchSize:    50,
+				RegionPerSpan:        0,
 			},
 			EnableNewSink: true,
 		},
@@ -254,8 +257,8 @@ sort-dir = "/tmp/just_a_test"
 region-retry-duration = "3s"
 
 [debug]
-enable-db-sorter = false
-enable-scheduler-v3 = true
+enable-db-sorter = true
+enable-pull-based-sink = true
 [debug.db]
 count = 5
 concurrency = 6
@@ -279,8 +282,10 @@ client-retry-rate-limit = 100.0
 server-max-pending-message-count = 1024
 server-ack-interval = "1s"
 server-worker-pool-size = 16
+max-recv-msg-size = 4
 [debug.scheduler]
 heartbeat-tick = 3
+collect-stats-tick = 201
 max-task-concurrency = 11
 check-balance-interval = "10s"
 `, dataDir)
@@ -336,8 +341,9 @@ check-balance-interval = "10s"
 			TableActor: &config.TableActorConfig{
 				EventBatchSize: 32,
 			},
-			EnableDBSorter:     false,
-			EnableNewScheduler: true,
+			EnableDBSorter:      true,
+			EnablePullBasedSink: true,
+			EnableNewScheduler:  true,
 			DB: &config.DBConfig{
 				Count:                       5,
 				Concurrency:                 6,
@@ -360,13 +366,15 @@ check-balance-interval = "10s"
 				ServerMaxPendingMessageCount: 1024,
 				ServerAckInterval:            config.TomlDuration(1 * time.Second),
 				ServerWorkerPoolSize:         16,
+				MaxRecvMsgSize:               4,
 			},
-			EnableSchedulerV3: true,
 			Scheduler: &config.SchedulerConfig{
 				HeartbeatTick:        3,
+				CollectStatsTick:     201,
 				MaxTaskConcurrency:   11,
 				CheckBalanceInterval: config.TomlDuration(10 * time.Second),
 				AddTableBatchSize:    50,
+				RegionPerSpan:        0,
 			},
 			EnableNewSink: true,
 		},
@@ -483,8 +491,9 @@ cert-allowed-cn = ["dd","ee"]
 			TableActor: &config.TableActorConfig{
 				EventBatchSize: 32,
 			},
-			EnableDBSorter:     true,
-			EnableNewScheduler: true,
+			EnableDBSorter:      true,
+			EnableNewScheduler:  true,
+			EnablePullBasedSink: true,
 			DB: &config.DBConfig{
 				Count:                       8,
 				Concurrency:                 128,
@@ -508,13 +517,15 @@ cert-allowed-cn = ["dd","ee"]
 				ServerMaxPendingMessageCount: 102400,
 				ServerAckInterval:            config.TomlDuration(time.Millisecond * 100),
 				ServerWorkerPoolSize:         4,
+				MaxRecvMsgSize:               256 * 1024 * 1024,
 			},
-			EnableSchedulerV3: true,
 			Scheduler: &config.SchedulerConfig{
 				HeartbeatTick:        2,
+				CollectStatsTick:     200,
 				MaxTaskConcurrency:   10,
 				CheckBalanceInterval: 60000000000,
 				AddTableBatchSize:    50,
+				RegionPerSpan:        0,
 			},
 			EnableNewSink: true,
 		},
@@ -548,8 +559,9 @@ unknown3 = 3
 		TableActor: &config.TableActorConfig{
 			EventBatchSize: 32,
 		},
-		EnableDBSorter:     true,
-		EnableNewScheduler: true,
+		EnableDBSorter:      true,
+		EnableNewScheduler:  true,
+		EnablePullBasedSink: true,
 		DB: &config.DBConfig{
 			Count:                       8,
 			Concurrency:                 128,
@@ -573,13 +585,15 @@ unknown3 = 3
 			ServerMaxPendingMessageCount: 102400,
 			ServerAckInterval:            config.TomlDuration(time.Millisecond * 100),
 			ServerWorkerPoolSize:         4,
+			MaxRecvMsgSize:               256 * 1024 * 1024,
 		},
-		EnableSchedulerV3: true,
 		Scheduler: &config.SchedulerConfig{
 			HeartbeatTick:        2,
+			CollectStatsTick:     200,
 			MaxTaskConcurrency:   10,
 			CheckBalanceInterval: 60000000000,
 			AddTableBatchSize:    50,
+			RegionPerSpan:        0,
 		},
 		EnableNewSink: true,
 	}, o.serverConfig.Debug)

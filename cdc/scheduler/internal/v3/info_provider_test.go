@@ -20,6 +20,7 @@ import (
 	"github.com/pingcap/tiflow/cdc/model"
 	"github.com/pingcap/tiflow/cdc/processor/tablepb"
 	"github.com/pingcap/tiflow/cdc/scheduler/internal"
+	"github.com/pingcap/tiflow/cdc/scheduler/internal/v3/keyspan"
 	"github.com/pingcap/tiflow/cdc/scheduler/internal/v3/member"
 	"github.com/pingcap/tiflow/pkg/config"
 	"github.com/stretchr/testify/require"
@@ -32,12 +33,15 @@ func TestInfoProvider(t *testing.T) {
 		HeartbeatTick:      math.MaxInt,
 		MaxTaskConcurrency: 1,
 	})
+	cfg := config.NewDefaultSchedulerConfig()
+	coord.reconciler = keyspan.NewReconciler(
+		model.ChangeFeedID{}, keyspan.NewMockRegionCache(), cfg.RegionPerSpan)
 	coord.captureM.Captures = map[model.CaptureID]*member.CaptureStatus{
 		"a": {Tables: []tablepb.TableStatus{{
-			TableID:    1,
+			Span:       tablepb.Span{TableID: 1},
 			Checkpoint: tablepb.Checkpoint{CheckpointTs: 1},
 		}, {
-			TableID:    2,
+			Span:       tablepb.Span{TableID: 2},
 			Checkpoint: tablepb.Checkpoint{CheckpointTs: 1},
 		}}},
 		"b": {},
@@ -54,11 +58,6 @@ func TestInfoProvider(t *testing.T) {
 		}},
 		"b": {Tables: map[model.TableID]*model.TableReplicaInfo{}},
 	}, tasks)
-	pos, err := ip.GetTaskPositions()
-	require.Nil(t, err)
-	require.Len(t, pos, 2)
-	require.Len(t, ip.GetTotalTableCounts(), 2)
-	require.Empty(t, ip.GetPendingTableCounts())
 }
 
 func TestInfoProviderIsInitialized(t *testing.T) {

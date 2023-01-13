@@ -47,10 +47,6 @@ var (
 		errors.RFCCodeText("DFLOW:ErrClusterResourceNotEnough"),
 	)
 
-	ErrGrpcBuildConn = errors.Normalize(
-		"dial grpc connection to %s failed",
-		errors.RFCCodeText("DFLOW:ErrGrpcBuildConn"),
-	)
 	ErrDecodeEtcdKeyFail = errors.Normalize(
 		"failed to decode etcd key: %s",
 		errors.RFCCodeText("DFLOW:ErrDecodeEtcdKeyFail"),
@@ -59,15 +55,15 @@ var (
 		"etcd api returns error",
 		errors.RFCCodeText("DFLOW:ErrEtcdAPIError"),
 	)
-	ErrNoRPCClient = errors.Normalize(
-		"no available RPC client",
-		errors.RFCCodeText("DFLOW:ErrNoRPCClient"),
-	)
 
 	// master related errors
 	ErrMasterNotReady = errors.Normalize(
 		"master is not ready",
 		errors.RFCCodeText("DFLOW:ErrMasterNotReady"),
+	)
+	ErrMasterNoLeader = errors.Normalize(
+		"master has no leader",
+		errors.RFCCodeText("DFLOW:ErrMasterNoLeader"),
 	)
 	ErrMasterDecodeConfigFile = errors.Normalize(
 		"decode config file failed",
@@ -76,10 +72,6 @@ var (
 	ErrMasterConfigUnknownItem = errors.Normalize(
 		"master config contains unknown configuration options: %s",
 		errors.RFCCodeText("DFLOW:ErrMasterConfigUnknownItem"),
-	)
-	ErrMasterRPCNotForward = errors.Normalize(
-		"server grpc is not forwarded to leader",
-		errors.RFCCodeText("DFLOW:ErrMasterRPCNotForward"),
 	)
 	ErrMasterNotFound = errors.Normalize(
 		"master is not found: master ID %s",
@@ -179,21 +171,6 @@ var (
 	ErrJobManagerGetJobDetailFail = errors.Normalize(
 		"failed to get job detail from job master",
 		errors.RFCCodeText("DFLOW:ErrJobManagerGetJobDetailFail"),
-	)
-
-	ErrJobManagerReadRespBodyFail = errors.Normalize(
-		"failed to read response body",
-		errors.RFCCodeText("DFLOW:ErrJobManagerReadRespBodyFail"),
-	)
-
-	ErrJobManagerRespStatusCode404 = errors.Normalize(
-		"get job detail response status code is 404",
-		errors.RFCCodeText("DFLOW:ErrJobManagerRespStatusCode404"),
-	)
-
-	ErrJobManagerRespStatusCodeNot2XX = errors.Normalize(
-		"get job detail response status code is not 2XX",
-		errors.RFCCodeText("DFLOW:ErrJobManagerRespStatusCodeNot2XX"),
 	)
 
 	// master etcd related errors
@@ -351,13 +328,13 @@ var (
 		"local resource directory not writable",
 		errors.RFCCodeText("DFLOW:ErrLocalFileDirNotWritable"),
 	)
+	ErrNoQualifiedExecutor = errors.Normalize(
+		"no executor is available for scheduling",
+		errors.RFCCodeText("DFLOW:ErrNoQualifiedExecutor"),
+	)
 	ErrFilterNoResult = errors.Normalize(
 		"filter % returns no result",
 		errors.RFCCodeText("DFLOW:ErrFilterNoResult"),
-	)
-	ErrCapacityNotEnough = errors.Normalize(
-		"capacity not enough",
-		errors.RFCCodeText("DFLOW:ErrCapacityNotEnough"),
 	)
 	ErrSelectorUnsatisfied = errors.Normalize(
 		"selector %v is not satisfied",
@@ -417,5 +394,9 @@ var (
 	ErrElectionRecordConflict = errors.Normalize(
 		"election record conflict",
 		errors.RFCCodeText("DFLOW:ErrElectionRecordConflict"),
+	)
+	ErrDeserializeConfig = errors.Normalize(
+		"deserialize config failed",
+		errors.RFCCodeText("DFLOW:ErrDeserializeConfig"),
 	)
 )

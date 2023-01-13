@@ -311,29 +311,6 @@ func castUnsigned(data interface{}, ft *types.FieldType) interface{} {
 	return data
 }
 
-func (s *Syncer) mappingDML(table *filter.Table, ti *model.TableInfo, data [][]interface{}) ([][]interface{}, error) {
-	if s.columnMapping == nil {
-		return data, nil
-	}
-
-	columns := make([]string, 0, len(ti.Columns))
-	for _, col := range ti.Columns {
-		columns = append(columns, col.Name.O)
-	}
-
-	var (
-		err  error
-		rows = make([][]interface{}, len(data))
-	)
-	for i := range data {
-		rows[i], _, err = s.columnMapping.HandleRowValue(table.Schema, table.Name, columns, data[i])
-		if err != nil {
-			return nil, terror.ErrSyncerUnitDoColumnMapping.Delegate(err, data[i], table)
-		}
-	}
-	return rows, nil
-}
-
 // checkLogColumns returns error when not all rows in skipped is empty, which means the binlog doesn't contain all
 // columns.
 // TODO: don't return error when all skipped columns is non-PK.

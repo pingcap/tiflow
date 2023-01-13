@@ -23,11 +23,11 @@ import (
 	"github.com/pingcap/tidb/br/pkg/storage"
 	"github.com/pingcap/tiflow/cdc/contextutil"
 	"github.com/pingcap/tiflow/cdc/model"
-	"github.com/pingcap/tiflow/cdc/redo/common"
 	"github.com/pingcap/tiflow/cdc/sinkv2/ddlsink"
 	"github.com/pingcap/tiflow/cdc/sinkv2/metrics"
 	"github.com/pingcap/tiflow/pkg/sink"
 	"github.com/pingcap/tiflow/pkg/sink/cloudstorage"
+	"github.com/pingcap/tiflow/pkg/util"
 )
 
 // Assert DDLEventSink implementation
@@ -39,62 +39,49 @@ type ddlSink struct {
 	// statistic is used to record the DDL metrics
 	statistics *metrics.Statistics
 	storage    storage.ExternalStorage
-	tables     *model.TableSet
 }
 
 // NewCloudStorageDDLSink creates a ddl sink for cloud storage.
 func NewCloudStorageDDLSink(ctx context.Context, sinkURI *url.URL) (*ddlSink, error) {
-	// parse backend storage from sinkURI
-	bs, err := storage.ParseBackend(sinkURI.String(), nil)
+	storage, err := util.GetExternalStorageFromURI(ctx, sinkURI.String())
 	if err != nil {
 		return nil, err
 	}
 
-	// create an external storage.
-	storage, err := storage.New(ctx, bs, &storage.ExternalStorageOptions{
-		SendCredentials: false,
-		S3Retryer:       common.DefaultS3Retryer(),
-	})
-	if err != nil {
-		return nil, err
-	}
 	changefeedID := contextutil.ChangefeedIDFromCtx(ctx)
-
 	d := &ddlSink{
 		id:         changefeedID,
 		storage:    storage,
-		tables:     model.NewTableSet(),
 		statistics: metrics.NewStatistics(ctx, sink.TxnSink),
 	}
 
 	return d, nil
 }
 
-func (d *ddlSink) generateSchemaPath(def cloudstorage.TableDetail) string {
-	return fmt.Sprintf("%s/%s/%d/schema.json", def.Schema, def.Table, def.Version)
+func generateSchemaPath(def cloudstorage.TableDefinition) string {
+	return fmt.Sprintf("%s/%s/%d/schema.json", def.Schema, def.Table, def.TableVersion)
 }
 
 func (d *ddlSink) WriteDDLEvent(ctx context.Context, ddl *model.DDLEvent) error {
-	var def cloudstorage.TableDetail
+	var def cloudstorage.TableDefinition
 
 	if ddl.TableInfo.TableInfo == nil {
 		return nil
 	}
 
-	def.FromTableInfo(ddl.TableInfo)
+	def.FromDDLEvent(ddl)
 	encodedDef, err := json.MarshalIndent(def, "", "    ")
 	if err != nil {
 		return errors.Trace(err)
 	}
 
-	path := d.generateSchemaPath(def)
+	path := generateSchemaPath(def)
 	err = d.statistics.RecordDDLExecution(func() error {
 		err1 := d.storage.WriteFile(ctx, path, encodedDef)
 		if err1 != nil {
 			return err1
 		}
 
-		d.tables.Add(ddl.TableInfo.ID)
 		return nil
 	})
 
@@ -104,28 +91,6 @@ func (d *ddlSink) WriteDDLEvent(ctx context.Context, ddl *model.DDLEvent) error 
 func (d *ddlSink) WriteCheckpointTs(ctx context.Context,
 	ts uint64, tables []*model.TableInfo,
 ) error {
-	for _, table := range tables {
-		ok := d.tables.Contain(table.ID)
-		// if table is not cached before, then create the corresponding
-		// schema.json file anyway.
-		if !ok {
-			var def cloudstorage.TableDetail
-			def.FromTableInfo(table)
-
-			encodedDef, err := json.MarshalIndent(def, "", "    ")
-			if err != nil {
-				return errors.Trace(err)
-			}
-
-			path := d.generateSchemaPath(def)
-			err = d.storage.WriteFile(ctx, path, encodedDef)
-			if err != nil {
-				return errors.Trace(err)
-			}
-			d.tables.Add(table.ID)
-		}
-	}
-
 	ckpt, err := json.Marshal(map[string]uint64{"checkpoint-ts": ts})
 	if err != nil {
 		return errors.Trace(err)

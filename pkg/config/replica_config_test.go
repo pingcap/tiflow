@@ -46,11 +46,13 @@ func TestReplicaConfigMarshal(t *testing.T) {
 	conf.Sink.CSVConfig = &CSVConfig{
 		Delimiter:       ",",
 		Quote:           "\"",
-		Terminator:      "",
 		NullString:      `\N`,
-		DateSeparator:   "month",
 		IncludeCommitTs: true,
 	}
+	conf.Sink.Terminator = ""
+	conf.Sink.DateSeparator = "month"
+	conf.Sink.EnablePartitionSeparator = true
+
 	b, err := conf.Marshal()
 	require.Nil(t, err)
 	require.JSONEq(t, testCfgTestReplicaConfigMarshal1, mustIndentJSON(t, b))
@@ -91,6 +93,7 @@ func TestReplicaConfigOutDated(t *testing.T) {
 		{Matcher: []string{"a.d"}, DispatcherRule: "r2"},
 	}
 	conf.Sink.TxnAtomicity = unknownTxnAtomicity
+	conf.Sink.DateSeparator = ""
 	conf.Sink.CSVConfig = nil
 	require.Equal(t, conf, conf2)
 }
@@ -127,6 +130,18 @@ func TestReplicaConfigValidate(t *testing.T) {
 	require.Equal(t, "d1", rules[0].PartitionRule)
 	require.Equal(t, "p1", rules[1].PartitionRule)
 	require.Equal(t, "", rules[2].PartitionRule)
+
+	// Test memory quota can be adjusted
+	conf = GetDefaultReplicaConfig()
+	conf.MemoryQuota = 0
+	err = conf.ValidateAndAdjust(nil)
+	require.NoError(t, err)
+	require.Equal(t, uint64(DefaultChangefeedMemoryQuota), conf.MemoryQuota)
+
+	conf.MemoryQuota = uint64(1024)
+	err = conf.ValidateAndAdjust(nil)
+	require.NoError(t, err)
+	require.Equal(t, uint64(1024), conf.MemoryQuota)
 }
 
 func TestValidateAndAdjust(t *testing.T) {

@@ -51,15 +51,18 @@ var defaultReplicaConfig = &ReplicaConfig{
 		CSVConfig: &CSVConfig{
 			Quote:      string(DoubleQuoteChar),
 			Delimiter:  Comma,
-			Terminator: string(LF),
 			NullString: NULL,
 		},
-		EncoderConcurrency: 16,
+		EncoderConcurrency:       16,
+		Terminator:               CRLF,
+		DateSeparator:            DateSeparatorNone.String(),
+		EnablePartitionSeparator: false,
+		TiDBSourceID:             1,
 	},
 	Consistent: &ConsistentConfig{
 		Level:             "none",
 		MaxLogSize:        64,
-		FlushIntervalInMs: 2000,
+		FlushIntervalInMs: MinFlushIntervalInMs,
 		Storage:           "",
 	},
 }
@@ -85,12 +88,16 @@ func (d *Duration) UnmarshalText(text []byte) error {
 type ReplicaConfig replicaConfig
 
 type replicaConfig struct {
-	MemoryQuota        uint64            `toml:"memory-quota" json:"memory-quota"`
-	CaseSensitive      bool              `toml:"case-sensitive" json:"case-sensitive"`
-	EnableOldValue     bool              `toml:"enable-old-value" json:"enable-old-value"`
-	ForceReplicate     bool              `toml:"force-replicate" json:"force-replicate"`
-	CheckGCSafePoint   bool              `toml:"check-gc-safe-point" json:"check-gc-safe-point"`
-	EnableSyncPoint    bool              `toml:"enable-sync-point" json:"enable-sync-point"`
+	MemoryQuota      uint64 `toml:"memory-quota" json:"memory-quota"`
+	CaseSensitive    bool   `toml:"case-sensitive" json:"case-sensitive"`
+	EnableOldValue   bool   `toml:"enable-old-value" json:"enable-old-value"`
+	ForceReplicate   bool   `toml:"force-replicate" json:"force-replicate"`
+	CheckGCSafePoint bool   `toml:"check-gc-safe-point" json:"check-gc-safe-point"`
+	EnableSyncPoint  bool   `toml:"enable-sync-point" json:"enable-sync-point"`
+	// BDR(Bidirectional Replication) is a feature that allows users to
+	// replicate data of same tables from TiDB-1 to TiDB-2 and vice versa.
+	// This feature is only available for TiDB.
+	BDRMode            bool              `toml:"bdr-mode" json:"bdr-mode"`
 	SyncPointInterval  time.Duration     `toml:"sync-point-interval" json:"sync-point-interval"`
 	SyncPointRetention time.Duration     `toml:"sync-point-retention" json:"sync-point-retention"`
 	Filter             *FilterConfig     `toml:"filter" json:"filter"`
@@ -163,6 +170,13 @@ func (c *ReplicaConfig) ValidateAndAdjust(sinkURI *url.URL) error {
 			return err
 		}
 	}
+	if c.Consistent != nil {
+		err := c.Consistent.ValidateAndAdjust()
+		if err != nil {
+			return err
+		}
+	}
+
 	// check sync point config
 	if c.EnableSyncPoint {
 		if c.SyncPointInterval < minSyncPointInterval {
@@ -180,8 +194,16 @@ func (c *ReplicaConfig) ValidateAndAdjust(sinkURI *url.URL) error {
 						minSyncPointRetention.String()))
 		}
 	}
+	if c.MemoryQuota == uint64(0) {
+		c.FixMemoryQuota()
+	}
 
 	return nil
+}
+
+// FixMemoryQuota adjusts memory quota to default value
+func (c *ReplicaConfig) FixMemoryQuota() {
+	c.MemoryQuota = DefaultChangefeedMemoryQuota
 }
 
 // GetSinkURIAndAdjustConfigWithSinkURI parses sinkURI as a URI and adjust config with sinkURI.

@@ -26,6 +26,9 @@ import (
 	"github.com/pingcap/tiflow/pkg/security"
 )
 
+// EmptyResponse return empty {} to http client
+type EmptyResponse struct{}
+
 // Tso contains timestamp get from PD
 type Tso struct {
 	Timestamp int64 `json:"timestamp"`
@@ -89,15 +92,18 @@ type ChangefeedConfig struct {
 
 // ReplicaConfig is a duplicate of  config.ReplicaConfig
 type ReplicaConfig struct {
+	MemoryQuota           uint64            `json:"memory_quota"`
 	CaseSensitive         bool              `json:"case_sensitive"`
 	EnableOldValue        bool              `json:"enable_old_value"`
 	ForceReplicate        bool              `json:"force_replicate"`
 	IgnoreIneligibleTable bool              `json:"ignore_ineligible_table"`
 	CheckGCSafePoint      bool              `json:"check_gc_safe_point"`
 	EnableSyncPoint       bool              `json:"enable_sync_point"`
+	BDRMode               bool              `json:"bdr_mode"`
 	SyncPointInterval     time.Duration     `json:"sync_point_interval"`
 	SyncPointRetention    time.Duration     `json:"sync_point_retention"`
 	Filter                *FilterConfig     `json:"filter"`
+	Mounter               *MounterConfig    `json:"mounter"`
 	Sink                  *SinkConfig       `json:"sink"`
 	Consistent            *ConsistentConfig `json:"consistent"`
 }
@@ -105,6 +111,7 @@ type ReplicaConfig struct {
 // ToInternalReplicaConfig coverts *v2.ReplicaConfig into *config.ReplicaConfig
 func (c *ReplicaConfig) ToInternalReplicaConfig() *config.ReplicaConfig {
 	res := config.GetDefaultReplicaConfig()
+	res.MemoryQuota = c.MemoryQuota
 	res.CaseSensitive = c.CaseSensitive
 	res.EnableOldValue = c.EnableOldValue
 	res.ForceReplicate = c.ForceReplicate
@@ -112,6 +119,7 @@ func (c *ReplicaConfig) ToInternalReplicaConfig() *config.ReplicaConfig {
 	res.EnableSyncPoint = c.EnableSyncPoint
 	res.SyncPointInterval = c.SyncPointInterval
 	res.SyncPointRetention = c.SyncPointRetention
+	res.BDRMode = c.BDRMode
 
 	if c.Filter != nil {
 		var mySQLReplicationRules *filter.MySQLReplicationRules
@@ -182,21 +190,27 @@ func (c *ReplicaConfig) ToInternalReplicaConfig() *config.ReplicaConfig {
 			csvConfig = &config.CSVConfig{
 				Delimiter:       c.Sink.CSVConfig.Delimiter,
 				Quote:           c.Sink.CSVConfig.Quote,
-				Terminator:      c.Sink.CSVConfig.Terminator,
 				NullString:      c.Sink.CSVConfig.NullString,
-				DateSeparator:   c.Sink.CSVConfig.DateSeparator,
 				IncludeCommitTs: c.Sink.CSVConfig.IncludeCommitTs,
 			}
 		}
 
 		res.Sink = &config.SinkConfig{
-			DispatchRules:      dispatchRules,
-			Protocol:           c.Sink.Protocol,
-			CSVConfig:          csvConfig,
-			TxnAtomicity:       config.AtomicityLevel(c.Sink.TxnAtomicity),
-			ColumnSelectors:    columnSelectors,
-			SchemaRegistry:     c.Sink.SchemaRegistry,
-			EncoderConcurrency: c.Sink.EncoderConcurrency,
+			DispatchRules:            dispatchRules,
+			Protocol:                 c.Sink.Protocol,
+			CSVConfig:                csvConfig,
+			TxnAtomicity:             config.AtomicityLevel(c.Sink.TxnAtomicity),
+			ColumnSelectors:          columnSelectors,
+			SchemaRegistry:           c.Sink.SchemaRegistry,
+			EncoderConcurrency:       c.Sink.EncoderConcurrency,
+			Terminator:               c.Sink.Terminator,
+			DateSeparator:            c.Sink.DateSeparator,
+			EnablePartitionSeparator: c.Sink.EnablePartitionSeparator,
+		}
+	}
+	if c.Mounter != nil {
+		res.Mounter = &config.MounterConfig{
+			WorkerNum: c.Mounter.WorkerNum,
 		}
 	}
 	return res
@@ -206,6 +220,7 @@ func (c *ReplicaConfig) ToInternalReplicaConfig() *config.ReplicaConfig {
 func ToAPIReplicaConfig(c *config.ReplicaConfig) *ReplicaConfig {
 	cloned := c.Clone()
 	res := &ReplicaConfig{
+		MemoryQuota:           cloned.MemoryQuota,
 		CaseSensitive:         cloned.CaseSensitive,
 		EnableOldValue:        cloned.EnableOldValue,
 		ForceReplicate:        cloned.ForceReplicate,
@@ -214,6 +229,7 @@ func ToAPIReplicaConfig(c *config.ReplicaConfig) *ReplicaConfig {
 		EnableSyncPoint:       cloned.EnableSyncPoint,
 		SyncPointInterval:     cloned.SyncPointInterval,
 		SyncPointRetention:    cloned.SyncPointRetention,
+		BDRMode:               cloned.BDRMode,
 	}
 
 	if cloned.Filter != nil {
@@ -278,21 +294,22 @@ func ToAPIReplicaConfig(c *config.ReplicaConfig) *ReplicaConfig {
 			csvConfig = &CSVConfig{
 				Delimiter:       cloned.Sink.CSVConfig.Delimiter,
 				Quote:           cloned.Sink.CSVConfig.Quote,
-				Terminator:      cloned.Sink.CSVConfig.Terminator,
 				NullString:      cloned.Sink.CSVConfig.NullString,
-				DateSeparator:   cloned.Sink.CSVConfig.DateSeparator,
 				IncludeCommitTs: cloned.Sink.CSVConfig.IncludeCommitTs,
 			}
 		}
 
 		res.Sink = &SinkConfig{
-			Protocol:           cloned.Sink.Protocol,
-			SchemaRegistry:     cloned.Sink.SchemaRegistry,
-			DispatchRules:      dispatchRules,
-			CSVConfig:          csvConfig,
-			ColumnSelectors:    columnSelectors,
-			TxnAtomicity:       string(cloned.Sink.TxnAtomicity),
-			EncoderConcurrency: cloned.Sink.EncoderConcurrency,
+			Protocol:                 cloned.Sink.Protocol,
+			SchemaRegistry:           cloned.Sink.SchemaRegistry,
+			DispatchRules:            dispatchRules,
+			CSVConfig:                csvConfig,
+			ColumnSelectors:          columnSelectors,
+			TxnAtomicity:             string(cloned.Sink.TxnAtomicity),
+			EncoderConcurrency:       cloned.Sink.EncoderConcurrency,
+			Terminator:               cloned.Sink.Terminator,
+			DateSeparator:            cloned.Sink.DateSeparator,
+			EnablePartitionSeparator: cloned.Sink.EnablePartitionSeparator,
 		}
 	}
 	if cloned.Consistent != nil {
@@ -301,6 +318,11 @@ func ToAPIReplicaConfig(c *config.ReplicaConfig) *ReplicaConfig {
 			MaxLogSize:        cloned.Consistent.MaxLogSize,
 			FlushIntervalInMs: cloned.Consistent.FlushIntervalInMs,
 			Storage:           cloned.Consistent.Storage,
+		}
+	}
+	if cloned.Mounter != nil {
+		res.Mounter = &MounterConfig{
+			WorkerNum: cloned.Mounter.WorkerNum,
 		}
 	}
 	return res
@@ -322,7 +344,7 @@ func GetDefaultReplicaConfig() *ReplicaConfig {
 		Consistent: &ConsistentConfig{
 			Level:             "none",
 			MaxLogSize:        64,
-			FlushIntervalInMs: 1000,
+			FlushIntervalInMs: config.MinFlushIntervalInMs,
 			Storage:           "",
 		},
 	}
@@ -335,6 +357,11 @@ type FilterConfig struct {
 	Rules            []string          `json:"rules,omitempty"`
 	IgnoreTxnStartTs []uint64          `json:"ignore_txn_start_ts,omitempty"`
 	EventFilters     []EventFilterRule `json:"event_filters"`
+}
+
+// MounterConfig represents mounter config for a changefeed
+type MounterConfig struct {
+	WorkerNum int `json:"worker_num"`
 }
 
 // EventFilterRule is used by sql event filter and expression filter
@@ -418,13 +445,16 @@ type Table struct {
 // SinkConfig represents sink config for a changefeed
 // This is a duplicate of config.SinkConfig
 type SinkConfig struct {
-	Protocol           string            `json:"protocol"`
-	SchemaRegistry     string            `json:"schema_registry"`
-	CSVConfig          *CSVConfig        `json:"csv"`
-	DispatchRules      []*DispatchRule   `json:"dispatchers,omitempty"`
-	ColumnSelectors    []*ColumnSelector `json:"column_selectors"`
-	TxnAtomicity       string            `json:"transaction_atomicity"`
-	EncoderConcurrency int               `json:"encoder_concurrency"`
+	Protocol                 string            `json:"protocol"`
+	SchemaRegistry           string            `json:"schema_registry"`
+	CSVConfig                *CSVConfig        `json:"csv"`
+	DispatchRules            []*DispatchRule   `json:"dispatchers,omitempty"`
+	ColumnSelectors          []*ColumnSelector `json:"column_selectors"`
+	TxnAtomicity             string            `json:"transaction_atomicity"`
+	EncoderConcurrency       int               `json:"encoder_concurrency"`
+	Terminator               string            `json:"terminator"`
+	DateSeparator            string            `json:"date_separator"`
+	EnablePartitionSeparator bool              `json:"enable_partition_separator"`
 }
 
 // CSVConfig denotes the csv config
@@ -432,9 +462,7 @@ type SinkConfig struct {
 type CSVConfig struct {
 	Delimiter       string `json:"delimiter"`
 	Quote           string `json:"quote"`
-	Terminator      string `json:"terminator"`
 	NullString      string `json:"null"`
-	DateSeparator   string `json:"date_separator"`
 	IncludeCommitTs bool   `json:"include_commit_ts"`
 }
 

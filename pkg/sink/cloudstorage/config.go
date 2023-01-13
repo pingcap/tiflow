@@ -39,7 +39,7 @@ const (
 	minFlushInterval = 2 * time.Second
 	// the upper limit of flush-interval.
 	maxFlushInterval = 10 * time.Minute
-	// defaultFileSize is the default value of file-sze.
+	// defaultFileSize is the default value of file-size.
 	defaultFileSize = 64 * 1024 * 1024
 	// the lower limit of file size
 	minFileSize = 1024 * 1024
@@ -49,10 +49,11 @@ const (
 
 // Config is the configuration for cloud storage sink.
 type Config struct {
-	WorkerCount   int
-	FlushInterval time.Duration
-	FileSize      int
-	DateSeparator string
+	WorkerCount              int
+	FlushInterval            time.Duration
+	FileSize                 int
+	DateSeparator            string
+	EnablePartitionSeparator bool
 }
 
 // NewConfig returns the default cloud storage sink config.
@@ -91,7 +92,8 @@ func (c *Config) Apply(
 		return err
 	}
 
-	c.DateSeparator = replicaConfig.Sink.CSVConfig.DateSeparator
+	c.DateSeparator = replicaConfig.Sink.DateSeparator
+	c.EnablePartitionSeparator = replicaConfig.Sink.EnablePartitionSeparator
 
 	return nil
 }

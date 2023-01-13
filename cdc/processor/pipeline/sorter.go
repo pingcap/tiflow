@@ -121,7 +121,9 @@ func newSorterNode(
 	}
 }
 
-func createSorter(ctx pipeline.NodeContext, tableName string, tableID model.TableID) (sorter.EventSorter, error) {
+func createSorter(
+	ctx pipeline.NodeContext, tableName string, span tablepb.Span,
+) (sorter.EventSorter, error) {
 	sortEngine := ctx.ChangefeedVars().Info.Engine
 	switch sortEngine {
 	// `file` and `memory` become aliases of `unified` for backward compatibility.
@@ -147,10 +149,10 @@ func createSorter(ctx pipeline.NodeContext, tableName string, tableID model.Tabl
 			}
 			startTs := ctx.ChangefeedVars().Info.StartTs
 			ssystem := ctx.GlobalVars().SorterSystem
-			dbActorID := ssystem.DBActorID(uint64(tableID))
+			dbActorID := ssystem.DBActorID(span)
 			compactScheduler := ctx.GlobalVars().SorterSystem.CompactScheduler()
 			levelSorter, err := db.NewSorter(
-				ctx, ctx.ChangefeedVars().ID, tableID, startTs, ssystem.DBRouter, dbActorID,
+				ctx, ctx.ChangefeedVars().ID, span, startTs, ssystem.DBRouter, dbActorID,
 				ssystem.WriterSystem, ssystem.WriterRouter,
 				ssystem.ReaderSystem, ssystem.ReaderRouter,
 				compactScheduler, config.GetGlobalServerConfig().Debug.DB)
@@ -162,7 +164,8 @@ func createSorter(ctx pipeline.NodeContext, tableName string, tableID model.Tabl
 		// Sorter dir has been set and checked when server starts.
 		// See https://github.com/pingcap/tiflow/blob/9dad09/cdc/server.go#L275
 		sortDir := config.GetGlobalServerConfig().Sorter.SortDir
-		unifiedSorter, err := unified.NewUnifiedSorter(sortDir, ctx.ChangefeedVars().ID, tableName, tableID)
+		unifiedSorter, err := unified.NewUnifiedSorter(
+			sortDir, ctx.ChangefeedVars().ID, tableName, span.TableID)
 		if err != nil {
 			return nil, err
 		}
@@ -420,6 +423,9 @@ func (n *sorterNode) start(
 				}
 				lastCRTs = e.CRTs
 				ctx.SendToNextNode(pmessage.PolymorphicEventMessage(e))
+			}
+			for i := 0; i < index; i++ {
+				events[i] = nil
 			}
 		}
 	})

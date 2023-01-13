@@ -22,6 +22,7 @@ services:
 
     dm_downstream_pd:
         image: pingcap/pd:nightly
+        container_name: dm_downstream_pd
         ports:
             - "2379"
         command:
@@ -36,6 +37,7 @@ services:
 
     dm_downstream_tikv:
         image: pingcap/tikv:nightly
+        container_name: dm_downstream_tikv
         command:
             - --addr=0.0.0.0:20160
             - --advertise-addr=dm_downstream_tikv:20160
@@ -46,6 +48,7 @@ services:
 
     dm_downstream_tidb:
         image: pingcap/tidb:nightly
+        container_name: dm_downstream_tidb
         ports:
             - "4000:4000"
             - "10080:10080"

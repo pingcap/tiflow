@@ -26,12 +26,12 @@ import (
 	"github.com/pingcap/tidb/util/dbutil"
 	"github.com/pingcap/tidb/util/filter"
 	"github.com/pingcap/tiflow/dm/config"
+	"github.com/pingcap/tiflow/dm/config/dbconfig"
 	"github.com/pingcap/tiflow/dm/pkg/conn"
 	tcontext "github.com/pingcap/tiflow/dm/pkg/context"
 	"github.com/pingcap/tiflow/dm/pkg/cputil"
 	parserpkg "github.com/pingcap/tiflow/dm/pkg/parser"
 	"github.com/pingcap/tiflow/dm/pkg/terror"
-	"github.com/pingcap/tiflow/dm/pkg/utils"
 	"github.com/pingcap/tiflow/dm/syncer/dbconn"
 	"github.com/pingcap/tiflow/dm/syncer/metrics"
 	"go.uber.org/zap"
@@ -66,7 +66,7 @@ type OnlinePlugin interface {
 	// CheckAndUpdate try to check and fix the schema/table case-sensitive issue
 	CheckAndUpdate(tctx *tcontext.Context, schemas map[string]string, tables map[string]map[string]string) error
 	// CheckRegex checks the regex of shadow/trash table rules and reports an error if a ddl event matches only either of the rules
-	CheckRegex(stmt ast.StmtNode, schema string, flavor utils.LowerCaseTableNamesFlavor) error
+	CheckRegex(stmt ast.StmtNode, schema string, flavor conn.LowerCaseTableNamesFlavor) error
 }
 
 // TableType is type of table.
@@ -134,8 +134,8 @@ func NewOnlineDDLStorage(
 // Init initials online handler.
 func (s *Storage) Init(tctx *tcontext.Context) error {
 	onlineDB := s.cfg.To
-	onlineDB.RawDBCfg = config.DefaultRawDBConfig().SetReadTimeout(maxCheckPointTimeout)
-	db, dbConns, err := dbconn.CreateConns(tctx, s.cfg, &onlineDB, 1)
+	onlineDB.RawDBCfg = dbconfig.DefaultRawDBConfig().SetReadTimeout(maxCheckPointTimeout)
+	db, dbConns, err := dbconn.CreateConns(tctx, s.cfg, conn.DownstreamDBConfig(&onlineDB), 1, s.cfg.IOTotalBytes, s.cfg.UUID)
 	if err != nil {
 		return terror.WithScope(err, terror.ScopeDownstream)
 	}
@@ -175,7 +175,7 @@ func (s *Storage) Load(tctx *tcontext.Context) error {
 	for rows.Next() {
 		err := rows.Scan(&schema, &table, &ddls)
 		if err != nil {
-			return terror.WithScope(terror.DBErrorAdapt(err, terror.ErrDBDriverError), terror.ScopeDownstream)
+			return terror.DBErrorAdapt(err, s.dbConn.Scope(), terror.ErrDBDriverError)
 		}
 
 		mSchema, ok := s.ddls[schema]
@@ -194,7 +194,7 @@ func (s *Storage) Load(tctx *tcontext.Context) error {
 			zap.String("table", table))
 	}
 
-	return terror.WithScope(terror.DBErrorAdapt(rows.Err(), terror.ErrDBDriverError), terror.ScopeDownstream)
+	return terror.DBErrorAdapt(rows.Err(), s.dbConn.Scope(), terror.ErrDBDriverError)
 }
 
 // Get returns ddls by given schema/table.
@@ -589,7 +589,7 @@ func (r *RealOnlinePlugin) CheckAndUpdate(tctx *tcontext.Context, schemas map[st
 }
 
 // CheckRegex checks the regex of shadow/trash table rules and reports an error if a ddl event matches only either of the rules.
-func (r *RealOnlinePlugin) CheckRegex(stmt ast.StmtNode, schema string, flavor utils.LowerCaseTableNamesFlavor) error {
+func (r *RealOnlinePlugin) CheckRegex(stmt ast.StmtNode, schema string, flavor conn.LowerCaseTableNamesFlavor) error {
 	var (
 		v  *ast.RenameTableStmt
 		ok bool
@@ -658,9 +658,9 @@ func unmatchedOnlineDDLRules(match int) string {
 	}
 }
 
-func fetchTable(t *ast.TableName, flavor utils.LowerCaseTableNamesFlavor) *filter.Table {
+func fetchTable(t *ast.TableName, flavor conn.LowerCaseTableNamesFlavor) *filter.Table {
 	var tb *filter.Table
-	if flavor == utils.LCTableNamesSensitive {
+	if flavor == conn.LCTableNamesSensitive {
 		tb = &filter.Table{Schema: t.Schema.O, Name: t.Name.O}
 	} else {
 		tb = &filter.Table{Schema: t.Schema.L, Name: t.Name.L}

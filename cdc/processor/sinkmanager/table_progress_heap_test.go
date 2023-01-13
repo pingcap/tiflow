@@ -16,7 +16,8 @@ package sinkmanager
 import (
 	"testing"
 
-	"github.com/pingcap/tiflow/pkg/sorter"
+	"github.com/pingcap/tiflow/cdc/processor/sourcemanager/engine"
+	"github.com/pingcap/tiflow/pkg/spanz"
 	"github.com/stretchr/testify/require"
 )
 
@@ -25,22 +26,22 @@ func TestTableProgresses(t *testing.T) {
 
 	p := newTableProgresses()
 	p.push(&progress{
-		tableID: 1,
-		nextLowerBoundPos: sorter.Position{
+		span: spanz.TableIDToComparableSpan(1),
+		nextLowerBoundPos: engine.Position{
 			StartTs:  1,
 			CommitTs: 2,
 		},
 	})
 	p.push(&progress{
-		tableID: 3,
-		nextLowerBoundPos: sorter.Position{
+		span: spanz.TableIDToComparableSpan(3),
+		nextLowerBoundPos: engine.Position{
 			StartTs:  2,
 			CommitTs: 2,
 		},
 	})
 	p.push(&progress{
-		tableID: 2,
-		nextLowerBoundPos: sorter.Position{
+		span: spanz.TableIDToComparableSpan(2),
+		nextLowerBoundPos: engine.Position{
 			StartTs:  2,
 			CommitTs: 3,
 		},
@@ -49,11 +50,11 @@ func TestTableProgresses(t *testing.T) {
 	require.Equal(t, p.len(), 3)
 
 	pg := p.pop()
-	require.Equal(t, int64(1), pg.tableID, "table1 is the slowest table")
+	require.Equal(t, spanz.TableIDToComparableSpan(1), pg.span, "table1 is the slowest table")
 	pg = p.pop()
-	require.Equal(t, int64(3), pg.tableID, "table2 is the slowest table")
+	require.Equal(t, spanz.TableIDToComparableSpan(3), pg.span, "table2 is the slowest table")
 	pg = p.pop()
-	require.Equal(t, int64(2), pg.tableID, "table3 is the slowest table")
+	require.Equal(t, spanz.TableIDToComparableSpan(2), pg.span, "table3 is the slowest table")
 
 	require.Equal(t, p.len(), 0, "all tables are popped")
 }

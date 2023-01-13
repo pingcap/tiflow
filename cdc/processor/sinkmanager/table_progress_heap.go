@@ -17,14 +17,15 @@ import (
 	"container/heap"
 	"sync"
 
-	"github.com/pingcap/tiflow/cdc/model"
-	"github.com/pingcap/tiflow/pkg/sorter"
+	"github.com/pingcap/tiflow/cdc/processor/sourcemanager/engine"
+	"github.com/pingcap/tiflow/cdc/processor/tablepb"
 )
 
 // progress is the fetch progress of a table.
 type progress struct {
-	tableID           model.TableID
-	nextLowerBoundPos sorter.Position
+	span              tablepb.Span
+	nextLowerBoundPos engine.Position
+	version           uint64
 }
 
 // Assert progressHeap implements heap.Interface
@@ -45,7 +46,9 @@ func (p *progressHeap) Len() int {
 }
 
 func (p *progressHeap) Less(i, j int) bool {
-	return p.heap[i].nextLowerBoundPos.Compare(p.heap[j].nextLowerBoundPos) == -1
+	a := p.heap[i]
+	b := p.heap[j]
+	return a.nextLowerBoundPos.Compare(b.nextLowerBoundPos) == -1
 }
 
 func (p *progressHeap) Swap(i, j int) {

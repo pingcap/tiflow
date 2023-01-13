@@ -76,13 +76,17 @@ func verifyCreateChangefeedConfig(
 		}
 		changefeedConfig.StartTS = oracle.ComposeTS(ts, logical)
 	}
+	etcdClient, err := capture.GetEtcdClient()
+	if err != nil {
+		return nil, err
+	}
 
 	// Ensure the start ts is valid in the next 1 hour.
 	const ensureTTL = 60 * 60
 	if err := gc.EnsureChangefeedStartTsSafety(
 		ctx,
 		up.PDClient,
-		capture.GetEtcdClient().GetEnsureGCServiceID(gc.EnsureGCServiceCreating),
+		etcdClient.GetEnsureGCServiceID(gc.EnsureGCServiceCreating),
 		model.DefaultChangeFeedID(changefeedConfig.ID),
 		ensureTTL, changefeedConfig.StartTS); err != nil {
 		if !cerror.ErrStartTsBeforeGC.Equal(err) {
@@ -132,6 +136,8 @@ func verifyCreateChangefeedConfig(
 
 	// init ChangefeedInfo
 	info := &model.ChangeFeedInfo{
+		Namespace:      model.DefaultNamespace,
+		ID:             changefeedConfig.ID,
 		UpstreamID:     up.ID,
 		SinkURI:        changefeedConfig.SinkURI,
 		CreateTime:     time.Now(),
@@ -199,22 +205,32 @@ func VerifyUpdateChangefeedConfig(ctx context.Context,
 		}
 	}
 
+	var sinkConfigUpdated, sinkURIUpdated bool
 	if len(changefeedConfig.IgnoreTxnStartTs) != 0 {
 		newInfo.Config.Filter.IgnoreTxnStartTs = changefeedConfig.IgnoreTxnStartTs
 	}
-
 	if changefeedConfig.MounterWorkerNum != 0 {
 		newInfo.Config.Mounter.WorkerNum = changefeedConfig.MounterWorkerNum
 	}
-
 	if changefeedConfig.SinkConfig != nil {
+		sinkConfigUpdated = true
 		newInfo.Config.Sink = changefeedConfig.SinkConfig
 	}
-
-	// verify sink_uri
 	if changefeedConfig.SinkURI != "" {
+		sinkURIUpdated = true
 		newInfo.SinkURI = changefeedConfig.SinkURI
-		if err := sink.Validate(ctx, changefeedConfig.SinkURI, newInfo.Config); err != nil {
+	}
+
+	if sinkConfigUpdated || sinkURIUpdated {
+		// check sink config is compatible with sinkURI
+		newCfg := newInfo.Config.Sink
+		oldCfg := oldInfo.Config.Sink
+		err := newCfg.CheckCompatibilityWithSinkURI(oldCfg, newInfo.SinkURI)
+		if err != nil {
+			return nil, cerror.ErrChangefeedUpdateRefused.GenWithStackByCause(err)
+		}
+
+		if err := sink.Validate(ctx, newInfo.SinkURI, newInfo.Config); err != nil {
 			return nil, cerror.ErrChangefeedUpdateRefused.GenWithStackByCause(err)
 		}
 	}

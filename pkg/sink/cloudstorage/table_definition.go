@@ -24,6 +24,8 @@ import (
 	"github.com/pingcap/tiflow/cdc/model"
 )
 
+const defaultTableDefinitionVersion = 1
+
 // TableCol denotes the column info for a table definition.
 type TableCol struct {
 	Name      string `json:"ColumnName" `
@@ -151,20 +153,46 @@ func (t *TableCol) ToTiColumnInfo() (*timodel.ColumnInfo, error) {
 	return col, nil
 }
 
-// TableDetail is the detailed table definition used for cloud storage sink.
-type TableDetail struct {
-	Table        string     `json:"Table"`
-	Schema       string     `json:"Schema"`
-	Version      uint64     `json:"Version"`
-	Columns      []TableCol `json:"TableColumns"`
-	TotalColumns int        `json:"TableColumnsTotal"`
+// TableDefinition is the detailed table definition used for cloud storage sink.
+type TableDefinition struct {
+	Table        string             `json:"Table"`
+	Schema       string             `json:"Schema"`
+	Version      uint64             `json:"Version"`
+	TableVersion uint64             `json:"TableVersion"`
+	Query        string             `json:"Query"`
+	Type         timodel.ActionType `json:"Type"`
+	Columns      []TableCol         `json:"TableColumns"`
+	TotalColumns int                `json:"TableColumnsTotal"`
 }
 
-// FromTableInfo converts from TableInfo to TableDetail.
-func (t *TableDetail) FromTableInfo(info *model.TableInfo) {
+// FromDDLEvent converts from DDLEvent to TableDefinition.
+func (t *TableDefinition) FromDDLEvent(event *model.DDLEvent) {
+	t.FromTableInfo(event.TableInfo)
+	t.Query = event.Query
+	t.Type = event.Type
+}
+
+// ToDDLEvent converts from TableDefinition to DDLEvent.
+func (t *TableDefinition) ToDDLEvent() (*model.DDLEvent, error) {
+	tableInfo, err := t.ToTableInfo()
+	if err != nil {
+		return nil, err
+	}
+
+	return &model.DDLEvent{
+		TableInfo: tableInfo,
+		CommitTs:  t.TableVersion,
+		Type:      t.Type,
+		Query:     t.Query,
+	}, nil
+}
+
+// FromTableInfo converts from TableInfo to TableDefinition.
+func (t *TableDefinition) FromTableInfo(info *model.TableInfo) {
 	t.Table = info.TableName.Table
 	t.Schema = info.TableName.Schema
-	t.Version = info.TableInfoVersion
+	t.Version = defaultTableDefinitionVersion
+	t.TableVersion = info.Version
 	t.TotalColumns = len(info.Columns)
 	for _, col := range info.Columns {
 		var tableCol TableCol
@@ -173,8 +201,8 @@ func (t *TableDetail) FromTableInfo(info *model.TableInfo) {
 	}
 }
 
-// ToTableInfo converts from TableDetail to TableInfo.
-func (t *TableDetail) ToTableInfo() (*model.TableInfo, error) {
+// ToTableInfo converts from TableDefinition to DDLEvent.
+func (t *TableDefinition) ToTableInfo() (*model.TableInfo, error) {
 	info := &model.TableInfo{
 		TableName: model.TableName{
 			Schema: t.Schema,

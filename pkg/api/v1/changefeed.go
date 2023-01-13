@@ -31,9 +31,6 @@ type ChangefeedsGetter interface {
 type ChangefeedInterface interface {
 	Get(ctx context.Context, name string) (*model.ChangefeedDetail, error)
 	List(ctx context.Context, state string) (*[]model.ChangefeedCommonInfo, error)
-	Delete(ctx context.Context, name string) error
-	Pause(ctx context.Context, name string) error
-	Resume(ctx context.Context, name string) error
 }
 
 // changefeeds implements ChangefeedInterface
@@ -71,28 +68,4 @@ func (c *changefeeds) List(ctx context.Context,
 		Do(ctx).
 		Into(result)
 	return result, err
-}
-
-// Pause the changefeed
-func (c *changefeeds) Pause(ctx context.Context, name string) error {
-	u := fmt.Sprintf("changefeeds/%s/pause", name)
-	return c.client.Post().
-		WithURI(u).
-		Do(ctx).Error()
-}
-
-// Resume a changefeed
-func (c *changefeeds) Resume(ctx context.Context, name string) error {
-	u := fmt.Sprintf("changefeeds/%s/resume", name)
-	return c.client.Post().
-		WithURI(u).
-		Do(ctx).Error()
-}
-
-// Delete delete the changefeed
-func (c *changefeeds) Delete(ctx context.Context, name string) error {
-	u := fmt.Sprintf("changefeeds/%s", name)
-	return c.client.Delete().
-		WithURI(u).
-		Do(ctx).Error()
 }

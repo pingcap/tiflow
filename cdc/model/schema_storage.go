@@ -35,11 +35,11 @@ type TableInfo struct {
 	*model.TableInfo
 	SchemaID  int64
 	TableName TableName
-	// TableInfoVersion record the tso of create the table info.
-	TableInfoVersion uint64
-	columnsOffset    map[int64]int
-	indicesOffset    map[int64]int
-	uniqueColumns    map[int64]struct{}
+	// Version record the tso of create the table info.
+	Version       uint64
+	columnsOffset map[int64]int
+	indicesOffset map[int64]int
+	uniqueColumns map[int64]struct{}
 
 	// It's a mapping from ColumnID to the offset of the columns in row changed events.
 	RowColumnsOffset map[int64]int
@@ -66,11 +66,12 @@ func WrapTableInfo(schemaID int64, schemaName string, version uint64, info *mode
 		TableInfo: info,
 		SchemaID:  schemaID,
 		TableName: TableName{
-			Schema:  schemaName,
-			Table:   info.Name.O,
-			TableID: info.ID,
+			Schema:      schemaName,
+			Table:       info.Name.O,
+			TableID:     info.ID,
+			IsPartition: info.GetPartitionInfo() != nil,
 		},
-		TableInfoVersion: version,
+		Version:          version,
 		columnsOffset:    make(map[int64]int, len(info.Columns)),
 		indicesOffset:    make(map[int64]int, len(info.Indices)),
 		uniqueColumns:    make(map[int64]struct{}),
@@ -301,5 +302,5 @@ func (ti *TableInfo) IsIndexUnique(indexInfo *model.IndexInfo) bool {
 
 // Clone clones the TableInfo
 func (ti *TableInfo) Clone() *TableInfo {
-	return WrapTableInfo(ti.SchemaID, ti.TableName.Schema, ti.TableInfoVersion, ti.TableInfo.Clone())
+	return WrapTableInfo(ti.SchemaID, ti.TableName.Schema, ti.Version, ti.TableInfo.Clone())
 }

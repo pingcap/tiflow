@@ -34,10 +34,10 @@ import (
 	"github.com/pingcap/tidb/kv"
 	"github.com/pingcap/tidb/store/mockstore/mockcopr"
 	"github.com/pingcap/tiflow/cdc/model"
+	"github.com/pingcap/tiflow/cdc/processor/tablepb"
 	"github.com/pingcap/tiflow/pkg/config"
 	cerror "github.com/pingcap/tiflow/pkg/errors"
 	"github.com/pingcap/tiflow/pkg/pdutil"
-	"github.com/pingcap/tiflow/pkg/regionspan"
 	"github.com/pingcap/tiflow/pkg/retry"
 	"github.com/pingcap/tiflow/pkg/security"
 	"github.com/pingcap/tiflow/pkg/txnutil"
@@ -72,7 +72,7 @@ func TestNewClient(t *testing.T) {
 	defer regionCache.Close()
 	cli := NewCDCClient(
 		context.Background(), pdClient, grpcPool, regionCache, pdutil.NewClock4Test(),
-		config.GetDefaultServerConfig().KVClient, model.DefaultChangeFeedID(""), 0, "")
+		config.GetDefaultServerConfig().KVClient, model.DefaultChangeFeedID(""), 0, "", false)
 	require.NotNil(t, cli)
 }
 
@@ -320,7 +320,7 @@ func TestConnectOfflineTiKV(t *testing.T) {
 	defer regionCache.Close()
 	cdcClient := NewCDCClient(
 		context.Background(), pdClient, grpcPool, regionCache, pdutil.NewClock4Test(),
-		config.GetDefaultServerConfig().KVClient, changefeed, 0, "")
+		config.GetDefaultServerConfig().KVClient, changefeed, 0, "", false)
 	// Take care of the eventCh, it's used to output resolvedTs event or kv event
 	// It will stuck the normal routine
 	eventCh := make(chan model.RegionFeedEvent, 50)
@@ -328,7 +328,7 @@ func TestConnectOfflineTiKV(t *testing.T) {
 	go func() {
 		defer wg.Done()
 		err := cdcClient.EventFeed(ctx,
-			regionspan.ComparableSpan{Start: []byte("a"), End: []byte("b")},
+			tablepb.Span{StartKey: []byte("a"), EndKey: []byte("b")},
 			1, lockResolver, eventCh)
 		require.Equal(t, context.Canceled, errors.Cause(err))
 	}()
@@ -422,13 +422,13 @@ func TestRecvLargeMessageSize(t *testing.T) {
 	defer regionCache.Close()
 	cdcClient := NewCDCClient(
 		ctx, pdClient, grpcPool, regionCache, pdutil.NewClock4Test(),
-		config.GetDefaultServerConfig().KVClient, changefeed, 0, "")
+		config.GetDefaultServerConfig().KVClient, changefeed, 0, "", false)
 	eventCh := make(chan model.RegionFeedEvent, 50)
 	wg.Add(1)
 	go func() {
 		defer wg.Done()
 		err := cdcClient.EventFeed(ctx,
-			regionspan.ComparableSpan{Start: []byte("a"), End: []byte("b")},
+			tablepb.Span{StartKey: []byte("a"), EndKey: []byte("b")},
 			1, lockResolver, eventCh)
 		require.Equal(t, context.Canceled, errors.Cause(err))
 	}()
@@ -522,13 +522,13 @@ func TestHandleError(t *testing.T) {
 	defer regionCache.Close()
 	cdcClient := NewCDCClient(
 		ctx, pdClient, grpcPool, regionCache, pdutil.NewClock4Test(),
-		config.GetDefaultServerConfig().KVClient, changefeed, 0, "")
+		config.GetDefaultServerConfig().KVClient, changefeed, 0, "", false)
 	eventCh := make(chan model.RegionFeedEvent, 50)
 	wg.Add(1)
 	go func() {
 		defer wg.Done()
 		err := cdcClient.EventFeed(ctx,
-			regionspan.ComparableSpan{Start: []byte("a"), End: []byte("d")},
+			tablepb.Span{StartKey: []byte("a"), EndKey: []byte("d")},
 			100, lockResolver, eventCh)
 		require.Equal(t, context.Canceled, errors.Cause(err))
 	}()
@@ -681,14 +681,14 @@ func TestCompatibilityWithSameConn(t *testing.T) {
 	defer regionCache.Close()
 	cdcClient := NewCDCClient(
 		ctx, pdClient, grpcPool, regionCache, pdutil.NewClock4Test(),
-		config.GetDefaultServerConfig().KVClient, changefeed, 0, "")
+		config.GetDefaultServerConfig().KVClient, changefeed, 0, "", false)
 	eventCh := make(chan model.RegionFeedEvent, 50)
 	var wg2 sync.WaitGroup
 	wg2.Add(1)
 	go func() {
 		defer wg2.Done()
 		err := cdcClient.EventFeed(ctx,
-			regionspan.ComparableSpan{Start: []byte("a"), End: []byte("b")},
+			tablepb.Span{StartKey: []byte("a"), EndKey: []byte("b")},
 			100, lockResolver, eventCh)
 		require.True(t, cerror.ErrVersionIncompatible.Equal(err))
 	}()
@@ -748,7 +748,7 @@ func TestClusterIDMismatch(t *testing.T) {
 	defer regionCache.Close()
 	cdcClient := NewCDCClient(
 		ctx, pdClient, grpcPool, regionCache, pdutil.NewClock4Test(),
-		config.GetDefaultServerConfig().KVClient, changefeed, 0, "")
+		config.GetDefaultServerConfig().KVClient, changefeed, 0, "", false)
 	eventCh := make(chan model.RegionFeedEvent, 50)
 
 	var wg2 sync.WaitGroup
@@ -756,7 +756,7 @@ func TestClusterIDMismatch(t *testing.T) {
 	go func() {
 		defer wg2.Done()
 		err := cdcClient.EventFeed(ctx,
-			regionspan.ComparableSpan{Start: []byte("a"), End: []byte("b")},
+			tablepb.Span{StartKey: []byte("a"), EndKey: []byte("b")},
 			100, lockResolver, eventCh)
 		require.True(t, cerror.ErrClusterIDMismatch.Equal(err))
 	}()
@@ -817,13 +817,13 @@ func testHandleFeedEvent(t *testing.T) {
 	defer regionCache.Close()
 	cdcClient := NewCDCClient(
 		ctx, pdClient, grpcPool, regionCache, pdutil.NewClock4Test(),
-		config.GetDefaultServerConfig().KVClient, changefeed, 0, "")
+		config.GetDefaultServerConfig().KVClient, changefeed, 0, "", false)
 	eventCh := make(chan model.RegionFeedEvent, 50)
 	wg.Add(1)
 	go func() {
 		defer wg.Done()
 		err := cdcClient.EventFeed(ctx,
-			regionspan.ComparableSpan{Start: []byte("a"), End: []byte("b")},
+			tablepb.Span{StartKey: []byte("a"), EndKey: []byte("b")},
 			100, lockResolver, eventCh)
 		require.Equal(t, context.Canceled, errors.Cause(err))
 	}()
@@ -1082,7 +1082,7 @@ func testHandleFeedEvent(t *testing.T) {
 		{
 			Resolved: &model.ResolvedSpans{
 				Spans: []model.RegionComparableSpan{{
-					Span:   regionspan.ComparableSpan{Start: []byte("a"), End: []byte("b")},
+					Span:   tablepb.Span{StartKey: []byte("a"), EndKey: []byte("b")},
 					Region: 3,
 				}}, ResolvedTs: 100,
 			},
@@ -1155,7 +1155,7 @@ func testHandleFeedEvent(t *testing.T) {
 		{
 			Resolved: &model.ResolvedSpans{
 				Spans: []model.RegionComparableSpan{{
-					Span:   regionspan.ComparableSpan{Start: []byte("a"), End: []byte("b")},
+					Span:   tablepb.Span{StartKey: []byte("a"), EndKey: []byte("b")},
 					Region: 3,
 				}}, ResolvedTs: 135,
 			},
@@ -1163,7 +1163,7 @@ func testHandleFeedEvent(t *testing.T) {
 		{
 			Resolved: &model.ResolvedSpans{
 				Spans: []model.RegionComparableSpan{{
-					Span:   regionspan.ComparableSpan{Start: []byte("a"), End: []byte("b")},
+					Span:   tablepb.Span{StartKey: []byte("a"), EndKey: []byte("b")},
 					Region: 3,
 				}}, ResolvedTs: 145,
 			},
@@ -1177,7 +1177,7 @@ func testHandleFeedEvent(t *testing.T) {
 	}
 	for i := range multipleExpected.Resolved.Spans {
 		multipleExpected.Resolved.Spans[i] = model.RegionComparableSpan{
-			Span:   regionspan.ComparableSpan{Start: []byte("a"), End: []byte("b")},
+			Span:   tablepb.Span{StartKey: []byte("a"), EndKey: []byte("b")},
 			Region: 3,
 		}
 	}
@@ -1278,13 +1278,13 @@ func TestStreamSendWithError(t *testing.T) {
 	defer regionCache.Close()
 	cdcClient := NewCDCClient(
 		ctx, pdClient, grpcPool, regionCache, pdutil.NewClock4Test(),
-		config.GetDefaultServerConfig().KVClient, changefeed, 0, "")
+		config.GetDefaultServerConfig().KVClient, changefeed, 0, "", false)
 	eventCh := make(chan model.RegionFeedEvent, 50)
 	wg.Add(1)
 	go func() {
 		defer wg.Done()
 		err := cdcClient.EventFeed(ctx,
-			regionspan.ComparableSpan{Start: []byte("a"), End: []byte("c")},
+			tablepb.Span{StartKey: []byte("a"), EndKey: []byte("c")},
 			100, lockerResolver, eventCh)
 		require.Equal(t, context.Canceled, errors.Cause(err))
 	}()
@@ -1390,13 +1390,13 @@ func testStreamRecvWithError(t *testing.T, failpointStr string) {
 	defer regionCache.Close()
 	cdcClient := NewCDCClient(
 		ctx, pdClient, grpcPool, regionCache, pdutil.NewClock4Test(),
-		config.GetDefaultServerConfig().KVClient, changefeed, 0, "")
+		config.GetDefaultServerConfig().KVClient, changefeed, 0, "", false)
 	eventCh := make(chan model.RegionFeedEvent, 50)
 	wg.Add(1)
 	go func() {
 		defer wg.Done()
 		err := cdcClient.EventFeed(ctx,
-			regionspan.ComparableSpan{Start: []byte("a"), End: []byte("b")},
+			tablepb.Span{StartKey: []byte("a"), EndKey: []byte("b")},
 			100, lockResolver, eventCh)
 		require.Equal(t, context.Canceled, errors.Cause(err))
 	}()
@@ -1442,7 +1442,7 @@ func testStreamRecvWithError(t *testing.T, failpointStr string) {
 		{
 			Resolved: &model.ResolvedSpans{
 				Spans: []model.RegionComparableSpan{{
-					Span:   regionspan.ComparableSpan{Start: []byte("a"), End: []byte("b")},
+					Span:   tablepb.Span{StartKey: []byte("a"), EndKey: []byte("b")},
 					Region: regionID,
 				}}, ResolvedTs: 120,
 			},
@@ -1450,7 +1450,7 @@ func testStreamRecvWithError(t *testing.T, failpointStr string) {
 		{
 			Resolved: &model.ResolvedSpans{
 				Spans: []model.RegionComparableSpan{{
-					Span:   regionspan.ComparableSpan{Start: []byte("a"), End: []byte("b")},
+					Span:   tablepb.Span{StartKey: []byte("a"), EndKey: []byte("b")},
 					Region: regionID,
 				}}, ResolvedTs: 120,
 			},
@@ -1523,14 +1523,14 @@ func TestStreamRecvWithErrorAndResolvedGoBack(t *testing.T) {
 	defer regionCache.Close()
 	cdcClient := NewCDCClient(
 		ctx, pdClient, grpcPool, regionCache, pdutil.NewClock4Test(),
-		config.GetDefaultServerConfig().KVClient, changefeed, 0, "")
+		config.GetDefaultServerConfig().KVClient, changefeed, 0, "", false)
 	eventCh := make(chan model.RegionFeedEvent, 50)
 	wg.Add(1)
 	go func() {
 		defer wg.Done()
 		defer close(eventCh)
 		err := cdcClient.EventFeed(ctx,
-			regionspan.ComparableSpan{Start: []byte("a"), End: []byte("b")},
+			tablepb.Span{StartKey: []byte("a"), EndKey: []byte("b")},
 			100, lockResolver, eventCh)
 		require.Equal(t, context.Canceled, errors.Cause(err))
 	}()
@@ -1732,14 +1732,14 @@ func TestIncompatibleTiKV(t *testing.T) {
 	defer regionCache.Close()
 	cdcClient := NewCDCClient(
 		ctx, pdClient, grpcPool, regionCache, pdutil.NewClock4Test(),
-		config.GetDefaultServerConfig().KVClient, changefeed, 0, "")
+		config.GetDefaultServerConfig().KVClient, changefeed, 0, "", false)
 	// NOTICE: eventCh may block the main logic of EventFeed
 	eventCh := make(chan model.RegionFeedEvent, 128)
 	wg.Add(1)
 	go func() {
 		defer wg.Done()
 		err := cdcClient.EventFeed(ctx,
-			regionspan.ComparableSpan{Start: []byte("a"), End: []byte("b")},
+			tablepb.Span{StartKey: []byte("a"), EndKey: []byte("b")},
 			100, lockResolver, eventCh)
 		require.Equal(t, context.Canceled, errors.Cause(err))
 	}()
@@ -1809,14 +1809,14 @@ func TestNoPendingRegionError(t *testing.T) {
 	defer regionCache.Close()
 	cdcClient := NewCDCClient(
 		ctx, pdClient, grpcPool, regionCache, pdutil.NewClock4Test(),
-		config.GetDefaultServerConfig().KVClient, changefeed, 0, "")
+		config.GetDefaultServerConfig().KVClient, changefeed, 0, "", false)
 	eventCh := make(chan model.RegionFeedEvent, 50)
 
 	wg.Add(1)
 	go func() {
 		defer wg.Done()
 		err := cdcClient.EventFeed(ctx,
-			regionspan.ComparableSpan{Start: []byte("a"), End: []byte("b")},
+			tablepb.Span{StartKey: []byte("a"), EndKey: []byte("b")},
 			100, lockResolver, eventCh)
 		require.Equal(t, context.Canceled, errors.Cause(err))
 	}()
@@ -1888,13 +1888,13 @@ func TestDropStaleRequest(t *testing.T) {
 	defer regionCache.Close()
 	cdcClient := NewCDCClient(
 		ctx, pdClient, grpcPool, regionCache, pdutil.NewClock4Test(),
-		config.GetDefaultServerConfig().KVClient, changefeed, 0, "")
+		config.GetDefaultServerConfig().KVClient, changefeed, 0, "", false)
 	eventCh := make(chan model.RegionFeedEvent, 50)
 	wg.Add(1)
 	go func() {
 		defer wg.Done()
 		err := cdcClient.EventFeed(ctx,
-			regionspan.ComparableSpan{Start: []byte("a"), End: []byte("b")},
+			tablepb.Span{StartKey: []byte("a"), EndKey: []byte("b")},
 			100, lockResolver, eventCh)
 		require.Equal(t, context.Canceled, errors.Cause(err))
 	}()
@@ -1925,7 +1925,7 @@ func TestDropStaleRequest(t *testing.T) {
 		{
 			Resolved: &model.ResolvedSpans{
 				Spans: []model.RegionComparableSpan{{
-					Span:   regionspan.ComparableSpan{Start: []byte("a"), End: []byte("b")},
+					Span:   tablepb.Span{StartKey: []byte("a"), EndKey: []byte("b")},
 					Region: regionID,
 				}}, ResolvedTs: 100,
 			},
@@ -1933,7 +1933,7 @@ func TestDropStaleRequest(t *testing.T) {
 		{
 			Resolved: &model.ResolvedSpans{
 				Spans: []model.RegionComparableSpan{{
-					Span:   regionspan.ComparableSpan{Start: []byte("a"), End: []byte("b")},
+					Span:   tablepb.Span{StartKey: []byte("a"), EndKey: []byte("b")},
 					Region: regionID,
 				}}, ResolvedTs: 120,
 			},
@@ -1941,7 +1941,7 @@ func TestDropStaleRequest(t *testing.T) {
 		{
 			Resolved: &model.ResolvedSpans{
 				Spans: []model.RegionComparableSpan{{
-					Span:   regionspan.ComparableSpan{Start: []byte("a"), End: []byte("b")},
+					Span:   tablepb.Span{StartKey: []byte("a"), EndKey: []byte("b")},
 					Region: regionID,
 				}}, ResolvedTs: 130,
 			},
@@ -2002,13 +2002,13 @@ func TestResolveLock(t *testing.T) {
 	defer regionCache.Close()
 	cdcClient := NewCDCClient(
 		ctx, pdClient, grpcPool, regionCache, pdutil.NewClock4Test(),
-		config.GetDefaultServerConfig().KVClient, changefeed, 0, "")
+		config.GetDefaultServerConfig().KVClient, changefeed, 0, "", false)
 	eventCh := make(chan model.RegionFeedEvent, 50)
 	wg.Add(1)
 	go func() {
 		defer wg.Done()
 		err := cdcClient.EventFeed(ctx,
-			regionspan.ComparableSpan{Start: []byte("a"), End: []byte("b")},
+			tablepb.Span{StartKey: []byte("a"), EndKey: []byte("b")},
 			100, lockResolver, eventCh)
 		require.Equal(t, context.Canceled, errors.Cause(err))
 	}()
@@ -2031,7 +2031,7 @@ func TestResolveLock(t *testing.T) {
 		{
 			Resolved: &model.ResolvedSpans{
 				Spans: []model.RegionComparableSpan{{
-					Span:   regionspan.ComparableSpan{Start: []byte("a"), End: []byte("b")},
+					Span:   tablepb.Span{StartKey: []byte("a"), EndKey: []byte("b")},
 					Region: regionID,
 				}}, ResolvedTs: 100,
 			},
@@ -2039,7 +2039,7 @@ func TestResolveLock(t *testing.T) {
 		{
 			Resolved: &model.ResolvedSpans{
 				Spans: []model.RegionComparableSpan{{
-					Span:   regionspan.ComparableSpan{Start: []byte("a"), End: []byte("b")},
+					Span:   tablepb.Span{StartKey: []byte("a"), EndKey: []byte("b")},
 					Region: regionID,
 				}}, ResolvedTs: tso,
 			},
@@ -2107,14 +2107,14 @@ func testEventCommitTsFallback(t *testing.T, events []*cdcpb.ChangeDataEvent) {
 	defer regionCache.Close()
 	cdcClient := NewCDCClient(
 		ctx, pdClient, grpcPool, regionCache, pdutil.NewClock4Test(),
-		config.GetDefaultServerConfig().KVClient, changefeed, 0, "")
+		config.GetDefaultServerConfig().KVClient, changefeed, 0, "", false)
 	eventCh := make(chan model.RegionFeedEvent, 50)
 	var clientWg sync.WaitGroup
 	clientWg.Add(1)
 	go func() {
 		defer clientWg.Done()
 		err := cdcClient.EventFeed(ctx,
-			regionspan.ComparableSpan{Start: []byte("a"), End: []byte("b")},
+			tablepb.Span{StartKey: []byte("a"), EndKey: []byte("b")},
 			100, lockResolver, eventCh)
 		require.Equal(t, errUnreachable, err)
 	}()
@@ -2260,13 +2260,13 @@ func testEventAfterFeedStop(t *testing.T) {
 	defer regionCache.Close()
 	cdcClient := NewCDCClient(
 		ctx, pdClient, grpcPool, regionCache, pdutil.NewClock4Test(),
-		config.GetDefaultServerConfig().KVClient, changefeed, 0, "")
+		config.GetDefaultServerConfig().KVClient, changefeed, 0, "", false)
 	eventCh := make(chan model.RegionFeedEvent, 50)
 	wg.Add(1)
 	go func() {
 		defer wg.Done()
 		err := cdcClient.EventFeed(ctx,
-			regionspan.ComparableSpan{Start: []byte("a"), End: []byte("b")},
+			tablepb.Span{StartKey: []byte("a"), EndKey: []byte("b")},
 			100, lockResolver, eventCh)
 		require.Equal(t, context.Canceled, errors.Cause(err))
 	}()
@@ -2367,7 +2367,7 @@ func testEventAfterFeedStop(t *testing.T) {
 		{
 			Resolved: &model.ResolvedSpans{
 				Spans: []model.RegionComparableSpan{{
-					Span:   regionspan.ComparableSpan{Start: []byte("a"), End: []byte("b")},
+					Span:   tablepb.Span{StartKey: []byte("a"), EndKey: []byte("b")},
 					Region: regionID,
 				}}, ResolvedTs: 100,
 			},
@@ -2376,7 +2376,7 @@ func testEventAfterFeedStop(t *testing.T) {
 		{
 			Resolved: &model.ResolvedSpans{
 				Spans: []model.RegionComparableSpan{{
-					Span:   regionspan.ComparableSpan{Start: []byte("a"), End: []byte("b")},
+					Span:   tablepb.Span{StartKey: []byte("a"), EndKey: []byte("b")},
 					Region: regionID,
 				}}, ResolvedTs: 100,
 			},
@@ -2396,7 +2396,7 @@ func testEventAfterFeedStop(t *testing.T) {
 		{
 			Resolved: &model.ResolvedSpans{
 				Spans: []model.RegionComparableSpan{{
-					Span:   regionspan.ComparableSpan{Start: []byte("a"), End: []byte("b")},
+					Span:   tablepb.Span{StartKey: []byte("a"), EndKey: []byte("b")},
 					Region: regionID,
 				}}, ResolvedTs: 120,
 			},
@@ -2447,13 +2447,13 @@ func TestOutOfRegionRangeEvent(t *testing.T) {
 	defer regionCache.Close()
 	cdcClient := NewCDCClient(
 		ctx, pdClient, grpcPool, regionCache, pdutil.NewClock4Test(),
-		config.GetDefaultServerConfig().KVClient, changefeed, 0, "")
+		config.GetDefaultServerConfig().KVClient, changefeed, 0, "", false)
 	eventCh := make(chan model.RegionFeedEvent, 50)
 	wg.Add(1)
 	go func() {
 		defer wg.Done()
 		err := cdcClient.EventFeed(ctx,
-			regionspan.ComparableSpan{Start: []byte("a"), End: []byte("b")},
+			tablepb.Span{StartKey: []byte("a"), EndKey: []byte("b")},
 			100, lockResolver, eventCh)
 		require.Equal(t, context.Canceled, errors.Cause(err))
 	}()
@@ -2573,7 +2573,7 @@ func TestOutOfRegionRangeEvent(t *testing.T) {
 		{
 			Resolved: &model.ResolvedSpans{
 				Spans: []model.RegionComparableSpan{{
-					Span:   regionspan.ComparableSpan{Start: []byte("a"), End: []byte("b")},
+					Span:   tablepb.Span{StartKey: []byte("a"), EndKey: []byte("b")},
 					Region: 3,
 				}}, ResolvedTs: 100,
 			},
@@ -2603,7 +2603,7 @@ func TestOutOfRegionRangeEvent(t *testing.T) {
 		{
 			Resolved: &model.ResolvedSpans{
 				Spans: []model.RegionComparableSpan{{
-					Span:   regionspan.ComparableSpan{Start: []byte("a"), End: []byte("b")},
+					Span:   tablepb.Span{StartKey: []byte("a"), EndKey: []byte("b")},
 					Region: 3,
 				}}, ResolvedTs: 145,
 			},
@@ -2665,13 +2665,13 @@ func TestResolveLockNoCandidate(t *testing.T) {
 	defer regionCache.Close()
 	cdcClient := NewCDCClient(
 		ctx, pdClient, grpcPool, regionCache, pdutil.NewClock4Test(),
-		config.GetDefaultServerConfig().KVClient, changefeed, 0, "")
+		config.GetDefaultServerConfig().KVClient, changefeed, 0, "", false)
 	eventCh := make(chan model.RegionFeedEvent, 50)
 	wg.Add(1)
 	go func() {
 		defer wg.Done()
 		err := cdcClient.EventFeed(ctx,
-			regionspan.ComparableSpan{Start: []byte("a"), End: []byte("b")},
+			tablepb.Span{StartKey: []byte("a"), EndKey: []byte("b")},
 			100, lockResolver, eventCh)
 		require.Equal(t, context.Canceled, errors.Cause(err))
 	}()
@@ -2761,13 +2761,13 @@ func TestFailRegionReentrant(t *testing.T) {
 	defer regionCache.Close()
 	cdcClient := NewCDCClient(
 		ctx, pdClient, grpcPool, regionCache, pdutil.NewClock4Test(),
-		config.GetDefaultServerConfig().KVClient, changefeed, 0, "")
+		config.GetDefaultServerConfig().KVClient, changefeed, 0, "", false)
 	eventCh := make(chan model.RegionFeedEvent, 50)
 	wg.Add(1)
 	go func() {
 		defer wg.Done()
 		err := cdcClient.EventFeed(ctx,
-			regionspan.ComparableSpan{Start: []byte("a"), End: []byte("b")},
+			tablepb.Span{StartKey: []byte("a"), EndKey: []byte("b")},
 			100, lockResolver, eventCh)
 		require.Equal(t, context.Canceled, errors.Cause(err))
 	}()
@@ -2844,13 +2844,13 @@ func TestClientV1UnlockRangeReentrant(t *testing.T) {
 	defer regionCache.Close()
 	cdcClient := NewCDCClient(
 		ctx, pdClient, grpcPool, regionCache, pdutil.NewClock4Test(),
-		config.GetDefaultServerConfig().KVClient, changefeed, 0, "")
+		config.GetDefaultServerConfig().KVClient, changefeed, 0, "", false)
 	eventCh := make(chan model.RegionFeedEvent, 50)
 	wg.Add(1)
 	go func() {
 		defer wg.Done()
 		err := cdcClient.EventFeed(ctx,
-			regionspan.ComparableSpan{Start: []byte("a"), End: []byte("c")},
+			tablepb.Span{StartKey: []byte("a"), EndKey: []byte("c")},
 			100, lockResolver, eventCh)
 		require.Equal(t, context.Canceled, errors.Cause(err))
 	}()
@@ -2912,13 +2912,13 @@ func testClientErrNoPendingRegion(t *testing.T) {
 	defer regionCache.Close()
 	cdcClient := NewCDCClient(
 		ctx, pdClient, grpcPool, regionCache, pdutil.NewClock4Test(),
-		config.GetDefaultServerConfig().KVClient, changefeed, 0, "")
+		config.GetDefaultServerConfig().KVClient, changefeed, 0, "", false)
 	eventCh := make(chan model.RegionFeedEvent, 50)
 	wg.Add(1)
 	go func() {
 		defer wg.Done()
 		err := cdcClient.EventFeed(ctx,
-			regionspan.ComparableSpan{Start: []byte("a"), End: []byte("c")},
+			tablepb.Span{StartKey: []byte("a"), EndKey: []byte("c")},
 			100, lockResolver, eventCh)
 		require.Equal(t, context.Canceled, errors.Cause(err))
 	}()
@@ -2990,13 +2990,13 @@ func testKVClientForceReconnect(t *testing.T) {
 	defer regionCache.Close()
 	cdcClient := NewCDCClient(
 		ctx, pdClient, grpcPool, regionCache, pdutil.NewClock4Test(),
-		config.GetDefaultServerConfig().KVClient, changefeed, 0, "")
+		config.GetDefaultServerConfig().KVClient, changefeed, 0, "", false)
 	eventCh := make(chan model.RegionFeedEvent, 50)
 	wg.Add(1)
 	go func() {
 		defer wg.Done()
 		err := cdcClient.EventFeed(ctx,
-			regionspan.ComparableSpan{Start: []byte("a"), End: []byte("c")},
+			tablepb.Span{StartKey: []byte("a"), EndKey: []byte("c")},
 			100, lockResolver, eventCh)
 		require.Equal(t, context.Canceled, errors.Cause(err))
 	}()
@@ -3060,7 +3060,7 @@ func testKVClientForceReconnect(t *testing.T) {
 	expected := model.RegionFeedEvent{
 		Resolved: &model.ResolvedSpans{
 			Spans: []model.RegionComparableSpan{{
-				Span:   regionspan.ComparableSpan{Start: []byte("a"), End: []byte("c")},
+				Span:   tablepb.Span{StartKey: []byte("a"), EndKey: []byte("c")},
 				Region: regionID3,
 			}}, ResolvedTs: 135,
 		},
@@ -3141,13 +3141,13 @@ func TestConcurrentProcessRangeRequest(t *testing.T) {
 	defer regionCache.Close()
 	cdcClient := NewCDCClient(
 		ctx, pdClient, grpcPool, regionCache, pdutil.NewClock4Test(),
-		config.GetDefaultServerConfig().KVClient, changefeed, 0, "")
+		config.GetDefaultServerConfig().KVClient, changefeed, 0, "", false)
 	eventCh := make(chan model.RegionFeedEvent, 100)
 	wg.Add(1)
 	go func() {
 		defer wg.Done()
 		err := cdcClient.EventFeed(ctx,
-			regionspan.ComparableSpan{Start: []byte("a"), End: []byte("z")},
+			tablepb.Span{StartKey: []byte("a"), EndKey: []byte("z")},
 			100, lockResolver, eventCh)
 		require.Equal(t, context.Canceled, errors.Cause(err))
 	}()
@@ -3258,13 +3258,13 @@ func TestEvTimeUpdate(t *testing.T) {
 	defer regionCache.Close()
 	cdcClient := NewCDCClient(
 		ctx, pdClient, grpcPool, regionCache, pdutil.NewClock4Test(),
-		config.GetDefaultServerConfig().KVClient, changefeed, 0, "")
+		config.GetDefaultServerConfig().KVClient, changefeed, 0, "", false)
 	eventCh := make(chan model.RegionFeedEvent, 50)
 	wg.Add(1)
 	go func() {
 		defer wg.Done()
 		err := cdcClient.EventFeed(ctx,
-			regionspan.ComparableSpan{Start: []byte("a"), End: []byte("b")},
+			tablepb.Span{StartKey: []byte("a"), EndKey: []byte("b")},
 			100, lockResolver, eventCh)
 		require.Equal(t, context.Canceled, errors.Cause(err))
 	}()
@@ -3300,7 +3300,7 @@ func TestEvTimeUpdate(t *testing.T) {
 		{
 			Resolved: &model.ResolvedSpans{
 				Spans: []model.RegionComparableSpan{{
-					Span:   regionspan.ComparableSpan{Start: []byte("a"), End: []byte("b")},
+					Span:   tablepb.Span{StartKey: []byte("a"), EndKey: []byte("b")},
 					Region: 3,
 				}}, ResolvedTs: 100,
 			},
@@ -3384,13 +3384,13 @@ func TestRegionWorkerExitWhenIsIdle(t *testing.T) {
 	defer regionCache.Close()
 	cdcClient := NewCDCClient(
 		ctx, pdClient, grpcPool, regionCache, pdutil.NewClock4Test(),
-		config.GetDefaultServerConfig().KVClient, changefeed, 0, "")
+		config.GetDefaultServerConfig().KVClient, changefeed, 0, "", false)
 	eventCh := make(chan model.RegionFeedEvent, 50)
 	wg.Add(1)
 	go func() {
 		defer wg.Done()
 		err := cdcClient.EventFeed(ctx,
-			regionspan.ComparableSpan{Start: []byte("a"), End: []byte("b")},
+			tablepb.Span{StartKey: []byte("a"), EndKey: []byte("b")},
 			100, lockResolver, eventCh)
 		require.Equal(t, context.Canceled, errors.Cause(err))
 	}()
@@ -3476,7 +3476,7 @@ func TestPrewriteNotMatchError(t *testing.T) {
 	defer regionCache.Close()
 	cdcClient := NewCDCClient(
 		ctx, pdClient, grpcPool, regionCache, pdutil.NewClock4Test(),
-		config.GetDefaultServerConfig().KVClient, changefeed, 0, "")
+		config.GetDefaultServerConfig().KVClient, changefeed, 0, "", false)
 	eventCh := make(chan model.RegionFeedEvent, 50)
 	baseAllocatedID := currentRequestID()
 
@@ -3484,7 +3484,7 @@ func TestPrewriteNotMatchError(t *testing.T) {
 	go func() {
 		defer wg.Done()
 		err = cdcClient.EventFeed(ctx,
-			regionspan.ComparableSpan{Start: []byte("a"), End: []byte("c")},
+			tablepb.Span{StartKey: []byte("a"), EndKey: []byte("c")},
 			100, lockResolver, eventCh)
 		require.Equal(t, context.Canceled, errors.Cause(err))
 	}()
@@ -3562,7 +3562,7 @@ func createFakeEventFeedSession(ctx context.Context) *eventFeedSession {
 			regionLimiters: defaultRegionEventFeedLimiters,
 			config:         config.GetDefaultServerConfig().KVClient,
 		},
-		regionspan.ComparableSpan{Start: []byte("a"), End: []byte("b")},
+		tablepb.Span{StartKey: []byte("a"), EndKey: []byte("b")},
 		nil, /*lockResolver*/
 		100, /*startTs*/
 		nil, /*eventCh*/

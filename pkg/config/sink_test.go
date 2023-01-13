@@ -81,27 +81,27 @@ func TestValidateOldValue(t *testing.T) {
 	}
 }
 
-func TestValidateApplyParameter(t *testing.T) {
+func TestValidateTxnAtomicity(t *testing.T) {
 	t.Parallel()
 	testCases := []struct {
-		sinkURI       string
-		expectedErr   string
-		expectedLevel AtomicityLevel
+		sinkURI        string
+		expectedErr    string
+		shouldSplitTxn bool
 	}{
 		{
-			sinkURI:       "mysql://normal:123456@127.0.0.1:3306",
-			expectedErr:   "",
-			expectedLevel: noneTxnAtomicity,
+			sinkURI:        "mysql://normal:123456@127.0.0.1:3306",
+			expectedErr:    "",
+			shouldSplitTxn: true,
 		},
 		{
-			sinkURI:       "mysql://normal:123456@127.0.0.1:3306?transaction-atomicity=table",
-			expectedErr:   "",
-			expectedLevel: tableTxnAtomicity,
+			sinkURI:        "mysql://normal:123456@127.0.0.1:3306?transaction-atomicity=table",
+			expectedErr:    "",
+			shouldSplitTxn: false,
 		},
 		{
-			sinkURI:       "mysql://normal:123456@127.0.0.1:3306?transaction-atomicity=none",
-			expectedErr:   "",
-			expectedLevel: noneTxnAtomicity,
+			sinkURI:        "mysql://normal:123456@127.0.0.1:3306?transaction-atomicity=none",
+			expectedErr:    "",
+			shouldSplitTxn: true,
 		},
 		{
 			sinkURI:     "mysql://normal:123456@127.0.0.1:3306?transaction-atomicity=global",
@@ -120,24 +120,34 @@ func TestValidateApplyParameter(t *testing.T) {
 			expectedErr: ".*protocol .* is incompatible with tidb scheme.*",
 		},
 		{
-			sinkURI:       "blackhole://normal:123456@127.0.0.1:3306?transaction-atomicity=none",
-			expectedErr:   "",
-			expectedLevel: noneTxnAtomicity,
+			sinkURI:        "blackhole://normal:123456@127.0.0.1:3306?transaction-atomicity=none",
+			expectedErr:    "",
+			shouldSplitTxn: true,
 		},
 		{
 			sinkURI: "kafka://127.0.0.1:9092?transaction-atomicity=none" +
 				"&protocol=open-protocol",
-			expectedErr:   "",
-			expectedLevel: noneTxnAtomicity,
+			expectedErr:    "",
+			shouldSplitTxn: true,
 		},
 		{
-			sinkURI:       "kafka://127.0.0.1:9092?protocol=default",
-			expectedErr:   "",
-			expectedLevel: noneTxnAtomicity,
+			sinkURI:        "kafka://127.0.0.1:9092?protocol=default",
+			expectedErr:    "",
+			shouldSplitTxn: true,
 		},
 		{
-			sinkURI:     "kafka://127.0.0.1:9092?transaction-atomicity=table",
+			sinkURI:     "kafka://127.0.0.1:9092?transaction-atomicity=none",
 			expectedErr: ".*unknown .* message protocol for sink.*",
+		},
+		{
+			sinkURI: "kafka://127.0.0.1:9092?transaction-atomicity=table" +
+				"&protocol=open-protocol",
+			expectedErr: "table level atomicity is not supported by kafka scheme",
+		},
+		{
+			sinkURI: "kafka://127.0.0.1:9092?transaction-atomicity=invalid" +
+				"&protocol=open-protocol",
+			expectedErr: "invalid level atomicity is not supported by kafka scheme",
 		},
 	}
 
@@ -147,14 +157,14 @@ func TestValidateApplyParameter(t *testing.T) {
 		require.Nil(t, err)
 		if tc.expectedErr == "" {
 			require.Nil(t, cfg.validateAndAdjust(parsedSinkURI, true))
-			require.Equal(t, tc.expectedLevel, cfg.TxnAtomicity)
+			require.Equal(t, tc.shouldSplitTxn, cfg.TxnAtomicity.ShouldSplitTxn())
 		} else {
 			require.Regexp(t, tc.expectedErr, cfg.validateAndAdjust(parsedSinkURI, true))
 		}
 	}
 }
 
-func TestApplyParameter(t *testing.T) {
+func TestValidateProtocol(t *testing.T) {
 	t.Parallel()
 	testCases := []struct {
 		sinkConfig *SinkConfig
@@ -184,8 +194,141 @@ func TestApplyParameter(t *testing.T) {
 	for _, c := range testCases {
 		parsedSinkURI, err := url.Parse(c.sinkURI)
 		require.Nil(t, err)
-		c.sinkConfig.applyParameter(parsedSinkURI)
+		c.sinkConfig.validateAndAdjustSinkURI(parsedSinkURI)
 		require.Equal(t, c.result, c.sinkConfig.Protocol)
+	}
+}
+
+func TestApplyParameterBySinkURI(t *testing.T) {
+	t.Parallel()
+	kafkaURI := "kafka://127.0.0.1:9092?protocol=whatever&transaction-atomicity=none"
+	testCases := []struct {
+		sinkConfig           *SinkConfig
+		sinkURI              string
+		expectedErr          string
+		expectedProtocol     string
+		expectedTxnAtomicity AtomicityLevel
+	}{
+		// test only config file
+		{
+			sinkConfig: &SinkConfig{
+				Protocol:     "default",
+				TxnAtomicity: noneTxnAtomicity,
+			},
+			sinkURI:              "kafka://127.0.0.1:9092",
+			expectedProtocol:     "default",
+			expectedTxnAtomicity: noneTxnAtomicity,
+		},
+		// test only sink uri
+		{
+			sinkConfig:           &SinkConfig{},
+			sinkURI:              kafkaURI,
+			expectedProtocol:     "whatever",
+			expectedTxnAtomicity: noneTxnAtomicity,
+		},
+		// test conflict scenarios
+		{
+			sinkConfig: &SinkConfig{
+				Protocol:     "default",
+				TxnAtomicity: tableTxnAtomicity,
+			},
+			sinkURI:              kafkaURI,
+			expectedProtocol:     "whatever",
+			expectedTxnAtomicity: noneTxnAtomicity,
+			expectedErr:          "incompatible configuration in sink uri",
+		},
+		{
+			sinkConfig: &SinkConfig{
+				Protocol:     "default",
+				TxnAtomicity: unknownTxnAtomicity,
+			},
+			sinkURI:              kafkaURI,
+			expectedProtocol:     "whatever",
+			expectedTxnAtomicity: noneTxnAtomicity,
+			expectedErr:          "incompatible configuration in sink uri",
+		},
+	}
+	for _, tc := range testCases {
+		parsedSinkURI, err := url.Parse(tc.sinkURI)
+		require.Nil(t, err)
+		err = tc.sinkConfig.applyParameterBySinkURI(parsedSinkURI)
+
+		require.Equal(t, tc.expectedProtocol, tc.sinkConfig.Protocol)
+		require.Equal(t, tc.expectedTxnAtomicity, tc.sinkConfig.TxnAtomicity)
+		if tc.expectedErr == "" {
+			require.NoError(t, err)
+		} else {
+			require.ErrorContains(t, err, tc.expectedErr)
+		}
+
+	}
+}
+
+func TestCheckCompatibilityWithSinkURI(t *testing.T) {
+	t.Parallel()
+	testCases := []struct {
+		newSinkConfig        *SinkConfig
+		oldSinkConfig        *SinkConfig
+		newsinkURI           string
+		expectedErr          string
+		expectedProtocol     string
+		expectedTxnAtomicity AtomicityLevel
+	}{
+		// test no update
+		{
+			newSinkConfig:        &SinkConfig{},
+			oldSinkConfig:        &SinkConfig{},
+			newsinkURI:           "kafka://",
+			expectedProtocol:     "",
+			expectedTxnAtomicity: unknownTxnAtomicity,
+		},
+		// test update config return err
+		{
+			newSinkConfig: &SinkConfig{
+				TxnAtomicity: tableTxnAtomicity,
+			},
+			oldSinkConfig: &SinkConfig{
+				TxnAtomicity: noneTxnAtomicity,
+			},
+			newsinkURI:           "kafka://127.0.0.1:9092?transaction-atomicity=none",
+			expectedErr:          "incompatible configuration in sink uri",
+			expectedProtocol:     "",
+			expectedTxnAtomicity: noneTxnAtomicity,
+		},
+		// test update compatible config
+		{
+			newSinkConfig: &SinkConfig{
+				Protocol: "canal",
+			},
+			oldSinkConfig: &SinkConfig{
+				TxnAtomicity: noneTxnAtomicity,
+			},
+			newsinkURI:           "kafka://127.0.0.1:9092?transaction-atomicity=none",
+			expectedProtocol:     "canal",
+			expectedTxnAtomicity: noneTxnAtomicity,
+		},
+		// test update sinkuri
+		{
+			newSinkConfig: &SinkConfig{
+				TxnAtomicity: noneTxnAtomicity,
+			},
+			oldSinkConfig: &SinkConfig{
+				TxnAtomicity: noneTxnAtomicity,
+			},
+			newsinkURI:           "kafka://127.0.0.1:9092?transaction-atomicity=table",
+			expectedProtocol:     "",
+			expectedTxnAtomicity: tableTxnAtomicity,
+		},
+	}
+	for _, tc := range testCases {
+		err := tc.newSinkConfig.CheckCompatibilityWithSinkURI(tc.oldSinkConfig, tc.newsinkURI)
+		if tc.expectedErr == "" {
+			require.NoError(t, err)
+		} else {
+			require.ErrorContains(t, err, tc.expectedErr)
+		}
+		require.Equal(t, tc.expectedProtocol, tc.newSinkConfig.Protocol)
+		require.Equal(t, tc.expectedTxnAtomicity, tc.newSinkConfig.TxnAtomicity)
 	}
 }
 
@@ -248,24 +391,6 @@ func TestValidateAndAdjustCSVConfig(t *testing.T) {
 				Delimiter: "'",
 			},
 			wantErr: "csv config quote and delimiter cannot be the same",
-		},
-		{
-			name: "valid date separator",
-			config: &CSVConfig{
-				Quote:         "\"",
-				Delimiter:     ",",
-				DateSeparator: "day",
-			},
-			wantErr: "",
-		},
-		{
-			name: "date separator is not in [day/month/year/none]",
-			config: &CSVConfig{
-				Quote:         "\"",
-				Delimiter:     ",",
-				DateSeparator: "hello",
-			},
-			wantErr: "date separator in cloud storage sink is invalid",
 		},
 	}
 	for _, tc := range tests {

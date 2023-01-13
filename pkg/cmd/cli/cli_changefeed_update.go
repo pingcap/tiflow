@@ -15,7 +15,6 @@ package cli
 
 import (
 	"encoding/json"
-	"fmt"
 	"strings"
 
 	"github.com/pingcap/log"
@@ -116,19 +115,15 @@ func (o *updateChangefeedOptions) run(cmd *cobra.Command) error {
 
 	if !o.commonChangefeedOptions.noConfirm {
 		cmd.Printf("Could you agree to apply changes above to changefeed [Y/N]\n")
-		var yOrN string
-		_, err = fmt.Scan(&yOrN)
-		if err != nil {
-			return err
-		}
-		if strings.ToLower(strings.TrimSpace(yOrN)) != "y" {
+		confirmed := readInput(cmd)
+		if !confirmed {
 			cmd.Printf("No update to changefeed.\n")
 			return nil
 		}
 	}
 
 	changefeedConfig := o.getChangefeedConfig(cmd, newInfo)
-	info, err := o.apiV2Client.Changefeeds().Update(ctx, changefeedConfig, newInfo.ID)
+	info, err := o.apiV2Client.Changefeeds().Update(ctx, changefeedConfig, o.changefeedID)
 	if err != nil {
 		return err
 	}

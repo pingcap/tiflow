@@ -18,19 +18,12 @@ import (
 	"testing"
 	"time"
 
-	"github.com/pingcap/check"
 	"github.com/pingcap/tiflow/dm/pkg/terror"
+	"github.com/stretchr/testify/require"
 )
 
-func TestT(t *testing.T) {
-	check.TestingT(t)
-}
-
-var _ = check.Suite(&testBackoffSuite{})
-
-type testBackoffSuite struct{}
-
-func (t *testBackoffSuite) TestNewBackoff(c *check.C) {
+func TestNewBackoff(t *testing.T) {
+	t.Parallel()
 	var (
 		backoffFactor float64 = 2
 		backoffMin            = 1 * time.Second
@@ -56,15 +49,16 @@ func (t *testBackoffSuite) TestNewBackoff(c *check.C) {
 	for _, tc := range testCases {
 		bf, err = NewBackoff(tc.factor, tc.jitter, tc.min, tc.max)
 		if tc.hasErr {
-			c.Assert(bf, check.IsNil)
-			c.Assert(terror.ErrBackoffArgsNotValid.Equal(err), check.IsTrue)
+			require.Nil(t, bf)
+			require.True(t, terror.ErrBackoffArgsNotValid.Equal(err))
 		} else {
-			c.Assert(err, check.IsNil)
+			require.NoError(t, err)
 		}
 	}
 }
 
-func (t *testBackoffSuite) TestExponentialBackoff(c *check.C) {
+func TestExponentialBackoff(t *testing.T) {
+	t.Parallel()
 	var (
 		min            = 1 * time.Millisecond
 		max            = 1 * time.Second
@@ -78,24 +72,26 @@ func (t *testBackoffSuite) TestExponentialBackoff(c *check.C) {
 
 	for i := 0; i < 10; i++ {
 		expected := min * time.Duration(math.Pow(factor, float64(i)))
-		c.Assert(b.Duration(), check.Equals, expected)
+		require.Equal(t, expected, b.Duration())
 	}
 	b.Rollback()
-	c.Assert(b.Current(), check.Equals, 512*min)
+	require.Equal(t, 512*min, b.Current())
 	b.Forward()
 	for i := 0; i < 10; i++ {
-		c.Assert(b.Duration(), check.Equals, max)
+		require.Equal(t, max, b.Duration())
 	}
 	b.Reset()
-	c.Assert(b.Duration(), check.Equals, min)
+	require.Equal(t, min, b.Duration())
 }
 
-func (t *testBackoffSuite) checkBetween(c *check.C, value, low, high time.Duration) {
-	c.Assert(value > low, check.IsTrue)
-	c.Assert(value < high, check.IsTrue)
+func checkBetween(t *testing.T, value, low, high time.Duration) {
+	t.Helper()
+	require.True(t, value > low)
+	require.True(t, value < high)
 }
 
-func (t *testBackoffSuite) TestBackoffJitter(c *check.C) {
+func TestBackoffJitter(t *testing.T) {
+	t.Parallel()
 	var (
 		min            = 1 * time.Millisecond
 		max            = 1 * time.Second
@@ -107,15 +103,16 @@ func (t *testBackoffSuite) TestBackoffJitter(c *check.C) {
 		Factor: factor,
 		Jitter: true,
 	}
-	c.Assert(b.Duration(), check.Equals, min)
-	t.checkBetween(c, b.Duration(), min, 2*min)
-	t.checkBetween(c, b.Duration(), 2*min, 4*min)
-	t.checkBetween(c, b.Duration(), 4*min, 8*min)
+	require.Equal(t, min, b.Duration())
+	checkBetween(t, b.Duration(), min, 2*min)
+	checkBetween(t, b.Duration(), 2*min, 4*min)
+	checkBetween(t, b.Duration(), 4*min, 8*min)
 	b.Reset()
-	c.Assert(b.Duration(), check.Equals, min)
+	require.Equal(t, min, b.Duration())
 }
 
-func (t *testBackoffSuite) TestFixedBackoff(c *check.C) {
+func TestFixedBackoff(t *testing.T) {
+	t.Parallel()
 	var (
 		min            = 100 * time.Millisecond
 		max            = 100 * time.Millisecond
@@ -127,11 +124,12 @@ func (t *testBackoffSuite) TestFixedBackoff(c *check.C) {
 		Factor: factor,
 	}
 	for i := 0; i < 10; i++ {
-		c.Assert(b.Duration(), check.Equals, max)
+		require.Equal(t, max, b.Duration())
 	}
 }
 
-func (t *testBackoffSuite) TestOverflowBackoff(c *check.C) {
+func TestOverflowBackoff(t *testing.T) {
+	t.Parallel()
 	testCases := []struct {
 		min    time.Duration
 		max    time.Duration
@@ -147,12 +145,13 @@ func (t *testBackoffSuite) TestOverflowBackoff(c *check.C) {
 			Max:    tc.max,
 			Factor: tc.factor,
 		}
-		c.Assert(b.Duration(), check.Equals, tc.min)
-		c.Assert(b.Duration(), check.Equals, tc.max)
+		require.Equal(t, tc.min, b.Duration())
+		require.Equal(t, tc.max, b.Duration())
 	}
 }
 
-func (t *testBackoffSuite) TestForward(c *check.C) {
+func TestForward(t *testing.T) {
+	t.Parallel()
 	var (
 		factor float64 = 2
 		min            = 1 * time.Second
@@ -167,11 +166,11 @@ func (t *testBackoffSuite) TestForward(c *check.C) {
 	for i := 0; i < n; i++ {
 		b.Forward()
 	}
-	c.Assert(b.cwnd, check.Equals, n)
+	require.Equal(t, n, b.cwnd)
 	b.Reset()
-	c.Assert(b.cwnd, check.Equals, 0)
+	require.Equal(t, 0, b.cwnd)
 	for i := 0; i < n; i++ {
 		b.BoundaryForward()
 	}
-	c.Assert(b.cwnd, check.Equals, 3)
+	require.Equal(t, 3, b.cwnd)
 }

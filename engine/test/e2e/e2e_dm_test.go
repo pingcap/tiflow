@@ -20,7 +20,6 @@ import (
 	"encoding/json"
 	"fmt"
 	"io"
-	"io/ioutil"
 	"net/http"
 	"net/url"
 	"os"
@@ -89,30 +88,39 @@ func TestDMJob(t *testing.T) {
 	}()
 	wg.Wait()
 
-	// test metrics for syncer
-	jobIDs := map[string]struct{}{}
+	// executor metrics
 	metricsURLs := []string{
 		"http://127.0.0.1:11241/metrics",
 		"http://127.0.0.1:11242/metrics",
 		"http://127.0.0.1:11243/metrics",
 	}
-	re := regexp.MustCompile(`syncer.*\{job_id="(.{36})"`)
-	ctx := context.Background()
-	cli, err := httputil.NewClient(nil)
-	require.NoError(t, err)
-	for _, metricsURL := range metricsURLs {
-		resp, err := cli.Get(ctx, metricsURL)
+
+	testMetrics := func(re *regexp.Regexp) {
+		jobIDs := map[string]struct{}{}
+
+		ctx := context.Background()
+		cli, err := httputil.NewClient(nil)
 		require.NoError(t, err)
-		content, err := io.ReadAll(resp.Body)
-		require.NoError(t, err)
-		matched := re.FindAllSubmatch(content, -1)
-		for _, m := range matched {
-			jobIDs[string(m[1])] = struct{}{}
+		for _, metricsURL := range metricsURLs {
+			resp, err := cli.Get(ctx, metricsURL)
+			require.NoError(t, err)
+			content, err := io.ReadAll(resp.Body)
+			require.NoError(t, err)
+			matched := re.FindAllSubmatch(content, -1)
+			for _, m := range matched {
+				jobIDs[string(m[1])] = struct{}{}
+			}
+			require.NoError(t, resp.Body.Close())
 		}
-		require.NoError(t, resp.Body.Close())
+		require.Equal(t, 2, len(jobIDs))
 	}
 
-	require.Equal(t, 2, len(jobIDs))
+	// test metrics for syncer
+	re := regexp.MustCompile(`syncer.*\{job_id="(.{36})"`)
+	testMetrics(re)
+	// test metrics for dm_worker_task_state: 2 running all job
+	re = regexp.MustCompile(`dm_worker_task_state.*\{job_id="(.{36})".*2`)
+	testMetrics(re)
 }
 
 // testSimpleAllModeTask extracts the common logic for a DM "all" mode task,
@@ -221,6 +229,10 @@ func testSimpleAllModeTask(
 	// eventually paused
 	require.Eventually(t, func() bool {
 		jobStatus, err = queryStatus(ctx, httpClient, jobID, nil)
+		for _, task := range jobStatus.TaskStatus {
+			require.Greater(t, task.Status.IoTotalBytes, uint64(0))
+			require.Greater(t, task.Status.DumpIoTotalBytes, uint64(0))
+		}
 		require.NoError(t, err)
 		return jobStatus.TaskStatus[source1].Status.Stage == metadata.StagePaused
 	}, time.Second*10, time.Second)
@@ -375,7 +387,7 @@ func queryStatus(ctx context.Context, client *httputil.Client, jobID string, tas
 		return nil, err
 	}
 
-	respBody, err := ioutil.ReadAll(resp.Body)
+	respBody, err := io.ReadAll(resp.Body)
 	if err != nil {
 		return nil, err
 	}
@@ -422,7 +434,7 @@ func getJobCfg(ctx context.Context, client *httputil.Client, jobID string) (stri
 		return "", err
 	}
 
-	respBody, err := ioutil.ReadAll(resp.Body)
+	respBody, err := io.ReadAll(resp.Body)
 	if err != nil {
 		return "", err
 	}
@@ -463,7 +475,7 @@ func getBinlogOperator(ctx context.Context, client *httputil.Client, jobID strin
 		return nil, err
 	}
 
-	respBody, err := ioutil.ReadAll(resp.Body)
+	respBody, err := io.ReadAll(resp.Body)
 	if err != nil {
 		return nil, err
 	}
@@ -525,7 +537,7 @@ func getBinlogSchema(ctx context.Context, client *httputil.Client, jobID string,
 		return nil, err
 	}
 
-	respBody, err := ioutil.ReadAll(resp.Body)
+	respBody, err := io.ReadAll(resp.Body)
 	if err != nil {
 		return nil, err
 	}

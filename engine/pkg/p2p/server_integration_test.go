@@ -46,6 +46,7 @@ var clientConfigForUnitTesting = &p2pImpl.MessageClientConfig{
 	RetryRateLimitPerSecond: 999.0,
 	ClientVersion:           "v5.4.0", // a fake version
 	AdvertisedAddr:          "fake-addr:8300",
+	MaxRecvMsgSize:          4 * 1024 * 1024, // 4MB
 }
 
 func TestMessageRPCServiceBasics(t *testing.T) {

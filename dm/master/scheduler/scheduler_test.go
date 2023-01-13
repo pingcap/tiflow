@@ -23,6 +23,8 @@ import (
 	"github.com/pingcap/errors"
 	"github.com/pingcap/failpoint"
 	"github.com/pingcap/tiflow/dm/config"
+	"github.com/pingcap/tiflow/dm/config/dbconfig"
+	"github.com/pingcap/tiflow/dm/config/security"
 	"github.com/pingcap/tiflow/dm/master/workerrpc"
 	"github.com/pingcap/tiflow/dm/pb"
 	"github.com/pingcap/tiflow/dm/pkg/ha"
@@ -91,7 +93,7 @@ func (t *testSchedulerSuite) testSchedulerProgress(restart int) {
 
 	var (
 		logger       = log.L()
-		s            = NewScheduler(&logger, config.Security{})
+		s            = NewScheduler(&logger, security.Security{})
 		sourceID1    = "mysql-replica-1"
 		sourceID2    = "mysql-replica-2"
 		workerName1  = "dm-worker-1"
@@ -112,7 +114,7 @@ func (t *testSchedulerSuite) testSchedulerProgress(restart int) {
 				require.NoError(t.T(), s.Start(ctx, t.etcdTestCli))
 			case restartNewInstance:
 				s.Close()
-				s = NewScheduler(&logger, config.Security{})
+				s = NewScheduler(&logger, security.Security{})
 				require.NoError(t.T(), s.Start(ctx, t.etcdTestCli))
 			}
 		}
@@ -126,6 +128,7 @@ func (t *testSchedulerSuite) testSchedulerProgress(restart int) {
 	require.NoError(t.T(), subtaskCfg1.Decode(config.SampleSubtaskConfig, true))
 	subtaskCfg1.SourceID = sourceID1
 	subtaskCfg1.Name = taskName1
+	subtaskCfg1.LoaderConfig.ImportMode = config.LoadModePhysical
 	require.NoError(t.T(), subtaskCfg1.Adjust(true))
 	subtaskCfg21 := subtaskCfg1
 	subtaskCfg21.Name = taskName2
@@ -261,6 +264,10 @@ func (t *testSchedulerSuite) testSchedulerProgress(restart int) {
 	t.subTaskStageMatch(s, taskName1, sourceID1, pb.Stage_Running)
 	t.downstreamMetaExist(s, taskName1, subtaskCfg1.To, subtaskCfg1.MetaSchema)
 	t.downstreamMetaNotExist(s, taskName2)
+	// check lightning status is written to etcd
+	status, err := ha.GetAllLightningStatus(t.etcdTestCli, taskName1)
+	require.NoError(t.T(), err)
+	require.Equal(t.T(), []string{ha.LightningNotReady}, status)
 
 	// try start a task with two sources, some sources not bound.
 	require.True(t.T(), terror.ErrSchedulerSourcesUnbound.Equal(s.AddSubTasks(false, pb.Stage_Running, subtaskCfg21, subtaskCfg22)))
@@ -420,6 +427,10 @@ func (t *testSchedulerSuite) testSchedulerProgress(restart int) {
 	t.subTaskStageMatch(s, taskName2, sourceID1, pb.Stage_Running)
 	t.subTaskStageMatch(s, taskName2, sourceID2, pb.Stage_Running)
 	t.validatorStageMatch(s, taskName2, sourceID2, pb.Stage_Running)
+	// check lightning status is written to etcd
+	status, err = ha.GetAllLightningStatus(t.etcdTestCli, taskName2)
+	require.NoError(t.T(), err)
+	require.Equal(t.T(), []string{ha.LightningNotReady, ha.LightningNotReady}, status)
 	rebuildScheduler(ctx)
 
 	// CASE 4.4.2 fail to stop any task.
@@ -639,7 +650,7 @@ func (t *testSchedulerSuite) downstreamMetaNotExist(s *Scheduler, task string) {
 	require.Equal(t.T(), "", metaConfig)
 }
 
-func (t *testSchedulerSuite) downstreamMetaExist(s *Scheduler, task string, expectDBCfg config.DBConfig, expectMetaConfig string) {
+func (t *testSchedulerSuite) downstreamMetaExist(s *Scheduler, task string, expectDBCfg dbconfig.DBConfig, expectMetaConfig string) {
 	t.T().Helper()
 	dbConfig, metaConfig := s.GetDownstreamMetaByTask(task)
 	require.NotNil(t.T(), dbConfig)
@@ -826,7 +837,7 @@ func (t *testSchedulerSuite) TestRestartScheduler() {
 	require.NoError(t.T(), err)
 	sourceCfg1.SourceID = sourceID1
 
-	s := NewScheduler(&logger, config.Security{})
+	s := NewScheduler(&logger, security.Security{})
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 	// step 1: start scheduler
@@ -969,7 +980,7 @@ func (t *testSchedulerSuite) TestRestartScheduler() {
 func (t *testSchedulerSuite) TestWatchWorkerEventEtcdCompact() {
 	var (
 		logger       = log.L()
-		s            = NewScheduler(&logger, config.Security{})
+		s            = NewScheduler(&logger, security.Security{})
 		sourceID1    = "mysql-replica-1"
 		sourceID2    = "mysql-replica-2"
 		workerName1  = "dm-worker-1"
@@ -1111,7 +1122,7 @@ func (t *testSchedulerSuite) TestWatchWorkerEventEtcdCompact() {
 func (t *testSchedulerSuite) TestLastBound() {
 	var (
 		logger      = log.L()
-		s           = NewScheduler(&logger, config.Security{})
+		s           = NewScheduler(&logger, security.Security{})
 		sourceID1   = "mysql-replica-1"
 		sourceID2   = "mysql-replica-2"
 		workerName1 = "dm-worker-1"
@@ -1185,7 +1196,7 @@ func (t *testSchedulerSuite) TestLastBound() {
 func (t *testSchedulerSuite) TestInvalidLastBound() {
 	var (
 		logger      = log.L()
-		s           = NewScheduler(&logger, config.Security{})
+		s           = NewScheduler(&logger, security.Security{})
 		sourceID1   = "mysql-replica-1"
 		sourceID2   = "invalid-replica-1"
 		workerName1 = "dm-worker-1"
@@ -1217,7 +1228,7 @@ func (t *testSchedulerSuite) TestInvalidLastBound() {
 func (t *testSchedulerSuite) TestTransferSource() {
 	var (
 		logger      = log.L()
-		s           = NewScheduler(&logger, config.Security{})
+		s           = NewScheduler(&logger, security.Security{})
 		sourceID1   = "mysql-replica-1"
 		sourceID2   = "mysql-replica-2"
 		sourceID3   = "mysql-replica-3"
@@ -1339,7 +1350,7 @@ func (t *testSchedulerSuite) TestTransferSource() {
 func (t *testSchedulerSuite) TestStartStopRelay() {
 	var (
 		logger      = log.L()
-		s           = NewScheduler(&logger, config.Security{})
+		s           = NewScheduler(&logger, security.Security{})
 		sourceID1   = "mysql-replica-1"
 		sourceID2   = "mysql-replica-2"
 		sourceID3   = "mysql-replica-3"
@@ -1466,7 +1477,7 @@ func (t *testSchedulerSuite) TestStartStopRelay() {
 func (t *testSchedulerSuite) TestRelayWithWithoutWorker() {
 	var (
 		logger      = log.L()
-		s           = NewScheduler(&logger, config.Security{})
+		s           = NewScheduler(&logger, security.Security{})
 		sourceID1   = "mysql-replica-1"
 		workerName1 = "dm-worker-1"
 		workerName2 = "dm-worker-2"
@@ -1549,7 +1560,7 @@ func checkAllWorkersClosed(t *testing.T, s *Scheduler, closed bool) {
 func (t *testSchedulerSuite) TestCloseAllWorkers() {
 	var (
 		logger = log.L()
-		s      = NewScheduler(&logger, config.Security{})
+		s      = NewScheduler(&logger, security.Security{})
 		names  []string
 	)
 	ctx, cancel := context.WithCancel(context.Background())
@@ -1582,7 +1593,7 @@ func (t *testSchedulerSuite) TestCloseAllWorkers() {
 func (t *testSchedulerSuite) TestStartSourcesWithoutSourceConfigsInEtcd() {
 	var (
 		logger       = log.L()
-		s            = NewScheduler(&logger, config.Security{})
+		s            = NewScheduler(&logger, security.Security{})
 		sourceID1    = "mysql-replica-1"
 		sourceID2    = "mysql-replica-2"
 		workerName1  = "dm-worker-1"
@@ -1649,7 +1660,7 @@ func (t *testSchedulerSuite) TestStartSourcesWithoutSourceConfigsInEtcd() {
 func (t *testSchedulerSuite) TestTransferWorkerAndSource() {
 	var (
 		logger      = log.L()
-		s           = NewScheduler(&logger, config.Security{})
+		s           = NewScheduler(&logger, security.Security{})
 		sourceID1   = "mysql-replica-1"
 		sourceID2   = "mysql-replica-2"
 		sourceID3   = "mysql-replica-3"
@@ -1731,7 +1742,7 @@ func (t *testSchedulerSuite) TestTransferWorkerAndSource() {
 func (t *testSchedulerSuite) TestWatchLoadTask() {
 	var (
 		logger      = log.L()
-		s           = NewScheduler(&logger, config.Security{})
+		s           = NewScheduler(&logger, security.Security{})
 		task1       = "task1"
 		task2       = "task2"
 		sourceID1   = "mysql-replica-1"
@@ -1848,7 +1859,7 @@ func (t *testSchedulerSuite) TestWatchLoadTask() {
 func (t *testSchedulerSuite) TestWorkerHasDiffRelayAndBound() {
 	var (
 		logger      = log.L()
-		s           = NewScheduler(&logger, config.Security{})
+		s           = NewScheduler(&logger, security.Security{})
 		sourceID1   = "mysql-replica-1"
 		sourceID2   = "mysql-replica-2"
 		workerName1 = "dm-worker-1"
@@ -1904,7 +1915,7 @@ func (t *testSchedulerSuite) TestWorkerHasDiffRelayAndBound() {
 func (t *testSchedulerSuite) TestUpgradeCauseConflictRelayType() {
 	var (
 		logger      = log.L()
-		s           = NewScheduler(&logger, config.Security{})
+		s           = NewScheduler(&logger, security.Security{})
 		sourceID1   = "mysql-replica-1"
 		workerName1 = "dm-worker-1"
 		workerName2 = "dm-worker-2"
@@ -1966,7 +1977,7 @@ func (t *testSchedulerSuite) TestUpgradeCauseConflictRelayType() {
 func (t *testSchedulerSuite) TestOperateValidatorTask() {
 	var (
 		logger      = log.L()
-		s           = NewScheduler(&logger, config.Security{})
+		s           = NewScheduler(&logger, security.Security{})
 		sourceID1   = "mysql-replica-1"
 		workerName1 = "dm-worker-1"
 		taskName    = "task-1"
@@ -2026,7 +2037,7 @@ func (t *testSchedulerSuite) TestUpdateSubTasksAndSourceCfg() {
 
 	var (
 		logger       = log.L()
-		s            = NewScheduler(&logger, config.Security{})
+		s            = NewScheduler(&logger, security.Security{})
 		sourceID1    = "mysql-replica-1"
 		taskName1    = "task-1"
 		workerName1  = "dm-worker-1"
@@ -2121,7 +2132,7 @@ func (t *testSchedulerSuite) TestUpdateSubTasksAndSourceCfg() {
 
 func (t *testSchedulerSuite) TestValidatorEnabledAndGetValidatorStage() {
 	logger := log.L()
-	s := NewScheduler(&logger, config.Security{})
+	s := NewScheduler(&logger, security.Security{})
 	task := "test"
 	source := "source"
 	m, _ := s.expectValidatorStages.LoadOrStore(task, map[string]ha.Stage{})

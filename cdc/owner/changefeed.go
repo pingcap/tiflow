@@ -15,25 +15,25 @@ package owner
 
 import (
 	"context"
-	"strings"
 	"sync"
 	"time"
 
 	"github.com/pingcap/errors"
 	"github.com/pingcap/failpoint"
 	"github.com/pingcap/log"
-	"github.com/pingcap/tidb/parser"
-	"github.com/pingcap/tidb/parser/format"
 	timodel "github.com/pingcap/tidb/parser/model"
 	"github.com/pingcap/tiflow/cdc/contextutil"
 	"github.com/pingcap/tiflow/cdc/model"
 	"github.com/pingcap/tiflow/cdc/puller"
 	"github.com/pingcap/tiflow/cdc/redo"
 	"github.com/pingcap/tiflow/cdc/scheduler"
+	"github.com/pingcap/tiflow/cdc/sink"
 	"github.com/pingcap/tiflow/pkg/config"
 	cdcContext "github.com/pingcap/tiflow/pkg/context"
 	cerror "github.com/pingcap/tiflow/pkg/errors"
 	"github.com/pingcap/tiflow/pkg/orchestrator"
+	"github.com/pingcap/tiflow/pkg/pdutil"
+	redoCfg "github.com/pingcap/tiflow/pkg/redo"
 	"github.com/pingcap/tiflow/pkg/txnutil/gc"
 	"github.com/pingcap/tiflow/pkg/upstream"
 	"github.com/prometheus/client_golang/prometheus"
@@ -41,33 +41,26 @@ import (
 	"go.uber.org/zap"
 )
 
-// newSchedulerFromCtx creates a new schedulerV2 from context.
+// newSchedulerFromCtx creates a new scheduler from context.
 // This function is factored out to facilitate unit testing.
 func newSchedulerFromCtx(
-	ctx cdcContext.Context, startTs uint64,
+	ctx cdcContext.Context, up *upstream.Upstream, cfg *config.SchedulerConfig,
 ) (ret scheduler.Scheduler, err error) {
 	changeFeedID := ctx.ChangefeedVars().ID
 	messageServer := ctx.GlobalVars().MessageServer
 	messageRouter := ctx.GlobalVars().MessageRouter
 	ownerRev := ctx.GlobalVars().OwnerRevision
 	captureID := ctx.GlobalVars().CaptureInfo.ID
-	cfg := config.GetGlobalServerConfig().Debug
-	if cfg.EnableSchedulerV3 {
-		ret, err = scheduler.NewSchedulerV3(
-			ctx, captureID, changeFeedID, startTs,
-			messageServer, messageRouter, ownerRev, cfg.Scheduler)
-	} else {
-		ret, err = scheduler.NewScheduler(
-			ctx, captureID, changeFeedID, startTs,
-			messageServer, messageRouter, ownerRev, cfg.Scheduler)
-	}
+	ret, err = scheduler.NewScheduler(
+		ctx, captureID, changeFeedID,
+		messageServer, messageRouter, ownerRev, up.RegionCache, up.PDClock, cfg)
 	return ret, errors.Trace(err)
 }
 
 func newScheduler(
-	ctx cdcContext.Context, startTs uint64,
+	ctx cdcContext.Context, up *upstream.Upstream, cfg *config.SchedulerConfig,
 ) (scheduler.Scheduler, error) {
-	return newSchedulerFromCtx(ctx, startTs)
+	return newSchedulerFromCtx(ctx, up, cfg)
 }
 
 type changefeed struct {
@@ -76,6 +69,7 @@ type changefeed struct {
 	state *orchestrator.ChangefeedReactorState
 
 	upstream  *upstream.Upstream
+	cfg       *config.SchedulerConfig
 	scheduler scheduler.Scheduler
 	// barriers will be created when a changefeed is initialized
 	// and will be destroyed when a changefeed is closed.
@@ -134,7 +128,9 @@ type changefeed struct {
 	) (puller.DDLPuller, error)
 
 	newSink      func(changefeedID model.ChangeFeedID, info *model.ChangeFeedInfo, reportErr func(error)) DDLSink
-	newScheduler func(ctx cdcContext.Context, startTs uint64) (scheduler.Scheduler, error)
+	newScheduler func(
+		ctx cdcContext.Context, up *upstream.Upstream, cfg *config.SchedulerConfig,
+	) (scheduler.Scheduler, error)
 
 	lastDDLTs uint64 // Timestamp of the last executed DDL. Only used for tests.
 }
@@ -143,6 +139,7 @@ func newChangefeed(
 	id model.ChangeFeedID,
 	state *orchestrator.ChangefeedReactorState,
 	up *upstream.Upstream,
+	cfg *config.SchedulerConfig,
 ) *changefeed {
 	c := &changefeed{
 		id:    id,
@@ -160,6 +157,7 @@ func newChangefeed(
 		newSink:      newDDLSink,
 	}
 	c.newScheduler = newScheduler
+	c.cfg = cfg
 	return c
 }
 
@@ -172,9 +170,12 @@ func newChangefeed4Test(
 		changefeed model.ChangeFeedID,
 	) (puller.DDLPuller, error),
 	newSink func(changefeedID model.ChangeFeedID, info *model.ChangeFeedInfo, reportErr func(err error)) DDLSink,
-	newScheduler func(ctx cdcContext.Context, startTs uint64) (scheduler.Scheduler, error),
+	newScheduler func(
+		ctx cdcContext.Context, up *upstream.Upstream, cfg *config.SchedulerConfig,
+	) (scheduler.Scheduler, error),
 ) *changefeed {
-	c := newChangefeed(id, state, up)
+	cfg := config.NewDefaultSchedulerConfig()
+	c := newChangefeed(id, state, up, cfg)
 	c.newDDLPuller = newDDLPuller
 	c.newSink = newSink
 	c.newScheduler = newScheduler
@@ -498,8 +499,25 @@ LOOP:
 		return errors.Trace(err)
 	}
 
+	// we must clean cached ddl and tables in changefeed initialization
+	// otherwise, the changefeed will loss tables that are needed to be replicated
+	// ref: https://github.com/pingcap/tiflow/issues/7682
+	c.ddlEventCache = nil
+	c.currentTables = nil
+
 	cancelCtx, cancel := cdcContext.WithCancel(ctx)
 	c.cancel = cancel
+
+	sourceID, err := pdutil.GetSourceID(ctx, c.upstream.PDClient)
+	if err != nil {
+		return errors.Trace(err)
+	}
+	c.state.Info.Config.Sink.TiDBSourceID = sourceID
+	log.Info("set source id",
+		zap.Uint64("sourceID", sourceID),
+		zap.String("namespace", c.id.Namespace),
+		zap.String("changefeed", c.id.ID),
+	)
 
 	c.sink = c.newSink(c.id, c.state.Info, ctx.Throw)
 	c.sink.run(cancelCtx)
@@ -530,7 +548,12 @@ LOOP:
 		zap.String("changefeed", c.id.ID))
 
 	// create scheduler
-	c.scheduler, err = c.newScheduler(ctx, checkpointTs)
+	// TODO: Remove the hack once span replication is compatible with all sinks.
+	cfg := *c.cfg
+	if !sink.IsSinkCompatibleWithSpanReplication(c.state.Info.SinkURI) {
+		cfg.RegionPerSpan = 0
+	}
+	c.scheduler, err = c.newScheduler(ctx, c.upstream, &cfg)
 	if err != nil {
 		return errors.Trace(err)
 	}
@@ -615,7 +638,9 @@ func (c *changefeed) releaseResources(ctx cdcContext.Context) {
 	log.Info("changefeed closed",
 		zap.String("namespace", c.id.Namespace),
 		zap.String("changefeed", c.id.ID),
-		zap.Stringer("info", c.state.Info), zap.Bool("isRemoved", c.isRemoved))
+		zap.Any("status", c.state.Status),
+		zap.Stringer("info", c.state.Info),
+		zap.Bool("isRemoved", c.isRemoved))
 }
 
 func (c *changefeed) cleanupMetrics() {
@@ -650,7 +675,7 @@ func (c *changefeed) cleanupRedoManager(ctx context.Context) {
 			log.Warn("changefeed is removed, but state is not complete", zap.Any("state", c.state))
 			return
 		}
-		if !redo.IsConsistentEnabled(c.state.Info.Config.Consistent.Level) {
+		if !redoCfg.IsConsistentEnabled(c.state.Info.Config.Consistent.Level) {
 			return
 		}
 		// when removing a paused changefeed, the redo manager is nil, create a new one
@@ -888,16 +913,21 @@ func (c *changefeed) asyncExecDDLJob(ctx cdcContext.Context,
 func (c *changefeed) asyncExecDDLEvent(ctx cdcContext.Context,
 	ddlEvent *model.DDLEvent,
 ) (done bool, err error) {
-	ddlEvent.Query, err = addSpecialComment(ddlEvent.Query)
-	if err != nil {
-		return false, err
-	}
 	if ddlEvent.TableInfo != nil &&
 		c.schema.IsIneligibleTableID(ddlEvent.TableInfo.TableName.TableID) {
 		log.Warn("ignore the DDL event of ineligible table",
 			zap.String("changefeed", c.id.ID), zap.Any("event", ddlEvent))
 		return true, nil
 	}
+
+	// check whether in bdr mode, if so, we need to skip all DDLs
+	if c.state.Info.Config.BDRMode {
+		log.Info("ignore the DDL event in BDR mode",
+			zap.String("changefeed", c.id.ID),
+			zap.Any("ddl", ddlEvent.Query))
+		return true, nil
+	}
+
 	done, err = c.sink.emitDDLEvent(ctx, ddlEvent)
 	if err != nil {
 		return false, err
@@ -984,30 +1014,4 @@ func (c *changefeed) checkUpstream() (skip bool, err error) {
 		return true, nil
 	}
 	return
-}
-
-// addSpecialComment translate tidb feature to comment
-func addSpecialComment(ddlQuery string) (string, error) {
-	stms, _, err := parser.New().ParseSQL(ddlQuery)
-	if err != nil {
-		return "", errors.Trace(err)
-	}
-	if len(stms) != 1 {
-		log.Panic("invalid ddlQuery statement size", zap.String("ddlQuery", ddlQuery))
-	}
-	var sb strings.Builder
-	// translate TiDB feature to special comment
-	restoreFlags := format.RestoreTiDBSpecialComment
-	// escape the keyword
-	restoreFlags |= format.RestoreNameBackQuotes
-	// upper case keyword
-	restoreFlags |= format.RestoreKeyWordUppercase
-	// wrap string with single quote
-	restoreFlags |= format.RestoreStringSingleQuotes
-	// remove placement rule
-	restoreFlags |= format.SkipPlacementRuleForRestore
-	if err = stms[0].Restore(format.NewRestoreCtx(restoreFlags, &sb)); err != nil {
-		return "", errors.Trace(err)
-	}
-	return sb.String(), nil
 }

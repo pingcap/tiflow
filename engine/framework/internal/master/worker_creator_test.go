@@ -141,8 +141,7 @@ func TestCreateWorkerNormal(t *testing.T) {
 	helper.ServerMasterClient.EXPECT().ScheduleTask(gomock.Any(),
 		&pb.ScheduleTaskRequest{
 			TaskId: "worker-1",
-			Cost:   int64(10),
-			ResourceRequirements: resModel.ToResourceRequirement(
+			Resources: resModel.ToResourceRequirement(
 				"job-1", "/local/resource-1", "/local/resource-2"),
 			Selectors: expectedPBSelectors,
 		}).Return(
@@ -172,7 +171,6 @@ func TestCreateWorkerNormal(t *testing.T) {
 		"worker-1",
 		[]byte("sample-config"),
 		CreateWorkerWithSelectors(additionalSelectors...),
-		CreateWorkerWithCost(10),
 		CreateWorkerWithResourceRequirements("/local/resource-1", "/local/resource-2"))
 	require.NoError(t, err)
 }

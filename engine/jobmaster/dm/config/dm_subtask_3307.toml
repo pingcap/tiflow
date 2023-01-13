@@ -29,8 +29,9 @@ skip-tz-utc = true
 extra-args = ""
 pool-size = 16
 dir = "./dumped_data"
-import-mode = "sql"
-on-duplicate = "replace"
+import-mode = "logical"
+on-duplicate = ""
+on-duplicate-logical = "replace"
 meta-file = ""
 worker-count = 16
 batch = 100
@@ -87,15 +88,6 @@ ansi-quotes = false
   events = []
   sql-pattern = ["alter table .* add column aaa int"]
   action = "Ignore"
-
-[[mapping-rule]]
-  schema-pattern = "dmctl"
-  table-pattern = "t_*"
-  source-column = "id"
-  target-column = "id"
-  expression = "partition id"
-  arguments = ["2", "", "t_", ""]
-  create-table-query = ""
 
 [[expression-filter]]
   schema = "expr_filter"

@@ -60,7 +60,7 @@ func TestAddEntry(t *testing.T) {
 	require.EqualValues(t,
 		message.Task{
 			UID:        s.uid,
-			TableID:    s.tableID,
+			Span:       &s.span,
 			InputEvent: event,
 		}, task.Value)
 }
@@ -75,9 +75,9 @@ func TestOutput(t *testing.T) {
 	require.True(t, ok)
 	require.EqualValues(t,
 		message.Task{
-			UID:     s.uid,
-			TableID: s.tableID,
-			ReadTs:  message.ReadTs{},
+			UID:    s.uid,
+			Span:   &s.span,
+			ReadTs: message.ReadTs{},
 		}, task.Value)
 }
 
@@ -106,12 +106,12 @@ func TestRunAndReportError(t *testing.T) {
 	require.True(t, ok)
 	require.EqualValues(t,
 		message.Task{
-			UID:     s.uid,
-			TableID: s.tableID,
+			UID:  s.uid,
+			Span: &s.span,
 			DeleteReq: &message.DeleteRequest{
 				Range: [2][]byte{
-					encoding.EncodeTsKey(s.uid, s.tableID, 0),
-					encoding.EncodeTsKey(s.uid, s.tableID+1, 0),
+					encoding.EncodeTsKey(s.uid, uint64(s.span.TableID), 0),
+					encoding.EncodeTsKey(s.uid, uint64(s.span.TableID)+1, 0),
 				},
 			},
 		}, msg.Value)

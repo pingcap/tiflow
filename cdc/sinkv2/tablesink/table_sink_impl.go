@@ -21,6 +21,7 @@ import (
 
 	"github.com/pingcap/log"
 	"github.com/pingcap/tiflow/cdc/model"
+	"github.com/pingcap/tiflow/cdc/processor/tablepb"
 	"github.com/pingcap/tiflow/cdc/sinkv2/eventsink"
 	"github.com/pingcap/tiflow/cdc/sinkv2/tablesink/state"
 	"github.com/prometheus/client_golang/prometheus"
@@ -36,7 +37,7 @@ var (
 // EventTableSink is a table sink that can write events.
 type EventTableSink[E eventsink.TableEvent] struct {
 	changefeedID    model.ChangeFeedID
-	tableID         model.TableID
+	span            tablepb.Span
 	eventID         uint64
 	maxResolvedTs   model.ResolvedTs
 	backendSink     eventsink.EventSink[E]
@@ -53,18 +54,18 @@ type EventTableSink[E eventsink.TableEvent] struct {
 // New an eventTableSink with given backendSink and event appender.
 func New[E eventsink.TableEvent](
 	changefeedID model.ChangeFeedID,
-	tableID model.TableID,
+	span tablepb.Span,
 	backendSink eventsink.EventSink[E],
 	appender eventsink.Appender[E],
 	totalRowsCounter prometheus.Counter,
 ) *EventTableSink[E] {
 	return &EventTableSink[E]{
 		changefeedID:              changefeedID,
-		tableID:                   tableID,
+		span:                      span,
 		eventID:                   0,
 		maxResolvedTs:             model.NewResolvedTs(0),
 		backendSink:               backendSink,
-		progressTracker:           newProgressTracker(tableID, defaultBufferSize),
+		progressTracker:           newProgressTracker(span, defaultBufferSize),
 		eventAppender:             appender,
 		eventBuffer:               make([]E, 0, 1024),
 		state:                     state.TableSinkSinking,
@@ -96,12 +97,12 @@ func (e *EventTableSink[E]) UpdateResolvedTs(resolvedTs model.ResolvedTs) error 
 		return nil
 	}
 	resolvedEvents := e.eventBuffer[:i]
-	e.eventBuffer = append(make([]E, 0, len(e.eventBuffer[i:])), e.eventBuffer[i:]...)
 
 	// We have to create a new slice for the rest of the elements,
 	// otherwise we cannot GC the flushed values as soon as possible.
-	resolvedCallbackableEvents := make([]*eventsink.CallbackableEvent[E], 0, len(resolvedEvents))
+	e.eventBuffer = append(make([]E, 0, len(e.eventBuffer[i:])), e.eventBuffer[i:]...)
 
+	resolvedCallbackableEvents := make([]*eventsink.CallbackableEvent[E], 0, len(resolvedEvents))
 	for _, ev := range resolvedEvents {
 		// We have to record the event ID for the callback.
 		ce := &eventsink.CallbackableEvent[E]{
@@ -123,15 +124,15 @@ func (e *EventTableSink[E]) GetCheckpointTs() model.ResolvedTs {
 
 // Close the table sink and wait for all callbacks be called.
 // Notice: It will be blocked until all callbacks be called.
-func (e *EventTableSink[E]) Close(ctx context.Context) error {
+func (e *EventTableSink[E]) Close(ctx context.Context) {
 	currentState := e.state.Load()
 	if currentState == state.TableSinkStopping ||
 		currentState == state.TableSinkStopped {
 		log.Warn(fmt.Sprintf("Table sink is already %s", currentState.String()),
 			zap.String("namespace", e.changefeedID.Namespace),
 			zap.String("changefeed", e.changefeedID.ID),
-			zap.Uint64("tableID", uint64(e.tableID)))
-		return nil
+			zap.Stringer("span", &e.span))
+		return
 	}
 
 	// Notice: We have to set the state to stopping first,
@@ -146,26 +147,15 @@ func (e *EventTableSink[E]) Close(ctx context.Context) error {
 	log.Info("Stopping table sink",
 		zap.String("namespace", e.changefeedID.Namespace),
 		zap.String("changefeed", e.changefeedID.ID),
-		zap.Int64("tableID", e.tableID),
+		zap.Stringer("span", &e.span),
 		zap.Uint64("checkpointTs", stoppingCheckpointTs.Ts))
-	err := e.progressTracker.close(ctx)
-	if err != nil {
-		failedCheckpointTs := e.GetCheckpointTs()
-		log.Error("Failed to stop table sink",
-			zap.String("namespace", e.changefeedID.Namespace),
-			zap.String("changefeed", e.changefeedID.ID),
-			zap.Int64("tableID", e.tableID),
-			zap.Uint64("checkpointTs", failedCheckpointTs.Ts),
-			zap.Duration("duration", time.Since(start)), zap.Error(err))
-		return err
-	}
+	e.progressTracker.close(ctx)
 	e.state.Store(state.TableSinkStopped)
 	stoppedCheckpointTs := e.GetCheckpointTs()
 	log.Info("Table sink stopped",
 		zap.String("namespace", e.changefeedID.Namespace),
 		zap.String("changefeed", e.changefeedID.ID),
-		zap.Int64("tableID", e.tableID),
+		zap.Stringer("span", &e.span),
 		zap.Uint64("checkpointTs", stoppedCheckpointTs.Ts),
 		zap.Duration("duration", time.Since(start)))
-	return nil
 }

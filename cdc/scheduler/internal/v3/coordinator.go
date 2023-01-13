@@ -21,7 +21,10 @@ import (
 	"github.com/pingcap/errors"
 	"github.com/pingcap/log"
 	"github.com/pingcap/tiflow/cdc/model"
+	"github.com/pingcap/tiflow/cdc/processor/tablepb"
 	"github.com/pingcap/tiflow/cdc/scheduler/internal"
+	"github.com/pingcap/tiflow/cdc/scheduler/internal/v3/compat"
+	"github.com/pingcap/tiflow/cdc/scheduler/internal/v3/keyspan"
 	"github.com/pingcap/tiflow/cdc/scheduler/internal/v3/member"
 	"github.com/pingcap/tiflow/cdc/scheduler/internal/v3/replication"
 	"github.com/pingcap/tiflow/cdc/scheduler/internal/v3/scheduler"
@@ -30,6 +33,8 @@ import (
 	"github.com/pingcap/tiflow/pkg/config"
 	cerror "github.com/pingcap/tiflow/pkg/errors"
 	"github.com/pingcap/tiflow/pkg/p2p"
+	"github.com/pingcap/tiflow/pkg/pdutil"
+	"github.com/pingcap/tiflow/pkg/spanz"
 	"github.com/pingcap/tiflow/pkg/version"
 	"go.uber.org/zap"
 )
@@ -53,6 +58,10 @@ type coordinator struct {
 	replicationM *replication.Manager
 	captureM     *member.CaptureManager
 	schedulerM   *scheduler.Manager
+	reconciler   *keyspan.Reconciler
+	compat       *compat.Compat
+	pdClock      pdutil.Clock
+	tableRanges  replication.TableRanges
 
 	lastCollectTime time.Time
 	changefeedID    model.ChangeFeedID
@@ -63,10 +72,11 @@ func NewCoordinator(
 	ctx context.Context,
 	captureID model.CaptureID,
 	changefeedID model.ChangeFeedID,
-	checkpointTs model.Ts,
 	messageServer *p2p.MessageServer,
 	messageRouter p2p.MessageRouter,
 	ownerRevision int64,
+	regionCache keyspan.RegionCache,
+	pdClock pdutil.Clock,
 	cfg *config.SchedulerConfig,
 ) (internal.Scheduler, error) {
 	trans, err := transport.NewTransport(
@@ -76,6 +86,8 @@ func NewCoordinator(
 	}
 	coord := newCoordinator(captureID, changefeedID, ownerRevision, cfg)
 	coord.trans = trans
+	coord.reconciler = keyspan.NewReconciler(changefeedID, regionCache, cfg.RegionPerSpan)
+	coord.pdClock = pdClock
 	return coord, nil
 }
 
@@ -93,10 +105,10 @@ func newCoordinator(
 		captureID: captureID,
 		replicationM: replication.NewReplicationManager(
 			cfg.MaxTaskConcurrency, changefeedID),
-		captureM: member.NewCaptureManager(
-			captureID, changefeedID, revision, cfg.HeartbeatTick),
+		captureM:     member.NewCaptureManager(captureID, changefeedID, revision, cfg),
 		schedulerM:   scheduler.NewSchedulerManager(changefeedID, cfg),
 		changefeedID: changefeedID,
+		compat:       compat.New(cfg, map[model.CaptureID]*model.CaptureInfo{}),
 	}
 }
 
@@ -117,6 +129,7 @@ func (c *coordinator) Tick(
 }
 
 // MoveTable implement the scheduler interface
+// FIXME: tableID should be Span.
 func (c *coordinator) MoveTable(tableID model.TableID, target model.CaptureID) {
 	c.mu.Lock()
 	defer c.mu.Unlock()
@@ -131,7 +144,8 @@ func (c *coordinator) MoveTable(tableID model.TableID, target model.CaptureID) {
 		return
 	}
 
-	c.schedulerM.MoveTable(tableID, target)
+	span := spanz.TableIDToComparableSpan(tableID)
+	c.schedulerM.MoveTable(span, target)
 }
 
 // Rebalance implement the scheduler interface
@@ -168,11 +182,13 @@ func (c *coordinator) DrainCapture(target model.CaptureID) (int, error) {
 	}
 
 	var count int
-	for _, rep := range c.replicationM.ReplicationSets() {
-		if rep.Primary == target {
-			count++
-		}
-	}
+	c.replicationM.ReplicationSets().Ascend(
+		func(_ tablepb.Span, rep *replication.ReplicationSet) bool {
+			if rep.Primary == target {
+				count++
+			}
+			return true
+		})
 
 	if count == 0 {
 		log.Info("schedulerv3: drain capture request ignored, "+
@@ -240,6 +256,11 @@ func (c *coordinator) poll(
 	aliveCaptures map[model.CaptureID]*model.CaptureInfo,
 ) (newCheckpointTs, newResolvedTs model.Ts, err error) {
 	c.maybeCollectMetrics()
+	if c.compat.UpdateCaptureInfo(aliveCaptures) {
+		log.Info("schedulerv3: compat update capture info",
+			zap.Any("captures", aliveCaptures),
+			zap.Bool("spanReplicationEnabled", c.compat.CheckSpanReplicationEnabled()))
+	}
 
 	recvMsgs, err := c.recvMsgs(ctx)
 	if err != nil {
@@ -260,10 +281,20 @@ func (c *coordinator) poll(
 	}
 	msgBuf = append(msgBuf, msgs...)
 
+	pdTime := time.Now()
+	// only nil in unit test
+	if c.pdClock != nil {
+		pdTime, err = c.pdClock.CurrentTime()
+		if err != nil {
+			log.Warn("schedulerv3: failed to get pd time", zap.Error(err))
+		}
+	}
+
+	c.tableRanges.UpdateTables(currentTables)
 	if !c.captureM.CheckAllCaptureInitialized() {
 		// Skip generating schedule tasks for replication manager,
 		// as not all capture are initialized.
-		newCheckpointTs, newResolvedTs = c.replicationM.AdvanceCheckpoint(currentTables)
+		newCheckpointTs, newResolvedTs = c.replicationM.AdvanceCheckpoint(&c.tableRanges, pdTime)
 		return newCheckpointTs, newResolvedTs, c.sendMsgs(ctx, msgBuf)
 	}
 
@@ -280,8 +311,9 @@ func (c *coordinator) poll(
 	// Generate schedule tasks based on the current status.
 	replications := c.replicationM.ReplicationSets()
 	runningTasks := c.replicationM.RunningTasks()
+	currentSpans := c.reconciler.Reconcile(ctx, &c.tableRanges, replications, c.compat)
 	allTasks := c.schedulerM.Schedule(
-		checkpointTs, currentTables, c.captureM.Captures, replications, runningTasks)
+		checkpointTs, currentSpans, c.captureM.Captures, replications, runningTasks)
 
 	// Handle generated schedule tasks.
 	msgs, err = c.replicationM.HandleTasks(allTasks)
@@ -297,7 +329,7 @@ func (c *coordinator) poll(
 	}
 
 	// Checkpoint calculation
-	newCheckpointTs, newResolvedTs = c.replicationM.AdvanceCheckpoint(currentTables)
+	newCheckpointTs, newResolvedTs = c.replicationM.AdvanceCheckpoint(&c.tableRanges, pdTime)
 	return newCheckpointTs, newResolvedTs, nil
 }
 
@@ -315,6 +347,7 @@ func (c *coordinator) recvMsgs(ctx context.Context) ([]*schedulepb.Message, erro
 			n++
 		}
 	}
+	c.compat.AfterTransportReceive(recvMsgs[:n])
 	return recvMsgs[:n], nil
 }
 
@@ -339,8 +372,8 @@ func (c *coordinator) sendMsgs(ctx context.Context, msgs []*schedulepb.Message) 
 			ProcessorEpoch: epoch,
 		}
 		m.From = c.captureID
-
 	}
+	c.compat.BeforeTransportSend(msgs)
 	return c.trans.Send(ctx, msgs)
 }
 

@@ -1,4 +1,4 @@
-load_task
+foreign_key
 downstream_more_column
 expression_filter
 fake_rotate_event
@@ -8,3 +8,5 @@ sql_mode
 http_proxies
 openapi
 duplicate_event
+binlog_parse
+only_dml

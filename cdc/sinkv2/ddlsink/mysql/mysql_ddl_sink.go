@@ -39,6 +39,9 @@ import (
 
 const (
 	defaultDDLMaxRetry uint64 = 20
+
+	// networkDriftDuration is used to construct a context timeout for database operations.
+	networkDriftDuration = 5 * time.Second
 )
 
 // Assert DDLEventSink implementation
@@ -48,7 +51,8 @@ type mysqlDDLSink struct {
 	// id indicates which processor (changefeed) this sink belongs to.
 	id model.ChangeFeedID
 	// db is the database connection.
-	db *sql.DB
+	db  *sql.DB
+	cfg *pmysql.Config
 	// statistics is the statistics of this sink.
 	// We use it to record the DDL count.
 	statistics *metrics.Statistics
@@ -81,6 +85,7 @@ func NewMySQLDDLSink(
 	m := &mysqlDDLSink{
 		id:         changefeedID,
 		db:         db,
+		cfg:        cfg,
 		statistics: metrics.NewStatistics(ctx, sink.TxnSink),
 	}
 
@@ -123,7 +128,12 @@ func (m *mysqlDDLSink) execDDLWithMaxRetries(ctx context.Context, ddl *model.DDL
 		retry.WithIsRetryableErr(cerror.IsRetryableError))
 }
 
-func (m *mysqlDDLSink) execDDL(ctx context.Context, ddl *model.DDLEvent) error {
+func (m *mysqlDDLSink) execDDL(pctx context.Context, ddl *model.DDLEvent) error {
+	writeTimeout, _ := time.ParseDuration(m.cfg.WriteTimeout)
+	writeTimeout += networkDriftDuration
+	ctx, cancelFunc := context.WithTimeout(pctx, writeTimeout)
+	defer cancelFunc()
+
 	shouldSwitchDB := needSwitchDB(ddl)
 
 	failpoint.Inject("MySQLSinkExecDDLDelay", func() {
@@ -138,35 +148,32 @@ func (m *mysqlDDLSink) execDDL(ctx context.Context, ddl *model.DDLEvent) error {
 	start := time.Now()
 	log.Info("Start exec DDL", zap.Any("DDL", ddl), zap.String("namespace", m.id.Namespace),
 		zap.String("changefeed", m.id.ID))
-	err := m.statistics.RecordDDLExecution(func() error {
-		tx, err := m.db.BeginTx(ctx, nil)
+	tx, err := m.db.BeginTx(ctx, nil)
+	if err != nil {
+		return err
+	}
+
+	if shouldSwitchDB {
+		_, err = tx.ExecContext(ctx, "USE "+quotes.QuoteName(ddl.TableInfo.TableName.Schema)+";")
 		if err != nil {
-			return err
-		}
-
-		if shouldSwitchDB {
-			_, err = tx.ExecContext(ctx, "USE "+quotes.QuoteName(ddl.TableInfo.TableName.Schema)+";")
-			if err != nil {
-				if rbErr := tx.Rollback(); rbErr != nil {
-					log.Error("Failed to rollback", zap.String("namespace", m.id.Namespace),
-						zap.String("changefeed", m.id.ID), zap.Error(err))
-				}
-				return err
-			}
-		}
-
-		if _, err = tx.ExecContext(ctx, ddl.Query); err != nil {
 			if rbErr := tx.Rollback(); rbErr != nil {
-				log.Error("Failed to rollback", zap.String("sql", ddl.Query),
-					zap.String("namespace", m.id.Namespace),
+				log.Error("Failed to rollback", zap.String("namespace", m.id.Namespace),
 					zap.String("changefeed", m.id.ID), zap.Error(err))
 			}
 			return err
 		}
+	}
 
-		return errors.Trace(tx.Commit())
-	})
-	if err != nil {
+	if _, err = tx.ExecContext(ctx, ddl.Query); err != nil {
+		if rbErr := tx.Rollback(); rbErr != nil {
+			log.Error("Failed to rollback", zap.String("sql", ddl.Query),
+				zap.String("namespace", m.id.Namespace),
+				zap.String("changefeed", m.id.ID), zap.Error(err))
+		}
+		return err
+	}
+
+	if err = tx.Commit(); err != nil {
 		log.Error("Failed to exec DDL", zap.String("sql", ddl.Query),
 			zap.Duration("duration", time.Since(start)),
 			zap.String("namespace", m.id.Namespace),

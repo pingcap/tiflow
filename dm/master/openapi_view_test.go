@@ -348,11 +348,11 @@ func (s *OpenAPIViewSuite) TestReverseRequestToLeader() {
 }
 
 func (s *OpenAPIViewSuite) TestReverseRequestToHttpsLeader() {
-	pwd, err := os.Getwd()
+	pwd2, err := os.Getwd()
 	require.NoError(s.T(), err)
-	caPath := pwd + "/tls_for_test/ca.pem"
-	certPath := pwd + "/tls_for_test/dm.pem"
-	keyPath := pwd + "/tls_for_test/dm.key"
+	caPath := pwd2 + "/tls_for_test/ca.pem"
+	certPath := pwd2 + "/tls_for_test/dm.pem"
+	keyPath := pwd2 + "/tls_for_test/dm.key"
 
 	// master1
 	masterAddr1 := tempurl.Alloc()[len("http://"):]

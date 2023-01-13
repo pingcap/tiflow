@@ -23,6 +23,8 @@ import (
 	"github.com/pingcap/failpoint"
 	"github.com/pingcap/log"
 	"github.com/pingcap/tiflow/cdc/model"
+	"github.com/pingcap/tiflow/cdc/sink"
+	"github.com/pingcap/tiflow/pkg/config"
 	cdcContext "github.com/pingcap/tiflow/pkg/context"
 	cerrors "github.com/pingcap/tiflow/pkg/errors"
 	"github.com/pingcap/tiflow/pkg/orchestrator"
@@ -71,7 +73,9 @@ type managerImpl struct {
 		model.ChangeFeedID,
 		*upstream.Upstream,
 		*model.Liveness,
+		*config.SchedulerConfig,
 	) *processor
+	cfg *config.SchedulerConfig
 
 	metricProcessorCloseDuration prometheus.Observer
 }
@@ -81,6 +85,7 @@ func NewManager(
 	captureInfo *model.CaptureInfo,
 	upstreamManager *upstream.Manager,
 	liveness *model.Liveness,
+	cfg *config.SchedulerConfig,
 ) Manager {
 	return &managerImpl{
 		captureInfo:                  captureInfo,
@@ -90,6 +95,7 @@ func NewManager(
 		upstreamManager:              upstreamManager,
 		newProcessor:                 newProcessor,
 		metricProcessorCloseDuration: processorCloseDuration,
+		cfg:                          cfg,
 	}
 }
 
@@ -118,7 +124,15 @@ func (m *managerImpl) Tick(stdCtx context.Context, state orchestrator.ReactorSta
 				up = m.upstreamManager.AddUpstream(upstreamInfo)
 			}
 			failpoint.Inject("processorManagerHandleNewChangefeedDelay", nil)
-			p = m.newProcessor(changefeedState, m.captureInfo, changefeedID, up, m.liveness)
+
+			// TODO: Remove the hack once span replication is compatible with
+			//       all sinks.
+			cfg := *m.cfg
+			if !sink.IsSinkCompatibleWithSpanReplication(changefeedState.Info.SinkURI) {
+				cfg.RegionPerSpan = 0
+			}
+			p = m.newProcessor(
+				changefeedState, m.captureInfo, changefeedID, up, m.liveness, &cfg)
 			m.processors[changefeedID] = p
 		}
 		ctx := cdcContext.WithChangefeedVars(ctx, &cdcContext.ChangefeedVars{
@@ -140,7 +154,6 @@ func (m *managerImpl) Tick(stdCtx context.Context, state orchestrator.ReactorSta
 		}
 	}
 
-	// close upstream
 	if err := m.upstreamManager.Tick(stdCtx, globalState); err != nil {
 		return state, errors.Trace(err)
 	}
@@ -148,7 +161,8 @@ func (m *managerImpl) Tick(stdCtx context.Context, state orchestrator.ReactorSta
 }
 
 func (m *managerImpl) closeProcessor(changefeedID model.ChangeFeedID, ctx cdcContext.Context) {
-	if processor, exist := m.processors[changefeedID]; exist {
+	processor, exist := m.processors[changefeedID]
+	if exist {
 		startTime := time.Now()
 		err := processor.Close(ctx)
 		costTime := time.Since(startTime)
@@ -235,11 +249,14 @@ func (m *managerImpl) handleCommand(ctx cdcContext.Context) error {
 		return cerrors.ErrReactorFinished
 	case commandTpWriteDebugInfo:
 		w := cmd.payload.(io.Writer)
-		m.writeDebugInfo(w)
+		err := m.writeDebugInfo(w)
+		if err != nil {
+			cmd.done <- err
+		}
 	case commandTpQueryTableCount:
 		count := 0
 		for _, p := range m.processors {
-			count += len(p.GetAllCurrentTables())
+			count += p.GetTableSpanCount()
 		}
 		select {
 		case cmd.payload.(chan int) <- count:
@@ -251,10 +268,15 @@ func (m *managerImpl) handleCommand(ctx cdcContext.Context) error {
 	return nil
 }
 
-func (m *managerImpl) writeDebugInfo(w io.Writer) {
+func (m *managerImpl) writeDebugInfo(w io.Writer) error {
 	for changefeedID, processor := range m.processors {
 		fmt.Fprintf(w, "changefeedID: %s\n", changefeedID)
-		processor.WriteDebugInfo(w)
+		err := processor.WriteDebugInfo(w)
+		if err != nil {
+			return errors.Trace(err)
+		}
 		fmt.Fprintf(w, "\n")
 	}
+
+	return nil
 }

@@ -88,3 +88,6 @@ start_tidb() {
 start_pd
 start_tikv
 start_tidb
+
+mysql -uroot -h127.0.0.1 -P4000 --default-character-set utf8 -e "CREATE USER 'test'@'%' IDENTIFIED BY '123456';" || true
+mysql -uroot -h127.0.0.1 -P4000 --default-character-set utf8 -e "GRANT ALL PRIVILEGES ON *.* TO 'test'@'%' WITH GRANT OPTION;" || true

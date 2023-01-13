@@ -186,7 +186,7 @@ ErrOpenAPITaskConfigExist,[code=20050:class=config:scope=internal:level=low], "M
 ErrOpenAPITaskConfigNotExist,[code=20051:class=config:scope=internal:level=low], "Message: the openapi task config for '%s' does not exist"
 ErrConfigCollationCompatibleNotSupport,[code=20052:class=config:scope=internal:level=medium], "Message: collation compatible %s not supported, Workaround: Please check the `collation_compatible` config in task configuration file, which can be set to `loose`/`strict`."
 ErrConfigInvalidLoadMode,[code=20053:class=config:scope=internal:level=medium], "Message: invalid load mode '%s', Workaround: Please choose a valid value in ['logical', 'physical']"
-ErrConfigInvalidDuplicateResolution,[code=20054:class=config:scope=internal:level=medium], "Message: invalid load on-duplicate '%s', Workaround: Please choose a valid value in ['replace', 'error', 'ignore']"
+ErrConfigInvalidDuplicateResolution,[code=20054:class=config:scope=internal:level=medium], "Message: invalid load on-duplicate-logical or on-duplicate option '%s', Workaround: Please choose a valid value in ['replace', 'error', 'ignore'] or leave it empty."
 ErrConfigValidationMode,[code=20055:class=config:scope=internal:level=high], "Message: invalid validation mode, Workaround: Please check `validation-mode` config in task configuration file."
 ErrContinuousValidatorCfgNotFound,[code=20056:class=config:scope=internal:level=medium], "Message: mysql-instance(%d)'s continuous validator config %s not exist, Workaround: Please check the `validator-config-name` config in task configuration file."
 ErrConfigStartTimeTooLate,[code=20057:class=config:scope=internal:level=high], "Message: start-time %s is too late, no binlog location matches it, Workaround: Please check the `--start-time` is expected or try again later."
@@ -194,6 +194,9 @@ ErrConfigLoaderDirInvalid,[code=20058:class=config:scope=internal:level=high], "
 ErrConfigLoaderS3NotSupport,[code=20059:class=config:scope=internal:level=high], "Message: loader's dir %s is s3 dir, but s3 is not supported, Workaround: Please check the `dir` config in task configuration file and you can use `Lightning` by set config `import-mode` be `sql` which supports s3 instead."
 ErrConfigInvalidSafeModeDuration,[code=20060:class=config:scope=internal:level=medium], "Message: safe-mode-duration '%s' parsed failed: %v, Workaround: Please check the `safe-mode-duration` is correct."
 ErrConfigConfictSafeModeDurationAndSafeMode,[code=20061:class=config:scope=internal:level=low], "Message: safe-mode(true) conflicts with safe-mode-duration(0s), Workaround: Please set safe-mode to false or safe-mode-duration to non-zero."
+ErrConfigInvalidPhysicalDuplicateResolution,[code=20062:class=config:scope=internal:level=medium], "Message: invalid load on-duplicate-physical option '%s', Workaround: Please choose a valid value in ['none', 'manual'] or leave it empty."
+ErrConfigInvalidPhysicalChecksum,[code=20063:class=config:scope=internal:level=medium], "Message: invalid load checksum-physical option '%s', Workaround: Please choose a valid value in ['required', 'optional', 'off'] or leave it empty."
+ErrConfigColumnMappingDeprecated,[code=20064:class=config:scope=internal:level=high], "Message: column-mapping is not supported since v6.6.0, Workaround: Please use extract-table/extract-schema/extract-source to handle data conflict when merge tables. See https://docs.pingcap.com/tidb/v6.4/task-configuration-file-full#task-configuration-file-template-advanced"
 ErrBinlogExtractPosition,[code=22001:class=binlog-op:scope=internal:level=high]
 ErrBinlogInvalidFilename,[code=22002:class=binlog-op:scope=internal:level=high], "Message: invalid binlog filename"
 ErrBinlogParsePosFromStr,[code=22003:class=binlog-op:scope=internal:level=high]
@@ -281,7 +284,9 @@ ErrLoadUnitDuplicateTableFile,[code=34015:class=load-unit:scope=internal:level=h
 ErrLoadUnitGenBAList,[code=34016:class=load-unit:scope=internal:level=high], "Message: generate block allow list, Workaround: Please check the `block-allow-list` config in task configuration file."
 ErrLoadTaskWorkerNotMatch,[code=34017:class=functional:scope=internal:level=high], "Message: different worker in load stage, previous worker: %s, current worker: %s, Workaround: Please check if the previous worker is online."
 ErrLoadTaskCheckPointNotMatch,[code=34018:class=functional:scope=internal:level=high], "Message: inconsistent checkpoints between loader and target database, Workaround: If you want to redo the whole task, please check that you have not forgotten to add -remove-meta flag for start-task command."
-ErrLoadLightningRuntime,[code=34019:class=load-unit:scope=not-set:level=high]
+ErrLoadLightningRuntime,[code=34019:class=load-unit:scope=internal:level=high]
+ErrLoadLightningHasDup,[code=34020:class=load-unit:scope=internal:level=medium], "Message: physical import finished but the data has duplication, please check `%s`.`%s` to see the duplication, Workaround: You can refer to https://docs.pingcap.com/tidb/stable/tidb-lightning-physical-import-mode-usage#conflict-detection to manually insert data and resume the task."
+ErrLoadLightningChecksum,[code=34021:class=load-unit:scope=internal:level=medium], "Message: checksum mismatched, KV number in source files: %s, KV number in TiDB cluster: %s, Workaround: If TiDB cluster has more KV, please check if the migrated tables are empty before the task. If source files have more KV, please set `on-duplicate-physical` and restart the task to see data duplication. You can resume the task to ignore the error if you want."
 ErrSyncerUnitPanic,[code=36001:class=sync-unit:scope=internal:level=high], "Message: panic error: %v"
 ErrSyncUnitInvalidTableName,[code=36002:class=sync-unit:scope=internal:level=high], "Message: extract table name for DML error: %s"
 ErrSyncUnitTableNameQuery,[code=36003:class=sync-unit:scope=internal:level=high], "Message: table name parse error: %s"

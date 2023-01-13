@@ -15,11 +15,15 @@ package rpcutil
 
 import (
 	"context"
+	"reflect"
+	"strings"
+	"time"
 
 	perrors "github.com/pingcap/errors"
 	"github.com/pingcap/log"
 	"github.com/pingcap/tiflow/pkg/errors"
 	"go.uber.org/zap"
+	"golang.org/x/time/rate"
 	"google.golang.org/genproto/googleapis/rpc/errdetails"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/codes"
@@ -95,28 +99,132 @@ func FromGRPCError(errIn error) error {
 	return normalizedErr.GenWithStackByArgs()
 }
 
-// UnaryServerInterceptor is a gRPC server-side interceptor that converts errors to gRPC errors and logs requests.
-func UnaryServerInterceptor(ctx context.Context, req interface{}, info *grpc.UnaryServerInfo, handler grpc.UnaryHandler) (interface{}, error) {
-	resp, err := handler(ctx, req)
-	if err != nil {
-		errOut := ToGRPCError(err)
-		s, _ := status.FromError(errOut)
-		logger := log.With(zap.String("method", info.FullMethod), zap.Error(err), zap.Any("request", req))
-		switch s.Code() {
-		case codes.Unknown:
-			logger.Warn("request handled with an unknown error")
-		case codes.Internal:
-			logger.Warn("request handled with an internal error")
-		default:
-			logger.Debug("request handled with an error")
+// ForwardToLeader is a gRPC middleware that forwards the request to the leader if the current node is not the leader.
+func ForwardToLeader[T any](fc ForwardChecker[T]) grpc.UnaryServerInterceptor {
+	return func(ctx context.Context, req any, info *grpc.UnaryServerInfo, handler grpc.UnaryHandler) (resp any, _ error) {
+		method := extractMethod(info.FullMethod)
+		if fc.IsLeader() || !fc.LeaderOnly(method) {
+			return handler(ctx, req)
 		}
-		return nil, errOut
+
+		leaderCli, err := waitForLeader(ctx, fc)
+		if err != nil {
+			// Return gRPC error to avoid depending on NormalizeError middleware.
+			return nil, ToGRPCError(err)
+		}
+
+		fv := reflect.ValueOf(leaderCli).MethodByName(method)
+		if fv.IsZero() {
+			return nil, status.Errorf(codes.Unimplemented, "method %s not implemented", method)
+		}
+		results := fv.Call([]reflect.Value{reflect.ValueOf(ctx), reflect.ValueOf(req)})
+		if len(results) != 2 {
+			log.Panic("invalid method signature", zap.String("method", method))
+		}
+		errI := results[1].Interface()
+		if errI != nil {
+			return nil, errI.(error)
+		}
+		return results[0].Interface(), nil
+	}
+}
+
+const (
+	waitForLeaderTimeout = 3 * time.Second
+	waitForLeaderTick    = 300 * time.Millisecond
+)
+
+func waitForLeader[T any](ctx context.Context, fc ForwardChecker[T]) (leaderCli T, _ error) {
+	leaderCli, err := fc.LeaderClient()
+	if err == nil {
+		return leaderCli, nil
+	}
+	if !errors.Is(err, errors.ErrMasterNoLeader) {
+		return leaderCli, err
 	}
 
-	log.With(
-		zap.String("method", info.FullMethod),
-		zap.Any("request", req),
-		zap.Any("response", resp),
-	).Debug("request handled successfully")
-	return resp, nil
+	timer := time.NewTimer(waitForLeaderTimeout)
+	defer timer.Stop()
+
+	ticker := time.NewTicker(waitForLeaderTick)
+	defer ticker.Stop()
+
+	for {
+		select {
+		case <-ctx.Done():
+			return leaderCli, errors.Trace(ctx.Err())
+		case <-ticker.C:
+			leaderCli, err = fc.LeaderClient()
+			if err == nil {
+				return leaderCli, nil
+			}
+			if !errors.Is(err, errors.ErrMasterNoLeader) {
+				return leaderCli, err
+			}
+		case <-time.After(waitForLeaderTimeout):
+			return leaderCli, errors.ErrMasterNoLeader.GenWithStackByArgs()
+		}
+	}
+}
+
+// CheckAvailable is a gRPC middleware that checks whether a method is ready to serve.
+func CheckAvailable(fc FeatureChecker) grpc.UnaryServerInterceptor {
+	return func(ctx context.Context, req any, info *grpc.UnaryServerInfo, handler grpc.UnaryHandler) (resp any, _ error) {
+		method := extractMethod(info.FullMethod)
+		if !fc.Available(method) {
+			// Return gRPC error to avoid depending on NormalizeError middleware.
+			return nil, ToGRPCError(errors.ErrMasterNotReady.GenWithStackByArgs())
+		}
+		return handler(ctx, req)
+	}
+}
+
+// NormalizeError is a gRPC middleware that normalizes the error.
+func NormalizeError() grpc.UnaryServerInterceptor {
+	return func(ctx context.Context, req any, info *grpc.UnaryServerInfo, handler grpc.UnaryHandler) (resp any, _ error) {
+		method := extractMethod(info.FullMethod)
+		resp, err := handler(ctx, req)
+		if err != nil {
+			errOut := ToGRPCError(err)
+			s, _ := status.FromError(errOut)
+			logger := log.L().With(zap.String("method", method), zap.Error(err), zap.Any("request", req))
+			switch s.Code() {
+			case codes.Unknown:
+				logger.Warn("request handled with an unknown error")
+			case codes.Internal:
+				logger.Warn("request handled with an internal error")
+			default:
+				logger.Debug("request handled with an error")
+			}
+			return nil, errOut
+		}
+
+		log.Debug("request handled successfully", zap.String("method", method), zap.Any("request", req), zap.Any("response", resp))
+		return resp, nil
+	}
+}
+
+// Logger is a gRPC middleware that logs the request and response.
+// allowList is a list of methods that will be logged. limiter is used to limit the log rate.
+func Logger(allowList []string, limiter *rate.Limiter) grpc.UnaryServerInterceptor {
+	allow := func(method string) bool {
+		for _, m := range allowList {
+			if m == method {
+				return true
+			}
+		}
+		return limiter.Allow()
+	}
+	return func(ctx context.Context, req any, info *grpc.UnaryServerInfo, handler grpc.UnaryHandler) (resp any, _ error) {
+		method := extractMethod(info.FullMethod)
+		if allow(method) {
+			log.Info("", zap.Any("request", req), zap.String("method", method))
+		}
+		return handler(ctx, req)
+	}
+}
+
+// extract method name from full method name. fullMethod is the full RPC method string, i.e., /package.service/method.
+func extractMethod(fullMethod string) string {
+	return fullMethod[strings.LastIndexByte(fullMethod, '/')+1:]
 }

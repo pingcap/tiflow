@@ -18,6 +18,7 @@ import (
 	"strings"
 
 	"github.com/pingcap/tiflow/cdc/model"
+	"github.com/pingcap/tiflow/cdc/processor/tablepb"
 	"github.com/pingcap/tiflow/cdc/sinkv2/eventsink"
 	"github.com/pingcap/tiflow/cdc/sinkv2/eventsink/blackhole"
 	"github.com/pingcap/tiflow/cdc/sinkv2/eventsink/cloudstorage"
@@ -66,13 +67,13 @@ func New(ctx context.Context,
 		s.sinkType = sink.TxnSink
 	case sink.KafkaScheme, sink.KafkaSSLScheme:
 		mqs, err := mq.NewKafkaDMLSink(ctx, sinkURI, cfg, errCh,
-			kafka.NewSaramaAdminClient, dmlproducer.NewKafkaDMLProducer)
+			kafka.NewSaramaAdminClient, kafka.NewSaramaClient, dmlproducer.NewKafkaDMLProducer)
 		if err != nil {
 			return nil, err
 		}
 		s.rowSink = mqs
 		s.sinkType = sink.RowSink
-	case sink.S3Scheme, sink.FileScheme, sink.GCSScheme, sink.AzblobScheme:
+	case sink.S3Scheme, sink.FileScheme, sink.GCSScheme, sink.GSScheme, sink.AzblobScheme, sink.AzureScheme, sink.CloudStorageNoopScheme:
 		storageSink, err := cloudstorage.NewCloudStorageSink(ctx, sinkURI, cfg, errCh)
 		if err != nil {
 			return nil, err
@@ -92,14 +93,16 @@ func New(ctx context.Context,
 }
 
 // CreateTableSink creates a TableSink by schema.
-func (s *SinkFactory) CreateTableSink(changefeedID model.ChangeFeedID, tableID model.TableID, totalRowsCounter prometheus.Counter) tablesink.TableSink {
+func (s *SinkFactory) CreateTableSink(
+	changefeedID model.ChangeFeedID, span tablepb.Span, totalRowsCounter prometheus.Counter,
+) tablesink.TableSink {
 	switch s.sinkType {
 	case sink.RowSink:
 		// We have to indicate the type here, otherwise it can not be compiled.
-		return tablesink.New[*model.RowChangedEvent](changefeedID, tableID,
+		return tablesink.New[*model.RowChangedEvent](changefeedID, span,
 			s.rowSink, &eventsink.RowChangeEventAppender{}, totalRowsCounter)
 	case sink.TxnSink:
-		return tablesink.New[*model.SingleTableTxn](changefeedID, tableID,
+		return tablesink.New[*model.SingleTableTxn](changefeedID, span,
 			s.txnSink, &eventsink.TxnEventAppender{}, totalRowsCounter)
 	default:
 		panic("unknown sink type")

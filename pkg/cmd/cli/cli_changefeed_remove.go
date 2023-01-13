@@ -17,6 +17,7 @@ import (
 	"strings"
 
 	apiv1client "github.com/pingcap/tiflow/pkg/api/v1"
+	apiv2client "github.com/pingcap/tiflow/pkg/api/v2"
 	"github.com/pingcap/tiflow/pkg/cmd/context"
 	"github.com/pingcap/tiflow/pkg/cmd/factory"
 	"github.com/pingcap/tiflow/pkg/cmd/util"
@@ -26,7 +27,8 @@ import (
 
 // removeChangefeedOptions defines flags for the `cli changefeed remove` command.
 type removeChangefeedOptions struct {
-	apiClient    apiv1client.APIV1Interface
+	apiV1Client  apiv1client.APIV1Interface
+	apiV2Client  apiv2client.APIV2Interface
 	changefeedID string
 }
 
@@ -44,12 +46,17 @@ func (o *removeChangefeedOptions) addFlags(cmd *cobra.Command) {
 
 // complete adapts from the command line args to the data and client required.
 func (o *removeChangefeedOptions) complete(f factory.Factory) error {
-	apiClient, err := f.APIV1Client()
+	v1Client, err := f.APIV1Client()
+	if err != nil {
+		return err
+	}
+	v2Client, err := f.APIV2Client()
 	if err != nil {
 		return err
 	}
 
-	o.apiClient = apiClient
+	o.apiV1Client = v1Client
+	o.apiV2Client = v2Client
 	return nil
 }
 
@@ -57,7 +64,7 @@ func (o *removeChangefeedOptions) complete(f factory.Factory) error {
 func (o *removeChangefeedOptions) run(cmd *cobra.Command) error {
 	ctx := context.GetDefaultContext()
 
-	changefeedDetail, err := o.apiClient.Changefeeds().Get(ctx, o.changefeedID)
+	changefeedDetail, err := o.apiV1Client.Changefeeds().Get(ctx, o.changefeedID)
 	if err != nil {
 		if strings.Contains(err.Error(), "ErrChangeFeedNotExists") {
 			cmd.Printf("Changefeed not found.\nID: %s\n", o.changefeedID)
@@ -71,14 +78,14 @@ func (o *removeChangefeedOptions) run(cmd *cobra.Command) error {
 	checkpointTs := changefeedDetail.CheckpointTSO
 	sinkURI := changefeedDetail.SinkURI
 
-	err = o.apiClient.Changefeeds().Delete(ctx, o.changefeedID)
+	err = o.apiV2Client.Changefeeds().Delete(ctx, o.changefeedID)
 	if err != nil {
 		cmd.Printf("Changefeed remove failed.\nID: %s\nError: %s\n", o.changefeedID,
 			err.Error())
 		return err
 	}
 
-	_, err = o.apiClient.Changefeeds().Get(ctx, o.changefeedID)
+	_, err = o.apiV1Client.Changefeeds().Get(ctx, o.changefeedID)
 	// Should never happen here. This checking is for defending.
 	// The reason is that changefeed query to owner is invoked in the subsequent owner
 	// Tick and in that Tick, the in-memory data structure and the metadata stored in

@@ -40,43 +40,11 @@ func (c *coordinator) GetTaskStatuses() (map[model.CaptureID]*model.TaskStatus, 
 			Tables: make(map[model.TableID]*model.TableReplicaInfo),
 		}
 		for _, s := range status.Tables {
-			taskStatus.Tables[s.TableID] = &model.TableReplicaInfo{
+			taskStatus.Tables[s.Span.TableID] = &model.TableReplicaInfo{
 				StartTs: s.Checkpoint.CheckpointTs,
 			}
 		}
 		tasks[captureID] = taskStatus
 	}
 	return tasks, nil
-}
-
-// GetTaskPositions returns the task positions.
-func (c *coordinator) GetTaskPositions() (map[model.CaptureID]*model.TaskPosition, error) {
-	c.mu.Lock()
-	defer c.mu.Unlock()
-
-	p := &model.TaskPosition{}
-	pos := make(map[model.CaptureID]*model.TaskPosition, len(c.captureM.Captures))
-	for captureID := range c.captureM.Captures {
-		pos[captureID] = p
-	}
-	return pos, nil
-}
-
-// GetTotalTableCounts returns the number of tables associated
-// with each capture.
-func (c *coordinator) GetTotalTableCounts() map[model.CaptureID]int {
-	c.mu.Lock()
-	defer c.mu.Unlock()
-
-	tables := make(map[model.CaptureID]int, len(c.captureM.Captures))
-	for captureID, status := range c.captureM.Captures {
-		tables[captureID] = len(status.Tables)
-	}
-	return tables
-}
-
-// GetPendingTableCounts returns the number of tables in a non-ready
-// status (Adding & Removing) associated with each capture.
-func (c *coordinator) GetPendingTableCounts() map[model.CaptureID]int {
-	return make(map[model.CaptureID]int)
 }

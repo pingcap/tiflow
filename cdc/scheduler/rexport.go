@@ -18,13 +18,14 @@ import (
 
 	"github.com/pingcap/tiflow/cdc/model"
 	"github.com/pingcap/tiflow/cdc/scheduler/internal"
-	v2 "github.com/pingcap/tiflow/cdc/scheduler/internal/v2"
 	v3 "github.com/pingcap/tiflow/cdc/scheduler/internal/v3"
 	v3agent "github.com/pingcap/tiflow/cdc/scheduler/internal/v3/agent"
 	"github.com/pingcap/tiflow/pkg/config"
 	"github.com/pingcap/tiflow/pkg/etcd"
 	"github.com/pingcap/tiflow/pkg/p2p"
+	"github.com/pingcap/tiflow/pkg/pdutil"
 	"github.com/prometheus/client_golang/prometheus"
+	"github.com/tikv/client-go/v2/tikv"
 )
 
 // TableExecutor is an abstraction for "Processor".
@@ -59,7 +60,7 @@ type Agent internal.Agent
 // Owner should not advance the global checkpoint TS just yet.
 const CheckpointCannotProceed = internal.CheckpointCannotProceed
 
-// NewAgent returns processor agent.
+// NewAgent returns two-phase agent.
 func NewAgent(
 	ctx context.Context,
 	captureID model.CaptureID,
@@ -69,57 +70,28 @@ func NewAgent(
 	etcdClient etcd.CDCEtcdClient,
 	executor TableExecutor,
 	changefeedID model.ChangeFeedID,
+	cfg *config.SchedulerConfig,
 ) (Agent, error) {
-	return v2.NewAgent(
-		ctx, messageServer, messageRouter, etcdClient, executor, changefeedID)
+	return v3agent.NewAgent(
+		ctx, captureID, liveness, changefeedID,
+		messageServer, messageRouter, etcdClient, executor, cfg)
 }
 
-// NewScheduler returns owner scheduler.
+// NewScheduler returns two-phase scheduler.
 func NewScheduler(
 	ctx context.Context,
 	captureID model.CaptureID,
 	changeFeedID model.ChangeFeedID,
-	checkpointTs model.Ts,
 	messageServer *p2p.MessageServer,
 	messageRouter p2p.MessageRouter,
 	ownerRevision int64,
-	cfg *config.SchedulerConfig,
-) (Scheduler, error) {
-	return v2.NewSchedulerV2(
-		ctx, changeFeedID, checkpointTs, messageServer, messageRouter, ownerRevision)
-}
-
-// NewAgentV3 returns two-phase agent.
-func NewAgentV3(
-	ctx context.Context,
-	captureID model.CaptureID,
-	liveness *model.Liveness,
-	messageServer *p2p.MessageServer,
-	messageRouter p2p.MessageRouter,
-	etcdClient etcd.CDCEtcdClient,
-	executor TableExecutor,
-	changefeedID model.ChangeFeedID,
-) (Agent, error) {
-	return v3agent.NewAgent(
-		ctx, captureID, liveness, changefeedID,
-		messageServer, messageRouter, etcdClient, executor,
-	)
-}
-
-// NewSchedulerV3 returns two-phase scheduler.
-func NewSchedulerV3(
-	ctx context.Context,
-	captureID model.CaptureID,
-	changeFeedID model.ChangeFeedID,
-	checkpointTs model.Ts,
-	messageServer *p2p.MessageServer,
-	messageRouter p2p.MessageRouter,
-	ownerRevision int64,
+	regionCache *tikv.RegionCache,
+	pdClock pdutil.Clock,
 	cfg *config.SchedulerConfig,
 ) (Scheduler, error) {
 	return v3.NewCoordinator(
-		ctx, captureID, changeFeedID, checkpointTs,
-		messageServer, messageRouter, ownerRevision, cfg)
+		ctx, captureID, changeFeedID,
+		messageServer, messageRouter, ownerRevision, regionCache, pdClock, cfg)
 }
 
 // InitMetrics registers all metrics used in scheduler

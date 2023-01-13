@@ -34,7 +34,6 @@ import (
 	cdcContext "github.com/pingcap/tiflow/pkg/context"
 	cerror "github.com/pingcap/tiflow/pkg/errors"
 	pmessage "github.com/pingcap/tiflow/pkg/pipeline/message"
-	"github.com/pingcap/tiflow/pkg/sorter"
 	"github.com/pingcap/tiflow/pkg/upstream"
 	"github.com/tikv/client-go/v2/oracle"
 	uberatomic "go.uber.org/atomic"
@@ -78,12 +77,7 @@ type tableActor struct {
 	// contains all nodes except pullerNode
 	nodes []*ActorNode
 
-	// If useEventSortEngine is true eventSortEngine will be used, otherwise sortNode will be used.
-	//
-	// TODO(qupeng): adjust it after all sorters are transformed to EventSortEngine.
-	useEventSortEngine bool
-	eventSortEngine    sorter.EventSortEngine
-	sortNode           *sorterNode
+	sortNode *sorterNode
 
 	// states of table actor
 	started     bool
@@ -92,7 +86,7 @@ type tableActor struct {
 	sinkStopped uberatomic.Bool
 
 	// TODO: try to reduce these config fields below in the future
-	tableID        int64
+	span           tablepb.Span
 	targetTs       model.Ts
 	memoryQuota    uint64
 	replicaInfo    *model.TableReplicaInfo
@@ -118,7 +112,7 @@ func NewTableActor(
 	cdcCtx cdcContext.Context,
 	up *upstream.Upstream,
 	mg entry.MounterGroup,
-	tableID model.TableID,
+	span tablepb.Span,
 	tableName string,
 	replicaInfo *model.TableReplicaInfo,
 	sinkV1 sinkv1.Sink,
@@ -137,10 +131,6 @@ func NewTableActor(
 	// All sub-goroutines should be spawn in this wait group.
 	wg, cctx := errgroup.WithContext(ctx)
 
-	// TODO(qupeng): adjust it after all sorters are transformed to EventSortEngine.
-	debugConfig := serverConfig.GetGlobalServerConfig().Debug
-	useEventSortEngine := debugConfig.EnablePullBasedSink && debugConfig.EnableDBSorter
-
 	table := &tableActor{
 		// all errors in table actor will be reported to processor
 		reportErr: cdcCtx.Throw,
@@ -149,7 +139,7 @@ func NewTableActor(
 		cancel:    cancel,
 
 		state:         tablepb.TableStatePreparing,
-		tableID:       tableID,
+		span:          span,
 		tableName:     tableName,
 		memoryQuota:   serverConfig.GetGlobalServerConfig().PerTableMemoryQuota,
 		upstream:      up,
@@ -162,9 +152,7 @@ func NewTableActor(
 		targetTs:      targetTs,
 		started:       false,
 
-		useEventSortEngine: useEventSortEngine,
-		eventSortEngine:    nil,
-		sortNode:           nil,
+		sortNode: nil,
 
 		changefeedID:   changefeedVars.ID,
 		changefeedVars: changefeedVars,
@@ -187,7 +175,7 @@ func NewTableActor(
 	log.Info("table actor started",
 		zap.String("namespace", table.changefeedID.Namespace),
 		zap.String("changefeed", table.changefeedID.ID),
-		zap.Int64("tableID", tableID),
+		zap.Stringer("span", &span),
 		zap.String("tableName", tableName),
 		zap.Uint64("checkpointTs", replicaInfo.StartTs),
 		zap.Uint64("quota", table.memoryQuota),
@@ -224,7 +212,7 @@ func (t *tableActor) Poll(ctx context.Context, msgs []message.Message[pmessage.M
 		if err != nil {
 			log.Error("failed to process message, stop table actor ",
 				zap.String("tableName", t.tableName),
-				zap.Int64("tableID", t.tableID),
+				zap.Stringer("span", &t.span),
 				zap.Any("message", msgs[i]),
 				zap.Error(err))
 			t.handleError(err)
@@ -236,7 +224,7 @@ func (t *tableActor) Poll(ctx context.Context, msgs []message.Message[pmessage.M
 			if err := t.handleDataMsg(ctx); err != nil {
 				log.Error("failed to process message, stop table actor ",
 					zap.String("tableName", t.tableName),
-					zap.Int64("tableID", t.tableID), zap.Error(err))
+					zap.Stringer("span", &t.span), zap.Error(err))
 				t.handleError(err)
 				break
 			}
@@ -247,7 +235,7 @@ func (t *tableActor) Poll(ctx context.Context, msgs []message.Message[pmessage.M
 			zap.String("namespace", t.changefeedID.Namespace),
 			zap.String("changefeed", t.changefeedID.ID),
 			zap.String("tableName", t.tableName),
-			zap.Int64("tableID", t.tableID))
+			zap.Stringer("span", &t.span))
 		return false
 	}
 	return true
@@ -263,9 +251,7 @@ func (t *tableActor) handleDataMsg(ctx context.Context) error {
 }
 
 func (t *tableActor) handleBarrierMsg(ctx context.Context, barrierTs model.Ts) error {
-	if !t.useEventSortEngine {
-		t.sortNode.updateBarrierTs(barrierTs)
-	}
+	t.sortNode.updateBarrierTs(barrierTs)
 	return t.sinkNode.updateBarrierTs(ctx, barrierTs)
 }
 
@@ -303,7 +289,7 @@ func (t *tableActor) start(sdtTableContext context.Context) error {
 		log.Panic("start an already started table",
 			zap.String("namespace", t.changefeedID.Namespace),
 			zap.String("changefeed", t.changefeedID.ID),
-			zap.Int64("tableID", t.tableID),
+			zap.Stringer("span", &t.span),
 			zap.String("tableName", t.tableName))
 	}
 
@@ -311,24 +297,12 @@ func (t *tableActor) start(sdtTableContext context.Context) error {
 
 	flowController := flowcontrol.NewTableFlowController(t.memoryQuota,
 		t.redoManager.Enabled(), splitTxn)
-	if !t.useEventSortEngine {
-		sorterNode := newSorterNode(t.tableName, t.tableID,
-			t.replicaInfo.StartTs, flowController,
-			t.mg, &t.state, t.changefeedID, t.redoManager.Enabled(),
-			t.upstream.PDClient,
-		)
-		t.sortNode = sorterNode
-	} else {
-		engine, err := t.globalVars.SortEngineManager.Create(t.changefeedVars.ID)
-		if err != nil {
-			log.Error("create sort engine fail",
-				zap.String("namespace", t.changefeedID.Namespace),
-				zap.String("changefeed", t.changefeedID.ID),
-				zap.Error(err))
-			return err
-		}
-		t.eventSortEngine = engine
-	}
+	sorterNode := newSorterNode(t.tableName, t.span.TableID,
+		t.replicaInfo.StartTs, flowController,
+		t.mg, &t.state, t.changefeedID, t.redoManager.Enabled(),
+		t.upstream.PDClient,
+	)
+	t.sortNode = sorterNode
 
 	sortActorNodeContext := newContext(sdtTableContext, t.tableName,
 		t.globalVars.TableActorSystem.Router(),
@@ -336,12 +310,12 @@ func (t *tableActor) start(sdtTableContext context.Context) error {
 	if err := startSorter(t, sortActorNodeContext); err != nil {
 		log.Error("sorter fails to start",
 			zap.String("tableName", t.tableName),
-			zap.Int64("tableID", t.tableID),
+			zap.Stringer("span", &t.span),
 			zap.Error(err))
 		return err
 	}
 
-	pullerNode := newPullerNode(t.tableID, t.replicaInfo.StartTs, t.tableName, t.changefeedVars.ID)
+	pullerNode := newPullerNode(t.span, t.replicaInfo.StartTs, t.tableName, t.changefeedVars.ID)
 	pullerActorNodeContext := newContext(sdtTableContext,
 		t.tableName,
 		t.globalVars.TableActorSystem.Router(),
@@ -350,7 +324,7 @@ func (t *tableActor) start(sdtTableContext context.Context) error {
 	if err := startPuller(t, pullerActorNodeContext); err != nil {
 		log.Error("puller fails to start",
 			zap.String("tableName", t.tableName),
-			zap.Int64("tableID", t.tableID),
+			zap.Stringer("span", &t.span),
 			zap.Error(err))
 		return err
 	}
@@ -359,7 +333,7 @@ func (t *tableActor) start(sdtTableContext context.Context) error {
 	}
 
 	actorSinkNode := newSinkNode(
-		t.tableID,
+		t.span,
 		t.tableSinkV1,
 		t.tableSinkV2,
 		t.replicaInfo.StartTs, t.targetTs, flowController, t.redoManager,
@@ -397,12 +371,9 @@ func (t *tableActor) stop() {
 	}
 	atomic.StoreUint32(&t.stopped, stopped)
 
-	if !t.useEventSortEngine && t.sortNode != nil {
+	if t.sortNode != nil {
 		// releaseResource will send a message to sorter router
 		t.sortNode.releaseResource()
-	}
-	if t.useEventSortEngine && t.eventSortEngine != nil {
-		t.eventSortEngine.RemoveTable(t.tableID)
 	}
 
 	t.cancel()
@@ -423,7 +394,7 @@ func (t *tableActor) stop() {
 		zap.String("namespace", t.changefeedID.Namespace),
 		zap.String("changefeed", t.changefeedID.ID),
 		zap.String("tableName", t.tableName),
-		zap.Int64("tableID", t.tableID))
+		zap.Stringer("span", &t.span))
 }
 
 // handleError stops the table actor at first and then reports the error to processor
@@ -443,10 +414,7 @@ func (t *tableActor) ResolvedTs() model.Ts {
 	// another replication barrier for consistent replication instead of reusing
 	// the global resolved-ts.
 	if t.redoManager.Enabled() {
-		return t.redoManager.GetResolvedTs(t.tableID)
-	}
-	if t.useEventSortEngine {
-		return t.eventSortEngine.GetResolvedTs(t.tableID)
+		return t.redoManager.GetResolvedTs(t.span)
 	}
 	return t.sortNode.ResolvedTs()
 }
@@ -468,7 +436,7 @@ func (t *tableActor) UpdateBarrierTs(ts model.Ts) {
 			log.Warn("send fails",
 				zap.Any("msg", msg),
 				zap.String("tableName", t.tableName),
-				zap.Int64("tableID", t.tableID),
+				zap.Stringer("span", &t.span),
 				zap.Error(err))
 		}
 	}
@@ -518,16 +486,14 @@ func (t *tableActor) Stats() tablepb.Stats {
 		},
 	}
 
-	if !t.useEventSortEngine {
-		sorterStats := t.sortNode.sorter.Stats()
-		stats.StageCheckpoints["sorter-ingress"] = tablepb.Checkpoint{
-			CheckpointTs: sorterStats.CheckpointTsIngress,
-			ResolvedTs:   sorterStats.ResolvedTsIngress,
-		}
-		stats.StageCheckpoints["sorter-egress"] = tablepb.Checkpoint{
-			CheckpointTs: sorterStats.CheckpointTsEgress,
-			ResolvedTs:   sorterStats.ResolvedTsEgress,
-		}
+	sorterStats := t.sortNode.sorter.Stats()
+	stats.StageCheckpoints["sorter-ingress"] = tablepb.Checkpoint{
+		CheckpointTs: sorterStats.CheckpointTsIngress,
+		ResolvedTs:   sorterStats.ResolvedTsIngress,
+	}
+	stats.StageCheckpoints["sorter-egress"] = tablepb.Checkpoint{
+		CheckpointTs: sorterStats.CheckpointTsEgress,
+		ResolvedTs:   sorterStats.ResolvedTsEgress,
 	}
 
 	return stats
@@ -540,7 +506,7 @@ func (t *tableActor) State() tablepb.TableState {
 
 // ID returns the ID of source table and mark table
 func (t *tableActor) ID() int64 {
-	return t.tableID
+	return t.span.TableID
 }
 
 // Name returns the quoted schema and table name
@@ -558,7 +524,7 @@ func (t *tableActor) Cancel() {
 	if err := t.router.Send(t.mb.ID(), message.ValueMessage(msg)); err != nil {
 		log.Warn("fails to send Stop message",
 			zap.String("tableName", t.tableName),
-			zap.Int64("tableID", t.tableID),
+			zap.Stringer("span", &t.span),
 			zap.Error(err))
 	}
 }
@@ -570,48 +536,29 @@ func (t *tableActor) Wait() {
 
 // MemoryConsumption return the memory consumption in bytes
 func (t *tableActor) MemoryConsumption() uint64 {
-	if !t.useEventSortEngine {
-		return t.sortNode.flowController.GetConsumption()
-	}
-	// TODO(qupeng): sink manager should handle this.
-	return 0
+	return t.sortNode.flowController.GetConsumption()
 }
 
 func (t *tableActor) Start(ts model.Ts) {
-	if !t.useEventSortEngine {
-		if atomic.CompareAndSwapInt32(&t.sortNode.started, 0, 1) {
-			t.sortNode.startTsCh <- ts
-			close(t.sortNode.startTsCh)
-		}
-	} else {
-		t.eventSortEngine.AddTable(t.tableID)
+	if atomic.CompareAndSwapInt32(&t.sortNode.started, 0, 1) {
+		t.sortNode.startTsCh <- ts
+		close(t.sortNode.startTsCh)
 	}
 }
 
 func (t *tableActor) RemainEvents() int64 {
-	if !t.useEventSortEngine {
-		return t.sortNode.remainEvent()
-	}
-	// TODO(qupeng): record it in sort engine and sinkmanager.
-	return 0
+	return t.sortNode.remainEvent()
 }
 
 // for ut
 var startPuller = func(t *tableActor, ctx *actorNodeContext) error {
-	if !t.useEventSortEngine {
-		return t.pullerNode.startWithSorterNode(ctx, t.upstream, t.wg, t.sortNode)
-	}
-	return t.pullerNode.startWithEventSortEngine(ctx, t.upstream, t.wg, t.eventSortEngine)
+	return t.pullerNode.startWithSorterNode(ctx, t.upstream, t.wg, t.sortNode, t.replicaConfig.BDRMode)
 }
 
 var startSorter = func(t *tableActor, ctx *actorNodeContext) error {
-	if !t.useEventSortEngine {
-		eventSorter, err := createSorter(ctx, t.tableName, t.tableID)
-		if err != nil {
-			return errors.Trace(err)
-		}
-		return t.sortNode.start(ctx, t.wg, t.actorID, t.router, eventSorter)
+	eventSorter, err := createSorter(ctx, t.tableName, t.span)
+	if err != nil {
+		return errors.Trace(err)
 	}
-	t.eventSortEngine.AddTable(t.tableID)
-	return nil
+	return t.sortNode.start(ctx, t.wg, t.actorID, t.router, eventSorter)
 }

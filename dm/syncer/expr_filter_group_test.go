@@ -15,18 +15,20 @@ package syncer
 
 import (
 	"context"
+	"testing"
 
-	. "github.com/pingcap/check"
+	ddl2 "github.com/pingcap/tidb/ddl"
+	"github.com/pingcap/tidb/parser/ast"
 	"github.com/pingcap/tidb/util/filter"
 	"github.com/pingcap/tiflow/dm/config"
 	tcontext "github.com/pingcap/tiflow/dm/pkg/context"
 	"github.com/pingcap/tiflow/dm/pkg/log"
 	"github.com/pingcap/tiflow/dm/pkg/schema"
 	"github.com/pingcap/tiflow/dm/pkg/utils"
-	"github.com/pingcap/tiflow/dm/syncer/dbconn"
+	"github.com/stretchr/testify/require"
 )
 
-func (s *testFilterSuite) TestSkipDMLByExpression(c *C) {
+func TestSkipDMLByExpression(t *testing.T) {
 	cases := []struct {
 		exprStr    string
 		tableStr   string
@@ -91,19 +93,18 @@ create table t (
 			Name:   tblName,
 		}
 	)
-	c.Assert(log.InitLogger(&log.Config{Level: "debug"}), IsNil)
+	require.NoError(t, log.InitLogger(&log.Config{Level: "debug"}))
 
-	dbConn := dbconn.NewDBConn(&config.SubTaskConfig{}, s.baseConn)
 	for _, ca := range cases {
-		schemaTracker, err := schema.NewTestTracker(ctx, "unit-test", dbConn, log.L())
-		c.Assert(err, IsNil)
-		c.Assert(schemaTracker.CreateSchemaIfNotExists(dbName), IsNil)
+		schemaTracker, err := schema.NewTestTracker(ctx, "unit-test", nil, log.L())
+		require.NoError(t, err)
+		require.NoError(t, schemaTracker.CreateSchemaIfNotExists(dbName))
 		stmt, err := parseSQL(ca.tableStr)
-		c.Assert(err, IsNil)
-		c.Assert(schemaTracker.Exec(ctx, dbName, stmt), IsNil)
+		require.NoError(t, err)
+		require.NoError(t, schemaTracker.Exec(ctx, dbName, stmt))
 
 		ti, err := schemaTracker.GetTableInfo(table)
-		c.Assert(err, IsNil)
+		require.NoError(t, err)
 
 		exprConfig := []*config.ExpressionFilter{
 			{
@@ -115,26 +116,26 @@ create table t (
 		sessCtx := utils.NewSessionCtx(map[string]string{"time_zone": "UTC"})
 		g := NewExprFilterGroup(tcontext.Background(), sessCtx, exprConfig)
 		exprs, err := g.GetInsertExprs(table, ti)
-		c.Assert(err, IsNil)
-		c.Assert(exprs, HasLen, 1)
+		require.NoError(t, err)
+		require.Len(t, exprs, 1)
 		expr := exprs[0]
 
 		ca.skippedRow = extractValueFromData(ca.skippedRow, ti.Columns, ti)
 		ca.passedRow = extractValueFromData(ca.passedRow, ti.Columns, ti)
 
 		skip, err := SkipDMLByExpression(sessCtx, ca.skippedRow, expr, ti.Columns)
-		c.Assert(err, IsNil)
-		c.Assert(skip, Equals, true)
+		require.NoError(t, err)
+		require.True(t, skip)
 
 		skip, err = SkipDMLByExpression(sessCtx, ca.passedRow, expr, ti.Columns)
-		c.Assert(err, IsNil)
-		c.Assert(skip, Equals, false)
+		require.NoError(t, err)
+		require.False(t, skip)
 
 		schemaTracker.Close()
 	}
 }
 
-func (s *testFilterSuite) TestAllBinaryProtocolTypes(c *C) {
+func TestAllBinaryProtocolTypes(t *testing.T) {
 	cases := []struct {
 		exprStr    string
 		tableStr   string
@@ -355,20 +356,19 @@ create table t (
 			Name:   tblName,
 		}
 	)
-	c.Assert(log.InitLogger(&log.Config{Level: "debug"}), IsNil)
+	require.NoError(t, log.InitLogger(&log.Config{Level: "debug"}))
 
-	dbConn := dbconn.NewDBConn(&config.SubTaskConfig{}, s.baseConn)
 	for _, ca := range cases {
-		c.Log(ca.tableStr)
-		schemaTracker, err := schema.NewTestTracker(ctx, "unit-test", dbConn, log.L())
-		c.Assert(err, IsNil)
-		c.Assert(schemaTracker.CreateSchemaIfNotExists(dbName), IsNil)
+		t.Log(ca.tableStr)
+		schemaTracker, err := schema.NewTestTracker(ctx, "unit-test", nil, log.L())
+		require.NoError(t, err)
+		require.NoError(t, schemaTracker.CreateSchemaIfNotExists(dbName))
 		stmt, err := parseSQL(ca.tableStr)
-		c.Assert(err, IsNil)
-		c.Assert(schemaTracker.Exec(ctx, dbName, stmt), IsNil)
+		require.NoError(t, err)
+		require.NoError(t, schemaTracker.Exec(ctx, dbName, stmt))
 
 		ti, err := schemaTracker.GetTableInfo(table)
-		c.Assert(err, IsNil)
+		require.NoError(t, err)
 
 		exprConfig := []*config.ExpressionFilter{
 			{
@@ -380,26 +380,26 @@ create table t (
 		sessCtx := utils.NewSessionCtx(map[string]string{"time_zone": "UTC"})
 		g := NewExprFilterGroup(tcontext.Background(), sessCtx, exprConfig)
 		exprs, err := g.GetInsertExprs(table, ti)
-		c.Assert(err, IsNil)
-		c.Assert(exprs, HasLen, 1)
+		require.NoError(t, err)
+		require.Len(t, exprs, 1)
 		expr := exprs[0]
 
 		ca.skippedRow = extractValueFromData(ca.skippedRow, ti.Columns, ti)
 		ca.passedRow = extractValueFromData(ca.passedRow, ti.Columns, ti)
 
 		skip, err := SkipDMLByExpression(sessCtx, ca.skippedRow, expr, ti.Columns)
-		c.Assert(err, IsNil)
-		c.Assert(skip, Equals, true)
+		require.NoError(t, err)
+		require.True(t, skip)
 
 		skip, err = SkipDMLByExpression(sessCtx, ca.passedRow, expr, ti.Columns)
-		c.Assert(err, IsNil)
-		c.Assert(skip, Equals, false)
+		require.NoError(t, err)
+		require.False(t, skip)
 
 		schemaTracker.Close()
 	}
 }
 
-func (s *testFilterSuite) TestExpressionContainsNonExistColumn(c *C) {
+func TestExpressionContainsNonExistColumn(t *testing.T) {
 	var (
 		ctx     = context.Background()
 		dbName  = "test"
@@ -415,16 +415,15 @@ create table t (
 		exprStr = "d > 1"
 	)
 
-	dbConn := dbconn.NewDBConn(&config.SubTaskConfig{}, s.baseConn)
-	schemaTracker, err := schema.NewTestTracker(ctx, "unit-test", dbConn, log.L())
-	c.Assert(err, IsNil)
-	c.Assert(schemaTracker.CreateSchemaIfNotExists(dbName), IsNil)
+	schemaTracker, err := schema.NewTestTracker(ctx, "unit-test", nil, log.L())
+	require.NoError(t, err)
+	require.NoError(t, schemaTracker.CreateSchemaIfNotExists(dbName))
 	stmt, err := parseSQL(tableStr)
-	c.Assert(err, IsNil)
-	c.Assert(schemaTracker.Exec(ctx, dbName, stmt), IsNil)
+	require.NoError(t, err)
+	require.NoError(t, schemaTracker.Exec(ctx, dbName, stmt))
 
 	ti, err := schemaTracker.GetTableInfo(table)
-	c.Assert(err, IsNil)
+	require.NoError(t, err)
 
 	exprConfig := []*config.ExpressionFilter{
 		{
@@ -436,16 +435,75 @@ create table t (
 	sessCtx := utils.NewSessionCtx(map[string]string{"time_zone": "UTC"})
 	g := NewExprFilterGroup(tcontext.Background(), sessCtx, exprConfig)
 	exprs, err := g.GetInsertExprs(table, ti)
-	c.Assert(err, IsNil)
-	c.Assert(exprs, HasLen, 1)
+	require.NoError(t, err)
+	require.Len(t, exprs, 1)
 	expr := exprs[0]
-	c.Assert(expr.String(), Equals, "0")
+	require.Equal(t, "0", expr.String())
 
 	// skip nothing
 	skip, err := SkipDMLByExpression(sessCtx, []interface{}{0}, expr, ti.Columns)
-	c.Assert(err, IsNil)
-	c.Assert(skip, Equals, false)
+	require.NoError(t, err)
+	require.False(t, skip)
 	skip, err = SkipDMLByExpression(sessCtx, []interface{}{2}, expr, ti.Columns)
-	c.Assert(err, IsNil)
-	c.Assert(skip, Equals, false)
+	require.NoError(t, err)
+	require.False(t, skip)
+}
+
+func TestGetUpdateExprsSameLength(t *testing.T) {
+	var (
+		dbName  = "test"
+		tblName = "t"
+		table   = &filter.Table{
+			Schema: dbName,
+			Name:   tblName,
+		}
+		tableStr = `
+create table t (
+	c varchar(20)
+);`
+		exprStr = "c > 1"
+		sessCtx = utils.NewSessionCtx(map[string]string{"time_zone": "UTC"})
+	)
+
+	cases := []*config.ExpressionFilter{
+		{
+			Schema:          dbName,
+			Table:           tblName,
+			InsertValueExpr: exprStr,
+		},
+		{
+			Schema:             dbName,
+			Table:              tblName,
+			UpdateOldValueExpr: exprStr,
+		},
+		{
+			Schema:             dbName,
+			Table:              tblName,
+			UpdateNewValueExpr: exprStr,
+		},
+		{
+			Schema:             dbName,
+			Table:              tblName,
+			UpdateOldValueExpr: exprStr,
+			UpdateNewValueExpr: exprStr,
+		},
+	}
+
+	stmt, err := parseSQL(tableStr)
+	require.NoError(t, err)
+	tableInfo, err := ddl2.BuildTableInfoFromAST(stmt.(*ast.CreateTableStmt))
+	require.NoError(t, err)
+
+	for i, c := range cases {
+		t.Logf("case #%d", i)
+		g := NewExprFilterGroup(tcontext.Background(), sessCtx, []*config.ExpressionFilter{c})
+		oldExprs, newExprs, err2 := g.GetUpdateExprs(table, tableInfo)
+		require.NoError(t, err2)
+		require.Equal(t, len(oldExprs), len(newExprs))
+	}
+	g := NewExprFilterGroup(tcontext.Background(), sessCtx, cases)
+	oldExprs, newExprs, err := g.GetUpdateExprs(table, tableInfo)
+	require.NoError(t, err)
+	require.Equal(t, len(oldExprs), len(newExprs))
+	require.Len(t, oldExprs, 3)
 }

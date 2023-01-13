@@ -23,9 +23,11 @@ import (
 	"github.com/pingcap/tiflow/engine/jobmaster/dm/config"
 	"github.com/pingcap/tiflow/engine/jobmaster/dm/metadata"
 	"github.com/pingcap/tiflow/engine/jobmaster/dm/runtime"
-	"github.com/pingcap/tiflow/engine/jobmaster/dm/ticker"
 	dmpkg "github.com/pingcap/tiflow/engine/pkg/dm"
+	"github.com/pingcap/tiflow/engine/pkg/dm/ticker"
+	"github.com/pingcap/tiflow/engine/pkg/promutil"
 	"github.com/pingcap/tiflow/pkg/errors"
+	"github.com/prometheus/client_golang/prometheus"
 	"go.uber.org/zap"
 )
 
@@ -38,21 +40,39 @@ var (
 type TaskManager struct {
 	*ticker.DefaultTicker
 
+	jobID        string
 	jobStore     *metadata.JobStore
 	messageAgent dmpkg.MessageAgent
 	logger       *zap.Logger
 	// tasks record the runtime task status
 	// taskID -> TaskStatus
 	tasks sync.Map
+
+	gaugeVec *prometheus.GaugeVec
 }
 
 // NewTaskManager creates a new TaskManager instance
-func NewTaskManager(initTaskStatus []runtime.TaskStatus, jobStore *metadata.JobStore, messageAgent dmpkg.MessageAgent, pLogger *zap.Logger) *TaskManager {
+func NewTaskManager(
+	jobID string,
+	initTaskStatus []runtime.TaskStatus,
+	jobStore *metadata.JobStore,
+	messageAgent dmpkg.MessageAgent,
+	pLogger *zap.Logger,
+	metricFactory promutil.Factory,
+) *TaskManager {
 	taskManager := &TaskManager{
+		jobID:         jobID,
 		DefaultTicker: ticker.NewDefaultTicker(taskNormalInterval, taskErrorInterval),
 		jobStore:      jobStore,
 		logger:        pLogger.With(zap.String("component", "task_manager")),
 		messageAgent:  messageAgent,
+		gaugeVec: metricFactory.NewGaugeVec(
+			prometheus.GaugeOpts{
+				Namespace: "dm",
+				Subsystem: "worker",
+				Name:      "task_state",
+				Help:      "task state of dm worker in this job",
+			}, []string{"task", "source_id"}),
 	}
 	taskManager.DefaultTicker.Ticker = taskManager
 
@@ -105,6 +125,7 @@ func (tm *TaskManager) UpdateTaskStatus(taskStatus runtime.TaskStatus) {
 		zap.Uint64("config_modify_revison", taskStatus.CfgModRevision),
 	)
 	tm.tasks.Store(taskStatus.Task, taskStatus)
+	tm.gaugeVec.WithLabelValues(tm.jobID, taskStatus.Task).Set(float64(taskStatus.Stage))
 }
 
 // TaskStatus return the task status.
@@ -153,7 +174,7 @@ func (tm *TaskManager) checkAndOperateTasks(ctx context.Context, job *metadata.J
 			continue
 		}
 
-		op := genOp(runningTask.Stage, persistentTask.Stage)
+		op := genOp(runningTask.Stage, runningTask.StageUpdatedTime, persistentTask.Stage, persistentTask.StageUpdatedTime)
 		if op == dmpkg.None {
 			tm.logger.Debug(
 				"task status will not be changed",
@@ -185,6 +206,7 @@ func (tm *TaskManager) onJobDel() {
 	tm.logger.Info("clear all task status")
 	tm.tasks.Range(func(key, value interface{}) bool {
 		tm.tasks.Delete(key)
+		tm.gaugeVec.DeleteLabelValues(tm.jobID, key.(string))
 		return true
 	})
 }
@@ -196,6 +218,7 @@ func (tm *TaskManager) removeTaskStatus(job *metadata.Job) {
 		if _, ok := job.Tasks[taskID]; !ok {
 			tm.logger.Info("remove task status", zap.String("task_id", taskID))
 			tm.tasks.Delete(taskID)
+			tm.gaugeVec.DeleteLabelValues(tm.jobID, taskID)
 		}
 		return true
 	})
@@ -210,12 +233,24 @@ func (tm *TaskManager) GetTaskStatus(taskID string) (runtime.TaskStatus, bool) {
 	return value.(runtime.TaskStatus), true
 }
 
-func genOp(runtimeStage, expectedStage metadata.TaskStage) dmpkg.OperateType {
+func genOp(
+	runningStage metadata.TaskStage,
+	runningStageUpdatedTime time.Time,
+	expectedStage metadata.TaskStage,
+	expectedStageUpdatedTime time.Time,
+) dmpkg.OperateType {
 	switch {
-	case expectedStage == metadata.StagePaused && (runtimeStage == metadata.StageRunning || runtimeStage == metadata.StageError):
+	case expectedStage == metadata.StagePaused && (runningStage == metadata.StageRunning || runningStage == metadata.StageError):
 		return dmpkg.Pause
-	case expectedStage == metadata.StageRunning && runtimeStage == metadata.StagePaused:
-		return dmpkg.Resume
+	case expectedStage == metadata.StageRunning:
+		if runningStage == metadata.StagePaused {
+			return dmpkg.Resume
+		}
+		// only resume a error task for a manual Resume action by checking expectedStageUpdatedTime
+		if runningStage == metadata.StageError && expectedStageUpdatedTime.After(runningStageUpdatedTime) {
+			return dmpkg.Resume
+		}
+		return dmpkg.None
 	// TODO: support update
 	default:
 		return dmpkg.None

@@ -22,7 +22,7 @@ import (
 	"github.com/DATA-DOG/go-sqlmock"
 	"github.com/phayes/freeport"
 	"github.com/pingcap/tiflow/cdc/model"
-	"github.com/pingcap/tiflow/cdc/redo"
+	"github.com/pingcap/tiflow/cdc/redo/common"
 	"github.com/pingcap/tiflow/cdc/redo/reader"
 	"github.com/pingcap/tiflow/cdc/sink/mysql"
 	"github.com/stretchr/testify/require"
@@ -145,6 +145,11 @@ func TestApplyDMLs(t *testing.T) {
 					sqlmock.NewRows(columns).
 						AddRow("tidb_placement_mode", "IGNORE"),
 				)
+			mock.ExpectQuery("show session variables like 'tidb_enable_external_ts_read';").
+				WillReturnRows(
+					sqlmock.NewRows(columns).
+						AddRow("tidb_enable_external_ts_read", "OFF"),
+				)
 			mock.ExpectQuery("select character_set_name from information_schema.character_sets " +
 				"where character_set_name = 'gbk';").WillReturnRows(
 				sqlmock.NewRows([]string{"character_set_name"}).AddRow("gbk"),
@@ -228,7 +233,7 @@ func TestApplyDMLs(t *testing.T) {
 		},
 	}
 	for _, dml := range dmls {
-		redoLogCh <- redo.RowToRedo(dml)
+		redoLogCh <- common.RowToRedo(dml)
 	}
 	close(redoLogCh)
 	close(ddlEventCh)

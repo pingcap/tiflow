@@ -36,7 +36,7 @@ import (
 	cerror "github.com/pingcap/tiflow/pkg/errors"
 	"github.com/pingcap/tiflow/pkg/filter"
 	"github.com/pingcap/tiflow/pkg/pdutil"
-	"github.com/pingcap/tiflow/pkg/regionspan"
+	"github.com/pingcap/tiflow/pkg/spanz"
 	"github.com/pingcap/tiflow/pkg/upstream"
 	"github.com/pingcap/tiflow/pkg/util"
 	"github.com/prometheus/client_golang/prometheus"
@@ -50,6 +50,10 @@ const (
 	ddlPullerStuckWarnDuration = 30 * time.Second
 	// DDLPullerTableName is the fake table name for ddl puller
 	DDLPullerTableName = "DDL_PULLER"
+	// ddl puller should never filter any DDL jobs even if
+	// the changefeed is in BDR mode, because the DDL jobs should
+	// be filtered before they are sent to the sink
+	ddLPullerFilterLoop = false
 )
 
 // DDLJobPuller is used to pull ddl job from TiKV.
@@ -118,6 +122,7 @@ func (p *ddlJobPullerImpl) Run(ctx context.Context) error {
 					if err != nil {
 						return errors.Trace(err)
 					}
+					log.Info("handle job", zap.Stringer("job", job), zap.Bool("skip", skip))
 					if skip {
 						continue
 					}
@@ -319,11 +324,11 @@ func (p *ddlJobPullerImpl) handleJob(job *timodel.Job) (skip bool, err error) {
 	if p.schemaSnapshot == nil {
 		return false, nil
 	}
-
 	// Do this first to fill the schema name to its origin schema name.
 	if err := p.schemaSnapshot.FillSchemaName(job); err != nil {
 		// If we can't find a job's schema, check if it's been filtered.
-		if p.filter.ShouldIgnoreTable(job.SchemaName, job.TableName) {
+		if p.filter.ShouldIgnoreTable(job.SchemaName, job.TableName) ||
+			p.filter.ShouldDiscardDDL(job.Type, job.SchemaName, job.TableName) {
 			return true, nil
 		}
 		return true, errors.Trace(err)
@@ -466,6 +471,10 @@ func NewDDLJobPuller(
 	if err != nil {
 		return nil, errors.Trace(err)
 	}
+	spans := spanz.GetAllDDLSpan()
+	for i := range spans {
+		spans[i].TableID = -1
+	}
 	return &ddlJobPullerImpl{
 		changefeedID:   changefeed,
 		filter:         f,
@@ -478,10 +487,13 @@ func NewDDLJobPuller(
 			kvStorage,
 			pdClock,
 			checkpointTs,
-			regionspan.GetAllDDLSpan(),
+			spans,
 			cfg,
 			changefeed,
-			-1, DDLPullerTableName),
+			-1, DDLPullerTableName,
+			ddLPullerFilterLoop,
+			true,
+		),
 		kvStorage: kvStorage,
 		outputCh:  make(chan *model.DDLJobEntry, defaultPullerOutputChanSize),
 		metricDiscardedDDLCounter: discardedDDLCounter.

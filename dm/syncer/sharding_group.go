@@ -77,6 +77,7 @@ import (
 	"github.com/pingcap/tidb/util/dbutil"
 	"github.com/pingcap/tidb/util/filter"
 	"github.com/pingcap/tiflow/dm/config"
+	"github.com/pingcap/tiflow/dm/config/dbconfig"
 	"github.com/pingcap/tiflow/dm/pb"
 	"github.com/pingcap/tiflow/dm/pkg/binlog"
 	"github.com/pingcap/tiflow/dm/pkg/conn"
@@ -453,8 +454,8 @@ func (k *ShardingGroupKeeper) Init() (err error) {
 
 	k.clear()
 	sgkDB := k.cfg.To
-	sgkDB.RawDBCfg = config.DefaultRawDBConfig().SetReadTimeout(maxCheckPointTimeout)
-	db, dbConns, err = dbconn.CreateConns(k.tctx, k.cfg, &sgkDB, 1)
+	sgkDB.RawDBCfg = dbconfig.DefaultRawDBConfig().SetReadTimeout(maxCheckPointTimeout)
+	db, dbConns, err = dbconn.CreateConns(k.tctx, k.cfg, conn.DownstreamDBConfig(&sgkDB), 1, k.cfg.IOTotalBytes, k.cfg.UUID)
 	if err != nil {
 		return
 	}
@@ -741,7 +742,7 @@ func (k *ShardingGroupKeeper) LoadShardMeta(flavor string, enableGTID bool) (map
 	for rows.Next() {
 		err := rows.Scan(&targetTableID, &sourceTableID, &activeIndex, &isGlobal, &data)
 		if err != nil {
-			return nil, terror.WithScope(terror.DBErrorAdapt(err, terror.ErrDBDriverError), terror.ScopeDownstream)
+			return nil, terror.DBErrorAdapt(err, k.dbConn.Scope(), terror.ErrDBDriverError)
 		}
 		if _, ok := meta[targetTableID]; !ok {
 			meta[targetTableID] = shardmeta.NewShardingMeta(k.shardMetaSchema, k.shardMetaTable, enableGTID)
@@ -751,7 +752,7 @@ func (k *ShardingGroupKeeper) LoadShardMeta(flavor string, enableGTID bool) (map
 			return nil, err
 		}
 	}
-	return meta, terror.WithScope(terror.DBErrorAdapt(rows.Err(), terror.ErrDBDriverError), terror.ScopeDownstream)
+	return meta, terror.DBErrorAdapt(rows.Err(), k.dbConn.Scope(), terror.ErrDBDriverError)
 }
 
 // CheckAndFix try to check and fix the schema/table case-sensitive issue.

@@ -15,19 +15,20 @@ package sinkmanager
 
 import (
 	"context"
+	"sync"
 	"testing"
 
-	"github.com/pingcap/errors"
 	"github.com/pingcap/tiflow/cdc/model"
 	"github.com/pingcap/tiflow/cdc/processor/tablepb"
 	"github.com/pingcap/tiflow/cdc/sinkv2/eventsink"
 	"github.com/pingcap/tiflow/cdc/sinkv2/tablesink"
-	cerror "github.com/pingcap/tiflow/pkg/errors"
+	"github.com/pingcap/tiflow/pkg/spanz"
 	"github.com/prometheus/client_golang/prometheus"
 	"github.com/stretchr/testify/require"
 )
 
 type mockSink struct {
+	mu         sync.Mutex
 	events     []*eventsink.CallbackableEvent[*model.RowChangedEvent]
 	writeTimes int
 }
@@ -39,9 +40,23 @@ func newMockSink() *mockSink {
 }
 
 func (m *mockSink) WriteEvents(events ...*eventsink.CallbackableEvent[*model.RowChangedEvent]) error {
+	m.mu.Lock()
+	defer m.mu.Unlock()
 	m.writeTimes++
 	m.events = append(m.events, events...)
 	return nil
+}
+
+func (m *mockSink) GetEvents() []*eventsink.CallbackableEvent[*model.RowChangedEvent] {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	return m.events
+}
+
+func (m *mockSink) GetWriteTimes() int {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	return m.writeTimes
 }
 
 func (m *mockSink) Close() error {
@@ -49,16 +64,20 @@ func (m *mockSink) Close() error {
 }
 
 //nolint:unparam
-func createTableSinkWrapper(changefeedID model.ChangeFeedID, tableID model.TableID) (*tableSinkWrapper, *mockSink) {
-	tableState := tablepb.TableStateReplicating
+func createTableSinkWrapper(
+	changefeedID model.ChangeFeedID, span tablepb.Span,
+) (*tableSinkWrapper, *mockSink) {
+	tableState := tablepb.TableStatePreparing
 	sink := newMockSink()
-	innerTableSink := tablesink.New[*model.RowChangedEvent](changefeedID, tableID,
+	innerTableSink := tablesink.New[*model.RowChangedEvent](
+		changefeedID, span,
 		sink, &eventsink.RowChangeEventAppender{}, prometheus.NewCounter(prometheus.CounterOpts{}))
 	wrapper := newTableSinkWrapper(
 		changefeedID,
-		tableID,
+		span,
 		innerTableSink,
 		tableState,
+		0,
 		100,
 	)
 	return wrapper, sink
@@ -67,18 +86,21 @@ func createTableSinkWrapper(changefeedID model.ChangeFeedID, tableID model.Table
 func TestTableSinkWrapperClose(t *testing.T) {
 	t.Parallel()
 
-	wrapper, _ := createTableSinkWrapper(model.DefaultChangeFeedID("1"), 1)
-	require.Equal(t, tablepb.TableStateReplicating, wrapper.getState())
-	require.ErrorIs(t, cerror.ErrTableProcessorStoppedSafely, errors.Cause(wrapper.close(context.Background())))
+	wrapper, _ := createTableSinkWrapper(
+		model.DefaultChangeFeedID("1"), spanz.TableIDToComparableSpan(1))
+	require.Equal(t, tablepb.TableStatePreparing, wrapper.getState())
+	wrapper.close(context.Background())
 	require.Equal(t, tablepb.TableStateStopped, wrapper.getState(), "table sink state should be stopped")
 }
 
 func TestUpdateReceivedSorterResolvedTs(t *testing.T) {
 	t.Parallel()
 
-	wrapper, _ := createTableSinkWrapper(model.DefaultChangeFeedID("1"), 1)
+	wrapper, _ := createTableSinkWrapper(
+		model.DefaultChangeFeedID("1"), spanz.TableIDToComparableSpan(1))
 	wrapper.updateReceivedSorterResolvedTs(100)
 	require.Equal(t, uint64(100), wrapper.getReceivedSorterResolvedTs())
+	require.Equal(t, tablepb.TableStatePrepared, wrapper.getState())
 }
 
 func TestConvertNilRowChangedEvents(t *testing.T) {
@@ -86,9 +108,9 @@ func TestConvertNilRowChangedEvents(t *testing.T) {
 
 	events := []*model.PolymorphicEvent{nil}
 	changefeedID := model.DefaultChangeFeedID("1")
-	tableID := model.TableID(1)
+	span := spanz.TableIDToComparableSpan(1)
 	enableOldVlaue := false
-	result, size, err := convertRowChangedEvents(changefeedID, tableID, enableOldVlaue, events...)
+	result, size, err := convertRowChangedEvents(changefeedID, span, enableOldVlaue, events...)
 	require.NoError(t, err)
 	require.Equal(t, 0, len(result))
 	require.Equal(t, uint64(0), size)
@@ -108,9 +130,9 @@ func TestConvertEmptyRowChangedEvents(t *testing.T) {
 		},
 	}
 	changefeedID := model.DefaultChangeFeedID("1")
-	tableID := model.TableID(1)
+	span := spanz.TableIDToComparableSpan(1)
 	enableOldValue := false
-	result, size, err := convertRowChangedEvents(changefeedID, tableID, enableOldValue, events...)
+	result, size, err := convertRowChangedEvents(changefeedID, span, enableOldValue, events...)
 	require.NoError(t, err)
 	require.Equal(t, 0, len(result))
 	require.Equal(t, uint64(0), size)
@@ -160,9 +182,9 @@ func TestConvertRowChangedEventsWhenEnableOldValue(t *testing.T) {
 		},
 	}
 	changefeedID := model.DefaultChangeFeedID("1")
-	tableID := model.TableID(1)
+	span := spanz.TableIDToComparableSpan(1)
 	enableOldValue := true
-	result, size, err := convertRowChangedEvents(changefeedID, tableID, enableOldValue, events...)
+	result, size, err := convertRowChangedEvents(changefeedID, span, enableOldValue, events...)
 	require.NoError(t, err)
 	require.Equal(t, 1, len(result))
 	require.Equal(t, uint64(216), size)
@@ -213,9 +235,9 @@ func TestConvertRowChangedEventsWhenDisableOldValue(t *testing.T) {
 		},
 	}
 	changefeedID := model.DefaultChangeFeedID("1")
-	tableID := model.TableID(1)
+	span := spanz.TableIDToComparableSpan(1)
 	enableOldValue := false
-	result, size, err := convertRowChangedEvents(changefeedID, tableID, enableOldValue, events...)
+	result, size, err := convertRowChangedEvents(changefeedID, span, enableOldValue, events...)
 	require.NoError(t, err)
 	require.Equal(t, 2, len(result))
 	require.Equal(t, uint64(216), size)
@@ -261,7 +283,7 @@ func TestConvertRowChangedEventsWhenDisableOldValue(t *testing.T) {
 			},
 		},
 	}
-	result, size, err = convertRowChangedEvents(changefeedID, tableID, enableOldValue, events...)
+	result, size, err = convertRowChangedEvents(changefeedID, span, enableOldValue, events...)
 	require.NoError(t, err)
 	require.Equal(t, 1, len(result))
 	require.Equal(t, uint64(216), size)

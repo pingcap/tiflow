@@ -13,18 +13,25 @@ mysql-instances:
     black-white-list: "instance"
     expression-filters:
       - "even_c"
+      - "always_false"
       - "future_date"
       - "pythagorean"
       - "update_old_lt_100"
       - "update_new_lt_100"
       - "update_old_and_new"
       - "only_muller"
+      - "e02"
 
 expression-filter:
   even_c:
     schema: "expr_filter"
     table: "t2"
     insert-value-expr: "c % 2 = 0"
+  always_false:
+    schema: "expr_filter"
+    table: "t2"
+    update-old-value-expr: "1 = 0"
+    update-new-value-expr: "1 = 0"
   future_date:
     schema: "expr_filter"
     table: "t3"
@@ -50,6 +57,10 @@ expression-filter:
     schema: "expr_filter"
     table: "t6"
     insert-value-expr: "name != 'Müller'"
+  e02:
+    schema: expr_filter
+    table: t7
+    update-new-value-expr: "r = 'a'"
 
 black-white-list: # compatible with deprecated config
   instance:

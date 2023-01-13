@@ -124,6 +124,7 @@ func (m *messageMatcher) sendRequest(
 	case <-ctx.Done():
 		return nil, ctx.Err()
 	case <-clientCtx.Done():
+		// todo: it's quite normal to see worker finished during the request, should we return nil, nil here?
 		return nil, errors.New("client is finished before receiving response")
 	case resp := <-respCh:
 		return resp, nil

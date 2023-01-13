@@ -29,6 +29,7 @@ import (
 	regexprrouter "github.com/pingcap/tidb/util/regexpr-router"
 	router "github.com/pingcap/tidb/util/table-router"
 	"github.com/pingcap/tiflow/dm/config"
+	"github.com/pingcap/tiflow/dm/config/dbconfig"
 	"github.com/pingcap/tiflow/dm/pb"
 	"github.com/pingcap/tiflow/dm/pkg/binlog"
 	"github.com/pingcap/tiflow/dm/pkg/binlog/event"
@@ -109,7 +110,7 @@ func TestValidatorStartStopAndInitialize(t *testing.T) {
 	require.Nil(t, validator.ctx)
 
 	// failed to init
-	cfg.From = config.DBConfig{
+	cfg.From = dbconfig.DBConfig{
 		Host: "invalid host",
 		Port: 3306,
 		User: "root",
@@ -398,7 +399,7 @@ func TestValidatorDoValidate(t *testing.T) {
 	)
 	dbConn, err := db.Conn(context.Background())
 	require.NoError(t, err)
-	syncerObj.downstreamTrackConn = dbconn.NewDBConn(cfg, conn.NewBaseConn(dbConn, &retry.FiniteRetryStrategy{}))
+	syncerObj.downstreamTrackConn = dbconn.NewDBConn(cfg, conn.NewBaseConnForTest(dbConn, &retry.FiniteRetryStrategy{}))
 	syncerObj.schemaTracker, err = schema.NewTestTracker(context.Background(), cfg.Name, syncerObj.downstreamTrackConn, log.L())
 	defer syncerObj.schemaTracker.Close()
 	require.NoError(t, err)
@@ -712,7 +713,7 @@ func TestValidatorGetValidationError(t *testing.T) {
 			},
 		},
 	}
-	validator.persistHelper.db = conn.NewBaseDB(db, func() {})
+	validator.persistHelper.db = conn.NewBaseDBForTest(db, func() {})
 	res, err := validator.GetValidatorError(pb.ValidateErrorState_InvalidErr)
 	require.Nil(t, err)
 	require.EqualValues(t, expected[0], res)
@@ -735,7 +736,7 @@ func TestValidatorOperateValidationError(t *testing.T) {
 	validator := NewContinuousDataValidator(cfg, syncerObj, false)
 	validator.ctx, validator.cancel = context.WithCancel(context.Background())
 	validator.tctx = tcontext.NewContext(validator.ctx, validator.L)
-	validator.persistHelper.db = conn.NewBaseDB(db, func() {})
+	validator.persistHelper.db = conn.NewBaseDBForTest(db, func() {})
 	sourceID := validator.cfg.SourceID
 	// 1. clear all error
 	dbMock.ExpectExec("DELETE FROM " + validator.persistHelper.errorChangeTableName + " WHERE source=\\?").
