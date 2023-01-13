@@ -87,8 +87,7 @@ func TestSplitSpan(t *testing.T) {
 	}
 
 	for i, cs := range cases {
-		cfg := &config.SchedulerConfig{RegionPerSpan: cs.regionPerSpan}
-		reconciler := NewReconciler(model.ChangeFeedID{}, cache, cfg.RegionPerSpan)
+		reconciler := NewReconciler(model.ChangeFeedID{}, cache, cs.regionPerSpan)
 		spans := reconciler.splitSpan(context.Background(), cs.span)
 		require.Equalf(t, cs.expectSpans, spans, "%d %s", i, &cs.span)
 	}
@@ -123,17 +122,17 @@ func TestEvenlySplitSpan(t *testing.T) {
 		},
 		{
 			regionPerSpan:  70,
-			expectSpansMin: 60,
-			expectSpansMax: 80,
+			expectSpansMin: 70,
+			expectSpansMax: 74,
 		},
 		{
 			regionPerSpan:  173,
-			expectSpansMin: 130,
+			expectSpansMin: 173,
 			expectSpansMax: 200,
 		},
 		{
 			regionPerSpan:  313,
-			expectSpansMin: 260,
+			expectSpansMin: 313,
 			expectSpansMax: 340,
 		},
 	}
