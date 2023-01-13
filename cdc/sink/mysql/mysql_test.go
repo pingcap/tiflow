@@ -2690,8 +2690,8 @@ func TestPrepareBatchDMLs(t *testing.T) {
 				},
 			},
 			expected: &preparedDMLs{
-				sqls:     []string{"UPDATE `common_1`.`uk_without_pk` SET `a1`=CASE WHEN ROW(`a1`,`a3`)=ROW(?,?) THEN ? WHEN ROW(`a1`,`a3`)=ROW(?,?) THEN ? END, `a3`=CASE WHEN ROW(`a1`,`a3`)=ROW(?,?) THEN ? WHEN ROW(`a1`,`a3`)=ROW(?,?) THEN ? END WHERE ROW(`a1`,`a3`) IN (ROW(?,?),ROW(?,?))"},
-				values:   [][]interface{}{{1, 1, 2, 3, 3, 4, 1, 1, 2, 3, 3, 4, 1, 1, 3, 3}},
+				sqls:     []string{"UPDATE `common_1`.`uk_without_pk` SET `a1` = ?, `a3` = ? WHERE `a1` = ? AND `a3` = ? LIMIT 1", "UPDATE `common_1`.`uk_without_pk` SET `a1` = ?, `a3` = ? WHERE `a1` = ? AND `a3` = ? LIMIT 1"},
+				values:   [][]interface{}{{2, 2, 1, 1}, {4, 4, 3, 3}},
 				rowCount: 2,
 			},
 		},
