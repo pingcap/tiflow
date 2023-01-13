@@ -40,12 +40,12 @@ type eventAppender struct {
 
 	mu sync.Mutex
 	// If an eventAppender is broken, it means it missed some events.
-	broken     bool
-	events     []*model.RowChangedEvent
-	sizes      []uint64
-	readyCount int // Count of ready events
-
-	// Several RowChangedEvent can come from one PolymorphicEvent.
+	broken bool
+	events []*model.RowChangedEvent
+	sizes  []uint64
+	// Count of ready events.
+	readyCount int
+	// Multiple RowChangedEvents can come from one PolymorphicEvent.
 	pushCounts []byte
 
 	// Both of them are included.
@@ -114,6 +114,7 @@ func (r *redoEventCache) maybeCreateAppender(tableID model.TableID, lowerBound e
 	if item.broken {
 		if item.readyCount == 0 {
 			item.broken = false
+			item.events = nil
 			item.lowerBound = lowerBound
 			item.upperBound = engine.Position{}
 		} else {
@@ -135,8 +136,15 @@ func (e *eventAppender) pop(lowerBound, upperBound engine.Position) (res popResu
 	defer e.mu.Unlock()
 
 	if lowerBound.Compare(e.lowerBound) < 0 {
+		// NOTE: the caller will fetch events [lowerBound, res.boundary) from engine.
 		res.success = false
 		res.boundary = e.lowerBound
+		return
+	}
+	if !e.upperBound.Valid() {
+		// NOTE: the caller will fetch events [lowerBound, res.boundary) from engine.
+		res.success = false
+		res.boundary = upperBound.Next()
 		return
 	}
 
@@ -162,7 +170,7 @@ func (e *eventAppender) pop(lowerBound, upperBound engine.Position) (res popResu
 	} else {
 		endIdx = sort.Search(e.readyCount, func(i int) bool {
 			pos := engine.Position{CommitTs: e.events[i].CommitTs, StartTs: e.events[i].StartTs}
-			return pos.Compare(upperBound) > 0
+			return pos.Compare(res.boundary) > 0
 		})
 		res.events = e.events[startIdx:endIdx]
 		for i := startIdx; i < endIdx; i++ {
@@ -176,7 +184,11 @@ func (e *eventAppender) pop(lowerBound, upperBound engine.Position) (res popResu
 	e.sizes = e.sizes[endIdx:]
 	e.pushCounts = e.pushCounts[endIdx:]
 	e.readyCount -= endIdx
+	// Update boundaries. Set upperBound to invalid if the range has been drained.
 	e.lowerBound = res.boundary.Next()
+	if e.lowerBound.Compare(e.upperBound) > 0 {
+		e.upperBound = engine.Position{}
+	}
 
 	atomic.AddUint64(&e.cache.allocated, ^(res.releaseSize - 1))
 	e.cache.metricRedoEventCache.Sub(float64(res.releaseSize))

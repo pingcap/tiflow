@@ -24,7 +24,7 @@ var (
 			Subsystem: "sinkv2",
 			Name:      "txn_conflict_detect_duration",
 			Help:      "Bucketed histogram of conflict detect time (s) for single DML statement.",
-			Buckets:   prometheus.ExponentialBuckets(0.001, 2, 20), // 1ms~1000s
+			Buckets:   prometheus.ExponentialBuckets(0.001, 2, 20), // 1ms~524s
 		}, []string{"namespace", "changefeed"})
 
 	WorkerFlushDuration = prometheus.NewHistogramVec(
@@ -33,7 +33,7 @@ var (
 			Subsystem: "sinkv2",
 			Name:      "txn_worker_flush_duration",
 			Help:      "Flush duration (s) for txn worker.",
-			Buckets:   prometheus.ExponentialBuckets(0.001, 2, 20), // 1ms~1000s
+			Buckets:   prometheus.ExponentialBuckets(0.001, 2, 20), // 1ms~524s
 		}, []string{"namespace", "changefeed"})
 
 	WorkerBusyRatio = prometheus.NewCounterVec(
@@ -58,7 +58,7 @@ var (
 			Subsystem: "sinkv2",
 			Name:      "txn_sink_dml_batch_commit",
 			Help:      "Duration of committing a DML batch",
-			Buckets:   prometheus.ExponentialBuckets(0.01, 2, 18), // 10ms~1000s
+			Buckets:   prometheus.ExponentialBuckets(0.01, 2, 18), // 10ms~1310s
 		}, []string{"namespace", "changefeed"})
 
 	SinkDMLBatchCallback = prometheus.NewHistogramVec(
@@ -67,7 +67,7 @@ var (
 			Subsystem: "sinkv2",
 			Name:      "txn_sink_dml_batch_callback",
 			Help:      "Duration of execuing a batch of callbacks",
-			Buckets:   prometheus.ExponentialBuckets(0.01, 2, 18), // 10ms~1000s
+			Buckets:   prometheus.ExponentialBuckets(0.01, 2, 18), // 10ms~1300s
 		}, []string{"namespace", "changefeed"})
 )
 

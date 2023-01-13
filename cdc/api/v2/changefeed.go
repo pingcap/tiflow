@@ -211,12 +211,12 @@ func (h *OpenAPIV2) updateChangefeed(c *gin.Context) {
 		return
 	}
 
-	cfInfo, err := h.capture.StatusProvider().GetChangeFeedInfo(ctx, changefeedID)
+	oldCfInfo, err := h.capture.StatusProvider().GetChangeFeedInfo(ctx, changefeedID)
 	if err != nil {
 		_ = c.Error(err)
 		return
 	}
-	if cfInfo.State != model.StateStopped {
+	if oldCfInfo.State != model.StateStopped {
 		_ = c.Error(cerror.ErrChangefeedUpdateRefused.
 			GenWithStackByArgs("can only update changefeed config when it is stopped"))
 		return
@@ -232,38 +232,39 @@ func (h *OpenAPIV2) updateChangefeed(c *gin.Context) {
 		_ = c.Error(err)
 		return
 	}
-	upInfo, err := etcdClient.GetUpstreamInfo(ctx, cfInfo.UpstreamID,
-		cfInfo.Namespace)
+	oldCfInfo.Namespace = changefeedID.Namespace
+	oldCfInfo.ID = changefeedID.ID
+	OldUpInfo, err := etcdClient.GetUpstreamInfo(ctx, oldCfInfo.UpstreamID,
+		oldCfInfo.Namespace)
 	if err != nil {
 		_ = c.Error(err)
 		return
 	}
 
 	updateCfConfig := &ChangefeedConfig{}
-	updateCfConfig.ReplicaConfig = ToAPIReplicaConfig(cfInfo.Config)
 	if err = c.BindJSON(updateCfConfig); err != nil {
 		_ = c.Error(cerror.WrapError(cerror.ErrAPIInvalidParam, err))
 		return
 	}
 
-	if err = h.helpers.verifyUpstream(ctx, updateCfConfig, cfInfo); err != nil {
+	if err = h.helpers.verifyUpstream(ctx, updateCfConfig, oldCfInfo); err != nil {
 		_ = c.Error(errors.Trace(err))
 		return
 	}
 
 	log.Info("Old ChangeFeed and Upstream Info",
-		zap.String("changefeedInfo", cfInfo.String()),
-		zap.Any("upstreamInfo", upInfo))
+		zap.String("changefeedInfo", oldCfInfo.String()),
+		zap.Any("upstreamInfo", OldUpInfo))
 
 	var pdAddrs []string
 	var credentials *security.Credential
-	if upInfo != nil {
-		pdAddrs = strings.Split(upInfo.PDEndpoints, ",")
+	if OldUpInfo != nil {
+		pdAddrs = strings.Split(OldUpInfo.PDEndpoints, ",")
 		credentials = &security.Credential{
-			CAPath:        upInfo.CAPath,
-			CertPath:      upInfo.CertPath,
-			KeyPath:       upInfo.KeyPath,
-			CertAllowedCN: upInfo.CertAllowedCN,
+			CAPath:        OldUpInfo.CAPath,
+			CertPath:      OldUpInfo.CertPath,
+			KeyPath:       OldUpInfo.KeyPath,
+			CertAllowedCN: OldUpInfo.CertAllowedCN,
 		}
 	}
 	if len(updateCfConfig.PDAddrs) != 0 {
@@ -275,8 +276,8 @@ func (h *OpenAPIV2) updateChangefeed(c *gin.Context) {
 	if err != nil {
 		_ = c.Error(errors.Trace(err))
 	}
-	newCfInfo, newUpInfo, err := h.helpers.
-		verifyUpdateChangefeedConfig(ctx, updateCfConfig, cfInfo, upInfo, storage, cfStatus.CheckpointTs)
+	newCfInfo, newUpInfo, err := h.helpers.verifyUpdateChangefeedConfig(ctx,
+		updateCfConfig, oldCfInfo, OldUpInfo, storage, cfStatus.CheckpointTs)
 	if err != nil {
 		_ = c.Error(errors.Trace(err))
 		return

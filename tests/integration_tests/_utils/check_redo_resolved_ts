@@ -1,0 +1,17 @@
+#!/bin/bash
+# parameter 1: changefeed id
+# parameter 2: check tso
+# parameter 3: external storage path
+# parameter 4: temporary download path
+
+changefeedid=$1
+check_tso=$2
+storage_path=$3
+read_dir=$4
+
+# check resolved ts has been persisted in redo log meta
+rts=$(cdc redo meta --storage="$storage_path" --tmp-dir="$read_dir" | grep -oE "resolved-ts:[0-9]+" | awk -F: '{print $2}')
+if [[ "$rts" -le "$check_tso" ]]; then
+	echo "global resolved ts $rts not forward to $check_tso"
+	exit 1
+fi

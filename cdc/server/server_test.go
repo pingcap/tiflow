@@ -37,7 +37,7 @@ import (
 	mock_etcd "github.com/pingcap/tiflow/pkg/etcd/mock"
 	"github.com/pingcap/tiflow/pkg/httputil"
 	"github.com/pingcap/tiflow/pkg/retry"
-	security2 "github.com/pingcap/tiflow/pkg/security"
+	"github.com/pingcap/tiflow/pkg/security"
 	"github.com/pingcap/tiflow/pkg/util"
 	"github.com/stretchr/testify/require"
 	"github.com/tikv/pd/pkg/tempurl"
@@ -174,12 +174,12 @@ const retryTime = 20
 func TestServerTLSWithoutCommonName(t *testing.T) {
 	addr := tempurl.Alloc()[len("http://"):]
 	// Do not specify common name
-	security, err := security2.NewCredential4Test("")
+	_, securityCfg, err := security.NewServerCredential4Test("")
 	require.Nil(t, err)
 	conf := config.GetDefaultServerConfig()
 	conf.Addr = addr
 	conf.AdvertiseAddr = addr
-	conf.Security = &security
+	conf.Security = securityCfg
 	config.StoreGlobalServerConfig(conf)
 
 	server, err := New([]string{"https://127.0.0.1:2379"})
@@ -205,7 +205,7 @@ func TestServerTLSWithoutCommonName(t *testing.T) {
 	go func() {
 		defer wg.Done()
 		err := server.tcpServer.Run(ctx)
-		require.Contains(t, err.Error(), "ErrTCPServerClosed")
+		require.ErrorContains(t, err, "ErrTCPServerClosed")
 	}()
 
 	// test cli sends request without a cert will success
@@ -227,12 +227,13 @@ func TestServerTLSWithoutCommonName(t *testing.T) {
 		require.Nil(t, err)
 		require.Equal(t, info.ID, captureInfo.ID)
 		return nil
-	}, retry.WithMaxTries(retryTime), retry.WithBackoffBaseDelay(50), retry.WithIsRetryableErr(cerrors.IsRetryableError))
+	}, retry.WithMaxTries(retryTime), retry.WithBackoffBaseDelay(50),
+		retry.WithIsRetryableErr(cerrors.IsRetryableError))
 	require.Nil(t, err)
 
 	// test cli sends request with a cert will success
 	err = retry.Do(ctx, func() error {
-		cli, err := httputil.NewClient(&security)
+		cli, err := httputil.NewClient(securityCfg)
 		require.Nil(t, err)
 		resp, err := cli.Get(ctx, statusURL)
 		if err != nil {
@@ -247,22 +248,25 @@ func TestServerTLSWithoutCommonName(t *testing.T) {
 		require.Equal(t, info.ID, captureInfo.ID)
 		resp.Body.Close()
 		return nil
-	}, retry.WithMaxTries(retryTime), retry.WithBackoffBaseDelay(50), retry.WithIsRetryableErr(cerrors.IsRetryableError))
+	}, retry.WithMaxTries(retryTime), retry.WithBackoffBaseDelay(50),
+		retry.WithIsRetryableErr(cerrors.IsRetryableError))
 	require.Nil(t, err)
 
 	cancel()
 	wg.Wait()
 }
 
-func TestServerTLSWithCommonName(t *testing.T) {
+func TestServerTLSWithCommonNameAndRotate(t *testing.T) {
 	addr := tempurl.Alloc()[len("http://"):]
 	// specify a common name
-	security, err := security2.NewCredential4Test("test")
+	ca, securityCfg, err := security.NewServerCredential4Test("server")
+	securityCfg.CertAllowedCN = append(securityCfg.CertAllowedCN, "client1")
 	require.Nil(t, err)
+
 	conf := config.GetDefaultServerConfig()
 	conf.Addr = addr
 	conf.AdvertiseAddr = addr
-	conf.Security = &security
+	conf.Security = securityCfg
 	config.StoreGlobalServerConfig(conf)
 
 	server, err := New([]string{"https://127.0.0.1:2379"})
@@ -280,7 +284,7 @@ func TestServerTLSWithCommonName(t *testing.T) {
 	}()
 
 	statusURL := fmt.Sprintf("https://%s/api/v1/status", addr)
-	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	ctx, cancel := context.WithTimeout(context.Background(), 20*time.Second)
 	defer cancel()
 
 	var wg sync.WaitGroup
@@ -288,7 +292,7 @@ func TestServerTLSWithCommonName(t *testing.T) {
 	go func() {
 		defer wg.Done()
 		err := server.tcpServer.Run(ctx)
-		require.Contains(t, err.Error(), "ErrTCPServerClosed")
+		require.ErrorContains(t, err, "ErrTCPServerClosed")
 	}()
 
 	// test cli sends request without a cert will fail
@@ -311,26 +315,59 @@ func TestServerTLSWithCommonName(t *testing.T) {
 		require.Equal(t, info.ID, captureInfo.ID)
 		resp.Body.Close()
 		return nil
-	}, retry.WithMaxTries(retryTime), retry.WithBackoffBaseDelay(50), retry.WithIsRetryableErr(cerrors.IsRetryableError))
-	require.Contains(t, err.Error(), "remote error: tls: bad certificate")
+	}, retry.WithMaxTries(retryTime), retry.WithBackoffBaseDelay(50),
+		retry.WithIsRetryableErr(cerrors.IsRetryableError))
+	require.ErrorContains(t, err, "remote error: tls: bad certificate")
+
+	testTlSClient := func(securityCfg *security.Credential) error {
+		return retry.Do(ctx, func() error {
+			cli, err := httputil.NewClient(securityCfg)
+			require.Nil(t, err)
+			resp, err := cli.Get(ctx, statusURL)
+			if err != nil {
+				return err
+			}
+			decoder := json.NewDecoder(resp.Body)
+			captureInfo := &model.CaptureInfo{}
+			err = decoder.Decode(captureInfo)
+			require.Nil(t, err)
+			info, err := server.capture.Info()
+			require.Nil(t, err)
+			require.Equal(t, info.ID, captureInfo.ID)
+			resp.Body.Close()
+			return nil
+		}, retry.WithMaxTries(retryTime), retry.WithBackoffBaseDelay(50),
+			retry.WithIsRetryableErr(cerrors.IsRetryableError))
+	}
 
 	// test cli sends request with a cert will success
-	err = retry.Do(ctx, func() error {
-		cli, err := httputil.NewClient(&security)
-		require.Nil(t, err)
-		resp, err := cli.Get(ctx, statusURL)
-		if err != nil {
-			return err
-		}
-		decoder := json.NewDecoder(resp.Body)
-		captureInfo := &model.CaptureInfo{}
-		err = decoder.Decode(captureInfo)
-		require.Nil(t, err)
-		info, err := server.capture.Info()
-		require.Nil(t, err)
-		require.Equal(t, info.ID, captureInfo.ID)
-		resp.Body.Close()
-		return nil
-	}, retry.WithMaxTries(retryTime), retry.WithBackoffBaseDelay(50), retry.WithIsRetryableErr(cerrors.IsRetryableError))
-	require.Nil(t, err)
+
+	// test peer success
+	require.NoError(t, testTlSClient(securityCfg))
+
+	// test rotate
+	serverCert, serverkey, err := ca.GenerateCerts("rotate")
+	require.NoError(t, err)
+	err = os.WriteFile(securityCfg.CertPath, serverCert, 0o600)
+	require.NoError(t, err)
+	err = os.WriteFile(securityCfg.KeyPath, serverkey, 0o600)
+	require.NoError(t, err)
+	// peer fail due to invalid common name `rotate`
+	require.ErrorContains(t, testTlSClient(securityCfg), "client certificate authentication failed")
+
+	cert, key, err := ca.GenerateCerts("client1")
+	require.NoError(t, err)
+	certPath, err := security.WriteFile("ticdc-test-client-cert", cert)
+	require.NoError(t, err)
+	keyPath, err := security.WriteFile("ticdc-test-client-key", key)
+	require.NoError(t, err)
+	require.NoError(t, testTlSClient(&security.Credential{
+		CAPath:        securityCfg.CAPath,
+		CertPath:      certPath,
+		KeyPath:       keyPath,
+		CertAllowedCN: []string{"rotate"},
+	}))
+
+	cancel()
+	wg.Wait()
 }

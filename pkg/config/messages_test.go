@@ -33,6 +33,7 @@ func TestDefaultMessageServerConfig(t *testing.T) {
 	require.Greater(t, serverConfig.SendRateLimitPerStream, 0.1)
 	require.Greater(t, serverConfig.MaxPeerCount, 0)
 	require.Greater(t, serverConfig.WaitUnregisterHandleTimeoutThreshold, time.Duration(0))
+	require.EqualValues(t, serverConfig.MaxRecvMsgSize, defaultMaxRecvMsgSize)
 }
 
 func TestDefaultMessageClientConfig(t *testing.T) {
@@ -43,6 +44,7 @@ func TestDefaultMessageClientConfig(t *testing.T) {
 	require.Greater(t, clientConfig.MaxBatchCount, 0)
 	require.Greater(t, clientConfig.RetryRateLimitPerSecond, 0.1)
 	require.Greater(t, clientConfig.DialTimeout, time.Duration(0))
+	require.EqualValues(t, clientConfig.MaxRecvMsgSize, defaultMaxRecvMsgSize)
 }
 
 func TestMessagesConfigClone(t *testing.T) {
@@ -73,4 +75,9 @@ func TestMessagesConfigValidateAndAdjust(t *testing.T) {
 	err = illegalConfig.ValidateAndAdjust()
 	require.Error(t, err)
 	require.Regexp(t, ".*ErrInvalidServerOption.*", err.Error())
+
+	illegalConfig = defaultMessageConfig.Clone()
+	illegalConfig.MaxRecvMsgSize = -1
+	err = illegalConfig.ValidateAndAdjust()
+	require.Error(t, err)
 }

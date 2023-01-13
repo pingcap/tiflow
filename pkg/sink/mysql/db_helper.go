@@ -160,6 +160,14 @@ func generateDSNByConfig(
 	if tidbPlacementMode != "" {
 		dsnCfg.Params["tidb_placement_mode"] = fmt.Sprintf(`"%s"`, tidbPlacementMode)
 	}
+	tidbEnableExternalTSRead, err := checkTiDBVariable(ctx, testDB, "tidb_enable_external_ts_read", "OFF")
+	if err != nil {
+		return "", err
+	}
+	if tidbEnableExternalTSRead != "" {
+		// set the `tidb_enable_external_ts_read` to `OFF`, so cdc could write to the sink
+		dsnCfg.Params["tidb_enable_external_ts_read"] = fmt.Sprintf(`"%s"`, tidbEnableExternalTSRead)
+	}
 	dsnClone := dsnCfg.Clone()
 	dsnClone.Passwd = "******"
 	log.Info("sink uri is configured", zap.String("dsn", dsnClone.FormatDSN()))
@@ -167,13 +175,17 @@ func generateDSNByConfig(
 	return dsnCfg.FormatDSN(), nil
 }
 
-func querySQLMode(ctx context.Context, db *sql.DB) (sqlMode string, err error) {
+func querySQLMode(ctx context.Context, db *sql.DB) (string, error) {
 	row := db.QueryRowContext(ctx, "SELECT @@SESSION.sql_mode;")
-	err = row.Scan(&sqlMode)
+	var sqlMode sql.NullString
+	err := row.Scan(&sqlMode)
 	if err != nil {
 		err = cerror.WrapError(cerror.ErrMySQLQueryError, err)
 	}
-	return
+	if !sqlMode.Valid {
+		sqlMode.String = ""
+	}
+	return sqlMode.String, err
 }
 
 // check whether the target charset is supported

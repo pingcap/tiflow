@@ -82,8 +82,9 @@ var defaultClientConfig = &p2p.MessageClientConfig{
 	BatchSendInterval:       100 * time.Millisecond, // essentially disables flushing
 	MaxBatchBytes:           8 * 1024 * 1024,        // 8MB
 	MaxBatchCount:           4096,
-	RetryRateLimitPerSecond: 1.0,      // once per second
-	ClientVersion:           "v5.4.0", // a fake version
+	RetryRateLimitPerSecond: 1.0,             // once per second
+	ClientVersion:           "v5.4.0",        // a fake version
+	MaxRecvMsgSize:          4 * 1024 * 1024, // 4MB
 }
 
 // NewMessageRouter creates a new MessageRouter instance via tiflow p2p API
