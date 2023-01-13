@@ -115,7 +115,8 @@ func (c *ClusterAdminClientMockImpl) GetBrokerConfig(configName string) (string,
 
 // SetRemainingFetchesUntilTopicVisible is used to control the visibility of a specific topic.
 // It is used to mock the topic creation delay.
-func (c *ClusterAdminClientMockImpl) SetRemainingFetchesUntilTopicVisible(topicName string,
+func (c *ClusterAdminClientMockImpl) SetRemainingFetchesUntilTopicVisible(
+	topicName string,
 	fetchesRemainingUntilVisible int,
 ) error {
 	topic, ok := c.topics[topicName]
@@ -130,9 +131,20 @@ func (c *ClusterAdminClientMockImpl) SetRemainingFetchesUntilTopicVisible(topicN
 // GetTopicsMeta implement the ClusterAdminClient interface
 func (c *ClusterAdminClientMockImpl) GetTopicsMeta(
 	topics []string,
-	ignoreTopicError bool,
+	_ bool,
 ) (map[string]TopicDetail, error) {
-	return nil, nil
+	result := make(map[string]TopicDetail, len(topics))
+	for _, topic := range topics {
+		details, ok := c.topics[topic]
+		if ok {
+			if details.fetchesRemainingUntilVisible > 0 {
+				details.fetchesRemainingUntilVisible--
+				continue
+			}
+			result[topic] = details.TopicDetail
+		}
+	}
+	return result, nil
 }
 
 // CreateTopic adds topic into map.
