@@ -692,10 +692,11 @@ func TestConfigurationCombinations(t *testing.T) {
 		err = options.Apply(sinkURI)
 		require.Nil(t, err)
 
-		saramaConfig, err := kafka.NewSaramaConfig(context.Background(), options)
+		ctx := context.Background()
+		saramaConfig, err := kafka.NewSaramaConfig(ctx, options)
 		require.Nil(t, err)
 
-		adminClient, err := NewAdminClientImpl([]string{sinkURI.Host}, saramaConfig)
+		adminClient, err := NewAdminClientImpl(ctx, options)
 		require.Nil(t, err)
 
 		topic, ok := a.uriParams[0].(string)
