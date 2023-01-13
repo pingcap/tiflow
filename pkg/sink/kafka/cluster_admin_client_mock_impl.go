@@ -163,6 +163,10 @@ func (c *ClusterAdminClientMockImpl) DescribeTopics(topics []string) (
 	return metadataRes, nil
 }
 
+func (c *ClusterAdminClientMockImpl) GetTopicMeta(topic string) (*TopicMetadata, error) {
+	return nil, nil
+}
+
 // CreateTopic adds topic into map.
 func (c *ClusterAdminClientMockImpl) CreateTopic(topic string, detail *TopicDetail, _ bool) error {
 	if detail.ReplicationFactor > defaultReplicationFactor {

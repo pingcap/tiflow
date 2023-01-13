@@ -86,6 +86,9 @@ type ClusterAdminClient interface {
 	// DescribeTopics fetches metadata from some topics.
 	DescribeTopics(topics []string) (metadata []*TopicMetadata, err error)
 
+	// GetTopicMeta return a topic's metadata
+	GetTopicMeta(topic string) (*TopicMetadata, error)
+
 	// Close shuts down the admin and closes underlying client.
 	Close() error
 }

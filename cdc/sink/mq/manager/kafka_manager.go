@@ -160,40 +160,21 @@ func (m *kafkaTopicManager) getMetadataOfTopics() ([]*kafka.TopicMetadata, error
 // topics have been created.
 // See https://kafka.apache.org/23/javadoc/org/apache/kafka/clients/admin/AdminClient.html
 func (m *kafkaTopicManager) waitUntilTopicVisible(topicName string) error {
-	topics := []string{topicName}
 	err := retry.Do(context.Background(), func() error {
 		start := time.Now()
-		topicMetaList, err := m.admin.DescribeTopics(topics)
+		meta, err := m.admin.GetTopicMeta(topicName)
 		if err != nil {
-			log.Error("Kafka admin client describe topic failed",
-				zap.String("topic", topicName),
+			log.Warn(" topic not found, retry it",
 				zap.Error(err),
-				zap.Duration("duration", time.Since(start)))
+				zap.Duration("duration", time.Since(start)),
+			)
 			return err
 		}
-
-		if len(topicMetaList) != 1 {
-			log.Error("topic metadata length is wrong.",
-				zap.String("topic", topicName),
-				zap.Int("expected", 1),
-				zap.Int("actual", len(topicMetaList)))
-			return cerror.ErrKafkaTopicNotExists.GenWithStack(
-				fmt.Sprintf("metadata length of topic %s is not equal to 1", topicName))
-		}
-
-		meta := topicMetaList[0]
-		if meta.Err != sarama.ErrNoError {
-			log.Error("topic metadata is fetched with error",
-				zap.String("topic", topicName),
-				zap.Error(meta.Err))
-			return meta.Err
-		}
-
-		log.Info("Kafka admin client describe topic success",
+		g
+		log.Info("topic found",
 			zap.String("topic", topicName),
 			zap.Int("partitionNumber", len(meta.Partitions)),
 			zap.Duration("duration", time.Since(start)))
-
 		return nil
 	}, retry.WithBackoffBaseDelay(500),
 		retry.WithBackoffMaxDelay(1000),

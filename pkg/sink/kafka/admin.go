@@ -142,6 +142,31 @@ func (a *admin) DescribeTopics(topics []string) ([]*TopicMetadata, error) {
 	return result, nil
 }
 
+func (a *admin) GetTopicMeta(topic string) (*TopicMetadata, error) {
+	metaList, err := a.client.DescribeTopics([]string{topic})
+	if err != nil {
+		return nil, err
+	}
+
+	if len(metaList) == 0 {
+		return nil, cerror.ErrKafkaTopicNotExists.GenWithStack("topic %s not found", topic)
+	}
+
+	meta := metaList[0]
+	if meta.Name != topic {
+		return nil, cerror.ErrKafkaTopicNotExists.GenWithStack("topic %s not found", topic)
+	}
+
+	if meta.Err != sarama.ErrNoError {
+		return nil, meta.Err
+	}
+
+	return &TopicMetadata{
+		Name: meta.Name,
+		Err:  meta.Err,
+	}, nil
+}
+
 func (a *admin) Close() error {
 	return a.client.Close()
 }
