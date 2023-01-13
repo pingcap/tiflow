@@ -17,6 +17,7 @@ import (
 	"context"
 )
 
+// TopicDetail represent a topic's detail information.
 type TopicDetail struct {
 	Name              string
 	NumPartitions     int32
@@ -24,31 +25,9 @@ type TopicDetail struct {
 	ConfigEntries     map[string]string
 }
 
+// Broker represents a Kafka broker.
 type Broker struct {
 	ID int32
-}
-
-// ConfigResourceType is a type for resources that have configs.
-type ConfigResourceType int8
-
-// Taken from:
-// https://github.com/apache/kafka/blob/ed7c071e07f1f90e4c2895582f61ca090ced3c42/clients/src/main/java/org/apache/kafka/common/config/ConfigResource.java#L32-L55
-
-const (
-	// UnknownResource constant type
-	UnknownResource ConfigResourceType = 0
-	// TopicResource constant type
-	TopicResource ConfigResourceType = 2
-	// BrokerResource constant type
-	BrokerResource ConfigResourceType = 4
-	// BrokerLoggerResource constant type
-	BrokerLoggerResource ConfigResourceType = 8
-)
-
-type ConfigResource struct {
-	Type        ConfigResourceType
-	Name        string
-	ConfigNames []string
 }
 
 // ClusterAdminClient is the administrative client for Kafka, which supports managing and inspecting topics,

@@ -508,7 +508,12 @@ func validateMinInsyncReplicas(
 // getTopicConfig gets topic config by name.
 // If the topic does not have this configuration, we will try to get it from the broker's configuration.
 // NOTICE: The configuration names of topic and broker may be different for the same configuration.
-func getTopicConfig(admin kafka.ClusterAdminClient, detail kafka.TopicDetail, topicConfigName string, brokerConfigName string) (string, error) {
+func getTopicConfig(
+	admin kafka.ClusterAdminClient,
+	detail kafka.TopicDetail,
+	topicConfigName string,
+	brokerConfigName string,
+) (string, error) {
 	if a, ok := detail.ConfigEntries[topicConfigName]; ok {
 		return a, nil
 	}

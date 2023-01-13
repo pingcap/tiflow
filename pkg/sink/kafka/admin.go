@@ -127,7 +127,10 @@ func (a *admin) GetBrokerConfig(configName string) (string, error) {
 	return configEntries[0].Value, nil
 }
 
-func (a *admin) GetTopicsMeta(topics []string, ignoreTopicError bool) (map[string]TopicDetail, error) {
+func (a *admin) GetTopicsMeta(
+	topics []string,
+	ignoreTopicError bool,
+) (map[string]TopicDetail, error) {
 	metaList, err := a.client.DescribeTopics(topics)
 	if err != nil {
 		return nil, err
@@ -151,17 +154,4 @@ func (a *admin) GetTopicsMeta(topics []string, ignoreTopicError bool) (map[strin
 
 func (a *admin) Close() error {
 	return a.client.Close()
-}
-
-func configResourceType4Sarama(resourceType ConfigResourceType) sarama.ConfigResourceType {
-	switch resourceType {
-	case TopicResource:
-		return sarama.TopicResource
-	case BrokerResource:
-		return sarama.BrokerResource
-	case BrokerLoggerResource:
-		return sarama.BrokerLoggerResource
-	default:
-		return sarama.UnknownResource
-	}
 }

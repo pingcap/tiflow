@@ -98,14 +98,17 @@ func (c *ClusterAdminClientMockImpl) GetAllTopicsMeta() (map[string]TopicDetail,
 	return topicsDetailsMap, nil
 }
 
+// GetAllBrokers implement the ClusterAdminClient interface
 func (c *ClusterAdminClientMockImpl) GetAllBrokers() ([]Broker, error) {
 	return nil, nil
 }
 
+// GetCoordinator implement the ClusterAdminClient interface
 func (c *ClusterAdminClientMockImpl) GetCoordinator() (int32, error) {
 	return c.controllerID, nil
 }
 
+// GetBrokerConfig implement the ClusterAdminClient interface
 func (c *ClusterAdminClientMockImpl) GetBrokerConfig(configName string) (string, error) {
 	return c.brokerConfigs[configName], nil
 }
@@ -124,7 +127,11 @@ func (c *ClusterAdminClientMockImpl) SetRemainingFetchesUntilTopicVisible(topicN
 	return nil
 }
 
-func (c *ClusterAdminClientMockImpl) GetTopicsMeta(topics []string, ignoreTopicError bool) (map[string]TopicDetail, error) {
+// GetTopicsMeta implement the ClusterAdminClient interface
+func (c *ClusterAdminClientMockImpl) GetTopicsMeta(
+	topics []string,
+	ignoreTopicError bool,
+) (map[string]TopicDetail, error) {
 	return nil, nil
 }
 
