@@ -2279,7 +2279,48 @@ func (s *Syncer) Run(ctx context.Context) (err error) {
 		var needContinue bool
 		var eventType string
 
-<<<<<<< HEAD
+		funcCommit := func(gSet mysql.GTIDSet) (bool, error) {
+			// reset eventIndex and force safeMode flag here.
+			eventIndex = 0
+			currentLocation.Position.Pos = e.Header.LogPos
+			for schemaName, tableMap := range affectedSourceTables {
+				for table := range tableMap {
+					s.saveTablePoint(&filter.Table{Schema: schemaName, Name: table}, currentLocation)
+				}
+			}
+			affectedSourceTables = make(map[string]map[string]struct{})
+			if shardingReSync != nil {
+				shardingReSync.currLocation.Position.Pos = e.Header.LogPos
+				shardingReSync.currLocation.Suffix = currentLocation.Suffix
+				err = shardingReSync.currLocation.SetGTID(gSet)
+				if err != nil {
+					return false, terror.Annotatef(err, "fail to record GTID %v", gSet)
+				}
+
+				// only need compare binlog position?
+				lastLocation = shardingReSync.currLocation
+				if binlog.CompareLocation(shardingReSync.currLocation, shardingReSync.latestLocation, s.cfg.EnableGTID) >= 0 {
+					s.tctx.L().Info("re-replicate shard group was completed", zap.String("event", eventType), zap.Stringer("re-shard", shardingReSync))
+					err = closeShardingResync()
+					if err != nil {
+						return false, terror.Annotatef(err, "shard group current location %s", shardingReSync.currLocation)
+					}
+					return true, nil
+				}
+			}
+
+			s.tctx.L().Debug("", zap.String("event", eventType), zap.Stringer("last location", lastLocation), log.WrapStringerField("location", currentLocation))
+			lastLocation.Position.Pos = e.Header.LogPos // update lastPos
+			err = lastLocation.SetGTID(gSet)
+			if err != nil {
+				return false, terror.Annotatef(err, "fail to record GTID %v", gSet)
+			}
+
+			job := newXIDJob(currentLocation, startLocation, currentLocation)
+			_, err = s.handleJobFunc(job)
+			return false, err
+		}
+
 		switch ev := e.Event.(type) {
 		case *replication.RotateEvent:
 			err2 = s.handleRotateEvent(ev, ec)
@@ -2295,89 +2336,21 @@ func (s *Syncer) Run(ctx context.Context) (err error) {
 			}
 		case *replication.QueryEvent:
 			originSQL = strings.TrimSpace(string(ev.Query))
-			err2 = s.handleQueryEvent(ev, ec, originSQL)
-		case *replication.XIDEvent:
-=======
-		funcCommit := func() (bool, error) {
->>>>>>> bc176c35e4 (syncer(dm): fix log error caused by "COMMIT" in QueryEvent (#7726))
-			// reset eventIndex and force safeMode flag here.
-			eventIndex = 0
-			currentLocation.Position.Pos = e.Header.LogPos
-			for schemaName, tableMap := range affectedSourceTables {
-				for table := range tableMap {
-					s.saveTablePoint(&filter.Table{Schema: schemaName, Name: table}, currentLocation)
-				}
-			}
-			affectedSourceTables = make(map[string]map[string]struct{})
-			if shardingReSync != nil {
-				shardingReSync.currLocation.Position.Pos = e.Header.LogPos
-				shardingReSync.currLocation.Suffix = currentLocation.Suffix
-				err = shardingReSync.currLocation.SetGTID(ev.GSet)
-				if err != nil {
-					return terror.Annotatef(err, "fail to record GTID %v", ev.GSet)
-				}
-
-				// only need compare binlog position?
-				lastLocation = shardingReSync.currLocation
-				if binlog.CompareLocation(shardingReSync.currLocation, shardingReSync.latestLocation, s.cfg.EnableGTID) >= 0 {
-					s.tctx.L().Info("re-replicate shard group was completed", zap.String("event", eventType), zap.Stringer("re-shard", shardingReSync))
-					err = closeShardingResync()
-					if err != nil {
-						return false, terror.Annotatef(err, "shard group current location %s", shardingReSync.currLocation)
-					}
-					return true, nil
-				}
-			}
-
-<<<<<<< HEAD
-			s.tctx.L().Debug("", zap.String("event", "XID"), zap.Stringer("last location", lastLocation), log.WrapStringerField("location", currentLocation))
-			lastLocation.Position.Pos = e.Header.LogPos // update lastPos
-			err = lastLocation.SetGTID(ev.GSet)
-			if err != nil {
-				return terror.Annotatef(err, "fail to record GTID %v", ev.GSet)
-			}
-
-			job := newXIDJob(currentLocation, startLocation, currentLocation)
-			_, err2 = s.handleJobFunc(job)
-=======
-			s.tctx.L().Debug("", zap.String("event", eventType), zap.Stringer("last location", lastTxnEndLocation), log.WrapStringerField("location", endLocation))
-
-			job := newXIDJob(endLocation, startLocation, endLocation)
-			_, err = s.handleJobFunc(job)
-			return false, err
-		}
-
-		switch ev := e.Event.(type) {
-		case *replication.RotateEvent:
-			err2 = s.handleRotateEvent(ev, ec)
-		case *replication.RowsEvent:
-			eventIndex++
-			s.metricsProxies.Metrics.BinlogEventRowHistogram.Observe(float64(len(ev.Rows)))
-			sourceTable, err2 = s.handleRowsEvent(ev, ec)
-			if sourceTable != nil && err2 == nil && s.cfg.EnableGTID {
-				if _, ok := affectedSourceTables[sourceTable.Schema]; !ok {
-					affectedSourceTables[sourceTable.Schema] = make(map[string]struct{})
-				}
-				affectedSourceTables[sourceTable.Schema][sourceTable.Name] = struct{}{}
-			}
-		case *replication.QueryEvent:
-			originSQL = strings.TrimSpace(string(ev.Query))
 			if originSQL == "COMMIT" {
 				eventType = "COMMIT query event"
-				needContinue, err2 = funcCommit()
+				needContinue, err2 = funcCommit(ev.GSet)
 				if needContinue {
 					continue
 				}
 			} else {
-				err2 = s.ddlWorker.HandleQueryEvent(ev, ec, originSQL)
+				err2 = s.handleQueryEvent(ev, ec, originSQL)
 			}
 		case *replication.XIDEvent:
 			eventType = "XID"
-			needContinue, err2 = funcCommit()
+			needContinue, err2 = funcCommit(ev.GSet)
 			if needContinue {
 				continue
 			}
->>>>>>> bc176c35e4 (syncer(dm): fix log error caused by "COMMIT" in QueryEvent (#7726))
 		case *replication.GenericEvent:
 			if e.Header.EventType == replication.HEARTBEAT_EVENT {
 				// flush checkpoint even if there are no real binlog events
