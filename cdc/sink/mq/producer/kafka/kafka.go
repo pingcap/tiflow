@@ -372,7 +372,7 @@ func AdjustConfig(
 	saramaConfig *sarama.Config,
 	topic string,
 ) error {
-	topics, err := admin.ListTopics()
+	topics, err := admin.GetAllTopicsMeta()
 	if err != nil {
 		return errors.Trace(err)
 	}

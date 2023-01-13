@@ -62,8 +62,9 @@ type ClusterAdminClient interface {
 
 	GetBrokerConfig(configName string) (string, error)
 
-	// ListTopics list the topics available in the cluster with the default options.
-	ListTopics() (map[string]TopicDetail, error)
+	// GetAllTopicsMeta return all topics' metadata
+	// which available in the cluster with the default options.
+	GetAllTopicsMeta() ([]TopicDetail, error)
 
 	// CreateTopic creates a new topic.
 	CreateTopic(topic string, detail *TopicDetail, validateOnly bool) error

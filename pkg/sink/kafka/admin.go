@@ -42,13 +42,13 @@ func NewSaramaAdminClient(ctx context.Context, config *Options) (ClusterAdminCli
 	return &admin{client: client}, nil
 }
 
-func (a *admin) ListTopics() (map[string]TopicDetail, error) {
+func (a *admin) GetAllTopicsMeta() ([]TopicDetail, error) {
 	topics, err := a.client.ListTopics()
 	if err != nil {
 		return nil, err
 	}
 
-	result := make(map[string]TopicDetail, len(topics))
+	result := make([]TopicDetail, len(topics))
 	for topic, detail := range topics {
 		configEntries := make(map[string]string, len(detail.ConfigEntries))
 		for name, value := range detail.ConfigEntries {
@@ -56,11 +56,12 @@ func (a *admin) ListTopics() (map[string]TopicDetail, error) {
 				configEntries[name] = *value
 			}
 		}
-		result[topic] = TopicDetail{
+		result = append(result, TopicDetail{
+			Name:              topic,
 			NumPartitions:     detail.NumPartitions,
 			ReplicationFactor: detail.ReplicationFactor,
 			ConfigEntries:     configEntries,
-		}
+		})
 	}
 
 	return result, nil

@@ -186,7 +186,7 @@ func (m *kafkaTopicManager) waitUntilTopicVisible(topicName string) error {
 // listTopics is used to do an initial metadata fetching.
 func (m *kafkaTopicManager) listTopics() error {
 	start := time.Now()
-	topics, err := m.admin.ListTopics()
+	topics, err := m.admin.GetAllTopicsMeta()
 	if err != nil {
 		log.Error(
 			"Kafka admin client list topics failed",
@@ -202,8 +202,8 @@ func (m *kafkaTopicManager) listTopics() error {
 
 	// Now that we have access to the latest topics' information,
 	// we need to update it here immediately.
-	for topic, detail := range topics {
-		m.tryUpdatePartitionsAndLogging(topic, detail.NumPartitions)
+	for _, detail := range topics {
+		m.tryUpdatePartitionsAndLogging(detail.Name, detail.NumPartitions)
 	}
 	m.lastMetadataRefresh.Store(time.Now().Unix())
 
