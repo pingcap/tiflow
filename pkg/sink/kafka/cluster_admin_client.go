@@ -18,6 +18,7 @@ import (
 )
 
 type TopicDetail struct {
+	Name              string
 	NumPartitions     int32
 	ReplicationFactor int16
 	ConfigEntries     map[string]string
@@ -50,13 +51,6 @@ type ConfigResource struct {
 	ConfigNames []string
 }
 
-type TopicMetadata struct {
-	Name string
-	Err  error
-
-	NumPartition int32
-}
-
 // ClusterAdminClient is the administrative client for Kafka, which supports managing and inspecting topics,
 // brokers, configurations and ACLs.
 type ClusterAdminClient interface {
@@ -74,8 +68,9 @@ type ClusterAdminClient interface {
 	// CreateTopic creates a new topic.
 	CreateTopic(topic string, detail *TopicDetail, validateOnly bool) error
 
-	// GetTopicMeta return a topic's metadata
-	GetTopicMeta(topics []string) ([]*TopicMetadata, error)
+	// GetTopicsMeta return all target topics' metadata
+	// if `ignoreTopicError` is true, ignore the topic error and return the metadata of valid topics
+	GetTopicsMeta(topics []string, ignoreTopicError bool) ([]TopicDetail, error)
 
 	// Close shuts down the admin and closes underlying client.
 	Close() error

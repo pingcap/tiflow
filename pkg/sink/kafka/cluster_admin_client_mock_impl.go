@@ -124,7 +124,7 @@ func (c *ClusterAdminClientMockImpl) SetRemainingFetchesUntilTopicVisible(topicN
 	return nil
 }
 
-func (c *ClusterAdminClientMockImpl) GetTopicMeta(topics []string) ([]*TopicMetadata, error) {
+func (c *ClusterAdminClientMockImpl) GetTopicsMeta(topics []string, ignoreTopicError bool) ([]TopicDetail, error) {
 	return nil, nil
 }
 

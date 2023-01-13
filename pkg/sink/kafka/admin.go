@@ -126,21 +126,22 @@ func (a *admin) GetBrokerConfig(configName string) (string, error) {
 	return configEntries[0].Value, nil
 }
 
-func (a *admin) GetTopicMeta(topics []string) ([]*TopicMetadata, error) {
+func (a *admin) GetTopicsMeta(topics []string, ignoreTopicError bool) ([]TopicDetail, error) {
 	metaList, err := a.client.DescribeTopics(topics)
 	if err != nil {
 		return nil, err
 	}
 
-	result := make([]*TopicMetadata, 0, len(metaList))
+	result := make([]TopicDetail, 0, len(metaList))
 	for _, meta := range metaList {
 		if meta.Err != sarama.ErrNoError {
-			return nil, meta.Err
+			if !ignoreTopicError {
+				return nil, meta.Err
+			}
 		}
-		result = append(result, &TopicMetadata{
-			Name:         meta.Name,
-			Err:          meta.Err,
-			NumPartition: int32(len(meta.Partitions)),
+		result = append(result, TopicDetail{
+			Name:          meta.Name,
+			NumPartitions: int32(len(meta.Partitions)),
 		})
 	}
 
