@@ -173,13 +173,7 @@ func (c *ClusterAdminClientMockImpl) CreateTopic(topic string, detail *TopicDeta
 		return sarama.ErrInvalidReplicationFactor
 	}
 
-	minInsyncReplicaConfigFound := false
-	for k, _ := range c.brokerConfigs {
-		if k == MinInsyncReplicasConfigName {
-			minInsyncReplicaConfigFound = true
-		}
-	}
-
+	_, minInsyncReplicaConfigFound := c.brokerConfigs[MinInsyncReplicasConfigName]
 	// For Confluent Cloud, min.insync.replica is invisible and replication factor must be 3.
 	// Otherwise, ErrPolicyViolation is expected to be returned.
 	if !minInsyncReplicaConfigFound &&
