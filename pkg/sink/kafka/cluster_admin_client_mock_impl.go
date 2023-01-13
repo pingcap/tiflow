@@ -106,15 +106,8 @@ func (c *ClusterAdminClientMockImpl) GetCoordinator() (int32, error) {
 	return c.controllerID, nil
 }
 
-// DescribeConfig return brokerConfigs directly.
-func (c *ClusterAdminClientMockImpl) DescribeConfig(resource ConfigResource) (map[string]string, error) {
-	var result map[string]string
-	for _, name := range resource.ConfigNames {
-		if value, ok := c.brokerConfigs[name]; ok {
-			result[name] = value
-		}
-	}
-	return result, nil
+func (c *ClusterAdminClientMockImpl) GetBrokerConfig(configName string) (string, error) {
+	return c.brokerConfigs[configName], nil
 }
 
 // SetRemainingFetchesUntilTopicVisible is used to control the visibility of a specific topic.

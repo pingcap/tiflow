@@ -15,9 +15,13 @@ package kafka
 
 import (
 	"context"
+	"strconv"
 	"strings"
 
 	"github.com/Shopify/sarama"
+	"github.com/pingcap/log"
+	cerror "github.com/pingcap/tiflow/pkg/errors"
+	"go.uber.org/zap"
 )
 
 type admin struct {
@@ -98,24 +102,28 @@ func (a *admin) GetCoordinator() (int32, error) {
 	return controllerID, nil
 }
 
-func (a *admin) DescribeConfig(resource ConfigResource) (map[string]string, error) {
-	request := sarama.ConfigResource{
-		Type:        configResourceType4Sarama(resource.Type),
-		Name:        resource.Name,
-		ConfigNames: resource.ConfigNames,
-	}
-
-	configEntries, err := a.client.DescribeConfig(request)
+func (a *admin) GetBrokerConfig(configName string) (string, error) {
+	_, controller, err := a.client.DescribeCluster()
 	if err != nil {
-		return nil, err
+		return "", err
 	}
 
-	result := make(map[string]string, len(configEntries))
-	for _, entry := range configEntries {
-		result[entry.Name] = entry.Value
+	configEntries, err := a.client.DescribeConfig(sarama.ConfigResource{
+		Type:        sarama.BrokerResource,
+		Name:        strconv.Itoa(int(controller)),
+		ConfigNames: []string{configName},
+	})
+	if err != nil {
+		return "", err
 	}
 
-	return result, nil
+	if len(configEntries) == 0 || configEntries[0].Name != configName {
+		log.Warn("Kafka config item not found", zap.String("configName", configName))
+		return "", cerror.ErrKafkaBrokerConfigNotFound.GenWithStack(
+			"cannot find the `%s` from the broker's configuration", configName)
+	}
+
+	return configEntries[0].Value, nil
 }
 
 func (a *admin) DescribeTopics(topics []string) ([]*TopicMetadata, error) {

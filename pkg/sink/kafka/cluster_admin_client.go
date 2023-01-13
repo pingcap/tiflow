@@ -75,15 +75,17 @@ type ClusterAdminClient interface {
 	// GetCoordinator return the coordinator's broker id for the cluster
 	GetCoordinator() (controllerID int32, err error)
 
+	GetBrokerConfig(configName string) (string, error)
+
 	// ListTopics list the topics available in the cluster with the default options.
 	ListTopics() (map[string]TopicDetail, error)
 
-	// DescribeConfig gets the configuration for the specified resources.
-	DescribeConfig(resource ConfigResource) (map[string]string, error)
-	// DescribeTopics fetches metadata from some topics.
-	DescribeTopics(topics []string) (metadata []*TopicMetadata, err error)
 	// CreateTopic creates a new topic.
 	CreateTopic(topic string, detail *TopicDetail, validateOnly bool) error
+
+	// DescribeTopics fetches metadata from some topics.
+	DescribeTopics(topics []string) (metadata []*TopicMetadata, err error)
+
 	// Close shuts down the admin and closes underlying client.
 	Close() error
 }

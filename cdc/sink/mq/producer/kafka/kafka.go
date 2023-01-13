@@ -417,7 +417,7 @@ func AdjustConfig(
 		return nil
 	}
 
-	brokerMessageMaxBytesStr, err := getBrokerConfig(admin, kafka.BrokerMessageMaxBytesConfigName)
+	brokerMessageMaxBytesStr, err := admin.GetBrokerConfig(kafka.BrokerMessageMaxBytesConfigName)
 	if err != nil {
 		log.Warn("TiCDC cannot find `message.max.bytes` from broker's configuration")
 		return errors.Trace(err)
@@ -464,7 +464,7 @@ func validateMinInsyncReplicas(
 			return minInsyncReplicasStr, true, nil
 		}
 
-		minInsyncReplicasStr, err := getBrokerConfig(admin, kafka.MinInsyncReplicasConfigName)
+		minInsyncReplicasStr, err := admin.GetBrokerConfig(kafka.MinInsyncReplicasConfigName)
 		if err != nil {
 			return "", false, err
 		}
@@ -505,32 +505,6 @@ func validateMinInsyncReplicas(
 	return nil
 }
 
-// getBrokerConfig gets broker config by name.
-func getBrokerConfig(admin kafka.ClusterAdminClient, brokerConfigName string) (string, error) {
-	controllerID, err := admin.GetCoordinator()
-	if err != nil {
-		return "", err
-	}
-
-	configEntries, err := admin.DescribeConfig(kafka.ConfigResource{
-		Type:        kafka.BrokerResource,
-		Name:        strconv.Itoa(int(controllerID)),
-		ConfigNames: []string{brokerConfigName},
-	})
-	if err != nil {
-		return "", err
-	}
-
-	value, ok := configEntries[brokerConfigName]
-	if !ok {
-		log.Warn("Kafka config item not found", zap.String("configName", brokerConfigName))
-		return "", cerror.ErrKafkaBrokerConfigNotFound.GenWithStack(
-			"cannot find the `%s` from the broker's configuration", brokerConfigName)
-	}
-
-	return value, nil
-}
-
 // getTopicConfig gets topic config by name.
 // If the topic does not have this configuration, we will try to get it from the broker's configuration.
 // NOTICE: The configuration names of topic and broker may be different for the same configuration.
@@ -539,5 +513,5 @@ func getTopicConfig(admin kafka.ClusterAdminClient, detail kafka.TopicDetail, to
 		return a, nil
 	}
 
-	return getBrokerConfig(admin, brokerConfigName)
+	return admin.GetBrokerConfig(brokerConfigName)
 }
