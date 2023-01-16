@@ -53,12 +53,7 @@ type memQuota struct {
 	metricUsed  prometheus.Gauge
 }
 
-func newMemQuota(changefeedID model.ChangeFeedID, totalBytes uint64, component ...string) *memQuota {
-	var comp string
-	if len(component) > 0 {
-		comp = component[0]
-	}
-
+func newMemQuota(changefeedID model.ChangeFeedID, totalBytes uint64, comp string) *memQuota {
 	m := &memQuota{
 		changefeedID: changefeedID,
 		totalBytes:   totalBytes,

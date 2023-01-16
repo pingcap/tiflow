@@ -43,7 +43,7 @@ func createWorker(
 		&entry.MockMountGroup{}, sortEngine, make(chan error, 1), false)
 
 	// To avoid refund or release panics.
-	quota := newMemQuota(changefeedID, memQuota+1024*1024*1024)
+	quota := newMemQuota(changefeedID, memQuota+1024*1024*1024, "")
 	quota.forceAcquire(1024 * 1024 * 1024)
 	for _, span := range spans {
 		quota.addTable(span)
