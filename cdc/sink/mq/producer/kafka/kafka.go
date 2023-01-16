@@ -372,7 +372,7 @@ func AdjustConfig(
 	saramaConfig *sarama.Config,
 	topic string,
 ) error {
-	topics, err := admin.ListTopics()
+	topics, err := admin.GetAllTopicsMeta()
 	if err != nil {
 		return errors.Trace(err)
 	}
@@ -417,7 +417,7 @@ func AdjustConfig(
 		return nil
 	}
 
-	brokerMessageMaxBytesStr, err := getBrokerConfig(admin, kafka.BrokerMessageMaxBytesConfigName)
+	brokerMessageMaxBytesStr, err := admin.GetBrokerConfig(kafka.BrokerMessageMaxBytesConfigName)
 	if err != nil {
 		log.Warn("TiCDC cannot find `message.max.bytes` from broker's configuration")
 		return errors.Trace(err)
@@ -450,7 +450,7 @@ func AdjustConfig(
 
 func validateMinInsyncReplicas(
 	admin kafka.ClusterAdminClient,
-	topics map[string]sarama.TopicDetail, topic string, replicationFactor int,
+	topics map[string]kafka.TopicDetail, topic string, replicationFactor int,
 ) error {
 	minInsyncReplicasConfigGetter := func() (string, bool, error) {
 		info, exists := topics[topic]
@@ -464,7 +464,7 @@ func validateMinInsyncReplicas(
 			return minInsyncReplicasStr, true, nil
 		}
 
-		minInsyncReplicasStr, err := getBrokerConfig(admin, kafka.MinInsyncReplicasConfigName)
+		minInsyncReplicasStr, err := admin.GetBrokerConfig(kafka.MinInsyncReplicasConfigName)
 		if err != nil {
 			return "", false, err
 		}
@@ -505,38 +505,18 @@ func validateMinInsyncReplicas(
 	return nil
 }
 
-// getBrokerConfig gets broker config by name.
-func getBrokerConfig(admin kafka.ClusterAdminClient, brokerConfigName string) (string, error) {
-	_, controllerID, err := admin.DescribeCluster()
-	if err != nil {
-		return "", err
-	}
-
-	configEntries, err := admin.DescribeConfig(sarama.ConfigResource{
-		Type:        sarama.BrokerResource,
-		Name:        strconv.Itoa(int(controllerID)),
-		ConfigNames: []string{brokerConfigName},
-	})
-	if err != nil {
-		return "", err
-	}
-
-	if len(configEntries) == 0 || configEntries[0].Name != brokerConfigName {
-		log.Warn("Kafka config item not found", zap.String("configName", brokerConfigName))
-		return "", cerror.ErrKafkaBrokerConfigNotFound.GenWithStack(
-			"cannot find the `%s` from the broker's configuration", brokerConfigName)
-	}
-
-	return configEntries[0].Value, nil
-}
-
 // getTopicConfig gets topic config by name.
 // If the topic does not have this configuration, we will try to get it from the broker's configuration.
 // NOTICE: The configuration names of topic and broker may be different for the same configuration.
-func getTopicConfig(admin kafka.ClusterAdminClient, detail sarama.TopicDetail, topicConfigName string, brokerConfigName string) (string, error) {
+func getTopicConfig(
+	admin kafka.ClusterAdminClient,
+	detail kafka.TopicDetail,
+	topicConfigName string,
+	brokerConfigName string,
+) (string, error) {
 	if a, ok := detail.ConfigEntries[topicConfigName]; ok {
-		return *a, nil
+		return a, nil
 	}
 
-	return getBrokerConfig(admin, brokerConfigName)
+	return admin.GetBrokerConfig(brokerConfigName)
 }
