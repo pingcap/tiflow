@@ -517,6 +517,12 @@ func (w *regionWorker) eventHandler(ctx context.Context) error {
 				}
 			}
 		}
+		for _, ev := range events {
+			// resolved ts event has been consumed, it is safe to put back.
+			if ev.resolvedTsEvent != nil {
+				w.session.resolvedTsPool.Put(ev)
+			}
+		}
 	}
 }
 

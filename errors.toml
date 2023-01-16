@@ -441,6 +441,11 @@ error = '''
 illegal parameter for sorter: %s
 '''
 
+["CDC:ErrIncompatibleSinkConfig"]
+error = '''
+incompatible configuration in sink uri(%s) and config file(%s), please try to update the configuration only through sink uri
+'''
+
 ["CDC:ErrIndexKeyTableNotFound"]
 error = '''
 table not found with index ID %d in index kv
