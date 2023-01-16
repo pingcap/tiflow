@@ -553,7 +553,8 @@ LOOP:
 		ctx.Throw(c.ddlPuller.Run(cancelCtx))
 	}()
 
-	c.downstreamObserver, err = c.newDownstreamObserver(ctx, c.state.Info.SinkURI, c.state.Info.Config)
+	c.downstreamObserver, err = c.newDownstreamObserver(
+		ctx, c.state.Info.SinkURI, c.state.Info.Config)
 	if err != nil {
 		return err
 	}
