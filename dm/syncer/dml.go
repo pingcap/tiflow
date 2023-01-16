@@ -332,7 +332,7 @@ func genSQLMultipleRows(op sqlmodel.DMLType, dmls []*sqlmodel.RowChange) (querie
 	case sqlmodel.DMLInsert, sqlmodel.DMLReplace, sqlmodel.DMLInsertOnDuplicateUpdate:
 		return sqlmodel.GenInsertSQL(op, dmls...)
 	case sqlmodel.DMLUpdate:
-		return sqlmodel.GenUpdateSQL(dmls...)
+		return sqlmodel.GenUpdateSQLFast(dmls...)
 	case sqlmodel.DMLDelete:
 		return sqlmodel.GenDeleteSQL(dmls...)
 	}

@@ -384,7 +384,7 @@ func (s *mysqlBackend) batchSingleTxnDmls(
 	// handle update
 	if len(updateRows) > 0 {
 		for _, rows := range updateRows {
-			sql, value := sqlmodel.GenUpdateSQL(rows...)
+			sql, value := sqlmodel.GenUpdateSQLFast(rows...)
 			sqls = append(sqls, sql)
 			values = append(values, value)
 		}
