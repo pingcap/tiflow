@@ -84,6 +84,15 @@ func (c *DebugConfig) ValidateAndAdjust() error {
 					" you can set `debug.enable-new-sink` to be true")
 		}
 	}
+
+	if c.EnableKafkaSinkV2 {
+		if !c.EnableNewSink {
+			return cerrors.ErrInvalidPullBasedSinkConfig.GenWithStackByArgs(
+				"enabling kafka sink v2 requires use of the new sink," +
+					" you can set `debug.enable-new-sink` to be true")
+		}
+	}
+
 	return nil
 }
 

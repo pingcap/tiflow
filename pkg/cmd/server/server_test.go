@@ -182,6 +182,7 @@ func TestParseCfg(t *testing.T) {
 			EnableDBSorter:      true,
 			EnableNewScheduler:  true,
 			EnablePullBasedSink: true,
+			EnableKafkaSinkV2:   false,
 			DB: &config.DBConfig{
 				Count:                       8,
 				Concurrency:                 128,
@@ -259,6 +260,7 @@ region-retry-duration = "3s"
 [debug]
 enable-db-sorter = true
 enable-pull-based-sink = true
+enable-kafka-sink-v2 = true
 [debug.db]
 count = 5
 concurrency = 6
@@ -344,6 +346,7 @@ check-balance-interval = "10s"
 			EnableDBSorter:      true,
 			EnablePullBasedSink: true,
 			EnableNewScheduler:  true,
+			EnableKafkaSinkV2:   true,
 			DB: &config.DBConfig{
 				Count:                       5,
 				Concurrency:                 6,
@@ -494,6 +497,7 @@ cert-allowed-cn = ["dd","ee"]
 			EnableDBSorter:      true,
 			EnableNewScheduler:  true,
 			EnablePullBasedSink: true,
+			EnableKafkaSinkV2:   false,
 			DB: &config.DBConfig{
 				Count:                       8,
 				Concurrency:                 128,
@@ -562,6 +566,7 @@ unknown3 = 3
 		EnableDBSorter:      true,
 		EnableNewScheduler:  true,
 		EnablePullBasedSink: true,
+		EnableKafkaSinkV2:   false,
 		DB: &config.DBConfig{
 			Count:                       8,
 			Concurrency:                 128,
