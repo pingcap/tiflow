@@ -49,7 +49,7 @@ func createWorker(
 		quota.addTable(span)
 	}
 
-	return newSinkWorker(changefeedID, sm, quota, nil, splitTxn, false), sortEngine
+	return newSinkWorker(changefeedID, sm, quota, nil, nil, splitTxn, false), sortEngine
 }
 
 // nolint:unparam
@@ -428,7 +428,7 @@ func (suite *workerSuite) TestHandleTaskWithSplitTxnAndAbortWhenNoMemAndBlocked(
 		return len(sink.GetEvents()) == 2
 	}, 5*time.Second, 10*time.Millisecond)
 	// Abort the task when no memory quota and blocked.
-	w.memQuota.close()
+	w.sinkMemQuota.close()
 	cancel()
 	wg.Wait()
 	require.Len(suite.T(), sink.GetEvents(), 2, "Only two events should be sent to sink")
