@@ -16,7 +16,6 @@ package ddlproducer
 import (
 	"context"
 
-	"github.com/Shopify/sarama"
 	"github.com/pingcap/tiflow/cdc/sink/codec/common"
 	mqv1 "github.com/pingcap/tiflow/cdc/sink/mq"
 	"github.com/pingcap/tiflow/pkg/sink/kafka"
@@ -30,7 +29,7 @@ type MockDDLProducer struct {
 }
 
 // NewMockDDLProducer creates a mock producer.
-func NewMockDDLProducer(_ context.Context, _ sarama.Client,
+func NewMockDDLProducer(_ context.Context, _ kafka.Client,
 	_ kafka.ClusterAdminClient,
 ) (DDLProducer, error) {
 	return &MockDDLProducer{

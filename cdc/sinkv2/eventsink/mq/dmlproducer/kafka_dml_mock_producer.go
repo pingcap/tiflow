@@ -17,7 +17,6 @@ import (
 	"context"
 	"sync"
 
-	"github.com/Shopify/sarama"
 	"github.com/pingcap/tiflow/cdc/sink/codec/common"
 	mqv1 "github.com/pingcap/tiflow/cdc/sink/mq"
 	"github.com/pingcap/tiflow/pkg/sink/kafka"
@@ -32,7 +31,7 @@ type MockDMLProducer struct {
 }
 
 // NewDMLMockProducer creates a mock producer.
-func NewDMLMockProducer(_ context.Context, _ sarama.Client,
+func NewDMLMockProducer(_ context.Context, _ kafka.Client,
 	_ kafka.ClusterAdminClient, _ chan error,
 ) (DMLProducer, error) {
 	return &MockDMLProducer{

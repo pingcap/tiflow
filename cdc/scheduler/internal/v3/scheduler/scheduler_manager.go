@@ -67,8 +67,8 @@ func (sm *Manager) Schedule(
 	checkpointTs model.Ts,
 	currentSpans []tablepb.Span,
 	aliveCaptures map[model.CaptureID]*member.CaptureStatus,
-	replications *spanz.Map[*replication.ReplicationSet],
-	runTasking *spanz.Map[*replication.ScheduleTask],
+	replications *spanz.BtreeMap[*replication.ReplicationSet],
+	runTasking *spanz.BtreeMap[*replication.ScheduleTask],
 ) []*replication.ScheduleTask {
 	for sid, scheduler := range sm.schedulers {
 		// Basic scheduler bypasses max task check, because it handles the most

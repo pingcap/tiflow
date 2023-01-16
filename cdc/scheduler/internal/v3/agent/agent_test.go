@@ -958,7 +958,7 @@ type MockTableExecutor struct {
 	mock.Mock
 
 	// it's preferred to use `pipeline.MockPipeline` here to make the test more vivid.
-	tables *spanz.Map[tablepb.TableState]
+	tables *spanz.BtreeMap[tablepb.TableState]
 }
 
 var _ internal.TableExecutor = (*MockTableExecutor)(nil)
@@ -966,7 +966,7 @@ var _ internal.TableExecutor = (*MockTableExecutor)(nil)
 // newMockTableExecutor creates a new mock table executor.
 func newMockTableExecutor() *MockTableExecutor {
 	return &MockTableExecutor{
-		tables: spanz.NewMap[tablepb.TableState](),
+		tables: spanz.NewBtreeMap[tablepb.TableState](),
 	}
 }
 
@@ -1082,12 +1082,6 @@ func (e *MockTableExecutor) GetTableSpanCount() int {
 		return true
 	})
 	return result
-}
-
-// GetCheckpoint returns the last checkpoint.
-func (e *MockTableExecutor) GetCheckpoint() (checkpointTs, resolvedTs model.Ts) {
-	args := e.Called()
-	return args.Get(0).(model.Ts), args.Get(1).(model.Ts)
 }
 
 // GetTableSpanStatus implements TableExecutor interface
