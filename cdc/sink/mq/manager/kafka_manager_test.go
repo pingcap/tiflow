@@ -17,7 +17,6 @@ import (
 	"testing"
 	"time"
 
-	kafkaconfig "github.com/pingcap/tiflow/cdc/sink/mq/producer/kafka"
 	"github.com/pingcap/tiflow/pkg/sink/kafka"
 	"github.com/stretchr/testify/require"
 )
@@ -30,7 +29,7 @@ func TestPartitions(t *testing.T) {
 	defer func(adminClient *kafka.ClusterAdminClientMockImpl) {
 		_ = adminClient.Close()
 	}(adminClient)
-	cfg := &kafkaconfig.AutoCreateTopicConfig{
+	cfg := &kafka.AutoCreateTopicConfig{
 		AutoCreate:        true,
 		PartitionNum:      2,
 		ReplicationFactor: 1,
@@ -52,7 +51,7 @@ func TestTryRefreshMeta(t *testing.T) {
 	defer func(adminClient *kafka.ClusterAdminClientMockImpl) {
 		_ = adminClient.Close()
 	}(adminClient)
-	cfg := &kafkaconfig.AutoCreateTopicConfig{
+	cfg := &kafka.AutoCreateTopicConfig{
 		AutoCreate:        true,
 		PartitionNum:      2,
 		ReplicationFactor: 1,
@@ -89,7 +88,7 @@ func TestCreateTopic(t *testing.T) {
 		_ = adminClient.Close()
 	}(adminClient)
 
-	cfg := &kafkaconfig.AutoCreateTopicConfig{
+	cfg := &kafka.AutoCreateTopicConfig{
 		AutoCreate:        true,
 		PartitionNum:      2,
 		ReplicationFactor: 1,
@@ -121,7 +120,7 @@ func TestCreateTopic(t *testing.T) {
 
 	// Invalid replication factor.
 	// It happens when replication-factor is greater than the number of brokers.
-	cfg = &kafkaconfig.AutoCreateTopicConfig{
+	cfg = &kafka.AutoCreateTopicConfig{
 		AutoCreate:        true,
 		PartitionNum:      2,
 		ReplicationFactor: 4,
@@ -144,7 +143,7 @@ func TestCreateTopicWithDelay(t *testing.T) {
 	defer func(adminClient *kafka.ClusterAdminClientMockImpl) {
 		_ = adminClient.Close()
 	}(adminClient)
-	cfg := &kafkaconfig.AutoCreateTopicConfig{
+	cfg := &kafka.AutoCreateTopicConfig{
 		AutoCreate:        true,
 		PartitionNum:      2,
 		ReplicationFactor: 1,

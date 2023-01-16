@@ -280,29 +280,28 @@ func (m *SinkManager) backgroundGC() {
 					zap.String("changefeed", m.changefeedID.ID))
 				return
 			case <-ticker.C:
-				tableSinks := make(map[spanz.HashableSpan]*tableSinkWrapper)
+				tableSinks := spanz.NewHashMap[*tableSinkWrapper]()
 				m.tableSinks.Range(func(key tablepb.Span, value any) bool {
 					wrapper := value.(*tableSinkWrapper)
-					tableSinks[spanz.ToHashableSpan(key)] = wrapper
+					tableSinks.ReplaceOrInsert(key, wrapper)
 					return true
 				})
 
-				for hspan, sink := range tableSinks {
+				tableSinks.Range(func(span tablepb.Span, sink *tableSinkWrapper) bool {
 					if time.Since(sink.lastCleanTime) < cleanTableInterval {
-						continue
+						return true
 					}
 					checkpointTs := sink.getCheckpointTs()
 					resolvedMark := checkpointTs.ResolvedMark()
 					if resolvedMark == 0 {
-						continue
+						return true
 					}
 
 					cleanPos := engine.Position{StartTs: resolvedMark - 1, CommitTs: resolvedMark}
 					if !sink.cleanRangeEventCounts(cleanPos, cleanTableMinEvents) {
-						continue
+						return true
 					}
 
-					span := hspan.ToSpan()
 					if err := m.sourceManager.CleanByTable(span, cleanPos); err != nil {
 						log.Error("Failed to clean table in sort engine",
 							zap.String("namespace", m.changefeedID.Namespace),
@@ -321,7 +320,8 @@ func (m *SinkManager) backgroundGC() {
 							zap.Any("upperBound", cleanPos))
 					}
 					sink.lastCleanTime = time.Now()
-				}
+					return true
+				})
 			}
 		}
 	}()

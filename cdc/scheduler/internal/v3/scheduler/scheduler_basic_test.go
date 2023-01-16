@@ -25,8 +25,8 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
-func mapToSpanMap[T any](in map[model.TableID]T) *spanz.Map[T] {
-	out := spanz.NewMap[T]()
+func mapToSpanMap[T any](in map[model.TableID]T) *spanz.BtreeMap[T] {
+	out := spanz.NewBtreeMap[T]()
 	for tableID, v := range in {
 		out.ReplaceOrInsert(tablepb.Span{TableID: tableID}, v)
 	}
@@ -188,7 +188,7 @@ func benchmarkSchedulerBalance(
 		name string,
 		currentTables []tablepb.Span,
 		captures map[model.CaptureID]*member.CaptureStatus,
-		replications *spanz.Map[*replication.ReplicationSet],
+		replications *spanz.BtreeMap[*replication.ReplicationSet],
 		sched scheduler,
 	),
 ) {
@@ -210,7 +210,7 @@ func BenchmarkSchedulerBasicAddTables(b *testing.B) {
 		name string,
 		currentTables []tablepb.Span,
 		captures map[model.CaptureID]*member.CaptureStatus,
-		replications *spanz.Map[*replication.ReplicationSet],
+		replications *spanz.BtreeMap[*replication.ReplicationSet],
 		sched scheduler,
 	) {
 		const captureCount = 8
@@ -234,7 +234,7 @@ func BenchmarkSchedulerBasicRemoveTables(b *testing.B) {
 		name string,
 		currentTables []tablepb.Span,
 		captures map[model.CaptureID]*member.CaptureStatus,
-		replications *spanz.Map[*replication.ReplicationSet],
+		replications *spanz.BtreeMap[*replication.ReplicationSet],
 		sched scheduler,
 	) {
 		const captureCount = 8
@@ -261,7 +261,7 @@ func BenchmarkSchedulerBasicAddRemoveTables(b *testing.B) {
 		name string,
 		currentTables []tablepb.Span,
 		captures map[model.CaptureID]*member.CaptureStatus,
-		replications *spanz.Map[*replication.ReplicationSet],
+		replications *spanz.BtreeMap[*replication.ReplicationSet],
 		sched scheduler,
 	) {
 		const captureCount = 8
