@@ -64,6 +64,7 @@ require (
 	github.com/prometheus/client_model v0.2.0
 	github.com/r3labs/diff v1.1.0
 	github.com/rcrowley/go-metrics v0.0.0-20201227073835-cf1acfcdf475
+	github.com/segmentio/kafka-go v0.4.38
 	github.com/shopspring/decimal v1.3.0
 	github.com/soheilhy/cmux v0.1.5
 	github.com/spf13/cobra v1.6.1
@@ -79,7 +80,7 @@ require (
 	github.com/tinylib/msgp v1.1.6
 	github.com/uber-go/atomic v1.4.0
 	github.com/vmihailenco/msgpack/v5 v5.3.5
-	github.com/xdg/scram v1.0.3
+	github.com/xdg/scram v1.0.5
 	go.etcd.io/etcd/api/v3 v3.5.4
 	go.etcd.io/etcd/client/pkg/v3 v3.5.4
 	go.etcd.io/etcd/client/v3 v3.5.4
@@ -295,3 +296,6 @@ replace github.com/benbjohnson/clock v1.3.0 => github.com/benbjohnson/clock v1.1
 
 // copy from TiDB
 replace go.opencensus.io => go.opencensus.io v0.23.1-0.20220331163232-052120675fac
+
+// todo: remove this replace after https://github.com/segmentio/kafka-go/pull/1059 merged
+replace github.com/segmentio/kafka-go v0.4.38 => github.com/3AceShowHand/kafka-go v0.0.0-20230109084533-cd584ac8c705
