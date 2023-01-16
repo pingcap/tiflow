@@ -130,7 +130,7 @@ func TestCreateTopic(t *testing.T) {
 	_, err = manager.createTopic("new-topic-failed")
 	require.Regexp(
 		t,
-		"new sarama producer: kafka server: Replication-factor is invalid",
+		"kafka create topic failed: kafka server: Replication-factor is invalid",
 		err,
 	)
 }
