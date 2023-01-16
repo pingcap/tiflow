@@ -925,7 +925,7 @@ func (s *mysqlSink) batchSingleTxnDmls(
 
 	// handle update
 	if len(updateRows) > 0 {
-		// use sql.GenUpdateSQL to generate update sql after we optimize the func.
+		// TODO: use sql.GenUpdateSQL to generate update sql after we optimize the func.
 		for _, rows := range updateRows {
 			for _, row := range rows {
 				sql, value := row.GenSQL(sqlmodel.DMLUpdate)
