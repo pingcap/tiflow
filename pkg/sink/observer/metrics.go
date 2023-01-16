@@ -21,8 +21,8 @@ var (
 			Namespace: "ticdc",
 			Subsystem: "observer",
 			Name:      "tidb_conn_idle_duration",
-			Help:      "Diagnose data of idle time(p90) of tidb connections",
-		}, []string{"instance", "in_txn"})
+			Help:      "Diagnose data of idle time of tidb connections",
+		}, []string{"instance", "in_txn", "quantile"})
 	tidbConnCountGauge = prometheus.NewGaugeVec(
 		prometheus.GaugeOpts{
 			Namespace: "ticdc",

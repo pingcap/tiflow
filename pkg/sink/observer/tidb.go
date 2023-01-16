@@ -25,18 +25,23 @@ import (
 
 var (
 	// Query latest tidb connection idle duration, sample output:
-	// +----------------------------+------------------+--------+---------------------+
-	// | time                       | instance         | in_txn | value               |
-	// +----------------------------+------------------+--------+---------------------+
-	// | 2023-01-10 16:40:16.372000 | 10.2.6.127:11080 | 0      |  0.3125843212237097 |
-	// | 2023-01-10 16:40:16.372000 | 10.2.6.127:11080 | 1      | 0.00049736527952178 |
-	// +----------------------------+------------------+--------+---------------------+
-	queryConnIdleDurationStmt = `SELECT a.time, a.instance, a.in_txn, a.value
+	// +----------------------------+------------------+--------+----------+-----------------------+
+	// | time                       | instance         | in_txn | quantile | value                 |
+	// +----------------------------+------------------+--------+----------+-----------------------+
+	// | 2023-01-16 17:22:16.881000 | 10.2.6.127:11080 | 0      |      0.9 |    0.3090630727762805 |
+	// | 2023-01-16 17:22:16.881000 | 10.2.6.127:11080 | 1      |      0.9 |  0.000486224547833011 |
+	// | 2023-01-16 17:22:16.881000 | 10.2.6.127:11080 | 0      |     0.99 |    0.4960534770889492 |
+	// | 2023-01-16 17:22:16.881000 | 10.2.6.127:11080 | 1      |     0.99 | 0.0018184140969162918 |
+	// +----------------------------+------------------+--------+----------+-----------------------+
+	queryConnIdleDurationStmt = `SELECT
+	a.time, a.instance, a.in_txn, a.quantile, a.value
 	FROM METRICS_SCHEMA.tidb_connection_idle_duration a
 	INNER JOIN (
-		SELECT instance, in_txn, MAX(time) time FROM METRICS_SCHEMA.tidb_connection_idle_duration
-		GROUP BY instance, in_txn
-	) b ON a.instance = b.instance AND a.in_txn = b.in_txn AND a.time = b.time;`
+		SELECT instance, in_txn, quantile, MAX(time) time
+		FROM METRICS_SCHEMA.tidb_connection_idle_duration
+		GROUP BY instance, in_txn, quantile
+	) b ON a.instance = b.instance AND a.in_txn = b.in_txn AND
+	a.quantile = b.quantile AND a.time = b.time;`
 
 	// Query latest tidb connection count, sample output:
 	// +----------------------------+------------------+-------+
@@ -113,7 +118,10 @@ func (o *TiDBObserver) Tick(ctx context.Context) error {
 			m.duration.Float64 = 0
 		}
 		inTxnLabel := strconv.Itoa(m.inTxn)
-		tidbConnIdleDurationGauge.WithLabelValues(m.instance, inTxnLabel).Set(m.duration.Float64)
+		quantileLabel := strconv.FormatFloat(m.quantile, 'f', -1, 64)
+		tidbConnIdleDurationGauge.
+			WithLabelValues(m.instance, inTxnLabel, quantileLabel).
+			Set(m.duration.Float64)
 	}
 
 	m2 := make([]*tidbConnCount, 0)
@@ -166,11 +174,12 @@ type tidbConnIdleDuration struct {
 	ts       string
 	instance string
 	inTxn    int
+	quantile float64
 	duration sql.NullFloat64
 }
 
 func (m *tidbConnIdleDuration) columns() []interface{} {
-	return []interface{}{&m.ts, &m.instance, &m.inTxn, &m.duration}
+	return []interface{}{&m.ts, &m.instance, &m.inTxn, &m.quantile, &m.duration}
 }
 
 type tidbConnCount struct {
