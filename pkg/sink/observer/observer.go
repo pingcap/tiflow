@@ -25,6 +25,8 @@ import (
 
 // Observer defines an interface of downstream performance observer.
 type Observer interface {
+	// Tick is called periodically, Observer fetches performance metrics and
+	// records them in each Tick.
 	Tick(ctx context.Context) error
 }
 
@@ -39,10 +41,8 @@ func NewObserver(
 		return nil, err
 	}
 
-	schema := strings.ToLower(sinkURI.Scheme)
-	switch schema {
-	case sink.MySQLSSLScheme, sink.MySQLScheme, sink.TiDBScheme, sink.TiDBSSLScheme:
-	default:
+	scheme := strings.ToLower(sinkURI.Scheme)
+	if !sink.IsMySQLCompatibleScheme(scheme) {
 		return NewDummyObserver(), nil
 	}
 
