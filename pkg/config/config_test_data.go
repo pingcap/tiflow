@@ -122,7 +122,6 @@ const (
       "iterator-max-alive-duration": 10000,
       "iterator-slow-read-duration": 256
     },
-    "enable-new-scheduler": true,
     "messages": {
       "client-max-batch-interval": 10000000,
       "client-max-batch-size": 8388608,
