@@ -152,6 +152,7 @@ var defaultServerConfig = &ServerConfig{
 		Scheduler:           NewDefaultSchedulerConfig(),
 		EnableNewSink:       true,
 		EnablePullBasedSink: true,
+		EnableKafkaSinkV2:   false,
 	},
 	ClusterID: "default",
 }
