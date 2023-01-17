@@ -53,7 +53,7 @@ type ClusterAdminClient interface {
 	// CreateTopic creates a new topic.
 	CreateTopic(topic string, detail *TopicDetail, validateOnly bool) error
 
-	// Close shuts down the admin and closes underlying client.
+	// Close shuts down the admin client.
 	Close() error
 }
 

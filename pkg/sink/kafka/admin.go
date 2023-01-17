@@ -24,7 +24,7 @@ import (
 	"go.uber.org/zap"
 )
 
-type admin struct {
+type saramaAdminClient struct {
 	client sarama.ClusterAdmin
 }
 
@@ -39,10 +39,10 @@ func NewSaramaAdminClient(ctx context.Context, config *Options) (ClusterAdminCli
 	if err != nil {
 		return nil, err
 	}
-	return &admin{client: client}, nil
+	return &saramaAdminClient{client: client}, nil
 }
 
-func (a *admin) GetAllBrokers() ([]Broker, error) {
+func (a *saramaAdminClient) GetAllBrokers() ([]Broker, error) {
 	brokers, _, err := a.client.DescribeCluster()
 	if err != nil {
 		return nil, err
@@ -58,7 +58,7 @@ func (a *admin) GetAllBrokers() ([]Broker, error) {
 	return result, nil
 }
 
-func (a *admin) GetCoordinator() (int32, error) {
+func (a *saramaAdminClient) GetCoordinator() (int32, error) {
 	_, controllerID, err := a.client.DescribeCluster()
 	if err != nil {
 		return 0, err
@@ -66,7 +66,7 @@ func (a *admin) GetCoordinator() (int32, error) {
 	return controllerID, nil
 }
 
-func (a *admin) GetBrokerConfig(configName string) (string, error) {
+func (a *saramaAdminClient) GetBrokerConfig(configName string) (string, error) {
 	_, controller, err := a.client.DescribeCluster()
 	if err != nil {
 		return "", err
@@ -90,7 +90,7 @@ func (a *admin) GetBrokerConfig(configName string) (string, error) {
 	return configEntries[0].Value, nil
 }
 
-func (a *admin) GetAllTopicsMeta() (map[string]TopicDetail, error) {
+func (a *saramaAdminClient) GetAllTopicsMeta() (map[string]TopicDetail, error) {
 	topics, err := a.client.ListTopics()
 	if err != nil {
 		return nil, err
@@ -115,7 +115,7 @@ func (a *admin) GetAllTopicsMeta() (map[string]TopicDetail, error) {
 	return result, nil
 }
 
-func (a *admin) GetTopicsMeta(
+func (a *saramaAdminClient) GetTopicsMeta(
 	topics []string,
 	ignoreTopicError bool,
 ) (map[string]TopicDetail, error) {
@@ -144,7 +144,7 @@ func (a *admin) GetTopicsMeta(
 	return result, nil
 }
 
-func (a *admin) CreateTopic(topic string, detail *TopicDetail, validateOnly bool) error {
+func (a *saramaAdminClient) CreateTopic(topic string, detail *TopicDetail, validateOnly bool) error {
 	err := a.client.CreateTopic(topic, &sarama.TopicDetail{
 		NumPartitions:     detail.NumPartitions,
 		ReplicationFactor: detail.ReplicationFactor,
@@ -156,6 +156,6 @@ func (a *admin) CreateTopic(topic string, detail *TopicDetail, validateOnly bool
 	return nil
 }
 
-func (a *admin) Close() error {
+func (a *saramaAdminClient) Close() error {
 	return a.client.Close()
 }
