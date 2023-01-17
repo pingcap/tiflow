@@ -77,7 +77,7 @@ func TestNewSaramaProducer(t *testing.T) {
 	saramaConfig.Producer.Flush.MaxMessages = 1
 	client, err := NewClientImpl(options.BrokerEndpoints, saramaConfig)
 	require.Nil(t, err)
-	adminClient, err := NewAdminClientImpl(options.BrokerEndpoints, saramaConfig)
+	adminClient, err := NewAdminClientImpl(ctx, options)
 	require.Nil(t, err)
 
 	changefeedID := model.DefaultChangeFeedID("changefeed-test")
@@ -236,10 +236,10 @@ func TestAdjustConfigTopicExist(t *testing.T) {
 	// When the topic exists, but the topic does not have `max.message.bytes`
 	// create a topic without `max.message.bytes`
 	topicName := "test-topic"
-	detail := &sarama.TopicDetail{
+	detail := &kafka.TopicDetail{
 		NumPartitions: 3,
 		// Does not contain `max.message.bytes`.
-		ConfigEntries: make(map[string]*string),
+		ConfigEntries: make(map[string]string),
 	}
 	err = adminClient.CreateTopic(topicName, detail, false)
 	require.Nil(t, err)
@@ -298,7 +298,7 @@ func TestAdjustConfigMinInsyncReplicas(t *testing.T) {
 	topicName := "no-topic-no-min-insync-replicas"
 	err = AdjustConfig(adminClient, options, saramaConfig, "no-topic-no-min-insync-replicas")
 	require.Nil(t, err)
-	err = adminClient.CreateTopic(topicName, &sarama.TopicDetail{ReplicationFactor: 1}, false)
+	err = adminClient.CreateTopic(topicName, &kafka.TopicDetail{ReplicationFactor: 1}, false)
 	require.ErrorIs(t, err, sarama.ErrPolicyViolation)
 
 	// Report an error if the replication-factor is less than min.insync.replicas
@@ -308,7 +308,7 @@ func TestAdjustConfigMinInsyncReplicas(t *testing.T) {
 
 	// topic exist, but `min.insync.replicas` not found in topic and broker configuration
 	topicName = "topic-no-options-entry"
-	err = adminClient.CreateTopic(topicName, &sarama.TopicDetail{
+	err = adminClient.CreateTopic(topicName, &kafka.TopicDetail{
 		ReplicationFactor: 3,
 		NumPartitions:     3,
 	}, false)
@@ -371,7 +371,7 @@ func TestProducerSendMessageFailed(t *testing.T) {
 
 	client, err := NewClientImpl(options.BrokerEndpoints, saramaConfig)
 	require.Nil(t, err)
-	adminClient, err := NewAdminClientImpl(options.BrokerEndpoints, saramaConfig)
+	adminClient, err := NewAdminClientImpl(ctx, options)
 	require.Nil(t, err)
 
 	changefeedID := model.DefaultChangeFeedID("changefeed-test")
@@ -454,7 +454,7 @@ func TestProducerDoubleClose(t *testing.T) {
 	require.Nil(t, err)
 	client, err := NewClientImpl(options.BrokerEndpoints, saramaConfig)
 	require.Nil(t, err)
-	adminClient, err := NewAdminClientImpl(options.BrokerEndpoints, saramaConfig)
+	adminClient, err := NewAdminClientImpl(ctx, options)
 	require.Nil(t, err)
 
 	changefeedID := model.DefaultChangeFeedID("changefeed-test")
@@ -692,10 +692,11 @@ func TestConfigurationCombinations(t *testing.T) {
 		err = options.Apply(sinkURI)
 		require.Nil(t, err)
 
-		saramaConfig, err := kafka.NewSaramaConfig(context.Background(), options)
+		ctx := context.Background()
+		saramaConfig, err := kafka.NewSaramaConfig(ctx, options)
 		require.Nil(t, err)
 
-		adminClient, err := NewAdminClientImpl([]string{sinkURI.Host}, saramaConfig)
+		adminClient, err := NewAdminClientImpl(ctx, options)
 		require.Nil(t, err)
 
 		topic, ok := a.uriParams[0].(string)

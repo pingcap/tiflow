@@ -397,7 +397,7 @@ func NewKafkaSaramaSink(ctx context.Context, sinkURI *url.URL,
 		return nil, errors.Trace(err)
 	}
 
-	adminClient, err := kafka.NewAdminClientImpl(options.BrokerEndpoints, saramaConfig)
+	adminClient, err := kafka.NewAdminClientImpl(ctx, options)
 	if err != nil {
 		return nil, cerror.WrapError(cerror.ErrKafkaNewSaramaProducer, err)
 	}
