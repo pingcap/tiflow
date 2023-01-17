@@ -26,6 +26,7 @@ import (
 	"github.com/pingcap/errors"
 	"github.com/pingcap/log"
 	timodel "github.com/pingcap/tidb/parser/model"
+	"github.com/pingcap/tidb/sessionctx/variable"
 	"github.com/pingcap/tidb/util/codec"
 	"github.com/pingcap/tiflow/cdc/entry"
 	"github.com/pingcap/tiflow/cdc/entry/schema"
@@ -472,6 +473,28 @@ func TestHandleJob(t *testing.T) {
 
 		job = helper.DDL2Job("alter table test1.t4 add partition (partition p1 values less than (100))")
 		skip, err = ddlJobPullerImpl.handleJob(job)
+		require.NoError(t, err)
+		require.True(t, skip)
+	}
+
+	// test flashback cluster
+	{
+		// mock a flashback job
+		job := &timodel.Job{
+			Type:       timodel.ActionFlashbackCluster,
+			BinlogInfo: &timodel.HistoryInfo{},
+			Args: []interface{}{
+				998,
+				map[string]interface{}{},
+				true,         /* tidb_gc_enable */
+				variable.On,  /* tidb_enable_auto_analyze */
+				variable.Off, /* tidb_super_read_only */
+				0,            /* totalRegions */
+				0,            /* startTS */
+				0,            /* commitTS */
+			},
+		}
+		skip, err := ddlJobPullerImpl.handleJob(job)
 		require.NoError(t, err)
 		require.True(t, skip)
 	}

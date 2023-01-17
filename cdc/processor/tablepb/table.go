@@ -74,6 +74,7 @@ type TableID = int64
 type Ts = uint64
 
 // Key is a custom type for bytes encoded in memcomparable format.
+// Key is read-only, must not be mutated.
 type Key []byte
 
 var (
