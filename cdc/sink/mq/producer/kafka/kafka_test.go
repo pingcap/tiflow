@@ -366,6 +366,7 @@ func TestProducerSendMessageFailed(t *testing.T) {
 	require.Equal(t, 8, saramaConfig.Producer.MaxMessageBytes)
 	require.Nil(t, err)
 	client, err := NewClientImpl(ctx, options)
+	require.Nil(t, err)
 	adminClient, err := NewAdminClientImpl(ctx, options)
 	require.Nil(t, err)
 
