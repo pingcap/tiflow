@@ -376,19 +376,17 @@ func (s *server) run(ctx context.Context) (err error) {
 		})
 	}
 
-	if conf.Debug.EnableNewScheduler {
-		grpcServer := grpc.NewServer(s.grpcService.ServerOptions()...)
-		p2pProto.RegisterCDCPeerToPeerServer(grpcServer, s.grpcService)
+	grpcServer := grpc.NewServer(s.grpcService.ServerOptions()...)
+	p2pProto.RegisterCDCPeerToPeerServer(grpcServer, s.grpcService)
 
-		wg.Go(func() error {
-			return grpcServer.Serve(s.tcpServer.GrpcListener())
-		})
-		wg.Go(func() error {
-			<-cctx.Done()
-			grpcServer.Stop()
-			return nil
-		})
-	}
+	wg.Go(func() error {
+		return grpcServer.Serve(s.tcpServer.GrpcListener())
+	})
+	wg.Go(func() error {
+		<-cctx.Done()
+		grpcServer.Stop()
+		return nil
+	})
 
 	return wg.Wait()
 }

@@ -128,7 +128,6 @@ var defaultServerConfig = &ServerConfig{
 		TableActor: &TableActorConfig{
 			EventBatchSize: 32,
 		},
-		EnableNewScheduler: true,
 		// Default db sorter config
 		EnableDBSorter: true,
 		DB: &DBConfig{
