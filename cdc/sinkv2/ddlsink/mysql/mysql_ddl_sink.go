@@ -97,6 +97,10 @@ func NewMySQLDDLSink(
 
 func (m *mysqlDDLSink) WriteDDLEvent(ctx context.Context, ddl *model.DDLEvent) error {
 	err := m.execDDLWithMaxRetries(ctx, ddl)
+	// we should not retry changefeed if DDL failed by return an unretryable error.
+	if !errorutil.IsRetryableDDLError(err) {
+		return cerror.WrapChangefeedUnretryableErr(err)
+	}
 	return errors.Trace(err)
 }
 
@@ -125,7 +129,7 @@ func (m *mysqlDDLSink) execDDLWithMaxRetries(ctx context.Context, ddl *model.DDL
 	}, retry.WithBackoffBaseDelay(pmysql.BackoffBaseDelay.Milliseconds()),
 		retry.WithBackoffMaxDelay(pmysql.BackoffMaxDelay.Milliseconds()),
 		retry.WithMaxTries(defaultDDLMaxRetry),
-		retry.WithIsRetryableErr(cerror.IsRetryableError))
+		retry.WithIsRetryableErr(errorutil.IsRetryableDDLError))
 }
 
 func (m *mysqlDDLSink) execDDL(pctx context.Context, ddl *model.DDLEvent) error {
