@@ -59,6 +59,9 @@ const (
     "max-log-size": 64,
     "flush-interval": 2000,
     "storage": ""
+  },
+  "scheduler": {
+    "region-per-span": 0
   }
 }`
 
@@ -138,8 +141,7 @@ const (
       "collect-stats-tick": 200,
       "max-task-concurrency": 10,
       "check-balance-interval": 60000000000,
-      "add-table-batch-size": 50,
-      "region-per-span": 0
+      "add-table-batch-size": 50
     },
     "enable-new-sink": true,
     "enable-kafka-sink-v2": false
@@ -199,6 +201,9 @@ const (
     "max-log-size": 64,
     "flush-interval": 2000,
     "storage": ""
+  },
+  "scheduler": {
+    "region-per-span": 100001
   }
 }`
 
@@ -251,6 +256,9 @@ const (
     "max-log-size": 64,
     "flush-interval": 2000,
     "storage": ""
+  },
+  "scheduler": {
+    "region-per-span": 100001
   }
 }`
 )

@@ -62,6 +62,8 @@ func iterPermutation(sequence []int, fn func(sequence []int)) {
 }
 
 func newAgent4Test() *agent {
+	cfg := config.GetDefaultServerConfig().Debug.Scheduler
+	cfg.ChangefeedSettings = config.GetDefaultReplicaConfig().Scheduler
 	a := &agent{
 		ownerInfo: ownerInfo{
 			CaptureInfo: model.CaptureInfo{
@@ -70,8 +72,7 @@ func newAgent4Test() *agent {
 			},
 			Revision: schedulepb.OwnerRevision{Revision: 1},
 		},
-		compat: compat.New(
-			config.GetDefaultServerConfig().Debug.Scheduler, map[string]*model.CaptureInfo{}),
+		compat: compat.New(cfg, map[string]*model.CaptureInfo{}),
 	}
 
 	a.Version = "agent-version-1"
@@ -90,7 +91,11 @@ func TestNewAgent(t *testing.T) {
 	me := mock_etcd.NewMockCDCEtcdClient(gomock.NewController(t))
 
 	tableExector := newMockTableExecutor()
-	cfg := &config.SchedulerConfig{RegionPerSpan: 1}
+	cfg := &config.SchedulerConfig{
+		ChangefeedSettings: &config.ChangefeedSchedulerConfig{
+			RegionPerSpan: 1,
+		},
+	}
 
 	// owner and revision found successfully
 	me.EXPECT().GetOwnerID(gomock.Any()).Return("ownerID", nil).Times(1)
@@ -875,7 +880,9 @@ func TestAgentTransportCompat(t *testing.T) {
 	trans := transport.NewMockTrans()
 	a.trans = trans
 	a.compat = compat.New(&config.SchedulerConfig{
-		RegionPerSpan: 1,
+		ChangefeedSettings: &config.ChangefeedSchedulerConfig{
+			RegionPerSpan: 1,
+		},
 	}, map[model.CaptureID]*model.CaptureInfo{})
 	ctx := context.Background()
 
