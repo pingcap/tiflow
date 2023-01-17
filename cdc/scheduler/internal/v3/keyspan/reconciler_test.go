@@ -153,7 +153,7 @@ func TestReconcile(t *testing.T) {
 	ctx := context.Background()
 
 	// Test 1. changefeed initialization.
-	reps := spanz.NewMap[*replication.ReplicationSet]()
+	reps := spanz.NewBtreeMap[*replication.ReplicationSet]()
 	reconciler := NewReconciler(model.ChangeFeedID{}, cache, cfg.RegionPerSpan)
 	currentTables := &replication.TableRanges{}
 	currentTables.UpdateTables([]model.TableID{1})
@@ -253,7 +253,7 @@ func TestCompatDisable(t *testing.T) {
 	})
 	require.False(t, cm.CheckSpanReplicationEnabled())
 	ctx := context.Background()
-	reps := spanz.NewMap[*replication.ReplicationSet]()
+	reps := spanz.NewBtreeMap[*replication.ReplicationSet]()
 	reconciler := NewReconciler(model.ChangeFeedID{}, cache, cfg.RegionPerSpan)
 	currentTables := &replication.TableRanges{}
 	currentTables.UpdateTables([]model.TableID{1})
@@ -289,7 +289,7 @@ func TestBatchAddRateLimit(t *testing.T) {
 	ctx := context.Background()
 
 	// Add table 2.
-	reps := spanz.NewMap[*replication.ReplicationSet]()
+	reps := spanz.NewBtreeMap[*replication.ReplicationSet]()
 	reconciler := NewReconciler(model.ChangeFeedID{}, cache, cfg.RegionPerSpan)
 	currentTables := &replication.TableRanges{}
 	currentTables.UpdateTables([]model.TableID{2})
