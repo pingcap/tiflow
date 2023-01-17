@@ -358,8 +358,14 @@ func TestProducerSendMessageFailed(t *testing.T) {
 	errCh := make(chan error, 1)
 	ctx = contextutil.PutRoleInCtx(ctx, util.RoleTester)
 
-	client, err := NewClientImpl(ctx, options)
+	options.MaxMessages = 1
+	options.MaxMessageBytes = 8
+	saramaConfig, err := kafka.NewSaramaConfig(context.Background(), options)
 	require.Nil(t, err)
+	require.Equal(t, 1, saramaConfig.Producer.Flush.MaxMessages)
+	require.Equal(t, 8, saramaConfig.Producer.MaxMessageBytes)
+	require.Nil(t, err)
+	client, err := NewClientImpl(ctx, options)
 	adminClient, err := NewAdminClientImpl(ctx, options)
 	require.Nil(t, err)
 
