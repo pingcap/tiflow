@@ -138,12 +138,14 @@ func TestProducerSendMsgFailed(t *testing.T) {
 	errCh := make(chan error, 1)
 	ctx, cancel := context.WithTimeout(context.Background(), time.Second*10)
 	defer cancel()
-	saramaConfig, err := kafka.NewSaramaConfig(context.Background(), options)
+	_, err := kafka.NewSaramaConfig(context.Background(), options)
 	require.Nil(t, err)
-	saramaConfig.Producer.Flush.MaxMessages = 1
-	saramaConfig.Producer.Retry.Max = 1
+	options.MaxMessages = 1
+	options.MaxMessageBytes = 1
+	//saramaConfig.Producer.Flush.MaxMessages = 1
+	//saramaConfig.Producer.Retry.Max = 1
 	// This will make the first send failed.
-	saramaConfig.Producer.MaxMessageBytes = 8
+	//saramaConfig.Producer.MaxMessageBytes = 8
 
 	client, err := kafka.NewSaramaClient(ctx, options)
 	require.Nil(t, err)
