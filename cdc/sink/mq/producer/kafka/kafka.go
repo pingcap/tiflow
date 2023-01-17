@@ -302,7 +302,8 @@ func NewKafkaSaramaProducer(
 		role: role,
 	}
 	go func() {
-		if err := k.asyncProducer.AsyncCallbackRun(ctx, k.id, k.closeCh, k.failpointCh); err != nil && errors.Cause(err) != context.Canceled {
+		if err := k.asyncProducer.AsyncCallbackRun(ctx, k.id, k.closeCh,
+			k.failpointCh); err != nil && errors.Cause(err) != context.Canceled {
 			select {
 			case <-ctx.Done():
 				return

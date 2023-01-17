@@ -108,7 +108,8 @@ func NewKafkaDMLProducer(
 	go k.collector.Run(ctx)
 
 	go func() {
-		if err := k.asyncProducer.AsyncCallbackRun(ctx, k.id, k.closedChan, k.failpointCh); err != nil && errors.Cause(err) != context.Canceled {
+		if err := k.asyncProducer.AsyncCallbackRun(ctx, k.id, k.closedChan,
+			k.failpointCh); err != nil && errors.Cause(err) != context.Canceled {
 			select {
 			case <-ctx.Done():
 				return
