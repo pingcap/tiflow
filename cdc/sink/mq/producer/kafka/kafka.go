@@ -364,8 +364,8 @@ func NewKafkaSaramaProducer(
 	return k, nil
 }
 
-// AdjustConfig adjust the `Options` and `sarama.Config` by condition.
-func AdjustConfig(
+// AdjustOptions adjust the `Options` and `sarama.Config` by condition.
+func AdjustOptions(
 	admin kafka.ClusterAdminClient,
 	options *kafka.Options,
 	topic string,
