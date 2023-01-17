@@ -101,7 +101,7 @@ func (c *ClusterAdminClientMockImpl) GetAllTopicsMeta() (map[string]TopicDetail,
 }
 
 // GetAllBrokers implement the ClusterAdminClient interface
-func (c *ClusterAdminClientMockImpl) GetAllBrokers() ([]Broker, error) {
+func (c *ClusterAdminClientMockImpl) GetAllBrokers(context.Context) ([]Broker, error) {
 	return nil, nil
 }
 

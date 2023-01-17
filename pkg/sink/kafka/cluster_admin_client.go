@@ -34,7 +34,7 @@ type Broker struct {
 // which supports managing and inspecting topics, brokers, configurations and ACLs.
 type ClusterAdminClient interface {
 	// GetAllBrokers return all brokers among the cluster
-	GetAllBrokers() ([]Broker, error)
+	GetAllBrokers(ctx context.Context) ([]Broker, error)
 
 	// GetCoordinator return the coordinator's broker id of the cluster
 	GetCoordinator(ctx context.Context) (controllerID int32, err error)

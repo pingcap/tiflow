@@ -42,7 +42,7 @@ func NewSaramaAdminClient(ctx context.Context, config *Options) (ClusterAdminCli
 	return &saramaAdminClient{client: client}, nil
 }
 
-func (a *saramaAdminClient) GetAllBrokers() ([]Broker, error) {
+func (a *saramaAdminClient) GetAllBrokers(context.Context) ([]Broker, error) {
 	brokers, _, err := a.client.DescribeCluster()
 	if err != nil {
 		return nil, err

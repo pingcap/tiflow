@@ -37,14 +37,35 @@ func NewClusterAdminClient(ctx context.Context, endpoints []string) *admin {
 	}
 }
 
-func (a *admin) GetAllBrokers() ([]pkafka.Broker, error) {
-	return nil, nil
+func (a *admin) clusterMetadata(ctx context.Context) (*kafka.MetadataResponse, error) {
+	return a.client.Metadata(ctx, &kafka.MetadataRequest{
+		Addr:   a.client.Addr,
+		Topics: []string{},
+	})
 }
 
-func (a *admin) GetCoordinator(context.Context) (int32, error) {
-	resp, err := a.client.FindCoordinator(ctx, &kafka.FindCoordinatorRequest{})
+func (a *admin) GetAllBrokers(ctx context.Context) ([]pkafka.Broker, error) {
+	response, err := a.clusterMetadata(ctx)
+	if err != nil {
+		return nil, err
+	}
 
-	return int32(resp.Coordinator.NodeID), nil
+	result := make([]pkafka.Broker, 0, len(response.Brokers))
+	for _, broker := range response.Brokers {
+		result = append(result, pkafka.Broker{
+			ID: int32(broker.ID),
+		})
+	}
+	return result, nil
+}
+
+func (a *admin) GetCoordinator(ctx context.Context) (int32, error) {
+	response, err := a.clusterMetadata(ctx)
+	if err != nil {
+		return 0, err
+	}
+
+	return int32(response.Controller.ID), nil
 }
 
 func (a *admin) GetBrokerConfig(configName string) (string, error) {
