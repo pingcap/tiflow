@@ -28,37 +28,37 @@ type SyncMap struct {
 // value is present.
 // The ok result indicates whether value was found in the map.
 func (m *SyncMap) Load(key tablepb.Span) (value any, ok bool) {
-	return m.m.Load(ToHashableSpan(key))
+	return m.m.Load(toHashableSpan(key))
 }
 
 // Store sets the value for a key.
 func (m *SyncMap) Store(key tablepb.Span, value any) {
-	m.m.Store(ToHashableSpan(key), value)
+	m.m.Store(toHashableSpan(key), value)
 }
 
 // LoadOrStore returns the existing value for the key if present.
 // Otherwise, it stores and returns the given value.
 // The loaded result is true if the value was loaded, false if stored.
 func (m *SyncMap) LoadOrStore(key tablepb.Span, value any) (actual any, loaded bool) {
-	return m.m.LoadOrStore(ToHashableSpan(key), value)
+	return m.m.LoadOrStore(toHashableSpan(key), value)
 }
 
 // Delete deletes the value for a key.
 func (m *SyncMap) Delete(key tablepb.Span) {
-	m.m.Delete(ToHashableSpan(key))
+	m.m.Delete(toHashableSpan(key))
 }
 
 // LoadAndDelete deletes the value for a key, returning the previous value if any.
 // The loaded result reports whether the key was present.
 func (m *SyncMap) LoadAndDelete(key tablepb.Span) (value any, loaded bool) {
-	return m.m.LoadAndDelete(ToHashableSpan(key))
+	return m.m.LoadAndDelete(toHashableSpan(key))
 }
 
 // Range calls f sequentially for each key and value present in the map.
 // If f returns false, range stops the iteration.
 func (m *SyncMap) Range(f func(span tablepb.Span, value any) bool) {
 	m.m.Range(func(key, value any) bool {
-		span := key.(HashableSpan).ToSpan()
+		span := key.(hashableSpan).toSpan()
 		return f(span, value)
 	})
 }

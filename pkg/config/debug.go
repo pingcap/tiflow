@@ -46,6 +46,9 @@ type DebugConfig struct {
 	// EnableNewSink enables the new sink.
 	// The default value is true.
 	EnableNewSink bool `toml:"enable-new-sink" json:"enable-new-sink"`
+
+	// EnableKafkaSinkV2 enable the new kafka sink, which is implemented based on kafka-go client.
+	EnableKafkaSinkV2 bool `toml:"enable-kafka-sink-v2" json:"enable-kafka-sink-v2"`
 }
 
 // ValidateAndAdjust validates and adjusts the debug configuration
@@ -78,6 +81,15 @@ func (c *DebugConfig) ValidateAndAdjust() error {
 					" you can set `debug.enable-new-sink` to be true")
 		}
 	}
+
+	if c.EnableKafkaSinkV2 {
+		if !c.EnableNewSink {
+			return cerrors.ErrInvalidPullBasedSinkConfig.GenWithStackByArgs(
+				"enabling kafka sink v2 requires use of the new sink," +
+					" you can set `debug.enable-new-sink` to be true")
+		}
+	}
+
 	return nil
 }
 

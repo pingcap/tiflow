@@ -59,7 +59,7 @@ func (b *balanceScheduler) Schedule(
 	_ model.Ts,
 	_ []tablepb.Span,
 	captures map[model.CaptureID]*member.CaptureStatus,
-	replications *spanz.Map[*replication.ReplicationSet],
+	replications *spanz.BtreeMap[*replication.ReplicationSet],
 ) []*replication.ScheduleTask {
 	if !b.forceBalance {
 		now := time.Now()
@@ -86,7 +86,7 @@ func (b *balanceScheduler) Schedule(
 func buildBalanceMoveTables(
 	random *rand.Rand,
 	captures map[model.CaptureID]*member.CaptureStatus,
-	replications *spanz.Map[*replication.ReplicationSet],
+	replications *spanz.BtreeMap[*replication.ReplicationSet],
 	maxTaskConcurrency int,
 ) []*replication.ScheduleTask {
 	moves := newBalanceMoveTables(

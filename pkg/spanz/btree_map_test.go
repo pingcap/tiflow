@@ -23,7 +23,7 @@ import (
 func TestSpanMap(t *testing.T) {
 	t.Parallel()
 
-	m := NewMap[int]()
+	m := NewBtreeMap[int]()
 
 	// Insert then get.
 	m.ReplaceOrInsert(tablepb.Span{TableID: 1}, 1)
@@ -65,7 +65,7 @@ func TestSpanMap(t *testing.T) {
 	require.Equal(t, v, 0)
 
 	// Pointer value
-	mp := NewMap[*int]()
+	mp := NewBtreeMap[*int]()
 	vp := &v
 	mp.ReplaceOrInsert(tablepb.Span{TableID: 1}, vp)
 	vp1, ok := mp.Get(tablepb.Span{TableID: 1})
@@ -77,7 +77,7 @@ func TestSpanMap(t *testing.T) {
 func TestMapAscend(t *testing.T) {
 	t.Parallel()
 
-	m := NewMap[int]()
+	m := NewBtreeMap[int]()
 	for i := 0; i < 4; i++ {
 		m.ReplaceOrInsert(tablepb.Span{TableID: int64(i)}, i)
 	}
@@ -208,7 +208,7 @@ func TestMapFindHole(t *testing.T) {
 
 	for i, cs := range cases {
 		_, _ = i, cs
-		m := NewMap[struct{}]()
+		m := NewBtreeMap[struct{}]()
 		for _, span := range cs.spans {
 			m.ReplaceOrInsert(span, struct{}{})
 		}
