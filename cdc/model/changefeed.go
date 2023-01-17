@@ -305,6 +305,12 @@ func (info *ChangeFeedInfo) FixIncompatible() {
 		info.fixMemoryQuota()
 		log.Info("Fix incompatible memory quota completed", zap.String("changefeed", info.String()))
 	}
+
+	if info.Config.Scheduler == nil {
+		log.Info("Start fixing incompatible scheduler", zap.String("changefeed", info.String()))
+		info.fixScheduler()
+		log.Info("Fix incompatible scheduler completed", zap.String("changefeed", info.String()))
+	}
 }
 
 // fixState attempts to fix state loss from upgrading the old owner to the new owner.
@@ -437,4 +443,8 @@ func (info *ChangeFeedInfo) HasFastFailError() bool {
 
 func (info *ChangeFeedInfo) fixMemoryQuota() {
 	info.Config.FixMemoryQuota()
+}
+
+func (info *ChangeFeedInfo) fixScheduler() {
+	info.Config.FixScheduler()
 }

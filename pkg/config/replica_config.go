@@ -203,6 +203,9 @@ func (c *ReplicaConfig) ValidateAndAdjust(sinkURI *url.URL) error {
 	if c.MemoryQuota == uint64(0) {
 		c.FixMemoryQuota()
 	}
+	if c.Scheduler == nil {
+		c.FixScheduler()
+	}
 	if c.Scheduler.RegionPerSpan < 1000 && c.Scheduler.RegionPerSpan != 0 {
 		return cerror.ErrInvalidReplicaConfig.GenWithStackByArgs(
 			"region-per-span must be either 0 or greater than 1000")
@@ -213,6 +216,11 @@ func (c *ReplicaConfig) ValidateAndAdjust(sinkURI *url.URL) error {
 	}
 
 	return nil
+}
+
+// FixScheduler adjusts scheduler to default value
+func (c *ReplicaConfig) FixScheduler() {
+	c.Scheduler = defaultReplicaConfig.Clone().Scheduler
 }
 
 // FixMemoryQuota adjusts memory quota to default value
