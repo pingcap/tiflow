@@ -666,7 +666,7 @@
           "dashes": false,
           "datasource": "${DS_TEST-CLUSTER}",
           "decimals": 1,
-          "description": "The min resolved ts of each TiKV",
+          "description": "The min resolved ts lag of each TiKV",
           "editable": true,
           "error": false,
           "fieldConfig": {
@@ -5203,7 +5203,7 @@
           "dashLength": 10,
           "dashes": false,
           "datasource": "${DS_TEST-CLUSTER}",
-          "description": "The number of events that sorter outputs to puller \n per second",
+          "description": "The number of events that sorter outputs to mounter(or table sink worker) per second",
           "fieldConfig": {
             "defaults": {
               "links": []
@@ -7598,7 +7598,7 @@
           "dashLength": 10,
           "dashes": false,
           "datasource": "${DS_TEST-CLUSTER}",
-          "description": "Sink worker busy ratio",
+          "description": "Distribution of flush transaction duration to backend",
           "fieldConfig": {
             "defaults": {},
             "overrides": []
