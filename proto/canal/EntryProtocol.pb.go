@@ -22,7 +22,7 @@ var _ = math.Inf
 // proto package needs to be updated.
 const _ = proto.GoGoProtoPackageIsVersion3 // please upgrade the proto package
 
-// *打散后的事件类型，主要用于标识事务的开始，变更数据，结束*
+//*打散后的事件类型，主要用于标识事务的开始，变更数据，结束*
 type EntryType int32
 
 const (
@@ -61,7 +61,7 @@ func (EntryType) EnumDescriptor() ([]byte, []int) {
 	return fileDescriptor_237ce6ff565bd62b, []int{0}
 }
 
-// * 事件类型 *
+//* 事件类型 *
 type EventType int32
 
 const (
@@ -132,7 +132,7 @@ func (EventType) EnumDescriptor() ([]byte, []int) {
 	return fileDescriptor_237ce6ff565bd62b, []int{1}
 }
 
-// *数据库类型*
+//*数据库类型*
 type Type int32
 
 const (
@@ -164,20 +164,19 @@ func (Type) EnumDescriptor() ([]byte, []int) {
 	return fileDescriptor_237ce6ff565bd62b, []int{2}
 }
 
-// ***************************************************************
+//***************************************************************
 // message model
-// 如果要在Enum中新增类型，确保以前的类型的下标值不变.
-// **************************************************************
+//如果要在Enum中新增类型，确保以前的类型的下标值不变.
+//**************************************************************
 type Entry struct {
-	// *协议头部信息*
+	//*协议头部信息*
 	Header *Header `protobuf:"bytes,1,opt,name=header,proto3" json:"header,omitempty"`
-	// /**打散后的事件类型**/ [default = ROWDATA]
+	///**打散后的事件类型**/ [default = ROWDATA]
 	//
 	// Types that are valid to be assigned to EntryTypePresent:
-	//
 	//	*Entry_EntryType
 	EntryTypePresent isEntry_EntryTypePresent `protobuf_oneof:"entryType_present"`
-	// *传输的二进制数组*
+	//*传输的二进制数组*
 	StoreValue []byte `protobuf:"bytes,3,opt,name=storeValue,proto3" json:"storeValue,omitempty"`
 }
 
@@ -261,45 +260,42 @@ func (*Entry) XXX_OneofWrappers() []interface{} {
 	}
 }
 
-// *message Header*
+//*message Header*
 type Header struct {
-	// [default = 1]
+	//[default = 1]
 	//
 	// Types that are valid to be assigned to VersionPresent:
-	//
 	//	*Header_Version
 	VersionPresent isHeader_VersionPresent `protobuf_oneof:"version_present"`
-	// *binlog/redolog 文件名*
+	//*binlog/redolog 文件名*
 	LogfileName string `protobuf:"bytes,2,opt,name=logfileName,proto3" json:"logfileName,omitempty"`
-	// *binlog/redolog 文件的偏移位置*
+	//*binlog/redolog 文件的偏移位置*
 	LogfileOffset int64 `protobuf:"varint,3,opt,name=logfileOffset,proto3" json:"logfileOffset,omitempty"`
-	// *服务端serverId*
+	//*服务端serverId*
 	ServerId int64 `protobuf:"varint,4,opt,name=serverId,proto3" json:"serverId,omitempty"`
-	// * 变更数据的编码 *
+	//* 变更数据的编码 *
 	ServerenCode string `protobuf:"bytes,5,opt,name=serverenCode,proto3" json:"serverenCode,omitempty"`
-	// *变更数据的执行时间 *
+	//*变更数据的执行时间 *
 	ExecuteTime int64 `protobuf:"varint,6,opt,name=executeTime,proto3" json:"executeTime,omitempty"`
-	// [default = MYSQL]
+	//[default = MYSQL]
 	//
 	// Types that are valid to be assigned to SourceTypePresent:
-	//
 	//	*Header_SourceType
 	SourceTypePresent isHeader_SourceTypePresent `protobuf_oneof:"sourceType_present"`
-	// * 变更数据的schemaname*
+	//* 变更数据的schemaname*
 	SchemaName string `protobuf:"bytes,8,opt,name=schemaName,proto3" json:"schemaName,omitempty"`
-	// *变更数据的tablename*
+	//*变更数据的tablename*
 	TableName string `protobuf:"bytes,9,opt,name=tableName,proto3" json:"tableName,omitempty"`
-	// *每个event的长度*
+	//*每个event的长度*
 	EventLength int64 `protobuf:"varint,10,opt,name=eventLength,proto3" json:"eventLength,omitempty"`
 	// [default = UPDATE]
 	//
 	// Types that are valid to be assigned to EventTypePresent:
-	//
 	//	*Header_EventType
 	EventTypePresent isHeader_EventTypePresent `protobuf_oneof:"eventType_present"`
-	// *预留扩展*
+	//*预留扩展*
 	Props []*Pair `protobuf:"bytes,12,rep,name=props,proto3" json:"props,omitempty"`
-	// *当前事务的gitd*
+	//*当前事务的gitd*
 	Gtid string `protobuf:"bytes,13,opt,name=gtid,proto3" json:"gtid,omitempty"`
 }
 
@@ -485,31 +481,30 @@ func (*Header) XXX_OneofWrappers() []interface{} {
 	}
 }
 
-// *每个字段的数据结构*
+//*每个字段的数据结构*
 type Column struct {
-	// *字段下标*
+	//*字段下标*
 	Index int32 `protobuf:"varint,1,opt,name=index,proto3" json:"index,omitempty"`
-	// *字段java中类型*
+	//*字段java中类型*
 	SqlType int32 `protobuf:"varint,2,opt,name=sqlType,proto3" json:"sqlType,omitempty"`
-	// *字段名称(忽略大小写)，在mysql中是没有的*
+	//*字段名称(忽略大小写)，在mysql中是没有的*
 	Name string `protobuf:"bytes,3,opt,name=name,proto3" json:"name,omitempty"`
-	// *是否是主键*
+	//*是否是主键*
 	IsKey bool `protobuf:"varint,4,opt,name=isKey,proto3" json:"isKey,omitempty"`
-	// *如果EventType=UPDATE,用于标识这个字段值是否有修改*
+	//*如果EventType=UPDATE,用于标识这个字段值是否有修改*
 	Updated bool `protobuf:"varint,5,opt,name=updated,proto3" json:"updated,omitempty"`
-	// [default = false]
+	//[default = false]
 	//
 	// Types that are valid to be assigned to IsNullPresent:
-	//
 	//	*Column_IsNull
 	IsNullPresent isColumn_IsNullPresent `protobuf_oneof:"isNull_present"`
-	// *预留扩展*
+	//*预留扩展*
 	Props []*Pair `protobuf:"bytes,7,rep,name=props,proto3" json:"props,omitempty"`
-	// * 字段值,timestamp,Datetime是一个时间格式的文本 *
+	//* 字段值,timestamp,Datetime是一个时间格式的文本 *
 	Value string `protobuf:"bytes,8,opt,name=value,proto3" json:"value,omitempty"`
-	// * 对应数据对象原始长度 *
+	//* 对应数据对象原始长度 *
 	Length int32 `protobuf:"varint,9,opt,name=length,proto3" json:"length,omitempty"`
-	// *字段mysql类型*
+	//*字段mysql类型*
 	MysqlType string `protobuf:"bytes,10,opt,name=mysqlType,proto3" json:"mysqlType,omitempty"`
 }
 
@@ -643,11 +638,11 @@ func (*Column) XXX_OneofWrappers() []interface{} {
 }
 
 type RowData struct {
-	// * 字段信息，增量数据(修改前,删除前) *
+	//* 字段信息，增量数据(修改前,删除前) *
 	BeforeColumns []*Column `protobuf:"bytes,1,rep,name=beforeColumns,proto3" json:"beforeColumns,omitempty"`
-	// * 字段信息，增量数据(修改后,新增后)  *
+	//* 字段信息，增量数据(修改后,新增后)  *
 	AfterColumns []*Column `protobuf:"bytes,2,rep,name=afterColumns,proto3" json:"afterColumns,omitempty"`
-	// *预留扩展*
+	//*预留扩展*
 	Props []*Pair `protobuf:"bytes,3,rep,name=props,proto3" json:"props,omitempty"`
 }
 
@@ -705,29 +700,27 @@ func (m *RowData) GetProps() []*Pair {
 	return nil
 }
 
-// *message row 每行变更数据的数据结构*
+//*message row 每行变更数据的数据结构*
 type RowChange struct {
-	// *tableId,由数据库产生*
+	//*tableId,由数据库产生*
 	TableId int64 `protobuf:"varint,1,opt,name=tableId,proto3" json:"tableId,omitempty"`
-	// [default = UPDATE]
+	//[default = UPDATE]
 	//
 	// Types that are valid to be assigned to EventTypePresent:
-	//
 	//	*RowChange_EventType
 	EventTypePresent isRowChange_EventTypePresent `protobuf_oneof:"eventType_present"`
 	// [default = false]
 	//
 	// Types that are valid to be assigned to IsDdlPresent:
-	//
 	//	*RowChange_IsDdl
 	IsDdlPresent isRowChange_IsDdlPresent `protobuf_oneof:"isDdl_present"`
-	// * ddl/query的sql语句  *
+	//* ddl/query的sql语句  *
 	Sql string `protobuf:"bytes,11,opt,name=sql,proto3" json:"sql,omitempty"`
-	// * 一次数据库变更可能存在多行  *
+	//* 一次数据库变更可能存在多行  *
 	RowDatas []*RowData `protobuf:"bytes,12,rep,name=rowDatas,proto3" json:"rowDatas,omitempty"`
-	// *预留扩展*
+	//*预留扩展*
 	Props []*Pair `protobuf:"bytes,13,rep,name=props,proto3" json:"props,omitempty"`
-	// * ddl/query的schemaName，会存在跨库ddl，需要保留执行ddl的当前schemaName  *
+	//* ddl/query的schemaName，会存在跨库ddl，需要保留执行ddl的当前schemaName  *
 	DdlSchemaName string `protobuf:"bytes,14,opt,name=ddlSchemaName,proto3" json:"ddlSchemaName,omitempty"`
 }
 
@@ -855,15 +848,15 @@ func (*RowChange) XXX_OneofWrappers() []interface{} {
 	}
 }
 
-// *开始事务的一些信息*
+//*开始事务的一些信息*
 type TransactionBegin struct {
-	// *已废弃，请使用header里的executeTime*
+	//*已废弃，请使用header里的executeTime*
 	ExecuteTime int64 `protobuf:"varint,1,opt,name=executeTime,proto3" json:"executeTime,omitempty"`
-	// *已废弃，Begin里不提供事务id*
+	//*已废弃，Begin里不提供事务id*
 	TransactionId string `protobuf:"bytes,2,opt,name=transactionId,proto3" json:"transactionId,omitempty"`
-	// *预留扩展*
+	//*预留扩展*
 	Props []*Pair `protobuf:"bytes,3,rep,name=props,proto3" json:"props,omitempty"`
-	// *执行的thread Id*
+	//*执行的thread Id*
 	ThreadId int64 `protobuf:"varint,4,opt,name=threadId,proto3" json:"threadId,omitempty"`
 }
 
@@ -928,13 +921,13 @@ func (m *TransactionBegin) GetThreadId() int64 {
 	return 0
 }
 
-// *结束事务的一些信息*
+//*结束事务的一些信息*
 type TransactionEnd struct {
-	// *已废弃，请使用header里的executeTime*
+	//*已废弃，请使用header里的executeTime*
 	ExecuteTime int64 `protobuf:"varint,1,opt,name=executeTime,proto3" json:"executeTime,omitempty"`
-	// *事务号*
+	//*事务号*
 	TransactionId string `protobuf:"bytes,2,opt,name=transactionId,proto3" json:"transactionId,omitempty"`
-	// *预留扩展*
+	//*预留扩展*
 	Props []*Pair `protobuf:"bytes,3,rep,name=props,proto3" json:"props,omitempty"`
 }
 
@@ -992,7 +985,7 @@ func (m *TransactionEnd) GetProps() []*Pair {
 	return nil
 }
 
-// *预留扩展*
+//*预留扩展*
 type Pair struct {
 	Key   string `protobuf:"bytes,1,opt,name=key,proto3" json:"key,omitempty"`
 	Value string `protobuf:"bytes,2,opt,name=value,proto3" json:"value,omitempty"`

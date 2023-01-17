@@ -1646,6 +1646,14 @@ func TestNewMySQLSinkExecDDL(t *testing.T) {
 			WillReturnError(&dmysql.MySQLError{
 				Number: uint16(infoschema.ErrColumnExists.Code()),
 			})
+		mock.ExpectExec("ALTER TABLE test.t1 ADD COLUMN a int").
+			WillReturnError(&dmysql.MySQLError{
+				Number: uint16(infoschema.ErrColumnExists.Code()),
+			})
+		mock.ExpectExec("ALTER TABLE test.t1 ADD PARTITION (PARTITION `p20230120` VALUES LESS THAN '2023-01-21'").
+			WillReturnError(&dmysql.MySQLError{
+				Number: mysql.ErrPartitionMgmtOnNonpartitioned,
+			})
 		mock.ExpectRollback()
 		mock.ExpectClose()
 		return db, nil
@@ -1692,7 +1700,16 @@ func TestNewMySQLSinkExecDDL(t *testing.T) {
 		Type:  timodel.ActionAddColumn,
 		Query: "ALTER TABLE test.t1 ADD COLUMN a int",
 	}
-
+	ddl3 := &model.DDLEvent{
+		StartTs:  1020,
+		CommitTs: 1030,
+		TableInfo: &model.SimpleTableInfo{
+			Schema: "test",
+			Table:  "t2",
+		},
+		Type:  timodel.ActionAddTablePartition,
+		Query: "ALTER TABLE test.t1 ADD PARTITION (PARTITION `p20230120` VALUES LESS THAN '2023-01-21'",
+	}
 	err = sink.EmitDDLEvent(ctx, ddl1)
 	require.Nil(t, err)
 	err = sink.EmitDDLEvent(ctx, ddl2)
@@ -1700,6 +1717,9 @@ func TestNewMySQLSinkExecDDL(t *testing.T) {
 	// DDL execute failed, but error can be ignored
 	err = sink.EmitDDLEvent(ctx, ddl1)
 	require.Nil(t, err)
+
+	err = sink.EmitDDLEvent(ctx, ddl3)
+	require.Nil(t, cerror.IsChangefeedUnRetryableError(err))
 
 	err = sink.Close(ctx)
 	require.Nil(t, err)

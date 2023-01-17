@@ -328,6 +328,9 @@ func (s *mysqlSink) EmitDDLEvent(ctx context.Context, ddl *model.DDLEvent) error
 	}
 	s.statistics.AddDDLCount()
 	err := s.execDDLWithMaxRetries(ctx, ddl)
+	if !errorutil.IsRetryableDDLError(err) {
+		return cerror.WrapChangefeedUnretryableErr(err)
+	}
 	return errors.Trace(err)
 }
 

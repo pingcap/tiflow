@@ -118,23 +118,20 @@ func (PacketType) EnumDescriptor() ([]byte, []int) {
 }
 
 type Packet struct {
-	// [default = 17];
+	//[default = 17];
 	//
 	// Types that are valid to be assigned to MagicNumberPresent:
-	//
 	//	*Packet_MagicNumber
 	MagicNumberPresent isPacket_MagicNumberPresent `protobuf_oneof:"magic_number_present"`
-	// [default = 1];
+	//[default = 1];
 	//
 	// Types that are valid to be assigned to VersionPresent:
-	//
 	//	*Packet_Version
 	VersionPresent isPacket_VersionPresent `protobuf_oneof:"version_present"`
 	Type           PacketType              `protobuf:"varint,3,opt,name=type,proto3,enum=com.alibaba.otter.canal.protocol.PacketType" json:"type,omitempty"`
-	// [default = NONE];
+	//[default = NONE];
 	//
 	// Types that are valid to be assigned to CompressionPresent:
-	//
 	//	*Packet_Compression
 	CompressionPresent isPacket_CompressionPresent `protobuf_oneof:"compression_present"`
 	Body               []byte                      `protobuf:"bytes,5,opt,name=body,proto3" json:"body,omitempty"`
@@ -319,10 +316,9 @@ func (m *HeartBeat) GetStartTimestamp() int64 {
 }
 
 type Handshake struct {
-	//	[default = "utf8"];
+	//  [default = "utf8"];
 	//
 	// Types that are valid to be assigned to CommunicationEncodingPresent:
-	//
 	//	*Handshake_CommunicationEncoding
 	CommunicationEncodingPresent isHandshake_CommunicationEncodingPresent `protobuf_oneof:"communication_encoding_present"`
 	Seeds                        []byte                                   `protobuf:"bytes,2,opt,name=seeds,proto3" json:"seeds,omitempty"`
@@ -416,13 +412,11 @@ type ClientAuth struct {
 	// [default = 0]
 	//
 	// Types that are valid to be assigned to NetReadTimeoutPresent:
-	//
 	//	*ClientAuth_NetReadTimeout
 	NetReadTimeoutPresent isClientAuth_NetReadTimeoutPresent `protobuf_oneof:"net_read_timeout_present"`
 	// [default = 0];
 	//
 	// Types that are valid to be assigned to NetWriteTimeoutPresent:
-	//
 	//	*ClientAuth_NetWriteTimeout
 	NetWriteTimeoutPresent isClientAuth_NetWriteTimeoutPresent `protobuf_oneof:"net_write_timeout_present"`
 	Destination            string                              `protobuf:"bytes,5,opt,name=destination,proto3" json:"destination,omitempty"`
@@ -563,10 +557,9 @@ func (*ClientAuth) XXX_OneofWrappers() []interface{} {
 }
 
 type Ack struct {
-	// [default = 0]
+	//[default = 0]
 	//
 	// Types that are valid to be assigned to ErrorCodePresent:
-	//
 	//	*Ack_ErrorCode
 	ErrorCodePresent isAck_ErrorCodePresent `protobuf_oneof:"error_code_present"`
 	ErrorMessage     string                 `protobuf:"bytes,2,opt,name=error_message,json=errorMessage,proto3" json:"error_message,omitempty"`
@@ -827,27 +820,24 @@ func (m *Unsub) GetFilter() string {
 	return ""
 }
 
-// PullRequest
+//  PullRequest
 type Get struct {
 	Destination string `protobuf:"bytes,1,opt,name=destination,proto3" json:"destination,omitempty"`
 	ClientId    string `protobuf:"bytes,2,opt,name=client_id,json=clientId,proto3" json:"client_id,omitempty"`
 	FetchSize   int32  `protobuf:"varint,3,opt,name=fetch_size,json=fetchSize,proto3" json:"fetch_size,omitempty"`
-	// [default = -1]
+	//[default = -1]
 	//
 	// Types that are valid to be assigned to TimeoutPresent:
-	//
 	//	*Get_Timeout
 	TimeoutPresent isGet_TimeoutPresent `protobuf_oneof:"timeout_present"`
-	// [default = 2]
+	//[default = 2]
 	//
 	// Types that are valid to be assigned to UnitPresent:
-	//
 	//	*Get_Unit
 	UnitPresent isGet_UnitPresent `protobuf_oneof:"unit_present"`
-	// [default = false]
+	//[default = false]
 	//
 	// Types that are valid to be assigned to AutoAckPresent:
-	//
 	//	*Get_AutoAck
 	AutoAckPresent isGet_AutoAckPresent `protobuf_oneof:"auto_ack_present"`
 }
@@ -985,6 +975,7 @@ func (*Get) XXX_OneofWrappers() []interface{} {
 	}
 }
 
+//
 type Messages struct {
 	BatchId  int64    `protobuf:"varint,1,opt,name=batch_id,json=batchId,proto3" json:"batch_id,omitempty"`
 	Messages [][]byte `protobuf:"bytes,2,rep,name=messages,proto3" json:"messages,omitempty"`
@@ -1044,7 +1035,6 @@ type Dump struct {
 	// [default = 0]
 	//
 	// Types that are valid to be assigned to TimestampPresent:
-	//
 	//	*Dump_Timestamp
 	TimestampPresent isDump_TimestampPresent `protobuf_oneof:"timestamp_present"`
 }
