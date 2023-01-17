@@ -141,7 +141,8 @@ const (
       "add-table-batch-size": 50,
       "region-per-span": 0
     },
-    "enable-new-sink": true
+    "enable-new-sink": true,
+    "enable-kafka-sink-v2": false
   },
   "cluster-id": "default"
 }`
