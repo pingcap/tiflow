@@ -15,7 +15,7 @@ package config
 
 const (
 	testCfgTestReplicaConfigOutDated = `{
-  "memory-quota": 2147483648,
+  "memory-quota": 1073741824,
   "case-sensitive": false,
   "enable-old-value": true,
   "force-replicate": true,
@@ -131,7 +131,7 @@ const (
       "server-max-pending-message-count": 102400,
       "server-ack-interval": 100000000,
       "server-worker-pool-size": 4,
-      "max-recv-msg-size": 2147483648
+      "max-recv-msg-size": 268435456
     },
     "scheduler": {
       "heartbeat-tick": 2,
@@ -147,7 +147,7 @@ const (
 }`
 
 	testCfgTestReplicaConfigMarshal1 = `{
-  "memory-quota": 2147483648,
+  "memory-quota": 1073741824,
   "case-sensitive": false,
   "enable-old-value": true,
   "force-replicate": true,
@@ -202,7 +202,7 @@ const (
 }`
 
 	testCfgTestReplicaConfigMarshal2 = `{
-  "memory-quota": 2147483648,
+  "memory-quota": 1073741824,
   "case-sensitive": false,
   "enable-old-value": true,
   "force-replicate": true,
