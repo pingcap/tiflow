@@ -122,6 +122,7 @@ func (p *ddlJobPullerImpl) Run(ctx context.Context) error {
 					if err != nil {
 						return errors.Trace(err)
 					}
+					log.Info("handle job", zap.Stringer("job", job), zap.Bool("skip", skip))
 					if skip {
 						continue
 					}
@@ -323,11 +324,11 @@ func (p *ddlJobPullerImpl) handleJob(job *timodel.Job) (skip bool, err error) {
 	if p.schemaSnapshot == nil {
 		return false, nil
 	}
-
 	// Do this first to fill the schema name to its origin schema name.
 	if err := p.schemaSnapshot.FillSchemaName(job); err != nil {
 		// If we can't find a job's schema, check if it's been filtered.
-		if p.filter.ShouldIgnoreTable(job.SchemaName, job.TableName) {
+		if p.filter.ShouldIgnoreTable(job.SchemaName, job.TableName) ||
+			p.filter.ShouldDiscardDDL(job.Type, job.SchemaName, job.TableName) {
 			return true, nil
 		}
 		return true, errors.Trace(err)

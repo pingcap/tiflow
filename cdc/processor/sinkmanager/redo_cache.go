@@ -31,7 +31,7 @@ type redoEventCache struct {
 	allocated uint64 // atomically shared in several goroutines.
 
 	mu     sync.Mutex
-	tables map[spanz.HashableSpan]*eventAppender
+	tables *spanz.HashMap[*eventAppender]
 
 	metricRedoEventCache prometheus.Gauge
 }
@@ -71,7 +71,7 @@ func newRedoEventCache(changefeedID model.ChangeFeedID, capacity uint64) *redoEv
 	return &redoEventCache{
 		capacity:  capacity,
 		allocated: 0,
-		tables:    make(map[spanz.HashableSpan]*eventAppender),
+		tables:    spanz.NewHashMap[*eventAppender](),
 
 		metricRedoEventCache: RedoEventCache.WithLabelValues(changefeedID.Namespace, changefeedID.ID),
 	}
@@ -79,7 +79,7 @@ func newRedoEventCache(changefeedID model.ChangeFeedID, capacity uint64) *redoEv
 
 func (r *redoEventCache) removeTable(span tablepb.Span) {
 	r.mu.Lock()
-	item, exists := r.tables[spanz.ToHashableSpan(span)]
+	item, exists := r.tables.Get(span)
 	defer r.mu.Unlock()
 	if exists {
 		item.mu.Lock()
@@ -92,7 +92,7 @@ func (r *redoEventCache) removeTable(span tablepb.Span) {
 		item.sizes = nil
 		item.pushCounts = nil
 		item.mu.Unlock()
-		delete(r.tables, spanz.ToHashableSpan(span))
+		r.tables.Delete(span)
 	}
 }
 
@@ -102,14 +102,14 @@ func (r *redoEventCache) maybeCreateAppender(
 	r.mu.Lock()
 	defer r.mu.Unlock()
 
-	item, exists := r.tables[spanz.ToHashableSpan(span)]
+	item, exists := r.tables.Get(span)
 	if !exists {
 		item = &eventAppender{
 			capacity:   r.capacity,
 			cache:      r,
 			lowerBound: lowerBound,
 		}
-		r.tables[spanz.ToHashableSpan(span)] = item
+		r.tables.ReplaceOrInsert(span, item)
 		return item
 	}
 
@@ -132,7 +132,7 @@ func (r *redoEventCache) maybeCreateAppender(
 func (r *redoEventCache) getAppender(span tablepb.Span) *eventAppender {
 	r.mu.Lock()
 	defer r.mu.Unlock()
-	return r.tables[spanz.ToHashableSpan(span)]
+	return r.tables.GetV(span)
 }
 
 func (e *eventAppender) pop(lowerBound, upperBound engine.Position) (res popResult) {

@@ -91,7 +91,7 @@ func (m *Collector) Run(ctx context.Context) {
 
 func (m *Collector) updateBrokers() {
 	start := time.Now()
-	brokers, _, err := m.adminClient.DescribeCluster()
+	brokers, err := m.adminClient.GetAllBrokers()
 	if err != nil {
 		log.Warn("Get Kafka brokers failed, "+
 			"use historical brokers to collect kafka broker level metrics",
@@ -104,7 +104,7 @@ func (m *Collector) updateBrokers() {
 	}
 
 	for _, b := range brokers {
-		m.brokers[b.ID()] = struct{}{}
+		m.brokers[b.ID] = struct{}{}
 	}
 }
 
