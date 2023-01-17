@@ -19,6 +19,9 @@ import (
 	"github.com/pingcap/tidb/infoschema"
 	"github.com/pingcap/tidb/parser/mysql"
 	"github.com/pingcap/tidb/util/dbterror"
+	"github.com/pingcap/tidb/util/dbutil"
+	dmretry "github.com/pingcap/tiflow/dm/pkg/retry"
+	cerror "github.com/pingcap/tiflow/pkg/errors"
 	v3rpc "go.etcd.io/etcd/api/v3/v3rpc/rpctypes"
 )
 
@@ -69,4 +72,44 @@ func IsRetryableEtcdError(err error) bool {
 	default:
 		return false
 	}
+}
+
+// IsRetryableDMLError check if the error is a retryable dml error.
+func IsRetryableDMLError(err error) bool {
+	if !cerror.IsRetryableError(err) {
+		return false
+	}
+	// Check if the error is connection errors that can retry safely.
+	if dmretry.IsConnectionError(err) {
+		return true
+	}
+	// Check if the error is a retriable TiDB error or MySQL error.
+	return dbutil.IsRetryableError(err)
+}
+
+// IsRetryableDDLError check if the error is a retryable ddl error.
+func IsRetryableDDLError(err error) bool {
+	if IsRetryableDMLError(err) {
+		return true
+	}
+	err = errors.Cause(err)
+	mysqlErr, ok := err.(*dmysql.MySQLError)
+	if !ok {
+		return false
+	}
+	// If the error is in the black list, return false.
+	switch mysqlErr.Number {
+	case mysql.ErrAccessDenied,
+		mysql.ErrDBaccessDenied,
+		mysql.ErrSyntax,
+		mysql.ErrParse,
+		mysql.ErrNoDB,
+		mysql.ErrNoSuchTable,
+		mysql.ErrNoSuchIndex,
+		mysql.ErrKeyColumnDoesNotExits,
+		mysql.ErrWrongColumnName,
+		mysql.ErrPartitionMgmtOnNonpartitioned:
+		return false
+	}
+	return true
 }

@@ -328,6 +328,9 @@ func (s *mysqlSink) EmitDDLEvent(ctx context.Context, ddl *model.DDLEvent) error
 	}
 	s.statistics.AddDDLCount()
 	err := s.execDDLWithMaxRetries(ctx, ddl)
+	if !errorutil.IsRetryableDDLError(err) {
+		return cerror.WrapChangefeedUnretryableErr(err)
+	}
 	return errors.Trace(err)
 }
 
@@ -338,14 +341,14 @@ func (s *mysqlSink) execDDLWithMaxRetries(ctx context.Context, ddl *model.DDLEve
 			log.Info("execute DDL failed, but error can be ignored", zap.String("query", ddl.Query), zap.Error(err))
 			return nil
 		}
-		if err != nil {
+		if err != nil && errorutil.IsRetryableDDLError(err) {
 			log.Warn("execute DDL with error, retry later", zap.String("query", ddl.Query), zap.Error(err))
 		}
 		return err
 	}, retry.WithBackoffBaseDelay(backoffBaseDelayInMs),
 		retry.WithBackoffMaxDelay(backoffMaxDelayInMs),
 		retry.WithMaxTries(defaultDDLMaxRetry),
-		retry.WithIsRetryableErr(cerror.IsRetryableError))
+		retry.WithIsRetryableErr(errorutil.IsRetryableDDLError))
 }
 
 func (s *mysqlSink) execDDL(pctx context.Context, ddl *model.DDLEvent) error {
