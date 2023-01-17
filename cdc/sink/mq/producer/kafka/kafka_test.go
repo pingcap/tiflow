@@ -178,7 +178,7 @@ func TestAdjustConfigTopicNotExist(t *testing.T) {
 	err = AdjustOptions(adminClient, options, "create-random2")
 	require.Nil(t, err)
 	expectedSaramaMaxMessageBytes = adminClient.GetBrokerMessageMaxBytes()
-	require.Equal(t, expectedSaramaMaxMessageBytes, saramaConfig.Producer.MaxMessageBytes)
+	require.Equal(t, expectedSaramaMaxMessageBytes, options.MaxMessageBytes)
 
 	// topic not exist, `max-message-bytes` < `message.max.bytes`
 	options.MaxMessageBytes = adminClient.GetBrokerMessageMaxBytes() - 1
@@ -187,7 +187,7 @@ func TestAdjustConfigTopicNotExist(t *testing.T) {
 	err = AdjustOptions(adminClient, options, "create-random3")
 	require.Nil(t, err)
 	expectedSaramaMaxMessageBytes = options.MaxMessageBytes
-	require.Equal(t, expectedSaramaMaxMessageBytes, saramaConfig.Producer.MaxMessageBytes)
+	require.Equal(t, expectedSaramaMaxMessageBytes, options.MaxMessageBytes)
 }
 
 func TestAdjustConfigTopicExist(t *testing.T) {
@@ -219,7 +219,7 @@ func TestAdjustConfigTopicExist(t *testing.T) {
 	require.Nil(t, err)
 
 	expectedSaramaMaxMessageBytes = adminClient.GetTopicMaxMessageBytes()
-	require.Equal(t, expectedSaramaMaxMessageBytes, saramaConfig.Producer.MaxMessageBytes)
+	require.Equal(t, expectedSaramaMaxMessageBytes, options.MaxMessageBytes)
 
 	// topic exists, `max-message-bytes` < `max.message.bytes`
 	options.MaxMessageBytes = adminClient.GetTopicMaxMessageBytes() - 1
@@ -263,7 +263,7 @@ func TestAdjustConfigTopicExist(t *testing.T) {
 	err = AdjustOptions(adminClient, options, topicName)
 	require.Nil(t, err)
 	expectedSaramaMaxMessageBytes = adminClient.GetBrokerMessageMaxBytes()
-	require.Equal(t, expectedSaramaMaxMessageBytes, saramaConfig.Producer.MaxMessageBytes)
+	require.Equal(t, expectedSaramaMaxMessageBytes, options.MaxMessageBytes)
 }
 
 func TestAdjustConfigMinInsyncReplicas(t *testing.T) {
@@ -703,7 +703,7 @@ func TestConfigurationCombinations(t *testing.T) {
 
 		expected, err := strconv.Atoi(a.expectedMaxMessageBytes)
 		require.Nil(t, err)
-		require.Equal(t, expected, saramaConfig.Producer.MaxMessageBytes)
+		require.Equal(t, expected, options.MaxMessageBytes)
 
 		_ = adminClient.Close()
 	}
