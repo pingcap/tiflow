@@ -18,7 +18,11 @@ import (
 
 	"github.com/Shopify/sarama"
 	"github.com/pingcap/errors"
+	"github.com/pingcap/log"
+	"github.com/pingcap/tiflow/cdc/model"
+	cerror "github.com/pingcap/tiflow/pkg/errors"
 	"github.com/rcrowley/go-metrics"
+	"go.uber.org/zap"
 )
 
 // Client is a generic Kafka client.
@@ -72,21 +76,15 @@ type AsyncProducer interface {
 	// Close on the underlying client.
 	Close() error
 
-	// Input is the input channel for the user to write messages to that they
+	// AsyncSend is the input channel for the user to write messages to that they
 	// wish to send.
-	Input() chan<- *sarama.ProducerMessage
+	AsyncSend(context.Context, string, int32, []byte, []byte, func()) error
 
-	// Successes is the success output channel back to the user when Return.Successes is
-	// enabled. If Return.Successes is true, you MUST read from this channel or the
-	// Producer will deadlock. It is suggested that you send and read messages
-	// together in a single select statement.
-	Successes() <-chan *sarama.ProducerMessage
-
-	// Errors is the error output channel back to the user. You MUST read from this
-	// channel or the Producer will deadlock when the channel is full. Alternatively,
-	// you can set Producer.Return.Errors in your config to false, which prevents
-	// errors to be returned.
-	Errors() <-chan *sarama.ProducerError
+	// AsyncCallbackRun is the func that process the callback logic
+	AsyncCallbackRun(ctx context.Context,
+		changefeedID model.ChangeFeedID,
+		closedChan chan struct{},
+		failpointCh chan error) error
 }
 
 type saramaKafkaClient struct {
@@ -174,18 +172,67 @@ func (p *saramaAsyncProducer) Close() error {
 	return p.producer.Close()
 }
 
-// Input is the input channel for the user to write messages to that they
+// AsyncSend is the input channel for the user to write messages to that they
 // wish to send.
-func (p *saramaAsyncProducer) Input() chan<- *sarama.ProducerMessage {
-	return p.producer.Input()
+func (p *saramaAsyncProducer) AsyncSend(ctx context.Context,
+	topic string,
+	partition int32,
+	key []byte,
+	value []byte,
+	callback func(),
+) error {
+	msg := &sarama.ProducerMessage{
+		Topic:     topic,
+		Partition: partition,
+		Key:       sarama.StringEncoder(key),
+		Value:     sarama.ByteEncoder(value),
+		Metadata:  callback,
+	}
+	select {
+	case <-ctx.Done():
+		return errors.Trace(ctx.Err())
+	case p.producer.Input() <- msg:
+	}
+	return nil
 }
 
-func (p *saramaAsyncProducer) Successes() <-chan *sarama.ProducerMessage {
-	return p.producer.Successes()
-}
-
-func (p *saramaAsyncProducer) Errors() <-chan *sarama.ProducerError {
-	return p.producer.Errors()
+func (p *saramaAsyncProducer) AsyncCallbackRun(ctx context.Context,
+	changefeedID model.ChangeFeedID,
+	closedChan chan struct{},
+	failpointCh chan error,
+) error {
+	for {
+		select {
+		case <-ctx.Done():
+			return errors.Trace(ctx.Err())
+		case <-closedChan:
+			return nil
+		case err := <-failpointCh:
+			log.Warn("Receive from failpoint chan in kafka "+
+				"DML producer",
+				zap.String("namespace", changefeedID.Namespace),
+				zap.String("changefeed", changefeedID.ID),
+				zap.Error(err))
+			return errors.Trace(err)
+		case ack := <-p.producer.Successes():
+			if ack != nil {
+				callback := ack.Metadata.(func())
+				if callback != nil {
+					callback()
+				}
+			}
+		case err := <-p.producer.Errors():
+			// We should not wrap a nil pointer if the pointer
+			// is of a subtype of `error` because Go would store the type info
+			// and the resulted `error` variable would not be nil,
+			// which will cause the pkg/error library to malfunction.
+			// See: https://go.dev/doc/faq#nil_error
+			if err == nil {
+				return nil
+			}
+			return cerror.WrapError(cerror.ErrKafkaAsyncSendMessage, err)
+		}
+	}
 }
 
 // ClientCreator defines the type of client crater.

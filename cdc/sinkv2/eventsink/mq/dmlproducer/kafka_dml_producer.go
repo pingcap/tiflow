@@ -18,14 +18,12 @@ import (
 	"sync"
 	"time"
 
-	"github.com/Shopify/sarama"
 	"github.com/pingcap/errors"
 	"github.com/pingcap/failpoint"
 	"github.com/pingcap/log"
 	"github.com/pingcap/tiflow/cdc/contextutil"
 	"github.com/pingcap/tiflow/cdc/model"
 	"github.com/pingcap/tiflow/cdc/sink/codec/common"
-	"github.com/pingcap/tiflow/cdc/sinkv2/eventsink"
 	collector "github.com/pingcap/tiflow/cdc/sinkv2/metrics/mq/kafka"
 	cerror "github.com/pingcap/tiflow/pkg/errors"
 	pkafka "github.com/pingcap/tiflow/pkg/sink/kafka"
@@ -34,11 +32,6 @@ import (
 )
 
 var _ DMLProducer = (*kafkaDMLProducer)(nil)
-
-// messageMetaData is used to store the callback function for the message.
-type messageMetaData struct {
-	callback eventsink.CallbackFunc
-}
 
 // kafkaDMLProducer is used to send messages to kafka.
 type kafkaDMLProducer struct {
@@ -115,7 +108,7 @@ func NewKafkaDMLProducer(
 	go k.collector.Run(ctx)
 
 	go func() {
-		if err := k.run(ctx); err != nil && errors.Cause(err) != context.Canceled {
+		if err := k.asyncProducer.AsyncCallbackRun(ctx, k.id, k.closedChan, k.failpointCh); err != nil && errors.Cause(err) != context.Canceled {
 			select {
 			case <-ctx.Done():
 				return
@@ -157,21 +150,8 @@ func (k *kafkaDMLProducer) AsyncSendMessage(
 		k.failpointCh <- errors.New("kafka sink injected error")
 		failpoint.Return(nil)
 	})
-
-	msg := &sarama.ProducerMessage{
-		Topic:     topic,
-		Partition: partition,
-		Key:       sarama.StringEncoder(message.Key),
-		Value:     sarama.ByteEncoder(message.Value),
-		Metadata:  messageMetaData{callback: message.Callback},
-	}
-
-	select {
-	case <-ctx.Done():
-		return errors.Trace(ctx.Err())
-	case k.asyncProducer.Input() <- msg:
-	}
-	return nil
+	return k.asyncProducer.AsyncSend(ctx, topic, partition,
+		message.Key, message.Value, message.Callback)
 }
 
 func (k *kafkaDMLProducer) Close() {
@@ -240,39 +220,4 @@ func (k *kafkaDMLProducer) Close() {
 		// Finally, close the metric collector.
 		k.collector.Close()
 	}()
-}
-
-func (k *kafkaDMLProducer) run(ctx context.Context) error {
-	for {
-		select {
-		case <-ctx.Done():
-			return errors.Trace(ctx.Err())
-		case <-k.closedChan:
-			return nil
-		case err := <-k.failpointCh:
-			log.Warn("Receive from failpoint chan in kafka "+
-				"DML producer",
-				zap.String("namespace", k.id.Namespace),
-				zap.String("changefeed", k.id.ID),
-				zap.Error(err))
-			return errors.Trace(err)
-		case ack := <-k.asyncProducer.Successes():
-			if ack != nil {
-				callback := ack.Metadata.(messageMetaData).callback
-				if callback != nil {
-					callback()
-				}
-			}
-		case err := <-k.asyncProducer.Errors():
-			// We should not wrap a nil pointer if the pointer
-			// is of a subtype of `error` because Go would store the type info
-			// and the resulted `error` variable would not be nil,
-			// which will cause the pkg/error library to malfunction.
-			// See: https://go.dev/doc/faq#nil_error
-			if err == nil {
-				return nil
-			}
-			return cerror.WrapError(cerror.ErrKafkaAsyncSendMessage, err)
-		}
-	}
 }
