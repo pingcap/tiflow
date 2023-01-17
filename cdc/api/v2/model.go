@@ -29,6 +29,11 @@ import (
 // EmptyResponse return empty {} to http client
 type EmptyResponse struct{}
 
+// LogLevelReq log level request
+type LogLevelReq struct {
+	Level string `json:"log_level"`
+}
+
 type ListResponse[T any] struct {
 	Total int `json:"total"`
 	Items []T `json:"items"`

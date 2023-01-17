@@ -15,6 +15,7 @@ package keyspan
 
 import (
 	"context"
+	"fmt"
 	"testing"
 
 	"github.com/pingcap/tiflow/cdc/model"
@@ -57,9 +58,8 @@ func TestSplitSpan(t *testing.T) {
 			regionPerSpan: 2,
 			span:          tablepb.Span{TableID: 1, StartKey: []byte("t1"), EndKey: []byte("t2")},
 			expectSpans: []tablepb.Span{
-				{TableID: 1, StartKey: []byte("t1"), EndKey: []byte("t1_2")},
-				{TableID: 1, StartKey: []byte("t1_2"), EndKey: []byte("t1_4")},
-				{TableID: 1, StartKey: []byte("t1_4"), EndKey: []byte("t2")},
+				{TableID: 1, StartKey: []byte("t1"), EndKey: []byte("t1_3")},
+				{TableID: 1, StartKey: []byte("t1_3"), EndKey: []byte("t2")},
 			},
 		},
 		{
@@ -87,10 +87,75 @@ func TestSplitSpan(t *testing.T) {
 	}
 
 	for i, cs := range cases {
-		cfg := &config.SchedulerConfig{RegionPerSpan: cs.regionPerSpan}
-		reconciler := NewReconciler(model.ChangeFeedID{}, cache, cfg.RegionPerSpan)
+		reconciler := NewReconciler(model.ChangeFeedID{}, cache, cs.regionPerSpan)
 		spans := reconciler.splitSpan(context.Background(), cs.span)
 		require.Equalf(t, cs.expectSpans, spans, "%d %s", i, &cs.span)
+	}
+}
+
+func TestEvenlySplitSpan(t *testing.T) {
+	t.Parallel()
+
+	cache := NewMockRegionCache()
+	totalRegion := 1000
+	for i := 0; i < totalRegion; i++ {
+		cache.regions.ReplaceOrInsert(tablepb.Span{
+			StartKey: []byte(fmt.Sprintf("t1_%09d", i)),
+			EndKey:   []byte(fmt.Sprintf("t1_%09d", i+1)),
+		}, uint64(i+1))
+	}
+
+	cases := []struct {
+		regionPerSpan  int
+		expectSpansMin int
+		expectSpansMax int
+	}{
+		{
+			regionPerSpan:  1,
+			expectSpansMin: 1,
+			expectSpansMax: 1,
+		},
+		{
+			regionPerSpan:  10,
+			expectSpansMin: 10,
+			expectSpansMax: 10,
+		},
+		{
+			regionPerSpan:  70,
+			expectSpansMin: 70,
+			expectSpansMax: 74,
+		},
+		{
+			regionPerSpan:  173,
+			expectSpansMin: 173,
+			expectSpansMax: 200,
+		},
+		{
+			regionPerSpan:  313,
+			expectSpansMin: 313,
+			expectSpansMax: 340,
+		},
+	}
+	for i, cs := range cases {
+		reconciler := NewReconciler(model.ChangeFeedID{}, cache, cs.regionPerSpan)
+		spans := reconciler.splitSpan(
+			context.Background(),
+			tablepb.Span{TableID: 1, StartKey: []byte("t1"), EndKey: []byte("t2")})
+		require.Equalf(t, totalRegion/cs.regionPerSpan, len(spans), "%d %v", i, cs)
+
+		for _, span := range spans {
+			start, end := 0, 1000
+			if len(span.StartKey) > len("t1") {
+				_, err := fmt.Sscanf(string(span.StartKey), "t1_%d", &start)
+				require.Nil(t, err, "%d %v %s", i, cs, span.StartKey)
+			}
+			if len(span.EndKey) > len("t2") {
+				_, err := fmt.Sscanf(string(span.EndKey), "t1_%d", &end)
+				require.Nil(t, err, "%d %v %s", i, cs, span.EndKey)
+			}
+			require.GreaterOrEqual(t, end-start, cs.expectSpansMin, "%d %v", i, cs)
+			require.LessOrEqual(t, end-start, cs.expectSpansMax, "%d %v", i, cs)
+		}
 	}
 }
 
