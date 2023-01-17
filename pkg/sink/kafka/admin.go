@@ -58,7 +58,7 @@ func (a *saramaAdminClient) GetAllBrokers() ([]Broker, error) {
 	return result, nil
 }
 
-func (a *saramaAdminClient) GetCoordinator() (int32, error) {
+func (a *saramaAdminClient) GetCoordinator(context.Context) (int32, error) {
 	_, controllerID, err := a.client.DescribeCluster()
 	if err != nil {
 		return 0, err
@@ -144,7 +144,7 @@ func (a *saramaAdminClient) GetTopicsMeta(
 	return result, nil
 }
 
-func (a *saramaAdminClient) CreateTopic(topic string, detail *TopicDetail, validateOnly bool) error {
+func (a *saramaAdminClient) CreateTopic(ctx context.Context, topic string, detail *TopicDetail, validateOnly bool) error {
 	err := a.client.CreateTopic(topic, &sarama.TopicDetail{
 		NumPartitions:     detail.NumPartitions,
 		ReplicationFactor: detail.ReplicationFactor,

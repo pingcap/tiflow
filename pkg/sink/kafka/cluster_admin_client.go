@@ -37,7 +37,7 @@ type ClusterAdminClient interface {
 	GetAllBrokers() ([]Broker, error)
 
 	// GetCoordinator return the coordinator's broker id of the cluster
-	GetCoordinator() (controllerID int32, err error)
+	GetCoordinator(ctx context.Context) (controllerID int32, err error)
 
 	// GetBrokerConfig return the broker level configuration with the `configName`
 	GetBrokerConfig(configName string) (string, error)
@@ -51,7 +51,7 @@ type ClusterAdminClient interface {
 	GetTopicsMeta(topics []string, ignoreTopicError bool) (map[string]TopicDetail, error)
 
 	// CreateTopic creates a new topic.
-	CreateTopic(topic string, detail *TopicDetail, validateOnly bool) error
+	CreateTopic(ctx context.Context, topic string, detail *TopicDetail, validateOnly bool) error
 
 	// Close shuts down the admin client.
 	Close() error

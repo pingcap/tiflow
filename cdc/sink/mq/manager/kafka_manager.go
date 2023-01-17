@@ -241,7 +241,7 @@ func (m *kafkaTopicManager) createTopic(topicName string) (int32, error) {
 	}
 
 	start := time.Now()
-	err = m.admin.CreateTopic(topicName, &kafka.TopicDetail{
+	err = m.admin.CreateTopic(nil, topicName, &kafka.TopicDetail{
 		NumPartitions:     m.cfg.PartitionNum,
 		ReplicationFactor: m.cfg.ReplicationFactor,
 	}, false)

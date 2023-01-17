@@ -14,6 +14,7 @@
 package kafka
 
 import (
+	"context"
 	"fmt"
 	"strconv"
 
@@ -105,7 +106,7 @@ func (c *ClusterAdminClientMockImpl) GetAllBrokers() ([]Broker, error) {
 }
 
 // GetCoordinator implement the ClusterAdminClient interface
-func (c *ClusterAdminClientMockImpl) GetCoordinator() (int32, error) {
+func (c *ClusterAdminClientMockImpl) GetCoordinator(context.Context) (int32, error) {
 	return c.controllerID, nil
 }
 
@@ -154,7 +155,7 @@ func (c *ClusterAdminClientMockImpl) GetTopicsMeta(
 }
 
 // CreateTopic adds topic into map.
-func (c *ClusterAdminClientMockImpl) CreateTopic(topic string, detail *TopicDetail, _ bool) error {
+func (c *ClusterAdminClientMockImpl) CreateTopic(ctx context.Context, topic string, detail *TopicDetail, validateOnly bool) error {
 	if detail.ReplicationFactor > defaultReplicationFactor {
 		return sarama.ErrInvalidReplicationFactor
 	}
