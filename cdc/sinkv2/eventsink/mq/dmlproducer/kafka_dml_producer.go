@@ -108,8 +108,7 @@ func NewKafkaDMLProducer(
 	go k.collector.Run(ctx)
 
 	go func() {
-		if err := k.asyncProducer.AsyncCallbackRun(ctx, k.id, k.closedChan,
-			k.failpointCh); err != nil && errors.Cause(err) != context.Canceled {
+		if err := k.run(ctx); err != nil && errors.Cause(err) != context.Canceled {
 			select {
 			case <-ctx.Done():
 				return
@@ -152,7 +151,7 @@ func (k *kafkaDMLProducer) AsyncSendMessage(
 		failpoint.Return(nil)
 	})
 	return k.asyncProducer.AsyncSend(ctx, topic, partition,
-		message.Key, message.Value, message.Callback)
+		message.Key, message.Value, k.closedChan, message.Callback)
 }
 
 func (k *kafkaDMLProducer) Close() {
@@ -221,4 +220,39 @@ func (k *kafkaDMLProducer) Close() {
 		// Finally, close the metric collector.
 		k.collector.Close()
 	}()
+}
+
+func (k *kafkaDMLProducer) run(ctx context.Context) error {
+	for {
+		select {
+		case <-ctx.Done():
+			return errors.Trace(ctx.Err())
+		case <-k.closedChan:
+			return nil
+		case err := <-k.failpointCh:
+			log.Warn("Receive from failpoint chan in kafka "+
+				"DML producer",
+				zap.String("namespace", k.id.Namespace),
+				zap.String("changefeed", k.id.ID),
+				zap.Error(err))
+			return errors.Trace(err)
+		case ack := <-k.asyncProducer.Successes():
+			if ack != nil {
+				callback := ack.Metadata.(func())
+				if callback != nil {
+					callback()
+				}
+			}
+		case err := <-k.asyncProducer.Errors():
+			// We should not wrap a nil pointer if the pointer
+			// is of a subtype of `error` because Go would store the type info
+			// and the resulted `error` variable would not be nil,
+			// which will cause the pkg/error library to malfunction.
+			// See: https://go.dev/doc/faq#nil_error
+			if err == nil {
+				return nil
+			}
+			return cerror.WrapError(cerror.ErrKafkaAsyncSendMessage, err)
+		}
+	}
 }

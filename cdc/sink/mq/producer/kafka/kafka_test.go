@@ -329,7 +329,7 @@ func TestCreateProducerFailed(t *testing.T) {
 
 func TestProducerSendMessageFailed(t *testing.T) {
 	topic := kafka.DefaultMockTopicName
-	ctx, cancel := context.WithTimeout(context.Background(), time.Second*100)
+	ctx, cancel := context.WithTimeout(context.Background(), time.Second*10)
 	defer cancel()
 
 	leader := sarama.NewMockBroker(t, 2)
