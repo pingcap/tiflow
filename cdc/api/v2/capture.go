@@ -18,7 +18,6 @@ import (
 
 	"github.com/gin-gonic/gin"
 	"github.com/pingcap/tiflow/cdc/api"
-	"github.com/pingcap/tiflow/cdc/api/middleware"
 	"github.com/pingcap/tiflow/cdc/model"
 	cerror "github.com/pingcap/tiflow/pkg/errors"
 )
@@ -27,10 +26,6 @@ const apiOpVarCaptureID = "capture_id"
 
 // drainCapture remove all tables at the given capture.
 func (h *OpenAPIV2) drainCapture(c *gin.Context) {
-	if !h.capture.IsOwner() {
-		middleware.ForwardToOwnerMiddleware(h.capture)(c)
-		return
-	}
 	captureID := c.Param(apiOpVarCaptureID)
 
 	ctx := c.Request.Context()
@@ -86,7 +81,7 @@ func (h *OpenAPIV2) drainCapture(c *gin.Context) {
 	c.JSON(http.StatusAccepted, resp)
 }
 
-// drainCapture remove all tables at the given capture.
+// listCaptures lists all captures
 func (h *OpenAPIV2) listCaptures(c *gin.Context) {
 	ctx := c.Request.Context()
 	captureInfos, err := h.capture.StatusProvider().GetCaptures(ctx)
