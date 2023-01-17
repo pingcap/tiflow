@@ -39,8 +39,6 @@ const (
 	LogEXT = ".log"
 	// MetaEXT is the meta file ext of meta file after safely wrote to disk
 	MetaEXT = ".meta"
-	// MetaTmpEXT is the meta file ext of meta file before safely wrote to disk
-	MetaTmpEXT = ".mtmp"
 	// SortLogEXT is the sorted log file ext of log file after safely wrote to disk
 	SortLogEXT = ".sort"
 
@@ -202,6 +200,9 @@ const (
 	// RedoLogFileFormatV2 is available since v6.1.0, which contains namespace information
 	// layout: captureID_namespace_changefeedID_fileType_maxEventCommitTs_uuid.fileExtName
 	RedoLogFileFormatV2 = "%s_%s_%s_%s_%d_%s%s"
+	// RedoMetaFileFormat is the format of redo meta file, which contains namespace information.
+	// layout: captureID_namespace_changefeedID_fileType_uuid.fileExtName
+	RedoMetaFileFormat = "%s_%s_%s_%s_%s%s"
 )
 
 // logFormat2ParseFormat converts redo log file name format to the space separated

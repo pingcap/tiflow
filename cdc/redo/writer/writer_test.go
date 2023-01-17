@@ -314,7 +314,7 @@ func TestLogWriterFlushLog(t *testing.T) {
 		mockStorage := mockstorage.NewMockExternalStorage(controller)
 		if tt.isRunning && tt.name != "context cancel" {
 			mockStorage.EXPECT().WriteFile(gomock.Any(),
-				"cp_test-cf_meta.meta",
+				"cp_default_test-cf_meta_uid.meta",
 				gomock.Any()).Return(nil).Times(1)
 		}
 		mockWriter := &mockFileWriter{}
@@ -333,11 +333,12 @@ func TestLogWriterFlushLog(t *testing.T) {
 			UseExternalStorage: true,
 		}
 		writer := logWriter{
-			cfg:        cfg,
-			rowWriter:  mockWriter,
-			ddlWriter:  mockWriter,
-			meta:       &common.LogMeta{},
-			extStorage: mockStorage,
+			cfg:           cfg,
+			uuidGenerator: uuid.NewConstGenerator("uid"),
+			rowWriter:     mockWriter,
+			ddlWriter:     mockWriter,
+			meta:          &common.LogMeta{},
+			extStorage:    mockStorage,
 		}
 
 		if tt.name == "context cancel" {
@@ -421,7 +422,7 @@ func TestNewLogWriter(t *testing.T) {
 		CaptureID:    "cp",
 		MaxLogSize:   10,
 	}
-	l, err := newLogWriter(ctx, cfg)
+	l, err := newLogWriter(ctx, cfg, WithUUIDGenerator(func() uuid.Generator { return uuidGen }))
 	require.Nil(t, err)
 	err = l.Close()
 	require.Nil(t, err)
@@ -435,7 +436,7 @@ func TestNewLogWriter(t *testing.T) {
 	_, err = f.Write(data)
 	require.Nil(t, err)
 
-	l, err = newLogWriter(ctx, cfg)
+	l, err = newLogWriter(ctx, cfg, WithUUIDGenerator(func() uuid.Generator { return uuidGen }))
 	require.Nil(t, err)
 	err = l.Close()
 	require.Nil(t, err)
