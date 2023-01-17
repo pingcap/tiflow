@@ -41,13 +41,13 @@ func createWorker(
 		&entry.MockMountGroup{}, sortEngine, make(chan error, 1), false)
 
 	// To avoid refund or release panics.
-	quota := newMemQuota(changefeedID, memQuota+1024*1024*1024)
+	quota := newMemQuota(changefeedID, memQuota+1024*1024*1024, "")
 	quota.forceAcquire(1024 * 1024 * 1024)
 	for _, tableID := range tableIDs {
 		quota.addTable(tableID)
 	}
 
-	return newSinkWorker(changefeedID, sm, quota, nil, splitTxn, false), sortEngine
+	return newSinkWorker(changefeedID, sm, quota, nil, nil, splitTxn, false), sortEngine
 }
 
 // nolint:unparam
@@ -423,7 +423,7 @@ func (suite *workerSuite) TestHandleTaskWithSplitTxnAndAbortWhenNoMemAndBlocked(
 		return len(sink.GetEvents()) == 2
 	}, 5*time.Second, 10*time.Millisecond)
 	// Abort the task when no memory quota and blocked.
-	w.memQuota.close()
+	w.sinkMemQuota.close()
 	cancel()
 	wg.Wait()
 	require.Len(suite.T(), sink.GetEvents(), 2, "Only two events should be sent to sink")

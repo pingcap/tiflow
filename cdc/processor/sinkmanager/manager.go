@@ -70,8 +70,6 @@ type SinkManager struct {
 	// redoProgressHeap is the heap of the table progress for redo.
 	redoProgressHeap *tableProgresses
 
-	// memQuota is used to control the total memory usage of the sink manager.
-	memQuota *memQuota
 	// eventCache caches events fetched from sort engine.
 	eventCache *redoEventCache
 	// redoManager is used to report the resolved ts of the table if redo log is enabled.
@@ -91,12 +89,16 @@ type SinkManager struct {
 	// sinkTaskChan is used to send tasks to sinkWorkers.
 	sinkTaskChan        chan *sinkTask
 	sinkWorkerAvailable chan struct{}
+	// sinkMemQuota is used to control the total memory usage of the table sink.
+	sinkMemQuota *memQuota
 
 	// redoWorkers used to pull data from source manager.
 	redoWorkers []*redoWorker
 	// redoTaskChan is used to send tasks to redoWorkers.
 	redoTaskChan        chan *redoTask
 	redoWorkerAvailable chan struct{}
+	// redoMemQuota is used to control the total memory usage of the redo.
+	redoMemQuota *memQuota
 
 	// wg is used to wait for all workers to exit.
 	wg sync.WaitGroup
@@ -133,7 +135,6 @@ func New(
 		ctx:           ctx,
 		cancel:        cancel,
 		up:            up,
-		memQuota:      newMemQuota(changefeedID, changefeedInfo.Config.MemoryQuota),
 		sinkFactory:   tableSinkFactory,
 		sourceManager: sourceManager,
 
@@ -151,8 +152,15 @@ func New(
 		m.redoWorkers = make([]*redoWorker, 0, redoWorkerNum)
 		m.redoTaskChan = make(chan *redoTask)
 		m.redoWorkerAvailable = make(chan struct{}, 1)
-		// Use 3/4 memory quota as redo event cache. A large value is helpful to cache hit ratio.
-		m.eventCache = newRedoEventCache(changefeedID, changefeedInfo.Config.MemoryQuota/4*3)
+
+		// Use 3/4 memory quota as redo quota, and 1/2 again for redo cache.
+		m.sinkMemQuota = newMemQuota(changefeedID, changefeedInfo.Config.MemoryQuota/4*1, "sink")
+		redoQuota := changefeedInfo.Config.MemoryQuota / 4 * 3
+		m.redoMemQuota = newMemQuota(changefeedID, redoQuota, "redo")
+		m.eventCache = newRedoEventCache(changefeedID, redoQuota/2*1)
+	} else {
+		m.sinkMemQuota = newMemQuota(changefeedID, changefeedInfo.Config.MemoryQuota, "sink")
+		m.redoMemQuota = newMemQuota(changefeedID, 0, "redo")
 	}
 
 	m.startWorkers(changefeedInfo.Config.Sink.TxnAtomicity.ShouldSplitTxn(), changefeedInfo.Config.EnableOldValue)
@@ -170,7 +178,8 @@ func New(
 // start all workers and report the error to the error channel.
 func (m *SinkManager) startWorkers(splitTxn bool, enableOldValue bool) {
 	for i := 0; i < sinkWorkerNum; i++ {
-		w := newSinkWorker(m.changefeedID, m.sourceManager, m.memQuota,
+		w := newSinkWorker(m.changefeedID, m.sourceManager,
+			m.sinkMemQuota, m.redoMemQuota,
 			m.eventCache, splitTxn, enableOldValue)
 		m.sinkWorkers = append(m.sinkWorkers, w)
 		m.wg.Add(1)
@@ -195,7 +204,7 @@ func (m *SinkManager) startWorkers(splitTxn bool, enableOldValue bool) {
 	}
 
 	for i := 0; i < redoWorkerNum; i++ {
-		w := newRedoWorker(m.changefeedID, m.sourceManager, m.memQuota,
+		w := newRedoWorker(m.changefeedID, m.sourceManager, m.redoMemQuota,
 			m.redoManager, m.eventCache, splitTxn, enableOldValue)
 		m.redoWorkers = append(m.redoWorkers, w)
 		m.wg.Add(1)
@@ -393,7 +402,7 @@ func (m *SinkManager) generateSinkTasks() error {
 			}
 
 			// No available memory, skip this round directly.
-			if !m.memQuota.tryAcquire(requestMemSize) {
+			if !m.sinkMemQuota.tryAcquire(requestMemSize) {
 				break LOOP
 			}
 
@@ -435,7 +444,7 @@ func (m *SinkManager) generateSinkTasks() error {
 					zap.Any("lowerBound", lowerBound),
 					zap.Any("currentUpperBound", upperBound))
 			default:
-				m.memQuota.refund(requestMemSize)
+				m.sinkMemQuota.refund(requestMemSize)
 				log.Debug("MemoryQuotaTracing: refund memory for table sink task",
 					zap.String("namespace", m.changefeedID.Namespace),
 					zap.String("changefeed", m.changefeedID.ID),
@@ -531,7 +540,7 @@ func (m *SinkManager) generateRedoTasks() error {
 			}
 
 			// No available memory, skip this round directly.
-			if !m.memQuota.tryAcquire(requestMemSize) {
+			if !m.redoMemQuota.tryAcquire(requestMemSize) {
 				break LOOP
 			}
 
@@ -573,7 +582,7 @@ func (m *SinkManager) generateRedoTasks() error {
 					zap.Any("lowerBound", lowerBound),
 					zap.Any("currentUpperBound", upperBound))
 			default:
-				m.memQuota.refund(requestMemSize)
+				m.redoMemQuota.refund(requestMemSize)
 				log.Debug("MemoryQuotaTracing: refund memory for redo log task",
 					zap.String("namespace", m.changefeedID.Namespace),
 					zap.String("changefeed", m.changefeedID.ID),
@@ -652,7 +661,8 @@ func (m *SinkManager) AddTable(tableID model.TableID, startTs model.Ts, targetTs
 			zap.Int64("tableID", tableID))
 		return
 	}
-	m.memQuota.addTable(tableID)
+	m.sinkMemQuota.addTable(tableID)
+	m.redoMemQuota.addTable(tableID)
 	log.Info("Add table sink",
 		zap.String("namespace", m.changefeedID.Namespace),
 		zap.String("changefeed", m.changefeedID.ID),
@@ -732,7 +742,8 @@ func (m *SinkManager) AsyncStopTable(tableID model.TableID) {
 				zap.Int64("tableID", tableID))
 		}
 		tableSink.(*tableSinkWrapper).close(m.ctx)
-		cleanedBytes := m.memQuota.clean(tableID)
+		cleanedBytes := m.sinkMemQuota.clean(tableID)
+		cleanedBytes += m.redoMemQuota.clean(tableID)
 		log.Debug("MemoryQuotaTracing: Clean up memory quota for table sink task when removing table",
 			zap.String("namespace", m.changefeedID.Namespace),
 			zap.String("changefeed", m.changefeedID.ID),
@@ -805,7 +816,8 @@ func (m *SinkManager) GetTableStats(tableID model.TableID) TableStats {
 	tableSink := value.(*tableSinkWrapper)
 
 	checkpointTs := tableSink.getCheckpointTs()
-	m.memQuota.release(tableID, checkpointTs)
+	m.sinkMemQuota.release(tableID, checkpointTs)
+	m.redoMemQuota.release(tableID, checkpointTs)
 
 	var resolvedTs model.Ts
 	// If redo log is enabled, we have to use redo log's resolved ts to calculate processor's min resolved ts.
@@ -844,7 +856,8 @@ func (m *SinkManager) Close() error {
 		m.cancel()
 		m.cancel = nil
 	}
-	m.memQuota.close()
+	m.sinkMemQuota.close()
+	m.redoMemQuota.close()
 	err := m.sinkFactory.Close()
 	if err != nil {
 		return errors.Trace(err)
