@@ -72,9 +72,9 @@ func TestNewSaramaProducer(t *testing.T) {
 	}()
 
 	ctx = contextutil.PutRoleInCtx(ctx, util.RoleTester)
-	saramaConfig, err := kafka.NewSaramaConfig(ctx, options)
+	options.MaxMessages = 1
+	_, err := kafka.NewSaramaConfig(ctx, options)
 	require.Nil(t, err)
-	saramaConfig.Producer.Flush.MaxMessages = 1
 	client, err := NewClientImpl(ctx, options)
 	require.Nil(t, err)
 	adminClient, err := NewAdminClientImpl(ctx, options)
