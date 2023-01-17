@@ -45,7 +45,7 @@ type memQuota struct {
 	// usedBytes is the memory usage of one changefeed.
 	usedBytes uint64
 	// tableMemory is the memory usage of each table.
-	tableMemory *spanz.Map[[]*memConsumeRecord]
+	tableMemory *spanz.HashMap[[]*memConsumeRecord]
 	// isClosed is used to indicate whether the mem quota is closed.
 	isClosed atomic.Bool
 
@@ -58,7 +58,7 @@ func newMemQuota(changefeedID model.ChangeFeedID, totalBytes uint64) *memQuota {
 		changefeedID: changefeedID,
 		totalBytes:   totalBytes,
 		usedBytes:    0,
-		tableMemory:  spanz.NewMap[[]*memConsumeRecord](),
+		tableMemory:  spanz.NewHashMap[[]*memConsumeRecord](),
 		metricTotal:  MemoryQuota.WithLabelValues(changefeedID.Namespace, changefeedID.ID, "total"),
 		metricUsed:   MemoryQuota.WithLabelValues(changefeedID.Namespace, changefeedID.ID, "used"),
 	}
@@ -229,7 +229,7 @@ func (m *memQuota) close() {
 	m.mu.Lock()
 	defer m.mu.Unlock()
 	// NOTE: m.usedBytes is not reset, because refund can still be called after closed.
-	m.tableMemory = spanz.NewMap[[]*memConsumeRecord]()
+	m.tableMemory = spanz.NewHashMap[[]*memConsumeRecord]()
 	m.metricUsed.Set(float64(0))
 	m.isClosed.Store(true)
 	m.blockAcquireCond.Broadcast()
