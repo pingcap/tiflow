@@ -410,7 +410,7 @@ func NewKafkaSaramaSink(ctx context.Context, sinkURI *url.URL,
 		}
 	}()
 
-	if err := kafka.AdjustOptions(adminClient, options, saramaConfig, topic); err != nil {
+	if err := kafka.AdjustOptions(adminClient, options, topic); err != nil {
 		return nil, cerror.WrapError(cerror.ErrKafkaNewSaramaProducer, err)
 	}
 
@@ -431,7 +431,7 @@ func NewKafkaSaramaSink(ctx context.Context, sinkURI *url.URL,
 		return nil, cerror.WrapError(cerror.ErrKafkaInvalidConfig, err)
 	}
 
-	client, err := kafka.NewClientImpl(options.BrokerEndpoints, saramaConfig)
+	client, err := kafka.NewClientImpl(ctx, options)
 	if err != nil {
 		return nil, cerror.WrapError(cerror.ErrKafkaNewSaramaProducer, err)
 	}
@@ -454,7 +454,6 @@ func NewKafkaSaramaSink(ctx context.Context, sinkURI *url.URL,
 		client,
 		adminClient,
 		options,
-		saramaConfig,
 		errCh,
 		changefeedID,
 	)
