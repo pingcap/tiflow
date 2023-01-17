@@ -29,6 +29,11 @@ import (
 // EmptyResponse return empty {} to http client
 type EmptyResponse struct{}
 
+// LogLevelReq log level request
+type LogLevelReq struct {
+	Level string `json:"log_level"`
+}
+
 // Tso contains timestamp get from PD
 type Tso struct {
 	Timestamp int64 `json:"timestamp"`
