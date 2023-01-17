@@ -92,8 +92,10 @@ type processor struct {
 	createTablePipeline func(
 		ctx cdcContext.Context, span tablepb.Span, replicaInfo *model.TableReplicaInfo,
 	) (tablepb.TablePipeline, error)
-	newAgent func(cdcContext.Context, *model.Liveness) (scheduler.Agent, error)
-	cfg      *config.SchedulerConfig
+	newAgent func(
+		cdcContext.Context, *model.Liveness, *config.SchedulerConfig,
+	) (scheduler.Agent, error)
+	cfg *config.SchedulerConfig
 
 	liveness *model.Liveness
 	agent    scheduler.Agent
@@ -880,7 +882,7 @@ func (p *processor) lazyInitImpl(ctx cdcContext.Context) error {
 			zap.Duration("duration", time.Since(start)))
 	}
 
-	p.agent, err = p.newAgent(ctx, p.liveness)
+	p.agent, err = p.newAgent(ctx, p.liveness, p.cfg)
 	if err != nil {
 		return err
 	}
@@ -894,13 +896,12 @@ func (p *processor) lazyInitImpl(ctx cdcContext.Context) error {
 }
 
 func (p *processor) newAgentImpl(
-	ctx cdcContext.Context, liveness *model.Liveness,
+	ctx cdcContext.Context, liveness *model.Liveness, cfg *config.SchedulerConfig,
 ) (ret scheduler.Agent, err error) {
 	messageServer := ctx.GlobalVars().MessageServer
 	messageRouter := ctx.GlobalVars().MessageRouter
 	etcdClient := ctx.GlobalVars().EtcdClient
 	captureID := ctx.GlobalVars().CaptureInfo.ID
-	cfg := config.GetGlobalServerConfig().Debug.Scheduler
 	ret, err = scheduler.NewAgent(
 		ctx, captureID, liveness,
 		messageServer, messageRouter, etcdClient, p, p.changefeedID, cfg)
