@@ -72,12 +72,13 @@ func TestProducerAck(t *testing.T) {
 	defer leader.Close()
 
 	options := getOptions(leader.Addr())
+	options.MaxMessages = 1
 
 	errCh := make(chan error, 1)
 	ctx, cancel := context.WithCancel(context.Background())
-	saramaConfig, err := kafka.NewSaramaConfig(context.Background(), options)
+	config, err := kafka.NewSaramaConfig(context.Background(), options)
 	require.Nil(t, err)
-	saramaConfig.Producer.Flush.MaxMessages = 1
+	require.Equal(t, 1, config.Producer.Flush.MaxMessages)
 
 	client, err := kafka.NewSaramaClient(ctx, options)
 	require.Nil(t, err)
