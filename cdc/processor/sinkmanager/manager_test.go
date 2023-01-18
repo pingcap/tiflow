@@ -188,7 +188,7 @@ func TestRemoveTable(t *testing.T) {
 
 	// Check all the events are sent to sink and record the memory usage.
 	require.Eventually(t, func() bool {
-		return manager.memQuota.getUsedBytes() == 872
+		return manager.sinkMemQuota.getUsedBytes() == 872
 	}, 5*time.Second, 10*time.Millisecond)
 
 	manager.AsyncStopTable(tableID)
@@ -202,7 +202,7 @@ func TestRemoveTable(t *testing.T) {
 
 	_, ok = manager.tableSinks.Load(tableID)
 	require.False(t, ok)
-	require.Equal(t, uint64(0), manager.memQuota.getUsedBytes(), "After remove table, the memory usage should be 0.")
+	require.Equal(t, uint64(0), manager.sinkMemQuota.getUsedBytes(), "After remove table, the memory usage should be 0.")
 }
 
 func TestUpdateBarrierTs(t *testing.T) {
@@ -304,7 +304,7 @@ func TestGetTableStatsToReleaseMemQuota(t *testing.T) {
 
 	require.Eventually(t, func() bool {
 		s := manager.GetTableStats(tableID)
-		return manager.memQuota.getUsedBytes() == 0 && s.CheckpointTs == 4
+		return manager.sinkMemQuota.getUsedBytes() == 0 && s.CheckpointTs == 4
 	}, 5*time.Second, 10*time.Millisecond)
 }
 
@@ -322,7 +322,7 @@ func TestDoNotGenerateTableSinkTaskWhenTableIsNotReplicating(t *testing.T) {
 	manager.UpdateBarrierTs(4)
 	manager.UpdateReceivedSorterResolvedTs(tableID, 5)
 
-	require.Equal(t, uint64(0), manager.memQuota.getUsedBytes())
+	require.Equal(t, uint64(0), manager.sinkMemQuota.getUsedBytes())
 	tableSink, ok := manager.tableSinks.Load(tableID)
 	require.True(t, ok)
 	require.NotNil(t, tableSink)

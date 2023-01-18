@@ -25,7 +25,7 @@ import (
 func TestMemQuotaTryAcquire(t *testing.T) {
 	t.Parallel()
 
-	m := newMemQuota(model.DefaultChangeFeedID("1"), 100)
+	m := newMemQuota(model.DefaultChangeFeedID("1"), 100, "")
 	defer m.close()
 
 	require.True(t, m.tryAcquire(50))
@@ -36,7 +36,7 @@ func TestMemQuotaTryAcquire(t *testing.T) {
 func TestMemQuotaForceAcquire(t *testing.T) {
 	t.Parallel()
 
-	m := newMemQuota(model.DefaultChangeFeedID("1"), 100)
+	m := newMemQuota(model.DefaultChangeFeedID("1"), 100, "")
 	defer m.close()
 
 	require.True(t, m.tryAcquire(100))
@@ -48,7 +48,7 @@ func TestMemQuotaForceAcquire(t *testing.T) {
 func TestMemQuotaBlockAcquire(t *testing.T) {
 	t.Parallel()
 
-	m := newMemQuota(model.DefaultChangeFeedID("1"), 100)
+	m := newMemQuota(model.DefaultChangeFeedID("1"), 100, "")
 	defer m.close()
 	err := m.blockAcquire(100)
 	require.NoError(t, err)
@@ -76,7 +76,7 @@ func TestMemQuotaBlockAcquire(t *testing.T) {
 func TestMemQuotaClose(t *testing.T) {
 	t.Parallel()
 
-	m := newMemQuota(model.DefaultChangeFeedID("1"), 100)
+	m := newMemQuota(model.DefaultChangeFeedID("1"), 100, "")
 
 	err := m.blockAcquire(100)
 	require.NoError(t, err)
@@ -121,7 +121,7 @@ func TestMemQuotaClose(t *testing.T) {
 func TestMemQuotaRefund(t *testing.T) {
 	t.Parallel()
 
-	m := newMemQuota(model.DefaultChangeFeedID("1"), 100)
+	m := newMemQuota(model.DefaultChangeFeedID("1"), 100, "")
 	defer m.close()
 
 	require.True(t, m.tryAcquire(50))
@@ -145,7 +145,7 @@ func TestMemQuotaRefund(t *testing.T) {
 func TestMemQuotaHasAvailable(t *testing.T) {
 	t.Parallel()
 
-	m := newMemQuota(model.DefaultChangeFeedID("1"), 100)
+	m := newMemQuota(model.DefaultChangeFeedID("1"), 100, "")
 	defer m.close()
 
 	require.True(t, m.hasAvailable(100))
@@ -156,7 +156,7 @@ func TestMemQuotaHasAvailable(t *testing.T) {
 func TestMemQuotaRecordAndRelease(t *testing.T) {
 	t.Parallel()
 
-	m := newMemQuota(model.DefaultChangeFeedID("1"), 300)
+	m := newMemQuota(model.DefaultChangeFeedID("1"), 300, "")
 	defer m.close()
 	m.addTable(1)
 
@@ -185,7 +185,7 @@ func TestMemQuotaRecordAndRelease(t *testing.T) {
 func TestMemQuotaRecordAndReleaseWithBatchID(t *testing.T) {
 	t.Parallel()
 
-	m := newMemQuota(model.DefaultChangeFeedID("1"), 300)
+	m := newMemQuota(model.DefaultChangeFeedID("1"), 300, "")
 	defer m.close()
 	m.addTable(1)
 
@@ -229,7 +229,7 @@ func TestMemQuotaRecordAndReleaseWithBatchID(t *testing.T) {
 func TestMemQuotaRecordAndClean(t *testing.T) {
 	t.Parallel()
 
-	m := newMemQuota(model.DefaultChangeFeedID("1"), 300)
+	m := newMemQuota(model.DefaultChangeFeedID("1"), 300, "")
 	defer m.close()
 	m.addTable(1)
 
