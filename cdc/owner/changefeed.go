@@ -39,6 +39,7 @@ import (
 	"github.com/pingcap/tiflow/pkg/upstream"
 	"github.com/prometheus/client_golang/prometheus"
 	"github.com/tikv/client-go/v2/oracle"
+	"go.uber.org/atomic"
 	"go.uber.org/zap"
 )
 
@@ -122,7 +123,7 @@ type changefeed struct {
 	metricsChangefeedTickDuration   prometheus.Observer
 
 	downstreamObserver observer.Observer
-	observerLastTick   time.Time
+	observerLastTick   *atomic.Time
 
 	newDDLPuller func(ctx context.Context,
 		replicaConfig *config.ReplicaConfig,
@@ -416,15 +417,9 @@ func (c *changefeed) tick(ctx cdcContext.Context, captures map[model.CaptureID]*
 		}
 	})
 
-	if time.Since(c.observerLastTick) > downstreamObserverTickDuration {
-		if err := c.downstreamObserver.Tick(ctx); err != nil {
-			log.Error("backend observer tick error", zap.Error(err))
-		}
-		c.observerLastTick = time.Now()
-	}
-
 	c.updateStatus(newCheckpointTs, newResolvedTs)
 	c.updateMetrics(currentTs, newCheckpointTs, metricsResolvedTs)
+	c.tickDownstreamObserver(ctx)
 
 	return nil
 }
@@ -558,6 +553,7 @@ LOOP:
 	if err != nil {
 		return err
 	}
+	c.observerLastTick = atomic.NewTime(time.Time{})
 
 	stdCtx := contextutil.PutChangefeedIDInCtx(cancelCtx, c.id)
 	redoManagerOpts := redo.NewOwnerManagerOptions(c.errCh)
@@ -1040,4 +1036,19 @@ func (c *changefeed) checkUpstream() (skip bool, err error) {
 		return true, nil
 	}
 	return
+}
+
+// tickDownstreamObserver checks whether needs to trigger tick of downstream
+// observer, if needed run it in an independent goroutine with 5s timeout.
+func (c *changefeed) tickDownstreamObserver(ctx context.Context) {
+	if time.Since(c.observerLastTick.Load()) > downstreamObserverTickDuration {
+		go func() {
+			cctx, cancel := context.WithTimeout(ctx, time.Second*5)
+			defer cancel()
+			if err := c.downstreamObserver.Tick(cctx); err != nil {
+				log.Error("backend observer tick error", zap.Error(err))
+			}
+			c.observerLastTick.Store(time.Now())
+		}()
+	}
 }
