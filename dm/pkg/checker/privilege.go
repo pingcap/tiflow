@@ -203,12 +203,16 @@ func verifyPrivileges(result *Result, grants []string, lackPriv map[mysql.Privil
 						if priv == mysql.GrantPriv {
 							continue
 						}
+						// in this old release branch, we don't have a flag that mark a privilege is global level.
+						// we use `deleted` to avoid delete a global level privilege when processing AllPriv.
+						deleted := false
 						for dbName := range lackPriv[priv] {
 							if stringutil.DoMatch(dbName, dbPatChar, dbPatType) {
 								delete(lackPriv[priv], dbName)
 							}
+							deleted = true
 						}
-						if len(lackPriv[priv]) == 0 {
+						if deleted && len(lackPriv[priv]) == 0 {
 							delete(lackPriv, priv)
 						}
 					}
