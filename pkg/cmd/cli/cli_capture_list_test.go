@@ -30,14 +30,9 @@ import (
 
 type mockAPIV1Client struct {
 	apiv1client.APIV1Interface
-	captures    apiv2client.CaptureInterface
 	changefeeds apiv1client.ChangefeedInterface
 	processor   apiv1client.ProcessorInterface
 	status      apiv2client.StatusInterface
-}
-
-func (f *mockAPIV1Client) Captures() apiv2client.CaptureInterface {
-	return f.captures
 }
 
 func (f *mockAPIV1Client) Processors() apiv1client.ProcessorInterface {
@@ -53,6 +48,7 @@ type mockAPIV2Client struct {
 	tso         apiv2client.TsoInterface
 	changefeeds apiv2client.ChangefeedInterface
 	unsafes     apiv2client.UnsafeInterface
+	captures    apiv2client.CaptureInterface
 }
 
 func (f *mockAPIV2Client) Changefeeds() apiv2client.ChangefeedInterface {
@@ -65,6 +61,10 @@ func (f *mockAPIV2Client) Tso() apiv2client.TsoInterface {
 
 func (f *mockAPIV2Client) Unsafe() apiv2client.UnsafeInterface {
 	return f.unsafes
+}
+
+func (f *mockAPIV2Client) Captures() apiv2client.CaptureInterface {
+	return f.captures
 }
 
 type mockFactory struct {
@@ -100,7 +100,6 @@ func newMockFactory(ctrl *gomock.Controller) *mockFactory {
 
 func (f *mockFactory) APIV1Client() (apiv1client.APIV1Interface, error) {
 	return &mockAPIV1Client{
-		captures:    f.captures,
 		changefeeds: f.changefeeds,
 		status:      f.status,
 		processor:   f.processor,
@@ -109,6 +108,7 @@ func (f *mockFactory) APIV1Client() (apiv1client.APIV1Interface, error) {
 
 func (f *mockFactory) APIV2Client() (apiv2client.APIV2Interface, error) {
 	return &mockAPIV2Client{
+		captures:    f.captures,
 		changefeeds: f.changefeedsv2,
 		tso:         f.tso,
 		unsafes:     f.unsafes,
