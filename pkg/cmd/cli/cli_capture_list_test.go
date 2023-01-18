@@ -33,7 +33,7 @@ type mockAPIV1Client struct {
 	captures    apiv1client.CaptureInterface
 	changefeeds apiv1client.ChangefeedInterface
 	processor   apiv1client.ProcessorInterface
-	status      apiv1client.StatusInterface
+	status      apiv2client.StatusInterface
 }
 
 func (f *mockAPIV1Client) Captures() apiv1client.CaptureInterface {
@@ -72,7 +72,7 @@ type mockFactory struct {
 	captures    *mock.MockCaptureInterface
 	changefeeds *mock.MockChangefeedInterface
 	processor   *mock.MockProcessorInterface
-	status      *mock.MockStatusInterface
+	status      *v2mock.MockStatusInterface
 
 	changefeedsv2 *v2mock.MockChangefeedInterface
 	tso           *v2mock.MockTsoInterface
@@ -83,7 +83,7 @@ func newMockFactory(ctrl *gomock.Controller) *mockFactory {
 	cps := mock.NewMockCaptureInterface(ctrl)
 	processor := mock.NewMockProcessorInterface(ctrl)
 	cf := mock.NewMockChangefeedInterface(ctrl)
-	status := mock.NewMockStatusInterface(ctrl)
+	status := v2mock.NewMockStatusInterface(ctrl)
 	unsafes := v2mock.NewMockUnsafeInterface(ctrl)
 	tso := v2mock.NewMockTsoInterface(ctrl)
 	cfv2 := v2mock.NewMockChangefeedInterface(ctrl)

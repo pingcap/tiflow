@@ -43,6 +43,10 @@ func RegisterOpenAPIV2Routes(router *gin.Engine, api OpenAPIV2) {
 	v2.Use(middleware.LogMiddleware())
 	v2.Use(middleware.ErrorHandleMiddleware())
 
+	v2.GET("health", api.health)
+	v2.GET("status", api.serverStatus)
+	v2.POST("log", api.setLogLevel)
+
 	// changefeed apis
 	changefeedGroup := v2.Group("/changefeeds")
 	changefeedGroup.Use(middleware.ForwardToOwnerMiddleware(api.capture))
@@ -51,6 +55,11 @@ func RegisterOpenAPIV2Routes(router *gin.Engine, api OpenAPIV2) {
 	changefeedGroup.DELETE("/:changefeed_id", api.deleteChangefeed)
 	changefeedGroup.GET("/:changefeed_id/meta_info", api.getChangeFeedMetaInfo)
 	changefeedGroup.POST("/:changefeed_id/resume", api.resumeChangefeed)
+	changefeedGroup.POST("/:changefeed_id/pause", api.pauseChangefeed)
+
+	// capture apis
+	captureGroup := v2.Group("/captures")
+	captureGroup.POST("/:capture_id/drain", api.drainCapture)
 
 	verifyTableGroup := v2.Group("/verify_table")
 	verifyTableGroup.Use(middleware.ForwardToOwnerMiddleware(api.capture))
@@ -62,6 +71,11 @@ func RegisterOpenAPIV2Routes(router *gin.Engine, api OpenAPIV2) {
 	unsafeGroup.GET("/metadata", api.CDCMetaData)
 	unsafeGroup.POST("/resolve_lock", api.ResolveLock)
 	unsafeGroup.DELETE("/service_gc_safepoint", api.DeleteServiceGcSafePoint)
+
+	// owner apis
+	ownerGroup := v2.Group("/owner")
+	unsafeGroup.Use(middleware.ForwardToOwnerMiddleware(api.capture))
+	ownerGroup.POST("/resign", api.resignOwner)
 
 	// common APIs
 	v2.POST("/tso", api.QueryTso)
