@@ -62,7 +62,7 @@ type topicDetail struct {
 type ClusterAdminClientMockImpl struct {
 	topics map[string]*topicDetail
 	// Cluster controller ID.
-	controllerID  int32
+	controllerID  int
 	brokerConfigs map[string]string
 }
 
