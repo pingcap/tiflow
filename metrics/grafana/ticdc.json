@@ -666,7 +666,7 @@
           "dashes": false,
           "datasource": "${DS_TEST-CLUSTER}",
           "decimals": 1,
-          "description": "The min resolved ts of each TiKV",
+          "description": "The min resolved ts lag of each TiKV",
           "editable": true,
           "error": false,
           "fieldConfig": {
@@ -5203,7 +5203,7 @@
           "dashLength": 10,
           "dashes": false,
           "datasource": "${DS_TEST-CLUSTER}",
-          "description": "The number of events that sorter outputs to puller \n per second",
+          "description": "The number of events that sorter outputs to mounter(or table sink worker) per second",
           "fieldConfig": {
             "defaults": {
               "links": []
@@ -6485,9 +6485,9 @@
           "targets": [
             {
               "exemplar": true,
-              "expr": "ticdc_sinkmanager_memory_quota{k8s_cluster=\"$k8s_cluster\", tidb_cluster=\"$tidb_cluster\", changefeed=~\"$changefeed\", instance=~\"$ticdc_instance\"}",
+              "expr": "ticdc_sinkmanager_memory_quota{k8s_cluster=\"$k8s_cluster\", tidb_cluster=\"$tidb_cluster\", changefeed=~\"$changefeed\", component!=\"\", instance=~\"$ticdc_instance\"}",
               "interval": "",
-              "legendFormat": "{{changefeed}}-{{instance}}-memory-{{type}}",
+              "legendFormat": "{{changefeed}}-{{instance}}-memory-{{component}}-{{type}}",
               "refId": "A"
             },
             {
@@ -7598,7 +7598,7 @@
           "dashLength": 10,
           "dashes": false,
           "datasource": "${DS_TEST-CLUSTER}",
-          "description": "Sink worker busy ratio",
+          "description": "Distribution of flush transaction duration to backend",
           "fieldConfig": {
             "defaults": {},
             "overrides": []
