@@ -74,6 +74,11 @@ func RegisterOpenAPIV2Routes(router *gin.Engine, api OpenAPIV2) {
 	unsafeGroup.POST("/resolve_lock", api.ResolveLock)
 	unsafeGroup.DELETE("/service_gc_safepoint", api.DeleteServiceGcSafePoint)
 
+	// owner apis
+	ownerGroup := v2.Group("/owner")
+	unsafeGroup.Use(middleware.ForwardToOwnerMiddleware(api.capture))
+	ownerGroup.POST("/resign", api.resignOwner)
+
 	// common APIs
 	v2.POST("/tso", api.QueryTso)
 }
