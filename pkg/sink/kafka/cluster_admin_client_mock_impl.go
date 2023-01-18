@@ -92,7 +92,7 @@ func NewClusterAdminClientMockImpl() *ClusterAdminClientMockImpl {
 }
 
 // GetAllTopicsMeta returns all topics directly.
-func (c *ClusterAdminClientMockImpl) GetAllTopicsMeta() (map[string]TopicDetail, error) {
+func (c *ClusterAdminClientMockImpl) GetAllTopicsMeta(context.Context) (map[string]TopicDetail, error) {
 	topicsDetailsMap := make(map[string]TopicDetail)
 	for topic, detail := range c.topics {
 		topicsDetailsMap[topic] = detail.TopicDetail
@@ -106,12 +106,12 @@ func (c *ClusterAdminClientMockImpl) GetAllBrokers(context.Context) ([]Broker, e
 }
 
 // GetCoordinator implement the ClusterAdminClient interface
-func (c *ClusterAdminClientMockImpl) GetCoordinator(context.Context) (int32, error) {
+func (c *ClusterAdminClientMockImpl) GetCoordinator(context.Context) (int, error) {
 	return c.controllerID, nil
 }
 
 // GetBrokerConfig implement the ClusterAdminClient interface
-func (c *ClusterAdminClientMockImpl) GetBrokerConfig(configName string) (string, error) {
+func (c *ClusterAdminClientMockImpl) GetBrokerConfig(ctx context.Context, configName string) (string, error) {
 	value, ok := c.brokerConfigs[configName]
 	if !ok {
 		return "", errors.ErrKafkaBrokerConfigNotFound.GenWithStack(
@@ -136,10 +136,7 @@ func (c *ClusterAdminClientMockImpl) SetRemainingFetchesUntilTopicVisible(
 }
 
 // GetTopicsMeta implement the ClusterAdminClient interface
-func (c *ClusterAdminClientMockImpl) GetTopicsMeta(
-	topics []string,
-	_ bool,
-) (map[string]TopicDetail, error) {
+func (c *ClusterAdminClientMockImpl) GetTopicsMeta(ctx context.Context, topics []string, ignoreTopicError bool) (map[string]TopicDetail, error) {
 	result := make(map[string]TopicDetail, len(topics))
 	for _, topic := range topics {
 		details, ok := c.topics[topic]

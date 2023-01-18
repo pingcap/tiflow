@@ -15,8 +15,10 @@ package v2
 
 import (
 	"context"
+	"strconv"
 
 	"github.com/pingcap/log"
+	"github.com/pingcap/tiflow/pkg/errors"
 	pkafka "github.com/pingcap/tiflow/pkg/sink/kafka"
 	"github.com/segmentio/kafka-go"
 	"go.uber.org/zap"
@@ -38,10 +40,25 @@ func NewClusterAdminClient(ctx context.Context, endpoints []string) *admin {
 }
 
 func (a *admin) clusterMetadata(ctx context.Context) (*kafka.MetadataResponse, error) {
-	return a.client.Metadata(ctx, &kafka.MetadataRequest{
+	result, err := a.client.Metadata(ctx, &kafka.MetadataRequest{
 		Addr:   a.client.Addr,
 		Topics: []string{},
 	})
+	if err != nil {
+		return nil, errors.Trace(err)
+	}
+	return result, nil
+}
+
+func (a *admin) topicsMetadata(ctx context.Context, topics []string) (*kafka.MetadataResponse, error) {
+	result, err := a.client.Metadata(ctx, &kafka.MetadataRequest{
+		Addr:   a.client.Addr,
+		Topics: topics,
+	})
+	if err != nil {
+		return nil, errors.Trace(err)
+	}
+	return result, nil
 }
 
 func (a *admin) GetAllBrokers(ctx context.Context) ([]pkafka.Broker, error) {
@@ -59,110 +76,111 @@ func (a *admin) GetAllBrokers(ctx context.Context) ([]pkafka.Broker, error) {
 	return result, nil
 }
 
-func (a *admin) GetCoordinator(ctx context.Context) (int32, error) {
+func (a *admin) GetCoordinator(ctx context.Context) (int, error) {
 	response, err := a.clusterMetadata(ctx)
 	if err != nil {
 		return 0, err
 	}
 
-	return int32(response.Controller.ID), nil
+	return response.Controller.ID, nil
 }
 
-func (a *admin) GetBrokerConfig(configName string) (string, error) {
-	//var resources []kafka.DescribeConfigRequestResource
-	//resources = append(resources, resource)
-	//request := &kafka.DescribeConfigsRequest{
-	//	Addr:      a.client.Addr,
-	//	Resources: resources,
-	//}
-	//
-	//response, err := a.client.DescribeConfigs(ctx, request)
-	//if err != nil {
-	//	return nil, err
-	//}
-	//
-	//var entries []configEntry
-	//for _, respResource := range response.Resources {
-	//	if respResource.ResourceName == resource.ResourceName {
-	//		if respResource.Error != nil {
-	//			// todo: wrap this into a cdc rfc error.
-	//			return nil, respResource.Error
-	//		}
-	//		for _, entry := range respResource.ConfigEntries {
-	//			entries = append(entries, configEntry{
-	//				Name:  entry.ConfigName,
-	//				Value: entry.ConfigValue,
-	//			})
-	//		}
-	//	}
-	//}
-	//
-	//return entries, nil
-	return "", nil
-}
-
-func (a *admin) GetAllTopicsMeta() (map[string]pkafka.TopicDetail, error) {
-	request := &kafka.DescribeConfigsRequest{
-		Addr:      a.client.Addr,
-		Resources: nil,
+func (a *admin) GetBrokerConfig(ctx context.Context, configName string) (string, error) {
+	controllerID, err := a.GetCoordinator(ctx)
+	if err != nil {
+		return "", err
 	}
-	//resp, err := a.client.DescribeConfigs(ctx,
-	//	&kafka.DescribeConfigsRequest{
-	//		Addr:      a.client.Addr,
-	//		Resources: []kafka.DescribeConfigRequestResource{{}},
-	//	})
-	//describeResp, err := client.DescribeConfigs(context.Background(), &DescribeConfigsRequest{
-	//	Resources: []DescribeConfigRequestResource{{
-	//		ResourceType: ResourceTypeTopic,
-	//		ResourceName: topic,
-	//		ConfigNames:  []string{MaxMessageBytes},
-	//	}},
-	//})
-	//
-	//if err != nil {
-	//	t.Fatal(err)
-	//}
-	//
-	//maxMessageBytesValue := "0"
-	//for _, resource := range describeResp.Resources {
-	//	if resource.ResourceType == int8(ResourceTypeTopic) && resource.ResourceName == topic {
-	//		for _, entry := range resource.ConfigEntries {
-	//			if entry.ConfigName == MaxMessageBytes {
-	//				maxMessageBytesValue = entry.ConfigValue
-	//			}
-	//		}
-	//	}
-	//}
-	//assert.Equal(t, maxMessageBytesValue, MaxMessageBytesValue)
+	request := &kafka.DescribeConfigsRequest{
+		Addr: a.client.Addr,
+		Resources: []kafka.DescribeConfigRequestResource{
+			{
+				ResourceType: kafka.ResourceTypeBroker,
+				ResourceName: strconv.Itoa(controllerID),
+				ConfigNames:  []string{configName},
+			},
+		},
+	}
+
+	resp, err := a.client.DescribeConfigs(ctx, request)
+	if err != nil {
+		return "", err
+	}
+
+	if len(resp.Resources) == 0 || resp.Resources[0].ConfigEntries[0].ConfigName != configName {
+		log.Warn("kafka config item not found",
+			zap.String("configName", configName))
+		return "", errors.ErrKafkaBrokerConfigNotFound.GenWithStack(
+			"cannot find the `%s` from the broker's configuration", configName)
+	}
+
+	return resp.Resources[0].ConfigEntries[0].ConfigValue, nil
+}
+
+func (a *admin) GetAllTopicsMeta(ctx context.Context) (map[string]pkafka.TopicDetail, error) {
+	response, err := a.clusterMetadata(ctx)
+	if err != nil {
+		return nil, errors.Trace(err)
+	}
+
+	describeTopicConfigsRequest := &kafka.DescribeConfigsRequest{
+		Addr:      a.client.Addr,
+		Resources: []kafka.DescribeConfigRequestResource{},
+	}
+	result := make(map[string]pkafka.TopicDetail, len(response.Topics))
+	for _, topic := range response.Topics {
+		result[topic.Name] = pkafka.TopicDetail{
+			Name:              topic.Name,
+			NumPartitions:     int32(len(topic.Partitions)),
+			ReplicationFactor: int16(len(topic.Partitions[0].Replicas)),
+		}
+		describeTopicConfigsRequest.Resources = append(describeTopicConfigsRequest.Resources,
+			kafka.DescribeConfigRequestResource{
+				ResourceType: kafka.ResourceTypeTopic,
+				ResourceName: topic.Name,
+			})
+	}
+
+	describeTopicConfigsResponse, err := a.client.DescribeConfigs(ctx, describeTopicConfigsRequest)
+	if err != nil {
+		return nil, errors.Trace(err)
+	}
+	for _, resource := range describeTopicConfigsResponse.Resources {
+		topicDetails, ok := result[resource.ResourceName]
+		if !ok {
+			return nil, errors.New("undesired topic found from the response")
+		}
+		topicDetails.ConfigEntries = make(map[string]string, len(resource.ConfigEntries))
+		for _, entry := range resource.ConfigEntries {
+			if entry.IsDefault || entry.IsSensitive {
+				continue
+			}
+			topicDetails.ConfigEntries[entry.ConfigName] = entry.ConfigValue
+		}
+		result[resource.ResourceName] = topicDetails
+	}
+
 	return nil, nil
 }
 
-func (a *admin) GetTopicsMeta(topics []string, ignoreTopicError bool) (map[string]pkafka.TopicDetail, error) {
-	var resources []kafka.DescribeConfigRequestResource
-	for _, topic := range topics {
-		resources = append(resources, kafka.DescribeConfigRequestResource{
-			ResourceType: kafka.ResourceTypeTopic,
-			ResourceName: topic,
-		})
-	}
-
-	request := &kafka.DescribeConfigsRequest{
-		Resources: resources,
-	}
-
-	response, err := a.client.DescribeConfigs(ctx, request)
+func (a *admin) GetTopicsMeta(ctx context.Context, topics []string, ignoreTopicError bool) (map[string]pkafka.TopicDetail, error) {
+	resp, err := a.topicsMetadata(ctx, topics)
 	if err != nil {
-		return nil, err
+		return nil, errors.Trace(err)
 	}
 
-	var result []string
-	for _, resp := range response.Resources {
-		if resp.Error != nil {
-			log.Warn("describe topic failed",
-				zap.Error(err))
-			return nil, err
+	result := make(map[string]pkafka.TopicDetail, len(resp.Topics))
+	for _, topic := range resp.Topics {
+		if topic.Error != nil {
+			if !ignoreTopicError {
+				return nil, errors.Trace(topic.Error)
+			}
+			log.Warn("fetch topic meta failed",
+				zap.String("topic", topic.Name), zap.Error(topic.Error))
 		}
-		result = append(result, resp.ResourceName)
+		result[topic.Name] = pkafka.TopicDetail{
+			Name:          topic.Name,
+			NumPartitions: int32(len(topic.Partitions)),
+		}
 	}
 	return result, nil
 }
@@ -179,54 +197,21 @@ func (a *admin) CreateTopic(ctx context.Context, topic string, detail *pkafka.To
 	}
 
 	response, err := a.client.CreateTopics(ctx, request)
+	// todo: also check if the topic already exist.
 	if err != nil {
-		return err
+		return errors.Trace(err)
 	}
 
 	for _, err := range response.Errors {
 		if err != nil {
-			return err
+			return errors.Trace(err)
 		}
 	}
 
 	return nil
 }
 
-//func (a *admin) DescribeCluster(ctx context.Context) (brokers []pkafka.Broker, controllerID int32, err error) {
-//	return nil, 0, nil
-//	//controller, err := a.client.Controller(ctx)
-//	//return nil, 0, nil
-//
-//	// to create topics when auto.create.topics.enable='false'
-//	//topic := "my-topic"
-//	//
-//	//
-//	//controller, err := conn.Controller()
-//	//if err != nil {
-//	//	panic(err.Error())
-//	//}
-//	//var controllerConn *kafka.Conn
-//	//controllerConn, err = kafka.Dial("tcp", net.JoinHostPort(controller.Host, strconv.Itoa(controller.Port)))
-//	//if err != nil {
-//	//	panic(err.Error())
-//	//}
-//	//defer controllerConn.Close()
-//	//
-//	//
-//	//topicConfigs := []kafka.TopicConfig{
-//	//	{
-//	//		Topic:             topic,
-//	//		NumPartitions:     1,
-//	//		ReplicationFactor: 1,
-//	//	},
-//	//}
-//	//
-//	//err = controllerConn.CreateTopics(topicConfigs...)
-//	//if err != nil {
-//	//	panic(err.Error())
-//	//}
-//}
-
 func (a *admin) Close() error {
+	// todo: how to close the underline client to release network resources ?
 	return nil
 }

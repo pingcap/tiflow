@@ -58,15 +58,15 @@ func (a *saramaAdminClient) GetAllBrokers(context.Context) ([]Broker, error) {
 	return result, nil
 }
 
-func (a *saramaAdminClient) GetCoordinator(context.Context) (int32, error) {
+func (a *saramaAdminClient) GetCoordinator(context.Context) (int, error) {
 	_, controllerID, err := a.client.DescribeCluster()
 	if err != nil {
 		return 0, err
 	}
-	return controllerID, nil
+	return int(controllerID), nil
 }
 
-func (a *saramaAdminClient) GetBrokerConfig(configName string) (string, error) {
+func (a *saramaAdminClient) GetBrokerConfig(ctx context.Context, configName string) (string, error) {
 	_, controller, err := a.client.DescribeCluster()
 	if err != nil {
 		return "", err
@@ -90,7 +90,7 @@ func (a *saramaAdminClient) GetBrokerConfig(configName string) (string, error) {
 	return configEntries[0].Value, nil
 }
 
-func (a *saramaAdminClient) GetAllTopicsMeta() (map[string]TopicDetail, error) {
+func (a *saramaAdminClient) GetAllTopicsMeta(context.Context) (map[string]TopicDetail, error) {
 	topics, err := a.client.ListTopics()
 	if err != nil {
 		return nil, err
@@ -115,10 +115,7 @@ func (a *saramaAdminClient) GetAllTopicsMeta() (map[string]TopicDetail, error) {
 	return result, nil
 }
 
-func (a *saramaAdminClient) GetTopicsMeta(
-	topics []string,
-	ignoreTopicError bool,
-) (map[string]TopicDetail, error) {
+func (a *saramaAdminClient) GetTopicsMeta(ctx context.Context, topics []string, ignoreTopicError bool) (map[string]TopicDetail, error) {
 	metaList, err := a.client.DescribeTopics(topics)
 	if err != nil {
 		return nil, err

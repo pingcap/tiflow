@@ -372,7 +372,7 @@ func AdjustConfig(
 	saramaConfig *sarama.Config,
 	topic string,
 ) error {
-	topics, err := admin.GetAllTopicsMeta()
+	topics, err := admin.GetAllTopicsMeta(nil)
 	if err != nil {
 		return errors.Trace(err)
 	}
@@ -417,7 +417,7 @@ func AdjustConfig(
 		return nil
 	}
 
-	brokerMessageMaxBytesStr, err := admin.GetBrokerConfig(kafka.BrokerMessageMaxBytesConfigName)
+	brokerMessageMaxBytesStr, err := admin.GetBrokerConfig(nil, kafka.BrokerMessageMaxBytesConfigName)
 	if err != nil {
 		log.Warn("TiCDC cannot find `message.max.bytes` from broker's configuration")
 		return errors.Trace(err)
@@ -464,7 +464,7 @@ func validateMinInsyncReplicas(
 			return minInsyncReplicasStr, true, nil
 		}
 
-		minInsyncReplicasStr, err := admin.GetBrokerConfig(kafka.MinInsyncReplicasConfigName)
+		minInsyncReplicasStr, err := admin.GetBrokerConfig(nil, kafka.MinInsyncReplicasConfigName)
 		if err != nil {
 			return "", false, err
 		}
@@ -518,5 +518,5 @@ func getTopicConfig(
 		return a, nil
 	}
 
-	return admin.GetBrokerConfig(brokerConfigName)
+	return admin.GetBrokerConfig(nil, brokerConfigName)
 }
