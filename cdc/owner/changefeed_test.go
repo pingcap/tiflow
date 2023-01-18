@@ -35,11 +35,8 @@ import (
 	cdcContext "github.com/pingcap/tiflow/pkg/context"
 	"github.com/pingcap/tiflow/pkg/etcd"
 	"github.com/pingcap/tiflow/pkg/orchestrator"
-<<<<<<< HEAD
 	"github.com/pingcap/tiflow/pkg/pdutil"
-=======
 	"github.com/pingcap/tiflow/pkg/sink/observer"
->>>>>>> 9a5ba7681b (mysql(ticdc): add mysql backend performance metrics observer (#8050))
 	"github.com/pingcap/tiflow/pkg/txnutil/gc"
 	"github.com/pingcap/tiflow/pkg/upstream"
 	"github.com/stretchr/testify/require"

@@ -32,11 +32,8 @@ import (
 	cerror "github.com/pingcap/tiflow/pkg/errors"
 	"github.com/pingcap/tiflow/pkg/etcd"
 	"github.com/pingcap/tiflow/pkg/orchestrator"
-<<<<<<< HEAD
 	"github.com/pingcap/tiflow/pkg/pdutil"
-=======
 	"github.com/pingcap/tiflow/pkg/sink/observer"
->>>>>>> 9a5ba7681b (mysql(ticdc): add mysql backend performance metrics observer (#8050))
 	"github.com/pingcap/tiflow/pkg/txnutil/gc"
 	"github.com/pingcap/tiflow/pkg/upstream"
 	"github.com/pingcap/tiflow/pkg/version"
@@ -67,16 +64,10 @@ func newOwner4Test(
 		changefeed model.ChangeFeedID,
 	) (puller.DDLPuller, error),
 	newSink func(changefeedID model.ChangeFeedID, info *model.ChangeFeedInfo, reportErr func(err error)) DDLSink,
-<<<<<<< HEAD
 	newScheduler func(ctx cdcContext.Context, pdClock pdutil.Clock) (scheduler.Scheduler, error),
-=======
-	newScheduler func(
-		ctx cdcContext.Context, up *upstream.Upstream, cfg *config.SchedulerConfig,
-	) (scheduler.Scheduler, error),
 	newDownstreamObserver func(
 		ctx context.Context, sinkURIStr string, replCfg *config.ReplicaConfig,
 	) (observer.Observer, error),
->>>>>>> 9a5ba7681b (mysql(ticdc): add mysql backend performance metrics observer (#8050))
 	pdClient pd.Client,
 ) Owner {
 	m := upstream.NewManager4Test(pdClient)
