@@ -25,8 +25,8 @@
 // channels. For example, in Go, to create a buffered or unbuffered
 // channel, one uses built-in function `make` to create a channel:
 //
-// 	ch := make(chan int)     // unbuffered channel
-// 	ch := make(chan int, 42) // or buffered channel
+//	ch := make(chan int)     // unbuffered channel
+//	ch := make(chan int, 42) // or buffered channel
 //
 // However, all these channels have a finite capacity for caching, and
 // it is impossible to create a channel with unlimited capacity, namely,
@@ -35,15 +35,15 @@
 // This package provides the ability to create all possible types of
 // channels. To create an unbuffered or a buffered channel:
 //
-// 	ch := chann.New[int](chann.Cap(0))  // unbuffered channel
-// 	ch := chann.New[int](chann.Cap(42)) // or buffered channel
+//	ch := chann.New[int](chann.Cap(0))  // unbuffered channel
+//	ch := chann.New[int](chann.Cap(42)) // or buffered channel
 //
 // More importantly, when the capacity of the channel is unspecified,
 // or provided as negative values, the created channel is an unbounded
 // channel:
 //
-// 	ch := chann.New[int]()               // unbounded channel
-// 	ch := chann.New[int](chann.Cap(-42)) // or unbounded channel
+//	ch := chann.New[int]()               // unbounded channel
+//	ch := chann.New[int](chann.Cap(-42)) // or unbounded channel
 //
 // Furthermore, all channels provides methods to send (In()),
 // receive (Out()), and close (Close()).
@@ -112,9 +112,9 @@ type Chann[T any] struct {
 // By default, or without specification, the function returns an unbounded
 // channel which has unlimited capacity.
 //
-// 	ch := chann.New[float64]()
-// 	// or
-//  ch := chann.New[float64](chann.Cap(-1))
+//		ch := chann.New[float64]()
+//		// or
+//	 ch := chann.New[float64](chann.Cap(-1))
 //
 // If the chann.Cap specified a non-negative integer, the returned channel
 // is either unbuffered (0) or buffered (positive).

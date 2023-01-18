@@ -22,6 +22,7 @@ import (
 	"github.com/pingcap/log"
 	"github.com/pingcap/tiflow/proto/p2p"
 	"go.uber.org/zap"
+	"google.golang.org/grpc"
 	"google.golang.org/grpc/codes"
 	gRPCPeer "google.golang.org/grpc/peer"
 	"google.golang.org/grpc/status"
@@ -52,16 +53,23 @@ func (w *streamWrapper) Context() context.Context {
 type ServerWrapper struct {
 	rwMu        sync.RWMutex
 	innerServer p2p.CDCPeerToPeerServer
+	cfg         *MessageServerConfig
 
 	wrappedStreamsMu sync.Mutex
 	wrappedStreams   map[*streamWrapper]struct{}
 }
 
 // NewServerWrapper creates a new ServerWrapper
-func NewServerWrapper() *ServerWrapper {
+func NewServerWrapper(cfg *MessageServerConfig) *ServerWrapper {
 	return &ServerWrapper{
 		wrappedStreams: map[*streamWrapper]struct{}{},
+		cfg:            cfg,
 	}
+}
+
+// ServerOptions returns server option for creating grpc servers.
+func (s *ServerWrapper) ServerOptions() []grpc.ServerOption {
+	return []grpc.ServerOption{grpc.MaxRecvMsgSize(s.cfg.MaxRecvMsgSize)}
 }
 
 // SendMessage implements p2p.CDCPeerToPeerServer

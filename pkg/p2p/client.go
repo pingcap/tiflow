@@ -54,6 +54,8 @@ type MessageClientConfig struct {
 	// The version of the client for compatibility check.
 	// It should be in semver format. Empty string means no check.
 	ClientVersion string
+	// MaxRecvMsgSize is the maximum message size in bytes TiCDC can receive.
+	MaxRecvMsgSize int
 }
 
 // MessageClient is a client used to send peer messages.
@@ -140,10 +142,11 @@ func (c *MessageClient) Run(
 		}
 
 		gRPCClient, release, err := c.connector.Connect(clientConnectOptions{
-			network:    network,
-			addr:       addr,
-			credential: credential,
-			timeout:    c.config.DialTimeout,
+			network:        network,
+			addr:           addr,
+			credential:     credential,
+			timeout:        c.config.DialTimeout,
+			maxRecvMsgSize: c.config.MaxRecvMsgSize,
 		})
 		if err != nil {
 			log.Warn("peer-message client: failed to connect to server",

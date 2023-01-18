@@ -53,6 +53,7 @@ const (
 	defaultSafeMode            = false
 	defaultTxnIsolationRC      = "READ-COMMITTED"
 	defaultCharacterSet        = "utf8mb4"
+	defaultBatchDMLEnable      = true
 )
 
 var (
@@ -70,6 +71,7 @@ var defaultParams = &sinkParams{
 	writeTimeout:        defaultWriteTimeout,
 	dialTimeout:         defaultDialTimeout,
 	safeMode:            defaultSafeMode,
+	batchDMLEnable:      defaultBatchDMLEnable,
 }
 
 var validSchemes = map[string]bool{
@@ -94,6 +96,7 @@ type sinkParams struct {
 	safeMode            bool
 	timezone            string
 	tls                 string
+	batchDMLEnable      bool
 }
 
 func (s *sinkParams) Clone() *sinkParams {
@@ -252,6 +255,15 @@ func parseSinkURIToParams(ctx context.Context,
 			return nil, cerror.WrapError(cerror.ErrMySQLInvalidConfig, err)
 		}
 		params.dialTimeout = s
+	}
+
+	s = sinkURI.Query().Get("batch-dml-enable")
+	if s != "" {
+		enable, err := strconv.ParseBool(s)
+		if err != nil {
+			return nil, cerror.WrapError(cerror.ErrMySQLInvalidConfig, err)
+		}
+		params.batchDMLEnable = enable
 	}
 
 	return params, nil

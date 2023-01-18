@@ -26,17 +26,6 @@ import (
 	"github.com/gin-gonic/gin"
 	"github.com/pingcap/errors"
 	"github.com/pingcap/log"
-
-	"github.com/prometheus/client_golang/prometheus"
-	"go.etcd.io/etcd/client/pkg/v3/logutil"
-	clientv3 "go.etcd.io/etcd/client/v3"
-	"go.uber.org/zap"
-	"go.uber.org/zap/zapcore"
-	"golang.org/x/net/netutil"
-	"golang.org/x/sync/errgroup"
-	"google.golang.org/grpc"
-	"google.golang.org/grpc/backoff"
-
 	"github.com/pingcap/tiflow/cdc/capture"
 	"github.com/pingcap/tiflow/cdc/kv"
 	"github.com/pingcap/tiflow/cdc/sorter/unified"
@@ -48,6 +37,15 @@ import (
 	"github.com/pingcap/tiflow/pkg/p2p"
 	"github.com/pingcap/tiflow/pkg/tcpserver"
 	p2pProto "github.com/pingcap/tiflow/proto/p2p"
+	"github.com/prometheus/client_golang/prometheus"
+	"go.etcd.io/etcd/client/pkg/v3/logutil"
+	clientv3 "go.etcd.io/etcd/client/v3"
+	"go.uber.org/zap"
+	"go.uber.org/zap/zapcore"
+	"golang.org/x/net/netutil"
+	"golang.org/x/sync/errgroup"
+	"google.golang.org/grpc"
+	"google.golang.org/grpc/backoff"
 )
 
 const (
@@ -99,9 +97,10 @@ func NewServer(pdEndpoints []string) (*Server, error) {
 		return nil, errors.Trace(err)
 	}
 
+	debugConfig := config.GetGlobalServerConfig().Debug
 	s := &Server{
 		pdEndpoints: pdEndpoints,
-		grpcService: p2p.NewServerWrapper(),
+		grpcService: p2p.NewServerWrapper(debugConfig.Messages.ToMessageServerConfig()),
 		tcpServer:   tcpServer,
 	}
 
@@ -273,7 +272,7 @@ func (s *Server) run(ctx context.Context) (err error) {
 
 	conf := config.GetGlobalServerConfig()
 	if conf.Debug.EnableNewScheduler {
-		grpcServer := grpc.NewServer()
+		grpcServer := grpc.NewServer(s.grpcService.ServerOptions()...)
 		p2pProto.RegisterCDCPeerToPeerServer(grpcServer, s.grpcService)
 
 		wg.Go(func() error {

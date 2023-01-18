@@ -136,7 +136,8 @@ const (
       "client-retry-rate-limit": 1,
       "server-max-pending-message-count": 102400,
       "server-ack-interval": 100000000,
-      "server-worker-pool-size": 4
+      "server-worker-pool-size": 4,
+      "max-recv-msg-size": 268435456
     }
   }
 }`
@@ -156,8 +157,9 @@ const (
     "worker-num": 3
   },
   "sink": {
-    "dispatchers": null,
+    "transaction-atomicity": "",
     "protocol": "open-protocol",
+    "dispatchers": null,
     "column-selectors": [
       {
         "matcher": [
@@ -170,7 +172,6 @@ const (
       }
     ],
     "schema-registry": "",
-    "transaction-atomicity": "",
     "encoder-concurrency": 16
   },
   "cyclic-replication": {

@@ -116,13 +116,14 @@ func newGenerator(flavor, version string, serverID uint32, latestPos uint32, lat
 
 // GenFileHeader generates a binlog file header, including to PreviousGTIDsEvent/MariadbGTIDListEvent.
 // for MySQL:
-//   1. BinLogFileHeader, [ fe `bin` ]
-//   2. FormatDescriptionEvent
-//   3. PreviousGTIDsEvent
+//  1. BinLogFileHeader, [ fe `bin` ]
+//  2. FormatDescriptionEvent
+//  3. PreviousGTIDsEvent
+//
 // for MariaDB:
-//   1. BinLogFileHeader, [ fe `bin` ]
-//   2. FormatDescriptionEvent
-//   3. MariadbGTIDListEvent
+//  1. BinLogFileHeader, [ fe `bin` ]
+//  2. FormatDescriptionEvent
+//  3. MariadbGTIDListEvent
 func (g *Generator) GenFileHeader(ts int64) ([]*replication.BinlogEvent, []byte, error) {
 	events, data, err := GenCommonFileHeader(g.Flavor, g.ServerID, g.ExecutedGTIDs, g.GenGTID, ts)
 	if err != nil {

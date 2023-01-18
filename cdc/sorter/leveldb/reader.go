@@ -127,7 +127,7 @@ func (r *reader) outputBufferedResolvedEvents(buffer *outputBuffer) {
 	buffer.shiftResolvedEvents(remainIdx)
 
 	// If all buffered resolved events are sent, send its resolved ts too.
-	if lastCommitTs != 0 && !hasRemainEvents {
+	if lastCommitTs != 0 && !hasRemainEvents && !buffer.partialReadTxn {
 		r.outputResolvedTs(lastCommitTs)
 	}
 }
@@ -138,16 +138,12 @@ func (r *reader) outputBufferedResolvedEvents(buffer *outputBuffer) {
 // later, and appends resolved events to outputBuffer resolvedEvents to send
 // them later.
 //
-// It returns:
-//   * a bool to indicate whether it has read the last Next or not.
-//   * an uint64, if it is not 0, it means all resolved events before the ts
-//     are outputted.
-//   * an error if it occurs.
+// It returns a new read position.
 //
 // Note: outputBuffer must be empty.
 func (r *reader) outputIterEvents(
-	iter db.Iterator, hasReadLastNext bool, buffer *outputBuffer, resolvedTs uint64,
-) (bool, uint64, error) {
+	iter db.Iterator, position readPosition, buffer *outputBuffer, resolvedTs uint64,
+) (readPosition, error) {
 	lenResolvedEvents, lenDeleteKeys := buffer.len()
 	if lenDeleteKeys > 0 || lenResolvedEvents > 0 {
 		log.Panic("buffer is not empty",
@@ -159,7 +155,7 @@ func (r *reader) outputIterEvents(
 	commitTs := uint64(0)
 	start := time.Now()
 	lastNext := start
-	if hasReadLastNext {
+	if position.iterHasRead {
 		// We have read the last key/value, move the Next.
 		iter.Next()
 		r.metricIterNextDuration.Observe(time.Since(start).Seconds())
@@ -172,12 +168,12 @@ func (r *reader) outputIterEvents(
 		lastNext = now
 
 		if iter.Error() != nil {
-			return false, 0, errors.Trace(iter.Error())
+			return readPosition{}, errors.Trace(iter.Error())
 		}
 		event := new(model.PolymorphicEvent)
 		_, err := r.serde.Unmarshal(event, iter.Value())
 		if err != nil {
-			return false, 0, errors.Trace(err)
+			return readPosition{}, errors.Trace(err)
 		}
 		if commitTs > event.CRTs || commitTs > resolvedTs {
 			log.Panic("event commit ts regression",
@@ -190,7 +186,14 @@ func (r *reader) outputIterEvents(
 		}
 		// Read all resolved events that have the same commit ts.
 		if commitTs == event.CRTs {
-			buffer.appendResolvedEvent(event)
+			ok := buffer.tryAppendResolvedEvent(event)
+			if !ok {
+				// append fails and buffer is full, we need to flush buffer to
+				// prevent OOM.
+				// It means we have not read value in to buffer after calling Next.
+				hasReadNext = false
+				break
+			}
 			continue
 		}
 
@@ -200,14 +203,14 @@ func (r *reader) outputIterEvents(
 		lenResolvedEvents, _ = buffer.len()
 		if lenResolvedEvents > 0 {
 			// Output blocked, skip append new event.
-			// This means we have not read Next.
+			// It means we have not read value in to buffer after calling Next.
 			hasReadNext = false
 			break
 		}
 
 		// Append new event to the buffer.
 		commitTs = event.CRTs
-		buffer.appendResolvedEvent(event)
+		buffer.tryAppendResolvedEvent(event)
 	}
 	elapsed := time.Since(start)
 	r.metricIterReadDuration.Observe(elapsed.Seconds())
@@ -219,30 +222,55 @@ func (r *reader) outputIterEvents(
 	// Try shrink buffer to release memory.
 	buffer.maybeShrink()
 
-	// All resolved events whose commit ts are less or equal to the commitTs
-	// have read into buffer.
-	exhaustedResolvedTs := commitTs
-	if !hasNext {
-		// Iter is exhausted, it means resolved events whose commit ts are
-		// less or equal to the commitTs have read into buffer.
-		if resolvedTs != 0 {
-			exhaustedResolvedTs = resolvedTs
+	newPos := readPosition{
+		iterHasRead: hasReadNext,
+	}
+	if !buffer.partialReadTxn {
+		// All resolved events whose commit ts are less or equal to the commitTs
+		// have read into buffer.
+		newPos.exhaustedResolvedTs = commitTs
+		if !hasNext {
+			// Iter is exhausted, it means resolved events whose commit ts are
+			// less or equal to the commitTs have read into buffer.
+			if resolvedTs != 0 {
+				newPos.exhaustedResolvedTs = resolvedTs
+			}
 		}
+	} else {
+		// Copy current iter key to position.
+		newPos.partialTxnKey = append([]byte{}, iter.Key()...)
 	}
 
-	return hasReadNext, exhaustedResolvedTs, nil
+	return newPos, nil
 }
 
-// TODO: inline the struct to reader.
+type readPosition struct {
+	// A flag to mark whether the current position has been read.
+	iterHasRead bool
+	// partialTxnKey is set when a transaction is partially read.
+	partialTxnKey []byte
+	// All resolved events before the resolved ts are read into buffer.
+	exhaustedResolvedTs uint64
+}
+
+func (r *readPosition) update(position readPosition) {
+	if position.exhaustedResolvedTs > r.exhaustedResolvedTs {
+		r.exhaustedResolvedTs = position.exhaustedResolvedTs
+	}
+	r.iterHasRead = position.iterHasRead
+	r.partialTxnKey = position.partialTxnKey
+}
+
 type pollState struct {
 	// Buffer for resolved events and to-be-deleted events.
 	outputBuf *outputBuffer
+	// The position of a reader.
+	position readPosition
+
 	// The maximum commit ts for all events.
 	maxCommitTs uint64
 	// The maximum commit ts for all resolved ts events.
 	maxResolvedTs uint64
-	// All resolved events before the resolved ts are read into buffer.
-	exhaustedResolvedTs uint64
 
 	// ID and router of the reader itself.
 	readerID     actor.ID
@@ -263,8 +291,6 @@ type pollState struct {
 	// An iterator for reading resolved events, up to the `iterResolvedTs`.
 	iter           *message.LimitedIterator
 	iterResolvedTs uint64
-	// A flag to mark whether the current position has been read.
-	iterHasRead bool
 
 	metricIterFirst   prometheus.Observer
 	metricIterRelease prometheus.Observer
@@ -285,8 +311,8 @@ func (state *pollState) hasResolvedEvents() bool {
 	// exhaustedResolvedTs
 	//                     maxResolvedTs
 	//                                   maxCommitTs
-	if state.exhaustedResolvedTs < state.maxCommitTs &&
-		state.exhaustedResolvedTs < state.maxResolvedTs {
+	if state.position.exhaustedResolvedTs < state.maxCommitTs &&
+		state.position.exhaustedResolvedTs < state.maxResolvedTs {
 		return true
 	}
 
@@ -331,7 +357,7 @@ func (state *pollState) tryGetIterator(uid uint32, tableID uint64) (*message.Ite
 		readerID := state.readerID
 		return &message.IterRequest{
 			Range: [2][]byte{
-				encoding.EncodeTsKey(uid, tableID, state.exhaustedResolvedTs+1),
+				encoding.EncodeTsKey(uid, tableID, state.position.exhaustedResolvedTs+1),
 				encoding.EncodeTsKey(uid, tableID, state.maxResolvedTs+1),
 			},
 			ResolvedTs: state.maxResolvedTs,
@@ -358,8 +384,8 @@ func (state *pollState) tryGetIterator(uid uint32, tableID uint64) (*message.Ite
 		start := time.Now()
 		state.iterAliveTime = start
 		state.iterResolvedTs = iter.ResolvedTs
-		state.iterHasRead = false
-		state.iter.Seek(encoding.EncodeTsKey(uid, tableID, 0))
+		state.position.iterHasRead = false
+		state.iter.Seek(state.position.partialTxnKey)
 		duration := time.Since(start)
 		state.metricIterFirst.Observe(duration.Seconds())
 		if duration >= state.iterFirstSlowDuration {
@@ -373,19 +399,19 @@ func (state *pollState) tryGetIterator(uid uint32, tableID uint64) (*message.Ite
 	}
 }
 
-func (state *pollState) tryReleaseIterator() error {
+func (state *pollState) tryReleaseIterator(force bool) error {
 	if state.iter == nil {
 		return nil
 	}
 	now := time.Now()
-	if !state.iter.Valid() || now.Sub(state.iterAliveTime) > state.iterMaxAliveDuration {
+	if !state.iter.Valid() || now.Sub(state.iterAliveTime) > state.iterMaxAliveDuration || force {
 		err := state.iter.Release()
 		if err != nil {
 			return errors.Trace(err)
 		}
 		state.metricIterRelease.Observe(time.Since(now).Seconds())
 		state.iter = nil
-		state.iterHasRead = true
+		state.position.iterHasRead = true
 
 		if state.iterCh != nil {
 			log.Panic("there must not be iterCh", zap.Any("iter", state.iter))
@@ -447,7 +473,7 @@ func (r *reader) Poll(ctx context.Context, msgs []actormsg.Message[message.Task]
 			}
 		}
 		// Release iterator as we do not need to read.
-		err := r.state.tryReleaseIterator()
+		err := r.state.tryReleaseIterator(false)
 		if err != nil {
 			r.reportError("failed to release iterator", err)
 			return false
@@ -477,17 +503,14 @@ func (r *reader) Poll(ctx context.Context, msgs []actormsg.Message[message.Task]
 	}
 
 	// Read and send resolved events from iterator.
-	hasReadNext, exhaustedResolvedTs, err := r.outputIterEvents(
-		r.state.iter, r.state.iterHasRead, r.state.outputBuf, r.state.iterResolvedTs)
+	position, err := r.outputIterEvents(
+		r.state.iter, r.state.position, r.state.outputBuf, r.state.iterResolvedTs)
 	if err != nil {
 		r.reportError("failed to read iterator", err)
 		return false
 	}
-	if exhaustedResolvedTs > r.state.exhaustedResolvedTs {
-		r.state.exhaustedResolvedTs = exhaustedResolvedTs
-	}
-	r.state.iterHasRead = hasReadNext
-	err = r.state.tryReleaseIterator()
+	r.state.position.update(position)
+	err = r.state.tryReleaseIterator(false)
 	if err != nil {
 		r.reportError("failed to release iterator", err)
 		return false
@@ -502,6 +525,6 @@ func (r *reader) OnClose() {
 	}
 	r.stopped = true
 	// Must release iterator before stopping, otherwise it leaks iterator.
-	_ = r.state.tryReleaseIterator()
+	_ = r.state.tryReleaseIterator(true)
 	r.common.closedWg.Done()
 }

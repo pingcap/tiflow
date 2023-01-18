@@ -187,4 +187,18 @@ func (t *testTLSConfig) TestLoadDumpTLSContent(c *C) {
 	c.Assert(utils.IsFileExists(s.SSLCA), Equals, true)
 	c.Assert(utils.IsFileExists(s.SSLCert), Equals, true)
 	c.Assert(utils.IsFileExists(s.SSLKey), Equals, true)
+
+	// test only ssl-ca config
+	s = &Security{
+		SSLCA: caFilePath,
+	}
+	err = s.LoadTLSContent()
+	c.Assert(err, IsNil)
+	c.Assert(s.DumpTLSContent(c.MkDir()), IsNil)
+	c.Assert(len(s.SSLCABytes) > 0, Equals, true)
+	c.Assert(len(s.SSLCertBytes) > 0, Equals, false)
+	c.Assert(len(s.SSLKEYBytes) > 0, Equals, false)
+	c.Assert(utils.IsFileExists(s.SSLCA), Equals, true)
+	c.Assert(utils.IsFileExists(s.SSLCert), Equals, false)
+	c.Assert(utils.IsFileExists(s.SSLKey), Equals, false)
 }

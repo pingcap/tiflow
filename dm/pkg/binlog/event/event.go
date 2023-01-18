@@ -198,8 +198,9 @@ func GenRotateEvent(header *replication.EventHeader, latestPos uint32, nextLogNa
 // GenPreviousGTIDsEvent generates a PreviousGTIDsEvent.
 // MySQL has no internal doc for PREVIOUS_GTIDS_EVENT.
 // we ref:
-//   a. https://github.com/vitessio/vitess/blob/28e7e5503a6c3d3b18d4925d95f23ebcb6f25c8e/go/mysql/binlog_event_mysql56.go#L56
-//   b. https://dev.mysql.com/doc/internals/en/com-binlog-dump-gtid.html
+//
+//	a. https://github.com/vitessio/vitess/blob/28e7e5503a6c3d3b18d4925d95f23ebcb6f25c8e/go/mysql/binlog_event_mysql56.go#L56
+//	b. https://dev.mysql.com/doc/internals/en/com-binlog-dump-gtid.html
 func GenPreviousGTIDsEvent(header *replication.EventHeader, latestPos uint32, gSet gtid.Set) (*replication.BinlogEvent, error) {
 	if gSet == nil {
 		return nil, terror.ErrBinlogEmptyGTID.Generate()
@@ -519,9 +520,11 @@ func GenTableMapEvent(header *replication.EventHeader, latestPos uint32, tableID
 
 // GenRowsEvent generates a RowsEvent.
 // RowsEvent includes:
-//   WRITE_ROWS_EVENTv0, WRITE_ROWS_EVENTv1, WRITE_ROWS_EVENTv2
-//   UPDATE_ROWS_EVENTv0, UPDATE_ROWS_EVENTv1, UPDATE_ROWS_EVENTv2
-//   DELETE_ROWS_EVENTv0, DELETE_ROWS_EVENTv1, DELETE_ROWS_EVENTv2
+//
+//	WRITE_ROWS_EVENTv0, WRITE_ROWS_EVENTv1, WRITE_ROWS_EVENTv2
+//	UPDATE_ROWS_EVENTv0, UPDATE_ROWS_EVENTv1, UPDATE_ROWS_EVENTv2
+//	DELETE_ROWS_EVENTv0, DELETE_ROWS_EVENTv1, DELETE_ROWS_EVENTv2
+//
 // ref: https://dev.mysql.com/doc/internals/en/rows-event.html
 // ref: http://blog.51cto.com/yanzongshuai/2090894
 func GenRowsEvent(header *replication.EventHeader, latestPos uint32, eventType replication.EventType, tableID uint64, rowsFlags uint16, rows [][]interface{}, columnType []byte, tableMapEv *replication.BinlogEvent) (*replication.BinlogEvent, error) {

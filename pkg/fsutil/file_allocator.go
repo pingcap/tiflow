@@ -19,13 +19,13 @@ import (
 	"path/filepath"
 	"sync"
 
-	"github.com/pingcap/tiflow/cdc/redo/common"
+	"github.com/pingcap/tiflow/pkg/redo"
 )
 
 // FileAllocator has two functionalities:
-// 1. create new file or reuse the existing file (the existing tmp file will be cleared)
-//    beforehand for file write.
-// 2. pre-allocate disk space to mitigate the overhead of file metadata updating.
+//  1. create new file or reuse the existing file (the existing tmp file will be cleared)
+//     beforehand for file write.
+//  2. pre-allocate disk space to mitigate the overhead of file metadata updating.
 //
 // ref: https://github.com/etcd-io/etcd/pull/4785
 type FileAllocator struct {
@@ -84,7 +84,7 @@ func (fl *FileAllocator) alloc() (f *os.File, err error) {
 	}
 
 	filePath := filepath.Join(fl.dir, fmt.Sprintf("%s_%d.tmp", fl.prefix, fl.count%2))
-	f, err = os.OpenFile(filePath, os.O_CREATE|os.O_WRONLY, common.DefaultFileMode)
+	f, err = os.OpenFile(filePath, os.O_CREATE|os.O_WRONLY, redo.DefaultFileMode)
 	if err != nil {
 		return nil, err
 	}

@@ -4,7 +4,7 @@
 // you may not use this file except in compliance with the License.
 // You may obtain a copy of the License at
 //
-//     http://www.apache.org/licenses/LICENSE-2.0
+//	http://www.apache.org/licenses/LICENSE-2.0
 //
 // Unless required by applicable law or agreed to in writing, software
 // distributed under the License is distributed on an "AS IS" BASIS,
@@ -19,8 +19,23 @@ import (
 )
 
 func TestMaskSinkURI(t *testing.T) {
-	uri := "mysql://root:123456@127.0.0.1:3306/?time-zone=Asia/Shanghai"
-	maskedURI, err := MaskSinkURI(uri)
-	require.NoError(t, err)
-	require.Equal(t, "mysql://root:xxxx@127.0.0.1:3306/?time-zone=Asia/Shanghai", maskedURI)
+	tests := []struct {
+		uri    string
+		masked string
+	}{
+		{
+			"mysql://root:123456@127.0.0.1:3306/?time-zone=Asia/Shanghai",
+			"mysql://root:xxxxx@127.0.0.1:3306/?time-zone=Asia/Shanghai",
+		},
+		{
+			"kafka://127.0.0.1:9093/cdc?sasl-mechanism=SCRAM-SHA-256&sasl-user=ticdc&sasl-password=verysecure",
+			"kafka://127.0.0.1:9093/cdc?sasl-mechanism=SCRAM-SHA-256&sasl-password=xxxxx&sasl-user=ticdc",
+		},
+	}
+
+	for _, tt := range tests {
+		maskedURI, err := MaskSinkURI(tt.uri)
+		require.NoError(t, err)
+		require.Equal(t, tt.masked, maskedURI)
+	}
 }

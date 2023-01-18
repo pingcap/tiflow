@@ -26,6 +26,7 @@ import (
 	"github.com/pingcap/tiflow/pkg/cyclic/mark"
 	cerror "github.com/pingcap/tiflow/pkg/errors"
 	cerrors "github.com/pingcap/tiflow/pkg/errors"
+	"github.com/pingcap/tiflow/pkg/sink"
 	"github.com/pingcap/tiflow/pkg/util"
 	"github.com/pingcap/tiflow/pkg/version"
 	"github.com/tikv/client-go/v2/oracle"
@@ -341,7 +342,7 @@ func (info *ChangeFeedInfo) fixMySQLSinkProtocol() {
 		return
 	}
 
-	if config.IsMqScheme(uri.Scheme) {
+	if sink.IsMQScheme(uri.Scheme) {
 		return
 	}
 
@@ -366,7 +367,7 @@ func (info *ChangeFeedInfo) fixMQSinkProtocol() {
 		return
 	}
 
-	if !config.IsMqScheme(uri.Scheme) {
+	if !sink.IsMQScheme(uri.Scheme) {
 		return
 	}
 

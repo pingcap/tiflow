@@ -291,9 +291,13 @@ var (
 		"s3 storage api",
 		errors.RFCCodeText("CDC:ErrS3StorageAPI"),
 	)
-	ErrS3StorageInitialize = errors.Normalize(
-		"new s3 storage for redo log",
-		errors.RFCCodeText("CDC:ErrS3StorageInitialize"),
+	ErrFailToCreateExternalStorage = errors.Normalize(
+		"failed to create external storage",
+		errors.RFCCodeText("DFLOW:ErrFailToCreateExternalStorage"),
+	)
+	ErrStorageInitialize = errors.Normalize(
+		"fail to open storage for redo log",
+		errors.RFCCodeText("CDC:ErrStorageInitialize"),
 	)
 	ErrMQCodecInvalidConfig = errors.Normalize(
 		"MQ Codec invalid config",
@@ -310,6 +314,15 @@ var (
 	ErrMQSinkUnknownProtocol = errors.Normalize(
 		"unknown '%s' protocol for Message Queue sink",
 		errors.RFCCodeText("CDC:ErrMQSinkUnknownProtocol"),
+	)
+	ErrIncompatibleSinkConfig = errors.Normalize(
+		"incompatible configuration in sink uri(%s) and config file(%s), "+
+			"please try to update the configuration only through sink uri",
+		errors.RFCCodeText("CDC:ErrIncompatibleSinkConfig"),
+	)
+	ErrSinkUnknownProtocol = errors.Normalize(
+		"unknown '%s' message protocol for sink",
+		errors.RFCCodeText("CDC:ErrSinkUnknownProtocol"),
 	)
 	ErrMySQLTxnError = errors.Normalize(
 		"MySQL txn error",
@@ -1001,5 +1014,11 @@ var (
 	ErrUpStreamNotFound = errors.Normalize(
 		"upStram not found, cluster-id: %d",
 		errors.RFCCodeText("CDC:ErrUpStreamNotFound"),
+	)
+
+	// changefeed config error
+	ErrInvalidReplicaConfig = errors.Normalize(
+		"invalid replica config, %s",
+		errors.RFCCodeText("CDC:ErrInvalidReplicaConfig"),
 	)
 )
