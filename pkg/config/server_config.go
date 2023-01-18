@@ -128,7 +128,6 @@ var defaultServerConfig = &ServerConfig{
 		TableActor: &TableActorConfig{
 			EventBatchSize: 32,
 		},
-		EnableNewScheduler: true,
 		// Default db sorter config
 		EnableDBSorter: true,
 		DB: &DBConfig{
@@ -152,6 +151,7 @@ var defaultServerConfig = &ServerConfig{
 		Scheduler:           NewDefaultSchedulerConfig(),
 		EnableNewSink:       true,
 		EnablePullBasedSink: true,
+		EnableKafkaSinkV2:   false,
 	},
 	ClusterID: "default",
 }

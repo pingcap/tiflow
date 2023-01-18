@@ -14,7 +14,10 @@
 package kafka
 
 import (
+	"context"
+
 	"github.com/Shopify/sarama"
+	"github.com/pingcap/errors"
 	"github.com/rcrowley/go-metrics"
 )
 
@@ -186,11 +189,15 @@ func (p *saramaAsyncProducer) Errors() <-chan *sarama.ProducerError {
 }
 
 // ClientCreator defines the type of client crater.
-type ClientCreator func([]string, *sarama.Config) (Client, error)
+type ClientCreator func(context.Context, *Options) (Client, error)
 
 // NewSaramaClient constructs a Client with sarama.
-func NewSaramaClient(addrs []string, conf *sarama.Config) (Client, error) {
-	c, err := sarama.NewClient(addrs, conf)
+func NewSaramaClient(ctx context.Context, o *Options) (Client, error) {
+	saramaConfig, err := NewSaramaConfig(ctx, o)
+	if err != nil {
+		return nil, errors.Trace(err)
+	}
+	c, err := sarama.NewClient(o.BrokerEndpoints, saramaConfig)
 	if err != nil {
 		return nil, err
 	}
@@ -198,6 +205,6 @@ func NewSaramaClient(addrs []string, conf *sarama.Config) (Client, error) {
 }
 
 // NewMockClient constructs a Client with mock implementation.
-func NewMockClient(_ []string, _ *sarama.Config) (Client, error) {
+func NewMockClient(_ context.Context, _ *Options) (Client, error) {
 	return NewClientMockImpl(), nil
 }
