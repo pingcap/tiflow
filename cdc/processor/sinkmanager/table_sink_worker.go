@@ -395,7 +395,7 @@ func (w *sinkWorker) fetchFromCache(
 		log.Debug("Advance table sink",
 			zap.String("namespace", w.changefeedID.Namespace),
 			zap.String("changefeed", w.changefeedID.ID),
-			zap.Stringer("tableID", task.tableID),
+			zap.Int64("tableID", task.tableID),
 			zap.Any("resolvedTs", resolvedTs),
 			zap.Error(err))
 	} else {
