@@ -6485,9 +6485,9 @@
           "targets": [
             {
               "exemplar": true,
-              "expr": "ticdc_sinkmanager_memory_quota{k8s_cluster=\"$k8s_cluster\", tidb_cluster=\"$tidb_cluster\", changefeed=~\"$changefeed\", instance=~\"$ticdc_instance\"}",
+              "expr": "ticdc_sinkmanager_memory_quota{k8s_cluster=\"$k8s_cluster\", tidb_cluster=\"$tidb_cluster\", changefeed=~\"$changefeed\", component!=\"\", instance=~\"$ticdc_instance\"}",
               "interval": "",
-              "legendFormat": "{{changefeed}}-{{instance}}-memory-{{type}}",
+              "legendFormat": "{{changefeed}}-{{instance}}-memory-{{component}}-{{type}}",
               "refId": "A"
             },
             {
