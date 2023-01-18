@@ -35,7 +35,11 @@ import (
 	cdcContext "github.com/pingcap/tiflow/pkg/context"
 	"github.com/pingcap/tiflow/pkg/etcd"
 	"github.com/pingcap/tiflow/pkg/orchestrator"
+<<<<<<< HEAD
 	"github.com/pingcap/tiflow/pkg/pdutil"
+=======
+	"github.com/pingcap/tiflow/pkg/sink/observer"
+>>>>>>> 9a5ba7681b (mysql(ticdc): add mysql backend performance metrics observer (#8050))
 	"github.com/pingcap/tiflow/pkg/txnutil/gc"
 	"github.com/pingcap/tiflow/pkg/upstream"
 	"github.com/stretchr/testify/require"
@@ -219,7 +223,15 @@ func createChangefeed4Test(ctx cdcContext.Context, t *testing.T,
 			ctx cdcContext.Context, pdClock pdutil.Clock,
 		) (scheduler.Scheduler, error) {
 			return &mockScheduler{}, nil
-		})
+		},
+		// new downstream observer
+		func(
+			ctx context.Context, sinkURIStr string, replCfg *config.ReplicaConfig,
+		) (observer.Observer, error) {
+			return observer.NewDummyObserver(), nil
+		},
+	)
+
 	cf.upstream = up
 
 	tester.MustUpdate(fmt.Sprintf("%s/capture/%s",
