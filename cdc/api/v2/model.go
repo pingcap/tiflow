@@ -34,6 +34,12 @@ type LogLevelReq struct {
 	Level string `json:"log_level"`
 }
 
+// ListResponse is the response for all List APIs
+type ListResponse[T any] struct {
+	Total int `json:"total"`
+	Items []T `json:"items"`
+}
+
 // Tso contains timestamp get from PD
 type Tso struct {
 	Timestamp int64 `json:"timestamp"`

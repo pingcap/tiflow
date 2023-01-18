@@ -1,4 +1,4 @@
-// Copyright 2021 PingCAP, Inc.
+// Copyright 2023 PingCAP, Inc.
 //
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -11,11 +11,12 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-package v1
+package v2
 
 import (
 	"context"
 
+	v2 "github.com/pingcap/tiflow/cdc/api/v2"
 	"github.com/pingcap/tiflow/cdc/model"
 	"github.com/pingcap/tiflow/pkg/api/internal/rest"
 )
@@ -28,7 +29,7 @@ type CapturesGetter interface {
 // CaptureInterface has methods to work with Capture items.
 // We can also mock the capture operations by implement this interface.
 type CaptureInterface interface {
-	List(ctx context.Context) (*[]model.Capture, error)
+	List(ctx context.Context) ([]model.Capture, error)
 }
 
 // captures implements CaptureInterface
@@ -37,18 +38,18 @@ type captures struct {
 }
 
 // newCaptures returns captures
-func newCaptures(c *APIV1Client) *captures {
+func newCaptures(c *APIV2Client) *captures {
 	return &captures{
 		client: c.RESTClient(),
 	}
 }
 
 // List returns the list of captures
-func (c *captures) List(ctx context.Context) (*[]model.Capture, error) {
-	result := new([]model.Capture)
+func (c *captures) List(ctx context.Context) ([]model.Capture, error) {
+	result := &v2.ListResponse[model.Capture]{}
 	err := c.client.Get().
 		WithURI("captures").
 		Do(ctx).
 		Into(result)
-	return result, err
+	return result.Items, err
 }
