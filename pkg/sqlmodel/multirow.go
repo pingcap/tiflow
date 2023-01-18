@@ -126,7 +126,7 @@ func GenDeleteSQL(changes ...*RowChange) (string, []interface{}) {
 // Input `changes` should have same target table and same columns for WHERE
 // (typically same PK/NOT NULL UK), otherwise the behaviour is undefined.
 // It is a faster version compared with GenUpdateSQL.
-func GenUpdateSQLFast(changes ...*RowChange) (string, []interface{}) {
+func GenUpdateSQLFast(changes ...*RowChange) (string, []any) {
 	if len(changes) == 0 {
 		log.L().DPanic("row changes is empty")
 		return "", nil
@@ -226,13 +226,13 @@ func GenUpdateSQLFast(changes ...*RowChange) (string, []interface{}) {
 		}
 		assignValueColumnCount++
 	}
-	args := make([]interface{}, 0,
+	args := make([]any, 0,
 		assignValueColumnCount*len(changes)*(len(whereColumns)+1)+len(changes)*len(whereColumns))
-	argsPerCol := make([][]interface{}, assignValueColumnCount)
+	argsPerCol := make([][]any, assignValueColumnCount)
 	for i := 0; i < assignValueColumnCount; i++ {
-		argsPerCol[i] = make([]interface{}, 0, len(changes)*(len(whereColumns)+1))
+		argsPerCol[i] = make([]any, 0, len(changes)*(len(whereColumns)+1))
 	}
-	whereValuesAtTheEnd := make([]interface{}, 0, len(changes)*len(whereColumns))
+	whereValuesAtTheEnd := make([]any, 0, len(changes)*len(whereColumns))
 	for _, change := range changes {
 		_, whereValues := change.whereColumnsAndValues()
 		// a simple check about different number of WHERE values, not trying to
