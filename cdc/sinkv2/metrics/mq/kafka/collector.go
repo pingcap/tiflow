@@ -91,13 +91,7 @@ func (m *Collector) Run(ctx context.Context) {
 
 func (m *Collector) updateBrokers() {
 	start := time.Now()
-<<<<<<< HEAD
-	brokers, err := m.adminClient.GetAllBrokers(nil)
-||||||| 2adff67c8
-	brokers, _, err := m.adminClient.DescribeCluster()
-=======
-	brokers, err := m.adminClient.GetAllBrokers()
->>>>>>> master
+	brokers, err := m.adminClient.GetAllBrokers(context.Background())
 	if err != nil {
 		log.Warn("Get Kafka brokers failed, "+
 			"use historical brokers to collect kafka broker level metrics",

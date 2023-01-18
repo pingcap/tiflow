@@ -228,7 +228,7 @@ func getBrokerMetricName(prefix, brokerID string) string {
 
 func (sm *saramaMetricsMonitor) collectBrokers() {
 	start := time.Now()
-	brokers, err := sm.admin.GetAllBrokers(nil)
+	brokers, err := sm.admin.GetAllBrokers(context.Background())
 	if err != nil {
 		log.Warn("kafka cluster unreachable, "+
 			"use historical brokers to collect kafka broker level metrics",
