@@ -10,7 +10,8 @@ alter table t2 drop column c;
 insert into t2 (id, should_skip) values (5, 0), (6, 0);
 -- test filter become valid again, and the checking column is a generated column
 alter table t2 add column c int as (id + 1);
-insert into t2 (id, should_skip, d) values (7, 1, 100), (8, 0, 200);
+insert into t2 (id, should_skip, d) values (7, 1, 100), (8, 0, 200), (10, 2, 300);
+update t2 set should_skip = 0 where id = 10;
 
 -- test a new created table
 create table t3 (id int primary key,
