@@ -19,6 +19,7 @@ import (
 	tc "github.com/pingcap/check"
 	"github.com/pingcap/tidb/parser/mysql"
 	"github.com/pingcap/tidb/util/filter"
+	"github.com/stretchr/testify/require"
 )
 
 func TestClient(t *testing.T) {
@@ -296,6 +297,84 @@ func (t *testCheckSuite) TestVerifyReplicationPrivileges(c *tc.C) {
 		c.Assert(err == nil, tc.Equals, cs.replicationState == StateSuccess)
 		if err != nil && len(cs.errMatch) != 0 {
 			c.Assert(err.ShortErr, tc.Matches, cs.errMatch)
+		}
+	}
+}
+
+func TestVerifyPrivilegesWildcard(t *testing.T) {
+	cases := []struct {
+		grants           []string
+		checkTables      []*filter.Table
+		replicationState State
+		errStr           string
+	}{
+		{
+			grants: []string{
+				"GRANT SELECT ON `demo\\_foobar`.* TO `dmuser`@`%`",
+			},
+			checkTables: []*filter.Table{
+				{Schema: "demo_foobar", Name: "t1"},
+			},
+			replicationState: StateSuccess,
+		},
+		{
+			grants: []string{
+				"GRANT SELECT ON `demo\\_foobar`.* TO `dmuser`@`%`",
+			},
+			checkTables: []*filter.Table{
+				{Schema: "demo2foobar", Name: "t1"},
+			},
+			replicationState: StateFailure,
+			errStr:           "lack of Select privilege: {`demo2foobar`.`t1`}; ",
+		},
+		{
+			grants: []string{
+				"GRANT SELECT ON `demo_`.* TO `dmuser`@`%`",
+			},
+			checkTables: []*filter.Table{
+				{Schema: "demo1", Name: "t1"},
+				{Schema: "demo2", Name: "t1"},
+			},
+			replicationState: StateSuccess,
+		},
+		{
+			grants: []string{
+				"GRANT SELECT ON `demo%`.* TO `dmuser`@`%`",
+			},
+			checkTables: []*filter.Table{
+				{Schema: "demo_some", Name: "t1"},
+				{Schema: "block_db", Name: "t1"},
+			},
+			replicationState: StateFailure,
+			errStr:           "lack of Select privilege: {`block_db`.`t1`}; ",
+		},
+		{
+			grants: []string{
+				"GRANT SELECT ON `demo_db`.`t1` TO `dmuser`@`%`",
+			},
+			checkTables: []*filter.Table{
+				{Schema: "demo_db", Name: "t1"},
+				{Schema: "demo2db", Name: "t1"},
+			},
+			replicationState: StateFailure,
+			errStr:           "lack of Select privilege: {`demo2db`.`t1`}; ",
+		},
+	}
+
+	for i, cs := range cases {
+		t.Logf("case %d", i)
+		result := &Result{
+			State: StateFailure,
+		}
+		requiredPrivs := genExpectPriv(map[mysql.PrivilegeType]struct{}{
+			mysql.SelectPriv: {},
+		}, cs.checkTables)
+		err := verifyPrivileges(result, cs.grants, requiredPrivs)
+		if cs.replicationState == StateSuccess {
+			require.Nil(t, err, "grants: %v", cs.grants)
+		} else {
+			require.NotNil(t, err, "grants: %v", cs.grants)
+			require.Equal(t, cs.errStr, err.ShortErr, "grants: %v", cs.grants)
 		}
 	}
 }

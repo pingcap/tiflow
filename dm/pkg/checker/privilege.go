@@ -25,9 +25,9 @@ import (
 	_ "github.com/pingcap/tidb/types/parser_driver" // for parser driver
 	"github.com/pingcap/tidb/util/dbutil"
 	"github.com/pingcap/tidb/util/filter"
-	"go.uber.org/zap"
-
+	"github.com/pingcap/tidb/util/stringutil"
 	"github.com/pingcap/tiflow/dm/pkg/log"
+	"go.uber.org/zap"
 )
 
 // some privileges are only effective on global level. in other words, GRANT ALL ON test.* is not enough for them
@@ -172,7 +172,7 @@ func verifyPrivileges(result *Result, grants []string, lackPriv map[mysql.Privil
 			return NewError("grant has no user %s", grant)
 		}
 
-		dbName := grantStmt.Level.DBName
+		dbPatChar, dbPatType := stringutil.CompilePattern(grantStmt.Level.DBName, '\\')
 		tableName := grantStmt.Level.TableName
 		switch grantStmt.Level.Level {
 		case ast.GrantLevelGlobal:
@@ -203,11 +203,16 @@ func verifyPrivileges(result *Result, grants []string, lackPriv map[mysql.Privil
 						if priv == mysql.GrantPriv {
 							continue
 						}
-						if _, ok := lackPriv[priv][dbName]; !ok {
-							continue
+						// in this old release branch, we don't have a flag that mark a privilege is global level.
+						// we use `deleted` to avoid delete a global level privilege when processing AllPriv.
+						deleted := false
+						for dbName := range lackPriv[priv] {
+							if stringutil.DoMatch(dbName, dbPatChar, dbPatType) {
+								delete(lackPriv[priv], dbName)
+							}
+							deleted = true
 						}
-						delete(lackPriv[priv], dbName)
-						if len(lackPriv[priv]) == 0 {
+						if deleted && len(lackPriv[priv]) == 0 {
 							delete(lackPriv, priv)
 						}
 					}
@@ -216,20 +221,22 @@ func verifyPrivileges(result *Result, grants []string, lackPriv map[mysql.Privil
 				if _, ok := lackPriv[privElem.Priv]; !ok {
 					continue
 				}
-				if _, ok := lackPriv[privElem.Priv][dbName]; !ok {
-					continue
-				}
 				// dumpling could report error if an allow-list table is lack of privilege.
 				// we only check that SELECT is granted on all columns, otherwise we can't SHOW CREATE TABLE
 				if privElem.Priv == mysql.SelectPriv && len(privElem.Cols) != 0 {
 					continue
 				}
-				delete(lackPriv[privElem.Priv], dbName)
+				for dbName := range lackPriv[privElem.Priv] {
+					if stringutil.DoMatch(dbName, dbPatChar, dbPatType) {
+						delete(lackPriv[privElem.Priv], dbName)
+					}
+				}
 				if len(lackPriv[privElem.Priv]) == 0 {
 					delete(lackPriv, privElem.Priv)
 				}
 			}
 		case ast.GrantLevelTable:
+			dbName := grantStmt.Level.DBName
 			for _, privElem := range grantStmt.Privs {
 				// all privileges available at a given privilege level (except GRANT OPTION)
 				// from https://dev.mysql.com/doc/refman/5.7/en/privileges-provided.html#priv_all
