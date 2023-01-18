@@ -21,7 +21,6 @@ import (
 	"sync/atomic"
 	"time"
 
-	"github.com/Shopify/sarama"
 	"github.com/pingcap/errors"
 	"github.com/pingcap/failpoint"
 	"github.com/pingcap/log"
@@ -109,7 +108,15 @@ func (k *kafkaSaramaProducer) AsyncSendMessage(
 	k.mu.Unlock()
 
 	return k.asyncProducer.AsyncSend(ctx, topic, partition,
-		message.Key, message.Value, k.closeCh, nil)
+		message.Key, message.Value, k.closeCh, func() {
+			k.mu.Lock()
+			k.mu.inflight--
+			if k.mu.inflight == 0 && k.mu.flushDone != nil {
+				k.mu.flushDone <- struct{}{}
+				k.mu.flushDone = nil
+			}
+			k.mu.Unlock()
+		})
 }
 
 func (k *kafkaSaramaProducer) SyncBroadcastMessage(
@@ -258,38 +265,7 @@ func (k *kafkaSaramaProducer) run(ctx context.Context) error {
 		k.stop()
 	}()
 
-	for {
-		var ack *sarama.ProducerMessage
-		select {
-		case <-ctx.Done():
-			return ctx.Err()
-		case <-k.closeCh:
-			return nil
-		case err := <-k.failpointCh:
-			log.Warn("receive from failpoint chan", zap.Error(err),
-				zap.String("namespace", k.id.Namespace),
-				zap.String("changefeed", k.id.ID), zap.Any("role", k.role))
-			return err
-		case ack = <-k.asyncProducer.Successes():
-		case err := <-k.asyncProducer.Errors():
-			// We should not wrap a nil pointer if the pointer is of a subtype of `error`
-			// because Go would store the type info and the resulted `error` variable would not be nil,
-			// which will cause the pkg/error library to malfunction.
-			if err == nil {
-				return nil
-			}
-			return cerror.WrapError(cerror.ErrKafkaAsyncSendMessage, err)
-		}
-		if ack != nil {
-			k.mu.Lock()
-			k.mu.inflight--
-			if k.mu.inflight == 0 && k.mu.flushDone != nil {
-				k.mu.flushDone <- struct{}{}
-				k.mu.flushDone = nil
-			}
-			k.mu.Unlock()
-		}
-	}
+	return k.asyncProducer.AsyncCallbackRun(ctx, k.id, k.closeCh, k.failpointCh)
 }
 
 // NewAdminClientImpl specifies the build method for the admin client.
