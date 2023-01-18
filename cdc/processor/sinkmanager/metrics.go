@@ -26,8 +26,8 @@ var (
 			Name:      "memory_quota",
 			Help:      "memory quota of the changefeed",
 		},
-		// type includes total, used.
-		[]string{"namespace", "changefeed", "type"})
+		// type includes total, used, component includes sink and redo.
+		[]string{"namespace", "changefeed", "type", "component"})
 
 	// RedoEventCache indicates redo event memory usage of a changefeed.
 	RedoEventCache = prometheus.NewGaugeVec(
