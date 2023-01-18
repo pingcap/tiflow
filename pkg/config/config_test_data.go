@@ -15,7 +15,7 @@ package config
 
 const (
 	testCfgTestReplicaConfigOutDated = `{
-  "memory-quota": 268435456,
+  "memory-quota": 1073741824,
   "case-sensitive": false,
   "enable-old-value": true,
   "force-replicate": true,
@@ -122,7 +122,6 @@ const (
       "iterator-max-alive-duration": 10000,
       "iterator-slow-read-duration": 256
     },
-    "enable-new-scheduler": true,
     "messages": {
       "client-max-batch-interval": 10000000,
       "client-max-batch-size": 8388608,
@@ -141,13 +140,14 @@ const (
       "add-table-batch-size": 50,
       "region-per-span": 0
     },
-    "enable-new-sink": true
+    "enable-new-sink": true,
+    "enable-kafka-sink-v2": false
   },
   "cluster-id": "default"
 }`
 
 	testCfgTestReplicaConfigMarshal1 = `{
-  "memory-quota": 268435456,
+  "memory-quota": 1073741824,
   "case-sensitive": false,
   "enable-old-value": true,
   "force-replicate": true,
@@ -202,7 +202,7 @@ const (
 }`
 
 	testCfgTestReplicaConfigMarshal2 = `{
-  "memory-quota": 268435456,
+  "memory-quota": 1073741824,
   "case-sensitive": false,
   "enable-old-value": true,
   "force-replicate": true,

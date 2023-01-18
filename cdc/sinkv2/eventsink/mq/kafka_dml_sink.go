@@ -44,16 +44,12 @@ func NewKafkaDMLSink(
 		return nil, errors.Trace(err)
 	}
 
-	baseConfig := kafka.NewConfig()
-	if err := baseConfig.Apply(sinkURI); err != nil {
+	options := pkafka.NewOptions()
+	if err := options.Apply(sinkURI); err != nil {
 		return nil, cerror.WrapError(cerror.ErrKafkaInvalidConfig, err)
 	}
-	saramaConfig, err := kafka.NewSaramaConfig(ctx, baseConfig)
-	if err != nil {
-		return nil, errors.Trace(err)
-	}
 
-	adminClient, err := adminClientCreator(baseConfig.BrokerEndpoints, saramaConfig)
+	adminClient, err := adminClientCreator(ctx, options)
 	if err != nil {
 		return nil, cerror.WrapError(cerror.ErrKafkaNewSaramaProducer, err)
 	}
@@ -68,7 +64,8 @@ func NewKafkaDMLSink(
 		}
 	}()
 
-	if err = kafka.AdjustConfig(adminClient, baseConfig, saramaConfig, topic); err != nil {
+	// adjust the option configuration before creating the kafka client
+	if err = kafka.AdjustOptions(adminClient, options, topic); err != nil {
 		return nil, cerror.WrapError(cerror.ErrKafkaNewSaramaProducer, err)
 	}
 
@@ -77,13 +74,13 @@ func NewKafkaDMLSink(
 		return nil, errors.Trace(err)
 	}
 
-	client, err := clientCreator(baseConfig.BrokerEndpoints, saramaConfig)
+	client, err := clientCreator(ctx, options)
 	if err != nil {
 		return nil, cerror.WrapError(cerror.ErrKafkaNewSaramaProducer, err)
 	}
 
 	log.Info("Try to create a DML sink producer",
-		zap.Any("baseConfig", baseConfig))
+		zap.Any("options", options))
 	p, err := producerCreator(ctx, client, adminClient, errCh)
 	if err != nil {
 		return nil, cerror.WrapError(cerror.ErrKafkaNewSaramaProducer, err)
@@ -98,7 +95,7 @@ func NewKafkaDMLSink(
 
 	topicManager, err := util.GetTopicManagerAndTryCreateTopic(
 		topic,
-		baseConfig.DeriveTopicConfig(),
+		options.DeriveTopicConfig(),
 		client,
 		adminClient,
 	)
@@ -112,7 +109,7 @@ func NewKafkaDMLSink(
 	}
 
 	encoderConfig, err := util.GetEncoderConfig(sinkURI, protocol, replicaConfig,
-		saramaConfig.Producer.MaxMessageBytes)
+		options.MaxMessageBytes)
 	if err != nil {
 		return nil, errors.Trace(err)
 	}

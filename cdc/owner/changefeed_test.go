@@ -35,6 +35,7 @@ import (
 	cdcContext "github.com/pingcap/tiflow/pkg/context"
 	"github.com/pingcap/tiflow/pkg/etcd"
 	"github.com/pingcap/tiflow/pkg/orchestrator"
+	"github.com/pingcap/tiflow/pkg/sink/observer"
 	"github.com/pingcap/tiflow/pkg/txnutil/gc"
 	"github.com/pingcap/tiflow/pkg/upstream"
 	"github.com/stretchr/testify/require"
@@ -218,7 +219,15 @@ func createChangefeed4Test(ctx cdcContext.Context, t *testing.T,
 			ctx cdcContext.Context, up *upstream.Upstream, cfg *config.SchedulerConfig,
 		) (scheduler.Scheduler, error) {
 			return &mockScheduler{}, nil
-		})
+		},
+		// new downstream observer
+		func(
+			ctx context.Context, sinkURIStr string, replCfg *config.ReplicaConfig,
+		) (observer.Observer, error) {
+			return observer.NewDummyObserver(), nil
+		},
+	)
+
 	cf.upstream = up
 
 	tester.MustUpdate(fmt.Sprintf("%s/capture/%s",

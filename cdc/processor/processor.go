@@ -73,7 +73,7 @@ type processor struct {
 	pullBasedSinking bool
 
 	// These fields are used to sinking data in non-pull-based mode.
-	tableSpans    *spanz.Map[tablepb.TablePipeline]
+	tableSpans    *spanz.HashMap[tablepb.TablePipeline]
 	sinkV1        sinkv1.Sink
 	sinkV2Factory *factory.SinkFactory
 
@@ -92,8 +92,10 @@ type processor struct {
 	createTablePipeline func(
 		ctx cdcContext.Context, span tablepb.Span, replicaInfo *model.TableReplicaInfo,
 	) (tablepb.TablePipeline, error)
-	newAgent func(cdcContext.Context, *model.Liveness) (scheduler.Agent, error)
-	cfg      *config.SchedulerConfig
+	newAgent func(
+		cdcContext.Context, *model.Liveness, *config.SchedulerConfig,
+	) (scheduler.Agent, error)
+	cfg *config.SchedulerConfig
 
 	liveness *model.Liveness
 	agent    scheduler.Agent
@@ -533,7 +535,7 @@ func newProcessor(
 	p := &processor{
 		changefeed:   state,
 		upstream:     up,
-		tableSpans:   spanz.NewMap[tablepb.TablePipeline](),
+		tableSpans:   spanz.NewHashMap[tablepb.TablePipeline](),
 		errCh:        make(chan error, 1),
 		changefeedID: changefeedID,
 		captureInfo:  captureInfo,
@@ -880,7 +882,7 @@ func (p *processor) lazyInitImpl(ctx cdcContext.Context) error {
 			zap.Duration("duration", time.Since(start)))
 	}
 
-	p.agent, err = p.newAgent(ctx, p.liveness)
+	p.agent, err = p.newAgent(ctx, p.liveness, p.cfg)
 	if err != nil {
 		return err
 	}
@@ -894,13 +896,12 @@ func (p *processor) lazyInitImpl(ctx cdcContext.Context) error {
 }
 
 func (p *processor) newAgentImpl(
-	ctx cdcContext.Context, liveness *model.Liveness,
+	ctx cdcContext.Context, liveness *model.Liveness, cfg *config.SchedulerConfig,
 ) (ret scheduler.Agent, err error) {
 	messageServer := ctx.GlobalVars().MessageServer
 	messageRouter := ctx.GlobalVars().MessageRouter
 	etcdClient := ctx.GlobalVars().EtcdClient
 	captureID := ctx.GlobalVars().CaptureInfo.ID
-	cfg := config.GetGlobalServerConfig().Debug.Scheduler
 	ret, err = scheduler.NewAgent(
 		ctx, captureID, liveness,
 		messageServer, messageRouter, etcdClient, p, p.changefeedID, cfg)
@@ -1035,7 +1036,7 @@ func (p *processor) pushResolvedTs2Table() {
 	if p.pullBasedSinking {
 		p.sinkManager.UpdateBarrierTs(resolvedTs)
 	} else {
-		p.tableSpans.Ascend(func(span tablepb.Span, table tablepb.TablePipeline) bool {
+		p.tableSpans.Range(func(span tablepb.Span, table tablepb.TablePipeline) bool {
 			table.UpdateBarrierTs(resolvedTs)
 			return true
 		})
@@ -1178,7 +1179,7 @@ func (p *processor) refreshMetrics() {
 	} else {
 		var totalConsumed uint64
 		var totalEvents int64
-		p.tableSpans.Ascend(func(span tablepb.Span, table tablepb.TablePipeline) bool {
+		p.tableSpans.Range(func(span tablepb.Span, table tablepb.TablePipeline) bool {
 			consumed := table.MemoryConsumption()
 			p.metricsTableMemoryHistogram.Observe(float64(consumed))
 			totalConsumed += consumed
@@ -1247,11 +1248,11 @@ func (p *processor) Close(ctx cdcContext.Context) error {
 				zap.String("changefeed", p.changefeedID.ID))
 		}
 	} else {
-		p.tableSpans.Ascend(func(span tablepb.Span, table tablepb.TablePipeline) bool {
+		p.tableSpans.Range(func(span tablepb.Span, table tablepb.TablePipeline) bool {
 			table.Cancel()
 			return true
 		})
-		p.tableSpans.Ascend(func(span tablepb.Span, table tablepb.TablePipeline) bool {
+		p.tableSpans.Range(func(span tablepb.Span, table tablepb.TablePipeline) bool {
 			table.Wait()
 			return true
 		})
@@ -1350,7 +1351,7 @@ func (p *processor) WriteDebugInfo(w io.Writer) error {
 				&span, stats.ResolvedTs, stats.CheckpointTs, state)
 		}
 	} else {
-		p.tableSpans.Ascend(func(span tablepb.Span, tablePipeline tablepb.TablePipeline) bool {
+		p.tableSpans.Range(func(span tablepb.Span, tablePipeline tablepb.TablePipeline) bool {
 			fmt.Fprintf(w, "span: %s, tableName: %s, resolvedTs: %d, checkpointTs: %d, state: %s\n",
 				&span, tablePipeline.Name(), tablePipeline.ResolvedTs(),
 				tablePipeline.CheckpointTs(), tablePipeline.State())

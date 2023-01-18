@@ -16,14 +16,11 @@ package manager
 import (
 	"context"
 	"fmt"
-	"strings"
 	"sync"
 	"time"
 
-	"github.com/Shopify/sarama"
 	"github.com/pingcap/errors"
 	"github.com/pingcap/log"
-	kafkaconfig "github.com/pingcap/tiflow/cdc/sink/mq/producer/kafka"
 	cerror "github.com/pingcap/tiflow/pkg/errors"
 	"github.com/pingcap/tiflow/pkg/retry"
 	"github.com/pingcap/tiflow/pkg/sink/kafka"
@@ -36,7 +33,7 @@ type kafkaTopicManager struct {
 	client kafka.Client
 	admin  kafka.ClusterAdminClient
 
-	cfg *kafkaconfig.AutoCreateTopicConfig
+	cfg *kafka.AutoCreateTopicConfig
 
 	topics sync.Map
 
@@ -47,7 +44,7 @@ type kafkaTopicManager struct {
 func NewKafkaTopicManager(
 	client kafka.Client,
 	admin kafka.ClusterAdminClient,
-	cfg *kafkaconfig.AutoCreateTopicConfig,
+	cfg *kafka.AutoCreateTopicConfig,
 ) (*kafkaTopicManager, error) {
 	mgr := &kafkaTopicManager{
 		client: client,
@@ -128,7 +125,7 @@ func (m *kafkaTopicManager) tryUpdatePartitionsAndLogging(topic string, partitio
 	}
 }
 
-func (m *kafkaTopicManager) getMetadataOfTopics() ([]*sarama.TopicMetadata, error) {
+func (m *kafkaTopicManager) getMetadataOfTopics() (map[string]kafka.TopicDetail, error) {
 	var topicList []string
 
 	m.topics.Range(func(key, value any) bool {
@@ -139,7 +136,8 @@ func (m *kafkaTopicManager) getMetadataOfTopics() ([]*sarama.TopicMetadata, erro
 	})
 
 	start := time.Now()
-	topicMetaList, err := m.admin.DescribeTopics(topicList)
+	// ignore the topic with error, return a subset of all topics.
+	topicMetaList, err := m.admin.GetTopicsMeta(topicList, true)
 	if err != nil {
 		log.Warn(
 			"Kafka admin client describe topics failed",
@@ -162,39 +160,21 @@ func (m *kafkaTopicManager) getMetadataOfTopics() ([]*sarama.TopicMetadata, erro
 // topics have been created.
 // See https://kafka.apache.org/23/javadoc/org/apache/kafka/clients/admin/AdminClient.html
 func (m *kafkaTopicManager) waitUntilTopicVisible(topicName string) error {
+	topics := []string{topicName}
 	err := retry.Do(context.Background(), func() error {
 		start := time.Now()
-		topicMetaList, err := m.admin.DescribeTopics([]string{topicName})
+		meta, err := m.admin.GetTopicsMeta(topics, false)
 		if err != nil {
-			log.Error("Kafka admin client describe topic failed",
-				zap.String("topic", topicName),
+			log.Warn(" topic not found, retry it",
 				zap.Error(err),
-				zap.Duration("duration", time.Since(start)))
+				zap.Duration("duration", time.Since(start)),
+			)
 			return err
 		}
-
-		if len(topicMetaList) != 1 {
-			log.Error("topic metadata length is wrong.",
-				zap.String("topic", topicName),
-				zap.Int("expected", 1),
-				zap.Int("actual", len(topicMetaList)))
-			return cerror.ErrKafkaTopicNotExists.GenWithStack(
-				fmt.Sprintf("metadata length of topic %s is not equal to 1", topicName))
-		}
-
-		meta := topicMetaList[0]
-		if meta.Err != sarama.ErrNoError {
-			log.Error("topic metadata is fetched with error",
-				zap.String("topic", topicName),
-				zap.Error(meta.Err))
-			return meta.Err
-		}
-
-		log.Info("Kafka admin client describe topic success",
+		log.Info("topic found",
 			zap.String("topic", topicName),
-			zap.Int("partitionNumber", len(meta.Partitions)),
+			zap.Int32("partitionNumber", meta[topicName].NumPartitions),
 			zap.Duration("duration", time.Since(start)))
-
 		return nil
 	}, retry.WithBackoffBaseDelay(500),
 		retry.WithBackoffMaxDelay(1000),
@@ -207,7 +187,7 @@ func (m *kafkaTopicManager) waitUntilTopicVisible(topicName string) error {
 // listTopics is used to do an initial metadata fetching.
 func (m *kafkaTopicManager) listTopics() error {
 	start := time.Now()
-	topics, err := m.admin.ListTopics()
+	topics, err := m.admin.GetAllTopicsMeta()
 	if err != nil {
 		log.Error(
 			"Kafka admin client list topics failed",
@@ -241,31 +221,17 @@ func (m *kafkaTopicManager) createTopic(topicName string) (int32, error) {
 
 	// Now that we have access to the latest topics' information,
 	// we need to update it here immediately.
-	targetTopicFound := false
-	targetTopicPartitionNum := 0
-	for _, topic := range topicMetaList {
-		if topic.Err != sarama.ErrNoError {
-			log.Error("Kafka admin client fetch topic metadata failed.",
-				zap.String("topic", topic.Name),
-				zap.Error(topic.Err))
-			continue
-		}
-
-		if topic.Name == topicName {
-			targetTopicFound = true
-			targetTopicPartitionNum = len(topic.Partitions)
-		}
-		m.tryUpdatePartitionsAndLogging(topic.Name, int32(len(topic.Partitions)))
+	for topic, detail := range topicMetaList {
+		m.tryUpdatePartitionsAndLogging(topic, detail.NumPartitions)
 	}
-	m.lastMetadataRefresh.Store(time.Now().Unix())
 
-	// Maybe our cache has expired information, so we just return it.
+	detail, targetTopicFound := topicMetaList[topicName]
 	if targetTopicFound {
 		log.Info(
 			"topic already exists and the cached information has expired",
 			zap.String("topic", topicName),
 		)
-		return int32(targetTopicPartitionNum), nil
+		return detail.NumPartitions, nil
 	}
 
 	if !m.cfg.AutoCreate {
@@ -275,12 +241,11 @@ func (m *kafkaTopicManager) createTopic(topicName string) (int32, error) {
 	}
 
 	start := time.Now()
-	err = m.admin.CreateTopic(topicName, &sarama.TopicDetail{
+	err = m.admin.CreateTopic(topicName, &kafka.TopicDetail{
 		NumPartitions:     m.cfg.PartitionNum,
 		ReplicationFactor: m.cfg.ReplicationFactor,
 	}, false)
-	// Ignore the already exists error because it's not harmful.
-	if err != nil && !strings.Contains(err.Error(), sarama.ErrTopicAlreadyExists.Error()) {
+	if err != nil {
 		log.Error(
 			"Kafka admin client create the topic failed",
 			zap.String("topic", topicName),
@@ -289,7 +254,7 @@ func (m *kafkaTopicManager) createTopic(topicName string) (int32, error) {
 			zap.Error(err),
 			zap.Duration("duration", time.Since(start)),
 		)
-		return 0, cerror.WrapError(cerror.ErrKafkaNewSaramaProducer, err)
+		return 0, cerror.WrapError(cerror.ErrKafkaCreateTopic, err)
 	}
 
 	log.Info(

@@ -38,7 +38,6 @@ var (
 type EventTableSink[E eventsink.TableEvent] struct {
 	changefeedID    model.ChangeFeedID
 	span            tablepb.Span
-	eventID         uint64
 	maxResolvedTs   model.ResolvedTs
 	backendSink     eventsink.EventSink[E]
 	progressTracker *progressTracker
@@ -62,7 +61,6 @@ func New[E eventsink.TableEvent](
 	return &EventTableSink[E]{
 		changefeedID:              changefeedID,
 		span:                      span,
-		eventID:                   0,
 		maxResolvedTs:             model.NewResolvedTs(0),
 		backendSink:               backendSink,
 		progressTracker:           newProgressTracker(span, defaultBufferSize),
