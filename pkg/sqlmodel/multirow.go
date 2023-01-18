@@ -16,12 +16,12 @@ package sqlmodel
 import (
 	"strings"
 
+	"github.com/pingcap/log"
 	"github.com/pingcap/tidb/parser/ast"
 	"github.com/pingcap/tidb/parser/format"
 	"github.com/pingcap/tidb/parser/model"
 	"github.com/pingcap/tidb/parser/opcode"
 	driver "github.com/pingcap/tidb/types/parser_driver"
-	"github.com/pingcap/tiflow/dm/pkg/log"
 	"github.com/pingcap/tiflow/pkg/quotes"
 	"go.uber.org/zap"
 )
@@ -238,7 +238,7 @@ func GenUpdateSQLFast(changes ...*RowChange) (string, []any) {
 		// a simple check about different number of WHERE values, not trying to
 		// cover all cases
 		if len(whereValues) != len(whereColumns) {
-			log.L().DPanic("len(whereValues) != len(whereColumns)",
+			log.Panic("len(whereValues) != len(whereColumns)",
 				zap.Int("len(whereValues)", len(whereValues)),
 				zap.Int("len(whereColumns)", len(whereColumns)),
 				zap.Any("whereValues", whereValues),
@@ -370,7 +370,7 @@ func GenUpdateSQL(changes ...*RowChange) (string, []interface{}) {
 		// a simple check about different number of WHERE values, not trying to
 		// cover all cases
 		if len(whereValues) != len(whereColumns) {
-			log.L().DPanic("len(whereValues) != len(whereColumns)",
+			log.Panic("len(whereValues) != len(whereColumns)",
 				zap.Int("len(whereValues)", len(whereValues)),
 				zap.Int("len(whereColumns)", len(whereColumns)),
 				zap.Any("whereValues", whereValues),
