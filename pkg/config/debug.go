@@ -37,10 +37,7 @@ type DebugConfig struct {
 	EnableDBSorter bool      `toml:"enable-db-sorter" json:"enable-db-sorter"`
 	DB             *DBConfig `toml:"db" json:"db"`
 
-	// EnableNewScheduler enables the peer-messaging based new scheduler.
-	// The default value is true.
-	EnableNewScheduler bool            `toml:"enable-new-scheduler" json:"enable-new-scheduler"`
-	Messages           *MessagesConfig `toml:"messages" json:"messages"`
+	Messages *MessagesConfig `toml:"messages" json:"messages"`
 
 	// Scheduler is the configuration of the two-phase scheduler.
 	Scheduler *SchedulerConfig `toml:"scheduler" json:"scheduler"`

@@ -180,7 +180,6 @@ func TestParseCfg(t *testing.T) {
 				EventBatchSize: 32,
 			},
 			EnableDBSorter:      true,
-			EnableNewScheduler:  true,
 			EnablePullBasedSink: true,
 			EnableKafkaSinkV2:   false,
 			DB: &config.DBConfig{
@@ -344,7 +343,6 @@ check-balance-interval = "10s"
 			},
 			EnableDBSorter:      true,
 			EnablePullBasedSink: true,
-			EnableNewScheduler:  true,
 			EnableKafkaSinkV2:   true,
 			DB: &config.DBConfig{
 				Count:                       5,
@@ -493,7 +491,6 @@ cert-allowed-cn = ["dd","ee"]
 				EventBatchSize: 32,
 			},
 			EnableDBSorter:      true,
-			EnableNewScheduler:  true,
 			EnablePullBasedSink: true,
 			EnableKafkaSinkV2:   false,
 			DB: &config.DBConfig{
@@ -561,7 +558,6 @@ unknown3 = 3
 			EventBatchSize: 32,
 		},
 		EnableDBSorter:      true,
-		EnableNewScheduler:  true,
 		EnablePullBasedSink: true,
 		EnableKafkaSinkV2:   false,
 		DB: &config.DBConfig{

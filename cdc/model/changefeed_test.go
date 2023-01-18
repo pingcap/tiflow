@@ -145,7 +145,7 @@ func TestVerifyAndComplete(t *testing.T) {
 		SinkURI: "blackhole://",
 		StartTs: 417257993615179777,
 		Config: &config.ReplicaConfig{
-			MemoryQuota:        268435456,
+			MemoryQuota:        1073741824,
 			CaseSensitive:      true,
 			EnableOldValue:     true,
 			CheckGCSafePoint:   true,
