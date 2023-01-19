@@ -588,8 +588,8 @@ func (m *ManagerImpl) bgUpdateLog(
 		}
 	}
 
-	overseerTimer := time.NewTicker(time.Second * 5)
-	defer overseerTimer.Stop()
+	overseerTicker := time.NewTicker(time.Second * 5)
+	defer overseerTicker.Stop()
 	var workTimeSlice time.Duration
 	startToWork := time.Now()
 	for {
@@ -621,7 +621,7 @@ func (m *ManagerImpl) bgUpdateLog(
 					log.Panic("redo manager receives unknown event type")
 				}
 				workTimeSlice += time.Since(startToHandleEvent)
-			case now := <-overseerTimer.C:
+			case now := <-overseerTicker.C:
 				busyRatio := int(workTimeSlice.Seconds() / now.Sub(startToWork).Seconds() * 1000)
 				m.metricRedoWorkerBusyRatio.Add(float64(busyRatio))
 				startToWork = now
@@ -658,7 +658,7 @@ func (m *ManagerImpl) bgUpdateLog(
 					log.Panic("redo manager receives unknown event type")
 				}
 				workTimeSlice += time.Since(startToHandleEvent)
-			case now := <-overseerTimer.C:
+			case now := <-overseerTicker.C:
 				busyRatio := int(workTimeSlice.Seconds() / now.Sub(startToWork).Seconds() * 1000)
 				m.metricRedoWorkerBusyRatio.Add(float64(busyRatio))
 				startToWork = now
