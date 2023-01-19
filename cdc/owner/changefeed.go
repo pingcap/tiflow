@@ -27,7 +27,6 @@ import (
 	"github.com/pingcap/tiflow/cdc/puller"
 	"github.com/pingcap/tiflow/cdc/redo"
 	"github.com/pingcap/tiflow/cdc/scheduler"
-	"github.com/pingcap/tiflow/cdc/sink"
 	"github.com/pingcap/tiflow/pkg/config"
 	cdcContext "github.com/pingcap/tiflow/pkg/context"
 	cerror "github.com/pingcap/tiflow/pkg/errors"
@@ -570,11 +569,8 @@ LOOP:
 		zap.String("changefeed", c.id.ID))
 
 	// create scheduler
-	// TODO: Remove the hack once span replication is compatible with all sinks.
 	cfg := *c.cfg
-	if !sink.IsSinkCompatibleWithSpanReplication(c.state.Info.SinkURI) {
-		cfg.RegionPerSpan = 0
-	}
+	cfg.ChangefeedSettings = c.state.Info.Config.Scheduler
 	c.scheduler, err = c.newScheduler(ctx, c.upstream, &cfg)
 	if err != nil {
 		return errors.Trace(err)

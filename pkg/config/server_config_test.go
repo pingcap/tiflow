@@ -140,12 +140,6 @@ func TestSchedulerConfigValidateAndAdjust(t *testing.T) {
 	conf = GetDefaultServerConfig().Clone().Debug.Scheduler
 	conf.AddTableBatchSize = 0
 	require.Error(t, conf.ValidateAndAdjust())
-
-	conf = GetDefaultServerConfig().Clone().Debug.Scheduler
-	conf.RegionPerSpan = 0
-	require.Nil(t, conf.ValidateAndAdjust())
-	conf.RegionPerSpan = 999
-	require.Error(t, conf.ValidateAndAdjust())
 }
 
 func TestIsValidClusterID(t *testing.T) {
