@@ -33,7 +33,6 @@ import (
 	cerror "github.com/pingcap/tiflow/pkg/errors"
 	"github.com/pingcap/tiflow/pkg/redo"
 	"github.com/pingcap/tiflow/pkg/uuid"
-	"github.com/prometheus/client_golang/prometheus"
 	"go.uber.org/multierr"
 	"go.uber.org/zap"
 	"golang.org/x/sync/errgroup"
@@ -137,8 +136,6 @@ type logWriter struct {
 	meta          *common.LogMeta
 	preMetaFile   string
 	uuidGenerator uuid.Generator
-
-	metricTotalRowsCount prometheus.Gauge
 }
 
 func newLogWriter(
