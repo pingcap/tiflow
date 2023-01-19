@@ -81,7 +81,7 @@ var (
 		prometheus.CounterOpts{
 			Namespace: namespace,
 			Subsystem: subsystem,
-			Name:      "redo_worker_busy_ratio",
+			Name:      "worker_busy_ratio",
 			Help:      "Busy ratio (X ms in 1s) for redo bgUpdateLog worker.",
 		}, []string{"namespace", "changefeed"})
 )

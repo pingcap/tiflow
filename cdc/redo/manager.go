@@ -574,7 +574,7 @@ func (m *ManagerImpl) bgUpdateLog(
 		}
 	}
 
-	overseerTimer := time.NewTicker(time.Second)
+	overseerTimer := time.NewTicker(time.Second * 5)
 	defer overseerTimer.Stop()
 	var workTimeSlice time.Duration
 	startToWork := time.Now()
@@ -590,6 +590,7 @@ func (m *ManagerImpl) bgUpdateLog(
 				if !ok {
 					return // channel closed
 				}
+				startToHandleEvent := time.Now()
 				switch cache.eventType {
 				case model.MessageTypeRow:
 					for _, row := range cache.rows {
@@ -605,6 +606,7 @@ func (m *ManagerImpl) bgUpdateLog(
 				default:
 					log.Panic("redo manager receives unknown event type")
 				}
+				workTimeSlice += time.Since(startToHandleEvent)
 			case now := <-overseerTimer.C:
 				busyRatio := int(workTimeSlice.Seconds() / now.Sub(startToWork).Seconds() * 1000)
 				m.metricRedoWorkerBusyRatio.Add(float64(busyRatio))
@@ -625,6 +627,7 @@ func (m *ManagerImpl) bgUpdateLog(
 				if !ok {
 					return // channel closed
 				}
+				startToHandleEvent := time.Now()
 				switch cache.eventType {
 				case model.MessageTypeRow:
 					for _, row := range cache.rows {
@@ -640,6 +643,12 @@ func (m *ManagerImpl) bgUpdateLog(
 				default:
 					log.Panic("redo manager receives unknown event type")
 				}
+				workTimeSlice += time.Since(startToHandleEvent)
+			case now := <-overseerTimer.C:
+				busyRatio := int(workTimeSlice.Seconds() / now.Sub(startToWork).Seconds() * 1000)
+				m.metricRedoWorkerBusyRatio.Add(float64(busyRatio))
+				startToWork = now
+				workTimeSlice = 0
 			case err = <-logErrCh:
 			}
 		}

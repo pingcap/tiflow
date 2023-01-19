@@ -129,8 +129,6 @@ func TestLogWriterWriteLog(t *testing.T) {
 			rowWriter: mockWriter,
 			ddlWriter: mockWriter,
 			meta:      &common.LogMeta{},
-			metricTotalRowsCount: common.RedoTotalRowsCountGauge.
-				WithLabelValues("default", ""),
 		}
 		if tt.name == "context cancel" {
 			ctx, cancel := context.WithCancel(context.Background())
