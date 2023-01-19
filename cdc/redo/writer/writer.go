@@ -621,7 +621,7 @@ func (l *logWriter) flushMetaToS3(ctx context.Context, data []byte) error {
 		}
 	}
 	l.preMetaFile = metaFile
-	log.Warn("flush meta to s3",
+	log.Debug("flush meta to s3",
 		zap.String("metaFile", metaFile),
 		zap.Any("cost", time.Since(start).Milliseconds()))
 	return nil
