@@ -54,6 +54,7 @@ var allowDDLList = []timodel.ActionType{
 	timodel.ActionAlterIndexVisibility,
 	timodel.ActionMultiSchemaChange,
 	timodel.ActionExchangeTablePartition,
+	timodel.ActionReorganizePartition,
 }
 
 // Filter are safe for concurrent use.
