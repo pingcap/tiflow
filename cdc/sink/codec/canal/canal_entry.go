@@ -265,7 +265,7 @@ func convertDdlEventType(e *model.DDLEvent) canal.EventType {
 	case mm.ActionAddColumn, mm.ActionDropColumn, mm.ActionModifyColumn, mm.ActionRebaseAutoID,
 		mm.ActionSetDefaultValue, mm.ActionModifyTableComment, mm.ActionRenameIndex, mm.ActionAddTablePartition,
 		mm.ActionDropTablePartition, mm.ActionModifyTableCharsetAndCollate, mm.ActionTruncateTablePartition,
-		mm.ActionAlterIndexVisibility, mm.ActionMultiSchemaChange,
+		mm.ActionAlterIndexVisibility, mm.ActionMultiSchemaChange, mm.ActionReorganizePartition,
 		// AddColumns and DropColumns are removed in TiDB v6.2.0, see https://github.com/pingcap/tidb/pull/35862.
 		mm.ActionAddColumns, mm.ActionDropColumns:
 		return canal.EventType_ALTER

@@ -813,6 +813,8 @@ func TestSchemaStorage(t *testing.T) {
 		"alter table test_ddl2.simple_test1 add primary key pk(id)",                          // ActionAddPrimaryKey
 		"ALTER TABLE test_ddl2.simple_test1 ALTER id SET DEFAULT 18",                         // ActionSetDefaultValue
 		"ALTER TABLE test_ddl2.simple_test1 CHARACTER SET = utf8mb4",                         // ActionModifyTableCharsetAndCollate
+
+		"ALTER TABLE test_ddl2.employees REORGANIZE PARTITION p3 INTO (PARTITION p2 VALUES LESS THAN (15), PARTITION p3 VALUES LESS THAN (20))", // ActionReorganizePartition
 		// "recover table test_ddl2.employees",                                                  // ActionRecoverTable this ddl can't work on mock tikv
 
 		"DROP TABLE test_ddl2.employees",
