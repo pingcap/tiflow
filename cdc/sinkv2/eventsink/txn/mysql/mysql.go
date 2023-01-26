@@ -585,6 +585,9 @@ func (s *mysqlBackend) execDMLWithMaxRetries(pctx context.Context, dmls *prepare
 					zap.String("sql", query), zap.Any("args", args))
 				ctx, cancelFunc := context.WithTimeout(pctx, writeTimeout)
 				s.cacheLock.Lock()
+				if s.stmtCache == nil {
+					s.stmtCache = make(map[string]*sql.Stmt)
+				}
 				stmt, ok := s.stmtCache[query]
 				s.cacheLock.Unlock()
 
