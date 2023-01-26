@@ -19,6 +19,7 @@ import (
 	"database/sql/driver"
 	"fmt"
 	"net/url"
+	"sync"
 	"time"
 
 	dmysql "github.com/go-sql-driver/mysql"
@@ -65,6 +66,9 @@ type mysqlBackend struct {
 	statistics                    *metrics.Statistics
 	metricTxnSinkDMLBatchCommit   prometheus.Observer
 	metricTxnSinkDMLBatchCallback prometheus.Observer
+	// implement stmtCache to improve performance, especially when the downstream is TiDB
+	stmtCache map[string]*sql.Stmt
+	cacheLock sync.Mutex
 }
 
 // NewMySQLBackends creates a new MySQL sink using schema storage
@@ -580,7 +584,23 @@ func (s *mysqlBackend) execDMLWithMaxRetries(pctx context.Context, dmls *prepare
 				log.Debug("exec row", zap.Int("workerID", s.workerID),
 					zap.String("sql", query), zap.Any("args", args))
 				ctx, cancelFunc := context.WithTimeout(pctx, writeTimeout)
-				if _, err := tx.ExecContext(ctx, query, args...); err != nil {
+				s.cacheLock.Lock()
+				stmt, ok := s.stmtCache[query]
+				s.cacheLock.Unlock()
+
+				if !ok {
+					var err error
+					stmt, err = s.db.Prepare(query)
+					if err != nil {
+						cancelFunc()
+						return 0, errors.Trace(err)
+					}
+
+					s.cacheLock.Lock()
+					s.stmtCache[query] = stmt
+					s.cacheLock.Unlock()
+				}
+				if _, err := tx.Stmt(stmt).ExecContext(ctx, args...); err != nil {
 					err := logDMLTxnErr(
 						cerror.WrapError(cerror.ErrMySQLTxnError, err),
 						start, s.changefeed, query, dmls.rowCount, dmls.startTs)
