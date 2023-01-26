@@ -740,6 +740,38 @@ var doc = `{
                     }
                 }
             }
+        },
+        "/api/v2/processors/{changefeed_id}/{capture_id}": {
+            "get": {
+                "description": "get the detail information of a processor",
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "processor"
+                ],
+                "summary": "Get processor detail information",
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/model.ProcessorDetail"
+                        }
+                    },
+                    "400": {
+                        "description": "Bad Request",
+                        "schema": {
+                            "$ref": "#/definitions/model.HTTPError"
+                        }
+                    },
+                    "500": {
+                        "description": "Internal Server Error",
+                        "schema": {
+                            "$ref": "#/definitions/model.HTTPError"
+                        }
+                    }
+                }
+            }
         }
     },
     "definitions": {
