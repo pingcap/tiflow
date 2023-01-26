@@ -186,6 +186,11 @@ func (s *mysqlBackend) Flush(ctx context.Context) (err error) {
 
 // Close implements interface backend.
 func (s *mysqlBackend) Close() (err error) {
+	if s.stmtCache != nil {
+		for _, stmt := range s.stmtCache {
+			stmt.Close()
+		}
+	}
 	if s.db != nil {
 		err = s.db.Close()
 		s.db = nil
