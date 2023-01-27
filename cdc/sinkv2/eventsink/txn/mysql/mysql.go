@@ -22,7 +22,7 @@ import (
 	"time"
 
 	dmysql "github.com/go-sql-driver/mysql"
-	"github.com/hashicorp/golang-lru"
+	lru "github.com/hashicorp/golang-lru"
 	"github.com/pingcap/errors"
 	"github.com/pingcap/failpoint"
 	"github.com/pingcap/log"
@@ -51,7 +51,7 @@ const (
 	networkDriftDuration = 5 * time.Second
 
 	defaultDMLMaxRetry uint64 = 8
-	prepStmtCacheSize  uint   = 1000
+	prepStmtCacheSize  int    = 1000
 )
 
 type mysqlBackend struct {
@@ -105,7 +105,7 @@ func NewMySQLBackends(
 
 	db.SetMaxIdleConns(cfg.WorkerCount)
 	db.SetMaxOpenConns(cfg.WorkerCount)
-	stmtCache, err := lru.NewWithEvict(prepStmtCacheSize, func(key lru.Key, value interface{}) {
+	stmtCache, err := lru.NewWithEvict(prepStmtCacheSize, func(key, value interface{}) {
 		stmt := value.(*sql.Stmt)
 		stmt.Close()
 	})
@@ -122,6 +122,7 @@ func NewMySQLBackends(
 
 			metricTxnSinkDMLBatchCommit:   txn.SinkDMLBatchCommit.WithLabelValues(changefeedID.Namespace, changefeedID.ID),
 			metricTxnSinkDMLBatchCallback: txn.SinkDMLBatchCallback.WithLabelValues(changefeedID.Namespace, changefeedID.ID),
+			stmtCache:                     stmtCache,
 		})
 	}
 
@@ -603,7 +604,7 @@ func (s *mysqlBackend) execDMLWithMaxRetries(pctx context.Context, dmls *prepare
 
 					s.stmtCache.Add(query, stmt)
 				}
-				if _, err := tx.Stmt(stmt).ExecContext(ctx, args...); err != nil {
+				if _, err := tx.Stmt(stmt.(*sql.Stmt)).ExecContext(ctx, args...); err != nil {
 					err := logDMLTxnErr(
 						cerror.WrapError(cerror.ErrMySQLTxnError, err),
 						start, s.changefeed, query, dmls.rowCount, dmls.startTs)

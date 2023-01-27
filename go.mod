@@ -42,6 +42,7 @@ require (
 	github.com/grpc-ecosystem/go-grpc-prometheus v1.2.0
 	github.com/grpc-ecosystem/grpc-gateway v1.16.0
 	github.com/grpc-ecosystem/grpc-gateway/v2 v2.11.0
+	github.com/hashicorp/golang-lru v0.5.1
 	github.com/integralist/go-findroot v0.0.0-20160518114804-ac90681525dc
 	github.com/jarcoal/httpmock v1.2.0
 	github.com/jmoiron/sqlx v1.3.3
@@ -172,7 +173,6 @@ require (
 	github.com/hashicorp/errwrap v1.0.0 // indirect
 	github.com/hashicorp/go-multierror v1.1.1 // indirect
 	github.com/hashicorp/go-uuid v1.0.3 // indirect
-	github.com/hashicorp/golang-lru v1.0.1 // indirect
 	github.com/iancoleman/strcase v0.2.0 // indirect
 	github.com/improbable-eng/grpc-web v0.12.0 // indirect
 	github.com/inconshreveable/mousetrap v1.0.1 // indirect
