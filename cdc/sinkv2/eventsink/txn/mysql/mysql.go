@@ -51,7 +51,7 @@ const (
 	networkDriftDuration = 5 * time.Second
 
 	defaultDMLMaxRetry uint64 = 8
-	prepStmtCacheSize  int    = 1000
+	prepStmtCacheSize  int    = 100000
 )
 
 type mysqlBackend struct {
@@ -109,6 +109,9 @@ func NewMySQLBackends(
 		stmt := value.(*sql.Stmt)
 		stmt.Close()
 	})
+	if err != nil {
+		return nil, err
+	}
 
 	backends := make([]*mysqlBackend, 0, cfg.WorkerCount)
 	for i := 0; i < cfg.WorkerCount; i++ {
