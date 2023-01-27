@@ -22,6 +22,7 @@ import (
 	"time"
 
 	dmysql "github.com/go-sql-driver/mysql"
+	"github.com/hashicorp/golang-lru"
 	"github.com/pingcap/errors"
 	"github.com/pingcap/failpoint"
 	"github.com/pingcap/log"
