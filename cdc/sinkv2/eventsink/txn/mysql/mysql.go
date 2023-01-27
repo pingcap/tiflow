@@ -68,7 +68,7 @@ type mysqlBackend struct {
 	metricTxnSinkDMLBatchCallback prometheus.Observer
 	// implement stmtCache to improve performance, especially when the downstream is TiDB
 	stmtCache map[string]*sql.Stmt
-	cacheLock sync.Mutex
+	cacheLock *sync.Mutex
 }
 
 // NewMySQLBackends creates a new MySQL sink using schema storage
@@ -107,6 +107,7 @@ func NewMySQLBackends(
 	db.SetMaxOpenConns(cfg.WorkerCount)
 
 	stmtCache := make(map[string]*sql.Stmt)
+	cacheLock := &sync.Mutex{}
 
 	backends := make([]*mysqlBackend, 0, cfg.WorkerCount)
 	for i := 0; i < cfg.WorkerCount; i++ {
@@ -121,6 +122,7 @@ func NewMySQLBackends(
 			metricTxnSinkDMLBatchCommit:   txn.SinkDMLBatchCommit.WithLabelValues(changefeedID.Namespace, changefeedID.ID),
 			metricTxnSinkDMLBatchCallback: txn.SinkDMLBatchCallback.WithLabelValues(changefeedID.Namespace, changefeedID.ID),
 			stmtCache:                     stmtCache,
+			cacheLock:                     cacheLock,
 		})
 	}
 
