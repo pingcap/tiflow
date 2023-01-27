@@ -19,7 +19,6 @@ import (
 	"database/sql/driver"
 	"fmt"
 	"net/url"
-	"sync"
 	"time"
 
 	dmysql "github.com/go-sql-driver/mysql"
@@ -51,6 +50,7 @@ const (
 	networkDriftDuration = 5 * time.Second
 
 	defaultDMLMaxRetry uint64 = 8
+	prepStmtCacheSize  uint   = 1000
 )
 
 type mysqlBackend struct {
@@ -67,8 +67,7 @@ type mysqlBackend struct {
 	metricTxnSinkDMLBatchCommit   prometheus.Observer
 	metricTxnSinkDMLBatchCallback prometheus.Observer
 	// implement stmtCache to improve performance, especially when the downstream is TiDB
-	stmtCache map[string]*sql.Stmt
-	cacheLock sync.Mutex
+	stmtCache *lru.Cache
 }
 
 // NewMySQLBackends creates a new MySQL sink using schema storage
@@ -105,6 +104,10 @@ func NewMySQLBackends(
 
 	db.SetMaxIdleConns(cfg.WorkerCount)
 	db.SetMaxOpenConns(cfg.WorkerCount)
+	stmtCache, err := lru.NewWithEvict(prepStmtCacheSize, func(key lru.Key, value interface{}) {
+		stmt := value.(*sql.Stmt)
+		stmt.Close()
+	})
 
 	backends := make([]*mysqlBackend, 0, cfg.WorkerCount)
 	for i := 0; i < cfg.WorkerCount; i++ {
@@ -187,9 +190,7 @@ func (s *mysqlBackend) Flush(ctx context.Context) (err error) {
 // Close implements interface backend.
 func (s *mysqlBackend) Close() (err error) {
 	if s.stmtCache != nil {
-		for _, stmt := range s.stmtCache {
-			stmt.Close()
-		}
+		s.stmtCache.Purge()
 	}
 	if s.db != nil {
 		err = s.db.Close()
@@ -589,12 +590,7 @@ func (s *mysqlBackend) execDMLWithMaxRetries(pctx context.Context, dmls *prepare
 				log.Debug("exec row", zap.Int("workerID", s.workerID),
 					zap.String("sql", query), zap.Any("args", args))
 				ctx, cancelFunc := context.WithTimeout(pctx, writeTimeout)
-				s.cacheLock.Lock()
-				if s.stmtCache == nil {
-					s.stmtCache = make(map[string]*sql.Stmt)
-				}
-				stmt, ok := s.stmtCache[query]
-				s.cacheLock.Unlock()
+				stmt, ok := s.stmtCache.Get(query)
 
 				if !ok {
 					var err error
@@ -604,9 +600,7 @@ func (s *mysqlBackend) execDMLWithMaxRetries(pctx context.Context, dmls *prepare
 						return 0, errors.Trace(err)
 					}
 
-					s.cacheLock.Lock()
-					s.stmtCache[query] = stmt
-					s.cacheLock.Unlock()
+					s.stmtCache.Add(query, stmt)
 				}
 				if _, err := tx.Stmt(stmt).ExecContext(ctx, args...); err != nil {
 					err := logDMLTxnErr(
