@@ -105,7 +105,7 @@ func NewConfig() *Config {
 		DialTimeout:         defaultDialTimeout,
 		SafeMode:            defaultSafeMode,
 		BatchDMLEnable:      defaultBatchDMLEnable,
-		PrepStmtCacheSize:   defaultBatchReplaceSize,
+		PrepStmtCacheSize:   defaultPrepStmtCacheSize,
 	}
 }
 
