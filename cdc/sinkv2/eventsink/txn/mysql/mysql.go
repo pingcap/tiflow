@@ -51,7 +51,6 @@ const (
 	networkDriftDuration = 5 * time.Second
 
 	defaultDMLMaxRetry uint64 = 8
-	prepStmtCacheSize  int    = 100000
 )
 
 type mysqlBackend struct {
@@ -105,7 +104,7 @@ func NewMySQLBackends(
 
 	db.SetMaxIdleConns(cfg.WorkerCount)
 	db.SetMaxOpenConns(cfg.WorkerCount)
-	stmtCache, err := lru.NewWithEvict(prepStmtCacheSize, func(key, value interface{}) {
+	stmtCache, err := lru.NewWithEvict(cfg.PrepStmtCacheSize, func(key, value interface{}) {
 		stmt := value.(*sql.Stmt)
 		stmt.Close()
 	})
