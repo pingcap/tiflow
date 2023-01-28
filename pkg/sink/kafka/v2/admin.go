@@ -28,11 +28,9 @@ type admin struct {
 	client *kafka.Client
 }
 
-func NewClusterAdminClient(ctx context.Context, endpoints []string) *admin {
+func NewClusterAdminClient(endpoints []string) *admin {
 	client := &kafka.Client{
 		Addr: kafka.TCP(endpoints...),
-		// todo: set transport
-		Transport: nil,
 	}
 	return &admin{
 		client: client,
@@ -106,14 +104,22 @@ func (a *admin) GetBrokerConfig(ctx context.Context, configName string) (string,
 		return "", err
 	}
 
-	if len(resp.Resources) == 0 || resp.Resources[0].ConfigEntries[0].ConfigName != configName {
+	if len(resp.Resources) == 0 || len(resp.Resources[0].ConfigEntries) == 0 {
 		log.Warn("kafka config item not found",
 			zap.String("configName", configName))
 		return "", errors.ErrKafkaBrokerConfigNotFound.GenWithStack(
 			"cannot find the `%s` from the broker's configuration", configName)
 	}
 
-	return resp.Resources[0].ConfigEntries[0].ConfigValue, nil
+	entry := resp.Resources[0].ConfigEntries[0]
+	if entry.ConfigName != configName {
+		log.Warn("kafka config item not found",
+			zap.String("configName", configName))
+		return "", errors.ErrKafkaBrokerConfigNotFound.GenWithStack(
+			"cannot find the `%s` from the broker's configuration", configName)
+	}
+
+	return entry.ConfigValue, nil
 }
 
 func (a *admin) GetAllTopicsMeta(ctx context.Context) (map[string]pkafka.TopicDetail, error) {
