@@ -63,6 +63,11 @@ const (
 	BackoffMaxDelay = 60 * time.Second
 
 	defaultBatchDMLEnable = true
+
+	// defaultStmtCacheSize is the default size of prepared statement cache
+	defaultPrepStmtCacheSize = 100000
+	// The upper limit of the max size of prepared statement cache
+	maxPrepStmtCacheSize = 100000000
 )
 
 // Config is the configs for MySQL backend.
@@ -81,9 +86,10 @@ type Config struct {
 	ForceReplicate      bool
 	EnableOldValue      bool
 
-	IsTiDB         bool // IsTiDB is true if the downstream is TiDB
-	SourceID       uint64
-	BatchDMLEnable bool
+	IsTiDB            bool // IsTiDB is true if the downstream is TiDB
+	SourceID          uint64
+	BatchDMLEnable    bool
+	PrepStmtCacheSize int
 }
 
 // NewConfig returns the default mysql backend config.
@@ -99,6 +105,7 @@ func NewConfig() *Config {
 		DialTimeout:         defaultDialTimeout,
 		SafeMode:            defaultSafeMode,
 		BatchDMLEnable:      defaultBatchDMLEnable,
+		PrepStmtCacheSize:   defaultBatchReplaceSize,
 	}
 }
 
@@ -149,6 +156,9 @@ func (c *Config) Apply(
 		return err
 	}
 	if err = getBatchDMLEnable(query, &c.BatchDMLEnable); err != nil {
+		return err
+	}
+	if err = getPrepStmtCacheSize(query, &c.PrepStmtCacheSize); err != nil {
 		return err
 	}
 	c.EnableOldValue = replicaConfig.EnableOldValue
@@ -330,5 +340,28 @@ func getBatchDMLEnable(values url.Values, batchDMLEnable *bool) error {
 		}
 		*batchDMLEnable = enable
 	}
+	return nil
+}
+
+func getPrepStmtCacheSize(values url.Values, prepStmtCacheSize *int) error {
+	s := values.Get("prep-stmt-cache-size")
+	if len(s) == 0 {
+		return nil
+	}
+
+	c, err := strconv.Atoi(s)
+	if err != nil {
+		return cerror.WrapError(cerror.ErrMySQLInvalidConfig, err)
+	}
+	if c <= 0 {
+		return cerror.WrapError(cerror.ErrMySQLInvalidConfig,
+			fmt.Errorf("invalid prep-stmt-cache-size %d, which must be greater than 0", c))
+	}
+	if c > maxPrepStmtCacheSize {
+		log.Warn("prep-stmt-cache-size too large",
+			zap.Int("original", c), zap.Int("override", maxPrepStmtCacheSize))
+		c = maxMaxTxnRow
+	}
+	*prepStmtCacheSize = c
 	return nil
 }
