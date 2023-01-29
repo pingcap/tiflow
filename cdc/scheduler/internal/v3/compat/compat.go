@@ -38,7 +38,7 @@ func New(
 	captureInfo map[model.CaptureID]*model.CaptureInfo,
 ) *Compat {
 	return &Compat{
-		regionPerSpan: config.RegionPerSpan,
+		regionPerSpan: config.ChangefeedSettings.RegionPerSpan,
 		captureInfo:   captureInfo,
 	}
 }

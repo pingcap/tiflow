@@ -26,6 +26,7 @@ import (
 	"github.com/pingcap/tiflow/cdc/capture"
 	"github.com/pingcap/tiflow/cdc/model"
 	cerror "github.com/pingcap/tiflow/pkg/errors"
+	"github.com/pingcap/tiflow/pkg/retry"
 	"github.com/pingcap/tiflow/pkg/security"
 	"github.com/pingcap/tiflow/pkg/txnutil/gc"
 	"github.com/pingcap/tiflow/pkg/upstream"
@@ -296,6 +297,58 @@ func (h *OpenAPIV2) updateChangefeed(c *gin.Context) {
 	c.JSON(http.StatusOK, toAPIModel(newCfInfo, true))
 }
 
+// deleteChangefeed handles delete changefeed request,
+func (h *OpenAPIV2) deleteChangefeed(c *gin.Context) {
+	ctx := c.Request.Context()
+	changefeedID := model.DefaultChangeFeedID(c.Param(apiOpVarChangefeedID))
+	if err := model.ValidateChangefeedID(changefeedID.ID); err != nil {
+		_ = c.Error(cerror.ErrAPIInvalidParam.GenWithStack("invalid changefeed_id: %s",
+			changefeedID.ID))
+		return
+	}
+	_, err := h.capture.StatusProvider().GetChangeFeedStatus(ctx, changefeedID)
+	if err != nil {
+		if cerror.ErrChangeFeedNotExists.Equal(err) {
+			c.Status(http.StatusNoContent)
+			return
+		}
+		_ = c.Error(err)
+		return
+	}
+
+	job := model.AdminJob{
+		CfID: changefeedID,
+		Type: model.AdminRemove,
+	}
+
+	if err := api.HandleOwnerJob(ctx, h.capture, job); err != nil {
+		_ = c.Error(err)
+		return
+	}
+
+	// Owner needs at least two ticks to remove a changefeed,
+	// we need to wait for it.
+	err = retry.Do(ctx, func() error {
+		_, err := h.capture.StatusProvider().GetChangeFeedStatus(ctx, changefeedID)
+		if err != nil {
+			if strings.Contains(err.Error(), "ErrChangeFeedNotExists") {
+				return nil
+			}
+			return err
+		}
+		return cerror.ErrChangeFeedDeletionUnfinished.GenWithStackByArgs(changefeedID)
+	},
+		retry.WithMaxTries(100),         // max retry duration is 1 minute
+		retry.WithBackoffBaseDelay(600), // default owner tick interval is 200ms
+		retry.WithIsRetryableErr(cerror.IsRetryableError))
+
+	if err != nil {
+		_ = c.Error(err)
+		return
+	}
+	c.Status(http.StatusNoContent)
+}
+
 // getChangeFeedMetaInfo returns the metaInfo of a changefeed
 func (h *OpenAPIV2) getChangeFeedMetaInfo(c *gin.Context) {
 	ctx := c.Request.Context()
@@ -314,7 +367,7 @@ func (h *OpenAPIV2) getChangeFeedMetaInfo(c *gin.Context) {
 	c.JSON(http.StatusOK, toAPIModel(info, false))
 }
 
-// resumeChangefeed handles update changefeed request.
+// resumeChangefeed handles resume changefeed request.
 func (h *OpenAPIV2) resumeChangefeed(c *gin.Context) {
 	ctx := c.Request.Context()
 	changefeedID := model.DefaultChangeFeedID(c.Param(apiOpVarChangefeedID))
@@ -401,6 +454,35 @@ func (h *OpenAPIV2) resumeChangefeed(c *gin.Context) {
 		return
 	}
 	c.Status(http.StatusOK)
+}
+
+// pauseChangefeed handles pause changefeed request
+func (h *OpenAPIV2) pauseChangefeed(c *gin.Context) {
+	ctx := c.Request.Context()
+
+	changefeedID := model.DefaultChangeFeedID(c.Param(apiOpVarChangefeedID))
+	if err := model.ValidateChangefeedID(changefeedID.ID); err != nil {
+		_ = c.Error(cerror.ErrAPIInvalidParam.GenWithStack("invalid changefeed_id: %s",
+			changefeedID.ID))
+		return
+	}
+	// check if the changefeed exists
+	_, err := h.capture.StatusProvider().GetChangeFeedStatus(ctx, changefeedID)
+	if err != nil {
+		_ = c.Error(err)
+		return
+	}
+
+	job := model.AdminJob{
+		CfID: changefeedID,
+		Type: model.AdminStop,
+	}
+
+	if err := api.HandleOwnerJob(ctx, h.capture, job); err != nil {
+		_ = c.Error(err)
+		return
+	}
+	c.JSON(http.StatusOK, &EmptyResponse{})
 }
 
 func toAPIModel(info *model.ChangeFeedInfo, maskSinkURI bool) *ChangeFeedInfo {

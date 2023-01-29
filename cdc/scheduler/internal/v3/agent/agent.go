@@ -377,12 +377,6 @@ func (a *agent) handleMessageDispatchTableRequest(
 	table.injectDispatchTableTask(task)
 }
 
-// GetLastSentCheckpointTs implement agent interface
-func (a *agent) GetLastSentCheckpointTs() (checkpointTs model.Ts) {
-	// no need to implement this.
-	return internal.CheckpointCannotProceed
-}
-
 // Close implement agent interface
 func (a *agent) Close() error {
 	log.Debug("schedulerv3: agent closed",

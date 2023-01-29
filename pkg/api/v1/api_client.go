@@ -22,20 +22,13 @@ import (
 // We can create a fake api client which mocks TiCDC operations by implement this interface.
 type APIV1Interface interface {
 	RESTClient() rest.CDCRESTInterface
-	CapturesGetter
 	ChangefeedsGetter
 	ProcessorsGetter
-	StatusGetter
 }
 
 // APIV1Client implements APIV1Interface and it is used to interact with cdc owner http api.
 type APIV1Client struct {
 	restClient rest.CDCRESTInterface
-}
-
-// Captures returns a CaptureInterface which abstracts capture operations.
-func (c *APIV1Client) Captures() CaptureInterface {
-	return newCaptures(c)
 }
 
 // Changefeeds returns a ChangefeedInterface which abstracts changefeed operations.
@@ -55,14 +48,6 @@ func (c *APIV1Client) RESTClient() rest.CDCRESTInterface {
 		return nil
 	}
 	return c.restClient
-}
-
-// Status returns a StatusInterface to communicate with cdc api
-func (c *APIV1Client) Status() StatusInterface {
-	if c == nil {
-		return nil
-	}
-	return newStatus(c)
 }
 
 // NewAPIClient creates a new APIV1Client.

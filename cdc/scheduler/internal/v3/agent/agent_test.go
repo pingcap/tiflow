@@ -62,6 +62,8 @@ func iterPermutation(sequence []int, fn func(sequence []int)) {
 }
 
 func newAgent4Test() *agent {
+	cfg := config.GetDefaultServerConfig().Debug.Scheduler
+	cfg.ChangefeedSettings = config.GetDefaultReplicaConfig().Scheduler
 	a := &agent{
 		ownerInfo: ownerInfo{
 			CaptureInfo: model.CaptureInfo{
@@ -70,8 +72,7 @@ func newAgent4Test() *agent {
 			},
 			Revision: schedulepb.OwnerRevision{Revision: 1},
 		},
-		compat: compat.New(
-			config.GetDefaultServerConfig().Debug.Scheduler, map[string]*model.CaptureInfo{}),
+		compat: compat.New(cfg, map[string]*model.CaptureInfo{}),
 	}
 
 	a.Version = "agent-version-1"
@@ -90,7 +91,11 @@ func TestNewAgent(t *testing.T) {
 	me := mock_etcd.NewMockCDCEtcdClient(gomock.NewController(t))
 
 	tableExector := newMockTableExecutor()
-	cfg := &config.SchedulerConfig{RegionPerSpan: 1}
+	cfg := &config.SchedulerConfig{
+		ChangefeedSettings: &config.ChangefeedSchedulerConfig{
+			RegionPerSpan: 1,
+		},
+	}
 
 	// owner and revision found successfully
 	me.EXPECT().GetOwnerID(gomock.Any()).Return("ownerID", nil).Times(1)
@@ -875,7 +880,9 @@ func TestAgentTransportCompat(t *testing.T) {
 	trans := transport.NewMockTrans()
 	a.trans = trans
 	a.compat = compat.New(&config.SchedulerConfig{
-		RegionPerSpan: 1,
+		ChangefeedSettings: &config.ChangefeedSchedulerConfig{
+			RegionPerSpan: 1,
+		},
 	}, map[model.CaptureID]*model.CaptureInfo{})
 	ctx := context.Background()
 
@@ -958,7 +965,7 @@ type MockTableExecutor struct {
 	mock.Mock
 
 	// it's preferred to use `pipeline.MockPipeline` here to make the test more vivid.
-	tables *spanz.Map[tablepb.TableState]
+	tables *spanz.BtreeMap[tablepb.TableState]
 }
 
 var _ internal.TableExecutor = (*MockTableExecutor)(nil)
@@ -966,7 +973,7 @@ var _ internal.TableExecutor = (*MockTableExecutor)(nil)
 // newMockTableExecutor creates a new mock table executor.
 func newMockTableExecutor() *MockTableExecutor {
 	return &MockTableExecutor{
-		tables: spanz.NewMap[tablepb.TableState](),
+		tables: spanz.NewBtreeMap[tablepb.TableState](),
 	}
 }
 
@@ -1082,12 +1089,6 @@ func (e *MockTableExecutor) GetTableSpanCount() int {
 		return true
 	})
 	return result
-}
-
-// GetCheckpoint returns the last checkpoint.
-func (e *MockTableExecutor) GetCheckpoint() (checkpointTs, resolvedTs model.Ts) {
-	args := e.Called()
-	return args.Get(0).(model.Ts), args.Get(1).(model.Ts)
 }
 
 // GetTableSpanStatus implements TableExecutor interface

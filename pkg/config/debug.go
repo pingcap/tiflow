@@ -15,7 +15,6 @@ package config
 
 import (
 	"github.com/pingcap/errors"
-	cerror "github.com/pingcap/tiflow/pkg/errors"
 	cerrors "github.com/pingcap/tiflow/pkg/errors"
 )
 
@@ -38,10 +37,7 @@ type DebugConfig struct {
 	EnableDBSorter bool      `toml:"enable-db-sorter" json:"enable-db-sorter"`
 	DB             *DBConfig `toml:"db" json:"db"`
 
-	// EnableNewScheduler enables the peer-messaging based new scheduler.
-	// The default value is true.
-	EnableNewScheduler bool            `toml:"enable-new-scheduler" json:"enable-new-scheduler"`
-	Messages           *MessagesConfig `toml:"messages" json:"messages"`
+	Messages *MessagesConfig `toml:"messages" json:"messages"`
 
 	// Scheduler is the configuration of the two-phase scheduler.
 	Scheduler *SchedulerConfig `toml:"scheduler" json:"scheduler"`
@@ -49,6 +45,9 @@ type DebugConfig struct {
 	// EnableNewSink enables the new sink.
 	// The default value is true.
 	EnableNewSink bool `toml:"enable-new-sink" json:"enable-new-sink"`
+
+	// EnableKafkaSinkV2 enable the new kafka sink, which is implemented based on kafka-go client.
+	EnableKafkaSinkV2 bool `toml:"enable-kafka-sink-v2" json:"enable-kafka-sink-v2"`
 }
 
 // ValidateAndAdjust validates and adjusts the debug configuration
@@ -62,13 +61,6 @@ func (c *DebugConfig) ValidateAndAdjust() error {
 	if err := c.Scheduler.ValidateAndAdjust(); err != nil {
 		return errors.Trace(err)
 	}
-	if c.Scheduler.RegionPerSpan != 0 {
-		if !c.EnableNewSink {
-			return cerror.ErrInvalidServerOption.GenWithStackByArgs(
-				"enabling span replication requires setting " +
-					"`debug.enable-new-sink` to be true")
-		}
-	}
 	if c.EnablePullBasedSink {
 		if !c.EnableDBSorter {
 			return cerrors.ErrInvalidPullBasedSinkConfig.GenWithStackByArgs(
@@ -81,6 +73,15 @@ func (c *DebugConfig) ValidateAndAdjust() error {
 					" you can set `debug.enable-new-sink` to be true")
 		}
 	}
+
+	if c.EnableKafkaSinkV2 {
+		if !c.EnableNewSink {
+			return cerrors.ErrInvalidPullBasedSinkConfig.GenWithStackByArgs(
+				"enabling kafka sink v2 requires use of the new sink," +
+					" you can set `debug.enable-new-sink` to be true")
+		}
+	}
+
 	return nil
 }
 

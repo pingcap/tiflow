@@ -17,7 +17,6 @@ import (
 	"context"
 	"fmt"
 	"io"
-	"math"
 	"strconv"
 	"sync"
 	"time"
@@ -74,7 +73,7 @@ type processor struct {
 	pullBasedSinking bool
 
 	// These fields are used to sinking data in non-pull-based mode.
-	tableSpans    *spanz.Map[tablepb.TablePipeline]
+	tableSpans    *spanz.HashMap[tablepb.TablePipeline]
 	sinkV1        sinkv1.Sink
 	sinkV2Factory *factory.SinkFactory
 
@@ -93,28 +92,22 @@ type processor struct {
 	createTablePipeline func(
 		ctx cdcContext.Context, span tablepb.Span, replicaInfo *model.TableReplicaInfo,
 	) (tablepb.TablePipeline, error)
-	newAgent func(cdcContext.Context, *model.Liveness) (scheduler.Agent, error)
-	cfg      *config.SchedulerConfig
+	newAgent func(
+		cdcContext.Context, *model.Liveness, *config.SchedulerConfig,
+	) (scheduler.Agent, error)
+	cfg *config.SchedulerConfig
 
-	liveness     *model.Liveness
-	agent        scheduler.Agent
-	checkpointTs model.Ts
-	resolvedTs   model.Ts
+	liveness *model.Liveness
+	agent    scheduler.Agent
 
-	metricResolvedTsGauge           prometheus.Gauge
-	metricResolvedTsLagGauge        prometheus.Gauge
-	metricMinResolvedTableIDGauge   prometheus.Gauge
-	metricCheckpointTsGauge         prometheus.Gauge
-	metricCheckpointTsLagGauge      prometheus.Gauge
-	metricMinCheckpointTableIDGauge prometheus.Gauge
-	metricSyncTableNumGauge         prometheus.Gauge
-	metricSchemaStorageGcTsGauge    prometheus.Gauge
-	metricProcessorErrorCounter     prometheus.Counter
-	metricProcessorTickDuration     prometheus.Observer
-	metricsTableSinkTotalRows       prometheus.Counter
-	metricsTableMemoryHistogram     prometheus.Observer
-	metricsProcessorMemoryGauge     prometheus.Gauge
-	metricRemainKVEventGauge        prometheus.Gauge
+	metricSyncTableNumGauge      prometheus.Gauge
+	metricSchemaStorageGcTsGauge prometheus.Gauge
+	metricProcessorErrorCounter  prometheus.Counter
+	metricProcessorTickDuration  prometheus.Observer
+	metricsTableSinkTotalRows    prometheus.Counter
+	metricsTableMemoryHistogram  prometheus.Observer
+	metricsProcessorMemoryGauge  prometheus.Gauge
+	metricRemainKVEventGauge     prometheus.Gauge
 }
 
 // checkReadyForMessages checks whether all necessary Etcd keys have been established.
@@ -287,9 +280,7 @@ func (p *processor) IsAddTableSpanFinished(span tablepb.Span, isPrepare bool) bo
 		return false
 	}
 
-	localResolvedTs := p.resolvedTs
 	globalResolvedTs := p.changefeed.Status.ResolvedTs
-	localCheckpointTs := p.agent.GetLastSentCheckpointTs()
 	globalCheckpointTs := p.changefeed.Status.CheckpointTs
 
 	var tableResolvedTs, tableCheckpointTs uint64
@@ -336,10 +327,8 @@ func (p *processor) IsAddTableSpanFinished(span tablepb.Span, isPrepare bool) bo
 			zap.String("changefeed", p.changefeedID.ID),
 			zap.Stringer("span", &span),
 			zap.Uint64("tableResolvedTs", tableResolvedTs),
-			zap.Uint64("localResolvedTs", localResolvedTs),
 			zap.Uint64("globalResolvedTs", globalResolvedTs),
 			zap.Uint64("tableCheckpointTs", tableCheckpointTs),
-			zap.Uint64("localCheckpointTs", localCheckpointTs),
 			zap.Uint64("globalCheckpointTs", globalCheckpointTs),
 			zap.Any("state", state),
 			zap.Bool("isPrepare", isPrepare))
@@ -352,10 +341,8 @@ func (p *processor) IsAddTableSpanFinished(span tablepb.Span, isPrepare bool) bo
 		zap.String("changefeed", p.changefeedID.ID),
 		zap.Stringer("span", &span),
 		zap.Uint64("tableResolvedTs", tableResolvedTs),
-		zap.Uint64("localResolvedTs", localResolvedTs),
 		zap.Uint64("globalResolvedTs", globalResolvedTs),
 		zap.Uint64("tableCheckpointTs", tableCheckpointTs),
-		zap.Uint64("localCheckpointTs", localCheckpointTs),
 		zap.Uint64("globalCheckpointTs", globalCheckpointTs),
 		zap.Any("state", state),
 		zap.Bool("isPrepare", isPrepare))
@@ -444,11 +431,6 @@ func (p *processor) GetTableSpanCount() int {
 		return len(p.sinkManager.GetAllCurrentTableSpans())
 	}
 	return p.tableSpans.Len()
-}
-
-// GetCheckpoint implements TableExecutor interface.
-func (p *processor) GetCheckpoint() (checkpointTs, resolvedTs model.Ts) {
-	return p.checkpointTs, p.resolvedTs
 }
 
 // GetTableSpanStatus implements TableExecutor interface
@@ -553,25 +535,13 @@ func newProcessor(
 	p := &processor{
 		changefeed:   state,
 		upstream:     up,
-		tableSpans:   spanz.NewMap[tablepb.TablePipeline](),
+		tableSpans:   spanz.NewHashMap[tablepb.TablePipeline](),
 		errCh:        make(chan error, 1),
 		changefeedID: changefeedID,
 		captureInfo:  captureInfo,
 		cancel:       func() {},
 		liveness:     liveness,
 
-		metricResolvedTsGauge: resolvedTsGauge.
-			WithLabelValues(changefeedID.Namespace, changefeedID.ID),
-		metricResolvedTsLagGauge: resolvedTsLagGauge.
-			WithLabelValues(changefeedID.Namespace, changefeedID.ID),
-		metricMinResolvedTableIDGauge: resolvedTsMinTableIDGauge.
-			WithLabelValues(changefeedID.Namespace, changefeedID.ID),
-		metricCheckpointTsGauge: checkpointTsGauge.
-			WithLabelValues(changefeedID.Namespace, changefeedID.ID),
-		metricCheckpointTsLagGauge: checkpointTsLagGauge.
-			WithLabelValues(changefeedID.Namespace, changefeedID.ID),
-		metricMinCheckpointTableIDGauge: checkpointTsMinTableIDGauge.
-			WithLabelValues(changefeedID.Namespace, changefeedID.ID),
 		metricSyncTableNumGauge: syncTableNumGauge.
 			WithLabelValues(changefeedID.Namespace, changefeedID.ID),
 		metricProcessorErrorCounter: processorErrorCounter.
@@ -721,10 +691,6 @@ func (p *processor) tick(ctx cdcContext.Context) error {
 		return errors.Trace(err)
 	}
 	p.pushResolvedTs2Table()
-	// it is no need to check the error here, because we will use
-	// local time when an error return, which is acceptable
-	pdTime, _ := p.upstream.PDClock.CurrentTime()
-	p.handlePosition(oracle.GetPhysical(pdTime))
 
 	p.doGCSchemaStorage()
 
@@ -916,7 +882,7 @@ func (p *processor) lazyInitImpl(ctx cdcContext.Context) error {
 			zap.Duration("duration", time.Since(start)))
 	}
 
-	p.agent, err = p.newAgent(ctx, p.liveness)
+	p.agent, err = p.newAgent(ctx, p.liveness, p.cfg)
 	if err != nil {
 		return err
 	}
@@ -930,13 +896,12 @@ func (p *processor) lazyInitImpl(ctx cdcContext.Context) error {
 }
 
 func (p *processor) newAgentImpl(
-	ctx cdcContext.Context, liveness *model.Liveness,
+	ctx cdcContext.Context, liveness *model.Liveness, cfg *config.SchedulerConfig,
 ) (ret scheduler.Agent, err error) {
 	messageServer := ctx.GlobalVars().MessageServer
 	messageRouter := ctx.GlobalVars().MessageRouter
 	etcdClient := ctx.GlobalVars().EtcdClient
 	captureID := ctx.GlobalVars().CaptureInfo.ID
-	cfg := config.GetGlobalServerConfig().Debug.Scheduler
 	ret, err = scheduler.NewAgent(
 		ctx, captureID, liveness,
 		messageServer, messageRouter, etcdClient, p, p.changefeedID, cfg)
@@ -1057,66 +1022,6 @@ func (p *processor) sendError(err error) {
 	}
 }
 
-// handlePosition calculates the local resolved ts and local checkpoint ts.
-// resolvedTs = min(schemaStorage's resolvedTs, all table's resolvedTs).
-// table's resolvedTs = redo's resolvedTs if redo enable, else sorter's resolvedTs.
-// checkpointTs = min(resolvedTs, all table's checkpointTs).
-func (p *processor) handlePosition(currentTs int64) {
-	minResolvedTs := uint64(math.MaxUint64)
-	minResolvedTableID := int64(0)
-	if p.schemaStorage != nil {
-		minResolvedTs = p.schemaStorage.ResolvedTs()
-	}
-	minCheckpointTs := minResolvedTs
-	minCheckpointTableID := int64(0)
-	if p.pullBasedSinking {
-		spans := p.sinkManager.GetAllCurrentTableSpans()
-		for _, span := range spans {
-			stats := p.sinkManager.GetTableStats(span)
-			log.Debug("sink manager gets table stats",
-				zap.String("namespace", p.changefeedID.Namespace),
-				zap.String("changefeed", p.changefeedID.ID),
-				zap.Stringer("span", &span),
-				zap.Any("stats", stats))
-			if stats.ResolvedTs < minResolvedTs {
-				minResolvedTs = stats.ResolvedTs
-				minResolvedTableID = span.TableID
-			}
-			if stats.CheckpointTs < minCheckpointTs {
-				minCheckpointTs = stats.CheckpointTs
-				minCheckpointTableID = span.TableID
-			}
-		}
-	} else {
-		p.tableSpans.Ascend(func(span tablepb.Span, table tablepb.TablePipeline) bool {
-			rts := table.ResolvedTs()
-			if rts < minResolvedTs {
-				minResolvedTs = rts
-				minResolvedTableID = table.ID()
-			}
-			cts := table.CheckpointTs()
-			if cts < minCheckpointTs {
-				minCheckpointTs = cts
-				minCheckpointTableID = table.ID()
-			}
-			return true
-		})
-	}
-
-	resolvedPhyTs := oracle.ExtractPhysical(minResolvedTs)
-	p.metricResolvedTsLagGauge.Set(float64(currentTs-resolvedPhyTs) / 1e3)
-	p.metricResolvedTsGauge.Set(float64(resolvedPhyTs))
-	p.metricMinResolvedTableIDGauge.Set(float64(minResolvedTableID))
-
-	checkpointPhyTs := oracle.ExtractPhysical(minCheckpointTs)
-	p.metricCheckpointTsLagGauge.Set(float64(currentTs-checkpointPhyTs) / 1e3)
-	p.metricCheckpointTsGauge.Set(float64(checkpointPhyTs))
-	p.metricMinCheckpointTableIDGauge.Set(float64(minCheckpointTableID))
-
-	p.checkpointTs = minCheckpointTs
-	p.resolvedTs = minResolvedTs
-}
-
 // pushResolvedTs2Table sends global resolved ts to all the table pipelines.
 func (p *processor) pushResolvedTs2Table() {
 	resolvedTs := p.changefeed.Status.ResolvedTs
@@ -1131,7 +1036,7 @@ func (p *processor) pushResolvedTs2Table() {
 	if p.pullBasedSinking {
 		p.sinkManager.UpdateBarrierTs(resolvedTs)
 	} else {
-		p.tableSpans.Ascend(func(span tablepb.Span, table tablepb.TablePipeline) bool {
+		p.tableSpans.Range(func(span tablepb.Span, table tablepb.TablePipeline) bool {
 			table.UpdateBarrierTs(resolvedTs)
 			return true
 		})
@@ -1274,7 +1179,7 @@ func (p *processor) refreshMetrics() {
 	} else {
 		var totalConsumed uint64
 		var totalEvents int64
-		p.tableSpans.Ascend(func(span tablepb.Span, table tablepb.TablePipeline) bool {
+		p.tableSpans.Range(func(span tablepb.Span, table tablepb.TablePipeline) bool {
 			consumed := table.MemoryConsumption()
 			p.metricsTableMemoryHistogram.Observe(float64(consumed))
 			totalConsumed += consumed
@@ -1343,11 +1248,11 @@ func (p *processor) Close(ctx cdcContext.Context) error {
 				zap.String("changefeed", p.changefeedID.ID))
 		}
 	} else {
-		p.tableSpans.Ascend(func(span tablepb.Span, table tablepb.TablePipeline) bool {
+		p.tableSpans.Range(func(span tablepb.Span, table tablepb.TablePipeline) bool {
 			table.Cancel()
 			return true
 		})
-		p.tableSpans.Ascend(func(span tablepb.Span, table tablepb.TablePipeline) bool {
+		p.tableSpans.Range(func(span tablepb.Span, table tablepb.TablePipeline) bool {
 			table.Wait()
 			return true
 		})
@@ -1416,14 +1321,6 @@ func (p *processor) Close(ctx cdcContext.Context) error {
 }
 
 func (p *processor) cleanupMetrics() {
-	resolvedTsGauge.DeleteLabelValues(p.changefeedID.Namespace, p.changefeedID.ID)
-	resolvedTsLagGauge.DeleteLabelValues(p.changefeedID.Namespace, p.changefeedID.ID)
-	resolvedTsMinTableIDGauge.DeleteLabelValues(p.changefeedID.Namespace, p.changefeedID.ID)
-
-	checkpointTsGauge.DeleteLabelValues(p.changefeedID.Namespace, p.changefeedID.ID)
-	checkpointTsLagGauge.DeleteLabelValues(p.changefeedID.Namespace, p.changefeedID.ID)
-	checkpointTsMinTableIDGauge.DeleteLabelValues(p.changefeedID.Namespace, p.changefeedID.ID)
-
 	syncTableNumGauge.DeleteLabelValues(p.changefeedID.Namespace, p.changefeedID.ID)
 	processorErrorCounter.DeleteLabelValues(p.changefeedID.Namespace, p.changefeedID.ID)
 	processorSchemaStorageGcTsGauge.DeleteLabelValues(p.changefeedID.Namespace, p.changefeedID.ID)
@@ -1454,7 +1351,7 @@ func (p *processor) WriteDebugInfo(w io.Writer) error {
 				&span, stats.ResolvedTs, stats.CheckpointTs, state)
 		}
 	} else {
-		p.tableSpans.Ascend(func(span tablepb.Span, tablePipeline tablepb.TablePipeline) bool {
+		p.tableSpans.Range(func(span tablepb.Span, tablePipeline tablepb.TablePipeline) bool {
 			fmt.Fprintf(w, "span: %s, tableName: %s, resolvedTs: %d, checkpointTs: %d, state: %s\n",
 				&span, tablePipeline.Name(), tablePipeline.ResolvedTs(),
 				tablePipeline.CheckpointTs(), tablePipeline.State())

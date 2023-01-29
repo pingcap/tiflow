@@ -14,35 +14,53 @@
 package kafka
 
 import (
-	"github.com/Shopify/sarama"
+	"context"
 )
 
-// ClusterAdminClient is the administrative client for Kafka, which supports managing and inspecting topics,
-// brokers, configurations and ACLs.
+// TopicDetail represent a topic's detail information.
+type TopicDetail struct {
+	Name              string
+	NumPartitions     int32
+	ReplicationFactor int16
+	ConfigEntries     map[string]string
+}
+
+// Broker represents a Kafka broker.
+type Broker struct {
+	ID int32
+}
+
+// ClusterAdminClient is the administrative client for Kafka,
+// which supports managing and inspecting topics, brokers, configurations and ACLs.
 type ClusterAdminClient interface {
-	// ListTopics list the topics available in the cluster with the default options.
-	ListTopics() (map[string]sarama.TopicDetail, error)
-	// DescribeCluster gets information about the nodes in the cluster
-	DescribeCluster() (brokers []*sarama.Broker, controllerID int32, err error)
-	// DescribeConfig gets the configuration for the specified resources.
-	DescribeConfig(resource sarama.ConfigResource) ([]sarama.ConfigEntry, error)
-	// DescribeTopics fetches metadata from some topics.
-	DescribeTopics(topics []string) (metadata []*sarama.TopicMetadata, err error)
+	// GetAllBrokers return all brokers among the cluster
+	GetAllBrokers() ([]Broker, error)
+
+	// GetCoordinator return the coordinator's broker id of the cluster
+	GetCoordinator() (controllerID int32, err error)
+
+	// GetBrokerConfig return the broker level configuration with the `configName`
+	GetBrokerConfig(configName string) (string, error)
+
+	// GetAllTopicsMeta return all topics' metadata
+	// which available in the cluster with the default options.
+	GetAllTopicsMeta() (map[string]TopicDetail, error)
+
+	// GetTopicsMeta return all target topics' metadata
+	// if `ignoreTopicError` is true, ignore the topic error and return the metadata of valid topics
+	GetTopicsMeta(topics []string, ignoreTopicError bool) (map[string]TopicDetail, error)
+
 	// CreateTopic creates a new topic.
-	CreateTopic(topic string, detail *sarama.TopicDetail, validateOnly bool) error
-	// Close shuts down the admin and closes underlying client.
+	CreateTopic(topic string, detail *TopicDetail, validateOnly bool) error
+
+	// Close shuts down the admin client.
 	Close() error
 }
 
 // ClusterAdminClientCreator defines the type of cluster admin client crater.
-type ClusterAdminClientCreator func([]string, *sarama.Config) (ClusterAdminClient, error)
-
-// NewSaramaAdminClient constructs a ClusterAdminClient with sarama.
-func NewSaramaAdminClient(addrs []string, conf *sarama.Config) (ClusterAdminClient, error) {
-	return sarama.NewClusterAdmin(addrs, conf)
-}
+type ClusterAdminClientCreator func(context.Context, *Options) (ClusterAdminClient, error)
 
 // NewMockAdminClient constructs a ClusterAdminClient with mock implementation.
-func NewMockAdminClient(_ []string, _ *sarama.Config) (ClusterAdminClient, error) {
+func NewMockAdminClient(_ context.Context, _ *Options) (ClusterAdminClient, error) {
 	return NewClusterAdminClientMockImpl(), nil
 }

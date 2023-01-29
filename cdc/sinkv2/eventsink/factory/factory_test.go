@@ -68,7 +68,7 @@ func newForTest(ctx context.Context,
 	case "kafka", "kafka+ssl":
 		mqs, err := mq.NewKafkaDMLSink(ctx, sinkURI, cfg, errCh,
 			// Use mock kafka clients for test.
-			kafka.NewMockAdminClient, dmlproducer.NewDMLMockProducer)
+			kafka.NewMockAdminClient, kafka.NewMockClient, dmlproducer.NewDMLMockProducer)
 		if err != nil {
 			return nil, err
 		}

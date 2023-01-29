@@ -29,14 +29,14 @@ var _ scheduler = &moveTableScheduler{}
 
 type moveTableScheduler struct {
 	mu    sync.Mutex
-	tasks *spanz.Map[*replication.ScheduleTask]
+	tasks *spanz.BtreeMap[*replication.ScheduleTask]
 
 	changefeedID model.ChangeFeedID
 }
 
 func newMoveTableScheduler(changefeed model.ChangeFeedID) *moveTableScheduler {
 	return &moveTableScheduler{
-		tasks:        spanz.NewMap[*replication.ScheduleTask](),
+		tasks:        spanz.NewBtreeMap[*replication.ScheduleTask](),
 		changefeedID: changefeed,
 	}
 }
@@ -70,7 +70,7 @@ func (m *moveTableScheduler) Schedule(
 	_ model.Ts,
 	currentSpans []tablepb.Span,
 	captures map[model.CaptureID]*member.CaptureStatus,
-	replications *spanz.Map[*replication.ReplicationSet],
+	replications *spanz.BtreeMap[*replication.ReplicationSet],
 ) []*replication.ScheduleTask {
 	m.mu.Lock()
 	defer m.mu.Unlock()
