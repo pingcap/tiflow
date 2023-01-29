@@ -65,7 +65,6 @@ func (m *MockPDClient) LoadGlobalConfig(
 		{
 			Name:  "source_id",
 			Value: "1",
-			Error: nil,
 		},
 	}, nil
 }
