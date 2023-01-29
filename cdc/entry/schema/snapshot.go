@@ -30,7 +30,9 @@ import (
 	"github.com/pingcap/tidb/parser/mysql"
 	"github.com/pingcap/tidb/session"
 	"github.com/pingcap/tiflow/cdc/model"
+	"github.com/pingcap/tiflow/pkg/config"
 	cerror "github.com/pingcap/tiflow/pkg/errors"
+	"github.com/pingcap/tiflow/pkg/filter"
 	"go.uber.org/zap"
 )
 
@@ -527,13 +529,28 @@ func (s *Snapshot) SchemaCount() (count int) {
 
 // DumpToString dumps the snapshot to a string.
 func (s *Snapshot) DumpToString() string {
+	// TiCDC will not use any table in system database,
+	// so we can ignore them.
+	cfg := config.GetDefaultReplicaConfig()
+	cfg.Filter.Rules = []string{"mysql.*"}
+	ft, err := filter.NewFilter(cfg, "")
+	if err != nil {
+		log.Panic("new filter error", zap.Error(err))
+	}
+
 	schemas := make([]string, 0, s.inner.schemas.Len())
 	s.IterSchemas(func(dbInfo *timodel.DBInfo) {
+		if ft.ShouldIgnoreTable(dbInfo.Name.O, "") {
+			return
+		}
 		schemas = append(schemas, fmt.Sprintf("%v", dbInfo))
 	})
 
 	tables := make([]string, 0, s.inner.tables.Len())
 	s.IterTables(true, func(tbInfo *model.TableInfo) {
+		if ft.ShouldIgnoreTable(tbInfo.TableName.Schema, tbInfo.TableName.Schema) {
+			return
+		}
 		tables = append(tables, fmt.Sprintf("%v", tbInfo))
 	})
 
@@ -544,12 +561,18 @@ func (s *Snapshot) DumpToString() string {
 
 	schemaNames := make([]string, 0, s.inner.schemaNameToID.Len())
 	s.IterSchemaNames(func(schema string, target int64) {
+		if ft.ShouldIgnoreTable(schema, "") {
+			return
+		}
 		schemaNames = append(schemaNames, fmt.Sprintf("%s:%d", schema, target))
 	})
 
 	tableNames := make([]string, 0, s.inner.tableNameToID.Len())
 	s.IterTableNames(func(schemaID int64, table string, target int64) {
 		schema, _ := s.inner.schemaByID(schemaID)
+		if ft.ShouldIgnoreTable(schema.Name.O, table) {
+			return
+		}
 		tableNames = append(tableNames, fmt.Sprintf("%s.%s:%d", schema.Name.O, table, target))
 	})
 
