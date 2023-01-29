@@ -36,6 +36,7 @@ fi
 "$MOCKGEN" -source pkg/api/v2/tso.go -destination pkg/api/v2/mock/tso_mock.go -package mock
 "$MOCKGEN" -source pkg/api/v2/unsafe.go -destination pkg/api/v2/mock/unsafe_mock.go -package mock
 "$MOCKGEN" -source pkg/api/v2/status.go -destination pkg/api/v2/mock/status_mock.go -package mock
+"$MOCKGEN" -source pkg/sink/kafka/v2/client.go -destination pkg/sink/kafka/v2/mock/client_mock.go
 
 # DM mock
 "$MOCKGEN" -package pbmock -destination dm/pbmock/dmmaster.go github.com/pingcap/tiflow/dm/pb MasterClient,MasterServer
