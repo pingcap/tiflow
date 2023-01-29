@@ -15,12 +15,12 @@ package pdutil
 
 import (
 	"context"
-	"github.com/pingcap/log"
-	"go.uber.org/zap"
 	"strconv"
 
+	"github.com/pingcap/log"
 	cerror "github.com/pingcap/tiflow/pkg/errors"
 	pd "github.com/tikv/pd/client"
+	"go.uber.org/zap"
 )
 
 const sourceIDName = "/global/config/source_id"
@@ -41,8 +41,8 @@ func GetSourceID(ctx context.Context, pdClient pd.Client) (uint64, error) {
 	if len(sourceIDConfig) != 0 && sourceIDConfig[0].Value != "" {
 		sourceID, err = strconv.ParseUint(sourceIDConfig[0].Value, 10, 64)
 		if err != nil {
-			log.Error("fail to parse source ID from PD",
-				zap.String("source ID", sourceIDConfig[0].Value),
+			log.Error("fail to parse sourceID from PD",
+				zap.String("sourceID", sourceIDConfig[0].Value),
 				zap.Error(err))
 			return 0, cerror.WrapError(cerror.ErrPDEtcdAPIError, err)
 		}
