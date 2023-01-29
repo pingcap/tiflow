@@ -25,7 +25,7 @@ import (
 )
 
 type admin struct {
-	client *kafka.Client
+	client Client
 }
 
 func NewClusterAdminClient(endpoints []string) *admin {
@@ -39,7 +39,6 @@ func NewClusterAdminClient(endpoints []string) *admin {
 
 func (a *admin) clusterMetadata(ctx context.Context) (*kafka.MetadataResponse, error) {
 	result, err := a.client.Metadata(ctx, &kafka.MetadataRequest{
-		Addr:   a.client.Addr,
 		Topics: []string{},
 	})
 	if err != nil {
@@ -50,7 +49,6 @@ func (a *admin) clusterMetadata(ctx context.Context) (*kafka.MetadataResponse, e
 
 func (a *admin) topicsMetadata(ctx context.Context, topics []string) (*kafka.MetadataResponse, error) {
 	result, err := a.client.Metadata(ctx, &kafka.MetadataRequest{
-		Addr:   a.client.Addr,
 		Topics: topics,
 	})
 	if err != nil {
@@ -89,7 +87,6 @@ func (a *admin) GetBrokerConfig(ctx context.Context, configName string) (string,
 		return "", err
 	}
 	request := &kafka.DescribeConfigsRequest{
-		Addr: a.client.Addr,
 		Resources: []kafka.DescribeConfigRequestResource{
 			{
 				ResourceType: kafka.ResourceTypeBroker,
@@ -125,11 +122,10 @@ func (a *admin) GetBrokerConfig(ctx context.Context, configName string) (string,
 func (a *admin) GetAllTopicsMeta(ctx context.Context) (map[string]pkafka.TopicDetail, error) {
 	response, err := a.clusterMetadata(ctx)
 	if err != nil {
-		return nil, errors.Trace(err)
+		return nil, err
 	}
 
 	describeTopicConfigsRequest := &kafka.DescribeConfigsRequest{
-		Addr:      a.client.Addr,
 		Resources: []kafka.DescribeConfigRequestResource{},
 	}
 	result := make(map[string]pkafka.TopicDetail, len(response.Topics))
@@ -148,7 +144,7 @@ func (a *admin) GetAllTopicsMeta(ctx context.Context) (map[string]pkafka.TopicDe
 
 	describeTopicConfigsResponse, err := a.client.DescribeConfigs(ctx, describeTopicConfigsRequest)
 	if err != nil {
-		return nil, errors.Trace(err)
+		return nil, err
 	}
 	for _, resource := range describeTopicConfigsResponse.Resources {
 		topicDetails, ok := result[resource.ResourceName]
@@ -165,7 +161,7 @@ func (a *admin) GetAllTopicsMeta(ctx context.Context) (map[string]pkafka.TopicDe
 		result[resource.ResourceName] = topicDetails
 	}
 
-	return nil, nil
+	return result, nil
 }
 
 func (a *admin) GetTopicsMeta(ctx context.Context, topics []string, ignoreTopicError bool) (map[string]pkafka.TopicDetail, error) {
@@ -193,7 +189,6 @@ func (a *admin) GetTopicsMeta(ctx context.Context, topics []string, ignoreTopicE
 
 func (a *admin) CreateTopic(ctx context.Context, topic string, detail *pkafka.TopicDetail, validateOnly bool) error {
 	request := &kafka.CreateTopicsRequest{
-		Addr: a.client.Addr,
 		Topics: []kafka.TopicConfig{{
 			Topic:             topic,
 			NumPartitions:     int(detail.NumPartitions),
