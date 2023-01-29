@@ -56,15 +56,3 @@ func (m *MockPDClient) GetAllStores(
 ) ([]*metapb.Store, error) {
 	return m.GetAllStoresFunc(ctx, opts...)
 }
-
-// LoadGlobalConfig loads global config from PD.
-func (m *MockPDClient) LoadGlobalConfig(
-	ctx context.Context, names []string,
-) ([]pd.GlobalConfigItem, error) {
-	return []pd.GlobalConfigItem{
-		{
-			Name:  "source_id",
-			Value: "1",
-		},
-	}, nil
-}
