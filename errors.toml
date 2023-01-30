@@ -883,7 +883,7 @@ failed to seek to the beginning of request body
 
 ["CDC:ErrS3StorageAPI"]
 error = '''
-s3 storage api
+external storage api
 '''
 
 ["CDC:ErrScanLockFailed"]
