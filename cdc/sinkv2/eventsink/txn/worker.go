@@ -137,8 +137,8 @@ func (w *worker) runBackgroundLoop() {
 		defer ticker.Stop()
 
 		var flushTimeSlice, totalTimeSlice time.Duration
-		overseerTimer := time.NewTicker(time.Second)
-		defer overseerTimer.Stop()
+		overseerTicker := time.NewTicker(time.Second)
+		defer overseerTicker.Stop()
 		startToWork := time.Now()
 	Loop:
 		for {
@@ -163,7 +163,7 @@ func (w *worker) runBackgroundLoop() {
 				if w.doFlush(&flushTimeSlice) {
 					break Loop
 				}
-			case now := <-overseerTimer.C:
+			case now := <-overseerTicker.C:
 				totalTimeSlice = now.Sub(startToWork)
 				busyRatio := int(flushTimeSlice.Seconds() / totalTimeSlice.Seconds() * 1000)
 				w.metricTxnWorkerBusyRatio.Add(float64(busyRatio) / float64(w.workerCount))
