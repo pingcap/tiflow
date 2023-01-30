@@ -925,6 +925,9 @@ func (p *processor) doGCSchemaStorage() {
 }
 
 func (p *processor) refreshMetrics() {
+	if !p.initialized {
+		return
+	}
 	tableSpans := p.sinkManager.GetAllCurrentTableSpans()
 	p.metricSyncTableNumGauge.Set(float64(len(tableSpans)))
 	sortEngineReceivedEvents := p.sourceManager.ReceivedEvents()
