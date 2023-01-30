@@ -17,8 +17,10 @@ import (
 	"context"
 	"strconv"
 
+	"github.com/pingcap/log"
 	cerror "github.com/pingcap/tiflow/pkg/errors"
 	pd "github.com/tikv/pd/client"
+	"go.uber.org/zap"
 )
 
 const sourceIDName = "source_id"
@@ -39,7 +41,9 @@ func GetSourceID(ctx context.Context, pdClient pd.Client) (uint64, error) {
 	if len(sourceIDConfig) != 0 && sourceIDConfig[0].Value != "" {
 		sourceID, err = strconv.ParseUint(sourceIDConfig[0].Value, 10, 64)
 		if err != nil {
-			return 0, cerror.WrapError(cerror.ErrPDEtcdAPIError, err)
+			// FIXME: return error here after we fix the compatibility issue
+			log.Error("parse source id failed, use the default sourceID: 1", zap.Error(err))
+			// return 0, cerror.WrapError(cerror.ErrPDEtcdAPIError, err)
 		}
 	}
 	return sourceID, nil
