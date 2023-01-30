@@ -92,7 +92,9 @@ func NewClusterAdminClientMockImpl() *ClusterAdminClientMockImpl {
 }
 
 // GetAllTopicsMeta returns all topics directly.
-func (c *ClusterAdminClientMockImpl) GetAllTopicsMeta(context.Context) (map[string]TopicDetail, error) {
+func (c *ClusterAdminClientMockImpl) GetAllTopicsMeta(
+	context.Context,
+) (map[string]TopicDetail, error) {
 	topicsDetailsMap := make(map[string]TopicDetail)
 	for topic, detail := range c.topics {
 		topicsDetailsMap[topic] = detail.TopicDetail
@@ -111,7 +113,10 @@ func (c *ClusterAdminClientMockImpl) GetCoordinator(context.Context) (int, error
 }
 
 // GetBrokerConfig implement the ClusterAdminClient interface
-func (c *ClusterAdminClientMockImpl) GetBrokerConfig(ctx context.Context, configName string) (string, error) {
+func (c *ClusterAdminClientMockImpl) GetBrokerConfig(
+	_ context.Context,
+	configName string,
+) (string, error) {
 	value, ok := c.brokerConfigs[configName]
 	if !ok {
 		return "", errors.ErrKafkaBrokerConfigNotFound.GenWithStack(
@@ -136,7 +141,11 @@ func (c *ClusterAdminClientMockImpl) SetRemainingFetchesUntilTopicVisible(
 }
 
 // GetTopicsMeta implement the ClusterAdminClient interface
-func (c *ClusterAdminClientMockImpl) GetTopicsMeta(ctx context.Context, topics []string, ignoreTopicError bool) (map[string]TopicDetail, error) {
+func (c *ClusterAdminClientMockImpl) GetTopicsMeta(
+	_ context.Context,
+	topics []string,
+	_ bool,
+) (map[string]TopicDetail, error) {
 	result := make(map[string]TopicDetail, len(topics))
 	for _, topic := range topics {
 		details, ok := c.topics[topic]
@@ -152,7 +161,11 @@ func (c *ClusterAdminClientMockImpl) GetTopicsMeta(ctx context.Context, topics [
 }
 
 // CreateTopic adds topic into map.
-func (c *ClusterAdminClientMockImpl) CreateTopic(_ context.Context, detail *TopicDetail, _ bool) error {
+func (c *ClusterAdminClientMockImpl) CreateTopic(
+	_ context.Context,
+	detail *TopicDetail,
+	_ bool,
+) error {
 	if detail.ReplicationFactor > defaultReplicationFactor {
 		return sarama.ErrInvalidReplicationFactor
 	}

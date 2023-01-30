@@ -69,6 +69,7 @@ func TestGetAllBrokers(t *testing.T) {
 			},
 		}, nil)
 	brokers, err = admin.GetAllBrokers(ctx)
+	require.NoError(t, err)
 	require.Len(t, brokers, 1)
 	require.Equal(t, int32(1), brokers[0].ID)
 }
@@ -165,6 +166,7 @@ func TestGetBrokerConfig(t *testing.T) {
 		}, nil)
 	result, err = admin.GetBrokerConfig(ctx, "test-config-name")
 	require.Error(t, err, errors.ErrKafkaBrokerConfigNotFound)
+	require.Len(t, result, 0)
 }
 
 func TestGetAllTopicsMeta(t *testing.T) {
@@ -282,6 +284,7 @@ func TestGetAllTopicsMeta(t *testing.T) {
 
 	result, err = admin.GetAllTopicsMeta(ctx)
 	require.Error(t, err, "undesired topic found from the response")
+	require.Nil(t, result)
 
 	client.EXPECT().DescribeConfigs(gomock.Any(), gomock.Any()).
 		Return(&kafka.DescribeConfigsResponse{

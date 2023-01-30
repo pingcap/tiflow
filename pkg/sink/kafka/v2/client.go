@@ -24,6 +24,8 @@ import (
 // This interface is mainly used to support mock kafka-go client in unit test.
 type Client interface {
 	Metadata(ctx context.Context, req *kafka.MetadataRequest) (*kafka.MetadataResponse, error)
-	DescribeConfigs(ctx context.Context, req *kafka.DescribeConfigsRequest) (*kafka.DescribeConfigsResponse, error)
-	CreateTopics(ctx context.Context, req *kafka.CreateTopicsRequest) (*kafka.CreateTopicsResponse, error)
+	DescribeConfigs(ctx context.Context,
+		req *kafka.DescribeConfigsRequest) (*kafka.DescribeConfigsResponse, error)
+	CreateTopics(ctx context.Context,
+		req *kafka.CreateTopicsRequest) (*kafka.CreateTopicsResponse, error)
 }

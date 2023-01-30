@@ -28,6 +28,7 @@ type admin struct {
 	client Client
 }
 
+// NewClusterAdminClient return an admin client
 func NewClusterAdminClient(endpoints []string) *admin {
 	client := &kafka.Client{
 		Addr: kafka.TCP(endpoints...),
@@ -225,6 +226,6 @@ func (a *admin) CreateTopic(
 }
 
 func (a *admin) Close() error {
-	// todo: how to close the underline client to release network resources ?
+	// todo: close the underline client after support transport configuration.
 	return nil
 }

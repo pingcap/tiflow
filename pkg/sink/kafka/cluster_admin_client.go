@@ -48,7 +48,8 @@ type ClusterAdminClient interface {
 
 	// GetTopicsMeta return all target topics' metadata
 	// if `ignoreTopicError` is true, ignore the topic error and return the metadata of valid topics
-	GetTopicsMeta(ctx context.Context, topics []string, ignoreTopicError bool) (map[string]TopicDetail, error)
+	GetTopicsMeta(ctx context.Context,
+		topics []string, ignoreTopicError bool) (map[string]TopicDetail, error)
 
 	// CreateTopic creates a new topic.
 	CreateTopic(ctx context.Context, detail *TopicDetail, validateOnly bool) error
