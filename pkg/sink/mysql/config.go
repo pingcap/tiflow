@@ -65,9 +65,9 @@ const (
 	defaultBatchDMLEnable = true
 
 	// defaultStmtCacheSize is the default size of prepared statement cache
-	defaultPrepStmtCacheSize = 100000
+	defaultPrepStmtCacheSize = 10000
 	// The upper limit of the max size of prepared statement cache
-	maxPrepStmtCacheSize = 100000000
+	maxPrepStmtCacheSize = 1000000
 )
 
 // Config is the configs for MySQL backend.
