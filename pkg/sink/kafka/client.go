@@ -118,7 +118,8 @@ func (c *saramaKafkaClient) SyncProducer() (SyncProducer, error) {
 func (c *saramaKafkaClient) AsyncProducer(
 	changefeedID model.ChangeFeedID,
 	closedChan chan struct{},
-	failpointCh chan error) (AsyncProducer, error) {
+	failpointCh chan error,
+) (AsyncProducer, error) {
 	p, err := sarama.NewAsyncProducerFromClient(c.client)
 	if err != nil {
 		return nil, err
@@ -127,7 +128,8 @@ func (c *saramaKafkaClient) AsyncProducer(
 		producer:     p,
 		changefeedID: changefeedID,
 		closedChan:   closedChan,
-		failpointCh:  failpointCh}, nil
+		failpointCh:  failpointCh,
+	}, nil
 }
 
 func (c *saramaKafkaClient) MetricRegistry() metrics.Registry {
@@ -189,7 +191,8 @@ func (p *saramaAsyncProducer) Close() error {
 }
 
 func (p *saramaAsyncProducer) AsyncRunCallback(
-	ctx context.Context) error {
+	ctx context.Context,
+) error {
 	for {
 		select {
 		case <-ctx.Done():

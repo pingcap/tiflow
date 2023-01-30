@@ -69,7 +69,8 @@ func (c *ClientMockImpl) SyncProducer() (SyncProducer, error) {
 func (c *ClientMockImpl) AsyncProducer(
 	changefeedID model.ChangeFeedID,
 	closedChan chan struct{},
-	failpointCh chan error) (AsyncProducer, error) {
+	failpointCh chan error,
+) (AsyncProducer, error) {
 	return &saramaAsyncProducer{}, nil
 }
 
