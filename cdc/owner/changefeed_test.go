@@ -223,6 +223,7 @@ func createChangefeed4Test(ctx cdcContext.Context, t *testing.T,
 		// new downstream observer
 		func(
 			ctx context.Context, sinkURIStr string, replCfg *config.ReplicaConfig,
+			opts ...observer.NewObserverOption,
 		) (observer.Observer, error) {
 			return observer.NewDummyObserver(), nil
 		},
