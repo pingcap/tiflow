@@ -51,7 +51,7 @@ else ifeq (${OS}, "linux")
 else ifeq (${ARCH}, ${MAC})
 	CGO := 1
 else ifeq (${OS}, "darwin")
-    CGO := 1
+	CGO := 1
 endif
 
 GOBUILD  := CGO_ENABLED=$(CGO) $(GO) build $(BUILD_FLAG) -trimpath $(GOVENDORFLAG)
