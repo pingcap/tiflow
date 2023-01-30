@@ -29,7 +29,9 @@ func TestCheckSpanReplicationEnabled(t *testing.T) {
 	t.Parallel()
 
 	c := New(&config.SchedulerConfig{
-		RegionPerSpan: 1,
+		ChangefeedSettings: &config.ChangefeedSchedulerConfig{
+			RegionPerSpan: 1,
+		},
 	}, map[string]*model.CaptureInfo{})
 
 	// Add 1 supported capture.
@@ -81,7 +83,9 @@ func TestCheckSpanReplicationEnabled(t *testing.T) {
 
 	// Disable in config
 	c = New(&config.SchedulerConfig{
-		RegionPerSpan: 0,
+		ChangefeedSettings: &config.ChangefeedSchedulerConfig{
+			RegionPerSpan: 0,
+		},
 	}, map[string]*model.CaptureInfo{
 		"a": {Version: SpanReplicationMinVersion.String()},
 	})
@@ -92,7 +96,9 @@ func TestBeforeTransportSend(t *testing.T) {
 	t.Parallel()
 
 	c := New(&config.SchedulerConfig{
-		RegionPerSpan: 0, // Disable span replication.
+		ChangefeedSettings: &config.ChangefeedSchedulerConfig{
+			RegionPerSpan: 0, // Disable span replication.
+		},
 	}, map[string]*model.CaptureInfo{})
 	require.False(t, c.CheckSpanReplicationEnabled())
 
@@ -174,7 +180,9 @@ func TestAfterTransportReceive(t *testing.T) {
 	t.Parallel()
 
 	c := New(&config.SchedulerConfig{
-		RegionPerSpan: 0, // Disable span replication.
+		ChangefeedSettings: &config.ChangefeedSchedulerConfig{
+			RegionPerSpan: 0, // Disable span replication.
+		},
 	}, map[string]*model.CaptureInfo{})
 	require.False(t, c.CheckSpanReplicationEnabled())
 

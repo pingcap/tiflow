@@ -27,17 +27,18 @@ import (
 	"github.com/pingcap/tiflow/cdc/puller"
 	"github.com/pingcap/tiflow/cdc/redo"
 	"github.com/pingcap/tiflow/cdc/scheduler"
-	"github.com/pingcap/tiflow/cdc/sink"
 	"github.com/pingcap/tiflow/pkg/config"
 	cdcContext "github.com/pingcap/tiflow/pkg/context"
 	cerror "github.com/pingcap/tiflow/pkg/errors"
 	"github.com/pingcap/tiflow/pkg/orchestrator"
 	"github.com/pingcap/tiflow/pkg/pdutil"
 	redoCfg "github.com/pingcap/tiflow/pkg/redo"
+	"github.com/pingcap/tiflow/pkg/sink/observer"
 	"github.com/pingcap/tiflow/pkg/txnutil/gc"
 	"github.com/pingcap/tiflow/pkg/upstream"
 	"github.com/prometheus/client_golang/prometheus"
 	"github.com/tikv/client-go/v2/oracle"
+	"go.uber.org/atomic"
 	"go.uber.org/zap"
 )
 
@@ -120,6 +121,9 @@ type changefeed struct {
 	metricsChangefeedBarrierTsGauge prometheus.Gauge
 	metricsChangefeedTickDuration   prometheus.Observer
 
+	downstreamObserver observer.Observer
+	observerLastTick   *atomic.Time
+
 	newDDLPuller func(ctx context.Context,
 		replicaConfig *config.ReplicaConfig,
 		up *upstream.Upstream,
@@ -131,6 +135,10 @@ type changefeed struct {
 	newScheduler func(
 		ctx cdcContext.Context, up *upstream.Upstream, cfg *config.SchedulerConfig,
 	) (scheduler.Scheduler, error)
+
+	newDownstreamObserver func(
+		ctx context.Context, sinkURIStr string, replCfg *config.ReplicaConfig,
+	) (observer.Observer, error)
 
 	lastDDLTs uint64 // Timestamp of the last executed DDL. Only used for tests.
 }
@@ -153,8 +161,9 @@ func newChangefeed(
 		errCh:  make(chan error, defaultErrChSize),
 		cancel: func() {},
 
-		newDDLPuller: puller.NewDDLPuller,
-		newSink:      newDDLSink,
+		newDDLPuller:          puller.NewDDLPuller,
+		newSink:               newDDLSink,
+		newDownstreamObserver: observer.NewObserver,
 	}
 	c.newScheduler = newScheduler
 	c.cfg = cfg
@@ -173,12 +182,16 @@ func newChangefeed4Test(
 	newScheduler func(
 		ctx cdcContext.Context, up *upstream.Upstream, cfg *config.SchedulerConfig,
 	) (scheduler.Scheduler, error),
+	newDownstreamObserver func(
+		ctx context.Context, sinkURIStr string, replCfg *config.ReplicaConfig,
+	) (observer.Observer, error),
 ) *changefeed {
 	cfg := config.NewDefaultSchedulerConfig()
 	c := newChangefeed(id, state, up, cfg)
 	c.newDDLPuller = newDDLPuller
 	c.newSink = newSink
 	c.newScheduler = newScheduler
+	c.newDownstreamObserver = newDownstreamObserver
 	return c
 }
 
@@ -405,6 +418,7 @@ func (c *changefeed) tick(ctx cdcContext.Context, captures map[model.CaptureID]*
 
 	c.updateStatus(newCheckpointTs, newResolvedTs)
 	c.updateMetrics(currentTs, newCheckpointTs, metricsResolvedTs)
+	c.tickDownstreamObserver(ctx)
 
 	return nil
 }
@@ -533,6 +547,13 @@ LOOP:
 		ctx.Throw(c.ddlPuller.Run(cancelCtx))
 	}()
 
+	c.downstreamObserver, err = c.newDownstreamObserver(
+		ctx, c.state.Info.SinkURI, c.state.Info.Config)
+	if err != nil {
+		return err
+	}
+	c.observerLastTick = atomic.NewTime(time.Time{})
+
 	stdCtx := contextutil.PutChangefeedIDInCtx(cancelCtx, c.id)
 	redoManagerOpts := redo.NewOwnerManagerOptions(c.errCh)
 	mgr, err := redo.NewManager(stdCtx, c.state.Info.Config.Consistent, redoManagerOpts)
@@ -548,11 +569,8 @@ LOOP:
 		zap.String("changefeed", c.id.ID))
 
 	// create scheduler
-	// TODO: Remove the hack once span replication is compatible with all sinks.
 	cfg := *c.cfg
-	if !sink.IsSinkCompatibleWithSpanReplication(c.state.Info.SinkURI) {
-		cfg.RegionPerSpan = 0
-	}
+	cfg.ChangefeedSettings = c.state.Info.Config.Scheduler
 	c.scheduler, err = c.newScheduler(ctx, c.upstream, &cfg)
 	if err != nil {
 		return errors.Trace(err)
@@ -1014,4 +1032,19 @@ func (c *changefeed) checkUpstream() (skip bool, err error) {
 		return true, nil
 	}
 	return
+}
+
+// tickDownstreamObserver checks whether needs to trigger tick of downstream
+// observer, if needed run it in an independent goroutine with 5s timeout.
+func (c *changefeed) tickDownstreamObserver(ctx context.Context) {
+	if time.Since(c.observerLastTick.Load()) > downstreamObserverTickDuration {
+		go func() {
+			cctx, cancel := context.WithTimeout(ctx, time.Second*5)
+			defer cancel()
+			if err := c.downstreamObserver.Tick(cctx); err != nil {
+				log.Error("backend observer tick error", zap.Error(err))
+			}
+			c.observerLastTick.Store(time.Now())
+		}()
+	}
 }

@@ -52,7 +52,7 @@ type kafkaSaramaProducer struct {
 	// This admin mainly used by `metricsMonitor` to fetch broker info.
 	admin         kafka.ClusterAdminClient
 	client        kafka.Client
-	asyncProducer sarama.AsyncProducer
+	asyncProducer kafka.AsyncProducer
 	syncProducer  kafka.SyncProducer
 
 	// producersReleased records whether asyncProducer and syncProducer have been closed properly
@@ -316,7 +316,6 @@ func NewKafkaSaramaProducer(
 	client kafka.Client,
 	admin kafka.ClusterAdminClient,
 	options *kafka.Options,
-	saramaConfig *sarama.Config,
 	errCh chan error,
 	changefeedID model.ChangeFeedID,
 ) (*kafkaSaramaProducer, error) {
@@ -335,7 +334,7 @@ func NewKafkaSaramaProducer(
 		return nil, cerror.WrapError(cerror.ErrKafkaNewSaramaProducer, err)
 	}
 
-	runSaramaMetricsMonitor(ctx, saramaConfig.MetricRegistry, changefeedID, role, admin)
+	runSaramaMetricsMonitor(ctx, client.MetricRegistry(), changefeedID, role, admin)
 
 	k := &kafkaSaramaProducer{
 		admin:         admin,
@@ -365,11 +364,10 @@ func NewKafkaSaramaProducer(
 	return k, nil
 }
 
-// AdjustConfig adjust the `Options` and `sarama.Config` by condition.
-func AdjustConfig(
+// AdjustOptions adjust the `Options` and `sarama.Config` by condition.
+func AdjustOptions(
 	admin kafka.ClusterAdminClient,
 	options *kafka.Options,
-	saramaConfig *sarama.Config,
 	topic string,
 ) error {
 	topics, err := admin.GetAllTopicsMeta(context.Background())
@@ -401,7 +399,7 @@ func AdjustConfig(
 				"use topic's `max.message.bytes` to initialize the Kafka producer",
 				zap.Int("max.message.bytes", topicMaxMessageBytes),
 				zap.Int("max-message-bytes", options.MaxMessageBytes))
-			saramaConfig.Producer.MaxMessageBytes = topicMaxMessageBytes
+			options.MaxMessageBytes = topicMaxMessageBytes
 		}
 
 		// no need to create the topic, but we would have to log user if they found enter wrong topic name later
@@ -436,7 +434,7 @@ func AdjustConfig(
 			"use broker's `message.max.bytes` to initialize the Kafka producer",
 			zap.Int("message.max.bytes", brokerMessageMaxBytes),
 			zap.Int("max-message-bytes", options.MaxMessageBytes))
-		saramaConfig.Producer.MaxMessageBytes = brokerMessageMaxBytes
+		options.MaxMessageBytes = brokerMessageMaxBytes
 	}
 
 	// topic not exists yet, and user does not specify the `partition-num` in the sink uri.

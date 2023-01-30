@@ -75,6 +75,15 @@ var (
 		Help:      "The latency distributions of flushLog called by redoManager",
 		Buckets:   prometheus.ExponentialBuckets(0.001, 2.0, 13),
 	}, []string{"namespace", "changefeed"})
+
+	// RedoWorkerBusyRatio records the busy ratio of redo bgUpdateLog worker.
+	RedoWorkerBusyRatio = prometheus.NewCounterVec(
+		prometheus.CounterOpts{
+			Namespace: namespace,
+			Subsystem: subsystem,
+			Name:      "worker_busy_ratio",
+			Help:      "Busy ratio (X ms in 1s) for redo bgUpdateLog worker.",
+		}, []string{"namespace", "changefeed"})
 )
 
 // InitMetrics registers all metrics in this file
@@ -85,4 +94,5 @@ func InitMetrics(registry *prometheus.Registry) {
 	registry.MustRegister(RedoFlushAllDurationHistogram)
 	registry.MustRegister(RedoWriteLogDurationHistogram)
 	registry.MustRegister(RedoFlushLogDurationHistogram)
+	registry.MustRegister(RedoWorkerBusyRatio)
 }

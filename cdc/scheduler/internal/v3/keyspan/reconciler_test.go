@@ -15,6 +15,7 @@ package keyspan
 
 import (
 	"context"
+	"fmt"
 	"testing"
 
 	"github.com/pingcap/tiflow/cdc/model"
@@ -57,9 +58,8 @@ func TestSplitSpan(t *testing.T) {
 			regionPerSpan: 2,
 			span:          tablepb.Span{TableID: 1, StartKey: []byte("t1"), EndKey: []byte("t2")},
 			expectSpans: []tablepb.Span{
-				{TableID: 1, StartKey: []byte("t1"), EndKey: []byte("t1_2")},
-				{TableID: 1, StartKey: []byte("t1_2"), EndKey: []byte("t1_4")},
-				{TableID: 1, StartKey: []byte("t1_4"), EndKey: []byte("t2")},
+				{TableID: 1, StartKey: []byte("t1"), EndKey: []byte("t1_3")},
+				{TableID: 1, StartKey: []byte("t1_3"), EndKey: []byte("t2")},
 			},
 		},
 		{
@@ -87,10 +87,75 @@ func TestSplitSpan(t *testing.T) {
 	}
 
 	for i, cs := range cases {
-		cfg := &config.SchedulerConfig{RegionPerSpan: cs.regionPerSpan}
-		reconciler := NewReconciler(model.ChangeFeedID{}, cache, cfg.RegionPerSpan)
+		reconciler := NewReconciler(model.ChangeFeedID{}, cache, cs.regionPerSpan)
 		spans := reconciler.splitSpan(context.Background(), cs.span)
 		require.Equalf(t, cs.expectSpans, spans, "%d %s", i, &cs.span)
+	}
+}
+
+func TestEvenlySplitSpan(t *testing.T) {
+	t.Parallel()
+
+	cache := NewMockRegionCache()
+	totalRegion := 1000
+	for i := 0; i < totalRegion; i++ {
+		cache.regions.ReplaceOrInsert(tablepb.Span{
+			StartKey: []byte(fmt.Sprintf("t1_%09d", i)),
+			EndKey:   []byte(fmt.Sprintf("t1_%09d", i+1)),
+		}, uint64(i+1))
+	}
+
+	cases := []struct {
+		regionPerSpan  int
+		expectSpansMin int
+		expectSpansMax int
+	}{
+		{
+			regionPerSpan:  1,
+			expectSpansMin: 1,
+			expectSpansMax: 1,
+		},
+		{
+			regionPerSpan:  10,
+			expectSpansMin: 10,
+			expectSpansMax: 10,
+		},
+		{
+			regionPerSpan:  70,
+			expectSpansMin: 70,
+			expectSpansMax: 74,
+		},
+		{
+			regionPerSpan:  173,
+			expectSpansMin: 173,
+			expectSpansMax: 200,
+		},
+		{
+			regionPerSpan:  313,
+			expectSpansMin: 313,
+			expectSpansMax: 340,
+		},
+	}
+	for i, cs := range cases {
+		reconciler := NewReconciler(model.ChangeFeedID{}, cache, cs.regionPerSpan)
+		spans := reconciler.splitSpan(
+			context.Background(),
+			tablepb.Span{TableID: 1, StartKey: []byte("t1"), EndKey: []byte("t2")})
+		require.Equalf(t, totalRegion/cs.regionPerSpan, len(spans), "%d %v", i, cs)
+
+		for _, span := range spans {
+			start, end := 0, 1000
+			if len(span.StartKey) > len("t1") {
+				_, err := fmt.Sscanf(string(span.StartKey), "t1_%d", &start)
+				require.Nil(t, err, "%d %v %s", i, cs, span.StartKey)
+			}
+			if len(span.EndKey) > len("t2") {
+				_, err := fmt.Sscanf(string(span.EndKey), "t1_%d", &end)
+				require.Nil(t, err, "%d %v %s", i, cs, span.EndKey)
+			}
+			require.GreaterOrEqual(t, end-start, cs.expectSpansMin, "%d %v", i, cs)
+			require.LessOrEqual(t, end-start, cs.expectSpansMax, "%d %v", i, cs)
+		}
 	}
 }
 
@@ -102,8 +167,7 @@ func TestSplitSpanRegionOutOfOrder(t *testing.T) {
 	cache.regions.ReplaceOrInsert(tablepb.Span{StartKey: []byte("t1_1"), EndKey: []byte("t1_4")}, 2)
 	cache.regions.ReplaceOrInsert(tablepb.Span{StartKey: []byte("t1_2"), EndKey: []byte("t1_3")}, 3)
 
-	cfg := &config.SchedulerConfig{RegionPerSpan: 1}
-	reconciler := NewReconciler(model.ChangeFeedID{}, cache, cfg.RegionPerSpan)
+	reconciler := NewReconciler(model.ChangeFeedID{}, cache, 1)
 	span := tablepb.Span{TableID: 1, StartKey: []byte("t1"), EndKey: []byte("t2")}
 	spans := reconciler.splitSpan(context.Background(), span)
 	require.Equal(
@@ -148,13 +212,15 @@ func TestReconcile(t *testing.T) {
 		{2, 2, 4},
 	})
 
-	cfg := &config.SchedulerConfig{RegionPerSpan: 1}
+	cfg := &config.SchedulerConfig{
+		ChangefeedSettings: &config.ChangefeedSchedulerConfig{RegionPerSpan: 1},
+	}
 	compat := compat.New(cfg, map[string]*model.CaptureInfo{})
 	ctx := context.Background()
 
 	// Test 1. changefeed initialization.
 	reps := spanz.NewBtreeMap[*replication.ReplicationSet]()
-	reconciler := NewReconciler(model.ChangeFeedID{}, cache, cfg.RegionPerSpan)
+	reconciler := NewReconciler(model.ChangeFeedID{}, cache, cfg.ChangefeedSettings.RegionPerSpan)
 	currentTables := &replication.TableRanges{}
 	currentTables.UpdateTables([]model.TableID{1})
 	spans := reconciler.Reconcile(ctx, currentTables, reps, compat)
@@ -166,7 +232,7 @@ func TestReconcile(t *testing.T) {
 	for _, span := range reconciler.tableSpans[1].spans {
 		reps.ReplaceOrInsert(span, nil)
 	}
-	reconciler = NewReconciler(model.ChangeFeedID{}, cache, cfg.RegionPerSpan)
+	reconciler = NewReconciler(model.ChangeFeedID{}, cache, cfg.ChangefeedSettings.RegionPerSpan)
 	currentTables.UpdateTables([]model.TableID{1})
 	spans = reconciler.Reconcile(ctx, currentTables, reps, compat)
 	require.Equal(t, allSpan[:4], spans)
@@ -247,14 +313,16 @@ func TestCompatDisable(t *testing.T) {
 	})
 
 	// changefeed initialization with span replication disabled.
-	cfg := &config.SchedulerConfig{RegionPerSpan: 1}
+	cfg := &config.SchedulerConfig{
+		ChangefeedSettings: &config.ChangefeedSchedulerConfig{RegionPerSpan: 1},
+	}
 	cm := compat.New(cfg, map[string]*model.CaptureInfo{
 		"1": {Version: "4.0.0"},
 	})
 	require.False(t, cm.CheckSpanReplicationEnabled())
 	ctx := context.Background()
 	reps := spanz.NewBtreeMap[*replication.ReplicationSet]()
-	reconciler := NewReconciler(model.ChangeFeedID{}, cache, cfg.RegionPerSpan)
+	reconciler := NewReconciler(model.ChangeFeedID{}, cache, cfg.ChangefeedSettings.RegionPerSpan)
 	currentTables := &replication.TableRanges{}
 	currentTables.UpdateTables([]model.TableID{1})
 	spans := reconciler.Reconcile(ctx, currentTables, reps, cm)
@@ -284,13 +352,15 @@ func TestBatchAddRateLimit(t *testing.T) {
 		{2, 3, 4},
 	})
 
-	cfg := &config.SchedulerConfig{RegionPerSpan: 1}
+	cfg := &config.SchedulerConfig{
+		ChangefeedSettings: &config.ChangefeedSchedulerConfig{RegionPerSpan: 1},
+	}
 	compat := compat.New(cfg, map[string]*model.CaptureInfo{})
 	ctx := context.Background()
 
 	// Add table 2.
 	reps := spanz.NewBtreeMap[*replication.ReplicationSet]()
-	reconciler := NewReconciler(model.ChangeFeedID{}, cache, cfg.RegionPerSpan)
+	reconciler := NewReconciler(model.ChangeFeedID{}, cache, cfg.ChangefeedSettings.RegionPerSpan)
 	currentTables := &replication.TableRanges{}
 	currentTables.UpdateTables([]model.TableID{2})
 	spans := reconciler.Reconcile(ctx, currentTables, reps, compat)

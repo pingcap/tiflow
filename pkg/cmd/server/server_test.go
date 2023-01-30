@@ -180,7 +180,6 @@ func TestParseCfg(t *testing.T) {
 				EventBatchSize: 32,
 			},
 			EnableDBSorter:      true,
-			EnableNewScheduler:  true,
 			EnablePullBasedSink: true,
 			EnableKafkaSinkV2:   false,
 			DB: &config.DBConfig{
@@ -214,7 +213,6 @@ func TestParseCfg(t *testing.T) {
 				MaxTaskConcurrency:   10,
 				CheckBalanceInterval: 60000000000,
 				AddTableBatchSize:    50,
-				RegionPerSpan:        0,
 			},
 			EnableNewSink: true,
 		},
@@ -345,7 +343,6 @@ check-balance-interval = "10s"
 			},
 			EnableDBSorter:      true,
 			EnablePullBasedSink: true,
-			EnableNewScheduler:  true,
 			EnableKafkaSinkV2:   true,
 			DB: &config.DBConfig{
 				Count:                       5,
@@ -377,7 +374,6 @@ check-balance-interval = "10s"
 				MaxTaskConcurrency:   11,
 				CheckBalanceInterval: config.TomlDuration(10 * time.Second),
 				AddTableBatchSize:    50,
-				RegionPerSpan:        0,
 			},
 			EnableNewSink: true,
 		},
@@ -495,7 +491,6 @@ cert-allowed-cn = ["dd","ee"]
 				EventBatchSize: 32,
 			},
 			EnableDBSorter:      true,
-			EnableNewScheduler:  true,
 			EnablePullBasedSink: true,
 			EnableKafkaSinkV2:   false,
 			DB: &config.DBConfig{
@@ -529,7 +524,6 @@ cert-allowed-cn = ["dd","ee"]
 				MaxTaskConcurrency:   10,
 				CheckBalanceInterval: 60000000000,
 				AddTableBatchSize:    50,
-				RegionPerSpan:        0,
 			},
 			EnableNewSink: true,
 		},
@@ -564,7 +558,6 @@ unknown3 = 3
 			EventBatchSize: 32,
 		},
 		EnableDBSorter:      true,
-		EnableNewScheduler:  true,
 		EnablePullBasedSink: true,
 		EnableKafkaSinkV2:   false,
 		DB: &config.DBConfig{
@@ -598,7 +591,6 @@ unknown3 = 3
 			MaxTaskConcurrency:   10,
 			CheckBalanceInterval: 60000000000,
 			AddTableBatchSize:    50,
-			RegionPerSpan:        0,
 		},
 		EnableNewSink: true,
 	}, o.serverConfig.Debug)
