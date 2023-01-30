@@ -119,7 +119,7 @@ func (m *FileManager) GetPersistedResource(
 
 	ok, err := storage.FileExists(ctx, placeholderFileName)
 	if err != nil {
-		return nil, errors.ErrS3StorageAPI.Wrap(err).GenWithStackByArgs("check placeholder file")
+		return nil, errors.ErrExternalStorageAPI.Wrap(err).GenWithStackByArgs("check placeholder file")
 	}
 	if !ok {
 		return nil, errors.ErrResourceFilesNotFound.GenWithStackByArgs()
@@ -293,7 +293,7 @@ func (m *FileManager) removeFilesIf(
 		return nil
 	})
 	if err != nil {
-		return errors.ErrS3StorageAPI.Wrap(err).GenWithStackByArgs("RemoveTemporaryFiles")
+		return errors.ErrExternalStorageAPI.Wrap(err).GenWithStackByArgs("RemoveTemporaryFiles")
 	}
 
 	log.Info("Removing resources",
@@ -303,7 +303,7 @@ func (m *FileManager) removeFilesIf(
 
 	for _, path := range toRemoveFiles {
 		if err := storage.DeleteFile(ctx, path); err != nil {
-			return errors.ErrS3StorageAPI.Wrap(err)
+			return errors.ErrExternalStorageAPI.Wrap(err)
 		}
 	}
 	return nil
@@ -312,25 +312,25 @@ func (m *FileManager) removeFilesIf(
 func createPlaceholderFile(ctx context.Context, storage brStorage.ExternalStorage) error {
 	exists, err := storage.FileExists(ctx, placeholderFileName)
 	if err != nil {
-		return errors.ErrS3StorageAPI.Wrap(err).GenWithStackByArgs("checking placeholder file")
+		return errors.ErrExternalStorageAPI.Wrap(err).GenWithStackByArgs("checking placeholder file")
 	}
 	if exists {
 		// This should not happen in production. Unless the caller of the FileManager has a bug.
-		return errors.ErrS3StorageAPI.GenWithStackByArgs("resource already exists")
+		return errors.ErrExternalStorageAPI.GenWithStackByArgs("resource already exists")
 	}
 
 	writer, err := storage.Create(ctx, placeholderFileName)
 	if err != nil {
-		return errors.ErrS3StorageAPI.Wrap(err).GenWithStackByArgs("creating placeholder file")
+		return errors.ErrExternalStorageAPI.Wrap(err).GenWithStackByArgs("creating placeholder file")
 	}
 
 	_, err = writer.Write(ctx, []byte("placeholder"))
 	if err != nil {
-		return errors.ErrS3StorageAPI.Wrap(err).GenWithStackByArgs("writing placeholder file")
+		return errors.ErrExternalStorageAPI.Wrap(err).GenWithStackByArgs("writing placeholder file")
 	}
 
 	if err := writer.Close(ctx); err != nil {
-		return errors.ErrS3StorageAPI.Wrap(err).GenWithStackByArgs("closing placeholder file")
+		return errors.ErrExternalStorageAPI.Wrap(err).GenWithStackByArgs("closing placeholder file")
 	}
 	return nil
 }
