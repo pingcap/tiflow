@@ -47,7 +47,10 @@ func (a *admin) clusterMetadata(ctx context.Context) (*kafka.MetadataResponse, e
 	return result, nil
 }
 
-func (a *admin) topicsMetadata(ctx context.Context, topics []string) (*kafka.MetadataResponse, error) {
+func (a *admin) topicsMetadata(
+	ctx context.Context,
+	topics []string,
+) (*kafka.MetadataResponse, error) {
 	result, err := a.client.Metadata(ctx, &kafka.MetadataRequest{
 		Topics: topics,
 	})
@@ -164,7 +167,11 @@ func (a *admin) GetAllTopicsMeta(ctx context.Context) (map[string]pkafka.TopicDe
 	return result, nil
 }
 
-func (a *admin) GetTopicsMeta(ctx context.Context, topics []string, ignoreTopicError bool) (map[string]pkafka.TopicDetail, error) {
+func (a *admin) GetTopicsMeta(
+	ctx context.Context,
+	topics []string,
+	ignoreTopicError bool,
+) (map[string]pkafka.TopicDetail, error) {
 	resp, err := a.topicsMetadata(ctx, topics)
 	if err != nil {
 		return nil, err
@@ -187,18 +194,23 @@ func (a *admin) GetTopicsMeta(ctx context.Context, topics []string, ignoreTopicE
 	return result, nil
 }
 
-func (a *admin) CreateTopic(ctx context.Context, topic string, detail *pkafka.TopicDetail, validateOnly bool) error {
+func (a *admin) CreateTopic(
+	ctx context.Context,
+	detail *pkafka.TopicDetail,
+	validateOnly bool,
+) error {
 	request := &kafka.CreateTopicsRequest{
-		Topics: []kafka.TopicConfig{{
-			Topic:             topic,
-			NumPartitions:     int(detail.NumPartitions),
-			ReplicationFactor: int(detail.ReplicationFactor),
-		}},
+		Topics: []kafka.TopicConfig{
+			{
+				Topic:             detail.Name,
+				NumPartitions:     int(detail.NumPartitions),
+				ReplicationFactor: int(detail.ReplicationFactor),
+			},
+		},
 		ValidateOnly: validateOnly,
 	}
 
 	response, err := a.client.CreateTopics(ctx, request)
-	// todo: also check if the topic already exist.
 	if err != nil {
 		return errors.Trace(err)
 	}

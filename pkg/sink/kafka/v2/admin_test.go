@@ -20,6 +20,7 @@ import (
 
 	"github.com/golang/mock/gomock"
 	"github.com/pingcap/tiflow/pkg/errors"
+	pkafka "github.com/pingcap/tiflow/pkg/sink/kafka"
 	mock "github.com/pingcap/tiflow/pkg/sink/kafka/v2/mock"
 	"github.com/segmentio/kafka-go"
 	"github.com/stretchr/testify/require"
@@ -46,25 +47,27 @@ func TestGetAllBrokers(t *testing.T) {
 	t.Parallel()
 
 	admin, client := newClusterAdminClientWithMock(t)
-	client.EXPECT().Metadata(gomock.Any(), gomock.Any()).Return(nil,
-		fmt.Errorf("kafka.(*Client).Metadata"))
+	client.EXPECT().Metadata(gomock.Any(), gomock.Any()).
+		Return(nil, fmt.Errorf("kafka.(*Client).Metadata"))
 
 	ctx := context.Background()
 	brokers, err := admin.GetAllBrokers(ctx)
 	require.Error(t, err)
 	require.Nil(t, brokers)
 
-	client.EXPECT().Metadata(gomock.Any(), gomock.Any()).Return(&kafka.MetadataResponse{}, nil)
+	client.EXPECT().Metadata(gomock.Any(), gomock.Any()).
+		Return(&kafka.MetadataResponse{}, nil)
 	brokers, err = admin.GetAllBrokers(ctx)
 	require.NoError(t, err)
 	require.NotNil(t, brokers)
 	require.Len(t, brokers, 0)
 
-	client.EXPECT().Metadata(gomock.Any(), gomock.Any()).Return(&kafka.MetadataResponse{
-		Brokers: []kafka.Broker{
-			{ID: 1},
-		},
-	}, nil)
+	client.EXPECT().Metadata(gomock.Any(), gomock.Any()).
+		Return(&kafka.MetadataResponse{
+			Brokers: []kafka.Broker{
+				{ID: 1},
+			},
+		}, nil)
 	brokers, err = admin.GetAllBrokers(ctx)
 	require.Len(t, brokers, 1)
 	require.Equal(t, int32(1), brokers[0].ID)
@@ -74,17 +77,18 @@ func TestGetCoordinator(t *testing.T) {
 	t.Parallel()
 
 	admin, client := newClusterAdminClientWithMock(t)
-	client.EXPECT().Metadata(gomock.Any(), gomock.Any()).Return(nil,
-		fmt.Errorf("kafka.(*Client).Metadata"))
+	client.EXPECT().Metadata(gomock.Any(), gomock.Any()).
+		Return(nil, fmt.Errorf("kafka.(*Client).Metadata"))
 
 	ctx := context.Background()
 	coordinatorID, err := admin.GetCoordinator(ctx)
 	require.Error(t, err)
 	require.Equal(t, 0, coordinatorID)
 
-	client.EXPECT().Metadata(gomock.Any(), gomock.Any()).Return(&kafka.MetadataResponse{
-		Controller: kafka.Broker{ID: 1},
-	}, nil)
+	client.EXPECT().Metadata(gomock.Any(), gomock.Any()).
+		Return(&kafka.MetadataResponse{
+			Controller: kafka.Broker{ID: 1},
+		}, nil)
 
 	coordinatorID, err = admin.GetCoordinator(ctx)
 	require.NoError(t, err)
@@ -94,48 +98,73 @@ func TestGetCoordinator(t *testing.T) {
 func TestGetBrokerConfig(t *testing.T) {
 	t.Parallel()
 
-	admin, client := newClusterAdminClientWithMock(t)
-	client.EXPECT().Metadata(gomock.Any(), gomock.Any()).Return(nil,
-		fmt.Errorf("kafka.(*Client).Metadata"))
-
 	ctx := context.Background()
+	admin, client := newClusterAdminClientWithMock(t)
+
+	// cannot find the coordinator
+	client.EXPECT().Metadata(gomock.Any(), gomock.Any()).
+		Return(nil, fmt.Errorf("kafka.(*Client).Metadata"))
 	result, err := admin.GetBrokerConfig(ctx, "test-config-name")
 	require.Error(t, err)
 	require.Equal(t, "", result)
 
-	client.EXPECT().Metadata(gomock.Any(), gomock.Any()).Return(&kafka.MetadataResponse{
-		Controller: kafka.Broker{ID: 1},
-	}, nil).AnyTimes()
+	client.EXPECT().Metadata(gomock.Any(), gomock.Any()).
+		Return(&kafka.MetadataResponse{
+			Controller: kafka.Broker{ID: 1},
+		}, nil).AnyTimes()
 
-	client.EXPECT().DescribeConfigs(gomock.Any(), gomock.Any()).Return(nil,
-		fmt.Errorf("kafka.(*Client).DescribeConfigs"))
+	// cannot get kafka broker's config
+	client.EXPECT().DescribeConfigs(gomock.Any(), gomock.Any()).
+		Return(nil, fmt.Errorf("kafka.(*Client).DescribeConfigs"))
 	result, err = admin.GetBrokerConfig(ctx, "test-config-name")
 	require.Error(t, err)
 	require.Equal(t, "", result)
 
-	client.EXPECT().DescribeConfigs(gomock.Any(), gomock.Any()).Return(&kafka.DescribeConfigsResponse{
-		Resources: []kafka.DescribeConfigResponseResource{},
-	}, nil)
+	// config is not found
+	client.EXPECT().DescribeConfigs(gomock.Any(), gomock.Any()).
+		Return(&kafka.DescribeConfigsResponse{
+			Resources: []kafka.DescribeConfigResponseResource{},
+		}, nil)
 	result, err = admin.GetBrokerConfig(ctx, "test-config-name")
 	require.Error(t, err, errors.ErrKafkaBrokerConfigNotFound)
 	require.Equal(t, "", result)
 
-	client.EXPECT().DescribeConfigs(gomock.Any(), gomock.Any()).Return(&kafka.DescribeConfigsResponse{
-		Resources: []kafka.DescribeConfigResponseResource{
-			{
-				ConfigEntries: []kafka.DescribeConfigResponseConfigEntry{
-					{
-						ConfigName:  "test-config-name",
-						ConfigValue: "test-config-value",
+	// config is found
+	client.EXPECT().DescribeConfigs(gomock.Any(), gomock.Any()).
+		Return(&kafka.DescribeConfigsResponse{
+			Resources: []kafka.DescribeConfigResponseResource{
+				{
+					ConfigEntries: []kafka.DescribeConfigResponseConfigEntry{
+						{
+							ConfigName:  "test-config-name",
+							ConfigValue: "test-config-value",
+						},
 					},
 				},
 			},
-		},
-	}, nil)
+		}, nil)
 
 	result, err = admin.GetBrokerConfig(ctx, "test-config-name")
 	require.NoError(t, err)
 	require.Equal(t, "test-config-value", result)
+
+	// config is found, but the key does not match,
+	// this should not happen, but we still prevent such case.
+	client.EXPECT().DescribeConfigs(gomock.Any(), gomock.Any()).
+		Return(&kafka.DescribeConfigsResponse{
+			Resources: []kafka.DescribeConfigResponseResource{
+				{
+					ConfigEntries: []kafka.DescribeConfigResponseConfigEntry{
+						{
+							ConfigName:  "undesired-config-name",
+							ConfigValue: "undesired-config-value",
+						},
+					},
+				},
+			},
+		}, nil)
+	result, err = admin.GetBrokerConfig(ctx, "test-config-name")
+	require.Error(t, err, errors.ErrKafkaBrokerConfigNotFound)
 }
 
 func TestGetAllTopicsMeta(t *testing.T) {
@@ -144,84 +173,87 @@ func TestGetAllTopicsMeta(t *testing.T) {
 	ctx := context.Background()
 
 	admin, client := newClusterAdminClientWithMock(t)
-	client.EXPECT().Metadata(gomock.Any(), gomock.Any()).Return(nil,
-		fmt.Errorf("kafka.(*Client).Metadata"))
+	client.EXPECT().Metadata(gomock.Any(), gomock.Any()).
+		Return(nil, fmt.Errorf("kafka.(*Client).Metadata"))
 
 	result, err := admin.GetAllTopicsMeta(ctx)
 	require.Error(t, err)
 	require.Nil(t, result)
 
-	client.EXPECT().Metadata(gomock.Any(), gomock.Any()).Return(&kafka.MetadataResponse{}, nil)
-	client.EXPECT().DescribeConfigs(gomock.Any(), gomock.Any()).Return(nil,
-		fmt.Errorf("kafka.(*Client).DescribeConfigs"))
+	client.EXPECT().Metadata(gomock.Any(), gomock.Any()).
+		Return(&kafka.MetadataResponse{}, nil)
+	client.EXPECT().DescribeConfigs(gomock.Any(), gomock.Any()).
+		Return(nil, fmt.Errorf("kafka.(*Client).DescribeConfigs"))
 
 	result, err = admin.GetAllTopicsMeta(ctx)
 	require.Error(t, err)
 	require.Nil(t, result)
 
-	client.EXPECT().Metadata(gomock.Any(), gomock.Any()).Return(&kafka.MetadataResponse{
-		Topics: []kafka.Topic{
-			{
-				Name: "topic-1",
-				Partitions: []kafka.Partition{
-					{
-						Replicas: []kafka.Broker{
-							{ID: 1},
+	client.EXPECT().Metadata(gomock.Any(), gomock.Any()).
+		Return(&kafka.MetadataResponse{
+			Topics: []kafka.Topic{
+				{
+					Name: "topic-1",
+					Partitions: []kafka.Partition{
+						{
+							Replicas: []kafka.Broker{
+								{ID: 1},
+							},
+						},
+					},
+				},
+				{
+					Name: "topic-2",
+					Partitions: []kafka.Partition{
+						{
+							Replicas: []kafka.Broker{
+								{ID: 1},
+								{ID: 2},
+							},
+						},
+						{
+							Replicas: []kafka.Broker{
+								{ID: 1},
+								{ID: 2},
+							},
+						},
+					},
+				},
+				{
+					Name: "topic-3",
+					Partitions: []kafka.Partition{
+						{
+							Replicas: []kafka.Broker{
+								{ID: 1},
+								{ID: 2},
+							},
+						},
+						{
+							Replicas: []kafka.Broker{
+								{ID: 1},
+								{ID: 3},
+							},
+						},
+						{
+							Replicas: []kafka.Broker{
+								{ID: 2},
+								{ID: 3},
+							},
 						},
 					},
 				},
 			},
-			{
-				Name: "topic-2",
-				Partitions: []kafka.Partition{
-					{
-						Replicas: []kafka.Broker{
-							{ID: 1},
-							{ID: 2},
-						},
-					},
-					{
-						Replicas: []kafka.Broker{
-							{ID: 1},
-							{ID: 2},
-						},
-					},
-				},
-			},
-			{
-				Name: "topic-3",
-				Partitions: []kafka.Partition{
-					{
-						Replicas: []kafka.Broker{
-							{ID: 1},
-							{ID: 2},
-						},
-					},
-					{
-						Replicas: []kafka.Broker{
-							{ID: 1},
-							{ID: 3},
-						},
-					},
-					{
-						Replicas: []kafka.Broker{
-							{ID: 2},
-							{ID: 3},
-						},
-					},
-				},
-			},
-		},
-	}, nil).AnyTimes()
+		}, nil).AnyTimes()
 
-	client.EXPECT().DescribeConfigs(gomock.Any(), gomock.Any()).Return(nil,
-		fmt.Errorf("kafka.(*Client).DescribeConfigs"))
+	client.EXPECT().DescribeConfigs(gomock.Any(), gomock.Any()).
+		Return(nil, fmt.Errorf("kafka.(*Client).DescribeConfigs"))
 
 	result, err = admin.GetAllTopicsMeta(ctx)
 	require.Error(t, err)
 	require.Nil(t, result)
 
-	client.EXPECT().DescribeConfigs(gomock.Any(), gomock.Any()).Return(&kafka.DescribeConfigsResponse{}, nil)
+	client.EXPECT().DescribeConfigs(gomock.Any(), gomock.Any()).
+		Return(&kafka.DescribeConfigsResponse{}, nil)
 
 	result, err = admin.GetAllTopicsMeta(ctx)
 	require.NoError(t, err)
@@ -239,36 +271,38 @@ func TestGetAllTopicsMeta(t *testing.T) {
 	require.Equal(t, int32(3), result["topic-3"].NumPartitions)
 	require.Equal(t, int16(2), result["topic-3"].ReplicationFactor)
 
-	client.EXPECT().DescribeConfigs(gomock.Any(), gomock.Any()).Return(&kafka.DescribeConfigsResponse{
-		Resources: []kafka.DescribeConfigResponseResource{
-			{
-				ResourceName: "undesired-resource",
+	client.EXPECT().DescribeConfigs(gomock.Any(), gomock.Any()).
+		Return(&kafka.DescribeConfigsResponse{
+			Resources: []kafka.DescribeConfigResponseResource{
+				{
+					ResourceName: "undesired-resource",
+				},
 			},
-		},
-	}, nil)
+		}, nil)
 
 	result, err = admin.GetAllTopicsMeta(ctx)
 	require.Error(t, err, "undesired topic found from the response")
 
-	client.EXPECT().DescribeConfigs(gomock.Any(), gomock.Any()).Return(&kafka.DescribeConfigsResponse{
-		Resources: []kafka.DescribeConfigResponseResource{
-			{
-				ResourceName: "topic-1",
-				ConfigEntries: []kafka.DescribeConfigResponseConfigEntry{
-					{
-						IsDefault: true,
-					},
-					{
-						IsSensitive: true,
-					},
-					{
-						ConfigName:  "config-1",
-						ConfigValue: "config-1-value",
+	client.EXPECT().DescribeConfigs(gomock.Any(), gomock.Any()).
+		Return(&kafka.DescribeConfigsResponse{
+			Resources: []kafka.DescribeConfigResponseResource{
+				{
+					ResourceName: "topic-1",
+					ConfigEntries: []kafka.DescribeConfigResponseConfigEntry{
+						{
+							IsDefault: true,
+						},
+						{
+							IsSensitive: true,
+						},
+						{
+							ConfigName:  "config-1",
+							ConfigValue: "config-1-value",
+						},
 					},
 				},
 			},
-		},
-	}, nil)
+		}, nil)
 
 	result, err = admin.GetAllTopicsMeta(ctx)
 	require.NoError(t, err)
@@ -289,8 +323,8 @@ func TestGetTopicMeta(t *testing.T) {
 	admin, client := newClusterAdminClientWithMock(t)
 
 	// cannot get topics meta from kafka
-	client.EXPECT().Metadata(gomock.Any(), gomock.Any()).Return(nil,
-		fmt.Errorf("kafka.(*Client).Metadata"))
+	client.EXPECT().Metadata(gomock.Any(), gomock.Any()).
+		Return(nil, fmt.Errorf("kafka.(*Client).Metadata"))
 	result, err := admin.GetTopicsMeta(ctx, []string{}, true)
 	require.Error(t, err)
 	require.Nil(t, result)
@@ -327,9 +361,44 @@ func TestGetTopicMeta(t *testing.T) {
 	require.Nil(t, result)
 }
 
-//
-//func TestCreateTopic(t *testing.T) {
-//	t.Parallel()
-//
-//	admin, client := newClusterAdminClientWithMock(t)
-//}
+func TestCreateTopic(t *testing.T) {
+	t.Parallel()
+
+	ctx := context.Background()
+	admin, client := newClusterAdminClientWithMock(t)
+
+	client.EXPECT().CreateTopics(gomock.Any(), gomock.Any()).
+		Return(nil, fmt.Errorf("kafka.(*Client).CreateTopics"))
+	err := admin.CreateTopic(ctx, &pkafka.TopicDetail{
+		Name:              "topic-1",
+		NumPartitions:     1,
+		ReplicationFactor: 1,
+		ConfigEntries:     nil,
+	}, false)
+	require.Error(t, err)
+
+	client.EXPECT().CreateTopics(gomock.Any(), gomock.Any()).
+		Return(&kafka.CreateTopicsResponse{
+			Errors: map[string]error{
+				"topic-1": errors.New("topic-1 error"),
+			},
+		}, nil)
+
+	err = admin.CreateTopic(ctx, &pkafka.TopicDetail{
+		Name:              "topic-1",
+		NumPartitions:     1,
+		ReplicationFactor: 1,
+		ConfigEntries:     nil,
+	}, false)
+	require.Error(t, err, "topic-1 error")
+
+	client.EXPECT().CreateTopics(gomock.Any(), gomock.Any()).
+		Return(&kafka.CreateTopicsResponse{}, nil)
+	err = admin.CreateTopic(ctx, &pkafka.TopicDetail{
+		Name:              "topic-1",
+		NumPartitions:     1,
+		ReplicationFactor: 1,
+		ConfigEntries:     nil,
+	}, false)
+	require.NoError(t, err)
+}
