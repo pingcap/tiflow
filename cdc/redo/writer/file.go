@@ -365,7 +365,7 @@ func (w *Writer) close() error {
 		if err != nil {
 			w.file.Close()
 			w.file = nil
-			return cerror.WrapError(cerror.ErrS3StorageAPI, err)
+			return cerror.WrapError(cerror.ErrExternalStorageAPI, err)
 		}
 	}
 
@@ -489,7 +489,7 @@ func (w *Writer) GC(checkPointTs uint64) error {
 				errs = multierr.Append(errs, err)
 			}
 			if errs != nil {
-				errs = cerror.WrapError(cerror.ErrS3StorageAPI, errs)
+				errs = cerror.WrapError(cerror.ErrExternalStorageAPI, errs)
 				log.Warn("delete redo log in s3 fail", zap.Error(errs))
 			}
 		}()
@@ -616,7 +616,7 @@ func (w *Writer) writeToS3(ctx context.Context, name string) error {
 	// Key in s3: aws.String(rs.options.Prefix + name), prefix should be changefeed name
 	err = w.storage.WriteFile(ctx, filepath.Base(name), fileData)
 	if err != nil {
-		return cerror.WrapError(cerror.ErrS3StorageAPI, err)
+		return cerror.WrapError(cerror.ErrExternalStorageAPI, err)
 	}
 
 	// in case the page cache piling up triggered the OS memory reclaming which may cause
