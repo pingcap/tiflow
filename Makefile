@@ -40,14 +40,26 @@ ifeq (${CDC_ENABLE_VENDOR}, 1)
 GOVENDORFLAG := -mod=vendor
 endif
 
-GOBUILD  := CGO_ENABLED=0 $(GO) build $(BUILD_FLAG) -trimpath $(GOVENDORFLAG)
+OS    := "$(shell go env GOOS)"
+ARCH  := "$(shell uname -s)"
+LINUX := "Linux"
+MAC   := "Darwin"
+ifeq (${ARCH}, ${LINUX})
+	CGO := 0
+else ifeq (${OS}, "linux")
+	CGO := 0
+else ifeq (${ARCH}, ${MAC})
+	CGO := 1
+else ifeq (${OS}, "darwin")
+    CGO := 1
+endif
+
+GOBUILD  := CGO_ENABLED=$(CGO) $(GO) build $(BUILD_FLAG) -trimpath $(GOVENDORFLAG)
 GOBUILDNOVENDOR  := CGO_ENABLED=0 $(GO) build $(BUILD_FLAG) -trimpath
 GOTEST   := CGO_ENABLED=1 $(GO) test -p $(P) --race
 GOTESTNORACE := CGO_ENABLED=1 $(GO) test -p $(P)
 
-ARCH  := "$(shell uname -s)"
-LINUX := "Linux"
-MAC   := "Darwin"
+
 CDC_PKG := github.com/pingcap/tiflow
 DM_PKG := github.com/pingcap/tiflow/dm
 ENGINE_PKG := github.com/pingcap/tiflow/engine
