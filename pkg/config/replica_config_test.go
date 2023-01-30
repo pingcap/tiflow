@@ -16,6 +16,7 @@ package config
 import (
 	"bytes"
 	"encoding/json"
+	"net/url"
 	"testing"
 	"time"
 
@@ -52,6 +53,7 @@ func TestReplicaConfigMarshal(t *testing.T) {
 	conf.Sink.Terminator = ""
 	conf.Sink.DateSeparator = "month"
 	conf.Sink.EnablePartitionSeparator = true
+	conf.Scheduler.RegionPerSpan = 100001
 
 	b, err := conf.Marshal()
 	require.Nil(t, err)
@@ -161,4 +163,68 @@ func TestValidateAndAdjust(t *testing.T) {
 
 	cfg.Sink.EncoderConcurrency = -1
 	require.Error(t, cfg.ValidateAndAdjust(nil))
+
+	cfg = GetDefaultReplicaConfig()
+	cfg.Scheduler.RegionPerSpan = 0
+	require.Nil(t, cfg.ValidateAndAdjust(nil))
+	cfg.Scheduler.RegionPerSpan = 999
+	require.Error(t, cfg.ValidateAndAdjust(nil))
+}
+
+func TestIsSinkCompatibleWithSpanReplication(t *testing.T) {
+	t.Parallel()
+
+	tests := []struct {
+		name       string
+		uri        string
+		compatible bool
+	}{
+		{
+			name:       "MySQL URI",
+			uri:        "mysql://root:111@foo.bar:3306/",
+			compatible: false,
+		},
+		{
+			name:       "TiDB URI",
+			uri:        "tidb://root:111@foo.bar:3306/",
+			compatible: false,
+		},
+		{
+			name:       "MySQL URI",
+			uri:        "mysql+ssl://root:111@foo.bar:3306/",
+			compatible: false,
+		},
+		{
+			name:       "TiDB URI",
+			uri:        "tidb+ssl://root:111@foo.bar:3306/",
+			compatible: false,
+		},
+		{
+			name:       "Kafka URI",
+			uri:        "kafka://foo.bar:3306/topic",
+			compatible: true,
+		},
+		{
+			name:       "Kafka URI",
+			uri:        "kafka+ssl://foo.bar:3306/topic",
+			compatible: true,
+		},
+		{
+			name:       "Blackhole URI",
+			uri:        "blackhole://foo.bar:3306/topic",
+			compatible: true,
+		},
+		{
+			name:       "Unknown URI",
+			uri:        "unknown://foo.bar:3306",
+			compatible: false,
+		},
+	}
+
+	for _, tt := range tests {
+		u, e := url.Parse(tt.uri)
+		require.Nil(t, e)
+		compatible := isSinkCompatibleWithSpanReplication(u)
+		require.Equal(t, compatible, tt.compatible, tt.name)
+	}
 }

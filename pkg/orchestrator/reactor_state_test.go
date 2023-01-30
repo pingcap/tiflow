@@ -125,6 +125,7 @@ func TestChangefeedStateUpdate(t *testing.T) {
 						Mounter:          &config.MounterConfig{WorkerNum: 16},
 						Sink:             &config.SinkConfig{Protocol: "open-protocol"},
 						Consistent:       &config.ConsistentConfig{Level: "normal", Storage: "local"},
+						Scheduler:        config.GetDefaultReplicaConfig().Scheduler,
 					},
 				},
 				Status: &model.ChangeFeedStatus{CheckpointTs: 421980719742451713, ResolvedTs: 421980720003809281},
@@ -173,6 +174,7 @@ func TestChangefeedStateUpdate(t *testing.T) {
 						Mounter:          &config.MounterConfig{WorkerNum: 16},
 						Sink:             &config.SinkConfig{Protocol: "open-protocol"},
 						Consistent:       &config.ConsistentConfig{Level: "normal", Storage: "local"},
+						Scheduler:        config.GetDefaultReplicaConfig().Scheduler,
 					},
 				},
 				Status: &model.ChangeFeedStatus{CheckpointTs: 421980719742451713, ResolvedTs: 421980720003809281},
@@ -226,6 +228,7 @@ func TestChangefeedStateUpdate(t *testing.T) {
 						Mounter:          &config.MounterConfig{WorkerNum: 16},
 						Sink:             &config.SinkConfig{Protocol: "open-protocol"},
 						Consistent:       &config.ConsistentConfig{Level: "normal", Storage: "local"},
+						Scheduler:        config.GetDefaultReplicaConfig().Scheduler,
 					},
 				},
 				Status: &model.ChangeFeedStatus{CheckpointTs: 421980719742451713, ResolvedTs: 421980720003809281},
@@ -314,6 +317,7 @@ func TestPatchInfo(t *testing.T) {
 			Mounter:    defaultConfig.Mounter,
 			Sink:       defaultConfig.Sink,
 			Consistent: defaultConfig.Consistent,
+			Scheduler:  defaultConfig.Scheduler,
 		},
 	})
 	state.PatchInfo(func(info *model.ChangeFeedInfo) (*model.ChangeFeedInfo, bool, error) {
@@ -330,6 +334,7 @@ func TestPatchInfo(t *testing.T) {
 			Mounter:    defaultConfig.Mounter,
 			Sink:       defaultConfig.Sink,
 			Consistent: defaultConfig.Consistent,
+			Scheduler:  defaultConfig.Scheduler,
 		},
 	})
 	state.PatchInfo(func(info *model.ChangeFeedInfo) (*model.ChangeFeedInfo, bool, error) {
