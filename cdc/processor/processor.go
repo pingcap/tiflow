@@ -231,9 +231,7 @@ func (p *processor) IsAddTableSpanFinished(span tablepb.Span, isPrepare bool) bo
 			stats := p.sinkManager.GetTableStats(span)
 			tableResolvedTs = stats.ResolvedTs
 			tableCheckpointTs = stats.CheckpointTs
-		}
-
-		if !alreadyExist {
+		} else {
 			log.Panic("table which was added is not found",
 				zap.String("captureID", p.captureInfo.ID),
 				zap.String("namespace", p.changefeedID.Namespace),
@@ -925,6 +923,8 @@ func (p *processor) doGCSchemaStorage() {
 }
 
 func (p *processor) refreshMetrics() {
+	// Before the processor is initialized, we should not refresh metrics.
+	// Otherwise, it will cause panic.
 	if !p.initialized {
 		return
 	}
