@@ -152,7 +152,7 @@ func (c *ClusterAdminClientMockImpl) GetTopicsMeta(ctx context.Context, topics [
 }
 
 // CreateTopic adds topic into map.
-func (c *ClusterAdminClientMockImpl) CreateTopic(ctx context.Context, topic string, detail *TopicDetail, validateOnly bool) error {
+func (c *ClusterAdminClientMockImpl) CreateTopic(_ context.Context, detail *TopicDetail, _ bool) error {
 	if detail.ReplicationFactor > defaultReplicationFactor {
 		return sarama.ErrInvalidReplicationFactor
 	}
@@ -165,7 +165,7 @@ func (c *ClusterAdminClientMockImpl) CreateTopic(ctx context.Context, topic stri
 		return sarama.ErrPolicyViolation
 	}
 
-	c.topics[topic] = &topicDetail{
+	c.topics[detail.Name] = &topicDetail{
 		TopicDetail: *detail,
 	}
 	return nil
