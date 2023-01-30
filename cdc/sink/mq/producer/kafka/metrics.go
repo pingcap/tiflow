@@ -187,9 +187,9 @@ type saramaMetricsMonitor struct {
 }
 
 // collectMetrics collect all monitored metrics
-func (sm *saramaMetricsMonitor) collectMetrics() {
+func (sm *saramaMetricsMonitor) collectMetrics(ctx context.Context) {
 	sm.collectProducerMetrics()
-	sm.collectBrokerMetrics()
+	sm.collectBrokerMetrics(ctx)
 }
 
 func (sm *saramaMetricsMonitor) collectProducerMetrics() {
@@ -226,9 +226,9 @@ func getBrokerMetricName(prefix, brokerID string) string {
 	return prefix + brokerID
 }
 
-func (sm *saramaMetricsMonitor) collectBrokers() {
+func (sm *saramaMetricsMonitor) collectBrokers(ctx context.Context) {
 	start := time.Now()
-	brokers, err := sm.admin.GetAllBrokers(context.Background())
+	brokers, err := sm.admin.GetAllBrokers(ctx)
 	if err != nil {
 		log.Warn("kafka cluster unreachable, "+
 			"use historical brokers to collect kafka broker level metrics",
@@ -245,8 +245,8 @@ func (sm *saramaMetricsMonitor) collectBrokers() {
 	}
 }
 
-func (sm *saramaMetricsMonitor) collectBrokerMetrics() {
-	sm.collectBrokers()
+func (sm *saramaMetricsMonitor) collectBrokerMetrics(ctx context.Context) {
+	sm.collectBrokers(ctx)
 
 	for id := range sm.brokers {
 		brokerID := strconv.Itoa(int(id))
@@ -336,7 +336,7 @@ func runSaramaMetricsMonitor(ctx context.Context,
 			case <-ctx.Done():
 				return
 			case <-ticker.C:
-				monitor.collectMetrics()
+				monitor.collectMetrics(ctx)
 			}
 		}
 	}()
