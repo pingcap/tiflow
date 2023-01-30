@@ -33,8 +33,13 @@ type Client interface {
 	// Partitions returns the sorted list of
 	// all partition IDs for the given topic.
 	Partitions(topic string) ([]int32, error)
+	// SyncProducer creates a sync producer to writer message to kafka
 	SyncProducer() (SyncProducer, error)
-	AsyncProducer() (AsyncProducer, error)
+	// AsyncProducer creates an async producer to writer message to kafka
+	AsyncProducer(changefeedID model.ChangeFeedID,
+		closedChan chan struct{},
+		failpointCh chan error) (AsyncProducer, error)
+	// MetricRegistry returns the kafka client metric registry
 	MetricRegistry() metrics.Registry
 	// Close closes the client
 	Close() error
@@ -78,14 +83,14 @@ type AsyncProducer interface {
 
 	// AsyncSend is the input channel for the user to write messages to that they
 	// wish to send.
-	AsyncSend(context.Context, string, int32, []byte, []byte,
-		chan struct{}, func()) error
+	AsyncSend(ctx context.Context, topic string,
+		partition int32, key []byte, value []byte,
+		callback func()) error
 
-	AsyncCallbackRun(ctx context.Context,
-		changefeedID model.ChangeFeedID,
-		closedChan chan struct{},
-		failpointCh chan error,
-	) error
+	// AsyncRunCallback process the messages that has sent to kafka,
+	// and run tha attached callback. the caller should call this
+	// method in a background goroutine
+	AsyncRunCallback(ctx context.Context) error
 }
 
 type saramaKafkaClient struct {
@@ -110,12 +115,19 @@ func (c *saramaKafkaClient) SyncProducer() (SyncProducer, error) {
 	return &saramaSyncProducer{producer: p}, nil
 }
 
-func (c *saramaKafkaClient) AsyncProducer() (AsyncProducer, error) {
+func (c *saramaKafkaClient) AsyncProducer(
+	changefeedID model.ChangeFeedID,
+	closedChan chan struct{},
+	failpointCh chan error) (AsyncProducer, error) {
 	p, err := sarama.NewAsyncProducerFromClient(c.client)
 	if err != nil {
 		return nil, err
 	}
-	return &saramaAsyncProducer{producer: p}, nil
+	return &saramaAsyncProducer{
+		producer:     p,
+		changefeedID: changefeedID,
+		closedChan:   closedChan,
+		failpointCh:  failpointCh}, nil
 }
 
 func (c *saramaKafkaClient) MetricRegistry() metrics.Registry {
@@ -162,7 +174,10 @@ func (p *saramaSyncProducer) Close() error {
 }
 
 type saramaAsyncProducer struct {
-	producer sarama.AsyncProducer
+	producer     sarama.AsyncProducer
+	changefeedID model.ChangeFeedID
+	closedChan   chan struct{}
+	failpointCh  chan error
 }
 
 func (p *saramaAsyncProducer) AsyncClose() {
@@ -173,22 +188,19 @@ func (p *saramaAsyncProducer) Close() error {
 	return p.producer.Close()
 }
 
-func (p *saramaAsyncProducer) AsyncCallbackRun(ctx context.Context,
-	changefeedID model.ChangeFeedID,
-	closedChan chan struct{},
-	failpointCh chan error,
-) error {
+func (p *saramaAsyncProducer) AsyncRunCallback(
+	ctx context.Context) error {
 	for {
 		select {
 		case <-ctx.Done():
 			return errors.Trace(ctx.Err())
-		case <-closedChan:
+		case <-p.closedChan:
 			return nil
-		case err := <-failpointCh:
+		case err := <-p.failpointCh:
 			log.Warn("Receive from failpoint chan in kafka "+
 				"DML producer",
-				zap.String("namespace", changefeedID.Namespace),
-				zap.String("changefeed", changefeedID.ID),
+				zap.String("namespace", p.changefeedID.Namespace),
+				zap.String("changefeed", p.changefeedID.ID),
 				zap.Error(err))
 			return errors.Trace(err)
 		case ack := <-p.producer.Successes():
@@ -219,7 +231,6 @@ func (p *saramaAsyncProducer) AsyncSend(ctx context.Context,
 	partition int32,
 	key []byte,
 	value []byte,
-	closedChan chan struct{},
 	callback func(),
 ) error {
 	msg := &sarama.ProducerMessage{
@@ -232,7 +243,7 @@ func (p *saramaAsyncProducer) AsyncSend(ctx context.Context,
 	select {
 	case <-ctx.Done():
 		return errors.Trace(ctx.Err())
-	case <-closedChan:
+	case <-p.closedChan:
 		return nil
 	case p.producer.Input() <- msg:
 	}

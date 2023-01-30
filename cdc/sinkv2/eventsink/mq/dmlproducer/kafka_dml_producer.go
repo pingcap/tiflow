@@ -69,7 +69,9 @@ func NewKafkaDMLProducer(
 		zap.String("namespace", changefeedID.Namespace),
 		zap.String("changefeed", changefeedID.ID))
 
-	asyncProducer, err := client.AsyncProducer()
+	closeCh := make(chan struct{})
+	failpointCh := make(chan error, 1)
+	asyncProducer, err := client.AsyncProducer(changefeedID, closeCh, failpointCh)
 	if err != nil {
 		// Close the client to prevent the goroutine leak.
 		// Because it may be a long time to close the client,
@@ -100,8 +102,8 @@ func NewKafkaDMLProducer(
 		asyncProducer: asyncProducer,
 		collector:     collector,
 		closed:        false,
-		closedChan:    make(chan struct{}),
-		failpointCh:   make(chan error, 1),
+		closedChan:    closeCh,
+		failpointCh:   failpointCh,
 	}
 
 	// Start collecting metrics.
@@ -151,7 +153,7 @@ func (k *kafkaDMLProducer) AsyncSendMessage(
 		failpoint.Return(nil)
 	})
 	return k.asyncProducer.AsyncSend(ctx, topic, partition,
-		message.Key, message.Value, k.closedChan, message.Callback)
+		message.Key, message.Value, message.Callback)
 }
 
 func (k *kafkaDMLProducer) Close() {
@@ -223,5 +225,5 @@ func (k *kafkaDMLProducer) Close() {
 }
 
 func (k *kafkaDMLProducer) run(ctx context.Context) error {
-	return k.asyncProducer.AsyncCallbackRun(ctx, k.id, k.closedChan, k.failpointCh)
+	return k.asyncProducer.AsyncRunCallback(ctx)
 }

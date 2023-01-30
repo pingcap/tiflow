@@ -108,7 +108,7 @@ func (k *kafkaSaramaProducer) AsyncSendMessage(
 	k.mu.Unlock()
 
 	return k.asyncProducer.AsyncSend(ctx, topic, partition,
-		message.Key, message.Value, k.closeCh, func() {
+		message.Key, message.Value, func() {
 			k.mu.Lock()
 			k.mu.inflight--
 			if k.mu.inflight == 0 && k.mu.flushDone != nil {
@@ -265,7 +265,7 @@ func (k *kafkaSaramaProducer) run(ctx context.Context) error {
 		k.stop()
 	}()
 
-	return k.asyncProducer.AsyncCallbackRun(ctx, k.id, k.closeCh, k.failpointCh)
+	return k.asyncProducer.AsyncRunCallback(ctx)
 }
 
 // NewAdminClientImpl specifies the build method for the admin client.
@@ -288,7 +288,9 @@ func NewKafkaSaramaProducer(
 		zap.String("namespace", changefeedID.Namespace),
 		zap.String("changefeed", changefeedID.ID), zap.Any("role", role))
 
-	asyncProducer, err := client.AsyncProducer()
+	closeCh := make(chan struct{})
+	failpointCh := make(chan error, 1)
+	asyncProducer, err := client.AsyncProducer(changefeedID, closeCh, failpointCh)
 	if err != nil {
 		return nil, cerror.WrapError(cerror.ErrKafkaNewSaramaProducer, err)
 	}
@@ -305,8 +307,8 @@ func NewKafkaSaramaProducer(
 		client:        client,
 		asyncProducer: asyncProducer,
 		syncProducer:  syncProducer,
-		closeCh:       make(chan struct{}),
-		failpointCh:   make(chan error, 1),
+		closeCh:       closeCh,
+		failpointCh:   failpointCh,
 		closing:       kafkaProducerRunning,
 
 		id:   changefeedID,
