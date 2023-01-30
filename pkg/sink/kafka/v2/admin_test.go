@@ -282,11 +282,51 @@ func TestGetAllTopicsMeta(t *testing.T) {
 	require.Equal(t, "config-1-value", result["topic-1"].ConfigEntries["config-1"])
 }
 
-//func TestGetTopicMeta(t *testing.T) {
-//	t.Parallel()
-//
-//	admin, client := newClusterAdminClientWithMock(t)
-//}
+func TestGetTopicMeta(t *testing.T) {
+	t.Parallel()
+
+	ctx := context.Background()
+	admin, client := newClusterAdminClientWithMock(t)
+
+	// cannot get topics meta from kafka
+	client.EXPECT().Metadata(gomock.Any(), gomock.Any()).Return(nil,
+		fmt.Errorf("kafka.(*Client).Metadata"))
+	result, err := admin.GetTopicsMeta(ctx, []string{}, true)
+	require.Error(t, err)
+	require.Nil(t, result)
+
+	client.EXPECT().Metadata(gomock.Any(), gomock.Any()).
+		Return(&kafka.MetadataResponse{}, nil)
+	result, err = admin.GetTopicsMeta(ctx, []string{}, true)
+	require.NoError(t, err)
+	require.Len(t, result, 0)
+
+	targetTopic := "topic-1"
+	client.EXPECT().Metadata(gomock.Any(), gomock.Any()).
+		Return(&kafka.MetadataResponse{
+			Topics: []kafka.Topic{
+				{
+					Name: targetTopic,
+					Partitions: []kafka.Partition{
+						{}, {}, // 2 partitions
+					},
+					Error: errors.New("topic error found"),
+				},
+			},
+		}, nil).Times(2)
+	// ignore topic error
+	result, err = admin.GetTopicsMeta(ctx, []string{targetTopic}, true)
+	require.NoError(t, err)
+	require.Len(t, result, 1)
+	require.Equal(t, "topic-1", result[targetTopic].Name)
+	require.Equal(t, int32(2), result["topic-1"].NumPartitions)
+
+	// not ignore topic error
+	result, err = admin.GetTopicsMeta(ctx, []string{targetTopic}, false)
+	require.Error(t, err)
+	require.Nil(t, result)
+}
+
 //
 //func TestCreateTopic(t *testing.T) {
 //	t.Parallel()

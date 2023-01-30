@@ -167,14 +167,14 @@ func (a *admin) GetAllTopicsMeta(ctx context.Context) (map[string]pkafka.TopicDe
 func (a *admin) GetTopicsMeta(ctx context.Context, topics []string, ignoreTopicError bool) (map[string]pkafka.TopicDetail, error) {
 	resp, err := a.topicsMetadata(ctx, topics)
 	if err != nil {
-		return nil, errors.Trace(err)
+		return nil, err
 	}
 
 	result := make(map[string]pkafka.TopicDetail, len(resp.Topics))
 	for _, topic := range resp.Topics {
 		if topic.Error != nil {
 			if !ignoreTopicError {
-				return nil, errors.Trace(topic.Error)
+				return nil, topic.Error
 			}
 			log.Warn("fetch topic meta failed",
 				zap.String("topic", topic.Name), zap.Error(topic.Error))
