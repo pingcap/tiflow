@@ -66,7 +66,7 @@ func (a *saramaAdminClient) GetCoordinator(context.Context) (int, error) {
 	return int(controllerID), nil
 }
 
-func (a *saramaAdminClient) GetBrokerConfig(ctx context.Context, configName string) (string, error) {
+func (a *saramaAdminClient) GetBrokerConfig(_ context.Context, configName string) (string, error) {
 	_, controller, err := a.client.DescribeCluster()
 	if err != nil {
 		return "", err
@@ -115,7 +115,11 @@ func (a *saramaAdminClient) GetAllTopicsMeta(context.Context) (map[string]TopicD
 	return result, nil
 }
 
-func (a *saramaAdminClient) GetTopicsMeta(ctx context.Context, topics []string, ignoreTopicError bool) (map[string]TopicDetail, error) {
+func (a *saramaAdminClient) GetTopicsMeta(
+	_ context.Context,
+	topics []string,
+	ignoreTopicError bool,
+) (map[string]TopicDetail, error) {
 	metaList, err := a.client.DescribeTopics(topics)
 	if err != nil {
 		return nil, err
@@ -141,8 +145,12 @@ func (a *saramaAdminClient) GetTopicsMeta(ctx context.Context, topics []string, 
 	return result, nil
 }
 
-func (a *saramaAdminClient) CreateTopic(ctx context.Context, topic string, detail *TopicDetail, validateOnly bool) error {
-	err := a.client.CreateTopic(topic, &sarama.TopicDetail{
+func (a *saramaAdminClient) CreateTopic(
+	_ context.Context,
+	detail *TopicDetail,
+	validateOnly bool,
+) error {
+	err := a.client.CreateTopic(detail.Name, &sarama.TopicDetail{
 		NumPartitions:     detail.NumPartitions,
 		ReplicationFactor: detail.ReplicationFactor,
 	}, validateOnly)
