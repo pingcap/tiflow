@@ -113,7 +113,7 @@ func (w *sinkWorker) handleTask(ctx context.Context, task *sinkTask) (finalErr e
 	batchID := uint64(1)
 
 	if w.eventCache != nil {
-		drained, err := w.fetchFromCache(task, &lowerBound, &upperBound, &batchID)
+		drained, err := w.fetchFromCache(ctx, task, &lowerBound, &upperBound, &batchID)
 		if err != nil {
 			return errors.Trace(err)
 		}
@@ -153,24 +153,24 @@ func (w *sinkWorker) handleTask(ctx context.Context, task *sinkTask) (finalErr e
 		if currTxnCommitTs == lastPos.CommitTs {
 			if lastPos.IsCommitFence() {
 				// All transactions before currTxnCommitTs are resolved.
-				err = w.advanceTableSink(task, currTxnCommitTs, committedTxnSize+pendingTxnSize)
+				err = w.advanceTableSink(ctx, task, currTxnCommitTs, committedTxnSize+pendingTxnSize)
 			} else {
 				// This means all events of the currenet transaction have been fetched, but we can't
 				// ensure whether there are more transaction with the same CommitTs or not.
-				err = w.advanceTableSinkWithBatchID(task, currTxnCommitTs, committedTxnSize+pendingTxnSize, batchID)
+				err = w.advanceTableSinkWithBatchID(ctx, task, currTxnCommitTs, committedTxnSize+pendingTxnSize, batchID)
 				batchID += 1
 			}
 			committedTxnSize = 0
 			pendingTxnSize = 0
 		} else if w.splitTxn && currTxnCommitTs > 0 {
 			// This branch will advance some complete transactions before currTxnCommitTs,
-			// and one partail transaction with `batchID`.
-			err = w.advanceTableSinkWithBatchID(task, currTxnCommitTs, committedTxnSize+pendingTxnSize, batchID)
+			// and one partial transaction with `batchID`.
+			err = w.advanceTableSinkWithBatchID(ctx, task, currTxnCommitTs, committedTxnSize+pendingTxnSize, batchID)
 			batchID += 1
 			committedTxnSize = 0
 			pendingTxnSize = 0
 		} else if !w.splitTxn && lastTxnCommitTs > 0 {
-			err = w.advanceTableSink(task, lastTxnCommitTs, committedTxnSize)
+			err = w.advanceTableSink(ctx, task, lastTxnCommitTs, committedTxnSize)
 			committedTxnSize = 0
 			// It's the last time we call `doEmitAndAdvance`, but `pendingTxnSize`
 			// hasn't been recorded yet. To avoid losing it, record it manually.
@@ -343,6 +343,7 @@ func (w *sinkWorker) handleTask(ctx context.Context, task *sinkTask) (finalErr e
 }
 
 func (w *sinkWorker) fetchFromCache(
+	ctx context.Context,
 	task *sinkTask, // task is read-only here.
 	lowerBound *engine.Position,
 	upperBound *engine.Position,
@@ -391,7 +392,7 @@ func (w *sinkWorker) fetchFromCache(
 		w.sinkMemQuota.record(task.span, resolvedTs, popRes.releaseSize)
 		w.redoMemQuota.refund(popRes.releaseSize)
 
-		err = task.tableSink.updateResolvedTs(resolvedTs)
+		err = task.tableSink.updateResolvedTs(ctx, resolvedTs)
 		log.Debug("Advance table sink",
 			zap.String("namespace", w.changefeedID.Namespace),
 			zap.String("changefeed", w.changefeedID.ID),
@@ -418,7 +419,9 @@ func (w *sinkWorker) fetchFromCache(
 	return
 }
 
-func (w *sinkWorker) advanceTableSinkWithBatchID(t *sinkTask, commitTs model.Ts, size uint64, batchID uint64) error {
+func (w *sinkWorker) advanceTableSinkWithBatchID(
+	ctx context.Context, t *sinkTask, commitTs model.Ts, size uint64, batchID uint64,
+) error {
 	resolvedTs := model.NewResolvedTs(commitTs)
 	resolvedTs.Mode = model.BatchResolvedMode
 	resolvedTs.BatchID = batchID
@@ -431,10 +434,12 @@ func (w *sinkWorker) advanceTableSinkWithBatchID(t *sinkTask, commitTs model.Ts,
 	if size > 0 {
 		w.sinkMemQuota.record(t.span, resolvedTs, size)
 	}
-	return t.tableSink.updateResolvedTs(resolvedTs)
+	return t.tableSink.updateResolvedTs(ctx, resolvedTs)
 }
 
-func (w *sinkWorker) advanceTableSink(t *sinkTask, commitTs model.Ts, size uint64) error {
+func (w *sinkWorker) advanceTableSink(
+	ctx context.Context, t *sinkTask, commitTs model.Ts, size uint64,
+) error {
 	resolvedTs := model.NewResolvedTs(commitTs)
 	log.Debug("Advance table sink without batch ID",
 		zap.String("namespace", w.changefeedID.Namespace),
@@ -445,5 +450,5 @@ func (w *sinkWorker) advanceTableSink(t *sinkTask, commitTs model.Ts, size uint6
 	if size > 0 {
 		w.sinkMemQuota.record(t.span, resolvedTs, size)
 	}
-	return t.tableSink.updateResolvedTs(resolvedTs)
+	return t.tableSink.updateResolvedTs(ctx, resolvedTs)
 }

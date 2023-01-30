@@ -29,7 +29,7 @@ type TableSink interface {
 	// UpdateResolvedTs writes the buffered row changed events to the eventTableSink.
 	// Note: This is an asynchronous and not thread-safe method.
 	// Please do not call it concurrently.
-	UpdateResolvedTs(resolvedTs model.ResolvedTs) error
+	UpdateResolvedTs(ctx context.Context, resolvedTs model.ResolvedTs) error
 	// GetCheckpointTs returns the current checkpoint ts of table sink.
 	// For example, calculating the current progress from the statistics of the table sink.
 	// This is a thread-safe method.

@@ -167,8 +167,8 @@ func (t *tableSinkWrapper) updateReceivedSorterCommitTs(ts model.Ts) {
 	}
 }
 
-func (t *tableSinkWrapper) updateResolvedTs(ts model.ResolvedTs) error {
-	if err := t.tableSink.UpdateResolvedTs(ts); err != nil {
+func (t *tableSinkWrapper) updateResolvedTs(ctx context.Context, ts model.ResolvedTs) error {
+	if err := t.tableSink.UpdateResolvedTs(ctx, ts); err != nil {
 		return errors.Trace(err)
 	}
 	return nil

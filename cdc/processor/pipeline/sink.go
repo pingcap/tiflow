@@ -177,7 +177,7 @@ func (n *sinkNode) flushSink(ctx context.Context, resolved model.ResolvedTs) (er
 			return errors.Trace(err)
 		}
 	} else {
-		err = n.sinkV2.UpdateResolvedTs(resolved)
+		err = n.sinkV2.UpdateResolvedTs(ctx, resolved)
 		if err != nil {
 			return errors.Trace(err)
 		}
