@@ -95,6 +95,7 @@ func NewKafkaDDLSink(
 	}()
 
 	topicManager, err := util.GetTopicManagerAndTryCreateTopic(
+		ctx,
 		topic,
 		options.DeriveTopicConfig(),
 		client,

@@ -138,7 +138,7 @@ func (k *mqSink) EmitRowChangedEvents(ctx context.Context, rows ...*model.RowCha
 	rowsCount := 0
 	for _, row := range rows {
 		topic := k.eventRouter.GetTopicForRowChange(row)
-		partitionNum, err := k.topicManager.GetPartitionNum(topic)
+		partitionNum, err := k.topicManager.GetPartitionNum(ctx, topic)
 		if err != nil {
 			return errors.Trace(err)
 		}
@@ -248,7 +248,7 @@ func (k *mqSink) EmitCheckpointTs(ctx context.Context, ts uint64, tables []*mode
 	// This will be compatible with the old behavior.
 	if len(tables) == 0 {
 		topic := k.eventRouter.GetDefaultTopic()
-		partitionNum, err := k.topicManager.GetPartitionNum(topic)
+		partitionNum, err := k.topicManager.GetPartitionNum(ctx, topic)
 		if err != nil {
 			return errors.Trace(err)
 		}
@@ -264,7 +264,7 @@ func (k *mqSink) EmitCheckpointTs(ctx context.Context, ts uint64, tables []*mode
 	topics := k.eventRouter.GetActiveTopics(tableNames)
 	log.Debug("MQ sink current active topics", zap.Any("topics", topics))
 	for _, topic := range topics {
-		partitionNum, err := k.topicManager.GetPartitionNum(topic)
+		partitionNum, err := k.topicManager.GetPartitionNum(ctx, topic)
 		if err != nil {
 			return errors.Trace(err)
 		}
@@ -300,7 +300,7 @@ func (k *mqSink) EmitDDLEvent(ctx context.Context, ddl *model.DDLEvent) error {
 		zap.String("changefeed", k.id.ID),
 		zap.Any("role", k.role))
 	if partitionRule == dispatcher.PartitionAll {
-		partitionNum, err := k.topicManager.GetPartitionNum(topic)
+		partitionNum, err := k.topicManager.GetPartitionNum(ctx, topic)
 		if err != nil {
 			return errors.Trace(err)
 		}
@@ -311,7 +311,7 @@ func (k *mqSink) EmitDDLEvent(ctx context.Context, ddl *model.DDLEvent) error {
 	// which will be responsible for automatically creating topics when they don't exist.
 	// If it is not called here and kafka has `auto.create.topics.enable` turned on,
 	// then the auto-created topic will not be created as configured by ticdc.
-	_, err = k.topicManager.GetPartitionNum(topic)
+	_, err = k.topicManager.GetPartitionNum(ctx, topic)
 	if err != nil {
 		return errors.Trace(err)
 	}
@@ -437,6 +437,7 @@ func NewKafkaSaramaSink(ctx context.Context, sinkURI *url.URL,
 	}
 
 	topicManager, err := manager.NewKafkaTopicManager(
+		ctx,
 		client,
 		adminClient,
 		options.DeriveTopicConfig(),
@@ -445,7 +446,7 @@ func NewKafkaSaramaSink(ctx context.Context, sinkURI *url.URL,
 		return nil, cerror.WrapError(cerror.ErrKafkaNewSaramaProducer, err)
 	}
 
-	if _, err := topicManager.CreateTopicAndWaitUntilVisible(topic); err != nil {
+	if _, err := topicManager.CreateTopicAndWaitUntilVisible(ctx, topic); err != nil {
 		return nil, cerror.WrapError(cerror.ErrKafkaCreateTopic, err)
 	}
 

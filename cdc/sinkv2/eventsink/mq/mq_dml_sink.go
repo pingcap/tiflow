@@ -101,7 +101,9 @@ func newSink(ctx context.Context,
 
 // WriteEvents writes events to the sink.
 // This is an asynchronously and thread-safe method.
-func (s *dmlSink) WriteEvents(rows ...*eventsink.RowChangeCallbackableEvent) error {
+func (s *dmlSink) WriteEvents(
+	ctx context.Context,
+	rows ...*eventsink.RowChangeCallbackableEvent) error {
 	for _, row := range rows {
 		if row.GetTableSinkState() != state.TableSinkSinking {
 			// The table where the event comes from is in stopping, so it's safe
@@ -110,7 +112,7 @@ func (s *dmlSink) WriteEvents(rows ...*eventsink.RowChangeCallbackableEvent) err
 			continue
 		}
 		topic := s.eventRouter.GetTopicForRowChange(row.Event)
-		partitionNum, err := s.topicManager.GetPartitionNum(topic)
+		partitionNum, err := s.topicManager.GetPartitionNum(ctx, topic)
 		if err != nil {
 			return errors.Trace(err)
 		}

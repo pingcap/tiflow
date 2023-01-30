@@ -13,11 +13,13 @@
 
 package eventsink
 
+import "context"
+
 // EventSink is the interface for event sink.
 type EventSink[E TableEvent] interface {
 	// WriteEvents writes events to the sink.
 	// This is an asynchronously and thread-safe method.
-	WriteEvents(events ...*CallbackableEvent[E]) error
+	WriteEvents(ctx context.Context, events ...*CallbackableEvent[E]) error
 	// Close closes the sink.
 	Close() error
 }
