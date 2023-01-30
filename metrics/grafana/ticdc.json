@@ -7764,7 +7764,7 @@
           "timeFrom": null,
           "timeRegions": [],
           "timeShift": null,
-          "title": "Txn sink DML callback Duration",
+          "title": "Txn Sink DML Callback Duration",
           "tooltip": {
             "shared": true,
             "sort": 0,
