@@ -18,7 +18,7 @@ import (
 
 	"github.com/gin-gonic/gin"
 	"github.com/pingcap/tiflow/cdc/api"
-	"github.com/pingcap/tiflow/cdc/api/middleware"
+	"github.com/pingcap/tiflow/cdc/model"
 	cerror "github.com/pingcap/tiflow/pkg/errors"
 )
 
@@ -26,10 +26,6 @@ const apiOpVarCaptureID = "capture_id"
 
 // drainCapture remove all tables at the given capture.
 func (h *OpenAPIV2) drainCapture(c *gin.Context) {
-	if !h.capture.IsOwner() {
-		middleware.ForwardToOwnerMiddleware(h.capture)(c)
-		return
-	}
 	captureID := c.Param(apiOpVarCaptureID)
 
 	ctx := c.Request.Context()
@@ -83,4 +79,43 @@ func (h *OpenAPIV2) drainCapture(c *gin.Context) {
 	}
 
 	c.JSON(http.StatusAccepted, resp)
+}
+
+// listCaptures lists all captures
+func (h *OpenAPIV2) listCaptures(c *gin.Context) {
+	ctx := c.Request.Context()
+	captureInfos, err := h.capture.StatusProvider().GetCaptures(ctx)
+	if err != nil {
+		_ = c.Error(err)
+		return
+	}
+	info, err := h.capture.Info()
+	if err != nil {
+		_ = c.Error(err)
+		return
+	}
+	ownerID := info.ID
+
+	etcdClient, err := h.capture.GetEtcdClient()
+	if err != nil {
+		_ = c.Error(err)
+		return
+	}
+
+	captures := make([]model.Capture, 0, len(captureInfos))
+	for _, c := range captureInfos {
+		isOwner := c.ID == ownerID
+		captures = append(captures,
+			model.Capture{
+				ID:            c.ID,
+				IsOwner:       isOwner,
+				AdvertiseAddr: c.AdvertiseAddr,
+				ClusterID:     etcdClient.GetClusterID(),
+			})
+	}
+	resp := &ListResponse[model.Capture]{
+		Total: len(captureInfos),
+		Items: captures,
+	}
+	c.JSON(http.StatusOK, resp)
 }

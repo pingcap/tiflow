@@ -41,7 +41,9 @@ func TestCoordinatorSendMsgs(t *testing.T) {
 	t.Parallel()
 	ctx := context.Background()
 	coord, trans := newTestCoordinator(&config.SchedulerConfig{
-		RegionPerSpan: 10000, // Enable span replication.
+		ChangefeedSettings: &config.ChangefeedSchedulerConfig{
+			RegionPerSpan: 10000, // Enable span replication.
+		},
 	})
 	coord.version = "6.2.0"
 	coord.revision = schedulepb.OwnerRevision{Revision: 3}
@@ -78,7 +80,9 @@ func TestCoordinatorRecvMsgs(t *testing.T) {
 
 	ctx := context.Background()
 	coord, trans := newTestCoordinator(&config.SchedulerConfig{
-		RegionPerSpan: 10000, // Enable span replication.
+		ChangefeedSettings: &config.ChangefeedSchedulerConfig{
+			RegionPerSpan: 10000, // Enable span replication.
+		},
 	})
 	coord.version = "6.2.0"
 	coord.revision = schedulepb.OwnerRevision{Revision: 3}
@@ -120,7 +124,9 @@ func TestCoordinatorTransportCompat(t *testing.T) {
 	t.Parallel()
 
 	coord, trans := newTestCoordinator(&config.SchedulerConfig{
-		RegionPerSpan: 0, // Disable span replication.
+		ChangefeedSettings: &config.ChangefeedSchedulerConfig{
+			RegionPerSpan: 0, // Disable span replication.
+		},
 	})
 
 	ctx := context.Background()
@@ -194,7 +200,7 @@ func newTestCoordinator(cfg *config.SchedulerConfig) (*coordinator, *transport.M
 	trans := transport.NewMockTrans()
 	coord.trans = trans
 	coord.reconciler = keyspan.NewReconciler(
-		model.ChangeFeedID{}, keyspan.NewMockRegionCache(), cfg.RegionPerSpan)
+		model.ChangeFeedID{}, keyspan.NewMockRegionCache(), cfg.ChangefeedSettings.RegionPerSpan)
 	return coord, trans
 }
 
@@ -206,6 +212,7 @@ func TestCoordinatorHeartbeat(t *testing.T) {
 		CollectStatsTick:   math.MaxInt,
 		MaxTaskConcurrency: 1,
 		AddTableBatchSize:  50,
+		ChangefeedSettings: config.GetDefaultReplicaConfig().Scheduler,
 	})
 
 	// Prepare captureM and replicationM.
@@ -262,6 +269,7 @@ func TestCoordinatorAddCapture(t *testing.T) {
 		HeartbeatTick:      math.MaxInt,
 		CollectStatsTick:   math.MaxInt,
 		MaxTaskConcurrency: 1,
+		ChangefeedSettings: config.GetDefaultReplicaConfig().Scheduler,
 	})
 
 	// Prepare captureM and replicationM.
@@ -318,6 +326,7 @@ func TestCoordinatorRemoveCapture(t *testing.T) {
 		CollectStatsTick:   math.MaxInt,
 		MaxTaskConcurrency: 1,
 		AddTableBatchSize:  50,
+		ChangefeedSettings: config.GetDefaultReplicaConfig().Scheduler,
 	})
 
 	// Prepare captureM and replicationM.
@@ -408,6 +417,7 @@ func TestCoordinatorAdvanceCheckpoint(t *testing.T) {
 		HeartbeatTick:      math.MaxInt,
 		CollectStatsTick:   math.MaxInt,
 		MaxTaskConcurrency: 1,
+		ChangefeedSettings: config.GetDefaultReplicaConfig().Scheduler,
 	})
 
 	// Prepare captureM and replicationM.

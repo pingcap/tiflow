@@ -70,6 +70,8 @@ function run() {
 	# Update changefeed failed because changefeed is running
 	cat - >"$WORK_DIR/changefeed.toml" <<EOF
 case-sensitive = false
+[scheduler]
+region-per-span = 10000
 EOF
 	set +e
 	update_result=$(cdc cli changefeed update --pd=$pd_addr --config="$WORK_DIR/changefeed.toml" --no-confirm --changefeed-id $uuid)
@@ -92,6 +94,18 @@ EOF
 	if [[ ! $changefeed_info == *"\"engine\":\"unified\""* ]]; then
 		echo "[$(date)] <<<<< changefeed info is not updated as expected ${changefeed_info} >>>>>"
 		exit 1
+	fi
+	if [ "$SINK_TYPE" == "kafka" ]; then
+		if [[ ! $changefeed_info == *"\"region_per_span\":10000"* ]]; then
+			echo "[$(date)] <<<<< changefeed info is not updated as expected ${changefeed_info} >>>>>"
+			exit 1
+		fi
+	else
+		# Currently, MySQL changefeed does not support scale out feature.
+		if [[ $changefeed_info == *"\"region_per_span\":10000"* ]]; then
+			echo "[$(date)] <<<<< changefeed info is not updated as expected ${changefeed_info} >>>>>"
+			exit 1
+		fi
 	fi
 
 	# Resume changefeed

@@ -275,6 +275,9 @@ func (info *ChangeFeedInfo) VerifyAndComplete() error {
 	if info.Config.Consistent == nil {
 		info.Config.Consistent = defaultConfig.Consistent
 	}
+	if info.Config.Scheduler == nil {
+		info.Config.Scheduler = defaultConfig.Scheduler
+	}
 
 	return nil
 }
@@ -304,6 +307,12 @@ func (info *ChangeFeedInfo) FixIncompatible() {
 		log.Info("Start fixing incompatible memory quota", zap.String("changefeed", info.String()))
 		info.fixMemoryQuota()
 		log.Info("Fix incompatible memory quota completed", zap.String("changefeed", info.String()))
+	}
+
+	if info.Config.Scheduler == nil {
+		log.Info("Start fixing incompatible scheduler", zap.String("changefeed", info.String()))
+		info.fixScheduler()
+		log.Info("Fix incompatible scheduler completed", zap.String("changefeed", info.String()))
 	}
 }
 
@@ -437,4 +446,8 @@ func (info *ChangeFeedInfo) HasFastFailError() bool {
 
 func (info *ChangeFeedInfo) fixMemoryQuota() {
 	info.Config.FixMemoryQuota()
+}
+
+func (info *ChangeFeedInfo) fixScheduler() {
+	info.Config.FixScheduler()
 }
