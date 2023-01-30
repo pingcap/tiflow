@@ -102,8 +102,8 @@ func NewMySQLBackends(
 		return nil, err
 	}
 
-	db.SetMaxIdleConns(cfg.WorkerCount)
-	db.SetMaxOpenConns(cfg.WorkerCount)
+	db.SetMaxIdleConns(cfg.WorkerCount + 1)
+	db.SetMaxOpenConns(cfg.WorkerCount + 1)
 	stmtCache, err := lru.NewWithEvict(cfg.PrepStmtCacheSize, func(key, value interface{}) {
 		stmt := value.(*sql.Stmt)
 		stmt.Close()
