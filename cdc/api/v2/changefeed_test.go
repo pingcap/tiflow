@@ -235,7 +235,7 @@ func TestUpdateChangefeed(t *testing.T) {
 	cp.EXPECT().IsOwner().Return(true).AnyTimes()
 
 	// case 1 invalid id
-	invalidID := "#Invalid_"
+	invalidID := "Invalid_#"
 	w := httptest.NewRecorder()
 	req, _ := http.NewRequestWithContext(context.Background(), update.method,
 		fmt.Sprintf(update.url, invalidID), nil)
