@@ -34,24 +34,25 @@ type Broker struct {
 // which supports managing and inspecting topics, brokers, configurations and ACLs.
 type ClusterAdminClient interface {
 	// GetAllBrokers return all brokers among the cluster
-	GetAllBrokers() ([]Broker, error)
+	GetAllBrokers(ctx context.Context) ([]Broker, error)
 
 	// GetCoordinator return the coordinator's broker id of the cluster
-	GetCoordinator() (controllerID int32, err error)
+	GetCoordinator(ctx context.Context) (controllerID int, err error)
 
 	// GetBrokerConfig return the broker level configuration with the `configName`
-	GetBrokerConfig(configName string) (string, error)
+	GetBrokerConfig(ctx context.Context, configName string) (string, error)
 
 	// GetAllTopicsMeta return all topics' metadata
 	// which available in the cluster with the default options.
-	GetAllTopicsMeta() (map[string]TopicDetail, error)
+	GetAllTopicsMeta(ctx context.Context) (map[string]TopicDetail, error)
 
 	// GetTopicsMeta return all target topics' metadata
 	// if `ignoreTopicError` is true, ignore the topic error and return the metadata of valid topics
-	GetTopicsMeta(topics []string, ignoreTopicError bool) (map[string]TopicDetail, error)
+	GetTopicsMeta(ctx context.Context,
+		topics []string, ignoreTopicError bool) (map[string]TopicDetail, error)
 
 	// CreateTopic creates a new topic.
-	CreateTopic(topic string, detail *TopicDetail, validateOnly bool) error
+	CreateTopic(ctx context.Context, detail *TopicDetail, validateOnly bool) error
 
 	// Close shuts down the admin client.
 	Close() error
