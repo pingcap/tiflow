@@ -14,6 +14,7 @@
 package blackhole
 
 import (
+	"context"
 	"testing"
 
 	"github.com/pingcap/tiflow/cdc/model"
@@ -33,6 +34,7 @@ func TestWriteEventsCallback(t *testing.T) {
 		Columns:  []*model.Column{{Name: "col1", Type: 1, Value: "aa"}},
 	}
 
+	ctx := context.Background()
 	count := 0
 	events := make([]*eventsink.RowChangeCallbackableEvent, 0, 3000)
 	for i := 0; i < 3000; i++ {
@@ -44,7 +46,7 @@ func TestWriteEventsCallback(t *testing.T) {
 			SinkState: &tableStatus,
 		})
 	}
-	err := s.WriteEvents(events...)
+	err := s.WriteEvents(ctx, events...)
 	require.Nil(t, err, "no error should be returned")
 	require.Equal(t, 3000, count, "all callbacks should be called")
 }

@@ -153,11 +153,15 @@ func (w *sinkWorker) handleTask(ctx context.Context, task *sinkTask) (finalErr e
 		if currTxnCommitTs == lastPos.CommitTs {
 			if lastPos.IsCommitFence() {
 				// All transactions before currTxnCommitTs are resolved.
-				err = w.advanceTableSink(ctx, task, currTxnCommitTs, committedTxnSize+pendingTxnSize)
+				err = w.advanceTableSink(
+					ctx, task, currTxnCommitTs, committedTxnSize+pendingTxnSize,
+				)
 			} else {
 				// This means all events of the  transaction have been fetched, but we can't
 				// ensure whether there are more transaction with the same CommitTs or not.
-				err = w.advanceTableSinkWithBatchID(ctx, task, currTxnCommitTs, committedTxnSize+pendingTxnSize, batchID)
+				err = w.advanceTableSinkWithBatchID(
+					ctx, task, currTxnCommitTs, committedTxnSize+pendingTxnSize, batchID,
+				)
 				batchID += 1
 			}
 			committedTxnSize = 0
@@ -165,7 +169,9 @@ func (w *sinkWorker) handleTask(ctx context.Context, task *sinkTask) (finalErr e
 		} else if w.splitTxn && currTxnCommitTs > 0 {
 			// This branch will advance some complete transactions before currTxnCommitTs,
 			// and one partial transaction with `batchID`.
-			err = w.advanceTableSinkWithBatchID(ctx, task, currTxnCommitTs, committedTxnSize+pendingTxnSize, batchID)
+			err = w.advanceTableSinkWithBatchID(
+				ctx, task, currTxnCommitTs, committedTxnSize+pendingTxnSize, batchID,
+			)
 			batchID += 1
 			committedTxnSize = 0
 			pendingTxnSize = 0

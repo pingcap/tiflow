@@ -73,6 +73,7 @@ func TestTxnSinkNolocking(t *testing.T) {
 
 	// Test `WriteEvents` shouldn't be blocked by slow workers.
 	var handled uint32 = 0
+	ctx := context.Background()
 	for i := 0; i < 100; i++ {
 		sinkState := new(state.TableSinkState)
 		*sinkState = state.TableSinkSinking
@@ -91,7 +92,7 @@ func TestTxnSinkNolocking(t *testing.T) {
 			Callback:  func() { atomic.AddUint32(&handled, 1) },
 			SinkState: sinkState,
 		}
-		sink.WriteEvents(e)
+		sink.WriteEvents(ctx, e)
 	}
 
 	time.Sleep(time.Second)

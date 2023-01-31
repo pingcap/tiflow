@@ -115,7 +115,7 @@ func TestWriteEvents(t *testing.T) {
 		})
 	}
 
-	err = s.WriteEvents(events...)
+	err = s.WriteEvents(ctx, events...)
 	// Wait for the events to be received by the worker.
 	time.Sleep(time.Second)
 	require.Nil(t, err)

@@ -91,7 +91,7 @@ func TestCloudStorageWriteEvents(t *testing.T) {
 	}
 	tableDir := path.Join(parentDir, "test/table1/33")
 	os.MkdirAll(tableDir, 0o755)
-	err = s.WriteEvents(txns...)
+	err = s.WriteEvents(ctx, txns...)
 	require.Nil(t, err)
 	time.Sleep(4 * time.Second)
 

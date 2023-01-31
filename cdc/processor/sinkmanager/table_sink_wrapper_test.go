@@ -39,7 +39,10 @@ func newMockSink() *mockSink {
 	}
 }
 
-func (m *mockSink) WriteEvents(events ...*eventsink.CallbackableEvent[*model.RowChangedEvent]) error {
+func (m *mockSink) WriteEvents(
+	_ context.Context,
+	events ...*eventsink.CallbackableEvent[*model.RowChangedEvent],
+) error {
 	m.mu.Lock()
 	defer m.mu.Unlock()
 	m.writeTimes++
