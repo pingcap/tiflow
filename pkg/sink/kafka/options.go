@@ -31,12 +31,14 @@ import (
 )
 
 const (
+	// SASLTypePlaintext represents the plain mechanism
 	SASLTypePlaintext = "PLAIN"
 	// SASLTypeSCRAMSHA256 represents the SCRAM-SHA-256 mechanism.
 	SASLTypeSCRAMSHA256 = "SCRAM-SHA-256"
 	// SASLTypeSCRAMSHA512 represents the SCRAM-SHA-512 mechanism.
 	SASLTypeSCRAMSHA512 = "SCRAM-SHA-512"
-	SASLTypeGSSAPI      = "GSSAPI"
+	// SASLTypeGSSAPI represents the gssapi mechanism.
+	SASLTypeGSSAPI = "GSSAPI"
 )
 
 // Options stores user specified configurations
