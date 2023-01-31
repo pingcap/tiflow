@@ -65,7 +65,7 @@ func NewKafkaDMLSink(
 	}()
 
 	// adjust the option configuration before creating the kafka client
-	if err = kafka.AdjustOptions(adminClient, options, topic); err != nil {
+	if err = kafka.AdjustOptions(ctx, adminClient, options, topic); err != nil {
 		return nil, cerror.WrapError(cerror.ErrKafkaNewSaramaProducer, err)
 	}
 

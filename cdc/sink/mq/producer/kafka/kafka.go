@@ -332,16 +332,17 @@ func NewKafkaSaramaProducer(
 
 // AdjustOptions adjust the `Options` and `sarama.Config` by condition.
 func AdjustOptions(
+	ctx context.Context,
 	admin kafka.ClusterAdminClient,
 	options *kafka.Options,
 	topic string,
 ) error {
-	topics, err := admin.GetAllTopicsMeta(context.Background())
+	topics, err := admin.GetAllTopicsMeta(ctx)
 	if err != nil {
 		return errors.Trace(err)
 	}
 
-	err = validateMinInsyncReplicas(admin, topics, topic, int(options.ReplicationFactor))
+	err = validateMinInsyncReplicas(ctx, admin, topics, topic, int(options.ReplicationFactor))
 	if err != nil {
 		return errors.Trace(err)
 	}
@@ -350,8 +351,11 @@ func AdjustOptions(
 	// once we have found the topic, no matter `auto-create-topic`, make sure user input parameters are valid.
 	if exists {
 		// make sure that producer's `MaxMessageBytes` smaller than topic's `max.message.bytes`
-		topicMaxMessageBytesStr, err := getTopicConfig(admin, info, kafka.TopicMaxMessageBytesConfigName,
-			kafka.BrokerMessageMaxBytesConfigName)
+		topicMaxMessageBytesStr, err := getTopicConfig(
+			ctx, admin, info,
+			kafka.TopicMaxMessageBytesConfigName,
+			kafka.BrokerMessageMaxBytesConfigName,
+		)
 		if err != nil {
 			return errors.Trace(err)
 		}
@@ -381,7 +385,7 @@ func AdjustOptions(
 		return nil
 	}
 
-	brokerMessageMaxBytesStr, err := admin.GetBrokerConfig(context.Background(),
+	brokerMessageMaxBytesStr, err := admin.GetBrokerConfig(ctx,
 		kafka.BrokerMessageMaxBytesConfigName)
 	if err != nil {
 		log.Warn("TiCDC cannot find `message.max.bytes` from broker's configuration")
@@ -414,13 +418,15 @@ func AdjustOptions(
 }
 
 func validateMinInsyncReplicas(
+	ctx context.Context,
 	admin kafka.ClusterAdminClient,
 	topics map[string]kafka.TopicDetail, topic string, replicationFactor int,
 ) error {
 	minInsyncReplicasConfigGetter := func() (string, bool, error) {
 		info, exists := topics[topic]
 		if exists {
-			minInsyncReplicasStr, err := getTopicConfig(admin, info,
+			minInsyncReplicasStr, err := getTopicConfig(
+				ctx, admin, info,
 				kafka.MinInsyncReplicasConfigName,
 				kafka.MinInsyncReplicasConfigName)
 			if err != nil {
@@ -429,7 +435,7 @@ func validateMinInsyncReplicas(
 			return minInsyncReplicasStr, true, nil
 		}
 
-		minInsyncReplicasStr, err := admin.GetBrokerConfig(context.Background(),
+		minInsyncReplicasStr, err := admin.GetBrokerConfig(ctx,
 			kafka.MinInsyncReplicasConfigName)
 		if err != nil {
 			return "", false, err
@@ -475,6 +481,7 @@ func validateMinInsyncReplicas(
 // If the topic does not have this configuration, we will try to get it from the broker's configuration.
 // NOTICE: The configuration names of topic and broker may be different for the same configuration.
 func getTopicConfig(
+	ctx context.Context,
 	admin kafka.ClusterAdminClient,
 	detail kafka.TopicDetail,
 	topicConfigName string,
@@ -484,5 +491,5 @@ func getTopicConfig(
 		return a, nil
 	}
 
-	return admin.GetBrokerConfig(context.Background(), brokerConfigName)
+	return admin.GetBrokerConfig(ctx, brokerConfigName)
 }
