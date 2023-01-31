@@ -26,21 +26,21 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
-func newClusterAdminClientWithMock(t *testing.T) (*admin, *mock.MockClient) {
-	admin := NewClusterAdminClient([]string{"127.0.0.1:9092"})
+func newClusterAdminClientWithMock(t *testing.T) (pkafka.ClusterAdminClient, *mock.MockClient) {
+	adminClient := NewClusterAdminClient([]string{"127.0.0.1:9092"})
 
 	ctrl := gomock.NewController(t)
 	client := mock.NewMockClient(ctrl)
-	admin.client = client
-	return admin, client
+	adminClient.(*admin).client = client
+	return adminClient, client
 }
 
 func TestNewClusterAdminClient(t *testing.T) {
 	t.Parallel()
 
-	admin := NewClusterAdminClient([]string{"127.0.0.1:9092"})
-	require.NotNil(t, admin)
-	require.NotNil(t, admin.client)
+	adminClient := NewClusterAdminClient([]string{"127.0.0.1:9092"})
+	require.NotNil(t, adminClient)
+	require.NotNil(t, adminClient.(*admin).client)
 }
 
 func TestGetAllBrokers(t *testing.T) {
