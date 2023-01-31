@@ -103,7 +103,8 @@ func newSink(ctx context.Context,
 // This is an asynchronously and thread-safe method.
 func (s *dmlSink) WriteEvents(
 	ctx context.Context,
-	rows ...*eventsink.RowChangeCallbackableEvent) error {
+	rows ...*eventsink.RowChangeCallbackableEvent,
+) error {
 	for _, row := range rows {
 		if row.GetTableSinkState() != state.TableSinkSinking {
 			// The table where the event comes from is in stopping, so it's safe
