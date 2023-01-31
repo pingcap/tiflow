@@ -66,7 +66,6 @@ func newSink(
 	encoderConcurrency int,
 	errCh chan error,
 ) (*dmlSink, error) {
-	ctx, cancel := context.WithCancel(ctx)
 	changefeedID := contextutil.ChangefeedIDFromCtx(ctx)
 
 	encoderBuilder, err := builder.NewEventBatchEncoderBuilder(ctx, encoderConfig)
@@ -74,6 +73,7 @@ func newSink(
 		return nil, cerror.WrapError(cerror.ErrKafkaInvalidConfig, err)
 	}
 
+	ctx, cancel := context.WithCancel(ctx)
 	statistics := metrics.NewStatistics(ctx, sink.RowSink)
 	worker := newWorker(changefeedID, encoderConfig.Protocol,
 		encoderBuilder, encoderConcurrency, producer, statistics)
