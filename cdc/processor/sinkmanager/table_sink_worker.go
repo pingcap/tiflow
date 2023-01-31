@@ -183,7 +183,17 @@ func (w *sinkWorker) handleTask(ctx context.Context, task *sinkTask) (finalErr e
 	}
 
 	maybeEmitAndAdvance := func(allFinished, txnFinished bool) error {
+		// If used memory size exceeds the required limit, do a block require.
 		memoryHighUsage := availableMem < usedMem
+		if memoryHighUsage {
+			w.sinkMemQuota.forceAcquire(usedMem - availableMem)
+			log.Debug("MemoryQuotaTracing: force acquire memory for table sink task",
+				zap.String("namespace", w.changefeedID.Namespace),
+				zap.String("changefeed", w.changefeedID.ID),
+				zap.Stringer("span", &task.span),
+				zap.Uint64("memory", usedMem-availableMem))
+			availableMem = usedMem
+		}
 
 		// Do emit in such situations:
 		// 1. we use more memory than we required;
@@ -193,16 +203,6 @@ func (w *sinkWorker) handleTask(ctx context.Context, task *sinkTask) (finalErr e
 			if err := doEmitAndAdvance(false); err != nil {
 				return errors.Trace(err)
 			}
-		}
-
-		if memoryHighUsage {
-			w.sinkMemQuota.forceAcquire(usedMem - availableMem)
-			log.Debug("MemoryQuotaTracing: force acquire memory for table sink task",
-				zap.String("namespace", w.changefeedID.Namespace),
-				zap.String("changefeed", w.changefeedID.ID),
-				zap.Stringer("span", &task.span),
-				zap.Uint64("memory", usedMem-availableMem))
-			availableMem = usedMem
 		}
 
 		if allFinished {
