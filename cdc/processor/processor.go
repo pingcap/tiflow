@@ -561,7 +561,9 @@ func (p *processor) tick(ctx cdcContext.Context) error {
 	if err := p.lazyInit(ctx); err != nil {
 		return errors.Trace(err)
 	}
-	p.pushResolvedTs2Table()
+	if err := p.updateBarrierTs(ctx); err != nil {
+		return errors.Trace(err)
+	}
 
 	p.doGCSchemaStorage()
 
@@ -849,18 +851,48 @@ func (p *processor) sendError(err error) {
 	}
 }
 
-// pushResolvedTs2Table sends global resolved ts to all the table pipelines.
-func (p *processor) pushResolvedTs2Table() {
-	resolvedTs := p.changefeed.Status.ResolvedTs
+func (p *processor) calculateTableBarrierTs(ctx cdcContext.Context) (map[model.TableID]model.Ts, error) {
+	tableBarrierTs := make(map[model.TableID]model.Ts)
+	for t, ts := range p.changefeed.Status.Barrier.TableBarrier {
+		snap, err := p.schemaStorage.GetSnapshot(ctx, ts)
+		if err != nil {
+			return nil, errors.Trace(err)
+		}
+		tbInfo, ok := snap.TableByName(t.Schema, t.Table)
+		if !ok {
+			return nil, cerror.ErrUnknown.GenWithStackByArgs("table not found", t.Schema, t.Table)
+		}
+		tableBarrierTs[tbInfo.ID] = ts
+		if t.IsPartition {
+			partitionInfo := tbInfo.GetPartitionInfo()
+			if partitionInfo == nil {
+				return nil, cerror.ErrUnknown.GenWithStackByArgs("partition not found", t.Schema, t.Table)
+			}
+			for _, partition := range partitionInfo.Definitions {
+				tableBarrierTs[partition.ID] = ts
+			}
+		}
+	}
+	return tableBarrierTs, nil
+}
+
+// updateBarrierTs updates barrierTs for all tables.
+func (p *processor) updateBarrierTs(ctx cdcContext.Context) error {
+	barrierTs := p.changefeed.Status.Barrier.GlobalBarrierTs
+	tableBarrier, err := p.calculateTableBarrierTs(ctx)
+	if err != nil {
+		return errors.Trace(err)
+	}
 	schemaResolvedTs := p.schemaStorage.ResolvedTs()
-	if schemaResolvedTs < resolvedTs {
+	if schemaResolvedTs < barrierTs {
 		// Do not update barrier ts that is larger than
 		// DDL puller's resolved ts.
 		// When DDL puller stall, resolved events that outputted by sorter
 		// may pile up in memory, as they have to wait DDL.
-		resolvedTs = schemaResolvedTs
+		barrierTs = schemaResolvedTs
 	}
-	p.sinkManager.UpdateBarrierTs(resolvedTs)
+	p.sinkManager.UpdateBarrierTs(barrierTs, tableBarrier)
+	return nil
 }
 
 func (p *processor) getTableName(ctx context.Context, tableID model.TableID) string {

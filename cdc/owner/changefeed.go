@@ -102,8 +102,8 @@ type changefeed struct {
 	// The ones that have not been executed yet do not have.
 	currentTables []*model.TableInfo
 
-	ddlHolder    *DDLHolder
-	barrierEvent *model.BarrierEvent
+	ddlHolder *DDLHolder
+	barrier   *model.Barrier
 
 	errCh chan error
 	// cancel the running goroutine start by `DDLPuller`
@@ -159,6 +159,7 @@ func newChangefeed(
 		// The scheduler will be created lazily.
 		scheduler:        nil,
 		barriers:         newBarriers(),
+		barrier:          model.NewBarrier(state.Info.StartTs),
 		feedStateManager: newFeedStateManager(),
 		upstream:         up,
 
@@ -177,18 +178,18 @@ func newChangefeed(
 func newChangefeed4Test(
 	id model.ChangeFeedID, state *orchestrator.ChangefeedReactorState, up *upstream.Upstream,
 	newDDLPuller func(ctx context.Context,
-	replicaConfig *config.ReplicaConfig,
-	up *upstream.Upstream,
-	startTs uint64,
-	changefeed model.ChangeFeedID,
-) (puller.DDLPuller, error),
+		replicaConfig *config.ReplicaConfig,
+		up *upstream.Upstream,
+		startTs uint64,
+		changefeed model.ChangeFeedID,
+	) (puller.DDLPuller, error),
 	newSink func(changefeedID model.ChangeFeedID, info *model.ChangeFeedInfo, reportErr func(err error)) DDLSink,
 	newScheduler func(
-	ctx cdcContext.Context, up *upstream.Upstream, cfg *config.SchedulerConfig,
-) (scheduler.Scheduler, error),
+		ctx cdcContext.Context, up *upstream.Upstream, cfg *config.SchedulerConfig,
+	) (scheduler.Scheduler, error),
 	newDownstreamObserver func(
-	ctx context.Context, sinkURIStr string, replCfg *config.ReplicaConfig,
-) (observer.Observer, error),
+		ctx context.Context, sinkURIStr string, replCfg *config.ReplicaConfig,
+	) (observer.Observer, error),
 ) *changefeed {
 	cfg := config.NewDefaultSchedulerConfig()
 	c := newChangefeed(id, state, up, cfg)
@@ -320,10 +321,10 @@ func (c *changefeed) tick(ctx cdcContext.Context, captures map[model.CaptureID]*
 	log.Debug("owner handles barrier",
 		zap.String("namespace", c.id.Namespace),
 		zap.String("changefeed", c.id.ID),
-		zap.Any("barrier", c.barrierEvent),
+		zap.Any("barrier", c.barrier),
 		zap.Uint64("checkpointTs", checkpointTs))
 
-	if c.barrierEvent.GlobalBarrierTs < checkpointTs {
+	if c.barrier.GlobalBarrierTs < checkpointTs {
 		// This condition implies that the ddlPuller resolvedTs has not yet reached checkpointTs,
 		// which implies that it would be premature to schedule tables or to update status.
 		// So we return here.
@@ -362,12 +363,12 @@ func (c *changefeed) tick(ctx cdcContext.Context, captures map[model.CaptureID]*
 	// If the owner is just initialized, barrierTs can be `checkpoint-1`.
 	// In such case the `newResolvedTs` and `newCheckpointTs` may be larger
 	// than the barrierTs, but it shouldn't be, so we need to handle it here.
-	if newResolvedTs > c.barrierEvent.GlobalBarrierTs {
-		newResolvedTs = c.barrierEvent.GlobalBarrierTs
+	if newResolvedTs > c.barrier.GlobalBarrierTs {
+		newResolvedTs = c.barrier.GlobalBarrierTs
 	}
 
-	if newCheckpointTs > c.barrierEvent.GlobalBarrierTs {
-		newCheckpointTs = c.barrierEvent.GlobalBarrierTs
+	if newCheckpointTs > c.barrier.GlobalBarrierTs {
+		newCheckpointTs = c.barrier.GlobalBarrierTs
 	}
 
 	if c.redoManager.Enabled() {
@@ -387,12 +388,12 @@ func (c *changefeed) tick(ctx cdcContext.Context, captures map[model.CaptureID]*
 		if flushedResolvedTs != 0 {
 			// It's not necessary to replace newCheckpointTs with flushedResolvedTs,
 			// as cdc can ensure newCheckpointTs can never exceed prevResolvedTs.
-			c.barrierEvent.GlobalBarrierTs = flushedResolvedTs
+			c.barrier.GlobalBarrierTs = flushedResolvedTs
 		} else {
-			c.barrierEvent.GlobalBarrierTs = c.state.Status.Barrier.GlobalBarrierTs
+			c.barrier.GlobalBarrierTs = c.state.Status.Barrier.GlobalBarrierTs
 		}
 		// If redo is enabled, resolvedTs should be less than global barrier ts
-		metricsResolvedTs = c.barrierEvent.GlobalBarrierTs
+		metricsResolvedTs = c.barrier.GlobalBarrierTs
 	}
 
 	// resolvedTs should never regress but checkpointTs can, as checkpointTs has already
@@ -403,8 +404,8 @@ func (c *changefeed) tick(ctx cdcContext.Context, captures map[model.CaptureID]*
 	}
 
 	// globalBarrierTs should never regress
-	if c.barrierEvent.GlobalBarrierTs < c.state.Status.Barrier.GlobalBarrierTs {
-		c.barrierEvent.GlobalBarrierTs = c.state.Status.Barrier.GlobalBarrierTs
+	if c.barrier.GlobalBarrierTs < c.state.Status.Barrier.GlobalBarrierTs {
+		c.barrier.GlobalBarrierTs = c.state.Status.Barrier.GlobalBarrierTs
 	}
 
 	failpoint.Inject("ChangefeedOwnerDontUpdateCheckpoint", func() {
@@ -420,7 +421,7 @@ func (c *changefeed) tick(ctx cdcContext.Context, captures map[model.CaptureID]*
 
 	log.Debug("owner prepares to update status",
 		zap.Any("prevBarrier", c.state.Status.Barrier),
-		zap.Any("newBarrier", c.barrierEvent),
+		zap.Any("newBarrier", c.barrier),
 		zap.Uint64("newResolvedTs", newResolvedTs),
 		zap.Uint64("newCheckpointTs", newCheckpointTs),
 		zap.String("namespace", c.id.Namespace),
@@ -814,7 +815,7 @@ func (c *changefeed) handleDDL(ctx cdcContext.Context) error {
 	//   1. All data before the barrierTs was sent to downstream.
 	//   2. No more data after barrierTs was sent to downstream.
 	// So we can execute the DDL event at the barrierTs.
-	if c.state.Status.CheckpointTs == c.barrierEvent.GetMinTableBarrierTs() {
+	if c.state.Status.CheckpointTs == c.barrier.GetMinTableBarrierTs() {
 		ddlEvent := c.ddlHolder.GetMinDDL()
 		if ddlEvent != nil {
 			eventDone, err := c.asyncExecDDLEvent(ctx, ddlEvent)
@@ -831,7 +832,7 @@ func (c *changefeed) handleDDL(ctx cdcContext.Context) error {
 		}
 	}
 	// update ddl barrier ts
-	c.barrierEvent.TableBarrier = c.ddlHolder.GetALLTableMinDDLTs()
+	c.barrier.TableBarrier = c.ddlHolder.GetALLTableMinDDLTs()
 	return nil
 }
 
@@ -860,7 +861,7 @@ func (c *changefeed) handleBarrierX(ctx cdcContext.Context) error {
 		log.Panic("Unknown barrier type", zap.Int("barrierType", int(barrierTp)))
 	}
 	// use the updated barrierTs as the new globalBarrierTs
-	_, c.barrierEvent.GlobalBarrierTs = c.barriers.Min()
+	_, c.barrier.GlobalBarrierTs = c.barriers.Min()
 	return c.handleDDL(ctx)
 }
 
@@ -1076,8 +1077,8 @@ func (c *changefeed) updateStatus(checkpointTs, resolvedTs model.Ts) {
 			status.CheckpointTs = checkpointTs
 			changed = true
 		}
-		if !reflect.DeepEqual(status.Barrier, *c.barrierEvent) {
-			status.Barrier = *c.barrierEvent
+		if !reflect.DeepEqual(status.Barrier, *c.barrier) {
+			status.Barrier = *c.barrier
 			changed = true
 		}
 		log.Info("fizz:update changefeed status", zap.String("changefeed", c.id.ID), zap.Any("status", status))

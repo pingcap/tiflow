@@ -34,7 +34,7 @@ func GetSourceID(ctx context.Context, pdClient pd.Client) (uint64, error) {
 	// The default value of sourceID is 1,
 	// which means the sourceID is not changed by user.
 	sourceID := uint64(1)
-	sourceIDConfig, err := pdClient.LoadGlobalConfig(ctx, []string{sourceIDName})
+	sourceIDConfig, _, err := pdClient.LoadGlobalConfig(ctx, sourceIDName)
 	if err != nil {
 		return 0, cerror.WrapError(cerror.ErrPDEtcdAPIError, err)
 	}

@@ -16,7 +16,6 @@ package sinkmanager
 import (
 	"context"
 	"sync"
-	"sync/atomic"
 	"time"
 
 	"github.com/pingcap/errors"
@@ -82,8 +81,6 @@ type SinkManager struct {
 	sinkFactory *factory.SinkFactory
 	// tableSinks is a map from tableID to tableSink.
 	tableSinks spanz.SyncMap
-	// lastBarrierTs is the last barrier ts.
-	lastBarrierTs atomic.Uint64
 
 	// sinkWorkers used to pull data from source manager.
 	sinkWorkers []*sinkWorker
@@ -336,7 +333,7 @@ func (m *SinkManager) generateSinkTasks() error {
 	// the resolved ts from sorter may be smaller than the barrier ts.
 	// So we use the min value of the barrier ts and the resolved ts from sorter.
 	getUpperBound := func(tableSink *tableSinkWrapper) engine.Position {
-		barrierTs := m.lastBarrierTs.Load()
+		barrierTs := tableSink.barrierTs.Load()
 		resolvedTs := tableSink.getReceivedSorterResolvedTs()
 		var upperBoundTs model.Ts
 		if resolvedTs > barrierTs {
@@ -633,15 +630,25 @@ func (m *SinkManager) UpdateReceivedSorterResolvedTs(span tablepb.Span, ts model
 }
 
 // UpdateBarrierTs updates the barrier ts of all tables in the sink manager.
-func (m *SinkManager) UpdateBarrierTs(ts model.Ts) {
-	// It is safe to do not use compare and swap here.
-	// Only the processor will update the barrier ts.
-	// Other goroutines will only read the barrier ts.
-	// So it is safe to do not use compare and swap here, just Load and Store.
-	if ts <= m.lastBarrierTs.Load() {
-		return
-	}
-	m.lastBarrierTs.Store(ts)
+func (m *SinkManager) UpdateBarrierTs(ts model.Ts, tableBarrier map[model.TableID]model.Ts) {
+	m.tableSinks.Range(func(span tablepb.Span, value interface{}) bool {
+		tableSink := value.(*tableSinkWrapper)
+		lastBarrierTs := tableSink.barrierTs.Load()
+		// It is safe to do not use compare and swap here.
+		// Only the processor will update the barrier ts.
+		// Other goroutines will only read the barrier ts.
+		// So it is safe to do not use compare and swap here, just Load and Store.
+		if tableBarrierTs, ok := tableBarrier[tableSink.span.TableID]; ok {
+			if tableBarrierTs > lastBarrierTs {
+				tableSink.barrierTs.Store(tableBarrierTs)
+			}
+		} else {
+			if ts > lastBarrierTs {
+				tableSink.barrierTs.Store(ts)
+			}
+		}
+		return true
+	})
 }
 
 // AddTable adds a table(TableSink) to the sink manager.
@@ -830,7 +837,7 @@ func (m *SinkManager) GetTableStats(span tablepb.Span) TableStats {
 	return TableStats{
 		CheckpointTs:          checkpointTs.ResolvedMark(),
 		ResolvedTs:            resolvedTs,
-		BarrierTs:             m.lastBarrierTs.Load(),
+		BarrierTs:             tableSink.barrierTs.Load(),
 		ReceivedMaxCommitTs:   tableSink.getReceivedSorterCommitTs(),
 		ReceivedMaxResolvedTs: tableSink.getReceivedSorterResolvedTs(),
 	}

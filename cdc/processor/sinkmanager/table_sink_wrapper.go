@@ -40,7 +40,7 @@ type tableSinkWrapper struct {
 
 	// changefeed used for logging.
 	changefeed model.ChangeFeedID
-	// tableID used for logging.
+	// tableSpan used for logging.
 	span tablepb.Span
 	// tableSink is the underlying sink.
 	tableSink sinkv2.TableSink
@@ -52,6 +52,8 @@ type tableSinkWrapper struct {
 	targetTs model.Ts
 	// replicateTs is the ts that the table sink has started to replicate.
 	replicateTs model.Ts
+	// barrierTs is the barrier bound of the table sink.
+	barrierTs atomic.Uint64
 	// receivedSorterResolvedTs is the resolved ts received from the sorter.
 	// We use this to advance the redo log.
 	receivedSorterResolvedTs atomic.Uint64

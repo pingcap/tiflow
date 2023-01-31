@@ -452,12 +452,19 @@ func (info *ChangeFeedInfo) fixScheduler() {
 	info.Config.FixScheduler()
 }
 
-type BarrierEvent struct {
+type Barrier struct {
 	GlobalBarrierTs Ts
 	TableBarrier    map[TableName]Ts
 }
 
-func (b *BarrierEvent) GetMinTableBarrierTs() Ts {
+func NewBarrier(ts Ts) *Barrier {
+	return &Barrier{
+		GlobalBarrierTs: ts,
+		TableBarrier:    make(map[TableName]Ts),
+	}
+}
+
+func (b *Barrier) GetMinTableBarrierTs() Ts {
 	res := b.GlobalBarrierTs
 	for _, ts := range b.TableBarrier {
 		if ts < res {
