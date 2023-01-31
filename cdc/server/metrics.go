@@ -25,7 +25,6 @@ import (
 	sink "github.com/pingcap/tiflow/cdc/sink/metrics"
 	"github.com/pingcap/tiflow/cdc/sink/mq/producer/kafka"
 	sinkv2 "github.com/pingcap/tiflow/cdc/sinkv2/metrics"
-	"github.com/pingcap/tiflow/cdc/sorter/memory"
 	"github.com/pingcap/tiflow/pkg/actor"
 	"github.com/pingcap/tiflow/pkg/etcd"
 	"github.com/pingcap/tiflow/pkg/orchestrator"
@@ -56,7 +55,7 @@ func init() {
 	orchestrator.InitMetrics(registry)
 	p2p.InitMetrics(registry)
 	engine.InitMetrics(registry)
-	memory.InitMetrics(registry)
+	memorysorter.InitMetrics(registry)
 	redo.InitMetrics(registry)
 	kafka.InitMetrics(registry)
 	scheduler.InitMetrics(registry)

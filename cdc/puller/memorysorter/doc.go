@@ -12,4 +12,4 @@
 // limitations under the License.
 
 // Package memory is an in-memory EventSorter implementation.
-package memory
+package memorysorter
