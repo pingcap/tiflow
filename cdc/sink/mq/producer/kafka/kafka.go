@@ -336,7 +336,7 @@ func AdjustOptions(
 	options *kafka.Options,
 	topic string,
 ) error {
-	topics, err := admin.GetAllTopicsMeta()
+	topics, err := admin.GetAllTopicsMeta(context.Background())
 	if err != nil {
 		return errors.Trace(err)
 	}
@@ -381,7 +381,8 @@ func AdjustOptions(
 		return nil
 	}
 
-	brokerMessageMaxBytesStr, err := admin.GetBrokerConfig(kafka.BrokerMessageMaxBytesConfigName)
+	brokerMessageMaxBytesStr, err := admin.GetBrokerConfig(context.Background(),
+		kafka.BrokerMessageMaxBytesConfigName)
 	if err != nil {
 		log.Warn("TiCDC cannot find `message.max.bytes` from broker's configuration")
 		return errors.Trace(err)
@@ -428,7 +429,8 @@ func validateMinInsyncReplicas(
 			return minInsyncReplicasStr, true, nil
 		}
 
-		minInsyncReplicasStr, err := admin.GetBrokerConfig(kafka.MinInsyncReplicasConfigName)
+		minInsyncReplicasStr, err := admin.GetBrokerConfig(context.Background(),
+			kafka.MinInsyncReplicasConfigName)
 		if err != nil {
 			return "", false, err
 		}
@@ -482,5 +484,5 @@ func getTopicConfig(
 		return a, nil
 	}
 
-	return admin.GetBrokerConfig(brokerConfigName)
+	return admin.GetBrokerConfig(context.Background(), brokerConfigName)
 }
