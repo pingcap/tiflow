@@ -66,6 +66,7 @@ func newSink(
 	encoderConcurrency int,
 	errCh chan error,
 ) (*dmlSink, error) {
+	ctx, cancel := context.WithCancel(ctx)
 	changefeedID := contextutil.ChangefeedIDFromCtx(ctx)
 
 	encoderBuilder, err := builder.NewEventBatchEncoderBuilder(ctx, encoderConfig)
@@ -82,6 +83,8 @@ func newSink(
 		worker:       worker,
 		eventRouter:  eventRouter,
 		topicManager: topicManager,
+		ctx:          ctx,
+		cancel:       cancel,
 	}
 
 	// Spawn a goroutine to send messages by the worker.
@@ -133,6 +136,9 @@ func (s *dmlSink) WriteEvents(rows ...*eventsink.RowChangeCallbackableEvent) err
 
 // Close closes the sink.
 func (s *dmlSink) Close() error {
+	if s.cancel != nil {
+		s.cancel()
+	}
 	s.worker.close()
 	return nil
 }

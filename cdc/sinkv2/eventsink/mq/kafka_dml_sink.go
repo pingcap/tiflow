@@ -39,8 +39,6 @@ func NewKafkaDMLSink(
 	clientCreator pkafka.ClientCreator,
 	producerCreator dmlproducer.Factory,
 ) (_ *dmlSink, err error) {
-	ctx, cancel := context.WithCancel(ctx)
-
 	topic, err := util.GetTopic(sinkURI)
 	if err != nil {
 		return nil, errors.Trace(err)
@@ -123,8 +121,5 @@ func NewKafkaDMLSink(
 		return nil, errors.Trace(err)
 	}
 
-	s.ctx = ctx
-	s.cancel = cancel
-	
 	return s, nil
 }
