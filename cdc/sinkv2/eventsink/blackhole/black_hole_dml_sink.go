@@ -14,8 +14,6 @@
 package blackhole
 
 import (
-	"context"
-
 	"github.com/pingcap/log"
 	"github.com/pingcap/tiflow/cdc/model"
 	"github.com/pingcap/tiflow/cdc/sinkv2/eventsink"
@@ -34,10 +32,7 @@ func New() *Sink {
 }
 
 // WriteEvents log the events.
-func (s *Sink) WriteEvents(
-	_ context.Context,
-	rows ...*eventsink.CallbackableEvent[*model.RowChangedEvent],
-) error {
+func (s *Sink) WriteEvents(rows ...*eventsink.CallbackableEvent[*model.RowChangedEvent]) error {
 	for _, row := range rows {
 		// NOTE: don't change the log, some tests depend on it.
 		log.Debug("BlackHoleSink: WriteEvents", zap.Any("row", row.Event))

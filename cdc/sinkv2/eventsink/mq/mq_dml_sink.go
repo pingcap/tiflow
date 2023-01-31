@@ -52,9 +52,13 @@ type dmlSink struct {
 	// topicManager used to manage topics.
 	// It is also responsible for creating topics.
 	topicManager manager.TopicManager
+
+	ctx    context.Context
+	cancel context.CancelFunc
 }
 
-func newSink(ctx context.Context,
+func newSink(
+	ctx context.Context,
 	producer dmlproducer.DMLProducer,
 	topicManager manager.TopicManager,
 	eventRouter *dispatcher.EventRouter,
@@ -101,10 +105,7 @@ func newSink(ctx context.Context,
 
 // WriteEvents writes events to the sink.
 // This is an asynchronously and thread-safe method.
-func (s *dmlSink) WriteEvents(
-	ctx context.Context,
-	rows ...*eventsink.RowChangeCallbackableEvent,
-) error {
+func (s *dmlSink) WriteEvents(rows ...*eventsink.RowChangeCallbackableEvent) error {
 	for _, row := range rows {
 		if row.GetTableSinkState() != state.TableSinkSinking {
 			// The table where the event comes from is in stopping, so it's safe
@@ -113,7 +114,7 @@ func (s *dmlSink) WriteEvents(
 			continue
 		}
 		topic := s.eventRouter.GetTopicForRowChange(row.Event)
-		partitionNum, err := s.topicManager.GetPartitionNum(ctx, topic)
+		partitionNum, err := s.topicManager.GetPartitionNum(s.ctx, topic)
 		if err != nil {
 			return errors.Trace(err)
 		}

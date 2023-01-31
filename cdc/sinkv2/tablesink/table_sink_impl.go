@@ -78,10 +78,7 @@ func (e *EventTableSink[E]) AppendRowChangedEvents(rows ...*model.RowChangedEven
 }
 
 // UpdateResolvedTs advances the resolved ts of the table sink.
-func (e *EventTableSink[E]) UpdateResolvedTs(
-	ctx context.Context,
-	resolvedTs model.ResolvedTs,
-) error {
+func (e *EventTableSink[E]) UpdateResolvedTs(resolvedTs model.ResolvedTs) error {
 	// If resolvedTs is not greater than maxResolvedTs,
 	// the flush is unnecessary.
 	if !e.maxResolvedTs.Less(resolvedTs) {
@@ -115,7 +112,7 @@ func (e *EventTableSink[E]) UpdateResolvedTs(
 	}
 	// Do not forget to add the resolvedTs to progressTracker.
 	e.progressTracker.addResolvedTs(resolvedTs)
-	return e.backendSink.WriteEvents(ctx, resolvedCallbackableEvents...)
+	return e.backendSink.WriteEvents(resolvedCallbackableEvents...)
 }
 
 // GetCheckpointTs returns the checkpoint ts of the table sink.

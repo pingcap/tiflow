@@ -138,10 +138,7 @@ func NewCloudStorageSink(ctx context.Context,
 }
 
 // WriteEvents write events to cloud storage sink.
-func (s *dmlSink) WriteEvents(
-	_ context.Context,
-	txns ...*eventsink.CallbackableEvent[*model.SingleTableTxn],
-) error {
+func (s *dmlSink) WriteEvents(txns ...*eventsink.CallbackableEvent[*model.SingleTableTxn]) error {
 	var tbl versionedTable
 
 	for _, txn := range txns {

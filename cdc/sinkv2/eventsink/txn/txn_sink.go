@@ -91,10 +91,7 @@ func NewMySQLSink(
 }
 
 // WriteEvents writes events to the sink.
-func (s *sink) WriteEvents(
-	_ context.Context,
-	txnEvents ...*eventsink.TxnCallbackableEvent,
-) error {
+func (s *sink) WriteEvents(txnEvents ...*eventsink.TxnCallbackableEvent) error {
 	if atomic.LoadInt32(&s.closed) != 0 {
 		return errors.Trace(errors.New("closed sink"))
 	}
