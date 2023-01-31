@@ -375,8 +375,8 @@ func (k *mqSink) asyncFlushToPartitionZero(
 	return k.mqProducer.Flush(ctx)
 }
 
-// NewKafkaSaramaSink creates a new Kafka mqSink.
-func NewKafkaSaramaSink(ctx context.Context, sinkURI *url.URL,
+// NewKafkaSink creates a new Kafka mqSink.
+func NewKafkaSink(ctx context.Context, sinkURI *url.URL,
 	replicaConfig *config.ReplicaConfig,
 	errCh chan error, changefeedID model.ChangeFeedID,
 ) (*mqSink, error) {
