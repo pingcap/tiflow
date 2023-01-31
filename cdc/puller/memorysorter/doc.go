@@ -11,5 +11,5 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-// Package memory is an in-memory EventSorter implementation.
+// Package memorysorter is an in-memory event sorter implementation.
 package memorysorter
