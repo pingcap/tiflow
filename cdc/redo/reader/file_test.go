@@ -15,6 +15,7 @@ package reader
 
 import (
 	"bufio"
+	"context"
 	"fmt"
 	"io"
 	"os"
@@ -22,7 +23,6 @@ import (
 	"testing"
 	"time"
 
-	"context"
 	"github.com/pingcap/tiflow/cdc/model"
 	"github.com/pingcap/tiflow/cdc/redo/writer"
 	"github.com/pingcap/tiflow/pkg/redo"

@@ -15,11 +15,11 @@ package optimism
 
 import (
 	"bytes"
+	"context"
 	"encoding/json"
 	"fmt"
 	"sync"
 
-	"context"
 	"github.com/pingcap/errors"
 	"github.com/pingcap/tidb/parser"
 	"github.com/pingcap/tidb/parser/ast"

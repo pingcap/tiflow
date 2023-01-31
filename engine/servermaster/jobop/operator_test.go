@@ -14,9 +14,9 @@
 package jobop
 
 import (
+	"context"
 	"testing"
 
-	"context"
 	frameModel "github.com/pingcap/tiflow/engine/framework/model"
 	pkgOrm "github.com/pingcap/tiflow/engine/pkg/orm"
 	ormModel "github.com/pingcap/tiflow/engine/pkg/orm/model"
