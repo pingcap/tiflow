@@ -351,6 +351,7 @@ var (
 	commonInvalidChar = regexp.MustCompile(`[\?:,"]`)
 )
 
+// NewKafkaClientID generates kafka client id
 func NewKafkaClientID(role, captureAddr string,
 	changefeedID model.ChangeFeedID,
 	configuredClientID string,
