@@ -236,11 +236,12 @@ func TestAdjustConfigTopicExist(t *testing.T) {
 	// create a topic without `max.message.bytes`
 	topicName := "test-topic"
 	detail := &kafka.TopicDetail{
+		Name:          topicName,
 		NumPartitions: 3,
 		// Does not contain `max.message.bytes`.
 		ConfigEntries: make(map[string]string),
 	}
-	err = adminClient.CreateTopic(topicName, detail, false)
+	err = adminClient.CreateTopic(context.Background(), detail, false)
 	require.Nil(t, err)
 
 	options.MaxMessageBytes = adminClient.GetBrokerMessageMaxBytes() - 1
@@ -294,7 +295,10 @@ func TestAdjustConfigMinInsyncReplicas(t *testing.T) {
 	topicName := "no-topic-no-min-insync-replicas"
 	err = AdjustOptions(adminClient, options, "no-topic-no-min-insync-replicas")
 	require.Nil(t, err)
-	err = adminClient.CreateTopic(topicName, &kafka.TopicDetail{ReplicationFactor: 1}, false)
+	err = adminClient.CreateTopic(context.Background(), &kafka.TopicDetail{
+		Name:              topicName,
+		ReplicationFactor: 1,
+	}, false)
 	require.ErrorIs(t, err, sarama.ErrPolicyViolation)
 
 	// Report an error if the replication-factor is less than min.insync.replicas
@@ -302,7 +306,8 @@ func TestAdjustConfigMinInsyncReplicas(t *testing.T) {
 
 	// topic exist, but `min.insync.replicas` not found in topic and broker configuration
 	topicName = "topic-no-options-entry"
-	err = adminClient.CreateTopic(topicName, &kafka.TopicDetail{
+	err = adminClient.CreateTopic(context.Background(), &kafka.TopicDetail{
+		Name:              topicName,
 		ReplicationFactor: 3,
 		NumPartitions:     3,
 	}, false)

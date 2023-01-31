@@ -137,7 +137,7 @@ func (m *kafkaTopicManager) getMetadataOfTopics() (map[string]kafka.TopicDetail,
 
 	start := time.Now()
 	// ignore the topic with error, return a subset of all topics.
-	topicMetaList, err := m.admin.GetTopicsMeta(topicList, true)
+	topicMetaList, err := m.admin.GetTopicsMeta(context.Background(), topicList, true)
 	if err != nil {
 		log.Warn(
 			"Kafka admin client describe topics failed",
@@ -163,7 +163,7 @@ func (m *kafkaTopicManager) waitUntilTopicVisible(topicName string) error {
 	topics := []string{topicName}
 	err := retry.Do(context.Background(), func() error {
 		start := time.Now()
-		meta, err := m.admin.GetTopicsMeta(topics, false)
+		meta, err := m.admin.GetTopicsMeta(context.Background(), topics, false)
 		if err != nil {
 			log.Warn(" topic not found, retry it",
 				zap.Error(err),
@@ -187,7 +187,7 @@ func (m *kafkaTopicManager) waitUntilTopicVisible(topicName string) error {
 // listTopics is used to do an initial metadata fetching.
 func (m *kafkaTopicManager) listTopics() error {
 	start := time.Now()
-	topics, err := m.admin.GetAllTopicsMeta()
+	topics, err := m.admin.GetAllTopicsMeta(context.Background())
 	if err != nil {
 		log.Error(
 			"Kafka admin client list topics failed",
@@ -241,7 +241,8 @@ func (m *kafkaTopicManager) createTopic(topicName string) (int32, error) {
 	}
 
 	start := time.Now()
-	err = m.admin.CreateTopic(topicName, &kafka.TopicDetail{
+	err = m.admin.CreateTopic(context.Background(), &kafka.TopicDetail{
+		Name:              topicName,
 		NumPartitions:     m.cfg.PartitionNum,
 		ReplicationFactor: m.cfg.ReplicationFactor,
 	}, false)

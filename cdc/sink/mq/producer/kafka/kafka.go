@@ -21,7 +21,6 @@ import (
 	"sync/atomic"
 	"time"
 
-	"github.com/Shopify/sarama"
 	"github.com/pingcap/errors"
 	"github.com/pingcap/failpoint"
 	"github.com/pingcap/log"
@@ -103,25 +102,21 @@ func (k *kafkaSaramaProducer) AsyncSendMessage(
 		failpoint.Return(nil)
 	})
 
-	msg := &sarama.ProducerMessage{
-		Topic:     topic,
-		Key:       sarama.ByteEncoder(message.Key),
-		Value:     sarama.ByteEncoder(message.Value),
-		Partition: partition,
-	}
 	k.mu.Lock()
 	k.mu.inflight++
 	log.Debug("emitting inflight messages to kafka", zap.Int64("inflight", k.mu.inflight))
 	k.mu.Unlock()
 
-	select {
-	case <-ctx.Done():
-		return ctx.Err()
-	case <-k.closeCh:
-		return nil
-	case k.asyncProducer.Input() <- msg:
-	}
-	return nil
+	return k.asyncProducer.AsyncSend(ctx, topic, partition,
+		message.Key, message.Value, func() {
+			k.mu.Lock()
+			k.mu.inflight--
+			if k.mu.inflight == 0 && k.mu.flushDone != nil {
+				k.mu.flushDone <- struct{}{}
+				k.mu.flushDone = nil
+			}
+			k.mu.Unlock()
+		})
 }
 
 func (k *kafkaSaramaProducer) SyncBroadcastMessage(
@@ -270,38 +265,7 @@ func (k *kafkaSaramaProducer) run(ctx context.Context) error {
 		k.stop()
 	}()
 
-	for {
-		var ack *sarama.ProducerMessage
-		select {
-		case <-ctx.Done():
-			return ctx.Err()
-		case <-k.closeCh:
-			return nil
-		case err := <-k.failpointCh:
-			log.Warn("receive from failpoint chan", zap.Error(err),
-				zap.String("namespace", k.id.Namespace),
-				zap.String("changefeed", k.id.ID), zap.Any("role", k.role))
-			return err
-		case ack = <-k.asyncProducer.Successes():
-		case err := <-k.asyncProducer.Errors():
-			// We should not wrap a nil pointer if the pointer is of a subtype of `error`
-			// because Go would store the type info and the resulted `error` variable would not be nil,
-			// which will cause the pkg/error library to malfunction.
-			if err == nil {
-				return nil
-			}
-			return cerror.WrapError(cerror.ErrKafkaAsyncSendMessage, err)
-		}
-		if ack != nil {
-			k.mu.Lock()
-			k.mu.inflight--
-			if k.mu.inflight == 0 && k.mu.flushDone != nil {
-				k.mu.flushDone <- struct{}{}
-				k.mu.flushDone = nil
-			}
-			k.mu.Unlock()
-		}
-	}
+	return k.asyncProducer.AsyncRunCallback(ctx)
 }
 
 // NewAdminClientImpl specifies the build method for the admin client.
@@ -324,7 +288,9 @@ func NewKafkaSaramaProducer(
 		zap.String("namespace", changefeedID.Namespace),
 		zap.String("changefeed", changefeedID.ID), zap.Any("role", role))
 
-	asyncProducer, err := client.AsyncProducer()
+	closeCh := make(chan struct{})
+	failpointCh := make(chan error, 1)
+	asyncProducer, err := client.AsyncProducer(changefeedID, closeCh, failpointCh)
 	if err != nil {
 		return nil, cerror.WrapError(cerror.ErrKafkaNewSaramaProducer, err)
 	}
@@ -341,8 +307,8 @@ func NewKafkaSaramaProducer(
 		client:        client,
 		asyncProducer: asyncProducer,
 		syncProducer:  syncProducer,
-		closeCh:       make(chan struct{}),
-		failpointCh:   make(chan error, 1),
+		closeCh:       closeCh,
+		failpointCh:   failpointCh,
 		closing:       kafkaProducerRunning,
 
 		id:   changefeedID,
@@ -370,7 +336,7 @@ func AdjustOptions(
 	options *kafka.Options,
 	topic string,
 ) error {
-	topics, err := admin.GetAllTopicsMeta()
+	topics, err := admin.GetAllTopicsMeta(context.Background())
 	if err != nil {
 		return errors.Trace(err)
 	}
@@ -415,7 +381,8 @@ func AdjustOptions(
 		return nil
 	}
 
-	brokerMessageMaxBytesStr, err := admin.GetBrokerConfig(kafka.BrokerMessageMaxBytesConfigName)
+	brokerMessageMaxBytesStr, err := admin.GetBrokerConfig(context.Background(),
+		kafka.BrokerMessageMaxBytesConfigName)
 	if err != nil {
 		log.Warn("TiCDC cannot find `message.max.bytes` from broker's configuration")
 		return errors.Trace(err)
@@ -462,7 +429,8 @@ func validateMinInsyncReplicas(
 			return minInsyncReplicasStr, true, nil
 		}
 
-		minInsyncReplicasStr, err := admin.GetBrokerConfig(kafka.MinInsyncReplicasConfigName)
+		minInsyncReplicasStr, err := admin.GetBrokerConfig(context.Background(),
+			kafka.MinInsyncReplicasConfigName)
 		if err != nil {
 			return "", false, err
 		}
@@ -516,5 +484,5 @@ func getTopicConfig(
 		return a, nil
 	}
 
-	return admin.GetBrokerConfig(brokerConfigName)
+	return admin.GetBrokerConfig(context.Background(), brokerConfigName)
 }
