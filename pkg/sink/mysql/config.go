@@ -360,7 +360,7 @@ func getPrepStmtCacheSize(values url.Values, prepStmtCacheSize *int) error {
 	if c > maxPrepStmtCacheSize {
 		log.Warn("prep-stmt-cache-size too large",
 			zap.Int("original", c), zap.Int("override", maxPrepStmtCacheSize))
-		c = maxMaxTxnRow
+		c = maxPrepStmtCacheSize
 	}
 	*prepStmtCacheSize = c
 	return nil

@@ -247,7 +247,7 @@ func TestParseSinkURIOverride(t *testing.T) {
 			require.EqualValues(t, sp.tidbTxnMode, defaultTiDBTxnMode)
 		},
 	}, {
-		uri: "mysql://127.0.0.1:3306/?prep-stmt-cache-size=1000000", // int32 max
+		uri: "mysql://127.0.0.1:3306/?prep-stmt-cache-size=100000000", // int32 max
 		checker: func(sp *Config) {
 			require.EqualValues(t, sp.PrepStmtCacheSize, maxPrepStmtCacheSize)
 		},
