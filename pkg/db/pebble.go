@@ -27,8 +27,8 @@ import (
 	"github.com/cockroachdb/pebble/bloom"
 	"github.com/pingcap/errors"
 	"github.com/pingcap/log"
-	"github.com/pingcap/tiflow/cdc/processor/sourcemanager/engine/pebble/encoding"
 	"github.com/pingcap/tiflow/pkg/config"
+	"github.com/pingcap/tiflow/pkg/db/encoding"
 	"github.com/pingcap/tiflow/pkg/retry"
 	"go.uber.org/zap"
 )
