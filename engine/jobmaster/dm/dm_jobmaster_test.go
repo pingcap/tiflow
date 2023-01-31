@@ -136,14 +136,16 @@ func (t *testDMJobmasterSuite) TestRunDMJobMaster() {
 	require.NoError(t.T(), err)
 
 	// Init
-	verDB := conn.InitVersionDB()
-	verDB.ExpectQuery("SHOW GLOBAL VARIABLES LIKE 'version'").WillReturnRows(sqlmock.NewRows([]string{"Variable_name", "Value"}).
-		AddRow("version", "5.7.25-TiDB-v6.1.0"))
-	_, mockDB, err := conn.InitMockDBFull()
+	db, mockDB, err := conn.InitMockDBNotClose()
 	require.NoError(t.T(), err)
+	defer db.Close()
+	mockDB.ExpectQuery("SHOW GLOBAL VARIABLES LIKE 'version'").WillReturnRows(sqlmock.NewRows([]string{"Variable_name", "Value"}).
+		AddRow("version", "5.7.25-TiDB-v6.1.0"))
 	mockDB.ExpectExec(".*").WillReturnResult(sqlmock.NewResult(1, 1))
 	mockDB.ExpectExec(".*").WillReturnResult(sqlmock.NewResult(1, 1))
 	mockDB.ExpectExec(".*").WillReturnResult(sqlmock.NewResult(1, 1))
+	mockDB.ExpectQuery("SHOW DATABASES").WillReturnRows(sqlmock.NewRows([]string{"Database"}))
+	mockDB.ExpectQuery("SHOW DATABASES").WillReturnRows(sqlmock.NewRows([]string{"Database"}))
 	checker.CheckSyncConfigFunc = func(_ context.Context, _ []*dmconfig.SubTaskConfig, _, _ int64) (string, error) {
 		return "check pass", nil
 	}
@@ -156,14 +158,13 @@ func (t *testDMJobmasterSuite) TestRunDMJobMaster() {
 		dctx, frameModel.DMJobMaster, "dm-jobmaster", libMetadata.JobManagerUUID,
 		cfgBytes, int64(2))
 	require.NoError(t.T(), err)
-	verDB = conn.InitVersionDB()
-	verDB.ExpectQuery("SHOW GLOBAL VARIABLES LIKE 'version'").WillReturnRows(sqlmock.NewRows([]string{"Variable_name", "Value"}).
+	mockDB.ExpectQuery("SHOW GLOBAL VARIABLES LIKE 'version'").WillReturnRows(sqlmock.NewRows([]string{"Variable_name", "Value"}).
 		AddRow("version", "5.7.26-log"))
-	_, mockDB, err = conn.InitMockDBFull()
-	require.NoError(t.T(), err)
 	mockDB.ExpectExec(".*").WillReturnResult(sqlmock.NewResult(1, 1))
 	mockDB.ExpectExec(".*").WillReturnResult(sqlmock.NewResult(1, 1))
 	mockDB.ExpectExec(".*").WillReturnResult(sqlmock.NewResult(1, 1))
+	mockDB.ExpectQuery("SHOW DATABASES").WillReturnRows(sqlmock.NewRows([]string{"Database"}))
+	mockDB.ExpectQuery("SHOW DATABASES").WillReturnRows(sqlmock.NewRows([]string{"Database"}))
 	require.NoError(t.T(), jobmaster.Init(context.Background()))
 
 	// Poll
@@ -240,6 +241,7 @@ func (t *testDMJobmasterSuite) TestDMJobmaster() {
 		AddRow("version", "5.7.26-log"))
 	mockBaseJobmaster.On("MetaKVClient").Return(metaKVClient)
 	mockBaseJobmaster.On("GetWorkers").Return(map[string]framework.WorkerHandle{}).Once()
+	mockCheckpointAgent.On("FetchAllDoTables").Return(nil, nil).Once()
 	require.NoError(t.T(), jm.InitImpl(context.Background()))
 
 	// recover
@@ -247,6 +249,7 @@ func (t *testDMJobmasterSuite) TestDMJobmaster() {
 		BaseJobMaster: mockBaseJobmaster,
 	}
 	mockBaseJobmaster.On("GetWorkers").Return(map[string]framework.WorkerHandle{}).Once()
+	mockCheckpointAgent.On("FetchAllDoTables").Return(nil, nil).Once()
 	jm.OnMasterRecovered(context.Background())
 
 	// tick
@@ -356,6 +359,7 @@ func (t *testDMJobmasterSuite) TestDMJobmaster() {
 	workerHandle2.On("Status").Return(&frameModel.WorkerStatus{ExtBytes: bytes2}).Once()
 	workerHandle1.On("IsTombStone").Return(false).Once()
 	workerHandle2.On("IsTombStone").Return(false).Once()
+	mockCheckpointAgent.On("FetchAllDoTables").Return(nil, nil).Once()
 	jm.OnMasterRecovered(context.Background())
 	require.NoError(t.T(), jm.Tick(context.Background()))
 
@@ -571,4 +575,21 @@ func (m *MockCheckpointAgent) IsFresh(ctx context.Context, workerType framework.
 
 func (m *MockCheckpointAgent) Upgrade(ctx context.Context, preVer semver.Version) error {
 	return nil
+}
+
+func (m *MockCheckpointAgent) FetchAllDoTables(ctx context.Context, cfg *config.JobCfg) (map[metadata.TargetTable][]metadata.SourceTable, error) {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	args := m.Called()
+	if args.Get(0) == nil {
+		return nil, args.Error(1)
+	}
+	return args.Get(0).(map[metadata.TargetTable][]metadata.SourceTable), args.Error(1)
+}
+
+func (m *MockCheckpointAgent) FetchTableStmt(ctx context.Context, jobID string, cfg *config.JobCfg, sourceTable metadata.SourceTable) (string, error) {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	args := m.Called()
+	return args.Get(0).(string), args.Error(1)
 }

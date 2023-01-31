@@ -275,6 +275,9 @@ func (info *ChangeFeedInfo) VerifyAndComplete() error {
 	if info.Config.Consistent == nil {
 		info.Config.Consistent = defaultConfig.Consistent
 	}
+	if info.Config.Scheduler == nil {
+		info.Config.Scheduler = defaultConfig.Scheduler
+	}
 
 	return nil
 }
@@ -298,6 +301,18 @@ func (info *ChangeFeedInfo) FixIncompatible() {
 		log.Info("Start fixing incompatible changefeed sink uri", zap.String("changefeed", info.String()))
 		info.fixMySQLSinkProtocol()
 		log.Info("Fix incompatibility changefeed sink uri completed", zap.String("changefeed", info.String()))
+	}
+
+	if info.Config.MemoryQuota == uint64(0) {
+		log.Info("Start fixing incompatible memory quota", zap.String("changefeed", info.String()))
+		info.fixMemoryQuota()
+		log.Info("Fix incompatible memory quota completed", zap.String("changefeed", info.String()))
+	}
+
+	if info.Config.Scheduler == nil {
+		log.Info("Start fixing incompatible scheduler", zap.String("changefeed", info.String()))
+		info.fixScheduler()
+		log.Info("Fix incompatible scheduler completed", zap.String("changefeed", info.String()))
 	}
 }
 
@@ -427,4 +442,12 @@ func (info *ChangeFeedInfo) HasFastFailError() bool {
 		return false
 	}
 	return cerror.IsChangefeedFastFailErrorCode(errors.RFCErrorCode(info.Error.Code))
+}
+
+func (info *ChangeFeedInfo) fixMemoryQuota() {
+	info.Config.FixMemoryQuota()
+}
+
+func (info *ChangeFeedInfo) fixScheduler() {
+	info.Config.FixScheduler()
 }

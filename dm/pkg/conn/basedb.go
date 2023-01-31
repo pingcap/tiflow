@@ -185,6 +185,9 @@ type BaseDB struct {
 	Scope terror.ErrScope
 	// this function will do when close the BaseDB
 	doFuncInClose []func()
+
+	// only use in unit test
+	doNotClose bool
 }
 
 // NewBaseDB returns *BaseDB object for test.
@@ -209,6 +212,13 @@ func NewBaseDBForTest(db *sql.DB, doFuncInClose ...func()) *BaseDB {
 		Scope:         terror.ScopeNotSet,
 		doFuncInClose: doFuncInClose,
 	}
+}
+
+// NewMockDB returns *BaseDB object for mock.
+func NewMockDB(db *sql.DB, doFuncInClose ...func()) *BaseDB {
+	baseDB := NewBaseDBForTest(db, doFuncInClose...)
+	baseDB.doNotClose = true
+	return baseDB
 }
 
 // GetBaseConn retrieves *BaseConn which has own retryStrategy.
@@ -322,7 +332,7 @@ func (d *BaseDB) ForceCloseConnWithoutErr(conn *BaseConn) {
 
 // Close release *BaseDB resource.
 func (d *BaseDB) Close() error {
-	if d == nil || d.DB == nil {
+	if d == nil || d.DB == nil || d.doNotClose {
 		return nil
 	}
 	var err error

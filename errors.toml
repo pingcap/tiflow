@@ -441,6 +441,11 @@ error = '''
 illegal parameter for sorter: %s
 '''
 
+["CDC:ErrIncompatibleSinkConfig"]
+error = '''
+incompatible configuration in sink uri(%s) and config file(%s), please try to update the configuration only through sink uri
+'''
+
 ["CDC:ErrIndexKeyTableNotFound"]
 error = '''
 table not found with index ID %d in index kv
@@ -993,12 +998,7 @@ failed to seek to the beginning of request body
 
 ["CDC:ErrS3StorageAPI"]
 error = '''
-s3 storage api
-'''
-
-["CDC:ErrS3StorageInitialize"]
-error = '''
-new s3 storage for redo log
+external storage api
 '''
 
 ["CDC:ErrScanLockFailed"]
@@ -1109,6 +1109,11 @@ start a stopped db system
 ["CDC:ErrStartTsBeforeGC"]
 error = '''
 fail to create or maintain changefeed because start-ts %d is earlier than or equal to GC safepoint at %d
+'''
+
+["CDC:ErrStorageInitialize"]
+error = '''
+fail to open storage for redo log
 '''
 
 ["CDC:ErrStorageSinkInvalidDateSeparator"]

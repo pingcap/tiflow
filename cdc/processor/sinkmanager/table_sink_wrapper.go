@@ -23,7 +23,6 @@ import (
 	"github.com/pingcap/errors"
 	"github.com/pingcap/log"
 	"github.com/pingcap/tiflow/cdc/model"
-	"github.com/pingcap/tiflow/cdc/processor/pipeline"
 	"github.com/pingcap/tiflow/cdc/processor/sourcemanager/engine"
 	"github.com/pingcap/tiflow/cdc/processor/tablepb"
 	sinkv2 "github.com/pingcap/tiflow/cdc/sinkv2/tablesink"
@@ -42,7 +41,7 @@ type tableSinkWrapper struct {
 	// changefeed used for logging.
 	changefeed model.ChangeFeedID
 	// tableID used for logging.
-	tableID model.TableID
+	span tablepb.Span
 	// tableSink is the underlying sink.
 	tableSink sinkv2.TableSink
 	// state used to control the lifecycle of the table.
@@ -90,7 +89,7 @@ func newRangeEventCount(pos engine.Position, events int) rangeEventCount {
 
 func newTableSinkWrapper(
 	changefeed model.ChangeFeedID,
-	tableID model.TableID,
+	span tablepb.Span,
 	tableSink sinkv2.TableSink,
 	state tablepb.TableState,
 	startTs model.Ts,
@@ -99,7 +98,7 @@ func newTableSinkWrapper(
 	res := &tableSinkWrapper{
 		version:    atomic.AddUint64(&version, 1),
 		changefeed: changefeed,
-		tableID:    tableID,
+		span:       span,
 		tableSink:  tableSink,
 		state:      &state,
 		startTs:    startTs,
@@ -115,7 +114,7 @@ func (t *tableSinkWrapper) start(startTs model.Ts, replicateTs model.Ts) {
 		log.Panic("The table sink has already started",
 			zap.String("namespace", t.changefeed.Namespace),
 			zap.String("changefeed", t.changefeed.ID),
-			zap.Int64("tableID", t.tableID),
+			zap.Stringer("span", &t.span),
 			zap.Uint64("startTs", startTs),
 			zap.Uint64("replicateTs", replicateTs),
 			zap.Uint64("oldReplicateTs", t.replicateTs),
@@ -124,7 +123,7 @@ func (t *tableSinkWrapper) start(startTs model.Ts, replicateTs model.Ts) {
 	log.Info("Sink is started",
 		zap.String("namespace", t.changefeed.Namespace),
 		zap.String("changefeed", t.changefeed.ID),
-		zap.Int64("tableID", t.tableID),
+		zap.Stringer("span", &t.span),
 		zap.Uint64("startTs", startTs),
 		zap.Uint64("replicateTs", replicateTs),
 	)
@@ -205,7 +204,7 @@ func (t *tableSinkWrapper) close(ctx context.Context) {
 	defer t.state.Store(tablepb.TableStateStopped)
 	t.tableSink.Close(ctx)
 	log.Info("Sink is closed",
-		zap.Int64("tableID", t.tableID),
+		zap.Stringer("span", &t.span),
 		zap.String("namespace", t.changefeed.Namespace),
 		zap.String("changefeed", t.changefeed.ID))
 }
@@ -264,7 +263,10 @@ func (t *tableSinkWrapper) cleanRangeEventCounts(upperBound engine.Position, min
 
 // convertRowChangedEvents uses to convert RowChangedEvents to TableSinkRowChangedEvents.
 // It will deal with the old value compatibility.
-func convertRowChangedEvents(changefeed model.ChangeFeedID, tableID model.TableID, enableOldValue bool, events ...*model.PolymorphicEvent) ([]*model.RowChangedEvent, uint64, error) {
+func convertRowChangedEvents(
+	changefeed model.ChangeFeedID, span tablepb.Span, enableOldValue bool,
+	events ...*model.PolymorphicEvent,
+) ([]*model.RowChangedEvent, uint64, error) {
 	size := 0
 	rowChangedEvents := make([]*model.RowChangedEvent, 0, len(events))
 	for _, e := range events {
@@ -272,7 +274,7 @@ func convertRowChangedEvents(changefeed model.ChangeFeedID, tableID model.TableI
 			log.Warn("skip emit nil event",
 				zap.String("namespace", changefeed.Namespace),
 				zap.String("changefeed", changefeed.ID),
-				zap.Int64("tableID", tableID),
+				zap.Stringer("span", &span),
 				zap.Any("event", e))
 			continue
 		}
@@ -284,7 +286,7 @@ func convertRowChangedEvents(changefeed model.ChangeFeedID, tableID model.TableI
 		// Just ignore these row changed events.
 		if colLen == 0 && preColLen == 0 {
 			log.Warn("skip emit empty row event",
-				zap.Int64("tableID", tableID),
+				zap.Stringer("span", &span),
 				zap.String("namespace", changefeed.Namespace),
 				zap.String("changefeed", changefeed.ID),
 				zap.Any("event", e))
@@ -297,8 +299,8 @@ func convertRowChangedEvents(changefeed model.ChangeFeedID, tableID model.TableI
 		// and after enable old value internally by default(but disable in the configuration).
 		// We need to handle the update event to be compatible with the old format.
 		if !enableOldValue && colLen != 0 && preColLen != 0 && colLen == preColLen {
-			if pipeline.ShouldSplitUpdateEvent(e) {
-				deleteEvent, insertEvent, err := pipeline.SplitUpdateEvent(e)
+			if shouldSplitUpdateEvent(e) {
+				deleteEvent, insertEvent, err := splitUpdateEvent(e)
 				if err != nil {
 					return nil, 0, errors.Trace(err)
 				}
@@ -314,4 +316,68 @@ func convertRowChangedEvents(changefeed model.ChangeFeedID, tableID model.TableI
 		}
 	}
 	return rowChangedEvents, uint64(size), nil
+}
+
+// shouldSplitUpdateEvent determines if the split event is needed to align the old format based on
+// whether the handle key column has been modified.
+// If the handle key column is modified,
+// we need to use splitUpdateEvent to split the update event into a delete and an insert event.
+func shouldSplitUpdateEvent(updateEvent *model.PolymorphicEvent) bool {
+	// nil event will never be split.
+	if updateEvent == nil {
+		return false
+	}
+
+	for i := range updateEvent.Row.Columns {
+		col := updateEvent.Row.Columns[i]
+		preCol := updateEvent.Row.PreColumns[i]
+		if col != nil && col.Flag.IsHandleKey() && preCol != nil && preCol.Flag.IsHandleKey() {
+			colValueString := model.ColumnValueString(col.Value)
+			preColValueString := model.ColumnValueString(preCol.Value)
+			// If one handle key columns is updated, we need to split the event row.
+			if colValueString != preColValueString {
+				return true
+			}
+		}
+	}
+	return false
+}
+
+// splitUpdateEvent splits an update event into a delete and an insert event.
+func splitUpdateEvent(
+	updateEvent *model.PolymorphicEvent,
+) (*model.PolymorphicEvent, *model.PolymorphicEvent, error) {
+	if updateEvent == nil {
+		return nil, nil, errors.New("nil event cannot be split")
+	}
+
+	// If there is an update to handle key columns,
+	// we need to split the event into two events to be compatible with the old format.
+	// NOTICE: Here we don't need a full deep copy because
+	// our two events need Columns and PreColumns respectively,
+	// so it won't have an impact and no more full deep copy wastes memory.
+	deleteEvent := *updateEvent
+	deleteEventRow := *updateEvent.Row
+	deleteEventRowKV := *updateEvent.RawKV
+	deleteEvent.Row = &deleteEventRow
+	deleteEvent.RawKV = &deleteEventRowKV
+
+	deleteEvent.Row.Columns = nil
+	for i := range deleteEvent.Row.PreColumns {
+		// NOTICE: Only the handle key pre column is retained in the delete event.
+		if deleteEvent.Row.PreColumns[i] != nil &&
+			!deleteEvent.Row.PreColumns[i].Flag.IsHandleKey() {
+			deleteEvent.Row.PreColumns[i] = nil
+		}
+	}
+
+	insertEvent := *updateEvent
+	insertEventRow := *updateEvent.Row
+	insertEventRowKV := *updateEvent.RawKV
+	insertEvent.Row = &insertEventRow
+	insertEvent.RawKV = &insertEventRowKV
+	// NOTICE: clean up pre cols for insert event.
+	insertEvent.Row.PreColumns = nil
+
+	return &deleteEvent, &insertEvent, nil
 }

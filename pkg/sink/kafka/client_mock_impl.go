@@ -13,6 +13,11 @@
 
 package kafka
 
+import (
+	"github.com/pingcap/tiflow/cdc/model"
+	"github.com/rcrowley/go-metrics"
+)
+
 // ClientMockImpl is a mock implementation of Client interface.
 type ClientMockImpl struct {
 	topics map[string][]int32
@@ -53,4 +58,28 @@ func (c *ClientMockImpl) AddTopic(topicName string, partitions int32) {
 // DeleteTopic deletes a topic.
 func (c *ClientMockImpl) DeleteTopic(topicName string) {
 	delete(c.topics, topicName)
+}
+
+// SyncProducer creates a sync producer
+func (c *ClientMockImpl) SyncProducer() (SyncProducer, error) {
+	return &saramaSyncProducer{}, nil
+}
+
+// AsyncProducer creates an async producer
+func (c *ClientMockImpl) AsyncProducer(
+	changefeedID model.ChangeFeedID,
+	closedChan chan struct{},
+	failpointCh chan error,
+) (AsyncProducer, error) {
+	return &saramaAsyncProducer{}, nil
+}
+
+// MetricRegistry returns the metric registry
+func (c *ClientMockImpl) MetricRegistry() metrics.Registry {
+	return metrics.DefaultRegistry
+}
+
+// Close closes the client
+func (c *ClientMockImpl) Close() error {
+	return nil
 }

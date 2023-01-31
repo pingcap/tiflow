@@ -16,14 +16,12 @@ package redo
 import (
 	"context"
 	"math"
-	"path/filepath"
 	"sync"
 	"sync/atomic"
 	"time"
 
 	"github.com/pingcap/errors"
 	"github.com/pingcap/log"
-	"github.com/pingcap/tidb/br/pkg/storage"
 	"github.com/pingcap/tiflow/cdc/contextutil"
 	"github.com/pingcap/tiflow/cdc/model"
 	"github.com/pingcap/tiflow/cdc/processor/tablepb"
@@ -32,69 +30,16 @@ import (
 	"github.com/pingcap/tiflow/pkg/chann"
 	"github.com/pingcap/tiflow/pkg/config"
 	cerror "github.com/pingcap/tiflow/pkg/errors"
+	"github.com/pingcap/tiflow/pkg/redo"
 	"github.com/pingcap/tiflow/pkg/spanz"
 	"github.com/prometheus/client_golang/prometheus"
 	"go.uber.org/zap"
 )
 
-var (
-	// flushIntervalInMs is the minimum value of flush interval
-	flushIntervalInMs int64 = 2000 // 2 seconds
-	flushTimeout            = time.Second * 20
+const redoFlushWarnDuration = time.Second * 20
 
-	// Redo Manager GC interval. It can be changed in tests.
-	defaultGCIntervalInMs = 5000 // 5 seconds
-)
-
-// ConsistentLevelType is the level of redo log consistent level.
-type ConsistentLevelType string
-
-const (
-	// ConsistentLevelNone no consistent guarantee.
-	ConsistentLevelNone ConsistentLevelType = "none"
-	// ConsistentLevelEventual eventual consistent.
-	ConsistentLevelEventual ConsistentLevelType = "eventual"
-)
-
-type consistentStorage string
-
-const (
-	consistentStorageLocal     consistentStorage = "local"
-	consistentStorageNFS       consistentStorage = "nfs"
-	consistentStorageS3        consistentStorage = "s3"
-	consistentStorageBlackhole consistentStorage = "blackhole"
-)
-
-// IsValidConsistentLevel checks whether a given consistent level is valid
-func IsValidConsistentLevel(level string) bool {
-	switch ConsistentLevelType(level) {
-	case ConsistentLevelNone, ConsistentLevelEventual:
-		return true
-	default:
-		return false
-	}
-}
-
-// IsValidConsistentStorage checks whether a give consistent storage is valid
-func IsValidConsistentStorage(storage string) bool {
-	switch consistentStorage(storage) {
-	case consistentStorageLocal, consistentStorageNFS,
-		consistentStorageS3, consistentStorageBlackhole:
-		return true
-	default:
-		return false
-	}
-}
-
-// IsConsistentEnabled returns whether the consistent feature is enabled
-func IsConsistentEnabled(level string) bool {
-	return IsValidConsistentLevel(level) && ConsistentLevelType(level) != ConsistentLevelNone
-}
-
-// IsS3StorageEnabled returns whether s3 storage is enabled
-func IsS3StorageEnabled(storage string) bool {
-	return consistentStorage(storage) == consistentStorageS3
-}
+// Redo Manager GC interval. It can be changed in tests.
+var defaultGCIntervalInMs = 5000 // 5 seconds
 
 // LogManager defines an interface that is used to manage redo log
 type LogManager interface {
@@ -170,8 +115,6 @@ func (s *statefulRts) checkAndSetUnflushed(unflushed model.Ts) {
 type ManagerImpl struct {
 	changeFeedID model.ChangeFeedID
 	enabled      bool
-	level        ConsistentLevelType
-	storageType  consistentStorage
 
 	opts *ManagerOptions
 
@@ -179,7 +122,7 @@ type ManagerImpl struct {
 	// it's just like map[span]*statefulRts.
 	// For a given statefulRts, unflushed is updated in routine bgUpdateLog,
 	// and flushed is updated in flushLog.
-	rtsMap sync.Map
+	rtsMap spanz.SyncMap
 
 	// A fast way to get min flushed timestamp in rtsMap. It can be updated
 	// in redo-flush goroutine and AddTable/RemoveTable.
@@ -200,100 +143,54 @@ type ManagerImpl struct {
 	flushing      int64
 	lastFlushTime time.Time
 
-	metricWriteLogDuration prometheus.Observer
-	metricFlushLogDuration prometheus.Observer
+	metricWriteLogDuration    prometheus.Observer
+	metricFlushLogDuration    prometheus.Observer
+	metricTotalRowsCount      prometheus.Counter
+	metricRedoWorkerBusyRatio prometheus.Counter
 }
 
 // NewManager creates a new Manager
 func NewManager(ctx context.Context, cfg *config.ConsistentConfig, opts *ManagerOptions) (*ManagerImpl, error) {
 	// return a disabled Manager if no consistent config or normal consistent level
-	if cfg == nil || ConsistentLevelType(cfg.Level) == ConsistentLevelNone {
+	if cfg == nil || !redo.IsConsistentEnabled(cfg.Level) {
 		return &ManagerImpl{enabled: false}, nil
 	}
-	if cfg.FlushIntervalInMs > flushIntervalInMs {
-		flushIntervalInMs = cfg.FlushIntervalInMs
-	}
 
-	uri, err := storage.ParseRawURL(cfg.Storage)
+	writer, err := writer.NewRedoLogWriter(ctx, cfg, opts.FileTypeConfig)
 	if err != nil {
 		return nil, err
 	}
 
-	changeFeedID := contextutil.ChangefeedIDFromCtx(ctx)
 	m := &ManagerImpl{
-		changeFeedID:  changeFeedID,
+		changeFeedID:  contextutil.ChangefeedIDFromCtx(ctx),
 		enabled:       true,
-		level:         ConsistentLevelType(cfg.Level),
-		storageType:   consistentStorage(uri.Scheme),
 		opts:          opts,
-		rtsMap:        sync.Map{},
+		rtsMap:        spanz.SyncMap{},
 		minResolvedTs: math.MaxInt64,
-
-		metricWriteLogDuration: common.RedoWriteLogDurationHistogram.
-			WithLabelValues(changeFeedID.Namespace, changeFeedID.ID),
-		metricFlushLogDuration: common.RedoFlushLogDurationHistogram.
-			WithLabelValues(changeFeedID.Namespace, changeFeedID.ID),
+		writer:        writer,
 	}
 
-	switch m.storageType {
-	case consistentStorageBlackhole:
-		m.writer = writer.NewBlackHoleWriter()
-	case consistentStorageLocal, consistentStorageNFS, consistentStorageS3:
-		globalConf := config.GetGlobalServerConfig()
-		// When an external storage such S3 is used, we use redoDir as a temporary dir to store redo logs
-		// before we flush them to S3.
-		var redoDir string
-		if changeFeedID.Namespace == model.DefaultNamespace {
-			redoDir = filepath.Join(globalConf.DataDir,
-				config.DefaultRedoDir, changeFeedID.ID)
-		} else {
-			redoDir = filepath.Join(globalConf.DataDir,
-				config.DefaultRedoDir,
-				changeFeedID.Namespace, changeFeedID.ID)
-		}
-
-		// When local storage or NFS is used, we use redoDir as the final storage path.
-		if m.storageType == consistentStorageLocal || m.storageType == consistentStorageNFS {
-			redoDir = uri.Path
-		}
-
-		writerCfg := &writer.LogWriterConfig{
-			Dir:               redoDir,
-			CaptureID:         contextutil.CaptureAddrFromCtx(ctx),
-			ChangeFeedID:      changeFeedID,
-			CreateTime:        time.Now(),
-			MaxLogSize:        cfg.MaxLogSize,
-			FlushIntervalInMs: cfg.FlushIntervalInMs,
-			S3Storage:         m.storageType == consistentStorageS3,
-
-			EmitMeta:      m.opts.EmitMeta,
-			EmitRowEvents: m.opts.EmitRowEvents,
-			EmitDDLEvents: m.opts.EmitDDLEvents,
-		}
-		if writerCfg.S3Storage {
-			writerCfg.S3URI = *uri
-		}
-		writer, err := writer.NewLogWriter(ctx, writerCfg)
-		if err != nil {
-			return nil, err
-		}
-		m.writer = writer
-
-		if m.opts.EmitMeta {
-			checkpointTs, resolvedTs := m.writer.GetMeta()
-			m.metaCheckpointTs.flushed = checkpointTs
-			m.metaCheckpointTs.unflushed = checkpointTs
-			m.metaResolvedTs.flushed = resolvedTs
-			m.metaResolvedTs.unflushed = resolvedTs
-		}
-	default:
-		return nil, cerror.ErrConsistentStorage.GenWithStackByArgs(m.storageType)
+	if m.opts.EmitMeta {
+		checkpointTs, resolvedTs := m.writer.GetMeta()
+		m.metaCheckpointTs.flushed = checkpointTs
+		m.metaCheckpointTs.unflushed = checkpointTs
+		m.metaResolvedTs.flushed = resolvedTs
+		m.metaResolvedTs.unflushed = resolvedTs
 	}
+
+	m.metricWriteLogDuration = common.RedoWriteLogDurationHistogram.
+		WithLabelValues(m.changeFeedID.Namespace, m.changeFeedID.ID)
+	m.metricFlushLogDuration = common.RedoFlushLogDurationHistogram.
+		WithLabelValues(m.changeFeedID.Namespace, m.changeFeedID.ID)
+	m.metricTotalRowsCount = common.RedoTotalRowsCountGauge.
+		WithLabelValues(m.changeFeedID.Namespace, m.changeFeedID.ID)
+	m.metricRedoWorkerBusyRatio = common.RedoWorkerBusyRatio.
+		WithLabelValues(m.changeFeedID.Namespace, m.changeFeedID.ID)
 
 	// TODO: better to wait background goroutines after the context is canceled.
 	if m.opts.EnableBgRunner {
 		m.logBuffer = chann.New[cacheEvents]()
-		go m.bgUpdateLog(ctx, opts.ErrCh)
+		go m.bgUpdateLog(ctx, cfg.FlushIntervalInMs, opts.ErrCh)
 	}
 	if m.opts.EnableGCRunner {
 		go m.bgGC(ctx)
@@ -310,8 +207,9 @@ func NewDisabledManager() *ManagerImpl {
 // NewMockManager returns a mock redo manager instance, used in test only
 func NewMockManager(ctx context.Context) (*ManagerImpl, error) {
 	cfg := &config.ConsistentConfig{
-		Level:   string(ConsistentLevelEventual),
-		Storage: "blackhole://",
+		Level:             string(redo.ConsistentLevelEventual),
+		Storage:           "blackhole://",
+		FlushIntervalInMs: config.DefaultFlushIntervalInMs,
 	}
 
 	errCh := make(chan error, 1)
@@ -396,12 +294,14 @@ func (m *ManagerImpl) UpdateCheckpointTs(ckpt model.Ts) {
 
 // EmitDDLEvent sends DDL event to redo log writer
 func (m *ManagerImpl) EmitDDLEvent(ctx context.Context, ddl *model.DDLEvent) error {
-	return m.withLock(func(m *ManagerImpl) error { return m.writer.SendDDL(ctx, DDLToRedo(ddl)) })
+	return m.withLock(func(m *ManagerImpl) error {
+		return m.writer.SendDDL(ctx, common.DDLToRedo(ddl))
+	})
 }
 
 // GetResolvedTs returns the resolved ts of a table
 func (m *ManagerImpl) GetResolvedTs(span tablepb.Span) model.Ts {
-	if value, ok := m.rtsMap.Load(spanz.ToHashableSpan(span)); ok {
+	if value, ok := m.rtsMap.Load(span); ok {
 		return value.(*statefulRts).getFlushed()
 	}
 	panic("GetResolvedTs is called on an invalid table")
@@ -427,7 +327,7 @@ func (m *ManagerImpl) GetFlushedMeta(checkpointTs, resolvedTs *model.Ts) {
 // AddTable adds a new table in redo log manager
 func (m *ManagerImpl) AddTable(span tablepb.Span, startTs uint64) {
 	_, loaded := m.rtsMap.LoadOrStore(
-		spanz.ToHashableSpan(span), &statefulRts{flushed: startTs, unflushed: startTs})
+		span, &statefulRts{flushed: startTs, unflushed: startTs})
 	if loaded {
 		log.Warn("add duplicated table in redo log manager", zap.Stringer("span", &span))
 		return
@@ -445,7 +345,7 @@ func (m *ManagerImpl) AddTable(span tablepb.Span, startTs uint64) {
 func (m *ManagerImpl) RemoveTable(span tablepb.Span) {
 	var v interface{}
 	var ok bool
-	if v, ok = m.rtsMap.LoadAndDelete(spanz.ToHashableSpan(span)); !ok {
+	if v, ok = m.rtsMap.LoadAndDelete(span); !ok {
 		log.Warn("remove a table not maintained in redo log manager", zap.Stringer("span", &span))
 		return
 	}
@@ -457,7 +357,7 @@ func (m *ManagerImpl) RemoveTable(span tablepb.Span) {
 			break
 		}
 		newMin := uint64(math.MaxInt64)
-		m.rtsMap.Range(func(key interface{}, value interface{}) bool {
+		m.rtsMap.Range(func(key tablepb.Span, value interface{}) bool {
 			rts := value.(*statefulRts)
 			flushed := rts.getFlushed()
 			if flushed < newMin {
@@ -478,27 +378,30 @@ func (m *ManagerImpl) Cleanup(ctx context.Context) error {
 		DeleteLabelValues(m.changeFeedID.Namespace, m.changeFeedID.ID)
 	common.RedoFlushLogDurationHistogram.
 		DeleteLabelValues(m.changeFeedID.Namespace, m.changeFeedID.ID)
+	common.RedoTotalRowsCountGauge.
+		DeleteLabelValues(m.changeFeedID.Namespace, m.changeFeedID.ID)
+	common.RedoWorkerBusyRatio.
+		DeleteLabelValues(m.changeFeedID.Namespace, m.changeFeedID.ID)
 	return m.withLock(func(m *ManagerImpl) error { return m.writer.DeleteAllLogs(ctx) })
 }
 
 func (m *ManagerImpl) prepareForFlush() (
-	tableRtsMap map[spanz.HashableSpan]model.Ts, minResolvedTs model.Ts,
+	tableRtsMap *spanz.HashMap[model.Ts], minResolvedTs model.Ts,
 ) {
 	if !m.opts.EmitRowEvents {
 		return
 	}
 
-	tableRtsMap = make(map[spanz.HashableSpan]model.Ts)
+	tableRtsMap = spanz.NewHashMap[model.Ts]()
 	minResolvedTs = math.MaxUint64
-	m.rtsMap.Range(func(key interface{}, value interface{}) bool {
-		span := key.(spanz.HashableSpan)
+	m.rtsMap.Range(func(span tablepb.Span, value interface{}) bool {
 		rts := value.(*statefulRts)
 		unflushed := rts.getUnflushed()
 		flushed := rts.getFlushed()
 		if unflushed > flushed {
 			flushed = unflushed
 		}
-		tableRtsMap[span] = flushed
+		tableRtsMap.ReplaceOrInsert(span, flushed)
 		if flushed < minResolvedTs {
 			minResolvedTs = flushed
 		}
@@ -512,7 +415,7 @@ func (m *ManagerImpl) prepareForFlush() (
 }
 
 func (m *ManagerImpl) postFlush(
-	tableRtsMap map[spanz.HashableSpan]model.Ts, minResolvedTs model.Ts,
+	tableRtsMap *spanz.HashMap[model.Ts], minResolvedTs model.Ts,
 ) {
 	if !m.opts.EmitRowEvents {
 		return
@@ -521,11 +424,13 @@ func (m *ManagerImpl) postFlush(
 		// m.minResolvedTs is only updated in flushLog, so no other one can change it.
 		atomic.StoreUint64(&m.minResolvedTs, minResolvedTs)
 	}
-	for span, flushed := range tableRtsMap {
+
+	tableRtsMap.Range(func(span tablepb.Span, flushed uint64) bool {
 		if value, loaded := m.rtsMap.Load(span); loaded {
 			value.(*statefulRts).setFlushed(flushed)
 		}
-	}
+		return true
+	})
 }
 
 func (m *ManagerImpl) prepareForFlushMeta() (metaCheckpoint, metaResolved model.Ts) {
@@ -545,11 +450,17 @@ func (m *ManagerImpl) postFlushMeta(metaCheckpoint, metaResolved model.Ts) {
 	m.metaCheckpointTs.setFlushed(metaCheckpoint)
 }
 
-func (m *ManagerImpl) flushLog(ctx context.Context, handleErr func(err error)) {
+func (m *ManagerImpl) flushLog(
+	ctx context.Context, handleErr func(err error), workTimeSlice *time.Duration,
+) {
+	start := time.Now()
+	defer func() {
+		*workTimeSlice += time.Since(start)
+	}()
 	if !atomic.CompareAndSwapInt64(&m.flushing, 0, 1) {
 		log.Debug("Fail to update flush flag, " +
 			"the previous flush operation hasn't finished yet")
-		if time.Since(m.lastFlushTime) > flushTimeout {
+		if time.Since(m.lastFlushTime) > redoFlushWarnDuration {
 			log.Warn("flushLog blocking too long, the redo manager may be stuck",
 				zap.Duration("duration", time.Since(m.lastFlushTime)),
 				zap.Any("changfeed", m.changeFeedID))
@@ -582,14 +493,16 @@ func (m *ManagerImpl) flushLog(ctx context.Context, handleErr func(err error)) {
 }
 
 func (m *ManagerImpl) onResolvedTsMsg(span tablepb.Span, resolvedTs model.Ts) {
-	value, loaded := m.rtsMap.Load(spanz.ToHashableSpan(span))
+	value, loaded := m.rtsMap.Load(span)
 	if !loaded {
 		panic("onResolvedTsMsg is called for an invalid table")
 	}
 	value.(*statefulRts).checkAndSetUnflushed(resolvedTs)
 }
 
-func (m *ManagerImpl) bgUpdateLog(ctx context.Context, errCh chan<- error) {
+func (m *ManagerImpl) bgUpdateLog(
+	ctx context.Context, flushIntervalInMs int64, errCh chan<- error,
+) {
 	// logErrCh is used to retrieve errors from log flushing goroutines.
 	// if the channel is full, it's better to block subsequent flushing goroutines.
 	logErrCh := make(chan error, 1)
@@ -597,7 +510,8 @@ func (m *ManagerImpl) bgUpdateLog(ctx context.Context, errCh chan<- error) {
 
 	log.Info("redo manager bgUpdateLog is running",
 		zap.String("namespace", m.changeFeedID.Namespace),
-		zap.String("changefeed", m.changeFeedID.ID))
+		zap.String("changefeed", m.changeFeedID.ID),
+		zap.Int64("flushIntervalInMs", flushIntervalInMs))
 
 	ticker := time.NewTicker(time.Duration(flushIntervalInMs) * time.Millisecond)
 	defer func() {
@@ -624,10 +538,14 @@ func (m *ManagerImpl) bgUpdateLog(ctx context.Context, errCh chan<- error) {
 
 	var err error
 	logs := make([]*model.RedoRowChangedEvent, 0, 1024*1024)
-	rtsMap := make(map[spanz.HashableSpan]model.Ts)
+	rtsMap := spanz.NewHashMap[model.Ts]()
 	releaseMemoryCbs := make([]func(), 0, 1024)
 
-	emitBatch := func() {
+	emitBatch := func(workTimeSlice *time.Duration) {
+		start := time.Now()
+		defer func() {
+			*workTimeSlice += time.Since(start)
+		}()
 		if len(logs) > 0 {
 			start := time.Now()
 			err = m.writer.WriteLog(ctx, logs)
@@ -638,6 +556,7 @@ func (m *ManagerImpl) bgUpdateLog(ctx context.Context, errCh chan<- error) {
 				zap.Int("rows", len(logs)),
 				zap.Error(err),
 				zap.Duration("writeLogElapse", writeLogElapse))
+			m.metricTotalRowsCount.Add(float64(len(logs)))
 			m.metricWriteLogDuration.Observe(writeLogElapse.Seconds())
 
 			for _, releaseMemory := range releaseMemoryCbs {
@@ -655,77 +574,95 @@ func (m *ManagerImpl) bgUpdateLog(ctx context.Context, errCh chan<- error) {
 				releaseMemoryCbs = releaseMemoryCbs[:0]
 			}
 		}
-		if len(rtsMap) > 0 {
-			for hs, resolvedTs := range rtsMap {
-				span := hs.ToSpan()
+		if rtsMap.Len() > 0 {
+			rtsMap.Range(func(span tablepb.Span, resolvedTs uint64) bool {
 				m.onResolvedTsMsg(span, resolvedTs)
 				log.Debug("redo manager writes resolvedTs",
 					zap.String("namespace", m.changeFeedID.Namespace),
 					zap.String("changefeed", m.changeFeedID.ID),
 					zap.Stringer("span", &span),
 					zap.Uint64("resolvedTs", resolvedTs))
-			}
-			rtsMap = make(map[spanz.HashableSpan]model.Ts)
+				return true
+			})
+			rtsMap = spanz.NewHashMap[model.Ts]()
 		}
 	}
 
+	overseerTicker := time.NewTicker(time.Second * 5)
+	defer overseerTicker.Stop()
+	var workTimeSlice time.Duration
+	startToWork := time.Now()
 	for {
-		if len(logs) > 0 || len(rtsMap) > 0 {
+		if len(logs) > 0 || rtsMap.Len() > 0 {
 			select {
 			case <-ctx.Done():
 				return
 			case <-ticker.C:
-				emitBatch()
-				m.flushLog(ctx, handleErr)
+				emitBatch(&workTimeSlice)
+				m.flushLog(ctx, handleErr, &workTimeSlice)
 			case cache, ok := <-m.logBuffer.Out():
 				if !ok {
 					return // channel closed
 				}
+				startToHandleEvent := time.Now()
 				switch cache.eventType {
 				case model.MessageTypeRow:
 					for _, row := range cache.rows {
-						logs = append(logs, RowToRedo(row))
+						logs = append(logs, common.RowToRedo(row))
 					}
 					if cache.releaseMemory != nil {
 						releaseMemoryCbs = append(releaseMemoryCbs, cache.releaseMemory)
 					}
 				case model.MessageTypeResolved:
-					if rtsMap[spanz.ToHashableSpan(cache.span)] < cache.resolvedTs {
-						rtsMap[spanz.ToHashableSpan(cache.span)] = cache.resolvedTs
+					if rtsMap.GetV(cache.span) < cache.resolvedTs {
+						rtsMap.ReplaceOrInsert(cache.span, cache.resolvedTs)
 					}
 				default:
 					log.Panic("redo manager receives unknown event type")
 				}
+				workTimeSlice += time.Since(startToHandleEvent)
+			case now := <-overseerTicker.C:
+				busyRatio := int(workTimeSlice.Seconds() / now.Sub(startToWork).Seconds() * 1000)
+				m.metricRedoWorkerBusyRatio.Add(float64(busyRatio))
+				startToWork = now
+				workTimeSlice = 0
 			case err = <-logErrCh:
 			default:
-				emitBatch()
+				emitBatch(&workTimeSlice)
 			}
 		} else {
 			select {
 			case <-ctx.Done():
 				return
 			case <-ticker.C:
-				emitBatch()
-				m.flushLog(ctx, handleErr)
+				emitBatch(&workTimeSlice)
+				m.flushLog(ctx, handleErr, &workTimeSlice)
 			case cache, ok := <-m.logBuffer.Out():
 				if !ok {
 					return // channel closed
 				}
+				startToHandleEvent := time.Now()
 				switch cache.eventType {
 				case model.MessageTypeRow:
 					for _, row := range cache.rows {
-						logs = append(logs, RowToRedo(row))
+						logs = append(logs, common.RowToRedo(row))
 					}
 					if cache.releaseMemory != nil {
 						releaseMemoryCbs = append(releaseMemoryCbs, cache.releaseMemory)
 					}
 				case model.MessageTypeResolved:
-					if rtsMap[spanz.ToHashableSpan(cache.span)] < cache.resolvedTs {
-						rtsMap[spanz.ToHashableSpan(cache.span)] = cache.resolvedTs
+					if rtsMap.GetV(cache.span) < cache.resolvedTs {
+						rtsMap.ReplaceOrInsert(cache.span, cache.resolvedTs)
 					}
 				default:
 					log.Panic("redo manager receives unknown event type")
 				}
+				workTimeSlice += time.Since(startToHandleEvent)
+			case now := <-overseerTicker.C:
+				busyRatio := int(workTimeSlice.Seconds() / now.Sub(startToWork).Seconds() * 1000)
+				m.metricRedoWorkerBusyRatio.Add(float64(busyRatio))
+				startToWork = now
+				workTimeSlice = 0
 			case err = <-logErrCh:
 			}
 		}

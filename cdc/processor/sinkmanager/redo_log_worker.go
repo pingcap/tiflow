@@ -22,7 +22,6 @@ import (
 	"github.com/pingcap/tiflow/cdc/processor/sourcemanager"
 	"github.com/pingcap/tiflow/cdc/processor/sourcemanager/engine"
 	"github.com/pingcap/tiflow/cdc/redo"
-	"github.com/pingcap/tiflow/pkg/spanz"
 	"go.uber.org/zap"
 )
 
@@ -75,13 +74,13 @@ func (w *redoWorker) handleTask(ctx context.Context, task *redoTask) (finalErr e
 		log.Panic("redo task upperbound must be a ResolvedTs",
 			zap.String("namespace", w.changefeedID.Namespace),
 			zap.String("changefeed", w.changefeedID.ID),
-			zap.Int64("tableID", task.tableID),
+			zap.Stringer("span", &task.span),
 			zap.Any("upperBound", upperBound))
 	}
 
 	var cache *eventAppender
 	if w.eventCache != nil {
-		cache = w.eventCache.maybeCreateAppender(task.tableID, task.lowerBound)
+		cache = w.eventCache.maybeCreateAppender(task.span, task.lowerBound)
 	}
 
 	// Events are pushed into redoEventCache if possible. Otherwise, their memory will
@@ -112,31 +111,27 @@ func (w *redoWorker) handleTask(ctx context.Context, task *redoTask) (finalErr e
 					log.Debug("MemoryQuotaTracing: refund memory for redo log task",
 						zap.String("namespace", w.changefeedID.Namespace),
 						zap.String("changefeed", w.changefeedID.ID),
-						zap.Int64("tableID", task.tableID),
+						zap.Stringer("span", &task.span),
 						zap.Uint64("memory", refundMem))
 				}
 			}
-			err := w.redoManager.EmitRowChangedEvents(
-				ctx, spanz.TableIDToComparableSpan(task.tableID), releaseMem, rows...)
+			err := w.redoManager.EmitRowChangedEvents(ctx, task.span, releaseMem, rows...)
 			if err != nil {
 				return errors.Trace(err)
 			}
+			// Should always re-allocate space because EmitRowChangedEvents is asynchronous.
+			rows = make([]*model.RowChangedEvent, 0, 1024)
 			rowsSize = 0
 			cachedSize = 0
-			rows = rows[:0]
-			if cap(rows) > 1024 {
-				rows = make([]*model.RowChangedEvent, 0, 1024)
-			}
 		}
 		if lastTxnCommitTs > emitedCommitTs {
-			if err := w.redoManager.UpdateResolvedTs(
-				ctx, spanz.TableIDToComparableSpan(task.tableID), lastTxnCommitTs); err != nil {
+			if err := w.redoManager.UpdateResolvedTs(ctx, task.span, lastTxnCommitTs); err != nil {
 				return errors.Trace(err)
 			}
 			log.Debug("update resolved ts to redo",
 				zap.String("namespace", w.changefeedID.Namespace),
 				zap.String("changefeed", w.changefeedID.ID),
-				zap.Int64("tableID", task.tableID),
+				zap.Stringer("span", &task.span),
 				zap.Uint64("resolvedTs", lastTxnCommitTs))
 			emitedCommitTs = lastTxnCommitTs
 		}
@@ -162,7 +157,7 @@ func (w *redoWorker) handleTask(ctx context.Context, task *redoTask) (finalErr e
 			log.Debug("MemoryQuotaTracing: force acquire memory for redo log task",
 				zap.String("namespace", w.changefeedID.Namespace),
 				zap.String("changefeed", w.changefeedID.ID),
-				zap.Int64("tableID", task.tableID),
+				zap.Stringer("span", &task.span),
 				zap.Uint64("memory", usedMemSize-availableMemSize))
 			availableMemSize = usedMemSize
 		}
@@ -177,7 +172,7 @@ func (w *redoWorker) handleTask(ctx context.Context, task *redoTask) (finalErr e
 					log.Debug("MemoryQuotaTracing: try acquire memory for redo log task",
 						zap.String("namespace", w.changefeedID.Namespace),
 						zap.String("changefeed", w.changefeedID.ID),
-						zap.Int64("tableID", task.tableID),
+						zap.Stringer("span", &task.span),
 						zap.Uint64("memory", requestMemSize))
 				}
 			} else {
@@ -191,7 +186,7 @@ func (w *redoWorker) handleTask(ctx context.Context, task *redoTask) (finalErr e
 				log.Debug("MemoryQuotaTracing: block acquire memory for redo log task",
 					zap.String("namespace", w.changefeedID.Namespace),
 					zap.String("changefeed", w.changefeedID.ID),
-					zap.Int64("tableID", task.tableID),
+					zap.Stringer("span", &task.span),
 					zap.Uint64("memory", requestMemSize))
 			}
 		}
@@ -199,7 +194,7 @@ func (w *redoWorker) handleTask(ctx context.Context, task *redoTask) (finalErr e
 		return nil
 	}
 
-	iter := w.sourceManager.FetchByTable(task.tableID, task.lowerBound, upperBound)
+	iter := w.sourceManager.FetchByTable(task.span, task.lowerBound, upperBound)
 	allEventCount := 0
 	defer func() {
 		task.tableSink.updateReceivedSorterCommitTs(lastTxnCommitTs)
@@ -210,14 +205,14 @@ func (w *redoWorker) handleTask(ctx context.Context, task *redoTask) (finalErr e
 			log.Error("redo worker fails to close iterator",
 				zap.String("namespace", w.changefeedID.Namespace),
 				zap.String("changefeed", w.changefeedID.ID),
-				zap.Int64("tableID", task.tableID),
+				zap.Stringer("span", &task.span),
 				zap.Error(err))
 		}
 
 		log.Debug("redo task finished",
 			zap.String("namespace", w.changefeedID.Namespace),
 			zap.String("changefeed", w.changefeedID.ID),
-			zap.Int64("tableID", task.tableID),
+			zap.Stringer("span", &task.span),
 			zap.Any("lowerBound", task.lowerBound),
 			zap.Any("upperBound", upperBound),
 			zap.Any("lastPos", lastPos))
@@ -232,7 +227,7 @@ func (w *redoWorker) handleTask(ctx context.Context, task *redoTask) (finalErr e
 			log.Debug("MemoryQuotaTracing: refund memory for redo log task",
 				zap.String("namespace", w.changefeedID.Namespace),
 				zap.String("changefeed", w.changefeedID.ID),
-				zap.Int64("tableID", task.tableID),
+				zap.Stringer("span", &task.span),
 				zap.Uint64("memory", availableMemSize-usedMemSize))
 		}
 	}()
@@ -271,7 +266,7 @@ func (w *redoWorker) handleTask(ctx context.Context, task *redoTask) (finalErr e
 		if e.Row != nil {
 			// For all rows, we add table replicate ts, so mysql sink can determine safe-mode.
 			e.Row.ReplicatingTs = task.tableSink.replicateTs
-			x, size, err = convertRowChangedEvents(w.changefeedID, task.tableID, w.enableOldValue, e)
+			x, size, err = convertRowChangedEvents(w.changefeedID, task.span, w.enableOldValue, e)
 			if err != nil {
 				return errors.Trace(err)
 			}

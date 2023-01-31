@@ -41,12 +41,15 @@ func TestCoordinatorSendMsgs(t *testing.T) {
 	t.Parallel()
 	ctx := context.Background()
 	coord, trans := newTestCoordinator(&config.SchedulerConfig{
-		RegionPerSpan: 10000, // Enable span replication.
+		ChangefeedSettings: &config.ChangefeedSchedulerConfig{
+			RegionPerSpan: 10000, // Enable span replication.
+		},
 	})
 	coord.version = "6.2.0"
 	coord.revision = schedulepb.OwnerRevision{Revision: 3}
 	coord.captureID = "0"
-	coord.captureM = member.NewCaptureManager("", model.ChangeFeedID{}, coord.revision, 0)
+	cfg := config.NewDefaultSchedulerConfig()
+	coord.captureM = member.NewCaptureManager("", model.ChangeFeedID{}, coord.revision, cfg)
 	coord.sendMsgs(
 		ctx, []*schedulepb.Message{{To: "1", MsgType: schedulepb.MsgDispatchTableRequest}})
 
@@ -77,7 +80,9 @@ func TestCoordinatorRecvMsgs(t *testing.T) {
 
 	ctx := context.Background()
 	coord, trans := newTestCoordinator(&config.SchedulerConfig{
-		RegionPerSpan: 10000, // Enable span replication.
+		ChangefeedSettings: &config.ChangefeedSchedulerConfig{
+			RegionPerSpan: 10000, // Enable span replication.
+		},
 	})
 	coord.version = "6.2.0"
 	coord.revision = schedulepb.OwnerRevision{Revision: 3}
@@ -119,7 +124,9 @@ func TestCoordinatorTransportCompat(t *testing.T) {
 	t.Parallel()
 
 	coord, trans := newTestCoordinator(&config.SchedulerConfig{
-		RegionPerSpan: 0, // Disable span replication.
+		ChangefeedSettings: &config.ChangefeedSchedulerConfig{
+			RegionPerSpan: 0, // Disable span replication.
+		},
 	})
 
 	ctx := context.Background()
@@ -193,7 +200,7 @@ func newTestCoordinator(cfg *config.SchedulerConfig) (*coordinator, *transport.M
 	trans := transport.NewMockTrans()
 	coord.trans = trans
 	coord.reconciler = keyspan.NewReconciler(
-		model.ChangeFeedID{}, keyspan.NewMockRegionCache(), cfg.RegionPerSpan)
+		model.ChangeFeedID{}, keyspan.NewMockRegionCache(), cfg.ChangefeedSettings.RegionPerSpan)
 	return coord, trans
 }
 
@@ -202,8 +209,10 @@ func TestCoordinatorHeartbeat(t *testing.T) {
 
 	coord, trans := newTestCoordinator(&config.SchedulerConfig{
 		HeartbeatTick:      math.MaxInt,
+		CollectStatsTick:   math.MaxInt,
 		MaxTaskConcurrency: 1,
 		AddTableBatchSize:  50,
+		ChangefeedSettings: config.GetDefaultReplicaConfig().Scheduler,
 	})
 
 	// Prepare captureM and replicationM.
@@ -258,7 +267,9 @@ func TestCoordinatorAddCapture(t *testing.T) {
 	t.Parallel()
 	coord, trans := newTestCoordinator(&config.SchedulerConfig{
 		HeartbeatTick:      math.MaxInt,
+		CollectStatsTick:   math.MaxInt,
 		MaxTaskConcurrency: 1,
+		ChangefeedSettings: config.GetDefaultReplicaConfig().Scheduler,
 	})
 
 	// Prepare captureM and replicationM.
@@ -312,8 +323,10 @@ func TestCoordinatorRemoveCapture(t *testing.T) {
 
 	coord, trans := newTestCoordinator(&config.SchedulerConfig{
 		HeartbeatTick:      math.MaxInt,
+		CollectStatsTick:   math.MaxInt,
 		MaxTaskConcurrency: 1,
 		AddTableBatchSize:  50,
+		ChangefeedSettings: config.GetDefaultReplicaConfig().Scheduler,
 	})
 
 	// Prepare captureM and replicationM.
@@ -354,7 +367,8 @@ func TestCoordinatorDrainCapture(t *testing.T) {
 		revision:  schedulepb.OwnerRevision{Revision: 3},
 		captureID: "a",
 	}
-	coord.captureM = member.NewCaptureManager("", model.ChangeFeedID{}, coord.revision, 0)
+	cfg := config.NewDefaultSchedulerConfig()
+	coord.captureM = member.NewCaptureManager("", model.ChangeFeedID{}, coord.revision, cfg)
 
 	coord.captureM.SetInitializedForTests(true)
 	coord.captureM.Captures["a"] = &member.CaptureStatus{State: member.CaptureStateUninitialized}
@@ -401,7 +415,9 @@ func TestCoordinatorAdvanceCheckpoint(t *testing.T) {
 
 	coord, trans := newTestCoordinator(&config.SchedulerConfig{
 		HeartbeatTick:      math.MaxInt,
+		CollectStatsTick:   math.MaxInt,
 		MaxTaskConcurrency: 1,
+		ChangefeedSettings: config.GetDefaultReplicaConfig().Scheduler,
 	})
 
 	// Prepare captureM and replicationM.

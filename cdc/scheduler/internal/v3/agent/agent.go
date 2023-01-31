@@ -262,7 +262,7 @@ func (a *agent) handleMessageHeartbeat(request *schedulepb.Heartbeat) *schedulep
 	allTables := a.tableM.getAllTableSpans()
 	result := make([]tablepb.TableStatus, 0, allTables.Len())
 	allTables.Ascend(func(span tablepb.Span, table *tableSpan) bool {
-		status := table.getTableSpanStatus()
+		status := table.getTableSpanStatus(request.CollectStats)
 		if table.task != nil && table.task.IsRemove {
 			status.State = tablepb.TableStateStopping
 		}
@@ -271,7 +271,7 @@ func (a *agent) handleMessageHeartbeat(request *schedulepb.Heartbeat) *schedulep
 	})
 	for _, span := range request.GetSpans() {
 		if _, ok := allTables.Get(span); !ok {
-			status := a.tableM.getTableSpanStatus(span)
+			status := a.tableM.getTableSpanStatus(span, request.CollectStats)
 			result = append(result, status)
 		}
 	}
@@ -356,7 +356,7 @@ func (a *agent) handleMessageDispatchTableRequest(
 				zap.String("capture", a.CaptureID),
 				zap.String("namespace", a.ChangeFeedID.Namespace),
 				zap.String("changefeed", a.ChangeFeedID.ID),
-				zap.Stringer("span", &span),
+				zap.String("span", span.String()),
 				zap.Any("request", request))
 			return
 		}
@@ -375,12 +375,6 @@ func (a *agent) handleMessageDispatchTableRequest(
 		return
 	}
 	table.injectDispatchTableTask(task)
-}
-
-// GetLastSentCheckpointTs implement agent interface
-func (a *agent) GetLastSentCheckpointTs() (checkpointTs model.Ts) {
-	// no need to implement this.
-	return internal.CheckpointCannotProceed
 }
 
 // Close implement agent interface

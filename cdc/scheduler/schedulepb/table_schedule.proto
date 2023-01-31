@@ -76,6 +76,7 @@ message Heartbeat {
 
     bool is_stopping = 2;
     repeated processor.tablepb.Span spans = 3 [(gogoproto.nullable) = false];
+    bool collect_stats = 4;
 }
 
 message HeartbeatResponse {

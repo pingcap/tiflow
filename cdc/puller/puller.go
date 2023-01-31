@@ -89,20 +89,21 @@ func New(ctx context.Context,
 	tableID model.TableID,
 	tableName string,
 	filterLoop bool,
+	isDDLPuller bool,
 ) Puller {
 	tikvStorage, ok := kvStorage.(tikv.Storage)
 	if !ok {
 		log.Panic("can't create puller for non-tikv storage")
 	}
-	// To make puller level resolved ts initialization distinguishable, we set
-	// the initial ts for frontier to 0. Once the puller level resolved ts
-	// initialized, the ts should advance to a non-zero value.
 	pullerType := "dml"
-	if len(spans) > 1 {
+	if isDDLPuller {
 		pullerType = "ddl"
 	}
 	metricMissedRegionCollectCounter := missedRegionCollectCounter.
 		WithLabelValues(changefeed.Namespace, changefeed.ID, pullerType)
+	// To make puller level resolved ts initialization distinguishable, we set
+	// the initial ts for frontier to 0. Once the puller level resolved ts
+	// initialized, the ts should advance to a non-zero value.
 	tsTracker := frontier.NewFrontier(0, metricMissedRegionCollectCounter, spans...)
 	kvCli := kv.NewCDCKVClient(
 		ctx, pdCli, grpcPool, regionCache, pdClock, cfg, changefeed, tableID, tableName, filterLoop)

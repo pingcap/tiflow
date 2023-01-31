@@ -337,6 +337,7 @@ func GetLightningConfig(globalCfg *lcfg.GlobalConfig, subtaskCfg *config.SubTask
 
 	cfg.TikvImporter.DiskQuota = subtaskCfg.LoaderConfig.DiskQuotaPhysical
 	cfg.TikvImporter.OnDuplicate = string(subtaskCfg.OnDuplicateLogical)
+	cfg.TikvImporter.IncrementalImport = true
 	switch subtaskCfg.OnDuplicatePhysical {
 	case config.OnDuplicateManual:
 		cfg.TikvImporter.DuplicateResolution = lcfg.DupeResAlgRemove
@@ -415,6 +416,9 @@ func (l *LightningLoader) restore(ctx context.Context) error {
 		if err != nil {
 			return err
 		}
+		if err2 := readyAndWait(ctx, l.cli, l.cfg); err2 != nil {
+			return err2
+		}
 		err = l.runLightning(ctx, cfg)
 		if err == nil {
 			l.finish.Store(true)
@@ -438,6 +442,7 @@ func (l *LightningLoader) restore(ctx context.Context) error {
 		if l.cfg.CleanDumpFile {
 			cleanDumpFiles(ctx, l.cfg)
 		}
+		return finishAndWait(ctx, l.cli, l.cfg)
 	}
 	return err
 }

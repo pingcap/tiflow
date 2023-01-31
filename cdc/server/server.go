@@ -30,7 +30,6 @@ import (
 	"github.com/pingcap/tiflow/cdc"
 	"github.com/pingcap/tiflow/cdc/capture"
 	"github.com/pingcap/tiflow/cdc/kv"
-	"github.com/pingcap/tiflow/cdc/processor/pipeline/system"
 	"github.com/pingcap/tiflow/cdc/processor/sourcemanager/engine/factory"
 	ssystem "github.com/pingcap/tiflow/cdc/sorter/db/system"
 	"github.com/pingcap/tiflow/cdc/sorter/unified"
@@ -85,8 +84,6 @@ type server struct {
 	etcdClient   etcd.CDCEtcdClient
 	pdEndpoints  []string
 
-	tableActorSystem *system.System
-
 	// If it's true sortEngineManager will be used, otherwise sorterSystem will be used.
 	useEventSortEngine bool
 	sortEngineFactory  *factory.SortEngineFactory
@@ -121,7 +118,7 @@ func New(pdEndpoints []string) (*server, error) {
 
 	s := &server{
 		pdEndpoints: pdEndpoints,
-		grpcService: p2p.NewServerWrapper(),
+		grpcService: p2p.NewServerWrapper(debugConfig.Messages.ToMessageServerConfig()),
 		tcpServer:   tcpServer,
 
 		useEventSortEngine: useEventSortEngine,
@@ -198,18 +195,12 @@ func (s *server) prepare(ctx context.Context) error {
 
 	s.capture = capture.NewCapture(
 		s.pdEndpoints, createEtcdClient, s.grpcService,
-		s.tableActorSystem, s.sortEngineFactory, s.sorterSystem)
+		s.sortEngineFactory, s.sorterSystem)
 
 	return nil
 }
 
 func (s *server) startActorSystems(ctx context.Context) error {
-	if s.tableActorSystem != nil {
-		s.tableActorSystem.Stop()
-	}
-	s.tableActorSystem = system.NewSystem()
-	s.tableActorSystem.Start(ctx)
-
 	conf := config.GetGlobalServerConfig()
 	if !conf.Debug.EnableDBSorter {
 		return nil
@@ -376,19 +367,17 @@ func (s *server) run(ctx context.Context) (err error) {
 		})
 	}
 
-	if conf.Debug.EnableNewScheduler {
-		grpcServer := grpc.NewServer()
-		p2pProto.RegisterCDCPeerToPeerServer(grpcServer, s.grpcService)
+	grpcServer := grpc.NewServer(s.grpcService.ServerOptions()...)
+	p2pProto.RegisterCDCPeerToPeerServer(grpcServer, s.grpcService)
 
-		wg.Go(func() error {
-			return grpcServer.Serve(s.tcpServer.GrpcListener())
-		})
-		wg.Go(func() error {
-			<-cctx.Done()
-			grpcServer.Stop()
-			return nil
-		})
-	}
+	wg.Go(func() error {
+		return grpcServer.Serve(s.tcpServer.GrpcListener())
+	})
+	wg.Go(func() error {
+		<-cctx.Done()
+		grpcServer.Stop()
+		return nil
+	})
 
 	return wg.Wait()
 }
@@ -424,13 +413,6 @@ func (s *server) Close() {
 
 func (s *server) stopActorSystems() {
 	start := time.Now()
-	if s.tableActorSystem != nil {
-		s.tableActorSystem.Stop()
-		s.tableActorSystem = nil
-	}
-	log.Info("table actor system closed", zap.Duration("duration", time.Since(start)))
-
-	start = time.Now()
 	if s.useEventSortEngine && s.sortEngineFactory != nil {
 		if err := s.sortEngineFactory.Close(); err != nil {
 			log.Error("fails to close sort engine manager", zap.Error(err))

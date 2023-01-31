@@ -40,6 +40,10 @@ type ChangefeedInterface interface {
 		name string) (*v2.ChangeFeedInfo, error)
 	// Resume resumes a changefeed with given config
 	Resume(ctx context.Context, cfg *v2.ResumeChangefeedConfig, name string) error
+	// Delete deletes a changefeed by name
+	Delete(ctx context.Context, name string) error
+	// Pause pauses a changefeed with given name
+	Pause(ctx context.Context, name string) error
 }
 
 // changefeeds implements ChangefeedInterface
@@ -110,5 +114,25 @@ func (c *changefeeds) Resume(ctx context.Context,
 	return c.client.Post().
 		WithURI(u).
 		WithBody(cfg).
+		Do(ctx).Error()
+}
+
+// Delete a changefeed
+func (c *changefeeds) Delete(ctx context.Context,
+	name string,
+) error {
+	u := fmt.Sprintf("changefeeds/%s", name)
+	return c.client.Delete().
+		WithURI(u).
+		Do(ctx).Error()
+}
+
+// Pause a changefeed
+func (c *changefeeds) Pause(ctx context.Context,
+	name string,
+) error {
+	u := fmt.Sprintf("changefeeds/%s/pause", name)
+	return c.client.Post().
+		WithURI(u).
 		Do(ctx).Error()
 }

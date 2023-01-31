@@ -54,6 +54,7 @@ type JobMaster struct {
 	metadata              *metadata.MetaData
 	workerManager         *WorkerManager
 	taskManager           *TaskManager
+	ddlCoordinator        *DDLCoordinator
 	messageAgent          dmpkg.MessageAgent
 	checkpointAgent       checkpoint.Agent
 	messageHandlerManager p2p.MessageHandlerManager
@@ -117,6 +118,7 @@ func (jm *JobMaster) initComponents() error {
 	jm.taskManager = NewTaskManager(jm.ID(), taskStatus, jm.metadata.JobStore(), jm.messageAgent, jm.Logger(), jm.MetricFactory())
 	jm.workerManager = NewWorkerManager(jm.ID(), workerStatus, jm.metadata.JobStore(), jm.metadata.UnitStateStore(),
 		jm, jm.messageAgent, jm.checkpointAgent, jm.Logger(), jm.IsS3StorageEnabled())
+	jm.ddlCoordinator = NewDDLCoordinator(jm.ID(), jm.MetaKVClient(), jm.checkpointAgent, jm.metadata.JobStore(), jm.Logger())
 	return errors.Trace(err)
 }
 
@@ -138,6 +140,9 @@ func (jm *JobMaster) InitImpl(ctx context.Context) error {
 	if err := jm.taskManager.OperateTask(ctx, dmpkg.Create, jm.initJobCfg, nil); err != nil {
 		return errors.Trace(err)
 	}
+	if err := jm.ddlCoordinator.Reset(ctx); err != nil {
+		return err
+	}
 	jm.initialized.Store(true)
 	return nil
 }
@@ -151,6 +156,9 @@ func (jm *JobMaster) OnMasterRecovered(ctx context.Context) error {
 	}
 	if err := jm.bootstrap(ctx); err != nil {
 		return errors.Trace(err)
+	}
+	if err := jm.ddlCoordinator.Reset(ctx); err != nil {
+		return err
 	}
 	jm.initialized.Store(true)
 	return nil
@@ -335,6 +343,9 @@ func (jm *JobMaster) StopImpl(ctx context.Context) {
 	// remove other resources
 	if err := jm.removeCheckpoint(ctx); err != nil {
 		jm.Logger().Error("failed to remove checkpoint", zap.Error(err))
+	}
+	if err := jm.ddlCoordinator.ClearMetadata(ctx); err != nil {
+		jm.Logger().Error("failed to clear ddl metadata", zap.Error(err))
 	}
 	if err := jm.taskManager.OperateTask(ctx, dmpkg.Delete, nil, nil); err != nil {
 		jm.Logger().Error("failed to delete task", zap.Error(err))

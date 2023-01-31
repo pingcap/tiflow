@@ -62,6 +62,8 @@ func iterPermutation(sequence []int, fn func(sequence []int)) {
 }
 
 func newAgent4Test() *agent {
+	cfg := config.GetDefaultServerConfig().Debug.Scheduler
+	cfg.ChangefeedSettings = config.GetDefaultReplicaConfig().Scheduler
 	a := &agent{
 		ownerInfo: ownerInfo{
 			CaptureInfo: model.CaptureInfo{
@@ -70,8 +72,7 @@ func newAgent4Test() *agent {
 			},
 			Revision: schedulepb.OwnerRevision{Revision: 1},
 		},
-		compat: compat.New(
-			config.GetDefaultServerConfig().Debug.Scheduler, map[string]*model.CaptureInfo{}),
+		compat: compat.New(cfg, map[string]*model.CaptureInfo{}),
 	}
 
 	a.Version = "agent-version-1"
@@ -90,7 +91,11 @@ func TestNewAgent(t *testing.T) {
 	me := mock_etcd.NewMockCDCEtcdClient(gomock.NewController(t))
 
 	tableExector := newMockTableExecutor()
-	cfg := &config.SchedulerConfig{RegionPerSpan: 1}
+	cfg := &config.SchedulerConfig{
+		ChangefeedSettings: &config.ChangefeedSchedulerConfig{
+			RegionPerSpan: 1,
+		},
+	}
 
 	// owner and revision found successfully
 	me.EXPECT().GetOwnerID(gomock.Any()).Return("ownerID", nil).Times(1)
@@ -875,7 +880,9 @@ func TestAgentTransportCompat(t *testing.T) {
 	trans := transport.NewMockTrans()
 	a.trans = trans
 	a.compat = compat.New(&config.SchedulerConfig{
-		RegionPerSpan: 1,
+		ChangefeedSettings: &config.ChangefeedSchedulerConfig{
+			RegionPerSpan: 1,
+		},
 	}, map[model.CaptureID]*model.CaptureInfo{})
 	ctx := context.Background()
 
@@ -958,7 +965,7 @@ type MockTableExecutor struct {
 	mock.Mock
 
 	// it's preferred to use `pipeline.MockPipeline` here to make the test more vivid.
-	tables *spanz.Map[tablepb.TableState]
+	tables *spanz.BtreeMap[tablepb.TableState]
 }
 
 var _ internal.TableExecutor = (*MockTableExecutor)(nil)
@@ -966,73 +973,73 @@ var _ internal.TableExecutor = (*MockTableExecutor)(nil)
 // newMockTableExecutor creates a new mock table executor.
 func newMockTableExecutor() *MockTableExecutor {
 	return &MockTableExecutor{
-		tables: spanz.NewMap[tablepb.TableState](),
+		tables: spanz.NewBtreeMap[tablepb.TableState](),
 	}
 }
 
 // AddTableSpan adds a table span to the executor.
 func (e *MockTableExecutor) AddTableSpan(
-	ctx context.Context, tableID tablepb.Span, startTs model.Ts, isPrepare bool,
+	ctx context.Context, span tablepb.Span, startTs model.Ts, isPrepare bool,
 ) (bool, error) {
 	log.Info("AddTableSpan",
-		zap.Stringer("span", &tableID),
+		zap.String("span", span.String()),
 		zap.Any("startTs", startTs),
 		zap.Bool("isPrepare", isPrepare))
 
-	state, ok := e.tables.Get(tableID)
+	state, ok := e.tables.Get(span)
 	if ok {
 		switch state {
 		case tablepb.TableStatePreparing:
 			return true, nil
 		case tablepb.TableStatePrepared:
 			if !isPrepare {
-				e.tables.ReplaceOrInsert(tableID, tablepb.TableStateReplicating)
+				e.tables.ReplaceOrInsert(span, tablepb.TableStateReplicating)
 			}
 			return true, nil
 		case tablepb.TableStateReplicating:
 			return true, nil
 		case tablepb.TableStateStopped:
-			e.tables.Delete(tableID)
+			e.tables.Delete(span)
 		}
 	}
-	args := e.Called(ctx, tableID, startTs, isPrepare)
+	args := e.Called(ctx, span, startTs, isPrepare)
 	if args.Bool(0) {
-		e.tables.ReplaceOrInsert(tableID, tablepb.TableStatePreparing)
+		e.tables.ReplaceOrInsert(span, tablepb.TableStatePreparing)
 	}
 	return args.Bool(0), args.Error(1)
 }
 
 // IsAddTableSpanFinished determines if the table span has been added.
-func (e *MockTableExecutor) IsAddTableSpanFinished(tableID tablepb.Span, isPrepare bool) bool {
-	_, ok := e.tables.Get(tableID)
+func (e *MockTableExecutor) IsAddTableSpanFinished(span tablepb.Span, isPrepare bool) bool {
+	_, ok := e.tables.Get(span)
 	if !ok {
 		log.Panic("table which was added is not found",
-			zap.Stringer("span", &tableID),
+			zap.String("span", span.String()),
 			zap.Bool("isPrepare", isPrepare))
 	}
 
-	args := e.Called(tableID, isPrepare)
+	args := e.Called(span, isPrepare)
 	if args.Bool(0) {
-		e.tables.ReplaceOrInsert(tableID, tablepb.TableStatePrepared)
+		e.tables.ReplaceOrInsert(span, tablepb.TableStatePrepared)
 		if !isPrepare {
-			e.tables.ReplaceOrInsert(tableID, tablepb.TableStateReplicating)
+			e.tables.ReplaceOrInsert(span, tablepb.TableStateReplicating)
 		}
 		return true
 	}
 
-	e.tables.ReplaceOrInsert(tableID, tablepb.TableStatePreparing)
+	e.tables.ReplaceOrInsert(span, tablepb.TableStatePreparing)
 	if !isPrepare {
-		e.tables.ReplaceOrInsert(tableID, tablepb.TableStatePrepared)
+		e.tables.ReplaceOrInsert(span, tablepb.TableStatePrepared)
 	}
 
 	return false
 }
 
 // RemoveTableSpan removes a table span from the executor.
-func (e *MockTableExecutor) RemoveTableSpan(tableID tablepb.Span) bool {
-	state, ok := e.tables.Get(tableID)
+func (e *MockTableExecutor) RemoveTableSpan(span tablepb.Span) bool {
+	state, ok := e.tables.Get(span)
 	if !ok {
-		log.Warn("table to be remove is not found", zap.Stringer("span", &tableID))
+		log.Warn("table to be remove is not found", zap.String("span", span.String()))
 		return true
 	}
 	switch state {
@@ -1042,33 +1049,33 @@ func (e *MockTableExecutor) RemoveTableSpan(tableID tablepb.Span) bool {
 	default:
 	}
 	// the current `processor implementation, does not consider table's state
-	log.Info("RemoveTableSpan", zap.Stringer("span", &tableID), zap.Any("state", state))
+	log.Info("RemoveTableSpan", zap.String("span", span.String()), zap.Any("state", state))
 
-	args := e.Called(tableID)
+	args := e.Called(span)
 	if args.Bool(0) {
-		e.tables.ReplaceOrInsert(tableID, tablepb.TableStateStopped)
+		e.tables.ReplaceOrInsert(span, tablepb.TableStateStopped)
 	}
 	return args.Bool(0)
 }
 
 // IsRemoveTableSpanFinished determines if the table span has been removed.
-func (e *MockTableExecutor) IsRemoveTableSpanFinished(tableID tablepb.Span) (model.Ts, bool) {
-	state, ok := e.tables.Get(tableID)
+func (e *MockTableExecutor) IsRemoveTableSpanFinished(span tablepb.Span) (model.Ts, bool) {
+	state, ok := e.tables.Get(span)
 	if !ok {
 		// the real `table executor` processor, would panic in such case.
 		log.Warn("table to be removed is not found",
-			zap.Stringer("span", &tableID))
+			zap.String("span", span.String()))
 		return 0, true
 	}
-	args := e.Called(tableID)
+	args := e.Called(span)
 	if args.Bool(1) {
 		log.Info("remove table finished, remove it from the executor",
-			zap.Stringer("span", &tableID), zap.Any("state", state))
-		e.tables.Delete(tableID)
+			zap.String("span", span.String()), zap.Any("state", state))
+		e.tables.Delete(span)
 	} else {
 		// revert the state back to old state, assume it's `replicating`,
 		// but `preparing` / `prepared` can also be removed.
-		e.tables.ReplaceOrInsert(tableID, tablepb.TableStateReplicating)
+		e.tables.ReplaceOrInsert(span, tablepb.TableStateReplicating)
 	}
 
 	return model.Ts(args.Int(0)), args.Bool(1)
@@ -1084,14 +1091,10 @@ func (e *MockTableExecutor) GetTableSpanCount() int {
 	return result
 }
 
-// GetCheckpoint returns the last checkpoint.
-func (e *MockTableExecutor) GetCheckpoint() (checkpointTs, resolvedTs model.Ts) {
-	args := e.Called()
-	return args.Get(0).(model.Ts), args.Get(1).(model.Ts)
-}
-
 // GetTableSpanStatus implements TableExecutor interface
-func (e *MockTableExecutor) GetTableSpanStatus(span tablepb.Span) tablepb.TableStatus {
+func (e *MockTableExecutor) GetTableSpanStatus(
+	span tablepb.Span, collectStat bool,
+) tablepb.TableStatus {
 	state, ok := e.tables.Get(span)
 	if !ok {
 		state = tablepb.TableStateAbsent
