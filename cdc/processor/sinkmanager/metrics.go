@@ -49,6 +49,14 @@ var (
 		},
 		// type includes hit and miss.
 		[]string{"namespace", "changefeed", "type"})
+
+	// OutputEventCount is the metric that counts events output by the sorter.
+	OutputEventCount = prometheus.NewCounterVec(prometheus.CounterOpts{
+		Namespace: "ticdc",
+		Subsystem: "sorter",
+		Name:      "output_event_count",
+		Help:      "The number of events output by the sorter",
+	}, []string{"namespace", "changefeed", "type"})
 )
 
 // InitMetrics registers all metrics in this file.
@@ -56,4 +64,5 @@ func InitMetrics(registry *prometheus.Registry) {
 	registry.MustRegister(MemoryQuota)
 	registry.MustRegister(RedoEventCache)
 	registry.MustRegister(RedoEventCacheAccess)
+	registry.MustRegister(OutputEventCount)
 }
