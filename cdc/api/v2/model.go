@@ -604,3 +604,9 @@ type UpstreamConfig struct {
 	ID uint64 `json:"id"`
 	PDConfig
 }
+
+// ProcessorDetail holds the detail info of a processor
+type ProcessorDetail struct {
+	// All table ids that this processor are replicating.
+	Tables []int64 `json:"table_ids"`
+}
