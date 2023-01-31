@@ -155,7 +155,7 @@ func (w *sinkWorker) handleTask(ctx context.Context, task *sinkTask) (finalErr e
 				// All transactions before currTxnCommitTs are resolved.
 				err = w.advanceTableSink(ctx, task, currTxnCommitTs, committedTxnSize+pendingTxnSize)
 			} else {
-				// This means all events of the currenet transaction have been fetched, but we can't
+				// This means all events of the  transaction have been fetched, but we can't
 				// ensure whether there are more transaction with the same CommitTs or not.
 				err = w.advanceTableSinkWithBatchID(ctx, task, currTxnCommitTs, committedTxnSize+pendingTxnSize, batchID)
 				batchID += 1
