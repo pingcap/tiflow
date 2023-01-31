@@ -98,7 +98,7 @@ func GetTopicManagerAndTryCreateTopic(
 		topicCfg,
 	)
 	if err != nil {
-		return nil, cerror.WrapError(cerror.ErrKafkaNewSaramaProducer, err)
+		return nil, cerror.WrapError(cerror.ErrKafkaNewProducer, err)
 	}
 
 	if _, err := topicManager.CreateTopicAndWaitUntilVisible(topic); err != nil {

@@ -292,12 +292,12 @@ func NewKafkaSaramaProducer(
 	failpointCh := make(chan error, 1)
 	asyncProducer, err := client.AsyncProducer(changefeedID, closeCh, failpointCh)
 	if err != nil {
-		return nil, cerror.WrapError(cerror.ErrKafkaNewSaramaProducer, err)
+		return nil, cerror.WrapError(cerror.ErrKafkaNewProducer, err)
 	}
 
 	syncProducer, err := client.SyncProducer()
 	if err != nil {
-		return nil, cerror.WrapError(cerror.ErrKafkaNewSaramaProducer, err)
+		return nil, cerror.WrapError(cerror.ErrKafkaNewProducer, err)
 	}
 
 	runSaramaMetricsMonitor(ctx, client.MetricRegistry(), changefeedID, role, admin)
