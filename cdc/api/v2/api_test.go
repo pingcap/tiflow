@@ -64,6 +64,8 @@ type mockStatusProvider struct {
 	owner.StatusProvider
 	changefeedStatus *model.ChangeFeedStatus
 	changefeedInfo   *model.ChangeFeedInfo
+	processors       []*model.ProcInfoSnap
+	taskStatus       map[model.CaptureID]*model.TaskStatus
 	err              error
 }
 
@@ -79,4 +81,23 @@ func (m *mockStatusProvider) GetChangeFeedInfo(ctx context.Context,
 	changefeedID model.ChangeFeedID,
 ) (*model.ChangeFeedInfo, error) {
 	return m.changefeedInfo, m.err
+}
+
+// GetProcessors returns a list of mock processor infos.
+func (m *mockStatusProvider) GetProcessors(ctx context.Context) (
+	[]*model.ProcInfoSnap,
+	error,
+) {
+	return m.processors, m.err
+}
+
+// GetAllTaskStatuses returns a map of mock task statuses.
+func (m *mockStatusProvider) GetAllTaskStatuses(
+	ctx context.Context,
+	changefeedID model.ChangeFeedID,
+) (
+	map[model.CaptureID]*model.TaskStatus,
+	error,
+) {
+	return m.taskStatus, m.err
 }

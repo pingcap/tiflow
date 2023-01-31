@@ -42,7 +42,7 @@ func NewSaramaAdminClient(ctx context.Context, config *Options) (ClusterAdminCli
 	return &saramaAdminClient{client: client}, nil
 }
 
-func (a *saramaAdminClient) GetAllBrokers() ([]Broker, error) {
+func (a *saramaAdminClient) GetAllBrokers(context.Context) ([]Broker, error) {
 	brokers, _, err := a.client.DescribeCluster()
 	if err != nil {
 		return nil, err
@@ -58,15 +58,15 @@ func (a *saramaAdminClient) GetAllBrokers() ([]Broker, error) {
 	return result, nil
 }
 
-func (a *saramaAdminClient) GetCoordinator() (int32, error) {
+func (a *saramaAdminClient) GetCoordinator(context.Context) (int, error) {
 	_, controllerID, err := a.client.DescribeCluster()
 	if err != nil {
 		return 0, err
 	}
-	return controllerID, nil
+	return int(controllerID), nil
 }
 
-func (a *saramaAdminClient) GetBrokerConfig(configName string) (string, error) {
+func (a *saramaAdminClient) GetBrokerConfig(_ context.Context, configName string) (string, error) {
 	_, controller, err := a.client.DescribeCluster()
 	if err != nil {
 		return "", err
@@ -90,7 +90,7 @@ func (a *saramaAdminClient) GetBrokerConfig(configName string) (string, error) {
 	return configEntries[0].Value, nil
 }
 
-func (a *saramaAdminClient) GetAllTopicsMeta() (map[string]TopicDetail, error) {
+func (a *saramaAdminClient) GetAllTopicsMeta(context.Context) (map[string]TopicDetail, error) {
 	topics, err := a.client.ListTopics()
 	if err != nil {
 		return nil, err
@@ -116,6 +116,7 @@ func (a *saramaAdminClient) GetAllTopicsMeta() (map[string]TopicDetail, error) {
 }
 
 func (a *saramaAdminClient) GetTopicsMeta(
+	_ context.Context,
 	topics []string,
 	ignoreTopicError bool,
 ) (map[string]TopicDetail, error) {
@@ -144,8 +145,12 @@ func (a *saramaAdminClient) GetTopicsMeta(
 	return result, nil
 }
 
-func (a *saramaAdminClient) CreateTopic(topic string, detail *TopicDetail, validateOnly bool) error {
-	err := a.client.CreateTopic(topic, &sarama.TopicDetail{
+func (a *saramaAdminClient) CreateTopic(
+	_ context.Context,
+	detail *TopicDetail,
+	validateOnly bool,
+) error {
+	err := a.client.CreateTopic(detail.Name, &sarama.TopicDetail{
 		NumPartitions:     detail.NumPartitions,
 		ReplicationFactor: detail.ReplicationFactor,
 	}, validateOnly)
