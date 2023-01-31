@@ -366,7 +366,7 @@ func GetDefaultReplicaConfig() *ReplicaConfig {
 		Consistent: &ConsistentConfig{
 			Level:             "none",
 			MaxLogSize:        64,
-			FlushIntervalInMs: config.MinFlushIntervalInMs,
+			FlushIntervalInMs: config.DefaultFlushIntervalInMs,
 			Storage:           "",
 		},
 	}
@@ -603,4 +603,10 @@ func (info *ChangeFeedInfo) Unmarshal(data []byte) error {
 type UpstreamConfig struct {
 	ID uint64 `json:"id"`
 	PDConfig
+}
+
+// ProcessorDetail holds the detail info of a processor
+type ProcessorDetail struct {
+	// All table ids that this processor are replicating.
+	Tables []int64 `json:"table_ids"`
 }

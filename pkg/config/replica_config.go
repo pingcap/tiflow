@@ -63,7 +63,7 @@ var defaultReplicaConfig = &ReplicaConfig{
 	Consistent: &ConsistentConfig{
 		Level:             "none",
 		MaxLogSize:        64,
-		FlushIntervalInMs: MinFlushIntervalInMs,
+		FlushIntervalInMs: DefaultFlushIntervalInMs,
 		Storage:           "",
 	},
 	Scheduler: &ChangefeedSchedulerConfig{
