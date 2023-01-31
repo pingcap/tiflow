@@ -14,12 +14,12 @@
 package framework
 
 import (
+	"context"
 	"database/sql"
 	"fmt"
 	"os"
 	"os/exec"
 
-	"context"
 	"github.com/integralist/go-findroot/find"
 	"github.com/pingcap/errors"
 	"github.com/pingcap/log"
