@@ -314,7 +314,7 @@ func (c *changefeed) tick(ctx cdcContext.Context, captures map[model.CaptureID]*
 	}
 	c.sink.emitCheckpointTs(checkpointTs, c.currentTables)
 
-	err := c.handleBarrierX(ctx)
+	err := c.handleBarrier(ctx)
 	if err != nil {
 		return errors.Trace(err)
 	}
@@ -836,7 +836,7 @@ func (c *changefeed) handleDDL(ctx cdcContext.Context) error {
 	return nil
 }
 
-func (c *changefeed) handleBarrierX(ctx cdcContext.Context) error {
+func (c *changefeed) handleBarrier(ctx cdcContext.Context) error {
 	barrierTp, barrierTs := c.barriers.Min()
 	c.metricsChangefeedBarrierTsGauge.Set(float64(oracle.ExtractPhysical(barrierTs)))
 	checkpointReachBarrier := barrierTs == c.state.Status.CheckpointTs
@@ -863,93 +863,6 @@ func (c *changefeed) handleBarrierX(ctx cdcContext.Context) error {
 	// use the updated barrierTs as the new globalBarrierTs
 	_, c.barrier.GlobalBarrierTs = c.barriers.Min()
 	return c.handleDDL(ctx)
-}
-
-// handleBarrier calculates the barrierTs of the changefeed.
-// barrierTs is used to control the data that can be flush to downstream.
-func (c *changefeed) handleBarrier(ctx cdcContext.Context) (uint64, error) {
-	barrierTp, barrierTs := c.barriers.Min()
-
-	c.metricsChangefeedBarrierTsGauge.Set(float64(oracle.ExtractPhysical(barrierTs)))
-
-	// It means:
-	//   1. All data before the barrierTs was sent to downstream.
-	//   2. No more data after barrierTs was sent to downstream.
-	// So we can execute the DDL job at the barrierTs.
-	checkpointReachBarrier := barrierTs == c.state.Status.CheckpointTs
-
-	// TODO: To check if we can remove the `barrierTs == c.state.Status.ResolvedTs` condition.
-	fullyBlocked := checkpointReachBarrier && barrierTs == c.state.Status.ResolvedTs
-
-	switch barrierTp {
-	case ddlResolvedBarrier:
-		ddlResolvedTs, ddlJob := c.ddlPuller.FrontDDL()
-		// ddlJob is nil means there is no ddl job in the queue
-		// and the ddlResolvedTs is updated by resolvedTs event.
-		if ddlJob == nil || ddlResolvedTs != barrierTs {
-			// This situation should only happen when the changefeed release
-			// but the `c.barriers` is not cleaned.
-			// In this case, ddlPuller would restart at `checkpointTs - 1`,
-			// so ddlResolvedTs would be less than barrierTs for a short time.
-			// TODO: To check if we can remove it, since the `c.barriers` is cleaned now.
-			if ddlResolvedTs < barrierTs {
-				return barrierTs, nil
-			}
-			// If the ddlResolvedTs is greater than barrierTs, we should not execute
-			// the DDL job, because the changefeed is not blocked by the DDL job yet,
-			// which also means not all data before the DDL job is sent to downstream.
-			// For example, let say barrierTs(ts=10) and there are some ddl jobs in
-			// the queue: [ddl-1(ts=11), ddl-2(ts=12), ddl-3(ts=13)] => ddlResolvedTs(ts=11)
-			// If ddlResolvedTs(ts=11) > barrierTs(ts=10), it means the last barrier was sent
-			// to sink is barrierTs(ts=10), so the data have been sent ware at most ts=10 not ts=11.
-			c.barriers.Update(ddlResolvedBarrier, ddlResolvedTs)
-			_, barrierTs = c.barriers.Min()
-			return barrierTs, nil
-		}
-
-		// TiCDC guarantees all dml(s) that happen before a ddl was sent to
-		// downstream when this ddl is sent. So, we need to wait checkpointTs is
-		// fullyBlocked at ddl resolvedTs (equivalent to ddl barrierTs here) before we
-		// execute the next ddl.
-		// For example, let say there are some events are replicated by cdc:
-		// [dml-1(ts=5), dml-2(ts=8), ddl-1(ts=11), ddl-2(ts=12)].
-		// We need to wait `checkpointTs == ddlResolvedTs(ts=11)` before execute ddl-1.
-		if !checkpointReachBarrier {
-			return barrierTs, nil
-		}
-
-		done, err := c.asyncExecDDLJob(ctx, ddlJob)
-		if err != nil {
-			return 0, errors.Trace(err)
-		}
-		if !done {
-			return barrierTs, nil
-		}
-
-		// If the last ddl was executed successfully, we can pop it
-		// from ddlPuller and update the ddl barrierTs.
-		c.lastDDLTs = ddlResolvedTs
-		c.ddlPuller.PopFrontDDL()
-		newDDLResolvedTs, _ := c.ddlPuller.FrontDDL()
-		c.barriers.Update(ddlResolvedBarrier, newDDLResolvedTs)
-	case syncPointBarrier:
-		if !fullyBlocked {
-			return barrierTs, nil
-		}
-		nextSyncPointTs := oracle.GoTimeToTS(oracle.GetTimeFromTS(barrierTs).Add(c.state.Info.Config.SyncPointInterval))
-		if err := c.sink.emitSyncPoint(ctx, barrierTs); err != nil {
-			return 0, errors.Trace(err)
-		}
-		c.barriers.Update(syncPointBarrier, nextSyncPointTs)
-	case finishBarrier:
-		if fullyBlocked {
-			c.feedStateManager.MarkFinished()
-		}
-		return barrierTs, nil
-	default:
-		log.Panic("Unknown barrier type", zap.Int("barrierType", int(barrierTp)))
-	}
-	return barrierTs, nil
 }
 
 // asyncExecDDLJob execute ddl job asynchronously, it returns true if the jod is done.
