@@ -30,7 +30,6 @@ import (
 	"github.com/pingcap/tiflow/cdc"
 	"github.com/pingcap/tiflow/cdc/capture"
 	"github.com/pingcap/tiflow/cdc/kv"
-	"github.com/pingcap/tiflow/cdc/processor/pipeline/system"
 	"github.com/pingcap/tiflow/cdc/processor/sourcemanager/engine/factory"
 	ssystem "github.com/pingcap/tiflow/cdc/sorter/db/system"
 	"github.com/pingcap/tiflow/cdc/sorter/unified"
@@ -84,8 +83,6 @@ type server struct {
 	statusServer *http.Server
 	etcdClient   etcd.CDCEtcdClient
 	pdEndpoints  []string
-
-	tableActorSystem *system.System
 
 	// If it's true sortEngineManager will be used, otherwise sorterSystem will be used.
 	useEventSortEngine bool
@@ -198,18 +195,12 @@ func (s *server) prepare(ctx context.Context) error {
 
 	s.capture = capture.NewCapture(
 		s.pdEndpoints, createEtcdClient, s.grpcService,
-		s.tableActorSystem, s.sortEngineFactory, s.sorterSystem)
+		s.sortEngineFactory, s.sorterSystem)
 
 	return nil
 }
 
 func (s *server) startActorSystems(ctx context.Context) error {
-	if s.tableActorSystem != nil {
-		s.tableActorSystem.Stop()
-	}
-	s.tableActorSystem = system.NewSystem()
-	s.tableActorSystem.Start(ctx)
-
 	conf := config.GetGlobalServerConfig()
 	if !conf.Debug.EnableDBSorter {
 		return nil
@@ -422,13 +413,6 @@ func (s *server) Close() {
 
 func (s *server) stopActorSystems() {
 	start := time.Now()
-	if s.tableActorSystem != nil {
-		s.tableActorSystem.Stop()
-		s.tableActorSystem = nil
-	}
-	log.Info("table actor system closed", zap.Duration("duration", time.Since(start)))
-
-	start = time.Now()
 	if s.useEventSortEngine && s.sortEngineFactory != nil {
 		if err := s.sortEngineFactory.Close(); err != nil {
 			log.Error("fails to close sort engine manager", zap.Error(err))

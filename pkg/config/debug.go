@@ -23,12 +23,8 @@ type DebugConfig struct {
 	TableActor *TableActorConfig `toml:"table-actor" json:"table-actor"`
 
 	// EnablePullBasedSink enables pull-based sink, true by default.
-	//
-	// NOTE: currently it can only be enabled with EnableDBSorter, because unified
-	// sorter hasn't been transformed into the new interface.
-	//
-	// TODO(qupeng): we need to transform unified sorter into EventSortEngine to remove
-	// the above limit.
+	// DEPRECATED: this option will be removed in the future.
+	// We will always use pull-based sink.
 	EnablePullBasedSink bool `toml:"enable-pull-based-sink" json:"enable-pull-based-sink"`
 
 	// EnableDBSorter enables db sorter.
@@ -83,9 +79,4 @@ func (c *DebugConfig) ValidateAndAdjust() error {
 	}
 
 	return nil
-}
-
-// IsPullBasedSinkEnabled returns whether pull-based sink is enabled.
-func (c *DebugConfig) IsPullBasedSinkEnabled() bool {
-	return c.EnablePullBasedSink && c.EnableDBSorter && c.EnableNewSink
 }
