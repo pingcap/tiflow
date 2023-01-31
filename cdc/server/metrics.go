@@ -20,6 +20,7 @@ import (
 	"github.com/pingcap/tiflow/cdc/processor"
 	"github.com/pingcap/tiflow/cdc/processor/sourcemanager/engine"
 	"github.com/pingcap/tiflow/cdc/puller"
+	"github.com/pingcap/tiflow/cdc/puller/memorysorter"
 	redo "github.com/pingcap/tiflow/cdc/redo/common"
 	"github.com/pingcap/tiflow/cdc/scheduler"
 	sink "github.com/pingcap/tiflow/cdc/sink/metrics"
