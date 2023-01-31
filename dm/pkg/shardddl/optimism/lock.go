@@ -19,6 +19,7 @@ import (
 	"fmt"
 	"sync"
 
+	"context"
 	"github.com/pingcap/errors"
 	"github.com/pingcap/tidb/parser"
 	"github.com/pingcap/tidb/parser/ast"
@@ -32,7 +33,6 @@ import (
 	"github.com/pingcap/tiflow/dm/pkg/terror"
 	clientv3 "go.etcd.io/etcd/client/v3"
 	"go.uber.org/zap"
-	"golang.org/x/net/context"
 )
 
 // DropColumnStage represents whether drop column done for a sharding table.

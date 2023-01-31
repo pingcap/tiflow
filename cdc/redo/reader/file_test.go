@@ -22,12 +22,12 @@ import (
 	"testing"
 	"time"
 
+	"context"
 	"github.com/pingcap/tiflow/cdc/model"
 	"github.com/pingcap/tiflow/cdc/redo/writer"
 	"github.com/pingcap/tiflow/pkg/redo"
 	"github.com/pingcap/tiflow/pkg/uuid"
 	"github.com/stretchr/testify/require"
-	"golang.org/x/net/context"
 )
 
 func TestReaderNewReader(t *testing.T) {

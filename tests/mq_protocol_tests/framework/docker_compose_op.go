@@ -19,13 +19,13 @@ import (
 	"os"
 	"os/exec"
 
+	"context"
 	"github.com/integralist/go-findroot/find"
 	"github.com/pingcap/errors"
 	"github.com/pingcap/log"
 	cerrors "github.com/pingcap/tiflow/pkg/errors"
 	"github.com/pingcap/tiflow/pkg/retry"
 	"go.uber.org/zap"
-	"golang.org/x/net/context"
 )
 
 // DockerComposeOperator represent a docker compose
