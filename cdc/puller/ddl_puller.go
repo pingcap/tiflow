@@ -509,6 +509,7 @@ type DDLPuller interface {
 	FrontDDL() (uint64, *timodel.Job)
 	// PopFrontDDL returns and pops the first DDL job in the internal queue
 	PopFrontDDL() (uint64, *timodel.Job)
+	ResolvedTs() uint64
 	// Close closes the DDLPuller
 	Close()
 }
@@ -674,6 +675,10 @@ func (h *ddlPullerImpl) PopFrontDDL() (uint64, *timodel.Job) {
 	job := h.pendingDDLJobs[0]
 	h.pendingDDLJobs = h.pendingDDLJobs[1:]
 	return job.BinlogInfo.FinishedTS, job
+}
+
+func (h *ddlPullerImpl) ResolvedTs() uint64 {
+	return h.resolvedTS
 }
 
 // Close the ddl puller, release all resources.

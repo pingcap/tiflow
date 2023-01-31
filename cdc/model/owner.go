@@ -261,6 +261,7 @@ func (p ProcessorsInfos) String() string {
 type ChangeFeedStatus struct {
 	ResolvedTs   uint64       `json:"resolved-ts"`
 	CheckpointTs uint64       `json:"checkpoint-ts"`
+	Barrier      BarrierEvent `json:"barrier-event"`
 	AdminJobType AdminJobType `json:"admin-job-type"`
 }
 

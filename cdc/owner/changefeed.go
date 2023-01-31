@@ -15,6 +15,7 @@ package owner
 
 import (
 	"context"
+	"reflect"
 	"sync"
 	"time"
 
@@ -101,6 +102,9 @@ type changefeed struct {
 	// The ones that have not been executed yet do not have.
 	currentTables []*model.TableInfo
 
+	ddlHolder    *DDLHolder
+	barrierEvent *model.BarrierEvent
+
 	errCh chan error
 	// cancel the running goroutine start by `DDLPuller`
 	cancel context.CancelFunc
@@ -173,18 +177,18 @@ func newChangefeed(
 func newChangefeed4Test(
 	id model.ChangeFeedID, state *orchestrator.ChangefeedReactorState, up *upstream.Upstream,
 	newDDLPuller func(ctx context.Context,
-		replicaConfig *config.ReplicaConfig,
-		up *upstream.Upstream,
-		startTs uint64,
-		changefeed model.ChangeFeedID,
-	) (puller.DDLPuller, error),
+	replicaConfig *config.ReplicaConfig,
+	up *upstream.Upstream,
+	startTs uint64,
+	changefeed model.ChangeFeedID,
+) (puller.DDLPuller, error),
 	newSink func(changefeedID model.ChangeFeedID, info *model.ChangeFeedInfo, reportErr func(err error)) DDLSink,
 	newScheduler func(
-		ctx cdcContext.Context, up *upstream.Upstream, cfg *config.SchedulerConfig,
-	) (scheduler.Scheduler, error),
+	ctx cdcContext.Context, up *upstream.Upstream, cfg *config.SchedulerConfig,
+) (scheduler.Scheduler, error),
 	newDownstreamObserver func(
-		ctx context.Context, sinkURIStr string, replCfg *config.ReplicaConfig,
-	) (observer.Observer, error),
+	ctx context.Context, sinkURIStr string, replCfg *config.ReplicaConfig,
+) (observer.Observer, error),
 ) *changefeed {
 	cfg := config.NewDefaultSchedulerConfig()
 	c := newChangefeed(id, state, up, cfg)
@@ -309,18 +313,18 @@ func (c *changefeed) tick(ctx cdcContext.Context, captures map[model.CaptureID]*
 	}
 	c.sink.emitCheckpointTs(checkpointTs, c.currentTables)
 
-	barrierTs, err := c.handleBarrier(ctx)
+	err := c.handleBarrierX(ctx)
 	if err != nil {
 		return errors.Trace(err)
 	}
 	log.Debug("owner handles barrier",
 		zap.String("namespace", c.id.Namespace),
 		zap.String("changefeed", c.id.ID),
-		zap.Uint64("barrierTs", barrierTs),
+		zap.Any("barrier", c.barrierEvent),
 		zap.Uint64("checkpointTs", checkpointTs))
 
-	if barrierTs < checkpointTs {
-		// This condition implies that the DDL resolved-ts has not yet reached checkpointTs,
+	if c.barrierEvent.GlobalBarrierTs < checkpointTs {
+		// This condition implies that the ddlPuller resolvedTs has not yet reached checkpointTs,
 		// which implies that it would be premature to schedule tables or to update status.
 		// So we return here.
 		return nil
@@ -358,13 +362,14 @@ func (c *changefeed) tick(ctx cdcContext.Context, captures map[model.CaptureID]*
 	// If the owner is just initialized, barrierTs can be `checkpoint-1`.
 	// In such case the `newResolvedTs` and `newCheckpointTs` may be larger
 	// than the barrierTs, but it shouldn't be, so we need to handle it here.
-	if newResolvedTs > barrierTs {
-		newResolvedTs = barrierTs
+	if newResolvedTs > c.barrierEvent.GlobalBarrierTs {
+		newResolvedTs = c.barrierEvent.GlobalBarrierTs
 	}
-	if newCheckpointTs > barrierTs {
-		newCheckpointTs = barrierTs
+
+	if newCheckpointTs > c.barrierEvent.GlobalBarrierTs {
+		newCheckpointTs = c.barrierEvent.GlobalBarrierTs
 	}
-	prevResolvedTs := c.state.Status.ResolvedTs
+
 	if c.redoManager.Enabled() {
 		var flushedCheckpointTs, flushedResolvedTs model.Ts
 		// newResolvedTs can never exceed the barrier timestamp boundary. If redo is enabled,
@@ -382,29 +387,26 @@ func (c *changefeed) tick(ctx cdcContext.Context, captures map[model.CaptureID]*
 		if flushedResolvedTs != 0 {
 			// It's not necessary to replace newCheckpointTs with flushedResolvedTs,
 			// as cdc can ensure newCheckpointTs can never exceed prevResolvedTs.
-			newResolvedTs = flushedResolvedTs
+			c.barrierEvent.GlobalBarrierTs = flushedResolvedTs
 		} else {
-			newResolvedTs = prevResolvedTs
+			c.barrierEvent.GlobalBarrierTs = c.state.Status.Barrier.GlobalBarrierTs
 		}
-		metricsResolvedTs = newResolvedTs
-	} else {
-		// If redo is not enabled, there is no need to wait the slowest table
-		// progress, we can just use `barrierTs` as  `newResolvedTs` to make
-		// the checkpointTs as close as possible to the barrierTs.
-		newResolvedTs = barrierTs
+		// If redo is enabled, resolvedTs should be less than global barrier ts
+		metricsResolvedTs = c.barrierEvent.GlobalBarrierTs
 	}
-	log.Debug("owner prepares to update status",
-		zap.Uint64("prevResolvedTs", prevResolvedTs),
-		zap.Uint64("newResolvedTs", newResolvedTs),
-		zap.Uint64("newCheckpointTs", newCheckpointTs),
-		zap.String("namespace", c.id.Namespace),
-		zap.String("changefeed", c.id.ID))
+
 	// resolvedTs should never regress but checkpointTs can, as checkpointTs has already
 	// been decreased when the owner is initialized.
-	if newResolvedTs < prevResolvedTs {
-		newResolvedTs = prevResolvedTs
+	if newResolvedTs < c.state.Status.ResolvedTs {
+		newResolvedTs = c.state.Status.ResolvedTs
 		metricsResolvedTs = newResolvedTs
 	}
+
+	// globalBarrierTs should never regress
+	if c.barrierEvent.GlobalBarrierTs < c.state.Status.Barrier.GlobalBarrierTs {
+		c.barrierEvent.GlobalBarrierTs = c.state.Status.Barrier.GlobalBarrierTs
+	}
+
 	failpoint.Inject("ChangefeedOwnerDontUpdateCheckpoint", func() {
 		if c.lastDDLTs != 0 && c.state.Status.CheckpointTs >= c.lastDDLTs {
 			log.Info("owner won't update checkpoint because of failpoint",
@@ -415,6 +417,14 @@ func (c *changefeed) tick(ctx cdcContext.Context, captures map[model.CaptureID]*
 			newCheckpointTs = c.state.Status.CheckpointTs
 		}
 	})
+
+	log.Debug("owner prepares to update status",
+		zap.Any("prevBarrier", c.state.Status.Barrier),
+		zap.Any("newBarrier", c.barrierEvent),
+		zap.Uint64("newResolvedTs", newResolvedTs),
+		zap.Uint64("newCheckpointTs", newCheckpointTs),
+		zap.String("namespace", c.id.Namespace),
+		zap.String("changefeed", c.id.ID))
 
 	c.updateStatus(newCheckpointTs, newResolvedTs)
 	c.updateMetrics(currentTs, newCheckpointTs, metricsResolvedTs)
@@ -505,7 +515,7 @@ LOOP:
 	if c.state.Info.Config.EnableSyncPoint {
 		c.barriers.Update(syncPointBarrier, resolvedTs)
 	}
-	c.barriers.Update(ddlJobBarrier, ddlStartTs)
+	c.barriers.Update(ddlResolvedBarrier, ddlStartTs)
 	c.barriers.Update(finishBarrier, c.state.Info.GetTargetTs())
 
 	c.schema, err = newSchemaWrap4Owner(c.upstream.KVStorage, ddlStartTs, c.state.Info.Config, c.id)
@@ -774,6 +784,86 @@ func (c *changefeed) preflightCheck(captures map[model.CaptureID]*model.CaptureI
 	return
 }
 
+func (c *changefeed) handleDDL(ctx cdcContext.Context) error {
+	_, ddl := c.ddlPuller.FrontDDL()
+	if ddl != nil {
+		ddlEvents, err := c.schema.BuildDDLEvents(ddl)
+		if err != nil {
+			return errors.Trace(err)
+		}
+		c.ddlHolder.AddDDLs(ddlEvents)
+	}
+	// apply ddl to owner schema
+	err := c.schema.HandleDDL(ddl)
+	if err != nil {
+		return errors.Trace(err)
+	}
+
+	if c.redoManager.Enabled() {
+		for _, ddlEvent := range c.ddlEventCache {
+			// FIXME: seems it's not necessary to emit DDL to redo storage,
+			// because for a given redo meta with range (checkpointTs, resolvedTs],
+			// there must be no pending DDLs not flushed into DDL sink.
+			err = c.redoManager.EmitDDLEvent(ctx, ddlEvent)
+			if err != nil {
+				return err
+			}
+		}
+	}
+	// It means:
+	//   1. All data before the barrierTs was sent to downstream.
+	//   2. No more data after barrierTs was sent to downstream.
+	// So we can execute the DDL event at the barrierTs.
+	if c.state.Status.CheckpointTs == c.barrierEvent.GetMinTableBarrierTs() {
+		ddlEvent := c.ddlHolder.GetMinDDL()
+		if ddlEvent != nil {
+			eventDone, err := c.asyncExecDDLEvent(ctx, ddlEvent)
+			if err != nil {
+				return err
+			}
+			if eventDone {
+				c.ddlEventCache = nil
+				// It has expired.
+				// We should use the latest table names now.
+				c.currentTables = nil
+			}
+			c.ddlHolder.RemoveMinDDL()
+		}
+	}
+	// update ddl barrier ts
+	c.barrierEvent.TableBarrier = c.ddlHolder.GetALLTableMinDDLTs()
+	return nil
+}
+
+func (c *changefeed) handleBarrierX(ctx cdcContext.Context) error {
+	barrierTp, barrierTs := c.barriers.Min()
+	c.metricsChangefeedBarrierTsGauge.Set(float64(oracle.ExtractPhysical(barrierTs)))
+	checkpointReachBarrier := barrierTs == c.state.Status.CheckpointTs
+	switch barrierTp {
+	case syncPointBarrier:
+		if !checkpointReachBarrier {
+			break
+		}
+		nextSyncPointTs := oracle.GoTimeToTS(oracle.GetTimeFromTS(barrierTs).Add(c.state.Info.Config.SyncPointInterval))
+		if err := c.sink.emitSyncPoint(ctx, barrierTs); err != nil {
+			return errors.Trace(err)
+		}
+		c.barriers.Update(syncPointBarrier, nextSyncPointTs)
+	case finishBarrier:
+		if checkpointReachBarrier {
+			c.feedStateManager.MarkFinished()
+		}
+		break
+	case ddlResolvedBarrier:
+		c.barriers.Update(ddlResolvedBarrier, c.ddlPuller.ResolvedTs())
+	default:
+		log.Panic("Unknown barrier type", zap.Int("barrierType", int(barrierTp)))
+	}
+	// use the updated barrierTs as the new globalBarrierTs
+	_, c.barrierEvent.GlobalBarrierTs = c.barriers.Min()
+	return c.handleDDL(ctx)
+}
+
 // handleBarrier calculates the barrierTs of the changefeed.
 // barrierTs is used to control the data that can be flush to downstream.
 func (c *changefeed) handleBarrier(ctx cdcContext.Context) (uint64, error) {
@@ -791,7 +881,7 @@ func (c *changefeed) handleBarrier(ctx cdcContext.Context) (uint64, error) {
 	fullyBlocked := checkpointReachBarrier && barrierTs == c.state.Status.ResolvedTs
 
 	switch barrierTp {
-	case ddlJobBarrier:
+	case ddlResolvedBarrier:
 		ddlResolvedTs, ddlJob := c.ddlPuller.FrontDDL()
 		// ddlJob is nil means there is no ddl job in the queue
 		// and the ddlResolvedTs is updated by resolvedTs event.
@@ -811,7 +901,7 @@ func (c *changefeed) handleBarrier(ctx cdcContext.Context) (uint64, error) {
 			// the queue: [ddl-1(ts=11), ddl-2(ts=12), ddl-3(ts=13)] => ddlResolvedTs(ts=11)
 			// If ddlResolvedTs(ts=11) > barrierTs(ts=10), it means the last barrier was sent
 			// to sink is barrierTs(ts=10), so the data have been sent ware at most ts=10 not ts=11.
-			c.barriers.Update(ddlJobBarrier, ddlResolvedTs)
+			c.barriers.Update(ddlResolvedBarrier, ddlResolvedTs)
 			_, barrierTs = c.barriers.Min()
 			return barrierTs, nil
 		}
@@ -840,7 +930,7 @@ func (c *changefeed) handleBarrier(ctx cdcContext.Context) (uint64, error) {
 		c.lastDDLTs = ddlResolvedTs
 		c.ddlPuller.PopFrontDDL()
 		newDDLResolvedTs, _ := c.ddlPuller.FrontDDL()
-		c.barriers.Update(ddlJobBarrier, newDDLResolvedTs)
+		c.barriers.Update(ddlResolvedBarrier, newDDLResolvedTs)
 	case syncPointBarrier:
 		if !fullyBlocked {
 			return barrierTs, nil
@@ -986,6 +1076,11 @@ func (c *changefeed) updateStatus(checkpointTs, resolvedTs model.Ts) {
 			status.CheckpointTs = checkpointTs
 			changed = true
 		}
+		if !reflect.DeepEqual(status.Barrier, *c.barrierEvent) {
+			status.Barrier = *c.barrierEvent
+			changed = true
+		}
+		log.Info("fizz:update changefeed status", zap.String("changefeed", c.id.ID), zap.Any("status", status))
 		return status, changed, nil
 	})
 }

@@ -451,3 +451,18 @@ func (info *ChangeFeedInfo) fixMemoryQuota() {
 func (info *ChangeFeedInfo) fixScheduler() {
 	info.Config.FixScheduler()
 }
+
+type BarrierEvent struct {
+	GlobalBarrierTs Ts
+	TableBarrier    map[TableName]Ts
+}
+
+func (b *BarrierEvent) GetMinTableBarrierTs() Ts {
+	res := b.GlobalBarrierTs
+	for _, ts := range b.TableBarrier {
+		if ts < res {
+			res = ts
+		}
+	}
+	return res
+}

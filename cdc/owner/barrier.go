@@ -23,8 +23,8 @@ import (
 type barrierType int
 
 const (
-	// ddlJobBarrier denotes a replication barrier caused by a DDL.
-	ddlJobBarrier barrierType = iota
+	// ddlResolvedBarrier denotes a replication barrier caused by a DDL.
+	ddlResolvedBarrier barrierType = iota
 	// syncPointBarrier denotes a barrier for snapshot replication.
 	syncPointBarrier
 	// finishBarrier denotes a barrier for changefeed finished.
