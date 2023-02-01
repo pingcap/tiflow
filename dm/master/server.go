@@ -2653,7 +2653,7 @@ func (s *Server) OperateRelay(ctx context.Context, req *pb.OperateRelayRequest) 
 		} else {
 			resp2.Sources = append(resp2.Sources, &pb.CommonWorkerResponse{
 				Result: true,
-				Msg:    "source relay is operated but the bounded worker is offline",
+				Msg:    "source relay is operated but the bound worker is offline",
 				Source: req.Source,
 				Worker: worker,
 			})
