@@ -18,7 +18,7 @@ function test_worker_restart() {
 	kill_process dm-worker1
 	check_port_offline $WORKER1_PORT 20
 
-	# source1 bound to worker3
+	# source1 is bound to worker3
 	run_dm_ctl_with_retry $WORK_DIR "127.0.0.1:$MASTER_PORT" \
 		"list-member -w -n worker3" \
 		"\"stage\": \"bound\"" 1 \
@@ -95,7 +95,7 @@ function test_transfer_two_sources() {
 	kill_process dm-worker1
 	check_port_offline $WORKER1_PORT 20
 
-	# source1 bound to worker2
+	# source1 is bound to worker2
 	run_dm_ctl_with_retry $WORK_DIR "127.0.0.1:$MASTER_PORT" \
 		"list-member -w -n worker2" \
 		"\"stage\": \"bound\"" 1 \
@@ -124,7 +124,7 @@ function test_transfer_two_sources() {
 	kill_process dm-worker3
 	check_port_offline $WORKER3_PORT 20
 
-	# source2 bound to worker1
+	# source2 is bound to worker1
 	run_dm_ctl_with_retry $WORK_DIR "127.0.0.1:$MASTER_PORT" \
 		"list-member -w -n worker1" \
 		"\"stage\": \"bound\"" 1 \
@@ -160,7 +160,7 @@ function test_transfer_two_sources() {
 	run_dm_worker $WORK_DIR/worker3 $WORKER3_PORT $CONF_DIR/dm-worker3.toml
 	check_rpc_alive $cur/../bin/check_worker_online 127.0.0.1:$WORKER3_PORT
 
-	# source2 bound to worker3 since load_task3
+	# source2 is bound to worker3 since load_task3
 	run_dm_ctl_with_retry $WORK_DIR "127.0.0.1:$MASTER_PORT" \
 		"list-member -w -n worker2" \
 		"\"stage\": \"bound\"" 1 \

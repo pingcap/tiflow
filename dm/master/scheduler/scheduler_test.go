@@ -199,7 +199,7 @@ func (t *testSchedulerSuite) testSchedulerProgress(restart int) {
 	t.workerOffline(s, workerName1)
 	// still no bounds (because the worker is offline).
 	t.sourceBounds(s, []string{}, []string{sourceID1})
-	// no expect relay stage exist (because the source has never been bounded).
+	// no expect relay stage exist (because the source has never been bound).
 	t.relayStageMatch(s, sourceID1, pb.Stage_InvalidStage)
 	rebuildScheduler(ctx)
 
@@ -212,7 +212,7 @@ func (t *testSchedulerSuite) testSchedulerProgress(restart int) {
 		defer wg.Done()
 		require.NoError(t.T(), ha.KeepAlive(ctx1, t.etcdTestCli, workerName1, keepAliveTTL))
 	}()
-	// wait for source1 bound to worker1.
+	// wait for source1 being bound to worker1.
 	require.Eventually(t.T(), func() bool {
 		bounds := s.BoundSources()
 		return len(bounds) == 1 && bounds[0] == sourceID1
@@ -1156,40 +1156,40 @@ func (t *testSchedulerSuite) TestLastBound() {
 	s.unbounds[sourceID1] = struct{}{}
 	s.unbounds[sourceID2] = struct{}{}
 
-	// worker1 goes to last bounded source
+	// worker1 goes to last bound source
 	worker1.ToFree()
-	bounded, err := s.tryBoundForWorker(worker1)
+	bound, err := s.tryBoundForWorker(worker1)
 	require.NoError(t.T(), err)
-	require.True(t.T(), bounded)
+	require.True(t.T(), bound)
 	require.Equal(t.T(), worker1, s.bounds[sourceID1])
 
-	// worker3 has to bounded to source2
+	// worker3 has to bind source2
 	worker3.ToFree()
-	bounded, err = s.tryBoundForWorker(worker3)
+	bound, err = s.tryBoundForWorker(worker3)
 	require.NoError(t.T(), err)
-	require.True(t.T(), bounded)
+	require.True(t.T(), bound)
 	require.Equal(t.T(), worker3, s.bounds[sourceID2])
 
 	// though worker2 has a previous source, that source is not available, so not bound
 	worker2.ToFree()
-	bounded, err = s.tryBoundForWorker(worker2)
+	bound, err = s.tryBoundForWorker(worker2)
 	require.NoError(t.T(), err)
-	require.False(t.T(), bounded)
+	require.False(t.T(), bound)
 
-	// worker4 is used to test whether source2 should be bounded to worker2 rather than a new worker
+	// worker4 is used to test whether source2 should be bound to worker2 rather than a new worker
 	worker4.ToFree()
-	bounded, err = s.tryBoundForWorker(worker4)
+	bound, err = s.tryBoundForWorker(worker4)
 	require.NoError(t.T(), err)
-	require.False(t.T(), bounded)
+	require.False(t.T(), bound)
 
-	// after worker3 become offline, source2 should be bounded to worker2
+	// after worker3 become offline, source2 should be bound to worker2
 	s.updateStatusToUnbound(sourceID2)
 	_, ok := s.bounds[sourceID2]
 	require.False(t.T(), ok)
 	worker3.ToOffline()
-	bounded, err = s.tryBoundForSource(sourceID2)
+	bound, err = s.tryBoundForSource(sourceID2)
 	require.NoError(t.T(), err)
-	require.True(t.T(), bounded)
+	require.True(t.T(), bound)
 	require.Equal(t.T(), worker2, s.bounds[sourceID2])
 }
 
@@ -1217,11 +1217,11 @@ func (t *testSchedulerSuite) TestInvalidLastBound() {
 	s.sourceCfgs[sourceID1] = sourceCfg1
 	s.lastBound[workerName1] = ha.SourceBound{Source: sourceID2}
 	s.unbounds[sourceID1] = struct{}{}
-	// step2: worker1 doesn't go to last bounded source, because last source doesn't have a source config (might be removed)
+	// step2: worker1 doesn't go to last bound source, because last source doesn't have a source config (might be removed)
 	worker1.ToFree()
-	bounded, err := s.tryBoundForWorker(worker1)
+	bound, err := s.tryBoundForWorker(worker1)
 	require.NoError(t.T(), err)
-	require.True(t.T(), bounded)
+	require.True(t.T(), bound)
 	require.Equal(t.T(), worker1, s.bounds[sourceID1])
 }
 
@@ -1629,12 +1629,12 @@ func (t *testSchedulerSuite) TestStartSourcesWithoutSourceConfigsInEtcd() {
 
 	s.workers[workerName1].stage = WorkerFree
 	s.workers[workerName2].stage = WorkerFree
-	bounded, err := s.tryBoundForSource(sourceID1)
+	bound, err := s.tryBoundForSource(sourceID1)
 	require.NoError(t.T(), err)
-	require.True(t.T(), bounded)
-	bounded, err = s.tryBoundForSource(sourceID2)
+	require.True(t.T(), bound)
+	bound, err = s.tryBoundForSource(sourceID2)
 	require.NoError(t.T(), err)
-	require.True(t.T(), bounded)
+	require.True(t.T(), bound)
 
 	s.started.Store(false)
 	sbm, _, err := ha.GetSourceBound(t.etcdTestCli, "")
@@ -1693,14 +1693,14 @@ func (t *testSchedulerSuite) TestTransferWorkerAndSource() {
 	s.unbounds[sourceID1] = struct{}{}
 	s.unbounds[sourceID2] = struct{}{}
 
-	// test free worker and unbounded source
+	// test free worker and unbound source
 	require.NoError(t.T(), s.transferWorkerAndSource(workerName1, "", "", sourceID1))
 	require.NoError(t.T(), s.transferWorkerAndSource("", sourceID2, workerName2, ""))
 	require.Equal(t.T(), worker1, s.bounds[sourceID1])
 	require.Equal(t.T(), worker2, s.bounds[sourceID2])
 	require.Equal(t.T(), 0, len(s.unbounds))
 
-	// test transfer bounded source to free worker
+	// test transfer bound source to free worker
 	require.NoError(t.T(), s.transferWorkerAndSource(workerName1, sourceID1, workerName4, ""))
 	require.Equal(t.T(), worker4, s.bounds[sourceID1])
 	require.Equal(t.T(), WorkerFree, worker1.Stage())
@@ -1711,7 +1711,7 @@ func (t *testSchedulerSuite) TestTransferWorkerAndSource() {
 	require.Equal(t.T(), WorkerFree, worker2.Stage())
 	require.Equal(t.T(), WorkerBound, worker3.Stage())
 
-	// test transfer bounded worker to unbounded source
+	// test transfer bound worker to unbound source
 	s.unbounds[sourceID3] = struct{}{}
 	s.unbounds[sourceID4] = struct{}{}
 	require.NoError(t.T(), s.transferWorkerAndSource("", sourceID3, workerName3, sourceID2))
@@ -1726,7 +1726,7 @@ func (t *testSchedulerSuite) TestTransferWorkerAndSource() {
 
 	require.Equal(t.T(), 0, len(s.unbounds))
 
-	// test transfer two bounded sources
+	// test transfer two bound sources
 	require.NoError(t.T(), s.transferWorkerAndSource(workerName1, sourceID1, workerName2, sourceID2))
 	require.NoError(t.T(), s.transferWorkerAndSource(workerName4, sourceID4, workerName3, sourceID3))
 	require.Equal(t.T(), worker2, s.bounds[sourceID1])
