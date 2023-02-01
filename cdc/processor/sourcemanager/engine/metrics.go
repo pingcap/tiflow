@@ -18,6 +18,14 @@ import (
 )
 
 var (
+	mountWaitDuration = prometheus.NewHistogramVec(prometheus.HistogramOpts{
+		Namespace: "ticdc",
+		Subsystem: "sorter",
+		Name:      "mount_wait_duration",
+		Help:      "Bucketed histogram of mount wait duration",
+		Buckets:   prometheus.ExponentialBuckets(0.001, 2.0, 20),
+	}, []string{"namespace", "changefeed"})
+
 	sorterWriteBytesHistogram = prometheus.NewHistogramVec(prometheus.HistogramOpts{
 		Namespace: "ticdc",
 		Subsystem: "sorter",
@@ -144,6 +152,7 @@ func BlockCacheAccess() *prometheus.GaugeVec {
 
 // InitMetrics registers all metrics in this file
 func InitMetrics(registry *prometheus.Registry) {
+	registry.MustRegister(mountWaitDuration)
 	registry.MustRegister(sorterWriteDurationHistogram)
 	registry.MustRegister(sorterCompactDurationHistogram)
 	registry.MustRegister(sorterWriteBytesHistogram)
@@ -151,6 +160,8 @@ func InitMetrics(registry *prometheus.Registry) {
 	registry.MustRegister(inMemoryDataSizeGauge)
 	registry.MustRegister(onDiskDataSizeGauge)
 	registry.MustRegister(dbIteratorGauge)
+
+	// TODO: Seems these things belong to pebble instead of engine.
 	registry.MustRegister(dbLevelCount)
 	registry.MustRegister(dbWriteDelayCount)
 	registry.MustRegister(dbBlockCacheAccess)

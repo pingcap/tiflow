@@ -19,7 +19,6 @@ import (
 
 	"github.com/pingcap/tiflow/cdc/entry"
 	"github.com/pingcap/tiflow/cdc/model"
-	metrics "github.com/pingcap/tiflow/cdc/sorter"
 	"github.com/prometheus/client_golang/prometheus"
 )
 
@@ -33,8 +32,7 @@ type MountedEventIter struct {
 	nextToEmit     int
 	savedIterError error
 
-	waitMount chan struct{}
-
+	waitMount         chan struct{}
 	mountWaitDuration prometheus.Observer
 }
 
@@ -50,9 +48,8 @@ func NewMountedEventIter(
 		mg:           mg,
 		maxBatchSize: maxBatchSize,
 
-		waitMount: make(chan struct{}, 1),
-
-		mountWaitDuration: metrics.MountWaitDuration.WithLabelValues(changefeedID.Namespace, changefeedID.ID),
+		waitMount:         make(chan struct{}, 1),
+		mountWaitDuration: mountWaitDuration.WithLabelValues(changefeedID.Namespace, changefeedID.ID),
 	}
 }
 
@@ -71,7 +68,7 @@ func (i *MountedEventIter) Next(ctx context.Context) (event *model.PolymorphicEv
 		idx := i.nextToEmit
 
 		mountStart := time.Now()
-		for !i.rawEvents[idx].event.Finished1.Load() {
+		for !i.rawEvents[idx].event.Mounted.Load() {
 			select {
 			case <-i.waitMount:
 			case <-ctx.Done():
@@ -110,7 +107,15 @@ func (i *MountedEventIter) readBatch(ctx context.Context) error {
 			i.iter = nil
 			break
 		}
-		task := entry.MountTask{Event: event, Finished: i.waitMount}
+		task := entry.MountTask{
+			Event: event,
+			PostFinish: func() {
+				select {
+				case i.waitMount <- struct{}{}:
+				default:
+				}
+			},
+		}
 		if err := i.mg.AddEvent(ctx, task); err != nil {
 			i.mg = nil
 			return err

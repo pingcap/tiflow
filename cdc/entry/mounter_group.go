@@ -30,8 +30,8 @@ type MounterGroup interface {
 }
 
 type MountTask struct {
-	Event    *model.PolymorphicEvent
-	Finished chan struct{}
+	Event      *model.PolymorphicEvent
+	PostFinish func()
 }
 
 type mounterGroup struct {
@@ -117,11 +117,8 @@ func (m *mounterGroup) runWorker(ctx context.Context) error {
 					return errors.Trace(err)
 				}
 			}
-			task.Event.Finished1.Store(true)
-			select {
-			case task.Finished <- struct{}{}:
-			default:
-			}
+			task.Event.Mounted.Store(true)
+			task.PostFinish()
 		}
 	}
 }
@@ -145,6 +142,6 @@ func (m *MockMountGroup) Run(ctx context.Context) error {
 
 // AddEvent implements MountGroup.
 func (m *MockMountGroup) AddEvent(ctx context.Context, task MountTask) error {
-	task.Event.Finished1.Store(true)
+	task.Event.Mounted.Store(true)
 	return nil
 }

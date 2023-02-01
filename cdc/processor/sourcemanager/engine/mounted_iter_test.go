@@ -49,7 +49,7 @@ func TestMountedEventIter(t *testing.T) {
 	}
 
 	mg := &entry.MockMountGroup{}
-	iter := NewMountedEventIter(rawIter, mg, 3)
+	iter := NewMountedEventIter(model.ChangeFeedID{}, rawIter, mg, 3)
 
 	for i := 0; i < 3; i++ {
 		event, _, err := iter.Next(context.Background())
