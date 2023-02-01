@@ -450,7 +450,7 @@ func NewKafkaSink(ctx context.Context, sinkURI *url.URL,
 		return nil, cerror.WrapError(cerror.ErrKafkaCreateTopic, err)
 	}
 
-	sProducer, err := kafka.NewKafkaSaramaProducer(
+	sProducer, err := kafka.NewProducer(
 		ctx,
 		client,
 		adminClient,
