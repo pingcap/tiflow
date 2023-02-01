@@ -97,7 +97,7 @@ func NewKafkaGoClient(ctx context.Context, options *pkafka.Options) (pkafka.Clie
 	}, nil
 }
 
-func completeSaramaSASLConfig(o *pkafka.Options) (sasl.Mechanism, error) {
+func completeSASLConfig(o *pkafka.Options) (sasl.Mechanism, error) {
 	if o.SASL != nil && o.SASL.SASLMechanism != "" {
 		switch o.SASL.SASLMechanism {
 		case pkafka.SASLTypeSCRAMSHA256, pkafka.SASLTypeSCRAMSHA512, pkafka.SASLTypePlaintext:
