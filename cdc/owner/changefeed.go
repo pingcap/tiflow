@@ -22,7 +22,6 @@ import (
 	"github.com/pingcap/errors"
 	"github.com/pingcap/failpoint"
 	"github.com/pingcap/log"
-	timodel "github.com/pingcap/tidb/parser/model"
 	"github.com/pingcap/tiflow/cdc/contextutil"
 	"github.com/pingcap/tiflow/cdc/model"
 	"github.com/pingcap/tiflow/cdc/puller"
@@ -91,18 +90,12 @@ type changefeed struct {
 	// in every tick. Such as the changefeed that is stopped or encountered an error.
 	isReleased bool
 
-	// only used for asyncExecDDL function
-	// ddlEventCache is not nil when the changefeed is executing
-	// a DDL job asynchronously. After the DDL job has been executed,
-	// ddlEventCache will be set to nil. ddlEventCache contains more than
-	// one event for a rename tables DDL job.
-	ddlEventCache []*model.DDLEvent
 	// currentTables is the tables that the changefeed is watching.
 	// And it contains only the tables of the ddl that have been processed.
 	// The ones that have not been executed yet do not have.
 	currentTables []*model.TableInfo
 
-	ddlHolder *DDLHolder
+	ddlHolder *ddlHolder
 	barrier   *model.Barrier
 
 	errCh chan error
@@ -160,7 +153,7 @@ func newChangefeed(
 		scheduler:        nil,
 		barriers:         newBarriers(),
 		barrier:          model.NewBarrier(state.Info.StartTs),
-		ddlHolder:        NewDDLHolder(),
+		ddlHolder:        newDDLHolder(),
 		feedStateManager: newFeedStateManager(),
 		upstream:         up,
 
@@ -315,11 +308,17 @@ func (c *changefeed) tick(ctx cdcContext.Context, captures map[model.CaptureID]*
 	}
 	c.sink.emitCheckpointTs(checkpointTs, c.currentTables)
 
-	err := c.handleBarrier(ctx)
+	err := c.handleGlobalBarrier(ctx)
 	if err != nil {
 		return errors.Trace(err)
 	}
-	log.Debug("owner handles barrier",
+
+	err = c.handleDDL(ctx)
+	if err != nil {
+		return errors.Trace(err)
+	}
+
+	log.Debug("owner update barrier",
 		zap.String("namespace", c.id.Namespace),
 		zap.String("changefeed", c.id.ID),
 		zap.Any("barrier", c.barrier),
@@ -525,11 +524,10 @@ LOOP:
 		return errors.Trace(err)
 	}
 
-	// we must clean cached ddl and tables in changefeed initialization
-	// otherwise, the changefeed will loss tables that are needed to be replicated
-	// ref: https://github.com/pingcap/tiflow/issues/7682
-	c.ddlEventCache = nil
 	c.currentTables = nil
+	// If the changefeed is resumed after being stopped, the changefeed instance will be reused,
+	// so we should make sure that the ddlHolder is empty when the changefeed is restarting.
+	c.ddlHolder.reset()
 
 	cancelCtx, cancel := cdcContext.WithCancel(ctx)
 	c.cancel = cancel
@@ -794,7 +792,7 @@ func (c *changefeed) handleDDL(ctx cdcContext.Context) error {
 		if err != nil {
 			return errors.Trace(err)
 		}
-		c.ddlHolder.AddDDLs(ddlEvents)
+		c.ddlHolder.addDDL(ddlEvents)
 		// apply ddl to owner schema
 		err = c.schema.HandleDDL(ddl)
 		if err != nil {
@@ -819,27 +817,28 @@ func (c *changefeed) handleDDL(ctx cdcContext.Context) error {
 	//   2. No more data after barrierTs was sent to downstream.
 	// So we can execute the DDL event at the barrierTs.
 	if c.state.Status.CheckpointTs == c.barrier.GetMinTableBarrierTs() {
-		ddlEvent := c.ddlHolder.GetMinDDL()
+		ddlEvent := c.ddlHolder.getMinDDL()
 		if ddlEvent != nil {
 			eventDone, err := c.asyncExecDDLEvent(ctx, ddlEvent)
 			if err != nil {
 				return err
 			}
 			if eventDone {
-				c.ddlEventCache = nil
 				// It has expired.
 				// We should use the latest table names now.
 				c.currentTables = nil
+				// We should remove the DDL event from
+				// the holder if it has been executed.
+				c.ddlHolder.removeMinDDL()
 			}
-			c.ddlHolder.RemoveMinDDL()
 		}
 	}
-	// update ddl barrier ts
-	c.barrier.TableBarrier = c.ddlHolder.GetALLTableMinDDLTs()
+	// update tableBarrier
+	c.barrier.TableBarrier = c.ddlHolder.getAllTableBarrier()
 	return nil
 }
 
-func (c *changefeed) handleBarrier(ctx cdcContext.Context) error {
+func (c *changefeed) handleGlobalBarrier(ctx cdcContext.Context) error {
 	barrierTp, barrierTs := c.barriers.Min()
 	c.metricsChangefeedBarrierTsGauge.Set(float64(oracle.ExtractPhysical(barrierTs)))
 	checkpointReachBarrier := barrierTs == c.state.Status.CheckpointTs
@@ -865,74 +864,7 @@ func (c *changefeed) handleBarrier(ctx cdcContext.Context) error {
 	}
 	// use the updated barrierTs as the new globalBarrierTs
 	_, c.barrier.GlobalBarrierTs = c.barriers.Min()
-	return c.handleDDL(ctx)
-}
-
-// asyncExecDDLJob execute ddl job asynchronously, it returns true if the jod is done.
-// 0. Build ddl events from job.
-// 1. Apply ddl job to c.schema.
-// 2. Emit ddl event to redo manager.
-// 3. Emit ddl event to ddl sink.
-func (c *changefeed) asyncExecDDLJob(ctx cdcContext.Context,
-	job *timodel.Job,
-) (bool, error) {
-	if job.BinlogInfo == nil {
-		log.Warn("ignore the invalid DDL job", zap.String("changefeed", c.id.ID),
-			zap.Any("job", job))
-		return true, nil
-	}
-
-	if c.ddlEventCache == nil {
-		// We must build ddl events from job before we call c.schema.HandleDDL(job).
-		ddlEvents, err := c.schema.BuildDDLEvents(job)
-		if err != nil {
-			log.Error("build DDL event fail", zap.String("changefeed", c.id.ID),
-				zap.Any("job", job), zap.Error(err))
-			return false, errors.Trace(err)
-		}
-		c.ddlEventCache = ddlEvents
-		// We can't use the latest schema directly,
-		// we need to make sure we receive the ddl before we start or stop broadcasting checkpoint ts.
-		// So let's remember the tables before processing and cache the DDL.
-		c.currentTables = c.schema.AllTables()
-		checkpointTs := c.state.Status.CheckpointTs
-		// refresh checkpointTs and currentTables when a ddl job is received
-		c.sink.emitCheckpointTs(checkpointTs, c.currentTables)
-		// we apply ddl to update changefeed schema here.
-		err = c.schema.HandleDDL(job)
-		if err != nil {
-			return false, errors.Trace(err)
-		}
-		if c.redoManager.Enabled() {
-			for _, ddlEvent := range c.ddlEventCache {
-				// FIXME: seems it's not necessary to emit DDL to redo storage,
-				// because for a given redo meta with range (checkpointTs, resolvedTs],
-				// there must be no pending DDLs not flushed into DDL sink.
-				err = c.redoManager.EmitDDLEvent(ctx, ddlEvent)
-				if err != nil {
-					return false, err
-				}
-			}
-		}
-	}
-
-	jobDone := true
-	for _, event := range c.ddlEventCache {
-		eventDone, err := c.asyncExecDDLEvent(ctx, event)
-		if err != nil {
-			return false, err
-		}
-		jobDone = jobDone && eventDone
-	}
-
-	if jobDone {
-		c.ddlEventCache = nil
-		// It has expired.
-		// We should use the latest table names now.
-		c.currentTables = nil
-	}
-
-	return jobDone, nil
+	return nil
 }
 
 func (c *changefeed) asyncExecDDLEvent(ctx cdcContext.Context,

@@ -259,7 +259,7 @@ func (s *ddlSinkImpl) run(ctx context.Context) {
 					// Force emitting checkpoint ts when a ddl event is finished.
 					// Otherwise, a kafka consumer may not execute that ddl event.
 					s.mu.Lock()
-					ddl.Done = true
+					ddl.Done.Store(true)
 					checkpointTs := s.mu.checkpointTs
 					if checkpointTs == 0 || checkpointTs <= lastCheckpointTs {
 						s.mu.Unlock()
@@ -310,7 +310,7 @@ func (s *ddlSinkImpl) emitCheckpointTs(ts uint64, tables []*model.TableInfo) {
 // from a map in order to check whether that event is finished or not.
 func (s *ddlSinkImpl) emitDDLEvent(ctx context.Context, ddl *model.DDLEvent) (bool, error) {
 	s.mu.Lock()
-	if ddl.Done {
+	if ddl.Done.Load() {
 		// the DDL event is executed successfully, and done is true
 		log.Info("ddl already executed",
 			zap.String("namespace", s.changefeedID.Namespace),
