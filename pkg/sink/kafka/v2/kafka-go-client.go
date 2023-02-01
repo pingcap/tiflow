@@ -42,27 +42,6 @@ type kafkaGoClient struct {
 
 // NewKafkaGoClient constructs a Client with kafka go.
 func NewKafkaGoClient(ctx context.Context, options *pkafka.Options) (pkafka.Client, error) {
-	var (
-		err       error
-		clientID  string
-		tlsConfig *tls.Config
-		mechanism sasl.Mechanism
-	)
-	if options.EnableTLS {
-		tlsConfig = &tls.Config{
-			MinVersion: tls.VersionTLS12,
-			NextProtos: []string{"h2", "http/1.1"},
-		}
-
-		// for SSL encryption with self-signed CA certificate, we reassign the
-		// config.Net.TLS.Config using the relevant credential files.
-		if options.Credential != nil && options.Credential.IsTLSEnabled() {
-			tlsConfig, err = options.Credential.ToTLSConfig()
-			if err != nil {
-				return nil, errors.Trace(err)
-			}
-		}
-	}
 	captureAddr := contextutil.CaptureAddrFromCtx(ctx)
 	changefeedID := contextutil.ChangefeedIDFromCtx(ctx)
 	var role string
@@ -71,14 +50,15 @@ func NewKafkaGoClient(ctx context.Context, options *pkafka.Options) (pkafka.Clie
 	} else {
 		role = util.RoleProcessor.String()
 	}
-	clientID, err = pkafka.NewKafkaClientID(role, captureAddr, changefeedID, options.ClientID)
+	clientID, err := pkafka.NewKafkaClientID(role, captureAddr, changefeedID, options.ClientID)
 	if err != nil {
 		return nil, errors.Trace(err)
 	}
-	mechanism, err = completeSASLConfig(options)
+	mechanism, err := completeSASLConfig(options)
 	if err != nil {
 		return nil, errors.Trace(err)
 	}
+	tlsConfig, err := completeSSLConfig(options)
 	transport := &kafka.Transport{
 		SASL:        mechanism,
 		ClientID:    clientID,
@@ -86,7 +66,8 @@ func NewKafkaGoClient(ctx context.Context, options *pkafka.Options) (pkafka.Clie
 		IdleTimeout: options.DialTimeout,
 	}
 	client := &kafka.Client{
-		Addr:      kafka.TCP(options.BrokerEndpoints...),
+		Addr: kafka.TCP(options.BrokerEndpoints...),
+		// todo: make this configurable
 		Timeout:   10 * time.Second,
 		Transport: transport,
 	}
@@ -95,6 +76,24 @@ func NewKafkaGoClient(ctx context.Context, options *pkafka.Options) (pkafka.Clie
 		client:    client,
 		options:   options,
 	}, nil
+}
+
+func completeSSLConfig(options *pkafka.Options) (*tls.Config, error) {
+	if options.EnableTLS {
+		tlsConfig := &tls.Config{
+			MinVersion: tls.VersionTLS12,
+			NextProtos: []string{"h2", "http/1.1"},
+		}
+
+		// for SSL encryption with self-signed CA certificate, we reassign the
+		// config.Net.TLS.Config using the relevant credential files.
+		if options.Credential != nil && options.Credential.IsTLSEnabled() {
+			tlsConfig, err := options.Credential.ToTLSConfig()
+			return tlsConfig, errors.Trace(err)
+		}
+		return tlsConfig, nil
+	}
+	return nil, nil
 }
 
 func completeSASLConfig(o *pkafka.Options) (sasl.Mechanism, error) {
@@ -274,6 +273,7 @@ type asyncWriter struct {
 // when both the Errors and Successes channels have been closed. When calling
 // AsyncClose, you *must* continue to read from those channels in order to
 // drain the results of any messages in flight.
+// todo: remove this field after we refine the interface
 func (a *asyncWriter) AsyncClose() {
 	go func() {
 		_ = a.Close()
