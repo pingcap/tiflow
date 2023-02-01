@@ -26,7 +26,10 @@ import (
 // MounterGroup is a group of mounter workers
 type MounterGroup interface {
 	Run(ctx context.Context) error
+
 	AddEvent(ctx context.Context, task MountTask) error
+
+	TryAddEvent(ctx context.Context, task MountTask) (bool, error)
 }
 
 type MountTask struct {
@@ -132,6 +135,17 @@ func (m *mounterGroup) AddEvent(ctx context.Context, task MountTask) error {
 	}
 }
 
+func (m *mounterGroup) TryAddEvent(ctx context.Context, task MountTask) (bool, error) {
+	select {
+	case <-ctx.Done():
+		return false, ctx.Err()
+	case m.inputCh <- task:
+		return true, nil
+	default:
+		return false, nil
+	}
+}
+
 // MockMountGroup is used for tests.
 type MockMountGroup struct{}
 
@@ -144,4 +158,10 @@ func (m *MockMountGroup) Run(ctx context.Context) error {
 func (m *MockMountGroup) AddEvent(ctx context.Context, task MountTask) error {
 	task.Event.Mounted.Store(true)
 	return nil
+}
+
+// TryAddEvent implements MountGroup.
+func (m *MockMountGroup) TryAddEvent(ctx context.Context, task MountTask) (bool, error) {
+	task.Event.Mounted.Store(true)
+	return true, nil
 }

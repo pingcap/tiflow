@@ -28,9 +28,10 @@ type MountedEventIter struct {
 	mg           entry.MounterGroup
 	maxBatchSize int
 
-	rawEvents      []rawEvent
-	nextToEmit     int
-	savedIterError error
+	inMountingEvents []rawEvent
+	toMountEvent     rawEvent
+	nextToEmit       int
+	savedIterError   error
 
 	waitMount         chan struct{}
 	mountWaitDuration prometheus.Observer
@@ -57,18 +58,18 @@ func NewMountedEventIter(
 func (i *MountedEventIter) Next(ctx context.Context) (event *model.PolymorphicEvent, txnFinished Position, err error) {
 	// There are no events in mounting. Fetch more events and mounting them.
 	// The batch size is determined by `maxBatchSize`.
-	if i.nextToEmit >= len(i.rawEvents) {
+	if i.nextToEmit >= len(i.inMountingEvents) {
 		if err = i.readBatch(ctx); err != nil {
 			return
 		}
 	}
 
 	// Check whether there are events in mounting or not.
-	if i.nextToEmit < len(i.rawEvents) {
+	if i.nextToEmit < len(i.inMountingEvents) {
 		idx := i.nextToEmit
 
 		mountStart := time.Now()
-		for !i.rawEvents[idx].event.Mounted.Load() {
+		for !i.inMountingEvents[idx].event.Mounted.Load() {
 			select {
 			case <-i.waitMount:
 			case <-ctx.Done():
@@ -78,8 +79,8 @@ func (i *MountedEventIter) Next(ctx context.Context) (event *model.PolymorphicEv
 		}
 		i.mountWaitDuration.Observe(time.Since(mountStart).Seconds())
 
-		event = i.rawEvents[idx].event
-		txnFinished = i.rawEvents[idx].txnFinished
+		event = i.inMountingEvents[idx].event
+		txnFinished = i.inMountingEvents[idx].txnFinished
 		i.nextToEmit += 1
 	}
 	return
@@ -91,13 +92,21 @@ func (i *MountedEventIter) readBatch(ctx context.Context) error {
 	}
 
 	i.nextToEmit = 0
-	if cap(i.rawEvents) == 0 {
-		i.rawEvents = make([]rawEvent, 0, i.maxBatchSize)
+	if cap(i.inMountingEvents) == 0 {
+		i.inMountingEvents = make([]rawEvent, 0, i.maxBatchSize)
 	} else {
-		i.rawEvents = i.rawEvents[:0]
+		i.inMountingEvents = i.inMountingEvents[:0]
 	}
 
-	for len(i.rawEvents) < cap(i.rawEvents) {
+	if i.toMountEvent.event != nil {
+		if err := i.mg.AddEvent(ctx, i.eventToTask(i.toMountEvent.event)); err != nil {
+			return err
+		}
+		i.inMountingEvents = append(i.inMountingEvents, i.toMountEvent)
+		i.toMountEvent.event = nil
+	}
+
+	for len(i.inMountingEvents) < i.maxBatchSize {
 		event, txnFinished, err := i.iter.Next()
 		if err != nil {
 			return err
@@ -107,22 +116,35 @@ func (i *MountedEventIter) readBatch(ctx context.Context) error {
 			i.iter = nil
 			break
 		}
-		task := entry.MountTask{
-			Event: event,
-			PostFinish: func() {
-				select {
-				case i.waitMount <- struct{}{}:
-				default:
-				}
-			},
+
+		inMounting := false
+		if len(i.inMountingEvents) > 0 {
+			inMounting, err = i.mg.TryAddEvent(ctx, i.eventToTask(event))
+		} else {
+			err = i.mg.AddEvent(ctx, i.eventToTask(event))
+			inMounting = true
 		}
-		if err := i.mg.AddEvent(ctx, task); err != nil {
-			i.mg = nil
+		if err != nil {
 			return err
 		}
-		i.rawEvents = append(i.rawEvents, rawEvent{event, txnFinished})
+		if !inMounting {
+			i.toMountEvent = rawEvent{event, txnFinished}
+			break
+		}
 	}
 	return nil
+}
+
+func (i *MountedEventIter) eventToTask(event *model.PolymorphicEvent) entry.MountTask {
+	return entry.MountTask{
+		Event: event,
+		PostFinish: func() {
+			select {
+			case i.waitMount <- struct{}{}:
+			default:
+			}
+		},
+	}
 }
 
 // Close implements sorter.EventIterator.
