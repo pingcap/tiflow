@@ -31,6 +31,7 @@ import (
 	metrics "github.com/pingcap/tiflow/cdc/sorter/db"
 	"github.com/pingcap/tiflow/pkg/chann"
 	"github.com/pingcap/tiflow/pkg/spanz"
+	"github.com/prometheus/client_golang/prometheus"
 	"go.uber.org/zap"
 )
 
@@ -65,6 +66,8 @@ type EventIter struct {
 	iter     *pebble.Iterator
 	headItem *model.PolymorphicEvent
 	serde    encoding.MsgPackGenSerde
+
+	nextDuration prometheus.Observer
 }
 
 // New creates an EventSorter instance.
@@ -207,7 +210,7 @@ func (s *EventSorter) OnResolve(action func(tablepb.Span, model.Ts)) {
 
 // FetchByTable implements engine.SortEngine.
 func (s *EventSorter) FetchByTable(
-	span tablepb.Span,
+	changefeedID model.ChangeFeedID, span tablepb.Span,
 	lowerBound, upperBound engine.Position,
 ) engine.EventIterator {
 	s.mu.RLock()
@@ -232,12 +235,25 @@ func (s *EventSorter) FetchByTable(
 	}
 
 	db := s.dbs[getDB(span, len(s.dbs))]
+	iterReadDur := metrics.SorterIterReadDuration()
+
+	seekStart := time.Now()
 	iter := iterTable(db, state.uniqueID, span.TableID, lowerBound, upperBound)
-	return &EventIter{tableID: span.TableID, state: state, iter: iter, serde: s.serde}
+	iterReadDur.WithLabelValues(changefeedID.Namespace, changefeedID.ID, "first").
+		Observe(time.Since(seekStart).Seconds())
+
+	return &EventIter{
+		tableID: span.TableID,
+		state:   state,
+		iter:    iter,
+		serde:   s.serde,
+
+		nextDuration: iterReadDur.WithLabelValues(changefeedID.Namespace, changefeedID.ID, "next"),
+	}
 }
 
 // FetchAllTables implements engine.SortEngine.
-func (s *EventSorter) FetchAllTables(lowerBound engine.Position) engine.EventIterator {
+func (s *EventSorter) FetchAllTables(_ model.ChangeFeedID, lowerBound engine.Position) engine.EventIterator {
 	log.Panic("FetchAllTables should never be called",
 		zap.String("namespace", s.changefeedID.Namespace),
 		zap.String("changefeed", s.changefeedID.ID))
@@ -345,7 +361,10 @@ func (s *EventIter) Next() (event *model.PolymorphicEvent, pos engine.Position, 
 	valid := s.iter != nil && s.iter.Valid()
 	var value []byte
 	for valid {
+		nextStart := time.Now()
 		value, valid = s.iter.Value(), s.iter.Next()
+		s.nextDuration.Observe(time.Since(nextStart).Seconds())
+
 		event = &model.PolymorphicEvent{}
 		if _, err = s.serde.Unmarshal(event, value); err != nil {
 			return

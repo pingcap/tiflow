@@ -108,7 +108,8 @@ func (s *EventSorter) OnResolve(action func(tablepb.Span, model.Ts)) {
 
 // FetchByTable implements engine.SortEngine.
 func (s *EventSorter) FetchByTable(
-	span tablepb.Span, lowerBound, upperBound engine.Position,
+	_ model.ChangeFeedID, span tablepb.Span,
+	lowerBound, upperBound engine.Position,
 ) engine.EventIterator {
 	value, exists := s.tables.Load(span)
 	if !exists {
@@ -119,7 +120,7 @@ func (s *EventSorter) FetchByTable(
 }
 
 // FetchAllTables implements engine.SortEngine.
-func (s *EventSorter) FetchAllTables(lowerBound engine.Position) engine.EventIterator {
+func (s *EventSorter) FetchAllTables(_ model.ChangeFeedID, lowerBound engine.Position) engine.EventIterator {
 	log.Panic("FetchAllTables should never be called")
 	return nil
 }

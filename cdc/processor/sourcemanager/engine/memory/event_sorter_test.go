@@ -101,7 +101,8 @@ func TestEventSorter(t *testing.T) {
 		}
 		es.Add(span, model.NewResolvedPolymorphicEvent(0, tc.resolvedTs))
 		iter := es.FetchByTable(
-			span, nextToFetch, engine.Position{CommitTs: tc.resolvedTs, StartTs: tc.resolvedTs})
+			model.ChangeFeedID{}, span, nextToFetch,
+			engine.Position{CommitTs: tc.resolvedTs, StartTs: tc.resolvedTs})
 		for _, expect := range tc.expect {
 			event, pos, _ := iter.Next()
 			require.NotNil(t, event)

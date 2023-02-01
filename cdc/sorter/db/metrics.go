@@ -68,6 +68,11 @@ func SorterWriteBytes() *prometheus.HistogramVec {
 	return sorterWriteBytesHistogram
 }
 
+// SorterIterReadDuration returns sorterIterReadDurationHistogram.
+func SorterIterReadDuration() *prometheus.HistogramVec {
+	return sorterIterReadDurationHistogram
+}
+
 // InitMetrics registers all metrics in this file
 func InitMetrics(registry *prometheus.Registry) {
 	registry.MustRegister(sorterWriteDurationHistogram)
