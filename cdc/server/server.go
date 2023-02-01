@@ -30,10 +30,7 @@ import (
 	"github.com/pingcap/tiflow/cdc"
 	"github.com/pingcap/tiflow/cdc/capture"
 	"github.com/pingcap/tiflow/cdc/kv"
-	"github.com/pingcap/tiflow/cdc/processor/pipeline/system"
 	"github.com/pingcap/tiflow/cdc/processor/sourcemanager/engine/factory"
-	ssystem "github.com/pingcap/tiflow/cdc/sorter/db/system"
-	"github.com/pingcap/tiflow/cdc/sorter/unified"
 	"github.com/pingcap/tiflow/pkg/config"
 	cerror "github.com/pingcap/tiflow/pkg/errors"
 	"github.com/pingcap/tiflow/pkg/etcd"
@@ -78,19 +75,13 @@ type Server interface {
 // TODO: we need to make server more unit testable and add more test cases.
 // Especially we need to decouple the HTTPServer out of server.
 type server struct {
-	capture      capture.Capture
-	tcpServer    tcpserver.TCPServer
-	grpcService  *p2p.ServerWrapper
-	statusServer *http.Server
-	etcdClient   etcd.CDCEtcdClient
-	pdEndpoints  []string
-
-	tableActorSystem *system.System
-
-	// If it's true sortEngineManager will be used, otherwise sorterSystem will be used.
-	useEventSortEngine bool
-	sortEngineFactory  *factory.SortEngineFactory
-	sorterSystem       *ssystem.System
+	capture           capture.Capture
+	tcpServer         tcpserver.TCPServer
+	grpcService       *p2p.ServerWrapper
+	statusServer      *http.Server
+	etcdClient        etcd.CDCEtcdClient
+	pdEndpoints       []string
+	sortEngineFactory *factory.SortEngineFactory
 }
 
 // New creates a server instance.
@@ -115,16 +106,11 @@ func New(pdEndpoints []string) (*server, error) {
 		return nil, errors.Trace(err)
 	}
 
-	// TODO(qupeng): adjust it after all sorters are transformed into EventSortEngine.
 	debugConfig := config.GetGlobalServerConfig().Debug
-	useEventSortEngine := debugConfig.EnablePullBasedSink && debugConfig.EnableDBSorter
-
 	s := &server{
 		pdEndpoints: pdEndpoints,
 		grpcService: p2p.NewServerWrapper(debugConfig.Messages.ToMessageServerConfig()),
 		tcpServer:   tcpServer,
-
-		useEventSortEngine: useEventSortEngine,
 	}
 
 	log.Info("CDC server created",
@@ -192,63 +178,36 @@ func (s *server) prepare(ctx context.Context) error {
 		return errors.Trace(err)
 	}
 
-	if err := s.startActorSystems(ctx); err != nil {
+	if err := s.createSortEngineFactory(); err != nil {
 		return errors.Trace(err)
 	}
 
 	s.capture = capture.NewCapture(
 		s.pdEndpoints, createEtcdClient, s.grpcService,
-		s.tableActorSystem, s.sortEngineFactory, s.sorterSystem)
+		s.sortEngineFactory)
 
 	return nil
 }
 
-func (s *server) startActorSystems(ctx context.Context) error {
-	if s.tableActorSystem != nil {
-		s.tableActorSystem.Stop()
-	}
-	s.tableActorSystem = system.NewSystem()
-	s.tableActorSystem.Start(ctx)
-
+func (s *server) createSortEngineFactory() error {
 	conf := config.GetGlobalServerConfig()
-	if !conf.Debug.EnableDBSorter {
-		return nil
-	}
-
-	if s.useEventSortEngine && s.sortEngineFactory != nil {
+	if s.sortEngineFactory != nil {
 		if err := s.sortEngineFactory.Close(); err != nil {
 			log.Error("fails to close sort engine manager", zap.Error(err))
 		}
 		s.sortEngineFactory = nil
 	}
-	if !s.useEventSortEngine && s.sorterSystem != nil {
-		s.sorterSystem.Stop()
-	}
 
 	// Sorter dir has been set and checked when server starts.
 	// See https://github.com/pingcap/tiflow/blob/9dad09/cdc/server.go#L275
 	sortDir := config.GetGlobalServerConfig().Sorter.SortDir
-
-	if s.useEventSortEngine {
-		totalMemory, err := memory.MemTotal()
-		if err != nil {
-			return errors.Trace(err)
-		}
-		memPercentage := float64(conf.Sorter.MaxMemoryPercentage) / 100
-		memInBytes := uint64(float64(totalMemory) * memPercentage)
-		if config.GetGlobalServerConfig().Debug.EnableDBSorter {
-			s.sortEngineFactory = factory.NewForPebble(sortDir, memInBytes, conf.Debug.DB)
-		} else {
-			panic("only pebble is transformed to EventSortEngine")
-		}
-	} else {
-		memPercentage := float64(conf.Sorter.MaxMemoryPercentage) / 100
-		s.sorterSystem = ssystem.NewSystem(sortDir, memPercentage, conf.Debug.DB)
-		err := s.sorterSystem.Start(ctx)
-		if err != nil {
-			return errors.Trace(err)
-		}
+	totalMemory, err := memory.MemTotal()
+	if err != nil {
+		return errors.Trace(err)
 	}
+	memPercentage := float64(conf.Sorter.MaxMemoryPercentage) / 100
+	memInBytes := uint64(float64(totalMemory) * memPercentage)
+	s.sortEngineFactory = factory.NewForPebble(sortDir, memInBytes, conf.Debug.DB)
 
 	return nil
 }
@@ -368,27 +327,17 @@ func (s *server) run(ctx context.Context) (err error) {
 		return s.tcpServer.Run(cctx)
 	})
 
-	conf := config.GetGlobalServerConfig()
+	grpcServer := grpc.NewServer(s.grpcService.ServerOptions()...)
+	p2pProto.RegisterCDCPeerToPeerServer(grpcServer, s.grpcService)
 
-	if !conf.Debug.EnableDBSorter {
-		wg.Go(func() error {
-			return unified.RunWorkerPool(cctx)
-		})
-	}
-
-	if conf.Debug.EnableNewScheduler {
-		grpcServer := grpc.NewServer(s.grpcService.ServerOptions()...)
-		p2pProto.RegisterCDCPeerToPeerServer(grpcServer, s.grpcService)
-
-		wg.Go(func() error {
-			return grpcServer.Serve(s.tcpServer.GrpcListener())
-		})
-		wg.Go(func() error {
-			<-cctx.Done()
-			grpcServer.Stop()
-			return nil
-		})
-	}
+	wg.Go(func() error {
+		return grpcServer.Serve(s.tcpServer.GrpcListener())
+	})
+	wg.Go(func() error {
+		<-cctx.Done()
+		grpcServer.Stop()
+		return nil
+	})
 
 	return wg.Wait()
 }
@@ -401,7 +350,7 @@ func (s *server) Drain() <-chan struct{} {
 
 // Close closes the server.
 func (s *server) Close() {
-	s.stopActorSystems()
+	s.closeSortEngineFactory()
 
 	if s.capture != nil {
 		s.capture.AsyncClose()
@@ -422,25 +371,13 @@ func (s *server) Close() {
 	}
 }
 
-func (s *server) stopActorSystems() {
+func (s *server) closeSortEngineFactory() {
 	start := time.Now()
-	if s.tableActorSystem != nil {
-		s.tableActorSystem.Stop()
-		s.tableActorSystem = nil
-	}
-	log.Info("table actor system closed", zap.Duration("duration", time.Since(start)))
-
-	start = time.Now()
-	if s.useEventSortEngine && s.sortEngineFactory != nil {
+	if s.sortEngineFactory != nil {
 		if err := s.sortEngineFactory.Close(); err != nil {
 			log.Error("fails to close sort engine manager", zap.Error(err))
 		}
 		log.Info("sort engine manager closed", zap.Duration("duration", time.Since(start)))
-	}
-	if !s.useEventSortEngine && s.sorterSystem != nil {
-		s.sorterSystem.Stop()
-		s.sorterSystem = nil
-		log.Info("sorter actor system closed", zap.Duration("duration", time.Since(start)))
 	}
 }
 

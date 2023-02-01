@@ -29,6 +29,17 @@ import (
 // EmptyResponse return empty {} to http client
 type EmptyResponse struct{}
 
+// LogLevelReq log level request
+type LogLevelReq struct {
+	Level string `json:"log_level"`
+}
+
+// ListResponse is the response for all List APIs
+type ListResponse[T any] struct {
+	Total int `json:"total"`
+	Items []T `json:"items"`
+}
+
 // Tso contains timestamp get from PD
 type Tso struct {
 	Timestamp int64 `json:"timestamp"`
@@ -90,22 +101,30 @@ type ChangefeedConfig struct {
 	PDConfig
 }
 
+// ProcessorCommonInfo holds the common info of a processor
+type ProcessorCommonInfo struct {
+	Namespace    string `json:"namespace"`
+	ChangeFeedID string `json:"changefeed_id"`
+	CaptureID    string `json:"capture_id"`
+}
+
 // ReplicaConfig is a duplicate of  config.ReplicaConfig
 type ReplicaConfig struct {
-	MemoryQuota           uint64            `json:"memory_quota"`
-	CaseSensitive         bool              `json:"case_sensitive"`
-	EnableOldValue        bool              `json:"enable_old_value"`
-	ForceReplicate        bool              `json:"force_replicate"`
-	IgnoreIneligibleTable bool              `json:"ignore_ineligible_table"`
-	CheckGCSafePoint      bool              `json:"check_gc_safe_point"`
-	EnableSyncPoint       bool              `json:"enable_sync_point"`
-	BDRMode               bool              `json:"bdr_mode"`
-	SyncPointInterval     time.Duration     `json:"sync_point_interval"`
-	SyncPointRetention    time.Duration     `json:"sync_point_retention"`
-	Filter                *FilterConfig     `json:"filter"`
-	Mounter               *MounterConfig    `json:"mounter"`
-	Sink                  *SinkConfig       `json:"sink"`
-	Consistent            *ConsistentConfig `json:"consistent"`
+	MemoryQuota           uint64                     `json:"memory_quota"`
+	CaseSensitive         bool                       `json:"case_sensitive"`
+	EnableOldValue        bool                       `json:"enable_old_value"`
+	ForceReplicate        bool                       `json:"force_replicate"`
+	IgnoreIneligibleTable bool                       `json:"ignore_ineligible_table"`
+	CheckGCSafePoint      bool                       `json:"check_gc_safe_point"`
+	EnableSyncPoint       bool                       `json:"enable_sync_point"`
+	BDRMode               bool                       `json:"bdr_mode"`
+	SyncPointInterval     time.Duration              `json:"sync_point_interval"`
+	SyncPointRetention    time.Duration              `json:"sync_point_retention"`
+	Filter                *FilterConfig              `json:"filter"`
+	Mounter               *MounterConfig             `json:"mounter"`
+	Sink                  *SinkConfig                `json:"sink"`
+	Consistent            *ConsistentConfig          `json:"consistent"`
+	Scheduler             *ChangefeedSchedulerConfig `json:"scheduler"`
 }
 
 // ToInternalReplicaConfig coverts *v2.ReplicaConfig into *config.ReplicaConfig
@@ -211,6 +230,11 @@ func (c *ReplicaConfig) ToInternalReplicaConfig() *config.ReplicaConfig {
 	if c.Mounter != nil {
 		res.Mounter = &config.MounterConfig{
 			WorkerNum: c.Mounter.WorkerNum,
+		}
+	}
+	if c.Scheduler != nil {
+		res.Scheduler = &config.ChangefeedSchedulerConfig{
+			RegionPerSpan: c.Scheduler.RegionPerSpan,
 		}
 	}
 	return res
@@ -325,6 +349,11 @@ func ToAPIReplicaConfig(c *config.ReplicaConfig) *ReplicaConfig {
 			WorkerNum: cloned.Mounter.WorkerNum,
 		}
 	}
+	if cloned.Scheduler != nil {
+		res.Scheduler = &ChangefeedSchedulerConfig{
+			RegionPerSpan: cloned.Scheduler.RegionPerSpan,
+		}
+	}
 	return res
 }
 
@@ -344,7 +373,7 @@ func GetDefaultReplicaConfig() *ReplicaConfig {
 		Consistent: &ConsistentConfig{
 			Level:             "none",
 			MaxLogSize:        64,
-			FlushIntervalInMs: config.MinFlushIntervalInMs,
+			FlushIntervalInMs: config.DefaultFlushIntervalInMs,
 			Storage:           "",
 		},
 	}
@@ -490,6 +519,14 @@ type ConsistentConfig struct {
 	Storage           string `json:"storage"`
 }
 
+// ChangefeedSchedulerConfig is per changefeed scheduler settings.
+// This is a duplicate of config.ChangefeedSchedulerConfig
+type ChangefeedSchedulerConfig struct {
+	// RegionPerSpan the number of regions in a span, must be greater than 1000.
+	// Set 0 to disable span replication.
+	RegionPerSpan int `toml:"region_per_span" json:"region_per_span"`
+}
+
 // EtcdData contains key/value pair of etcd data
 type EtcdData struct {
 	Key   string `json:"key,omitempty"`
@@ -523,7 +560,8 @@ type ChangeFeedInfo struct {
 	CreatorVersion string             `json:"creator_version,omitempty"`
 }
 
-// RunningError represents some running error from cdc components, such as processor.
+// RunningError represents some running error from cdc components,
+// such as processor.
 type RunningError struct {
 	Addr    string `json:"addr"`
 	Code    string `json:"code"`
@@ -573,4 +611,10 @@ func (info *ChangeFeedInfo) Unmarshal(data []byte) error {
 type UpstreamConfig struct {
 	ID uint64 `json:"id"`
 	PDConfig
+}
+
+// ProcessorDetail holds the detail info of a processor
+type ProcessorDetail struct {
+	// All table ids that this processor are replicating.
+	Tables []int64 `json:"table_ids"`
 }

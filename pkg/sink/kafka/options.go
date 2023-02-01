@@ -52,6 +52,10 @@ type Options struct {
 	DialTimeout  time.Duration
 	WriteTimeout time.Duration
 	ReadTimeout  time.Duration
+
+	// The maximum number of messages the producer will send in a single
+	// broker request. Defaults to 0
+	MaxMessages int
 }
 
 // NewOptions returns a default Kafka configuration

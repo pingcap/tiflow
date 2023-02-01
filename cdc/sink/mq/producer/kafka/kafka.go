@@ -21,7 +21,6 @@ import (
 	"sync/atomic"
 	"time"
 
-	"github.com/Shopify/sarama"
 	"github.com/pingcap/errors"
 	"github.com/pingcap/failpoint"
 	"github.com/pingcap/log"
@@ -52,7 +51,7 @@ type kafkaSaramaProducer struct {
 	// This admin mainly used by `metricsMonitor` to fetch broker info.
 	admin         kafka.ClusterAdminClient
 	client        kafka.Client
-	asyncProducer sarama.AsyncProducer
+	asyncProducer kafka.AsyncProducer
 	syncProducer  kafka.SyncProducer
 
 	// producersReleased records whether asyncProducer and syncProducer have been closed properly
@@ -103,25 +102,21 @@ func (k *kafkaSaramaProducer) AsyncSendMessage(
 		failpoint.Return(nil)
 	})
 
-	msg := &sarama.ProducerMessage{
-		Topic:     topic,
-		Key:       sarama.ByteEncoder(message.Key),
-		Value:     sarama.ByteEncoder(message.Value),
-		Partition: partition,
-	}
 	k.mu.Lock()
 	k.mu.inflight++
 	log.Debug("emitting inflight messages to kafka", zap.Int64("inflight", k.mu.inflight))
 	k.mu.Unlock()
 
-	select {
-	case <-ctx.Done():
-		return ctx.Err()
-	case <-k.closeCh:
-		return nil
-	case k.asyncProducer.Input() <- msg:
-	}
-	return nil
+	return k.asyncProducer.AsyncSend(ctx, topic, partition,
+		message.Key, message.Value, func() {
+			k.mu.Lock()
+			k.mu.inflight--
+			if k.mu.inflight == 0 && k.mu.flushDone != nil {
+				k.mu.flushDone <- struct{}{}
+				k.mu.flushDone = nil
+			}
+			k.mu.Unlock()
+		})
 }
 
 func (k *kafkaSaramaProducer) SyncBroadcastMessage(
@@ -270,38 +265,7 @@ func (k *kafkaSaramaProducer) run(ctx context.Context) error {
 		k.stop()
 	}()
 
-	for {
-		var ack *sarama.ProducerMessage
-		select {
-		case <-ctx.Done():
-			return ctx.Err()
-		case <-k.closeCh:
-			return nil
-		case err := <-k.failpointCh:
-			log.Warn("receive from failpoint chan", zap.Error(err),
-				zap.String("namespace", k.id.Namespace),
-				zap.String("changefeed", k.id.ID), zap.Any("role", k.role))
-			return err
-		case ack = <-k.asyncProducer.Successes():
-		case err := <-k.asyncProducer.Errors():
-			// We should not wrap a nil pointer if the pointer is of a subtype of `error`
-			// because Go would store the type info and the resulted `error` variable would not be nil,
-			// which will cause the pkg/error library to malfunction.
-			if err == nil {
-				return nil
-			}
-			return cerror.WrapError(cerror.ErrKafkaAsyncSendMessage, err)
-		}
-		if ack != nil {
-			k.mu.Lock()
-			k.mu.inflight--
-			if k.mu.inflight == 0 && k.mu.flushDone != nil {
-				k.mu.flushDone <- struct{}{}
-				k.mu.flushDone = nil
-			}
-			k.mu.Unlock()
-		}
-	}
+	return k.asyncProducer.AsyncRunCallback(ctx)
 }
 
 // NewAdminClientImpl specifies the build method for the admin client.
@@ -316,7 +280,6 @@ func NewKafkaSaramaProducer(
 	client kafka.Client,
 	admin kafka.ClusterAdminClient,
 	options *kafka.Options,
-	saramaConfig *sarama.Config,
 	errCh chan error,
 	changefeedID model.ChangeFeedID,
 ) (*kafkaSaramaProducer, error) {
@@ -325,7 +288,9 @@ func NewKafkaSaramaProducer(
 		zap.String("namespace", changefeedID.Namespace),
 		zap.String("changefeed", changefeedID.ID), zap.Any("role", role))
 
-	asyncProducer, err := client.AsyncProducer()
+	closeCh := make(chan struct{})
+	failpointCh := make(chan error, 1)
+	asyncProducer, err := client.AsyncProducer(changefeedID, closeCh, failpointCh)
 	if err != nil {
 		return nil, cerror.WrapError(cerror.ErrKafkaNewSaramaProducer, err)
 	}
@@ -335,15 +300,15 @@ func NewKafkaSaramaProducer(
 		return nil, cerror.WrapError(cerror.ErrKafkaNewSaramaProducer, err)
 	}
 
-	runSaramaMetricsMonitor(ctx, saramaConfig.MetricRegistry, changefeedID, role, admin)
+	runSaramaMetricsMonitor(ctx, client.MetricRegistry(), changefeedID, role, admin)
 
 	k := &kafkaSaramaProducer{
 		admin:         admin,
 		client:        client,
 		asyncProducer: asyncProducer,
 		syncProducer:  syncProducer,
-		closeCh:       make(chan struct{}),
-		failpointCh:   make(chan error, 1),
+		closeCh:       closeCh,
+		failpointCh:   failpointCh,
 		closing:       kafkaProducerRunning,
 
 		id:   changefeedID,
@@ -365,19 +330,19 @@ func NewKafkaSaramaProducer(
 	return k, nil
 }
 
-// AdjustConfig adjust the `Options` and `sarama.Config` by condition.
-func AdjustConfig(
+// AdjustOptions adjust the `Options` and `sarama.Config` by condition.
+func AdjustOptions(
+	ctx context.Context,
 	admin kafka.ClusterAdminClient,
 	options *kafka.Options,
-	saramaConfig *sarama.Config,
 	topic string,
 ) error {
-	topics, err := admin.ListTopics()
+	topics, err := admin.GetAllTopicsMeta(ctx)
 	if err != nil {
 		return errors.Trace(err)
 	}
 
-	err = validateMinInsyncReplicas(admin, topics, topic, int(options.ReplicationFactor))
+	err = validateMinInsyncReplicas(ctx, admin, topics, topic, int(options.ReplicationFactor))
 	if err != nil {
 		return errors.Trace(err)
 	}
@@ -386,8 +351,11 @@ func AdjustConfig(
 	// once we have found the topic, no matter `auto-create-topic`, make sure user input parameters are valid.
 	if exists {
 		// make sure that producer's `MaxMessageBytes` smaller than topic's `max.message.bytes`
-		topicMaxMessageBytesStr, err := getTopicConfig(admin, info, kafka.TopicMaxMessageBytesConfigName,
-			kafka.BrokerMessageMaxBytesConfigName)
+		topicMaxMessageBytesStr, err := getTopicConfig(
+			ctx, admin, info,
+			kafka.TopicMaxMessageBytesConfigName,
+			kafka.BrokerMessageMaxBytesConfigName,
+		)
 		if err != nil {
 			return errors.Trace(err)
 		}
@@ -401,7 +369,7 @@ func AdjustConfig(
 				"use topic's `max.message.bytes` to initialize the Kafka producer",
 				zap.Int("max.message.bytes", topicMaxMessageBytes),
 				zap.Int("max-message-bytes", options.MaxMessageBytes))
-			saramaConfig.Producer.MaxMessageBytes = topicMaxMessageBytes
+			options.MaxMessageBytes = topicMaxMessageBytes
 		}
 
 		// no need to create the topic, but we would have to log user if they found enter wrong topic name later
@@ -417,7 +385,10 @@ func AdjustConfig(
 		return nil
 	}
 
-	brokerMessageMaxBytesStr, err := getBrokerConfig(admin, kafka.BrokerMessageMaxBytesConfigName)
+	brokerMessageMaxBytesStr, err := admin.GetBrokerConfig(
+		ctx,
+		kafka.BrokerMessageMaxBytesConfigName,
+	)
 	if err != nil {
 		log.Warn("TiCDC cannot find `message.max.bytes` from broker's configuration")
 		return errors.Trace(err)
@@ -436,7 +407,7 @@ func AdjustConfig(
 			"use broker's `message.max.bytes` to initialize the Kafka producer",
 			zap.Int("message.max.bytes", brokerMessageMaxBytes),
 			zap.Int("max-message-bytes", options.MaxMessageBytes))
-		saramaConfig.Producer.MaxMessageBytes = brokerMessageMaxBytes
+		options.MaxMessageBytes = brokerMessageMaxBytes
 	}
 
 	// topic not exists yet, and user does not specify the `partition-num` in the sink uri.
@@ -449,13 +420,15 @@ func AdjustConfig(
 }
 
 func validateMinInsyncReplicas(
+	ctx context.Context,
 	admin kafka.ClusterAdminClient,
-	topics map[string]sarama.TopicDetail, topic string, replicationFactor int,
+	topics map[string]kafka.TopicDetail, topic string, replicationFactor int,
 ) error {
 	minInsyncReplicasConfigGetter := func() (string, bool, error) {
 		info, exists := topics[topic]
 		if exists {
-			minInsyncReplicasStr, err := getTopicConfig(admin, info,
+			minInsyncReplicasStr, err := getTopicConfig(
+				ctx, admin, info,
 				kafka.MinInsyncReplicasConfigName,
 				kafka.MinInsyncReplicasConfigName)
 			if err != nil {
@@ -464,7 +437,8 @@ func validateMinInsyncReplicas(
 			return minInsyncReplicasStr, true, nil
 		}
 
-		minInsyncReplicasStr, err := getBrokerConfig(admin, kafka.MinInsyncReplicasConfigName)
+		minInsyncReplicasStr, err := admin.GetBrokerConfig(ctx,
+			kafka.MinInsyncReplicasConfigName)
 		if err != nil {
 			return "", false, err
 		}
@@ -505,38 +479,19 @@ func validateMinInsyncReplicas(
 	return nil
 }
 
-// getBrokerConfig gets broker config by name.
-func getBrokerConfig(admin kafka.ClusterAdminClient, brokerConfigName string) (string, error) {
-	_, controllerID, err := admin.DescribeCluster()
-	if err != nil {
-		return "", err
-	}
-
-	configEntries, err := admin.DescribeConfig(sarama.ConfigResource{
-		Type:        sarama.BrokerResource,
-		Name:        strconv.Itoa(int(controllerID)),
-		ConfigNames: []string{brokerConfigName},
-	})
-	if err != nil {
-		return "", err
-	}
-
-	if len(configEntries) == 0 || configEntries[0].Name != brokerConfigName {
-		log.Warn("Kafka config item not found", zap.String("configName", brokerConfigName))
-		return "", cerror.ErrKafkaBrokerConfigNotFound.GenWithStack(
-			"cannot find the `%s` from the broker's configuration", brokerConfigName)
-	}
-
-	return configEntries[0].Value, nil
-}
-
 // getTopicConfig gets topic config by name.
 // If the topic does not have this configuration, we will try to get it from the broker's configuration.
 // NOTICE: The configuration names of topic and broker may be different for the same configuration.
-func getTopicConfig(admin kafka.ClusterAdminClient, detail sarama.TopicDetail, topicConfigName string, brokerConfigName string) (string, error) {
+func getTopicConfig(
+	ctx context.Context,
+	admin kafka.ClusterAdminClient,
+	detail kafka.TopicDetail,
+	topicConfigName string,
+	brokerConfigName string,
+) (string, error) {
 	if a, ok := detail.ConfigEntries[topicConfigName]; ok {
-		return *a, nil
+		return a, nil
 	}
 
-	return getBrokerConfig(admin, brokerConfigName)
+	return admin.GetBrokerConfig(ctx, brokerConfigName)
 }

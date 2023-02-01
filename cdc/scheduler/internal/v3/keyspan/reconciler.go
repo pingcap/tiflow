@@ -16,6 +16,7 @@ package keyspan
 import (
 	"bytes"
 	"context"
+	"math"
 
 	"github.com/pingcap/log"
 	"github.com/pingcap/tiflow/cdc/model"
@@ -38,21 +39,21 @@ type Reconciler struct {
 	tableSpans map[model.TableID]splitSpans
 	spanCache  []tablepb.Span
 
-	regionCache      RegionCache
-	changefeedID     model.ChangeFeedID
-	maxRegionPerSpan int
+	regionCache   RegionCache
+	changefeedID  model.ChangeFeedID
+	regionPerSpan int
 }
 
 // NewReconciler returns a Reconciler.
 func NewReconciler(
 	changefeedID model.ChangeFeedID, regionCache RegionCache,
-	maxRegionPerSpan int,
+	regionPerSpan int,
 ) *Reconciler {
 	return &Reconciler{
-		tableSpans:       make(map[int64]splitSpans),
-		regionCache:      regionCache,
-		changefeedID:     changefeedID,
-		maxRegionPerSpan: maxRegionPerSpan,
+		tableSpans:    make(map[int64]splitSpans),
+		regionCache:   regionCache,
+		changefeedID:  changefeedID,
+		regionPerSpan: regionPerSpan,
 	}
 }
 
@@ -191,12 +192,13 @@ func (m *Reconciler) splitSpan(ctx context.Context, span tablepb.Span) []tablepb
 			zap.Error(err))
 		return []tablepb.Span{span}
 	}
-	if len(regions) <= m.maxRegionPerSpan {
+	if len(regions) <= m.regionPerSpan {
 		return []tablepb.Span{span}
 	}
 
-	spans := make([]tablepb.Span, 0, len(regions)/m.maxRegionPerSpan+1)
-	start, end := 0, m.maxRegionPerSpan
+	stepper := newEvenlySplitStepper(m.regionPerSpan, len(regions))
+	spans := make([]tablepb.Span, 0, stepper.SpanCount())
+	start, end := 0, stepper.Step()
 	for {
 		startRegion, err := m.regionCache.LocateRegionByID(bo, regions[start])
 		if err != nil {
@@ -233,8 +235,9 @@ func (m *Reconciler) splitSpan(ctx context.Context, span tablepb.Span) []tablepb
 			break
 		}
 		start = end
-		if end+m.maxRegionPerSpan < len(regions) {
-			end = end + m.maxRegionPerSpan
+		step := stepper.Step()
+		if end+step < len(regions) {
+			end = end + step
 		} else {
 			end = len(regions)
 		}
@@ -243,4 +246,38 @@ func (m *Reconciler) splitSpan(ctx context.Context, span tablepb.Span) []tablepb
 	spans[0].StartKey = span.StartKey
 	spans[len(spans)-1].EndKey = span.EndKey
 	return spans
+}
+
+type evenlySplitStepper struct {
+	spanCount          int
+	regionPerSpan      int
+	extraRegionPerSpan int
+	remain             int
+}
+
+func newEvenlySplitStepper(regionPerSpan int, totalRegion int) evenlySplitStepper {
+	extraRegionPerSpan := 0
+	spanCount, remain := totalRegion/regionPerSpan, totalRegion%regionPerSpan
+	if remain != 0 {
+		// Evenly distributes the remaining regions.
+		extraRegionPerSpan = int(math.Ceil(float64(remain) / float64(spanCount)))
+	}
+	return evenlySplitStepper{
+		regionPerSpan:      regionPerSpan,
+		spanCount:          spanCount,
+		extraRegionPerSpan: extraRegionPerSpan,
+		remain:             remain,
+	}
+}
+
+func (e *evenlySplitStepper) SpanCount() int {
+	return e.spanCount
+}
+
+func (e *evenlySplitStepper) Step() int {
+	if e.remain <= 0 {
+		return e.regionPerSpan
+	}
+	e.remain = e.remain - e.extraRegionPerSpan
+	return e.regionPerSpan + e.extraRegionPerSpan
 }

@@ -666,7 +666,7 @@
           "dashes": false,
           "datasource": "${DS_TEST-CLUSTER}",
           "decimals": 1,
-          "description": "The min resolved ts of each TiKV",
+          "description": "The min resolved ts lag of each TiKV",
           "editable": true,
           "error": false,
           "fieldConfig": {
@@ -5203,7 +5203,7 @@
           "dashLength": 10,
           "dashes": false,
           "datasource": "${DS_TEST-CLUSTER}",
-          "description": "The number of events that sorter outputs to puller \n per second",
+          "description": "The number of events that sorter outputs to mounter(or table sink worker) per second",
           "fieldConfig": {
             "defaults": {
               "links": []
@@ -6485,9 +6485,9 @@
           "targets": [
             {
               "exemplar": true,
-              "expr": "ticdc_sinkmanager_memory_quota{k8s_cluster=\"$k8s_cluster\", tidb_cluster=\"$tidb_cluster\", changefeed=~\"$changefeed\", instance=~\"$ticdc_instance\"}",
+              "expr": "ticdc_sinkmanager_memory_quota{k8s_cluster=\"$k8s_cluster\", tidb_cluster=\"$tidb_cluster\", changefeed=~\"$changefeed\", component!=\"\", instance=~\"$ticdc_instance\"}",
               "interval": "",
-              "legendFormat": "{{changefeed}}-{{instance}}-memory-{{type}}",
+              "legendFormat": "{{changefeed}}-{{instance}}-memory-{{component}}-{{type}}",
               "refId": "A"
             },
             {
@@ -7598,7 +7598,7 @@
           "dashLength": 10,
           "dashes": false,
           "datasource": "${DS_TEST-CLUSTER}",
-          "description": "Sink worker busy ratio",
+          "description": "Distribution of flush transaction duration to backend",
           "fieldConfig": {
             "defaults": {},
             "overrides": []
@@ -20698,6 +20698,104 @@
               "max": null,
               "min": null,
               "show": true
+            }
+          ],
+          "yaxis": {
+            "align": false,
+            "alignLevel": null
+          }
+        },
+        {
+          "aliasColors": {},
+          "bars": false,
+          "dashLength": 10,
+          "dashes": false,
+          "datasource": "${DS_TEST-CLUSTER}",
+          "description": "Redo bgUpdateLog worker busy ratio",
+          "fieldConfig": {
+            "defaults": {},
+            "overrides": []
+          },
+          "fill": 1,
+          "fillGradient": 0,
+          "gridPos": {
+            "h": 8,
+            "w": 12,
+            "x": 0,
+            "y": 106
+          },
+          "hiddenSeries": false,
+          "id": 723,
+          "legend": {
+            "alignAsTable": true,
+            "avg": false,
+            "current": true,
+            "max": false,
+            "min": false,
+            "rightSide": false,
+            "show": true,
+            "total": false,
+            "values": true
+          },
+          "lines": true,
+          "linewidth": 1,
+          "nullPointMode": "null",
+          "options": {
+            "alertThreshold": true
+          },
+          "percentage": false,
+          "pluginVersion": "7.5.11",
+          "pointradius": 2,
+          "points": false,
+          "renderer": "flot",
+          "seriesOverrides": [],
+          "spaceLength": 10,
+          "stack": false,
+          "steppedLine": false,
+          "targets": [
+            {
+              "exemplar": true,
+              "expr": "sum(rate(ticdc_redo_worker_busy_ratio{k8s_cluster=\"$k8s_cluster\",tidb_cluster=\"$tidb_cluster\",changefeed=~\"$changefeed\",instance=~\"$ticdc_instance\"}[1m])/10) by (changefeed,instance)",
+              "interval": "",
+              "legendFormat": "{{changefeed}}-{{instance}}",
+              "queryType": "randomWalk",
+              "refId": "A"
+            }
+          ],
+          "thresholds": [],
+          "timeFrom": null,
+          "timeRegions": [],
+          "timeShift": null,
+          "title": "Worker Busy Ratio",
+          "tooltip": {
+            "shared": true,
+            "sort": 0,
+            "value_type": "individual"
+          },
+          "type": "graph",
+          "xaxis": {
+            "buckets": null,
+            "mode": "time",
+            "name": null,
+            "show": true,
+            "values": []
+          },
+          "yaxes": [
+            {
+              "format": "percent",
+              "label": null,
+              "logBase": 1,
+              "max": null,
+              "min": null,
+              "show": true
+            },
+            {
+              "format": "short",
+              "label": null,
+              "logBase": 1,
+              "max": null,
+              "min": null,
+              "show": false
             }
           ],
           "yaxis": {

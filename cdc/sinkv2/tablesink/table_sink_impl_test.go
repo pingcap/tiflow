@@ -159,7 +159,6 @@ func TestNewEventTableSink(t *testing.T) {
 		model.DefaultChangeFeedID("1"), spanz.TableIDToComparableSpan(1),
 		sink, &eventsink.TxnEventAppender{}, prometheus.NewCounter(prometheus.CounterOpts{}))
 
-	require.Equal(t, uint64(0), tb.eventID, "eventID should start from 0")
 	require.Equal(t, model.NewResolvedTs(0), tb.maxResolvedTs, "maxResolvedTs should start from 0")
 	require.NotNil(t, sink, tb.backendSink, "backendSink should be set")
 	require.NotNil(t, tb.progressTracker, "progressTracker should be set")

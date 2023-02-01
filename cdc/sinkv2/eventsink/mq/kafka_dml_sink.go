@@ -48,12 +48,8 @@ func NewKafkaDMLSink(
 	if err := options.Apply(sinkURI); err != nil {
 		return nil, cerror.WrapError(cerror.ErrKafkaInvalidConfig, err)
 	}
-	saramaConfig, err := pkafka.NewSaramaConfig(ctx, options)
-	if err != nil {
-		return nil, errors.Trace(err)
-	}
 
-	adminClient, err := adminClientCreator(options.BrokerEndpoints, saramaConfig)
+	adminClient, err := adminClientCreator(ctx, options)
 	if err != nil {
 		return nil, cerror.WrapError(cerror.ErrKafkaNewSaramaProducer, err)
 	}
@@ -68,7 +64,8 @@ func NewKafkaDMLSink(
 		}
 	}()
 
-	if err = kafka.AdjustConfig(adminClient, options, saramaConfig, topic); err != nil {
+	// adjust the option configuration before creating the kafka client
+	if err = kafka.AdjustOptions(ctx, adminClient, options, topic); err != nil {
 		return nil, cerror.WrapError(cerror.ErrKafkaNewSaramaProducer, err)
 	}
 
@@ -77,7 +74,7 @@ func NewKafkaDMLSink(
 		return nil, errors.Trace(err)
 	}
 
-	client, err := clientCreator(options.BrokerEndpoints, saramaConfig)
+	client, err := clientCreator(ctx, options)
 	if err != nil {
 		return nil, cerror.WrapError(cerror.ErrKafkaNewSaramaProducer, err)
 	}
@@ -97,6 +94,7 @@ func NewKafkaDMLSink(
 	}()
 
 	topicManager, err := util.GetTopicManagerAndTryCreateTopic(
+		ctx,
 		topic,
 		options.DeriveTopicConfig(),
 		client,
@@ -112,7 +110,7 @@ func NewKafkaDMLSink(
 	}
 
 	encoderConfig, err := util.GetEncoderConfig(sinkURI, protocol, replicaConfig,
-		saramaConfig.Producer.MaxMessageBytes)
+		options.MaxMessageBytes)
 	if err != nil {
 		return nil, errors.Trace(err)
 	}

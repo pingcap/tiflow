@@ -86,7 +86,8 @@ func NewCoordinator(
 	}
 	coord := newCoordinator(captureID, changefeedID, ownerRevision, cfg)
 	coord.trans = trans
-	coord.reconciler = keyspan.NewReconciler(changefeedID, regionCache, cfg.RegionPerSpan)
+	coord.reconciler = keyspan.NewReconciler(
+		changefeedID, regionCache, cfg.ChangefeedSettings.RegionPerSpan)
 	coord.pdClock = pdClock
 	return coord, nil
 }
