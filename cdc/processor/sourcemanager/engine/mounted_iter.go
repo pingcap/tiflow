@@ -15,9 +15,12 @@ package engine
 
 import (
 	"context"
+	"time"
 
 	"github.com/pingcap/tiflow/cdc/entry"
 	"github.com/pingcap/tiflow/cdc/model"
+	metrics "github.com/pingcap/tiflow/cdc/sorter"
+	"github.com/prometheus/client_golang/prometheus"
 )
 
 // MountedEventIter is just like EventIterator, but returns mounted events.
@@ -29,10 +32,13 @@ type MountedEventIter struct {
 	rawEvents      []rawEvent
 	nextToEmit     int
 	savedIterError error
+
+	mountWaitDuration prometheus.Observer
 }
 
 // NewMountedEventIter creates a MountedEventIter instance.
 func NewMountedEventIter(
+	changefeedID model.ChangeFeedID,
 	iter EventIterator,
 	mg entry.MounterGroup,
 	maxBatchSize int,
@@ -41,6 +47,8 @@ func NewMountedEventIter(
 		iter:         iter,
 		mg:           mg,
 		maxBatchSize: maxBatchSize,
+
+		mountWaitDuration: metrics.MountWaitDuration.WithLabelValues(changefeedID.Namespace, changefeedID.ID),
 	}
 }
 
@@ -57,9 +65,14 @@ func (i *MountedEventIter) Next(ctx context.Context) (event *model.PolymorphicEv
 	// Check whether there are events in mounting or not.
 	if i.nextToEmit < len(i.rawEvents) {
 		idx := i.nextToEmit
-		if err = i.rawEvents[idx].event.WaitFinished(ctx); err != nil {
+
+		mountStart := time.Now()
+		err = i.rawEvents[idx].event.WaitFinished(ctx)
+		i.mountWaitDuration.Observe(time.Since(mountStart).Seconds())
+		if err != nil {
 			return
 		}
+
 		event = i.rawEvents[idx].event
 		txnFinished = i.rawEvents[idx].txnFinished
 		i.nextToEmit += 1
