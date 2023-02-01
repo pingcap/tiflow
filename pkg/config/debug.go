@@ -27,9 +27,9 @@ type DebugConfig struct {
 	// We will always use pull-based sink.
 	EnablePullBasedSink bool `toml:"enable-pull-based-sink" json:"enable-pull-based-sink"`
 
-	// EnableDBSorter enables db sorter.
-	//
-	// The default value is true.
+	// EnableDBSorter enables db sorter. The default value is true.
+	// DEPRECATED: this option will be removed in the future.
+	// We will always use db sorter.
 	EnableDBSorter bool      `toml:"enable-db-sorter" json:"enable-db-sorter"`
 	DB             *DBConfig `toml:"db" json:"db"`
 
