@@ -56,16 +56,6 @@ var (
 			Help:      "Bucketed histogram of processorManager close processor time (s).",
 			Buckets:   prometheus.ExponentialBuckets(0.01 /* 10 ms */, 2, 18),
 		})
-
-	tableMemoryHistogram = prometheus.NewHistogramVec(
-		prometheus.HistogramOpts{
-			Namespace: "ticdc",
-			Subsystem: "processor",
-			Name:      "table_memory_consumption",
-			Help:      "each table's memory consumption after sorter, in bytes",
-			Buckets:   prometheus.ExponentialBuckets(256, 2.0, 20),
-		}, []string{"namespace", "changefeed"})
-
 	processorMemoryGauge = prometheus.NewGaugeVec(
 		prometheus.GaugeOpts{
 			Namespace: "ticdc",
@@ -73,7 +63,6 @@ var (
 			Name:      "memory_consumption",
 			Help:      "processor's memory consumption estimated in bytes",
 		}, []string{"namespace", "changefeed"})
-
 	remainKVEventsGauge = prometheus.NewGaugeVec(
 		prometheus.GaugeOpts{
 			Namespace: "ticdc",
@@ -90,7 +79,6 @@ func InitMetrics(registry *prometheus.Registry) {
 	registry.MustRegister(processorSchemaStorageGcTsGauge)
 	registry.MustRegister(processorTickDuration)
 	registry.MustRegister(processorCloseDuration)
-	registry.MustRegister(tableMemoryHistogram)
 	registry.MustRegister(processorMemoryGauge)
 	registry.MustRegister(remainKVEventsGauge)
 	sinkmanager.InitMetrics(registry)
