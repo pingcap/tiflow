@@ -41,32 +41,71 @@ const (
 	SASLTypeGSSAPI = "GSSAPI"
 )
 
+// RequiredAcks is used in Produce Requests to tell the broker how many replica acknowledgements
+// it must see before responding. Any of the constants defined here are valid. On broker versions
+// prior to 0.8.2.0 any other positive int16 is also valid (the broker will wait for that many
+// acknowledgements) but in 0.8.2.0 and later this will raise an exception (it has been replaced
+// by setting the `min.isr` value in the brokers configuration).
+type RequiredAcks int16
+
+const (
+	// NoResponse doesn't send any response, the TCP ACK is all you get.
+	NoResponse RequiredAcks = 0
+	// WaitForLocal waits for only the local commit to succeed before responding.
+	WaitForLocal RequiredAcks = 1
+	// WaitForAll waits for all in-sync replicas to commit before responding.
+	// The minimum number of in-sync replicas is configured on the broker via
+	// the `min.insync.replicas` configuration key.
+	WaitForAll RequiredAcks = -1
+	// Unknown should never have been use in real config.
+	Unknown RequiredAcks = 2
+)
+
+func requireAcksFromString(acks string) (RequiredAcks, error) {
+	i, err := strconv.Atoi(acks)
+	if err != nil {
+		return Unknown, err
+	}
+
+	switch i {
+	case int(WaitForAll):
+		return WaitForAll, nil
+	case int(WaitForLocal):
+		return WaitForLocal, nil
+	case int(NoResponse):
+		return NoResponse, nil
+	default:
+		return Unknown, cerror.ErrKafkaInvalidRequiredAcks.GenWithStackByArgs(i)
+	}
+}
+
 // Options stores user specified configurations
 type Options struct {
 	BrokerEndpoints []string
-	PartitionNum    int32
 
+	// control whether to create topic
+	AutoCreate   bool
+	PartitionNum int32
 	// User should make sure that `replication-factor` not greater than the number of kafka brokers.
 	ReplicationFactor int16
+	Version           string
+	MaxMessageBytes   int
+	Compression       string
+	ClientID          string
+	RequiredAcks      RequiredAcks
+	// Only for test. User can not set this value.
+	// The current prod default value is 0.
+	MaxMessages int
 
-	Version         string
-	MaxMessageBytes int
-	Compression     string
-	ClientID        string
-	EnableTLS       bool
-	Credential      *security.Credential
-	SASL            *security.SASL
-	// control whether to create topic
-	AutoCreate bool
+	// Credential is used to connect to kafka cluster.
+	EnableTLS  bool
+	Credential *security.Credential
+	SASL       *security.SASL
 
 	// Timeout for network configurations, default to `10s`
 	DialTimeout  time.Duration
 	WriteTimeout time.Duration
 	ReadTimeout  time.Duration
-
-	// The maximum number of messages the producer will send in a single
-	// broker request. Defaults to 0
-	MaxMessages int
 }
 
 // NewOptions returns a default Kafka configuration
@@ -77,6 +116,7 @@ func NewOptions() *Options {
 		MaxMessageBytes:   config.DefaultMaxMessageBytes,
 		ReplicationFactor: 1,
 		Compression:       "none",
+		RequiredAcks:      WaitForAll,
 		Credential:        &security.Credential{},
 		SASL:              &security.SASL{},
 		AutoCreate:        true,
@@ -195,6 +235,15 @@ func (c *Options) Apply(sinkURI *url.URL) error {
 			return err
 		}
 		c.ReadTimeout = a
+	}
+
+	s = params.Get("required-acks")
+	if s != "" {
+		r, err := requireAcksFromString(s)
+		if err != nil {
+			return err
+		}
+		c.RequiredAcks = r
 	}
 
 	err := c.applySASL(params)
