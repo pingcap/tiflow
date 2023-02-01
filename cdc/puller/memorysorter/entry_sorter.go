@@ -11,7 +11,7 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-package memory
+package memorysorter
 
 import (
 	"context"
@@ -24,7 +24,6 @@ import (
 	"github.com/pingcap/log"
 	"github.com/pingcap/tiflow/cdc/contextutil"
 	"github.com/pingcap/tiflow/cdc/model"
-	"github.com/pingcap/tiflow/cdc/sorter"
 	"github.com/pingcap/tiflow/pkg/notify"
 	"go.uber.org/zap"
 	"golang.org/x/sync/errgroup"
@@ -154,12 +153,6 @@ func (es *EntrySorter) AddEntry(_ context.Context, entry *model.PolymorphicEvent
 func (es *EntrySorter) Output() <-chan *model.PolymorphicEvent {
 	return es.outputCh
 }
-
-// EmitStartTs implement sorter interface
-func (es *EntrySorter) EmitStartTs(_ context.Context, _ uint64) {}
-
-// Stats implement sorter interface
-func (es *EntrySorter) Stats() sorter.Stats { return sorter.Stats{} }
 
 func eventLess(i *model.PolymorphicEvent, j *model.PolymorphicEvent) bool {
 	return model.ComparePolymorphicEvents(i, j)
