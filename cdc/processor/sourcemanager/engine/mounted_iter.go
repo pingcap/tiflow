@@ -127,7 +127,9 @@ func (i *MountedEventIter) readBatch(ctx context.Context) error {
 		if err != nil {
 			return err
 		}
-		if !inMounting {
+		if inMounting {
+			i.inMountingEvents = append(i.inMountingEvents, rawEvent{event, txnFinished})
+		} else {
 			i.toMountEvent = rawEvent{event, txnFinished}
 			break
 		}
