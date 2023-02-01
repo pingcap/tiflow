@@ -59,6 +59,9 @@ func NewKafkaGoClient(ctx context.Context, options *pkafka.Options) (pkafka.Clie
 		return nil, errors.Trace(err)
 	}
 	tlsConfig, err := completeSSLConfig(options)
+	if err != nil {
+		return nil, errors.Trace(err)
+	}
 	transport := &kafka.Transport{
 		SASL:        mechanism,
 		ClientID:    clientID,
