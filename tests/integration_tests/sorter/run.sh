@@ -54,39 +54,15 @@ function run() {
 
 	cd $WORK_DIR
 
-	# FIXME: pull-based sink does not support unified sorter.
-	#	echo "test unified sorter"
-	#
-	#	start_ts=$(run_cdc_cli_tso_query ${UP_PD_HOST_1} ${UP_PD_PORT_1})
-	#	reset_and_prepare_data
-	#
-	#	# Run cdc server with unified sorter.
-	#	run_cdc_server --workdir $WORK_DIR --binary $CDC_BINARY --config $CUR/conf/ticdc_unified_sorter.toml
-	#
-	#	TOPIC_NAME="ticdc-unified-sorter-test-$RANDOM"
-	#	CF_NAME=$TOPIC_NAME
-	#	case $SINK_TYPE in
-	#	kafka) SINK_URI="kafka://127.0.0.1:9092/$TOPIC_NAME?protocol=open-protocol&partition-num=4&kafka-version=${KAFKA_VERSION}&max-message-bytes=10485760" ;;
-	#	*) SINK_URI="mysql://normal:123456@127.0.0.1:3306/?max-txn-row=1" ;;
-	#	esac
-	#	run_cdc_cli changefeed create -c $CF_NAME --start-ts=$start_ts --sink-uri="$SINK_URI" --sort-engine="unified"
-	#	if [ "$SINK_TYPE" == "kafka" ]; then
-	#		run_kafka_consumer $WORK_DIR "kafka://127.0.0.1:9092/$TOPIC_NAME?protocol=open-protocol&partition-num=4&version=${KAFKA_VERSION}&max-message-bytes=10485760"
-	#	fi
-	#
-	#	run_test
-	#	cleanup_process $CDC_BINARY
-	#	run_cdc_cli unsafe reset --no-confirm --pd=http://${UP_PD_HOST_1}:${UP_PD_PORT_1}
-
-	echo "test leveldb sorter"
+	echo "test db sorter"
 
 	start_ts=$(run_cdc_cli_tso_query ${UP_PD_HOST_1} ${UP_PD_PORT_1})
 	reset_and_prepare_data
 
-	# Run cdc server with leveldb sorter.
+	# Run cdc server with db sorter.
 	run_cdc_server --workdir $WORK_DIR --binary $CDC_BINARY
 
-	TOPIC_NAME="ticdc-leveldb-sorter-test-$RANDOM"
+	TOPIC_NAME="ticdc-db-sorter-test-$RANDOM"
 	CF_NAME=$TOPIC_NAME
 	case $SINK_TYPE in
 	kafka) SINK_URI="kafka://127.0.0.1:9092/$TOPIC_NAME?protocol=open-protocol&partition-num=4&kafka-version=${KAFKA_VERSION}&max-message-bytes=10485760" ;;

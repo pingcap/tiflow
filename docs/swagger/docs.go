@@ -741,6 +741,41 @@ var doc = `{
                 }
             }
         },
+        "/api/v2/processors": {
+            "get": {
+                "description": "list all processors in the TiCDC cluster",
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "processor"
+                ],
+                "summary": "List processors",
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "type": "array",
+                            "items": {
+                                "$ref": "#/definitions/model.ProcessorCommonInfo"
+                            }
+                        }
+                    },
+                    "400": {
+                        "description": "Bad Request",
+                        "schema": {
+                            "$ref": "#/definitions/model.HTTPError"
+                        }
+                    },
+                    "500": {
+                        "description": "Internal Server Error",
+                        "schema": {
+                            "$ref": "#/definitions/model.HTTPError"
+                        }
+                    }
+                }
+            }
+        },
         "/api/v2/processors/{changefeed_id}/{capture_id}": {
             "get": {
                 "description": "get the detail information of a processor",

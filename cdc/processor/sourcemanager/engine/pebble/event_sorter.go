@@ -28,7 +28,6 @@ import (
 	"github.com/pingcap/tiflow/cdc/processor/sourcemanager/engine"
 	"github.com/pingcap/tiflow/cdc/processor/sourcemanager/engine/pebble/encoding"
 	"github.com/pingcap/tiflow/cdc/processor/tablepb"
-	metrics "github.com/pingcap/tiflow/cdc/sorter/db"
 	"github.com/pingcap/tiflow/pkg/chann"
 	"github.com/pingcap/tiflow/pkg/spanz"
 	"go.uber.org/zap"
@@ -398,8 +397,8 @@ func (s *EventSorter) handleEvents(
 	fetchTokens, ioTokens chan struct{},
 ) {
 	idstr := strconv.Itoa(id + 1)
-	writeDuration := metrics.SorterWriteDuration().WithLabelValues(idstr)
-	writeBytes := metrics.SorterWriteBytes().WithLabelValues(idstr)
+	writeDuration := engine.SorterWriteDuration().WithLabelValues(idstr)
+	writeBytes := engine.SorterWriteBytes().WithLabelValues(idstr)
 
 	batch := db.NewBatch()
 	writeOpts := &pebble.WriteOptions{Sync: false}
@@ -552,8 +551,8 @@ func (s *EventSorter) cleanTable(
 
 // ----- Some internal variable and functions -----
 const (
-	batchCommitSize     int           = 16 * 1024 * 1024
-	batchCommitInterval time.Duration = 20 * time.Millisecond
+	batchCommitSize     int = 16 * 1024 * 1024
+	batchCommitInterval     = 20 * time.Millisecond
 )
 
 var uniqueIDGen uint32 = 0

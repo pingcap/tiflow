@@ -14,6 +14,7 @@
 package manager
 
 import (
+	"context"
 	"testing"
 	"time"
 
@@ -35,9 +36,11 @@ func TestPartitions(t *testing.T) {
 		ReplicationFactor: 1,
 	}
 
-	manager, err := NewKafkaTopicManager(client, adminClient, cfg)
+	ctx := context.Background()
+	manager, err := NewKafkaTopicManager(ctx, client, adminClient, cfg)
 	require.Nil(t, err)
 	partitionsNum, err := manager.GetPartitionNum(
+		ctx,
 		kafka.DefaultMockTopicName)
 	require.Nil(t, err)
 	require.Equal(t, int32(3), partitionsNum)
@@ -57,9 +60,11 @@ func TestTryRefreshMeta(t *testing.T) {
 		ReplicationFactor: 1,
 	}
 
-	manager, err := NewKafkaTopicManager(client, adminClient, cfg)
+	ctx := context.Background()
+	manager, err := NewKafkaTopicManager(ctx, client, adminClient, cfg)
 	require.Nil(t, err)
 	partitionsNum, err := manager.GetPartitionNum(
+		ctx,
 		kafka.DefaultMockTopicName)
 	require.Nil(t, err)
 	require.Equal(t, int32(3), partitionsNum)
@@ -67,14 +72,14 @@ func TestTryRefreshMeta(t *testing.T) {
 	// Mock create a topic.
 	client.AddTopic("test", 4)
 	manager.lastMetadataRefresh.Store(time.Now().Add(-2 * time.Minute).Unix())
-	partitionsNum, err = manager.GetPartitionNum("test")
+	partitionsNum, err = manager.GetPartitionNum(ctx, "test")
 	require.Nil(t, err)
 	require.Equal(t, int32(4), partitionsNum)
 
 	// Mock delete a topic.
 	// NOTICE: we do not refresh metadata for the deleted topic.
 	client.DeleteTopic("test")
-	partitionsNum, err = manager.GetPartitionNum("test")
+	partitionsNum, err = manager.GetPartitionNum(ctx, "test")
 	require.Nil(t, err)
 	require.Equal(t, int32(4), partitionsNum)
 }
@@ -94,24 +99,25 @@ func TestCreateTopic(t *testing.T) {
 		ReplicationFactor: 1,
 	}
 
-	manager, err := NewKafkaTopicManager(client, adminClient, cfg)
+	ctx := context.Background()
+	manager, err := NewKafkaTopicManager(ctx, client, adminClient, cfg)
 	require.Nil(t, err)
-	partitionNum, err := manager.createTopic(kafka.DefaultMockTopicName)
+	partitionNum, err := manager.createTopic(ctx, kafka.DefaultMockTopicName)
 	require.Nil(t, err)
 	require.Equal(t, int32(3), partitionNum)
 
-	partitionNum, err = manager.createTopic("new-topic")
+	partitionNum, err = manager.createTopic(ctx, "new-topic")
 	require.Nil(t, err)
 	require.Equal(t, int32(2), partitionNum)
-	partitionsNum, err := manager.GetPartitionNum("new-topic")
+	partitionsNum, err := manager.GetPartitionNum(ctx, "new-topic")
 	require.Nil(t, err)
 	require.Equal(t, int32(2), partitionsNum)
 
 	// Try to create a topic without auto create.
 	cfg.AutoCreate = false
-	manager, err = NewKafkaTopicManager(client, adminClient, cfg)
+	manager, err = NewKafkaTopicManager(ctx, client, adminClient, cfg)
 	require.Nil(t, err)
-	_, err = manager.createTopic("new-topic2")
+	_, err = manager.createTopic(ctx, "new-topic2")
 	require.Regexp(
 		t,
 		"`auto-create-topic` is false, and new-topic2 not found",
@@ -125,9 +131,9 @@ func TestCreateTopic(t *testing.T) {
 		PartitionNum:      2,
 		ReplicationFactor: 4,
 	}
-	manager, err = NewKafkaTopicManager(client, adminClient, cfg)
+	manager, err = NewKafkaTopicManager(ctx, client, adminClient, cfg)
 	require.Nil(t, err)
-	_, err = manager.createTopic("new-topic-failed")
+	_, err = manager.createTopic(ctx, "new-topic-failed")
 	require.Regexp(
 		t,
 		"kafka create topic failed: kafka server: Replication-factor is invalid",
@@ -149,13 +155,14 @@ func TestCreateTopicWithDelay(t *testing.T) {
 		ReplicationFactor: 1,
 	}
 
-	manager, err := NewKafkaTopicManager(client, adminClient, cfg)
+	ctx := context.Background()
+	manager, err := NewKafkaTopicManager(ctx, client, adminClient, cfg)
 	require.Nil(t, err)
-	partitionNum, err := manager.createTopic("new_topic")
+	partitionNum, err := manager.createTopic(ctx, "new_topic")
 	require.Nil(t, err)
 	err = adminClient.SetRemainingFetchesUntilTopicVisible("new_topic", 3)
 	require.Nil(t, err)
-	err = manager.waitUntilTopicVisible("new_topic")
+	err = manager.waitUntilTopicVisible(ctx, "new_topic")
 	require.Nil(t, err)
 	require.Equal(t, int32(2), partitionNum)
 }
