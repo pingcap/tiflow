@@ -13,7 +13,10 @@
 
 package kafka
 
-import "github.com/rcrowley/go-metrics"
+import (
+	"github.com/pingcap/tiflow/cdc/model"
+	"github.com/rcrowley/go-metrics"
+)
 
 // ClientMockImpl is a mock implementation of Client interface.
 type ClientMockImpl struct {
@@ -63,7 +66,11 @@ func (c *ClientMockImpl) SyncProducer() (SyncProducer, error) {
 }
 
 // AsyncProducer creates an async producer
-func (c *ClientMockImpl) AsyncProducer() (AsyncProducer, error) {
+func (c *ClientMockImpl) AsyncProducer(
+	changefeedID model.ChangeFeedID,
+	closedChan chan struct{},
+	failpointCh chan error,
+) (AsyncProducer, error) {
 	return &saramaAsyncProducer{}, nil
 }
 

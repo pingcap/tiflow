@@ -101,6 +101,13 @@ type ChangefeedConfig struct {
 	PDConfig
 }
 
+// ProcessorCommonInfo holds the common info of a processor
+type ProcessorCommonInfo struct {
+	Namespace    string `json:"namespace"`
+	ChangeFeedID string `json:"changefeed_id"`
+	CaptureID    string `json:"capture_id"`
+}
+
 // ReplicaConfig is a duplicate of  config.ReplicaConfig
 type ReplicaConfig struct {
 	MemoryQuota           uint64                     `json:"memory_quota"`
@@ -553,7 +560,8 @@ type ChangeFeedInfo struct {
 	CreatorVersion string             `json:"creator_version,omitempty"`
 }
 
-// RunningError represents some running error from cdc components, such as processor.
+// RunningError represents some running error from cdc components,
+// such as processor.
 type RunningError struct {
 	Addr    string `json:"addr"`
 	Code    string `json:"code"`
@@ -603,4 +611,10 @@ func (info *ChangeFeedInfo) Unmarshal(data []byte) error {
 type UpstreamConfig struct {
 	ID uint64 `json:"id"`
 	PDConfig
+}
+
+// ProcessorDetail holds the detail info of a processor
+type ProcessorDetail struct {
+	// All table ids that this processor are replicating.
+	Tables []int64 `json:"table_ids"`
 }

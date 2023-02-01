@@ -14,13 +14,14 @@
 package jobop
 
 import (
+	"context"
+
 	"github.com/pingcap/log"
 	frameworkModel "github.com/pingcap/tiflow/engine/framework/model"
 	pkgOrm "github.com/pingcap/tiflow/engine/pkg/orm"
 	ormModel "github.com/pingcap/tiflow/engine/pkg/orm/model"
 	"go.uber.org/multierr"
 	"go.uber.org/zap"
-	"golang.org/x/net/context"
 )
 
 type operateRouter interface {
