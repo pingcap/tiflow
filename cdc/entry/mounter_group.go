@@ -15,8 +15,6 @@ package entry
 
 import (
 	"context"
-	"strconv"
-	"sync/atomic"
 	"time"
 
 	"github.com/pingcap/errors"
@@ -28,12 +26,17 @@ import (
 // MounterGroup is a group of mounter workers
 type MounterGroup interface {
 	Run(ctx context.Context) error
-	AddEvent(ctx context.Context, event *model.PolymorphicEvent) error
+	AddEvent(ctx context.Context, task MountTask) error
+}
+
+type MountTask struct {
+	Event    *model.PolymorphicEvent
+	Finished chan struct{}
 }
 
 type mounterGroup struct {
 	schemaStorage  SchemaStorage
-	inputCh        []chan *model.PolymorphicEvent
+	inputCh        chan MountTask
 	tz             *time.Location
 	filter         filter.Filter
 	enableOldValue bool
@@ -62,13 +65,9 @@ func NewMounterGroup(
 	if workerNum <= 0 {
 		workerNum = defaultMounterWorkerNum
 	}
-	inputCh := make([]chan *model.PolymorphicEvent, workerNum)
-	for i := 0; i < workerNum; i++ {
-		inputCh[i] = make(chan *model.PolymorphicEvent, defaultInputChanSize)
-	}
 	return &mounterGroup{
 		schemaStorage:  schemaStorage,
-		inputCh:        inputCh,
+		inputCh:        make(chan MountTask, defaultInputChanSize),
 		enableOldValue: enableOldValue,
 		filter:         filter,
 		tz:             tz,
@@ -85,48 +84,53 @@ func (m *mounterGroup) Run(ctx context.Context) error {
 	}()
 	g, ctx := errgroup.WithContext(ctx)
 	for i := 0; i < m.workerNum; i++ {
-		idx := i
 		g.Go(func() error {
-			return m.runWorker(ctx, idx)
+			return m.runWorker(ctx)
 		})
 	}
+	g.Go(func() error {
+		metrics := mounterGroupInputChanSizeGauge.WithLabelValues(m.changefeedID.Namespace, m.changefeedID.ID)
+		ticker := time.NewTicker(defaultMetricInterval)
+		defer ticker.Stop()
+		for {
+			select {
+			case <-ctx.Done():
+				return errors.Trace(ctx.Err())
+			case <-ticker.C:
+				metrics.Set(float64(len(m.inputCh)))
+			}
+		}
+	})
 	return g.Wait()
 }
 
-func (m *mounterGroup) runWorker(ctx context.Context, index int) error {
+func (m *mounterGroup) runWorker(ctx context.Context) error {
 	mounter := NewMounter(m.schemaStorage, m.changefeedID, m.tz, m.filter, m.enableOldValue)
-	rawCh := m.inputCh[index]
-	metrics := mounterGroupInputChanSizeGauge.
-		WithLabelValues(m.changefeedID.Namespace, m.changefeedID.ID, strconv.Itoa(index))
-	ticker := time.NewTicker(defaultMetricInterval)
-	defer ticker.Stop()
 	for {
-		var pEvent *model.PolymorphicEvent
 		select {
 		case <-ctx.Done():
 			return errors.Trace(ctx.Err())
-		case <-ticker.C:
-			metrics.Set(float64(len(rawCh)))
-		case pEvent = <-rawCh:
-			if pEvent.RawKV.OpType == model.OpTypeResolved {
-				pEvent.MarkFinished()
-				continue
+		case task := <-m.inputCh:
+			if task.Event.RawKV.OpType != model.OpTypeResolved {
+				err := mounter.DecodeEvent(ctx, task.Event)
+				if err != nil {
+					return errors.Trace(err)
+				}
 			}
-			err := mounter.DecodeEvent(ctx, pEvent)
-			if err != nil {
-				return errors.Trace(err)
+			task.Event.Finished1.Store(true)
+			select {
+			case task.Finished <- struct{}{}:
+			default:
 			}
-			pEvent.MarkFinished()
 		}
 	}
 }
 
-func (m *mounterGroup) AddEvent(ctx context.Context, event *model.PolymorphicEvent) error {
-	index := atomic.AddUint64(&m.index, 1) % uint64(m.workerNum)
+func (m *mounterGroup) AddEvent(ctx context.Context, task MountTask) error {
 	select {
 	case <-ctx.Done():
 		return ctx.Err()
-	case m.inputCh[index] <- event:
+	case m.inputCh <- task:
 		return nil
 	}
 }
@@ -140,7 +144,7 @@ func (m *MockMountGroup) Run(ctx context.Context) error {
 }
 
 // AddEvent implements MountGroup.
-func (m *MockMountGroup) AddEvent(ctx context.Context, event *model.PolymorphicEvent) error {
-	event.MarkFinished()
+func (m *MockMountGroup) AddEvent(ctx context.Context, task MountTask) error {
+	task.Event.Finished1.Store(true)
 	return nil
 }

@@ -16,6 +16,7 @@ package model
 import (
 	"context"
 	"math"
+	"sync/atomic"
 
 	"github.com/pingcap/log"
 	"github.com/pingcap/tidb/types"
@@ -42,7 +43,8 @@ type PolymorphicEvent struct {
 	RawKV *RawKVEntry
 	Row   *RowChangedEvent
 
-	finished chan struct{}
+	finished  chan struct{}
+	Finished1 atomic.Bool
 }
 
 // NewEmptyPolymorphicEvent creates a new empty PolymorphicEvent.
