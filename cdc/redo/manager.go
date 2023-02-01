@@ -493,7 +493,7 @@ func (m *ManagerImpl) flushLog(
 }
 
 func (m *ManagerImpl) onResolvedTsMsg(span tablepb.Span, resolvedTs model.Ts) {
-	// It's possible that the table is removed while redo log is still in writting.
+	// It's possible that the table is removed while redo log is still in writing.
 	if value, loaded := m.rtsMap.Load(span); loaded {
 		value.(*statefulRts).checkAndSetUnflushed(resolvedTs)
 	}
