@@ -75,7 +75,7 @@ func NewKafkaGoClient(ctx context.Context, options *pkafka.Options) (pkafka.Clie
 	if err != nil {
 		return nil, errors.Trace(err)
 	}
-	mechanism, err = completeSaramaSASLConfig(options)
+	mechanism, err = completeSASLConfig(options)
 	if err != nil {
 		return nil, errors.Trace(err)
 	}
@@ -267,7 +267,7 @@ type asyncWriter struct {
 	closedChan   chan struct{}
 	failpointCh  chan error
 	successes    chan []kafka.Message
-	errorsChan       chan error
+	errorsChan   chan error
 }
 
 // AsyncClose triggers a shutdown of the producer. The shutdown has completed
@@ -299,6 +299,9 @@ func (a *asyncWriter) AsyncSend(ctx context.Context, topic string,
 	case <-ctx.Done():
 		return errors.Trace(ctx.Err())
 	case <-a.closedChan:
+		log.Warn("Receive from closed chan in kafka producer",
+			zap.String("namespace", a.changefeedID.Namespace),
+			zap.String("changefeed", a.changefeedID.ID))
 		return nil
 	default:
 	}
@@ -320,10 +323,12 @@ func (a *asyncWriter) AsyncRunCallback(ctx context.Context) error {
 		case <-ctx.Done():
 			return errors.Trace(ctx.Err())
 		case <-a.closedChan:
+			log.Warn("Receive from closed chan in kafka producer",
+				zap.String("namespace", a.changefeedID.Namespace),
+				zap.String("changefeed", a.changefeedID.ID))
 			return nil
 		case err := <-a.failpointCh:
-			log.Warn("Receive from failpoint chan in kafka "+
-				"DML producer",
+			log.Warn("Receive from failpoint chan in kafka producer",
 				zap.String("namespace", a.changefeedID.Namespace),
 				zap.String("changefeed", a.changefeedID.ID),
 				zap.Error(err))
@@ -335,7 +340,7 @@ func (a *asyncWriter) AsyncRunCallback(ctx context.Context) error {
 					callback()
 				}
 			}
-		case err := <-a.errors:
+		case err := <-a.errorsChan:
 			// We should not wrap a nil pointer if the pointer
 			// is of a subtype of `error` because Go would store the type info
 			// and the resulted `error` variable would not be nil,
@@ -351,7 +356,8 @@ func (a *asyncWriter) AsyncRunCallback(ctx context.Context) error {
 
 func (a *asyncWriter) callBackRun(messages []kafka.Message, err error) {
 	if err != nil {
-		a.errors <- err
+		a.errorsChan <- err
+	} else {
+		a.successes <- messages
 	}
-	a.successes <- messages
 }
