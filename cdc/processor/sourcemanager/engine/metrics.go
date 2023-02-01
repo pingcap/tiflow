@@ -120,6 +120,11 @@ func SorterWriteBytes() *prometheus.HistogramVec {
 	return sorterWriteBytesHistogram
 }
 
+// SorterIterReadDuration returns sorterIterReadDurationHistogram.
+func SorterIterReadDuration() *prometheus.HistogramVec {
+	return sorterIterReadDurationHistogram
+}
+
 // InMemoryDataSize returns inMemoryDataSizeGauge.
 func InMemoryDataSize() *prometheus.GaugeVec {
 	return inMemoryDataSizeGauge

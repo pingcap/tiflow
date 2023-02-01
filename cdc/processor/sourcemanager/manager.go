@@ -99,7 +99,7 @@ func (m *SourceManager) OnResolve(action func(tablepb.Span, model.Ts)) {
 func (m *SourceManager) FetchByTable(
 	span tablepb.Span, lowerBound, upperBound engine.Position,
 ) *engine.MountedEventIter {
-	iter := m.engine.FetchByTable(span, lowerBound, upperBound)
+	iter := m.engine.FetchByTable(m.changefeedID, span, lowerBound, upperBound)
 	return engine.NewMountedEventIter(m.changefeedID, iter, m.mg, defaultMaxBatchSize)
 }
 
