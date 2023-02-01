@@ -267,7 +267,7 @@ type asyncWriter struct {
 	closedChan   chan struct{}
 	failpointCh  chan error
 	successes    chan []kafka.Message
-	errors       chan error
+	errorsChan       chan error
 }
 
 // AsyncClose triggers a shutdown of the producer. The shutdown has completed
