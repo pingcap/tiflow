@@ -454,21 +454,25 @@ func (info *ChangeFeedInfo) fixScheduler() {
 
 type Barrier struct {
 	GlobalBarrierTs Ts
-	TableBarrier    map[TableName]Ts
+	TableBarrier    []TableBarrier
+}
+
+type TableBarrier struct {
+	TableName TableName
+	BarrierTs Ts
 }
 
 func NewBarrier(ts Ts) *Barrier {
 	return &Barrier{
 		GlobalBarrierTs: ts,
-		TableBarrier:    make(map[TableName]Ts),
 	}
 }
 
 func (b *Barrier) GetMinTableBarrierTs() Ts {
 	res := b.GlobalBarrierTs
-	for _, ts := range b.TableBarrier {
-		if ts < res {
-			res = ts
+	for _, t := range b.TableBarrier {
+		if t.BarrierTs < res {
+			res = t.BarrierTs
 		}
 	}
 	return res

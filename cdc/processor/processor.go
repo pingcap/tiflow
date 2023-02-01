@@ -853,23 +853,23 @@ func (p *processor) sendError(err error) {
 
 func (p *processor) calculateTableBarrierTs(ctx cdcContext.Context) (map[model.TableID]model.Ts, error) {
 	tableBarrierTs := make(map[model.TableID]model.Ts)
-	for t, ts := range p.changefeed.Status.Barrier.TableBarrier {
-		snap, err := p.schemaStorage.GetSnapshot(ctx, ts)
+	for _, tb := range p.changefeed.Status.Barrier.TableBarrier {
+		snap, err := p.schemaStorage.GetSnapshot(ctx, tb.BarrierTs)
 		if err != nil {
 			return nil, errors.Trace(err)
 		}
-		tbInfo, ok := snap.TableByName(t.Schema, t.Table)
+		tbInfo, ok := snap.TableByName(tb.TableName.Schema, tb.TableName.Table)
 		if !ok {
-			return nil, cerror.ErrUnknown.GenWithStackByArgs("table not found", t.Schema, t.Table)
+			return nil, cerror.ErrUnknown.GenWithStackByArgs("table not found", tb.TableName.Schema, tb.TableName.Table)
 		}
-		tableBarrierTs[tbInfo.ID] = ts
-		if t.IsPartition {
+		tableBarrierTs[tbInfo.ID] = tb.BarrierTs
+		if tb.TableName.IsPartition {
 			partitionInfo := tbInfo.GetPartitionInfo()
 			if partitionInfo == nil {
-				return nil, cerror.ErrUnknown.GenWithStackByArgs("partition not found", t.Schema, t.Table)
+				return nil, cerror.ErrUnknown.GenWithStackByArgs("partition not found", tb.TableName.Schema, tb.TableName.Table)
 			}
 			for _, partition := range partitionInfo.Definitions {
-				tableBarrierTs[partition.ID] = ts
+				tableBarrierTs[partition.ID] = tb.BarrierTs
 			}
 		}
 	}

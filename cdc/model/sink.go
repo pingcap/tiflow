@@ -14,6 +14,7 @@
 package model
 
 import (
+	"encoding/json"
 	"fmt"
 	"strconv"
 	"sync"
@@ -192,6 +193,37 @@ type TableName struct {
 	Table       string `toml:"tbl-name" json:"tbl-name" msg:"tbl-name"`
 	TableID     int64  `toml:"tbl-id" json:"tbl-id" msg:"tbl-id"`
 	IsPartition bool   `toml:"is-partition" json:"is-partition" msg:"is-partition"`
+}
+
+func (t *TableName) MarshalJSON() ([]byte, error) {
+	return json.Marshal(&struct {
+		Schema      string `json:"db-name"`
+		Table       string `json:"tbl-name"`
+		TableID     int64  `json:"tbl-id"`
+		IsPartition bool   `json:"is-partition"`
+	}{
+		Schema:      t.Schema,
+		Table:       t.Table,
+		TableID:     t.TableID,
+		IsPartition: t.IsPartition,
+	})
+}
+
+func (t *TableName) UnmarshalJSON(b []byte) error {
+	tmp := struct {
+		Schema      string `json:"db-name"`
+		Table       string `json:"tbl-name"`
+		TableID     int64  `json:"tbl-id"`
+		IsPartition bool   `json:"is-partition"`
+	}{}
+	if err := json.Unmarshal(b, &tmp); err != nil {
+		return err
+	}
+	t.Schema = tmp.Schema
+	t.Table = tmp.Table
+	t.TableID = tmp.TableID
+	t.IsPartition = tmp.IsPartition
+	return nil
 }
 
 // String implements fmt.Stringer interface.

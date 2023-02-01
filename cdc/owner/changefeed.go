@@ -160,6 +160,7 @@ func newChangefeed(
 		scheduler:        nil,
 		barriers:         newBarriers(),
 		barrier:          model.NewBarrier(state.Info.StartTs),
+		ddlHolder:        NewDDLHolder(),
 		feedStateManager: newFeedStateManager(),
 		upstream:         up,
 
@@ -786,26 +787,28 @@ func (c *changefeed) preflightCheck(captures map[model.CaptureID]*model.CaptureI
 }
 
 func (c *changefeed) handleDDL(ctx cdcContext.Context) error {
-	_, ddl := c.ddlPuller.FrontDDL()
+	var ddlEvents []*model.DDLEvent
+	_, ddl := c.ddlPuller.PopFrontDDL()
 	if ddl != nil {
 		ddlEvents, err := c.schema.BuildDDLEvents(ddl)
 		if err != nil {
 			return errors.Trace(err)
 		}
 		c.ddlHolder.AddDDLs(ddlEvents)
-	}
-	// apply ddl to owner schema
-	err := c.schema.HandleDDL(ddl)
-	if err != nil {
-		return errors.Trace(err)
+		// apply ddl to owner schema
+		err = c.schema.HandleDDL(ddl)
+		if err != nil {
+			return errors.Trace(err)
+		}
 	}
 
+	// flush all ddl events to redo
 	if c.redoManager.Enabled() {
-		for _, ddlEvent := range c.ddlEventCache {
+		for _, ddlEvent := range ddlEvents {
 			// FIXME: seems it's not necessary to emit DDL to redo storage,
 			// because for a given redo meta with range (checkpointTs, resolvedTs],
 			// there must be no pending DDLs not flushed into DDL sink.
-			err = c.redoManager.EmitDDLEvent(ctx, ddlEvent)
+			err := c.redoManager.EmitDDLEvent(ctx, ddlEvent)
 			if err != nil {
 				return err
 			}
@@ -994,7 +997,7 @@ func (c *changefeed) updateStatus(checkpointTs, resolvedTs model.Ts) {
 			status.Barrier = *c.barrier
 			changed = true
 		}
-		log.Info("fizz:update changefeed status", zap.String("changefeed", c.id.ID), zap.Any("status", status))
+		log.Debug("fizz:update changefeed status", zap.String("changefeed", c.id.ID), zap.Any("status", status))
 		return status, changed, nil
 	})
 }

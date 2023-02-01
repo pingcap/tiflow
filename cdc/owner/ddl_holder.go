@@ -52,10 +52,13 @@ func (h *DDLHolder) RemoveMinDDL() {
 	h.minDDL = nil
 }
 
-func (h *DDLHolder) GetALLTableMinDDLTs() map[model.TableName]model.Ts {
-	ret := make(map[model.TableName]model.Ts)
+func (h *DDLHolder) GetALLTableMinDDLTs() []model.TableBarrier {
+	ret := make([]model.TableBarrier, 0, len(h.pendingDDLs))
 	for table, ddls := range h.pendingDDLs {
-		ret[table] = ddls[0].CommitTs
+		ret = append(ret, model.TableBarrier{
+			BarrierTs: ddls[0].CommitTs,
+			TableName: table,
+		})
 	}
 	return ret
 }
