@@ -17,7 +17,6 @@ import (
 	"context"
 	"crypto/tls"
 	"strings"
-	"time"
 
 	"github.com/pingcap/log"
 	"github.com/pingcap/tiflow/cdc/model"
@@ -45,9 +44,8 @@ func NewKafkaGoClient(_ context.Context, options *pkafka.Options) (pkafka.Client
 		return nil, errors.Trace(err)
 	}
 	client := &kafka.Client{
-		Addr: kafka.TCP(options.BrokerEndpoints...),
-		// todo: make this configurable
-		Timeout:   10 * time.Second,
+		Addr:      kafka.TCP(options.BrokerEndpoints...),
+		Timeout:   options.WriteTimeout,
 		Transport: transport,
 	}
 	return &kafkaGoClient{
@@ -57,21 +55,27 @@ func NewKafkaGoClient(_ context.Context, options *pkafka.Options) (pkafka.Client
 	}, nil
 }
 
+// NewTransport return a transport which is used by kafka-go client.
 func NewTransport(options *pkafka.Options) (*kafka.Transport, error) {
-	mechanism, err := completeSASLConfig(options)
-	if err != nil {
-		return nil, errors.Trace(err)
-	}
 	tlsConfig, err := completeSSLConfig(options)
 	if err != nil {
-		return nil, errors.Trace(err)
+		return nil, err
 	}
-	return &kafka.Transport{
-		SASL:        mechanism,
+
+	transport := &kafka.Transport{
 		TLS:         tlsConfig,
-		ClientID:    options.ClientID,
 		IdleTimeout: options.DialTimeout,
-	}, nil
+		ClientID:    options.ClientID,
+	}
+
+	mechanism, err := completeSASLConfig(options)
+	if err != nil {
+		return nil, err
+	}
+	if mechanism != nil {
+		transport.SASL = mechanism
+	}
+	return transport, nil
 }
 
 func completeSSLConfig(options *pkafka.Options) (*tls.Config, error) {
