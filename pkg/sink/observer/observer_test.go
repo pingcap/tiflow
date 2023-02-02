@@ -51,6 +51,7 @@ func TestNewObserver(t *testing.T) {
 
 		// normal db
 		db, mock := newTestMockDB(t)
+		mock.ExpectBegin()
 		mock.ExpectClose()
 		return db, nil
 	}
@@ -64,4 +65,6 @@ func TestNewObserver(t *testing.T) {
 		err = obs.Tick(ctx)
 		require.NoError(t, err)
 	}
+	err = obs.Close()
+	require.NoError(t, err)
 }

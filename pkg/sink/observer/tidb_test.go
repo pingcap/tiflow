@@ -59,9 +59,12 @@ func TestTiDBObserver(t *testing.T) {
 				AddRow("2023-01-10 16:50:38.153000", "10.2.6.127:11080", "commit", 0.06155323076923076).
 				AddRow("2023-01-10 16:50:38.153000", "10.2.6.127:11080", "rollback", nil),
 		)
+	mock.ExpectClose()
 
 	ctx := context.Background()
 	observer := NewTiDBObserver(db)
 	err = observer.Tick(ctx)
+	require.NoError(t, err)
+	err = observer.Close()
 	require.NoError(t, err)
 }

@@ -163,6 +163,11 @@ func (o *TiDBObserver) Tick(ctx context.Context) error {
 	return nil
 }
 
+// Close implements Observer
+func (o *TiDBObserver) Close() error {
+	return o.db.Close()
+}
+
 // NewTiDBObserver creates a new TiDBObserver instance
 func NewTiDBObserver(db *sql.DB) *TiDBObserver {
 	return &TiDBObserver{

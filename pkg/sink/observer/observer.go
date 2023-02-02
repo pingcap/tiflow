@@ -28,6 +28,7 @@ type Observer interface {
 	// Tick is called periodically, Observer fetches performance metrics and
 	// records them in each Tick.
 	Tick(ctx context.Context) error
+	Close() error
 }
 
 // NewObserverOpt represents available options when creating a new observer.
@@ -91,5 +92,6 @@ func NewObserver(
 	if isTiDB {
 		return NewTiDBObserver(db), nil
 	}
+	_ = db.Close()
 	return NewDummyObserver(), nil
 }
