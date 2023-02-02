@@ -41,7 +41,7 @@ type kafkaGoClient struct {
 func NewKafkaGoClient(_ context.Context, options *pkafka.Options) (pkafka.Client, error) {
 	transport, err := NewTransport(options)
 	if err != nil {
-		return nil, errors.Trace(err)
+		return nil, err
 	}
 	client := &kafka.Client{
 		Addr:      kafka.TCP(options.BrokerEndpoints...),

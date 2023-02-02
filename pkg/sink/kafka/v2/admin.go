@@ -29,13 +29,23 @@ type admin struct {
 }
 
 // NewClusterAdminClient return an admin client
-func NewClusterAdminClient(endpoints []string) pkafka.ClusterAdminClient {
+func NewClusterAdminClient(
+	_ context.Context,
+	options *pkafka.Options,
+) (pkafka.ClusterAdminClient, error) {
+	transport, err := NewTransport(options)
+	if err != nil {
+		return nil, err
+	}
+
 	client := &kafka.Client{
-		Addr: kafka.TCP(endpoints...),
+		Addr:      kafka.TCP(options.BrokerEndpoints...),
+		Timeout:   options.WriteTimeout,
+		Transport: transport,
 	}
 	return &admin{
 		client: client,
-	}
+	}, nil
 }
 
 func (a *admin) clusterMetadata(ctx context.Context) (*kafka.MetadataResponse, error) {
@@ -226,6 +236,15 @@ func (a *admin) CreateTopic(
 }
 
 func (a *admin) Close() error {
-	// todo: close the underline client after support transport configuration.
+	client, ok := a.client.(*kafka.Client)
+	if !ok {
+		return nil
+	}
+
+	transport, ok := client.Transport.(*kafka.Transport)
+	if ok {
+		transport.CloseIdleConnections()
+	}
+
 	return nil
 }
