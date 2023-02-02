@@ -24,7 +24,6 @@ import (
 
 	"github.com/pingcap/errors"
 	"github.com/pingcap/log"
-	"github.com/pingcap/tidb/kv"
 	timodel "github.com/pingcap/tidb/parser/model"
 	"github.com/pingcap/tidb/parser/mysql"
 	"github.com/pingcap/tidb/table"
@@ -43,7 +42,7 @@ type baseKVEntry struct {
 	CRTs uint64
 
 	PhysicalTableID int64
-	RecordID        kv.Handle
+	IntRowID        int64 // Valid if the handle is row id.
 	Delete          bool
 }
 
@@ -193,6 +192,10 @@ func (m *mounter) unmarshalRowKVEntry(tableInfo *model.TableInfo, rawKey []byte,
 	if err != nil {
 		return nil, errors.Trace(err)
 	}
+	if recordID.IsInt() {
+		base.IntRowID = recordID.IntValue()
+	}
+
 	decodeRow := func(rawColValue []byte) (map[int64]types.Datum, bool, error) {
 		if len(rawColValue) == 0 {
 			return nil, false, nil
@@ -213,7 +216,6 @@ func (m *mounter) unmarshalRowKVEntry(tableInfo *model.TableInfo, rawKey []byte,
 		return nil, errors.Trace(err)
 	}
 
-	base.RecordID = recordID
 	return &rowKVEntry{
 		baseKVEntry: base,
 		Row:         row,
@@ -360,10 +362,6 @@ func (m *mounter) mountRowKVEntry(tableInfo *model.TableInfo, row *rowKVEntry, d
 
 	schemaName := tableInfo.TableName.Schema
 	tableName := tableInfo.TableName.Table
-	var intRowID int64
-	if row.RecordID.IsInt() {
-		intRowID = row.RecordID.IntValue()
-	}
 
 	_, _, colInfos := tableInfo.GetRowColInfos()
 	rawRow.PreRowDatums = preRawCols
@@ -371,7 +369,7 @@ func (m *mounter) mountRowKVEntry(tableInfo *model.TableInfo, row *rowKVEntry, d
 	return &model.RowChangedEvent{
 		StartTs:  row.StartTs,
 		CommitTs: row.CRTs,
-		RowID:    intRowID,
+		RowID:    row.IntRowID,
 		Table: &model.TableName{
 			Schema:      schemaName,
 			Table:       tableName,
