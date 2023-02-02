@@ -27,7 +27,6 @@ import (
 	"github.com/segmentio/kafka-go/sasl"
 	"github.com/segmentio/kafka-go/sasl/plain"
 	"github.com/segmentio/kafka-go/sasl/scram"
-	"github.com/segmentio/kafka-go/topics"
 	"go.uber.org/zap"
 )
 
@@ -119,20 +118,6 @@ func completeSASLConfig(o *pkafka.Options) (sasl.Mechanism, error) {
 		}
 	}
 	return nil, nil
-}
-
-// Topics returns the set of available
-// topics as retrieved from cluster metadata.
-func (k *kafkaGoClient) Topics() ([]string, error) {
-	ts, err := topics.List(context.Background(), k.client)
-	if err != nil {
-		return nil, errors.Trace(err)
-	}
-	topicList := make([]string, 0, len(ts))
-	for _, t := range ts {
-		topicList = append(topicList, t.Name)
-	}
-	return topicList, nil
 }
 
 func (k *kafkaGoClient) createWriter(async bool) *kafka.Writer {
