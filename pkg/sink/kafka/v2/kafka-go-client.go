@@ -20,11 +20,9 @@ import (
 	"time"
 
 	"github.com/pingcap/log"
-	"github.com/pingcap/tiflow/cdc/contextutil"
 	"github.com/pingcap/tiflow/cdc/model"
 	"github.com/pingcap/tiflow/pkg/errors"
 	pkafka "github.com/pingcap/tiflow/pkg/sink/kafka"
-	"github.com/pingcap/tiflow/pkg/util"
 	"github.com/rcrowley/go-metrics"
 	"github.com/segmentio/kafka-go"
 	"github.com/segmentio/kafka-go/sasl"
@@ -41,32 +39,10 @@ type kafkaGoClient struct {
 }
 
 // NewKafkaGoClient constructs a Client with kafka go.
-func NewKafkaGoClient(ctx context.Context, options *pkafka.Options) (pkafka.Client, error) {
-	captureAddr := contextutil.CaptureAddrFromCtx(ctx)
-	changefeedID := contextutil.ChangefeedIDFromCtx(ctx)
-	var role string
-	if contextutil.IsOwnerFromCtx(ctx) {
-		role = util.RoleOwner.String()
-	} else {
-		role = util.RoleProcessor.String()
-	}
-	clientID, err := pkafka.NewKafkaClientID(role, captureAddr, changefeedID, options.ClientID)
+func NewKafkaGoClient(_ context.Context, options *pkafka.Options) (pkafka.Client, error) {
+	transport, err := NewTransport(options)
 	if err != nil {
 		return nil, errors.Trace(err)
-	}
-	mechanism, err := completeSASLConfig(options)
-	if err != nil {
-		return nil, errors.Trace(err)
-	}
-	tlsConfig, err := completeSSLConfig(options)
-	if err != nil {
-		return nil, errors.Trace(err)
-	}
-	transport := &kafka.Transport{
-		SASL:        mechanism,
-		ClientID:    clientID,
-		TLS:         tlsConfig,
-		IdleTimeout: options.DialTimeout,
 	}
 	client := &kafka.Client{
 		Addr: kafka.TCP(options.BrokerEndpoints...),
@@ -78,6 +54,23 @@ func NewKafkaGoClient(ctx context.Context, options *pkafka.Options) (pkafka.Clie
 		transport: transport,
 		client:    client,
 		options:   options,
+	}, nil
+}
+
+func NewTransport(options *pkafka.Options) (*kafka.Transport, error) {
+	mechanism, err := completeSASLConfig(options)
+	if err != nil {
+		return nil, errors.Trace(err)
+	}
+	tlsConfig, err := completeSSLConfig(options)
+	if err != nil {
+		return nil, errors.Trace(err)
+	}
+	return &kafka.Transport{
+		SASL:        mechanism,
+		TLS:         tlsConfig,
+		ClientID:    options.ClientID,
+		IdleTimeout: options.DialTimeout,
 	}, nil
 }
 

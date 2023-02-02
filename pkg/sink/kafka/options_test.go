@@ -14,6 +14,7 @@
 package kafka
 
 import (
+	"context"
 	"fmt"
 	"net/url"
 	"testing"
@@ -37,7 +38,8 @@ func TestCompleteOptions(t *testing.T) {
 	sinkURI, err := url.Parse(uri)
 	require.NoError(t, err)
 
-	err = options.Apply(sinkURI)
+	ctx := context.Background()
+	err = options.Apply(ctx, sinkURI)
 	require.NoError(t, err)
 	require.Equal(t, int32(1), options.PartitionNum)
 	require.Equal(t, int16(3), options.ReplicationFactor)
@@ -49,7 +51,7 @@ func TestCompleteOptions(t *testing.T) {
 	sinkURI, err = url.Parse(uri)
 	require.NoError(t, err)
 	options = NewOptions()
-	err = options.Apply(sinkURI)
+	err = options.Apply(ctx, sinkURI)
 	require.NoError(t, err)
 	require.Len(t, options.BrokerEndpoints, 3)
 
@@ -58,7 +60,7 @@ func TestCompleteOptions(t *testing.T) {
 	sinkURI, err = url.Parse(uri)
 	require.NoError(t, err)
 	options = NewOptions()
-	err = options.Apply(sinkURI)
+	err = options.Apply(ctx, sinkURI)
 	require.Regexp(t, ".*invalid syntax.*", errors.Cause(err))
 
 	// Illegal max-message-bytes.
@@ -66,7 +68,7 @@ func TestCompleteOptions(t *testing.T) {
 	sinkURI, err = url.Parse(uri)
 	require.NoError(t, err)
 	options = NewOptions()
-	err = options.Apply(sinkURI)
+	err = options.Apply(ctx, sinkURI)
 	require.Regexp(t, ".*invalid syntax.*", errors.Cause(err))
 
 	// Illegal partition-num.
@@ -74,7 +76,7 @@ func TestCompleteOptions(t *testing.T) {
 	sinkURI, err = url.Parse(uri)
 	require.NoError(t, err)
 	options = NewOptions()
-	err = options.Apply(sinkURI)
+	err = options.Apply(ctx, sinkURI)
 	require.Regexp(t, ".*invalid syntax.*", errors.Cause(err))
 
 	// Out of range partition-num.
@@ -82,7 +84,7 @@ func TestCompleteOptions(t *testing.T) {
 	sinkURI, err = url.Parse(uri)
 	require.NoError(t, err)
 	options = NewOptions()
-	err = options.Apply(sinkURI)
+	err = options.Apply(ctx, sinkURI)
 	require.Regexp(t, ".*invalid partition num.*", errors.Cause(err))
 }
 
@@ -137,7 +139,7 @@ func TestClientID(t *testing.T) {
 		},
 	}
 	for _, tc := range testCases {
-		id, err := NewKafkaClientID(tc.role, tc.addr,
+		id, err := newKafkaClientID(tc.role, tc.addr,
 			model.DefaultChangeFeedID(tc.changefeedID), tc.configuredID)
 		if tc.hasError {
 			require.Error(t, err)
@@ -159,7 +161,7 @@ func TestTimeout(t *testing.T) {
 	sinkURI, err := url.Parse(uri)
 	require.NoError(t, err)
 
-	err = options.Apply(sinkURI)
+	err = options.Apply(context.Background(), sinkURI)
 	require.NoError(t, err)
 
 	require.Equal(t, 5*time.Second, options.DialTimeout)
