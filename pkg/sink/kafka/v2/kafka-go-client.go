@@ -155,7 +155,7 @@ func (k *kafkaGoClient) Partitions(topic string) ([]int32, error) {
 	return partitions, nil
 }
 
-func (k *kafkaGoClient) createWriter() *kafka.Writer {
+func (k *kafkaGoClient) createWriter(async bool) *kafka.Writer {
 	w := &kafka.Writer{
 		Addr:         kafka.TCP(k.options.BrokerEndpoints...),
 		Balancer:     newManualPartitioner(),
@@ -164,7 +164,7 @@ func (k *kafkaGoClient) createWriter() *kafka.Writer {
 		WriteTimeout: k.options.WriteTimeout,
 		RequiredAcks: kafka.RequireAll,
 		BatchBytes:   int64(k.options.MaxMessageBytes),
-		Async:        false,
+		Async:        async,
 	}
 	compression := strings.ToLower(strings.TrimSpace(k.options.Compression))
 	switch compression {
@@ -188,7 +188,7 @@ func (k *kafkaGoClient) createWriter() *kafka.Writer {
 
 // SyncProducer creates a sync producer to writer message to kafka
 func (k *kafkaGoClient) SyncProducer() (pkafka.SyncProducer, error) {
-	w := k.createWriter()
+	w := k.createWriter(false)
 	return &syncWriter{w: w}, nil
 }
 
@@ -197,7 +197,7 @@ func (k *kafkaGoClient) AsyncProducer(changefeedID model.ChangeFeedID,
 	closedChan chan struct{},
 	failpointCh chan error,
 ) (pkafka.AsyncProducer, error) {
-	w := k.createWriter()
+	w := k.createWriter(true)
 	aw := &asyncWriter{
 		w:            w,
 		closedChan:   closedChan,
@@ -305,7 +305,7 @@ func (a *asyncWriter) AsyncSend(ctx context.Context, topic string,
 		return nil
 	default:
 	}
-	return a.w.WriteMessages(context.Background(), kafka.Message{
+	return a.w.WriteMessages(ctx, kafka.Message{
 		Topic:     topic,
 		Partition: int(partition),
 		Key:       key,
