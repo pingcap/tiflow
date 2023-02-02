@@ -30,8 +30,7 @@ import (
 
 // kafkaTopicManager is a manager for kafka topics.
 type kafkaTopicManager struct {
-	client kafka.Client
-	admin  kafka.ClusterAdminClient
+	admin kafka.ClusterAdminClient
 
 	cfg *kafka.AutoCreateTopicConfig
 
@@ -48,9 +47,8 @@ func NewKafkaTopicManager(
 	cfg *kafka.AutoCreateTopicConfig,
 ) (*kafkaTopicManager, error) {
 	mgr := &kafkaTopicManager{
-		client: client,
-		admin:  admin,
-		cfg:    cfg,
+		admin: admin,
+		cfg:   cfg,
 	}
 
 	// do an initial metadata fetching using ListTopics
@@ -92,13 +90,8 @@ func (m *kafkaTopicManager) tryRefreshMeta(ctx context.Context) error {
 		if err != nil {
 			return err
 		}
-
-		for topic, _ := range topics {
-			partitions, err := m.client.Partitions(topic)
-			if err != nil {
-				return err
-			}
-			m.tryUpdatePartitionsAndLogging(topic, int32(len(partitions)))
+		for topic, detail := range topics {
+			m.tryUpdatePartitionsAndLogging(topic, int32(detail.NumPartitions))
 		}
 		m.lastMetadataRefresh.Store(time.Now().Unix())
 	}

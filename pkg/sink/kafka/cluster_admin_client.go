@@ -20,7 +20,7 @@ import (
 // TopicDetail represent a topic's detail information.
 type TopicDetail struct {
 	Name              string
-	NumPartitions     int
+	NumPartitions     int32
 	ReplicationFactor int16
 	ConfigEntries     map[string]string
 }
@@ -53,9 +53,6 @@ type ClusterAdminClient interface {
 
 	// CreateTopic creates a new topic.
 	CreateTopic(ctx context.Context, detail *TopicDetail, validateOnly bool) error
-
-	// GetNumPartitionsByTopic return the number of the partition for the given topic.
-	GetNumPartitionsByTopic(ctx context.Context, topic string) (int, error)
 
 	// Close shuts down the admin client.
 	Close() error

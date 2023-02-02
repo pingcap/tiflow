@@ -184,14 +184,6 @@ func (c *ClusterAdminClientMockImpl) CreateTopic(
 	return nil
 }
 
-func (c *ClusterAdminClientMockImpl) GetNumPartitionsByTopic(ctx context.Context, topic string) (int, error) {
-	detail, ok := c.topics[topic]
-	if !ok {
-		return 0, fmt.Errorf("topic %s not found", topic)
-	}
-	return detail.NumPartitions, nil
-}
-
 // Close do nothing.
 func (c *ClusterAdminClientMockImpl) Close() error {
 	return nil
