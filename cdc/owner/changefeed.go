@@ -648,6 +648,10 @@ func (c *changefeed) releaseResources(ctx cdcContext.Context) {
 		c.scheduler.Close(ctx)
 		c.scheduler = nil
 	}
+	if c.downstreamObserver != nil {
+		_ = c.downstreamObserver.Close()
+		c.downstreamObserver = nil
+	}
 
 	c.cleanupMetrics()
 	c.schema = nil
