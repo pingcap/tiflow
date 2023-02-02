@@ -14,8 +14,11 @@ package cloudstorage
 
 import (
 	"context"
-	"sync"
 	"sync/atomic"
+
+	"github.com/pingcap/errors"
+
+	"golang.org/x/sync/errgroup"
 
 	"github.com/pingcap/log"
 	"github.com/pingcap/tiflow/cdc/model"
@@ -28,12 +31,10 @@ import (
 type encodingWorker struct {
 	id           int
 	changeFeedID model.ChangeFeedID
-	wg           sync.WaitGroup
 	encoder      codec.EventBatchEncoder
 	isClosed     uint64
 	inputCh      chan eventFragment
 	defragmenter *defragmenter
-	errCh        chan<- error
 }
 
 func newEncodingWorker(
@@ -42,7 +43,6 @@ func newEncodingWorker(
 	encoder codec.EventBatchEncoder,
 	inputCh chan eventFragment,
 	defragmenter *defragmenter,
-	errCh chan<- error,
 ) *encodingWorker {
 	return &encodingWorker{
 		id:           workerID,
@@ -50,33 +50,32 @@ func newEncodingWorker(
 		encoder:      encoder,
 		inputCh:      inputCh,
 		defragmenter: defragmenter,
-		errCh:        errCh,
 	}
 }
 
-func (w *encodingWorker) run(ctx context.Context) {
-	w.wg.Add(1)
-	go func() {
+func (w *encodingWorker) run(ctx context.Context) error {
+	eg, ctx := errgroup.WithContext(ctx)
+	eg.Go(func() error {
 		log.Debug("encoding worker started", zap.Int("workerID", w.id),
 			zap.String("namespace", w.changeFeedID.Namespace),
 			zap.String("changefeed", w.changeFeedID.ID))
-		defer w.wg.Done()
 		for {
 			select {
 			case <-ctx.Done():
-				return
+				return errors.Trace(ctx.Err())
 			case frag, ok := <-w.inputCh:
 				if !ok || atomic.LoadUint64(&w.isClosed) == 1 {
-					return
+					return nil
 				}
 				err := w.encodeEvents(ctx, frag)
 				if err != nil {
-					w.errCh <- err
-					return
+					return errors.Trace(err)
 				}
 			}
 		}
-	}()
+	})
+
+	return eg.Wait()
 }
 
 func (w *encodingWorker) encodeEvents(ctx context.Context, frag eventFragment) error {
@@ -108,5 +107,4 @@ func (w *encodingWorker) close() {
 	if !atomic.CompareAndSwapUint64(&w.isClosed, 0, 1) {
 		return
 	}
-	w.wg.Wait()
 }
