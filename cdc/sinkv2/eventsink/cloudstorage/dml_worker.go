@@ -22,7 +22,10 @@ import (
 	"sync/atomic"
 	"time"
 
+	"github.com/pingcap/errors"
 	"github.com/pingcap/log"
+	"golang.org/x/sync/errgroup"
+
 	"github.com/pingcap/tidb/br/pkg/storage"
 	"github.com/pingcap/tiflow/cdc/model"
 	"github.com/pingcap/tiflow/cdc/sinkv2/metrics"
@@ -50,9 +53,7 @@ type dmlWorker struct {
 	fileIndex map[versionedTable]*indexWithDate
 	// fileSize maintains a mapping of <table, file size>.
 	fileSize         map[versionedTable]uint64
-	wg               sync.WaitGroup
 	isClosed         uint64
-	errCh            chan<- error
 	extension        string
 	statistics       *metrics.Statistics
 	clock            clock.Clock
@@ -94,7 +95,6 @@ func newDMLWorker(
 	config *cloudstorage.Config,
 	extension string,
 	statistics *metrics.Statistics,
-	errCh chan<- error,
 ) *dmlWorker {
 	d := &dmlWorker{
 		id:            id,
@@ -106,7 +106,6 @@ func newDMLWorker(
 		fileIndex:     make(map[versionedTable]*indexWithDate),
 		fileSize:      make(map[versionedTable]uint64),
 		extension:     extension,
-		errCh:         errCh,
 		statistics:    statistics,
 		clock:         clock.New(),
 		bufferPool: sync.Pool{
@@ -122,65 +121,67 @@ func newDMLWorker(
 }
 
 // run creates a set of background goroutines.
-func (d *dmlWorker) run(ctx context.Context, ch *chann.Chann[eventFragment]) {
-	d.backgroundFlushMsgs(ctx)
-	d.backgroundDispatchTasks(ctx, ch)
+func (d *dmlWorker) run(ctx context.Context, ch *chann.Chann[eventFragment]) error {
+	eg, ctx := errgroup.WithContext(ctx)
+	eg.Go(func() error {
+		return d.backgroundFlushMsgs(ctx)
+	})
+
+	eg.Go(func() error {
+		return d.backgroundDispatchTasks(ctx, ch)
+	})
+
+	return eg.Wait()
 }
 
 // backgroundFlushMsgs flush messages from active tables to cloud storage.
 // active means that a table has events since last flushing.
-func (d *dmlWorker) backgroundFlushMsgs(ctx context.Context) {
-	d.wg.Add(1)
-	go func() {
-		defer d.wg.Done()
-
-		for {
-			select {
-			case <-ctx.Done():
-				return
-			case task := <-d.flushNotifyCh:
-				if atomic.LoadUint64(&d.isClosed) == 1 {
-					return
+func (d *dmlWorker) backgroundFlushMsgs(ctx context.Context) error {
+	for {
+		select {
+		case <-ctx.Done():
+			return errors.Trace(ctx.Err())
+		case task := <-d.flushNotifyCh:
+			if atomic.LoadUint64(&d.isClosed) == 1 {
+				return nil
+			}
+			for _, tbl := range task.targetTables {
+				table := versionedTable{
+					TableName: tbl.tableName,
+					version:   tbl.tableInfo.Version,
 				}
-				for _, tbl := range task.targetTables {
-					table := versionedTable{
-						TableName: tbl.tableName,
-						version:   tbl.tableInfo.Version,
-					}
-					d.tableEvents.mu.Lock()
-					events := make([]eventFragment, len(d.tableEvents.fragments[table]))
-					copy(events, d.tableEvents.fragments[table])
-					d.tableEvents.fragments[table] = nil
-					d.tableEvents.mu.Unlock()
-					if len(events) == 0 {
-						continue
-					}
-
-					// generate scheme.json file before generating the first data file if necessary
-					err := d.writeSchemaFile(ctx, table, tbl.tableInfo)
-					if err != nil {
-						d.errCh <- err
-						return
-					}
-
-					path := d.generateDataFilePath(table)
-					err = d.writeDataFile(ctx, path, events)
-					if err != nil {
-						d.errCh <- err
-						return
-					}
-
-					log.Debug("write file to storage success", zap.Int("workerID", d.id),
-						zap.String("namespace", d.changeFeedID.Namespace),
-						zap.String("changefeed", d.changeFeedID.ID),
-						zap.String("schema", table.Schema),
-						zap.String("table", table.Table),
-						zap.String("path", path),
-					)
+				d.tableEvents.mu.Lock()
+				events := make([]eventFragment, len(d.tableEvents.fragments[table]))
+				copy(events, d.tableEvents.fragments[table])
+				d.tableEvents.fragments[table] = nil
+				d.tableEvents.mu.Unlock()
+				if len(events) == 0 {
+					continue
 				}
+
+				// generate scheme.json file before generating the first data file if necessary
+				err := d.writeSchemaFile(ctx, table, tbl.tableInfo)
+				if err != nil {
+					return errors.Trace(err)
+				}
+
+				path := d.generateDataFilePath(table)
+				err = d.writeDataFile(ctx, path, events)
+				if err != nil {
+					return errors.Trace(err)
+				}
+
+				log.Debug("write file to storage success", zap.Int("workerID", d.id),
+					zap.String("namespace", d.changeFeedID.Namespace),
+					zap.String("changefeed", d.changeFeedID.ID),
+					zap.String("schema", table.Schema),
+					zap.String("table", table.Table),
+					zap.String("path", path),
+				)
 			}
 		}
-	}()
+	}
+
 }
 
 // In order to avoid spending so much time lookuping directory and getting last write point
@@ -260,94 +261,90 @@ func (d *dmlWorker) writeDataFile(ctx context.Context, path string, events []eve
 // backgroundDispatchTasks dispatches flush tasks in two conditions:
 // 1. the flush interval exceeds the upper limit.
 // 2. the file size exceeds the upper limit.
-func (d *dmlWorker) backgroundDispatchTasks(ctx context.Context, ch *chann.Chann[eventFragment]) {
+func (d *dmlWorker) backgroundDispatchTasks(ctx context.Context, ch *chann.Chann[eventFragment]) error {
 	tableSet := make(map[wrappedTable]struct{})
 	ticker := time.NewTicker(d.config.FlushInterval)
 
-	d.wg.Add(1)
-	go func() {
-		log.Debug("dml worker started", zap.Int("workerID", d.id),
-			zap.String("namespace", d.changeFeedID.Namespace),
-			zap.String("changefeed", d.changeFeedID.ID))
-		defer d.wg.Done()
-		for {
+	log.Debug("dml worker started", zap.Int("workerID", d.id),
+		zap.String("namespace", d.changeFeedID.Namespace),
+		zap.String("changefeed", d.changeFeedID.ID))
+	for {
+		select {
+		case <-ctx.Done():
+			return errors.Trace(ctx.Err())
+		case <-ticker.C:
+			if atomic.LoadUint64(&d.isClosed) == 1 {
+				return nil
+			}
+			var readyTables []wrappedTable
+			for tbl := range tableSet {
+				readyTables = append(readyTables, tbl)
+			}
+			if len(readyTables) == 0 {
+				continue
+			}
+			task := flushTask{
+				targetTables: readyTables,
+			}
 			select {
 			case <-ctx.Done():
-				return
-			case <-ticker.C:
-				if atomic.LoadUint64(&d.isClosed) == 1 {
-					return
+				return errors.Trace(ctx.Err())
+			case d.flushNotifyCh <- task:
+				log.Debug("flush task is emitted successfully when flush interval exceeds",
+					zap.Any("tables", task.targetTables))
+				for elem := range tableSet {
+					// we should get TableName using elem.tableName instead of
+					// elem.tableInfo.TableName because the former one contains
+					// the physical table id (useful for partition table)
+					// recorded in mounter while the later one does not.
+					// TODO: handle TableID of model.TableInfo.TableName properly.
+					tbl := versionedTable{
+						TableName: elem.tableName,
+						version:   elem.tableInfo.Version,
+					}
+					d.fileSize[tbl] = 0
 				}
-				var readyTables []wrappedTable
-				for tbl := range tableSet {
-					readyTables = append(readyTables, tbl)
+				tableSet = make(map[wrappedTable]struct{})
+			default:
+			}
+		case frag, ok := <-ch.Out():
+			if !ok || atomic.LoadUint64(&d.isClosed) == 1 {
+				return nil
+			}
+			table := frag.versionedTable
+			d.tableEvents.mu.Lock()
+			d.tableEvents.fragments[table] = append(d.tableEvents.fragments[table], frag)
+			d.tableEvents.mu.Unlock()
+
+			key := wrappedTable{
+				tableName: frag.TableName,
+				tableInfo: frag.event.Event.TableInfo,
+			}
+
+			tableSet[key] = struct{}{}
+			for _, msg := range frag.encodedMsgs {
+				if msg.Value != nil {
+					d.fileSize[table] += uint64(len(msg.Value))
 				}
-				if len(readyTables) == 0 {
-					continue
-				}
+			}
+			// if the file size exceeds the upper limit, emit the flush task containing the table
+			// as soon as possible.
+			if d.fileSize[table] > uint64(d.config.FileSize) {
 				task := flushTask{
-					targetTables: readyTables,
+					targetTables: []wrappedTable{key},
 				}
 				select {
 				case <-ctx.Done():
-					return
+					return errors.Trace(ctx.Err())
 				case d.flushNotifyCh <- task:
-					log.Debug("flush task is emitted successfully when flush interval exceeds",
-						zap.Any("tables", task.targetTables))
-					for elem := range tableSet {
-						// we should get TableName using elem.tableName instead of
-						// elem.tableInfo.TableName because the former one contains
-						// the physical table id (useful for partition table)
-						// recorded in mounter while the later one does not.
-						// TODO: handle TableID of model.TableInfo.TableName properly.
-						tbl := versionedTable{
-							TableName: elem.tableName,
-							version:   elem.tableInfo.Version,
-						}
-						d.fileSize[tbl] = 0
-					}
-					tableSet = make(map[wrappedTable]struct{})
+					log.Debug("flush task is emitted successfully when file size exceeds",
+						zap.Any("tables", table))
+					d.fileSize[table] = 0
 				default:
-				}
-			case frag, ok := <-ch.Out():
-				if !ok || atomic.LoadUint64(&d.isClosed) == 1 {
-					return
-				}
-				table := frag.versionedTable
-				d.tableEvents.mu.Lock()
-				d.tableEvents.fragments[table] = append(d.tableEvents.fragments[table], frag)
-				d.tableEvents.mu.Unlock()
-
-				key := wrappedTable{
-					tableName: frag.TableName,
-					tableInfo: frag.event.Event.TableInfo,
-				}
-
-				tableSet[key] = struct{}{}
-				for _, msg := range frag.encodedMsgs {
-					if msg.Value != nil {
-						d.fileSize[table] += uint64(len(msg.Value))
-					}
-				}
-				// if the file size exceeds the upper limit, emit the flush task containing the table
-				// as soon as possible.
-				if d.fileSize[table] > uint64(d.config.FileSize) {
-					task := flushTask{
-						targetTables: []wrappedTable{key},
-					}
-					select {
-					case <-ctx.Done():
-						return
-					case d.flushNotifyCh <- task:
-						log.Debug("flush task is emitted successfully when file size exceeds",
-							zap.Any("tables", table))
-						d.fileSize[table] = 0
-					default:
-					}
 				}
 			}
 		}
-	}()
+	}
 }
 
 func generateSchemaFilePath(def cloudstorage.TableDefinition) string {
@@ -402,6 +399,4 @@ func (d *dmlWorker) close() {
 	if !atomic.CompareAndSwapUint64(&d.isClosed, 0, 1) {
 		return
 	}
-
-	d.wg.Wait()
 }
