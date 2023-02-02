@@ -32,20 +32,6 @@ func NewClientMockImpl() *ClientMockImpl {
 	}
 }
 
-// Partitions returns the partitions of the given topic.
-func (c *ClientMockImpl) Partitions(topic string) ([]int32, error) {
-	return c.topics[topic], nil
-}
-
-// Topics returns the all topics.
-func (c *ClientMockImpl) Topics() ([]string, error) {
-	var topics []string
-	for topic := range c.topics {
-		topics = append(topics, topic)
-	}
-	return topics, nil
-}
-
 // AddTopic adds a topic.
 func (c *ClientMockImpl) AddTopic(topicName string, partitions int32) {
 	p := make([]int32, partitions)

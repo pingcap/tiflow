@@ -30,8 +30,7 @@ import (
 
 // kafkaTopicManager is a manager for kafka topics.
 type kafkaTopicManager struct {
-	client kafka.Client
-	admin  kafka.ClusterAdminClient
+	admin kafka.ClusterAdminClient
 
 	cfg *kafka.AutoCreateTopicConfig
 
@@ -43,14 +42,12 @@ type kafkaTopicManager struct {
 // NewKafkaTopicManager creates a new topic manager.
 func NewKafkaTopicManager(
 	ctx context.Context,
-	client kafka.Client,
 	admin kafka.ClusterAdminClient,
 	cfg *kafka.AutoCreateTopicConfig,
 ) (*kafkaTopicManager, error) {
 	mgr := &kafkaTopicManager{
-		client: client,
-		admin:  admin,
-		cfg:    cfg,
+		admin: admin,
+		cfg:   cfg,
 	}
 
 	// do an initial metadata fetching using ListTopics
@@ -68,7 +65,7 @@ func (m *kafkaTopicManager) GetPartitionNum(
 	ctx context.Context,
 	topic string,
 ) (int32, error) {
-	err := m.tryRefreshMeta()
+	err := m.tryRefreshMeta(ctx)
 	if err != nil {
 		return 0, errors.Trace(err)
 	}
@@ -86,19 +83,14 @@ func (m *kafkaTopicManager) GetPartitionNum(
 }
 
 // tryRefreshMeta try to refresh the topics' information maintained by manager.
-func (m *kafkaTopicManager) tryRefreshMeta() error {
+func (m *kafkaTopicManager) tryRefreshMeta(ctx context.Context) error {
 	if time.Since(time.Unix(m.lastMetadataRefresh.Load(), 0)) > time.Minute {
-		topics, err := m.client.Topics()
+		topics, err := m.admin.GetAllTopicsMeta(ctx)
 		if err != nil {
 			return err
 		}
-
-		for _, topic := range topics {
-			partitions, err := m.client.Partitions(topic)
-			if err != nil {
-				return err
-			}
-			m.tryUpdatePartitionsAndLogging(topic, int32(len(partitions)))
+		for topic, detail := range topics {
+			m.tryUpdatePartitionsAndLogging(topic, detail.NumPartitions)
 		}
 		m.lastMetadataRefresh.Store(time.Now().Unix())
 	}
