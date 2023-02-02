@@ -741,6 +741,46 @@ var doc = `{
                 }
             }
         },
+        "/api/v2/changefeeds": {
+            "get": {
+                "description": "list all changefeeds in cdc cluster",
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "changefeed"
+                ],
+                "summary": "List changefeed",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "description": "state",
+                        "name": "state",
+                        "in": "query"
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "type": "array",
+                            "items": {
+                                "$ref": "#/definitions/model.ChangefeedCommonInfo"
+                            }
+                        }
+                    },
+                    "500": {
+                        "description": "Internal Server Error",
+                        "schema": {
+                            "$ref": "#/definitions/model.HTTPError"
+                        }
+                    }
+                }
+            }
+        },
         "/api/v2/changefeeds/{changefeed_id}": {
             "get": {
                 "description": "get detail information of a changefeed",

@@ -725,6 +725,32 @@ paths:
       summary: Get server status
       tags:
       - common
+  /api/v2/changefeeds:
+    get:
+      consumes:
+      - application/json
+      description: list all changefeeds in cdc cluster
+      parameters:
+      - description: state
+        in: query
+        name: state
+        type: string
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            items:
+              $ref: '#/definitions/model.ChangefeedCommonInfo'
+            type: array
+        "500":
+          description: Internal Server Error
+          schema:
+            $ref: '#/definitions/model.HTTPError'
+      summary: List changefeed
+      tags:
+      - changefeed
   /api/v2/changefeeds/{changefeed_id}:
     get:
       consumes:
