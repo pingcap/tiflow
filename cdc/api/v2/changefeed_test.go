@@ -221,6 +221,91 @@ func TestCreateChangefeed(t *testing.T) {
 	require.Equal(t, http.StatusCreated, w.Code)
 }
 
+func TestGetChangeFeed(t *testing.T) {
+	t.Parallel()
+
+	cfInfo := testCase{url: "/api/v2/changefeeds/%s", method: "GET"}
+	statusProvider := &mockStatusProvider{}
+	cp := mock_capture.NewMockCapture(gomock.NewController(t))
+	cp.EXPECT().IsReady().Return(true).AnyTimes()
+	cp.EXPECT().IsOwner().Return(true).AnyTimes()
+
+	apiV2 := NewOpenAPIV2ForTest(cp, APIV2HelpersImpl{})
+	router := newRouter(apiV2)
+
+	// case 1: invalid id
+	w := httptest.NewRecorder()
+	invalidID := "@^Invalid"
+	req, _ := http.NewRequestWithContext(
+		context.Background(),
+		cfInfo.method, fmt.Sprintf(cfInfo.url, invalidID),
+		nil,
+	)
+	router.ServeHTTP(w, req)
+	respErr := model.HTTPError{}
+	err := json.NewDecoder(w.Body).Decode(&respErr)
+	require.Nil(t, err)
+	require.Contains(t, respErr.Code, "ErrAPIInvalidParam")
+
+	// validId but not exists
+	validID := "changefeed-valid-id"
+	statusProvider.err = cerrors.ErrChangeFeedNotExists.GenWithStackByArgs(validID)
+	cp.EXPECT().StatusProvider().Return(statusProvider).AnyTimes()
+
+	w = httptest.NewRecorder()
+	req, _ = http.NewRequestWithContext(
+		context.Background(),
+		cfInfo.method,
+		fmt.Sprintf(cfInfo.url, validID),
+		nil,
+	)
+	router.ServeHTTP(w, req)
+	require.Equal(t, http.StatusBadRequest, w.Code)
+	respErr = model.HTTPError{}
+	err = json.NewDecoder(w.Body).Decode(&respErr)
+	require.Nil(t, err)
+	require.Contains(t, respErr.Code, "ErrChangeFeedNotExists")
+
+	// valid but changefeed contains runtime error
+	statusProvider.err = nil
+	statusProvider.changefeedInfo = &model.ChangeFeedInfo{
+		ID: validID,
+		Error: &model.RunningError{
+			Code: string(cerrors.ErrGCTTLExceeded.RFCCode()),
+		},
+	}
+	statusProvider.changefeedStatus = &model.ChangeFeedStatus{
+		CheckpointTs: 1,
+	}
+	w = httptest.NewRecorder()
+	req, _ = http.NewRequestWithContext(context.Background(),
+		cfInfo.method, fmt.Sprintf(cfInfo.url, validID), nil)
+	router.ServeHTTP(w, req)
+	require.Equal(t, http.StatusOK, w.Code)
+	resp := ChangeFeedDetail{}
+	err = json.NewDecoder(w.Body).Decode(&resp)
+	require.Nil(t, err)
+	require.Equal(t, resp.ID, validID)
+	require.Contains(t, resp.RunningError.Code, "ErrGCTTLExceeded")
+
+	// success
+	statusProvider.changefeedInfo = &model.ChangeFeedInfo{ID: validID}
+	w = httptest.NewRecorder()
+	req, _ = http.NewRequestWithContext(
+		context.Background(),
+		cfInfo.method,
+		fmt.Sprintf(cfInfo.url, validID),
+		nil,
+	)
+	router.ServeHTTP(w, req)
+	require.Equal(t, http.StatusOK, w.Code)
+	resp = ChangeFeedDetail{}
+	err = json.NewDecoder(w.Body).Decode(&resp)
+	require.Nil(t, err)
+	require.Equal(t, resp.ID, validID)
+	require.Nil(t, resp.RunningError)
+}
+
 func TestUpdateChangefeed(t *testing.T) {
 	t.Parallel()
 	update := testCase{url: "/api/v2/changefeeds/%s", method: "PUT"}
