@@ -1,4 +1,4 @@
-// Copyright 2023 PingCAP, Inc.
+// Copyright 2022 PingCAP, Inc.
 //
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -11,26 +11,14 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-package observer
+package v2
 
 import (
-	"context"
+	"testing"
+
+	"github.com/pingcap/tiflow/pkg/leakutil"
 )
 
-// DummyObserver is an observer that does nothing
-type DummyObserver struct{}
-
-// Tick implements Observer
-func (o *DummyObserver) Tick(ctx context.Context) error {
-	return nil
-}
-
-// Close implements Observer
-func (o *DummyObserver) Close() error {
-	return nil
-}
-
-// NewDummyObserver creates a new DummyObserver instance
-func NewDummyObserver() *DummyObserver {
-	return &DummyObserver{}
+func TestMain(m *testing.M) {
+	leakutil.SetUpLeakTest(m)
 }

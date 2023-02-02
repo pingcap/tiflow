@@ -375,8 +375,8 @@ func (k *mqSink) asyncFlushToPartitionZero(
 	return k.mqProducer.Flush(ctx)
 }
 
-// NewKafkaSaramaSink creates a new Kafka mqSink.
-func NewKafkaSaramaSink(ctx context.Context, sinkURI *url.URL,
+// NewKafkaSink creates a new Kafka mqSink.
+func NewKafkaSink(ctx context.Context, sinkURI *url.URL,
 	replicaConfig *config.ReplicaConfig,
 	errCh chan error, changefeedID model.ChangeFeedID,
 ) (*mqSink, error) {
@@ -392,14 +392,9 @@ func NewKafkaSaramaSink(ctx context.Context, sinkURI *url.URL,
 		return nil, cerror.WrapError(cerror.ErrKafkaInvalidConfig, err)
 	}
 
-	saramaConfig, err := pkafka.NewSaramaConfig(ctx, options)
-	if err != nil {
-		return nil, errors.Trace(err)
-	}
-
 	adminClient, err := kafka.NewAdminClientImpl(ctx, options)
 	if err != nil {
-		return nil, cerror.WrapError(cerror.ErrKafkaNewSaramaProducer, err)
+		return nil, cerror.WrapError(cerror.ErrKafkaNewProducer, err)
 	}
 
 	// we must close adminClient when this func return cause by an error
@@ -411,7 +406,7 @@ func NewKafkaSaramaSink(ctx context.Context, sinkURI *url.URL,
 	}()
 
 	if err := kafka.AdjustOptions(ctx, adminClient, options, topic); err != nil {
-		return nil, cerror.WrapError(cerror.ErrKafkaNewSaramaProducer, err)
+		return nil, cerror.WrapError(cerror.ErrKafkaNewProducer, err)
 	}
 
 	protocol, err := config.ParseSinkProtocolFromString(replicaConfig.Sink.Protocol)
@@ -425,7 +420,7 @@ func NewKafkaSaramaSink(ctx context.Context, sinkURI *url.URL,
 	}
 	// always set encoder's `MaxMessageBytes` equal to producer's `MaxMessageBytes`
 	// to prevent that the encoder generate batched message too large then cause producer meet `message too large`
-	encoderConfig = encoderConfig.WithMaxMessageBytes(saramaConfig.Producer.MaxMessageBytes)
+	encoderConfig = encoderConfig.WithMaxMessageBytes(options.MaxMessageBytes)
 
 	if err := encoderConfig.Validate(); err != nil {
 		return nil, cerror.WrapError(cerror.ErrKafkaInvalidConfig, err)
@@ -433,7 +428,7 @@ func NewKafkaSaramaSink(ctx context.Context, sinkURI *url.URL,
 
 	client, err := kafka.NewClientImpl(ctx, options)
 	if err != nil {
-		return nil, cerror.WrapError(cerror.ErrKafkaNewSaramaProducer, err)
+		return nil, cerror.WrapError(cerror.ErrKafkaNewProducer, err)
 	}
 
 	topicManager, err := manager.NewKafkaTopicManager(
@@ -443,14 +438,14 @@ func NewKafkaSaramaSink(ctx context.Context, sinkURI *url.URL,
 		options.DeriveTopicConfig(),
 	)
 	if err != nil {
-		return nil, cerror.WrapError(cerror.ErrKafkaNewSaramaProducer, err)
+		return nil, cerror.WrapError(cerror.ErrKafkaNewProducer, err)
 	}
 
 	if _, err := topicManager.CreateTopicAndWaitUntilVisible(ctx, topic); err != nil {
 		return nil, cerror.WrapError(cerror.ErrKafkaCreateTopic, err)
 	}
 
-	sProducer, err := kafka.NewKafkaSaramaProducer(
+	sProducer, err := kafka.NewProducer(
 		ctx,
 		client,
 		adminClient,

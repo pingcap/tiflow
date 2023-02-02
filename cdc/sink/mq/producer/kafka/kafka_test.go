@@ -81,7 +81,7 @@ func TestNewSaramaProducer(t *testing.T) {
 	require.Nil(t, err)
 
 	changefeedID := model.DefaultChangeFeedID("changefeed-test")
-	producer, err := NewKafkaSaramaProducer(
+	producer, err := NewProducer(
 		ctx,
 		client,
 		adminClient,
@@ -382,7 +382,7 @@ func TestProducerSendMessageFailed(t *testing.T) {
 	require.Nil(t, err)
 
 	changefeedID := model.DefaultChangeFeedID("changefeed-test")
-	producer, err := NewKafkaSaramaProducer(
+	producer, err := NewProducer(
 		ctx,
 		client,
 		adminClient,
@@ -462,7 +462,7 @@ func TestProducerDoubleClose(t *testing.T) {
 	require.Nil(t, err)
 
 	changefeedID := model.DefaultChangeFeedID("changefeed-test")
-	producer, err := NewKafkaSaramaProducer(
+	producer, err := NewProducer(
 		ctx,
 		client,
 		adminClient,
