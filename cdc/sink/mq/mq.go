@@ -392,11 +392,6 @@ func NewKafkaSink(ctx context.Context, sinkURI *url.URL,
 		return nil, cerror.WrapError(cerror.ErrKafkaInvalidConfig, err)
 	}
 
-	saramaConfig, err := pkafka.NewSaramaConfig(ctx, options)
-	if err != nil {
-		return nil, errors.Trace(err)
-	}
-
 	adminClient, err := kafka.NewAdminClientImpl(ctx, options)
 	if err != nil {
 		return nil, cerror.WrapError(cerror.ErrKafkaNewProducer, err)
@@ -425,7 +420,7 @@ func NewKafkaSink(ctx context.Context, sinkURI *url.URL,
 	}
 	// always set encoder's `MaxMessageBytes` equal to producer's `MaxMessageBytes`
 	// to prevent that the encoder generate batched message too large then cause producer meet `message too large`
-	encoderConfig = encoderConfig.WithMaxMessageBytes(saramaConfig.Producer.MaxMessageBytes)
+	encoderConfig = encoderConfig.WithMaxMessageBytes(options.MaxMessageBytes)
 
 	if err := encoderConfig.Validate(); err != nil {
 		return nil, cerror.WrapError(cerror.ErrKafkaInvalidConfig, err)
