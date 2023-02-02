@@ -45,7 +45,7 @@ func NewKafkaDDLSink(
 	}
 
 	options := pkafka.NewOptions()
-	if err := options.Apply(sinkURI); err != nil {
+	if err := options.Apply(ctx, sinkURI); err != nil {
 		return nil, cerror.WrapError(cerror.ErrKafkaInvalidConfig, err)
 	}
 

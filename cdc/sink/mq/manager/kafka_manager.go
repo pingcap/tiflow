@@ -68,7 +68,7 @@ func (m *kafkaTopicManager) GetPartitionNum(
 	ctx context.Context,
 	topic string,
 ) (int32, error) {
-	err := m.tryRefreshMeta()
+	err := m.tryRefreshMeta(ctx)
 	if err != nil {
 		return 0, errors.Trace(err)
 	}
@@ -86,14 +86,14 @@ func (m *kafkaTopicManager) GetPartitionNum(
 }
 
 // tryRefreshMeta try to refresh the topics' information maintained by manager.
-func (m *kafkaTopicManager) tryRefreshMeta() error {
+func (m *kafkaTopicManager) tryRefreshMeta(ctx context.Context) error {
 	if time.Since(time.Unix(m.lastMetadataRefresh.Load(), 0)) > time.Minute {
-		topics, err := m.client.Topics()
+		topics, err := m.admin.GetAllTopicsMeta(ctx)
 		if err != nil {
 			return err
 		}
 
-		for _, topic := range topics {
+		for topic, _ := range topics {
 			partitions, err := m.client.Partitions(topic)
 			if err != nil {
 				return err

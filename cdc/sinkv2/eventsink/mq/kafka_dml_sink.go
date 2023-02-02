@@ -45,13 +45,13 @@ func NewKafkaDMLSink(
 	}
 
 	options := pkafka.NewOptions()
-	if err := options.Apply(sinkURI); err != nil {
+	if err := options.Apply(ctx, sinkURI); err != nil {
 		return nil, cerror.WrapError(cerror.ErrKafkaInvalidConfig, err)
 	}
 
 	adminClient, err := adminClientCreator(ctx, options)
 	if err != nil {
-		return nil, cerror.WrapError(cerror.ErrKafkaNewSaramaProducer, err)
+		return nil, cerror.WrapError(cerror.ErrKafgkaNewSaramaProducer, err)
 	}
 	// We must close adminClient when this func return cause by an error
 	// otherwise the adminClient will never be closed and lead to a goroutine leak.

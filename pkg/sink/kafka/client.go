@@ -27,9 +27,9 @@ import (
 
 // Client is a generic Kafka client.
 type Client interface {
-	// Topics returns the set of available
-	// topics as retrieved from cluster metadata.
-	Topics() ([]string, error)
+	//// Topics returns the set of available
+	//// topics as retrieved from cluster metadata.
+	//Topics() ([]string, error)
 	// Partitions returns the sorted list of
 	// all partition IDs for the given topic.
 	Partitions(topic string) ([]int32, error)
