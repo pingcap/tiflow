@@ -19,6 +19,7 @@ import (
 	"strings"
 
 	"github.com/Shopify/sarama"
+	"github.com/pingcap/errors"
 	"github.com/pingcap/log"
 	cerror "github.com/pingcap/tiflow/pkg/errors"
 	"go.uber.org/zap"
@@ -106,7 +107,7 @@ func (a *saramaAdminClient) GetAllTopicsMeta(context.Context) (map[string]TopicD
 		}
 		result[topic] = TopicDetail{
 			Name:              topic,
-			NumPartitions:     detail.NumPartitions,
+			NumPartitions:     int(detail.NumPartitions),
 			ReplicationFactor: detail.ReplicationFactor,
 			ConfigEntries:     configEntries,
 		}
@@ -138,7 +139,7 @@ func (a *saramaAdminClient) GetTopicsMeta(
 		}
 		result[meta.Name] = TopicDetail{
 			Name:          meta.Name,
-			NumPartitions: int32(len(meta.Partitions)),
+			NumPartitions: len(meta.Partitions),
 		}
 	}
 
@@ -151,7 +152,7 @@ func (a *saramaAdminClient) CreateTopic(
 	validateOnly bool,
 ) error {
 	err := a.client.CreateTopic(detail.Name, &sarama.TopicDetail{
-		NumPartitions:     detail.NumPartitions,
+		NumPartitions:     int32(detail.NumPartitions),
 		ReplicationFactor: detail.ReplicationFactor,
 	}, validateOnly)
 	// Ignore the already exists error because it's not harmful.
@@ -159,6 +160,21 @@ func (a *saramaAdminClient) CreateTopic(
 		return err
 	}
 	return nil
+}
+
+func (a *saramaAdminClient) GetNumPartitionsByTopic(
+	_ context.Context,
+	topic string,
+) (int, error) {
+	resp, err := a.client.DescribeTopics([]string{topic})
+	if err != nil {
+		return 0, errors.Trace(err)
+	}
+
+	if len(resp) != 1 {
+		return 0, errors.New("failed to describe topic " + topic)
+	}
+	return len(resp[0].Partitions), nil
 }
 
 func (a *saramaAdminClient) Close() error {

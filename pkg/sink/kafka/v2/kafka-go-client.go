@@ -135,26 +135,6 @@ func (k *kafkaGoClient) Topics() ([]string, error) {
 	return topicList, nil
 }
 
-// Partitions returns the sorted list of
-// all partition IDs for the given topic.
-func (k *kafkaGoClient) Partitions(topic string) ([]int32, error) {
-	response, err := k.client.Metadata(context.Background(), &kafka.MetadataRequest{
-		Addr:   k.client.Addr,
-		Topics: []string{topic},
-	})
-	if err != nil {
-		return nil, errors.Trace(err)
-	}
-	if len(response.Topics) != 1 {
-		return nil, errors.New("failed to describe topic " + topic)
-	}
-	partitions := make([]int32, 0, len(response.Topics[0].Partitions))
-	for _, partition := range response.Topics[0].Partitions {
-		partitions = append(partitions, int32(partition.ID))
-	}
-	return partitions, nil
-}
-
 func (k *kafkaGoClient) createWriter(async bool) *kafka.Writer {
 	w := &kafka.Writer{
 		Addr:         kafka.TCP(k.options.BrokerEndpoints...),

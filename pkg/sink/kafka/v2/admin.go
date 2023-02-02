@@ -146,7 +146,7 @@ func (a *admin) GetAllTopicsMeta(ctx context.Context) (map[string]pkafka.TopicDe
 	for _, topic := range response.Topics {
 		result[topic.Name] = pkafka.TopicDetail{
 			Name:              topic.Name,
-			NumPartitions:     int32(len(topic.Partitions)),
+			NumPartitions:     len(topic.Partitions),
 			ReplicationFactor: int16(len(topic.Partitions[0].Replicas)),
 		}
 		describeTopicConfigsRequest.Resources = append(describeTopicConfigsRequest.Resources,
@@ -199,7 +199,7 @@ func (a *admin) GetTopicsMeta(
 		}
 		result[topic.Name] = pkafka.TopicDetail{
 			Name:          topic.Name,
-			NumPartitions: int32(len(topic.Partitions)),
+			NumPartitions: len(topic.Partitions),
 		}
 	}
 	return result, nil
@@ -233,6 +233,21 @@ func (a *admin) CreateTopic(
 	}
 
 	return nil
+}
+
+func (a *admin) GetNumPartitionsByTopic(ctx context.Context, topic string) (int, error) {
+	response, err := a.client.Metadata(ctx, &kafka.MetadataRequest{
+		Topics: []string{topic},
+	})
+	if err != nil {
+		return 0, errors.Trace(err)
+	}
+
+	if len(response.Topics) != 1 {
+		return 0, errors.New("failed to describe topic " + topic)
+	}
+
+	return len(response.Topics[0].Partitions), nil
 }
 
 func (a *admin) Close() error {
