@@ -16,7 +16,7 @@ services:
       KAFKA_REPLICA_FETCH_MAX_BYTES: 11534336
       KAFKA_CREATE_TOPICS: "big-message-test:1:1"
       KAFKA_BROKER_ID: 1
-      RACK_COMMAND: "curl -sfL https://git.io/JJZXX -o /tmp/kafka.server.keystore.jks && curl -sfL https://git.io/JJZXM -o /tmp/kafka.server.truststore.jks"
+      RACK_COMMAND: "curl -sfL http://shorturl.at/fPUW6 -o /tmp/kafka.server.keystore.jks && curl -sfL http://shorturl.at/giQS0 -o /tmp/kafka.server.truststore.jks"
       KAFKA_LISTENERS: "SSL://127.0.0.1:9093,PLAINTEXT://127.0.0.1:9092"
       KAFKA_ADVERTISED_LISTENERS: "SSL://127.0.0.1:9093,PLAINTEXT://127.0.0.1:9092"
       KAFKA_SSL_KEYSTORE_LOCATION: "/tmp/kafka.server.keystore.jks"

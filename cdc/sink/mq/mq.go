@@ -138,7 +138,7 @@ func (k *mqSink) EmitRowChangedEvents(ctx context.Context, rows ...*model.RowCha
 	rowsCount := 0
 	for _, row := range rows {
 		topic := k.eventRouter.GetTopicForRowChange(row)
-		partitionNum, err := k.topicManager.GetPartitionNum(topic)
+		partitionNum, err := k.topicManager.GetPartitionNum(ctx, topic)
 		if err != nil {
 			return errors.Trace(err)
 		}
@@ -248,7 +248,7 @@ func (k *mqSink) EmitCheckpointTs(ctx context.Context, ts uint64, tables []*mode
 	// This will be compatible with the old behavior.
 	if len(tables) == 0 {
 		topic := k.eventRouter.GetDefaultTopic()
-		partitionNum, err := k.topicManager.GetPartitionNum(topic)
+		partitionNum, err := k.topicManager.GetPartitionNum(ctx, topic)
 		if err != nil {
 			return errors.Trace(err)
 		}
@@ -264,7 +264,7 @@ func (k *mqSink) EmitCheckpointTs(ctx context.Context, ts uint64, tables []*mode
 	topics := k.eventRouter.GetActiveTopics(tableNames)
 	log.Debug("MQ sink current active topics", zap.Any("topics", topics))
 	for _, topic := range topics {
-		partitionNum, err := k.topicManager.GetPartitionNum(topic)
+		partitionNum, err := k.topicManager.GetPartitionNum(ctx, topic)
 		if err != nil {
 			return errors.Trace(err)
 		}
@@ -300,7 +300,7 @@ func (k *mqSink) EmitDDLEvent(ctx context.Context, ddl *model.DDLEvent) error {
 		zap.String("changefeed", k.id.ID),
 		zap.Any("role", k.role))
 	if partitionRule == dispatcher.PartitionAll {
-		partitionNum, err := k.topicManager.GetPartitionNum(topic)
+		partitionNum, err := k.topicManager.GetPartitionNum(ctx, topic)
 		if err != nil {
 			return errors.Trace(err)
 		}
@@ -311,7 +311,7 @@ func (k *mqSink) EmitDDLEvent(ctx context.Context, ddl *model.DDLEvent) error {
 	// which will be responsible for automatically creating topics when they don't exist.
 	// If it is not called here and kafka has `auto.create.topics.enable` turned on,
 	// then the auto-created topic will not be created as configured by ticdc.
-	_, err = k.topicManager.GetPartitionNum(topic)
+	_, err = k.topicManager.GetPartitionNum(ctx, topic)
 	if err != nil {
 		return errors.Trace(err)
 	}
@@ -375,8 +375,8 @@ func (k *mqSink) asyncFlushToPartitionZero(
 	return k.mqProducer.Flush(ctx)
 }
 
-// NewKafkaSaramaSink creates a new Kafka mqSink.
-func NewKafkaSaramaSink(ctx context.Context, sinkURI *url.URL,
+// NewKafkaSink creates a new Kafka mqSink.
+func NewKafkaSink(ctx context.Context, sinkURI *url.URL,
 	replicaConfig *config.ReplicaConfig,
 	errCh chan error, changefeedID model.ChangeFeedID,
 ) (*mqSink, error) {
@@ -392,14 +392,9 @@ func NewKafkaSaramaSink(ctx context.Context, sinkURI *url.URL,
 		return nil, cerror.WrapError(cerror.ErrKafkaInvalidConfig, err)
 	}
 
-	saramaConfig, err := pkafka.NewSaramaConfig(ctx, options)
-	if err != nil {
-		return nil, errors.Trace(err)
-	}
-
 	adminClient, err := kafka.NewAdminClientImpl(ctx, options)
 	if err != nil {
-		return nil, cerror.WrapError(cerror.ErrKafkaNewSaramaProducer, err)
+		return nil, cerror.WrapError(cerror.ErrKafkaNewProducer, err)
 	}
 
 	// we must close adminClient when this func return cause by an error
@@ -410,8 +405,8 @@ func NewKafkaSaramaSink(ctx context.Context, sinkURI *url.URL,
 		}
 	}()
 
-	if err := kafka.AdjustOptions(adminClient, options, topic); err != nil {
-		return nil, cerror.WrapError(cerror.ErrKafkaNewSaramaProducer, err)
+	if err := kafka.AdjustOptions(ctx, adminClient, options, topic); err != nil {
+		return nil, cerror.WrapError(cerror.ErrKafkaNewProducer, err)
 	}
 
 	protocol, err := config.ParseSinkProtocolFromString(replicaConfig.Sink.Protocol)
@@ -425,7 +420,7 @@ func NewKafkaSaramaSink(ctx context.Context, sinkURI *url.URL,
 	}
 	// always set encoder's `MaxMessageBytes` equal to producer's `MaxMessageBytes`
 	// to prevent that the encoder generate batched message too large then cause producer meet `message too large`
-	encoderConfig = encoderConfig.WithMaxMessageBytes(saramaConfig.Producer.MaxMessageBytes)
+	encoderConfig = encoderConfig.WithMaxMessageBytes(options.MaxMessageBytes)
 
 	if err := encoderConfig.Validate(); err != nil {
 		return nil, cerror.WrapError(cerror.ErrKafkaInvalidConfig, err)
@@ -433,23 +428,24 @@ func NewKafkaSaramaSink(ctx context.Context, sinkURI *url.URL,
 
 	client, err := kafka.NewClientImpl(ctx, options)
 	if err != nil {
-		return nil, cerror.WrapError(cerror.ErrKafkaNewSaramaProducer, err)
+		return nil, cerror.WrapError(cerror.ErrKafkaNewProducer, err)
 	}
 
 	topicManager, err := manager.NewKafkaTopicManager(
+		ctx,
 		client,
 		adminClient,
 		options.DeriveTopicConfig(),
 	)
 	if err != nil {
-		return nil, cerror.WrapError(cerror.ErrKafkaNewSaramaProducer, err)
+		return nil, cerror.WrapError(cerror.ErrKafkaNewProducer, err)
 	}
 
-	if _, err := topicManager.CreateTopicAndWaitUntilVisible(topic); err != nil {
+	if _, err := topicManager.CreateTopicAndWaitUntilVisible(ctx, topic); err != nil {
 		return nil, cerror.WrapError(cerror.ErrKafkaCreateTopic, err)
 	}
 
-	sProducer, err := kafka.NewKafkaSaramaProducer(
+	sProducer, err := kafka.NewProducer(
 		ctx,
 		client,
 		adminClient,
