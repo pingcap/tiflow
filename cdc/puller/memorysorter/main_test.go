@@ -1,4 +1,4 @@
-// Copyright 2020 PingCAP, Inc.
+// Copyright 2022 PingCAP, Inc.
 //
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -11,24 +11,14 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-package unified
+package memorysorter
 
-import "github.com/pingcap/tiflow/cdc/model"
+import (
+	"testing"
 
-type backEnd interface {
-	reader() (backEndReader, error)
-	writer() (backEndWriter, error)
-	free() error
-}
+	"github.com/pingcap/tiflow/pkg/leakutil"
+)
 
-type backEndReader interface {
-	readNext() (*model.PolymorphicEvent, error)
-	resetAndClose() error
-}
-
-type backEndWriter interface {
-	writeNext(event *model.PolymorphicEvent) error
-	writtenCount() int
-	dataSize() uint64
-	flushAndClose() error
+func TestMain(m *testing.M) {
+	leakutil.SetUpLeakTest(m)
 }

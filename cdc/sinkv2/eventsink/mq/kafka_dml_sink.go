@@ -51,7 +51,7 @@ func NewKafkaDMLSink(
 
 	adminClient, err := adminClientCreator(ctx, options)
 	if err != nil {
-		return nil, cerror.WrapError(cerror.ErrKafkaNewSaramaProducer, err)
+		return nil, cerror.WrapError(cerror.ErrKafkaNewProducer, err)
 	}
 	// We must close adminClient when this func return cause by an error
 	// otherwise the adminClient will never be closed and lead to a goroutine leak.
@@ -65,8 +65,8 @@ func NewKafkaDMLSink(
 	}()
 
 	// adjust the option configuration before creating the kafka client
-	if err = kafka.AdjustOptions(adminClient, options, topic); err != nil {
-		return nil, cerror.WrapError(cerror.ErrKafkaNewSaramaProducer, err)
+	if err = kafka.AdjustOptions(ctx, adminClient, options, topic); err != nil {
+		return nil, cerror.WrapError(cerror.ErrKafkaNewProducer, err)
 	}
 
 	protocol, err := util.GetProtocol(replicaConfig.Sink.Protocol)
@@ -76,14 +76,14 @@ func NewKafkaDMLSink(
 
 	client, err := clientCreator(ctx, options)
 	if err != nil {
-		return nil, cerror.WrapError(cerror.ErrKafkaNewSaramaProducer, err)
+		return nil, cerror.WrapError(cerror.ErrKafkaNewProducer, err)
 	}
 
 	log.Info("Try to create a DML sink producer",
 		zap.Any("options", options))
 	p, err := producerCreator(ctx, client, adminClient, errCh)
 	if err != nil {
-		return nil, cerror.WrapError(cerror.ErrKafkaNewSaramaProducer, err)
+		return nil, cerror.WrapError(cerror.ErrKafkaNewProducer, err)
 	}
 	// Preventing leaks when error occurs.
 	// This also closes the client in p.Close().
@@ -94,6 +94,7 @@ func NewKafkaDMLSink(
 	}()
 
 	topicManager, err := util.GetTopicManagerAndTryCreateTopic(
+		ctx,
 		topic,
 		options.DeriveTopicConfig(),
 		client,

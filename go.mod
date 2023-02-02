@@ -296,3 +296,5 @@ replace github.com/benbjohnson/clock v1.3.0 => github.com/benbjohnson/clock v1.1
 
 // copy from TiDB
 replace go.opencensus.io => go.opencensus.io v0.23.1-0.20220331163232-052120675fac
+
+replace github.com/segmentio/kafka-go v0.4.38 => github.com/3AceShowHand/kafka-go v0.0.0-20230109084533-cd584ac8c705

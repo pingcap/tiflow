@@ -312,7 +312,7 @@ func (sm *saramaMetricsMonitor) collectBrokerMetrics(ctx context.Context) {
 // flushMetricsInterval specifies the interval of refresh sarama metrics.
 const flushMetricsInterval = 5 * time.Second
 
-func runSaramaMetricsMonitor(ctx context.Context,
+func runMetricsMonitor(ctx context.Context,
 	registry metrics.Registry,
 	changefeedID model.ChangeFeedID,
 	role util.Role, admin kafka.ClusterAdminClient,

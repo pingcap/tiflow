@@ -53,7 +53,11 @@ func (h *OpenAPIV2) getProcessor(c *gin.Context) {
 		)
 		return
 	}
-	info, err := h.capture.StatusProvider().GetChangeFeedInfo(ctx, changefeedID)
+
+	info, err := h.capture.StatusProvider().GetChangeFeedInfo(
+		ctx,
+		changefeedID,
+	)
 	if err != nil {
 		_ = c.Error(err)
 		return
@@ -63,7 +67,7 @@ func (h *OpenAPIV2) getProcessor(c *gin.Context) {
 			cerror.WrapError(
 				cerror.ErrAPIInvalidParam,
 				fmt.Errorf("changefeed in abnormal state: %s, "+
-					"can't get processors of an abnormal changefeed",
+					"can't get processor of an abnormal changefeed",
 					string(info.State),
 				),
 			),
@@ -110,4 +114,36 @@ func (h *OpenAPIV2) getProcessor(c *gin.Context) {
 		processorDetail.Tables = tables
 	}
 	c.JSON(http.StatusOK, &processorDetail)
+}
+
+// listProcessors lists all processors in the TiCDC cluster
+// @Summary List processors
+// @Description list all processors in the TiCDC cluster
+// @Tags processor
+// @Produce json
+// @Success 200 {array} model.ProcessorCommonInfo
+// @Failure 500,400 {object} model.HTTPError
+// @Router	/api/v2/processors [get]
+func (h *OpenAPIV2) listProcessors(c *gin.Context) {
+	ctx := c.Request.Context()
+	infos, err := h.capture.StatusProvider().GetProcessors(ctx)
+	if err != nil {
+		_ = c.Error(err)
+		return
+	}
+	prcInfos := make([]ProcessorCommonInfo, 0, len(infos))
+	for i, info := range infos {
+		resp := ProcessorCommonInfo{
+			Namespace:    info.CfID.Namespace,
+			ChangeFeedID: info.CfID.ID,
+			CaptureID:    info.CaptureID,
+		}
+		prcInfos[i] = resp
+	}
+	resp := &ListResponse[ProcessorCommonInfo]{
+		Total: len(prcInfos),
+		Items: prcInfos,
+	}
+
+	c.JSON(http.StatusOK, resp)
 }
