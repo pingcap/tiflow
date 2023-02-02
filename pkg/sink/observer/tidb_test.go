@@ -75,3 +75,18 @@ func TestTiDBObserver(t *testing.T) {
 	err = observer.Close()
 	require.NoError(t, err)
 }
+
+func TestTiDBObserverCloseSequence(t *testing.T) {
+	t.Parallel()
+
+	db, mock, err := sqlmock.New(sqlmock.QueryMatcherOption(sqlmock.QueryMatcherEqual))
+	require.NoError(t, err)
+	mock.ExpectClose()
+
+	ctx := context.Background()
+	observer := NewTiDBObserver(db)
+	err = observer.Close()
+	require.NoError(t, err)
+	err = observer.Tick(ctx)
+	require.NoError(t, err)
+}

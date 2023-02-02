@@ -15,10 +15,13 @@ package observer
 
 import (
 	"context"
+	"sync"
 )
 
 // DummyObserver is an observer that does nothing
-type DummyObserver struct{}
+type DummyObserver struct {
+	wg sync.WaitGroup
+}
 
 // Tick implements Observer
 func (o *DummyObserver) Tick(ctx context.Context) error {

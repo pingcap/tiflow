@@ -27,6 +27,7 @@ import (
 type Observer interface {
 	// Tick is called periodically, Observer fetches performance metrics and
 	// records them in each Tick.
+	// Tick and Close must be concurrent safe.
 	Tick(ctx context.Context) error
 	Close() error
 }

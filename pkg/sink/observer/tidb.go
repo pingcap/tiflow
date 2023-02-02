@@ -17,9 +17,11 @@ import (
 	"context"
 	"database/sql"
 	"strconv"
+	"sync"
 
 	"github.com/pingcap/log"
 	"github.com/pingcap/tiflow/pkg/errors"
+	"github.com/uber-go/atomic"
 	"go.uber.org/zap"
 )
 
@@ -104,10 +106,19 @@ var (
 // TiDBObserver is a tidb performance observer
 type TiDBObserver struct {
 	db *sql.DB
+	// Use the following lock mechanism to guarantee that Tick can be called
+	// concurrently after Close is called.
+	lock   sync.Mutex
+	closed *atomic.Bool
 }
 
 // Tick implements Observer
 func (o *TiDBObserver) Tick(ctx context.Context) error {
+	o.lock.Lock()
+	defer o.lock.Unlock()
+	if o.closed.Load() {
+		return nil
+	}
 	m1 := make([]*tidbConnIdleDuration, 0)
 	if err := queryMetrics[tidbConnIdleDuration](
 		ctx, o.db, queryConnIdleDurationStmt, &m1); err != nil {
@@ -165,13 +176,19 @@ func (o *TiDBObserver) Tick(ctx context.Context) error {
 
 // Close implements Observer
 func (o *TiDBObserver) Close() error {
+	o.lock.Lock()
+	defer func() {
+		o.closed.Store(true)
+		o.lock.Unlock()
+	}()
 	return o.db.Close()
 }
 
 // NewTiDBObserver creates a new TiDBObserver instance
 func NewTiDBObserver(db *sql.DB) *TiDBObserver {
 	return &TiDBObserver{
-		db: db,
+		db:     db,
+		closed: atomic.NewBool(false),
 	}
 }
 

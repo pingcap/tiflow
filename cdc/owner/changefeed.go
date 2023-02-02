@@ -650,7 +650,6 @@ func (c *changefeed) releaseResources(ctx cdcContext.Context) {
 	}
 	if c.downstreamObserver != nil {
 		_ = c.downstreamObserver.Close()
-		c.downstreamObserver = nil
 	}
 
 	c.cleanupMetrics()
