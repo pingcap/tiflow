@@ -725,6 +725,35 @@ paths:
       summary: Get server status
       tags:
       - common
+  /api/v2/changefeeds/{changefeed_id}:
+    get:
+      consumes:
+      - application/json
+      description: get detail information of a changefeed
+      parameters:
+      - description: changefeed_id
+        in: path
+        name: changefeed_id
+        required: true
+        type: string
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/model.ChangefeedDetail'
+        "400":
+          description: Bad Request
+          schema:
+            $ref: '#/definitions/model.HTTPError'
+        "500":
+          description: Internal Server Error
+          schema:
+            $ref: '#/definitions/model.HTTPError'
+      summary: Get changefeed
+      tags:
+      - changefeed
   /api/v2/processors:
     get:
       description: list all processors in the TiCDC cluster

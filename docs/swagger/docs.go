@@ -741,6 +741,50 @@ var doc = `{
                 }
             }
         },
+        "/api/v2/changefeeds/{changefeed_id}": {
+            "get": {
+                "description": "get detail information of a changefeed",
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "changefeed"
+                ],
+                "summary": "Get changefeed",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "description": "changefeed_id",
+                        "name": "changefeed_id",
+                        "in": "path",
+                        "required": true
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/model.ChangefeedDetail"
+                        }
+                    },
+                    "400": {
+                        "description": "Bad Request",
+                        "schema": {
+                            "$ref": "#/definitions/model.HTTPError"
+                        }
+                    },
+                    "500": {
+                        "description": "Internal Server Error",
+                        "schema": {
+                            "$ref": "#/definitions/model.HTTPError"
+                        }
+                    }
+                }
+            }
+        },
         "/api/v2/processors": {
             "get": {
                 "description": "list all processors in the TiCDC cluster",
