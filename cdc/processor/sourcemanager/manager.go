@@ -100,7 +100,7 @@ func (m *SourceManager) FetchByTable(
 	span tablepb.Span, lowerBound, upperBound engine.Position,
 ) *engine.MountedEventIter {
 	iter := m.engine.FetchByTable(m.changefeedID, span, lowerBound, upperBound)
-	return engine.NewMountedEventIter(iter, m.mg, defaultMaxBatchSize)
+	return engine.NewMountedEventIter(m.changefeedID, iter, m.mg, defaultMaxBatchSize)
 }
 
 // CleanByTable just wrap the engine's CleanByTable method.

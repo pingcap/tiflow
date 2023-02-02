@@ -15,9 +15,11 @@ package engine
 
 import (
 	"context"
+	"time"
 
 	"github.com/pingcap/tiflow/cdc/entry"
 	"github.com/pingcap/tiflow/cdc/model"
+	"github.com/prometheus/client_golang/prometheus"
 )
 
 // MountedEventIter is just like EventIterator, but returns mounted events.
@@ -26,13 +28,15 @@ type MountedEventIter struct {
 	mg           entry.MounterGroup
 	maxBatchSize int
 
-	rawEvents      []rawEvent
-	nextToEmit     int
-	savedIterError error
+	rawEvents         []rawEvent
+	nextToEmit        int
+	savedIterError    error
+	mountWaitDuration prometheus.Observer
 }
 
 // NewMountedEventIter creates a MountedEventIter instance.
 func NewMountedEventIter(
+	changefeedID model.ChangeFeedID,
 	iter EventIterator,
 	mg entry.MounterGroup,
 	maxBatchSize int,
@@ -41,6 +45,8 @@ func NewMountedEventIter(
 		iter:         iter,
 		mg:           mg,
 		maxBatchSize: maxBatchSize,
+
+		mountWaitDuration: mountWaitDuration.WithLabelValues(changefeedID.Namespace, changefeedID.ID),
 	}
 }
 
@@ -57,9 +63,13 @@ func (i *MountedEventIter) Next(ctx context.Context) (event *model.PolymorphicEv
 	// Check whether there are events in mounting or not.
 	if i.nextToEmit < len(i.rawEvents) {
 		idx := i.nextToEmit
+
+		startWait := time.Now()
 		if err = i.rawEvents[idx].event.WaitFinished(ctx); err != nil {
 			return
 		}
+		i.mountWaitDuration.Observe((time.Since(startWait) + i.rawEvents[idx].latency).Seconds())
+
 		event = i.rawEvents[idx].event
 		txnFinished = i.rawEvents[idx].txnFinished
 		i.nextToEmit += 1
@@ -89,12 +99,16 @@ func (i *MountedEventIter) readBatch(ctx context.Context) error {
 			i.iter = nil
 			break
 		}
+
+		startMount := time.Now()
 		event.SetUpFinishedCh()
 		if err := i.mg.AddEvent(ctx, event); err != nil {
 			i.mg = nil
 			return err
 		}
-		i.rawEvents = append(i.rawEvents, rawEvent{event, txnFinished})
+		latency := time.Since(startMount)
+
+		i.rawEvents = append(i.rawEvents, rawEvent{event, txnFinished, latency})
 	}
 	return nil
 }
@@ -113,4 +127,5 @@ func (i *MountedEventIter) Close() error {
 type rawEvent struct {
 	event       *model.PolymorphicEvent
 	txnFinished Position
+	latency     time.Duration
 }
