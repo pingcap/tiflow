@@ -30,6 +30,7 @@ import (
 	"github.com/pingcap/tiflow/cdc/processor/tablepb"
 	"github.com/pingcap/tiflow/pkg/chann"
 	"github.com/pingcap/tiflow/pkg/spanz"
+	"github.com/prometheus/client_golang/prometheus"
 	"go.uber.org/zap"
 )
 
@@ -64,6 +65,8 @@ type EventIter struct {
 	iter     *pebble.Iterator
 	headItem *model.PolymorphicEvent
 	serde    encoding.MsgPackGenSerde
+
+	nextDuration prometheus.Observer
 }
 
 // New creates an EventSorter instance.
@@ -205,10 +208,7 @@ func (s *EventSorter) OnResolve(action func(tablepb.Span, model.Ts)) {
 }
 
 // FetchByTable implements engine.SortEngine.
-func (s *EventSorter) FetchByTable(
-	span tablepb.Span,
-	lowerBound, upperBound engine.Position,
-) engine.EventIterator {
+func (s *EventSorter) FetchByTable(span tablepb.Span, lowerBound, upperBound engine.Position) engine.EventIterator {
 	s.mu.RLock()
 	state, exists := s.tables.Get(span)
 	s.mu.RUnlock()
@@ -231,8 +231,21 @@ func (s *EventSorter) FetchByTable(
 	}
 
 	db := s.dbs[getDB(span, len(s.dbs))]
+	iterReadDur := engine.SorterIterReadDuration()
+
+	seekStart := time.Now()
 	iter := iterTable(db, state.uniqueID, span.TableID, lowerBound, upperBound)
-	return &EventIter{tableID: span.TableID, state: state, iter: iter, serde: s.serde}
+	iterReadDur.WithLabelValues(s.changefeedID.Namespace, s.changefeedID.ID, "first").
+		Observe(time.Since(seekStart).Seconds())
+
+	return &EventIter{
+		tableID: span.TableID,
+		state:   state,
+		iter:    iter,
+		serde:   s.serde,
+
+		nextDuration: iterReadDur.WithLabelValues(s.changefeedID.Namespace, s.changefeedID.ID, "next"),
+	}
 }
 
 // FetchAllTables implements engine.SortEngine.
@@ -344,7 +357,10 @@ func (s *EventIter) Next() (event *model.PolymorphicEvent, pos engine.Position, 
 	valid := s.iter != nil && s.iter.Valid()
 	var value []byte
 	for valid {
+		nextStart := time.Now()
 		value, valid = s.iter.Value(), s.iter.Next()
+		s.nextDuration.Observe(time.Since(nextStart).Seconds())
+
 		event = &model.PolymorphicEvent{}
 		if _, err = s.serde.Unmarshal(event, value); err != nil {
 			return
