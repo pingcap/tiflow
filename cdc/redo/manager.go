@@ -464,12 +464,18 @@ func (m *ManagerImpl) flushLog(ctx context.Context, handleErr func(err error)) {
 	}()
 }
 
+<<<<<<< HEAD
 func (m *ManagerImpl) onResolvedTsMsg(tableID model.TableID, resolvedTs model.Ts) {
 	value, loaded := m.rtsMap.Load(tableID)
 	if !loaded {
 		panic("onResolvedTsMsg is called for an invalid table")
+=======
+func (m *ManagerImpl) onResolvedTsMsg(span tablepb.Span, resolvedTs model.Ts) {
+	// It's possible that the table is removed while redo log is still in writing.
+	if value, loaded := m.rtsMap.Load(span); loaded {
+		value.(*statefulRts).checkAndSetUnflushed(resolvedTs)
+>>>>>>> 979485490e (sinkv2(cdc): fix panics about table scheduling or blackhole sink (#8156))
 	}
-	value.(*statefulRts).checkAndSetUnflushed(resolvedTs)
 }
 
 func (m *ManagerImpl) bgUpdateLog(

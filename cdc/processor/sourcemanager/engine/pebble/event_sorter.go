@@ -29,6 +29,11 @@ import (
 	"github.com/pingcap/tiflow/cdc/processor/sourcemanager/engine/pebble/encoding"
 	metrics "github.com/pingcap/tiflow/cdc/sorter/db"
 	"github.com/pingcap/tiflow/pkg/chann"
+<<<<<<< HEAD
+=======
+	"github.com/pingcap/tiflow/pkg/spanz"
+	"github.com/prometheus/client_golang/prometheus"
+>>>>>>> 979485490e (sinkv2(cdc): fix panics about table scheduling or blackhole sink (#8156))
 	"go.uber.org/zap"
 )
 
@@ -64,6 +69,8 @@ type EventIter struct {
 	iter     *pebble.Iterator
 	headItem *model.PolymorphicEvent
 	serde    encoding.MsgPackGenSerde
+
+	nextDuration prometheus.Observer
 }
 
 // New creates an EventSorter instance.
@@ -203,10 +210,14 @@ func (s *EventSorter) OnResolve(action func(model.TableID, model.Ts)) {
 }
 
 // FetchByTable implements engine.SortEngine.
+<<<<<<< HEAD
 func (s *EventSorter) FetchByTable(
 	tableID model.TableID,
 	lowerBound, upperBound engine.Position,
 ) engine.EventIterator {
+=======
+func (s *EventSorter) FetchByTable(span tablepb.Span, lowerBound, upperBound engine.Position) engine.EventIterator {
+>>>>>>> 979485490e (sinkv2(cdc): fix panics about table scheduling or blackhole sink (#8156))
 	s.mu.RLock()
 	state, exists := s.tables[tableID]
 	s.mu.RUnlock()
@@ -228,9 +239,28 @@ func (s *EventSorter) FetchByTable(
 			zap.Uint64("resolved", sortedResolved))
 	}
 
+<<<<<<< HEAD
 	db := s.dbs[getDB(tableID, len(s.dbs))]
 	iter := iterTable(db, s.uniqueID, tableID, lowerBound, upperBound)
 	return &EventIter{tableID: tableID, state: state, iter: iter, serde: s.serde}
+=======
+	db := s.dbs[getDB(span, len(s.dbs))]
+	iterReadDur := engine.SorterIterReadDuration()
+
+	seekStart := time.Now()
+	iter := iterTable(db, state.uniqueID, span.TableID, lowerBound, upperBound)
+	iterReadDur.WithLabelValues(s.changefeedID.Namespace, s.changefeedID.ID, "first").
+		Observe(time.Since(seekStart).Seconds())
+
+	return &EventIter{
+		tableID: span.TableID,
+		state:   state,
+		iter:    iter,
+		serde:   s.serde,
+
+		nextDuration: iterReadDur.WithLabelValues(s.changefeedID.Namespace, s.changefeedID.ID, "next"),
+	}
+>>>>>>> 979485490e (sinkv2(cdc): fix panics about table scheduling or blackhole sink (#8156))
 }
 
 // FetchAllTables implements engine.SortEngine.
@@ -335,7 +365,10 @@ func (s *EventIter) Next() (event *model.PolymorphicEvent, pos engine.Position, 
 	valid := s.iter != nil && s.iter.Valid()
 	var value []byte
 	for valid {
+		nextStart := time.Now()
 		value, valid = s.iter.Value(), s.iter.Next()
+		s.nextDuration.Observe(time.Since(nextStart).Seconds())
+
 		event = &model.PolymorphicEvent{}
 		if _, err = s.serde.Unmarshal(event, value); err != nil {
 			return

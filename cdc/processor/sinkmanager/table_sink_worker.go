@@ -183,7 +183,17 @@ func (w *sinkWorker) handleTask(ctx context.Context, task *sinkTask) (finalErr e
 	}
 
 	maybeEmitAndAdvance := func(allFinished, txnFinished bool) error {
+		// If used memory size exceeds the required limit, do a force acquire.
 		memoryHighUsage := availableMem < usedMem
+		if memoryHighUsage {
+			w.sinkMemQuota.forceAcquire(usedMem - availableMem)
+			log.Debug("MemoryQuotaTracing: force acquire memory for table sink task",
+				zap.String("namespace", w.changefeedID.Namespace),
+				zap.String("changefeed", w.changefeedID.ID),
+				zap.Stringer("span", &task.span),
+				zap.Uint64("memory", usedMem-availableMem))
+			availableMem = usedMem
+		}
 
 		// Do emit in such situations:
 		// 1. we use more memory than we required;
@@ -195,6 +205,7 @@ func (w *sinkWorker) handleTask(ctx context.Context, task *sinkTask) (finalErr e
 			}
 		}
 
+<<<<<<< HEAD
 		if memoryHighUsage {
 			w.sinkMemQuota.forceAcquire(usedMem - availableMem)
 			log.Debug("MemoryQuotaTracing: force acquire memory for table sink task",
@@ -205,6 +216,8 @@ func (w *sinkWorker) handleTask(ctx context.Context, task *sinkTask) (finalErr e
 			availableMem = usedMem
 		}
 
+=======
+>>>>>>> 979485490e (sinkv2(cdc): fix panics about table scheduling or blackhole sink (#8156))
 		if allFinished {
 			return nil
 		}

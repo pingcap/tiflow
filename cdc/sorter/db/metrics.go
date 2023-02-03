@@ -68,6 +68,44 @@ func SorterWriteBytes() *prometheus.HistogramVec {
 	return sorterWriteBytesHistogram
 }
 
+<<<<<<< HEAD:cdc/sorter/db/metrics.go
+=======
+// SorterIterReadDuration returns sorterIterReadDurationHistogram.
+func SorterIterReadDuration() *prometheus.HistogramVec {
+	return sorterIterReadDurationHistogram
+}
+
+// InMemoryDataSize returns inMemoryDataSizeGauge.
+func InMemoryDataSize() *prometheus.GaugeVec {
+	return inMemoryDataSizeGauge
+}
+
+// OnDiskDataSize returns onDiskDataSizeGauge.
+func OnDiskDataSize() *prometheus.GaugeVec {
+	return onDiskDataSizeGauge
+}
+
+// IteratorGauge returns dbIteratorGauge.
+func IteratorGauge() *prometheus.GaugeVec {
+	return dbIteratorGauge
+}
+
+// WriteDelayCount returns dbWriteDelayCount.
+func WriteDelayCount() *prometheus.GaugeVec {
+	return dbWriteDelayCount
+}
+
+// LevelCount returns dbLevelCount.
+func LevelCount() *prometheus.GaugeVec {
+	return dbLevelCount
+}
+
+// BlockCacheAccess returns dbBlockCacheAccess.
+func BlockCacheAccess() *prometheus.GaugeVec {
+	return dbBlockCacheAccess
+}
+
+>>>>>>> 979485490e (sinkv2(cdc): fix panics about table scheduling or blackhole sink (#8156)):cdc/processor/sourcemanager/engine/metrics.go
 // InitMetrics registers all metrics in this file
 func InitMetrics(registry *prometheus.Registry) {
 	registry.MustRegister(sorterWriteDurationHistogram)
