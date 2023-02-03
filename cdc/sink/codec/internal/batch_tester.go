@@ -24,8 +24,8 @@ import (
 )
 
 var (
-	// CodecRowCases defines test cases for RowChangedEvent.
-	CodecRowCases = [][]*model.RowChangedEvent{{{
+	// CodecRowCases defines test cases for DetailedRowChangedEvent.
+	CodecRowCases = [][]*model.DetailedRowChangedEvent{{{
 		CommitTs: 424316552636792833,
 		Table:    &model.TableName{Schema: "a", Table: "b"},
 		PreColumns: []*model.Column{
@@ -209,7 +209,7 @@ func sortColumnArrays(arrays ...[]*model.Column) {
 
 // BatchTester is a tester for batch encoders.
 type BatchTester struct {
-	RowCases        [][]*model.RowChangedEvent
+	RowCases        [][]*model.DetailedRowChangedEvent
 	DDLCases        [][]*model.DDLEvent
 	ResolvedTsCases [][]uint64
 }
@@ -229,7 +229,7 @@ func (s *BatchTester) TestBatchCodec(
 	encoderBuilder codec.EncoderBuilder,
 	newDecoder func(key []byte, value []byte) (codec.EventBatchDecoder, error),
 ) {
-	checkRowDecoder := func(decoder codec.EventBatchDecoder, cs []*model.RowChangedEvent) {
+	checkRowDecoder := func(decoder codec.EventBatchDecoder, cs []*model.DetailedRowChangedEvent) {
 		index := 0
 		for {
 			tp, hasNext, err := decoder.HasNext()
@@ -280,7 +280,7 @@ func (s *BatchTester) TestBatchCodec(
 		encoder := encoderBuilder.Build()
 
 		for _, row := range cs {
-			err := encoder.AppendRowChangedEvent(context.Background(), "", row, nil)
+			err := encoder.AppendDetailedRowChangedEvent(context.Background(), "", row, nil)
 			require.Nil(t, err)
 		}
 

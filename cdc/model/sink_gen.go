@@ -367,6 +367,303 @@ func (z DDLEvent) Msgsize() (s int) {
 }
 
 // DecodeMsg implements msgp.Decodable
+func (z *DetailedRowChangedEvent) DecodeMsg(dc *msgp.Reader) (err error) {
+	var field []byte
+	_ = field
+	var zb0001 uint32
+	zb0001, err = dc.ReadMapHeader()
+	if err != nil {
+		err = msgp.WrapError(err)
+		return
+	}
+	for zb0001 > 0 {
+		zb0001--
+		field, err = dc.ReadMapKeyPtr()
+		if err != nil {
+			err = msgp.WrapError(err)
+			return
+		}
+		switch msgp.UnsafeString(field) {
+		case "start-ts":
+			z.StartTs, err = dc.ReadUint64()
+			if err != nil {
+				err = msgp.WrapError(err, "StartTs")
+				return
+			}
+		case "commit-ts":
+			z.CommitTs, err = dc.ReadUint64()
+			if err != nil {
+				err = msgp.WrapError(err, "CommitTs")
+				return
+			}
+		case "table":
+			if dc.IsNil() {
+				err = dc.ReadNil()
+				if err != nil {
+					err = msgp.WrapError(err, "Table")
+					return
+				}
+				z.Table = nil
+			} else {
+				if z.Table == nil {
+					z.Table = new(TableName)
+				}
+				err = z.Table.DecodeMsg(dc)
+				if err != nil {
+					err = msgp.WrapError(err, "Table")
+					return
+				}
+			}
+		case "index-columns":
+			var zb0002 uint32
+			zb0002, err = dc.ReadArrayHeader()
+			if err != nil {
+				err = msgp.WrapError(err, "IndexColumns")
+				return
+			}
+			if cap(z.IndexColumns) >= int(zb0002) {
+				z.IndexColumns = (z.IndexColumns)[:zb0002]
+			} else {
+				z.IndexColumns = make([][]int, zb0002)
+			}
+			for za0001 := range z.IndexColumns {
+				var zb0003 uint32
+				zb0003, err = dc.ReadArrayHeader()
+				if err != nil {
+					err = msgp.WrapError(err, "IndexColumns", za0001)
+					return
+				}
+				if cap(z.IndexColumns[za0001]) >= int(zb0003) {
+					z.IndexColumns[za0001] = (z.IndexColumns[za0001])[:zb0003]
+				} else {
+					z.IndexColumns[za0001] = make([]int, zb0003)
+				}
+				for za0002 := range z.IndexColumns[za0001] {
+					z.IndexColumns[za0001][za0002], err = dc.ReadInt()
+					if err != nil {
+						err = msgp.WrapError(err, "IndexColumns", za0001, za0002)
+						return
+					}
+				}
+			}
+		default:
+			err = dc.Skip()
+			if err != nil {
+				err = msgp.WrapError(err)
+				return
+			}
+		}
+	}
+	return
+}
+
+// EncodeMsg implements msgp.Encodable
+func (z *DetailedRowChangedEvent) EncodeMsg(en *msgp.Writer) (err error) {
+	// map header, size 4
+	// write "start-ts"
+	err = en.Append(0x84, 0xa8, 0x73, 0x74, 0x61, 0x72, 0x74, 0x2d, 0x74, 0x73)
+	if err != nil {
+		return
+	}
+	err = en.WriteUint64(z.StartTs)
+	if err != nil {
+		err = msgp.WrapError(err, "StartTs")
+		return
+	}
+	// write "commit-ts"
+	err = en.Append(0xa9, 0x63, 0x6f, 0x6d, 0x6d, 0x69, 0x74, 0x2d, 0x74, 0x73)
+	if err != nil {
+		return
+	}
+	err = en.WriteUint64(z.CommitTs)
+	if err != nil {
+		err = msgp.WrapError(err, "CommitTs")
+		return
+	}
+	// write "table"
+	err = en.Append(0xa5, 0x74, 0x61, 0x62, 0x6c, 0x65)
+	if err != nil {
+		return
+	}
+	if z.Table == nil {
+		err = en.WriteNil()
+		if err != nil {
+			return
+		}
+	} else {
+		err = z.Table.EncodeMsg(en)
+		if err != nil {
+			err = msgp.WrapError(err, "Table")
+			return
+		}
+	}
+	// write "index-columns"
+	err = en.Append(0xad, 0x69, 0x6e, 0x64, 0x65, 0x78, 0x2d, 0x63, 0x6f, 0x6c, 0x75, 0x6d, 0x6e, 0x73)
+	if err != nil {
+		return
+	}
+	err = en.WriteArrayHeader(uint32(len(z.IndexColumns)))
+	if err != nil {
+		err = msgp.WrapError(err, "IndexColumns")
+		return
+	}
+	for za0001 := range z.IndexColumns {
+		err = en.WriteArrayHeader(uint32(len(z.IndexColumns[za0001])))
+		if err != nil {
+			err = msgp.WrapError(err, "IndexColumns", za0001)
+			return
+		}
+		for za0002 := range z.IndexColumns[za0001] {
+			err = en.WriteInt(z.IndexColumns[za0001][za0002])
+			if err != nil {
+				err = msgp.WrapError(err, "IndexColumns", za0001, za0002)
+				return
+			}
+		}
+	}
+	return
+}
+
+// MarshalMsg implements msgp.Marshaler
+func (z *DetailedRowChangedEvent) MarshalMsg(b []byte) (o []byte, err error) {
+	o = msgp.Require(b, z.Msgsize())
+	// map header, size 4
+	// string "start-ts"
+	o = append(o, 0x84, 0xa8, 0x73, 0x74, 0x61, 0x72, 0x74, 0x2d, 0x74, 0x73)
+	o = msgp.AppendUint64(o, z.StartTs)
+	// string "commit-ts"
+	o = append(o, 0xa9, 0x63, 0x6f, 0x6d, 0x6d, 0x69, 0x74, 0x2d, 0x74, 0x73)
+	o = msgp.AppendUint64(o, z.CommitTs)
+	// string "table"
+	o = append(o, 0xa5, 0x74, 0x61, 0x62, 0x6c, 0x65)
+	if z.Table == nil {
+		o = msgp.AppendNil(o)
+	} else {
+		o, err = z.Table.MarshalMsg(o)
+		if err != nil {
+			err = msgp.WrapError(err, "Table")
+			return
+		}
+	}
+	// string "index-columns"
+	o = append(o, 0xad, 0x69, 0x6e, 0x64, 0x65, 0x78, 0x2d, 0x63, 0x6f, 0x6c, 0x75, 0x6d, 0x6e, 0x73)
+	o = msgp.AppendArrayHeader(o, uint32(len(z.IndexColumns)))
+	for za0001 := range z.IndexColumns {
+		o = msgp.AppendArrayHeader(o, uint32(len(z.IndexColumns[za0001])))
+		for za0002 := range z.IndexColumns[za0001] {
+			o = msgp.AppendInt(o, z.IndexColumns[za0001][za0002])
+		}
+	}
+	return
+}
+
+// UnmarshalMsg implements msgp.Unmarshaler
+func (z *DetailedRowChangedEvent) UnmarshalMsg(bts []byte) (o []byte, err error) {
+	var field []byte
+	_ = field
+	var zb0001 uint32
+	zb0001, bts, err = msgp.ReadMapHeaderBytes(bts)
+	if err != nil {
+		err = msgp.WrapError(err)
+		return
+	}
+	for zb0001 > 0 {
+		zb0001--
+		field, bts, err = msgp.ReadMapKeyZC(bts)
+		if err != nil {
+			err = msgp.WrapError(err)
+			return
+		}
+		switch msgp.UnsafeString(field) {
+		case "start-ts":
+			z.StartTs, bts, err = msgp.ReadUint64Bytes(bts)
+			if err != nil {
+				err = msgp.WrapError(err, "StartTs")
+				return
+			}
+		case "commit-ts":
+			z.CommitTs, bts, err = msgp.ReadUint64Bytes(bts)
+			if err != nil {
+				err = msgp.WrapError(err, "CommitTs")
+				return
+			}
+		case "table":
+			if msgp.IsNil(bts) {
+				bts, err = msgp.ReadNilBytes(bts)
+				if err != nil {
+					return
+				}
+				z.Table = nil
+			} else {
+				if z.Table == nil {
+					z.Table = new(TableName)
+				}
+				bts, err = z.Table.UnmarshalMsg(bts)
+				if err != nil {
+					err = msgp.WrapError(err, "Table")
+					return
+				}
+			}
+		case "index-columns":
+			var zb0002 uint32
+			zb0002, bts, err = msgp.ReadArrayHeaderBytes(bts)
+			if err != nil {
+				err = msgp.WrapError(err, "IndexColumns")
+				return
+			}
+			if cap(z.IndexColumns) >= int(zb0002) {
+				z.IndexColumns = (z.IndexColumns)[:zb0002]
+			} else {
+				z.IndexColumns = make([][]int, zb0002)
+			}
+			for za0001 := range z.IndexColumns {
+				var zb0003 uint32
+				zb0003, bts, err = msgp.ReadArrayHeaderBytes(bts)
+				if err != nil {
+					err = msgp.WrapError(err, "IndexColumns", za0001)
+					return
+				}
+				if cap(z.IndexColumns[za0001]) >= int(zb0003) {
+					z.IndexColumns[za0001] = (z.IndexColumns[za0001])[:zb0003]
+				} else {
+					z.IndexColumns[za0001] = make([]int, zb0003)
+				}
+				for za0002 := range z.IndexColumns[za0001] {
+					z.IndexColumns[za0001][za0002], bts, err = msgp.ReadIntBytes(bts)
+					if err != nil {
+						err = msgp.WrapError(err, "IndexColumns", za0001, za0002)
+						return
+					}
+				}
+			}
+		default:
+			bts, err = msgp.Skip(bts)
+			if err != nil {
+				err = msgp.WrapError(err)
+				return
+			}
+		}
+	}
+	o = bts
+	return
+}
+
+// Msgsize returns an upper bound estimate of the number of bytes occupied by the serialized message
+func (z *DetailedRowChangedEvent) Msgsize() (s int) {
+	s = 1 + 9 + msgp.Uint64Size + 10 + msgp.Uint64Size + 6
+	if z.Table == nil {
+		s += msgp.NilSize
+	} else {
+		s += z.Table.Msgsize()
+	}
+	s += 14 + msgp.ArrayHeaderSize
+	for za0001 := range z.IndexColumns {
+		s += msgp.ArrayHeaderSize + (len(z.IndexColumns[za0001]) * (msgp.IntSize))
+	}
+	return
+}
+
+// DecodeMsg implements msgp.Decodable
 func (z *MessageType) DecodeMsg(dc *msgp.Reader) (err error) {
 	{
 		var zb0001 int
@@ -1192,7 +1489,7 @@ func (z *RedoRowChangedEvent) DecodeMsg(dc *msgp.Reader) (err error) {
 				z.Row = nil
 			} else {
 				if z.Row == nil {
-					z.Row = new(RowChangedEvent)
+					z.Row = new(DetailedRowChangedEvent)
 				}
 				err = z.Row.DecodeMsg(dc)
 				if err != nil {
@@ -1565,7 +1862,7 @@ func (z *RedoRowChangedEvent) UnmarshalMsg(bts []byte) (o []byte, err error) {
 				z.Row = nil
 			} else {
 				if z.Row == nil {
-					z.Row = new(RowChangedEvent)
+					z.Row = new(DetailedRowChangedEvent)
 				}
 				bts, err = z.Row.UnmarshalMsg(bts)
 				if err != nil {
@@ -1760,303 +2057,6 @@ func (z *RedoRowChangedEvent) Msgsize() (s int) {
 			}
 			s += 5 + msgp.Uint64Size
 		}
-	}
-	return
-}
-
-// DecodeMsg implements msgp.Decodable
-func (z *RowChangedEvent) DecodeMsg(dc *msgp.Reader) (err error) {
-	var field []byte
-	_ = field
-	var zb0001 uint32
-	zb0001, err = dc.ReadMapHeader()
-	if err != nil {
-		err = msgp.WrapError(err)
-		return
-	}
-	for zb0001 > 0 {
-		zb0001--
-		field, err = dc.ReadMapKeyPtr()
-		if err != nil {
-			err = msgp.WrapError(err)
-			return
-		}
-		switch msgp.UnsafeString(field) {
-		case "start-ts":
-			z.StartTs, err = dc.ReadUint64()
-			if err != nil {
-				err = msgp.WrapError(err, "StartTs")
-				return
-			}
-		case "commit-ts":
-			z.CommitTs, err = dc.ReadUint64()
-			if err != nil {
-				err = msgp.WrapError(err, "CommitTs")
-				return
-			}
-		case "table":
-			if dc.IsNil() {
-				err = dc.ReadNil()
-				if err != nil {
-					err = msgp.WrapError(err, "Table")
-					return
-				}
-				z.Table = nil
-			} else {
-				if z.Table == nil {
-					z.Table = new(TableName)
-				}
-				err = z.Table.DecodeMsg(dc)
-				if err != nil {
-					err = msgp.WrapError(err, "Table")
-					return
-				}
-			}
-		case "index-columns":
-			var zb0002 uint32
-			zb0002, err = dc.ReadArrayHeader()
-			if err != nil {
-				err = msgp.WrapError(err, "IndexColumns")
-				return
-			}
-			if cap(z.IndexColumns) >= int(zb0002) {
-				z.IndexColumns = (z.IndexColumns)[:zb0002]
-			} else {
-				z.IndexColumns = make([][]int, zb0002)
-			}
-			for za0001 := range z.IndexColumns {
-				var zb0003 uint32
-				zb0003, err = dc.ReadArrayHeader()
-				if err != nil {
-					err = msgp.WrapError(err, "IndexColumns", za0001)
-					return
-				}
-				if cap(z.IndexColumns[za0001]) >= int(zb0003) {
-					z.IndexColumns[za0001] = (z.IndexColumns[za0001])[:zb0003]
-				} else {
-					z.IndexColumns[za0001] = make([]int, zb0003)
-				}
-				for za0002 := range z.IndexColumns[za0001] {
-					z.IndexColumns[za0001][za0002], err = dc.ReadInt()
-					if err != nil {
-						err = msgp.WrapError(err, "IndexColumns", za0001, za0002)
-						return
-					}
-				}
-			}
-		default:
-			err = dc.Skip()
-			if err != nil {
-				err = msgp.WrapError(err)
-				return
-			}
-		}
-	}
-	return
-}
-
-// EncodeMsg implements msgp.Encodable
-func (z *RowChangedEvent) EncodeMsg(en *msgp.Writer) (err error) {
-	// map header, size 4
-	// write "start-ts"
-	err = en.Append(0x84, 0xa8, 0x73, 0x74, 0x61, 0x72, 0x74, 0x2d, 0x74, 0x73)
-	if err != nil {
-		return
-	}
-	err = en.WriteUint64(z.StartTs)
-	if err != nil {
-		err = msgp.WrapError(err, "StartTs")
-		return
-	}
-	// write "commit-ts"
-	err = en.Append(0xa9, 0x63, 0x6f, 0x6d, 0x6d, 0x69, 0x74, 0x2d, 0x74, 0x73)
-	if err != nil {
-		return
-	}
-	err = en.WriteUint64(z.CommitTs)
-	if err != nil {
-		err = msgp.WrapError(err, "CommitTs")
-		return
-	}
-	// write "table"
-	err = en.Append(0xa5, 0x74, 0x61, 0x62, 0x6c, 0x65)
-	if err != nil {
-		return
-	}
-	if z.Table == nil {
-		err = en.WriteNil()
-		if err != nil {
-			return
-		}
-	} else {
-		err = z.Table.EncodeMsg(en)
-		if err != nil {
-			err = msgp.WrapError(err, "Table")
-			return
-		}
-	}
-	// write "index-columns"
-	err = en.Append(0xad, 0x69, 0x6e, 0x64, 0x65, 0x78, 0x2d, 0x63, 0x6f, 0x6c, 0x75, 0x6d, 0x6e, 0x73)
-	if err != nil {
-		return
-	}
-	err = en.WriteArrayHeader(uint32(len(z.IndexColumns)))
-	if err != nil {
-		err = msgp.WrapError(err, "IndexColumns")
-		return
-	}
-	for za0001 := range z.IndexColumns {
-		err = en.WriteArrayHeader(uint32(len(z.IndexColumns[za0001])))
-		if err != nil {
-			err = msgp.WrapError(err, "IndexColumns", za0001)
-			return
-		}
-		for za0002 := range z.IndexColumns[za0001] {
-			err = en.WriteInt(z.IndexColumns[za0001][za0002])
-			if err != nil {
-				err = msgp.WrapError(err, "IndexColumns", za0001, za0002)
-				return
-			}
-		}
-	}
-	return
-}
-
-// MarshalMsg implements msgp.Marshaler
-func (z *RowChangedEvent) MarshalMsg(b []byte) (o []byte, err error) {
-	o = msgp.Require(b, z.Msgsize())
-	// map header, size 4
-	// string "start-ts"
-	o = append(o, 0x84, 0xa8, 0x73, 0x74, 0x61, 0x72, 0x74, 0x2d, 0x74, 0x73)
-	o = msgp.AppendUint64(o, z.StartTs)
-	// string "commit-ts"
-	o = append(o, 0xa9, 0x63, 0x6f, 0x6d, 0x6d, 0x69, 0x74, 0x2d, 0x74, 0x73)
-	o = msgp.AppendUint64(o, z.CommitTs)
-	// string "table"
-	o = append(o, 0xa5, 0x74, 0x61, 0x62, 0x6c, 0x65)
-	if z.Table == nil {
-		o = msgp.AppendNil(o)
-	} else {
-		o, err = z.Table.MarshalMsg(o)
-		if err != nil {
-			err = msgp.WrapError(err, "Table")
-			return
-		}
-	}
-	// string "index-columns"
-	o = append(o, 0xad, 0x69, 0x6e, 0x64, 0x65, 0x78, 0x2d, 0x63, 0x6f, 0x6c, 0x75, 0x6d, 0x6e, 0x73)
-	o = msgp.AppendArrayHeader(o, uint32(len(z.IndexColumns)))
-	for za0001 := range z.IndexColumns {
-		o = msgp.AppendArrayHeader(o, uint32(len(z.IndexColumns[za0001])))
-		for za0002 := range z.IndexColumns[za0001] {
-			o = msgp.AppendInt(o, z.IndexColumns[za0001][za0002])
-		}
-	}
-	return
-}
-
-// UnmarshalMsg implements msgp.Unmarshaler
-func (z *RowChangedEvent) UnmarshalMsg(bts []byte) (o []byte, err error) {
-	var field []byte
-	_ = field
-	var zb0001 uint32
-	zb0001, bts, err = msgp.ReadMapHeaderBytes(bts)
-	if err != nil {
-		err = msgp.WrapError(err)
-		return
-	}
-	for zb0001 > 0 {
-		zb0001--
-		field, bts, err = msgp.ReadMapKeyZC(bts)
-		if err != nil {
-			err = msgp.WrapError(err)
-			return
-		}
-		switch msgp.UnsafeString(field) {
-		case "start-ts":
-			z.StartTs, bts, err = msgp.ReadUint64Bytes(bts)
-			if err != nil {
-				err = msgp.WrapError(err, "StartTs")
-				return
-			}
-		case "commit-ts":
-			z.CommitTs, bts, err = msgp.ReadUint64Bytes(bts)
-			if err != nil {
-				err = msgp.WrapError(err, "CommitTs")
-				return
-			}
-		case "table":
-			if msgp.IsNil(bts) {
-				bts, err = msgp.ReadNilBytes(bts)
-				if err != nil {
-					return
-				}
-				z.Table = nil
-			} else {
-				if z.Table == nil {
-					z.Table = new(TableName)
-				}
-				bts, err = z.Table.UnmarshalMsg(bts)
-				if err != nil {
-					err = msgp.WrapError(err, "Table")
-					return
-				}
-			}
-		case "index-columns":
-			var zb0002 uint32
-			zb0002, bts, err = msgp.ReadArrayHeaderBytes(bts)
-			if err != nil {
-				err = msgp.WrapError(err, "IndexColumns")
-				return
-			}
-			if cap(z.IndexColumns) >= int(zb0002) {
-				z.IndexColumns = (z.IndexColumns)[:zb0002]
-			} else {
-				z.IndexColumns = make([][]int, zb0002)
-			}
-			for za0001 := range z.IndexColumns {
-				var zb0003 uint32
-				zb0003, bts, err = msgp.ReadArrayHeaderBytes(bts)
-				if err != nil {
-					err = msgp.WrapError(err, "IndexColumns", za0001)
-					return
-				}
-				if cap(z.IndexColumns[za0001]) >= int(zb0003) {
-					z.IndexColumns[za0001] = (z.IndexColumns[za0001])[:zb0003]
-				} else {
-					z.IndexColumns[za0001] = make([]int, zb0003)
-				}
-				for za0002 := range z.IndexColumns[za0001] {
-					z.IndexColumns[za0001][za0002], bts, err = msgp.ReadIntBytes(bts)
-					if err != nil {
-						err = msgp.WrapError(err, "IndexColumns", za0001, za0002)
-						return
-					}
-				}
-			}
-		default:
-			bts, err = msgp.Skip(bts)
-			if err != nil {
-				err = msgp.WrapError(err)
-				return
-			}
-		}
-	}
-	o = bts
-	return
-}
-
-// Msgsize returns an upper bound estimate of the number of bytes occupied by the serialized message
-func (z *RowChangedEvent) Msgsize() (s int) {
-	s = 1 + 9 + msgp.Uint64Size + 10 + msgp.Uint64Size + 6
-	if z.Table == nil {
-		s += msgp.NilSize
-	} else {
-		s += z.Table.Msgsize()
-	}
-	s += 14 + msgp.ArrayHeaderSize
-	for za0001 := range z.IndexColumns {
-		s += msgp.ArrayHeaderSize + (len(z.IndexColumns[za0001]) * (msgp.IntSize))
 	}
 	return
 }

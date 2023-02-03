@@ -19,6 +19,7 @@ import (
 	"github.com/pingcap/errors"
 	"github.com/pingcap/log"
 	"github.com/pingcap/tiflow/cdc/contextutil"
+	"github.com/pingcap/tiflow/cdc/entry"
 	"github.com/pingcap/tiflow/cdc/model"
 	"github.com/pingcap/tiflow/cdc/sink/codec/builder"
 	"github.com/pingcap/tiflow/cdc/sink/codec/common"
@@ -52,6 +53,8 @@ type dmlSink struct {
 	// topicManager used to manage topics.
 	// It is also responsible for creating topics.
 	topicManager manager.TopicManager
+
+	mountHelper *entry.MountHelper
 
 	ctx    context.Context
 	cancel context.CancelFunc
@@ -116,12 +119,13 @@ func (s *dmlSink) WriteEvents(rows ...*eventsink.RowChangeCallbackableEvent) err
 			row.Callback()
 			continue
 		}
-		topic := s.eventRouter.GetTopicForRowChange(row.Event)
+		detailedEvent := s.mountHelper.BuildRowChangedEvent(row.Event)
+		topic := s.eventRouter.GetTopicForRowChange(detailedEvent)
 		partitionNum, err := s.topicManager.GetPartitionNum(s.ctx, topic)
 		if err != nil {
 			return errors.Trace(err)
 		}
-		partition := s.eventRouter.GetPartitionForRowChange(row.Event, partitionNum)
+		partition := s.eventRouter.GetPartitionForRowChange(detailedEvent, partitionNum)
 		// This never be blocked because this is an unbounded channel.
 		s.worker.msgChan.In() <- mqEvent{
 			key: mqv1.TopicPartitionKey{

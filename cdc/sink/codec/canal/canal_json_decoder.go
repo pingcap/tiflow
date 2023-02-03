@@ -88,7 +88,7 @@ func (b *batchDecoder) HasNext() (model.MessageType, bool, error) {
 
 // NextRowChangedEvent implements the EventBatchDecoder interface
 // `HasNext` should be called before this.
-func (b *batchDecoder) NextRowChangedEvent() (*model.RowChangedEvent, error) {
+func (b *batchDecoder) NextRowChangedEvent() (*model.DetailedRowChangedEvent, error) {
 	if b.msg == nil || b.msg.messageType() != model.MessageTypeRow {
 		return nil, cerror.ErrCanalDecodeFailed.
 			GenWithStack("not found row changed event message")

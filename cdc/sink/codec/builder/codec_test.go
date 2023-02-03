@@ -55,7 +55,7 @@ func checkCompressedSize(messages []*common.Message) (int, int) {
 	return originalSize, buff.Len()
 }
 
-func encodeRowCase(t *testing.T, encoder codec.EventBatchEncoder, events []*model.RowChangedEvent) []*common.Message {
+func encodeRowCase(t *testing.T, encoder codec.EventBatchEncoder, events []*model.DetailedRowChangedEvent) []*common.Message {
 	msg, err := codecEncodeRowCase(encoder, events)
 	require.Nil(t, err)
 	return msg
@@ -95,7 +95,7 @@ func TestJsonVsCraftVsPB(t *testing.T) {
 	}
 }
 
-func codecEncodeKeyPB(event *model.RowChangedEvent) []byte {
+func codecEncodeKeyPB(event *model.DetailedRowChangedEvent) []byte {
 	key := &benchmark.Key{
 		Ts:        event.CommitTs,
 		Schema:    event.Table.Schema,
@@ -127,7 +127,7 @@ func codecEncodeColumnsPB(columns []*model.Column) []*benchmark.Column {
 	return converted
 }
 
-func codecEncodeRowChangedPB(event *model.RowChangedEvent) []byte {
+func codecEncodeRowChangedPB(event *model.DetailedRowChangedEvent) []byte {
 	rowChanged := &benchmark.RowChanged{
 		OldValue: codecEncodeColumnsPB(event.PreColumns),
 		NewValue: codecEncodeColumnsPB(event.Columns),
@@ -139,7 +139,7 @@ func codecEncodeRowChangedPB(event *model.RowChangedEvent) []byte {
 	}
 }
 
-func codecEncodeRowChangedPB1ToMessage(events []*model.RowChangedEvent) []*common.Message {
+func codecEncodeRowChangedPB1ToMessage(events []*model.DetailedRowChangedEvent) []*common.Message {
 	result := make([]*common.Message, len(events))
 	for i, event := range events {
 		result[i] = &common.Message{
@@ -150,14 +150,14 @@ func codecEncodeRowChangedPB1ToMessage(events []*model.RowChangedEvent) []*commo
 	return result
 }
 
-func codecEncodeRowChangedPB2ToMessage(events []*model.RowChangedEvent) []*common.Message {
+func codecEncodeRowChangedPB2ToMessage(events []*model.DetailedRowChangedEvent) []*common.Message {
 	return []*common.Message{{
 		Key:   codecEncodeKeysPB2(events),
 		Value: codecEncodeRowChangedPB2(events),
 	}}
 }
 
-func codecEncodeKeysPB2(events []*model.RowChangedEvent) []byte {
+func codecEncodeKeysPB2(events []*model.DetailedRowChangedEvent) []byte {
 	converted := &benchmark.KeysColumnar{}
 
 	for _, event := range events {
@@ -191,7 +191,7 @@ func codecEncodeColumnsPB2(columns []*model.Column) *benchmark.ColumnsColumnar {
 	return converted
 }
 
-func codecEncodeRowChangedPB2(events []*model.RowChangedEvent) []byte {
+func codecEncodeRowChangedPB2(events []*model.DetailedRowChangedEvent) []byte {
 	rowChanged := &benchmark.RowChangedColumnar{}
 	for _, event := range events {
 		rowChanged.OldValue = append(rowChanged.OldValue, codecEncodeColumnsPB2(event.PreColumns))
@@ -204,7 +204,7 @@ func codecEncodeRowChangedPB2(events []*model.RowChangedEvent) []byte {
 	}
 }
 
-func codecEncodeRowCase(encoder codec.EventBatchEncoder, events []*model.RowChangedEvent) ([]*common.Message, error) {
+func codecEncodeRowCase(encoder codec.EventBatchEncoder, events []*model.DetailedRowChangedEvent) ([]*common.Message, error) {
 	for _, event := range events {
 		err := encoder.AppendRowChangedEvent(context.Background(), "", event, nil)
 		if err != nil {
@@ -329,8 +329,8 @@ func codecDecodeRowChangedPB1(columns []*benchmark.Column) []*model.Column {
 	return result
 }
 
-func benchmarkProtobuf1Decoding() []*model.RowChangedEvent {
-	result := make([]*model.RowChangedEvent, 0, 4)
+func benchmarkProtobuf1Decoding() []*model.DetailedRowChangedEvent {
+	result := make([]*model.DetailedRowChangedEvent, 0, 4)
 	for _, message := range codecPB1EncodedRowChanges {
 		key := &benchmark.Key{}
 		if err := key.Unmarshal(message.Key); err != nil {
@@ -340,7 +340,7 @@ func benchmarkProtobuf1Decoding() []*model.RowChangedEvent {
 		if err := value.Unmarshal(message.Value); err != nil {
 			panic(err)
 		}
-		ev := &model.RowChangedEvent{}
+		ev := &model.DetailedRowChangedEvent{}
 		ev.PreColumns = codecDecodeRowChangedPB1(value.OldValue)
 		ev.Columns = codecDecodeRowChangedPB1(value.NewValue)
 		ev.CommitTs = key.Ts
@@ -379,8 +379,8 @@ func codecDecodeRowChangedPB2(columns *benchmark.ColumnsColumnar) []*model.Colum
 	return result
 }
 
-func benchmarkProtobuf2Decoding() []*model.RowChangedEvent {
-	result := make([]*model.RowChangedEvent, 0, 4)
+func benchmarkProtobuf2Decoding() []*model.DetailedRowChangedEvent {
+	result := make([]*model.DetailedRowChangedEvent, 0, 4)
 	for _, message := range codecPB2EncodedRowChanges {
 		keys := &benchmark.KeysColumnar{}
 		if err := keys.Unmarshal(message.Key); err != nil {
@@ -392,7 +392,7 @@ func benchmarkProtobuf2Decoding() []*model.RowChangedEvent {
 		}
 
 		for i, ts := range keys.Ts {
-			ev := &model.RowChangedEvent{}
+			ev := &model.DetailedRowChangedEvent{}
 			if len(values.OldValue) > i {
 				ev.PreColumns = codecDecodeRowChangedPB2(values.OldValue[i])
 			}

@@ -62,7 +62,6 @@ type rowKVEntry struct {
 type Mounter interface {
 	// DecodeEvent accepts `model.PolymorphicEvent` with `RawKVEntry` filled and
 	// decodes `RawKVEntry` into `RowChangedEvent`.
-	// If a `model.PolymorphicEvent` should be ignored, it will returns (false, nil).
 	DecodeEvent(ctx context.Context, event *model.PolymorphicEvent) error
 }
 
@@ -89,7 +88,7 @@ type tableMetaValue struct {
 	tableInfo  *model.TableInfo
 
 	// These fields are used to construct a model.RowChangedEvent in place.
-	buffer     model.RowChangedEvent
+	buffer     model.DetailedRowChangedEvent
 	columns    []model.Column
 	preColumns []model.Column
 	rawRow     model.RowChangedDatums
@@ -148,27 +147,39 @@ func (m *mounter) DecodeEvent(ctx context.Context, event *model.PolymorphicEvent
 		return errors.Trace(err)
 	}
 	if tableMeta != nil {
-		tableInfo := tableMeta.tableInfo
 		row := &tableMeta.buffer
-
-		event.MiniRow.StartTs = row.StartTs
-		event.MiniRow.CommitTs = row.CommitTs
-		event.MiniRow.TableInfo = tableInfo
+		event.MiniRow = &model.RowChangedEvent{
+			StartTs:         row.StartTs,
+			CommitTs:        row.CommitTs,
+			PhysicalTableID: tableMeta.physicalID,
+			TableInfo:       tableMeta.tableInfo,
+		}
 		if len(row.Columns) > 0 {
-			event.MiniRow.Columns = make([]interface{}, len(row.Columns))
+			event.MiniRow.Columns = make([]model.MiniColumnValue, len(row.Columns))
 			for i, col := range row.Columns {
-				event.MiniRow.Columns[i] = col.Value
+				if col != nil {
+					event.MiniRow.Columns[i].Exists = true
+					event.MiniRow.Columns[i].V = col.Value
+					event.MiniRow.ApproximateSize += int64(col.ApproximateBytes)
+				}
 			}
 		}
 		if len(row.PreColumns) > 0 {
-			event.MiniRow.PreColumns = make([]interface{}, len(row.PreColumns))
+			event.MiniRow.PreColumns = make([]model.MiniColumnValue, len(row.PreColumns))
 			for i, col := range row.PreColumns {
-				event.MiniRow.PreColumns[i] = col.Value
+				if col != nil {
+					event.MiniRow.PreColumns[i].Exists = true
+					event.MiniRow.PreColumns[i].V = col.Value
+					event.MiniRow.ApproximateSize += int64(col.ApproximateBytes)
+				}
 			}
 		}
+		event.MiniRow.ApproximateSize += int64(unsafe.Sizeof(model.RowChangedEvent{}))
+		event.MiniRow.ApproximateSize += int64(unsafe.Sizeof(model.MiniColumnValue{})) * int64(len(event.MiniRow.Columns))
+		event.MiniRow.ApproximateSize += int64(unsafe.Sizeof(model.MiniColumnValue{})) * int64(len(event.MiniRow.PreColumns))
 	} else {
 		// The event has been ignored or filtered out.
-		// TODO(qupeng): clear useless values.
+		// TODO(qupeng): clear useless values in the buffer.
 	}
 	event.RawKV.Value = nil
 	event.RawKV.OldValue = nil
@@ -304,8 +315,8 @@ func newTableMetaValue(physicalID int64, tableInfo *model.TableInfo) *tableMetaV
 	value := &tableMetaValue{
 		physicalID: physicalID,
 		tableInfo:  tableInfo,
-		// Initialize unmutable fields of the buffer model.RowChangedEvent.
-		buffer: model.RowChangedEvent{
+		// Initialize immutable fields of the buffer model.RowChangedEvent.
+		buffer: model.DetailedRowChangedEvent{
 			Table: &model.TableName{
 				Schema:      tableInfo.TableName.Schema,
 				Table:       tableInfo.TableName.Table,
@@ -667,4 +678,63 @@ func DecodeTableID(key []byte) (model.TableID, error) {
 		return 0, errors.Trace(err)
 	}
 	return physicalTableID, nil
+}
+
+// MountHelper is a thread-unsafe component to help convert model.RowChangedEvent
+// to model.RowChangedEvent. It can only used after sort engine, which means retrieved
+// MiniRows are ordered in physical tables.
+type MountHelper struct {
+	// Just keep one latest version for every table.
+	tableMetas map[int64]*tableMetaValue
+	// TODO(qupeng): GC periodically.
+}
+
+func NewMountHelper(capacity int) *MountHelper {
+	return &MountHelper{
+		tableMetas: make(map[int64]*tableMetaValue),
+	}
+}
+
+// GetRowChangedEventBase returns a DetailedRowChangedEvent carries all immutable things.
+func (m *MountHelper) GetRowChangedEventBase(row *model.RowChangedEvent) *model.DetailedRowChangedEvent {
+	return &m.getTableMeta(row).buffer
+}
+
+// BuildRowChangedEvent builds a DetailedRowChangedEvent carries immutable and mutable things.
+func (m *MountHelper) BuildRowChangedEvent(row *model.RowChangedEvent) *model.DetailedRowChangedEvent {
+	v := m.getTableMeta(row)
+	buffer := &v.buffer
+
+	buffer.StartTs = row.StartTs
+	buffer.CommitTs = row.CommitTs
+	buffer.RowID = row.RowID
+
+	buffer.Columns = buffer.Columns[:0]
+	buffer.PreColumns = buffer.PreColumns[:0]
+	for i, col := range row.Columns {
+		if col.Exists {
+			buffer.Columns = append(buffer.Columns, &v.columns[i])
+			buffer.Columns[i].Value = col.V
+		} else {
+			buffer.Columns = append(buffer.Columns, nil)
+		}
+	}
+	for i, col := range row.PreColumns {
+		if col.Exists {
+			buffer.PreColumns = append(buffer.PreColumns, &v.preColumns[i])
+			buffer.PreColumns[i].Value = col.V
+		} else {
+			buffer.PreColumns = append(buffer.PreColumns, nil)
+		}
+	}
+	return buffer
+}
+
+func (m *MountHelper) getTableMeta(row *model.RowChangedEvent) *tableMetaValue {
+	tableMeta := m.tableMetas[row.PhysicalTableID]
+	if tableMeta == nil {
+		tableMeta = newTableMetaValue(row.PhysicalTableID, row.TableInfo)
+		m.tableMetas[row.PhysicalTableID] = tableMeta
+	}
+	return tableMeta
 }

@@ -536,7 +536,7 @@ func (m *ManagerImpl) bgUpdateLog(
 	}()
 
 	var err error
-	logs := make([]*model.RedoRowChangedEvent, 0, 1024*1024)
+	logs := make([]*model.RowChangedEvent, 0, 1024*1024)
 	rtsMap := spanz.NewHashMap[model.Ts]()
 	releaseMemoryCbs := make([]func(), 0, 1024)
 
@@ -563,7 +563,7 @@ func (m *ManagerImpl) bgUpdateLog(
 			}
 
 			if cap(logs) > 1024*1024 {
-				logs = make([]*model.RedoRowChangedEvent, 0, 1024*1024)
+				logs = make([]*model.RowChangedEvent, 0, 1024*1024)
 			} else {
 				logs = logs[:0]
 			}
@@ -607,7 +607,7 @@ func (m *ManagerImpl) bgUpdateLog(
 				switch cache.eventType {
 				case model.MessageTypeRow:
 					for _, row := range cache.rows {
-						logs = append(logs, common.RowToRedo(row))
+						logs = append(logs, row)
 					}
 					if cache.releaseMemory != nil {
 						releaseMemoryCbs = append(releaseMemoryCbs, cache.releaseMemory)
@@ -644,7 +644,7 @@ func (m *ManagerImpl) bgUpdateLog(
 				switch cache.eventType {
 				case model.MessageTypeRow:
 					for _, row := range cache.rows {
-						logs = append(logs, common.RowToRedo(row))
+						logs = append(logs, row)
 					}
 					if cache.releaseMemory != nil {
 						releaseMemoryCbs = append(releaseMemoryCbs, cache.releaseMemory)

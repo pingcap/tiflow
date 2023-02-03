@@ -20,6 +20,7 @@ import (
 	"time"
 
 	"github.com/pingcap/log"
+	"github.com/pingcap/tiflow/cdc/entry"
 	"github.com/pingcap/tiflow/cdc/model"
 	"github.com/pingcap/tiflow/cdc/sinkv2/eventsink"
 	"go.uber.org/zap"
@@ -27,29 +28,35 @@ import (
 
 type txnEvent struct {
 	*eventsink.TxnCallbackableEvent
-	start time.Time
+	mountHelper *entry.MountHelper
+	start       time.Time
 }
 
-func newTxnEvent(event *eventsink.TxnCallbackableEvent) *txnEvent {
-	return &txnEvent{TxnCallbackableEvent: event, start: time.Now()}
+func newTxnEvent(event *eventsink.TxnCallbackableEvent, mountHelper *entry.MountHelper) *txnEvent {
+	return &txnEvent{
+		TxnCallbackableEvent: event,
+		mountHelper:          mountHelper,
+		start:                time.Now(),
+	}
 }
 
 // ConflictKeys implements causality.txnEvent interface.
 func (e *txnEvent) ConflictKeys(numSlots uint64) []uint64 {
-	keys := genTxnKeys(e.TxnCallbackableEvent.Event)
+	keys := genTxnKeys(e.TxnCallbackableEvent.Event, e.mountHelper)
 	sort.Slice(keys, func(i, j int) bool { return keys[i]%numSlots < keys[j]%numSlots })
 	return keys
 }
 
 // genTxnKeys returns hash keys for `txn`.
-func genTxnKeys(txn *model.SingleTableTxn) []uint64 {
+func genTxnKeys(txn *model.SingleTableTxn, mountHelper *entry.MountHelper) []uint64 {
 	if len(txn.Rows) == 0 {
 		return nil
 	}
 	hashRes := make(map[uint64]struct{}, len(txn.Rows))
 	hasher := fnv.New32a()
 	for _, row := range txn.Rows {
-		for _, key := range genRowKeys(row) {
+		detailedRow := mountHelper.BuildRowChangedEvent(row)
+		for _, key := range genRowKeys(detailedRow) {
 			if n, err := hasher.Write(key); n != len(key) || err != nil {
 				log.Panic("transaction key hash fail")
 			}
@@ -64,7 +71,7 @@ func genTxnKeys(txn *model.SingleTableTxn) []uint64 {
 	return keys
 }
 
-func genRowKeys(row *model.RowChangedEvent) [][]byte {
+func genRowKeys(row *model.DetailedRowChangedEvent) [][]byte {
 	var keys [][]byte
 	if len(row.Columns) != 0 {
 		for iIdx, idxCol := range row.IndexColumns {

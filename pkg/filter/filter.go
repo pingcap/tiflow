@@ -60,7 +60,7 @@ var allowDDLList = []timodel.ActionType{
 // TODO: find a better way to abstract this interface.
 type Filter interface {
 	// ShouldIgnoreDMLEvent returns true and nil if the DML event should be ignored.
-	ShouldIgnoreDMLEvent(dml *model.RowChangedEvent, rawRow model.RowChangedDatums, tableInfo *model.TableInfo) (bool, error)
+	ShouldIgnoreDMLEvent(dml *model.DetailedRowChangedEvent, rawRow model.RowChangedDatums, tableInfo *model.TableInfo) (bool, error)
 	// ShouldIgnoreDDLEvent returns true and nil if the DDL event should be ignored.
 	// If a ddl is ignored, it will applied to cdc's schema storage,
 	// but not sent to downstream.
@@ -121,7 +121,7 @@ func NewFilter(cfg *config.ReplicaConfig, tz string) (Filter, error) {
 // 2. By type.
 // 3. By columns value.
 func (f *filter) ShouldIgnoreDMLEvent(
-	dml *model.RowChangedEvent,
+	dml *model.DetailedRowChangedEvent,
 	rawRow model.RowChangedDatums,
 	ti *model.TableInfo,
 ) (bool, error) {

@@ -18,6 +18,7 @@ import (
 
 	"github.com/pingcap/errors"
 	"github.com/pingcap/log"
+	"github.com/pingcap/tiflow/cdc/entry"
 	"github.com/pingcap/tiflow/cdc/model"
 	"github.com/pingcap/tiflow/cdc/processor/sourcemanager"
 	"github.com/pingcap/tiflow/cdc/processor/sourcemanager/engine"
@@ -36,6 +37,8 @@ type sinkWorker struct {
 	// enableOldValue indicates whether to enable the old value feature.
 	// If it is enabled, we need to deal with the compatibility of the data format.
 	enableOldValue bool
+
+	mountHelper *entry.MountHelper
 
 	metricRedoEventCacheHit  prometheus.Counter
 	metricRedoEventCacheMiss prometheus.Counter
@@ -59,6 +62,8 @@ func newSinkWorker(
 		eventCache:     eventCache,
 		splitTxn:       splitTxn,
 		enableOldValue: enableOldValue,
+
+		mountHelper: entry.NewMountHelper(16),
 
 		metricRedoEventCacheHit:  RedoEventCacheAccess.WithLabelValues(changefeedID.Namespace, changefeedID.ID, "hit"),
 		metricRedoEventCacheMiss: RedoEventCacheAccess.WithLabelValues(changefeedID.Namespace, changefeedID.ID, "miss"),
@@ -321,10 +326,10 @@ func (w *sinkWorker) handleTask(ctx context.Context, task *sinkTask) (finalErr e
 		}
 
 		// NOTICE: The event can be filtered by the event filter.
-		if e.Row != nil {
+		if e.MiniRow != nil {
 			// For all rows, we add table replicate ts, so mysql sink can determine safe-mode.
-			e.Row.ReplicatingTs = task.tableSink.replicateTs
-			x, size, err := convertRowChangedEvents(w.changefeedID, task.span, w.enableOldValue, e)
+			e.MiniRow.ReplicatingTs = task.tableSink.replicateTs
+			x, size, err := convertRowChangedEvents(w.changefeedID, task.span, w.enableOldValue, w.mountHelper, e)
 			if err != nil {
 				return err
 			}

@@ -26,7 +26,7 @@ import (
 
 func TestCreate(t *testing.T) {
 	t.Parallel()
-	rowEvent := &model.RowChangedEvent{
+	rowEvent := &model.DetailedRowChangedEvent{
 		Table: &model.TableName{
 			Schema: "test",
 			Table:  "t1",

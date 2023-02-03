@@ -31,7 +31,7 @@ func TestCraftMaxMessageBytes(t *testing.T) {
 	cfg := common.NewConfig(config.ProtocolCraft).WithMaxMessageBytes(256)
 	encoder := NewBatchEncoderBuilder(cfg).Build()
 
-	testEvent := &model.RowChangedEvent{
+	testEvent := &model.DetailedRowChangedEvent{
 		CommitTs: 1,
 		Table:    &model.TableName{Schema: "a", Table: "b"},
 		Columns: []*model.Column{{
@@ -58,7 +58,7 @@ func TestCraftMaxBatchSize(t *testing.T) {
 	cfg.MaxBatchSize = 64
 	encoder := NewBatchEncoderBuilder(cfg).Build()
 
-	testEvent := &model.RowChangedEvent{
+	testEvent := &model.DetailedRowChangedEvent{
 		CommitTs: 1,
 		Table:    &model.TableName{Schema: "a", Table: "b"},
 		Columns: []*model.Column{{
@@ -113,7 +113,7 @@ func testBatchCodec(
 	encoderBuilder codec.EncoderBuilder,
 	newDecoder func(value []byte) (codec.EventBatchDecoder, error),
 ) {
-	checkRowDecoder := func(decoder codec.EventBatchDecoder, cs []*model.RowChangedEvent) {
+	checkRowDecoder := func(decoder codec.EventBatchDecoder, cs []*model.DetailedRowChangedEvent) {
 		index := 0
 		for {
 			tp, hasNext, err := decoder.HasNext()
@@ -219,7 +219,7 @@ func TestCraftAppendRowChangedEventWithCallback(t *testing.T) {
 
 	count := 0
 
-	row := &model.RowChangedEvent{
+	row := &model.DetailedRowChangedEvent{
 		CommitTs: 1,
 		Table:    &model.TableName{Schema: "a", Table: "b"},
 		Columns: []*model.Column{{
@@ -230,7 +230,7 @@ func TestCraftAppendRowChangedEventWithCallback(t *testing.T) {
 	}
 
 	tests := []struct {
-		row      *model.RowChangedEvent
+		row      *model.DetailedRowChangedEvent
 		callback func()
 	}{
 		{

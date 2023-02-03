@@ -24,45 +24,45 @@ func TestTsDispatcher(t *testing.T) {
 	t.Parallel()
 
 	testCases := []struct {
-		row             *model.RowChangedEvent
+		row             *model.DetailedRowChangedEvent
 		expectPartition int32
 	}{
-		{row: &model.RowChangedEvent{
+		{row: &model.DetailedRowChangedEvent{
 			Table: &model.TableName{
 				Schema: "test",
 				Table:  "t1",
 			},
 			CommitTs: 1,
 		}, expectPartition: 1},
-		{row: &model.RowChangedEvent{
+		{row: &model.DetailedRowChangedEvent{
 			Table: &model.TableName{
 				Schema: "test",
 				Table:  "t1",
 			},
 			CommitTs: 2,
 		}, expectPartition: 2},
-		{row: &model.RowChangedEvent{
+		{row: &model.DetailedRowChangedEvent{
 			Table: &model.TableName{
 				Schema: "test",
 				Table:  "t1",
 			},
 			CommitTs: 3,
 		}, expectPartition: 3},
-		{row: &model.RowChangedEvent{
+		{row: &model.DetailedRowChangedEvent{
 			Table: &model.TableName{
 				Schema: "test",
 				Table:  "t2",
 			},
 			CommitTs: 1,
 		}, expectPartition: 1},
-		{row: &model.RowChangedEvent{
+		{row: &model.DetailedRowChangedEvent{
 			Table: &model.TableName{
 				Schema: "test",
 				Table:  "t2",
 			},
 			CommitTs: 2,
 		}, expectPartition: 2},
-		{row: &model.RowChangedEvent{
+		{row: &model.DetailedRowChangedEvent{
 			Table: &model.TableName{
 				Schema: "test",
 				Table:  "t2",

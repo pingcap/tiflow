@@ -40,9 +40,8 @@ type PolymorphicEvent struct {
 	Resolved *ResolvedTs
 
 	RawKV *RawKVEntry
-	Row   *RowChangedEvent
 
-	MiniRow MiniRowChangedEvent
+	MiniRow *RowChangedEvent
 
 	finished chan struct{}
 }
@@ -52,7 +51,6 @@ func NewEmptyPolymorphicEvent(ts uint64) *PolymorphicEvent {
 	return &PolymorphicEvent{
 		CRTs:  ts,
 		RawKV: &RawKVEntry{},
-		Row:   &RowChangedEvent{},
 	}
 }
 
@@ -73,7 +71,6 @@ func NewResolvedPolymorphicEvent(regionID uint64, resolvedTs uint64) *Polymorphi
 	return &PolymorphicEvent{
 		CRTs:  resolvedTs,
 		RawKV: &RawKVEntry{CRTs: resolvedTs, OpType: OpTypeResolved, RegionID: regionID},
-		Row:   nil,
 	}
 }
 
@@ -205,14 +202,34 @@ func (r ResolvedTs) Greater(r1 ResolvedTs) bool {
 	return r.Ts > r1.Ts
 }
 
-// MiniRowChangedEvent carries minimum information to generate a RowChangedEvent.
-type MiniRowChangedEvent struct {
+// RowChangedEvent carries minimum information to generate a RowChangedEvent.
+type RowChangedEvent struct {
 	StartTs  uint64 `json:"start-ts" msg: "start-ts"`
 	CommitTs uint64 `json:"commit-ts" msg: "commit-ts"`
-	// TODO(qupeng): later we can move mounter before sort engine, we need also
-	// serialize TableID and TableTimestamp into messages.
+	RowID    int64  `json:"row-id" msg:"-"` // Deprecated, just like RowChangedEvent.RowID.
 
-	TableInfo  *TableInfo    `json:"-" msg:"-"`
-	Columns    []interface{} `json:"-" msg:"-"`
-	PreColumns []interface{} `json:"-" msg:"-"`
+	// TODO(qupeng): later we can move mounter before sort engine, we need also
+	// serialize Table timestamp into messages.
+	PhysicalTableID int64 `json:"physical-table-id" msg: "physical-table-id"`
+
+	TableInfo       *TableInfo        `json:"-" msg:"-"`
+	Columns         []MiniColumnValue `json:"-" msg:"-"`
+	PreColumns      []MiniColumnValue `json:"-" msg:"-"`
+	ApproximateSize int64             `json:"-" msg: "-"`
+
+	// SplitTxn marks this RowChangedEvent as the first line of a new txn.
+	SplitTxn bool `json:"-" msg:"-"`
+	// ReplicatingTs is ts when a table starts replicating events to downstream.
+	ReplicatingTs uint64 `json:"-" msg: "-"`
+}
+
+// MiniColumnValue is used in RowChangedEvent.
+type MiniColumnValue struct {
+	Exists bool
+	V      interface{}
+}
+
+// GetCommitTs returns the commit timestamp of this event.
+func (r *RowChangedEvent) GetCommitTs() uint64 {
+	return r.CommitTs
 }

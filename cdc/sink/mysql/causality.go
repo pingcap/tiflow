@@ -14,9 +14,11 @@
 package mysql
 
 import (
+	"context"
 	"encoding/binary"
 
 	"github.com/pingcap/log"
+	"github.com/pingcap/tiflow/cdc/entry"
 	"github.com/pingcap/tiflow/cdc/model"
 	"go.uber.org/zap"
 )
@@ -35,6 +37,8 @@ const (
 // See: https://pingcap.com/zh/blog/tidb-binlog-source-code-reading-8
 type causality struct {
 	relations map[string]int
+
+	mountHelper *entry.MountHelper
 }
 
 func newCausality() *causality {
@@ -95,13 +99,14 @@ func (c *causality) detectConflict(keys [][]byte) (bool, int) {
 	return conflictingWorkerIndex != noConflicting, conflictingWorkerIndex
 }
 
-func genTxnKeys(txn *model.SingleTableTxn) [][]byte {
+func genTxnKeys(txn *model.SingleTableTxn, mountHelper *entry.MountHelper) [][]byte {
 	if len(txn.Rows) == 0 {
 		return nil
 	}
 	keysSet := make(map[string]struct{}, len(txn.Rows))
 	for _, row := range txn.Rows {
-		rowKeys := genRowKeys(row)
+		detailedRow := mountHelper.BuildRowChangedEvent(row)
+		rowKeys := genRowKeys(detailedRow)
 		for _, key := range rowKeys {
 			keysSet[string(key)] = struct{}{}
 		}
@@ -113,7 +118,8 @@ func genTxnKeys(txn *model.SingleTableTxn) [][]byte {
 	return keys
 }
 
-func genRowKeys(row *model.RowChangedEvent) [][]byte {
+func genRowKeys(row *model.DetailedRowChangedEvent) [][]byte {
+	context.Background()
 	var keys [][]byte
 	if len(row.Columns) != 0 {
 		for iIdx, idxCol := range row.IndexColumns {

@@ -19,6 +19,7 @@ import (
 	"sync/atomic"
 
 	"github.com/pingcap/errors"
+	"github.com/pingcap/tiflow/cdc/entry"
 	"github.com/pingcap/tiflow/cdc/model"
 	"github.com/pingcap/tiflow/cdc/sinkv2/eventsink"
 	"github.com/pingcap/tiflow/cdc/sinkv2/eventsink/txn/mysql"
@@ -47,6 +48,8 @@ type sink struct {
 	// should return an error.
 	closed int32
 
+	mountHelper *entry.MountHelper
+
 	statistics *metrics.Statistics
 }
 
@@ -58,7 +61,8 @@ func newSink(ctx context.Context, backends []backend, errCh chan<- error, confli
 		workers = append(workers, w)
 	}
 	detector := causality.NewConflictDetector[*worker, *txnEvent](workers, conflictDetectorSlots)
-	return &sink{conflictDetector: detector, workers: workers}
+	mountHelper := entry.NewMountHelper(16)
+	return &sink{conflictDetector: detector, workers: workers, mountHelper: mountHelper}
 }
 
 // NewMySQLSink creates a mysql sink with given parameters.
@@ -104,7 +108,7 @@ func (s *sink) WriteEvents(txnEvents ...*eventsink.TxnCallbackableEvent) error {
 			continue
 		}
 
-		s.conflictDetector.Add(newTxnEvent(txn))
+		s.conflictDetector.Add(newTxnEvent(txn, s.mountHelper))
 	}
 	return nil
 }

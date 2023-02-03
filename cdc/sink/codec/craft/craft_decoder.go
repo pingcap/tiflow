@@ -52,7 +52,7 @@ func (b *batchDecoder) NextResolvedEvent() (uint64, error) {
 }
 
 // NextRowChangedEvent implements the EventBatchDecoder interface
-func (b *batchDecoder) NextRowChangedEvent() (*model.RowChangedEvent, error) {
+func (b *batchDecoder) NextRowChangedEvent() (*model.DetailedRowChangedEvent, error) {
 	ty, hasNext, err := b.HasNext()
 	if err != nil {
 		return nil, errors.Trace(err)
@@ -61,11 +61,11 @@ func (b *batchDecoder) NextRowChangedEvent() (*model.RowChangedEvent, error) {
 		return nil,
 			cerror.ErrCraftCodecInvalidData.GenWithStack("not found row changed event message")
 	}
-	oldValue, newValue, err := b.decoder.RowChangedEvent(b.index)
+	oldValue, newValue, err := b.decoder.DetailedRowChangedEvent(b.index)
 	if err != nil {
 		return nil, errors.Trace(err)
 	}
-	ev := &model.RowChangedEvent{}
+	ev := &model.DetailedRowChangedEvent{}
 	if oldValue != nil {
 		if ev.PreColumns, err = oldValue.ToModel(); err != nil {
 			return nil, errors.Trace(err)

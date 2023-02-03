@@ -18,6 +18,7 @@ import (
 
 	"github.com/pingcap/errors"
 	"github.com/pingcap/log"
+	"github.com/pingcap/tiflow/cdc/entry"
 	"github.com/pingcap/tiflow/cdc/model"
 	"github.com/pingcap/tiflow/cdc/processor/sourcemanager"
 	"github.com/pingcap/tiflow/cdc/processor/sourcemanager/engine"
@@ -33,6 +34,8 @@ type redoWorker struct {
 	eventCache     *redoEventCache
 	splitTxn       bool
 	enableOldValue bool
+
+	mountHelper *entry.MountHelper
 }
 
 func newRedoWorker(
@@ -52,6 +55,8 @@ func newRedoWorker(
 		eventCache:     eventCache,
 		splitTxn:       splitTxn,
 		enableOldValue: enableOldValue,
+
+		mountHelper: entry.NewMountHelper(16),
 	}
 }
 
@@ -262,10 +267,10 @@ func (w *redoWorker) handleTask(ctx context.Context, task *redoTask) (finalErr e
 		// NOTICE: The event can be filtered by the event filter.
 		var x []*model.RowChangedEvent
 		var size uint64
-		if e.Row != nil {
+		if e.MiniRow != nil {
 			// For all rows, we add table replicate ts, so mysql sink can determine safe-mode.
-			e.Row.ReplicatingTs = task.tableSink.replicateTs
-			x, size, err = convertRowChangedEvents(w.changefeedID, task.span, w.enableOldValue, e)
+			e.MiniRow.ReplicatingTs = task.tableSink.replicateTs
+			x, size, err = convertRowChangedEvents(w.changefeedID, task.span, w.enableOldValue, w.mountHelper, e)
 			if err != nil {
 				return errors.Trace(err)
 			}

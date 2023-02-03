@@ -22,6 +22,7 @@ import (
 
 	"github.com/pingcap/errors"
 	"github.com/pingcap/log"
+	"github.com/pingcap/tiflow/cdc/entry"
 	"github.com/pingcap/tiflow/cdc/model"
 	"github.com/pingcap/tiflow/cdc/processor/sourcemanager/engine"
 	"github.com/pingcap/tiflow/cdc/processor/tablepb"
@@ -265,12 +266,13 @@ func (t *tableSinkWrapper) cleanRangeEventCounts(upperBound engine.Position, min
 // It will deal with the old value compatibility.
 func convertRowChangedEvents(
 	changefeed model.ChangeFeedID, span tablepb.Span, enableOldValue bool,
+	mountHelper *entry.MountHelper,
 	events ...*model.PolymorphicEvent,
 ) ([]*model.RowChangedEvent, uint64, error) {
-	size := 0
+	var size uint64 = 0
 	rowChangedEvents := make([]*model.RowChangedEvent, 0, len(events))
 	for _, e := range events {
-		if e == nil || e.Row == nil {
+		if e == nil || e.MiniRow == nil {
 			log.Warn("skip emit nil event",
 				zap.String("namespace", changefeed.Namespace),
 				zap.String("changefeed", changefeed.ID),
@@ -279,8 +281,8 @@ func convertRowChangedEvents(
 			continue
 		}
 
-		colLen := len(e.Row.Columns)
-		preColLen := len(e.Row.PreColumns)
+		colLen := len(e.MiniRow.Columns)
+		preColLen := len(e.MiniRow.PreColumns)
 		// Some transactions could generate empty row change event, such as
 		// begin; insert into t (id) values (1); delete from t where id=1; commit;
 		// Just ignore these row changed events.
@@ -293,44 +295,39 @@ func convertRowChangedEvents(
 			continue
 		}
 
-		size += e.Row.ApproximateBytes()
+		size += uint64(e.MiniRow.ApproximateSize)
 
 		// This indicates that it is an update event,
 		// and after enable old value internally by default(but disable in the configuration).
 		// We need to handle the update event to be compatible with the old format.
 		if !enableOldValue && colLen != 0 && preColLen != 0 && colLen == preColLen {
-			if shouldSplitUpdateEvent(e) {
-				deleteEvent, insertEvent, err := splitUpdateEvent(e)
+			phantom := mountHelper.BuildRowChangedEvent(e.MiniRow)
+			if shouldSplitUpdateEvent(phantom) {
+				deleteEvent, insertEvent, err := splitUpdateEvent(e.MiniRow, phantom)
 				if err != nil {
 					return nil, 0, errors.Trace(err)
 				}
 				// NOTICE: Please do not change the order, the delete event always comes before the insert event.
-				rowChangedEvents = append(rowChangedEvents, deleteEvent.Row, insertEvent.Row)
+				rowChangedEvents = append(rowChangedEvents, deleteEvent, insertEvent)
 			} else {
 				// If the handle key columns are not updated, PreColumns is directly ignored.
-				e.Row.PreColumns = nil
-				rowChangedEvents = append(rowChangedEvents, e.Row)
+				e.MiniRow.PreColumns = nil
+				rowChangedEvents = append(rowChangedEvents, e.MiniRow)
 			}
 		} else {
-			rowChangedEvents = append(rowChangedEvents, e.Row)
+			rowChangedEvents = append(rowChangedEvents, e.MiniRow)
 		}
 	}
-	return rowChangedEvents, uint64(size), nil
+	return rowChangedEvents, size, nil
 }
 
 // shouldSplitUpdateEvent determines if the split event is needed to align the old format based on
 // whether the handle key column has been modified.
 // If the handle key column is modified,
 // we need to use splitUpdateEvent to split the update event into a delete and an insert event.
-func shouldSplitUpdateEvent(updateEvent *model.PolymorphicEvent) bool {
-	// nil event will never be split.
-	if updateEvent == nil {
-		return false
-	}
-
-	for i := range updateEvent.Row.Columns {
-		col := updateEvent.Row.Columns[i]
-		preCol := updateEvent.Row.PreColumns[i]
+func shouldSplitUpdateEvent(updateEvent *model.DetailedRowChangedEvent) bool {
+	for i, col := range updateEvent.Columns {
+		preCol := updateEvent.PreColumns[i]
 		if col != nil && col.Flag.IsHandleKey() && preCol != nil && preCol.Flag.IsHandleKey() {
 			colValueString := model.ColumnValueString(col.Value)
 			preColValueString := model.ColumnValueString(preCol.Value)
@@ -345,39 +342,25 @@ func shouldSplitUpdateEvent(updateEvent *model.PolymorphicEvent) bool {
 
 // splitUpdateEvent splits an update event into a delete and an insert event.
 func splitUpdateEvent(
-	updateEvent *model.PolymorphicEvent,
-) (*model.PolymorphicEvent, *model.PolymorphicEvent, error) {
-	if updateEvent == nil {
-		return nil, nil, errors.New("nil event cannot be split")
-	}
-
+	updateEvent *model.RowChangedEvent,
+	updateEventPhantom *model.DetailedRowChangedEvent,
+) (*model.RowChangedEvent, *model.RowChangedEvent, error) {
 	// If there is an update to handle key columns,
 	// we need to split the event into two events to be compatible with the old format.
 	// NOTICE: Here we don't need a full deep copy because
 	// our two events need Columns and PreColumns respectively,
 	// so it won't have an impact and no more full deep copy wastes memory.
 	deleteEvent := *updateEvent
-	deleteEventRow := *updateEvent.Row
-	deleteEventRowKV := *updateEvent.RawKV
-	deleteEvent.Row = &deleteEventRow
-	deleteEvent.RawKV = &deleteEventRowKV
 
-	deleteEvent.Row.Columns = nil
-	for i := range deleteEvent.Row.PreColumns {
+	deleteEvent.Columns = nil
+	for i, preCol := range updateEventPhantom.PreColumns {
 		// NOTICE: Only the handle key pre column is retained in the delete event.
-		if deleteEvent.Row.PreColumns[i] != nil &&
-			!deleteEvent.Row.PreColumns[i].Flag.IsHandleKey() {
-			deleteEvent.Row.PreColumns[i] = nil
+		if preCol != nil && !preCol.Flag.IsHandleKey() {
+			deleteEvent.PreColumns[i].Exists = false
 		}
 	}
 
-	insertEvent := *updateEvent
-	insertEventRow := *updateEvent.Row
-	insertEventRowKV := *updateEvent.RawKV
-	insertEvent.Row = &insertEventRow
-	insertEvent.RawKV = &insertEventRowKV
 	// NOTICE: clean up pre cols for insert event.
-	insertEvent.Row.PreColumns = nil
-
-	return &deleteEvent, &insertEvent, nil
+	updateEvent.PreColumns = nil
+	return &deleteEvent, updateEvent, nil
 }

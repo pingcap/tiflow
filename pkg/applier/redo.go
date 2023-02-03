@@ -135,7 +135,7 @@ func (ra *RedoApplier) consumeLogs(ctx context.Context) error {
 	lastSafeResolvedTs := checkpointTs - 1
 	// lastResolvedTs records the max resolved ts we have seen from redo logs.
 	lastResolvedTs := checkpointTs
-	cachedRows := make([]*model.RowChangedEvent, 0, emitBatch)
+	cachedRows := make([]*model.DetailedRowChangedEvent, 0, emitBatch)
 	tableResolvedTsMap := make(map[model.TableID]model.Ts)
 	appliedLogCount := 0
 	for {
@@ -154,11 +154,12 @@ func (ra *RedoApplier) consumeLogs(ctx context.Context) error {
 				tableResolvedTsMap[tableID] = lastSafeResolvedTs
 			}
 			if len(cachedRows) >= emitBatch {
-				err := s.EmitRowChangedEvents(ctx, cachedRows...)
+				// TODO(qupeng): implement it.
+				// err := s.EmitRowChangedEvents(ctx, cachedRows...)
 				if err != nil {
 					return err
 				}
-				cachedRows = make([]*model.RowChangedEvent, 0, emitBatch)
+				cachedRows = make([]*model.DetailedRowChangedEvent, 0, emitBatch)
 			}
 			cachedRows = append(cachedRows, common.LogToRow(redoLog))
 
@@ -174,10 +175,11 @@ func (ra *RedoApplier) consumeLogs(ctx context.Context) error {
 			}
 		}
 	}
-	err = s.EmitRowChangedEvents(ctx, cachedRows...)
-	if err != nil {
-		return err
-	}
+	// TODO(qupeng): implement it.
+	// err = s.EmitRowChangedEvents(ctx, cachedRows...)
+	// if err != nil {
+	//	return err
+	// }
 
 	for tableID := range tableResolvedTsMap {
 		_, err = s.FlushRowChangedEvents(ctx, tableID, model.NewResolvedTs(resolvedTs))

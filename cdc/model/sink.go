@@ -243,13 +243,13 @@ type RedoLog struct {
 
 // RedoRowChangedEvent represents the DML event used in RedoLog
 type RedoRowChangedEvent struct {
-	Row        *RowChangedEvent `msg:"row"`
-	PreColumns []*RedoColumn    `msg:"pre-columns"`
-	Columns    []*RedoColumn    `msg:"columns"`
+	Row        *DetailedRowChangedEvent `msg:"row"`
+	PreColumns []*RedoColumn            `msg:"pre-columns"`
+	Columns    []*RedoColumn            `msg:"columns"`
 }
 
-// RowChangedEvent represents a row changed event
-type RowChangedEvent struct {
+// DetailedRowChangedEvent represents a row changed event
+type DetailedRowChangedEvent struct {
 	StartTs  uint64 `json:"start-ts" msg:"start-ts"`
 	CommitTs uint64 `json:"commit-ts" msg:"commit-ts"`
 
@@ -274,27 +274,27 @@ type RowChangedEvent struct {
 }
 
 // GetCommitTs returns the commit timestamp of this event.
-func (r *RowChangedEvent) GetCommitTs() uint64 {
+func (r *DetailedRowChangedEvent) GetCommitTs() uint64 {
 	return r.CommitTs
 }
 
 // IsDelete returns true if the row is a delete event
-func (r *RowChangedEvent) IsDelete() bool {
+func (r *DetailedRowChangedEvent) IsDelete() bool {
 	return len(r.PreColumns) != 0 && len(r.Columns) == 0
 }
 
 // IsInsert returns true if the row is an insert event
-func (r *RowChangedEvent) IsInsert() bool {
+func (r *DetailedRowChangedEvent) IsInsert() bool {
 	return len(r.PreColumns) == 0 && len(r.Columns) != 0
 }
 
 // IsUpdate returns true if the row is an update event
-func (r *RowChangedEvent) IsUpdate() bool {
+func (r *DetailedRowChangedEvent) IsUpdate() bool {
 	return len(r.PreColumns) != 0 && len(r.Columns) != 0
 }
 
 // PrimaryKeyColumnNames return all primary key's name
-func (r *RowChangedEvent) PrimaryKeyColumnNames() []string {
+func (r *DetailedRowChangedEvent) PrimaryKeyColumnNames() []string {
 	var result []string
 
 	var cols []*Column
@@ -314,7 +314,7 @@ func (r *RowChangedEvent) PrimaryKeyColumnNames() []string {
 }
 
 // PrimaryKeyColumns returns the column(s) corresponding to the handle key(s)
-func (r *RowChangedEvent) PrimaryKeyColumns() []*Column {
+func (r *DetailedRowChangedEvent) PrimaryKeyColumns() []*Column {
 	pkeyCols := make([]*Column, 0)
 
 	var cols []*Column
@@ -335,7 +335,7 @@ func (r *RowChangedEvent) PrimaryKeyColumns() []*Column {
 }
 
 // HandleKeyColumns returns the column(s) corresponding to the handle key(s)
-func (r *RowChangedEvent) HandleKeyColumns() []*Column {
+func (r *DetailedRowChangedEvent) HandleKeyColumns() []*Column {
 	pkeyCols := make([]*Column, 0)
 
 	var cols []*Column
@@ -356,7 +356,7 @@ func (r *RowChangedEvent) HandleKeyColumns() []*Column {
 }
 
 // HandleKeyColInfos returns the column(s) and colInfo(s) corresponding to the handle key(s)
-func (r *RowChangedEvent) HandleKeyColInfos() ([]*Column, []rowcodec.ColInfo) {
+func (r *DetailedRowChangedEvent) HandleKeyColInfos() ([]*Column, []rowcodec.ColInfo) {
 	pkeyCols := make([]*Column, 0)
 	pkeyColInfos := make([]rowcodec.ColInfo, 0)
 
@@ -379,7 +379,7 @@ func (r *RowChangedEvent) HandleKeyColInfos() ([]*Column, []rowcodec.ColInfo) {
 }
 
 // WithHandlePrimaryFlag set `HandleKeyFlag` and `PrimaryKeyFlag`
-func (r *RowChangedEvent) WithHandlePrimaryFlag(colNames map[string]struct{}) {
+func (r *DetailedRowChangedEvent) WithHandlePrimaryFlag(colNames map[string]struct{}) {
 	for _, col := range r.Columns {
 		if _, ok := colNames[col.Name]; ok {
 			col.Flag.SetIsHandleKey()
@@ -395,7 +395,7 @@ func (r *RowChangedEvent) WithHandlePrimaryFlag(colNames map[string]struct{}) {
 }
 
 // ApproximateBytes returns approximate bytes in memory consumed by the event.
-func (r *RowChangedEvent) ApproximateBytes() int {
+func (r *DetailedRowChangedEvent) ApproximateBytes() int {
 	const sizeOfRowEvent = int(unsafe.Sizeof(*r))
 	const sizeOfTable = int(unsafe.Sizeof(*r.Table))
 	const sizeOfIndexes = int(unsafe.Sizeof(r.IndexColumns[0]))
@@ -677,7 +677,7 @@ func (t *SingleTableTxn) GetCommitTs() uint64 {
 
 // Append adds a row changed event into SingleTableTxn
 func (t *SingleTableTxn) Append(row *RowChangedEvent) {
-	if row.StartTs != t.StartTs || row.CommitTs != t.CommitTs || row.Table.TableID != t.Table.TableID {
+	if row.StartTs != t.StartTs || row.CommitTs != t.CommitTs || row.TableInfo.ID != t.Table.TableID {
 		log.Panic("unexpected row change event",
 			zap.Uint64("startTs", t.StartTs),
 			zap.Uint64("commitTs", t.CommitTs),

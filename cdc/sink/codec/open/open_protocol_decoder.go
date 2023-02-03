@@ -60,7 +60,7 @@ func (b *BatchMixedDecoder) NextResolvedEvent() (uint64, error) {
 }
 
 // NextRowChangedEvent implements the EventBatchDecoder interface
-func (b *BatchMixedDecoder) NextRowChangedEvent() (*model.RowChangedEvent, error) {
+func (b *BatchMixedDecoder) NextRowChangedEvent() (*model.DetailedRowChangedEvent, error) {
 	if b.nextKey == nil {
 		if err := b.decodeNextKey(); err != nil {
 			return nil, err
@@ -161,7 +161,7 @@ func (b *BatchDecoder) NextResolvedEvent() (uint64, error) {
 }
 
 // NextRowChangedEvent implements the EventBatchDecoder interface
-func (b *BatchDecoder) NextRowChangedEvent() (*model.RowChangedEvent, error) {
+func (b *BatchDecoder) NextRowChangedEvent() (*model.DetailedRowChangedEvent, error) {
 	if b.nextKey == nil {
 		if err := b.decodeNextKey(); err != nil {
 			return nil, err

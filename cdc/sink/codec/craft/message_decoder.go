@@ -459,8 +459,8 @@ func (d *MessageDecoder) DDLEvent(index int) (pmodel.ActionType, string, error) 
 	return pmodel.ActionType(ty), query, err
 }
 
-// RowChangedEvent decode a row changeded event
-func (d *MessageDecoder) RowChangedEvent(index int) (preColumns, columns *columnGroup, err error) {
+// DetailedRowChangedEvent decode a row changeded event
+func (d *MessageDecoder) DetailedRowChangedEvent(index int) (preColumns, columns *columnGroup, err error) {
 	bits := d.bodyBits(index)
 	columnGroupSizeTable := d.sizeTables[columnGroupSizeTableStartIndex+index]
 	columnGroupIndex := 0

@@ -33,6 +33,7 @@ type EventBatchEncoder interface {
 	// AppendRowChangedEvent appends the calling context, a row changed event and the dispatch
 	// topic into the batch
 	AppendRowChangedEvent(context.Context, string, *model.RowChangedEvent, func()) error
+	AppendDetailedRowChangedEvent(context.Context, string, *model.DetailedRowChangedEvent, func()) error
 	// EncodeDDLEvent appends a DDL event into the batch
 	EncodeDDLEvent(e *model.DDLEvent) (*common.Message, error)
 	// Build builds the batch and returns the bytes of key and value.

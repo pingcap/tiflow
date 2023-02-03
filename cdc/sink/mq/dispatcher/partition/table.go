@@ -36,7 +36,7 @@ func NewTableDispatcher() *TableDispatcher {
 
 // DispatchRowChangedEvent returns the target partition to which
 // a row changed event should be dispatched.
-func (t *TableDispatcher) DispatchRowChangedEvent(row *model.RowChangedEvent, partitionNum int32) int32 {
+func (t *TableDispatcher) DispatchRowChangedEvent(row *model.DetailedRowChangedEvent, partitionNum int32) int32 {
 	t.lock.Lock()
 	defer t.lock.Unlock()
 	t.hasher.Reset()

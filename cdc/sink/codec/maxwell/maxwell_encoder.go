@@ -47,6 +47,16 @@ func (d *BatchEncoder) AppendRowChangedEvent(
 	e *model.RowChangedEvent,
 	callback func(),
 ) error {
+	return nil
+}
+
+// AppendDetailedRowChangedEvent implements the EventBatchEncoder interface
+func (d *BatchEncoder) AppendDetailedRowChangedEvent(
+	_ context.Context,
+	_ string,
+	e *model.DetailedRowChangedEvent,
+	callback func(),
+) error {
 	_, valueMsg := rowChangeToMaxwellMsg(e)
 	value, err := valueMsg.encode()
 	if err != nil {

@@ -35,7 +35,7 @@ func NewIndexValueDispatcher() *IndexValueDispatcher {
 
 // DispatchRowChangedEvent returns the target partition to which
 // a row changed event should be dispatched.
-func (r *IndexValueDispatcher) DispatchRowChangedEvent(row *model.RowChangedEvent, partitionNum int32) int32 {
+func (r *IndexValueDispatcher) DispatchRowChangedEvent(row *model.DetailedRowChangedEvent, partitionNum int32) int32 {
 	r.lock.Lock()
 	defer r.lock.Unlock()
 	r.hasher.Reset()

@@ -162,7 +162,7 @@ func (f *sqlEventFilter) shouldSkipDDL(ddl *model.DDLEvent) (bool, error) {
 }
 
 // shouldSkipDML skips dml event by its type.
-func (f *sqlEventFilter) shouldSkipDML(event *model.RowChangedEvent) (bool, error) {
+func (f *sqlEventFilter) shouldSkipDML(event *model.DetailedRowChangedEvent) (bool, error) {
 	var et bf.EventType
 	switch {
 	case event.IsInsert():

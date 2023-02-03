@@ -22,6 +22,7 @@ import (
 	"github.com/pingcap/errors"
 	"github.com/pingcap/log"
 	"github.com/pingcap/tiflow/cdc/contextutil"
+	"github.com/pingcap/tiflow/cdc/entry"
 	"github.com/pingcap/tiflow/cdc/model"
 	"github.com/pingcap/tiflow/cdc/sink/codec"
 	"github.com/pingcap/tiflow/cdc/sink/codec/builder"
@@ -60,6 +61,8 @@ type mqSink struct {
 
 	role util.Role
 	id   model.ChangeFeedID
+
+	mountHelper *entry.MountHelper
 }
 
 func newMqSink(
@@ -137,12 +140,13 @@ func (k *mqSink) AddTable(tableID model.TableID) error {
 func (k *mqSink) EmitRowChangedEvents(ctx context.Context, rows ...*model.RowChangedEvent) error {
 	rowsCount := 0
 	for _, row := range rows {
-		topic := k.eventRouter.GetTopicForRowChange(row)
+		detailedRow := k.mountHelper.BuildRowChangedEvent(row)
+		topic := k.eventRouter.GetTopicForRowChange(detailedRow)
 		partitionNum, err := k.topicManager.GetPartitionNum(ctx, topic)
 		if err != nil {
 			return errors.Trace(err)
 		}
-		partition := k.eventRouter.GetPartitionForRowChange(row, partitionNum)
+		partition := k.eventRouter.GetPartitionForRowChange(detailedRow, partitionNum)
 		err = k.flushWorker.addEvent(ctx, mqEvent{
 			row: row,
 			key: TopicPartitionKey{

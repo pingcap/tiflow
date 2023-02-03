@@ -770,7 +770,7 @@ func TestConvertToCSVType(t *testing.T) {
 
 func TestRowChangeEventConversion(t *testing.T) {
 	for idx, group := range csvTestColumnsGroup {
-		row := &model.RowChangedEvent{}
+		row := &model.DetailedRowChangedEvent{}
 		var cols []*model.Column = make([]*model.Column, 0)
 		var colInfos []rowcodec.ColInfo = make([]rowcodec.ColInfo, 0)
 		for _, c := range group {

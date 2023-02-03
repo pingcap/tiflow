@@ -25,6 +25,6 @@ func NewTsDispatcher() *TsDispatcher {
 
 // DispatchRowChangedEvent returns the target partition to which
 // a row changed event should be dispatched.
-func (t *TsDispatcher) DispatchRowChangedEvent(row *model.RowChangedEvent, partitionNum int32) int32 {
+func (t *TsDispatcher) DispatchRowChangedEvent(row *model.DetailedRowChangedEvent, partitionNum int32) int32 {
 	return int32(row.CommitTs % uint64(partitionNum))
 }

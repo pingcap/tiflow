@@ -357,10 +357,10 @@ var (
 	}
 
 	defaultCanalBatchTester = &struct {
-		rowCases [][]*model.RowChangedEvent
+		rowCases [][]*model.DetailedRowChangedEvent
 		ddlCases [][]*model.DDLEvent
 	}{
-		rowCases: [][]*model.RowChangedEvent{
+		rowCases: [][]*model.DetailedRowChangedEvent{
 			{{
 				CommitTs: 1,
 				Table:    &model.TableName{Schema: "a", Table: "b"},
@@ -425,7 +425,7 @@ var (
 
 	testColumns = collectAllColumns(testColumnsTable)
 
-	testCaseInsert = &model.RowChangedEvent{
+	testCaseInsert = &model.DetailedRowChangedEvent{
 		CommitTs: 417318403368288260,
 		Table: &model.TableName{
 			Schema: "cdc",
@@ -435,7 +435,7 @@ var (
 		PreColumns: nil,
 	}
 
-	testCaseUpdate = &model.RowChangedEvent{
+	testCaseUpdate = &model.DetailedRowChangedEvent{
 		CommitTs: 417318403368288260,
 		Table: &model.TableName{
 			Schema: "cdc",
@@ -445,7 +445,7 @@ var (
 		PreColumns: testColumns,
 	}
 
-	testCaseDelete = &model.RowChangedEvent{
+	testCaseDelete = &model.DetailedRowChangedEvent{
 		CommitTs: 417318403368288260,
 		Table: &model.TableName{
 			Schema: "cdc",

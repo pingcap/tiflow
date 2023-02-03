@@ -1067,15 +1067,15 @@ func TestDecodeEventIgnoreRow(t *testing.T) {
 			pEvent := model.NewPolymorphicEvent(rawKV)
 			err := mounter.DecodeEvent(ctx, pEvent)
 			require.Nil(t, err)
-			if pEvent.Row == nil {
+			if pEvent.MiniRow == nil {
 				return
 			}
-			row := pEvent.Row
+			row := pEvent.MiniRow
 			rows++
-			require.Equal(t, row.Table.Schema, "test")
+			require.Equal(t, row.TableInfo.TableName.Schema, "test")
 			// Now we only allow filter dml event by table, so we only check row's table.
-			require.NotContains(t, ignoredTables, row.Table.Table)
-			require.Contains(t, tables, row.Table.Table)
+			require.NotContains(t, ignoredTables, row.TableInfo.TableName.Table)
+			require.Contains(t, tables, row.TableInfo.TableName.Table)
 		})
 		return rows
 	}

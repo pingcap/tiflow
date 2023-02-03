@@ -245,7 +245,7 @@ func (r *dmlExprFilterRule) getSimpleExprOfTable(
 }
 
 func (r *dmlExprFilterRule) shouldSkipDML(
-	row *model.RowChangedEvent,
+	row *model.DetailedRowChangedEvent,
 	rawRow model.RowChangedDatums,
 	ti *model.TableInfo,
 ) (bool, error) {
@@ -403,7 +403,7 @@ func (f *dmlExprFilter) getRules(schema, table string) []*dmlExprFilterRule {
 
 // shouldSkipDML skips dml event by sql expression.
 func (f *dmlExprFilter) shouldSkipDML(
-	row *model.RowChangedEvent,
+	row *model.DetailedRowChangedEvent,
 	rawRow model.RowChangedDatums,
 	ti *model.TableInfo,
 ) (bool, error) {

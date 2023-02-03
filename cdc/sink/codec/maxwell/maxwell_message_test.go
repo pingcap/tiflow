@@ -49,7 +49,7 @@ func TestEncodeBinaryToMaxwell(t *testing.T) {
 		Flag: model.BinaryFlag,
 	}
 
-	e := &model.RowChangedEvent{
+	e := &model.DetailedRowChangedEvent{
 		Table:   &model.TableName{Schema: "a", Table: "b"},
 		Columns: []*model.Column{column},
 	}

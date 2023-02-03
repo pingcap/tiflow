@@ -404,7 +404,7 @@ func newColumnGroup(allocator *SliceAllocator, ty byte, columns []*model.Column)
 // Row changed message is basically an array of column groups
 type rowChangedEvent = []*columnGroup
 
-func newRowChangedMessage(allocator *SliceAllocator, ev *model.RowChangedEvent) (int, rowChangedEvent) {
+func newRowChangedMessage(allocator *SliceAllocator, ev *model.DetailedRowChangedEvent) (int, rowChangedEvent) {
 	numGroups := 0
 	if ev.PreColumns != nil {
 		numGroups++
@@ -427,8 +427,8 @@ func newRowChangedMessage(allocator *SliceAllocator, ev *model.RowChangedEvent) 
 	return estimatedSize, groups
 }
 
-// RowChangedEventBuffer is a buffer to save row changed events in batch
-type RowChangedEventBuffer struct {
+// DetailedRowChangedEventBuffer is a buffer to save row changed events in batch
+type DetailedRowChangedEventBuffer struct {
 	headers *Headers
 
 	events        []rowChangedEvent
@@ -439,22 +439,22 @@ type RowChangedEventBuffer struct {
 }
 
 // NewRowChangedEventBuffer creates new row changed event buffer with given allocator
-func NewRowChangedEventBuffer(allocator *SliceAllocator) *RowChangedEventBuffer {
-	return &RowChangedEventBuffer{
+func NewRowChangedEventBuffer(allocator *SliceAllocator) *DetailedRowChangedEventBuffer {
+	return &DetailedRowChangedEventBuffer{
 		headers:   &Headers{},
 		allocator: allocator,
 	}
 }
 
 // Encode row changed event buffer into bits
-func (b *RowChangedEventBuffer) Encode() []byte {
+func (b *DetailedRowChangedEventBuffer) Encode() []byte {
 	bits := NewMessageEncoder(b.allocator).encodeHeaders(b.headers).encodeRowChangeEvents(b.events[:b.eventsCount]).Encode()
 	b.Reset()
 	return bits
 }
 
 // AppendRowChangedEvent append a new event to buffer
-func (b *RowChangedEventBuffer) AppendRowChangedEvent(ev *model.RowChangedEvent) (rows, size int) {
+func (b *DetailedRowChangedEventBuffer) AppendRowChangedEvent(ev *model.DetailedRowChangedEvent) (rows, size int) {
 	var partition int64 = -1
 	if ev.Table.IsPartition {
 		partition = ev.Table.TableID
@@ -487,23 +487,23 @@ func (b *RowChangedEventBuffer) AppendRowChangedEvent(ev *model.RowChangedEvent)
 }
 
 // Reset buffer
-func (b *RowChangedEventBuffer) Reset() {
+func (b *DetailedRowChangedEventBuffer) Reset() {
 	b.headers.reset()
 	b.eventsCount = 0
 	b.estimatedSize = 0
 }
 
 // Size of buffer
-func (b *RowChangedEventBuffer) Size() int {
+func (b *DetailedRowChangedEventBuffer) Size() int {
 	return b.estimatedSize
 }
 
 // RowsCount returns number of rows batched in this buffer.
-func (b *RowChangedEventBuffer) RowsCount() int {
+func (b *DetailedRowChangedEventBuffer) RowsCount() int {
 	return b.eventsCount
 }
 
 // GetHeaders returns headers of buffer
-func (b *RowChangedEventBuffer) GetHeaders() *Headers {
+func (b *DetailedRowChangedEventBuffer) GetHeaders() *Headers {
 	return b.headers
 }
