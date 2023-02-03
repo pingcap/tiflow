@@ -39,6 +39,24 @@ type Client interface {
 	Close() error
 }
 
+//type factory interface {
+//	// NewClusterAdminClient returns kafka admin client
+//	NewClusterAdminClient(ctx context.Context) (ClusterAdminClient, error)
+//
+//	// NewSyncProducer returns kafka sync producer
+//	NewSyncProducer(ctx context.Context) (SyncProducer, error)
+//
+//	// NewAsyncProducer returns kafka async producer
+//	NewAsyncProducer(changefeedID model.ChangeFeedID,
+//		closedChan chan struct{},
+//		failpointCh chan error) (AsyncProducer, error)
+//
+//	// MetricRegistry returns the kafka client metric registry
+//	MetricRegistry() metrics.Registry
+//	// Close closes the client
+//	Close() error
+//}
+
 // SyncProducer is the kafka sync producer
 type SyncProducer interface {
 	// SendMessage produces a given message, and returns only when it either has
