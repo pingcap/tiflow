@@ -28,21 +28,6 @@ type saramaAdminClient struct {
 	client sarama.ClusterAdmin
 }
 
-// NewSaramaAdminClient constructs a ClusterAdminClient with sarama.
-// todo: remove this method
-func NewSaramaAdminClient(ctx context.Context, o *Options) (ClusterAdminClient, error) {
-	saramaConfig, err := NewSaramaConfig(ctx, o)
-	if err != nil {
-		return nil, err
-	}
-
-	client, err := sarama.NewClusterAdmin(o.BrokerEndpoints, saramaConfig)
-	if err != nil {
-		return nil, err
-	}
-	return &saramaAdminClient{client: client}, nil
-}
-
 func (a *saramaAdminClient) GetAllBrokers(context.Context) ([]Broker, error) {
 	brokers, _, err := a.client.DescribeCluster()
 	if err != nil {

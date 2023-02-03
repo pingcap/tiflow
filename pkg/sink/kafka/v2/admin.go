@@ -28,17 +28,6 @@ type admin struct {
 	client Client
 }
 
-// NewClusterAdminClient return an admin client
-// todo: remove this method
-func NewClusterAdminClient(endpoints []string) pkafka.ClusterAdminClient {
-	client := &kafka.Client{
-		Addr: kafka.TCP(endpoints...),
-	}
-	return &admin{
-		client: client,
-	}
-}
-
 func (a *admin) clusterMetadata(ctx context.Context) (*kafka.MetadataResponse, error) {
 	result, err := a.client.Metadata(ctx, &kafka.MetadataRequest{
 		Topics: []string{},
@@ -214,6 +203,7 @@ func (a *admin) CreateTopic(
 
 	response, err := a.client.CreateTopics(ctx, request)
 	if err != nil {
+		cl
 		return errors.Trace(err)
 	}
 
