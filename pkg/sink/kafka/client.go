@@ -27,12 +27,6 @@ import (
 
 // Client is a generic Kafka client.
 type Client interface {
-	// Topics returns the set of available
-	// topics as retrieved from cluster metadata.
-	Topics() ([]string, error)
-	// Partitions returns the sorted list of
-	// all partition IDs for the given topic.
-	Partitions(topic string) ([]int32, error)
 	// SyncProducer creates a sync producer to writer message to kafka
 	SyncProducer() (SyncProducer, error)
 	// AsyncProducer creates an async producer to writer message to kafka
@@ -95,16 +89,6 @@ type AsyncProducer interface {
 
 type saramaKafkaClient struct {
 	client sarama.Client
-}
-
-func (c *saramaKafkaClient) Topics() ([]string, error) {
-	return c.client.Topics()
-}
-
-// Partitions returns the sorted list of
-// all partition IDs for the given topic.
-func (c *saramaKafkaClient) Partitions(topic string) ([]int32, error) {
-	return c.client.Partitions(topic)
 }
 
 func (c *saramaKafkaClient) SyncProducer() (SyncProducer, error) {
