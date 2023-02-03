@@ -205,9 +205,12 @@ func NewSaramaFactory(ctx context.Context, o *Options) (Factory, error) {
 	}
 	c, err := sarama.NewClient(o.BrokerEndpoints, saramaConfig)
 	if err != nil {
-		return nil, err
+		return nil, errors.Trace(err)
 	}
-	return &saramaFactory{client: c}, nil
+	return &saramaFactory{
+		client: c,
+		config: saramaConfig,
+	}, nil
 }
 
 // NewMockFactory constructs a Factory with mock implementation.

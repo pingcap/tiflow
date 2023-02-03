@@ -22,10 +22,15 @@ import (
 
 type saramaFactory struct {
 	client sarama.Client
+	config *sarama.Config
 }
 
 func (f *saramaFactory) AdminClient() (ClusterAdminClient, error) {
-	return nil, nil
+	admin, err := sarama.NewClusterAdminFromClient(f.client)
+	if err != nil {
+		return nil, errors.Trace(err)
+	}
+	return &saramaAdminClient{client: admin}, nil
 }
 
 func (f *saramaFactory) SyncProducer() (SyncProducer, error) {
