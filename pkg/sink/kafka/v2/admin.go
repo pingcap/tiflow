@@ -203,7 +203,6 @@ func (a *admin) CreateTopic(
 
 	response, err := a.client.CreateTopics(ctx, request)
 	if err != nil {
-		cl
 		return errors.Trace(err)
 	}
 

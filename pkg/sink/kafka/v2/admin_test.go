@@ -27,20 +27,13 @@ import (
 )
 
 func newClusterAdminClientWithMock(t *testing.T) (pkafka.ClusterAdminClient, *mock.MockClient) {
-	adminClient := NewClusterAdminClient([]string{"127.0.0.1:9092"})
-
 	ctrl := gomock.NewController(t)
 	client := mock.NewMockClient(ctrl)
-	adminClient.(*admin).client = client
+
+	adminClient := &admin{
+		client: client,
+	}
 	return adminClient, client
-}
-
-func TestNewClusterAdminClient(t *testing.T) {
-	t.Parallel()
-
-	adminClient := NewClusterAdminClient([]string{"127.0.0.1:9092"})
-	require.NotNil(t, adminClient)
-	require.NotNil(t, adminClient.(*admin).client)
 }
 
 func TestGetAllBrokers(t *testing.T) {
