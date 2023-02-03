@@ -19,31 +19,11 @@ import (
 )
 
 // ClientMockImpl is a mock implementation of Client interface.
-type ClientMockImpl struct {
-	topics map[string][]int32
-}
+type ClientMockImpl struct{}
 
 // NewClientMockImpl creates a new ClientMockImpl instance.
 func NewClientMockImpl() *ClientMockImpl {
-	topics := make(map[string][]int32)
-	topics[DefaultMockTopicName] = []int32{0, 1, 2}
-	return &ClientMockImpl{
-		topics: topics,
-	}
-}
-
-// AddTopic adds a topic.
-func (c *ClientMockImpl) AddTopic(topicName string, partitions int32) {
-	p := make([]int32, partitions)
-	for i := int32(0); i < partitions; i++ {
-		p[i] = i
-	}
-	c.topics[topicName] = p
-}
-
-// DeleteTopic deletes a topic.
-func (c *ClientMockImpl) DeleteTopic(topicName string) {
-	delete(c.topics, topicName)
+	return &ClientMockImpl{}
 }
 
 // SyncProducer creates a sync producer

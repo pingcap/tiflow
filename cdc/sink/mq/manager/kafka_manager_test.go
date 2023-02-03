@@ -48,7 +48,6 @@ func TestPartitions(t *testing.T) {
 func TestTryRefreshMeta(t *testing.T) {
 	t.Parallel()
 
-	client := kafka.NewClientMockImpl()
 	adminClient := kafka.NewClusterAdminClientMockImpl()
 	defer func(adminClient *kafka.ClusterAdminClientMockImpl) {
 		_ = adminClient.Close()
@@ -69,7 +68,11 @@ func TestTryRefreshMeta(t *testing.T) {
 	require.Equal(t, int32(3), partitionsNum)
 
 	// Mock create a topic.
-	client.AddTopic("test", 4)
+	adminClient.CreateTopic(ctx, &kafka.TopicDetail{
+		Name:          "test",
+		NumPartitions: 4,
+	}, false)
+
 	manager.lastMetadataRefresh.Store(time.Now().Add(-2 * time.Minute).Unix())
 	partitionsNum, err = manager.GetPartitionNum(ctx, "test")
 	require.Nil(t, err)
@@ -77,7 +80,7 @@ func TestTryRefreshMeta(t *testing.T) {
 
 	// Mock delete a topic.
 	// NOTICE: we do not refresh metadata for the deleted topic.
-	client.DeleteTopic("test")
+	adminClient.DeleteTopic("test")
 	partitionsNum, err = manager.GetPartitionNum(ctx, "test")
 	require.Nil(t, err)
 	require.Equal(t, int32(4), partitionsNum)
