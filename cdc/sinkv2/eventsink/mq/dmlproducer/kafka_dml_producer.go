@@ -39,7 +39,7 @@ type kafkaDMLProducer struct {
 	id model.ChangeFeedID
 	// We hold the client to make close operation faster.
 	// Please see the comment of Close().
-	client pkafka.Factory
+	factory pkafka.Factory
 	// asyncProducer is used to send messages to kafka asynchronously.
 	asyncProducer pkafka.AsyncProducer
 	// collector is used to report metrics.
@@ -60,8 +60,7 @@ type kafkaDMLProducer struct {
 // NewKafkaDMLProducer creates a new kafka producer.
 func NewKafkaDMLProducer(
 	ctx context.Context,
-	client pkafka.Factory,
-	adminClient pkafka.ClusterAdminClient,
+	factory pkafka.Factory,
 	errCh chan error,
 ) (DMLProducer, error) {
 	changefeedID := contextutil.ChangefeedIDFromCtx(ctx)
@@ -71,19 +70,19 @@ func NewKafkaDMLProducer(
 
 	closeCh := make(chan struct{})
 	failpointCh := make(chan error, 1)
-	asyncProducer, err := client.AsyncProducer(changefeedID, closeCh, failpointCh)
+	asyncProducer, err := factory.AsyncProducer(changefeedID, closeCh, failpointCh)
 	if err != nil {
 		// Close the client to prevent the goroutine leak.
 		// Because it may be a long time to close the client,
 		// so close it asynchronously.
 		go func() {
-			if err := client.Close(); err != nil {
+			if err := factory.Close(); err != nil {
 				log.Error("Close sarama client with error in kafka "+
 					"DML producer", zap.Error(err),
 					zap.String("namespace", changefeedID.Namespace),
 					zap.String("changefeed", changefeedID.ID))
 			}
-			if err := adminClient.Close(); err != nil {
+			if err := asyncProducer.Close(); err != nil {
 				log.Error("Close sarama admin client with error in kafka "+
 					"DML producer", zap.Error(err),
 					zap.String("namespace", changefeedID.Namespace),
@@ -93,12 +92,17 @@ func NewKafkaDMLProducer(
 		return nil, cerror.WrapError(cerror.ErrKafkaNewProducer, err)
 	}
 
+	adminClient, err := factory.AdminClient()
+	if err != nil {
+		return nil, cerror.WrapError(cerror.ErrKafkaNewProducer, err)
+	}
+
 	collector := collector.New(changefeedID, util.RoleProcessor,
-		adminClient, client.MetricRegistry())
+		adminClient, factory.MetricRegistry())
 
 	k := &kafkaDMLProducer{
 		id:            changefeedID,
-		client:        client,
+		factory:       factory,
 		asyncProducer: asyncProducer,
 		collector:     collector,
 		closed:        false,
@@ -192,7 +196,7 @@ func (k *kafkaDMLProducer) Close() {
 		// closed, `asyncProducer.Close()` would waste a mount of time to try flush all messages.
 		// To prevent the scenario mentioned above, close the client first.
 		start := time.Now()
-		if err := k.client.Close(); err != nil {
+		if err := k.factory.Close(); err != nil {
 			log.Error("Close sarama client with error in kafka "+
 				"DML producer", zap.Error(err),
 				zap.Duration("duration", time.Since(start)),

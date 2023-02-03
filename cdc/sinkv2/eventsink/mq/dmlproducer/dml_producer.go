@@ -38,4 +38,4 @@ type DMLProducer interface {
 // So we let the GC close errCh.
 // It's usually a buffered channel.
 type Factory func(ctx context.Context, factory kafka.Factory,
-	adminClient kafka.ClusterAdminClient, errCh chan error) (DMLProducer, error)
+	errCh chan error) (DMLProducer, error)

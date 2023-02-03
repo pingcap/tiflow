@@ -71,21 +71,18 @@ func TestProducerAck(t *testing.T) {
 	leader, topic := initBroker(t, true)
 	defer leader.Close()
 
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+
 	options := getOptions(leader.Addr())
 	options.MaxMessages = 1
 
-	errCh := make(chan error, 1)
-	ctx, cancel := context.WithCancel(context.Background())
-	config, err := kafka.NewSaramaConfig(context.Background(), options)
-	require.Nil(t, err)
-	require.Equal(t, 1, config.Producer.Flush.MaxMessages)
+	factory, err := kafka.NewSaramaFactory(ctx, options)
+	require.NoError(t, err)
 
-	client, err := kafka.NewSaramaClient(ctx, options)
-	require.Nil(t, err)
-	adminClient, err := kafka.NewMockAdminClient(ctx, options)
-	require.Nil(t, err)
-	producer, err := NewKafkaDMLProducer(ctx, client, adminClient, errCh)
-	require.Nil(t, err)
+	errCh := make(chan error, 1)
+	producer, err := NewKafkaDMLProducer(ctx, factory, errCh)
+	require.NoError(t, err)
 	require.NotNil(t, producer)
 
 	count := atomic.NewInt64(0)
@@ -135,12 +132,10 @@ func TestProducerSendMsgFailed(t *testing.T) {
 	leader, topic := initBroker(t, false)
 	defer leader.Close()
 
-	options := getOptions(leader.Addr())
-	errCh := make(chan error, 1)
 	ctx, cancel := context.WithTimeout(context.Background(), time.Second*10)
 	defer cancel()
-	_, err := kafka.NewSaramaConfig(context.Background(), options)
-	require.Nil(t, err)
+
+	options := getOptions(leader.Addr())
 	options.MaxMessages = 1
 	options.MaxMessageBytes = 1
 	// saramaConfig.Producer.Flush.MaxMessages = 1
@@ -148,11 +143,11 @@ func TestProducerSendMsgFailed(t *testing.T) {
 	// This will make the first send failed.
 	// saramaConfig.Producer.MaxMessageBytes = 8
 
-	client, err := kafka.NewSaramaClient(ctx, options)
-	require.Nil(t, err)
-	adminClient, err := kafka.NewMockAdminClient(ctx, options)
-	require.Nil(t, err)
-	producer, err := NewKafkaDMLProducer(ctx, client, adminClient, errCh)
+	factory, err := kafka.NewSaramaFactory(ctx, options)
+	require.NoError(t, err)
+
+	errCh := make(chan error, 1)
+	producer, err := NewKafkaDMLProducer(ctx, factory, errCh)
 	defer func() {
 		producer.Close()
 
@@ -201,19 +196,15 @@ func TestProducerDoubleClose(t *testing.T) {
 	leader, _ := initBroker(t, false)
 	defer leader.Close()
 
-	options := getOptions(leader.Addr())
-
-	errCh := make(chan error, 1)
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
-	saramaConfig, err := kafka.NewSaramaConfig(ctx, options)
-	require.Nil(t, err)
-	saramaConfig.Producer.Flush.MaxMessages = 1
-	client, err := kafka.NewSaramaClient(ctx, options)
-	require.Nil(t, err)
-	adminClient, err := kafka.NewMockAdminClient(ctx, options)
-	require.Nil(t, err)
-	producer, err := NewKafkaDMLProducer(ctx, client, adminClient, errCh)
+	options := getOptions(leader.Addr())
+
+	factory, err := kafka.NewSaramaFactory(ctx, options)
+	require.NoError(t, err)
+
+	errCh := make(chan error, 1)
+	producer, err := NewKafkaDMLProducer(ctx, factory, errCh)
 	require.Nil(t, err)
 	require.NotNil(t, producer)
 
