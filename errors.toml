@@ -586,6 +586,11 @@ error = '''
 invalid partition num %d
 '''
 
+["CDC:ErrKafkaInvalidRequiredAcks"]
+error = '''
+invalid required acks %d, only support these values: 0(NoResponse),1(WaitForLocal) and -1(WaitForAll)
+'''
+
 ["CDC:ErrKafkaInvalidVersion"]
 error = '''
 invalid kafka version
