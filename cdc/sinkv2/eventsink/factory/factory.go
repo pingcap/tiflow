@@ -30,6 +30,7 @@ import (
 	cerror "github.com/pingcap/tiflow/pkg/errors"
 	"github.com/pingcap/tiflow/pkg/sink"
 	"github.com/pingcap/tiflow/pkg/sink/kafka"
+	v2 "github.com/pingcap/tiflow/pkg/sink/kafka/v2"
 	"github.com/prometheus/client_golang/prometheus"
 )
 
@@ -66,8 +67,25 @@ func New(ctx context.Context,
 		s.txnSink = txnSink
 		s.sinkType = sink.TxnSink
 	case sink.KafkaScheme, sink.KafkaSSLScheme:
+		options := kafka.NewOptions()
+		if err := options.Apply(sinkURI); err != nil {
+			return nil, cerror.WrapError(cerror.ErrKafkaInvalidConfig, err)
+		}
+		var (
+			factory kafka.Factory
+			err     error
+		)
+		if config.GetGlobalServerConfig().Debug.EnableKafkaSinkV2 {
+			factory, err = v2.NewFactory(ctx, options)
+		} else {
+			factory, err = kafka.NewSaramaFactory(ctx, options)
+		}
+		if err != nil {
+			return nil, err
+		}
 		mqs, err := mq.NewKafkaDMLSink(ctx, sinkURI, cfg, errCh,
-			kafka.NewSaramaAdminClient, kafka.NewSaramaClient, dmlproducer.NewKafkaDMLProducer)
+			factory,
+			dmlproducer.NewKafkaDMLProducer)
 		if err != nil {
 			return nil, err
 		}

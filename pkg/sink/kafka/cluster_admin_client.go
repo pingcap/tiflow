@@ -57,8 +57,3 @@ type ClusterAdminClient interface {
 	// Close shuts down the admin client.
 	Close() error
 }
-
-// NewMockAdminClient constructs a ClusterAdminClient with mock implementation.
-func NewMockAdminClient(_ context.Context, _ *Options) (ClusterAdminClient, error) {
-	return NewClusterAdminClientMockImpl(), nil
-}

@@ -17,7 +17,6 @@ import (
 	"context"
 	"strings"
 
-	"github.com/pingcap/tiflow/cdc/sink/mq/producer/kafka"
 	"github.com/pingcap/tiflow/cdc/sinkv2/ddlsink"
 	"github.com/pingcap/tiflow/cdc/sinkv2/ddlsink/blackhole"
 	"github.com/pingcap/tiflow/cdc/sinkv2/ddlsink/cloudstorage"
@@ -27,6 +26,8 @@ import (
 	"github.com/pingcap/tiflow/pkg/config"
 	cerror "github.com/pingcap/tiflow/pkg/errors"
 	"github.com/pingcap/tiflow/pkg/sink"
+	"github.com/pingcap/tiflow/pkg/sink/kafka"
+	v2 "github.com/pingcap/tiflow/pkg/sink/kafka/v2"
 	pmysql "github.com/pingcap/tiflow/pkg/sink/mysql"
 )
 
@@ -43,8 +44,26 @@ func New(
 	schema := strings.ToLower(sinkURI.Scheme)
 	switch schema {
 	case sink.KafkaScheme, sink.KafkaSSLScheme:
+		options := kafka.NewOptions()
+		if err := options.Apply(sinkURI); err != nil {
+			return nil, cerror.WrapError(cerror.ErrKafkaInvalidConfig, err)
+		}
+		var (
+			factory kafka.Factory
+			err     error
+		)
+		if config.GetGlobalServerConfig().Debug.EnableKafkaSinkV2 {
+			factory, err = v2.NewFactory(ctx, options)
+		} else {
+			factory, err = kafka.NewSaramaFactory(ctx, options)
+		}
+		if err != nil {
+			return nil, err
+		}
+
 		return mq.NewKafkaDDLSink(ctx, sinkURI, cfg,
-			kafka.NewAdminClientImpl, kafka.NewClientImpl, ddlproducer.NewKafkaDDLProducer)
+			factory,
+			ddlproducer.NewKafkaDDLProducer)
 	case sink.BlackHoleScheme:
 		return blackhole.New(), nil
 	case sink.MySQLSSLScheme, sink.MySQLScheme, sink.TiDBScheme, sink.TiDBSSLScheme:

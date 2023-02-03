@@ -209,7 +209,6 @@ func NewSaramaFactory(ctx context.Context, o *Options) (Factory, error) {
 	}
 	return &saramaFactory{
 		client: c,
-		config: saramaConfig,
 	}, nil
 }
 

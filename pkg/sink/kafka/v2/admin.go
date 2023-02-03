@@ -29,6 +29,7 @@ type admin struct {
 }
 
 // NewClusterAdminClient return an admin client
+// todo: remove this method
 func NewClusterAdminClient(endpoints []string) pkafka.ClusterAdminClient {
 	client := &kafka.Client{
 		Addr: kafka.TCP(endpoints...),

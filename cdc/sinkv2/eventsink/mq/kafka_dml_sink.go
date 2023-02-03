@@ -35,8 +35,7 @@ func NewKafkaDMLSink(
 	sinkURI *url.URL,
 	replicaConfig *config.ReplicaConfig,
 	errCh chan error,
-	adminClientCreator pkafka.ClusterAdminClientCreator,
-	clientCreator pkafka.ClientCreator,
+	factory pkafka.Factory,
 	producerCreator dmlproducer.Factory,
 ) (_ *dmlSink, err error) {
 	topic, err := util.GetTopic(sinkURI)
@@ -49,7 +48,7 @@ func NewKafkaDMLSink(
 		return nil, cerror.WrapError(cerror.ErrKafkaInvalidConfig, err)
 	}
 
-	adminClient, err := adminClientCreator(ctx, options)
+	adminClient, err := factory.AdminClient()
 	if err != nil {
 		return nil, cerror.WrapError(cerror.ErrKafkaNewProducer, err)
 	}
@@ -74,14 +73,9 @@ func NewKafkaDMLSink(
 		return nil, errors.Trace(err)
 	}
 
-	client, err := clientCreator(ctx, options)
-	if err != nil {
-		return nil, cerror.WrapError(cerror.ErrKafkaNewProducer, err)
-	}
-
 	log.Info("Try to create a DML sink producer",
 		zap.Any("options", options))
-	p, err := producerCreator(ctx, client, adminClient, errCh)
+	p, err := producerCreator(ctx, factory, adminClient, errCh)
 	if err != nil {
 		return nil, cerror.WrapError(cerror.ErrKafkaNewProducer, err)
 	}

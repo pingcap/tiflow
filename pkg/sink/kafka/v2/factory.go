@@ -156,7 +156,9 @@ func (k *Factory) createWriter() *kafka.Writer {
 
 // AdminClient creates a kafka admin client
 func (k *Factory) AdminClient() (pkafka.ClusterAdminClient, error) {
-	return nil, nil
+	return &admin{
+		client: k.client,
+	}, nil
 }
 
 // SyncProducer creates a sync producer to writer message to kafka

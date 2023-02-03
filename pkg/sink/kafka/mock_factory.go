@@ -22,7 +22,7 @@ import (
 type MockFactory struct{}
 
 func (c *MockFactory) AdminClient() (ClusterAdminClient, error) {
-	return nil, nil
+	return NewClusterAdminClientMockImpl(), nil
 }
 
 // SyncProducer creates a sync producer

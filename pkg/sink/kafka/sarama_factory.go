@@ -22,7 +22,6 @@ import (
 
 type saramaFactory struct {
 	client sarama.Client
-	config *sarama.Config
 }
 
 func (f *saramaFactory) AdminClient() (ClusterAdminClient, error) {
