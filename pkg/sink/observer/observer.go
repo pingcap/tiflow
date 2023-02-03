@@ -27,7 +27,24 @@ import (
 type Observer interface {
 	// Tick is called periodically, Observer fetches performance metrics and
 	// records them in each Tick.
+	// Tick and Close must be concurrent safe.
 	Tick(ctx context.Context) error
+	Close() error
+}
+
+// NewObserverOpt represents available options when creating a new observer.
+type NewObserverOpt struct {
+	dbConnFactory pmysql.Factory
+}
+
+// NewObserverOption configures NewObserverOpt.
+type NewObserverOption func(*NewObserverOpt)
+
+// WithDBConnFactory specifies factory to create db connection.
+func WithDBConnFactory(factory pmysql.Factory) NewObserverOption {
+	return func(opt *NewObserverOpt) {
+		opt.dbConnFactory = factory
+	}
 }
 
 // NewObserver creates a new Observer
@@ -35,7 +52,12 @@ func NewObserver(
 	ctx context.Context,
 	sinkURIStr string,
 	replCfg *config.ReplicaConfig,
+	opts ...NewObserverOption,
 ) (Observer, error) {
+	options := &NewObserverOpt{dbConnFactory: pmysql.CreateMySQLDBConn}
+	for _, opt := range opts {
+		opt(options)
+	}
 	sinkURI, err := config.GetSinkURIAndAdjustConfigWithSinkURI(sinkURIStr, replCfg)
 	if err != nil {
 		return nil, err
@@ -53,12 +75,11 @@ func NewObserver(
 		return nil, err
 	}
 
-	dbConnFactory := pmysql.CreateMySQLDBConn
-	dsnStr, err := pmysql.GenerateDSN(ctx, sinkURI, cfg, dbConnFactory)
+	dsnStr, err := pmysql.GenerateDSN(ctx, sinkURI, cfg, options.dbConnFactory)
 	if err != nil {
 		return nil, err
 	}
-	db, err := dbConnFactory(ctx, dsnStr)
+	db, err := options.dbConnFactory(ctx, dsnStr)
 	if err != nil {
 		return nil, err
 	}
@@ -72,5 +93,6 @@ func NewObserver(
 	if isTiDB {
 		return NewTiDBObserver(db), nil
 	}
+	_ = db.Close()
 	return NewDummyObserver(), nil
 }
