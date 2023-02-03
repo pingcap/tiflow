@@ -343,9 +343,14 @@ func AdjustOptions(
 		return errors.Trace(err)
 	}
 
-	err = validateMinInsyncReplicas(ctx, admin, topics, topic, int(options.ReplicationFactor))
-	if err != nil {
-		return errors.Trace(err)
+	// Only check replicationFactor >= minInsyncReplicas when producer's required acks is -1.
+	// If we don't check it, the producer probably can not send message to the topic.
+	// Because it will wait for the ack from all replicas. But we do not have enough replicas.
+	if options.RequiredAcks == kafka.WaitForAll {
+		err = validateMinInsyncReplicas(ctx, admin, topics, topic, int(options.ReplicationFactor))
+		if err != nil {
+			return errors.Trace(err)
+		}
 	}
 
 	info, exists := topics[topic]
@@ -423,7 +428,9 @@ func AdjustOptions(
 func validateMinInsyncReplicas(
 	ctx context.Context,
 	admin kafka.ClusterAdminClient,
-	topics map[string]kafka.TopicDetail, topic string, replicationFactor int,
+	topics map[string]kafka.TopicDetail,
+	topic string,
+	replicationFactor int,
 ) error {
 	minInsyncReplicasConfigGetter := func() (string, bool, error) {
 		info, exists := topics[topic]
@@ -451,6 +458,11 @@ func validateMinInsyncReplicas(
 	if err != nil {
 		// 'min.insync.replica' is invisible to us in Confluent Cloud Kafka.
 		if cerror.ErrKafkaBrokerConfigNotFound.Equal(err) {
+			log.Warn("TiCDC cannot find `min.insync.replicas` from broker's configuration, " +
+				"please make sure that the replication factor is greater than or equal " +
+				"to the minimum number of in-sync replicas" +
+				"if you want to use `required-acks` = -1." +
+				"Otherwise, TiCDC will not be able to send messages to the topic.")
 			return nil
 		}
 		return err
@@ -472,8 +484,9 @@ func validateMinInsyncReplicas(
 			zap.Int("min.insync.replicas", minInsyncReplicas))
 		return cerror.ErrKafkaInvalidConfig.GenWithStack(
 			"TiCDC Kafka producer's `request.required.acks` defaults to -1, "+
-				"TiCDC cannot deliver messages when the `replication-factor` "+
-				"is smaller than the `min.insync.replicas` of %s", configFrom,
+				"TiCDC cannot deliver messages when the `replication-factor` %d "+
+				"is smaller than the `min.insync.replicas` %d of %s",
+			replicationFactor, minInsyncReplicas, configFrom,
 		)
 	}
 
