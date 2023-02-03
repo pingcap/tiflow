@@ -80,8 +80,11 @@ func TestProducerAck(t *testing.T) {
 	factory, err := kafka.NewSaramaFactory(ctx, options)
 	require.NoError(t, err)
 
+	adminClient, err := factory.AdminClient()
+	require.NoError(t, err)
+
 	errCh := make(chan error, 1)
-	producer, err := NewKafkaDMLProducer(ctx, factory, errCh)
+	producer, err := NewKafkaDMLProducer(ctx, factory, adminClient, errCh)
 	require.NoError(t, err)
 	require.NotNil(t, producer)
 
@@ -146,8 +149,11 @@ func TestProducerSendMsgFailed(t *testing.T) {
 	factory, err := kafka.NewSaramaFactory(ctx, options)
 	require.NoError(t, err)
 
+	adminClient, err := factory.AdminClient()
+	require.NoError(t, err)
+
 	errCh := make(chan error, 1)
-	producer, err := NewKafkaDMLProducer(ctx, factory, errCh)
+	producer, err := NewKafkaDMLProducer(ctx, factory, adminClient, errCh)
 	defer func() {
 		producer.Close()
 
@@ -203,8 +209,11 @@ func TestProducerDoubleClose(t *testing.T) {
 	factory, err := kafka.NewSaramaFactory(ctx, options)
 	require.NoError(t, err)
 
+	adminClient, err := factory.AdminClient()
+	require.NoError(t, err)
+
 	errCh := make(chan error, 1)
-	producer, err := NewKafkaDMLProducer(ctx, factory, errCh)
+	producer, err := NewKafkaDMLProducer(ctx, factory, adminClient, errCh)
 	require.Nil(t, err)
 	require.NotNil(t, producer)
 

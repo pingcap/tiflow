@@ -61,6 +61,7 @@ type kafkaDMLProducer struct {
 func NewKafkaDMLProducer(
 	ctx context.Context,
 	factory pkafka.Factory,
+	adminClient pkafka.ClusterAdminClient,
 	errCh chan error,
 ) (DMLProducer, error) {
 	changefeedID := contextutil.ChangefeedIDFromCtx(ctx)
@@ -89,11 +90,6 @@ func NewKafkaDMLProducer(
 					zap.String("changefeed", changefeedID.ID))
 			}
 		}()
-		return nil, cerror.WrapError(cerror.ErrKafkaNewProducer, err)
-	}
-
-	adminClient, err := factory.AdminClient()
-	if err != nil {
 		return nil, cerror.WrapError(cerror.ErrKafkaNewProducer, err)
 	}
 
