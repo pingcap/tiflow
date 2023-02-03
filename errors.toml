@@ -591,9 +591,9 @@ error = '''
 invalid kafka version
 '''
 
-["CDC:ErrKafkaNewSaramaProducer"]
+["CDC:ErrKafkaNewProducer"]
 error = '''
-new sarama producer
+new kafka producer
 '''
 
 ["CDC:ErrKafkaProducerClosed"]
@@ -998,7 +998,7 @@ failed to seek to the beginning of request body
 
 ["CDC:ErrS3StorageAPI"]
 error = '''
-s3 storage api
+external storage api
 '''
 
 ["CDC:ErrScanLockFailed"]

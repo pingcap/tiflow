@@ -50,7 +50,9 @@ func RegisterOpenAPIV2Routes(router *gin.Engine, api OpenAPIV2) {
 	// changefeed apis
 	changefeedGroup := v2.Group("/changefeeds")
 	changefeedGroup.Use(middleware.ForwardToOwnerMiddleware(api.capture))
+	changefeedGroup.GET("/:changefeed_id", api.getChangeFeed)
 	changefeedGroup.POST("", api.createChangefeed)
+	changefeedGroup.GET("", api.listChangeFeeds)
 	changefeedGroup.PUT("/:changefeed_id", api.updateChangefeed)
 	changefeedGroup.DELETE("/:changefeed_id", api.deleteChangefeed)
 	changefeedGroup.GET("/:changefeed_id/meta_info", api.getChangeFeedMetaInfo)
@@ -62,6 +64,12 @@ func RegisterOpenAPIV2Routes(router *gin.Engine, api OpenAPIV2) {
 	captureGroup.Use(middleware.ForwardToOwnerMiddleware(api.capture))
 	captureGroup.POST("/:capture_id/drain", api.drainCapture)
 	captureGroup.GET("", api.listCaptures)
+
+	// processor apis
+	processorGroup := v2.Group("/processors")
+	processorGroup.Use(middleware.ForwardToOwnerMiddleware(api.capture))
+	processorGroup.GET("/:changefeed_id/:capture_id", api.getProcessor)
+	processorGroup.GET("", api.listProcessors)
 
 	verifyTableGroup := v2.Group("/verify_table")
 	verifyTableGroup.Use(middleware.ForwardToOwnerMiddleware(api.capture))

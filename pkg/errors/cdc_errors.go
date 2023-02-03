@@ -240,9 +240,9 @@ var (
 		"invalid partition num %d",
 		errors.RFCCodeText("CDC:ErrKafkaInvalidPartitionNum"),
 	)
-	ErrKafkaNewSaramaProducer = errors.Normalize(
-		"new sarama producer",
-		errors.RFCCodeText("CDC:ErrKafkaNewSaramaProducer"),
+	ErrKafkaNewProducer = errors.Normalize(
+		"new kafka producer",
+		errors.RFCCodeText("CDC:ErrKafkaNewProducer"),
 	)
 	ErrKafkaInvalidClientID = errors.Normalize(
 		"invalid kafka client ID '%s'",
@@ -299,8 +299,8 @@ var (
 		"rawData size %d exceeds maximum file size %d",
 		errors.RFCCodeText("CDC:ErrFileSizeExceed"),
 	)
-	ErrS3StorageAPI = errors.Normalize(
-		"s3 storage api",
+	ErrExternalStorageAPI = errors.Normalize(
+		"external storage api",
 		errors.RFCCodeText("CDC:ErrS3StorageAPI"),
 	)
 	ErrStorageInitialize = errors.Normalize(

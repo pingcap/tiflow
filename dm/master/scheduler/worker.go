@@ -85,7 +85,7 @@ type Worker struct {
 	cli workerrpc.Client // the gRPC client proxy.
 
 	baseInfo ha.WorkerInfo  // the base information of the DM-worker instance.
-	bound    ha.SourceBound // the source bound relationship, null value if not bounded.
+	bound    ha.SourceBound // the source bound relationship, null value if not bound
 	stage    WorkerStage    // the current stage.
 
 	// the source ID from which the worker is pulling relay log. should keep consistent with Scheduler.relayWorkers
@@ -162,7 +162,7 @@ func (w *Worker) Unbound() error {
 	defer w.mu.Unlock()
 	if w.stage != WorkerBound {
 		// caller should not do this.
-		return terror.ErrSchedulerWorkerInvalidTrans.Generatef("can't unbound a worker that is not in bound stage.")
+		return terror.ErrSchedulerWorkerInvalidTrans.Generatef("can't unbind a worker that is not in bound stage.")
 	}
 
 	w.bound = nullBound
@@ -227,8 +227,8 @@ func (w *Worker) Stage() WorkerStage {
 	return w.stage
 }
 
-// Bound returns the current source ID bounded to,
-// returns null value if not bounded.
+// Bound returns the current source ID bound to,
+// returns null value if not be bound.
 func (w *Worker) Bound() ha.SourceBound {
 	w.mu.RLock()
 	defer w.mu.RUnlock()

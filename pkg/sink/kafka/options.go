@@ -30,6 +30,17 @@ import (
 	"go.uber.org/zap"
 )
 
+const (
+	// SASLTypePlaintext represents the plain mechanism
+	SASLTypePlaintext = "PLAIN"
+	// SASLTypeSCRAMSHA256 represents the SCRAM-SHA-256 mechanism.
+	SASLTypeSCRAMSHA256 = "SCRAM-SHA-256"
+	// SASLTypeSCRAMSHA512 represents the SCRAM-SHA-512 mechanism.
+	SASLTypeSCRAMSHA512 = "SCRAM-SHA-512"
+	// SASLTypeGSSAPI represents the gssapi mechanism.
+	SASLTypeGSSAPI = "GSSAPI"
+)
+
 // Options stores user specified configurations
 type Options struct {
 	BrokerEndpoints []string
@@ -340,7 +351,8 @@ var (
 	commonInvalidChar = regexp.MustCompile(`[\?:,"]`)
 )
 
-func newKafkaClientID(role, captureAddr string,
+// NewKafkaClientID generates kafka client id
+func NewKafkaClientID(role, captureAddr string,
 	changefeedID model.ChangeFeedID,
 	configuredClientID string,
 ) (clientID string, err error) {

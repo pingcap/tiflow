@@ -15,6 +15,7 @@ package reader
 
 import (
 	"bufio"
+	"context"
 	"fmt"
 	"io"
 	"os"
@@ -27,7 +28,6 @@ import (
 	"github.com/pingcap/tiflow/pkg/redo"
 	"github.com/pingcap/tiflow/pkg/uuid"
 	"github.com/stretchr/testify/require"
-	"golang.org/x/net/context"
 )
 
 func TestReaderNewReader(t *testing.T) {

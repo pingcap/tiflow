@@ -105,7 +105,7 @@ func (k *ddlSink) WriteDDLEvent(ctx context.Context, ddl *model.DDLEvent) error 
 		zap.String("namespace", k.id.Namespace),
 		zap.String("changefeed", k.id.ID))
 	if partitionRule == dispatcher.PartitionAll {
-		partitionNum, err := k.topicManager.GetPartitionNum(topic)
+		partitionNum, err := k.topicManager.GetPartitionNum(ctx, topic)
 		if err != nil {
 			return errors.Trace(err)
 		}
@@ -118,7 +118,7 @@ func (k *ddlSink) WriteDDLEvent(ctx context.Context, ddl *model.DDLEvent) error 
 	// which will be responsible for automatically creating topics when they don't exist.
 	// If it is not called here and kafka has `auto.create.topics.enable` turned on,
 	// then the auto-created topic will not be created as configured by ticdc.
-	_, err = k.topicManager.GetPartitionNum(topic)
+	_, err = k.topicManager.GetPartitionNum(ctx, topic)
 	if err != nil {
 		return errors.Trace(err)
 	}
@@ -144,7 +144,7 @@ func (k *ddlSink) WriteCheckpointTs(ctx context.Context,
 	// This will be compatible with the old behavior.
 	if len(tables) == 0 {
 		topic := k.eventRouter.GetDefaultTopic()
-		partitionNum, err := k.topicManager.GetPartitionNum(topic)
+		partitionNum, err := k.topicManager.GetPartitionNum(ctx, topic)
 		if err != nil {
 			return errors.Trace(err)
 		}
@@ -159,7 +159,7 @@ func (k *ddlSink) WriteCheckpointTs(ctx context.Context,
 	}
 	topics := k.eventRouter.GetActiveTopics(tableNames)
 	for _, topic := range topics {
-		partitionNum, err := k.topicManager.GetPartitionNum(topic)
+		partitionNum, err := k.topicManager.GetPartitionNum(ctx, topic)
 		if err != nil {
 			return errors.Trace(err)
 		}

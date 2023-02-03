@@ -78,7 +78,7 @@ func NewKafkaDDLProducer(ctx context.Context, client pkafka.Client,
 					zap.String("changefeed", changefeedID.ID))
 			}
 		}()
-		return nil, cerror.WrapError(cerror.ErrKafkaNewSaramaProducer, err)
+		return nil, cerror.WrapError(cerror.ErrKafkaNewProducer, err)
 	}
 	collector := collector.New(changefeedID, util.RoleOwner,
 		adminClient, client.MetricRegistry())

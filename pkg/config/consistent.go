@@ -22,9 +22,10 @@ import (
 )
 
 const (
-	// MinFlushIntervalInMs is the minimum value of flush interval, which is set
-	// to two seconds to reduce the frequency of accessing external storage.
-	MinFlushIntervalInMs = 2000
+	// DefaultFlushIntervalInMs is the default flush interval for redo log.
+	DefaultFlushIntervalInMs = 2000
+	// minFlushIntervalInMs is the minimum flush interval for redo log.
+	minFlushIntervalInMs = 50
 )
 
 // ConsistentConfig represents replication consistency config for a changefeed.
@@ -41,10 +42,14 @@ func (c *ConsistentConfig) ValidateAndAdjust() error {
 		return nil
 	}
 
-	if c.FlushIntervalInMs < MinFlushIntervalInMs {
+	if c.FlushIntervalInMs == 0 {
+		c.FlushIntervalInMs = DefaultFlushIntervalInMs
+	}
+
+	if c.FlushIntervalInMs < minFlushIntervalInMs {
 		return cerror.ErrInvalidReplicaConfig.FastGenByArgs(
 			fmt.Sprintf("The consistent.flush-interval:%d must be equal or greater than %d",
-				c.FlushIntervalInMs, MinFlushIntervalInMs))
+				c.FlushIntervalInMs, minFlushIntervalInMs))
 	}
 
 	uri, err := storage.ParseRawURL(c.Storage)

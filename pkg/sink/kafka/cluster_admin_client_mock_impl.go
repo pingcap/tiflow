@@ -14,6 +14,7 @@
 package kafka
 
 import (
+	"context"
 	"fmt"
 	"strconv"
 
@@ -61,7 +62,7 @@ type topicDetail struct {
 type ClusterAdminClientMockImpl struct {
 	topics map[string]*topicDetail
 	// Cluster controller ID.
-	controllerID  int32
+	controllerID  int
 	brokerConfigs map[string]string
 }
 
@@ -91,7 +92,9 @@ func NewClusterAdminClientMockImpl() *ClusterAdminClientMockImpl {
 }
 
 // GetAllTopicsMeta returns all topics directly.
-func (c *ClusterAdminClientMockImpl) GetAllTopicsMeta() (map[string]TopicDetail, error) {
+func (c *ClusterAdminClientMockImpl) GetAllTopicsMeta(
+	context.Context,
+) (map[string]TopicDetail, error) {
 	topicsDetailsMap := make(map[string]TopicDetail)
 	for topic, detail := range c.topics {
 		topicsDetailsMap[topic] = detail.TopicDetail
@@ -100,17 +103,20 @@ func (c *ClusterAdminClientMockImpl) GetAllTopicsMeta() (map[string]TopicDetail,
 }
 
 // GetAllBrokers implement the ClusterAdminClient interface
-func (c *ClusterAdminClientMockImpl) GetAllBrokers() ([]Broker, error) {
+func (c *ClusterAdminClientMockImpl) GetAllBrokers(context.Context) ([]Broker, error) {
 	return nil, nil
 }
 
 // GetCoordinator implement the ClusterAdminClient interface
-func (c *ClusterAdminClientMockImpl) GetCoordinator() (int32, error) {
+func (c *ClusterAdminClientMockImpl) GetCoordinator(context.Context) (int, error) {
 	return c.controllerID, nil
 }
 
 // GetBrokerConfig implement the ClusterAdminClient interface
-func (c *ClusterAdminClientMockImpl) GetBrokerConfig(configName string) (string, error) {
+func (c *ClusterAdminClientMockImpl) GetBrokerConfig(
+	_ context.Context,
+	configName string,
+) (string, error) {
 	value, ok := c.brokerConfigs[configName]
 	if !ok {
 		return "", errors.ErrKafkaBrokerConfigNotFound.GenWithStack(
@@ -136,6 +142,7 @@ func (c *ClusterAdminClientMockImpl) SetRemainingFetchesUntilTopicVisible(
 
 // GetTopicsMeta implement the ClusterAdminClient interface
 func (c *ClusterAdminClientMockImpl) GetTopicsMeta(
+	_ context.Context,
 	topics []string,
 	_ bool,
 ) (map[string]TopicDetail, error) {
@@ -154,7 +161,11 @@ func (c *ClusterAdminClientMockImpl) GetTopicsMeta(
 }
 
 // CreateTopic adds topic into map.
-func (c *ClusterAdminClientMockImpl) CreateTopic(topic string, detail *TopicDetail, _ bool) error {
+func (c *ClusterAdminClientMockImpl) CreateTopic(
+	_ context.Context,
+	detail *TopicDetail,
+	_ bool,
+) error {
 	if detail.ReplicationFactor > defaultReplicationFactor {
 		return sarama.ErrInvalidReplicationFactor
 	}
@@ -167,10 +178,15 @@ func (c *ClusterAdminClientMockImpl) CreateTopic(topic string, detail *TopicDeta
 		return sarama.ErrPolicyViolation
 	}
 
-	c.topics[topic] = &topicDetail{
+	c.topics[detail.Name] = &topicDetail{
 		TopicDetail: *detail,
 	}
 	return nil
+}
+
+// DeleteTopic deletes a topic, only used for testing.
+func (c *ClusterAdminClientMockImpl) DeleteTopic(topicName string) {
+	delete(c.topics, topicName)
 }
 
 // Close do nothing.

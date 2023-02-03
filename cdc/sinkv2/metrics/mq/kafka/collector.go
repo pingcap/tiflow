@@ -82,16 +82,16 @@ func (m *Collector) Run(ctx context.Context) {
 		case <-ctx.Done():
 			return
 		case <-ticker.C:
-			m.updateBrokers()
+			m.updateBrokers(ctx)
 			m.collectBrokerMetrics()
 			m.collectProducerMetrics()
 		}
 	}
 }
 
-func (m *Collector) updateBrokers() {
+func (m *Collector) updateBrokers(ctx context.Context) {
 	start := time.Now()
-	brokers, err := m.adminClient.GetAllBrokers()
+	brokers, err := m.adminClient.GetAllBrokers(ctx)
 	if err != nil {
 		log.Warn("Get Kafka brokers failed, "+
 			"use historical brokers to collect kafka broker level metrics",

@@ -13,48 +13,17 @@
 
 package kafka
 
-import "github.com/rcrowley/go-metrics"
+import (
+	"github.com/pingcap/tiflow/cdc/model"
+	"github.com/rcrowley/go-metrics"
+)
 
 // ClientMockImpl is a mock implementation of Client interface.
-type ClientMockImpl struct {
-	topics map[string][]int32
-}
+type ClientMockImpl struct{}
 
 // NewClientMockImpl creates a new ClientMockImpl instance.
 func NewClientMockImpl() *ClientMockImpl {
-	topics := make(map[string][]int32)
-	topics[DefaultMockTopicName] = []int32{0, 1, 2}
-	return &ClientMockImpl{
-		topics: topics,
-	}
-}
-
-// Partitions returns the partitions of the given topic.
-func (c *ClientMockImpl) Partitions(topic string) ([]int32, error) {
-	return c.topics[topic], nil
-}
-
-// Topics returns the all topics.
-func (c *ClientMockImpl) Topics() ([]string, error) {
-	var topics []string
-	for topic := range c.topics {
-		topics = append(topics, topic)
-	}
-	return topics, nil
-}
-
-// AddTopic adds a topic.
-func (c *ClientMockImpl) AddTopic(topicName string, partitions int32) {
-	p := make([]int32, partitions)
-	for i := int32(0); i < partitions; i++ {
-		p[i] = i
-	}
-	c.topics[topicName] = p
-}
-
-// DeleteTopic deletes a topic.
-func (c *ClientMockImpl) DeleteTopic(topicName string) {
-	delete(c.topics, topicName)
+	return &ClientMockImpl{}
 }
 
 // SyncProducer creates a sync producer
@@ -63,7 +32,11 @@ func (c *ClientMockImpl) SyncProducer() (SyncProducer, error) {
 }
 
 // AsyncProducer creates an async producer
-func (c *ClientMockImpl) AsyncProducer() (AsyncProducer, error) {
+func (c *ClientMockImpl) AsyncProducer(
+	changefeedID model.ChangeFeedID,
+	closedChan chan struct{},
+	failpointCh chan error,
+) (AsyncProducer, error) {
 	return &saramaAsyncProducer{}, nil
 }
 
