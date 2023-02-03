@@ -39,24 +39,6 @@ type Factory interface {
 	Close() error
 }
 
-//type factory interface {
-//	// NewClusterAdminClient returns kafka admin client
-//	NewClusterAdminClient(ctx context.Context) (ClusterAdminClient, error)
-//
-//	// NewSyncProducer returns kafka sync producer
-//	NewSyncProducer(ctx context.Context) (SyncProducer, error)
-//
-//	// NewAsyncProducer returns kafka async producer
-//	NewAsyncProducer(changefeedID model.ChangeFeedID,
-//		closedChan chan struct{},
-//		failpointCh chan error) (AsyncProducer, error)
-//
-//	// MetricRegistry returns the kafka client metric registry
-//	MetricRegistry() metrics.Registry
-//	// Close closes the client
-//	Close() error
-//}
-
 // SyncProducer is the kafka sync producer
 type SyncProducer interface {
 	// SendMessage produces a given message, and returns only when it either has
@@ -99,43 +81,6 @@ type AsyncProducer interface {
 	// and run tha attached callback. the caller should call this
 	// method in a background goroutine
 	AsyncRunCallback(ctx context.Context) error
-}
-
-type saramaKafkaClient struct {
-	client sarama.Client
-}
-
-func (c *saramaKafkaClient) SyncProducer() (SyncProducer, error) {
-	p, err := sarama.NewSyncProducerFromClient(c.client)
-	if err != nil {
-		return nil, err
-	}
-	return &saramaSyncProducer{producer: p}, nil
-}
-
-func (c *saramaKafkaClient) AsyncProducer(
-	changefeedID model.ChangeFeedID,
-	closedChan chan struct{},
-	failpointCh chan error,
-) (AsyncProducer, error) {
-	p, err := sarama.NewAsyncProducerFromClient(c.client)
-	if err != nil {
-		return nil, err
-	}
-	return &saramaAsyncProducer{
-		producer:     p,
-		changefeedID: changefeedID,
-		closedChan:   closedChan,
-		failpointCh:  failpointCh,
-	}, nil
-}
-
-func (c *saramaKafkaClient) MetricRegistry() metrics.Registry {
-	return c.client.Config().MetricRegistry
-}
-
-func (c *saramaKafkaClient) Close() error {
-	return c.client.Close()
 }
 
 type saramaSyncProducer struct {
@@ -263,7 +208,7 @@ func NewSaramaFactory(ctx context.Context, o *Options) (Factory, error) {
 	if err != nil {
 		return nil, err
 	}
-	return &saramaKafkaClient{client: c}, nil
+	return &saramaFactory{client: c}, nil
 }
 
 // NewMockFactory constructs a Factory with mock implementation.
