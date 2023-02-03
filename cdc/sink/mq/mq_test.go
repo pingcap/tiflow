@@ -24,7 +24,6 @@ import (
 	"github.com/pingcap/tidb/parser/mysql"
 	"github.com/pingcap/tiflow/cdc/model"
 	"github.com/pingcap/tiflow/cdc/sink/codec/open"
-	kafkap "github.com/pingcap/tiflow/cdc/sink/mq/producer/kafka"
 	"github.com/pingcap/tiflow/pkg/config"
 	"github.com/pingcap/tiflow/pkg/retry"
 	"github.com/pingcap/tiflow/pkg/sink/kafka"
@@ -81,14 +80,10 @@ func TestKafkaSink(t *testing.T) {
 	replicaConfig := config.GetDefaultReplicaConfig()
 	errCh := make(chan error, 1)
 
-	kafkap.NewAdminClientImpl = kafka.NewMockAdminClient
-	defer func() {
-		kafkap.NewAdminClientImpl = kafka.NewSaramaAdminClient
-	}()
-
 	changefeedID := model.DefaultChangeFeedID("changefeed-test")
 	require.Nil(t, replicaConfig.ValidateAndAdjust(sinkURI))
-	sink, err := NewKafkaSink(ctx, sinkURI, replicaConfig, errCh, changefeedID)
+	factory, err := kafka.NewMockFactory(context.Background(), nil)
+	sink, err := NewKafkaSink(ctx, sinkURI, replicaConfig, factory, errCh, changefeedID)
 	require.Nil(t, err)
 
 	encoder := sink.encoderBuilder.Build()
@@ -184,16 +179,13 @@ func TestFlushRowChangedEvents(t *testing.T) {
 	replicaConfig := config.GetDefaultReplicaConfig()
 	errCh := make(chan error, 1)
 
-	kafkap.NewAdminClientImpl = kafka.NewMockAdminClient
-	defer func() {
-		kafkap.NewAdminClientImpl = kafka.NewSaramaAdminClient
-	}()
-
 	require.Nil(t, replicaConfig.ValidateAndAdjust(sinkURI))
 
 	changefeedID := model.DefaultChangeFeedID("changefeed-test")
-	sink, err := NewKafkaSink(ctx, sinkURI, replicaConfig, errCh, changefeedID)
-	require.Nil(t, err)
+
+	factory, err := kafka.NewMockFactory(context.Background(), nil)
+	sink, err := NewKafkaSink(ctx, sinkURI, replicaConfig, factory, errCh, changefeedID)
+	require.NoError(t, err)
 
 	// mock kafka broker processes 1 row changed event
 	tableID1 := model.TableID(1)

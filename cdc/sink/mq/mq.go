@@ -378,6 +378,7 @@ func (k *mqSink) asyncFlushToPartitionZero(
 // NewKafkaSink creates a new Kafka mqSink.
 func NewKafkaSink(ctx context.Context, sinkURI *url.URL,
 	replicaConfig *config.ReplicaConfig,
+	factory pkafka.Factory,
 	errCh chan error, changefeedID model.ChangeFeedID,
 ) (*mqSink, error) {
 	topic := strings.TrimFunc(sinkURI.Path, func(r rune) bool {
@@ -390,11 +391,6 @@ func NewKafkaSink(ctx context.Context, sinkURI *url.URL,
 	options := pkafka.NewOptions()
 	if err := options.Apply(sinkURI); err != nil {
 		return nil, cerror.WrapError(cerror.ErrKafkaInvalidConfig, err)
-	}
-
-	factory, err := pkafka.NewSaramaFactory(ctx, options)
-	if err != nil {
-		return nil, cerror.WrapError(cerror.ErrKafkaNewProducer, err)
 	}
 
 	adminClient, err := factory.AdminClient()
