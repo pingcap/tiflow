@@ -110,31 +110,31 @@ func (mr *MockSortEngineMockRecorder) Close() *gomock.Call {
 }
 
 // FetchAllTables mocks base method.
-func (m *MockSortEngine) FetchAllTables(changefeedID model.ChangeFeedID, lowerBound engine.Position) engine.EventIterator {
+func (m *MockSortEngine) FetchAllTables(lowerBound engine.Position) engine.EventIterator {
 	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "FetchAllTables", changefeedID, lowerBound)
+	ret := m.ctrl.Call(m, "FetchAllTables", lowerBound)
 	ret0, _ := ret[0].(engine.EventIterator)
 	return ret0
 }
 
 // FetchAllTables indicates an expected call of FetchAllTables.
-func (mr *MockSortEngineMockRecorder) FetchAllTables(changefeedID, lowerBound interface{}) *gomock.Call {
+func (mr *MockSortEngineMockRecorder) FetchAllTables(lowerBound interface{}) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "FetchAllTables", reflect.TypeOf((*MockSortEngine)(nil).FetchAllTables), changefeedID, lowerBound)
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "FetchAllTables", reflect.TypeOf((*MockSortEngine)(nil).FetchAllTables), lowerBound)
 }
 
 // FetchByTable mocks base method.
-func (m *MockSortEngine) FetchByTable(changefeedID model.ChangeFeedID, span tablepb.Span, lowerBound, upperBound engine.Position) engine.EventIterator {
+func (m *MockSortEngine) FetchByTable(span tablepb.Span, lowerBound, upperBound engine.Position) engine.EventIterator {
 	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "FetchByTable", changefeedID, span, lowerBound, upperBound)
+	ret := m.ctrl.Call(m, "FetchByTable", span, lowerBound, upperBound)
 	ret0, _ := ret[0].(engine.EventIterator)
 	return ret0
 }
 
 // FetchByTable indicates an expected call of FetchByTable.
-func (mr *MockSortEngineMockRecorder) FetchByTable(changefeedID, span, lowerBound, upperBound interface{}) *gomock.Call {
+func (mr *MockSortEngineMockRecorder) FetchByTable(span, lowerBound, upperBound interface{}) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "FetchByTable", reflect.TypeOf((*MockSortEngine)(nil).FetchByTable), changefeedID, span, lowerBound, upperBound)
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "FetchByTable", reflect.TypeOf((*MockSortEngine)(nil).FetchByTable), span, lowerBound, upperBound)
 }
 
 // GetResolvedTs mocks base method.

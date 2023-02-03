@@ -49,14 +49,13 @@ type SortEngine interface {
 	// lowerBound is inclusive and only resolved events can be retrieved.
 	//
 	// NOTE: FetchByTable is always available even if IsTableBased returns false.
-	FetchByTable(changefeedID model.ChangeFeedID, span tablepb.Span,
-		lowerBound, upperBound Position) EventIterator
+	FetchByTable(span tablepb.Span, lowerBound, upperBound Position) EventIterator
 
 	// FetchAllTables creates an iterator to fetch events from all tables.
 	// lowerBound is inclusive and only resolved events can be retrieved.
 	//
 	// NOTE: It's only available if IsTableBased returns false.
-	FetchAllTables(changefeedID model.ChangeFeedID, lowerBound Position) EventIterator
+	FetchAllTables(lowerBound Position) EventIterator
 
 	// CleanByTable tells the engine events of the given table in the given range
 	// (unlimited, upperBound] are committed and not necessary any more.

@@ -139,7 +139,7 @@ func (w *redoWorker) handleTask(ctx context.Context, task *redoTask) (finalErr e
 	}
 
 	maybeEmitBatchEvents := func(allFinished, txnFinished bool) error {
-		// If used memory size exceeds the required limit, do a block require.
+		// If used memory size exceeds the required limit, do a force acquire.
 		memoryHighUsage := availableMemSize < usedMemSize
 		if memoryHighUsage {
 			w.memQuota.forceAcquire(usedMemSize - availableMemSize)

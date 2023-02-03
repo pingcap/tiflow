@@ -72,7 +72,7 @@ func TestNoResolvedTs(t *testing.T) {
 	timer := time.NewTimer(100 * time.Millisecond)
 	select {
 	case ts := <-resolvedTs:
-		iter := s.FetchByTable(model.ChangeFeedID{}, span, engine.Position{}, engine.Position{CommitTs: ts})
+		iter := s.FetchByTable(span, engine.Position{}, engine.Position{CommitTs: ts})
 		event, _, err := iter.Next()
 		require.Nil(t, event)
 		require.Nil(t, err)
@@ -135,8 +135,7 @@ func TestEventFetch(t *testing.T) {
 	timer := time.NewTimer(100 * time.Millisecond)
 	select {
 	case ts := <-resolvedTs:
-		iter := s.FetchByTable(model.ChangeFeedID{}, span,
-			engine.Position{}, engine.Position{CommitTs: ts, StartTs: ts - 1})
+		iter := s.FetchByTable(span, engine.Position{}, engine.Position{CommitTs: ts, StartTs: ts - 1})
 		for {
 			event, pos, err := iter.Next()
 			require.Nil(t, err)

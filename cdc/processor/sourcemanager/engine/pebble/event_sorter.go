@@ -208,10 +208,7 @@ func (s *EventSorter) OnResolve(action func(tablepb.Span, model.Ts)) {
 }
 
 // FetchByTable implements engine.SortEngine.
-func (s *EventSorter) FetchByTable(
-	changefeedID model.ChangeFeedID, span tablepb.Span,
-	lowerBound, upperBound engine.Position,
-) engine.EventIterator {
+func (s *EventSorter) FetchByTable(span tablepb.Span, lowerBound, upperBound engine.Position) engine.EventIterator {
 	s.mu.RLock()
 	state, exists := s.tables.Get(span)
 	s.mu.RUnlock()
@@ -238,7 +235,7 @@ func (s *EventSorter) FetchByTable(
 
 	seekStart := time.Now()
 	iter := iterTable(db, state.uniqueID, span.TableID, lowerBound, upperBound)
-	iterReadDur.WithLabelValues(changefeedID.Namespace, changefeedID.ID, "first").
+	iterReadDur.WithLabelValues(s.changefeedID.Namespace, s.changefeedID.ID, "first").
 		Observe(time.Since(seekStart).Seconds())
 
 	return &EventIter{
@@ -247,12 +244,12 @@ func (s *EventSorter) FetchByTable(
 		iter:    iter,
 		serde:   s.serde,
 
-		nextDuration: iterReadDur.WithLabelValues(changefeedID.Namespace, changefeedID.ID, "next"),
+		nextDuration: iterReadDur.WithLabelValues(s.changefeedID.Namespace, s.changefeedID.ID, "next"),
 	}
 }
 
 // FetchAllTables implements engine.SortEngine.
-func (s *EventSorter) FetchAllTables(_ model.ChangeFeedID, lowerBound engine.Position) engine.EventIterator {
+func (s *EventSorter) FetchAllTables(lowerBound engine.Position) engine.EventIterator {
 	log.Panic("FetchAllTables should never be called",
 		zap.String("namespace", s.changefeedID.Namespace),
 		zap.String("changefeed", s.changefeedID.ID))

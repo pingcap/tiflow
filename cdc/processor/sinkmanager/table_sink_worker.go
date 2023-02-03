@@ -182,7 +182,7 @@ func (w *sinkWorker) handleTask(ctx context.Context, task *sinkTask) (finalErr e
 	}
 
 	maybeEmitAndAdvance := func(allFinished, txnFinished bool) error {
-		// If used memory size exceeds the required limit, do a block require.
+		// If used memory size exceeds the required limit, do a force acquire.
 		memoryHighUsage := availableMem < usedMem
 		if memoryHighUsage {
 			w.sinkMemQuota.forceAcquire(usedMem - availableMem)
