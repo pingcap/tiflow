@@ -42,6 +42,8 @@ type PolymorphicEvent struct {
 	RawKV *RawKVEntry
 	Row   *RowChangedEvent
 
+	MiniRow MiniRowChangedEvent
+
 	finished chan struct{}
 }
 
@@ -201,4 +203,16 @@ func (r ResolvedTs) Greater(r1 ResolvedTs) bool {
 		return r.BatchID > r1.BatchID
 	}
 	return r.Ts > r1.Ts
+}
+
+// MiniRowChangedEvent carries minimum information to generate a RowChangedEvent.
+type MiniRowChangedEvent struct {
+	StartTs  uint64 `json:"start-ts" msg: "start-ts"`
+	CommitTs uint64 `json:"commit-ts" msg: "commit-ts"`
+	// TODO(qupeng): later we can move mounter before sort engine, we need also
+	// serialize TableID and TableTimestamp into messages.
+
+	TableInfo  *TableInfo    `json:"-" msg:"-"`
+	Columns    []interface{} `json:"-" msg:"-"`
+	PreColumns []interface{} `json:"-" msg:"-"`
 }

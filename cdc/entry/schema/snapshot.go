@@ -348,6 +348,14 @@ func (s *Snapshot) PhysicalTableByID(id int64) (*model.TableInfo, bool) {
 	return s.inner.physicalTableByID(id)
 }
 
+// PhysicalTableWithTsByID is just like PhysicalTableByID, but with a timestamp of
+// the latest modification on the table.
+func (s *Snapshot) PhysicalTableWithTsByID(id int64) (*model.TableInfo, uint64, bool) {
+	s.rwlock.RLock()
+	defer s.rwlock.RUnlock()
+	return s.inner.physicalTableWithTsByID(id)
+}
+
 // SchemaIDByName gets the schema id from the given schema name.
 func (s *Snapshot) SchemaIDByName(schema string) (int64, bool) {
 	s.rwlock.RLock()
@@ -607,11 +615,17 @@ func (s *snapshot) schemaByID(id int64) (val *timodel.DBInfo, ok bool) {
 }
 
 func (s *snapshot) physicalTableByID(id int64) (tableInfo *model.TableInfo, ok bool) {
+	tableInfo, _, ok = s.physicalTableWithTsByID(id)
+	return
+}
+
+func (s *snapshot) physicalTableWithTsByID(id int64) (tableInfo *model.TableInfo, ts uint64, ok bool) {
 	tag := negative(s.currentTs)
 	start := versionedID{id: id, tag: tag, target: nil}
 	end := versionedID{id: id, tag: negative(uint64(0)), target: nil}
 	s.tables.AscendRange(start, end, func(i versionedID) bool {
 		tableInfo = targetToTableInfo(i.target)
+		ts = negative(i.tag)
 		ok = tableInfo != nil
 		return false
 	})
@@ -619,6 +633,7 @@ func (s *snapshot) physicalTableByID(id int64) (tableInfo *model.TableInfo, ok b
 		// Try partition, it could be a partition table.
 		s.partitions.AscendRange(start, end, func(i versionedID) bool {
 			tableInfo = targetToTableInfo(i.target)
+			ts = negative(i.tag)
 			ok = tableInfo != nil
 			return false
 		})

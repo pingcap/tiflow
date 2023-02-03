@@ -172,6 +172,7 @@ func decodeRow(b []byte, recordID kv.Handle, tableInfo *model.TableInfo, tz *tim
 	handleColIDs, handleColFt, reqCols := tableInfo.GetRowColInfos()
 	var datums map[int64]types.Datum
 	var err error
+	// TODO(qupeng): pingcap/tiflow#8168 shows allocating utilizes about 6% CPU, more than the decode logic.
 	if rowcodec.IsNewFormat(b) {
 		datums, err = decodeRowV2(b, reqCols, tz)
 	} else {

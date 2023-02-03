@@ -314,11 +314,12 @@ func testMounterDisableOldValue(t *testing.T, tc struct {
 		var rows int
 		walkTableSpanInStore(t, store, tableID, func(key []byte, value []byte) {
 			rawKV := f(key, value)
-			row, err := mounter.unmarshalAndMountRowChanged(ctx, rawKV)
+			tableMeta, err := mounter.unmarshalAndMountRowChanged(ctx, rawKV)
 			require.Nil(t, err)
-			if row == nil {
+			if tableMeta == nil {
 				return
 			}
+			row := &tableMeta.buffer
 			rows++
 			require.Equal(t, row.Table.Table, tc.tableName)
 			require.Equal(t, row.Table.Schema, "test")
@@ -1189,8 +1190,10 @@ func TestBuildTableInfo(t *testing.T) {
 		originTI, err := ddl.BuildTableInfoFromAST(stmt.(*ast.CreateTableStmt))
 		require.NoError(t, err)
 		cdcTableInfo := model.WrapTableInfo(0, "test", 0, originTI)
-		cols, _, err := datum2Column(cdcTableInfo, map[int64]types.Datum{}, true)
+		tableMeta := newTableMetaValue(0, cdcTableInfo)
+		err = tableMeta.datum2Column(false, make(map[int64]types.Datum), true)
 		require.NoError(t, err)
+		cols := tableMeta.buffer.Columns
 		recoveredTI := model.BuildTiDBTableInfo(cols, cdcTableInfo.IndexColumnsOffset)
 		handle := sqlmodel.GetWhereHandle(recoveredTI, recoveredTI)
 		require.NotNil(t, handle.UniqueNotNullIdx)

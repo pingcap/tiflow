@@ -67,13 +67,48 @@ type Mounter interface {
 }
 
 type mounter struct {
-	schemaStorage                SchemaStorage
-	tz                           *time.Location
-	enableOldValue               bool
-	changefeedID                 model.ChangeFeedID
-	filter                       pfilter.Filter
+	schemaStorage  SchemaStorage
+	tz             *time.Location
+	enableOldValue bool
+	changefeedID   model.ChangeFeedID
+	filter         pfilter.Filter
+
+	tableCache map[tableMetaKey]*tableMetaValue
+
 	metricTotalRows              prometheus.Gauge
 	metricIgnoredDMLEventCounter prometheus.Counter
+}
+
+type tableMetaKey struct {
+	physicalID int64
+	timestamp  uint64
+}
+
+type tableMetaValue struct {
+	physicalID int64
+	tableInfo  *model.TableInfo
+
+	// These fields are used to construct a model.RowChangedEvent in place.
+	buffer     model.RowChangedEvent
+	columns    []model.Column
+	preColumns []model.Column
+	rawRow     model.RowChangedDatums
+
+	// To cache default values.
+	colDefaults map[int64]columnDefaultOrZeroValue
+}
+
+type columnDefaultOrZeroValue struct {
+	d    types.Datum
+	v    interface{}
+	size int
+	warn string
+	err  error
+}
+
+type RowChangedEventBuilder struct {
+	meta      *tableMetaValue
+	colValues []interface{}
 }
 
 // NewMounter creates a mounter
@@ -88,33 +123,59 @@ func NewMounter(schemaStorage SchemaStorage,
 		changefeedID:   changefeedID,
 		enableOldValue: enableOldValue,
 		filter:         filter,
+		tz:             tz,
+
+		tableCache: make(map[tableMetaKey]*tableMetaValue),
+
 		metricTotalRows: totalRowsCountGauge.
 			WithLabelValues(changefeedID.Namespace, changefeedID.ID),
 		metricIgnoredDMLEventCounter: ignoredDMLEventCounter.
 			WithLabelValues(changefeedID.Namespace, changefeedID.ID),
-		tz: tz,
 	}
 }
 
 // DecodeEvent decode kv events using ddl puller's schemaStorage
 // this method could block indefinitely if the DDL puller is lagging.
+//
+// It will fill event.MiniRow to construct a model.RowChangedEvent when necessary.
 func (m *mounter) DecodeEvent(ctx context.Context, event *model.PolymorphicEvent) error {
 	m.metricTotalRows.Inc()
 	if event.IsResolved() {
 		return nil
 	}
-	row, err := m.unmarshalAndMountRowChanged(ctx, event.RawKV)
+	tableMeta, err := m.unmarshalAndMountRowChanged(ctx, event.RawKV)
 	if err != nil {
 		return errors.Trace(err)
 	}
+	if tableMeta != nil {
+		tableInfo := tableMeta.tableInfo
+		row := &tableMeta.buffer
 
-	event.Row = row
+		event.MiniRow.StartTs = row.StartTs
+		event.MiniRow.CommitTs = row.CommitTs
+		event.MiniRow.TableInfo = tableInfo
+		if len(row.Columns) > 0 {
+			event.MiniRow.Columns = make([]interface{}, len(row.Columns))
+			for i, col := range row.Columns {
+				event.MiniRow.Columns[i] = col.Value
+			}
+		}
+		if len(row.PreColumns) > 0 {
+			event.MiniRow.PreColumns = make([]interface{}, len(row.PreColumns))
+			for i, col := range row.PreColumns {
+				event.MiniRow.PreColumns[i] = col.Value
+			}
+		}
+	} else {
+		// The event has been ignored or filtered out.
+		// TODO(qupeng): clear useless values.
+	}
 	event.RawKV.Value = nil
 	event.RawKV.OldValue = nil
 	return nil
 }
 
-func (m *mounter) unmarshalAndMountRowChanged(ctx context.Context, raw *model.RawKVEntry) (*model.RowChangedEvent, error) {
+func (m *mounter) unmarshalAndMountRowChanged(ctx context.Context, raw *model.RawKVEntry) (*tableMetaValue, error) {
 	if !bytes.HasPrefix(raw.Key, tablePrefix) {
 		return nil, nil
 	}
@@ -140,12 +201,12 @@ func (m *mounter) unmarshalAndMountRowChanged(ctx context.Context, raw *model.Ra
 	if err != nil {
 		return nil, errors.Trace(err)
 	}
-	row, err := func() (*model.RowChangedEvent, error) {
+	tableMeta, err := func() (*tableMetaValue, error) {
 		if snap.IsIneligibleTableID(physicalTableID) {
 			log.Debug("skip the DML of ineligible table", zap.Uint64("ts", raw.CRTs), zap.Int64("tableID", physicalTableID))
 			return nil, nil
 		}
-		tableInfo, exist := snap.PhysicalTableByID(physicalTableID)
+		tableInfo, ts, exist := snap.PhysicalTableWithTsByID(physicalTableID)
 		if !exist {
 			if snap.IsTruncateTableID(physicalTableID) {
 				log.Debug("skip the DML of truncated table", zap.Uint64("ts", raw.CRTs), zap.Int64("tableID", physicalTableID))
@@ -161,12 +222,13 @@ func (m *mounter) unmarshalAndMountRowChanged(ctx context.Context, raw *model.Ra
 			if rowKV == nil {
 				return nil, nil
 			}
-			row, rawRow, err := m.mountRowKVEntry(tableInfo, rowKV, raw.ApproximateDataSize())
-			if err != nil {
+
+			tableMeta := m.fillTableMeta(physicalTableID, ts, tableInfo)
+			if err = m.mountRowKVEntry(tableMeta, rowKV, raw.ApproximateDataSize()); err != nil {
 				return nil, err
 			}
 			// We need to filter a row here because we need its tableInfo.
-			ignore, err := m.filter.ShouldIgnoreDMLEvent(row, rawRow, tableInfo)
+			ignore, err := m.filter.ShouldIgnoreDMLEvent(&tableMeta.buffer, tableMeta.rawRow, tableInfo)
 			if err != nil {
 				return nil, err
 			}
@@ -176,7 +238,7 @@ func (m *mounter) unmarshalAndMountRowChanged(ctx context.Context, raw *model.Ra
 				m.metricIgnoredDMLEventCounter.Inc()
 				return nil, nil
 			}
-			return row, nil
+			return tableMeta, nil
 		}
 		return nil, nil
 	}()
@@ -184,7 +246,7 @@ func (m *mounter) unmarshalAndMountRowChanged(ctx context.Context, raw *model.Ra
 		log.Error("failed to mount and unmarshals entry, start to print debug info", zap.Error(err))
 		snap.PrintStatus(log.Error)
 	}
-	return row, err
+	return tableMeta, err
 }
 
 func (m *mounter) unmarshalRowKVEntry(tableInfo *model.TableInfo, rawKey []byte, rawValue []byte, rawOldValue []byte, base baseKVEntry) (*rowKVEntry, error) {
@@ -223,6 +285,71 @@ func (m *mounter) unmarshalRowKVEntry(tableInfo *model.TableInfo, rawKey []byte,
 		RowExist:    rowExist,
 		PreRowExist: preRowExist,
 	}, nil
+}
+
+func (m *mounter) fillTableMeta(physicalID int64, timestamp uint64, tableInfo *model.TableInfo) *tableMetaValue {
+	key := tableMetaKey{physicalID: physicalID, timestamp: timestamp}
+	if value, ok := m.tableCache[key]; ok {
+		return value
+	}
+
+	value := newTableMetaValue(physicalID, tableInfo)
+	m.tableCache[key] = value
+	return value
+}
+
+func newTableMetaValue(physicalID int64, tableInfo *model.TableInfo) *tableMetaValue {
+	_, _, colInfos := tableInfo.GetRowColInfos()
+
+	value := &tableMetaValue{
+		physicalID: physicalID,
+		tableInfo:  tableInfo,
+		// Initialize unmutable fields of the buffer model.RowChangedEvent.
+		buffer: model.RowChangedEvent{
+			Table: &model.TableName{
+				Schema:      tableInfo.TableName.Schema,
+				Table:       tableInfo.TableName.Table,
+				TableID:     physicalID,
+				IsPartition: tableInfo.GetPartitionInfo() != nil,
+			},
+			ColInfos:     colInfos,
+			TableInfo:    tableInfo,
+			Columns:      make([]*model.Column, 0, len(tableInfo.RowColumnsOffset)),
+			PreColumns:   make([]*model.Column, 0, len(tableInfo.RowColumnsOffset)),
+			IndexColumns: tableInfo.IndexColumnsOffset,
+		},
+	}
+
+	// Allocate model.Columns in a continuous space.
+	value.columns = make([]model.Column, len(tableInfo.RowColumnsOffset))
+	value.preColumns = make([]model.Column, len(tableInfo.RowColumnsOffset))
+	for _, colInfo := range tableInfo.Columns {
+		if !model.IsColCDCVisible(colInfo) {
+			log.Debug("skip the column which is not visible",
+				zap.String("table", tableInfo.Name.O), zap.String("column", colInfo.Name.O))
+			continue
+		}
+		offset := tableInfo.RowColumnsOffset[colInfo.ID]
+		value.columns[offset] = model.Column{
+			Name:    colInfo.Name.O,
+			Type:    colInfo.GetType(),
+			Charset: colInfo.GetCharset(),
+			Default: getDDLDefaultDefinition(colInfo),
+			Flag:    tableInfo.ColumnsFlag[colInfo.ID],
+		}
+		value.preColumns[offset] = model.Column{
+			Name:    colInfo.Name.O,
+			Type:    colInfo.GetType(),
+			Charset: colInfo.GetCharset(),
+			Default: getDDLDefaultDefinition(colInfo),
+			Flag:    tableInfo.ColumnsFlag[colInfo.ID],
+		}
+	}
+
+	value.rawRow.RowDatums = make([]types.Datum, len(tableInfo.RowColumnsOffset))
+	value.rawRow.PreRowDatums = make([]types.Datum, len(tableInfo.RowColumnsOffset))
+	value.colDefaults = make(map[int64]columnDefaultOrZeroValue)
+	return value
 }
 
 // IsLegacyFormatJob returns true if the job is from the legacy DDL list key.
@@ -271,61 +398,93 @@ func parseJob(v []byte, startTs, CRTs uint64) (*timodel.Job, error) {
 	return job, nil
 }
 
-func datum2Column(tableInfo *model.TableInfo, datums map[int64]types.Datum, fillWithDefaultValue bool) ([]*model.Column, []types.Datum, error) {
-	cols := make([]*model.Column, len(tableInfo.RowColumnsOffset))
-	rawCols := make([]types.Datum, len(tableInfo.RowColumnsOffset))
-	for _, colInfo := range tableInfo.Columns {
-		colSize := 0
+// datum2Column reads columns from `datums`, and fill them into v.buffer.
+func (v *tableMetaValue) datum2Column(isPreValue bool, datums map[int64]types.Datum, fillWithDefaultValue bool) error {
+	var cols []*model.Column
+	var colsBuffer []model.Column
+	var rawCols []types.Datum
+	if isPreValue {
+		for i := 0; i < len(v.tableInfo.RowColumnsOffset); i++ {
+			v.buffer.PreColumns = append(v.buffer.PreColumns, nil)
+			v.rawRow.PreRowDatums = append(v.rawRow.PreRowDatums, types.Datum{})
+		}
+		cols = v.buffer.PreColumns
+		colsBuffer = v.preColumns
+		rawCols = v.rawRow.PreRowDatums
+	} else {
+		for i := 0; i < len(v.tableInfo.RowColumnsOffset); i++ {
+			v.buffer.Columns = append(v.buffer.Columns, nil)
+			v.rawRow.RowDatums = append(v.rawRow.RowDatums, types.Datum{})
+		}
+		cols = v.buffer.Columns
+		colsBuffer = v.columns
+		rawCols = v.rawRow.RowDatums
+	}
+
+	for _, colInfo := range v.tableInfo.Columns {
 		if !model.IsColCDCVisible(colInfo) {
-			log.Debug("skip the column which is not visible",
-				zap.String("table", tableInfo.Name.O), zap.String("column", colInfo.Name.O))
 			continue
 		}
-		colName := colInfo.Name.O
-		colDatums, exist := datums[colInfo.ID]
-		var colValue interface{}
+
+		offset := v.tableInfo.RowColumnsOffset[colInfo.ID]
+		cols[offset] = &colsBuffer[offset]
+
+		colDatum, exist := datums[colInfo.ID]
 		if !exist && !fillWithDefaultValue {
 			log.Debug("column value is not found",
-				zap.String("table", tableInfo.Name.O), zap.String("column", colName))
+				zap.String("table", v.tableInfo.Name.O), zap.String("column", colInfo.Name.O))
 			continue
 		}
-		var err error
-		var warn string
+
+		var colValue interface{}
 		var size int
+		var warn string
+		var err error
 		if exist {
-			colValue, size, warn, err = formatColVal(colDatums, colInfo)
+			colValue, size, warn, err = formatColVal(colDatum, colInfo)
 		} else if fillWithDefaultValue {
-			colDatums, colValue, size, warn, err = getDefaultOrZeroValue(colInfo)
+			if def, ok := v.colDefaults[colInfo.ID]; ok {
+				colDatum = def.d
+				colValue = def.v
+				size = def.size
+				warn = def.warn
+				err = def.err
+			} else {
+				colDatum, colValue, size, warn, err = getDefaultOrZeroValue(colInfo)
+				v.colDefaults[colInfo.ID] = columnDefaultOrZeroValue{
+					d: colDatum, v: colValue, size: size, warn: warn, err: err,
+				}
+			}
 		}
 		if err != nil {
-			return nil, nil, errors.Trace(err)
+			return errors.Trace(err)
 		}
 		if warn != "" {
-			log.Warn(warn, zap.String("table", tableInfo.TableName.String()), zap.String("column", colInfo.Name.String()))
+			log.Warn(warn,
+				zap.String("table", v.tableInfo.TableName.String()),
+				zap.String("column", colInfo.Name.String()))
 		}
-		defaultValue := getDDLDefaultDefinition(colInfo)
-		colSize += size
-		rawCols[tableInfo.RowColumnsOffset[colInfo.ID]] = colDatums
-		cols[tableInfo.RowColumnsOffset[colInfo.ID]] = &model.Column{
-			Name:    colName,
-			Type:    colInfo.GetType(),
-			Charset: colInfo.GetCharset(),
-			Value:   colValue,
-			Default: defaultValue,
-			Flag:    tableInfo.ColumnsFlag[colInfo.ID],
-			// ApproximateBytes = column data size + column struct size
-			ApproximateBytes: colSize + sizeOfEmptyColumn,
-		}
+
+		rawCols[offset] = colDatum
+		cols[offset].Value = colValue
+		// ApproximateBytes = column data size + column struct size
+		cols[offset].ApproximateBytes = size + sizeOfEmptyColumn
 	}
-	return cols, rawCols, nil
+	return nil
 }
 
-func (m *mounter) mountRowKVEntry(tableInfo *model.TableInfo, row *rowKVEntry, dataSize int64) (*model.RowChangedEvent, model.RowChangedDatums, error) {
-	var err error
-	// Decode previous columns.
-	var preCols []*model.Column
-	var preRawCols []types.Datum
-	var rawRow model.RowChangedDatums
+func (m *mounter) mountRowKVEntry(tableMeta *tableMetaValue, row *rowKVEntry, dataSize int64) (err error) {
+	tableMeta.buffer.StartTs = row.StartTs
+	tableMeta.buffer.CommitTs = row.CRTs
+	tableMeta.buffer.RowID = row.IntRowID
+	tableMeta.buffer.ApproximateDataSize = dataSize
+
+	// Clear internal buffers.
+	tableMeta.buffer.Columns = tableMeta.buffer.Columns[:0]
+	tableMeta.buffer.PreColumns = tableMeta.buffer.PreColumns[:0]
+	tableMeta.rawRow.RowDatums = tableMeta.rawRow.RowDatums[:0]
+	tableMeta.rawRow.PreRowDatums = tableMeta.rawRow.PreRowDatums[:0]
+
 	// Since we now always use old value internally,
 	// we need to control the output(sink will use the PreColumns field to determine whether to output old value).
 	// Normally old value is output when only enableOldValue is on,
@@ -334,55 +493,30 @@ func (m *mounter) mountRowKVEntry(tableInfo *model.TableInfo, row *rowKVEntry, d
 	if row.PreRowExist {
 		// FIXME(leoppro): using pre table info to mounter pre column datum
 		// the pre column and current column in one event may using different table info
-		preCols, preRawCols, err = datum2Column(tableInfo, row.PreRow, m.enableOldValue)
+		err = tableMeta.datum2Column(true, row.PreRow, m.enableOldValue)
 		if err != nil {
-			return nil, rawRow, errors.Trace(err)
+			return errors.Trace(err)
 		}
 
 		// NOTICE: When the old Value feature is off,
 		// the Delete event only needs to keep the handle key column.
 		if row.Delete && !m.enableOldValue {
-			for i := range preCols {
-				col := preCols[i]
+			for i, col := range tableMeta.buffer.PreColumns {
 				if col != nil && !col.Flag.IsHandleKey() {
-					preCols[i] = nil
+					tableMeta.buffer.PreColumns[i] = nil
 				}
 			}
 		}
 	}
 
-	var cols []*model.Column
-	var rawCols []types.Datum
 	if row.RowExist {
-		cols, rawCols, err = datum2Column(tableInfo, row.Row, true)
+		err = tableMeta.datum2Column(false, row.Row, true)
 		if err != nil {
-			return nil, rawRow, errors.Trace(err)
+			return errors.Trace(err)
 		}
 	}
 
-	schemaName := tableInfo.TableName.Schema
-	tableName := tableInfo.TableName.Table
-
-	_, _, colInfos := tableInfo.GetRowColInfos()
-	rawRow.PreRowDatums = preRawCols
-	rawRow.RowDatums = rawCols
-	return &model.RowChangedEvent{
-		StartTs:  row.StartTs,
-		CommitTs: row.CRTs,
-		RowID:    row.IntRowID,
-		Table: &model.TableName{
-			Schema:      schemaName,
-			Table:       tableName,
-			TableID:     row.PhysicalTableID,
-			IsPartition: tableInfo.GetPartitionInfo() != nil,
-		},
-		ColInfos:            colInfos,
-		TableInfo:           tableInfo,
-		Columns:             cols,
-		PreColumns:          preCols,
-		IndexColumns:        tableInfo.IndexColumnsOffset,
-		ApproximateDataSize: dataSize,
-	}, rawRow, nil
+	return nil
 }
 
 var emptyBytes = make([]byte, 0)
