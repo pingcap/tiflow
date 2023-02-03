@@ -269,12 +269,6 @@ func (k *producer) run(ctx context.Context) error {
 	return k.asyncProducer.AsyncRunCallback(ctx)
 }
 
-// NewAdminClientImpl specifies the build method for the admin client.
-var NewAdminClientImpl kafka.ClusterAdminClientCreator = kafka.NewSaramaAdminClient
-
-// NewClientImpl specifies the build method for the  client.
-var NewClientImpl kafka.ClientCreator = kafka.NewSaramaClient
-
 // NewProducer creates a kafka producer
 func NewProducer(
 	ctx context.Context,

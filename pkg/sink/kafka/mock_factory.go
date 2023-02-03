@@ -21,6 +21,10 @@ import (
 // MockFactory is a mock implementation of Factory interface.
 type MockFactory struct{}
 
+func (c *MockFactory) AdminClient() (ClusterAdminClient, error) {
+	return nil, nil
+}
+
 // SyncProducer creates a sync producer
 func (c *MockFactory) SyncProducer() (SyncProducer, error) {
 	return &saramaSyncProducer{}, nil

@@ -27,6 +27,8 @@ import (
 
 // Factory is a generic Kafka client.
 type Factory interface {
+	// AdminClient return kafka cluster admin client
+	AdminClient() (ClusterAdminClient, error)
 	// SyncProducer creates a sync producer to writer message to kafka
 	SyncProducer() (SyncProducer, error)
 	// AsyncProducer creates an async producer to writer message to kafka
@@ -194,9 +196,6 @@ func (p *saramaAsyncProducer) AsyncSend(ctx context.Context,
 	}
 	return nil
 }
-
-// FactoryCreator defines the type of factor creator.
-type FactoryCreator func(context.Context, *Options) (Factory, error)
 
 // NewSaramaFactory constructs a Factory with sarama implementation.
 func NewSaramaFactory(ctx context.Context, o *Options) (Factory, error) {

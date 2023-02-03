@@ -392,7 +392,12 @@ func NewKafkaSink(ctx context.Context, sinkURI *url.URL,
 		return nil, cerror.WrapError(cerror.ErrKafkaInvalidConfig, err)
 	}
 
-	adminClient, err := kafka.NewAdminClientImpl(ctx, options)
+	factory, err := pkafka.NewSaramaFactory(ctx, options)
+	if err != nil {
+		return nil, cerror.WrapError(cerror.ErrKafkaNewProducer, err)
+	}
+
+	adminClient, err := factory.AdminClient()
 	if err != nil {
 		return nil, cerror.WrapError(cerror.ErrKafkaNewProducer, err)
 	}
@@ -426,11 +431,6 @@ func NewKafkaSink(ctx context.Context, sinkURI *url.URL,
 		return nil, cerror.WrapError(cerror.ErrKafkaInvalidConfig, err)
 	}
 
-	client, err := kafka.NewClientImpl(ctx, options)
-	if err != nil {
-		return nil, cerror.WrapError(cerror.ErrKafkaNewProducer, err)
-	}
-
 	topicManager, err := manager.NewKafkaTopicManager(
 		ctx,
 		adminClient,
@@ -446,7 +446,7 @@ func NewKafkaSink(ctx context.Context, sinkURI *url.URL,
 
 	sProducer, err := kafka.NewProducer(
 		ctx,
-		client,
+		factory,
 		adminClient,
 		options,
 		errCh,

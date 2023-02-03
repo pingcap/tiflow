@@ -35,8 +35,7 @@ func NewKafkaDDLSink(
 	ctx context.Context,
 	sinkURI *url.URL,
 	replicaConfig *config.ReplicaConfig,
-	adminClientCreator pkafka.ClusterAdminClientCreator,
-	clientCreator pkafka.ClientCreator,
+	factory pkafka.Factory,
 	producerCreator ddlproducer.Factory,
 ) (_ *ddlSink, err error) {
 	topic, err := util.GetTopic(sinkURI)
@@ -49,7 +48,7 @@ func NewKafkaDDLSink(
 		return nil, cerror.WrapError(cerror.ErrKafkaInvalidConfig, err)
 	}
 
-	adminClient, err := adminClientCreator(ctx, options)
+	adminClient, err := factory.AdminClient(ctx, options)
 	if err != nil {
 		return nil, cerror.WrapError(cerror.ErrKafkaNewProducer, err)
 	}
@@ -73,15 +72,15 @@ func NewKafkaDDLSink(
 		return nil, errors.Trace(err)
 	}
 
-	client, err := clientCreator(ctx, options)
-	if err != nil {
-		return nil, cerror.WrapError(cerror.ErrKafkaNewProducer, err)
-	}
+	//client, err := factory.(ctx, options)
+	//if err != nil {
+	//	return nil, cerror.WrapError(cerror.ErrKafkaNewProducer, err)
+	//}
 
 	start := time.Now()
 	log.Info("Try to create a DDL sink producer",
 		zap.Any("options", options))
-	p, err := producerCreator(ctx, client, adminClient)
+	p, err := producerCreator(ctx, factory, adminClient)
 	log.Info("DDL sink producer client created", zap.Duration("duration", time.Since(start)))
 	if err != nil {
 		return nil, cerror.WrapError(cerror.ErrKafkaNewProducer, err)

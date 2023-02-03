@@ -24,6 +24,10 @@ type saramaFactory struct {
 	client sarama.Client
 }
 
+func (f *saramaFactory) AdminClient() (ClusterAdminClient, error) {
+	return nil, nil
+}
+
 func (f *saramaFactory) SyncProducer() (SyncProducer, error) {
 	p, err := sarama.NewSyncProducerFromClient(f.client)
 	if err != nil {
