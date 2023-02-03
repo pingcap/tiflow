@@ -74,15 +74,15 @@ func TestSyncBroadcastMessage(t *testing.T) {
 	ctx, cancel := context.WithCancel(context.Background())
 	options := getOptions(leader.Addr())
 	options.MaxMessages = 1
-	_, err := kafka.NewSaramaConfig(context.Background(), options)
-	require.Nil(t, err)
 
-	client, err := kafka.NewSaramaClient(ctx, options)
-	require.Nil(t, err)
-	adminClient, err := kafka.NewMockAdminClient(ctx, options)
-	require.Nil(t, err)
-	p, err := NewKafkaDDLProducer(ctx, client, adminClient)
-	require.Nil(t, err)
+	factory, err := kafka.NewMockFactory(ctx, options)
+	require.NoError(t, err)
+
+	adminClient, err := factory.AdminClient()
+	require.NoError(t, err)
+
+	p, err := NewKafkaDDLProducer(ctx, factory, adminClient)
+	require.NoError(t, err)
 
 	err = p.SyncBroadcastMessage(ctx, topic,
 		kafka.DefaultMockPartitionNum, &common.Message{Ts: 417318403368288260})
@@ -103,16 +103,15 @@ func TestSyncSendMessage(t *testing.T) {
 
 	ctx, cancel := context.WithCancel(context.Background())
 	options := getOptions(leader.Addr())
-	saramaConfig, err := kafka.NewSaramaConfig(context.Background(), options)
-	require.Nil(t, err)
-	saramaConfig.Producer.Flush.MaxMessages = 1
 
-	client, err := kafka.NewSaramaClient(ctx, options)
-	require.Nil(t, err)
-	adminClient, err := kafka.NewMockAdminClient(ctx, options)
-	require.Nil(t, err)
-	p, err := NewKafkaDDLProducer(ctx, client, adminClient)
-	require.Nil(t, err)
+	factory, err := kafka.NewMockFactory(ctx, options)
+	require.NoError(t, err)
+
+	adminClient, err := factory.AdminClient()
+	require.NoError(t, err)
+
+	p, err := NewKafkaDDLProducer(ctx, factory, adminClient)
+	require.NoError(t, err)
 
 	err = p.SyncSendMessage(ctx, topic, 0, &common.Message{Ts: 417318403368288260})
 	require.Nil(t, err)
@@ -134,16 +133,15 @@ func TestProducerSendMsgFailed(t *testing.T) {
 	options := getOptions(leader.Addr())
 	options.MaxMessages = 1
 	options.MaxMessageBytes = 1
-	_, err := kafka.NewSaramaConfig(context.Background(), options)
-	require.Nil(t, err)
-	// This will make the first send failed.
-	client, err := kafka.NewSaramaClient(ctx, options)
-	require.Nil(t, err)
 
-	adminClient, err := kafka.NewMockAdminClient(ctx, options)
-	require.Nil(t, err)
-	p, err := NewKafkaDDLProducer(ctx, client, adminClient)
-	require.Nil(t, err)
+	factory, err := kafka.NewMockFactory(ctx, options)
+	require.NoError(t, err)
+
+	adminClient, err := factory.AdminClient()
+	require.NoError(t, err)
+
+	p, err := NewKafkaDDLProducer(ctx, factory, adminClient)
+	require.NoError(t, err)
 	defer p.Close()
 
 	err = p.SyncSendMessage(ctx, topic, 0, &common.Message{Ts: 417318403368288260})
@@ -159,16 +157,15 @@ func TestProducerDoubleClose(t *testing.T) {
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 	options := getOptions(leader.Addr())
-	saramaConfig, err := kafka.NewSaramaConfig(context.Background(), options)
-	require.Nil(t, err)
-	saramaConfig.Producer.Flush.MaxMessages = 1
 
-	client, err := kafka.NewSaramaClient(ctx, options)
-	require.Nil(t, err)
-	adminClient, err := kafka.NewMockAdminClient(ctx, options)
-	require.Nil(t, err)
-	p, err := NewKafkaDDLProducer(ctx, client, adminClient)
-	require.Nil(t, err)
+	factory, err := kafka.NewMockFactory(ctx, options)
+	require.NoError(t, err)
+
+	adminClient, err := factory.AdminClient()
+	require.NoError(t, err)
+
+	p, err := NewKafkaDDLProducer(ctx, factory, adminClient)
+	require.NoError(t, err)
 
 	p.Close()
 	p.Close()

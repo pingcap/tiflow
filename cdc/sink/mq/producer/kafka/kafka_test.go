@@ -66,30 +66,25 @@ func TestNewSaramaProducer(t *testing.T) {
 	options.AutoCreate = false
 	options.BrokerEndpoints = strings.Split(leader.Addr(), ",")
 
-	NewAdminClientImpl = kafka.NewMockAdminClient
-	defer func() {
-		NewAdminClientImpl = kafka.NewSaramaAdminClient
-	}()
-
 	ctx = contextutil.PutRoleInCtx(ctx, util.RoleTester)
 	options.MaxMessages = 1
-	_, err := kafka.NewSaramaConfig(ctx, options)
-	require.Nil(t, err)
-	client, err := NewClientImpl(ctx, options)
-	require.Nil(t, err)
-	adminClient, err := NewAdminClientImpl(ctx, options)
-	require.Nil(t, err)
+
+	factory, err := kafka.NewMockFactory(ctx, options)
+	require.NoError(t, err)
+
+	adminClient, err := factory.AdminClient()
+	require.NoError(t, err)
 
 	changefeedID := model.DefaultChangeFeedID("changefeed-test")
 	producer, err := NewProducer(
 		ctx,
-		client,
+		factory,
 		adminClient,
 		options,
 		errCh,
 		changefeedID,
 	)
-	require.Nil(t, err)
+	require.NoError(t, err)
 
 	for i := 0; i < 100; i++ {
 		err = producer.AsyncSendMessage(ctx, topic, int32(0), &common.Message{
@@ -381,31 +376,21 @@ func TestProducerSendMessageFailed(t *testing.T) {
 	options.PartitionNum = int32(2)
 	options.AutoCreate = false
 	options.BrokerEndpoints = strings.Split(leader.Addr(), ",")
-
-	NewAdminClientImpl = kafka.NewMockAdminClient
-	defer func() {
-		NewAdminClientImpl = kafka.NewSaramaAdminClient
-	}()
-
-	errCh := make(chan error, 1)
-	ctx = contextutil.PutRoleInCtx(ctx, util.RoleTester)
-
 	options.MaxMessages = 1
 	options.MaxMessageBytes = 8
-	saramaConfig, err := kafka.NewSaramaConfig(context.Background(), options)
-	require.Nil(t, err)
-	require.Equal(t, 1, saramaConfig.Producer.Flush.MaxMessages)
-	require.Equal(t, 8, saramaConfig.Producer.MaxMessageBytes)
-	require.Nil(t, err)
-	client, err := NewClientImpl(ctx, options)
-	require.Nil(t, err)
-	adminClient, err := NewAdminClientImpl(ctx, options)
-	require.Nil(t, err)
 
+	ctx = contextutil.PutRoleInCtx(ctx, util.RoleTester)
+	factory, err := kafka.NewMockFactory(ctx, options)
+	require.NoError(t, err)
+
+	adminClient, err := factory.AdminClient()
+	require.NoError(t, err)
+
+	errCh := make(chan error, 1)
 	changefeedID := model.DefaultChangeFeedID("changefeed-test")
 	producer, err := NewProducer(
 		ctx,
-		client,
+		factory,
 		adminClient,
 		options,
 		errCh,
@@ -470,22 +455,19 @@ func TestProducerDoubleClose(t *testing.T) {
 	options.AutoCreate = false
 	options.BrokerEndpoints = strings.Split(leader.Addr(), ",")
 
-	NewAdminClientImpl = kafka.NewMockAdminClient
-	defer func() {
-		NewAdminClientImpl = kafka.NewSaramaAdminClient
-	}()
-
 	errCh := make(chan error, 1)
 	ctx = contextutil.PutRoleInCtx(ctx, util.RoleTester)
-	client, err := NewClientImpl(ctx, options)
-	require.Nil(t, err)
-	adminClient, err := NewAdminClientImpl(ctx, options)
-	require.Nil(t, err)
+
+	factory, err := kafka.NewMockFactory(ctx, options)
+	require.NoError(t, err)
+
+	adminClient, err := factory.AdminClient()
+	require.NoError(t, err)
 
 	changefeedID := model.DefaultChangeFeedID("changefeed-test")
 	producer, err := NewProducer(
 		ctx,
-		client,
+		factory,
 		adminClient,
 		options,
 		errCh,
@@ -507,11 +489,6 @@ func TestProducerDoubleClose(t *testing.T) {
 }
 
 func TestConfigurationCombinations(t *testing.T) {
-	NewAdminClientImpl = kafka.NewMockAdminClient
-	defer func() {
-		NewAdminClientImpl = kafka.NewSaramaAdminClient
-	}()
-
 	combinations := []struct {
 		uriTemplate             string
 		uriParams               []interface{}
@@ -717,11 +694,12 @@ func TestConfigurationCombinations(t *testing.T) {
 		require.Nil(t, err)
 
 		ctx := context.Background()
-		saramaConfig, err := kafka.NewSaramaConfig(ctx, options)
-		require.Nil(t, err)
 
-		adminClient, err := NewAdminClientImpl(ctx, options)
-		require.Nil(t, err)
+		factory, err := kafka.NewMockFactory(ctx, options)
+		require.NoError(t, err)
+
+		adminClient, err := factory.AdminClient()
+		require.NoError(t, err)
 
 		topic, ok := a.uriParams[0].(string)
 		require.True(t, ok)
@@ -732,13 +710,13 @@ func TestConfigurationCombinations(t *testing.T) {
 		encoderConfig := common.NewConfig(config.ProtocolOpen)
 		err = encoderConfig.Apply(sinkURI, &config.ReplicaConfig{})
 		require.Nil(t, err)
-		encoderConfig.WithMaxMessageBytes(saramaConfig.Producer.MaxMessageBytes)
+		encoderConfig.WithMaxMessageBytes(options.MaxMessageBytes)
 
 		err = encoderConfig.Validate()
 		require.Nil(t, err)
 
 		// producer's `MaxMessageBytes` = encoder's `MaxMessageBytes`.
-		require.Equal(t, encoderConfig.MaxMessageBytes, saramaConfig.Producer.MaxMessageBytes)
+		require.Equal(t, encoderConfig.MaxMessageBytes, options.MaxMessageBytes)
 
 		expected, err := strconv.Atoi(a.expectedMaxMessageBytes)
 		require.Nil(t, err)
