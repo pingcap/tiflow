@@ -30,7 +30,6 @@ import (
 	"github.com/segmentio/kafka-go/sasl"
 	"github.com/segmentio/kafka-go/sasl/plain"
 	"github.com/segmentio/kafka-go/sasl/scram"
-	"github.com/segmentio/kafka-go/topics"
 	"go.uber.org/zap"
 )
 
@@ -122,40 +121,6 @@ func completeSASLConfig(o *pkafka.Options) (sasl.Mechanism, error) {
 		}
 	}
 	return nil, nil
-}
-
-// Topics returns the set of available
-// topics as retrieved from cluster metadata.
-func (k *kafkaGoClient) Topics() ([]string, error) {
-	ts, err := topics.List(context.Background(), k.client)
-	if err != nil {
-		return nil, errors.Trace(err)
-	}
-	topicList := make([]string, 0, len(ts))
-	for _, t := range ts {
-		topicList = append(topicList, t.Name)
-	}
-	return topicList, nil
-}
-
-// Partitions returns the sorted list of
-// all partition IDs for the given topic.
-func (k *kafkaGoClient) Partitions(topic string) ([]int32, error) {
-	response, err := k.client.Metadata(context.Background(), &kafka.MetadataRequest{
-		Addr:   k.client.Addr,
-		Topics: []string{topic},
-	})
-	if err != nil {
-		return nil, errors.Trace(err)
-	}
-	if len(response.Topics) != 1 {
-		return nil, errors.New("failed to describe topic " + topic)
-	}
-	partitions := make([]int32, 0, len(response.Topics[0].Partitions))
-	for _, partition := range response.Topics[0].Partitions {
-		partitions = append(partitions, int32(partition.ID))
-	}
-	return partitions, nil
 }
 
 func (k *kafkaGoClient) createWriter() *kafka.Writer {

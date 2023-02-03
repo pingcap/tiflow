@@ -91,12 +91,10 @@ func GetTopicManagerAndTryCreateTopic(
 	ctx context.Context,
 	topic string,
 	topicCfg *kafka.AutoCreateTopicConfig,
-	client kafka.Client,
 	adminClient kafka.ClusterAdminClient,
 ) (manager.TopicManager, error) {
 	topicManager, err := manager.NewKafkaTopicManager(
 		ctx,
-		client,
 		adminClient,
 		topicCfg,
 	)
