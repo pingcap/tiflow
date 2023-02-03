@@ -68,6 +68,7 @@ func newOwner4Test(
 	) (scheduler.Scheduler, error),
 	newDownstreamObserver func(
 		ctx context.Context, sinkURIStr string, replCfg *config.ReplicaConfig,
+		opts ...observer.NewObserverOption,
 	) (observer.Observer, error),
 	pdClient pd.Client,
 ) Owner {
@@ -117,6 +118,7 @@ func createOwner4Test(ctx cdcContext.Context, t *testing.T) (*ownerImpl, *orches
 		// new downstream observer
 		func(
 			ctx context.Context, sinkURIStr string, replCfg *config.ReplicaConfig,
+			opts ...observer.NewObserverOption,
 		) (observer.Observer, error) {
 			return observer.NewDummyObserver(), nil
 		},

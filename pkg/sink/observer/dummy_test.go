@@ -15,22 +15,17 @@ package observer
 
 import (
 	"context"
+	"testing"
+
+	"github.com/stretchr/testify/require"
 )
 
-// DummyObserver is an observer that does nothing
-type DummyObserver struct{}
+func TestDummyObserverCloseSequence(t *testing.T) {
+	t.Parallel()
 
-// Tick implements Observer
-func (o *DummyObserver) Tick(ctx context.Context) error {
-	return nil
-}
-
-// Close implements Observer
-func (o *DummyObserver) Close() error {
-	return nil
-}
-
-// NewDummyObserver creates a new DummyObserver instance
-func NewDummyObserver() *DummyObserver {
-	return &DummyObserver{}
+	observer := NewDummyObserver()
+	err := observer.Close()
+	require.NoError(t, err)
+	err = observer.Tick(context.Background())
+	require.NoError(t, err)
 }

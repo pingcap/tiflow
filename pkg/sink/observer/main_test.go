@@ -14,23 +14,11 @@
 package observer
 
 import (
-	"context"
+	"testing"
+
+	"github.com/pingcap/tiflow/pkg/leakutil"
 )
 
-// DummyObserver is an observer that does nothing
-type DummyObserver struct{}
-
-// Tick implements Observer
-func (o *DummyObserver) Tick(ctx context.Context) error {
-	return nil
-}
-
-// Close implements Observer
-func (o *DummyObserver) Close() error {
-	return nil
-}
-
-// NewDummyObserver creates a new DummyObserver instance
-func NewDummyObserver() *DummyObserver {
-	return &DummyObserver{}
+func TestMain(m *testing.M) {
+	leakutil.SetUpLeakTest(m)
 }
