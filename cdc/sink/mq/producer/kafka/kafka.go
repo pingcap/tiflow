@@ -130,7 +130,8 @@ func (k *producer) SyncBroadcastMessage(
 	case <-k.closeCh:
 		return nil
 	default:
-		err := k.syncProducer.SendMessages(topic, partitionsNum, message.Key, message.Value)
+		err := k.syncProducer.SendMessages(ctx, topic,
+			partitionsNum, message.Key, message.Value)
 		return cerror.WrapError(cerror.ErrKafkaSendMessage, err)
 	}
 }
