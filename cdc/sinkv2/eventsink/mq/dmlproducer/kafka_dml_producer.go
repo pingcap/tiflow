@@ -90,7 +90,7 @@ func NewKafkaDMLProducer(
 					zap.String("changefeed", changefeedID.ID))
 			}
 		}()
-		return nil, cerror.WrapError(cerror.ErrKafkaNewSaramaProducer, err)
+		return nil, cerror.WrapError(cerror.ErrKafkaNewProducer, err)
 	}
 
 	collector := collector.New(changefeedID, util.RoleProcessor,

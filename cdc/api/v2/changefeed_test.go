@@ -20,6 +20,7 @@ import (
 	"fmt"
 	"net/http"
 	"net/http/httptest"
+	"sort"
 	"testing"
 
 	"github.com/golang/mock/gomock"
@@ -476,6 +477,84 @@ func TestUpdateChangefeed(t *testing.T) {
 		fmt.Sprintf(update.url, validID), bytes.NewReader(body))
 	router.ServeHTTP(w, req)
 	require.Equal(t, http.StatusOK, w.Code)
+}
+
+func TestListChangeFeeds(t *testing.T) {
+	t.Parallel()
+
+	cp := mock_capture.NewMockCapture(gomock.NewController(t))
+	cp.EXPECT().IsReady().Return(true).AnyTimes()
+	cp.EXPECT().IsOwner().Return(true).AnyTimes()
+
+	apiV2 := NewOpenAPIV2ForTest(cp, APIV2HelpersImpl{})
+	router := newRouter(apiV2)
+	sorted := func(s []model.ChangefeedCommonInfo) bool {
+		return sort.SliceIsSorted(s, func(i, j int) bool {
+			cf1, cf2 := s[i], s[j]
+			if cf1.Namespace == cf2.Namespace {
+				return cf1.ID < cf2.ID
+			}
+			return cf1.Namespace < cf2.Namespace
+		})
+	}
+
+	// case 1: list all changefeeds regardless of the state
+	provider1 := &mockStatusProvider{
+		changefeedInfos: map[model.ChangeFeedID]*model.ChangeFeedInfo{
+			model.DefaultChangeFeedID("cf1"): {
+				State: model.StateNormal,
+			},
+			model.DefaultChangeFeedID("cf2"): {
+				State: model.StateError,
+			},
+			model.DefaultChangeFeedID("cf3"): {
+				State: model.StateStopped,
+			},
+		},
+		changefeedStatuses: map[model.ChangeFeedID]*model.ChangeFeedStatus{
+			model.DefaultChangeFeedID("cf1"): {},
+			model.DefaultChangeFeedID("cf2"): {},
+			model.DefaultChangeFeedID("cf3"): {},
+		},
+	}
+	cp.EXPECT().StatusProvider().Return(provider1).AnyTimes()
+	w := httptest.NewRecorder()
+	metaInfo := testCase{
+		url:    "/api/v2/changefeeds?state=all",
+		method: "GET",
+	}
+	req, _ := http.NewRequestWithContext(
+		context.Background(),
+		metaInfo.method,
+		metaInfo.url,
+		nil,
+	)
+	router.ServeHTTP(w, req)
+	resp := ListResponse[model.ChangefeedCommonInfo]{}
+	err := json.NewDecoder(w.Body).Decode(&resp)
+	require.Nil(t, err)
+	require.Equal(t, 3, resp.Total)
+	// changefeed info must be sorted by ID
+	require.Equal(t, true, sorted(resp.Items))
+
+	// case 2: only list changefeed with state 'normal', 'stopped' and 'failed'
+	metaInfo2 := testCase{
+		url:    "/api/v2/changefeeds",
+		method: "GET",
+	}
+	req2, _ := http.NewRequestWithContext(
+		context.Background(),
+		metaInfo2.method,
+		metaInfo2.url,
+		nil,
+	)
+	router.ServeHTTP(w, req2)
+	resp2 := ListResponse[model.ChangefeedCommonInfo]{}
+	err = json.NewDecoder(w.Body).Decode(&resp2)
+	require.Nil(t, err)
+	require.Equal(t, 2, resp2.Total)
+	// changefeed info must be sorted by ID
+	require.Equal(t, true, sorted(resp2.Items))
 }
 
 func TestGetChangeFeedMetaInfo(t *testing.T) {
