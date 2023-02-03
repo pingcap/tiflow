@@ -26,7 +26,6 @@ import (
 	sink "github.com/pingcap/tiflow/cdc/sink/metrics"
 	"github.com/pingcap/tiflow/cdc/sink/mq/producer/kafka"
 	sinkv2 "github.com/pingcap/tiflow/cdc/sinkv2/metrics"
-	"github.com/pingcap/tiflow/pkg/actor"
 	"github.com/pingcap/tiflow/pkg/etcd"
 	"github.com/pingcap/tiflow/pkg/orchestrator"
 	"github.com/pingcap/tiflow/pkg/p2p"
@@ -52,7 +51,6 @@ func init() {
 	processor.InitMetrics(registry)
 	owner.InitMetrics(registry)
 	etcd.InitMetrics(registry)
-	actor.InitMetrics(registry)
 	orchestrator.InitMetrics(registry)
 	p2p.InitMetrics(registry)
 	engine.InitMetrics(registry)
