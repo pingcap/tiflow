@@ -39,7 +39,7 @@ type kafkaDMLProducer struct {
 	id model.ChangeFeedID
 	// We hold the client to make close operation faster.
 	// Please see the comment of Close().
-	client pkafka.Client
+	client pkafka.Factory
 	// asyncProducer is used to send messages to kafka asynchronously.
 	asyncProducer pkafka.AsyncProducer
 	// collector is used to report metrics.
@@ -60,7 +60,7 @@ type kafkaDMLProducer struct {
 // NewKafkaDMLProducer creates a new kafka producer.
 func NewKafkaDMLProducer(
 	ctx context.Context,
-	client pkafka.Client,
+	client pkafka.Factory,
 	adminClient pkafka.ClusterAdminClient,
 	errCh chan error,
 ) (DMLProducer, error) {

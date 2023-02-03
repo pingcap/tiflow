@@ -50,7 +50,7 @@ type producer struct {
 	clientLock sync.RWMutex
 	// This admin mainly used by `metricsMonitor` to fetch broker info.
 	admin         kafka.ClusterAdminClient
-	client        kafka.Client
+	factory       kafka.Factory
 	asyncProducer kafka.AsyncProducer
 	syncProducer  kafka.SyncProducer
 
@@ -205,7 +205,7 @@ func (k *producer) Close() error {
 	// closed, `asyncProducer.Close()` would waste a mount of time to try flush all messages.
 	// To prevent the scenario mentioned above, close client first.
 	start := time.Now()
-	if err := k.client.Close(); err != nil {
+	if err := k.factory.Close(); err != nil {
 		log.Error("close sarama client with error", zap.Error(err),
 			zap.Duration("duration", time.Since(start)),
 			zap.String("namespace", k.id.Namespace),
@@ -278,7 +278,7 @@ var NewClientImpl kafka.ClientCreator = kafka.NewSaramaClient
 // NewProducer creates a kafka producer
 func NewProducer(
 	ctx context.Context,
-	client kafka.Client,
+	factory kafka.Factory,
 	admin kafka.ClusterAdminClient,
 	options *kafka.Options,
 	errCh chan error,
@@ -291,21 +291,21 @@ func NewProducer(
 
 	closeCh := make(chan struct{})
 	failpointCh := make(chan error, 1)
-	asyncProducer, err := client.AsyncProducer(changefeedID, closeCh, failpointCh)
+	asyncProducer, err := factory.AsyncProducer(changefeedID, closeCh, failpointCh)
 	if err != nil {
 		return nil, cerror.WrapError(cerror.ErrKafkaNewProducer, err)
 	}
 
-	syncProducer, err := client.SyncProducer()
+	syncProducer, err := factory.SyncProducer()
 	if err != nil {
 		return nil, cerror.WrapError(cerror.ErrKafkaNewProducer, err)
 	}
 
-	runMetricsMonitor(ctx, client.MetricRegistry(), changefeedID, role, admin)
+	runMetricsMonitor(ctx, factory.MetricRegistry(), changefeedID, role, admin)
 
 	k := &producer{
 		admin:         admin,
-		client:        client,
+		factory:       factory,
 		asyncProducer: asyncProducer,
 		syncProducer:  syncProducer,
 		closeCh:       closeCh,

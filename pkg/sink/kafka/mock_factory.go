@@ -18,21 +18,16 @@ import (
 	"github.com/rcrowley/go-metrics"
 )
 
-// ClientMockImpl is a mock implementation of Client interface.
-type ClientMockImpl struct{}
-
-// NewClientMockImpl creates a new ClientMockImpl instance.
-func NewClientMockImpl() *ClientMockImpl {
-	return &ClientMockImpl{}
-}
+// MockFactory is a mock implementation of Factory interface.
+type MockFactory struct{}
 
 // SyncProducer creates a sync producer
-func (c *ClientMockImpl) SyncProducer() (SyncProducer, error) {
+func (c *MockFactory) SyncProducer() (SyncProducer, error) {
 	return &saramaSyncProducer{}, nil
 }
 
 // AsyncProducer creates an async producer
-func (c *ClientMockImpl) AsyncProducer(
+func (c *MockFactory) AsyncProducer(
 	changefeedID model.ChangeFeedID,
 	closedChan chan struct{},
 	failpointCh chan error,
@@ -41,11 +36,11 @@ func (c *ClientMockImpl) AsyncProducer(
 }
 
 // MetricRegistry returns the metric registry
-func (c *ClientMockImpl) MetricRegistry() metrics.Registry {
+func (c *MockFactory) MetricRegistry() metrics.Registry {
 	return metrics.DefaultRegistry
 }
 
 // Close closes the client
-func (c *ClientMockImpl) Close() error {
+func (c *MockFactory) Close() error {
 	return nil
 }

@@ -25,8 +25,8 @@ import (
 	"go.uber.org/zap"
 )
 
-// Client is a generic Kafka client.
-type Client interface {
+// Factory is a generic Kafka client.
+type Factory interface {
 	// SyncProducer creates a sync producer to writer message to kafka
 	SyncProducer() (SyncProducer, error)
 	// AsyncProducer creates an async producer to writer message to kafka
@@ -250,11 +250,11 @@ func (p *saramaAsyncProducer) AsyncSend(ctx context.Context,
 	return nil
 }
 
-// ClientCreator defines the type of client crater.
-type ClientCreator func(context.Context, *Options) (Client, error)
+// FactoryCreator defines the type of factor creator.
+type FactoryCreator func(context.Context, *Options) (Factory, error)
 
-// NewSaramaClient constructs a Client with sarama.
-func NewSaramaClient(ctx context.Context, o *Options) (Client, error) {
+// NewSaramaFactory constructs a Factory with sarama implementation.
+func NewSaramaFactory(ctx context.Context, o *Options) (Factory, error) {
 	saramaConfig, err := NewSaramaConfig(ctx, o)
 	if err != nil {
 		return nil, errors.Trace(err)
@@ -266,7 +266,7 @@ func NewSaramaClient(ctx context.Context, o *Options) (Client, error) {
 	return &saramaKafkaClient{client: c}, nil
 }
 
-// NewMockClient constructs a Client with mock implementation.
-func NewMockClient(_ context.Context, _ *Options) (Client, error) {
-	return NewClientMockImpl(), nil
+// NewMockFactory constructs a Factory with mock implementation.
+func NewMockFactory(_ context.Context, _ *Options) (Factory, error) {
+	return &MockFactory{}, nil
 }

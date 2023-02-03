@@ -39,7 +39,7 @@ type kafkaDDLProducer struct {
 	id model.ChangeFeedID
 	// We hold the client to make close operation faster.
 	// Please see the comment of Close().
-	client pkafka.Client
+	factory pkafka.Factory
 	// collector is used to report metrics.
 	collector *collector.Collector
 	// asyncProducer is used to send messages to kafka synchronously.
@@ -53,18 +53,18 @@ type kafkaDDLProducer struct {
 }
 
 // NewKafkaDDLProducer creates a new kafka producer for replicating DDL.
-func NewKafkaDDLProducer(ctx context.Context, client pkafka.Client,
+func NewKafkaDDLProducer(ctx context.Context, factory pkafka.Factory,
 	adminClient pkafka.ClusterAdminClient,
 ) (DDLProducer, error) {
 	changefeedID := contextutil.ChangefeedIDFromCtx(ctx)
 
-	syncProducer, err := client.SyncProducer()
+	syncProducer, err := factory.SyncProducer()
 	if err != nil {
 		// Close the client to prevent the goroutine leak.
 		// Because it may be a long time to close the client,
 		// so close it asynchronously.
 		go func() {
-			err := client.Close()
+			err := factory.Close()
 			if err != nil {
 				log.Error("Close sarama client with error in kafka "+
 					"DDL producer", zap.Error(err),
@@ -81,11 +81,11 @@ func NewKafkaDDLProducer(ctx context.Context, client pkafka.Client,
 		return nil, cerror.WrapError(cerror.ErrKafkaNewProducer, err)
 	}
 	collector := collector.New(changefeedID, util.RoleOwner,
-		adminClient, client.MetricRegistry())
+		adminClient, factory.MetricRegistry())
 
 	p := &kafkaDDLProducer{
 		id:           changefeedID,
-		client:       client,
+		factory:      factory,
 		collector:    collector,
 		syncProducer: syncProducer,
 		closed:       false,
@@ -153,7 +153,7 @@ func (k *kafkaDDLProducer) Close() {
 	k.closed = true
 	// We need to close it asynchronously. Otherwise, we might get stuck
 	// with an unhealthy(i.e. Network jitter, isolation) state of Kafka.
-	// Client has a background thread to fetch and update the metadata.
+	// Factory has a background thread to fetch and update the metadata.
 	// If we close the client synchronously, we might get stuck.
 	// Safety:
 	// * If the kafka cluster is running well, it will be closed as soon as possible.
@@ -163,7 +163,7 @@ func (k *kafkaDDLProducer) Close() {
 	//   goal is not to get stuck with the owner tick.
 	go func() {
 		start := time.Now()
-		if err := k.client.Close(); err != nil {
+		if err := k.factory.Close(); err != nil {
 			log.Error("Close sarama client with error in kafka "+
 				"DDL producer", zap.Error(err),
 				zap.Duration("duration", time.Since(start)),

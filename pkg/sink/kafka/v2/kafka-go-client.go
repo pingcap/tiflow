@@ -40,7 +40,7 @@ type kafkaGoClient struct {
 }
 
 // NewKafkaGoClient constructs a Client with kafka go.
-func NewKafkaGoClient(ctx context.Context, options *pkafka.Options) (pkafka.Client, error) {
+func NewKafkaGoClient(ctx context.Context, options *pkafka.Options) (pkafka.Factory, error) {
 	captureAddr := contextutil.CaptureAddrFromCtx(ctx)
 	changefeedID := contextutil.ChangefeedIDFromCtx(ctx)
 	var role string
