@@ -11,7 +11,7 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-package sinkmanager
+package memquota
 
 import (
 	"sort"
@@ -32,7 +32,7 @@ type memConsumeRecord struct {
 	size       uint64
 }
 
-type memQuota struct {
+type MemQuota struct {
 	changefeedID model.ChangeFeedID
 	// totalBytes is the total memory quota for one changefeed.
 	totalBytes uint64
@@ -53,8 +53,8 @@ type memQuota struct {
 	metricUsed  prometheus.Gauge
 }
 
-func newMemQuota(changefeedID model.ChangeFeedID, totalBytes uint64, comp string) *memQuota {
-	m := &memQuota{
+func NewMemQuota(changefeedID model.ChangeFeedID, totalBytes uint64, comp string) *MemQuota {
+	m := &MemQuota{
 		changefeedID: changefeedID,
 		totalBytes:   totalBytes,
 		usedBytes:    0,
@@ -73,8 +73,8 @@ func newMemQuota(changefeedID model.ChangeFeedID, totalBytes uint64, comp string
 	return m
 }
 
-// tryAcquire returns true if the memory quota is available, otherwise returns false.
-func (m *memQuota) tryAcquire(nBytes uint64) bool {
+// TryAcquire returns true if the memory quota is available, otherwise returns false.
+func (m *MemQuota) TryAcquire(nBytes uint64) bool {
 	m.mu.Lock()
 	defer m.mu.Unlock()
 	if m.usedBytes+nBytes > m.totalBytes {
@@ -85,16 +85,16 @@ func (m *memQuota) tryAcquire(nBytes uint64) bool {
 	return true
 }
 
-// forceAcquire is used to force acquire the memory quota.
-func (m *memQuota) forceAcquire(nBytes uint64) {
+// ForceAcquire is used to force acquire the memory quota.
+func (m *MemQuota) ForceAcquire(nBytes uint64) {
 	m.mu.Lock()
 	defer m.mu.Unlock()
 	m.usedBytes += nBytes
 	m.metricUsed.Set(float64(m.usedBytes))
 }
 
-// blockAcquire is used to block the request when the memory quota is not available.
-func (m *memQuota) blockAcquire(nBytes uint64) error {
+// BlockAcquire is used to block the request when the memory quota is not available.
+func (m *MemQuota) BlockAcquire(nBytes uint64) error {
 	m.mu.Lock()
 	defer m.mu.Unlock()
 	for {
@@ -111,15 +111,15 @@ func (m *memQuota) blockAcquire(nBytes uint64) error {
 	}
 }
 
-// refund directly release the memory quota.
-func (m *memQuota) refund(nBytes uint64) {
+// Refund directly release the memory quota.
+func (m *MemQuota) Refund(nBytes uint64) {
 	if nBytes == 0 {
 		return
 	}
 	m.mu.Lock()
 	defer m.mu.Unlock()
 	if m.usedBytes < nBytes {
-		log.Panic("memQuota.refund fail",
+		log.Panic("MemQuota.refund fail",
 			zap.Uint64("used", m.usedBytes), zap.Uint64("refund", nBytes))
 	}
 	m.usedBytes -= nBytes
@@ -129,14 +129,15 @@ func (m *memQuota) refund(nBytes uint64) {
 	}
 }
 
-func (m *memQuota) addTable(span tablepb.Span) {
+// AddTable adds a table into the quota.
+func (m *MemQuota) AddTable(span tablepb.Span) {
 	m.mu.Lock()
 	defer m.mu.Unlock()
 	m.tableMemory.ReplaceOrInsert(span, make([]*memConsumeRecord, 0, 2))
 }
 
-// record records the memory usage of a table.
-func (m *memQuota) record(span tablepb.Span, resolved model.ResolvedTs, nBytes uint64) {
+// Record records the memory usage of a table.
+func (m *MemQuota) Record(span tablepb.Span, resolved model.ResolvedTs, nBytes uint64) {
 	if nBytes == 0 {
 		return
 	}
@@ -145,7 +146,7 @@ func (m *memQuota) record(span tablepb.Span, resolved model.ResolvedTs, nBytes u
 	if _, ok := m.tableMemory.Get(span); !ok {
 		// Can't find the table record, the table must be removed.
 		if m.usedBytes < nBytes {
-			log.Panic("memQuota.refund fail",
+			log.Panic("MemQuota.refund fail",
 				zap.Uint64("used", m.usedBytes), zap.Uint64("refund", nBytes))
 		}
 		m.usedBytes -= nBytes
@@ -161,10 +162,10 @@ func (m *memQuota) record(span tablepb.Span, resolved model.ResolvedTs, nBytes u
 	}))
 }
 
-// release try to use resolvedTs to release the memory quota.
+// Release try to use resolvedTs to release the memory quota.
 // Because we append records in order, we can use binary search to find the first record
 // that is greater than resolvedTs, and release the memory quota of the records before it.
-func (m *memQuota) release(span tablepb.Span, resolved model.ResolvedTs) {
+func (m *MemQuota) Release(span tablepb.Span, resolved model.ResolvedTs) {
 	m.mu.Lock()
 	defer m.mu.Unlock()
 	if _, ok := m.tableMemory.Get(span); !ok {
@@ -186,7 +187,7 @@ func (m *memQuota) release(span tablepb.Span, resolved model.ResolvedTs) {
 		return
 	}
 	if m.usedBytes < toRelease {
-		log.Panic("memQuota.release fail",
+		log.Panic("MemQuota.release fail",
 			zap.Uint64("used", m.usedBytes), zap.Uint64("release", toRelease))
 	}
 	m.usedBytes -= toRelease
@@ -196,9 +197,9 @@ func (m *memQuota) release(span tablepb.Span, resolved model.ResolvedTs) {
 	}
 }
 
-// clean all records of the table.
+// Clean all records of the table.
 // Return the cleaned memory quota.
-func (m *memQuota) clean(span tablepb.Span) uint64 {
+func (m *MemQuota) Clean(span tablepb.Span) uint64 {
 	m.mu.Lock()
 	defer m.mu.Unlock()
 
@@ -224,8 +225,8 @@ func (m *memQuota) clean(span tablepb.Span) uint64 {
 	return cleaned
 }
 
-// close the mem quota and notify the blocked acquire.
-func (m *memQuota) close() {
+// Close the mem quota and notify the blocked acquire.
+func (m *MemQuota) Close() {
 	m.mu.Lock()
 	defer m.mu.Unlock()
 	// NOTE: m.usedBytes is not reset, because refund can still be called after closed.
@@ -235,16 +236,34 @@ func (m *memQuota) close() {
 	m.blockAcquireCond.Broadcast()
 }
 
-// getUsedBytes returns the used memory quota.
-func (m *memQuota) getUsedBytes() uint64 {
+// GetUsedBytes returns the used memory quota.
+func (m *MemQuota) GetUsedBytes() uint64 {
 	m.mu.Lock()
 	defer m.mu.Unlock()
 	return m.usedBytes
 }
 
 // hasAvailable returns true if the memory quota is available, otherwise returns false.
-func (m *memQuota) hasAvailable(nBytes uint64) bool {
+func (m *MemQuota) hasAvailable(nBytes uint64) bool {
 	m.mu.Lock()
 	defer m.mu.Unlock()
 	return m.usedBytes+nBytes <= m.totalBytes
+}
+
+var (
+	// MemoryQuota indicates memory usage of a changefeed.
+	MemoryQuota = prometheus.NewGaugeVec(
+		prometheus.GaugeOpts{
+			Namespace: "ticdc",
+			Subsystem: "sinkmanager",
+			Name:      "memory_quota",
+			Help:      "memory quota of the changefeed",
+		},
+		// type includes total, used, component includes sink and redo.
+		[]string{"namespace", "changefeed", "type", "component"})
+)
+
+// InitMetrics registers all metrics in this file.
+func InitMetrics(registry *prometheus.Registry) {
+	registry.MustRegister(MemoryQuota)
 }

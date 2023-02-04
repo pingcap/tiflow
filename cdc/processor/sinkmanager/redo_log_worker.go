@@ -19,6 +19,7 @@ import (
 	"github.com/pingcap/errors"
 	"github.com/pingcap/log"
 	"github.com/pingcap/tiflow/cdc/model"
+	"github.com/pingcap/tiflow/cdc/processor/memquota"
 	"github.com/pingcap/tiflow/cdc/processor/sourcemanager"
 	"github.com/pingcap/tiflow/cdc/processor/sourcemanager/engine"
 	"github.com/pingcap/tiflow/cdc/redo"
@@ -28,7 +29,7 @@ import (
 type redoWorker struct {
 	changefeedID   model.ChangeFeedID
 	sourceManager  *sourcemanager.SourceManager
-	memQuota       *memQuota
+	memQuota       *memquota.MemQuota
 	redoManager    redo.LogManager
 	eventCache     *redoEventCache
 	splitTxn       bool
@@ -38,7 +39,7 @@ type redoWorker struct {
 func newRedoWorker(
 	changefeedID model.ChangeFeedID,
 	sourceManager *sourcemanager.SourceManager,
-	quota *memQuota,
+	quota *memquota.MemQuota,
 	redoManager redo.LogManager,
 	eventCache *redoEventCache,
 	splitTxn bool,
@@ -107,7 +108,7 @@ func (w *redoWorker) handleTask(ctx context.Context, task *redoTask) (finalErr e
 			if rowsSize-cachedSize > 0 {
 				refundMem := rowsSize - cachedSize
 				releaseMem = func() {
-					w.memQuota.refund(refundMem)
+					w.memQuota.Refund(refundMem)
 					log.Debug("MemoryQuotaTracing: refund memory for redo log task",
 						zap.String("namespace", w.changefeedID.Namespace),
 						zap.String("changefeed", w.changefeedID.ID),
@@ -142,7 +143,7 @@ func (w *redoWorker) handleTask(ctx context.Context, task *redoTask) (finalErr e
 		// If used memory size exceeds the required limit, do a force acquire.
 		memoryHighUsage := availableMemSize < usedMemSize
 		if memoryHighUsage {
-			w.memQuota.forceAcquire(usedMemSize - availableMemSize)
+			w.memQuota.ForceAcquire(usedMemSize - availableMemSize)
 			log.Debug("MemoryQuotaTracing: force acquire memory for redo log task",
 				zap.String("namespace", w.changefeedID.Namespace),
 				zap.String("changefeed", w.changefeedID.ID),
@@ -166,7 +167,7 @@ func (w *redoWorker) handleTask(ctx context.Context, task *redoTask) (finalErr e
 		}
 		if usedMemSize >= availableMemSize {
 			if txnFinished {
-				if w.memQuota.tryAcquire(requestMemSize) {
+				if w.memQuota.TryAcquire(requestMemSize) {
 					availableMemSize += requestMemSize
 					log.Debug("MemoryQuotaTracing: try acquire memory for redo log task",
 						zap.String("namespace", w.changefeedID.Namespace),
@@ -177,7 +178,7 @@ func (w *redoWorker) handleTask(ctx context.Context, task *redoTask) (finalErr e
 			} else {
 				// NOTE: it's not required to use `forceAcquire` even if splitTxn is false.
 				// It's because memory will finally be `refund` after redo-logs are written.
-				err := w.memQuota.blockAcquire(requestMemSize)
+				err := w.memQuota.BlockAcquire(requestMemSize)
 				if err != nil {
 					return errors.Trace(err)
 				}
@@ -193,7 +194,7 @@ func (w *redoWorker) handleTask(ctx context.Context, task *redoTask) (finalErr e
 		return nil
 	}
 
-	iter := w.sourceManager.FetchByTable(task.span, task.lowerBound, upperBound)
+	iter := w.sourceManager.FetchByTable(task.span, task.lowerBound, upperBound, w.memQuota)
 	allEventCount := 0
 	defer func() {
 		task.tableSink.updateReceivedSorterCommitTs(lastTxnCommitTs)
@@ -222,7 +223,7 @@ func (w *redoWorker) handleTask(ctx context.Context, task *redoTask) (finalErr e
 
 		// There is no more events and some required memory isn't used.
 		if availableMemSize > usedMemSize {
-			w.memQuota.refund(availableMemSize - usedMemSize)
+			w.memQuota.Refund(availableMemSize - usedMemSize)
 			log.Debug("MemoryQuotaTracing: refund memory for redo log task",
 				zap.String("namespace", w.changefeedID.Namespace),
 				zap.String("changefeed", w.changefeedID.ID),
