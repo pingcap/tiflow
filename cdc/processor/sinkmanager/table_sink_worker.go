@@ -20,6 +20,7 @@ import (
 	"github.com/pingcap/log"
 	"github.com/pingcap/tiflow/cdc/entry"
 	"github.com/pingcap/tiflow/cdc/model"
+	"github.com/pingcap/tiflow/cdc/processor/memquota"
 	"github.com/pingcap/tiflow/cdc/processor/sourcemanager"
 	"github.com/pingcap/tiflow/cdc/processor/sourcemanager/engine"
 	"github.com/prometheus/client_golang/prometheus"
@@ -29,8 +30,8 @@ import (
 type sinkWorker struct {
 	changefeedID  model.ChangeFeedID
 	sourceManager *sourcemanager.SourceManager
-	sinkMemQuota  *memQuota
-	redoMemQuota  *memQuota
+	sinkMemQuota  *memquota.MemQuota
+	redoMemQuota  *memquota.MemQuota
 	eventCache    *redoEventCache
 	// splitTxn indicates whether to split the transaction into multiple batches.
 	splitTxn bool
@@ -48,8 +49,8 @@ type sinkWorker struct {
 func newSinkWorker(
 	changefeedID model.ChangeFeedID,
 	sourceManager *sourcemanager.SourceManager,
-	sinkQuota *memQuota,
-	redoQuota *memQuota,
+	sinkQuota *memquota.MemQuota,
+	redoQuota *memquota.MemQuota,
 	eventCache *redoEventCache,
 	splitTxn bool,
 	enableOldValue bool,
@@ -122,7 +123,7 @@ func (w *sinkWorker) handleTask(ctx context.Context, task *sinkTask) (finalErr e
 			return errors.Trace(err)
 		}
 		if drained {
-			w.sinkMemQuota.refund(availableMem - usedMem)
+			w.sinkMemQuota.Refund(availableMem - usedMem)
 			log.Debug("MemoryQuotaTracing: refund memory for table sink task",
 				zap.String("namespace", w.changefeedID.Namespace),
 				zap.String("changefeed", w.changefeedID.ID),
@@ -179,7 +180,7 @@ func (w *sinkWorker) handleTask(ctx context.Context, task *sinkTask) (finalErr e
 			// It's the last time we call `doEmitAndAdvance`, but `pendingTxnSize`
 			// hasn't been recorded yet. To avoid losing it, record it manually.
 			if isLastTime && pendingTxnSize > 0 {
-				w.sinkMemQuota.record(task.span, model.NewResolvedTs(currTxnCommitTs), pendingTxnSize)
+				w.sinkMemQuota.Record(task.span, model.NewResolvedTs(currTxnCommitTs), pendingTxnSize)
 				pendingTxnSize = 0
 			}
 		}
@@ -190,7 +191,7 @@ func (w *sinkWorker) handleTask(ctx context.Context, task *sinkTask) (finalErr e
 		// If used memory size exceeds the required limit, do a block require.
 		memoryHighUsage := availableMem < usedMem
 		if memoryHighUsage {
-			w.sinkMemQuota.forceAcquire(usedMem - availableMem)
+			w.sinkMemQuota.ForceAcquire(usedMem - availableMem)
 			log.Debug("MemoryQuotaTracing: force acquire memory for table sink task",
 				zap.String("namespace", w.changefeedID.Namespace),
 				zap.String("changefeed", w.changefeedID.ID),
@@ -214,7 +215,7 @@ func (w *sinkWorker) handleTask(ctx context.Context, task *sinkTask) (finalErr e
 		}
 		if usedMem >= availableMem {
 			if txnFinished {
-				if w.sinkMemQuota.tryAcquire(requestMemSize) {
+				if w.sinkMemQuota.TryAcquire(requestMemSize) {
 					availableMem += requestMemSize
 					log.Debug("MemoryQuotaTracing: try acquire memory for table sink task",
 						zap.String("namespace", w.changefeedID.Namespace),
@@ -224,7 +225,7 @@ func (w *sinkWorker) handleTask(ctx context.Context, task *sinkTask) (finalErr e
 				}
 			} else {
 				if !w.splitTxn {
-					w.sinkMemQuota.forceAcquire(requestMemSize)
+					w.sinkMemQuota.ForceAcquire(requestMemSize)
 					availableMem += requestMemSize
 					log.Debug("MemoryQuotaTracing: force acquire memory for table sink task",
 						zap.String("namespace", w.changefeedID.Namespace),
@@ -233,7 +234,7 @@ func (w *sinkWorker) handleTask(ctx context.Context, task *sinkTask) (finalErr e
 						zap.Uint64("memory", requestMemSize))
 				} else {
 					// NOTE: if splitTxn is true it's not required to force acquire memory.
-					if err := w.sinkMemQuota.blockAcquire(requestMemSize); err != nil {
+					if err := w.sinkMemQuota.BlockAcquire(requestMemSize); err != nil {
 						return errors.Trace(err)
 					}
 					availableMem += requestMemSize
@@ -251,7 +252,7 @@ func (w *sinkWorker) handleTask(ctx context.Context, task *sinkTask) (finalErr e
 	// lowerBound and upperBound are both closed intervals.
 	allEventSize := uint64(0)
 	allEventCount := 0
-	iter := w.sourceManager.FetchByTable(task.span, lowerBound, upperBound)
+	iter := w.sourceManager.FetchByTable(task.span, lowerBound, upperBound, w.sinkMemQuota)
 	defer func() {
 		w.metricRedoEventCacheMiss.Add(float64(allEventSize))
 		task.tableSink.receivedEventCount.Add(int64(allEventCount))
@@ -291,7 +292,7 @@ func (w *sinkWorker) handleTask(ctx context.Context, task *sinkTask) (finalErr e
 
 		// The task is finished and some required memory isn't used.
 		if availableMem > usedMem {
-			w.sinkMemQuota.refund(availableMem - usedMem)
+			w.sinkMemQuota.Refund(availableMem - usedMem)
 			log.Debug("MemoryQuotaTracing: refund memory for table sink task",
 				zap.String("namespace", w.changefeedID.Namespace),
 				zap.String("changefeed", w.changefeedID.ID),
@@ -391,9 +392,9 @@ func (w *sinkWorker) fetchFromCache(
 			}
 		}
 		// Transfer the memory usage from redoMemQuota to sinkMemQuota.
-		w.sinkMemQuota.forceAcquire(popRes.releaseSize)
-		w.sinkMemQuota.record(task.span, resolvedTs, popRes.releaseSize)
-		w.redoMemQuota.refund(popRes.releaseSize)
+		w.sinkMemQuota.ForceAcquire(popRes.releaseSize)
+		w.sinkMemQuota.Record(task.span, resolvedTs, popRes.releaseSize)
+		w.redoMemQuota.Refund(popRes.releaseSize)
 
 		err = task.tableSink.updateResolvedTs(resolvedTs)
 		log.Debug("Advance table sink",
@@ -433,7 +434,7 @@ func (w *sinkWorker) advanceTableSinkWithBatchID(t *sinkTask, commitTs model.Ts,
 		zap.Any("resolvedTs", resolvedTs),
 		zap.Uint64("size", size))
 	if size > 0 {
-		w.sinkMemQuota.record(t.span, resolvedTs, size)
+		w.sinkMemQuota.Record(t.span, resolvedTs, size)
 	}
 	return t.tableSink.updateResolvedTs(resolvedTs)
 }
@@ -447,7 +448,7 @@ func (w *sinkWorker) advanceTableSink(t *sinkTask, commitTs model.Ts, size uint6
 		zap.Any("resolvedTs", resolvedTs),
 		zap.Uint64("size", size))
 	if size > 0 {
-		w.sinkMemQuota.record(t.span, resolvedTs, size)
+		w.sinkMemQuota.Record(t.span, resolvedTs, size)
 	}
 	return t.tableSink.updateResolvedTs(resolvedTs)
 }

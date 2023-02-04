@@ -19,6 +19,7 @@ import (
 
 	"github.com/pingcap/tiflow/cdc/entry"
 	"github.com/pingcap/tiflow/cdc/model"
+	"github.com/pingcap/tiflow/cdc/processor/memquota"
 	"github.com/prometheus/client_golang/prometheus"
 )
 
@@ -27,10 +28,13 @@ type MountedEventIter struct {
 	iter         EventIterator
 	mg           entry.MounterGroup
 	maxBatchSize int
+	quota        *memquota.MemQuota
 
-	rawEvents         []rawEvent
-	nextToEmit        int
-	savedIterError    error
+	rawEvents      []rawEvent
+	nextToEmit     int
+	savedIterError error
+
+	waitMount         chan struct{}
 	mountWaitDuration prometheus.Observer
 }
 
@@ -40,12 +44,15 @@ func NewMountedEventIter(
 	iter EventIterator,
 	mg entry.MounterGroup,
 	maxBatchSize int,
+	quota *memquota.MemQuota,
 ) *MountedEventIter {
 	return &MountedEventIter{
 		iter:         iter,
 		mg:           mg,
 		maxBatchSize: maxBatchSize,
+		quota:        quota,
 
+		waitMount:         make(chan struct{}, 1),
 		mountWaitDuration: mountWaitDuration.WithLabelValues(changefeedID.Namespace, changefeedID.ID),
 	}
 }
@@ -65,10 +72,16 @@ func (i *MountedEventIter) Next(ctx context.Context) (event *model.PolymorphicEv
 		idx := i.nextToEmit
 
 		startWait := time.Now()
-		if err = i.rawEvents[idx].event.WaitFinished(ctx); err != nil {
-			return
+		for !i.rawEvents[idx].event.Mounted.Load() {
+			select {
+			case <-i.waitMount:
+			case <-ctx.Done():
+				err = ctx.Err()
+				return
+			}
 		}
-		i.mountWaitDuration.Observe((time.Since(startWait) + i.rawEvents[idx].latency).Seconds())
+		i.mountWaitDuration.Observe(time.Since(startWait).Seconds())
+		i.quota.Refund(uint64(i.rawEvents[idx].size))
 
 		event = i.rawEvents[idx].event
 		txnFinished = i.rawEvents[idx].txnFinished
@@ -100,15 +113,23 @@ func (i *MountedEventIter) readBatch(ctx context.Context) error {
 			break
 		}
 
-		startMount := time.Now()
-		event.SetUpFinishedCh()
-		if err := i.mg.AddEvent(ctx, event); err != nil {
+		task := entry.MountTask{
+			Event: event,
+			PostFinish: func() {
+				select {
+				case i.waitMount <- struct{}{}:
+				default:
+				}
+			},
+		}
+		if err := i.mg.AddEvent(ctx, task); err != nil {
 			i.mg = nil
 			return err
 		}
-		latency := time.Since(startMount)
 
-		i.rawEvents = append(i.rawEvents, rawEvent{event, txnFinished, latency})
+		size := event.RawKV.ApproximateDataSize()
+		i.quota.ForceAcquire(uint64(size))
+		i.rawEvents = append(i.rawEvents, rawEvent{event, txnFinished, size})
 	}
 	return nil
 }
@@ -127,5 +148,5 @@ func (i *MountedEventIter) Close() error {
 type rawEvent struct {
 	event       *model.PolymorphicEvent
 	txnFinished Position
-	latency     time.Duration
+	size        int64
 }

@@ -14,8 +14,8 @@
 package model
 
 import (
-	"context"
 	"math"
+	"sync/atomic"
 
 	"github.com/pingcap/log"
 	"github.com/pingcap/tidb/types"
@@ -43,7 +43,7 @@ type PolymorphicEvent struct {
 
 	MiniRow *RowChangedEvent
 
-	finished chan struct{}
+	Mounted atomic.Bool
 }
 
 // NewEmptyPolymorphicEvent creates a new empty PolymorphicEvent.
@@ -83,32 +83,6 @@ func (e *PolymorphicEvent) RegionID() uint64 {
 // only be called when `RawKV != nil`.
 func (e *PolymorphicEvent) IsResolved() bool {
 	return e.RawKV.OpType == OpTypeResolved
-}
-
-// SetUpFinishedCh set up the finished chan, should be called before mounting the event.
-func (e *PolymorphicEvent) SetUpFinishedCh() {
-	if e.finished == nil {
-		e.finished = make(chan struct{})
-	}
-}
-
-// MarkFinished is called to indicate that mount is finished.
-func (e *PolymorphicEvent) MarkFinished() {
-	if e.finished != nil {
-		close(e.finished)
-	}
-}
-
-// WaitFinished is called by caller to wait for the mount finished.
-func (e *PolymorphicEvent) WaitFinished(ctx context.Context) error {
-	if e.finished != nil {
-		select {
-		case <-ctx.Done():
-			return ctx.Err()
-		case <-e.finished:
-		}
-	}
-	return nil
 }
 
 // ComparePolymorphicEvents compares two events by CRTs, Resolved, StartTs, Delete/Put order.
