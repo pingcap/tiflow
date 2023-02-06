@@ -14,10 +14,13 @@
 package main
 
 import (
+    "runtime"
+
 	_ "github.com/pingcap/tidb/types/parser_driver"
 	"github.com/pingcap/tiflow/pkg/cmd"
 )
 
 func main() {
+    runtime.SetMutexProfileFraction(5)
 	cmd.Run()
 }
