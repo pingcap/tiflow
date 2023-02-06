@@ -250,18 +250,16 @@ func (m *MemQuota) hasAvailable(nBytes uint64) bool {
 	return m.usedBytes+nBytes <= m.totalBytes
 }
 
-var (
-	// MemoryQuota indicates memory usage of a changefeed.
-	MemoryQuota = prometheus.NewGaugeVec(
-		prometheus.GaugeOpts{
-			Namespace: "ticdc",
-			Subsystem: "sinkmanager",
-			Name:      "memory_quota",
-			Help:      "memory quota of the changefeed",
-		},
-		// type includes total, used, component includes sink and redo.
-		[]string{"namespace", "changefeed", "type", "component"})
-)
+// MemoryQuota indicates memory usage of a changefeed.
+var MemoryQuota = prometheus.NewGaugeVec(
+	prometheus.GaugeOpts{
+		Namespace: "ticdc",
+		Subsystem: "sinkmanager",
+		Name:      "memory_quota",
+		Help:      "memory quota of the changefeed",
+	},
+	// type includes total, used, component includes sink and redo.
+	[]string{"namespace", "changefeed", "type", "component"})
 
 // InitMetrics registers all metrics in this file.
 func InitMetrics(registry *prometheus.Registry) {
