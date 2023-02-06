@@ -145,10 +145,10 @@ func (w *redoWorker) handleTask(ctx context.Context, task *redoTask) (finalErr e
 	}
 
 	maybeEmitBatchEvents := func(allFinished, txnFinished bool) error {
-		// If used memory size exceeds the required limit, do a block require.
+		// If used memory size exceeds the required limit, do a force acquire.
 		memoryHighUsage := availableMemSize < usedMemSize
 		if memoryHighUsage {
-			w.memQuota.ForceAcquire(usedMemSize - availableMemSize)
+			w.memQuota.forceAcquire(usedMemSize - availableMemSize)
 			log.Debug("MemoryQuotaTracing: force acquire memory for redo log task",
 				zap.String("namespace", w.changefeedID.Namespace),
 				zap.String("changefeed", w.changefeedID.ID),

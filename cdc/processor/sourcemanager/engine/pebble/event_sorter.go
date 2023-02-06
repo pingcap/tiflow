@@ -208,10 +208,7 @@ func (s *EventSorter) OnResolve(action func(tablepb.Span, model.Ts)) {
 }
 
 // FetchByTable implements engine.SortEngine.
-func (s *EventSorter) FetchByTable(
-	changefeedID model.ChangeFeedID, span tablepb.Span,
-	lowerBound, upperBound engine.Position,
-) engine.EventIterator {
+func (s *EventSorter) FetchByTable(span tablepb.Span, lowerBound, upperBound engine.Position) engine.EventIterator {
 	s.mu.RLock()
 	state, exists := s.tables.Get(span)
 	s.mu.RUnlock()
@@ -238,7 +235,11 @@ func (s *EventSorter) FetchByTable(
 
 	seekStart := time.Now()
 	iter := iterTable(db, state.uniqueID, span.TableID, lowerBound, upperBound)
+<<<<<<< HEAD
 	iterReadDur.WithLabelValues(changefeedID.Namespace, changefeedID.ID, "first").
+=======
+	iterReadDur.WithLabelValues(s.changefeedID.Namespace, s.changefeedID.ID, "first").
+>>>>>>> master
 		Observe(time.Since(seekStart).Seconds())
 
 	return &EventIter{
@@ -247,7 +248,11 @@ func (s *EventSorter) FetchByTable(
 		iter:    iter,
 		serde:   s.serde,
 
+<<<<<<< HEAD
 		nextDuration: iterReadDur.WithLabelValues(changefeedID.Namespace, changefeedID.ID, "next"),
+=======
+		nextDuration: iterReadDur.WithLabelValues(s.changefeedID.Namespace, s.changefeedID.ID, "next"),
+>>>>>>> master
 	}
 }
 

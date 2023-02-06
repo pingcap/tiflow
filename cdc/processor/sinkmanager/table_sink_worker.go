@@ -188,10 +188,10 @@ func (w *sinkWorker) handleTask(ctx context.Context, task *sinkTask) (finalErr e
 	}
 
 	maybeEmitAndAdvance := func(allFinished, txnFinished bool) error {
-		// If used memory size exceeds the required limit, do a block require.
+		// If used memory size exceeds the required limit, do a force acquire.
 		memoryHighUsage := availableMem < usedMem
 		if memoryHighUsage {
-			w.sinkMemQuota.ForceAcquire(usedMem - availableMem)
+			w.sinkMemQuota.forceAcquire(usedMem - availableMem)
 			log.Debug("MemoryQuotaTracing: force acquire memory for table sink task",
 				zap.String("namespace", w.changefeedID.Namespace),
 				zap.String("changefeed", w.changefeedID.ID),

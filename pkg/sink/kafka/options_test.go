@@ -31,7 +31,7 @@ func TestCompleteOptions(t *testing.T) {
 	// Normal config.
 	uriTemplate := "kafka://127.0.0.1:9092/kafka-test?kafka-version=2.6.0&max-batch-size=5" +
 		"&max-message-bytes=%s&partition-num=1&replication-factor=3" +
-		"&kafka-client-id=unit-test&auto-create-topic=false&compression=gzip"
+		"&kafka-client-id=unit-test&auto-create-topic=false&compression=gzip&required-acks=1"
 	maxMessageSize := "4096" // 4kb
 	uri := fmt.Sprintf(uriTemplate, maxMessageSize)
 	sinkURI, err := url.Parse(uri)
@@ -43,6 +43,7 @@ func TestCompleteOptions(t *testing.T) {
 	require.Equal(t, int16(3), options.ReplicationFactor)
 	require.Equal(t, "2.6.0", options.Version)
 	require.Equal(t, 4096, options.MaxMessageBytes)
+	require.Equal(t, WaitForLocal, options.RequiredAcks)
 
 	// multiple kafka broker endpoints
 	uri = "kafka://127.0.0.1:9092,127.0.0.1:9091,127.0.0.1:9090/kafka-test?"
@@ -84,6 +85,14 @@ func TestCompleteOptions(t *testing.T) {
 	options = NewOptions()
 	err = options.Apply(sinkURI)
 	require.Regexp(t, ".*invalid partition num.*", errors.Cause(err))
+
+	// Unknown required-acks.
+	uri = "kafka://127.0.0.1:9092/abc?kafka-version=2.6.0&required-acks=3"
+	sinkURI, err = url.Parse(uri)
+	require.NoError(t, err)
+	options = NewOptions()
+	err = options.Apply(sinkURI)
+	require.Regexp(t, ".*invalid required acks 3.*", errors.Cause(err))
 }
 
 func TestSetPartitionNum(t *testing.T) {

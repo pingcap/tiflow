@@ -123,6 +123,17 @@ func (c ChangeFeedDetail) MarshalJSON() ([]byte, error) {
 	})
 }
 
+// ChangefeedCommonInfo holds some common usage information of a changefeed
+type ChangefeedCommonInfo struct {
+	UpstreamID     uint64              `json:"upstream_id"`
+	Namespace      string              `json:"namespace"`
+	ID             string              `json:"id"`
+	FeedState      model.FeedState     `json:"state"`
+	CheckpointTSO  uint64              `json:"checkpoint_tso"`
+	CheckpointTime model.JSONTime      `json:"checkpoint_time"`
+	RunningError   *model.RunningError `json:"error"`
+}
+
 // ChangefeedConfig use by create changefeed api
 type ChangefeedConfig struct {
 	Namespace     string         `json:"namespace"`

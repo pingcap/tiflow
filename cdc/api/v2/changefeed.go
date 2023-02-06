@@ -16,6 +16,7 @@ package v2
 import (
 	"context"
 	"net/http"
+	"sort"
 	"strings"
 	"time"
 
@@ -35,7 +36,12 @@ import (
 	"go.uber.org/zap"
 )
 
-const apiOpVarChangefeedID = "changefeed_id"
+const (
+	// apiOpVarChangefeedState is the key of changefeed state in HTTP API
+	apiOpVarChangefeedState = "state"
+	// apiOpVarChangefeedID is the key of changefeed ID in HTTP API
+	apiOpVarChangefeedID = "changefeed_id"
+)
 
 // createChangefeed handles create changefeed request,
 // it returns the changefeed's changefeedInfo that it just created
@@ -148,6 +154,83 @@ func (h *OpenAPIV2) createChangefeed(c *gin.Context) {
 		zap.String("id", info.ID),
 		zap.String("changefeed", infoStr))
 	c.JSON(http.StatusCreated, toAPIModel(info, true))
+}
+
+// listChangeFeeds lists all changgefeeds in cdc cluster
+// @Summary List changefeed
+// @Description list all changefeeds in cdc cluster
+// @Tags changefeed
+// @Accept json
+// @Produce json
+// @Param state query string false "state"
+// @Success 200 {array} model.ChangefeedCommonInfo
+// @Failure 500 {object} model.HTTPError
+// @Router /api/v2/changefeeds [get]
+func (h *OpenAPIV2) listChangeFeeds(c *gin.Context) {
+	ctx := c.Request.Context()
+	state := c.Query(apiOpVarChangefeedState)
+	statuses, err := h.capture.StatusProvider().GetAllChangeFeedStatuses(ctx)
+	if err != nil {
+		_ = c.Error(err)
+		return
+	}
+
+	infos, err := h.capture.StatusProvider().GetAllChangeFeedInfo(ctx)
+	if err != nil {
+		_ = c.Error(err)
+		return
+	}
+
+	commonInfos := make([]ChangefeedCommonInfo, 0)
+	changefeeds := make([]model.ChangeFeedID, 0)
+
+	for cfID := range statuses {
+		changefeeds = append(changefeeds, cfID)
+	}
+	sort.Slice(changefeeds, func(i, j int) bool {
+		if changefeeds[i].Namespace == changefeeds[j].Namespace {
+			return changefeeds[i].ID < changefeeds[j].ID
+		}
+
+		return changefeeds[i].Namespace < changefeeds[j].Namespace
+	})
+
+	for _, cfID := range changefeeds {
+		cfInfo, exist := infos[cfID]
+		if !exist {
+			continue
+		}
+		cfStatus := statuses[cfID]
+
+		if !cfInfo.State.IsNeeded(state) {
+			// if the value of `state` is not 'all', only return changefeed
+			// with state 'normal', 'stopped', 'failed'
+			continue
+		}
+
+		// return the common info only.
+		commonInfo := &ChangefeedCommonInfo{
+			UpstreamID:   cfInfo.UpstreamID,
+			Namespace:    cfID.Namespace,
+			ID:           cfID.ID,
+			FeedState:    cfInfo.State,
+			RunningError: cfInfo.Error,
+		}
+
+		if cfStatus != nil {
+			commonInfo.CheckpointTSO = cfStatus.CheckpointTs
+			tm := oracle.GetTimeFromTS(cfStatus.CheckpointTs)
+			commonInfo.CheckpointTime = model.JSONTime(tm)
+		}
+
+		commonInfos = append(commonInfos, *commonInfo)
+	}
+	resp := &ListResponse[ChangefeedCommonInfo]{
+		Total: len(commonInfos),
+		Items: commonInfos,
+	}
+
+	c.JSON(http.StatusOK, resp)
 }
 
 // verifyTable verify table, return ineligibleTables and EligibleTables.

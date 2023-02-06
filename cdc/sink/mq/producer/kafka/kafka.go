@@ -43,7 +43,7 @@ const (
 	kafkaProducerClosing = 1
 )
 
-type kafkaSaramaProducer struct {
+type producer struct {
 	// clientLock is used to protect concurrent access of asyncProducer and syncProducer.
 	// Since we don't close these two clients (which have an input chan) from the
 	// sender routine, data race or send on closed chan could happen.
@@ -81,7 +81,7 @@ type kafkaProducerClosingFlag = int32
 // Do not try to call AsyncSendMessage and Flush functions in different threads,
 // otherwise Flush will not work as expected. It may never finish or flush the wrong message.
 // Because inflight will be modified by mistake.
-func (k *kafkaSaramaProducer) AsyncSendMessage(
+func (k *producer) AsyncSendMessage(
 	ctx context.Context, topic string, partition int32, message *common.Message,
 ) error {
 	k.clientLock.RLock()
@@ -119,7 +119,7 @@ func (k *kafkaSaramaProducer) AsyncSendMessage(
 		})
 }
 
-func (k *kafkaSaramaProducer) SyncBroadcastMessage(
+func (k *producer) SyncBroadcastMessage(
 	ctx context.Context, topic string, partitionsNum int32, message *common.Message,
 ) error {
 	k.clientLock.RLock()
@@ -140,7 +140,7 @@ func (k *kafkaSaramaProducer) SyncBroadcastMessage(
 // Do not try to call AsyncSendMessage and Flush functions in different threads,
 // otherwise Flush will not work as expected. It may never finish or flush the wrong message.
 // Because inflight will be modified by mistake.
-func (k *kafkaSaramaProducer) Flush(ctx context.Context) error {
+func (k *producer) Flush(ctx context.Context) error {
 	done := make(chan struct{}, 1)
 
 	k.mu.Lock()
@@ -168,7 +168,7 @@ func (k *kafkaSaramaProducer) Flush(ctx context.Context) error {
 
 // stop closes the closeCh to signal other routines to exit
 // It SHOULD NOT be called under `clientLock`.
-func (k *kafkaSaramaProducer) stop() {
+func (k *producer) stop() {
 	if atomic.SwapInt32(&k.closing, kafkaProducerClosing) == kafkaProducerClosing {
 		return
 	}
@@ -178,7 +178,7 @@ func (k *kafkaSaramaProducer) stop() {
 }
 
 // Close closes the sync and async clients.
-func (k *kafkaSaramaProducer) Close() error {
+func (k *producer) Close() error {
 	log.Info("stop the kafka producer", zap.String("namespace", k.id.Namespace),
 		zap.String("changefeed", k.id.ID), zap.Any("role", k.role))
 	k.stop()
@@ -198,7 +198,7 @@ func (k *kafkaSaramaProducer) Close() error {
 	k.producersReleased = true
 
 	// `client` is mainly used by `asyncProducer` to fetch metadata and other related
-	// operations. When we close the `kafkaSaramaProducer`, TiCDC no need to make sure
+	// operations. When we close the `producer`, TiCDC no need to make sure
 	// that buffered messages flushed.
 	// Consider the situation that the broker does not respond, If the client is not
 	// closed, `asyncProducer.Close()` would waste a mount of time to try flush all messages.
@@ -257,7 +257,7 @@ func (k *kafkaSaramaProducer) Close() error {
 	return nil
 }
 
-func (k *kafkaSaramaProducer) run(ctx context.Context) error {
+func (k *producer) run(ctx context.Context) error {
 	defer func() {
 		log.Info("stop the kafka producer",
 			zap.String("namespace", k.id.Namespace),
@@ -274,15 +274,15 @@ var NewAdminClientImpl kafka.ClusterAdminClientCreator = kafka.NewSaramaAdminCli
 // NewClientImpl specifies the build method for the  client.
 var NewClientImpl kafka.ClientCreator = kafka.NewSaramaClient
 
-// NewKafkaSaramaProducer creates a kafka sarama producer
-func NewKafkaSaramaProducer(
+// NewProducer creates a kafka producer
+func NewProducer(
 	ctx context.Context,
 	client kafka.Client,
 	admin kafka.ClusterAdminClient,
 	options *kafka.Options,
 	errCh chan error,
 	changefeedID model.ChangeFeedID,
-) (*kafkaSaramaProducer, error) {
+) (*producer, error) {
 	role := contextutil.RoleFromCtx(ctx)
 	log.Info("Starting kafka sarama producer ...", zap.Any("options", options),
 		zap.String("namespace", changefeedID.Namespace),
@@ -292,17 +292,17 @@ func NewKafkaSaramaProducer(
 	failpointCh := make(chan error, 1)
 	asyncProducer, err := client.AsyncProducer(changefeedID, closeCh, failpointCh)
 	if err != nil {
-		return nil, cerror.WrapError(cerror.ErrKafkaNewSaramaProducer, err)
+		return nil, cerror.WrapError(cerror.ErrKafkaNewProducer, err)
 	}
 
 	syncProducer, err := client.SyncProducer()
 	if err != nil {
-		return nil, cerror.WrapError(cerror.ErrKafkaNewSaramaProducer, err)
+		return nil, cerror.WrapError(cerror.ErrKafkaNewProducer, err)
 	}
 
-	runSaramaMetricsMonitor(ctx, client.MetricRegistry(), changefeedID, role, admin)
+	runMetricsMonitor(ctx, client.MetricRegistry(), changefeedID, role, admin)
 
-	k := &kafkaSaramaProducer{
+	k := &producer{
 		admin:         admin,
 		client:        client,
 		asyncProducer: asyncProducer,
@@ -342,9 +342,14 @@ func AdjustOptions(
 		return errors.Trace(err)
 	}
 
-	err = validateMinInsyncReplicas(ctx, admin, topics, topic, int(options.ReplicationFactor))
-	if err != nil {
-		return errors.Trace(err)
+	// Only check replicationFactor >= minInsyncReplicas when producer's required acks is -1.
+	// If we don't check it, the producer probably can not send message to the topic.
+	// Because it will wait for the ack from all replicas. But we do not have enough replicas.
+	if options.RequiredAcks == kafka.WaitForAll {
+		err = validateMinInsyncReplicas(ctx, admin, topics, topic, int(options.ReplicationFactor))
+		if err != nil {
+			return errors.Trace(err)
+		}
 	}
 
 	info, exists := topics[topic]
@@ -422,7 +427,9 @@ func AdjustOptions(
 func validateMinInsyncReplicas(
 	ctx context.Context,
 	admin kafka.ClusterAdminClient,
-	topics map[string]kafka.TopicDetail, topic string, replicationFactor int,
+	topics map[string]kafka.TopicDetail,
+	topic string,
+	replicationFactor int,
 ) error {
 	minInsyncReplicasConfigGetter := func() (string, bool, error) {
 		info, exists := topics[topic]
@@ -450,6 +457,11 @@ func validateMinInsyncReplicas(
 	if err != nil {
 		// 'min.insync.replica' is invisible to us in Confluent Cloud Kafka.
 		if cerror.ErrKafkaBrokerConfigNotFound.Equal(err) {
+			log.Warn("TiCDC cannot find `min.insync.replicas` from broker's configuration, " +
+				"please make sure that the replication factor is greater than or equal " +
+				"to the minimum number of in-sync replicas" +
+				"if you want to use `required-acks` = -1." +
+				"Otherwise, TiCDC will not be able to send messages to the topic.")
 			return nil
 		}
 		return err
@@ -471,8 +483,9 @@ func validateMinInsyncReplicas(
 			zap.Int("min.insync.replicas", minInsyncReplicas))
 		return cerror.ErrKafkaInvalidConfig.GenWithStack(
 			"TiCDC Kafka producer's `request.required.acks` defaults to -1, "+
-				"TiCDC cannot deliver messages when the `replication-factor` "+
-				"is smaller than the `min.insync.replicas` of %s", configFrom,
+				"TiCDC cannot deliver messages when the `replication-factor` %d "+
+				"is smaller than the `min.insync.replicas` %d of %s",
+			replicationFactor, minInsyncReplicas, configFrom,
 		)
 	}
 

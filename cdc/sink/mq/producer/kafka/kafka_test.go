@@ -81,7 +81,7 @@ func TestNewSaramaProducer(t *testing.T) {
 	require.Nil(t, err)
 
 	changefeedID := model.DefaultChangeFeedID("changefeed-test")
-	producer, err := NewKafkaSaramaProducer(
+	producer, err := NewProducer(
 		ctx,
 		client,
 		adminClient,
@@ -292,7 +292,7 @@ func TestAdjustConfigMinInsyncReplicas(t *testing.T) {
 	)
 	require.Regexp(
 		t,
-		".*`replication-factor` is smaller than the `min.insync.replicas` of broker.*",
+		".*`replication-factor` 1 is smaller than the `min.insync.replicas` 2 of broker.*",
 		errors.Cause(err),
 	)
 
@@ -325,9 +325,30 @@ func TestAdjustConfigMinInsyncReplicas(t *testing.T) {
 	adminClient.SetMinInsyncReplicas("2")
 	err = AdjustOptions(ctx, adminClient, options, adminClient.GetDefaultMockTopicName())
 	require.Regexp(t,
-		".*`replication-factor` is smaller than the `min.insync.replicas` of topic.*",
+		".*`replication-factor` 1 is smaller than the `min.insync.replicas` 2 of topic.*",
 		errors.Cause(err),
 	)
+}
+
+func TestSkipAdjustConfigMinInsyncReplicasWhenRequiredAcksIsNotWailAll(t *testing.T) {
+	adminClient := kafka.NewClusterAdminClientMockImpl()
+	defer func() {
+		_ = adminClient.Close()
+	}()
+
+	options := kafka.NewOptions()
+	options.BrokerEndpoints = []string{"127.0.0.1:9092"}
+	options.RequiredAcks = kafka.WaitForLocal
+
+	// Do not report an error if the replication-factor is less than min.insync.replicas(1<2).
+	adminClient.SetMinInsyncReplicas("2")
+	err := AdjustOptions(
+		context.Background(),
+		adminClient,
+		options,
+		"skip-check-min-insync-replicas",
+	)
+	require.Nil(t, err, "Should not report an error when `required-acks` is not `all`")
 }
 
 func TestCreateProducerFailed(t *testing.T) {
@@ -382,7 +403,7 @@ func TestProducerSendMessageFailed(t *testing.T) {
 	require.Nil(t, err)
 
 	changefeedID := model.DefaultChangeFeedID("changefeed-test")
-	producer, err := NewKafkaSaramaProducer(
+	producer, err := NewProducer(
 		ctx,
 		client,
 		adminClient,
@@ -462,7 +483,7 @@ func TestProducerDoubleClose(t *testing.T) {
 	require.Nil(t, err)
 
 	changefeedID := model.DefaultChangeFeedID("changefeed-test")
-	producer, err := NewKafkaSaramaProducer(
+	producer, err := NewProducer(
 		ctx,
 		client,
 		adminClient,
