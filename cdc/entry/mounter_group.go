@@ -106,7 +106,7 @@ func (m *mounterGroup) runWorker(ctx context.Context) error {
 		select {
 		case <-ctx.Done():
 			return errors.Trace(ctx.Err())
-        case pEvent := <-m.inputCh.Out():
+		case pEvent := <-m.inputCh.Out():
 			if pEvent.RawKV.OpType == model.OpTypeResolved {
 				pEvent.MarkFinished()
 				continue

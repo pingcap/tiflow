@@ -345,6 +345,7 @@ func (m *SinkManager) generateSinkTasks() error {
 		} else {
 			upperBoundTs = resolvedTs
 		}
+
 		return engine.Position{StartTs: upperBoundTs - 1, CommitTs: upperBoundTs}
 	}
 

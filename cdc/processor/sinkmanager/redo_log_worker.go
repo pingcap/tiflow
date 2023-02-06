@@ -15,6 +15,7 @@ package sinkmanager
 
 import (
 	"context"
+	"time"
 
 	"github.com/pingcap/errors"
 	"github.com/pingcap/log"
@@ -23,6 +24,7 @@ import (
 	"github.com/pingcap/tiflow/cdc/processor/sourcemanager"
 	"github.com/pingcap/tiflow/cdc/processor/sourcemanager/engine"
 	"github.com/pingcap/tiflow/cdc/redo"
+	"github.com/tikv/client-go/v2/oracle"
 	"go.uber.org/zap"
 )
 
@@ -70,7 +72,18 @@ func (w *redoWorker) handleTasks(ctx context.Context, taskChan <-chan *redoTask)
 }
 
 func (w *redoWorker) handleTask(ctx context.Context, task *redoTask) (finalErr error) {
+	lowerBound := task.lowerBound
 	upperBound := task.getUpperBound(task.tableSink)
+	lowerPhs := oracle.GetTimeFromTS(lowerBound.CommitTs)
+	upperPhs := oracle.GetTimeFromTS(upperBound.CommitTs)
+	if upperPhs.Sub(lowerPhs) > 3*time.Second {
+		upperCommitTs := oracle.GoTimeToTS(lowerPhs.Add(3 * time.Second))
+		upperBound = engine.Position{
+			StartTs:  upperCommitTs - 1,
+			CommitTs: upperCommitTs,
+		}
+	}
+
 	if !upperBound.IsCommitFence() {
 		log.Panic("redo task upperbound must be a ResolvedTs",
 			zap.String("namespace", w.changefeedID.Namespace),
@@ -81,7 +94,7 @@ func (w *redoWorker) handleTask(ctx context.Context, task *redoTask) (finalErr e
 
 	var cache *eventAppender
 	if w.eventCache != nil {
-		cache = w.eventCache.maybeCreateAppender(task.span, task.lowerBound)
+		cache = w.eventCache.maybeCreateAppender(task.span, lowerBound)
 	}
 
 	// Events are pushed into redoEventCache if possible. Otherwise, their memory will
@@ -194,7 +207,7 @@ func (w *redoWorker) handleTask(ctx context.Context, task *redoTask) (finalErr e
 		return nil
 	}
 
-	iter := w.sourceManager.FetchByTable(task.span, task.lowerBound, upperBound, w.memQuota)
+	iter := w.sourceManager.FetchByTable(task.span, lowerBound, upperBound, w.memQuota)
 	allEventCount := 0
 	defer func() {
 		task.tableSink.updateReceivedSorterCommitTs(lastTxnCommitTs)
@@ -213,7 +226,7 @@ func (w *redoWorker) handleTask(ctx context.Context, task *redoTask) (finalErr e
 			zap.String("namespace", w.changefeedID.Namespace),
 			zap.String("changefeed", w.changefeedID.ID),
 			zap.Stringer("span", &task.span),
-			zap.Any("lowerBound", task.lowerBound),
+			zap.Any("lowerBound", lowerBound),
 			zap.Any("upperBound", upperBound),
 			zap.Any("lastPos", lastPos))
 		if finalErr == nil {

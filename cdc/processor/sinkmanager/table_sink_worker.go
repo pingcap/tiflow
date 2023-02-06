@@ -15,6 +15,7 @@ package sinkmanager
 
 import (
 	"context"
+	"time"
 
 	"github.com/pingcap/errors"
 	"github.com/pingcap/log"
@@ -23,6 +24,7 @@ import (
 	"github.com/pingcap/tiflow/cdc/processor/sourcemanager"
 	"github.com/pingcap/tiflow/cdc/processor/sourcemanager/engine"
 	"github.com/prometheus/client_golang/prometheus"
+	"github.com/tikv/client-go/v2/oracle"
 	"go.uber.org/zap"
 )
 
@@ -83,6 +85,16 @@ func (w *sinkWorker) handleTasks(ctx context.Context, taskChan <-chan *sinkTask)
 func (w *sinkWorker) handleTask(ctx context.Context, task *sinkTask) (finalErr error) {
 	lowerBound := task.lowerBound
 	upperBound := task.getUpperBound(task.tableSink)
+	lowerPhs := oracle.GetTimeFromTS(lowerBound.CommitTs)
+	upperPhs := oracle.GetTimeFromTS(upperBound.CommitTs)
+	if upperPhs.Sub(lowerPhs) > 3*time.Second {
+		upperCommitTs := oracle.GoTimeToTS(lowerPhs.Add(3 * time.Second))
+		upperBound = engine.Position{
+			StartTs:  upperCommitTs - 1,
+			CommitTs: upperCommitTs,
+		}
+	}
+
 	if !upperBound.IsCommitFence() {
 		log.Panic("sink task upperbound must be a ResolvedTs",
 			zap.String("namespace", w.changefeedID.Namespace),
