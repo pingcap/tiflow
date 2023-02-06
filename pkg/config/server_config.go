@@ -107,12 +107,8 @@ var defaultServerConfig = &ServerConfig{
 	OwnerFlushInterval:     TomlDuration(50 * time.Millisecond),
 	ProcessorFlushInterval: TomlDuration(50 * time.Millisecond),
 	Sorter: &SorterConfig{
-		NumConcurrentWorker:    4,
-		ChunkSizeLimit:         128 * 1024 * 1024,       // 128MB
-		MaxMemoryPercentage:    10,                      // 10% is safe on machines with memory capacity <= 16GB
-		MaxMemoryConsumption:   16 * 1024 * 1024 * 1024, // 16GB
-		NumWorkerPoolGoroutine: 16,
-		SortDir:                DefaultSortDir,
+		MaxMemoryPercentage: 10, // 10% is safe on machines with memory capacity <= 16GB
+		SortDir:             DefaultSortDir,
 	},
 	Security:            &SecurityConfig{},
 	PerTableMemoryQuota: DefaultTableMemoryQuota,
