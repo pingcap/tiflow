@@ -72,11 +72,6 @@ func NewKafkaDDLSink(
 		return nil, errors.Trace(err)
 	}
 
-	//client, err := factory.(ctx, options)
-	//if err != nil {
-	//	return nil, cerror.WrapError(cerror.ErrKafkaNewProducer, err)
-	//}
-
 	start := time.Now()
 	log.Info("Try to create a DDL sink producer",
 		zap.Any("options", options))

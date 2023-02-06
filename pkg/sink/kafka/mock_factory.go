@@ -51,8 +51,7 @@ func (c *MockFactory) Close() error {
 	return nil
 }
 
-type mockSyncProducer struct {
-}
+type mockSyncProducer struct{}
 
 func (p *mockSyncProducer) SendMessage(topic string, partitionNum int32, key []byte, value []byte) error {
 	return nil
@@ -66,25 +65,24 @@ func (p *mockSyncProducer) Close() error {
 	return nil
 }
 
-type mockAsyncProducer struct {
-}
+type mockAsyncProducer struct{}
 
 func (m *mockAsyncProducer) AsyncClose() {
-	//TODO implement me
+	// TODO implement me
 	panic("implement me")
 }
 
 func (m *mockAsyncProducer) Close() error {
-	//TODO implement me
+	// TODO implement me
 	panic("implement me")
 }
 
 func (m *mockAsyncProducer) AsyncSend(ctx context.Context, topic string, partition int32, key []byte, value []byte, callback func()) error {
-	//TODO implement me
+	// TODO implement me
 	panic("implement me")
 }
 
 func (m *mockAsyncProducer) AsyncRunCallback(ctx context.Context) error {
-	//TODO implement me
+	// TODO implement me
 	panic("implement me")
 }
