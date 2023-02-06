@@ -90,7 +90,7 @@ func TestKafkaSink(t *testing.T) {
 	factory, err := kafka.NewMockFactory(ctx, option)
 	require.NoError(t, err)
 	defer factory.Close()
-	
+
 	sink, err := NewKafkaSink(ctx, sinkURI, replicaConfig,
 		factory, errCh, changefeedID)
 	require.Nil(t, err)
