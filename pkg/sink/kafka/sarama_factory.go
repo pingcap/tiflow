@@ -14,6 +14,8 @@
 package kafka
 
 import (
+	"context"
+
 	"github.com/Shopify/sarama"
 	"github.com/pingcap/tiflow/cdc/model"
 	"github.com/pingcap/tiflow/pkg/errors"
@@ -22,6 +24,21 @@ import (
 
 type saramaFactory struct {
 	client sarama.Client
+}
+
+// NewSaramaFactory constructs a Factory with sarama implementation.
+func NewSaramaFactory(ctx context.Context, o *Options) (Factory, error) {
+	saramaConfig, err := NewSaramaConfig(ctx, o)
+	if err != nil {
+		return nil, errors.Trace(err)
+	}
+	c, err := sarama.NewClient(o.BrokerEndpoints, saramaConfig)
+	if err != nil {
+		return nil, errors.Trace(err)
+	}
+	return &saramaFactory{
+		client: c,
+	}, nil
 }
 
 func (f *saramaFactory) AdminClient() (ClusterAdminClient, error) {

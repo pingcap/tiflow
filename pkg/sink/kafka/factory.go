@@ -196,23 +196,3 @@ func (p *saramaAsyncProducer) AsyncSend(ctx context.Context,
 	}
 	return nil
 }
-
-// NewSaramaFactory constructs a Factory with sarama implementation.
-func NewSaramaFactory(ctx context.Context, o *Options) (Factory, error) {
-	saramaConfig, err := NewSaramaConfig(ctx, o)
-	if err != nil {
-		return nil, errors.Trace(err)
-	}
-	c, err := sarama.NewClient(o.BrokerEndpoints, saramaConfig)
-	if err != nil {
-		return nil, errors.Trace(err)
-	}
-	return &saramaFactory{
-		client: c,
-	}, nil
-}
-
-// NewMockFactory constructs a Factory with mock implementation.
-func NewMockFactory() Factory {
-	return &MockFactory{}
-}

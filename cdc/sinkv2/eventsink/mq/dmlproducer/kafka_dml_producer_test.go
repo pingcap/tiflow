@@ -77,10 +77,10 @@ func TestProducerAck(t *testing.T) {
 	options := getOptions(leader.Addr())
 	options.MaxMessages = 1
 
-	factory, err := kafka.NewSaramaFactory(ctx, options)
+	factory, err := kafka.NewMockFactory(ctx, options)
 	require.NoError(t, err)
 
-	adminClient, err := kafka.NewMockFactory().AdminClient()
+	adminClient, err := factory.AdminClient()
 	require.NoError(t, err)
 
 	errCh := make(chan error, 1)
@@ -146,10 +146,10 @@ func TestProducerSendMsgFailed(t *testing.T) {
 	// This will make the first send failed.
 	// saramaConfig.Producer.MaxMessageBytes = 8
 
-	factory, err := kafka.NewSaramaFactory(ctx, options)
+	factory, err := kafka.NewMockFactory(ctx, options)
 	require.NoError(t, err)
 
-	adminClient, err := kafka.NewMockFactory().AdminClient()
+	adminClient, err := factory.AdminClient()
 	require.NoError(t, err)
 
 	errCh := make(chan error, 1)
@@ -206,10 +206,10 @@ func TestProducerDoubleClose(t *testing.T) {
 	defer cancel()
 	options := getOptions(leader.Addr())
 
-	factory, err := kafka.NewSaramaFactory(ctx, options)
+	factory, err := kafka.NewMockFactory(ctx, options)
 	require.NoError(t, err)
 
-	adminClient, err := kafka.NewMockFactory().AdminClient()
+	adminClient, err := factory.AdminClient()
 	require.NoError(t, err)
 
 	errCh := make(chan error, 1)

@@ -21,7 +21,17 @@ import (
 )
 
 // MockFactory is a mock implementation of Factory interface.
-type MockFactory struct{}
+type MockFactory struct {
+	// mock factory is used by some unit test based on sarama implementations,
+	// so we adapt sarama factory to support the mock implementation temporarily.
+	// todo: make unit test become implementation independent.
+	helper *saramaFactory
+}
+
+// NewMockFactory constructs a Factory with mock implementation.
+func NewMockFactory(ctx context.Context, o *Options) (Factory, error) {
+	return NewSaramaFactory(ctx, o)
+}
 
 // AdminClient creates a cluster admin client
 func (c *MockFactory) AdminClient() (ClusterAdminClient, error) {
@@ -30,7 +40,7 @@ func (c *MockFactory) AdminClient() (ClusterAdminClient, error) {
 
 // SyncProducer creates a sync producer
 func (c *MockFactory) SyncProducer() (SyncProducer, error) {
-	return &mockSyncProducer{}, nil
+	return c.helper.SyncProducer()
 }
 
 // AsyncProducer creates an async producer
@@ -39,7 +49,7 @@ func (c *MockFactory) AsyncProducer(
 	closedChan chan struct{},
 	failpointCh chan error,
 ) (AsyncProducer, error) {
-	return &mockAsyncProducer{}, nil
+	return c.helper.AsyncProducer(changefeedID, closedChan, failpointCh)
 }
 
 // MetricRegistry returns the metric registry
@@ -49,47 +59,5 @@ func (c *MockFactory) MetricRegistry() metrics.Registry {
 
 // Close closes the client
 func (c *MockFactory) Close() error {
-	return nil
-}
-
-type mockSyncProducer struct{}
-
-func (p *mockSyncProducer) SendMessage(topic string, partitionNum int32,
-	key []byte, value []byte,
-) error {
-	return nil
-}
-
-func (p *mockSyncProducer) SendMessages(topic string, partitionNum int32,
-	key []byte, value []byte,
-) error {
-	return nil
-}
-
-func (p *mockSyncProducer) Close() error {
-	return nil
-}
-
-type mockAsyncProducer struct{}
-
-func (m *mockAsyncProducer) AsyncClose() {
-	// TODO implement me
-	panic("implement me")
-}
-
-func (m *mockAsyncProducer) Close() error {
-	// TODO implement me
-	panic("implement me")
-}
-
-func (m *mockAsyncProducer) AsyncSend(ctx context.Context, topic string, partition int32,
-	key []byte, value []byte, callback func(),
-) error {
-	// TODO implement me
-	panic("implement me")
-}
-
-func (m *mockAsyncProducer) AsyncRunCallback(ctx context.Context) error {
-	// TODO implement me
-	panic("implement me")
+	return c.helper.Close()
 }
