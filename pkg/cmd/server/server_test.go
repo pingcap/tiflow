@@ -124,11 +124,7 @@ func TestParseCfg(t *testing.T) {
 		"--cert", "bb",
 		"--key", "cc",
 		"--cert-allowed-cn", "dd,ee",
-		"--sorter-chunk-size-limit", "50000000",
-		"--sorter-max-memory-consumption", "60000",
 		"--sorter-max-memory-percentage", "70",
-		"--sorter-num-concurrent-worker", "80",
-		"--sorter-num-workerpool-goroutine", "90",
 		"--sort-dir", "/tmp/just_a_test",
 	}))
 
@@ -236,19 +232,13 @@ max-days = 1
 max-backups = 1
 
 [sorter]
-chunk-size-limit = 10000000
-max-memory-consumption = 2000000
 max-memory-percentage = 3
-num-concurrent-worker = 4
-num-workerpool-goroutine = 5
 sort-dir = "/tmp/just_a_test"
 
 [kv-client]
 region-retry-duration = "3s"
 
 [debug]
-enable-db-sorter = true
-enable-pull-based-sink = true
 enable-kafka-sink-v2 = true
 [debug.db]
 count = 5
