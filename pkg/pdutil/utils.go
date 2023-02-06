@@ -23,7 +23,7 @@ import (
 	"go.uber.org/zap"
 )
 
-const sourceIDName = "/global/config/source_id"
+const sourceIDName = "source_id"
 
 // GetSourceID returns the source ID of the TiDB cluster that PD is belonged to.
 func GetSourceID(ctx context.Context, pdClient pd.Client) (uint64, error) {
@@ -34,7 +34,7 @@ func GetSourceID(ctx context.Context, pdClient pd.Client) (uint64, error) {
 	// The default value of sourceID is 1,
 	// which means the sourceID is not changed by user.
 	sourceID := uint64(1)
-	sourceIDConfig, _, err := pdClient.LoadGlobalConfig(ctx, sourceIDName)
+	sourceIDConfig, _, err := pdClient.LoadGlobalConfig(ctx, []string{sourceIDName}, "")
 	if err != nil {
 		return 0, cerror.WrapError(cerror.ErrPDEtcdAPIError, err)
 	}
