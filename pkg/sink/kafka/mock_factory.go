@@ -22,15 +22,19 @@ import (
 
 // MockFactory is a mock implementation of Factory interface.
 type MockFactory struct {
-	// mock factory is used by some unit test based on sarama implementations,
-	// so we adapt sarama factory to support the mock implementation temporarily.
-	// todo: make unit test become implementation independent.
-	helper *saramaFactory
+	helper Factory
 }
 
 // NewMockFactory constructs a Factory with mock implementation.
 func NewMockFactory(ctx context.Context, o *Options) (Factory, error) {
-	return NewSaramaFactory(ctx, o)
+	// mock factory is used by some unit test based on sarama implementations,
+	// so we adapt sarama factory to support the mock implementation temporarily.
+	// todo: make unit test become implementation independent.
+	helper, err := NewSaramaFactory(ctx, o)
+	if err != nil {
+		return nil, err
+	}
+	return &MockFactory{helper: helper}, nil
 }
 
 // AdminClient creates a cluster admin client
