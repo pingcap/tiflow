@@ -97,7 +97,6 @@ function sql_test() {
 	cleanup_process $CDC_BINARY
 }
 
-
 trap stop_tidb_cluster EXIT
 prepare $*
 sql_test $*
