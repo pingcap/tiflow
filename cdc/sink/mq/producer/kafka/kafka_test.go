@@ -698,11 +698,7 @@ func TestConfigurationCombinations(t *testing.T) {
 
 		ctx := context.Background()
 
-		factory, err := kafka.NewMockFactory(ctx, options)
-		require.NoError(t, err)
-
-		adminClient, err := factory.AdminClient()
-		require.NoError(t, err)
+		adminClient := kafka.NewClusterAdminClientMockImpl()
 
 		topic, ok := a.uriParams[0].(string)
 		require.True(t, ok)
@@ -726,6 +722,5 @@ func TestConfigurationCombinations(t *testing.T) {
 		require.Equal(t, expected, options.MaxMessageBytes)
 
 		_ = adminClient.Close()
-		factory.Close()
 	}
 }

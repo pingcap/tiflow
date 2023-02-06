@@ -75,7 +75,7 @@ func TestSyncBroadcastMessage(t *testing.T) {
 	options := getOptions(leader.Addr())
 	options.MaxMessages = 1
 
-	factory, err := kafka.NewSaramaFactory(ctx, options)
+	factory, err := kafka.NewMockFactory(ctx, options)
 	require.NoError(t, err)
 	defer factory.Close()
 
@@ -105,7 +105,7 @@ func TestSyncSendMessage(t *testing.T) {
 	ctx, cancel := context.WithCancel(context.Background())
 	options := getOptions(leader.Addr())
 
-	factory, err := kafka.NewSaramaFactory(ctx, options)
+	factory, err := kafka.NewMockFactory(ctx, options)
 	require.NoError(t, err)
 	defer factory.Close()
 
@@ -136,7 +136,7 @@ func TestProducerSendMsgFailed(t *testing.T) {
 	options.MaxMessages = 1
 	options.MaxMessageBytes = 1
 
-	factory, err := kafka.NewSaramaFactory(ctx, options)
+	factory, err := kafka.NewMockFactory(ctx, options)
 	require.NoError(t, err)
 	defer factory.Close()
 
@@ -161,7 +161,7 @@ func TestProducerDoubleClose(t *testing.T) {
 	defer cancel()
 	options := getOptions(leader.Addr())
 
-	factory, err := kafka.NewSaramaFactory(ctx, options)
+	factory, err := kafka.NewMockFactory(ctx, options)
 	require.NoError(t, err)
 	defer factory.Close()
 
