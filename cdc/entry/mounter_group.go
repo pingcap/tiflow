@@ -27,18 +27,12 @@ import (
 // MounterGroup is a group of mounter workers
 type MounterGroup interface {
 	Run(ctx context.Context) error
-
-	AddEvent(ctx context.Context, task MountTask) error
-}
-
-type MountTask struct {
-	Event      *model.PolymorphicEvent
-	PostFinish func()
+	AddEvent(ctx context.Context, event *model.PolymorphicEvent) error
 }
 
 type mounterGroup struct {
 	schemaStorage  SchemaStorage
-	inputCh        *chann.Chann[MountTask]
+	inputCh        *chann.Chann[*model.PolymorphicEvent]
 	tz             *time.Location
 	filter         filter.Filter
 	enableOldValue bool
@@ -69,7 +63,7 @@ func NewMounterGroup(
 	}
 	return &mounterGroup{
 		schemaStorage:  schemaStorage,
-		inputCh:        chann.New[MountTask](),
+		inputCh:        chann.New[*model.PolymorphicEvent](),
 		enableOldValue: enableOldValue,
 		filter:         filter,
 		tz:             tz,
@@ -112,24 +106,25 @@ func (m *mounterGroup) runWorker(ctx context.Context) error {
 		select {
 		case <-ctx.Done():
 			return errors.Trace(ctx.Err())
-		case task := <-m.inputCh.Out():
-			if task.Event.RawKV.OpType != model.OpTypeResolved {
-				err := mounter.DecodeEvent(ctx, task.Event)
-				if err != nil {
-					return errors.Trace(err)
-				}
+        case pEvent := <-m.inputCh.Out():
+			if pEvent.RawKV.OpType == model.OpTypeResolved {
+				pEvent.MarkFinished()
+				continue
 			}
-			task.Event.Mounted.Store(true)
-			task.PostFinish()
+			err := mounter.DecodeEvent(ctx, pEvent)
+			if err != nil {
+				return errors.Trace(err)
+			}
+			pEvent.MarkFinished()
 		}
 	}
 }
 
-func (m *mounterGroup) AddEvent(ctx context.Context, task MountTask) error {
+func (m *mounterGroup) AddEvent(ctx context.Context, event *model.PolymorphicEvent) error {
 	select {
 	case <-ctx.Done():
 		return ctx.Err()
-	case m.inputCh.In() <- task:
+	case m.inputCh.In() <- event:
 		return nil
 	}
 }
@@ -143,7 +138,7 @@ func (m *MockMountGroup) Run(ctx context.Context) error {
 }
 
 // AddEvent implements MountGroup.
-func (m *MockMountGroup) AddEvent(ctx context.Context, task MountTask) error {
-	task.Event.Mounted.Store(true)
+func (m *MockMountGroup) AddEvent(ctx context.Context, event *model.PolymorphicEvent) error {
+	event.MarkFinished()
 	return nil
 }

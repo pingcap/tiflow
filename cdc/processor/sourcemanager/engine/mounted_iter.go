@@ -33,7 +33,6 @@ type MountedEventIter struct {
 	nextToEmit     int
 	savedIterError error
 
-	waitMount         chan struct{}
 	mountWaitDuration prometheus.Observer
 }
 
@@ -51,7 +50,6 @@ func NewMountedEventIter(
 		quota:     quota,
 		rawEvents: make([]rawEvent, 0, maxBatchSize),
 
-		waitMount:         make(chan struct{}, 1),
 		mountWaitDuration: mountWaitDuration.WithLabelValues(changefeedID.Namespace, changefeedID.ID),
 	}
 }
@@ -71,13 +69,8 @@ func (i *MountedEventIter) Next(ctx context.Context) (event *model.PolymorphicEv
 		idx := i.nextToEmit
 
 		startWait := time.Now()
-		for !i.rawEvents[idx].event.Mounted.Load() {
-			select {
-			case <-i.waitMount:
-			case <-ctx.Done():
-				err = ctx.Err()
-				return
-			}
+		if err = i.rawEvents[idx].event.WaitFinished(ctx); err != nil {
+			return
 		}
 		i.mountWaitDuration.Observe(time.Since(startWait).Seconds())
 		i.quota.Refund(uint64(i.rawEvents[idx].size))
@@ -106,17 +99,8 @@ func (i *MountedEventIter) readBatch(ctx context.Context) error {
 			i.iter = nil
 			break
 		}
-
-		task := entry.MountTask{
-			Event: event,
-			PostFinish: func() {
-				select {
-				case i.waitMount <- struct{}{}:
-				default:
-				}
-			},
-		}
-		if err := i.mg.AddEvent(ctx, task); err != nil {
+		event.SetUpFinishedCh()
+		if err := i.mg.AddEvent(ctx, event); err != nil {
 			i.mg = nil
 			return err
 		}
