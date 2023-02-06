@@ -66,12 +66,8 @@ func newForTest(ctx context.Context,
 	schema := strings.ToLower(sinkURI.Scheme)
 	switch schema {
 	case "kafka", "kafka+ssl":
-		factory, err := kafka.NewMockFactory(ctx, nil)
-		if err != nil {
-			return nil, err
-		}
 		mqs, err := mq.NewKafkaDMLSink(ctx, sinkURI, cfg, errCh,
-			factory,
+			kafka.NewMockFactory(),
 			dmlproducer.NewDMLMockProducer)
 		if err != nil {
 			return nil, err

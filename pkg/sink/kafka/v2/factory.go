@@ -33,6 +33,7 @@ import (
 	"go.uber.org/zap"
 )
 
+// Factory is used to produce kafka-go based kafka components.
 type Factory struct {
 	transport *kafka.Transport
 	client    *kafka.Client

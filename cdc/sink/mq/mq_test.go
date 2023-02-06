@@ -82,8 +82,8 @@ func TestKafkaSink(t *testing.T) {
 
 	changefeedID := model.DefaultChangeFeedID("changefeed-test")
 	require.Nil(t, replicaConfig.ValidateAndAdjust(sinkURI))
-	factory, err := kafka.NewMockFactory(context.Background(), nil)
-	sink, err := NewKafkaSink(ctx, sinkURI, replicaConfig, factory, errCh, changefeedID)
+	sink, err := NewKafkaSink(ctx, sinkURI, replicaConfig,
+		kafka.NewMockFactory(), errCh, changefeedID)
 	require.Nil(t, err)
 
 	encoder := sink.encoderBuilder.Build()
@@ -182,9 +182,8 @@ func TestFlushRowChangedEvents(t *testing.T) {
 	require.Nil(t, replicaConfig.ValidateAndAdjust(sinkURI))
 
 	changefeedID := model.DefaultChangeFeedID("changefeed-test")
-
-	factory, err := kafka.NewMockFactory(context.Background(), nil)
-	sink, err := NewKafkaSink(ctx, sinkURI, replicaConfig, factory, errCh, changefeedID)
+	sink, err := NewKafkaSink(ctx, sinkURI, replicaConfig,
+		kafka.NewMockFactory(), errCh, changefeedID)
 	require.NoError(t, err)
 
 	// mock kafka broker processes 1 row changed event

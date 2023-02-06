@@ -23,6 +23,7 @@ import (
 // MockFactory is a mock implementation of Factory interface.
 type MockFactory struct{}
 
+// AdminClient creates a cluster admin client
 func (c *MockFactory) AdminClient() (ClusterAdminClient, error) {
 	return NewClusterAdminClientMockImpl(), nil
 }
@@ -53,11 +54,15 @@ func (c *MockFactory) Close() error {
 
 type mockSyncProducer struct{}
 
-func (p *mockSyncProducer) SendMessage(topic string, partitionNum int32, key []byte, value []byte) error {
+func (p *mockSyncProducer) SendMessage(topic string, partitionNum int32,
+	key []byte, value []byte,
+) error {
 	return nil
 }
 
-func (p *mockSyncProducer) SendMessages(topic string, partitionNum int32, key []byte, value []byte) error {
+func (p *mockSyncProducer) SendMessages(topic string, partitionNum int32,
+	key []byte, value []byte,
+) error {
 	return nil
 }
 
@@ -77,7 +82,9 @@ func (m *mockAsyncProducer) Close() error {
 	panic("implement me")
 }
 
-func (m *mockAsyncProducer) AsyncSend(ctx context.Context, topic string, partition int32, key []byte, value []byte, callback func()) error {
+func (m *mockAsyncProducer) AsyncSend(ctx context.Context, topic string, partition int32,
+	key []byte, value []byte, callback func(),
+) error {
 	// TODO implement me
 	panic("implement me")
 }
