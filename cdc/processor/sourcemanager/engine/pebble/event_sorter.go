@@ -29,6 +29,7 @@ import (
 	"github.com/pingcap/tiflow/cdc/processor/sourcemanager/engine/pebble/encoding"
 	metrics "github.com/pingcap/tiflow/cdc/sorter/db"
 	"github.com/pingcap/tiflow/pkg/chann"
+	"github.com/prometheus/client_golang/prometheus"
 	"go.uber.org/zap"
 )
 
@@ -64,6 +65,8 @@ type EventIter struct {
 	iter     *pebble.Iterator
 	headItem *model.PolymorphicEvent
 	serde    encoding.MsgPackGenSerde
+
+	nextDuration prometheus.Observer
 }
 
 // New creates an EventSorter instance.
@@ -229,8 +232,21 @@ func (s *EventSorter) FetchByTable(
 	}
 
 	db := s.dbs[getDB(tableID, len(s.dbs))]
+	iterReadDur := metrics.SorterIterReadDuration()
+
+	seekStart := time.Now()
 	iter := iterTable(db, s.uniqueID, tableID, lowerBound, upperBound)
-	return &EventIter{tableID: tableID, state: state, iter: iter, serde: s.serde}
+	iterReadDur.WithLabelValues(s.changefeedID.Namespace, s.changefeedID.ID, "first").
+		Observe(time.Since(seekStart).Seconds())
+
+	return &EventIter{
+		tableID: tableID,
+		state:   state,
+		iter:    iter,
+		serde:   s.serde,
+
+		nextDuration: iterReadDur.WithLabelValues(s.changefeedID.Namespace, s.changefeedID.ID, "next"),
+	}
 }
 
 // FetchAllTables implements engine.SortEngine.
@@ -335,7 +351,10 @@ func (s *EventIter) Next() (event *model.PolymorphicEvent, pos engine.Position, 
 	valid := s.iter != nil && s.iter.Valid()
 	var value []byte
 	for valid {
+		nextStart := time.Now()
 		value, valid = s.iter.Value(), s.iter.Next()
+		s.nextDuration.Observe(time.Since(nextStart).Seconds())
+
 		event = &model.PolymorphicEvent{}
 		if _, err = s.serde.Unmarshal(event, value); err != nil {
 			return

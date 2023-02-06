@@ -130,7 +130,7 @@ func TestEventFetch(t *testing.T) {
 	timer := time.NewTimer(100 * time.Millisecond)
 	select {
 	case ts := <-resolvedTs:
-		iter := s.FetchByTable(model.TableID(1), engine.Position{}, engine.Position{CommitTs: ts, StartTs: ts - 1})
+		iter := s.FetchByTable(1, engine.Position{}, engine.Position{CommitTs: ts, StartTs: ts - 1})
 		for {
 			event, pos, err := iter.Next()
 			require.Nil(t, err)

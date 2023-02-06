@@ -465,11 +465,10 @@ func (m *ManagerImpl) flushLog(ctx context.Context, handleErr func(err error)) {
 }
 
 func (m *ManagerImpl) onResolvedTsMsg(tableID model.TableID, resolvedTs model.Ts) {
-	value, loaded := m.rtsMap.Load(tableID)
-	if !loaded {
-		panic("onResolvedTsMsg is called for an invalid table")
+	// It's possible that the table is removed while redo log is still in writing.
+	if value, loaded := m.rtsMap.Load(tableID); loaded {
+		value.(*statefulRts).checkAndSetUnflushed(resolvedTs)
 	}
-	value.(*statefulRts).checkAndSetUnflushed(resolvedTs)
 }
 
 func (m *ManagerImpl) bgUpdateLog(
