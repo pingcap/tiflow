@@ -213,6 +213,6 @@ func NewSaramaFactory(ctx context.Context, o *Options) (Factory, error) {
 }
 
 // NewMockFactory constructs a Factory with mock implementation.
-func NewMockFactory(_ context.Context, _ *Options) (Factory, error) {
-	return &MockFactory{}, nil
+func NewMockFactory() Factory {
+	return &MockFactory{}
 }
