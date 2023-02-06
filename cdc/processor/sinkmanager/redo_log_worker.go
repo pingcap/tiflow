@@ -19,6 +19,7 @@ import (
 
 	"github.com/pingcap/errors"
 	"github.com/pingcap/log"
+	"github.com/pingcap/tiflow/cdc/entry"
 	"github.com/pingcap/tiflow/cdc/model"
 	"github.com/pingcap/tiflow/cdc/processor/memquota"
 	"github.com/pingcap/tiflow/cdc/processor/sourcemanager"
@@ -30,6 +31,7 @@ import (
 
 type redoWorker struct {
 	changefeedID   model.ChangeFeedID
+	mg             entry.MounterGroup
 	sourceManager  *sourcemanager.SourceManager
 	memQuota       *memquota.MemQuota
 	redoManager    redo.LogManager
@@ -40,6 +42,7 @@ type redoWorker struct {
 
 func newRedoWorker(
 	changefeedID model.ChangeFeedID,
+	mg entry.MounterGroup,
 	sourceManager *sourcemanager.SourceManager,
 	quota *memquota.MemQuota,
 	redoManager redo.LogManager,
@@ -49,6 +52,7 @@ func newRedoWorker(
 ) *redoWorker {
 	return &redoWorker{
 		changefeedID:   changefeedID,
+		mg:             mg,
 		sourceManager:  sourceManager,
 		memQuota:       quota,
 		redoManager:    redoManager,
@@ -207,7 +211,7 @@ func (w *redoWorker) handleTask(ctx context.Context, task *redoTask) (finalErr e
 		return nil
 	}
 
-	iter := w.sourceManager.FetchByTable(task.span, lowerBound, upperBound, w.memQuota)
+	iter := w.sourceManager.FetchByTable(task.span, lowerBound, upperBound, w.mg, w.memQuota)
 	allEventCount := 0
 	defer func() {
 		task.tableSink.updateReceivedSorterCommitTs(lastTxnCommitTs)

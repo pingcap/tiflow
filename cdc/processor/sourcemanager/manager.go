@@ -40,8 +40,6 @@ type SourceManager struct {
 	changefeedID model.ChangeFeedID
 	// up is the upstream of the puller.
 	up *upstream.Upstream
-	// mg is the mounter group for mount the raw kv entry.
-	mg entry.MounterGroup
 	// engine is the source engine.
 	engine engine.SortEngine
 	// pullers is the puller wrapper map.
@@ -56,7 +54,6 @@ type SourceManager struct {
 func New(
 	changefeedID model.ChangeFeedID,
 	up *upstream.Upstream,
-	mg entry.MounterGroup,
 	engine engine.SortEngine,
 	errChan chan error,
 	bdrMode bool,
@@ -64,7 +61,6 @@ func New(
 	return &SourceManager{
 		changefeedID: changefeedID,
 		up:           up,
-		mg:           mg,
 		engine:       engine,
 		errChan:      errChan,
 		bdrMode:      bdrMode,
@@ -99,10 +95,10 @@ func (m *SourceManager) OnResolve(action func(tablepb.Span, model.Ts)) {
 // FetchByTable just wrap the engine's FetchByTable method.
 func (m *SourceManager) FetchByTable(
 	span tablepb.Span, lowerBound, upperBound engine.Position,
-	quota *memquota.MemQuota,
+	mg entry.MounterGroup, quota *memquota.MemQuota,
 ) *engine.MountedEventIter {
 	iter := m.engine.FetchByTable(span, lowerBound, upperBound)
-	return engine.NewMountedEventIter(m.changefeedID, iter, m.mg, defaultMaxBatchSize, quota)
+	return engine.NewMountedEventIter(m.changefeedID, iter, mg, defaultMaxBatchSize, quota)
 }
 
 // CleanByTable just wrap the engine's CleanByTable method.

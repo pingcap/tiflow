@@ -21,6 +21,7 @@ import (
 
 	"github.com/pingcap/errors"
 	"github.com/pingcap/log"
+	"github.com/pingcap/tiflow/cdc/entry"
 	"github.com/pingcap/tiflow/cdc/model"
 	"github.com/pingcap/tiflow/cdc/processor/memquota"
 	"github.com/pingcap/tiflow/cdc/processor/sourcemanager"
@@ -72,6 +73,9 @@ type SinkManager struct {
 	// redoProgressHeap is the heap of the table progress for redo.
 	redoProgressHeap *tableProgresses
 
+	sinkMg entry.MounterGroup
+	redoMg entry.MounterGroup
+
 	// eventCache caches events fetched from sort engine.
 	eventCache *redoEventCache
 	// redoManager is used to report the resolved ts of the table if redo log is enabled.
@@ -118,6 +122,7 @@ func New(
 	up *upstream.Upstream,
 	redoManager redo.LogManager,
 	sourceManager *sourcemanager.SourceManager,
+	createMounterGroup func() entry.MounterGroup,
 	errChan chan error,
 	metricsTableSinkTotalRows prometheus.Counter,
 ) (*SinkManager, error) {
@@ -140,6 +145,7 @@ func New(
 		sinkFactory:   tableSinkFactory,
 		sourceManager: sourceManager,
 
+		sinkMg:              createMounterGroup(),
 		sinkProgressHeap:    newTableProgresses(),
 		sinkWorkers:         make([]*sinkWorker, 0, sinkWorkerNum),
 		sinkTaskChan:        make(chan *sinkTask),
@@ -150,6 +156,7 @@ func New(
 
 	if redoManager != nil && redoManager.Enabled() {
 		m.redoManager = redoManager
+		m.redoMg = createMounterGroup()
 		m.redoProgressHeap = newTableProgresses()
 		m.redoWorkers = make([]*redoWorker, 0, redoWorkerNum)
 		m.redoTaskChan = make(chan *redoTask)
@@ -180,7 +187,7 @@ func New(
 // start all workers and report the error to the error channel.
 func (m *SinkManager) startWorkers(splitTxn bool, enableOldValue bool) {
 	for i := 0; i < sinkWorkerNum; i++ {
-		w := newSinkWorker(m.changefeedID, m.sourceManager,
+		w := newSinkWorker(m.changefeedID, m.sinkMg, m.sourceManager,
 			m.sinkMemQuota, m.redoMemQuota,
 			m.eventCache, splitTxn, enableOldValue)
 		m.sinkWorkers = append(m.sinkWorkers, w)
@@ -206,7 +213,7 @@ func (m *SinkManager) startWorkers(splitTxn bool, enableOldValue bool) {
 	}
 
 	for i := 0; i < redoWorkerNum; i++ {
-		w := newRedoWorker(m.changefeedID, m.sourceManager, m.redoMemQuota,
+		w := newRedoWorker(m.changefeedID, m.redoMg, m.sourceManager, m.redoMemQuota,
 			m.redoManager, m.eventCache, splitTxn, enableOldValue)
 		m.redoWorkers = append(m.redoWorkers, w)
 		m.wg.Add(1)
