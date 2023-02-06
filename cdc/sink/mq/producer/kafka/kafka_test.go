@@ -69,10 +69,11 @@ func TestNewSaramaProducer(t *testing.T) {
 	ctx = contextutil.PutRoleInCtx(ctx, util.RoleTester)
 	options.MaxMessages = 1
 
-	factory := kafka.NewMockFactory()
-	adminClient, err := factory.AdminClient()
+	adminClient, err := kafka.NewMockFactory().AdminClient()
 	require.NoError(t, err)
 
+	factory, err := kafka.NewSaramaFactory(ctx, options)
+	require.NoError(t, err)
 	changefeedID := model.DefaultChangeFeedID("changefeed-test")
 	producer, err := NewProducer(
 		ctx,

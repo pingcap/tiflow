@@ -80,7 +80,7 @@ func TestProducerAck(t *testing.T) {
 	factory, err := kafka.NewSaramaFactory(ctx, options)
 	require.NoError(t, err)
 
-	adminClient, err := factory.AdminClient()
+	adminClient, err := kafka.NewMockFactory().AdminClient()
 	require.NoError(t, err)
 
 	errCh := make(chan error, 1)
@@ -149,7 +149,7 @@ func TestProducerSendMsgFailed(t *testing.T) {
 	factory, err := kafka.NewSaramaFactory(ctx, options)
 	require.NoError(t, err)
 
-	adminClient, err := factory.AdminClient()
+	adminClient, err := kafka.NewMockFactory().AdminClient()
 	require.NoError(t, err)
 
 	errCh := make(chan error, 1)
@@ -209,7 +209,7 @@ func TestProducerDoubleClose(t *testing.T) {
 	factory, err := kafka.NewSaramaFactory(ctx, options)
 	require.NoError(t, err)
 
-	adminClient, err := factory.AdminClient()
+	adminClient, err := kafka.NewMockFactory().AdminClient()
 	require.NoError(t, err)
 
 	errCh := make(chan error, 1)
