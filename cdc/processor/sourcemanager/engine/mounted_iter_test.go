@@ -19,6 +19,7 @@ import (
 
 	"github.com/pingcap/tiflow/cdc/entry"
 	"github.com/pingcap/tiflow/cdc/model"
+	"github.com/pingcap/tiflow/cdc/processor/memquota"
 	"github.com/stretchr/testify/require"
 )
 
@@ -40,6 +41,10 @@ func TestMountedEventIter(t *testing.T) {
 	rawIter := &mockIter{
 		repeatItem: func() *model.PolymorphicEvent {
 			return &model.PolymorphicEvent{
+				RawKV: &model.RawKVEntry{
+					Key:   []byte("testbytes"),
+					Value: []byte("testbytes"),
+				},
 				Row: &model.RowChangedEvent{
 					Table:        &model.TableName{Schema: "schema", Table: "table"},
 					IndexColumns: [][]int{{1}},
@@ -49,14 +54,20 @@ func TestMountedEventIter(t *testing.T) {
 	}
 
 	mg := &entry.MockMountGroup{}
-	iter := NewMountedEventIter(rawIter, mg, 3)
+	quota := memquota.NewMemQuota(model.ChangeFeedID{}, 1024*1024, "test")
+	iter := NewMountedEventIter(model.ChangeFeedID{}, rawIter, mg, 3, quota)
 
 	for i := 0; i < 3; i++ {
 		event, _, err := iter.Next(context.Background())
 		require.NotNil(t, event)
 		require.Nil(t, err)
+		if i != 2 {
+			require.NotZero(t, quota.GetUsedBytes())
+		} else {
+			require.Zero(t, quota.GetUsedBytes())
+		}
 	}
-	require.Equal(t, iter.nextToEmit, 3)
+	require.Equal(t, 3, iter.nextToEmit)
 
 	rawIter.repeatItem = func() *model.PolymorphicEvent { return nil }
 	event, _, err := iter.Next(context.Background())
@@ -64,4 +75,5 @@ func TestMountedEventIter(t *testing.T) {
 	require.Nil(t, err)
 	require.Equal(t, iter.nextToEmit, 0)
 	require.Nil(t, iter.iter)
+	require.Nil(t, iter.Close())
 }

@@ -127,18 +127,26 @@ func (i *MountedEventIter) readBatch(ctx context.Context) error {
 			return err
 		}
 
-		size := event.RawKV.ApproximateDataSize()
+		var size int64
+		if event.RawKV != nil {
+			size = event.RawKV.ApproximateDataSize()
+		}
 		i.rawEvents = append(i.rawEvents, rawEvent{event, txnFinished, size})
-        if !i.quota.TryAcquire(uint64(size)) {
-            i.quota.ForceAcquire(uint64(size))
-            break
-        }
+		if !i.quota.TryAcquire(uint64(size)) {
+			i.quota.ForceAcquire(uint64(size))
+			break
+		}
 	}
 	return nil
 }
 
 // Close implements sorter.EventIterator.
 func (i *MountedEventIter) Close() error {
+	for idx := i.nextToEmit; idx < len(i.rawEvents); idx++ {
+		if i.rawEvents[idx].size != 0 {
+			i.quota.Refund(uint64(i.rawEvents[idx].size))
+		}
+	}
 	if i.savedIterError != nil {
 		return i.savedIterError
 	}
