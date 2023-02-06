@@ -106,11 +106,6 @@ const (
     "region-retry-duration": 60000000000
   },
   "debug": {
-    "table-actor": {
-      "event-batch-size": 32
-    },
-    "enable-pull-based-sink": true,
-    "enable-db-sorter": true,
     "db": {
       "count": 8,
       "concurrency": 128,
