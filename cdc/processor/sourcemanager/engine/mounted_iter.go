@@ -25,10 +25,9 @@ import (
 
 // MountedEventIter is just like EventIterator, but returns mounted events.
 type MountedEventIter struct {
-	iter         EventIterator
-	mg           entry.MounterGroup
-	maxBatchSize int
-	quota        *memquota.MemQuota
+	iter  EventIterator
+	mg    entry.MounterGroup
+	quota *memquota.MemQuota
 
 	rawEvents      []rawEvent
 	nextToEmit     int
@@ -47,10 +46,10 @@ func NewMountedEventIter(
 	quota *memquota.MemQuota,
 ) *MountedEventIter {
 	return &MountedEventIter{
-		iter:         iter,
-		mg:           mg,
-		maxBatchSize: maxBatchSize,
-		quota:        quota,
+		iter:      iter,
+		mg:        mg,
+		quota:     quota,
+		rawEvents: make([]rawEvent, 0, maxBatchSize),
 
 		waitMount:         make(chan struct{}, 1),
 		mountWaitDuration: mountWaitDuration.WithLabelValues(changefeedID.Namespace, changefeedID.ID),
@@ -96,12 +95,7 @@ func (i *MountedEventIter) readBatch(ctx context.Context) error {
 	}
 
 	i.nextToEmit = 0
-	if cap(i.rawEvents) == 0 {
-		i.rawEvents = make([]rawEvent, 0, i.maxBatchSize)
-	} else {
-		i.rawEvents = i.rawEvents[:0]
-	}
-
+	i.rawEvents = i.rawEvents[:0]
 	for len(i.rawEvents) < cap(i.rawEvents) {
 		event, txnFinished, err := i.iter.Next()
 		if err != nil {
