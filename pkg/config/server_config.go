@@ -125,11 +125,6 @@ var defaultServerConfig = &ServerConfig{
 		RegionRetryDuration: TomlDuration(time.Minute),
 	},
 	Debug: &DebugConfig{
-		TableActor: &TableActorConfig{
-			EventBatchSize: 32,
-		},
-		// Default db sorter config
-		EnableDBSorter: true,
 		DB: &DBConfig{
 			Count: 8,
 			// Following configs are optimized for write/read throughput.
@@ -148,10 +143,9 @@ var defaultServerConfig = &ServerConfig{
 		},
 		Messages: defaultMessageConfig.Clone(),
 
-		Scheduler:           NewDefaultSchedulerConfig(),
-		EnableNewSink:       true,
-		EnablePullBasedSink: true,
-		EnableKafkaSinkV2:   false,
+		Scheduler:         NewDefaultSchedulerConfig(),
+		EnableNewSink:     true,
+		EnableKafkaSinkV2: false,
 	},
 	ClusterID: "default",
 }

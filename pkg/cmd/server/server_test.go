@@ -176,12 +176,7 @@ func TestParseCfg(t *testing.T) {
 			RegionRetryDuration: config.TomlDuration(time.Minute),
 		},
 		Debug: &config.DebugConfig{
-			TableActor: &config.TableActorConfig{
-				EventBatchSize: 32,
-			},
-			EnableDBSorter:      true,
-			EnablePullBasedSink: true,
-			EnableKafkaSinkV2:   false,
+			EnableKafkaSinkV2: false,
 			DB: &config.DBConfig{
 				Count:                       8,
 				Concurrency:                 128,
@@ -338,12 +333,7 @@ check-balance-interval = "10s"
 			RegionRetryDuration: config.TomlDuration(3 * time.Second),
 		},
 		Debug: &config.DebugConfig{
-			TableActor: &config.TableActorConfig{
-				EventBatchSize: 32,
-			},
-			EnableDBSorter:      true,
-			EnablePullBasedSink: true,
-			EnableKafkaSinkV2:   true,
+			EnableKafkaSinkV2: true,
 			DB: &config.DBConfig{
 				Count:                       5,
 				Concurrency:                 6,
@@ -487,12 +477,7 @@ cert-allowed-cn = ["dd","ee"]
 			RegionRetryDuration: config.TomlDuration(time.Minute),
 		},
 		Debug: &config.DebugConfig{
-			TableActor: &config.TableActorConfig{
-				EventBatchSize: 32,
-			},
-			EnableDBSorter:      true,
-			EnablePullBasedSink: true,
-			EnableKafkaSinkV2:   false,
+			EnableKafkaSinkV2: false,
 			DB: &config.DBConfig{
 				Count:                       8,
 				Concurrency:                 128,
@@ -554,12 +539,7 @@ unknown3 = 3
 	err = o.validate()
 	require.Nil(t, err)
 	require.Equal(t, &config.DebugConfig{
-		TableActor: &config.TableActorConfig{
-			EventBatchSize: 32,
-		},
-		EnableDBSorter:      true,
-		EnablePullBasedSink: true,
-		EnableKafkaSinkV2:   false,
+		EnableKafkaSinkV2: false,
 		DB: &config.DBConfig{
 			Count:                       8,
 			Concurrency:                 128,
