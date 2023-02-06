@@ -73,6 +73,8 @@ func TestNewKafkaDMLSinkFailed(t *testing.T) {
 	require.NoError(t, err)
 
 	factory, err := kafka.NewMockFactory(ctx, option)
+	require.NoError(t, err)
+	defer factory.Close()
 	s, err := NewKafkaDMLSink(ctx, sinkURI, replicaConfig, errCh,
 		factory,
 		dmlproducer.NewDMLMockProducer)
@@ -106,6 +108,7 @@ func TestWriteEvents(t *testing.T) {
 
 	factory, err := kafka.NewMockFactory(ctx, option)
 	require.NoError(t, err)
+	defer factory.Close()
 
 	s, err := NewKafkaDMLSink(ctx, sinkURI, replicaConfig, errCh,
 		factory,

@@ -77,8 +77,9 @@ func TestSyncBroadcastMessage(t *testing.T) {
 
 	factory, err := kafka.NewSaramaFactory(ctx, options)
 	require.NoError(t, err)
+	defer factory.Close()
 
-	adminClient, err := kafka.NewMockFactory().AdminClient()
+	adminClient, err := factory.AdminClient()
 	require.NoError(t, err)
 
 	p, err := NewKafkaDDLProducer(ctx, factory, adminClient)
@@ -106,8 +107,9 @@ func TestSyncSendMessage(t *testing.T) {
 
 	factory, err := kafka.NewSaramaFactory(ctx, options)
 	require.NoError(t, err)
+	defer factory.Close()
 
-	adminClient, err := kafka.NewMockFactory().AdminClient()
+	adminClient, err := factory.AdminClient()
 	require.NoError(t, err)
 
 	p, err := NewKafkaDDLProducer(ctx, factory, adminClient)
@@ -136,8 +138,9 @@ func TestProducerSendMsgFailed(t *testing.T) {
 
 	factory, err := kafka.NewSaramaFactory(ctx, options)
 	require.NoError(t, err)
+	defer factory.Close()
 
-	adminClient, err := kafka.NewMockFactory().AdminClient()
+	adminClient, err := factory.AdminClient()
 	require.NoError(t, err)
 
 	p, err := NewKafkaDDLProducer(ctx, factory, adminClient)
@@ -160,8 +163,9 @@ func TestProducerDoubleClose(t *testing.T) {
 
 	factory, err := kafka.NewSaramaFactory(ctx, options)
 	require.NoError(t, err)
+	defer factory.Close()
 
-	adminClient, err := kafka.NewMockFactory().AdminClient()
+	adminClient, err := factory.AdminClient()
 	require.NoError(t, err)
 
 	p, err := NewKafkaDDLProducer(ctx, factory, adminClient)

@@ -79,6 +79,7 @@ func TestProducerAck(t *testing.T) {
 
 	factory, err := kafka.NewMockFactory(ctx, options)
 	require.NoError(t, err)
+	defer factory.Close()
 
 	adminClient, err := factory.AdminClient()
 	require.NoError(t, err)
@@ -148,6 +149,7 @@ func TestProducerSendMsgFailed(t *testing.T) {
 
 	factory, err := kafka.NewMockFactory(ctx, options)
 	require.NoError(t, err)
+	defer factory.Close()
 
 	adminClient, err := factory.AdminClient()
 	require.NoError(t, err)
@@ -208,6 +210,7 @@ func TestProducerDoubleClose(t *testing.T) {
 
 	factory, err := kafka.NewMockFactory(ctx, options)
 	require.NoError(t, err)
+	defer factory.Close()
 
 	adminClient, err := factory.AdminClient()
 	require.NoError(t, err)

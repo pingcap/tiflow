@@ -25,7 +25,7 @@ import (
 	"go.uber.org/zap"
 )
 
-// Factory is a generic Kafka client.
+// Factory is the interface used to produce all kafka components
 type Factory interface {
 	// AdminClient return kafka cluster admin client
 	AdminClient() (ClusterAdminClient, error)
@@ -37,7 +37,7 @@ type Factory interface {
 		failpointCh chan error) (AsyncProducer, error)
 	// MetricRegistry returns the kafka client metric registry
 	MetricRegistry() metrics.Registry
-	// Close closes the client
+	// Close the factory, all components created by the factory should not be accessed.
 	Close() error
 }
 

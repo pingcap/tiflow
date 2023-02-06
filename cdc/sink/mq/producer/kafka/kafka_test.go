@@ -71,6 +71,7 @@ func TestNewSaramaProducer(t *testing.T) {
 
 	factory, err := kafka.NewMockFactory(ctx, options)
 	require.NoError(t, err)
+	defer factory.Close()
 
 	adminClient, err := factory.AdminClient()
 	require.NoError(t, err)
@@ -382,6 +383,8 @@ func TestProducerSendMessageFailed(t *testing.T) {
 	ctx = contextutil.PutRoleInCtx(ctx, util.RoleTester)
 	factory, err := kafka.NewMockFactory(ctx, options)
 	require.NoError(t, err)
+	defer factory.Close()
+
 	adminClient, err := factory.AdminClient()
 	require.NoError(t, err)
 
@@ -459,6 +462,8 @@ func TestProducerDoubleClose(t *testing.T) {
 
 	factory, err := kafka.NewMockFactory(ctx, options)
 	require.NoError(t, err)
+	defer factory.Close()
+
 	adminClient, err := factory.AdminClient()
 	require.NoError(t, err)
 
@@ -721,5 +726,6 @@ func TestConfigurationCombinations(t *testing.T) {
 		require.Equal(t, expected, options.MaxMessageBytes)
 
 		_ = adminClient.Close()
+		factory.Close()
 	}
 }

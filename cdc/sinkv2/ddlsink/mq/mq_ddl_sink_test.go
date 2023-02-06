@@ -73,6 +73,7 @@ func TestNewKafkaDDLSinkFailed(t *testing.T) {
 
 	factory, err := kafka.NewMockFactory(ctx, option)
 	require.NoError(t, err)
+	defer factory.Close()
 
 	s, err := NewKafkaDDLSink(ctx, sinkURI, replicaConfig,
 		factory,
@@ -106,6 +107,8 @@ func TestWriteDDLEventToAllPartitions(t *testing.T) {
 
 	factory, err := kafka.NewMockFactory(ctx, option)
 	require.NoError(t, err)
+	defer factory.Close()
+
 	s, err := NewKafkaDDLSink(ctx, sinkURI, replicaConfig,
 		factory,
 		ddlproducer.NewMockDDLProducer)
@@ -164,6 +167,8 @@ func TestWriteDDLEventToZeroPartition(t *testing.T) {
 
 	factory, err := kafka.NewMockFactory(ctx, option)
 	require.NoError(t, err)
+	defer factory.Close()
+
 	s, err := NewKafkaDDLSink(ctx, sinkURI, replicaConfig,
 		factory,
 		ddlproducer.NewMockDDLProducer)
@@ -223,6 +228,8 @@ func TestWriteCheckpointTsToDefaultTopic(t *testing.T) {
 
 	factory, err := kafka.NewMockFactory(ctx, option)
 	require.NoError(t, err)
+	defer factory.Close()
+
 	s, err := NewKafkaDDLSink(ctx, sinkURI, replicaConfig,
 		factory,
 		ddlproducer.NewMockDDLProducer)
@@ -282,6 +289,8 @@ func TestWriteCheckpointTsToTableTopics(t *testing.T) {
 
 	factory, err := kafka.NewMockFactory(ctx, option)
 	require.NoError(t, err)
+	defer factory.Close()
+
 	s, err := NewKafkaDDLSink(ctx, sinkURI, replicaConfig,
 		factory,
 		ddlproducer.NewMockDDLProducer)
@@ -367,6 +376,8 @@ func TestWriteCheckpointTsWhenCanalJsonTiDBExtensionIsDisable(t *testing.T) {
 
 	factory, err := kafka.NewMockFactory(ctx, option)
 	require.NoError(t, err)
+	defer factory.Close()
+
 	s, err := NewKafkaDDLSink(ctx, sinkURI, replicaConfig,
 		factory,
 		ddlproducer.NewMockDDLProducer)
