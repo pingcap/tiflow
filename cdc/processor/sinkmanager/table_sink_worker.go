@@ -190,7 +190,7 @@ func (w *sinkWorker) handleTask(ctx context.Context, task *sinkTask) (finalErr e
 			log.Debug("MemoryQuotaTracing: force acquire memory for table sink task",
 				zap.String("namespace", w.changefeedID.Namespace),
 				zap.String("changefeed", w.changefeedID.ID),
-				zap.Stringer("span", &task.span),
+				zap.Int64("tableID", task.tableID),
 				zap.Uint64("memory", usedMem-availableMem))
 			availableMem = usedMem
 		}
@@ -205,19 +205,6 @@ func (w *sinkWorker) handleTask(ctx context.Context, task *sinkTask) (finalErr e
 			}
 		}
 
-<<<<<<< HEAD
-		if memoryHighUsage {
-			w.sinkMemQuota.forceAcquire(usedMem - availableMem)
-			log.Debug("MemoryQuotaTracing: force acquire memory for table sink task",
-				zap.String("namespace", w.changefeedID.Namespace),
-				zap.String("changefeed", w.changefeedID.ID),
-				zap.Int64("tableID", task.tableID),
-				zap.Uint64("memory", usedMem-availableMem))
-			availableMem = usedMem
-		}
-
-=======
->>>>>>> 979485490e (sinkv2(cdc): fix panics about table scheduling or blackhole sink (#8156))
 		if allFinished {
 			return nil
 		}

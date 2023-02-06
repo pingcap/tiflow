@@ -105,13 +105,8 @@ func (s *EventSorter) OnResolve(action func(model.TableID, model.Ts)) {
 }
 
 // FetchByTable implements engine.SortEngine.
-<<<<<<< HEAD
 func (s *EventSorter) FetchByTable(tableID model.TableID, lowerBound, upperBound engine.Position) engine.EventIterator {
 	value, exists := s.tables.Load(tableID)
-=======
-func (s *EventSorter) FetchByTable(span tablepb.Span, lowerBound, upperBound engine.Position) engine.EventIterator {
-	value, exists := s.tables.Load(span)
->>>>>>> 979485490e (sinkv2(cdc): fix panics about table scheduling or blackhole sink (#8156))
 	if !exists {
 		log.Panic("fetch events from an unexist table", zap.Int64("tableID", tableID))
 	}

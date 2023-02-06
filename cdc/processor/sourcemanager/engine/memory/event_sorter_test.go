@@ -97,13 +97,8 @@ func TestEventSorter(t *testing.T) {
 		for _, entry := range tc.input {
 			es.Add(1, model.NewPolymorphicEvent(entry))
 		}
-<<<<<<< HEAD
 		es.Add(1, model.NewResolvedPolymorphicEvent(0, tc.resolvedTs))
 		iter := es.FetchByTable(1, nextToFetch, engine.Position{CommitTs: tc.resolvedTs, StartTs: tc.resolvedTs})
-=======
-		es.Add(span, model.NewResolvedPolymorphicEvent(0, tc.resolvedTs))
-		iter := es.FetchByTable(span, nextToFetch, engine.Position{CommitTs: tc.resolvedTs, StartTs: tc.resolvedTs})
->>>>>>> 979485490e (sinkv2(cdc): fix panics about table scheduling or blackhole sink (#8156))
 		for _, expect := range tc.expect {
 			event, pos, _ := iter.Next()
 			require.NotNil(t, event)
