@@ -131,7 +131,7 @@ func (h *OpenAPIV2) listProcessors(c *gin.Context) {
 		_ = c.Error(err)
 		return
 	}
-	prcInfos := make([]ProcessorCommonInfo, 0, len(infos))
+	prcInfos := make([]ProcessorCommonInfo, len(infos))
 	for i, info := range infos {
 		resp := ProcessorCommonInfo{
 			Namespace:    info.CfID.Namespace,
