@@ -17,13 +17,11 @@ import (
 	"sync/atomic"
 
 	"github.com/pingcap/errors"
-
-	"golang.org/x/sync/errgroup"
-
 	"github.com/pingcap/log"
 	"github.com/pingcap/tiflow/cdc/model"
 	"github.com/pingcap/tiflow/cdc/sink/codec"
 	"go.uber.org/zap"
+	"golang.org/x/sync/errgroup"
 )
 
 // encodingWorker denotes the worker responsible for encoding RowChangedEvents

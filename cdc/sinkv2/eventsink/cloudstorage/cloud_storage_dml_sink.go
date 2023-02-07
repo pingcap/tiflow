@@ -129,7 +129,7 @@ func NewCloudStorageSink(ctx context.Context,
 	s.defragmenter = newDefragmenter(ctx)
 	orderedCh := s.defragmenter.orderedOut()
 	s.statistics = metrics.NewStatistics(ctx, sink.TxnSink)
-	s.writer = newDMLWriter(ctx, s.changefeedID, storage, cfg, ext, s.statistics, orderedCh, errCh)
+	s.writer = newDMLWriter(s.changefeedID, storage, cfg, ext, s.statistics, orderedCh, errCh)
 	s.encodingWorkers = make([]*encodingWorker, 0, defaultEncodingConcurrency)
 
 	s.wg.Add(1)
@@ -145,11 +145,12 @@ func NewCloudStorageSink(ctx context.Context,
 
 func (s *dmlSink) run(ctx context.Context, encoderBuilder codec.EncoderBuilder) error {
 	eg, ctx := errgroup.WithContext(ctx)
+	// run dml writer
 	eg.Go(func() error {
 		return s.writer.run(ctx)
 	})
 
-	// create a group of encoding workers.
+	// create and run a group of encoding workers.
 	for i := 0; i < defaultEncodingConcurrency; i++ {
 		encoder := encoderBuilder.Build()
 		w := newEncodingWorker(i+1, s.changefeedID, encoder, s.msgCh, s.defragmenter)

@@ -24,8 +24,6 @@ import (
 
 	"github.com/pingcap/errors"
 	"github.com/pingcap/log"
-	"golang.org/x/sync/errgroup"
-
 	"github.com/pingcap/tidb/br/pkg/storage"
 	"github.com/pingcap/tiflow/cdc/model"
 	"github.com/pingcap/tiflow/cdc/sinkv2/metrics"
@@ -36,6 +34,7 @@ import (
 	"github.com/pingcap/tiflow/pkg/sink/cloudstorage"
 	"github.com/prometheus/client_golang/prometheus"
 	"go.uber.org/zap"
+	"golang.org/x/sync/errgroup"
 )
 
 // dmlWorker denotes a worker responsible for writing messages to cloud storage.
@@ -124,19 +123,19 @@ func newDMLWorker(
 func (d *dmlWorker) run(ctx context.Context, ch *chann.Chann[eventFragment]) error {
 	eg, ctx := errgroup.WithContext(ctx)
 	eg.Go(func() error {
-		return d.backgroundFlushMsgs(ctx)
+		return d.flushMessages(ctx)
 	})
 
 	eg.Go(func() error {
-		return d.backgroundDispatchTasks(ctx, ch)
+		return d.dispatchFlushTasks(ctx, ch)
 	})
 
 	return eg.Wait()
 }
 
-// backgroundFlushMsgs flush messages from active tables to cloud storage.
+// flushMessages flush messages from active tables to cloud storage.
 // active means that a table has events since last flushing.
-func (d *dmlWorker) backgroundFlushMsgs(ctx context.Context) error {
+func (d *dmlWorker) flushMessages(ctx context.Context) error {
 	for {
 		select {
 		case <-ctx.Done():
@@ -181,7 +180,6 @@ func (d *dmlWorker) backgroundFlushMsgs(ctx context.Context) error {
 			}
 		}
 	}
-
 }
 
 // In order to avoid spending so much time lookuping directory and getting last write point
@@ -258,10 +256,10 @@ func (d *dmlWorker) writeDataFile(ctx context.Context, path string, events []eve
 	return nil
 }
 
-// backgroundDispatchTasks dispatches flush tasks in two conditions:
+// dispatchFlushTasks dispatches flush tasks in two conditions:
 // 1. the flush interval exceeds the upper limit.
 // 2. the file size exceeds the upper limit.
-func (d *dmlWorker) backgroundDispatchTasks(ctx context.Context, ch *chann.Chann[eventFragment]) error {
+func (d *dmlWorker) dispatchFlushTasks(ctx context.Context, ch *chann.Chann[eventFragment]) error {
 	tableSet := make(map[wrappedTable]struct{})
 	ticker := time.NewTicker(d.config.FlushInterval)
 
