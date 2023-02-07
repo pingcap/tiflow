@@ -1,4 +1,4 @@
-// Copyright 2022 PingCAP, Inc.
+// Copyright 2023 PingCAP, Inc.
 //
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -20,11 +20,14 @@ import (
 
 	"github.com/pingcap/log"
 	"github.com/pingcap/tiflow/cdc/model"
-	"github.com/pingcap/tiflow/pkg/sink/kafka"
 	"github.com/pingcap/tiflow/pkg/util"
 	"github.com/rcrowley/go-metrics"
 	"go.uber.org/zap"
 )
+
+type MetricsCollector interface {
+	Run(ctx context.Context)
+}
 
 // flushMetricsInterval specifies the interval of refresh sarama metrics.
 const flushMetricsInterval = 5 * time.Second
@@ -41,36 +44,21 @@ const (
 	responseRateMetricNamePrefix       = "response-rate-for-broker-"
 )
 
-// Collector is a metric collector for kafka.
-type Collector struct {
+type saramaMetricsCollector struct {
 	changefeedID model.ChangeFeedID
 	role         util.Role
 	// adminClient is used to get broker infos from broker.
-	adminClient kafka.ClusterAdminClient
+	adminClient ClusterAdminClient
 	brokers     map[int32]struct{}
-	// TiCDC metrics registry.
+
 	registry metrics.Registry
 }
 
-// New creates a new metric collector.
-func New(
-	changefeedID model.ChangeFeedID,
-	role util.Role,
-	adminClient kafka.ClusterAdminClient,
-	registry metrics.Registry,
-) *Collector {
-	return &Collector{
-		changefeedID: changefeedID,
-		role:         role,
-		adminClient:  adminClient,
-		brokers:      make(map[int32]struct{}),
-		registry:     registry,
-	}
+func NewSaramaCollector() MetricsCollector {
+	return &saramaMetricsCollector{}
 }
 
-// Run collects kafka metrics.
-// It will close the admin client when it's done.
-func (m *Collector) Run(ctx context.Context) {
+func (m *saramaMetricsCollector) Run(ctx context.Context) {
 	ticker := time.NewTicker(flushMetricsInterval)
 	defer func() {
 		ticker.Stop()
@@ -89,7 +77,7 @@ func (m *Collector) Run(ctx context.Context) {
 	}
 }
 
-func (m *Collector) updateBrokers(ctx context.Context) {
+func (m *saramaMetricsCollector) updateBrokers(ctx context.Context) {
 	start := time.Now()
 	brokers, err := m.adminClient.GetAllBrokers(ctx)
 	if err != nil {
@@ -108,7 +96,7 @@ func (m *Collector) updateBrokers(ctx context.Context) {
 	}
 }
 
-func (m *Collector) collectProducerMetrics() {
+func (m *saramaMetricsCollector) collectProducerMetrics() {
 	namespace := m.changefeedID.Namespace
 	changefeedID := m.changefeedID.ID
 
@@ -120,7 +108,7 @@ func (m *Collector) collectProducerMetrics() {
 	}
 }
 
-func (m *Collector) collectBrokerMetrics() {
+func (m *saramaMetricsCollector) collectBrokerMetrics() {
 	namespace := m.changefeedID.Namespace
 	changefeedID := m.changefeedID.ID
 	for id := range m.brokers {
@@ -172,12 +160,12 @@ func getBrokerMetricName(prefix, brokerID string) string {
 	return prefix + brokerID
 }
 
-func (m *Collector) cleanupProducerMetrics() {
+func (m *saramaMetricsCollector) cleanupProducerMetrics() {
 	compressionRatioGauge.
 		DeleteLabelValues(m.changefeedID.Namespace, m.changefeedID.ID)
 }
 
-func (m *Collector) cleanupBrokerMetrics() {
+func (m *saramaMetricsCollector) cleanupBrokerMetrics() {
 	namespace := m.changefeedID.Namespace
 	changefeedID := m.changefeedID.ID
 	for id := range m.brokers {
@@ -196,13 +184,13 @@ func (m *Collector) cleanupBrokerMetrics() {
 	}
 }
 
-func (m *Collector) cleanupMetrics() {
+func (m *saramaMetricsCollector) cleanupMetrics() {
 	m.cleanupProducerMetrics()
 	m.cleanupBrokerMetrics()
 }
 
 // Close closes the admin client.
-func (m *Collector) Close() {
+func (m *saramaMetricsCollector) Close() {
 	start := time.Now()
 	namespace := m.changefeedID.Namespace
 	changefeedID := m.changefeedID.ID
