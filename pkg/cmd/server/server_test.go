@@ -378,11 +378,7 @@ max-days = 1
 max-backups = 1
 
 [sorter]
-chunk-size-limit = 10000000
-max-memory-consumption = 2000000
 max-memory-percentage = 3
-num-concurrent-worker = 4
-num-workerpool-goroutine = 5
 sort-dir = "/tmp/just_a_test"
 
 [security]
@@ -408,10 +404,7 @@ cert-allowed-cn = ["dd","ee"]
 		"--owner-flush-interval", "150ms",
 		"--processor-flush-interval", "150ms",
 		"--ca", "",
-		"--sorter-chunk-size-limit", "50000000",
-		"--sorter-max-memory-consumption", "60000000",
 		"--sorter-max-memory-percentage", "70",
-		"--sorter-num-concurrent-worker", "3",
 		"--config", configPath,
 	}))
 
