@@ -52,11 +52,12 @@ func newEncodingWorker(
 }
 
 func (w *encodingWorker) run(ctx context.Context) error {
+	log.Debug("encoding worker started", zap.Int("workerID", w.id),
+		zap.String("namespace", w.changeFeedID.Namespace),
+		zap.String("changefeed", w.changeFeedID.ID))
+
 	eg, ctx := errgroup.WithContext(ctx)
 	eg.Go(func() error {
-		log.Debug("encoding worker started", zap.Int("workerID", w.id),
-			zap.String("namespace", w.changeFeedID.Namespace),
-			zap.String("changefeed", w.changeFeedID.ID))
 		for {
 			select {
 			case <-ctx.Done():
