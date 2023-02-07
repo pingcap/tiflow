@@ -15,7 +15,6 @@ package sinkmanager
 
 import (
 	"context"
-	"time"
 
 	"github.com/pingcap/errors"
 	"github.com/pingcap/log"
@@ -91,8 +90,8 @@ func (w *sinkWorker) handleTask(ctx context.Context, task *sinkTask) (finalErr e
 	upperBound := task.getUpperBound(task.tableSink)
 	lowerPhs := oracle.GetTimeFromTS(lowerBound.CommitTs)
 	upperPhs := oracle.GetTimeFromTS(upperBound.CommitTs)
-	if upperPhs.Sub(lowerPhs) > 3*time.Second {
-		upperCommitTs := oracle.GoTimeToTS(lowerPhs.Add(3 * time.Second))
+	if upperPhs.Sub(lowerPhs) > maxTaskRange {
+		upperCommitTs := oracle.GoTimeToTS(lowerPhs.Add(maxTaskRange))
 		upperBound = engine.Position{
 			StartTs:  upperCommitTs - 1,
 			CommitTs: upperCommitTs,
