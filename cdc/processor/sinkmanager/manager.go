@@ -138,6 +138,7 @@ func New(
 		up:            up,
 		sinkFactory:   tableSinkFactory,
 		sourceManager: sourceManager,
+		errChan:       errChan,
 
 		sinkProgressHeap:    newTableProgresses(),
 		sinkWorkers:         make([]*sinkWorker, 0, sinkWorkerNum),
@@ -225,6 +226,11 @@ func (m *SinkManager) startWorkers(splitTxn bool, enableOldValue bool) {
 				select {
 				case m.errChan <- err:
 				case <-m.ctx.Done():
+				default:
+					log.Warn("err chan full, drop error",
+						zap.String("namespace", m.changefeedID.Namespace),
+						zap.String("changefeed", m.changefeedID.ID),
+						zap.Error(err))
 				}
 			}
 		}()
@@ -245,6 +251,11 @@ func (m *SinkManager) startGenerateTasks() {
 			select {
 			case m.errChan <- err:
 			case <-m.ctx.Done():
+			default:
+				log.Warn("err chan full, drop error",
+					zap.String("namespace", m.changefeedID.Namespace),
+					zap.String("changefeed", m.changefeedID.ID),
+					zap.Error(err))
 			}
 		}
 	}()
@@ -265,6 +276,11 @@ func (m *SinkManager) startGenerateTasks() {
 			select {
 			case m.errChan <- err:
 			case <-m.ctx.Done():
+			default:
+				log.Warn("err chan full, drop error",
+					zap.String("namespace", m.changefeedID.Namespace),
+					zap.String("changefeed", m.changefeedID.ID),
+					zap.Error(err))
 			}
 		}
 	}()
@@ -316,6 +332,11 @@ func (m *SinkManager) backgroundGC() {
 						select {
 						case m.errChan <- err:
 						case <-m.ctx.Done():
+						default:
+							log.Warn("err chan full, drop error",
+								zap.String("namespace", m.changefeedID.Namespace),
+								zap.String("changefeed", m.changefeedID.ID),
+								zap.Error(err))
 						}
 					} else {
 						log.Debug("table stale data has been cleaned",
