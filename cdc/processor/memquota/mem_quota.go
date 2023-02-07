@@ -44,7 +44,8 @@ type MemQuota struct {
 	// isClosed is used to indicate whether the mem quota is closed.
 	isClosed atomic.Bool
 
-	// closeBg is used to close the background metrics goroutine.
+	// To close the background metrics goroutine.
+	wg      sync.WaitGroup
 	closeBg chan struct{}
 
 	// blockAcquireCond is used to notify the blocked acquire.
@@ -80,6 +81,7 @@ func NewMemQuota(changefeedID model.ChangeFeedID, totalBytes uint64, comp string
 		zap.String("changefeed", changefeedID.ID),
 		zap.Uint64("total", totalBytes))
 
+	m.wg.Add(1)
 	go func() {
 		timer := time.NewTicker(3 * time.Second)
 		defer timer.Stop()
@@ -89,6 +91,7 @@ func NewMemQuota(changefeedID model.ChangeFeedID, totalBytes uint64, comp string
 				m.metricUsed.Set(float64(atomic.LoadUint64(&m.usedBytes)))
 			case <-m.closeBg:
 				m.metricUsed.Set(0.0)
+				m.wg.Done()
 				return
 			}
 		}
@@ -246,9 +249,11 @@ func (m *MemQuota) Clean(span tablepb.Span) uint64 {
 
 // Close the mem quota and notify the blocked acquire.
 func (m *MemQuota) Close() {
-	m.isClosed.Store(true)
-	m.blockAcquireCond.Broadcast()
-	close(m.closeBg)
+	if m.isClosed.CompareAndSwap(false, true) {
+		m.blockAcquireCond.Broadcast()
+		close(m.closeBg)
+		m.wg.Wait()
+	}
 }
 
 // GetUsedBytes returns the used memory quota.

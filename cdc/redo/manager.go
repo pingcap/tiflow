@@ -536,7 +536,7 @@ func (m *ManagerImpl) bgUpdateLog(
 	}()
 
 	var err error
-	logs := make([]*model.RedoRowChangedEvent, 0, 1024)
+	logs := make([]*model.RedoRowChangedEvent, 0, 1024*1024)
 	rtsMap := spanz.NewHashMap[model.Ts]()
 	releaseMemoryCbs := make([]func(), 0, 1024)
 
@@ -562,8 +562,8 @@ func (m *ManagerImpl) bgUpdateLog(
 				releaseMemory()
 			}
 
-			if cap(logs) > 1024 {
-				logs = make([]*model.RedoRowChangedEvent, 0, 1024)
+			if cap(logs) > 1024*1024 {
+				logs = make([]*model.RedoRowChangedEvent, 0, 1024*1024)
 			} else {
 				logs = logs[:0]
 			}

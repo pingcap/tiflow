@@ -39,22 +39,6 @@ var (
 			Name:      "group_input_chan_size",
 			Help:      "The size of input channel of mounter group",
 		}, []string{"namespace", "changefeed"})
-
-	mountSnapDuration = prometheus.NewHistogramVec(prometheus.HistogramOpts{
-		Namespace: "ticdc",
-		Subsystem: "mounter",
-		Name:      "mount_snap_duration",
-		Help:      "Bucketed histogram of mount wait duration",
-		Buckets:   prometheus.ExponentialBuckets(0.001, 2.0, 20),
-	}, []string{"namespace", "changefeed"})
-
-	mountAndDecodeDuration = prometheus.NewHistogramVec(prometheus.HistogramOpts{
-		Namespace: "ticdc",
-		Subsystem: "mounter",
-		Name:      "mount_and_decode_duration",
-		Help:      "Bucketed histogram of mount wait duration",
-		Buckets:   prometheus.ExponentialBuckets(0.001, 2.0, 20),
-	}, []string{"namespace", "changefeed"})
 )
 
 // InitMetrics registers all metrics in this file
@@ -62,6 +46,4 @@ func InitMetrics(registry *prometheus.Registry) {
 	registry.MustRegister(totalRowsCountGauge)
 	registry.MustRegister(ignoredDMLEventCounter)
 	registry.MustRegister(mounterGroupInputChanSizeGauge)
-	registry.MustRegister(mountSnapDuration)
-	registry.MustRegister(mountAndDecodeDuration)
 }

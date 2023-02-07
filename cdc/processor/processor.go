@@ -64,6 +64,7 @@ type processor struct {
 	lastSchemaTs  model.Ts
 
 	filter filter.Filter
+	mg     entry.MounterGroup
 
 	// These fields are used to sinking data in pull-based mode.
 	sourceManager *sourcemanager.SourceManager
@@ -649,6 +650,17 @@ func (p *processor) lazyInitImpl(ctx cdcContext.Context) error {
 	stdCtx := contextutil.PutChangefeedIDInCtx(ctx, p.changefeedID)
 	stdCtx = contextutil.PutRoleInCtx(stdCtx, util.RoleProcessor)
 
+	p.mg = entry.NewMounterGroup(p.schemaStorage,
+		p.changefeed.Info.Config.Mounter.WorkerNum,
+		p.changefeed.Info.Config.EnableOldValue,
+		p.filter, tz, p.changefeedID)
+
+	p.wg.Add(1)
+	go func() {
+		defer p.wg.Done()
+		p.sendError(p.mg.Run(ctx))
+	}()
+
 	sourceID, err := pdutil.GetSourceID(ctx, p.upstream.PDClient)
 	if err != nil {
 		return errors.Trace(err)
@@ -679,20 +691,8 @@ func (p *processor) lazyInitImpl(ctx cdcContext.Context) error {
 	p.sourceManager = sourcemanager.New(p.changefeedID, p.upstream,
 		sortEngine, p.errCh, p.changefeed.Info.Config.BDRMode)
 	p.sinkManager, err = sinkmanager.New(stdCtx, p.changefeedID,
-		p.changefeed.Info, p.upstream, p.schemaStorage,
+		p.changefeed.Info, p.upstream, p.mg, p.schemaStorage,
 		p.redoManager, p.sourceManager,
-		func() entry.MounterGroup {
-			mg := entry.NewMounterGroup(p.schemaStorage,
-				p.changefeed.Info.Config.Mounter.WorkerNum,
-				p.changefeed.Info.Config.EnableOldValue,
-				p.filter, tz, p.changefeedID)
-			p.wg.Add(1)
-			go func() {
-				defer p.wg.Done()
-				p.sendError(mg.Run(ctx))
-			}()
-			return mg
-		},
 		p.errCh, p.metricsTableSinkTotalRows)
 	if err != nil {
 		log.Info("Processor creates sink manager fail",

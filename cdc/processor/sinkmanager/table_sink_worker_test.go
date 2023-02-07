@@ -21,6 +21,7 @@ import (
 
 	"github.com/pingcap/tiflow/cdc/entry"
 	"github.com/pingcap/tiflow/cdc/model"
+	"github.com/pingcap/tiflow/cdc/processor/memquota"
 	"github.com/pingcap/tiflow/cdc/processor/sourcemanager"
 	"github.com/pingcap/tiflow/cdc/processor/sourcemanager/engine"
 	"github.com/pingcap/tiflow/cdc/processor/sourcemanager/engine/memory"
@@ -40,16 +41,16 @@ func createWorker(
 ) (*sinkWorker, engine.SortEngine) {
 	sortEngine := memory.New(context.Background())
 	sm := sourcemanager.New(changefeedID, upstream.NewUpstream4Test(&mockPD{}),
-		&entry.MockMountGroup{}, sortEngine, make(chan error, 1), false)
+		sortEngine, make(chan error, 1), false)
 
 	// To avoid refund or release panics.
-	quota := newMemQuota(changefeedID, memQuota+1024*1024*1024, "")
-	quota.forceAcquire(1024 * 1024 * 1024)
+	quota := memquota.NewMemQuota(changefeedID, memQuota+1024*1024*1024, "")
+	quota.ForceAcquire(1024 * 1024 * 1024)
 	for _, span := range spans {
-		quota.addTable(span)
+		quota.AddTable(span)
 	}
 
-	return newSinkWorker(changefeedID, sm, quota, nil, nil, splitTxn, false), sortEngine
+	return newSinkWorker(changefeedID, &entry.MockMountGroup{}, sm, quota, nil, nil, splitTxn, false), sortEngine
 }
 
 // nolint:unparam
@@ -177,6 +178,7 @@ func (suite *workerSuite) TestHandleTaskWithSplitTxnAndGotSomeFilteredEvents() {
 	}
 
 	w, e := createWorker(changefeedID, eventSize, true)
+	defer w.sinkMemQuota.Close()
 	addEventsToSortEngine(suite.T(), events, e, span)
 
 	taskChan := make(chan *sinkTask)
@@ -283,6 +285,7 @@ func (suite *workerSuite) TestHandleTaskWithSplitTxnAndAbortWhenNoMemAndOneTxnFi
 	}
 
 	w, e := createWorker(changefeedID, eventSize, true, span)
+	defer w.sinkMemQuota.Close()
 	addEventsToSortEngine(suite.T(), events, e, span)
 
 	taskChan := make(chan *sinkTask)
@@ -388,6 +391,7 @@ func (suite *workerSuite) TestHandleTaskWithSplitTxnAndAbortWhenNoMemAndBlocked(
 		},
 	}
 	w, e := createWorker(changefeedID, eventSize, true, span)
+	defer w.sinkMemQuota.Close()
 	addEventsToSortEngine(suite.T(), events, e, span)
 
 	taskChan := make(chan *sinkTask)
@@ -428,7 +432,7 @@ func (suite *workerSuite) TestHandleTaskWithSplitTxnAndAbortWhenNoMemAndBlocked(
 		return len(sink.GetEvents()) == 2
 	}, 5*time.Second, 10*time.Millisecond)
 	// Abort the task when no memory quota and blocked.
-	w.sinkMemQuota.close()
+	w.sinkMemQuota.Close()
 	cancel()
 	wg.Wait()
 	require.Len(suite.T(), sink.GetEvents(), 2, "Only two events should be sent to sink")
@@ -514,6 +518,7 @@ func (suite *workerSuite) TestHandleTaskWithSplitTxnAndOnlyAdvanceTableSinkWhenR
 		},
 	}
 	w, e := createWorker(changefeedID, eventSize, true, span)
+	defer w.sinkMemQuota.Close()
 	addEventsToSortEngine(suite.T(), events, e, span)
 
 	taskChan := make(chan *sinkTask)
@@ -640,6 +645,7 @@ func (suite *workerSuite) TestHandleTaskWithoutSplitTxnAndAbortWhenNoMemAndForce
 		},
 	}
 	w, e := createWorker(changefeedID, eventSize, false, span)
+	defer w.sinkMemQuota.Close()
 	w.splitTxn = false
 	addEventsToSortEngine(suite.T(), events, e, span)
 
@@ -768,6 +774,7 @@ func (suite *workerSuite) TestHandleTaskWithoutSplitTxnOnlyAdvanceTableSinkWhenR
 		},
 	}
 	w, e := createWorker(changefeedID, eventSize, false)
+	defer w.sinkMemQuota.Close()
 	addEventsToSortEngine(suite.T(), events, e, span)
 
 	taskChan := make(chan *sinkTask)
@@ -886,6 +893,7 @@ func (suite *workerSuite) TestHandleTaskWithSplitTxnAndDoNotAdvanceTableUntilMee
 		},
 	}
 	w, e := createWorker(changefeedID, eventSize, true, span)
+	defer w.sinkMemQuota.Close()
 	addEventsToSortEngine(suite.T(), events, e, span)
 
 	taskChan := make(chan *sinkTask)
@@ -970,6 +978,7 @@ func (suite *workerSuite) TestHandleTaskWithSplitTxnAndAdvanceTableUntilTaskIsFi
 		},
 	}
 	w, e := createWorker(changefeedID, eventSize, true, span)
+	defer w.sinkMemQuota.Close()
 	addEventsToSortEngine(suite.T(), events, e, span)
 
 	taskChan := make(chan *sinkTask)
@@ -1041,6 +1050,7 @@ func (suite *workerSuite) TestHandleTaskWithSplitTxnAndAdvanceTableIfNoWorkload(
 		},
 	}
 	w, e := createWorker(changefeedID, eventSize, true, span)
+	defer w.sinkMemQuota.Close()
 	addEventsToSortEngine(suite.T(), events, e, span)
 
 	taskChan := make(chan *sinkTask)

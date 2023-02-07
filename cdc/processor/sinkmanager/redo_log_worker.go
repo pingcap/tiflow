@@ -226,7 +226,7 @@ func (w *redoWorker) handleTask(ctx context.Context, task *redoTask) (finalErr e
 				zap.Error(err))
 		}
 
-		log.Info("QP redo task finished",
+		log.Debug("redo task finished",
 			zap.String("namespace", w.changefeedID.Namespace),
 			zap.String("changefeed", w.changefeedID.ID),
 			zap.Stringer("span", &task.span),
