@@ -30,6 +30,7 @@ import (
 	"github.com/segmentio/kafka-go/sasl"
 	"github.com/segmentio/kafka-go/sasl/plain"
 	"github.com/segmentio/kafka-go/sasl/scram"
+	"go.uber.org/atomic"
 	"go.uber.org/zap"
 )
 
@@ -38,6 +39,8 @@ type Factory struct {
 	transport *kafka.Transport
 	client    *kafka.Client
 	options   *pkafka.Options
+
+	closed atomic.Bool
 }
 
 // NewFactory constructs a Client with kafka go.
@@ -191,6 +194,15 @@ func (k *Factory) MetricRegistry() metrics.Registry {
 
 // Close closes the client
 func (k *Factory) Close() error {
+	if k.closed.Load() {
+		return errors.New("sarama factory: client is already closed")
+	}
+	if k.transport != nil {
+		k.transport.CloseIdleConnections()
+	}
+
+	k.closed.Store(true)
+
 	return nil
 }
 

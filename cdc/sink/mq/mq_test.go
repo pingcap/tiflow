@@ -93,7 +93,7 @@ func TestKafkaSink(t *testing.T) {
 
 	sink, err := NewKafkaSink(ctx, sinkURI, replicaConfig,
 		factory, errCh, changefeedID)
-	require.Nil(t, err)
+	require.NoError(t, err)
 
 	encoder := sink.encoderBuilder.Build()
 
