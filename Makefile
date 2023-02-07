@@ -64,7 +64,6 @@ GOBUILDNOVENDOR  := CGO_ENABLED=0 $(GO) build $(BUILD_FLAG) -trimpath
 GOTEST   := CGO_ENABLED=1 $(GO) test -p $(P) --race --tags=intest
 GOTESTNORACE := CGO_ENABLED=1 $(GO) test -p $(P)
 
-
 CDC_PKG := github.com/pingcap/tiflow
 DM_PKG := github.com/pingcap/tiflow/dm
 ENGINE_PKG := github.com/pingcap/tiflow/engine
