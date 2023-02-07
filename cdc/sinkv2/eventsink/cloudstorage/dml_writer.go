@@ -49,7 +49,7 @@ func newDMLWriter(
 	inputCh <-chan eventFragment,
 	errCh chan<- error,
 ) *dmlWriter {
-	w := &dmlWriter{
+	d := &dmlWriter{
 		changefeedID:   changefeedID,
 		storage:        storage,
 		workerChannels: make([]*chann.Chann[eventFragment], config.WorkerCount),
@@ -62,7 +62,13 @@ func newDMLWriter(
 		errCh:          errCh,
 	}
 
-	return w
+	for i := 0; i < config.WorkerCount; i++ {
+		worker := newDMLWorker(i, changefeedID, storage, config, extension, statistics)
+		d.workers[i] = worker
+		d.workerChannels[i] = chann.New[eventFragment]()
+	}
+
+	return d
 }
 
 func (d *dmlWriter) run(ctx context.Context) error {
@@ -72,9 +78,7 @@ func (d *dmlWriter) run(ctx context.Context) error {
 	})
 
 	for i := 0; i < d.config.WorkerCount; i++ {
-		worker := newDMLWorker(i, d.changefeedID, d.storage, d.config, d.extension, d.statistics)
-		d.workers[i] = worker
-		d.workerChannels[i] = chann.New[eventFragment]()
+		worker := d.workers[i]
 		ch := d.workerChannels[i]
 		eg.Go(func() error {
 			return worker.run(ctx, ch)

@@ -22,7 +22,6 @@ import (
 	"github.com/pingcap/errors"
 	"github.com/pingcap/tiflow/cdc/contextutil"
 	"github.com/pingcap/tiflow/cdc/model"
-	"github.com/pingcap/tiflow/cdc/sink/codec"
 	"github.com/pingcap/tiflow/cdc/sink/codec/builder"
 	"github.com/pingcap/tiflow/cdc/sink/codec/common"
 	"github.com/pingcap/tiflow/cdc/sinkv2/eventsink"
@@ -131,11 +130,17 @@ func NewCloudStorageSink(ctx context.Context,
 	s.statistics = metrics.NewStatistics(ctx, sink.TxnSink)
 	s.writer = newDMLWriter(s.changefeedID, storage, cfg, ext, s.statistics, orderedCh, errCh)
 	s.encodingWorkers = make([]*encodingWorker, 0, defaultEncodingConcurrency)
+	// create a group of encoding workers.
+	for i := 0; i < defaultEncodingConcurrency; i++ {
+		encoder := encoderBuilder.Build()
+		w := newEncodingWorker(i, s.changefeedID, encoder, s.msgCh, s.defragmenter)
+		s.encodingWorkers = append(s.encodingWorkers, w)
+	}
 
 	s.wg.Add(1)
 	go func() {
 		defer s.wg.Done()
-		if err := s.run(ctx, encoderBuilder); err != nil && errors.Cause(err) != context.Canceled {
+		if err := s.run(ctx); err != nil && errors.Cause(err) != context.Canceled {
 			errCh <- err
 		}
 	}()
@@ -143,21 +148,19 @@ func NewCloudStorageSink(ctx context.Context,
 	return s, nil
 }
 
-func (s *dmlSink) run(ctx context.Context, encoderBuilder codec.EncoderBuilder) error {
+func (s *dmlSink) run(ctx context.Context) error {
 	eg, ctx := errgroup.WithContext(ctx)
 	// run dml writer
 	eg.Go(func() error {
 		return s.writer.run(ctx)
 	})
 
-	// create and run a group of encoding workers.
+	// run the encoding workers.
 	for i := 0; i < defaultEncodingConcurrency; i++ {
-		encoder := encoderBuilder.Build()
-		w := newEncodingWorker(i+1, s.changefeedID, encoder, s.msgCh, s.defragmenter)
+		worker := s.encodingWorkers[i]
 		eg.Go(func() error {
-			return w.run(ctx)
+			return worker.run(ctx)
 		})
-		s.encodingWorkers = append(s.encodingWorkers, w)
 	}
 
 	return eg.Wait()
