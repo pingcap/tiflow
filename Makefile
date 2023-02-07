@@ -40,6 +40,11 @@ ifeq (${CDC_ENABLE_VENDOR}, 1)
 GOVENDORFLAG := -mod=vendor
 endif
 
+# Since TiDB add a new dependency on github.com/cloudfoundry/gosigar,
+# We need to add CGO_ENABLED=1 to make it work when build TiCDC in Darwin OS.
+# These logic is to check if the OS is Darwin, if so, add CGO_ENABLED=1.
+# ref: https://github.com/cloudfoundry/gosigar/issues/58#issuecomment-1150925711
+# ref: https://github.com/pingcap/tidb/pull/39526#issuecomment-1407952955
 OS    := "$(shell go env GOOS)"
 ARCH  := "$(shell uname -s)"
 LINUX := "Linux"

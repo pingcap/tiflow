@@ -38,15 +38,10 @@ func TestGetSourceID(t *testing.T) {
 	require.NoError(t, err)
 	_, err = se.Execute(context.Background(), "set @@global.tidb_source_id=2;")
 	require.NoError(t, err)
-	for i := 0; i < 20; i++ {
-		time.Sleep(100 * time.Millisecond)
+	require.Eventually(t, func() bool {
 		client := store.(kv.StorageWithPD).GetPDClient()
 		sourceID, err := GetSourceID(context.Background(), client)
 		require.NoError(t, err)
-		if sourceID == 1 {
-			continue
-		}
-		require.Equal(t, uint64(2), sourceID)
-		return
-	}
+		return sourceID == 2
+	}, 5*time.Second, 100*time.Millisecond)
 }
