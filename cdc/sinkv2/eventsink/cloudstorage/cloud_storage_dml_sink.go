@@ -16,6 +16,7 @@ import (
 	"context"
 	"math"
 	"net/url"
+	"sync"
 	"sync/atomic"
 
 	"github.com/pingcap/errors"
@@ -32,6 +33,7 @@ import (
 	"github.com/pingcap/tiflow/pkg/sink"
 	"github.com/pingcap/tiflow/pkg/sink/cloudstorage"
 	putil "github.com/pingcap/tiflow/pkg/util"
+	"golang.org/x/sync/errgroup"
 )
 
 const (
@@ -66,6 +68,7 @@ type eventFragment struct {
 // dmlSink is the cloud storage sink.
 // It will send the events to cloud storage systems.
 type dmlSink struct {
+	changefeedID model.ChangeFeedID
 	// msgCh is a channel to hold eventFragment.
 	msgCh chan eventFragment
 	// encodingWorkers defines a group of workers for encoding events.
@@ -78,6 +81,7 @@ type dmlSink struct {
 	statistics *metrics.Statistics
 	// last sequence number
 	lastSeqNum uint64
+	wg         sync.WaitGroup
 }
 
 // NewCloudStorageSink creates a cloud storage sink.
@@ -119,22 +123,47 @@ func NewCloudStorageSink(ctx context.Context,
 		return nil, cerror.WrapError(cerror.ErrCloudStorageInvalidConfig, err)
 	}
 
-	changefeedID := contextutil.ChangefeedIDFromCtx(ctx)
+	s.changefeedID = contextutil.ChangefeedIDFromCtx(ctx)
 	s.msgCh = make(chan eventFragment, defaultChannelSize)
 	s.defragmenter = newDefragmenter(ctx)
 	orderedCh := s.defragmenter.orderedOut()
 	s.statistics = metrics.NewStatistics(ctx, sink.TxnSink)
-	s.writer = newDMLWriter(ctx, changefeedID, storage, cfg, ext, s.statistics, orderedCh, errCh)
-
+	s.writer = newDMLWriter(s.changefeedID, storage, cfg, ext, s.statistics, orderedCh, errCh)
+	s.encodingWorkers = make([]*encodingWorker, 0, defaultEncodingConcurrency)
 	// create a group of encoding workers.
 	for i := 0; i < defaultEncodingConcurrency; i++ {
 		encoder := encoderBuilder.Build()
-		w := newEncodingWorker(i+1, changefeedID, encoder, s.msgCh, s.defragmenter, errCh)
-		w.run(ctx)
+		w := newEncodingWorker(i, s.changefeedID, encoder, s.msgCh, s.defragmenter)
 		s.encodingWorkers = append(s.encodingWorkers, w)
 	}
 
+	s.wg.Add(1)
+	go func() {
+		defer s.wg.Done()
+		if err := s.run(ctx); err != nil && errors.Cause(err) != context.Canceled {
+			errCh <- err
+		}
+	}()
+
 	return s, nil
+}
+
+func (s *dmlSink) run(ctx context.Context) error {
+	eg, ctx := errgroup.WithContext(ctx)
+	// run dml writer
+	eg.Go(func() error {
+		return s.writer.run(ctx)
+	})
+
+	// run the encoding workers.
+	for i := 0; i < defaultEncodingConcurrency; i++ {
+		worker := s.encodingWorkers[i]
+		eg.Go(func() error {
+			return worker.run(ctx)
+		})
+	}
+
+	return eg.Wait()
 }
 
 // WriteEvents write events to cloud storage sink.
@@ -175,5 +204,6 @@ func (s *dmlSink) Close() error {
 	if s.statistics != nil {
 		s.statistics.Close()
 	}
+	s.wg.Wait()
 	return nil
 }

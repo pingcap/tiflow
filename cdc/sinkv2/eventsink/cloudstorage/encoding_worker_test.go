@@ -16,6 +16,7 @@ import (
 	"context"
 	"fmt"
 	"net/url"
+	"sync"
 	"testing"
 
 	"github.com/pingcap/tiflow/cdc/model"
@@ -36,12 +37,11 @@ func testEncodingWorker(ctx context.Context, t *testing.T) (*encodingWorker, fun
 	encoderBuilder, err := builder.NewEventBatchEncoderBuilder(context.TODO(), encoderConfig)
 	require.Nil(t, err)
 	encoder := encoderBuilder.Build()
-	errCh := make(chan error, 10)
 	changefeedID := model.DefaultChangeFeedID("test-encode")
 
 	msgCh := make(chan eventFragment, 1024)
 	defragmenter := newDefragmenter(ctx)
-	worker := newEncodingWorker(1, changefeedID, encoder, msgCh, defragmenter, errCh)
+	worker := newEncodingWorker(1, changefeedID, encoder, msgCh, defragmenter)
 	return worker, func() {
 		defragmenter.close()
 	}
@@ -104,7 +104,6 @@ func TestEncodingWorkerRun(t *testing.T) {
 	ctx, cancel := context.WithCancel(context.Background())
 	worker, fn := testEncodingWorker(ctx, t)
 	defer fn()
-	worker.run(ctx)
 	table := model.TableName{
 		Schema:  "test",
 		Table:   "table1",
@@ -145,6 +144,15 @@ func TestEncodingWorkerRun(t *testing.T) {
 		}
 		worker.inputCh <- frag
 	}
+
+	var wg sync.WaitGroup
+	wg.Add(1)
+	go func() {
+		defer wg.Done()
+		_ = worker.run(ctx)
+	}()
+
 	cancel()
 	worker.close()
+	wg.Wait()
 }
