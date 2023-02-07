@@ -40,7 +40,7 @@ type dmlWriter struct {
 	errCh          chan<- error
 }
 
-func newDMLWriter(ctx context.Context,
+func newDMLWriter(
 	changefeedID model.ChangeFeedID,
 	storage storage.ExternalStorage,
 	config *cloudstorage.Config,
