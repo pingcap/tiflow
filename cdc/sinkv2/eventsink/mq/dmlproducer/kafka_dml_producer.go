@@ -92,9 +92,10 @@ func NewKafkaDMLProducer(
 		return nil, cerror.WrapError(cerror.ErrKafkaNewProducer, err)
 	}
 
-	metricsCollector := kafka.NewSaramaMetricsCollector(
-		changefeedID, util.RoleProcessor, adminClient, client.MetricRegistry())
-
+	metricsCollector := client.MetricsCollector(
+		changefeedID,
+		util.RoleProcessor,
+		adminClient)
 	k := &kafkaDMLProducer{
 		id:               changefeedID,
 		client:           client,

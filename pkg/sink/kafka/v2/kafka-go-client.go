@@ -176,9 +176,17 @@ func (k *kafkaGoClient) AsyncProducer(changefeedID model.ChangeFeedID,
 	return aw, nil
 }
 
-// MetricRegistry returns the kafka client metric registry
 func (k *kafkaGoClient) MetricRegistry() metrics.Registry {
-	return metrics.DefaultRegistry
+	return nil
+}
+
+// MetricsCollector returns the kafka metrics collector
+func (k *kafkaGoClient) MetricsCollector(
+	changefeedID model.ChangeFeedID,
+	role util.Role,
+	adminClient pkafka.ClusterAdminClient,
+) pkafka.MetricsCollector {
+	return NewMetricsCollector(changefeedID, role, adminClient)
 }
 
 // Close closes the client

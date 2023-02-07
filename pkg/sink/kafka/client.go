@@ -21,6 +21,7 @@ import (
 	"github.com/pingcap/log"
 	"github.com/pingcap/tiflow/cdc/model"
 	cerror "github.com/pingcap/tiflow/pkg/errors"
+	"github.com/pingcap/tiflow/pkg/util"
 	"github.com/rcrowley/go-metrics"
 	"go.uber.org/zap"
 )
@@ -34,7 +35,14 @@ type Client interface {
 		closedChan chan struct{},
 		failpointCh chan error) (AsyncProducer, error)
 	// MetricRegistry returns the kafka client metric registry
+	// todo: this is only used by sink v1, after it's removed, remove this method.
 	MetricRegistry() metrics.Registry
+	// MetricsCollector returns the kafka metrics collector
+	MetricsCollector(
+		changefeedID model.ChangeFeedID,
+		role util.Role,
+		adminClient ClusterAdminClient,
+	) MetricsCollector
 	// Close closes the client
 	Close() error
 }
@@ -84,11 +92,12 @@ type AsyncProducer interface {
 }
 
 type saramaKafkaClient struct {
-	client sarama.Client
+	endpoints []string
+	config    *sarama.Config
 }
 
 func (c *saramaKafkaClient) SyncProducer() (SyncProducer, error) {
-	p, err := sarama.NewSyncProducerFromClient(c.client)
+	p, err := sarama.NewSyncProducer(c.endpoints, c.config)
 	if err != nil {
 		return nil, err
 	}
@@ -100,7 +109,7 @@ func (c *saramaKafkaClient) AsyncProducer(
 	closedChan chan struct{},
 	failpointCh chan error,
 ) (AsyncProducer, error) {
-	p, err := sarama.NewAsyncProducerFromClient(c.client)
+	p, err := sarama.NewAsyncProducer(c.endpoints, c.config)
 	if err != nil {
 		return nil, err
 	}
@@ -113,11 +122,20 @@ func (c *saramaKafkaClient) AsyncProducer(
 }
 
 func (c *saramaKafkaClient) MetricRegistry() metrics.Registry {
-	return c.client.Config().MetricRegistry
+	return c.config.MetricRegistry
+}
+
+func (c *saramaKafkaClient) MetricsCollector(
+	changefeedID model.ChangeFeedID,
+	role util.Role,
+	adminClient ClusterAdminClient,
+) MetricsCollector {
+	return NewSaramaMetricsCollector(
+		changefeedID, role, adminClient, c.config.MetricRegistry)
 }
 
 func (c *saramaKafkaClient) Close() error {
-	return c.client.Close()
+	return nil
 }
 
 type saramaSyncProducer struct {
@@ -241,11 +259,11 @@ func NewSaramaClient(ctx context.Context, o *Options) (Client, error) {
 	if err != nil {
 		return nil, errors.Trace(err)
 	}
-	c, err := sarama.NewClient(o.BrokerEndpoints, saramaConfig)
-	if err != nil {
-		return nil, err
-	}
-	return &saramaKafkaClient{client: c}, nil
+
+	return &saramaKafkaClient{
+		endpoints: o.BrokerEndpoints,
+		config:    saramaConfig,
+	}, nil
 }
 
 // NewMockClient constructs a Client with mock implementation.

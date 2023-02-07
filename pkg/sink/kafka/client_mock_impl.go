@@ -15,6 +15,7 @@ package kafka
 
 import (
 	"github.com/pingcap/tiflow/cdc/model"
+	"github.com/pingcap/tiflow/pkg/util"
 	"github.com/rcrowley/go-metrics"
 )
 
@@ -40,9 +41,17 @@ func (c *ClientMockImpl) AsyncProducer(
 	return &saramaAsyncProducer{}, nil
 }
 
-// MetricRegistry returns the metric registry
 func (c *ClientMockImpl) MetricRegistry() metrics.Registry {
-	return metrics.DefaultRegistry
+	return nil
+}
+
+// MetricsCollector returns the metric collector
+func (c *ClientMockImpl) MetricsCollector(
+	changefeedID model.ChangeFeedID,
+	role util.Role,
+	adminClient ClusterAdminClient,
+) MetricsCollector {
+	return nil
 }
 
 // Close closes the client
