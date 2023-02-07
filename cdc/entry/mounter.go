@@ -75,6 +75,8 @@ type mounter struct {
 	filter                       pfilter.Filter
 	metricTotalRows              prometheus.Gauge
 	metricIgnoredDMLEventCounter prometheus.Counter
+	metricSnapDuration           prometheus.Observer
+	metricMountAndDecodeDuration prometheus.Observer
 }
 
 // NewMounter creates a mounter
@@ -86,6 +88,7 @@ func NewMounter(schemaStorage SchemaStorage,
 ) Mounter {
 	return &mounter{
 		schemaStorage:  schemaStorage,
+		tz:             tz,
 		changefeedID:   changefeedID,
 		enableOldValue: enableOldValue,
 		filter:         filter,
@@ -93,7 +96,10 @@ func NewMounter(schemaStorage SchemaStorage,
 			WithLabelValues(changefeedID.Namespace, changefeedID.ID),
 		metricIgnoredDMLEventCounter: ignoredDMLEventCounter.
 			WithLabelValues(changefeedID.Namespace, changefeedID.ID),
-		tz: tz,
+		metricSnapDuration: mountSnapDuration.
+			WithLabelValues(changefeedID.Namespace, changefeedID.ID),
+		metricMountAndDecodeDuration: mountAndDecodeDuration.
+			WithLabelValues(changefeedID.Namespace, changefeedID.ID),
 	}
 }
 
@@ -137,10 +143,14 @@ func (m *mounter) unmarshalAndMountRowChanged(ctx context.Context, raw *model.Ra
 	}
 	// when async commit is enabled, the commitTs of DMLs may be equals with DDL finishedTs
 	// a DML whose commitTs is equal to a DDL finishedTs using the schema info before the DDL
+	now := time.Now()
 	snap, err := m.schemaStorage.GetSnapshot(ctx, raw.CRTs-1)
 	if err != nil {
 		return nil, errors.Trace(err)
 	}
+	m.metricSnapDuration.Observe(time.Since(now).Seconds())
+
+	now = time.Now()
 	row, err := func() (*model.RowChangedEvent, error) {
 		if snap.IsIneligibleTableID(physicalTableID) {
 			log.Debug("skip the DML of ineligible table", zap.Uint64("ts", raw.CRTs), zap.Int64("tableID", physicalTableID))
@@ -181,6 +191,8 @@ func (m *mounter) unmarshalAndMountRowChanged(ctx context.Context, raw *model.Ra
 		}
 		return nil, nil
 	}()
+	m.metricMountAndDecodeDuration.Observe(time.Since(now).Seconds())
+
 	if err != nil && !cerror.IsChangefeedUnRetryableError(err) {
 		log.Error("failed to mount and unmarshals entry, start to print debug info", zap.Error(err))
 		snap.PrintStatus(log.Error)

@@ -679,8 +679,8 @@ func (p *processor) lazyInitImpl(ctx cdcContext.Context) error {
 	p.sourceManager = sourcemanager.New(p.changefeedID, p.upstream,
 		sortEngine, p.errCh, p.changefeed.Info.Config.BDRMode)
 	p.sinkManager, err = sinkmanager.New(stdCtx, p.changefeedID,
-		p.changefeed.Info, p.upstream, p.redoManager,
-		p.sourceManager,
+		p.changefeed.Info, p.upstream, p.schemaStorage,
+		p.redoManager, p.sourceManager,
 		func() entry.MounterGroup {
 			mg := entry.NewMounterGroup(p.schemaStorage,
 				p.changefeed.Info.Config.Mounter.WorkerNum,

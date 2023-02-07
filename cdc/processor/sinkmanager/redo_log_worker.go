@@ -226,13 +226,14 @@ func (w *redoWorker) handleTask(ctx context.Context, task *redoTask) (finalErr e
 				zap.Error(err))
 		}
 
-		log.Debug("redo task finished",
+		log.Info("QP redo task finished",
 			zap.String("namespace", w.changefeedID.Namespace),
 			zap.String("changefeed", w.changefeedID.ID),
 			zap.Stringer("span", &task.span),
 			zap.Any("lowerBound", lowerBound),
 			zap.Any("upperBound", upperBound),
-			zap.Any("lastPos", lastPos))
+			zap.Any("lastPos", lastPos),
+			zap.Float64("lag", time.Since(oracle.GetTimeFromTS(lastPos.CommitTs)).Seconds()))
 		if finalErr == nil {
 			// Otherwise we can't ensure all events before `lastPos` are emitted.
 			task.callback(lastPos)
