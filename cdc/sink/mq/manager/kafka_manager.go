@@ -30,8 +30,7 @@ import (
 
 // kafkaTopicManager is a manager for kafka topics.
 type kafkaTopicManager struct {
-	client kafka.Client
-	admin  kafka.ClusterAdminClient
+	admin kafka.ClusterAdminClient
 
 	cfg *kafka.AutoCreateTopicConfig
 
@@ -42,18 +41,17 @@ type kafkaTopicManager struct {
 
 // NewKafkaTopicManager creates a new topic manager.
 func NewKafkaTopicManager(
-	client kafka.Client,
+	ctx context.Context,
 	admin kafka.ClusterAdminClient,
 	cfg *kafka.AutoCreateTopicConfig,
 ) (*kafkaTopicManager, error) {
 	mgr := &kafkaTopicManager{
-		client: client,
-		admin:  admin,
-		cfg:    cfg,
+		admin: admin,
+		cfg:   cfg,
 	}
 
 	// do an initial metadata fetching using ListTopics
-	err := mgr.listTopics()
+	err := mgr.listTopics(ctx)
 	if err != nil {
 		return nil, err
 	}
@@ -63,8 +61,11 @@ func NewKafkaTopicManager(
 
 // GetPartitionNum returns the number of partitions of the topic.
 // It may also try to update the topics' information maintained by manager.
-func (m *kafkaTopicManager) GetPartitionNum(topic string) (int32, error) {
-	err := m.tryRefreshMeta()
+func (m *kafkaTopicManager) GetPartitionNum(
+	ctx context.Context,
+	topic string,
+) (int32, error) {
+	err := m.tryRefreshMeta(ctx)
 	if err != nil {
 		return 0, errors.Trace(err)
 	}
@@ -73,7 +74,7 @@ func (m *kafkaTopicManager) GetPartitionNum(topic string) (int32, error) {
 		return partitions.(int32), nil
 	}
 
-	partitionNum, err := m.CreateTopicAndWaitUntilVisible(topic)
+	partitionNum, err := m.CreateTopicAndWaitUntilVisible(ctx, topic)
 	if err != nil {
 		return 0, errors.Trace(err)
 	}
@@ -82,19 +83,14 @@ func (m *kafkaTopicManager) GetPartitionNum(topic string) (int32, error) {
 }
 
 // tryRefreshMeta try to refresh the topics' information maintained by manager.
-func (m *kafkaTopicManager) tryRefreshMeta() error {
+func (m *kafkaTopicManager) tryRefreshMeta(ctx context.Context) error {
 	if time.Since(time.Unix(m.lastMetadataRefresh.Load(), 0)) > time.Minute {
-		topics, err := m.client.Topics()
+		topics, err := m.admin.GetAllTopicsMeta(ctx)
 		if err != nil {
 			return err
 		}
-
-		for _, topic := range topics {
-			partitions, err := m.client.Partitions(topic)
-			if err != nil {
-				return err
-			}
-			m.tryUpdatePartitionsAndLogging(topic, int32(len(partitions)))
+		for topic, detail := range topics {
+			m.tryUpdatePartitionsAndLogging(topic, detail.NumPartitions)
 		}
 		m.lastMetadataRefresh.Store(time.Now().Unix())
 	}
@@ -125,7 +121,9 @@ func (m *kafkaTopicManager) tryUpdatePartitionsAndLogging(topic string, partitio
 	}
 }
 
-func (m *kafkaTopicManager) getMetadataOfTopics() (map[string]kafka.TopicDetail, error) {
+func (m *kafkaTopicManager) getMetadataOfTopics(
+	ctx context.Context,
+) (map[string]kafka.TopicDetail, error) {
 	var topicList []string
 
 	m.topics.Range(func(key, value any) bool {
@@ -137,7 +135,7 @@ func (m *kafkaTopicManager) getMetadataOfTopics() (map[string]kafka.TopicDetail,
 
 	start := time.Now()
 	// ignore the topic with error, return a subset of all topics.
-	topicMetaList, err := m.admin.GetTopicsMeta(context.Background(), topicList, true)
+	topicMetaList, err := m.admin.GetTopicsMeta(ctx, topicList, true)
 	if err != nil {
 		log.Warn(
 			"Kafka admin client describe topics failed",
@@ -159,11 +157,14 @@ func (m *kafkaTopicManager) getMetadataOfTopics() (map[string]kafka.TopicDetail,
 // CreateTopic returns success for all the brokers to become aware that the
 // topics have been created.
 // See https://kafka.apache.org/23/javadoc/org/apache/kafka/clients/admin/AdminClient.html
-func (m *kafkaTopicManager) waitUntilTopicVisible(topicName string) error {
+func (m *kafkaTopicManager) waitUntilTopicVisible(
+	ctx context.Context,
+	topicName string,
+) error {
 	topics := []string{topicName}
-	err := retry.Do(context.Background(), func() error {
+	err := retry.Do(ctx, func() error {
 		start := time.Now()
-		meta, err := m.admin.GetTopicsMeta(context.Background(), topics, false)
+		meta, err := m.admin.GetTopicsMeta(ctx, topics, false)
 		if err != nil {
 			log.Warn(" topic not found, retry it",
 				zap.Error(err),
@@ -185,9 +186,9 @@ func (m *kafkaTopicManager) waitUntilTopicVisible(topicName string) error {
 }
 
 // listTopics is used to do an initial metadata fetching.
-func (m *kafkaTopicManager) listTopics() error {
+func (m *kafkaTopicManager) listTopics(ctx context.Context) error {
 	start := time.Now()
-	topics, err := m.admin.GetAllTopicsMeta(context.Background())
+	topics, err := m.admin.GetAllTopicsMeta(ctx)
 	if err != nil {
 		log.Error(
 			"Kafka admin client list topics failed",
@@ -213,8 +214,11 @@ func (m *kafkaTopicManager) listTopics() error {
 
 // createTopic creates a topic with the given name
 // and returns the number of partitions.
-func (m *kafkaTopicManager) createTopic(topicName string) (int32, error) {
-	topicMetaList, err := m.getMetadataOfTopics()
+func (m *kafkaTopicManager) createTopic(
+	ctx context.Context,
+	topicName string,
+) (int32, error) {
+	topicMetaList, err := m.getMetadataOfTopics(ctx)
 	if err != nil {
 		return 0, errors.Trace(err)
 	}
@@ -241,7 +245,7 @@ func (m *kafkaTopicManager) createTopic(topicName string) (int32, error) {
 	}
 
 	start := time.Now()
-	err = m.admin.CreateTopic(context.Background(), &kafka.TopicDetail{
+	err = m.admin.CreateTopic(ctx, &kafka.TopicDetail{
 		Name:              topicName,
 		NumPartitions:     m.cfg.PartitionNum,
 		ReplicationFactor: m.cfg.ReplicationFactor,
@@ -271,13 +275,16 @@ func (m *kafkaTopicManager) createTopic(topicName string) (int32, error) {
 }
 
 // CreateTopicAndWaitUntilVisible wraps createTopic and waitUntilTopicVisible together.
-func (m *kafkaTopicManager) CreateTopicAndWaitUntilVisible(topicName string) (int32, error) {
-	partitionNum, err := m.createTopic(topicName)
+func (m *kafkaTopicManager) CreateTopicAndWaitUntilVisible(
+	ctx context.Context,
+	topicName string,
+) (int32, error) {
+	partitionNum, err := m.createTopic(ctx, topicName)
 	if err != nil {
 		return 0, errors.Trace(err)
 	}
 
-	err = m.waitUntilTopicVisible(topicName)
+	err = m.waitUntilTopicVisible(ctx, topicName)
 	if err != nil {
 		return 0, errors.Trace(err)
 	}

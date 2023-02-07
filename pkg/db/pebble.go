@@ -27,9 +27,8 @@ import (
 	"github.com/cockroachdb/pebble/bloom"
 	"github.com/pingcap/errors"
 	"github.com/pingcap/log"
-	"github.com/pingcap/tiflow/cdc/sorter"
-	"github.com/pingcap/tiflow/cdc/sorter/encoding"
 	"github.com/pingcap/tiflow/pkg/config"
+	"github.com/pingcap/tiflow/pkg/db/encoding"
 	"github.com/pingcap/tiflow/pkg/retry"
 	"go.uber.org/zap"
 )
@@ -195,43 +194,6 @@ func (p *pebbleDB) Compact(start, end []byte) error {
 
 func (p *pebbleDB) Close() error {
 	return p.db.Close()
-}
-
-// TODO: Update metrics once we switch to pebble,
-// as some metrics are not applicable to pebble.
-func (p *pebbleDB) CollectMetrics(i int) {
-	db := p.db
-	stats := db.Metrics()
-	id := strconv.Itoa(i)
-	sum := 0
-	for i := range stats.Levels {
-		sum += int(stats.Levels[i].Size)
-	}
-	sorter.OnDiskDataSizeGauge.
-		WithLabelValues(id).Set(float64(stats.DiskSpaceUsage()))
-	sorter.InMemoryDataSizeGauge.
-		WithLabelValues(id).Set(float64(stats.BlockCache.Size))
-	dbIteratorGauge.
-		WithLabelValues(id).Set(float64(stats.TableIters))
-	dbWriteDelayCount.
-		WithLabelValues(id).
-		Set(float64(atomic.LoadInt64(&p.metricWriteStall.counter)))
-	stallDuration := p.metricWriteStall.duration.Load()
-	if stallDuration != nil && stallDuration.(time.Duration) != time.Duration(0) {
-		p.metricWriteStall.duration.Store(time.Duration(0))
-		dbWriteDelayDuration.
-			WithLabelValues(id).
-			Set(stallDuration.(time.Duration).Seconds())
-	}
-	metricLevelCount := dbLevelCount.
-		MustCurryWith(map[string]string{"id": id})
-	for level, metric := range stats.Levels {
-		metricLevelCount.WithLabelValues(fmt.Sprint(level)).Set(float64(metric.NumFiles))
-	}
-	dbBlockCacheAccess.
-		WithLabelValues(id, "hit").Set(float64(stats.BlockCache.Hits))
-	dbBlockCacheAccess.
-		WithLabelValues(id, "miss").Set(float64(stats.BlockCache.Misses))
 }
 
 type pebbleBatch struct {

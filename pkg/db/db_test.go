@@ -21,7 +21,6 @@ import (
 	"math/rand"
 	"path/filepath"
 	"testing"
-	"time"
 
 	"github.com/cockroachdb/pebble"
 	"github.com/pingcap/tiflow/pkg/config"
@@ -50,9 +49,6 @@ func testDB(t *testing.T, db DB) {
 	option, _ := buildPebbleOption(id, cfg)
 	pdb, err := pebble.Open(t.TempDir(), &option)
 	require.Nil(t, err)
-
-	// Collect metrics
-	db.CollectMetrics(0)
 
 	// Batch
 	pbatch := pdb.NewBatch()
@@ -120,50 +116,6 @@ func testDB(t *testing.T, db DB) {
 
 	// Close
 	require.Nil(t, db.Close())
-	require.Nil(t, pdb.Close())
-}
-
-func TestPebbleMetrics(t *testing.T) {
-	t.Parallel()
-
-	cfg := config.GetDefaultServerConfig().Clone().Debug.DB
-	cfg.Count = 1
-
-	id := 1
-	option, ws := buildPebbleOption(id, cfg)
-	db, err := pebble.Open(t.TempDir(), &option)
-	require.Nil(t, err)
-	pdb := &pebbleDB{
-		db:               db,
-		metricWriteStall: ws,
-	}
-
-	// Collect empty metrics.
-	pdb.CollectMetrics(id)
-
-	// Write stall.
-	option.EventListener.WriteStallBegin(pebble.WriteStallBeginInfo{})
-	time.Sleep(100 * time.Millisecond)
-	option.EventListener.WriteStallEnd()
-	require.EqualValues(t, 1, ws.counter)
-	require.Less(t, time.Duration(0), ws.duration.Load().(time.Duration))
-
-	// Collect write stall metrics.
-	pdb.CollectMetrics(id)
-	require.EqualValues(t, 1, ws.counter)
-	require.Equal(t, time.Duration(0), ws.duration.Load().(time.Duration))
-
-	// Filter out of order write stall end.
-	option.EventListener.WriteStallEnd()
-	require.Equal(t, time.Duration(0), ws.duration.Load().(time.Duration))
-
-	// Write stall again.
-	option.EventListener.WriteStallBegin(pebble.WriteStallBeginInfo{})
-	time.Sleep(10 * time.Millisecond)
-	option.EventListener.WriteStallEnd()
-	require.EqualValues(t, 2, ws.counter)
-	require.Less(t, time.Duration(0), ws.duration.Load().(time.Duration))
-
 	require.Nil(t, pdb.Close())
 }
 

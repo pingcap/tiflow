@@ -184,6 +184,11 @@ func (c *ClusterAdminClientMockImpl) CreateTopic(
 	return nil
 }
 
+// DeleteTopic deletes a topic, only used for testing.
+func (c *ClusterAdminClientMockImpl) DeleteTopic(topicName string) {
+	delete(c.topics, topicName)
+}
+
 // Close do nothing.
 func (c *ClusterAdminClientMockImpl) Close() error {
 	return nil

@@ -1,4 +1,4 @@
-// Copyright 2021 PingCAP, Inc.
+// Copyright 2022 PingCAP, Inc.
 //
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -11,9 +11,14 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-package actor
+package v2
 
-// InsertMailbox4Test add a mailbox into router. Test only.
-func (r *Router[T]) InsertMailbox4Test(id ID, mb Mailbox[T]) {
-	r.procs.Store(id, &proc[T]{mb: mb})
+import (
+	"testing"
+
+	"github.com/pingcap/tiflow/pkg/leakutil"
+)
+
+func TestMain(m *testing.M) {
+	leakutil.SetUpLeakTest(m)
 }
