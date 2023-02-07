@@ -38,7 +38,6 @@ type mounterGroup struct {
 	enableOldValue bool
 
 	workerNum int
-	index     uint64
 
 	changefeedID model.ChangeFeedID
 }

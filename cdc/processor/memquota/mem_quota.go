@@ -33,6 +33,7 @@ type memConsumeRecord struct {
 	size       uint64
 }
 
+// MemQuota is used to trace memory usage.
 type MemQuota struct {
 	changefeedID model.ChangeFeedID
 	// totalBytes is the total memory quota for one changefeed.
@@ -61,6 +62,7 @@ type MemQuota struct {
 	tableMemory *spanz.HashMap[[]*memConsumeRecord]
 }
 
+// NewMemQuota creates a MemQuota instance.
 func NewMemQuota(changefeedID model.ChangeFeedID, totalBytes uint64, comp string) *MemQuota {
 	m := &MemQuota{
 		changefeedID: changefeedID,
@@ -115,7 +117,6 @@ func (m *MemQuota) TryAcquire(nBytes uint64) bool {
 // ForceAcquire is used to force acquire the memory quota.
 func (m *MemQuota) ForceAcquire(nBytes uint64) {
 	atomic.AddUint64(&m.usedBytes, nBytes)
-	return
 }
 
 // BlockAcquire is used to block the request when the memory quota is not available.
@@ -263,7 +264,7 @@ func (m *MemQuota) GetUsedBytes() uint64 {
 
 // hasAvailable returns true if the memory quota is available, otherwise returns false.
 func (m *MemQuota) hasAvailable(nBytes uint64) bool {
-	return atomic.LoadUint64(&m.usedBytes) < m.totalBytes
+	return atomic.LoadUint64(&m.usedBytes)+nBytes <= m.totalBytes
 }
 
 // MemoryQuota indicates memory usage of a changefeed.
