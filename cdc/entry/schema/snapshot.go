@@ -572,7 +572,6 @@ func (s *Snapshot) DumpToString() string {
 		schema, _ := s.inner.schemaByID(schemaID)
 		tableNames = append(tableNames, fmt.Sprintf("%s.%s:%d", schema.Name.O, table, target))
 	})
-	fmt.Println("tableNames", tableNames)
 	return fmt.Sprintf("%s\n%s\n%s\n%s\n%s",
 		strings.Join(schemas, "\t"),
 		strings.Join(tables, "\t"),
