@@ -493,11 +493,10 @@ func (m *ManagerImpl) flushLog(
 }
 
 func (m *ManagerImpl) onResolvedTsMsg(span tablepb.Span, resolvedTs model.Ts) {
-	value, loaded := m.rtsMap.Load(span)
-	if !loaded {
-		panic("onResolvedTsMsg is called for an invalid table")
+	// It's possible that the table is removed while redo log is still in writing.
+	if value, loaded := m.rtsMap.Load(span); loaded {
+		value.(*statefulRts).checkAndSetUnflushed(resolvedTs)
 	}
-	value.(*statefulRts).checkAndSetUnflushed(resolvedTs)
 }
 
 func (m *ManagerImpl) bgUpdateLog(

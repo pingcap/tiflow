@@ -97,7 +97,6 @@ func NewKafkaDMLSink(
 		ctx,
 		topic,
 		options.DeriveTopicConfig(),
-		client,
 		adminClient,
 	)
 	if err != nil {

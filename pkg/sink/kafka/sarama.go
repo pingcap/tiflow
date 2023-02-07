@@ -89,7 +89,7 @@ func NewSaramaConfig(ctx context.Context, o *Options) (*sarama.Config, error) {
 	config.Producer.MaxMessageBytes = o.MaxMessageBytes
 	config.Producer.Return.Successes = true
 	config.Producer.Return.Errors = true
-	config.Producer.RequiredAcks = sarama.WaitForAll
+	config.Producer.RequiredAcks = sarama.RequiredAcks(o.RequiredAcks)
 	compression := strings.ToLower(strings.TrimSpace(o.Compression))
 	switch compression {
 	case "none":
