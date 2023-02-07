@@ -25,6 +25,7 @@ import (
 	"go.uber.org/zap"
 )
 
+// MetricsCollector is the interface for kafka metrics collector.
 type MetricsCollector interface {
 	Run(ctx context.Context)
 	Close()
@@ -55,6 +56,7 @@ type saramaMetricsCollector struct {
 	registry metrics.Registry
 }
 
+// NewSaramaMetricsCollector return a kafka metrics collector based on sarama library.
 func NewSaramaMetricsCollector(
 	changefeedID model.ChangeFeedID,
 	role util.Role,

@@ -21,6 +21,7 @@ import (
 	"github.com/pingcap/tiflow/pkg/util"
 )
 
+// MetricsCollector is the kafka metrics collector based on kafka-go library.
 type MetricsCollector struct {
 	changefeedID model.ChangeFeedID
 	role         util.Role
@@ -40,8 +41,10 @@ func NewMetricsCollector(
 	}
 }
 
+// Run implement the MetricsCollector interface
 func (m *MetricsCollector) Run(ctx context.Context) {
 }
 
+// Close implement the MetricsCollector interface
 func (m *MetricsCollector) Close() {
 }

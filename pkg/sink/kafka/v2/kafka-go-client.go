@@ -176,6 +176,7 @@ func (k *kafkaGoClient) AsyncProducer(changefeedID model.ChangeFeedID,
 	return aw, nil
 }
 
+// MetricRegistry implement the MetricsCollector interface
 func (k *kafkaGoClient) MetricRegistry() metrics.Registry {
 	return nil
 }

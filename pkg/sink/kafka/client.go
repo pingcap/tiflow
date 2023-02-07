@@ -121,6 +121,7 @@ func (c *saramaKafkaClient) AsyncProducer(
 	}, nil
 }
 
+// MetricRegistry return the metrics registry
 func (c *saramaKafkaClient) MetricRegistry() metrics.Registry {
 	return c.config.MetricRegistry
 }

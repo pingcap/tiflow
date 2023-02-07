@@ -41,6 +41,7 @@ func (c *ClientMockImpl) AsyncProducer(
 	return &saramaAsyncProducer{}, nil
 }
 
+// MetricRegistry implement the MetricsCollector interface
 func (c *ClientMockImpl) MetricRegistry() metrics.Registry {
 	return nil
 }
