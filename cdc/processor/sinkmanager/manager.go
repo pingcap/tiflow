@@ -337,12 +337,9 @@ func (m *SinkManager) backgroundGC() {
 
 // generateSinkTasks generates tasks to fetch data from the source manager.
 func (m *SinkManager) generateSinkTasks() error {
-	// We use the barrier ts as the upper bound of the fetch tableSinkTask.
-	// Because it can not exceed the barrier ts.
-	// We also need to consider the resolved ts from sorter,
-	// Because if the redo log is enabled and the table just scheduled to this node,
-	// the resolved ts from sorter may be smaller than the barrier ts.
-	// So we use the min value of the barrier ts and the resolved ts from sorter.
+	// Task upperbound is limited by barrierTs and schemaResolvedTs.
+	// But receivedSorterResolvedTs can be less than barrierTs, in which case
+	// the table is just scheduled to this node.
 	getUpperBound := func(tableSink *tableSinkWrapper) engine.Position {
 		upperBoundTs := tableSink.getReceivedSorterResolvedTs()
 
