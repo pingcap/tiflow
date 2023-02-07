@@ -190,10 +190,12 @@ type syncWriter struct {
 	w *kafka.Writer
 }
 
-func (s *syncWriter) SendMessage(topic string,
-	partitionNum int32, key []byte, value []byte,
+func (s *syncWriter) SendMessage(
+	ctx context.Context,
+	topic string, partitionNum int32,
+	key []byte, value []byte,
 ) error {
-	return s.w.WriteMessages(context.Background(), kafka.Message{
+	return s.w.WriteMessages(ctx, kafka.Message{
 		Topic:     topic,
 		Partition: int(partitionNum),
 		Key:       key,
@@ -205,8 +207,9 @@ func (s *syncWriter) SendMessage(topic string,
 // messages in the set have either succeeded or failed. Note that messages
 // can succeed and fail individually; if some succeed and some fail,
 // SendMessages will return an error.
-func (s *syncWriter) SendMessages(topic string,
-	partitionNum int32,
+func (s *syncWriter) SendMessages(
+	ctx context.Context,
+	topic string, partitionNum int32,
 	key []byte, value []byte,
 ) error {
 	msgs := make([]kafka.Message, int(partitionNum))
@@ -218,7 +221,7 @@ func (s *syncWriter) SendMessages(topic string,
 			Partition: i,
 		}
 	}
-	return s.w.WriteMessages(context.Background(), msgs...)
+	return s.w.WriteMessages(ctx, msgs...)
 }
 
 // Close shuts down the producer; you must call this function before a producer
@@ -235,17 +238,6 @@ type asyncWriter struct {
 	failpointCh  chan error
 	successes    chan []kafka.Message
 	errorsChan   chan error
-}
-
-// AsyncClose triggers a shutdown of the producer. The shutdown has completed
-// when both the Errors and Successes channels have been closed. When calling
-// AsyncClose, you *must* continue to read from those channels in order to
-// drain the results of any messages in flight.
-// todo: remove this field after we refine the interface
-func (a *asyncWriter) AsyncClose() {
-	go func() {
-		_ = a.Close()
-	}()
 }
 
 // Close shuts down the producer and waits for any buffered messages to be
