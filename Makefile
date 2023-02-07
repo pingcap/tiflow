@@ -46,15 +46,9 @@ endif
 # ref: https://github.com/cloudfoundry/gosigar/issues/58#issuecomment-1150925711
 # ref: https://github.com/pingcap/tidb/pull/39526#issuecomment-1407952955
 OS    := "$(shell go env GOOS)"
-ARCH  := "$(shell uname -s)"
-LINUX := "Linux"
-MAC   := "Darwin"
-ifeq (${ARCH}, ${LINUX})
+#ARCH  := "$(shell uname -s)"
+ifeq (${OS}, "linux")
 	CGO := 0
-else ifeq (${OS}, "linux")
-	CGO := 0
-else ifeq (${ARCH}, ${MAC})
-	CGO := 1
 else ifeq (${OS}, "darwin")
 	CGO := 1
 endif
