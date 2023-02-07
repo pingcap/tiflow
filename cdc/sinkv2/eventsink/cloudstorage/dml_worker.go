@@ -121,6 +121,10 @@ func newDMLWorker(
 
 // run creates a set of background goroutines.
 func (d *dmlWorker) run(ctx context.Context, ch *chann.Chann[eventFragment]) error {
+	log.Debug("dml worker started", zap.Int("workerID", d.id),
+		zap.String("namespace", d.changeFeedID.Namespace),
+		zap.String("changefeed", d.changeFeedID.ID))
+
 	eg, ctx := errgroup.WithContext(ctx)
 	eg.Go(func() error {
 		return d.flushMessages(ctx)
@@ -161,12 +165,22 @@ func (d *dmlWorker) flushMessages(ctx context.Context) error {
 				// generate scheme.json file before generating the first data file if necessary
 				err := d.writeSchemaFile(ctx, table, tbl.tableInfo)
 				if err != nil {
+					log.Error("failed to write schema file to external storage",
+						zap.Int("workerID", d.id),
+						zap.String("namespace", d.changeFeedID.Namespace),
+						zap.String("changefeed", d.changeFeedID.ID),
+						zap.Error(err))
 					return errors.Trace(err)
 				}
 
 				path := d.generateDataFilePath(table)
 				err = d.writeDataFile(ctx, path, events)
 				if err != nil {
+					log.Error("failed to write data file to external storage",
+						zap.Int("workerID", d.id),
+						zap.String("namespace", d.changeFeedID.Namespace),
+						zap.String("changefeed", d.changeFeedID.ID),
+						zap.Error(err))
 					return errors.Trace(err)
 				}
 
@@ -263,9 +277,6 @@ func (d *dmlWorker) dispatchFlushTasks(ctx context.Context, ch *chann.Chann[even
 	tableSet := make(map[wrappedTable]struct{})
 	ticker := time.NewTicker(d.config.FlushInterval)
 
-	log.Debug("dml worker started", zap.Int("workerID", d.id),
-		zap.String("namespace", d.changeFeedID.Namespace),
-		zap.String("changefeed", d.changeFeedID.ID))
 	for {
 		select {
 		case <-ctx.Done():
