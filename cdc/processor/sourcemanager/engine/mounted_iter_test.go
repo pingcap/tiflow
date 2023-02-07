@@ -55,6 +55,7 @@ func TestMountedEventIter(t *testing.T) {
 
 	mg := &entry.MockMountGroup{}
 	quota := memquota.NewMemQuota(model.ChangeFeedID{}, 1024*1024, "test")
+	defer quota.Close()
 	iter := NewMountedEventIter(model.ChangeFeedID{}, rawIter, mg, 3, quota)
 
 	for i := 0; i < 3; i++ {

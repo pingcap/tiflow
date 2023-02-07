@@ -18,7 +18,6 @@ import (
 
 	"github.com/pingcap/errors"
 	"github.com/pingcap/log"
-	"github.com/pingcap/tiflow/cdc/entry"
 	"github.com/pingcap/tiflow/cdc/model"
 	"github.com/pingcap/tiflow/cdc/processor/memquota"
 	"github.com/pingcap/tiflow/cdc/processor/sourcemanager"
@@ -30,7 +29,6 @@ import (
 
 type sinkWorker struct {
 	changefeedID  model.ChangeFeedID
-	mg            entry.MounterGroup
 	sourceManager *sourcemanager.SourceManager
 	sinkMemQuota  *memquota.MemQuota
 	redoMemQuota  *memquota.MemQuota
@@ -48,7 +46,6 @@ type sinkWorker struct {
 // newWorker creates a new worker.
 func newSinkWorker(
 	changefeedID model.ChangeFeedID,
-	mg entry.MounterGroup,
 	sourceManager *sourcemanager.SourceManager,
 	sinkQuota *memquota.MemQuota,
 	redoQuota *memquota.MemQuota,
@@ -58,7 +55,6 @@ func newSinkWorker(
 ) *sinkWorker {
 	return &sinkWorker{
 		changefeedID:   changefeedID,
-		mg:             mg,
 		sourceManager:  sourceManager,
 		sinkMemQuota:   sinkQuota,
 		redoMemQuota:   redoQuota,
@@ -262,7 +258,7 @@ func (w *sinkWorker) handleTask(ctx context.Context, task *sinkTask) (finalErr e
 	// lowerBound and upperBound are both closed intervals.
 	allEventSize := uint64(0)
 	allEventCount := 0
-	iter := w.sourceManager.FetchByTable(task.span, lowerBound, upperBound, w.mg, w.sinkMemQuota)
+	iter := w.sourceManager.FetchByTable(task.span, lowerBound, upperBound, w.sinkMemQuota)
 	defer func() {
 		w.metricRedoEventCacheMiss.Add(float64(allEventSize))
 		task.tableSink.receivedEventCount.Add(int64(allEventCount))

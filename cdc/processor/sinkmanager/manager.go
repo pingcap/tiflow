@@ -68,8 +68,6 @@ type SinkManager struct {
 	// up is the upstream and used to get the current pd time.
 	up *upstream.Upstream
 
-	mg entry.MounterGroup
-
 	// used to generate task upperbounds.
 	schemaStorage entry.SchemaStorage
 
@@ -77,9 +75,6 @@ type SinkManager struct {
 	sinkProgressHeap *tableProgresses
 	// redoProgressHeap is the heap of the table progress for redo.
 	redoProgressHeap *tableProgresses
-
-	sinkMg entry.MounterGroup
-	redoMg entry.MounterGroup
 
 	// eventCache caches events fetched from sort engine.
 	eventCache *redoEventCache
@@ -125,7 +120,6 @@ func New(
 	changefeedID model.ChangeFeedID,
 	changefeedInfo *model.ChangeFeedInfo,
 	up *upstream.Upstream,
-	mg entry.MounterGroup,
 	schemaStorage entry.SchemaStorage,
 	redoManager redo.LogManager,
 	sourceManager *sourcemanager.SourceManager,
@@ -148,7 +142,6 @@ func New(
 		ctx:           ctx,
 		cancel:        cancel,
 		up:            up,
-		mg:            mg,
 		schemaStorage: schemaStorage,
 		sinkFactory:   tableSinkFactory,
 		sourceManager: sourceManager,
@@ -193,7 +186,7 @@ func New(
 // start all workers and report the error to the error channel.
 func (m *SinkManager) startWorkers(splitTxn bool, enableOldValue bool) {
 	for i := 0; i < sinkWorkerNum; i++ {
-		w := newSinkWorker(m.changefeedID, m.mg, m.sourceManager,
+		w := newSinkWorker(m.changefeedID, m.sourceManager,
 			m.sinkMemQuota, m.redoMemQuota,
 			m.eventCache, splitTxn, enableOldValue)
 		m.sinkWorkers = append(m.sinkWorkers, w)
@@ -219,7 +212,7 @@ func (m *SinkManager) startWorkers(splitTxn bool, enableOldValue bool) {
 	}
 
 	for i := 0; i < redoWorkerNum; i++ {
-		w := newRedoWorker(m.changefeedID, m.mg, m.sourceManager, m.redoMemQuota,
+		w := newRedoWorker(m.changefeedID, m.sourceManager, m.redoMemQuota,
 			m.redoManager, m.eventCache, splitTxn, enableOldValue)
 		m.redoWorkers = append(m.redoWorkers, w)
 		m.wg.Add(1)

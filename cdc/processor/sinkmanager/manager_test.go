@@ -56,10 +56,10 @@ func createManagerWithMemEngine(
 ) (*SinkManager, engine.SortEngine) {
 	sortEngine := memory.New(context.Background())
 	up := upstream.NewUpstream4Test(&mockPD{})
-	sm := sourcemanager.New(changefeedID, up, sortEngine, errChan, false)
+	sm := sourcemanager.New(changefeedID, up, &entry.MockMountGroup{}, sortEngine, errChan, false)
 	manager, err := New(
 		ctx, changefeedID, changefeedInfo, up,
-		&entry.MockMountGroup{}, &entry.MockSchemaStorage{Resolved: math.MaxUint64},
+		&entry.MockSchemaStorage{Resolved: math.MaxUint64},
 		nil, sm,
 		errChan, prometheus.NewCounter(prometheus.CounterOpts{}))
 	require.NoError(t, err)
