@@ -145,6 +145,7 @@ func New(
 		schemaStorage: schemaStorage,
 		sinkFactory:   tableSinkFactory,
 		sourceManager: sourceManager,
+		errChan:       errChan,
 
 		sinkProgressHeap:    newTableProgresses(),
 		sinkWorkers:         make([]*sinkWorker, 0, sinkWorkerNum),
