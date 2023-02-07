@@ -27,6 +27,7 @@ type MetricsCollector struct {
 	admin        kafka.ClusterAdminClient
 }
 
+// NewMetricsCollector return a kafka metrics collector
 func NewMetricsCollector(
 	changefeedID model.ChangeFeedID,
 	role util.Role,
@@ -40,9 +41,7 @@ func NewMetricsCollector(
 }
 
 func (m *MetricsCollector) Run(ctx context.Context) {
-
 }
 
 func (m *MetricsCollector) Close() {
-
 }
