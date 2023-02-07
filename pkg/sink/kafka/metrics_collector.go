@@ -27,6 +27,7 @@ import (
 
 type MetricsCollector interface {
 	Run(ctx context.Context)
+	Close()
 }
 
 // flushMetricsInterval specifies the interval of refresh sarama metrics.
@@ -54,8 +55,19 @@ type saramaMetricsCollector struct {
 	registry metrics.Registry
 }
 
-func NewSaramaCollector() MetricsCollector {
-	return &saramaMetricsCollector{}
+func NewSaramaMetricsCollector(
+	changefeedID model.ChangeFeedID,
+	role util.Role,
+	adminClient ClusterAdminClient,
+	registry metrics.Registry,
+) MetricsCollector {
+	return &saramaMetricsCollector{
+		changefeedID: changefeedID,
+		role:         role,
+		adminClient:  adminClient,
+		brokers:      make(map[int32]struct{}),
+		registry:     registry,
+	}
 }
 
 func (m *saramaMetricsCollector) Run(ctx context.Context) {

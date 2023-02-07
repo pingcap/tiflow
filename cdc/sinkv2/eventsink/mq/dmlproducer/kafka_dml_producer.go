@@ -24,9 +24,8 @@ import (
 	"github.com/pingcap/tiflow/cdc/contextutil"
 	"github.com/pingcap/tiflow/cdc/model"
 	"github.com/pingcap/tiflow/cdc/sink/codec/common"
-	collector "github.com/pingcap/tiflow/cdc/sinkv2/metrics/mq/kafka"
 	cerror "github.com/pingcap/tiflow/pkg/errors"
-	pkafka "github.com/pingcap/tiflow/pkg/sink/kafka"
+	"github.com/pingcap/tiflow/pkg/sink/kafka"
 	"github.com/pingcap/tiflow/pkg/util"
 	"go.uber.org/zap"
 )
@@ -39,11 +38,11 @@ type kafkaDMLProducer struct {
 	id model.ChangeFeedID
 	// We hold the client to make close operation faster.
 	// Please see the comment of Close().
-	client pkafka.Client
+	client kafka.Client
 	// asyncProducer is used to send messages to kafka asynchronously.
-	asyncProducer pkafka.AsyncProducer
-	// collector is used to report metrics.
-	collector *collector.Collector
+	asyncProducer kafka.AsyncProducer
+	// metricsCollector is used to report metrics.
+	metricsCollector kafka.MetricsCollector
 	// closedMu is used to protect `closed`.
 	// We need to ensure that closed producers are never written to.
 	closedMu sync.RWMutex
@@ -60,8 +59,8 @@ type kafkaDMLProducer struct {
 // NewKafkaDMLProducer creates a new kafka producer.
 func NewKafkaDMLProducer(
 	ctx context.Context,
-	client pkafka.Client,
-	adminClient pkafka.ClusterAdminClient,
+	client kafka.Client,
+	adminClient kafka.ClusterAdminClient,
 	errCh chan error,
 ) (DMLProducer, error) {
 	changefeedID := contextutil.ChangefeedIDFromCtx(ctx)
@@ -93,21 +92,21 @@ func NewKafkaDMLProducer(
 		return nil, cerror.WrapError(cerror.ErrKafkaNewProducer, err)
 	}
 
-	collector := collector.New(changefeedID, util.RoleProcessor,
-		adminClient, client.MetricRegistry())
+	metricsCollector := kafka.NewSaramaMetricsCollector(
+		changefeedID, util.RoleProcessor, adminClient, client.MetricRegistry())
 
 	k := &kafkaDMLProducer{
-		id:            changefeedID,
-		client:        client,
-		asyncProducer: asyncProducer,
-		collector:     collector,
-		closed:        false,
-		closedChan:    closeCh,
-		failpointCh:   failpointCh,
+		id:               changefeedID,
+		client:           client,
+		asyncProducer:    asyncProducer,
+		metricsCollector: metricsCollector,
+		closed:           false,
+		closedChan:       closeCh,
+		failpointCh:      failpointCh,
 	}
 
 	// Start collecting metrics.
-	go k.collector.Run(ctx)
+	go k.metricsCollector.Run(ctx)
 
 	go func() {
 		if err := k.run(ctx); err != nil && errors.Cause(err) != context.Canceled {
@@ -219,8 +218,8 @@ func (k *kafkaDMLProducer) Close() {
 				zap.String("namespace", k.id.Namespace),
 				zap.String("changefeed", k.id.ID))
 		}
-		// Finally, close the metric collector.
-		k.collector.Close()
+		// Finally, close the metric metricsCollector.
+		k.metricsCollector.Close()
 	}()
 }
 
