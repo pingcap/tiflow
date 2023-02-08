@@ -225,7 +225,6 @@ func (a *admin) CreateTopic(
 	return nil
 }
 
-func (a *admin) Close() error {
+func (a *admin) Close() {
 	// todo: close the underline client after support transport configuration.
-	return nil
 }
