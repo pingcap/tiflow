@@ -895,10 +895,6 @@ github.com/pingcap/sysutil v0.0.0-20220114020952-ea68d2dbf5b4/go.mod h1:sDCsM39c
 github.com/pingcap/tidb v1.1.0-beta.0.20220511160835-98c31070d958/go.mod h1:luW4sIZoLHY3bCWuKqyqk2QgMvF+/M7nWOXf/me0+fY=
 github.com/pingcap/tidb v1.1.0-beta.0.20230208042158-8398f0fe098e h1:Ow+RSqniwx5+54bs9dl9yYD8wI1Vp7fHEbyWQ8lD+WY=
 github.com/pingcap/tidb v1.1.0-beta.0.20230208042158-8398f0fe098e/go.mod h1:/mPfwhOdsf2eEpQjdynf/VmPV2YDO/C0C8xpk9hxj2U=
-github.com/pingcap/tidb-tools v6.1.1-0.20220715000306-1d2f00da8c3e+incompatible h1:ftmrSd7avCEdTOkWx3O0UkS4yTBrlKQweRF8uqz9+No=
-github.com/pingcap/tidb-tools v6.1.1-0.20220715000306-1d2f00da8c3e+incompatible/go.mod h1:XGdcy9+yqlDSEMTpOXnwf3hiTeqrV6MN/u1se9N8yIM=
-github.com/pingcap/tidb-tools v6.5.1-0.20230208063159-0884f870c6a4+incompatible h1:S83kSSioU9sN5DeyaKBjNZldZZTbnLtT8no2iEgyiis=
-github.com/pingcap/tidb-tools v6.5.1-0.20230208063159-0884f870c6a4+incompatible/go.mod h1:XGdcy9+yqlDSEMTpOXnwf3hiTeqrV6MN/u1se9N8yIM=
 github.com/pingcap/tidb-tools v6.5.1-0.20230208065359-62b90e1e24a7+incompatible h1:OT1Mrhe5UQInwiO+vGjbtd5Ej4r1ECjmeN4oaTdPlbE=
 github.com/pingcap/tidb-tools v6.5.1-0.20230208065359-62b90e1e24a7+incompatible/go.mod h1:XGdcy9+yqlDSEMTpOXnwf3hiTeqrV6MN/u1se9N8yIM=
 github.com/pingcap/tidb/parser v0.0.0-20211011031125-9b13dc409c5e/go.mod h1:e1MGCA9Sg3T8jid8PKAEq5eYVuMMCq4n8gJ+Kqp4Plg=
