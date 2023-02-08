@@ -259,9 +259,10 @@ func getMaxMultiUpdateRowSize(values url.Values, maxMultiUpdateRowSize *int) err
 	if err != nil {
 		return cerror.WrapError(cerror.ErrMySQLInvalidConfig, err)
 	}
-	if c <= 0 {
+	if c < 0 {
 		return cerror.WrapError(cerror.ErrMySQLInvalidConfig,
-			fmt.Errorf("invalid max-multi-update-row-size %d, which must be greater than 0", c))
+			fmt.Errorf("invalid max-multi-update-row-size %d, "+
+				"which must be greater than or equal to 0", c))
 	}
 	if c > maxMaxMultiUpdateRowSize {
 		log.Warn("max-multi-update-row-size too large",
