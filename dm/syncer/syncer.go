@@ -1080,6 +1080,7 @@ func (s *Syncer) handleJob(job *job) (added2Queue bool, err error) {
 		s.isTransactionEnd = true
 		return
 	case skip:
+		s.saveGlobalPoint(job.location)
 		s.updateReplicationJobTS(job, skipJobIdx)
 		return
 	}
