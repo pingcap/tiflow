@@ -878,7 +878,7 @@ func (m *SinkManager) Close() error {
 	}
 	m.sinkMemQuota.Close()
 	m.redoMemQuota.Close()
-  m.sinkFactory.Close()
+	m.sinkFactory.Close()
 	m.tableSinks.Range(func(_ tablepb.Span, value interface{}) bool {
 		sink := value.(*tableSinkWrapper)
 		sink.close(m.ctx)
