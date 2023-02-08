@@ -70,7 +70,3 @@ func (f *saramaFactory) MetricsCollector(
 	return NewSaramaMetricsCollector(
 		changefeedID, role, adminClient, f.client.Config().MetricRegistry)
 }
-
-func (f *saramaFactory) Close() error {
-	return f.client.Close()
-}

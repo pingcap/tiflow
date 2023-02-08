@@ -43,8 +43,6 @@ type Factory interface {
 		role util.Role,
 		adminClient ClusterAdminClient,
 	) MetricsCollector
-	// Close the factory, all components created by the factory should not be accessed.
-	Close() error
 }
 
 // SyncProducer is the kafka sync producer

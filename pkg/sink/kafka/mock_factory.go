@@ -54,8 +54,3 @@ func (c *MockFactory) MetricsCollector(
 ) MetricsCollector {
 	return nil
 }
-
-// Close closes the client
-func (c *MockFactory) Close() error {
-	return nil
-}
