@@ -78,3 +78,35 @@ func TestMountedEventIter(t *testing.T) {
 	require.Nil(t, iter.iter)
 	require.Nil(t, iter.Close())
 }
+
+func TestMountedEventIterReadBatch(t *testing.T) {
+	t.Parallel()
+
+	rawIter := &mockIter{
+		repeatItem: func() *model.PolymorphicEvent {
+			return &model.PolymorphicEvent{
+				RawKV: &model.RawKVEntry{
+					Key:   []byte("testbytes"),
+					Value: []byte("testbytes"),
+				},
+			}
+		},
+	}
+
+	quota := memquota.NewMemQuota(model.ChangeFeedID{}, 1024*1024, "test")
+	defer quota.Close()
+
+	mg := &entry.MockMountGroup{IsFull: true}
+	iter := NewMountedEventIter(model.ChangeFeedID{}, rawIter, mg, 3, quota)
+
+	iter.readBatch(context.Background())
+	require.NotNil(t, iter.rawEventBuffer.event)
+	require.Equal(t, 1, len(iter.rawEvents))
+
+	rawIter.repeatItem = func() *model.PolymorphicEvent { return nil }
+	iter.readBatch(context.Background())
+	require.Nil(t, iter.rawEventBuffer.event)
+	require.Equal(t, 1, len(iter.rawEvents))
+
+	require.Equal(t, uint64(36), quota.GetUsedBytes())
+}

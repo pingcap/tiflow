@@ -348,6 +348,8 @@ func (m *SinkManager) generateSinkTasks() error {
 			upperBoundTs = barrierTs
 		}
 
+		// If a task carries events after schemaResolvedTs, mounter group threads
+		// can be blocked on waiting schemaResolvedTs get advanced.
 		schemaTs := m.schemaStorage.ResolvedTs()
 		if upperBoundTs-1 > schemaTs {
 			upperBoundTs = schemaTs + 1
@@ -493,6 +495,8 @@ func (m *SinkManager) generateRedoTasks() error {
 	getUpperBound := func(tableSink *tableSinkWrapper) engine.Position {
 		upperBoundTs := tableSink.getReceivedSorterResolvedTs()
 
+		// If a task carries events after schemaResolvedTs, mounter group threads
+		// can be blocked on waiting schemaResolvedTs get advanced.
 		schemaTs := m.schemaStorage.ResolvedTs()
 		if upperBoundTs-1 > schemaTs {
 			upperBoundTs = schemaTs + 1

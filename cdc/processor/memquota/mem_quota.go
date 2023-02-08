@@ -39,8 +39,8 @@ type MemQuota struct {
 	// totalBytes is the total memory quota for one changefeed.
 	totalBytes uint64
 
-	// usedBytes is the memory usage of one changefeed. It's used as an atomic.
-	usedBytes uint64
+	// usedBytes is the memory usage of one changefeed.
+	usedBytes atomic.Uint64
 
 	// isClosed is used to indicate whether the mem quota is closed.
 	isClosed atomic.Bool
@@ -51,7 +51,8 @@ type MemQuota struct {
 
 	// blockAcquireCond is used to notify the blocked acquire.
 	blockAcquireCond *sync.Cond
-	condMu           sync.Mutex
+	// condMu protects nothing, but sync.Cond needs a mutex.
+	condMu sync.Mutex
 
 	metricTotal prometheus.Gauge
 	metricUsed  prometheus.Gauge
@@ -67,7 +68,6 @@ func NewMemQuota(changefeedID model.ChangeFeedID, totalBytes uint64, comp string
 	m := &MemQuota{
 		changefeedID: changefeedID,
 		totalBytes:   totalBytes,
-		usedBytes:    0,
 		metricTotal:  MemoryQuota.WithLabelValues(changefeedID.Namespace, changefeedID.ID, "total", comp),
 		metricUsed:   MemoryQuota.WithLabelValues(changefeedID.Namespace, changefeedID.ID, "used", comp),
 		closeBg:      make(chan struct{}, 1),
@@ -90,7 +90,7 @@ func NewMemQuota(changefeedID model.ChangeFeedID, totalBytes uint64, comp string
 		for {
 			select {
 			case <-timer.C:
-				m.metricUsed.Set(float64(atomic.LoadUint64(&m.usedBytes)))
+				m.metricUsed.Set(float64(m.usedBytes.Load()))
 			case <-m.closeBg:
 				m.metricUsed.Set(0.0)
 				m.wg.Done()
@@ -104,11 +104,11 @@ func NewMemQuota(changefeedID model.ChangeFeedID, totalBytes uint64, comp string
 // TryAcquire returns true if the memory quota is available, otherwise returns false.
 func (m *MemQuota) TryAcquire(nBytes uint64) bool {
 	for {
-		usedBytes := atomic.LoadUint64(&m.usedBytes)
+		usedBytes := m.usedBytes.Load()
 		if usedBytes+nBytes > m.totalBytes {
 			return false
 		}
-		if atomic.CompareAndSwapUint64(&m.usedBytes, usedBytes, usedBytes+nBytes) {
+		if m.usedBytes.CompareAndSwap(usedBytes, usedBytes+nBytes) {
 			return true
 		}
 	}
@@ -116,7 +116,7 @@ func (m *MemQuota) TryAcquire(nBytes uint64) bool {
 
 // ForceAcquire is used to force acquire the memory quota.
 func (m *MemQuota) ForceAcquire(nBytes uint64) {
-	atomic.AddUint64(&m.usedBytes, nBytes)
+	m.usedBytes.Add(nBytes)
 }
 
 // BlockAcquire is used to block the request when the memory quota is not available.
@@ -125,14 +125,14 @@ func (m *MemQuota) BlockAcquire(nBytes uint64) error {
 		if m.isClosed.Load() {
 			return cerrors.ErrFlowControllerAborted.GenWithStackByArgs()
 		}
-		usedBytes := atomic.LoadUint64(&m.usedBytes)
+		usedBytes := m.usedBytes.Load()
 		if usedBytes+nBytes > m.totalBytes {
 			m.condMu.Lock()
 			m.blockAcquireCond.Wait()
 			m.condMu.Unlock()
 			continue
 		}
-		if atomic.CompareAndSwapUint64(&m.usedBytes, usedBytes, usedBytes+nBytes) {
+		if m.usedBytes.CompareAndSwap(usedBytes, usedBytes+nBytes) {
 			return nil
 		}
 	}
@@ -143,12 +143,12 @@ func (m *MemQuota) Refund(nBytes uint64) {
 	if nBytes == 0 {
 		return
 	}
-	usedBytes := atomic.LoadUint64(&m.usedBytes)
+	usedBytes := m.usedBytes.Load()
 	if usedBytes < nBytes {
 		log.Panic("MemQuota.refund fail",
-			zap.Uint64("used", m.usedBytes), zap.Uint64("refund", nBytes))
+			zap.Uint64("used", usedBytes), zap.Uint64("refund", nBytes))
 	}
-	if atomic.AddUint64(&m.usedBytes, ^(nBytes-1)) < m.totalBytes {
+	if m.usedBytes.Add(^(nBytes - 1)) < m.totalBytes {
 		m.blockAcquireCond.Broadcast()
 	}
 }
@@ -169,12 +169,12 @@ func (m *MemQuota) Record(span tablepb.Span, resolved model.ResolvedTs, nBytes u
 	defer m.mu.Unlock()
 	if _, ok := m.tableMemory.Get(span); !ok {
 		// Can't find the table record, the table must be removed.
-		usedBytes := atomic.LoadUint64(&m.usedBytes)
+		usedBytes := m.usedBytes.Load()
 		if usedBytes < nBytes {
 			log.Panic("MemQuota.refund fail",
-				zap.Uint64("used", m.usedBytes), zap.Uint64("refund", nBytes))
+				zap.Uint64("used", usedBytes), zap.Uint64("refund", nBytes))
 		}
-		if atomic.AddUint64(&m.usedBytes, ^(nBytes-1)) < m.totalBytes {
+		if m.usedBytes.Add(^(nBytes - 1)) < m.totalBytes {
 			m.blockAcquireCond.Broadcast()
 		}
 		return
@@ -210,12 +210,12 @@ func (m *MemQuota) Release(span tablepb.Span, resolved model.ResolvedTs) {
 		return
 	}
 
-	usedBytes := atomic.LoadUint64(&m.usedBytes)
+	usedBytes := m.usedBytes.Load()
 	if usedBytes < toRelease {
 		log.Panic("MemQuota.release fail",
-			zap.Uint64("used", m.usedBytes), zap.Uint64("release", toRelease))
+			zap.Uint64("used", usedBytes), zap.Uint64("release", toRelease))
 	}
-	if atomic.AddUint64(&m.usedBytes, ^(toRelease-1)) < m.totalBytes {
+	if m.usedBytes.Add(^(toRelease - 1)) < m.totalBytes {
 		m.blockAcquireCond.Broadcast()
 	}
 }
@@ -242,7 +242,7 @@ func (m *MemQuota) Clean(span tablepb.Span) uint64 {
 	}
 	m.tableMemory.Delete(span)
 
-	if atomic.AddUint64(&m.usedBytes, ^(cleaned-1)) < m.totalBytes {
+	if m.usedBytes.Add(^(cleaned - 1)) < m.totalBytes {
 		m.blockAcquireCond.Broadcast()
 	}
 	return cleaned
@@ -259,26 +259,10 @@ func (m *MemQuota) Close() {
 
 // GetUsedBytes returns the used memory quota.
 func (m *MemQuota) GetUsedBytes() uint64 {
-	return atomic.LoadUint64(&m.usedBytes)
+	return m.usedBytes.Load()
 }
 
 // hasAvailable returns true if the memory quota is available, otherwise returns false.
 func (m *MemQuota) hasAvailable(nBytes uint64) bool {
-	return atomic.LoadUint64(&m.usedBytes)+nBytes <= m.totalBytes
-}
-
-// MemoryQuota indicates memory usage of a changefeed.
-var MemoryQuota = prometheus.NewGaugeVec(
-	prometheus.GaugeOpts{
-		Namespace: "ticdc",
-		Subsystem: "sinkmanager",
-		Name:      "memory_quota",
-		Help:      "memory quota of the changefeed",
-	},
-	// type includes total, used, component includes sink and redo.
-	[]string{"namespace", "changefeed", "type", "component"})
-
-// InitMetrics registers all metrics in this file.
-func InitMetrics(registry *prometheus.Registry) {
-	registry.MustRegister(MemoryQuota)
+	return m.usedBytes.Load()+nBytes <= m.totalBytes
 }

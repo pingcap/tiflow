@@ -30,6 +30,7 @@ type MountedEventIter struct {
 	quota *memquota.MemQuota
 
 	rawEvents      []rawEvent
+	rawEventBuffer rawEvent
 	nextToEmit     int
 	savedIterError error
 
@@ -89,7 +90,19 @@ func (i *MountedEventIter) readBatch(ctx context.Context) error {
 
 	i.nextToEmit = 0
 	i.rawEvents = i.rawEvents[:0]
-	for len(i.rawEvents) < cap(i.rawEvents) {
+
+	if i.rawEventBuffer.event != nil {
+		i.rawEventBuffer.event.SetUpFinishedCh()
+		if err := i.mg.AddEvent(ctx, i.rawEventBuffer.event); err != nil {
+			i.mg = nil
+			return err
+		}
+		i.rawEvents = append(i.rawEvents, i.rawEventBuffer)
+		i.rawEventBuffer.event = nil
+	}
+
+	keepFetching := true
+	for keepFetching && len(i.rawEvents) < cap(i.rawEvents) {
 		event, txnFinished, err := i.iter.Next()
 		if err != nil {
 			return err
@@ -99,20 +112,35 @@ func (i *MountedEventIter) readBatch(ctx context.Context) error {
 			i.iter = nil
 			break
 		}
-		event.SetUpFinishedCh()
-		if err := i.mg.AddEvent(ctx, event); err != nil {
-			i.mg = nil
-			return err
-		}
 
 		var size int64
 		if event.RawKV != nil {
 			size = event.RawKV.ApproximateDataSize()
 		}
-		i.rawEvents = append(i.rawEvents, rawEvent{event, txnFinished, size})
-		if !i.quota.TryAcquire(uint64(size)) {
+		keepFetching = i.quota.TryAcquire(uint64(size))
+		if !keepFetching {
 			i.quota.ForceAcquire(uint64(size))
-			break
+		}
+
+		var mountStarted bool
+		event.SetUpFinishedCh()
+		if len(i.rawEvents) > 0 {
+			mountStarted, err = i.mg.TryAddEvent(ctx, event)
+			keepFetching = keepFetching && mountStarted
+		} else {
+			err = i.mg.AddEvent(ctx, event)
+			mountStarted = true
+		}
+		if err != nil {
+			i.mg = nil
+			return err
+		}
+		if mountStarted {
+			i.rawEvents = append(i.rawEvents, rawEvent{event, txnFinished, size})
+		} else {
+			i.rawEventBuffer.event = event
+			i.rawEventBuffer.txnFinished = txnFinished
+			i.rawEventBuffer.size = size
 		}
 	}
 	return nil

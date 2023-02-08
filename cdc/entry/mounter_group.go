@@ -19,7 +19,6 @@ import (
 
 	"github.com/pingcap/errors"
 	"github.com/pingcap/tiflow/cdc/model"
-	"github.com/pingcap/tiflow/pkg/chann"
 	"github.com/pingcap/tiflow/pkg/filter"
 	"golang.org/x/sync/errgroup"
 )
@@ -28,11 +27,12 @@ import (
 type MounterGroup interface {
 	Run(ctx context.Context) error
 	AddEvent(ctx context.Context, event *model.PolymorphicEvent) error
+	TryAddEvent(ctx context.Context, event *model.PolymorphicEvent) (bool, error)
 }
 
 type mounterGroup struct {
 	schemaStorage  SchemaStorage
-	inputCh        *chann.Chann[*model.PolymorphicEvent]
+	inputCh        chan *model.PolymorphicEvent
 	tz             *time.Location
 	filter         filter.Filter
 	enableOldValue bool
@@ -44,7 +44,7 @@ type mounterGroup struct {
 
 const (
 	defaultMounterWorkerNum = 16
-	defaultInputChanSize    = 256
+	defaultInputChanSize    = 1024
 	defaultMetricInterval   = 15 * time.Second
 )
 
@@ -62,7 +62,7 @@ func NewMounterGroup(
 	}
 	return &mounterGroup{
 		schemaStorage:  schemaStorage,
-		inputCh:        chann.New[*model.PolymorphicEvent](),
+		inputCh:        make(chan *model.PolymorphicEvent, defaultInputChanSize),
 		enableOldValue: enableOldValue,
 		filter:         filter,
 		tz:             tz,
@@ -92,7 +92,7 @@ func (m *mounterGroup) Run(ctx context.Context) error {
 			case <-ctx.Done():
 				return errors.Trace(ctx.Err())
 			case <-ticker.C:
-				metrics.Set(float64(m.inputCh.Len()))
+				metrics.Set(float64(len(m.inputCh)))
 			}
 		}
 	})
@@ -105,7 +105,7 @@ func (m *mounterGroup) runWorker(ctx context.Context) error {
 		select {
 		case <-ctx.Done():
 			return errors.Trace(ctx.Err())
-		case pEvent := <-m.inputCh.Out():
+		case pEvent := <-m.inputCh:
 			if pEvent.RawKV.OpType == model.OpTypeResolved {
 				pEvent.MarkFinished()
 				continue
@@ -123,13 +123,26 @@ func (m *mounterGroup) AddEvent(ctx context.Context, event *model.PolymorphicEve
 	select {
 	case <-ctx.Done():
 		return ctx.Err()
-	case m.inputCh.In() <- event:
+	case m.inputCh <- event:
 		return nil
 	}
 }
 
+func (m *mounterGroup) TryAddEvent(ctx context.Context, event *model.PolymorphicEvent) (bool, error) {
+	select {
+	case <-ctx.Done():
+		return false, ctx.Err()
+	case m.inputCh <- event:
+		return true, nil
+	default:
+		return false, nil
+	}
+}
+
 // MockMountGroup is used for tests.
-type MockMountGroup struct{}
+type MockMountGroup struct {
+	IsFull bool
+}
 
 // Run implements MountGroup.
 func (m *MockMountGroup) Run(ctx context.Context) error {
@@ -140,4 +153,14 @@ func (m *MockMountGroup) Run(ctx context.Context) error {
 func (m *MockMountGroup) AddEvent(ctx context.Context, event *model.PolymorphicEvent) error {
 	event.MarkFinished()
 	return nil
+}
+
+// TryAddEvent implements MountGroup.
+func (m *MockMountGroup) TryAddEvent(ctx context.Context, event *model.PolymorphicEvent) (bool, error) {
+	if !m.IsFull {
+		event.MarkFinished()
+		return true, nil
+	} else {
+		return false, nil
+	}
 }
