@@ -41,15 +41,21 @@ const (
 	defaultWorkerCount = 16
 	// defaultMaxTxnRow is the default max number of rows in a transaction.
 	defaultMaxTxnRow = 256
-	// defaultMaxMultiUpdateRow is the default max number of rows in a single
-	// multi update SQL.
-	defaultMaxMultiUpdateRow = 40
+	// defaultMaxMultiUpdateRowCount is the default max number of rows in a
+	// single multi update SQL.
+	defaultMaxMultiUpdateRowCount = 40
+	// defaultMaxMultiUpdateRowSize(1KB) defines the default value of MaxMultiUpdateRowSize
+	// When row average size is larger MaxMultiUpdateRowSize,
+	// disable multi update, otherwise enable multi update.
+	defaultMaxMultiUpdateRowSize = 1024
 	// The upper limit of max worker counts.
 	maxWorkerCount = 1024
 	// The upper limit of max txn rows.
 	maxMaxTxnRow = 2048
 	// The upper limit of max multi update rows in a single SQL.
-	maxMaxMultiUpdateRow = defaultMaxTxnRow
+	maxMaxMultiUpdateRow = 256
+	// The upper limit of max multi update row size(8KB).
+	maxMaxMultiUpdateRowSize = 8192
 
 	defaultTiDBTxnMode         = txnModeOptimistic
 	defaultBatchReplaceEnabled = true
@@ -72,20 +78,21 @@ const (
 
 // Config is the configs for MySQL backend.
 type Config struct {
-	WorkerCount         int
-	MaxTxnRow           int
-	MaxMultiUpdateRow   int
-	tidbTxnMode         string
-	BatchReplaceEnabled bool
-	BatchReplaceSize    int
-	ReadTimeout         string
-	WriteTimeout        string
-	DialTimeout         string
-	SafeMode            bool
-	Timezone            string
-	TLS                 string
-	ForceReplicate      bool
-	EnableOldValue      bool
+	WorkerCount            int
+	MaxTxnRow              int
+	MaxMultiUpdateRowCount int
+	MaxMultiUpdateRowSize  int
+	tidbTxnMode            string
+	BatchReplaceEnabled    bool
+	BatchReplaceSize       int
+	ReadTimeout            string
+	WriteTimeout           string
+	DialTimeout            string
+	SafeMode               bool
+	Timezone               string
+	TLS                    string
+	ForceReplicate         bool
+	EnableOldValue         bool
 
 	IsTiDB         bool // IsTiDB is true if the downstream is TiDB
 	SourceID       uint64
@@ -95,17 +102,18 @@ type Config struct {
 // NewConfig returns the default mysql backend config.
 func NewConfig() *Config {
 	return &Config{
-		WorkerCount:         defaultWorkerCount,
-		MaxTxnRow:           defaultMaxTxnRow,
-		MaxMultiUpdateRow:   defaultMaxMultiUpdateRow,
-		tidbTxnMode:         defaultTiDBTxnMode,
-		BatchReplaceEnabled: defaultBatchReplaceEnabled,
-		BatchReplaceSize:    defaultBatchReplaceSize,
-		ReadTimeout:         defaultReadTimeout,
-		WriteTimeout:        defaultWriteTimeout,
-		DialTimeout:         defaultDialTimeout,
-		SafeMode:            defaultSafeMode,
-		BatchDMLEnable:      defaultBatchDMLEnable,
+		WorkerCount:            defaultWorkerCount,
+		MaxTxnRow:              defaultMaxTxnRow,
+		MaxMultiUpdateRowCount: defaultMaxMultiUpdateRowCount,
+		MaxMultiUpdateRowSize:  defaultMaxMultiUpdateRowSize,
+		tidbTxnMode:            defaultTiDBTxnMode,
+		BatchReplaceEnabled:    defaultBatchReplaceEnabled,
+		BatchReplaceSize:       defaultBatchReplaceSize,
+		ReadTimeout:            defaultReadTimeout,
+		WriteTimeout:           defaultWriteTimeout,
+		DialTimeout:            defaultDialTimeout,
+		SafeMode:               defaultSafeMode,
+		BatchDMLEnable:         defaultBatchDMLEnable,
 	}
 }
 
@@ -131,7 +139,10 @@ func (c *Config) Apply(
 	if err = getMaxTxnRow(query, &c.MaxTxnRow); err != nil {
 		return err
 	}
-	if err = getMaxMultiUpdateRow(query, &c.MaxMultiUpdateRow); err != nil {
+	if err = getMaxMultiUpdateRowCount(query, &c.MaxMultiUpdateRowCount); err != nil {
+		return err
+	}
+	if err = getMaxMultiUpdateRowSize(query, &c.MaxMultiUpdateRowSize); err != nil {
 		return err
 	}
 	if err = getTiDBTxnMode(query, &c.tidbTxnMode); err != nil {
@@ -215,7 +226,7 @@ func getMaxTxnRow(values url.Values, maxTxnRow *int) error {
 	return nil
 }
 
-func getMaxMultiUpdateRow(values url.Values, maxMultiUpdateRow *int) error {
+func getMaxMultiUpdateRowCount(values url.Values, maxMultiUpdateRow *int) error {
 	s := values.Get("max-multi-update-row")
 	if len(s) == 0 {
 		return nil
@@ -235,6 +246,29 @@ func getMaxMultiUpdateRow(values url.Values, maxMultiUpdateRow *int) error {
 		c = maxMaxMultiUpdateRow
 	}
 	*maxMultiUpdateRow = c
+	return nil
+}
+
+func getMaxMultiUpdateRowSize(values url.Values, maxMultiUpdateRowSize *int) error {
+	s := values.Get("max-multi-update-row-size")
+	if len(s) == 0 {
+		return nil
+	}
+
+	c, err := strconv.Atoi(s)
+	if err != nil {
+		return cerror.WrapError(cerror.ErrMySQLInvalidConfig, err)
+	}
+	if c <= 0 {
+		return cerror.WrapError(cerror.ErrMySQLInvalidConfig,
+			fmt.Errorf("invalid max-multi-update-row-size %d, which must be greater than 0", c))
+	}
+	if c > maxMaxMultiUpdateRowSize {
+		log.Warn("max-multi-update-row-size too large",
+			zap.Int("original", c), zap.Int("override", maxMaxMultiUpdateRowSize))
+		c = maxMaxMultiUpdateRowSize
+	}
+	*maxMultiUpdateRowSize = c
 	return nil
 }
 
