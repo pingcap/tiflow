@@ -117,7 +117,7 @@ func NewKafkaDDLSink(
 		return nil, errors.Trace(err)
 	}
 
-	s, err := newDDLSink(ctx, p, topicManager, eventRouter, encoderConfig)
+	s, err := newDDLSink(ctx, p, adminClient, topicManager, eventRouter, encoderConfig)
 	if err != nil {
 		return nil, errors.Trace(err)
 	}
