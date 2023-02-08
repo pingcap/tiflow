@@ -400,7 +400,7 @@ func (s *mysqlBackend) genUpdateSQL(rows ...*sqlmodel.RowChange) ([]string, [][]
 		size += int(r.GetApproximateDataSize())
 		count++
 	}
-	if size <= s.cfg.MaxMultiUpdateRowSize*count {
+	if size < s.cfg.MaxMultiUpdateRowSize*count {
 		// use multi update in one SQL
 		sql, value := sqlmodel.GenUpdateSQLFast(rows...)
 		return []string{sql}, [][]interface{}{value}
