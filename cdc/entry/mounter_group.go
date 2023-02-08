@@ -160,7 +160,6 @@ func (m *MockMountGroup) TryAddEvent(ctx context.Context, event *model.Polymorph
 	if !m.IsFull {
 		event.MarkFinished()
 		return true, nil
-	} else {
-		return false, nil
 	}
+	return false, nil
 }
