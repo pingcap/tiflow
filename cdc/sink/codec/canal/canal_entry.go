@@ -144,7 +144,7 @@ func (b *canalEntryBuilder) buildColumn(c *model.Column, colName string, updated
 }
 
 // build the RowData of a canal entry
-func (b *canalEntryBuilder) buildRowData(e *model.RowChangedEvent) (*canal.RowData, error) {
+func (b *canalEntryBuilder) buildRowData(e *model.DetailedRowChangedEvent) (*canal.RowData, error) {
 	var columns []*canal.Column
 	for _, column := range e.Columns {
 		if column == nil {
@@ -174,8 +174,8 @@ func (b *canalEntryBuilder) buildRowData(e *model.RowChangedEvent) (*canal.RowDa
 	return rowData, nil
 }
 
-// fromRowEvent builds canal entry from cdc RowChangedEvent
-func (b *canalEntryBuilder) fromRowEvent(e *model.RowChangedEvent) (*canal.Entry, error) {
+// fromRowEvent builds canal entry from cdc DetailedRowChangedEvent
+func (b *canalEntryBuilder) fromRowEvent(e *model.DetailedRowChangedEvent) (*canal.Entry, error) {
 	eventType := convertRowEventType(e)
 	header := b.buildHeader(e.CommitTs, e.Table.Schema, e.Table.Table, eventType, 1)
 	isDdl := isCanalDDL(eventType) // false
@@ -233,8 +233,8 @@ func convertToCanalTs(commitTs uint64) int64 {
 	return int64(commitTs >> 18)
 }
 
-// get the canal EventType according to the RowChangedEvent
-func convertRowEventType(e *model.RowChangedEvent) canal.EventType {
+// get the canal EventType according to the DetailedRowChangedEvent
+func convertRowEventType(e *model.DetailedRowChangedEvent) canal.EventType {
 	if e.IsDelete() {
 		return canal.EventType_DELETE
 	}

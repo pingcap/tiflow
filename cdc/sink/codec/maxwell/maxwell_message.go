@@ -43,7 +43,7 @@ func (m *maxwellMessage) encode() ([]byte, error) {
 	return data, cerror.WrapError(cerror.ErrMaxwellEncodeFailed, err)
 }
 
-func rowChangeToMaxwellMsg(e *model.RowChangedEvent) (*internal.MessageKey, *maxwellMessage) {
+func rowChangeToMaxwellMsg(e *model.DetailedRowChangedEvent) (*internal.MessageKey, *maxwellMessage) {
 	var partition *int64
 	if e.Table.IsPartition {
 		partition = &e.Table.TableID

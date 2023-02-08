@@ -19,6 +19,7 @@ import (
 	"github.com/pingcap/log"
 	"github.com/pingcap/tiflow/cdc/entry"
 	"github.com/pingcap/tiflow/cdc/model"
+	"github.com/pingcap/tiflow/cdc/processor/memquota"
 	"github.com/pingcap/tiflow/cdc/processor/sourcemanager/engine"
 	pullerwrapper "github.com/pingcap/tiflow/cdc/processor/sourcemanager/puller"
 	"github.com/pingcap/tiflow/cdc/processor/tablepb"
@@ -98,9 +99,10 @@ func (m *SourceManager) OnResolve(action func(tablepb.Span, model.Ts)) {
 // FetchByTable just wrap the engine's FetchByTable method.
 func (m *SourceManager) FetchByTable(
 	span tablepb.Span, lowerBound, upperBound engine.Position,
+	quota *memquota.MemQuota,
 ) *engine.MountedEventIter {
-	iter := m.engine.FetchByTable(span, lowerBound, upperBound)
-	return engine.NewMountedEventIter(iter, m.mg, defaultMaxBatchSize)
+	iter := m.engine.FetchByTable(m.changefeedID, span, lowerBound, upperBound)
+	return engine.NewMountedEventIter(m.changefeedID, iter, m.mg, defaultMaxBatchSize, quota)
 }
 
 // CleanByTable just wrap the engine's CleanByTable method.

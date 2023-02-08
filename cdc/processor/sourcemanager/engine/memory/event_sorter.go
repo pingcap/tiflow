@@ -117,7 +117,7 @@ func (s *EventSorter) FetchByTable(span tablepb.Span, lowerBound, upperBound eng
 }
 
 // FetchAllTables implements engine.SortEngine.
-func (s *EventSorter) FetchAllTables(lowerBound engine.Position) engine.EventIterator {
+func (s *EventSorter) FetchAllTables(_ model.ChangeFeedID, lowerBound engine.Position) engine.EventIterator {
 	log.Panic("FetchAllTables should never be called")
 	return nil
 }

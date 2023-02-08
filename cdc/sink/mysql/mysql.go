@@ -32,6 +32,7 @@ import (
 	"github.com/pingcap/tidb/parser/charset"
 	timodel "github.com/pingcap/tidb/parser/model"
 	"github.com/pingcap/tiflow/cdc/contextutil"
+	"github.com/pingcap/tiflow/cdc/entry"
 	"github.com/pingcap/tiflow/cdc/model"
 	"github.com/pingcap/tiflow/cdc/sink/metrics"
 	dmutils "github.com/pingcap/tiflow/dm/pkg/conn"
@@ -248,6 +249,8 @@ func (s *mysqlSink) FlushRowChangedEvents(
 }
 
 func (s *mysqlSink) flushRowChangedEvents(ctx context.Context) {
+	mountHelper := entry.NewMountHelper(16)
+
 	defer func() {
 		for _, worker := range s.workers {
 			worker.close()
@@ -270,7 +273,7 @@ outer:
 		checkpointTsMap, resolvedTxnsMap := s.txnCache.Resolved(&s.tableMaxResolvedTs)
 
 		if len(resolvedTxnsMap) != 0 {
-			s.dispatchAndExecTxns(ctx, resolvedTxnsMap)
+			s.dispatchAndExecTxns(ctx, resolvedTxnsMap, mountHelper)
 		}
 
 		// This is an ad-hoc fix to prevent the checkpoint
@@ -488,7 +491,11 @@ func (s *mysqlSink) broadcastFinishTxn() {
 // 1) Try to distribute all transactions equally to each worker
 // 2) Each conflicting transaction will be executed in the order of the CommitTs
 // 3）Conflict-free transactions will be executed concurrently
-func (s *mysqlSink) dispatchAndExecTxns(ctx context.Context, txnsGroup map[model.TableID][]*model.SingleTableTxn) {
+func (s *mysqlSink) dispatchAndExecTxns(
+	ctx context.Context,
+	txnsGroup map[model.TableID][]*model.SingleTableTxn,
+	mountHelper *entry.MountHelper,
+) {
 	nWorkers := s.params.workerCount
 	causality := newCausality()
 	workerIndex := 0
@@ -499,7 +506,7 @@ func (s *mysqlSink) dispatchAndExecTxns(ctx context.Context, txnsGroup map[model
 	}
 
 	resolveConflict := func(txn *model.SingleTableTxn) {
-		keys := genTxnKeys(txn)
+		keys := genTxnKeys(txn, mountHelper)
 		if conflict, conflictWorkerIndex := causality.detectConflict(keys); conflict {
 			// This means that the conflict only occurs on one worker,
 			// and we can just send the transaction to that worker to queue it.
@@ -721,7 +728,7 @@ type preparedDMLs struct {
 }
 
 // prepareDMLs converts model.RowChangedEvent list to query string list and args list
-func (s *mysqlSink) prepareDMLs(rows []*model.RowChangedEvent) *preparedDMLs {
+func (s *mysqlSink) prepareDMLs(rows []*model.RowChangedEvent, mountHelper *entry.MountHelper) *preparedDMLs {
 	startTs := make([]model.Ts, 0, 1)
 	sqls := make([]string, 0, len(rows))
 	values := make([][]interface{}, 0, len(rows))
@@ -749,7 +756,8 @@ func (s *mysqlSink) prepareDMLs(rows []*model.RowChangedEvent) *preparedDMLs {
 		}
 	}
 
-	for _, row := range rows {
+	for _, miniRow := range rows {
+		row := mountHelper.BuildRowChangedEvent(miniRow)
 		var query string
 		var args []interface{}
 		quoteTable := quotes.QuoteSchema(row.Table.Schema, row.Table.Table)
@@ -826,7 +834,7 @@ func (s *mysqlSink) prepareDMLs(rows []*model.RowChangedEvent) *preparedDMLs {
 	return dmls
 }
 
-func (s *mysqlSink) execDMLs(ctx context.Context, rows []*model.RowChangedEvent, bucket int) error {
+func (s *mysqlSink) execDMLs(ctx context.Context, rows []*model.RowChangedEvent, bucket int, mountHelper *entry.MountHelper) error {
 	failpoint.Inject("MySQLSinkExecDMLError", func() {
 		// Add a delay to ensure the sink worker with `MySQLSinkHangLongTime`
 		// failpoint injected is executed first.
@@ -834,7 +842,7 @@ func (s *mysqlSink) execDMLs(ctx context.Context, rows []*model.RowChangedEvent,
 		failpoint.Return(errors.Trace(dmysql.ErrInvalidConn))
 	})
 	s.statistics.ObserveRows(rows...)
-	dmls := s.prepareDMLs(rows)
+	dmls := s.prepareDMLs(rows, mountHelper)
 	log.Debug("prepare DMLs", zap.Any("rows", rows), zap.Strings("sqls", dmls.sqls), zap.Any("values", dmls.values))
 	if err := s.execDMLWithMaxRetries(ctx, dmls, bucket); err != nil {
 		if errors.Cause(err) != context.Canceled {

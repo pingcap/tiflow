@@ -121,7 +121,7 @@ func NewEventRouter(cfg *config.ReplicaConfig, defaultTopic string) (*EventRoute
 }
 
 // GetTopicForRowChange returns the target topic for row changes.
-func (s *EventRouter) GetTopicForRowChange(row *model.RowChangedEvent) string {
+func (s *EventRouter) GetTopicForRowChange(row *model.DetailedRowChangedEvent) string {
 	topicDispatcher, _ := s.matchDispatcher(row.Table.Schema, row.Table.Table)
 	return topicDispatcher.Substitute(row.Table.Schema, row.Table.Table)
 }
@@ -149,7 +149,7 @@ func (s *EventRouter) GetTopicForDDL(ddl *model.DDLEvent) string {
 
 // GetPartitionForRowChange returns the target partition for row changes.
 func (s *EventRouter) GetPartitionForRowChange(
-	row *model.RowChangedEvent,
+	row *model.DetailedRowChangedEvent,
 	partitionNum int32,
 ) int32 {
 	_, partitionDispatcher := s.matchDispatcher(

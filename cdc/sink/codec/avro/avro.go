@@ -56,11 +56,22 @@ type avroEncodeResult struct {
 }
 
 // AppendRowChangedEvent appends a row change event to the encoder
-// NOTE: the encoder can only store one RowChangedEvent!
+// NOTE: the encoder can only store one DetailedRowChangedEvent!
 func (a *BatchEncoder) AppendRowChangedEvent(
 	ctx context.Context,
 	topic string,
 	e *model.RowChangedEvent,
+	callback func(),
+) error {
+	return nil
+}
+
+// AppendRowChangedEvent appends a row change event to the encoder
+// NOTE: the encoder can only store one DetailedRowChangedEvent!
+func (a *BatchEncoder) AppendDetailedRowChangedEvent(
+	ctx context.Context,
+	topic string,
+	e *model.DetailedRowChangedEvent,
 	callback func(),
 ) error {
 	message := common.NewMsg(
@@ -138,7 +149,7 @@ const (
 
 func (a *BatchEncoder) avroEncode(
 	ctx context.Context,
-	e *model.RowChangedEvent,
+	e *model.DetailedRowChangedEvent,
 	topic string,
 	isKey bool,
 ) (*avroEncodeResult, error) {

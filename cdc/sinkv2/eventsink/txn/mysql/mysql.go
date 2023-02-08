@@ -29,6 +29,7 @@ import (
 	timodel "github.com/pingcap/tidb/parser/model"
 	"github.com/pingcap/tidb/parser/mysql"
 	"github.com/pingcap/tiflow/cdc/contextutil"
+	"github.com/pingcap/tiflow/cdc/entry"
 	"github.com/pingcap/tiflow/cdc/model"
 	"github.com/pingcap/tiflow/cdc/sinkv2/eventsink"
 	"github.com/pingcap/tiflow/cdc/sinkv2/metrics"
@@ -61,6 +62,8 @@ type mysqlBackend struct {
 
 	events []*eventsink.TxnCallbackableEvent
 	rows   int
+
+	mountHelper *entry.MountHelper
 
 	statistics                    *metrics.Statistics
 	metricTxnSinkDMLBatchCommit   prometheus.Observer
@@ -110,8 +113,10 @@ func NewMySQLBackends(
 			db:          db,
 			cfg:         cfg,
 			dmlMaxRetry: defaultDMLMaxRetry,
-			statistics:  statistics,
 
+			mountHelper: entry.NewMountHelper(16),
+
+			statistics:                    statistics,
 			metricTxnSinkDMLBatchCommit:   txn.SinkDMLBatchCommit.WithLabelValues(changefeedID.Namespace, changefeedID.ID),
 			metricTxnSinkDMLBatchCallback: txn.SinkDMLBatchCallback.WithLabelValues(changefeedID.Namespace, changefeedID.ID),
 		})
@@ -205,7 +210,7 @@ type preparedDMLs struct {
 // convert2RowChanges is a helper function that convert the row change representation
 // of CDC into a general one.
 func convert2RowChanges(
-	row *model.RowChangedEvent,
+	row *model.DetailedRowChangedEvent,
 	tableInfo *timodel.TableInfo,
 	changeType sqlmodel.RowChangeType,
 ) *sqlmodel.RowChange {
@@ -259,7 +264,7 @@ func convert2RowChanges(
 	return res
 }
 
-func convertBinaryToString(row *model.RowChangedEvent) {
+func convertBinaryToString(row *model.DetailedRowChangedEvent) {
 	for i, col := range row.Columns {
 		if col == nil {
 			continue
@@ -287,7 +292,8 @@ func (s *mysqlBackend) groupRowsByType(
 	updateRow := make([]*sqlmodel.RowChange, 0, preAllocateSize)
 	deleteRow := make([]*sqlmodel.RowChange, 0, preAllocateSize)
 
-	for _, row := range event.Event.Rows {
+	for _, miniRow := range event.Event.Rows {
+		row := s.mountHelper.BuildRowChangedEvent(miniRow)
 		convertBinaryToString(row)
 
 		if row.IsInsert() {
@@ -436,7 +442,7 @@ func (s *mysqlBackend) prepareDMLs() *preparedDMLs {
 		}
 		rowCount += len(event.Event.Rows)
 
-		firstRow := event.Event.Rows[0]
+		firstRow := s.mountHelper.BuildRowChangedEvent(event.Event.Rows[0])
 		if len(startTs) == 0 || startTs[len(startTs)-1] != firstRow.StartTs {
 			startTs = append(startTs, firstRow.StartTs)
 		}
@@ -474,7 +480,9 @@ func (s *mysqlBackend) prepareDMLs() *preparedDMLs {
 		}
 
 		quoteTable := firstRow.Table.QuoteString()
-		for _, row := range event.Event.Rows {
+		for _, miniRow := range event.Event.Rows {
+			row := s.mountHelper.BuildRowChangedEvent(miniRow)
+
 			var query string
 			var args []interface{}
 			// If the old value is enabled, is not in safe mode and is an update event, then translate to UPDATE.

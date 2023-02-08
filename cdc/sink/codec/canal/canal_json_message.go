@@ -148,8 +148,8 @@ func (c *canalJSONMessageWithTiDBExtension) getCommitTs() uint64 {
 	return c.Extensions.CommitTs
 }
 
-func canalJSONMessage2RowChange(msg canalJSONMessageInterface) (*model.RowChangedEvent, error) {
-	result := new(model.RowChangedEvent)
+func canalJSONMessage2RowChange(msg canalJSONMessageInterface) (*model.DetailedRowChangedEvent, error) {
+	result := new(model.DetailedRowChangedEvent)
 	result.CommitTs = msg.getCommitTs()
 	result.Table = &model.TableName{
 		Schema: *msg.getSchema(),

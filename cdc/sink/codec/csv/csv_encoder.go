@@ -38,6 +38,16 @@ func (b *BatchEncoder) AppendRowChangedEvent(
 	e *model.RowChangedEvent,
 	callback func(),
 ) error {
+	return nil
+}
+
+// AppendDetailedRowChangedEvent implements the EventBatchEncoder interface
+func (b *BatchEncoder) AppendDetailedRowChangedEvent(
+	_ context.Context,
+	_ string,
+	e *model.DetailedRowChangedEvent,
+	callback func(),
+) error {
 	row, err := rowChangedEvent2CSVMsg(b.config, e)
 	if err != nil {
 		return err

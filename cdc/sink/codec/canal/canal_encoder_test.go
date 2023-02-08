@@ -81,7 +81,7 @@ func TestCanalAppendRowChangedEventWithCallback(t *testing.T) {
 
 	count := 0
 
-	row := &model.RowChangedEvent{
+	row := &model.DetailedRowChangedEvent{
 		CommitTs: 1,
 		Table:    &model.TableName{Schema: "a", Table: "b"},
 		Columns: []*model.Column{{
@@ -92,7 +92,7 @@ func TestCanalAppendRowChangedEventWithCallback(t *testing.T) {
 	}
 
 	tests := []struct {
-		row      *model.RowChangedEvent
+		row      *model.DetailedRowChangedEvent
 		callback func()
 	}{
 		{

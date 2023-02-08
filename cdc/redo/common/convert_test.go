@@ -25,7 +25,7 @@ import (
 
 func TestRowRedoConvert(t *testing.T) {
 	t.Parallel()
-	row := &model.RowChangedEvent{
+	row := &model.DetailedRowChangedEvent{
 		StartTs:  100,
 		CommitTs: 120,
 		Table:    &model.TableName{Schema: "test", Table: "table1", TableID: 57},
@@ -89,7 +89,7 @@ func TestRowRedoConvert(t *testing.T) {
 
 func TestRowRedoConvertWithEmptySlice(t *testing.T) {
 	t.Parallel()
-	row := &model.RowChangedEvent{
+	row := &model.DetailedRowChangedEvent{
 		StartTs:  100,
 		CommitTs: 120,
 		Table:    &model.TableName{Schema: "test", Table: "table1", TableID: 57},

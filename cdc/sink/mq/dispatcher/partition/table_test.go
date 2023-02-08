@@ -24,52 +24,52 @@ func TestTableDispatcher(t *testing.T) {
 	t.Parallel()
 
 	testCases := []struct {
-		row             *model.RowChangedEvent
+		row             *model.DetailedRowChangedEvent
 		expectPartition int32
 	}{
-		{row: &model.RowChangedEvent{
+		{row: &model.DetailedRowChangedEvent{
 			Table: &model.TableName{
 				Schema: "test",
 				Table:  "t1",
 			},
 			CommitTs: 1,
 		}, expectPartition: 15},
-		{row: &model.RowChangedEvent{
+		{row: &model.DetailedRowChangedEvent{
 			Table: &model.TableName{
 				Schema: "test",
 				Table:  "t1",
 			},
 			CommitTs: 2,
 		}, expectPartition: 15},
-		{row: &model.RowChangedEvent{
+		{row: &model.DetailedRowChangedEvent{
 			Table: &model.TableName{
 				Schema: "test",
 				Table:  "t1",
 			},
 			CommitTs: 3,
 		}, expectPartition: 15},
-		{row: &model.RowChangedEvent{
+		{row: &model.DetailedRowChangedEvent{
 			Table: &model.TableName{
 				Schema: "test",
 				Table:  "t2",
 			},
 			CommitTs: 1,
 		}, expectPartition: 5},
-		{row: &model.RowChangedEvent{
+		{row: &model.DetailedRowChangedEvent{
 			Table: &model.TableName{
 				Schema: "test",
 				Table:  "t2",
 			},
 			CommitTs: 2,
 		}, expectPartition: 5},
-		{row: &model.RowChangedEvent{
+		{row: &model.DetailedRowChangedEvent{
 			Table: &model.TableName{
 				Schema: "test",
 				Table:  "t2",
 			},
 			CommitTs: 3,
 		}, expectPartition: 5},
-		{row: &model.RowChangedEvent{
+		{row: &model.DetailedRowChangedEvent{
 			Table: &model.TableName{
 				Schema: "test",
 				Table:  "t3",

@@ -26,7 +26,7 @@ type EventBatchDecoder interface {
 	// NextResolvedEvent returns the next resolved event if exists
 	NextResolvedEvent() (uint64, error)
 	// NextRowChangedEvent returns the next row changed event if exists
-	NextRowChangedEvent() (*model.RowChangedEvent, error)
+	NextRowChangedEvent() (*model.DetailedRowChangedEvent, error)
 	// NextDDLEvent returns the next DDL event if exists
 	NextDDLEvent() (*model.DDLEvent, error)
 }

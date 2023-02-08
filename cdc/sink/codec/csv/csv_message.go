@@ -310,8 +310,8 @@ func fromColValToCsvVal(col *model.Column, ft *types.FieldType) (any, error) {
 	}
 }
 
-// rowChangedEvent2CSVMsg converts a RowChangedEvent to a csv record.
-func rowChangedEvent2CSVMsg(csvConfig *common.Config, e *model.RowChangedEvent) (*csvMessage, error) {
+// rowChangedEvent2CSVMsg converts a DetailedRowChangedEvent to a csv record.
+func rowChangedEvent2CSVMsg(csvConfig *common.Config, e *model.DetailedRowChangedEvent) (*csvMessage, error) {
 	var err error
 
 	csvMsg := &csvMessage{
@@ -342,7 +342,7 @@ func rowChangedEvent2CSVMsg(csvConfig *common.Config, e *model.RowChangedEvent) 
 	return csvMsg, nil
 }
 
-func csvMsg2RowChangedEvent(csvMsg *csvMessage, ticols []*timodel.ColumnInfo) (*model.RowChangedEvent, error) {
+func csvMsg2RowChangedEvent(csvMsg *csvMessage, ticols []*timodel.ColumnInfo) (*model.DetailedRowChangedEvent, error) {
 	var err error
 	if len(csvMsg.columns) != len(ticols) {
 		return nil, cerror.WrapError(cerror.ErrCSVDecodeFailed,
@@ -350,7 +350,7 @@ func csvMsg2RowChangedEvent(csvMsg *csvMessage, ticols []*timodel.ColumnInfo) (*
 				len(csvMsg.columns), len(ticols)))
 	}
 
-	e := new(model.RowChangedEvent)
+	e := new(model.DetailedRowChangedEvent)
 	e.CommitTs = csvMsg.commitTs
 	e.Table = &model.TableName{
 		Schema: csvMsg.schemaName,

@@ -76,7 +76,7 @@ func newResolvedMessage(ts uint64) *internal.MessageKey {
 	}
 }
 
-func rowChangeToMsg(e *model.RowChangedEvent) (*internal.MessageKey, *messageRow) {
+func rowChangeToMsg(e *model.DetailedRowChangedEvent) (*internal.MessageKey, *messageRow) {
 	var partition *int64
 	if e.Table.IsPartition {
 		partition = &e.Table.TableID
@@ -99,8 +99,8 @@ func rowChangeToMsg(e *model.RowChangedEvent) (*internal.MessageKey, *messageRow
 	return key, value
 }
 
-func msgToRowChange(key *internal.MessageKey, value *messageRow) *model.RowChangedEvent {
-	e := new(model.RowChangedEvent)
+func msgToRowChange(key *internal.MessageKey, value *messageRow) *model.DetailedRowChangedEvent {
+	e := new(model.DetailedRowChangedEvent)
 	// TODO: we lost the startTs from kafka message
 	// startTs-based txn filter is out of work
 	e.CommitTs = key.Ts

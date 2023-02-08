@@ -27,6 +27,7 @@ import (
 	"github.com/pingcap/log"
 	"github.com/pingcap/tidb/br/pkg/storage"
 	"github.com/pingcap/tiflow/cdc/contextutil"
+	"github.com/pingcap/tiflow/cdc/entry"
 	"github.com/pingcap/tiflow/cdc/model"
 	"github.com/pingcap/tiflow/cdc/redo/common"
 	"github.com/pingcap/tiflow/pkg/config"
@@ -41,7 +42,7 @@ import (
 // RedoLogWriter defines the interfaces used to write redo log, all operations are thread-safe.
 type RedoLogWriter interface {
 	// WriteLog writer RedoRowChangedEvent to row log file.
-	WriteLog(ctx context.Context, rows []*model.RedoRowChangedEvent) error
+	WriteLog(ctx context.Context, rows []*model.RowChangedEvent) error
 
 	// SendDDL writer RedoDDLEvent to ddl log file.
 	SendDDL(ctx context.Context, ddl *model.RedoDDLEvent) error
@@ -136,6 +137,8 @@ type logWriter struct {
 	meta          *common.LogMeta
 	preMetaFile   string
 	uuidGenerator uuid.Generator
+
+	mountHelper *entry.MountHelper
 }
 
 func newLogWriter(
@@ -146,6 +149,7 @@ func newLogWriter(
 	}
 
 	lw = &logWriter{cfg: cfg}
+	lw.mountHelper = entry.NewMountHelper(16)
 
 	writerOp := &writerOptions{}
 	for _, opt := range opts {
@@ -282,7 +286,7 @@ func (l *logWriter) GC(ctx context.Context, ts model.Ts) error {
 }
 
 // WriteLog implement WriteLog api
-func (l *logWriter) WriteLog(ctx context.Context, rows []*model.RedoRowChangedEvent) error {
+func (l *logWriter) WriteLog(ctx context.Context, rows []*model.RowChangedEvent) error {
 	select {
 	case <-ctx.Done():
 		return errors.Trace(ctx.Err())
@@ -297,17 +301,19 @@ func (l *logWriter) WriteLog(ctx context.Context, rows []*model.RedoRowChangedEv
 	}
 
 	for _, r := range rows {
-		if r == nil || r.Row == nil {
+		if r == nil {
 			continue
 		}
 
-		rl := &model.RedoLog{RedoRow: r, Type: model.RedoLogTypeRow}
+		event := l.mountHelper.BuildRowChangedEvent(r)
+		redoEvent := common.RowToRedo(event)
+		rl := &model.RedoLog{RedoRow: redoEvent, Type: model.RedoLogTypeRow}
 		data, err := rl.MarshalMsg(nil)
 		if err != nil {
 			return cerror.WrapError(cerror.ErrMarshalFailed, err)
 		}
 
-		l.rowWriter.AdvanceTs(r.Row.CommitTs)
+		l.rowWriter.AdvanceTs(r.CommitTs)
 		_, err = l.rowWriter.Write(data)
 		if err != nil {
 			return err

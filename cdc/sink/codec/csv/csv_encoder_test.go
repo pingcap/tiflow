@@ -26,7 +26,7 @@ import (
 )
 
 func TestCSVBatchCodec(t *testing.T) {
-	testCases := [][]*model.RowChangedEvent{{
+	testCases := [][]*model.DetailedRowChangedEvent{{
 		{
 			CommitTs: 1,
 			Table:    &model.TableName{Schema: "test", Table: "table1"},
@@ -84,7 +84,7 @@ func TestCSVAppendRowChangedEventWithCallback(t *testing.T) {
 	require.NotNil(t, encoder)
 
 	count := 0
-	row := &model.RowChangedEvent{
+	row := &model.DetailedRowChangedEvent{
 		CommitTs: 1,
 		Table:    &model.TableName{Schema: "test", Table: "table1"},
 		Columns:  []*model.Column{{Name: "tiny", Value: int64(1), Type: mysql.TypeTiny}},
@@ -96,7 +96,7 @@ func TestCSVAppendRowChangedEventWithCallback(t *testing.T) {
 		}},
 	}
 	tests := []struct {
-		row      *model.RowChangedEvent
+		row      *model.DetailedRowChangedEvent
 		callback func()
 	}{
 		{

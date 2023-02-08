@@ -38,7 +38,7 @@ func TestBuildOpenProtocolBatchEncoder(t *testing.T) {
 func TestMaxMessageBytes(t *testing.T) {
 	t.Parallel()
 	// the size of `testEvent` is 87
-	testEvent := &model.RowChangedEvent{
+	testEvent := &model.DetailedRowChangedEvent{
 		CommitTs: 1,
 		Table:    &model.TableName{Schema: "a", Table: "b"},
 		Columns: []*model.Column{{
@@ -83,7 +83,7 @@ func TestMaxBatchSize(t *testing.T) {
 	config.MaxBatchSize = 64
 	encoder := NewBatchEncoderBuilder(config).Build()
 
-	testEvent := &model.RowChangedEvent{
+	testEvent := &model.DetailedRowChangedEvent{
 		CommitTs: 1,
 		Table:    &model.TableName{Schema: "a", Table: "b"},
 		Columns: []*model.Column{{
@@ -135,7 +135,7 @@ func TestOpenProtocolAppendRowChangedEventWithCallback(t *testing.T) {
 
 	count := 0
 
-	row := &model.RowChangedEvent{
+	row := &model.DetailedRowChangedEvent{
 		CommitTs: 1,
 		Table:    &model.TableName{Schema: "a", Table: "b"},
 		Columns: []*model.Column{{
@@ -146,7 +146,7 @@ func TestOpenProtocolAppendRowChangedEventWithCallback(t *testing.T) {
 	}
 
 	tests := []struct {
-		row      *model.RowChangedEvent
+		row      *model.DetailedRowChangedEvent
 		callback func()
 	}{
 		{

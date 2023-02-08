@@ -21,7 +21,7 @@ import (
 )
 
 // RowToRedo converts row changed event to redo log row
-func RowToRedo(row *model.RowChangedEvent) *model.RedoRowChangedEvent {
+func RowToRedo(row *model.DetailedRowChangedEvent) *model.RedoRowChangedEvent {
 	redoLog := &model.RedoRowChangedEvent{
 		Row:        row,
 		Columns:    make([]*model.RedoColumn, 0, len(row.Columns)),
@@ -31,7 +31,7 @@ func RowToRedo(row *model.RowChangedEvent) *model.RedoRowChangedEvent {
 		var redoColumn *model.RedoColumn
 		if column != nil {
 			// workaround msgp issue(Decode replaces empty slices with nil https://github.com/tinylib/msgp/issues/247)
-			// if []byte("") send with RowChangedEvent after UnmarshalMsg,
+			// if []byte("") send with DetailedRowChangedEvent after UnmarshalMsg,
 			// the value will become nil, which is unexpected.
 			switch v := column.Value.(type) {
 			case []byte:
@@ -60,7 +60,7 @@ func RowToRedo(row *model.RowChangedEvent) *model.RedoRowChangedEvent {
 }
 
 // LogToRow converts redo log row to row changed event
-func LogToRow(redoLog *model.RedoRowChangedEvent) *model.RowChangedEvent {
+func LogToRow(redoLog *model.RedoRowChangedEvent) *model.DetailedRowChangedEvent {
 	row := redoLog.Row
 	row.Columns = make([]*model.Column, 0, len(redoLog.Columns))
 	row.PreColumns = make([]*model.Column, 0, len(redoLog.PreColumns))

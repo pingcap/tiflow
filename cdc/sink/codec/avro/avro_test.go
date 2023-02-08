@@ -757,7 +757,7 @@ func TestAvroEncode(t *testing.T) {
 		colInfos = append(colInfos, v.colInfo)
 	}
 
-	event := &model.RowChangedEvent{
+	event := &model.DetailedRowChangedEvent{
 		CommitTs: 417318403368288260,
 		Table: &model.TableName{
 			Schema: "testdb",
@@ -915,7 +915,7 @@ func TestArvoAppendRowChangedEventWithCallback(t *testing.T) {
 	msgs := encoder.Build()
 	require.Len(t, msgs, 0, "no message should be built and no panic")
 
-	row := &model.RowChangedEvent{
+	row := &model.DetailedRowChangedEvent{
 		CommitTs:  1,
 		Table:     &model.TableName{Schema: "a", Table: "b"},
 		TableInfo: &model.TableInfo{TableName: model.TableName{Schema: "a", Table: "b"}},

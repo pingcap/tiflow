@@ -67,7 +67,7 @@ func (t *TxnEventAppender) Append(
 			txn := &model.SingleTableTxn{
 				StartTs:   row.StartTs,
 				CommitTs:  row.CommitTs,
-				Table:     row.Table,
+				Table:     &row.TableInfo.TableName,
 				TableInfo: row.TableInfo,
 			}
 			txn.Append(row)
@@ -95,7 +95,7 @@ func (t *TxnEventAppender) Append(
 			buffer = append(buffer, &model.SingleTableTxn{
 				StartTs:   row.StartTs,
 				CommitTs:  row.CommitTs,
-				Table:     row.Table,
+				Table:     &row.TableInfo.TableName,
 				TableInfo: row.TableInfo,
 			})
 		}

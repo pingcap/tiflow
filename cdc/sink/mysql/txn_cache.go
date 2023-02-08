@@ -39,7 +39,7 @@ func (t *txnsWithTheSameCommitTs) Append(row *model.RowChangedEvent) {
 		txn = &model.SingleTableTxn{
 			StartTs:   row.StartTs,
 			CommitTs:  row.CommitTs,
-			Table:     row.Table,
+			Table:     &row.TableInfo.TableName,
 			TableInfo: row.TableInfo,
 		}
 		t.txns = append(t.txns, txn)
@@ -84,10 +84,10 @@ func (c *unresolvedTxnCache) Append(rows ...*model.RowChangedEvent) int {
 	defer c.unresolvedTxnsMu.Unlock()
 	appendRows := 0
 	for _, row := range rows {
-		txns, ok := c.unresolvedTxns[row.Table.TableID]
+		txns, ok := c.unresolvedTxns[row.TableInfo.ID]
 		if !ok {
 			txns = queue.NewChunkQueue[*txnsWithTheSameCommitTs]()
-			c.unresolvedTxns[row.Table.TableID] = txns
+			c.unresolvedTxns[row.TableInfo.ID] = txns
 		}
 
 		lastTxn, ok := txns.Tail()

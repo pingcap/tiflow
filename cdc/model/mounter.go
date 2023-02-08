@@ -14,8 +14,8 @@
 package model
 
 import (
-	"context"
 	"math"
+	"sync/atomic"
 
 	"github.com/pingcap/log"
 	"github.com/pingcap/tidb/types"
@@ -40,9 +40,10 @@ type PolymorphicEvent struct {
 	Resolved *ResolvedTs
 
 	RawKV *RawKVEntry
-	Row   *RowChangedEvent
 
-	finished chan struct{}
+	MiniRow *RowChangedEvent
+
+	Mounted atomic.Bool
 }
 
 // NewEmptyPolymorphicEvent creates a new empty PolymorphicEvent.
@@ -50,7 +51,6 @@ func NewEmptyPolymorphicEvent(ts uint64) *PolymorphicEvent {
 	return &PolymorphicEvent{
 		CRTs:  ts,
 		RawKV: &RawKVEntry{},
-		Row:   &RowChangedEvent{},
 	}
 }
 
@@ -71,7 +71,6 @@ func NewResolvedPolymorphicEvent(regionID uint64, resolvedTs uint64) *Polymorphi
 	return &PolymorphicEvent{
 		CRTs:  resolvedTs,
 		RawKV: &RawKVEntry{CRTs: resolvedTs, OpType: OpTypeResolved, RegionID: regionID},
-		Row:   nil,
 	}
 }
 
@@ -84,32 +83,6 @@ func (e *PolymorphicEvent) RegionID() uint64 {
 // only be called when `RawKV != nil`.
 func (e *PolymorphicEvent) IsResolved() bool {
 	return e.RawKV.OpType == OpTypeResolved
-}
-
-// SetUpFinishedCh set up the finished chan, should be called before mounting the event.
-func (e *PolymorphicEvent) SetUpFinishedCh() {
-	if e.finished == nil {
-		e.finished = make(chan struct{})
-	}
-}
-
-// MarkFinished is called to indicate that mount is finished.
-func (e *PolymorphicEvent) MarkFinished() {
-	if e.finished != nil {
-		close(e.finished)
-	}
-}
-
-// WaitFinished is called by caller to wait for the mount finished.
-func (e *PolymorphicEvent) WaitFinished(ctx context.Context) error {
-	if e.finished != nil {
-		select {
-		case <-ctx.Done():
-			return ctx.Err()
-		case <-e.finished:
-		}
-	}
-	return nil
 }
 
 // ComparePolymorphicEvents compares two events by CRTs, Resolved, StartTs, Delete/Put order.
@@ -201,4 +174,36 @@ func (r ResolvedTs) Greater(r1 ResolvedTs) bool {
 		return r.BatchID > r1.BatchID
 	}
 	return r.Ts > r1.Ts
+}
+
+// RowChangedEvent carries minimum information to generate a RowChangedEvent.
+type RowChangedEvent struct {
+	StartTs  uint64 `json:"start-ts" msg: "start-ts"`
+	CommitTs uint64 `json:"commit-ts" msg: "commit-ts"`
+	RowID    int64  `json:"row-id" msg:"-"` // Deprecated, just like RowChangedEvent.RowID.
+
+	// TODO(qupeng): later we can move mounter before sort engine, we need also
+	// serialize Table timestamp into messages.
+	PhysicalTableID int64 `json:"physical-table-id" msg: "physical-table-id"`
+
+	TableInfo       *TableInfo        `json:"-" msg:"-"`
+	Columns         []MiniColumnValue `json:"-" msg:"-"`
+	PreColumns      []MiniColumnValue `json:"-" msg:"-"`
+	ApproximateSize int64             `json:"-" msg: "-"`
+
+	// SplitTxn marks this RowChangedEvent as the first line of a new txn.
+	SplitTxn bool `json:"-" msg:"-"`
+	// ReplicatingTs is ts when a table starts replicating events to downstream.
+	ReplicatingTs uint64 `json:"-" msg: "-"`
+}
+
+// MiniColumnValue is used in RowChangedEvent.
+type MiniColumnValue struct {
+	Exists bool
+	V      interface{}
+}
+
+// GetCommitTs returns the commit timestamp of this event.
+func (r *RowChangedEvent) GetCommitTs() uint64 {
+	return r.CommitTs
 }

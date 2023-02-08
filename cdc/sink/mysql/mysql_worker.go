@@ -20,6 +20,7 @@ import (
 
 	"github.com/pingcap/errors"
 	"github.com/pingcap/log"
+	"github.com/pingcap/tiflow/cdc/entry"
 	"github.com/pingcap/tiflow/cdc/model"
 	cerror "github.com/pingcap/tiflow/pkg/errors"
 	"github.com/pingcap/tiflow/pkg/notify"
@@ -32,11 +33,13 @@ type mysqlSinkWorker struct {
 	txnCh            chan *model.SingleTableTxn
 	maxTxnRow        int
 	bucket           int
-	execDMLs         func(context.Context, []*model.RowChangedEvent, int) error
+	execDMLs         func(context.Context, []*model.RowChangedEvent, int, *entry.MountHelper) error
 	metricBucketSize prometheus.Counter
 	receiver         *notify.Receiver
 	closedCh         chan struct{}
 	hasError         atomic.Bool
+
+	mountHelper *entry.MountHelper
 }
 
 func newMySQLSinkWorker(
@@ -44,7 +47,7 @@ func newMySQLSinkWorker(
 	bucket int,
 	metricBucketSize prometheus.Counter,
 	receiver *notify.Receiver,
-	execDMLs func(context.Context, []*model.RowChangedEvent, int) error,
+	execDMLs func(context.Context, []*model.RowChangedEvent, int, *entry.MountHelper) error,
 ) *mysqlSinkWorker {
 	return &mysqlSinkWorker{
 		txnCh:            make(chan *model.SingleTableTxn, 1024),
@@ -54,6 +57,8 @@ func newMySQLSinkWorker(
 		execDMLs:         execDMLs,
 		receiver:         receiver,
 		closedCh:         make(chan struct{}),
+
+		mountHelper: entry.NewMountHelper(16),
 	}
 }
 
@@ -114,7 +119,7 @@ func (w *mysqlSinkWorker) run(ctx context.Context) (err error) {
 		if len(toExecRows) == 0 {
 			return nil
 		}
-		err := w.execDMLs(ctx, toExecRows, w.bucket)
+		err := w.execDMLs(ctx, toExecRows, w.bucket, w.mountHelper)
 		if err != nil {
 			txnNum = 0
 			return err

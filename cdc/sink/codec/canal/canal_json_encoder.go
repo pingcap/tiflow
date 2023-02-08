@@ -52,7 +52,7 @@ func newJSONBatchEncoder(config *common.Config) codec.EventBatchEncoder {
 	return encoder
 }
 
-func (c *JSONBatchEncoder) newJSONMessageForDML(e *model.RowChangedEvent) ([]byte, error) {
+func (c *JSONBatchEncoder) newJSONMessageForDML(e *model.DetailedRowChangedEvent) ([]byte, error) {
 	isDelete := e.IsDelete()
 	mysqlTypeMap := make(map[string]string, len(e.Columns))
 
@@ -246,7 +246,7 @@ func (c *JSONBatchEncoder) newJSONMessageForDML(e *model.RowChangedEvent) ([]byt
 	return out.BuildBytes()
 }
 
-func eventTypeString(e *model.RowChangedEvent) string {
+func eventTypeString(e *model.DetailedRowChangedEvent) string {
 	if e.IsDelete() {
 		return "DELETE"
 	}
@@ -310,6 +310,16 @@ func (c *JSONBatchEncoder) AppendRowChangedEvent(
 	_ context.Context,
 	_ string,
 	e *model.RowChangedEvent,
+	callback func(),
+) error {
+	return nil
+}
+
+// AppendDetailedRowChangedEvent implements the interface EventJSONBatchEncoder
+func (c *JSONBatchEncoder) AppendDetailedRowChangedEvent(
+	_ context.Context,
+	_ string,
+	e *model.DetailedRowChangedEvent,
 	callback func(),
 ) error {
 	value, err := c.newJSONMessageForDML(e)

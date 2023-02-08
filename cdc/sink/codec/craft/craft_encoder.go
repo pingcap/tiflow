@@ -24,7 +24,7 @@ import (
 
 // BatchEncoder encodes the events into the byte of a batch into craft binary format.
 type BatchEncoder struct {
-	rowChangedBuffer *RowChangedEventBuffer
+	rowChangedBuffer *DetailedRowChangedEventBuffer
 	messageBuf       []*common.Message
 	callbackBuf      []func()
 
@@ -47,6 +47,16 @@ func (e *BatchEncoder) AppendRowChangedEvent(
 	_ context.Context,
 	_ string,
 	ev *model.RowChangedEvent,
+	callback func(),
+) error {
+	return nil
+}
+
+// AppendDetailedRowChangedEvent implements the EventBatchEncoder interface
+func (e *BatchEncoder) AppendDetailedRowChangedEvent(
+	_ context.Context,
+	_ string,
+	ev *model.DetailedRowChangedEvent,
 	callback func(),
 ) error {
 	rows, size := e.rowChangedBuffer.AppendRowChangedEvent(ev)

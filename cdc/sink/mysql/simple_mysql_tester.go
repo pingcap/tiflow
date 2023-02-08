@@ -25,6 +25,7 @@ import (
 	dmysql "github.com/go-sql-driver/mysql"
 	"github.com/pingcap/errors"
 	"github.com/pingcap/log"
+	"github.com/pingcap/tiflow/cdc/entry"
 	"github.com/pingcap/tiflow/cdc/model"
 	"github.com/pingcap/tiflow/pkg/config"
 	"github.com/pingcap/tiflow/pkg/container/queue"
@@ -40,6 +41,8 @@ type simpleMySQLSink struct {
 	db                  *sql.DB
 	rowsBuffer          *queue.ChunkQueue[*model.RowChangedEvent]
 	rowsBufferLock      sync.Mutex
+
+	mountHelper *entry.MountHelper
 }
 
 // NewSimpleMySQLSink creates a new simple MySQL Sink.
@@ -95,6 +98,8 @@ func NewSimpleMySQLSink(
 		db:             db,
 		enableOldValue: config.EnableOldValue,
 		rowsBuffer:     queue.NewChunkQueue[*model.RowChangedEvent](),
+
+		mountHelper: entry.NewMountHelper(16),
 	}
 	if strings.ToLower(sinkURI.Query().Get("check-old-value")) == "true" {
 		sink.enableCheckOldValue = true
@@ -120,7 +125,8 @@ func (s *simpleMySQLSink) executeRowChangedEvents(ctx context.Context, rows ...*
 	var sql string
 	var args []interface{}
 	if s.enableOldValue {
-		for _, row := range rows {
+		for _, miniRow := range rows {
+			row := s.mountHelper.BuildRowChangedEvent(miniRow)
 			if len(row.PreColumns) != 0 && len(row.Columns) != 0 {
 				// update
 				if s.enableCheckOldValue {
@@ -149,7 +155,8 @@ func (s *simpleMySQLSink) executeRowChangedEvents(ctx context.Context, rows ...*
 			}
 		}
 	} else {
-		for _, row := range rows {
+		for _, miniRow := range rows {
+			row := s.mountHelper.BuildRowChangedEvent(miniRow)
 			if row.IsDelete() {
 				sql, args = prepareDelete(row.Table.QuoteString(), row.PreColumns, true)
 			} else {
@@ -246,7 +253,7 @@ func prepareCheckSQL(quoteTable string, cols []*model.Column) (string, []interfa
 	return sql, args
 }
 
-func (s *simpleMySQLSink) checkOldValue(ctx context.Context, row *model.RowChangedEvent) error {
+func (s *simpleMySQLSink) checkOldValue(ctx context.Context, row *model.DetailedRowChangedEvent) error {
 	sql, args := prepareCheckSQL(row.Table.QuoteString(), row.PreColumns)
 	result, err := s.db.QueryContext(ctx, sql, args...)
 	if err != nil {

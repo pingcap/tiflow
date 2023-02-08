@@ -54,7 +54,7 @@ func TestConvertEntry(t *testing.T) {
 }
 
 func testInsert(t *testing.T) {
-	testCaseInsert := &model.RowChangedEvent{
+	testCaseInsert := &model.DetailedRowChangedEvent{
 		CommitTs: 417318403368288260,
 		Table: &model.TableName{
 			Schema: "cdc",
@@ -130,7 +130,7 @@ func testInsert(t *testing.T) {
 }
 
 func testUpdate(t *testing.T) {
-	testCaseUpdate := &model.RowChangedEvent{
+	testCaseUpdate := &model.DetailedRowChangedEvent{
 		CommitTs: 417318403368288260,
 		Table: &model.TableName{
 			Schema: "cdc",
@@ -207,7 +207,7 @@ func testUpdate(t *testing.T) {
 }
 
 func testDelete(t *testing.T) {
-	testCaseDelete := &model.RowChangedEvent{
+	testCaseDelete := &model.DetailedRowChangedEvent{
 		CommitTs: 417318403368288260,
 		Table: &model.TableName{
 			Schema: "cdc",

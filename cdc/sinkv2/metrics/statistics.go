@@ -63,8 +63,8 @@ func (b *Statistics) ObserveRows(rows ...*model.RowChangedEvent) {
 	for _, row := range rows {
 		// only track row with data size larger than `rowSizeLowBound` to reduce
 		// the overhead of calling `Observe` method.
-		if row.ApproximateDataSize >= largeRowSizeLowBound {
-			b.metricRowSizeHis.Observe(float64(row.ApproximateDataSize))
+		if row.ApproximateSize >= largeRowSizeLowBound {
+			b.metricRowSizeHis.Observe(float64(row.ApproximateSize))
 		}
 	}
 }

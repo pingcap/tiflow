@@ -27,7 +27,7 @@ func TestMaxwellBatchCodec(t *testing.T) {
 	t.Parallel()
 	newEncoder := newBatchEncoder
 
-	rowCases := [][]*model.RowChangedEvent{{{
+	rowCases := [][]*model.DetailedRowChangedEvent{{{
 		CommitTs: 1,
 		Table:    &model.TableName{Schema: "a", Table: "b"},
 		Columns:  []*model.Column{{Name: "col1", Type: 3, Value: 10}},
@@ -74,7 +74,7 @@ func TestMaxwellAppendRowChangedEventWithCallback(t *testing.T) {
 
 	count := 0
 
-	row := &model.RowChangedEvent{
+	row := &model.DetailedRowChangedEvent{
 		CommitTs: 1,
 		Table:    &model.TableName{Schema: "a", Table: "b"},
 		Columns: []*model.Column{{
@@ -85,7 +85,7 @@ func TestMaxwellAppendRowChangedEventWithCallback(t *testing.T) {
 	}
 
 	tests := []struct {
-		row      *model.RowChangedEvent
+		row      *model.DetailedRowChangedEvent
 		callback func()
 	}{
 		{
