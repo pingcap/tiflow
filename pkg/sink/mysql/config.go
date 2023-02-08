@@ -41,10 +41,15 @@ const (
 	defaultWorkerCount = 16
 	// defaultMaxTxnRow is the default max number of rows in a transaction.
 	defaultMaxTxnRow = 256
+	// defaultMaxMultiUpdateRow is the default max number of rows in a single
+	// multi update SQL.
+	defaultMaxMultiUpdateRow = 40
 	// The upper limit of max worker counts.
 	maxWorkerCount = 1024
 	// The upper limit of max txn rows.
 	maxMaxTxnRow = 2048
+	// The upper limit of max multi update rows in a single SQL.
+	maxMaxMultiUpdateRow = defaultMaxTxnRow
 
 	defaultTiDBTxnMode         = txnModeOptimistic
 	defaultBatchReplaceEnabled = true
@@ -69,6 +74,7 @@ const (
 type Config struct {
 	WorkerCount         int
 	MaxTxnRow           int
+	MaxMultiUpdateRow   int
 	tidbTxnMode         string
 	BatchReplaceEnabled bool
 	BatchReplaceSize    int
@@ -91,6 +97,7 @@ func NewConfig() *Config {
 	return &Config{
 		WorkerCount:         defaultWorkerCount,
 		MaxTxnRow:           defaultMaxTxnRow,
+		MaxMultiUpdateRow:   defaultMaxMultiUpdateRow,
 		tidbTxnMode:         defaultTiDBTxnMode,
 		BatchReplaceEnabled: defaultBatchReplaceEnabled,
 		BatchReplaceSize:    defaultBatchReplaceSize,
@@ -122,6 +129,9 @@ func (c *Config) Apply(
 		return err
 	}
 	if err = getMaxTxnRow(query, &c.MaxTxnRow); err != nil {
+		return err
+	}
+	if err = getMaxMultiUpdateRow(query, &c.MaxMultiUpdateRow); err != nil {
 		return err
 	}
 	if err = getTiDBTxnMode(query, &c.tidbTxnMode); err != nil {
@@ -202,6 +212,29 @@ func getMaxTxnRow(values url.Values, maxTxnRow *int) error {
 		c = maxMaxTxnRow
 	}
 	*maxTxnRow = c
+	return nil
+}
+
+func getMaxMultiUpdateRow(values url.Values, maxMultiUpdateRow *int) error {
+	s := values.Get("max-multi-update-row")
+	if len(s) == 0 {
+		return nil
+	}
+
+	c, err := strconv.Atoi(s)
+	if err != nil {
+		return cerror.WrapError(cerror.ErrMySQLInvalidConfig, err)
+	}
+	if c <= 0 {
+		return cerror.WrapError(cerror.ErrMySQLInvalidConfig,
+			fmt.Errorf("invalid max-multi-update-row %d, which must be greater than 0", c))
+	}
+	if c > maxMaxMultiUpdateRow {
+		log.Warn("max-multi-update-row too large",
+			zap.Int("original", c), zap.Int("override", maxMaxMultiUpdateRow))
+		c = maxMaxMultiUpdateRow
+	}
+	*maxMultiUpdateRow = c
 	return nil
 }
 
