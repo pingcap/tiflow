@@ -14,6 +14,8 @@
 package sinkmanager
 
 import (
+	"time"
+
 	"github.com/pingcap/tiflow/cdc/model"
 	"github.com/pingcap/tiflow/cdc/processor/sourcemanager/engine"
 )
@@ -29,6 +31,10 @@ const (
 var (
 	requestMemSize        = defaultRequestMemSize
 	maxUpdateIntervalSize = defaultMaxUpdateIntervalSize
+
+	// Sink manager schedules table tasks based on lag. Limit the max task range
+	// can be helpful to reduce changefeed latency.
+	maxTaskRange = 5 * time.Second
 )
 
 // Used to record the progress of the table.
