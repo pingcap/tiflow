@@ -14,6 +14,7 @@
 package processor
 
 import (
+	"github.com/pingcap/tiflow/cdc/processor/memquota"
 	"github.com/pingcap/tiflow/cdc/processor/sinkmanager"
 	"github.com/prometheus/client_golang/prometheus"
 )
@@ -82,4 +83,5 @@ func InitMetrics(registry *prometheus.Registry) {
 	registry.MustRegister(processorMemoryGauge)
 	registry.MustRegister(remainKVEventsGauge)
 	sinkmanager.InitMetrics(registry)
+	memquota.InitMetrics(registry)
 }
