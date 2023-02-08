@@ -15,20 +15,23 @@ package sinkmanager
 
 import (
 	"context"
+	"time"
 
 	"github.com/pingcap/errors"
 	"github.com/pingcap/log"
 	"github.com/pingcap/tiflow/cdc/model"
+	"github.com/pingcap/tiflow/cdc/processor/memquota"
 	"github.com/pingcap/tiflow/cdc/processor/sourcemanager"
 	"github.com/pingcap/tiflow/cdc/processor/sourcemanager/engine"
 	"github.com/pingcap/tiflow/cdc/redo"
+	"github.com/tikv/client-go/v2/oracle"
 	"go.uber.org/zap"
 )
 
 type redoWorker struct {
 	changefeedID   model.ChangeFeedID
 	sourceManager  *sourcemanager.SourceManager
-	memQuota       *memQuota
+	memQuota       *memquota.MemQuota
 	redoManager    redo.LogManager
 	eventCache     *redoEventCache
 	splitTxn       bool
@@ -38,7 +41,7 @@ type redoWorker struct {
 func newRedoWorker(
 	changefeedID model.ChangeFeedID,
 	sourceManager *sourcemanager.SourceManager,
-	quota *memQuota,
+	quota *memquota.MemQuota,
 	redoManager redo.LogManager,
 	eventCache *redoEventCache,
 	splitTxn bool,
@@ -69,7 +72,18 @@ func (w *redoWorker) handleTasks(ctx context.Context, taskChan <-chan *redoTask)
 }
 
 func (w *redoWorker) handleTask(ctx context.Context, task *redoTask) (finalErr error) {
+	lowerBound := task.lowerBound
 	upperBound := task.getUpperBound(task.tableSink)
+	lowerPhs := oracle.GetTimeFromTS(lowerBound.CommitTs)
+	upperPhs := oracle.GetTimeFromTS(upperBound.CommitTs)
+	if upperPhs.Sub(lowerPhs) > maxTaskRange {
+		upperCommitTs := oracle.GoTimeToTS(lowerPhs.Add(maxTaskRange))
+		upperBound = engine.Position{
+			StartTs:  upperCommitTs - 1,
+			CommitTs: upperCommitTs,
+		}
+	}
+
 	if !upperBound.IsCommitFence() {
 		log.Panic("redo task upperbound must be a ResolvedTs",
 			zap.String("namespace", w.changefeedID.Namespace),
@@ -80,7 +94,7 @@ func (w *redoWorker) handleTask(ctx context.Context, task *redoTask) (finalErr e
 
 	var cache *eventAppender
 	if w.eventCache != nil {
-		cache = w.eventCache.maybeCreateAppender(task.tableID, task.lowerBound)
+		cache = w.eventCache.maybeCreateAppender(task.tableID, lowerBound)
 	}
 
 	// Events are pushed into redoEventCache if possible. Otherwise, their memory will
@@ -107,7 +121,7 @@ func (w *redoWorker) handleTask(ctx context.Context, task *redoTask) (finalErr e
 			if rowsSize-cachedSize > 0 {
 				refundMem := rowsSize - cachedSize
 				releaseMem = func() {
-					w.memQuota.refund(refundMem)
+					w.memQuota.Refund(refundMem)
 					log.Debug("MemoryQuotaTracing: refund memory for redo log task",
 						zap.String("namespace", w.changefeedID.Namespace),
 						zap.String("changefeed", w.changefeedID.ID),
@@ -142,7 +156,7 @@ func (w *redoWorker) handleTask(ctx context.Context, task *redoTask) (finalErr e
 		// If used memory size exceeds the required limit, do a force acquire.
 		memoryHighUsage := availableMemSize < usedMemSize
 		if memoryHighUsage {
-			w.memQuota.forceAcquire(usedMemSize - availableMemSize)
+			w.memQuota.ForceAcquire(usedMemSize - availableMemSize)
 			log.Debug("MemoryQuotaTracing: force acquire memory for redo log task",
 				zap.String("namespace", w.changefeedID.Namespace),
 				zap.String("changefeed", w.changefeedID.ID),
@@ -166,7 +180,7 @@ func (w *redoWorker) handleTask(ctx context.Context, task *redoTask) (finalErr e
 		}
 		if usedMemSize >= availableMemSize {
 			if txnFinished {
-				if w.memQuota.tryAcquire(requestMemSize) {
+				if w.memQuota.TryAcquire(requestMemSize) {
 					availableMemSize += requestMemSize
 					log.Debug("MemoryQuotaTracing: try acquire memory for redo log task",
 						zap.String("namespace", w.changefeedID.Namespace),
@@ -177,7 +191,7 @@ func (w *redoWorker) handleTask(ctx context.Context, task *redoTask) (finalErr e
 			} else {
 				// NOTE: it's not required to use `forceAcquire` even if splitTxn is false.
 				// It's because memory will finally be `refund` after redo-logs are written.
-				err := w.memQuota.blockAcquire(requestMemSize)
+				err := w.memQuota.BlockAcquire(requestMemSize)
 				if err != nil {
 					return errors.Trace(err)
 				}
@@ -193,7 +207,7 @@ func (w *redoWorker) handleTask(ctx context.Context, task *redoTask) (finalErr e
 		return nil
 	}
 
-	iter := w.sourceManager.FetchByTable(task.tableID, task.lowerBound, upperBound)
+	iter := w.sourceManager.FetchByTable(task.tableID, lowerBound, upperBound, w.memQuota)
 	allEventCount := 0
 	defer func() {
 		task.tableSink.updateReceivedSorterCommitTs(lastTxnCommitTs)
@@ -212,9 +226,10 @@ func (w *redoWorker) handleTask(ctx context.Context, task *redoTask) (finalErr e
 			zap.String("namespace", w.changefeedID.Namespace),
 			zap.String("changefeed", w.changefeedID.ID),
 			zap.Int64("tableID", task.tableID),
-			zap.Any("lowerBound", task.lowerBound),
+			zap.Any("lowerBound", lowerBound),
 			zap.Any("upperBound", upperBound),
-			zap.Any("lastPos", lastPos))
+			zap.Any("lastPos", lastPos),
+			zap.Float64("lag", time.Since(oracle.GetTimeFromTS(lastPos.CommitTs)).Seconds()))
 		if finalErr == nil {
 			// Otherwise we can't ensure all events before `lastPos` are emitted.
 			task.callback(lastPos)
@@ -222,7 +237,7 @@ func (w *redoWorker) handleTask(ctx context.Context, task *redoTask) (finalErr e
 
 		// There is no more events and some required memory isn't used.
 		if availableMemSize > usedMemSize {
-			w.memQuota.refund(availableMemSize - usedMemSize)
+			w.memQuota.Refund(availableMemSize - usedMemSize)
 			log.Debug("MemoryQuotaTracing: refund memory for redo log task",
 				zap.String("namespace", w.changefeedID.Namespace),
 				zap.String("changefeed", w.changefeedID.ID),
