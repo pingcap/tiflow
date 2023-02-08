@@ -585,7 +585,9 @@ func (g *fakeTableIDGenerator) generateFakeTableID(schema, table string, partiti
 
 func main() {
 	go func() {
-		http.ListenAndServe(":6060", nil)
+		if err := http.ListenAndServe(":6060", nil); err != nil {
+			log.Fatal("http pprof", zap.Error(err))
+		}
 	}()
 
 	ctx, stop := signal.NotifyContext(context.Background(), syscall.SIGINT, syscall.SIGTERM)
