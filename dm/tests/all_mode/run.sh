@@ -587,6 +587,106 @@ function run() {
 
 	run_sql_both_source "SET @@GLOBAL.SQL_MODE='ONLY_FULL_GROUP_BY,STRICT_TRANS_TABLES,NO_ZERO_IN_DATE,NO_ZERO_DATE,ERROR_FOR_DIVISION_BY_ZERO,NO_ENGINE_SUBSTITUTION'"
 	run_sql_both_source "SET @@global.time_zone = 'SYSTEM';"
+<<<<<<< HEAD
+=======
+
+	test_source_and_target_with_empty_gtid
+}
+
+function prepare_test_empty_gtid() {
+	run_sql 'DROP DATABASE if exists all_mode;' $TIDB_PORT $TIDB_PASSWORD
+	run_sql 'DROP DATABASE if exists all_mode;' $MYSQL_PORT1 $MYSQL_PASSWORD1
+	run_sql 'DROP DATABASE if exists xxx;' $MYSQL_PORT1 $MYSQL_PASSWORD1
+	run_sql 'CREATE DATABASE all_mode;' $MYSQL_PORT1 $MYSQL_PASSWORD1
+	run_sql "CREATE TABLE all_mode.t1(i TINYINT, j INT UNIQUE KEY);" $MYSQL_PORT1 $MYSQL_PASSWORD1
+
+	run_sql 'reset master;' $MYSQL_PORT1 $MYSQL_PASSWORD1
+}
+
+function test_source_and_target_with_empty_gtid() {
+	echo "[$(date)] <<<<<< start test_source_and_target_with_empty_gtid >>>>>>"
+	cleanup_process
+	cleanup_data all_mode
+	prepare_test_empty_gtid
+
+	cp $cur/conf/source1.yaml $WORK_DIR/source1.yaml
+	cp $cur/conf/dm-master.toml $WORK_DIR/
+	cp $cur/conf/dm-worker1.toml $WORK_DIR/
+	cp $cur/conf/dm-task-no-gtid.yaml $WORK_DIR/
+
+	# start DM worker and master
+	run_dm_master $WORK_DIR/master $MASTER_PORT $WORK_DIR/dm-master.toml
+	check_rpc_alive $cur/../bin/check_master_online 127.0.0.1:$MASTER_PORT
+	run_dm_worker $WORK_DIR/worker1 $WORKER1_PORT $WORK_DIR/dm-worker1.toml
+	check_rpc_alive $cur/../bin/check_worker_online 127.0.0.1:$WORKER1_PORT
+
+	# operate mysql config to worker
+	run_dm_ctl_with_retry $WORK_DIR "127.0.0.1:$MASTER_PORT" \
+		"operate-source create $WORK_DIR/source1.yaml" \
+		"\"result\": true" 2 \
+		"\"source\": \"$SOURCE_ID1\"" 1
+
+	echo "check master alive"
+	run_dm_ctl_with_retry $WORK_DIR "127.0.0.1:$MASTER_PORT" \
+		"list-member" \
+		"\"alive\": true" 1
+
+	# check current master gtid is empty
+	# len indicates the number of non-empty fields
+	len=$(echo "show master status;" | MYSQL_PWD=$MYSQL_PASSWORD1 mysql -uroot -h127.0.0.1 -P$MYSQL_PORT1 | awk 'FNR == 2 {print NF}')
+	if [ "$len" = 2 ]; then
+		echo "gtid is empty"
+	else
+		exit 1
+	fi
+
+	echo "start task and check stage"
+	run_dm_ctl_with_retry $WORK_DIR "127.0.0.1:$MASTER_PORT" \
+		"start-task $WORK_DIR/dm-task-no-gtid.yaml --remove-meta=true" \
+		"\"result\": true" 2
+
+	run_sql 'INSERT INTO all_mode.t1 VALUES (1,1001);' $MYSQL_PORT1 $MYSQL_PASSWORD1
+
+	run_dm_ctl_with_retry $WORK_DIR "127.0.0.1:$MASTER_PORT" \
+		"query-status test" \
+		"\"result\": true" 2 \
+		"\"unit\": \"Sync\"" 1 \
+		"\"stage\": \"Running\"" 2
+
+	echo "check data"
+	check_sync_diff $WORK_DIR $cur/conf/diff_config-1.toml
+
+	# check checkpoint matches master when the last event is a ddl
+	# 1. ddl that dm will sync
+	run_sql_source1 "create table all_mode.t2(c int primary key)"
+	run_sql_tidb_with_retry "show create table all_mode.t2" "CREATE TABLE"
+	run_dm_ctl_with_retry $WORK_DIR "127.0.0.1:$MASTER_PORT" \
+		"query-status test" \
+		'"synced": true' 1
+	# 2. ddl cannot be parsed and should be skipped
+	run_sql_source1 "create FUNCTION all_mode.hello (s CHAR(20)) RETURNS CHAR(50) DETERMINISTIC RETURN 'a';"
+	check_log_contain_with_retry "RETURNS char(50)" $WORK_DIR/worker1/log/dm-worker.log
+	sleep 30 # we rely on heartbeat event to flush checkpoint here, below too
+	run_dm_ctl_with_retry $WORK_DIR "127.0.0.1:$MASTER_PORT" \
+		"query-status test" \
+		'"synced": true' 1
+	# 3. ddl can be parsed and dm don't handle
+	run_sql_source1 "analyze table all_mode.t1"
+	check_log_contain_with_retry "analyze table" $WORK_DIR/worker1/log/dm-worker.log
+	sleep 30
+	run_dm_ctl_with_retry $WORK_DIR "127.0.0.1:$MASTER_PORT" \
+		"query-status test" \
+		'"synced": true' 1
+	# 4. ddl that is filtered
+	run_sql_source1 "create database xxx"
+	check_log_contain_with_retry "CREATE DATABASE IF NOT EXISTS" $WORK_DIR/worker1/log/dm-worker.log
+	sleep 30
+	run_dm_ctl_with_retry $WORK_DIR "127.0.0.1:$MASTER_PORT" \
+		"query-status test" \
+		'"synced": true' 1
+
+	echo "<<<<<< test_source_and_target_with_empty_gtid success! >>>>>>"
+>>>>>>> 0e1322f90b (dm: fix checkpoint not updated when last event is ddl and skipped (#8193))
 }
 
 cleanup_data_upstream all_mode
