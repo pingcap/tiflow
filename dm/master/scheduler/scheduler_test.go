@@ -1866,7 +1866,10 @@ func (t *testSchedulerSuite) TestWorkerHasDiffRelayAndBound() {
 		keepAlive   = int64(3)
 	)
 
-	workerInfo := ha.WorkerInfo{Name: workerName1}
+	workerInfo := ha.WorkerInfo{
+		Name: workerName1,
+		Addr: "workerinfo.addr",
+	}
 	bound := ha.SourceBound{
 		Source: sourceID1,
 		Worker: workerName1,
@@ -1922,8 +1925,14 @@ func (t *testSchedulerSuite) TestUpgradeCauseConflictRelayType() {
 		keepAlive   = int64(3)
 	)
 
-	workerInfo1 := ha.WorkerInfo{Name: workerName1}
-	workerInfo2 := ha.WorkerInfo{Name: workerName2}
+	workerInfo1 := ha.WorkerInfo{
+		Name: workerName1,
+		Addr: "workerinfo.addr",
+	}
+	workerInfo2 := ha.WorkerInfo{
+		Name: workerName2,
+		Addr: "workerinfo.addr",
+	}
 	bound := ha.SourceBound{
 		Source: sourceID1,
 		Worker: workerName1,
@@ -1990,7 +1999,10 @@ func (t *testSchedulerSuite) TestOperateValidatorTask() {
 	subtaskCfg.ValidatorCfg = config.ValidatorConfig{Mode: config.ValidationNone}
 	require.NoError(t.T(), subtaskCfg.Adjust(true))
 
-	workerInfo1 := ha.WorkerInfo{Name: workerName1}
+	workerInfo1 := ha.WorkerInfo{
+		Name: workerName1,
+		Addr: "workerinfo.addr",
+	}
 	bound := ha.SourceBound{
 		Source: sourceID1,
 		Worker: workerName1,
