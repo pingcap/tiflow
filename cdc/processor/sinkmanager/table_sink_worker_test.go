@@ -45,7 +45,7 @@ func createWorker(
 	quota := memquota.NewMemQuota(changefeedID, memQuota+1024*1024*1024, "")
 	quota.ForceAcquire(1024 * 1024 * 1024)
 	for _, tableID := range tableIDs {
-		quota.addTable(tableID)
+		quota.AddTable(tableID)
 	}
 
 	return newSinkWorker(changefeedID, sm, quota, nil, nil, splitTxn, false), sortEngine
@@ -387,7 +387,7 @@ func (suite *workerSuite) TestHandleTaskWithSplitTxnAndAbortWhenNoMemAndBlocked(
 	}
 	w, e := createWorker(changefeedID, eventSize, true, tableID)
 	defer w.sinkMemQuota.Close()
-	addEventsToSortEngine(suite.T(), events, e, span)
+	addEventsToSortEngine(suite.T(), events, e, tableID)
 
 	taskChan := make(chan *sinkTask)
 	var wg sync.WaitGroup
@@ -514,7 +514,7 @@ func (suite *workerSuite) TestHandleTaskWithSplitTxnAndOnlyAdvanceTableSinkWhenR
 	}
 	w, e := createWorker(changefeedID, eventSize, true, tableID)
 	defer w.sinkMemQuota.Close()
-	addEventsToSortEngine(suite.T(), events, e, span)
+	addEventsToSortEngine(suite.T(), events, e, tableID)
 
 	taskChan := make(chan *sinkTask)
 	var wg sync.WaitGroup

@@ -321,6 +321,7 @@ func TestDoNotGenerateTableSinkTaskWhenTableIsNotReplicating(t *testing.T) {
 		err := manager.Close()
 		require.NoError(t, err)
 	}()
+	tableID := model.TableID(1)
 	manager.AddTable(tableID, 1, 100)
 	addTableAndAddEventsToSortEngine(t, e, tableID)
 	manager.UpdateBarrierTs(4)

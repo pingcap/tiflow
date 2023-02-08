@@ -66,7 +66,7 @@ var (
 		Help:      "The number of open file descriptors held by the sorter",
 	}, []string{"id"})
 
-    // MountWaitDuration is the metric of waiting mount time.
+	// MountWaitDuration is the metric of waiting mount time.
 	MountWaitDuration = prometheus.NewHistogramVec(prometheus.HistogramOpts{
 		Namespace: "ticdc",
 		Subsystem: "sorter",
