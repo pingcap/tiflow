@@ -121,7 +121,7 @@ func NewSingleSnapshotFromMeta(meta *timeta.Meta, currentTs uint64, forceReplica
 	// meta is nil only in unit tests
 	if meta == nil {
 		snap := NewEmptySnapshot(forceReplicate)
-		snap.InitConcurrentDDLTables()
+		snap.InitPreExistingTables()
 		snap.inner.currentTs = currentTs
 		return snap, nil
 	}
@@ -210,12 +210,16 @@ const (
 	mdlCreateTable = "create table mysql.tidb_mdl_info(job_id BIGINT NOT NULL PRIMARY KEY, version BIGINT NOT NULL, table_ids text(65535));"
 )
 
-// InitConcurrentDDLTables imitates the creating table logic for concurrent DDL.
+// InitPreExistingTables initializes the pre-existing tables in an empty Snapshot.
 // Since v6.2.0, tables of concurrent DDL will be directly written as meta KV in
 // TiKV, without being written to history DDL jobs. So the Snapshot which is not
 // build from meta needs this method to handle history DDL.
-func (s *Snapshot) InitConcurrentDDLTables() {
-	tableIDs := [...]int64{ddl.JobTableID, ddl.ReorgTableID, ddl.HistoryTableID}
+// Since v6.5.0, Backfill tables is written as meta KV in TiKV, so the Snapshot
+// which is not build from meta needs this method to handle history DDL.
+// See:https://github.com/pingcap/tidb/pull/39616
+func (s *Snapshot) InitPreExistingTables() {
+	ddlJobTableIDs := [...]int64{ddl.JobTableID, ddl.ReorgTableID, ddl.HistoryTableID}
+	backfillTableIDs := [...]int64{ddl.BackfillTableID, ddl.BackfillHistoryTableID}
 
 	mysqlDBInfo := &timodel.DBInfo{
 		ID:      mysqlDBID,
@@ -231,10 +235,20 @@ func (s *Snapshot) InitConcurrentDDLTables() {
 		stmt, _ := p.ParseOneStmt(table.SQL, "", "")
 		tblInfo, _ := ddl.BuildTableInfoFromAST(stmt.(*ast.CreateTableStmt))
 		tblInfo.State = timodel.StatePublic
-		tblInfo.ID = tableIDs[i]
+		tblInfo.ID = ddlJobTableIDs[i]
 		wrapped := model.WrapTableInfo(mysqlDBID, mysql.SystemDB, dummyTS, tblInfo)
 		_ = s.inner.createTable(wrapped, dummyTS)
 	}
+
+	for i, table := range session.BackfillTables {
+		stmt, _ := p.ParseOneStmt(table.SQL, "", "")
+		tblInfo, _ := ddl.BuildTableInfoFromAST(stmt.(*ast.CreateTableStmt))
+		tblInfo.State = timodel.StatePublic
+		tblInfo.ID = backfillTableIDs[i]
+		wrapped := model.WrapTableInfo(mysqlDBID, mysql.SystemDB, dummyTS, tblInfo)
+		_ = s.inner.createTable(wrapped, dummyTS)
+	}
+
 	stmt, _ := p.ParseOneStmt(mdlCreateTable, "", "")
 	tblInfo, _ := ddl.BuildTableInfoFromAST(stmt.(*ast.CreateTableStmt))
 	tblInfo.State = timodel.StatePublic
@@ -514,8 +528,14 @@ func (s *Snapshot) DoHandleDDL(job *timodel.Job) error {
 }
 
 // TableCount counts tables in the snapshot. It's only for tests.
-func (s *Snapshot) TableCount(includeIneligible bool) (count int) {
-	s.IterTables(includeIneligible, func(i *model.TableInfo) { count += 1 })
+func (s *Snapshot) TableCount(includeIneligible bool,
+	filter func(schema, table string) bool,
+) (count int) {
+	s.IterTables(includeIneligible, func(i *model.TableInfo) {
+		if filter(i.TableName.Schema, i.TableName.Table) {
+			count++
+		}
+	})
 	return
 }
 
@@ -552,7 +572,6 @@ func (s *Snapshot) DumpToString() string {
 		schema, _ := s.inner.schemaByID(schemaID)
 		tableNames = append(tableNames, fmt.Sprintf("%s.%s:%d", schema.Name.O, table, target))
 	})
-
 	return fmt.Sprintf("%s\n%s\n%s\n%s\n%s",
 		strings.Join(schemas, "\t"),
 		strings.Join(tables, "\t"),

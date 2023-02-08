@@ -240,9 +240,14 @@ var (
 		"invalid partition num %d",
 		errors.RFCCodeText("CDC:ErrKafkaInvalidPartitionNum"),
 	)
-	ErrKafkaNewSaramaProducer = errors.Normalize(
-		"new sarama producer",
-		errors.RFCCodeText("CDC:ErrKafkaNewSaramaProducer"),
+	ErrKafkaInvalidRequiredAcks = errors.Normalize(
+		"invalid required acks %d, "+
+			"only support these values: 0(NoResponse),1(WaitForLocal) and -1(WaitForAll)",
+		errors.RFCCodeText("CDC:ErrKafkaInvalidRequiredAcks"),
+	)
+	ErrKafkaNewProducer = errors.Normalize(
+		"new kafka producer",
+		errors.RFCCodeText("CDC:ErrKafkaNewProducer"),
 	)
 	ErrKafkaInvalidClientID = errors.Normalize(
 		"invalid kafka client ID '%s'",

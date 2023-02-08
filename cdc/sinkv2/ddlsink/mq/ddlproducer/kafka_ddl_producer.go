@@ -78,7 +78,7 @@ func NewKafkaDDLProducer(ctx context.Context, client pkafka.Client,
 					zap.String("changefeed", changefeedID.ID))
 			}
 		}()
-		return nil, cerror.WrapError(cerror.ErrKafkaNewSaramaProducer, err)
+		return nil, cerror.WrapError(cerror.ErrKafkaNewProducer, err)
 	}
 	collector := collector.New(changefeedID, util.RoleOwner,
 		adminClient, client.MetricRegistry())
@@ -111,7 +111,8 @@ func (k *kafkaDDLProducer) SyncBroadcastMessage(ctx context.Context, topic strin
 	case <-ctx.Done():
 		return ctx.Err()
 	default:
-		err := k.syncProducer.SendMessages(topic, totalPartitionsNum, message.Key, message.Value)
+		err := k.syncProducer.SendMessages(ctx, topic,
+			totalPartitionsNum, message.Key, message.Value)
 		return cerror.WrapError(cerror.ErrKafkaSendMessage, err)
 	}
 }
@@ -130,7 +131,8 @@ func (k *kafkaDDLProducer) SyncSendMessage(ctx context.Context, topic string,
 	case <-ctx.Done():
 		return errors.Trace(ctx.Err())
 	default:
-		err := k.syncProducer.SendMessage(topic, partitionNum, message.Key, message.Value)
+		err := k.syncProducer.SendMessage(ctx, topic,
+			partitionNum, message.Key, message.Value)
 		return cerror.WrapError(cerror.ErrKafkaSendMessage, err)
 	}
 }

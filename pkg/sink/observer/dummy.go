@@ -25,6 +25,11 @@ func (o *DummyObserver) Tick(ctx context.Context) error {
 	return nil
 }
 
+// Close implements Observer
+func (o *DummyObserver) Close() error {
+	return nil
+}
+
 // NewDummyObserver creates a new DummyObserver instance
 func NewDummyObserver() *DummyObserver {
 	return &DummyObserver{}

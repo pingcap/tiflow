@@ -27,12 +27,6 @@ import (
 
 // Client is a generic Kafka client.
 type Client interface {
-	// Topics returns the set of available
-	// topics as retrieved from cluster metadata.
-	Topics() ([]string, error)
-	// Partitions returns the sorted list of
-	// all partition IDs for the given topic.
-	Partitions(topic string) ([]int32, error)
 	// SyncProducer creates a sync producer to writer message to kafka
 	SyncProducer() (SyncProducer, error)
 	// AsyncProducer creates an async producer to writer message to kafka
@@ -50,14 +44,16 @@ type SyncProducer interface {
 	// SendMessage produces a given message, and returns only when it either has
 	// succeeded or failed to produce. It will return the partition and the offset
 	// of the produced message, or an error if the message failed to produce.
-	SendMessage(topic string, partitionNum int32,
+	SendMessage(ctx context.Context,
+		topic string, partitionNum int32,
 		key []byte, value []byte) error
 
 	// SendMessages produces a given set of messages, and returns only when all
 	// messages in the set have either succeeded or failed. Note that messages
 	// can succeed and fail individually; if some succeed and some fail,
 	// SendMessages will return an error.
-	SendMessages(topic string, partitionNum int32,
+	SendMessages(ctx context.Context,
+		topic string, partitionNum int32,
 		key []byte, value []byte) error
 
 	// Close shuts down the producer; you must call this function before a producer
@@ -68,12 +64,6 @@ type SyncProducer interface {
 
 // AsyncProducer is the kafka async producer
 type AsyncProducer interface {
-	// AsyncClose triggers a shutdown of the producer. The shutdown has completed
-	// when both the Errors and Successes channels have been closed. When calling
-	// AsyncClose, you *must* continue to read from those channels in order to
-	// drain the results of any messages in flight.
-	AsyncClose()
-
 	// Close shuts down the producer and waits for any buffered messages to be
 	// flushed. You must call this function before a producer object passes out of
 	// scope, as it may otherwise leak memory. You must call this before process
@@ -95,16 +85,6 @@ type AsyncProducer interface {
 
 type saramaKafkaClient struct {
 	client sarama.Client
-}
-
-func (c *saramaKafkaClient) Topics() ([]string, error) {
-	return c.client.Topics()
-}
-
-// Partitions returns the sorted list of
-// all partition IDs for the given topic.
-func (c *saramaKafkaClient) Partitions(topic string) ([]int32, error) {
-	return c.client.Partitions(topic)
 }
 
 func (c *saramaKafkaClient) SyncProducer() (SyncProducer, error) {
@@ -144,8 +124,10 @@ type saramaSyncProducer struct {
 	producer sarama.SyncProducer
 }
 
-func (p *saramaSyncProducer) SendMessage(topic string,
-	partitionNum int32, key []byte, value []byte,
+func (p *saramaSyncProducer) SendMessage(
+	ctx context.Context,
+	topic string, partitionNum int32,
+	key []byte, value []byte,
 ) error {
 	_, _, err := p.producer.SendMessage(&sarama.ProducerMessage{
 		Topic:     topic,
@@ -156,8 +138,9 @@ func (p *saramaSyncProducer) SendMessage(topic string,
 	return err
 }
 
-func (p *saramaSyncProducer) SendMessages(topic string,
-	partitionNum int32, key []byte, value []byte,
+func (p *saramaSyncProducer) SendMessages(ctx context.Context,
+	topic string, partitionNum int32,
+	key []byte, value []byte,
 ) error {
 	msgs := make([]*sarama.ProducerMessage, partitionNum)
 	for i := 0; i < int(partitionNum); i++ {
@@ -180,10 +163,6 @@ type saramaAsyncProducer struct {
 	changefeedID model.ChangeFeedID
 	closedChan   chan struct{}
 	failpointCh  chan error
-}
-
-func (p *saramaAsyncProducer) AsyncClose() {
-	p.producer.AsyncClose()
 }
 
 func (p *saramaAsyncProducer) Close() error {
