@@ -50,7 +50,7 @@ type producer struct {
 	clientLock sync.RWMutex
 	// This admin mainly used by `metricsMonitor` to fetch broker info.
 	admin         kafka.ClusterAdminClient
-	client        kafka.Factory
+	factory       kafka.Factory
 	asyncProducer kafka.AsyncProducer
 	syncProducer  kafka.SyncProducer
 

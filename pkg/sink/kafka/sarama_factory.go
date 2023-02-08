@@ -14,6 +14,8 @@
 package kafka
 
 import (
+	"context"
+
 	"github.com/Shopify/sarama"
 	"github.com/pingcap/tiflow/cdc/model"
 	"github.com/pingcap/tiflow/pkg/errors"
@@ -25,14 +27,23 @@ type saramaFactory struct {
 	client sarama.Client
 }
 
-func (f *saramaFactory) AdminClient() (ClusterAdminClient, error) {
-	admin, err := sarama.NewClusterAdminFromClient(f.client)
+// NewSaramaFactory constructs a Factory with sarama implementation.
+func NewSaramaFactory(ctx context.Context, o *Options) (Factory, error) {
+	saramaConfig, err := NewSaramaConfig(ctx, o)
 	if err != nil {
 		return nil, errors.Trace(err)
 	}
-	return &saramaAdminClient{client: admin}, nil
+	c, err := sarama.NewClient(o.BrokerEndpoints, saramaConfig)
+	if err != nil {
+		return nil, errors.Trace(err)
+	}
+	return &saramaFactory{
+		client: c,
+	}, nil
 }
 
+// SyncProducer return a Sync Producer,
+// it should be the caller's responsibility to close the producer
 func (f *saramaFactory) SyncProducer() (SyncProducer, error) {
 	p, err := sarama.NewSyncProducerFromClient(f.client)
 	if err != nil {
@@ -41,6 +52,8 @@ func (f *saramaFactory) SyncProducer() (SyncProducer, error) {
 	return &saramaSyncProducer{producer: p}, nil
 }
 
+// AsyncProducer return an Async Producer,
+// it should be the caller's responsibility to close the producer
 func (f *saramaFactory) AsyncProducer(
 	changefeedID model.ChangeFeedID,
 	closedChan chan struct{},

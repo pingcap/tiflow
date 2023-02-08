@@ -204,21 +204,6 @@ func (p *saramaAsyncProducer) AsyncSend(ctx context.Context,
 // FactoryCreator defines the type of client crater.
 type FactoryCreator func(context.Context, *Options) (Factory, error)
 
-// NewSaramaFactory constructs a Factory with sarama implementation.
-func NewSaramaFactory(ctx context.Context, o *Options) (Factory, error) {
-	saramaConfig, err := NewSaramaConfig(ctx, o)
-	if err != nil {
-		return nil, errors.Trace(err)
-	}
-	c, err := sarama.NewClient(o.BrokerEndpoints, saramaConfig)
-	if err != nil {
-		return nil, errors.Trace(err)
-	}
-	return &saramaFactory{
-		client: c,
-	}, nil
-}
-
 // NewMockFactory constructs a Factory with mock implementation.
 func NewMockFactory(_ context.Context, _ *Options) (Factory, error) {
 	return NewMockFactoryImpl(), nil

@@ -36,9 +36,7 @@ var _ DDLProducer = (*kafkaDDLProducer)(nil)
 type kafkaDDLProducer struct {
 	// id indicates this sink belongs to which processor(changefeed).
 	id model.ChangeFeedID
-	// We hold the client to make close operation faster.
-	// Please see the comment of Close().
-	client kafka.Factory
+
 	// syncProducer is used to send messages to kafka synchronously.
 	syncProducer kafka.SyncProducer
 	// metricsCollector is used to report metrics.
@@ -52,42 +50,23 @@ type kafkaDDLProducer struct {
 }
 
 // NewKafkaDDLProducer creates a new kafka producer for replicating DDL.
-func NewKafkaDDLProducer(ctx context.Context, client kafka.Factory,
+func NewKafkaDDLProducer(ctx context.Context, factory kafka.Factory,
 	adminClient kafka.ClusterAdminClient,
 ) (DDLProducer, error) {
 	changefeedID := contextutil.ChangefeedIDFromCtx(ctx)
 
-	syncProducer, err := client.SyncProducer()
+	syncProducer, err := factory.SyncProducer()
 	if err != nil {
-		// Close the client to prevent the goroutine leak.
-		// Because it may be a long time to close the client,
-		// so close it asynchronously.
-		go func() {
-			err := client.Close()
-			if err != nil {
-				log.Error("Close sarama client with error in kafka "+
-					"DDL producer", zap.Error(err),
-					zap.String("namespace", changefeedID.Namespace),
-					zap.String("changefeed", changefeedID.ID))
-			}
-			if err := adminClient.Close(); err != nil {
-				log.Error("Close sarama admin client with error in kafka "+
-					"DDL producer", zap.Error(err),
-					zap.String("namespace", changefeedID.Namespace),
-					zap.String("changefeed", changefeedID.ID))
-			}
-		}()
 		return nil, cerror.WrapError(cerror.ErrKafkaNewProducer, err)
 	}
 
-	metricsCollector := client.MetricsCollector(
+	metricsCollector := factory.MetricsCollector(
 		changefeedID,
 		util.RoleOwner,
 		adminClient,
 	)
 	p := &kafkaDDLProducer{
 		id:               changefeedID,
-		client:           client,
 		metricsCollector: metricsCollector,
 		syncProducer:     syncProducer,
 		closed:           false,
@@ -164,36 +143,26 @@ func (k *kafkaDDLProducer) Close() {
 	// * There is a risk of goroutine leakage, but it is acceptable and our main
 	//   goal is not to get stuck with the owner tick.
 	go func() {
-		start := time.Now()
-		if err := k.client.Close(); err != nil {
-			log.Error("Close sarama client with error in kafka "+
-				"DDL producer", zap.Error(err),
-				zap.Duration("duration", time.Since(start)),
-				zap.String("namespace", k.id.Namespace),
-				zap.String("changefeed", k.id.ID))
-		} else {
-			log.Info("Sarama client closed in kafka "+
-				"DDL producer", zap.Duration("duration", time.Since(start)),
-				zap.String("namespace", k.id.Namespace),
-				zap.String("changefeed", k.id.ID))
-		}
+		if k.syncProducer != nil {
+			start := time.Now()
+			err := k.syncProducer.Close()
+			if err != nil {
+				log.Error("Close sync client with error in kafka DDL producer",
+					zap.String("namespace", k.id.Namespace),
+					zap.String("changefeed", k.id.ID),
+					zap.Duration("duration", time.Since(start)),
+					zap.Error(err))
+			} else {
+				log.Info("Sync client closed in kafka DDL producer",
+					zap.String("namespace", k.id.Namespace),
+					zap.String("changefeed", k.id.ID),
+					zap.Duration("duration", time.Since(start)))
+			}
 
-		start = time.Now()
-		err := k.syncProducer.Close()
-		if err != nil {
-			log.Error("Close sync client with error in kafka "+
-				"DDL producer", zap.Error(err),
-				zap.Duration("duration", time.Since(start)),
-				zap.String("namespace", k.id.Namespace),
-				zap.String("changefeed", k.id.ID))
-		} else {
-			log.Info("Sync client closed in kafka "+
-				"DDL producer", zap.Duration("duration", time.Since(start)),
-				zap.String("namespace", k.id.Namespace),
-				zap.String("changefeed", k.id.ID))
 		}
-
-		// Finally, close the metric collector.
-		k.metricsCollector.Close()
+		if k.metricsCollector != nil {
+			// Finally, close the metric collector.
+			k.metricsCollector.Close()
+		}
 	}()
 }
