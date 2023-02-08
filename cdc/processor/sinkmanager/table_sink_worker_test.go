@@ -21,6 +21,7 @@ import (
 
 	"github.com/pingcap/tiflow/cdc/entry"
 	"github.com/pingcap/tiflow/cdc/model"
+	"github.com/pingcap/tiflow/cdc/processor/memquota"
 	"github.com/pingcap/tiflow/cdc/processor/sourcemanager"
 	"github.com/pingcap/tiflow/cdc/processor/sourcemanager/engine"
 	"github.com/pingcap/tiflow/cdc/processor/sourcemanager/engine/memory"
@@ -41,10 +42,17 @@ func createWorker(
 		&entry.MockMountGroup{}, sortEngine, make(chan error, 1), false)
 
 	// To avoid refund or release panics.
+<<<<<<< HEAD
 	quota := newMemQuota(changefeedID, memQuota+1024*1024*1024, "")
 	quota.forceAcquire(1024 * 1024 * 1024)
 	for _, tableID := range tableIDs {
 		quota.addTable(tableID)
+=======
+	quota := memquota.NewMemQuota(changefeedID, memQuota+1024*1024*1024, "")
+	quota.ForceAcquire(1024 * 1024 * 1024)
+	for _, span := range spans {
+		quota.AddTable(span)
+>>>>>>> ae12f82ade (*(ticdc): fix some major problems about pull-based-sink (#8179))
 	}
 
 	return newSinkWorker(changefeedID, sm, quota, nil, nil, splitTxn, false), sortEngine
@@ -172,7 +180,12 @@ func (suite *workerSuite) TestHandleTaskWithSplitTxnAndGotSomeFilteredEvents() {
 	}
 
 	w, e := createWorker(changefeedID, eventSize, true)
+<<<<<<< HEAD
 	addEventsToSortEngine(suite.T(), events, e, tableID)
+=======
+	defer w.sinkMemQuota.Close()
+	addEventsToSortEngine(suite.T(), events, e, span)
+>>>>>>> ae12f82ade (*(ticdc): fix some major problems about pull-based-sink (#8179))
 
 	taskChan := make(chan *sinkTask)
 	var wg sync.WaitGroup
@@ -277,8 +290,14 @@ func (suite *workerSuite) TestHandleTaskWithSplitTxnAndAbortWhenNoMemAndOneTxnFi
 		},
 	}
 
+<<<<<<< HEAD
 	w, e := createWorker(changefeedID, eventSize, true, tableID)
 	addEventsToSortEngine(suite.T(), events, e, tableID)
+=======
+	w, e := createWorker(changefeedID, eventSize, true, span)
+	defer w.sinkMemQuota.Close()
+	addEventsToSortEngine(suite.T(), events, e, span)
+>>>>>>> ae12f82ade (*(ticdc): fix some major problems about pull-based-sink (#8179))
 
 	taskChan := make(chan *sinkTask)
 	var wg sync.WaitGroup
@@ -382,8 +401,14 @@ func (suite *workerSuite) TestHandleTaskWithSplitTxnAndAbortWhenNoMemAndBlocked(
 			},
 		},
 	}
+<<<<<<< HEAD
 	w, e := createWorker(changefeedID, eventSize, true, tableID)
 	addEventsToSortEngine(suite.T(), events, e, tableID)
+=======
+	w, e := createWorker(changefeedID, eventSize, true, span)
+	defer w.sinkMemQuota.Close()
+	addEventsToSortEngine(suite.T(), events, e, span)
+>>>>>>> ae12f82ade (*(ticdc): fix some major problems about pull-based-sink (#8179))
 
 	taskChan := make(chan *sinkTask)
 	var wg sync.WaitGroup
@@ -423,7 +448,7 @@ func (suite *workerSuite) TestHandleTaskWithSplitTxnAndAbortWhenNoMemAndBlocked(
 		return len(sink.GetEvents()) == 2
 	}, 5*time.Second, 10*time.Millisecond)
 	// Abort the task when no memory quota and blocked.
-	w.sinkMemQuota.close()
+	w.sinkMemQuota.Close()
 	cancel()
 	wg.Wait()
 	require.Len(suite.T(), sink.GetEvents(), 2, "Only two events should be sent to sink")
@@ -508,8 +533,14 @@ func (suite *workerSuite) TestHandleTaskWithSplitTxnAndOnlyAdvanceTableSinkWhenR
 			},
 		},
 	}
+<<<<<<< HEAD
 	w, e := createWorker(changefeedID, eventSize, true, tableID)
 	addEventsToSortEngine(suite.T(), events, e, tableID)
+=======
+	w, e := createWorker(changefeedID, eventSize, true, span)
+	defer w.sinkMemQuota.Close()
+	addEventsToSortEngine(suite.T(), events, e, span)
+>>>>>>> ae12f82ade (*(ticdc): fix some major problems about pull-based-sink (#8179))
 
 	taskChan := make(chan *sinkTask)
 	var wg sync.WaitGroup
@@ -634,7 +665,12 @@ func (suite *workerSuite) TestHandleTaskWithoutSplitTxnAndAbortWhenNoMemAndForce
 			},
 		},
 	}
+<<<<<<< HEAD
 	w, e := createWorker(changefeedID, eventSize, false, tableID)
+=======
+	w, e := createWorker(changefeedID, eventSize, false, span)
+	defer w.sinkMemQuota.Close()
+>>>>>>> ae12f82ade (*(ticdc): fix some major problems about pull-based-sink (#8179))
 	w.splitTxn = false
 	addEventsToSortEngine(suite.T(), events, e, tableID)
 
@@ -763,7 +799,12 @@ func (suite *workerSuite) TestHandleTaskWithoutSplitTxnOnlyAdvanceTableSinkWhenR
 		},
 	}
 	w, e := createWorker(changefeedID, eventSize, false)
+<<<<<<< HEAD
 	addEventsToSortEngine(suite.T(), events, e, tableID)
+=======
+	defer w.sinkMemQuota.Close()
+	addEventsToSortEngine(suite.T(), events, e, span)
+>>>>>>> ae12f82ade (*(ticdc): fix some major problems about pull-based-sink (#8179))
 
 	taskChan := make(chan *sinkTask)
 	var wg sync.WaitGroup
@@ -880,8 +921,14 @@ func (suite *workerSuite) TestHandleTaskWithSplitTxnAndDoNotAdvanceTableUntilMee
 			},
 		},
 	}
+<<<<<<< HEAD
 	w, e := createWorker(changefeedID, eventSize, true, tableID)
 	addEventsToSortEngine(suite.T(), events, e, tableID)
+=======
+	w, e := createWorker(changefeedID, eventSize, true, span)
+	defer w.sinkMemQuota.Close()
+	addEventsToSortEngine(suite.T(), events, e, span)
+>>>>>>> ae12f82ade (*(ticdc): fix some major problems about pull-based-sink (#8179))
 
 	taskChan := make(chan *sinkTask)
 	var wg sync.WaitGroup
@@ -964,8 +1011,14 @@ func (suite *workerSuite) TestHandleTaskWithSplitTxnAndAdvanceTableUntilTaskIsFi
 			},
 		},
 	}
+<<<<<<< HEAD
 	w, e := createWorker(changefeedID, eventSize, true, tableID)
 	addEventsToSortEngine(suite.T(), events, e, tableID)
+=======
+	w, e := createWorker(changefeedID, eventSize, true, span)
+	defer w.sinkMemQuota.Close()
+	addEventsToSortEngine(suite.T(), events, e, span)
+>>>>>>> ae12f82ade (*(ticdc): fix some major problems about pull-based-sink (#8179))
 
 	taskChan := make(chan *sinkTask)
 	var wg sync.WaitGroup
@@ -1035,8 +1088,14 @@ func (suite *workerSuite) TestHandleTaskWithSplitTxnAndAdvanceTableIfNoWorkload(
 			},
 		},
 	}
+<<<<<<< HEAD
 	w, e := createWorker(changefeedID, eventSize, true, tableID)
 	addEventsToSortEngine(suite.T(), events, e, tableID)
+=======
+	w, e := createWorker(changefeedID, eventSize, true, span)
+	defer w.sinkMemQuota.Close()
+	addEventsToSortEngine(suite.T(), events, e, span)
+>>>>>>> ae12f82ade (*(ticdc): fix some major problems about pull-based-sink (#8179))
 
 	taskChan := make(chan *sinkTask)
 	var wg sync.WaitGroup

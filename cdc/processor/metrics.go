@@ -14,7 +14,11 @@
 package processor
 
 import (
+<<<<<<< HEAD
 	"github.com/pingcap/tiflow/cdc/processor/pipeline"
+=======
+	"github.com/pingcap/tiflow/cdc/processor/memquota"
+>>>>>>> ae12f82ade (*(ticdc): fix some major problems about pull-based-sink (#8179))
 	"github.com/pingcap/tiflow/cdc/processor/sinkmanager"
 	"github.com/prometheus/client_golang/prometheus"
 )
@@ -144,4 +148,5 @@ func InitMetrics(registry *prometheus.Registry) {
 	registry.MustRegister(remainKVEventsGauge)
 	pipeline.InitMetrics(registry)
 	sinkmanager.InitMetrics(registry)
+	memquota.InitMetrics(registry)
 }

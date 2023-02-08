@@ -58,6 +58,7 @@ func createManagerWithMemEngine(
 	sm := sourcemanager.New(changefeedID, up, &entry.MockMountGroup{}, sortEngine, errChan, false)
 	manager, err := New(
 		ctx, changefeedID, changefeedInfo, up,
+		&entry.MockSchemaStorage{Resolved: math.MaxUint64},
 		nil, sm,
 		errChan, prometheus.NewCounter(prometheus.CounterOpts{}))
 	require.NoError(t, err)
@@ -188,7 +189,7 @@ func TestRemoveTable(t *testing.T) {
 
 	// Check all the events are sent to sink and record the memory usage.
 	require.Eventually(t, func() bool {
-		return manager.sinkMemQuota.getUsedBytes() == 872
+		return manager.sinkMemQuota.GetUsedBytes() == 872
 	}, 5*time.Second, 10*time.Millisecond)
 
 	manager.AsyncStopTable(tableID)
@@ -202,7 +203,7 @@ func TestRemoveTable(t *testing.T) {
 
 	_, ok = manager.tableSinks.Load(tableID)
 	require.False(t, ok)
-	require.Equal(t, uint64(0), manager.sinkMemQuota.getUsedBytes(), "After remove table, the memory usage should be 0.")
+	require.Equal(t, uint64(0), manager.sinkMemQuota.GetUsedBytes(), "After remove table, the memory usage should be 0.")
 }
 
 func TestUpdateBarrierTs(t *testing.T) {
@@ -303,8 +304,13 @@ func TestGetTableStatsToReleaseMemQuota(t *testing.T) {
 	require.NoError(t, err)
 
 	require.Eventually(t, func() bool {
+<<<<<<< HEAD
 		s := manager.GetTableStats(tableID)
 		return manager.sinkMemQuota.getUsedBytes() == 0 && s.CheckpointTs == 4
+=======
+		s := manager.GetTableStats(span)
+		return manager.sinkMemQuota.GetUsedBytes() == 0 && s.CheckpointTs == 4
+>>>>>>> ae12f82ade (*(ticdc): fix some major problems about pull-based-sink (#8179))
 	}, 5*time.Second, 10*time.Millisecond)
 }
 
@@ -316,14 +322,29 @@ func TestDoNotGenerateTableSinkTaskWhenTableIsNotReplicating(t *testing.T) {
 
 	changefeedInfo := getChangefeedInfo()
 	manager, e := createManagerWithMemEngine(t, ctx, model.DefaultChangeFeedID("1"), changefeedInfo, make(chan error, 1))
+<<<<<<< HEAD
 	tableID := model.TableID(1)
 	manager.AddTable(tableID, 1, 100)
 	addTableAndAddEventsToSortEngine(t, e, tableID)
+=======
+	defer func() {
+		err := manager.Close()
+		require.NoError(t, err)
+	}()
+	span := spanz.TableIDToComparableSpan(1)
+	manager.AddTable(span, 1, 100)
+	addTableAndAddEventsToSortEngine(t, e, span)
+>>>>>>> ae12f82ade (*(ticdc): fix some major problems about pull-based-sink (#8179))
 	manager.UpdateBarrierTs(4)
 	manager.UpdateReceivedSorterResolvedTs(tableID, 5)
 
+<<<<<<< HEAD
 	require.Equal(t, uint64(0), manager.sinkMemQuota.getUsedBytes())
 	tableSink, ok := manager.tableSinks.Load(tableID)
+=======
+	require.Equal(t, uint64(0), manager.sinkMemQuota.GetUsedBytes())
+	tableSink, ok := manager.tableSinks.Load(span)
+>>>>>>> ae12f82ade (*(ticdc): fix some major problems about pull-based-sink (#8179))
 	require.True(t, ok)
 	require.NotNil(t, tableSink)
 	require.Equal(t, uint64(1), tableSink.(*tableSinkWrapper).getCheckpointTs().Ts)
@@ -353,6 +374,10 @@ func TestUpdateReceivedSorterResolvedTsOfNonExistTable(t *testing.T) {
 
 	changefeedInfo := getChangefeedInfo()
 	manager, _ := createManagerWithMemEngine(t, ctx, model.DefaultChangeFeedID("1"), changefeedInfo, make(chan error, 1))
+	defer func() {
+		err := manager.Close()
+		require.NoError(t, err)
+	}()
 
 	manager.UpdateReceivedSorterResolvedTs(model.TableID(1), 1)
 }

@@ -21,7 +21,9 @@ import (
 
 	"github.com/pingcap/errors"
 	"github.com/pingcap/log"
+	"github.com/pingcap/tiflow/cdc/entry"
 	"github.com/pingcap/tiflow/cdc/model"
+	"github.com/pingcap/tiflow/cdc/processor/memquota"
 	"github.com/pingcap/tiflow/cdc/processor/sourcemanager"
 	"github.com/pingcap/tiflow/cdc/processor/sourcemanager/engine"
 	"github.com/pingcap/tiflow/cdc/processor/tablepb"
@@ -65,6 +67,9 @@ type SinkManager struct {
 	// up is the upstream and used to get the current pd time.
 	up *upstream.Upstream
 
+	// used to generate task upperbounds.
+	schemaStorage entry.SchemaStorage
+
 	// sinkProgressHeap is the heap of the table progress for sink.
 	sinkProgressHeap *tableProgresses
 	// redoProgressHeap is the heap of the table progress for redo.
@@ -90,7 +95,7 @@ type SinkManager struct {
 	sinkTaskChan        chan *sinkTask
 	sinkWorkerAvailable chan struct{}
 	// sinkMemQuota is used to control the total memory usage of the table sink.
-	sinkMemQuota *memQuota
+	sinkMemQuota *memquota.MemQuota
 
 	// redoWorkers used to pull data from source manager.
 	redoWorkers []*redoWorker
@@ -98,7 +103,7 @@ type SinkManager struct {
 	redoTaskChan        chan *redoTask
 	redoWorkerAvailable chan struct{}
 	// redoMemQuota is used to control the total memory usage of the redo.
-	redoMemQuota *memQuota
+	redoMemQuota *memquota.MemQuota
 
 	// wg is used to wait for all workers to exit.
 	wg sync.WaitGroup
@@ -114,6 +119,7 @@ func New(
 	changefeedID model.ChangeFeedID,
 	changefeedInfo *model.ChangeFeedInfo,
 	up *upstream.Upstream,
+	schemaStorage entry.SchemaStorage,
 	redoManager redo.LogManager,
 	sourceManager *sourcemanager.SourceManager,
 	errChan chan error,
@@ -135,8 +141,10 @@ func New(
 		ctx:           ctx,
 		cancel:        cancel,
 		up:            up,
+		schemaStorage: schemaStorage,
 		sinkFactory:   tableSinkFactory,
 		sourceManager: sourceManager,
+		errChan:       errChan,
 
 		sinkProgressHeap:    newTableProgresses(),
 		sinkWorkers:         make([]*sinkWorker, 0, sinkWorkerNum),
@@ -154,13 +162,13 @@ func New(
 		m.redoWorkerAvailable = make(chan struct{}, 1)
 
 		// Use 3/4 memory quota as redo quota, and 1/2 again for redo cache.
-		m.sinkMemQuota = newMemQuota(changefeedID, changefeedInfo.Config.MemoryQuota/4*1, "sink")
+		m.sinkMemQuota = memquota.NewMemQuota(changefeedID, changefeedInfo.Config.MemoryQuota/4*1, "sink")
 		redoQuota := changefeedInfo.Config.MemoryQuota / 4 * 3
-		m.redoMemQuota = newMemQuota(changefeedID, redoQuota, "redo")
+		m.redoMemQuota = memquota.NewMemQuota(changefeedID, redoQuota, "redo")
 		m.eventCache = newRedoEventCache(changefeedID, redoQuota/2*1)
 	} else {
-		m.sinkMemQuota = newMemQuota(changefeedID, changefeedInfo.Config.MemoryQuota, "sink")
-		m.redoMemQuota = newMemQuota(changefeedID, 0, "redo")
+		m.sinkMemQuota = memquota.NewMemQuota(changefeedID, changefeedInfo.Config.MemoryQuota, "sink")
+		m.redoMemQuota = memquota.NewMemQuota(changefeedID, 0, "redo")
 	}
 
 	m.startWorkers(changefeedInfo.Config.Sink.TxnAtomicity.ShouldSplitTxn(), changefeedInfo.Config.EnableOldValue)
@@ -328,21 +336,24 @@ func (m *SinkManager) backgroundGC() {
 
 // generateSinkTasks generates tasks to fetch data from the source manager.
 func (m *SinkManager) generateSinkTasks() error {
-	// We use the barrier ts as the upper bound of the fetch tableSinkTask.
-	// Because it can not exceed the barrier ts.
-	// We also need to consider the resolved ts from sorter,
-	// Because if the redo log is enabled and the table just scheduled to this node,
-	// the resolved ts from sorter may be smaller than the barrier ts.
-	// So we use the min value of the barrier ts and the resolved ts from sorter.
+	// Task upperbound is limited by barrierTs and schemaResolvedTs.
+	// But receivedSorterResolvedTs can be less than barrierTs, in which case
+	// the table is just scheduled to this node.
 	getUpperBound := func(tableSink *tableSinkWrapper) engine.Position {
+		upperBoundTs := tableSink.getReceivedSorterResolvedTs()
+
 		barrierTs := m.lastBarrierTs.Load()
-		resolvedTs := tableSink.getReceivedSorterResolvedTs()
-		var upperBoundTs model.Ts
-		if resolvedTs > barrierTs {
+		if upperBoundTs > barrierTs {
 			upperBoundTs = barrierTs
-		} else {
-			upperBoundTs = resolvedTs
 		}
+
+		// If a task carries events after schemaResolvedTs, mounter group threads
+		// can be blocked on waiting schemaResolvedTs get advanced.
+		schemaTs := m.schemaStorage.ResolvedTs()
+		if upperBoundTs-1 > schemaTs {
+			upperBoundTs = schemaTs + 1
+		}
+
 		return engine.Position{StartTs: upperBoundTs - 1, CommitTs: upperBoundTs}
 	}
 
@@ -402,7 +413,7 @@ func (m *SinkManager) generateSinkTasks() error {
 			}
 
 			// No available memory, skip this round directly.
-			if !m.sinkMemQuota.tryAcquire(requestMemSize) {
+			if !m.sinkMemQuota.TryAcquire(requestMemSize) {
 				break LOOP
 			}
 
@@ -444,7 +455,7 @@ func (m *SinkManager) generateSinkTasks() error {
 					zap.Any("lowerBound", lowerBound),
 					zap.Any("currentUpperBound", upperBound))
 			default:
-				m.sinkMemQuota.refund(requestMemSize)
+				m.sinkMemQuota.Refund(requestMemSize)
 				log.Debug("MemoryQuotaTracing: refund memory for table sink task",
 					zap.String("namespace", m.changefeedID.Namespace),
 					zap.String("changefeed", m.changefeedID.ID),
@@ -482,6 +493,14 @@ func (m *SinkManager) generateRedoTasks() error {
 	// We use the table's resolved ts as the upper bound to fetch events.
 	getUpperBound := func(tableSink *tableSinkWrapper) engine.Position {
 		upperBoundTs := tableSink.getReceivedSorterResolvedTs()
+
+		// If a task carries events after schemaResolvedTs, mounter group threads
+		// can be blocked on waiting schemaResolvedTs get advanced.
+		schemaTs := m.schemaStorage.ResolvedTs()
+		if upperBoundTs-1 > schemaTs {
+			upperBoundTs = schemaTs + 1
+		}
+
 		return engine.Position{StartTs: upperBoundTs - 1, CommitTs: upperBoundTs}
 	}
 
@@ -540,7 +559,7 @@ func (m *SinkManager) generateRedoTasks() error {
 			}
 
 			// No available memory, skip this round directly.
-			if !m.redoMemQuota.tryAcquire(requestMemSize) {
+			if !m.redoMemQuota.TryAcquire(requestMemSize) {
 				break LOOP
 			}
 
@@ -580,9 +599,10 @@ func (m *SinkManager) generateRedoTasks() error {
 					zap.String("changefeed", m.changefeedID.ID),
 					zap.Int64("tableID", tableSink.tableID),
 					zap.Any("lowerBound", lowerBound),
-					zap.Any("currentUpperBound", upperBound))
+					zap.Any("currentUpperBound", upperBound),
+					zap.Float64("lag", time.Since(oracle.GetTimeFromTS(upperBound.CommitTs)).Seconds()))
 			default:
-				m.redoMemQuota.refund(requestMemSize)
+				m.redoMemQuota.Refund(requestMemSize)
 				log.Debug("MemoryQuotaTracing: refund memory for redo log task",
 					zap.String("namespace", m.changefeedID.Namespace),
 					zap.String("changefeed", m.changefeedID.ID),
@@ -661,8 +681,13 @@ func (m *SinkManager) AddTable(tableID model.TableID, startTs model.Ts, targetTs
 			zap.Int64("tableID", tableID))
 		return
 	}
+<<<<<<< HEAD
 	m.sinkMemQuota.addTable(tableID)
 	m.redoMemQuota.addTable(tableID)
+=======
+	m.sinkMemQuota.AddTable(span)
+	m.redoMemQuota.AddTable(span)
+>>>>>>> ae12f82ade (*(ticdc): fix some major problems about pull-based-sink (#8179))
 	log.Info("Add table sink",
 		zap.String("namespace", m.changefeedID.Namespace),
 		zap.String("changefeed", m.changefeedID.ID),
@@ -742,8 +767,13 @@ func (m *SinkManager) AsyncStopTable(tableID model.TableID) {
 				zap.Int64("tableID", tableID))
 		}
 		tableSink.(*tableSinkWrapper).close(m.ctx)
+<<<<<<< HEAD
 		cleanedBytes := m.sinkMemQuota.clean(tableID)
 		cleanedBytes += m.redoMemQuota.clean(tableID)
+=======
+		cleanedBytes := m.sinkMemQuota.Clean(span)
+		cleanedBytes += m.redoMemQuota.Clean(span)
+>>>>>>> ae12f82ade (*(ticdc): fix some major problems about pull-based-sink (#8179))
 		log.Debug("MemoryQuotaTracing: Clean up memory quota for table sink task when removing table",
 			zap.String("namespace", m.changefeedID.Namespace),
 			zap.String("changefeed", m.changefeedID.ID),
@@ -816,9 +846,14 @@ func (m *SinkManager) GetTableStats(tableID model.TableID) TableStats {
 	tableSink := value.(*tableSinkWrapper)
 
 	checkpointTs := tableSink.getCheckpointTs()
+<<<<<<< HEAD
 	m.sinkMemQuota.release(tableID, checkpointTs)
 	m.redoMemQuota.release(tableID, checkpointTs)
 
+=======
+	m.sinkMemQuota.Release(span, checkpointTs)
+	m.redoMemQuota.Release(span, checkpointTs)
+>>>>>>> ae12f82ade (*(ticdc): fix some major problems about pull-based-sink (#8179))
 	var resolvedTs model.Ts
 	// If redo log is enabled, we have to use redo log's resolved ts to calculate processor's min resolved ts.
 	if m.redoManager != nil {
@@ -856,8 +891,8 @@ func (m *SinkManager) Close() error {
 		m.cancel()
 		m.cancel = nil
 	}
-	m.sinkMemQuota.close()
-	m.redoMemQuota.close()
+	m.sinkMemQuota.Close()
+	m.redoMemQuota.Close()
 	err := m.sinkFactory.Close()
 	if err != nil {
 		return errors.Trace(err)

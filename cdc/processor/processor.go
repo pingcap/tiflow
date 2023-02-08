@@ -895,6 +895,27 @@ func (p *processor) lazyInitImpl(ctx cdcContext.Context) error {
 			zap.String("changefeed", p.changefeed.ID.ID),
 			zap.Duration("duration", time.Since(start)))
 	}
+<<<<<<< HEAD
+=======
+	p.sourceManager = sourcemanager.New(p.changefeedID, p.upstream, p.mg,
+		sortEngine, p.errCh, p.changefeed.Info.Config.BDRMode)
+	p.sinkManager, err = sinkmanager.New(stdCtx, p.changefeedID,
+		p.changefeed.Info, p.upstream, p.schemaStorage,
+		p.redoManager, p.sourceManager,
+		p.errCh, p.metricsTableSinkTotalRows)
+	if err != nil {
+		log.Info("Processor creates sink manager fail",
+			zap.String("namespace", p.changefeedID.Namespace),
+			zap.String("changefeed", p.changefeedID.ID),
+			zap.Error(err),
+			zap.Duration("duration", time.Since(start)))
+		p.sourceManager = nil
+		_ = engineFactory.Drop(p.changefeedID)
+		return errors.Trace(err)
+	}
+	// Bind them so that sourceManager can notify sinkManager.
+	p.sourceManager.OnResolve(p.sinkManager.UpdateReceivedSorterResolvedTs)
+>>>>>>> ae12f82ade (*(ticdc): fix some major problems about pull-based-sink (#8179))
 
 	p.agent, err = p.newAgent(ctx, p.liveness)
 	if err != nil {
