@@ -1698,7 +1698,9 @@ func TestBackendGenUpdateSQL(t *testing.T) {
 	require.NoError(t, err)
 
 	row1 := sqlmodel.NewRowChange(table, table, []any{1, "a"}, []any{1, "aa"}, ti, ti, nil)
+	row1.SetApproximateDataSize(6)
 	row2 := sqlmodel.NewRowChange(table, table, []any{2, "b"}, []any{2, "bb"}, ti, ti, nil)
+	row2.SetApproximateDataSize(6)
 
 	testCases := []struct {
 		rows                  []*sqlmodel.RowChange
