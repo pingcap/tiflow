@@ -53,7 +53,7 @@ const (
 	// The upper limit of max txn rows.
 	maxMaxTxnRow = 2048
 	// The upper limit of max multi update rows in a single SQL.
-	maxMaxMultiUpdateRow = 256
+	maxMaxMultiUpdateRowCount = 256
 	// The upper limit of max multi update row size(8KB).
 	maxMaxMultiUpdateRowSize = 8192
 
@@ -240,10 +240,10 @@ func getMaxMultiUpdateRowCount(values url.Values, maxMultiUpdateRow *int) error 
 		return cerror.WrapError(cerror.ErrMySQLInvalidConfig,
 			fmt.Errorf("invalid max-multi-update-row %d, which must be greater than 0", c))
 	}
-	if c > maxMaxMultiUpdateRow {
+	if c > maxMaxMultiUpdateRowCount {
 		log.Warn("max-multi-update-row too large",
-			zap.Int("original", c), zap.Int("override", maxMaxMultiUpdateRow))
-		c = maxMaxMultiUpdateRow
+			zap.Int("original", c), zap.Int("override", maxMaxMultiUpdateRowCount))
+		c = maxMaxMultiUpdateRowCount
 	}
 	*maxMultiUpdateRow = c
 	return nil
