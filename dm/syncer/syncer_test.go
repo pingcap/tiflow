@@ -777,7 +777,7 @@ func (s *testSyncerSuite) TestRun(c *C) {
 	syncer.metricsProxies = metrics.DefaultMetricsProxies.CacheForOneTask("task", "worker", "source")
 
 	mock.ExpectBegin()
-	mock.ExpectExec(fmt.Sprintf("SET SESSION SQL_MODE = '%s'", schema.DefaultSQLMode)).WillReturnResult(sqlmock.NewResult(0, 0))
+	mock.ExpectExec(fmt.Sprintf("SET SESSION SQL_MODE = '%s'", schema.DefaultSQLModeMySQL80)).WillReturnResult(sqlmock.NewResult(0, 0))
 	mock.ExpectCommit()
 	mock.ExpectQuery("SHOW CREATE TABLE " + "`test_1`.`t_1`").WillReturnRows(
 		sqlmock.NewRows([]string{"Table", "Create Table"}).
@@ -946,7 +946,7 @@ func (s *testSyncerSuite) TestRun(c *C) {
 		WillReturnRows(sqlmock.NewRows([]string{""}).AddRow("01:00:00"))
 	mockGetServerUnixTS(mock)
 	mock.ExpectBegin()
-	mock.ExpectExec(fmt.Sprintf("SET SESSION SQL_MODE = '%s'", schema.DefaultSQLMode)).WillReturnResult(sqlmock.NewResult(0, 0))
+	mock.ExpectExec(fmt.Sprintf("SET SESSION SQL_MODE = '%s'", schema.DefaultSQLModeMySQL80)).WillReturnResult(sqlmock.NewResult(0, 0))
 	mock.ExpectCommit()
 	mock.ExpectQuery("SHOW CREATE TABLE " + "`test_1`.`t_2`").WillReturnRows(
 		sqlmock.NewRows([]string{"Table", "Create Table"}).
@@ -1105,7 +1105,7 @@ func (s *testSyncerSuite) TestExitSafeModeByConfig(c *C) {
 	syncer.ddlDBConn = dbconn.NewDBConn(s.cfg, conn.NewBaseConnForTest(dbConn, &retry.FiniteRetryStrategy{}))
 	syncer.downstreamTrackConn = dbconn.NewDBConn(s.cfg, conn.NewBaseConnForTest(dbConn, &retry.FiniteRetryStrategy{}))
 	mock.ExpectBegin()
-	mock.ExpectExec(fmt.Sprintf("SET SESSION SQL_MODE = '%s'", schema.DefaultSQLMode)).WillReturnResult(sqlmock.NewResult(0, 0))
+	mock.ExpectExec(fmt.Sprintf("SET SESSION SQL_MODE = '%s'", schema.DefaultSQLModeMySQL80)).WillReturnResult(sqlmock.NewResult(0, 0))
 	mock.ExpectCommit()
 
 	mock.ExpectQuery("SHOW CREATE TABLE " + "`test_1`.`t_1`").WillReturnRows(

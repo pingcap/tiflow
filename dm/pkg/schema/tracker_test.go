@@ -579,7 +579,7 @@ func TestInitDownStreamSQLModeAndParser(t *testing.T) {
 	defer tracker.Close()
 
 	mock.ExpectBegin()
-	mock.ExpectExec(fmt.Sprintf("SET SESSION SQL_MODE = '%s'", DefaultSQLMode)).WillReturnResult(sqlmock.NewResult(0, 0))
+	mock.ExpectExec(fmt.Sprintf("SET SESSION SQL_MODE = '%s'", DefaultSQLModeMySQL80)).WillReturnResult(sqlmock.NewResult(0, 0))
 	mock.ExpectCommit()
 
 	tctx := tcontext.NewContext(context.Background(), dlog.L())
@@ -606,7 +606,7 @@ func TestGetDownStreamIndexInfo(t *testing.T) {
 	defer tracker.Close()
 
 	mock.ExpectBegin()
-	mock.ExpectExec(fmt.Sprintf("SET SESSION SQL_MODE = '%s'", DefaultSQLMode)).WillReturnResult(sqlmock.NewResult(0, 0))
+	mock.ExpectExec(fmt.Sprintf("SET SESSION SQL_MODE = '%s'", DefaultSQLModeMySQL80)).WillReturnResult(sqlmock.NewResult(0, 0))
 	mock.ExpectCommit()
 
 	tableID := "`test`.`test`"
@@ -634,7 +634,7 @@ func TestReTrackDownStreamIndex(t *testing.T) {
 	defer tracker.Close()
 
 	mock.ExpectBegin()
-	mock.ExpectExec(fmt.Sprintf("SET SESSION SQL_MODE = '%s'", DefaultSQLMode)).WillReturnResult(sqlmock.NewResult(0, 0))
+	mock.ExpectExec(fmt.Sprintf("SET SESSION SQL_MODE = '%s'", DefaultSQLModeMySQL80)).WillReturnResult(sqlmock.NewResult(0, 0))
 	mock.ExpectCommit()
 
 	tableID := "`test`.`test`"
@@ -715,7 +715,7 @@ func TestVarchar20000(t *testing.T) {
 	defer tracker.Close()
 
 	mock.ExpectBegin()
-	mock.ExpectExec(fmt.Sprintf("SET SESSION SQL_MODE = '%s'", DefaultSQLMode)).WillReturnResult(sqlmock.NewResult(0, 0))
+	mock.ExpectExec(fmt.Sprintf("SET SESSION SQL_MODE = '%s'", DefaultSQLModeMySQL80)).WillReturnResult(sqlmock.NewResult(0, 0))
 	mock.ExpectCommit()
 
 	tableID := "`test`.`test`"
@@ -743,7 +743,7 @@ func TestPlacementRule(t *testing.T) {
 	defer tracker.Close()
 
 	mock.ExpectBegin()
-	mock.ExpectExec(fmt.Sprintf("SET SESSION SQL_MODE = '%s'", DefaultSQLMode)).WillReturnResult(sqlmock.NewResult(0, 0))
+	mock.ExpectExec(fmt.Sprintf("SET SESSION SQL_MODE = '%s'", DefaultSQLModeMySQL80)).WillReturnResult(sqlmock.NewResult(0, 0))
 	mock.ExpectCommit()
 
 	tableID := "`test`.`test`"
