@@ -161,6 +161,6 @@ func (a *saramaAdminClient) CreateTopic(
 	return nil
 }
 
-func (a *saramaAdminClient) Close() error {
-	return a.client.Close()
+func (a *saramaAdminClient) Close() {
+	_ = a.client.Close()
 }
