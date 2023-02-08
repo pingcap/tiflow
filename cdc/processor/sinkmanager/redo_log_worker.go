@@ -94,11 +94,7 @@ func (w *redoWorker) handleTask(ctx context.Context, task *redoTask) (finalErr e
 
 	var cache *eventAppender
 	if w.eventCache != nil {
-<<<<<<< HEAD
-		cache = w.eventCache.maybeCreateAppender(task.tableID, task.lowerBound)
-=======
-		cache = w.eventCache.maybeCreateAppender(task.span, lowerBound)
->>>>>>> ae12f82ade (*(ticdc): fix some major problems about pull-based-sink (#8179))
+		cache = w.eventCache.maybeCreateAppender(task.tableID, lowerBound)
 	}
 
 	// Events are pushed into redoEventCache if possible. Otherwise, their memory will
@@ -211,11 +207,7 @@ func (w *redoWorker) handleTask(ctx context.Context, task *redoTask) (finalErr e
 		return nil
 	}
 
-<<<<<<< HEAD
-	iter := w.sourceManager.FetchByTable(task.tableID, task.lowerBound, upperBound)
-=======
-	iter := w.sourceManager.FetchByTable(task.span, lowerBound, upperBound, w.memQuota)
->>>>>>> ae12f82ade (*(ticdc): fix some major problems about pull-based-sink (#8179))
+	iter := w.sourceManager.FetchByTable(task.tableID, lowerBound, upperBound, w.memQuota)
 	allEventCount := 0
 	defer func() {
 		task.tableSink.updateReceivedSorterCommitTs(lastTxnCommitTs)
@@ -233,13 +225,8 @@ func (w *redoWorker) handleTask(ctx context.Context, task *redoTask) (finalErr e
 		log.Debug("redo task finished",
 			zap.String("namespace", w.changefeedID.Namespace),
 			zap.String("changefeed", w.changefeedID.ID),
-<<<<<<< HEAD
 			zap.Int64("tableID", task.tableID),
-			zap.Any("lowerBound", task.lowerBound),
-=======
-			zap.Stringer("span", &task.span),
 			zap.Any("lowerBound", lowerBound),
->>>>>>> ae12f82ade (*(ticdc): fix some major problems about pull-based-sink (#8179))
 			zap.Any("upperBound", upperBound),
 			zap.Any("lastPos", lastPos),
 			zap.Float64("lag", time.Since(oracle.GetTimeFromTS(lastPos.CommitTs)).Seconds()))

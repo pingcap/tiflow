@@ -38,14 +38,8 @@ type MemQuota struct {
 	totalBytes uint64
 
 	// usedBytes is the memory usage of one changefeed.
-<<<<<<< HEAD:cdc/processor/sinkmanager/mem_quota.go
-	usedBytes uint64
-	// tableMemory is the memory usage of each table.
-	tableMemory map[model.TableID][]*memConsumeRecord
-=======
 	usedBytes atomic.Uint64
 
->>>>>>> ae12f82ade (*(ticdc): fix some major problems about pull-based-sink (#8179)):cdc/processor/memquota/mem_quota.go
 	// isClosed is used to indicate whether the mem quota is closed.
 	isClosed atomic.Bool
 
@@ -64,7 +58,7 @@ type MemQuota struct {
 	// mu protects the following fields.
 	mu sync.Mutex
 	// tableMemory is the memory usage of each table.
-	tableMemory *spanz.HashMap[[]*memConsumeRecord]
+	tableMemory map[model.TableID][]*memConsumeRecord
 }
 
 // NewMemQuota creates a MemQuota instance.
@@ -72,16 +66,11 @@ func NewMemQuota(changefeedID model.ChangeFeedID, totalBytes uint64, comp string
 	m := &MemQuota{
 		changefeedID: changefeedID,
 		totalBytes:   totalBytes,
-<<<<<<< HEAD:cdc/processor/sinkmanager/mem_quota.go
-		usedBytes:    0,
-		tableMemory:  make(map[model.TableID][]*memConsumeRecord),
-=======
->>>>>>> ae12f82ade (*(ticdc): fix some major problems about pull-based-sink (#8179)):cdc/processor/memquota/mem_quota.go
 		metricTotal:  MemoryQuota.WithLabelValues(changefeedID.Namespace, changefeedID.ID, "total", comp),
 		metricUsed:   MemoryQuota.WithLabelValues(changefeedID.Namespace, changefeedID.ID, "used", comp),
 		closeBg:      make(chan struct{}, 1),
 
-		tableMemory: spanz.NewHashMap[[]*memConsumeRecord](),
+		tableMemory: make(map[model.TableID][]*memConsumeRecord),
 	}
 	m.blockAcquireCond = sync.NewCond(&m.condMu)
 	m.metricTotal.Set(float64(totalBytes))
@@ -162,24 +151,15 @@ func (m *MemQuota) Refund(nBytes uint64) {
 	}
 }
 
-<<<<<<< HEAD:cdc/processor/sinkmanager/mem_quota.go
-func (m *memQuota) addTable(tableID model.TableID) {
-=======
 // AddTable adds a table into the quota.
-func (m *MemQuota) AddTable(span tablepb.Span) {
->>>>>>> ae12f82ade (*(ticdc): fix some major problems about pull-based-sink (#8179)):cdc/processor/memquota/mem_quota.go
+func (m *MemQuota) AddTable(tableID model.TableID) {
 	m.mu.Lock()
 	defer m.mu.Unlock()
 	m.tableMemory[tableID] = make([]*memConsumeRecord, 0, 2)
 }
 
-<<<<<<< HEAD:cdc/processor/sinkmanager/mem_quota.go
-// record records the memory usage of a table.
-func (m *memQuota) record(tableID model.TableID, resolved model.ResolvedTs, nBytes uint64) {
-=======
 // Record records the memory usage of a table.
-func (m *MemQuota) Record(span tablepb.Span, resolved model.ResolvedTs, nBytes uint64) {
->>>>>>> ae12f82ade (*(ticdc): fix some major problems about pull-based-sink (#8179)):cdc/processor/memquota/mem_quota.go
+func (m *MemQuota) Record(tableID model.TableID, resolved model.ResolvedTs, nBytes uint64) {
 	if nBytes == 0 {
 		return
 	}
@@ -206,11 +186,7 @@ func (m *MemQuota) Record(span tablepb.Span, resolved model.ResolvedTs, nBytes u
 // Release try to use resolvedTs to release the memory quota.
 // Because we append records in order, we can use binary search to find the first record
 // that is greater than resolvedTs, and release the memory quota of the records before it.
-<<<<<<< HEAD:cdc/processor/sinkmanager/mem_quota.go
-func (m *memQuota) release(tableID model.TableID, resolved model.ResolvedTs) {
-=======
-func (m *MemQuota) Release(span tablepb.Span, resolved model.ResolvedTs) {
->>>>>>> ae12f82ade (*(ticdc): fix some major problems about pull-based-sink (#8179)):cdc/processor/memquota/mem_quota.go
+func (m *MemQuota) Release(tableID model.TableID, resolved model.ResolvedTs) {
 	m.mu.Lock()
 	defer m.mu.Unlock()
 	if _, ok := m.tableMemory[tableID]; !ok {
@@ -244,11 +220,7 @@ func (m *MemQuota) Release(span tablepb.Span, resolved model.ResolvedTs) {
 
 // Clean all records of the table.
 // Return the cleaned memory quota.
-<<<<<<< HEAD:cdc/processor/sinkmanager/mem_quota.go
-func (m *memQuota) clean(tableID model.TableID) uint64 {
-=======
-func (m *MemQuota) Clean(span tablepb.Span) uint64 {
->>>>>>> ae12f82ade (*(ticdc): fix some major problems about pull-based-sink (#8179)):cdc/processor/memquota/mem_quota.go
+func (m *MemQuota) Clean(tableID model.TableID) uint64 {
 	m.mu.Lock()
 	defer m.mu.Unlock()
 
@@ -266,32 +238,14 @@ func (m *MemQuota) Clean(span tablepb.Span) uint64 {
 	for _, record := range records {
 		cleaned += record.size
 	}
-<<<<<<< HEAD:cdc/processor/sinkmanager/mem_quota.go
-	m.usedBytes -= cleaned
-	m.metricUsed.Set(float64(m.usedBytes))
 	delete(m.tableMemory, tableID)
-	if m.usedBytes < m.totalBytes {
-=======
-	m.tableMemory.Delete(span)
 
 	if m.usedBytes.Add(^(cleaned - 1)) < m.totalBytes {
->>>>>>> ae12f82ade (*(ticdc): fix some major problems about pull-based-sink (#8179)):cdc/processor/memquota/mem_quota.go
 		m.blockAcquireCond.Broadcast()
 	}
 	return cleaned
 }
 
-<<<<<<< HEAD:cdc/processor/sinkmanager/mem_quota.go
-// close the mem quota and notify the blocked acquire.
-func (m *memQuota) close() {
-	m.mu.Lock()
-	defer m.mu.Unlock()
-	// NOTE: m.usedBytes is not reset, because refund can still be called after closed.
-	m.tableMemory = make(map[model.TableID][]*memConsumeRecord)
-	m.metricUsed.Set(float64(0))
-	m.isClosed.Store(true)
-	m.blockAcquireCond.Broadcast()
-=======
 // Close the mem quota and notify the blocked acquire.
 func (m *MemQuota) Close() {
 	if m.isClosed.CompareAndSwap(false, true) {
@@ -299,7 +253,6 @@ func (m *MemQuota) Close() {
 		close(m.closeBg)
 		m.wg.Wait()
 	}
->>>>>>> ae12f82ade (*(ticdc): fix some major problems about pull-based-sink (#8179)):cdc/processor/memquota/mem_quota.go
 }
 
 // GetUsedBytes returns the used memory quota.

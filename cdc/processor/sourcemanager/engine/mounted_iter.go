@@ -20,6 +20,7 @@ import (
 	"github.com/pingcap/tiflow/cdc/entry"
 	"github.com/pingcap/tiflow/cdc/model"
 	"github.com/pingcap/tiflow/cdc/processor/memquota"
+	metrics "github.com/pingcap/tiflow/cdc/sorter"
 	"github.com/prometheus/client_golang/prometheus"
 )
 
@@ -51,7 +52,7 @@ func NewMountedEventIter(
 		quota:     quota,
 		rawEvents: make([]rawEvent, 0, maxBatchSize),
 
-		mountWaitDuration: mountWaitDuration.WithLabelValues(changefeedID.Namespace, changefeedID.ID),
+		mountWaitDuration: metrics.MountWaitDuration.WithLabelValues(changefeedID.Namespace, changefeedID.ID),
 	}
 }
 

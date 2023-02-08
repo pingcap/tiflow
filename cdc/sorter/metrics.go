@@ -65,10 +65,20 @@ var (
 		Name:      "open_file_count_gauge",
 		Help:      "The number of open file descriptors held by the sorter",
 	}, []string{"id"})
+
+    // MountWaitDuration is the metric of waiting mount time.
+	MountWaitDuration = prometheus.NewHistogramVec(prometheus.HistogramOpts{
+		Namespace: "ticdc",
+		Subsystem: "sorter",
+		Name:      "mount_wait_duration",
+		Help:      "Bucketed histogram of mount wait duration",
+		Buckets:   prometheus.ExponentialBuckets(0.001, 2.0, 20),
+	}, []string{"namespace", "changefeed"})
 )
 
 // InitMetrics registers all metrics in this file
 func InitMetrics(registry *prometheus.Registry) {
+	registry.MustRegister(MountWaitDuration)
 	registry.MustRegister(InputEventCount)
 	registry.MustRegister(OutputEventCount)
 	registry.MustRegister(ResolvedTsGauge)

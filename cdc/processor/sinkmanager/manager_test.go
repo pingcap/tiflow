@@ -304,13 +304,8 @@ func TestGetTableStatsToReleaseMemQuota(t *testing.T) {
 	require.NoError(t, err)
 
 	require.Eventually(t, func() bool {
-<<<<<<< HEAD
 		s := manager.GetTableStats(tableID)
-		return manager.sinkMemQuota.getUsedBytes() == 0 && s.CheckpointTs == 4
-=======
-		s := manager.GetTableStats(span)
 		return manager.sinkMemQuota.GetUsedBytes() == 0 && s.CheckpointTs == 4
->>>>>>> ae12f82ade (*(ticdc): fix some major problems about pull-based-sink (#8179))
 	}, 5*time.Second, 10*time.Millisecond)
 }
 
@@ -322,29 +317,17 @@ func TestDoNotGenerateTableSinkTaskWhenTableIsNotReplicating(t *testing.T) {
 
 	changefeedInfo := getChangefeedInfo()
 	manager, e := createManagerWithMemEngine(t, ctx, model.DefaultChangeFeedID("1"), changefeedInfo, make(chan error, 1))
-<<<<<<< HEAD
-	tableID := model.TableID(1)
-	manager.AddTable(tableID, 1, 100)
-	addTableAndAddEventsToSortEngine(t, e, tableID)
-=======
 	defer func() {
 		err := manager.Close()
 		require.NoError(t, err)
 	}()
-	span := spanz.TableIDToComparableSpan(1)
-	manager.AddTable(span, 1, 100)
-	addTableAndAddEventsToSortEngine(t, e, span)
->>>>>>> ae12f82ade (*(ticdc): fix some major problems about pull-based-sink (#8179))
+	manager.AddTable(tableID, 1, 100)
+	addTableAndAddEventsToSortEngine(t, e, tableID)
 	manager.UpdateBarrierTs(4)
 	manager.UpdateReceivedSorterResolvedTs(tableID, 5)
 
-<<<<<<< HEAD
-	require.Equal(t, uint64(0), manager.sinkMemQuota.getUsedBytes())
-	tableSink, ok := manager.tableSinks.Load(tableID)
-=======
 	require.Equal(t, uint64(0), manager.sinkMemQuota.GetUsedBytes())
-	tableSink, ok := manager.tableSinks.Load(span)
->>>>>>> ae12f82ade (*(ticdc): fix some major problems about pull-based-sink (#8179))
+	tableSink, ok := manager.tableSinks.Load(tableID)
 	require.True(t, ok)
 	require.NotNil(t, tableSink)
 	require.Equal(t, uint64(1), tableSink.(*tableSinkWrapper).getCheckpointTs().Ts)

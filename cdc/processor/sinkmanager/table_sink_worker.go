@@ -187,11 +187,7 @@ func (w *sinkWorker) handleTask(ctx context.Context, task *sinkTask) (finalErr e
 			// It's the last time we call `doEmitAndAdvance`, but `pendingTxnSize`
 			// hasn't been recorded yet. To avoid losing it, record it manually.
 			if isLastTime && pendingTxnSize > 0 {
-<<<<<<< HEAD
-				w.sinkMemQuota.record(task.tableID, model.NewResolvedTs(currTxnCommitTs), pendingTxnSize)
-=======
-				w.sinkMemQuota.Record(task.span, model.NewResolvedTs(currTxnCommitTs), pendingTxnSize)
->>>>>>> ae12f82ade (*(ticdc): fix some major problems about pull-based-sink (#8179))
+				w.sinkMemQuota.Record(task.tableID, model.NewResolvedTs(currTxnCommitTs), pendingTxnSize)
 				pendingTxnSize = 0
 			}
 		}
@@ -263,11 +259,7 @@ func (w *sinkWorker) handleTask(ctx context.Context, task *sinkTask) (finalErr e
 	// lowerBound and upperBound are both closed intervals.
 	allEventSize := uint64(0)
 	allEventCount := 0
-<<<<<<< HEAD
-	iter := w.sourceManager.FetchByTable(task.tableID, lowerBound, upperBound)
-=======
-	iter := w.sourceManager.FetchByTable(task.span, lowerBound, upperBound, w.sinkMemQuota)
->>>>>>> ae12f82ade (*(ticdc): fix some major problems about pull-based-sink (#8179))
+	iter := w.sourceManager.FetchByTable(task.tableID, lowerBound, upperBound, w.sinkMemQuota)
 	defer func() {
 		w.metricRedoEventCacheMiss.Add(float64(allEventSize))
 		task.tableSink.receivedEventCount.Add(int64(allEventCount))
@@ -407,15 +399,9 @@ func (w *sinkWorker) fetchFromCache(
 			}
 		}
 		// Transfer the memory usage from redoMemQuota to sinkMemQuota.
-<<<<<<< HEAD
-		w.sinkMemQuota.forceAcquire(popRes.releaseSize)
-		w.sinkMemQuota.record(task.tableID, resolvedTs, popRes.releaseSize)
-		w.redoMemQuota.refund(popRes.releaseSize)
-=======
 		w.sinkMemQuota.ForceAcquire(popRes.releaseSize)
-		w.sinkMemQuota.Record(task.span, resolvedTs, popRes.releaseSize)
+		w.sinkMemQuota.Record(task.tableID, resolvedTs, popRes.releaseSize)
 		w.redoMemQuota.Refund(popRes.releaseSize)
->>>>>>> ae12f82ade (*(ticdc): fix some major problems about pull-based-sink (#8179))
 
 		err = task.tableSink.updateResolvedTs(resolvedTs)
 		log.Debug("Advance table sink",
@@ -455,11 +441,7 @@ func (w *sinkWorker) advanceTableSinkWithBatchID(t *sinkTask, commitTs model.Ts,
 		zap.Any("resolvedTs", resolvedTs),
 		zap.Uint64("size", size))
 	if size > 0 {
-<<<<<<< HEAD
-		w.sinkMemQuota.record(t.tableID, resolvedTs, size)
-=======
-		w.sinkMemQuota.Record(t.span, resolvedTs, size)
->>>>>>> ae12f82ade (*(ticdc): fix some major problems about pull-based-sink (#8179))
+		w.sinkMemQuota.Record(t.tableID, resolvedTs, size)
 	}
 	return t.tableSink.updateResolvedTs(resolvedTs)
 }
@@ -473,11 +455,7 @@ func (w *sinkWorker) advanceTableSink(t *sinkTask, commitTs model.Ts, size uint6
 		zap.Any("resolvedTs", resolvedTs),
 		zap.Uint64("size", size))
 	if size > 0 {
-<<<<<<< HEAD
-		w.sinkMemQuota.record(t.tableID, resolvedTs, size)
-=======
-		w.sinkMemQuota.Record(t.span, resolvedTs, size)
->>>>>>> ae12f82ade (*(ticdc): fix some major problems about pull-based-sink (#8179))
+		w.sinkMemQuota.Record(t.tableID, resolvedTs, size)
 	}
 	return t.tableSink.updateResolvedTs(resolvedTs)
 }

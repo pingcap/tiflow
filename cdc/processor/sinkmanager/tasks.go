@@ -14,12 +14,9 @@
 package sinkmanager
 
 import (
-<<<<<<< HEAD
-	"github.com/pingcap/tiflow/cdc/model"
-=======
 	"time"
 
->>>>>>> ae12f82ade (*(ticdc): fix some major problems about pull-based-sink (#8179))
+	"github.com/pingcap/tiflow/cdc/model"
 	"github.com/pingcap/tiflow/cdc/processor/sourcemanager/engine"
 )
 

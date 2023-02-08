@@ -681,13 +681,8 @@ func (m *SinkManager) AddTable(tableID model.TableID, startTs model.Ts, targetTs
 			zap.Int64("tableID", tableID))
 		return
 	}
-<<<<<<< HEAD
-	m.sinkMemQuota.addTable(tableID)
-	m.redoMemQuota.addTable(tableID)
-=======
-	m.sinkMemQuota.AddTable(span)
-	m.redoMemQuota.AddTable(span)
->>>>>>> ae12f82ade (*(ticdc): fix some major problems about pull-based-sink (#8179))
+	m.sinkMemQuota.AddTable(tableID)
+	m.redoMemQuota.AddTable(tableID)
 	log.Info("Add table sink",
 		zap.String("namespace", m.changefeedID.Namespace),
 		zap.String("changefeed", m.changefeedID.ID),
@@ -767,13 +762,8 @@ func (m *SinkManager) AsyncStopTable(tableID model.TableID) {
 				zap.Int64("tableID", tableID))
 		}
 		tableSink.(*tableSinkWrapper).close(m.ctx)
-<<<<<<< HEAD
-		cleanedBytes := m.sinkMemQuota.clean(tableID)
-		cleanedBytes += m.redoMemQuota.clean(tableID)
-=======
-		cleanedBytes := m.sinkMemQuota.Clean(span)
-		cleanedBytes += m.redoMemQuota.Clean(span)
->>>>>>> ae12f82ade (*(ticdc): fix some major problems about pull-based-sink (#8179))
+		cleanedBytes := m.sinkMemQuota.Clean(tableID)
+		cleanedBytes += m.redoMemQuota.Clean(tableID)
 		log.Debug("MemoryQuotaTracing: Clean up memory quota for table sink task when removing table",
 			zap.String("namespace", m.changefeedID.Namespace),
 			zap.String("changefeed", m.changefeedID.ID),
@@ -846,14 +836,9 @@ func (m *SinkManager) GetTableStats(tableID model.TableID) TableStats {
 	tableSink := value.(*tableSinkWrapper)
 
 	checkpointTs := tableSink.getCheckpointTs()
-<<<<<<< HEAD
-	m.sinkMemQuota.release(tableID, checkpointTs)
-	m.redoMemQuota.release(tableID, checkpointTs)
+	m.sinkMemQuota.Release(tableID, checkpointTs)
+	m.redoMemQuota.Release(tableID, checkpointTs)
 
-=======
-	m.sinkMemQuota.Release(span, checkpointTs)
-	m.redoMemQuota.Release(span, checkpointTs)
->>>>>>> ae12f82ade (*(ticdc): fix some major problems about pull-based-sink (#8179))
 	var resolvedTs model.Ts
 	// If redo log is enabled, we have to use redo log's resolved ts to calculate processor's min resolved ts.
 	if m.redoManager != nil {

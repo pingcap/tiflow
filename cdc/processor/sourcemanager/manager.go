@@ -94,18 +94,12 @@ func (m *SourceManager) OnResolve(action func(model.TableID, model.Ts)) {
 }
 
 // FetchByTable just wrap the engine's FetchByTable method.
-<<<<<<< HEAD
-func (m *SourceManager) FetchByTable(tableID model.TableID, lowerBound, upperBound engine.Position) *engine.MountedEventIter {
-	iter := m.engine.FetchByTable(tableID, lowerBound, upperBound)
-	return engine.NewMountedEventIter(iter, m.mg, defaultMaxBatchSize)
-=======
 func (m *SourceManager) FetchByTable(
-	span tablepb.Span, lowerBound, upperBound engine.Position,
+	tableID model.TableID, lowerBound, upperBound engine.Position,
 	quota *memquota.MemQuota,
 ) *engine.MountedEventIter {
-	iter := m.engine.FetchByTable(span, lowerBound, upperBound)
+	iter := m.engine.FetchByTable(tableID, lowerBound, upperBound)
 	return engine.NewMountedEventIter(m.changefeedID, iter, m.mg, defaultMaxBatchSize, quota)
->>>>>>> ae12f82ade (*(ticdc): fix some major problems about pull-based-sink (#8179))
 }
 
 // CleanByTable just wrap the engine's CleanByTable method.

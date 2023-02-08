@@ -52,15 +52,8 @@ func TestMemQuotaBlockAcquire(t *testing.T) {
 	defer m.Close()
 	err := m.BlockAcquire(100)
 	require.NoError(t, err)
-<<<<<<< HEAD:cdc/processor/sinkmanager/mem_quota_test.go
-	m.record(1, model.NewResolvedTs(1), 50)
-	m.record(1, model.NewResolvedTs(2), 50)
-=======
-
-	span := spanz.TableIDToComparableSpan(1)
-	m.Record(span, model.NewResolvedTs(1), 50)
-	m.Record(span, model.NewResolvedTs(2), 50)
->>>>>>> ae12f82ade (*(ticdc): fix some major problems about pull-based-sink (#8179)):cdc/processor/memquota/mem_quota_test.go
+	m.Record(1, model.NewResolvedTs(1), 50)
+	m.Record(1, model.NewResolvedTs(2), 50)
 
 	var wg sync.WaitGroup
 	wg.Add(1)
@@ -75,13 +68,8 @@ func TestMemQuotaBlockAcquire(t *testing.T) {
 		err := m.BlockAcquire(50)
 		require.NoError(t, err)
 	}()
-<<<<<<< HEAD:cdc/processor/sinkmanager/mem_quota_test.go
-	m.release(1, model.NewResolvedTs(1))
-	m.release(1, model.NewResolvedTs(2))
-=======
-	m.Release(span, model.NewResolvedTs(1))
-	m.Release(span, model.NewResolvedTs(2))
->>>>>>> ae12f82ade (*(ticdc): fix some major problems about pull-based-sink (#8179)):cdc/processor/memquota/mem_quota_test.go
+	m.Release(1, model.NewResolvedTs(1))
+	m.Release(1, model.NewResolvedTs(2))
 	wg.Wait()
 }
 
@@ -92,12 +80,7 @@ func TestMemQuotaClose(t *testing.T) {
 
 	err := m.BlockAcquire(100)
 	require.NoError(t, err)
-<<<<<<< HEAD:cdc/processor/sinkmanager/mem_quota_test.go
-	m.record(1, model.NewResolvedTs(2), 100)
-=======
-	span := spanz.TableIDToComparableSpan(1)
-	m.Record(span, model.NewResolvedTs(2), 100)
->>>>>>> ae12f82ade (*(ticdc): fix some major problems about pull-based-sink (#8179)):cdc/processor/memquota/mem_quota_test.go
+	m.Record(1, model.NewResolvedTs(2), 100)
 
 	var wg sync.WaitGroup
 	wg.Add(1)
@@ -129,11 +112,7 @@ func TestMemQuotaClose(t *testing.T) {
 	wg.Add(1)
 	go func() {
 		defer wg.Done()
-<<<<<<< HEAD:cdc/processor/sinkmanager/mem_quota_test.go
-		m.release(1, model.NewResolvedTs(2))
-=======
-		m.Release(span, model.NewResolvedTs(2))
->>>>>>> ae12f82ade (*(ticdc): fix some major problems about pull-based-sink (#8179)):cdc/processor/memquota/mem_quota_test.go
+		m.Release(1, model.NewResolvedTs(2))
 	}()
 	m.Close()
 	wg.Wait()
@@ -177,72 +156,38 @@ func TestMemQuotaHasAvailable(t *testing.T) {
 func TestMemQuotaRecordAndRelease(t *testing.T) {
 	t.Parallel()
 
-<<<<<<< HEAD:cdc/processor/sinkmanager/mem_quota_test.go
-	m := newMemQuota(model.DefaultChangeFeedID("1"), 300, "")
-	defer m.close()
-	m.addTable(1)
-
-	require.True(t, m.tryAcquire(100))
-	m.record(1, model.NewResolvedTs(100), 100)
-	require.True(t, m.tryAcquire(100))
-	m.record(1, model.NewResolvedTs(200), 100)
-	require.True(t, m.tryAcquire(100))
-	m.record(1, model.NewResolvedTs(300), 100)
-	require.False(t, m.tryAcquire(1))
-	require.False(t, m.hasAvailable(1))
-	// release the memory of resolvedTs 100
-	m.release(1, model.NewResolvedTs(101))
-	require.True(t, m.hasAvailable(100))
-	// release the memory of resolvedTs 200
-	m.release(1, model.NewResolvedTs(201))
-	require.True(t, m.hasAvailable(200))
-	// release the memory of resolvedTs 300
-	m.release(1, model.NewResolvedTs(301))
-	require.True(t, m.hasAvailable(300))
-	// release the memory of resolvedTs 300 again
-	m.release(1, model.NewResolvedTs(301))
-=======
 	m := NewMemQuota(model.DefaultChangeFeedID("1"), 300, "")
 	defer m.Close()
-	span := spanz.TableIDToComparableSpan(1)
-	m.AddTable(span)
+	m.AddTable(1)
 
 	require.True(t, m.TryAcquire(100))
-	m.Record(span, model.NewResolvedTs(100), 100)
+	m.Record(1, model.NewResolvedTs(100), 100)
 	require.True(t, m.TryAcquire(100))
-	m.Record(span, model.NewResolvedTs(200), 100)
+	m.Record(1, model.NewResolvedTs(200), 100)
 	require.True(t, m.TryAcquire(100))
-	m.Record(span, model.NewResolvedTs(300), 100)
+	m.Record(1, model.NewResolvedTs(300), 100)
 	require.False(t, m.TryAcquire(1))
 	require.False(t, m.hasAvailable(1))
 	// release the memory of resolvedTs 100
-	m.Release(span, model.NewResolvedTs(101))
+	m.Release(1, model.NewResolvedTs(101))
 	require.True(t, m.hasAvailable(100))
 	// release the memory of resolvedTs 200
-	m.Release(span, model.NewResolvedTs(201))
+	m.Release(1, model.NewResolvedTs(201))
 	require.True(t, m.hasAvailable(200))
 	// release the memory of resolvedTs 300
-	m.Release(span, model.NewResolvedTs(301))
+	m.Release(1, model.NewResolvedTs(301))
 	require.True(t, m.hasAvailable(300))
 	// release the memory of resolvedTs 300 again
-	m.Release(span, model.NewResolvedTs(301))
->>>>>>> ae12f82ade (*(ticdc): fix some major problems about pull-based-sink (#8179)):cdc/processor/memquota/mem_quota_test.go
+	m.Release(1, model.NewResolvedTs(301))
 	require.True(t, m.hasAvailable(300))
 }
 
 func TestMemQuotaRecordAndReleaseWithBatchID(t *testing.T) {
 	t.Parallel()
 
-<<<<<<< HEAD:cdc/processor/sinkmanager/mem_quota_test.go
-	m := newMemQuota(model.DefaultChangeFeedID("1"), 300, "")
-	defer m.close()
-	m.addTable(1)
-=======
 	m := NewMemQuota(model.DefaultChangeFeedID("1"), 300, "")
 	defer m.Close()
-	span := spanz.TableIDToComparableSpan(1)
-	m.AddTable(span)
->>>>>>> ae12f82ade (*(ticdc): fix some major problems about pull-based-sink (#8179)):cdc/processor/memquota/mem_quota_test.go
+	m.AddTable(1)
 
 	require.True(t, m.TryAcquire(100))
 	resolvedTs := model.ResolvedTs{
@@ -250,37 +195,22 @@ func TestMemQuotaRecordAndReleaseWithBatchID(t *testing.T) {
 		Ts:      100,
 		BatchID: 1,
 	}
-<<<<<<< HEAD:cdc/processor/sinkmanager/mem_quota_test.go
-	m.record(1, resolvedTs, 100)
-=======
-	m.Record(span, resolvedTs, 100)
->>>>>>> ae12f82ade (*(ticdc): fix some major problems about pull-based-sink (#8179)):cdc/processor/memquota/mem_quota_test.go
+	m.Record(1, resolvedTs, 100)
 	resolvedTs = model.ResolvedTs{
 		Mode:    model.BatchResolvedMode,
 		Ts:      100,
 		BatchID: 2,
 	}
-<<<<<<< HEAD:cdc/processor/sinkmanager/mem_quota_test.go
-	require.True(t, m.tryAcquire(100))
-	m.record(1, resolvedTs, 100)
-=======
 	require.True(t, m.TryAcquire(100))
-	m.Record(span, resolvedTs, 100)
->>>>>>> ae12f82ade (*(ticdc): fix some major problems about pull-based-sink (#8179)):cdc/processor/memquota/mem_quota_test.go
+	m.Record(1, resolvedTs, 100)
 	resolvedTs = model.ResolvedTs{
 		Mode:    model.BatchResolvedMode,
 		Ts:      100,
 		BatchID: 3,
 	}
-<<<<<<< HEAD:cdc/processor/sinkmanager/mem_quota_test.go
-	require.True(t, m.tryAcquire(100))
-	m.record(1, resolvedTs, 100)
-	require.False(t, m.tryAcquire(1))
-=======
 	require.True(t, m.TryAcquire(100))
-	m.Record(span, resolvedTs, 100)
+	m.Record(1, resolvedTs, 100)
 	require.False(t, m.TryAcquire(1))
->>>>>>> ae12f82ade (*(ticdc): fix some major problems about pull-based-sink (#8179)):cdc/processor/memquota/mem_quota_test.go
 	require.False(t, m.hasAvailable(1))
 
 	// release the memory of resolvedTs 100 batchID 2
@@ -289,57 +219,31 @@ func TestMemQuotaRecordAndReleaseWithBatchID(t *testing.T) {
 		Ts:      100,
 		BatchID: 2,
 	}
-<<<<<<< HEAD:cdc/processor/sinkmanager/mem_quota_test.go
-	m.release(1, resolvedTs)
+	m.Release(1, resolvedTs)
 	require.True(t, m.hasAvailable(200))
 	// release the memory of resolvedTs 101
-	m.release(1, model.NewResolvedTs(101))
-=======
-	m.Release(span, resolvedTs)
-	require.True(t, m.hasAvailable(200))
-	// release the memory of resolvedTs 101
-	m.Release(span, model.NewResolvedTs(101))
->>>>>>> ae12f82ade (*(ticdc): fix some major problems about pull-based-sink (#8179)):cdc/processor/memquota/mem_quota_test.go
+	m.Release(1, model.NewResolvedTs(101))
 	require.True(t, m.hasAvailable(300))
 }
 
 func TestMemQuotaRecordAndClean(t *testing.T) {
 	t.Parallel()
 
-<<<<<<< HEAD:cdc/processor/sinkmanager/mem_quota_test.go
-	m := newMemQuota(model.DefaultChangeFeedID("1"), 300, "")
-	defer m.close()
-	m.addTable(1)
-
-	require.True(t, m.tryAcquire(100))
-	m.record(1, model.NewResolvedTs(100), 100)
-	require.True(t, m.tryAcquire(100))
-	m.record(1, model.NewResolvedTs(200), 100)
-	require.True(t, m.tryAcquire(100))
-	m.record(1, model.NewResolvedTs(300), 100)
-	require.False(t, m.tryAcquire(1))
-	require.False(t, m.hasAvailable(1))
-
-	// clean the all memory.
-	cleanedBytes := m.clean(1)
-=======
 	m := NewMemQuota(model.DefaultChangeFeedID("1"), 300, "")
 	defer m.Close()
-	span := spanz.TableIDToComparableSpan(1)
-	m.AddTable(span)
+	m.AddTable(1)
 
 	require.True(t, m.TryAcquire(100))
-	m.Record(span, model.NewResolvedTs(100), 100)
+	m.Record(1, model.NewResolvedTs(100), 100)
 	require.True(t, m.TryAcquire(100))
-	m.Record(span, model.NewResolvedTs(200), 100)
+	m.Record(1, model.NewResolvedTs(200), 100)
 	require.True(t, m.TryAcquire(100))
-	m.Record(span, model.NewResolvedTs(300), 100)
+	m.Record(1, model.NewResolvedTs(300), 100)
 	require.False(t, m.TryAcquire(1))
 	require.False(t, m.hasAvailable(1))
 
 	// clean the all memory.
-	cleanedBytes := m.Clean(span)
->>>>>>> ae12f82ade (*(ticdc): fix some major problems about pull-based-sink (#8179)):cdc/processor/memquota/mem_quota_test.go
+	cleanedBytes := m.Clean(1)
 	require.Equal(t, uint64(300), cleanedBytes)
 	require.True(t, m.hasAvailable(100))
 }
