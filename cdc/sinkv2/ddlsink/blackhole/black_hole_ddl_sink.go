@@ -47,6 +47,4 @@ func (d *ddlSink) WriteCheckpointTs(ctx context.Context,
 }
 
 // Close do nothing.
-func (d *ddlSink) Close() error {
-	return nil
-}
+func (d *ddlSink) Close() {}

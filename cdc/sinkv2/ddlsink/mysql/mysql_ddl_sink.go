@@ -204,13 +204,11 @@ func (m *mysqlDDLSink) WriteCheckpointTs(_ context.Context, _ uint64, _ []*model
 }
 
 // Close closes the database connection.
-func (m *mysqlDDLSink) Close() error {
-	if err := m.db.Close(); err != nil {
-		return errors.Trace(err)
+func (m *mysqlDDLSink) Close() {
+	if m.db != nil {
+		m.db.Close()
 	}
 	if m.statistics != nil {
 		m.statistics.Close()
 	}
-
-	return nil
 }
