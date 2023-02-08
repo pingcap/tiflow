@@ -66,7 +66,7 @@ func Validate(ctx context.Context, sinkURI string, cfg *config.ReplicaConfig) er
 			return err
 		}
 		cancel()
-		err = s.Close()
+		s.Close()
 	}
 	if err != nil {
 		return err
