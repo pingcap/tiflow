@@ -21,7 +21,7 @@ import (
 	"github.com/pingcap/tiflow/cdc/model"
 	"github.com/pingcap/tiflow/cdc/sink/codec/internal"
 	cerror "github.com/pingcap/tiflow/pkg/errors"
-	"github.com/tikv/pd/pkg/tsoutil"
+	"github.com/tikv/pd/pkg/utils/tsoutil"
 )
 
 type maxwellMessage struct {

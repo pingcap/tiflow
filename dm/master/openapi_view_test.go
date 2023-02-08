@@ -43,7 +43,7 @@ import (
 	"github.com/pingcap/tiflow/dm/pkg/utils"
 	"github.com/stretchr/testify/require"
 	"github.com/stretchr/testify/suite"
-	"github.com/tikv/pd/pkg/tempurl"
+	"github.com/tikv/pd/pkg/utils/tempurl"
 )
 
 // some data for test.
