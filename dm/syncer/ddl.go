@@ -250,7 +250,7 @@ func (ddl *DDLWorker) HandleQueryEvent(ev *replication.QueryEvent, ec eventConte
 		// don't return error if filter success
 		ddl.metricsProxies.SkipBinlogDurationHistogram.WithLabelValues("query", ddl.name, ddl.sourceID).Observe(time.Since(ec.startTime).Seconds())
 		ddl.logger.Warn("skip event", zap.String("event", "query"), zap.Stringer("query event context", qec))
-		err = ddl.recordSkipSQLsLocation(&ec)
+		err = ddl.handleSkippedDDL(&ec)
 	}()
 
 	qec.p, err = event.GetParserForStatusVars(ev.StatusVars)
@@ -272,7 +272,9 @@ func (ddl *DDLWorker) HandleQueryEvent(ev *replication.QueryEvent, ec eventConte
 	}
 
 	if _, ok := stmt.(ast.DDLNode); !ok {
-		return nil
+		ddl.logger.Info("ddl that dm don't handle, skip it", zap.String("event", "query"),
+			zap.Stringer("queryEventContext", qec))
+		return ddl.handleSkippedDDL(qec.eventContext)
 	}
 
 	if qec.shardingReSync != nil {
@@ -375,7 +377,7 @@ func (ddl *DDLWorker) HandleQueryEvent(ev *replication.QueryEvent, ec eventConte
 	ddl.logger.Info("prepare to handle ddls", zap.String("event", "query"), zap.Stringer("queryEventContext", qec))
 	if len(qec.needHandleDDLs) == 0 {
 		ddl.logger.Info("skip event, need handled ddls is empty", zap.String("event", "query"), zap.Stringer("queryEventContext", qec))
-		return ddl.recordSkipSQLsLocation(qec.eventContext)
+		return ddl.handleSkippedDDL(qec.eventContext)
 	}
 
 	// interrupted before flush old checkpoint.
@@ -393,6 +395,19 @@ func (ddl *DDLWorker) HandleQueryEvent(ev *replication.QueryEvent, ec eventConte
 	}
 
 	return ddl.strategy.handleDDL(qec)
+}
+
+func (ddl *DDLWorker) handleSkippedDDL(ec *eventContext) error {
+	// skipped ddl includes:
+	// - ddl cannot be parsed and should be skipped, such as create function
+	// - ddl can be parsed but dm don't handle, such as analyze table
+	// - ddls related to db/table which is filtered
+	// for those ddls we still flush job like non-skipped ddls, so we can set global checkpoint.
+	// then checkpoint can match master position if skipped ddl is the last binlog in source db
+	if err := ddl.flushJobs(); err != nil {
+		return err
+	}
+	return ddl.recordSkipSQLsLocation(ec)
 }
 
 func (ddl *Normal) preFilter(*ddlInfo, *queryEventContext, *filter.Table, *filter.Table) (bool, error) {
