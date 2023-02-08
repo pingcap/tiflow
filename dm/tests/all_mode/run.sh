@@ -552,7 +552,7 @@ function run() {
 	run_sql_source1 "create table all_mode.db_error (c int primary key);"
 	run_dm_ctl_with_retry $WORK_DIR "127.0.0.1:$MASTER_PORT" \
 		"query-status $ILLEGAL_CHAR_NAME" \
-		"Error 1049: Unknown database" 1
+		"Error 1049 (42000): Unknown database" 1
 
 	# stop task, task state should be cleaned
 	run_dm_ctl $WORK_DIR "127.0.0.1:$MASTER_PORT" \
