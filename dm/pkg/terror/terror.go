@@ -204,7 +204,7 @@ func (e *Error) Workaround() string {
 	return e.workaround
 }
 
-// ErrorWithoutWorkaround returns err msg without workaround, in some place like cloud we want display it separately
+// ErrorWithoutWorkaround returns err msg without workaround, in some place like cloud we want display it separately.
 func (e *Error) ErrorWithoutWorkaround() string {
 	str := fmt.Sprintf(errBaseFormat, e.code, e.class, e.scope, e.level)
 	if e.getMsg() != "" {
