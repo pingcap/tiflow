@@ -45,8 +45,7 @@ const (
 	// pageBytes is the alignment for flushing records to the backing Writer.
 	// It should be a multiple of the minimum sector size so that log can safely
 	// distinguish between torn writes and ordinary data corruption.
-	pageBytes        = 8 * redo.MinSectorSize
-	defaultS3Timeout = 15 * time.Second
+	pageBytes = 8 * redo.MinSectorSize
 )
 
 var (
@@ -298,7 +297,9 @@ func (w *Writer) Close() error {
 	common.RedoWriteBytesGauge.
 		DeleteLabelValues(w.cfg.ChangeFeedID.Namespace, w.cfg.ChangeFeedID.ID)
 
-	return w.close()
+	ctx, cancel := context.WithTimeout(context.Background(), redo.CloseTimeout)
+	defer cancel()
+	return w.close(ctx)
 }
 
 // IsRunning implement IsRunning interface
@@ -310,7 +311,7 @@ func (w *Writer) isGCRunning() bool {
 	return w.gcRunning.Load()
 }
 
-func (w *Writer) close() error {
+func (w *Writer) close(ctx context.Context) error {
 	if w.file == nil {
 		return nil
 	}
@@ -358,9 +359,6 @@ func (w *Writer) close() error {
 	// We only write content to S3 before closing the local file.
 	// By this way, we no longer need renaming object in S3.
 	if w.cfg.UseExternalStorage {
-		ctx, cancel := context.WithTimeout(context.Background(), defaultS3Timeout)
-		defer cancel()
-
 		err = w.writeToS3(ctx, w.ongoingFilePath)
 		if err != nil {
 			w.file.Close()
@@ -448,7 +446,9 @@ func (w *Writer) newPageWriter() error {
 }
 
 func (w *Writer) rotate() error {
-	if err := w.close(); err != nil {
+	ctx, cancel := context.WithTimeout(context.Background(), redo.DefaultTimeout)
+	defer cancel()
+	if err := w.close(ctx); err != nil {
 		return err
 	}
 	return w.openNew()
