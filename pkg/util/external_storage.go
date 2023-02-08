@@ -185,29 +185,30 @@ func (s *extStorageWithTimeout) Rename(
 
 // IsNotExistInExtStorage checks if the error is caused by the file not exist in external storage.
 func IsNotExistInExtStorage(err error) bool {
-	if err != nil {
-		if os.IsNotExist(errors.Cause(err)) {
+	if err == nil {
+		return false
+	}
+
+	if os.IsNotExist(errors.Cause(err)) {
+		return true
+	}
+
+	if aerr, ok := errors.Cause(err).(awserr.Error); ok { // nolint:errorlint
+		switch aerr.Code() {
+		case s3.ErrCodeNoSuchBucket, s3.ErrCodeNoSuchKey, "NotFound":
 			return true
 		}
+	}
 
-		if aerr, ok := errors.Cause(err).(awserr.Error); ok { // nolint:errorlint
-			switch aerr.Code() {
-			case s3.ErrCodeNoSuchBucket, s3.ErrCodeNoSuchKey, "NotFound":
-				return true
-			}
-		}
+	if errors.Cause(err) == gcsStorage.ErrObjectNotExist { // nolint:errorlint
+		return true
+	}
 
-		if errors.Cause(err) == gcsStorage.ErrObjectNotExist { // nolint:errorlint
+	var errResp *azblob.StorageError
+	if internalErr, ok := err.(*azblob.InternalError); ok && internalErr.As(&errResp) {
+		if errResp.ErrorCode == azblob.StorageErrorCodeBlobNotFound {
 			return true
 		}
-
-		var errResp *azblob.StorageError
-		if internalErr, ok := err.(*azblob.InternalError); ok && internalErr.As(&errResp) {
-			if errResp.ErrorCode == azblob.StorageErrorCodeBlobNotFound {
-				return true
-			}
-		}
-
 	}
 	return false
 }
