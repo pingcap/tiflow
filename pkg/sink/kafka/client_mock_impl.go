@@ -46,6 +46,4 @@ func (c *ClientMockImpl) MetricRegistry() metrics.Registry {
 }
 
 // Close closes the client
-func (c *ClientMockImpl) Close() error {
-	return nil
-}
+func (c *ClientMockImpl) Close() {}

@@ -182,9 +182,7 @@ func (k *kafkaGoClient) MetricRegistry() metrics.Registry {
 }
 
 // Close closes the client
-func (k *kafkaGoClient) Close() error {
-	return nil
-}
+func (k *kafkaGoClient) Close() {}
 
 type syncWriter struct {
 	w *kafka.Writer

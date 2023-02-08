@@ -57,10 +57,7 @@ func NewKafkaDDLSink(
 	// otherwise the adminClient will never be closed and lead to a goroutine leak.
 	defer func() {
 		if err != nil {
-			if closeErr := adminClient.Close(); closeErr != nil {
-				log.Error("Close admin client failed in kafka "+
-					"DDL sink", zap.Error(closeErr))
-			}
+			adminClient.Close()
 		}
 	}()
 
@@ -77,6 +74,11 @@ func NewKafkaDDLSink(
 	if err != nil {
 		return nil, cerror.WrapError(cerror.ErrKafkaNewProducer, err)
 	}
+	defer func() {
+		if err != nil {
+			client.Close()
+		}
+	}()
 
 	start := time.Now()
 	log.Info("Try to create a DDL sink producer",

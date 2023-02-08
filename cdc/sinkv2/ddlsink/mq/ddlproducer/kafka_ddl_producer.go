@@ -60,24 +60,6 @@ func NewKafkaDDLProducer(ctx context.Context, client pkafka.Client,
 
 	syncProducer, err := client.SyncProducer()
 	if err != nil {
-		// Close the client to prevent the goroutine leak.
-		// Because it may be a long time to close the client,
-		// so close it asynchronously.
-		go func() {
-			err := client.Close()
-			if err != nil {
-				log.Error("Close sarama client with error in kafka "+
-					"DDL producer", zap.Error(err),
-					zap.String("namespace", changefeedID.Namespace),
-					zap.String("changefeed", changefeedID.ID))
-			}
-			if err := adminClient.Close(); err != nil {
-				log.Error("Close sarama admin client with error in kafka "+
-					"DDL producer", zap.Error(err),
-					zap.String("namespace", changefeedID.Namespace),
-					zap.String("changefeed", changefeedID.ID))
-			}
-		}()
 		return nil, cerror.WrapError(cerror.ErrKafkaNewProducer, err)
 	}
 	collector := collector.New(changefeedID, util.RoleOwner,

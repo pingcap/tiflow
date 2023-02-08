@@ -36,7 +36,7 @@ type Client interface {
 	// MetricRegistry returns the kafka client metric registry
 	MetricRegistry() metrics.Registry
 	// Close closes the client
-	Close() error
+	Close()
 }
 
 // SyncProducer is the kafka sync producer
@@ -116,8 +116,13 @@ func (c *saramaKafkaClient) MetricRegistry() metrics.Registry {
 	return c.client.Config().MetricRegistry
 }
 
-func (c *saramaKafkaClient) Close() error {
-	return c.client.Close()
+func (c *saramaKafkaClient) Close() {
+	// Close the client to prevent the goroutine leak.
+	// Because it may be a long time to close the client,
+	// so close it asynchronously.
+	go func() {
+		c.client.Close()
+	}()
 }
 
 type saramaSyncProducer struct {
