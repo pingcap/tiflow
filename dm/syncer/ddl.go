@@ -399,8 +399,7 @@ func (ddl *DDLWorker) HandleQueryEvent(ev *replication.QueryEvent, ec eventConte
 
 func (ddl *DDLWorker) handleSkippedDDL(ec *eventContext) error {
 	// skipped ddl includes:
-	// - ddl cannot be parsed and should be skipped, such as create function
-	// - ddl can be parsed but dm don't handle, such as analyze table
+	// - ddls that dm don't handle, such as analyze table(can be parsed), create function(cannot be parsed)
 	// - ddls related to db/table which is filtered
 	// for those ddls we still flush job like non-skipped ddls, so we can set global checkpoint.
 	// then checkpoint can match master position if skipped ddl is the last binlog in source db
