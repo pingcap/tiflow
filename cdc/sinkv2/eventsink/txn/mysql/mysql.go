@@ -330,7 +330,7 @@ func (s *mysqlBackend) groupRowsByType(
 				updateRow = append(
 					updateRow,
 					convert2RowChanges(row, tableInfo, sqlmodel.RowChangeUpdate))
-				if len(updateRow) >= s.cfg.MaxTxnRow {
+				if len(updateRow) >= s.cfg.MaxMultiUpdateRow {
 					updateRows = append(updateRows, updateRow)
 					updateRow = make([]*sqlmodel.RowChange, 0, preAllocateSize)
 				}
@@ -384,7 +384,7 @@ func (s *mysqlBackend) batchSingleTxnDmls(
 	// handle update
 	if len(updateRows) > 0 {
 		for _, rows := range updateRows {
-			sql, value := sqlmodel.GenUpdateSQL(rows...)
+			sql, value := sqlmodel.GenUpdateSQLFast(rows...)
 			sqls = append(sqls, sql)
 			values = append(values, value)
 		}
