@@ -33,14 +33,14 @@ import (
 	"go.uber.org/zap"
 )
 
-type kafkaGoClient struct {
+type factory struct {
 	transport *kafka.Transport
 	client    *kafka.Client
 	options   *pkafka.Options
 }
 
-// NewKafkaGoClient constructs a Client with kafka go.
-func NewKafkaGoClient(ctx context.Context, options *pkafka.Options) (pkafka.Factory, error) {
+// NewFactory returns a factory implemented based on kafka-go
+func NewFactory(ctx context.Context, options *pkafka.Options) (pkafka.Factory, error) {
 	captureAddr := contextutil.CaptureAddrFromCtx(ctx)
 	changefeedID := contextutil.ChangefeedIDFromCtx(ctx)
 	var role string
@@ -73,7 +73,7 @@ func NewKafkaGoClient(ctx context.Context, options *pkafka.Options) (pkafka.Fact
 		Timeout:   10 * time.Second,
 		Transport: transport,
 	}
-	return &kafkaGoClient{
+	return &factory{
 		transport: transport,
 		client:    client,
 		options:   options,
@@ -123,7 +123,7 @@ func completeSASLConfig(o *pkafka.Options) (sasl.Mechanism, error) {
 	return nil, nil
 }
 
-func (k *kafkaGoClient) createWriter() *kafka.Writer {
+func (k *factory) createWriter() *kafka.Writer {
 	w := &kafka.Writer{
 		Addr:         kafka.TCP(k.options.BrokerEndpoints...),
 		Balancer:     newManualPartitioner(),
@@ -155,13 +155,13 @@ func (k *kafkaGoClient) createWriter() *kafka.Writer {
 }
 
 // SyncProducer creates a sync producer to writer message to kafka
-func (k *kafkaGoClient) SyncProducer() (pkafka.SyncProducer, error) {
+func (k *factory) SyncProducer() (pkafka.SyncProducer, error) {
 	w := k.createWriter()
 	return &syncWriter{w: w}, nil
 }
 
 // AsyncProducer creates an async producer to writer message to kafka
-func (k *kafkaGoClient) AsyncProducer(changefeedID model.ChangeFeedID,
+func (k *factory) AsyncProducer(changefeedID model.ChangeFeedID,
 	closedChan chan struct{},
 	failpointCh chan error,
 ) (pkafka.AsyncProducer, error) {
@@ -177,12 +177,12 @@ func (k *kafkaGoClient) AsyncProducer(changefeedID model.ChangeFeedID,
 }
 
 // MetricRegistry implement the MetricsCollector interface
-func (k *kafkaGoClient) MetricRegistry() metrics.Registry {
+func (k *factory) MetricRegistry() metrics.Registry {
 	return nil
 }
 
 // MetricsCollector returns the kafka metrics collector
-func (k *kafkaGoClient) MetricsCollector(
+func (k *factory) MetricsCollector(
 	changefeedID model.ChangeFeedID,
 	role util.Role,
 	adminClient pkafka.ClusterAdminClient,
@@ -191,7 +191,7 @@ func (k *kafkaGoClient) MetricsCollector(
 }
 
 // Close closes the client
-func (k *kafkaGoClient) Close() error {
+func (k *factory) Close() error {
 	return nil
 }
 
