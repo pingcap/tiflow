@@ -1078,7 +1078,14 @@ func (s *Syncer) handleJob(job *job) (added2Queue bool, err error) {
 		s.isTransactionEnd = true
 		return
 	case skip:
-		s.saveGlobalPoint(job.location)
+		if job.eventHeader.EventType == replication.QUERY_EVENT {
+			// skipped ddl includes:
+			// - ddls that dm don't handle, such as analyze table(can be parsed), create function(cannot be parsed)
+			// - ddls related to db/table which is filtered
+			// for those ddls we record its location, so checkpoint can match master position if skipped ddl
+			// is the last binlog in source db
+			s.saveGlobalPoint(job.location)
+		}
 		s.updateReplicationJobTS(job, skipJobIdx)
 		return
 	}
