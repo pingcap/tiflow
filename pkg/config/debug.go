@@ -20,18 +20,7 @@ import (
 
 // DebugConfig represents config for ticdc unexposed feature configurations
 type DebugConfig struct {
-	TableActor *TableActorConfig `toml:"table-actor" json:"table-actor"`
-
-	// EnablePullBasedSink enables pull-based sink, true by default.
-	// DEPRECATED: this option will be removed in the future.
-	// We will always use pull-based sink.
-	EnablePullBasedSink bool `toml:"enable-pull-based-sink" json:"enable-pull-based-sink"`
-
-	// EnableDBSorter enables db sorter. The default value is true.
-	// DEPRECATED: this option will be removed in the future.
-	// We will always use db sorter.
-	EnableDBSorter bool      `toml:"enable-db-sorter" json:"enable-db-sorter"`
-	DB             *DBConfig `toml:"db" json:"db"`
+	DB *DBConfig `toml:"db" json:"db"`
 
 	Messages *MessagesConfig `toml:"messages" json:"messages"`
 
@@ -57,17 +46,12 @@ func (c *DebugConfig) ValidateAndAdjust() error {
 	if err := c.Scheduler.ValidateAndAdjust(); err != nil {
 		return errors.Trace(err)
 	}
-	if c.EnablePullBasedSink {
-		if !c.EnableDBSorter {
-			return cerrors.ErrInvalidPullBasedSinkConfig.GenWithStackByArgs(
-				"enabling pull-based sinks requires use of the DB sorter," +
-					" you can set `debug.enable-db-sorter` to be true")
-		}
-		if !c.EnableNewSink {
-			return cerrors.ErrInvalidPullBasedSinkConfig.GenWithStackByArgs(
-				"enabling pull-based sinks requires use of the new sink," +
-					" you can set `debug.enable-new-sink` to be true")
-		}
+
+	// FIXME(hi-rustin): We should remove this check after the old sink is removed.
+	if !c.EnableNewSink {
+		return cerrors.ErrInvalidPullBasedSinkConfig.GenWithStackByArgs(
+			"enabling pull-based sinks requires use of the new sink," +
+				" you can set `debug.enable-new-sink` to be true")
 	}
 
 	if c.EnableKafkaSinkV2 {
