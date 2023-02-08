@@ -19,7 +19,6 @@ import (
 	"flag"
 	"fmt"
 	"net/http"
-	_ "net/http/pprof"
 	"net/url"
 	"os"
 	"os/signal"
@@ -282,7 +281,8 @@ func newConsumer(ctx context.Context) (*consumer, error) {
 	}
 
 	errCh := make(chan error, 1)
-	stdCtx := contextutil.PutChangefeedIDInCtx(ctx, model.DefaultChangeFeedID(defaultChangefeedName))
+	stdCtx := contextutil.PutChangefeedIDInCtx(ctx,
+		model.DefaultChangeFeedID(defaultChangefeedName))
 	factory, err := factory.New(
 		stdCtx,
 		downstreamURIStr,
@@ -585,7 +585,12 @@ func (g *fakeTableIDGenerator) generateFakeTableID(schema, table string, partiti
 
 func main() {
 	go func() {
-		if err := http.ListenAndServe(":6060", nil); err != nil {
+		server := &http.Server{
+			Addr:              ":6060",
+			ReadHeaderTimeout: 5 * time.Second,
+		}
+
+		if err := server.ListenAndServe(); err != nil {
 			log.Fatal("http pprof", zap.Error(err))
 		}
 	}()
