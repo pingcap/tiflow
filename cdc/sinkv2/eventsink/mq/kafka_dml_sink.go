@@ -36,7 +36,7 @@ func NewKafkaDMLSink(
 	replicaConfig *config.ReplicaConfig,
 	errCh chan error,
 	adminClientCreator pkafka.ClusterAdminClientCreator,
-	clientCreator pkafka.ClientCreator,
+	clientCreator pkafka.FactoryCreator,
 	producerCreator dmlproducer.Factory,
 ) (_ *dmlSink, err error) {
 	topic, err := util.GetTopic(sinkURI)

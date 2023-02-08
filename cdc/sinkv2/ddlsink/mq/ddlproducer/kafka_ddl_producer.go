@@ -38,7 +38,7 @@ type kafkaDDLProducer struct {
 	id model.ChangeFeedID
 	// We hold the client to make close operation faster.
 	// Please see the comment of Close().
-	client kafka.Client
+	client kafka.Factory
 	// syncProducer is used to send messages to kafka synchronously.
 	syncProducer kafka.SyncProducer
 	// metricsCollector is used to report metrics.
@@ -52,7 +52,7 @@ type kafkaDDLProducer struct {
 }
 
 // NewKafkaDDLProducer creates a new kafka producer for replicating DDL.
-func NewKafkaDDLProducer(ctx context.Context, client kafka.Client,
+func NewKafkaDDLProducer(ctx context.Context, client kafka.Factory,
 	adminClient kafka.ClusterAdminClient,
 ) (DDLProducer, error) {
 	changefeedID := contextutil.ChangefeedIDFromCtx(ctx)
@@ -155,7 +155,7 @@ func (k *kafkaDDLProducer) Close() {
 	k.closed = true
 	// We need to close it asynchronously. Otherwise, we might get stuck
 	// with an unhealthy(i.e. Network jitter, isolation) state of Kafka.
-	// Client has a background thread to fetch and update the metadata.
+	// Factory has a background thread to fetch and update the metadata.
 	// If we close the client synchronously, we might get stuck.
 	// Safety:
 	// * If the kafka cluster is running well, it will be closed as soon as possible.

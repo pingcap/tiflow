@@ -67,7 +67,7 @@ func New(ctx context.Context,
 		s.sinkType = sink.TxnSink
 	case sink.KafkaScheme, sink.KafkaSSLScheme:
 		mqs, err := mq.NewKafkaDMLSink(ctx, sinkURI, cfg, errCh,
-			kafka.NewSaramaAdminClient, kafka.NewSaramaClient, dmlproducer.NewKafkaDMLProducer)
+			kafka.NewSaramaAdminClient, kafka.NewSaramaFactory, dmlproducer.NewKafkaDMLProducer)
 		if err != nil {
 			return nil, err
 		}

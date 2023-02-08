@@ -426,7 +426,7 @@ func NewKafkaSink(ctx context.Context, sinkURI *url.URL,
 		return nil, cerror.WrapError(cerror.ErrKafkaInvalidConfig, err)
 	}
 
-	client, err := kafka.NewClientImpl(ctx, options)
+	client, err := kafka.NewFactoryImpl(ctx, options)
 	if err != nil {
 		return nil, cerror.WrapError(cerror.ErrKafkaNewProducer, err)
 	}

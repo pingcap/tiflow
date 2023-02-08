@@ -19,21 +19,21 @@ import (
 	"github.com/rcrowley/go-metrics"
 )
 
-// ClientMockImpl is a mock implementation of Client interface.
-type ClientMockImpl struct{}
+// MockFactory is a mock implementation of Factory interface.
+type MockFactory struct{}
 
-// NewClientMockImpl creates a new ClientMockImpl instance.
-func NewClientMockImpl() *ClientMockImpl {
-	return &ClientMockImpl{}
+// NewMockFactoryImpl creates a new MockFactory instance.
+func NewMockFactoryImpl() *MockFactory {
+	return &MockFactory{}
 }
 
 // SyncProducer creates a sync producer
-func (c *ClientMockImpl) SyncProducer() (SyncProducer, error) {
+func (c *MockFactory) SyncProducer() (SyncProducer, error) {
 	return &saramaSyncProducer{}, nil
 }
 
 // AsyncProducer creates an async producer
-func (c *ClientMockImpl) AsyncProducer(
+func (c *MockFactory) AsyncProducer(
 	changefeedID model.ChangeFeedID,
 	closedChan chan struct{},
 	failpointCh chan error,
@@ -42,12 +42,12 @@ func (c *ClientMockImpl) AsyncProducer(
 }
 
 // MetricRegistry implement the MetricsCollector interface
-func (c *ClientMockImpl) MetricRegistry() metrics.Registry {
+func (c *MockFactory) MetricRegistry() metrics.Registry {
 	return nil
 }
 
 // MetricsCollector returns the metric collector
-func (c *ClientMockImpl) MetricsCollector(
+func (c *MockFactory) MetricsCollector(
 	changefeedID model.ChangeFeedID,
 	role util.Role,
 	adminClient ClusterAdminClient,
@@ -56,6 +56,6 @@ func (c *ClientMockImpl) MetricsCollector(
 }
 
 // Close closes the client
-func (c *ClientMockImpl) Close() error {
+func (c *MockFactory) Close() error {
 	return nil
 }

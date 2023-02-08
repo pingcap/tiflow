@@ -36,7 +36,7 @@ func NewKafkaDDLSink(
 	sinkURI *url.URL,
 	replicaConfig *config.ReplicaConfig,
 	adminClientCreator pkafka.ClusterAdminClientCreator,
-	clientCreator pkafka.ClientCreator,
+	clientCreator pkafka.FactoryCreator,
 	producerCreator ddlproducer.Factory,
 ) (_ *ddlSink, err error) {
 	topic, err := util.GetTopic(sinkURI)

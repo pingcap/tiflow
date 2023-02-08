@@ -73,7 +73,7 @@ func TestNewSaramaProducer(t *testing.T) {
 	}()
 
 	ctx = contextutil.PutRoleInCtx(ctx, util.RoleTester)
-	client, err := NewClientImpl(ctx, options)
+	client, err := NewFactoryImpl(ctx, options)
 	require.Nil(t, err)
 	adminClient, err := NewAdminClientImpl(ctx, options)
 	require.Nil(t, err)
@@ -395,7 +395,7 @@ func TestProducerSendMessageFailed(t *testing.T) {
 	require.Equal(t, 1, saramaConfig.Producer.Flush.MaxMessages)
 	require.Equal(t, 8, saramaConfig.Producer.MaxMessageBytes)
 	require.Nil(t, err)
-	client, err := NewClientImpl(ctx, options)
+	client, err := NewFactoryImpl(ctx, options)
 	require.Nil(t, err)
 	adminClient, err := NewAdminClientImpl(ctx, options)
 	require.Nil(t, err)
@@ -475,7 +475,7 @@ func TestProducerDoubleClose(t *testing.T) {
 
 	errCh := make(chan error, 1)
 	ctx = contextutil.PutRoleInCtx(ctx, util.RoleTester)
-	client, err := NewClientImpl(ctx, options)
+	client, err := NewFactoryImpl(ctx, options)
 	require.Nil(t, err)
 	adminClient, err := NewAdminClientImpl(ctx, options)
 	require.Nil(t, err)

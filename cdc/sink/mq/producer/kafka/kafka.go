@@ -50,7 +50,7 @@ type producer struct {
 	clientLock sync.RWMutex
 	// This admin mainly used by `metricsMonitor` to fetch broker info.
 	admin         kafka.ClusterAdminClient
-	client        kafka.Client
+	client        kafka.Factory
 	asyncProducer kafka.AsyncProducer
 	syncProducer  kafka.SyncProducer
 
@@ -272,13 +272,13 @@ func (k *producer) run(ctx context.Context) error {
 // NewAdminClientImpl specifies the build method for the admin client.
 var NewAdminClientImpl kafka.ClusterAdminClientCreator = kafka.NewSaramaAdminClient
 
-// NewClientImpl specifies the build method for the  client.
-var NewClientImpl kafka.ClientCreator = kafka.NewSaramaClient
+// NewFactoryImpl specifies the build method for the  client.
+var NewFactoryImpl kafka.FactoryCreator = kafka.NewSaramaFactory
 
 // NewProducer creates a kafka producer
 func NewProducer(
 	ctx context.Context,
-	client kafka.Client,
+	client kafka.Factory,
 	admin kafka.ClusterAdminClient,
 	options *kafka.Options,
 	errCh chan error,

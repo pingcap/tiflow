@@ -26,8 +26,8 @@ import (
 	"go.uber.org/zap"
 )
 
-// Client is a generic Kafka client.
-type Client interface {
+// Factory is used to produce all kafka components.
+type Factory interface {
 	// SyncProducer creates a sync producer to writer message to kafka
 	SyncProducer() (SyncProducer, error)
 	// AsyncProducer creates an async producer to writer message to kafka
@@ -43,7 +43,7 @@ type Client interface {
 		role util.Role,
 		adminClient ClusterAdminClient,
 	) MetricsCollector
-	// Close closes the client
+	// Close the factory, all components created by the factory should not be accessed.
 	Close() error
 }
 
@@ -89,53 +89,6 @@ type AsyncProducer interface {
 	// and run tha attached callback. the caller should call this
 	// method in a background goroutine
 	AsyncRunCallback(ctx context.Context) error
-}
-
-type saramaKafkaClient struct {
-	client sarama.Client
-}
-
-func (c *saramaKafkaClient) SyncProducer() (SyncProducer, error) {
-	p, err := sarama.NewSyncProducerFromClient(c.client)
-	if err != nil {
-		return nil, err
-	}
-	return &saramaSyncProducer{producer: p}, nil
-}
-
-func (c *saramaKafkaClient) AsyncProducer(
-	changefeedID model.ChangeFeedID,
-	closedChan chan struct{},
-	failpointCh chan error,
-) (AsyncProducer, error) {
-	p, err := sarama.NewAsyncProducerFromClient(c.client)
-	if err != nil {
-		return nil, err
-	}
-	return &saramaAsyncProducer{
-		producer:     p,
-		changefeedID: changefeedID,
-		closedChan:   closedChan,
-		failpointCh:  failpointCh,
-	}, nil
-}
-
-// MetricRegistry return the metrics registry
-func (c *saramaKafkaClient) MetricRegistry() metrics.Registry {
-	return c.client.Config().MetricRegistry
-}
-
-func (c *saramaKafkaClient) MetricsCollector(
-	changefeedID model.ChangeFeedID,
-	role util.Role,
-	adminClient ClusterAdminClient,
-) MetricsCollector {
-	return NewSaramaMetricsCollector(
-		changefeedID, role, adminClient, c.client.Config().MetricRegistry)
-}
-
-func (c *saramaKafkaClient) Close() error {
-	return c.client.Close()
 }
 
 type saramaSyncProducer struct {
@@ -250,23 +203,25 @@ func (p *saramaAsyncProducer) AsyncSend(ctx context.Context,
 	return nil
 }
 
-// ClientCreator defines the type of client crater.
-type ClientCreator func(context.Context, *Options) (Client, error)
+// FactoryCreator defines the type of client crater.
+type FactoryCreator func(context.Context, *Options) (Factory, error)
 
-// NewSaramaClient constructs a Client with sarama.
-func NewSaramaClient(ctx context.Context, o *Options) (Client, error) {
+// NewSaramaFactory constructs a Factory with sarama implementation.
+func NewSaramaFactory(ctx context.Context, o *Options) (Factory, error) {
 	saramaConfig, err := NewSaramaConfig(ctx, o)
 	if err != nil {
 		return nil, errors.Trace(err)
 	}
 	c, err := sarama.NewClient(o.BrokerEndpoints, saramaConfig)
 	if err != nil {
-		return nil, err
+		return nil, errors.Trace(err)
 	}
-	return &saramaKafkaClient{client: c}, nil
+	return &saramaFactory{
+		client: c,
+	}, nil
 }
 
-// NewMockClient constructs a Client with mock implementation.
-func NewMockClient(_ context.Context, _ *Options) (Client, error) {
-	return NewClientMockImpl(), nil
+// NewMockFactory constructs a Factory with mock implementation.
+func NewMockFactory(_ context.Context, _ *Options) (Factory, error) {
+	return NewMockFactoryImpl(), nil
 }
