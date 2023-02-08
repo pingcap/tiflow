@@ -39,7 +39,7 @@ type kafkaDDLProducer struct {
 	// We hold the client to make close operation faster.
 	// Please see the comment of Close().
 	client kafka.Client
-	// asyncProducer is used to send messages to kafka synchronously.
+	// syncProducer is used to send messages to kafka synchronously.
 	syncProducer kafka.SyncProducer
 	// metricsCollector is used to report metrics.
 	metricsCollector kafka.MetricsCollector
