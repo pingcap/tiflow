@@ -62,6 +62,7 @@ func createManagerWithMemEngine(
 		nil, sm,
 		errChan, prometheus.NewCounter(prometheus.CounterOpts{}))
 	require.NoError(t, err)
+	require.NotNil(t, errChan)
 	return manager, sortEngine
 }
 
