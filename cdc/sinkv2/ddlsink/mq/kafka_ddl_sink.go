@@ -21,12 +21,11 @@ import (
 	"github.com/pingcap/errors"
 	"github.com/pingcap/log"
 	"github.com/pingcap/tiflow/cdc/sink/mq/dispatcher"
-	"github.com/pingcap/tiflow/cdc/sink/mq/producer/kafka"
 	"github.com/pingcap/tiflow/cdc/sinkv2/ddlsink/mq/ddlproducer"
 	"github.com/pingcap/tiflow/cdc/sinkv2/util"
 	"github.com/pingcap/tiflow/pkg/config"
 	cerror "github.com/pingcap/tiflow/pkg/errors"
-	pkafka "github.com/pingcap/tiflow/pkg/sink/kafka"
+	"github.com/pingcap/tiflow/pkg/sink/kafka"
 	"go.uber.org/zap"
 )
 
@@ -35,8 +34,8 @@ func NewKafkaDDLSink(
 	ctx context.Context,
 	sinkURI *url.URL,
 	replicaConfig *config.ReplicaConfig,
-	adminClientCreator pkafka.ClusterAdminClientCreator,
-	factoryCreator pkafka.FactoryCreator,
+	adminClientCreator kafka.ClusterAdminClientCreator,
+	factoryCreator kafka.FactoryCreator,
 	producerCreator ddlproducer.Factory,
 ) (_ *ddlSink, err error) {
 	topic, err := util.GetTopic(sinkURI)
@@ -44,7 +43,7 @@ func NewKafkaDDLSink(
 		return nil, errors.Trace(err)
 	}
 
-	options := pkafka.NewOptions()
+	options := kafka.NewOptions()
 	if err := options.Apply(sinkURI); err != nil {
 		return nil, cerror.WrapError(cerror.ErrKafkaInvalidConfig, err)
 	}
