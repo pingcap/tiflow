@@ -58,7 +58,7 @@ func TestReaderRead(t *testing.T) {
 	)
 	require.Nil(t, err)
 	log := &model.RedoLog{
-		RedoRow: &model.RedoRowChangedEvent{Row: &model.RowChangedEvent{CommitTs: 1123}},
+		RedoRow: &model.RowChangedEvent{Row: &model.RowChangedEvent{CommitTs: 1123}},
 	}
 	data, err := log.MarshalMsg(nil)
 	require.Nil(t, err)
@@ -110,14 +110,14 @@ func TestReaderOpenSelectedFiles(t *testing.T) {
 	}))
 	require.Nil(t, err)
 	log := &model.RedoLog{
-		RedoRow: &model.RedoRowChangedEvent{Row: &model.RowChangedEvent{CommitTs: 11}},
+		RedoRow: &model.RowChangedEvent{Row: &model.RowChangedEvent{CommitTs: 11}},
 	}
 	data, err := log.MarshalMsg(nil)
 	require.Nil(t, err)
 	_, err = w.Write(data)
 	require.Nil(t, err)
 	log = &model.RedoLog{
-		RedoRow: &model.RedoRowChangedEvent{Row: &model.RowChangedEvent{CommitTs: 10}},
+		RedoRow: &model.RowChangedEvent{Row: &model.RowChangedEvent{CommitTs: 10}},
 	}
 	data, err = log.MarshalMsg(nil)
 	require.Nil(t, err)

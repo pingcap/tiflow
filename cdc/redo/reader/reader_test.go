@@ -91,7 +91,7 @@ func TestLogReaderResetReader(t *testing.T) {
 	}))
 	require.Nil(t, err)
 	log := &model.RedoLog{
-		RedoRow: &model.RedoRowChangedEvent{Row: &model.RowChangedEvent{CommitTs: 11}},
+		RedoRow: &model.RowChangedEvent{Row: &model.RowChangedEvent{CommitTs: 11}},
 	}
 	data, err := log.MarshalMsg(nil)
 	require.Nil(t, err)
@@ -112,7 +112,7 @@ func TestLogReaderResetReader(t *testing.T) {
 	}))
 	require.Nil(t, err)
 	log = &model.RedoLog{
-		RedoRow: &model.RedoRowChangedEvent{Row: &model.RowChangedEvent{CommitTs: 11}},
+		RedoRow: &model.RowChangedEvent{Row: &model.RowChangedEvent{CommitTs: 11}},
 	}
 	data, err = log.MarshalMsg(nil)
 	require.Nil(t, err)
@@ -348,7 +348,7 @@ func TestLogReaderReadNextLog(t *testing.T) {
 				maxNum: 3,
 			},
 			readerRet: &model.RedoLog{
-				RedoRow: &model.RedoRowChangedEvent{
+				RedoRow: &model.RowChangedEvent{
 					Row: &model.RowChangedEvent{
 						CommitTs: 15,
 						RowID:    1,
@@ -356,7 +356,7 @@ func TestLogReaderReadNextLog(t *testing.T) {
 				},
 			},
 			readerRet1: &model.RedoLog{
-				RedoRow: &model.RedoRowChangedEvent{
+				RedoRow: &model.RowChangedEvent{
 					Row: &model.RowChangedEvent{
 						CommitTs: 6,
 						RowID:    2,
@@ -371,7 +371,7 @@ func TestLogReaderReadNextLog(t *testing.T) {
 				maxNum: 3,
 			},
 			readerRet: &model.RedoLog{
-				RedoRow: &model.RedoRowChangedEvent{
+				RedoRow: &model.RowChangedEvent{
 					Row: &model.RowChangedEvent{
 						CommitTs: 5,
 						RowID:    1,
@@ -379,7 +379,7 @@ func TestLogReaderReadNextLog(t *testing.T) {
 				},
 			},
 			readerRet1: &model.RedoLog{
-				RedoRow: &model.RedoRowChangedEvent{
+				RedoRow: &model.RowChangedEvent{
 					Row: &model.RowChangedEvent{
 						CommitTs: 6,
 						RowID:    2,
@@ -395,7 +395,7 @@ func TestLogReaderReadNextLog(t *testing.T) {
 				maxNum: 3,
 			},
 			readerRet: &model.RedoLog{
-				RedoRow: &model.RedoRowChangedEvent{
+				RedoRow: &model.RowChangedEvent{
 					Row: &model.RowChangedEvent{
 						CommitTs: 2,
 						RowID:    1,
@@ -403,7 +403,7 @@ func TestLogReaderReadNextLog(t *testing.T) {
 				},
 			},
 			readerRet1: &model.RedoLog{
-				RedoRow: &model.RedoRowChangedEvent{
+				RedoRow: &model.RowChangedEvent{
 					Row: &model.RowChangedEvent{
 						CommitTs: 6,
 						RowID:    2,
@@ -418,7 +418,7 @@ func TestLogReaderReadNextLog(t *testing.T) {
 				maxNum: 3,
 			},
 			readerRet: &model.RedoLog{
-				RedoRow: &model.RedoRowChangedEvent{
+				RedoRow: &model.RowChangedEvent{
 					Row: &model.RowChangedEvent{
 						CommitTs: 2,
 						StartTs:  2,
@@ -427,7 +427,7 @@ func TestLogReaderReadNextLog(t *testing.T) {
 				},
 			},
 			readerRet1: &model.RedoLog{
-				RedoRow: &model.RedoRowChangedEvent{
+				RedoRow: &model.RowChangedEvent{
 					Row: &model.RowChangedEvent{
 						CommitTs: 2,
 						StartTs:  1,
@@ -443,7 +443,7 @@ func TestLogReaderReadNextLog(t *testing.T) {
 				maxNum: 3,
 			},
 			readerRet: &model.RedoLog{
-				RedoRow: &model.RedoRowChangedEvent{
+				RedoRow: &model.RowChangedEvent{
 					Row: &model.RowChangedEvent{
 						CommitTs: 5,
 						RowID:    1,
@@ -451,7 +451,7 @@ func TestLogReaderReadNextLog(t *testing.T) {
 				},
 			},
 			readerRet1: &model.RedoLog{
-				RedoRow: &model.RedoRowChangedEvent{
+				RedoRow: &model.RowChangedEvent{
 					Row: &model.RowChangedEvent{
 						CommitTs: 6,
 						RowID:    2,
@@ -467,7 +467,7 @@ func TestLogReaderReadNextLog(t *testing.T) {
 				maxNum: 3,
 			},
 			readerRet: &model.RedoLog{
-				RedoRow: &model.RedoRowChangedEvent{
+				RedoRow: &model.RowChangedEvent{
 					Row: &model.RowChangedEvent{
 						CommitTs: 5,
 						RowID:    1,
@@ -475,7 +475,7 @@ func TestLogReaderReadNextLog(t *testing.T) {
 				},
 			},
 			readerRet1: &model.RedoLog{
-				RedoRow: &model.RedoRowChangedEvent{
+				RedoRow: &model.RowChangedEvent{
 					Row: &model.RowChangedEvent{
 						CommitTs: 6,
 						RowID:    2,
@@ -563,14 +563,14 @@ func TestLogReaderReadNexDDL(t *testing.T) {
 				maxNum: 3,
 			},
 			readerRet: &model.RedoLog{
-				RedoDDL: &model.RedoDDLEvent{
+				RedoDDL: &model.DDLEvent{
 					DDL: &model.DDLEvent{
 						CommitTs: 15,
 					},
 				},
 			},
 			readerRet1: &model.RedoLog{
-				RedoDDL: &model.RedoDDLEvent{
+				RedoDDL: &model.DDLEvent{
 					DDL: &model.DDLEvent{
 						CommitTs: 6,
 					},
@@ -584,14 +584,14 @@ func TestLogReaderReadNexDDL(t *testing.T) {
 				maxNum: 3,
 			},
 			readerRet: &model.RedoLog{
-				RedoDDL: &model.RedoDDLEvent{
+				RedoDDL: &model.DDLEvent{
 					DDL: &model.DDLEvent{
 						CommitTs: 5,
 					},
 				},
 			},
 			readerRet1: &model.RedoLog{
-				RedoDDL: &model.RedoDDLEvent{
+				RedoDDL: &model.DDLEvent{
 					DDL: &model.DDLEvent{
 						CommitTs: 6,
 					},
@@ -606,14 +606,14 @@ func TestLogReaderReadNexDDL(t *testing.T) {
 				maxNum: 3,
 			},
 			readerRet: &model.RedoLog{
-				RedoDDL: &model.RedoDDLEvent{
+				RedoDDL: &model.DDLEvent{
 					DDL: &model.DDLEvent{
 						CommitTs: 1,
 					},
 				},
 			},
 			readerRet1: &model.RedoLog{
-				RedoDDL: &model.RedoDDLEvent{
+				RedoDDL: &model.DDLEvent{
 					DDL: &model.DDLEvent{
 						CommitTs: 6,
 					},
@@ -627,14 +627,14 @@ func TestLogReaderReadNexDDL(t *testing.T) {
 				maxNum: 3,
 			},
 			readerRet: &model.RedoLog{
-				RedoDDL: &model.RedoDDLEvent{
+				RedoDDL: &model.DDLEvent{
 					DDL: &model.DDLEvent{
 						CommitTs: 5,
 					},
 				},
 			},
 			readerRet1: &model.RedoLog{
-				RedoDDL: &model.RedoDDLEvent{
+				RedoDDL: &model.DDLEvent{
 					DDL: &model.DDLEvent{
 						CommitTs: 6,
 					},
@@ -649,14 +649,14 @@ func TestLogReaderReadNexDDL(t *testing.T) {
 				maxNum: 3,
 			},
 			readerRet: &model.RedoLog{
-				RedoDDL: &model.RedoDDLEvent{
+				RedoDDL: &model.DDLEvent{
 					DDL: &model.DDLEvent{
 						CommitTs: 5,
 					},
 				},
 			},
 			readerRet1: &model.RedoLog{
-				RedoDDL: &model.RedoDDLEvent{
+				RedoDDL: &model.DDLEvent{
 					DDL: &model.DDLEvent{
 						CommitTs: 6,
 					},

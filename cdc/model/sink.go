@@ -232,20 +232,10 @@ const (
 )
 
 // RedoLog defines the persistent structure of redo log
-// since MsgPack do not support types that are defined in another package,
-// more info https://github.com/tinylib/msgp/issues/158, https://github.com/tinylib/msgp/issues/149
-// so define a RedoColumn, RedoDDLEvent instead of using the Column, DDLEvent
 type RedoLog struct {
-	RedoRow *RedoRowChangedEvent `msg:"row"`
-	RedoDDL *RedoDDLEvent        `msg:"ddl"`
-	Type    RedoLogType          `msg:"type"`
-}
-
-// RedoRowChangedEvent represents the DML event used in RedoLog
-type RedoRowChangedEvent struct {
-	Row        *RowChangedEvent `msg:"row"`
-	PreColumns []*RedoColumn    `msg:"pre-columns"`
-	Columns    []*RedoColumn    `msg:"columns"`
+	RedoRow *RowChangedEvent `msg:"row"`
+	RedoDDL *DDLEvent        `msg:"ddl"`
+	Type    RedoLogType      `msg:"type"`
 }
 
 // RowChangedEvent represents a row changed event
@@ -436,12 +426,6 @@ type Column struct {
 	ApproximateBytes int `json:"-"`
 }
 
-// RedoColumn stores Column change
-type RedoColumn struct {
-	Column *Column `msg:"column"`
-	Flag   uint64  `msg:"flag"`
-}
-
 // BuildTiDBTableInfo builds a TiDB TableInfo from given information.
 func BuildTiDBTableInfo(columns []*Column, indexColumns [][]int) *model.TableInfo {
 	ret := &model.TableInfo{}
@@ -593,12 +577,6 @@ type DDLEvent struct {
 	PreTableInfo *TableInfo       `msg:"-"`
 	Type         model.ActionType `msg:"-"`
 	Done         bool             `msg:"-"`
-}
-
-// RedoDDLEvent represents DDL event used in redo log persistent
-type RedoDDLEvent struct {
-	DDL  *DDLEvent `msg:"ddl"`
-	Type byte      `msg:"type"`
 }
 
 // FromJob fills the values with DDLEvent from DDL job

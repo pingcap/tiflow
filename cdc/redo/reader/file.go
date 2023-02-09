@@ -30,6 +30,7 @@ import (
 	"github.com/pingcap/log"
 	"github.com/pingcap/tidb/br/pkg/storage"
 	"github.com/pingcap/tiflow/cdc/model"
+	"github.com/pingcap/tiflow/cdc/model/codec"
 	"github.com/pingcap/tiflow/cdc/redo/writer"
 	cerror "github.com/pingcap/tiflow/pkg/errors"
 	"github.com/pingcap/tiflow/pkg/redo"
@@ -266,7 +267,7 @@ func writFile(ctx context.Context, dir, name string, h logHeap) error {
 
 	for h.Len() != 0 {
 		item := heap.Pop(&h).(*logWithIdx).data
-		data, err := item.MarshalMsg(nil)
+		data, err := codec.MarshalRedoLog(item, nil)
 		if err != nil {
 			return cerror.WrapError(cerror.ErrMarshalFailed, err)
 		}
@@ -398,7 +399,7 @@ func (r *reader) Read(redoLog *model.RedoLog) error {
 		return cerror.WrapError(cerror.ErrRedoFileOp, err)
 	}
 
-	_, err = redoLog.UnmarshalMsg(data[:recBytes])
+	redoLog, _, err = codec.UnmarshalRedoLog(data[:recBytes])
 	if err != nil {
 		if r.isTornEntry(data) {
 			// just return io.EOF, since if torn write it is the last redoLog entry
