@@ -99,10 +99,8 @@ func (d *ddlSink) WriteCheckpointTs(ctx context.Context,
 	return errors.Trace(err)
 }
 
-func (d *ddlSink) Close() error {
+func (d *ddlSink) Close() {
 	if d.statistics != nil {
 		d.statistics.Close()
 	}
-
-	return nil
 }
