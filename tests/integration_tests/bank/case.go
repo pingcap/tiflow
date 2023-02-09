@@ -255,7 +255,7 @@ func (s *bankTest) prepare(ctx context.Context, db *sql.DB, accounts, tableID, c
 
 func (*bankTest) verify(ctx context.Context, db *sql.DB, accounts, tableID int, tag string, endTs string) error {
 	return retry.Do(ctx,
-		func() error {
+		func() (err error) {
 			defer func() {
 				log.Error("bank test verify failed", zap.Error(err))
 			}()
