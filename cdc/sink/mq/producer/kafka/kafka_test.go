@@ -368,6 +368,7 @@ func TestProducerSendMessageFailed(t *testing.T) {
 	metadataResponse.AddTopicPartition(topic, 1, leader.BrokerID(), nil, nil, nil, sarama.ErrNoError)
 	// Response for `sarama.NewClient`
 	leader.Returns(metadataResponse)
+	leader.Returns(metadataResponse)
 
 	options := kafka.NewOptions()
 	// Because the sarama mock broker is not compatible with version larger than 1.0.0
@@ -452,6 +453,7 @@ func TestProducerDoubleClose(t *testing.T) {
 	metadataResponse.AddTopicPartition(topic, 0, leader.BrokerID(), nil, nil, nil, sarama.ErrNoError)
 	metadataResponse.AddTopicPartition(topic, 1, leader.BrokerID(), nil, nil, nil, sarama.ErrNoError)
 	// Response for `sarama.NewClient`
+	leader.Returns(metadataResponse)
 	leader.Returns(metadataResponse)
 
 	options := kafka.NewOptions()
@@ -724,7 +726,7 @@ func TestConfigurationCombinations(t *testing.T) {
 		require.Nil(t, err)
 
 		// producer's `MaxMessageBytes` = encoder's `MaxMessageBytes`.
-		require.Equal(t, encoderConfig.MaxMessageBytes, options.MaxMessages)
+		require.Equal(t, encoderConfig.MaxMessageBytes, options.MaxMessageBytes)
 
 		expected, err := strconv.Atoi(a.expectedMaxMessageBytes)
 		require.Nil(t, err)
