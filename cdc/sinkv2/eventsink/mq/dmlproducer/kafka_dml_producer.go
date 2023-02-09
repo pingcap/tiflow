@@ -171,20 +171,6 @@ func (k *kafkaDMLProducer) Close() {
 		// closed, `asyncProducer.Close()` would waste a mount of time to try flush all messages.
 		// To prevent the scenario mentioned above, close the client first.
 		start := time.Now()
-		if err := k.client.Close(); err != nil {
-			log.Error("Close sarama client with error in kafka "+
-				"DML producer", zap.Error(err),
-				zap.Duration("duration", time.Since(start)),
-				zap.String("namespace", k.id.Namespace),
-				zap.String("changefeed", k.id.ID))
-		} else {
-			log.Info("Sarama client closed in kafka "+
-				"DML producer", zap.Duration("duration", time.Since(start)),
-				zap.String("namespace", k.id.Namespace),
-				zap.String("changefeed", k.id.ID))
-		}
-
-		start = time.Now()
 		err := k.asyncProducer.Close()
 		if err != nil {
 			log.Error("Close async client with error in kafka "+

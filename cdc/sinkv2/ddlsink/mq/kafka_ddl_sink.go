@@ -20,6 +20,7 @@ import (
 
 	"github.com/pingcap/errors"
 	"github.com/pingcap/log"
+	"github.com/pingcap/tiflow/cdc/contextutil"
 	"github.com/pingcap/tiflow/cdc/sink/mq/dispatcher"
 	"github.com/pingcap/tiflow/cdc/sinkv2/ddlsink/mq/ddlproducer"
 	"github.com/pingcap/tiflow/cdc/sinkv2/util"
@@ -34,7 +35,6 @@ func NewKafkaDDLSink(
 	ctx context.Context,
 	sinkURI *url.URL,
 	replicaConfig *config.ReplicaConfig,
-	adminClientCreator kafka.ClusterAdminClientCreator,
 	factoryCreator kafka.FactoryCreator,
 	producerCreator ddlproducer.Factory,
 ) (_ *ddlSink, err error) {
@@ -48,15 +48,23 @@ func NewKafkaDDLSink(
 		return nil, cerror.WrapError(cerror.ErrKafkaInvalidConfig, err)
 	}
 
-	adminClient, err := adminClientCreator(ctx, options)
+	factory, err := factoryCreator(ctx, options)
 	if err != nil {
 		return nil, cerror.WrapError(cerror.ErrKafkaNewProducer, err)
 	}
+
+	adminClient, err := factory.AdminClient()
 	// We must close adminClient when this func return cause by an error
 	// otherwise the adminClient will never be closed and lead to a goroutine leak.
+	changefeed := contextutil.ChangefeedIDFromCtx(ctx)
 	defer func() {
 		if err != nil {
-			adminClient.Close()
+			if closeErr := adminClient.Close(); closeErr != nil {
+				log.Error("Close admin client failed in kafka DDL sink",
+					zap.String("namespace", changefeed.Namespace),
+					zap.String("changefeed", changefeed.ID),
+					zap.Error(closeErr))
+			}
 		}
 	}()
 
@@ -67,11 +75,6 @@ func NewKafkaDDLSink(
 	protocol, err := util.GetProtocol(replicaConfig.Sink.Protocol)
 	if err != nil {
 		return nil, errors.Trace(err)
-	}
-
-	factory, err := factoryCreator(ctx, options)
-	if err != nil {
-		return nil, cerror.WrapError(cerror.ErrKafkaNewProducer, err)
 	}
 
 	start := time.Now()
