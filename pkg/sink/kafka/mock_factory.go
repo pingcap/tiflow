@@ -28,8 +28,9 @@ type MockFactory struct {
 }
 
 // NewMockFactory constructs a Factory with mock implementation.
-func NewMockFactory(ctx context.Context, o *Options) (Factory, error) {
-	helper, err := NewSaramaFactory(ctx, o)
+func NewMockFactory(ctx context.Context,
+	o *Options, changefeedID model.ChangeFeedID) (Factory, error) {
+	helper, err := NewSaramaFactory(ctx, o, changefeedID)
 	if err != nil {
 		return nil, err
 	}
@@ -48,11 +49,10 @@ func (f *MockFactory) SyncProducer() (SyncProducer, error) {
 
 // AsyncProducer creates an async producer
 func (f *MockFactory) AsyncProducer(
-	changefeedID model.ChangeFeedID,
 	closedChan chan struct{},
 	failpointCh chan error,
 ) (AsyncProducer, error) {
-	return f.helper.AsyncProducer(changefeedID, closedChan, failpointCh)
+	return f.helper.AsyncProducer(closedChan, failpointCh)
 }
 
 // MetricRegistry implement the MetricsCollector interface
@@ -62,9 +62,8 @@ func (f *MockFactory) MetricRegistry() metrics.Registry {
 
 // MetricsCollector returns the metric collector
 func (f *MockFactory) MetricsCollector(
-	changefeedID model.ChangeFeedID,
 	role util.Role,
 	adminClient ClusterAdminClient,
 ) MetricsCollector {
-	return f.helper.MetricsCollector(changefeedID, role, adminClient)
+	return f.helper.MetricsCollector(role, adminClient)
 }

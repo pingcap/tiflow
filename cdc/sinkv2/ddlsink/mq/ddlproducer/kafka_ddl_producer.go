@@ -16,7 +16,6 @@ package ddlproducer
 import (
 	"context"
 	"sync"
-	"time"
 
 	"github.com/pingcap/errors"
 	"github.com/pingcap/log"
@@ -61,7 +60,6 @@ func NewKafkaDDLProducer(ctx context.Context, factory kafka.Factory,
 	}
 
 	metricsCollector := factory.MetricsCollector(
-		changefeedID,
 		util.RoleOwner,
 		adminClient,
 	)
@@ -132,33 +130,8 @@ func (k *kafkaDDLProducer) Close() {
 		return
 	}
 	k.closed = true
-	// We need to close it asynchronously. Otherwise, we might get stuck
-	// with an unhealthy(i.e. Network jitter, isolation) state of Kafka.
-	// Factory has a background thread to fetch and update the metadata.
-	// If we close the client synchronously, we might get stuck.
-	// Safety:
-	// * If the kafka cluster is running well, it will be closed as soon as possible.
-	// * If there is a problem with the kafka cluster,
-	//   no data will be lost because this is a synchronous client.
-	// * There is a risk of goroutine leakage, but it is acceptable and our main
-	//   goal is not to get stuck with the owner tick.
-	go func() {
-		if k.syncProducer != nil {
-			start := time.Now()
-			err := k.syncProducer.Close()
-			if err != nil {
-				log.Error("Close sync client with error in kafka DDL producer",
-					zap.String("namespace", k.id.Namespace),
-					zap.String("changefeed", k.id.ID),
-					zap.Duration("duration", time.Since(start)),
-					zap.Error(err))
-			} else {
-				log.Info("Sync client closed in kafka DDL producer",
-					zap.String("namespace", k.id.Namespace),
-					zap.String("changefeed", k.id.ID),
-					zap.Duration("duration", time.Since(start)))
-			}
 
-		}
-	}()
+	if k.syncProducer != nil {
+		k.syncProducer.Close()
+	}
 }

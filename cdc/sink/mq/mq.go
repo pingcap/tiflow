@@ -339,7 +339,7 @@ func (k *mqSink) Close(_ context.Context) error {
 	k.flushWorker.close()
 	// We need to close it asynchronously.
 	// Otherwise, we might get stuck with it in an unhealthy state of kafka.
-	go k.mqProducer.Close()
+	k.mqProducer.Close()
 	k.adminClient.Close()
 	return nil
 }
@@ -398,7 +398,7 @@ func NewKafkaSink(ctx context.Context, sinkURI *url.URL,
 		return nil, cerror.WrapError(cerror.ErrKafkaInvalidConfig, err)
 	}
 
-	factory, err := kafka.NewFactoryImpl(ctx, options)
+	factory, err := kafka.NewFactoryImpl(ctx, options, changefeedID)
 	if err != nil {
 		return nil, cerror.WrapError(cerror.ErrKafkaNewProducer, err)
 	}

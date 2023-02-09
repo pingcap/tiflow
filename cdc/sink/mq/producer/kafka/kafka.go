@@ -17,7 +17,6 @@ import (
 	"context"
 	"sync"
 	"sync/atomic"
-	"time"
 
 	"github.com/pingcap/errors"
 	"github.com/pingcap/failpoint"
@@ -188,31 +187,8 @@ func (k *producer) Close() error {
 	}
 	k.producersReleased = true
 
-	start := time.Now()
-	err := k.asyncProducer.Close()
-	if err != nil {
-		log.Error("close async client with error", zap.Error(err),
-			zap.Duration("duration", time.Since(start)),
-			zap.String("namespace", k.id.Namespace),
-			zap.String("changefeed", k.id.ID),
-			zap.Any("role", k.role))
-	} else {
-		log.Info("async client closed", zap.Duration("duration", time.Since(start)),
-			zap.String("namespace", k.id.Namespace),
-			zap.String("changefeed", k.id.ID), zap.Any("role", k.role))
-	}
-	start = time.Now()
-	err = k.syncProducer.Close()
-	if err != nil {
-		log.Error("close sync client with error", zap.Error(err),
-			zap.Duration("duration", time.Since(start)),
-			zap.String("namespace", k.id.Namespace),
-			zap.String("changefeed", k.id.ID), zap.Any("role", k.role))
-	} else {
-		log.Info("sync client closed", zap.Duration("duration", time.Since(start)),
-			zap.String("namespace", k.id.Namespace),
-			zap.String("changefeed", k.id.ID), zap.Any("role", k.role))
-	}
+	k.asyncProducer.Close()
+	k.syncProducer.Close()
 	return nil
 }
 
@@ -246,7 +222,7 @@ func NewProducer(
 
 	closeCh := make(chan struct{})
 	failpointCh := make(chan error, 1)
-	asyncProducer, err := factory.AsyncProducer(changefeedID, closeCh, failpointCh)
+	asyncProducer, err := factory.AsyncProducer(closeCh, failpointCh)
 	if err != nil {
 		return nil, cerror.WrapError(cerror.ErrKafkaNewProducer, err)
 	}

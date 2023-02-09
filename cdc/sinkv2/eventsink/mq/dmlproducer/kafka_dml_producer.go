@@ -16,7 +16,6 @@ package dmlproducer
 import (
 	"context"
 	"sync"
-	"time"
 
 	"github.com/pingcap/errors"
 	"github.com/pingcap/failpoint"
@@ -67,13 +66,12 @@ func NewKafkaDMLProducer(
 
 	closeCh := make(chan struct{})
 	failpointCh := make(chan error, 1)
-	asyncProducer, err := factory.AsyncProducer(changefeedID, closeCh, failpointCh)
+	asyncProducer, err := factory.AsyncProducer(closeCh, failpointCh)
 	if err != nil {
 		return nil, cerror.WrapError(cerror.ErrKafkaNewProducer, err)
 	}
 
 	metricsCollector := factory.MetricsCollector(
-		changefeedID,
 		util.RoleProcessor,
 		adminClient)
 	k := &kafkaDMLProducer{
@@ -152,39 +150,8 @@ func (k *kafkaDMLProducer) Close() {
 	// Notify the run loop to exit.
 	close(k.closedChan)
 	k.closed = true
-	// We need to close it asynchronously. Otherwise, we might get stuck
-	// with an unhealthy(i.e. Network jitter, isolation) state of Kafka.
-	// Safety:
-	// * If the kafka cluster is running well, it will be closed as soon as possible.
-	//   Also, we cancel all table pipelines before closed, so it's safe.
-	// * If there is a problem with the kafka cluster, it will shut down the client first,
-	//   which means no more data will be sent because the connection to the broker is dropped.
-	//   Also, we cancel all table pipelines before closed, so it's safe.
-	// * For Kafka Sink, duplicate data is acceptable.
-	// * There is a risk of goroutine leakage, but it is acceptable and our main
-	//   goal is not to get stuck with the processor tick.
-	go func() {
-		// `client` is mainly used by `asyncProducer` to fetch metadata and perform other related
-		// operations. When we close the `kafkaSaramaProducer`,
-		// there is no need for TiCDC to make sure that all buffered messages are flushed.
-		// Consider the situation where the broker is irresponsive. If the client were not
-		// closed, `asyncProducer.Close()` would waste a mount of time to try flush all messages.
-		// To prevent the scenario mentioned above, close the client first.
-		start := time.Now()
-		err := k.asyncProducer.Close()
-		if err != nil {
-			log.Error("Close async client with error in kafka "+
-				"DML producer", zap.Error(err),
-				zap.Duration("duration", time.Since(start)),
-				zap.String("namespace", k.id.Namespace),
-				zap.String("changefeed", k.id.ID))
-		} else {
-			log.Info("Async client closed in kafka "+
-				"DML producer", zap.Duration("duration", time.Since(start)),
-				zap.String("namespace", k.id.Namespace),
-				zap.String("changefeed", k.id.ID))
-		}
-	}()
+
+	k.asyncProducer.Close()
 }
 
 func (k *kafkaDMLProducer) run(ctx context.Context) error {

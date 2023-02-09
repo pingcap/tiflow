@@ -48,7 +48,8 @@ func NewKafkaDDLSink(
 		return nil, cerror.WrapError(cerror.ErrKafkaInvalidConfig, err)
 	}
 
-	factory, err := factoryCreator(ctx, options)
+	changefeed := contextutil.ChangefeedIDFromCtx(ctx)
+	factory, err := factoryCreator(ctx, options, changefeed)
 	if err != nil {
 		return nil, cerror.WrapError(cerror.ErrKafkaNewProducer, err)
 	}
@@ -56,7 +57,6 @@ func NewKafkaDDLSink(
 	adminClient, err := factory.AdminClient()
 	// We must close adminClient when this func return cause by an error
 	// otherwise the adminClient will never be closed and lead to a goroutine leak.
-	changefeed := contextutil.ChangefeedIDFromCtx(ctx)
 	defer func() {
 		if err != nil {
 			if closeErr := adminClient.Close(); closeErr != nil {
