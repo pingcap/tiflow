@@ -210,7 +210,7 @@ func (m *mysqlDDLSink) Close() {
 	}
 	if m.db != nil {
 		if err := m.db.Close(); err != nil {
-			log.Warn("mysql ddl sink close db wit error",
+			log.Warn("MySQL ddl sink close db wit error",
 				zap.String("namespace", m.id.Namespace),
 				zap.String("changefeed", m.id.ID),
 				zap.Error(err))
