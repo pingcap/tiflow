@@ -65,6 +65,7 @@ func TestNewSaramaProducer(t *testing.T) {
 	options.PartitionNum = int32(2)
 	options.AutoCreate = false
 	options.BrokerEndpoints = strings.Split(leader.Addr(), ",")
+	options.MaxMessages = 1
 
 	NewAdminClientImpl = kafka.NewMockAdminClient
 	defer func() {
@@ -72,9 +73,6 @@ func TestNewSaramaProducer(t *testing.T) {
 	}()
 
 	ctx = contextutil.PutRoleInCtx(ctx, util.RoleTester)
-	options.MaxMessages = 1
-	_, err := kafka.NewSaramaConfig(ctx, options)
-	require.Nil(t, err)
 	client, err := NewClientImpl(ctx, options)
 	require.Nil(t, err)
 	adminClient, err := NewAdminClientImpl(ctx, options)

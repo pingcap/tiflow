@@ -3,6 +3,8 @@ module github.com/pingcap/tiflow
 go 1.19
 
 require (
+	cloud.google.com/go/storage v1.27.0
+	github.com/Azure/azure-sdk-for-go/sdk/storage/azblob v0.2.0
 	github.com/BurntSushi/toml v1.2.1
 	github.com/DATA-DOG/go-sqlmock v1.5.0
 	github.com/Shopify/sarama v1.36.0
@@ -114,11 +116,9 @@ require (
 	cloud.google.com/go/compute v1.13.0 // indirect
 	cloud.google.com/go/compute/metadata v0.2.1 // indirect
 	cloud.google.com/go/iam v0.8.0 // indirect
-	cloud.google.com/go/storage v1.27.0 // indirect
 	github.com/Azure/azure-sdk-for-go/sdk/azcore v0.20.0 // indirect
 	github.com/Azure/azure-sdk-for-go/sdk/azidentity v0.12.0 // indirect
 	github.com/Azure/azure-sdk-for-go/sdk/internal v0.8.1 // indirect
-	github.com/Azure/azure-sdk-for-go/sdk/storage/azblob v0.2.0 // indirect
 	github.com/DataDog/zstd v1.4.6-0.20210211175136-c6db21d202f4 // indirect
 	github.com/KyleBanks/depth v1.2.1 // indirect
 	github.com/Masterminds/semver v1.5.0 // indirect
