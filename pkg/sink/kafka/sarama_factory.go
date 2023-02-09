@@ -47,10 +47,16 @@ func (f *saramaFactory) AdminClient() (ClusterAdminClient, error) {
 // SyncProducer return a Sync Producer,
 // it should be the caller's responsibility to close the producer
 func (f *saramaFactory) SyncProducer() (SyncProducer, error) {
-	p, err := sarama.NewSyncProducer(f.brokerEndpoints, f.config)
+	client, err := sarama.NewClient(f.brokerEndpoints, f.config)
 	if err != nil {
 		return nil, errors.Trace(err)
 	}
+
+	p, err := sarama.NewSyncProducerFromClient(client)
+	if err != nil {
+		return nil, errors.Trace(err)
+	}
+
 	return &saramaSyncProducer{producer: p}, nil
 }
 
