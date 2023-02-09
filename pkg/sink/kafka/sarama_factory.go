@@ -24,28 +24,26 @@ import (
 )
 
 type saramaFactory struct {
-	client sarama.Client
+	brokerEndpoints []string
+	config          *sarama.Config
 }
 
 // NewSaramaFactory constructs a Factory with sarama implementation.
 func NewSaramaFactory(ctx context.Context, o *Options) (Factory, error) {
 	saramaConfig, err := NewSaramaConfig(ctx, o)
 	if err != nil {
-		return nil, errors.Trace(err)
-	}
-	c, err := sarama.NewClient(o.BrokerEndpoints, saramaConfig)
-	if err != nil {
-		return nil, errors.Trace(err)
+		return nil, err
 	}
 	return &saramaFactory{
-		client: c,
+		brokerEndpoints: o.BrokerEndpoints,
+		config:          saramaConfig,
 	}, nil
 }
 
 // SyncProducer return a Sync Producer,
 // it should be the caller's responsibility to close the producer
 func (f *saramaFactory) SyncProducer() (SyncProducer, error) {
-	p, err := sarama.NewSyncProducerFromClient(f.client)
+	p, err := sarama.NewSyncProducer(f.brokerEndpoints, f.config)
 	if err != nil {
 		return nil, errors.Trace(err)
 	}
@@ -59,7 +57,7 @@ func (f *saramaFactory) AsyncProducer(
 	closedChan chan struct{},
 	failpointCh chan error,
 ) (AsyncProducer, error) {
-	p, err := sarama.NewAsyncProducerFromClient(f.client)
+	p, err := sarama.NewAsyncProducer(f.brokerEndpoints, f.config)
 	if err != nil {
 		return nil, errors.Trace(err)
 	}
@@ -72,7 +70,7 @@ func (f *saramaFactory) AsyncProducer(
 }
 
 func (f *saramaFactory) MetricRegistry() metrics.Registry {
-	return f.client.Config().MetricRegistry
+	return f.config.MetricRegistry
 }
 
 func (f *saramaFactory) MetricsCollector(
@@ -81,9 +79,5 @@ func (f *saramaFactory) MetricsCollector(
 	adminClient ClusterAdminClient,
 ) MetricsCollector {
 	return NewSaramaMetricsCollector(
-		changefeedID, role, adminClient, f.client.Config().MetricRegistry)
-}
-
-func (f *saramaFactory) Close() error {
-	return f.client.Close()
+		changefeedID, role, adminClient, f.config.MetricRegistry)
 }

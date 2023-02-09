@@ -54,7 +54,3 @@ func (c *MockFactory) MetricsCollector(
 ) MetricsCollector {
 	return nil
 }
-
-func (c *MockFactory) Close() error {
-	return nil
-}

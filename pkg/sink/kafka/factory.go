@@ -43,8 +43,6 @@ type Factory interface {
 		role util.Role,
 		adminClient ClusterAdminClient,
 	) MetricsCollector
-	// Close closes the client
-	Close() error
 }
 
 // SyncProducer is the kafka sync producer
@@ -89,53 +87,6 @@ type AsyncProducer interface {
 	// and run tha attached callback. the caller should call this
 	// method in a background goroutine
 	AsyncRunCallback(ctx context.Context) error
-}
-
-type saramaKafkaClient struct {
-	client sarama.Client
-}
-
-func (c *saramaKafkaClient) SyncProducer() (SyncProducer, error) {
-	p, err := sarama.NewSyncProducerFromClient(c.client)
-	if err != nil {
-		return nil, err
-	}
-	return &saramaSyncProducer{producer: p}, nil
-}
-
-func (c *saramaKafkaClient) AsyncProducer(
-	changefeedID model.ChangeFeedID,
-	closedChan chan struct{},
-	failpointCh chan error,
-) (AsyncProducer, error) {
-	p, err := sarama.NewAsyncProducerFromClient(c.client)
-	if err != nil {
-		return nil, err
-	}
-	return &saramaAsyncProducer{
-		producer:     p,
-		changefeedID: changefeedID,
-		closedChan:   closedChan,
-		failpointCh:  failpointCh,
-	}, nil
-}
-
-// MetricRegistry return the metrics registry
-func (c *saramaKafkaClient) MetricRegistry() metrics.Registry {
-	return c.client.Config().MetricRegistry
-}
-
-func (c *saramaKafkaClient) MetricsCollector(
-	changefeedID model.ChangeFeedID,
-	role util.Role,
-	adminClient ClusterAdminClient,
-) MetricsCollector {
-	return NewSaramaMetricsCollector(
-		changefeedID, role, adminClient, c.client.Config().MetricRegistry)
-}
-
-func (c *saramaKafkaClient) Close() error {
-	return c.client.Close()
 }
 
 type saramaSyncProducer struct {
