@@ -22,16 +22,19 @@ import (
 )
 
 // MockFactory is a mock implementation of Factory interface.
-type MockFactory struct{}
-
-// NewMockFactoryImpl creates a new MockFactory instance.
-func NewMockFactoryImpl() *MockFactory {
-	return &MockFactory{}
+type MockFactory struct {
+	// some unit test is based on sarama, so we set it as a helper
+	helper Factory
 }
 
 // NewMockFactory constructs a Factory with mock implementation.
-func NewMockFactory(_ context.Context, _ *Options) (Factory, error) {
-	return NewMockFactoryImpl(), nil
+func NewMockFactory(ctx context.Context, o *Options) (Factory, error) {
+	helper, err := NewSaramaFactory(ctx, o)
+	if err != nil {
+		return nil, err
+	}
+
+	return &MockFactory{helper: helper}, nil
 }
 
 func (f *MockFactory) AdminClient() (ClusterAdminClient, error) {
@@ -40,7 +43,7 @@ func (f *MockFactory) AdminClient() (ClusterAdminClient, error) {
 
 // SyncProducer creates a sync producer
 func (f *MockFactory) SyncProducer() (SyncProducer, error) {
-	return &saramaSyncProducer{}, nil
+	return f.helper.SyncProducer()
 }
 
 // AsyncProducer creates an async producer
@@ -49,7 +52,7 @@ func (f *MockFactory) AsyncProducer(
 	closedChan chan struct{},
 	failpointCh chan error,
 ) (AsyncProducer, error) {
-	return &saramaAsyncProducer{}, nil
+	return f.helper.AsyncProducer(changefeedID, closedChan, failpointCh)
 }
 
 // MetricRegistry implement the MetricsCollector interface
