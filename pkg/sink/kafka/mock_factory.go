@@ -34,17 +34,17 @@ func NewMockFactory(_ context.Context, _ *Options) (Factory, error) {
 	return NewMockFactoryImpl(), nil
 }
 
-func (c *MockFactory) AdminClient() (ClusterAdminClient, error) {
+func (f *MockFactory) AdminClient() (ClusterAdminClient, error) {
 	return NewClusterAdminClientMockImpl(), nil
 }
 
 // SyncProducer creates a sync producer
-func (c *MockFactory) SyncProducer() (SyncProducer, error) {
+func (f *MockFactory) SyncProducer() (SyncProducer, error) {
 	return &saramaSyncProducer{}, nil
 }
 
 // AsyncProducer creates an async producer
-func (c *MockFactory) AsyncProducer(
+func (f *MockFactory) AsyncProducer(
 	changefeedID model.ChangeFeedID,
 	closedChan chan struct{},
 	failpointCh chan error,
@@ -53,12 +53,12 @@ func (c *MockFactory) AsyncProducer(
 }
 
 // MetricRegistry implement the MetricsCollector interface
-func (c *MockFactory) MetricRegistry() metrics.Registry {
+func (f *MockFactory) MetricRegistry() metrics.Registry {
 	return nil
 }
 
 // MetricsCollector returns the metric collector
-func (c *MockFactory) MetricsCollector(
+func (f *MockFactory) MetricsCollector(
 	changefeedID model.ChangeFeedID,
 	role util.Role,
 	adminClient ClusterAdminClient,

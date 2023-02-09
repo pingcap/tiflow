@@ -125,18 +125,18 @@ func completeSASLConfig(o *pkafka.Options) (sasl.Mechanism, error) {
 	return nil, nil
 }
 
-func (k *factory) createWriter() *kafka.Writer {
+func (f *factory) createWriter() *kafka.Writer {
 	w := &kafka.Writer{
-		Addr:         kafka.TCP(k.options.BrokerEndpoints...),
+		Addr:         kafka.TCP(f.options.BrokerEndpoints...),
 		Balancer:     newManualPartitioner(),
-		Transport:    k.transport,
-		ReadTimeout:  k.options.ReadTimeout,
-		WriteTimeout: k.options.WriteTimeout,
+		Transport:    f.transport,
+		ReadTimeout:  f.options.ReadTimeout,
+		WriteTimeout: f.options.WriteTimeout,
 		RequiredAcks: kafka.RequireAll,
-		BatchBytes:   int64(k.options.MaxMessageBytes),
+		BatchBytes:   int64(f.options.MaxMessageBytes),
 		Async:        false,
 	}
-	compression := strings.ToLower(strings.TrimSpace(k.options.Compression))
+	compression := strings.ToLower(strings.TrimSpace(f.options.Compression))
 	switch compression {
 	case "none":
 	case "gzip":
@@ -149,29 +149,29 @@ func (k *factory) createWriter() *kafka.Writer {
 		w.Compression = kafka.Zstd
 	default:
 		log.Warn("Unsupported compression algorithm",
-			zap.String("compression", k.options.Compression))
-		k.options.Compression = "none"
+			zap.String("compression", f.options.Compression))
+		f.options.Compression = "none"
 	}
-	log.Info("Kafka producer uses " + k.options.Compression + " compression algorithm")
+	log.Info("Kafka producer uses " + f.options.Compression + " compression algorithm")
 	return w
 }
 
-func (k *factory) AdminClient() (pkafka.ClusterAdminClient, error) {
-	return NewClusterAdminClient(k.brokerEndpoints), nil
+func (f *factory) AdminClient() (pkafka.ClusterAdminClient, error) {
+	return NewClusterAdminClient(f.brokerEndpoints), nil
 }
 
 // SyncProducer creates a sync producer to writer message to kafka
-func (k *factory) SyncProducer() (pkafka.SyncProducer, error) {
-	w := k.createWriter()
+func (f *factory) SyncProducer() (pkafka.SyncProducer, error) {
+	w := f.createWriter()
 	return &syncWriter{w: w}, nil
 }
 
 // AsyncProducer creates an async producer to writer message to kafka
-func (k *factory) AsyncProducer(changefeedID model.ChangeFeedID,
+func (f *factory) AsyncProducer(changefeedID model.ChangeFeedID,
 	closedChan chan struct{},
 	failpointCh chan error,
 ) (pkafka.AsyncProducer, error) {
-	w := k.createWriter()
+	w := f.createWriter()
 	aw := &asyncWriter{
 		w:            w,
 		closedChan:   closedChan,
@@ -183,12 +183,12 @@ func (k *factory) AsyncProducer(changefeedID model.ChangeFeedID,
 }
 
 // MetricRegistry implement the MetricsCollector interface
-func (k *factory) MetricRegistry() metrics.Registry {
+func (f *factory) MetricRegistry() metrics.Registry {
 	return nil
 }
 
 // MetricsCollector returns the kafka metrics collector
-func (k *factory) MetricsCollector(
+func (f *factory) MetricsCollector(
 	changefeedID model.ChangeFeedID,
 	role util.Role,
 	adminClient pkafka.ClusterAdminClient,
