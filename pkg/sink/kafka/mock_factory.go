@@ -34,6 +34,10 @@ func NewMockFactory(_ context.Context, _ *Options) (Factory, error) {
 	return NewMockFactoryImpl(), nil
 }
 
+func (c *MockFactory) AdminClient() (ClusterAdminClient, error) {
+	return NewClusterAdminClientMockImpl(), nil
+}
+
 // SyncProducer creates a sync producer
 func (c *MockFactory) SyncProducer() (SyncProducer, error) {
 	return &saramaSyncProducer{}, nil

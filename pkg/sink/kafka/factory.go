@@ -28,6 +28,8 @@ import (
 
 // Factory is used to produce all kafka components.
 type Factory interface {
+	// AdminClient return a kafka cluster admin client
+	AdminClient() (ClusterAdminClient, error)
 	// SyncProducer creates a sync producer to writer message to kafka
 	SyncProducer() (SyncProducer, error)
 	// AsyncProducer creates an async producer to writer message to kafka

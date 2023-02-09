@@ -29,13 +29,10 @@ type saramaAdminClient struct {
 }
 
 // NewSaramaAdminClient constructs a ClusterAdminClient with sarama.
-func NewSaramaAdminClient(ctx context.Context, config *Options) (ClusterAdminClient, error) {
-	saramaConfig, err := NewSaramaConfig(ctx, config)
-	if err != nil {
-		return nil, err
-	}
-
-	client, err := sarama.NewClusterAdmin(config.BrokerEndpoints, saramaConfig)
+func NewSaramaAdminClient(ctx context.Context,
+	brokerEndpoints []string,
+	config *sarama.Config) (ClusterAdminClient, error) {
+	client, err := sarama.NewClusterAdmin(brokerEndpoints, config)
 	if err != nil {
 		return nil, err
 	}

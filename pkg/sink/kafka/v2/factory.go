@@ -34,9 +34,10 @@ import (
 )
 
 type factory struct {
-	transport *kafka.Transport
-	client    *kafka.Client
-	options   *pkafka.Options
+	brokerEndpoints []string
+	transport       *kafka.Transport
+	client          *kafka.Client
+	options         *pkafka.Options
 }
 
 // NewFactory returns a factory implemented based on kafka-go
@@ -74,9 +75,10 @@ func NewFactory(ctx context.Context, options *pkafka.Options) (pkafka.Factory, e
 		Transport: transport,
 	}
 	return &factory{
-		transport: transport,
-		client:    client,
-		options:   options,
+		brokerEndpoints: options.BrokerEndpoints,
+		transport:       transport,
+		client:          client,
+		options:         options,
 	}, nil
 }
 
@@ -152,6 +154,10 @@ func (k *factory) createWriter() *kafka.Writer {
 	}
 	log.Info("Kafka producer uses " + k.options.Compression + " compression algorithm")
 	return w
+}
+
+func (k *factory) AdminClient() (pkafka.ClusterAdminClient, error) {
+	return NewClusterAdminClient(k.brokerEndpoints), nil
 }
 
 // SyncProducer creates a sync producer to writer message to kafka

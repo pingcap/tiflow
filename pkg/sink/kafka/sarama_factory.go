@@ -40,6 +40,10 @@ func NewSaramaFactory(ctx context.Context, o *Options) (Factory, error) {
 	}, nil
 }
 
+func (f *saramaFactory) AdminClient(ctx context.Context) (ClusterAdminClient, error) {
+	return NewSaramaAdminClient(ctx, f.brokerEndpoints, f.config)
+}
+
 // SyncProducer return a Sync Producer,
 // it should be the caller's responsibility to close the producer
 func (f *saramaFactory) SyncProducer() (SyncProducer, error) {
