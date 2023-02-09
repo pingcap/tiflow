@@ -190,6 +190,10 @@ func (k *factory) MetricsCollector(
 	return NewMetricsCollector(changefeedID, role, adminClient)
 }
 
+func (k *factory) Close() error {
+	return nil
+}
+
 type syncWriter struct {
 	w *kafka.Writer
 }

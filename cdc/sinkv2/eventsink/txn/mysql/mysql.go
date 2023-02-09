@@ -256,6 +256,7 @@ func convert2RowChanges(
 			tableInfo,
 			nil, nil)
 	}
+	res.SetApproximateDataSize(row.ApproximateDataSize)
 	return res
 }
 
@@ -330,7 +331,7 @@ func (s *mysqlBackend) groupRowsByType(
 				updateRow = append(
 					updateRow,
 					convert2RowChanges(row, tableInfo, sqlmodel.RowChangeUpdate))
-				if len(updateRow) >= s.cfg.MaxTxnRow {
+				if len(updateRow) >= s.cfg.MaxMultiUpdateRowCount {
 					updateRows = append(updateRows, updateRow)
 					updateRow = make([]*sqlmodel.RowChange, 0, preAllocateSize)
 				}
@@ -384,13 +385,35 @@ func (s *mysqlBackend) batchSingleTxnDmls(
 	// handle update
 	if len(updateRows) > 0 {
 		for _, rows := range updateRows {
-			sql, value := sqlmodel.GenUpdateSQL(rows...)
-			sqls = append(sqls, sql)
-			values = append(values, value)
+			s, v := s.genUpdateSQL(rows...)
+			sqls = append(sqls, s...)
+			values = append(values, v...)
 		}
 	}
 
 	return
+}
+
+func (s *mysqlBackend) genUpdateSQL(rows ...*sqlmodel.RowChange) ([]string, [][]interface{}) {
+	size, count := 0, 0
+	for _, r := range rows {
+		size += int(r.GetApproximateDataSize())
+		count++
+	}
+	if size < s.cfg.MaxMultiUpdateRowSize*count {
+		// use multi update in one SQL
+		sql, value := sqlmodel.GenUpdateSQLFast(rows...)
+		return []string{sql}, [][]interface{}{value}
+	}
+	// each row has one independent update SQL.
+	sqls := make([]string, 0, len(rows))
+	values := make([][]interface{}, 0, len(rows))
+	for _, row := range rows {
+		sql, value := row.GenSQL(sqlmodel.DMLUpdate)
+		sqls = append(sqls, sql)
+		values = append(values, value)
+	}
+	return sqls, values
 }
 
 func hasHandleKey(cols []*model.Column) bool {

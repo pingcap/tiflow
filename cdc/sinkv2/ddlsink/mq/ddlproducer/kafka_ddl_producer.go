@@ -160,9 +160,5 @@ func (k *kafkaDDLProducer) Close() {
 			}
 
 		}
-		if k.metricsCollector != nil {
-			// Finally, close the metric collector.
-			k.metricsCollector.Close()
-		}
 	}()
 }

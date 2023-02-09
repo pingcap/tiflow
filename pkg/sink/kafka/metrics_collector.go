@@ -28,7 +28,6 @@ import (
 // MetricsCollector is the interface for kafka metrics collector.
 type MetricsCollector interface {
 	Run(ctx context.Context)
-	Close()
 }
 
 // flushMetricsInterval specifies the interval of refresh sarama metrics.
@@ -201,23 +200,4 @@ func (m *saramaMetricsCollector) cleanupBrokerMetrics() {
 func (m *saramaMetricsCollector) cleanupMetrics() {
 	m.cleanupProducerMetrics()
 	m.cleanupBrokerMetrics()
-}
-
-// Close closes the admin client.
-func (m *saramaMetricsCollector) Close() {
-	start := time.Now()
-	namespace := m.changefeedID.Namespace
-	changefeedID := m.changefeedID.ID
-	if err := m.adminClient.Close(); err != nil {
-		log.Warn("Close kafka cluster admin with error in "+
-			"metric collector", zap.Error(err),
-			zap.Duration("duration", time.Since(start)),
-			zap.String("namespace", namespace),
-			zap.String("changefeed", changefeedID), zap.Any("role", m.role))
-	} else {
-		log.Info("Kafka cluster admin closed in "+
-			"metric collector", zap.Duration("duration", time.Since(start)),
-			zap.String("namespace", namespace),
-			zap.String("changefeed", changefeedID), zap.Any("role", m.role))
-	}
 }

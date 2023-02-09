@@ -219,8 +219,6 @@ func (k *kafkaDMLProducer) Close() {
 				zap.String("namespace", k.id.Namespace),
 				zap.String("changefeed", k.id.ID))
 		}
-		// Finally, close the metric metricsCollector.
-		k.metricsCollector.Close()
 	}()
 }
 
