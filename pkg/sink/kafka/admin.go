@@ -28,8 +28,7 @@ type saramaAdminClient struct {
 	client sarama.ClusterAdmin
 }
 
-// NewSaramaAdminClient constructs a ClusterAdminClient with sarama.
-func NewSaramaAdminClient(
+func newAdminClient(
 	brokerEndpoints []string,
 	config *sarama.Config,
 ) (ClusterAdminClient, error) {

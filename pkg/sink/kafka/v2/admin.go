@@ -28,8 +28,7 @@ type admin struct {
 	client Client
 }
 
-// NewClusterAdminClient return an admin client
-func NewClusterAdminClient(endpoints []string) pkafka.ClusterAdminClient {
+func newClusterAdminClient(endpoints []string) pkafka.ClusterAdminClient {
 	client := &kafka.Client{
 		Addr: kafka.TCP(endpoints...),
 	}

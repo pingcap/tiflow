@@ -34,6 +34,7 @@ import (
 )
 
 type factory struct {
+	changefeedID    model.ChangeFeedID
 	brokerEndpoints []string
 	transport       *kafka.Transport
 	client          *kafka.Client
@@ -41,9 +42,12 @@ type factory struct {
 }
 
 // NewFactory returns a factory implemented based on kafka-go
-func NewFactory(ctx context.Context, options *pkafka.Options) (pkafka.Factory, error) {
+func NewFactory(
+	ctx context.Context,
+	options *pkafka.Options,
+	changefeedID model.ChangeFeedID,
+) (pkafka.Factory, error) {
 	captureAddr := contextutil.CaptureAddrFromCtx(ctx)
-	changefeedID := contextutil.ChangefeedIDFromCtx(ctx)
 	var role string
 	if contextutil.IsOwnerFromCtx(ctx) {
 		role = util.RoleOwner.String()
@@ -75,6 +79,7 @@ func NewFactory(ctx context.Context, options *pkafka.Options) (pkafka.Factory, e
 		Transport: transport,
 	}
 	return &factory{
+		changefeedID:    changefeedID,
 		brokerEndpoints: options.BrokerEndpoints,
 		transport:       transport,
 		client:          client,
@@ -157,7 +162,7 @@ func (f *factory) createWriter() *kafka.Writer {
 }
 
 func (f *factory) AdminClient() (pkafka.ClusterAdminClient, error) {
-	return NewClusterAdminClient(f.brokerEndpoints), nil
+	return newClusterAdminClient(f.brokerEndpoints), nil
 }
 
 // SyncProducer creates a sync producer to writer message to kafka
@@ -167,15 +172,14 @@ func (f *factory) SyncProducer() (pkafka.SyncProducer, error) {
 }
 
 // AsyncProducer creates an async producer to writer message to kafka
-func (f *factory) AsyncProducer(changefeedID model.ChangeFeedID,
-	closedChan chan struct{},
+func (f *factory) AsyncProducer(closedChan chan struct{},
 	failpointCh chan error,
 ) (pkafka.AsyncProducer, error) {
 	w := f.createWriter()
 	aw := &asyncWriter{
 		w:            w,
 		closedChan:   closedChan,
-		changefeedID: changefeedID,
+		changefeedID: f.changefeedID,
 		failpointCh:  failpointCh,
 	}
 	w.Completion = aw.callBackRun
@@ -189,15 +193,15 @@ func (f *factory) MetricRegistry() metrics.Registry {
 
 // MetricsCollector returns the kafka metrics collector
 func (f *factory) MetricsCollector(
-	changefeedID model.ChangeFeedID,
 	role util.Role,
 	adminClient pkafka.ClusterAdminClient,
 ) pkafka.MetricsCollector {
-	return NewMetricsCollector(changefeedID, role, adminClient)
+	return NewMetricsCollector(f.changefeedID, role, adminClient)
 }
 
 type syncWriter struct {
-	w *kafka.Writer
+	changefeedID model.ChangeFeedID
+	w            *kafka.Writer
 }
 
 func (s *syncWriter) SendMessage(
@@ -237,8 +241,20 @@ func (s *syncWriter) SendMessages(
 // Close shuts down the producer; you must call this function before a producer
 // object passes out of scope, as it may otherwise leak memory.
 // You must call this before calling Close on the underlying client.
-func (s *syncWriter) Close() error {
-	return s.w.Close()
+func (s *syncWriter) Close() {
+	start := time.Now()
+	if err := s.w.Close(); err != nil {
+		log.Warn("Close kafka sync producer failed",
+			zap.String("namespace", s.changefeedID.Namespace),
+			zap.String("changefeed", s.changefeedID.ID),
+			zap.Duration("duration", time.Since(start)),
+			zap.Error(err))
+	} else {
+		log.Info("Close kafka sync producer success",
+			zap.String("namespace", s.changefeedID.Namespace),
+			zap.String("changefeed", s.changefeedID.ID),
+			zap.Duration("duration", time.Since(start)))
+	}
 }
 
 type asyncWriter struct {
@@ -255,8 +271,20 @@ type asyncWriter struct {
 // scope, as it may otherwise leak memory. You must call this before process
 // shutting down, or you may lose messages. You must call this before calling
 // Close on the underlying client.
-func (a *asyncWriter) Close() error {
-	return a.w.Close()
+func (a *asyncWriter) Close() {
+	start := time.Now()
+	if err := a.w.Close(); err != nil {
+		log.Warn("Close kafka async producer failed",
+			zap.String("namespace", a.changefeedID.Namespace),
+			zap.String("changefeed", a.changefeedID.ID),
+			zap.Duration("duration", time.Since(start)),
+			zap.Error(err))
+	} else {
+		log.Info("Close kafka async producer success",
+			zap.String("namespace", a.changefeedID.Namespace),
+			zap.String("changefeed", a.changefeedID.ID),
+			zap.Duration("duration", time.Since(start)))
+	}
 }
 
 // AsyncSend is the input channel for the user to write messages to that they
