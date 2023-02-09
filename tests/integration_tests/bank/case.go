@@ -260,8 +260,11 @@ func (*bankTest) verify(ctx context.Context, db *sql.DB, accounts, tableID int, 
 	return retry.Do(ctx,
 		func() (err error) {
 			defer func() {
-				log.Error("bank test verify failed", zap.Error(err))
+				if err != nil {
+					log.Error("bank test verify failed", zap.Error(err))
+				}
 			}()
+			// use a single connection to keep the same database session.
 			conn, err := db.Conn(ctx)
 			if err != nil {
 				return errors.Trace(err)
