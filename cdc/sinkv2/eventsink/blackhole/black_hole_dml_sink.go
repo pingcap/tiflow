@@ -43,6 +43,4 @@ func (s *Sink) WriteEvents(rows ...*eventsink.CallbackableEvent[*model.RowChange
 }
 
 // Close do nothing.
-func (s *Sink) Close() error {
-	return nil
-}
+func (s *Sink) Close() {}
