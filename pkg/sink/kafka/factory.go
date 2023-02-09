@@ -95,6 +95,7 @@ type AsyncProducer interface {
 }
 
 type saramaSyncProducer struct {
+	client   sarama.Client
 	producer sarama.SyncProducer
 }
 
@@ -129,10 +130,15 @@ func (p *saramaSyncProducer) SendMessages(ctx context.Context,
 }
 
 func (p *saramaSyncProducer) Close() error {
-	return p.producer.Close()
+	go func() {
+		p.client.Close()
+		p.producer.Close()
+	}()
+	return nil
 }
 
 type saramaAsyncProducer struct {
+	client       sarama.Client
 	producer     sarama.AsyncProducer
 	changefeedID model.ChangeFeedID
 	closedChan   chan struct{}
@@ -140,7 +146,11 @@ type saramaAsyncProducer struct {
 }
 
 func (p *saramaAsyncProducer) Close() error {
-	return p.producer.Close()
+	go func() {
+		p.client.Close()
+		p.producer.Close()
+	}()
+	return nil
 }
 
 func (p *saramaAsyncProducer) AsyncRunCallback(

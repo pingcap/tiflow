@@ -47,6 +47,7 @@ func TestNewSaramaProducer(t *testing.T) {
 	metadataResponse.AddTopicPartition(topic, 1, leader.BrokerID(), nil, nil, nil, sarama.ErrNoError)
 	// Response for `sarama.NewClient`
 	leader.Returns(metadataResponse)
+	leader.Returns(metadataResponse)
 
 	prodSuccess := new(sarama.ProduceResponse)
 	prodSuccess.AddTopicPartition(topic, 0, sarama.ErrNoError)

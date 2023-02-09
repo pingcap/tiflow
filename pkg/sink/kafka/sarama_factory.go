@@ -57,7 +57,10 @@ func (f *saramaFactory) SyncProducer() (SyncProducer, error) {
 		return nil, errors.Trace(err)
 	}
 
-	return &saramaSyncProducer{producer: p}, nil
+	return &saramaSyncProducer{
+		client:   client,
+		producer: p,
+	}, nil
 }
 
 // AsyncProducer return an Async Producer,
@@ -67,11 +70,16 @@ func (f *saramaFactory) AsyncProducer(
 	closedChan chan struct{},
 	failpointCh chan error,
 ) (AsyncProducer, error) {
-	p, err := sarama.NewAsyncProducer(f.brokerEndpoints, f.config)
+	client, err := sarama.NewClient(f.brokerEndpoints, f.config)
+	if err != nil {
+		return nil, errors.Trace(err)
+	}
+	p, err := sarama.NewAsyncProducerFromClient(client)
 	if err != nil {
 		return nil, errors.Trace(err)
 	}
 	return &saramaAsyncProducer{
+		client:       client,
 		producer:     p,
 		changefeedID: changefeedID,
 		closedChan:   closedChan,
