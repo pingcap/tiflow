@@ -141,7 +141,10 @@ func (s *sequenceTest) prepare(ctx context.Context, db *sql.DB, accounts, tableI
 }
 
 func (*sequenceTest) verify(ctx context.Context, db *sql.DB, accounts, tableID int, tag string, endTs string) error {
-	return retry.Do(ctx, func() error {
+	return retry.Do(ctx, func() (err error) {
+		defer func() {
+			log.Warn("verify failed", zap.Error(err))
+		}()
 		query := fmt.Sprintf("set @@tidb_snapshot='%s'", endTs)
 		// use a single connection to keep the same database session.
 		conn, err := db.Conn(ctx)
