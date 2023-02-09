@@ -32,6 +32,7 @@ import (
 	"github.com/pingcap/tiflow/pkg/config"
 	cerror "github.com/pingcap/tiflow/pkg/errors"
 	"github.com/pingcap/tiflow/pkg/sink"
+	"github.com/pingcap/tiflow/pkg/sink/kafka"
 	"go.uber.org/zap"
 )
 
@@ -53,6 +54,10 @@ type dmlSink struct {
 	// It is also responsible for creating topics.
 	topicManager manager.TopicManager
 
+	// adminClient is used to query kafka cluster information, it's shared among
+	// multiple place, it's sink's responsibility to close it.
+	adminClient kafka.ClusterAdminClient
+
 	ctx    context.Context
 	cancel context.CancelFunc
 }
@@ -60,6 +65,7 @@ type dmlSink struct {
 func newSink(
 	ctx context.Context,
 	producer dmlproducer.DMLProducer,
+	adminClient kafka.ClusterAdminClient,
 	topicManager manager.TopicManager,
 	eventRouter *dispatcher.EventRouter,
 	encoderConfig *common.Config,
@@ -83,6 +89,7 @@ func newSink(
 		worker:       worker,
 		eventRouter:  eventRouter,
 		topicManager: topicManager,
+		adminClient:  adminClient,
 		ctx:          ctx,
 		cancel:       cancel,
 	}
@@ -140,5 +147,13 @@ func (s *dmlSink) Close() error {
 		s.cancel()
 	}
 	s.worker.close()
+	if s.adminClient != nil {
+		if err := s.adminClient.Close(); err != nil {
+			log.Warn("close admin client error",
+				zap.String("namespace", s.id.Namespace),
+				zap.String("changefeed", s.id.ID),
+				zap.Error(err))
+		}
+	}
 	return nil
 }

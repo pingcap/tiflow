@@ -32,6 +32,7 @@ type saramaAdminClient struct {
 func NewSaramaAdminClient(
 	brokerEndpoints []string,
 	config *sarama.Config,
+
 ) (ClusterAdminClient, error) {
 	client, err := sarama.NewClusterAdmin(brokerEndpoints, config)
 	if err != nil {
@@ -159,6 +160,6 @@ func (a *saramaAdminClient) CreateTopic(
 	return nil
 }
 
-func (a *saramaAdminClient) Close() {
-	_ = a.client.Close()
+func (a *saramaAdminClient) Close() error {
+	return a.client.Close()
 }

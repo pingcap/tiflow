@@ -36,9 +36,6 @@ var _ DMLProducer = (*kafkaDMLProducer)(nil)
 type kafkaDMLProducer struct {
 	// id indicates which processor (changefeed) this sink belongs to.
 	id model.ChangeFeedID
-	// We hold the client to make close operation faster.
-	// Please see the comment of Close().
-	client kafka.Factory
 	// asyncProducer is used to send messages to kafka asynchronously.
 	asyncProducer kafka.AsyncProducer
 	// metricsCollector is used to report metrics.
@@ -59,7 +56,7 @@ type kafkaDMLProducer struct {
 // NewKafkaDMLProducer creates a new kafka producer.
 func NewKafkaDMLProducer(
 	ctx context.Context,
-	client kafka.Factory,
+	factory kafka.Factory,
 	adminClient kafka.ClusterAdminClient,
 	errCh chan error,
 ) (DMLProducer, error) {
@@ -70,35 +67,17 @@ func NewKafkaDMLProducer(
 
 	closeCh := make(chan struct{})
 	failpointCh := make(chan error, 1)
-	asyncProducer, err := client.AsyncProducer(changefeedID, closeCh, failpointCh)
+	asyncProducer, err := factory.AsyncProducer(changefeedID, closeCh, failpointCh)
 	if err != nil {
-		// Close the client to prevent the goroutine leak.
-		// Because it may be a long time to close the client,
-		// so close it asynchronously.
-		go func() {
-			if err := client.Close(); err != nil {
-				log.Error("Close sarama client with error in kafka "+
-					"DML producer", zap.Error(err),
-					zap.String("namespace", changefeedID.Namespace),
-					zap.String("changefeed", changefeedID.ID))
-			}
-			if err := adminClient.Close(); err != nil {
-				log.Error("Close sarama admin client with error in kafka "+
-					"DML producer", zap.Error(err),
-					zap.String("namespace", changefeedID.Namespace),
-					zap.String("changefeed", changefeedID.ID))
-			}
-		}()
 		return nil, cerror.WrapError(cerror.ErrKafkaNewProducer, err)
 	}
 
-	metricsCollector := client.MetricsCollector(
+	metricsCollector := factory.MetricsCollector(
 		changefeedID,
 		util.RoleProcessor,
 		adminClient)
 	k := &kafkaDMLProducer{
 		id:               changefeedID,
-		client:           client,
 		asyncProducer:    asyncProducer,
 		metricsCollector: metricsCollector,
 		closed:           false,

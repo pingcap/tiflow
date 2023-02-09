@@ -190,7 +190,9 @@ func (c *ClusterAdminClientMockImpl) DeleteTopic(topicName string) {
 }
 
 // Close do nothing.
-func (c *ClusterAdminClientMockImpl) Close() {}
+func (c *ClusterAdminClientMockImpl) Close() error {
+	return nil
+}
 
 // SetMinInsyncReplicas sets the MinInsyncReplicas for broker and default topic.
 func (c *ClusterAdminClientMockImpl) SetMinInsyncReplicas(minInsyncReplicas string) {

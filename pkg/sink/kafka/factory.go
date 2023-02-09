@@ -47,6 +47,9 @@ type Factory interface {
 	) MetricsCollector
 }
 
+// FactoryCreator defines the type of factory creator.
+type FactoryCreator func(context.Context, *Options) (Factory, error)
+
 // SyncProducer is the kafka sync producer
 type SyncProducer interface {
 	// SendMessage produces a given message, and returns only when it either has
@@ -202,6 +205,3 @@ func (p *saramaAsyncProducer) AsyncSend(ctx context.Context,
 	}
 	return nil
 }
-
-// FactoryCreator defines the type of client crater.
-type FactoryCreator func(context.Context, *Options) (Factory, error)

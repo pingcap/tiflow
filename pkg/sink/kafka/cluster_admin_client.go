@@ -55,7 +55,7 @@ type ClusterAdminClient interface {
 	CreateTopic(ctx context.Context, detail *TopicDetail, validateOnly bool) error
 
 	// Close shuts down the admin client.
-	Close()
+	Close() error
 }
 
 // ClusterAdminClientCreator defines the type of cluster admin client crater.
