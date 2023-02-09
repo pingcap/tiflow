@@ -143,7 +143,9 @@ func (s *sequenceTest) prepare(ctx context.Context, db *sql.DB, accounts, tableI
 func (*sequenceTest) verify(ctx context.Context, db *sql.DB, accounts, tableID int, tag string, endTs string) error {
 	return retry.Do(ctx, func() (err error) {
 		defer func() {
-			log.Warn("sequence test verify failed", zap.Error(err))
+			if err != nil {
+				log.Warn("sequence test verify failed", zap.Error(err))
+			}
 		}()
 		query := fmt.Sprintf("set @@tidb_snapshot='%s'", endTs)
 		// use a single connection to keep the same database session.
@@ -151,6 +153,7 @@ func (*sequenceTest) verify(ctx context.Context, db *sql.DB, accounts, tableID i
 		if err != nil {
 			return errors.Trace(err)
 		}
+		defer conn.Close()
 		if _, err := conn.ExecContext(ctx, query); err != nil {
 			log.Error("sequenceTest set tidb_snapshot failed", zap.String("query", query), zap.Error(err))
 			return errors.Trace(err)
@@ -259,7 +262,12 @@ func (*bankTest) verify(ctx context.Context, db *sql.DB, accounts, tableID int, 
 			defer func() {
 				log.Error("bank test verify failed", zap.Error(err))
 			}()
-			if _, err := db.ExecContext(ctx, fmt.Sprintf("set @@tidb_snapshot='%s'", endTs)); err != nil {
+			conn, err := db.Conn(ctx)
+			if err != nil {
+				return errors.Trace(err)
+			}
+			defer conn.Close()
+			if _, err := conn.ExecContext(ctx, fmt.Sprintf("set @@tidb_snapshot='%s'", endTs)); err != nil {
 				log.Error("bank set tidb_snapshot failed", zap.String("endTs", endTs))
 				return errors.Trace(err)
 			}
@@ -267,7 +275,7 @@ func (*bankTest) verify(ctx context.Context, db *sql.DB, accounts, tableID int, 
 			var obtained, expect int
 
 			query := fmt.Sprintf("SELECT SUM(balance) as total FROM accounts%d", tableID)
-			if err := db.QueryRowContext(ctx, query).Scan(&obtained); err != nil {
+			if err := conn.QueryRowContext(ctx, query).Scan(&obtained); err != nil {
 				log.Warn("query failed", zap.String("query", query), zap.Error(err), zap.String("tag", tag))
 				return errors.Trace(err)
 			}
@@ -278,7 +286,7 @@ func (*bankTest) verify(ctx context.Context, db *sql.DB, accounts, tableID int, 
 			}
 
 			query = fmt.Sprintf("SELECT COUNT(*) as count FROM accounts%d", tableID)
-			if err := db.QueryRowContext(ctx, query).Scan(&obtained); err != nil {
+			if err := conn.QueryRowContext(ctx, query).Scan(&obtained); err != nil {
 				log.Warn("query failed", zap.String("query", query), zap.Error(err), zap.String("tag", tag))
 				return errors.Trace(err)
 			}
@@ -288,7 +296,7 @@ func (*bankTest) verify(ctx context.Context, db *sql.DB, accounts, tableID int, 
 
 			log.Info("bank verify pass", zap.String("tag", tag))
 
-			if _, err := db.ExecContext(ctx, "set @@tidb_snapshot=''"); err != nil {
+			if _, err := conn.ExecContext(ctx, "set @@tidb_snapshot=''"); err != nil {
 				log.Warn("bank reset tidb_snapshot failed")
 			}
 
