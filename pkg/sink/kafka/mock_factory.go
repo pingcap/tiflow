@@ -14,6 +14,8 @@
 package kafka
 
 import (
+	"context"
+
 	"github.com/pingcap/tiflow/cdc/model"
 	"github.com/pingcap/tiflow/pkg/util"
 	"github.com/rcrowley/go-metrics"
@@ -25,6 +27,11 @@ type MockFactory struct{}
 // NewMockFactoryImpl creates a new MockFactory instance.
 func NewMockFactoryImpl() *MockFactory {
 	return &MockFactory{}
+}
+
+// NewMockFactory constructs a Factory with mock implementation.
+func NewMockFactory(_ context.Context, _ *Options) (Factory, error) {
+	return NewMockFactoryImpl(), nil
 }
 
 // SyncProducer creates a sync producer

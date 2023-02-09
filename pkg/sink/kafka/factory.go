@@ -203,8 +203,3 @@ func (p *saramaAsyncProducer) AsyncSend(ctx context.Context,
 
 // FactoryCreator defines the type of client crater.
 type FactoryCreator func(context.Context, *Options) (Factory, error)
-
-// NewMockFactory constructs a Factory with mock implementation.
-func NewMockFactory(_ context.Context, _ *Options) (Factory, error) {
-	return NewMockFactoryImpl(), nil
-}
