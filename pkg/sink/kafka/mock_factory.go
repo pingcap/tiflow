@@ -66,5 +66,5 @@ func (f *MockFactory) MetricsCollector(
 	role util.Role,
 	adminClient ClusterAdminClient,
 ) MetricsCollector {
-	return nil
+	return f.helper.MetricsCollector(changefeedID, role, adminClient)
 }
