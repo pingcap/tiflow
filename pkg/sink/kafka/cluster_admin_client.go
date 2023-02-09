@@ -57,11 +57,3 @@ type ClusterAdminClient interface {
 	// Close shuts down the admin client.
 	Close() error
 }
-
-// ClusterAdminClientCreator defines the type of cluster admin client crater.
-type ClusterAdminClientCreator func(context.Context, *Options) (ClusterAdminClient, error)
-
-// NewMockAdminClient constructs a ClusterAdminClient with mock implementation.
-func NewMockAdminClient(_ context.Context, _ *Options) (ClusterAdminClient, error) {
-	return NewClusterAdminClientMockImpl(), nil
-}
