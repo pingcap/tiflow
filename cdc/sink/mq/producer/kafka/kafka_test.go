@@ -69,7 +69,8 @@ func TestNewSaramaProducer(t *testing.T) {
 	options.BrokerEndpoints = strings.Split(leader.Addr(), ",")
 	options.MaxMessages = 1
 
-	factory, err := kafka.NewMockFactory(ctx, options)
+	changefeed := model.DefaultChangeFeedID("changefeed-test")
+	factory, err := kafka.NewMockFactory(ctx, options, changefeed)
 	require.NoError(t, err)
 
 	adminClient, err := factory.AdminClient()
@@ -389,7 +390,8 @@ func TestProducerSendMessageFailed(t *testing.T) {
 	require.Equal(t, 8, saramaConfig.Producer.MaxMessageBytes)
 	require.Nil(t, err)
 
-	factory, err := kafka.NewMockFactory(ctx, options)
+	changefeed := model.DefaultChangeFeedID("changefeed-test")
+	factory, err := kafka.NewMockFactory(ctx, options, changefeed)
 	require.NoError(t, err)
 
 	adminClient, err := factory.AdminClient()
@@ -467,7 +469,8 @@ func TestProducerDoubleClose(t *testing.T) {
 
 	errCh := make(chan error, 1)
 
-	factory, err := kafka.NewMockFactory(ctx, options)
+	changefeed := model.DefaultChangeFeedID("changefeed-test")
+	factory, err := kafka.NewMockFactory(ctx, options, changefeed)
 	require.NoError(t, err)
 
 	adminClient, err := factory.AdminClient()
@@ -705,7 +708,8 @@ func TestConfigurationCombinations(t *testing.T) {
 		err = options.Apply(sinkURI)
 		require.NoError(t, err)
 
-		factory, err := kafka.NewMockFactory(ctx, options)
+		changefeed := model.DefaultChangeFeedID("changefeed-test")
+		factory, err := kafka.NewMockFactory(ctx, options, changefeed)
 		require.NoError(t, err)
 
 		adminClient, err := factory.AdminClient()

@@ -207,7 +207,6 @@ func (p *saramaAsyncProducer) Close() {
 				zap.String("namespace", p.changefeedID.Namespace),
 				zap.String("changefeed", p.changefeedID.ID),
 				zap.Duration("duration", time.Since(start)))
-
 		}
 
 		start = time.Now()

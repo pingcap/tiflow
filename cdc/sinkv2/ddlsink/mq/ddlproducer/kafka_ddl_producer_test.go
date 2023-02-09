@@ -20,6 +20,7 @@ import (
 	"time"
 
 	"github.com/Shopify/sarama"
+	"github.com/pingcap/tiflow/cdc/model"
 	"github.com/pingcap/tiflow/cdc/sink/codec/common"
 	cerror "github.com/pingcap/tiflow/pkg/errors"
 	"github.com/pingcap/tiflow/pkg/sink/kafka"
@@ -77,7 +78,8 @@ func TestSyncBroadcastMessage(t *testing.T) {
 	_, err := kafka.NewSaramaConfig(context.Background(), options)
 	require.Nil(t, err)
 
-	factory, err := kafka.NewMockFactory(ctx, options)
+	changefeed := model.DefaultChangeFeedID("changefeed-test")
+	factory, err := kafka.NewMockFactory(ctx, options, changefeed)
 	require.NoError(t, err)
 
 	adminClient, err := factory.AdminClient()
@@ -109,7 +111,8 @@ func TestSyncSendMessage(t *testing.T) {
 	require.Nil(t, err)
 	saramaConfig.Producer.Flush.MaxMessages = 1
 
-	factory, err := kafka.NewMockFactory(ctx, options)
+	changefeed := model.DefaultChangeFeedID("changefeed-test")
+	factory, err := kafka.NewMockFactory(ctx, options, changefeed)
 	require.NoError(t, err)
 
 	adminClient, err := factory.AdminClient()
@@ -140,7 +143,8 @@ func TestProducerSendMsgFailed(t *testing.T) {
 	options.MaxMessageBytes = 1
 
 	// This will make the first send failed.
-	factory, err := kafka.NewMockFactory(ctx, options)
+	changefeed := model.DefaultChangeFeedID("changefeed-test")
+	factory, err := kafka.NewMockFactory(ctx, options, changefeed)
 	require.NoError(t, err)
 
 	adminClient, err := factory.AdminClient()
@@ -167,7 +171,8 @@ func TestProducerDoubleClose(t *testing.T) {
 	require.Nil(t, err)
 	saramaConfig.Producer.Flush.MaxMessages = 1
 
-	factory, err := kafka.NewMockFactory(ctx, options)
+	changefeed := model.DefaultChangeFeedID("changefeed-test")
+	factory, err := kafka.NewMockFactory(ctx, options, changefeed)
 	require.NoError(t, err)
 
 	adminClient, err := factory.AdminClient()

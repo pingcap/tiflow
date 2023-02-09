@@ -29,7 +29,8 @@ type MockFactory struct {
 
 // NewMockFactory constructs a Factory with mock implementation.
 func NewMockFactory(ctx context.Context,
-	o *Options, changefeedID model.ChangeFeedID) (Factory, error) {
+	o *Options, changefeedID model.ChangeFeedID,
+) (Factory, error) {
 	helper, err := NewSaramaFactory(ctx, o, changefeedID)
 	if err != nil {
 		return nil, err

@@ -58,7 +58,7 @@ func NewKafkaDMLSink(
 	if err != nil {
 		return nil, cerror.WrapError(cerror.ErrKafkaNewProducer, err)
 	}
-	
+
 	// We must close adminClient when this func return cause by an error
 	// otherwise the adminClient will never be closed and lead to a goroutine leak.
 	defer func() {
