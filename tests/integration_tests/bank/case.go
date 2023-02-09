@@ -143,13 +143,18 @@ func (s *sequenceTest) prepare(ctx context.Context, db *sql.DB, accounts, tableI
 func (*sequenceTest) verify(ctx context.Context, db *sql.DB, accounts, tableID int, tag string, endTs string) error {
 	return retry.Do(ctx, func() error {
 		query := fmt.Sprintf("set @@tidb_snapshot='%s'", endTs)
-		if _, err := db.ExecContext(ctx, query); err != nil {
+		// use a single connection to keep the same database session.
+		conn, err := db.Conn(ctx)
+		if err != nil {
+			return errors.Trace(err)
+		}
+		if _, err := conn.ExecContext(ctx, query); err != nil {
 			log.Error("sequenceTest set tidb_snapshot failed", zap.String("query", query), zap.Error(err))
 			return errors.Trace(err)
 		}
 
 		query = fmt.Sprintf("SELECT sequence FROM accounts_seq%d ORDER BY sequence", tableID)
-		rows, err := db.QueryContext(ctx, query)
+		rows, err := conn.QueryContext(ctx, query)
 		if err != nil {
 			log.Warn("select sequence err", zap.String("query", query), zap.Error(err), zap.String("tag", tag))
 			return nil
@@ -171,7 +176,7 @@ func (*sequenceTest) verify(ctx context.Context, db *sql.DB, accounts, tableID i
 
 		log.Info("sequence verify pass", zap.String("tag", tag))
 
-		if _, err := db.ExecContext(ctx, "set @@tidb_snapshot=''"); err != nil {
+		if _, err := conn.ExecContext(ctx, "set @@tidb_snapshot=''"); err != nil {
 			log.Warn("sequenceTest reset tidb_snapshot failed")
 		}
 
