@@ -177,13 +177,11 @@ func (k *ddlSink) WriteCheckpointTs(ctx context.Context,
 	return nil
 }
 
-func (k *ddlSink) Close() error {
+func (k *ddlSink) Close() {
 	if k.producer != nil {
 		k.producer.Close()
 	}
 	if k.admin != nil {
 		k.admin.Close()
 	}
-
-	return nil
 }

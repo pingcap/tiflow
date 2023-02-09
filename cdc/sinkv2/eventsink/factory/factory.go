@@ -110,12 +110,12 @@ func (s *SinkFactory) CreateTableSink(
 }
 
 // Close closes the sink.
-func (s *SinkFactory) Close() error {
+func (s *SinkFactory) Close() {
 	switch s.sinkType {
 	case sink.RowSink:
-		return s.rowSink.Close()
+		s.rowSink.Close()
 	case sink.TxnSink:
-		return s.txnSink.Close()
+		s.txnSink.Close()
 	default:
 		panic("unknown sink type")
 	}

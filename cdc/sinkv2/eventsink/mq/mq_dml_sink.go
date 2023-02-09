@@ -142,11 +142,13 @@ func (s *dmlSink) WriteEvents(rows ...*eventsink.RowChangeCallbackableEvent) err
 }
 
 // Close closes the sink.
-func (s *dmlSink) Close() error {
+func (s *dmlSink) Close() {
 	if s.cancel != nil {
 		s.cancel()
 	}
-	s.worker.close()
+	if s.worker != nil {
+		s.worker.close()
+	}
 	if s.adminClient != nil {
 		if err := s.adminClient.Close(); err != nil {
 			log.Warn("close admin client error",
@@ -155,5 +157,4 @@ func (s *dmlSink) Close() error {
 				zap.Error(err))
 		}
 	}
-	return nil
 }
