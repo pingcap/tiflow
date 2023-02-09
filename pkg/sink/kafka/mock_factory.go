@@ -54,7 +54,7 @@ func (f *MockFactory) AsyncProducer(
 
 // MetricRegistry implement the MetricsCollector interface
 func (f *MockFactory) MetricRegistry() metrics.Registry {
-	return nil
+	return metrics.DefaultRegistry
 }
 
 // MetricsCollector returns the metric collector

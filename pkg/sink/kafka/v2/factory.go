@@ -184,7 +184,7 @@ func (f *factory) AsyncProducer(changefeedID model.ChangeFeedID,
 
 // MetricRegistry implement the MetricsCollector interface
 func (f *factory) MetricRegistry() metrics.Registry {
-	return nil
+	return metrics.DefaultRegistry
 }
 
 // MetricsCollector returns the kafka metrics collector

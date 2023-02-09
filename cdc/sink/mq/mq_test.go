@@ -81,9 +81,9 @@ func TestKafkaSink(t *testing.T) {
 	replicaConfig := config.GetDefaultReplicaConfig()
 	errCh := make(chan error, 1)
 
-	kafkap.NewAdminClientImpl = kafka.NewMockAdminClient
+	kafkap.NewFactoryImpl = kafka.NewMockFactory
 	defer func() {
-		kafkap.NewAdminClientImpl = kafka.NewSaramaAdminClient
+		kafkap.NewFactoryImpl = kafka.NewSaramaFactory
 	}()
 
 	changefeedID := model.DefaultChangeFeedID("changefeed-test")
@@ -184,11 +184,10 @@ func TestFlushRowChangedEvents(t *testing.T) {
 	replicaConfig := config.GetDefaultReplicaConfig()
 	errCh := make(chan error, 1)
 
-	kafkap.NewAdminClientImpl = kafka.NewMockAdminClient
+	kafkap.NewFactoryImpl = kafka.NewMockFactory
 	defer func() {
-		kafkap.NewAdminClientImpl = kafka.NewSaramaAdminClient
+		kafkap.NewFactoryImpl = kafka.NewSaramaFactory
 	}()
-
 	require.Nil(t, replicaConfig.ValidateAndAdjust(sinkURI))
 
 	changefeedID := model.DefaultChangeFeedID("changefeed-test")
