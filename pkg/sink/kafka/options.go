@@ -447,7 +447,8 @@ func AdjustOptions(
 	}
 
 	info, exists := topics[topic]
-	// once we have found the topic, no matter `auto-create-topic`, make sure user input parameters are valid.
+	// once we have found the topic, no matter `auto-create-topic`,
+	// make sure user input parameters are valid.
 	if exists {
 		// make sure that producer's `MaxMessageBytes` smaller than topic's `max.message.bytes`
 		topicMaxMessageBytesStr, err := getTopicConfig(
@@ -471,7 +472,8 @@ func AdjustOptions(
 			options.MaxMessageBytes = topicMaxMessageBytes
 		}
 
-		// no need to create the topic, but we would have to log user if they found enter wrong topic name later
+		// no need to create the topic,
+		// but we would have to log user if they found enter wrong topic name later
 		if options.AutoCreate {
 			log.Warn("topic already exist, TiCDC will not create the topic",
 				zap.String("topic", topic), zap.Any("detail", info))
@@ -587,7 +589,8 @@ func validateMinInsyncReplicas(
 }
 
 // getTopicConfig gets topic config by name.
-// If the topic does not have this configuration, we will try to get it from the broker's configuration.
+// If the topic does not have this configuration,
+// we will try to get it from the broker's configuration.
 // NOTICE: The configuration names of topic and broker may be different for the same configuration.
 func getTopicConfig(
 	ctx context.Context,
