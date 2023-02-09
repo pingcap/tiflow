@@ -1,4 +1,4 @@
-// Copyright 2022 PingCAP, Inc.
+// Copyright 2023 PingCAP, Inc.
 //
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -21,6 +21,7 @@ import (
 	"github.com/pingcap/log"
 	"github.com/pingcap/tiflow/cdc/model"
 	cerror "github.com/pingcap/tiflow/pkg/errors"
+	"github.com/pingcap/tiflow/pkg/util"
 	"github.com/rcrowley/go-metrics"
 	"go.uber.org/zap"
 )
@@ -34,7 +35,14 @@ type Client interface {
 		closedChan chan struct{},
 		failpointCh chan error) (AsyncProducer, error)
 	// MetricRegistry returns the kafka client metric registry
+	// todo: this is only used by sink v1, after it's removed, remove this method.
 	MetricRegistry() metrics.Registry
+	// MetricsCollector returns the kafka metrics collector
+	MetricsCollector(
+		changefeedID model.ChangeFeedID,
+		role util.Role,
+		adminClient ClusterAdminClient,
+	) MetricsCollector
 	// Close closes the client
 	Close() error
 }
@@ -112,8 +120,18 @@ func (c *saramaKafkaClient) AsyncProducer(
 	}, nil
 }
 
+// MetricRegistry return the metrics registry
 func (c *saramaKafkaClient) MetricRegistry() metrics.Registry {
 	return c.client.Config().MetricRegistry
+}
+
+func (c *saramaKafkaClient) MetricsCollector(
+	changefeedID model.ChangeFeedID,
+	role util.Role,
+	adminClient ClusterAdminClient,
+) MetricsCollector {
+	return NewSaramaMetricsCollector(
+		changefeedID, role, adminClient, c.client.Config().MetricRegistry)
 }
 
 func (c *saramaKafkaClient) Close() error {
