@@ -40,10 +40,7 @@ type producer struct {
 	// clientLock is used to protect concurrent access of asyncProducer and syncProducer.
 	// Since we don't close these two clients (which have an input chan) from the
 	// sender routine, data race or send on closed chan could happen.
-	clientLock sync.RWMutex
-	// This admin mainly used by `metricsMonitor` to fetch broker info.
-	admin         kafka.ClusterAdminClient
-	factory       kafka.Factory
+	clientLock    sync.RWMutex
 	asyncProducer kafka.AsyncProducer
 	syncProducer  kafka.SyncProducer
 
@@ -191,25 +188,7 @@ func (k *producer) Close() error {
 	}
 	k.producersReleased = true
 
-	// `client` is mainly used by `asyncProducer` to fetch metadata and other related
-	// operations. When we close the `producer`, TiCDC no need to make sure
-	// that buffered messages flushed.
-	// Consider the situation that the broker does not respond, If the client is not
-	// closed, `asyncProducer.Close()` would waste a mount of time to try flush all messages.
-	// To prevent the scenario mentioned above, close client first.
 	start := time.Now()
-	if err := k.client.Close(); err != nil {
-		log.Error("close sarama client with error", zap.Error(err),
-			zap.Duration("duration", time.Since(start)),
-			zap.String("namespace", k.id.Namespace),
-			zap.String("changefeed", k.id.ID), zap.Any("role", k.role))
-	} else {
-		log.Info("sarama client closed", zap.Duration("duration", time.Since(start)),
-			zap.String("namespace", k.id.Namespace),
-			zap.String("changefeed", k.id.ID), zap.Any("role", k.role))
-	}
-
-	start = time.Now()
 	err := k.asyncProducer.Close()
 	if err != nil {
 		log.Error("close async client with error", zap.Error(err),
@@ -234,20 +213,6 @@ func (k *producer) Close() error {
 			zap.String("namespace", k.id.Namespace),
 			zap.String("changefeed", k.id.ID), zap.Any("role", k.role))
 	}
-
-	// adminClient should be closed last, since `metricsMonitor` would use it when `Cleanup`.
-	start = time.Now()
-	if err := k.admin.Close(); err != nil {
-		log.Warn("close kafka cluster admin with error", zap.Error(err),
-			zap.Duration("duration", time.Since(start)),
-			zap.String("namespace", k.id.Namespace),
-			zap.String("changefeed", k.id.ID), zap.Any("role", k.role))
-	} else {
-		log.Info("kafka cluster admin closed", zap.Duration("duration", time.Since(start)),
-			zap.String("namespace", k.id.Namespace),
-			zap.String("changefeed", k.id.ID), zap.Any("role", k.role))
-	}
-
 	return nil
 }
 
@@ -262,16 +227,13 @@ func (k *producer) run(ctx context.Context) error {
 	return k.asyncProducer.AsyncRunCallback(ctx)
 }
 
-// NewAdminClientImpl specifies the build method for the admin client.
-var NewAdminClientImpl kafka.ClusterAdminClientCreator = kafka.NewSaramaAdminClient
-
 // NewFactoryImpl specifies the build method for the  client.
 var NewFactoryImpl kafka.FactoryCreator = kafka.NewSaramaFactory
 
 // NewProducer creates a kafka producer
 func NewProducer(
 	ctx context.Context,
-	client kafka.Factory,
+	factory kafka.Factory,
 	admin kafka.ClusterAdminClient,
 	options *kafka.Options,
 	errCh chan error,
@@ -284,21 +246,19 @@ func NewProducer(
 
 	closeCh := make(chan struct{})
 	failpointCh := make(chan error, 1)
-	asyncProducer, err := client.AsyncProducer(changefeedID, closeCh, failpointCh)
+	asyncProducer, err := factory.AsyncProducer(changefeedID, closeCh, failpointCh)
 	if err != nil {
 		return nil, cerror.WrapError(cerror.ErrKafkaNewProducer, err)
 	}
 
-	syncProducer, err := client.SyncProducer()
+	syncProducer, err := factory.SyncProducer()
 	if err != nil {
 		return nil, cerror.WrapError(cerror.ErrKafkaNewProducer, err)
 	}
 
-	runMetricsMonitor(ctx, client.MetricRegistry(), changefeedID, role, admin)
+	runMetricsMonitor(ctx, factory.MetricRegistry(), changefeedID, role, admin)
 
 	k := &producer{
-		admin:         admin,
-		client:        client,
 		asyncProducer: asyncProducer,
 		syncProducer:  syncProducer,
 		closeCh:       closeCh,

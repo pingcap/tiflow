@@ -58,6 +58,8 @@ type mqSink struct {
 
 	statistics *metrics.Statistics
 
+	adminClient pkafka.ClusterAdminClient
+
 	role util.Role
 	id   model.ChangeFeedID
 }
@@ -66,6 +68,7 @@ func newMqSink(
 	ctx context.Context,
 	topicManager manager.TopicManager,
 	mqProducer producer.Producer,
+	adminClient pkafka.ClusterAdminClient,
 	defaultTopic string,
 	replicaConfig *config.ReplicaConfig, encoderConfig *common.Config,
 	errCh chan error,
@@ -97,8 +100,10 @@ func newMqSink(
 		flushWorker:    flushWorker,
 		resolvedBuffer: chann.New[resolvedTsEvent](),
 		statistics:     statistics,
-		role:           role,
-		id:             changefeedID,
+		adminClient:    adminClient,
+
+		role: role,
+		id:   changefeedID,
 	}
 
 	go func() {
@@ -335,6 +340,7 @@ func (k *mqSink) Close(_ context.Context) error {
 	// We need to close it asynchronously.
 	// Otherwise, we might get stuck with it in an unhealthy state of kafka.
 	go k.mqProducer.Close()
+	k.adminClient.Close()
 	return nil
 }
 
@@ -392,20 +398,26 @@ func NewKafkaSink(ctx context.Context, sinkURI *url.URL,
 		return nil, cerror.WrapError(cerror.ErrKafkaInvalidConfig, err)
 	}
 
-	adminClient, err := kafka.NewAdminClientImpl(ctx, options)
+	factory, err := kafka.NewFactoryImpl(ctx, options)
 	if err != nil {
 		return nil, cerror.WrapError(cerror.ErrKafkaNewProducer, err)
 	}
 
+	adminClient, err := factory.AdminClient()
 	// we must close adminClient when this func return cause by an error
 	// otherwise the adminClient will never be closed and lead to an goroutine leak
 	defer func() {
 		if err != nil {
-			adminClient.Close()
+			if err := adminClient.Close(); err != nil {
+				log.Warn("Close admin client failed",
+					zap.String("namespace", changefeedID.Namespace),
+					zap.String("changefeed", changefeedID.ID),
+					zap.Error(err))
+			}
 		}
 	}()
 
-	if err := kafka.AdjustOptions(ctx, adminClient, options, topic); err != nil {
+	if err := pkafka.AdjustOptions(ctx, adminClient, options, topic); err != nil {
 		return nil, cerror.WrapError(cerror.ErrKafkaNewProducer, err)
 	}
 
@@ -426,11 +438,6 @@ func NewKafkaSink(ctx context.Context, sinkURI *url.URL,
 		return nil, cerror.WrapError(cerror.ErrKafkaInvalidConfig, err)
 	}
 
-	client, err := kafka.NewFactoryImpl(ctx, options)
-	if err != nil {
-		return nil, cerror.WrapError(cerror.ErrKafkaNewProducer, err)
-	}
-
 	topicManager, err := manager.NewKafkaTopicManager(
 		ctx,
 		adminClient,
@@ -446,7 +453,7 @@ func NewKafkaSink(ctx context.Context, sinkURI *url.URL,
 
 	sProducer, err := kafka.NewProducer(
 		ctx,
-		client,
+		factory,
 		adminClient,
 		options,
 		errCh,
@@ -460,6 +467,7 @@ func NewKafkaSink(ctx context.Context, sinkURI *url.URL,
 		ctx,
 		topicManager,
 		sProducer,
+		adminClient,
 		topic,
 		replicaConfig,
 		encoderConfig,
