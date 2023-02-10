@@ -18,18 +18,22 @@ import (
 	"errors"
 	"strconv"
 	"strings"
+	"sync"
 	"syscall"
 
 	"github.com/Shopify/sarama"
 	"github.com/pingcap/log"
 	cerror "github.com/pingcap/tiflow/pkg/errors"
+	"github.com/pingcap/tiflow/pkg/retry"
 	"go.uber.org/zap"
 )
 
 type saramaAdminClient struct {
 	brokerEndpoints []string
 	config          *sarama.Config
-	client          sarama.ClusterAdmin
+
+	mu     sync.Mutex
+	client sarama.ClusterAdmin
 }
 
 // NewSaramaAdminClient constructs a ClusterAdminClient with sarama.
@@ -50,8 +54,37 @@ func NewSaramaAdminClient(ctx context.Context, config *Options) (ClusterAdminCli
 	}, nil
 }
 
-func (a *saramaAdminClient) GetAllBrokers(context.Context) ([]Broker, error) {
-	brokers, _, err := a.client.DescribeCluster()
+func (a *saramaAdminClient) reset() error {
+	newClient, err := sarama.NewClusterAdmin(a.brokerEndpoints, a.config)
+	if err != nil {
+		return cerror.Trace(err)
+	}
+
+	_ = a.client.Close()
+	a.client = newClient
+
+	return nil
+}
+
+func (a *saramaAdminClient) GetAllBrokers(ctx context.Context) ([]Broker, error) {
+	var (
+		brokers []*sarama.Broker
+		err     error
+	)
+	err = retry.Do(ctx, func() error {
+		a.mu.Lock()
+		defer a.mu.Unlock()
+		brokers, _, err = a.client.DescribeCluster()
+		if err == nil {
+			return nil
+		}
+
+		if !errors.Is(err, syscall.EPIPE) {
+			return err
+		}
+
+		return a.reset()
+	}, retry.WithBackoffBaseDelay(20), retry.WithMaxTries(1))
 	if err != nil {
 		return nil, err
 	}
@@ -66,25 +99,56 @@ func (a *saramaAdminClient) GetAllBrokers(context.Context) ([]Broker, error) {
 	return result, nil
 }
 
-func (a *saramaAdminClient) GetCoordinator(context.Context) (int, error) {
-	_, controllerID, err := a.client.DescribeCluster()
-	if err != nil {
-		return 0, err
-	}
-	return int(controllerID), nil
+func (a *saramaAdminClient) GetCoordinator(ctx context.Context) (int, error) {
+	var (
+		controllerID int32
+		err          error
+	)
+	err = retry.Do(ctx, func() error {
+		a.mu.Lock()
+		defer a.mu.Unlock()
+		_, controllerID, err = a.client.DescribeCluster()
+		if err == nil {
+			return nil
+		}
+
+		if !errors.Is(err, syscall.EPIPE) {
+			return err
+		}
+
+		return a.reset()
+	}, retry.WithBackoffBaseDelay(20), retry.WithMaxTries(1))
+
+	return int(controllerID), err
 }
 
-func (a *saramaAdminClient) GetBrokerConfig(_ context.Context, configName string) (string, error) {
-	_, controller, err := a.client.DescribeCluster()
+func (a *saramaAdminClient) GetBrokerConfig(
+	ctx context.Context,
+	configName string,
+) (string, error) {
+	controller, err := a.GetCoordinator(ctx)
 	if err != nil {
 		return "", err
 	}
 
-	configEntries, err := a.client.DescribeConfig(sarama.ConfigResource{
-		Type:        sarama.BrokerResource,
-		Name:        strconv.Itoa(int(controller)),
-		ConfigNames: []string{configName},
-	})
+	var configEntries []sarama.ConfigEntry
+	err = retry.Do(ctx, func() error {
+		a.mu.Lock()
+		defer a.mu.Unlock()
+		configEntries, err = a.client.DescribeConfig(sarama.ConfigResource{
+			Type:        sarama.BrokerResource,
+			Name:        strconv.Itoa(controller),
+			ConfigNames: []string{configName},
+		})
+		if err == nil {
+			return nil
+		}
+
+		if !errors.Is(err, syscall.EPIPE) {
+			return err
+		}
+		return a.reset()
+	}, retry.WithBackoffBaseDelay(20), retry.WithMaxTries(1))
 	if err != nil {
 		return "", err
 	}
@@ -98,30 +162,25 @@ func (a *saramaAdminClient) GetBrokerConfig(_ context.Context, configName string
 	return configEntries[0].Value, nil
 }
 
-func (a *saramaAdminClient) getAllTopicsMeta() (map[string]sarama.TopicDetail, error) {
-	topics, err := a.client.ListTopics()
-	if err == nil {
-		return topics, nil
-	}
+func (a *saramaAdminClient) GetAllTopicsMeta(ctx context.Context) (map[string]TopicDetail, error) {
+	var (
+		topics map[string]sarama.TopicDetail
+		err    error
+	)
 
-	if !errors.Is(err, syscall.EPIPE) {
-		return nil, err
-	}
+	err = retry.Do(ctx, func() error {
+		a.mu.Lock()
+		defer a.mu.Unlock()
+		topics, err = a.client.ListTopics()
+		if err == nil {
+			return nil
+		}
+		if !errors.Is(err, syscall.EPIPE) {
+			return err
+		}
+		return a.reset()
+	}, retry.WithBackoffBaseDelay(20), retry.WithMaxTries(1))
 
-	client, err := sarama.NewClusterAdmin(a.brokerEndpoints, a.config)
-	if err != nil {
-		return nil, err
-	}
-
-	a.client = client
-	return a.client.ListTopics()
-}
-
-func (a *saramaAdminClient) GetAllTopicsMeta(context.Context) (map[string]TopicDetail, error) {
-	topics, err := a.getAllTopicsMeta()
-	if err != nil {
-		return nil, cerror.Trace(err)
-	}
 	result := make(map[string]TopicDetail, len(topics))
 	for topic, detail := range topics {
 		configEntries := make(map[string]string, len(detail.ConfigEntries))
@@ -142,11 +201,28 @@ func (a *saramaAdminClient) GetAllTopicsMeta(context.Context) (map[string]TopicD
 }
 
 func (a *saramaAdminClient) GetTopicsMeta(
-	_ context.Context,
+	ctx context.Context,
 	topics []string,
 	ignoreTopicError bool,
 ) (map[string]TopicDetail, error) {
-	metaList, err := a.client.DescribeTopics(topics)
+	var (
+		metaList []*sarama.TopicMetadata
+		err      error
+	)
+
+	err = retry.Do(ctx, func() error {
+		a.mu.Lock()
+		defer a.mu.Unlock()
+		metaList, err = a.client.DescribeTopics(topics)
+		if err == nil {
+			return nil
+		}
+		if !errors.Is(err, syscall.EPIPE) {
+			return err
+		}
+
+		return a.reset()
+	}, retry.WithBackoffBaseDelay(20), retry.WithMaxTries(1))
 	if err != nil {
 		return nil, err
 	}
@@ -172,21 +248,35 @@ func (a *saramaAdminClient) GetTopicsMeta(
 }
 
 func (a *saramaAdminClient) CreateTopic(
-	_ context.Context,
+	ctx context.Context,
 	detail *TopicDetail,
 	validateOnly bool,
 ) error {
-	err := a.client.CreateTopic(detail.Name, &sarama.TopicDetail{
+	request := &sarama.TopicDetail{
 		NumPartitions:     detail.NumPartitions,
 		ReplicationFactor: detail.ReplicationFactor,
-	}, validateOnly)
-	// Ignore the already exists error because it's not harmful.
-	if err != nil && !strings.Contains(err.Error(), sarama.ErrTopicAlreadyExists.Error()) {
-		return err
 	}
-	return nil
+	err := retry.Do(ctx, func() error {
+		a.mu.Lock()
+		defer a.mu.Unlock()
+		err := a.client.CreateTopic(detail.Name, request, validateOnly)
+		if err == nil {
+			return nil
+		}
+		if strings.Contains(err.Error(), sarama.ErrTopicAlreadyExists.Error()) {
+			return nil
+		}
+		if !errors.Is(err, syscall.EPIPE) {
+			return err
+		}
+		return a.reset()
+	}, retry.WithBackoffBaseDelay(20), retry.WithMaxTries(1))
+
+	return err
 }
 
 func (a *saramaAdminClient) Close() error {
+	a.mu.Lock()
+	defer a.mu.Unlock()
 	return a.client.Close()
 }
