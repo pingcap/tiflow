@@ -891,8 +891,9 @@ func (m *SinkManager) Close() error {
 		zap.String("namespace", m.changefeedID.Namespace),
 		zap.String("changefeed", m.changefeedID.ID),
 		zap.Duration("cost", time.Since(start)))
-	// todo: add a unit test to cover this,
-	// make sure all sink workers exited before close the sink factory.
+	// todo: Add a unit test to cover this,
+	// Make sure all sink workers exited before closing the sink factory.
+	// Otherwise, it would panic in the sink when you try to write some data to a closed sink.
 	m.sinkFactory.Close()
 	log.Info("Closed sink manager",
 		zap.String("namespace", m.changefeedID.Namespace),
