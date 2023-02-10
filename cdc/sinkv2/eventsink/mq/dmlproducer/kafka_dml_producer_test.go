@@ -22,6 +22,7 @@ import (
 	"time"
 
 	"github.com/Shopify/sarama"
+	"github.com/pingcap/tiflow/cdc/model"
 	"github.com/pingcap/tiflow/cdc/sink/codec/common"
 	cerror "github.com/pingcap/tiflow/pkg/errors"
 	"github.com/pingcap/tiflow/pkg/sink/kafka"
@@ -80,7 +81,8 @@ func TestProducerAck(t *testing.T) {
 	require.Nil(t, err)
 	require.Equal(t, 1, config.Producer.Flush.MaxMessages)
 
-	factory, err := kafka.NewMockFactory(ctx, options)
+	changefeed := model.DefaultChangeFeedID("changefeed-test")
+	factory, err := kafka.NewMockFactory(ctx, options, changefeed)
 	require.NoError(t, err)
 
 	adminClient, err := factory.AdminClient()
@@ -146,7 +148,8 @@ func TestProducerSendMsgFailed(t *testing.T) {
 	options.MaxMessages = 1
 	options.MaxMessageBytes = 1
 
-	factory, err := kafka.NewMockFactory(ctx, options)
+	changefeed := model.DefaultChangeFeedID("changefeed-test")
+	factory, err := kafka.NewMockFactory(ctx, options, changefeed)
 	require.NoError(t, err)
 
 	adminClient, err := factory.AdminClient()
@@ -207,7 +210,8 @@ func TestProducerDoubleClose(t *testing.T) {
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 
-	factory, err := kafka.NewMockFactory(ctx, options)
+	changefeed := model.DefaultChangeFeedID("changefeed-test")
+	factory, err := kafka.NewMockFactory(ctx, options, changefeed)
 	require.NoError(t, err)
 
 	adminClient, err := factory.AdminClient()

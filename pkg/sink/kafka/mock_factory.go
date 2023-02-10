@@ -39,6 +39,7 @@ func NewMockFactory(ctx context.Context,
 	return &MockFactory{helper: helper}, nil
 }
 
+// AdminClient return a mocked admin client
 func (f *MockFactory) AdminClient() (ClusterAdminClient, error) {
 	return NewClusterAdminClientMockImpl(), nil
 }
