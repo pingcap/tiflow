@@ -15,8 +15,10 @@ package kafka
 
 import (
 	"context"
+	"errors"
 	"strconv"
 	"strings"
+	"syscall"
 
 	"github.com/Shopify/sarama"
 	"github.com/pingcap/log"
@@ -25,7 +27,9 @@ import (
 )
 
 type saramaAdminClient struct {
-	client sarama.ClusterAdmin
+	brokerEndpoints []string
+	config          *sarama.Config
+	client          sarama.ClusterAdmin
 }
 
 // NewSaramaAdminClient constructs a ClusterAdminClient with sarama.
@@ -39,7 +43,11 @@ func NewSaramaAdminClient(ctx context.Context, config *Options) (ClusterAdminCli
 	if err != nil {
 		return nil, err
 	}
-	return &saramaAdminClient{client: client}, nil
+	return &saramaAdminClient{
+		client:          client,
+		brokerEndpoints: config.BrokerEndpoints,
+		config:          saramaConfig,
+	}, nil
 }
 
 func (a *saramaAdminClient) GetAllBrokers(context.Context) ([]Broker, error) {
@@ -90,12 +98,30 @@ func (a *saramaAdminClient) GetBrokerConfig(_ context.Context, configName string
 	return configEntries[0].Value, nil
 }
 
-func (a *saramaAdminClient) GetAllTopicsMeta(context.Context) (map[string]TopicDetail, error) {
+func (a *saramaAdminClient) getAllTopicsMeta() (map[string]sarama.TopicDetail, error) {
 	topics, err := a.client.ListTopics()
+	if err == nil {
+		return topics, nil
+	}
+
+	if !errors.Is(err, syscall.EPIPE) {
+		return nil, err
+	}
+
+	client, err := sarama.NewClusterAdmin(a.brokerEndpoints, a.config)
 	if err != nil {
 		return nil, err
 	}
 
+	a.client = client
+	return a.client.ListTopics()
+}
+
+func (a *saramaAdminClient) GetAllTopicsMeta(context.Context) (map[string]TopicDetail, error) {
+	topics, err := a.getAllTopicsMeta()
+	if err != nil {
+		return nil, cerror.Trace(err)
+	}
 	result := make(map[string]TopicDetail, len(topics))
 	for topic, detail := range topics {
 		configEntries := make(map[string]string, len(detail.ConfigEntries))
