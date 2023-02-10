@@ -1,4 +1,4 @@
-// Copyright 2021 PingCAP, Inc.
+// Copyright 2023 PingCAP, Inc.
 //
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -14,7 +14,7 @@
 package cli
 
 import (
-	apiv1client "github.com/pingcap/tiflow/pkg/api/v1"
+	apiv2client "github.com/pingcap/tiflow/pkg/api/v2"
 	cmdcontext "github.com/pingcap/tiflow/pkg/cmd/context"
 	"github.com/pingcap/tiflow/pkg/cmd/factory"
 	"github.com/pingcap/tiflow/pkg/cmd/util"
@@ -23,7 +23,7 @@ import (
 
 // listProcessorOptions defines flags for the `cli processor list` command.
 type listProcessorOptions struct {
-	apiClient apiv1client.APIV1Interface
+	apiClient apiv2client.APIV2Interface
 }
 
 // newListProcessorOptions creates new listProcessorOptions for the `cli processor list` command.
@@ -33,7 +33,7 @@ func newListProcessorOptions() *listProcessorOptions {
 
 // complete adapts from the command line args to the data and client required.
 func (o *listProcessorOptions) complete(f factory.Factory) error {
-	apiClient, err := f.APIV1Client()
+	apiClient, err := f.APIV2Client()
 	if err != nil {
 		return err
 	}
