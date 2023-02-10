@@ -14,11 +14,13 @@
 package kafka
 
 import (
+	"context"
 	"fmt"
 	"net/url"
 	"testing"
 	"time"
 
+	"github.com/Shopify/sarama"
 	"github.com/pingcap/errors"
 	"github.com/pingcap/tiflow/cdc/model"
 	cerror "github.com/pingcap/tiflow/pkg/errors"
@@ -174,4 +176,212 @@ func TestTimeout(t *testing.T) {
 	require.Equal(t, 5*time.Second, options.DialTimeout)
 	require.Equal(t, 1000*time.Millisecond, options.ReadTimeout)
 	require.Equal(t, 2*time.Minute, options.WriteTimeout)
+}
+
+func TestAdjustConfigTopicNotExist(t *testing.T) {
+	adminClient := NewClusterAdminClientMockImpl()
+	defer func() {
+		_ = adminClient.Close()
+	}()
+
+	options := NewOptions()
+	options.BrokerEndpoints = []string{"127.0.0.1:9092"}
+
+	// When the topic does not exist, use the broker's configuration to create the topic.
+	// topic not exist, `max-message-bytes` = `message.max.bytes`
+	options.MaxMessageBytes = adminClient.GetBrokerMessageMaxBytes()
+	ctx := context.Background()
+	saramaConfig, err := NewSaramaConfig(ctx, options)
+	require.Nil(t, err)
+
+	err = AdjustOptions(ctx, adminClient, options, "create-random1")
+	require.Nil(t, err)
+	expectedSaramaMaxMessageBytes := options.MaxMessageBytes
+	require.Equal(t, expectedSaramaMaxMessageBytes, saramaConfig.Producer.MaxMessageBytes)
+
+	// topic not exist, `max-message-bytes` > `message.max.bytes`
+	options.MaxMessageBytes = adminClient.GetBrokerMessageMaxBytes() + 1
+	saramaConfig, err = NewSaramaConfig(ctx, options)
+	require.Nil(t, err)
+	err = AdjustOptions(ctx, adminClient, options, "create-random2")
+	require.Nil(t, err)
+	expectedSaramaMaxMessageBytes = adminClient.GetBrokerMessageMaxBytes()
+	require.Equal(t, expectedSaramaMaxMessageBytes, options.MaxMessageBytes)
+
+	// topic not exist, `max-message-bytes` < `message.max.bytes`
+	options.MaxMessageBytes = adminClient.GetBrokerMessageMaxBytes() - 1
+	saramaConfig, err = NewSaramaConfig(ctx, options)
+	require.Nil(t, err)
+	err = AdjustOptions(ctx, adminClient, options, "create-random3")
+	require.Nil(t, err)
+	expectedSaramaMaxMessageBytes = options.MaxMessageBytes
+	require.Equal(t, expectedSaramaMaxMessageBytes, options.MaxMessageBytes)
+}
+
+func TestAdjustConfigTopicExist(t *testing.T) {
+	adminClient := NewClusterAdminClientMockImpl()
+	defer func() {
+		_ = adminClient.Close()
+	}()
+
+	options := NewOptions()
+	options.BrokerEndpoints = []string{"127.0.0.1:9092"}
+
+	// topic exists, `max-message-bytes` = `max.message.bytes`.
+	options.MaxMessageBytes = adminClient.GetTopicMaxMessageBytes()
+
+	ctx := context.Background()
+	saramaConfig, err := NewSaramaConfig(ctx, options)
+	require.Nil(t, err)
+
+	err = AdjustOptions(ctx, adminClient, options, adminClient.GetDefaultMockTopicName())
+	require.Nil(t, err)
+
+	expectedSaramaMaxMessageBytes := options.MaxMessageBytes
+	require.Equal(t, expectedSaramaMaxMessageBytes, saramaConfig.Producer.MaxMessageBytes)
+
+	// topic exists, `max-message-bytes` > `max.message.bytes`
+	options.MaxMessageBytes = adminClient.GetTopicMaxMessageBytes() + 1
+	saramaConfig, err = NewSaramaConfig(context.Background(), options)
+	require.Nil(t, err)
+
+	err = AdjustOptions(ctx, adminClient, options, adminClient.GetDefaultMockTopicName())
+	require.Nil(t, err)
+
+	expectedSaramaMaxMessageBytes = adminClient.GetTopicMaxMessageBytes()
+	require.Equal(t, expectedSaramaMaxMessageBytes, options.MaxMessageBytes)
+
+	// topic exists, `max-message-bytes` < `max.message.bytes`
+	options.MaxMessageBytes = adminClient.GetTopicMaxMessageBytes() - 1
+	saramaConfig, err = NewSaramaConfig(ctx, options)
+	require.Nil(t, err)
+
+	err = AdjustOptions(ctx, adminClient, options, adminClient.GetDefaultMockTopicName())
+	require.Nil(t, err)
+
+	expectedSaramaMaxMessageBytes = options.MaxMessageBytes
+	require.Equal(t, expectedSaramaMaxMessageBytes, saramaConfig.Producer.MaxMessageBytes)
+
+	// When the topic exists, but the topic does not have `max.message.bytes`
+	// create a topic without `max.message.bytes`
+	topicName := "test-topic"
+	detail := &TopicDetail{
+		Name:          topicName,
+		NumPartitions: 3,
+		// Does not contain `max.message.bytes`.
+		ConfigEntries: make(map[string]string),
+	}
+	err = adminClient.CreateTopic(context.Background(), detail, false)
+	require.Nil(t, err)
+
+	options.MaxMessageBytes = adminClient.GetBrokerMessageMaxBytes() - 1
+	saramaConfig, err = NewSaramaConfig(ctx, options)
+	require.Nil(t, err)
+
+	err = AdjustOptions(ctx, adminClient, options, topicName)
+	require.Nil(t, err)
+
+	// since `max.message.bytes` cannot be found, use broker's `message.max.bytes` instead.
+	expectedSaramaMaxMessageBytes = options.MaxMessageBytes
+	require.Equal(t, expectedSaramaMaxMessageBytes, saramaConfig.Producer.MaxMessageBytes)
+
+	// When the topic exists, but the topic doesn't have `max.message.bytes`
+	// `max-message-bytes` > `message.max.bytes`
+	options.MaxMessageBytes = adminClient.GetBrokerMessageMaxBytes() + 1
+	saramaConfig, err = NewSaramaConfig(ctx, options)
+	require.Nil(t, err)
+
+	err = AdjustOptions(ctx, adminClient, options, topicName)
+	require.Nil(t, err)
+	expectedSaramaMaxMessageBytes = adminClient.GetBrokerMessageMaxBytes()
+	require.Equal(t, expectedSaramaMaxMessageBytes, options.MaxMessageBytes)
+}
+
+func TestAdjustConfigMinInsyncReplicas(t *testing.T) {
+	adminClient := NewClusterAdminClientMockImpl()
+	defer func() {
+		_ = adminClient.Close()
+	}()
+
+	options := NewOptions()
+	options.BrokerEndpoints = []string{"127.0.0.1:9092"}
+
+	// Report an error if the replication-factor is less than min.insync.replicas
+	// when the topic does not exist.
+	adminClient.SetMinInsyncReplicas("2")
+
+	ctx := context.Background()
+	err := AdjustOptions(
+		ctx,
+		adminClient,
+		options,
+		"create-new-fail-invalid-min-insync-replicas",
+	)
+	require.Regexp(
+		t,
+		".*`replication-factor` 1 is smaller than the `min.insync.replicas` 2 of broker.*",
+		errors.Cause(err),
+	)
+
+	// topic not exist, and `min.insync.replicas` not found in broker's configuration
+	adminClient.DropBrokerConfig(MinInsyncReplicasConfigName)
+	topicName := "no-topic-no-min-insync-replicas"
+	err = AdjustOptions(ctx, adminClient, options, "no-topic-no-min-insync-replicas")
+	require.Nil(t, err)
+	err = adminClient.CreateTopic(context.Background(), &TopicDetail{
+		Name:              topicName,
+		ReplicationFactor: 1,
+	}, false)
+	require.ErrorIs(t, err, sarama.ErrPolicyViolation)
+
+	// Report an error if the replication-factor is less than min.insync.replicas
+	// when the topic does exist.
+
+	// topic exist, but `min.insync.replicas` not found in topic and broker configuration
+	topicName = "topic-no-options-entry"
+	err = adminClient.CreateTopic(context.Background(), &TopicDetail{
+		Name:              topicName,
+		ReplicationFactor: 3,
+		NumPartitions:     3,
+	}, false)
+	require.Nil(t, err)
+	err = AdjustOptions(ctx, adminClient, options, topicName)
+	require.Nil(t, err)
+
+	// topic found, and have `min.insync.replicas`, but set to 2, larger than `replication-factor`.
+	adminClient.SetMinInsyncReplicas("2")
+	err = AdjustOptions(ctx, adminClient, options, adminClient.GetDefaultMockTopicName())
+	require.Regexp(t,
+		".*`replication-factor` 1 is smaller than the `min.insync.replicas` 2 of topic.*",
+		errors.Cause(err),
+	)
+}
+
+func TestSkipAdjustConfigMinInsyncReplicasWhenRequiredAcksIsNotWailAll(t *testing.T) {
+	adminClient := NewClusterAdminClientMockImpl()
+	defer func() {
+		_ = adminClient.Close()
+	}()
+
+	options := NewOptions()
+	options.BrokerEndpoints = []string{"127.0.0.1:9092"}
+	options.RequiredAcks = WaitForLocal
+
+	// Do not report an error if the replication-factor is less than min.insync.replicas(1<2).
+	adminClient.SetMinInsyncReplicas("2")
+	err := AdjustOptions(
+		context.Background(),
+		adminClient,
+		options,
+		"skip-check-min-insync-replicas",
+	)
+	require.Nil(t, err, "Should not report an error when `required-acks` is not `all`")
+}
+
+func TestCreateProducerFailed(t *testing.T) {
+	options := NewOptions()
+	options.Version = "invalid"
+	saramaConfig, err := NewSaramaConfig(context.Background(), options)
+	require.Regexp(t, "invalid version.*", errors.Cause(err))
+	require.Nil(t, saramaConfig)
 }

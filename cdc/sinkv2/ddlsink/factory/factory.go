@@ -17,7 +17,6 @@ import (
 	"context"
 	"strings"
 
-	"github.com/pingcap/tiflow/cdc/sink/mq/producer/kafka"
 	"github.com/pingcap/tiflow/cdc/sinkv2/ddlsink"
 	"github.com/pingcap/tiflow/cdc/sinkv2/ddlsink/blackhole"
 	"github.com/pingcap/tiflow/cdc/sinkv2/ddlsink/cloudstorage"
@@ -27,8 +26,15 @@ import (
 	"github.com/pingcap/tiflow/pkg/config"
 	cerror "github.com/pingcap/tiflow/pkg/errors"
 	"github.com/pingcap/tiflow/pkg/sink"
+	"github.com/pingcap/tiflow/pkg/sink/kafka"
 	pmysql "github.com/pingcap/tiflow/pkg/sink/mysql"
 )
+
+// NewAdminClientImpl specifies the build method for the admin client.
+var NewAdminClientImpl kafka.ClusterAdminClientCreator = kafka.NewSaramaAdminClient
+
+// NewClientImpl specifies the build method for the  client.
+var NewClientImpl kafka.ClientCreator = kafka.NewSaramaClient
 
 // New creates a new ddlsink.DDLEventSink by schema.
 func New(
@@ -44,7 +50,7 @@ func New(
 	switch schema {
 	case sink.KafkaScheme, sink.KafkaSSLScheme:
 		return mq.NewKafkaDDLSink(ctx, sinkURI, cfg,
-			kafka.NewAdminClientImpl, kafka.NewClientImpl, ddlproducer.NewKafkaDDLProducer)
+			NewAdminClientImpl, NewClientImpl, ddlproducer.NewKafkaDDLProducer)
 	case sink.BlackHoleScheme:
 		return blackhole.New(), nil
 	case sink.MySQLSSLScheme, sink.MySQLScheme, sink.TiDBScheme, sink.TiDBSSLScheme:
