@@ -59,11 +59,10 @@ type mockFactory struct {
 	factory.Factory
 	captures    *mock.MockCaptureInterface
 	changefeeds *mock.MockChangefeedInterface
-	processor   *mock.MockProcessorInterface
+	processors  *mock.MockProcessorInterface
 	status      *mock.MockStatusInterface
 	tso         *mock.MockTsoInterface
 	unsafes     *mock.MockUnsafeInterface
-	processors  *mock.MockProcessorInterface
 }
 
 func newMockFactory(ctrl *gomock.Controller) *mockFactory {
@@ -76,7 +75,7 @@ func newMockFactory(ctrl *gomock.Controller) *mockFactory {
 	return &mockFactory{
 		captures:    cps,
 		changefeeds: cf,
-		processor:   processor,
+		processors:  processor,
 		status:      statuses,
 		tso:         tso,
 		unsafes:     unsafes,
