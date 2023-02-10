@@ -51,8 +51,7 @@ type saramaMetricsCollector struct {
 	// adminClient is used to get broker infos from broker.
 	adminClient ClusterAdminClient
 	brokers     map[int32]struct{}
-
-	registry metrics.Registry
+	registry    metrics.Registry
 }
 
 // NewSaramaMetricsCollector return a kafka metrics collector based on sarama library.
