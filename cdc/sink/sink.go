@@ -23,6 +23,7 @@ import (
 	"github.com/pingcap/tiflow/cdc/sink/mysql"
 	"github.com/pingcap/tiflow/pkg/config"
 	cerror "github.com/pingcap/tiflow/pkg/errors"
+	"github.com/pingcap/tiflow/pkg/sink/kafka"
 )
 
 // Sink is an abstraction for anything that a changefeed may emit into.
@@ -123,7 +124,7 @@ func init() {
 		config *config.ReplicaConfig,
 		errCh chan error,
 	) (Sink, error) {
-		return mq.NewKafkaSink(ctx, sinkURI, config, errCh, changefeedID)
+		return mq.NewKafkaSink(ctx, sinkURI, config, kafka.NewSaramaFactory, errCh, changefeedID)
 	}
 	sinkIniterMap["kafka+ssl"] = sinkIniterMap["kafka"]
 }

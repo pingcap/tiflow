@@ -203,9 +203,6 @@ func (k *producer) run(ctx context.Context) error {
 	return k.asyncProducer.AsyncRunCallback(ctx)
 }
 
-// NewFactoryImpl specifies the build method for the  client.
-var NewFactoryImpl kafka.FactoryCreator = kafka.NewSaramaFactory
-
 // NewProducer creates a kafka producer
 func NewProducer(
 	ctx context.Context,
