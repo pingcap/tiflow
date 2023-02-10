@@ -59,9 +59,7 @@ func (m *mockSink) GetWriteTimes() int {
 	return m.writeTimes
 }
 
-func (m *mockSink) Close() error {
-	return nil
-}
+func (m *mockSink) Close() {}
 
 //nolint:unparam
 func createTableSinkWrapper(

@@ -195,15 +195,21 @@ func (s *dmlSink) WriteEvents(txns ...*eventsink.CallbackableEvent[*model.Single
 }
 
 // Close closes the cloud storage sink.
-func (s *dmlSink) Close() error {
-	s.defragmenter.close()
+func (s *dmlSink) Close() {
+	if s.defragmenter != nil {
+		s.defragmenter.close()
+	}
+
 	for _, w := range s.encodingWorkers {
 		w.close()
 	}
-	s.writer.close()
+
+	if s.writer != nil {
+		s.writer.close()
+	}
+
 	if s.statistics != nil {
 		s.statistics.Close()
 	}
 	s.wg.Wait()
-	return nil
 }
