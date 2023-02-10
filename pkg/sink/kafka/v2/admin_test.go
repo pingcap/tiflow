@@ -48,7 +48,7 @@ func TestGetAllBrokers(t *testing.T) {
 
 	admin, client := newClusterAdminClientWithMock(t)
 	client.EXPECT().Metadata(gomock.Any(), gomock.Any()).
-		Return(nil, fmt.Errorf("kafka.(*Factory).Metadata"))
+		Return(nil, fmt.Errorf("kafka.(*Client).Metadata"))
 
 	ctx := context.Background()
 	brokers, err := admin.GetAllBrokers(ctx)
@@ -79,7 +79,7 @@ func TestGetCoordinator(t *testing.T) {
 
 	admin, client := newClusterAdminClientWithMock(t)
 	client.EXPECT().Metadata(gomock.Any(), gomock.Any()).
-		Return(nil, fmt.Errorf("kafka.(*Factory).Metadata"))
+		Return(nil, fmt.Errorf("kafka.(*Client).Metadata"))
 
 	ctx := context.Background()
 	coordinatorID, err := admin.GetCoordinator(ctx)
@@ -104,7 +104,7 @@ func TestGetBrokerConfig(t *testing.T) {
 
 	// cannot find the coordinator
 	client.EXPECT().Metadata(gomock.Any(), gomock.Any()).
-		Return(nil, fmt.Errorf("kafka.(*Factory).Metadata"))
+		Return(nil, fmt.Errorf("kafka.(*Client).Metadata"))
 	result, err := admin.GetBrokerConfig(ctx, "test-config-name")
 	require.Error(t, err)
 	require.Equal(t, "", result)
@@ -116,7 +116,7 @@ func TestGetBrokerConfig(t *testing.T) {
 
 	// cannot get kafka broker's config
 	client.EXPECT().DescribeConfigs(gomock.Any(), gomock.Any()).
-		Return(nil, fmt.Errorf("kafka.(*Factory).DescribeConfigs"))
+		Return(nil, fmt.Errorf("kafka.(*Client).DescribeConfigs"))
 	result, err = admin.GetBrokerConfig(ctx, "test-config-name")
 	require.Error(t, err)
 	require.Equal(t, "", result)
@@ -176,7 +176,7 @@ func TestGetAllTopicsMeta(t *testing.T) {
 
 	admin, client := newClusterAdminClientWithMock(t)
 	client.EXPECT().Metadata(gomock.Any(), gomock.Any()).
-		Return(nil, fmt.Errorf("kafka.(*Factory).Metadata"))
+		Return(nil, fmt.Errorf("kafka.(*Client).Metadata"))
 
 	result, err := admin.GetAllTopicsMeta(ctx)
 	require.Error(t, err)
@@ -185,7 +185,7 @@ func TestGetAllTopicsMeta(t *testing.T) {
 	client.EXPECT().Metadata(gomock.Any(), gomock.Any()).
 		Return(&kafka.MetadataResponse{}, nil)
 	client.EXPECT().DescribeConfigs(gomock.Any(), gomock.Any()).
-		Return(nil, fmt.Errorf("kafka.(*Factory).DescribeConfigs"))
+		Return(nil, fmt.Errorf("kafka.(*Client).DescribeConfigs"))
 
 	result, err = admin.GetAllTopicsMeta(ctx)
 	require.Error(t, err)
@@ -248,7 +248,7 @@ func TestGetAllTopicsMeta(t *testing.T) {
 		}, nil).AnyTimes()
 
 	client.EXPECT().DescribeConfigs(gomock.Any(), gomock.Any()).
-		Return(nil, fmt.Errorf("kafka.(*Factory).DescribeConfigs"))
+		Return(nil, fmt.Errorf("kafka.(*Client).DescribeConfigs"))
 
 	result, err = admin.GetAllTopicsMeta(ctx)
 	require.Error(t, err)
@@ -327,7 +327,7 @@ func TestGetTopicMeta(t *testing.T) {
 
 	// cannot get topics meta from kafka
 	client.EXPECT().Metadata(gomock.Any(), gomock.Any()).
-		Return(nil, fmt.Errorf("kafka.(*Factory).Metadata"))
+		Return(nil, fmt.Errorf("kafka.(*Client).Metadata"))
 	result, err := admin.GetTopicsMeta(ctx, []string{}, true)
 	require.Error(t, err)
 	require.Nil(t, result)
@@ -371,7 +371,7 @@ func TestCreateTopic(t *testing.T) {
 	admin, client := newClusterAdminClientWithMock(t)
 
 	client.EXPECT().CreateTopics(gomock.Any(), gomock.Any()).
-		Return(nil, fmt.Errorf("kafka.(*Factory).CreateTopics"))
+		Return(nil, fmt.Errorf("kafka.(*Client).CreateTopics"))
 	err := admin.CreateTopic(ctx, &pkafka.TopicDetail{
 		Name:              "topic-1",
 		NumPartitions:     1,
