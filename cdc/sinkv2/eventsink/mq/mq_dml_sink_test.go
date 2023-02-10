@@ -121,6 +121,5 @@ func TestWriteEvents(t *testing.T) {
 	require.Nil(t, err)
 	require.Len(t, errCh, 0)
 	require.Len(t, s.worker.producer.(*dmlproducer.MockDMLProducer).GetAllEvents(), 3000)
-	err = s.Close()
-	require.Nil(t, err)
+	s.Close()
 }

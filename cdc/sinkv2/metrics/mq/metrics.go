@@ -14,7 +14,7 @@
 package mq
 
 import (
-	"github.com/pingcap/tiflow/cdc/sinkv2/metrics/mq/kafka"
+	"github.com/pingcap/tiflow/pkg/sink/kafka"
 	"github.com/prometheus/client_golang/prometheus"
 )
 

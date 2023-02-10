@@ -91,8 +91,7 @@ func TestWriteDDLEvent(t *testing.T) {
 	err = sink.WriteDDLEvent(ctx, ddl1)
 	require.Nil(t, err)
 
-	err = sink.Close()
-	require.Nil(t, err)
+	sink.Close()
 }
 
 func TestNeedSwitchDB(t *testing.T) {
