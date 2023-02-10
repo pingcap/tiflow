@@ -878,7 +878,6 @@ func (m *SinkManager) Close() error {
 	}
 	m.sinkMemQuota.Close()
 	m.redoMemQuota.Close()
-	m.sinkFactory.Close()
 	m.tableSinks.Range(func(_ tablepb.Span, value interface{}) bool {
 		sink := value.(*tableSinkWrapper)
 		sink.close(m.ctx)
@@ -887,11 +886,12 @@ func (m *SinkManager) Close() error {
 		}
 		return true
 	})
+	m.wg.Wait()
 	log.Info("All table sinks closed",
 		zap.String("namespace", m.changefeedID.Namespace),
 		zap.String("changefeed", m.changefeedID.ID),
 		zap.Duration("cost", time.Since(start)))
-	m.wg.Wait()
+	m.sinkFactory.Close()
 	log.Info("Closed sink manager",
 		zap.String("namespace", m.changefeedID.Namespace),
 		zap.String("changefeed", m.changefeedID.ID),
