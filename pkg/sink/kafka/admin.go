@@ -36,6 +36,11 @@ type saramaAdminClient struct {
 	client sarama.ClusterAdmin
 }
 
+const (
+	defaultRetryBackoff  = 20
+	defaultRetryMaxTries = 3
+)
+
 // NewSaramaAdminClient constructs a ClusterAdminClient with sarama.
 func NewSaramaAdminClient(ctx context.Context, config *Options) (ClusterAdminClient, error) {
 	saramaConfig, err := NewSaramaConfig(ctx, config)
@@ -63,7 +68,7 @@ func (a *saramaAdminClient) reset() error {
 	_ = a.client.Close()
 	a.client = newClient
 
-	return nil
+	return errors.New("retry after reset")
 }
 
 func (a *saramaAdminClient) GetAllBrokers(ctx context.Context) ([]Broker, error) {
@@ -84,7 +89,7 @@ func (a *saramaAdminClient) GetAllBrokers(ctx context.Context) ([]Broker, error)
 		}
 
 		return a.reset()
-	}, retry.WithBackoffBaseDelay(20), retry.WithMaxTries(1))
+	}, retry.WithBackoffBaseDelay(defaultRetryBackoff), retry.WithMaxTries(defaultRetryMaxTries))
 	if err != nil {
 		return nil, err
 	}
@@ -117,7 +122,7 @@ func (a *saramaAdminClient) GetCoordinator(ctx context.Context) (int, error) {
 		}
 
 		return a.reset()
-	}, retry.WithBackoffBaseDelay(20), retry.WithMaxTries(1))
+	}, retry.WithBackoffBaseDelay(defaultRetryBackoff), retry.WithMaxTries(defaultRetryMaxTries))
 
 	return int(controllerID), err
 }
@@ -148,7 +153,7 @@ func (a *saramaAdminClient) GetBrokerConfig(
 			return err
 		}
 		return a.reset()
-	}, retry.WithBackoffBaseDelay(20), retry.WithMaxTries(1))
+	}, retry.WithBackoffBaseDelay(defaultRetryBackoff), retry.WithMaxTries(defaultRetryMaxTries))
 	if err != nil {
 		return "", err
 	}
@@ -179,7 +184,10 @@ func (a *saramaAdminClient) GetAllTopicsMeta(ctx context.Context) (map[string]To
 			return err
 		}
 		return a.reset()
-	}, retry.WithBackoffBaseDelay(20), retry.WithMaxTries(1))
+	}, retry.WithBackoffBaseDelay(defaultRetryBackoff), retry.WithMaxTries(defaultRetryMaxTries))
+	if err != nil {
+		return nil, err
+	}
 
 	result := make(map[string]TopicDetail, len(topics))
 	for topic, detail := range topics {
@@ -222,7 +230,7 @@ func (a *saramaAdminClient) GetTopicsMeta(
 		}
 
 		return a.reset()
-	}, retry.WithBackoffBaseDelay(20), retry.WithMaxTries(1))
+	}, retry.WithBackoffBaseDelay(defaultRetryBackoff), retry.WithMaxTries(defaultRetryMaxTries))
 	if err != nil {
 		return nil, err
 	}
@@ -270,7 +278,7 @@ func (a *saramaAdminClient) CreateTopic(
 			return err
 		}
 		return a.reset()
-	}, retry.WithBackoffBaseDelay(20), retry.WithMaxTries(1))
+	}, retry.WithBackoffBaseDelay(defaultRetryBackoff), retry.WithMaxTries(defaultRetryMaxTries))
 
 	return err
 }
