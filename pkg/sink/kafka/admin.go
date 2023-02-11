@@ -71,15 +71,11 @@ func (a *saramaAdminClient) reset() error {
 	return errors.New("retry after reset")
 }
 
-func (a *saramaAdminClient) GetAllBrokers(ctx context.Context) ([]Broker, error) {
-	var (
-		brokers []*sarama.Broker
-		err     error
-	)
-	err = retry.Do(ctx, func() error {
+func (a *saramaAdminClient) queryClusterWithRetry(ctx context.Context, query func() error) error {
+	err := retry.Do(ctx, func() error {
 		a.mu.Lock()
 		defer a.mu.Unlock()
-		brokers, _, err = a.client.DescribeCluster()
+		err := query()
 		if err == nil {
 			return nil
 		}
@@ -90,6 +86,20 @@ func (a *saramaAdminClient) GetAllBrokers(ctx context.Context) ([]Broker, error)
 
 		return a.reset()
 	}, retry.WithBackoffBaseDelay(defaultRetryBackoff), retry.WithMaxTries(defaultRetryMaxTries))
+	return err
+}
+
+func (a *saramaAdminClient) GetAllBrokers(ctx context.Context) ([]Broker, error) {
+	var (
+		brokers []*sarama.Broker
+		err     error
+	)
+	query := func() error {
+		brokers, _, err = a.client.DescribeCluster()
+		return err
+	}
+
+	err = a.queryClusterWithRetry(ctx, query)
 	if err != nil {
 		return nil, err
 	}
