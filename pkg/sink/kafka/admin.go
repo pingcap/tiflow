@@ -17,7 +17,6 @@ import (
 	"context"
 	"errors"
 	"strconv"
-	"strings"
 	"sync"
 	"syscall"
 
@@ -119,21 +118,12 @@ func (a *saramaAdminClient) GetCoordinator(ctx context.Context) (int, error) {
 		controllerID int32
 		err          error
 	)
-	err = retry.Do(ctx, func() error {
-		a.mu.Lock()
-		defer a.mu.Unlock()
+
+	query := func() error {
 		_, controllerID, err = a.client.DescribeCluster()
-		if err == nil {
-			return nil
-		}
-
-		if !errors.Is(err, syscall.EPIPE) {
-			return err
-		}
-
-		return a.reset()
-	}, retry.WithBackoffBaseDelay(defaultRetryBackoff), retry.WithMaxTries(defaultRetryMaxTries))
-
+		return err
+	}
+	err = a.queryClusterWithRetry(ctx, query)
 	return int(controllerID), err
 }
 
@@ -147,23 +137,15 @@ func (a *saramaAdminClient) GetBrokerConfig(
 	}
 
 	var configEntries []sarama.ConfigEntry
-	err = retry.Do(ctx, func() error {
-		a.mu.Lock()
-		defer a.mu.Unlock()
+	query := func() error {
 		configEntries, err = a.client.DescribeConfig(sarama.ConfigResource{
 			Type:        sarama.BrokerResource,
 			Name:        strconv.Itoa(controller),
 			ConfigNames: []string{configName},
 		})
-		if err == nil {
-			return nil
-		}
-
-		if !errors.Is(err, syscall.EPIPE) {
-			return err
-		}
-		return a.reset()
-	}, retry.WithBackoffBaseDelay(defaultRetryBackoff), retry.WithMaxTries(defaultRetryMaxTries))
+		return err
+	}
+	err = a.queryClusterWithRetry(ctx, query)
 	if err != nil {
 		return "", err
 	}
@@ -183,18 +165,11 @@ func (a *saramaAdminClient) GetAllTopicsMeta(ctx context.Context) (map[string]To
 		err    error
 	)
 
-	err = retry.Do(ctx, func() error {
-		a.mu.Lock()
-		defer a.mu.Unlock()
+	query := func() error {
 		topics, err = a.client.ListTopics()
-		if err == nil {
-			return nil
-		}
-		if !errors.Is(err, syscall.EPIPE) {
-			return err
-		}
-		return a.reset()
-	}, retry.WithBackoffBaseDelay(defaultRetryBackoff), retry.WithMaxTries(defaultRetryMaxTries))
+		return err
+	}
+	err = a.queryClusterWithRetry(ctx, query)
 	if err != nil {
 		return nil, err
 	}
@@ -227,20 +202,12 @@ func (a *saramaAdminClient) GetTopicsMeta(
 		metaList []*sarama.TopicMetadata
 		err      error
 	)
-
-	err = retry.Do(ctx, func() error {
-		a.mu.Lock()
-		defer a.mu.Unlock()
+	query := func() error {
 		metaList, err = a.client.DescribeTopics(topics)
-		if err == nil {
-			return nil
-		}
-		if !errors.Is(err, syscall.EPIPE) {
-			return err
-		}
+		return err
+	}
 
-		return a.reset()
-	}, retry.WithBackoffBaseDelay(defaultRetryBackoff), retry.WithMaxTries(defaultRetryMaxTries))
+	err = a.queryClusterWithRetry(ctx, query)
 	if err != nil {
 		return nil, err
 	}
@@ -274,23 +241,10 @@ func (a *saramaAdminClient) CreateTopic(
 		NumPartitions:     detail.NumPartitions,
 		ReplicationFactor: detail.ReplicationFactor,
 	}
-	err := retry.Do(ctx, func() error {
-		a.mu.Lock()
-		defer a.mu.Unlock()
-		err := a.client.CreateTopic(detail.Name, request, validateOnly)
-		if err == nil {
-			return nil
-		}
-		if strings.Contains(err.Error(), sarama.ErrTopicAlreadyExists.Error()) {
-			return nil
-		}
-		if !errors.Is(err, syscall.EPIPE) {
-			return err
-		}
-		return a.reset()
-	}, retry.WithBackoffBaseDelay(defaultRetryBackoff), retry.WithMaxTries(defaultRetryMaxTries))
-
-	return err
+	query := func() error {
+		return a.client.CreateTopic(detail.Name, request, validateOnly)
+	}
+	return a.queryClusterWithRetry(ctx, query)
 }
 
 func (a *saramaAdminClient) Close() error {
