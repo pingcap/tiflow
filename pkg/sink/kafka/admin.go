@@ -16,6 +16,8 @@ package kafka
 import (
 	"context"
 	"errors"
+	"io"
+	"net"
 	"strconv"
 	"sync"
 	"syscall"
@@ -80,6 +82,12 @@ func (a *saramaAdminClient) queryClusterWithRetry(ctx context.Context, query fun
 		}
 
 		if !errors.Is(err, syscall.EPIPE) {
+			return err
+		}
+		if !errors.Is(err, net.ErrClosed) {
+			return err
+		}
+		if !errors.Is(err, io.EOF) {
 			return err
 		}
 
