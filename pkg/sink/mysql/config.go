@@ -64,6 +64,8 @@ const (
 
 	defaultBatchDMLEnable = true
 
+	// defaultcachePrepStmts is the default value of cachePrepStmts
+	defaultCachePrepStmts = true
 	// defaultStmtCacheSize is the default size of prepared statement cache
 	defaultPrepStmtCacheSize = 10000
 	// The upper limit of the max size of prepared statement cache
@@ -89,6 +91,7 @@ type Config struct {
 	IsTiDB            bool // IsTiDB is true if the downstream is TiDB
 	SourceID          uint64
 	BatchDMLEnable    bool
+	CachePrepStmts    bool
 	PrepStmtCacheSize int
 }
 
@@ -105,6 +108,7 @@ func NewConfig() *Config {
 		DialTimeout:         defaultDialTimeout,
 		SafeMode:            defaultSafeMode,
 		BatchDMLEnable:      defaultBatchDMLEnable,
+		CachePrepStmts:      defaultCachePrepStmts,
 		PrepStmtCacheSize:   defaultPrepStmtCacheSize,
 	}
 }
@@ -156,6 +160,9 @@ func (c *Config) Apply(
 		return err
 	}
 	if err = getBatchDMLEnable(query, &c.BatchDMLEnable); err != nil {
+		return err
+	}
+	if err = getCachePrepStmts(query, &c.CachePrepStmts); err != nil {
 		return err
 	}
 	if err = getPrepStmtCacheSize(query, &c.PrepStmtCacheSize); err != nil {
@@ -339,6 +346,17 @@ func getBatchDMLEnable(values url.Values, batchDMLEnable *bool) error {
 			return cerror.WrapError(cerror.ErrMySQLInvalidConfig, err)
 		}
 		*batchDMLEnable = enable
+	}
+	return nil
+}
+func getCachePrepStmts(values url.Values, cachePrepStmts *bool) error {
+	s := values.Get("cache-prep-stmts")
+	if len(s) > 0 {
+		enable, err := strconv.ParseBool(s)
+		if err != nil {
+			return cerror.WrapError(cerror.ErrMySQLInvalidConfig, err)
+		}
+		*cachePrepStmts = enable
 	}
 	return nil
 }

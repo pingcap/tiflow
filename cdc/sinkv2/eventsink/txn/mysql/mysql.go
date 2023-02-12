@@ -102,7 +102,7 @@ func NewMySQLBackends(
 		return nil, err
 	}
 
-	// When using an LRU cache for prepared statements, two connections are required to process a transaction.
+	// By default, cache-prep-stmts=true, an LRU cache is used for prepared statements, two connections are required to process a transaction.
 	// The first connection is held in the tx variable, which is used to manage the transaction.
 	// The second connection is requested through a call to s.db.Prepare in case of a cache miss for the statement query.
 	// The connection pool for CDC is configured with a static size, equal to the number of workers.
@@ -601,21 +601,26 @@ func (s *mysqlBackend) execDMLWithMaxRetries(pctx context.Context, dmls *prepare
 				log.Debug("exec row", zap.Int("workerID", s.workerID),
 					zap.String("sql", query), zap.Any("args", args))
 				ctx, cancelFunc := context.WithTimeout(pctx, writeTimeout)
-				stmt, ok := s.stmtCache.Get(query)
+				var execError error
+				if s.cfg.CachePrepStmts {
+					stmt, ok := s.stmtCache.Get(query)
+					if !ok {
+						var err error
+						stmt, err = s.db.Prepare(query)
+						if err != nil {
+							cancelFunc()
+							return 0, errors.Trace(err)
+						}
 
-				if !ok {
-					var err error
-					stmt, err = s.db.Prepare(query)
-					if err != nil {
-						cancelFunc()
-						return 0, errors.Trace(err)
+						s.stmtCache.Add(query, stmt)
 					}
-
-					s.stmtCache.Add(query, stmt)
+					_, execError = tx.Stmt(stmt.(*sql.Stmt)).ExecContext(ctx, args...)
+				} else {
+					_, execError = tx.ExecContext(ctx, query, args...)
 				}
-				if _, err := tx.Stmt(stmt.(*sql.Stmt)).ExecContext(ctx, args...); err != nil {
+				if execError != nil {
 					err := logDMLTxnErr(
-						cerror.WrapError(cerror.ErrMySQLTxnError, err),
+						cerror.WrapError(cerror.ErrMySQLTxnError, execError),
 						start, s.changefeed, query, dmls.rowCount, dmls.startTs)
 					if rbErr := tx.Rollback(); rbErr != nil {
 						if errors.Cause(rbErr) != context.Canceled {
