@@ -102,12 +102,18 @@ func NewMySQLBackends(
 		return nil, err
 	}
 
-	// By default, cache-prep-stmts=true, an LRU cache is used for prepared statements, two connections are required to process a transaction.
+	// By default, cache-prep-stmts=true, an LRU cache is used for prepared statements,
+	// two connections are required to process a transaction.
 	// The first connection is held in the tx variable, which is used to manage the transaction.
-	// The second connection is requested through a call to s.db.Prepare in case of a cache miss for the statement query.
+	// The second connection is requested through a call to s.db.Prepare
+	// in case of a cache miss for the statement query.
 	// The connection pool for CDC is configured with a static size, equal to the number of workers.
 	// CDC may hang at the "Get Connection" call is due to the limited size of the connection pool.
-	// When the connection pool is small, the chance of all connections being active at the same time increases, leading to exhaustion of available connections and a hang at the "Get Connection" call. This issue is less likely to occur when the connection pool is larger, as there are more connections available for use.
+	// When the connection pool is small,
+	// the chance of all connections being active at the same time increases,
+	// leading to exhaustion of available connections and a hang at the "Get Connection" call.
+	// This issue is less likely to occur when the connection pool is larger,
+	// as there are more connections available for use.
 	// Adding an extra connection to the connection pool solves the connection exhaustion issue.
 	db.SetMaxIdleConns(cfg.WorkerCount + 1)
 	db.SetMaxOpenConns(cfg.WorkerCount + 1)
