@@ -417,6 +417,7 @@ func getBatchDMLEnable(values url.Values, batchDMLEnable *bool) error {
 	}
 	return nil
 }
+
 func getCachePrepStmts(values url.Values, cachePrepStmts *bool) error {
 	s := values.Get("cache-prep-stmts")
 	if len(s) > 0 {
