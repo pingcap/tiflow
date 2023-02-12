@@ -45,7 +45,7 @@ func NewSaramaConfig(ctx context.Context, o *Options) (*sarama.Config, error) {
 	captureAddr := contextutil.CaptureAddrFromCtx(ctx)
 	changefeedID := contextutil.ChangefeedIDFromCtx(ctx)
 
-	config.ClientID, err = newKafkaClientID(role, captureAddr, changefeedID, o.ClientID)
+	config.ClientID, err = NewKafkaClientID(role, captureAddr, changefeedID, o.ClientID)
 	if err != nil {
 		return nil, errors.Trace(err)
 	}
@@ -89,7 +89,7 @@ func NewSaramaConfig(ctx context.Context, o *Options) (*sarama.Config, error) {
 	config.Producer.MaxMessageBytes = o.MaxMessageBytes
 	config.Producer.Return.Successes = true
 	config.Producer.Return.Errors = true
-	config.Producer.RequiredAcks = sarama.WaitForAll
+	config.Producer.RequiredAcks = sarama.RequiredAcks(o.RequiredAcks)
 	compression := strings.ToLower(strings.TrimSpace(o.Compression))
 	switch compression {
 	case "none":
@@ -139,19 +139,19 @@ func completeSaramaSASLConfig(config *sarama.Config, o *Options) {
 		config.Net.SASL.Enable = true
 		config.Net.SASL.Mechanism = sarama.SASLMechanism(o.SASL.SASLMechanism)
 		switch o.SASL.SASLMechanism {
-		case sarama.SASLTypeSCRAMSHA256, sarama.SASLTypeSCRAMSHA512, sarama.SASLTypePlaintext:
+		case SASLTypeSCRAMSHA256, SASLTypeSCRAMSHA512, SASLTypePlaintext:
 			config.Net.SASL.User = o.SASL.SASLUser
 			config.Net.SASL.Password = o.SASL.SASLPassword
-			if strings.EqualFold(string(o.SASL.SASLMechanism), sarama.SASLTypeSCRAMSHA256) {
+			if strings.EqualFold(string(o.SASL.SASLMechanism), SASLTypeSCRAMSHA256) {
 				config.Net.SASL.SCRAMClientGeneratorFunc = func() sarama.SCRAMClient {
 					return &security.XDGSCRAMClient{HashGeneratorFcn: security.SHA256}
 				}
-			} else if strings.EqualFold(string(o.SASL.SASLMechanism), sarama.SASLTypeSCRAMSHA512) {
+			} else if strings.EqualFold(string(o.SASL.SASLMechanism), SASLTypeSCRAMSHA512) {
 				config.Net.SASL.SCRAMClientGeneratorFunc = func() sarama.SCRAMClient {
 					return &security.XDGSCRAMClient{HashGeneratorFcn: security.SHA512}
 				}
 			}
-		case sarama.SASLTypeGSSAPI:
+		case SASLTypeGSSAPI:
 			config.Net.SASL.GSSAPI.AuthType = int(o.SASL.GSSAPI.AuthType)
 			config.Net.SASL.GSSAPI.Username = o.SASL.GSSAPI.Username
 			config.Net.SASL.GSSAPI.ServiceName = o.SASL.GSSAPI.ServiceName

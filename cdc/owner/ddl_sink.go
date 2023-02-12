@@ -367,7 +367,7 @@ func (s *ddlSinkImpl) close(ctx context.Context) (err error) {
 	if s.sinkV1 != nil {
 		err = s.sinkV1.Close(ctx)
 	} else if s.sinkV2 != nil {
-		err = s.sinkV2.Close()
+		s.sinkV2.Close()
 	}
 	if s.syncPointStore != nil {
 		err = s.syncPointStore.Close()

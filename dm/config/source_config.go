@@ -82,7 +82,7 @@ type SourceConfig struct {
 	// relay synchronous starting point (if specified)
 	RelayBinLogName string `yaml:"relay-binlog-name" toml:"relay-binlog-name" json:"relay-binlog-name"`
 	RelayBinlogGTID string `yaml:"relay-binlog-gtid" toml:"relay-binlog-gtid" json:"relay-binlog-gtid"`
-	// only use when worker bound source, do not marsh it
+	// only use when the source is bound to a worker, do not marsh it
 	UUIDSuffix int `yaml:"-" toml:"-" json:"-"`
 
 	SourceID string            `yaml:"source-id" toml:"source-id" json:"source-id"`

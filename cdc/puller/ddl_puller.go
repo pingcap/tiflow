@@ -31,7 +31,7 @@ import (
 	"github.com/pingcap/tiflow/cdc/entry/schema"
 	"github.com/pingcap/tiflow/cdc/kv"
 	"github.com/pingcap/tiflow/cdc/model"
-	"github.com/pingcap/tiflow/cdc/sorter/memory"
+	"github.com/pingcap/tiflow/cdc/puller/memorysorter"
 	"github.com/pingcap/tiflow/pkg/config"
 	cerror "github.com/pingcap/tiflow/pkg/errors"
 	"github.com/pingcap/tiflow/pkg/filter"
@@ -92,7 +92,7 @@ func (p *ddlJobPullerImpl) Run(ctx context.Context) error {
 		return errors.Trace(p.puller.Run(ctx))
 	})
 
-	rawDDLCh := memory.SortOutput(ctx, p.puller.Output())
+	rawDDLCh := memorysorter.SortOutput(ctx, p.puller.Output())
 	eg.Go(
 		func() error {
 			for {

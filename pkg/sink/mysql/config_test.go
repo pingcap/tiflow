@@ -181,6 +181,8 @@ func TestApplySinkURIParamsToConfig(t *testing.T) {
 	expected := NewConfig()
 	expected.WorkerCount = 64
 	expected.MaxTxnRow = 20
+	expected.MaxMultiUpdateRowCount = 80
+	expected.MaxMultiUpdateRowSize = 512
 	expected.BatchReplaceEnabled = true
 	expected.BatchReplaceSize = 50
 	expected.SafeMode = false
@@ -190,6 +192,7 @@ func TestApplySinkURIParamsToConfig(t *testing.T) {
 	expected.CachePrepStmts = true
 	expected.PrepStmtCacheSize = 1000000
 	uriStr := "mysql://127.0.0.1:3306/?worker-count=64&max-txn-row=20" +
+		"&max-multi-update-row=80&max-multi-update-row-size=512" +
 		"&batch-replace-enable=true&batch-replace-size=50&safe-mode=false" +
 		"&tidb-txn-mode=pessimistic&cache-prep-stmts=true&prep-stmt-cache-size=1000000"
 	uri, err := url.Parse(uriStr)
@@ -241,6 +244,16 @@ func TestParseSinkURIOverride(t *testing.T) {
 		uri: "mysql://127.0.0.1:3306/?max-txn-row=2147483648", // int32 max
 		checker: func(sp *Config) {
 			require.EqualValues(t, sp.MaxTxnRow, maxMaxTxnRow)
+		},
+	}, {
+		uri: "mysql://127.0.0.1:3306/?max-multi-update-row=2147483648", // int32 max
+		checker: func(sp *Config) {
+			require.EqualValues(t, sp.MaxMultiUpdateRowCount, maxMaxMultiUpdateRowCount)
+		},
+	}, {
+		uri: "mysql://127.0.0.1:3306/?max-multi-update-row-size=2147483648", // int32 max
+		checker: func(sp *Config) {
+			require.EqualValues(t, sp.MaxMultiUpdateRowSize, maxMaxMultiUpdateRowSize)
 		},
 	}, {
 		uri: "mysql://127.0.0.1:3306/?tidb-txn-mode=badmode",

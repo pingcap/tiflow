@@ -14,6 +14,7 @@
 package util
 
 import (
+	"context"
 	"net/url"
 	"strings"
 
@@ -87,21 +88,21 @@ func GetEncoderConfig(
 
 // GetTopicManagerAndTryCreateTopic returns the topic manager and try to create the topic.
 func GetTopicManagerAndTryCreateTopic(
+	ctx context.Context,
 	topic string,
 	topicCfg *kafka.AutoCreateTopicConfig,
-	client kafka.Client,
 	adminClient kafka.ClusterAdminClient,
 ) (manager.TopicManager, error) {
 	topicManager, err := manager.NewKafkaTopicManager(
-		client,
+		ctx,
 		adminClient,
 		topicCfg,
 	)
 	if err != nil {
-		return nil, cerror.WrapError(cerror.ErrKafkaNewSaramaProducer, err)
+		return nil, cerror.WrapError(cerror.ErrKafkaNewProducer, err)
 	}
 
-	if _, err := topicManager.CreateTopicAndWaitUntilVisible(topic); err != nil {
+	if _, err := topicManager.CreateTopicAndWaitUntilVisible(ctx, topic); err != nil {
 		return nil, cerror.WrapError(cerror.ErrKafkaCreateTopic, err)
 	}
 

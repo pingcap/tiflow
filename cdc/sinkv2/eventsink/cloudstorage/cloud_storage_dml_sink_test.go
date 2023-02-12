@@ -109,6 +109,5 @@ func TestCloudStorageWriteEvents(t *testing.T) {
 
 	require.Equal(t, uint64(1000), atomic.LoadUint64(&cnt))
 	cancel()
-	err = s.Close()
-	require.Nil(t, err)
+	s.Close()
 }

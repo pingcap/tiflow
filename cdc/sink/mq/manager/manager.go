@@ -13,12 +13,14 @@
 
 package manager
 
+import "context"
+
 // TopicManager is the interface of topic manager.
 // It will be responsible for creating and
 // updating the information of the topic.
 type TopicManager interface {
 	// GetPartitionNum returns the number of partitions of the topic.
-	GetPartitionNum(topic string) (int32, error)
+	GetPartitionNum(ctx context.Context, topic string) (int32, error)
 	// CreateTopicAndWaitUntilVisible creates the topic and wait for the topic completion.
-	CreateTopicAndWaitUntilVisible(topicName string) (int32, error)
+	CreateTopicAndWaitUntilVisible(ctx context.Context, topicName string) (int32, error)
 }
