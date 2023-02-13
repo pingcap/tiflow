@@ -149,6 +149,11 @@ func (mockMounter) AddEvent(ctx context.Context, event *model.PolymorphicEvent) 
 	return nil
 }
 
+func (mockMounter) TryAddEvent(ctx context.Context, event *model.PolymorphicEvent) (bool, error) {
+	event.MarkFinished()
+	return true, nil
+}
+
 func TestSorterReplicateTs(t *testing.T) {
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
