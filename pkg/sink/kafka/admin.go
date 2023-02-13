@@ -80,7 +80,7 @@ func (a *saramaAdminClient) reset() error {
 	_ = a.close()
 	a.client = newClient
 	a.admin = newAdmin
-
+	log.Info("kafka admin client is reset")
 	return errors.New("retry after reset")
 }
 
@@ -92,6 +92,8 @@ func (a *saramaAdminClient) queryClusterWithRetry(ctx context.Context, query fun
 		if err == nil {
 			return nil
 		}
+
+		log.Warn("query kafka cluster meta failed, retry it", zap.Error(err))
 
 		if !errors.Is(err, syscall.EPIPE) {
 			return err
