@@ -69,6 +69,7 @@ func NewRedoApplier(cfg *RedoApplierConfig) *RedoApplier {
 	return &RedoApplier{
 		cfg:        cfg,
 		tableSinks: make(map[model.TableID]tablesink.TableSink),
+		errCh:      make(chan error, 1024),
 	}
 }
 
@@ -146,7 +147,7 @@ func (ra *RedoApplier) consumeLogs(ctx context.Context) error {
 			if _, ok := ra.tableSinks[tableID]; !ok {
 				tableSink := ra.sinkFactory.CreateTableSink(
 					model.DefaultChangeFeedID(applierChangefeed),
-					spanz.TableIDToComparableSpan(1),
+					spanz.TableIDToComparableSpan(tableID),
 					prometheus.NewCounter(prometheus.CounterOpts{}),
 				)
 				ra.tableSinks[tableID] = tableSink
@@ -216,7 +217,6 @@ func (ra *RedoApplier) Apply(ctx context.Context) error {
 		return err
 	}
 	ra.rd = rd
-	ra.errCh = make(chan error, 1024)
 	defer func() {
 		if err = ra.rd.Close(); err != nil {
 			log.Warn("Close redo reader failed", zap.Error(err))

@@ -20,7 +20,7 @@ import (
 	"testing"
 
 	"github.com/DATA-DOG/go-sqlmock"
-	dmysql "github.com/go-sql-driver/mysql"
+	"github.com/go-sql-driver/mysql"
 	"github.com/phayes/freeport"
 	"github.com/pingcap/tiflow/cdc/model"
 	"github.com/pingcap/tiflow/cdc/redo/common"
@@ -164,7 +164,7 @@ func TestApplyDMLs(t *testing.T) {
 		require.Nil(t, err)
 		// Before we write data to downstream, we need to check whether the downstream is TiDB.
 		// So we mock a select tidb_version() query.
-		mock.ExpectQuery("select tidb_version()").WillReturnError(&dmysql.MySQLError{
+		mock.ExpectQuery("select tidb_version()").WillReturnError(&mysql.MySQLError{
 			Number:  1305,
 			Message: "FUNCTION test.tidb_version does not exist",
 		})
