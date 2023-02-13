@@ -55,7 +55,6 @@ type ddlSink struct {
 	producer ddlproducer.DDLProducer
 	// statistics is used to record DDL metrics.
 	statistics *metrics.Statistics
-
 	// admin is used to query kafka cluster information.
 	admin kafka.ClusterAdminClient
 }
