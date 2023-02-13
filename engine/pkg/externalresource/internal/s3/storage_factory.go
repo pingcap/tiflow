@@ -91,7 +91,7 @@ func GetExternalStorageFromURI(
 	}
 
 	// Note that we may have network I/O here.
-	ret, err := util.GetExternalStorage(ctx, uri, opts)
+	ret, err := util.GetExternalStorage(ctx, uri, opts, util.DefaultS3Retryer())
 	if err != nil {
 		retErr := errors.ErrFailToCreateExternalStorage.Wrap(errors.Trace(err))
 		return nil, retErr.GenWithStackByArgs("creating ExternalStorage for s3")
