@@ -19,7 +19,6 @@ import (
 	"container/heap"
 	"context"
 	"encoding/binary"
-	"fmt"
 	"io"
 	"math"
 	"net/url"
@@ -242,14 +241,12 @@ func readFile(file *os.File) (logHeap, error) {
 	h := logHeap{}
 	for {
 		rl, err := r.Read()
-		fmt.Printf("read a log, err is nil: %t\n", err == nil)
 		if err != nil {
 			if err != io.EOF {
 				return nil, err
 			}
 			break
 		}
-		fmt.Printf("read a log, row is nil: %t\n", rl.RedoRow == nil)
 		h = append(h, &logWithIdx{data: rl})
 	}
 
@@ -269,7 +266,6 @@ func writFile(ctx context.Context, dir, name string, h logHeap) error {
 
 	for h.Len() != 0 {
 		item := heap.Pop(&h).(*logWithIdx).data
-		fmt.Printf("MarshalRedoLog, redo row is nil: %t\n", item.RedoRow == nil)
 		data, err := codec.MarshalRedoLog(item, nil)
 		if err != nil {
 			return cerror.WrapError(cerror.ErrMarshalFailed, err)
@@ -403,7 +399,6 @@ func (r *reader) Read() (*model.RedoLog, error) {
 	}
 
 	redoLog, _, err := codec.UnmarshalRedoLog(data[:recBytes])
-	fmt.Printf("UnmarshalRedoLog is called, row is nil: %t\n", redoLog.RedoRow == nil)
 	if err != nil {
 		if r.isTornEntry(data) {
 			// just return io.EOF, since if torn write it is the last redoLog entry

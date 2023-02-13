@@ -77,7 +77,6 @@ func TestReaderRead(t *testing.T) {
 	require.Nil(t, err)
 	require.Equal(t, fileName, info.Name())
 
-	fmt.Printf("creates a reader\n")
 	r, err := newReader(ctx, &readerConfig{
 		dir:      dir,
 		startTs:  1,
@@ -87,7 +86,6 @@ func TestReaderRead(t *testing.T) {
 	require.Nil(t, err)
 	require.Equal(t, 1, len(r))
 	defer r[0].Close() //nolint:errcheck
-	fmt.Printf("start the bad read\n")
 	log, err = r[0].Read()
 	require.Nil(t, err)
 	require.EqualValues(t, 1123, log.RedoRow.CommitTs)
