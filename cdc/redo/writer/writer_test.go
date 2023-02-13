@@ -57,10 +57,8 @@ func TestLogWriterWriteLog(t *testing.T) {
 			args: arg{
 				ctx: context.Background(),
 				rows: []*model.RowChangedEvent{
-					{
-						Row: &model.RowChangedEvent{
-							Table: &model.TableName{TableID: 111}, CommitTs: 1,
-						},
+					&model.RowChangedEvent{
+						Table: &model.TableName{TableID: 111}, CommitTs: 1,
 					},
 				},
 			},
@@ -72,11 +70,9 @@ func TestLogWriterWriteLog(t *testing.T) {
 			args: arg{
 				ctx: context.Background(),
 				rows: []*model.RowChangedEvent{
-					{Row: nil},
-					{
-						Row: &model.RowChangedEvent{
-							Table: &model.TableName{TableID: 11}, CommitTs: 11,
-						},
+					nil,
+					&model.RowChangedEvent{
+						Table: &model.TableName{TableID: 11}, CommitTs: 11,
 					},
 				},
 			},
@@ -166,7 +162,7 @@ func TestLogWriterSendDDL(t *testing.T) {
 			args: arg{
 				ctx:     context.Background(),
 				tableID: 1,
-				ddl:     &model.DDLEvent{DDL: &model.DDLEvent{CommitTs: 1}},
+				ddl:     &model.DDLEvent{CommitTs: 1},
 			},
 			isRunning: true,
 			writerErr: nil,
@@ -176,7 +172,7 @@ func TestLogWriterSendDDL(t *testing.T) {
 			args: arg{
 				ctx:     context.Background(),
 				tableID: 1,
-				ddl:     &model.DDLEvent{DDL: &model.DDLEvent{CommitTs: 1}},
+				ddl:     &model.DDLEvent{CommitTs: 1},
 			},
 			writerErr: errors.New("err"),
 			wantErr:   errors.New("err"),
@@ -197,7 +193,7 @@ func TestLogWriterSendDDL(t *testing.T) {
 			args: arg{
 				ctx:     context.Background(),
 				tableID: 1,
-				ddl:     &model.DDLEvent{DDL: &model.DDLEvent{CommitTs: 1}},
+				ddl:     &model.DDLEvent{CommitTs: 1},
 			},
 			writerErr: cerror.ErrRedoWriterStopped,
 			isRunning: false,
@@ -208,7 +204,7 @@ func TestLogWriterSendDDL(t *testing.T) {
 			args: arg{
 				ctx:     context.Background(),
 				tableID: 1,
-				ddl:     &model.DDLEvent{DDL: &model.DDLEvent{CommitTs: 1}},
+				ddl:     &model.DDLEvent{CommitTs: 1},
 			},
 			writerErr: nil,
 			isRunning: true,

@@ -14,6 +14,7 @@
 package codec
 
 import (
+    "fmt"
     "encoding/binary"
 
 	"github.com/pingcap/tiflow/cdc/model"
@@ -101,12 +102,14 @@ func UnmarshalRedoLog(bts []byte) (r *model.RedoLog, o []byte, err error) {
 		}
 	}
 	if shouldBeV1 {
+        fmt.Printf("it's v1\n")
 		var rv1 *codecv1.RedoLog = new(codecv1.RedoLog)
 		if o, err = rv1.UnmarshalMsg(bts); err != nil {
 			return
 		}
 		r = redoLogFromV1(rv1)
 	} else {
+        fmt.Printf("it's v2\n")
         bts = bts[versionPrefixLength:]
         version, bts := decodeVersion(bts)
         if version == latestVersion {

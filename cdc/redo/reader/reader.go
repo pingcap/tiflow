@@ -233,8 +233,7 @@ func (l *LogReader) ReadNextLog(ctx context.Context, maxNumberOfEvents uint64) (
 	// init heap
 	if l.rowHeap.Len() == 0 {
 		for i := 0; i < len(l.rowReader); i++ {
-			rl := &model.RedoLog{}
-			err := l.rowReader[i].Read(rl)
+			rl, err := l.rowReader[i].Read()
 			if err != nil {
 				if err != io.EOF {
 					return nil, err
@@ -263,8 +262,7 @@ func (l *LogReader) ReadNextLog(ctx context.Context, maxNumberOfEvents uint64) (
 			i++
 		}
 
-		rl := &model.RedoLog{}
-		err := l.rowReader[item.idx].Read(rl)
+		rl, err := l.rowReader[item.idx].Read()
 		if err != nil {
 			if err != io.EOF {
 				return nil, err
@@ -296,8 +294,7 @@ func (l *LogReader) ReadNextDDL(ctx context.Context, maxNumberOfEvents uint64) (
 	// init heap
 	if l.ddlHeap.Len() == 0 {
 		for i := 0; i < len(l.ddlReader); i++ {
-			rl := &model.RedoLog{}
-			err := l.ddlReader[i].Read(rl)
+			rl, err := l.ddlReader[i].Read()
 			if err != nil {
 				if err != io.EOF {
 					return nil, err
@@ -318,7 +315,7 @@ func (l *LogReader) ReadNextDDL(ctx context.Context, maxNumberOfEvents uint64) (
 	var i uint64
 	for l.ddlHeap.Len() != 0 && i < maxNumberOfEvents {
 		item := heap.Pop(&l.ddlHeap).(*logWithIdx)
-		if item.data.RedoDDL != nil && item.data.RedoDDL != nil &&
+		if item.data.RedoDDL != nil &&
 			// by design only data (startTs,endTs] is needed, so filter out data may beyond the boundary
 			item.data.RedoDDL.CommitTs > l.cfg.startTs &&
 			item.data.RedoDDL.CommitTs <= l.cfg.endTs {
@@ -326,8 +323,7 @@ func (l *LogReader) ReadNextDDL(ctx context.Context, maxNumberOfEvents uint64) (
 			i++
 		}
 
-		rl := &model.RedoLog{}
-		err := l.ddlReader[item.idx].Read(rl)
+		rl, err := l.ddlReader[item.idx].Read()
 		if err != nil {
 			if err != io.EOF {
 				return nil, err

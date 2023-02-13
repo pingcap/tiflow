@@ -73,10 +73,14 @@ func TestV1toV2(t *testing.T) {
 	rv2, msg2, err = UnmarshalRedoLog(msg1)
 	require.Nil(t, err)
 	require.Zero(t, len(msg2))
+	require.NotNil(t, rv2.RedoRow)
+	require.Nil(t, rv2.RedoDDL)
 
 	msg2, err = MarshalRedoLog(rv2, nil)
 	require.Nil(t, err)
 	_, msg2, err = UnmarshalRedoLog(msg2)
 	require.Nil(t, err)
 	require.Zero(t, len(msg2))
+	require.NotNil(t, rv2.RedoRow)
+	require.Nil(t, rv2.RedoDDL)
 }

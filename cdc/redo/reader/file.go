@@ -19,6 +19,7 @@ import (
 	"container/heap"
 	"context"
 	"encoding/binary"
+	"fmt"
 	"io"
 	"math"
 	"net/url"
@@ -53,7 +54,7 @@ const (
 type fileReader interface {
 	io.Closer
 	// Read return the log from log file
-	Read(log *model.RedoLog) error
+	Read() (*model.RedoLog, error)
 }
 
 type readerConfig struct {
@@ -240,14 +241,15 @@ func readFile(file *os.File) (logHeap, error) {
 
 	h := logHeap{}
 	for {
-		rl := &model.RedoLog{}
-		err := r.Read(rl)
+		rl, err := r.Read()
+		fmt.Printf("read a log, err is nil: %t\n", err == nil)
 		if err != nil {
 			if err != io.EOF {
 				return nil, err
 			}
 			break
 		}
+		fmt.Printf("read a log, row is nil: %t\n", rl.RedoRow == nil)
 		h = append(h, &logWithIdx{data: rl})
 	}
 
@@ -267,6 +269,7 @@ func writFile(ctx context.Context, dir, name string, h logHeap) error {
 
 	for h.Len() != 0 {
 		item := heap.Pop(&h).(*logWithIdx).data
+		fmt.Printf("MarshalRedoLog, redo row is nil: %t\n", item.RedoRow == nil)
 		data, err := codec.MarshalRedoLog(item, nil)
 		if err != nil {
 			return cerror.WrapError(cerror.ErrMarshalFailed, err)
@@ -374,16 +377,16 @@ func shouldOpen(startTs uint64, name, fixedType string) (bool, error) {
 
 // Read implement Read interface.
 // TODO: more general reader pair with writer in writer pkg
-func (r *reader) Read(redoLog *model.RedoLog) error {
+func (r *reader) Read() (*model.RedoLog, error) {
 	r.mu.Lock()
 	defer r.mu.Unlock()
 
 	lenField, err := readInt64(r.br)
 	if err != nil {
 		if err == io.EOF {
-			return err
+			return nil, err
 		}
-		return cerror.WrapError(cerror.ErrRedoFileOp, err)
+		return nil, cerror.WrapError(cerror.ErrRedoFileOp, err)
 	}
 
 	recBytes, padBytes := decodeFrameSize(lenField)
@@ -394,23 +397,24 @@ func (r *reader) Read(redoLog *model.RedoLog) error {
 			log.Warn("read redo log have unexpected io error",
 				zap.String("fileName", r.fileName),
 				zap.Error(err))
-			return io.EOF
+			return nil, io.EOF
 		}
-		return cerror.WrapError(cerror.ErrRedoFileOp, err)
+		return nil, cerror.WrapError(cerror.ErrRedoFileOp, err)
 	}
 
-	redoLog, _, err = codec.UnmarshalRedoLog(data[:recBytes])
+	redoLog, _, err := codec.UnmarshalRedoLog(data[:recBytes])
+	fmt.Printf("UnmarshalRedoLog is called, row is nil: %t\n", redoLog.RedoRow == nil)
 	if err != nil {
 		if r.isTornEntry(data) {
 			// just return io.EOF, since if torn write it is the last redoLog entry
-			return io.EOF
+			return nil, io.EOF
 		}
-		return cerror.WrapError(cerror.ErrUnmarshalFailed, err)
+		return nil, cerror.WrapError(cerror.ErrUnmarshalFailed, err)
 	}
 
 	// point last valid offset to the end of redoLog
 	r.lastValidOff += frameSizeBytes + recBytes + padBytes
-	return nil
+	return redoLog, nil
 }
 
 func readInt64(r io.Reader) (int64, error) {

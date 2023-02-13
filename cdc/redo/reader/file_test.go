@@ -24,6 +24,7 @@ import (
 	"time"
 
 	"github.com/pingcap/tiflow/cdc/model"
+	"github.com/pingcap/tiflow/cdc/model/codec"
 	"github.com/pingcap/tiflow/cdc/redo/writer"
 	"github.com/pingcap/tiflow/pkg/redo"
 	"github.com/pingcap/tiflow/pkg/uuid"
@@ -58,9 +59,9 @@ func TestReaderRead(t *testing.T) {
 	)
 	require.Nil(t, err)
 	log := &model.RedoLog{
-		RedoRow: &model.RowChangedEvent{Row: &model.RowChangedEvent{CommitTs: 1123}},
+		RedoRow: &model.RowChangedEvent{CommitTs: 1123},
 	}
-	data, err := log.MarshalMsg(nil)
+	data, err := codec.MarshalRedoLog(log, nil)
 	require.Nil(t, err)
 	w.AdvanceTs(11)
 	_, err = w.Write(data)
@@ -76,6 +77,7 @@ func TestReaderRead(t *testing.T) {
 	require.Nil(t, err)
 	require.Equal(t, fileName, info.Name())
 
+	fmt.Printf("creates a reader\n")
 	r, err := newReader(ctx, &readerConfig{
 		dir:      dir,
 		startTs:  1,
@@ -85,10 +87,10 @@ func TestReaderRead(t *testing.T) {
 	require.Nil(t, err)
 	require.Equal(t, 1, len(r))
 	defer r[0].Close() //nolint:errcheck
-	log = &model.RedoLog{}
-	err = r[0].Read(log)
+	fmt.Printf("start the bad read\n")
+	log, err = r[0].Read()
 	require.Nil(t, err)
-	require.EqualValues(t, 1123, log.RedoRow.Row.CommitTs)
+	require.EqualValues(t, 1123, log.RedoRow.CommitTs)
 	time.Sleep(1001 * time.Millisecond)
 }
 
@@ -110,16 +112,16 @@ func TestReaderOpenSelectedFiles(t *testing.T) {
 	}))
 	require.Nil(t, err)
 	log := &model.RedoLog{
-		RedoRow: &model.RowChangedEvent{Row: &model.RowChangedEvent{CommitTs: 11}},
+		RedoRow: &model.RowChangedEvent{CommitTs: 11},
 	}
-	data, err := log.MarshalMsg(nil)
+	data, err := codec.MarshalRedoLog(log, nil)
 	require.Nil(t, err)
 	_, err = w.Write(data)
 	require.Nil(t, err)
 	log = &model.RedoLog{
-		RedoRow: &model.RowChangedEvent{Row: &model.RowChangedEvent{CommitTs: 10}},
+		RedoRow: &model.RowChangedEvent{CommitTs: 10},
 	}
-	data, err = log.MarshalMsg(nil)
+	data, err = codec.MarshalRedoLog(log, nil)
 	require.Nil(t, err)
 	_, err = w.Write(data)
 	require.Nil(t, err)
@@ -235,13 +237,12 @@ func TestReaderOpenSelectedFiles(t *testing.T) {
 					closer:   r,
 				}
 				for {
-					rl := &model.RedoLog{}
-					err := r.Read(rl)
+					rl, err := r.Read()
 					if err == io.EOF {
 						break
 					}
-					require.Greater(t, rl.RedoRow.Row.CommitTs, preTs, tt.name)
-					preTs = rl.RedoRow.Row.CommitTs
+					require.Greater(t, rl.RedoRow.CommitTs, preTs, tt.name)
+					preTs = rl.RedoRow.CommitTs
 				}
 			}
 		} else {
