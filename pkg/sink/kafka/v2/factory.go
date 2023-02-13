@@ -25,7 +25,6 @@ import (
 	"github.com/pingcap/tiflow/pkg/errors"
 	pkafka "github.com/pingcap/tiflow/pkg/sink/kafka"
 	"github.com/pingcap/tiflow/pkg/util"
-	"github.com/rcrowley/go-metrics"
 	"github.com/segmentio/kafka-go"
 	"github.com/segmentio/kafka-go/sasl"
 	"github.com/segmentio/kafka-go/sasl/plain"
@@ -184,11 +183,6 @@ func (f *factory) AsyncProducer(closedChan chan struct{},
 	}
 	w.Completion = aw.callBackRun
 	return aw, nil
-}
-
-// MetricRegistry implement the MetricsCollector interface
-func (f *factory) MetricRegistry() metrics.Registry {
-	return metrics.DefaultRegistry
 }
 
 // MetricsCollector returns the kafka metrics collector

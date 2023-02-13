@@ -35,7 +35,6 @@ var _ DDLProducer = (*kafkaDDLProducer)(nil)
 type kafkaDDLProducer struct {
 	// id indicates this sink belongs to which processor(changefeed).
 	id model.ChangeFeedID
-
 	// syncProducer is used to send messages to kafka synchronously.
 	syncProducer kafka.SyncProducer
 	// metricsCollector is used to report metrics.

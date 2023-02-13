@@ -23,7 +23,6 @@ import (
 	"github.com/pingcap/tiflow/cdc/model"
 	cerror "github.com/pingcap/tiflow/pkg/errors"
 	"github.com/pingcap/tiflow/pkg/util"
-	"github.com/rcrowley/go-metrics"
 	"go.uber.org/zap"
 )
 
@@ -35,9 +34,6 @@ type Factory interface {
 	SyncProducer() (SyncProducer, error)
 	// AsyncProducer creates an async producer to writer message to kafka
 	AsyncProducer(closedChan chan struct{}, failpointCh chan error) (AsyncProducer, error)
-	// MetricRegistry returns the kafka client metric registry
-	// todo: this is only used by sink v1, after it's removed, remove this method.
-	MetricRegistry() metrics.Registry
 	// MetricsCollector returns the kafka metrics collector
 	MetricsCollector(role util.Role, adminClient ClusterAdminClient) MetricsCollector
 }

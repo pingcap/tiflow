@@ -20,7 +20,6 @@ import (
 	"github.com/pingcap/tiflow/cdc/model"
 	"github.com/pingcap/tiflow/pkg/errors"
 	"github.com/pingcap/tiflow/pkg/util"
-	"github.com/rcrowley/go-metrics"
 )
 
 type saramaFactory struct {
@@ -90,10 +89,6 @@ func (f *saramaFactory) AsyncProducer(
 		closedChan:   closedChan,
 		failpointCh:  failpointCh,
 	}, nil
-}
-
-func (f *saramaFactory) MetricRegistry() metrics.Registry {
-	return f.config.MetricRegistry
 }
 
 func (f *saramaFactory) MetricsCollector(

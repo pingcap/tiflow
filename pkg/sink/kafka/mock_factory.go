@@ -18,7 +18,6 @@ import (
 
 	"github.com/pingcap/tiflow/cdc/model"
 	"github.com/pingcap/tiflow/pkg/util"
-	"github.com/rcrowley/go-metrics"
 )
 
 // MockFactory is a mock implementation of Factory interface.
@@ -55,11 +54,6 @@ func (f *MockFactory) AsyncProducer(
 	failpointCh chan error,
 ) (AsyncProducer, error) {
 	return f.helper.AsyncProducer(closedChan, failpointCh)
-}
-
-// MetricRegistry implement the MetricsCollector interface
-func (f *MockFactory) MetricRegistry() metrics.Registry {
-	return metrics.DefaultRegistry
 }
 
 // MetricsCollector returns the metric collector
