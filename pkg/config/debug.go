@@ -15,7 +15,6 @@ package config
 
 import (
 	"github.com/pingcap/errors"
-	cerrors "github.com/pingcap/tiflow/pkg/errors"
 )
 
 // DebugConfig represents config for ticdc unexposed feature configurations
@@ -26,10 +25,6 @@ type DebugConfig struct {
 
 	// Scheduler is the configuration of the two-phase scheduler.
 	Scheduler *SchedulerConfig `toml:"scheduler" json:"scheduler"`
-
-	// EnableNewSink enables the new sink.
-	// The default value is true.
-	EnableNewSink bool `toml:"enable-new-sink" json:"enable-new-sink"`
 
 	// EnableKafkaSinkV2 enable the new kafka sink, which is implemented based on kafka-go client.
 	EnableKafkaSinkV2 bool `toml:"enable-kafka-sink-v2" json:"enable-kafka-sink-v2"`
@@ -45,21 +40,6 @@ func (c *DebugConfig) ValidateAndAdjust() error {
 	}
 	if err := c.Scheduler.ValidateAndAdjust(); err != nil {
 		return errors.Trace(err)
-	}
-
-	// FIXME(hi-rustin): We should remove this check after the old sink is removed.
-	if !c.EnableNewSink {
-		return cerrors.ErrInvalidPullBasedSinkConfig.GenWithStackByArgs(
-			"enabling pull-based sinks requires use of the new sink," +
-				" you can set `debug.enable-new-sink` to be true")
-	}
-
-	if c.EnableKafkaSinkV2 {
-		if !c.EnableNewSink {
-			return cerrors.ErrInvalidPullBasedSinkConfig.GenWithStackByArgs(
-				"enabling kafka sink v2 requires use of the new sink," +
-					" you can set `debug.enable-new-sink` to be true")
-		}
 	}
 
 	return nil

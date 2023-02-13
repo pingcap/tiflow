@@ -140,7 +140,6 @@ var defaultServerConfig = &ServerConfig{
 		Messages: defaultMessageConfig.Clone(),
 
 		Scheduler:         NewDefaultSchedulerConfig(),
-		EnableNewSink:     true,
 		EnableKafkaSinkV2: false,
 	},
 	ClusterID: "default",
