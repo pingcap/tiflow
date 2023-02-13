@@ -39,7 +39,7 @@ type saramaAdminClient struct {
 }
 
 const (
-	defaultRetryBackoff  = 50
+	defaultRetryBackoff  = 20
 	defaultRetryMaxTries = 3
 )
 
