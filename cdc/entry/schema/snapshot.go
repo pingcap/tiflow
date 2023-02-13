@@ -219,7 +219,7 @@ const (
 // See:https://github.com/pingcap/tidb/pull/39616
 func (s *Snapshot) InitPreExistingTables() {
 	ddlJobTableIDs := [...]int64{ddl.JobTableID, ddl.ReorgTableID, ddl.HistoryTableID}
-	backfillTableIDs := [...]int64{ddl.BackfillTableID, ddl.BackfillHistoryTableID}
+	backfillTableIDs := [...]int64{ddl.BackgroundSubtaskTableID, ddl.BackgroundSubtaskHistoryTableID}
 
 	mysqlDBInfo := &timodel.DBInfo{
 		ID:      mysqlDBID,
