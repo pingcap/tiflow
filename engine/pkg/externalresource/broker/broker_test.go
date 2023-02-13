@@ -23,8 +23,8 @@ import (
 	"github.com/golang/mock/gomock"
 	pb "github.com/pingcap/tiflow/engine/enginepb"
 	"github.com/pingcap/tiflow/engine/pkg/client"
+	"github.com/pingcap/tiflow/engine/pkg/externalresource/internal/bucket"
 	"github.com/pingcap/tiflow/engine/pkg/externalresource/internal/local"
-	"github.com/pingcap/tiflow/engine/pkg/externalresource/internal/s3"
 	"github.com/pingcap/tiflow/engine/pkg/externalresource/manager"
 	resModel "github.com/pingcap/tiflow/engine/pkg/externalresource/model"
 	"github.com/pingcap/tiflow/engine/pkg/tenant"
@@ -177,7 +177,7 @@ func TestBrokerOpenExistingStorageWithOption(t *testing.T) {
 	brk, cli, _ := newBroker(t)
 	defer brk.Close()
 	require.False(t, brk.IsS3StorageEnabled())
-	mockS3FileManager, storageFactory := s3.NewFileManagerForUT(t.TempDir(), brk.executorID)
+	mockS3FileManager, storageFactory := bucket.NewFileManagerForUT(t.TempDir(), brk.executorID)
 	brk.fileManagers[resModel.ResourceTypeS3] = mockS3FileManager
 	require.True(t, brk.IsS3StorageEnabled())
 
@@ -221,7 +221,7 @@ func TestBrokerOpenExistingStorageWithOption(t *testing.T) {
 	require.NoError(t, err)
 	defer brk2.Close()
 	require.False(t, brk2.IsS3StorageEnabled())
-	mockS3FileManager2 := s3.NewFileManagerForUTFromSharedStorageFactory(brk2.executorID, storageFactory)
+	mockS3FileManager2 := bucket.NewFileManagerForUTFromSharedStorageFactory(brk2.executorID, storageFactory)
 	brk2.fileManagers[resModel.ResourceTypeS3] = mockS3FileManager2
 	require.True(t, brk2.IsS3StorageEnabled())
 	require.Panics(t, func() {

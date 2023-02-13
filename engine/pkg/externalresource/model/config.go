@@ -31,6 +31,10 @@ var DefaultConfig = Config{
 		Bucket: "",
 		Prefix: "",
 	},
+	GCS: GCSConfig{
+		Bucket: "",
+		Prefix: "",
+	},
 }
 
 // Config defines configurations for an external storage resource

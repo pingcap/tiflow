@@ -354,7 +354,7 @@ func (s *Server) Run(ctx context.Context) error {
 	// resourceManagerService relies on meta store
 	s.initResourceManagerService()
 
-	if err := broker.PreCheckConfig(s.cfg.Storage); err != nil {
+	if err := broker.PreCheckConfig(&s.cfg.Storage); err != nil {
 		return err
 	}
 

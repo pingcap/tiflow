@@ -85,7 +85,7 @@ func NewBroker(
 
 	// validate and check config
 	storageConfig.ValidateAndAdjust(executorID)
-	if err := PreCheckConfig(storageConfig); err != nil {
+	if err := PreCheckConfig(&storageConfig); err != nil {
 		return nil, err
 	}
 	return NewBrokerWithConfig(&storageConfig, executorID, client)
@@ -161,7 +161,7 @@ func initGCSStorageIfEnable(broker *DefaultBroker,
 	}
 
 	broker.fileManagers[resModel.ResourceTypeGCS] = bucket.NewFileManagerWithConfig(executorID, config)
-	// TODO: check
+	// TODO: check, this is s3-related
 	if err := broker.createDummyResource(); err != nil {
 		return err
 	}
@@ -456,7 +456,7 @@ func (b *DefaultBroker) IsS3StorageEnabled() bool {
 }
 
 // PreCheckConfig checks the configuration of external storage.
-func PreCheckConfig(config resModel.Config) error {
+func PreCheckConfig(config *resModel.Config) error {
 	if config.LocalEnabled() {
 		if err := local.PreCheckConfig(config.Local); err != nil {
 			return err

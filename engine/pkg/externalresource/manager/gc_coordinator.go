@@ -188,6 +188,7 @@ func (c *DefaultGCCoordinator) gcByStatusSnapshots(
 			if err != nil {
 				return err
 			}
+			// TODO(maxshuang)
 			if tp == resModel.ResourceTypeLocalFile ||
 				tp == resModel.ResourceTypeS3 && resName == bucket.GetDummyResourceName() {
 				toGCExecutorSet[resMeta.Executor] = struct{}{}
