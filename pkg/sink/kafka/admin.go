@@ -15,18 +15,33 @@ package kafka
 
 import (
 	"context"
+	"errors"
+	"io"
+	"net"
 	"strconv"
-	"strings"
+	"sync"
+	"syscall"
 
 	"github.com/Shopify/sarama"
 	"github.com/pingcap/log"
 	cerror "github.com/pingcap/tiflow/pkg/errors"
+	"github.com/pingcap/tiflow/pkg/retry"
 	"go.uber.org/zap"
 )
 
 type saramaAdminClient struct {
-	client sarama.ClusterAdmin
+	brokerEndpoints []string
+	config          *sarama.Config
+
+	mu     sync.Mutex
+	client sarama.Client
+	admin  sarama.ClusterAdmin
 }
+
+const (
+	defaultRetryBackoff  = 20
+	defaultRetryMaxTries = 3
+)
 
 // NewSaramaAdminClient constructs a ClusterAdminClient with sarama.
 func NewSaramaAdminClient(ctx context.Context, config *Options) (ClusterAdminClient, error) {
@@ -35,15 +50,77 @@ func NewSaramaAdminClient(ctx context.Context, config *Options) (ClusterAdminCli
 		return nil, err
 	}
 
-	client, err := sarama.NewClusterAdmin(config.BrokerEndpoints, saramaConfig)
+	client, err := sarama.NewClient(config.BrokerEndpoints, saramaConfig)
+	if err != nil {
+		return nil, cerror.Trace(err)
+	}
+
+	admin, err := sarama.NewClusterAdminFromClient(client)
 	if err != nil {
 		return nil, err
 	}
-	return &saramaAdminClient{client: client}, nil
+	return &saramaAdminClient{
+		client:          client,
+		admin:           admin,
+		brokerEndpoints: config.BrokerEndpoints,
+		config:          saramaConfig,
+	}, nil
 }
 
-func (a *saramaAdminClient) GetAllBrokers() ([]Broker, error) {
-	brokers, _, err := a.client.DescribeCluster()
+func (a *saramaAdminClient) reset() error {
+	newClient, err := sarama.NewClient(a.brokerEndpoints, a.config)
+	if err != nil {
+		return cerror.Trace(err)
+	}
+	newAdmin, err := sarama.NewClusterAdminFromClient(newClient)
+	if err != nil {
+		return cerror.Trace(err)
+	}
+
+	_ = a.close()
+	a.client = newClient
+	a.admin = newAdmin
+	log.Info("kafka admin client is reset")
+	return errors.New("retry after reset")
+}
+
+func (a *saramaAdminClient) queryClusterWithRetry(ctx context.Context, query func() error) error {
+	err := retry.Do(ctx, func() error {
+		a.mu.Lock()
+		defer a.mu.Unlock()
+		err := query()
+		if err == nil {
+			return nil
+		}
+
+		log.Warn("query kafka cluster meta failed, retry it", zap.Error(err))
+
+		if !errors.Is(err, syscall.EPIPE) {
+			return err
+		}
+		if !errors.Is(err, net.ErrClosed) {
+			return err
+		}
+		if !errors.Is(err, io.EOF) {
+			return err
+		}
+
+		return a.reset()
+	}, retry.WithBackoffBaseDelay(defaultRetryBackoff), retry.WithMaxTries(defaultRetryMaxTries))
+	return err
+}
+
+func (a *saramaAdminClient) GetAllBrokers(ctx context.Context) ([]Broker, error) {
+	var (
+		brokers []*sarama.Broker
+		err     error
+	)
+	query := func() error {
+		brokers, _, err = a.admin.DescribeCluster()
+		return err
+	}
+
+	err = a.queryClusterWithRetry(ctx, query)
 	if err != nil {
 		return nil, err
 	}
@@ -58,25 +135,39 @@ func (a *saramaAdminClient) GetAllBrokers() ([]Broker, error) {
 	return result, nil
 }
 
-func (a *saramaAdminClient) GetCoordinator() (int32, error) {
-	_, controllerID, err := a.client.DescribeCluster()
-	if err != nil {
-		return 0, err
+func (a *saramaAdminClient) GetCoordinator(ctx context.Context) (int, error) {
+	var (
+		controllerID int32
+		err          error
+	)
+
+	query := func() error {
+		_, controllerID, err = a.admin.DescribeCluster()
+		return err
 	}
-	return controllerID, nil
+	err = a.queryClusterWithRetry(ctx, query)
+	return int(controllerID), err
 }
 
-func (a *saramaAdminClient) GetBrokerConfig(configName string) (string, error) {
-	_, controller, err := a.client.DescribeCluster()
+func (a *saramaAdminClient) GetBrokerConfig(
+	ctx context.Context,
+	configName string,
+) (string, error) {
+	controller, err := a.GetCoordinator(ctx)
 	if err != nil {
 		return "", err
 	}
 
-	configEntries, err := a.client.DescribeConfig(sarama.ConfigResource{
-		Type:        sarama.BrokerResource,
-		Name:        strconv.Itoa(int(controller)),
-		ConfigNames: []string{configName},
-	})
+	var configEntries []sarama.ConfigEntry
+	query := func() error {
+		configEntries, err = a.admin.DescribeConfig(sarama.ConfigResource{
+			Type:        sarama.BrokerResource,
+			Name:        strconv.Itoa(controller),
+			ConfigNames: []string{configName},
+		})
+		return err
+	}
+	err = a.queryClusterWithRetry(ctx, query)
 	if err != nil {
 		return "", err
 	}
@@ -90,8 +181,35 @@ func (a *saramaAdminClient) GetBrokerConfig(configName string) (string, error) {
 	return configEntries[0].Value, nil
 }
 
-func (a *saramaAdminClient) GetAllTopicsMeta() (map[string]TopicDetail, error) {
-	topics, err := a.client.ListTopics()
+func (a *saramaAdminClient) GetTopicsPartitions(_ context.Context) (map[string]int32, error) {
+	topics, err := a.client.Topics()
+	if err != nil {
+		return nil, cerror.Trace(err)
+	}
+
+	result := make(map[string]int32, len(topics))
+	for _, topic := range topics {
+		partitions, err := a.client.Partitions(topic)
+		if err != nil {
+			return nil, cerror.Trace(err)
+		}
+		result[topic] = int32(len(partitions))
+	}
+
+	return result, nil
+}
+
+func (a *saramaAdminClient) GetAllTopicsMeta(ctx context.Context) (map[string]TopicDetail, error) {
+	var (
+		topics map[string]sarama.TopicDetail
+		err    error
+	)
+
+	query := func() error {
+		topics, err = a.admin.ListTopics()
+		return err
+	}
+	err = a.queryClusterWithRetry(ctx, query)
 	if err != nil {
 		return nil, err
 	}
@@ -116,10 +234,20 @@ func (a *saramaAdminClient) GetAllTopicsMeta() (map[string]TopicDetail, error) {
 }
 
 func (a *saramaAdminClient) GetTopicsMeta(
+	ctx context.Context,
 	topics []string,
 	ignoreTopicError bool,
 ) (map[string]TopicDetail, error) {
-	metaList, err := a.client.DescribeTopics(topics)
+	var (
+		metaList []*sarama.TopicMetadata
+		err      error
+	)
+	query := func() error {
+		metaList, err = a.admin.DescribeTopics(topics)
+		return err
+	}
+
+	err = a.queryClusterWithRetry(ctx, query)
 	if err != nil {
 		return nil, err
 	}
@@ -144,18 +272,27 @@ func (a *saramaAdminClient) GetTopicsMeta(
 	return result, nil
 }
 
-func (a *saramaAdminClient) CreateTopic(topic string, detail *TopicDetail, validateOnly bool) error {
-	err := a.client.CreateTopic(topic, &sarama.TopicDetail{
+func (a *saramaAdminClient) CreateTopic(
+	ctx context.Context,
+	detail *TopicDetail,
+	validateOnly bool,
+) error {
+	request := &sarama.TopicDetail{
 		NumPartitions:     detail.NumPartitions,
 		ReplicationFactor: detail.ReplicationFactor,
-	}, validateOnly)
-	// Ignore the already exists error because it's not harmful.
-	if err != nil && !strings.Contains(err.Error(), sarama.ErrTopicAlreadyExists.Error()) {
-		return err
 	}
-	return nil
+	query := func() error {
+		return a.admin.CreateTopic(detail.Name, request, validateOnly)
+	}
+	return a.queryClusterWithRetry(ctx, query)
+}
+
+func (a *saramaAdminClient) close() error {
+	a.mu.Lock()
+	defer a.mu.Unlock()
+	return a.admin.Close()
 }
 
 func (a *saramaAdminClient) Close() error {
-	return a.client.Close()
+	return a.close()
 }

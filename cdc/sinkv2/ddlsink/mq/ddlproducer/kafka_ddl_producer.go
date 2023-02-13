@@ -23,9 +23,8 @@ import (
 	"github.com/pingcap/tiflow/cdc/contextutil"
 	"github.com/pingcap/tiflow/cdc/model"
 	"github.com/pingcap/tiflow/cdc/sink/codec/common"
-	collector "github.com/pingcap/tiflow/cdc/sinkv2/metrics/mq/kafka"
 	cerror "github.com/pingcap/tiflow/pkg/errors"
-	pkafka "github.com/pingcap/tiflow/pkg/sink/kafka"
+	"github.com/pingcap/tiflow/pkg/sink/kafka"
 	"github.com/pingcap/tiflow/pkg/util"
 	"go.uber.org/zap"
 )
@@ -39,11 +38,11 @@ type kafkaDDLProducer struct {
 	id model.ChangeFeedID
 	// We hold the client to make close operation faster.
 	// Please see the comment of Close().
-	client pkafka.Client
-	// collector is used to report metrics.
-	collector *collector.Collector
-	// asyncProducer is used to send messages to kafka synchronously.
-	syncProducer pkafka.SyncProducer
+	client kafka.Client
+	// syncProducer is used to send messages to kafka synchronously.
+	syncProducer kafka.SyncProducer
+	// metricsCollector is used to report metrics.
+	metricsCollector kafka.MetricsCollector
 	// closedMu is used to protect `closed`.
 	// We need to ensure that closed producers are never written to.
 	closedMu sync.RWMutex
@@ -53,8 +52,8 @@ type kafkaDDLProducer struct {
 }
 
 // NewKafkaDDLProducer creates a new kafka producer for replicating DDL.
-func NewKafkaDDLProducer(ctx context.Context, client pkafka.Client,
-	adminClient pkafka.ClusterAdminClient,
+func NewKafkaDDLProducer(ctx context.Context, client kafka.Client,
+	adminClient kafka.ClusterAdminClient,
 ) (DDLProducer, error) {
 	changefeedID := contextutil.ChangefeedIDFromCtx(ctx)
 
@@ -78,21 +77,24 @@ func NewKafkaDDLProducer(ctx context.Context, client pkafka.Client,
 					zap.String("changefeed", changefeedID.ID))
 			}
 		}()
-		return nil, cerror.WrapError(cerror.ErrKafkaNewSaramaProducer, err)
+		return nil, cerror.WrapError(cerror.ErrKafkaNewProducer, err)
 	}
-	collector := collector.New(changefeedID, util.RoleOwner,
-		adminClient, client.MetricRegistry())
 
+	metricsCollector := client.MetricsCollector(
+		changefeedID,
+		util.RoleOwner,
+		adminClient,
+	)
 	p := &kafkaDDLProducer{
-		id:           changefeedID,
-		client:       client,
-		collector:    collector,
-		syncProducer: syncProducer,
-		closed:       false,
+		id:               changefeedID,
+		client:           client,
+		metricsCollector: metricsCollector,
+		syncProducer:     syncProducer,
+		closed:           false,
 	}
 
 	// Start collecting metrics.
-	go p.collector.Run(ctx)
+	go p.metricsCollector.Run(ctx)
 
 	return p, nil
 }
@@ -111,7 +113,8 @@ func (k *kafkaDDLProducer) SyncBroadcastMessage(ctx context.Context, topic strin
 	case <-ctx.Done():
 		return ctx.Err()
 	default:
-		err := k.syncProducer.SendMessages(topic, totalPartitionsNum, message.Key, message.Value)
+		err := k.syncProducer.SendMessages(ctx, topic,
+			totalPartitionsNum, message.Key, message.Value)
 		return cerror.WrapError(cerror.ErrKafkaSendMessage, err)
 	}
 }
@@ -130,7 +133,8 @@ func (k *kafkaDDLProducer) SyncSendMessage(ctx context.Context, topic string,
 	case <-ctx.Done():
 		return errors.Trace(ctx.Err())
 	default:
-		err := k.syncProducer.SendMessage(topic, partitionNum, message.Key, message.Value)
+		err := k.syncProducer.SendMessage(ctx, topic,
+			partitionNum, message.Key, message.Value)
 		return cerror.WrapError(cerror.ErrKafkaSendMessage, err)
 	}
 }
@@ -190,6 +194,6 @@ func (k *kafkaDDLProducer) Close() {
 		}
 
 		// Finally, close the metric collector.
-		k.collector.Close()
+		k.metricsCollector.Close()
 	}()
 }

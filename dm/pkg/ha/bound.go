@@ -42,7 +42,7 @@ const (
 // SourceBound represents the bound relationship between the DM-worker instance and the upstream MySQL source.
 type SourceBound struct {
 	Source string `json:"source"` // the source ID of the upstream.
-	Worker string `json:"worker"` // the name of the bounded DM-worker for the source.
+	Worker string `json:"worker"` // the name of the bound DM-worker for the source.
 
 	// only used to report to the caller of the watcher, do not marsh it.
 	// if it's true, it means the bound has been deleted in etcd.

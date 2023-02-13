@@ -169,7 +169,7 @@ message SyncStatus {
 // SourceStatus represents status for source runing on dm-worker
 message SourceStatus {
     string source = 1; // sourceID, set by dm-master
-    string worker = 2; // bounded worker name for this source
+    string worker = 2; // worker name bound to this source
     ProcessResult result = 3;
     RelayStatus relayStatus = 4;
 }

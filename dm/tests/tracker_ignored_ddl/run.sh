@@ -36,7 +36,7 @@ function run() {
 	run_sql_file $cur/data/db.increment2.sql $MYSQL_HOST1 $MYSQL_PORT1 $MYSQL_PASSWORD1
 	run_dm_ctl_with_retry $WORK_DIR "127.0.0.1:$MASTER_PORT" \
 		"query-status test" \
-		"Error 1054: Unknown column" 1
+		"Error 1054 (42S22): Unknown column" 1
 
 	# force a resume, the error is still there, but we want to check https://github.com/pingcap/tiflow/issues/5272#issuecomment-1109283279
 	run_dm_ctl $WORK_DIR "127.0.0.1:$MASTER_PORT" \

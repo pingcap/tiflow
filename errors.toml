@@ -586,14 +586,19 @@ error = '''
 invalid partition num %d
 '''
 
+["CDC:ErrKafkaInvalidRequiredAcks"]
+error = '''
+invalid required acks %d, only support these values: 0(NoResponse),1(WaitForLocal) and -1(WaitForAll)
+'''
+
 ["CDC:ErrKafkaInvalidVersion"]
 error = '''
 invalid kafka version
 '''
 
-["CDC:ErrKafkaNewSaramaProducer"]
+["CDC:ErrKafkaNewProducer"]
 error = '''
-new sarama producer
+new kafka producer
 '''
 
 ["CDC:ErrKafkaProducerClosed"]
@@ -998,7 +1003,7 @@ failed to seek to the beginning of request body
 
 ["CDC:ErrS3StorageAPI"]
 error = '''
-s3 storage api
+external storage api
 '''
 
 ["CDC:ErrScanLockFailed"]

@@ -85,12 +85,12 @@ const (
   "owner-flush-interval": 50000000,
   "processor-flush-interval": 50000000,
   "sorter": {
-    "num-concurrent-worker": 4,
-    "chunk-size-limit": 999,
     "max-memory-percentage": 10,
-    "max-memory-consumption": 17179869184,
-    "num-workerpool-goroutine": 16,
-    "sort-dir": "/tmp/sorter"
+    "sort-dir": "/tmp/sorter",
+    "max-memory-consumption": 0,
+    "num-workerpool-goroutine": 0,
+    "num-concurrent-worker": 0,
+    "chunk-size-limit": 0
   },
   "security": {
     "ca-path": "",
@@ -106,11 +106,6 @@ const (
     "region-retry-duration": 60000000000
   },
   "debug": {
-    "table-actor": {
-      "event-batch-size": 32
-    },
-    "enable-pull-based-sink": true,
-    "enable-db-sorter": true,
     "db": {
       "count": 8,
       "concurrency": 128,
@@ -142,7 +137,6 @@ const (
       "check-balance-interval": 60000000000,
       "add-table-batch-size": 50
     },
-    "enable-new-sink": true,
     "enable-kafka-sink-v2": false
   },
   "cluster-id": "default"

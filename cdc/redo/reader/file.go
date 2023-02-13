@@ -133,7 +133,7 @@ func selectDownLoadFile(
 			return nil
 		})
 	if err != nil {
-		return nil, cerror.WrapError(cerror.ErrS3StorageAPI, err)
+		return nil, cerror.WrapError(cerror.ErrExternalStorageAPI, err)
 	}
 
 	return files, nil
@@ -153,7 +153,7 @@ func downLoadToLocal(
 		eg.Go(func() error {
 			data, err := extStorage.ReadFile(eCtx, f)
 			if err != nil {
-				return cerror.WrapError(cerror.ErrS3StorageAPI, err)
+				return cerror.WrapError(cerror.ErrExternalStorageAPI, err)
 			}
 
 			err = os.MkdirAll(dir, redo.DefaultDirMode)

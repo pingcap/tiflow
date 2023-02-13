@@ -40,10 +40,7 @@ func (m *mockEventSink) WriteEvents(rows ...*eventsink.TxnCallbackableEvent) err
 	return nil
 }
 
-func (m *mockEventSink) Close() error {
-	// Do nothing.
-	return nil
-}
+func (m *mockEventSink) Close() {}
 
 // acknowledge the txn events by call the callback function.
 func (m *mockEventSink) acknowledge(commitTs uint64) []*eventsink.TxnCallbackableEvent {

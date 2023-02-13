@@ -19,7 +19,6 @@ import (
 	"strings"
 
 	"github.com/pingcap/tiflow/cdc/model"
-	"github.com/pingcap/tiflow/cdc/sink/mq"
 	"github.com/pingcap/tiflow/cdc/sink/mysql"
 	"github.com/pingcap/tiflow/pkg/config"
 	cerror "github.com/pingcap/tiflow/pkg/errors"
@@ -97,15 +96,6 @@ type sinkInitFunc func(
 ) (Sink, error)
 
 func init() {
-	// register blackhole sink
-	sinkIniterMap["blackhole"] = func(
-		ctx context.Context, changefeedID model.ChangeFeedID, sinkURI *url.URL,
-		config *config.ReplicaConfig,
-		errCh chan error,
-	) (Sink, error) {
-		return newBlackHoleSink(ctx), nil
-	}
-
 	// register mysql sink
 	sinkIniterMap["mysql"] = func(
 		ctx context.Context, changefeedID model.ChangeFeedID, sinkURI *url.URL, config *config.ReplicaConfig,
@@ -116,16 +106,6 @@ func init() {
 	sinkIniterMap["tidb"] = sinkIniterMap["mysql"]
 	sinkIniterMap["mysql+ssl"] = sinkIniterMap["mysql"]
 	sinkIniterMap["tidb+ssl"] = sinkIniterMap["mysql"]
-
-	// register kafka sink
-	sinkIniterMap["kafka"] = func(
-		ctx context.Context, changefeedID model.ChangeFeedID, sinkURI *url.URL,
-		config *config.ReplicaConfig,
-		errCh chan error,
-	) (Sink, error) {
-		return mq.NewKafkaSaramaSink(ctx, sinkURI, config, errCh, changefeedID)
-	}
-	sinkIniterMap["kafka+ssl"] = sinkIniterMap["kafka"]
 }
 
 // New creates a new sink with the sink-uri

@@ -49,6 +49,7 @@ type mockAPIV2Client struct {
 	changefeeds apiv2client.ChangefeedInterface
 	unsafes     apiv2client.UnsafeInterface
 	captures    apiv2client.CaptureInterface
+	processors  apiv2client.ProcessorInterface
 }
 
 func (f *mockAPIV2Client) Changefeeds() apiv2client.ChangefeedInterface {
@@ -67,6 +68,10 @@ func (f *mockAPIV2Client) Captures() apiv2client.CaptureInterface {
 	return f.captures
 }
 
+func (f *mockAPIV2Client) Processors() apiv2client.ProcessorInterface {
+	return f.processors
+}
+
 type mockFactory struct {
 	factory.Factory
 	captures    *v2mock.MockCaptureInterface
@@ -77,6 +82,7 @@ type mockFactory struct {
 	changefeedsv2 *v2mock.MockChangefeedInterface
 	tso           *v2mock.MockTsoInterface
 	unsafes       *v2mock.MockUnsafeInterface
+	processorsv2  *v2mock.MockProcessorInterface
 }
 
 func newMockFactory(ctrl *gomock.Controller) *mockFactory {
@@ -87,6 +93,7 @@ func newMockFactory(ctrl *gomock.Controller) *mockFactory {
 	unsafes := v2mock.NewMockUnsafeInterface(ctrl)
 	tso := v2mock.NewMockTsoInterface(ctrl)
 	cfv2 := v2mock.NewMockChangefeedInterface(ctrl)
+	processorsv2 := v2mock.NewMockProcessorInterface(ctrl)
 	return &mockFactory{
 		captures:      cps,
 		changefeeds:   cf,
@@ -95,6 +102,7 @@ func newMockFactory(ctrl *gomock.Controller) *mockFactory {
 		changefeedsv2: cfv2,
 		tso:           tso,
 		unsafes:       unsafes,
+		processorsv2:  processorsv2,
 	}
 }
 
@@ -112,6 +120,7 @@ func (f *mockFactory) APIV2Client() (apiv2client.APIV2Interface, error) {
 		changefeeds: f.changefeedsv2,
 		tso:         f.tso,
 		unsafes:     f.unsafes,
+		processors:  f.processorsv2,
 	}, nil
 }
 

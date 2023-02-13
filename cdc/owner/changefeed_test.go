@@ -223,6 +223,7 @@ func createChangefeed4Test(ctx cdcContext.Context, t *testing.T,
 		// new downstream observer
 		func(
 			ctx context.Context, sinkURIStr string, replCfg *config.ReplicaConfig,
+			opts ...observer.NewObserverOption,
 		) (observer.Observer, error) {
 			return observer.NewDummyObserver(), nil
 		},
@@ -495,7 +496,7 @@ func TestRemoveChangefeed(t *testing.T) {
 	info.Config.Consistent = &config.ConsistentConfig{
 		Level:             "eventual",
 		Storage:           filepath.Join("nfs://", dir),
-		FlushIntervalInMs: config.MinFlushIntervalInMs,
+		FlushIntervalInMs: config.DefaultFlushIntervalInMs,
 	}
 	ctx = cdcContext.WithChangefeedVars(ctx, &cdcContext.ChangefeedVars{
 		ID:   ctx.ChangefeedVars().ID,

@@ -22,7 +22,6 @@ import (
 	"github.com/pingcap/tiflow/cdc/model"
 	"github.com/pingcap/tiflow/cdc/sink/codec/builder"
 	"github.com/pingcap/tiflow/cdc/sink/codec/common"
-	mqv1 "github.com/pingcap/tiflow/cdc/sink/mq"
 	"github.com/pingcap/tiflow/cdc/sink/mq/dispatcher"
 	"github.com/pingcap/tiflow/cdc/sink/mq/manager"
 	"github.com/pingcap/tiflow/cdc/sinkv2/eventsink"
@@ -52,9 +51,13 @@ type dmlSink struct {
 	// topicManager used to manage topics.
 	// It is also responsible for creating topics.
 	topicManager manager.TopicManager
+
+	ctx    context.Context
+	cancel context.CancelFunc
 }
 
-func newSink(ctx context.Context,
+func newSink(
+	ctx context.Context,
 	producer dmlproducer.DMLProducer,
 	topicManager manager.TopicManager,
 	eventRouter *dispatcher.EventRouter,
@@ -69,6 +72,7 @@ func newSink(ctx context.Context,
 		return nil, cerror.WrapError(cerror.ErrKafkaInvalidConfig, err)
 	}
 
+	ctx, cancel := context.WithCancel(ctx)
 	statistics := metrics.NewStatistics(ctx, sink.RowSink)
 	worker := newWorker(changefeedID, encoderConfig.Protocol,
 		encoderBuilder, encoderConcurrency, producer, statistics)
@@ -78,6 +82,8 @@ func newSink(ctx context.Context,
 		worker:       worker,
 		eventRouter:  eventRouter,
 		topicManager: topicManager,
+		ctx:          ctx,
+		cancel:       cancel,
 	}
 
 	// Spawn a goroutine to send messages by the worker.
@@ -110,14 +116,14 @@ func (s *dmlSink) WriteEvents(rows ...*eventsink.RowChangeCallbackableEvent) err
 			continue
 		}
 		topic := s.eventRouter.GetTopicForRowChange(row.Event)
-		partitionNum, err := s.topicManager.GetPartitionNum(topic)
+		partitionNum, err := s.topicManager.GetPartitionNum(s.ctx, topic)
 		if err != nil {
 			return errors.Trace(err)
 		}
 		partition := s.eventRouter.GetPartitionForRowChange(row.Event, partitionNum)
 		// This never be blocked because this is an unbounded channel.
 		s.worker.msgChan.In() <- mqEvent{
-			key: mqv1.TopicPartitionKey{
+			key: TopicPartitionKey{
 				Topic: topic, Partition: partition,
 			},
 			rowEvent: row,
@@ -128,7 +134,11 @@ func (s *dmlSink) WriteEvents(rows ...*eventsink.RowChangeCallbackableEvent) err
 }
 
 // Close closes the sink.
-func (s *dmlSink) Close() error {
-	s.worker.close()
-	return nil
+func (s *dmlSink) Close() {
+	if s.cancel != nil {
+		s.cancel()
+	}
+	if s.worker != nil {
+		s.worker.close()
+	}
 }
