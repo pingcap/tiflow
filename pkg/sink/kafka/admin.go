@@ -39,7 +39,7 @@ type saramaAdminClient struct {
 }
 
 const (
-	defaultRetryBackoff  = 20
+	defaultRetryBackoff  = 50
 	defaultRetryMaxTries = 3
 )
 
@@ -68,13 +68,18 @@ func NewSaramaAdminClient(ctx context.Context, config *Options) (ClusterAdminCli
 }
 
 func (a *saramaAdminClient) reset() error {
-	newClient, err := sarama.NewClusterAdmin(a.brokerEndpoints, a.config)
+	newClient, err := sarama.NewClient(a.brokerEndpoints, a.config)
+	if err != nil {
+		return cerror.Trace(err)
+	}
+	newAdmin, err := sarama.NewClusterAdminFromClient(newClient)
 	if err != nil {
 		return cerror.Trace(err)
 	}
 
-	_ = a.admin.Close()
-	a.admin = newClient
+	_ = a.close()
+	a.client = newClient
+	a.admin = newAdmin
 
 	return errors.New("retry after reset")
 }
@@ -280,8 +285,12 @@ func (a *saramaAdminClient) CreateTopic(
 	return a.queryClusterWithRetry(ctx, query)
 }
 
-func (a *saramaAdminClient) Close() error {
+func (a *saramaAdminClient) close() error {
 	a.mu.Lock()
 	defer a.mu.Unlock()
 	return a.admin.Close()
+}
+
+func (a *saramaAdminClient) Close() error {
+	return a.close()
 }
