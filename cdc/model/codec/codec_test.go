@@ -25,7 +25,7 @@ import (
 func TestV1toV2(t *testing.T) {
 	var msg1, msg2 []byte
 	var rv1 *codecv1.RedoLog
-	var rv2 *model.RedoLog
+	var rv2, rv2_gen *model.RedoLog
 	var err error
 
 	rv1 = &codecv1.RedoLog{
@@ -68,19 +68,62 @@ func TestV1toV2(t *testing.T) {
 		},
 	}
 
+	rv2 = &model.RedoLog{
+		RedoRow: &model.RowChangedEvent{
+			StartTs:  1,
+			CommitTs: 2,
+			RowID:    1,
+			Table: &model.TableName{
+				Schema:      "schema",
+				Table:       "table",
+				TableID:     1,
+				IsPartition: false,
+			},
+			ColInfos: []rowcodec.ColInfo{
+				rowcodec.ColInfo{
+					ID:            1,
+					IsPKHandle:    true,
+					VirtualGenCol: false,
+					Ft:            nil,
+				},
+			},
+			TableInfo: nil,
+			Columns: []*model.Column{
+				&model.Column{
+					Name:    "column",
+					Value:   1,
+					Default: 0,
+				},
+			},
+			PreColumns: []*model.Column{
+				&model.Column{
+					Name:    "column",
+					Value:   1,
+					Default: 0,
+				},
+			},
+			IndexColumns: [][]int{[]int{1}},
+		},
+	}
+
+	// Unmarshal into v2 from v1.
 	msg1, err = rv1.MarshalMsg(nil)
 	require.Nil(t, err)
-	rv2, msg2, err = UnmarshalRedoLog(msg1)
+	rv2_gen, msg1, err = UnmarshalRedoLog(msg1)
 	require.Nil(t, err)
-	require.Zero(t, len(msg2))
-	require.NotNil(t, rv2.RedoRow)
-	require.Nil(t, rv2.RedoDDL)
+	require.Zero(t, len(msg1))
 
+	// rv2_gen should equal to rv2.
+	msg1, err = MarshalRedoLog(rv2_gen, nil)
+	require.Nil(t, err)
 	msg2, err = MarshalRedoLog(rv2, nil)
 	require.Nil(t, err)
-	_, msg2, err = UnmarshalRedoLog(msg2)
+	require.Equal(t, msg1, msg2)
+
+	// Unmarshal and marshal v2.
+	rv2_gen, _, err = UnmarshalRedoLog(msg2)
 	require.Nil(t, err)
-	require.Zero(t, len(msg2))
-	require.NotNil(t, rv2.RedoRow)
-	require.Nil(t, rv2.RedoDDL)
+	msg1, err = MarshalRedoLog(rv2_gen, nil)
+	require.Nil(t, err)
+	require.Equal(t, msg1, msg2)
 }
