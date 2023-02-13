@@ -55,7 +55,7 @@ func NewSaramaAdminClient(ctx context.Context, config *Options) (ClusterAdminCli
 		return nil, cerror.Trace(err)
 	}
 
-	admin, err := sarama.NewClusterAdmin(config.BrokerEndpoints, saramaConfig)
+	admin, err := sarama.NewClusterAdminFromClient(client)
 	if err != nil {
 		return nil, err
 	}
@@ -172,6 +172,24 @@ func (a *saramaAdminClient) GetBrokerConfig(
 	}
 
 	return configEntries[0].Value, nil
+}
+
+func (a *saramaAdminClient) GetTopicsPartitions(_ context.Context) (map[string]int32, error) {
+	topics, err := a.client.Topics()
+	if err != nil {
+		return nil, cerror.Trace(err)
+	}
+
+	result := make(map[string]int32, len(topics))
+	for _, topic := range topics {
+		partitions, err := a.client.Partitions(topic)
+		if err != nil {
+			return nil, cerror.Trace(err)
+		}
+		result[topic] = int32(len(partitions))
+	}
+
+	return result, nil
 }
 
 func (a *saramaAdminClient) GetAllTopicsMeta(ctx context.Context) (map[string]TopicDetail, error) {
