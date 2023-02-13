@@ -23,12 +23,15 @@ import (
 	"github.com/pingcap/tiflow/cdc/model"
 	"github.com/pingcap/tiflow/cdc/redo/common"
 	"github.com/pingcap/tiflow/cdc/redo/reader"
-	"github.com/pingcap/tiflow/cdc/sink"
 	"github.com/pingcap/tiflow/cdc/sink/mysql"
+	"github.com/pingcap/tiflow/cdc/sinkv2/eventsink/factory"
+	"github.com/pingcap/tiflow/cdc/sinkv2/tablesink"
 	"github.com/pingcap/tiflow/pkg/config"
 	cerror "github.com/pingcap/tiflow/pkg/errors"
 	"github.com/pingcap/tiflow/pkg/redo"
+	"github.com/pingcap/tiflow/pkg/spanz"
 	"github.com/pingcap/tiflow/pkg/util"
+	"github.com/prometheus/client_golang/prometheus"
 	"go.uber.org/zap"
 	"golang.org/x/sync/errgroup"
 )
@@ -52,14 +55,20 @@ type RedoApplierConfig struct {
 type RedoApplier struct {
 	cfg *RedoApplierConfig
 
-	rd    reader.RedoLogReader
-	errCh chan error
+	rd reader.RedoLogReader
+	// sinkFactory is used to create table sinks.
+	sinkFactory *factory.SinkFactory
+	// tableSinks is a map from tableID to table sink.
+	// We create it when we need it, and close it after we finish applying the redo logs.
+	tableSinks map[model.TableID]tablesink.TableSink
+	errCh      chan error
 }
 
 // NewRedoApplier creates a new RedoApplier instance
 func NewRedoApplier(cfg *RedoApplierConfig) *RedoApplier {
 	return &RedoApplier{
-		cfg: cfg,
+		cfg:        cfg,
+		tableSinks: make(map[model.TableID]tablesink.TableSink),
 	}
 }
 
@@ -104,28 +113,12 @@ func (ra *RedoApplier) consumeLogs(ctx context.Context) error {
 			zap.Uint64("resolvedTs", resolvedTs))
 		return errApplyFinished
 	}
+
 	err = ra.rd.ResetReader(ctx, checkpointTs, resolvedTs)
 	if err != nil {
 		return err
 	}
 	log.Info("apply redo log starts", zap.Uint64("checkpointTs", checkpointTs), zap.Uint64("resolvedTs", resolvedTs))
-
-	// MySQL sink will use the following replication config
-	// - EnableOldValue: default true
-	// - ForceReplicate: default false
-	// - filter: default []string{"*.*"}
-	replicaConfig := config.GetDefaultReplicaConfig()
-	ctx = contextutil.PutRoleInCtx(ctx, util.RoleRedoLogApplier)
-	s, err := sink.New(ctx,
-		model.DefaultChangeFeedID(applierChangefeed),
-		ra.cfg.SinkURI, replicaConfig, ra.errCh)
-	if err != nil {
-		return err
-	}
-	defer func() {
-		ra.rd.Close() //nolint:errcheck
-		s.Close(ctx)  //nolint:errcheck
-	}()
 
 	// TODO: split events for large transaction
 	// We use lastSafeResolvedTs and lastResolvedTs to ensure the events in one
@@ -150,44 +143,47 @@ func (ra *RedoApplier) consumeLogs(ctx context.Context) error {
 
 		for _, redoLog := range redoLogs {
 			tableID := redoLog.Row.Table.TableID
+			if _, ok := ra.tableSinks[tableID]; !ok {
+				tableSink := ra.sinkFactory.CreateTableSink(
+					model.DefaultChangeFeedID(applierChangefeed),
+					spanz.TableIDToComparableSpan(1),
+					prometheus.NewCounter(prometheus.CounterOpts{}),
+				)
+				ra.tableSinks[tableID] = tableSink
+			}
 			if _, ok := tableResolvedTsMap[redoLog.Row.Table.TableID]; !ok {
 				tableResolvedTsMap[tableID] = lastSafeResolvedTs
 			}
 			if len(cachedRows) >= emitBatch {
-				err := s.EmitRowChangedEvents(ctx, cachedRows...)
-				if err != nil {
-					return err
+				for _, row := range cachedRows {
+					tableID := row.Table.TableID
+					ra.tableSinks[tableID].AppendRowChangedEvents(row)
 				}
 				cachedRows = make([]*model.RowChangedEvent, 0, emitBatch)
 			}
 			cachedRows = append(cachedRows, common.LogToRow(redoLog))
-
 			if redoLog.Row.CommitTs > tableResolvedTsMap[tableID] {
 				tableResolvedTsMap[tableID], lastResolvedTs = lastResolvedTs, redoLog.Row.CommitTs
 			}
 		}
 
 		for tableID, tableLastResolvedTs := range tableResolvedTsMap {
-			_, err = s.FlushRowChangedEvents(ctx, tableID, model.NewResolvedTs(tableLastResolvedTs))
-			if err != nil {
+			if err := ra.tableSinks[tableID].UpdateResolvedTs(
+				model.NewResolvedTs(tableLastResolvedTs)); err != nil {
 				return err
 			}
 		}
 	}
-	err = s.EmitRowChangedEvents(ctx, cachedRows...)
-	if err != nil {
-		return err
+	for _, row := range cachedRows {
+		tableID := row.Table.TableID
+		ra.tableSinks[tableID].AppendRowChangedEvents(row)
 	}
-
 	for tableID := range tableResolvedTsMap {
-		_, err = s.FlushRowChangedEvents(ctx, tableID, model.NewResolvedTs(resolvedTs))
-		if err != nil {
+		if err := ra.tableSinks[tableID].UpdateResolvedTs(
+			model.NewResolvedTs(resolvedTs)); err != nil {
 			return err
 		}
-		err = s.RemoveTable(ctx, tableID)
-		if err != nil {
-			return err
-		}
+		ra.tableSinks[tableID].Close(ctx)
 	}
 
 	log.Info("apply redo log finishes", zap.Int("appliedLogCount", appliedLogCount))
@@ -221,6 +217,24 @@ func (ra *RedoApplier) Apply(ctx context.Context) error {
 	}
 	ra.rd = rd
 	ra.errCh = make(chan error, 1024)
+	defer func() {
+		if err = ra.rd.Close(); err != nil {
+			log.Warn("Close redo reader failed", zap.Error(err))
+		}
+	}()
+	// MySQL sink will use the following replication config
+	// - EnableOldValue: default true
+	// - ForceReplicate: default false
+	// - filter: default []string{"*.*"}
+	replicaConfig := config.GetDefaultReplicaConfig()
+	ctx = contextutil.PutRoleInCtx(ctx, util.RoleRedoLogApplier)
+	sinkFactory, err := factory.New(ctx,
+		ra.cfg.SinkURI, replicaConfig, ra.errCh)
+	if err != nil {
+		return err
+	}
+	ra.sinkFactory = sinkFactory
+	defer sinkFactory.Close()
 
 	wg, ctx := errgroup.WithContext(ctx)
 	wg.Go(func() error {

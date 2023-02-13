@@ -20,11 +20,12 @@ import (
 	"testing"
 
 	"github.com/DATA-DOG/go-sqlmock"
+	dmysql "github.com/go-sql-driver/mysql"
 	"github.com/phayes/freeport"
 	"github.com/pingcap/tiflow/cdc/model"
 	"github.com/pingcap/tiflow/cdc/redo/common"
 	"github.com/pingcap/tiflow/cdc/redo/reader"
-	"github.com/pingcap/tiflow/cdc/sink/mysql"
+	"github.com/pingcap/tiflow/cdc/sinkv2/eventsink/txn"
 	"github.com/stretchr/testify/require"
 )
 
@@ -157,9 +158,16 @@ func TestApplyDMLs(t *testing.T) {
 			mock.ExpectClose()
 			return db, nil
 		}
+
 		// normal db
 		db, mock, err := sqlmock.New(sqlmock.QueryMatcherOption(sqlmock.QueryMatcherEqual))
 		require.Nil(t, err)
+		// Before we write data to downstream, we need to check whether the downstream is TiDB.
+		// So we mock a select tidb_version() query.
+		mock.ExpectQuery("select tidb_version()").WillReturnError(&dmysql.MySQLError{
+			Number:  1305,
+			Message: "FUNCTION test.tidb_version does not exist",
+		})
 		mock.ExpectBegin()
 		mock.ExpectExec("REPLACE INTO `test`.`t1`(`a`,`b`) VALUES (?,?)").
 			WithArgs(1, "2").
@@ -178,13 +186,13 @@ func TestApplyDMLs(t *testing.T) {
 		return db, nil
 	}
 
-	getDBConnBak := mysql.GetDBConnImpl
-	mysql.GetDBConnImpl = mockGetDBConn
+	getDBConnBak := txn.GetDBConnImpl
+	txn.GetDBConnImpl = mockGetDBConn
 	createRedoReaderBak := createRedoReader
 	createRedoReader = createMockReader
 	defer func() {
 		createRedoReader = createRedoReaderBak
-		mysql.GetDBConnImpl = getDBConnBak
+		txn.GetDBConnImpl = getDBConnBak
 	}()
 
 	dmls := []*model.RowChangedEvent{
