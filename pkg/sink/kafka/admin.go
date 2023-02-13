@@ -43,14 +43,8 @@ const (
 	defaultRetryMaxTries = 3
 )
 
-// NewSaramaAdminClient constructs a ClusterAdminClient with sarama.
-func NewSaramaAdminClient(ctx context.Context, config *Options) (ClusterAdminClient, error) {
-	saramaConfig, err := NewSaramaConfig(ctx, config)
-	if err != nil {
-		return nil, err
-	}
-
-	client, err := sarama.NewClient(config.BrokerEndpoints, saramaConfig)
+func newAdminClient(brokerEndpoints []string, config *sarama.Config) (ClusterAdminClient, error) {
+	client, err := sarama.NewClient(brokerEndpoints, config)
 	if err != nil {
 		return nil, cerror.Trace(err)
 	}
@@ -62,8 +56,8 @@ func NewSaramaAdminClient(ctx context.Context, config *Options) (ClusterAdminCli
 	return &saramaAdminClient{
 		client:          client,
 		admin:           admin,
-		brokerEndpoints: config.BrokerEndpoints,
-		config:          saramaConfig,
+		brokerEndpoints: brokerEndpoints,
+		config:          config,
 	}, nil
 }
 
