@@ -68,7 +68,7 @@ func NewKafkaDDLSink(
 		}
 	}()
 
-	if err := kafka.AdjustOptions(ctx, adminClient, options, topic); err != nil {
+	if err := pkafka.AdjustOptions(ctx, adminClient, options, topic); err != nil {
 		return nil, cerror.WrapError(cerror.ErrKafkaNewProducer, err)
 	}
 

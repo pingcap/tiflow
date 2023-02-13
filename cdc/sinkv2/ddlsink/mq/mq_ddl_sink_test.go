@@ -22,7 +22,6 @@ import (
 	"github.com/Shopify/sarama"
 	mm "github.com/pingcap/tidb/parser/model"
 	"github.com/pingcap/tiflow/cdc/model"
-	mqv1 "github.com/pingcap/tiflow/cdc/sink/mq"
 	"github.com/pingcap/tiflow/cdc/sinkv2/ddlsink/mq/ddlproducer"
 	"github.com/pingcap/tiflow/pkg/config"
 	"github.com/pingcap/tiflow/pkg/sink/kafka"
@@ -112,18 +111,9 @@ func TestWriteDDLEventToAllPartitions(t *testing.T) {
 	require.Nil(t, err)
 	require.Len(t, s.producer.(*ddlproducer.MockDDLProducer).GetAllEvents(),
 		3, "All partitions should be broadcast")
-	require.Len(t, s.producer.(*ddlproducer.MockDDLProducer).GetEvents(mqv1.TopicPartitionKey{
-		Topic:     "mock_topic",
-		Partition: 0,
-	}), 1)
-	require.Len(t, s.producer.(*ddlproducer.MockDDLProducer).GetEvents(mqv1.TopicPartitionKey{
-		Topic:     "mock_topic",
-		Partition: 1,
-	}), 1)
-	require.Len(t, s.producer.(*ddlproducer.MockDDLProducer).GetEvents(mqv1.TopicPartitionKey{
-		Topic:     "mock_topic",
-		Partition: 2,
-	}), 1)
+	require.Len(t, s.producer.(*ddlproducer.MockDDLProducer).GetEvents("mock_topic", 0), 1)
+	require.Len(t, s.producer.(*ddlproducer.MockDDLProducer).GetEvents("mock_topic", 1), 1)
+	require.Len(t, s.producer.(*ddlproducer.MockDDLProducer).GetEvents("mock_topic", 2), 1)
 }
 
 func TestWriteDDLEventToZeroPartition(t *testing.T) {
@@ -164,18 +154,9 @@ func TestWriteDDLEventToZeroPartition(t *testing.T) {
 	require.Nil(t, err)
 	require.Len(t, s.producer.(*ddlproducer.MockDDLProducer).GetAllEvents(),
 		1, "Only zero partition")
-	require.Len(t, s.producer.(*ddlproducer.MockDDLProducer).GetEvents(mqv1.TopicPartitionKey{
-		Topic:     "mock_topic",
-		Partition: 0,
-	}), 1)
-	require.Len(t, s.producer.(*ddlproducer.MockDDLProducer).GetEvents(mqv1.TopicPartitionKey{
-		Topic:     "mock_topic",
-		Partition: 1,
-	}), 0)
-	require.Len(t, s.producer.(*ddlproducer.MockDDLProducer).GetEvents(mqv1.TopicPartitionKey{
-		Topic:     "mock_topic",
-		Partition: 2,
-	}), 0)
+	require.Len(t, s.producer.(*ddlproducer.MockDDLProducer).GetEvents("mock_topic", 0), 1)
+	require.Len(t, s.producer.(*ddlproducer.MockDDLProducer).GetEvents("mock_topic", 1), 0)
+	require.Len(t, s.producer.(*ddlproducer.MockDDLProducer).GetEvents("mock_topic", 2), 0)
 }
 
 func TestWriteCheckpointTsToDefaultTopic(t *testing.T) {
@@ -210,18 +191,9 @@ func TestWriteCheckpointTsToDefaultTopic(t *testing.T) {
 
 	require.Len(t, s.producer.(*ddlproducer.MockDDLProducer).GetAllEvents(),
 		3, "All partitions should be broadcast")
-	require.Len(t, s.producer.(*ddlproducer.MockDDLProducer).GetEvents(mqv1.TopicPartitionKey{
-		Topic:     "mock_topic",
-		Partition: 0,
-	}), 1)
-	require.Len(t, s.producer.(*ddlproducer.MockDDLProducer).GetEvents(mqv1.TopicPartitionKey{
-		Topic:     "mock_topic",
-		Partition: 1,
-	}), 1)
-	require.Len(t, s.producer.(*ddlproducer.MockDDLProducer).GetEvents(mqv1.TopicPartitionKey{
-		Topic:     "mock_topic",
-		Partition: 2,
-	}), 1)
+	require.Len(t, s.producer.(*ddlproducer.MockDDLProducer).GetEvents("mock_topic", 0), 1)
+	require.Len(t, s.producer.(*ddlproducer.MockDDLProducer).GetEvents("mock_topic", 1), 1)
+	require.Len(t, s.producer.(*ddlproducer.MockDDLProducer).GetEvents("mock_topic", 2), 1)
 }
 
 func TestWriteCheckpointTsToTableTopics(t *testing.T) {
@@ -283,30 +255,12 @@ func TestWriteCheckpointTsToTableTopics(t *testing.T) {
 
 	require.Len(t, s.producer.(*ddlproducer.MockDDLProducer).GetAllEvents(),
 		6, "All topics and partitions should be broadcast")
-	require.Len(t, s.producer.(*ddlproducer.MockDDLProducer).GetEvents(mqv1.TopicPartitionKey{
-		Topic:     "mock_topic",
-		Partition: 0,
-	}), 1)
-	require.Len(t, s.producer.(*ddlproducer.MockDDLProducer).GetEvents(mqv1.TopicPartitionKey{
-		Topic:     "mock_topic",
-		Partition: 1,
-	}), 1)
-	require.Len(t, s.producer.(*ddlproducer.MockDDLProducer).GetEvents(mqv1.TopicPartitionKey{
-		Topic:     "mock_topic",
-		Partition: 2,
-	}), 1)
-	require.Len(t, s.producer.(*ddlproducer.MockDDLProducer).GetEvents(mqv1.TopicPartitionKey{
-		Topic:     "cdc_person",
-		Partition: 0,
-	}), 1)
-	require.Len(t, s.producer.(*ddlproducer.MockDDLProducer).GetEvents(mqv1.TopicPartitionKey{
-		Topic:     "cdc_person1",
-		Partition: 0,
-	}), 1)
-	require.Len(t, s.producer.(*ddlproducer.MockDDLProducer).GetEvents(mqv1.TopicPartitionKey{
-		Topic:     "cdc_person2",
-		Partition: 0,
-	}), 1)
+	require.Len(t, s.producer.(*ddlproducer.MockDDLProducer).GetEvents("mock_topic", 0), 1)
+	require.Len(t, s.producer.(*ddlproducer.MockDDLProducer).GetEvents("mock_topic", 1), 1)
+	require.Len(t, s.producer.(*ddlproducer.MockDDLProducer).GetEvents("mock_topic", 2), 1)
+	require.Len(t, s.producer.(*ddlproducer.MockDDLProducer).GetEvents("cdc_person", 0), 1)
+	require.Len(t, s.producer.(*ddlproducer.MockDDLProducer).GetEvents("cdc_person1", 0), 1)
+	require.Len(t, s.producer.(*ddlproducer.MockDDLProducer).GetEvents("cdc_person2", 0), 1)
 }
 
 func TestWriteCheckpointTsWhenCanalJsonTiDBExtensionIsDisable(t *testing.T) {

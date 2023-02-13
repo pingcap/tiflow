@@ -22,7 +22,6 @@ import (
 	"github.com/pingcap/tiflow/cdc/model"
 	"github.com/pingcap/tiflow/cdc/sink/codec/builder"
 	"github.com/pingcap/tiflow/cdc/sink/codec/common"
-	mqv1 "github.com/pingcap/tiflow/cdc/sink/mq"
 	"github.com/pingcap/tiflow/cdc/sinkv2/eventsink"
 	"github.com/pingcap/tiflow/cdc/sinkv2/eventsink/mq/dmlproducer"
 	"github.com/pingcap/tiflow/cdc/sinkv2/metrics"
@@ -67,7 +66,7 @@ func TestNonBatchEncode_SendMessages(t *testing.T) {
 	worker, p := newNonBatchEncodeWorker(ctx, t)
 	defer worker.close()
 
-	key := mqv1.TopicPartitionKey{
+	key := TopicPartitionKey{
 		Topic:     "test",
 		Partition: 1,
 	}
@@ -124,7 +123,7 @@ func TestBatchEncode_Batch(t *testing.T) {
 	defer cancel()
 	worker, _ := newBatchEncodeWorker(ctx, t)
 	defer worker.close()
-	key := mqv1.TopicPartitionKey{
+	key := TopicPartitionKey{
 		Topic:     "test",
 		Partition: 1,
 	}
@@ -156,15 +155,15 @@ func TestBatchEncode_Batch(t *testing.T) {
 func TestBatchEncode_Group(t *testing.T) {
 	t.Parallel()
 
-	key1 := mqv1.TopicPartitionKey{
+	key1 := TopicPartitionKey{
 		Topic:     "test",
 		Partition: 1,
 	}
-	key2 := mqv1.TopicPartitionKey{
+	key2 := TopicPartitionKey{
 		Topic:     "test",
 		Partition: 2,
 	}
-	key3 := mqv1.TopicPartitionKey{
+	key3 := TopicPartitionKey{
 		Topic:     "test1",
 		Partition: 2,
 	}
@@ -254,11 +253,11 @@ func TestBatchEncode_Group(t *testing.T) {
 func TestBatchEncode_GroupWhenTableStopping(t *testing.T) {
 	t.Parallel()
 
-	key1 := mqv1.TopicPartitionKey{
+	key1 := TopicPartitionKey{
 		Topic:     "test",
 		Partition: 1,
 	}
-	key2 := mqv1.TopicPartitionKey{
+	key2 := TopicPartitionKey{
 		Topic:     "test",
 		Partition: 2,
 	}
@@ -321,15 +320,15 @@ func TestBatchEncode_GroupWhenTableStopping(t *testing.T) {
 func TestBatchEncode_SendMessages(t *testing.T) {
 	t.Parallel()
 
-	key1 := mqv1.TopicPartitionKey{
+	key1 := TopicPartitionKey{
 		Topic:     "test",
 		Partition: 1,
 	}
-	key2 := mqv1.TopicPartitionKey{
+	key2 := TopicPartitionKey{
 		Topic:     "test",
 		Partition: 2,
 	}
-	key3 := mqv1.TopicPartitionKey{
+	key3 := TopicPartitionKey{
 		Topic:     "test1",
 		Partition: 2,
 	}
@@ -430,13 +429,13 @@ func TestBatchEncode_SendMessages(t *testing.T) {
 		return len(mp.GetAllEvents()) == len(events)
 	}, 3*time.Second, 100*time.Millisecond)
 	require.Eventually(t, func() bool {
-		return len(mp.GetEvents(key1)) == 3
+		return len(mp.GetEvents(key1.Topic, key1.Partition)) == 3
 	}, 3*time.Second, 100*time.Millisecond)
 	require.Eventually(t, func() bool {
-		return len(mp.GetEvents(key2)) == 1
+		return len(mp.GetEvents(key2.Topic, key2.Partition)) == 1
 	}, 3*time.Second, 100*time.Millisecond)
 	require.Eventually(t, func() bool {
-		return len(mp.GetEvents(key3)) == 2
+		return len(mp.GetEvents(key3.Topic, key3.Partition)) == 2
 	}, 3*time.Second, 100*time.Millisecond)
 
 	cancel()
@@ -465,11 +464,11 @@ func TestBatchEncodeWorker_Abort(t *testing.T) {
 func TestNonBatchEncode_SendMessagesWhenTableStopping(t *testing.T) {
 	t.Parallel()
 
-	key1 := mqv1.TopicPartitionKey{
+	key1 := TopicPartitionKey{
 		Topic:     "test",
 		Partition: 1,
 	}
-	key2 := mqv1.TopicPartitionKey{
+	key2 := TopicPartitionKey{
 		Topic:     "test",
 		Partition: 2,
 	}

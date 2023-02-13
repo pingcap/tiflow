@@ -201,7 +201,6 @@ func TestParseCfg(t *testing.T) {
 				CheckBalanceInterval: 60000000000,
 				AddTableBatchSize:    50,
 			},
-			EnableNewSink: true,
 		},
 		ClusterID: "default",
 	}, o.serverConfig)
@@ -347,7 +346,6 @@ check-balance-interval = "10s"
 				CheckBalanceInterval: config.TomlDuration(10 * time.Second),
 				AddTableBatchSize:    50,
 			},
-			EnableNewSink: true,
 		},
 		ClusterID: "default",
 	}, o.serverConfig)
@@ -481,7 +479,6 @@ cert-allowed-cn = ["dd","ee"]
 				CheckBalanceInterval: 60000000000,
 				AddTableBatchSize:    50,
 			},
-			EnableNewSink: true,
 		},
 		ClusterID: "default",
 	}, o.serverConfig)
@@ -543,6 +540,5 @@ unknown3 = 3
 			CheckBalanceInterval: 60000000000,
 			AddTableBatchSize:    50,
 		},
-		EnableNewSink: true,
 	}, o.serverConfig.Debug)
 }
