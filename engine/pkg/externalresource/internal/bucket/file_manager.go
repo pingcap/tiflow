@@ -11,7 +11,7 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-package s3
+package bucket
 
 import (
 	"context"
@@ -58,31 +58,35 @@ func (f persistedResources) UnsetPersisted(ident internal.ResourceIdent) bool {
 // FileManager manages resource files stored on s3.
 type FileManager struct {
 	executorID     model.ExecutorID
-	storageFactory ExternalStorageFactory
+	storageCreator BucketCreator
 
 	mu              sync.RWMutex
 	persistedResMap map[resModel.WorkerID]persistedResources
 }
 
-// NewFileManagerWithConfig returns a new s3 FileManager.
+// NewFileManagerWithConfig returns a new bucket FileManager.
 // Note that the lifetime of the returned object should span the whole
 // lifetime of the executor.
 func NewFileManagerWithConfig(
-	executorID resModel.ExecutorID, config resModel.S3Config,
+	executorID resModel.ExecutorID, config *resModel.Config,
 ) *FileManager {
-	factory := NewExternalStorageFactory(config.Bucket,
-		config.Prefix, &config.S3BackendOptions)
-	return NewFileManager(executorID, factory)
+	opts := &brStorage.BackendOptions{
+		S3:  config.S3.S3BackendOptions,
+		GCS: config.GCS.GCSBackendOptions,
+	}
+	// TODO:
+	creator := NewBucketCreator(config.S3.Bucket, config.S3.Prefix, opts)
+	return NewFileManager(executorID, creator)
 }
 
-// NewFileManager creates a new s3 FileManager.
+// NewFileManager creates a new bucket FileManager.
 func NewFileManager(
 	executorID resModel.ExecutorID,
-	factory ExternalStorageFactory,
+	creator BucketCreator,
 ) *FileManager {
 	return &FileManager{
 		executorID:      executorID,
-		storageFactory:  factory,
+		storageCreator:  creator,
 		persistedResMap: make(map[string]persistedResources),
 	}
 }
@@ -93,7 +97,7 @@ func (m *FileManager) CreateResource(
 	ctx context.Context, ident internal.ResourceIdent,
 ) (internal.ResourceDescriptor, error) {
 	m.validateExecutor(ident.Executor, ident)
-	desc := newResourceDescriptor(ident, m.storageFactory)
+	desc := newResourceDescriptor(ident, m.storageCreator)
 	storage, err := desc.ExternalStorage(ctx)
 	if err != nil {
 		return nil, err
@@ -111,7 +115,7 @@ func (m *FileManager) CreateResource(
 func (m *FileManager) GetPersistedResource(
 	ctx context.Context, ident internal.ResourceIdent,
 ) (internal.ResourceDescriptor, error) {
-	desc := newResourceDescriptor(ident, m.storageFactory)
+	desc := newResourceDescriptor(ident, m.storageCreator)
 	storage, err := desc.ExternalStorage(ctx)
 	if err != nil {
 		return nil, err
@@ -128,7 +132,7 @@ func (m *FileManager) GetPersistedResource(
 	return desc, nil
 }
 
-// CleanOrRecreatePersistedResource cleans the s3 directory or recreates placeholder
+// CleanOrRecreatePersistedResource cleans the bucket directory or recreates placeholder
 // file of the given resource.
 // Note that CleanOrRecreatePersistedResource will work on any executor for any persisted resource.
 func (m *FileManager) CleanOrRecreatePersistedResource(
@@ -136,7 +140,7 @@ func (m *FileManager) CleanOrRecreatePersistedResource(
 ) (internal.ResourceDescriptor, error) {
 	desc, err := m.GetPersistedResource(ctx, ident)
 	if errors.Is(err, errors.ErrResourceFilesNotFound) {
-		desc := newResourceDescriptor(ident, m.storageFactory)
+		desc := newResourceDescriptor(ident, m.storageCreator)
 		storage, err := desc.ExternalStorage(ctx)
 		if err != nil {
 			return nil, err
@@ -266,7 +270,7 @@ func (m *FileManager) SetPersisted(
 
 func (m *FileManager) validateExecutor(creator model.ExecutorID, res interface{}) {
 	if creator != m.executorID {
-		log.Panic("inconsistent executor ID of s3 file",
+		log.Panic("inconsistent executor ID of bucket file",
 			zap.Any("resource", res),
 			zap.Any("creator", creator),
 			zap.String("currentExecutor", string(m.executorID)))
@@ -279,7 +283,7 @@ func (m *FileManager) removeFilesIf(
 	pred func(path string) bool,
 ) error {
 	// TODO: add a cache here to reuse storage.
-	storage, err := m.storageFactory.newS3ExternalStorageForScope(ctx, scope)
+	storage, err := m.storageCreator.newBucketForScope(ctx, scope)
 	if err != nil {
 		return err
 	}
@@ -336,12 +340,15 @@ func createPlaceholderFile(ctx context.Context, storage brStorage.ExternalStorag
 }
 
 // PreCheckConfig does a preflight check on the executor's storage configurations.
-func PreCheckConfig(config resModel.S3Config) error {
+func PreCheckConfig(config *resModel.Config) error {
 	// TODO: use customized retry policy.
 	log.Debug("pre-checking s3Storage config", zap.Any("config", config))
-	factory := NewExternalStorageFactory(config.Bucket,
-		config.Prefix, &config.S3BackendOptions)
-	_, err := factory.newS3ExternalStorageForScope(context.Background(), internal.ResourceScope{})
+	opts := &brStorage.BackendOptions{
+		S3:  config.S3.S3BackendOptions,
+		GCS: config.GCS.GCSBackendOptions,
+	}
+	creator := NewBucketCreator(config.S3.Bucket, config.S3.Prefix, opts)
+	_, err := creator.newBucketForScope(context.Background(), internal.ResourceScope{})
 	if err != nil {
 		return err
 	}

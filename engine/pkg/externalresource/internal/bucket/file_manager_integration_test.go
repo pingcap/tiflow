@@ -11,7 +11,7 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-package s3
+package bucket
 
 import (
 	"context"
@@ -40,11 +40,12 @@ func newFileManagerForTest(t *testing.T) *FileManager {
 	}
 
 	pathPrefix := fmt.Sprintf("%s-%s", t.Name(), time.Now().Format("20060102-150405"))
-	config := resModel.S3Config{
+	s3Config := resModel.S3Config{
 		S3BackendOptions: *options,
 		Bucket:           UtBucketName,
 		Prefix:           pathPrefix,
 	}
+	config := &resModel.Config{S3: s3Config}
 	err = PreCheckConfig(config)
 	require.NoError(t, err)
 	return NewFileManagerWithConfig(MockExecutorID, config)

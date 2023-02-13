@@ -37,6 +37,7 @@ var DefaultConfig = Config{
 type Config struct {
 	Local LocalFileConfig `json:"local" toml:"local"`
 	S3    S3Config        `json:"s3" toml:"s3"`
+	GCS   GCSConfig       `json:"gcs" toml:"gcs"`
 }
 
 // LocalEnabled returns true if the local storage is enabled
@@ -47,6 +48,11 @@ func (c *Config) LocalEnabled() bool {
 // S3Enabled returns true if the S3 storage is enabled
 func (c *Config) S3Enabled() bool {
 	return c.S3.Bucket != ""
+}
+
+// GCSEnabled returns true if the GCS storage is enabled
+func (c *Config) GCSEnabled() bool {
+	return c.GCS.Bucket != ""
 }
 
 // ValidateAndAdjust validates and adjusts the configuration
@@ -69,6 +75,13 @@ func (c *LocalFileConfig) validateAndAdjust(executorID ExecutorID) {
 // S3Config defines configurations for s3 based resources
 type S3Config struct {
 	brStorage.S3BackendOptions
+	Bucket string `json:"bucket" toml:"bucket"`
+	Prefix string `json:"prefix" toml:"prefix"`
+}
+
+// GCSConfig defines configurations for gcs based resources
+type GCSConfig struct {
+	brStorage.GCSBackendOptions
 	Bucket string `json:"bucket" toml:"bucket"`
 	Prefix string `json:"prefix" toml:"prefix"`
 }

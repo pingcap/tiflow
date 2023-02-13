@@ -23,8 +23,8 @@ import (
 	pb "github.com/pingcap/tiflow/engine/enginepb"
 	"github.com/pingcap/tiflow/engine/pkg/client"
 	"github.com/pingcap/tiflow/engine/pkg/externalresource/internal"
+	"github.com/pingcap/tiflow/engine/pkg/externalresource/internal/bucket"
 	"github.com/pingcap/tiflow/engine/pkg/externalresource/internal/local"
-	"github.com/pingcap/tiflow/engine/pkg/externalresource/internal/s3"
 	resModel "github.com/pingcap/tiflow/engine/pkg/externalresource/model"
 	"github.com/pingcap/tiflow/engine/pkg/tenant"
 	"github.com/pingcap/tiflow/pkg/errors"
@@ -112,24 +112,61 @@ func NewBrokerWithConfig(
 	go broker.tick(ctx)
 	broker.cancel = cancel
 
-	// Initialize local file managers
-	if config == nil || !config.LocalEnabled() {
-		log.Panic("local file manager must be supported by resource broker")
-	}
-	broker.fileManagers[resModel.ResourceTypeLocalFile] = local.NewLocalFileManager(executorID, config.Local)
+	mustInitLocalStorage(broker, config, executorID)
 
-	// Initialize s3 file managers
-	if !config.S3Enabled() {
-		log.Info("broker will not use s3 as external storage since s3 is not configured")
-		return broker, nil
+	if err := initS3StorageIfEnable(broker, config, executorID); err != nil {
+		return nil, err
 	}
-
-	broker.fileManagers[resModel.ResourceTypeS3] = s3.NewFileManagerWithConfig(executorID, config.S3)
-	if err := broker.createDummyS3Resource(); err != nil {
+	if err := initGCSStorageIfEnable(broker, config, executorID); err != nil {
 		return nil, err
 	}
 
 	return broker, nil
+}
+
+func mustInitLocalStorage(broker *DefaultBroker,
+	config *resModel.Config,
+	executorID resModel.ExecutorID,
+) {
+	if config == nil || !config.LocalEnabled() {
+		log.Panic("local file manager must be supported by resource broker")
+	}
+	broker.fileManagers[resModel.ResourceTypeLocalFile] = local.NewLocalFileManager(executorID, config.Local)
+}
+
+func initS3StorageIfEnable(broker *DefaultBroker,
+	config *resModel.Config,
+	executorID resModel.ExecutorID,
+) error {
+	if !config.S3Enabled() {
+		log.Info("broker will not use s3 as external storage since s3 is not configured")
+		return nil
+	}
+
+	broker.fileManagers[resModel.ResourceTypeS3] = bucket.NewFileManagerWithConfig(executorID, config)
+	if err := broker.createDummyResource(); err != nil {
+		return err
+	}
+
+	return nil
+}
+
+func initGCSStorageIfEnable(broker *DefaultBroker,
+	config *resModel.Config,
+	executorID resModel.ExecutorID,
+) error {
+	if !config.GCSEnabled() {
+		log.Info("broker will not use gcs as external storage since gcs is not configured")
+		return nil
+	}
+
+	broker.fileManagers[resModel.ResourceTypeGCS] = bucket.NewFileManagerWithConfig(executorID, config)
+	// TODO: check
+	if err := broker.createDummyResource(); err != nil {
+		return err
+	}
+
+	return nil
 }
 
 // OpenStorage implements Broker.OpenStorage
@@ -357,7 +394,7 @@ func (b *DefaultBroker) cleanOrRecreatePersistResource(
 	return desc, nil
 }
 
-func (b *DefaultBroker) createDummyS3Resource() error {
+func (b *DefaultBroker) createDummyResource() error {
 	s3FileManager, ok := b.fileManagers[resModel.ResourceTypeS3]
 	if !ok {
 		return errors.New("S3 file manager not found")
@@ -365,12 +402,12 @@ func (b *DefaultBroker) createDummyS3Resource() error {
 
 	ctx, cancel := context.WithTimeout(context.Background(), defaultTimeout)
 	defer cancel()
-	desc, err := s3FileManager.CreateResource(ctx, s3.GetDummyIdent(b.executorID))
+	desc, err := s3FileManager.CreateResource(ctx, bucket.GetDummyIdent(b.executorID))
 	if err != nil {
 		return err
 	}
 
-	handler, err := newResourceHandle(s3.GetDummyJobID(b.executorID), b.executorID,
+	handler, err := newResourceHandle(bucket.GetDummyJobID(b.executorID), b.executorID,
 		s3FileManager, desc, false, b.client)
 	if err != nil {
 		return err
@@ -425,8 +462,8 @@ func PreCheckConfig(config resModel.Config) error {
 			return err
 		}
 	}
-	if config.S3Enabled() {
-		if err := s3.PreCheckConfig(config.S3); err != nil {
+	if config.S3Enabled() || config.GCSEnabled() {
+		if err := bucket.PreCheckConfig(config); err != nil {
 			return err
 		}
 	}

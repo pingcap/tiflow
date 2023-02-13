@@ -11,7 +11,7 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-package s3
+package bucket
 
 import (
 	"context"
@@ -34,9 +34,9 @@ type resourceController struct {
 	fm *FileManager
 }
 
-// NewResourceController creates a new s3 resourceController.
-func NewResourceController(config resModel.S3Config) *resourceController {
-	log.Debug("create s3 resource controller", zap.Any("config", config))
+// NewResourceController creates a new bucket resourceController.
+func NewResourceController(config *resModel.Config) *resourceController {
+	log.Debug("create bucket resource controller", zap.Any("config", config))
 	fm := NewFileManagerWithConfig(defaultControllerID, config)
 	return &resourceController{fm: fm}
 }
@@ -47,7 +47,7 @@ func (r *resourceController) GCSingleResource(ctx context.Context, res *resModel
 	if err != nil {
 		return err
 	}
-	if tp != resModel.ResourceTypeS3 {
+	if tp != resModel.ResourceTypeS3 && tp != resModel.ResourceTypeGCS {
 		log.Panic("unexpected resource type", zap.Any("resource", res))
 	}
 
@@ -74,7 +74,7 @@ func (r *resourceController) GCExecutor(
 		if err != nil {
 			return err
 		}
-		if tp != resModel.ResourceTypeS3 {
+		if tp != resModel.ResourceTypeS3 && tp != resModel.ResourceTypeGCS {
 			log.Panic("unexpected resource type", zap.Any("resource", res))
 		}
 

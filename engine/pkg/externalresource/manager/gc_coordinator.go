@@ -20,7 +20,7 @@ import (
 	"github.com/pingcap/log"
 	frameModel "github.com/pingcap/tiflow/engine/framework/model"
 	"github.com/pingcap/tiflow/engine/model"
-	"github.com/pingcap/tiflow/engine/pkg/externalresource/internal/s3"
+	"github.com/pingcap/tiflow/engine/pkg/externalresource/internal/bucket"
 	resModel "github.com/pingcap/tiflow/engine/pkg/externalresource/model"
 	"github.com/pingcap/tiflow/engine/pkg/notifier"
 	pkgOrm "github.com/pingcap/tiflow/engine/pkg/orm"
@@ -189,7 +189,7 @@ func (c *DefaultGCCoordinator) gcByStatusSnapshots(
 				return err
 			}
 			if tp == resModel.ResourceTypeLocalFile ||
-				tp == resModel.ResourceTypeS3 && resName == s3.GetDummyResourceName() {
+				tp == resModel.ResourceTypeS3 && resName == bucket.GetDummyResourceName() {
 				toGCExecutorSet[resMeta.Executor] = struct{}{}
 			}
 			continue

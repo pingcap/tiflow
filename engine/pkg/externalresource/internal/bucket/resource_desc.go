@@ -11,7 +11,7 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-package s3
+package bucket
 
 import (
 	"context"
@@ -24,7 +24,7 @@ import (
 
 var _ internal.ResourceDescriptor = (*resourceDescriptor)(nil)
 
-// resourceDescriptor is a handle for a s3-backed resource used
+// resourceDescriptor is a handle for a bucket-backed resource used
 // internally in engine/pkg/externalresource.
 //
 // Note that this implementation caches a brStorage.ExternalStorage object,
@@ -33,17 +33,17 @@ var _ internal.ResourceDescriptor = (*resourceDescriptor)(nil)
 type resourceDescriptor struct {
 	Ident internal.ResourceIdent
 
-	storageFactory ExternalStorageFactory
-	storage        brStorage.ExternalStorage
+	creator BucketCreator
+	storage brStorage.ExternalStorage
 }
 
 func newResourceDescriptor(
 	ident internal.ResourceIdent,
-	factory ExternalStorageFactory,
+	creator BucketCreator,
 ) *resourceDescriptor {
 	return &resourceDescriptor{
-		Ident:          ident,
-		storageFactory: factory,
+		Ident:   ident,
+		creator: creator,
 	}
 }
 
@@ -62,11 +62,11 @@ func (r *resourceDescriptor) ExternalStorage(ctx context.Context) (brStorage.Ext
 
 // makeExternalStorage actually creates the storage object.
 func (r *resourceDescriptor) makeExternalStorage(ctx context.Context) (brStorage.ExternalStorage, error) {
-	return r.storageFactory.newS3ExternalStorageFromURI(ctx, r.URI())
+	return r.creator.newBucketFromURI(ctx, r.URI())
 }
 
 func (r *resourceDescriptor) URI() string {
-	return fmt.Sprintf("%s/%s", r.storageFactory.baseURI(), r.Ident.BuildResPath())
+	return fmt.Sprintf("%s/%s", r.creator.baseURI(), r.Ident.BuildResPath())
 }
 
 func (r *resourceDescriptor) ResourceIdent() internal.ResourceIdent {
@@ -74,5 +74,5 @@ func (r *resourceDescriptor) ResourceIdent() internal.ResourceIdent {
 }
 
 func (r *resourceDescriptor) ID() string {
-	return resModel.BuildResourceID(resModel.ResourceTypeS3, r.Ident.Name)
+	return resModel.BuildResourceID(r.creator.resourceType(), r.Ident.Name)
 }

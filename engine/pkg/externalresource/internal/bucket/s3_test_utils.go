@@ -11,7 +11,7 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-package s3
+package bucket
 
 import (
 	"context"
@@ -65,56 +65,60 @@ func GetS3OptionsForUT() (*brStorage.S3BackendOptions, error) {
 	}, nil
 }
 
-type mockExternalStorageFactory struct {
+type mockBucketCreator struct {
 	baseDir string
 	bucket  string
 }
 
-func newMockExternalStorageFactory(tempDir string, bucket string) *mockExternalStorageFactory {
-	return &mockExternalStorageFactory{
+func newMockBucketCreator(tempDir string, bucket string) *mockBucketCreator {
+	return &mockBucketCreator{
 		baseDir: tempDir,
 		bucket:  bucket,
 	}
 }
 
-func (f *mockExternalStorageFactory) newS3ExternalStorageForScope(
+func (f *mockBucketCreator) newBucketForScope(
 	ctx context.Context, scope internal.ResourceScope,
 ) (brStorage.ExternalStorage, error) {
 	uri := fmt.Sprintf("%s/%s", f.baseURI(), scope.BuildResPath())
-	return f.newS3ExternalStorageFromURI(ctx, uri)
+	return f.newBucketFromURI(ctx, uri)
 }
 
-func (f *mockExternalStorageFactory) newS3ExternalStorageFromURI(
+func (f *mockBucketCreator) newBucketFromURI(
 	ctx context.Context,
 	uri string,
 ) (brStorage.ExternalStorage, error) {
 	return brStorage.NewLocalStorage(uri)
 }
 
-func (f *mockExternalStorageFactory) baseURI() string {
+func (f *mockBucketCreator) baseURI() string {
 	return fmt.Sprintf("%s/%s", f.baseDir, f.bucket)
 }
 
-func (f *mockExternalStorageFactory) assertFileExists(t *testing.T, uri string) {
+func (f *mockBucketCreator) resourceType() resModel.ResourceType {
+	return resModel.ResourceTypeS3
+}
+
+func (f *mockBucketCreator) assertFileExists(t *testing.T, uri string) {
 	require.FileExists(t, filepath.Join(f.baseDir, uri))
 }
 
-func (f *mockExternalStorageFactory) assertFileNotExist(t *testing.T, uri string) {
+func (f *mockBucketCreator) assertFileNotExist(t *testing.T, uri string) {
 	require.NoFileExists(t, filepath.Join(f.baseDir, uri))
 }
 
 // NewFileManagerForUT returns a file manager for UT.
-func NewFileManagerForUT(tempDir string, executorID resModel.ExecutorID) (*FileManager, *mockExternalStorageFactory) {
-	factory := newMockExternalStorageFactory(tempDir, UtBucketName)
+func NewFileManagerForUT(tempDir string, executorID resModel.ExecutorID) (*FileManager, *mockBucketCreator) {
+	creator := newMockBucketCreator(tempDir, UtBucketName)
 	return NewFileManager(
 		executorID,
-		factory,
-	), factory
+		creator,
+	), creator
 }
 
 // NewFileManagerForUTFromSharedStorageFactory returns a file manager for UT.
 func NewFileManagerForUTFromSharedStorageFactory(
-	executorID model.ExecutorID, factory *mockExternalStorageFactory,
+	executorID model.ExecutorID, creator *mockBucketCreator,
 ) *FileManager {
-	return NewFileManager(executorID, factory)
+	return NewFileManager(executorID, creator)
 }
