@@ -22,7 +22,6 @@ import (
 	"github.com/pingcap/tiflow/cdc/model"
 	"github.com/pingcap/tiflow/cdc/sink/codec/builder"
 	"github.com/pingcap/tiflow/cdc/sink/codec/common"
-	mqv1 "github.com/pingcap/tiflow/cdc/sink/mq"
 	"github.com/pingcap/tiflow/cdc/sink/mq/dispatcher"
 	"github.com/pingcap/tiflow/cdc/sink/mq/manager"
 	"github.com/pingcap/tiflow/cdc/sinkv2/eventsink"
@@ -124,7 +123,7 @@ func (s *dmlSink) WriteEvents(rows ...*eventsink.RowChangeCallbackableEvent) err
 		partition := s.eventRouter.GetPartitionForRowChange(row.Event, partitionNum)
 		// This never be blocked because this is an unbounded channel.
 		s.worker.msgChan.In() <- mqEvent{
-			key: mqv1.TopicPartitionKey{
+			key: TopicPartitionKey{
 				Topic: topic, Partition: partition,
 			},
 			rowEvent: row,
