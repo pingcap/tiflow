@@ -34,7 +34,8 @@ type saramaAdminClient struct {
 	config          *sarama.Config
 
 	mu     sync.Mutex
-	client sarama.ClusterAdmin
+	client sarama.Client
+	admin  sarama.ClusterAdmin
 }
 
 const (
@@ -49,12 +50,18 @@ func NewSaramaAdminClient(ctx context.Context, config *Options) (ClusterAdminCli
 		return nil, err
 	}
 
-	client, err := sarama.NewClusterAdmin(config.BrokerEndpoints, saramaConfig)
+	client, err := sarama.NewClient(config.BrokerEndpoints, saramaConfig)
+	if err != nil {
+		return nil, cerror.Trace(err)
+	}
+
+	admin, err := sarama.NewClusterAdmin(config.BrokerEndpoints, saramaConfig)
 	if err != nil {
 		return nil, err
 	}
 	return &saramaAdminClient{
 		client:          client,
+		admin:           admin,
 		brokerEndpoints: config.BrokerEndpoints,
 		config:          saramaConfig,
 	}, nil
@@ -66,8 +73,8 @@ func (a *saramaAdminClient) reset() error {
 		return cerror.Trace(err)
 	}
 
-	_ = a.client.Close()
-	a.client = newClient
+	_ = a.admin.Close()
+	a.admin = newClient
 
 	return errors.New("retry after reset")
 }
@@ -102,7 +109,7 @@ func (a *saramaAdminClient) GetAllBrokers(ctx context.Context) ([]Broker, error)
 		err     error
 	)
 	query := func() error {
-		brokers, _, err = a.client.DescribeCluster()
+		brokers, _, err = a.admin.DescribeCluster()
 		return err
 	}
 
@@ -128,7 +135,7 @@ func (a *saramaAdminClient) GetCoordinator(ctx context.Context) (int, error) {
 	)
 
 	query := func() error {
-		_, controllerID, err = a.client.DescribeCluster()
+		_, controllerID, err = a.admin.DescribeCluster()
 		return err
 	}
 	err = a.queryClusterWithRetry(ctx, query)
@@ -146,7 +153,7 @@ func (a *saramaAdminClient) GetBrokerConfig(
 
 	var configEntries []sarama.ConfigEntry
 	query := func() error {
-		configEntries, err = a.client.DescribeConfig(sarama.ConfigResource{
+		configEntries, err = a.admin.DescribeConfig(sarama.ConfigResource{
 			Type:        sarama.BrokerResource,
 			Name:        strconv.Itoa(controller),
 			ConfigNames: []string{configName},
@@ -174,7 +181,7 @@ func (a *saramaAdminClient) GetAllTopicsMeta(ctx context.Context) (map[string]To
 	)
 
 	query := func() error {
-		topics, err = a.client.ListTopics()
+		topics, err = a.admin.ListTopics()
 		return err
 	}
 	err = a.queryClusterWithRetry(ctx, query)
@@ -211,7 +218,7 @@ func (a *saramaAdminClient) GetTopicsMeta(
 		err      error
 	)
 	query := func() error {
-		metaList, err = a.client.DescribeTopics(topics)
+		metaList, err = a.admin.DescribeTopics(topics)
 		return err
 	}
 
@@ -250,7 +257,7 @@ func (a *saramaAdminClient) CreateTopic(
 		ReplicationFactor: detail.ReplicationFactor,
 	}
 	query := func() error {
-		return a.client.CreateTopic(detail.Name, request, validateOnly)
+		return a.admin.CreateTopic(detail.Name, request, validateOnly)
 	}
 	return a.queryClusterWithRetry(ctx, query)
 }
@@ -258,5 +265,5 @@ func (a *saramaAdminClient) CreateTopic(
 func (a *saramaAdminClient) Close() error {
 	a.mu.Lock()
 	defer a.mu.Unlock()
-	return a.client.Close()
+	return a.admin.Close()
 }
