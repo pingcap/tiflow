@@ -24,7 +24,6 @@ import (
 	redo "github.com/pingcap/tiflow/cdc/redo/common"
 	"github.com/pingcap/tiflow/cdc/scheduler"
 	sink "github.com/pingcap/tiflow/cdc/sink/metrics"
-	"github.com/pingcap/tiflow/cdc/sink/mq/producer/kafka"
 	sinkv2 "github.com/pingcap/tiflow/cdc/sinkv2/metrics"
 	"github.com/pingcap/tiflow/pkg/etcd"
 	"github.com/pingcap/tiflow/pkg/orchestrator"
@@ -56,7 +55,6 @@ func init() {
 	engine.InitMetrics(registry)
 	memorysorter.InitMetrics(registry)
 	redo.InitMetrics(registry)
-	kafka.InitMetrics(registry)
 	scheduler.InitMetrics(registry)
 	observer.InitMetrics(registry)
 	// TiKV client metrics, including metrics about resolved and region cache.
