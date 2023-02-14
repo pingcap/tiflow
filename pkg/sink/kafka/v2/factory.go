@@ -141,16 +141,16 @@ func completeSASLConfig(o *pkafka.Options) (sasl.Mechanism, error) {
 	return nil, nil
 }
 
-func (f *factory) createWriter() *kafka.Writer {
+func (f *factory) newWriter(async bool) *kafka.Writer {
 	w := &kafka.Writer{
 		Addr:         kafka.TCP(f.options.BrokerEndpoints...),
 		Balancer:     newManualPartitioner(),
 		Transport:    f.transport,
 		ReadTimeout:  f.options.ReadTimeout,
 		WriteTimeout: f.options.WriteTimeout,
-		RequiredAcks: kafka.RequireAll,
+		RequiredAcks: kafka.RequiredAcks(f.options.RequiredAcks),
 		BatchBytes:   int64(f.options.MaxMessageBytes),
-		Async:        false,
+		Async:        async,
 	}
 	compression := strings.ToLower(strings.TrimSpace(f.options.Compression))
 	switch compression {
@@ -178,7 +178,7 @@ func (f *factory) AdminClient() (pkafka.ClusterAdminClient, error) {
 
 // SyncProducer creates a sync producer to writer message to kafka
 func (f *factory) SyncProducer() (pkafka.SyncProducer, error) {
-	w := f.createWriter()
+	w := f.newWriter(false)
 	return &syncWriter{w: w}, nil
 }
 
@@ -186,7 +186,7 @@ func (f *factory) SyncProducer() (pkafka.SyncProducer, error) {
 func (f *factory) AsyncProducer(closedChan chan struct{},
 	failpointCh chan error,
 ) (pkafka.AsyncProducer, error) {
-	w := f.createWriter()
+	w := f.newWriter(true)
 	aw := &asyncWriter{
 		w:            w,
 		closedChan:   closedChan,
