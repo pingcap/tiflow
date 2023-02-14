@@ -240,3 +240,12 @@ func TestGCCoordinatorRemoveJobAndExecutor(t *testing.T) {
 
 	helper.Close()
 }
+
+func TestDummyBucketResource(t *testing.T) {
+	t.Parallel()
+	require.True(t, isDummyBucketResource(resModel.ResourceTypeS3, bucket.GetDummyResourceName()))
+	require.False(t, isDummyBucketResource(resModel.ResourceTypeS3, "xxx"))
+	require.True(t, isDummyBucketResource(resModel.ResourceTypeGCS, bucket.GetDummyResourceName()))
+	require.False(t, isDummyBucketResource(resModel.ResourceTypeGCS, "xxx"))
+	require.False(t, isDummyBucketResource(resModel.ResourceTypeLocalFile, bucket.GetDummyResourceName()))
+}

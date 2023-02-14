@@ -188,9 +188,9 @@ func (c *DefaultGCCoordinator) gcByStatusSnapshots(
 			if err != nil {
 				return err
 			}
-			// TODO(maxshuang)
+
 			if tp == resModel.ResourceTypeLocalFile ||
-				tp == resModel.ResourceTypeS3 && resName == bucket.GetDummyResourceName() {
+				isDummyBucketResource(tp, resName) {
 				toGCExecutorSet[resMeta.Executor] = struct{}{}
 			}
 			continue
@@ -237,4 +237,9 @@ func (c *DefaultGCCoordinator) gcByOfflineExecutorIDs(
 
 	log.Info("Clean up offlined executors", zap.Any("executorIDs", executorIDs))
 	return c.gcRunner.GCExecutors(ctx, executorIDs...)
+}
+
+func isDummyBucketResource(tp resModel.ResourceType, resName string) bool {
+	return (tp == resModel.ResourceTypeS3 || tp == resModel.ResourceTypeGCS) &&
+		resName == bucket.GetDummyResourceName()
 }
