@@ -123,7 +123,7 @@ if [[ "$restart" == "true" ]]; then
 			--sorter-num-workerpool-goroutine 4 \
 			--data-dir "$data_dir" \
 			--cluster-id "$cluster_id" \
-			$config_path \
+			--config $config_path \
 			$tls \
 			$certcn \
 			$addr \
@@ -140,7 +140,7 @@ else
 		--sorter-num-workerpool-goroutine 4 \
 		--data-dir "$data_dir" \
 		--cluster-id "$cluster_id" \
-		$config_path \
+		--config $config_path \
 		$tls \
 		$certcn \
 		$addr \
