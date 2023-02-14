@@ -24,7 +24,7 @@ pwd=$pwd
 log_level=debug
 restart=
 failpoint=$GO_FAILPOINTS
-config_path="server.toml"
+config_path=$CUR/server.toml
 data_dir=
 curl_status_cmd=
 supposed_to_fail="no"
@@ -76,7 +76,7 @@ while [[ ${1} ]]; do
 		shift
 		;;
 	--config)
-		config_path="--config ${2}"
+		config_path="${2}"
 		shift
 		;;
 	--supposed-to-fail)
