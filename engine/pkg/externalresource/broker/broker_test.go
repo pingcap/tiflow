@@ -23,6 +23,7 @@ import (
 	"github.com/golang/mock/gomock"
 	pb "github.com/pingcap/tiflow/engine/enginepb"
 	"github.com/pingcap/tiflow/engine/pkg/client"
+	"github.com/pingcap/tiflow/engine/pkg/externalresource/internal"
 	"github.com/pingcap/tiflow/engine/pkg/externalresource/internal/bucket"
 	"github.com/pingcap/tiflow/engine/pkg/externalresource/internal/local"
 	"github.com/pingcap/tiflow/engine/pkg/externalresource/manager"
@@ -324,4 +325,70 @@ func TestBrokerRemoveResource(t *testing.T) {
 	require.Error(t, err)
 	code = status.Convert(err).Code()
 	require.Equal(t, codes.InvalidArgument, code)
+}
+
+func TestInitStorage(t *testing.T) {
+	t.Parallel()
+	// with S3
+	broker := &DefaultBroker{
+		fileManagers: make(map[resModel.ResourceType]internal.FileManager),
+		config: &resModel.Config{
+			Local: resModel.LocalFileConfig{
+				BaseDir: "base-dir",
+			},
+			S3: resModel.S3Config{
+				Bucket: "s3-bucket",
+			},
+		},
+	}
+	require.NoError(t, broker.initStorage())
+	require.NotNil(t, broker.bucketFileManager)
+	require.Len(t, broker.fileManagers, 2)
+	_, ok := broker.fileManagers[resModel.ResourceTypeLocalFile]
+	require.True(t, ok)
+	_, ok = broker.fileManagers[resModel.ResourceTypeS3]
+	require.True(t, ok)
+	_, ok = broker.fileManagers[resModel.ResourceTypeGCS]
+	require.False(t, ok)
+
+	// with gcs
+	broker = &DefaultBroker{
+		fileManagers: make(map[resModel.ResourceType]internal.FileManager),
+		config: &resModel.Config{
+			Local: resModel.LocalFileConfig{
+				BaseDir: "base-dir",
+			},
+			GCS: resModel.GCSConfig{
+				Bucket: "gcs-bucket",
+			},
+		},
+	}
+	require.NoError(t, broker.initStorage())
+	require.NotNil(t, broker.bucketFileManager)
+	require.Len(t, broker.fileManagers, 2)
+	_, ok = broker.fileManagers[resModel.ResourceTypeLocalFile]
+	require.True(t, ok)
+	_, ok = broker.fileManagers[resModel.ResourceTypeS3]
+	require.False(t, ok)
+	_, ok = broker.fileManagers[resModel.ResourceTypeGCS]
+	require.True(t, ok)
+
+	// without s3/gcs
+	broker = &DefaultBroker{
+		fileManagers: make(map[resModel.ResourceType]internal.FileManager),
+		config: &resModel.Config{
+			Local: resModel.LocalFileConfig{
+				BaseDir: "base-dir",
+			},
+		},
+	}
+	require.NoError(t, broker.initStorage())
+	require.Nil(t, broker.bucketFileManager)
+	require.Len(t, broker.fileManagers, 1)
+	_, ok = broker.fileManagers[resModel.ResourceTypeLocalFile]
+	require.True(t, ok)
+	_, ok = broker.fileManagers[resModel.ResourceTypeS3]
+	require.False(t, ok)
+	_, ok = broker.fileManagers[resModel.ResourceTypeGCS]
+	require.False(t, ok)
 }
