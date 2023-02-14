@@ -227,6 +227,7 @@ func (ra *RedoApplier) Apply(ctx context.Context) error {
 	// - ForceReplicate: default false
 	// - filter: default []string{"*.*"}
 	replicaConfig := config.GetDefaultReplicaConfig()
+	replicaConfig.Sink.TxnAtomicity = "table"
 	ctx = contextutil.PutRoleInCtx(ctx, util.RoleRedoLogApplier)
 	sinkFactory, err := factory.New(ctx,
 		ra.cfg.SinkURI, replicaConfig, ra.errCh)
