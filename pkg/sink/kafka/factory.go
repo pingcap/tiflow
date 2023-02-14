@@ -15,6 +15,7 @@ package kafka
 
 import (
 	"context"
+	"time"
 
 	"github.com/Shopify/sarama"
 	"github.com/pingcap/errors"
@@ -22,30 +23,23 @@ import (
 	"github.com/pingcap/tiflow/cdc/model"
 	cerror "github.com/pingcap/tiflow/pkg/errors"
 	"github.com/pingcap/tiflow/pkg/util"
-	"github.com/rcrowley/go-metrics"
 	"go.uber.org/zap"
 )
 
-// Client is a generic Kafka client.
-type Client interface {
+// Factory is used to produce all kafka components.
+type Factory interface {
+	// AdminClient return a kafka cluster admin client
+	AdminClient() (ClusterAdminClient, error)
 	// SyncProducer creates a sync producer to writer message to kafka
 	SyncProducer() (SyncProducer, error)
 	// AsyncProducer creates an async producer to writer message to kafka
-	AsyncProducer(changefeedID model.ChangeFeedID,
-		closedChan chan struct{},
-		failpointCh chan error) (AsyncProducer, error)
-	// MetricRegistry returns the kafka client metric registry
-	// todo: this is only used by sink v1, after it's removed, remove this method.
-	MetricRegistry() metrics.Registry
+	AsyncProducer(closedChan chan struct{}, failpointCh chan error) (AsyncProducer, error)
 	// MetricsCollector returns the kafka metrics collector
-	MetricsCollector(
-		changefeedID model.ChangeFeedID,
-		role util.Role,
-		adminClient ClusterAdminClient,
-	) MetricsCollector
-	// Close closes the client
-	Close() error
+	MetricsCollector(role util.Role, adminClient ClusterAdminClient) MetricsCollector
 }
+
+// FactoryCreator defines the type of factory creator.
+type FactoryCreator func(context.Context, *Options, model.ChangeFeedID) (Factory, error)
 
 // SyncProducer is the kafka sync producer
 type SyncProducer interface {
@@ -67,7 +61,7 @@ type SyncProducer interface {
 	// Close shuts down the producer; you must call this function before a producer
 	// object passes out of scope, as it may otherwise leak memory.
 	// You must call this before calling Close on the underlying client.
-	Close() error
+	Close()
 }
 
 // AsyncProducer is the kafka async producer
@@ -77,7 +71,7 @@ type AsyncProducer interface {
 	// scope, as it may otherwise leak memory. You must call this before process
 	// shutting down, or you may lose messages. You must call this before calling
 	// Close on the underlying client.
-	Close() error
+	Close()
 
 	// AsyncSend is the input channel for the user to write messages to that they
 	// wish to send.
@@ -91,54 +85,9 @@ type AsyncProducer interface {
 	AsyncRunCallback(ctx context.Context) error
 }
 
-type saramaKafkaClient struct {
-	client sarama.Client
-}
-
-func (c *saramaKafkaClient) SyncProducer() (SyncProducer, error) {
-	p, err := sarama.NewSyncProducerFromClient(c.client)
-	if err != nil {
-		return nil, err
-	}
-	return &saramaSyncProducer{producer: p}, nil
-}
-
-func (c *saramaKafkaClient) AsyncProducer(
-	changefeedID model.ChangeFeedID,
-	closedChan chan struct{},
-	failpointCh chan error,
-) (AsyncProducer, error) {
-	p, err := sarama.NewAsyncProducerFromClient(c.client)
-	if err != nil {
-		return nil, err
-	}
-	return &saramaAsyncProducer{
-		producer:     p,
-		changefeedID: changefeedID,
-		closedChan:   closedChan,
-		failpointCh:  failpointCh,
-	}, nil
-}
-
-// MetricRegistry return the metrics registry
-func (c *saramaKafkaClient) MetricRegistry() metrics.Registry {
-	return c.client.Config().MetricRegistry
-}
-
-func (c *saramaKafkaClient) MetricsCollector(
-	changefeedID model.ChangeFeedID,
-	role util.Role,
-	adminClient ClusterAdminClient,
-) MetricsCollector {
-	return NewSaramaMetricsCollector(
-		changefeedID, role, adminClient, c.client.Config().MetricRegistry)
-}
-
-func (c *saramaKafkaClient) Close() error {
-	return c.client.Close()
-}
-
 type saramaSyncProducer struct {
+	id       model.ChangeFeedID
+	client   sarama.Client
 	producer sarama.SyncProducer
 }
 
@@ -172,19 +121,104 @@ func (p *saramaSyncProducer) SendMessages(ctx context.Context,
 	return p.producer.SendMessages(msgs)
 }
 
-func (p *saramaSyncProducer) Close() error {
-	return p.producer.Close()
+func (p *saramaSyncProducer) Close() {
+	go func() {
+		// We need to close it asynchronously. Otherwise, we might get stuck
+		// with an unhealthy(i.e. Network jitter, isolation) state of Kafka.
+		// Factory has a background thread to fetch and update the metadata.
+		// If we close the client synchronously, we might get stuck.
+		// Safety:
+		// * If the kafka cluster is running well, it will be closed as soon as possible.
+		// * If there is a problem with the kafka cluster,
+		//   no data will be lost because this is a synchronous client.
+		// * There is a risk of goroutine leakage, but it is acceptable and our main
+		//   goal is not to get stuck with the owner tick.
+		start := time.Now()
+		if err := p.client.Close(); err != nil {
+			log.Warn("Close Kafka DDL client with error",
+				zap.String("namespace", p.id.Namespace),
+				zap.String("changefeed", p.id.ID),
+				zap.Duration("duration", time.Since(start)),
+				zap.Error(err))
+		} else {
+			log.Info("Kafka DDL client closed",
+				zap.String("namespace", p.id.Namespace),
+				zap.String("changefeed", p.id.ID),
+				zap.Duration("duration", time.Since(start)))
+		}
+		start = time.Now()
+		err := p.producer.Close()
+		if err != nil {
+			log.Error("Close Kafka DDL producer with error",
+				zap.String("namespace", p.id.Namespace),
+				zap.String("changefeed", p.id.ID),
+				zap.Duration("duration", time.Since(start)),
+				zap.Error(err))
+		} else {
+			log.Info("Kafka DDL producer closed",
+				zap.String("namespace", p.id.Namespace),
+				zap.String("changefeed", p.id.ID),
+				zap.Duration("duration", time.Since(start)))
+		}
+	}()
 }
 
 type saramaAsyncProducer struct {
+	client       sarama.Client
 	producer     sarama.AsyncProducer
 	changefeedID model.ChangeFeedID
 	closedChan   chan struct{}
 	failpointCh  chan error
 }
 
-func (p *saramaAsyncProducer) Close() error {
-	return p.producer.Close()
+func (p *saramaAsyncProducer) Close() {
+	go func() {
+		// We need to close it asynchronously. Otherwise, we might get stuck
+		// with an unhealthy(i.e. Network jitter, isolation) state of Kafka.
+		// Safety:
+		// * If the kafka cluster is running well, it will be closed as soon as possible.
+		//   Also, we cancel all table pipelines before closed, so it's safe.
+		// * If there is a problem with the kafka cluster, it will shut down the client first,
+		//   which means no more data will be sent because the connection to the broker is dropped.
+		//   Also, we cancel all table pipelines before closed, so it's safe.
+		// * For Kafka Sink, duplicate data is acceptable.
+		// * There is a risk of goroutine leakage, but it is acceptable and our main
+		//   goal is not to get stuck with the processor tick.
+
+		// `client` is mainly used by `asyncProducer` to fetch metadata and perform other related
+		// operations. When we close the `kafkaSaramaProducer`,
+		// there is no need for TiCDC to make sure that all buffered messages are flushed.
+		// Consider the situation where the broker is irresponsive. If the client were not
+		// closed, `asyncProducer.Close()` would waste a mount of time to try flush all messages.
+		// To prevent the scenario mentioned above, close the client first.
+		start := time.Now()
+		if err := p.client.Close(); err != nil {
+			log.Warn("Close kafka async producer client error",
+				zap.String("namespace", p.changefeedID.Namespace),
+				zap.String("changefeed", p.changefeedID.ID),
+				zap.Duration("duration", time.Since(start)),
+				zap.Error(err))
+		} else {
+			log.Info("Close kafka async producer client success",
+				zap.String("namespace", p.changefeedID.Namespace),
+				zap.String("changefeed", p.changefeedID.ID),
+				zap.Duration("duration", time.Since(start)))
+		}
+
+		start = time.Now()
+		if err := p.producer.Close(); err != nil {
+			log.Warn("Close kafka async producer error",
+				zap.String("namespace", p.changefeedID.Namespace),
+				zap.String("changefeed", p.changefeedID.ID),
+				zap.Duration("duration", time.Since(start)),
+				zap.Error(err))
+		} else {
+			log.Info("Close kafka async producer success",
+				zap.String("namespace", p.changefeedID.Namespace),
+				zap.String("changefeed", p.changefeedID.ID),
+				zap.Duration("duration", time.Since(start)))
+		}
+	}()
 }
 
 func (p *saramaAsyncProducer) AsyncRunCallback(
@@ -248,25 +282,4 @@ func (p *saramaAsyncProducer) AsyncSend(ctx context.Context,
 	case p.producer.Input() <- msg:
 	}
 	return nil
-}
-
-// ClientCreator defines the type of client crater.
-type ClientCreator func(context.Context, *Options) (Client, error)
-
-// NewSaramaClient constructs a Client with sarama.
-func NewSaramaClient(ctx context.Context, o *Options) (Client, error) {
-	saramaConfig, err := NewSaramaConfig(ctx, o)
-	if err != nil {
-		return nil, errors.Trace(err)
-	}
-	c, err := sarama.NewClient(o.BrokerEndpoints, saramaConfig)
-	if err != nil {
-		return nil, err
-	}
-	return &saramaKafkaClient{client: c}, nil
-}
-
-// NewMockClient constructs a Client with mock implementation.
-func NewMockClient(_ context.Context, _ *Options) (Client, error) {
-	return NewClientMockImpl(), nil
 }
