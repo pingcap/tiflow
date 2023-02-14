@@ -64,7 +64,10 @@ var (
 	flushInterval    time.Duration
 )
 
-const defaultChangefeedName = "storage-consumer"
+const (
+	defaultChangefeedName    = "storage-consumer"
+	defaultFlushWaitDuration = 200 * time.Millisecond
+)
 
 func init() {
 	flag.StringVar(&upstreamURIStr, "upstream-uri", "", "storage uri")
@@ -237,6 +240,7 @@ type consumer struct {
 	// tableSinkMap maintails a map of <TableID, TableSink>
 	tableSinkMap     map[model.TableID]tablesink.TableSink
 	tableIDGenerator *fakeTableIDGenerator
+	errCh            chan error
 }
 
 func newConsumer(ctx context.Context) (*consumer, error) {
@@ -283,7 +287,7 @@ func newConsumer(ctx context.Context) (*consumer, error) {
 	errCh := make(chan error, 1)
 	stdCtx := contextutil.PutChangefeedIDInCtx(ctx,
 		model.DefaultChangeFeedID(defaultChangefeedName))
-	factory, err := factory.New(
+	sinkFactory, err := factory.New(
 		stdCtx,
 		downstreamURIStr,
 		config.GetDefaultReplicaConfig(),
@@ -295,14 +299,15 @@ func newConsumer(ctx context.Context) (*consumer, error) {
 	}
 
 	return &consumer{
-		sinkFactory:     factory,
+		sinkFactory:     sinkFactory,
 		replicationCfg:  replicaConfig,
 		codecCfg:        codecConfig,
 		externalStorage: storage,
 		fileExtension:   extension,
+		errCh:           errCh,
 		tableIdxMap:     make(map[dmlPathKey]uint64),
 		tableTsMap:      make(map[model.TableID]uint64),
-		tableSinkMap:    make(map[int64]tablesink.TableSink),
+		tableSinkMap:    make(map[model.TableID]tablesink.TableSink),
 		tableIDGenerator: &fakeTableIDGenerator{
 			tableIDs: make(map[string]int64),
 		},
@@ -488,6 +493,7 @@ func (c *consumer) waitTableFlushComplete(ctx context.Context, tableID model.Tab
 		if checkpoint.Ts == maxResolvedTs {
 			return nil
 		}
+		time.Sleep(defaultFlushWaitDuration)
 	}
 }
 
@@ -497,6 +503,8 @@ func (c *consumer) run(ctx context.Context) error {
 		select {
 		case <-ctx.Done():
 			return ctx.Err()
+		case err := <-c.errCh:
+			return err
 		case <-ticker.C:
 		}
 
@@ -584,6 +592,9 @@ func (g *fakeTableIDGenerator) generateFakeTableID(schema, table string, partiti
 }
 
 func main() {
+	var consumer *consumer
+	var err error
+
 	go func() {
 		server := &http.Server{
 			Addr:              ":6060",
@@ -596,16 +607,27 @@ func main() {
 	}()
 
 	ctx, stop := signal.NotifyContext(context.Background(), syscall.SIGINT, syscall.SIGTERM)
-	defer stop()
-	consumer, err := newConsumer(ctx)
-	if err != nil {
-		log.Error("failed to create storage consumer", zap.Error(err))
-		os.Exit(1)
+	deferFunc := func() int {
+		stop()
+		if consumer != nil {
+			_ = consumer.sinkFactory.Close()
+		}
+		if err != nil && err != context.Canceled {
+			return 1
+		}
+		return 0
 	}
 
-	if err := consumer.run(ctx); err != nil && errors.Cause(err) != context.Canceled {
-		log.Error("error occurred while running consumer", zap.Error(err))
-		os.Exit(1)
+	consumer, err = newConsumer(ctx)
+	if err != nil {
+		log.Error("failed to create storage consumer", zap.Error(err))
+		goto EXIT
 	}
-	os.Exit(0)
+
+	if err := consumer.run(ctx); err != nil {
+		log.Error("error occurred while running consumer", zap.Error(err))
+	}
+
+EXIT:
+	os.Exit(deferFunc())
 }
