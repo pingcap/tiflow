@@ -180,9 +180,14 @@ func (ra *RedoApplier) consumeLogs(ctx context.Context) error {
 		ra.tableSinks[tableID].AppendRowChangedEvents(row)
 	}
 	for tableID := range tableResolvedTsMap {
+		resolvedTs := model.NewResolvedTs(resolvedTs)
 		if err := ra.tableSinks[tableID].UpdateResolvedTs(
-			model.NewResolvedTs(resolvedTs)); err != nil {
+			resolvedTs); err != nil {
 			return err
+		}
+		// Make sure all events are flushed to downstream.
+		for ra.tableSinks[tableID].GetCheckpointTs().EqualOrGreater(resolvedTs) {
+			break
 		}
 		ra.tableSinks[tableID].Close(ctx)
 	}
@@ -227,7 +232,6 @@ func (ra *RedoApplier) Apply(ctx context.Context) error {
 	// - ForceReplicate: default false
 	// - filter: default []string{"*.*"}
 	replicaConfig := config.GetDefaultReplicaConfig()
-	replicaConfig.Sink.TxnAtomicity = "table"
 	ctx = contextutil.PutRoleInCtx(ctx, util.RoleRedoLogApplier)
 	sinkFactory, err := factory.New(ctx,
 		ra.cfg.SinkURI, replicaConfig, ra.errCh)
