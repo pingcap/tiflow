@@ -78,8 +78,9 @@ func (d *dmlWriter) run(ctx context.Context) error {
 	})
 
 	for i := 0; i < d.config.WorkerCount; i++ {
-		worker := d.workers[i]
-		ch := d.workerChannels[i]
+		idx := i
+		worker := d.workers[idx]
+		ch := d.workerChannels[idx]
 		eg.Go(func() error {
 			return worker.run(ctx, ch)
 		})
