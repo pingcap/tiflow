@@ -21,7 +21,6 @@ import (
 	"github.com/pingcap/log"
 	"github.com/pingcap/tiflow/cdc/model"
 	"github.com/pingcap/tiflow/cdc/sink/codec"
-	mqv1 "github.com/pingcap/tiflow/cdc/sink/mq"
 	"github.com/pingcap/tiflow/cdc/sinkv2/eventsink"
 	"github.com/pingcap/tiflow/cdc/sinkv2/eventsink/mq/dmlproducer"
 	"github.com/pingcap/tiflow/cdc/sinkv2/metrics"
@@ -42,10 +41,16 @@ const (
 	flushInterval = 15 * time.Millisecond
 )
 
+// TopicPartitionKey contains the topic and partition key of the message.
+type TopicPartitionKey struct {
+	Topic     string
+	Partition int32
+}
+
 // mqEvent is the event of the mq worker.
 // It carries the topic and partition information of the message.
 type mqEvent struct {
-	key      mqv1.TopicPartitionKey
+	key      TopicPartitionKey
 	rowEvent *eventsink.RowChangeCallbackableEvent
 }
 
@@ -244,8 +249,8 @@ func (w *worker) batch(
 // group is responsible for grouping messages by the partition.
 func (w *worker) group(
 	events []mqEvent,
-) map[mqv1.TopicPartitionKey][]*eventsink.RowChangeCallbackableEvent {
-	partitionedRows := make(map[mqv1.TopicPartitionKey][]*eventsink.RowChangeCallbackableEvent)
+) map[TopicPartitionKey][]*eventsink.RowChangeCallbackableEvent {
+	partitionedRows := make(map[TopicPartitionKey][]*eventsink.RowChangeCallbackableEvent)
 	for _, event := range events {
 		// Skip this event when the table is stopping.
 		if event.rowEvent.GetTableSinkState() != state.TableSinkSinking {

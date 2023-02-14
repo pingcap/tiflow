@@ -36,12 +36,7 @@ type mockSink struct {
 	ddlError     error
 }
 
-func (m *mockSink) EmitCheckpointTs(_ context.Context, ts uint64, _ []*model.TableInfo) error {
-	atomic.StoreUint64(&m.checkpointTs, ts)
-	return nil
-}
-
-func (m *mockSink) EmitDDLEvent(ctx context.Context, ddl *model.DDLEvent) error {
+func (m *mockSink) WriteDDLEvent(ctx context.Context, ddl *model.DDLEvent) error {
 	m.ddlMu.Lock()
 	defer m.ddlMu.Unlock()
 	time.Sleep(1 * time.Second)
@@ -49,13 +44,14 @@ func (m *mockSink) EmitDDLEvent(ctx context.Context, ddl *model.DDLEvent) error 
 	return m.ddlError
 }
 
-func (m *mockSink) Close(ctx context.Context) error {
+func (m *mockSink) WriteCheckpointTs(ctx context.Context,
+	ts uint64, tables []*model.TableInfo,
+) error {
+	atomic.StoreUint64(&m.checkpointTs, ts)
 	return nil
 }
 
-func (m *mockSink) Barrier(ctx context.Context, tableID model.TableID) error {
-	return nil
-}
+func (m *mockSink) Close() {}
 
 func (m *mockSink) GetDDL() *model.DDLEvent {
 	m.ddlMu.Lock()
@@ -67,7 +63,7 @@ func newDDLSink4Test(reportErr func(err error)) (DDLSink, *mockSink) {
 	mockSink := &mockSink{}
 	ddlSink := newDDLSink(model.DefaultChangeFeedID("changefeed-test"), &model.ChangeFeedInfo{}, reportErr)
 	ddlSink.(*ddlSinkImpl).sinkInitHandler = func(ctx context.Context, s *ddlSinkImpl) error {
-		s.sinkV1 = mockSink
+		s.sinkV2 = mockSink
 		return nil
 	}
 	return ddlSink, mockSink
