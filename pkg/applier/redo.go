@@ -16,6 +16,7 @@ package applier
 import (
 	"context"
 	"net/url"
+	"time"
 
 	"github.com/pingcap/errors"
 	"github.com/pingcap/log"
@@ -172,6 +173,10 @@ func (ra *RedoApplier) consumeLogs(ctx context.Context) error {
 		tableID := row.Table.TableID
 		ra.tableSinks[tableID].AppendRowChangedEvents(row)
 	}
+	const warnDuration = 3 * time.Minute
+	const flushWaitDuration = 200 * time.Millisecond
+	ticker := time.NewTicker(warnDuration)
+	defer ticker.Stop()
 	for tableID := range tableResolvedTsMap {
 		resolvedTs := model.NewResolvedTs(resolvedTs)
 		if err := ra.tableSinks[tableID].UpdateResolvedTs(
@@ -180,6 +185,21 @@ func (ra *RedoApplier) consumeLogs(ctx context.Context) error {
 		}
 		// Make sure all events are flushed to downstream.
 		for !ra.tableSinks[tableID].GetCheckpointTs().EqualOrGreater(resolvedTs) {
+			select {
+			case <-ctx.Done():
+				return errors.Trace(ctx.Err())
+			case <-ticker.C:
+				log.Warn(
+					"Table sink is not catching up with resolved ts for a long time",
+					zap.Int64("tableID", tableID),
+					zap.Any("resolvedTs", resolvedTs),
+					zap.Any("checkpointTs", ra.tableSinks[tableID].GetCheckpointTs()),
+				)
+
+			default:
+				time.Sleep(flushWaitDuration)
+			}
+
 		}
 		ra.tableSinks[tableID].Close(ctx)
 	}
