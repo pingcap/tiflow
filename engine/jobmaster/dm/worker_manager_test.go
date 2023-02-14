@@ -26,6 +26,7 @@ import (
 	"github.com/pingcap/tiflow/engine/jobmaster/dm/metadata"
 	"github.com/pingcap/tiflow/engine/jobmaster/dm/runtime"
 	dmpkg "github.com/pingcap/tiflow/engine/pkg/dm"
+	resModel "github.com/pingcap/tiflow/engine/pkg/externalresource/model"
 	kvmock "github.com/pingcap/tiflow/engine/pkg/meta/mock"
 	"github.com/pingcap/tiflow/pkg/errors"
 	"github.com/stretchr/testify/mock"
@@ -39,7 +40,7 @@ func (t *testDMJobmasterSuite) TestUpdateWorkerStatus() {
 	jobStore := metadata.NewJobStore(kvmock.NewMetaMock(), log.L())
 	unitStore := metadata.NewUnitStateStore(kvmock.NewMetaMock())
 	require.NoError(t.T(), jobStore.Put(context.Background(), job))
-	workerManager := NewWorkerManager("job_id", nil, jobStore, unitStore, nil, nil, nil, log.L(), false)
+	workerManager := NewWorkerManager("job_id", nil, jobStore, unitStore, nil, nil, nil, log.L(), resModel.ResourceTypeLocalFile)
 
 	require.Len(t.T(), workerManager.WorkerStatus(), 0)
 
@@ -99,7 +100,7 @@ func (t *testDMJobmasterSuite) TestUpdateWorkerStatus() {
 	workerStatus1.Stage = runtime.WorkerOnline
 	workerStatus2.Stage = runtime.WorkerOnline
 	workerStatusList := []runtime.WorkerStatus{workerStatus1, workerStatus2}
-	workerManager = NewWorkerManager("job_id", workerStatusList, jobStore, nil, nil, nil, nil, log.L(), false)
+	workerManager = NewWorkerManager("job_id", workerStatusList, jobStore, nil, nil, nil, nil, log.L(), resModel.ResourceTypeLocalFile)
 	workerStatusMap = workerManager.WorkerStatus()
 	require.Len(t.T(), workerStatusMap, 2)
 	require.Contains(t.T(), workerStatusMap, source1)
@@ -137,7 +138,8 @@ func (t *testDMJobmasterSuite) TestClearWorkerStatus() {
 	workerStatus1 := runtime.InitWorkerStatus(source1, frameModel.WorkerDMDump, "worker-id-1")
 	workerStatus2 := runtime.InitWorkerStatus(source2, frameModel.WorkerDMDump, "worker-id-2")
 
-	workerManager := NewWorkerManager("job_id", []runtime.WorkerStatus{workerStatus1, workerStatus2}, nil, nil, nil, messageAgent, nil, log.L(), false)
+	workerManager := NewWorkerManager("job_id", []runtime.WorkerStatus{workerStatus1, workerStatus2}, nil, nil, nil, messageAgent, nil,
+		log.L(), resModel.ResourceTypeLocalFile)
 	require.Len(t.T(), workerManager.WorkerStatus(), 2)
 
 	workerManager.removeOfflineWorkers()
@@ -222,7 +224,7 @@ func (t *testDMJobmasterSuite) TestClearWorkerStatus() {
 func (t *testDMJobmasterSuite) TestCreateWorker() {
 	mockAgent := &MockWorkerAgent{}
 	unitStore := metadata.NewUnitStateStore(kvmock.NewMetaMock())
-	workerManager := NewWorkerManager("job_id", nil, nil, unitStore, mockAgent, nil, nil, log.L(), false)
+	workerManager := NewWorkerManager("job_id", nil, nil, unitStore, mockAgent, nil, nil, log.L(), resModel.ResourceTypeLocalFile)
 
 	jobCfg := &config.JobCfg{}
 	require.NoError(t.T(), jobCfg.DecodeFile(jobTemplatePath))
@@ -261,7 +263,7 @@ func (t *testDMJobmasterSuite) TestGetUnit() {
 	mockAgent := &MockCheckpointAgent{}
 	task := &metadata.Task{Cfg: &config.TaskCfg{}}
 	task.Cfg.TaskMode = dmconfig.ModeFull
-	workerManager := NewWorkerManager("job_id", nil, nil, nil, nil, nil, mockAgent, log.L(), false)
+	workerManager := NewWorkerManager("job_id", nil, nil, nil, nil, nil, mockAgent, log.L(), resModel.ResourceTypeLocalFile)
 
 	workerStatus := runtime.NewWorkerStatus("source", frameModel.WorkerDMDump, "worker-id-1", runtime.WorkerOnline, 0)
 	require.Equal(t.T(), getNextUnit(task, workerStatus), frameModel.WorkerDMDump)
@@ -341,7 +343,7 @@ func (t *testDMJobmasterSuite) TestCheckAndScheduleWorkers() {
 	checkpointAgent := &MockCheckpointAgent{}
 	workerAgent := &MockWorkerAgent{}
 	unitStore := metadata.NewUnitStateStore(kvmock.NewMetaMock())
-	workerManager := NewWorkerManager("job_id", nil, nil, unitStore, workerAgent, nil, checkpointAgent, log.L(), false)
+	workerManager := NewWorkerManager("job_id", nil, nil, unitStore, workerAgent, nil, checkpointAgent, log.L(), resModel.ResourceTypeLocalFile)
 
 	// new tasks
 	worker1 := "worker1"
@@ -467,7 +469,7 @@ func (t *testDMJobmasterSuite) TestWorkerManager() {
 	checkpointAgent := &MockCheckpointAgent{}
 	workerAgent := &MockWorkerAgent{}
 	messageAgent := &dmpkg.MockMessageAgent{}
-	workerManager := NewWorkerManager("job_id", nil, jobStore, unitStore, workerAgent, messageAgent, checkpointAgent, log.L(), false)
+	workerManager := NewWorkerManager("job_id", nil, jobStore, unitStore, workerAgent, messageAgent, checkpointAgent, log.L(), resModel.ResourceTypeLocalFile)
 	source1 := jobCfg.Upstreams[0].SourceID
 	source2 := jobCfg.Upstreams[1].SourceID
 

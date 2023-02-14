@@ -52,7 +52,8 @@ type DefaultBroker struct {
 	executorID resModel.ExecutorID
 	client     client.ResourceManagerClient
 
-	fileManagers map[resModel.ResourceType]internal.FileManager
+	fileManagers      map[resModel.ResourceType]internal.FileManager
+	bucketFileManager internal.FileManager
 	// TODO: add monitor for closedWorkerCh
 	closedWorkerCh chan closedWorker
 
@@ -65,6 +66,9 @@ type DefaultBroker struct {
 	// will be cleaned up by GCCoordinator eventually.
 	s3dummyHandler Handle
 	cancel         context.CancelFunc
+
+	// storage config
+	config *resModel.Config
 }
 
 // NewBroker creates a new Impl instance.
@@ -106,63 +110,41 @@ func NewBrokerWithConfig(
 		client:         client,
 		fileManagers:   make(map[resModel.ResourceType]internal.FileManager),
 		closedWorkerCh: make(chan closedWorker, defaultClosedWorkerChannelSize),
+		config:         config,
+	}
+	if err := broker.initStorage(); err != nil {
+		return nil, err
 	}
 
 	ctx, cancel := context.WithCancel(context.Background())
 	go broker.tick(ctx)
 	broker.cancel = cancel
 
-	mustInitLocalStorage(broker, config, executorID)
-
-	if err := initS3StorageIfEnable(broker, config, executorID); err != nil {
-		return nil, err
-	}
-	if err := initGCSStorageIfEnable(broker, config, executorID); err != nil {
-		return nil, err
-	}
-
 	return broker, nil
 }
 
-func mustInitLocalStorage(broker *DefaultBroker,
-	config *resModel.Config,
-	executorID resModel.ExecutorID,
-) {
-	if config == nil || !config.LocalEnabled() {
+func (b *DefaultBroker) initStorage() error {
+	if b.config == nil || !b.config.LocalEnabled() {
 		log.Panic("local file manager must be supported by resource broker")
 	}
-	broker.fileManagers[resModel.ResourceTypeLocalFile] = local.NewLocalFileManager(executorID, config.Local)
-}
+	b.fileManagers[resModel.ResourceTypeLocalFile] = local.NewLocalFileManager(b.executorID, b.config.Local)
 
-func initS3StorageIfEnable(broker *DefaultBroker,
-	config *resModel.Config,
-	executorID resModel.ExecutorID,
-) error {
-	if !config.S3Enabled() {
-		log.Info("broker will not use s3 as external storage since s3 is not configured")
+	if !b.config.S3Enabled() && !b.config.GCSEnabled() {
+		log.Info("broker will not use s3/gcs as external storage since s3/gcs are both not configured")
 		return nil
 	}
-
-	broker.fileManagers[resModel.ResourceTypeS3] = bucket.NewFileManagerWithConfig(executorID, config)
-	if err := broker.createDummyResource(); err != nil {
-		return err
-	}
-
-	return nil
-}
-
-func initGCSStorageIfEnable(broker *DefaultBroker,
-	config *resModel.Config,
-	executorID resModel.ExecutorID,
-) error {
-	if !config.GCSEnabled() {
-		log.Info("broker will not use gcs as external storage since gcs is not configured")
+	b.bucketFileManager = bucket.NewFileManagerWithConfig(b.executorID, b.config)
+	if b.config.S3Enabled() {
+		log.Info("broker will use s3 as external storage since s3 is configured")
+		b.fileManagers[resModel.ResourceTypeS3] = b.bucketFileManager
 		return nil
 	}
-
-	broker.fileManagers[resModel.ResourceTypeGCS] = bucket.NewFileManagerWithConfig(executorID, config)
-	// TODO: check, this is s3-related
-	if err := broker.createDummyResource(); err != nil {
+	if b.config.GCSEnabled() {
+		log.Info("broker will use gcs as external storage since gcs is configured")
+		b.fileManagers[resModel.ResourceTypeGCS] = b.bucketFileManager
+		return nil
+	}
+	if err := b.createDummyResource(); err != nil {
 		return err
 	}
 
@@ -394,22 +376,16 @@ func (b *DefaultBroker) cleanOrRecreatePersistResource(
 	return desc, nil
 }
 
-// TODO(check)
 func (b *DefaultBroker) createDummyResource() error {
-	s3FileManager, ok := b.fileManagers[resModel.ResourceTypeS3]
-	if !ok {
-		return errors.New("S3 file manager not found")
-	}
-
 	ctx, cancel := context.WithTimeout(context.Background(), defaultTimeout)
 	defer cancel()
-	desc, err := s3FileManager.CreateResource(ctx, bucket.GetDummyIdent(b.executorID))
+	desc, err := b.bucketFileManager.CreateResource(ctx, bucket.GetDummyIdent(b.executorID))
 	if err != nil {
 		return err
 	}
 
 	handler, err := newResourceHandle(bucket.GetDummyJobID(b.executorID), b.executorID,
-		s3FileManager, desc, false, b.client)
+		b.bucketFileManager, desc, false, b.client)
 	if err != nil {
 		return err
 	}
@@ -451,7 +427,7 @@ func (b *DefaultBroker) Close() {
 	}
 }
 
-// GetEnabledBucketStorage returns true and the correspondent resource type if bucket storage is enabled.
+// GetEnabledBucketStorage returns true and the corresponding resource type if bucket storage is enabled.
 func (b *DefaultBroker) GetEnabledBucketStorage() (bool, resModel.ResourceType) {
 	if _, ok := b.fileManagers[resModel.ResourceTypeS3]; ok {
 		return true, resModel.ResourceTypeS3

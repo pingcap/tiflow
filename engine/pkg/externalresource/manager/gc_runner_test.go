@@ -23,7 +23,7 @@ import (
 
 	"github.com/pingcap/tiflow/engine/model"
 	"github.com/pingcap/tiflow/engine/pkg/clock"
-	"github.com/pingcap/tiflow/engine/pkg/externalresource/internal/s3"
+	"github.com/pingcap/tiflow/engine/pkg/externalresource/internal/bucket"
 	resModel "github.com/pingcap/tiflow/engine/pkg/externalresource/model"
 	pkgOrm "github.com/pingcap/tiflow/engine/pkg/orm"
 	"github.com/pingcap/tiflow/pkg/errors"
@@ -338,8 +338,8 @@ func testGCExecutors(t *testing.T, helper *gcRunnerTestHelper) {
 	checkAlive := func(ctx context.Context, executors ...model.ExecutorID) {
 		for _, executor := range executors {
 			res, err := helper.Meta.GetResourceByID(ctx, pkgOrm.ResourceKey{
-				JobID: s3.GetDummyJobID(executor),
-				ID:    s3.DummyResourceID,
+				JobID: bucket.GetDummyJobID(executor),
+				ID:    bucket.DummyResourceID,
 			})
 			require.NoError(t, err)
 			require.NotNil(t, res)
@@ -352,7 +352,7 @@ func testGCExecutors(t *testing.T, helper *gcRunnerTestHelper) {
 			tp, resName, err := resModel.ParseResourceID(meta.ID)
 			require.NoError(t, err)
 			require.Equal(t, resModel.ResourceTypeS3, tp)
-			require.NotEqual(t, s3.GetDummyResourceName(), resName)
+			require.NotEqual(t, bucket.GetDummyResourceName(), resName)
 		}
 	}
 
@@ -361,9 +361,9 @@ func testGCExecutors(t *testing.T, helper *gcRunnerTestHelper) {
 	// generate mock meta
 	for _, executor := range executors {
 		err := helper.Meta.CreateResource(context.Background(), &resModel.ResourceMeta{
-			ID:       s3.DummyResourceID,
-			Job:      s3.GetDummyJobID(model.ExecutorID(executor)),
-			Worker:   s3.DummyWorkerID,
+			ID:       bucket.DummyResourceID,
+			Job:      bucket.GetDummyJobID(model.ExecutorID(executor)),
+			Worker:   bucket.DummyWorkerID,
 			Executor: model.ExecutorID(executor),
 		})
 		require.NoError(t, err)

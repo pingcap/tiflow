@@ -85,7 +85,7 @@ type BaseJobMaster interface {
 	// of this interface.
 	IsBaseJobMaster()
 
-	// GetEnabledBucketStorage returns whether the bucket storage is enabled and the correspondent reource type
+	// GetEnabledBucketStorage returns whether the bucket storage is enabled and the corresponding resource type
 	// if the bucket exists
 	GetEnabledBucketStorage() (bool, resModel.ResourceType)
 }
