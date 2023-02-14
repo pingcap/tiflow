@@ -44,10 +44,12 @@ func TestNewWriter(t *testing.T) {
 	o := newOptions4Test()
 	factory := newFactory4Test(o, t)
 
-	sync := factory.newWriter(false)
+	sync, err := factory.newWriter(false)
+	require.NoError(t, err)
 	require.False(t, sync.Async)
 
-	async := factory.newWriter(true)
+	async, err := factory.newWriter(true)
+	require.NoError(t, err)
 	require.True(t, async.Async)
 
 	require.Equal(t, async.ReadTimeout, o.ReadTimeout)

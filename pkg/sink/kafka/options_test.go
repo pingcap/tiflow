@@ -183,9 +183,7 @@ func TestTimeout(t *testing.T) {
 
 func TestAdjustConfigTopicNotExist(t *testing.T) {
 	adminClient := NewClusterAdminClientMockImpl()
-	defer func() {
-		_ = adminClient.Close()
-	}()
+	defer adminClient.Close()
 
 	options := NewOptions()
 	options.BrokerEndpoints = []string{"127.0.0.1:9092"}
@@ -223,9 +221,7 @@ func TestAdjustConfigTopicNotExist(t *testing.T) {
 
 func TestAdjustConfigTopicExist(t *testing.T) {
 	adminClient := NewClusterAdminClientMockImpl()
-	defer func() {
-		_ = adminClient.Close()
-	}()
+	defer adminClient.Close()
 
 	options := NewOptions()
 	options.BrokerEndpoints = []string{"127.0.0.1:9092"}
@@ -302,9 +298,7 @@ func TestAdjustConfigTopicExist(t *testing.T) {
 
 func TestAdjustConfigMinInsyncReplicas(t *testing.T) {
 	adminClient := NewClusterAdminClientMockImpl()
-	defer func() {
-		_ = adminClient.Close()
-	}()
+	defer adminClient.Close()
 
 	options := NewOptions()
 	options.BrokerEndpoints = []string{"127.0.0.1:9092"}
@@ -362,9 +356,7 @@ func TestAdjustConfigMinInsyncReplicas(t *testing.T) {
 
 func TestSkipAdjustConfigMinInsyncReplicasWhenRequiredAcksIsNotWailAll(t *testing.T) {
 	adminClient := NewClusterAdminClientMockImpl()
-	defer func() {
-		_ = adminClient.Close()
-	}()
+	defer adminClient.Close()
 
 	options := NewOptions()
 	options.BrokerEndpoints = []string{"127.0.0.1:9092"}
@@ -624,6 +616,6 @@ func TestConfigurationCombinations(t *testing.T) {
 		require.Nil(t, err)
 		require.Equal(t, expected, options.MaxMessageBytes)
 
-		_ = adminClient.Close()
+		adminClient.Close()
 	}
 }
