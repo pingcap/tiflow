@@ -18,7 +18,7 @@ import (
 
 	"github.com/pingcap/tiflow/cdc/api/owner"
 	"github.com/pingcap/tiflow/cdc/model"
-	apiv1client "github.com/pingcap/tiflow/pkg/api/v1"
+	"github.com/pingcap/tiflow/pkg/api/v2"
 	"github.com/pingcap/tiflow/pkg/cmd/context"
 	"github.com/pingcap/tiflow/pkg/cmd/factory"
 	"github.com/pingcap/tiflow/pkg/cmd/util"
@@ -36,7 +36,7 @@ type changefeedCommonInfo struct {
 
 // listChangefeedOptions defines flags for the `cli changefeed list` command.
 type listChangefeedOptions struct {
-	apiClient apiv1client.APIV1Interface
+	apiClient v2.APIV2Interface
 
 	listAll bool
 }
@@ -54,7 +54,7 @@ func (o *listChangefeedOptions) addFlags(cmd *cobra.Command) {
 
 // complete adapts from the command line args to the data and client required.
 func (o *listChangefeedOptions) complete(f factory.Factory) error {
-	apiClient, err := f.APIV1Client()
+	apiClient, err := f.APIV2Client()
 	if err != nil {
 		return err
 	}
@@ -70,9 +70,9 @@ func (o *listChangefeedOptions) run(cmd *cobra.Command) error {
 	if err != nil {
 		return err
 	}
-	cfs := make([]*changefeedCommonInfo, 0, len(*raw))
+	cfs := make([]*changefeedCommonInfo, 0, len(raw))
 
-	for _, cf := range *raw {
+	for _, cf := range raw {
 		if !o.listAll {
 			if cf.FeedState == model.StateFinished ||
 				cf.FeedState == model.StateRemoved {
