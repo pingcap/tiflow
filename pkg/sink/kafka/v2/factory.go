@@ -33,11 +33,8 @@ import (
 )
 
 type factory struct {
-	changefeedID    model.ChangeFeedID
-	brokerEndpoints []string
-	transport       *kafka.Transport
-	client          *kafka.Client
-	options         *pkafka.Options
+	changefeedID model.ChangeFeedID
+	options      *pkafka.Options
 }
 
 // NewFactory returns a factory implemented based on kafka-go
@@ -64,12 +61,9 @@ func NewFactory(
 	}
 	transport.ClientID = clientID
 
-	client := newClient(options.BrokerEndpoints, transport)
 	return &factory{
-		changefeedID:    changefeedID,
-		brokerEndpoints: options.BrokerEndpoints,
-		client:          client,
-		options:         options,
+		changefeedID: changefeedID,
+		options:      options,
 	}, nil
 }
 
@@ -141,11 +135,15 @@ func completeSASLConfig(o *pkafka.Options) (sasl.Mechanism, error) {
 	return nil, nil
 }
 
-func (f *factory) newWriter(async bool) *kafka.Writer {
+func (f *factory) newWriter(async bool) (*kafka.Writer, error) {
+	transport, err := newTransport(f.options)
+	if err != nil {
+		return nil, err
+	}
 	w := &kafka.Writer{
 		Addr:         kafka.TCP(f.options.BrokerEndpoints...),
 		Balancer:     newManualPartitioner(),
-		Transport:    f.transport,
+		Transport:    transport,
 		ReadTimeout:  f.options.ReadTimeout,
 		WriteTimeout: f.options.WriteTimeout,
 		RequiredAcks: kafka.RequiredAcks(f.options.RequiredAcks),
@@ -173,16 +171,23 @@ func (f *factory) newWriter(async bool) *kafka.Writer {
 	log.Info("Kafka producer uses "+f.options.Compression+" compression algorithm",
 		zap.String("namespace", f.changefeedID.Namespace),
 		zap.String("changefeed", f.changefeedID.ID))
-	return w
+	return w, nil
 }
 
 func (f *factory) AdminClient() (pkafka.ClusterAdminClient, error) {
-	return newClusterAdminClient(f.brokerEndpoints, f.transport), nil
+	transport, err := newTransport(f.options)
+	if err != nil {
+		return nil, err
+	}
+	return newClusterAdminClient(f.options.BrokerEndpoints, transport), nil
 }
 
 // SyncProducer creates a sync producer to writer message to kafka
 func (f *factory) SyncProducer() (pkafka.SyncProducer, error) {
-	w := f.newWriter(false)
+	w, err := f.newWriter(false)
+	if err != nil {
+		return nil, err
+	}
 	return &syncWriter{w: w}, nil
 }
 
@@ -190,7 +195,10 @@ func (f *factory) SyncProducer() (pkafka.SyncProducer, error) {
 func (f *factory) AsyncProducer(closedChan chan struct{},
 	failpointCh chan error,
 ) (pkafka.AsyncProducer, error) {
-	w := f.newWriter(true)
+	w, err := f.newWriter(true)
+	if err != nil {
+		return nil, err
+	}
 	aw := &asyncWriter{
 		w:            w,
 		closedChan:   closedChan,
