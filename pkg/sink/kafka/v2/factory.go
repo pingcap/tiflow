@@ -165,10 +165,14 @@ func (f *factory) newWriter(async bool) *kafka.Writer {
 		w.Compression = kafka.Zstd
 	default:
 		log.Warn("Unsupported compression algorithm",
+			zap.String("namespace", f.changefeedID.Namespace),
+			zap.String("changefeed", f.changefeedID.ID),
 			zap.String("compression", f.options.Compression))
 		f.options.Compression = "none"
 	}
-	log.Info("Kafka producer uses " + f.options.Compression + " compression algorithm")
+	log.Info("Kafka producer uses "+f.options.Compression+" compression algorithm",
+		zap.String("namespace", f.changefeedID.Namespace),
+		zap.String("changefeed", f.changefeedID.ID))
 	return w
 }
 
