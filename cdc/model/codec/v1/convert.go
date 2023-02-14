@@ -14,7 +14,7 @@
 package v1
 
 import (
-    "bytes"
+	"bytes"
 
 	pmodel "github.com/pingcap/tidb/parser/model"
 	"github.com/pingcap/tiflow/cdc/model"
@@ -22,16 +22,16 @@ import (
 
 // PreMarshal should be called before marshal a RedoLog.
 func PreMarshal(r *RedoLog) {
-    if r.RedoRow != nil && r.RedoRow.Row != nil {
-        adjustRowPreMarshal(r.RedoRow)
-    }
-    if r.RedoDDL != nil && r.RedoDDL.DDL != nil {
-        adjustDDLPreMarshal(r.RedoDDL)
-    }
+	if r.RedoRow != nil && r.RedoRow.Row != nil {
+		adjustRowPreMarshal(r.RedoRow)
+	}
+	if r.RedoDDL != nil && r.RedoDDL.DDL != nil {
+		adjustDDLPreMarshal(r.RedoDDL)
+	}
 }
 
 func adjustRowPreMarshal(redoLog *RedoRowChangedEvent) {
-    row := redoLog.Row
+	row := redoLog.Row
 	for _, column := range row.Columns {
 		var redoColumn *RedoColumn
 		if column != nil {
@@ -64,7 +64,7 @@ func adjustRowPreMarshal(redoLog *RedoRowChangedEvent) {
 }
 
 func adjustDDLPreMarshal(redoDDL *RedoDDLEvent) {
-    redoDDL.Type = byte(redoDDL.DDL.Type)
+	redoDDL.Type = byte(redoDDL.DDL.Type)
 }
 
 // PostUnmarshal should be called after unmarshal a RedoLog.
