@@ -57,32 +57,44 @@ func NewFactory(
 	if err != nil {
 		return nil, errors.Trace(err)
 	}
-	mechanism, err := completeSASLConfig(options)
+
+	transport, err := newTransport(options)
 	if err != nil {
 		return nil, errors.Trace(err)
 	}
-	tlsConfig, err := completeSSLConfig(options)
-	if err != nil {
-		return nil, errors.Trace(err)
-	}
-	transport := &kafka.Transport{
-		SASL:        mechanism,
-		ClientID:    clientID,
-		TLS:         tlsConfig,
-		IdleTimeout: options.DialTimeout,
-	}
-	client := &kafka.Client{
-		Addr: kafka.TCP(options.BrokerEndpoints...),
+	transport.ClientID = clientID
+
+	client := newClient(options.BrokerEndpoints, transport)
+	return &factory{
+		changefeedID:    changefeedID,
+		brokerEndpoints: options.BrokerEndpoints,
+		client:          client,
+		options:         options,
+	}, nil
+}
+
+func newClient(brokerEndpoints []string, transport *kafka.Transport) *kafka.Client {
+	return &kafka.Client{
+		Addr: kafka.TCP(brokerEndpoints...),
 		// todo: make this configurable
 		Timeout:   10 * time.Second,
 		Transport: transport,
 	}
-	return &factory{
-		changefeedID:    changefeedID,
-		brokerEndpoints: options.BrokerEndpoints,
-		transport:       transport,
-		client:          client,
-		options:         options,
+}
+
+func newTransport(o *pkafka.Options) (*kafka.Transport, error) {
+	mechanism, err := completeSASLConfig(o)
+	if err != nil {
+		return nil, err
+	}
+	tlsConfig, err := completeSSLConfig(o)
+	if err != nil {
+		return nil, err
+	}
+	return &kafka.Transport{
+		SASL:        mechanism,
+		TLS:         tlsConfig,
+		IdleTimeout: o.DialTimeout,
 	}, nil
 }
 
@@ -161,7 +173,7 @@ func (f *factory) createWriter() *kafka.Writer {
 }
 
 func (f *factory) AdminClient() (pkafka.ClusterAdminClient, error) {
-	return newClusterAdminClient(f.brokerEndpoints), nil
+	return newClusterAdminClient(f.brokerEndpoints, f.transport), nil
 }
 
 // SyncProducer creates a sync producer to writer message to kafka
