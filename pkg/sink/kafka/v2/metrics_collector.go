@@ -44,7 +44,3 @@ func NewMetricsCollector(
 // Run implement the MetricsCollector interface
 func (m *MetricsCollector) Run(ctx context.Context) {
 }
-
-// Close implement the MetricsCollector interface
-func (m *MetricsCollector) Close() {
-}

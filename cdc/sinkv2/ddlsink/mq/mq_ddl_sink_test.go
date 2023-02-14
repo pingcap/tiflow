@@ -67,7 +67,7 @@ func TestNewKafkaDDLSinkFailed(t *testing.T) {
 	require.Nil(t, replicaConfig.ValidateAndAdjust(sinkURI))
 
 	s, err := NewKafkaDDLSink(ctx, sinkURI, replicaConfig,
-		kafka.NewMockAdminClient, kafka.NewMockClient, ddlproducer.NewMockDDLProducer)
+		kafka.NewMockFactory, ddlproducer.NewMockDDLProducer)
 	require.ErrorContains(t, err, "Avro protocol requires parameter \"schema-registry\"",
 		"should report error when protocol is avro but schema-registry is not set")
 	require.Nil(t, s)
@@ -92,7 +92,7 @@ func TestWriteDDLEventToAllPartitions(t *testing.T) {
 	require.Nil(t, replicaConfig.ValidateAndAdjust(sinkURI))
 
 	s, err := NewKafkaDDLSink(ctx, sinkURI, replicaConfig,
-		kafka.NewMockAdminClient, kafka.NewMockClient,
+		kafka.NewMockFactory,
 		ddlproducer.NewMockDDLProducer)
 	require.Nil(t, err)
 	require.NotNil(t, s)
@@ -135,7 +135,7 @@ func TestWriteDDLEventToZeroPartition(t *testing.T) {
 	require.Nil(t, replicaConfig.ValidateAndAdjust(sinkURI))
 
 	s, err := NewKafkaDDLSink(ctx, sinkURI, replicaConfig,
-		kafka.NewMockAdminClient, kafka.NewMockClient,
+		kafka.NewMockFactory,
 		ddlproducer.NewMockDDLProducer)
 	require.Nil(t, err)
 	require.NotNil(t, s)
@@ -179,7 +179,7 @@ func TestWriteCheckpointTsToDefaultTopic(t *testing.T) {
 	require.Nil(t, replicaConfig.ValidateAndAdjust(sinkURI))
 
 	s, err := NewKafkaDDLSink(ctx, sinkURI, replicaConfig,
-		kafka.NewMockAdminClient, kafka.NewMockClient,
+		kafka.NewMockFactory,
 		ddlproducer.NewMockDDLProducer)
 	require.Nil(t, err)
 	require.NotNil(t, s)
@@ -223,7 +223,7 @@ func TestWriteCheckpointTsToTableTopics(t *testing.T) {
 	}
 
 	s, err := NewKafkaDDLSink(ctx, sinkURI, replicaConfig,
-		kafka.NewMockAdminClient, kafka.NewMockClient,
+		kafka.NewMockFactory,
 		ddlproducer.NewMockDDLProducer)
 	require.Nil(t, err)
 	require.NotNil(t, s)
@@ -284,7 +284,7 @@ func TestWriteCheckpointTsWhenCanalJsonTiDBExtensionIsDisable(t *testing.T) {
 	require.Nil(t, replicaConfig.ValidateAndAdjust(sinkURI))
 
 	s, err := NewKafkaDDLSink(ctx, sinkURI, replicaConfig,
-		kafka.NewMockAdminClient, kafka.NewMockClient,
+		kafka.NewMockFactory,
 		ddlproducer.NewMockDDLProducer)
 	require.Nil(t, err)
 	require.NotNil(t, s)
