@@ -94,7 +94,7 @@ func newTransport(o *pkafka.Options) (*kafka.Transport, error) {
 	return &kafka.Transport{
 		SASL:        mechanism,
 		TLS:         tlsConfig,
-		IdleTimeout: o.DialTimeout,
+		DialTimeout: o.DialTimeout,
 	}, nil
 }
 
