@@ -179,9 +179,7 @@ func (ra *RedoApplier) consumeLogs(ctx context.Context) error {
 			return err
 		}
 		// Make sure all events are flushed to downstream.
-		for ra.tableSinks[tableID].GetCheckpointTs().EqualOrGreater(resolvedTs) {
-			log.Info("resolved ts flushed to downstream", zap.Any("resolvedTs", resolvedTs))
-			break
+		for !ra.tableSinks[tableID].GetCheckpointTs().EqualOrGreater(resolvedTs) {
 		}
 		ra.tableSinks[tableID].Close(ctx)
 	}
