@@ -19,6 +19,7 @@ import (
 
 	"github.com/pingcap/tiflow/cdc/model"
 	pkafka "github.com/pingcap/tiflow/pkg/sink/kafka"
+	"github.com/segmentio/kafka-go"
 	"github.com/stretchr/testify/require"
 )
 
@@ -51,6 +52,6 @@ func TestNewWriter(t *testing.T) {
 
 	require.Equal(t, async.ReadTimeout, o.ReadTimeout)
 	require.Equal(t, async.WriteTimeout, o.WriteTimeout)
-	require.Equal(t, async.RequiredAcks, o.RequiredAcks)
-	require.Equal(t, async.BatchBytes, o.MaxMessageBytes)
+	require.Equal(t, async.RequiredAcks, kafka.RequiredAcks(o.RequiredAcks))
+	require.Equal(t, async.BatchBytes, int64(o.MaxMessageBytes))
 }
