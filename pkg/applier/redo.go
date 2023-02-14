@@ -121,14 +121,6 @@ func (ra *RedoApplier) consumeLogs(ctx context.Context) error {
 	}
 	log.Info("apply redo log starts", zap.Uint64("checkpointTs", checkpointTs), zap.Uint64("resolvedTs", resolvedTs))
 
-	// TODO: split events for large transaction
-	// We use lastSafeResolvedTs and lastResolvedTs to ensure the events in one
-	// transaction are flushed in a single batch.
-	// lastSafeResolvedTs records the max resolved ts of a closed transaction.
-	// Closed transaction means all events of this transaction have been received.
-	lastSafeResolvedTs := checkpointTs - 1
-	// lastResolvedTs records the max resolved ts we have seen from redo logs.
-	lastResolvedTs := checkpointTs
 	cachedRows := make([]*model.RowChangedEvent, 0, emitBatch)
 	tableResolvedTsMap := make(map[model.TableID]model.Ts)
 	appliedLogCount := 0
@@ -153,7 +145,8 @@ func (ra *RedoApplier) consumeLogs(ctx context.Context) error {
 				ra.tableSinks[tableID] = tableSink
 			}
 			if _, ok := tableResolvedTsMap[redoLog.Row.Table.TableID]; !ok {
-				tableResolvedTsMap[tableID] = lastSafeResolvedTs
+				// Safe to use checkpointTs - 1 as the resolvedTs of a table.
+				tableResolvedTsMap[tableID] = checkpointTs - 1
 			}
 			if len(cachedRows) >= emitBatch {
 				for _, row := range cachedRows {
@@ -164,7 +157,7 @@ func (ra *RedoApplier) consumeLogs(ctx context.Context) error {
 			}
 			cachedRows = append(cachedRows, common.LogToRow(redoLog))
 			if redoLog.Row.CommitTs > tableResolvedTsMap[tableID] {
-				tableResolvedTsMap[tableID], lastResolvedTs = lastResolvedTs, redoLog.Row.CommitTs
+				tableResolvedTsMap[tableID] = redoLog.Row.CommitTs
 			}
 		}
 
