@@ -169,16 +169,16 @@ func TestApplyDMLs(t *testing.T) {
 			Message: "FUNCTION test.tidb_version does not exist",
 		})
 		mock.ExpectBegin()
-		mock.ExpectExec("REPLACE INTO `test`.`t1`(`a`,`b`) VALUES (?,?)").
+		mock.ExpectExec("REPLACE INTO `test`.`t1` (`a`,`b`) VALUES (?,?)").
 			WithArgs(1, "2").
 			WillReturnResult(sqlmock.NewResult(1, 1))
 		mock.ExpectCommit()
 
 		mock.ExpectBegin()
-		mock.ExpectExec("DELETE FROM `test`.`t1` WHERE `a` = ? LIMIT 1;").
-			WithArgs(1).
+		mock.ExpectExec("DELETE FROM `test`.`t1` WHERE (`a`,`b`) IN ((?,?))").
+			WithArgs(1, "2").
 			WillReturnResult(sqlmock.NewResult(1, 1))
-		mock.ExpectExec("REPLACE INTO `test`.`t1`(`a`,`b`) VALUES (?,?)").
+		mock.ExpectExec("REPLACE INTO `test`.`t1` (`a`,`b`) VALUES (?,?)").
 			WithArgs(2, "3").
 			WillReturnResult(sqlmock.NewResult(1, 1))
 		mock.ExpectCommit()
