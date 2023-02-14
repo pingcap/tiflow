@@ -14,7 +14,7 @@
 package v1
 
 import (
-	pmodel "github.com/pingcap/tidb/parser/model"
+	timodel "github.com/pingcap/tidb/parser/model"
 	"github.com/pingcap/tidb/util/rowcodec"
 	"github.com/pingcap/tiflow/cdc/model"
 )
@@ -95,13 +95,13 @@ type RedoColumn struct {
 
 // DDLEvent stores DDL event
 type DDLEvent struct {
-	StartTs      uint64            `msg:"start-ts"`
-	CommitTs     uint64            `msg:"commit-ts"`
-	Query        string            `msg:"query"`
-	TableInfo    *model.TableInfo  `msg:"-"`
-	PreTableInfo *model.TableInfo  `msg:"-"`
-	Type         pmodel.ActionType `msg:"-"`
-	Done         bool              `msg:"-"`
+	StartTs      uint64             `msg:"start-ts"`
+	CommitTs     uint64             `msg:"commit-ts"`
+	Query        string             `msg:"query"`
+	TableInfo    *model.TableInfo   `msg:"-"`
+	PreTableInfo *model.TableInfo   `msg:"-"`
+	Type         timodel.ActionType `msg:"-"`
+	Done         bool               `msg:"-"`
 }
 
 // RedoDDLEvent represents DDL event used in redo log persistent

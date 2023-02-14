@@ -16,7 +16,7 @@ package v1
 import (
 	"bytes"
 
-	pmodel "github.com/pingcap/tidb/parser/model"
+	timodel "github.com/pingcap/tidb/parser/model"
 	"github.com/pingcap/tiflow/cdc/model"
 )
 
@@ -100,5 +100,5 @@ func adjustRowPostUnmarshal(redoLog *RedoRowChangedEvent) {
 }
 
 func adjustDDLPostUnmarshal(redoDDL *RedoDDLEvent) {
-	redoDDL.DDL.Type = pmodel.ActionType(redoDDL.Type)
+	redoDDL.DDL.Type = timodel.ActionType(redoDDL.Type)
 }

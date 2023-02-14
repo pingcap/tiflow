@@ -57,7 +57,7 @@ func TestLogWriterWriteLog(t *testing.T) {
 			args: arg{
 				ctx: context.Background(),
 				rows: []*model.RowChangedEvent{
-					&model.RowChangedEvent{
+					{
 						Table: &model.TableName{TableID: 111}, CommitTs: 1,
 					},
 				},
@@ -71,7 +71,7 @@ func TestLogWriterWriteLog(t *testing.T) {
 				ctx: context.Background(),
 				rows: []*model.RowChangedEvent{
 					nil,
-					&model.RowChangedEvent{
+					{
 						Table: &model.TableName{TableID: 11}, CommitTs: 11,
 					},
 				},

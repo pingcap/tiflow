@@ -16,7 +16,9 @@ package codec
 import (
 	"testing"
 
-	pmodel "github.com/pingcap/tidb/parser/model"
+	"github.com/pingcap/tidb/parser/charset"
+	timodel "github.com/pingcap/tidb/parser/model"
+	"github.com/pingcap/tidb/parser/mysql"
 	"github.com/pingcap/tiflow/cdc/model"
 	codecv1 "github.com/pingcap/tiflow/cdc/model/codec/v1"
 	"github.com/stretchr/testify/require"
@@ -41,25 +43,25 @@ func TestV1toV2(t *testing.T) {
 				},
 				TableInfo: nil,
 				Columns: []*codecv1.Column{
-					&codecv1.Column{
+					{
 						Name: "column",
 						Flag: model.BinaryFlag,
 					},
 				},
 				PreColumns: []*codecv1.Column{
-					&codecv1.Column{
+					{
 						Name: "column",
 						Flag: model.BinaryFlag,
 					},
 				},
-				IndexColumns: [][]int{[]int{1}},
+				IndexColumns: [][]int{{1}},
 			},
 		},
 		RedoDDL: &codecv1.RedoDDLEvent{
 			DDL: &codecv1.DDLEvent{
 				StartTs:  1,
 				CommitTs: 2,
-				Type:     pmodel.ActionCreateTable,
+				Type:     timodel.ActionCreateTable,
 			},
 		},
 	}
@@ -77,25 +79,25 @@ func TestV1toV2(t *testing.T) {
 				},
 				TableInfo: nil,
 				Columns: []*model.Column{
-					&model.Column{
+					{
 						Name: "column",
 						Flag: model.BinaryFlag,
 					},
 				},
 				PreColumns: []*model.Column{
-					&model.Column{
+					{
 						Name: "column",
 						Flag: model.BinaryFlag,
 					},
 				},
-				IndexColumns: [][]int{[]int{1}},
+				IndexColumns: [][]int{{1}},
 			},
 		},
 		RedoDDL: model.RedoDDLEvent{
 			DDL: &model.DDLEvent{
 				StartTs:  1,
 				CommitTs: 2,
-				Type:     pmodel.ActionCreateTable,
+				Type:     timodel.ActionCreateTable,
 			},
 		},
 	}
@@ -129,4 +131,124 @@ func TestV1toV2(t *testing.T) {
 	require.Nil(t, err)
 	require.Zero(t, len(msg1))
 	require.Equal(t, rv2.RedoRow.Row, rv2_gen.RedoRow.Row)
+}
+
+func TestRowRedoConvert(t *testing.T) {
+	t.Parallel()
+
+	row := &model.RowChangedEvent{
+		StartTs:  100,
+		CommitTs: 120,
+		Table:    &model.TableName{Schema: "test", Table: "table1", TableID: 57},
+		PreColumns: []*model.Column{{
+			Name:  "a1",
+			Type:  mysql.TypeLong,
+			Flag:  model.BinaryFlag | model.MultipleKeyFlag | model.HandleKeyFlag,
+			Value: int64(1),
+		}, {
+			Name:  "a2",
+			Type:  mysql.TypeVarchar,
+			Value: []byte("char"),
+		}, {
+			Name:  "a3",
+			Type:  mysql.TypeLong,
+			Flag:  model.BinaryFlag | model.MultipleKeyFlag | model.HandleKeyFlag,
+			Value: int64(1),
+		}, {
+			Name:    "a4",
+			Type:    mysql.TypeTinyBlob,
+			Charset: charset.CharsetGBK,
+			Value:   []byte("你好"),
+		}, nil},
+		Columns: []*model.Column{{
+			Name:  "a1",
+			Type:  mysql.TypeLong,
+			Flag:  model.BinaryFlag | model.MultipleKeyFlag | model.HandleKeyFlag,
+			Value: int64(2),
+		}, {
+			Name:  "a2",
+			Type:  mysql.TypeVarchar,
+			Value: []byte("char-updated"),
+		}, {
+			Name:  "a3",
+			Type:  mysql.TypeLong,
+			Flag:  model.BinaryFlag | model.MultipleKeyFlag | model.HandleKeyFlag,
+			Value: int64(2),
+		}, {
+			Name:    "a4",
+			Type:    mysql.TypeTinyBlob,
+			Charset: charset.CharsetGBK,
+			Value:   []byte("世界"),
+		}, nil},
+		IndexColumns: [][]int{{1, 3}},
+	}
+
+	redoLog := &model.RedoLog{RedoRow: model.RedoRowChangedEvent{Row: row}}
+	data, err := MarshalRedoLog(redoLog, nil)
+	require.Nil(t, err)
+
+	redoLog2, data, err := UnmarshalRedoLog(data)
+	require.Nil(t, err)
+	require.Zero(t, len(data))
+	require.Equal(t, row, redoLog2.RedoRow.Row)
+}
+
+func TestRowRedoConvertWithEmptySlice(t *testing.T) {
+	t.Parallel()
+
+	row := &model.RowChangedEvent{
+		StartTs:  100,
+		CommitTs: 120,
+		Table:    &model.TableName{Schema: "test", Table: "table1", TableID: 57},
+		PreColumns: []*model.Column{{
+			Name:  "a1",
+			Type:  mysql.TypeLong,
+			Flag:  model.BinaryFlag | model.MultipleKeyFlag | model.HandleKeyFlag,
+			Value: int64(1),
+		}, {
+			Name:  "a2",
+			Type:  mysql.TypeVarchar,
+			Value: []byte(""), // empty slice should be marshal and unmarshal safely
+		}},
+		Columns: []*model.Column{{
+			Name:  "a1",
+			Type:  mysql.TypeLong,
+			Flag:  model.BinaryFlag | model.MultipleKeyFlag | model.HandleKeyFlag,
+			Value: int64(2),
+		}, {
+			Name:  "a2",
+			Type:  mysql.TypeVarchar,
+			Value: []byte(""),
+		}},
+		IndexColumns: [][]int{{1}},
+	}
+
+	redoLog := &model.RedoLog{RedoRow: model.RedoRowChangedEvent{Row: row}}
+	data, err := MarshalRedoLog(redoLog, nil)
+	require.Nil(t, err)
+
+	redoLog2, data, err := UnmarshalRedoLog(data)
+	require.Nil(t, err)
+	require.Zero(t, len(data))
+	require.Equal(t, row, redoLog2.RedoRow.Row)
+}
+
+func TestDDLRedoConvert(t *testing.T) {
+	t.Parallel()
+
+	ddl := &model.DDLEvent{
+		StartTs:  1020,
+		CommitTs: 1030,
+		Type:     timodel.ActionAddColumn,
+		Query:    "ALTER TABLE test.t1 ADD COLUMN a int",
+	}
+
+	redoLog := &model.RedoLog{RedoDDL: model.RedoDDLEvent{DDL: ddl}}
+	data, err := MarshalRedoLog(redoLog, nil)
+	require.Nil(t, err)
+
+	redoLog2, data, err := UnmarshalRedoLog(data)
+	require.Nil(t, err)
+	require.Zero(t, len(data))
+	require.Equal(t, ddl, redoLog2.RedoDDL.DDL)
 }

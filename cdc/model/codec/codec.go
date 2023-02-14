@@ -14,10 +14,9 @@
 package codec
 
 import (
-	"bytes"
 	"encoding/binary"
 
-	pmodel "github.com/pingcap/tidb/parser/model"
+	timodel "github.com/pingcap/tidb/parser/model"
 	"github.com/pingcap/tiflow/cdc/model"
 	codecv1 "github.com/pingcap/tiflow/cdc/model/codec/v1"
 	"github.com/tinylib/msgp/msgp"
@@ -43,54 +42,63 @@ var (
 )
 
 func postUnmarshal(r *model.RedoLog) {
+	workaroundColumn := func(c *model.Column, redoC *model.RedoColumn) {
+		c.Flag = model.ColumnFlagType(redoC.Flag)
+		if redoC.ValueIsEmptyByteSlice {
+			c.Value = []byte{}
+		} else {
+			c.Value = redoC.Value
+		}
+	}
+
 	if r.RedoRow.Row != nil {
 		row := r.RedoRow.Row
 		for i, c := range row.Columns {
-			c.Flag = model.ColumnFlagType(r.RedoRow.Columns[i].Flag)
-			if r.RedoRow.Columns[i].ValueIsEmptyByteSlice {
-				c.Value = []byte{}
-			} else {
-				c.Value = r.RedoRow.Columns[i].Value
+			if c != nil {
+				workaroundColumn(c, &r.RedoRow.Columns[i])
 			}
 		}
 		for i, c := range row.PreColumns {
-			c.Flag = model.ColumnFlagType(r.RedoRow.PreColumns[i].Flag)
-			if r.RedoRow.Columns[i].ValueIsEmptyByteSlice {
-				c.Value = []byte{}
-			} else {
-				c.Value = r.RedoRow.Columns[i].Value
+			if c != nil {
+				workaroundColumn(c, &r.RedoRow.PreColumns[i])
 			}
 		}
 	}
 	if r.RedoDDL.DDL != nil {
-		r.RedoDDL.DDL.Type = pmodel.ActionType(r.RedoDDL.Type)
+		r.RedoDDL.DDL.Type = timodel.ActionType(r.RedoDDL.Type)
 	}
 }
 
 func preMarshal(r *model.RedoLog) {
+	// Workaround empty byte slice for msgp#247
+	workaroundColumn := func(redoC *model.RedoColumn) {
+		switch v := redoC.Value.(type) {
+		case []byte:
+			if len(v) == 0 {
+				redoC.ValueIsEmptyByteSlice = true
+			}
+		}
+	}
+
 	if r.RedoRow.Row != nil {
 		row := r.RedoRow.Row
 		r.RedoRow.Columns = make([]model.RedoColumn, 0, len(row.Columns))
+		r.RedoRow.PreColumns = make([]model.RedoColumn, 0, len(row.PreColumns))
 		for _, c := range row.Columns {
-			redoC := model.RedoColumn{Value: c.Value, Flag: uint64(c.Flag)}
-			// Workaround empty byte slice for msgp#247
-			switch v := redoC.Value.(type) {
-			case []byte:
-				if bytes.Equal(v, []byte{}) {
-					redoC.ValueIsEmptyByteSlice = true
-				}
+			redoC := model.RedoColumn{}
+			if c != nil {
+				redoC.Value = c.Value
+				redoC.Flag = uint64(c.Flag)
+				workaroundColumn(&redoC)
 			}
 			r.RedoRow.Columns = append(r.RedoRow.Columns, redoC)
 		}
-		r.RedoRow.PreColumns = make([]model.RedoColumn, 0, len(row.PreColumns))
 		for _, c := range row.PreColumns {
-			redoC := model.RedoColumn{Value: c.Value, Flag: uint64(c.Flag)}
-			// Workaround empty byte slice for msgp#247
-			switch v := redoC.Value.(type) {
-			case []byte:
-				if bytes.Equal(v, []byte{}) {
-					redoC.ValueIsEmptyByteSlice = true
-				}
+			redoC := model.RedoColumn{}
+			if c != nil {
+				redoC.Value = c.Value
+				redoC.Flag = uint64(c.Flag)
+				workaroundColumn(&redoC)
 			}
 			r.RedoRow.PreColumns = append(r.RedoRow.PreColumns, redoC)
 		}
