@@ -69,7 +69,7 @@ func TestNewKafkaDMLSinkFailed(t *testing.T) {
 	errCh := make(chan error, 1)
 
 	s, err := NewKafkaDMLSink(ctx, sinkURI, replicaConfig, errCh,
-		kafka.NewMockAdminClient, kafka.NewMockClient, dmlproducer.NewDMLMockProducer)
+		kafka.NewMockFactory, dmlproducer.NewDMLMockProducer)
 	require.ErrorContains(t, err, "Avro protocol requires parameter \"schema-registry\"",
 		"should report error when protocol is avro but schema-registry is not set")
 	require.Nil(t, s)
@@ -95,7 +95,7 @@ func TestWriteEvents(t *testing.T) {
 	errCh := make(chan error, 1)
 
 	s, err := NewKafkaDMLSink(ctx, sinkURI, replicaConfig, errCh,
-		kafka.NewMockAdminClient, kafka.NewMockClient, dmlproducer.NewDMLMockProducer)
+		kafka.NewMockFactory, dmlproducer.NewDMLMockProducer)
 	require.Nil(t, err)
 	require.NotNil(t, s)
 

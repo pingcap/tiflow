@@ -20,12 +20,13 @@ import (
 
 	"github.com/pingcap/errors"
 	"github.com/pingcap/log"
+	"github.com/pingcap/tiflow/cdc/contextutil"
 	"github.com/pingcap/tiflow/cdc/sink/mq/dispatcher"
 	"github.com/pingcap/tiflow/cdc/sinkv2/ddlsink/mq/ddlproducer"
 	"github.com/pingcap/tiflow/cdc/sinkv2/util"
 	"github.com/pingcap/tiflow/pkg/config"
 	cerror "github.com/pingcap/tiflow/pkg/errors"
-	pkafka "github.com/pingcap/tiflow/pkg/sink/kafka"
+	"github.com/pingcap/tiflow/pkg/sink/kafka"
 	"go.uber.org/zap"
 )
 
@@ -34,8 +35,7 @@ func NewKafkaDDLSink(
 	ctx context.Context,
 	sinkURI *url.URL,
 	replicaConfig *config.ReplicaConfig,
-	adminClientCreator pkafka.ClusterAdminClientCreator,
-	clientCreator pkafka.ClientCreator,
+	factoryCreator kafka.FactoryCreator,
 	producerCreator ddlproducer.Factory,
 ) (_ *ddlSink, err error) {
 	topic, err := util.GetTopic(sinkURI)
@@ -43,27 +43,32 @@ func NewKafkaDDLSink(
 		return nil, errors.Trace(err)
 	}
 
-	options := pkafka.NewOptions()
+	options := kafka.NewOptions()
 	if err := options.Apply(sinkURI); err != nil {
 		return nil, cerror.WrapError(cerror.ErrKafkaInvalidConfig, err)
 	}
 
-	adminClient, err := adminClientCreator(ctx, options)
+	changefeed := contextutil.ChangefeedIDFromCtx(ctx)
+	factory, err := factoryCreator(ctx, options, changefeed)
 	if err != nil {
 		return nil, cerror.WrapError(cerror.ErrKafkaNewProducer, err)
 	}
+
+	adminClient, err := factory.AdminClient()
 	// We must close adminClient when this func return cause by an error
 	// otherwise the adminClient will never be closed and lead to a goroutine leak.
 	defer func() {
 		if err != nil {
 			if closeErr := adminClient.Close(); closeErr != nil {
-				log.Error("Close admin client failed in kafka "+
-					"DDL sink", zap.Error(closeErr))
+				log.Error("Close admin client failed in kafka DDL sink",
+					zap.String("namespace", changefeed.Namespace),
+					zap.String("changefeed", changefeed.ID),
+					zap.Error(closeErr))
 			}
 		}
 	}()
 
-	if err := pkafka.AdjustOptions(ctx, adminClient, options, topic); err != nil {
+	if err := kafka.AdjustOptions(ctx, adminClient, options, topic); err != nil {
 		return nil, cerror.WrapError(cerror.ErrKafkaNewProducer, err)
 	}
 
@@ -72,15 +77,10 @@ func NewKafkaDDLSink(
 		return nil, errors.Trace(err)
 	}
 
-	client, err := clientCreator(ctx, options)
-	if err != nil {
-		return nil, cerror.WrapError(cerror.ErrKafkaNewProducer, err)
-	}
-
 	start := time.Now()
 	log.Info("Try to create a DDL sink producer",
 		zap.Any("options", options))
-	p, err := producerCreator(ctx, client, adminClient)
+	p, err := producerCreator(ctx, factory, adminClient)
 	log.Info("DDL sink producer client created", zap.Duration("duration", time.Since(start)))
 	if err != nil {
 		return nil, cerror.WrapError(cerror.ErrKafkaNewProducer, err)
@@ -114,7 +114,7 @@ func NewKafkaDDLSink(
 		return nil, errors.Trace(err)
 	}
 
-	s, err := newDDLSink(ctx, p, topicManager, eventRouter, encoderConfig)
+	s, err := newDDLSink(ctx, p, adminClient, topicManager, eventRouter, encoderConfig)
 	if err != nil {
 		return nil, errors.Trace(err)
 	}
