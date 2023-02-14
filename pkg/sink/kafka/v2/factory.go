@@ -179,7 +179,7 @@ func (f *factory) AdminClient() (pkafka.ClusterAdminClient, error) {
 	if err != nil {
 		return nil, err
 	}
-	return newClusterAdminClient(f.options.BrokerEndpoints, transport), nil
+	return newClusterAdminClient(f.options.BrokerEndpoints, transport, f.changefeedID), nil
 }
 
 // SyncProducer creates a sync producer to writer message to kafka

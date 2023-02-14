@@ -19,6 +19,7 @@ import (
 	"testing"
 
 	"github.com/golang/mock/gomock"
+	"github.com/pingcap/tiflow/cdc/model"
 	"github.com/pingcap/tiflow/pkg/errors"
 	pkafka "github.com/pingcap/tiflow/pkg/sink/kafka"
 	mock "github.com/pingcap/tiflow/pkg/sink/kafka/v2/mock"
@@ -30,7 +31,8 @@ func newClusterAdminClientWithMock(t *testing.T) (pkafka.ClusterAdminClient, *mo
 	transport, err := newTransport(pkafka.NewOptions())
 	require.NoError(t, err)
 
-	adminClient := newClusterAdminClient([]string{"127.0.0.1:9092"}, transport)
+	changefeedID := model.DefaultChangeFeedID("changefeed-test")
+	adminClient := newClusterAdminClient([]string{"127.0.0.1:9092"}, transport, changefeedID)
 
 	ctrl := gomock.NewController(t)
 	client := mock.NewMockClient(ctrl)
@@ -43,7 +45,9 @@ func TestNewClusterAdminClient(t *testing.T) {
 
 	transport, err := newTransport(pkafka.NewOptions())
 	require.NoError(t, err)
-	adminClient := newClusterAdminClient([]string{"127.0.0.1:9092"}, transport)
+
+	changefeedID := model.DefaultChangeFeedID("changefeed-test")
+	adminClient := newClusterAdminClient([]string{"127.0.0.1:9092"}, transport, changefeedID)
 	require.NotNil(t, adminClient)
 	require.NotNil(t, adminClient.(*admin).client)
 }
