@@ -403,13 +403,12 @@ func (b *DefaultBroker) createDummyResource() error {
 func (b *DefaultBroker) Close() {
 	b.cancel()
 
-	// TODO: check
 	// Try to clean up temporary files created by current executor
-	if fm, ok := b.fileManagers[resModel.ResourceTypeS3]; ok {
+	if b.bucketFileManager != nil {
 		ctx, cancel := context.WithTimeout(context.Background(), defaultTimeout)
 		defer cancel()
 
-		err := fm.RemoveTemporaryFiles(ctx, internal.ResourceScope{
+		err := b.bucketFileManager.RemoveTemporaryFiles(ctx, internal.ResourceScope{
 			Executor: b.executorID,
 			WorkerID: "", /* empty workID means remove all temp files in executor */
 		})

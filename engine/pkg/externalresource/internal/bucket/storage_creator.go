@@ -30,14 +30,9 @@ import (
 // Implementing mock or stub BucketCreator will make
 // unit testing easier.
 type BucketCreator interface {
-	newBucketForScope(
-		ctx context.Context, scope internal.ResourceScope,
-	) (brStorage.ExternalStorage, error)
-
+	newBucketForScope(ctx context.Context, scope internal.ResourceScope) (brStorage.ExternalStorage, error)
 	newBucketFromURI(ctx context.Context, uri string) (brStorage.ExternalStorage, error)
-
 	baseURI() string
-
 	resourceType() model.ResourceType
 }
 
@@ -56,11 +51,11 @@ type BucketCreatorImpl struct {
 	ResourceType model.ResourceType
 }
 
-// NewBucketCreator creates a new BucketCreator with s3 options.
+// NewBucketCreator creates a new BucketCreator
 func NewBucketCreator(
-	bucket string, prefix string,
-	options *brStorage.BackendOptions,
+	config *model.Config,
 ) *BucketCreatorImpl {
+	options, bucket, prefix := config.ToBrBackendOptions()
 	return &BucketCreatorImpl{Prefix: prefix, Bucket: bucket, Options: options}
 }
 
