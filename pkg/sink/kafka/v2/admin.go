@@ -28,8 +28,7 @@ type admin struct {
 	client Client
 }
 
-// NewClusterAdminClient return an admin client
-func NewClusterAdminClient(endpoints []string) pkafka.ClusterAdminClient {
+func newClusterAdminClient(endpoints []string) pkafka.ClusterAdminClient {
 	client := &kafka.Client{
 		Addr: kafka.TCP(endpoints...),
 	}
@@ -121,6 +120,18 @@ func (a *admin) GetBrokerConfig(ctx context.Context, configName string) (string,
 	}
 
 	return entry.ConfigValue, nil
+}
+
+func (a *admin) GetTopicsPartitions(ctx context.Context) (map[string]int32, error) {
+	response, err := a.clusterMetadata(ctx)
+	if err != nil {
+		return nil, err
+	}
+	result := make(map[string]int32, len(response.Topics))
+	for _, topic := range response.Topics {
+		result[topic.Name] = int32(len(topic.Partitions))
+	}
+	return result, nil
 }
 
 func (a *admin) GetAllTopicsMeta(ctx context.Context) (map[string]pkafka.TopicDetail, error) {

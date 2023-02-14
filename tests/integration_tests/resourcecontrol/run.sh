@@ -1,6 +1,6 @@
 #!/bin/bash
 
-set -e
+set -eu
 
 CUR=$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)
 source $CUR/../_utils/test_prepare
@@ -8,13 +8,7 @@ WORK_DIR=$OUT_DIR/$TEST_NAME
 CDC_BINARY=cdc.test
 SINK_TYPE=$1
 
-# use canal-adapter to sync data from kafka to mysql,
-# make sure that `canal-json` output can be consumed by the canal-adapter.
 function run() {
-	if [ "$SINK_TYPE" == "mysql" ]; then
-		return
-	fi
-
 	rm -rf $WORK_DIR && mkdir -p $WORK_DIR
 
 	start_tidb_cluster --workdir $WORK_DIR
@@ -26,19 +20,19 @@ function run() {
 
 	run_cdc_server --workdir $WORK_DIR --binary $CDC_BINARY
 
-	SINK_URI="kafka://127.0.0.1:9092/test?protocol=canal-json&kafka-version=${KAFKA_VERSION}&max-message-bytes=10485760"
-
+	TOPIC_NAME="ticdc-resourcecontrol-test-$RANDOM"
+	case $SINK_TYPE in
+	kafka) SINK_URI="kafka://127.0.0.1:9092/$TOPIC_NAME?protocol=open-protocol&partition-num=4&kafka-version=${KAFKA_VERSION}&max-message-bytes=10485760" ;;
+	*) SINK_URI="mysql://normal:123456@127.0.0.1:3306/" ;;
+	esac
 	run_cdc_cli changefeed create --start-ts=$start_ts --sink-uri="$SINK_URI"
-
-	run_sql_file $CUR/data/data.sql ${UP_TIDB_HOST} ${UP_TIDB_PORT}
-
+	if [ "$SINK_TYPE" == "kafka" ]; then
+		run_kafka_consumer $WORK_DIR "kafka://127.0.0.1:9092/$TOPIC_NAME?protocol=open-protocol&partition-num=4&version=${KAFKA_VERSION}&max-message-bytes=10485760"
+	fi
+	run_sql_file $CUR/data/prepare.sql ${UP_TIDB_HOST} ${UP_TIDB_PORT}
 	# sync_diff can't check non-exist table, so we check expected tables are created in downstream first
-	check_table_exists test.binary_columns ${DOWN_TIDB_HOST} ${DOWN_TIDB_PORT} 600
-	check_sync_diff $WORK_DIR $CUR/conf/diff_config.toml 600
-
-	run_sql_file $CUR/data/data_gbk.sql ${UP_TIDB_HOST} ${UP_TIDB_PORT}
-	check_table_exists test.binary_columns ${DOWN_TIDB_HOST} ${DOWN_TIDB_PORT} 600
-	check_sync_diff $WORK_DIR $CUR/conf/diff_config.toml 600
+	check_table_exists resourcecontrol.finish_mark ${DOWN_TIDB_HOST} ${DOWN_TIDB_PORT}
+	check_sync_diff $WORK_DIR $CUR/conf/diff_config.toml
 
 	cleanup_process $CDC_BINARY
 }

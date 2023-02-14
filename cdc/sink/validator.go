@@ -31,53 +31,27 @@ import (
 // TODO: For now, we create a real sink instance and validate it.
 // Maybe we should support the dry-run mode to validate sink.
 func Validate(ctx context.Context, sinkURI string, cfg *config.ReplicaConfig) error {
-	var err error
-	var uri *url.URL
-	if uri, err = preCheckSinkURI(sinkURI); err != nil {
+	uri, err := preCheckSinkURI(sinkURI)
+	if err != nil {
 		return err
 	}
 
 	if cfg.BDRMode {
-		err = checkBDRMode(ctx, uri, cfg)
+		err := checkBDRMode(ctx, uri, cfg)
 		if err != nil {
 			return err
 		}
 	}
 
-	errCh := make(chan error)
 	ctx, cancel := context.WithCancel(contextutil.PutRoleInCtx(ctx, util.RoleClient))
-	conf := config.GetGlobalServerConfig()
-	if !conf.Debug.EnableNewSink {
-		var s Sink
-		s, err = New(ctx, model.DefaultChangeFeedID("sink-verify"), sinkURI, cfg, errCh)
-		if err != nil {
-			cancel()
-			return err
-		}
-		// NOTICE: We have to cancel the context before we close it,
-		// otherwise we will write data to closed chan after sink closed.
-		cancel()
-		err = s.Close(ctx)
-	} else {
-		var s *factory.SinkFactory
-		s, err = factory.New(ctx, sinkURI, cfg, errCh)
-		if err != nil {
-			cancel()
-			return err
-		}
-		cancel()
-		err = s.Close()
-	}
+	s, err := factory.New(ctx, sinkURI, cfg, make(chan error))
 	if err != nil {
+		cancel()
 		return err
 	}
-	select {
-	case err = <-errCh:
-		if err != nil {
-			return err
-		}
-	default:
-	}
+	cancel()
+	s.Close()
+
 	return nil
 }
 

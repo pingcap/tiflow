@@ -30,6 +30,7 @@ import (
 	cerror "github.com/pingcap/tiflow/pkg/errors"
 	"github.com/pingcap/tiflow/pkg/sink"
 	"github.com/pingcap/tiflow/pkg/sink/kafka"
+	v2 "github.com/pingcap/tiflow/pkg/sink/kafka/v2"
 	"github.com/prometheus/client_golang/prometheus"
 )
 
@@ -66,8 +67,12 @@ func New(ctx context.Context,
 		s.txnSink = txnSink
 		s.sinkType = sink.TxnSink
 	case sink.KafkaScheme, sink.KafkaSSLScheme:
+		factoryCreator := kafka.NewSaramaFactory
+		if config.GetGlobalServerConfig().Debug.EnableKafkaSinkV2 {
+			factoryCreator = v2.NewFactory
+		}
 		mqs, err := mq.NewKafkaDMLSink(ctx, sinkURI, cfg, errCh,
-			kafka.NewSaramaAdminClient, kafka.NewSaramaClient, dmlproducer.NewKafkaDMLProducer)
+			factoryCreator, dmlproducer.NewKafkaDMLProducer)
 		if err != nil {
 			return nil, err
 		}
@@ -110,12 +115,12 @@ func (s *SinkFactory) CreateTableSink(
 }
 
 // Close closes the sink.
-func (s *SinkFactory) Close() error {
+func (s *SinkFactory) Close() {
 	switch s.sinkType {
 	case sink.RowSink:
-		return s.rowSink.Close()
+		s.rowSink.Close()
 	case sink.TxnSink:
-		return s.txnSink.Close()
+		s.txnSink.Close()
 	default:
 		panic("unknown sink type")
 	}

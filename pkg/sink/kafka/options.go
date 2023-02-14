@@ -14,6 +14,7 @@
 package kafka
 
 import (
+	"context"
 	"fmt"
 	"net/url"
 	"regexp"
@@ -28,6 +29,28 @@ import (
 	cerror "github.com/pingcap/tiflow/pkg/errors"
 	"github.com/pingcap/tiflow/pkg/security"
 	"go.uber.org/zap"
+)
+
+const (
+	// defaultPartitionNum specifies the default number of partitions when we create the topic.
+	defaultPartitionNum = 3
+)
+
+const (
+	// BrokerMessageMaxBytesConfigName specifies the largest record batch size allowed by
+	// Kafka brokers.
+	// See: https://kafka.apache.org/documentation/#brokerconfigs_message.max.bytes
+	BrokerMessageMaxBytesConfigName = "message.max.bytes"
+	// TopicMaxMessageBytesConfigName specifies the largest record batch size allowed by
+	// Kafka topics.
+	// See: https://kafka.apache.org/documentation/#topicconfigs_max.message.bytes
+	TopicMaxMessageBytesConfigName = "max.message.bytes"
+	// MinInsyncReplicasConfigName the minimum number of replicas that must acknowledge a write
+	// for the write to be considered successful.
+	// Only works if the producer's acks is "all" (or "-1").
+	// See: https://kafka.apache.org/documentation/#brokerconfigs_min.insync.replicas and
+	// https://kafka.apache.org/documentation/#topicconfigs_min.insync.replicas
+	MinInsyncReplicasConfigName = "min.insync.replicas"
 )
 
 const (
@@ -416,4 +439,186 @@ func NewKafkaClientID(role, captureAddr string,
 		return "", cerror.ErrKafkaInvalidClientID.GenWithStackByArgs(clientID)
 	}
 	return
+}
+
+// AdjustOptions adjust the `Options` and `sarama.Config` by condition.
+func AdjustOptions(
+	ctx context.Context,
+	admin ClusterAdminClient,
+	options *Options,
+	topic string,
+) error {
+	topics, err := admin.GetAllTopicsMeta(ctx)
+	if err != nil {
+		return errors.Trace(err)
+	}
+
+	// Only check replicationFactor >= minInsyncReplicas when producer's required acks is -1.
+	// If we don't check it, the producer probably can not send message to the topic.
+	// Because it will wait for the ack from all replicas. But we do not have enough replicas.
+	if options.RequiredAcks == WaitForAll {
+		err = validateMinInsyncReplicas(ctx, admin, topics, topic, int(options.ReplicationFactor))
+		if err != nil {
+			return errors.Trace(err)
+		}
+	}
+
+	info, exists := topics[topic]
+	// once we have found the topic, no matter `auto-create-topic`,
+	// make sure user input parameters are valid.
+	if exists {
+		// make sure that producer's `MaxMessageBytes` smaller than topic's `max.message.bytes`
+		topicMaxMessageBytesStr, err := getTopicConfig(
+			ctx, admin, info,
+			TopicMaxMessageBytesConfigName,
+			BrokerMessageMaxBytesConfigName,
+		)
+		if err != nil {
+			return errors.Trace(err)
+		}
+		topicMaxMessageBytes, err := strconv.Atoi(topicMaxMessageBytesStr)
+		if err != nil {
+			return errors.Trace(err)
+		}
+
+		if topicMaxMessageBytes < options.MaxMessageBytes {
+			log.Warn("topic's `max.message.bytes` less than the `max-message-bytes`,"+
+				"use topic's `max.message.bytes` to initialize the Kafka producer",
+				zap.Int("max.message.bytes", topicMaxMessageBytes),
+				zap.Int("max-message-bytes", options.MaxMessageBytes))
+			options.MaxMessageBytes = topicMaxMessageBytes
+		}
+
+		// no need to create the topic,
+		// but we would have to log user if they found enter wrong topic name later
+		if options.AutoCreate {
+			log.Warn("topic already exist, TiCDC will not create the topic",
+				zap.String("topic", topic), zap.Any("detail", info))
+		}
+
+		if err := options.SetPartitionNum(info.NumPartitions); err != nil {
+			return errors.Trace(err)
+		}
+
+		return nil
+	}
+
+	brokerMessageMaxBytesStr, err := admin.GetBrokerConfig(
+		ctx,
+		BrokerMessageMaxBytesConfigName,
+	)
+	if err != nil {
+		log.Warn("TiCDC cannot find `message.max.bytes` from broker's configuration")
+		return errors.Trace(err)
+	}
+	brokerMessageMaxBytes, err := strconv.Atoi(brokerMessageMaxBytesStr)
+	if err != nil {
+		return errors.Trace(err)
+	}
+
+	// when create the topic, `max.message.bytes` is decided by the broker,
+	// it would use broker's `message.max.bytes` to set topic's `max.message.bytes`.
+	// TiCDC need to make sure that the producer's `MaxMessageBytes` won't larger than
+	// broker's `message.max.bytes`.
+	if brokerMessageMaxBytes < options.MaxMessageBytes {
+		log.Warn("broker's `message.max.bytes` less than the `max-message-bytes`,"+
+			"use broker's `message.max.bytes` to initialize the Kafka producer",
+			zap.Int("message.max.bytes", brokerMessageMaxBytes),
+			zap.Int("max-message-bytes", options.MaxMessageBytes))
+		options.MaxMessageBytes = brokerMessageMaxBytes
+	}
+
+	// topic not exists yet, and user does not specify the `partition-num` in the sink uri.
+	if options.PartitionNum == 0 {
+		options.PartitionNum = defaultPartitionNum
+		log.Warn("partition-num is not set, use the default partition count",
+			zap.String("topic", topic), zap.Int32("partitions", options.PartitionNum))
+	}
+	return nil
+}
+
+func validateMinInsyncReplicas(
+	ctx context.Context,
+	admin ClusterAdminClient,
+	topics map[string]TopicDetail,
+	topic string,
+	replicationFactor int,
+) error {
+	minInsyncReplicasConfigGetter := func() (string, bool, error) {
+		info, exists := topics[topic]
+		if exists {
+			minInsyncReplicasStr, err := getTopicConfig(
+				ctx, admin, info,
+				MinInsyncReplicasConfigName,
+				MinInsyncReplicasConfigName)
+			if err != nil {
+				return "", true, err
+			}
+			return minInsyncReplicasStr, true, nil
+		}
+
+		minInsyncReplicasStr, err := admin.GetBrokerConfig(ctx,
+			MinInsyncReplicasConfigName)
+		if err != nil {
+			return "", false, err
+		}
+
+		return minInsyncReplicasStr, false, nil
+	}
+
+	minInsyncReplicasStr, exists, err := minInsyncReplicasConfigGetter()
+	if err != nil {
+		// 'min.insync.replica' is invisible to us in Confluent Cloud Kafka.
+		if cerror.ErrKafkaBrokerConfigNotFound.Equal(err) {
+			log.Warn("TiCDC cannot find `min.insync.replicas` from broker's configuration, " +
+				"please make sure that the replication factor is greater than or equal " +
+				"to the minimum number of in-sync replicas" +
+				"if you want to use `required-acks` = -1." +
+				"Otherwise, TiCDC will not be able to send messages to the topic.")
+			return nil
+		}
+		return err
+	}
+	minInsyncReplicas, err := strconv.Atoi(minInsyncReplicasStr)
+	if err != nil {
+		return err
+	}
+
+	configFrom := "topic"
+	if !exists {
+		configFrom = "broker"
+	}
+
+	if replicationFactor < minInsyncReplicas {
+		msg := fmt.Sprintf("`replication-factor` cannot be smaller than the `%s` of %s",
+			MinInsyncReplicasConfigName, configFrom)
+		log.Error(msg, zap.Int("replication-factor", replicationFactor),
+			zap.Int("min.insync.replicas", minInsyncReplicas))
+		return cerror.ErrKafkaInvalidConfig.GenWithStack(
+			"TiCDC Kafka producer's `request.required.acks` defaults to -1, "+
+				"TiCDC cannot deliver messages when the `replication-factor` %d "+
+				"is smaller than the `min.insync.replicas` %d of %s",
+			replicationFactor, minInsyncReplicas, configFrom,
+		)
+	}
+
+	return nil
+}
+
+// getTopicConfig gets topic config by name.
+// If the topic does not have this configuration,
+// we will try to get it from the broker's configuration.
+// NOTICE: The configuration names of topic and broker may be different for the same configuration.
+func getTopicConfig(
+	ctx context.Context,
+	admin ClusterAdminClient,
+	detail TopicDetail,
+	topicConfigName string,
+	brokerConfigName string,
+) (string, error) {
+	if a, ok := detail.ConfigEntries[topicConfigName]; ok {
+		return a, nil
+	}
+
+	return admin.GetBrokerConfig(ctx, brokerConfigName)
 }
