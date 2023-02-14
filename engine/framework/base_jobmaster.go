@@ -25,6 +25,7 @@ import (
 	frameModel "github.com/pingcap/tiflow/engine/framework/model"
 	dcontext "github.com/pingcap/tiflow/engine/pkg/context"
 	"github.com/pingcap/tiflow/engine/pkg/errctx"
+	resModel "github.com/pingcap/tiflow/engine/pkg/externalresource/model"
 	metaModel "github.com/pingcap/tiflow/engine/pkg/meta/model"
 	"github.com/pingcap/tiflow/engine/pkg/p2p"
 	"github.com/pingcap/tiflow/engine/pkg/promutil"
@@ -84,8 +85,9 @@ type BaseJobMaster interface {
 	// of this interface.
 	IsBaseJobMaster()
 
-	// IsBucketStorageEnabled returns whether the s3 storage is enabled
-	IsBucketStorageEnabled() bool
+	// GetEnabledBucketStorage returns whether the bucket storage is enabled and the correspondent reource type
+	// if the bucket exists
+	GetEnabledBucketStorage() (bool, resModel.ResourceType)
 }
 
 // BaseJobMasterExt extends BaseJobMaster with some extra methods.
@@ -336,9 +338,9 @@ func (d *DefaultBaseJobMaster) CurrentEpoch() frameModel.Epoch {
 func (d *DefaultBaseJobMaster) IsBaseJobMaster() {
 }
 
-// IsBucketStorageEnabled implements BaseJobMaster.IsBucketStorageEnabled
-func (d *DefaultBaseJobMaster) IsBucketStorageEnabled() bool {
-	return d.worker.IsBucketStorageEnabled()
+// GetEnabledBucketStorage implements BaseJobMaster.GetEnabledBucketStorage
+func (d *DefaultBaseJobMaster) GetEnabledBucketStorage() (bool, resModel.ResourceType) {
+	return d.worker.GetEnabledBucketStorage()
 }
 
 // SendMessage delegates the SendMessage or inner worker

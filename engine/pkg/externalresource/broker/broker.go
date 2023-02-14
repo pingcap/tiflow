@@ -451,11 +451,16 @@ func (b *DefaultBroker) Close() {
 	}
 }
 
-// TODO: check
-// IsS3StorageEnabled returns true if s3 storage is enabled.
-func (b *DefaultBroker) IsBucketStorageEnabled() bool {
-	_, ok := b.fileManagers[resModel.ResourceTypeS3]
-	return ok
+// GetEnabledBucketStorage returns true and the correspondent resource type if bucket storage is enabled.
+func (b *DefaultBroker) GetEnabledBucketStorage() (bool, resModel.ResourceType) {
+	if _, ok := b.fileManagers[resModel.ResourceTypeS3]; ok {
+		return true, resModel.ResourceTypeS3
+	}
+	if _, ok := b.fileManagers[resModel.ResourceTypeGCS]; ok {
+		return true, resModel.ResourceTypeGCS
+	}
+
+	return false, resModel.ResourceTypeNone
 }
 
 // PreCheckConfig checks the configuration of external storage.

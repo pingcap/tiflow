@@ -545,8 +545,8 @@ func (m *MockBaseJobmaster) Exit(ctx context.Context, exitReason framework.ExitR
 	return args.Error(0)
 }
 
-func (m *MockBaseJobmaster) IsS3StorageEnabled() bool {
-	return false
+func (m *MockBaseJobmaster) GetEnabledBucketStorage() (bool, resModel.ResourceType) {
+	return false, resModel.ResourceTypeNone
 }
 
 func (m *MockBaseJobmaster) MetricFactory() promutil.Factory {

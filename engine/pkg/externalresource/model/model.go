@@ -139,6 +139,7 @@ const (
 	ResourceTypeLocalFile = ResourceType("local")
 	ResourceTypeS3        = ResourceType("s3")
 	ResourceTypeGCS       = ResourceType("gs")
+	ResourceTypeNone      = ResourceType("none")
 )
 
 // BuildPrefix returns the prefix of the resource type.
