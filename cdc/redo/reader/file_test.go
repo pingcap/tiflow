@@ -58,9 +58,8 @@ func TestReaderRead(t *testing.T) {
 		writer.WithUUIDGenerator(func() uuid.Generator { return uuidGen }),
 	)
 	require.Nil(t, err)
-	log := &model.RedoLog{
-		RedoRow: &model.RowChangedEvent{CommitTs: 1123},
-	}
+	log := &model.RedoLog{}
+	log.RedoRow.Row = &model.RowChangedEvent{CommitTs: 1123}
 	data, err := codec.MarshalRedoLog(log, nil)
 	require.Nil(t, err)
 	w.AdvanceTs(11)
@@ -88,7 +87,7 @@ func TestReaderRead(t *testing.T) {
 	defer r[0].Close() //nolint:errcheck
 	log, err = r[0].Read()
 	require.Nil(t, err)
-	require.EqualValues(t, 1123, log.RedoRow.CommitTs)
+	require.EqualValues(t, 1123, log.RedoRow.Row.CommitTs)
 	time.Sleep(1001 * time.Millisecond)
 }
 
@@ -109,16 +108,14 @@ func TestReaderOpenSelectedFiles(t *testing.T) {
 		return fileName
 	}))
 	require.Nil(t, err)
-	log := &model.RedoLog{
-		RedoRow: &model.RowChangedEvent{CommitTs: 11},
-	}
+	log := &model.RedoLog{}
+	log.RedoRow.Row = &model.RowChangedEvent{CommitTs: 11}
 	data, err := codec.MarshalRedoLog(log, nil)
 	require.Nil(t, err)
 	_, err = w.Write(data)
 	require.Nil(t, err)
-	log = &model.RedoLog{
-		RedoRow: &model.RowChangedEvent{CommitTs: 10},
-	}
+	log = &model.RedoLog{}
+	log.RedoRow.Row = &model.RowChangedEvent{CommitTs: 10}
 	data, err = codec.MarshalRedoLog(log, nil)
 	require.Nil(t, err)
 	_, err = w.Write(data)
@@ -239,8 +236,8 @@ func TestReaderOpenSelectedFiles(t *testing.T) {
 					if err == io.EOF {
 						break
 					}
-					require.Greater(t, rl.RedoRow.CommitTs, preTs, tt.name)
-					preTs = rl.RedoRow.CommitTs
+					require.Greater(t, rl.RedoRow.Row.CommitTs, preTs, tt.name)
+					preTs = rl.RedoRow.Row.CommitTs
 				}
 			}
 		} else {

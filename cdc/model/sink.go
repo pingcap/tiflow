@@ -232,10 +232,20 @@ const (
 )
 
 // RedoLog defines the persistent structure of redo log
+// since MsgPack do not support types that are defined in another package,
+// more info https://github.com/tinylib/msgp/issues/158, https://github.com/tinylib/msgp/issues/149
+// so define a RedoColumn, RedoDDLEvent instead of using the Column, DDLEvent
 type RedoLog struct {
-	RedoRow *RowChangedEvent `msg:"row"`
-	RedoDDL *DDLEvent        `msg:"ddl"`
-	Type    RedoLogType      `msg:"type"`
+	RedoRow RedoRowChangedEvent `msg:"row"`
+	RedoDDL RedoDDLEvent        `msg:"ddl"`
+	Type    RedoLogType         `msg:"type"`
+}
+
+// RedoRowChangedEvent represents the DML event used in RedoLog
+type RedoRowChangedEvent struct {
+	Row        *RowChangedEvent `msg:"row"`
+	Columns    []RedoColumn     `msg:"columns"`
+	PreColumns []RedoColumn     `msg:"pre-columns"`
 }
 
 // RowChangedEvent represents a row changed event
@@ -249,8 +259,8 @@ type RowChangedEvent struct {
 	ColInfos  []rowcodec.ColInfo `json:"column-infos" msg:"-"`
 	TableInfo *TableInfo         `json:"-" msg:"-"`
 
-	Columns      []*Column `json:"columns" msg:"-"`
-	PreColumns   []*Column `json:"pre-columns" msg:"-"`
+	Columns      []*Column `json:"columns" msg:"columns"`
+	PreColumns   []*Column `json:"pre-columns" msg:"pre-columns"`
 	IndexColumns [][]int   `json:"-" msg:"index-columns"`
 
 	// ApproximateDataSize is the approximate size of protobuf binary
@@ -419,11 +429,20 @@ type Column struct {
 	Type    byte           `json:"type" msg:"type"`
 	Charset string         `json:"charset" msg:"charset"`
 	Flag    ColumnFlagType `json:"flag" msg:"-"`
-	Value   interface{}    `json:"value" msg:"value"`
+	Value   interface{}    `json:"value" msg:"-"`
 	Default interface{}    `json:"default" msg:"-"`
 
 	// ApproximateBytes is approximate bytes consumed by the column.
 	ApproximateBytes int `json:"-"`
+}
+
+// RedoColumn stores Column change
+type RedoColumn struct {
+	// Fields from Column and can't be marshaled directly in Column.
+	Value interface{} `msg:"column"`
+	// msgp transfroms empty byte slice into nil, PTAL msgp#247.
+	ValueIsEmptyByteSlice bool   `msg: "value-is-empty-byte-slice"`
+	Flag                  uint64 `msg:"flag"`
 }
 
 // BuildTiDBTableInfo builds a TiDB TableInfo from given information.
@@ -577,6 +596,12 @@ type DDLEvent struct {
 	PreTableInfo *TableInfo       `msg:"-"`
 	Type         model.ActionType `msg:"-"`
 	Done         bool             `msg:"-"`
+}
+
+// RedoDDLEvent represents DDL event used in redo log persistent
+type RedoDDLEvent struct {
+	DDL  *DDLEvent `msg:"ddl"`
+	Type byte      `msg:"type"`
 }
 
 // FromJob fills the values with DDLEvent from DDL job

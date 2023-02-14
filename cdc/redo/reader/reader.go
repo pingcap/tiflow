@@ -254,11 +254,11 @@ func (l *LogReader) ReadNextLog(ctx context.Context, maxNumberOfEvents uint64) (
 	var i uint64
 	for l.rowHeap.Len() != 0 && i < maxNumberOfEvents {
 		item := heap.Pop(&l.rowHeap).(*logWithIdx)
-		if item.data.RedoRow != nil &&
+		if item.data.RedoRow.Row != nil &&
 			// by design only data (startTs,endTs] is needed, so filter out data may beyond the boundary
-			item.data.RedoRow.CommitTs > l.cfg.startTs &&
-			item.data.RedoRow.CommitTs <= l.cfg.endTs {
-			ret = append(ret, item.data.RedoRow)
+			item.data.RedoRow.Row.CommitTs > l.cfg.startTs &&
+			item.data.RedoRow.Row.CommitTs <= l.cfg.endTs {
+			ret = append(ret, item.data.RedoRow.Row)
 			i++
 		}
 
@@ -315,11 +315,11 @@ func (l *LogReader) ReadNextDDL(ctx context.Context, maxNumberOfEvents uint64) (
 	var i uint64
 	for l.ddlHeap.Len() != 0 && i < maxNumberOfEvents {
 		item := heap.Pop(&l.ddlHeap).(*logWithIdx)
-		if item.data.RedoDDL != nil &&
+		if item.data.RedoDDL.DDL != nil &&
 			// by design only data (startTs,endTs] is needed, so filter out data may beyond the boundary
-			item.data.RedoDDL.CommitTs > l.cfg.startTs &&
-			item.data.RedoDDL.CommitTs <= l.cfg.endTs {
-			ret = append(ret, item.data.RedoDDL)
+			item.data.RedoDDL.DDL.CommitTs > l.cfg.startTs &&
+			item.data.RedoDDL.DDL.CommitTs <= l.cfg.endTs {
+			ret = append(ret, item.data.RedoDDL.DDL)
 			i++
 		}
 
@@ -441,27 +441,27 @@ func (h logHeap) Len() int {
 
 func (h logHeap) Less(i, j int) bool {
 	if h[i].data.Type == model.RedoLogTypeDDL {
-		if h[i].data.RedoDDL == nil {
+		if h[i].data.RedoDDL.DDL == nil {
 			return true
 		}
-		if h[j].data.RedoDDL == nil {
+		if h[j].data.RedoDDL.DDL == nil {
 			return false
 		}
-		return h[i].data.RedoDDL.CommitTs < h[j].data.RedoDDL.CommitTs
+		return h[i].data.RedoDDL.DDL.CommitTs < h[j].data.RedoDDL.DDL.CommitTs
 	}
 
-	if h[i].data.RedoRow == nil {
+	if h[i].data.RedoRow.Row == nil {
 		return true
 	}
-	if h[j].data.RedoRow == nil {
+	if h[j].data.RedoRow.Row == nil {
 		return false
 	}
 
-	if h[i].data.RedoRow.CommitTs == h[j].data.RedoRow.CommitTs &&
-		h[i].data.RedoRow.StartTs < h[j].data.RedoRow.StartTs {
+	if h[i].data.RedoRow.Row.CommitTs == h[j].data.RedoRow.Row.CommitTs &&
+		h[i].data.RedoRow.Row.StartTs < h[j].data.RedoRow.Row.StartTs {
 		return true
 	}
-	return h[i].data.RedoRow.CommitTs < h[j].data.RedoRow.CommitTs
+	return h[i].data.RedoRow.Row.CommitTs < h[j].data.RedoRow.Row.CommitTs
 }
 
 func (h logHeap) Swap(i, j int) {
