@@ -17,6 +17,7 @@ import (
 	"path/filepath"
 
 	brStorage "github.com/pingcap/tidb/br/pkg/storage"
+	"github.com/pingcap/tiflow/pkg/errors"
 )
 
 const defaultLocalStorageDirPrefix = "/tmp/dfe-storage"
@@ -45,23 +46,50 @@ type Config struct {
 }
 
 // LocalEnabled returns true if the local storage is enabled
-func (c *Config) LocalEnabled() bool {
+func (c Config) LocalEnabled() bool {
 	return c.Local.BaseDir != ""
 }
 
 // S3Enabled returns true if the S3 storage is enabled
-func (c *Config) S3Enabled() bool {
+func (c Config) S3Enabled() bool {
 	return c.S3.Bucket != ""
 }
 
 // GCSEnabled returns true if the GCS storage is enabled
-func (c *Config) GCSEnabled() bool {
+func (c Config) GCSEnabled() bool {
 	return c.GCS.Bucket != ""
 }
 
-// ValidateAndAdjust validates and adjusts the configuration
-func (c *Config) ValidateAndAdjust(executorID ExecutorID) {
-	c.Local.validateAndAdjust(executorID)
+// Adjust adjusts the configuration
+func (c *Config) Adjust(executorID ExecutorID) {
+	c.Local.Adjust(executorID)
+}
+
+// Validate implements the validation.Validatable interface
+func (c Config) Validate() error {
+	if c.S3Enabled() && c.GCSEnabled() {
+		return errors.ErrInvalidArgument.GenWithStackByArgs("both s3 and gcs are enabled")
+	}
+
+	return nil
+}
+
+// ToBrBackendOptions return BackendOptions for brStorage
+// Make sure the Config is a valid config
+func (c Config) ToBrBackendOptions() (opts *brStorage.BackendOptions, bucket, prefix string) {
+	if c.S3Enabled() {
+		return &brStorage.BackendOptions{
+			S3: c.S3.S3BackendOptions,
+		}, c.S3.Bucket, c.S3.Prefix
+	}
+
+	if c.GCSEnabled() {
+		return &brStorage.BackendOptions{
+			GCS: c.GCS.GCSBackendOptions,
+		}, c.GCS.Bucket, c.GCS.Prefix
+	}
+
+	return &brStorage.BackendOptions{}, "", ""
 }
 
 // LocalFileConfig defines configurations for a local file based resource
@@ -69,7 +97,7 @@ type LocalFileConfig struct {
 	BaseDir string `json:"base-dir" toml:"base-dir"`
 }
 
-func (c *LocalFileConfig) validateAndAdjust(executorID ExecutorID) {
+func (c *LocalFileConfig) Adjust(executorID ExecutorID) {
 	if c.BaseDir == "" {
 		c.BaseDir = defaultLocalStorageDirPrefix
 	}

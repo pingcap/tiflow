@@ -70,12 +70,8 @@ type FileManager struct {
 func NewFileManagerWithConfig(
 	executorID resModel.ExecutorID, config *resModel.Config,
 ) *FileManager {
-	opts := &brStorage.BackendOptions{
-		S3:  config.S3.S3BackendOptions,
-		GCS: config.GCS.GCSBackendOptions,
-	}
-	// TODO:
-	creator := NewBucketCreator(config.S3.Bucket, config.S3.Prefix, opts)
+	opts, bucket, prefix := config.ToBrBackendOptions()
+	creator := NewBucketCreator(bucket, prefix, opts)
 	return NewFileManager(executorID, creator)
 }
 
@@ -343,11 +339,8 @@ func createPlaceholderFile(ctx context.Context, storage brStorage.ExternalStorag
 func PreCheckConfig(config *resModel.Config) error {
 	// TODO: use customized retry policy.
 	log.Debug("pre-checking s3Storage config", zap.Any("config", config))
-	opts := &brStorage.BackendOptions{
-		S3:  config.S3.S3BackendOptions,
-		GCS: config.GCS.GCSBackendOptions,
-	}
-	creator := NewBucketCreator(config.S3.Bucket, config.S3.Prefix, opts)
+	opts, bucket, prefix := config.ToBrBackendOptions()
+	creator := NewBucketCreator(bucket, prefix, opts)
 	_, err := creator.newBucketForScope(context.Background(), internal.ResourceScope{})
 	if err != nil {
 		return err

@@ -20,7 +20,7 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
-func TestValidateAndAdjust(t *testing.T) {
+func TestAdjust(t *testing.T) {
 	dirs := []string{"", "/tmp/dfe-storage", "/var/engine/", "/a/b", "/a/b/c"}
 	for _, dir := range dirs {
 		cfg := Config{
@@ -32,7 +32,7 @@ func TestValidateAndAdjust(t *testing.T) {
 			dir = defaultLocalStorageDirPrefix
 		}
 		oldCfg := cfg
-		cfg.ValidateAndAdjust("test-executor")
+		cfg.Adjust("test-executor")
 		require.Equal(t, oldCfg.S3, cfg.S3, "inputBaseDir: %s", dir)
 		require.NotEqual(t, oldCfg.Local, cfg.Local, "inputBaseDir: %s", dir)
 

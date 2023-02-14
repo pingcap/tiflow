@@ -136,6 +136,10 @@ func (c *Config) AdjustAndValidate() (err error) {
 		return err
 	}
 
+	if err := validation.ValidateStruct(c, validation.Field(&c.Storage)); err != nil {
+		return err
+	}
+
 	return validation.ValidateStruct(c,
 		validation.Field(&c.FrameworkMeta),
 		validation.Field(&c.BusinessMeta),

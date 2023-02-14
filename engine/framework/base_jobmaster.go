@@ -84,8 +84,8 @@ type BaseJobMaster interface {
 	// of this interface.
 	IsBaseJobMaster()
 
-	// IsS3StorageEnabled returns whether the s3 storage is enabled
-	IsS3StorageEnabled() bool
+	// IsBucketStorageEnabled returns whether the s3 storage is enabled
+	IsBucketStorageEnabled() bool
 }
 
 // BaseJobMasterExt extends BaseJobMaster with some extra methods.
@@ -336,9 +336,9 @@ func (d *DefaultBaseJobMaster) CurrentEpoch() frameModel.Epoch {
 func (d *DefaultBaseJobMaster) IsBaseJobMaster() {
 }
 
-// IsS3StorageEnabled implements BaseJobMaster.IsS3StorageEnabled
-func (d *DefaultBaseJobMaster) IsS3StorageEnabled() bool {
-	return d.worker.IsS3StorageEnabled()
+// IsBucketStorageEnabled implements BaseJobMaster.IsBucketStorageEnabled
+func (d *DefaultBaseJobMaster) IsBucketStorageEnabled() bool {
+	return d.worker.IsBucketStorageEnabled()
 }
 
 // SendMessage delegates the SendMessage or inner worker

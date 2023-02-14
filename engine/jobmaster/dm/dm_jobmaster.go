@@ -117,7 +117,7 @@ func (jm *JobMaster) initComponents() error {
 	jm.checkpointAgent = checkpoint.NewCheckpointAgent(jm.ID(), jm.Logger())
 	jm.taskManager = NewTaskManager(jm.ID(), taskStatus, jm.metadata.JobStore(), jm.messageAgent, jm.Logger(), jm.MetricFactory())
 	jm.workerManager = NewWorkerManager(jm.ID(), workerStatus, jm.metadata.JobStore(), jm.metadata.UnitStateStore(),
-		jm, jm.messageAgent, jm.checkpointAgent, jm.Logger(), jm.IsS3StorageEnabled())
+		jm, jm.messageAgent, jm.checkpointAgent, jm.Logger(), jm.IsBucketStorageEnabled())
 	jm.ddlCoordinator = NewDDLCoordinator(jm.ID(), jm.MetaKVClient(), jm.checkpointAgent, jm.metadata.JobStore(), jm.Logger())
 	return errors.Trace(err)
 }

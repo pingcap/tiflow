@@ -83,8 +83,8 @@ func NewBroker(
 		return nil, errors.Trace(err)
 	}
 
-	// validate and check config
-	storageConfig.ValidateAndAdjust(executorID)
+	// adjust and check config
+	storageConfig.Adjust(executorID)
 	if err := PreCheckConfig(&storageConfig); err != nil {
 		return nil, err
 	}
@@ -229,7 +229,7 @@ func (b *DefaultBroker) createResource(
 		ResourceScope: internal.ResourceScope{
 			ProjectInfo: projectInfo,
 			Executor:    b.executorID, /* executor id where resource is created */
-			WorkerID:    workerID,     /* creator id*/
+			WorkerID:    workerID,     /* creator id */
 		},
 	}
 	desc, err := fm.CreateResource(ctx, ident)
@@ -394,6 +394,7 @@ func (b *DefaultBroker) cleanOrRecreatePersistResource(
 	return desc, nil
 }
 
+// TODO(check)
 func (b *DefaultBroker) createDummyResource() error {
 	s3FileManager, ok := b.fileManagers[resModel.ResourceTypeS3]
 	if !ok {
@@ -426,6 +427,7 @@ func (b *DefaultBroker) createDummyResource() error {
 func (b *DefaultBroker) Close() {
 	b.cancel()
 
+	// TODO: check
 	// Try to clean up temporary files created by current executor
 	if fm, ok := b.fileManagers[resModel.ResourceTypeS3]; ok {
 		ctx, cancel := context.WithTimeout(context.Background(), defaultTimeout)
@@ -449,8 +451,9 @@ func (b *DefaultBroker) Close() {
 	}
 }
 
+// TODO: check
 // IsS3StorageEnabled returns true if s3 storage is enabled.
-func (b *DefaultBroker) IsS3StorageEnabled() bool {
+func (b *DefaultBroker) IsBucketStorageEnabled() bool {
 	_, ok := b.fileManagers[resModel.ResourceTypeS3]
 	return ok
 }

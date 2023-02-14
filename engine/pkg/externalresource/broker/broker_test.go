@@ -176,10 +176,10 @@ func TestBrokerOpenExistingStorageWithOption(t *testing.T) {
 	t.Parallel()
 	brk, cli, _ := newBroker(t)
 	defer brk.Close()
-	require.False(t, brk.IsS3StorageEnabled())
+	require.False(t, brk.IsBucketStorageEnabled())
 	mockS3FileManager, storageFactory := bucket.NewFileManagerForUT(t.TempDir(), brk.executorID)
 	brk.fileManagers[resModel.ResourceTypeS3] = mockS3FileManager
-	require.True(t, brk.IsS3StorageEnabled())
+	require.True(t, brk.IsBucketStorageEnabled())
 
 	fakeProjectInfo := tenant.NewProjectInfo("fakeTenant", "fakeProject")
 	creatorExecutor := "executor-1"
@@ -220,10 +220,10 @@ func TestBrokerOpenExistingStorageWithOption(t *testing.T) {
 	}, "executor-2", cli)
 	require.NoError(t, err)
 	defer brk2.Close()
-	require.False(t, brk2.IsS3StorageEnabled())
+	require.False(t, brk2.IsBucketStorageEnabled())
 	mockS3FileManager2 := bucket.NewFileManagerForUTFromSharedStorageFactory(brk2.executorID, storageFactory)
 	brk2.fileManagers[resModel.ResourceTypeS3] = mockS3FileManager2
-	require.True(t, brk2.IsS3StorageEnabled())
+	require.True(t, brk2.IsBucketStorageEnabled())
 	require.Panics(t, func() {
 		openStorageWithClean("/local/test-option", brk2, "worker-2")
 	})
