@@ -199,7 +199,6 @@ func (ra *RedoApplier) consumeLogs(ctx context.Context) error {
 			default:
 				time.Sleep(flushWaitDuration)
 			}
-
 		}
 		ra.tableSinks[tableID].Close(ctx)
 	}
