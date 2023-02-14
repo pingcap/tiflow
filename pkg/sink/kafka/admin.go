@@ -286,4 +286,3 @@ func (a *saramaAdminClient) Close() error {
 	defer a.mu.Unlock()
 	return a.admin.Close()
 }
-g
