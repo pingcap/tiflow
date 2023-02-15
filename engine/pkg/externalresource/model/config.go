@@ -76,20 +76,20 @@ func (c Config) Validate() error {
 
 // ToBrBackendOptions return BackendOptions for brStorage
 // Make sure the Config is a valid config
-func (c Config) ToBrBackendOptions() (opts *brStorage.BackendOptions, bucket, prefix string) {
+func (c Config) ToBrBackendOptions() (opts *brStorage.BackendOptions, bucket, prefix string, tp ResourceType) {
 	if c.S3Enabled() {
 		return &brStorage.BackendOptions{
 			S3: c.S3.S3BackendOptions,
-		}, c.S3.Bucket, c.S3.Prefix
+		}, c.S3.Bucket, c.S3.Prefix, ResourceTypeS3
 	}
 
 	if c.GCSEnabled() {
 		return &brStorage.BackendOptions{
 			GCS: c.GCS.GCSBackendOptions,
-		}, c.GCS.Bucket, c.GCS.Prefix
+		}, c.GCS.Bucket, c.GCS.Prefix, ResourceTypeGCS
 	}
 
-	return &brStorage.BackendOptions{}, "", ""
+	return &brStorage.BackendOptions{}, "", "", ResourceTypeNone
 }
 
 // LocalFileConfig defines configurations for a local file based resource

@@ -55,8 +55,8 @@ type CreatorImpl struct {
 func NewCreator(
 	config *model.Config,
 ) *CreatorImpl {
-	options, bucket, prefix := config.ToBrBackendOptions()
-	return &CreatorImpl{Prefix: prefix, Bucket: bucket, Options: options}
+	options, bucket, prefix, tp := config.ToBrBackendOptions()
+	return &CreatorImpl{Prefix: prefix, Bucket: bucket, Options: options, ResourceType: tp}
 }
 
 func (f *CreatorImpl) newBucketForScope(
