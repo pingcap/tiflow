@@ -25,6 +25,7 @@ import (
 	"github.com/pingcap/tidb/br/pkg/storage"
 	"github.com/pingcap/tiflow/cdc/contextutil"
 	"github.com/pingcap/tiflow/cdc/model"
+	"github.com/pingcap/tiflow/cdc/model/codec"
 	"github.com/pingcap/tiflow/cdc/redo/common"
 	"github.com/pingcap/tiflow/pkg/config"
 	"github.com/pingcap/tiflow/pkg/errors"
@@ -38,11 +39,11 @@ import (
 
 // RedoLogWriter defines the interfaces used to write redo log, all operations are thread-safe.
 type RedoLogWriter interface {
-	// WriteLog writer RedoRowChangedEvent to row log file.
-	WriteLog(ctx context.Context, rows []*model.RedoRowChangedEvent) error
+	// WriteLog writer RowChangedEvent to row log file.
+	WriteLog(ctx context.Context, rows []*model.RowChangedEvent) error
 
-	// SendDDL writer RedoDDLEvent to ddl log file.
-	SendDDL(ctx context.Context, ddl *model.RedoDDLEvent) error
+	// SendDDL writer DDLEvent to ddl log file.
+	SendDDL(ctx context.Context, ddl *model.DDLEvent) error
 
 	// FlushLog flushes all rows written by `WriteLog` into redo storage.
 	// `checkpointTs` and `resolvedTs` will be written into redo meta file.
@@ -282,7 +283,7 @@ func (l *logWriter) GC(ctx context.Context, ts model.Ts) error {
 }
 
 // WriteLog implement WriteLog api
-func (l *logWriter) WriteLog(ctx context.Context, rows []*model.RedoRowChangedEvent) error {
+func (l *logWriter) WriteLog(ctx context.Context, rows []*model.RowChangedEvent) error {
 	select {
 	case <-ctx.Done():
 		return errors.Trace(ctx.Err())
@@ -297,17 +298,15 @@ func (l *logWriter) WriteLog(ctx context.Context, rows []*model.RedoRowChangedEv
 	}
 
 	for _, r := range rows {
-		if r == nil || r.Row == nil {
+		if r == nil {
 			continue
 		}
-
-		rl := &model.RedoLog{RedoRow: r, Type: model.RedoLogTypeRow}
-		data, err := rl.MarshalMsg(nil)
+		data, err := codec.MarshalRowAsRedoLog(r, nil)
 		if err != nil {
 			return errors.WrapError(errors.ErrMarshalFailed, err)
 		}
 
-		l.rowWriter.AdvanceTs(r.Row.CommitTs)
+		l.rowWriter.AdvanceTs(r.CommitTs)
 		_, err = l.rowWriter.Write(data)
 		if err != nil {
 			return err
@@ -317,7 +316,7 @@ func (l *logWriter) WriteLog(ctx context.Context, rows []*model.RedoRowChangedEv
 }
 
 // SendDDL implement SendDDL api
-func (l *logWriter) SendDDL(ctx context.Context, ddl *model.RedoDDLEvent) error {
+func (l *logWriter) SendDDL(ctx context.Context, ddl *model.DDLEvent) error {
 	select {
 	case <-ctx.Done():
 		return errors.Trace(ctx.Err())
@@ -327,17 +326,16 @@ func (l *logWriter) SendDDL(ctx context.Context, ddl *model.RedoDDLEvent) error 
 	if l.isStopped() {
 		return errors.ErrRedoWriterStopped.GenWithStackByArgs()
 	}
-	if ddl == nil || ddl.DDL == nil {
+	if ddl == nil {
 		return nil
 	}
 
-	rl := &model.RedoLog{RedoDDL: ddl, Type: model.RedoLogTypeDDL}
-	data, err := rl.MarshalMsg(nil)
+	data, err := codec.MarshalDDLAsRedoLog(ddl, nil)
 	if err != nil {
 		return errors.WrapError(errors.ErrMarshalFailed, err)
 	}
 
-	l.ddlWriter.AdvanceTs(ddl.DDL.CommitTs)
+	l.ddlWriter.AdvanceTs(ddl.CommitTs)
 	_, err = l.ddlWriter.Write(data)
 	return err
 }
