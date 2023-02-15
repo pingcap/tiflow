@@ -26,9 +26,7 @@ func TestPartitions(t *testing.T) {
 	t.Parallel()
 
 	adminClient := kafka.NewClusterAdminClientMockImpl()
-	defer func(adminClient *kafka.ClusterAdminClientMockImpl) {
-		_ = adminClient.Close()
-	}(adminClient)
+	defer adminClient.Close()
 	cfg := &kafka.AutoCreateTopicConfig{
 		AutoCreate:        true,
 		PartitionNum:      2,
@@ -49,9 +47,7 @@ func TestTryRefreshMeta(t *testing.T) {
 	t.Parallel()
 
 	adminClient := kafka.NewClusterAdminClientMockImpl()
-	defer func(adminClient *kafka.ClusterAdminClientMockImpl) {
-		_ = adminClient.Close()
-	}(adminClient)
+	defer adminClient.Close()
 	cfg := &kafka.AutoCreateTopicConfig{
 		AutoCreate:        true,
 		PartitionNum:      2,
@@ -90,10 +86,7 @@ func TestCreateTopic(t *testing.T) {
 	t.Parallel()
 
 	adminClient := kafka.NewClusterAdminClientMockImpl()
-	defer func(adminClient *kafka.ClusterAdminClientMockImpl) {
-		_ = adminClient.Close()
-	}(adminClient)
-
+	defer adminClient.Close()
 	cfg := &kafka.AutoCreateTopicConfig{
 		AutoCreate:        true,
 		PartitionNum:      2,
@@ -146,9 +139,7 @@ func TestCreateTopicWithDelay(t *testing.T) {
 	t.Parallel()
 
 	adminClient := kafka.NewClusterAdminClientMockImpl()
-	defer func(adminClient *kafka.ClusterAdminClientMockImpl) {
-		_ = adminClient.Close()
-	}(adminClient)
+	defer adminClient.Close()
 	cfg := &kafka.AutoCreateTopicConfig{
 		AutoCreate:        true,
 		PartitionNum:      2,
