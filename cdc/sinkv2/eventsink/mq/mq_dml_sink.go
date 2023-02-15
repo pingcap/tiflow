@@ -149,11 +149,6 @@ func (s *dmlSink) Close() {
 		s.worker.close()
 	}
 	if s.adminClient != nil {
-		if err := s.adminClient.Close(); err != nil {
-			log.Warn("Kafka DML sink close admin client error",
-				zap.String("namespace", s.id.Namespace),
-				zap.String("changefeed", s.id.ID),
-				zap.Error(err))
-		}
+		s.adminClient.Close()
 	}
 }

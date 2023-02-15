@@ -18,6 +18,7 @@ import (
 	"strconv"
 
 	"github.com/pingcap/log"
+	"github.com/pingcap/tiflow/cdc/model"
 	"github.com/pingcap/tiflow/pkg/errors"
 	pkafka "github.com/pingcap/tiflow/pkg/sink/kafka"
 	"github.com/segmentio/kafka-go"
@@ -25,15 +26,19 @@ import (
 )
 
 type admin struct {
-	client Client
+	client       Client
+	changefeedID model.ChangeFeedID
 }
 
-func newClusterAdminClient(endpoints []string) pkafka.ClusterAdminClient {
-	client := &kafka.Client{
-		Addr: kafka.TCP(endpoints...),
-	}
+func newClusterAdminClient(
+	endpoints []string,
+	transport *kafka.Transport,
+	changefeedID model.ChangeFeedID,
+) pkafka.ClusterAdminClient {
+	client := newClient(endpoints, transport)
 	return &admin{
-		client: client,
+		client:       client,
+		changefeedID: changefeedID,
 	}
 }
 
@@ -236,7 +241,23 @@ func (a *admin) CreateTopic(
 	return nil
 }
 
-func (a *admin) Close() error {
-	// todo: close the underline client after support transport configuration.
-	return nil
+func (a *admin) Close() {
+	client, ok := a.client.(*kafka.Client)
+	if !ok {
+		return
+	}
+
+	if client.Transport == nil {
+		return
+	}
+
+	transport, ok := client.Transport.(*kafka.Transport)
+	if !ok {
+		return
+	}
+
+	transport.CloseIdleConnections()
+	log.Info("admin client close idle connections",
+		zap.String("namespace", a.changefeedID.Namespace),
+		zap.String("changefeed", a.changefeedID.ID))
 }
