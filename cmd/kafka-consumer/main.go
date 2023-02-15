@@ -428,7 +428,7 @@ func NewConsumer(ctx context.Context) (*Consumer, error) {
 	}
 	f, err := eventsinkfactory.New(
 		ctx,
-		downstreamURIStr+"",
+		downstreamURIStr,
 		config.GetDefaultReplicaConfig(),
 		errChan,
 	)
