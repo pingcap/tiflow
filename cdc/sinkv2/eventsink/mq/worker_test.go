@@ -70,11 +70,11 @@ func TestNonBatchEncode_SendMessages(t *testing.T) {
 		Topic:     "test",
 		Partition: 1,
 	}
-	row := &model.RowChangedEvent{
+	row := (&model.BoundedRowChangedEvent{
 		CommitTs: 1,
 		Table:    &model.TableName{Schema: "a", Table: "b"},
-		Columns:  []*model.Column{{Name: "col1", Type: 1, Value: "aa"}},
-	}
+		Columns:  []*model.BoundedColumn{{Name: "col1", Type: 1, Value: "aa"}},
+	}).Unbound()
 	tableStatus := state.TableSinkSinking
 
 	count := 512
@@ -128,11 +128,11 @@ func TestBatchEncode_Batch(t *testing.T) {
 		Partition: 1,
 	}
 	tableStatus := state.TableSinkSinking
-	row := &model.RowChangedEvent{
+	row := (&model.BoundedRowChangedEvent{
 		CommitTs: 1,
 		Table:    &model.TableName{Schema: "a", Table: "b"},
-		Columns:  []*model.Column{{Name: "col1", Type: 1, Value: "aa"}},
-	}
+		Columns:  []*model.BoundedColumn{{Name: "col1", Type: 1, Value: "aa"}},
+	}).Unbound()
 
 	for i := 0; i < 512; i++ {
 		worker.msgChan.In() <- mqEvent{
@@ -177,11 +177,11 @@ func TestBatchEncode_Group(t *testing.T) {
 	events := []mqEvent{
 		{
 			rowEvent: &eventsink.RowChangeCallbackableEvent{
-				Event: &model.RowChangedEvent{
+				Event: (&model.BoundedRowChangedEvent{
 					CommitTs: 1,
 					Table:    &model.TableName{Schema: "a", Table: "b"},
-					Columns:  []*model.Column{{Name: "col1", Type: 1, Value: "aa"}},
-				},
+					Columns:  []*model.BoundedColumn{{Name: "col1", Type: 1, Value: "aa"}},
+				}).Unbound(),
 				Callback:  func() {},
 				SinkState: &tableStatus,
 			},
@@ -189,11 +189,11 @@ func TestBatchEncode_Group(t *testing.T) {
 		},
 		{
 			rowEvent: &eventsink.RowChangeCallbackableEvent{
-				Event: &model.RowChangedEvent{
+				Event: (&model.BoundedRowChangedEvent{
 					CommitTs: 2,
 					Table:    &model.TableName{Schema: "a", Table: "b"},
-					Columns:  []*model.Column{{Name: "col1", Type: 1, Value: "bb"}},
-				},
+					Columns:  []*model.BoundedColumn{{Name: "col1", Type: 1, Value: "bb"}},
+				}).Unbound(),
 				Callback:  func() {},
 				SinkState: &tableStatus,
 			},
@@ -201,11 +201,11 @@ func TestBatchEncode_Group(t *testing.T) {
 		},
 		{
 			rowEvent: &eventsink.RowChangeCallbackableEvent{
-				Event: &model.RowChangedEvent{
+				Event: (&model.BoundedRowChangedEvent{
 					CommitTs: 3,
 					Table:    &model.TableName{Schema: "a", Table: "b"},
-					Columns:  []*model.Column{{Name: "col1", Type: 1, Value: "cc"}},
-				},
+					Columns:  []*model.BoundedColumn{{Name: "col1", Type: 1, Value: "cc"}},
+				}).Unbound(),
 				Callback:  func() {},
 				SinkState: &tableStatus,
 			},
@@ -213,11 +213,11 @@ func TestBatchEncode_Group(t *testing.T) {
 		},
 		{
 			rowEvent: &eventsink.RowChangeCallbackableEvent{
-				Event: &model.RowChangedEvent{
+				Event: (&model.BoundedRowChangedEvent{
 					CommitTs: 2,
 					Table:    &model.TableName{Schema: "aa", Table: "bb"},
-					Columns:  []*model.Column{{Name: "col1", Type: 1, Value: "bb"}},
-				},
+					Columns:  []*model.BoundedColumn{{Name: "col1", Type: 1, Value: "bb"}},
+				}).Unbound(),
 				Callback:  func() {},
 				SinkState: &tableStatus,
 			},
@@ -225,11 +225,11 @@ func TestBatchEncode_Group(t *testing.T) {
 		},
 		{
 			rowEvent: &eventsink.RowChangeCallbackableEvent{
-				Event: &model.RowChangedEvent{
+				Event: (&model.BoundedRowChangedEvent{
 					CommitTs: 2,
 					Table:    &model.TableName{Schema: "aaa", Table: "bbb"},
-					Columns:  []*model.Column{{Name: "col1", Type: 1, Value: "bb"}},
-				},
+					Columns:  []*model.BoundedColumn{{Name: "col1", Type: 1, Value: "bb"}},
+				}).Unbound(),
 				Callback:  func() {},
 				SinkState: &tableStatus,
 			},
@@ -270,11 +270,11 @@ func TestBatchEncode_GroupWhenTableStopping(t *testing.T) {
 	events := []mqEvent{
 		{
 			rowEvent: &eventsink.RowChangeCallbackableEvent{
-				Event: &model.RowChangedEvent{
+				Event: (&model.BoundedRowChangedEvent{
 					CommitTs: 1,
 					Table:    &model.TableName{Schema: "a", Table: "b"},
-					Columns:  []*model.Column{{Name: "col1", Type: 1, Value: "aa"}},
-				},
+					Columns:  []*model.BoundedColumn{{Name: "col1", Type: 1, Value: "aa"}},
+				}).Unbound(),
 				Callback:  func() {},
 				SinkState: &replicatingStatus,
 			},
@@ -282,11 +282,11 @@ func TestBatchEncode_GroupWhenTableStopping(t *testing.T) {
 		},
 		{
 			rowEvent: &eventsink.RowChangeCallbackableEvent{
-				Event: &model.RowChangedEvent{
+				Event: (&model.BoundedRowChangedEvent{
 					CommitTs: 2,
 					Table:    &model.TableName{Schema: "a", Table: "b"},
-					Columns:  []*model.Column{{Name: "col1", Type: 1, Value: "bb"}},
-				},
+					Columns:  []*model.BoundedColumn{{Name: "col1", Type: 1, Value: "bb"}},
+				}).Unbound(),
 				Callback:  func() {},
 				SinkState: &replicatingStatus,
 			},
@@ -294,11 +294,11 @@ func TestBatchEncode_GroupWhenTableStopping(t *testing.T) {
 		},
 		{
 			rowEvent: &eventsink.RowChangeCallbackableEvent{
-				Event: &model.RowChangedEvent{
+				Event: (&model.BoundedRowChangedEvent{
 					CommitTs: 3,
 					Table:    &model.TableName{Schema: "a", Table: "b"},
-					Columns:  []*model.Column{{Name: "col1", Type: 1, Value: "cc"}},
-				},
+					Columns:  []*model.BoundedColumn{{Name: "col1", Type: 1, Value: "cc"}},
+				}).Unbound(),
 				Callback:  func() {},
 				SinkState: &stoppedStatus,
 			},
@@ -341,11 +341,11 @@ func TestBatchEncode_SendMessages(t *testing.T) {
 	events := []mqEvent{
 		{
 			rowEvent: &eventsink.RowChangeCallbackableEvent{
-				Event: &model.RowChangedEvent{
+				Event: (&model.BoundedRowChangedEvent{
 					CommitTs: 1,
 					Table:    &model.TableName{Schema: "a", Table: "b"},
-					Columns:  []*model.Column{{Name: "col1", Type: 1, Value: "aa"}},
-				},
+					Columns:  []*model.BoundedColumn{{Name: "col1", Type: 1, Value: "aa"}},
+				}).Unbound(),
 				Callback:  func() {},
 				SinkState: &tableStatus,
 			},
@@ -353,11 +353,11 @@ func TestBatchEncode_SendMessages(t *testing.T) {
 		},
 		{
 			rowEvent: &eventsink.RowChangeCallbackableEvent{
-				Event: &model.RowChangedEvent{
+				Event: (&model.BoundedRowChangedEvent{
 					CommitTs: 2,
 					Table:    &model.TableName{Schema: "a", Table: "b"},
-					Columns:  []*model.Column{{Name: "col1", Type: 1, Value: "bb"}},
-				},
+					Columns:  []*model.BoundedColumn{{Name: "col1", Type: 1, Value: "bb"}},
+				}).Unbound(),
 				Callback:  func() {},
 				SinkState: &tableStatus,
 			},
@@ -365,11 +365,11 @@ func TestBatchEncode_SendMessages(t *testing.T) {
 		},
 		{
 			rowEvent: &eventsink.RowChangeCallbackableEvent{
-				Event: &model.RowChangedEvent{
+				Event: (&model.BoundedRowChangedEvent{
 					CommitTs: 3,
 					Table:    &model.TableName{Schema: "a", Table: "b"},
-					Columns:  []*model.Column{{Name: "col1", Type: 1, Value: "cc"}},
-				},
+					Columns:  []*model.BoundedColumn{{Name: "col1", Type: 1, Value: "cc"}},
+				}).Unbound(),
 				Callback:  func() {},
 				SinkState: &tableStatus,
 			},
@@ -377,11 +377,11 @@ func TestBatchEncode_SendMessages(t *testing.T) {
 		},
 		{
 			rowEvent: &eventsink.RowChangeCallbackableEvent{
-				Event: &model.RowChangedEvent{
+				Event: (&model.BoundedRowChangedEvent{
 					CommitTs: 2,
 					Table:    &model.TableName{Schema: "aa", Table: "bb"},
-					Columns:  []*model.Column{{Name: "col1", Type: 1, Value: "bb"}},
-				},
+					Columns:  []*model.BoundedColumn{{Name: "col1", Type: 1, Value: "bb"}},
+				}).Unbound(),
 				Callback:  func() {},
 				SinkState: &tableStatus,
 			},
@@ -389,11 +389,11 @@ func TestBatchEncode_SendMessages(t *testing.T) {
 		},
 		{
 			rowEvent: &eventsink.RowChangeCallbackableEvent{
-				Event: &model.RowChangedEvent{
+				Event: (&model.BoundedRowChangedEvent{
 					CommitTs: 2,
 					Table:    &model.TableName{Schema: "aaa", Table: "bbb"},
-					Columns:  []*model.Column{{Name: "col1", Type: 1, Value: "bb"}},
-				},
+					Columns:  []*model.BoundedColumn{{Name: "col1", Type: 1, Value: "bb"}},
+				}).Unbound(),
 				Callback:  func() {},
 				SinkState: &tableStatus,
 			},
@@ -401,11 +401,11 @@ func TestBatchEncode_SendMessages(t *testing.T) {
 		},
 		{
 			rowEvent: &eventsink.RowChangeCallbackableEvent{
-				Event: &model.RowChangedEvent{
+				Event: (&model.BoundedRowChangedEvent{
 					CommitTs: 3,
 					Table:    &model.TableName{Schema: "aaa", Table: "bbb"},
-					Columns:  []*model.Column{{Name: "col1", Type: 1, Value: "bb"}},
-				},
+					Columns:  []*model.BoundedColumn{{Name: "col1", Type: 1, Value: "bb"}},
+				}).Unbound(),
 				Callback:  func() {},
 				SinkState: &tableStatus,
 			},
@@ -481,11 +481,11 @@ func TestNonBatchEncode_SendMessagesWhenTableStopping(t *testing.T) {
 	events := []mqEvent{
 		{
 			rowEvent: &eventsink.RowChangeCallbackableEvent{
-				Event: &model.RowChangedEvent{
+				Event: (&model.BoundedRowChangedEvent{
 					CommitTs: 1,
 					Table:    &model.TableName{Schema: "a", Table: "b"},
-					Columns:  []*model.Column{{Name: "col1", Type: 1, Value: "aa"}},
-				},
+					Columns:  []*model.BoundedColumn{{Name: "col1", Type: 1, Value: "aa"}},
+				}).Unbound(),
 				Callback:  func() {},
 				SinkState: &replicatingStatus,
 			},
@@ -493,11 +493,11 @@ func TestNonBatchEncode_SendMessagesWhenTableStopping(t *testing.T) {
 		},
 		{
 			rowEvent: &eventsink.RowChangeCallbackableEvent{
-				Event: &model.RowChangedEvent{
+				Event: (&model.BoundedRowChangedEvent{
 					CommitTs: 2,
 					Table:    &model.TableName{Schema: "a", Table: "b"},
-					Columns:  []*model.Column{{Name: "col1", Type: 1, Value: "bb"}},
-				},
+					Columns:  []*model.BoundedColumn{{Name: "col1", Type: 1, Value: "bb"}},
+				}).Unbound(),
 				Callback:  func() {},
 				SinkState: &replicatingStatus,
 			},
@@ -505,11 +505,11 @@ func TestNonBatchEncode_SendMessagesWhenTableStopping(t *testing.T) {
 		},
 		{
 			rowEvent: &eventsink.RowChangeCallbackableEvent{
-				Event: &model.RowChangedEvent{
+				Event: (&model.BoundedRowChangedEvent{
 					CommitTs: 3,
 					Table:    &model.TableName{Schema: "a", Table: "b"},
-					Columns:  []*model.Column{{Name: "col1", Type: 1, Value: "cc"}},
-				},
+					Columns:  []*model.BoundedColumn{{Name: "col1", Type: 1, Value: "cc"}},
+				}).Unbound(),
 				Callback:  func() {},
 				SinkState: &stoppedStatus,
 			},

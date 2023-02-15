@@ -70,7 +70,7 @@ func addEventsToSortEngine(
 //
 //nolint:unparam
 func genRowChangedEvent(startTs, commitTs uint64, span tablepb.Span) *model.RowChangedEvent {
-	return &model.RowChangedEvent{
+	return (&model.BoundedRowChangedEvent{
 		StartTs:  startTs,
 		CommitTs: commitTs,
 		Table: &model.TableName{
@@ -79,13 +79,13 @@ func genRowChangedEvent(startTs, commitTs uint64, span tablepb.Span) *model.RowC
 			TableID:     span.TableID,
 			IsPartition: false,
 		},
-		Columns: []*model.Column{
+		Columns: []*model.BoundedColumn{
 			{Name: "a", Value: 2},
 		},
-		PreColumns: []*model.Column{
+		PreColumns: []*model.BoundedColumn{
 			{Name: "a", Value: 1},
 		},
-	}
+	}).Unbound()
 }
 
 type workerSuite struct {

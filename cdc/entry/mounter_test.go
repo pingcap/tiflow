@@ -245,7 +245,7 @@ func TestMounterDisableOldValue(t *testing.T) {
 		putApproximateBytes: [][]int{{592, 592}},
 		delApproximateBytes: [][]int{{592, 592}},
 	}}
-	for i, tc := range testCases {
+	for _, tc := range testCases {
 		testMounterDisableOldValue(t, tc)
 	}
 }

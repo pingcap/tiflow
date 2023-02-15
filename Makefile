@@ -160,13 +160,11 @@ cdc_test_image:
 install:
 	go install ./...
 
-unit_test: check_failpoint_ctl generate_mock go-generate generate-protobuf
+unit_test:
 	mkdir -p "$(TEST_DIR)"
-	$(FAILPOINT_ENABLE)
 	@export log_level=error;\
 	$(GOTEST) -cover -covermode=atomic -coverprofile="$(TEST_DIR)/cov.unit.out" $(PACKAGES_TICDC) \
 	|| { $(FAILPOINT_DISABLE); exit 1; }
-	$(FAILPOINT_DISABLE)
 
 unit_test_in_verify_ci: check_failpoint_ctl tools/bin/gotestsum tools/bin/gocov tools/bin/gocov-xml
 	mkdir -p "$(TEST_DIR)"

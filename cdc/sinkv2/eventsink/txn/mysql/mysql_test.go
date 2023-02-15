@@ -89,23 +89,23 @@ func newTestMockDB(t *testing.T) (db *sql.DB, mock sqlmock.Sqlmock) {
 func TestPrepareDML(t *testing.T) {
 	t.Parallel()
 	testCases := []struct {
-		input    []*model.RowChangedEvent
+		input    []*model.BoundedRowChangedEvent
 		expected *preparedDMLs
 	}{
 		{
-			input: []*model.RowChangedEvent{},
+			input: []*model.BoundedRowChangedEvent{},
 			expected: &preparedDMLs{
 				startTs: []model.Ts{},
 				sqls:    []string{},
 				values:  [][]interface{}{},
 			},
 		}, {
-			input: []*model.RowChangedEvent{
+			input: []*model.BoundedRowChangedEvent{
 				{
 					StartTs:  418658114257813514,
 					CommitTs: 418658114257813515,
 					Table:    &model.TableName{Schema: "common_1", Table: "uk_without_pk"},
-					PreColumns: []*model.Column{nil, {
+					PreColumns: []*model.BoundedColumn{nil, {
 						Name:  "a1",
 						Type:  mysql.TypeLong,
 						Flag:  model.BinaryFlag | model.MultipleKeyFlag | model.HandleKeyFlag,
@@ -126,12 +126,12 @@ func TestPrepareDML(t *testing.T) {
 				rowCount: 1,
 			},
 		}, {
-			input: []*model.RowChangedEvent{
+			input: []*model.BoundedRowChangedEvent{
 				{
 					StartTs:  418658114257813516,
 					CommitTs: 418658114257813517,
 					Table:    &model.TableName{Schema: "common_1", Table: "uk_without_pk"},
-					Columns: []*model.Column{nil, {
+					Columns: []*model.BoundedColumn{nil, {
 						Name:  "a1",
 						Type:  mysql.TypeLong,
 						Flag:  model.BinaryFlag | model.MultipleKeyFlag | model.HandleKeyFlag,
@@ -159,7 +159,7 @@ func TestPrepareDML(t *testing.T) {
 	for _, tc := range testCases {
 		ms.events = make([]*eventsink.TxnCallbackableEvent, 1)
 		ms.events[0] = &eventsink.TxnCallbackableEvent{
-			Event: &model.SingleTableTxn{Rows: tc.input},
+			Event: &model.SingleTableTxn{Rows: model.UnboundRowChangedEvents(tc.input)},
 		}
 		ms.rows = len(tc.input)
 		dmls := ms.prepareDMLs()
@@ -294,12 +294,12 @@ func TestNewMySQLBackendExecDML(t *testing.T) {
 		config.GetDefaultReplicaConfig(), mockGetDBConn)
 	require.Nil(t, err)
 
-	rows := []*model.RowChangedEvent{
+	rows := []*model.BoundedRowChangedEvent{
 		{
 			StartTs:  1,
 			CommitTs: 2,
 			Table:    &model.TableName{Schema: "s1", Table: "t1", TableID: 1},
-			Columns: []*model.Column{
+			Columns: []*model.BoundedColumn{
 				{
 					Name:  "a",
 					Type:  mysql.TypeLong,
@@ -318,7 +318,7 @@ func TestNewMySQLBackendExecDML(t *testing.T) {
 			StartTs:  5,
 			CommitTs: 6,
 			Table:    &model.TableName{Schema: "s1", Table: "t1", TableID: 1},
-			Columns: []*model.Column{
+			Columns: []*model.BoundedColumn{
 				{
 					Name:  "a",
 					Type:  mysql.TypeLong,
@@ -337,7 +337,7 @@ func TestNewMySQLBackendExecDML(t *testing.T) {
 
 	var flushedTs uint64 = 0
 	_ = sink.OnTxnEvent(&eventsink.TxnCallbackableEvent{
-		Event: &model.SingleTableTxn{Rows: rows},
+		Event: &model.SingleTableTxn{Rows: model.UnboundRowChangedEvents(rows)},
 		Callback: func() {
 			for _, row := range rows {
 				if flushedTs < row.CommitTs {
@@ -355,10 +355,10 @@ func TestNewMySQLBackendExecDML(t *testing.T) {
 }
 
 func TestExecDMLRollbackErrDatabaseNotExists(t *testing.T) {
-	rows := []*model.RowChangedEvent{
+	rows := []*model.BoundedRowChangedEvent{
 		{
 			Table: &model.TableName{Schema: "s1", Table: "t1", TableID: 1},
-			Columns: []*model.Column{
+			Columns: []*model.BoundedColumn{
 				{
 					Name:  "a",
 					Type:  mysql.TypeLong,
@@ -369,7 +369,7 @@ func TestExecDMLRollbackErrDatabaseNotExists(t *testing.T) {
 		},
 		{
 			Table: &model.TableName{Schema: "s1", Table: "t1", TableID: 1},
-			Columns: []*model.Column{
+			Columns: []*model.BoundedColumn{
 				{
 					Name:  "a",
 					Type:  mysql.TypeLong,
@@ -417,7 +417,7 @@ func TestExecDMLRollbackErrDatabaseNotExists(t *testing.T) {
 	require.Nil(t, err)
 
 	_ = sink.OnTxnEvent(&eventsink.TxnCallbackableEvent{
-		Event: &model.SingleTableTxn{Rows: rows},
+		Event: &model.SingleTableTxn{Rows: model.UnboundRowChangedEvents(rows)},
 	})
 	err = sink.Flush(context.Background())
 	require.Equal(t, errDatabaseNotExists, errors.Cause(err))
@@ -426,10 +426,10 @@ func TestExecDMLRollbackErrDatabaseNotExists(t *testing.T) {
 }
 
 func TestExecDMLRollbackErrTableNotExists(t *testing.T) {
-	rows := []*model.RowChangedEvent{
+	rows := []*model.BoundedRowChangedEvent{
 		{
 			Table: &model.TableName{Schema: "s1", Table: "t1", TableID: 1},
-			Columns: []*model.Column{
+			Columns: []*model.BoundedColumn{
 				{
 					Name:  "a",
 					Type:  mysql.TypeLong,
@@ -440,7 +440,7 @@ func TestExecDMLRollbackErrTableNotExists(t *testing.T) {
 		},
 		{
 			Table: &model.TableName{Schema: "s1", Table: "t1", TableID: 1},
-			Columns: []*model.Column{
+			Columns: []*model.BoundedColumn{
 				{
 					Name:  "a",
 					Type:  mysql.TypeLong,
@@ -488,7 +488,7 @@ func TestExecDMLRollbackErrTableNotExists(t *testing.T) {
 	require.Nil(t, err)
 
 	_ = sink.OnTxnEvent(&eventsink.TxnCallbackableEvent{
-		Event: &model.SingleTableTxn{Rows: rows},
+		Event: &model.SingleTableTxn{Rows: model.UnboundRowChangedEvents(rows)},
 	})
 	err = sink.Flush(context.Background())
 	require.Equal(t, errTableNotExists, errors.Cause(err))
@@ -497,10 +497,10 @@ func TestExecDMLRollbackErrTableNotExists(t *testing.T) {
 }
 
 func TestExecDMLRollbackErrRetryable(t *testing.T) {
-	rows := []*model.RowChangedEvent{
+	rows := []*model.BoundedRowChangedEvent{
 		{
 			Table: &model.TableName{Schema: "s1", Table: "t1", TableID: 1},
-			Columns: []*model.Column{
+			Columns: []*model.BoundedColumn{
 				{
 					Name:  "a",
 					Type:  mysql.TypeLong,
@@ -511,7 +511,7 @@ func TestExecDMLRollbackErrRetryable(t *testing.T) {
 		},
 		{
 			Table: &model.TableName{Schema: "s1", Table: "t1", TableID: 1},
-			Columns: []*model.Column{
+			Columns: []*model.BoundedColumn{
 				{
 					Name:  "a",
 					Type:  mysql.TypeLong,
@@ -562,7 +562,7 @@ func TestExecDMLRollbackErrRetryable(t *testing.T) {
 	sink.setDMLMaxRetry(2)
 
 	_ = sink.OnTxnEvent(&eventsink.TxnCallbackableEvent{
-		Event: &model.SingleTableTxn{Rows: rows},
+		Event: &model.SingleTableTxn{Rows: model.UnboundRowChangedEvents(rows)},
 	})
 	err = sink.Flush(context.Background())
 	require.Equal(t, errLockDeadlock, errors.Cause(err))
@@ -572,13 +572,13 @@ func TestExecDMLRollbackErrRetryable(t *testing.T) {
 
 func TestMysqlSinkNotRetryErrDupEntry(t *testing.T) {
 	errDup := mysql.NewErr(mysql.ErrDupEntry)
-	rows := []*model.RowChangedEvent{
+	rows := []*model.BoundedRowChangedEvent{
 		{
 			StartTs:       2,
 			CommitTs:      3,
 			ReplicatingTs: 1,
 			Table:         &model.TableName{Schema: "s1", Table: "t1", TableID: 1},
-			Columns: []*model.Column{
+			Columns: []*model.BoundedColumn{
 				{
 					Name:  "a",
 					Type:  mysql.TypeLong,
@@ -623,7 +623,7 @@ func TestMysqlSinkNotRetryErrDupEntry(t *testing.T) {
 	require.Nil(t, err)
 	sink.setDMLMaxRetry(1)
 	_ = sink.OnTxnEvent(&eventsink.TxnCallbackableEvent{
-		Event: &model.SingleTableTxn{Rows: rows},
+		Event: &model.SingleTableTxn{Rows: model.UnboundRowChangedEvents(rows)},
 	})
 	err = sink.Flush(context.Background())
 	require.Equal(t, errDup, errors.Cause(err))
@@ -796,12 +796,12 @@ func TestMySQLSinkExecDMLError(t *testing.T) {
 		config.GetDefaultReplicaConfig(), mockGetDBConn)
 	require.Nil(t, err)
 
-	rows := []*model.RowChangedEvent{
+	rows := []*model.BoundedRowChangedEvent{
 		{
 			StartTs:  1,
 			CommitTs: 2,
 			Table:    &model.TableName{Schema: "s1", Table: "t1", TableID: 1},
-			Columns: []*model.Column{
+			Columns: []*model.BoundedColumn{
 				{
 					Name:  "a",
 					Type:  mysql.TypeLong,
@@ -820,7 +820,7 @@ func TestMySQLSinkExecDMLError(t *testing.T) {
 			StartTs:  2,
 			CommitTs: 3,
 			Table:    &model.TableName{Schema: "s1", Table: "t1", TableID: 1},
-			Columns: []*model.Column{
+			Columns: []*model.BoundedColumn{
 				{
 					Name:  "a",
 					Type:  mysql.TypeLong,
@@ -839,7 +839,7 @@ func TestMySQLSinkExecDMLError(t *testing.T) {
 			StartTs:  3,
 			CommitTs: 4,
 			Table:    &model.TableName{Schema: "s1", Table: "t1", TableID: 1},
-			Columns: []*model.Column{
+			Columns: []*model.BoundedColumn{
 				{
 					Name:  "a",
 					Type:  mysql.TypeLong,
@@ -858,7 +858,7 @@ func TestMySQLSinkExecDMLError(t *testing.T) {
 			StartTs:  4,
 			CommitTs: 5,
 			Table:    &model.TableName{Schema: "s1", Table: "t1", TableID: 1},
-			Columns: []*model.Column{
+			Columns: []*model.BoundedColumn{
 				{
 					Name:  "a",
 					Type:  mysql.TypeLong,
@@ -877,7 +877,7 @@ func TestMySQLSinkExecDMLError(t *testing.T) {
 			StartTs:  5,
 			CommitTs: 6,
 			Table:    &model.TableName{Schema: "s1", Table: "t1", TableID: 1},
-			Columns: []*model.Column{
+			Columns: []*model.BoundedColumn{
 				{
 					Name:  "a",
 					Type:  mysql.TypeLong,
@@ -895,7 +895,7 @@ func TestMySQLSinkExecDMLError(t *testing.T) {
 	}
 
 	_ = sink.OnTxnEvent(&eventsink.TxnCallbackableEvent{
-		Event: &model.SingleTableTxn{Rows: rows},
+		Event: &model.SingleTableTxn{Rows: model.UnboundRowChangedEvents(rows)},
 	})
 	err = sink.Flush(context.Background())
 	require.Regexp(t, ".*ErrMySQLTxnError.*", err)
@@ -907,12 +907,12 @@ func TestMysqlSinkSafeModeOff(t *testing.T) {
 
 	testCases := []struct {
 		name     string
-		input    []*model.RowChangedEvent
+		input    []*model.BoundedRowChangedEvent
 		expected *preparedDMLs
 	}{
 		{
 			name:  "empty",
-			input: []*model.RowChangedEvent{},
+			input: []*model.BoundedRowChangedEvent{},
 			expected: &preparedDMLs{
 				startTs: []model.Ts{},
 				sqls:    []string{},
@@ -920,13 +920,13 @@ func TestMysqlSinkSafeModeOff(t *testing.T) {
 			},
 		}, {
 			name: "insert without PK",
-			input: []*model.RowChangedEvent{
+			input: []*model.BoundedRowChangedEvent{
 				{
 					StartTs:       418658114257813514,
 					CommitTs:      418658114257813515,
 					ReplicatingTs: 418658114257813513,
 					Table:         &model.TableName{Schema: "common_1", Table: "uk_without_pk"},
-					Columns: []*model.Column{nil, {
+					Columns: []*model.BoundedColumn{nil, {
 						Name:  "a1",
 						Type:  mysql.TypeLong,
 						Flag:  model.BinaryFlag | model.MultipleKeyFlag | model.HandleKeyFlag,
@@ -949,13 +949,13 @@ func TestMysqlSinkSafeModeOff(t *testing.T) {
 			},
 		}, {
 			name: "insert with PK",
-			input: []*model.RowChangedEvent{
+			input: []*model.BoundedRowChangedEvent{
 				{
 					StartTs:       418658114257813514,
 					CommitTs:      418658114257813515,
 					ReplicatingTs: 418658114257813513,
 					Table:         &model.TableName{Schema: "common_1", Table: "pk"},
-					Columns: []*model.Column{nil, {
+					Columns: []*model.BoundedColumn{nil, {
 						Name:  "a1",
 						Type:  mysql.TypeLong,
 						Flag:  model.HandleKeyFlag | model.PrimaryKeyFlag,
@@ -976,13 +976,13 @@ func TestMysqlSinkSafeModeOff(t *testing.T) {
 			},
 		}, {
 			name: "update without PK",
-			input: []*model.RowChangedEvent{
+			input: []*model.BoundedRowChangedEvent{
 				{
 					StartTs:       418658114257813516,
 					CommitTs:      418658114257813517,
 					ReplicatingTs: 418658114257813515,
 					Table:         &model.TableName{Schema: "common_1", Table: "uk_without_pk"},
-					PreColumns: []*model.Column{nil, {
+					PreColumns: []*model.BoundedColumn{nil, {
 						Name:  "a1",
 						Type:  mysql.TypeLong,
 						Flag:  model.BinaryFlag | model.MultipleKeyFlag | model.HandleKeyFlag,
@@ -993,7 +993,7 @@ func TestMysqlSinkSafeModeOff(t *testing.T) {
 						Flag:  model.BinaryFlag | model.MultipleKeyFlag | model.HandleKeyFlag,
 						Value: 2,
 					}},
-					Columns: []*model.Column{nil, {
+					Columns: []*model.BoundedColumn{nil, {
 						Name:  "a1",
 						Type:  mysql.TypeLong,
 						Flag:  model.BinaryFlag | model.MultipleKeyFlag | model.HandleKeyFlag,
@@ -1017,13 +1017,13 @@ func TestMysqlSinkSafeModeOff(t *testing.T) {
 			},
 		}, {
 			name: "update with PK",
-			input: []*model.RowChangedEvent{
+			input: []*model.BoundedRowChangedEvent{
 				{
 					StartTs:       418658114257813516,
 					CommitTs:      418658114257813517,
 					ReplicatingTs: 418658114257813515,
 					Table:         &model.TableName{Schema: "common_1", Table: "pk"},
-					PreColumns: []*model.Column{nil, {
+					PreColumns: []*model.BoundedColumn{nil, {
 						Name:  "a1",
 						Type:  mysql.TypeLong,
 						Flag:  model.HandleKeyFlag | model.PrimaryKeyFlag,
@@ -1034,7 +1034,7 @@ func TestMysqlSinkSafeModeOff(t *testing.T) {
 						Flag:  model.BinaryFlag | model.MultipleKeyFlag | model.HandleKeyFlag,
 						Value: 2,
 					}},
-					Columns: []*model.Column{nil, {
+					Columns: []*model.BoundedColumn{nil, {
 						Name:  "a1",
 						Type:  mysql.TypeLong,
 						Flag:  model.HandleKeyFlag | model.PrimaryKeyFlag,
@@ -1056,13 +1056,13 @@ func TestMysqlSinkSafeModeOff(t *testing.T) {
 			},
 		}, {
 			name: "batch insert with PK",
-			input: []*model.RowChangedEvent{
+			input: []*model.BoundedRowChangedEvent{
 				{
 					StartTs:       418658114257813516,
 					CommitTs:      418658114257813517,
 					ReplicatingTs: 418658114257813515,
 					Table:         &model.TableName{Schema: "common_1", Table: "pk"},
-					Columns: []*model.Column{nil, {
+					Columns: []*model.BoundedColumn{nil, {
 						Name:  "a1",
 						Type:  mysql.TypeLong,
 						Flag:  model.HandleKeyFlag | model.PrimaryKeyFlag,
@@ -1079,7 +1079,7 @@ func TestMysqlSinkSafeModeOff(t *testing.T) {
 					CommitTs:      418658114257813517,
 					ReplicatingTs: 418658114257813515,
 					Table:         &model.TableName{Schema: "common_1", Table: "pk"},
-					Columns: []*model.Column{nil, {
+					Columns: []*model.BoundedColumn{nil, {
 						Name:  "a1",
 						Type:  mysql.TypeLong,
 						Flag:  model.HandleKeyFlag | model.PrimaryKeyFlag,
@@ -1103,13 +1103,13 @@ func TestMysqlSinkSafeModeOff(t *testing.T) {
 			},
 		}, {
 			name: "safe mode on commit ts < replicating ts",
-			input: []*model.RowChangedEvent{
+			input: []*model.BoundedRowChangedEvent{
 				{
 					StartTs:       418658114257813516,
 					CommitTs:      418658114257813517,
 					ReplicatingTs: 418658114257813518,
 					Table:         &model.TableName{Schema: "common_1", Table: "pk"},
-					Columns: []*model.Column{nil, {
+					Columns: []*model.BoundedColumn{nil, {
 						Name:  "a1",
 						Type:  mysql.TypeLong,
 						Flag:  model.HandleKeyFlag | model.PrimaryKeyFlag,
@@ -1132,13 +1132,13 @@ func TestMysqlSinkSafeModeOff(t *testing.T) {
 			},
 		}, {
 			name: "safe mode on and txn's commit ts < replicating ts",
-			input: []*model.RowChangedEvent{
+			input: []*model.BoundedRowChangedEvent{
 				{
 					StartTs:       418658114257813516,
 					CommitTs:      418658114257813517,
 					ReplicatingTs: 418658114257813518,
 					Table:         &model.TableName{Schema: "common_1", Table: "pk"},
-					Columns: []*model.Column{nil, {
+					Columns: []*model.BoundedColumn{nil, {
 						Name:  "a1",
 						Type:  mysql.TypeLong,
 						Flag:  model.HandleKeyFlag | model.PrimaryKeyFlag,
@@ -1155,7 +1155,7 @@ func TestMysqlSinkSafeModeOff(t *testing.T) {
 					CommitTs:      418658114257813517,
 					ReplicatingTs: 418658114257813518,
 					Table:         &model.TableName{Schema: "common_1", Table: "pk"},
-					Columns: []*model.Column{nil, {
+					Columns: []*model.BoundedColumn{nil, {
 						Name:  "a1",
 						Type:  mysql.TypeLong,
 						Flag:  model.HandleKeyFlag | model.PrimaryKeyFlag,
@@ -1187,7 +1187,7 @@ func TestMysqlSinkSafeModeOff(t *testing.T) {
 	for _, tc := range testCases {
 		ms.events = make([]*eventsink.TxnCallbackableEvent, 1)
 		ms.events[0] = &eventsink.TxnCallbackableEvent{
-			Event: &model.SingleTableTxn{Rows: tc.input},
+			Event: &model.SingleTableTxn{Rows: model.UnboundRowChangedEvents(tc.input)},
 		}
 		ms.rows = len(tc.input)
 		dmls := ms.prepareDMLs()
@@ -1198,12 +1198,12 @@ func TestMysqlSinkSafeModeOff(t *testing.T) {
 func TestPrepareBatchDMLs(t *testing.T) {
 	t.Parallel()
 	testCases := []struct {
-		input    []*model.RowChangedEvent
+		input    []*model.BoundedRowChangedEvent
 		expected *preparedDMLs
 	}{
 		// empty event
 		{
-			input: []*model.RowChangedEvent{},
+			input: []*model.BoundedRowChangedEvent{},
 			expected: &preparedDMLs{
 				startTs: []model.Ts{},
 				sqls:    []string{},
@@ -1211,12 +1211,12 @@ func TestPrepareBatchDMLs(t *testing.T) {
 			},
 		},
 		{ // delete event
-			input: []*model.RowChangedEvent{
+			input: []*model.BoundedRowChangedEvent{
 				{
 					StartTs:  418658114257813514,
 					CommitTs: 418658114257813515,
 					Table:    &model.TableName{Schema: "common_1", Table: "uk_without_pk"},
-					PreColumns: []*model.Column{nil, {
+					PreColumns: []*model.BoundedColumn{nil, {
 						Name:  "a1",
 						Type:  mysql.TypeLong,
 						Flag:  model.BinaryFlag | model.MultipleKeyFlag | model.HandleKeyFlag | model.UniqueKeyFlag,
@@ -1233,7 +1233,7 @@ func TestPrepareBatchDMLs(t *testing.T) {
 					StartTs:  418658114257813514,
 					CommitTs: 418658114257813515,
 					Table:    &model.TableName{Schema: "common_1", Table: "uk_without_pk"},
-					PreColumns: []*model.Column{nil, {
+					PreColumns: []*model.BoundedColumn{nil, {
 						Name:  "a1",
 						Type:  mysql.TypeLong,
 						Flag:  model.BinaryFlag | model.MultipleKeyFlag | model.HandleKeyFlag | model.UniqueKeyFlag,
@@ -1255,12 +1255,12 @@ func TestPrepareBatchDMLs(t *testing.T) {
 			},
 		},
 		{ // insert event
-			input: []*model.RowChangedEvent{
+			input: []*model.BoundedRowChangedEvent{
 				{
 					StartTs:  418658114257813516,
 					CommitTs: 418658114257813517,
 					Table:    &model.TableName{Schema: "common_1", Table: "uk_without_pk"},
-					Columns: []*model.Column{nil, {
+					Columns: []*model.BoundedColumn{nil, {
 						Name:  "a1",
 						Type:  mysql.TypeLong,
 						Flag:  model.BinaryFlag | model.MultipleKeyFlag | model.HandleKeyFlag,
@@ -1277,7 +1277,7 @@ func TestPrepareBatchDMLs(t *testing.T) {
 					StartTs:  418658114257813516,
 					CommitTs: 418658114257813517,
 					Table:    &model.TableName{Schema: "common_1", Table: "uk_without_pk"},
-					Columns: []*model.Column{nil, {
+					Columns: []*model.BoundedColumn{nil, {
 						Name:  "a1",
 						Type:  mysql.TypeLong,
 						Flag:  model.BinaryFlag | model.MultipleKeyFlag | model.HandleKeyFlag | model.HandleKeyFlag,
@@ -1300,12 +1300,12 @@ func TestPrepareBatchDMLs(t *testing.T) {
 		},
 		// update event
 		{
-			input: []*model.RowChangedEvent{
+			input: []*model.BoundedRowChangedEvent{
 				{
 					StartTs:  418658114257813516,
 					CommitTs: 418658114257813517,
 					Table:    &model.TableName{Schema: "common_1", Table: "uk_without_pk"},
-					PreColumns: []*model.Column{nil, {
+					PreColumns: []*model.BoundedColumn{nil, {
 						Name:  "a1",
 						Type:  mysql.TypeLong,
 						Flag:  model.BinaryFlag | model.MultipleKeyFlag | model.HandleKeyFlag | model.UniqueKeyFlag,
@@ -1316,7 +1316,7 @@ func TestPrepareBatchDMLs(t *testing.T) {
 						Flag:  model.BinaryFlag | model.MultipleKeyFlag | model.HandleKeyFlag | model.UniqueKeyFlag,
 						Value: 1,
 					}},
-					Columns: []*model.Column{nil, {
+					Columns: []*model.BoundedColumn{nil, {
 						Name:  "a1",
 						Type:  mysql.TypeLong,
 						Flag:  model.BinaryFlag | model.MultipleKeyFlag | model.HandleKeyFlag | model.UniqueKeyFlag,
@@ -1333,7 +1333,7 @@ func TestPrepareBatchDMLs(t *testing.T) {
 					StartTs:  418658114257813516,
 					CommitTs: 418658114257813517,
 					Table:    &model.TableName{Schema: "common_1", Table: "uk_without_pk"},
-					PreColumns: []*model.Column{nil, {
+					PreColumns: []*model.BoundedColumn{nil, {
 						Name:  "a1",
 						Type:  mysql.TypeLong,
 						Flag:  model.BinaryFlag | model.MultipleKeyFlag | model.HandleKeyFlag | model.UniqueKeyFlag,
@@ -1344,7 +1344,7 @@ func TestPrepareBatchDMLs(t *testing.T) {
 						Flag:  model.BinaryFlag | model.MultipleKeyFlag | model.HandleKeyFlag | model.UniqueKeyFlag,
 						Value: 3,
 					}},
-					Columns: []*model.Column{nil, {
+					Columns: []*model.BoundedColumn{nil, {
 						Name:  "a1",
 						Type:  mysql.TypeLong,
 						Flag:  model.BinaryFlag | model.MultipleKeyFlag | model.HandleKeyFlag | model.UniqueKeyFlag,
@@ -1367,12 +1367,12 @@ func TestPrepareBatchDMLs(t *testing.T) {
 		},
 		// mixed event
 		{
-			input: []*model.RowChangedEvent{
+			input: []*model.BoundedRowChangedEvent{
 				{
 					StartTs:  418658114257813514,
 					CommitTs: 418658114257813515,
 					Table:    &model.TableName{Schema: "common_1", Table: "uk_without_pk"},
-					Columns: []*model.Column{nil, {
+					Columns: []*model.BoundedColumn{nil, {
 						Name:  "a1",
 						Type:  mysql.TypeLong,
 						Flag:  model.BinaryFlag | model.MultipleKeyFlag | model.HandleKeyFlag | model.UniqueKeyFlag,
@@ -1390,7 +1390,7 @@ func TestPrepareBatchDMLs(t *testing.T) {
 					StartTs:  418658114257813514,
 					CommitTs: 418658114257813515,
 					Table:    &model.TableName{Schema: "common_1", Table: "uk_without_pk"},
-					PreColumns: []*model.Column{nil, {
+					PreColumns: []*model.BoundedColumn{nil, {
 						Name:  "a1",
 						Type:  mysql.TypeLong,
 						Flag:  model.BinaryFlag | model.MultipleKeyFlag | model.HandleKeyFlag | model.UniqueKeyFlag,
@@ -1407,7 +1407,7 @@ func TestPrepareBatchDMLs(t *testing.T) {
 					StartTs:  418658114257813514,
 					CommitTs: 418658114257813515,
 					Table:    &model.TableName{Schema: "common_1", Table: "uk_without_pk"},
-					PreColumns: []*model.Column{nil, {
+					PreColumns: []*model.BoundedColumn{nil, {
 						Name:  "a1",
 						Type:  mysql.TypeLong,
 						Flag:  model.BinaryFlag | model.MultipleKeyFlag | model.HandleKeyFlag | model.UniqueKeyFlag,
@@ -1442,7 +1442,7 @@ func TestPrepareBatchDMLs(t *testing.T) {
 	for _, tc := range testCases {
 		ms.events = make([]*eventsink.TxnCallbackableEvent, 1)
 		ms.events[0] = &eventsink.TxnCallbackableEvent{
-			Event: &model.SingleTableTxn{Rows: tc.input},
+			Event: &model.SingleTableTxn{Rows: model.UnboundRowChangedEvents(tc.input)},
 		}
 		ms.rows = len(tc.input)
 		dmls := ms.prepareDMLs()
@@ -1455,17 +1455,17 @@ func TestGroupRowsByType(t *testing.T) {
 	ms := newMySQLBackendWithoutDB(ctx)
 	testCases := []struct {
 		name      string
-		input     []*model.RowChangedEvent
+		input     []*model.BoundedRowChangedEvent
 		maxTxnRow int
 	}{
 		{
 			name: "delete",
-			input: []*model.RowChangedEvent{
+			input: []*model.BoundedRowChangedEvent{
 				{
 					StartTs:  418658114257813514,
 					CommitTs: 418658114257813515,
 					Table:    &model.TableName{Schema: "common_1", Table: "uk_without_pk"},
-					PreColumns: []*model.Column{nil, {
+					PreColumns: []*model.BoundedColumn{nil, {
 						Name: "a1",
 						Type: mysql.TypeLong,
 						Flag: model.BinaryFlag | model.MultipleKeyFlag |
@@ -1484,7 +1484,7 @@ func TestGroupRowsByType(t *testing.T) {
 					StartTs:  418658114257813514,
 					CommitTs: 418658114257813515,
 					Table:    &model.TableName{Schema: "common_1", Table: "uk_without_pk"},
-					PreColumns: []*model.Column{nil, {
+					PreColumns: []*model.BoundedColumn{nil, {
 						Name: "a1",
 						Type: mysql.TypeLong,
 						Flag: model.BinaryFlag | model.MultipleKeyFlag |
@@ -1503,7 +1503,7 @@ func TestGroupRowsByType(t *testing.T) {
 					StartTs:  418658114257813514,
 					CommitTs: 418658114257813515,
 					Table:    &model.TableName{Schema: "common_1", Table: "uk_without_pk"},
-					PreColumns: []*model.Column{nil, {
+					PreColumns: []*model.BoundedColumn{nil, {
 						Name: "a1",
 						Type: mysql.TypeLong,
 						Flag: model.BinaryFlag | model.MultipleKeyFlag |
@@ -1522,7 +1522,7 @@ func TestGroupRowsByType(t *testing.T) {
 					StartTs:  418658114257813514,
 					CommitTs: 418658114257813515,
 					Table:    &model.TableName{Schema: "common_1", Table: "uk_without_pk"},
-					PreColumns: []*model.Column{nil, {
+					PreColumns: []*model.BoundedColumn{nil, {
 						Name: "a1",
 						Type: mysql.TypeLong,
 						Flag: model.BinaryFlag | model.MultipleKeyFlag |
@@ -1542,12 +1542,12 @@ func TestGroupRowsByType(t *testing.T) {
 		},
 		{
 			name: "insert",
-			input: []*model.RowChangedEvent{
+			input: []*model.BoundedRowChangedEvent{
 				{
 					StartTs:  418658114257813516,
 					CommitTs: 418658114257813517,
 					Table:    &model.TableName{Schema: "common_1", Table: "uk_without_pk"},
-					Columns: []*model.Column{nil, {
+					Columns: []*model.BoundedColumn{nil, {
 						Name:  "a1",
 						Type:  mysql.TypeLong,
 						Flag:  model.BinaryFlag | model.MultipleKeyFlag | model.HandleKeyFlag,
@@ -1564,7 +1564,7 @@ func TestGroupRowsByType(t *testing.T) {
 					StartTs:  418658114257813516,
 					CommitTs: 418658114257813517,
 					Table:    &model.TableName{Schema: "common_1", Table: "uk_without_pk"},
-					Columns: []*model.Column{nil, {
+					Columns: []*model.BoundedColumn{nil, {
 						Name: "a1",
 						Type: mysql.TypeLong,
 						Flag: model.BinaryFlag | model.MultipleKeyFlag |
@@ -1583,7 +1583,7 @@ func TestGroupRowsByType(t *testing.T) {
 					StartTs:  418658114257813516,
 					CommitTs: 418658114257813517,
 					Table:    &model.TableName{Schema: "common_1", Table: "uk_without_pk"},
-					Columns: []*model.Column{nil, {
+					Columns: []*model.BoundedColumn{nil, {
 						Name: "a1",
 						Type: mysql.TypeLong,
 						Flag: model.BinaryFlag | model.MultipleKeyFlag |
@@ -1602,27 +1602,7 @@ func TestGroupRowsByType(t *testing.T) {
 					StartTs:  418658114257813516,
 					CommitTs: 418658114257813517,
 					Table:    &model.TableName{Schema: "common_1", Table: "uk_without_pk"},
-					Columns: []*model.Column{nil, {
-						Name: "a1",
-						Type: mysql.TypeLong,
-						Flag: model.BinaryFlag | model.MultipleKeyFlag |
-							model.HandleKeyFlag | model.HandleKeyFlag,
-						Value: 2,
-					}, {
-						Name: "a3",
-						Type: mysql.TypeLong,
-						Flag: model.BinaryFlag | model.MultipleKeyFlag |
-							model.HandleKeyFlag | model.HandleKeyFlag,
-						Value: 2,
-					}},
-					IndexColumns: [][]int{{2, 2}},
-				},
-
-				{
-					StartTs:  418658114257813516,
-					CommitTs: 418658114257813517,
-					Table:    &model.TableName{Schema: "common_1", Table: "uk_without_pk"},
-					Columns: []*model.Column{nil, {
+					Columns: []*model.BoundedColumn{nil, {
 						Name: "a1",
 						Type: mysql.TypeLong,
 						Flag: model.BinaryFlag | model.MultipleKeyFlag |
@@ -1642,7 +1622,27 @@ func TestGroupRowsByType(t *testing.T) {
 					StartTs:  418658114257813516,
 					CommitTs: 418658114257813517,
 					Table:    &model.TableName{Schema: "common_1", Table: "uk_without_pk"},
-					Columns: []*model.Column{nil, {
+					Columns: []*model.BoundedColumn{nil, {
+						Name: "a1",
+						Type: mysql.TypeLong,
+						Flag: model.BinaryFlag | model.MultipleKeyFlag |
+							model.HandleKeyFlag | model.HandleKeyFlag,
+						Value: 2,
+					}, {
+						Name: "a3",
+						Type: mysql.TypeLong,
+						Flag: model.BinaryFlag | model.MultipleKeyFlag |
+							model.HandleKeyFlag | model.HandleKeyFlag,
+						Value: 2,
+					}},
+					IndexColumns: [][]int{{2, 2}},
+				},
+
+				{
+					StartTs:  418658114257813516,
+					CommitTs: 418658114257813517,
+					Table:    &model.TableName{Schema: "common_1", Table: "uk_without_pk"},
+					Columns: []*model.BoundedColumn{nil, {
 						Name: "a1",
 						Type: mysql.TypeLong,
 						Flag: model.BinaryFlag | model.MultipleKeyFlag |
@@ -1664,13 +1664,13 @@ func TestGroupRowsByType(t *testing.T) {
 	for _, tc := range testCases {
 		t.Run(tc.name, func(t *testing.T) {
 			event := &eventsink.TxnCallbackableEvent{
-				Event: &model.SingleTableTxn{Rows: testCases[0].input},
+				Event: &model.SingleTableTxn{Rows: model.UnboundRowChangedEvents(testCases[0].input)},
 			}
-			colums := tc.input[0].Columns
-			if len(colums) == 0 {
-				colums = tc.input[0].PreColumns
+			columns, _ := model.UnboundColumns(tc.input[0].Columns)
+			if len(columns) == 0 {
+				columns, _ = model.UnboundColumns(tc.input[0].PreColumns)
 			}
-			tableInfo := model.BuildTiDBTableInfo(colums, tc.input[0].IndexColumns)
+			tableInfo := model.BuildTiDBTableInfo(columns, tc.input[0].IndexColumns)
 			ms.cfg.MaxTxnRow = tc.maxTxnRow
 			inserts, updates, deletes := ms.groupRowsByType(event, tableInfo, false)
 			for _, rows := range inserts {

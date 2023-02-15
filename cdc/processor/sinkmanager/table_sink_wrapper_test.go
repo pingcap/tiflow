@@ -139,7 +139,7 @@ func TestConvertEmptyRowChangedEvents(t *testing.T) {
 func TestConvertRowChangedEventsWhenEnableOldValue(t *testing.T) {
 	t.Parallel()
 
-	columns := []*model.Column{
+	columns := []*model.BoundedColumn{
 		{
 			Name:  "col1",
 			Flag:  model.BinaryFlag,
@@ -151,7 +151,7 @@ func TestConvertRowChangedEventsWhenEnableOldValue(t *testing.T) {
 			Value: "col2-value-updated",
 		},
 	}
-	preColumns := []*model.Column{
+	preColumns := []*model.BoundedColumn{
 		{
 			Name:  "col1",
 			Flag:  model.BinaryFlag,
@@ -168,7 +168,7 @@ func TestConvertRowChangedEventsWhenEnableOldValue(t *testing.T) {
 		{
 			CRTs:  1,
 			RawKV: &model.RawKVEntry{OpType: model.OpTypePut},
-			Row: &model.RowChangedEvent{
+			Row: (&model.BoundedRowChangedEvent{
 				CommitTs:   1,
 				Columns:    columns,
 				PreColumns: preColumns,
@@ -176,7 +176,7 @@ func TestConvertRowChangedEventsWhenEnableOldValue(t *testing.T) {
 					Schema: "test",
 					Table:  "test",
 				},
-			},
+			}).Unbound(),
 		},
 	}
 	changefeedID := model.DefaultChangeFeedID("1")
@@ -192,7 +192,7 @@ func TestConvertRowChangedEventsWhenDisableOldValue(t *testing.T) {
 	t.Parallel()
 
 	// Update handle key.
-	columns := []*model.Column{
+	columns := []*model.BoundedColumn{
 		{
 			Name:  "col1",
 			Flag:  model.BinaryFlag,
@@ -204,7 +204,7 @@ func TestConvertRowChangedEventsWhenDisableOldValue(t *testing.T) {
 			Value: "col2-value-updated",
 		},
 	}
-	preColumns := []*model.Column{
+	preColumns := []*model.BoundedColumn{
 		{
 			Name:  "col1",
 			Flag:  model.BinaryFlag,
@@ -221,7 +221,7 @@ func TestConvertRowChangedEventsWhenDisableOldValue(t *testing.T) {
 		{
 			CRTs:  1,
 			RawKV: &model.RawKVEntry{OpType: model.OpTypePut},
-			Row: &model.RowChangedEvent{
+			Row: (&model.BoundedRowChangedEvent{
 				CommitTs:   1,
 				Columns:    columns,
 				PreColumns: preColumns,
@@ -229,7 +229,7 @@ func TestConvertRowChangedEventsWhenDisableOldValue(t *testing.T) {
 					Schema: "test",
 					Table:  "test",
 				},
-			},
+			}).Unbound(),
 		},
 	}
 	changefeedID := model.DefaultChangeFeedID("1")
@@ -241,7 +241,7 @@ func TestConvertRowChangedEventsWhenDisableOldValue(t *testing.T) {
 	require.Equal(t, uint64(216), size)
 
 	// Update non-handle key.
-	columns = []*model.Column{
+	columns = []*model.BoundedColumn{
 		{
 			Name:  "col1",
 			Flag:  model.BinaryFlag,
@@ -253,7 +253,7 @@ func TestConvertRowChangedEventsWhenDisableOldValue(t *testing.T) {
 			Value: "col2-value",
 		},
 	}
-	preColumns = []*model.Column{
+	preColumns = []*model.BoundedColumn{
 		{
 			Name:  "col1",
 			Flag:  model.BinaryFlag,
@@ -270,7 +270,7 @@ func TestConvertRowChangedEventsWhenDisableOldValue(t *testing.T) {
 		{
 			CRTs:  1,
 			RawKV: &model.RawKVEntry{OpType: model.OpTypePut},
-			Row: &model.RowChangedEvent{
+			Row: (&model.BoundedRowChangedEvent{
 				CommitTs:   1,
 				Columns:    columns,
 				PreColumns: preColumns,
@@ -278,7 +278,7 @@ func TestConvertRowChangedEventsWhenDisableOldValue(t *testing.T) {
 					Schema: "test",
 					Table:  "test",
 				},
-			},
+			}).Unbound(),
 		},
 	}
 	result, size, err = convertRowChangedEvents(changefeedID, span, enableOldValue, events...)

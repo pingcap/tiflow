@@ -68,7 +68,7 @@ func TestV1toV2(t *testing.T) {
 
 	rv2 = &model.RedoLog{
 		RedoRow: model.RedoRowChangedEvent{
-			Row: &model.RowChangedEvent{
+			Row: (&model.BoundedRowChangedEvent{
 				StartTs:  1,
 				CommitTs: 2,
 				Table: &model.TableName{
@@ -78,20 +78,20 @@ func TestV1toV2(t *testing.T) {
 					IsPartition: false,
 				},
 				TableInfo: nil,
-				Columns: []*model.Column{
+				Columns: []*model.BoundedColumn{
 					{
 						Name: "column",
 						Flag: model.BinaryFlag,
 					},
 				},
-				PreColumns: []*model.Column{
+				PreColumns: []*model.BoundedColumn{
 					{
 						Name: "column",
 						Flag: model.BinaryFlag,
 					},
 				},
 				IndexColumns: [][]int{{1}},
-			},
+			}).Unbound(),
 		},
 		RedoDDL: model.RedoDDLEvent{
 			DDL: &model.DDLEvent{
@@ -105,8 +105,8 @@ func TestV1toV2(t *testing.T) {
 	// Unmarshal from v1, []byte{} will be transformed into "".
 	rv1.RedoRow.Row.Columns[0].Value = []byte{}
 	rv1.RedoRow.Row.PreColumns[0].Value = []byte{}
-	rv2.RedoRow.Row.Columns[0].Value = ""
-	rv2.RedoRow.Row.PreColumns[0].Value = ""
+	rv2.RedoRow.Row.ColumnValues[0].Value = ""
+	rv2.RedoRow.Row.PreColumnValues[0].Value = ""
 
 	// Marshal v1 into bytes.
 	codecv1.PreMarshal(rv1)
@@ -120,10 +120,10 @@ func TestV1toV2(t *testing.T) {
 	require.Equal(t, rv2.RedoRow.Row, rv2Gen.RedoRow.Row)
 
 	// For v2, []byte{} will be kept same in marshal and unmarshal.
-	rv2.RedoRow.Row.Columns[0].Value = []byte{}
-	rv2.RedoRow.Row.PreColumns[0].Value = []byte{}
-	rv2Gen.RedoRow.Row.Columns[0].Value = []byte{}
-	rv2Gen.RedoRow.Row.PreColumns[0].Value = []byte{}
+	rv2.RedoRow.Row.ColumnValues[0].Value = []byte{}
+	rv2.RedoRow.Row.PreColumnValues[0].Value = []byte{}
+	rv2Gen.RedoRow.Row.ColumnValues[0].Value = []byte{}
+	rv2Gen.RedoRow.Row.PreColumnValues[0].Value = []byte{}
 
 	msg1, err = MarshalRedoLog(rv2Gen, nil)
 	require.Nil(t, err)
@@ -136,11 +136,11 @@ func TestV1toV2(t *testing.T) {
 func TestRowRedoConvert(t *testing.T) {
 	t.Parallel()
 
-	row := &model.RowChangedEvent{
+	row := (&model.BoundedRowChangedEvent{
 		StartTs:  100,
 		CommitTs: 120,
 		Table:    &model.TableName{Schema: "test", Table: "table1", TableID: 57},
-		PreColumns: []*model.Column{{
+		PreColumns: []*model.BoundedColumn{{
 			Name:  "a1",
 			Type:  mysql.TypeLong,
 			Flag:  model.BinaryFlag | model.MultipleKeyFlag | model.HandleKeyFlag,
@@ -160,7 +160,7 @@ func TestRowRedoConvert(t *testing.T) {
 			Charset: charset.CharsetGBK,
 			Value:   []byte("你好"),
 		}, nil},
-		Columns: []*model.Column{{
+		Columns: []*model.BoundedColumn{{
 			Name:  "a1",
 			Type:  mysql.TypeLong,
 			Flag:  model.BinaryFlag | model.MultipleKeyFlag | model.HandleKeyFlag,
@@ -181,7 +181,7 @@ func TestRowRedoConvert(t *testing.T) {
 			Value:   []byte("世界"),
 		}, nil},
 		IndexColumns: [][]int{{1, 3}},
-	}
+	}).Unbound()
 
 	redoLog := &model.RedoLog{RedoRow: model.RedoRowChangedEvent{Row: row}}
 	data, err := MarshalRedoLog(redoLog, nil)
@@ -196,11 +196,11 @@ func TestRowRedoConvert(t *testing.T) {
 func TestRowRedoConvertWithEmptySlice(t *testing.T) {
 	t.Parallel()
 
-	row := &model.RowChangedEvent{
+	row := (&model.BoundedRowChangedEvent{
 		StartTs:  100,
 		CommitTs: 120,
 		Table:    &model.TableName{Schema: "test", Table: "table1", TableID: 57},
-		PreColumns: []*model.Column{{
+		PreColumns: []*model.BoundedColumn{{
 			Name:  "a1",
 			Type:  mysql.TypeLong,
 			Flag:  model.BinaryFlag | model.MultipleKeyFlag | model.HandleKeyFlag,
@@ -210,7 +210,7 @@ func TestRowRedoConvertWithEmptySlice(t *testing.T) {
 			Type:  mysql.TypeVarchar,
 			Value: []byte(""), // empty slice should be marshal and unmarshal safely
 		}},
-		Columns: []*model.Column{{
+		Columns: []*model.BoundedColumn{{
 			Name:  "a1",
 			Type:  mysql.TypeLong,
 			Flag:  model.BinaryFlag | model.MultipleKeyFlag | model.HandleKeyFlag,
@@ -221,7 +221,7 @@ func TestRowRedoConvertWithEmptySlice(t *testing.T) {
 			Value: []byte(""),
 		}},
 		IndexColumns: [][]int{{1}},
-	}
+	}).Unbound()
 
 	redoLog := &model.RedoLog{RedoRow: model.RedoRowChangedEvent{Row: row}}
 	data, err := MarshalRedoLog(redoLog, nil)

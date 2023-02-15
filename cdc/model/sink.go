@@ -693,3 +693,74 @@ type BoundedColumn struct {
 	Default interface{}
 	Value   interface{}
 }
+
+// BoundedRowChangedEvent is like RowChangedEvent, but carries BoundedColumn instead of Column.
+type BoundedRowChangedEvent struct {
+	Table               *TableName
+	Columns             []*BoundedColumn
+	PreColumns          []*BoundedColumn
+	IndexColumns        [][]int
+	TableInfo           *TableInfo
+	ColInfos            []rowcodec.ColInfo
+	StartTs             uint64
+	CommitTs            uint64
+	RowID               int64
+	ApproximateDataSize int64
+	ApproximateMemSize  int
+	SplitTxn            bool
+	ReplicatingTs       Ts
+}
+
+func (b *BoundedColumn) Unbound() *Column {
+	return &Column{
+		Name:    b.Name,
+		Type:    b.Type,
+		Charset: b.Charset,
+		Flag:    b.Flag,
+		Default: b.Default,
+	}
+}
+
+func UnboundColumns(cols []*BoundedColumn) ([]*Column, []ColumnValue) {
+	if len(cols) == 0 {
+		return nil, nil
+	}
+	x := make([]*Column, len(cols))
+	y := make([]ColumnValue, len(cols))
+	for i, c := range cols {
+		if c != nil {
+			x[i] = c.Unbound()
+			y[i].Value = c.Value
+		}
+	}
+	return x, y
+}
+
+func (b *BoundedRowChangedEvent) Unbound() *RowChangedEvent {
+	x := &RowChangedEvent{
+		Table:               b.Table,
+		IndexColumns:        b.IndexColumns,
+		TableInfo:           b.TableInfo,
+		ColInfos:            b.ColInfos,
+		StartTs:             b.StartTs,
+		CommitTs:            b.CommitTs,
+		RowID:               b.RowID,
+		ApproximateDataSize: b.ApproximateDataSize,
+		ApproximateMemSize:  b.ApproximateMemSize,
+		SplitTxn:            b.SplitTxn,
+		ReplicatingTs:       b.ReplicatingTs,
+	}
+	x.Columns, x.ColumnValues = UnboundColumns(b.Columns)
+	x.PreColumns, x.PreColumnValues = UnboundColumns(b.PreColumns)
+	return x
+}
+
+func UnboundRowChangedEvents(rows []*BoundedRowChangedEvent) []*RowChangedEvent {
+	x := make([]*RowChangedEvent, len(rows))
+	for i, r := range rows {
+		if r != nil {
+			x[i] = r.Unbound()
+		}
+	}
+	return x
+}
