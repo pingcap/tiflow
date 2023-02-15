@@ -10,6 +10,8 @@
 
 set -e
 
+CUR=$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)
+
 workdir=
 tls=
 tls_dir=
