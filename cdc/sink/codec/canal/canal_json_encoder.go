@@ -158,6 +158,7 @@ func (c *JSONBatchEncoder) newJSONMessageForDML(e *model.RowChangedEvent) ([]byt
 		columnValues := e.PreColumnValues
 		if !isDelete {
 			columns = e.Columns
+			columnValues = e.ColumnValues
 		}
 		const prefix string = ",\"sqlType\":"
 		out.RawString(prefix)

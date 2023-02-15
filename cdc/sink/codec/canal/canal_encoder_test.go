@@ -30,7 +30,7 @@ func TestCanalBatchEncoder(t *testing.T) {
 	for _, cs := range s.rowCases {
 		encoder := newBatchEncoder()
 		for _, row := range cs {
-			err := encoder.AppendRowChangedEvent(context.Background(), "", row, nil)
+			err := encoder.AppendRowChangedEvent(context.Background(), "", row.Unbound(), nil)
 			require.Nil(t, err)
 		}
 		res := encoder.Build()
@@ -81,15 +81,15 @@ func TestCanalAppendRowChangedEventWithCallback(t *testing.T) {
 
 	count := 0
 
-	row := &model.RowChangedEvent{
+	row := (&model.BoundedRowChangedEvent{
 		CommitTs: 1,
 		Table:    &model.TableName{Schema: "a", Table: "b"},
-		Columns: []*model.Column{{
+		Columns: []*model.BoundedColumn{{
 			Name:  "col1",
 			Type:  mysql.TypeVarchar,
 			Value: []byte("aa"),
 		}},
-	}
+	}).Unbound()
 
 	tests := []struct {
 		row      *model.RowChangedEvent

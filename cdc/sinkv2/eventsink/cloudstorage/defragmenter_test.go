@@ -70,17 +70,17 @@ func TestDeframenter(t *testing.T) {
 			rand.Seed(time.Now().UnixNano())
 			n := 1 + rand.Intn(1000)
 			for j := 0; j < n; j++ {
-				row := &model.RowChangedEvent{
+				row := (&model.BoundedRowChangedEvent{
 					Table: &model.TableName{
 						Schema:  "test",
 						Table:   "table1",
 						TableID: 100,
 					},
-					Columns: []*model.Column{
+					Columns: []*model.BoundedColumn{
 						{Name: "c1", Value: j + 1},
 						{Name: "c2", Value: "hello world"},
 					},
-				}
+				}).Unbound()
 				frag.event.Event.Rows = append(frag.event.Event.Rows, row)
 				encoder.AppendRowChangedEvent(ctx, "", row, nil)
 			}

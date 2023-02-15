@@ -27,11 +27,11 @@ func TestWriteEventsCallback(t *testing.T) {
 
 	s := New()
 	tableStatus := state.TableSinkSinking
-	row := &model.RowChangedEvent{
+	row := (&model.BoundedRowChangedEvent{
 		CommitTs: 1,
 		Table:    &model.TableName{Schema: "a", Table: "b"},
-		Columns:  []*model.Column{{Name: "col1", Type: 1, Value: "aa"}},
-	}
+		Columns:  []*model.BoundedColumn{{Name: "col1", Type: 1, Value: "aa"}},
+	}).Unbound()
 
 	count := 0
 	events := make([]*eventsink.RowChangeCallbackableEvent, 0, 3000)

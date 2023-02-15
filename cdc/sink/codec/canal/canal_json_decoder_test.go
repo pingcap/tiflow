@@ -33,7 +33,7 @@ func TestNewCanalJSONBatchDecoder4RowMessage(t *testing.T) {
 		})
 		require.NotNil(t, encoder)
 
-		err := encoder.AppendRowChangedEvent(context.Background(), "", testCaseInsert, nil)
+		err := encoder.AppendRowChangedEvent(context.Background(), "", testCaseInsert.Unbound(), nil)
 		require.Nil(t, err)
 
 		messages := encoder.Build()
@@ -58,10 +58,10 @@ func TestNewCanalJSONBatchDecoder4RowMessage(t *testing.T) {
 				require.Equal(t, uint64(0), consumed.CommitTs)
 			}
 
-			for _, col := range consumed.Columns {
+			for i, col := range consumed.Columns {
 				expected, ok := expectedDecodedValue[col.Name]
 				require.True(t, ok)
-				require.Equal(t, expected, col.Value)
+				require.Equal(t, expected, consumed.ColumnValues[i].Value)
 
 				for _, item := range testCaseInsert.Columns {
 					if item.Name == col.Name {
