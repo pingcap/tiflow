@@ -96,6 +96,10 @@ func (d *ConflictDetector[Worker, Txn]) Close() {
 }
 
 func (d *ConflictDetector[Worker, Txn]) runBackgroundTasks() {
+	defer func() {
+		d.notifiedNodes.Close()
+		d.garbageNodes.Close()
+	}()
 	for {
 		select {
 		case <-d.closeCh:
