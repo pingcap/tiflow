@@ -40,7 +40,8 @@ import (
 	"github.com/pingcap/tiflow/cdc/sink/codec/open"
 	"github.com/pingcap/tiflow/cdc/sink/mq/dispatcher"
 	"github.com/pingcap/tiflow/cdc/sinkv2/ddlsink"
-	"github.com/pingcap/tiflow/cdc/sinkv2/ddlsink/factory"
+	ddlsinkfactory "github.com/pingcap/tiflow/cdc/sinkv2/ddlsink/factory"
+	eventsinkfactory "github.com/pingcap/tiflow/cdc/sinkv2/eventsink/factory"
 	"github.com/pingcap/tiflow/cdc/sinkv2/tablesink"
 	cmdUtil "github.com/pingcap/tiflow/pkg/cmd/util"
 	"github.com/pingcap/tiflow/pkg/config"
@@ -48,7 +49,9 @@ import (
 	"github.com/pingcap/tiflow/pkg/logutil"
 	"github.com/pingcap/tiflow/pkg/quotes"
 	"github.com/pingcap/tiflow/pkg/security"
+	"github.com/pingcap/tiflow/pkg/spanz"
 	"github.com/pingcap/tiflow/pkg/util"
+	"github.com/prometheus/client_golang/prometheus"
 	"go.uber.org/zap"
 )
 
@@ -367,8 +370,9 @@ type Consumer struct {
 	ddlSink              ddlsink.DDLEventSink
 	fakeTableIDGenerator *fakeTableIDGenerator
 
-	sinks   []*partitionSink
-	sinksMu sync.Mutex
+	sinkFactory *eventsinkfactory.SinkFactory
+	sinks       []*partitionSink
+	sinksMu     sync.Mutex
 
 	errChan chan error
 
@@ -424,6 +428,18 @@ func NewConsumer(ctx context.Context) (*Consumer, error) {
 			partitionNo: i,
 		}
 	}
+	f, err := eventsinkfactory.New(
+		ctx,
+		downstreamURIStr,
+		config.GetDefaultReplicaConfig(),
+		c.errChan,
+	)
+	if err != nil {
+		cancel()
+		return nil, errors.Trace(err)
+	}
+	c.sinkFactory = f
+
 	go func() {
 		err := <-c.errChan
 		if errors.Cause(err) != context.Canceled {
@@ -434,7 +450,7 @@ func NewConsumer(ctx context.Context) (*Consumer, error) {
 		cancel()
 	}()
 
-	ddlSink, err := factory.New(
+	ddlSink, err := ddlsinkfactory.New(
 		ctx,
 		downstreamURIStr,
 		config.GetDefaultReplicaConfig(),
@@ -610,6 +626,13 @@ func (c *Consumer) ConsumeClaim(session sarama.ConsumerGroupSession, claim saram
 						events := group.Resolve(ts)
 						if len(events) == 0 {
 							continue
+						}
+						if _, ok := sink.tableSinks[tableID]; !ok {
+							sink.tableSinks[tableID] = c.sinkFactory.CreateTableSinkForConsumer(
+								model.DefaultChangeFeedID("kafka-consumer"),
+								spanz.TableIDToComparableSpan(tableID),
+								prometheus.NewCounter(prometheus.CounterOpts{}),
+							)
 						}
 						sink.tableSinks[tableID].AppendRowChangedEvents(events...)
 						commitTs := events[len(events)-1].CommitTs
