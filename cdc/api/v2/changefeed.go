@@ -216,6 +216,11 @@ func (h *OpenAPIV2) listChangeFeeds(c *gin.Context) {
 			FeedState:    cfInfo.State,
 			RunningError: cfInfo.Error,
 		}
+		// if the state is normal, we shall not return the error info
+		// because changefeed will is retrying. errors will confuse the users
+		if commonInfo.FeedState == model.StateNormal {
+			commonInfo.RunningError = nil
+		}
 
 		if cfStatus != nil {
 			commonInfo.CheckpointTSO = cfStatus.CheckpointTs
@@ -459,11 +464,20 @@ func (h *OpenAPIV2) getChangeFeed(c *gin.Context) {
 		CheckpointTime: model.JSONTime(
 			oracle.GetTimeFromTS(status.CheckpointTs),
 		),
-		ResolvedTs:   status.ResolvedTs,
-		Engine:       cfInfo.Engine,
-		FeedState:    cfInfo.State,
-		RunningError: (*RunningError)(cfInfo.Error),
-		TaskStatus:   taskStatus,
+		ResolvedTs: status.ResolvedTs,
+		Engine:     cfInfo.Engine,
+		FeedState:  cfInfo.State,
+		TaskStatus: taskStatus,
+	}
+
+	// if the state is normal, we shall not return the error info
+	// because changefeed will is retrying. errors will confuse the users
+	if cfInfo.State != model.StateNormal && cfInfo.Error != nil {
+		detail.RunningError = &RunningError{
+			Addr:    cfInfo.Error.Addr,
+			Code:    cfInfo.Error.Code,
+			Message: cfInfo.Error.Message,
+		}
 	}
 
 	c.JSON(http.StatusOK, detail)

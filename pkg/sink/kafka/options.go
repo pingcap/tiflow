@@ -32,6 +32,11 @@ import (
 )
 
 const (
+	// defaultPartitionNum specifies the default number of partitions when we create the topic.
+	defaultPartitionNum = 3
+)
+
+const (
 	// BrokerMessageMaxBytesConfigName specifies the largest record batch size allowed by
 	// Kafka brokers.
 	// See: https://kafka.apache.org/documentation/#brokerconfigs_message.max.bytes
@@ -46,9 +51,6 @@ const (
 	// See: https://kafka.apache.org/documentation/#brokerconfigs_min.insync.replicas and
 	// https://kafka.apache.org/documentation/#topicconfigs_min.insync.replicas
 	MinInsyncReplicasConfigName = "min.insync.replicas"
-
-	// defaultPartitionNum specifies the default number of partitions when we create the topic.
-	defaultPartitionNum = 3
 )
 
 const (
