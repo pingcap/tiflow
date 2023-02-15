@@ -626,7 +626,7 @@ func (c *Consumer) ConsumeClaim(session sarama.ConsumerGroupSession, claim saram
 							continue
 						}
 						if _, ok := sink.tableSinks[tableID]; !ok {
-							sink.tableSinks[tableID] = c.sinkFactory.CreateTableSinkForConsumer(
+							sink.tableSinks[tableID] = c.sinkFactory.CreateTableSink(
 								model.DefaultChangeFeedID("kafka-consumer"),
 								spanz.TableIDToComparableSpan(tableID),
 								prometheus.NewCounter(prometheus.CounterOpts{}),
