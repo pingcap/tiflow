@@ -97,27 +97,21 @@ func (o *queryChangefeedOptions) run(cmd *cobra.Command) error {
 	if err != nil && cerror.ErrChangeFeedNotExists.NotEqual(err) {
 		return err
 	}
-
-	info, err := o.apiClientV2.Changefeeds().GetInfo(ctx, o.changefeedID)
-	if err != nil && cerror.ErrChangeFeedNotExists.NotEqual(err) {
-		return err
-	}
 	meta := &cfMeta{
 		UpstreamID:     detail.UpstreamID,
 		Namespace:      detail.Namespace,
 		ID:             detail.ID,
 		SinkURI:        detail.SinkURI,
-		Config:         info.Config,
-		CreateTime:     detail.CreateTime,
+		Config:         detail.Config,
+		CreateTime:     model.JSONTime(detail.CreateTime),
 		StartTs:        detail.StartTs,
 		ResolvedTs:     detail.ResolvedTs,
 		TargetTs:       detail.TargetTs,
-		CheckpointTSO:  detail.CheckpointTSO,
+		CheckpointTSO:  detail.CheckpointTs,
 		CheckpointTime: detail.CheckpointTime,
 		Engine:         detail.Engine,
-		FeedState:      detail.FeedState,
-		RunningError:   detail.RunningError,
-		ErrorHis:       detail.ErrorHis,
+		FeedState:      detail.State,
+		RunningError:   detail.Error,
 		CreatorVersion: detail.CreatorVersion,
 		TaskStatus:     detail.TaskStatus,
 	}
