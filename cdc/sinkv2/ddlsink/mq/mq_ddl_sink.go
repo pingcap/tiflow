@@ -31,6 +31,7 @@ import (
 	"github.com/pingcap/tiflow/pkg/config"
 	cerror "github.com/pingcap/tiflow/pkg/errors"
 	"github.com/pingcap/tiflow/pkg/sink"
+	"github.com/pingcap/tiflow/pkg/sink/kafka"
 	"go.uber.org/zap"
 )
 
@@ -54,10 +55,13 @@ type ddlSink struct {
 	producer ddlproducer.DDLProducer
 	// statistics is used to record DDL metrics.
 	statistics *metrics.Statistics
+	// admin is used to query kafka cluster information.
+	admin kafka.ClusterAdminClient
 }
 
 func newDDLSink(ctx context.Context,
 	producer ddlproducer.DDLProducer,
+	adminClient kafka.ClusterAdminClient,
 	topicManager manager.TopicManager,
 	eventRouter *dispatcher.EventRouter,
 	encoderConfig *common.Config,
@@ -77,6 +81,7 @@ func newDDLSink(ctx context.Context,
 		encoderBuilder: encoderBuilder,
 		producer:       producer,
 		statistics:     metrics.NewStatistics(ctx, sink.RowSink),
+		admin:          adminClient,
 	}
 
 	return s, nil
@@ -174,5 +179,13 @@ func (k *ddlSink) WriteCheckpointTs(ctx context.Context,
 func (k *ddlSink) Close() {
 	if k.producer != nil {
 		k.producer.Close()
+	}
+	if k.admin != nil {
+		if err := k.admin.Close(); err != nil {
+			log.Warn("Kafka DML sink close admin client error",
+				zap.String("namespace", k.id.Namespace),
+				zap.String("changefeed", k.id.ID),
+				zap.Error(err))
+		}
 	}
 }
