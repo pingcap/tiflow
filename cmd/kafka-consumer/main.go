@@ -374,8 +374,6 @@ type Consumer struct {
 	sinks       []*partitionSink
 	sinksMu     sync.Mutex
 
-	errChan chan error
-
 	// initialize to 0 by default
 	globalResolvedTs uint64
 
@@ -421,7 +419,7 @@ func NewConsumer(ctx context.Context) (*Consumer, error) {
 	c.sinks = make([]*partitionSink, kafkaPartitionNum)
 	ctx, cancel := context.WithCancel(ctx)
 	ctx = contextutil.PutRoleInCtx(ctx, util.RoleKafkaConsumer)
-	c.errChan = make(chan error, 1)
+	errChan := make(chan error, 1)
 	for i := 0; i < int(kafkaPartitionNum); i++ {
 		c.sinks[i] = &partitionSink{
 			tableSinks:  make(map[model.TableID]tablesink.TableSink),
@@ -432,7 +430,7 @@ func NewConsumer(ctx context.Context) (*Consumer, error) {
 		ctx,
 		downstreamURIStr,
 		config.GetDefaultReplicaConfig(),
-		c.errChan,
+		errChan,
 	)
 	if err != nil {
 		cancel()
@@ -441,7 +439,7 @@ func NewConsumer(ctx context.Context) (*Consumer, error) {
 	c.sinkFactory = f
 
 	go func() {
-		err := <-c.errChan
+		err := <-errChan
 		if errors.Cause(err) != context.Canceled {
 			log.Error("error on running consumer", zap.Error(err))
 		} else {
