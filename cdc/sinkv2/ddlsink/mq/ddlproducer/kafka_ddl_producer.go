@@ -16,7 +16,6 @@ package ddlproducer
 import (
 	"context"
 	"sync"
-	"time"
 
 	"github.com/pingcap/errors"
 	"github.com/pingcap/log"
@@ -36,9 +35,6 @@ var _ DDLProducer = (*kafkaDDLProducer)(nil)
 type kafkaDDLProducer struct {
 	// id indicates this sink belongs to which processor(changefeed).
 	id model.ChangeFeedID
-	// We hold the client to make close operation faster.
-	// Please see the comment of Close().
-	client kafka.Client
 	// syncProducer is used to send messages to kafka synchronously.
 	syncProducer kafka.SyncProducer
 	// metricsCollector is used to report metrics.
@@ -52,42 +48,22 @@ type kafkaDDLProducer struct {
 }
 
 // NewKafkaDDLProducer creates a new kafka producer for replicating DDL.
-func NewKafkaDDLProducer(ctx context.Context, client kafka.Client,
+func NewKafkaDDLProducer(ctx context.Context, factory kafka.Factory,
 	adminClient kafka.ClusterAdminClient,
 ) (DDLProducer, error) {
 	changefeedID := contextutil.ChangefeedIDFromCtx(ctx)
 
-	syncProducer, err := client.SyncProducer()
+	syncProducer, err := factory.SyncProducer()
 	if err != nil {
-		// Close the client to prevent the goroutine leak.
-		// Because it may be a long time to close the client,
-		// so close it asynchronously.
-		go func() {
-			err := client.Close()
-			if err != nil {
-				log.Error("Close sarama client with error in kafka "+
-					"DDL producer", zap.Error(err),
-					zap.String("namespace", changefeedID.Namespace),
-					zap.String("changefeed", changefeedID.ID))
-			}
-			if err := adminClient.Close(); err != nil {
-				log.Error("Close sarama admin client with error in kafka "+
-					"DDL producer", zap.Error(err),
-					zap.String("namespace", changefeedID.Namespace),
-					zap.String("changefeed", changefeedID.ID))
-			}
-		}()
 		return nil, cerror.WrapError(cerror.ErrKafkaNewProducer, err)
 	}
 
-	metricsCollector := client.MetricsCollector(
-		changefeedID,
+	metricsCollector := factory.MetricsCollector(
 		util.RoleOwner,
 		adminClient,
 	)
 	p := &kafkaDDLProducer{
 		id:               changefeedID,
-		client:           client,
 		metricsCollector: metricsCollector,
 		syncProducer:     syncProducer,
 		closed:           false,
@@ -153,47 +129,8 @@ func (k *kafkaDDLProducer) Close() {
 		return
 	}
 	k.closed = true
-	// We need to close it asynchronously. Otherwise, we might get stuck
-	// with an unhealthy(i.e. Network jitter, isolation) state of Kafka.
-	// Client has a background thread to fetch and update the metadata.
-	// If we close the client synchronously, we might get stuck.
-	// Safety:
-	// * If the kafka cluster is running well, it will be closed as soon as possible.
-	// * If there is a problem with the kafka cluster,
-	//   no data will be lost because this is a synchronous client.
-	// * There is a risk of goroutine leakage, but it is acceptable and our main
-	//   goal is not to get stuck with the owner tick.
-	go func() {
-		start := time.Now()
-		if err := k.client.Close(); err != nil {
-			log.Error("Close sarama client with error in kafka "+
-				"DDL producer", zap.Error(err),
-				zap.Duration("duration", time.Since(start)),
-				zap.String("namespace", k.id.Namespace),
-				zap.String("changefeed", k.id.ID))
-		} else {
-			log.Info("Sarama client closed in kafka "+
-				"DDL producer", zap.Duration("duration", time.Since(start)),
-				zap.String("namespace", k.id.Namespace),
-				zap.String("changefeed", k.id.ID))
-		}
 
-		start = time.Now()
-		err := k.syncProducer.Close()
-		if err != nil {
-			log.Error("Close sync client with error in kafka "+
-				"DDL producer", zap.Error(err),
-				zap.Duration("duration", time.Since(start)),
-				zap.String("namespace", k.id.Namespace),
-				zap.String("changefeed", k.id.ID))
-		} else {
-			log.Info("Sync client closed in kafka "+
-				"DDL producer", zap.Duration("duration", time.Since(start)),
-				zap.String("namespace", k.id.Namespace),
-				zap.String("changefeed", k.id.ID))
-		}
-
-		// Finally, close the metric collector.
-		k.metricsCollector.Close()
-	}()
+	if k.syncProducer != nil {
+		k.syncProducer.Close()
+	}
 }

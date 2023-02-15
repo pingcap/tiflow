@@ -22,6 +22,7 @@ import (
 	"time"
 
 	"github.com/Shopify/sarama"
+	"github.com/pingcap/tiflow/cdc/model"
 	"github.com/pingcap/tiflow/cdc/sink/codec/common"
 	cerror "github.com/pingcap/tiflow/pkg/errors"
 	"github.com/pingcap/tiflow/pkg/sink/kafka"
@@ -80,11 +81,14 @@ func TestProducerAck(t *testing.T) {
 	require.Nil(t, err)
 	require.Equal(t, 1, config.Producer.Flush.MaxMessages)
 
-	client, err := kafka.NewSaramaClient(ctx, options)
-	require.Nil(t, err)
-	adminClient, err := kafka.NewMockAdminClient(ctx, options)
-	require.Nil(t, err)
-	producer, err := NewKafkaDMLProducer(ctx, client, adminClient, errCh)
+	changefeed := model.DefaultChangeFeedID("changefeed-test")
+	factory, err := kafka.NewMockFactory(ctx, options, changefeed)
+	require.NoError(t, err)
+
+	adminClient, err := factory.AdminClient()
+	require.NoError(t, err)
+
+	producer, err := NewKafkaDMLProducer(ctx, factory, adminClient, errCh)
 	require.Nil(t, err)
 	require.NotNil(t, producer)
 
@@ -143,16 +147,15 @@ func TestProducerSendMsgFailed(t *testing.T) {
 	require.Nil(t, err)
 	options.MaxMessages = 1
 	options.MaxMessageBytes = 1
-	// saramaConfig.Producer.Flush.MaxMessages = 1
-	// saramaConfig.Producer.Retry.Max = 1
-	// This will make the first send failed.
-	// saramaConfig.Producer.MaxMessageBytes = 8
 
-	client, err := kafka.NewSaramaClient(ctx, options)
-	require.Nil(t, err)
-	adminClient, err := kafka.NewMockAdminClient(ctx, options)
-	require.Nil(t, err)
-	producer, err := NewKafkaDMLProducer(ctx, client, adminClient, errCh)
+	changefeed := model.DefaultChangeFeedID("changefeed-test")
+	factory, err := kafka.NewMockFactory(ctx, options, changefeed)
+	require.NoError(t, err)
+
+	adminClient, err := factory.AdminClient()
+	require.NoError(t, err)
+
+	producer, err := NewKafkaDMLProducer(ctx, factory, adminClient, errCh)
 	defer func() {
 		producer.Close()
 
@@ -206,14 +209,16 @@ func TestProducerDoubleClose(t *testing.T) {
 	errCh := make(chan error, 1)
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
-	saramaConfig, err := kafka.NewSaramaConfig(ctx, options)
+
+	changefeed := model.DefaultChangeFeedID("changefeed-test")
+	factory, err := kafka.NewMockFactory(ctx, options, changefeed)
+	require.NoError(t, err)
+
+	adminClient, err := factory.AdminClient()
+	require.NoError(t, err)
+
 	require.Nil(t, err)
-	saramaConfig.Producer.Flush.MaxMessages = 1
-	client, err := kafka.NewSaramaClient(ctx, options)
-	require.Nil(t, err)
-	adminClient, err := kafka.NewMockAdminClient(ctx, options)
-	require.Nil(t, err)
-	producer, err := NewKafkaDMLProducer(ctx, client, adminClient, errCh)
+	producer, err := NewKafkaDMLProducer(ctx, factory, adminClient, errCh)
 	require.Nil(t, err)
 	require.NotNil(t, producer)
 

@@ -27,14 +27,9 @@ import (
 	cerror "github.com/pingcap/tiflow/pkg/errors"
 	"github.com/pingcap/tiflow/pkg/sink"
 	"github.com/pingcap/tiflow/pkg/sink/kafka"
+	v2 "github.com/pingcap/tiflow/pkg/sink/kafka/v2"
 	pmysql "github.com/pingcap/tiflow/pkg/sink/mysql"
 )
-
-// NewAdminClientImpl specifies the build method for the admin client.
-var NewAdminClientImpl kafka.ClusterAdminClientCreator = kafka.NewSaramaAdminClient
-
-// NewClientImpl specifies the build method for the  client.
-var NewClientImpl kafka.ClientCreator = kafka.NewSaramaClient
 
 // New creates a new ddlsink.DDLEventSink by schema.
 func New(
@@ -49,8 +44,12 @@ func New(
 	schema := strings.ToLower(sinkURI.Scheme)
 	switch schema {
 	case sink.KafkaScheme, sink.KafkaSSLScheme:
+		factoryCreator := kafka.NewSaramaFactory
+		if config.GetGlobalServerConfig().Debug.EnableKafkaSinkV2 {
+			factoryCreator = v2.NewFactory
+		}
 		return mq.NewKafkaDDLSink(ctx, sinkURI, cfg,
-			NewAdminClientImpl, NewClientImpl, ddlproducer.NewKafkaDDLProducer)
+			factoryCreator, ddlproducer.NewKafkaDDLProducer)
 	case sink.BlackHoleScheme:
 		return blackhole.New(), nil
 	case sink.MySQLSSLScheme, sink.MySQLScheme, sink.TiDBScheme, sink.TiDBSSLScheme:

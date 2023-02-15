@@ -32,13 +32,13 @@ func TestProcessorListCli(t *testing.T) {
 	o.complete(f)
 	cmd := newCmdListProcessor(f)
 	os.Args = []string{"list"}
-	f.processorsv2.EXPECT().List(gomock.Any()).
+	f.processors.EXPECT().List(gomock.Any()).
 		Return(nil, errors.New("test"))
 	require.NotNil(t, o.run(cmd))
 
 	cmd = newCmdListProcessor(f)
 	os.Args = []string{"list"}
-	f.processorsv2.EXPECT().List(gomock.Any()).
+	f.processors.EXPECT().List(gomock.Any()).
 		Return([]v2.ProcessorCommonInfo{{}}, nil)
 	require.Nil(t, cmd.Execute())
 }
