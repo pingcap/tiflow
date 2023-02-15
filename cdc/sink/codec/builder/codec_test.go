@@ -30,7 +30,7 @@ import (
 )
 
 var (
-	codecBenchmarkRowChanges = internal.CodecRowCases[1]
+	codecBenchmarkRowChanges = model.UnboundRowChangedEvents(internal.CodecRowCases[1])
 
 	codecCraftEncodedRowChanges = []*common.Message{}
 	codecJSONEncodedRowChanges  = []*common.Message{}
@@ -65,10 +65,12 @@ func TestJsonVsCraftVsPB(t *testing.T) {
 	t.Parallel()
 	t.Logf("| case | craft size | json size | protobuf 1 size | protobuf 2 size | craft compressed | json compressed | protobuf 1 compressed | protobuf 2 compressed |")
 	t.Logf("| :---- | :--------- | :-------- | :-------------- | :-------------- | :--------------- | :-------------- | :-------------------- | :-------------------- |")
-	for i, cs := range internal.CodecRowCases {
-		if len(cs) == 0 {
+	for i, bcs := range internal.CodecRowCases {
+		if len(bcs) == 0 {
 			continue
 		}
+		cs := model.UnboundRowChangedEvents(bcs)
+
 		craftEncoder := craft.NewBatchEncoder()
 		craftEncoder.(*craft.BatchEncoder).MaxMessageBytes = 8192
 		craftEncoder.(*craft.BatchEncoder).MaxBatchSize = 64
@@ -110,27 +112,27 @@ func codecEncodeKeyPB(event *model.RowChangedEvent) []byte {
 	}
 }
 
-func codecEncodeColumnPB(column *model.Column) *benchmark.Column {
+func codecEncodeColumnPB(column *model.Column, colv model.ColumnValue) *benchmark.Column {
 	return &benchmark.Column{
 		Name:  column.Name,
 		Type:  uint32(column.Type),
 		Flag:  uint32(column.Flag),
-		Value: craft.EncodeTiDBType(codecTestSliceAllocator, column.Type, column.Flag, column.Value),
+		Value: craft.EncodeTiDBType(codecTestSliceAllocator, column.Type, column.Flag, colv.Value),
 	}
 }
 
-func codecEncodeColumnsPB(columns []*model.Column) []*benchmark.Column {
+func codecEncodeColumnsPB(columns []*model.Column, colvals []model.ColumnValue) []*benchmark.Column {
 	converted := make([]*benchmark.Column, len(columns))
 	for i, column := range columns {
-		converted[i] = codecEncodeColumnPB(column)
+		converted[i] = codecEncodeColumnPB(column, colvals[i])
 	}
 	return converted
 }
 
 func codecEncodeRowChangedPB(event *model.RowChangedEvent) []byte {
 	rowChanged := &benchmark.RowChanged{
-		OldValue: codecEncodeColumnsPB(event.PreColumns),
-		NewValue: codecEncodeColumnsPB(event.Columns),
+		OldValue: codecEncodeColumnsPB(event.PreColumns, event.PreColumnValues),
+		NewValue: codecEncodeColumnsPB(event.Columns, event.ColumnValues),
 	}
 	if b, err := rowChanged.Marshal(); err != nil {
 		panic(err)
@@ -175,7 +177,7 @@ func codecEncodeKeysPB2(events []*model.RowChangedEvent) []byte {
 	}
 }
 
-func codecEncodeColumnsPB2(columns []*model.Column) *benchmark.ColumnsColumnar {
+func codecEncodeColumnsPB2(columns []*model.Column, colvals []model.ColumnValue) *benchmark.ColumnsColumnar {
 	converted := &benchmark.ColumnsColumnar{
 		Name:  make([]string, len(columns)),
 		Type:  make([]uint32, len(columns)),
@@ -186,7 +188,7 @@ func codecEncodeColumnsPB2(columns []*model.Column) *benchmark.ColumnsColumnar {
 		converted.Name[i] = column.Name
 		converted.Type[i] = uint32(column.Type)
 		converted.Flag[i] = uint32(column.Flag)
-		converted.Value[i] = craft.EncodeTiDBType(codecTestSliceAllocator, column.Type, column.Flag, column.Value)
+		converted.Value[i] = craft.EncodeTiDBType(codecTestSliceAllocator, column.Type, column.Flag, colvals[i].Value)
 	}
 	return converted
 }
@@ -194,8 +196,8 @@ func codecEncodeColumnsPB2(columns []*model.Column) *benchmark.ColumnsColumnar {
 func codecEncodeRowChangedPB2(events []*model.RowChangedEvent) []byte {
 	rowChanged := &benchmark.RowChangedColumnar{}
 	for _, event := range events {
-		rowChanged.OldValue = append(rowChanged.OldValue, codecEncodeColumnsPB2(event.PreColumns))
-		rowChanged.NewValue = append(rowChanged.NewValue, codecEncodeColumnsPB2(event.Columns))
+		rowChanged.OldValue = append(rowChanged.OldValue, codecEncodeColumnsPB2(event.PreColumns, event.PreColumnValues))
+		rowChanged.NewValue = append(rowChanged.NewValue, codecEncodeColumnsPB2(event.Columns, event.ColumnValues))
 	}
 	if b, err := rowChanged.Marshal(); err != nil {
 		panic(err)
@@ -310,23 +312,24 @@ func BenchmarkJsonDecoding(b *testing.B) {
 	}
 }
 
-func codecDecodeRowChangedPB1(columns []*benchmark.Column) []*model.Column {
+func codecDecodeRowChangedPB1(columns []*benchmark.Column) ([]*model.Column, []model.ColumnValue) {
 	if len(columns) == 0 {
-		return nil
+		return nil, nil
 	}
 
-	result := make([]*model.Column, len(columns))
+	x := make([]*model.Column, len(columns))
+	y := make([]model.ColumnValue, len(columns))
 	for i, column := range columns {
 		value, _ := craft.DecodeTiDBType(byte(column.Type), model.ColumnFlagType(column.Flag), column.Value)
-		result[i] = &model.Column{
-			Name:  column.Name,
-			Type:  byte(column.Type),
-			Flag:  model.ColumnFlagType(column.Flag),
-			Value: value,
+		x[i] = &model.Column{
+			Name: column.Name,
+			Type: byte(column.Type),
+			Flag: model.ColumnFlagType(column.Flag),
 		}
+		y[i] = model.ColumnValue{Value: value}
 	}
 
-	return result
+	return x, y
 }
 
 func benchmarkProtobuf1Decoding() []*model.RowChangedEvent {
@@ -341,8 +344,8 @@ func benchmarkProtobuf1Decoding() []*model.RowChangedEvent {
 			panic(err)
 		}
 		ev := &model.RowChangedEvent{}
-		ev.PreColumns = codecDecodeRowChangedPB1(value.OldValue)
-		ev.Columns = codecDecodeRowChangedPB1(value.NewValue)
+		ev.PreColumns, ev.PreColumnValues = codecDecodeRowChangedPB1(value.OldValue)
+		ev.Columns, ev.ColumnValues = codecDecodeRowChangedPB1(value.NewValue)
 		ev.CommitTs = key.Ts
 		ev.Table = &model.TableName{
 			Schema: key.Schema,
@@ -365,18 +368,23 @@ func BenchmarkProtobuf1Decoding(b *testing.B) {
 	}
 }
 
-func codecDecodeRowChangedPB2(columns *benchmark.ColumnsColumnar) []*model.Column {
-	result := make([]*model.Column, len(columns.Value))
+func codecDecodeRowChangedPB2(columns *benchmark.ColumnsColumnar) ([]*model.Column, []model.ColumnValue) {
+	if len(columns.Value) == 0 {
+		return nil, nil
+	}
+
+	x := make([]*model.Column, len(columns.Value))
+	y := make([]model.ColumnValue, len(columns.Value))
 	for i, value := range columns.Value {
 		v, _ := craft.DecodeTiDBType(byte(columns.Type[i]), model.ColumnFlagType(columns.Flag[i]), value)
-		result[i] = &model.Column{
-			Name:  columns.Name[i],
-			Type:  byte(columns.Type[i]),
-			Flag:  model.ColumnFlagType(columns.Flag[i]),
-			Value: v,
+		x[i] = &model.Column{
+			Name: columns.Name[i],
+			Type: byte(columns.Type[i]),
+			Flag: model.ColumnFlagType(columns.Flag[i]),
 		}
+		y[i] = model.ColumnValue{Value: v}
 	}
-	return result
+	return x, y
 }
 
 func benchmarkProtobuf2Decoding() []*model.RowChangedEvent {
@@ -394,10 +402,10 @@ func benchmarkProtobuf2Decoding() []*model.RowChangedEvent {
 		for i, ts := range keys.Ts {
 			ev := &model.RowChangedEvent{}
 			if len(values.OldValue) > i {
-				ev.PreColumns = codecDecodeRowChangedPB2(values.OldValue[i])
+				ev.PreColumns, ev.PreColumnValues = codecDecodeRowChangedPB2(values.OldValue[i])
 			}
 			if len(values.NewValue) > i {
-				ev.Columns = codecDecodeRowChangedPB2(values.NewValue[i])
+				ev.Columns, ev.ColumnValues = codecDecodeRowChangedPB2(values.NewValue[i])
 			}
 			ev.CommitTs = ts
 			ev.Table = &model.TableName{

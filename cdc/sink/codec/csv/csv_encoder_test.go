@@ -26,11 +26,11 @@ import (
 )
 
 func TestCSVBatchCodec(t *testing.T) {
-	testCases := [][]*model.RowChangedEvent{{
+	testCases := [][]*model.BoundedRowChangedEvent{{
 		{
 			CommitTs: 1,
 			Table:    &model.TableName{Schema: "test", Table: "table1"},
-			Columns:  []*model.Column{{Name: "tiny", Value: int64(1), Type: mysql.TypeTiny}},
+			Columns:  []*model.BoundedColumn{{Name: "tiny", Value: int64(1), Type: mysql.TypeTiny}},
 			ColInfos: []rowcodec.ColInfo{{
 				ID:            1,
 				IsPKHandle:    false,
@@ -41,7 +41,7 @@ func TestCSVBatchCodec(t *testing.T) {
 		{
 			CommitTs: 2,
 			Table:    &model.TableName{Schema: "test", Table: "table1"},
-			Columns:  []*model.Column{{Name: "tiny", Value: int64(2), Type: mysql.TypeTiny}},
+			Columns:  []*model.BoundedColumn{{Name: "tiny", Value: int64(2), Type: mysql.TypeTiny}},
 			ColInfos: []rowcodec.ColInfo{{
 				ID:            1,
 				IsPKHandle:    false,
@@ -59,7 +59,8 @@ func TestCSVBatchCodec(t *testing.T) {
 			NullString:      "\\N",
 			IncludeCommitTs: true,
 		})
-		for _, row := range cs {
+		for _, brow := range cs {
+			row := brow.Unbound()
 			err := encoder.AppendRowChangedEvent(context.Background(), "", row, nil)
 			require.Nil(t, err)
 		}
@@ -84,10 +85,10 @@ func TestCSVAppendRowChangedEventWithCallback(t *testing.T) {
 	require.NotNil(t, encoder)
 
 	count := 0
-	row := &model.RowChangedEvent{
+	row := &model.BoundedRowChangedEvent{
 		CommitTs: 1,
 		Table:    &model.TableName{Schema: "test", Table: "table1"},
-		Columns:  []*model.Column{{Name: "tiny", Value: int64(1), Type: mysql.TypeTiny}},
+		Columns:  []*model.BoundedColumn{{Name: "tiny", Value: int64(1), Type: mysql.TypeTiny}},
 		ColInfos: []rowcodec.ColInfo{{
 			ID:            1,
 			IsPKHandle:    false,
@@ -96,7 +97,7 @@ func TestCSVAppendRowChangedEventWithCallback(t *testing.T) {
 		}},
 	}
 	tests := []struct {
-		row      *model.RowChangedEvent
+		row      *model.BoundedRowChangedEvent
 		callback func()
 	}{
 		{
@@ -131,7 +132,8 @@ func TestCSVAppendRowChangedEventWithCallback(t *testing.T) {
 
 	// Append the events.
 	for _, test := range tests {
-		err := encoder.AppendRowChangedEvent(context.Background(), "", test.row, test.callback)
+		row := test.row.Unbound()
+		err := encoder.AppendRowChangedEvent(context.Background(), "", row, test.callback)
 		require.Nil(t, err)
 	}
 	require.Equal(t, 0, count, "nothing should be called")

@@ -31,15 +31,15 @@ func TestCraftMaxMessageBytes(t *testing.T) {
 	cfg := common.NewConfig(config.ProtocolCraft).WithMaxMessageBytes(256)
 	encoder := NewBatchEncoderBuilder(cfg).Build()
 
-	testEvent := &model.RowChangedEvent{
+	testEvent := (&model.BoundedRowChangedEvent{
 		CommitTs: 1,
 		Table:    &model.TableName{Schema: "a", Table: "b"},
-		Columns: []*model.Column{{
+		Columns: []*model.BoundedColumn{{
 			Name:  "col1",
 			Type:  mysql.TypeVarchar,
 			Value: []byte("aa"),
 		}},
-	}
+	}).Unbound()
 
 	for i := 0; i < 10000; i++ {
 		err := encoder.AppendRowChangedEvent(context.Background(), "", testEvent, nil)
@@ -58,15 +58,15 @@ func TestCraftMaxBatchSize(t *testing.T) {
 	cfg.MaxBatchSize = 64
 	encoder := NewBatchEncoderBuilder(cfg).Build()
 
-	testEvent := &model.RowChangedEvent{
+	testEvent := (&model.BoundedRowChangedEvent{
 		CommitTs: 1,
 		Table:    &model.TableName{Schema: "a", Table: "b"},
-		Columns: []*model.Column{{
+		Columns: []*model.BoundedColumn{{
 			Name:  "col1",
 			Type:  mysql.TypeVarchar,
 			Value: []byte("aa"),
 		}},
-	}
+	}).Unbound()
 
 	for i := 0; i < 10000; i++ {
 		err := encoder.AppendRowChangedEvent(context.Background(), "", testEvent, nil)
@@ -219,15 +219,15 @@ func TestCraftAppendRowChangedEventWithCallback(t *testing.T) {
 
 	count := 0
 
-	row := &model.RowChangedEvent{
+	row := (&model.BoundedRowChangedEvent{
 		CommitTs: 1,
 		Table:    &model.TableName{Schema: "a", Table: "b"},
-		Columns: []*model.Column{{
+		Columns: []*model.BoundedColumn{{
 			Name:  "col1",
 			Type:  mysql.TypeVarchar,
 			Value: []byte("aa"),
 		}},
-	}
+	}).Unbound()
 
 	tests := []struct {
 		row      *model.RowChangedEvent

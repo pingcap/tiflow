@@ -88,7 +88,7 @@ func setElems(ft *types.FieldType, elems []string) *types.FieldType {
 }
 
 type avroTestColumnTuple struct {
-	col            model.Column
+	col            model.BoundedColumn
 	colInfo        rowcodec.ColInfo
 	expectedSchema interface{}
 	expectedData   interface{}
@@ -97,7 +97,7 @@ type avroTestColumnTuple struct {
 
 var avroTestColumns = []*avroTestColumnTuple{
 	{
-		model.Column{Name: "tiny", Value: int64(1), Type: mysql.TypeTiny},
+		model.BoundedColumn{Name: "tiny", Value: int64(1), Type: mysql.TypeTiny},
 		rowcodec.ColInfo{
 			ID:            1,
 			IsPKHandle:    false,
@@ -108,7 +108,7 @@ var avroTestColumns = []*avroTestColumnTuple{
 		int32(1), "int",
 	},
 	{
-		model.Column{Name: "short", Value: int64(1), Type: mysql.TypeShort},
+		model.BoundedColumn{Name: "short", Value: int64(1), Type: mysql.TypeShort},
 		rowcodec.ColInfo{
 			ID:            2,
 			IsPKHandle:    false,
@@ -119,7 +119,7 @@ var avroTestColumns = []*avroTestColumnTuple{
 		int32(1), "int",
 	},
 	{
-		model.Column{Name: "int24", Value: int64(1), Type: mysql.TypeInt24},
+		model.BoundedColumn{Name: "int24", Value: int64(1), Type: mysql.TypeInt24},
 		rowcodec.ColInfo{
 			ID:            3,
 			IsPKHandle:    false,
@@ -130,7 +130,7 @@ var avroTestColumns = []*avroTestColumnTuple{
 		int32(1), "int",
 	},
 	{
-		model.Column{Name: "long", Value: int64(1), Type: mysql.TypeLong},
+		model.BoundedColumn{Name: "long", Value: int64(1), Type: mysql.TypeLong},
 		rowcodec.ColInfo{
 			ID:            4,
 			IsPKHandle:    false,
@@ -141,7 +141,7 @@ var avroTestColumns = []*avroTestColumnTuple{
 		int32(1), "int",
 	},
 	{
-		model.Column{Name: "longlong", Value: int64(1), Type: mysql.TypeLonglong},
+		model.BoundedColumn{Name: "longlong", Value: int64(1), Type: mysql.TypeLonglong},
 		rowcodec.ColInfo{
 			ID:            5,
 			IsPKHandle:    false,
@@ -152,7 +152,7 @@ var avroTestColumns = []*avroTestColumnTuple{
 		int64(1), "long",
 	},
 	{
-		model.Column{
+		model.BoundedColumn{
 			Name:  "tinyunsigned",
 			Value: uint64(1),
 			Type:  mysql.TypeTiny,
@@ -168,7 +168,7 @@ var avroTestColumns = []*avroTestColumnTuple{
 		int32(1), "int",
 	},
 	{
-		model.Column{
+		model.BoundedColumn{
 			Name:  "shortunsigned",
 			Value: uint64(1),
 			Type:  mysql.TypeShort,
@@ -184,7 +184,7 @@ var avroTestColumns = []*avroTestColumnTuple{
 		int32(1), "int",
 	},
 	{
-		model.Column{
+		model.BoundedColumn{
 			Name:  "int24unsigned",
 			Value: uint64(1),
 			Type:  mysql.TypeInt24,
@@ -200,7 +200,7 @@ var avroTestColumns = []*avroTestColumnTuple{
 		int32(1), "int",
 	},
 	{
-		model.Column{
+		model.BoundedColumn{
 			Name:  "longunsigned",
 			Value: uint64(1),
 			Type:  mysql.TypeLong,
@@ -216,7 +216,7 @@ var avroTestColumns = []*avroTestColumnTuple{
 		int64(1), "long",
 	},
 	{
-		model.Column{
+		model.BoundedColumn{
 			Name:  "longlongunsigned",
 			Value: uint64(1),
 			Type:  mysql.TypeLonglong,
@@ -235,7 +235,7 @@ var avroTestColumns = []*avroTestColumnTuple{
 		int64(1), "long",
 	},
 	{
-		model.Column{Name: "float", Value: float64(3.14), Type: mysql.TypeFloat},
+		model.BoundedColumn{Name: "float", Value: float64(3.14), Type: mysql.TypeFloat},
 		rowcodec.ColInfo{
 			ID:            11,
 			IsPKHandle:    false,
@@ -246,7 +246,7 @@ var avroTestColumns = []*avroTestColumnTuple{
 		float64(3.14), "double",
 	},
 	{
-		model.Column{Name: "double", Value: float64(3.14), Type: mysql.TypeDouble},
+		model.BoundedColumn{Name: "double", Value: float64(3.14), Type: mysql.TypeDouble},
 		rowcodec.ColInfo{
 			ID:            12,
 			IsPKHandle:    false,
@@ -257,7 +257,7 @@ var avroTestColumns = []*avroTestColumnTuple{
 		float64(3.14), "double",
 	},
 	{
-		model.Column{Name: "bit", Value: uint64(683), Type: mysql.TypeBit},
+		model.BoundedColumn{Name: "bit", Value: uint64(683), Type: mysql.TypeBit},
 		rowcodec.ColInfo{
 			ID:            13,
 			IsPKHandle:    false,
@@ -268,7 +268,7 @@ var avroTestColumns = []*avroTestColumnTuple{
 		[]byte("\x02\xab"), "bytes",
 	},
 	{
-		model.Column{Name: "decimal", Value: "129012.1230000", Type: mysql.TypeNewDecimal},
+		model.BoundedColumn{Name: "decimal", Value: "129012.1230000", Type: mysql.TypeNewDecimal},
 		rowcodec.ColInfo{
 			ID:            14,
 			IsPKHandle:    false,
@@ -287,7 +287,7 @@ var avroTestColumns = []*avroTestColumnTuple{
 		big.NewRat(129012123, 1000), "bytes.decimal",
 	},
 	{
-		model.Column{Name: "tinytext", Value: []byte("hello world"), Type: mysql.TypeTinyBlob},
+		model.BoundedColumn{Name: "tinytext", Value: []byte("hello world"), Type: mysql.TypeTinyBlob},
 		rowcodec.ColInfo{
 			ID:            15,
 			IsPKHandle:    false,
@@ -298,7 +298,7 @@ var avroTestColumns = []*avroTestColumnTuple{
 		"hello world", "string",
 	},
 	{
-		model.Column{Name: "mediumtext", Value: []byte("hello world"), Type: mysql.TypeMediumBlob},
+		model.BoundedColumn{Name: "mediumtext", Value: []byte("hello world"), Type: mysql.TypeMediumBlob},
 		rowcodec.ColInfo{
 			ID:            16,
 			IsPKHandle:    false,
@@ -309,7 +309,7 @@ var avroTestColumns = []*avroTestColumnTuple{
 		"hello world", "string",
 	},
 	{
-		model.Column{Name: "text", Value: []byte("hello world"), Type: mysql.TypeBlob},
+		model.BoundedColumn{Name: "text", Value: []byte("hello world"), Type: mysql.TypeBlob},
 		rowcodec.ColInfo{
 			ID:            17,
 			IsPKHandle:    false,
@@ -320,7 +320,7 @@ var avroTestColumns = []*avroTestColumnTuple{
 		"hello world", "string",
 	},
 	{
-		model.Column{Name: "longtext", Value: []byte("hello world"), Type: mysql.TypeLongBlob},
+		model.BoundedColumn{Name: "longtext", Value: []byte("hello world"), Type: mysql.TypeLongBlob},
 		rowcodec.ColInfo{
 			ID:            18,
 			IsPKHandle:    false,
@@ -331,7 +331,7 @@ var avroTestColumns = []*avroTestColumnTuple{
 		"hello world", "string",
 	},
 	{
-		model.Column{Name: "varchar", Value: []byte("hello world"), Type: mysql.TypeVarchar},
+		model.BoundedColumn{Name: "varchar", Value: []byte("hello world"), Type: mysql.TypeVarchar},
 		rowcodec.ColInfo{
 			ID:            19,
 			IsPKHandle:    false,
@@ -342,7 +342,7 @@ var avroTestColumns = []*avroTestColumnTuple{
 		"hello world", "string",
 	},
 	{
-		model.Column{Name: "varstring", Value: []byte("hello world"), Type: mysql.TypeVarString},
+		model.BoundedColumn{Name: "varstring", Value: []byte("hello world"), Type: mysql.TypeVarString},
 		rowcodec.ColInfo{
 			ID:            20,
 			IsPKHandle:    false,
@@ -353,7 +353,7 @@ var avroTestColumns = []*avroTestColumnTuple{
 		"hello world", "string",
 	},
 	{
-		model.Column{Name: "string", Value: []byte("hello world"), Type: mysql.TypeString},
+		model.BoundedColumn{Name: "string", Value: []byte("hello world"), Type: mysql.TypeString},
 		rowcodec.ColInfo{
 			ID:            21,
 			IsPKHandle:    false,
@@ -364,7 +364,7 @@ var avroTestColumns = []*avroTestColumnTuple{
 		"hello world", "string",
 	},
 	{
-		model.Column{
+		model.BoundedColumn{
 			Name:  "tinyblob",
 			Value: []byte("hello world"),
 			Type:  mysql.TypeTinyBlob,
@@ -380,7 +380,7 @@ var avroTestColumns = []*avroTestColumnTuple{
 		[]byte("hello world"), "bytes",
 	},
 	{
-		model.Column{
+		model.BoundedColumn{
 			Name:  "mediumblob",
 			Value: []byte("hello world"),
 			Type:  mysql.TypeMediumBlob,
@@ -396,7 +396,7 @@ var avroTestColumns = []*avroTestColumnTuple{
 		[]byte("hello world"), "bytes",
 	},
 	{
-		model.Column{
+		model.BoundedColumn{
 			Name:  "blob",
 			Value: []byte("hello world"),
 			Type:  mysql.TypeBlob,
@@ -412,7 +412,7 @@ var avroTestColumns = []*avroTestColumnTuple{
 		[]byte("hello world"), "bytes",
 	},
 	{
-		model.Column{
+		model.BoundedColumn{
 			Name:  "longblob",
 			Value: []byte("hello world"),
 			Type:  mysql.TypeLongBlob,
@@ -428,7 +428,7 @@ var avroTestColumns = []*avroTestColumnTuple{
 		[]byte("hello world"), "bytes",
 	},
 	{
-		model.Column{
+		model.BoundedColumn{
 			Name:  "varbinary",
 			Value: []byte("hello world"),
 			Type:  mysql.TypeVarchar,
@@ -444,7 +444,7 @@ var avroTestColumns = []*avroTestColumnTuple{
 		[]byte("hello world"), "bytes",
 	},
 	{
-		model.Column{
+		model.BoundedColumn{
 			Name:  "varbinary1",
 			Value: []byte("hello world"),
 			Type:  mysql.TypeVarString,
@@ -460,7 +460,7 @@ var avroTestColumns = []*avroTestColumnTuple{
 		[]byte("hello world"), "bytes",
 	},
 	{
-		model.Column{
+		model.BoundedColumn{
 			Name:  "binary",
 			Value: []byte("hello world"),
 			Type:  mysql.TypeString,
@@ -476,7 +476,7 @@ var avroTestColumns = []*avroTestColumnTuple{
 		[]byte("hello world"), "bytes",
 	},
 	{
-		model.Column{Name: "enum", Value: uint64(1), Type: mysql.TypeEnum},
+		model.BoundedColumn{Name: "enum", Value: uint64(1), Type: mysql.TypeEnum},
 		rowcodec.ColInfo{
 			ID:            29,
 			IsPKHandle:    false,
@@ -490,7 +490,7 @@ var avroTestColumns = []*avroTestColumnTuple{
 		"a,", "string",
 	},
 	{
-		model.Column{Name: "set", Value: uint64(1), Type: mysql.TypeSet},
+		model.BoundedColumn{Name: "set", Value: uint64(1), Type: mysql.TypeSet},
 		rowcodec.ColInfo{
 			ID:            30,
 			IsPKHandle:    false,
@@ -504,7 +504,7 @@ var avroTestColumns = []*avroTestColumnTuple{
 		"a,", "string",
 	},
 	{
-		model.Column{Name: "json", Value: `{"key": "value"}`, Type: mysql.TypeJSON},
+		model.BoundedColumn{Name: "json", Value: `{"key": "value"}`, Type: mysql.TypeJSON},
 		rowcodec.ColInfo{
 			ID:            31,
 			IsPKHandle:    false,
@@ -515,7 +515,7 @@ var avroTestColumns = []*avroTestColumnTuple{
 		`{"key": "value"}`, "string",
 	},
 	{
-		model.Column{Name: "date", Value: "2000-01-01", Type: mysql.TypeDate},
+		model.BoundedColumn{Name: "date", Value: "2000-01-01", Type: mysql.TypeDate},
 		rowcodec.ColInfo{
 			ID:            32,
 			IsPKHandle:    false,
@@ -526,7 +526,7 @@ var avroTestColumns = []*avroTestColumnTuple{
 		"2000-01-01", "string",
 	},
 	{
-		model.Column{Name: "datetime", Value: "2015-12-20 23:58:58", Type: mysql.TypeDatetime},
+		model.BoundedColumn{Name: "datetime", Value: "2015-12-20 23:58:58", Type: mysql.TypeDatetime},
 		rowcodec.ColInfo{
 			ID:            33,
 			IsPKHandle:    false,
@@ -537,7 +537,7 @@ var avroTestColumns = []*avroTestColumnTuple{
 		"2015-12-20 23:58:58", "string",
 	},
 	{
-		model.Column{Name: "timestamp", Value: "1973-12-30 15:30:00", Type: mysql.TypeTimestamp},
+		model.BoundedColumn{Name: "timestamp", Value: "1973-12-30 15:30:00", Type: mysql.TypeTimestamp},
 		rowcodec.ColInfo{
 			ID:            34,
 			IsPKHandle:    false,
@@ -548,7 +548,7 @@ var avroTestColumns = []*avroTestColumnTuple{
 		"1973-12-30 15:30:00", "string",
 	},
 	{
-		model.Column{Name: "time", Value: "23:59:59", Type: mysql.TypeDuration},
+		model.BoundedColumn{Name: "time", Value: "23:59:59", Type: mysql.TypeDuration},
 		rowcodec.ColInfo{
 			ID:            35,
 			IsPKHandle:    false,
@@ -559,7 +559,7 @@ var avroTestColumns = []*avroTestColumnTuple{
 		"23:59:59", "string",
 	},
 	{
-		model.Column{Name: "year", Value: int64(1970), Type: mysql.TypeYear},
+		model.BoundedColumn{Name: "year", Value: int64(1970), Type: mysql.TypeYear},
 		rowcodec.ColInfo{
 			ID:            36,
 			IsPKHandle:    false,
@@ -573,11 +573,12 @@ var avroTestColumns = []*avroTestColumnTuple{
 
 func TestColumnToAvroSchema(t *testing.T) {
 	for _, v := range avroTestColumns {
-		schema, err := columnToAvroSchema(&v.col, v.colInfo.Ft, "precise", "long")
+		col := v.col.Unbound()
+		schema, err := columnToAvroSchema(col, v.colInfo.Ft, "precise", "long")
 		require.NoError(t, err)
 		require.Equal(t, v.expectedSchema, schema)
-		if v.col.Name == "decimal" {
-			schema, err := columnToAvroSchema(&v.col, v.colInfo.Ft, "string", "long")
+		if col.Name == "decimal" {
+			schema, err := columnToAvroSchema(col, v.colInfo.Ft, "string", "long")
 			require.NoError(t, err)
 			require.Equal(
 				t,
@@ -585,8 +586,8 @@ func TestColumnToAvroSchema(t *testing.T) {
 				schema,
 			)
 		}
-		if v.col.Name == "longlongunsigned" {
-			schema, err := columnToAvroSchema(&v.col, v.colInfo.Ft, "precise", "string")
+		if col.Name == "longlongunsigned" {
+			schema, err := columnToAvroSchema(col, v.colInfo.Ft, "precise", "string")
 			require.NoError(t, err)
 			require.Equal(
 				t,
@@ -604,18 +605,21 @@ func TestColumnToAvroData(t *testing.T) {
 	t.Parallel()
 
 	for _, v := range avroTestColumns {
-		data, str, err := columnToAvroData(&v.col, v.colInfo.Ft, "precise", "long")
+		col := v.col.Unbound()
+		colv := model.ColumnValue{Value: v.col.Value}
+
+		data, str, err := columnToAvroData(col, colv, v.colInfo.Ft, "precise", "long")
 		require.NoError(t, err)
 		require.Equal(t, v.expectedData, data)
 		require.Equal(t, v.expectedType, str)
-		if v.col.Name == "decimal" {
-			data, str, err := columnToAvroData(&v.col, v.colInfo.Ft, "string", "long")
+		if col.Name == "decimal" {
+			data, str, err := columnToAvroData(col, colv, v.colInfo.Ft, "string", "long")
 			require.NoError(t, err)
 			require.Equal(t, "129012.1230000", data)
 			require.Equal(t, "string", str)
 		}
-		if v.col.Name == "longlongunsigned" {
-			data, str, err := columnToAvroData(&v.col, v.colInfo.Ft, "precise", "string")
+		if col.Name == "longlongunsigned" {
+			data, str, err := columnToAvroData(col, colv, v.colInfo.Ft, "precise", "string")
 			require.NoError(t, err)
 			require.Equal(t, "1", data)
 			require.Equal(t, "string", str)
@@ -638,16 +642,19 @@ func TestRowToAvroSchema(t *testing.T) {
 	}
 	namespace := getAvroNamespace(model.DefaultNamespace, &table)
 	cols := make([]*model.Column, 0)
+	colvals := make([]model.ColumnValue, 0)
 	colInfos := make([]rowcodec.ColInfo, 0)
 
 	for _, v := range avroTestColumns {
-		cols = append(cols, &v.col)
+		cols = append(cols, v.col.Unbound())
+		colvals = append(colvals, model.ColumnValue{Value: v.col.Value})
 		colInfos = append(colInfos, v.colInfo)
 		colNew := v.col
 		colNew.Name = colNew.Name + "nullable"
 		colNew.Value = nil
 		colNew.Flag.SetIsNullable()
-		cols = append(cols, &colNew)
+		cols = append(cols, colNew.Unbound())
+		colvals = append(colvals, model.ColumnValue{Value: colNew.Value})
 		colInfos = append(colInfos, v.colInfo)
 	}
 
@@ -655,6 +662,7 @@ func TestRowToAvroSchema(t *testing.T) {
 		namespace,
 		table.Table,
 		cols,
+		colvals,
 		colInfos,
 		false,
 		"precise",
@@ -669,6 +677,7 @@ func TestRowToAvroSchema(t *testing.T) {
 		namespace,
 		table.Table,
 		cols,
+		colvals,
 		colInfos,
 		true,
 		"precise",
@@ -684,20 +693,23 @@ func TestRowToAvroData(t *testing.T) {
 	t.Parallel()
 
 	cols := make([]*model.Column, 0)
+	colvals := make([]model.ColumnValue, 0)
 	colInfos := make([]rowcodec.ColInfo, 0)
 
 	for _, v := range avroTestColumns {
-		cols = append(cols, &v.col)
+		cols = append(cols, v.col.Unbound())
+		colvals = append(colvals, model.ColumnValue{Value: v.col.Value})
 		colInfos = append(colInfos, v.colInfo)
 		colNew := v.col
 		colNew.Name = colNew.Name + "nullable"
 		colNew.Value = nil
 		colNew.Flag.SetIsNullable()
-		cols = append(cols, &colNew)
+		cols = append(cols, colNew.Unbound())
+		colvals = append(colvals, model.ColumnValue{Value: colNew.Value})
 		colInfos = append(colInfos, v.colInfo)
 	}
 
-	data, err := rowToAvroData(cols, colInfos, 417318403368288260, "c", false, "precise", "long")
+	data, err := rowToAvroData(cols, colvals, colInfos, 417318403368288260, "c", false, "precise", "long")
 	require.NoError(t, err)
 	_, exists := data["_tidb_commit_ts"]
 	require.False(t, exists)
@@ -706,7 +718,7 @@ func TestRowToAvroData(t *testing.T) {
 	_, exists = data["_tidb_commit_physical_time"]
 	require.False(t, exists)
 
-	data, err = rowToAvroData(cols, colInfos, 417318403368288260, "c", true, "precise", "long")
+	data, err = rowToAvroData(cols, colvals, colInfos, 417318403368288260, "c", true, "precise", "long")
 	require.NoError(t, err)
 	v, exists := data["_tidb_commit_ts"]
 	require.True(t, exists)
@@ -724,12 +736,12 @@ func TestAvroEncode(t *testing.T) {
 	require.NoError(t, err)
 	defer teardownEncoderAndSchemaRegistry()
 
-	cols := make([]*model.Column, 0)
+	bcols := make([]*model.BoundedColumn, 0)
 	colInfos := make([]rowcodec.ColInfo, 0)
 
-	cols = append(
-		cols,
-		&model.Column{
+	bcols = append(
+		bcols,
+		&model.BoundedColumn{
 			Name:  "id",
 			Value: int64(1),
 			Type:  mysql.TypeLong,
@@ -747,17 +759,17 @@ func TestAvroEncode(t *testing.T) {
 	)
 
 	for _, v := range avroTestColumns {
-		cols = append(cols, &v.col)
+		bcols = append(bcols, &v.col)
 		colInfos = append(colInfos, v.colInfo)
 		colNew := v.col
 		colNew.Name = colNew.Name + "nullable"
 		colNew.Value = nil
 		colNew.Flag.SetIsNullable()
-		cols = append(cols, &colNew)
+		bcols = append(bcols, &colNew)
 		colInfos = append(colInfos, v.colInfo)
 	}
 
-	event := &model.RowChangedEvent{
+	event := (&model.BoundedRowChangedEvent{
 		CommitTs: 417318403368288260,
 		Table: &model.TableName{
 			Schema: "testdb",
@@ -769,20 +781,21 @@ func TestAvroEncode(t *testing.T) {
 				Table:  "avroencode",
 			},
 		},
-		Columns:  cols,
 		ColInfos: colInfos,
-	}
+	}).Unbound()
+	event.Columns, event.ColumnValues = model.UnboundColumns(bcols)
 
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 
-	keyCols, keyColInfos := event.HandleKeyColInfos()
+	keyCols, keyColVals, keyColInfos := event.HandleKeyColInfos()
 	namespace := getAvroNamespace(encoder.namespace, event.Table)
 
 	keySchema, err := rowToAvroSchema(
 		namespace,
 		event.Table.Table,
 		keyCols,
+		keyColVals,
 		keyColInfos,
 		false,
 		"precise",
@@ -803,10 +816,12 @@ func TestAvroEncode(t *testing.T) {
 		}
 	}
 
+	cols, colvals := model.UnboundColumns(bcols)
 	valueSchema, err := rowToAvroSchema(
 		namespace,
 		event.Table.Table,
 		cols,
+		colvals,
 		colInfos,
 		true,
 		"precise",
@@ -915,11 +930,11 @@ func TestArvoAppendRowChangedEventWithCallback(t *testing.T) {
 	msgs := encoder.Build()
 	require.Len(t, msgs, 0, "no message should be built and no panic")
 
-	row := &model.RowChangedEvent{
+	row := (&model.BoundedRowChangedEvent{
 		CommitTs:  1,
 		Table:     &model.TableName{Schema: "a", Table: "b"},
 		TableInfo: &model.TableInfo{TableName: model.TableName{Schema: "a", Table: "b"}},
-		Columns: []*model.Column{{
+		Columns: []*model.BoundedColumn{{
 			Name:  "col1",
 			Type:  mysql.TypeVarchar,
 			Value: []byte("aa"),
@@ -930,7 +945,7 @@ func TestArvoAppendRowChangedEventWithCallback(t *testing.T) {
 			VirtualGenCol: false,
 			Ft:            types.NewFieldType(mysql.TypeVarchar),
 		}},
-	}
+	}).Unbound()
 
 	ctx := context.Background()
 	expected := 0

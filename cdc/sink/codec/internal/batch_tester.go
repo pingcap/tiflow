@@ -23,47 +23,12 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
-// RowChangedEventX is just like model.RowChangedEvent, but for tests.
-type RowChangedEventX struct {
-	CommitTs   uint64
-	Table      *model.TableName
-	Columns    []*ColumnX
-	PreColumns []*ColumnX
-}
-
-// ColumnX is just like model.Column, but for tests.
-type ColumnX struct {
-	Name  string
-	Type  byte
-	Value interface{}
-}
-
-func normalizeRow(x *RowChangedEventX) *model.RowChangedEvent {
-	y := &model.RowChangedEvent{
-		CommitTs:        x.CommitTs,
-		Table:           x.Table,
-		Columns:         make([]*model.Column, 0, len(x.Columns)),
-		PreColumns:      make([]*model.Column, 0, len(x.PreColumns)),
-		ColumnValues:    make([]model.ColumnValue, 0, len(x.Columns)),
-		PreColumnValues: make([]model.ColumnValue, 0, len(x.PreColumns)),
-	}
-	for _, c := range x.Columns {
-		y.Columns = append(y.Columns, &model.Column{Name: c.Name, Type: c.Type})
-		y.ColumnValues = append(y.ColumnValues, model.ColumnValue{Value: c.Value})
-	}
-	for _, c := range x.PreColumns {
-		y.PreColumns = append(y.PreColumns, &model.Column{Name: c.Name, Type: c.Type})
-		y.PreColumnValues = append(y.PreColumnValues, model.ColumnValue{Value: c.Value})
-	}
-	return y
-}
-
 var (
 	// CodecRowCases defines test cases for RowChangedEvent.
-	CodecRowCases = [][]*RowChangedEventX{{{
+	CodecRowCases = [][]*model.BoundedRowChangedEvent{{{
 		CommitTs: 424316552636792833,
 		Table:    &model.TableName{Schema: "a", Table: "b"},
-		PreColumns: []*ColumnX{
+		PreColumns: []*model.BoundedColumn{
 			{Name: "varchar", Type: mysql.TypeVarchar, Value: []byte("varchar0")},
 			{Name: "string", Type: mysql.TypeString, Value: []byte("string0")},
 			{Name: "date", Type: mysql.TypeDate, Value: "2021/01/01"},
@@ -73,7 +38,7 @@ var (
 			{Name: "long", Type: mysql.TypeLong, Value: int64(1000)},
 			{Name: "null", Type: mysql.TypeNull, Value: nil},
 		},
-		Columns: []*ColumnX{
+		Columns: []*model.BoundedColumn{
 			{Name: "varchar", Type: mysql.TypeVarchar, Value: []byte("varchar1")},
 			{Name: "string", Type: mysql.TypeString, Value: []byte("string1")},
 			{Name: "date", Type: mysql.TypeDate, Value: "2021/01/02"},
@@ -86,7 +51,7 @@ var (
 	}}, {{
 		CommitTs: 424316553934667777,
 		Table:    &model.TableName{Schema: "a", Table: "c"},
-		PreColumns: []*ColumnX{
+		PreColumns: []*model.BoundedColumn{
 			{Name: "varchar", Type: mysql.TypeVarchar, Value: []byte("varchar0")},
 			{Name: "string", Type: mysql.TypeString, Value: []byte("string0")},
 			{Name: "date", Type: mysql.TypeDate, Value: "2021/01/01"},
@@ -96,7 +61,7 @@ var (
 			{Name: "long", Type: mysql.TypeLong, Value: int64(1000)},
 			{Name: "null", Type: mysql.TypeNull, Value: nil},
 		},
-		Columns: []*ColumnX{
+		Columns: []*model.BoundedColumn{
 			{Name: "varchar", Type: mysql.TypeVarchar, Value: []byte("varchar1")},
 			{Name: "string", Type: mysql.TypeString, Value: []byte("string1")},
 			{Name: "date", Type: mysql.TypeDate, Value: "2021/01/02"},
@@ -109,7 +74,7 @@ var (
 	}, {
 		CommitTs: 424316554327097345,
 		Table:    &model.TableName{Schema: "a", Table: "d"},
-		PreColumns: []*ColumnX{
+		PreColumns: []*model.BoundedColumn{
 			{Name: "varchar", Type: mysql.TypeVarchar, Value: []byte("varchar0")},
 			{Name: "string", Type: mysql.TypeString, Value: []byte("string0")},
 			{Name: "date", Type: mysql.TypeDate, Value: "2021/01/01"},
@@ -119,7 +84,7 @@ var (
 			{Name: "long", Type: mysql.TypeLong, Value: int64(1000)},
 			{Name: "null", Type: mysql.TypeNull, Value: nil},
 		},
-		Columns: []*ColumnX{
+		Columns: []*model.BoundedColumn{
 			{Name: "varchar", Type: mysql.TypeVarchar, Value: []byte("varchar1")},
 			{Name: "string", Type: mysql.TypeString, Value: []byte("string1")},
 			{Name: "date", Type: mysql.TypeDate, Value: "2021/01/02"},
@@ -132,7 +97,7 @@ var (
 	}, {
 		CommitTs: 424316554746789889,
 		Table:    &model.TableName{Schema: "a", Table: "e"},
-		PreColumns: []*ColumnX{
+		PreColumns: []*model.BoundedColumn{
 			{Name: "varchar", Type: mysql.TypeVarchar, Value: []byte("varchar0")},
 			{Name: "string", Type: mysql.TypeString, Value: []byte("string0")},
 			{Name: "date", Type: mysql.TypeDate, Value: "2021/01/01"},
@@ -142,7 +107,7 @@ var (
 			{Name: "long", Type: mysql.TypeLong, Value: int64(1000)},
 			{Name: "null", Type: mysql.TypeNull, Value: nil},
 		},
-		Columns: []*ColumnX{
+		Columns: []*model.BoundedColumn{
 			{Name: "varchar", Type: mysql.TypeVarchar, Value: []byte("varchar1")},
 			{Name: "string", Type: mysql.TypeString, Value: []byte("string1")},
 			{Name: "date", Type: mysql.TypeDate, Value: "2021/01/02"},
@@ -155,7 +120,7 @@ var (
 	}, {
 		CommitTs: 424316555073945601,
 		Table:    &model.TableName{Schema: "a", Table: "f", TableID: 6, IsPartition: true},
-		PreColumns: []*ColumnX{
+		PreColumns: []*model.BoundedColumn{
 			{Name: "varchar", Type: mysql.TypeVarchar, Value: []byte("varchar0")},
 			{Name: "string", Type: mysql.TypeString, Value: []byte("string0")},
 			{Name: "date", Type: mysql.TypeDate, Value: "2021/01/01"},
@@ -165,7 +130,7 @@ var (
 			{Name: "long", Type: mysql.TypeLong, Value: int64(1000)},
 			{Name: "null", Type: mysql.TypeNull, Value: nil},
 		},
-		Columns: []*ColumnX{
+		Columns: []*model.BoundedColumn{
 			{Name: "varchar", Type: mysql.TypeVarchar, Value: []byte("varchar1")},
 			{Name: "string", Type: mysql.TypeString, Value: []byte("string1")},
 			{Name: "date", Type: mysql.TypeDate, Value: "2021/01/02"},
@@ -251,13 +216,9 @@ type BatchTester struct {
 
 // NewDefaultBatchTester creates a default BatchTester.
 func NewDefaultBatchTester() *BatchTester {
-	cases := make([][]*model.RowChangedEvent, 0, len(CodecDDLCases))
-	for _, cc := range CodecRowCases {
-		ccx := make([]*model.RowChangedEvent, 0, len(cc))
-		for _, c := range cc {
-			ccx = append(ccx, normalizeRow(c))
-		}
-		cases = append(cases, ccx)
+	cases := make([][]*model.RowChangedEvent, len(CodecRowCases))
+	for i, cc := range CodecRowCases {
+		cases[i] = model.UnboundRowChangedEvents(cc)
 	}
 
 	return &BatchTester{

@@ -49,13 +49,13 @@ func TestFormatCol(t *testing.T) {
 
 func TestNonBinaryStringCol(t *testing.T) {
 	t.Parallel()
-	col := &model.Column{
+	col := &model.BoundedColumn{
 		Name:  "test",
 		Type:  mysql.TypeString,
 		Value: "value",
 	}
 	mqCol := internal.Column{}
-	mqCol.FromRowChangeColumn(col)
+    mqCol.FromRowChangeColumn(col.Unbound(), model.ColumnValue { Value: col.Value })
 	row := &messageRow{Update: map[string]internal.Column{"test": mqCol}}
 	rowEncode, err := row.encode()
 	require.Nil(t, err)
@@ -63,30 +63,41 @@ func TestNonBinaryStringCol(t *testing.T) {
 	err = row2.decode(rowEncode)
 	require.Nil(t, err)
 	require.Equal(t, row, row2)
+
 	mqCol2 := row2.Update["test"]
-	col2 := mqCol2.ToRowChangeColumn("test")
-	col2.Value = string(col2.Value.([]byte))
-	require.Equal(t, col, col2)
+	col2, colv2 := mqCol2.ToRowChangeColumn("test")
+	colv2.Value = string(colv2.Value.([]byte))
+    require.Equal(t, col, &model.BoundedColumn{
+        Name: col2.Name,
+        Type: col2.Type,
+        Value: colv2.Value,
+    })
 }
 
 func TestVarBinaryCol(t *testing.T) {
 	t.Parallel()
-	col := &model.Column{
+	col := &model.BoundedColumn{
 		Name:  "test",
 		Type:  mysql.TypeString,
 		Flag:  model.BinaryFlag,
 		Value: []byte{0x89, 0x50, 0x4E, 0x47, 0x0D, 0x0A, 0x1A, 0x0A},
 	}
 	mqCol := internal.Column{}
-	mqCol.FromRowChangeColumn(col)
+    mqCol.FromRowChangeColumn(col.Unbound(), model.ColumnValue { Value: col.Value })
 	row := &messageRow{Update: map[string]internal.Column{"test": mqCol}}
 	rowEncode, err := row.encode()
 	require.Nil(t, err)
+
 	row2 := new(messageRow)
 	err = row2.decode(rowEncode)
 	require.Nil(t, err)
 	require.Equal(t, row, row2)
 	mqCol2 := row2.Update["test"]
-	col2 := mqCol2.ToRowChangeColumn("test")
-	require.Equal(t, col, col2)
+	col2, colv2 := mqCol2.ToRowChangeColumn("test")
+    require.Equal(t, col, &model.BoundedColumn{
+        Name: col2.Name,
+		Type:  col2.Type,
+		Flag:  col2.Flag,
+		Value: colv2.Value,
+    })
 }
