@@ -50,16 +50,11 @@ type sink struct {
 	statistics *metrics.Statistics
 }
 
-func newSink(ctx context.Context, backends []backend, errCh chan<- error, conflictDetectorSlots uint64) *sink {
-	workers := make([]*worker, 0, len(backends))
-	for i, backend := range backends {
-		w := newWorker(ctx, i, backend, errCh, len(backends))
-		w.runBackgroundLoop()
-		workers = append(workers, w)
-	}
-	detector := causality.NewConflictDetector[*worker, *txnEvent](workers, conflictDetectorSlots)
-	return &sink{conflictDetector: detector, workers: workers}
-}
+// GetDBConnImpl is the implementation of pmysql.Factory.
+// Exported for testing.
+// Maybe we can use a better way to do this. Because this is not thread-safe.
+// You can use `SetupSuite` and `TearDownSuite` to do this to get a better way.
+var GetDBConnImpl pmysql.Factory = pmysql.CreateMySQLDBConn
 
 // NewMySQLSink creates a mysql sink with given parameters.
 func NewMySQLSink(
@@ -69,11 +64,10 @@ func NewMySQLSink(
 	errCh chan<- error,
 	conflictDetectorSlots uint64,
 ) (*sink, error) {
-	var getConn pmysql.Factory = pmysql.CreateMySQLDBConn
-
 	ctx1, cancel := context.WithCancel(ctx)
 	statistics := metrics.NewStatistics(ctx1, psink.TxnSink)
-	backendImpls, err := mysql.NewMySQLBackends(ctx, sinkURI, replicaConfig, getConn, statistics)
+	backendImpls, err := mysql.NewMySQLBackends(ctx, sinkURI,
+		replicaConfig, GetDBConnImpl, statistics)
 	if err != nil {
 		cancel()
 		return nil, err
@@ -88,6 +82,19 @@ func NewMySQLSink(
 	sink.cancel = cancel
 
 	return sink, nil
+}
+
+func newSink(ctx context.Context, backends []backend,
+	errCh chan<- error, conflictDetectorSlots uint64,
+) *sink {
+	workers := make([]*worker, 0, len(backends))
+	for i, backend := range backends {
+		w := newWorker(ctx, i, backend, errCh, len(backends))
+		w.runBackgroundLoop()
+		workers = append(workers, w)
+	}
+	detector := causality.NewConflictDetector[*worker, *txnEvent](workers, conflictDetectorSlots)
+	return &sink{conflictDetector: detector, workers: workers}
 }
 
 // WriteEvents writes events to the sink.
