@@ -63,7 +63,7 @@ func (a *admin) topicsMetadata(
 func (a *admin) GetAllBrokers(ctx context.Context) ([]pkafka.Broker, error) {
 	response, err := a.clusterMetadata(ctx)
 	if err != nil {
-		return nil, err
+		return nil, errors.Trace(err)
 	}
 
 	result := make([]pkafka.Broker, 0, len(response.Brokers))
@@ -78,7 +78,7 @@ func (a *admin) GetAllBrokers(ctx context.Context) ([]pkafka.Broker, error) {
 func (a *admin) GetCoordinator(ctx context.Context) (int, error) {
 	response, err := a.clusterMetadata(ctx)
 	if err != nil {
-		return 0, err
+		return 0, errors.Trace(err)
 	}
 
 	return response.Controller.ID, nil
@@ -125,7 +125,7 @@ func (a *admin) GetBrokerConfig(ctx context.Context, configName string) (string,
 func (a *admin) GetTopicsPartitions(ctx context.Context) (map[string]int32, error) {
 	response, err := a.clusterMetadata(ctx)
 	if err != nil {
-		return nil, err
+		return nil, errors.Trace(err)
 	}
 	result := make(map[string]int32, len(response.Topics))
 	for _, topic := range response.Topics {
@@ -137,7 +137,7 @@ func (a *admin) GetTopicsPartitions(ctx context.Context) (map[string]int32, erro
 func (a *admin) GetAllTopicsMeta(ctx context.Context) (map[string]pkafka.TopicDetail, error) {
 	response, err := a.clusterMetadata(ctx)
 	if err != nil {
-		return nil, err
+		return nil, errors.Trace(err)
 	}
 
 	describeTopicConfigsRequest := &kafka.DescribeConfigsRequest{
