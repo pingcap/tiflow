@@ -225,11 +225,11 @@ func TestBrokerOpenExistingStorageWithOption(t *testing.T) {
 	}, "executor-2", cli)
 	require.NoError(t, err)
 	defer brk2.Close()
-	enabled, resType = brk2.GetEnabledBucketStorage()
+	enabled, _ = brk2.GetEnabledBucketStorage()
 	require.False(t, enabled)
 	mockS3FileManager2 := bucket.NewFileManagerForUTFromSharedStorageFactory(brk2.executorID, storageFactory)
 	brk2.fileManagers[resModel.ResourceTypeS3] = mockS3FileManager2
-	enabled, resType = brk2.GetEnabledBucketStorage()
+	enabled, _ = brk2.GetEnabledBucketStorage()
 	require.True(t, enabled)
 	require.Panics(t, func() {
 		openStorageWithClean("/local/test-option", brk2, "worker-2")

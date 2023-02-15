@@ -144,11 +144,8 @@ func (b *DefaultBroker) initStorage() error {
 		b.fileManagers[resModel.ResourceTypeGCS] = b.bucketFileManager
 		return nil
 	}
-	if err := b.createDummyResource(); err != nil {
-		return err
-	}
 
-	return nil
+	return b.createDummyResource()
 }
 
 // OpenStorage implements Broker.OpenStorage

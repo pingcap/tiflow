@@ -44,9 +44,9 @@ func TestParseResource(t *testing.T) {
 	require.Equal(t, "my-local-resource/a/b/c", rawResName)
 	require.Equal(t, "/gs/my-local-resource/a/b/c", BuildResourceID(tp, suffix))
 
-	tp, suffix, err = ParseResourceID("/gcs/my-local-resource/a/b/c")
+	_, _, err = ParseResourceID("/gcs/my-local-resource/a/b/c")
 	require.Error(t, err)
-	tp, suffix, err = ParseResourceID("/none/my-local-resource/a/b/c")
+	_, _, err = ParseResourceID("/none/my-local-resource/a/b/c")
 	require.Error(t, err)
 }
 

@@ -58,7 +58,7 @@ func (f persistedResources) UnsetPersisted(ident internal.ResourceIdent) bool {
 // FileManager manages resource files stored on s3.
 type FileManager struct {
 	executorID     model.ExecutorID
-	storageCreator BucketCreator
+	storageCreator Creator
 
 	mu              sync.RWMutex
 	persistedResMap map[resModel.WorkerID]persistedResources
@@ -70,14 +70,14 @@ type FileManager struct {
 func NewFileManagerWithConfig(
 	executorID resModel.ExecutorID, config *resModel.Config,
 ) *FileManager {
-	creator := NewBucketCreator(config)
+	creator := NewCreator(config)
 	return NewFileManager(executorID, creator)
 }
 
 // NewFileManager creates a new bucket FileManager.
 func NewFileManager(
 	executorID resModel.ExecutorID,
-	creator BucketCreator,
+	creator Creator,
 ) *FileManager {
 	return &FileManager{
 		executorID:      executorID,
@@ -338,7 +338,7 @@ func createPlaceholderFile(ctx context.Context, storage brStorage.ExternalStorag
 func PreCheckConfig(config *resModel.Config) error {
 	// TODO: use customized retry policy.
 	log.Debug("pre-checking s3Storage config", zap.Any("config", config))
-	creator := NewBucketCreator(config)
+	creator := NewCreator(config)
 	_, err := creator.newBucketForScope(context.Background(), internal.ResourceScope{})
 	if err != nil {
 		return err

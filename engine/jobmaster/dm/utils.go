@@ -17,6 +17,7 @@ import (
 	resModel "github.com/pingcap/tiflow/engine/pkg/externalresource/model"
 )
 
+// GetDMStorageType return the storage type that DM uses
 func GetDMStorageType(bucketEnabled bool, bucketType resModel.ResourceType) resModel.ResourceType {
 	resType := resModel.ResourceTypeLocalFile
 	if bucketEnabled {

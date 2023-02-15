@@ -97,6 +97,7 @@ type LocalFileConfig struct {
 	BaseDir string `json:"base-dir" toml:"base-dir"`
 }
 
+// Adjust adjusts the local file config
 func (c *LocalFileConfig) Adjust(executorID ExecutorID) {
 	if c.BaseDir == "" {
 		c.BaseDir = defaultLocalStorageDirPrefix

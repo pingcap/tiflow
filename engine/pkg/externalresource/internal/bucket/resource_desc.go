@@ -33,13 +33,13 @@ var _ internal.ResourceDescriptor = (*resourceDescriptor)(nil)
 type resourceDescriptor struct {
 	Ident internal.ResourceIdent
 
-	creator BucketCreator
+	creator Creator
 	storage brStorage.ExternalStorage
 }
 
 func newResourceDescriptor(
 	ident internal.ResourceIdent,
-	creator BucketCreator,
+	creator Creator,
 ) *resourceDescriptor {
 	return &resourceDescriptor{
 		Ident:   ident,

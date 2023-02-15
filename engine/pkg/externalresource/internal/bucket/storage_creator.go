@@ -25,20 +25,20 @@ import (
 	"github.com/pingcap/tiflow/pkg/util"
 )
 
-// BucketCreator represents a creator used to create
+// Creator represents a creator used to create
 // brStorage.ExternalStorage.
-// Implementing mock or stub BucketCreator will make
+// Implementing mock or stub Creator will make
 // unit testing easier.
-type BucketCreator interface {
+type Creator interface {
 	newBucketForScope(ctx context.Context, scope internal.ResourceScope) (brStorage.ExternalStorage, error)
 	newBucketFromURI(ctx context.Context, uri string) (brStorage.ExternalStorage, error)
 	baseURI() string
 	resourceType() model.ResourceType
 }
 
-// BucketCreatorImpl implements BucketCreator.
+// CreatorImpl implements Creator.
 // It is exported for testing purposes.
-type BucketCreatorImpl struct {
+type CreatorImpl struct {
 	// Bucket represents a name of an s3 bucket.
 	Bucket string
 	// Prefix is an optional prefix in the S3 file path.
@@ -51,15 +51,15 @@ type BucketCreatorImpl struct {
 	ResourceType model.ResourceType
 }
 
-// NewBucketCreator creates a new BucketCreator
-func NewBucketCreator(
+// NewCreator creates a new Creator
+func NewCreator(
 	config *model.Config,
-) *BucketCreatorImpl {
+) *CreatorImpl {
 	options, bucket, prefix := config.ToBrBackendOptions()
-	return &BucketCreatorImpl{Prefix: prefix, Bucket: bucket, Options: options}
+	return &CreatorImpl{Prefix: prefix, Bucket: bucket, Options: options}
 }
 
-func (f *BucketCreatorImpl) newBucketForScope(
+func (f *CreatorImpl) newBucketForScope(
 	ctx context.Context, scope internal.ResourceScope,
 ) (brStorage.ExternalStorage, error) {
 	// full uri path is like: `s3://bucket/prefix/executorID/workerID`
@@ -67,7 +67,7 @@ func (f *BucketCreatorImpl) newBucketForScope(
 	return GetExternalStorageFromURI(ctx, uri, f.Options)
 }
 
-func (f *BucketCreatorImpl) baseURI() string {
+func (f *CreatorImpl) baseURI() string {
 	uri := fmt.Sprintf("%s://%s", string(f.ResourceType), url.QueryEscape(f.Bucket))
 	if f.Prefix != "" {
 		uri += "/" + url.QueryEscape(f.Prefix)
@@ -75,11 +75,11 @@ func (f *BucketCreatorImpl) baseURI() string {
 	return uri
 }
 
-func (f *BucketCreatorImpl) resourceType() model.ResourceType {
+func (f *CreatorImpl) resourceType() model.ResourceType {
 	return f.ResourceType
 }
 
-func (f *BucketCreatorImpl) newBucketFromURI(
+func (f *CreatorImpl) newBucketFromURI(
 	ctx context.Context,
 	uri string,
 ) (brStorage.ExternalStorage, error) {
