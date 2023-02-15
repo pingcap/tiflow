@@ -250,8 +250,6 @@ type RedoRowChangedEvent struct {
 // RowChangedEvent represents a row changed event
 type RowChangedEvent struct {
 	/*********** Immutable fields **********/
-	StartTs      uint64     `json:"start-ts" msg:"start-ts"`
-	CommitTs     uint64     `json:"commit-ts" msg:"commit-ts"`
 	Table        *TableName `json:"table" msg:"table"`
 	Columns      []*Column  `json:"columns" msg:"columns"`
 	PreColumns   []*Column  `json:"pre-columns" msg:"pre-columns"`
@@ -261,6 +259,8 @@ type RowChangedEvent struct {
 	ColInfos  []rowcodec.ColInfo `json:"column-infos" msg:"-"`
 
 	/*********** Mutable fields **********/
+	StartTs         uint64        `json:"start-ts" msg:"start-ts"`
+	CommitTs        uint64        `json:"commit-ts" msg:"commit-ts"`
 	RowID           int64         `json:"row-id" msg:"-"` // Deprecated. It is empty when the RowID comes from clustered index table.
 	ColumnValues    []ColumnValue `json:"column-values" msg: "column-values"`
 	PreColumnValues []ColumnValue `json:"pre-column-values" msg: "pre-column-values"`
@@ -682,4 +682,14 @@ func (t *SingleTableTxn) Append(row *RowChangedEvent) {
 // ToWaitFlush indicates whether to wait flushing after the txn is processed or not.
 func (t *SingleTableTxn) ToWaitFlush() bool {
 	return t.FinishWg != nil
+}
+
+// BoundedColumn is a combination of Column and ColumnValue. Generally used in tests.
+type BoundedColumn struct {
+	Name    string
+	Type    byte
+	Charset string
+	Flag    ColumnFlagType
+	Default interface{}
+	Value   interface{}
 }
