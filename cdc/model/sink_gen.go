@@ -413,10 +413,10 @@ func (z *RedoColumn) DecodeMsg(dc *msgp.Reader) (err error) {
 				err = msgp.WrapError(err, "Value")
 				return
 			}
-		case "ValueIsEmptyByteSlice":
-			z.ValueIsEmptyByteSlice, err = dc.ReadBool()
+		case "value-is-empty-bytes":
+			z.ValueIsEmptyBytes, err = dc.ReadBool()
 			if err != nil {
-				err = msgp.WrapError(err, "ValueIsEmptyByteSlice")
+				err = msgp.WrapError(err, "ValueIsEmptyBytes")
 				return
 			}
 		case "flag":
@@ -449,14 +449,14 @@ func (z RedoColumn) EncodeMsg(en *msgp.Writer) (err error) {
 		err = msgp.WrapError(err, "Value")
 		return
 	}
-	// write "ValueIsEmptyByteSlice"
-	err = en.Append(0xb5, 0x56, 0x61, 0x6c, 0x75, 0x65, 0x49, 0x73, 0x45, 0x6d, 0x70, 0x74, 0x79, 0x42, 0x79, 0x74, 0x65, 0x53, 0x6c, 0x69, 0x63, 0x65)
+	// write "value-is-empty-bytes"
+	err = en.Append(0xb4, 0x76, 0x61, 0x6c, 0x75, 0x65, 0x2d, 0x69, 0x73, 0x2d, 0x65, 0x6d, 0x70, 0x74, 0x79, 0x2d, 0x62, 0x79, 0x74, 0x65, 0x73)
 	if err != nil {
 		return
 	}
-	err = en.WriteBool(z.ValueIsEmptyByteSlice)
+	err = en.WriteBool(z.ValueIsEmptyBytes)
 	if err != nil {
-		err = msgp.WrapError(err, "ValueIsEmptyByteSlice")
+		err = msgp.WrapError(err, "ValueIsEmptyBytes")
 		return
 	}
 	// write "flag"
@@ -483,9 +483,9 @@ func (z RedoColumn) MarshalMsg(b []byte) (o []byte, err error) {
 		err = msgp.WrapError(err, "Value")
 		return
 	}
-	// string "ValueIsEmptyByteSlice"
-	o = append(o, 0xb5, 0x56, 0x61, 0x6c, 0x75, 0x65, 0x49, 0x73, 0x45, 0x6d, 0x70, 0x74, 0x79, 0x42, 0x79, 0x74, 0x65, 0x53, 0x6c, 0x69, 0x63, 0x65)
-	o = msgp.AppendBool(o, z.ValueIsEmptyByteSlice)
+	// string "value-is-empty-bytes"
+	o = append(o, 0xb4, 0x76, 0x61, 0x6c, 0x75, 0x65, 0x2d, 0x69, 0x73, 0x2d, 0x65, 0x6d, 0x70, 0x74, 0x79, 0x2d, 0x62, 0x79, 0x74, 0x65, 0x73)
+	o = msgp.AppendBool(o, z.ValueIsEmptyBytes)
 	// string "flag"
 	o = append(o, 0xa4, 0x66, 0x6c, 0x61, 0x67)
 	o = msgp.AppendUint64(o, z.Flag)
@@ -516,10 +516,10 @@ func (z *RedoColumn) UnmarshalMsg(bts []byte) (o []byte, err error) {
 				err = msgp.WrapError(err, "Value")
 				return
 			}
-		case "ValueIsEmptyByteSlice":
-			z.ValueIsEmptyByteSlice, bts, err = msgp.ReadBoolBytes(bts)
+		case "value-is-empty-bytes":
+			z.ValueIsEmptyBytes, bts, err = msgp.ReadBoolBytes(bts)
 			if err != nil {
-				err = msgp.WrapError(err, "ValueIsEmptyByteSlice")
+				err = msgp.WrapError(err, "ValueIsEmptyBytes")
 				return
 			}
 		case "flag":
@@ -542,7 +542,7 @@ func (z *RedoColumn) UnmarshalMsg(bts []byte) (o []byte, err error) {
 
 // Msgsize returns an upper bound estimate of the number of bytes occupied by the serialized message
 func (z RedoColumn) Msgsize() (s int) {
-	s = 1 + 7 + msgp.GuessSize(z.Value) + 22 + msgp.BoolSize + 5 + msgp.Uint64Size
+	s = 1 + 7 + msgp.GuessSize(z.Value) + 21 + msgp.BoolSize + 5 + msgp.Uint64Size
 	return
 }
 
@@ -1109,10 +1109,10 @@ func (z *RedoRowChangedEvent) DecodeMsg(dc *msgp.Reader) (err error) {
 							err = msgp.WrapError(err, "Columns", za0001, "Value")
 							return
 						}
-					case "ValueIsEmptyByteSlice":
-						z.Columns[za0001].ValueIsEmptyByteSlice, err = dc.ReadBool()
+					case "value-is-empty-bytes":
+						z.Columns[za0001].ValueIsEmptyBytes, err = dc.ReadBool()
 						if err != nil {
-							err = msgp.WrapError(err, "Columns", za0001, "ValueIsEmptyByteSlice")
+							err = msgp.WrapError(err, "Columns", za0001, "ValueIsEmptyBytes")
 							return
 						}
 					case "flag":
@@ -1163,10 +1163,10 @@ func (z *RedoRowChangedEvent) DecodeMsg(dc *msgp.Reader) (err error) {
 							err = msgp.WrapError(err, "PreColumns", za0002, "Value")
 							return
 						}
-					case "ValueIsEmptyByteSlice":
-						z.PreColumns[za0002].ValueIsEmptyByteSlice, err = dc.ReadBool()
+					case "value-is-empty-bytes":
+						z.PreColumns[za0002].ValueIsEmptyBytes, err = dc.ReadBool()
 						if err != nil {
-							err = msgp.WrapError(err, "PreColumns", za0002, "ValueIsEmptyByteSlice")
+							err = msgp.WrapError(err, "PreColumns", za0002, "ValueIsEmptyBytes")
 							return
 						}
 					case "flag":
@@ -1237,14 +1237,14 @@ func (z *RedoRowChangedEvent) EncodeMsg(en *msgp.Writer) (err error) {
 			err = msgp.WrapError(err, "Columns", za0001, "Value")
 			return
 		}
-		// write "ValueIsEmptyByteSlice"
-		err = en.Append(0xb5, 0x56, 0x61, 0x6c, 0x75, 0x65, 0x49, 0x73, 0x45, 0x6d, 0x70, 0x74, 0x79, 0x42, 0x79, 0x74, 0x65, 0x53, 0x6c, 0x69, 0x63, 0x65)
+		// write "value-is-empty-bytes"
+		err = en.Append(0xb4, 0x76, 0x61, 0x6c, 0x75, 0x65, 0x2d, 0x69, 0x73, 0x2d, 0x65, 0x6d, 0x70, 0x74, 0x79, 0x2d, 0x62, 0x79, 0x74, 0x65, 0x73)
 		if err != nil {
 			return
 		}
-		err = en.WriteBool(z.Columns[za0001].ValueIsEmptyByteSlice)
+		err = en.WriteBool(z.Columns[za0001].ValueIsEmptyBytes)
 		if err != nil {
-			err = msgp.WrapError(err, "Columns", za0001, "ValueIsEmptyByteSlice")
+			err = msgp.WrapError(err, "Columns", za0001, "ValueIsEmptyBytes")
 			return
 		}
 		// write "flag"
@@ -1280,14 +1280,14 @@ func (z *RedoRowChangedEvent) EncodeMsg(en *msgp.Writer) (err error) {
 			err = msgp.WrapError(err, "PreColumns", za0002, "Value")
 			return
 		}
-		// write "ValueIsEmptyByteSlice"
-		err = en.Append(0xb5, 0x56, 0x61, 0x6c, 0x75, 0x65, 0x49, 0x73, 0x45, 0x6d, 0x70, 0x74, 0x79, 0x42, 0x79, 0x74, 0x65, 0x53, 0x6c, 0x69, 0x63, 0x65)
+		// write "value-is-empty-bytes"
+		err = en.Append(0xb4, 0x76, 0x61, 0x6c, 0x75, 0x65, 0x2d, 0x69, 0x73, 0x2d, 0x65, 0x6d, 0x70, 0x74, 0x79, 0x2d, 0x62, 0x79, 0x74, 0x65, 0x73)
 		if err != nil {
 			return
 		}
-		err = en.WriteBool(z.PreColumns[za0002].ValueIsEmptyByteSlice)
+		err = en.WriteBool(z.PreColumns[za0002].ValueIsEmptyBytes)
 		if err != nil {
-			err = msgp.WrapError(err, "PreColumns", za0002, "ValueIsEmptyByteSlice")
+			err = msgp.WrapError(err, "PreColumns", za0002, "ValueIsEmptyBytes")
 			return
 		}
 		// write "flag"
@@ -1331,9 +1331,9 @@ func (z *RedoRowChangedEvent) MarshalMsg(b []byte) (o []byte, err error) {
 			err = msgp.WrapError(err, "Columns", za0001, "Value")
 			return
 		}
-		// string "ValueIsEmptyByteSlice"
-		o = append(o, 0xb5, 0x56, 0x61, 0x6c, 0x75, 0x65, 0x49, 0x73, 0x45, 0x6d, 0x70, 0x74, 0x79, 0x42, 0x79, 0x74, 0x65, 0x53, 0x6c, 0x69, 0x63, 0x65)
-		o = msgp.AppendBool(o, z.Columns[za0001].ValueIsEmptyByteSlice)
+		// string "value-is-empty-bytes"
+		o = append(o, 0xb4, 0x76, 0x61, 0x6c, 0x75, 0x65, 0x2d, 0x69, 0x73, 0x2d, 0x65, 0x6d, 0x70, 0x74, 0x79, 0x2d, 0x62, 0x79, 0x74, 0x65, 0x73)
+		o = msgp.AppendBool(o, z.Columns[za0001].ValueIsEmptyBytes)
 		// string "flag"
 		o = append(o, 0xa4, 0x66, 0x6c, 0x61, 0x67)
 		o = msgp.AppendUint64(o, z.Columns[za0001].Flag)
@@ -1350,9 +1350,9 @@ func (z *RedoRowChangedEvent) MarshalMsg(b []byte) (o []byte, err error) {
 			err = msgp.WrapError(err, "PreColumns", za0002, "Value")
 			return
 		}
-		// string "ValueIsEmptyByteSlice"
-		o = append(o, 0xb5, 0x56, 0x61, 0x6c, 0x75, 0x65, 0x49, 0x73, 0x45, 0x6d, 0x70, 0x74, 0x79, 0x42, 0x79, 0x74, 0x65, 0x53, 0x6c, 0x69, 0x63, 0x65)
-		o = msgp.AppendBool(o, z.PreColumns[za0002].ValueIsEmptyByteSlice)
+		// string "value-is-empty-bytes"
+		o = append(o, 0xb4, 0x76, 0x61, 0x6c, 0x75, 0x65, 0x2d, 0x69, 0x73, 0x2d, 0x65, 0x6d, 0x70, 0x74, 0x79, 0x2d, 0x62, 0x79, 0x74, 0x65, 0x73)
+		o = msgp.AppendBool(o, z.PreColumns[za0002].ValueIsEmptyBytes)
 		// string "flag"
 		o = append(o, 0xa4, 0x66, 0x6c, 0x61, 0x67)
 		o = msgp.AppendUint64(o, z.PreColumns[za0002].Flag)
@@ -1428,10 +1428,10 @@ func (z *RedoRowChangedEvent) UnmarshalMsg(bts []byte) (o []byte, err error) {
 							err = msgp.WrapError(err, "Columns", za0001, "Value")
 							return
 						}
-					case "ValueIsEmptyByteSlice":
-						z.Columns[za0001].ValueIsEmptyByteSlice, bts, err = msgp.ReadBoolBytes(bts)
+					case "value-is-empty-bytes":
+						z.Columns[za0001].ValueIsEmptyBytes, bts, err = msgp.ReadBoolBytes(bts)
 						if err != nil {
-							err = msgp.WrapError(err, "Columns", za0001, "ValueIsEmptyByteSlice")
+							err = msgp.WrapError(err, "Columns", za0001, "ValueIsEmptyBytes")
 							return
 						}
 					case "flag":
@@ -1482,10 +1482,10 @@ func (z *RedoRowChangedEvent) UnmarshalMsg(bts []byte) (o []byte, err error) {
 							err = msgp.WrapError(err, "PreColumns", za0002, "Value")
 							return
 						}
-					case "ValueIsEmptyByteSlice":
-						z.PreColumns[za0002].ValueIsEmptyByteSlice, bts, err = msgp.ReadBoolBytes(bts)
+					case "value-is-empty-bytes":
+						z.PreColumns[za0002].ValueIsEmptyBytes, bts, err = msgp.ReadBoolBytes(bts)
 						if err != nil {
-							err = msgp.WrapError(err, "PreColumns", za0002, "ValueIsEmptyByteSlice")
+							err = msgp.WrapError(err, "PreColumns", za0002, "ValueIsEmptyBytes")
 							return
 						}
 					case "flag":
@@ -1525,11 +1525,11 @@ func (z *RedoRowChangedEvent) Msgsize() (s int) {
 	}
 	s += 8 + msgp.ArrayHeaderSize
 	for za0001 := range z.Columns {
-		s += 1 + 7 + msgp.GuessSize(z.Columns[za0001].Value) + 22 + msgp.BoolSize + 5 + msgp.Uint64Size
+		s += 1 + 7 + msgp.GuessSize(z.Columns[za0001].Value) + 21 + msgp.BoolSize + 5 + msgp.Uint64Size
 	}
 	s += 12 + msgp.ArrayHeaderSize
 	for za0002 := range z.PreColumns {
-		s += 1 + 7 + msgp.GuessSize(z.PreColumns[za0002].Value) + 22 + msgp.BoolSize + 5 + msgp.Uint64Size
+		s += 1 + 7 + msgp.GuessSize(z.PreColumns[za0002].Value) + 21 + msgp.BoolSize + 5 + msgp.Uint64Size
 	}
 	return
 }

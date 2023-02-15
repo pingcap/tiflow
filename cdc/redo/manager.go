@@ -606,9 +606,7 @@ func (m *ManagerImpl) bgUpdateLog(
 				startToHandleEvent := time.Now()
 				switch cache.eventType {
 				case model.MessageTypeRow:
-					for _, row := range cache.rows {
-						logs = append(logs, row)
-					}
+					logs = append(logs, cache.rows...)
 					if cache.releaseMemory != nil {
 						releaseMemoryCbs = append(releaseMemoryCbs, cache.releaseMemory)
 					}
@@ -643,9 +641,7 @@ func (m *ManagerImpl) bgUpdateLog(
 				startToHandleEvent := time.Now()
 				switch cache.eventType {
 				case model.MessageTypeRow:
-					for _, row := range cache.rows {
-						logs = append(logs, row)
-					}
+					logs = append(logs, cache.rows...)
 					if cache.releaseMemory != nil {
 						releaseMemoryCbs = append(releaseMemoryCbs, cache.releaseMemory)
 					}

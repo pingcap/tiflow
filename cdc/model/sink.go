@@ -440,9 +440,9 @@ type Column struct {
 type RedoColumn struct {
 	// Fields from Column and can't be marshaled directly in Column.
 	Value interface{} `msg:"column"`
-	// msgp transfroms empty byte slice into nil, PTAL msgp#247.
-	ValueIsEmptyByteSlice bool   `msg: "value-is-empty-byte-slice"`
-	Flag                  uint64 `msg:"flag"`
+	// msgp transforms empty byte slice into nil, PTAL msgp#247.
+	ValueIsEmptyBytes bool   `msg:"value-is-empty-bytes"`
+	Flag              uint64 `msg:"flag"`
 }
 
 // BuildTiDBTableInfo builds a TiDB TableInfo from given information.

@@ -44,7 +44,7 @@ var (
 func postUnmarshal(r *model.RedoLog) {
 	workaroundColumn := func(c *model.Column, redoC *model.RedoColumn) {
 		c.Flag = model.ColumnFlagType(redoC.Flag)
-		if redoC.ValueIsEmptyByteSlice {
+		if redoC.ValueIsEmptyBytes {
 			c.Value = []byte{}
 		} else {
 			c.Value = redoC.Value
@@ -77,7 +77,7 @@ func preMarshal(r *model.RedoLog) {
 		switch v := redoC.Value.(type) {
 		case []byte:
 			if len(v) == 0 {
-				redoC.ValueIsEmptyByteSlice = true
+				redoC.ValueIsEmptyBytes = true
 			}
 		}
 	}
@@ -110,6 +110,7 @@ func preMarshal(r *model.RedoLog) {
 	}
 }
 
+// UnmarshalRedoLog unmarshals a RedoLog from the given byte slice.
 func UnmarshalRedoLog(bts []byte) (r *model.RedoLog, o []byte, err error) {
 	if len(bts) < versionPrefixLength {
 		err = msgp.ErrShortBytes
@@ -146,6 +147,7 @@ func UnmarshalRedoLog(bts []byte) (r *model.RedoLog, o []byte, err error) {
 	return
 }
 
+// MarshalRedoLog marshals a RedoLog into bytes.
 func MarshalRedoLog(r *model.RedoLog, b []byte) (o []byte, err error) {
 	preMarshal(r)
 	b = append(b, versionPrefix[:]...)
@@ -154,6 +156,7 @@ func MarshalRedoLog(r *model.RedoLog, b []byte) (o []byte, err error) {
 	return
 }
 
+// MarshalRowAsRedoLog converts a RowChangedEvent into RedoLog, and then marshals it.
 func MarshalRowAsRedoLog(r *model.RowChangedEvent, b []byte) (o []byte, err error) {
 	log := &model.RedoLog{
 		RedoRow: model.RedoRowChangedEvent{Row: r},
@@ -162,6 +165,7 @@ func MarshalRowAsRedoLog(r *model.RowChangedEvent, b []byte) (o []byte, err erro
 	return MarshalRedoLog(log, b)
 }
 
+// MarshalDDLAsRedoLog converts a DDLEvent into RedoLog, and then marshals it.
 func MarshalDDLAsRedoLog(d *model.DDLEvent, b []byte) (o []byte, err error) {
 	log := &model.RedoLog{
 		RedoDDL: model.RedoDDLEvent{DDL: d},

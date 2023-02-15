@@ -27,7 +27,7 @@ import (
 func TestV1toV2(t *testing.T) {
 	var msg1 []byte
 	var rv1 *codecv1.RedoLog
-	var rv2, rv2_gen *model.RedoLog
+	var rv2, rv2Gen *model.RedoLog
 	var err error
 
 	rv1 = &codecv1.RedoLog{
@@ -114,23 +114,23 @@ func TestV1toV2(t *testing.T) {
 	require.Nil(t, err)
 
 	// Unmarshal v2 from v1 bytes.
-	rv2_gen, msg1, err = UnmarshalRedoLog(msg1)
+	rv2Gen, msg1, err = UnmarshalRedoLog(msg1)
 	require.Nil(t, err)
 	require.Zero(t, len(msg1))
-	require.Equal(t, rv2.RedoRow.Row, rv2_gen.RedoRow.Row)
+	require.Equal(t, rv2.RedoRow.Row, rv2Gen.RedoRow.Row)
 
 	// For v2, []byte{} will be kept same in marshal and unmarshal.
 	rv2.RedoRow.Row.Columns[0].Value = []byte{}
 	rv2.RedoRow.Row.PreColumns[0].Value = []byte{}
-	rv2_gen.RedoRow.Row.Columns[0].Value = []byte{}
-	rv2_gen.RedoRow.Row.PreColumns[0].Value = []byte{}
+	rv2Gen.RedoRow.Row.Columns[0].Value = []byte{}
+	rv2Gen.RedoRow.Row.PreColumns[0].Value = []byte{}
 
-	msg1, err = MarshalRedoLog(rv2_gen, nil)
+	msg1, err = MarshalRedoLog(rv2Gen, nil)
 	require.Nil(t, err)
-	rv2_gen, msg1, err = UnmarshalRedoLog(msg1)
+	rv2Gen, msg1, err = UnmarshalRedoLog(msg1)
 	require.Nil(t, err)
 	require.Zero(t, len(msg1))
-	require.Equal(t, rv2.RedoRow.Row, rv2_gen.RedoRow.Row)
+	require.Equal(t, rv2.RedoRow.Row, rv2Gen.RedoRow.Row)
 }
 
 func TestRowRedoConvert(t *testing.T) {
