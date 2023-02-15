@@ -54,12 +54,7 @@ func NewFactory(
 	if err != nil {
 		return nil, errors.Trace(err)
 	}
-
-	transport, err := newTransport(options)
-	if err != nil {
-		return nil, errors.Trace(err)
-	}
-	transport.ClientID = clientID
+	options.ClientID = clientID
 
 	return &factory{
 		changefeedID: changefeedID,
@@ -89,6 +84,7 @@ func newTransport(o *pkafka.Options) (*kafka.Transport, error) {
 		SASL:        mechanism,
 		TLS:         tlsConfig,
 		DialTimeout: o.DialTimeout,
+		ClientID:    o.ClientID,
 	}, nil
 }
 
