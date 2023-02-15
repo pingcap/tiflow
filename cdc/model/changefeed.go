@@ -146,6 +146,8 @@ type ChangeFeedInfo struct {
 	Error  *RunningError         `json:"error"`
 
 	CreatorVersion string `json:"creator-version"`
+	// Epoch is the epoch of a changefeed, changes on every restart.
+	Epoch uint64 `json:""`
 }
 
 const changeFeedIDMaxLen = 128

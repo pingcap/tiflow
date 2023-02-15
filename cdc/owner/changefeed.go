@@ -45,7 +45,7 @@ import (
 // newSchedulerFromCtx creates a new scheduler from context.
 // This function is factored out to facilitate unit testing.
 func newSchedulerFromCtx(
-	ctx cdcContext.Context, up *upstream.Upstream, cfg *config.SchedulerConfig,
+	ctx cdcContext.Context, up *upstream.Upstream, epoch uint64, cfg *config.SchedulerConfig,
 ) (ret scheduler.Scheduler, err error) {
 	changeFeedID := ctx.ChangefeedVars().ID
 	messageServer := ctx.GlobalVars().MessageServer
@@ -54,14 +54,14 @@ func newSchedulerFromCtx(
 	captureID := ctx.GlobalVars().CaptureInfo.ID
 	ret, err = scheduler.NewScheduler(
 		ctx, captureID, changeFeedID,
-		messageServer, messageRouter, ownerRev, up.RegionCache, up.PDClock, cfg)
+		messageServer, messageRouter, ownerRev, epoch, up.RegionCache, up.PDClock, cfg)
 	return ret, errors.Trace(err)
 }
 
 func newScheduler(
-	ctx cdcContext.Context, up *upstream.Upstream, cfg *config.SchedulerConfig,
+	ctx cdcContext.Context, up *upstream.Upstream, epoch uint64, cfg *config.SchedulerConfig,
 ) (scheduler.Scheduler, error) {
-	return newSchedulerFromCtx(ctx, up, cfg)
+	return newSchedulerFromCtx(ctx, up, epoch, cfg)
 }
 
 type changefeed struct {
@@ -133,7 +133,7 @@ type changefeed struct {
 
 	newSink      func(changefeedID model.ChangeFeedID, info *model.ChangeFeedInfo, reportErr func(error)) DDLSink
 	newScheduler func(
-		ctx cdcContext.Context, up *upstream.Upstream, cfg *config.SchedulerConfig,
+		ctx cdcContext.Context, up *upstream.Upstream, epoch uint64, cfg *config.SchedulerConfig,
 	) (scheduler.Scheduler, error)
 
 	newDownstreamObserver func(
@@ -181,7 +181,7 @@ func newChangefeed4Test(
 	) (puller.DDLPuller, error),
 	newSink func(changefeedID model.ChangeFeedID, info *model.ChangeFeedInfo, reportErr func(err error)) DDLSink,
 	newScheduler func(
-		ctx cdcContext.Context, up *upstream.Upstream, cfg *config.SchedulerConfig,
+		ctx cdcContext.Context, up *upstream.Upstream, epoch uint64, cfg *config.SchedulerConfig,
 	) (scheduler.Scheduler, error),
 	newDownstreamObserver func(
 		ctx context.Context, sinkURIStr string, replCfg *config.ReplicaConfig,
@@ -570,13 +570,18 @@ LOOP:
 		zap.String("namespace", c.id.Namespace),
 		zap.String("changefeed", c.id.ID))
 
+	phyTs, logical, err := c.upstream.PDClient.GetTS(ctx)
+	epoch := oracle.ComposeTS(phyTs, logical)
+
 	// create scheduler
 	cfg := *c.cfg
 	cfg.ChangefeedSettings = c.state.Info.Config.Scheduler
-	c.scheduler, err = c.newScheduler(ctx, c.upstream, &cfg)
+	c.scheduler, err = c.newScheduler(ctx, c.upstream, epoch, &cfg)
 	if err != nil {
 		return errors.Trace(err)
 	}
+	// Update changefeed epoch.
+	c.feedStateManager.patchEpoch(epoch)
 
 	c.initMetrics()
 

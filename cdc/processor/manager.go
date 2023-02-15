@@ -72,6 +72,7 @@ type managerImpl struct {
 		model.ChangeFeedID,
 		*upstream.Upstream,
 		*model.Liveness,
+		uint64,
 		*config.SchedulerConfig,
 	) *processor
 	cfg *config.SchedulerConfig
@@ -126,8 +127,9 @@ func (m *managerImpl) Tick(stdCtx context.Context, state orchestrator.ReactorSta
 
 			cfg := *m.cfg
 			cfg.ChangefeedSettings = changefeedState.Info.Config.Scheduler
+			changefeedEpoch := changefeedState.Info.Epoch
 			p = m.newProcessor(
-				changefeedState, m.captureInfo, changefeedID, up, m.liveness, &cfg)
+				changefeedState, m.captureInfo, changefeedID, up, m.liveness, changefeedEpoch, &cfg)
 			m.processors[changefeedID] = p
 		}
 		ctx := cdcContext.WithChangefeedVars(ctx, &cdcContext.ChangefeedVars{

@@ -333,6 +333,20 @@ func (m *feedStateManager) pushAdminJob(job *model.AdminJob) {
 	m.adminJobQueue = append(m.adminJobQueue, job)
 }
 
+func (m *feedStateManager) patchEpoch(epoch uint64) {
+	m.state.PatchInfo(func(info *model.ChangeFeedInfo) (*model.ChangeFeedInfo, bool, error) {
+		changed := false
+		if info == nil {
+			return nil, changed, nil
+		}
+		if info.Epoch != epoch {
+			info.Epoch = epoch
+			changed = true
+		}
+		return info, changed, nil
+	})
+}
+
 func (m *feedStateManager) patchState(feedState model.FeedState) {
 	var adminJobType model.AdminJobType
 	switch feedState {
