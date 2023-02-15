@@ -135,7 +135,7 @@ func checkFile(t *testing.T, storage brStorage.ExternalStorage, path string, exp
 			return "exist"
 		}
 		return "not exist"
-	})
+	}())
 }
 
 func checkS3ResourceForWorker(

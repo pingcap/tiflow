@@ -133,19 +133,22 @@ func (b *DefaultBroker) initStorage() error {
 		log.Info("broker will not use s3/gcs as external storage since s3/gcs are both not configured")
 		return nil
 	}
-	b.bucketFileManager = bucket.NewFileManagerWithConfig(b.executorID, b.config)
+
 	if b.config.S3Enabled() {
 		log.Info("broker will use s3 as external storage since s3 is configured")
+		b.bucketFileManager = bucket.NewFileManagerWithConfig(b.executorID, b.config)
 		b.fileManagers[resModel.ResourceTypeS3] = b.bucketFileManager
-		return nil
-	}
-	if b.config.GCSEnabled() {
-		log.Info("broker will use gcs as external storage since gcs is configured")
-		b.fileManagers[resModel.ResourceTypeGCS] = b.bucketFileManager
-		return nil
+		return b.createDummyResource()
 	}
 
-	return b.createDummyResource()
+	if b.config.GCSEnabled() {
+		log.Info("broker will use gcs as external storage since gcs is configured")
+		b.bucketFileManager = bucket.NewFileManagerWithConfig(b.executorID, b.config)
+		b.fileManagers[resModel.ResourceTypeGCS] = b.bucketFileManager
+		return b.createDummyResource()
+	}
+
+	return nil
 }
 
 // OpenStorage implements Broker.OpenStorage
