@@ -281,7 +281,6 @@ func datum2Column(tableInfo *model.TableInfo, datums map[int64]types.Datum, fill
 		}
 		colName := colInfo.Name.O
 		colDatums, exist := datums[colInfo.ID]
-		var colValue interface{}
 		if !exist && !fillWithDefaultValue {
 			log.Debug("column value is not found",
 				zap.String("table", tableInfo.Name.O), zap.String("column", colName))
@@ -291,9 +290,9 @@ func datum2Column(tableInfo *model.TableInfo, datums map[int64]types.Datum, fill
 		var warn string
 		var size int
 		if exist {
-			colValue, size, warn, err = formatColVal(colDatums, colInfo)
+			_, size, warn, err = formatColVal(colDatums, colInfo)
 		} else if fillWithDefaultValue {
-			colDatums, colValue, size, warn, err = getDefaultOrZeroValue(colInfo)
+			colDatums, _, size, warn, err = getDefaultOrZeroValue(colInfo)
 		}
 		if err != nil {
 			return nil, nil, errors.Trace(err)
@@ -308,11 +307,11 @@ func datum2Column(tableInfo *model.TableInfo, datums map[int64]types.Datum, fill
 			Name:    colName,
 			Type:    colInfo.GetType(),
 			Charset: colInfo.GetCharset(),
-			Value:   colValue,
+			// Value:   colValue,
 			Default: defaultValue,
 			Flag:    tableInfo.ColumnsFlag[colInfo.ID],
 			// ApproximateBytes = column data size + column struct size
-			ApproximateBytes: colSize + sizeOfEmptyColumn,
+			// ApproximateBytes: colSize + sizeOfEmptyColumn,
 		}
 	}
 	return cols, rawCols, nil

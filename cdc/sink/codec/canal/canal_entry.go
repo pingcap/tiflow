@@ -119,14 +119,14 @@ func (b *canalEntryBuilder) formatValue(value interface{}, javaType internal.Jav
 
 // build the Column in the canal RowData
 // see https://github.com/alibaba/canal/blob/b54bea5e3337c9597c427a53071d214ff04628d1/parse/src/main/java/com/alibaba/otter/canal/parse/inbound/mysql/dbsync/LogEventConvert.java#L756-L872
-func (b *canalEntryBuilder) buildColumn(c *model.Column, colName string, updated bool) (*canal.Column, error) {
+func (b *canalEntryBuilder) buildColumn(c *model.Column, cv model.ColumnValue, colName string, updated bool) (*canal.Column, error) {
 	mysqlType := getMySQLType(c)
-	javaType, err := getJavaSQLType(c, mysqlType)
+	javaType, err := getJavaSQLType(c, cv, mysqlType)
 	if err != nil {
 		return nil, cerror.WrapError(cerror.ErrCanalEncodeFailed, err)
 	}
 
-	value, err := b.formatValue(c.Value, javaType)
+	value, err := b.formatValue(cv.Value, javaType)
 	if err != nil {
 		return nil, cerror.WrapError(cerror.ErrCanalEncodeFailed, err)
 	}
@@ -136,7 +136,7 @@ func (b *canalEntryBuilder) buildColumn(c *model.Column, colName string, updated
 		Name:          colName,
 		IsKey:         c.Flag.IsPrimaryKey(),
 		Updated:       updated,
-		IsNullPresent: &canal.Column_IsNull{IsNull: c.Value == nil},
+		IsNullPresent: &canal.Column_IsNull{IsNull: cv.Value == nil},
 		Value:         value,
 		MysqlType:     mysqlType,
 	}
@@ -146,22 +146,22 @@ func (b *canalEntryBuilder) buildColumn(c *model.Column, colName string, updated
 // build the RowData of a canal entry
 func (b *canalEntryBuilder) buildRowData(e *model.RowChangedEvent) (*canal.RowData, error) {
 	var columns []*canal.Column
-	for _, column := range e.Columns {
+	for i, column := range e.Columns {
 		if column == nil {
 			continue
 		}
-		c, err := b.buildColumn(column, column.Name, !e.IsDelete())
+		c, err := b.buildColumn(column, e.ColumnValues[i], column.Name, !e.IsDelete())
 		if err != nil {
 			return nil, errors.Trace(err)
 		}
 		columns = append(columns, c)
 	}
 	var preColumns []*canal.Column
-	for _, column := range e.PreColumns {
+	for i, column := range e.PreColumns {
 		if column == nil {
 			continue
 		}
-		c, err := b.buildColumn(column, column.Name, !e.IsDelete())
+		c, err := b.buildColumn(column, e.PreColumnValues[i], column.Name, !e.IsDelete())
 		if err != nil {
 			return nil, errors.Trace(err)
 		}
@@ -294,7 +294,7 @@ func isCanalDDL(t canal.EventType) bool {
 	return false
 }
 
-func getJavaSQLType(c *model.Column, mysqlType string) (result internal.JavaSQLType, err error) {
+func getJavaSQLType(c *model.Column, cv model.ColumnValue, mysqlType string) (result internal.JavaSQLType, err error) {
 	javaType := internal.MySQLType2JavaType(c.Type, c.Flag.IsBinary())
 
 	switch javaType {
@@ -323,11 +323,11 @@ func getJavaSQLType(c *model.Column, mysqlType string) (result internal.JavaSQLT
 	// for **unsigned** integral types, type would be `uint64` or `string`. see reference:
 	// https://github.com/pingcap/tiflow/blob/1e3dd155049417e3fd7bf9b0a0c7b08723b33791/cdc/entry/mounter.go#L501
 	// https://github.com/pingcap/tidb/blob/6495a5a116a016a3e077d181b8c8ad81f76ac31b/types/datum.go#L423-L455
-	if c.Value == nil {
+	if cv.Value == nil {
 		return javaType, nil
 	}
 	var number uint64
-	switch v := c.Value.(type) {
+	switch v := cv.Value.(type) {
 	case uint64:
 		number = v
 	case string:

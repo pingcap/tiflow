@@ -304,23 +304,24 @@ func (g *columnGroup) encode(bits []byte, dict *termDictionary) []byte {
 }
 
 // ToModel converts column group into model
-func (g *columnGroup) ToModel() ([]*model.Column, error) {
+func (g *columnGroup) ToModel() ([]*model.Column, []model.ColumnValue, error) {
 	columns := make([]*model.Column, len(g.names))
+	columnValues := make([]model.ColumnValue, len(g.names))
 	for i, name := range g.names {
 		ty := byte(g.types[i])
 		flag := model.ColumnFlagType(g.flags[i])
 		value, err := DecodeTiDBType(ty, flag, g.values[i])
 		if err != nil {
-			return nil, errors.Trace(err)
+			return nil, nil, errors.Trace(err)
 		}
 		columns[i] = &model.Column{
-			Name:  name,
-			Type:  ty,
-			Flag:  flag,
-			Value: value,
+			Name: name,
+			Type: ty,
+			Flag: flag,
 		}
+		columnValues[i] = model.ColumnValue{Value: value}
 	}
-	return columns, nil
+	return columns, columnValues, nil
 }
 
 func decodeColumnGroup(bits []byte, allocator *SliceAllocator, dict *termDictionary) (*columnGroup, error) {
@@ -366,7 +367,7 @@ func decodeColumnGroup(bits []byte, allocator *SliceAllocator, dict *termDiction
 	}, nil
 }
 
-func newColumnGroup(allocator *SliceAllocator, ty byte, columns []*model.Column) (int, *columnGroup) {
+func newColumnGroup(allocator *SliceAllocator, ty byte, columns []*model.Column, colvals []model.ColumnValue) (int, *columnGroup) {
 	l := len(columns)
 	if l == 0 {
 		return 0, nil
@@ -377,14 +378,14 @@ func newColumnGroup(allocator *SliceAllocator, ty byte, columns []*model.Column)
 	flags := allocator.uint64Slice(l)
 	estimatedSize := 0
 	idx := 0
-	for _, col := range columns {
+	for i, col := range columns {
 		if col == nil {
 			continue
 		}
 		names[idx] = col.Name
 		types[idx] = uint64(col.Type)
 		flags[idx] = uint64(col.Flag)
-		value := EncodeTiDBType(allocator, col.Type, col.Flag, col.Value)
+		value := EncodeTiDBType(allocator, col.Type, col.Flag, colvals[i].Value)
 		values[idx] = value
 		estimatedSize += len(col.Name) + len(value) + 16 /* two 64-bits integers */
 		idx++
@@ -415,12 +416,12 @@ func newRowChangedMessage(allocator *SliceAllocator, ev *model.RowChangedEvent) 
 	groups := allocator.columnGroupSlice(numGroups)
 	estimatedSize := 0
 	idx := 0
-	if size, group := newColumnGroup(allocator, columnGroupTypeNew, ev.Columns); group != nil {
+	if size, group := newColumnGroup(allocator, columnGroupTypeNew, ev.Columns, ev.ColumnValues); group != nil {
 		groups[idx] = group
 		idx++
 		estimatedSize += size
 	}
-	if size, group := newColumnGroup(allocator, columnGroupTypeOld, ev.PreColumns); group != nil {
+	if size, group := newColumnGroup(allocator, columnGroupTypeOld, ev.PreColumns, ev.PreColumnValues); group != nil {
 		groups[idx] = group
 		estimatedSize += size
 	}

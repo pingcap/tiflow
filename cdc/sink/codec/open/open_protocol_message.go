@@ -91,10 +91,10 @@ func rowChangeToMsg(e *model.RowChangedEvent) (*internal.MessageKey, *messageRow
 	}
 	value := &messageRow{}
 	if e.IsDelete() {
-		value.Delete = rowChangeColumns2CodecColumns(e.PreColumns)
+		value.Delete = rowChangeColumns2CodecColumns(e.PreColumns, e.PreColumnValues)
 	} else {
-		value.Update = rowChangeColumns2CodecColumns(e.Columns)
-		value.PreColumns = rowChangeColumns2CodecColumns(e.PreColumns)
+		value.Update = rowChangeColumns2CodecColumns(e.Columns, e.ColumnValues)
+		value.PreColumns = rowChangeColumns2CodecColumns(e.PreColumns, e.PreColumnValues)
 	}
 	return key, value
 }
@@ -115,22 +115,22 @@ func msgToRowChange(key *internal.MessageKey, value *messageRow) *model.RowChang
 	}
 
 	if len(value.Delete) != 0 {
-		e.PreColumns = codecColumns2RowChangeColumns(value.Delete)
+		e.PreColumns, e.PreColumnValues = codecColumns2RowChangeColumns(value.Delete)
 	} else {
-		e.Columns = codecColumns2RowChangeColumns(value.Update)
-		e.PreColumns = codecColumns2RowChangeColumns(value.PreColumns)
+		e.Columns, e.ColumnValues = codecColumns2RowChangeColumns(value.Update)
+		e.PreColumns, e.PreColumnValues = codecColumns2RowChangeColumns(value.PreColumns)
 	}
 	return e
 }
 
-func rowChangeColumns2CodecColumns(cols []*model.Column) map[string]internal.Column {
+func rowChangeColumns2CodecColumns(cols []*model.Column, colvs []model.ColumnValue) map[string]internal.Column {
 	jsonCols := make(map[string]internal.Column, len(cols))
-	for _, col := range cols {
+	for i, col := range cols {
 		if col == nil {
 			continue
 		}
 		c := internal.Column{}
-		c.FromRowChangeColumn(col)
+		c.FromRowChangeColumn(col, colvs[i])
 		jsonCols[col.Name] = c
 	}
 	if len(jsonCols) == 0 {
@@ -139,19 +139,26 @@ func rowChangeColumns2CodecColumns(cols []*model.Column) map[string]internal.Col
 	return jsonCols
 }
 
-func codecColumns2RowChangeColumns(cols map[string]internal.Column) []*model.Column {
-	sinkCols := make([]*model.Column, 0, len(cols))
+func codecColumns2RowChangeColumns(cols map[string]internal.Column) ([]*model.Column, []model.ColumnValue) {
+	sinkCols := make([]columnAndValue, 0, len(cols))
 	for name, col := range cols {
-		c := col.ToRowChangeColumn(name)
-		sinkCols = append(sinkCols, c)
+		c, cv := col.ToRowChangeColumn(name)
+		sinkCols = append(sinkCols, columnAndValue{ c, cv })
 	}
 	if len(sinkCols) == 0 {
-		return nil
+		return nil, nil
 	}
 	sort.Slice(sinkCols, func(i, j int) bool {
-		return strings.Compare(sinkCols[i].Name, sinkCols[j].Name) > 0
+		return strings.Compare(sinkCols[i].c.Name, sinkCols[j].c.Name) > 0
 	})
-	return sinkCols
+
+    coldefs:= make([]*model.Column, 0, len(sinkCols))
+    colvals:= make([]model.ColumnValue, 0, len(sinkCols))
+    for _, x := range sinkCols {
+        coldefs = append(coldefs, x.c)
+        colvals = append(colvals, x.cv)
+    }
+	return coldefs, colvals
 }
 
 func ddlEventToMsg(e *model.DDLEvent) (*internal.MessageKey, *messageDDL) {
@@ -181,4 +188,9 @@ func msgToDDLEvent(key *internal.MessageKey, value *messageDDL) *model.DDLEvent 
 	e.Type = value.Type
 	e.Query = value.Query
 	return e
+}
+
+type columnAndValue struct {
+    c *model.Column
+    cv model.ColumnValue
 }

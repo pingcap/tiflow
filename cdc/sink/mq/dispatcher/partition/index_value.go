@@ -45,15 +45,18 @@ func (r *IndexValueDispatcher) DispatchRowChangedEvent(row *model.RowChangedEven
 
 	// distribute partition by rowid or unique column value
 	dispatchCols := row.Columns
+	dispatchColVals := row.ColumnValues
 	if len(row.Columns) == 0 {
 		dispatchCols = row.PreColumns
+		dispatchColVals = row.PreColumnValues
 	}
-	for _, col := range dispatchCols {
+	for i, col := range dispatchCols {
 		if col == nil {
 			continue
 		}
 		if col.Flag.IsHandleKey() {
-			r.hasher.Write([]byte(col.Name), []byte(model.ColumnValueString(col.Value)))
+			v := dispatchColVals[i].Value
+			r.hasher.Write([]byte(col.Name), []byte(model.ColumnValueString(v)))
 		}
 	}
 	return int32(r.hasher.Sum32() % uint32(partitionNum))

@@ -332,8 +332,8 @@ func shouldSplitUpdateEvent(updateEvent *model.PolymorphicEvent) bool {
 		col := updateEvent.Row.Columns[i]
 		preCol := updateEvent.Row.PreColumns[i]
 		if col != nil && col.Flag.IsHandleKey() && preCol != nil && preCol.Flag.IsHandleKey() {
-			colValueString := model.ColumnValueString(col.Value)
-			preColValueString := model.ColumnValueString(preCol.Value)
+			colValueString := model.ColumnValueString(updateEvent.Row.ColumnValues[i].Value)
+			preColValueString := model.ColumnValueString(updateEvent.Row.PreColumnValues[i].Value)
 			// If one handle key columns is updated, we need to split the event row.
 			if colValueString != preColValueString {
 				return true

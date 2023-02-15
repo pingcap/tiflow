@@ -43,25 +43,25 @@ func NewColumn(value any, tp byte) *Column {
 }
 
 // FromRowChangeColumn converts from a row changed column to a codec column.
-func (c *Column) FromRowChangeColumn(col *model.Column) {
+func (c *Column) FromRowChangeColumn(col *model.Column, colv model.ColumnValue) {
 	c.Type = col.Type
 	c.Flag = col.Flag
 	if c.Flag.IsHandleKey() {
 		whereHandle := true
 		c.WhereHandle = &whereHandle
 	}
-	if col.Value == nil {
+	if colv.Value == nil {
 		c.Value = nil
 		return
 	}
 	switch col.Type {
 	case mysql.TypeString, mysql.TypeVarString, mysql.TypeVarchar:
 		var str string
-		switch col.Value.(type) {
+		switch x := colv.Value.(type) {
 		case []byte:
-			str = string(col.Value.([]byte))
+			str = string(x)
 		case string:
-			str = col.Value.(string)
+			str = x
 		default:
 			log.Panic("invalid column value, please report a bug", zap.Any("col", col))
 		}
@@ -71,23 +71,23 @@ func (c *Column) FromRowChangeColumn(col *model.Column) {
 		}
 		c.Value = str
 	default:
-		c.Value = col.Value
+		c.Value = colv.Value
 	}
 }
 
 // ToRowChangeColumn converts from a codec column to a row changed column.
-func (c *Column) ToRowChangeColumn(name string) *model.Column {
+func (c *Column) ToRowChangeColumn(name string) (*model.Column, model.ColumnValue) {
 	col := new(model.Column)
 	col.Type = c.Type
 	col.Flag = c.Flag
 	col.Name = name
-	col.Value = c.Value
+	colv := model.ColumnValue{Value: c.Value}
 	if c.Value == nil {
-		return col
+		return col, colv
 	}
 	switch col.Type {
 	case mysql.TypeString, mysql.TypeVarString, mysql.TypeVarchar:
-		str := col.Value.(string)
+		str := colv.Value.(string)
 		var err error
 		if c.Flag.IsBinary() {
 			str, err = strconv.Unquote("\"" + str + "\"")
@@ -95,25 +95,25 @@ func (c *Column) ToRowChangeColumn(name string) *model.Column {
 				log.Panic("invalid column value, please report a bug", zap.Any("col", c), zap.Error(err))
 			}
 		}
-		col.Value = []byte(str)
+		colv.Value = []byte(str)
 	default:
-		col.Value = c.Value
+		colv.Value = c.Value
 	}
-	return col
+	return col, colv
 }
 
 // ToCanalJSONFormatColumn converts from a codec column to a row changed column in canal-json format.
-func (c *Column) ToCanalJSONFormatColumn(name string, javaType JavaSQLType) *model.Column {
+func (c *Column) ToCanalJSONFormatColumn(name string, javaType JavaSQLType) (*model.Column, model.ColumnValue) {
 	col := new(model.Column)
 	col.Type = c.Type
 	col.Flag = c.Flag
 	col.Name = name
-	col.Value = c.Value
+	colv := model.ColumnValue{Value: c.Value}
 	if c.Value == nil {
-		return col
+		return col, colv
 	}
 
-	value, ok := col.Value.(string)
+	value, ok := colv.Value.(string)
 	if !ok {
 		log.Panic("canal-json encoded message should have type in `string`")
 	}
@@ -123,13 +123,13 @@ func (c *Column) ToCanalJSONFormatColumn(name string, javaType JavaSQLType) *mod
 		if err != nil {
 			log.Panic("invalid column value for bit", zap.Any("col", c), zap.Error(err))
 		}
-		col.Value = val
-		return col
+		colv.Value = val
+		return col, colv
 	}
 
 	if javaType != JavaSQLTypeBLOB {
-		col.Value = value
-		return col
+		colv.Value = value
+		return col, colv
 	}
 
 	// when encoding the `JavaSQLTypeBLOB`, use `ISO8859_1` decoder, now reverse it back.
@@ -139,8 +139,8 @@ func (c *Column) ToCanalJSONFormatColumn(name string, javaType JavaSQLType) *mod
 		log.Panic("invalid column value, please report a bug", zap.Any("col", c), zap.Error(err))
 	}
 
-	col.Value = value
-	return col
+	colv.Value = value
+	return col, colv
 }
 
 // FormatColumn formats a codec column.

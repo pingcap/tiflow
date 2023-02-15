@@ -162,7 +162,7 @@ func canalJSONMessage2RowChange(msg canalJSONMessageInterface) (*model.RowChange
 	var err error
 	if msg.eventType() == canal.EventType_DELETE {
 		// for `DELETE` event, `data` contain the old data, set it as the `PreColumns`
-		result.PreColumns, err = canalJSONColumnMap2RowChangeColumns(
+		result.PreColumns, result.PreColumnValues, err = canalJSONColumnMap2RowChangeColumns(
 			msg.getData(), mysqlType, javaSQLType)
 		// canal-json encoder does not encode `Flag` information into the result,
 		// we have to set the `Flag` to make it can be handled by MySQL Sink.
@@ -172,7 +172,7 @@ func canalJSONMessage2RowChange(msg canalJSONMessageInterface) (*model.RowChange
 	}
 
 	// for `INSERT` and `UPDATE`, `data` contain fresh data, set it as the `Columns`
-	result.Columns, err = canalJSONColumnMap2RowChangeColumns(msg.getData(),
+	result.Columns, result.ColumnValues, err = canalJSONColumnMap2RowChangeColumns(msg.getData(),
 		mysqlType, javaSQLType)
 	if err != nil {
 		return nil, err
@@ -180,7 +180,7 @@ func canalJSONMessage2RowChange(msg canalJSONMessageInterface) (*model.RowChange
 
 	// for `UPDATE`, `old` contain old data, set it as the `PreColumns`
 	if msg.eventType() == canal.EventType_UPDATE {
-		result.PreColumns, err = canalJSONColumnMap2RowChangeColumns(msg.getOld(),
+		result.PreColumns, result.PreColumnValues, err = canalJSONColumnMap2RowChangeColumns(msg.getOld(),
 			mysqlType, javaSQLType)
 		if err != nil {
 			return nil, err
@@ -191,33 +191,48 @@ func canalJSONMessage2RowChange(msg canalJSONMessageInterface) (*model.RowChange
 	return result, nil
 }
 
-func canalJSONColumnMap2RowChangeColumns(cols map[string]interface{}, mysqlType map[string]string, javaSQLType map[string]int32) ([]*model.Column, error) {
-	result := make([]*model.Column, 0, len(cols))
+type columnAndValue struct {
+	def *model.Column
+	val model.ColumnValue
+}
+
+func canalJSONColumnMap2RowChangeColumns(
+	cols map[string]interface{},
+	mysqlType map[string]string,
+	javaSQLType map[string]int32,
+) ([]*model.Column, []model.ColumnValue, error) {
+	x := make([]columnAndValue, 0, len(cols))
 	for name, value := range cols {
 		javaType, ok := javaSQLType[name]
 		if !ok {
 			// this should not happen, else we have to check encoding for javaSQLType.
-			return nil, cerrors.ErrCanalDecodeFailed.GenWithStack(
+			return nil, nil, cerrors.ErrCanalDecodeFailed.GenWithStack(
 				"java sql type does not found, column: %+v, mysqlType: %+v", name, javaSQLType)
 		}
 		mysqlTypeStr, ok := mysqlType[name]
 		if !ok {
 			// this should not happen, else we have to check encoding for mysqlType.
-			return nil, cerrors.ErrCanalDecodeFailed.GenWithStack(
+			return nil, nil, cerrors.ErrCanalDecodeFailed.GenWithStack(
 				"mysql type does not found, column: %+v, mysqlType: %+v", name, mysqlType)
 		}
 		mysqlTypeStr = trimUnsignedFromMySQLType(mysqlTypeStr)
 		mysqlType := types.StrToType(mysqlTypeStr)
-		col := internal.NewColumn(value, mysqlType).ToCanalJSONFormatColumn(name, internal.JavaSQLType(javaType))
-		result = append(result, col)
+		def, val := internal.NewColumn(value, mysqlType).ToCanalJSONFormatColumn(name, internal.JavaSQLType(javaType))
+		x = append(x, columnAndValue{def, val})
 	}
-	if len(result) == 0 {
-		return nil, nil
+	if len(x) == 0 {
+		return nil, nil, nil
 	}
-	sort.Slice(result, func(i, j int) bool {
-		return strings.Compare(result[i].Name, result[j].Name) > 0
+	sort.Slice(x, func(i, j int) bool {
+		return strings.Compare(x[i].def.Name, x[j].def.Name) > 0
 	})
-	return result, nil
+	coldefs := make([]*model.Column, 0, len(x))
+	colvals := make([]model.ColumnValue, 0, len(x))
+	for _, i := range x {
+		coldefs = append(coldefs, i.def)
+		colvals = append(colvals, i.val)
+	}
+	return coldefs, colvals, nil
 }
 
 func canalJSONMessage2DDLEvent(msg canalJSONMessageInterface) *model.DDLEvent {

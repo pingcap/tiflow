@@ -56,7 +56,7 @@ func (c *JSONBatchEncoder) newJSONMessageForDML(e *model.RowChangedEvent) ([]byt
 	isDelete := e.IsDelete()
 	mysqlTypeMap := make(map[string]string, len(e.Columns))
 
-	filling := func(columns []*model.Column, out *jwriter.Writer) error {
+	filling := func(columns []*model.Column, columnValues []model.ColumnValue, out *jwriter.Writer) error {
 		if len(columns) == 0 {
 			out.RawString("null")
 			return nil
@@ -64,7 +64,7 @@ func (c *JSONBatchEncoder) newJSONMessageForDML(e *model.RowChangedEvent) ([]byt
 		out.RawByte('[')
 		out.RawByte('{')
 		isFirst := true
-		for _, col := range columns {
+		for i, col := range columns {
 			if col != nil {
 				if isFirst {
 					isFirst = false
@@ -72,17 +72,17 @@ func (c *JSONBatchEncoder) newJSONMessageForDML(e *model.RowChangedEvent) ([]byt
 					out.RawByte(',')
 				}
 				mysqlType := getMySQLType(col)
-				javaType, err := getJavaSQLType(col, mysqlType)
+				javaType, err := getJavaSQLType(col, columnValues[i], mysqlType)
 				if err != nil {
 					return cerror.WrapError(cerror.ErrCanalEncodeFailed, err)
 				}
-				value, err := c.builder.formatValue(col.Value, javaType)
+				value, err := c.builder.formatValue(columnValues[i].Value, javaType)
 				if err != nil {
 					return cerror.WrapError(cerror.ErrCanalEncodeFailed, err)
 				}
 				out.String(col.Name)
 				out.RawByte(':')
-				if col.Value == nil {
+				if columnValues[i].Value == nil {
 					out.RawString("null")
 				} else {
 					out.String(value)
@@ -155,13 +155,14 @@ func (c *JSONBatchEncoder) newJSONMessageForDML(e *model.RowChangedEvent) ([]byt
 	}
 	{
 		columns := e.PreColumns
+		columnValues := e.PreColumnValues
 		if !isDelete {
 			columns = e.Columns
 		}
 		const prefix string = ",\"sqlType\":"
 		out.RawString(prefix)
 		emptyColumn := true
-		for _, col := range columns {
+		for i, col := range columns {
 			if col != nil {
 				if emptyColumn {
 					out.RawByte('{')
@@ -170,7 +171,7 @@ func (c *JSONBatchEncoder) newJSONMessageForDML(e *model.RowChangedEvent) ([]byt
 					out.RawByte(',')
 				}
 				mysqlType := getMySQLType(col)
-				javaType, err := getJavaSQLType(col, mysqlType)
+				javaType, err := getJavaSQLType(col, columnValues[i], mysqlType)
 				if err != nil {
 					return nil, cerror.WrapError(cerror.ErrCanalEncodeFailed, err)
 				}
@@ -211,22 +212,22 @@ func (c *JSONBatchEncoder) newJSONMessageForDML(e *model.RowChangedEvent) ([]byt
 	if e.IsDelete() {
 		out.RawString(",\"old\":null")
 		out.RawString(",\"data\":")
-		if err := filling(e.PreColumns, out); err != nil {
+		if err := filling(e.PreColumns, e.PreColumnValues, out); err != nil {
 			return nil, err
 		}
 	} else if e.IsInsert() {
 		out.RawString(",\"old\":null")
 		out.RawString(",\"data\":")
-		if err := filling(e.Columns, out); err != nil {
+		if err := filling(e.Columns, e.ColumnValues, out); err != nil {
 			return nil, err
 		}
 	} else if e.IsUpdate() {
 		out.RawString(",\"old\":")
-		if err := filling(e.PreColumns, out); err != nil {
+		if err := filling(e.PreColumns, e.PreColumnValues, out); err != nil {
 			return nil, err
 		}
 		out.RawString(",\"data\":")
-		if err := filling(e.Columns, out); err != nil {
+		if err := filling(e.Columns, e.PreColumnValues, out); err != nil {
 			return nil, err
 		}
 	} else {

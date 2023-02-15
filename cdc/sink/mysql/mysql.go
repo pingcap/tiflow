@@ -762,7 +762,7 @@ func (s *mysqlSink) prepareDMLs(rows []*model.RowChangedEvent) *preparedDMLs {
 		// NOTICE: Only update events with the old value feature enabled will have both columns and preColumns.
 		if translateToInsert && len(row.PreColumns) != 0 && len(row.Columns) != 0 {
 			flushCacheDMLs()
-			query, args = prepareUpdate(quoteTable, row.PreColumns, row.Columns, s.forceReplicate)
+			query, args = prepareUpdate(quoteTable, row.PreColumns, row.Columns, row.PreColumnValues, row.ColumnValues, s.forceReplicate)
 			if query != "" {
 				sqls = append(sqls, query)
 				values = append(values, args)
@@ -779,7 +779,7 @@ func (s *mysqlSink) prepareDMLs(rows []*model.RowChangedEvent) *preparedDMLs {
 		// It will be translated directly into a DELETE SQL.
 		if len(row.PreColumns) != 0 {
 			flushCacheDMLs()
-			query, args = prepareDelete(quoteTable, row.PreColumns, s.forceReplicate)
+			query, args = prepareDelete(quoteTable, row.PreColumns, row.PreColumnValues, s.forceReplicate)
 			if query != "" {
 				sqls = append(sqls, query)
 				values = append(values, args)
@@ -797,7 +797,7 @@ func (s *mysqlSink) prepareDMLs(rows []*model.RowChangedEvent) *preparedDMLs {
 		// or REPLACE(old value is disabled or in safe mode) SQL.
 		if len(row.Columns) != 0 {
 			if s.params.batchReplaceEnabled {
-				query, args = prepareReplace(quoteTable, row.Columns, false /* appendPlaceHolder */, translateToInsert)
+				query, args = prepareReplace(quoteTable, row.Columns, row.ColumnValues, false /* appendPlaceHolder */, translateToInsert)
 				if query != "" {
 					if _, ok := replaces[query]; !ok {
 						replaces[query] = make([][]interface{}, 0)
@@ -806,7 +806,7 @@ func (s *mysqlSink) prepareDMLs(rows []*model.RowChangedEvent) *preparedDMLs {
 					rowCount++
 				}
 			} else {
-				query, args = prepareReplace(quoteTable, row.Columns, true /* appendPlaceHolder */, translateToInsert)
+				query, args = prepareReplace(quoteTable, row.Columns, row.ColumnValues, true /* appendPlaceHolder */, translateToInsert)
 				if query != "" {
 					sqls = append(sqls, query)
 					values = append(values, args)
@@ -849,16 +849,16 @@ func (s *mysqlSink) execDMLs(ctx context.Context, rows []*model.RowChangedEvent,
 // representation. Because if we use the byte array respresentation, the go-sql-driver
 // will automatically set `_binary` charset for that column, which is not expected.
 // See https://github.com/go-sql-driver/mysql/blob/ce134bfc/connection.go#L267
-func appendQueryArgs(args []interface{}, col *model.Column) []interface{} {
+func appendQueryArgs(args []interface{}, col *model.Column, colv model.ColumnValue) []interface{} {
 	if col.Charset != "" && col.Charset != charset.CharsetBin {
-		colValBytes, ok := col.Value.([]byte)
+		colValBytes, ok := colv.Value.([]byte)
 		if ok {
 			args = append(args, string(colValBytes))
 		} else {
-			args = append(args, col.Value)
+			args = append(args, colv.Value)
 		}
 	} else {
-		args = append(args, col.Value)
+		args = append(args, colv.Value)
 	}
 
 	return args
@@ -867,18 +867,19 @@ func appendQueryArgs(args []interface{}, col *model.Column) []interface{} {
 func prepareReplace(
 	quoteTable string,
 	cols []*model.Column,
+	colvals []model.ColumnValue,
 	appendPlaceHolder bool,
 	translateToInsert bool,
 ) (string, []interface{}) {
 	var builder strings.Builder
 	columnNames := make([]string, 0, len(cols))
 	args := make([]interface{}, 0, len(cols))
-	for _, col := range cols {
+	for i, col := range cols {
 		if col == nil || col.Flag.IsGeneratedColumn() {
 			continue
 		}
 		columnNames = append(columnNames, col.Name)
-		args = appendQueryArgs(args, col)
+		args = appendQueryArgs(args, col, colvals[i])
 	}
 	if len(args) == 0 {
 		return "", nil
@@ -935,18 +936,23 @@ func reduceReplace(replaces map[string][][]interface{}, batchSize int) ([]string
 	return sqls, args
 }
 
-func prepareUpdate(quoteTable string, preCols, cols []*model.Column, forceReplicate bool) (string, []interface{}) {
+func prepareUpdate(
+	quoteTable string,
+	preCols, cols []*model.Column,
+	preColVals, colVals []model.ColumnValue,
+	forceReplicate bool,
+) (string, []interface{}) {
 	var builder strings.Builder
 	builder.WriteString("UPDATE " + quoteTable + " SET ")
 
 	columnNames := make([]string, 0, len(cols))
 	args := make([]interface{}, 0, len(cols)+len(preCols))
-	for _, col := range cols {
+	for i, col := range cols {
 		if col == nil || col.Flag.IsGeneratedColumn() {
 			continue
 		}
 		columnNames = append(columnNames, col.Name)
-		args = appendQueryArgs(args, col)
+		args = appendQueryArgs(args, col, colVals[i])
 	}
 	if len(args) == 0 {
 		return "", nil
@@ -960,7 +966,7 @@ func prepareUpdate(quoteTable string, preCols, cols []*model.Column, forceReplic
 	}
 
 	builder.WriteString(" WHERE ")
-	colNames, wargs := whereSlice(preCols, forceReplicate)
+	colNames, wargs := whereSlice(preCols, preColVals, forceReplicate)
 	if len(wargs) == 0 {
 		return "", nil
 	}
@@ -980,11 +986,11 @@ func prepareUpdate(quoteTable string, preCols, cols []*model.Column, forceReplic
 	return sql, args
 }
 
-func prepareDelete(quoteTable string, cols []*model.Column, forceReplicate bool) (string, []interface{}) {
+func prepareDelete(quoteTable string, cols []*model.Column, colvals []model.ColumnValue, forceReplicate bool) (string, []interface{}) {
 	var builder strings.Builder
 	builder.WriteString("DELETE FROM " + quoteTable + " WHERE ")
 
-	colNames, wargs := whereSlice(cols, forceReplicate)
+	colNames, wargs := whereSlice(cols, colvals, forceReplicate)
 	if len(wargs) == 0 {
 		return "", nil
 	}
@@ -1005,22 +1011,22 @@ func prepareDelete(quoteTable string, cols []*model.Column, forceReplicate bool)
 	return sql, args
 }
 
-func whereSlice(cols []*model.Column, forceReplicate bool) (colNames []string, args []interface{}) {
+func whereSlice(cols []*model.Column, colvals []model.ColumnValue, forceReplicate bool) (colNames []string, args []interface{}) {
 	// Try to use unique key values when available
-	for _, col := range cols {
+	for i, col := range cols {
 		if col == nil || !col.Flag.IsHandleKey() {
 			continue
 		}
 		colNames = append(colNames, col.Name)
-		args = appendQueryArgs(args, col)
+		args = appendQueryArgs(args, col, colvals[i])
 	}
 	// if no explicit row id but force replicate, use all key-values in where condition
 	if len(colNames) == 0 && forceReplicate {
 		colNames = make([]string, 0, len(cols))
 		args = make([]interface{}, 0, len(cols))
-		for _, col := range cols {
+		for i, col := range cols {
 			colNames = append(colNames, col.Name)
-			args = appendQueryArgs(args, col)
+			args = appendQueryArgs(args, col, colvals[i])
 		}
 	}
 	return

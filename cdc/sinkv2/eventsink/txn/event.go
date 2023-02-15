@@ -68,7 +68,7 @@ func genRowKeys(row *model.RowChangedEvent) [][]byte {
 	var keys [][]byte
 	if len(row.Columns) != 0 {
 		for iIdx, idxCol := range row.IndexColumns {
-			key := genKeyList(row.Columns, iIdx, idxCol, row.Table.TableID)
+			key := genKeyList(row.Columns, row.ColumnValues, iIdx, idxCol, row.Table.TableID)
 			if len(key) == 0 {
 				continue
 			}
@@ -77,7 +77,7 @@ func genRowKeys(row *model.RowChangedEvent) [][]byte {
 	}
 	if len(row.PreColumns) != 0 {
 		for iIdx, idxCol := range row.IndexColumns {
-			key := genKeyList(row.PreColumns, iIdx, idxCol, row.Table.TableID)
+			key := genKeyList(row.PreColumns, row.PreColumnValues, iIdx, idxCol, row.Table.TableID)
 			if len(key) == 0 {
 				continue
 			}
@@ -95,16 +95,19 @@ func genRowKeys(row *model.RowChangedEvent) [][]byte {
 	return keys
 }
 
-func genKeyList(columns []*model.Column, iIdx int, colIdx []int, tableID int64) []byte {
+func genKeyList(
+	columns []*model.Column, columnValues []model.ColumnValue,
+	iIdx int, colIdx []int, tableID int64,
+) []byte {
 	var key []byte
 	for _, i := range colIdx {
 		// if a column value is null, we can ignore this index
 		// If the index contain generated column, we can't use this key to detect conflict with other DML,
 		// Because such as insert can't specified the generated value.
-		if columns[i] == nil || columns[i].Value == nil || columns[i].Flag.IsGeneratedColumn() {
+		if columns[i] == nil || columnValues[i].Value == nil || columns[i].Flag.IsGeneratedColumn() {
 			return nil
 		}
-		key = append(key, []byte(model.ColumnValueString(columns[i].Value))...)
+		key = append(key, []byte(model.ColumnValueString(columnValues[i].Value))...)
 		key = append(key, 0)
 	}
 	if len(key) == 0 {
