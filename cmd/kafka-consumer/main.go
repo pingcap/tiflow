@@ -589,9 +589,6 @@ func (c *Consumer) ConsumeClaim(session sarama.ConsumerGroupSession, claim saram
 						zap.Int32("partition", partition),
 						zap.Any("row", row))
 				}
-				// FIXME: hack to set start-ts in row changed event, as start-ts
-				// is not contained in TiCDC open protocol
-				row.StartTs = row.CommitTs
 				var partitionID int64
 				if row.Table.IsPartition {
 					partitionID = row.Table.TableID
@@ -626,7 +623,7 @@ func (c *Consumer) ConsumeClaim(session sarama.ConsumerGroupSession, claim saram
 							continue
 						}
 						if _, ok := sink.tableSinks[tableID]; !ok {
-							sink.tableSinks[tableID] = c.sinkFactory.CreateTableSink(
+							sink.tableSinks[tableID] = c.sinkFactory.CreateTableSinkForConsumer(
 								model.DefaultChangeFeedID("kafka-consumer"),
 								spanz.TableIDToComparableSpan(tableID),
 								prometheus.NewCounter(prometheus.CounterOpts{}),
