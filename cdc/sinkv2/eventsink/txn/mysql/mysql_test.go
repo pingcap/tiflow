@@ -288,6 +288,10 @@ func TestNewMySQLBackendExecDML(t *testing.T) {
 	defer cancel()
 	changefeed := "test-changefeed"
 	contextutil.PutChangefeedIDInCtx(ctx, model.DefaultChangeFeedID(changefeed))
+	// TODO: Need to test txn sink behavior when cache-prep-stmts is true
+	// I did some attempts to write tests when cache-prep-stmts is true, but failed.
+	// The reason is that I can't find a way to prepare a statement in sqlmock connection,
+	// and execute it in another sqlmock connection.
 	sinkURI, err := url.Parse(
 		"mysql://127.0.0.1:4000/?time-zone=UTC&worker-count=1&cache-prep-stmts=false")
 	require.Nil(t, err)
