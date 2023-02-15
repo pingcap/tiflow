@@ -20,6 +20,7 @@ import (
 	"os"
 	"path/filepath"
 	"sync"
+	"time"
 
 	"github.com/aws/aws-sdk-go/aws/awserr"
 	"github.com/aws/aws-sdk-go/service/s3"
@@ -32,7 +33,7 @@ import (
 	"github.com/pingcap/tiflow/pkg/config"
 	cerror "github.com/pingcap/tiflow/pkg/errors"
 	"github.com/pingcap/tiflow/pkg/redo"
-	"github.com/prometheus/client_golang/prometheus"
+	"github.com/pingcap/tiflow/pkg/uuid"
 	"go.uber.org/multierr"
 	"go.uber.org/zap"
 	"golang.org/x/sync/errgroup"
@@ -139,9 +140,9 @@ type logWriter struct {
 	// the redo log files when changefeed is created or deleted.
 	extStorage storage.ExternalStorage
 
-	meta *common.LogMeta
-
-	metricTotalRowsCount prometheus.Gauge
+	meta          *common.LogMeta
+	preMetaFile   string
+	uuidGenerator uuid.Generator
 }
 
 func newLogWriter(
@@ -152,6 +153,16 @@ func newLogWriter(
 	}
 
 	lw = &logWriter{cfg: cfg}
+
+	writerOp := &writerOptions{}
+	for _, opt := range opts {
+		opt(writerOp)
+	}
+	if writerOp.getUUIDGenerator != nil {
+		lw.uuidGenerator = writerOp.getUUIDGenerator()
+	} else {
+		lw.uuidGenerator = uuid.NewGenerator()
+	}
 
 	if lw.cfg.EmitRowEvents {
 		writerCfg := &FileWriterConfig{
@@ -205,15 +216,13 @@ func newLogWriter(
 		}
 	}
 
-	lw.metricTotalRowsCount = common.RedoTotalRowsCountGauge.
-		WithLabelValues(cfg.ChangeFeedID.Namespace, cfg.ChangeFeedID.ID)
 	return
 }
 
 func (l *logWriter) preCleanUpS3(ctx context.Context) error {
 	ret, err := l.extStorage.FileExists(ctx, l.getDeletedChangefeedMarker())
 	if err != nil {
-		return cerror.WrapError(cerror.ErrS3StorageAPI, err)
+		return cerror.WrapError(cerror.ErrExternalStorageAPI, err)
 	}
 	if !ret {
 		return nil
@@ -236,7 +245,7 @@ func (l *logWriter) preCleanUpS3(ctx context.Context) error {
 	}
 	err = l.extStorage.DeleteFile(ctx, l.getDeletedChangefeedMarker())
 	if !isNotExistInS3(err) {
-		return cerror.WrapError(cerror.ErrS3StorageAPI, err)
+		return cerror.WrapError(cerror.ErrExternalStorageAPI, err)
 	}
 
 	return nil
@@ -296,7 +305,7 @@ func (l *logWriter) WriteLog(
 		return nil
 	}
 
-	for i, r := range rows {
+	for _, r := range rows {
 		if r == nil || r.Row == nil {
 			continue
 		}
@@ -313,13 +322,11 @@ func (l *logWriter) WriteLog(
 		l.rowWriter.AdvanceTs(r.Row.CommitTs)
 		_, err = l.rowWriter.Write(data)
 		if err != nil {
-			l.metricTotalRowsCount.Add(float64(i))
 			return err
 		}
 
 		redoLogPool.Put(rl)
 	}
-	l.metricTotalRowsCount.Add(float64(len(rows)))
 	return nil
 }
 
@@ -451,7 +458,7 @@ func (l *logWriter) getDeletedChangefeedMarker() string {
 }
 
 func (l *logWriter) writeDeletedMarkerToS3(ctx context.Context) error {
-	return cerror.WrapError(cerror.ErrS3StorageAPI,
+	return cerror.WrapError(cerror.ErrExternalStorageAPI,
 		l.extStorage.WriteFile(ctx, l.getDeletedChangefeedMarker(), []byte("D")))
 }
 
@@ -464,7 +471,7 @@ func (l *logWriter) deleteFilesInS3(ctx context.Context, files []string) error {
 			if err != nil {
 				// if fail then retry, may end up with notExit err, ignore the error
 				if !isNotExistInS3(err) {
-					return cerror.WrapError(cerror.ErrS3StorageAPI, err)
+					return cerror.WrapError(cerror.ErrExternalStorageAPI, err)
 				}
 			}
 			return nil
@@ -474,6 +481,7 @@ func (l *logWriter) deleteFilesInS3(ctx context.Context, files []string) error {
 }
 
 func isNotExistInS3(err error) bool {
+	// TODO: support other storage
 	if err != nil {
 		if aerr, ok := errors.Cause(err).(awserr.Error); ok { // nolint:errorlint
 			switch aerr.Code() {
@@ -492,7 +500,7 @@ var getAllFilesInS3 = func(ctx context.Context, l *logWriter) ([]string, error) 
 		return nil
 	})
 	if err != nil {
-		return nil, cerror.WrapError(cerror.ErrS3StorageAPI, err)
+		return nil, cerror.WrapError(cerror.ErrExternalStorageAPI, err)
 	}
 
 	return files, nil
@@ -535,16 +543,6 @@ func (l *logWriter) isStopped() bool {
 		ddlStopped = !l.ddlWriter.IsRunning()
 	}
 	return rowStopped || ddlStopped
-}
-
-func (l *logWriter) getMetafileName() string {
-	if model.DefaultNamespace == l.cfg.ChangeFeedID.Namespace {
-		return fmt.Sprintf("%s_%s_%s%s", l.cfg.CaptureID, l.cfg.ChangeFeedID.ID,
-			redo.RedoMetaFileType, redo.MetaEXT)
-	}
-	return fmt.Sprintf("%s_%s_%s_%s%s", l.cfg.CaptureID,
-		l.cfg.ChangeFeedID.Namespace, l.cfg.ChangeFeedID.ID,
-		redo.RedoMetaFileType, redo.MetaEXT)
 }
 
 func (l *logWriter) maybeUpdateMeta(checkpointTs, resolvedTs uint64) ([]byte, error) {
@@ -591,62 +589,67 @@ func (l *logWriter) flushLogMeta(checkpointTs, resolvedTs uint64) error {
 		return nil
 	}
 
-	err = os.MkdirAll(l.cfg.Dir, redo.DefaultDirMode)
-	if err != nil {
-		return cerror.WrapError(cerror.ErrRedoFileOp, errors.Annotate(err, "can't make dir for new redo logfile"))
-	}
-
-	// we will create a temp metadata file and then atomically rename it.
-	tmpFileName := l.filePath() + redo.MetaTmpEXT
-	tmpFile, err := openTruncFile(tmpFileName)
-	if err != nil {
-		return cerror.WrapError(cerror.ErrRedoFileOp, err)
-	}
-	defer tmpFile.Close()
-
-	_, err = tmpFile.Write(data)
-	if err != nil {
-		return cerror.WrapError(cerror.ErrRedoFileOp, err)
-	}
-	err = tmpFile.Sync()
-	if err != nil {
-		return cerror.WrapError(cerror.ErrRedoFileOp, err)
-	}
-
-	err = os.Rename(tmpFileName, l.filePath())
-	if err != nil {
-		return cerror.WrapError(cerror.ErrRedoFileOp, err)
-	}
-
-	dirFile, err := os.Open(l.cfg.Dir)
-	if err != nil {
-		return cerror.WrapError(cerror.ErrRedoFileOp, err)
-	}
-	defer dirFile.Close()
-	// sync the dir to guarantee the renamed file is persisted to disk.
-	err = dirFile.Sync()
-	if err != nil {
-		return cerror.WrapError(cerror.ErrRedoFileOp, err)
-	}
-
 	if !l.cfg.UseExternalStorage {
-		return nil
+		return l.flushMetaToLocal(data)
 	}
 
 	ctx, cancel := context.WithTimeout(context.Background(), defaultS3Timeout)
 	defer cancel()
-	return l.writeMetaToS3(ctx)
+	return l.flushMetaToS3(ctx, data)
 }
 
-func (l *logWriter) writeMetaToS3(ctx context.Context) error {
-	name := l.filePath()
-	fileData, err := os.ReadFile(name)
+func (l *logWriter) flushMetaToLocal(data []byte) error {
+	if err := os.MkdirAll(l.cfg.Dir, redo.DefaultDirMode); err != nil {
+		e := errors.Annotate(err, "can't make dir for new redo logfile")
+		return cerror.WrapError(cerror.ErrRedoFileOp, e)
+	}
+
+	metaFile, err := openTruncFile(l.filePath())
+	if err != nil {
+		return cerror.WrapError(cerror.ErrRedoFileOp, err)
+	}
+	_, err = metaFile.Write(data)
+	if err != nil {
+		return cerror.WrapError(cerror.ErrRedoFileOp, err)
+	}
+	err = metaFile.Sync()
 	if err != nil {
 		return cerror.WrapError(cerror.ErrRedoFileOp, err)
 	}
 
-	return cerror.WrapError(cerror.ErrS3StorageAPI,
-		l.extStorage.WriteFile(ctx, l.getMetafileName(), fileData))
+	if l.preMetaFile != "" {
+		if err := os.Remove(l.preMetaFile); err != nil && !os.IsNotExist(err) {
+			return cerror.WrapError(cerror.ErrRedoFileOp, err)
+		}
+	}
+	l.preMetaFile = metaFile.Name()
+
+	return metaFile.Close()
+}
+
+func (l *logWriter) flushMetaToS3(ctx context.Context, data []byte) error {
+	start := time.Now()
+	metaFile := l.getMetafileName()
+	if err := l.extStorage.WriteFile(ctx, metaFile, data); err != nil {
+		return cerror.WrapError(cerror.ErrExternalStorageAPI, err)
+	}
+
+	if l.preMetaFile != "" {
+		if err := l.extStorage.DeleteFile(ctx, l.preMetaFile); err != nil && !isNotExistInS3(err) {
+			return cerror.WrapError(cerror.ErrExternalStorageAPI, err)
+		}
+	}
+	l.preMetaFile = metaFile
+	log.Debug("flush meta to s3",
+		zap.String("metaFile", metaFile),
+		zap.Any("cost", time.Since(start).Milliseconds()))
+	return nil
+}
+
+func (l *logWriter) getMetafileName() string {
+	return fmt.Sprintf(redo.RedoMetaFileFormat, l.cfg.CaptureID,
+		l.cfg.ChangeFeedID.Namespace, l.cfg.ChangeFeedID.ID,
+		redo.RedoMetaFileType, l.uuidGenerator.NewString(), redo.MetaEXT)
 }
 
 func (l *logWriter) filePath() string {
