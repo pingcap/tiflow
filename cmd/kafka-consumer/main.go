@@ -354,7 +354,7 @@ func main() {
 }
 
 type partitionSink struct {
-	tableSinks  map[model.TableID]tablesink.TableSink
+	tableSinks  sync.Map
 	resolvedTs  uint64
 	partitionNo int
 	tablesMap   sync.Map
@@ -422,7 +422,6 @@ func NewConsumer(ctx context.Context) (*Consumer, error) {
 	errChan := make(chan error, 1)
 	for i := 0; i < int(kafkaPartitionNum); i++ {
 		c.sinks[i] = &partitionSink{
-			tableSinks:  make(map[model.TableID]tablesink.TableSink),
 			partitionNo: i,
 		}
 	}
@@ -622,14 +621,15 @@ func (c *Consumer) ConsumeClaim(session sarama.ConsumerGroupSession, claim saram
 						if len(events) == 0 {
 							continue
 						}
-						if _, ok := sink.tableSinks[tableID]; !ok {
-							sink.tableSinks[tableID] = c.sinkFactory.CreateTableSinkForConsumer(
+						if _, ok := sink.tableSinks.Load(tableID); !ok {
+							sink.tableSinks.Store(tableID, c.sinkFactory.CreateTableSinkForConsumer(
 								model.DefaultChangeFeedID("kafka-consumer"),
 								spanz.TableIDToComparableSpan(tableID),
 								prometheus.NewCounter(prometheus.CounterOpts{}),
-							)
+							))
 						}
-						sink.tableSinks[tableID].AppendRowChangedEvents(events...)
+						s, _ := sink.tableSinks.Load(tableID)
+						s.(tablesink.TableSink).AppendRowChangedEvents(events...)
 						commitTs := events[len(events)-1].CommitTs
 						lastCommitTs, ok := sink.tablesMap.Load(tableID)
 						if !ok || lastCommitTs.(uint64) < commitTs {
@@ -798,11 +798,15 @@ func syncFlushRowChangedEvents(ctx context.Context, sink *partitionSink, resolve
 		sink.tablesMap.Range(func(key, value interface{}) bool {
 			tableID := key.(int64)
 			resolvedTs := model.NewResolvedTs(resolvedTs)
-			if err := sink.tableSinks[tableID].UpdateResolvedTs(resolvedTs); err != nil {
+			tableSink, ok := sink.tableSinks.Load(tableID)
+			if !ok {
+				log.Panic("Table sink not found", zap.Int64("tableID", tableID))
+			}
+			if err := tableSink.(tablesink.TableSink).UpdateResolvedTs(resolvedTs); err != nil {
 				log.Error("Failed to update resolved ts", zap.Error(err))
 				return false
 			}
-			if !sink.tableSinks[tableID].GetCheckpointTs().EqualOrGreater(resolvedTs) {
+			if !tableSink.(tablesink.TableSink).GetCheckpointTs().EqualOrGreater(resolvedTs) {
 				flushedResolvedTs = false
 			}
 			return true
