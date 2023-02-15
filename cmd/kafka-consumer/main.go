@@ -353,11 +353,11 @@ func main() {
 	}
 }
 
-type partitionSink struct {
-	tableSinks  sync.Map
-	resolvedTs  uint64
-	partitionNo int
-	tablesMap   sync.Map
+type partitionSinks struct {
+	tablesCommitTsMap sync.Map
+	tableSinksMap     sync.Map
+	resolvedTs        uint64
+	partitionNo       int
 }
 
 // Consumer represents a Sarama consumer group consumer
@@ -370,8 +370,9 @@ type Consumer struct {
 	ddlSink              ddlsink.DDLEventSink
 	fakeTableIDGenerator *fakeTableIDGenerator
 
+	// sinkFactory is used to create table sink for each table.
 	sinkFactory *eventsinkfactory.SinkFactory
-	sinks       []*partitionSink
+	sinks       []*partitionSinks
 	sinksMu     sync.Mutex
 
 	// initialize to 0 by default
@@ -416,12 +417,12 @@ func NewConsumer(ctx context.Context) (*Consumer, error) {
 
 	}
 
-	c.sinks = make([]*partitionSink, kafkaPartitionNum)
+	c.sinks = make([]*partitionSinks, kafkaPartitionNum)
 	ctx, cancel := context.WithCancel(ctx)
 	ctx = contextutil.PutRoleInCtx(ctx, util.RoleKafkaConsumer)
 	errChan := make(chan error, 1)
 	for i := 0; i < int(kafkaPartitionNum); i++ {
-		c.sinks[i] = &partitionSink{
+		c.sinks[i] = &partitionSinks{
 			partitionNo: i,
 		}
 	}
@@ -621,19 +622,19 @@ func (c *Consumer) ConsumeClaim(session sarama.ConsumerGroupSession, claim saram
 						if len(events) == 0 {
 							continue
 						}
-						if _, ok := sink.tableSinks.Load(tableID); !ok {
-							sink.tableSinks.Store(tableID, c.sinkFactory.CreateTableSinkForConsumer(
+						if _, ok := sink.tableSinksMap.Load(tableID); !ok {
+							sink.tableSinksMap.Store(tableID, c.sinkFactory.CreateTableSinkForConsumer(
 								model.DefaultChangeFeedID("kafka-consumer"),
 								spanz.TableIDToComparableSpan(tableID),
 								prometheus.NewCounter(prometheus.CounterOpts{}),
 							))
 						}
-						s, _ := sink.tableSinks.Load(tableID)
+						s, _ := sink.tableSinksMap.Load(tableID)
 						s.(tablesink.TableSink).AppendRowChangedEvents(events...)
 						commitTs := events[len(events)-1].CommitTs
-						lastCommitTs, ok := sink.tablesMap.Load(tableID)
+						lastCommitTs, ok := sink.tablesCommitTsMap.Load(tableID)
 						if !ok || lastCommitTs.(uint64) < commitTs {
-							sink.tablesMap.Store(tableID, commitTs)
+							sink.tablesCommitTsMap.Store(tableID, commitTs)
 						}
 					}
 					log.Debug("update sink resolved ts",
@@ -703,7 +704,7 @@ func (c *Consumer) popDDL() *model.DDLEvent {
 	return nil
 }
 
-func (c *Consumer) forEachSink(fn func(sink *partitionSink) error) error {
+func (c *Consumer) forEachSink(fn func(sink *partitionSinks) error) error {
 	c.sinksMu.Lock()
 	defer c.sinksMu.Unlock()
 	for _, sink := range c.sinks {
@@ -716,7 +717,7 @@ func (c *Consumer) forEachSink(fn func(sink *partitionSink) error) error {
 
 func (c *Consumer) getMinPartitionResolvedTs() (result uint64, err error) {
 	result = uint64(math.MaxUint64)
-	err = c.forEachSink(func(sink *partitionSink) error {
+	err = c.forEachSink(func(sink *partitionSinks) error {
 		a := atomic.LoadUint64(&sink.resolvedTs)
 		if a < result {
 			result = a
@@ -746,7 +747,7 @@ func (c *Consumer) Run(ctx context.Context) error {
 		todoDDL := c.getFrontDDL()
 		if todoDDL != nil && todoDDL.CommitTs <= minPartitionResolvedTs {
 			// flush DMLs
-			if err := c.forEachSink(func(sink *partitionSink) error {
+			if err := c.forEachSink(func(sink *partitionSinks) error {
 				return syncFlushRowChangedEvents(ctx, sink, todoDDL.CommitTs)
 			}); err != nil {
 				return errors.Trace(err)
@@ -779,7 +780,7 @@ func (c *Consumer) Run(ctx context.Context) error {
 
 		c.globalResolvedTs = minPartitionResolvedTs
 
-		if err := c.forEachSink(func(sink *partitionSink) error {
+		if err := c.forEachSink(func(sink *partitionSinks) error {
 			return syncFlushRowChangedEvents(ctx, sink, c.globalResolvedTs)
 		}); err != nil {
 			return errors.Trace(err)
@@ -787,7 +788,7 @@ func (c *Consumer) Run(ctx context.Context) error {
 	}
 }
 
-func syncFlushRowChangedEvents(ctx context.Context, sink *partitionSink, resolvedTs uint64) error {
+func syncFlushRowChangedEvents(ctx context.Context, sink *partitionSinks, resolvedTs uint64) error {
 	for {
 		select {
 		case <-ctx.Done():
@@ -795,10 +796,10 @@ func syncFlushRowChangedEvents(ctx context.Context, sink *partitionSink, resolve
 		default:
 		}
 		flushedResolvedTs := true
-		sink.tablesMap.Range(func(key, value interface{}) bool {
+		sink.tablesCommitTsMap.Range(func(key, value interface{}) bool {
 			tableID := key.(int64)
 			resolvedTs := model.NewResolvedTs(resolvedTs)
-			tableSink, ok := sink.tableSinks.Load(tableID)
+			tableSink, ok := sink.tableSinksMap.Load(tableID)
 			if !ok {
 				log.Panic("Table sink not found", zap.Int64("tableID", tableID))
 			}
