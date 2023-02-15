@@ -33,12 +33,12 @@ func (br *BlackHoleReader) ResetReader(ctx context.Context, startTs, endTs uint6
 }
 
 // ReadNextLog implements LogReader.ReadNextLog
-func (br *BlackHoleReader) ReadNextLog(ctx context.Context, maxNumberOfEvents uint64) ([]*model.RedoRowChangedEvent, error) {
+func (br *BlackHoleReader) ReadNextLog(ctx context.Context, maxNumberOfEvents uint64) ([]*model.RowChangedEvent, error) {
 	return nil, nil
 }
 
 // ReadNextDDL implements LogReader.ReadNextDDL
-func (br *BlackHoleReader) ReadNextDDL(ctx context.Context, maxNumberOfEvents uint64) ([]*model.RedoDDLEvent, error) {
+func (br *BlackHoleReader) ReadNextDDL(ctx context.Context, maxNumberOfEvents uint64) ([]*model.DDLEvent, error) {
 	return nil, nil
 }
 

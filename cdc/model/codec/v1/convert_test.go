@@ -11,7 +11,7 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-package common
+package v1
 
 import (
 	"testing"
@@ -25,11 +25,12 @@ import (
 
 func TestRowRedoConvert(t *testing.T) {
 	t.Parallel()
-	row := &model.RowChangedEvent{
+
+	row := &RowChangedEvent{
 		StartTs:  100,
 		CommitTs: 120,
-		Table:    &model.TableName{Schema: "test", Table: "table1", TableID: 57},
-		PreColumns: []*model.Column{{
+		Table:    &TableName{Schema: "test", Table: "table1", TableID: 57},
+		PreColumns: []*Column{{
 			Name:  "a1",
 			Type:  mysql.TypeLong,
 			Flag:  model.BinaryFlag | model.MultipleKeyFlag | model.HandleKeyFlag,
@@ -49,7 +50,7 @@ func TestRowRedoConvert(t *testing.T) {
 			Charset: charset.CharsetGBK,
 			Value:   []byte("你好"),
 		}, nil},
-		Columns: []*model.Column{{
+		Columns: []*Column{{
 			Name:  "a1",
 			Type:  mysql.TypeLong,
 			Flag:  model.BinaryFlag | model.MultipleKeyFlag | model.HandleKeyFlag,
@@ -71,29 +72,29 @@ func TestRowRedoConvert(t *testing.T) {
 		}, nil},
 		IndexColumns: [][]int{{1, 3}},
 	}
-	rowRedo := RowToRedo(row)
-	require.Equal(t, 5, len(rowRedo.PreColumns))
-	require.Equal(t, 5, len(rowRedo.Columns))
 
-	redoLog := &model.RedoLog{
-		RedoRow: rowRedo,
-		Type:    model.RedoLogTypeRow,
-	}
+	redoLog := &RedoLog{RedoRow: &RedoRowChangedEvent{Row: row}}
+	PreMarshal(redoLog)
+	require.Equal(t, 5, len(redoLog.RedoRow.PreColumns))
+	require.Equal(t, 5, len(redoLog.RedoRow.Columns))
 	data, err := redoLog.MarshalMsg(nil)
 	require.Nil(t, err)
-	redoLog2 := &model.RedoLog{}
+
+	redoLog2 := &RedoLog{}
 	_, err = redoLog2.UnmarshalMsg(data)
 	require.Nil(t, err)
-	require.Equal(t, row, LogToRow(redoLog2.RedoRow))
+	PostUnmarshal(redoLog2)
+	require.Equal(t, row, redoLog2.RedoRow.Row)
 }
 
 func TestRowRedoConvertWithEmptySlice(t *testing.T) {
 	t.Parallel()
-	row := &model.RowChangedEvent{
+
+	row := &RowChangedEvent{
 		StartTs:  100,
 		CommitTs: 120,
-		Table:    &model.TableName{Schema: "test", Table: "table1", TableID: 57},
-		PreColumns: []*model.Column{{
+		Table:    &TableName{Schema: "test", Table: "table1", TableID: 57},
+		PreColumns: []*Column{{
 			Name:  "a1",
 			Type:  mysql.TypeLong,
 			Flag:  model.BinaryFlag | model.MultipleKeyFlag | model.HandleKeyFlag,
@@ -103,7 +104,7 @@ func TestRowRedoConvertWithEmptySlice(t *testing.T) {
 			Type:  mysql.TypeVarchar,
 			Value: []byte(""), // empty slice should be marshal and unmarshal safely
 		}},
-		Columns: []*model.Column{{
+		Columns: []*Column{{
 			Name:  "a1",
 			Type:  mysql.TypeLong,
 			Flag:  model.BinaryFlag | model.MultipleKeyFlag | model.HandleKeyFlag,
@@ -115,38 +116,37 @@ func TestRowRedoConvertWithEmptySlice(t *testing.T) {
 		}},
 		IndexColumns: [][]int{{1}},
 	}
-	rowRedo := RowToRedo(row)
-	redoLog := &model.RedoLog{
-		RedoRow: rowRedo,
-		Type:    model.RedoLogTypeRow,
-	}
+
+	redoLog := &RedoLog{RedoRow: &RedoRowChangedEvent{Row: row}}
+	PreMarshal(redoLog)
 	data, err := redoLog.MarshalMsg(nil)
 	require.Nil(t, err)
 
-	redoLog2 := &model.RedoLog{}
+	redoLog2 := &RedoLog{}
 	_, err = redoLog2.UnmarshalMsg(data)
 	require.Nil(t, err)
-	require.Equal(t, row, LogToRow(redoLog2.RedoRow))
+	PostUnmarshal(redoLog2)
+	require.Equal(t, row, redoLog2.RedoRow.Row)
 }
 
 func TestDDLRedoConvert(t *testing.T) {
 	t.Parallel()
-	ddl := &model.DDLEvent{
+
+	ddl := &DDLEvent{
 		StartTs:  1020,
 		CommitTs: 1030,
 		Type:     timodel.ActionAddColumn,
 		Query:    "ALTER TABLE test.t1 ADD COLUMN a int",
 	}
-	redoDDL := DDLToRedo(ddl)
 
-	redoLog := &model.RedoLog{
-		RedoDDL: redoDDL,
-		Type:    model.RedoLogTypeDDL,
-	}
+	redoLog := &RedoLog{RedoDDL: &RedoDDLEvent{DDL: ddl}}
+	PreMarshal(redoLog)
 	data, err := redoLog.MarshalMsg(nil)
 	require.Nil(t, err)
-	redoLog2 := &model.RedoLog{}
+
+	redoLog2 := &RedoLog{}
 	_, err = redoLog2.UnmarshalMsg(data)
 	require.Nil(t, err)
-	require.Equal(t, ddl, LogToDDL(redoLog2.RedoDDL))
+	PostUnmarshal(redoLog2)
+	require.Equal(t, ddl, redoLog2.RedoDDL.DDL)
 }

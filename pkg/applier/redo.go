@@ -22,7 +22,6 @@ import (
 	"github.com/pingcap/log"
 	"github.com/pingcap/tiflow/cdc/contextutil"
 	"github.com/pingcap/tiflow/cdc/model"
-	"github.com/pingcap/tiflow/cdc/redo/common"
 	"github.com/pingcap/tiflow/cdc/redo/reader"
 	"github.com/pingcap/tiflow/cdc/sink/mysql"
 	"github.com/pingcap/tiflow/cdc/sinkv2/eventsink/factory"
@@ -136,7 +135,7 @@ func (ra *RedoApplier) consumeLogs(ctx context.Context) error {
 		appliedLogCount += len(redoLogs)
 
 		for _, redoLog := range redoLogs {
-			tableID := redoLog.Row.Table.TableID
+			tableID := redoLog.Table.TableID
 			if _, ok := ra.tableSinks[tableID]; !ok {
 				tableSink := ra.sinkFactory.CreateTableSink(
 					model.DefaultChangeFeedID(applierChangefeed),
@@ -145,7 +144,7 @@ func (ra *RedoApplier) consumeLogs(ctx context.Context) error {
 				)
 				ra.tableSinks[tableID] = tableSink
 			}
-			if _, ok := tableResolvedTsMap[redoLog.Row.Table.TableID]; !ok {
+			if _, ok := tableResolvedTsMap[tableID]; !ok {
 				// Safe to use checkpointTs - 1 as the resolvedTs of a table.
 				tableResolvedTsMap[tableID] = checkpointTs - 1
 			}
@@ -156,9 +155,9 @@ func (ra *RedoApplier) consumeLogs(ctx context.Context) error {
 				}
 				cachedRows = make([]*model.RowChangedEvent, 0, emitBatch)
 			}
-			cachedRows = append(cachedRows, common.LogToRow(redoLog))
-			if redoLog.Row.CommitTs > tableResolvedTsMap[tableID] {
-				tableResolvedTsMap[tableID] = redoLog.Row.CommitTs
+			cachedRows = append(cachedRows, redoLog)
+			if redoLog.CommitTs > tableResolvedTsMap[tableID] {
+				tableResolvedTsMap[tableID] = redoLog.CommitTs
 			}
 		}
 
