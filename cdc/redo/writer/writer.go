@@ -301,9 +301,7 @@ func (l *logWriter) WriteLog(ctx context.Context, rows []*model.RowChangedEvent)
 		if r == nil {
 			continue
 		}
-		rl := &model.RedoLog{Type: model.RedoLogTypeRow}
-		rl.RedoRow.Row = r
-		data, err := codec.MarshalRedoLog(rl, nil)
+		data, err := codec.MarshalRowAsRedoLog(r, nil)
 		if err != nil {
 			return errors.WrapError(errors.ErrMarshalFailed, err)
 		}
@@ -332,9 +330,7 @@ func (l *logWriter) SendDDL(ctx context.Context, ddl *model.DDLEvent) error {
 		return nil
 	}
 
-	rl := &model.RedoLog{Type: model.RedoLogTypeDDL}
-	rl.RedoDDL.DDL = ddl
-	data, err := codec.MarshalRedoLog(rl, nil)
+	data, err := codec.MarshalDDLAsRedoLog(ddl, nil)
 	if err != nil {
 		return errors.WrapError(errors.ErrMarshalFailed, err)
 	}

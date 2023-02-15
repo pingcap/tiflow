@@ -33,12 +33,12 @@ const (
 // NOTE: why we need this?
 //
 // Before this logic is introduced, redo log is encoded into byte slice without a version field.
-// This makes it hard to extend in future.
-// However in the old format (i.e. v1 format), the first 5 bytes are always same, which can be
+// This makes it hard to extend in the future.
+// However, in the old format (i.e. v1 format), the first 5 bytes are always same, which can be
 // confirmed in v1/codec_gen.go. So we reuse those bytes, and add a version field in them.
 var (
-	v1Header      [v1HeaderLength]byte      = [...]byte{0x83, 0xa3, 0x72, 0x6f}
-	versionPrefix [versionPrefixLength]byte = [...]byte{0xff, 0xff}
+	v1Header      = [v1HeaderLength]byte{0x83, 0xa3, 0x72, 0x6f}
+	versionPrefix = [versionPrefixLength]byte{0xff, 0xff}
 )
 
 func postUnmarshal(r *model.RedoLog) {
@@ -63,6 +63,8 @@ func postUnmarshal(r *model.RedoLog) {
 				workaroundColumn(c, &r.RedoRow.PreColumns[i])
 			}
 		}
+		r.RedoRow.Columns = nil
+		r.RedoRow.PreColumns = nil
 	}
 	if r.RedoDDL.DDL != nil {
 		r.RedoDDL.DDL.Type = timodel.ActionType(r.RedoDDL.Type)
@@ -108,59 +110,6 @@ func preMarshal(r *model.RedoLog) {
 	}
 }
 
-func DecodeRedoLog(dc *msgp.Reader) (r *model.RedoLog, err error) {
-	var p []byte
-	p, err = dc.R.Peek(versionPrefixLength)
-	if err != nil {
-		return
-	}
-
-	shouldBeV1 := false
-	for i := 0; i < versionPrefixLength; i++ {
-		if p[i] != versionPrefix[i] {
-			shouldBeV1 = true
-			break
-		}
-	}
-
-	if shouldBeV1 {
-		var rv1 *codecv1.RedoLog = new(codecv1.RedoLog)
-		if err = rv1.DecodeMsg(dc); err != nil {
-			return
-		}
-		codecv1.PostUnmarshal(rv1)
-		r = redoLogFromV1(rv1)
-	} else {
-		p = make([]byte, 4)
-		if _, err = dc.R.Read(p); err != nil {
-			return
-		}
-		version, _ := decodeVersion(p[versionPrefixLength:])
-		if version == latestVersion {
-			r = new(model.RedoLog)
-			if err = r.DecodeMsg(dc); err != nil {
-				return
-			}
-			postUnmarshal(r)
-		} else {
-			panic("unsupported codec version")
-		}
-	}
-	return
-}
-
-func EncodeRedoLog(r *model.RedoLog, en *msgp.Writer) (err error) {
-	preMarshal(r)
-	if _, err = en.Write(versionPrefix[:]); err != nil {
-		return
-	}
-	versionField := binary.BigEndian.AppendUint16(nil, latestVersion)
-	if _, err = en.Write(versionField); err != nil {
-		return
-	}
-	return r.EncodeMsg(en)
-}
-
 func UnmarshalRedoLog(bts []byte) (r *model.RedoLog, o []byte, err error) {
 	if len(bts) < versionPrefixLength {
 		err = msgp.ErrShortBytes
@@ -203,6 +152,22 @@ func MarshalRedoLog(r *model.RedoLog, b []byte) (o []byte, err error) {
 	b = binary.BigEndian.AppendUint16(b, latestVersion)
 	o, err = r.MarshalMsg(b)
 	return
+}
+
+func MarshalRowAsRedoLog(r *model.RowChangedEvent, b []byte) (o []byte, err error) {
+	log := &model.RedoLog{
+		RedoRow: model.RedoRowChangedEvent{Row: r},
+		Type:    model.RedoLogTypeRow,
+	}
+	return MarshalRedoLog(log, b)
+}
+
+func MarshalDDLAsRedoLog(d *model.DDLEvent, b []byte) (o []byte, err error) {
+	log := &model.RedoLog{
+		RedoDDL: model.RedoDDLEvent{DDL: d},
+		Type:    model.RedoLogTypeDDL,
+	}
+	return MarshalRedoLog(log, b)
 }
 
 func decodeVersion(bts []byte) (uint16, []byte) {
