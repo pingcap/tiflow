@@ -289,7 +289,7 @@ func (m *ManagerImpl) UpdateCheckpointTs(ckpt model.Ts) {
 // EmitDDLEvent sends DDL event to redo log writer
 func (m *ManagerImpl) EmitDDLEvent(ctx context.Context, ddl *model.DDLEvent) error {
 	return m.withLock(func(m *ManagerImpl) error {
-		return m.writer.SendDDL(ctx, common.DDLToRedo(ddl))
+		return m.writer.SendDDL(ctx, ddl)
 	})
 }
 
@@ -524,8 +524,13 @@ func (m *ManagerImpl) bgUpdateLog(
 	}()
 
 	var err error
+<<<<<<< HEAD
 	logs := make([]*model.RedoRowChangedEvent, 0, 1024*1024)
 	rtsMap := make(map[model.TableID]model.Ts)
+=======
+	logs := make([]*model.RowChangedEvent, 0, 1024*1024)
+	rtsMap := spanz.NewHashMap[model.Ts]()
+>>>>>>> d0e848d74e (redo(cdc): add a version field for redo (#8235))
 	releaseMemoryCbs := make([]func(), 0, 1024)
 
 	emitBatch := func(workTimeSlice *time.Duration) {
@@ -551,7 +556,7 @@ func (m *ManagerImpl) bgUpdateLog(
 			}
 
 			if cap(logs) > 1024*1024 {
-				logs = make([]*model.RedoRowChangedEvent, 0, 1024*1024)
+				logs = make([]*model.RowChangedEvent, 0, 1024*1024)
 			} else {
 				logs = logs[:0]
 			}
@@ -593,9 +598,7 @@ func (m *ManagerImpl) bgUpdateLog(
 				startToHandleEvent := time.Now()
 				switch cache.eventType {
 				case model.MessageTypeRow:
-					for _, row := range cache.rows {
-						logs = append(logs, common.RowToRedo(row))
-					}
+					logs = append(logs, cache.rows...)
 					if cache.releaseMemory != nil {
 						releaseMemoryCbs = append(releaseMemoryCbs, cache.releaseMemory)
 					}
@@ -630,9 +633,7 @@ func (m *ManagerImpl) bgUpdateLog(
 				startToHandleEvent := time.Now()
 				switch cache.eventType {
 				case model.MessageTypeRow:
-					for _, row := range cache.rows {
-						logs = append(logs, common.RowToRedo(row))
-					}
+					logs = append(logs, cache.rows...)
 					if cache.releaseMemory != nil {
 						releaseMemoryCbs = append(releaseMemoryCbs, cache.releaseMemory)
 					}

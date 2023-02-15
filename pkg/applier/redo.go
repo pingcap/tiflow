@@ -21,7 +21,6 @@ import (
 	"github.com/pingcap/log"
 	"github.com/pingcap/tiflow/cdc/contextutil"
 	"github.com/pingcap/tiflow/cdc/model"
-	"github.com/pingcap/tiflow/cdc/redo/common"
 	"github.com/pingcap/tiflow/cdc/redo/reader"
 	"github.com/pingcap/tiflow/cdc/sink"
 	"github.com/pingcap/tiflow/cdc/sink/mysql"
@@ -149,9 +148,24 @@ func (ra *RedoApplier) consumeLogs(ctx context.Context) error {
 		appliedLogCount += len(redoLogs)
 
 		for _, redoLog := range redoLogs {
+<<<<<<< HEAD
 			tableID := redoLog.Row.Table.TableID
 			if _, ok := tableResolvedTsMap[redoLog.Row.Table.TableID]; !ok {
 				tableResolvedTsMap[tableID] = lastSafeResolvedTs
+=======
+			tableID := redoLog.Table.TableID
+			if _, ok := ra.tableSinks[tableID]; !ok {
+				tableSink := ra.sinkFactory.CreateTableSink(
+					model.DefaultChangeFeedID(applierChangefeed),
+					spanz.TableIDToComparableSpan(tableID),
+					prometheus.NewCounter(prometheus.CounterOpts{}),
+				)
+				ra.tableSinks[tableID] = tableSink
+			}
+			if _, ok := tableResolvedTsMap[tableID]; !ok {
+				// Safe to use checkpointTs - 1 as the resolvedTs of a table.
+				tableResolvedTsMap[tableID] = checkpointTs - 1
+>>>>>>> d0e848d74e (redo(cdc): add a version field for redo (#8235))
 			}
 			if len(cachedRows) >= emitBatch {
 				err := s.EmitRowChangedEvents(ctx, cachedRows...)
@@ -160,10 +174,16 @@ func (ra *RedoApplier) consumeLogs(ctx context.Context) error {
 				}
 				cachedRows = make([]*model.RowChangedEvent, 0, emitBatch)
 			}
+<<<<<<< HEAD
 			cachedRows = append(cachedRows, common.LogToRow(redoLog))
 
 			if redoLog.Row.CommitTs > tableResolvedTsMap[tableID] {
 				tableResolvedTsMap[tableID], lastResolvedTs = lastResolvedTs, redoLog.Row.CommitTs
+=======
+			cachedRows = append(cachedRows, redoLog)
+			if redoLog.CommitTs > tableResolvedTsMap[tableID] {
+				tableResolvedTsMap[tableID] = redoLog.CommitTs
+>>>>>>> d0e848d74e (redo(cdc): add a version field for redo (#8235))
 			}
 		}
 
