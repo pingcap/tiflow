@@ -14,8 +14,6 @@
 package kafka
 
 import (
-	"context"
-
 	"github.com/Shopify/sarama"
 	"github.com/pingcap/tiflow/cdc/model"
 	"github.com/pingcap/tiflow/pkg/errors"
@@ -29,7 +27,7 @@ type saramaFactory struct {
 }
 
 // NewSaramaFactory constructs a Factory with sarama implementation.
-func NewSaramaFactory(ctx context.Context,
+func NewSaramaFactory(
 	o *Options,
 	changefeedID model.ChangeFeedID,
 ) (Factory, error) {

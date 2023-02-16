@@ -49,7 +49,7 @@ func NewKafkaDDLSink(
 	}
 
 	changefeed := contextutil.ChangefeedIDFromCtx(ctx)
-	factory, err := factoryCreator(ctx, options, changefeed)
+	factory, err := factoryCreator(options, changefeed)
 	if err != nil {
 		return nil, cerror.WrapError(cerror.ErrKafkaNewProducer, err)
 	}

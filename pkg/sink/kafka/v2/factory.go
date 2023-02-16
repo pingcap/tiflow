@@ -38,7 +38,6 @@ type factory struct {
 
 // NewFactory returns a factory implemented based on kafka-go
 func NewFactory(
-	ctx context.Context,
 	options *pkafka.Options,
 	changefeedID model.ChangeFeedID,
 ) (pkafka.Factory, error) {
