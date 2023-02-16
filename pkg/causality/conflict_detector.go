@@ -37,8 +37,8 @@ type ConflictDetector[Worker worker[Txn], Txn txnEvent] struct {
 	nextWorkerID atomic.Int64
 
 	// Used to run a background goroutine to GC or notify nodes.
-	notifiedNodes *chann.Chann[func()]
-	garbageNodes  *chann.Chann[txnFinishedEvent]
+	notifiedNodes *chann.DrainableChann[func()]
+	garbageNodes  *chann.DrainableChann[txnFinishedEvent]
 	wg            sync.WaitGroup
 	closeCh       chan struct{}
 }
@@ -57,8 +57,8 @@ func NewConflictDetector[Worker worker[Txn], Txn txnEvent](
 		workers:       workers,
 		slots:         internal.NewSlots[*internal.Node](numSlots),
 		numSlots:      numSlots,
-		notifiedNodes: chann.New[func()](),
-		garbageNodes:  chann.New[txnFinishedEvent](),
+		notifiedNodes: chann.NewAutoDrainChann[func()](),
+		garbageNodes:  chann.NewAutoDrainChann[txnFinishedEvent](),
 		closeCh:       make(chan struct{}),
 	}
 
@@ -97,14 +97,8 @@ func (d *ConflictDetector[Worker, Txn]) Close() {
 
 func (d *ConflictDetector[Worker, Txn]) runBackgroundTasks() {
 	defer func() {
-		d.notifiedNodes.Close()
-		// Drain the channel to avoid goroutine leak.
-		//for range d.notifiedNodes.Out() {
-		//}
-		d.garbageNodes.Close()
-		//// Drain the channel to avoid goroutine leak.
-		//for range d.garbageNodes.Out() {
-		//}
+		d.notifiedNodes.CloseAndDrain()
+		d.garbageNodes.CloseAndDrain()
 	}()
 	for {
 		select {

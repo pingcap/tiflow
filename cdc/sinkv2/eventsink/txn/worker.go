@@ -41,7 +41,7 @@ type worker struct {
 	workerCount int
 
 	ID      int
-	txnCh   *chann.Chann[txnWithNotifier]
+	txnCh   *chann.DrainableChann[txnWithNotifier]
 	stopped chan struct{}
 	wg      sync.WaitGroup
 	backend backend
@@ -68,7 +68,7 @@ func newWorker(ctx context.Context, ID int, backend backend, errCh chan<- error,
 		workerCount: workerCount,
 
 		ID:      ID,
-		txnCh:   chann.New[txnWithNotifier](chann.Cap(-1 /*unbounded*/)),
+		txnCh:   chann.NewAutoDrainChann[txnWithNotifier](chann.Cap(-1 /*unbounded*/)),
 		stopped: make(chan struct{}),
 		backend: backend,
 		errCh:   errCh,
@@ -98,7 +98,7 @@ func (w *worker) Close() {
 	start := time.Now()
 	close(w.stopped)
 	w.wg.Wait()
-	w.txnCh.Close()
+	w.txnCh.CloseAndDrain()
 	log.Info("Closed txn worker",
 		zap.String("changefeed", w.changefeed),
 		zap.Int("worker", w.ID),
