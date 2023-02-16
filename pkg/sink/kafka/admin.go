@@ -24,6 +24,7 @@ import (
 
 	"github.com/Shopify/sarama"
 	"github.com/pingcap/log"
+	"github.com/pingcap/tiflow/cdc/model"
 	cerror "github.com/pingcap/tiflow/pkg/errors"
 	"github.com/pingcap/tiflow/pkg/retry"
 	"go.uber.org/zap"
@@ -32,6 +33,7 @@ import (
 type saramaAdminClient struct {
 	brokerEndpoints []string
 	config          *sarama.Config
+	changefeed      model.ChangeFeedID
 
 	mu     sync.Mutex
 	client sarama.Client
@@ -43,7 +45,11 @@ const (
 	defaultRetryMaxTries = 3
 )
 
-func newAdminClient(brokerEndpoints []string, config *sarama.Config) (ClusterAdminClient, error) {
+func newAdminClient(
+	brokerEndpoints []string,
+	config *sarama.Config,
+	changefeed model.ChangeFeedID,
+) (ClusterAdminClient, error) {
 	client, err := sarama.NewClient(brokerEndpoints, config)
 	if err != nil {
 		return nil, cerror.Trace(err)
@@ -58,6 +64,7 @@ func newAdminClient(brokerEndpoints []string, config *sarama.Config) (ClusterAdm
 		admin:           admin,
 		brokerEndpoints: brokerEndpoints,
 		config:          config,
+		changefeed:      changefeed,
 	}, nil
 }
 
@@ -74,7 +81,9 @@ func (a *saramaAdminClient) reset() error {
 	_ = a.admin.Close()
 	a.client = newClient
 	a.admin = newAdmin
-	log.Info("kafka admin client is reset")
+	log.Info("kafka admin client is reset",
+		zap.String("namespace", a.changefeed.Namespace),
+		zap.String("changefeed", a.changefeed.ID))
 	return errors.New("retry after reset")
 }
 
@@ -87,7 +96,10 @@ func (a *saramaAdminClient) queryClusterWithRetry(ctx context.Context, query fun
 			return nil
 		}
 
-		log.Warn("query kafka cluster meta failed, retry it", zap.Error(err))
+		log.Warn("query kafka cluster meta failed, retry it",
+			zap.String("namespace", a.changefeed.Namespace),
+			zap.String("changefeed", a.changefeed.ID),
+			zap.Error(err))
 
 		if !errors.Is(err, syscall.EPIPE) {
 			return err
@@ -167,7 +179,10 @@ func (a *saramaAdminClient) GetBrokerConfig(
 	}
 
 	if len(configEntries) == 0 || configEntries[0].Name != configName {
-		log.Warn("Kafka config item not found", zap.String("configName", configName))
+		log.Warn("Kafka config item not found",
+			zap.String("namespace", a.changefeed.Namespace),
+			zap.String("changefeed", a.changefeed.ID),
+			zap.String("configName", configName))
 		return "", cerror.ErrKafkaBrokerConfigNotFound.GenWithStack(
 			"cannot find the `%s` from the broker's configuration", configName)
 	}
@@ -253,6 +268,8 @@ func (a *saramaAdminClient) GetTopicsMeta(
 				return nil, meta.Err
 			}
 			log.Warn("fetch topic meta failed",
+				zap.String("namespace", a.changefeed.Namespace),
+				zap.String("changefeed", a.changefeed.ID),
 				zap.String("topic", meta.Name),
 				zap.Error(meta.Err))
 			continue
@@ -281,8 +298,13 @@ func (a *saramaAdminClient) CreateTopic(
 	return a.queryClusterWithRetry(ctx, query)
 }
 
-func (a *saramaAdminClient) Close() error {
+func (a *saramaAdminClient) Close() {
 	a.mu.Lock()
 	defer a.mu.Unlock()
-	return a.admin.Close()
+	if err := a.admin.Close(); err != nil {
+		log.Warn("close admin client meet error",
+			zap.String("namespace", a.changefeed.Namespace),
+			zap.String("changefeed", a.changefeed.ID),
+			zap.Error(err))
+	}
 }
