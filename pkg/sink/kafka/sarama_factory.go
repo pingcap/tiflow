@@ -45,7 +45,7 @@ func NewSaramaFactory(ctx context.Context,
 }
 
 func (f *saramaFactory) AdminClient() (ClusterAdminClient, error) {
-	return newAdminClient(f.brokerEndpoints, f.config)
+	return newAdminClient(f.brokerEndpoints, f.config, f.changefeedID)
 }
 
 // SyncProducer returns a Sync Producer,
