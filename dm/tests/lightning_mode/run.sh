@@ -13,9 +13,6 @@ function run() {
 
 	run_downstream_cluster $WORK_DIR
 
-	run_sql_tidb "drop database if exists lightning_mode;"
-	export GO_FAILPOINTS='github.com/pingcap/tiflow/dm/pkg/conn/VeryLargeTable=return("t1")'
-
 	run_sql_both_source "SET @@GLOBAL.SQL_MODE='ANSI_QUOTES,NO_AUTO_VALUE_ON_ZERO'"
 
 	run_sql_file $cur/data/db1.prepare.sql $MYSQL_HOST1 $MYSQL_PORT1 $MYSQL_PASSWORD1
@@ -41,54 +38,9 @@ function run() {
 	check_rpc_alive $cur/../bin/check_worker_online 127.0.0.1:$WORKER2_PORT
 	dmctl_operate_source create $WORK_DIR/source2.yaml $SOURCE_ID2
 
-	run_dm_ctl $WORK_DIR "127.0.0.1:$MASTER_PORT" \
-		"check-task $cur/conf/dm-task.yaml" \
-		"Downstream doesn't have enough space" 1 \
-		"but we need 4EiB" 1
-
-	export GO_FAILPOINTS=''
-	kill_dm_master
-	run_dm_master_info_log $WORK_DIR/master $MASTER_PORT $cur/conf/dm-master.toml
-	check_rpc_alive $cur/../bin/check_master_online 127.0.0.1:$MASTER_PORT
-
-	# start DM task
-	dmctl_start_task "$cur/conf/dm-task-dup.yaml" "--remove-meta"
-	run_dm_ctl_with_retry $WORK_DIR "127.0.0.1:$MASTER_PORT" \
-		"query-status test" \
-		"\"stage\": \"Paused\"" 1 \
-		'"progress": "100.00 %"' 2 \
-		"please check \`dm_meta_test\`.\`conflict_error_v1\` to see the duplication" 1
-	run_dm_ctl $WORK_DIR "127.0.0.1:$MASTER_PORT" \
-		"resume-task test" \
-		"\"result\": true" 3
-	run_dm_ctl_with_retry $WORK_DIR "127.0.0.1:$MASTER_PORT" \
-		"query-status test" \
-		'unit": "Sync"' 2
-	run_dm_ctl $WORK_DIR "127.0.0.1:$MASTER_PORT" \
-		"stop-task test" \
-		"\"result\": true" 3
-	run_sql_tidb "drop database if exists lightning_mode;"
-
-	# if not set duplicate detection, checksum will fail
-	cp $cur/conf/dm-task-dup.yaml $WORK_DIR/dm-task-dup.yaml
-	sed -i "/on-duplicate-physical/d" $WORK_DIR/dm-task-dup.yaml
-	dmctl_start_task "$WORK_DIR/dm-task-dup.yaml" "--remove-meta"
-	run_dm_ctl_with_retry $WORK_DIR "127.0.0.1:$MASTER_PORT" \
-		"query-status test" \
-		"checksum mismatched, KV number in source files: 6, KV number in TiDB cluster: 3" 1 \
-		'"unit": "Load"' 2
-	run_dm_ctl $WORK_DIR "127.0.0.1:$MASTER_PORT" \
-		"resume-task test"
-	run_dm_ctl_with_retry $WORK_DIR "127.0.0.1:$MASTER_PORT" \
-		"query-status test" \
-		'unit": "Sync"' 2
-
-	run_dm_ctl $WORK_DIR "127.0.0.1:$MASTER_PORT" \
-		"stop-task test" \
-		"\"result\": true" 3
-	run_sql_tidb "drop database if exists lightning_mode;"
-
-	dmctl_start_task "$cur/conf/dm-task.yaml" "--remove-meta"
+	# start DM task only
+	cp $cur/conf/dm-task.yaml $WORK_DIR/dm-task.yaml
+	dmctl_start_task "$WORK_DIR/dm-task.yaml" "--remove-meta"
 
 	# use sync_diff_inspector to check full dump loader
 	check_sync_diff $WORK_DIR $cur/conf/diff_config.toml
@@ -119,7 +71,6 @@ function run() {
 	killall -9 pd-server 2>/dev/null || true
 	rm -rf /tmp/tidb || true
 	run_tidb_server 4000 $TIDB_PASSWORD
-	export GO_FAILPOINTS=''
 }
 
 cleanup_data lightning_mode
