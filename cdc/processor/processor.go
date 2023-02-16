@@ -719,6 +719,7 @@ func (p *processor) lazyInitImpl(ctx cdcContext.Context) error {
 	log.Info("processor initialized",
 		zap.String("capture", p.captureInfo.ID),
 		zap.String("namespace", p.changefeedID.Namespace),
+		zap.Uint64("changefeedEpoch", p.changefeedEpoch),
 		zap.String("changefeed", p.changefeedID.ID))
 	return nil
 }

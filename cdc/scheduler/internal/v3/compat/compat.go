@@ -23,6 +23,13 @@ import (
 	"github.com/pingcap/tiflow/pkg/version"
 )
 
+var (
+	// SpanReplicationMinVersion is the min version that allows span replication.
+	SpanReplicationMinVersion = semver.New("6.6.0-alpha")
+	// ChangefeedEpochMinVersion is the min version that enables changefeed epoch.
+	ChangefeedEpochMinVersion = semver.New("6.7.0-alpha")
+)
+
 // Compat is a compatibility layer between span replication and table replication.
 type Compat struct {
 	regionPerSpan int
@@ -67,13 +74,6 @@ func (c *Compat) UpdateCaptureInfo(
 	}
 	return false
 }
-
-var (
-	// SpanReplicationMinVersion is the min version that allows span replication.
-	SpanReplicationMinVersion = semver.New("6.6.0-alpha")
-	// ChangefeedEpochMinVersion is the min version that enables changefeed epoch.
-	ChangefeedEpochMinVersion = semver.New("6.7.0-alpha")
-)
 
 // CheckSpanReplicationEnabled check if the changefeed can enable span replication.
 func (c *Compat) CheckSpanReplicationEnabled() bool {

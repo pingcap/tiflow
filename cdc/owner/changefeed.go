@@ -156,7 +156,7 @@ func newChangefeed(
 		// The scheduler will be created lazily.
 		scheduler:        nil,
 		barriers:         newBarriers(),
-		feedStateManager: newFeedStateManager(),
+		feedStateManager: newFeedStateManager(up),
 		upstream:         up,
 
 		errCh:  make(chan error, defaultErrChSize),
@@ -570,24 +570,21 @@ LOOP:
 		zap.String("namespace", c.id.Namespace),
 		zap.String("changefeed", c.id.ID))
 
-	phyTs, logical, err := c.upstream.PDClient.GetTS(ctx)
-	epoch := oracle.ComposeTS(phyTs, logical)
-
 	// create scheduler
 	cfg := *c.cfg
 	cfg.ChangefeedSettings = c.state.Info.Config.Scheduler
+	epoch := c.state.Info.Epoch
 	c.scheduler, err = c.newScheduler(ctx, c.upstream, epoch, &cfg)
 	if err != nil {
 		return errors.Trace(err)
 	}
-	// Update changefeed epoch.
-	c.feedStateManager.patchEpoch(epoch)
 
 	c.initMetrics()
 
 	c.initialized = true
 	log.Info("changefeed initialized",
 		zap.String("namespace", c.state.ID.Namespace),
+		zap.Uint64("changefeedEpoch", epoch),
 		zap.String("changefeed", c.state.ID.ID),
 		zap.Uint64("checkpointTs", checkpointTs),
 		zap.Uint64("resolvedTs", resolvedTs),

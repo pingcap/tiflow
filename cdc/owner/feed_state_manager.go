@@ -14,6 +14,7 @@
 package owner
 
 import (
+	"context"
 	"time"
 
 	"github.com/cenkalti/backoff/v4"
@@ -22,6 +23,8 @@ import (
 	"github.com/pingcap/tiflow/cdc/model"
 	cerrors "github.com/pingcap/tiflow/pkg/errors"
 	"github.com/pingcap/tiflow/pkg/orchestrator"
+	"github.com/pingcap/tiflow/pkg/upstream"
+	"github.com/tikv/client-go/v2/oracle"
 	"go.uber.org/zap"
 )
 
@@ -44,6 +47,7 @@ const (
 // feedStateManager manages the ReactorState of a changefeed
 // when an error or an admin job occurs, the feedStateManager is responsible for controlling the ReactorState
 type feedStateManager struct {
+	upstream        *upstream.Upstream
 	state           *orchestrator.ChangefeedReactorState
 	shouldBeRunning bool
 	// Based on shouldBeRunning = false
@@ -59,8 +63,9 @@ type feedStateManager struct {
 }
 
 // newFeedStateManager creates feedStateManager and initialize the exponential backoff
-func newFeedStateManager() *feedStateManager {
+func newFeedStateManager(up *upstream.Upstream) *feedStateManager {
 	f := new(feedStateManager)
+	f.upstream = up
 
 	f.errBackoff = backoff.NewExponentialBackOff()
 	f.errBackoff.InitialInterval = defaultBackoffInitInterval
@@ -333,31 +338,22 @@ func (m *feedStateManager) pushAdminJob(job *model.AdminJob) {
 	m.adminJobQueue = append(m.adminJobQueue, job)
 }
 
-func (m *feedStateManager) patchEpoch(epoch uint64) {
-	m.state.PatchInfo(func(info *model.ChangeFeedInfo) (*model.ChangeFeedInfo, bool, error) {
-		changed := false
-		if info == nil {
-			return nil, changed, nil
-		}
-		if info.Epoch != epoch {
-			info.Epoch = epoch
-			changed = true
-		}
-		return info, changed, nil
-	})
-}
-
 func (m *feedStateManager) patchState(feedState model.FeedState) {
+	var updateEpoch bool
 	var adminJobType model.AdminJobType
 	switch feedState {
 	case model.StateNormal:
 		adminJobType = model.AdminNone
+		updateEpoch = false
 	case model.StateFinished:
 		adminJobType = model.AdminFinish
+		updateEpoch = true
 	case model.StateError, model.StateStopped, model.StateFailed:
 		adminJobType = model.AdminStop
+		updateEpoch = true
 	case model.StateRemoved:
 		adminJobType = model.AdminRemove
+		updateEpoch = true
 	default:
 		log.Panic("Unreachable")
 	}
@@ -384,8 +380,30 @@ func (m *feedStateManager) patchState(feedState model.FeedState) {
 			info.AdminJobType = adminJobType
 			changed = true
 		}
+		if updateEpoch {
+			previous := info.Epoch
+			info.Epoch = m.generateEpoch()
+			changed = true
+			log.Info("update changefeed epoch",
+				zap.String("namespace", m.state.ID.Namespace),
+				zap.String("changefeed", m.state.ID.ID),
+				zap.Uint64("perviousEpoch", previous),
+				zap.Uint64("changefeedEpoch", info.Epoch))
+		}
 		return info, changed, nil
 	})
+}
+
+func (m *feedStateManager) generateEpoch() uint64 {
+	ctx, cancel := context.WithTimeout(context.TODO(), 5*time.Second)
+	defer cancel()
+	phyTs, logical, err := m.upstream.PDClient.GetTS(ctx)
+	if err != nil {
+		log.Warn("generate epoch using local timestamp due error",
+			zap.Uint64("upstreamID", m.upstream.ID), zap.Error(err))
+		return uint64(time.Now().UnixNano())
+	}
+	return oracle.ComposeTS(phyTs, logical)
 }
 
 func (m *feedStateManager) cleanUpInfos() {
