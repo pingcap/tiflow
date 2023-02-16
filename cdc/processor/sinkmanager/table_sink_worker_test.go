@@ -70,7 +70,7 @@ func addEventsToSortEngine(
 //
 //nolint:unparam
 func genRowChangedEvent(startTs, commitTs uint64, span tablepb.Span) *model.RowChangedEvent {
-	return &model.RowChangedEvent{
+	x := (&model.BoundedRowChangedEvent{
 		StartTs:  startTs,
 		CommitTs: commitTs,
 		Table: &model.TableName{
@@ -79,13 +79,15 @@ func genRowChangedEvent(startTs, commitTs uint64, span tablepb.Span) *model.RowC
 			TableID:     span.TableID,
 			IsPartition: false,
 		},
-		Columns: []*model.Column{
+		Columns: []*model.BoundedColumn{
 			{Name: "a", Value: 2},
 		},
-		PreColumns: []*model.Column{
+		PreColumns: []*model.BoundedColumn{
 			{Name: "a", Value: 1},
 		},
-	}
+	}).Unbound()
+	x.ApproximateMemSize = 100
+	return x
 }
 
 type workerSuite struct {
@@ -175,6 +177,11 @@ func (suite *workerSuite) TestHandleTaskWithSplitTxnAndGotSomeFilteredEvents() {
 				CRTs:   4,
 			},
 		},
+	}
+	for _, event := range events {
+		if event.Row != nil {
+			event.Row.ApproximateMemSize = 218
+		}
 	}
 
 	w, e := createWorker(changefeedID, eventSize, true)
@@ -283,6 +290,11 @@ func (suite *workerSuite) TestHandleTaskWithSplitTxnAndAbortWhenNoMemAndOneTxnFi
 			},
 		},
 	}
+	for _, event := range events {
+		if event.Row != nil {
+			event.Row.ApproximateMemSize = 218
+		}
+	}
 
 	w, e := createWorker(changefeedID, eventSize, true, span)
 	defer w.sinkMemQuota.Close()
@@ -390,6 +402,12 @@ func (suite *workerSuite) TestHandleTaskWithSplitTxnAndAbortWhenNoMemAndBlocked(
 			},
 		},
 	}
+	for _, event := range events {
+		if event.Row != nil {
+			event.Row.ApproximateMemSize = 218
+		}
+	}
+
 	w, e := createWorker(changefeedID, eventSize, true, span)
 	defer w.sinkMemQuota.Close()
 	addEventsToSortEngine(suite.T(), events, e, span)
@@ -517,6 +535,12 @@ func (suite *workerSuite) TestHandleTaskWithSplitTxnAndOnlyAdvanceTableSinkWhenR
 			},
 		},
 	}
+	for _, event := range events {
+		if event.Row != nil {
+			event.Row.ApproximateMemSize = 218
+		}
+	}
+
 	w, e := createWorker(changefeedID, eventSize, true, span)
 	defer w.sinkMemQuota.Close()
 	addEventsToSortEngine(suite.T(), events, e, span)
@@ -644,6 +668,12 @@ func (suite *workerSuite) TestHandleTaskWithoutSplitTxnAndAbortWhenNoMemAndForce
 			},
 		},
 	}
+	for _, event := range events {
+		if event.Row != nil {
+			event.Row.ApproximateMemSize = 218
+		}
+	}
+
 	w, e := createWorker(changefeedID, eventSize, false, span)
 	defer w.sinkMemQuota.Close()
 	w.splitTxn = false
@@ -773,6 +803,12 @@ func (suite *workerSuite) TestHandleTaskWithoutSplitTxnOnlyAdvanceTableSinkWhenR
 			},
 		},
 	}
+	for _, event := range events {
+		if event.Row != nil {
+			event.Row.ApproximateMemSize = 218
+		}
+	}
+
 	w, e := createWorker(changefeedID, eventSize, false)
 	defer w.sinkMemQuota.Close()
 	addEventsToSortEngine(suite.T(), events, e, span)
@@ -892,6 +928,12 @@ func (suite *workerSuite) TestHandleTaskWithSplitTxnAndDoNotAdvanceTableUntilMee
 			},
 		},
 	}
+	for _, event := range events {
+		if event.Row != nil {
+			event.Row.ApproximateMemSize = 218
+		}
+	}
+
 	w, e := createWorker(changefeedID, eventSize, true, span)
 	defer w.sinkMemQuota.Close()
 	addEventsToSortEngine(suite.T(), events, e, span)
@@ -977,6 +1019,12 @@ func (suite *workerSuite) TestHandleTaskWithSplitTxnAndAdvanceTableUntilTaskIsFi
 			},
 		},
 	}
+	for _, event := range events {
+		if event.Row != nil {
+			event.Row.ApproximateMemSize = 218
+		}
+	}
+
 	w, e := createWorker(changefeedID, eventSize, true, span)
 	defer w.sinkMemQuota.Close()
 	addEventsToSortEngine(suite.T(), events, e, span)
@@ -1049,6 +1097,12 @@ func (suite *workerSuite) TestHandleTaskWithSplitTxnAndAdvanceTableIfNoWorkload(
 			},
 		},
 	}
+	for _, event := range events {
+		if event.Row != nil {
+			event.Row.ApproximateMemSize = 218
+		}
+	}
+
 	w, e := createWorker(changefeedID, eventSize, true, span)
 	defer w.sinkMemQuota.Close()
 	addEventsToSortEngine(suite.T(), events, e, span)

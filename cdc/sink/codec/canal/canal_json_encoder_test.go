@@ -53,7 +53,7 @@ func TestNewCanalJSONMessage4DML(t *testing.T) {
 	encoder, ok := e.(*JSONBatchEncoder)
 	require.True(t, ok)
 
-	data, err := encoder.newJSONMessageForDML(testCaseInsert)
+	data, err := encoder.newJSONMessageForDML(testCaseInsert.Unbound())
 	require.Nil(t, err)
 	var msg canalJSONMessageInterface = &JSONMessage{}
 	err = json.Unmarshal(data, msg)
@@ -96,7 +96,7 @@ func TestNewCanalJSONMessage4DML(t *testing.T) {
 		require.Equal(t, item.expectedEncodedValue, obtainedValue)
 	}
 
-	data, err = encoder.newJSONMessageForDML(testCaseUpdate)
+	data, err = encoder.newJSONMessageForDML(testCaseUpdate.Unbound())
 	require.Nil(t, err)
 	jsonMsg = &JSONMessage{}
 	err = json.Unmarshal(data, jsonMsg)
@@ -105,7 +105,7 @@ func TestNewCanalJSONMessage4DML(t *testing.T) {
 	require.NotNil(t, jsonMsg.Old)
 	require.Equal(t, "UPDATE", jsonMsg.EventType)
 
-	data, err = encoder.newJSONMessageForDML(testCaseDelete)
+	data, err = encoder.newJSONMessageForDML(testCaseDelete.Unbound())
 	require.Nil(t, err)
 	jsonMsg = &JSONMessage{}
 	err = json.Unmarshal(data, jsonMsg)
@@ -122,7 +122,7 @@ func TestNewCanalJSONMessage4DML(t *testing.T) {
 
 	encoder, ok = e.(*JSONBatchEncoder)
 	require.True(t, ok)
-	data, err = encoder.newJSONMessageForDML(testCaseUpdate)
+	data, err = encoder.newJSONMessageForDML(testCaseUpdate.Unbound())
 	require.Nil(t, err)
 
 	withExtension := &canalJSONMessageWithTiDBExtension{}
@@ -175,7 +175,7 @@ func TestBatching(t *testing.T) {
 	for i := 1; i <= 1000; i++ {
 		ts := uint64(i)
 		updateCase.CommitTs = ts
-		err := encoder.AppendRowChangedEvent(context.Background(), "", &updateCase, nil)
+		err := encoder.AppendRowChangedEvent(context.Background(), "", (&updateCase).Unbound(), nil)
 		require.Nil(t, err)
 
 		if i%100 == 0 {
@@ -330,10 +330,10 @@ func TestCanalJSONAppendRowChangedEventWithCallback(t *testing.T) {
 
 	count := 0
 
-	row := &model.RowChangedEvent{
+	row := &model.BoundedRowChangedEvent{
 		CommitTs: 1,
 		Table:    &model.TableName{Schema: "a", Table: "b"},
-		Columns: []*model.Column{{
+		Columns: []*model.BoundedColumn{{
 			Name:  "col1",
 			Type:  mysql.TypeVarchar,
 			Value: []byte("aa"),
@@ -341,7 +341,7 @@ func TestCanalJSONAppendRowChangedEventWithCallback(t *testing.T) {
 	}
 
 	tests := []struct {
-		row      *model.RowChangedEvent
+		row      *model.BoundedRowChangedEvent
 		callback func()
 	}{
 		{
@@ -382,7 +382,8 @@ func TestCanalJSONAppendRowChangedEventWithCallback(t *testing.T) {
 
 	// Append the events.
 	for _, test := range tests {
-		err := encoder.AppendRowChangedEvent(context.Background(), "", test.row, test.callback)
+		row := test.row.Unbound()
+		err := encoder.AppendRowChangedEvent(context.Background(), "", row, test.callback)
 		require.Nil(t, err)
 	}
 	require.Equal(t, 0, count, "nothing should be called")

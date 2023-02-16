@@ -24,15 +24,15 @@ func TestIndexValueDispatcher(t *testing.T) {
 	t.Parallel()
 
 	testCases := []struct {
-		row             *model.RowChangedEvent
+		row             *model.BoundedRowChangedEvent
 		expectPartition int32
 	}{
-		{row: &model.RowChangedEvent{
+		{row: &model.BoundedRowChangedEvent{
 			Table: &model.TableName{
 				Schema: "test",
 				Table:  "t1",
 			},
-			Columns: []*model.Column{
+			Columns: []*model.BoundedColumn{
 				{
 					Name:  "a",
 					Value: 11,
@@ -44,12 +44,12 @@ func TestIndexValueDispatcher(t *testing.T) {
 				},
 			},
 		}, expectPartition: 2},
-		{row: &model.RowChangedEvent{
+		{row: &model.BoundedRowChangedEvent{
 			Table: &model.TableName{
 				Schema: "test",
 				Table:  "t1",
 			},
-			Columns: []*model.Column{
+			Columns: []*model.BoundedColumn{
 				{
 					Name:  "a",
 					Value: 22,
@@ -61,12 +61,12 @@ func TestIndexValueDispatcher(t *testing.T) {
 				},
 			},
 		}, expectPartition: 11},
-		{row: &model.RowChangedEvent{
+		{row: &model.BoundedRowChangedEvent{
 			Table: &model.TableName{
 				Schema: "test",
 				Table:  "t1",
 			},
-			Columns: []*model.Column{
+			Columns: []*model.BoundedColumn{
 				{
 					Name:  "a",
 					Value: 11,
@@ -78,12 +78,12 @@ func TestIndexValueDispatcher(t *testing.T) {
 				},
 			},
 		}, expectPartition: 2},
-		{row: &model.RowChangedEvent{
+		{row: &model.BoundedRowChangedEvent{
 			Table: &model.TableName{
 				Schema: "test",
 				Table:  "t2",
 			},
-			Columns: []*model.Column{
+			Columns: []*model.BoundedColumn{
 				{
 					Name:  "a",
 					Value: 11,
@@ -95,12 +95,12 @@ func TestIndexValueDispatcher(t *testing.T) {
 				},
 			},
 		}, expectPartition: 5},
-		{row: &model.RowChangedEvent{
+		{row: &model.BoundedRowChangedEvent{
 			Table: &model.TableName{
 				Schema: "test",
 				Table:  "t2",
 			},
-			Columns: []*model.Column{
+			Columns: []*model.BoundedColumn{
 				{
 					Name:  "b",
 					Value: 22,
@@ -112,12 +112,12 @@ func TestIndexValueDispatcher(t *testing.T) {
 				},
 			},
 		}, expectPartition: 5},
-		{row: &model.RowChangedEvent{
+		{row: &model.BoundedRowChangedEvent{
 			Table: &model.TableName{
 				Schema: "test",
 				Table:  "t2",
 			},
-			Columns: []*model.Column{
+			Columns: []*model.BoundedColumn{
 				{
 					Name:  "a",
 					Value: 11,
@@ -129,12 +129,12 @@ func TestIndexValueDispatcher(t *testing.T) {
 				},
 			},
 		}, expectPartition: 14},
-		{row: &model.RowChangedEvent{
+		{row: &model.BoundedRowChangedEvent{
 			Table: &model.TableName{
 				Schema: "test",
 				Table:  "t2",
 			},
-			Columns: []*model.Column{
+			Columns: []*model.BoundedColumn{
 				{
 					Name:  "a",
 					Value: 11,
@@ -149,6 +149,7 @@ func TestIndexValueDispatcher(t *testing.T) {
 	}
 	p := NewIndexValueDispatcher()
 	for _, tc := range testCases {
-		require.Equal(t, tc.expectPartition, p.DispatchRowChangedEvent(tc.row, 16))
+		row := tc.row.Unbound()
+		require.Equal(t, tc.expectPartition, p.DispatchRowChangedEvent(row, 16))
 	}
 }

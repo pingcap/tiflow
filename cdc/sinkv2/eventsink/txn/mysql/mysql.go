@@ -210,22 +210,22 @@ func convert2RowChanges(
 	changeType sqlmodel.RowChangeType,
 ) *sqlmodel.RowChange {
 	preValues := make([]interface{}, 0, len(row.PreColumns))
-	for _, col := range row.PreColumns {
+	for i, col := range row.PreColumns {
 		if col == nil {
 			// will not use this value, just append a dummy value
 			preValues = append(preValues, "omitted value")
 			continue
 		}
-		preValues = append(preValues, col.Value)
+		preValues = append(preValues, row.PreColumnValues[i].Value)
 	}
 
 	postValues := make([]interface{}, 0, len(row.Columns))
-	for _, col := range row.Columns {
+	for i, col := range row.Columns {
 		if col == nil {
 			postValues = append(postValues, "omitted value")
 			continue
 		}
-		postValues = append(postValues, col.Value)
+		postValues = append(postValues, row.ColumnValues[i].Value)
 	}
 
 	var res *sqlmodel.RowChange
@@ -266,9 +266,9 @@ func convertBinaryToString(row *model.RowChangedEvent) {
 			continue
 		}
 		if col.Charset != "" && col.Charset != charset.CharsetBin {
-			colValBytes, ok := col.Value.([]byte)
+			colValBytes, ok := row.ColumnValues[i].Value.([]byte)
 			if ok {
-				row.Columns[i].Value = string(colValBytes)
+				row.ColumnValues[i].Value = string(colValBytes)
 			}
 		}
 	}
@@ -504,7 +504,12 @@ func (s *mysqlBackend) prepareDMLs() *preparedDMLs {
 			// NOTICE: Only update events with the old value feature enabled will have both columns and preColumns.
 			if translateToInsert && len(row.PreColumns) != 0 && len(row.Columns) != 0 {
 				flushCacheDMLs()
-				query, args = prepareUpdate(quoteTable, row.PreColumns, row.Columns, s.cfg.ForceReplicate)
+				query, args = prepareUpdate(
+					quoteTable,
+					row.PreColumns, row.Columns,
+					row.PreColumnValues, row.ColumnValues,
+					s.cfg.ForceReplicate,
+				)
 				if query != "" {
 					sqls = append(sqls, query)
 					values = append(values, args)
@@ -520,7 +525,7 @@ func (s *mysqlBackend) prepareDMLs() *preparedDMLs {
 			// It will be translated directly into a DELETE SQL.
 			if len(row.PreColumns) != 0 {
 				flushCacheDMLs()
-				query, args = prepareDelete(quoteTable, row.PreColumns, s.cfg.ForceReplicate)
+				query, args = prepareDelete(quoteTable, row.PreColumns, row.PreColumnValues, s.cfg.ForceReplicate)
 				if query != "" {
 					sqls = append(sqls, query)
 					values = append(values, args)
@@ -537,7 +542,7 @@ func (s *mysqlBackend) prepareDMLs() *preparedDMLs {
 			// or REPLACE(old value is disabled or in safe mode) SQL.
 			if len(row.Columns) != 0 {
 				if s.cfg.BatchReplaceEnabled {
-					query, args = prepareReplace(quoteTable, row.Columns, false /* appendPlaceHolder */, translateToInsert)
+					query, args = prepareReplace(quoteTable, row.Columns, row.ColumnValues, false /* appendPlaceHolder */, translateToInsert)
 					if query != "" {
 						if _, ok := replaces[query]; !ok {
 							replaces[query] = make([][]interface{}, 0)
@@ -545,7 +550,7 @@ func (s *mysqlBackend) prepareDMLs() *preparedDMLs {
 						replaces[query] = append(replaces[query], args)
 					}
 				} else {
-					query, args = prepareReplace(quoteTable, row.Columns, true /* appendPlaceHolder */, translateToInsert)
+					query, args = prepareReplace(quoteTable, row.Columns, row.ColumnValues, true /* appendPlaceHolder */, translateToInsert)
 					if query != "" {
 						sqls = append(sqls, query)
 						values = append(values, args)

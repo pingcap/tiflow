@@ -79,12 +79,12 @@ func TestGenKeys(t *testing.T) {
 		expected: nil,
 	}, {
 		txn: &model.SingleTableTxn{
-			Rows: []*model.RowChangedEvent{
+			Rows: model.UnboundRowChangedEvents([]*model.BoundedRowChangedEvent{
 				{
 					StartTs:  418658114257813514,
 					CommitTs: 418658114257813515,
 					Table:    &model.TableName{Schema: "common_1", Table: "uk_without_pk", TableID: 47},
-					PreColumns: []*model.Column{nil, {
+					PreColumns: []*model.BoundedColumn{nil, {
 						Name:  "a1",
 						Type:  mysql.TypeLong,
 						Flag:  model.BinaryFlag | model.MultipleKeyFlag | model.HandleKeyFlag,
@@ -100,7 +100,7 @@ func TestGenKeys(t *testing.T) {
 					StartTs:  418658114257813514,
 					CommitTs: 418658114257813515,
 					Table:    &model.TableName{Schema: "common_1", Table: "uk_without_pk", TableID: 47},
-					PreColumns: []*model.Column{nil, {
+					PreColumns: []*model.BoundedColumn{nil, {
 						Name:  "a1",
 						Type:  mysql.TypeLong,
 						Flag:  model.BinaryFlag | model.MultipleKeyFlag | model.HandleKeyFlag,
@@ -113,7 +113,7 @@ func TestGenKeys(t *testing.T) {
 					}},
 					IndexColumns: [][]int{{1, 2}},
 				},
-			},
+			}),
 		},
 		expected: [][]byte{
 			{'1', '2', 0x0, '1', 0x0, 0x0, 0x0, 0x0, 0x0, 0x0, 0x0, 0x0, 0x0, 0x0, 0x0, 0x0, 0x0, 0x0, 0x0, 0x0, 47},
@@ -121,12 +121,12 @@ func TestGenKeys(t *testing.T) {
 		},
 	}, {
 		txn: &model.SingleTableTxn{
-			Rows: []*model.RowChangedEvent{
+			Rows: model.UnboundRowChangedEvents([]*model.BoundedRowChangedEvent{
 				{
 					StartTs:  418658114257813514,
 					CommitTs: 418658114257813515,
 					Table:    &model.TableName{Schema: "common_1", Table: "uk_without_pk", TableID: 47},
-					PreColumns: []*model.Column{nil, {
+					PreColumns: []*model.BoundedColumn{nil, {
 						Name:  "a1",
 						Type:  mysql.TypeLong,
 						Flag:  model.BinaryFlag | model.HandleKeyFlag,
@@ -142,7 +142,7 @@ func TestGenKeys(t *testing.T) {
 					StartTs:  418658114257813514,
 					CommitTs: 418658114257813515,
 					Table:    &model.TableName{Schema: "common_1", Table: "uk_without_pk", TableID: 47},
-					PreColumns: []*model.Column{nil, {
+					PreColumns: []*model.BoundedColumn{nil, {
 						Name:  "a1",
 						Type:  mysql.TypeLong,
 						Flag:  model.BinaryFlag | model.HandleKeyFlag,
@@ -155,7 +155,7 @@ func TestGenKeys(t *testing.T) {
 					}},
 					IndexColumns: [][]int{{1}, {2}},
 				},
-			},
+			}),
 		},
 		expected: [][]byte{
 			{'2', '1', 0x0, 0x0, 0x0, 0x0, 0x0, 0x0, 0x0, 0x0, 1, 0x0, 0x0, 0x0, 0x0, 0x0, 0x0, 0x0, 47},
@@ -165,12 +165,12 @@ func TestGenKeys(t *testing.T) {
 		},
 	}, {
 		txn: &model.SingleTableTxn{
-			Rows: []*model.RowChangedEvent{
+			Rows: model.UnboundRowChangedEvents([]*model.BoundedRowChangedEvent{
 				{
 					StartTs:  418658114257813514,
 					CommitTs: 418658114257813515,
 					Table:    &model.TableName{Schema: "common_1", Table: "uk_without_pk", TableID: 47},
-					PreColumns: []*model.Column{nil, {
+					PreColumns: []*model.BoundedColumn{nil, {
 						Name:  "a1",
 						Type:  mysql.TypeLong,
 						Flag:  model.BinaryFlag | model.NullableFlag,
@@ -186,7 +186,7 @@ func TestGenKeys(t *testing.T) {
 					StartTs:  418658114257813514,
 					CommitTs: 418658114257813515,
 					Table:    &model.TableName{Schema: "common_1", Table: "uk_without_pk", TableID: 47},
-					PreColumns: []*model.Column{nil, {
+					PreColumns: []*model.BoundedColumn{nil, {
 						Name:  "a1",
 						Type:  mysql.TypeLong,
 						Flag:  model.BinaryFlag | model.HandleKeyFlag,
@@ -199,7 +199,7 @@ func TestGenKeys(t *testing.T) {
 					}},
 					IndexColumns: [][]int{{1}, {2}},
 				},
-			},
+			}),
 		},
 		expected: [][]uint8{
 			{'2', '1', 0x0, 0x0, 0x0, 0x0, 0x0, 0x0, 0x0, 0x0, 1, 0x0, 0x0, 0x0, 0x0, 0x0, 0x0, 0x0, 47},

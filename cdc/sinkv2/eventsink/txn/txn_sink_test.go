@@ -78,15 +78,15 @@ func TestTxnSinkNolocking(t *testing.T) {
 		*sinkState = state.TableSinkSinking
 		e := &eventsink.CallbackableEvent[*model.SingleTableTxn]{
 			Event: &model.SingleTableTxn{
-				Rows: []*model.RowChangedEvent{
+				Rows: model.UnboundRowChangedEvents([]*model.BoundedRowChangedEvent{
 					{
 						Table: &model.TableName{Schema: "test", Table: "t1"},
-						Columns: []*model.Column{
+						Columns: []*model.BoundedColumn{
 							{Name: "a", Value: 1},
 							{Name: "b", Value: 2},
 						},
 					},
-				},
+				}),
 			},
 			Callback:  func() { atomic.AddUint32(&handled, 1) },
 			SinkState: sinkState,
@@ -115,12 +115,12 @@ func TestGenKeys(t *testing.T) {
 		expected: nil,
 	}, {
 		txn: &model.SingleTableTxn{
-			Rows: []*model.RowChangedEvent{
+			Rows: model.UnboundRowChangedEvents([]*model.BoundedRowChangedEvent{
 				{
 					StartTs:  418658114257813514,
 					CommitTs: 418658114257813515,
 					Table:    &model.TableName{Schema: "common_1", Table: "uk_without_pk", TableID: 47},
-					PreColumns: []*model.Column{nil, {
+					PreColumns: []*model.BoundedColumn{nil, {
 						Name:  "a1",
 						Type:  mysql.TypeLong,
 						Flag:  model.BinaryFlag | model.MultipleKeyFlag | model.HandleKeyFlag,
@@ -136,7 +136,7 @@ func TestGenKeys(t *testing.T) {
 					StartTs:  418658114257813514,
 					CommitTs: 418658114257813515,
 					Table:    &model.TableName{Schema: "common_1", Table: "uk_without_pk", TableID: 47},
-					PreColumns: []*model.Column{nil, {
+					PreColumns: []*model.BoundedColumn{nil, {
 						Name:  "a1",
 						Type:  mysql.TypeLong,
 						Flag:  model.BinaryFlag | model.MultipleKeyFlag | model.HandleKeyFlag,
@@ -149,17 +149,17 @@ func TestGenKeys(t *testing.T) {
 					}},
 					IndexColumns: [][]int{{1, 2}},
 				},
-			},
+			}),
 		},
 		expected: []uint64{2072713494, 3710968706},
 	}, {
 		txn: &model.SingleTableTxn{
-			Rows: []*model.RowChangedEvent{
+			Rows: model.UnboundRowChangedEvents([]*model.BoundedRowChangedEvent{
 				{
 					StartTs:  418658114257813514,
 					CommitTs: 418658114257813515,
 					Table:    &model.TableName{Schema: "common_1", Table: "uk_without_pk", TableID: 47},
-					PreColumns: []*model.Column{nil, {
+					PreColumns: []*model.BoundedColumn{nil, {
 						Name:  "a1",
 						Type:  mysql.TypeLong,
 						Flag:  model.BinaryFlag | model.HandleKeyFlag,
@@ -175,7 +175,7 @@ func TestGenKeys(t *testing.T) {
 					StartTs:  418658114257813514,
 					CommitTs: 418658114257813515,
 					Table:    &model.TableName{Schema: "common_1", Table: "uk_without_pk", TableID: 47},
-					PreColumns: []*model.Column{nil, {
+					PreColumns: []*model.BoundedColumn{nil, {
 						Name:  "a1",
 						Type:  mysql.TypeLong,
 						Flag:  model.BinaryFlag | model.HandleKeyFlag,
@@ -188,17 +188,17 @@ func TestGenKeys(t *testing.T) {
 					}},
 					IndexColumns: [][]int{{1}, {2}},
 				},
-			},
+			}),
 		},
 		expected: []uint64{318190470, 2109733718, 2658640457, 2989258527},
 	}, {
 		txn: &model.SingleTableTxn{
-			Rows: []*model.RowChangedEvent{
+			Rows: model.UnboundRowChangedEvents([]*model.BoundedRowChangedEvent{
 				{
 					StartTs:  418658114257813514,
 					CommitTs: 418658114257813515,
 					Table:    &model.TableName{Schema: "common_1", Table: "uk_without_pk", TableID: 47},
-					PreColumns: []*model.Column{nil, {
+					PreColumns: []*model.BoundedColumn{nil, {
 						Name:  "a1",
 						Type:  mysql.TypeLong,
 						Flag:  model.BinaryFlag | model.NullableFlag,
@@ -214,7 +214,7 @@ func TestGenKeys(t *testing.T) {
 					StartTs:  418658114257813514,
 					CommitTs: 418658114257813515,
 					Table:    &model.TableName{Schema: "common_1", Table: "uk_without_pk", TableID: 47},
-					PreColumns: []*model.Column{nil, {
+					PreColumns: []*model.BoundedColumn{nil, {
 						Name:  "a1",
 						Type:  mysql.TypeLong,
 						Flag:  model.BinaryFlag | model.HandleKeyFlag,
@@ -227,7 +227,7 @@ func TestGenKeys(t *testing.T) {
 					}},
 					IndexColumns: [][]int{{1}, {2}},
 				},
-			},
+			}),
 		},
 		expected: []uint64{318190470, 2095136920, 2658640457},
 	}}

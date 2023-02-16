@@ -28,21 +28,21 @@ func TestPrepareUpdate(t *testing.T) {
 	t.Parallel()
 	testCases := []struct {
 		quoteTable   string
-		preCols      []*model.Column
-		cols         []*model.Column
+		preCols      []*model.BoundedColumn
+		cols         []*model.BoundedColumn
 		expectedSQL  string
 		expectedArgs []interface{}
 	}{
 		{
 			quoteTable:   "`test`.`t1`",
-			preCols:      []*model.Column{},
-			cols:         []*model.Column{},
+			preCols:      []*model.BoundedColumn{},
+			cols:         []*model.BoundedColumn{},
 			expectedSQL:  "",
 			expectedArgs: nil,
 		},
 		{
 			quoteTable: "`test`.`t1`",
-			preCols: []*model.Column{
+			preCols: []*model.BoundedColumn{
 				{
 					Name:  "a",
 					Type:  mysql.TypeLong,
@@ -56,7 +56,7 @@ func TestPrepareUpdate(t *testing.T) {
 					Value: "test",
 				},
 			},
-			cols: []*model.Column{
+			cols: []*model.BoundedColumn{
 				{
 					Name:  "a",
 					Type:  mysql.TypeLong,
@@ -70,7 +70,7 @@ func TestPrepareUpdate(t *testing.T) {
 		},
 		{
 			quoteTable: "`test`.`t1`",
-			preCols: []*model.Column{
+			preCols: []*model.BoundedColumn{
 				{
 					Name:  "a",
 					Type:  mysql.TypeLong,
@@ -90,7 +90,7 @@ func TestPrepareUpdate(t *testing.T) {
 					Value: 100,
 				},
 			},
-			cols: []*model.Column{
+			cols: []*model.BoundedColumn{
 				{
 					Name:  "a",
 					Type:  mysql.TypeLong,
@@ -114,7 +114,7 @@ func TestPrepareUpdate(t *testing.T) {
 		},
 		{
 			quoteTable: "`test`.`t1`",
-			preCols: []*model.Column{
+			preCols: []*model.BoundedColumn{
 				{
 					Name:  "a",
 					Type:  mysql.TypeLong,
@@ -133,7 +133,7 @@ func TestPrepareUpdate(t *testing.T) {
 					Value: 100,
 				},
 			},
-			cols: []*model.Column{
+			cols: []*model.BoundedColumn{
 				{
 					Name:  "a",
 					Type:  mysql.TypeLong,
@@ -158,7 +158,7 @@ func TestPrepareUpdate(t *testing.T) {
 		},
 		{
 			quoteTable: "`test`.`t1`",
-			preCols: []*model.Column{
+			preCols: []*model.BoundedColumn{
 				{
 					Name:  "a",
 					Type:  mysql.TypeLong,
@@ -179,7 +179,7 @@ func TestPrepareUpdate(t *testing.T) {
 					Value: 100,
 				},
 			},
-			cols: []*model.Column{
+			cols: []*model.BoundedColumn{
 				{
 					Name:  "a",
 					Type:  mysql.TypeLong,
@@ -205,7 +205,7 @@ func TestPrepareUpdate(t *testing.T) {
 		},
 		{
 			quoteTable: "`test`.`t1`",
-			preCols: []*model.Column{
+			preCols: []*model.BoundedColumn{
 				{
 					Name:  "a",
 					Type:  mysql.TypeLong,
@@ -226,7 +226,7 @@ func TestPrepareUpdate(t *testing.T) {
 					Value: 100,
 				},
 			},
-			cols: []*model.Column{
+			cols: []*model.BoundedColumn{
 				{
 					Name:  "a",
 					Type:  mysql.TypeLong,
@@ -252,7 +252,9 @@ func TestPrepareUpdate(t *testing.T) {
 		},
 	}
 	for _, tc := range testCases {
-		query, args := prepareUpdate(tc.quoteTable, tc.preCols, tc.cols, false)
+		x, y := model.UnboundColumns(tc.preCols)
+		x1, y1 := model.UnboundColumns(tc.cols)
+		query, args := prepareUpdate(tc.quoteTable, x, x1, y, y1, false)
 		require.Equal(t, tc.expectedSQL, query)
 		require.Equal(t, tc.expectedArgs, args)
 	}
@@ -262,19 +264,19 @@ func TestPrepareDelete(t *testing.T) {
 	t.Parallel()
 	testCases := []struct {
 		quoteTable   string
-		preCols      []*model.Column
+		preCols      []*model.BoundedColumn
 		expectedSQL  string
 		expectedArgs []interface{}
 	}{
 		{
 			quoteTable:   "`test`.`t1`",
-			preCols:      []*model.Column{},
+			preCols:      []*model.BoundedColumn{},
 			expectedSQL:  "",
 			expectedArgs: nil,
 		},
 		{
 			quoteTable: "`test`.`t1`",
-			preCols: []*model.Column{
+			preCols: []*model.BoundedColumn{
 				{
 					Name:  "a",
 					Type:  mysql.TypeLong,
@@ -293,7 +295,7 @@ func TestPrepareDelete(t *testing.T) {
 		},
 		{
 			quoteTable: "`test`.`t1`",
-			preCols: []*model.Column{
+			preCols: []*model.BoundedColumn{
 				{
 					Name:  "a",
 					Type:  mysql.TypeLong,
@@ -318,7 +320,7 @@ func TestPrepareDelete(t *testing.T) {
 		},
 		{
 			quoteTable: "`test`.`t1`",
-			preCols: []*model.Column{
+			preCols: []*model.BoundedColumn{
 				{
 					Name:  "a",
 					Type:  mysql.TypeLong,
@@ -342,7 +344,7 @@ func TestPrepareDelete(t *testing.T) {
 		},
 		{
 			quoteTable: "`test`.`t1`",
-			preCols: []*model.Column{
+			preCols: []*model.BoundedColumn{
 				{
 					Name:  "a",
 					Type:  mysql.TypeLong,
@@ -368,7 +370,7 @@ func TestPrepareDelete(t *testing.T) {
 		},
 		{
 			quoteTable: "`test`.`t1`",
-			preCols: []*model.Column{
+			preCols: []*model.BoundedColumn{
 				{
 					Name:  "a",
 					Type:  mysql.TypeLong,
@@ -394,7 +396,8 @@ func TestPrepareDelete(t *testing.T) {
 		},
 	}
 	for _, tc := range testCases {
-		query, args := prepareDelete(tc.quoteTable, tc.preCols, false)
+		x, y := model.UnboundColumns(tc.preCols)
+		query, args := prepareDelete(tc.quoteTable, x, y, false)
 		require.Equal(t, tc.expectedSQL, query)
 		require.Equal(t, tc.expectedArgs, args)
 	}
@@ -403,19 +406,19 @@ func TestPrepareDelete(t *testing.T) {
 func TestWhereSlice(t *testing.T) {
 	t.Parallel()
 	testCases := []struct {
-		cols             []*model.Column
+		cols             []*model.BoundedColumn
 		forceReplicate   bool
 		expectedColNames []string
 		expectedArgs     []interface{}
 	}{
 		{
-			cols:             []*model.Column{},
+			cols:             []*model.BoundedColumn{},
 			forceReplicate:   false,
 			expectedColNames: nil,
 			expectedArgs:     nil,
 		},
 		{
-			cols: []*model.Column{
+			cols: []*model.BoundedColumn{
 				{
 					Name:  "a",
 					Type:  mysql.TypeLong,
@@ -434,7 +437,7 @@ func TestWhereSlice(t *testing.T) {
 			expectedArgs:     []interface{}{1},
 		},
 		{
-			cols: []*model.Column{
+			cols: []*model.BoundedColumn{
 				{
 					Name:  "a",
 					Type:  mysql.TypeLong,
@@ -458,13 +461,13 @@ func TestWhereSlice(t *testing.T) {
 			expectedArgs:     []interface{}{1, "test"},
 		},
 		{
-			cols:             []*model.Column{},
+			cols:             []*model.BoundedColumn{},
 			forceReplicate:   true,
 			expectedColNames: []string{},
 			expectedArgs:     []interface{}{},
 		},
 		{
-			cols: []*model.Column{
+			cols: []*model.BoundedColumn{
 				{
 					Name:  "a",
 					Type:  mysql.TypeLong,
@@ -483,7 +486,7 @@ func TestWhereSlice(t *testing.T) {
 			expectedArgs:     []interface{}{1},
 		},
 		{
-			cols: []*model.Column{
+			cols: []*model.BoundedColumn{
 				{
 					Name:  "a",
 					Type:  mysql.TypeLong,
@@ -508,7 +511,7 @@ func TestWhereSlice(t *testing.T) {
 			expectedArgs:     []interface{}{1, "test"},
 		},
 		{
-			cols: []*model.Column{
+			cols: []*model.BoundedColumn{
 				{
 					Name:  "a",
 					Type:  mysql.TypeLong,
@@ -527,7 +530,7 @@ func TestWhereSlice(t *testing.T) {
 			expectedArgs:     []interface{}{1, "test"},
 		},
 		{
-			cols: []*model.Column{
+			cols: []*model.BoundedColumn{
 				{
 					Name:  "a",
 					Type:  mysql.TypeLong,
@@ -552,7 +555,7 @@ func TestWhereSlice(t *testing.T) {
 			expectedArgs:     []interface{}{1, "test", 100},
 		},
 		{
-			cols: []*model.Column{
+			cols: []*model.BoundedColumn{
 				{
 					Name:  "a",
 					Type:  mysql.TypeLong,
@@ -577,7 +580,7 @@ func TestWhereSlice(t *testing.T) {
 			expectedArgs:     []interface{}{1, []byte("你好")},
 		},
 		{
-			cols: []*model.Column{
+			cols: []*model.BoundedColumn{
 				{
 					Name:  "a",
 					Type:  mysql.TypeLong,
@@ -604,7 +607,8 @@ func TestWhereSlice(t *testing.T) {
 		},
 	}
 	for _, tc := range testCases {
-		colNames, args := whereSlice(tc.cols, tc.forceReplicate)
+		x, y := model.UnboundColumns(tc.cols)
+		colNames, args := whereSlice(x, y, tc.forceReplicate)
 		require.Equal(t, tc.expectedColNames, colNames)
 		require.Equal(t, tc.expectedArgs, args)
 	}
@@ -614,13 +618,13 @@ func TestMapReplace(t *testing.T) {
 	t.Parallel()
 	testCases := []struct {
 		quoteTable    string
-		cols          []*model.Column
+		cols          []*model.BoundedColumn
 		expectedQuery string
 		expectedArgs  []interface{}
 	}{
 		{
 			quoteTable: "`test`.`t1`",
-			cols: []*model.Column{
+			cols: []*model.BoundedColumn{
 				{
 					Name:  "a",
 					Type:  mysql.TypeLong,
@@ -648,7 +652,7 @@ func TestMapReplace(t *testing.T) {
 		},
 		{
 			quoteTable: "`test`.`t1`",
-			cols: []*model.Column{
+			cols: []*model.BoundedColumn{
 				{
 					Name:  "a",
 					Type:  mysql.TypeLong,
@@ -675,7 +679,7 @@ func TestMapReplace(t *testing.T) {
 		},
 		{
 			quoteTable: "`test`.`t1`",
-			cols: []*model.Column{
+			cols: []*model.BoundedColumn{
 				{
 					Name:  "a",
 					Type:  mysql.TypeLong,
@@ -714,8 +718,9 @@ func TestMapReplace(t *testing.T) {
 	}
 	for _, tc := range testCases {
 		// multiple times to verify the stability of column sequence in query string
+		x, y := model.UnboundColumns(tc.cols)
 		for i := 0; i < 10; i++ {
-			query, args := prepareReplace(tc.quoteTable, tc.cols, false, false)
+			query, args := prepareReplace(tc.quoteTable, x, y, false, false)
 			require.Equal(t, tc.expectedQuery, query)
 			require.Equal(t, tc.expectedArgs, args)
 		}

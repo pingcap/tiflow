@@ -248,9 +248,9 @@ func TestGetPartitionForRowChange(t *testing.T) {
 	}, "test")
 	require.Nil(t, err)
 
-	p := d.GetPartitionForRowChange(&model.RowChangedEvent{
+	p := d.GetPartitionForRowChange((&model.BoundedRowChangedEvent{
 		Table: &model.TableName{Schema: "test_default1", Table: "table"},
-		Columns: []*model.Column{
+		Columns: []*model.BoundedColumn{
 			{
 				Name:  "id",
 				Value: 1,
@@ -258,11 +258,11 @@ func TestGetPartitionForRowChange(t *testing.T) {
 			},
 		},
 		IndexColumns: [][]int{{0}},
-	}, 16)
+	}).Unbound(), 16)
 	require.Equal(t, int32(10), p)
-	p = d.GetPartitionForRowChange(&model.RowChangedEvent{
+	p = d.GetPartitionForRowChange((&model.BoundedRowChangedEvent{
 		Table: &model.TableName{Schema: "test_default2", Table: "table"},
-		Columns: []*model.Column{
+		Columns: []*model.BoundedColumn{
 			{
 				Name:  "id",
 				Value: 1,
@@ -270,7 +270,7 @@ func TestGetPartitionForRowChange(t *testing.T) {
 			},
 		},
 		IndexColumns: [][]int{{0}},
-	}, 16)
+	}).Unbound(), 16)
 	require.Equal(t, int32(4), p)
 
 	p = d.GetPartitionForRowChange(&model.RowChangedEvent{
@@ -278,9 +278,9 @@ func TestGetPartitionForRowChange(t *testing.T) {
 		CommitTs: 1,
 	}, 16)
 	require.Equal(t, int32(15), p)
-	p = d.GetPartitionForRowChange(&model.RowChangedEvent{
+	p = d.GetPartitionForRowChange((&model.BoundedRowChangedEvent{
 		Table: &model.TableName{Schema: "test_index_value", Table: "table"},
-		Columns: []*model.Column{
+		Columns: []*model.BoundedColumn{
 			{
 				Name:  "a",
 				Value: 11,
@@ -291,7 +291,7 @@ func TestGetPartitionForRowChange(t *testing.T) {
 				Flag:  0,
 			},
 		},
-	}, 10)
+	}).Unbound(), 10)
 	require.Equal(t, int32(1), p)
 	p = d.GetPartitionForRowChange(&model.RowChangedEvent{
 		Table:    &model.TableName{Schema: "a", Table: "table"},

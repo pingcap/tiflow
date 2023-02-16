@@ -30,10 +30,12 @@ func TestGetMySQLTypeAndJavaSQLType(t *testing.T) {
 	t.Parallel()
 	canalEntryBuilder := newCanalEntryBuilder()
 	for _, item := range testColumnsTable {
-		obtainedMySQLType := getMySQLType(item.column)
+		c := item.column.Unbound()
+		cv := model.ColumnValue{Value: item.column.Value}
+		obtainedMySQLType := getMySQLType(c)
 		require.Equal(t, item.expectedMySQLType, obtainedMySQLType)
 
-		obtainedJavaSQLType, err := getJavaSQLType(item.column, obtainedMySQLType)
+		obtainedJavaSQLType, err := getJavaSQLType(c, cv, obtainedMySQLType)
 		require.Nil(t, err)
 		require.Equal(t, item.expectedJavaSQLType, obtainedJavaSQLType)
 
@@ -54,20 +56,20 @@ func TestConvertEntry(t *testing.T) {
 }
 
 func testInsert(t *testing.T) {
-	testCaseInsert := &model.RowChangedEvent{
+	testCaseInsert := (&model.BoundedRowChangedEvent{
 		CommitTs: 417318403368288260,
 		Table: &model.TableName{
 			Schema: "cdc",
 			Table:  "person",
 		},
-		Columns: []*model.Column{
+		Columns: []*model.BoundedColumn{
 			{Name: "id", Type: mysql.TypeLong, Flag: model.PrimaryKeyFlag, Value: 1},
 			{Name: "name", Type: mysql.TypeVarchar, Value: "Bob"},
 			{Name: "tiny", Type: mysql.TypeTiny, Value: 255},
 			{Name: "comment", Type: mysql.TypeBlob, Value: []byte("测试")},
 			{Name: "blob", Type: mysql.TypeBlob, Value: []byte("测试blob"), Flag: model.BinaryFlag},
 		},
-	}
+	}).Unbound()
 
 	builder := newCanalEntryBuilder()
 	entry, err := builder.fromRowEvent(testCaseInsert)
@@ -130,21 +132,21 @@ func testInsert(t *testing.T) {
 }
 
 func testUpdate(t *testing.T) {
-	testCaseUpdate := &model.RowChangedEvent{
+	testCaseUpdate := (&model.BoundedRowChangedEvent{
 		CommitTs: 417318403368288260,
 		Table: &model.TableName{
 			Schema: "cdc",
 			Table:  "person",
 		},
-		Columns: []*model.Column{
+		Columns: []*model.BoundedColumn{
 			{Name: "id", Type: mysql.TypeLong, Flag: model.PrimaryKeyFlag, Value: 1},
 			{Name: "name", Type: mysql.TypeVarchar, Value: "Bob"},
 		},
-		PreColumns: []*model.Column{
+		PreColumns: []*model.BoundedColumn{
 			{Name: "id", Type: mysql.TypeLong, Flag: model.PrimaryKeyFlag, Value: 2},
 			{Name: "name", Type: mysql.TypeVarchar, Value: "Nancy"},
 		},
-	}
+	}).Unbound()
 	builder := newCanalEntryBuilder()
 	entry, err := builder.fromRowEvent(testCaseUpdate)
 	require.Nil(t, err)
@@ -207,16 +209,16 @@ func testUpdate(t *testing.T) {
 }
 
 func testDelete(t *testing.T) {
-	testCaseDelete := &model.RowChangedEvent{
+	testCaseDelete := (&model.BoundedRowChangedEvent{
 		CommitTs: 417318403368288260,
 		Table: &model.TableName{
 			Schema: "cdc",
 			Table:  "person",
 		},
-		PreColumns: []*model.Column{
+		PreColumns: []*model.BoundedColumn{
 			{Name: "id", Type: mysql.TypeLong, Flag: model.PrimaryKeyFlag, Value: 1},
 		},
-	}
+	}).Unbound()
 
 	builder := newCanalEntryBuilder()
 	entry, err := builder.fromRowEvent(testCaseDelete)

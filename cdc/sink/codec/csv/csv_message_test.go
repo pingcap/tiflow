@@ -29,7 +29,7 @@ import (
 )
 
 type csvTestColumnTuple struct {
-	col     model.Column
+	col     model.BoundedColumn
 	colInfo rowcodec.ColInfo
 	want    interface{}
 }
@@ -37,7 +37,7 @@ type csvTestColumnTuple struct {
 var csvTestColumnsGroup = [][]*csvTestColumnTuple{
 	{
 		{
-			model.Column{Name: "tiny", Value: int64(1), Type: mysql.TypeTiny},
+			model.BoundedColumn{Name: "tiny", Value: int64(1), Type: mysql.TypeTiny},
 			rowcodec.ColInfo{
 				ID:            1,
 				IsPKHandle:    false,
@@ -47,7 +47,7 @@ var csvTestColumnsGroup = [][]*csvTestColumnTuple{
 			int64(1),
 		},
 		{
-			model.Column{Name: "short", Value: int64(1), Type: mysql.TypeShort},
+			model.BoundedColumn{Name: "short", Value: int64(1), Type: mysql.TypeShort},
 			rowcodec.ColInfo{
 				ID:            2,
 				IsPKHandle:    false,
@@ -57,7 +57,7 @@ var csvTestColumnsGroup = [][]*csvTestColumnTuple{
 			int64(1),
 		},
 		{
-			model.Column{Name: "int24", Value: int64(1), Type: mysql.TypeInt24},
+			model.BoundedColumn{Name: "int24", Value: int64(1), Type: mysql.TypeInt24},
 			rowcodec.ColInfo{
 				ID:            3,
 				IsPKHandle:    false,
@@ -67,7 +67,7 @@ var csvTestColumnsGroup = [][]*csvTestColumnTuple{
 			int64(1),
 		},
 		{
-			model.Column{Name: "long", Value: int64(1), Type: mysql.TypeLong},
+			model.BoundedColumn{Name: "long", Value: int64(1), Type: mysql.TypeLong},
 			rowcodec.ColInfo{
 				ID:            4,
 				IsPKHandle:    false,
@@ -77,7 +77,7 @@ var csvTestColumnsGroup = [][]*csvTestColumnTuple{
 			int64(1),
 		},
 		{
-			model.Column{Name: "longlong", Value: int64(1), Type: mysql.TypeLonglong},
+			model.BoundedColumn{Name: "longlong", Value: int64(1), Type: mysql.TypeLonglong},
 			rowcodec.ColInfo{
 				ID:            5,
 				IsPKHandle:    false,
@@ -87,7 +87,7 @@ var csvTestColumnsGroup = [][]*csvTestColumnTuple{
 			int64(1),
 		},
 		{
-			model.Column{
+			model.BoundedColumn{
 				Name:  "tinyunsigned",
 				Value: uint64(1),
 				Type:  mysql.TypeTiny,
@@ -102,7 +102,7 @@ var csvTestColumnsGroup = [][]*csvTestColumnTuple{
 			uint64(1),
 		},
 		{
-			model.Column{
+			model.BoundedColumn{
 				Name:  "shortunsigned",
 				Value: uint64(1),
 				Type:  mysql.TypeShort,
@@ -117,7 +117,7 @@ var csvTestColumnsGroup = [][]*csvTestColumnTuple{
 			uint64(1),
 		},
 		{
-			model.Column{
+			model.BoundedColumn{
 				Name:  "int24unsigned",
 				Value: uint64(1),
 				Type:  mysql.TypeInt24,
@@ -132,7 +132,7 @@ var csvTestColumnsGroup = [][]*csvTestColumnTuple{
 			uint64(1),
 		},
 		{
-			model.Column{
+			model.BoundedColumn{
 				Name:  "longunsigned",
 				Value: uint64(1),
 				Type:  mysql.TypeLong,
@@ -147,7 +147,7 @@ var csvTestColumnsGroup = [][]*csvTestColumnTuple{
 			uint64(1),
 		},
 		{
-			model.Column{
+			model.BoundedColumn{
 				Name:  "longlongunsigned",
 				Value: uint64(1),
 				Type:  mysql.TypeLonglong,
@@ -167,7 +167,7 @@ var csvTestColumnsGroup = [][]*csvTestColumnTuple{
 	},
 	{
 		{
-			model.Column{Name: "float", Value: float64(3.14), Type: mysql.TypeFloat},
+			model.BoundedColumn{Name: "float", Value: float64(3.14), Type: mysql.TypeFloat},
 			rowcodec.ColInfo{
 				ID:            11,
 				IsPKHandle:    false,
@@ -177,7 +177,7 @@ var csvTestColumnsGroup = [][]*csvTestColumnTuple{
 			float64(3.14),
 		},
 		{
-			model.Column{Name: "double", Value: float64(3.14), Type: mysql.TypeDouble},
+			model.BoundedColumn{Name: "double", Value: float64(3.14), Type: mysql.TypeDouble},
 			rowcodec.ColInfo{
 				ID:            12,
 				IsPKHandle:    false,
@@ -189,7 +189,7 @@ var csvTestColumnsGroup = [][]*csvTestColumnTuple{
 	},
 	{
 		{
-			model.Column{Name: "bit", Value: uint64(683), Type: mysql.TypeBit},
+			model.BoundedColumn{Name: "bit", Value: uint64(683), Type: mysql.TypeBit},
 			rowcodec.ColInfo{
 				ID:            13,
 				IsPKHandle:    false,
@@ -201,7 +201,7 @@ var csvTestColumnsGroup = [][]*csvTestColumnTuple{
 	},
 	{
 		{
-			model.Column{Name: "decimal", Value: "129012.1230000", Type: mysql.TypeNewDecimal},
+			model.BoundedColumn{Name: "decimal", Value: "129012.1230000", Type: mysql.TypeNewDecimal},
 			rowcodec.ColInfo{
 				ID:            14,
 				IsPKHandle:    false,
@@ -213,7 +213,7 @@ var csvTestColumnsGroup = [][]*csvTestColumnTuple{
 	},
 	{
 		{
-			model.Column{Name: "tinytext", Value: []byte("hello world"), Type: mysql.TypeTinyBlob},
+			model.BoundedColumn{Name: "tinytext", Value: []byte("hello world"), Type: mysql.TypeTinyBlob},
 			rowcodec.ColInfo{
 				ID:            15,
 				IsPKHandle:    false,
@@ -223,7 +223,7 @@ var csvTestColumnsGroup = [][]*csvTestColumnTuple{
 			"hello world",
 		},
 		{
-			model.Column{Name: "mediumtext", Value: []byte("hello world"), Type: mysql.TypeMediumBlob},
+			model.BoundedColumn{Name: "mediumtext", Value: []byte("hello world"), Type: mysql.TypeMediumBlob},
 			rowcodec.ColInfo{
 				ID:            16,
 				IsPKHandle:    false,
@@ -233,7 +233,7 @@ var csvTestColumnsGroup = [][]*csvTestColumnTuple{
 			"hello world",
 		},
 		{
-			model.Column{Name: "text", Value: []byte("hello world"), Type: mysql.TypeBlob},
+			model.BoundedColumn{Name: "text", Value: []byte("hello world"), Type: mysql.TypeBlob},
 			rowcodec.ColInfo{
 				ID:            17,
 				IsPKHandle:    false,
@@ -243,7 +243,7 @@ var csvTestColumnsGroup = [][]*csvTestColumnTuple{
 			"hello world",
 		},
 		{
-			model.Column{Name: "longtext", Value: []byte("hello world"), Type: mysql.TypeLongBlob},
+			model.BoundedColumn{Name: "longtext", Value: []byte("hello world"), Type: mysql.TypeLongBlob},
 			rowcodec.ColInfo{
 				ID:            18,
 				IsPKHandle:    false,
@@ -253,7 +253,7 @@ var csvTestColumnsGroup = [][]*csvTestColumnTuple{
 			"hello world",
 		},
 		{
-			model.Column{Name: "varchar", Value: []byte("hello world"), Type: mysql.TypeVarchar},
+			model.BoundedColumn{Name: "varchar", Value: []byte("hello world"), Type: mysql.TypeVarchar},
 			rowcodec.ColInfo{
 				ID:            19,
 				IsPKHandle:    false,
@@ -263,7 +263,7 @@ var csvTestColumnsGroup = [][]*csvTestColumnTuple{
 			"hello world",
 		},
 		{
-			model.Column{Name: "varstring", Value: []byte("hello world"), Type: mysql.TypeVarString},
+			model.BoundedColumn{Name: "varstring", Value: []byte("hello world"), Type: mysql.TypeVarString},
 			rowcodec.ColInfo{
 				ID:            20,
 				IsPKHandle:    false,
@@ -273,7 +273,7 @@ var csvTestColumnsGroup = [][]*csvTestColumnTuple{
 			"hello world",
 		},
 		{
-			model.Column{Name: "string", Value: []byte("hello world"), Type: mysql.TypeString},
+			model.BoundedColumn{Name: "string", Value: []byte("hello world"), Type: mysql.TypeString},
 			rowcodec.ColInfo{
 				ID:            21,
 				IsPKHandle:    false,
@@ -283,7 +283,7 @@ var csvTestColumnsGroup = [][]*csvTestColumnTuple{
 			"hello world",
 		},
 		{
-			model.Column{Name: "json", Value: `{"key": "value"}`, Type: mysql.TypeJSON},
+			model.BoundedColumn{Name: "json", Value: `{"key": "value"}`, Type: mysql.TypeJSON},
 			rowcodec.ColInfo{
 				ID:            31,
 				IsPKHandle:    false,
@@ -295,7 +295,7 @@ var csvTestColumnsGroup = [][]*csvTestColumnTuple{
 	},
 	{
 		{
-			model.Column{
+			model.BoundedColumn{
 				Name:  "tinyblob",
 				Value: []byte("hello world"),
 				Type:  mysql.TypeTinyBlob,
@@ -310,7 +310,7 @@ var csvTestColumnsGroup = [][]*csvTestColumnTuple{
 			"aGVsbG8gd29ybGQ=",
 		},
 		{
-			model.Column{
+			model.BoundedColumn{
 				Name:  "mediumblob",
 				Value: []byte("hello world"),
 				Type:  mysql.TypeMediumBlob,
@@ -325,7 +325,7 @@ var csvTestColumnsGroup = [][]*csvTestColumnTuple{
 			"aGVsbG8gd29ybGQ=",
 		},
 		{
-			model.Column{
+			model.BoundedColumn{
 				Name:  "blob",
 				Value: []byte("hello world"),
 				Type:  mysql.TypeBlob,
@@ -340,7 +340,7 @@ var csvTestColumnsGroup = [][]*csvTestColumnTuple{
 			"aGVsbG8gd29ybGQ=",
 		},
 		{
-			model.Column{
+			model.BoundedColumn{
 				Name:  "longblob",
 				Value: []byte("hello world"),
 				Type:  mysql.TypeLongBlob,
@@ -355,7 +355,7 @@ var csvTestColumnsGroup = [][]*csvTestColumnTuple{
 			"aGVsbG8gd29ybGQ=",
 		},
 		{
-			model.Column{
+			model.BoundedColumn{
 				Name:  "varbinary",
 				Value: []byte("hello world"),
 				Type:  mysql.TypeVarchar,
@@ -370,7 +370,7 @@ var csvTestColumnsGroup = [][]*csvTestColumnTuple{
 			"aGVsbG8gd29ybGQ=",
 		},
 		{
-			model.Column{
+			model.BoundedColumn{
 				Name:  "varbinary1",
 				Value: []byte("hello world"),
 				Type:  mysql.TypeVarString,
@@ -385,7 +385,7 @@ var csvTestColumnsGroup = [][]*csvTestColumnTuple{
 			"aGVsbG8gd29ybGQ=",
 		},
 		{
-			model.Column{
+			model.BoundedColumn{
 				Name:  "binary",
 				Value: []byte("hello world"),
 				Type:  mysql.TypeString,
@@ -402,7 +402,7 @@ var csvTestColumnsGroup = [][]*csvTestColumnTuple{
 	},
 	{
 		{
-			model.Column{Name: "enum", Value: uint64(1), Type: mysql.TypeEnum},
+			model.BoundedColumn{Name: "enum", Value: uint64(1), Type: mysql.TypeEnum},
 			rowcodec.ColInfo{
 				ID:            29,
 				IsPKHandle:    false,
@@ -414,7 +414,7 @@ var csvTestColumnsGroup = [][]*csvTestColumnTuple{
 	},
 	{
 		{
-			model.Column{Name: "set", Value: uint64(9), Type: mysql.TypeSet},
+			model.BoundedColumn{Name: "set", Value: uint64(9), Type: mysql.TypeSet},
 			rowcodec.ColInfo{
 				ID:            30,
 				IsPKHandle:    false,
@@ -426,7 +426,7 @@ var csvTestColumnsGroup = [][]*csvTestColumnTuple{
 	},
 	{
 		{
-			model.Column{Name: "date", Value: "2000-01-01", Type: mysql.TypeDate},
+			model.BoundedColumn{Name: "date", Value: "2000-01-01", Type: mysql.TypeDate},
 			rowcodec.ColInfo{
 				ID:            32,
 				IsPKHandle:    false,
@@ -436,7 +436,7 @@ var csvTestColumnsGroup = [][]*csvTestColumnTuple{
 			"2000-01-01",
 		},
 		{
-			model.Column{Name: "datetime", Value: "2015-12-20 23:58:58", Type: mysql.TypeDatetime},
+			model.BoundedColumn{Name: "datetime", Value: "2015-12-20 23:58:58", Type: mysql.TypeDatetime},
 			rowcodec.ColInfo{
 				ID:            33,
 				IsPKHandle:    false,
@@ -446,7 +446,7 @@ var csvTestColumnsGroup = [][]*csvTestColumnTuple{
 			"2015-12-20 23:58:58",
 		},
 		{
-			model.Column{Name: "timestamp", Value: "1973-12-30 15:30:00", Type: mysql.TypeTimestamp},
+			model.BoundedColumn{Name: "timestamp", Value: "1973-12-30 15:30:00", Type: mysql.TypeTimestamp},
 			rowcodec.ColInfo{
 				ID:            34,
 				IsPKHandle:    false,
@@ -456,7 +456,7 @@ var csvTestColumnsGroup = [][]*csvTestColumnTuple{
 			"1973-12-30 15:30:00",
 		},
 		{
-			model.Column{Name: "time", Value: "23:59:59", Type: mysql.TypeDuration},
+			model.BoundedColumn{Name: "time", Value: "23:59:59", Type: mysql.TypeDuration},
 			rowcodec.ColInfo{
 				ID:            35,
 				IsPKHandle:    false,
@@ -468,7 +468,7 @@ var csvTestColumnsGroup = [][]*csvTestColumnTuple{
 	},
 	{
 		{
-			model.Column{Name: "year", Value: int64(1970), Type: mysql.TypeYear},
+			model.BoundedColumn{Name: "year", Value: int64(1970), Type: mysql.TypeYear},
 			rowcodec.ColInfo{
 				ID:            36,
 				IsPKHandle:    false,
@@ -762,7 +762,9 @@ func TestCSVMessageEncode(t *testing.T) {
 func TestConvertToCSVType(t *testing.T) {
 	for _, group := range csvTestColumnsGroup {
 		for _, c := range group {
-			val, _ := fromColValToCsvVal(&c.col, c.colInfo.Ft)
+			col := c.col.Unbound()
+			colv := model.ColumnValue{Value: c.col.Value}
+			val, _ := fromColValToCsvVal(col, colv, c.colInfo.Ft)
 			require.Equal(t, c.want, val, c.col.Name)
 		}
 	}
@@ -770,8 +772,8 @@ func TestConvertToCSVType(t *testing.T) {
 
 func TestRowChangeEventConversion(t *testing.T) {
 	for idx, group := range csvTestColumnsGroup {
-		row := &model.RowChangedEvent{}
-		var cols []*model.Column = make([]*model.Column, 0)
+		row := &model.BoundedRowChangedEvent{}
+		var cols []*model.BoundedColumn = make([]*model.BoundedColumn, 0)
 		var colInfos []rowcodec.ColInfo = make([]rowcodec.ColInfo, 0)
 		for _, c := range group {
 			cols = append(cols, &c.col)
@@ -797,7 +799,7 @@ func TestRowChangeEventConversion(t *testing.T) {
 			Terminator:      "\n",
 			NullString:      "\\N",
 			IncludeCommitTs: true,
-		}, row)
+		}, row.Unbound())
 		require.NotNil(t, csvMsg)
 		require.Nil(t, err)
 

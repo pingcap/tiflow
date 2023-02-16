@@ -14,7 +14,6 @@ package internal
 
 import (
 	"context"
-	"sort"
 	"testing"
 
 	"github.com/pingcap/tidb/parser/mysql"
@@ -25,10 +24,10 @@ import (
 
 var (
 	// CodecRowCases defines test cases for RowChangedEvent.
-	CodecRowCases = [][]*model.RowChangedEvent{{{
+	CodecRowCases = [][]*model.BoundedRowChangedEvent{{{
 		CommitTs: 424316552636792833,
 		Table:    &model.TableName{Schema: "a", Table: "b"},
-		PreColumns: []*model.Column{
+		PreColumns: []*model.BoundedColumn{
 			{Name: "varchar", Type: mysql.TypeVarchar, Value: []byte("varchar0")},
 			{Name: "string", Type: mysql.TypeString, Value: []byte("string0")},
 			{Name: "date", Type: mysql.TypeDate, Value: "2021/01/01"},
@@ -38,7 +37,7 @@ var (
 			{Name: "long", Type: mysql.TypeLong, Value: int64(1000)},
 			{Name: "null", Type: mysql.TypeNull, Value: nil},
 		},
-		Columns: []*model.Column{
+		Columns: []*model.BoundedColumn{
 			{Name: "varchar", Type: mysql.TypeVarchar, Value: []byte("varchar1")},
 			{Name: "string", Type: mysql.TypeString, Value: []byte("string1")},
 			{Name: "date", Type: mysql.TypeDate, Value: "2021/01/02"},
@@ -51,7 +50,7 @@ var (
 	}}, {{
 		CommitTs: 424316553934667777,
 		Table:    &model.TableName{Schema: "a", Table: "c"},
-		PreColumns: []*model.Column{
+		PreColumns: []*model.BoundedColumn{
 			{Name: "varchar", Type: mysql.TypeVarchar, Value: []byte("varchar0")},
 			{Name: "string", Type: mysql.TypeString, Value: []byte("string0")},
 			{Name: "date", Type: mysql.TypeDate, Value: "2021/01/01"},
@@ -61,7 +60,7 @@ var (
 			{Name: "long", Type: mysql.TypeLong, Value: int64(1000)},
 			{Name: "null", Type: mysql.TypeNull, Value: nil},
 		},
-		Columns: []*model.Column{
+		Columns: []*model.BoundedColumn{
 			{Name: "varchar", Type: mysql.TypeVarchar, Value: []byte("varchar1")},
 			{Name: "string", Type: mysql.TypeString, Value: []byte("string1")},
 			{Name: "date", Type: mysql.TypeDate, Value: "2021/01/02"},
@@ -74,7 +73,7 @@ var (
 	}, {
 		CommitTs: 424316554327097345,
 		Table:    &model.TableName{Schema: "a", Table: "d"},
-		PreColumns: []*model.Column{
+		PreColumns: []*model.BoundedColumn{
 			{Name: "varchar", Type: mysql.TypeVarchar, Value: []byte("varchar0")},
 			{Name: "string", Type: mysql.TypeString, Value: []byte("string0")},
 			{Name: "date", Type: mysql.TypeDate, Value: "2021/01/01"},
@@ -84,7 +83,7 @@ var (
 			{Name: "long", Type: mysql.TypeLong, Value: int64(1000)},
 			{Name: "null", Type: mysql.TypeNull, Value: nil},
 		},
-		Columns: []*model.Column{
+		Columns: []*model.BoundedColumn{
 			{Name: "varchar", Type: mysql.TypeVarchar, Value: []byte("varchar1")},
 			{Name: "string", Type: mysql.TypeString, Value: []byte("string1")},
 			{Name: "date", Type: mysql.TypeDate, Value: "2021/01/02"},
@@ -97,7 +96,7 @@ var (
 	}, {
 		CommitTs: 424316554746789889,
 		Table:    &model.TableName{Schema: "a", Table: "e"},
-		PreColumns: []*model.Column{
+		PreColumns: []*model.BoundedColumn{
 			{Name: "varchar", Type: mysql.TypeVarchar, Value: []byte("varchar0")},
 			{Name: "string", Type: mysql.TypeString, Value: []byte("string0")},
 			{Name: "date", Type: mysql.TypeDate, Value: "2021/01/01"},
@@ -107,7 +106,7 @@ var (
 			{Name: "long", Type: mysql.TypeLong, Value: int64(1000)},
 			{Name: "null", Type: mysql.TypeNull, Value: nil},
 		},
-		Columns: []*model.Column{
+		Columns: []*model.BoundedColumn{
 			{Name: "varchar", Type: mysql.TypeVarchar, Value: []byte("varchar1")},
 			{Name: "string", Type: mysql.TypeString, Value: []byte("string1")},
 			{Name: "date", Type: mysql.TypeDate, Value: "2021/01/02"},
@@ -120,7 +119,7 @@ var (
 	}, {
 		CommitTs: 424316555073945601,
 		Table:    &model.TableName{Schema: "a", Table: "f", TableID: 6, IsPartition: true},
-		PreColumns: []*model.Column{
+		PreColumns: []*model.BoundedColumn{
 			{Name: "varchar", Type: mysql.TypeVarchar, Value: []byte("varchar0")},
 			{Name: "string", Type: mysql.TypeString, Value: []byte("string0")},
 			{Name: "date", Type: mysql.TypeDate, Value: "2021/01/01"},
@@ -130,7 +129,7 @@ var (
 			{Name: "long", Type: mysql.TypeLong, Value: int64(1000)},
 			{Name: "null", Type: mysql.TypeNull, Value: nil},
 		},
-		Columns: []*model.Column{
+		Columns: []*model.BoundedColumn{
 			{Name: "varchar", Type: mysql.TypeVarchar, Value: []byte("varchar1")},
 			{Name: "string", Type: mysql.TypeString, Value: []byte("string1")},
 			{Name: "date", Type: mysql.TypeDate, Value: "2021/01/02"},
@@ -185,28 +184,6 @@ var (
 	CodecResolvedTSCases = [][]uint64{{424316592563683329}, {424316594097225729, 424316594214141953, 424316594345213953}, {}}
 )
 
-type columnsArray []*model.Column
-
-func (a columnsArray) Len() int {
-	return len(a)
-}
-
-func (a columnsArray) Less(i, j int) bool {
-	return a[i].Name < a[j].Name
-}
-
-func (a columnsArray) Swap(i, j int) {
-	a[i], a[j] = a[j], a[i]
-}
-
-func sortColumnArrays(arrays ...[]*model.Column) {
-	for _, array := range arrays {
-		if array != nil {
-			sort.Sort(columnsArray(array))
-		}
-	}
-}
-
 // BatchTester is a tester for batch encoders.
 type BatchTester struct {
 	RowCases        [][]*model.RowChangedEvent
@@ -216,8 +193,13 @@ type BatchTester struct {
 
 // NewDefaultBatchTester creates a default BatchTester.
 func NewDefaultBatchTester() *BatchTester {
+	cases := make([][]*model.RowChangedEvent, len(CodecRowCases))
+	for i, cc := range CodecRowCases {
+		cases[i] = model.UnboundRowChangedEvents(cc)
+	}
+
 	return &BatchTester{
-		RowCases:        CodecRowCases,
+		RowCases:        cases,
 		DDLCases:        CodecDDLCases,
 		ResolvedTsCases: CodecResolvedTSCases,
 	}
@@ -240,7 +222,10 @@ func (s *BatchTester) TestBatchCodec(
 			require.Equal(t, model.MessageTypeRow, tp)
 			row, err := decoder.NextRowChangedEvent()
 			require.Nil(t, err)
-			sortColumnArrays(row.Columns, row.PreColumns, cs[index].Columns, cs[index].PreColumns)
+			model.SortColumnsByName(row.Columns, row.ColumnValues, false)
+			model.SortColumnsByName(row.PreColumns, row.PreColumnValues, false)
+			model.SortColumnsByName(cs[index].Columns, cs[index].ColumnValues, false)
+			model.SortColumnsByName(cs[index].PreColumns, cs[index].PreColumnValues, false)
 			require.Equal(t, cs[index], row)
 			index++
 		}

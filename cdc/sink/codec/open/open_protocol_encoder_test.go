@@ -38,15 +38,15 @@ func TestBuildOpenProtocolBatchEncoder(t *testing.T) {
 func TestMaxMessageBytes(t *testing.T) {
 	t.Parallel()
 	// the size of `testEvent` is 87
-	testEvent := &model.RowChangedEvent{
+	testEvent := (&model.BoundedRowChangedEvent{
 		CommitTs: 1,
 		Table:    &model.TableName{Schema: "a", Table: "b"},
-		Columns: []*model.Column{{
+		Columns: []*model.BoundedColumn{{
 			Name:  "col1",
 			Type:  mysql.TypeVarchar,
 			Value: []byte("aa"),
 		}},
-	}
+	}).Unbound()
 
 	ctx := context.Background()
 	topic := ""
@@ -83,15 +83,15 @@ func TestMaxBatchSize(t *testing.T) {
 	config.MaxBatchSize = 64
 	encoder := NewBatchEncoderBuilder(config).Build()
 
-	testEvent := &model.RowChangedEvent{
+	testEvent := (&model.BoundedRowChangedEvent{
 		CommitTs: 1,
 		Table:    &model.TableName{Schema: "a", Table: "b"},
-		Columns: []*model.Column{{
+		Columns: []*model.BoundedColumn{{
 			Name:  "col1",
 			Type:  mysql.TypeVarchar,
 			Value: []byte("aa"),
 		}},
-	}
+	}).Unbound()
 
 	for i := 0; i < 10000; i++ {
 		err := encoder.AppendRowChangedEvent(context.Background(), "", testEvent, nil)
@@ -135,10 +135,10 @@ func TestOpenProtocolAppendRowChangedEventWithCallback(t *testing.T) {
 
 	count := 0
 
-	row := &model.RowChangedEvent{
+	row := &model.BoundedRowChangedEvent{
 		CommitTs: 1,
 		Table:    &model.TableName{Schema: "a", Table: "b"},
-		Columns: []*model.Column{{
+		Columns: []*model.BoundedColumn{{
 			Name:  "col1",
 			Type:  mysql.TypeVarchar,
 			Value: []byte("aa"),
@@ -146,7 +146,7 @@ func TestOpenProtocolAppendRowChangedEventWithCallback(t *testing.T) {
 	}
 
 	tests := []struct {
-		row      *model.RowChangedEvent
+		row      *model.BoundedRowChangedEvent
 		callback func()
 	}{
 		{
@@ -187,7 +187,8 @@ func TestOpenProtocolAppendRowChangedEventWithCallback(t *testing.T) {
 
 	// Append the events.
 	for _, test := range tests {
-		err := encoder.AppendRowChangedEvent(context.Background(), "", test.row, test.callback)
+        row := test.row.Unbound()
+		err := encoder.AppendRowChangedEvent(context.Background(), "", row, test.callback)
 		require.Nil(t, err)
 	}
 	require.Equal(t, 0, count, "nothing should be called")

@@ -14,6 +14,7 @@
 package memquota
 
 import (
+	"fmt"
 	"sort"
 	"sync"
 	"sync/atomic"
@@ -106,6 +107,7 @@ func (m *MemQuota) TryAcquire(nBytes uint64) bool {
 	for {
 		usedBytes := m.usedBytes.Load()
 		if usedBytes+nBytes > m.totalBytes {
+			fmt.Printf("try acquire %d bytes\n", nBytes)
 			return false
 		}
 		if m.usedBytes.CompareAndSwap(usedBytes, usedBytes+nBytes) {
@@ -116,6 +118,7 @@ func (m *MemQuota) TryAcquire(nBytes uint64) bool {
 
 // ForceAcquire is used to force acquire the memory quota.
 func (m *MemQuota) ForceAcquire(nBytes uint64) {
+	fmt.Printf("force acquire %d bytes\n", nBytes)
 	m.usedBytes.Add(nBytes)
 }
 
@@ -133,6 +136,7 @@ func (m *MemQuota) BlockAcquire(nBytes uint64) error {
 			continue
 		}
 		if m.usedBytes.CompareAndSwap(usedBytes, usedBytes+nBytes) {
+			fmt.Printf("block acquire %d bytes\n", nBytes)
 			return nil
 		}
 	}
@@ -140,6 +144,7 @@ func (m *MemQuota) BlockAcquire(nBytes uint64) error {
 
 // Refund directly release the memory quota.
 func (m *MemQuota) Refund(nBytes uint64) {
+	fmt.Printf("refund %d bytes\n", nBytes)
 	if nBytes == 0 {
 		return
 	}
@@ -162,6 +167,7 @@ func (m *MemQuota) AddTable(span tablepb.Span) {
 
 // Record records the memory usage of a table.
 func (m *MemQuota) Record(span tablepb.Span, resolved model.ResolvedTs, nBytes uint64) {
+	fmt.Printf("record %d bytes\n", nBytes)
 	if nBytes == 0 {
 		return
 	}

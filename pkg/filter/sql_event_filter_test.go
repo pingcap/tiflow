@@ -306,10 +306,12 @@ func TestShouldSkipDML(t *testing.T) {
 					},
 				}
 				if c.columns != "" {
-					event.Columns = []*model.Column{{Value: c.columns}}
+					x := []*model.BoundedColumn{{Value: c.columns}}
+					event.Columns, event.ColumnValues = model.UnboundColumns(x)
 				}
 				if c.preColumns != "" {
-					event.PreColumns = []*model.Column{{Value: c.preColumns}}
+					x := []*model.BoundedColumn{{Value: c.preColumns}}
+					event.PreColumns, event.PreColumnValues = model.UnboundColumns(x)
 				}
 				skip, err := f.shouldSkipDML(event)
 				require.NoError(t, err)

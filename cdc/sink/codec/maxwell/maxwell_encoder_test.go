@@ -27,14 +27,15 @@ func TestMaxwellBatchCodec(t *testing.T) {
 	t.Parallel()
 	newEncoder := newBatchEncoder
 
-	rowCases := [][]*model.RowChangedEvent{{{
+	rowCases := [][]*model.BoundedRowChangedEvent{{{
 		CommitTs: 1,
 		Table:    &model.TableName{Schema: "a", Table: "b"},
-		Columns:  []*model.Column{{Name: "col1", Type: 3, Value: 10}},
+		Columns:  []*model.BoundedColumn{{Name: "col1", Type: 3, Value: 10}},
 	}}, {}}
 	for _, cs := range rowCases {
 		encoder := newEncoder()
-		for _, row := range cs {
+		for _, brow := range cs {
+			row := brow.Unbound()
 			err := encoder.AppendRowChangedEvent(context.Background(), "", row, nil)
 			require.Nil(t, err)
 		}
@@ -74,10 +75,10 @@ func TestMaxwellAppendRowChangedEventWithCallback(t *testing.T) {
 
 	count := 0
 
-	row := &model.RowChangedEvent{
+	row := &model.BoundedRowChangedEvent{
 		CommitTs: 1,
 		Table:    &model.TableName{Schema: "a", Table: "b"},
-		Columns: []*model.Column{{
+		Columns: []*model.BoundedColumn{{
 			Name:  "col1",
 			Type:  mysql.TypeVarchar,
 			Value: []byte("aa"),
@@ -85,7 +86,7 @@ func TestMaxwellAppendRowChangedEventWithCallback(t *testing.T) {
 	}
 
 	tests := []struct {
-		row      *model.RowChangedEvent
+		row      *model.BoundedRowChangedEvent
 		callback func()
 	}{
 		{
@@ -126,7 +127,8 @@ func TestMaxwellAppendRowChangedEventWithCallback(t *testing.T) {
 
 	// Append the events.
 	for _, test := range tests {
-		err := encoder.AppendRowChangedEvent(context.Background(), "", test.row, test.callback)
+		row := test.row.Unbound()
+		err := encoder.AppendRowChangedEvent(context.Background(), "", row, test.callback)
 		require.Nil(t, err)
 	}
 	require.Equal(t, 0, count, "nothing should be called")

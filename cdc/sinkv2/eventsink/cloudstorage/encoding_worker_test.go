@@ -69,14 +69,14 @@ func TestEncodeEvents(t *testing.T) {
 						TableID: 100,
 					},
 				},
-				Rows: []*model.RowChangedEvent{
+				Rows: model.UnboundRowChangedEvents([]*model.BoundedRowChangedEvent{
 					{
 						Table: &model.TableName{
 							Schema:  "test",
 							Table:   "table1",
 							TableID: 100,
 						},
-						Columns: []*model.Column{
+						Columns: []*model.BoundedColumn{
 							{Name: "c1", Value: 100},
 							{Name: "c2", Value: "hello world"},
 						},
@@ -87,12 +87,12 @@ func TestEncodeEvents(t *testing.T) {
 							Table:   "table1",
 							TableID: 100,
 						},
-						Columns: []*model.Column{
+						Columns: []*model.BoundedColumn{
 							{Name: "c1", Value: 200},
 							{Name: "c2", Value: "你好，世界"},
 						},
 					},
-				},
+				}),
 			},
 		},
 	})
@@ -117,19 +117,19 @@ func TestEncodingWorkerRun(t *testing.T) {
 				TableID: 100,
 			},
 		},
-		Rows: []*model.RowChangedEvent{
+		Rows: model.UnboundRowChangedEvents([]*model.BoundedRowChangedEvent{
 			{
 				Table: &model.TableName{
 					Schema:  "test",
 					Table:   "table1",
 					TableID: 100,
 				},
-				Columns: []*model.Column{
+				Columns: []*model.BoundedColumn{
 					{Name: "c1", Value: 100},
 					{Name: "c2", Value: "hello world"},
 				},
 			},
-		},
+		}),
 	}
 
 	for i := 0; i < 3; i++ {

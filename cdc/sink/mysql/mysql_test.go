@@ -57,23 +57,23 @@ func newMySQLSink4Test(ctx context.Context) *mysqlSink {
 func TestPrepareDML(t *testing.T) {
 	t.Parallel()
 	testCases := []struct {
-		input    []*model.RowChangedEvent
+		input    []*model.BoundedRowChangedEvent
 		expected *preparedDMLs
 	}{
 		{
-			input: []*model.RowChangedEvent{},
+			input: []*model.BoundedRowChangedEvent{},
 			expected: &preparedDMLs{
 				startTs: []model.Ts{},
 				sqls:    []string{},
 				values:  [][]interface{}{},
 			},
 		}, {
-			input: []*model.RowChangedEvent{
+			input: []*model.BoundedRowChangedEvent{
 				{
 					StartTs:  418658114257813514,
 					CommitTs: 418658114257813515,
 					Table:    &model.TableName{Schema: "common_1", Table: "uk_without_pk"},
-					PreColumns: []*model.Column{nil, {
+					PreColumns: []*model.BoundedColumn{nil, {
 						Name:  "a1",
 						Type:  mysql.TypeLong,
 						Flag:  model.BinaryFlag | model.MultipleKeyFlag | model.HandleKeyFlag,
@@ -94,12 +94,12 @@ func TestPrepareDML(t *testing.T) {
 				rowCount: 1,
 			},
 		}, {
-			input: []*model.RowChangedEvent{
+			input: []*model.BoundedRowChangedEvent{
 				{
 					StartTs:  418658114257813516,
 					CommitTs: 418658114257813517,
 					Table:    &model.TableName{Schema: "common_1", Table: "uk_without_pk"},
-					Columns: []*model.Column{nil, {
+					Columns: []*model.BoundedColumn{nil, {
 						Name:  "a1",
 						Type:  mysql.TypeLong,
 						Flag:  model.BinaryFlag | model.MultipleKeyFlag | model.HandleKeyFlag,
@@ -125,7 +125,7 @@ func TestPrepareDML(t *testing.T) {
 	defer cancel()
 	ms := newMySQLSink4Test(ctx)
 	for _, tc := range testCases {
-		dmls := ms.prepareDMLs(tc.input)
+		dmls := ms.prepareDMLs(model.UnboundRowChangedEvents(tc.input))
 		require.Equal(t, tc.expected, dmls)
 	}
 }
@@ -134,21 +134,21 @@ func TestPrepareUpdate(t *testing.T) {
 	t.Parallel()
 	testCases := []struct {
 		quoteTable   string
-		preCols      []*model.Column
-		cols         []*model.Column
+		preCols      []*model.BoundedColumn
+		cols         []*model.BoundedColumn
 		expectedSQL  string
 		expectedArgs []interface{}
 	}{
 		{
 			quoteTable:   "`test`.`t1`",
-			preCols:      []*model.Column{},
-			cols:         []*model.Column{},
+			preCols:      []*model.BoundedColumn{},
+			cols:         []*model.BoundedColumn{},
 			expectedSQL:  "",
 			expectedArgs: nil,
 		},
 		{
 			quoteTable: "`test`.`t1`",
-			preCols: []*model.Column{
+			preCols: []*model.BoundedColumn{
 				{
 					Name:  "a",
 					Type:  mysql.TypeLong,
@@ -162,7 +162,7 @@ func TestPrepareUpdate(t *testing.T) {
 					Value: "test",
 				},
 			},
-			cols: []*model.Column{
+			cols: []*model.BoundedColumn{
 				{
 					Name:  "a",
 					Type:  mysql.TypeLong,
@@ -176,7 +176,7 @@ func TestPrepareUpdate(t *testing.T) {
 		},
 		{
 			quoteTable: "`test`.`t1`",
-			preCols: []*model.Column{
+			preCols: []*model.BoundedColumn{
 				{
 					Name:  "a",
 					Type:  mysql.TypeLong,
@@ -196,7 +196,7 @@ func TestPrepareUpdate(t *testing.T) {
 					Value: 100,
 				},
 			},
-			cols: []*model.Column{
+			cols: []*model.BoundedColumn{
 				{
 					Name:  "a",
 					Type:  mysql.TypeLong,
@@ -220,7 +220,7 @@ func TestPrepareUpdate(t *testing.T) {
 		},
 		{
 			quoteTable: "`test`.`t1`",
-			preCols: []*model.Column{
+			preCols: []*model.BoundedColumn{
 				{
 					Name:  "a",
 					Type:  mysql.TypeLong,
@@ -239,7 +239,7 @@ func TestPrepareUpdate(t *testing.T) {
 					Value: 100,
 				},
 			},
-			cols: []*model.Column{
+			cols: []*model.BoundedColumn{
 				{
 					Name:  "a",
 					Type:  mysql.TypeLong,
@@ -264,7 +264,7 @@ func TestPrepareUpdate(t *testing.T) {
 		},
 		{
 			quoteTable: "`test`.`t1`",
-			preCols: []*model.Column{
+			preCols: []*model.BoundedColumn{
 				{
 					Name:  "a",
 					Type:  mysql.TypeLong,
@@ -285,7 +285,7 @@ func TestPrepareUpdate(t *testing.T) {
 					Value: 100,
 				},
 			},
-			cols: []*model.Column{
+			cols: []*model.BoundedColumn{
 				{
 					Name:  "a",
 					Type:  mysql.TypeLong,
@@ -311,7 +311,7 @@ func TestPrepareUpdate(t *testing.T) {
 		},
 		{
 			quoteTable: "`test`.`t1`",
-			preCols: []*model.Column{
+			preCols: []*model.BoundedColumn{
 				{
 					Name:  "a",
 					Type:  mysql.TypeLong,
@@ -332,7 +332,7 @@ func TestPrepareUpdate(t *testing.T) {
 					Value: 100,
 				},
 			},
-			cols: []*model.Column{
+			cols: []*model.BoundedColumn{
 				{
 					Name:  "a",
 					Type:  mysql.TypeLong,
@@ -358,7 +358,9 @@ func TestPrepareUpdate(t *testing.T) {
 		},
 	}
 	for _, tc := range testCases {
-		query, args := prepareUpdate(tc.quoteTable, tc.preCols, tc.cols, false)
+		pcols, pcolvals := model.UnboundColumns(tc.preCols)
+		cols, colvals := model.UnboundColumns(tc.cols)
+		query, args := prepareUpdate(tc.quoteTable, pcols, cols, pcolvals, colvals, false)
 		fmt.Println(query)
 		require.Equal(t, tc.expectedSQL, query)
 		require.Equal(t, tc.expectedArgs, args)
@@ -369,19 +371,19 @@ func TestPrepareDelete(t *testing.T) {
 	t.Parallel()
 	testCases := []struct {
 		quoteTable   string
-		preCols      []*model.Column
+		preCols      []*model.BoundedColumn
 		expectedSQL  string
 		expectedArgs []interface{}
 	}{
 		{
 			quoteTable:   "`test`.`t1`",
-			preCols:      []*model.Column{},
+			preCols:      []*model.BoundedColumn{},
 			expectedSQL:  "",
 			expectedArgs: nil,
 		},
 		{
 			quoteTable: "`test`.`t1`",
-			preCols: []*model.Column{
+			preCols: []*model.BoundedColumn{
 				{
 					Name:  "a",
 					Type:  mysql.TypeLong,
@@ -400,7 +402,7 @@ func TestPrepareDelete(t *testing.T) {
 		},
 		{
 			quoteTable: "`test`.`t1`",
-			preCols: []*model.Column{
+			preCols: []*model.BoundedColumn{
 				{
 					Name:  "a",
 					Type:  mysql.TypeLong,
@@ -425,7 +427,7 @@ func TestPrepareDelete(t *testing.T) {
 		},
 		{
 			quoteTable: "`test`.`t1`",
-			preCols: []*model.Column{
+			preCols: []*model.BoundedColumn{
 				{
 					Name:  "a",
 					Type:  mysql.TypeLong,
@@ -449,7 +451,7 @@ func TestPrepareDelete(t *testing.T) {
 		},
 		{
 			quoteTable: "`test`.`t1`",
-			preCols: []*model.Column{
+			preCols: []*model.BoundedColumn{
 				{
 					Name:  "a",
 					Type:  mysql.TypeLong,
@@ -475,7 +477,7 @@ func TestPrepareDelete(t *testing.T) {
 		},
 		{
 			quoteTable: "`test`.`t1`",
-			preCols: []*model.Column{
+			preCols: []*model.BoundedColumn{
 				{
 					Name:  "a",
 					Type:  mysql.TypeLong,
@@ -501,7 +503,8 @@ func TestPrepareDelete(t *testing.T) {
 		},
 	}
 	for _, tc := range testCases {
-		query, args := prepareDelete(tc.quoteTable, tc.preCols, false)
+		cols, colvals := model.UnboundColumns(tc.preCols)
+		query, args := prepareDelete(tc.quoteTable, cols, colvals, false)
 		require.Equal(t, tc.expectedSQL, query)
 		require.Equal(t, tc.expectedArgs, args)
 	}
@@ -510,19 +513,19 @@ func TestPrepareDelete(t *testing.T) {
 func TestWhereSlice(t *testing.T) {
 	t.Parallel()
 	testCases := []struct {
-		cols             []*model.Column
+		cols             []*model.BoundedColumn
 		forceReplicate   bool
 		expectedColNames []string
 		expectedArgs     []interface{}
 	}{
 		{
-			cols:             []*model.Column{},
+			cols:             []*model.BoundedColumn{},
 			forceReplicate:   false,
 			expectedColNames: nil,
 			expectedArgs:     nil,
 		},
 		{
-			cols: []*model.Column{
+			cols: []*model.BoundedColumn{
 				{
 					Name:  "a",
 					Type:  mysql.TypeLong,
@@ -541,7 +544,7 @@ func TestWhereSlice(t *testing.T) {
 			expectedArgs:     []interface{}{1},
 		},
 		{
-			cols: []*model.Column{
+			cols: []*model.BoundedColumn{
 				{
 					Name:  "a",
 					Type:  mysql.TypeLong,
@@ -565,13 +568,13 @@ func TestWhereSlice(t *testing.T) {
 			expectedArgs:     []interface{}{1, "test"},
 		},
 		{
-			cols:             []*model.Column{},
+			cols:             []*model.BoundedColumn{},
 			forceReplicate:   true,
 			expectedColNames: []string{},
 			expectedArgs:     []interface{}{},
 		},
 		{
-			cols: []*model.Column{
+			cols: []*model.BoundedColumn{
 				{
 					Name:  "a",
 					Type:  mysql.TypeLong,
@@ -590,7 +593,7 @@ func TestWhereSlice(t *testing.T) {
 			expectedArgs:     []interface{}{1},
 		},
 		{
-			cols: []*model.Column{
+			cols: []*model.BoundedColumn{
 				{
 					Name:  "a",
 					Type:  mysql.TypeLong,
@@ -615,7 +618,7 @@ func TestWhereSlice(t *testing.T) {
 			expectedArgs:     []interface{}{1, "test"},
 		},
 		{
-			cols: []*model.Column{
+			cols: []*model.BoundedColumn{
 				{
 					Name:  "a",
 					Type:  mysql.TypeLong,
@@ -634,7 +637,7 @@ func TestWhereSlice(t *testing.T) {
 			expectedArgs:     []interface{}{1, "test"},
 		},
 		{
-			cols: []*model.Column{
+			cols: []*model.BoundedColumn{
 				{
 					Name:  "a",
 					Type:  mysql.TypeLong,
@@ -659,7 +662,7 @@ func TestWhereSlice(t *testing.T) {
 			expectedArgs:     []interface{}{1, "test", 100},
 		},
 		{
-			cols: []*model.Column{
+			cols: []*model.BoundedColumn{
 				{
 					Name:  "a",
 					Type:  mysql.TypeLong,
@@ -684,7 +687,7 @@ func TestWhereSlice(t *testing.T) {
 			expectedArgs:     []interface{}{1, []byte("你好")},
 		},
 		{
-			cols: []*model.Column{
+			cols: []*model.BoundedColumn{
 				{
 					Name:  "a",
 					Type:  mysql.TypeLong,
@@ -711,7 +714,8 @@ func TestWhereSlice(t *testing.T) {
 		},
 	}
 	for _, tc := range testCases {
-		colNames, args := whereSlice(tc.cols, tc.forceReplicate)
+		cols, colvals := model.UnboundColumns(tc.cols)
+		colNames, args := whereSlice(cols, colvals, tc.forceReplicate)
 		require.Equal(t, tc.expectedColNames, colNames)
 		require.Equal(t, tc.expectedArgs, args)
 	}
@@ -721,13 +725,13 @@ func TestMapReplace(t *testing.T) {
 	t.Parallel()
 	testCases := []struct {
 		quoteTable    string
-		cols          []*model.Column
+		cols          []*model.BoundedColumn
 		expectedQuery string
 		expectedArgs  []interface{}
 	}{
 		{
 			quoteTable: "`test`.`t1`",
-			cols: []*model.Column{
+			cols: []*model.BoundedColumn{
 				{
 					Name:  "a",
 					Type:  mysql.TypeLong,
@@ -755,7 +759,7 @@ func TestMapReplace(t *testing.T) {
 		},
 		{
 			quoteTable: "`test`.`t1`",
-			cols: []*model.Column{
+			cols: []*model.BoundedColumn{
 				{
 					Name:  "a",
 					Type:  mysql.TypeLong,
@@ -782,7 +786,7 @@ func TestMapReplace(t *testing.T) {
 		},
 		{
 			quoteTable: "`test`.`t1`",
-			cols: []*model.Column{
+			cols: []*model.BoundedColumn{
 				{
 					Name:  "a",
 					Type:  mysql.TypeLong,
@@ -822,7 +826,8 @@ func TestMapReplace(t *testing.T) {
 	for _, tc := range testCases {
 		// multiple times to verify the stability of column sequence in query string
 		for i := 0; i < 10; i++ {
-			query, args := prepareReplace(tc.quoteTable, tc.cols, false, false)
+			cols, colvals := model.UnboundColumns(tc.cols)
+			query, args := prepareReplace(tc.quoteTable, cols, colvals, false, false)
 			require.Equal(t, tc.expectedQuery, query)
 			require.Equal(t, tc.expectedArgs, args)
 		}
@@ -1142,12 +1147,12 @@ func TestNewMySQLSinkExecDML(t *testing.T) {
 
 	require.Nil(t, err)
 
-	rows := []*model.RowChangedEvent{
+	rows := []*model.BoundedRowChangedEvent{
 		{
 			StartTs:  1,
 			CommitTs: 2,
 			Table:    &model.TableName{Schema: "s1", Table: "t1", TableID: 1},
-			Columns: []*model.Column{
+			Columns: []*model.BoundedColumn{
 				{
 					Name:  "a",
 					Type:  mysql.TypeLong,
@@ -1166,7 +1171,7 @@ func TestNewMySQLSinkExecDML(t *testing.T) {
 			StartTs:  1,
 			CommitTs: 2,
 			Table:    &model.TableName{Schema: "s1", Table: "t1", TableID: 1},
-			Columns: []*model.Column{
+			Columns: []*model.BoundedColumn{
 				{
 					Name:  "a",
 					Type:  mysql.TypeLong,
@@ -1185,7 +1190,7 @@ func TestNewMySQLSinkExecDML(t *testing.T) {
 			StartTs:  5,
 			CommitTs: 6,
 			Table:    &model.TableName{Schema: "s1", Table: "t1", TableID: 1},
-			Columns: []*model.Column{
+			Columns: []*model.BoundedColumn{
 				{
 					Name:  "a",
 					Type:  mysql.TypeLong,
@@ -1204,7 +1209,7 @@ func TestNewMySQLSinkExecDML(t *testing.T) {
 			StartTs:  3,
 			CommitTs: 4,
 			Table:    &model.TableName{Schema: "s1", Table: "t2", TableID: 2},
-			Columns: []*model.Column{
+			Columns: []*model.BoundedColumn{
 				{
 					Name:  "a",
 					Type:  mysql.TypeLong,
@@ -1223,7 +1228,7 @@ func TestNewMySQLSinkExecDML(t *testing.T) {
 			StartTs:  3,
 			CommitTs: 4,
 			Table:    &model.TableName{Schema: "s1", Table: "t2", TableID: 2},
-			Columns: []*model.Column{
+			Columns: []*model.BoundedColumn{
 				{
 					Name:  "a",
 					Type:  mysql.TypeLong,
@@ -1240,7 +1245,7 @@ func TestNewMySQLSinkExecDML(t *testing.T) {
 		},
 	}
 
-	err = sink.EmitRowChangedEvents(ctx, rows...)
+	err = sink.EmitRowChangedEvents(ctx, model.UnboundRowChangedEvents(rows)...)
 	require.Nil(t, err)
 
 	// retry to make sure event is flushed
@@ -1279,10 +1284,10 @@ func TestNewMySQLSinkExecDML(t *testing.T) {
 }
 
 func TestExecDMLRollbackErrDatabaseNotExists(t *testing.T) {
-	rows := []*model.RowChangedEvent{
+	rows := []*model.BoundedRowChangedEvent{
 		{
 			Table: &model.TableName{Schema: "s1", Table: "t1", TableID: 1},
-			Columns: []*model.Column{
+			Columns: []*model.BoundedColumn{
 				{
 					Name:  "a",
 					Type:  mysql.TypeLong,
@@ -1293,7 +1298,7 @@ func TestExecDMLRollbackErrDatabaseNotExists(t *testing.T) {
 		},
 		{
 			Table: &model.TableName{Schema: "s1", Table: "t1", TableID: 1},
-			Columns: []*model.Column{
+			Columns: []*model.BoundedColumn{
 				{
 					Name:  "a",
 					Type:  mysql.TypeLong,
@@ -1348,7 +1353,7 @@ func TestExecDMLRollbackErrDatabaseNotExists(t *testing.T) {
 
 	require.Nil(t, err)
 
-	err = sink.execDMLs(ctx, rows, 1 /* bucket */)
+	err = sink.execDMLs(ctx, model.UnboundRowChangedEvents(rows), 1 /* bucket */)
 	require.Equal(t, errDatabaseNotExists, errors.Cause(err))
 
 	err = sink.Close(ctx)
@@ -1356,10 +1361,10 @@ func TestExecDMLRollbackErrDatabaseNotExists(t *testing.T) {
 }
 
 func TestExecDMLRollbackErrTableNotExists(t *testing.T) {
-	rows := []*model.RowChangedEvent{
+	rows := []*model.BoundedRowChangedEvent{
 		{
 			Table: &model.TableName{Schema: "s1", Table: "t1", TableID: 1},
-			Columns: []*model.Column{
+			Columns: []*model.BoundedColumn{
 				{
 					Name:  "a",
 					Type:  mysql.TypeLong,
@@ -1370,7 +1375,7 @@ func TestExecDMLRollbackErrTableNotExists(t *testing.T) {
 		},
 		{
 			Table: &model.TableName{Schema: "s1", Table: "t1", TableID: 1},
-			Columns: []*model.Column{
+			Columns: []*model.BoundedColumn{
 				{
 					Name:  "a",
 					Type:  mysql.TypeLong,
@@ -1425,7 +1430,7 @@ func TestExecDMLRollbackErrTableNotExists(t *testing.T) {
 
 	require.Nil(t, err)
 
-	err = sink.execDMLs(ctx, rows, 1 /* bucket */)
+	err = sink.execDMLs(ctx, model.UnboundRowChangedEvents(rows), 1 /* bucket */)
 	require.Equal(t, errTableNotExists, errors.Cause(err))
 
 	err = sink.Close(ctx)
@@ -1433,10 +1438,10 @@ func TestExecDMLRollbackErrTableNotExists(t *testing.T) {
 }
 
 func TestExecDMLRollbackErrRetryable(t *testing.T) {
-	rows := []*model.RowChangedEvent{
+	rows := []*model.BoundedRowChangedEvent{
 		{
 			Table: &model.TableName{Schema: "s1", Table: "t1", TableID: 1},
-			Columns: []*model.Column{
+			Columns: []*model.BoundedColumn{
 				{
 					Name:  "a",
 					Type:  mysql.TypeLong,
@@ -1447,7 +1452,7 @@ func TestExecDMLRollbackErrRetryable(t *testing.T) {
 		},
 		{
 			Table: &model.TableName{Schema: "s1", Table: "t1", TableID: 1},
-			Columns: []*model.Column{
+			Columns: []*model.BoundedColumn{
 				{
 					Name:  "a",
 					Type:  mysql.TypeLong,
@@ -1507,7 +1512,7 @@ func TestExecDMLRollbackErrRetryable(t *testing.T) {
 
 	require.Nil(t, err)
 
-	err = sink.execDMLs(ctx, rows, 1 /* bucket */)
+	err = sink.execDMLs(ctx, model.UnboundRowChangedEvents(rows), 1 /* bucket */)
 	require.Equal(t, errLockDeadlock, errors.Cause(err))
 
 	err = sink.Close(ctx)
@@ -1516,13 +1521,13 @@ func TestExecDMLRollbackErrRetryable(t *testing.T) {
 
 func TestMysqlSinkNotRetryErrDupEntry(t *testing.T) {
 	errDup := mysql.NewErr(mysql.ErrDupEntry)
-	rows := []*model.RowChangedEvent{
+	rows := []*model.BoundedRowChangedEvent{
 		{
 			StartTs:       2,
 			CommitTs:      3,
 			ReplicatingTs: 1,
 			Table:         &model.TableName{Schema: "s1", Table: "t1", TableID: 1},
-			Columns: []*model.Column{
+			Columns: []*model.BoundedColumn{
 				{
 					Name:  "a",
 					Type:  mysql.TypeLong,
@@ -1575,7 +1580,7 @@ func TestMysqlSinkNotRetryErrDupEntry(t *testing.T) {
 	sink, err := NewMySQLSink(ctx, model.DefaultChangeFeedID(changefeed), sinkURI, rc)
 	require.Nil(t, err)
 
-	err = sink.execDMLs(ctx, rows, 1 /* bucket */)
+	err = sink.execDMLs(ctx, model.UnboundRowChangedEvents(rows), 1 /* bucket */)
 	require.Equal(t, errDup, errors.Cause(err))
 
 	err = sink.Close(ctx)
@@ -1871,11 +1876,11 @@ func TestMySQLSinkFlushResolvedTs(t *testing.T) {
 	checkpoint, err := sink.FlushRowChangedEvents(ctx, model.TableID(1), model.NewResolvedTs(1))
 	require.Nil(t, err)
 	require.True(t, checkpoint.Ts <= 1)
-	rows := []*model.RowChangedEvent{
+	rows := []*model.BoundedRowChangedEvent{
 		{
 			Table:    &model.TableName{Schema: "s1", Table: "t1", TableID: 1},
 			CommitTs: 5,
-			Columns: []*model.Column{
+			Columns: []*model.BoundedColumn{
 				{
 					Name:  "a",
 					Type:  mysql.TypeLong,
@@ -1885,17 +1890,17 @@ func TestMySQLSinkFlushResolvedTs(t *testing.T) {
 			},
 		},
 	}
-	err = sink.EmitRowChangedEvents(ctx, rows...)
+	err = sink.EmitRowChangedEvents(ctx, model.UnboundRowChangedEvents(rows)...)
 	require.Nil(t, err)
 	checkpoint, err = sink.FlushRowChangedEvents(ctx, model.TableID(1), model.NewResolvedTs(6))
 	require.True(t, checkpoint.Ts <= 6)
 	require.Nil(t, err)
 	require.True(t, sink.getTableCheckpointTs(model.TableID(1)).Ts <= 6)
-	rows = []*model.RowChangedEvent{
+	rows = []*model.BoundedRowChangedEvent{
 		{
 			Table:    &model.TableName{Schema: "s1", Table: "t2", TableID: 2},
 			CommitTs: 4,
-			Columns: []*model.Column{
+			Columns: []*model.BoundedColumn{
 				{
 					Name:  "a",
 					Type:  mysql.TypeLong,
@@ -1905,7 +1910,7 @@ func TestMySQLSinkFlushResolvedTs(t *testing.T) {
 			},
 		},
 	}
-	err = sink.EmitRowChangedEvents(ctx, rows...)
+	err = sink.EmitRowChangedEvents(ctx, model.UnboundRowChangedEvents(rows)...)
 	require.Nil(t, err)
 	checkpoint, err = sink.FlushRowChangedEvents(ctx, model.TableID(2), model.NewResolvedTs(5))
 	require.True(t, checkpoint.Ts <= 5)
@@ -2051,12 +2056,12 @@ func TestMySQLSinkExecDMLError(t *testing.T) {
 		sinkURI, rc)
 	require.Nil(t, err)
 
-	rows := []*model.RowChangedEvent{
+	rows := []*model.BoundedRowChangedEvent{
 		{
 			StartTs:  1,
 			CommitTs: 2,
 			Table:    &model.TableName{Schema: "s1", Table: "t1", TableID: 1},
-			Columns: []*model.Column{
+			Columns: []*model.BoundedColumn{
 				{
 					Name:  "a",
 					Type:  mysql.TypeLong,
@@ -2075,7 +2080,7 @@ func TestMySQLSinkExecDMLError(t *testing.T) {
 			StartTs:  2,
 			CommitTs: 3,
 			Table:    &model.TableName{Schema: "s1", Table: "t1", TableID: 1},
-			Columns: []*model.Column{
+			Columns: []*model.BoundedColumn{
 				{
 					Name:  "a",
 					Type:  mysql.TypeLong,
@@ -2094,7 +2099,7 @@ func TestMySQLSinkExecDMLError(t *testing.T) {
 			StartTs:  3,
 			CommitTs: 4,
 			Table:    &model.TableName{Schema: "s1", Table: "t1", TableID: 1},
-			Columns: []*model.Column{
+			Columns: []*model.BoundedColumn{
 				{
 					Name:  "a",
 					Type:  mysql.TypeLong,
@@ -2113,7 +2118,7 @@ func TestMySQLSinkExecDMLError(t *testing.T) {
 			StartTs:  4,
 			CommitTs: 5,
 			Table:    &model.TableName{Schema: "s1", Table: "t1", TableID: 1},
-			Columns: []*model.Column{
+			Columns: []*model.BoundedColumn{
 				{
 					Name:  "a",
 					Type:  mysql.TypeLong,
@@ -2132,7 +2137,7 @@ func TestMySQLSinkExecDMLError(t *testing.T) {
 			StartTs:  5,
 			CommitTs: 6,
 			Table:    &model.TableName{Schema: "s1", Table: "t1", TableID: 1},
-			Columns: []*model.Column{
+			Columns: []*model.BoundedColumn{
 				{
 					Name:  "a",
 					Type:  mysql.TypeLong,
@@ -2150,7 +2155,7 @@ func TestMySQLSinkExecDMLError(t *testing.T) {
 	}
 
 	for _, row := range rows {
-		err = sink.EmitRowChangedEvents(ctx, row)
+		err = sink.EmitRowChangedEvents(ctx, row.Unbound())
 		require.NoError(t, err)
 	}
 
@@ -2177,12 +2182,12 @@ func TestMysqlSinkSafeModeOff(t *testing.T) {
 
 	testCases := []struct {
 		name     string
-		input    []*model.RowChangedEvent
+		input    []*model.BoundedRowChangedEvent
 		expected *preparedDMLs
 	}{
 		{
 			name:  "empty",
-			input: []*model.RowChangedEvent{},
+			input: []*model.BoundedRowChangedEvent{},
 			expected: &preparedDMLs{
 				startTs: []model.Ts{},
 				sqls:    []string{},
@@ -2190,13 +2195,13 @@ func TestMysqlSinkSafeModeOff(t *testing.T) {
 			},
 		}, {
 			name: "insert without PK",
-			input: []*model.RowChangedEvent{
+			input: []*model.BoundedRowChangedEvent{
 				{
 					StartTs:       418658114257813514,
 					CommitTs:      418658114257813515,
 					ReplicatingTs: 418658114257813513,
 					Table:         &model.TableName{Schema: "common_1", Table: "uk_without_pk"},
-					Columns: []*model.Column{nil, {
+					Columns: []*model.BoundedColumn{nil, {
 						Name:  "a1",
 						Type:  mysql.TypeLong,
 						Flag:  model.BinaryFlag | model.MultipleKeyFlag | model.HandleKeyFlag,
@@ -2219,13 +2224,13 @@ func TestMysqlSinkSafeModeOff(t *testing.T) {
 			},
 		}, {
 			name: "insert with PK",
-			input: []*model.RowChangedEvent{
+			input: []*model.BoundedRowChangedEvent{
 				{
 					StartTs:       418658114257813514,
 					CommitTs:      418658114257813515,
 					ReplicatingTs: 418658114257813513,
 					Table:         &model.TableName{Schema: "common_1", Table: "pk"},
-					Columns: []*model.Column{nil, {
+					Columns: []*model.BoundedColumn{nil, {
 						Name:  "a1",
 						Type:  mysql.TypeLong,
 						Flag:  model.HandleKeyFlag | model.PrimaryKeyFlag,
@@ -2246,13 +2251,13 @@ func TestMysqlSinkSafeModeOff(t *testing.T) {
 			},
 		}, {
 			name: "update without PK",
-			input: []*model.RowChangedEvent{
+			input: []*model.BoundedRowChangedEvent{
 				{
 					StartTs:       418658114257813516,
 					CommitTs:      418658114257813517,
 					ReplicatingTs: 418658114257813515,
 					Table:         &model.TableName{Schema: "common_1", Table: "uk_without_pk"},
-					PreColumns: []*model.Column{nil, {
+					PreColumns: []*model.BoundedColumn{nil, {
 						Name:  "a1",
 						Type:  mysql.TypeLong,
 						Flag:  model.BinaryFlag | model.MultipleKeyFlag | model.HandleKeyFlag,
@@ -2263,7 +2268,7 @@ func TestMysqlSinkSafeModeOff(t *testing.T) {
 						Flag:  model.BinaryFlag | model.MultipleKeyFlag | model.HandleKeyFlag,
 						Value: 2,
 					}},
-					Columns: []*model.Column{nil, {
+					Columns: []*model.BoundedColumn{nil, {
 						Name:  "a1",
 						Type:  mysql.TypeLong,
 						Flag:  model.BinaryFlag | model.MultipleKeyFlag | model.HandleKeyFlag,
@@ -2287,13 +2292,13 @@ func TestMysqlSinkSafeModeOff(t *testing.T) {
 			},
 		}, {
 			name: "update with PK",
-			input: []*model.RowChangedEvent{
+			input: []*model.BoundedRowChangedEvent{
 				{
 					StartTs:       418658114257813516,
 					CommitTs:      418658114257813517,
 					ReplicatingTs: 418658114257813515,
 					Table:         &model.TableName{Schema: "common_1", Table: "pk"},
-					PreColumns: []*model.Column{nil, {
+					PreColumns: []*model.BoundedColumn{nil, {
 						Name:  "a1",
 						Type:  mysql.TypeLong,
 						Flag:  model.HandleKeyFlag | model.PrimaryKeyFlag,
@@ -2304,7 +2309,7 @@ func TestMysqlSinkSafeModeOff(t *testing.T) {
 						Flag:  model.BinaryFlag | model.MultipleKeyFlag | model.HandleKeyFlag,
 						Value: 2,
 					}},
-					Columns: []*model.Column{nil, {
+					Columns: []*model.BoundedColumn{nil, {
 						Name:  "a1",
 						Type:  mysql.TypeLong,
 						Flag:  model.HandleKeyFlag | model.PrimaryKeyFlag,
@@ -2326,13 +2331,13 @@ func TestMysqlSinkSafeModeOff(t *testing.T) {
 			},
 		}, {
 			name: "batch insert with PK",
-			input: []*model.RowChangedEvent{
+			input: []*model.BoundedRowChangedEvent{
 				{
 					StartTs:       418658114257813516,
 					CommitTs:      418658114257813517,
 					ReplicatingTs: 418658114257813515,
 					Table:         &model.TableName{Schema: "common_1", Table: "pk"},
-					Columns: []*model.Column{nil, {
+					Columns: []*model.BoundedColumn{nil, {
 						Name:  "a1",
 						Type:  mysql.TypeLong,
 						Flag:  model.HandleKeyFlag | model.PrimaryKeyFlag,
@@ -2349,7 +2354,7 @@ func TestMysqlSinkSafeModeOff(t *testing.T) {
 					CommitTs:      418658114257813517,
 					ReplicatingTs: 418658114257813515,
 					Table:         &model.TableName{Schema: "common_1", Table: "pk"},
-					Columns: []*model.Column{nil, {
+					Columns: []*model.BoundedColumn{nil, {
 						Name:  "a1",
 						Type:  mysql.TypeLong,
 						Flag:  model.HandleKeyFlag | model.PrimaryKeyFlag,
@@ -2373,13 +2378,13 @@ func TestMysqlSinkSafeModeOff(t *testing.T) {
 			},
 		}, {
 			name: "safe mode on commit ts < replicating ts",
-			input: []*model.RowChangedEvent{
+			input: []*model.BoundedRowChangedEvent{
 				{
 					StartTs:       418658114257813516,
 					CommitTs:      418658114257813517,
 					ReplicatingTs: 418658114257813518,
 					Table:         &model.TableName{Schema: "common_1", Table: "pk"},
-					Columns: []*model.Column{nil, {
+					Columns: []*model.BoundedColumn{nil, {
 						Name:  "a1",
 						Type:  mysql.TypeLong,
 						Flag:  model.HandleKeyFlag | model.PrimaryKeyFlag,
@@ -2402,13 +2407,13 @@ func TestMysqlSinkSafeModeOff(t *testing.T) {
 			},
 		}, {
 			name: "safe mode on one row commit ts < replicating ts",
-			input: []*model.RowChangedEvent{
+			input: []*model.BoundedRowChangedEvent{
 				{
 					StartTs:       418658114257813516,
 					CommitTs:      418658114257813517,
 					ReplicatingTs: 418658114257813518,
 					Table:         &model.TableName{Schema: "common_1", Table: "pk"},
-					Columns: []*model.Column{nil, {
+					Columns: []*model.BoundedColumn{nil, {
 						Name:  "a1",
 						Type:  mysql.TypeLong,
 						Flag:  model.HandleKeyFlag | model.PrimaryKeyFlag,
@@ -2425,7 +2430,7 @@ func TestMysqlSinkSafeModeOff(t *testing.T) {
 					CommitTs:      418658114257813507,
 					ReplicatingTs: 418658114257813505,
 					Table:         &model.TableName{Schema: "common_1", Table: "pk"},
-					Columns: []*model.Column{nil, {
+					Columns: []*model.BoundedColumn{nil, {
 						Name:  "a1",
 						Type:  mysql.TypeLong,
 						Flag:  model.HandleKeyFlag | model.PrimaryKeyFlag,
@@ -2455,7 +2460,7 @@ func TestMysqlSinkSafeModeOff(t *testing.T) {
 	ms.params.safeMode = false
 	ms.params.enableOldValue = true
 	for _, tc := range testCases {
-		dmls := ms.prepareDMLs(tc.input)
+		dmls := ms.prepareDMLs(model.UnboundRowChangedEvents(tc.input))
 		require.Equal(t, tc.expected, dmls, tc.name)
 	}
 }

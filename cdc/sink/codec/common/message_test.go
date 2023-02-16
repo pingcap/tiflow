@@ -26,12 +26,12 @@ import (
 
 func TestCreate(t *testing.T) {
 	t.Parallel()
-	rowEvent := &model.RowChangedEvent{
+	rowEvent := (&model.BoundedRowChangedEvent{
 		Table: &model.TableName{
 			Schema: "test",
 			Table:  "t1",
 		},
-		PreColumns: []*model.Column{
+		PreColumns: []*model.BoundedColumn{
 			{
 				Name:  "a",
 				Value: 1,
@@ -44,7 +44,7 @@ func TestCreate(t *testing.T) {
 		},
 		StartTs:  1234,
 		CommitTs: 5678,
-	}
+	}).Unbound()
 
 	msg := NewMsg(config.ProtocolOpen, []byte("key1"), []byte("value1"), rowEvent.CommitTs, model.MessageTypeRow, &rowEvent.Table.Schema, &rowEvent.Table.Table)
 

@@ -16,8 +16,6 @@ package open
 import (
 	"bytes"
 	"encoding/json"
-	"sort"
-	"strings"
 
 	timodel "github.com/pingcap/tidb/parser/model"
 	"github.com/pingcap/tiflow/cdc/model"
@@ -91,10 +89,10 @@ func rowChangeToMsg(e *model.RowChangedEvent) (*internal.MessageKey, *messageRow
 	}
 	value := &messageRow{}
 	if e.IsDelete() {
-		value.Delete = rowChangeColumns2CodecColumns(e.PreColumns)
+		value.Delete = rowChangeColumns2CodecColumns(e.PreColumns, e.PreColumnValues)
 	} else {
-		value.Update = rowChangeColumns2CodecColumns(e.Columns)
-		value.PreColumns = rowChangeColumns2CodecColumns(e.PreColumns)
+		value.Update = rowChangeColumns2CodecColumns(e.Columns, e.ColumnValues)
+		value.PreColumns = rowChangeColumns2CodecColumns(e.PreColumns, e.PreColumnValues)
 	}
 	return key, value
 }
@@ -115,22 +113,22 @@ func msgToRowChange(key *internal.MessageKey, value *messageRow) *model.RowChang
 	}
 
 	if len(value.Delete) != 0 {
-		e.PreColumns = codecColumns2RowChangeColumns(value.Delete)
+		e.PreColumns, e.PreColumnValues = codecColumns2RowChangeColumns(value.Delete)
 	} else {
-		e.Columns = codecColumns2RowChangeColumns(value.Update)
-		e.PreColumns = codecColumns2RowChangeColumns(value.PreColumns)
+		e.Columns, e.ColumnValues = codecColumns2RowChangeColumns(value.Update)
+		e.PreColumns, e.PreColumnValues = codecColumns2RowChangeColumns(value.PreColumns)
 	}
 	return e
 }
 
-func rowChangeColumns2CodecColumns(cols []*model.Column) map[string]internal.Column {
+func rowChangeColumns2CodecColumns(cols []*model.Column, colvs []model.ColumnValue) map[string]internal.Column {
 	jsonCols := make(map[string]internal.Column, len(cols))
-	for _, col := range cols {
+	for i, col := range cols {
 		if col == nil {
 			continue
 		}
 		c := internal.Column{}
-		c.FromRowChangeColumn(col)
+		c.FromRowChangeColumn(col, colvs[i])
 		jsonCols[col.Name] = c
 	}
 	if len(jsonCols) == 0 {
@@ -139,19 +137,19 @@ func rowChangeColumns2CodecColumns(cols []*model.Column) map[string]internal.Col
 	return jsonCols
 }
 
-func codecColumns2RowChangeColumns(cols map[string]internal.Column) []*model.Column {
-	sinkCols := make([]*model.Column, 0, len(cols))
+func codecColumns2RowChangeColumns(cols map[string]internal.Column) ([]*model.Column, []model.ColumnValue) {
+    if len(cols) == 0 {
+        return nil, nil
+    }
+    coldefs:= make([]*model.Column, 0, len(cols))
+    colvals:= make([]model.ColumnValue, 0, len(cols))
 	for name, col := range cols {
-		c := col.ToRowChangeColumn(name)
-		sinkCols = append(sinkCols, c)
+		c, cv := col.ToRowChangeColumn(name)
+        coldefs = append(coldefs, c)
+        colvals = append(colvals, cv)
 	}
-	if len(sinkCols) == 0 {
-		return nil
-	}
-	sort.Slice(sinkCols, func(i, j int) bool {
-		return strings.Compare(sinkCols[i].Name, sinkCols[j].Name) > 0
-	})
-	return sinkCols
+    model.SortColumnsByName(coldefs, colvals, true)
+	return coldefs, colvals
 }
 
 func ddlEventToMsg(e *model.DDLEvent) (*internal.MessageKey, *messageDDL) {

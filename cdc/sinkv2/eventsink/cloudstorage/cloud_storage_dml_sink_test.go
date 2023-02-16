@@ -76,16 +76,16 @@ func TestCloudStorageWriteEvents(t *testing.T) {
 			SinkState: &tableStatus,
 		}
 		for j := 0; j < batch; j++ {
-			row := &model.RowChangedEvent{
+			row := &model.BoundedRowChangedEvent{
 				CommitTs:  100,
 				Table:     &model.TableName{Schema: "test", Table: "table1"},
 				TableInfo: &model.TableInfo{TableName: model.TableName{Schema: "test", Table: "table1"}, Version: 33},
-				Columns: []*model.Column{
+				Columns: []*model.BoundedColumn{
 					{Name: "c1", Value: i*batch + j},
 					{Name: "c2", Value: "hello world"},
 				},
 			}
-			txn.Event.Rows = append(txn.Event.Rows, row)
+			txn.Event.Rows = append(txn.Event.Rows, row.Unbound())
 		}
 		txns = append(txns, txn)
 	}

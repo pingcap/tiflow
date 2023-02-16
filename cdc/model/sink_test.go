@@ -92,21 +92,18 @@ func TestRowChangedEventFuncs(t *testing.T) {
 		},
 		PreColumns: []*Column{
 			{
-				Name:  "a",
-				Value: 1,
-				Flag:  HandleKeyFlag | PrimaryKeyFlag,
+				Name: "a",
+				Flag: HandleKeyFlag | PrimaryKeyFlag,
 			}, {
-				Name:  "b",
-				Value: 2,
-				Flag:  0,
+				Name: "b",
+				Flag: 0,
 			},
 		},
 	}
 	expectedKeyCols := []*Column{
 		{
-			Name:  "a",
-			Value: 1,
-			Flag:  HandleKeyFlag | PrimaryKeyFlag,
+			Name: "a",
+			Flag: HandleKeyFlag | PrimaryKeyFlag,
 		},
 	}
 	require.True(t, deleteRow.IsDelete())
@@ -120,22 +117,19 @@ func TestRowChangedEventFuncs(t *testing.T) {
 		},
 		Columns: []*Column{
 			{
-				Name:  "a",
-				Value: 1,
-				Flag:  HandleKeyFlag,
+				Name: "a",
+				Flag: HandleKeyFlag,
 			}, {
-				Name:  "b",
-				Value: 2,
-				Flag:  0,
+				Name: "b",
+				Flag: 0,
 			},
 		},
 	}
 	expectedPrimaryKeyCols := []*Column{}
 	expectedHandleKeyCols := []*Column{
 		{
-			Name:  "a",
-			Value: 1,
-			Flag:  HandleKeyFlag,
+			Name: "a",
+			Flag: HandleKeyFlag,
 		},
 	}
 	require.False(t, insertRow.IsDelete())
@@ -149,13 +143,11 @@ func TestRowChangedEventFuncs(t *testing.T) {
 		},
 		Columns: []*Column{
 			{
-				Name:  "a",
-				Value: 1,
-				Flag:  0,
+				Name: "a",
+				Flag: 0,
 			}, {
-				Name:  "b",
-				Value: 2,
-				Flag:  0,
+				Name: "b",
+				Flag: 0,
 			},
 		},
 	}

@@ -15,9 +15,9 @@ package model
 
 import (
 	"fmt"
+	"sort"
 	"strconv"
 	"sync"
-	"unsafe"
 
 	"github.com/pingcap/log"
 	"github.com/pingcap/tidb/parser/model"
@@ -250,25 +250,33 @@ type RedoRowChangedEvent struct {
 
 // RowChangedEvent represents a row changed event
 type RowChangedEvent struct {
-	StartTs  uint64 `json:"start-ts" msg:"start-ts"`
-	CommitTs uint64 `json:"commit-ts" msg:"commit-ts"`
+	/*********** Immutable fields **********/
+	Table        *TableName `json:"table" msg:"table"`
+	Columns      []*Column  `json:"columns" msg:"columns"`
+	PreColumns   []*Column  `json:"pre-columns" msg:"pre-columns"`
+	IndexColumns [][]int    `json:"-" msg:"index-columns"`
 
-	RowID int64 `json:"row-id" msg:"-"` // Deprecated. It is empty when the RowID comes from clustered index table.
-
-	Table     *TableName         `json:"table" msg:"table"`
-	ColInfos  []rowcodec.ColInfo `json:"column-infos" msg:"-"`
 	TableInfo *TableInfo         `json:"-" msg:"-"`
+	ColInfos  []rowcodec.ColInfo `json:"column-infos" msg:"-"`
 
-	Columns      []*Column `json:"columns" msg:"columns"`
-	PreColumns   []*Column `json:"pre-columns" msg:"pre-columns"`
-	IndexColumns [][]int   `json:"-" msg:"index-columns"`
+	/*********** Mutable fields **********/
+	StartTs         uint64        `json:"start-ts" msg:"start-ts"`
+	CommitTs        uint64        `json:"commit-ts" msg:"commit-ts"`
+	RowID           int64         `json:"row-id" msg:"-"` // Deprecated. It is empty when the RowID comes from clustered index table.
+	ColumnValues    []ColumnValue `json:"column-values" msg:"column-values"`
+	PreColumnValues []ColumnValue `json:"pre-column-values" msg:"pre-column-values"`
 
 	// ApproximateDataSize is the approximate size of protobuf binary
-	// representation of this event.
+	// representation of this event, without any meta information.
 	ApproximateDataSize int64 `json:"-" msg:"-"`
+
+	// ApproximateMemSize is the approximate size of memory representation
+	// of this event, including all meta information.
+	ApproximateMemSize int `json:"-" msg:"-"`
 
 	// SplitTxn marks this RowChangedEvent as the first line of a new txn.
 	SplitTxn bool `json:"-" msg:"-"`
+
 	// ReplicatingTs is ts when a table starts replicating events to downstream.
 	ReplicatingTs Ts `json:"-" msg:"-"`
 }
@@ -356,26 +364,31 @@ func (r *RowChangedEvent) HandleKeyColumns() []*Column {
 }
 
 // HandleKeyColInfos returns the column(s) and colInfo(s) corresponding to the handle key(s)
-func (r *RowChangedEvent) HandleKeyColInfos() ([]*Column, []rowcodec.ColInfo) {
+func (r *RowChangedEvent) HandleKeyColInfos() ([]*Column, []ColumnValue, []rowcodec.ColInfo) {
 	pkeyCols := make([]*Column, 0)
+	pkeyColVals := make([]ColumnValue, 0)
 	pkeyColInfos := make([]rowcodec.ColInfo, 0)
 
 	var cols []*Column
+	var colvals []ColumnValue
 	if r.IsDelete() {
 		cols = r.PreColumns
+		colvals = r.PreColumnValues
 	} else {
 		cols = r.Columns
+		colvals = r.ColumnValues
 	}
 
 	for i, col := range cols {
 		if col != nil && col.Flag.IsHandleKey() {
 			pkeyCols = append(pkeyCols, col)
+			pkeyColVals = append(pkeyColVals, colvals[i])
 			pkeyColInfos = append(pkeyColInfos, r.ColInfos[i])
 		}
 	}
 
 	// It is okay not to have handle keys, so the empty array is an acceptable result
-	return pkeyCols, pkeyColInfos
+	return pkeyCols, pkeyColVals, pkeyColInfos
 }
 
 // WithHandlePrimaryFlag set `HandleKeyFlag` and `PrimaryKeyFlag`
@@ -396,44 +409,21 @@ func (r *RowChangedEvent) WithHandlePrimaryFlag(colNames map[string]struct{}) {
 
 // ApproximateBytes returns approximate bytes in memory consumed by the event.
 func (r *RowChangedEvent) ApproximateBytes() int {
-	const sizeOfRowEvent = int(unsafe.Sizeof(*r))
-	const sizeOfTable = int(unsafe.Sizeof(*r.Table))
-	const sizeOfIndexes = int(unsafe.Sizeof(r.IndexColumns[0]))
-	const sizeOfInt = int(unsafe.Sizeof(int(0)))
-
-	// Size of table name
-	size := len(r.Table.Schema) + len(r.Table.Table) + sizeOfTable
-	// Size of cols
-	for i := range r.Columns {
-		size += r.Columns[i].ApproximateBytes
-	}
-	// Size of pre cols
-	for i := range r.PreColumns {
-		if r.PreColumns[i] != nil {
-			size += r.PreColumns[i].ApproximateBytes
-		}
-	}
-	// Size of index columns
-	for i := range r.IndexColumns {
-		size += len(r.IndexColumns[i]) * sizeOfInt
-		size += sizeOfIndexes
-	}
-	// Size of an empty row event
-	size += sizeOfRowEvent
-	return size
+	return r.ApproximateMemSize
 }
 
-// Column represents a column value in row changed event
+// Column represents a column definition in row changed event
 type Column struct {
 	Name    string         `json:"name" msg:"name"`
 	Type    byte           `json:"type" msg:"type"`
 	Charset string         `json:"charset" msg:"charset"`
 	Flag    ColumnFlagType `json:"flag" msg:"-"`
-	Value   interface{}    `json:"value" msg:"-"`
 	Default interface{}    `json:"default" msg:"-"`
+}
 
-	// ApproximateBytes is approximate bytes consumed by the column.
-	ApproximateBytes int `json:"-"`
+// ColumnValue represents a column value in row changed event
+type ColumnValue struct {
+	Value interface{} `json:"value" msg:"value"`
 }
 
 // RedoColumn stores Column change
@@ -693,4 +683,121 @@ func (t *SingleTableTxn) Append(row *RowChangedEvent) {
 // ToWaitFlush indicates whether to wait flushing after the txn is processed or not.
 func (t *SingleTableTxn) ToWaitFlush() bool {
 	return t.FinishWg != nil
+}
+
+// BoundedColumn is a combination of Column and ColumnValue. Generally used in tests.
+//
+//msgp:ignore BoundedColumn
+type BoundedColumn struct {
+	Name    string
+	Type    byte
+	Charset string
+	Flag    ColumnFlagType
+	Default interface{}
+	Value   interface{}
+}
+
+// BoundedRowChangedEvent is like RowChangedEvent, but carries BoundedColumn instead of Column.
+//
+//msgp:ignore BoundedRowChangedEvent
+type BoundedRowChangedEvent struct {
+	Table               *TableName
+	Columns             []*BoundedColumn
+	PreColumns          []*BoundedColumn
+	IndexColumns        [][]int
+	TableInfo           *TableInfo
+	ColInfos            []rowcodec.ColInfo
+	StartTs             uint64
+	CommitTs            uint64
+	RowID               int64
+	ApproximateDataSize int64
+	ApproximateMemSize  int
+	SplitTxn            bool
+	ReplicatingTs       Ts
+}
+
+// Unbound converts BoundedColumn to Column.
+func (b *BoundedColumn) Unbound() *Column {
+	return &Column{
+		Name:    b.Name,
+		Type:    b.Type,
+		Charset: b.Charset,
+		Flag:    b.Flag,
+		Default: b.Default,
+	}
+}
+
+// UnboundColumns converts BoundedColumns to Columns and ColumnValues.
+func UnboundColumns(cols []*BoundedColumn) ([]*Column, []ColumnValue) {
+	if len(cols) == 0 {
+		return nil, nil
+	}
+	x := make([]*Column, len(cols))
+	y := make([]ColumnValue, len(cols))
+	for i, c := range cols {
+		if c != nil {
+			x[i] = c.Unbound()
+			y[i].Value = c.Value
+		}
+	}
+	return x, y
+}
+
+// Unbound converts BoundedRowChangedEvent to RowChangedEvent.
+func (b *BoundedRowChangedEvent) Unbound() *RowChangedEvent {
+	x := &RowChangedEvent{
+		Table:               b.Table,
+		IndexColumns:        b.IndexColumns,
+		TableInfo:           b.TableInfo,
+		ColInfos:            b.ColInfos,
+		StartTs:             b.StartTs,
+		CommitTs:            b.CommitTs,
+		RowID:               b.RowID,
+		ApproximateDataSize: b.ApproximateDataSize,
+		ApproximateMemSize:  b.ApproximateMemSize,
+		SplitTxn:            b.SplitTxn,
+		ReplicatingTs:       b.ReplicatingTs,
+	}
+	x.Columns, x.ColumnValues = UnboundColumns(b.Columns)
+	x.PreColumns, x.PreColumnValues = UnboundColumns(b.PreColumns)
+	return x
+}
+
+// UnboundRowChangedEvents converts BoundedRowChangedEvents to RowChangedEvents.
+func UnboundRowChangedEvents(rows []*BoundedRowChangedEvent) []*RowChangedEvent {
+	x := make([]*RowChangedEvent, len(rows))
+	for i, r := range rows {
+		if r != nil {
+			x[i] = r.Unbound()
+		}
+	}
+	return x
+}
+
+// SortColumnsByName sorts the given Columns and associated ColumnValues by name.
+func SortColumnsByName(cols []*Column, colvals []ColumnValue, reverse bool) {
+	if len(cols) == 0 {
+		return
+	}
+	bcols := make([]*BoundedColumn, 0, len(cols))
+	for i, col := range cols {
+		bcols = append(bcols, &BoundedColumn{
+			Name:    col.Name,
+			Type:    col.Type,
+			Charset: col.Charset,
+			Flag:    col.Flag,
+			Default: col.Default,
+			Value:   colvals[i].Value,
+		})
+	}
+	sort.Slice(bcols, func(i, j int) bool {
+		if reverse {
+			return bcols[i].Name > bcols[j].Name
+		}
+		return bcols[i].Name < bcols[j].Name
+	})
+	for i := range bcols {
+		cols[i] = bcols[i].Unbound()
+		colvals[i].Value = bcols[i].Value
+	}
 }

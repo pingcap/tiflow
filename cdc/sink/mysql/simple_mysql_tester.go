@@ -129,10 +129,10 @@ func (s *simpleMySQLSink) executeRowChangedEvents(ctx context.Context, rows ...*
 						return errors.Trace(err)
 					}
 				}
-				sql, args = prepareReplace(row.Table.QuoteString(), row.Columns, true, false /* translateToInsert */)
+				sql, args = prepareReplace(row.Table.QuoteString(), row.Columns, row.ColumnValues, true, false /* translateToInsert */)
 			} else if len(row.PreColumns) == 0 {
 				// insert
-				sql, args = prepareReplace(row.Table.QuoteString(), row.Columns, true, false /* translateToInsert */)
+				sql, args = prepareReplace(row.Table.QuoteString(), row.Columns, row.ColumnValues, true, false /* translateToInsert */)
 			} else if len(row.Columns) == 0 {
 				// delete
 				if s.enableCheckOldValue {
@@ -141,7 +141,7 @@ func (s *simpleMySQLSink) executeRowChangedEvents(ctx context.Context, rows ...*
 						return errors.Trace(err)
 					}
 				}
-				sql, args = prepareDelete(row.Table.QuoteString(), row.PreColumns, true)
+				sql, args = prepareDelete(row.Table.QuoteString(), row.PreColumns, row.PreColumnValues, true)
 			}
 			_, err := s.db.ExecContext(ctx, sql, args...)
 			if err != nil {
@@ -151,9 +151,9 @@ func (s *simpleMySQLSink) executeRowChangedEvents(ctx context.Context, rows ...*
 	} else {
 		for _, row := range rows {
 			if row.IsDelete() {
-				sql, args = prepareDelete(row.Table.QuoteString(), row.PreColumns, true)
+				sql, args = prepareDelete(row.Table.QuoteString(), row.PreColumns, row.PreColumnValues, true)
 			} else {
-				sql, args = prepareReplace(row.Table.QuoteString(), row.Columns, true, false)
+				sql, args = prepareReplace(row.Table.QuoteString(), row.Columns, row.PreColumnValues, true, false)
 			}
 			_, err := s.db.ExecContext(ctx, sql, args...)
 			if err != nil {
@@ -221,11 +221,11 @@ func (s *simpleMySQLSink) RemoveTable(ctx context.Context, tableID model.TableID
 	return nil
 }
 
-func prepareCheckSQL(quoteTable string, cols []*model.Column) (string, []interface{}) {
+func prepareCheckSQL(quoteTable string, cols []*model.Column, colvals []model.ColumnValue) (string, []interface{}) {
 	var builder strings.Builder
 	builder.WriteString("SELECT count(1) FROM " + quoteTable + " WHERE ")
 
-	colNames, wargs := whereSlice(cols, true)
+	colNames, wargs := whereSlice(cols, colvals, true)
 	if len(wargs) == 0 {
 		return "", nil
 	}
@@ -247,7 +247,7 @@ func prepareCheckSQL(quoteTable string, cols []*model.Column) (string, []interfa
 }
 
 func (s *simpleMySQLSink) checkOldValue(ctx context.Context, row *model.RowChangedEvent) error {
-	sql, args := prepareCheckSQL(row.Table.QuoteString(), row.PreColumns)
+	sql, args := prepareCheckSQL(row.Table.QuoteString(), row.PreColumns, row.PreColumnValues)
 	result, err := s.db.QueryContext(ctx, sql, args...)
 	if err != nil {
 		return errors.Trace(err)

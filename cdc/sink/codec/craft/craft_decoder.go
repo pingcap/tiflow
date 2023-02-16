@@ -67,12 +67,12 @@ func (b *batchDecoder) NextRowChangedEvent() (*model.RowChangedEvent, error) {
 	}
 	ev := &model.RowChangedEvent{}
 	if oldValue != nil {
-		if ev.PreColumns, err = oldValue.ToModel(); err != nil {
+		if ev.PreColumns, ev.PreColumnValues, err = oldValue.ToModel(); err != nil {
 			return nil, errors.Trace(err)
 		}
 	}
 	if newValue != nil {
-		if ev.Columns, err = newValue.ToModel(); err != nil {
+		if ev.Columns, ev.ColumnValues, err = newValue.ToModel(); err != nil {
 			return nil, errors.Trace(err)
 		}
 	}

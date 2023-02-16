@@ -190,7 +190,7 @@ func TestRemoveTable(t *testing.T) {
 
 	// Check all the events are sent to sink and record the memory usage.
 	require.Eventually(t, func() bool {
-		return manager.sinkMemQuota.GetUsedBytes() == 872
+		return manager.sinkMemQuota.GetUsedBytes() == 400
 	}, 5*time.Second, 10*time.Millisecond)
 
 	manager.AsyncStopTable(span)

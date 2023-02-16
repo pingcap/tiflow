@@ -67,58 +67,61 @@ func rowChangeToMaxwellMsg(e *model.RowChangedEvent) (*internal.MessageKey, *max
 	value.Ts = physicalTime.Unix()
 	if e.IsDelete() {
 		value.Type = "delete"
-		for _, v := range e.PreColumns {
+		for i, v := range e.PreColumns {
+			val := e.PreColumnValues[i].Value
 			switch v.Type {
 			case mysql.TypeString, mysql.TypeVarString, mysql.TypeVarchar, mysql.TypeTinyBlob, mysql.TypeMediumBlob, mysql.TypeLongBlob, mysql.TypeBlob:
-				if v.Value == nil {
+				if val == nil {
 					value.Old[v.Name] = nil
 				} else if v.Flag.IsBinary() {
-					value.Old[v.Name] = v.Value
+					value.Old[v.Name] = val
 				} else {
-					value.Old[v.Name] = string(v.Value.([]byte))
+					value.Old[v.Name] = string(val.([]byte))
 				}
 			default:
-				value.Old[v.Name] = v.Value
+				value.Old[v.Name] = val
 			}
 		}
 	} else {
-		for _, v := range e.Columns {
+		for i, v := range e.Columns {
+			val := e.ColumnValues[i].Value
 			switch v.Type {
 			case mysql.TypeString, mysql.TypeVarString, mysql.TypeVarchar, mysql.TypeTinyBlob, mysql.TypeMediumBlob, mysql.TypeLongBlob, mysql.TypeBlob:
-				if v.Value == nil {
+				if val == nil {
 					value.Data[v.Name] = nil
 				} else if v.Flag.IsBinary() {
-					value.Data[v.Name] = v.Value
+					value.Data[v.Name] = val
 				} else {
-					value.Data[v.Name] = string(v.Value.([]byte))
+					value.Data[v.Name] = string(val.([]byte))
 				}
 			default:
-				value.Data[v.Name] = v.Value
+				value.Data[v.Name] = val
 			}
 		}
 		if e.PreColumns == nil {
 			value.Type = "insert"
 		} else {
 			value.Type = "update"
-			for _, v := range e.PreColumns {
+			for i, v := range e.PreColumns {
+				val := e.PreColumnValues[i].Value
 				switch v.Type {
 				case mysql.TypeString, mysql.TypeVarString, mysql.TypeVarchar, mysql.TypeTinyBlob, mysql.TypeMediumBlob, mysql.TypeLongBlob, mysql.TypeBlob:
-					if v.Value == nil {
+					if val == nil {
 						if value.Data[v.Name] != nil {
 							value.Old[v.Name] = nil
 						}
 					} else if v.Flag.IsBinary() {
-						if value.Data[v.Name] != v.Value {
-							value.Old[v.Name] = v.Value
+						if value.Data[v.Name] != val {
+							value.Old[v.Name] = val
 						}
 					} else {
-						if value.Data[v.Name] != string(v.Value.([]byte)) {
-							value.Old[v.Name] = string(v.Value.([]byte))
+						if value.Data[v.Name] != string(val.([]byte)) {
+							value.Old[v.Name] = string(val.([]byte))
 						}
 					}
 				default:
-					if value.Data[v.Name] != v.Value {
-						value.Old[v.Name] = v.Value
+					if value.Data[v.Name] != val {
+						value.Old[v.Name] = val
 					}
 				}
 			}

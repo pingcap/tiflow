@@ -44,17 +44,17 @@ func TestMaxwellFormatCol(t *testing.T) {
 func TestEncodeBinaryToMaxwell(t *testing.T) {
 	t.Parallel()
 
-	column := &model.Column{
+	column := &model.BoundedColumn{
 		Name: "varbinary", Type: mysql.TypeVarchar, Value: []uint8("测试varbinary"),
 		Flag: model.BinaryFlag,
 	}
 
-	e := &model.RowChangedEvent{
+	e := &model.BoundedRowChangedEvent{
 		Table:   &model.TableName{Schema: "a", Table: "b"},
-		Columns: []*model.Column{column},
+		Columns: []*model.BoundedColumn{column},
 	}
 
-	key, msg := rowChangeToMaxwellMsg(e)
+	key, msg := rowChangeToMaxwellMsg(e.Unbound())
 	require.NotNil(t, key)
 	require.NotNil(t, msg)
 }

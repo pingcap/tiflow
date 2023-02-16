@@ -309,6 +309,7 @@ func convertRowChangedEvents(
 			} else {
 				// If the handle key columns are not updated, PreColumns is directly ignored.
 				e.Row.PreColumns = nil
+				e.Row.PreColumnValues = nil
 				rowChangedEvents = append(rowChangedEvents, e.Row)
 			}
 		} else {
@@ -332,8 +333,8 @@ func shouldSplitUpdateEvent(updateEvent *model.PolymorphicEvent) bool {
 		col := updateEvent.Row.Columns[i]
 		preCol := updateEvent.Row.PreColumns[i]
 		if col != nil && col.Flag.IsHandleKey() && preCol != nil && preCol.Flag.IsHandleKey() {
-			colValueString := model.ColumnValueString(col.Value)
-			preColValueString := model.ColumnValueString(preCol.Value)
+			colValueString := model.ColumnValueString(updateEvent.Row.ColumnValues[i].Value)
+			preColValueString := model.ColumnValueString(updateEvent.Row.PreColumnValues[i].Value)
 			// If one handle key columns is updated, we need to split the event row.
 			if colValueString != preColValueString {
 				return true
@@ -363,11 +364,13 @@ func splitUpdateEvent(
 	deleteEvent.RawKV = &deleteEventRowKV
 
 	deleteEvent.Row.Columns = nil
+	deleteEvent.Row.ColumnValues = nil
 	for i := range deleteEvent.Row.PreColumns {
 		// NOTICE: Only the handle key pre column is retained in the delete event.
 		if deleteEvent.Row.PreColumns[i] != nil &&
 			!deleteEvent.Row.PreColumns[i].Flag.IsHandleKey() {
 			deleteEvent.Row.PreColumns[i] = nil
+			deleteEvent.Row.PreColumnValues[i].Value = nil
 		}
 	}
 
@@ -378,6 +381,7 @@ func splitUpdateEvent(
 	insertEvent.RawKV = &insertEventRowKV
 	// NOTICE: clean up pre cols for insert event.
 	insertEvent.Row.PreColumns = nil
+	insertEvent.Row.PreColumnValues = nil
 
 	return &deleteEvent, &insertEvent, nil
 }

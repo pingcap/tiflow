@@ -292,7 +292,6 @@ func testMounterDisableOldValue(t *testing.T, tc struct {
 	}
 
 	for _, params := range tc.values {
-
 		insertSQL := prepareInsertSQL(t, tableInfo, len(params))
 		tk.MustExec(insertSQL, params...)
 	}
@@ -327,12 +326,12 @@ func testMounterDisableOldValue(t *testing.T, tc struct {
 			t.Log("ApproximateBytes", tc.tableName, rows-1, row.ApproximateBytes())
 			// TODO: test column flag, column type and index columns
 			if len(row.Columns) != 0 {
-				checkSQL, params := prepareCheckSQL(t, tc.tableName, row.Columns)
+				checkSQL, params := prepareCheckSQL(t, tc.tableName, row.Columns, row.ColumnValues)
 				result := tk.MustQuery(checkSQL, params...)
 				result.Check([][]interface{}{{"1"}})
 			}
 			if len(row.PreColumns) != 0 {
-				checkSQL, params := prepareCheckSQL(t, tc.tableName, row.PreColumns)
+				checkSQL, params := prepareCheckSQL(t, tc.tableName, row.PreColumns, row.PreColumnValues)
 				result := tk.MustQuery(checkSQL, params...)
 				result.Check([][]interface{}{{"1"}})
 			}
@@ -402,7 +401,10 @@ func prepareInsertSQL(t *testing.T, tableInfo *model.TableInfo, columnLens int) 
 	return sb.String()
 }
 
-func prepareCheckSQL(t *testing.T, tableName string, cols []*model.Column) (string, []interface{}) {
+func prepareCheckSQL(
+	t *testing.T, tableName string,
+	cols []*model.Column, colvals []model.ColumnValue,
+) (string, []interface{}) {
 	var sb strings.Builder
 	_, err := sb.WriteString("SELECT count(1) FROM " + tableName + " WHERE ")
 	require.Nil(t, err)
@@ -415,16 +417,16 @@ func prepareCheckSQL(t *testing.T, tableName string, cols []*model.Column) (stri
 			_, err = sb.WriteString(" AND ")
 			require.Nil(t, err)
 		}
-		if col.Value == nil {
+		if colvals[i].Value == nil {
 			_, err = sb.WriteString(col.Name + " IS NULL")
 			require.Nil(t, err)
 			continue
 		}
 		// convert types for tk.MustQuery
-		if bytes, ok := col.Value.([]byte); ok {
-			col.Value = string(bytes)
+		if bytes, ok := colvals[i].Value.([]byte); ok {
+			colvals[i].Value = string(bytes)
 		}
-		params = append(params, col.Value)
+		params = append(params, colvals[i].Value)
 		if col.Type == mysql.TypeJSON {
 			_, err = sb.WriteString(col.Name + " = CAST(? AS JSON)")
 		} else {
@@ -1189,8 +1191,10 @@ func TestBuildTableInfo(t *testing.T) {
 		originTI, err := ddl.BuildTableInfoFromAST(stmt.(*ast.CreateTableStmt))
 		require.NoError(t, err)
 		cdcTableInfo := model.WrapTableInfo(0, "test", 0, originTI)
-		cols, _, err := datum2Column(cdcTableInfo, map[int64]types.Datum{}, true)
+		tableMeta := newTableMetaValue(0, 0, cdcTableInfo)
+		err = tableMeta.datum2Column(false, make(map[int64]types.Datum), true)
 		require.NoError(t, err)
+		cols := tableMeta.buffer.Columns
 		recoveredTI := model.BuildTiDBTableInfo(cols, cdcTableInfo.IndexColumnsOffset)
 		handle := sqlmodel.GetWhereHandle(recoveredTI, recoveredTI)
 		require.NotNil(t, handle.UniqueNotNullIdx)
@@ -1245,13 +1249,13 @@ func TestNewDMRowChange(t *testing.T) {
 		cdcTableInfo := model.WrapTableInfo(0, "test", 0, originTI)
 		cols := []*model.Column{
 			{
-				Name: "id", Type: 3, Charset: "binary", Flag: 65, Value: 1, Default: nil,
+				Name: "id", Type: 3, Charset: "binary", Flag: 65, Default: nil,
 			},
 			{
-				Name: "a1", Type: 3, Charset: "binary", Flag: 51, Value: 1, Default: nil,
+				Name: "a1", Type: 3, Charset: "binary", Flag: 51, Default: nil,
 			},
 			{
-				Name: "a3", Type: 3, Charset: "binary", Flag: 51, Value: 2, Default: nil,
+				Name: "a3", Type: 3, Charset: "binary", Flag: 51, Default: nil,
 			},
 		}
 		recoveredTI := model.BuildTiDBTableInfo(cols, cdcTableInfo.IndexColumnsOffset)
