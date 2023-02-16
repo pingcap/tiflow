@@ -450,7 +450,7 @@ func (c *consumer) emitDMLEvents(ctx context.Context, tableID int64, pathKey dml
 			}
 
 			if _, ok := c.tableSinkMap[tableID]; !ok {
-				c.tableSinkMap[tableID] = c.sinkFactory.CreateTableSink(
+				c.tableSinkMap[tableID] = c.sinkFactory.CreateTableSinkForConsumer(
 					model.DefaultChangeFeedID(defaultChangefeedName),
 					spanz.TableIDToComparableSpan(tableID),
 					prometheus.NewCounter(prometheus.CounterOpts{}))
@@ -485,6 +485,8 @@ func (c *consumer) waitTableFlushComplete(ctx context.Context, tableID model.Tab
 		select {
 		case <-ctx.Done():
 			return ctx.Err()
+		case err := <-c.errCh:
+			return err
 		default:
 		}
 
@@ -558,12 +560,10 @@ func (c *consumer) run(ctx context.Context) error {
 				if err != nil {
 					return errors.Trace(err)
 				}
-			}
-		}
-
-		for tableID := range c.tableSinkMap {
-			if err = c.waitTableFlushComplete(ctx, tableID); err != nil {
-				return err
+				err = c.waitTableFlushComplete(ctx, tableID)
+				if err != nil {
+					return errors.Trace(err)
+				}
 			}
 		}
 	}
@@ -610,7 +610,7 @@ func main() {
 	deferFunc := func() int {
 		stop()
 		if consumer != nil {
-			_ = consumer.sinkFactory.Close()
+			consumer.sinkFactory.Close()
 		}
 		if err != nil && err != context.Canceled {
 			return 1
@@ -624,7 +624,7 @@ func main() {
 		goto EXIT
 	}
 
-	if err := consumer.run(ctx); err != nil {
+	if err = consumer.run(ctx); err != nil {
 		log.Error("error occurred while running consumer", zap.Error(err))
 	}
 
