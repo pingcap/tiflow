@@ -131,7 +131,7 @@ func TestDMLWorkerRun(t *testing.T) {
 	ctx, cancel := context.WithCancel(context.Background())
 	parentDir := t.TempDir()
 	d := testDMLWorker(ctx, t, parentDir)
-	fragCh := chann.New[eventFragment]()
+	fragCh := chann.NewAutoDrainChann[eventFragment]()
 	table1Dir := path.Join(parentDir, "test/table1/99")
 	// assume table1 and table2 are dispatched to the same DML worker
 	table1 := model.TableName{
@@ -208,8 +208,5 @@ func TestDMLWorkerRun(t *testing.T) {
 	cancel()
 	d.close()
 	wg.Wait()
-	fragCh.Close()
-	for range fragCh.Out() {
-		// drain the fragCh
-	}
+	fragCh.CloseAndDrain()
 }
