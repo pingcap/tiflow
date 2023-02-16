@@ -172,6 +172,10 @@ func (f *factory) SyncProducer() (pkafka.SyncProducer, error) {
 	return &syncWriter{w: w}, nil
 }
 
+const (
+	defaultWait4ConfirmMessagesCount = 256
+)
+
 // AsyncProducer creates an async producer to writer message to kafka
 func (f *factory) AsyncProducer(closedChan chan struct{},
 	failpointCh chan error,
@@ -185,6 +189,8 @@ func (f *factory) AsyncProducer(closedChan chan struct{},
 		closedChan:   closedChan,
 		changefeedID: f.changefeedID,
 		failpointCh:  failpointCh,
+		successes:    make(chan []kafka.Message, defaultWait4ConfirmMessagesCount),
+		errorsChan:   make(chan error, 1),
 	}
 	w.Completion = aw.callBackRun
 	return aw, nil
@@ -302,7 +308,7 @@ func (a *asyncWriter) AsyncSend(ctx context.Context, topic string,
 		return nil
 	default:
 	}
-	return a.w.WriteMessages(context.Background(), kafka.Message{
+	return a.w.WriteMessages(ctx, kafka.Message{
 		Topic:     topic,
 		Partition: int(partition),
 		Key:       key,
