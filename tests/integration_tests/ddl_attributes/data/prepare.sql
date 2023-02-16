@@ -30,7 +30,7 @@ CREATE TABLE finish_mark(a INT PRIMARY KEY);
 DROP TABLE IF EXISTS ttl_t1, ttl_t2, ttl_t3, ttl_t4;
 CREATE TABLE ttl_t1(t datetime) TTL=`t` + INTERVAL 1 DAY;
 CREATE TABLE ttl_t2(t datetime);
-CREATE TABLE ttl_t3(t datetime) TTL=`t` + TTL_ENABLE='OFF';
+CREATE TABLE ttl_t3(t datetime) TTL=`t` + INTERVAL 1 DAY TTL_ENABLE='OFF';
 CREATE TABLE ttl_t4(t datetime) TTL=`t` + INTERVAL 1 DAY;
 ALTER TABLE ttl_t2 TTL=`t` + INTERVAL 1 DAY;
 ALTER TABLE ttl_t3 TTL_ENABLE='ON';
