@@ -1634,18 +1634,6 @@ func (z *RowChangedEvent) DecodeMsg(dc *msgp.Reader) (err error) {
 			return
 		}
 		switch msgp.UnsafeString(field) {
-		case "start-ts":
-			z.StartTs, err = dc.ReadUint64()
-			if err != nil {
-				err = msgp.WrapError(err, "StartTs")
-				return
-			}
-		case "commit-ts":
-			z.CommitTs, err = dc.ReadUint64()
-			if err != nil {
-				err = msgp.WrapError(err, "CommitTs")
-				return
-			}
 		case "table":
 			if dc.IsNil() {
 				err = dc.ReadNil()
@@ -1828,6 +1816,18 @@ func (z *RowChangedEvent) DecodeMsg(dc *msgp.Reader) (err error) {
 					}
 				}
 			}
+		case "start-ts":
+			z.StartTs, err = dc.ReadUint64()
+			if err != nil {
+				err = msgp.WrapError(err, "StartTs")
+				return
+			}
+		case "commit-ts":
+			z.CommitTs, err = dc.ReadUint64()
+			if err != nil {
+				err = msgp.WrapError(err, "CommitTs")
+				return
+			}
 		case "ColumnValues":
 			var zb0008 uint32
 			zb0008, err = dc.ReadArrayHeader()
@@ -1926,28 +1926,8 @@ func (z *RowChangedEvent) DecodeMsg(dc *msgp.Reader) (err error) {
 // EncodeMsg implements msgp.Encodable
 func (z *RowChangedEvent) EncodeMsg(en *msgp.Writer) (err error) {
 	// map header, size 8
-	// write "start-ts"
-	err = en.Append(0x88, 0xa8, 0x73, 0x74, 0x61, 0x72, 0x74, 0x2d, 0x74, 0x73)
-	if err != nil {
-		return
-	}
-	err = en.WriteUint64(z.StartTs)
-	if err != nil {
-		err = msgp.WrapError(err, "StartTs")
-		return
-	}
-	// write "commit-ts"
-	err = en.Append(0xa9, 0x63, 0x6f, 0x6d, 0x6d, 0x69, 0x74, 0x2d, 0x74, 0x73)
-	if err != nil {
-		return
-	}
-	err = en.WriteUint64(z.CommitTs)
-	if err != nil {
-		err = msgp.WrapError(err, "CommitTs")
-		return
-	}
 	// write "table"
-	err = en.Append(0xa5, 0x74, 0x61, 0x62, 0x6c, 0x65)
+	err = en.Append(0x88, 0xa5, 0x74, 0x61, 0x62, 0x6c, 0x65)
 	if err != nil {
 		return
 	}
@@ -2087,6 +2067,26 @@ func (z *RowChangedEvent) EncodeMsg(en *msgp.Writer) (err error) {
 			}
 		}
 	}
+	// write "start-ts"
+	err = en.Append(0xa8, 0x73, 0x74, 0x61, 0x72, 0x74, 0x2d, 0x74, 0x73)
+	if err != nil {
+		return
+	}
+	err = en.WriteUint64(z.StartTs)
+	if err != nil {
+		err = msgp.WrapError(err, "StartTs")
+		return
+	}
+	// write "commit-ts"
+	err = en.Append(0xa9, 0x63, 0x6f, 0x6d, 0x6d, 0x69, 0x74, 0x2d, 0x74, 0x73)
+	if err != nil {
+		return
+	}
+	err = en.WriteUint64(z.CommitTs)
+	if err != nil {
+		err = msgp.WrapError(err, "CommitTs")
+		return
+	}
 	// write "ColumnValues"
 	err = en.Append(0xac, 0x43, 0x6f, 0x6c, 0x75, 0x6d, 0x6e, 0x56, 0x61, 0x6c, 0x75, 0x65, 0x73)
 	if err != nil {
@@ -2140,14 +2140,8 @@ func (z *RowChangedEvent) EncodeMsg(en *msgp.Writer) (err error) {
 func (z *RowChangedEvent) MarshalMsg(b []byte) (o []byte, err error) {
 	o = msgp.Require(b, z.Msgsize())
 	// map header, size 8
-	// string "start-ts"
-	o = append(o, 0x88, 0xa8, 0x73, 0x74, 0x61, 0x72, 0x74, 0x2d, 0x74, 0x73)
-	o = msgp.AppendUint64(o, z.StartTs)
-	// string "commit-ts"
-	o = append(o, 0xa9, 0x63, 0x6f, 0x6d, 0x6d, 0x69, 0x74, 0x2d, 0x74, 0x73)
-	o = msgp.AppendUint64(o, z.CommitTs)
 	// string "table"
-	o = append(o, 0xa5, 0x74, 0x61, 0x62, 0x6c, 0x65)
+	o = append(o, 0x88, 0xa5, 0x74, 0x61, 0x62, 0x6c, 0x65)
 	if z.Table == nil {
 		o = msgp.AppendNil(o)
 	} else {
@@ -2204,6 +2198,12 @@ func (z *RowChangedEvent) MarshalMsg(b []byte) (o []byte, err error) {
 			o = msgp.AppendInt(o, z.IndexColumns[za0003][za0004])
 		}
 	}
+	// string "start-ts"
+	o = append(o, 0xa8, 0x73, 0x74, 0x61, 0x72, 0x74, 0x2d, 0x74, 0x73)
+	o = msgp.AppendUint64(o, z.StartTs)
+	// string "commit-ts"
+	o = append(o, 0xa9, 0x63, 0x6f, 0x6d, 0x6d, 0x69, 0x74, 0x2d, 0x74, 0x73)
+	o = msgp.AppendUint64(o, z.CommitTs)
 	// string "ColumnValues"
 	o = append(o, 0xac, 0x43, 0x6f, 0x6c, 0x75, 0x6d, 0x6e, 0x56, 0x61, 0x6c, 0x75, 0x65, 0x73)
 	o = msgp.AppendArrayHeader(o, uint32(len(z.ColumnValues)))
@@ -2251,18 +2251,6 @@ func (z *RowChangedEvent) UnmarshalMsg(bts []byte) (o []byte, err error) {
 			return
 		}
 		switch msgp.UnsafeString(field) {
-		case "start-ts":
-			z.StartTs, bts, err = msgp.ReadUint64Bytes(bts)
-			if err != nil {
-				err = msgp.WrapError(err, "StartTs")
-				return
-			}
-		case "commit-ts":
-			z.CommitTs, bts, err = msgp.ReadUint64Bytes(bts)
-			if err != nil {
-				err = msgp.WrapError(err, "CommitTs")
-				return
-			}
 		case "table":
 			if msgp.IsNil(bts) {
 				bts, err = msgp.ReadNilBytes(bts)
@@ -2442,6 +2430,18 @@ func (z *RowChangedEvent) UnmarshalMsg(bts []byte) (o []byte, err error) {
 					}
 				}
 			}
+		case "start-ts":
+			z.StartTs, bts, err = msgp.ReadUint64Bytes(bts)
+			if err != nil {
+				err = msgp.WrapError(err, "StartTs")
+				return
+			}
+		case "commit-ts":
+			z.CommitTs, bts, err = msgp.ReadUint64Bytes(bts)
+			if err != nil {
+				err = msgp.WrapError(err, "CommitTs")
+				return
+			}
 		case "ColumnValues":
 			var zb0008 uint32
 			zb0008, bts, err = msgp.ReadArrayHeaderBytes(bts)
@@ -2540,7 +2540,7 @@ func (z *RowChangedEvent) UnmarshalMsg(bts []byte) (o []byte, err error) {
 
 // Msgsize returns an upper bound estimate of the number of bytes occupied by the serialized message
 func (z *RowChangedEvent) Msgsize() (s int) {
-	s = 1 + 9 + msgp.Uint64Size + 10 + msgp.Uint64Size + 6
+	s = 1 + 6
 	if z.Table == nil {
 		s += msgp.NilSize
 	} else {
@@ -2566,7 +2566,7 @@ func (z *RowChangedEvent) Msgsize() (s int) {
 	for za0003 := range z.IndexColumns {
 		s += msgp.ArrayHeaderSize + (len(z.IndexColumns[za0003]) * (msgp.IntSize))
 	}
-	s += 13 + msgp.ArrayHeaderSize
+	s += 9 + msgp.Uint64Size + 10 + msgp.Uint64Size + 13 + msgp.ArrayHeaderSize
 	for za0005 := range z.ColumnValues {
 		s += 1 + 6 + msgp.GuessSize(z.ColumnValues[za0005].Value)
 	}

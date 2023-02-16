@@ -14,7 +14,6 @@
 package canal
 
 import (
-	"sort"
 	"strings"
 
 	timodel "github.com/pingcap/tidb/parser/model"
@@ -191,17 +190,13 @@ func canalJSONMessage2RowChange(msg canalJSONMessageInterface) (*model.RowChange
 	return result, nil
 }
 
-type columnAndValue struct {
-	def *model.Column
-	val model.ColumnValue
-}
-
 func canalJSONColumnMap2RowChangeColumns(
 	cols map[string]interface{},
 	mysqlType map[string]string,
 	javaSQLType map[string]int32,
 ) ([]*model.Column, []model.ColumnValue, error) {
-	x := make([]columnAndValue, 0, len(cols))
+	coldefs := make([]*model.Column, 0, len(cols))
+	colvals := make([]model.ColumnValue, 0, len(cols))
 	for name, value := range cols {
 		javaType, ok := javaSQLType[name]
 		if !ok {
@@ -218,20 +213,13 @@ func canalJSONColumnMap2RowChangeColumns(
 		mysqlTypeStr = trimUnsignedFromMySQLType(mysqlTypeStr)
 		mysqlType := types.StrToType(mysqlTypeStr)
 		def, val := internal.NewColumn(value, mysqlType).ToCanalJSONFormatColumn(name, internal.JavaSQLType(javaType))
-		x = append(x, columnAndValue{def, val})
+		coldefs = append(coldefs, def)
+		colvals = append(colvals, val)
 	}
-	if len(x) == 0 {
+	if len(coldefs) == 0 {
 		return nil, nil, nil
 	}
-	sort.Slice(x, func(i, j int) bool {
-		return strings.Compare(x[i].def.Name, x[j].def.Name) > 0
-	})
-	coldefs := make([]*model.Column, 0, len(x))
-	colvals := make([]model.ColumnValue, 0, len(x))
-	for _, i := range x {
-		coldefs = append(coldefs, i.def)
-		colvals = append(colvals, i.val)
-	}
+	model.SortColumnsByName(coldefs, colvals, true)
 	return coldefs, colvals, nil
 }
 

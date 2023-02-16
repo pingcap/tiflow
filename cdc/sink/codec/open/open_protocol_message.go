@@ -16,8 +16,6 @@ package open
 import (
 	"bytes"
 	"encoding/json"
-	"sort"
-	"strings"
 
 	timodel "github.com/pingcap/tidb/parser/model"
 	"github.com/pingcap/tiflow/cdc/model"
@@ -140,24 +138,17 @@ func rowChangeColumns2CodecColumns(cols []*model.Column, colvs []model.ColumnVal
 }
 
 func codecColumns2RowChangeColumns(cols map[string]internal.Column) ([]*model.Column, []model.ColumnValue) {
-	sinkCols := make([]columnAndValue, 0, len(cols))
+    if len(cols) == 0 {
+        return nil, nil
+    }
+    coldefs:= make([]*model.Column, 0, len(cols))
+    colvals:= make([]model.ColumnValue, 0, len(cols))
 	for name, col := range cols {
 		c, cv := col.ToRowChangeColumn(name)
-		sinkCols = append(sinkCols, columnAndValue{ c, cv })
+        coldefs = append(coldefs, c)
+        colvals = append(colvals, cv)
 	}
-	if len(sinkCols) == 0 {
-		return nil, nil
-	}
-	sort.Slice(sinkCols, func(i, j int) bool {
-		return strings.Compare(sinkCols[i].c.Name, sinkCols[j].c.Name) > 0
-	})
-
-    coldefs:= make([]*model.Column, 0, len(sinkCols))
-    colvals:= make([]model.ColumnValue, 0, len(sinkCols))
-    for _, x := range sinkCols {
-        coldefs = append(coldefs, x.c)
-        colvals = append(colvals, x.cv)
-    }
+    model.SortColumnsByName(coldefs, colvals, true)
 	return coldefs, colvals
 }
 

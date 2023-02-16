@@ -14,7 +14,6 @@ package internal
 
 import (
 	"context"
-	"sort"
 	"testing"
 
 	"github.com/pingcap/tidb/parser/mysql"
@@ -185,28 +184,6 @@ var (
 	CodecResolvedTSCases = [][]uint64{{424316592563683329}, {424316594097225729, 424316594214141953, 424316594345213953}, {}}
 )
 
-type columnsArray []*model.Column
-
-func (a columnsArray) Len() int {
-	return len(a)
-}
-
-func (a columnsArray) Less(i, j int) bool {
-	return a[i].Name < a[j].Name
-}
-
-func (a columnsArray) Swap(i, j int) {
-	a[i], a[j] = a[j], a[i]
-}
-
-func sortColumnArrays(arrays ...[]*model.Column) {
-	for _, array := range arrays {
-		if array != nil {
-			sort.Sort(columnsArray(array))
-		}
-	}
-}
-
 // BatchTester is a tester for batch encoders.
 type BatchTester struct {
 	RowCases        [][]*model.RowChangedEvent
@@ -245,7 +222,10 @@ func (s *BatchTester) TestBatchCodec(
 			require.Equal(t, model.MessageTypeRow, tp)
 			row, err := decoder.NextRowChangedEvent()
 			require.Nil(t, err)
-			sortColumnArrays(row.Columns, row.PreColumns, cs[index].Columns, cs[index].PreColumns)
+			model.SortColumnsByName(row.Columns, row.ColumnValues, false)
+			model.SortColumnsByName(row.PreColumns, row.PreColumnValues, false)
+			model.SortColumnsByName(cs[index].Columns, cs[index].ColumnValues, false)
+			model.SortColumnsByName(cs[index].PreColumns, cs[index].PreColumnValues, false)
 			require.Equal(t, cs[index], row)
 			index++
 		}

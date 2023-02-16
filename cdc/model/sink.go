@@ -15,6 +15,7 @@ package model
 
 import (
 	"fmt"
+	"sort"
 	"strconv"
 	"sync"
 
@@ -685,6 +686,8 @@ func (t *SingleTableTxn) ToWaitFlush() bool {
 }
 
 // BoundedColumn is a combination of Column and ColumnValue. Generally used in tests.
+//
+//msgp:ignore BoundedColumn
 type BoundedColumn struct {
 	Name    string
 	Type    byte
@@ -695,6 +698,8 @@ type BoundedColumn struct {
 }
 
 // BoundedRowChangedEvent is like RowChangedEvent, but carries BoundedColumn instead of Column.
+//
+//msgp:ignore BoundedRowChangedEvent
 type BoundedRowChangedEvent struct {
 	Table               *TableName
 	Columns             []*BoundedColumn
@@ -711,6 +716,7 @@ type BoundedRowChangedEvent struct {
 	ReplicatingTs       Ts
 }
 
+// Unbound converts BoundedColumn to Column.
 func (b *BoundedColumn) Unbound() *Column {
 	return &Column{
 		Name:    b.Name,
@@ -721,6 +727,7 @@ func (b *BoundedColumn) Unbound() *Column {
 	}
 }
 
+// UnboundColumns converts BoundedColumns to Columns and ColumnValues.
 func UnboundColumns(cols []*BoundedColumn) ([]*Column, []ColumnValue) {
 	if len(cols) == 0 {
 		return nil, nil
@@ -736,6 +743,7 @@ func UnboundColumns(cols []*BoundedColumn) ([]*Column, []ColumnValue) {
 	return x, y
 }
 
+// Unbound converts BoundedRowChangedEvent to RowChangedEvent.
 func (b *BoundedRowChangedEvent) Unbound() *RowChangedEvent {
 	x := &RowChangedEvent{
 		Table:               b.Table,
@@ -755,6 +763,7 @@ func (b *BoundedRowChangedEvent) Unbound() *RowChangedEvent {
 	return x
 }
 
+// UnboundRowChangedEvents converts BoundedRowChangedEvents to RowChangedEvents.
 func UnboundRowChangedEvents(rows []*BoundedRowChangedEvent) []*RowChangedEvent {
 	x := make([]*RowChangedEvent, len(rows))
 	for i, r := range rows {
@@ -763,4 +772,33 @@ func UnboundRowChangedEvents(rows []*BoundedRowChangedEvent) []*RowChangedEvent 
 		}
 	}
 	return x
+}
+
+// SortColumnsByName sorts the given Columns and associated ColumnValues by name.
+func SortColumnsByName(cols []*Column, colvals []ColumnValue, reverse bool) {
+	if len(cols) == 0 {
+		return
+	}
+	bcols := make([]*BoundedColumn, 0, len(cols))
+	for i, col := range cols {
+		bcols = append(bcols, &BoundedColumn{
+			Name:    col.Name,
+			Type:    col.Type,
+			Charset: col.Charset,
+			Flag:    col.Flag,
+			Default: col.Default,
+			Value:   colvals[i].Value,
+		})
+	}
+	sort.Slice(bcols, func(i, j int) bool {
+		if reverse {
+			return bcols[i].Name > bcols[j].Name
+		} else {
+			return bcols[i].Name < bcols[j].Name
+		}
+	})
+	for i := range bcols {
+		cols[i] = bcols[i].Unbound()
+		colvals[i].Value = bcols[i].Value
+	}
 }
