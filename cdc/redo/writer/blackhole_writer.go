@@ -39,11 +39,11 @@ func NewBlackHoleWriter() *blackHoleWriter {
 	return &blackHoleWriter{}
 }
 
-func (bs *blackHoleWriter) WriteLog(_ context.Context, logs []*model.RedoRowChangedEvent) (err error) {
+func (bs *blackHoleWriter) WriteLog(_ context.Context, logs []*model.RowChangedEvent) (err error) {
 	if len(logs) == 0 {
 		return nil
 	}
-	current := logs[len(logs)-1].Row.CommitTs
+	current := logs[len(logs)-1].CommitTs
 	log.Debug("write row redo logs", zap.Int("count", len(logs)),
 		zap.Uint64("current", current))
 	return
@@ -57,7 +57,7 @@ func (ibs *blackHoleWriter) GetMeta() (checkpointTs, resolvedTs model.Ts) {
 	return 0, 0
 }
 
-func (bs *blackHoleWriter) SendDDL(_ context.Context, ddl *model.RedoDDLEvent) error {
+func (bs *blackHoleWriter) SendDDL(_ context.Context, ddl *model.DDLEvent) error {
 	log.Debug("send ddl event", zap.Any("ddl", ddl))
 	return nil
 }
@@ -78,7 +78,7 @@ func NewInvalidBlackHoleWriter(rl RedoLogWriter) *invalidBlackHoleWriter {
 }
 
 func (ibs *invalidBlackHoleWriter) WriteLog(
-	_ context.Context, _ []*model.RedoRowChangedEvent,
+	_ context.Context, _ []*model.RowChangedEvent,
 ) (err error) {
 	return errors.New("[WriteLog] invalid black hole writer")
 }

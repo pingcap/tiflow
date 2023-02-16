@@ -20,7 +20,6 @@ import (
 
 	"github.com/pingcap/errors"
 	"github.com/pingcap/log"
-	apiv1client "github.com/pingcap/tiflow/pkg/api/v1"
 	apiv2client "github.com/pingcap/tiflow/pkg/api/v2"
 	cmdconetxt "github.com/pingcap/tiflow/pkg/cmd/context"
 	"github.com/pingcap/tiflow/pkg/cmd/util"
@@ -198,23 +197,6 @@ func (f *factoryImpl) PdClient() (pd.Client, error) {
 	}
 
 	return pdClient, nil
-}
-
-// APIV1Client returns cdc api v1 client.
-func (f *factoryImpl) APIV1Client() (apiv1client.APIV1Interface, error) {
-	serverAddr, err := f.findServerAddr()
-	if err != nil {
-		return nil, errors.Trace(err)
-	}
-	log.Info(serverAddr)
-	client, err := apiv2client.NewAPIClient(serverAddr, f.clientGetter.GetCredential())
-	if err != nil {
-		return nil, errors.Trace(err)
-	}
-	if err := checkCDCVersion(client); err != nil {
-		return nil, errors.Trace(err)
-	}
-	return apiv1client.NewAPIClient(serverAddr, f.clientGetter.GetCredential())
 }
 
 // APIV2Client returns cdc api v2 client.

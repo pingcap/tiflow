@@ -27,7 +27,7 @@ import (
 	"github.com/pingcap/tiflow/cdc/kv"
 	"github.com/pingcap/tiflow/cdc/model"
 	"github.com/pingcap/tiflow/cdc/owner"
-	"github.com/pingcap/tiflow/cdc/sink"
+	"github.com/pingcap/tiflow/cdc/sinkv2/validator"
 	"github.com/pingcap/tiflow/pkg/config"
 	cerror "github.com/pingcap/tiflow/pkg/errors"
 	"github.com/pingcap/tiflow/pkg/filter"
@@ -237,7 +237,7 @@ func (APIV2HelpersImpl) verifyCreateChangefeedConfig(
 	}
 
 	// verify sink
-	if err := sink.Validate(ctx, cfg.SinkURI, replicaCfg); err != nil {
+	if err := validator.Validate(ctx, cfg.SinkURI, replicaCfg); err != nil {
 		return nil, err
 	}
 
@@ -350,7 +350,7 @@ func (APIV2HelpersImpl) verifyUpdateChangefeedConfig(
 			return nil, nil, cerror.ErrChangefeedUpdateRefused.GenWithStackByCause(err)
 		}
 
-		if err := sink.Validate(ctx, newInfo.SinkURI, newInfo.Config); err != nil {
+		if err := validator.Validate(ctx, newInfo.SinkURI, newInfo.Config); err != nil {
 			return nil, nil, cerror.ErrChangefeedUpdateRefused.GenWithStackByCause(err)
 		}
 	}
