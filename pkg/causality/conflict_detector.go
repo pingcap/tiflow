@@ -99,20 +99,20 @@ func (d *ConflictDetector[Worker, Txn]) runBackgroundTasks() {
 	defer func() {
 		d.notifiedNodes.Close()
 		// Drain the channel to avoid goroutine leak.
-		for range d.notifiedNodes.Out() {
-		}
+		//for range d.notifiedNodes.Out() {
+		//}
 		d.garbageNodes.Close()
-		// Drain the channel to avoid goroutine leak.
-		for range d.garbageNodes.Out() {
-		}
+		//// Drain the channel to avoid goroutine leak.
+		//for range d.garbageNodes.Out() {
+		//}
 	}()
 	for {
 		select {
 		case <-d.closeCh:
 			return
-		case notifiyCallback := <-d.notifiedNodes.Out():
-			if notifiyCallback != nil {
-				notifiyCallback()
+		case notifyCallback := <-d.notifiedNodes.Out():
+			if notifyCallback != nil {
+				notifyCallback()
 			}
 		case event := <-d.garbageNodes.Out():
 			if event.node != nil {
