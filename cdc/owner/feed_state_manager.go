@@ -25,6 +25,7 @@ import (
 	"github.com/pingcap/tiflow/pkg/orchestrator"
 	"github.com/pingcap/tiflow/pkg/upstream"
 	"github.com/tikv/client-go/v2/oracle"
+	pd "github.com/tikv/pd/client"
 	"go.uber.org/zap"
 )
 
@@ -74,28 +75,6 @@ func newFeedStateManager(up *upstream.Upstream) *feedStateManager {
 	f.errBackoff.RandomizationFactor = defaultBackoffRandomizationFactor
 	// MaxElapsedTime=0 means the backoff never stops
 	f.errBackoff.MaxElapsedTime = 0
-
-	f.resetErrBackoff()
-	f.lastErrorTime = time.Unix(0, 0)
-
-	return f
-}
-
-// newFeedStateManager4Test creates feedStateManager for test
-func newFeedStateManager4Test(
-	initialIntervalInMs time.Duration,
-	maxIntervalInMs time.Duration,
-	maxElapsedTimeInMs time.Duration,
-	multiplier float64,
-) *feedStateManager {
-	f := new(feedStateManager)
-
-	f.errBackoff = backoff.NewExponentialBackOff()
-	f.errBackoff.InitialInterval = initialIntervalInMs * time.Millisecond
-	f.errBackoff.MaxInterval = maxIntervalInMs * time.Millisecond
-	f.errBackoff.MaxElapsedTime = maxElapsedTimeInMs * time.Millisecond
-	f.errBackoff.Multiplier = multiplier
-	f.errBackoff.RandomizationFactor = 0
 
 	f.resetErrBackoff()
 	f.lastErrorTime = time.Unix(0, 0)
@@ -382,7 +361,9 @@ func (m *feedStateManager) patchState(feedState model.FeedState) {
 		}
 		if updateEpoch {
 			previous := info.Epoch
-			info.Epoch = m.generateEpoch()
+			ctx, cancel := context.WithTimeout(context.TODO(), 5*time.Second)
+			defer cancel()
+			info.Epoch = GenerateChangefeedEpoch(ctx, m.upstream.PDClient)
 			changed = true
 			log.Info("update changefeed epoch",
 				zap.String("namespace", m.state.ID.Namespace),
@@ -392,18 +373,6 @@ func (m *feedStateManager) patchState(feedState model.FeedState) {
 		}
 		return info, changed, nil
 	})
-}
-
-func (m *feedStateManager) generateEpoch() uint64 {
-	ctx, cancel := context.WithTimeout(context.TODO(), 5*time.Second)
-	defer cancel()
-	phyTs, logical, err := m.upstream.PDClient.GetTS(ctx)
-	if err != nil {
-		log.Warn("generate epoch using local timestamp due error",
-			zap.Uint64("upstreamID", m.upstream.ID), zap.Error(err))
-		return uint64(time.Now().UnixNano())
-	}
-	return oracle.ComposeTS(phyTs, logical)
 }
 
 func (m *feedStateManager) cleanUpInfos() {
@@ -529,4 +498,14 @@ func (m *feedStateManager) handleError(errs ...*model.RunningError) {
 			zap.Duration("oldInterval", oldBackoffInterval),
 			zap.Duration("newInterval", m.backoffInterval))
 	}
+}
+
+// GenerateChangefeedEpoch generates a unique changefeed epoch.
+func GenerateChangefeedEpoch(ctx context.Context, pdClient pd.Client) uint64 {
+	phyTs, logical, err := pdClient.GetTS(ctx)
+	if err != nil {
+		log.Warn("generate epoch using local timestamp due error", zap.Error(err))
+		return uint64(time.Now().UnixNano())
+	}
+	return oracle.ComposeTS(phyTs, logical)
 }

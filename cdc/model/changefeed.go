@@ -147,7 +147,7 @@ type ChangeFeedInfo struct {
 
 	CreatorVersion string `json:"creator-version"`
 	// Epoch is the epoch of a changefeed, changes on every restart.
-	Epoch uint64 `json:""`
+	Epoch uint64 `json:"epoch"`
 }
 
 const changeFeedIDMaxLen = 128
