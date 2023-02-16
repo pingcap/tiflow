@@ -17,11 +17,9 @@ import (
 	"context"
 
 	"github.com/Shopify/sarama"
-	"github.com/labstack/gommon/log"
 	"github.com/pingcap/tiflow/cdc/model"
 	"github.com/pingcap/tiflow/pkg/errors"
 	"github.com/pingcap/tiflow/pkg/util"
-	"go.uber.org/zap"
 )
 
 type saramaFactory struct {
@@ -64,12 +62,6 @@ func (f *saramaFactory) SyncProducer() (SyncProducer, error) {
 	if err != nil {
 		return nil, errors.Trace(err)
 	}
-	log.Info("kafka sync producer created",
-		zap.String("namespace", f.changefeedID.Namespace),
-		zap.String("changefeed", f.changefeedID.ID),
-		zap.Any("brokers", f.option.BrokerEndpoints),
-		zap.Any("config", f.config))
-
 	return &saramaSyncProducer{
 		id:       f.changefeedID,
 		client:   client,
@@ -92,12 +84,6 @@ func (f *saramaFactory) AsyncProducer(
 	if err != nil {
 		return nil, errors.Trace(err)
 	}
-	log.Info("kafka async producer created",
-		zap.String("namespace", f.changefeedID.Namespace),
-		zap.String("changefeed", f.changefeedID.ID),
-		zap.Any("brokers", f.option.BrokerEndpoints),
-		zap.Any("config", f.config))
-
 	return &saramaAsyncProducer{
 		client:       client,
 		producer:     p,
