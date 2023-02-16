@@ -179,13 +179,15 @@ func TestConvertRowChangedEventsWhenEnableOldValue(t *testing.T) {
 			}).Unbound(),
 		},
 	}
+	events[0].Row.ApproximateMemSize = 100
+
 	changefeedID := model.DefaultChangeFeedID("1")
 	span := spanz.TableIDToComparableSpan(1)
 	enableOldValue := true
 	result, size, err := convertRowChangedEvents(changefeedID, span, enableOldValue, events...)
 	require.NoError(t, err)
 	require.Equal(t, 1, len(result))
-	require.Equal(t, uint64(216), size)
+	require.Equal(t, uint64(100), size)
 }
 
 func TestConvertRowChangedEventsWhenDisableOldValue(t *testing.T) {
@@ -232,13 +234,15 @@ func TestConvertRowChangedEventsWhenDisableOldValue(t *testing.T) {
 			}).Unbound(),
 		},
 	}
+	events[0].Row.ApproximateMemSize = 100
+
 	changefeedID := model.DefaultChangeFeedID("1")
 	span := spanz.TableIDToComparableSpan(1)
 	enableOldValue := false
 	result, size, err := convertRowChangedEvents(changefeedID, span, enableOldValue, events...)
 	require.NoError(t, err)
 	require.Equal(t, 2, len(result))
-	require.Equal(t, uint64(216), size)
+	require.Equal(t, uint64(100), size)
 
 	// Update non-handle key.
 	columns = []*model.BoundedColumn{
@@ -281,8 +285,10 @@ func TestConvertRowChangedEventsWhenDisableOldValue(t *testing.T) {
 			}).Unbound(),
 		},
 	}
+	events[0].Row.ApproximateMemSize = 100
+
 	result, size, err = convertRowChangedEvents(changefeedID, span, enableOldValue, events...)
 	require.NoError(t, err)
 	require.Equal(t, 1, len(result))
-	require.Equal(t, uint64(216), size)
+	require.Equal(t, uint64(100), size)
 }
