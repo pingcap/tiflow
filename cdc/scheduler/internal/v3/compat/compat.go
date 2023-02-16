@@ -109,8 +109,12 @@ func (c *Compat) CheckChangefeedEpochEnabled(captureID model.CaptureID) bool {
 	if !ok {
 		return false
 	}
-	captureVer := semver.New(version.SanitizeVersion(captureInfo.Version))
-	isEnabled = captureVer.Compare(*ChangefeedEpochMinVersion) >= 0
+	if len(captureInfo.Version) != 0 {
+		captureVer := semver.New(version.SanitizeVersion(captureInfo.Version))
+		isEnabled = captureVer.Compare(*ChangefeedEpochMinVersion) >= 0
+	} else {
+		isEnabled = false
+	}
 	c.changefeedEpoch[captureID] = isEnabled
 	return isEnabled
 }
