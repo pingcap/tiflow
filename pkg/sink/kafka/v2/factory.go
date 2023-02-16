@@ -25,7 +25,6 @@ import (
 	"github.com/pingcap/tiflow/pkg/errors"
 	pkafka "github.com/pingcap/tiflow/pkg/sink/kafka"
 	"github.com/pingcap/tiflow/pkg/util"
-	"github.com/rcrowley/go-metrics"
 	"github.com/segmentio/kafka-go"
 	"github.com/segmentio/kafka-go/sasl"
 	"github.com/segmentio/kafka-go/sasl/plain"
@@ -33,16 +32,18 @@ import (
 	"go.uber.org/zap"
 )
 
-type kafkaGoClient struct {
-	transport *kafka.Transport
-	client    *kafka.Client
-	options   *pkafka.Options
+type factory struct {
+	changefeedID model.ChangeFeedID
+	options      *pkafka.Options
 }
 
-// NewKafkaGoClient constructs a Client with kafka go.
-func NewKafkaGoClient(ctx context.Context, options *pkafka.Options) (pkafka.Client, error) {
+// NewFactory returns a factory implemented based on kafka-go
+func NewFactory(
+	ctx context.Context,
+	options *pkafka.Options,
+	changefeedID model.ChangeFeedID,
+) (pkafka.Factory, error) {
 	captureAddr := contextutil.CaptureAddrFromCtx(ctx)
-	changefeedID := contextutil.ChangefeedIDFromCtx(ctx)
 	var role string
 	if contextutil.IsOwnerFromCtx(ctx) {
 		role = util.RoleOwner.String()
@@ -53,30 +54,41 @@ func NewKafkaGoClient(ctx context.Context, options *pkafka.Options) (pkafka.Clie
 	if err != nil {
 		return nil, errors.Trace(err)
 	}
-	mechanism, err := completeSASLConfig(options)
+
+	transport, err := newTransport(options)
 	if err != nil {
 		return nil, errors.Trace(err)
 	}
-	tlsConfig, err := completeSSLConfig(options)
-	if err != nil {
-		return nil, errors.Trace(err)
-	}
-	transport := &kafka.Transport{
-		SASL:        mechanism,
-		ClientID:    clientID,
-		TLS:         tlsConfig,
-		IdleTimeout: options.DialTimeout,
-	}
-	client := &kafka.Client{
-		Addr: kafka.TCP(options.BrokerEndpoints...),
+	transport.ClientID = clientID
+
+	return &factory{
+		changefeedID: changefeedID,
+		options:      options,
+	}, nil
+}
+
+func newClient(brokerEndpoints []string, transport *kafka.Transport) *kafka.Client {
+	return &kafka.Client{
+		Addr: kafka.TCP(brokerEndpoints...),
 		// todo: make this configurable
 		Timeout:   10 * time.Second,
 		Transport: transport,
 	}
-	return &kafkaGoClient{
-		transport: transport,
-		client:    client,
-		options:   options,
+}
+
+func newTransport(o *pkafka.Options) (*kafka.Transport, error) {
+	mechanism, err := completeSASLConfig(o)
+	if err != nil {
+		return nil, err
+	}
+	tlsConfig, err := completeSSLConfig(o)
+	if err != nil {
+		return nil, err
+	}
+	return &kafka.Transport{
+		SASL:        mechanism,
+		TLS:         tlsConfig,
+		DialTimeout: o.DialTimeout,
 	}, nil
 }
 
@@ -123,18 +135,22 @@ func completeSASLConfig(o *pkafka.Options) (sasl.Mechanism, error) {
 	return nil, nil
 }
 
-func (k *kafkaGoClient) createWriter() *kafka.Writer {
-	w := &kafka.Writer{
-		Addr:         kafka.TCP(k.options.BrokerEndpoints...),
-		Balancer:     newManualPartitioner(),
-		Transport:    k.transport,
-		ReadTimeout:  k.options.ReadTimeout,
-		WriteTimeout: k.options.WriteTimeout,
-		RequiredAcks: kafka.RequireAll,
-		BatchBytes:   int64(k.options.MaxMessageBytes),
-		Async:        false,
+func (f *factory) newWriter(async bool) (*kafka.Writer, error) {
+	transport, err := newTransport(f.options)
+	if err != nil {
+		return nil, err
 	}
-	compression := strings.ToLower(strings.TrimSpace(k.options.Compression))
+	w := &kafka.Writer{
+		Addr:         kafka.TCP(f.options.BrokerEndpoints...),
+		Balancer:     newManualPartitioner(),
+		Transport:    transport,
+		ReadTimeout:  f.options.ReadTimeout,
+		WriteTimeout: f.options.WriteTimeout,
+		RequiredAcks: kafka.RequiredAcks(f.options.RequiredAcks),
+		BatchBytes:   int64(f.options.MaxMessageBytes),
+		Async:        async,
+	}
+	compression := strings.ToLower(strings.TrimSpace(f.options.Compression))
 	switch compression {
 	case "none":
 	case "gzip":
@@ -147,56 +163,63 @@ func (k *kafkaGoClient) createWriter() *kafka.Writer {
 		w.Compression = kafka.Zstd
 	default:
 		log.Warn("Unsupported compression algorithm",
-			zap.String("compression", k.options.Compression))
-		k.options.Compression = "none"
+			zap.String("namespace", f.changefeedID.Namespace),
+			zap.String("changefeed", f.changefeedID.ID),
+			zap.String("compression", f.options.Compression))
+		f.options.Compression = "none"
 	}
-	log.Info("Kafka producer uses " + k.options.Compression + " compression algorithm")
-	return w
+	log.Info("Kafka producer uses "+f.options.Compression+" compression algorithm",
+		zap.String("namespace", f.changefeedID.Namespace),
+		zap.String("changefeed", f.changefeedID.ID))
+	return w, nil
+}
+
+func (f *factory) AdminClient() (pkafka.ClusterAdminClient, error) {
+	transport, err := newTransport(f.options)
+	if err != nil {
+		return nil, err
+	}
+	return newClusterAdminClient(f.options.BrokerEndpoints, transport, f.changefeedID), nil
 }
 
 // SyncProducer creates a sync producer to writer message to kafka
-func (k *kafkaGoClient) SyncProducer() (pkafka.SyncProducer, error) {
-	w := k.createWriter()
+func (f *factory) SyncProducer() (pkafka.SyncProducer, error) {
+	w, err := f.newWriter(false)
+	if err != nil {
+		return nil, err
+	}
 	return &syncWriter{w: w}, nil
 }
 
 // AsyncProducer creates an async producer to writer message to kafka
-func (k *kafkaGoClient) AsyncProducer(changefeedID model.ChangeFeedID,
-	closedChan chan struct{},
+func (f *factory) AsyncProducer(closedChan chan struct{},
 	failpointCh chan error,
 ) (pkafka.AsyncProducer, error) {
-	w := k.createWriter()
+	w, err := f.newWriter(true)
+	if err != nil {
+		return nil, err
+	}
 	aw := &asyncWriter{
 		w:            w,
 		closedChan:   closedChan,
-		changefeedID: changefeedID,
+		changefeedID: f.changefeedID,
 		failpointCh:  failpointCh,
 	}
 	w.Completion = aw.callBackRun
 	return aw, nil
 }
 
-// MetricRegistry implement the MetricsCollector interface
-func (k *kafkaGoClient) MetricRegistry() metrics.Registry {
-	return nil
-}
-
 // MetricsCollector returns the kafka metrics collector
-func (k *kafkaGoClient) MetricsCollector(
-	changefeedID model.ChangeFeedID,
+func (f *factory) MetricsCollector(
 	role util.Role,
 	adminClient pkafka.ClusterAdminClient,
 ) pkafka.MetricsCollector {
-	return NewMetricsCollector(changefeedID, role, adminClient)
-}
-
-// Close closes the client
-func (k *kafkaGoClient) Close() error {
-	return nil
+	return NewMetricsCollector(f.changefeedID, role, adminClient)
 }
 
 type syncWriter struct {
-	w *kafka.Writer
+	changefeedID model.ChangeFeedID
+	w            *kafka.Writer
 }
 
 func (s *syncWriter) SendMessage(
@@ -236,8 +259,20 @@ func (s *syncWriter) SendMessages(
 // Close shuts down the producer; you must call this function before a producer
 // object passes out of scope, as it may otherwise leak memory.
 // You must call this before calling Close on the underlying client.
-func (s *syncWriter) Close() error {
-	return s.w.Close()
+func (s *syncWriter) Close() {
+	start := time.Now()
+	if err := s.w.Close(); err != nil {
+		log.Warn("Close kafka sync producer failed",
+			zap.String("namespace", s.changefeedID.Namespace),
+			zap.String("changefeed", s.changefeedID.ID),
+			zap.Duration("duration", time.Since(start)),
+			zap.Error(err))
+	} else {
+		log.Info("Close kafka sync producer success",
+			zap.String("namespace", s.changefeedID.Namespace),
+			zap.String("changefeed", s.changefeedID.ID),
+			zap.Duration("duration", time.Since(start)))
+	}
 }
 
 type asyncWriter struct {
@@ -254,8 +289,20 @@ type asyncWriter struct {
 // scope, as it may otherwise leak memory. You must call this before process
 // shutting down, or you may lose messages. You must call this before calling
 // Close on the underlying client.
-func (a *asyncWriter) Close() error {
-	return a.w.Close()
+func (a *asyncWriter) Close() {
+	start := time.Now()
+	if err := a.w.Close(); err != nil {
+		log.Warn("Close kafka async producer failed",
+			zap.String("namespace", a.changefeedID.Namespace),
+			zap.String("changefeed", a.changefeedID.ID),
+			zap.Duration("duration", time.Since(start)),
+			zap.Error(err))
+	} else {
+		log.Info("Close kafka async producer success",
+			zap.String("namespace", a.changefeedID.Namespace),
+			zap.String("changefeed", a.changefeedID.ID),
+			zap.Duration("duration", time.Since(start)))
+	}
 }
 
 // AsyncSend is the input channel for the user to write messages to that they

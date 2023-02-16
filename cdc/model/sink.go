@@ -236,16 +236,16 @@ const (
 // more info https://github.com/tinylib/msgp/issues/158, https://github.com/tinylib/msgp/issues/149
 // so define a RedoColumn, RedoDDLEvent instead of using the Column, DDLEvent
 type RedoLog struct {
-	RedoRow *RedoRowChangedEvent `msg:"row"`
-	RedoDDL *RedoDDLEvent        `msg:"ddl"`
-	Type    RedoLogType          `msg:"type"`
+	RedoRow RedoRowChangedEvent `msg:"row"`
+	RedoDDL RedoDDLEvent        `msg:"ddl"`
+	Type    RedoLogType         `msg:"type"`
 }
 
 // RedoRowChangedEvent represents the DML event used in RedoLog
 type RedoRowChangedEvent struct {
 	Row        *RowChangedEvent `msg:"row"`
-	PreColumns []*RedoColumn    `msg:"pre-columns"`
-	Columns    []*RedoColumn    `msg:"columns"`
+	Columns    []RedoColumn     `msg:"columns"`
+	PreColumns []RedoColumn     `msg:"pre-columns"`
 }
 
 // RowChangedEvent represents a row changed event
@@ -259,8 +259,8 @@ type RowChangedEvent struct {
 	ColInfos  []rowcodec.ColInfo `json:"column-infos" msg:"-"`
 	TableInfo *TableInfo         `json:"-" msg:"-"`
 
-	Columns      []*Column `json:"columns" msg:"-"`
-	PreColumns   []*Column `json:"pre-columns" msg:"-"`
+	Columns      []*Column `json:"columns" msg:"columns"`
+	PreColumns   []*Column `json:"pre-columns" msg:"pre-columns"`
 	IndexColumns [][]int   `json:"-" msg:"index-columns"`
 
 	// ApproximateDataSize is the approximate size of protobuf binary
@@ -429,7 +429,7 @@ type Column struct {
 	Type    byte           `json:"type" msg:"type"`
 	Charset string         `json:"charset" msg:"charset"`
 	Flag    ColumnFlagType `json:"flag" msg:"-"`
-	Value   interface{}    `json:"value" msg:"value"`
+	Value   interface{}    `json:"value" msg:"-"`
 	Default interface{}    `json:"default" msg:"-"`
 
 	// ApproximateBytes is approximate bytes consumed by the column.
@@ -438,8 +438,11 @@ type Column struct {
 
 // RedoColumn stores Column change
 type RedoColumn struct {
-	Column *Column `msg:"column"`
-	Flag   uint64  `msg:"flag"`
+	// Fields from Column and can't be marshaled directly in Column.
+	Value interface{} `msg:"column"`
+	// msgp transforms empty byte slice into nil, PTAL msgp#247.
+	ValueIsEmptyBytes bool   `msg:"value-is-empty-bytes"`
+	Flag              uint64 `msg:"flag"`
 }
 
 // BuildTiDBTableInfo builds a TiDB TableInfo from given information.

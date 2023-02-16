@@ -31,7 +31,7 @@ type MockDMLProducer struct {
 }
 
 // NewDMLMockProducer creates a mock producer.
-func NewDMLMockProducer(_ context.Context, _ kafka.Client,
+func NewDMLMockProducer(_ context.Context, _ kafka.Factory,
 	_ kafka.ClusterAdminClient, _ chan error,
 ) (DMLProducer, error) {
 	return &MockDMLProducer{

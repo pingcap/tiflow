@@ -183,9 +183,7 @@ func TestTimeout(t *testing.T) {
 
 func TestAdjustConfigTopicNotExist(t *testing.T) {
 	adminClient := NewClusterAdminClientMockImpl()
-	defer func() {
-		_ = adminClient.Close()
-	}()
+	defer adminClient.Close()
 
 	options := NewOptions()
 	options.BrokerEndpoints = []string{"127.0.0.1:9092"}
@@ -223,9 +221,7 @@ func TestAdjustConfigTopicNotExist(t *testing.T) {
 
 func TestAdjustConfigTopicExist(t *testing.T) {
 	adminClient := NewClusterAdminClientMockImpl()
-	defer func() {
-		_ = adminClient.Close()
-	}()
+	defer adminClient.Close()
 
 	options := NewOptions()
 	options.BrokerEndpoints = []string{"127.0.0.1:9092"}
@@ -302,9 +298,7 @@ func TestAdjustConfigTopicExist(t *testing.T) {
 
 func TestAdjustConfigMinInsyncReplicas(t *testing.T) {
 	adminClient := NewClusterAdminClientMockImpl()
-	defer func() {
-		_ = adminClient.Close()
-	}()
+	defer adminClient.Close()
 
 	options := NewOptions()
 	options.BrokerEndpoints = []string{"127.0.0.1:9092"}
@@ -362,9 +356,7 @@ func TestAdjustConfigMinInsyncReplicas(t *testing.T) {
 
 func TestSkipAdjustConfigMinInsyncReplicasWhenRequiredAcksIsNotWailAll(t *testing.T) {
 	adminClient := NewClusterAdminClientMockImpl()
-	defer func() {
-		_ = adminClient.Close()
-	}()
+	defer adminClient.Close()
 
 	options := NewOptions()
 	options.BrokerEndpoints = []string{"127.0.0.1:9092"}
@@ -595,11 +587,13 @@ func TestConfigurationCombinations(t *testing.T) {
 		require.Nil(t, err)
 
 		ctx := context.Background()
-		saramaConfig, err := NewSaramaConfig(ctx, options)
-		require.Nil(t, err)
 
-		adminClient, err := NewMockAdminClient(ctx, options)
-		require.Nil(t, err)
+		changefeed := model.DefaultChangeFeedID("changefeed-test")
+		factory, err := NewMockFactory(ctx, options, changefeed)
+		require.NoError(t, err)
+
+		adminClient, err := factory.AdminClient()
+		require.NoError(t, err)
 
 		topic, ok := a.uriParams[0].(string)
 		require.True(t, ok)
@@ -610,18 +604,18 @@ func TestConfigurationCombinations(t *testing.T) {
 		encoderConfig := common.NewConfig(config.ProtocolOpen)
 		err = encoderConfig.Apply(sinkURI, &config.ReplicaConfig{})
 		require.Nil(t, err)
-		encoderConfig.WithMaxMessageBytes(saramaConfig.Producer.MaxMessageBytes)
+		encoderConfig.WithMaxMessageBytes(options.MaxMessageBytes)
 
 		err = encoderConfig.Validate()
 		require.Nil(t, err)
 
 		// producer's `MaxMessageBytes` = encoder's `MaxMessageBytes`.
-		require.Equal(t, encoderConfig.MaxMessageBytes, saramaConfig.Producer.MaxMessageBytes)
+		require.Equal(t, encoderConfig.MaxMessageBytes, options.MaxMessageBytes)
 
 		expected, err := strconv.Atoi(a.expectedMaxMessageBytes)
 		require.Nil(t, err)
 		require.Equal(t, expected, options.MaxMessageBytes)
 
-		_ = adminClient.Close()
+		adminClient.Close()
 	}
 }

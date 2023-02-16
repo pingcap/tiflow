@@ -27,7 +27,7 @@ func TestChangefeedPauseCli(t *testing.T) {
 	ctrl := gomock.NewController(t)
 	defer ctrl.Finish()
 	cf := mock.NewMockChangefeedInterface(ctrl)
-	f := &mockFactory{changefeedsv2: cf}
+	f := &mockFactory{changefeeds: cf}
 	cmd := newCmdPauseChangefeed(f)
 	cf.EXPECT().Pause(gomock.Any(), "abc").Return(nil)
 	os.Args = []string{"pause", "--changefeed-id=abc"}
