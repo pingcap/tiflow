@@ -18,6 +18,7 @@ import (
 	"strconv"
 
 	"github.com/pingcap/log"
+	"github.com/pingcap/tiflow/cdc/model"
 	"github.com/pingcap/tiflow/pkg/errors"
 	pkafka "github.com/pingcap/tiflow/pkg/sink/kafka"
 	"github.com/segmentio/kafka-go"
@@ -25,16 +26,19 @@ import (
 )
 
 type admin struct {
-	client Client
+	client       Client
+	changefeedID model.ChangeFeedID
 }
 
-// NewClusterAdminClient return an admin client
-func NewClusterAdminClient(endpoints []string) pkafka.ClusterAdminClient {
-	client := &kafka.Client{
-		Addr: kafka.TCP(endpoints...),
-	}
+func newClusterAdminClient(
+	endpoints []string,
+	transport *kafka.Transport,
+	changefeedID model.ChangeFeedID,
+) pkafka.ClusterAdminClient {
+	client := newClient(endpoints, transport)
 	return &admin{
-		client: client,
+		client:       client,
+		changefeedID: changefeedID,
 	}
 }
 
@@ -121,6 +125,18 @@ func (a *admin) GetBrokerConfig(ctx context.Context, configName string) (string,
 	}
 
 	return entry.ConfigValue, nil
+}
+
+func (a *admin) GetTopicsPartitions(ctx context.Context) (map[string]int32, error) {
+	response, err := a.clusterMetadata(ctx)
+	if err != nil {
+		return nil, err
+	}
+	result := make(map[string]int32, len(response.Topics))
+	for _, topic := range response.Topics {
+		result[topic.Name] = int32(len(topic.Partitions))
+	}
+	return result, nil
 }
 
 func (a *admin) GetAllTopicsMeta(ctx context.Context) (map[string]pkafka.TopicDetail, error) {
@@ -225,7 +241,23 @@ func (a *admin) CreateTopic(
 	return nil
 }
 
-func (a *admin) Close() error {
-	// todo: close the underline client after support transport configuration.
-	return nil
+func (a *admin) Close() {
+	client, ok := a.client.(*kafka.Client)
+	if !ok {
+		return
+	}
+
+	if client.Transport == nil {
+		return
+	}
+
+	transport, ok := client.Transport.(*kafka.Transport)
+	if !ok {
+		return
+	}
+
+	transport.CloseIdleConnections()
+	log.Info("admin client close idle connections",
+		zap.String("namespace", a.changefeedID.Namespace),
+		zap.String("changefeed", a.changefeedID.ID))
 }

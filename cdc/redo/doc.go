@@ -20,7 +20,7 @@ All files will flush to disk or upload to s3 if enabled every defaultFlushInterv
 The log file name is formatted as CaptureID_ChangeFeedID_CreateTime_FileType_MaxCommitTSOfAllEventInTheFile.log if safely wrote or end up with .log.tmp is not.
 meta file name is like CaptureID_ChangeFeedID_meta.meta
 
-Each log file contains batch of model.RedoRowChangedEvent or model.RedoDDLEvent records wrote into different file with defaultMaxLogSize 64 MB.
+Each log file contains batch of model.RowChangedEvent or model.DDLEvent records wrote into different file with defaultMaxLogSize 64 MB.
 If larger than 64 MB will auto rotated to a new file.
 A record has a length field and a logical Log data. The length field is a 64-bit packed structure holding the length of the remaining logical Log data in its lower
 56 bits and its physical padding in the first three bits of the most significant byte. Each record is 8-byte aligned so that the length field is never torn.

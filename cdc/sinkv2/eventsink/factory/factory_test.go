@@ -68,7 +68,7 @@ func newForTest(ctx context.Context,
 	case "kafka", "kafka+ssl":
 		mqs, err := mq.NewKafkaDMLSink(ctx, sinkURI, cfg, errCh,
 			// Use mock kafka clients for test.
-			kafka.NewMockAdminClient, kafka.NewMockClient, dmlproducer.NewDMLMockProducer)
+			kafka.NewMockFactory, dmlproducer.NewDMLMockProducer)
 		if err != nil {
 			return nil, err
 		}
@@ -110,6 +110,5 @@ func TestSinkFactory(t *testing.T) {
 		spanz.TableIDToComparableSpan(1), prometheus.NewCounter(prometheus.CounterOpts{}))
 	require.NotNil(t, tableSink, "table sink can be created")
 
-	err = sinkFactory.Close()
-	require.Nil(t, err, "sink factory can be closed")
+	sinkFactory.Close()
 }

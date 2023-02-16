@@ -22,7 +22,6 @@ import (
 	"github.com/pingcap/tiflow/cdc/model"
 	"github.com/pingcap/tiflow/cdc/sink/codec/builder"
 	"github.com/pingcap/tiflow/cdc/sink/codec/common"
-	mqv1 "github.com/pingcap/tiflow/cdc/sink/mq"
 	"github.com/pingcap/tiflow/cdc/sink/mq/dispatcher"
 	"github.com/pingcap/tiflow/cdc/sink/mq/manager"
 	"github.com/pingcap/tiflow/cdc/sinkv2/eventsink"
@@ -32,6 +31,7 @@ import (
 	"github.com/pingcap/tiflow/pkg/config"
 	cerror "github.com/pingcap/tiflow/pkg/errors"
 	"github.com/pingcap/tiflow/pkg/sink"
+	"github.com/pingcap/tiflow/pkg/sink/kafka"
 	"go.uber.org/zap"
 )
 
@@ -53,6 +53,10 @@ type dmlSink struct {
 	// It is also responsible for creating topics.
 	topicManager manager.TopicManager
 
+	// adminClient is used to query kafka cluster information, it's shared among
+	// multiple place, it's sink's responsibility to close it.
+	adminClient kafka.ClusterAdminClient
+
 	ctx    context.Context
 	cancel context.CancelFunc
 }
@@ -60,6 +64,7 @@ type dmlSink struct {
 func newSink(
 	ctx context.Context,
 	producer dmlproducer.DMLProducer,
+	adminClient kafka.ClusterAdminClient,
 	topicManager manager.TopicManager,
 	eventRouter *dispatcher.EventRouter,
 	encoderConfig *common.Config,
@@ -83,6 +88,7 @@ func newSink(
 		worker:       worker,
 		eventRouter:  eventRouter,
 		topicManager: topicManager,
+		adminClient:  adminClient,
 		ctx:          ctx,
 		cancel:       cancel,
 	}
@@ -124,7 +130,7 @@ func (s *dmlSink) WriteEvents(rows ...*eventsink.RowChangeCallbackableEvent) err
 		partition := s.eventRouter.GetPartitionForRowChange(row.Event, partitionNum)
 		// This never be blocked because this is an unbounded channel.
 		s.worker.msgChan.In() <- mqEvent{
-			key: mqv1.TopicPartitionKey{
+			key: TopicPartitionKey{
 				Topic: topic, Partition: partition,
 			},
 			rowEvent: row,
@@ -135,10 +141,14 @@ func (s *dmlSink) WriteEvents(rows ...*eventsink.RowChangeCallbackableEvent) err
 }
 
 // Close closes the sink.
-func (s *dmlSink) Close() error {
+func (s *dmlSink) Close() {
 	if s.cancel != nil {
 		s.cancel()
 	}
-	s.worker.close()
-	return nil
+	if s.worker != nil {
+		s.worker.close()
+	}
+	if s.adminClient != nil {
+		s.adminClient.Close()
+	}
 }

@@ -28,7 +28,10 @@ import (
 	dmysql "github.com/go-sql-driver/mysql"
 	"github.com/pingcap/errors"
 	"github.com/pingcap/log"
+	"github.com/pingcap/tidb/ddl"
 	"github.com/pingcap/tidb/infoschema"
+	"github.com/pingcap/tidb/parser"
+	"github.com/pingcap/tidb/parser/ast"
 	"github.com/pingcap/tidb/parser/mysql"
 	"github.com/pingcap/tiflow/cdc/contextutil"
 	"github.com/pingcap/tiflow/cdc/model"
@@ -37,6 +40,7 @@ import (
 	"github.com/pingcap/tiflow/pkg/config"
 	"github.com/pingcap/tiflow/pkg/sink"
 	pmysql "github.com/pingcap/tiflow/pkg/sink/mysql"
+	"github.com/pingcap/tiflow/pkg/sqlmodel"
 	"github.com/stretchr/testify/require"
 	"go.uber.org/zap"
 	"go.uber.org/zap/zaptest/observer"
@@ -1679,5 +1683,61 @@ func TestGroupRowsByType(t *testing.T) {
 				require.LessOrEqual(t, len(rows), tc.maxTxnRow)
 			}
 		})
+	}
+}
+
+func TestBackendGenUpdateSQL(t *testing.T) {
+	ctx := context.Background()
+	ms := newMySQLBackendWithoutDB(ctx)
+	table := &model.TableName{Schema: "db", Table: "tb1"}
+
+	createSQL := "CREATE TABLE tb1 (id INT PRIMARY KEY, name varchar(20))"
+	stmt, err := parser.New().ParseOneStmt(createSQL, "", "")
+	require.NoError(t, err)
+	ti, err := ddl.BuildTableInfoFromAST(stmt.(*ast.CreateTableStmt))
+	require.NoError(t, err)
+
+	row1 := sqlmodel.NewRowChange(table, table, []any{1, "a"}, []any{1, "aa"}, ti, ti, nil)
+	row1.SetApproximateDataSize(6)
+	row2 := sqlmodel.NewRowChange(table, table, []any{2, "b"}, []any{2, "bb"}, ti, ti, nil)
+	row2.SetApproximateDataSize(6)
+
+	testCases := []struct {
+		rows                  []*sqlmodel.RowChange
+		maxMultiUpdateRowSize int
+		expectedSQLs          []string
+		expectedValues        [][]interface{}
+	}{
+		{
+			[]*sqlmodel.RowChange{row1, row2},
+			ms.cfg.MaxMultiUpdateRowCount,
+			[]string{
+				"UPDATE `db`.`tb1` SET " +
+					"`id`=CASE WHEN `id`=? THEN ? WHEN `id`=? THEN ? END, " +
+					"`name`=CASE WHEN `id`=? THEN ? WHEN `id`=? THEN ? END " +
+					"WHERE `id` IN (?,?)",
+			},
+			[][]interface{}{
+				{1, 1, 2, 2, 1, "aa", 2, "bb", 1, 2},
+			},
+		},
+		{
+			[]*sqlmodel.RowChange{row1, row2},
+			0,
+			[]string{
+				"UPDATE `db`.`tb1` SET `id` = ?, `name` = ? WHERE `id` = ? LIMIT 1",
+				"UPDATE `db`.`tb1` SET `id` = ?, `name` = ? WHERE `id` = ? LIMIT 1",
+			},
+			[][]interface{}{
+				{1, "aa", 1},
+				{2, "bb", 2},
+			},
+		},
+	}
+	for _, tc := range testCases {
+		ms.cfg.MaxMultiUpdateRowSize = tc.maxMultiUpdateRowSize
+		sqls, values := ms.genUpdateSQL(tc.rows...)
+		require.Equal(t, tc.expectedSQLs, sqls)
+		require.Equal(t, tc.expectedValues, values)
 	}
 }

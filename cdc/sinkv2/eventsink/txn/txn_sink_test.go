@@ -102,8 +102,7 @@ func TestTxnSinkNolocking(t *testing.T) {
 	}
 	time.Sleep(time.Second)
 	require.Equal(t, uint32(100), atomic.LoadUint32(&handled))
-
-	require.Nil(t, sink.Close())
+	sink.Close()
 }
 
 func TestGenKeys(t *testing.T) {

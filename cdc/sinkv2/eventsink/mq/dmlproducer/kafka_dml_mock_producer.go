@@ -15,10 +15,10 @@ package dmlproducer
 
 import (
 	"context"
+	"fmt"
 	"sync"
 
 	"github.com/pingcap/tiflow/cdc/sink/codec/common"
-	mqv1 "github.com/pingcap/tiflow/cdc/sink/mq"
 	"github.com/pingcap/tiflow/pkg/sink/kafka"
 )
 
@@ -27,15 +27,15 @@ var _ DMLProducer = (*MockDMLProducer)(nil)
 // MockDMLProducer is a mock producer for test.
 type MockDMLProducer struct {
 	mu     sync.Mutex
-	events map[mqv1.TopicPartitionKey][]*common.Message
+	events map[string][]*common.Message
 }
 
 // NewDMLMockProducer creates a mock producer.
-func NewDMLMockProducer(_ context.Context, _ kafka.Client,
+func NewDMLMockProducer(_ context.Context, _ kafka.Factory,
 	_ kafka.ClusterAdminClient, _ chan error,
 ) (DMLProducer, error) {
 	return &MockDMLProducer{
-		events: make(map[mqv1.TopicPartitionKey][]*common.Message),
+		events: make(map[string][]*common.Message),
 	}, nil
 }
 
@@ -45,10 +45,8 @@ func (m *MockDMLProducer) AsyncSendMessage(_ context.Context, topic string,
 ) error {
 	m.mu.Lock()
 	defer m.mu.Unlock()
-	key := mqv1.TopicPartitionKey{
-		Topic:     topic,
-		Partition: partition,
-	}
+
+	key := fmt.Sprintf("%s-%d", topic, partition)
 	if _, ok := m.events[key]; !ok {
 		m.events[key] = make([]*common.Message, 0)
 	}
@@ -74,8 +72,9 @@ func (m *MockDMLProducer) GetAllEvents() []*common.Message {
 }
 
 // GetEvents returns the event filtered by the key.
-func (m *MockDMLProducer) GetEvents(key mqv1.TopicPartitionKey) []*common.Message {
+func (m *MockDMLProducer) GetEvents(topic string, partition int32) []*common.Message {
 	m.mu.Lock()
 	defer m.mu.Unlock()
+	key := fmt.Sprintf("%s-%d", topic, partition)
 	return m.events[key]
 }

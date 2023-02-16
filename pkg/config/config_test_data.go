@@ -137,7 +137,6 @@ const (
       "check-balance-interval": 60000000000,
       "add-table-batch-size": 50
     },
-    "enable-new-sink": true,
     "enable-kafka-sink-v2": false
   },
   "cluster-id": "default"

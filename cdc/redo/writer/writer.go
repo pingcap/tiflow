@@ -21,17 +21,16 @@ import (
 	"path/filepath"
 	"time"
 
-	"github.com/aws/aws-sdk-go/aws/awserr"
-	"github.com/aws/aws-sdk-go/service/s3"
-	"github.com/pingcap/errors"
 	"github.com/pingcap/log"
 	"github.com/pingcap/tidb/br/pkg/storage"
 	"github.com/pingcap/tiflow/cdc/contextutil"
 	"github.com/pingcap/tiflow/cdc/model"
+	"github.com/pingcap/tiflow/cdc/model/codec"
 	"github.com/pingcap/tiflow/cdc/redo/common"
 	"github.com/pingcap/tiflow/pkg/config"
-	cerror "github.com/pingcap/tiflow/pkg/errors"
+	"github.com/pingcap/tiflow/pkg/errors"
 	"github.com/pingcap/tiflow/pkg/redo"
+	"github.com/pingcap/tiflow/pkg/util"
 	"github.com/pingcap/tiflow/pkg/uuid"
 	"go.uber.org/multierr"
 	"go.uber.org/zap"
@@ -40,11 +39,11 @@ import (
 
 // RedoLogWriter defines the interfaces used to write redo log, all operations are thread-safe.
 type RedoLogWriter interface {
-	// WriteLog writer RedoRowChangedEvent to row log file.
-	WriteLog(ctx context.Context, rows []*model.RedoRowChangedEvent) error
+	// WriteLog writer RowChangedEvent to row log file.
+	WriteLog(ctx context.Context, rows []*model.RowChangedEvent) error
 
-	// SendDDL writer RedoDDLEvent to ddl log file.
-	SendDDL(ctx context.Context, ddl *model.RedoDDLEvent) error
+	// SendDDL writer DDLEvent to ddl log file.
+	SendDDL(ctx context.Context, ddl *model.DDLEvent) error
 
 	// FlushLog flushes all rows written by `WriteLog` into redo storage.
 	// `checkpointTs` and `resolvedTs` will be written into redo meta file.
@@ -77,7 +76,7 @@ func NewRedoLogWriter(
 
 	scheme := uri.Scheme
 	if !redo.IsValidConsistentStorage(scheme) {
-		return nil, cerror.ErrConsistentStorage.GenWithStackByArgs(scheme)
+		return nil, errors.ErrConsistentStorage.GenWithStackByArgs(scheme)
 	}
 	if redo.IsBlackholeStorage(scheme) {
 		return NewBlackHoleWriter(), nil
@@ -142,7 +141,8 @@ func newLogWriter(
 	ctx context.Context, cfg *logWriterConfig, opts ...Option,
 ) (lw *logWriter, err error) {
 	if cfg == nil {
-		return nil, cerror.WrapError(cerror.ErrRedoConfigInvalid, errors.New("LogWriterConfig can not be nil"))
+		err := errors.New("LogWriterConfig can not be nil")
+		return nil, errors.WrapError(errors.ErrRedoConfigInvalid, err)
 	}
 
 	lw = &logWriter{cfg: cfg}
@@ -215,7 +215,7 @@ func newLogWriter(
 func (l *logWriter) preCleanUpS3(ctx context.Context) error {
 	ret, err := l.extStorage.FileExists(ctx, l.getDeletedChangefeedMarker())
 	if err != nil {
-		return cerror.WrapError(cerror.ErrExternalStorageAPI, err)
+		return errors.WrapError(errors.ErrExternalStorageAPI, err)
 	}
 	if !ret {
 		return nil
@@ -237,8 +237,8 @@ func (l *logWriter) preCleanUpS3(ctx context.Context) error {
 		return err
 	}
 	err = l.extStorage.DeleteFile(ctx, l.getDeletedChangefeedMarker())
-	if !isNotExistInS3(err) {
-		return cerror.WrapError(cerror.ErrExternalStorageAPI, err)
+	if !util.IsNotExistInExtStorage(err) {
+		return errors.WrapError(errors.ErrExternalStorageAPI, err)
 	}
 
 	return nil
@@ -258,12 +258,13 @@ func (l *logWriter) initMeta(ctx context.Context) error {
 		if os.IsNotExist(err) {
 			return nil
 		}
-		return cerror.WrapError(cerror.ErrRedoMetaInitialize, errors.Annotate(err, "read meta file fail"))
+		err = errors.Annotate(err, "read meta file fail")
+		return errors.WrapError(errors.ErrRedoMetaInitialize, err)
 	}
 
 	_, err = l.meta.UnmarshalMsg(data)
 	if err != nil {
-		return cerror.WrapError(cerror.ErrRedoMetaInitialize, err)
+		return errors.WrapError(errors.ErrRedoMetaInitialize, err)
 	}
 
 	return nil
@@ -282,7 +283,7 @@ func (l *logWriter) GC(ctx context.Context, ts model.Ts) error {
 }
 
 // WriteLog implement WriteLog api
-func (l *logWriter) WriteLog(ctx context.Context, rows []*model.RedoRowChangedEvent) error {
+func (l *logWriter) WriteLog(ctx context.Context, rows []*model.RowChangedEvent) error {
 	select {
 	case <-ctx.Done():
 		return errors.Trace(ctx.Err())
@@ -290,24 +291,22 @@ func (l *logWriter) WriteLog(ctx context.Context, rows []*model.RedoRowChangedEv
 	}
 
 	if l.isStopped() {
-		return cerror.ErrRedoWriterStopped.GenWithStackByArgs()
+		return errors.ErrRedoWriterStopped.GenWithStackByArgs()
 	}
 	if len(rows) == 0 {
 		return nil
 	}
 
 	for _, r := range rows {
-		if r == nil || r.Row == nil {
+		if r == nil {
 			continue
 		}
-
-		rl := &model.RedoLog{RedoRow: r, Type: model.RedoLogTypeRow}
-		data, err := rl.MarshalMsg(nil)
+		data, err := codec.MarshalRowAsRedoLog(r, nil)
 		if err != nil {
-			return cerror.WrapError(cerror.ErrMarshalFailed, err)
+			return errors.WrapError(errors.ErrMarshalFailed, err)
 		}
 
-		l.rowWriter.AdvanceTs(r.Row.CommitTs)
+		l.rowWriter.AdvanceTs(r.CommitTs)
 		_, err = l.rowWriter.Write(data)
 		if err != nil {
 			return err
@@ -317,7 +316,7 @@ func (l *logWriter) WriteLog(ctx context.Context, rows []*model.RedoRowChangedEv
 }
 
 // SendDDL implement SendDDL api
-func (l *logWriter) SendDDL(ctx context.Context, ddl *model.RedoDDLEvent) error {
+func (l *logWriter) SendDDL(ctx context.Context, ddl *model.DDLEvent) error {
 	select {
 	case <-ctx.Done():
 		return errors.Trace(ctx.Err())
@@ -325,19 +324,18 @@ func (l *logWriter) SendDDL(ctx context.Context, ddl *model.RedoDDLEvent) error 
 	}
 
 	if l.isStopped() {
-		return cerror.ErrRedoWriterStopped.GenWithStackByArgs()
+		return errors.ErrRedoWriterStopped.GenWithStackByArgs()
 	}
-	if ddl == nil || ddl.DDL == nil {
+	if ddl == nil {
 		return nil
 	}
 
-	rl := &model.RedoLog{RedoDDL: ddl, Type: model.RedoLogTypeDDL}
-	data, err := rl.MarshalMsg(nil)
+	data, err := codec.MarshalDDLAsRedoLog(ddl, nil)
 	if err != nil {
-		return cerror.WrapError(cerror.ErrMarshalFailed, err)
+		return errors.WrapError(errors.ErrMarshalFailed, err)
 	}
 
-	l.ddlWriter.AdvanceTs(ddl.DDL.CommitTs)
+	l.ddlWriter.AdvanceTs(ddl.CommitTs)
 	_, err = l.ddlWriter.Write(data)
 	return err
 }
@@ -351,10 +349,10 @@ func (l *logWriter) FlushLog(ctx context.Context, checkpointTs, resolvedTs model
 	}
 
 	if l.isStopped() {
-		return cerror.ErrRedoWriterStopped.GenWithStackByArgs()
+		return errors.ErrRedoWriterStopped.GenWithStackByArgs()
 	}
 
-	return l.flush(checkpointTs, resolvedTs)
+	return l.flush(ctx, checkpointTs, resolvedTs)
 }
 
 // GetMeta implement GetMeta api
@@ -377,7 +375,7 @@ func (l *logWriter) DeleteAllLogs(ctx context.Context) (err error) {
 			log.Warn("read removed log dir fail", zap.Error(err))
 			return nil
 		}
-		return cerror.WrapError(cerror.ErrRedoFileOp,
+		return errors.WrapError(errors.ErrRedoFileOp,
 			errors.Annotatef(err, "can't read log file directory: %s", l.cfg.Dir))
 	}
 
@@ -393,7 +391,7 @@ func (l *logWriter) DeleteAllLogs(ctx context.Context) (err error) {
 				log.Warn("removed log dir fail", zap.Error(err))
 				return nil
 			}
-			return cerror.WrapError(cerror.ErrRedoFileOp, err)
+			return errors.WrapError(errors.ErrRedoFileOp, err)
 		}
 	} else {
 		for _, file := range filteredFiles {
@@ -402,7 +400,7 @@ func (l *logWriter) DeleteAllLogs(ctx context.Context) (err error) {
 					log.Warn("removed log dir fail", zap.Error(err))
 					return nil
 				}
-				return cerror.WrapError(cerror.ErrRedoFileOp, err)
+				return errors.WrapError(errors.ErrRedoFileOp, err)
 			}
 		}
 	}
@@ -439,7 +437,7 @@ func (l *logWriter) getDeletedChangefeedMarker() string {
 }
 
 func (l *logWriter) writeDeletedMarkerToS3(ctx context.Context) error {
-	return cerror.WrapError(cerror.ErrExternalStorageAPI,
+	return errors.WrapError(errors.ErrExternalStorageAPI,
 		l.extStorage.WriteFile(ctx, l.getDeletedChangefeedMarker(), []byte("D")))
 }
 
@@ -451,27 +449,14 @@ func (l *logWriter) deleteFilesInS3(ctx context.Context, files []string) error {
 			err := l.extStorage.DeleteFile(eCtx, name)
 			if err != nil {
 				// if fail then retry, may end up with notExit err, ignore the error
-				if !isNotExistInS3(err) {
-					return cerror.WrapError(cerror.ErrExternalStorageAPI, err)
+				if !util.IsNotExistInExtStorage(err) {
+					return errors.WrapError(errors.ErrExternalStorageAPI, err)
 				}
 			}
 			return nil
 		})
 	}
 	return eg.Wait()
-}
-
-func isNotExistInS3(err error) bool {
-	// TODO: support other storage
-	if err != nil {
-		if aerr, ok := errors.Cause(err).(awserr.Error); ok { // nolint:errorlint
-			switch aerr.Code() {
-			case s3.ErrCodeNoSuchKey:
-				return true
-			}
-		}
-	}
-	return false
 }
 
 var getAllFilesInS3 = func(ctx context.Context, l *logWriter) ([]string, error) {
@@ -481,7 +466,7 @@ var getAllFilesInS3 = func(ctx context.Context, l *logWriter) ([]string, error) 
 		return nil
 	})
 	if err != nil {
-		return nil, cerror.WrapError(cerror.ErrExternalStorageAPI, err)
+		return nil, errors.WrapError(errors.ErrExternalStorageAPI, err)
 	}
 
 	return files, nil
@@ -502,7 +487,7 @@ func (l *logWriter) Close() (err error) {
 }
 
 // flush flushes all the buffered data to the disk.
-func (l *logWriter) flush(checkpointTs, resolvedTs model.Ts) (err error) {
+func (l *logWriter) flush(ctx context.Context, checkpointTs, resolvedTs model.Ts) (err error) {
 	if l.cfg.EmitDDLEvents {
 		err = multierr.Append(err, l.ddlWriter.Flush())
 	}
@@ -510,7 +495,7 @@ func (l *logWriter) flush(checkpointTs, resolvedTs model.Ts) (err error) {
 		err = multierr.Append(err, l.rowWriter.Flush())
 	}
 	if l.cfg.EmitMeta {
-		err = multierr.Append(err, l.flushLogMeta(checkpointTs, resolvedTs))
+		err = multierr.Append(err, l.flushLogMeta(ctx, checkpointTs, resolvedTs))
 	}
 	return
 }
@@ -556,12 +541,12 @@ func (l *logWriter) maybeUpdateMeta(checkpointTs, resolvedTs uint64) ([]byte, er
 
 	data, err := l.meta.MarshalMsg(nil)
 	if err != nil {
-		err = cerror.WrapError(cerror.ErrMarshalFailed, err)
+		err = errors.WrapError(errors.ErrMarshalFailed, err)
 	}
 	return data, err
 }
 
-func (l *logWriter) flushLogMeta(checkpointTs, resolvedTs uint64) error {
+func (l *logWriter) flushLogMeta(ctx context.Context, checkpointTs, resolvedTs uint64) error {
 	data, err := l.maybeUpdateMeta(checkpointTs, resolvedTs)
 	if err != nil {
 		return err
@@ -573,34 +558,31 @@ func (l *logWriter) flushLogMeta(checkpointTs, resolvedTs uint64) error {
 	if !l.cfg.UseExternalStorage {
 		return l.flushMetaToLocal(data)
 	}
-
-	ctx, cancel := context.WithTimeout(context.Background(), defaultS3Timeout)
-	defer cancel()
 	return l.flushMetaToS3(ctx, data)
 }
 
 func (l *logWriter) flushMetaToLocal(data []byte) error {
 	if err := os.MkdirAll(l.cfg.Dir, redo.DefaultDirMode); err != nil {
 		e := errors.Annotate(err, "can't make dir for new redo logfile")
-		return cerror.WrapError(cerror.ErrRedoFileOp, e)
+		return errors.WrapError(errors.ErrRedoFileOp, e)
 	}
 
 	metaFile, err := openTruncFile(l.filePath())
 	if err != nil {
-		return cerror.WrapError(cerror.ErrRedoFileOp, err)
+		return errors.WrapError(errors.ErrRedoFileOp, err)
 	}
 	_, err = metaFile.Write(data)
 	if err != nil {
-		return cerror.WrapError(cerror.ErrRedoFileOp, err)
+		return errors.WrapError(errors.ErrRedoFileOp, err)
 	}
 	err = metaFile.Sync()
 	if err != nil {
-		return cerror.WrapError(cerror.ErrRedoFileOp, err)
+		return errors.WrapError(errors.ErrRedoFileOp, err)
 	}
 
 	if l.preMetaFile != "" {
 		if err := os.Remove(l.preMetaFile); err != nil && !os.IsNotExist(err) {
-			return cerror.WrapError(cerror.ErrRedoFileOp, err)
+			return errors.WrapError(errors.ErrRedoFileOp, err)
 		}
 	}
 	l.preMetaFile = metaFile.Name()
@@ -612,12 +594,17 @@ func (l *logWriter) flushMetaToS3(ctx context.Context, data []byte) error {
 	start := time.Now()
 	metaFile := l.getMetafileName()
 	if err := l.extStorage.WriteFile(ctx, metaFile, data); err != nil {
-		return cerror.WrapError(cerror.ErrExternalStorageAPI, err)
+		return errors.WrapError(errors.ErrExternalStorageAPI, err)
 	}
 
 	if l.preMetaFile != "" {
-		if err := l.extStorage.DeleteFile(ctx, l.preMetaFile); err != nil && !isNotExistInS3(err) {
-			return cerror.WrapError(cerror.ErrExternalStorageAPI, err)
+		if l.preMetaFile == metaFile {
+			// This should only happen when use a constant uuid generator in test.
+			return nil
+		}
+		err := l.extStorage.DeleteFile(ctx, l.preMetaFile)
+		if err != nil && !util.IsNotExistInExtStorage(err) {
+			return errors.WrapError(errors.ErrExternalStorageAPI, err)
 		}
 	}
 	l.preMetaFile = metaFile

@@ -30,6 +30,7 @@ import (
 	cerror "github.com/pingcap/tiflow/pkg/errors"
 	"github.com/pingcap/tiflow/pkg/sink"
 	"github.com/pingcap/tiflow/pkg/sink/kafka"
+	v2 "github.com/pingcap/tiflow/pkg/sink/kafka/v2"
 	"github.com/prometheus/client_golang/prometheus"
 )
 
@@ -45,7 +46,8 @@ type SinkFactory struct {
 }
 
 // New creates a new SinkFactory by schema.
-func New(ctx context.Context,
+func New(
+	ctx context.Context,
 	sinkURIStr string,
 	cfg *config.ReplicaConfig,
 	errCh chan error,
@@ -66,8 +68,12 @@ func New(ctx context.Context,
 		s.txnSink = txnSink
 		s.sinkType = sink.TxnSink
 	case sink.KafkaScheme, sink.KafkaSSLScheme:
+		factoryCreator := kafka.NewSaramaFactory
+		if config.GetGlobalServerConfig().Debug.EnableKafkaSinkV2 {
+			factoryCreator = v2.NewFactory
+		}
 		mqs, err := mq.NewKafkaDMLSink(ctx, sinkURI, cfg, errCh,
-			kafka.NewSaramaAdminClient, kafka.NewSaramaClient, dmlproducer.NewKafkaDMLProducer)
+			factoryCreator, dmlproducer.NewKafkaDMLProducer)
 		if err != nil {
 			return nil, err
 		}
@@ -109,13 +115,35 @@ func (s *SinkFactory) CreateTableSink(
 	}
 }
 
-// Close closes the sink.
-func (s *SinkFactory) Close() error {
+// CreateTableSinkForConsumer creates a TableSink by schema for consumer.
+// The difference between CreateTableSink and CreateTableSinkForConsumer is that
+// CreateTableSinkForConsumer will not create a new sink for each table.
+// NOTICE: This only used for the consumer. Please do not use it in the processor.
+func (s *SinkFactory) CreateTableSinkForConsumer(
+	changefeedID model.ChangeFeedID, span tablepb.Span, totalRowsCounter prometheus.Counter,
+) tablesink.TableSink {
 	switch s.sinkType {
 	case sink.RowSink:
-		return s.rowSink.Close()
+		// We have to indicate the type here, otherwise it can not be compiled.
+		return tablesink.New[*model.RowChangedEvent](changefeedID, span,
+			s.rowSink, &eventsink.RowChangeEventAppender{}, totalRowsCounter)
 	case sink.TxnSink:
-		return s.txnSink.Close()
+		return tablesink.New[*model.SingleTableTxn](changefeedID, span,
+			// IgnoreStartTs is true because the consumer can
+			// **not** get the start ts of the row changed event.
+			s.txnSink, &eventsink.TxnEventAppender{IgnoreStartTs: true}, totalRowsCounter)
+	default:
+		panic("unknown sink type")
+	}
+}
+
+// Close closes the sink.
+func (s *SinkFactory) Close() {
+	switch s.sinkType {
+	case sink.RowSink:
+		s.rowSink.Close()
+	case sink.TxnSink:
+		s.txnSink.Close()
 	default:
 		panic("unknown sink type")
 	}
