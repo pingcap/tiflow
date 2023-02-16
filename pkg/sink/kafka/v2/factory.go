@@ -33,11 +33,8 @@ import (
 )
 
 type factory struct {
-	changefeedID    model.ChangeFeedID
-	brokerEndpoints []string
-	transport       *kafka.Transport
-	client          *kafka.Client
-	options         *pkafka.Options
+	changefeedID model.ChangeFeedID
+	options      *pkafka.Options
 }
 
 // NewFactory returns a factory implemented based on kafka-go
@@ -57,32 +54,41 @@ func NewFactory(
 	if err != nil {
 		return nil, errors.Trace(err)
 	}
-	mechanism, err := completeSASLConfig(options)
+
+	transport, err := newTransport(options)
 	if err != nil {
 		return nil, errors.Trace(err)
 	}
-	tlsConfig, err := completeSSLConfig(options)
-	if err != nil {
-		return nil, errors.Trace(err)
-	}
-	transport := &kafka.Transport{
-		SASL:        mechanism,
-		ClientID:    clientID,
-		TLS:         tlsConfig,
-		IdleTimeout: options.DialTimeout,
-	}
-	client := &kafka.Client{
-		Addr: kafka.TCP(options.BrokerEndpoints...),
+	transport.ClientID = clientID
+
+	return &factory{
+		changefeedID: changefeedID,
+		options:      options,
+	}, nil
+}
+
+func newClient(brokerEndpoints []string, transport *kafka.Transport) *kafka.Client {
+	return &kafka.Client{
+		Addr: kafka.TCP(brokerEndpoints...),
 		// todo: make this configurable
 		Timeout:   10 * time.Second,
 		Transport: transport,
 	}
-	return &factory{
-		changefeedID:    changefeedID,
-		brokerEndpoints: options.BrokerEndpoints,
-		transport:       transport,
-		client:          client,
-		options:         options,
+}
+
+func newTransport(o *pkafka.Options) (*kafka.Transport, error) {
+	mechanism, err := completeSASLConfig(o)
+	if err != nil {
+		return nil, err
+	}
+	tlsConfig, err := completeSSLConfig(o)
+	if err != nil {
+		return nil, err
+	}
+	return &kafka.Transport{
+		SASL:        mechanism,
+		TLS:         tlsConfig,
+		DialTimeout: o.DialTimeout,
 	}, nil
 }
 
@@ -129,16 +135,20 @@ func completeSASLConfig(o *pkafka.Options) (sasl.Mechanism, error) {
 	return nil, nil
 }
 
-func (f *factory) createWriter() *kafka.Writer {
+func (f *factory) newWriter(async bool) (*kafka.Writer, error) {
+	transport, err := newTransport(f.options)
+	if err != nil {
+		return nil, err
+	}
 	w := &kafka.Writer{
 		Addr:         kafka.TCP(f.options.BrokerEndpoints...),
 		Balancer:     newManualPartitioner(),
-		Transport:    f.transport,
+		Transport:    transport,
 		ReadTimeout:  f.options.ReadTimeout,
 		WriteTimeout: f.options.WriteTimeout,
-		RequiredAcks: kafka.RequireAll,
+		RequiredAcks: kafka.RequiredAcks(f.options.RequiredAcks),
 		BatchBytes:   int64(f.options.MaxMessageBytes),
-		Async:        false,
+		Async:        async,
 	}
 	compression := strings.ToLower(strings.TrimSpace(f.options.Compression))
 	switch compression {
@@ -153,20 +163,31 @@ func (f *factory) createWriter() *kafka.Writer {
 		w.Compression = kafka.Zstd
 	default:
 		log.Warn("Unsupported compression algorithm",
+			zap.String("namespace", f.changefeedID.Namespace),
+			zap.String("changefeed", f.changefeedID.ID),
 			zap.String("compression", f.options.Compression))
 		f.options.Compression = "none"
 	}
-	log.Info("Kafka producer uses " + f.options.Compression + " compression algorithm")
-	return w
+	log.Info("Kafka producer uses "+f.options.Compression+" compression algorithm",
+		zap.String("namespace", f.changefeedID.Namespace),
+		zap.String("changefeed", f.changefeedID.ID))
+	return w, nil
 }
 
 func (f *factory) AdminClient() (pkafka.ClusterAdminClient, error) {
-	return newClusterAdminClient(f.brokerEndpoints), nil
+	transport, err := newTransport(f.options)
+	if err != nil {
+		return nil, err
+	}
+	return newClusterAdminClient(f.options.BrokerEndpoints, transport, f.changefeedID), nil
 }
 
 // SyncProducer creates a sync producer to writer message to kafka
 func (f *factory) SyncProducer() (pkafka.SyncProducer, error) {
-	w := f.createWriter()
+	w, err := f.newWriter(false)
+	if err != nil {
+		return nil, err
+	}
 	return &syncWriter{w: w}, nil
 }
 
@@ -174,7 +195,10 @@ func (f *factory) SyncProducer() (pkafka.SyncProducer, error) {
 func (f *factory) AsyncProducer(closedChan chan struct{},
 	failpointCh chan error,
 ) (pkafka.AsyncProducer, error) {
-	w := f.createWriter()
+	w, err := f.newWriter(true)
+	if err != nil {
+		return nil, err
+	}
 	aw := &asyncWriter{
 		w:            w,
 		closedChan:   closedChan,

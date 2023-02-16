@@ -71,10 +71,7 @@ func TestChangefeedQueryCli(t *testing.T) {
 	require.NotNil(t, o.run(cmd))
 
 	// query success
-	cfV2.EXPECT().Get(gomock.Any(), "bcd").Return(&v2.ChangeFeedDetail{}, nil)
-	cfV2.EXPECT().GetInfo(gomock.Any(), gomock.Any()).Return(&v2.ChangeFeedInfo{
-		Config: v2.GetDefaultReplicaConfig(),
-	}, nil)
+	cfV2.EXPECT().Get(gomock.Any(), "bcd").Return(&v2.ChangeFeedInfo{}, nil)
 
 	o.simplified = false
 	o.changefeedID = "bcd"
