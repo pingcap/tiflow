@@ -46,7 +46,8 @@ type SinkFactory struct {
 }
 
 // New creates a new SinkFactory by schema.
-func New(ctx context.Context,
+func New(
+	ctx context.Context,
 	sinkURIStr string,
 	cfg *config.ReplicaConfig,
 	errCh chan error,
@@ -109,6 +110,28 @@ func (s *SinkFactory) CreateTableSink(
 	case sink.TxnSink:
 		return tablesink.New[*model.SingleTableTxn](changefeedID, span,
 			s.txnSink, &eventsink.TxnEventAppender{}, totalRowsCounter)
+	default:
+		panic("unknown sink type")
+	}
+}
+
+// CreateTableSinkForConsumer creates a TableSink by schema for consumer.
+// The difference between CreateTableSink and CreateTableSinkForConsumer is that
+// CreateTableSinkForConsumer will not create a new sink for each table.
+// NOTICE: This only used for the consumer. Please do not use it in the processor.
+func (s *SinkFactory) CreateTableSinkForConsumer(
+	changefeedID model.ChangeFeedID, span tablepb.Span, totalRowsCounter prometheus.Counter,
+) tablesink.TableSink {
+	switch s.sinkType {
+	case sink.RowSink:
+		// We have to indicate the type here, otherwise it can not be compiled.
+		return tablesink.New[*model.RowChangedEvent](changefeedID, span,
+			s.rowSink, &eventsink.RowChangeEventAppender{}, totalRowsCounter)
+	case sink.TxnSink:
+		return tablesink.New[*model.SingleTableTxn](changefeedID, span,
+			// IgnoreStartTs is true because the consumer can
+			// **not** get the start ts of the row changed event.
+			s.txnSink, &eventsink.TxnEventAppender{IgnoreStartTs: true}, totalRowsCounter)
 	default:
 		panic("unknown sink type")
 	}

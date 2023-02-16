@@ -54,7 +54,7 @@ func TestRowChangeEventAppender(t *testing.T) {
 	require.Equal(t, uint64(2), buffer[2].GetCommitTs())
 }
 
-func TestTxnEventAppender(t *testing.T) {
+func TestTxnEventAppenderWithoutIgnoreStartTs(t *testing.T) {
 	t.Parallel()
 
 	tableInfo := &model.TableName{
@@ -190,6 +190,166 @@ func TestTxnEventAppender(t *testing.T) {
 	}
 	buffer = buffer[:0]
 	require.Panics(t, func() {
+		buffer = appender.Append(buffer, rows...)
+	})
+}
+
+func TestTxnEventAppenderWithIgnoreStartTs(t *testing.T) {
+	t.Parallel()
+
+	tableInfo := &model.TableName{
+		Schema:      "test",
+		Table:       "t1",
+		TableID:     1,
+		IsPartition: false,
+	}
+
+	appender := &TxnEventAppender{IgnoreStartTs: true}
+	var buffer []*model.SingleTableTxn
+	rows := []*model.RowChangedEvent{
+		{
+			Table:    tableInfo,
+			CommitTs: 101,
+			StartTs:  0,
+		},
+		{
+			Table:    tableInfo,
+			CommitTs: 101,
+			StartTs:  0,
+		},
+		{
+			Table:    tableInfo,
+			CommitTs: 102,
+			StartTs:  90,
+		},
+		{
+			Table:    tableInfo,
+			CommitTs: 102,
+			StartTs:  91,
+		},
+		{
+			Table:    tableInfo,
+			CommitTs: 103,
+			StartTs:  0,
+		},
+		{
+			Table:    tableInfo,
+			CommitTs: 103,
+			StartTs:  0,
+		},
+		{
+			Table:    tableInfo,
+			CommitTs: 104,
+			StartTs:  0,
+		},
+		{
+			Table:    tableInfo,
+			CommitTs: 105,
+			StartTs:  0,
+			// Batch1
+			SplitTxn: true,
+		},
+		{
+			Table:    tableInfo,
+			CommitTs: 105,
+			StartTs:  0,
+		},
+		{
+			Table:    tableInfo,
+			CommitTs: 105,
+			StartTs:  0,
+		},
+		{
+			Table:    tableInfo,
+			CommitTs: 105,
+			StartTs:  0,
+			// Batch2
+			SplitTxn: true,
+		},
+		{
+			Table:    tableInfo,
+			CommitTs: 105,
+			StartTs:  0,
+		},
+	}
+	buffer = appender.Append(buffer, rows...)
+	require.Len(t, buffer, 7)
+	// Make sure the order is correct.
+	require.Equal(t, uint64(101), buffer[0].GetCommitTs())
+	// Make we can ignore the startTs.
+	require.Len(t, buffer[0].Rows, 2)
+
+	// Make sure if the startTs is not 0, we can't deal with it.
+	require.Equal(t, uint64(102), buffer[1].GetCommitTs())
+	require.Len(t, buffer[1].Rows, 1)
+	require.Equal(t, uint64(102), buffer[2].GetCommitTs())
+	require.Len(t, buffer[2].Rows, 1)
+
+	require.Equal(t, uint64(103), buffer[3].GetCommitTs())
+	require.Len(t, buffer[3].Rows, 2)
+
+	require.Equal(t, uint64(104), buffer[4].GetCommitTs())
+	require.Len(t, buffer[4].Rows, 1)
+
+	// First batch.
+	require.Equal(t, uint64(105), buffer[5].GetCommitTs())
+	require.Len(t, buffer[5].Rows, 3)
+
+	// Second batch.
+	require.Equal(t, uint64(105), buffer[6].GetCommitTs())
+	require.Len(t, buffer[6].Rows, 2)
+
+	// Test the case which the commitTs is not strictly increasing.
+	rows = []*model.RowChangedEvent{
+		{
+			Table:    tableInfo,
+			CommitTs: 101,
+			StartTs:  98,
+		},
+		{
+			Table:    tableInfo,
+			CommitTs: 100,
+			StartTs:  99,
+		},
+	}
+	buffer = buffer[:0]
+	require.Panics(t, func() {
+		buffer = appender.Append(buffer, rows...)
+	})
+
+	// Test the case which the startTs is not strictly increasing.
+	rows = []*model.RowChangedEvent{
+		{
+			Table:    tableInfo,
+			CommitTs: 101,
+			StartTs:  98,
+		},
+		{
+			Table:    tableInfo,
+			CommitTs: 101,
+			StartTs:  80,
+		},
+	}
+	buffer = buffer[:0]
+	require.Panics(t, func() {
+		buffer = appender.Append(buffer, rows...)
+	})
+
+	// Test the case which the startTs all is 0.
+	rows = []*model.RowChangedEvent{
+		{
+			Table:    tableInfo,
+			CommitTs: 101,
+			StartTs:  0,
+		},
+		{
+			Table:    tableInfo,
+			CommitTs: 101,
+			StartTs:  0,
+		},
+	}
+	buffer = buffer[:0]
+	require.NotPanics(t, func() {
 		buffer = appender.Append(buffer, rows...)
 	})
 }
