@@ -24,6 +24,7 @@ import (
 
 	"github.com/pingcap/errors"
 	"github.com/pingcap/log"
+	"github.com/pingcap/tiflow/cdc/contextutil"
 	"github.com/pingcap/tiflow/cdc/model"
 	"github.com/pingcap/tiflow/pkg/config"
 	cerror "github.com/pingcap/tiflow/pkg/errors"
@@ -179,7 +180,7 @@ func (c *Options) SetPartitionNum(realPartitionCount int32) error {
 }
 
 // Apply the sinkURI to update Options
-func (c *Options) Apply(sinkURI *url.URL) error {
+func (c *Options) Apply(ctx context.Context, sinkURI *url.URL) error {
 	c.BrokerEndpoints = strings.Split(sinkURI.Host, ",")
 	params := sinkURI.Query()
 	s := params.Get("partition-num")
@@ -222,7 +223,14 @@ func (c *Options) Apply(sinkURI *url.URL) error {
 		c.Compression = s
 	}
 
-	c.ClientID = params.Get("kafka-client-id")
+	clientID, err := NewKafkaClientID(
+		contextutil.CaptureAddrFromCtx(ctx),
+		contextutil.ChangefeedIDFromCtx(ctx),
+		params.Get("kafka-client-id"))
+	if err != nil {
+		return err
+	}
+	c.ClientID = clientID
 
 	s = params.Get("auto-create-topic")
 	if s != "" {
@@ -269,7 +277,7 @@ func (c *Options) Apply(sinkURI *url.URL) error {
 		c.RequiredAcks = r
 	}
 
-	err := c.applySASL(params)
+	err = c.applySASL(params)
 	if err != nil {
 		return err
 	}
@@ -424,15 +432,15 @@ var (
 )
 
 // NewKafkaClientID generates kafka client id
-func NewKafkaClientID(role, captureAddr string,
+func NewKafkaClientID(captureAddr string,
 	changefeedID model.ChangeFeedID,
 	configuredClientID string,
 ) (clientID string, err error) {
 	if configuredClientID != "" {
 		clientID = configuredClientID
 	} else {
-		clientID = fmt.Sprintf("TiCDC_producer_%s_%s_%s_%s",
-			role, captureAddr, changefeedID.Namespace, changefeedID.ID)
+		clientID = fmt.Sprintf("TiCDC_producer_%s_%s_%s",
+			captureAddr, changefeedID.Namespace, changefeedID.ID)
 		clientID = commonInvalidChar.ReplaceAllString(clientID, "_")
 	}
 	if !validClientID.MatchString(clientID) {

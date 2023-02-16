@@ -20,7 +20,6 @@ import (
 	"time"
 
 	"github.com/pingcap/log"
-	"github.com/pingcap/tiflow/cdc/contextutil"
 	"github.com/pingcap/tiflow/cdc/model"
 	"github.com/pingcap/tiflow/pkg/errors"
 	pkafka "github.com/pingcap/tiflow/pkg/sink/kafka"
@@ -43,19 +42,6 @@ func NewFactory(
 	options *pkafka.Options,
 	changefeedID model.ChangeFeedID,
 ) (pkafka.Factory, error) {
-	captureAddr := contextutil.CaptureAddrFromCtx(ctx)
-	var role string
-	if contextutil.IsOwnerFromCtx(ctx) {
-		role = util.RoleOwner.String()
-	} else {
-		role = util.RoleProcessor.String()
-	}
-	clientID, err := pkafka.NewKafkaClientID(role, captureAddr, changefeedID, options.ClientID)
-	if err != nil {
-		return nil, errors.Trace(err)
-	}
-	options.ClientID = clientID
-
 	return &factory{
 		changefeedID: changefeedID,
 		options:      options,

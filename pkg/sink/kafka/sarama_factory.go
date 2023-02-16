@@ -23,9 +23,9 @@ import (
 )
 
 type saramaFactory struct {
-	changefeedID    model.ChangeFeedID
-	brokerEndpoints []string
-	config          *sarama.Config
+	changefeedID model.ChangeFeedID
+	option       *Options
+	config       *sarama.Config
 }
 
 // NewSaramaFactory constructs a Factory with sarama implementation.
@@ -33,25 +33,27 @@ func NewSaramaFactory(ctx context.Context,
 	o *Options,
 	changefeedID model.ChangeFeedID,
 ) (Factory, error) {
-	saramaConfig, err := NewSaramaConfig(ctx, o)
+	saramaConfig, err := NewSaramaConfig(o)
 	if err != nil {
 		return nil, err
 	}
 	return &saramaFactory{
-		changefeedID:    changefeedID,
-		brokerEndpoints: o.BrokerEndpoints,
-		config:          saramaConfig,
+		changefeedID: changefeedID,
+		option:       o,
+		config:       saramaConfig,
 	}, nil
 }
 
 func (f *saramaFactory) AdminClient() (ClusterAdminClient, error) {
-	return newAdminClient(f.brokerEndpoints, f.config, f.changefeedID)
+	f.config.Producer.MaxMessageBytes = f.option.MaxMessageBytes
+	return newAdminClient(f.option.BrokerEndpoints, f.config, f.changefeedID)
 }
 
 // SyncProducer returns a Sync Producer,
 // it should be the caller's responsibility to close the producer
 func (f *saramaFactory) SyncProducer() (SyncProducer, error) {
-	client, err := sarama.NewClient(f.brokerEndpoints, f.config)
+	f.config.Producer.MaxMessageBytes = f.option.MaxMessageBytes
+	client, err := sarama.NewClient(f.option.BrokerEndpoints, f.config)
 	if err != nil {
 		return nil, errors.Trace(err)
 	}
@@ -74,7 +76,8 @@ func (f *saramaFactory) AsyncProducer(
 	closedChan chan struct{},
 	failpointCh chan error,
 ) (AsyncProducer, error) {
-	client, err := sarama.NewClient(f.brokerEndpoints, f.config)
+	f.config.Producer.MaxMessageBytes = f.option.MaxMessageBytes
+	client, err := sarama.NewClient(f.option.BrokerEndpoints, f.config)
 	if err != nil {
 		return nil, errors.Trace(err)
 	}
