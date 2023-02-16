@@ -219,9 +219,9 @@ func (a *admin) CreateTopic(
 	if err != nil {
 		return errors.Trace(err)
 	}
-
+	
 	for _, err := range response.Errors {
-		if err != nil {
+		if err != nil && !errors.Is(err, kafka.TopicAlreadyExists) {
 			return errors.Trace(err)
 		}
 	}
