@@ -233,8 +233,10 @@ type consumer struct {
 	codecCfg        *common.Config
 	externalStorage storage.ExternalStorage
 	fileExtension   string
-	// tableIdxMap maintains a map of <dmlPathKey, max file index>
-	tableIdxMap map[dmlPathKey]uint64
+	// tableDMLIdxMap maintains a map of <dmlPathKey, max file index>
+	tableDMLIdxMap map[dmlPathKey]uint64
+	// tableDDLSet maintains a set of schemaPathKey
+	tableDDLSet map[schemaPathKey]struct{}
 	// tableTsMap maintains a map of <TableID, max commit ts>
 	tableTsMap map[model.TableID]uint64
 	// tableSinkMap maintains a map of <TableID, TableSink>
@@ -305,7 +307,7 @@ func newConsumer(ctx context.Context) (*consumer, error) {
 		externalStorage: storage,
 		fileExtension:   extension,
 		errCh:           errCh,
-		tableIdxMap:     make(map[dmlPathKey]uint64),
+		tableDMLIdxMap:  make(map[dmlPathKey]uint64),
 		tableTsMap:      make(map[model.TableID]uint64),
 		tableSinkMap:    make(map[model.TableID]tablesink.TableSink),
 		tableIDGenerator: &fakeTableIDGenerator{
@@ -315,7 +317,7 @@ func newConsumer(ctx context.Context) (*consumer, error) {
 }
 
 // map1 - map2
-func (c *consumer) difference(map1, map2 map[dmlPathKey]uint64) map[dmlPathKey]fileIndexRange {
+func diffDMLMaps(map1, map2 map[dmlPathKey]uint64) map[dmlPathKey]fileIndexRange {
 	resMap := make(map[dmlPathKey]fileIndexRange)
 	for k, v := range map1 {
 		if _, ok := map2[k]; !ok {
@@ -334,17 +336,33 @@ func (c *consumer) difference(map1, map2 map[dmlPathKey]uint64) map[dmlPathKey]f
 	return resMap
 }
 
-// getNewFiles returns dml files in specific ranges.
-func (c *consumer) getNewFiles(ctx context.Context) (map[dmlPathKey]fileIndexRange, error) {
-	m := make(map[dmlPathKey]fileIndexRange)
-	opt := &storage.WalkOption{SubDir: ""}
-
-	origTableMap := make(map[dmlPathKey]uint64, len(c.tableIdxMap))
-	for k, v := range c.tableIdxMap {
-		origTableMap[k] = v
+// set1 - set2
+func diffDDLSet(set1, set2 map[schemaPathKey]struct{}) map[schemaPathKey]struct{} {
+	resSet := make(map[schemaPathKey]struct{})
+	for k := range set1 {
+		if _, ok := set2[k]; !ok {
+			resSet[k] = struct{}{}
+		}
 	}
 
-	schemaSet := make(map[schemaPathKey]struct{})
+	return resSet
+}
+
+// getNewFiles returns newly created dml files in specific ranges and ddl files (schema.json).
+func (c *consumer) getNewFiles(ctx context.Context) (map[dmlPathKey]fileIndexRange, map[schemaPathKey]struct{}, error) {
+	var tableDDLSet map[schemaPathKey]struct{}
+	tableDMLMap := make(map[dmlPathKey]fileIndexRange)
+	opt := &storage.WalkOption{SubDir: ""}
+
+	origDMLIdxMap := make(map[dmlPathKey]uint64, len(c.tableDMLIdxMap))
+	for k, v := range c.tableDMLIdxMap {
+		origDMLIdxMap[k] = v
+	}
+	origDDLSet := make(map[schemaPathKey]struct{}, len(c.tableDDLSet))
+	for k := range c.tableDDLSet {
+		origDDLSet[k] = struct{}{}
+	}
+
 	err := c.externalStorage.WalkDir(ctx, opt, func(path string, size int64) error {
 		var dmlkey dmlPathKey
 		var schemaKey schemaPathKey
@@ -357,9 +375,9 @@ func (c *consumer) getNewFiles(ctx context.Context) (map[dmlPathKey]fileIndexRan
 			err := schemaKey.parseSchemaFilePath(path)
 			if err != nil {
 				log.Error("failed to parse schema file path", zap.Error(err))
-			} else {
-				schemaSet[schemaKey] = struct{}{}
+				// skip handling this file
 			}
+			c.tableDDLSet[schemaKey] = struct{}{}
 
 			return nil
 		}
@@ -371,50 +389,34 @@ func (c *consumer) getNewFiles(ctx context.Context) (map[dmlPathKey]fileIndexRan
 			return nil
 		}
 
-		if _, ok := c.tableIdxMap[dmlkey]; !ok || fileIdx >= c.tableIdxMap[dmlkey] {
-			c.tableIdxMap[dmlkey] = fileIdx
+		if _, ok := c.tableDMLIdxMap[dmlkey]; !ok || fileIdx >= c.tableDMLIdxMap[dmlkey] {
+			c.tableDMLIdxMap[dmlkey] = fileIdx
 		}
 
 		return nil
 	})
 	if err != nil {
-		return m, err
+		return tableDMLMap, tableDDLSet, err
 	}
 
-	// filter out those files whose "schema.json" file has not been generated yet.
-	// because we strongly rely on this schema file to get correct table definition
-	// and do message decoding.
-	for key := range c.tableIdxMap {
-		schemaKey := key.schemaPathKey
-		// cannot find the scheme file, filter out the item.
-		if _, ok := schemaSet[schemaKey]; !ok {
-			delete(c.tableIdxMap, key)
-		}
-	}
-
-	m = c.difference(c.tableIdxMap, origTableMap)
-	return m, err
+	tableDMLMap = diffDMLMaps(c.tableDMLIdxMap, origDMLIdxMap)
+	tableDDLSet = diffDDLSet(c.tableDDLSet, origDDLSet)
+	return tableDMLMap, tableDDLSet, err
 }
 
 // emitDMLEvents decodes RowChangedEvents from file content and emit them.
-func (c *consumer) emitDMLEvents(ctx context.Context, tableID int64, pathKey dmlPathKey, content []byte) error {
+func (c *consumer) emitDMLEvents(
+	ctx context.Context, tableID int64,
+	tableDetail cloudstorage.TableDefinition,
+	pathKey dmlPathKey,
+	content []byte,
+) error {
 	var (
-		events      []*model.RowChangedEvent
-		tableDetail cloudstorage.TableDefinition
-		decoder     codec.EventBatchDecoder
-		err         error
+		events  []*model.RowChangedEvent
+		decoder codec.EventBatchDecoder
+		err     error
 	)
 
-	schemaFilePath := pathKey.schemaPathKey.generagteSchemaFilePath()
-	schemaContent, err := c.externalStorage.ReadFile(ctx, schemaFilePath)
-	if err != nil {
-		return errors.Trace(err)
-	}
-
-	err = json.Unmarshal(schemaContent, &tableDetail)
-	if err != nil {
-		return errors.Trace(err)
-	}
 	tableInfo, err := tableDetail.ToTableInfo()
 	if err != nil {
 		return errors.Trace(err)
@@ -499,6 +501,132 @@ func (c *consumer) waitTableFlushComplete(ctx context.Context, tableID model.Tab
 	}
 }
 
+func (c *consumer) syncExecDMLEvents(
+	ctx context.Context,
+	tableDef cloudstorage.TableDefinition,
+	key dmlPathKey,
+	fileIdx uint64,
+) error {
+	filePath := key.generateDMLFilePath(fileIdx, c.fileExtension)
+	log.Debug("read from dml file path", zap.String("path", filePath))
+	content, err := c.externalStorage.ReadFile(ctx, filePath)
+	if err != nil {
+		return errors.Trace(err)
+	}
+	tableID := c.tableIDGenerator.generateFakeTableID(
+		key.schema, key.table, key.partitionNum)
+	err = c.emitDMLEvents(ctx, tableID, tableDef, key, content)
+	if err != nil {
+		return errors.Trace(err)
+	}
+
+	resolvedTs := model.NewResolvedTs(c.tableTsMap[tableID])
+	err = c.tableSinkMap[tableID].UpdateResolvedTs(resolvedTs)
+	if err != nil {
+		return errors.Trace(err)
+	}
+	err = c.waitTableFlushComplete(ctx, tableID)
+	if err != nil {
+		return errors.Trace(err)
+	}
+
+	return nil
+}
+
+func (c *consumer) handleDDLFiles(ctx context.Context, ddlFileSet map[schemaPathKey]struct{}) error {
+	keys := make([]schemaPathKey, 0, len(ddlFileSet))
+	for k := range ddlFileSet {
+		keys = append(keys, k)
+	}
+
+	if len(keys) == 0 {
+		log.Info("no new ddl files found since last round")
+		return nil
+	}
+
+	sort.Slice(keys, func(i, j int) bool {
+		if keys[i].schema != keys[j].schema {
+			return keys[i].schema < keys[j].schema
+		}
+		if keys[i].table != keys[j].table {
+			return keys[i].table < keys[j].table
+		}
+		return keys[i].version < keys[j].version
+	})
+	for _, key := range keys {
+		tableDef, err := c.getTableDefFromFile(ctx, key)
+		if err != nil {
+			return err
+		}
+		_, err = tableDef.ToDDLEvent()
+		if err != nil {
+			return err
+		}
+		// TODO: use ddlsink to execute this ddl event
+	}
+
+	return nil
+}
+
+func (c *consumer) getTableDefFromFile(ctx context.Context, schemaKey schemaPathKey) (cloudstorage.TableDefinition, error) {
+	var tableDef cloudstorage.TableDefinition
+
+	schemaFilePath := schemaKey.generagteSchemaFilePath()
+	schemaContent, err := c.externalStorage.ReadFile(ctx, schemaFilePath)
+	if err != nil {
+		return tableDef, errors.Trace(err)
+	}
+
+	err = json.Unmarshal(schemaContent, &tableDef)
+	if err != nil {
+		return tableDef, errors.Trace(err)
+	}
+
+	return tableDef, nil
+}
+
+func (c *consumer) handleDMLFiles(ctx context.Context, dmlFileMap map[dmlPathKey]fileIndexRange) error {
+	keys := make([]dmlPathKey, 0, len(dmlFileMap))
+	for k := range dmlFileMap {
+		keys = append(keys, k)
+	}
+	if len(keys) == 0 {
+		log.Info("no new dml files found since last round")
+		return nil
+	}
+	sort.Slice(keys, func(i, j int) bool {
+		if keys[i].schema != keys[j].schema {
+			return keys[i].schema < keys[j].schema
+		}
+		if keys[i].table != keys[j].table {
+			return keys[i].table < keys[j].table
+		}
+		if keys[i].version != keys[j].version {
+			return keys[i].version < keys[j].version
+		}
+		if keys[i].partitionNum != keys[j].partitionNum {
+			return keys[i].partitionNum < keys[j].partitionNum
+		}
+		return keys[i].date < keys[j].date
+	})
+
+	for _, key := range keys {
+		tableDef, err := c.getTableDefFromFile(ctx, key.schemaPathKey)
+		if err != nil {
+			return err
+		}
+
+		fileRange := dmlFileMap[key]
+		for i := fileRange.start; i <= fileRange.end; i++ {
+			if err := c.syncExecDMLEvents(ctx, tableDef, key, i); err != nil {
+				return err
+			}
+		}
+	}
+
+	return nil
+}
+
 func (c *consumer) run(ctx context.Context) error {
 	ticker := time.NewTicker(flushInterval)
 	for {
@@ -510,61 +638,19 @@ func (c *consumer) run(ctx context.Context) error {
 		case <-ticker.C:
 		}
 
-		fileMap, err := c.getNewFiles(ctx)
+		dmlFileMap, ddlFileSet, err := c.getNewFiles(ctx)
 		if err != nil {
 			return errors.Trace(err)
 		}
 
-		keys := make([]dmlPathKey, 0, len(fileMap))
-		for k := range fileMap {
-			keys = append(keys, k)
+		err = c.handleDMLFiles(ctx, dmlFileMap)
+		if err != nil {
+			return errors.Trace(err)
 		}
 
-		if len(keys) == 0 {
-			log.Info("no new files found since last round")
-		}
-		sort.Slice(keys, func(i, j int) bool {
-			if keys[i].schema != keys[j].schema {
-				return keys[i].schema < keys[j].schema
-			}
-			if keys[i].table != keys[j].table {
-				return keys[i].table < keys[j].table
-			}
-			if keys[i].version != keys[j].version {
-				return keys[i].version < keys[j].version
-			}
-			if keys[i].partitionNum != keys[j].partitionNum {
-				return keys[i].partitionNum < keys[j].partitionNum
-			}
-			return keys[i].date < keys[j].date
-		})
-
-		for _, k := range keys {
-			fileRange := fileMap[k]
-			for i := fileRange.start; i <= fileRange.end; i++ {
-				filePath := k.generateDMLFilePath(i, c.fileExtension)
-				log.Debug("read from dml file path", zap.String("path", filePath))
-				content, err := c.externalStorage.ReadFile(ctx, filePath)
-				if err != nil {
-					return errors.Trace(err)
-				}
-				tableID := c.tableIDGenerator.generateFakeTableID(
-					k.schema, k.table, k.partitionNum)
-				err = c.emitDMLEvents(ctx, tableID, k, content)
-				if err != nil {
-					return errors.Trace(err)
-				}
-
-				resolvedTs := model.NewResolvedTs(c.tableTsMap[tableID])
-				err = c.tableSinkMap[tableID].UpdateResolvedTs(resolvedTs)
-				if err != nil {
-					return errors.Trace(err)
-				}
-				err = c.waitTableFlushComplete(ctx, tableID)
-				if err != nil {
-					return errors.Trace(err)
-				}
-			}
+		err = c.handleDDLFiles(ctx, ddlFileSet)
+		if err != nil {
+			return errors.Trace(err)
 		}
 	}
 }
