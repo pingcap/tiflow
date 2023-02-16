@@ -57,7 +57,7 @@ type worker struct {
 	protocol config.Protocol
 	// msgChan caches the messages to be sent.
 	// It is an unbounded channel.
-	msgChan *chann.Chann[mqEvent]
+	msgChan *chann.DrainableChann[mqEvent]
 	// ticker used to force flush the messages when the interval is reached.
 	ticker *time.Ticker
 
@@ -88,7 +88,7 @@ func newWorker(
 	w := &worker{
 		changeFeedID:                      id,
 		protocol:                          protocol,
-		msgChan:                           chann.New[mqEvent](),
+		msgChan:                           chann.NewAutoDrainChann[mqEvent](),
 		ticker:                            time.NewTicker(flushInterval),
 		encoderGroup:                      codec.NewEncoderGroup(builder, encoderConcurrency, id),
 		producer:                          producer,
@@ -304,12 +304,7 @@ func (w *worker) sendMessages(ctx context.Context) error {
 }
 
 func (w *worker) close() {
-	w.msgChan.Close()
-	// We must finish consuming the data here,
-	// otherwise it will cause the channel to not close properly.
-	for range w.msgChan.Out() {
-		// Do nothing. We do not care about the data.
-	}
+	w.msgChan.CloseAndDrain()
 	w.producer.Close()
 
 	mq.WorkerSendMessageDuration.DeleteLabelValues(w.changeFeedID.Namespace, w.changeFeedID.ID)
