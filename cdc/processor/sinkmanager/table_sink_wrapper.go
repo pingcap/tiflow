@@ -309,6 +309,7 @@ func convertRowChangedEvents(
 			} else {
 				// If the handle key columns are not updated, PreColumns is directly ignored.
 				e.Row.PreColumns = nil
+				e.Row.PreColumnValues = nil
 				rowChangedEvents = append(rowChangedEvents, e.Row)
 			}
 		} else {
@@ -363,11 +364,13 @@ func splitUpdateEvent(
 	deleteEvent.RawKV = &deleteEventRowKV
 
 	deleteEvent.Row.Columns = nil
+	deleteEvent.Row.ColumnValues = nil
 	for i := range deleteEvent.Row.PreColumns {
 		// NOTICE: Only the handle key pre column is retained in the delete event.
 		if deleteEvent.Row.PreColumns[i] != nil &&
 			!deleteEvent.Row.PreColumns[i].Flag.IsHandleKey() {
 			deleteEvent.Row.PreColumns[i] = nil
+			deleteEvent.Row.PreColumnValues[i].Value = nil
 		}
 	}
 
@@ -378,6 +381,7 @@ func splitUpdateEvent(
 	insertEvent.RawKV = &insertEventRowKV
 	// NOTICE: clean up pre cols for insert event.
 	insertEvent.Row.PreColumns = nil
+	insertEvent.Row.PreColumnValues = nil
 
 	return &deleteEvent, &insertEvent, nil
 }
