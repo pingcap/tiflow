@@ -237,7 +237,7 @@ type consumer struct {
 	tableIdxMap map[dmlPathKey]uint64
 	// tableTsMap maintains a map of <TableID, max commit ts>
 	tableTsMap map[model.TableID]uint64
-	// tableSinkMap maintails a map of <TableID, TableSink>
+	// tableSinkMap maintains a map of <TableID, TableSink>
 	tableSinkMap     map[model.TableID]tablesink.TableSink
 	tableIDGenerator *fakeTableIDGenerator
 	errCh            chan error
