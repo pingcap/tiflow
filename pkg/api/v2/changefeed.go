@@ -31,8 +31,6 @@ type ChangefeedsGetter interface {
 type ChangefeedInterface interface {
 	// Create creates a changefeed
 	Create(ctx context.Context, cfg *v2.ChangefeedConfig) (*v2.ChangeFeedInfo, error)
-	// GetInfo gets a changefeed's info
-	GetInfo(ctx context.Context, name string) (*v2.ChangeFeedInfo, error)
 	// VerifyTable verifies table for a changefeed
 	VerifyTable(ctx context.Context, cfg *v2.VerifyTableConfig) (*v2.Tables, error)
 	// Update updates a changefeed
@@ -44,6 +42,10 @@ type ChangefeedInterface interface {
 	Delete(ctx context.Context, name string) error
 	// Pause pauses a changefeed with given name
 	Pause(ctx context.Context, name string) error
+	// Get gets a changefeed detaail info
+	Get(ctx context.Context, name string) (*v2.ChangeFeedInfo, error)
+	// List lists all changefeeds
+	List(ctx context.Context, state string) ([]v2.ChangefeedCommonInfo, error)
 }
 
 // changefeeds implements ChangefeedInterface
@@ -76,18 +78,6 @@ func (c *changefeeds) VerifyTable(ctx context.Context,
 	err := c.client.Post().
 		WithURI("verify_table").
 		WithBody(cfg).
-		Do(ctx).
-		Into(result)
-	return result, err
-}
-
-func (c *changefeeds) GetInfo(ctx context.Context,
-	name string,
-) (*v2.ChangeFeedInfo, error) {
-	result := &v2.ChangeFeedInfo{}
-	u := fmt.Sprintf("changefeeds/%s/meta_info", name)
-	err := c.client.Get().
-		WithURI(u).
 		Do(ctx).
 		Into(result)
 	return result, err
@@ -135,4 +125,30 @@ func (c *changefeeds) Pause(ctx context.Context,
 	return c.client.Post().
 		WithURI(u).
 		Do(ctx).Error()
+}
+
+// Get gets a changefeed detaail info
+func (c *changefeeds) Get(ctx context.Context,
+	name string,
+) (*v2.ChangeFeedInfo, error) {
+	result := new(v2.ChangeFeedInfo)
+	u := fmt.Sprintf("changefeeds/%s", name)
+	err := c.client.Get().
+		WithURI(u).
+		Do(ctx).
+		Into(result)
+	return result, err
+}
+
+// List lists all changefeeds
+func (c *changefeeds) List(ctx context.Context,
+	state string,
+) ([]v2.ChangefeedCommonInfo, error) {
+	result := &v2.ListResponse[v2.ChangefeedCommonInfo]{}
+	err := c.client.Get().
+		WithURI("changefeeds").
+		WithParam("state", state).
+		Do(ctx).
+		Into(result)
+	return result.Items, err
 }
