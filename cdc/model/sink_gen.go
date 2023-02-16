@@ -1828,7 +1828,7 @@ func (z *RowChangedEvent) DecodeMsg(dc *msgp.Reader) (err error) {
 				err = msgp.WrapError(err, "CommitTs")
 				return
 			}
-		case "ColumnValues":
+		case "column-values":
 			var zb0008 uint32
 			zb0008, err = dc.ReadArrayHeader()
 			if err != nil {
@@ -1870,7 +1870,7 @@ func (z *RowChangedEvent) DecodeMsg(dc *msgp.Reader) (err error) {
 					}
 				}
 			}
-		case "PreColumnValues":
+		case "pre-column-values":
 			var zb0010 uint32
 			zb0010, err = dc.ReadArrayHeader()
 			if err != nil {
@@ -2087,8 +2087,8 @@ func (z *RowChangedEvent) EncodeMsg(en *msgp.Writer) (err error) {
 		err = msgp.WrapError(err, "CommitTs")
 		return
 	}
-	// write "ColumnValues"
-	err = en.Append(0xac, 0x43, 0x6f, 0x6c, 0x75, 0x6d, 0x6e, 0x56, 0x61, 0x6c, 0x75, 0x65, 0x73)
+	// write "column-values"
+	err = en.Append(0xad, 0x63, 0x6f, 0x6c, 0x75, 0x6d, 0x6e, 0x2d, 0x76, 0x61, 0x6c, 0x75, 0x65, 0x73)
 	if err != nil {
 		return
 	}
@@ -2110,8 +2110,8 @@ func (z *RowChangedEvent) EncodeMsg(en *msgp.Writer) (err error) {
 			return
 		}
 	}
-	// write "PreColumnValues"
-	err = en.Append(0xaf, 0x50, 0x72, 0x65, 0x43, 0x6f, 0x6c, 0x75, 0x6d, 0x6e, 0x56, 0x61, 0x6c, 0x75, 0x65, 0x73)
+	// write "pre-column-values"
+	err = en.Append(0xb1, 0x70, 0x72, 0x65, 0x2d, 0x63, 0x6f, 0x6c, 0x75, 0x6d, 0x6e, 0x2d, 0x76, 0x61, 0x6c, 0x75, 0x65, 0x73)
 	if err != nil {
 		return
 	}
@@ -2204,8 +2204,8 @@ func (z *RowChangedEvent) MarshalMsg(b []byte) (o []byte, err error) {
 	// string "commit-ts"
 	o = append(o, 0xa9, 0x63, 0x6f, 0x6d, 0x6d, 0x69, 0x74, 0x2d, 0x74, 0x73)
 	o = msgp.AppendUint64(o, z.CommitTs)
-	// string "ColumnValues"
-	o = append(o, 0xac, 0x43, 0x6f, 0x6c, 0x75, 0x6d, 0x6e, 0x56, 0x61, 0x6c, 0x75, 0x65, 0x73)
+	// string "column-values"
+	o = append(o, 0xad, 0x63, 0x6f, 0x6c, 0x75, 0x6d, 0x6e, 0x2d, 0x76, 0x61, 0x6c, 0x75, 0x65, 0x73)
 	o = msgp.AppendArrayHeader(o, uint32(len(z.ColumnValues)))
 	for za0005 := range z.ColumnValues {
 		// map header, size 1
@@ -2217,8 +2217,8 @@ func (z *RowChangedEvent) MarshalMsg(b []byte) (o []byte, err error) {
 			return
 		}
 	}
-	// string "PreColumnValues"
-	o = append(o, 0xaf, 0x50, 0x72, 0x65, 0x43, 0x6f, 0x6c, 0x75, 0x6d, 0x6e, 0x56, 0x61, 0x6c, 0x75, 0x65, 0x73)
+	// string "pre-column-values"
+	o = append(o, 0xb1, 0x70, 0x72, 0x65, 0x2d, 0x63, 0x6f, 0x6c, 0x75, 0x6d, 0x6e, 0x2d, 0x76, 0x61, 0x6c, 0x75, 0x65, 0x73)
 	o = msgp.AppendArrayHeader(o, uint32(len(z.PreColumnValues)))
 	for za0006 := range z.PreColumnValues {
 		// map header, size 1
@@ -2442,7 +2442,7 @@ func (z *RowChangedEvent) UnmarshalMsg(bts []byte) (o []byte, err error) {
 				err = msgp.WrapError(err, "CommitTs")
 				return
 			}
-		case "ColumnValues":
+		case "column-values":
 			var zb0008 uint32
 			zb0008, bts, err = msgp.ReadArrayHeaderBytes(bts)
 			if err != nil {
@@ -2484,7 +2484,7 @@ func (z *RowChangedEvent) UnmarshalMsg(bts []byte) (o []byte, err error) {
 					}
 				}
 			}
-		case "PreColumnValues":
+		case "pre-column-values":
 			var zb0010 uint32
 			zb0010, bts, err = msgp.ReadArrayHeaderBytes(bts)
 			if err != nil {
@@ -2566,11 +2566,11 @@ func (z *RowChangedEvent) Msgsize() (s int) {
 	for za0003 := range z.IndexColumns {
 		s += msgp.ArrayHeaderSize + (len(z.IndexColumns[za0003]) * (msgp.IntSize))
 	}
-	s += 9 + msgp.Uint64Size + 10 + msgp.Uint64Size + 13 + msgp.ArrayHeaderSize
+	s += 9 + msgp.Uint64Size + 10 + msgp.Uint64Size + 14 + msgp.ArrayHeaderSize
 	for za0005 := range z.ColumnValues {
 		s += 1 + 6 + msgp.GuessSize(z.ColumnValues[za0005].Value)
 	}
-	s += 16 + msgp.ArrayHeaderSize
+	s += 18 + msgp.ArrayHeaderSize
 	for za0006 := range z.PreColumnValues {
 		s += 1 + 6 + msgp.GuessSize(z.PreColumnValues[za0006].Value)
 	}

@@ -194,12 +194,12 @@ func TestApplyDMLs(t *testing.T) {
 		txn.GetDBConnImpl = getDBConnBak
 	}()
 
-	dmls := []*model.RowChangedEvent{
+	dmls := model.UnboundRowChangedEvents([]*model.BoundedRowChangedEvent{
 		{
 			StartTs:  1100,
 			CommitTs: 1200,
 			Table:    &model.TableName{Schema: "test", Table: "t1"},
-			Columns: []*model.Column{
+			Columns: []*model.BoundedColumn{
 				{
 					Name:  "a",
 					Value: 1,
@@ -215,7 +215,7 @@ func TestApplyDMLs(t *testing.T) {
 			StartTs:  1200,
 			CommitTs: 1300,
 			Table:    &model.TableName{Schema: "test", Table: "t1"},
-			PreColumns: []*model.Column{
+			PreColumns: []*model.BoundedColumn{
 				{
 					Name:  "a",
 					Value: 1,
@@ -226,7 +226,7 @@ func TestApplyDMLs(t *testing.T) {
 					Flag:  0,
 				},
 			},
-			Columns: []*model.Column{
+			Columns: []*model.BoundedColumn{
 				{
 					Name:  "a",
 					Value: 2,
@@ -238,7 +238,7 @@ func TestApplyDMLs(t *testing.T) {
 				},
 			},
 		},
-	}
+	})
 	for _, dml := range dmls {
 		redoLogCh <- dml
 	}

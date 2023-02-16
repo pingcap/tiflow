@@ -263,8 +263,8 @@ type RowChangedEvent struct {
 	StartTs         uint64        `json:"start-ts" msg:"start-ts"`
 	CommitTs        uint64        `json:"commit-ts" msg:"commit-ts"`
 	RowID           int64         `json:"row-id" msg:"-"` // Deprecated. It is empty when the RowID comes from clustered index table.
-	ColumnValues    []ColumnValue `json:"column-values" msg: "column-values"`
-	PreColumnValues []ColumnValue `json:"pre-column-values" msg: "pre-column-values"`
+	ColumnValues    []ColumnValue `json:"column-values" msg:"column-values"`
+	PreColumnValues []ColumnValue `json:"pre-column-values" msg:"pre-column-values"`
 
 	// ApproximateDataSize is the approximate size of protobuf binary
 	// representation of this event, without any meta information.
@@ -793,9 +793,8 @@ func SortColumnsByName(cols []*Column, colvals []ColumnValue, reverse bool) {
 	sort.Slice(bcols, func(i, j int) bool {
 		if reverse {
 			return bcols[i].Name > bcols[j].Name
-		} else {
-			return bcols[i].Name < bcols[j].Name
 		}
+		return bcols[i].Name < bcols[j].Name
 	})
 	for i := range bcols {
 		cols[i] = bcols[i].Unbound()

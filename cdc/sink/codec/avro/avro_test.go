@@ -642,19 +642,16 @@ func TestRowToAvroSchema(t *testing.T) {
 	}
 	namespace := getAvroNamespace(model.DefaultNamespace, &table)
 	cols := make([]*model.Column, 0)
-	colvals := make([]model.ColumnValue, 0)
 	colInfos := make([]rowcodec.ColInfo, 0)
 
 	for _, v := range avroTestColumns {
 		cols = append(cols, v.col.Unbound())
-		colvals = append(colvals, model.ColumnValue{Value: v.col.Value})
 		colInfos = append(colInfos, v.colInfo)
 		colNew := v.col
 		colNew.Name = colNew.Name + "nullable"
 		colNew.Value = nil
 		colNew.Flag.SetIsNullable()
 		cols = append(cols, colNew.Unbound())
-		colvals = append(colvals, model.ColumnValue{Value: colNew.Value})
 		colInfos = append(colInfos, v.colInfo)
 	}
 
@@ -662,7 +659,6 @@ func TestRowToAvroSchema(t *testing.T) {
 		namespace,
 		table.Table,
 		cols,
-		colvals,
 		colInfos,
 		false,
 		"precise",
@@ -677,7 +673,6 @@ func TestRowToAvroSchema(t *testing.T) {
 		namespace,
 		table.Table,
 		cols,
-		colvals,
 		colInfos,
 		true,
 		"precise",
@@ -788,14 +783,13 @@ func TestAvroEncode(t *testing.T) {
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 
-	keyCols, keyColVals, keyColInfos := event.HandleKeyColInfos()
+	keyCols, _, keyColInfos := event.HandleKeyColInfos()
 	namespace := getAvroNamespace(encoder.namespace, event.Table)
 
 	keySchema, err := rowToAvroSchema(
 		namespace,
 		event.Table.Table,
 		keyCols,
-		keyColVals,
 		keyColInfos,
 		false,
 		"precise",
@@ -816,12 +810,11 @@ func TestAvroEncode(t *testing.T) {
 		}
 	}
 
-	cols, colvals := model.UnboundColumns(bcols)
+	cols, _ := model.UnboundColumns(bcols)
 	valueSchema, err := rowToAvroSchema(
 		namespace,
 		event.Table.Table,
 		cols,
-		colvals,
 		colInfos,
 		true,
 		"precise",

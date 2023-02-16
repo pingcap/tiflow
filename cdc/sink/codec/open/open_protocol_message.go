@@ -180,8 +180,3 @@ func msgToDDLEvent(key *internal.MessageKey, value *messageDDL) *model.DDLEvent 
 	e.Query = value.Query
 	return e
 }
-
-type columnAndValue struct {
-    c *model.Column
-    cv model.ColumnValue
-}
