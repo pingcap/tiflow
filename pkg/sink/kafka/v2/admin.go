@@ -43,22 +43,8 @@ func newClusterAdminClient(
 }
 
 func (a *admin) clusterMetadata(ctx context.Context) (*kafka.MetadataResponse, error) {
-	result, err := a.client.Metadata(ctx, &kafka.MetadataRequest{
-		Topics: []string{},
-	})
-	if err != nil {
-		return nil, errors.Trace(err)
-	}
-	return result, nil
-}
-
-func (a *admin) topicsMetadata(
-	ctx context.Context,
-	topics []string,
-) (*kafka.MetadataResponse, error) {
-	result, err := a.client.Metadata(ctx, &kafka.MetadataRequest{
-		Topics: topics,
-	})
+	// request is not set, so it will return all metadata
+	result, err := a.client.Metadata(ctx, &kafka.MetadataRequest{})
 	if err != nil {
 		return nil, errors.Trace(err)
 	}
@@ -189,9 +175,11 @@ func (a *admin) GetTopicsMeta(
 	topics []string,
 	ignoreTopicError bool,
 ) (map[string]pkafka.TopicDetail, error) {
-	resp, err := a.topicsMetadata(ctx, topics)
+	resp, err := a.client.Metadata(ctx, &kafka.MetadataRequest{
+		Topics: topics,
+	})
 	if err != nil {
-		return nil, err
+		return nil, errors.Trace(err)
 	}
 
 	result := make(map[string]pkafka.TopicDetail, len(resp.Topics))
