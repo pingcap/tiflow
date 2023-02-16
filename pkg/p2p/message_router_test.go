@@ -26,7 +26,7 @@ import (
 	"github.com/pingcap/tiflow/pkg/security"
 	"github.com/pingcap/tiflow/proto/p2p"
 	"github.com/stretchr/testify/require"
-	"github.com/tikv/pd/pkg/tempurl"
+	"github.com/tikv/pd/pkg/utils/tempurl"
 	"google.golang.org/grpc"
 )
 

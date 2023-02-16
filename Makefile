@@ -40,14 +40,23 @@ ifeq (${CDC_ENABLE_VENDOR}, 1)
 GOVENDORFLAG := -mod=vendor
 endif
 
-GOBUILD  := CGO_ENABLED=0 $(GO) build $(BUILD_FLAG) -trimpath $(GOVENDORFLAG)
+# Since TiDB add a new dependency on github.com/cloudfoundry/gosigar,
+# We need to add CGO_ENABLED=1 to make it work when build TiCDC in Darwin OS.
+# These logic is to check if the OS is Darwin, if so, add CGO_ENABLED=1.
+# ref: https://github.com/cloudfoundry/gosigar/issues/58#issuecomment-1150925711
+# ref: https://github.com/pingcap/tidb/pull/39526#issuecomment-1407952955
+OS    := "$(shell go env GOOS)"
+ifeq (${OS}, "linux")
+	CGO := 0
+else ifeq (${OS}, "darwin")
+	CGO := 1
+endif
+
+GOBUILD  := CGO_ENABLED=$(CGO) $(GO) build $(BUILD_FLAG) -trimpath $(GOVENDORFLAG)
 GOBUILDNOVENDOR  := CGO_ENABLED=0 $(GO) build $(BUILD_FLAG) -trimpath
-GOTEST   := CGO_ENABLED=1 $(GO) test -p $(P) --race
+GOTEST   := CGO_ENABLED=1 $(GO) test -p $(P) --race --tags=intest
 GOTESTNORACE := CGO_ENABLED=1 $(GO) test -p $(P)
 
-ARCH  := "$(shell uname -s)"
-LINUX := "Linux"
-MAC   := "Darwin"
 CDC_PKG := github.com/pingcap/tiflow
 DM_PKG := github.com/pingcap/tiflow/dm
 ENGINE_PKG := github.com/pingcap/tiflow/engine
@@ -163,7 +172,7 @@ unit_test_in_verify_ci: check_failpoint_ctl tools/bin/gotestsum tools/bin/gocov 
 	mkdir -p "$(TEST_DIR)"
 	$(FAILPOINT_ENABLE)
 	@export log_level=error;\
-	CGO_ENABLED=1 tools/bin/gotestsum --junitfile cdc-junit-report.xml -- -v -timeout 5m -p $(P) --race \
+	CGO_ENABLED=1 tools/bin/gotestsum --junitfile cdc-junit-report.xml -- -v -timeout 5m -p $(P) --race --tags=intest \
 	-covermode=atomic -coverprofile="$(TEST_DIR)/cov.unit.out" $(PACKAGES_TICDC) \
 	|| { $(FAILPOINT_DISABLE); exit 1; }
 	tools/bin/gocov convert "$(TEST_DIR)/cov.unit.out" | tools/bin/gocov-xml > cdc-coverage.xml

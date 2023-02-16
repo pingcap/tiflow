@@ -25,7 +25,7 @@ import (
 	"github.com/pingcap/tiflow/dm/pb"
 	"github.com/pingcap/tiflow/dm/pbmock"
 	"github.com/pingcap/tiflow/dm/pkg/terror"
-	"github.com/tikv/pd/pkg/tempurl"
+	"github.com/tikv/pd/pkg/utils/tempurl"
 )
 
 var _ = Suite(&testWorkerRPCSuite{})
