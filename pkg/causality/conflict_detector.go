@@ -98,7 +98,13 @@ func (d *ConflictDetector[Worker, Txn]) Close() {
 func (d *ConflictDetector[Worker, Txn]) runBackgroundTasks() {
 	defer func() {
 		d.notifiedNodes.Close()
+		// Drain the channel to avoid goroutine leak.
+		for range d.notifiedNodes.Out() {
+		}
 		d.garbageNodes.Close()
+		// Drain the channel to avoid goroutine leak.
+		for range d.garbageNodes.Out() {
+		}
 	}()
 	for {
 		select {
