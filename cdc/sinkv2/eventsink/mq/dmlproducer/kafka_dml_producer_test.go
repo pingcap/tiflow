@@ -77,12 +77,12 @@ func TestProducerAck(t *testing.T) {
 
 	errCh := make(chan error, 1)
 	ctx, cancel := context.WithCancel(context.Background())
-	config, err := kafka.NewSaramaConfig(context.Background(), options)
+	config, err := kafka.NewSaramaConfig(options)
 	require.Nil(t, err)
 	require.Equal(t, 1, config.Producer.Flush.MaxMessages)
 
 	changefeed := model.DefaultChangeFeedID("changefeed-test")
-	factory, err := kafka.NewMockFactory(ctx, options, changefeed)
+	factory, err := kafka.NewMockFactory(options, changefeed)
 	require.NoError(t, err)
 
 	adminClient, err := factory.AdminClient()
@@ -143,13 +143,13 @@ func TestProducerSendMsgFailed(t *testing.T) {
 	errCh := make(chan error, 1)
 	ctx, cancel := context.WithTimeout(context.Background(), time.Second*10)
 	defer cancel()
-	_, err := kafka.NewSaramaConfig(context.Background(), options)
+	_, err := kafka.NewSaramaConfig(options)
 	require.Nil(t, err)
 	options.MaxMessages = 1
 	options.MaxMessageBytes = 1
 
 	changefeed := model.DefaultChangeFeedID("changefeed-test")
-	factory, err := kafka.NewMockFactory(ctx, options, changefeed)
+	factory, err := kafka.NewMockFactory(options, changefeed)
 	require.NoError(t, err)
 
 	adminClient, err := factory.AdminClient()
@@ -211,7 +211,7 @@ func TestProducerDoubleClose(t *testing.T) {
 	defer cancel()
 
 	changefeed := model.DefaultChangeFeedID("changefeed-test")
-	factory, err := kafka.NewMockFactory(ctx, options, changefeed)
+	factory, err := kafka.NewMockFactory(options, changefeed)
 	require.NoError(t, err)
 
 	adminClient, err := factory.AdminClient()

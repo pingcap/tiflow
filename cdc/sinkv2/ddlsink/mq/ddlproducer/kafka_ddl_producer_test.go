@@ -75,11 +75,9 @@ func TestSyncBroadcastMessage(t *testing.T) {
 	ctx, cancel := context.WithCancel(context.Background())
 	options := getOptions(leader.Addr())
 	options.MaxMessages = 1
-	_, err := kafka.NewSaramaConfig(context.Background(), options)
-	require.Nil(t, err)
 
 	changefeed := model.DefaultChangeFeedID("changefeed-test")
-	factory, err := kafka.NewMockFactory(ctx, options, changefeed)
+	factory, err := kafka.NewMockFactory(options, changefeed)
 	require.NoError(t, err)
 
 	adminClient, err := factory.AdminClient()
@@ -107,12 +105,9 @@ func TestSyncSendMessage(t *testing.T) {
 
 	ctx, cancel := context.WithCancel(context.Background())
 	options := getOptions(leader.Addr())
-	saramaConfig, err := kafka.NewSaramaConfig(context.Background(), options)
-	require.Nil(t, err)
-	saramaConfig.Producer.Flush.MaxMessages = 1
 
 	changefeed := model.DefaultChangeFeedID("changefeed-test")
-	factory, err := kafka.NewMockFactory(ctx, options, changefeed)
+	factory, err := kafka.NewMockFactory(options, changefeed)
 	require.NoError(t, err)
 
 	adminClient, err := factory.AdminClient()
@@ -144,7 +139,7 @@ func TestProducerSendMsgFailed(t *testing.T) {
 
 	// This will make the first send failed.
 	changefeed := model.DefaultChangeFeedID("changefeed-test")
-	factory, err := kafka.NewMockFactory(ctx, options, changefeed)
+	factory, err := kafka.NewMockFactory(options, changefeed)
 	require.NoError(t, err)
 
 	adminClient, err := factory.AdminClient()
@@ -167,12 +162,9 @@ func TestProducerDoubleClose(t *testing.T) {
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 	options := getOptions(leader.Addr())
-	saramaConfig, err := kafka.NewSaramaConfig(context.Background(), options)
-	require.Nil(t, err)
-	saramaConfig.Producer.Flush.MaxMessages = 1
 
 	changefeed := model.DefaultChangeFeedID("changefeed-test")
-	factory, err := kafka.NewMockFactory(ctx, options, changefeed)
+	factory, err := kafka.NewMockFactory(options, changefeed)
 	require.NoError(t, err)
 
 	adminClient, err := factory.AdminClient()
