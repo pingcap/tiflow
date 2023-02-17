@@ -504,7 +504,7 @@ func (m *feedStateManager) handleError(errs ...*model.RunningError) {
 func GenerateChangefeedEpoch(ctx context.Context, pdClient pd.Client) uint64 {
 	phyTs, logical, err := pdClient.GetTS(ctx)
 	if err != nil {
-		log.Warn("generate epoch using local timestamp due error", zap.Error(err))
+		log.Warn("generate epoch using local timestamp due to error", zap.Error(err))
 		return uint64(time.Now().UnixNano())
 	}
 	return oracle.ComposeTS(phyTs, logical)
