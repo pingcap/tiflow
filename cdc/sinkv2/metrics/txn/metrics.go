@@ -17,14 +17,16 @@ import "github.com/prometheus/client_golang/prometheus"
 
 // ---------- Metrics for txn sink and backends. ---------- //
 var (
-	// ConflictDetectDuration records the duration of detecting conflict.
-	ConflictDetectDuration = prometheus.NewHistogramVec(
+	// PreSendWaitingDuration records the duration of detecting conflict.
+	PreSendWaitingDuration = prometheus.NewHistogramVec(
 		prometheus.HistogramOpts{
 			Namespace: "ticdc",
 			Subsystem: "sinkv2",
-			Name:      "txn_conflict_detect_duration",
-			Help:      "Bucketed histogram of conflict detect time (s) for single DML statement.",
-			Buckets:   prometheus.ExponentialBuckets(0.001, 2, 20), // 1ms~524s
+			Name:      "txn_pre_send_waiting_duration",
+			Help: "Bucketed histogram of pre-send waiting duration (s) for a transaction." +
+				" It is the time between a transaction being added into " +
+				"sink from sorter and being flushed to downstream.",
+			Buckets: prometheus.ExponentialBuckets(0.001, 2, 20), // 1ms~524s
 		}, []string{"namespace", "changefeed"})
 
 	WorkerFlushDuration = prometheus.NewHistogramVec(
@@ -73,7 +75,7 @@ var (
 
 // InitMetrics registers all metrics in this file.
 func InitMetrics(registry *prometheus.Registry) {
-	registry.MustRegister(ConflictDetectDuration)
+	registry.MustRegister(PreSendWaitingDuration)
 	registry.MustRegister(WorkerFlushDuration)
 	registry.MustRegister(WorkerBusyRatio)
 	registry.MustRegister(WorkerHandledRows)

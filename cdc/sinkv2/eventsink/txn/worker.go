@@ -48,10 +48,10 @@ type worker struct {
 	errCh   chan<- error
 
 	// Metrics.
-	metricConflictDetectDuration prometheus.Observer
-	metricTxnWorkerFlushDuration prometheus.Observer
-	metricTxnWorkerBusyRatio     prometheus.Counter
-	metricTxnWorkerHandledRows   prometheus.Counter
+	metricTxnPreSendWaitingDuration prometheus.Observer
+	metricTxnWorkerFlushDuration    prometheus.Observer
+	metricTxnWorkerBusyRatio        prometheus.Counter
+	metricTxnWorkerHandledRows      prometheus.Counter
 
 	// Fields only used in the background loop.
 	flushInterval     time.Duration
@@ -73,10 +73,18 @@ func newWorker(ctx context.Context, ID int, backend backend, errCh chan<- error,
 		backend: backend,
 		errCh:   errCh,
 
-		metricConflictDetectDuration: txn.ConflictDetectDuration.WithLabelValues(changefeedID.Namespace, changefeedID.ID),
-		metricTxnWorkerFlushDuration: txn.WorkerFlushDuration.WithLabelValues(changefeedID.Namespace, changefeedID.ID),
-		metricTxnWorkerBusyRatio:     txn.WorkerBusyRatio.WithLabelValues(changefeedID.Namespace, changefeedID.ID),
-		metricTxnWorkerHandledRows:   txn.WorkerHandledRows.WithLabelValues(changefeedID.Namespace, changefeedID.ID, wid),
+		metricTxnPreSendWaitingDuration: txn.PreSendWaitingDuration.WithLabelValues(
+			changefeedID.Namespace,
+			changefeedID.ID),
+		metricTxnWorkerFlushDuration: txn.WorkerFlushDuration.WithLabelValues(
+			changefeedID.Namespace,
+			changefeedID.ID),
+		metricTxnWorkerBusyRatio: txn.WorkerBusyRatio.WithLabelValues(
+			changefeedID.Namespace,
+			changefeedID.ID),
+		metricTxnWorkerHandledRows: txn.WorkerHandledRows.WithLabelValues(
+			changefeedID.Namespace,
+			changefeedID.ID, wid),
 
 		flushInterval:     backend.MaxFlushInterval(),
 		hasPending:        false,
@@ -189,7 +197,7 @@ func (w *worker) onEvent(txn txnWithNotifier) bool {
 		return false
 	}
 
-	w.metricConflictDetectDuration.Observe(time.Since(txn.start).Seconds())
+	w.metricTxnPreSendWaitingDuration.Observe(time.Since(txn.start).Seconds())
 	w.metricTxnWorkerHandledRows.Add(float64(len(txn.Event.Rows)))
 	w.wantMoreCallbacks = append(w.wantMoreCallbacks, txn.wantMore)
 	return w.backend.OnTxnEvent(txn.txnEvent.TxnCallbackableEvent)

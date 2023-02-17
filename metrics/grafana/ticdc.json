@@ -7191,7 +7191,7 @@
           "dashLength": 10,
           "dashes": false,
           "datasource": "${DS_TEST-CLUSTER}",
-          "description": "Duration of event staying in conflict detector",
+          "description": "Duration between a transaction being added into sink from sorter and being flushed to downstream.",
           "fieldConfig": {
             "defaults": {},
             "overrides": []
@@ -7235,7 +7235,7 @@
           "targets": [
             {
               "exemplar": true,
-              "expr": "histogram_quantile(0.999, sum(rate(ticdc_sinkv2_txn_conflict_detect_duration_bucket{k8s_cluster=\"$k8s_cluster\",tidb_cluster=\"$tidb_cluster\",changefeed=~\"$changefeed\",instance=~\"$ticdc_instance\"}[1m])) by (le,changefeed,instance))",
+              "expr": "histogram_quantile(0.999, sum(rate(ticdc_sinkv2_txn_pre_send_waiting_duration_bucket{k8s_cluster=\"$k8s_cluster\",tidb_cluster=\"$tidb_cluster\",changefeed=~\"$changefeed\",instance=~\"$ticdc_instance\"}[1m])) by (le,changefeed,instance))",
               "interval": "",
               "legendFormat": "99.9-{{changefeed}}-{{instance}}",
               "queryType": "randomWalk",
@@ -7243,7 +7243,7 @@
             },
             {
               "exemplar": true,
-              "expr": "sum(rate(ticdc_sinkv2_txn_conflict_detect_duration_sum{k8s_cluster=\"$k8s_cluster\",tidb_cluster=\"$tidb_cluster\",changefeed=~\"$changefeed\",instance=~\"$ticdc_instance\"}[1m])) by (changefeed,instance) / \nsum(rate(ticdc_sinkv2_txn_conflict_detect_duration_count{k8s_cluster=\"$k8s_cluster\",tidb_cluster=\"$tidb_cluster\",changefeed=~\"$changefeed\",instance=~\"$ticdc_instance\"}[1m])) by (changefeed,instance)",
+              "expr": "sum(rate(ticdc_sinkv2_txn_pre_send_waiting_duration_sum{k8s_cluster=\"$k8s_cluster\",tidb_cluster=\"$tidb_cluster\",changefeed=~\"$changefeed\",instance=~\"$ticdc_instance\"}[1m])) by (changefeed,instance) / \nsum(rate(ticdc_sinkv2_txn_pre_send_waiting_duration_count{k8s_cluster=\"$k8s_cluster\",tidb_cluster=\"$tidb_cluster\",changefeed=~\"$changefeed\",instance=~\"$ticdc_instance\"}[1m])) by (changefeed,instance)",
               "hide": false,
               "interval": "",
               "legendFormat": "avg-{{changefeed}}-{{instance}}",
@@ -7254,7 +7254,7 @@
           "timeFrom": null,
           "timeRegions": [],
           "timeShift": null,
-          "title": "Conflict Detect Duration",
+          "title": "Pre-Send Waiting Duration ",
           "tooltip": {
             "shared": true,
             "sort": 0,
