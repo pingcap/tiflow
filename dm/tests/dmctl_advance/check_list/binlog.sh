@@ -10,7 +10,7 @@ function binlog_invalid_binlogpos() {
 	binlog_pos="mysql-bin:should-be-digital"
 	run_dm_ctl $WORK_DIR "127.0.0.1:$MASTER_PORT" \
 		"binlog skip test-task --binlog-pos $binlog_pos" \
-		"\[.*\], Message: invalid --binlog-pos $binlog_pos in handle-error operation: the pos should be digital" 1
+		"\[.*\]Message: invalid --binlog-pos $binlog_pos in handle-error operation: the pos should be digital" 1
 }
 
 function binlog_invalid_sqls_by_replace() {
@@ -31,7 +31,7 @@ function binlog_invalid_list_op() {
 	binlog_pos="mysql-bin:should-be-digital"
 	run_dm_ctl $WORK_DIR "127.0.0.1:$MASTER_PORT" \
 		"binlog list test-task --binlog-pos $binlog_pos" \
-		"\[.*\], Message: invalid --binlog-pos $binlog_pos in handle-error operation: the pos should be digital" 1
+		"\[.*\]Message: invalid --binlog-pos $binlog_pos in handle-error operation: the pos should be digital" 1
 }
 
 function binlog_invalid_op() {

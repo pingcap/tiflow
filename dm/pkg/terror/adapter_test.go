@@ -50,7 +50,7 @@ func TestDBAdapter(t *testing.T) {
 				obj, ok := err.(*Error)
 				require.True(t, ok)
 				require.Equal(t, tc.expect.message, obj.getMsg())
-				require.Equal(t, fmt.Sprintf(errBaseFormat+", Message: %s, RawCause: %s, Workaround: %s", exp.code, exp.class, exp.scope, exp.level, exp.message, tc.err.Error(), exp.workaround), obj.Error())
+				require.Equal(t, fmt.Sprintf(errBaseFormat+"Message: %s, RawCause: %s, Workaround: %s", exp.code, exp.class, exp.scope, exp.level, exp.message, tc.err.Error(), exp.workaround), obj.Error())
 			}
 		}
 	}
