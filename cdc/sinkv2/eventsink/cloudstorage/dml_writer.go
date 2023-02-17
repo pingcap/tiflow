@@ -30,7 +30,7 @@ import (
 type dmlWriter struct {
 	changefeedID   model.ChangeFeedID
 	workers        []*dmlWorker
-	workerChannels []*chann.Chann[eventFragment]
+	workerChannels []*chann.DrainableChann[eventFragment]
 	hasher         *hash.PositionInertia
 	storage        storage.ExternalStorage
 	config         *cloudstorage.Config
@@ -52,7 +52,7 @@ func newDMLWriter(
 	d := &dmlWriter{
 		changefeedID:   changefeedID,
 		storage:        storage,
-		workerChannels: make([]*chann.Chann[eventFragment], config.WorkerCount),
+		workerChannels: make([]*chann.DrainableChann[eventFragment], config.WorkerCount),
 		workers:        make([]*dmlWorker, config.WorkerCount),
 		hasher:         hash.NewPositionInertia(),
 		config:         config,
@@ -65,7 +65,7 @@ func newDMLWriter(
 	for i := 0; i < config.WorkerCount; i++ {
 		worker := newDMLWorker(i, changefeedID, storage, config, extension, statistics)
 		d.workers[i] = worker
-		d.workerChannels[i] = chann.New[eventFragment]()
+		d.workerChannels[i] = chann.NewDrainableChann[eventFragment]()
 	}
 
 	return d
@@ -111,9 +111,6 @@ func (d *dmlWriter) close() {
 		w.close()
 	}
 	for _, ch := range d.workerChannels {
-		ch.Close()
-		for range ch.Out() {
-			// drain the worker channel
-		}
+		ch.CloseAndDrain()
 	}
 }

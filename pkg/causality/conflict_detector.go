@@ -37,8 +37,8 @@ type ConflictDetector[Worker worker[Txn], Txn txnEvent] struct {
 	nextWorkerID atomic.Int64
 
 	// Used to run a background goroutine to GC or notify nodes.
-	notifiedNodes *chann.Chann[func()]
-	garbageNodes  *chann.Chann[txnFinishedEvent]
+	notifiedNodes *chann.DrainableChann[func()]
+	garbageNodes  *chann.DrainableChann[txnFinishedEvent]
 	wg            sync.WaitGroup
 	closeCh       chan struct{}
 }
@@ -57,8 +57,8 @@ func NewConflictDetector[Worker worker[Txn], Txn txnEvent](
 		workers:       workers,
 		slots:         internal.NewSlots[*internal.Node](numSlots),
 		numSlots:      numSlots,
-		notifiedNodes: chann.New[func()](),
-		garbageNodes:  chann.New[txnFinishedEvent](),
+		notifiedNodes: chann.NewDrainableChann[func()](),
+		garbageNodes:  chann.NewDrainableChann[txnFinishedEvent](),
 		closeCh:       make(chan struct{}),
 	}
 
@@ -97,16 +97,16 @@ func (d *ConflictDetector[Worker, Txn]) Close() {
 
 func (d *ConflictDetector[Worker, Txn]) runBackgroundTasks() {
 	defer func() {
-		d.notifiedNodes.Close()
-		d.garbageNodes.Close()
+		d.notifiedNodes.CloseAndDrain()
+		d.garbageNodes.CloseAndDrain()
 	}()
 	for {
 		select {
 		case <-d.closeCh:
 			return
-		case notifiyCallback := <-d.notifiedNodes.Out():
-			if notifiyCallback != nil {
-				notifiyCallback()
+		case notifyCallback := <-d.notifiedNodes.Out():
+			if notifyCallback != nil {
+				notifyCallback()
 			}
 		case event := <-d.garbageNodes.Out():
 			if event.node != nil {

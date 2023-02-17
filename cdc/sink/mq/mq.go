@@ -54,7 +54,7 @@ type mqSink struct {
 	topicManager         manager.TopicManager
 	flushWorker          *flushWorker
 	tableCheckpointTsMap sync.Map
-	resolvedBuffer       *chann.Chann[resolvedTsEvent]
+	resolvedBuffer       *chann.DrainableChann[resolvedTsEvent]
 
 	statistics *metrics.Statistics
 
@@ -95,7 +95,7 @@ func newMqSink(
 		protocol:       encoderConfig.Protocol,
 		topicManager:   topicManager,
 		flushWorker:    flushWorker,
-		resolvedBuffer: chann.New[resolvedTsEvent](),
+		resolvedBuffer: chann.NewDrainableChann[resolvedTsEvent](),
 		statistics:     statistics,
 		role:           role,
 		id:             changefeedID,
