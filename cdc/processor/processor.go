@@ -34,7 +34,6 @@ import (
 	"github.com/pingcap/tiflow/cdc/puller"
 	"github.com/pingcap/tiflow/cdc/redo"
 	"github.com/pingcap/tiflow/cdc/scheduler"
-	sinkmetric "github.com/pingcap/tiflow/cdc/sink/metrics"
 	"github.com/pingcap/tiflow/pkg/config"
 	cdcContext "github.com/pingcap/tiflow/pkg/context"
 	cerror "github.com/pingcap/tiflow/pkg/errors"
@@ -90,7 +89,6 @@ type processor struct {
 	metricSchemaStorageGcTsGauge prometheus.Gauge
 	metricProcessorErrorCounter  prometheus.Counter
 	metricProcessorTickDuration  prometheus.Observer
-	metricsTableSinkTotalRows    prometheus.Counter
 	metricsProcessorMemoryGauge  prometheus.Gauge
 	metricRemainKVEventGauge     prometheus.Gauge
 }
@@ -421,8 +419,6 @@ func newProcessor(
 			WithLabelValues(changefeedID.Namespace, changefeedID.ID),
 		metricProcessorTickDuration: processorTickDuration.
 			WithLabelValues(changefeedID.Namespace, changefeedID.ID),
-		metricsTableSinkTotalRows: sinkmetric.TableSinkTotalRowsCountCounter.
-			WithLabelValues(changefeedID.Namespace, changefeedID.ID),
 		metricsProcessorMemoryGauge: processorMemoryGauge.
 			WithLabelValues(changefeedID.Namespace, changefeedID.ID),
 		metricRemainKVEventGauge: remainKVEventsGauge.
@@ -693,7 +689,7 @@ func (p *processor) lazyInitImpl(ctx cdcContext.Context) error {
 	p.sinkManager, err = sinkmanager.New(stdCtx, p.changefeedID,
 		p.changefeed.Info, p.upstream, p.schemaStorage,
 		p.redoManager, p.sourceManager,
-		p.errCh, p.metricsTableSinkTotalRows)
+		p.errCh)
 	if err != nil {
 		log.Info("Processor creates sink manager fail",
 			zap.String("namespace", p.changefeedID.Namespace),
@@ -1016,8 +1012,6 @@ func (p *processor) cleanupMetrics() {
 	processorTickDuration.DeleteLabelValues(p.changefeedID.Namespace, p.changefeedID.ID)
 	processorMemoryGauge.DeleteLabelValues(p.changefeedID.Namespace, p.changefeedID.ID)
 	remainKVEventsGauge.DeleteLabelValues(p.changefeedID.Namespace, p.changefeedID.ID)
-	sinkmetric.TableSinkTotalRowsCountCounter.
-		DeleteLabelValues(p.changefeedID.Namespace, p.changefeedID.ID)
 }
 
 // WriteDebugInfo write the debug info to Writer
