@@ -23,6 +23,8 @@ import (
 	"github.com/pingcap/errors"
 	"github.com/pingcap/failpoint"
 	"github.com/pingcap/tiflow/dm/config"
+	"github.com/pingcap/tiflow/dm/config/dbconfig"
+	"github.com/pingcap/tiflow/dm/config/security"
 	"github.com/pingcap/tiflow/dm/master/workerrpc"
 	"github.com/pingcap/tiflow/dm/pb"
 	"github.com/pingcap/tiflow/dm/pkg/ha"
@@ -91,7 +93,7 @@ func (t *testSchedulerSuite) testSchedulerProgress(restart int) {
 
 	var (
 		logger       = log.L()
-		s            = NewScheduler(&logger, config.Security{})
+		s            = NewScheduler(&logger, security.Security{})
 		sourceID1    = "mysql-replica-1"
 		sourceID2    = "mysql-replica-2"
 		workerName1  = "dm-worker-1"
@@ -112,7 +114,7 @@ func (t *testSchedulerSuite) testSchedulerProgress(restart int) {
 				require.NoError(t.T(), s.Start(ctx, t.etcdTestCli))
 			case restartNewInstance:
 				s.Close()
-				s = NewScheduler(&logger, config.Security{})
+				s = NewScheduler(&logger, security.Security{})
 				require.NoError(t.T(), s.Start(ctx, t.etcdTestCli))
 			}
 		}
@@ -126,6 +128,7 @@ func (t *testSchedulerSuite) testSchedulerProgress(restart int) {
 	require.NoError(t.T(), subtaskCfg1.Decode(config.SampleSubtaskConfig, true))
 	subtaskCfg1.SourceID = sourceID1
 	subtaskCfg1.Name = taskName1
+	subtaskCfg1.LoaderConfig.ImportMode = config.LoadModePhysical
 	require.NoError(t.T(), subtaskCfg1.Adjust(true))
 	subtaskCfg21 := subtaskCfg1
 	subtaskCfg21.Name = taskName2
@@ -196,7 +199,7 @@ func (t *testSchedulerSuite) testSchedulerProgress(restart int) {
 	t.workerOffline(s, workerName1)
 	// still no bounds (because the worker is offline).
 	t.sourceBounds(s, []string{}, []string{sourceID1})
-	// no expect relay stage exist (because the source has never been bounded).
+	// no expect relay stage exist (because the source has never been bound).
 	t.relayStageMatch(s, sourceID1, pb.Stage_InvalidStage)
 	rebuildScheduler(ctx)
 
@@ -209,7 +212,7 @@ func (t *testSchedulerSuite) testSchedulerProgress(restart int) {
 		defer wg.Done()
 		require.NoError(t.T(), ha.KeepAlive(ctx1, t.etcdTestCli, workerName1, keepAliveTTL))
 	}()
-	// wait for source1 bound to worker1.
+	// wait for source1 being bound to worker1.
 	require.Eventually(t.T(), func() bool {
 		bounds := s.BoundSources()
 		return len(bounds) == 1 && bounds[0] == sourceID1
@@ -261,6 +264,10 @@ func (t *testSchedulerSuite) testSchedulerProgress(restart int) {
 	t.subTaskStageMatch(s, taskName1, sourceID1, pb.Stage_Running)
 	t.downstreamMetaExist(s, taskName1, subtaskCfg1.To, subtaskCfg1.MetaSchema)
 	t.downstreamMetaNotExist(s, taskName2)
+	// check lightning status is written to etcd
+	status, err := ha.GetAllLightningStatus(t.etcdTestCli, taskName1)
+	require.NoError(t.T(), err)
+	require.Equal(t.T(), []string{ha.LightningNotReady}, status)
 
 	// try start a task with two sources, some sources not bound.
 	require.True(t.T(), terror.ErrSchedulerSourcesUnbound.Equal(s.AddSubTasks(false, pb.Stage_Running, subtaskCfg21, subtaskCfg22)))
@@ -420,6 +427,10 @@ func (t *testSchedulerSuite) testSchedulerProgress(restart int) {
 	t.subTaskStageMatch(s, taskName2, sourceID1, pb.Stage_Running)
 	t.subTaskStageMatch(s, taskName2, sourceID2, pb.Stage_Running)
 	t.validatorStageMatch(s, taskName2, sourceID2, pb.Stage_Running)
+	// check lightning status is written to etcd
+	status, err = ha.GetAllLightningStatus(t.etcdTestCli, taskName2)
+	require.NoError(t.T(), err)
+	require.Equal(t.T(), []string{ha.LightningNotReady, ha.LightningNotReady}, status)
 	rebuildScheduler(ctx)
 
 	// CASE 4.4.2 fail to stop any task.
@@ -639,7 +650,7 @@ func (t *testSchedulerSuite) downstreamMetaNotExist(s *Scheduler, task string) {
 	require.Equal(t.T(), "", metaConfig)
 }
 
-func (t *testSchedulerSuite) downstreamMetaExist(s *Scheduler, task string, expectDBCfg config.DBConfig, expectMetaConfig string) {
+func (t *testSchedulerSuite) downstreamMetaExist(s *Scheduler, task string, expectDBCfg dbconfig.DBConfig, expectMetaConfig string) {
 	t.T().Helper()
 	dbConfig, metaConfig := s.GetDownstreamMetaByTask(task)
 	require.NotNil(t.T(), dbConfig)
@@ -826,7 +837,7 @@ func (t *testSchedulerSuite) TestRestartScheduler() {
 	require.NoError(t.T(), err)
 	sourceCfg1.SourceID = sourceID1
 
-	s := NewScheduler(&logger, config.Security{})
+	s := NewScheduler(&logger, security.Security{})
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 	// step 1: start scheduler
@@ -969,7 +980,7 @@ func (t *testSchedulerSuite) TestRestartScheduler() {
 func (t *testSchedulerSuite) TestWatchWorkerEventEtcdCompact() {
 	var (
 		logger       = log.L()
-		s            = NewScheduler(&logger, config.Security{})
+		s            = NewScheduler(&logger, security.Security{})
 		sourceID1    = "mysql-replica-1"
 		sourceID2    = "mysql-replica-2"
 		workerName1  = "dm-worker-1"
@@ -1111,7 +1122,7 @@ func (t *testSchedulerSuite) TestWatchWorkerEventEtcdCompact() {
 func (t *testSchedulerSuite) TestLastBound() {
 	var (
 		logger      = log.L()
-		s           = NewScheduler(&logger, config.Security{})
+		s           = NewScheduler(&logger, security.Security{})
 		sourceID1   = "mysql-replica-1"
 		sourceID2   = "mysql-replica-2"
 		workerName1 = "dm-worker-1"
@@ -1145,47 +1156,47 @@ func (t *testSchedulerSuite) TestLastBound() {
 	s.unbounds[sourceID1] = struct{}{}
 	s.unbounds[sourceID2] = struct{}{}
 
-	// worker1 goes to last bounded source
+	// worker1 goes to last bound source
 	worker1.ToFree()
-	bounded, err := s.tryBoundForWorker(worker1)
+	bound, err := s.tryBoundForWorker(worker1)
 	require.NoError(t.T(), err)
-	require.True(t.T(), bounded)
+	require.True(t.T(), bound)
 	require.Equal(t.T(), worker1, s.bounds[sourceID1])
 
-	// worker3 has to bounded to source2
+	// worker3 has to bind source2
 	worker3.ToFree()
-	bounded, err = s.tryBoundForWorker(worker3)
+	bound, err = s.tryBoundForWorker(worker3)
 	require.NoError(t.T(), err)
-	require.True(t.T(), bounded)
+	require.True(t.T(), bound)
 	require.Equal(t.T(), worker3, s.bounds[sourceID2])
 
 	// though worker2 has a previous source, that source is not available, so not bound
 	worker2.ToFree()
-	bounded, err = s.tryBoundForWorker(worker2)
+	bound, err = s.tryBoundForWorker(worker2)
 	require.NoError(t.T(), err)
-	require.False(t.T(), bounded)
+	require.False(t.T(), bound)
 
-	// worker4 is used to test whether source2 should be bounded to worker2 rather than a new worker
+	// worker4 is used to test whether source2 should be bound to worker2 rather than a new worker
 	worker4.ToFree()
-	bounded, err = s.tryBoundForWorker(worker4)
+	bound, err = s.tryBoundForWorker(worker4)
 	require.NoError(t.T(), err)
-	require.False(t.T(), bounded)
+	require.False(t.T(), bound)
 
-	// after worker3 become offline, source2 should be bounded to worker2
+	// after worker3 become offline, source2 should be bound to worker2
 	s.updateStatusToUnbound(sourceID2)
 	_, ok := s.bounds[sourceID2]
 	require.False(t.T(), ok)
 	worker3.ToOffline()
-	bounded, err = s.tryBoundForSource(sourceID2)
+	bound, err = s.tryBoundForSource(sourceID2)
 	require.NoError(t.T(), err)
-	require.True(t.T(), bounded)
+	require.True(t.T(), bound)
 	require.Equal(t.T(), worker2, s.bounds[sourceID2])
 }
 
 func (t *testSchedulerSuite) TestInvalidLastBound() {
 	var (
 		logger      = log.L()
-		s           = NewScheduler(&logger, config.Security{})
+		s           = NewScheduler(&logger, security.Security{})
 		sourceID1   = "mysql-replica-1"
 		sourceID2   = "invalid-replica-1"
 		workerName1 = "dm-worker-1"
@@ -1206,18 +1217,18 @@ func (t *testSchedulerSuite) TestInvalidLastBound() {
 	s.sourceCfgs[sourceID1] = sourceCfg1
 	s.lastBound[workerName1] = ha.SourceBound{Source: sourceID2}
 	s.unbounds[sourceID1] = struct{}{}
-	// step2: worker1 doesn't go to last bounded source, because last source doesn't have a source config (might be removed)
+	// step2: worker1 doesn't go to last bound source, because last source doesn't have a source config (might be removed)
 	worker1.ToFree()
-	bounded, err := s.tryBoundForWorker(worker1)
+	bound, err := s.tryBoundForWorker(worker1)
 	require.NoError(t.T(), err)
-	require.True(t.T(), bounded)
+	require.True(t.T(), bound)
 	require.Equal(t.T(), worker1, s.bounds[sourceID1])
 }
 
 func (t *testSchedulerSuite) TestTransferSource() {
 	var (
 		logger      = log.L()
-		s           = NewScheduler(&logger, config.Security{})
+		s           = NewScheduler(&logger, security.Security{})
 		sourceID1   = "mysql-replica-1"
 		sourceID2   = "mysql-replica-2"
 		sourceID3   = "mysql-replica-3"
@@ -1339,7 +1350,7 @@ func (t *testSchedulerSuite) TestTransferSource() {
 func (t *testSchedulerSuite) TestStartStopRelay() {
 	var (
 		logger      = log.L()
-		s           = NewScheduler(&logger, config.Security{})
+		s           = NewScheduler(&logger, security.Security{})
 		sourceID1   = "mysql-replica-1"
 		sourceID2   = "mysql-replica-2"
 		sourceID3   = "mysql-replica-3"
@@ -1466,7 +1477,7 @@ func (t *testSchedulerSuite) TestStartStopRelay() {
 func (t *testSchedulerSuite) TestRelayWithWithoutWorker() {
 	var (
 		logger      = log.L()
-		s           = NewScheduler(&logger, config.Security{})
+		s           = NewScheduler(&logger, security.Security{})
 		sourceID1   = "mysql-replica-1"
 		workerName1 = "dm-worker-1"
 		workerName2 = "dm-worker-2"
@@ -1549,7 +1560,7 @@ func checkAllWorkersClosed(t *testing.T, s *Scheduler, closed bool) {
 func (t *testSchedulerSuite) TestCloseAllWorkers() {
 	var (
 		logger = log.L()
-		s      = NewScheduler(&logger, config.Security{})
+		s      = NewScheduler(&logger, security.Security{})
 		names  []string
 	)
 	ctx, cancel := context.WithCancel(context.Background())
@@ -1582,7 +1593,7 @@ func (t *testSchedulerSuite) TestCloseAllWorkers() {
 func (t *testSchedulerSuite) TestStartSourcesWithoutSourceConfigsInEtcd() {
 	var (
 		logger       = log.L()
-		s            = NewScheduler(&logger, config.Security{})
+		s            = NewScheduler(&logger, security.Security{})
 		sourceID1    = "mysql-replica-1"
 		sourceID2    = "mysql-replica-2"
 		workerName1  = "dm-worker-1"
@@ -1618,12 +1629,12 @@ func (t *testSchedulerSuite) TestStartSourcesWithoutSourceConfigsInEtcd() {
 
 	s.workers[workerName1].stage = WorkerFree
 	s.workers[workerName2].stage = WorkerFree
-	bounded, err := s.tryBoundForSource(sourceID1)
+	bound, err := s.tryBoundForSource(sourceID1)
 	require.NoError(t.T(), err)
-	require.True(t.T(), bounded)
-	bounded, err = s.tryBoundForSource(sourceID2)
+	require.True(t.T(), bound)
+	bound, err = s.tryBoundForSource(sourceID2)
 	require.NoError(t.T(), err)
-	require.True(t.T(), bounded)
+	require.True(t.T(), bound)
 
 	s.started.Store(false)
 	sbm, _, err := ha.GetSourceBound(t.etcdTestCli, "")
@@ -1649,7 +1660,7 @@ func (t *testSchedulerSuite) TestStartSourcesWithoutSourceConfigsInEtcd() {
 func (t *testSchedulerSuite) TestTransferWorkerAndSource() {
 	var (
 		logger      = log.L()
-		s           = NewScheduler(&logger, config.Security{})
+		s           = NewScheduler(&logger, security.Security{})
 		sourceID1   = "mysql-replica-1"
 		sourceID2   = "mysql-replica-2"
 		sourceID3   = "mysql-replica-3"
@@ -1682,14 +1693,14 @@ func (t *testSchedulerSuite) TestTransferWorkerAndSource() {
 	s.unbounds[sourceID1] = struct{}{}
 	s.unbounds[sourceID2] = struct{}{}
 
-	// test free worker and unbounded source
+	// test free worker and unbound source
 	require.NoError(t.T(), s.transferWorkerAndSource(workerName1, "", "", sourceID1))
 	require.NoError(t.T(), s.transferWorkerAndSource("", sourceID2, workerName2, ""))
 	require.Equal(t.T(), worker1, s.bounds[sourceID1])
 	require.Equal(t.T(), worker2, s.bounds[sourceID2])
 	require.Equal(t.T(), 0, len(s.unbounds))
 
-	// test transfer bounded source to free worker
+	// test transfer bound source to free worker
 	require.NoError(t.T(), s.transferWorkerAndSource(workerName1, sourceID1, workerName4, ""))
 	require.Equal(t.T(), worker4, s.bounds[sourceID1])
 	require.Equal(t.T(), WorkerFree, worker1.Stage())
@@ -1700,7 +1711,7 @@ func (t *testSchedulerSuite) TestTransferWorkerAndSource() {
 	require.Equal(t.T(), WorkerFree, worker2.Stage())
 	require.Equal(t.T(), WorkerBound, worker3.Stage())
 
-	// test transfer bounded worker to unbounded source
+	// test transfer bound worker to unbound source
 	s.unbounds[sourceID3] = struct{}{}
 	s.unbounds[sourceID4] = struct{}{}
 	require.NoError(t.T(), s.transferWorkerAndSource("", sourceID3, workerName3, sourceID2))
@@ -1715,7 +1726,7 @@ func (t *testSchedulerSuite) TestTransferWorkerAndSource() {
 
 	require.Equal(t.T(), 0, len(s.unbounds))
 
-	// test transfer two bounded sources
+	// test transfer two bound sources
 	require.NoError(t.T(), s.transferWorkerAndSource(workerName1, sourceID1, workerName2, sourceID2))
 	require.NoError(t.T(), s.transferWorkerAndSource(workerName4, sourceID4, workerName3, sourceID3))
 	require.Equal(t.T(), worker2, s.bounds[sourceID1])
@@ -1731,7 +1742,7 @@ func (t *testSchedulerSuite) TestTransferWorkerAndSource() {
 func (t *testSchedulerSuite) TestWatchLoadTask() {
 	var (
 		logger      = log.L()
-		s           = NewScheduler(&logger, config.Security{})
+		s           = NewScheduler(&logger, security.Security{})
 		task1       = "task1"
 		task2       = "task2"
 		sourceID1   = "mysql-replica-1"
@@ -1848,14 +1859,17 @@ func (t *testSchedulerSuite) TestWatchLoadTask() {
 func (t *testSchedulerSuite) TestWorkerHasDiffRelayAndBound() {
 	var (
 		logger      = log.L()
-		s           = NewScheduler(&logger, config.Security{})
+		s           = NewScheduler(&logger, security.Security{})
 		sourceID1   = "mysql-replica-1"
 		sourceID2   = "mysql-replica-2"
 		workerName1 = "dm-worker-1"
 		keepAlive   = int64(3)
 	)
 
-	workerInfo := ha.WorkerInfo{Name: workerName1}
+	workerInfo := ha.WorkerInfo{
+		Name: workerName1,
+		Addr: "workerinfo.addr",
+	}
 	bound := ha.SourceBound{
 		Source: sourceID1,
 		Worker: workerName1,
@@ -1904,15 +1918,21 @@ func (t *testSchedulerSuite) TestWorkerHasDiffRelayAndBound() {
 func (t *testSchedulerSuite) TestUpgradeCauseConflictRelayType() {
 	var (
 		logger      = log.L()
-		s           = NewScheduler(&logger, config.Security{})
+		s           = NewScheduler(&logger, security.Security{})
 		sourceID1   = "mysql-replica-1"
 		workerName1 = "dm-worker-1"
 		workerName2 = "dm-worker-2"
 		keepAlive   = int64(3)
 	)
 
-	workerInfo1 := ha.WorkerInfo{Name: workerName1}
-	workerInfo2 := ha.WorkerInfo{Name: workerName2}
+	workerInfo1 := ha.WorkerInfo{
+		Name: workerName1,
+		Addr: "workerinfo.addr",
+	}
+	workerInfo2 := ha.WorkerInfo{
+		Name: workerName2,
+		Addr: "workerinfo.addr",
+	}
 	bound := ha.SourceBound{
 		Source: sourceID1,
 		Worker: workerName1,
@@ -1966,7 +1986,7 @@ func (t *testSchedulerSuite) TestUpgradeCauseConflictRelayType() {
 func (t *testSchedulerSuite) TestOperateValidatorTask() {
 	var (
 		logger      = log.L()
-		s           = NewScheduler(&logger, config.Security{})
+		s           = NewScheduler(&logger, security.Security{})
 		sourceID1   = "mysql-replica-1"
 		workerName1 = "dm-worker-1"
 		taskName    = "task-1"
@@ -1979,7 +1999,10 @@ func (t *testSchedulerSuite) TestOperateValidatorTask() {
 	subtaskCfg.ValidatorCfg = config.ValidatorConfig{Mode: config.ValidationNone}
 	require.NoError(t.T(), subtaskCfg.Adjust(true))
 
-	workerInfo1 := ha.WorkerInfo{Name: workerName1}
+	workerInfo1 := ha.WorkerInfo{
+		Name: workerName1,
+		Addr: "workerinfo.addr",
+	}
 	bound := ha.SourceBound{
 		Source: sourceID1,
 		Worker: workerName1,
@@ -2026,7 +2049,7 @@ func (t *testSchedulerSuite) TestUpdateSubTasksAndSourceCfg() {
 
 	var (
 		logger       = log.L()
-		s            = NewScheduler(&logger, config.Security{})
+		s            = NewScheduler(&logger, security.Security{})
 		sourceID1    = "mysql-replica-1"
 		taskName1    = "task-1"
 		workerName1  = "dm-worker-1"
@@ -2121,7 +2144,7 @@ func (t *testSchedulerSuite) TestUpdateSubTasksAndSourceCfg() {
 
 func (t *testSchedulerSuite) TestValidatorEnabledAndGetValidatorStage() {
 	logger := log.L()
-	s := NewScheduler(&logger, config.Security{})
+	s := NewScheduler(&logger, security.Security{})
 	task := "test"
 	source := "source"
 	m, _ := s.expectValidatorStages.LoadOrStore(task, map[string]ha.Stage{})

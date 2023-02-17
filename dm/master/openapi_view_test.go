@@ -43,7 +43,7 @@ import (
 	"github.com/pingcap/tiflow/dm/pkg/utils"
 	"github.com/stretchr/testify/require"
 	"github.com/stretchr/testify/suite"
-	"github.com/tikv/pd/pkg/tempurl"
+	"github.com/tikv/pd/pkg/utils/tempurl"
 )
 
 // some data for test.
@@ -348,11 +348,11 @@ func (s *OpenAPIViewSuite) TestReverseRequestToLeader() {
 }
 
 func (s *OpenAPIViewSuite) TestReverseRequestToHttpsLeader() {
-	pwd, err := os.Getwd()
+	pwd2, err := os.Getwd()
 	require.NoError(s.T(), err)
-	caPath := pwd + "/tls_for_test/ca.pem"
-	certPath := pwd + "/tls_for_test/dm.pem"
-	keyPath := pwd + "/tls_for_test/dm.key"
+	caPath := pwd2 + "/tls_for_test/ca.pem"
+	certPath := pwd2 + "/tls_for_test/dm.pem"
+	keyPath := pwd2 + "/tls_for_test/dm.key"
 
 	// master1
 	masterAddr1 := tempurl.Alloc()[len("http://"):]
@@ -718,7 +718,7 @@ func (s *OpenAPIViewSuite) TestSourceAPI() {
 
 	ctrl := gomock.NewController(s.T())
 	defer ctrl.Finish()
-	// add mock worker the unbounded sources should be bounded
+	// add mock worker to which the unbound sources should be bound
 	ctx1, cancel1 := context.WithCancel(ctx)
 	defer cancel1()
 	workerName1 := "worker1"
@@ -737,7 +737,7 @@ func (s *OpenAPIViewSuite) TestSourceAPI() {
 	mockRelayQueryStatus(mockWorkerClient, source1.SourceName, workerName1, pb.Stage_InvalidStage)
 	s1.scheduler.SetWorkerClientForTest(workerName1, newMockRPCClient(mockWorkerClient))
 
-	// get source status again,source should be bounded by worker1,but relay not started
+	// get source status again,source should be bound by worker1,but relay not started
 	result = testutil.NewRequest().Get(source1StatusURL).GoWithHTTPHandler(s.T(), s1.openapiHandles)
 	s.Equal(http.StatusOK, result.Code())
 	s.NoError(result.UnmarshalBodyToObject(&source1Status))
@@ -967,7 +967,7 @@ func (s *OpenAPIViewSuite) TestTaskAPI() {
 	// check http status code
 	s.Equal(http.StatusCreated, result.Code())
 
-	// add mock worker  start workers, the unbounded sources should be bounded
+	// add mock worker, the unbound sources should be bound before starting workers
 	ctx1, cancel1 := context.WithCancel(ctx)
 	defer cancel1()
 	workerName1 := "worker-1"

@@ -20,11 +20,17 @@ import "processor/tablepb/table.proto";
 
 option(gogoproto.goproto_enum_prefix_all) = false;
 
+// TODO rename XXTableRequest to XXTableSpanRequest respectively.
+// TODO rename XXTableResponse to XXTableSpanResponse respectively.
+
 message AddTableRequest {
     int64 table_id = 1 [
         (gogoproto.casttype) = "github.com/pingcap/tiflow/cdc/model.TableID",
         (gogoproto.customname) = "TableID"
     ];
+
+    processor.tablepb.Span span = 4 [(gogoproto.nullable) = false];
+
     bool is_secondary = 2;
     processor.tablepb.Checkpoint checkpoint = 3 [(gogoproto.nullable) = false];
 }
@@ -34,6 +40,8 @@ message RemoveTableRequest {
         (gogoproto.casttype) = "github.com/pingcap/tiflow/cdc/model.TableID",
         (gogoproto.customname) = "TableID"
     ];
+
+    processor.tablepb.Span span = 2 [(gogoproto.nullable) = false];
 }
 
 message DispatchTableRequest {
@@ -65,7 +73,10 @@ message Heartbeat {
         (gogoproto.casttype) = "github.com/pingcap/tiflow/cdc/model.TableID",
         (gogoproto.customname) = "TableIDs"
     ];
+
     bool is_stopping = 2;
+    repeated processor.tablepb.Span spans = 3 [(gogoproto.nullable) = false];
+    bool collect_stats = 4;
 }
 
 message HeartbeatResponse {

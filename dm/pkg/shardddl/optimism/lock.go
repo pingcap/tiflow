@@ -15,6 +15,7 @@ package optimism
 
 import (
 	"bytes"
+	"context"
 	"encoding/json"
 	"fmt"
 	"sync"
@@ -32,7 +33,6 @@ import (
 	"github.com/pingcap/tiflow/dm/pkg/terror"
 	clientv3 "go.etcd.io/etcd/client/v3"
 	"go.uber.org/zap"
-	"golang.org/x/net/context"
 )
 
 // DropColumnStage represents whether drop column done for a sharding table.
@@ -135,7 +135,7 @@ func (l *Lock) FetchTableInfos(task, source, schema, table string) (*model.Table
 		return nil, terror.ErrMasterOptimisticDownstreamMetaNotFound.Generate(task)
 	}
 
-	db, err := conn.DefaultDBProvider.Apply(l.downstreamMeta.dbConfig)
+	db, err := conn.GetDownstreamDB(l.downstreamMeta.dbConfig)
 	if err != nil {
 		return nil, err
 	}

@@ -14,31 +14,34 @@
 package sinkmanager
 
 import (
-	"github.com/pingcap/tiflow/cdc/model"
+	"time"
+
 	"github.com/pingcap/tiflow/cdc/processor/sourcemanager/engine"
+	"github.com/pingcap/tiflow/cdc/processor/tablepb"
 )
 
 const (
 	// defaultRequestMemSize is the default memory usage for a request.
-	defaultRequestMemSize = uint64(10 * 1024 * 1024) // 10MB
+	defaultRequestMemSize = uint64(1024 * 1024) // 1MB
 	// Avoid update resolved ts too frequently, if there are too many small transactions.
 	defaultMaxUpdateIntervalSize = uint64(1024 * 256) // 256KB
-	// Limit the maximum size of a group of one batch, if there is a big translation.
-	defaultMaxBigTxnBatchSize = defaultMaxUpdateIntervalSize * 20 // 5MB
 )
 
 // Make these values be variables, so that we can mock them in unit tests.
 var (
 	requestMemSize        = defaultRequestMemSize
 	maxUpdateIntervalSize = defaultMaxUpdateIntervalSize
-	maxBigTxnBatchSize    = defaultMaxBigTxnBatchSize
+
+	// Sink manager schedules table tasks based on lag. Limit the max task range
+	// can be helpful to reduce changefeed latency.
+	maxTaskRange = 5 * time.Second
 )
 
 // Used to record the progress of the table.
 type writeSuccessCallback func(lastWrittenPos engine.Position)
 
 // Used to get an upper bound.
-type upperBoundGetter func() engine.Position
+type upperBoundGetter func(*tableSinkWrapper) engine.Position
 
 // Used to abort the task processing of the table.
 type isCanceled func() bool
@@ -46,7 +49,7 @@ type isCanceled func() bool
 // sinkTask is a task for a table sink.
 // It only considers how to control the table sink.
 type sinkTask struct {
-	tableID model.TableID
+	span tablepb.Span
 	// lowerBound indicates the lower bound of the task.
 	// It is a closed interval.
 	lowerBound engine.Position
@@ -61,9 +64,10 @@ type sinkTask struct {
 
 // redoTask is a task for the redo log.
 type redoTask struct {
-	tableID       model.TableID
+	span          tablepb.Span
 	lowerBound    engine.Position
 	getUpperBound upperBoundGetter
 	tableSink     *tableSinkWrapper
 	callback      writeSuccessCallback
+	isCanceled    isCanceled
 }

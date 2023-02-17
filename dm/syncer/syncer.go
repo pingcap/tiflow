@@ -32,7 +32,6 @@ import (
 	"github.com/pingcap/errors"
 	"github.com/pingcap/failpoint"
 	bf "github.com/pingcap/tidb-tools/pkg/binlog-filter"
-	cm "github.com/pingcap/tidb-tools/pkg/column-mapping"
 	"github.com/pingcap/tidb/parser"
 	"github.com/pingcap/tidb/parser/ast"
 	"github.com/pingcap/tidb/parser/model"
@@ -42,6 +41,7 @@ import (
 	regexprrouter "github.com/pingcap/tidb/util/regexpr-router"
 	router "github.com/pingcap/tidb/util/table-router"
 	"github.com/pingcap/tiflow/dm/config"
+	"github.com/pingcap/tiflow/dm/config/dbconfig"
 	"github.com/pingcap/tiflow/dm/pb"
 	"github.com/pingcap/tiflow/dm/pkg/binlog"
 	"github.com/pingcap/tiflow/dm/pkg/binlog/event"
@@ -160,7 +160,6 @@ type Syncer struct {
 
 	tableRouter     *regexprrouter.RouteTable
 	binlogFilter    *bf.BinlogEvent
-	columnMapping   *cm.Mapping
 	baList          *filter.Filter
 	exprFilterGroup *ExprFilterGroup
 	sessCtx         sessionctx.Context
@@ -221,7 +220,7 @@ type Syncer struct {
 	flushSeq      int64
 
 	// `lower_case_table_names` setting of upstream db
-	SourceTableNamesFlavor utils.LowerCaseTableNamesFlavor
+	SourceTableNamesFlavor conn.LowerCaseTableNamesFlavor
 
 	tsOffset                  atomic.Int64    // time offset between upstream and syncer, DM's timestamp - MySQL's timestamp
 	secondsBehindMaster       atomic.Int64    // current task delay second behind upstream
@@ -355,11 +354,11 @@ func (s *Syncer) Init(ctx context.Context) (err error) {
 	}()
 
 	tctx := s.tctx.WithContext(ctx)
-	s.upstreamTZ, s.upstreamTZStr, err = str2TimezoneOrFromDB(tctx, "", &s.cfg.From)
+	s.upstreamTZ, s.upstreamTZStr, err = str2TimezoneOrFromDB(tctx, "", conn.UpstreamDBConfig(&s.cfg.From))
 	if err != nil {
 		return
 	}
-	s.timezone, _, err = str2TimezoneOrFromDB(tctx, s.cfg.Timezone, &s.cfg.To)
+	s.timezone, _, err = str2TimezoneOrFromDB(tctx, s.cfg.Timezone, conn.DownstreamDBConfig(&s.cfg.To))
 	if err != nil {
 		return
 	}
@@ -410,13 +409,6 @@ func (s *Syncer) Init(ctx context.Context) (err error) {
 	// create an empty Tracker and will be initialized in `Run`
 	s.schemaTracker = schema.NewTracker()
 
-	if len(s.cfg.ColumnMappingRules) > 0 {
-		s.columnMapping, err = cm.NewMapping(s.cfg.CaseSensitive, s.cfg.ColumnMappingRules)
-		if err != nil {
-			return terror.ErrSyncerUnitGenColumnMapping.Delegate(err)
-		}
-	}
-
 	if s.cfg.OnlineDDL {
 		s.onlineDDL, err = onlineddl.NewRealOnlinePlugin(tctx, s.cfg, s.metricsProxies)
 		if err != nil {
@@ -432,9 +424,9 @@ func (s *Syncer) Init(ctx context.Context) (err error) {
 
 	var schemaMap map[string]string
 	var tableMap map[string]map[string]string
-	if s.SourceTableNamesFlavor == utils.LCTableNamesSensitive {
+	if s.SourceTableNamesFlavor == conn.LCTableNamesSensitive {
 		// TODO: we should avoid call this function multi times
-		allTables, err1 := utils.FetchAllDoTables(ctx, s.fromDB.BaseDB.DB, s.baList)
+		allTables, err1 := conn.FetchAllDoTables(ctx, s.fromDB.BaseDB, s.baList)
 		if err1 != nil {
 			return err1
 		}
@@ -469,7 +461,7 @@ func (s *Syncer) Init(ctx context.Context) (err error) {
 	if err != nil {
 		return err
 	}
-	if s.SourceTableNamesFlavor == utils.LCTableNamesSensitive {
+	if s.SourceTableNamesFlavor == conn.LCTableNamesSensitive {
 		if err = s.checkpoint.CheckAndUpdate(ctx, schemaMap, tableMap); err != nil {
 			return err
 		}
@@ -580,7 +572,7 @@ func (s *Syncer) initShardingGroups(ctx context.Context, needCheck bool) error {
 	if err2 != nil {
 		return err2
 	}
-	if needCheck && s.SourceTableNamesFlavor == utils.LCTableNamesSensitive {
+	if needCheck && s.SourceTableNamesFlavor == conn.LCTableNamesSensitive {
 		// try fix persistent data before init
 		schemaMap, tableMap := buildLowerCaseTableNamesMap(s.tctx.L(), sourceTables)
 		if err2 = s.sgk.CheckAndFix(loadMeta, schemaMap, tableMap); err2 != nil {
@@ -684,9 +676,18 @@ func (s *Syncer) resetDBs(tctx *tcontext.Context) error {
 	return nil
 }
 
+func (s *Syncer) handleExitErrMetric(err *pb.ProcessError) {
+	if unit.IsResumableError(err) {
+		s.metricsProxies.Metrics.ExitWithResumableErrorCounter.Inc()
+	} else {
+		s.metricsProxies.Metrics.ExitWithNonResumableErrorCounter.Inc()
+	}
+}
+
 // Process implements the dm.Unit interface.
 func (s *Syncer) Process(ctx context.Context, pr chan pb.ProcessResult) {
-	s.metricsProxies.Metrics.SyncerExitWithErrorCounter.Add(0)
+	s.metricsProxies.Metrics.ExitWithResumableErrorCounter.Add(0)
+	s.metricsProxies.Metrics.ExitWithNonResumableErrorCounter.Add(0)
 
 	newCtx, cancel := context.WithCancel(ctx)
 	defer cancel()
@@ -717,7 +718,6 @@ func (s *Syncer) Process(ctx context.Context, pr chan pb.ProcessResult) {
 				return
 			}
 			cancel() // cancel s.Run
-			s.metricsProxies.Metrics.SyncerExitWithErrorCounter.Inc()
 			errsMu.Lock()
 			errs = append(errs, err)
 			errsMu.Unlock()
@@ -744,7 +744,6 @@ func (s *Syncer) Process(ctx context.Context, pr chan pb.ProcessResult) {
 			s.tctx.L().Info("filter out error caused by user cancel", log.ShortError(err))
 		} else {
 			s.tctx.L().Debug("unit syncer quits with error", zap.Error(err))
-			s.metricsProxies.Metrics.SyncerExitWithErrorCounter.Inc()
 			errsMu.Lock()
 			errs = append(errs, unit.NewProcessError(err))
 			errsMu.Unlock()
@@ -758,6 +757,9 @@ func (s *Syncer) Process(ctx context.Context, pr chan pb.ProcessResult) {
 	default:
 	}
 
+	for _, processError := range errs {
+		s.handleExitErrMetric(processError)
+	}
 	pr <- pb.ProcessResult{
 		IsCanceled: isCanceled,
 		Errors:     errs,
@@ -1078,6 +1080,14 @@ func (s *Syncer) handleJob(job *job) (added2Queue bool, err error) {
 		s.isTransactionEnd = true
 		return
 	case skip:
+		if job.eventHeader.EventType == replication.QUERY_EVENT {
+			// skipped ddl includes:
+			// - ddls that dm don't handle, such as analyze table(can be parsed), create function(cannot be parsed)
+			// - ddls related to db/table which is filtered
+			// for those ddls we record its location, so checkpoint can match master position if skipped ddl
+			// is the last binlog in source db
+			s.saveGlobalPoint(job.location)
+		}
 		s.updateReplicationJobTS(job, skipJobIdx)
 		return
 	}
@@ -2509,15 +2519,11 @@ func (s *Syncer) handleRowsEvent(ev *replication.RowsEvent, ec eventContext) (*f
 		return nil, nil
 	}
 
-	// TODO(csuzhangxc): check performance of `getTable` from schema tracker.
 	tableInfo, err := s.getTableInfo(ec.tctx, sourceTable, targetTable)
 	if err != nil {
 		return nil, terror.WithScope(err, terror.ScopeDownstream)
 	}
-	originRows, err := s.mappingDML(sourceTable, tableInfo, ev.Rows)
-	if err != nil {
-		return nil, err
-	}
+	originRows := ev.Rows
 	if err2 := checkLogColumns(ev.SkippedColumns); err2 != nil {
 		return nil, err2
 	}
@@ -2910,7 +2916,7 @@ func (s *Syncer) loadTableStructureFromDump(ctx context.Context) error {
 			firstErr = err
 		}
 	}
-	p, err := utils.GetParserFromSQLModeStr(s.cfg.LoaderConfig.SQLMode)
+	p, err := conn.GetParserFromSQLModeStr(s.cfg.LoaderConfig.SQLMode)
 	if err != nil {
 		logger.Error("failed to create parser from SQL Mode, will skip loadTableStructureFromDump",
 			zap.String("SQLMode", s.cfg.LoaderConfig.SQLMode),
@@ -2969,18 +2975,18 @@ func (s *Syncer) loadTableStructureFromDump(ctx context.Context) error {
 func (s *Syncer) createDBs(ctx context.Context) error {
 	var err error
 	dbCfg := s.cfg.From
-	dbCfg.RawDBCfg = config.DefaultRawDBConfig().SetReadTimeout(maxDMLConnectionTimeout)
-	fromDB, fromConns, err := dbconn.CreateConns(s.tctx, s.cfg, &dbCfg, 1)
+	dbCfg.RawDBCfg = dbconfig.DefaultRawDBConfig().SetReadTimeout(maxDMLConnectionTimeout)
+	fromDB, fromConns, err := dbconn.CreateConns(s.tctx, s.cfg, conn.UpstreamDBConfig(&dbCfg), 1, s.cfg.DumpIOTotalBytes, s.cfg.DumpUUID)
 	if err != nil {
 		return err
 	}
 	s.fromDB = &dbconn.UpStreamConn{BaseDB: fromDB}
 	s.fromConn = fromConns[0]
-	conn, err := s.fromDB.BaseDB.GetBaseConn(ctx)
+	baseConn, err := s.fromDB.BaseDB.GetBaseConn(ctx)
 	if err != nil {
 		return err
 	}
-	lcFlavor, err := utils.FetchLowerCaseTableNamesSetting(ctx, conn.DBConn)
+	lcFlavor, err := conn.FetchLowerCaseTableNamesSetting(ctx, baseConn)
 	if err != nil {
 		return err
 	}
@@ -2999,11 +3005,11 @@ func (s *Syncer) createDBs(ctx context.Context) error {
 		}
 	}
 	if !hasSQLMode {
-		sqlMode, err2 := utils.GetGlobalVariable(ctx, s.fromDB.BaseDB.DB, "sql_mode")
+		sqlMode, err2 := conn.GetGlobalVariable(tcontext.NewContext(ctx, log.L()), s.fromDB.BaseDB, "sql_mode")
 		if err2 != nil {
 			s.tctx.L().Warn("cannot get sql_mode from upstream database, the sql_mode will be assigned \"IGNORE_SPACE, NO_AUTO_VALUE_ON_ZERO, ALLOW_INVALID_DATES\"", log.ShortError(err2))
 		}
-		sqlModes, err3 := utils.AdjustSQLModeCompatible(sqlMode)
+		sqlModes, err3 := conn.AdjustSQLModeCompatible(sqlMode)
 		if err3 != nil {
 			s.tctx.L().Warn("cannot adjust sql_mode compatible, the sql_mode will be assigned  stay the same", log.ShortError(err3))
 		}
@@ -3011,21 +3017,21 @@ func (s *Syncer) createDBs(ctx context.Context) error {
 	}
 
 	dbCfg = s.cfg.To
-	dbCfg.RawDBCfg = config.DefaultRawDBConfig().
+	dbCfg.RawDBCfg = dbconfig.DefaultRawDBConfig().
 		SetReadTimeout(maxDMLConnectionTimeout).
 		SetMaxIdleConns(s.cfg.WorkerCount)
 
-	s.toDB, s.toDBConns, err = dbconn.CreateConns(s.tctx, s.cfg, &dbCfg, s.cfg.WorkerCount)
+	s.toDB, s.toDBConns, err = dbconn.CreateConns(s.tctx, s.cfg, conn.DownstreamDBConfig(&dbCfg), s.cfg.WorkerCount, s.cfg.IOTotalBytes, s.cfg.UUID)
 	if err != nil {
 		dbconn.CloseUpstreamConn(s.tctx, s.fromDB) // release resources acquired before return with error
 		return err
 	}
 	// baseConn for ddl
 	dbCfg = s.cfg.To
-	dbCfg.RawDBCfg = config.DefaultRawDBConfig().SetReadTimeout(maxDDLConnectionTimeout)
+	dbCfg.RawDBCfg = dbconfig.DefaultRawDBConfig().SetReadTimeout(maxDDLConnectionTimeout)
 
 	var ddlDBConns []*dbconn.DBConn
-	s.ddlDB, ddlDBConns, err = dbconn.CreateConns(s.tctx, s.cfg, &dbCfg, 2)
+	s.ddlDB, ddlDBConns, err = dbconn.CreateConns(s.tctx, s.cfg, conn.DownstreamDBConfig(&dbCfg), 2, s.cfg.IOTotalBytes, s.cfg.UUID)
 	if err != nil {
 		dbconn.CloseUpstreamConn(s.tctx, s.fromDB)
 		dbconn.CloseBaseDB(s.tctx, s.toDB)
@@ -3164,10 +3170,12 @@ func (s *Syncer) Resume(ctx context.Context, pr chan pb.ProcessResult) {
 	var err error
 	defer func() {
 		if err != nil {
+			processError := unit.NewProcessError(err)
+			s.handleExitErrMetric(processError)
 			pr <- pb.ProcessResult{
 				IsCanceled: false,
 				Errors: []*pb.ProcessError{
-					unit.NewProcessError(err),
+					processError,
 				},
 			}
 		}
@@ -3244,11 +3252,10 @@ func (s *Syncer) Update(ctx context.Context, cfg *config.SubTaskConfig) error {
 	}
 
 	var (
-		err              error
-		oldBaList        *filter.Filter
-		oldTableRouter   *regexprrouter.RouteTable
-		oldBinlogFilter  *bf.BinlogEvent
-		oldColumnMapping *cm.Mapping
+		err             error
+		oldBaList       *filter.Filter
+		oldTableRouter  *regexprrouter.RouteTable
+		oldBinlogFilter *bf.BinlogEvent
 	)
 
 	defer func() {
@@ -3263,9 +3270,6 @@ func (s *Syncer) Update(ctx context.Context, cfg *config.SubTaskConfig) error {
 		}
 		if oldBinlogFilter != nil {
 			s.binlogFilter = oldBinlogFilter
-		}
-		if oldColumnMapping != nil {
-			s.columnMapping = oldColumnMapping
 		}
 	}()
 
@@ -3288,13 +3292,6 @@ func (s *Syncer) Update(ctx context.Context, cfg *config.SubTaskConfig) error {
 	s.binlogFilter, err = bf.NewBinlogEvent(cfg.CaseSensitive, cfg.FilterRules)
 	if err != nil {
 		return terror.ErrSyncerUnitGenBinlogEventFilter.Delegate(err)
-	}
-
-	// update column-mappings
-	oldColumnMapping = s.columnMapping
-	s.columnMapping, err = cm.NewMapping(cfg.CaseSensitive, cfg.ColumnMappingRules)
-	if err != nil {
-		return terror.ErrSyncerUnitGenColumnMapping.Delegate(err)
 	}
 
 	switch s.cfg.ShardMode {
@@ -3324,7 +3321,7 @@ func (s *Syncer) Update(ctx context.Context, cfg *config.SubTaskConfig) error {
 
 	// update timezone
 	if s.timezone == nil {
-		s.timezone, _, err = str2TimezoneOrFromDB(s.tctx.WithContext(ctx), s.cfg.Timezone, &s.cfg.To)
+		s.timezone, _, err = str2TimezoneOrFromDB(s.tctx.WithContext(ctx), s.cfg.Timezone, conn.DownstreamDBConfig(&s.cfg.To))
 		return err
 	}
 	// update syncer config
@@ -3434,7 +3431,7 @@ func (s *Syncer) adjustGlobalPointGTID(tctx *tcontext.Context) (bool, error) {
 		s.tctx.L().Warn("fail to build connection", zap.Stringer("pos", location), zap.Error(err))
 		return false, err
 	}
-	gs, err = utils.AddGSetWithPurged(tctx.Context(), gs, dbConn.DBConn)
+	gs, err = conn.AddGSetWithPurged(tctx.Context(), gs, dbConn)
 	if err != nil {
 		s.tctx.L().Warn("fail to merge purged gtidSet", zap.Stringer("pos", location), zap.Error(err))
 		return false, err

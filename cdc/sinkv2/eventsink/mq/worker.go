@@ -20,8 +20,6 @@ import (
 	"github.com/pingcap/errors"
 	"github.com/pingcap/log"
 	"github.com/pingcap/tiflow/cdc/model"
-	"github.com/pingcap/tiflow/cdc/sink/codec"
-	mqv1 "github.com/pingcap/tiflow/cdc/sink/mq"
 	"github.com/pingcap/tiflow/cdc/sinkv2/eventsink"
 	"github.com/pingcap/tiflow/cdc/sinkv2/eventsink/mq/dmlproducer"
 	"github.com/pingcap/tiflow/cdc/sinkv2/metrics"
@@ -29,6 +27,7 @@ import (
 	"github.com/pingcap/tiflow/cdc/sinkv2/tablesink/state"
 	"github.com/pingcap/tiflow/pkg/chann"
 	"github.com/pingcap/tiflow/pkg/config"
+	"github.com/pingcap/tiflow/pkg/sink/codec"
 	"github.com/prometheus/client_golang/prometheus"
 	"go.uber.org/zap"
 	"golang.org/x/sync/errgroup"
@@ -42,10 +41,16 @@ const (
 	flushInterval = 15 * time.Millisecond
 )
 
+// TopicPartitionKey contains the topic and partition key of the message.
+type TopicPartitionKey struct {
+	Topic     string
+	Partition int32
+}
+
 // mqEvent is the event of the mq worker.
 // It carries the topic and partition information of the message.
 type mqEvent struct {
-	key      mqv1.TopicPartitionKey
+	key      TopicPartitionKey
 	rowEvent *eventsink.RowChangeCallbackableEvent
 }
 
@@ -57,7 +62,7 @@ type worker struct {
 	protocol config.Protocol
 	// msgChan caches the messages to be sent.
 	// It is an unbounded channel.
-	msgChan *chann.Chann[mqEvent]
+	msgChan *chann.DrainableChann[mqEvent]
 	// ticker used to force flush the messages when the interval is reached.
 	ticker *time.Ticker
 
@@ -88,7 +93,7 @@ func newWorker(
 	w := &worker{
 		changeFeedID:                      id,
 		protocol:                          protocol,
-		msgChan:                           chann.New[mqEvent](),
+		msgChan:                           chann.NewAutoDrainChann[mqEvent](),
 		ticker:                            time.NewTicker(flushInterval),
 		encoderGroup:                      codec.NewEncoderGroup(builder, encoderConcurrency, id),
 		producer:                          producer,
@@ -173,7 +178,7 @@ func (w *worker) batchEncodeRun(ctx context.Context) (retErr error) {
 	eventsBuf := make([]mqEvent, flushBatchSize)
 	for {
 		start := time.Now()
-		endIndex, err := w.batch(ctx, eventsBuf)
+		endIndex, err := w.batch(ctx, eventsBuf, flushInterval)
 		if err != nil {
 			return errors.Trace(err)
 		}
@@ -195,7 +200,7 @@ func (w *worker) batchEncodeRun(ctx context.Context) (retErr error) {
 
 // batch collects a batch of messages to be sent to the DML producer.
 func (w *worker) batch(
-	ctx context.Context, events []mqEvent,
+	ctx context.Context, events []mqEvent, flushInterval time.Duration,
 ) (int, error) {
 	index := 0
 	max := len(events)
@@ -210,6 +215,7 @@ func (w *worker) batch(
 			return index, nil
 		}
 		if msg.rowEvent != nil {
+			w.statistics.ObserveRows(msg.rowEvent.Event)
 			events[index] = msg
 			index++
 		}
@@ -228,6 +234,7 @@ func (w *worker) batch(
 			}
 
 			if msg.rowEvent != nil {
+				w.statistics.ObserveRows(msg.rowEvent.Event)
 				events[index] = msg
 				index++
 			}
@@ -244,8 +251,8 @@ func (w *worker) batch(
 // group is responsible for grouping messages by the partition.
 func (w *worker) group(
 	events []mqEvent,
-) map[mqv1.TopicPartitionKey][]*eventsink.RowChangeCallbackableEvent {
-	partitionedRows := make(map[mqv1.TopicPartitionKey][]*eventsink.RowChangeCallbackableEvent)
+) map[TopicPartitionKey][]*eventsink.RowChangeCallbackableEvent {
+	partitionedRows := make(map[TopicPartitionKey][]*eventsink.RowChangeCallbackableEvent)
 	for _, event := range events {
 		// Skip this event when the table is stopping.
 		if event.rowEvent.GetTableSinkState() != state.TableSinkSinking {
@@ -304,12 +311,7 @@ func (w *worker) sendMessages(ctx context.Context) error {
 }
 
 func (w *worker) close() {
-	w.msgChan.Close()
-	// We must finish consuming the data here,
-	// otherwise it will cause the channel to not close properly.
-	for range w.msgChan.Out() {
-		// Do nothing. We do not care about the data.
-	}
+	w.msgChan.CloseAndDrain()
 	w.producer.Close()
 
 	mq.WorkerSendMessageDuration.DeleteLabelValues(w.changeFeedID.Namespace, w.changeFeedID.ID)

@@ -41,7 +41,7 @@ type worker struct {
 	workerCount int
 
 	ID      int
-	txnCh   *chann.Chann[txnWithNotifier]
+	txnCh   *chann.DrainableChann[txnWithNotifier]
 	stopped chan struct{}
 	wg      sync.WaitGroup
 	backend backend
@@ -68,7 +68,7 @@ func newWorker(ctx context.Context, ID int, backend backend, errCh chan<- error,
 		workerCount: workerCount,
 
 		ID:      ID,
-		txnCh:   chann.New[txnWithNotifier](chann.Cap(-1 /*unbounded*/)),
+		txnCh:   chann.NewAutoDrainChann[txnWithNotifier](chann.Cap(-1 /*unbounded*/)),
 		stopped: make(chan struct{}),
 		backend: backend,
 		errCh:   errCh,
@@ -92,9 +92,17 @@ func (w *worker) Add(txn *txnEvent, unlock func()) {
 }
 
 func (w *worker) Close() {
+	log.Info("Closing txn worker",
+		zap.String("changefeed", w.changefeed),
+		zap.Int("worker", w.ID))
+	start := time.Now()
 	close(w.stopped)
 	w.wg.Wait()
-	w.txnCh.Close()
+	w.txnCh.CloseAndDrain()
+	log.Info("Closed txn worker",
+		zap.String("changefeed", w.changefeed),
+		zap.Int("worker", w.ID),
+		zap.Duration("elapsed", time.Since(start)))
 }
 
 // Run a background loop.
@@ -129,8 +137,8 @@ func (w *worker) runBackgroundLoop() {
 		defer ticker.Stop()
 
 		var flushTimeSlice, totalTimeSlice time.Duration
-		overseerTimer := time.NewTicker(time.Second)
-		defer overseerTimer.Stop()
+		overseerTicker := time.NewTicker(time.Second)
+		defer overseerTicker.Stop()
 		startToWork := time.Now()
 	Loop:
 		for {
@@ -155,7 +163,7 @@ func (w *worker) runBackgroundLoop() {
 				if w.doFlush(&flushTimeSlice) {
 					break Loop
 				}
-			case now := <-overseerTimer.C:
+			case now := <-overseerTicker.C:
 				totalTimeSlice = now.Sub(startToWork)
 				busyRatio := int(flushTimeSlice.Seconds() / totalTimeSlice.Seconds() * 1000)
 				w.metricTxnWorkerBusyRatio.Add(float64(busyRatio) / float64(w.workerCount))

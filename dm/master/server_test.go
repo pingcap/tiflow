@@ -20,6 +20,7 @@ import (
 	"io"
 	"io/ioutil"
 	"net"
+	"net/http"
 	"os"
 	"path/filepath"
 	"sort"
@@ -31,7 +32,6 @@ import (
 	"github.com/DATA-DOG/go-sqlmock"
 	"github.com/go-mysql-org/go-mysql/mysql"
 	"github.com/golang/mock/gomock"
-	"github.com/pingcap/check"
 	"github.com/pingcap/errors"
 	"github.com/pingcap/failpoint"
 	tiddl "github.com/pingcap/tidb/ddl"
@@ -44,7 +44,10 @@ import (
 	"github.com/pingcap/tiflow/dm/checker"
 	common2 "github.com/pingcap/tiflow/dm/common"
 	"github.com/pingcap/tiflow/dm/config"
+	"github.com/pingcap/tiflow/dm/config/dbconfig"
+	"github.com/pingcap/tiflow/dm/config/security"
 	"github.com/pingcap/tiflow/dm/ctl/common"
+	"github.com/pingcap/tiflow/dm/loader"
 	"github.com/pingcap/tiflow/dm/master/scheduler"
 	"github.com/pingcap/tiflow/dm/master/shardddl"
 	"github.com/pingcap/tiflow/dm/master/workerrpc"
@@ -62,7 +65,8 @@ import (
 	"github.com/pingcap/tiflow/dm/pkg/utils"
 	"github.com/pingcap/tiflow/pkg/version"
 	"github.com/stretchr/testify/require"
-	"github.com/tikv/pd/pkg/tempurl"
+	"github.com/stretchr/testify/suite"
+	"github.com/tikv/pd/pkg/utils/tempurl"
 	clientv3 "go.etcd.io/etcd/client/v3"
 	"go.etcd.io/etcd/server/v3/verify"
 	"go.etcd.io/etcd/tests/v3/integration"
@@ -89,7 +93,6 @@ mysql-instances:
   - source-id: "mysql-replica-01"
     block-allow-list:  "instance"
     route-rules: ["sharding-route-rules-table", "sharding-route-rules-schema"]
-    column-mapping-rules: ["instance-1"]
     mydumper-config-name: "global"
     loader-config-name: "global"
     syncer-config-name: "global"
@@ -97,7 +100,6 @@ mysql-instances:
   - source-id: "mysql-replica-02"
     block-allow-list:  "instance"
     route-rules: ["sharding-route-rules-table", "sharding-route-rules-schema"]
-    column-mapping-rules: ["instance-2"]
     mydumper-config-name: "global"
     loader-config-name: "global"
     syncer-config-name: "global"
@@ -119,23 +121,6 @@ routes:
   sharding-route-rules-schema:
     schema-pattern: sharding*
     target-schema: db_target
-
-column-mappings:
-  instance-1:
-    schema-pattern: "sharding*"
-    table-pattern: "t*"
-    expression: "partition id"
-    source-column: "id"
-    target-column: "id"
-    arguments: ["1", "sharding", "t"]
-
-  instance-2:
-    schema-pattern: "sharding*"
-    table-pattern: "t*"
-    expression: "partition id"
-    source-column: "id"
-    target-column: "id"
-    arguments: ["2", "sharding", "t"]
 
 mydumpers:
   global:
@@ -163,40 +148,29 @@ var (
 	keepAliveTTL          = int64(10)
 )
 
-type testMaster struct {
+type testMasterSuite struct {
+	suite.Suite
+
 	workerClients     map[string]workerrpc.Client
 	saveMaxRetryNum   int
 	electionTTLBackup int
-	testT             *testing.T
 
 	testEtcdCluster *integration.ClusterV3
 	etcdTestCli     *clientv3.Client
 }
 
-var (
-	testSuite = check.SerialSuites(&testMaster{})
-	pwd       string
-)
-
-func TestMaster(t *testing.T) {
-	err := log.InitLogger(&log.Config{})
-	if err != nil {
-		t.Fatal(err)
-	}
-	pwd, err = os.Getwd()
-	if err != nil {
-		t.Fatal(err)
-	}
-	integration.BeforeTestExternal(t)
-	// inject *testing.T to testMaster
-	s := testSuite.(*testMaster)
-	s.testT = t
-
-	check.TestingT(t)
+func TestMasterSuite(t *testing.T) {
+	suite.Run(t, new(testMasterSuite))
 }
 
-func (t *testMaster) SetUpSuite(c *check.C) {
-	c.Assert(log.InitLogger(&log.Config{}), check.IsNil)
+var pwd string
+
+func (t *testMasterSuite) SetupSuite() {
+	require.NoError(t.T(), log.InitLogger(&log.Config{}))
+	var err error
+	pwd, err = os.Getwd()
+	require.NoError(t.T(), err)
+	integration.BeforeTestExternal(t.T())
 	t.workerClients = make(map[string]workerrpc.Client)
 	t.saveMaxRetryNum = maxRetryNum
 	t.electionTTLBackup = electionTTL
@@ -205,36 +179,38 @@ func (t *testMaster) SetUpSuite(c *check.C) {
 	checkAndAdjustSourceConfigForDMCtlFunc = checkAndNoAdjustSourceConfigMock
 }
 
-func (t *testMaster) TearDownSuite(c *check.C) {
+func (t *testMasterSuite) TearDownSuite() {
 	maxRetryNum = t.saveMaxRetryNum
 	electionTTL = t.electionTTLBackup
 	checkAndAdjustSourceConfigForDMCtlFunc = checkAndAdjustSourceConfig
 }
 
-func (t *testMaster) SetUpTest(c *check.C) {
-	t.testEtcdCluster = integration.NewClusterV3(t.testT, &integration.ClusterConfig{Size: 1})
+func (t *testMasterSuite) SetupTest() {
+	t.testEtcdCluster = integration.NewClusterV3(t.T(), &integration.ClusterConfig{Size: 1})
 	t.etcdTestCli = t.testEtcdCluster.RandClient()
-	t.clearEtcdEnv(c)
+	t.clearEtcdEnv()
 }
 
-func (t *testMaster) TearDownTest(c *check.C) {
-	t.clearEtcdEnv(c)
-	t.testEtcdCluster.Terminate(t.testT)
+func (t *testMasterSuite) TearDownTest() {
+	t.clearEtcdEnv()
+	t.testEtcdCluster.Terminate(t.T())
 }
 
-func (t *testMaster) clearEtcdEnv(c *check.C) {
-	c.Assert(ha.ClearTestInfoOperation(t.etcdTestCli), check.IsNil)
+func (t *testMasterSuite) clearEtcdEnv() {
+	require.NoError(t.T(), ha.ClearTestInfoOperation(t.etcdTestCli))
 }
 
-func (t testMaster) clearSchedulerEnv(c *check.C, cancel context.CancelFunc, wg *sync.WaitGroup) {
+func (t *testMasterSuite) clearSchedulerEnv(cancel context.CancelFunc, wg *sync.WaitGroup) {
 	cancel()
 	wg.Wait()
-	t.clearEtcdEnv(c)
+	t.clearEtcdEnv()
 }
 
-func stageDeepEqualExcludeRev(c *check.C, stage, expectStage ha.Stage) {
+func stageDeepEqualExcludeRev(t *testing.T, stage, expectStage ha.Stage) {
+	t.Helper()
+
 	expectStage.Revision = stage.Revision
-	c.Assert(stage, check.DeepEquals, expectStage)
+	require.Equal(t, expectStage, stage)
 }
 
 func mockRevelantWorkerClient(mockWorkerClient *pbmock.MockWorkerClient, taskName, sourceID string, masterReq interface{}) {
@@ -302,19 +278,15 @@ func mockRevelantWorkerClient(mockWorkerClient *pbmock.MockWorkerClient, taskNam
 	).Return(queryResp, nil).MaxTimes(maxRetryNum)
 }
 
-func createTableInfo(c *check.C, p *parser.Parser, se sessionctx.Context, tableID int64, sql string) *model.TableInfo {
+func createTableInfo(t *testing.T, p *parser.Parser, se sessionctx.Context, tableID int64, sql string) *model.TableInfo {
+	t.Helper()
+
 	node, err := p.ParseOneStmt(sql, "utf8mb4", "utf8mb4_bin")
-	if err != nil {
-		c.Fatalf("fail to parse stmt, %v", err)
-	}
+	require.NoError(t, err)
 	createStmtNode, ok := node.(*ast.CreateTableStmt)
-	if !ok {
-		c.Fatalf("%s is not a CREATE TABLE statement", sql)
-	}
+	require.True(t, ok, "%s is not a CREATE TABLE statement", sql)
 	info, err := tiddl.MockTableInfo(se, createStmtNode, tableID)
-	if err != nil {
-		c.Fatalf("fail to create table info, %v", err)
-	}
+	require.NoError(t, err)
 	return info
 }
 
@@ -353,11 +325,13 @@ func makeWorkerClientsForHandle(ctrl *gomock.Controller, taskName string, source
 	return workerClients
 }
 
-func testDefaultMasterServer(c *check.C) *Server {
+func testDefaultMasterServer(t *testing.T) *Server {
+	t.Helper()
+
 	cfg := NewConfig()
 	err := cfg.FromContent(SampleConfig)
-	c.Assert(err, check.IsNil)
-	cfg.DataDir = c.MkDir()
+	require.NoError(t, err)
+	cfg.DataDir = t.TempDir()
 	server := NewServer(cfg)
 	server.leader.Store(oneselfLeader)
 	go server.ap.Start(context.Background())
@@ -365,86 +339,101 @@ func testDefaultMasterServer(c *check.C) *Server {
 	return server
 }
 
-func (t *testMaster) testMockScheduler(ctx context.Context, wg *sync.WaitGroup, c *check.C, sources, workers []string, password string, workerClients map[string]workerrpc.Client) (*scheduler.Scheduler, []context.CancelFunc) {
+func (t *testMasterSuite) testMockScheduler(
+	ctx context.Context,
+	wg *sync.WaitGroup,
+	sources, workers []string,
+	password string,
+	workerClients map[string]workerrpc.Client,
+) (*scheduler.Scheduler, []context.CancelFunc) {
 	logger := log.L()
-	scheduler2 := scheduler.NewScheduler(&logger, config.Security{})
+	scheduler2 := scheduler.NewScheduler(&logger, security.Security{})
 	err := scheduler2.Start(ctx, t.etcdTestCli)
-	c.Assert(err, check.IsNil)
+	require.NoError(t.T(), err)
 	cancels := make([]context.CancelFunc, 0, 2)
 	for i := range workers {
 		// add worker to scheduler's workers map
 		name := workers[i]
-		c.Assert(scheduler2.AddWorker(name, workers[i]), check.IsNil)
+		require.NoError(t.T(), scheduler2.AddWorker(name, workers[i]))
 		scheduler2.SetWorkerClientForTest(name, workerClients[workers[i]])
 		// operate mysql config on this worker
 		cfg := config.NewSourceConfig()
 		cfg.SourceID = sources[i]
 		cfg.From.Password = password
-		c.Assert(scheduler2.AddSourceCfg(cfg), check.IsNil, check.Commentf("all sources: %v", sources))
+		require.NoError(t.T(), scheduler2.AddSourceCfg(cfg))
 		wg.Add(1)
 		ctx1, cancel1 := context.WithCancel(ctx)
 		cancels = append(cancels, cancel1)
 		go func(ctx context.Context, workerName string) {
 			defer wg.Done()
-			c.Assert(ha.KeepAlive(ctx, t.etcdTestCli, workerName, keepAliveTTL), check.IsNil)
+			require.NoError(t.T(), ha.KeepAlive(ctx, t.etcdTestCli, workerName, keepAliveTTL))
 		}(ctx1, name)
 		idx := i
-		c.Assert(utils.WaitSomething(30, 100*time.Millisecond, func() bool {
+		require.Eventually(t.T(), func() bool {
 			w := scheduler2.GetWorkerBySource(sources[idx])
 			return w != nil && w.BaseInfo().Name == name
-		}), check.IsTrue)
+		}, 3*time.Second, 100*time.Millisecond)
 	}
 	return scheduler2, cancels
 }
 
-func (t *testMaster) testMockSchedulerForRelay(ctx context.Context, wg *sync.WaitGroup, c *check.C, sources, workers []string, password string, workerClients map[string]workerrpc.Client) (*scheduler.Scheduler, []context.CancelFunc) {
+func (t *testMasterSuite) testMockSchedulerForRelay(
+	ctx context.Context,
+	wg *sync.WaitGroup,
+	sources, workers []string,
+	password string,
+	workerClients map[string]workerrpc.Client,
+) (*scheduler.Scheduler, []context.CancelFunc) {
 	logger := log.L()
-	scheduler2 := scheduler.NewScheduler(&logger, config.Security{})
+	scheduler2 := scheduler.NewScheduler(&logger, security.Security{})
 	err := scheduler2.Start(ctx, t.etcdTestCli)
-	c.Assert(err, check.IsNil)
+	require.NoError(t.T(), err)
 	cancels := make([]context.CancelFunc, 0, 2)
 	for i := range workers {
 		// add worker to scheduler's workers map
 		name := workers[i]
-		c.Assert(scheduler2.AddWorker(name, workers[i]), check.IsNil)
+		require.NoError(t.T(), scheduler2.AddWorker(name, workers[i]))
 		scheduler2.SetWorkerClientForTest(name, workerClients[workers[i]])
 		// operate mysql config on this worker
 		cfg := config.NewSourceConfig()
 		cfg.SourceID = sources[i]
 		cfg.From.Password = password
-		c.Assert(scheduler2.AddSourceCfg(cfg), check.IsNil, check.Commentf("all sources: %v", sources))
+		require.NoError(t.T(), scheduler2.AddSourceCfg(cfg))
 		wg.Add(1)
 		ctx1, cancel1 := context.WithCancel(ctx)
 		cancels = append(cancels, cancel1)
 		go func(ctx context.Context, workerName string) {
 			defer wg.Done()
-			c.Assert(ha.KeepAlive(ctx, t.etcdTestCli, workerName, keepAliveTTL), check.IsNil)
+			require.NoError(t.T(), ha.KeepAlive(ctx, t.etcdTestCli, workerName, keepAliveTTL))
 		}(ctx1, name)
 
 		// wait the mock worker has alive
-		c.Assert(utils.WaitSomething(30, 100*time.Millisecond, func() bool {
+		require.Eventually(t.T(), func() bool {
 			resp, err2 := t.etcdTestCli.Get(ctx, common2.WorkerKeepAliveKeyAdapter.Encode(name))
-			c.Assert(err2, check.IsNil)
+			require.NoError(t.T(), err2)
 			return resp.Count == 1
-		}), check.IsTrue)
+		}, 3*time.Second, 100*time.Millisecond)
 
-		c.Assert(scheduler2.StartRelay(sources[i], []string{workers[i]}), check.IsNil)
+		require.NoError(t.T(), scheduler2.StartRelay(sources[i], []string{workers[i]}))
 		idx := i
-		c.Assert(utils.WaitSomething(30, 100*time.Millisecond, func() bool {
+		require.Eventually(t.T(), func() bool {
 			relayWorkers, err2 := scheduler2.GetRelayWorkers(sources[idx])
-			c.Assert(err2, check.IsNil)
+			require.NoError(t.T(), err2)
 			return len(relayWorkers) == 1 && relayWorkers[0].BaseInfo().Name == name
-		}), check.IsTrue)
+		}, 3*time.Second, 100*time.Millisecond)
 	}
 	return scheduler2, cancels
 }
 
-func generateServerConfig(c *check.C, name string) *Config {
+func generateServerConfig(t *testing.T, name string) *Config {
+	t.Helper()
+
 	// create a new cluster
 	cfg1 := NewConfig()
-	c.Assert(cfg1.FromContent(SampleConfig), check.IsNil)
+	err := cfg1.FromContent(SampleConfig)
+	require.NoError(t, err)
 	cfg1.Name = name
-	cfg1.DataDir = c.MkDir()
+	cfg1.DataDir = t.TempDir()
 	cfg1.MasterAddr = tempurl.Alloc()[len("http://"):]
 	cfg1.AdvertiseAddr = cfg1.MasterAddr
 	cfg1.PeerUrls = tempurl.Alloc()
@@ -453,11 +442,11 @@ func generateServerConfig(c *check.C, name string) *Config {
 	return cfg1
 }
 
-func (t *testMaster) TestQueryStatus(c *check.C) {
-	ctrl := gomock.NewController(c)
+func (t *testMasterSuite) TestQueryStatus() {
+	ctrl := gomock.NewController(t.T())
 	defer ctrl.Finish()
 
-	server := testDefaultMasterServer(c)
+	server := testDefaultMasterServer(t.T())
 	sources, workers := defaultWorkerSource()
 	var cancels []context.CancelFunc
 
@@ -475,14 +464,14 @@ func (t *testMaster) TestQueryStatus(c *check.C) {
 	}
 	var wg sync.WaitGroup
 	ctx, cancel := context.WithCancel(context.Background())
-	server.scheduler, cancels = t.testMockScheduler(ctx, &wg, c, sources, workers, "", t.workerClients)
+	server.scheduler, cancels = t.testMockScheduler(ctx, &wg, sources, workers, "", t.workerClients)
 	for _, cancelFunc := range cancels {
 		defer cancelFunc()
 	}
 	resp, err := server.QueryStatus(context.Background(), &pb.QueryStatusListRequest{})
-	c.Assert(err, check.IsNil)
-	c.Assert(resp.Result, check.IsTrue)
-	t.clearSchedulerEnv(c, cancel, &wg)
+	require.NoError(t.T(), err)
+	require.True(t.T(), resp.Result)
+	t.clearSchedulerEnv(cancel, &wg)
 
 	// query specified sources
 	for _, worker := range workers {
@@ -497,36 +486,36 @@ func (t *testMaster) TestQueryStatus(c *check.C) {
 		t.workerClients[worker] = newMockRPCClient(mockWorkerClient)
 	}
 	ctx, cancel = context.WithCancel(context.Background())
-	server.scheduler, cancels = t.testMockSchedulerForRelay(ctx, &wg, c, sources, workers, "passwd", t.workerClients)
+	server.scheduler, cancels = t.testMockSchedulerForRelay(ctx, &wg, sources, workers, "passwd", t.workerClients)
 	for _, cancelFunc := range cancels {
 		defer cancelFunc()
 	}
 	resp, err = server.QueryStatus(context.Background(), &pb.QueryStatusListRequest{
 		Sources: sources,
 	})
-	c.Assert(err, check.IsNil)
-	c.Assert(resp.Result, check.IsTrue)
+	require.NoError(t.T(), err)
+	require.True(t.T(), resp.Result)
 
 	// query with invalid dm-worker[s]
 	resp, err = server.QueryStatus(context.Background(), &pb.QueryStatusListRequest{
 		Sources: []string{"invalid-source1", "invalid-source2"},
 	})
-	c.Assert(err, check.IsNil)
-	c.Assert(resp.Result, check.IsFalse)
-	c.Assert(resp.Msg, check.Matches, "sources .* haven't been added")
+	require.NoError(t.T(), err)
+	require.False(t.T(), resp.Result)
+	require.Regexp(t.T(), "sources .* haven't been added", resp.Msg)
 
 	// query with invalid task name
 	resp, err = server.QueryStatus(context.Background(), &pb.QueryStatusListRequest{
 		Name: "invalid-task-name",
 	})
-	c.Assert(err, check.IsNil)
-	c.Assert(resp.Result, check.IsFalse)
-	c.Assert(resp.Msg, check.Matches, "task .* has no source or not exist")
-	t.clearSchedulerEnv(c, cancel, &wg)
+	require.NoError(t.T(), err)
+	require.False(t.T(), resp.Result)
+	require.Regexp(t.T(), "task .* has no source or not exist", resp.Msg)
+	t.clearSchedulerEnv(cancel, &wg)
 	// TODO: test query with correct task name, this needs to add task first
 }
 
-func (t *testMaster) TestWaitOperationOkRightResult(c *check.C) {
+func (t *testMasterSuite) TestWaitOperationOkRightResult() {
 	cases := []struct {
 		req              interface{}
 		resp             *pb.QueryStatusResponse
@@ -564,7 +553,7 @@ func (t *testMaster) TestWaitOperationOkRightResult(c *check.C) {
 		},
 	}
 
-	ctrl := gomock.NewController(c)
+	ctrl := gomock.NewController(t.T())
 	defer ctrl.Finish()
 	ctx := context.Background()
 	duration, _ := time.ParseDuration("1s")
@@ -578,13 +567,17 @@ func (t *testMaster) TestWaitOperationOkRightResult(c *check.C) {
 		mockWorker := scheduler.NewMockWorker(newMockRPCClient(mockWorkerClient))
 
 		ok, msg, _, err := s.waitOperationOk(ctx, mockWorker, "", "", ca.req)
-		c.Assert(err, check.IsNil)
-		c.Assert(ok, check.Equals, ca.expectedOK)
-		c.Assert(msg == "", check.Equals, ca.expectedEmptyMsg)
+		require.NoError(t.T(), err)
+		require.Equal(t.T(), ca.expectedOK, ok)
+		if ca.expectedEmptyMsg {
+			require.Empty(t.T(), msg)
+		} else {
+			require.NotEmpty(t.T(), msg)
+		}
 	}
 }
 
-func (t *testMaster) TestStopTaskWithExceptRight(c *check.C) {
+func (t *testMasterSuite) TestStopTaskWithExceptRight() {
 	taskName := "test-stop-task"
 	responeses := [][]*pb.QueryStatusResponse{{
 		&pb.QueryStatusResponse{
@@ -620,7 +613,7 @@ func (t *testMaster) TestStopTaskWithExceptRight(c *check.C) {
 		Op:   pb.TaskOp_Delete,
 		Name: taskName,
 	}
-	ctrl := gomock.NewController(c)
+	ctrl := gomock.NewController(t.T())
 	defer ctrl.Finish()
 	ctx := context.Background()
 	s := &Server{cfg: &Config{RPCTimeout: time.Second}}
@@ -633,13 +626,13 @@ func (t *testMaster) TestStopTaskWithExceptRight(c *check.C) {
 		).Return(item[0], nil).Return(item[1], nil).MaxTimes(2)
 		mockWorker := scheduler.NewMockWorker(newMockRPCClient(mockWorkerClient))
 		ok, msg, _, err := s.waitOperationOk(ctx, mockWorker, taskName, "", req)
-		c.Assert(err, check.IsNil)
-		c.Assert(ok, check.IsTrue)
-		c.Assert(msg, check.HasLen, 0)
+		require.NoError(t.T(), err)
+		require.True(t.T(), ok)
+		require.Empty(t.T(), msg)
 	}
 }
 
-func (t *testMaster) TestFillUnsyncedStatus(c *check.C) {
+func (t *testMasterSuite) TestFillUnsyncedStatus() {
 	var (
 		logger  = log.L()
 		task1   = "task1"
@@ -799,10 +792,10 @@ func (t *testMaster) TestFillUnsyncedStatus(c *check.C) {
 	for _, ca := range cases {
 		s := &Server{}
 		s.pessimist = shardddl.NewPessimist(&logger, func(task string) []string { return sources })
-		c.Assert(s.pessimist.Start(context.Background(), t.etcdTestCli), check.IsNil)
+		require.NoError(t.T(), s.pessimist.Start(context.Background(), t.etcdTestCli))
 		for _, i := range ca.infos {
 			_, err := pessimism.PutInfo(t.etcdTestCli, i)
-			c.Assert(err, check.IsNil)
+			require.NoError(t.T(), err)
 		}
 		if len(ca.infos) > 0 {
 			utils.WaitSomething(20, 100*time.Millisecond, func() bool {
@@ -811,23 +804,23 @@ func (t *testMaster) TestFillUnsyncedStatus(c *check.C) {
 		}
 
 		s.fillUnsyncedStatus(ca.input)
-		c.Assert(ca.input, check.DeepEquals, ca.expected)
+		require.Equal(t.T(), ca.expected, ca.input)
 		_, err := pessimism.DeleteInfosOperations(t.etcdTestCli, ca.infos, nil)
-		c.Assert(err, check.IsNil)
+		require.NoError(t.T(), err)
 	}
 }
 
-func (t *testMaster) TestCheckTask(c *check.C) {
-	ctrl := gomock.NewController(c)
+func (t *testMasterSuite) TestCheckTask() {
+	ctrl := gomock.NewController(t.T())
 	defer ctrl.Finish()
 
-	server := testDefaultMasterServer(c)
+	server := testDefaultMasterServer(t.T())
 	sources, workers := defaultWorkerSource()
 
 	t.workerClients = makeNilWorkerClients(workers)
 	var wg sync.WaitGroup
 	ctx, cancel := context.WithCancel(context.Background())
-	server.scheduler, _ = t.testMockScheduler(ctx, &wg, c, sources, workers, "", t.workerClients)
+	server.scheduler, _ = t.testMockScheduler(ctx, &wg, sources, workers, "", t.workerClients)
 	mock := conn.InitVersionDB()
 	defer func() {
 		conn.DefaultDBProvider = &conn.DefaultDBProviderImpl{}
@@ -837,36 +830,36 @@ func (t *testMaster) TestCheckTask(c *check.C) {
 	resp, err := server.CheckTask(context.Background(), &pb.CheckTaskRequest{
 		Task: taskConfig,
 	})
-	c.Assert(err, check.IsNil)
-	c.Assert(resp.Result, check.IsTrue)
+	require.NoError(t.T(), err)
+	require.True(t.T(), resp.Result)
 
 	// decode task with error
 	resp, err = server.CheckTask(context.Background(), &pb.CheckTaskRequest{
 		Task: "invalid toml config",
 	})
-	c.Assert(err, check.IsNil)
-	c.Assert(resp.Result, check.IsFalse)
-	t.clearSchedulerEnv(c, cancel, &wg)
+	require.NoError(t.T(), err)
+	require.False(t.T(), resp.Result)
+	t.clearSchedulerEnv(cancel, &wg)
 
 	// simulate invalid password returned from scheduler, but config was supported plaintext mysql password, so cfg.SubTaskConfigs will success
 	ctx, cancel = context.WithCancel(context.Background())
-	server.scheduler, _ = t.testMockScheduler(ctx, &wg, c, sources, workers, "invalid-encrypt-password", t.workerClients)
+	server.scheduler, _ = t.testMockScheduler(ctx, &wg, sources, workers, "invalid-encrypt-password", t.workerClients)
 	mock = conn.InitVersionDB()
 	mock.ExpectQuery("SHOW GLOBAL VARIABLES LIKE 'version'").WillReturnRows(sqlmock.NewRows([]string{"Variable_name", "Value"}).
 		AddRow("version", "5.7.25-TiDB-v4.0.2"))
 	resp, err = server.CheckTask(context.Background(), &pb.CheckTaskRequest{
 		Task: taskConfig,
 	})
-	c.Assert(err, check.IsNil)
-	c.Assert(resp.Result, check.IsTrue)
-	t.clearSchedulerEnv(c, cancel, &wg)
+	require.NoError(t.T(), err)
+	require.True(t.T(), resp.Result)
+	t.clearSchedulerEnv(cancel, &wg)
 }
 
-func (t *testMaster) TestStartTask(c *check.C) {
-	ctrl := gomock.NewController(c)
+func (t *testMasterSuite) TestStartTask() {
+	ctrl := gomock.NewController(t.T())
 	defer ctrl.Finish()
 
-	server := testDefaultMasterServer(c)
+	server := testDefaultMasterServer(t.T())
 	server.etcdClient = t.etcdTestCli
 	sources, workers := defaultWorkerSource()
 
@@ -874,8 +867,8 @@ func (t *testMaster) TestStartTask(c *check.C) {
 	resp, err := server.StartTask(context.Background(), &pb.StartTaskRequest{
 		Task: "invalid toml config",
 	})
-	c.Assert(err, check.IsNil)
-	c.Assert(resp.Result, check.IsFalse)
+	require.NoError(t.T(), err)
+	require.False(t.T(), resp.Result)
 
 	// test start task successfully
 	var wg sync.WaitGroup
@@ -886,7 +879,7 @@ func (t *testMaster) TestStartTask(c *check.C) {
 		Task:    taskConfig,
 		Sources: sources,
 	}
-	server.scheduler, _ = t.testMockScheduler(ctx, &wg, c, sources, workers, "",
+	server.scheduler, _ = t.testMockScheduler(ctx, &wg, sources, workers, "",
 		makeWorkerClientsForHandle(ctrl, taskName, sources, workers, req))
 	mock := conn.InitVersionDB()
 	defer func() {
@@ -895,15 +888,15 @@ func (t *testMaster) TestStartTask(c *check.C) {
 	mock.ExpectQuery("SHOW GLOBAL VARIABLES LIKE 'version'").WillReturnRows(sqlmock.NewRows([]string{"Variable_name", "Value"}).
 		AddRow("version", "5.7.25-TiDB-v4.0.2"))
 	resp, err = server.StartTask(context.Background(), req)
-	c.Assert(err, check.IsNil)
-	c.Assert(resp.Result, check.IsTrue)
+	require.NoError(t.T(), err)
+	require.True(t.T(), resp.Result)
 	for _, source := range sources {
-		t.subTaskStageMatch(c, server.scheduler, taskName, source, pb.Stage_Running)
+		t.subTaskStageMatch(server.scheduler, taskName, source, pb.Stage_Running)
 		tcm, _, err2 := ha.GetSubTaskCfg(t.etcdTestCli, source, taskName, 0)
-		c.Assert(err2, check.IsNil)
-		c.Assert(tcm, check.HasKey, taskName)
-		c.Assert(tcm[taskName].Name, check.Equals, taskName)
-		c.Assert(tcm[taskName].SourceID, check.Equals, source)
+		require.NoError(t.T(), err2)
+		require.Contains(t.T(), tcm, taskName)
+		require.Equal(t.T(), taskName, tcm[taskName].Name)
+		require.Equal(t.T(), source, tcm[taskName].SourceID)
 	}
 
 	// check start-task with an invalid source
@@ -915,11 +908,11 @@ func (t *testMaster) TestStartTask(c *check.C) {
 		Task:    taskConfig,
 		Sources: []string{invalidSource},
 	})
-	c.Assert(err, check.IsNil)
-	c.Assert(resp.Result, check.IsFalse)
-	c.Assert(resp.Sources, check.HasLen, 1)
-	c.Assert(resp.Sources[0].Result, check.IsFalse)
-	c.Assert(resp.Sources[0].Source, check.Equals, invalidSource)
+	require.NoError(t.T(), err)
+	require.False(t.T(), resp.Result)
+	require.Len(t.T(), resp.Sources, 1)
+	require.False(t.T(), resp.Sources[0].Result)
+	require.Equal(t.T(), invalidSource, resp.Sources[0].Source)
 
 	// test start task, but the first step check-task fails
 	bakCheckSyncConfigFunc := checker.CheckSyncConfigFunc
@@ -936,17 +929,17 @@ func (t *testMaster) TestStartTask(c *check.C) {
 		Task:    taskConfig,
 		Sources: sources,
 	})
-	c.Assert(err, check.IsNil)
-	c.Assert(resp.Result, check.IsFalse)
-	c.Assert(resp.CheckResult, check.Matches, errCheckSyncConfigReg)
-	t.clearSchedulerEnv(c, cancel, &wg)
+	require.NoError(t.T(), err)
+	require.False(t.T(), resp.Result)
+	require.Regexp(t.T(), errCheckSyncConfigReg, resp.CheckResult)
+	t.clearSchedulerEnv(cancel, &wg)
 }
 
-func (t *testMaster) TestStartTaskWithRemoveMeta(c *check.C) {
-	ctrl := gomock.NewController(c)
+func (t *testMasterSuite) TestStartTaskWithRemoveMeta() {
+	ctrl := gomock.NewController(t.T())
 	defer ctrl.Finish()
 
-	server := testDefaultMasterServer(c)
+	server := testDefaultMasterServer(t.T())
 	sources, workers := defaultWorkerSource()
 	server.etcdClient = t.etcdTestCli
 
@@ -955,7 +948,7 @@ func (t *testMaster) TestStartTaskWithRemoveMeta(c *check.C) {
 	// taskName is relative to taskConfig
 	cfg := config.NewTaskConfig()
 	err := cfg.Decode(taskConfig)
-	c.Assert(err, check.IsNil)
+	require.NoError(t.T(), err)
 	taskName := cfg.Name
 	ctx, cancel := context.WithCancel(context.Background())
 	logger := log.L()
@@ -967,7 +960,7 @@ func (t *testMaster) TestStartTaskWithRemoveMeta(c *check.C) {
 		Sources:    sources,
 		RemoveMeta: true,
 	}
-	server.scheduler, _ = t.testMockScheduler(ctx, &wg, c, sources, workers, "",
+	server.scheduler, _ = t.testMockScheduler(ctx, &wg, sources, workers, "",
 		makeWorkerClientsForHandle(ctrl, taskName, sources, workers, req))
 	server.pessimist = shardddl.NewPessimist(&logger, func(task string) []string { return sources })
 	server.optimist = shardddl.NewOptimist(&logger, server.scheduler.GetDownstreamMetaByTask)
@@ -980,13 +973,13 @@ func (t *testMaster) TestStartTaskWithRemoveMeta(c *check.C) {
 		op2           = pessimism.NewOperation(ID, taskName, sources[0], DDLs, true, false)
 	)
 	_, err = pessimism.PutInfo(t.etcdTestCli, i11)
-	c.Assert(err, check.IsNil)
+	require.NoError(t.T(), err)
 	_, succ, err := pessimism.PutOperations(t.etcdTestCli, false, op2)
-	c.Assert(succ, check.IsTrue)
-	c.Assert(err, check.IsNil)
+	require.True(t.T(), succ)
+	require.NoError(t.T(), err)
 
-	c.Assert(server.pessimist.Start(ctx, t.etcdTestCli), check.IsNil)
-	c.Assert(server.optimist.Start(ctx, t.etcdTestCli), check.IsNil)
+	require.NoError(t.T(), server.pessimist.Start(ctx, t.etcdTestCli))
+	require.NoError(t.T(), server.optimist.Start(ctx, t.etcdTestCli))
 
 	verMock := conn.InitVersionDB()
 	defer func() {
@@ -994,7 +987,8 @@ func (t *testMaster) TestStartTaskWithRemoveMeta(c *check.C) {
 	}()
 	verMock.ExpectQuery("SHOW GLOBAL VARIABLES LIKE 'version'").WillReturnRows(sqlmock.NewRows([]string{"Variable_name", "Value"}).
 		AddRow("version", "5.7.25-TiDB-v4.0.2"))
-	mock := conn.InitMockDB(c)
+	mock, err := conn.MockDefaultDBProvider()
+	require.NoError(t.T(), err)
 	mock.ExpectBegin()
 	mock.ExpectExec(fmt.Sprintf("DROP TABLE IF EXISTS `%s`.`%s`", cfg.MetaSchema, cputil.LoaderCheckpoint(cfg.Name))).WillReturnResult(sqlmock.NewResult(1, 1))
 	mock.ExpectExec(fmt.Sprintf("DROP TABLE IF EXISTS `%s`.`%s`", cfg.MetaSchema, cputil.LightningCheckpoint(cfg.Name))).WillReturnResult(sqlmock.NewResult(1, 1))
@@ -1005,8 +999,9 @@ func (t *testMaster) TestStartTaskWithRemoveMeta(c *check.C) {
 	mock.ExpectExec(fmt.Sprintf("DROP TABLE IF EXISTS `%s`.`%s`", cfg.MetaSchema, cputil.ValidatorPendingChange(cfg.Name))).WillReturnResult(sqlmock.NewResult(1, 1))
 	mock.ExpectExec(fmt.Sprintf("DROP TABLE IF EXISTS `%s`.`%s`", cfg.MetaSchema, cputil.ValidatorErrorChange(cfg.Name))).WillReturnResult(sqlmock.NewResult(1, 1))
 	mock.ExpectExec(fmt.Sprintf("DROP TABLE IF EXISTS `%s`.`%s`", cfg.MetaSchema, cputil.ValidatorTableStatus(cfg.Name))).WillReturnResult(sqlmock.NewResult(1, 1))
+	mock.ExpectExec(fmt.Sprintf("DROP DATABASE IF EXISTS `%s`", loader.GetTaskInfoSchemaName(cfg.MetaSchema, cfg.Name))).WillReturnResult(sqlmock.NewResult(1, 1))
 	mock.ExpectCommit()
-	c.Assert(len(server.pessimist.Locks()), check.Greater, 0)
+	require.Greater(t.T(), len(server.pessimist.Locks()), 0)
 
 	resp, err := server.StartTask(context.Background(), req)
 	wg.Add(1)
@@ -1018,35 +1013,31 @@ func (t *testMaster) TestStartTaskWithRemoveMeta(c *check.C) {
 		verMock2.ExpectQuery("SHOW GLOBAL VARIABLES LIKE 'version'").WillReturnRows(sqlmock.NewRows([]string{"Variable_name", "Value"}).
 			AddRow("version", "5.7.25-TiDB-v4.0.2"))
 		resp1, err1 := server.StartTask(context.Background(), req)
-		c.Assert(err1, check.IsNil)
-		c.Assert(resp1.Result, check.IsFalse)
-		c.Assert(resp1.Msg, check.Equals, terror.Annotate(terror.ErrSchedulerSubTaskExist.Generate(cfg.Name, sources),
-			"while remove-meta is true").Error())
+		require.NoError(t.T(), err1)
+		require.False(t.T(), resp1.Result)
+		require.Equal(t.T(), terror.Annotate(terror.ErrSchedulerSubTaskExist.Generate(cfg.Name, sources),
+			"while remove-meta is true").Error(), resp1.Msg)
 	}()
-	c.Assert(err, check.IsNil)
-	if !resp.Result {
-		c.Errorf("start task failed: %s", resp.Msg)
-	}
+	require.NoError(t.T(), err)
+	require.True(t.T(), resp.Result, "start task failed: %s", resp.Msg)
 	for _, source := range sources {
-		t.subTaskStageMatch(c, server.scheduler, taskName, source, pb.Stage_Running)
+		t.subTaskStageMatch(server.scheduler, taskName, source, pb.Stage_Running)
 		tcm, _, err2 := ha.GetSubTaskCfg(t.etcdTestCli, source, taskName, 0)
-		c.Assert(err2, check.IsNil)
-		c.Assert(tcm, check.HasKey, taskName)
-		c.Assert(tcm[taskName].Name, check.Equals, taskName)
-		c.Assert(tcm[taskName].SourceID, check.Equals, source)
+		require.NoError(t.T(), err2)
+		require.Contains(t.T(), tcm, taskName)
+		require.Equal(t.T(), taskName, tcm[taskName].Name)
+		require.Equal(t.T(), source, tcm[taskName].SourceID)
 	}
 
-	c.Assert(server.pessimist.Locks(), check.HasLen, 0)
-	if err = mock.ExpectationsWereMet(); err != nil {
-		c.Errorf("db unfulfilled expectations: %s", err)
-	}
+	require.Len(t.T(), server.pessimist.Locks(), 0)
+	require.NoError(t.T(), mock.ExpectationsWereMet())
 	ifm, _, err := pessimism.GetAllInfo(t.etcdTestCli)
-	c.Assert(err, check.IsNil)
-	c.Assert(ifm, check.HasLen, 0)
+	require.NoError(t.T(), err)
+	require.Len(t.T(), ifm, 0)
 	opm, _, err := pessimism.GetAllOperations(t.etcdTestCli)
-	c.Assert(err, check.IsNil)
-	c.Assert(opm, check.HasLen, 0)
-	t.clearSchedulerEnv(c, cancel, &wg)
+	require.NoError(t.T(), err)
+	require.Len(t.T(), opm, 0)
+	t.clearSchedulerEnv(cancel, &wg)
 
 	// test remove meta with optimist
 	ctx, cancel = context.WithCancel(context.Background())
@@ -1056,7 +1047,7 @@ func (t *testMaster) TestStartTaskWithRemoveMeta(c *check.C) {
 		Sources:    sources,
 		RemoveMeta: true,
 	}
-	server.scheduler, _ = t.testMockScheduler(ctx, &wg, c, sources, workers, "",
+	server.scheduler, _ = t.testMockScheduler(ctx, &wg, sources, workers, "",
 		makeWorkerClientsForHandle(ctrl, taskName, sources, workers, req))
 	server.pessimist = shardddl.NewPessimist(&logger, func(task string) []string { return sources })
 	server.optimist = shardddl.NewOptimist(&logger, server.scheduler.GetDownstreamMetaByTask)
@@ -1068,30 +1059,31 @@ func (t *testMaster) TestStartTaskWithRemoveMeta(c *check.C) {
 
 		st1      = optimism.NewSourceTables(taskName, sources[0])
 		DDLs1    = []string{"ALTER TABLE bar ADD COLUMN c1 INT"}
-		tiBefore = createTableInfo(c, p, se, tblID, `CREATE TABLE bar (id INT PRIMARY KEY)`)
-		tiAfter1 = createTableInfo(c, p, se, tblID, `CREATE TABLE bar (id INT PRIMARY KEY, c1 TEXT)`)
+		tiBefore = createTableInfo(t.T(), p, se, tblID, `CREATE TABLE bar (id INT PRIMARY KEY)`)
+		tiAfter1 = createTableInfo(t.T(), p, se, tblID, `CREATE TABLE bar (id INT PRIMARY KEY, c1 TEXT)`)
 		info1    = optimism.NewInfo(taskName, sources[0], "foo-1", "bar-1", schema, table, DDLs1, tiBefore, []*model.TableInfo{tiAfter1})
 		op1      = optimism.NewOperation(ID, taskName, sources[0], info1.UpSchema, info1.UpTable, DDLs1, optimism.ConflictNone, "", false, []string{})
 	)
 
 	st1.AddTable("foo-1", "bar-1", schema, table)
 	_, err = optimism.PutSourceTables(t.etcdTestCli, st1)
-	c.Assert(err, check.IsNil)
+	require.NoError(t.T(), err)
 	_, err = optimism.PutInfo(t.etcdTestCli, info1)
-	c.Assert(err, check.IsNil)
+	require.NoError(t.T(), err)
 	_, succ, err = optimism.PutOperation(t.etcdTestCli, false, op1, 0)
-	c.Assert(succ, check.IsTrue)
-	c.Assert(err, check.IsNil)
+	require.True(t.T(), succ)
+	require.NoError(t.T(), err)
 
 	err = server.pessimist.Start(ctx, t.etcdTestCli)
-	c.Assert(err, check.IsNil)
+	require.NoError(t.T(), err)
 	err = server.optimist.Start(ctx, t.etcdTestCli)
-	c.Assert(err, check.IsNil)
+	require.NoError(t.T(), err)
 
 	verMock = conn.InitVersionDB()
 	verMock.ExpectQuery("SHOW GLOBAL VARIABLES LIKE 'version'").WillReturnRows(sqlmock.NewRows([]string{"Variable_name", "Value"}).
 		AddRow("version", "5.7.25-TiDB-v4.0.2"))
-	mock = conn.InitMockDB(c)
+	mock, err = conn.MockDefaultDBProvider()
+	require.NoError(t.T(), err)
 	mock.ExpectBegin()
 	mock.ExpectExec(fmt.Sprintf("DROP TABLE IF EXISTS `%s`.`%s`", cfg.MetaSchema, cputil.LoaderCheckpoint(cfg.Name))).WillReturnResult(sqlmock.NewResult(1, 1))
 	mock.ExpectExec(fmt.Sprintf("DROP TABLE IF EXISTS `%s`.`%s`", cfg.MetaSchema, cputil.LightningCheckpoint(cfg.Name))).WillReturnResult(sqlmock.NewResult(1, 1))
@@ -1102,8 +1094,9 @@ func (t *testMaster) TestStartTaskWithRemoveMeta(c *check.C) {
 	mock.ExpectExec(fmt.Sprintf("DROP TABLE IF EXISTS `%s`.`%s`", cfg.MetaSchema, cputil.ValidatorPendingChange(cfg.Name))).WillReturnResult(sqlmock.NewResult(1, 1))
 	mock.ExpectExec(fmt.Sprintf("DROP TABLE IF EXISTS `%s`.`%s`", cfg.MetaSchema, cputil.ValidatorErrorChange(cfg.Name))).WillReturnResult(sqlmock.NewResult(1, 1))
 	mock.ExpectExec(fmt.Sprintf("DROP TABLE IF EXISTS `%s`.`%s`", cfg.MetaSchema, cputil.ValidatorTableStatus(cfg.Name))).WillReturnResult(sqlmock.NewResult(1, 1))
+	mock.ExpectExec(fmt.Sprintf("DROP DATABASE IF EXISTS `%s`", loader.GetTaskInfoSchemaName(cfg.MetaSchema, cfg.Name))).WillReturnResult(sqlmock.NewResult(1, 1))
 	mock.ExpectCommit()
-	c.Assert(len(server.optimist.Locks()), check.Greater, 0)
+	require.Greater(t.T(), len(server.optimist.Locks()), 0)
 
 	resp, err = server.StartTask(context.Background(), req)
 	wg.Add(1)
@@ -1115,48 +1108,46 @@ func (t *testMaster) TestStartTaskWithRemoveMeta(c *check.C) {
 		vermock2.ExpectQuery("SHOW GLOBAL VARIABLES LIKE 'version'").WillReturnRows(sqlmock.NewRows([]string{"Variable_name", "Value"}).
 			AddRow("version", "5.7.25-TiDB-v4.0.2"))
 		resp1, err1 := server.StartTask(context.Background(), req)
-		c.Assert(err1, check.IsNil)
-		c.Assert(resp1.Result, check.IsFalse)
-		c.Assert(resp1.Msg, check.Equals, terror.Annotate(terror.ErrSchedulerSubTaskExist.Generate(cfg.Name, sources),
-			"while remove-meta is true").Error())
+		require.NoError(t.T(), err1)
+		require.False(t.T(), resp1.Result)
+		require.Equal(t.T(), terror.Annotate(terror.ErrSchedulerSubTaskExist.Generate(cfg.Name, sources),
+			"while remove-meta is true").Error(), resp1.Msg)
 	}()
-	c.Assert(err, check.IsNil)
-	c.Assert(resp.Result, check.IsTrue)
+	require.NoError(t.T(), err)
+	require.True(t.T(), resp.Result)
 	for _, source := range sources {
-		t.subTaskStageMatch(c, server.scheduler, taskName, source, pb.Stage_Running)
+		t.subTaskStageMatch(server.scheduler, taskName, source, pb.Stage_Running)
 		tcm, _, err2 := ha.GetSubTaskCfg(t.etcdTestCli, source, taskName, 0)
-		c.Assert(err2, check.IsNil)
-		c.Assert(tcm, check.HasKey, taskName)
-		c.Assert(tcm[taskName].Name, check.Equals, taskName)
-		c.Assert(tcm[taskName].SourceID, check.Equals, source)
+		require.NoError(t.T(), err2)
+		require.Contains(t.T(), tcm, taskName)
+		require.Equal(t.T(), taskName, tcm[taskName].Name)
+		require.Equal(t.T(), source, tcm[taskName].SourceID)
 	}
 
-	c.Assert(server.optimist.Locks(), check.HasLen, 0)
-	if err = mock.ExpectationsWereMet(); err != nil {
-		c.Errorf("db unfulfilled expectations: %s", err)
-	}
+	require.Len(t.T(), server.optimist.Locks(), 0)
+	require.NoError(t.T(), mock.ExpectationsWereMet())
 	ifm2, _, err := optimism.GetAllInfo(t.etcdTestCli)
-	c.Assert(err, check.IsNil)
-	c.Assert(ifm2, check.HasLen, 0)
+	require.NoError(t.T(), err)
+	require.Len(t.T(), ifm2, 0)
 	opm2, _, err := optimism.GetAllOperations(t.etcdTestCli)
-	c.Assert(err, check.IsNil)
-	c.Assert(opm2, check.HasLen, 0)
+	require.NoError(t.T(), err)
+	require.Len(t.T(), opm2, 0)
 	tbm, _, err := optimism.GetAllSourceTables(t.etcdTestCli)
-	c.Assert(err, check.IsNil)
-	c.Assert(tbm, check.HasLen, 0)
+	require.NoError(t.T(), err)
+	require.Len(t.T(), tbm, 0)
 
-	t.clearSchedulerEnv(c, cancel, &wg)
+	t.clearSchedulerEnv(cancel, &wg)
 }
 
-func (t *testMaster) TestOperateTask(c *check.C) {
+func (t *testMasterSuite) TestOperateTask() {
 	var (
 		taskName = "unit-test-task"
 		pauseOp  = pb.TaskOp_Pause
 	)
 
-	ctrl := gomock.NewController(c)
+	ctrl := gomock.NewController(t.T())
 	defer ctrl.Finish()
-	server := testDefaultMasterServer(c)
+	server := testDefaultMasterServer(t.T())
 	server.etcdClient = t.etcdTestCli
 	sources, workers := defaultWorkerSource()
 
@@ -1165,9 +1156,9 @@ func (t *testMaster) TestOperateTask(c *check.C) {
 		Op:   pauseOp,
 		Name: taskName,
 	})
-	c.Assert(err, check.IsNil)
-	c.Assert(resp.Result, check.IsFalse)
-	c.Assert(resp.Msg, check.Equals, fmt.Sprintf("task %s has no source or not exist, please check the task name and status", taskName))
+	require.NoError(t.T(), err)
+	require.False(t.T(), resp.Result)
+	require.Equal(t.T(), fmt.Sprintf("task %s has no source or not exist, please check the task name and status", taskName), resp.Msg)
 
 	// 1. start task
 	taskName = "test"
@@ -1195,7 +1186,7 @@ func (t *testMaster) TestOperateTask(c *check.C) {
 		Name: taskName,
 	}
 	sourceResps := []*pb.CommonWorkerResponse{{Result: true, Source: sources[0]}, {Result: true, Source: sources[1]}}
-	server.scheduler, _ = t.testMockScheduler(ctx, &wg, c, sources, workers, "",
+	server.scheduler, _ = t.testMockScheduler(ctx, &wg, sources, workers, "",
 		makeWorkerClientsForHandle(ctrl, taskName, sources, workers, startReq, pauseReq, resumeReq, stopReq1, stopReq2))
 	mock := conn.InitVersionDB()
 	defer func() {
@@ -1204,48 +1195,50 @@ func (t *testMaster) TestOperateTask(c *check.C) {
 	mock.ExpectQuery("SHOW GLOBAL VARIABLES LIKE 'version'").WillReturnRows(sqlmock.NewRows([]string{"Variable_name", "Value"}).
 		AddRow("version", "5.7.25-TiDB-v4.0.2"))
 	stResp, err := server.StartTask(context.Background(), startReq)
-	c.Assert(err, check.IsNil)
-	c.Assert(stResp.Result, check.IsTrue)
+	require.NoError(t.T(), err)
+	require.True(t.T(), stResp.Result)
 	for _, source := range sources {
-		t.subTaskStageMatch(c, server.scheduler, taskName, source, pb.Stage_Running)
+		t.subTaskStageMatch(server.scheduler, taskName, source, pb.Stage_Running)
 	}
-	c.Assert(stResp.Sources, check.DeepEquals, sourceResps)
+
+	require.Equal(t.T(), sourceResps, stResp.Sources)
 	// 2. pause task
 	resp, err = server.OperateTask(context.Background(), pauseReq)
-	c.Assert(err, check.IsNil)
-	c.Assert(resp.Result, check.IsTrue)
+	require.NoError(t.T(), err)
+	require.True(t.T(), resp.Result)
 	for _, source := range sources {
-		t.subTaskStageMatch(c, server.scheduler, taskName, source, pb.Stage_Paused)
+		t.subTaskStageMatch(server.scheduler, taskName, source, pb.Stage_Paused)
 	}
-	c.Assert(resp.Sources, check.DeepEquals, sourceResps)
+
+	require.Equal(t.T(), sourceResps, resp.Sources)
 	// 3. resume task
 	resp, err = server.OperateTask(context.Background(), resumeReq)
-	c.Assert(err, check.IsNil)
-	c.Assert(resp.Result, check.IsTrue)
+	require.NoError(t.T(), err)
+	require.True(t.T(), resp.Result)
 	for _, source := range sources {
-		t.subTaskStageMatch(c, server.scheduler, taskName, source, pb.Stage_Running)
+		t.subTaskStageMatch(server.scheduler, taskName, source, pb.Stage_Running)
 	}
-	c.Assert(resp.Sources, check.DeepEquals, sourceResps)
+	require.Equal(t.T(), sourceResps, resp.Sources)
 	// 4. test stop task successfully, remove partial sources
 	resp, err = server.OperateTask(context.Background(), stopReq1)
-	c.Assert(err, check.IsNil)
-	c.Assert(resp.Result, check.IsTrue)
-	c.Assert(server.getTaskSourceNameList(taskName), check.DeepEquals, []string{sources[1]})
-	c.Assert(resp.Sources, check.DeepEquals, []*pb.CommonWorkerResponse{{Result: true, Source: sources[0]}})
+	require.NoError(t.T(), err)
+	require.True(t.T(), resp.Result)
+	require.Equal(t.T(), []string{sources[1]}, server.getTaskSourceNameList(taskName))
+	require.Equal(t.T(), []*pb.CommonWorkerResponse{{Result: true, Source: sources[0]}}, resp.Sources)
 	// 5. test stop task successfully, remove all workers
 	resp, err = server.OperateTask(context.Background(), stopReq2)
-	c.Assert(err, check.IsNil)
-	c.Assert(resp.Result, check.IsTrue)
-	c.Assert(len(server.getTaskSourceNameList(taskName)), check.Equals, 0)
-	c.Assert(resp.Sources, check.DeepEquals, []*pb.CommonWorkerResponse{{Result: true, Source: sources[1]}})
-	t.clearSchedulerEnv(c, cancel, &wg)
+	require.NoError(t.T(), err)
+	require.True(t.T(), resp.Result)
+	require.Len(t.T(), server.getTaskSourceNameList(taskName), 0)
+	require.Equal(t.T(), []*pb.CommonWorkerResponse{{Result: true, Source: sources[1]}}, resp.Sources)
+	t.clearSchedulerEnv(cancel, &wg)
 }
 
-func (t *testMaster) TestPurgeWorkerRelay(c *check.C) {
-	ctrl := gomock.NewController(c)
+func (t *testMasterSuite) TestPurgeWorkerRelay() {
+	ctrl := gomock.NewController(t.T())
 	defer ctrl.Finish()
 
-	server := testDefaultMasterServer(c)
+	server := testDefaultMasterServer(t.T())
 	sources, workers := defaultWorkerSource()
 	var (
 		now      = time.Now().Unix()
@@ -1282,7 +1275,7 @@ func (t *testMaster) TestPurgeWorkerRelay(c *check.C) {
 
 	var wg sync.WaitGroup
 	ctx, cancel := context.WithCancel(context.Background())
-	server.scheduler, _ = t.testMockSchedulerForRelay(ctx, &wg, c, nil, nil, "", t.workerClients)
+	server.scheduler, _ = t.testMockSchedulerForRelay(ctx, &wg, nil, nil, "", t.workerClients)
 
 	// test PurgeWorkerRelay with invalid dm-worker[s]
 	resp, err := server.PurgeWorkerRelay(context.Background(), &pb.PurgeWorkerRelayRequest{
@@ -1290,56 +1283,56 @@ func (t *testMaster) TestPurgeWorkerRelay(c *check.C) {
 		Time:     now,
 		Filename: filename,
 	})
-	c.Assert(err, check.IsNil)
-	c.Assert(resp.Result, check.IsTrue)
-	c.Assert(resp.Sources, check.HasLen, 2)
+	require.NoError(t.T(), err)
+	require.True(t.T(), resp.Result)
+	require.Len(t.T(), resp.Sources, 2)
 	for _, w := range resp.Sources {
-		c.Assert(w.Result, check.IsFalse)
-		c.Assert(w.Msg, check.Matches, "relay worker for source .* not found.*")
+		require.False(t.T(), w.Result)
+		require.Regexp(t.T(), "relay worker for source .* not found.*", w.Msg)
 	}
-	t.clearSchedulerEnv(c, cancel, &wg)
+	t.clearSchedulerEnv(cancel, &wg)
 
 	ctx, cancel = context.WithCancel(context.Background())
 	// test PurgeWorkerRelay successfully
 	mockPurgeRelay(true)
-	server.scheduler, _ = t.testMockSchedulerForRelay(ctx, &wg, c, sources, workers, "", t.workerClients)
+	server.scheduler, _ = t.testMockSchedulerForRelay(ctx, &wg, sources, workers, "", t.workerClients)
 	resp, err = server.PurgeWorkerRelay(context.Background(), &pb.PurgeWorkerRelayRequest{
 		Sources:  sources,
 		Time:     now,
 		Filename: filename,
 	})
-	c.Assert(err, check.IsNil)
-	c.Assert(resp.Result, check.IsTrue)
-	c.Assert(resp.Sources, check.HasLen, 2)
+	require.NoError(t.T(), err)
+	require.True(t.T(), resp.Result)
+	require.Len(t.T(), resp.Sources, 2)
 	for _, w := range resp.Sources {
-		c.Assert(w.Result, check.IsTrue)
+		require.True(t.T(), w.Result)
 	}
-	t.clearSchedulerEnv(c, cancel, &wg)
+	t.clearSchedulerEnv(cancel, &wg)
 
 	ctx, cancel = context.WithCancel(context.Background())
 	// test PurgeWorkerRelay with error response
 	mockPurgeRelay(false)
-	server.scheduler, _ = t.testMockSchedulerForRelay(ctx, &wg, c, sources, workers, "", t.workerClients)
+	server.scheduler, _ = t.testMockSchedulerForRelay(ctx, &wg, sources, workers, "", t.workerClients)
 	resp, err = server.PurgeWorkerRelay(context.Background(), &pb.PurgeWorkerRelayRequest{
 		Sources:  sources,
 		Time:     now,
 		Filename: filename,
 	})
-	c.Assert(err, check.IsNil)
-	c.Assert(resp.Result, check.IsTrue)
-	c.Assert(resp.Sources, check.HasLen, 2)
+	require.NoError(t.T(), err)
+	require.True(t.T(), resp.Result)
+	require.Len(t.T(), resp.Sources, 2)
 	for _, w := range resp.Sources {
-		c.Assert(w.Result, check.IsFalse)
-		c.Assert(w.Msg, check.Matches, errGRPCFailedReg)
+		require.False(t.T(), w.Result)
+		require.Regexp(t.T(), errGRPCFailedReg, w.Msg)
 	}
-	t.clearSchedulerEnv(c, cancel, &wg)
+	t.clearSchedulerEnv(cancel, &wg)
 }
 
-func (t *testMaster) TestOperateWorkerRelayTask(c *check.C) {
-	ctrl := gomock.NewController(c)
+func (t *testMasterSuite) TestOperateWorkerRelayTask() {
+	ctrl := gomock.NewController(t.T())
 	defer ctrl.Finish()
 
-	server := testDefaultMasterServer(c)
+	server := testDefaultMasterServer(t.T())
 	sources, workers := defaultWorkerSource()
 	var wg sync.WaitGroup
 	ctx, cancel := context.WithCancel(context.Background())
@@ -1351,7 +1344,7 @@ func (t *testMaster) TestOperateWorkerRelayTask(c *check.C) {
 		Sources: sources,
 		Op:      pb.RelayOp_ResumeRelay,
 	}
-	server.scheduler, _ = t.testMockScheduler(ctx, &wg, c, sources, workers, "",
+	server.scheduler, _ = t.testMockScheduler(ctx, &wg, sources, workers, "",
 		makeWorkerClientsForHandle(ctrl, "", sources, workers, pauseReq, resumeReq))
 
 	// test OperateWorkerRelayTask with invalid dm-worker[s]
@@ -1359,83 +1352,83 @@ func (t *testMaster) TestOperateWorkerRelayTask(c *check.C) {
 		Sources: []string{"invalid-source1", "invalid-source2"},
 		Op:      pb.RelayOp_PauseRelay,
 	})
-	c.Assert(err, check.IsNil)
-	c.Assert(resp.Result, check.IsFalse)
-	c.Assert(resp.Msg, check.Matches, `[\s\S]*need to update expectant relay stage not exist[\s\S]*`)
+	require.NoError(t.T(), err)
+	require.False(t.T(), resp.Result)
+	require.Contains(t.T(), resp.Msg, "need to update expectant relay stage not exist")
 
 	sourceResps := []*pb.CommonWorkerResponse{{Result: true, Source: sources[0]}, {Result: true, Source: sources[1]}}
 	// 1. test pause-relay successfully
 	resp, err = server.OperateWorkerRelayTask(context.Background(), pauseReq)
-	c.Assert(err, check.IsNil)
-	c.Assert(resp.Result, check.IsTrue)
+	require.NoError(t.T(), err)
+	require.True(t.T(), resp.Result)
 	for _, source := range sources {
-		t.relayStageMatch(c, server.scheduler, source, pb.Stage_Paused)
+		t.relayStageMatch(server.scheduler, source, pb.Stage_Paused)
 	}
-	c.Assert(resp.Sources, check.DeepEquals, sourceResps)
+	require.Equal(t.T(), sourceResps, resp.Sources)
 	// 2. test resume-relay successfully
 	resp, err = server.OperateWorkerRelayTask(context.Background(), resumeReq)
-	c.Assert(err, check.IsNil)
-	c.Assert(resp.Result, check.IsTrue)
+	require.NoError(t.T(), err)
+	require.True(t.T(), resp.Result)
 	for _, source := range sources {
-		t.relayStageMatch(c, server.scheduler, source, pb.Stage_Running)
+		t.relayStageMatch(server.scheduler, source, pb.Stage_Running)
 	}
-	c.Assert(resp.Sources, check.DeepEquals, sourceResps)
-	t.clearSchedulerEnv(c, cancel, &wg)
+	require.Equal(t.T(), sourceResps, resp.Sources)
+	t.clearSchedulerEnv(cancel, &wg)
 }
 
-func (t *testMaster) TestServer(c *check.C) {
+func (t *testMasterSuite) TestServer() {
 	var err error
 	cfg := NewConfig()
-	c.Assert(cfg.FromContent(SampleConfig), check.IsNil)
+	require.NoError(t.T(), cfg.FromContent(SampleConfig))
 	cfg.PeerUrls = "http://127.0.0.1:8294"
-	cfg.DataDir = c.MkDir()
+	cfg.DataDir = t.T().TempDir()
 	cfg.MasterAddr = tempurl.Alloc()[len("http://"):]
 	cfg.AdvertiseAddr = cfg.MasterAddr
 
-	basicServiceCheck := func(c *check.C, cfg *Config) {
-		t.testHTTPInterface(c, fmt.Sprintf("http://%s/status", cfg.AdvertiseAddr), []byte(version.GetRawInfo()))
-		t.testHTTPInterface(c, fmt.Sprintf("http://%s/debug/pprof/", cfg.AdvertiseAddr), []byte("Types of profiles available"))
+	basicServiceCheck := func(cfg *Config) {
+		t.testHTTPInterface(fmt.Sprintf("http://%s/status", cfg.AdvertiseAddr), []byte(version.GetRawInfo()))
+		t.testHTTPInterface(fmt.Sprintf("http://%s/debug/pprof/", cfg.AdvertiseAddr), []byte("Types of profiles available"))
 		// HTTP API in this unit test is unstable, but we test it in `http_apis` in integration test.
-		// t.testHTTPInterface(c, fmt.Sprintf("http://%s/apis/v1alpha1/status/test-task", cfg.AdvertiseAddr), []byte("task test-task has no source or not exist"))
+		// t.testHTTPInterface( fmt.Sprintf("http://%s/apis/v1alpha1/status/test-task", cfg.AdvertiseAddr), []byte("task test-task has no source or not exist"))
 	}
-	t.testNormalServerLifecycle(c, cfg, func(c *check.C, cfg *Config) {
-		basicServiceCheck(c, cfg)
+	t.testNormalServerLifecycle(cfg, func(cfg *Config) {
+		basicServiceCheck(cfg)
 
 		// try to start another server with the same address.  Expect it to fail
 		// unset an etcd variable because it will cause checking on exit, and block forever
 		err = os.Unsetenv(verify.ENV_VERIFY)
-		c.Assert(err, check.IsNil)
+		require.NoError(t.T(), err)
 
 		dupServer := NewServer(cfg)
 		ctx, cancel := context.WithCancel(context.Background())
 		defer cancel()
 		err1 := dupServer.Start(ctx)
-		c.Assert(terror.ErrMasterStartEmbedEtcdFail.Equal(err1), check.IsTrue)
-		c.Assert(err1.Error(), check.Matches, ".*bind: address already in use.*")
+		require.True(t.T(), terror.ErrMasterStartEmbedEtcdFail.Equal(err1))
+		require.Contains(t.T(), err1.Error(), "bind: address already in use")
 
 		err = os.Setenv(verify.ENV_VERIFY, verify.ENV_VERIFY_ALL_VALUE)
-		c.Assert(err, check.IsNil)
+		require.NoError(t.T(), err)
 	})
 
 	// test the listen address is 0.0.0.0
 	masterAddrStr := tempurl.Alloc()[len("http://"):]
 	_, masterPort, err := net.SplitHostPort(masterAddrStr)
-	c.Assert(err, check.IsNil)
+	require.NoError(t.T(), err)
 	cfg2 := NewConfig()
 	*cfg2 = *cfg
 	cfg2.MasterAddr = fmt.Sprintf("0.0.0.0:%s", masterPort)
 	cfg2.AdvertiseAddr = masterAddrStr
-	t.testNormalServerLifecycle(c, cfg2, basicServiceCheck)
+	t.testNormalServerLifecycle(cfg2, basicServiceCheck)
 }
 
-func (t *testMaster) TestMasterTLS(c *check.C) {
+func (t *testMasterSuite) TestMasterTLS() {
 	var err error
 	masterAddr := tempurl.Alloc()[len("http://"):]
 	peerAddr := tempurl.Alloc()[len("http://"):]
 	_, masterPort, err := net.SplitHostPort(masterAddr)
-	c.Assert(err, check.IsNil)
+	require.NoError(t.T(), err)
 	_, peerPort, err := net.SplitHostPort(peerAddr)
-	c.Assert(err, check.IsNil)
+	require.NoError(t.T(), err)
 
 	caPath := pwd + "/tls_for_test/ca.pem"
 	certPath := pwd + "/tls_for_test/dm.pem"
@@ -1443,9 +1436,9 @@ func (t *testMaster) TestMasterTLS(c *check.C) {
 
 	// all with `https://` prefix
 	cfg := NewConfig()
-	c.Assert(cfg.Parse([]string{
+	err = cfg.Parse([]string{
 		"--name=master-tls",
-		fmt.Sprintf("--data-dir=%s", c.MkDir()),
+		fmt.Sprintf("--data-dir=%s", t.T().TempDir()),
 		fmt.Sprintf("--master-addr=https://%s", masterAddr),
 		fmt.Sprintf("--advertise-addr=https://%s", masterAddr),
 		fmt.Sprintf("--peer-urls=https://%s", peerAddr),
@@ -1454,19 +1447,20 @@ func (t *testMaster) TestMasterTLS(c *check.C) {
 		"--ssl-ca=" + caPath,
 		"--ssl-cert=" + certPath,
 		"--ssl-key=" + keyPath,
-	}), check.IsNil)
-	t.testTLSPrefix(c, cfg)
-	c.Assert(cfg.MasterAddr, check.Equals, masterAddr)
-	c.Assert(cfg.AdvertiseAddr, check.Equals, masterAddr)
-	c.Assert(cfg.PeerUrls, check.Equals, "https://"+peerAddr)
-	c.Assert(cfg.AdvertisePeerUrls, check.Equals, "https://"+peerAddr)
-	c.Assert(cfg.InitialCluster, check.Equals, "master-tls=https://"+peerAddr)
+	})
+	require.NoError(t.T(), err)
+	t.testTLSPrefix(cfg)
+	require.Equal(t.T(), masterAddr, cfg.MasterAddr)
+	require.Equal(t.T(), masterAddr, cfg.AdvertiseAddr)
+	require.Equal(t.T(), "https://"+peerAddr, cfg.PeerUrls)
+	require.Equal(t.T(), "https://"+peerAddr, cfg.AdvertisePeerUrls)
+	require.Equal(t.T(), "master-tls=https://"+peerAddr, cfg.InitialCluster)
 
 	// no `https://` prefix for `--master-addr`
 	cfg = NewConfig()
-	c.Assert(cfg.Parse([]string{
+	err = cfg.Parse([]string{
 		"--name=master-tls",
-		fmt.Sprintf("--data-dir=%s", c.MkDir()),
+		fmt.Sprintf("--data-dir=%s", t.T().TempDir()),
 		fmt.Sprintf("--master-addr=%s", masterAddr),
 		fmt.Sprintf("--advertise-addr=https://%s", masterAddr),
 		fmt.Sprintf("--peer-urls=https://%s", peerAddr),
@@ -1475,14 +1469,15 @@ func (t *testMaster) TestMasterTLS(c *check.C) {
 		"--ssl-ca=" + caPath,
 		"--ssl-cert=" + certPath,
 		"--ssl-key=" + keyPath,
-	}), check.IsNil)
-	t.testTLSPrefix(c, cfg)
+	})
+	require.NoError(t.T(), err)
+	t.testTLSPrefix(cfg)
 
 	// no `https://` prefix for `--master-addr` and `--advertise-addr`
 	cfg = NewConfig()
-	c.Assert(cfg.Parse([]string{
+	err = cfg.Parse([]string{
 		"--name=master-tls",
-		fmt.Sprintf("--data-dir=%s", c.MkDir()),
+		fmt.Sprintf("--data-dir=%s", t.T().TempDir()),
 		fmt.Sprintf("--master-addr=%s", masterAddr),
 		fmt.Sprintf("--advertise-addr=%s", masterAddr),
 		fmt.Sprintf("--peer-urls=https://%s", peerAddr),
@@ -1491,14 +1486,15 @@ func (t *testMaster) TestMasterTLS(c *check.C) {
 		"--ssl-ca=" + caPath,
 		"--ssl-cert=" + certPath,
 		"--ssl-key=" + keyPath,
-	}), check.IsNil)
-	t.testTLSPrefix(c, cfg)
+	})
+	require.NoError(t.T(), err)
+	t.testTLSPrefix(cfg)
 
 	// no `https://` prefix for `--master-addr`, `--advertise-addr` and `--peer-urls`
 	cfg = NewConfig()
-	c.Assert(cfg.Parse([]string{
+	err = cfg.Parse([]string{
 		"--name=master-tls",
-		fmt.Sprintf("--data-dir=%s", c.MkDir()),
+		fmt.Sprintf("--data-dir=%s", t.T().TempDir()),
 		fmt.Sprintf("--master-addr=%s", masterAddr),
 		fmt.Sprintf("--advertise-addr=%s", masterAddr),
 		fmt.Sprintf("--peer-urls=%s", peerAddr),
@@ -1507,14 +1503,15 @@ func (t *testMaster) TestMasterTLS(c *check.C) {
 		"--ssl-ca=" + caPath,
 		"--ssl-cert=" + certPath,
 		"--ssl-key=" + keyPath,
-	}), check.IsNil)
-	t.testTLSPrefix(c, cfg)
+	})
+	require.NoError(t.T(), err)
+	t.testTLSPrefix(cfg)
 
 	// no `https://` prefix for `--master-addr`, `--advertise-addr`, `--peer-urls` and `--advertise-peer-urls`
 	cfg = NewConfig()
-	c.Assert(cfg.Parse([]string{
+	err = cfg.Parse([]string{
 		"--name=master-tls",
-		fmt.Sprintf("--data-dir=%s", c.MkDir()),
+		fmt.Sprintf("--data-dir=%s", t.T().TempDir()),
 		fmt.Sprintf("--master-addr=%s", masterAddr),
 		fmt.Sprintf("--advertise-addr=%s", masterAddr),
 		fmt.Sprintf("--peer-urls=%s", peerAddr),
@@ -1523,14 +1520,15 @@ func (t *testMaster) TestMasterTLS(c *check.C) {
 		"--ssl-ca=" + caPath,
 		"--ssl-cert=" + certPath,
 		"--ssl-key=" + keyPath,
-	}), check.IsNil)
-	t.testTLSPrefix(c, cfg)
+	})
+	require.NoError(t.T(), err)
+	t.testTLSPrefix(cfg)
 
 	// all without `https://`/`http://` prefix
 	cfg = NewConfig()
-	c.Assert(cfg.Parse([]string{
+	err = cfg.Parse([]string{
 		"--name=master-tls",
-		fmt.Sprintf("--data-dir=%s", c.MkDir()),
+		fmt.Sprintf("--data-dir=%s", t.T().TempDir()),
 		fmt.Sprintf("--master-addr=%s", masterAddr),
 		fmt.Sprintf("--advertise-addr=%s", masterAddr),
 		fmt.Sprintf("--peer-urls=%s", peerAddr),
@@ -1539,19 +1537,20 @@ func (t *testMaster) TestMasterTLS(c *check.C) {
 		"--ssl-ca=" + caPath,
 		"--ssl-cert=" + certPath,
 		"--ssl-key=" + keyPath,
-	}), check.IsNil)
-	t.testTLSPrefix(c, cfg)
-	c.Assert(cfg.MasterAddr, check.Equals, masterAddr)
-	c.Assert(cfg.AdvertiseAddr, check.Equals, masterAddr)
-	c.Assert(cfg.PeerUrls, check.Equals, "https://"+peerAddr)
-	c.Assert(cfg.AdvertisePeerUrls, check.Equals, "https://"+peerAddr)
-	c.Assert(cfg.InitialCluster, check.Equals, "master-tls=https://"+peerAddr)
+	})
+	require.NoError(t.T(), err)
+	t.testTLSPrefix(cfg)
+	require.Equal(t.T(), masterAddr, cfg.MasterAddr)
+	require.Equal(t.T(), masterAddr, cfg.AdvertiseAddr)
+	require.Equal(t.T(), "https://"+peerAddr, cfg.PeerUrls)
+	require.Equal(t.T(), "https://"+peerAddr, cfg.AdvertisePeerUrls)
+	require.Equal(t.T(), "master-tls=https://"+peerAddr, cfg.InitialCluster)
 
 	// all with `http://` prefix, but with TLS enabled.
 	cfg = NewConfig()
-	c.Assert(cfg.Parse([]string{
+	err = cfg.Parse([]string{
 		"--name=master-tls",
-		fmt.Sprintf("--data-dir=%s", c.MkDir()),
+		fmt.Sprintf("--data-dir=%s", t.T().TempDir()),
 		fmt.Sprintf("--master-addr=http://%s", masterAddr),
 		fmt.Sprintf("--advertise-addr=http://%s", masterAddr),
 		fmt.Sprintf("--peer-urls=http://%s", peerAddr),
@@ -1560,18 +1559,19 @@ func (t *testMaster) TestMasterTLS(c *check.C) {
 		"--ssl-ca=" + caPath,
 		"--ssl-cert=" + certPath,
 		"--ssl-key=" + keyPath,
-	}), check.IsNil)
-	c.Assert(cfg.MasterAddr, check.Equals, masterAddr)
-	c.Assert(cfg.AdvertiseAddr, check.Equals, masterAddr)
-	c.Assert(cfg.PeerUrls, check.Equals, "https://"+peerAddr)
-	c.Assert(cfg.AdvertisePeerUrls, check.Equals, "https://"+peerAddr)
-	c.Assert(cfg.InitialCluster, check.Equals, "master-tls=https://"+peerAddr)
+	})
+	require.NoError(t.T(), err)
+	require.Equal(t.T(), masterAddr, cfg.MasterAddr)
+	require.Equal(t.T(), masterAddr, cfg.AdvertiseAddr)
+	require.Equal(t.T(), "https://"+peerAddr, cfg.PeerUrls)
+	require.Equal(t.T(), "https://"+peerAddr, cfg.AdvertisePeerUrls)
+	require.Equal(t.T(), "master-tls=https://"+peerAddr, cfg.InitialCluster)
 
 	// different prefix for `--peer-urls` and `--initial-cluster`
 	cfg = NewConfig()
-	c.Assert(cfg.Parse([]string{
+	err = cfg.Parse([]string{
 		"--name=master-tls",
-		fmt.Sprintf("--data-dir=%s", c.MkDir()),
+		fmt.Sprintf("--data-dir=%s", t.T().TempDir()),
 		fmt.Sprintf("--master-addr=https://%s", masterAddr),
 		fmt.Sprintf("--advertise-addr=https://%s", masterAddr),
 		fmt.Sprintf("--peer-urls=https://%s", peerAddr),
@@ -1580,19 +1580,20 @@ func (t *testMaster) TestMasterTLS(c *check.C) {
 		"--ssl-ca=" + caPath,
 		"--ssl-cert=" + certPath,
 		"--ssl-key=" + keyPath,
-	}), check.IsNil)
-	c.Assert(cfg.MasterAddr, check.Equals, masterAddr)
-	c.Assert(cfg.AdvertiseAddr, check.Equals, masterAddr)
-	c.Assert(cfg.PeerUrls, check.Equals, "https://"+peerAddr)
-	c.Assert(cfg.AdvertisePeerUrls, check.Equals, "https://"+peerAddr)
-	c.Assert(cfg.InitialCluster, check.Equals, "master-tls=https://"+peerAddr)
-	t.testTLSPrefix(c, cfg)
+	})
+	require.NoError(t.T(), err)
+	require.Equal(t.T(), masterAddr, cfg.MasterAddr)
+	require.Equal(t.T(), masterAddr, cfg.AdvertiseAddr)
+	require.Equal(t.T(), "https://"+peerAddr, cfg.PeerUrls)
+	require.Equal(t.T(), "https://"+peerAddr, cfg.AdvertisePeerUrls)
+	require.Equal(t.T(), "master-tls=https://"+peerAddr, cfg.InitialCluster)
+	t.testTLSPrefix(cfg)
 
 	// listen address set to 0.0.0.0
 	cfg = NewConfig()
-	c.Assert(cfg.Parse([]string{
+	err = cfg.Parse([]string{
 		"--name=master-tls",
-		fmt.Sprintf("--data-dir=%s", c.MkDir()),
+		fmt.Sprintf("--data-dir=%s", t.T().TempDir()),
 		fmt.Sprintf("--master-addr=0.0.0.0:%s", masterPort),
 		fmt.Sprintf("--advertise-addr=https://%s", masterAddr),
 		fmt.Sprintf("--peer-urls=0.0.0.0:%s", peerPort),
@@ -1601,64 +1602,65 @@ func (t *testMaster) TestMasterTLS(c *check.C) {
 		"--ssl-ca=" + caPath,
 		"--ssl-cert=" + certPath,
 		"--ssl-key=" + keyPath,
-	}), check.IsNil)
-	t.testTLSPrefix(c, cfg)
+	})
+	require.NoError(t.T(), err)
+	t.testTLSPrefix(cfg)
 }
 
-func (t *testMaster) testTLSPrefix(c *check.C, cfg *Config) {
-	t.testNormalServerLifecycle(c, cfg, func(c *check.C, cfg *Config) {
-		t.testHTTPInterface(c, fmt.Sprintf("https://%s/status", cfg.AdvertiseAddr), []byte(version.GetRawInfo()))
-		t.testHTTPInterface(c, fmt.Sprintf("https://%s/debug/pprof/", cfg.AdvertiseAddr), []byte("Types of profiles available"))
+func (t *testMasterSuite) testTLSPrefix(cfg *Config) {
+	t.testNormalServerLifecycle(cfg, func(cfg *Config) {
+		t.testHTTPInterface(fmt.Sprintf("https://%s/status", cfg.AdvertiseAddr), []byte(version.GetRawInfo()))
+		t.testHTTPInterface(fmt.Sprintf("https://%s/debug/pprof/", cfg.AdvertiseAddr), []byte("Types of profiles available"))
 	})
 }
 
-func (t *testMaster) testNormalServerLifecycle(c *check.C, cfg *Config, checkLogic func(*check.C, *Config)) {
+func (t *testMasterSuite) testNormalServerLifecycle(cfg *Config, checkLogic func(*Config)) {
 	var err error
 	s := NewServer(cfg)
 
 	ctx, cancel := context.WithCancel(context.Background())
 	err = s.Start(ctx)
-	c.Assert(err, check.IsNil)
+	require.NoError(t.T(), err)
 
-	checkLogic(c, cfg)
+	checkLogic(cfg)
 
 	// close
 	cancel()
 	s.Close()
 
-	c.Assert(utils.WaitSomething(30, 100*time.Millisecond, func() bool {
+	require.Eventually(t.T(), func() bool {
 		return s.closed.Load()
-	}), check.IsTrue)
+	}, 3*time.Second, 100*time.Millisecond)
 }
 
-func (t *testMaster) testHTTPInterface(c *check.C, url string, contain []byte) {
+func (t *testMasterSuite) testHTTPInterface(url string, contain []byte) {
 	// we use HTTPS in some test cases.
 	tlsConfig, err := toolutils.NewTLSConfig(
 		toolutils.WithCAPath(pwd+"/tls_for_test/ca.pem"),
 		toolutils.WithCertAndKeyPath(pwd+"/tls_for_test/dm.pem", pwd+"/tls_for_test/dm.key"),
 	)
-	c.Assert(err, check.IsNil)
+	require.NoError(t.T(), err)
 	cli := toolutils.ClientWithTLS(tlsConfig)
 
 	// nolint:noctx
 	resp, err := cli.Get(url)
-	c.Assert(err, check.IsNil)
+	require.NoError(t.T(), err)
 	defer resp.Body.Close()
-	c.Assert(resp.StatusCode, check.Equals, 200)
+	require.Equal(t.T(), http.StatusOK, resp.StatusCode)
 
 	body, err := io.ReadAll(resp.Body)
-	c.Assert(err, check.IsNil)
-	c.Assert(bytes.Contains(body, contain), check.IsTrue)
+	require.NoError(t.T(), err)
+	require.True(t.T(), bytes.Contains(body, contain))
 }
 
-func (t *testMaster) TestJoinMember(c *check.C) {
+func (t *testMasterSuite) TestJoinMember() {
 	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
 
 	// create a new cluster
 	cfg1 := NewConfig()
-	c.Assert(cfg1.FromContent(SampleConfig), check.IsNil)
+	require.NoError(t.T(), cfg1.FromContent(SampleConfig))
 	cfg1.Name = "dm-master-1"
-	cfg1.DataDir = c.MkDir()
+	cfg1.DataDir = t.T().TempDir()
 	cfg1.MasterAddr = tempurl.Alloc()[len("http://"):]
 	cfg1.AdvertiseAddr = cfg1.MasterAddr
 	cfg1.PeerUrls = tempurl.Alloc()
@@ -1666,19 +1668,19 @@ func (t *testMaster) TestJoinMember(c *check.C) {
 	cfg1.InitialCluster = fmt.Sprintf("%s=%s", cfg1.Name, cfg1.AdvertisePeerUrls)
 
 	s1 := NewServer(cfg1)
-	c.Assert(s1.Start(ctx), check.IsNil)
+	require.NoError(t.T(), s1.Start(ctx))
 	defer s1.Close()
 
 	// wait the first one become the leader
-	c.Assert(utils.WaitSomething(30, 100*time.Millisecond, func() bool {
+	require.Eventually(t.T(), func() bool {
 		return s1.election.IsLeader()
-	}), check.IsTrue)
+	}, 3*time.Second, 100*time.Millisecond)
 
 	// join to an existing cluster
 	cfg2 := NewConfig()
-	c.Assert(cfg2.FromContent(SampleConfig), check.IsNil)
+	require.NoError(t.T(), cfg2.FromContent(SampleConfig))
 	cfg2.Name = "dm-master-2"
-	cfg2.DataDir = c.MkDir()
+	cfg2.DataDir = t.T().TempDir()
 	cfg2.MasterAddr = tempurl.Alloc()[len("http://"):]
 	cfg2.AdvertiseAddr = cfg2.MasterAddr
 	cfg2.PeerUrls = tempurl.Alloc()
@@ -1686,34 +1688,34 @@ func (t *testMaster) TestJoinMember(c *check.C) {
 	cfg2.Join = cfg1.MasterAddr // join to an existing cluster
 
 	s2 := NewServer(cfg2)
-	c.Assert(s2.Start(ctx), check.IsNil)
+	require.NoError(t.T(), s2.Start(ctx))
 	defer s2.Close()
 
 	client, err := etcdutil.CreateClient(strings.Split(cfg1.AdvertisePeerUrls, ","), nil)
-	c.Assert(err, check.IsNil)
+	require.NoError(t.T(), err)
 	defer client.Close()
 
 	// verify members
 	listResp, err := etcdutil.ListMembers(client)
-	c.Assert(err, check.IsNil)
-	c.Assert(listResp.Members, check.HasLen, 2)
+	require.NoError(t.T(), err)
+	require.Len(t.T(), listResp.Members, 2)
 	names := make(map[string]struct{}, len(listResp.Members))
 	for _, m := range listResp.Members {
 		names[m.Name] = struct{}{}
 	}
-	c.Assert(names, check.HasKey, cfg1.Name)
-	c.Assert(names, check.HasKey, cfg2.Name)
+	require.Contains(t.T(), names, cfg1.Name)
+	require.Contains(t.T(), names, cfg2.Name)
 
 	// s1 is still the leader
 	_, leaderID, _, err := s2.election.LeaderInfo(ctx)
 
-	c.Assert(err, check.IsNil)
-	c.Assert(leaderID, check.Equals, cfg1.Name)
+	require.NoError(t.T(), err)
+	require.Equal(t.T(), leaderID, cfg1.Name)
 
 	cfg3 := NewConfig()
-	c.Assert(cfg3.FromContent(SampleConfig), check.IsNil)
+	require.NoError(t.T(), cfg3.FromContent(SampleConfig))
 	cfg3.Name = "dm-master-3"
-	cfg3.DataDir = c.MkDir()
+	cfg3.DataDir = t.T().TempDir()
 	cfg3.MasterAddr = tempurl.Alloc()[len("http://"):]
 	cfg3.AdvertiseAddr = cfg3.MasterAddr
 	cfg3.PeerUrls = tempurl.Alloc()
@@ -1721,42 +1723,42 @@ func (t *testMaster) TestJoinMember(c *check.C) {
 	cfg3.Join = cfg1.MasterAddr // join to an existing cluster
 
 	// mock join master without wal dir
-	c.Assert(os.Mkdir(filepath.Join(cfg3.DataDir, "member"), privateDirMode), check.IsNil)
-	c.Assert(os.Mkdir(filepath.Join(cfg3.DataDir, "member", "join"), privateDirMode), check.IsNil)
+	require.NoError(t.T(), os.Mkdir(filepath.Join(cfg3.DataDir, "member"), privateDirMode))
+	require.NoError(t.T(), os.Mkdir(filepath.Join(cfg3.DataDir, "member", "join"), privateDirMode))
 	s3 := NewServer(cfg3)
 	// avoid join a unhealthy cluster
-	c.Assert(utils.WaitSomething(30, 1000*time.Millisecond, func() bool {
+	require.Eventually(t.T(), func() bool {
 		return s3.Start(ctx) == nil
-	}), check.IsTrue)
+	}, 30*time.Second, time.Second)
 	defer s3.Close()
 
 	// verify members
 	listResp, err = etcdutil.ListMembers(client)
-	c.Assert(err, check.IsNil)
-	c.Assert(listResp.Members, check.HasLen, 3)
+	require.NoError(t.T(), err)
+	require.Len(t.T(), listResp.Members, 3)
 	names = make(map[string]struct{}, len(listResp.Members))
 	for _, m := range listResp.Members {
 		names[m.Name] = struct{}{}
 	}
-	c.Assert(names, check.HasKey, cfg1.Name)
-	c.Assert(names, check.HasKey, cfg2.Name)
-	c.Assert(names, check.HasKey, cfg3.Name)
+	require.Contains(t.T(), names, cfg1.Name)
+	require.Contains(t.T(), names, cfg2.Name)
+	require.Contains(t.T(), names, cfg3.Name)
 
 	cancel()
-	t.clearEtcdEnv(c)
+	t.clearEtcdEnv()
 }
 
-func (t *testMaster) TestOperateSource(c *check.C) {
+func (t *testMasterSuite) TestOperateSource() {
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
-	ctrl := gomock.NewController(c)
+	ctrl := gomock.NewController(t.T())
 	defer ctrl.Finish()
 
 	// create a new cluster
 	cfg1 := NewConfig()
-	c.Assert(cfg1.FromContent(SampleConfig), check.IsNil)
+	require.NoError(t.T(), cfg1.FromContent(SampleConfig))
 	cfg1.Name = "dm-master-1"
-	cfg1.DataDir = c.MkDir()
+	cfg1.DataDir = t.T().TempDir()
 	cfg1.MasterAddr = tempurl.Alloc()[len("http://"):]
 	cfg1.AdvertiseAddr = cfg1.MasterAddr
 	cfg1.PeerUrls = tempurl.Alloc()
@@ -1765,13 +1767,13 @@ func (t *testMaster) TestOperateSource(c *check.C) {
 
 	s1 := NewServer(cfg1)
 	s1.leader.Store(oneselfLeader)
-	c.Assert(s1.Start(ctx), check.IsNil)
+	require.NoError(t.T(), s1.Start(ctx))
 	defer s1.Close()
 	mysqlCfg, err := config.ParseYamlAndVerify(config.SampleSourceConfig)
-	c.Assert(err, check.IsNil)
+	require.NoError(t.T(), err)
 	mysqlCfg.From.Password = os.Getenv("MYSQL_PSWD")
 	task, err := mysqlCfg.Yaml()
-	c.Assert(err, check.IsNil)
+	require.NoError(t.T(), err)
 	sourceID := mysqlCfg.SourceID
 	// 1. wait for scheduler to start
 	time.Sleep(3 * time.Second)
@@ -1779,41 +1781,41 @@ func (t *testMaster) TestOperateSource(c *check.C) {
 	// 2. try to add a new mysql source
 	req := &pb.OperateSourceRequest{Op: pb.SourceOp_StartSource, Config: []string{task}}
 	resp, err := s1.OperateSource(ctx, req)
-	c.Assert(err, check.IsNil)
-	c.Assert(resp.Result, check.Equals, true)
-	c.Assert(resp.Sources, check.DeepEquals, []*pb.CommonWorkerResponse{{
+	require.NoError(t.T(), err)
+	require.True(t.T(), resp.Result)
+	require.Equal(t.T(), []*pb.CommonWorkerResponse{{
 		Result: true,
 		Msg:    "source is added but there is no free worker to bound",
 		Source: sourceID,
-	}})
+	}}, resp.Sources)
 	unBoundSources := s1.scheduler.UnboundSources()
-	c.Assert(unBoundSources, check.HasLen, 1)
-	c.Assert(unBoundSources[0], check.Equals, sourceID)
+	require.Len(t.T(), unBoundSources, 1)
+	require.Equal(t.T(), sourceID, unBoundSources[0])
 
 	// 3. try to add multiple source
 	// 3.1 duplicated source id
 	sourceID2 := "mysql-replica-02"
 	mysqlCfg.SourceID = sourceID2
 	task2, err := mysqlCfg.Yaml()
-	c.Assert(err, check.IsNil)
+	require.NoError(t.T(), err)
 	req = &pb.OperateSourceRequest{Op: pb.SourceOp_StartSource, Config: []string{task2, task2}}
 	resp, err = s1.OperateSource(ctx, req)
-	c.Assert(err, check.IsNil)
-	c.Assert(resp.Result, check.Equals, false)
-	c.Assert(resp.Msg, check.Matches, ".*source config with ID "+sourceID2+" already exists.*")
+	require.NoError(t.T(), err)
+	require.False(t.T(), resp.Result)
+	require.Contains(t.T(), resp.Msg, "source config with ID "+sourceID2+" already exists")
 	// 3.2 run same command after correction
 	sourceID3 := "mysql-replica-03"
 	mysqlCfg.SourceID = sourceID3
 	task3, err := mysqlCfg.Yaml()
-	c.Assert(err, check.IsNil)
+	require.NoError(t.T(), err)
 	req = &pb.OperateSourceRequest{Op: pb.SourceOp_StartSource, Config: []string{task2, task3}}
 	resp, err = s1.OperateSource(ctx, req)
-	c.Assert(err, check.IsNil)
-	c.Assert(resp.Result, check.Equals, true)
+	require.NoError(t.T(), err)
+	require.True(t.T(), resp.Result)
 	sort.Slice(resp.Sources, func(i, j int) bool {
 		return resp.Sources[i].Source < resp.Sources[j].Source
 	})
-	c.Assert(resp.Sources, check.DeepEquals, []*pb.CommonWorkerResponse{{
+	require.Equal(t.T(), []*pb.CommonWorkerResponse{{
 		Result: true,
 		Msg:    "source is added but there is no free worker to bound",
 		Source: sourceID2,
@@ -1821,54 +1823,54 @@ func (t *testMaster) TestOperateSource(c *check.C) {
 		Result: true,
 		Msg:    "source is added but there is no free worker to bound",
 		Source: sourceID3,
-	}})
+	}}, resp.Sources)
 	unBoundSources = s1.scheduler.UnboundSources()
-	c.Assert(unBoundSources, check.HasLen, 3)
-	c.Assert(unBoundSources[0], check.Equals, sourceID)
-	c.Assert(unBoundSources[1], check.Equals, sourceID2)
-	c.Assert(unBoundSources[2], check.Equals, sourceID3)
+	require.Len(t.T(), unBoundSources, 3)
+	require.Equal(t.T(), sourceID, unBoundSources[0])
+	require.Equal(t.T(), sourceID2, unBoundSources[1])
+	require.Equal(t.T(), sourceID3, unBoundSources[2])
 
 	// 4. try to stop a non-exist-source
 	req.Op = pb.SourceOp_StopSource
 	mysqlCfg.SourceID = "not-exist-source"
 	task4, err := mysqlCfg.Yaml()
-	c.Assert(err, check.IsNil)
+	require.NoError(t.T(), err)
 	req.Config = []string{task4}
 	resp, err = s1.OperateSource(ctx, req)
-	c.Assert(err, check.IsNil)
-	c.Assert(resp.Result, check.Equals, false)
-	c.Assert(resp.Msg, check.Matches, `[\s\S]*source config with ID `+mysqlCfg.SourceID+` not exists[\s\S]*`)
+	require.NoError(t.T(), err)
+	require.False(t.T(), resp.Result)
+	require.Contains(t.T(), resp.Msg, "source config with ID "+mysqlCfg.SourceID+" not exists")
 
-	// 5. start workers, the unbounded sources should be bounded
+	// 5. start workers, the unbound sources should be bound
 	var wg sync.WaitGroup
 	workerName1 := "worker1"
 	workerName2 := "worker2"
 	workerName3 := "worker3"
 	defer func() {
-		t.clearSchedulerEnv(c, cancel, &wg)
+		t.clearSchedulerEnv(cancel, &wg)
 	}()
-	c.Assert(s1.scheduler.AddWorker(workerName1, "172.16.10.72:8262"), check.IsNil)
+	require.NoError(t.T(), s1.scheduler.AddWorker(workerName1, "172.16.10.72:8262"))
 	wg.Add(1)
 	go func(ctx context.Context, workerName string) {
 		defer wg.Done()
-		c.Assert(ha.KeepAlive(ctx, s1.etcdClient, workerName, keepAliveTTL), check.IsNil)
+		require.NoError(t.T(), ha.KeepAlive(ctx, s1.etcdClient, workerName, keepAliveTTL))
 	}(ctx, workerName1)
-	c.Assert(s1.scheduler.AddWorker(workerName2, "172.16.10.72:8263"), check.IsNil)
+	require.NoError(t.T(), s1.scheduler.AddWorker(workerName2, "172.16.10.72:8263"))
 	wg.Add(1)
 	go func(ctx context.Context, workerName string) {
 		defer wg.Done()
-		c.Assert(ha.KeepAlive(ctx, s1.etcdClient, workerName, keepAliveTTL), check.IsNil)
+		require.NoError(t.T(), ha.KeepAlive(ctx, s1.etcdClient, workerName, keepAliveTTL))
 	}(ctx, workerName2)
-	c.Assert(s1.scheduler.AddWorker(workerName3, "172.16.10.72:8264"), check.IsNil)
+	require.NoError(t.T(), s1.scheduler.AddWorker(workerName3, "172.16.10.72:8264"))
 	wg.Add(1)
 	go func(ctx context.Context, workerName string) {
 		defer wg.Done()
-		c.Assert(ha.KeepAlive(ctx, s1.etcdClient, workerName, keepAliveTTL), check.IsNil)
+		require.NoError(t.T(), ha.KeepAlive(ctx, s1.etcdClient, workerName, keepAliveTTL))
 	}(ctx, workerName3)
-	c.Assert(utils.WaitSomething(30, 100*time.Millisecond, func() bool {
+	require.Eventually(t.T(), func() bool {
 		w := s1.scheduler.GetWorkerBySource(sourceID)
 		return w != nil
-	}), check.IsTrue)
+	}, 3*time.Second, 100*time.Millisecond)
 
 	// 6. stop sources
 	req.Config = []string{task, task2, task3}
@@ -1884,9 +1886,9 @@ func (t *testMaster) TestOperateSource(c *check.C) {
 	mockRevelantWorkerClient(mockWorkerClient3, "", sourceID3, req)
 	s1.scheduler.SetWorkerClientForTest(workerName3, newMockRPCClient(mockWorkerClient3))
 	resp, err = s1.OperateSource(ctx, req)
-	c.Assert(err, check.IsNil)
-	c.Assert(resp.Result, check.Equals, true)
-	c.Assert(resp.Sources, check.DeepEquals, []*pb.CommonWorkerResponse{{
+	require.NoError(t.T(), err)
+	require.True(t.T(), resp.Result)
+	require.Equal(t.T(), []*pb.CommonWorkerResponse{{
 		Result: true,
 		Source: sourceID,
 	}, {
@@ -1895,21 +1897,21 @@ func (t *testMaster) TestOperateSource(c *check.C) {
 	}, {
 		Result: true,
 		Source: sourceID3,
-	}})
+	}}, resp.Sources)
 	scm, _, err := ha.GetSourceCfg(t.etcdTestCli, sourceID, 0)
-	c.Assert(err, check.IsNil)
-	c.Assert(scm, check.HasLen, 0)
-	t.clearSchedulerEnv(c, cancel, &wg)
+	require.NoError(t.T(), err)
+	require.Len(t.T(), scm, 0)
+	t.clearSchedulerEnv(cancel, &wg)
 
 	cancel()
 }
 
-func (t *testMaster) TestOfflineMember(c *check.C) {
+func (t *testMasterSuite) TestOfflineMember() {
 	ctx, cancel := context.WithTimeout(context.Background(), 20*time.Second)
 
-	cfg1 := generateServerConfig(c, "dm-master-1")
-	cfg2 := generateServerConfig(c, "dm-master-2")
-	cfg3 := generateServerConfig(c, "dm-master-3")
+	cfg1 := generateServerConfig(t.T(), "dm-master-1")
+	cfg2 := generateServerConfig(t.T(), "dm-master-2")
+	cfg3 := generateServerConfig(t.T(), "dm-master-3")
 
 	initialCluster := fmt.Sprintf("%s=%s", cfg1.Name, cfg1.AdvertisePeerUrls) + "," +
 		fmt.Sprintf("%s=%s", cfg2.Name, cfg2.AdvertisePeerUrls) + "," +
@@ -1926,7 +1928,7 @@ func (t *testMaster) TestOfflineMember(c *check.C) {
 	}()
 	wg.Add(1)
 	go func() {
-		c.Assert(s1.Start(ctx), check.IsNil)
+		require.NoError(t.T(), s1.Start(ctx))
 		wg.Done()
 	}()
 
@@ -1937,13 +1939,13 @@ func (t *testMaster) TestOfflineMember(c *check.C) {
 	}()
 	wg.Add(1)
 	go func() {
-		c.Assert(s2.Start(ctx), check.IsNil)
+		require.NoError(t.T(), s2.Start(ctx))
 		wg.Done()
 	}()
 
 	ctx3, cancel3 := context.WithCancel(ctx)
 	s3 := NewServer(cfg3)
-	c.Assert(s3.Start(ctx3), check.IsNil)
+	require.NoError(t.T(), s3.Start(ctx3))
 	defer func() {
 		cancel3()
 		s3.Close()
@@ -1953,7 +1955,7 @@ func (t *testMaster) TestOfflineMember(c *check.C) {
 
 	var leaderID string
 	// ensure s2 has got the right leader info, because it will be used to `OfflineMember`.
-	c.Assert(utils.WaitSomething(30, 100*time.Millisecond, func() bool {
+	require.Eventually(t.T(), func() bool {
 		s2.RLock()
 		leader := s2.leader.Load()
 		s2.RUnlock()
@@ -1966,7 +1968,7 @@ func (t *testMaster) TestOfflineMember(c *check.C) {
 			leaderID = s2.leader.Load()
 		}
 		return true
-	}), check.IsTrue)
+	}, 3*time.Second, 100*time.Millisecond)
 
 	// master related operations
 	req := &pb.OfflineMemberRequest{
@@ -1975,23 +1977,23 @@ func (t *testMaster) TestOfflineMember(c *check.C) {
 	}
 	// test offline member with wrong type
 	resp, err := s2.OfflineMember(ctx, req)
-	c.Assert(err, check.IsNil)
-	c.Assert(resp.Result, check.IsFalse)
-	c.Assert(resp.Msg, check.Equals, terror.ErrMasterInvalidOfflineType.Generate(req.Type).Error())
+	require.NoError(t.T(), err)
+	require.False(t.T(), resp.Result)
+	require.Contains(t.T(), resp.Msg, terror.ErrMasterInvalidOfflineType.Generate(req.Type).Error())
 	// test offline member with invalid master name
 	req.Type = common.Master
 	resp, err = s2.OfflineMember(ctx, req)
-	c.Assert(err, check.IsNil)
-	c.Assert(resp.Result, check.IsFalse)
-	c.Assert(resp.Msg, check.Matches, `[\s\S]*dm-master with name `+req.Name+` not exists[\s\S]*`)
+	require.NoError(t.T(), err)
+	require.False(t.T(), resp.Result)
+	require.Contains(t.T(), resp.Msg, `dm-master with name `+req.Name+` not exists`)
 	// test offline member with correct master name
 	cli := s2.etcdClient
 	listResp, err := etcdutil.ListMembers(cli)
-	c.Assert(err, check.IsNil)
-	c.Assert(listResp.Members, check.HasLen, 3)
+	require.NoError(t.T(), err)
+	require.Len(t.T(), listResp.Members, 3)
 
 	// make sure s3 is not the leader, otherwise it will take some time to campaign a new leader after close s3, and it may cause timeout
-	c.Assert(utils.WaitSomething(20, 500*time.Millisecond, func() bool {
+	require.Eventually(t.T(), func() bool {
 		_, leaderID, _, err = s1.election.LeaderInfo(ctx)
 		if err != nil {
 			return false
@@ -2001,38 +2003,38 @@ func (t *testMaster) TestOfflineMember(c *check.C) {
 			_, err = s3.OperateLeader(ctx, &pb.OperateLeaderRequest{
 				Op: pb.LeaderOp_EvictLeaderOp,
 			})
-			c.Assert(err, check.IsNil)
+			require.NoError(t.T(), err)
 		}
 		return leaderID != s3.cfg.Name
-	}), check.IsTrue)
+	}, 10*time.Second, 500*time.Millisecond)
 
 	cancel3()
 	s3.Close()
 
 	req.Name = s3.cfg.Name
 	resp, err = s2.OfflineMember(ctx, req)
-	c.Assert(err, check.IsNil)
-	c.Assert(resp.Msg, check.Equals, "")
-	c.Assert(resp.Result, check.IsTrue)
+	require.NoError(t.T(), err)
+	require.Equal(t.T(), "", resp.Msg)
+	require.True(t.T(), resp.Result)
 
 	listResp, err = etcdutil.ListMembers(cli)
-	c.Assert(err, check.IsNil)
-	c.Assert(listResp.Members, check.HasLen, 2)
+	require.NoError(t.T(), err)
+	require.Len(t.T(), listResp.Members, 2)
 	if listResp.Members[0].Name == cfg2.Name {
 		listResp.Members[0], listResp.Members[1] = listResp.Members[1], listResp.Members[0]
 	}
-	c.Assert(listResp.Members[0].Name, check.Equals, cfg1.Name)
-	c.Assert(listResp.Members[1].Name, check.Equals, cfg2.Name)
+	require.Equal(t.T(), cfg1.Name, listResp.Members[0].Name)
+	require.Equal(t.T(), cfg2.Name, listResp.Members[1].Name)
 
 	_, leaderID2, _, err := s1.election.LeaderInfo(ctx)
-	c.Assert(err, check.IsNil)
+	require.NoError(t.T(), err)
 
 	if leaderID == cfg3.Name {
 		// s3 is leader before, leader should re-campaign
-		c.Assert(leaderID != leaderID2, check.IsTrue)
+		require.False(t.T(), leaderID != leaderID2)
 	} else {
 		// s3 isn't leader before, leader should keep the same
-		c.Assert(leaderID, check.Equals, leaderID2)
+		require.Equal(t.T(), leaderID, leaderID2)
 	}
 
 	// worker related operations
@@ -2043,8 +2045,8 @@ func (t *testMaster) TestOfflineMember(c *check.C) {
 		Address: "127.0.0.1:1000",
 	}
 	regReq, err := s1.RegisterWorker(ectx, req1)
-	c.Assert(err, check.IsNil)
-	c.Assert(regReq.Result, check.IsTrue)
+	require.NoError(t.T(), err)
+	require.True(t.T(), regReq.Result)
 
 	req2 := &pb.OfflineMemberRequest{
 		Type: common.Worker,
@@ -2052,30 +2054,30 @@ func (t *testMaster) TestOfflineMember(c *check.C) {
 	}
 	{
 		res, err := s1.OfflineMember(ectx, req2)
-		c.Assert(err, check.IsNil)
-		c.Assert(res.Result, check.IsFalse)
-		c.Assert(res.Msg, check.Matches, `[\s\S]*dm-worker with name `+req2.Name+` not exists[\s\S]*`)
+		require.NoError(t.T(), err)
+		require.False(t.T(), res.Result)
+		require.Contains(t.T(), res.Msg, `dm-worker with name `+req2.Name+` not exists`)
 	}
 	{
 		req2.Name = "xixi"
 		res, err := s1.OfflineMember(ectx, req2)
-		c.Assert(err, check.IsNil)
-		c.Assert(res.Result, check.IsTrue)
+		require.NoError(t.T(), err)
+		require.True(t.T(), res.Result)
 	}
 	{
 		// register offline worker again. TICASE-962, 963
 		resp, err := s1.RegisterWorker(ectx, req1)
-		c.Assert(err, check.IsNil)
-		c.Assert(resp.Result, check.IsTrue)
+		require.NoError(t.T(), err)
+		require.True(t.T(), resp.Result)
 	}
-	t.clearSchedulerEnv(c, cancel, &wg)
+	t.clearSchedulerEnv(cancel, &wg)
 }
 
-func (t *testMaster) TestGetCfg(c *check.C) {
-	ctrl := gomock.NewController(c)
+func (t *testMasterSuite) TestGetCfg() {
+	ctrl := gomock.NewController(t.T())
 	defer ctrl.Finish()
 
-	server := testDefaultMasterServer(c)
+	server := testDefaultMasterServer(t.T())
 	sources, workers := defaultWorkerSource()
 
 	var wg sync.WaitGroup
@@ -2085,7 +2087,7 @@ func (t *testMaster) TestGetCfg(c *check.C) {
 		Task:    taskConfig,
 		Sources: sources,
 	}
-	server.scheduler, _ = t.testMockScheduler(ctx, &wg, c, sources, workers, "",
+	server.scheduler, _ = t.testMockScheduler(ctx, &wg, sources, workers, "",
 		makeWorkerClientsForHandle(ctrl, taskName, sources, workers, req))
 	server.etcdClient = t.etcdTestCli
 
@@ -2097,8 +2099,8 @@ func (t *testMaster) TestGetCfg(c *check.C) {
 	mock.ExpectQuery("SHOW GLOBAL VARIABLES LIKE 'version'").WillReturnRows(sqlmock.NewRows([]string{"Variable_name", "Value"}).
 		AddRow("version", "5.7.25-TiDB-v4.0.2"))
 	resp, err := server.StartTask(context.Background(), req)
-	c.Assert(err, check.IsNil)
-	c.Assert(resp.Result, check.IsTrue)
+	require.NoError(t.T(), err)
+	require.True(t.T(), resp.Result)
 
 	// get task config
 	req1 := &pb.GetCfgRequest{
@@ -2106,9 +2108,9 @@ func (t *testMaster) TestGetCfg(c *check.C) {
 		Type: pb.CfgType_TaskType,
 	}
 	resp1, err := server.GetCfg(context.Background(), req1)
-	c.Assert(err, check.IsNil)
-	c.Assert(resp1.Result, check.IsTrue)
-	c.Assert(strings.Contains(resp1.Cfg, "name: test"), check.IsTrue)
+	require.NoError(t.T(), err)
+	require.True(t.T(), resp1.Result)
+	require.Contains(t.T(), resp1.Cfg, "name: test")
 
 	// not exist task name
 	taskName2 := "wrong"
@@ -2117,117 +2119,117 @@ func (t *testMaster) TestGetCfg(c *check.C) {
 		Type: pb.CfgType_TaskType,
 	}
 	resp2, err := server.GetCfg(context.Background(), req2)
-	c.Assert(err, check.IsNil)
-	c.Assert(resp2.Result, check.IsFalse)
-	c.Assert(resp2.Msg, check.Equals, "task not found")
+	require.NoError(t.T(), err)
+	require.False(t.T(), resp2.Result)
+	require.Contains(t.T(), resp2.Msg, "task not found")
 
 	// generate a template named `wrong`, test get this task template
 	openapiTask, err := fixtures.GenNoShardOpenAPITaskForTest()
-	c.Assert(err, check.IsNil)
+	require.NoError(t.T(), err)
 	openapiTask.Name = taskName2
-	c.Assert(ha.PutOpenAPITaskTemplate(t.etcdTestCli, openapiTask, true), check.IsNil)
-	c.Assert(failpoint.Enable("github.com/pingcap/tiflow/dm/master/MockSkipAdjustTargetDB", `return(true)`), check.IsNil)
+	require.NoError(t.T(), ha.PutOpenAPITaskTemplate(t.etcdTestCli, openapiTask, true))
+	require.NoError(t.T(), failpoint.Enable("github.com/pingcap/tiflow/dm/master/MockSkipAdjustTargetDB", `return(true)`))
 	resp2, err = server.GetCfg(context.Background(), &pb.GetCfgRequest{Name: taskName2, Type: pb.CfgType_TaskTemplateType})
-	c.Assert(failpoint.Disable("github.com/pingcap/tiflow/dm/master/MockSkipAdjustTargetDB"), check.IsNil)
-	c.Assert(err, check.IsNil)
-	c.Assert(resp2.Result, check.IsTrue)
-	c.Assert(strings.Contains(resp2.Cfg, fmt.Sprintf("name: %s", taskName2)), check.IsTrue)
+	require.NoError(t.T(), failpoint.Disable("github.com/pingcap/tiflow/dm/master/MockSkipAdjustTargetDB"))
+	require.NoError(t.T(), err)
+	require.True(t.T(), resp2.Result)
+	require.Contains(t.T(), resp2.Cfg, "name: "+taskName2)
 
 	// test restart master
 	server.scheduler.Close()
-	c.Assert(server.scheduler.Start(ctx, t.etcdTestCli), check.IsNil)
+	require.NoError(t.T(), server.scheduler.Start(ctx, t.etcdTestCli))
 
 	resp3, err := server.GetCfg(context.Background(), req1)
-	c.Assert(err, check.IsNil)
-	c.Assert(resp3.Result, check.IsTrue)
-	c.Assert(resp3.Cfg, check.Equals, resp1.Cfg)
+	require.NoError(t.T(), err)
+	require.True(t.T(), resp3.Result)
+	require.Equal(t.T(), resp1.Cfg, resp3.Cfg)
 
 	req3 := &pb.GetCfgRequest{
 		Name: "dm-master",
 		Type: pb.CfgType_MasterType,
 	}
 	resp4, err := server.GetCfg(context.Background(), req3)
-	c.Assert(err, check.IsNil)
-	c.Assert(resp4.Result, check.IsTrue)
-	c.Assert(strings.Contains(resp4.Cfg, "name = \"dm-master\""), check.IsTrue)
+	require.NoError(t.T(), err)
+	require.True(t.T(), resp4.Result)
+	require.Contains(t.T(), resp4.Cfg, `name = "dm-master"`)
 
 	req4 := &pb.GetCfgRequest{
 		Name: "haha",
 		Type: pb.CfgType_MasterType,
 	}
 	resp5, err := server.GetCfg(context.Background(), req4)
-	c.Assert(err, check.IsNil)
-	c.Assert(resp5.Result, check.IsFalse)
-	c.Assert(resp5.Msg, check.Equals, "master not found")
+	require.NoError(t.T(), err)
+	require.False(t.T(), resp5.Result)
+	require.Contains(t.T(), resp5.Msg, "master not found")
 
 	req5 := &pb.GetCfgRequest{
 		Name: "haha",
 		Type: pb.CfgType_WorkerType,
 	}
 	resp6, err := server.GetCfg(context.Background(), req5)
-	c.Assert(err, check.IsNil)
-	c.Assert(resp6.Result, check.IsFalse)
-	c.Assert(resp6.Msg, check.Equals, "worker not found")
+	require.NoError(t.T(), err)
+	require.False(t.T(), resp6.Result)
+	require.Contains(t.T(), resp6.Msg, "worker not found")
 
 	req6 := &pb.GetCfgRequest{
 		Name: "mysql-replica-01",
 		Type: pb.CfgType_SourceType,
 	}
 	resp7, err := server.GetCfg(context.Background(), req6)
-	c.Assert(err, check.IsNil)
-	c.Assert(resp7.Result, check.IsTrue)
-	c.Assert(strings.Contains(resp7.Cfg, "source-id: mysql-replica-01"), check.IsTrue, check.Commentf(resp7.Cfg))
+	require.NoError(t.T(), err)
+	require.True(t.T(), resp7.Result)
+	require.Contains(t.T(), resp7.Cfg, `source-id: mysql-replica-01`)
 
 	req7 := &pb.GetCfgRequest{
 		Name: "haha",
 		Type: pb.CfgType_SourceType,
 	}
 	resp8, err := server.GetCfg(context.Background(), req7)
-	c.Assert(err, check.IsNil)
-	c.Assert(resp8.Result, check.IsFalse)
-	c.Assert(resp8.Msg, check.Equals, "source not found")
+	require.NoError(t.T(), err)
+	require.False(t.T(), resp8.Result)
+	require.Equal(t.T(), resp8.Msg, "source not found")
 
-	t.clearSchedulerEnv(c, cancel, &wg)
+	t.clearSchedulerEnv(cancel, &wg)
 }
 
-func (t *testMaster) relayStageMatch(c *check.C, s *scheduler.Scheduler, source string, expectStage pb.Stage) {
+func (t *testMasterSuite) relayStageMatch(s *scheduler.Scheduler, source string, expectStage pb.Stage) {
 	stage := ha.NewRelayStage(expectStage, source)
-	stageDeepEqualExcludeRev(c, s.GetExpectRelayStage(source), stage)
+	stageDeepEqualExcludeRev(t.T(), s.GetExpectRelayStage(source), stage)
 
 	eStage, _, err := ha.GetRelayStage(t.etcdTestCli, source)
-	c.Assert(err, check.IsNil)
+	require.NoError(t.T(), err)
 	switch expectStage {
 	case pb.Stage_Running, pb.Stage_Paused:
-		stageDeepEqualExcludeRev(c, eStage, stage)
+		stageDeepEqualExcludeRev(t.T(), eStage, stage)
 	}
 }
 
-func (t *testMaster) subTaskStageMatch(c *check.C, s *scheduler.Scheduler, task, source string, expectStage pb.Stage) {
+func (t *testMasterSuite) subTaskStageMatch(s *scheduler.Scheduler, task, source string, expectStage pb.Stage) {
 	stage := ha.NewSubTaskStage(expectStage, source, task)
-	c.Assert(s.GetExpectSubTaskStage(task, source), check.DeepEquals, stage)
+	require.Equal(t.T(), s.GetExpectSubTaskStage(task, source), stage)
 
 	eStageM, _, err := ha.GetSubTaskStage(t.etcdTestCli, source, task)
-	c.Assert(err, check.IsNil)
+	require.NoError(t.T(), err)
 	switch expectStage {
 	case pb.Stage_Running, pb.Stage_Paused:
-		c.Assert(eStageM, check.HasLen, 1)
-		stageDeepEqualExcludeRev(c, eStageM[task], stage)
+		require.Len(t.T(), eStageM, 1)
+		stageDeepEqualExcludeRev(t.T(), eStageM[task], stage)
 	default:
-		c.Assert(eStageM, check.HasLen, 0)
+		require.Len(t.T(), eStageM, 0)
 	}
 }
 
-func (t *testMaster) TestGRPCLongResponse(c *check.C) {
-	c.Assert(failpoint.Enable("github.com/pingcap/tiflow/dm/master/LongRPCResponse", `return()`), check.IsNil)
+func (t *testMasterSuite) TestGRPCLongResponse() {
+	require.NoError(t.T(), failpoint.Enable("github.com/pingcap/tiflow/dm/master/LongRPCResponse", `return()`))
 	//nolint:errcheck
 	defer failpoint.Disable("github.com/pingcap/tiflow/dm/master/LongRPCResponse")
-	c.Assert(failpoint.Enable("github.com/pingcap/tiflow/dm/ctl/common/SkipUpdateMasterClient", `return()`), check.IsNil)
+	require.NoError(t.T(), failpoint.Enable("github.com/pingcap/tiflow/dm/ctl/common/SkipUpdateMasterClient", `return()`))
 	//nolint:errcheck
 	defer failpoint.Disable("github.com/pingcap/tiflow/dm/ctl/common/SkipUpdateMasterClient")
 
 	masterAddr := tempurl.Alloc()[len("http://"):]
 	lis, err := net.Listen("tcp", masterAddr)
-	c.Assert(err, check.IsNil)
+	require.NoError(t.T(), err)
 	defer lis.Close()
 	server := grpc.NewServer()
 	pb.RegisterMasterServer(server, &Server{})
@@ -2237,35 +2239,35 @@ func (t *testMaster) TestGRPCLongResponse(c *check.C) {
 	conn, err := grpc.Dial(utils.UnwrapScheme(masterAddr),
 		grpc.WithInsecure(),
 		grpc.WithBlock())
-	c.Assert(err, check.IsNil)
+	require.NoError(t.T(), err)
 	defer conn.Close()
 
 	common.GlobalCtlClient.MasterClient = pb.NewMasterClient(conn)
 	ctx := context.Background()
 	resp := &pb.StartTaskResponse{}
 	err = common.SendRequest(ctx, "StartTask", &pb.StartTaskRequest{}, &resp)
-	c.Assert(err, check.IsNil)
+	require.NoError(t.T(), err)
 }
 
-func (t *testMaster) TestStartStopValidation(c *check.C) {
+func (t *testMasterSuite) TestStartStopValidation() {
 	var (
 		wg       sync.WaitGroup
 		taskName = "test"
 	)
-	ctrl := gomock.NewController(c)
+	ctrl := gomock.NewController(t.T())
 	defer ctrl.Finish()
-	server := testDefaultMasterServer(c)
+	server := testDefaultMasterServer(t.T())
 	server.etcdClient = t.etcdTestCli
 	sources, workers := defaultWorkerSource()
 	ctx, cancel := context.WithCancel(context.Background())
-	defer t.clearSchedulerEnv(c, cancel, &wg)
+	defer t.clearSchedulerEnv(cancel, &wg)
 	// start task without validation
 	startReq := &pb.StartTaskRequest{
 		Task:    taskConfig,
 		Sources: sources,
 	}
 	sourceResps := []*pb.CommonWorkerResponse{{Result: true, Source: sources[0]}, {Result: true, Source: sources[1]}}
-	server.scheduler, _ = t.testMockScheduler(ctx, &wg, c, sources, workers, "",
+	server.scheduler, _ = t.testMockScheduler(ctx, &wg, sources, workers, "",
 		makeWorkerClientsForHandle(ctrl, taskName, sources, workers, startReq))
 	mock := conn.InitVersionDB()
 	defer func() {
@@ -2274,12 +2276,13 @@ func (t *testMaster) TestStartStopValidation(c *check.C) {
 	mock.ExpectQuery("SHOW GLOBAL VARIABLES LIKE 'version'").WillReturnRows(sqlmock.NewRows([]string{"Variable_name", "Value"}).
 		AddRow("version", "5.7.25-TiDB-v4.0.2"))
 	stResp, err := server.StartTask(context.Background(), startReq)
-	c.Assert(err, check.IsNil)
-	c.Assert(stResp.Result, check.IsTrue)
+	require.NoError(t.T(), err)
+	require.True(t.T(), stResp.Result)
+
 	for _, source := range sources {
-		t.subTaskStageMatch(c, server.scheduler, taskName, source, pb.Stage_Running)
+		t.subTaskStageMatch(server.scheduler, taskName, source, pb.Stage_Running)
 	}
-	c.Assert(stResp.Sources, check.DeepEquals, sourceResps)
+	require.Equal(t.T(), sourceResps, stResp.Sources)
 
 	// (fail) start all validator of the task with explicit but invalid mode
 	validatorStartReq := &pb.StartValidationRequest{
@@ -2287,13 +2290,13 @@ func (t *testMaster) TestStartStopValidation(c *check.C) {
 		TaskName: taskName,
 	}
 	startResp, err := server.StartValidation(context.Background(), validatorStartReq)
-	c.Assert(err, check.IsNil)
-	c.Assert(startResp.Result, check.IsFalse)
-	c.Assert(startResp.Msg, check.Matches, ".*validation mode should be either `full` or `fast`.*")
-	t.validatorStageMatch(c, taskName, sources[0], pb.Stage_InvalidStage)
-	t.validatorStageMatch(c, taskName, sources[1], pb.Stage_InvalidStage)
-	t.validatorModeMatch(c, server.scheduler, taskName, sources[0], config.ValidationNone, "")
-	t.validatorModeMatch(c, server.scheduler, taskName, sources[1], config.ValidationNone, "")
+	require.NoError(t.T(), err)
+	require.False(t.T(), startResp.Result)
+	require.Contains(t.T(), startResp.Msg, "validation mode should be either `full` or `fast`")
+	t.validatorStageMatch(taskName, sources[0], pb.Stage_InvalidStage)
+	t.validatorStageMatch(taskName, sources[1], pb.Stage_InvalidStage)
+	t.validatorModeMatch(server.scheduler, taskName, sources[0], config.ValidationNone, "")
+	t.validatorModeMatch(server.scheduler, taskName, sources[1], config.ValidationNone, "")
 
 	// (fail) start with explicit but invalid start-time
 	validatorStartReq = &pb.StartValidationRequest{
@@ -2301,39 +2304,39 @@ func (t *testMaster) TestStartStopValidation(c *check.C) {
 		TaskName:  taskName,
 	}
 	startResp, err = server.StartValidation(context.Background(), validatorStartReq)
-	c.Assert(err, check.IsNil)
-	c.Assert(startResp.Result, check.IsFalse)
-	c.Assert(startResp.Msg, check.Matches, ".*start-time should be in the format like.*")
-	t.validatorStageMatch(c, taskName, sources[0], pb.Stage_InvalidStage)
-	t.validatorStageMatch(c, taskName, sources[1], pb.Stage_InvalidStage)
-	t.validatorModeMatch(c, server.scheduler, taskName, sources[0], config.ValidationNone, "")
-	t.validatorModeMatch(c, server.scheduler, taskName, sources[1], config.ValidationNone, "")
+	require.NoError(t.T(), err)
+	require.False(t.T(), startResp.Result)
+	require.Contains(t.T(), startResp.Msg, "start-time should be in the format like")
+	t.validatorStageMatch(taskName, sources[0], pb.Stage_InvalidStage)
+	t.validatorStageMatch(taskName, sources[1], pb.Stage_InvalidStage)
+	t.validatorModeMatch(server.scheduler, taskName, sources[0], config.ValidationNone, "")
+	t.validatorModeMatch(server.scheduler, taskName, sources[1], config.ValidationNone, "")
 
 	// (fail) start for non-existed subtask
 	validatorStartReq = &pb.StartValidationRequest{
 		TaskName: "not-exist-name",
 	}
 	startResp, err = server.StartValidation(context.Background(), validatorStartReq)
-	c.Assert(err, check.IsNil)
-	c.Assert(startResp.Result, check.IsFalse)
-	c.Assert(startResp.Msg, check.Matches, ".*cannot get subtask by task name.*")
-	t.validatorStageMatch(c, taskName, sources[0], pb.Stage_InvalidStage)
-	t.validatorStageMatch(c, taskName, sources[1], pb.Stage_InvalidStage)
-	t.validatorModeMatch(c, server.scheduler, taskName, sources[0], config.ValidationNone, "")
-	t.validatorModeMatch(c, server.scheduler, taskName, sources[1], config.ValidationNone, "")
+	require.NoError(t.T(), err)
+	require.False(t.T(), startResp.Result)
+	require.Contains(t.T(), startResp.Msg, "cannot get subtask by task name")
+	t.validatorStageMatch(taskName, sources[0], pb.Stage_InvalidStage)
+	t.validatorStageMatch(taskName, sources[1], pb.Stage_InvalidStage)
+	t.validatorModeMatch(server.scheduler, taskName, sources[0], config.ValidationNone, "")
+	t.validatorModeMatch(server.scheduler, taskName, sources[1], config.ValidationNone, "")
 
 	// (fail) start for non-exist source
 	validatorStartReq = &pb.StartValidationRequest{
 		Sources: []string{"xxx"},
 	}
 	startResp, err = server.StartValidation(context.Background(), validatorStartReq)
-	c.Assert(err, check.IsNil)
-	c.Assert(startResp.Result, check.IsFalse)
-	c.Assert(startResp.Msg, check.Matches, ".*cannot get subtask by sources.*")
-	t.validatorStageMatch(c, taskName, sources[0], pb.Stage_InvalidStage)
-	t.validatorStageMatch(c, taskName, sources[1], pb.Stage_InvalidStage)
-	t.validatorModeMatch(c, server.scheduler, taskName, sources[0], config.ValidationNone, "")
-	t.validatorModeMatch(c, server.scheduler, taskName, sources[1], config.ValidationNone, "")
+	require.NoError(t.T(), err)
+	require.False(t.T(), startResp.Result)
+	require.Contains(t.T(), startResp.Msg, "cannot get subtask by sources")
+	t.validatorStageMatch(taskName, sources[0], pb.Stage_InvalidStage)
+	t.validatorStageMatch(taskName, sources[1], pb.Stage_InvalidStage)
+	t.validatorModeMatch(server.scheduler, taskName, sources[0], config.ValidationNone, "")
+	t.validatorModeMatch(server.scheduler, taskName, sources[1], config.ValidationNone, "")
 
 	// (success) start validation without explicit mode for source 0
 	validatorStartReq = &pb.StartValidationRequest{
@@ -2341,12 +2344,12 @@ func (t *testMaster) TestStartStopValidation(c *check.C) {
 		Sources:  []string{sources[0]},
 	}
 	startResp, err = server.StartValidation(context.Background(), validatorStartReq)
-	c.Assert(err, check.IsNil)
-	c.Assert(startResp.Result, check.IsTrue)
-	t.validatorStageMatch(c, taskName, sources[0], pb.Stage_Running)
-	t.validatorStageMatch(c, taskName, sources[1], pb.Stage_InvalidStage)
-	t.validatorModeMatch(c, server.scheduler, taskName, sources[0], config.ValidationFull, "")
-	t.validatorModeMatch(c, server.scheduler, taskName, sources[1], config.ValidationNone, "")
+	require.NoError(t.T(), err)
+	require.True(t.T(), startResp.Result)
+	t.validatorStageMatch(taskName, sources[0], pb.Stage_Running)
+	t.validatorStageMatch(taskName, sources[1], pb.Stage_InvalidStage)
+	t.validatorModeMatch(server.scheduler, taskName, sources[0], config.ValidationFull, "")
+	t.validatorModeMatch(server.scheduler, taskName, sources[1], config.ValidationNone, "")
 
 	// (fail) start all validator with explicit mode
 	validatorStartReq = &pb.StartValidationRequest{
@@ -2354,13 +2357,13 @@ func (t *testMaster) TestStartStopValidation(c *check.C) {
 		TaskName: taskName,
 	}
 	startResp, err = server.StartValidation(context.Background(), validatorStartReq)
-	c.Assert(err, check.IsNil)
-	c.Assert(startResp.Result, check.IsFalse)
-	c.Assert(startResp.Msg, check.Matches, ".*some of target validator.* has already enabled.*")
-	t.validatorStageMatch(c, taskName, sources[0], pb.Stage_Running)
-	t.validatorStageMatch(c, taskName, sources[1], pb.Stage_InvalidStage)
-	t.validatorModeMatch(c, server.scheduler, taskName, sources[0], config.ValidationFull, "")
-	t.validatorModeMatch(c, server.scheduler, taskName, sources[1], config.ValidationNone, "")
+	require.NoError(t.T(), err)
+	require.False(t.T(), startResp.Result)
+	require.Regexp(t.T(), ".*some of target validator.* has already enabled.*", startResp.Msg)
+	t.validatorStageMatch(taskName, sources[0], pb.Stage_Running)
+	t.validatorStageMatch(taskName, sources[1], pb.Stage_InvalidStage)
+	t.validatorModeMatch(server.scheduler, taskName, sources[0], config.ValidationFull, "")
+	t.validatorModeMatch(server.scheduler, taskName, sources[1], config.ValidationNone, "")
 
 	// (fail) start validation with explicit mode for source 0 again
 	validatorStartReq = &pb.StartValidationRequest{
@@ -2369,26 +2372,26 @@ func (t *testMaster) TestStartStopValidation(c *check.C) {
 		Sources:  []string{sources[0]},
 	}
 	startResp, err = server.StartValidation(context.Background(), validatorStartReq)
-	c.Assert(err, check.IsNil)
-	c.Assert(startResp.Result, check.IsFalse)
-	c.Assert(startResp.Msg, check.Matches, ".*all target validator has enabled, cannot do 'validation start' with explicit mode or start-time.*")
-	t.validatorStageMatch(c, taskName, sources[0], pb.Stage_Running)
-	t.validatorStageMatch(c, taskName, sources[1], pb.Stage_InvalidStage)
-	t.validatorModeMatch(c, server.scheduler, taskName, sources[0], config.ValidationFull, "")
-	t.validatorModeMatch(c, server.scheduler, taskName, sources[1], config.ValidationNone, "")
+	require.NoError(t.T(), err)
+	require.False(t.T(), startResp.Result)
+	require.Contains(t.T(), startResp.Msg, "all target validator has enabled, cannot do 'validation start' with explicit mode or start-time")
+	t.validatorStageMatch(taskName, sources[0], pb.Stage_Running)
+	t.validatorStageMatch(taskName, sources[1], pb.Stage_InvalidStage)
+	t.validatorModeMatch(server.scheduler, taskName, sources[0], config.ValidationFull, "")
+	t.validatorModeMatch(server.scheduler, taskName, sources[1], config.ValidationNone, "")
 
 	// (fail) start all validator without explicit mode
 	validatorStartReq = &pb.StartValidationRequest{
 		TaskName: taskName,
 	}
 	startResp, err = server.StartValidation(context.Background(), validatorStartReq)
-	c.Assert(err, check.IsNil)
-	c.Assert(startResp.Result, check.IsFalse)
-	c.Assert(startResp.Msg, check.Matches, ".*some of target validator.* has already enabled.*")
-	t.validatorStageMatch(c, taskName, sources[0], pb.Stage_Running)
-	t.validatorStageMatch(c, taskName, sources[1], pb.Stage_InvalidStage)
-	t.validatorModeMatch(c, server.scheduler, taskName, sources[0], config.ValidationFull, "")
-	t.validatorModeMatch(c, server.scheduler, taskName, sources[1], config.ValidationNone, "")
+	require.NoError(t.T(), err)
+	require.False(t.T(), startResp.Result)
+	require.Regexp(t.T(), ".*some of target validator.* has already enabled.*", startResp.Msg)
+	t.validatorStageMatch(taskName, sources[0], pb.Stage_Running)
+	t.validatorStageMatch(taskName, sources[1], pb.Stage_InvalidStage)
+	t.validatorModeMatch(server.scheduler, taskName, sources[0], config.ValidationFull, "")
+	t.validatorModeMatch(server.scheduler, taskName, sources[1], config.ValidationNone, "")
 
 	// (fail) stop validator of source 1
 	validatorStopReq := &pb.StopValidationRequest{
@@ -2396,26 +2399,26 @@ func (t *testMaster) TestStartStopValidation(c *check.C) {
 		Sources:  sources[1:],
 	}
 	stopResp, err := server.StopValidation(context.Background(), validatorStopReq)
-	c.Assert(err, check.IsNil)
-	c.Assert(stopResp.Result, check.IsFalse)
-	c.Assert(stopResp.Msg, check.Matches, ".*some target validator.* is not enabled.*")
-	t.validatorStageMatch(c, taskName, sources[0], pb.Stage_Running)
-	t.validatorStageMatch(c, taskName, sources[1], pb.Stage_InvalidStage)
-	t.validatorModeMatch(c, server.scheduler, taskName, sources[0], config.ValidationFull, "")
-	t.validatorModeMatch(c, server.scheduler, taskName, sources[1], config.ValidationNone, "")
+	require.NoError(t.T(), err)
+	require.False(t.T(), stopResp.Result)
+	require.Regexp(t.T(), ".*some target validator.* is not enabled.*", stopResp.Msg)
+	t.validatorStageMatch(taskName, sources[0], pb.Stage_Running)
+	t.validatorStageMatch(taskName, sources[1], pb.Stage_InvalidStage)
+	t.validatorModeMatch(server.scheduler, taskName, sources[0], config.ValidationFull, "")
+	t.validatorModeMatch(server.scheduler, taskName, sources[1], config.ValidationNone, "")
 
 	// (fail) stop all validator
 	validatorStopReq = &pb.StopValidationRequest{
 		TaskName: taskName,
 	}
 	stopResp, err = server.StopValidation(context.Background(), validatorStopReq)
-	c.Assert(err, check.IsNil)
-	c.Assert(stopResp.Result, check.IsFalse)
-	c.Assert(stopResp.Msg, check.Matches, ".*some target validator.* is not enabled.*")
-	t.validatorStageMatch(c, taskName, sources[0], pb.Stage_Running)
-	t.validatorStageMatch(c, taskName, sources[1], pb.Stage_InvalidStage)
-	t.validatorModeMatch(c, server.scheduler, taskName, sources[0], config.ValidationFull, "")
-	t.validatorModeMatch(c, server.scheduler, taskName, sources[1], config.ValidationNone, "")
+	require.NoError(t.T(), err)
+	require.False(t.T(), stopResp.Result)
+	require.Regexp(t.T(), ".*some target validator.* is not enabled.*", stopResp.Msg)
+	t.validatorStageMatch(taskName, sources[0], pb.Stage_Running)
+	t.validatorStageMatch(taskName, sources[1], pb.Stage_InvalidStage)
+	t.validatorModeMatch(server.scheduler, taskName, sources[0], config.ValidationFull, "")
+	t.validatorModeMatch(server.scheduler, taskName, sources[1], config.ValidationNone, "")
 
 	// (success) start validation with fast mode and start-time for source 1
 	validatorStartReq = &pb.StartValidationRequest{
@@ -2425,12 +2428,12 @@ func (t *testMaster) TestStartStopValidation(c *check.C) {
 		Sources:   []string{sources[1]},
 	}
 	startResp, err = server.StartValidation(context.Background(), validatorStartReq)
-	c.Assert(err, check.IsNil)
-	c.Assert(startResp.Result, check.IsTrue)
-	t.validatorStageMatch(c, taskName, sources[0], pb.Stage_Running)
-	t.validatorStageMatch(c, taskName, sources[1], pb.Stage_Running)
-	t.validatorModeMatch(c, server.scheduler, taskName, sources[0], config.ValidationFull, "")
-	t.validatorModeMatch(c, server.scheduler, taskName, sources[1], config.ValidationFast, "2006-01-02 15:04:05")
+	require.NoError(t.T(), err)
+	require.True(t.T(), startResp.Result)
+	t.validatorStageMatch(taskName, sources[0], pb.Stage_Running)
+	t.validatorStageMatch(taskName, sources[1], pb.Stage_Running)
+	t.validatorModeMatch(server.scheduler, taskName, sources[0], config.ValidationFull, "")
+	t.validatorModeMatch(server.scheduler, taskName, sources[1], config.ValidationFast, "2006-01-02 15:04:05")
 
 	// now validator of the 2 subtask is enabled(running)
 
@@ -2439,38 +2442,38 @@ func (t *testMaster) TestStartStopValidation(c *check.C) {
 		TaskName: taskName,
 	}
 	startResp, err = server.StartValidation(context.Background(), validatorStartReq)
-	c.Assert(err, check.IsNil)
-	c.Assert(startResp.Result, check.IsTrue)
-	t.validatorStageMatch(c, taskName, sources[0], pb.Stage_Running)
-	t.validatorStageMatch(c, taskName, sources[1], pb.Stage_Running)
-	t.validatorModeMatch(c, server.scheduler, taskName, sources[0], config.ValidationFull, "")
-	t.validatorModeMatch(c, server.scheduler, taskName, sources[1], config.ValidationFast, "2006-01-02 15:04:05")
+	require.NoError(t.T(), err)
+	require.True(t.T(), startResp.Result)
+	t.validatorStageMatch(taskName, sources[0], pb.Stage_Running)
+	t.validatorStageMatch(taskName, sources[1], pb.Stage_Running)
+	t.validatorModeMatch(server.scheduler, taskName, sources[0], config.ValidationFull, "")
+	t.validatorModeMatch(server.scheduler, taskName, sources[1], config.ValidationFast, "2006-01-02 15:04:05")
 
 	// (fail) stop non-existed subtask's validator
 	validatorStopReq = &pb.StopValidationRequest{
 		TaskName: "not-exist-name",
 	}
 	stopResp, err = server.StopValidation(context.Background(), validatorStopReq)
-	c.Assert(err, check.IsNil)
-	c.Assert(stopResp.Result, check.IsFalse)
-	c.Assert(stopResp.Msg, check.Matches, ".*cannot get subtask by task name.*")
-	t.validatorStageMatch(c, taskName, sources[0], pb.Stage_Running)
-	t.validatorStageMatch(c, taskName, sources[1], pb.Stage_Running)
-	t.validatorModeMatch(c, server.scheduler, taskName, sources[0], config.ValidationFull, "")
-	t.validatorModeMatch(c, server.scheduler, taskName, sources[1], config.ValidationFast, "2006-01-02 15:04:05")
+	require.NoError(t.T(), err)
+	require.False(t.T(), stopResp.Result)
+	require.Contains(t.T(), stopResp.Msg, "cannot get subtask by task name")
+	t.validatorStageMatch(taskName, sources[0], pb.Stage_Running)
+	t.validatorStageMatch(taskName, sources[1], pb.Stage_Running)
+	t.validatorModeMatch(server.scheduler, taskName, sources[0], config.ValidationFull, "")
+	t.validatorModeMatch(server.scheduler, taskName, sources[1], config.ValidationFast, "2006-01-02 15:04:05")
 
 	// (fail) stop all task but with non-exist source
 	validatorStopReq = &pb.StopValidationRequest{
 		Sources: []string{"xxx"},
 	}
 	stopResp, err = server.StopValidation(context.Background(), validatorStopReq)
-	c.Assert(err, check.IsNil)
-	c.Assert(stopResp.Result, check.IsFalse)
-	c.Assert(stopResp.Msg, check.Matches, ".*cannot get subtask by sources.*")
-	t.validatorStageMatch(c, taskName, sources[0], pb.Stage_Running)
-	t.validatorStageMatch(c, taskName, sources[1], pb.Stage_Running)
-	t.validatorModeMatch(c, server.scheduler, taskName, sources[0], config.ValidationFull, "")
-	t.validatorModeMatch(c, server.scheduler, taskName, sources[1], config.ValidationFast, "2006-01-02 15:04:05")
+	require.NoError(t.T(), err)
+	require.False(t.T(), stopResp.Result)
+	require.Contains(t.T(), stopResp.Msg, "cannot get subtask by source")
+	t.validatorStageMatch(taskName, sources[0], pb.Stage_Running)
+	t.validatorStageMatch(taskName, sources[1], pb.Stage_Running)
+	t.validatorModeMatch(server.scheduler, taskName, sources[0], config.ValidationFull, "")
+	t.validatorModeMatch(server.scheduler, taskName, sources[1], config.ValidationFast, "2006-01-02 15:04:05")
 
 	// (success) stop validation of source 0
 	validatorStopReq = &pb.StopValidationRequest{
@@ -2478,86 +2481,86 @@ func (t *testMaster) TestStartStopValidation(c *check.C) {
 		Sources:  []string{sources[0]},
 	}
 	stopResp, err = server.StopValidation(context.Background(), validatorStopReq)
-	c.Assert(err, check.IsNil)
-	c.Assert(stopResp.Result, check.IsTrue)
-	t.validatorStageMatch(c, taskName, sources[0], pb.Stage_Stopped)
-	t.validatorStageMatch(c, taskName, sources[1], pb.Stage_Running)
-	t.validatorModeMatch(c, server.scheduler, taskName, sources[0], config.ValidationFull, "")
-	t.validatorModeMatch(c, server.scheduler, taskName, sources[1], config.ValidationFast, "2006-01-02 15:04:05")
+	require.NoError(t.T(), err)
+	require.True(t.T(), stopResp.Result)
+	t.validatorStageMatch(taskName, sources[0], pb.Stage_Stopped)
+	t.validatorStageMatch(taskName, sources[1], pb.Stage_Running)
+	t.validatorModeMatch(server.scheduler, taskName, sources[0], config.ValidationFull, "")
+	t.validatorModeMatch(server.scheduler, taskName, sources[1], config.ValidationFast, "2006-01-02 15:04:05")
 
 	// (success) stop all
 	validatorStopReq = &pb.StopValidationRequest{
 		TaskName: "",
 	}
 	stopResp, err = server.StopValidation(context.Background(), validatorStopReq)
-	c.Assert(err, check.IsNil)
-	c.Assert(stopResp.Result, check.IsTrue)
-	t.validatorStageMatch(c, taskName, sources[0], pb.Stage_Stopped)
-	t.validatorStageMatch(c, taskName, sources[1], pb.Stage_Stopped)
-	t.validatorModeMatch(c, server.scheduler, taskName, sources[0], config.ValidationFull, "")
-	t.validatorModeMatch(c, server.scheduler, taskName, sources[1], config.ValidationFast, "2006-01-02 15:04:05")
+	require.NoError(t.T(), err)
+	require.True(t.T(), stopResp.Result)
+	t.validatorStageMatch(taskName, sources[0], pb.Stage_Stopped)
+	t.validatorStageMatch(taskName, sources[1], pb.Stage_Stopped)
+	t.validatorModeMatch(server.scheduler, taskName, sources[0], config.ValidationFull, "")
+	t.validatorModeMatch(server.scheduler, taskName, sources[1], config.ValidationFast, "2006-01-02 15:04:05")
 
 	// (success) stop all again
 	validatorStopReq = &pb.StopValidationRequest{
 		TaskName: "",
 	}
 	stopResp, err = server.StopValidation(context.Background(), validatorStopReq)
-	c.Assert(err, check.IsNil)
-	c.Assert(stopResp.Result, check.IsTrue)
-	t.validatorStageMatch(c, taskName, sources[0], pb.Stage_Stopped)
-	t.validatorStageMatch(c, taskName, sources[1], pb.Stage_Stopped)
-	t.validatorModeMatch(c, server.scheduler, taskName, sources[0], config.ValidationFull, "")
-	t.validatorModeMatch(c, server.scheduler, taskName, sources[1], config.ValidationFast, "2006-01-02 15:04:05")
+	require.NoError(t.T(), err)
+	require.True(t.T(), stopResp.Result)
+	t.validatorStageMatch(taskName, sources[0], pb.Stage_Stopped)
+	t.validatorStageMatch(taskName, sources[1], pb.Stage_Stopped)
+	t.validatorModeMatch(server.scheduler, taskName, sources[0], config.ValidationFull, "")
+	t.validatorModeMatch(server.scheduler, taskName, sources[1], config.ValidationFast, "2006-01-02 15:04:05")
 
 	// (success) start all tasks
 	validatorStartReq = &pb.StartValidationRequest{
 		TaskName: "",
 	}
 	startResp, err = server.StartValidation(context.Background(), validatorStartReq)
-	c.Assert(err, check.IsNil)
-	c.Assert(startResp.Result, check.IsTrue)
-	t.validatorStageMatch(c, taskName, sources[0], pb.Stage_Running)
-	t.validatorStageMatch(c, taskName, sources[1], pb.Stage_Running)
-	t.validatorModeMatch(c, server.scheduler, taskName, sources[0], config.ValidationFull, "")
-	t.validatorModeMatch(c, server.scheduler, taskName, sources[1], config.ValidationFast, "2006-01-02 15:04:05")
+	require.NoError(t.T(), err)
+	require.True(t.T(), startResp.Result)
+	t.validatorStageMatch(taskName, sources[0], pb.Stage_Running)
+	t.validatorStageMatch(taskName, sources[1], pb.Stage_Running)
+	t.validatorModeMatch(server.scheduler, taskName, sources[0], config.ValidationFull, "")
+	t.validatorModeMatch(server.scheduler, taskName, sources[1], config.ValidationFast, "2006-01-02 15:04:05")
 }
 
-// nolint:unparam
-func (t *testMaster) validatorStageMatch(c *check.C, taskName, source string, expectStage pb.Stage) {
+//nolint:unparam
+func (t *testMasterSuite) validatorStageMatch(taskName, source string, expectStage pb.Stage) {
 	stage := ha.NewValidatorStage(expectStage, source, taskName)
 
 	stageM, _, err := ha.GetValidatorStage(t.etcdTestCli, source, taskName, 0)
-	c.Assert(err, check.IsNil)
+	require.NoError(t.T(), err)
 	switch expectStage {
 	case pb.Stage_Running, pb.Stage_Stopped:
-		c.Assert(stageM, check.HasLen, 1)
-		stageDeepEqualExcludeRev(c, stageM[taskName], stage)
+		require.Len(t.T(), stageM, 1)
+		stageDeepEqualExcludeRev(t.T(), stageM[taskName], stage)
 	default:
-		c.Assert(stageM, check.HasLen, 0)
+		require.Len(t.T(), stageM, 0)
 	}
 }
 
 //nolint:unparam
-func (t *testMaster) validatorModeMatch(c *check.C, s *scheduler.Scheduler, task, source string,
+func (t *testMasterSuite) validatorModeMatch(s *scheduler.Scheduler, task, source string,
 	expectMode, expectedStartTime string,
 ) {
 	cfgs := s.GetSubTaskCfgsByTaskAndSource(task, []string{source})
 	v, ok := cfgs[task]
-	c.Assert(ok, check.IsTrue)
+	require.True(t.T(), ok)
 	cfg, ok := v[source]
-	c.Assert(ok, check.IsTrue)
-	c.Assert(cfg.ValidatorCfg.Mode, check.Equals, expectMode)
-	c.Assert(cfg.ValidatorCfg.StartTime, check.Equals, expectedStartTime)
+	require.True(t.T(), ok)
+	require.Equal(t.T(), expectMode, cfg.ValidatorCfg.Mode)
+	require.Equal(t.T(), expectedStartTime, cfg.ValidatorCfg.StartTime)
 }
 
-func (t *testMaster) TestGetValidatorStatus(c *check.C) {
+func (t *testMasterSuite) TestGetValidatorStatus() {
 	var (
 		wg       sync.WaitGroup
 		taskName = "test"
 	)
-	ctrl := gomock.NewController(c)
+	ctrl := gomock.NewController(t.T())
 	defer ctrl.Finish()
-	server := testDefaultMasterServer(c)
+	server := testDefaultMasterServer(t.T())
 	server.etcdClient = t.etcdTestCli
 	sources, workers := defaultWorkerSource()
 	startReq := &pb.StartTaskRequest{
@@ -2593,10 +2596,10 @@ func (t *testMaster) TestGetValidatorStatus(c *check.C) {
 		t.workerClients[worker] = newMockRPCClient(mockWorkerClient)
 	}
 	ctx, cancel := context.WithCancel(context.Background())
-	defer t.clearSchedulerEnv(c, cancel, &wg)
+	defer t.clearSchedulerEnv(cancel, &wg)
 	// start task without validation
 	sourceResps := []*pb.CommonWorkerResponse{{Result: true, Source: sources[0]}, {Result: true, Source: sources[1]}}
-	server.scheduler, _ = t.testMockScheduler(ctx, &wg, c, sources, workers, "", t.workerClients)
+	server.scheduler, _ = t.testMockScheduler(ctx, &wg, sources, workers, "", t.workerClients)
 	mock := conn.InitVersionDB()
 	defer func() {
 		conn.DefaultDBProvider = &conn.DefaultDBProviderImpl{}
@@ -2604,56 +2607,57 @@ func (t *testMaster) TestGetValidatorStatus(c *check.C) {
 	mock.ExpectQuery("SHOW GLOBAL VARIABLES LIKE 'version'").WillReturnRows(sqlmock.NewRows([]string{"Variable_name", "Value"}).
 		AddRow("version", "5.7.25-TiDB-v4.0.2"))
 	stResp, err := server.StartTask(context.Background(), startReq)
-	c.Assert(err, check.IsNil)
-	c.Assert(stResp.Result, check.IsTrue)
+	require.NoError(t.T(), err)
+	require.True(t.T(), stResp.Result)
+
 	for _, source := range sources {
-		t.subTaskStageMatch(c, server.scheduler, taskName, source, pb.Stage_Running)
+		t.subTaskStageMatch(server.scheduler, taskName, source, pb.Stage_Running)
 	}
-	c.Assert(stResp.Sources, check.DeepEquals, sourceResps)
+	require.Equal(t.T(), sourceResps, stResp.Sources)
 	// 1. query existing task's status
 	statusReq := &pb.GetValidationStatusRequest{
 		TaskName: taskName,
 	}
 	resp, err := server.GetValidationStatus(context.Background(), statusReq)
-	c.Assert(err, check.IsNil)
-	c.Assert(resp.Msg, check.Equals, "")
-	c.Assert(resp.Result, check.IsTrue)
-	c.Assert(len(resp.TableStatuses), check.Equals, 2)
+	require.NoError(t.T(), err)
+	require.Equal(t.T(), "", resp.Msg)
+	require.True(t.T(), resp.Result)
+	require.Equal(t.T(), 2, len(resp.TableStatuses))
 	// 2. query invalid task's status
 	statusReq.TaskName = "invalid-task"
 	resp, err = server.GetValidationStatus(context.Background(), statusReq)
-	c.Assert(err, check.IsNil)
-	c.Assert(resp.Msg, check.Matches, ".*cannot get subtask by task name.*")
-	c.Assert(resp.Result, check.IsFalse)
+	require.NoError(t.T(), err)
+	require.Contains(t.T(), resp.Msg, "cannot get subtask by task name")
+	require.False(t.T(), resp.Result)
 	// 3. query invalid stage
 	statusReq.TaskName = taskName
 	statusReq.FilterStatus = pb.Stage_Paused // invalid stage
 	resp, err = server.GetValidationStatus(context.Background(), statusReq)
-	c.Assert(err, check.IsNil)
-	c.Assert(resp.Msg, check.Matches, ".*filtering stage should be either.*")
-	c.Assert(resp.Result, check.IsFalse)
+	require.NoError(t.T(), err)
+	require.Contains(t.T(), resp.Msg, "filtering stage should be either")
+	require.False(t.T(), resp.Result)
 	// 4. worker error
 	statusReq.FilterStatus = pb.Stage_Running
 	resp, err = server.GetValidationStatus(context.Background(), statusReq)
-	c.Assert(err, check.IsNil)
-	c.Assert(resp.Result, check.IsFalse)
-	c.Assert(resp.Msg, check.Matches, ".*something wrong in worker.*")
+	require.NoError(t.T(), err)
+	require.False(t.T(), resp.Result)
+	require.Contains(t.T(), resp.Msg, "something wrong in worker")
 	// 5. grpc error
 	statusReq.FilterStatus = pb.Stage_Running
 	resp, err = server.GetValidationStatus(context.Background(), statusReq)
-	c.Assert(err, check.IsNil)
-	c.Assert(resp.Result, check.IsFalse)
-	c.Assert(resp.Msg, check.Matches, ".*grpc error.*")
+	require.NoError(t.T(), err)
+	require.False(t.T(), resp.Result)
+	require.Contains(t.T(), resp.Msg, "grpc error")
 }
 
-func (t *testMaster) TestGetValidationError(c *check.C) {
+func (t *testMasterSuite) TestGetValidationError() {
 	var (
 		wg       sync.WaitGroup
 		taskName = "test"
 	)
-	ctrl := gomock.NewController(c)
+	ctrl := gomock.NewController(t.T())
 	defer ctrl.Finish()
-	server := testDefaultMasterServer(c)
+	server := testDefaultMasterServer(t.T())
 	server.etcdClient = t.etcdTestCli
 	sources, workers := defaultWorkerSource()
 	startReq := &pb.StartTaskRequest{
@@ -2690,10 +2694,10 @@ func (t *testMaster) TestGetValidationError(c *check.C) {
 		t.workerClients[worker] = newMockRPCClient(mockWorkerClient)
 	}
 	ctx, cancel := context.WithCancel(context.Background())
-	defer t.clearSchedulerEnv(c, cancel, &wg)
+	defer t.clearSchedulerEnv(cancel, &wg)
 	// start task without validation
 	sourceResps := []*pb.CommonWorkerResponse{{Result: true, Source: sources[0]}, {Result: true, Source: sources[1]}}
-	server.scheduler, _ = t.testMockScheduler(ctx, &wg, c, sources, workers, "", t.workerClients)
+	server.scheduler, _ = t.testMockScheduler(ctx, &wg, sources, workers, "", t.workerClients)
 	mock := conn.InitVersionDB()
 	defer func() {
 		conn.DefaultDBProvider = &conn.DefaultDBProviderImpl{}
@@ -2701,57 +2705,58 @@ func (t *testMaster) TestGetValidationError(c *check.C) {
 	mock.ExpectQuery("SHOW GLOBAL VARIABLES LIKE 'version'").WillReturnRows(sqlmock.NewRows([]string{"Variable_name", "Value"}).
 		AddRow("version", "5.7.25-TiDB-v4.0.2"))
 	stResp, err := server.StartTask(context.Background(), startReq)
-	c.Assert(err, check.IsNil)
-	c.Assert(stResp.Result, check.IsTrue)
+	require.NoError(t.T(), err)
+	require.True(t.T(), stResp.Result)
+
 	for _, source := range sources {
-		t.subTaskStageMatch(c, server.scheduler, taskName, source, pb.Stage_Running)
+		t.subTaskStageMatch(server.scheduler, taskName, source, pb.Stage_Running)
 	}
-	c.Assert(stResp.Sources, check.DeepEquals, sourceResps)
+	require.Equal(t.T(), sourceResps, stResp.Sources)
 	// 1. query existing task's error
 	errReq := &pb.GetValidationErrorRequest{
 		TaskName: taskName,
 		ErrState: pb.ValidateErrorState_InvalidErr,
 	}
 	resp, err := server.GetValidationError(context.Background(), errReq)
-	c.Assert(err, check.IsNil)
-	c.Assert(resp.Msg, check.Equals, "")
-	c.Assert(resp.Result, check.IsTrue)
-	c.Assert(len(resp.Error), check.Equals, 2)
+	require.NoError(t.T(), err)
+	require.Equal(t.T(), "", resp.Msg)
+	require.True(t.T(), resp.Result)
+	require.Len(t.T(), resp.Error, 2)
 	// 2. query invalid task's error
 	errReq.TaskName = "invalid-task"
 	resp, err = server.GetValidationError(context.Background(), errReq)
-	c.Assert(err, check.IsNil)
-	c.Assert(resp.Msg, check.Matches, ".*cannot get subtask by task name.*")
-	c.Assert(resp.Result, check.IsFalse)
+	require.NoError(t.T(), err)
+	require.Contains(t.T(), resp.Msg, "cannot get subtask by task name")
+	require.False(t.T(), resp.Result)
 	// 3. query invalid state
 	errReq.TaskName = taskName
 	errReq.ErrState = pb.ValidateErrorState_ResolvedErr // invalid state
 	resp, err = server.GetValidationError(context.Background(), errReq)
-	c.Assert(err, check.IsNil)
-	c.Assert(resp.Msg, check.Matches, ".*only support querying `all`, `unprocessed`, and `ignored` error.*")
-	c.Assert(resp.Result, check.IsFalse)
+	require.NoError(t.T(), err)
+	require.Contains(t.T(), resp.Msg, "only support querying `all`, `unprocessed`, and `ignored` error")
+	require.False(t.T(), resp.Result)
 	// 4. worker error
 	errReq.TaskName = taskName
 	errReq.ErrState = pb.ValidateErrorState_InvalidErr
 	resp, err = server.GetValidationError(context.Background(), errReq)
-	c.Assert(err, check.IsNil)
-	c.Assert(resp.Result, check.IsFalse)
-	c.Assert(resp.Msg, check.Matches, ".*something wrong in worker.*")
+	require.NoError(t.T(), err)
+	require.False(t.T(), resp.Result)
+	require.Contains(t.T(), resp.Msg, "something wrong in worker")
 	// 5. grpc error
 	resp, err = server.GetValidationError(context.Background(), errReq)
-	c.Assert(err, check.IsNil)
-	c.Assert(resp.Result, check.IsFalse)
-	c.Assert(resp.Msg, check.Matches, ".*grpc error.*")
+	require.NoError(t.T(), err)
+	require.False(t.T(), resp.Result)
+	require.Contains(t.T(), resp.Msg, "grpc error")
 }
 
-func (t *testMaster) TestOperateValidationError(c *check.C) {
+func (t *testMasterSuite) TestOperateValidationError() {
 	var (
 		wg       sync.WaitGroup
 		taskName = "test"
 	)
-	ctrl := gomock.NewController(c)
+	ctrl := gomock.NewController(t.T())
 	defer ctrl.Finish()
-	server := testDefaultMasterServer(c)
+	server := testDefaultMasterServer(t.T())
 	server.etcdClient = t.etcdTestCli
 	sources, workers := defaultWorkerSource()
 	startReq := &pb.StartTaskRequest{
@@ -2783,10 +2788,10 @@ func (t *testMaster) TestOperateValidationError(c *check.C) {
 		t.workerClients[worker] = newMockRPCClient(mockWorkerClient)
 	}
 	ctx, cancel := context.WithCancel(context.Background())
-	defer t.clearSchedulerEnv(c, cancel, &wg)
+	defer t.clearSchedulerEnv(cancel, &wg)
 	// start task without validation
 	sourceResps := []*pb.CommonWorkerResponse{{Result: true, Source: sources[0]}, {Result: true, Source: sources[1]}}
-	server.scheduler, _ = t.testMockScheduler(ctx, &wg, c, sources, workers, "", t.workerClients)
+	server.scheduler, _ = t.testMockScheduler(ctx, &wg, sources, workers, "", t.workerClients)
 	mock := conn.InitVersionDB()
 	defer func() {
 		conn.DefaultDBProvider = &conn.DefaultDBProviderImpl{}
@@ -2794,63 +2799,64 @@ func (t *testMaster) TestOperateValidationError(c *check.C) {
 	mock.ExpectQuery("SHOW GLOBAL VARIABLES LIKE 'version'").WillReturnRows(sqlmock.NewRows([]string{"Variable_name", "Value"}).
 		AddRow("version", "5.7.25-TiDB-v4.0.2"))
 	stResp, err := server.StartTask(context.Background(), startReq)
-	c.Assert(err, check.IsNil)
-	c.Assert(stResp.Result, check.IsTrue)
+	require.NoError(t.T(), err)
+	require.True(t.T(), stResp.Result)
+
 	for _, source := range sources {
-		t.subTaskStageMatch(c, server.scheduler, taskName, source, pb.Stage_Running)
+		t.subTaskStageMatch(server.scheduler, taskName, source, pb.Stage_Running)
 	}
-	c.Assert(stResp.Sources, check.DeepEquals, sourceResps)
+	require.Equal(t.T(), sourceResps, stResp.Sources)
 	// 1. query existing task's error
 	opReq := &pb.OperateValidationErrorRequest{
 		TaskName:   taskName,
 		IsAllError: true,
 	}
 	resp, err := server.OperateValidationError(context.Background(), opReq)
-	c.Assert(err, check.IsNil)
-	c.Assert(resp.Msg, check.Equals, "")
-	c.Assert(resp.Result, check.IsTrue)
+	require.NoError(t.T(), err)
+	require.Equal(t.T(), resp.Msg, "")
+	require.True(t.T(), resp.Result)
 	// 2. query invalid task's error
 	opReq.TaskName = "invalid-task"
 	resp, err = server.OperateValidationError(context.Background(), opReq)
-	c.Assert(err, check.IsNil)
-	c.Assert(resp.Msg, check.Matches, ".*cannot get subtask by task name.*")
-	c.Assert(resp.Result, check.IsFalse)
+	require.NoError(t.T(), err)
+	require.Contains(t.T(), resp.Msg, "cannot get subtask by task name")
+	require.False(t.T(), resp.Result)
 	// 3. worker error
 	opReq.TaskName = taskName
 	resp, err = server.OperateValidationError(context.Background(), opReq)
-	c.Assert(err, check.IsNil)
-	c.Assert(resp.Result, check.IsFalse)
-	c.Assert(resp.Msg, check.Matches, ".*something wrong in worker.*")
+	require.NoError(t.T(), err)
+	require.False(t.T(), resp.Result)
+	require.Contains(t.T(), resp.Msg, "something wrong in worker")
 	// 4. grpc error
 	opReq.TaskName = taskName
 	resp, err = server.OperateValidationError(context.Background(), opReq)
-	c.Assert(err, check.IsNil)
-	c.Assert(resp.Result, check.IsFalse)
-	c.Assert(resp.Msg, check.Matches, ".*grpc error.*")
+	require.NoError(t.T(), err)
+	require.False(t.T(), resp.Result)
+	require.Contains(t.T(), resp.Msg, "grpc error")
 }
 
-func (t *testMaster) TestDashboardAddress(c *check.C) {
+func (t *testMasterSuite) TestDashboardAddress() {
 	// Temp file for test log output
-	file, err := ioutil.TempFile(c.MkDir(), "*")
-	c.Assert(err, check.IsNil)
+	file, err := ioutil.TempFile(t.T().TempDir(), "*")
+	require.NoError(t.T(), err)
 	defer os.Remove(file.Name())
 
 	cfg := NewConfig()
 	err = cfg.FromContent(SampleConfig)
-	c.Assert(err, check.IsNil)
+	require.NoError(t.T(), err)
 
 	err = log.InitLogger(&log.Config{
 		File: file.Name(),
 	})
-	c.Assert(err, check.IsNil)
+	require.NoError(t.T(), err)
 	defer func() {
 		err = log.InitLogger(&log.Config{})
-		c.Assert(err, check.IsNil)
+		require.NoError(t.T(), err)
 	}()
 
 	cfg.OpenAPI = true
 	cfg.LogFile = file.Name()
-	cfg.DataDir = c.MkDir()
+	cfg.DataDir = t.T().TempDir()
 
 	server := NewServer(cfg)
 	server.leader.Store(oneselfLeader)
@@ -2858,7 +2864,7 @@ func (t *testMaster) TestDashboardAddress(c *check.C) {
 	go server.ap.Start(ctx)
 	go func() {
 		err2 := server.Start(ctx)
-		c.Assert(err2, check.IsNil)
+		require.NoError(t.T(), err2)
 	}()
 	defer server.Close()
 	defer cancel()
@@ -2867,42 +2873,42 @@ func (t *testMaster) TestDashboardAddress(c *check.C) {
 	time.Sleep(time.Second * 3)
 
 	content, err := ioutil.ReadFile(file.Name())
-	c.Assert(err, check.IsNil)
-	c.Assert(string(content), check.Matches, "[\\s\\S]*Web UI enabled[\\s\\S]*")
+	require.NoError(t.T(), err)
+	require.Contains(t.T(), string(content), "Web UI enabled")
 }
 
-func (t *testMaster) TestGetLatestMeta(*check.C) {
+func (t *testMasterSuite) TestGetLatestMeta() {
 	_, mockDB, err := conn.InitMockDBFull()
-	require.NoError(t.testT, err)
+	require.NoError(t.T(), err)
 	getMasterStatusError := errors.New("failed to get master status")
 	mockDB.ExpectQuery(`SHOW MASTER STATUS`).WillReturnError(getMasterStatusError)
-	meta, err := GetLatestMeta(context.Background(), "", &config.DBConfig{})
-	require.Contains(t.testT, err.Error(), getMasterStatusError.Error())
-	require.Nil(t.testT, meta)
+	meta, err := GetLatestMeta(context.Background(), "", &dbconfig.DBConfig{})
+	require.Contains(t.T(), err.Error(), getMasterStatusError.Error())
+	require.Nil(t.T(), meta)
 
 	_, mockDB, err = conn.InitMockDBFull()
-	require.NoError(t.testT, err)
+	require.NoError(t.T(), err)
 	rows := mockDB.NewRows([]string{"File", "Position", "Binlog_Do_DB", "Binlog_Ignore_DB", "Executed_Gtid_Set"})
 	mockDB.ExpectQuery(`SHOW MASTER STATUS`).WillReturnRows(rows)
-	meta, err = GetLatestMeta(context.Background(), "", &config.DBConfig{})
-	require.True(t.testT, terror.ErrNoMasterStatus.Equal(err))
-	require.Nil(t.testT, meta)
+	meta, err = GetLatestMeta(context.Background(), "", &dbconfig.DBConfig{})
+	require.True(t.T(), terror.ErrNoMasterStatus.Equal(err))
+	require.Nil(t.T(), meta)
 
 	_, mockDB, err = conn.InitMockDBFull()
-	require.NoError(t.testT, err)
+	require.NoError(t.T(), err)
 	// 5 columns for MySQL
 	rows = mockDB.NewRows([]string{"File", "Position", "Binlog_Do_DB", "Binlog_Ignore_DB", "Executed_Gtid_Set"}).AddRow(
 		"mysql-bin.000009", 11232, "do_db", "ignore_db", "",
 	)
 	mockDB.ExpectQuery(`SHOW MASTER STATUS`).WillReturnRows(rows)
-	meta, err = GetLatestMeta(context.Background(), mysql.MySQLFlavor, &config.DBConfig{})
-	require.NoError(t.testT, err)
-	require.Equal(t.testT, meta.BinLogName, "mysql-bin.000009")
-	require.Equal(t.testT, meta.BinLogPos, uint32(11232))
-	require.Equal(t.testT, meta.BinLogGTID, "")
+	meta, err = GetLatestMeta(context.Background(), mysql.MySQLFlavor, &dbconfig.DBConfig{})
+	require.NoError(t.T(), err)
+	require.Equal(t.T(), meta.BinLogName, "mysql-bin.000009")
+	require.Equal(t.T(), meta.BinLogPos, uint32(11232))
+	require.Equal(t.T(), meta.BinLogGTID, "")
 
 	_, mockDB, err = conn.InitMockDBFull()
-	require.NoError(t.testT, err)
+	require.NoError(t.T(), err)
 	// 4 columns for MariaDB
 	rows = mockDB.NewRows([]string{"File", "Position", "Binlog_Do_DB", "Binlog_Ignore_DB"}).AddRow(
 		"mysql-bin.000009", 11232, "do_db", "ignore_db",
@@ -2910,9 +2916,9 @@ func (t *testMaster) TestGetLatestMeta(*check.C) {
 	mockDB.ExpectQuery(`SHOW MASTER STATUS`).WillReturnRows(rows)
 	rows = mockDB.NewRows([]string{"Variable_name", "Value"}).AddRow("gtid_binlog_pos", "1-2-100")
 	mockDB.ExpectQuery(`SHOW GLOBAL VARIABLES LIKE 'gtid_binlog_pos'`).WillReturnRows(rows)
-	meta, err = GetLatestMeta(context.Background(), mysql.MariaDBFlavor, &config.DBConfig{})
-	require.NoError(t.testT, err)
-	require.Equal(t.testT, meta.BinLogName, "mysql-bin.000009")
-	require.Equal(t.testT, meta.BinLogPos, uint32(11232))
-	require.Equal(t.testT, meta.BinLogGTID, "1-2-100")
+	meta, err = GetLatestMeta(context.Background(), mysql.MariaDBFlavor, &dbconfig.DBConfig{})
+	require.NoError(t.T(), err)
+	require.Equal(t.T(), meta.BinLogName, "mysql-bin.000009")
+	require.Equal(t.T(), meta.BinLogPos, uint32(11232))
+	require.Equal(t.T(), meta.BinLogGTID, "1-2-100")
 }

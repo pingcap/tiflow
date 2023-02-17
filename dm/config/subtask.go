@@ -21,6 +21,7 @@ import (
 	"encoding/json"
 	"flag"
 	"fmt"
+	"net/url"
 	"regexp"
 	"strconv"
 	"strings"
@@ -34,6 +35,7 @@ import (
 	"github.com/pingcap/tidb/util/filter"
 	regexprrouter "github.com/pingcap/tidb/util/regexpr-router"
 	router "github.com/pingcap/tidb/util/table-router"
+	"github.com/pingcap/tiflow/dm/config/dbconfig"
 	"github.com/pingcap/tiflow/dm/pkg/log"
 	"github.com/pingcap/tiflow/dm/pkg/storage"
 	"github.com/pingcap/tiflow/dm/pkg/terror"
@@ -58,97 +60,6 @@ const (
 	TiDBLightningCheckpointPrefix = "tidb_lightning_checkpoint_"
 )
 
-var defaultMaxIdleConns = 2
-
-// RawDBConfig contains some low level database config.
-type RawDBConfig struct {
-	MaxIdleConns int
-	ReadTimeout  string
-	WriteTimeout string
-}
-
-// DefaultRawDBConfig returns a default raw database config.
-func DefaultRawDBConfig() *RawDBConfig {
-	return &RawDBConfig{
-		MaxIdleConns: defaultMaxIdleConns,
-	}
-}
-
-// SetReadTimeout set readTimeout for raw database config.
-func (c *RawDBConfig) SetReadTimeout(readTimeout string) *RawDBConfig {
-	c.ReadTimeout = readTimeout
-	return c
-}
-
-// SetWriteTimeout set writeTimeout for raw database config.
-func (c *RawDBConfig) SetWriteTimeout(writeTimeout string) *RawDBConfig {
-	c.WriteTimeout = writeTimeout
-	return c
-}
-
-// SetMaxIdleConns set maxIdleConns for raw database config
-// set value <= 0 then no idle connections are retained.
-// set value > 0 then `value` idle connections are retained.
-func (c *RawDBConfig) SetMaxIdleConns(value int) *RawDBConfig {
-	c.MaxIdleConns = value
-	return c
-}
-
-// DBConfig is the DB configuration.
-type DBConfig struct {
-	Host     string `toml:"host" json:"host" yaml:"host"`
-	Port     int    `toml:"port" json:"port" yaml:"port"`
-	User     string `toml:"user" json:"user" yaml:"user"`
-	Password string `toml:"password" json:"-" yaml:"password"` // omit it for privacy
-	// deprecated, mysql driver could automatically fetch this value
-	MaxAllowedPacket *int              `toml:"max-allowed-packet" json:"max-allowed-packet" yaml:"max-allowed-packet"`
-	Session          map[string]string `toml:"session" json:"session" yaml:"session"`
-
-	// security config
-	Security *Security `toml:"security" json:"security" yaml:"security"`
-
-	RawDBCfg *RawDBConfig `toml:"-" json:"-" yaml:"-"`
-	Net      string       `toml:"-" json:"-" yaml:"-"`
-}
-
-func (db *DBConfig) String() string {
-	cfg, err := json.Marshal(db)
-	if err != nil {
-		log.L().Error("fail to marshal config to json", log.ShortError(err))
-	}
-	return string(cfg)
-}
-
-// Toml returns TOML format representation of config.
-func (db *DBConfig) Toml() (string, error) {
-	var b bytes.Buffer
-	enc := toml.NewEncoder(&b)
-	if err := enc.Encode(db); err != nil {
-		return "", terror.ErrConfigTomlTransform.Delegate(err, "encode db config to toml")
-	}
-	return b.String(), nil
-}
-
-// Decode loads config from file data.
-func (db *DBConfig) Decode(data string) error {
-	_, err := toml.Decode(data, db)
-	return terror.ErrConfigTomlTransform.Delegate(err, "decode db config")
-}
-
-// Adjust adjusts the config.
-func (db *DBConfig) Adjust() {
-	if len(db.Password) > 0 {
-		db.Password = utils.DecryptOrPlaintext(db.Password)
-	}
-}
-
-func (db *DBConfig) AdjustWithTimeZone(timeZone string) {
-	if timeZone != "" {
-		AdjustDBTimeZone(db, timeZone)
-	}
-	db.Adjust()
-}
-
 // FetchTimeZoneSetting fetch target db global time_zone setting.
 // TODO: move GetTimeZoneOffset and FormatTimeZoneOffset from TiDB to tiflow.
 func FetchTimeZoneSetting(ctx context.Context, db *sql.DB) (string, error) {
@@ -159,39 +70,9 @@ func FetchTimeZoneSetting(ctx context.Context, db *sql.DB) (string, error) {
 	return dbutil.FormatTimeZoneOffset(dur), nil
 }
 
-// Clone returns a deep copy of DBConfig. This function only fixes data race when adjusting Session.
-func (db *DBConfig) Clone() *DBConfig {
-	if db == nil {
-		return nil
-	}
-
-	clone := *db
-
-	if db.MaxAllowedPacket != nil {
-		packet := *(db.MaxAllowedPacket)
-		clone.MaxAllowedPacket = &packet
-	}
-
-	if db.Session != nil {
-		clone.Session = make(map[string]string, len(db.Session))
-		for k, v := range db.Session {
-			clone.Session[k] = v
-		}
-	}
-
-	clone.Security = db.Security.Clone()
-
-	if db.RawDBCfg != nil {
-		dbCfg := *(db.RawDBCfg)
-		clone.RawDBCfg = &dbCfg
-	}
-
-	return &clone
-}
-
 // GetDBConfigForTest is a helper function to get db config for unit test .
-func GetDBConfigForTest() DBConfig {
-	return DBConfig{Host: "localhost", User: "root", Password: "not a real password", Port: 3306}
+func GetDBConfigForTest() dbconfig.DBConfig {
+	return dbconfig.DBConfig{Host: "localhost", User: "root", Password: "not a real password", Port: 3306}
 }
 
 // SubTaskConfig is the configuration for SubTask.
@@ -245,14 +126,15 @@ type SubTaskConfig struct {
 	RelayDir string `toml:"relay-dir" json:"relay-dir"`
 
 	// UseRelay get value from dm-worker's relayEnabled
-	UseRelay bool     `toml:"use-relay" json:"use-relay"`
-	From     DBConfig `toml:"from" json:"from"`
-	To       DBConfig `toml:"to" json:"to"`
+	UseRelay bool              `toml:"use-relay" json:"use-relay"`
+	From     dbconfig.DBConfig `toml:"from" json:"from"`
+	To       dbconfig.DBConfig `toml:"to" json:"to"`
 
-	RouteRules         []*router.TableRule   `toml:"route-rules" json:"route-rules"`
-	FilterRules        []*bf.BinlogEventRule `toml:"filter-rules" json:"filter-rules"`
-	ColumnMappingRules []*column.Rule        `toml:"mapping-rule" json:"mapping-rule"`
-	ExprFilter         []*ExpressionFilter   `yaml:"expression-filter" toml:"expression-filter" json:"expression-filter"`
+	RouteRules  []*router.TableRule   `toml:"route-rules" json:"route-rules"`
+	FilterRules []*bf.BinlogEventRule `toml:"filter-rules" json:"filter-rules"`
+	// deprecated
+	ColumnMappingRules []*column.Rule      `toml:"mapping-rule" json:"mapping-rule"`
+	ExprFilter         []*ExpressionFilter `yaml:"expression-filter" toml:"expression-filter" json:"expression-filter"`
 
 	// black-white-list is deprecated, use block-allow-list instead
 	BWList *filter.Rules `toml:"black-white-list" json:"black-white-list"`
@@ -299,6 +181,11 @@ type SubTaskConfig struct {
 	// key to let MySQL driver to find the right TCPConnWithIOCounter.
 	UUID         string         `toml:"-" json:"-"`
 	IOTotalBytes *atomic.Uint64 `toml:"-" json:"-"`
+
+	// meter network usage from upstream
+	// e.g., pulling binlog
+	DumpUUID         string         `toml:"-" json:"-"`
+	DumpIOTotalBytes *atomic.Uint64 `toml:"-" json:"-"`
 }
 
 // SampleSubtaskConfig is the content of subtask.toml in current folder.
@@ -402,6 +289,10 @@ func (c *SubTaskConfig) Adjust(verifyDecryptPassword bool) error {
 		c.ShardMode = ShardPessimistic // use the pessimistic mode as default for back compatible.
 	}
 
+	if len(c.ColumnMappingRules) > 0 {
+		return terror.ErrConfigColumnMappingDeprecated.Generate()
+	}
+
 	if c.OnlineDDLScheme != "" && c.OnlineDDLScheme != PT && c.OnlineDDLScheme != GHOST {
 		return terror.ErrConfigOnlineSchemeNotSupport.Generate(c.OnlineDDLScheme)
 	} else if c.OnlineDDLScheme == PT || c.OnlineDDLScheme == GHOST {
@@ -453,6 +344,13 @@ func (c *SubTaskConfig) Adjust(verifyDecryptPassword bool) error {
 			return terror.ErrConfigLoaderDirInvalid.Delegate(err, c.LoaderConfig.Dir)
 		}
 		c.LoaderConfig.Dir = newDir
+
+		if storage.IsLocalDiskPath(newDir) {
+			// lightning will not recursively create directories, so we use same level dir
+			c.LoaderConfig.SortingDirPhysical = newDir + ".sorting"
+		} else {
+			c.LoaderConfig.SortingDirPhysical = "./sorting." + url.PathEscape(c.Name)
+		}
 	}
 
 	if c.SyncerConfig.QueueSize == 0 {
@@ -587,10 +485,4 @@ func (c *SubTaskConfig) Clone() (*SubTaskConfig, error) {
 	}
 
 	return clone, nil
-}
-
-// NeedUseLightning returns whether need to use lightning loader.
-func (c *SubTaskConfig) NeedUseLightning() bool {
-	// TODO: return true after remove loader
-	return (c.Mode == ModeAll || c.Mode == ModeFull) && c.ImportMode != LoadModeLoader
 }

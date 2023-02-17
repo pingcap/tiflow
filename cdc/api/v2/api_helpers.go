@@ -27,7 +27,7 @@ import (
 	"github.com/pingcap/tiflow/cdc/kv"
 	"github.com/pingcap/tiflow/cdc/model"
 	"github.com/pingcap/tiflow/cdc/owner"
-	"github.com/pingcap/tiflow/cdc/sink"
+	"github.com/pingcap/tiflow/cdc/sinkv2/validator"
 	"github.com/pingcap/tiflow/pkg/config"
 	cerror "github.com/pingcap/tiflow/pkg/errors"
 	"github.com/pingcap/tiflow/pkg/filter"
@@ -237,7 +237,7 @@ func (APIV2HelpersImpl) verifyCreateChangefeedConfig(
 	}
 
 	// verify sink
-	if err := sink.Validate(ctx, cfg.SinkURI, replicaCfg); err != nil {
+	if err := validator.Validate(ctx, cfg.SinkURI, replicaCfg); err != nil {
 		return nil, err
 	}
 
@@ -294,12 +294,13 @@ func (APIV2HelpersImpl) verifyUpdateChangefeedConfig(
 	kvStorage tidbkv.Storage,
 	checkpointTs uint64,
 ) (*model.ChangeFeedInfo, *model.UpstreamInfo, error) {
+	// update changefeed info
 	newInfo, err := oldInfo.Clone()
 	if err != nil {
 		return nil, nil, cerror.ErrChangefeedUpdateRefused.GenWithStackByArgs(err.Error())
 	}
 
-	// verify TargetTs
+	var configUpdated, sinkURIUpdated bool
 	if cfg.TargetTs != 0 {
 		if cfg.TargetTs <= newInfo.StartTs {
 			return nil, nil, cerror.ErrChangefeedUpdateRefused.GenWithStack(
@@ -308,43 +309,52 @@ func (APIV2HelpersImpl) verifyUpdateChangefeedConfig(
 		}
 		newInfo.TargetTs = cfg.TargetTs
 	}
-
-	// verify replica config
+	if cfg.Engine != "" {
+		newInfo.Engine = cfg.Engine
+	}
 	if cfg.ReplicaConfig != nil {
+		configUpdated = true
 		newInfo.Config = cfg.ReplicaConfig.ToInternalReplicaConfig()
-		err = newInfo.Config.ValidateAndAdjust(nil)
-		if err != nil {
-			return nil, nil, err
-		}
+	}
+	if cfg.SinkURI != "" {
+		sinkURIUpdated = true
+		newInfo.SinkURI = cfg.SinkURI
 	}
 
+	// verify changefeed info
 	f, err := filter.NewFilter(newInfo.Config, "")
 	if err != nil {
 		return nil, nil, cerror.ErrChangefeedUpdateRefused.
 			GenWithStackByArgs(errors.Cause(err).Error())
 	}
-
 	tableInfos, _, _, err := entry.VerifyTables(f, kvStorage, checkpointTs)
 	if err != nil {
 		return nil, nil, cerror.ErrChangefeedUpdateRefused.GenWithStackByCause(err)
 	}
-
 	err = f.Verify(tableInfos)
 	if err != nil {
 		return nil, nil, cerror.ErrChangefeedUpdateRefused.
 			GenWithStackByArgs(errors.Cause(err).Error())
 	}
 
-	// verify SinkURI
-	if cfg.SinkURI != "" {
-		newInfo.SinkURI = cfg.SinkURI
-		if err := sink.Validate(ctx, newInfo.SinkURI, newInfo.Config); err != nil {
+	if configUpdated || sinkURIUpdated {
+		log.Info("config or sink uri updated, check the compatibility",
+			zap.Bool("configUpdated", configUpdated),
+			zap.Bool("sinkURIUpdated", sinkURIUpdated))
+		// check sink config is compatible with sinkURI
+		newCfg := newInfo.Config.Sink
+		oldCfg := oldInfo.Config.Sink
+		err := newCfg.CheckCompatibilityWithSinkURI(oldCfg, newInfo.SinkURI)
+		if err != nil {
+			return nil, nil, cerror.ErrChangefeedUpdateRefused.GenWithStackByCause(err)
+		}
+
+		if err := validator.Validate(ctx, newInfo.SinkURI, newInfo.Config); err != nil {
 			return nil, nil, cerror.ErrChangefeedUpdateRefused.GenWithStackByCause(err)
 		}
 	}
-	if cfg.Engine != "" {
-		newInfo.Engine = cfg.Engine
-	}
+
+	// update and verify up info
 	newUpInfo, err := oldUpInfo.Clone()
 	if err != nil {
 		return nil, nil, cerror.ErrChangefeedUpdateRefused.GenWithStackByArgs(err.Error())
@@ -364,9 +374,9 @@ func (APIV2HelpersImpl) verifyUpdateChangefeedConfig(
 	if cfg.CertAllowedCN != nil {
 		newUpInfo.CertAllowedCN = cfg.CertAllowedCN
 	}
+
 	changefeedInfoChanged := diff.Changed(oldInfo, newInfo)
 	upstreamInfoChanged := diff.Changed(oldUpInfo, newUpInfo)
-
 	if !changefeedInfoChanged && !upstreamInfoChanged {
 		return nil, nil, cerror.ErrChangefeedUpdateRefused.
 			GenWithStackByArgs("changefeed config is the same with the old one, do nothing")

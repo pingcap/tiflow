@@ -27,9 +27,11 @@ import (
 	"github.com/DATA-DOG/go-sqlmock"
 	dmysql "github.com/go-sql-driver/mysql"
 	"github.com/pingcap/errors"
-	"github.com/pingcap/failpoint"
 	"github.com/pingcap/log"
+	"github.com/pingcap/tidb/ddl"
 	"github.com/pingcap/tidb/infoschema"
+	"github.com/pingcap/tidb/parser"
+	"github.com/pingcap/tidb/parser/ast"
 	"github.com/pingcap/tidb/parser/mysql"
 	"github.com/pingcap/tiflow/cdc/contextutil"
 	"github.com/pingcap/tiflow/cdc/model"
@@ -38,6 +40,7 @@ import (
 	"github.com/pingcap/tiflow/pkg/config"
 	"github.com/pingcap/tiflow/pkg/sink"
 	pmysql "github.com/pingcap/tiflow/pkg/sink/mysql"
+	"github.com/pingcap/tiflow/pkg/sqlmodel"
 	"github.com/stretchr/testify/require"
 	"go.uber.org/zap"
 	"go.uber.org/zap/zaptest/observer"
@@ -1447,13 +1450,294 @@ func TestPrepareBatchDMLs(t *testing.T) {
 	}
 }
 
-func TestNetworkPartition(t *testing.T) {
+func TestGroupRowsByType(t *testing.T) {
 	ctx := context.Background()
 	ms := newMySQLBackendWithoutDB(ctx)
-	ms.cfg.WriteTimeout = "1s"
-	_ = failpoint.Enable("github.com/pingcap/tiflow/cdc/sinkv2/eventsink/txn/mysql/MySQLSinkHangLongTime", "return")
-	defer failpoint.Disable("github.com/pingcap/tiflow/cdc/sinkv2/eventsink/txn/mysql/MySQLSinkHangLongTime")
+	testCases := []struct {
+		name      string
+		input     []*model.RowChangedEvent
+		maxTxnRow int
+	}{
+		{
+			name: "delete",
+			input: []*model.RowChangedEvent{
+				{
+					StartTs:  418658114257813514,
+					CommitTs: 418658114257813515,
+					Table:    &model.TableName{Schema: "common_1", Table: "uk_without_pk"},
+					PreColumns: []*model.Column{nil, {
+						Name: "a1",
+						Type: mysql.TypeLong,
+						Flag: model.BinaryFlag | model.MultipleKeyFlag |
+							model.HandleKeyFlag | model.UniqueKeyFlag,
+						Value: 1,
+					}, {
+						Name: "a3",
+						Type: mysql.TypeLong,
+						Flag: model.BinaryFlag | model.MultipleKeyFlag |
+							model.HandleKeyFlag | model.UniqueKeyFlag,
+						Value: 1,
+					}},
+					IndexColumns: [][]int{{1, 2}},
+				},
+				{
+					StartTs:  418658114257813514,
+					CommitTs: 418658114257813515,
+					Table:    &model.TableName{Schema: "common_1", Table: "uk_without_pk"},
+					PreColumns: []*model.Column{nil, {
+						Name: "a1",
+						Type: mysql.TypeLong,
+						Flag: model.BinaryFlag | model.MultipleKeyFlag |
+							model.HandleKeyFlag | model.UniqueKeyFlag,
+						Value: 2,
+					}, {
+						Name: "a3",
+						Type: mysql.TypeLong,
+						Flag: model.BinaryFlag | model.MultipleKeyFlag |
+							model.HandleKeyFlag | model.UniqueKeyFlag,
+						Value: 2,
+					}},
+					IndexColumns: [][]int{{1, 2}},
+				},
+				{
+					StartTs:  418658114257813514,
+					CommitTs: 418658114257813515,
+					Table:    &model.TableName{Schema: "common_1", Table: "uk_without_pk"},
+					PreColumns: []*model.Column{nil, {
+						Name: "a1",
+						Type: mysql.TypeLong,
+						Flag: model.BinaryFlag | model.MultipleKeyFlag |
+							model.HandleKeyFlag | model.UniqueKeyFlag,
+						Value: 2,
+					}, {
+						Name: "a3",
+						Type: mysql.TypeLong,
+						Flag: model.BinaryFlag | model.MultipleKeyFlag |
+							model.HandleKeyFlag | model.UniqueKeyFlag,
+						Value: 2,
+					}},
+					IndexColumns: [][]int{{1, 2}},
+				},
+				{
+					StartTs:  418658114257813514,
+					CommitTs: 418658114257813515,
+					Table:    &model.TableName{Schema: "common_1", Table: "uk_without_pk"},
+					PreColumns: []*model.Column{nil, {
+						Name: "a1",
+						Type: mysql.TypeLong,
+						Flag: model.BinaryFlag | model.MultipleKeyFlag |
+							model.HandleKeyFlag | model.UniqueKeyFlag,
+						Value: 2,
+					}, {
+						Name: "a3",
+						Type: mysql.TypeLong,
+						Flag: model.BinaryFlag | model.MultipleKeyFlag |
+							model.HandleKeyFlag | model.UniqueKeyFlag,
+						Value: 2,
+					}},
+					IndexColumns: [][]int{{1, 2}},
+				},
+			},
+			maxTxnRow: 2,
+		},
+		{
+			name: "insert",
+			input: []*model.RowChangedEvent{
+				{
+					StartTs:  418658114257813516,
+					CommitTs: 418658114257813517,
+					Table:    &model.TableName{Schema: "common_1", Table: "uk_without_pk"},
+					Columns: []*model.Column{nil, {
+						Name:  "a1",
+						Type:  mysql.TypeLong,
+						Flag:  model.BinaryFlag | model.MultipleKeyFlag | model.HandleKeyFlag,
+						Value: 1,
+					}, {
+						Name:  "a3",
+						Type:  mysql.TypeLong,
+						Flag:  model.BinaryFlag | model.MultipleKeyFlag | model.HandleKeyFlag,
+						Value: 1,
+					}},
+					IndexColumns: [][]int{{1, 1}},
+				},
+				{
+					StartTs:  418658114257813516,
+					CommitTs: 418658114257813517,
+					Table:    &model.TableName{Schema: "common_1", Table: "uk_without_pk"},
+					Columns: []*model.Column{nil, {
+						Name: "a1",
+						Type: mysql.TypeLong,
+						Flag: model.BinaryFlag | model.MultipleKeyFlag |
+							model.HandleKeyFlag | model.HandleKeyFlag,
+						Value: 2,
+					}, {
+						Name: "a3",
+						Type: mysql.TypeLong,
+						Flag: model.BinaryFlag | model.MultipleKeyFlag |
+							model.HandleKeyFlag | model.HandleKeyFlag,
+						Value: 2,
+					}},
+					IndexColumns: [][]int{{2, 2}},
+				},
+				{
+					StartTs:  418658114257813516,
+					CommitTs: 418658114257813517,
+					Table:    &model.TableName{Schema: "common_1", Table: "uk_without_pk"},
+					Columns: []*model.Column{nil, {
+						Name: "a1",
+						Type: mysql.TypeLong,
+						Flag: model.BinaryFlag | model.MultipleKeyFlag |
+							model.HandleKeyFlag | model.HandleKeyFlag,
+						Value: 2,
+					}, {
+						Name: "a3",
+						Type: mysql.TypeLong,
+						Flag: model.BinaryFlag | model.MultipleKeyFlag |
+							model.HandleKeyFlag | model.HandleKeyFlag,
+						Value: 2,
+					}},
+					IndexColumns: [][]int{{2, 2}},
+				},
+				{
+					StartTs:  418658114257813516,
+					CommitTs: 418658114257813517,
+					Table:    &model.TableName{Schema: "common_1", Table: "uk_without_pk"},
+					Columns: []*model.Column{nil, {
+						Name: "a1",
+						Type: mysql.TypeLong,
+						Flag: model.BinaryFlag | model.MultipleKeyFlag |
+							model.HandleKeyFlag | model.HandleKeyFlag,
+						Value: 2,
+					}, {
+						Name: "a3",
+						Type: mysql.TypeLong,
+						Flag: model.BinaryFlag | model.MultipleKeyFlag |
+							model.HandleKeyFlag | model.HandleKeyFlag,
+						Value: 2,
+					}},
+					IndexColumns: [][]int{{2, 2}},
+				},
 
-	err := ms.execDMLWithMaxRetries(ctx, &preparedDMLs{})
-	require.Equal(t, context.Canceled, err)
+				{
+					StartTs:  418658114257813516,
+					CommitTs: 418658114257813517,
+					Table:    &model.TableName{Schema: "common_1", Table: "uk_without_pk"},
+					Columns: []*model.Column{nil, {
+						Name: "a1",
+						Type: mysql.TypeLong,
+						Flag: model.BinaryFlag | model.MultipleKeyFlag |
+							model.HandleKeyFlag | model.HandleKeyFlag,
+						Value: 2,
+					}, {
+						Name: "a3",
+						Type: mysql.TypeLong,
+						Flag: model.BinaryFlag | model.MultipleKeyFlag |
+							model.HandleKeyFlag | model.HandleKeyFlag,
+						Value: 2,
+					}},
+					IndexColumns: [][]int{{2, 2}},
+				},
+
+				{
+					StartTs:  418658114257813516,
+					CommitTs: 418658114257813517,
+					Table:    &model.TableName{Schema: "common_1", Table: "uk_without_pk"},
+					Columns: []*model.Column{nil, {
+						Name: "a1",
+						Type: mysql.TypeLong,
+						Flag: model.BinaryFlag | model.MultipleKeyFlag |
+							model.HandleKeyFlag | model.HandleKeyFlag,
+						Value: 2,
+					}, {
+						Name: "a3",
+						Type: mysql.TypeLong,
+						Flag: model.BinaryFlag | model.MultipleKeyFlag |
+							model.HandleKeyFlag | model.HandleKeyFlag,
+						Value: 2,
+					}},
+					IndexColumns: [][]int{{2, 2}},
+				},
+			},
+			maxTxnRow: 4,
+		},
+	}
+	for _, tc := range testCases {
+		t.Run(tc.name, func(t *testing.T) {
+			event := &eventsink.TxnCallbackableEvent{
+				Event: &model.SingleTableTxn{Rows: testCases[0].input},
+			}
+			colums := tc.input[0].Columns
+			if len(colums) == 0 {
+				colums = tc.input[0].PreColumns
+			}
+			tableInfo := model.BuildTiDBTableInfo(colums, tc.input[0].IndexColumns)
+			ms.cfg.MaxTxnRow = tc.maxTxnRow
+			inserts, updates, deletes := ms.groupRowsByType(event, tableInfo, false)
+			for _, rows := range inserts {
+				require.LessOrEqual(t, len(rows), tc.maxTxnRow)
+			}
+			for _, rows := range updates {
+				require.LessOrEqual(t, len(rows), tc.maxTxnRow)
+			}
+			for _, rows := range deletes {
+				require.LessOrEqual(t, len(rows), tc.maxTxnRow)
+			}
+		})
+	}
+}
+
+func TestBackendGenUpdateSQL(t *testing.T) {
+	ctx := context.Background()
+	ms := newMySQLBackendWithoutDB(ctx)
+	table := &model.TableName{Schema: "db", Table: "tb1"}
+
+	createSQL := "CREATE TABLE tb1 (id INT PRIMARY KEY, name varchar(20))"
+	stmt, err := parser.New().ParseOneStmt(createSQL, "", "")
+	require.NoError(t, err)
+	ti, err := ddl.BuildTableInfoFromAST(stmt.(*ast.CreateTableStmt))
+	require.NoError(t, err)
+
+	row1 := sqlmodel.NewRowChange(table, table, []any{1, "a"}, []any{1, "aa"}, ti, ti, nil)
+	row1.SetApproximateDataSize(6)
+	row2 := sqlmodel.NewRowChange(table, table, []any{2, "b"}, []any{2, "bb"}, ti, ti, nil)
+	row2.SetApproximateDataSize(6)
+
+	testCases := []struct {
+		rows                  []*sqlmodel.RowChange
+		maxMultiUpdateRowSize int
+		expectedSQLs          []string
+		expectedValues        [][]interface{}
+	}{
+		{
+			[]*sqlmodel.RowChange{row1, row2},
+			ms.cfg.MaxMultiUpdateRowCount,
+			[]string{
+				"UPDATE `db`.`tb1` SET " +
+					"`id`=CASE WHEN `id`=? THEN ? WHEN `id`=? THEN ? END, " +
+					"`name`=CASE WHEN `id`=? THEN ? WHEN `id`=? THEN ? END " +
+					"WHERE `id` IN (?,?)",
+			},
+			[][]interface{}{
+				{1, 1, 2, 2, 1, "aa", 2, "bb", 1, 2},
+			},
+		},
+		{
+			[]*sqlmodel.RowChange{row1, row2},
+			0,
+			[]string{
+				"UPDATE `db`.`tb1` SET `id` = ?, `name` = ? WHERE `id` = ? LIMIT 1",
+				"UPDATE `db`.`tb1` SET `id` = ?, `name` = ? WHERE `id` = ? LIMIT 1",
+			},
+			[][]interface{}{
+				{1, "aa", 1},
+				{2, "bb", 2},
+			},
+		},
+	}
+	for _, tc := range testCases {
+		ms.cfg.MaxMultiUpdateRowSize = tc.maxMultiUpdateRowSize
+		sqls, values := ms.genUpdateSQL(tc.rows...)
+		require.Equal(t, tc.expectedSQLs, sqls)
+		require.Equal(t, tc.expectedValues, values)
+	}
 }

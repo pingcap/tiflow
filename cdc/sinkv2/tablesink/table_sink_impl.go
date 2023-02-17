@@ -21,6 +21,7 @@ import (
 
 	"github.com/pingcap/log"
 	"github.com/pingcap/tiflow/cdc/model"
+	"github.com/pingcap/tiflow/cdc/processor/tablepb"
 	"github.com/pingcap/tiflow/cdc/sinkv2/eventsink"
 	"github.com/pingcap/tiflow/cdc/sinkv2/tablesink/state"
 	"github.com/prometheus/client_golang/prometheus"
@@ -36,8 +37,7 @@ var (
 // EventTableSink is a table sink that can write events.
 type EventTableSink[E eventsink.TableEvent] struct {
 	changefeedID    model.ChangeFeedID
-	tableID         model.TableID
-	eventID         uint64
+	span            tablepb.Span
 	maxResolvedTs   model.ResolvedTs
 	backendSink     eventsink.EventSink[E]
 	progressTracker *progressTracker
@@ -53,18 +53,17 @@ type EventTableSink[E eventsink.TableEvent] struct {
 // New an eventTableSink with given backendSink and event appender.
 func New[E eventsink.TableEvent](
 	changefeedID model.ChangeFeedID,
-	tableID model.TableID,
+	span tablepb.Span,
 	backendSink eventsink.EventSink[E],
 	appender eventsink.Appender[E],
 	totalRowsCounter prometheus.Counter,
 ) *EventTableSink[E] {
 	return &EventTableSink[E]{
 		changefeedID:              changefeedID,
-		tableID:                   tableID,
-		eventID:                   0,
+		span:                      span,
 		maxResolvedTs:             model.NewResolvedTs(0),
 		backendSink:               backendSink,
-		progressTracker:           newProgressTracker(tableID, defaultBufferSize),
+		progressTracker:           newProgressTracker(span, defaultBufferSize),
 		eventAppender:             appender,
 		eventBuffer:               make([]E, 0, 1024),
 		state:                     state.TableSinkSinking,
@@ -130,7 +129,7 @@ func (e *EventTableSink[E]) Close(ctx context.Context) {
 		log.Warn(fmt.Sprintf("Table sink is already %s", currentState.String()),
 			zap.String("namespace", e.changefeedID.Namespace),
 			zap.String("changefeed", e.changefeedID.ID),
-			zap.Uint64("tableID", uint64(e.tableID)))
+			zap.Stringer("span", &e.span))
 		return
 	}
 
@@ -146,7 +145,7 @@ func (e *EventTableSink[E]) Close(ctx context.Context) {
 	log.Info("Stopping table sink",
 		zap.String("namespace", e.changefeedID.Namespace),
 		zap.String("changefeed", e.changefeedID.ID),
-		zap.Int64("tableID", e.tableID),
+		zap.Stringer("span", &e.span),
 		zap.Uint64("checkpointTs", stoppingCheckpointTs.Ts))
 	e.progressTracker.close(ctx)
 	e.state.Store(state.TableSinkStopped)
@@ -154,7 +153,7 @@ func (e *EventTableSink[E]) Close(ctx context.Context) {
 	log.Info("Table sink stopped",
 		zap.String("namespace", e.changefeedID.Namespace),
 		zap.String("changefeed", e.changefeedID.ID),
-		zap.Int64("tableID", e.tableID),
+		zap.Stringer("span", &e.span),
 		zap.Uint64("checkpointTs", stoppedCheckpointTs.Ts),
 		zap.Duration("duration", time.Since(start)))
 }

@@ -18,16 +18,15 @@ import (
 	"net/url"
 	"time"
 
-	"github.com/Shopify/sarama"
 	"github.com/pingcap/errors"
 	"github.com/pingcap/log"
-	"github.com/pingcap/tiflow/cdc/sink/mq/dispatcher"
-	"github.com/pingcap/tiflow/cdc/sink/mq/producer/kafka"
+	"github.com/pingcap/tiflow/cdc/contextutil"
 	"github.com/pingcap/tiflow/cdc/sinkv2/ddlsink/mq/ddlproducer"
+	"github.com/pingcap/tiflow/cdc/sinkv2/eventsink/mq/dispatcher"
 	"github.com/pingcap/tiflow/cdc/sinkv2/util"
 	"github.com/pingcap/tiflow/pkg/config"
 	cerror "github.com/pingcap/tiflow/pkg/errors"
-	pkafka "github.com/pingcap/tiflow/pkg/sink/kafka"
+	"github.com/pingcap/tiflow/pkg/sink/kafka"
 	"go.uber.org/zap"
 )
 
@@ -36,7 +35,7 @@ func NewKafkaDDLSink(
 	ctx context.Context,
 	sinkURI *url.URL,
 	replicaConfig *config.ReplicaConfig,
-	adminClientCreator pkafka.ClusterAdminClientCreator,
+	factoryCreator kafka.FactoryCreator,
 	producerCreator ddlproducer.Factory,
 ) (_ *ddlSink, err error) {
 	topic, err := util.GetTopic(sinkURI)
@@ -44,32 +43,28 @@ func NewKafkaDDLSink(
 		return nil, errors.Trace(err)
 	}
 
-	baseConfig := kafka.NewConfig()
-	if err := baseConfig.Apply(sinkURI); err != nil {
+	options := kafka.NewOptions()
+	if err := options.Apply(sinkURI); err != nil {
 		return nil, cerror.WrapError(cerror.ErrKafkaInvalidConfig, err)
 	}
-	saramaConfig, err := kafka.NewSaramaConfig(ctx, baseConfig)
+
+	changefeed := contextutil.ChangefeedIDFromCtx(ctx)
+	factory, err := factoryCreator(ctx, options, changefeed)
 	if err != nil {
-		return nil, errors.Trace(err)
+		return nil, cerror.WrapError(cerror.ErrKafkaNewProducer, err)
 	}
 
-	adminClient, err := adminClientCreator(baseConfig.BrokerEndpoints, saramaConfig)
-	if err != nil {
-		return nil, cerror.WrapError(cerror.ErrKafkaNewSaramaProducer, err)
-	}
+	adminClient, err := factory.AdminClient()
 	// We must close adminClient when this func return cause by an error
 	// otherwise the adminClient will never be closed and lead to a goroutine leak.
 	defer func() {
 		if err != nil {
-			if closeErr := adminClient.Close(); closeErr != nil {
-				log.Error("Close admin client failed in kafka "+
-					"DDL sink", zap.Error(closeErr))
-			}
+			adminClient.Close()
 		}
 	}()
 
-	if err := kafka.AdjustConfig(adminClient, baseConfig, saramaConfig, topic); err != nil {
-		return nil, cerror.WrapError(cerror.ErrKafkaNewSaramaProducer, err)
+	if err := kafka.AdjustOptions(ctx, adminClient, options, topic); err != nil {
+		return nil, cerror.WrapError(cerror.ErrKafkaNewProducer, err)
 	}
 
 	protocol, err := util.GetProtocol(replicaConfig.Sink.Protocol)
@@ -77,18 +72,13 @@ func NewKafkaDDLSink(
 		return nil, errors.Trace(err)
 	}
 
-	client, err := sarama.NewClient(baseConfig.BrokerEndpoints, saramaConfig)
-	if err != nil {
-		return nil, cerror.WrapError(cerror.ErrKafkaNewSaramaProducer, err)
-	}
-
 	start := time.Now()
 	log.Info("Try to create a DDL sink producer",
-		zap.Any("baseConfig", baseConfig))
-	p, err := producerCreator(ctx, client, adminClient)
+		zap.Any("options", options))
+	p, err := producerCreator(ctx, factory, adminClient)
 	log.Info("DDL sink producer client created", zap.Duration("duration", time.Since(start)))
 	if err != nil {
-		return nil, cerror.WrapError(cerror.ErrKafkaNewSaramaProducer, err)
+		return nil, cerror.WrapError(cerror.ErrKafkaNewProducer, err)
 	}
 	// Preventing leaks when error occurs.
 	// This also closes the client in p.Close().
@@ -99,9 +89,9 @@ func NewKafkaDDLSink(
 	}()
 
 	topicManager, err := util.GetTopicManagerAndTryCreateTopic(
+		ctx,
 		topic,
-		baseConfig.DeriveTopicConfig(),
-		client,
+		options.DeriveTopicConfig(),
 		adminClient,
 	)
 	if err != nil {
@@ -114,12 +104,12 @@ func NewKafkaDDLSink(
 	}
 
 	encoderConfig, err := util.GetEncoderConfig(sinkURI, protocol, replicaConfig,
-		saramaConfig.Producer.MaxMessageBytes)
+		options.MaxMessageBytes)
 	if err != nil {
 		return nil, errors.Trace(err)
 	}
 
-	s, err := newDDLSink(ctx, p, topicManager, eventRouter, encoderConfig)
+	s, err := newDDLSink(ctx, p, adminClient, topicManager, eventRouter, encoderConfig)
 	if err != nil {
 		return nil, errors.Trace(err)
 	}

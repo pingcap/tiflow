@@ -30,6 +30,7 @@ import (
 	resManager "github.com/pingcap/tiflow/engine/pkg/externalresource/manager"
 	jobMock "github.com/pingcap/tiflow/engine/pkg/httputil/mock"
 	"github.com/pingcap/tiflow/engine/pkg/notifier"
+	"github.com/pingcap/tiflow/engine/pkg/openapi"
 	pkgOrm "github.com/pingcap/tiflow/engine/pkg/orm"
 	"github.com/pingcap/tiflow/engine/servermaster/jobop"
 	jobopMock "github.com/pingcap/tiflow/engine/servermaster/jobop/mock"
@@ -89,8 +90,6 @@ func TestJobManagerCreateJob(t *testing.T) {
 		},
 	}
 	job, err := mgr.CreateJob(ctx, req)
-	require.NoError(t, err)
-	err = mockMaster.Poll(ctx)
 	require.NoError(t, err)
 
 	require.Eventually(t, func() bool {
@@ -483,7 +482,7 @@ func TestGetJobDetailFromJobMaster(t *testing.T) {
 		Type: frameModel.FakeJobMaster,
 		// set state to running
 		State:    frameModel.MasterStateInit,
-		Addr:     "1.1.1.1:1",
+		Addr:     "127.0.0.1:10340",
 		ErrorMsg: "error_message",
 	}
 
@@ -498,7 +497,7 @@ func TestGetJobDetailFromJobMaster(t *testing.T) {
 	})
 	require.NoError(t, err)
 
-	mockJobClient.EXPECT().GetJobDetail(ctx, "1.1.1.1:1", "new-job").Return([]byte("detail test"), nil).Times(1)
+	mockJobClient.EXPECT().GetJobDetail(ctx, "127.0.0.1:10340", "new-job").Return([]byte("detail test"), nil).Times(1)
 	job, err := mgr.GetJob(ctx, &pb.GetJobRequest{Id: "new-job"})
 	require.NoError(t, err)
 	require.True(t, proto.Equal(&pb.Job{
@@ -511,18 +510,24 @@ func TestGetJobDetailFromJobMaster(t *testing.T) {
 		},
 	}, job))
 
-	// test return 404
+	// get job detail failed
 	err = mgr.frameMetaClient.UpsertJob(ctx, &frameModel.MasterMeta{
 		ID:   "new-job",
 		Type: frameModel.FakeJobMaster,
 		// set status code to running state
 		State:    frameModel.MasterStateInit,
-		Addr:     "1.1.1.1:1",
+		Addr:     "127.0.0.1:10340",
 		ErrorMsg: "error_message",
 	})
 	require.NoError(t, err)
 
-	mockJobClient.EXPECT().GetJobDetail(ctx, "1.1.1.1:1", "new-job").Return(nil, nil).Times(1)
+	mockJobClient.EXPECT().
+		GetJobDetail(ctx, "127.0.0.1:10340", "new-job").
+		Return(nil, &openapi.HTTPError{
+			Code:    string(errors.ErrJobNotRunning.RFCCode()),
+			Message: "job new-job is not running",
+		}).
+		Times(1)
 	job, err = mgr.GetJob(ctx, &pb.GetJobRequest{Id: "new-job"})
 	require.NoError(t, err)
 	require.True(t, proto.Equal(&pb.Job{
@@ -530,30 +535,8 @@ func TestGetJobDetailFromJobMaster(t *testing.T) {
 		Type:  pb.Job_FakeJob,
 		State: pb.Job_Running,
 		Error: &pb.Job_Error{
-			Message: "error_message",
-		},
-	}, job))
-
-	// test wrong url
-	err = mgr.frameMetaClient.UpsertJob(ctx, &frameModel.MasterMeta{
-		ID:   "new-job",
-		Type: frameModel.FakeJobMaster,
-		// set status code to running state
-		State:    frameModel.MasterStateInit,
-		Addr:     "123.123.12.1:234",
-		ErrorMsg: "error_message",
-	})
-	require.NoError(t, err)
-
-	mockJobClient.EXPECT().GetJobDetail(ctx, "123.123.12.1:234", "new-job").Return(nil, errors.New("error test")).Times(1)
-	job, err = mgr.GetJob(ctx, &pb.GetJobRequest{Id: "new-job"})
-	require.NoError(t, err)
-	require.True(t, proto.Equal(&pb.Job{
-		Id:    "new-job",
-		Type:  pb.Job_FakeJob,
-		State: pb.Job_Running,
-		Error: &pb.Job_Error{
-			Message: "error test",
+			Code:    "DFLOW:ErrJobNotRunning",
+			Message: "job new-job is not running",
 		},
 	}, job))
 }

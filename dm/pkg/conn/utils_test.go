@@ -32,7 +32,7 @@ func TestGetBinlogDB(t *testing.T) {
 
 	db, mock, err := sqlmock.New()
 	require.NoError(t, err)
-	baseDB := NewBaseDB(db)
+	baseDB := NewBaseDBForTest(db)
 
 	// 5 columns for MySQL
 	rows := mock.NewRows([]string{"File", "Position", "Binlog_Do_DB", "Binlog_Ignore_DB", "Executed_Gtid_Set"}).AddRow(
@@ -67,12 +67,12 @@ func TestGetMasterStatus(t *testing.T) {
 
 	db, mock, err := sqlmock.New()
 	require.NoError(t, err)
-	baseDB := NewBaseDB(db)
+	baseDB := NewBaseDBForTest(db)
 
 	cases := []struct {
 		rows           *sqlmock.Rows
 		binlogName     string
-		pos            uint32
+		pos            uint64
 		binlogDoDB     string
 		binlogIgnoreDB string
 		gtidStr        string
@@ -91,6 +91,18 @@ func TestGetMasterStatus(t *testing.T) {
 			nil,
 			gmysql.MySQLFlavor,
 		},
+		// test unit64 position for MySQL
+		{
+			sqlmock.NewRows([]string{"File", "Position", "Binlog_Do_DB", "Binlog_Ignore_DB", "Executed_Gtid_Set"}).
+				AddRow("ON.000002", 429496729500, "", "", "85ab69d1-b21f-11e6-9c5e-64006a8978d2:1-500"),
+			"ON.000002",
+			429496729500,
+			"",
+			"",
+			"85ab69d1-b21f-11e6-9c5e-64006a8978d2:1-500",
+			nil,
+			gmysql.MySQLFlavor,
+		},
 		// For MariaDB
 		{
 			sqlmock.NewRows([]string{"File", "Position", "Binlog_Do_DB", "Binlog_Ignore_DB"}).
@@ -104,7 +116,6 @@ func TestGetMasterStatus(t *testing.T) {
 			gmysql.MariaDBFlavor,
 		},
 	}
-
 	for _, ca := range cases {
 		mock.ExpectQuery("SHOW MASTER STATUS").WillReturnRows(ca.rows)
 		// For MariaDB
@@ -115,6 +126,7 @@ func TestGetMasterStatus(t *testing.T) {
 			)
 		}
 		binlogName, pos, binlogDoDB, binlogIgnoreDB, gtidStr, err := GetMasterStatus(tctx, baseDB, ca.flavor)
+		require.IsType(t, uint64(0), pos)
 		require.NoError(t, err)
 		require.Equal(t, ca.binlogName, binlogName)
 		require.Equal(t, ca.pos, pos)

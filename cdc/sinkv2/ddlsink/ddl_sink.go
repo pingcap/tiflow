@@ -29,5 +29,5 @@ type DDLEventSink interface {
 	// This only for MQSink for now.
 	WriteCheckpointTs(ctx context.Context, ts uint64, tables []*model.TableInfo) error
 	// Close closes the sink.
-	Close() error
+	Close()
 }

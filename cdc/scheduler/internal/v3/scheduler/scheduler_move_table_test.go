@@ -17,8 +17,10 @@ import (
 	"testing"
 
 	"github.com/pingcap/tiflow/cdc/model"
+	"github.com/pingcap/tiflow/cdc/processor/tablepb"
 	"github.com/pingcap/tiflow/cdc/scheduler/internal/v3/member"
 	"github.com/pingcap/tiflow/cdc/scheduler/internal/v3/replication"
+	"github.com/pingcap/tiflow/pkg/spanz"
 	"github.com/stretchr/testify/require"
 )
 
@@ -31,11 +33,11 @@ func TestSchedulerMoveTable(t *testing.T) {
 	}, "b": {
 		State: member.CaptureStateInitialized,
 	}}
-	currentTables := []model.TableID{1, 2, 3, 4}
+	currentTables := spanz.ArrayToSpan([]model.TableID{1, 2, 3, 4})
 
-	replications := map[model.TableID]*replication.ReplicationSet{
+	replications := mapToSpanMap(map[model.TableID]*replication.ReplicationSet{
 		1: {State: replication.ReplicationSetStateReplicating, Primary: "a"},
-	}
+	})
 
 	scheduler := newMoveTableScheduler(model.ChangeFeedID{})
 	require.Equal(t, "move-table-scheduler", scheduler.Name())
@@ -44,44 +46,44 @@ func TestSchedulerMoveTable(t *testing.T) {
 		checkpointTs, currentTables, map[model.CaptureID]*member.CaptureStatus{}, replications)
 	require.Len(t, tasks, 0)
 
-	scheduler.addTask(model.TableID(0), "a")
+	scheduler.addTask(tablepb.Span{TableID: 0}, "a")
 	tasks = scheduler.Schedule(
 		checkpointTs, currentTables, map[model.CaptureID]*member.CaptureStatus{}, replications)
 	require.Len(t, tasks, 0)
 
 	// move a not exist table
-	scheduler.addTask(model.TableID(0), "a")
+	scheduler.addTask(tablepb.Span{TableID: 0}, "a")
 	tasks = scheduler.Schedule(checkpointTs, currentTables, captures, replications)
 	require.Len(t, tasks, 0)
 
 	// move table to a not exist capture
-	scheduler.addTask(model.TableID(1), "c")
+	scheduler.addTask(tablepb.Span{TableID: 1}, "c")
 	tasks = scheduler.Schedule(checkpointTs, currentTables, captures, replications)
 	require.Len(t, tasks, 0)
 
 	// move table not replicating
-	scheduler.addTask(model.TableID(1), "b")
+	scheduler.addTask(tablepb.Span{TableID: 1}, "b")
 	tasks = scheduler.Schedule(
-		checkpointTs, currentTables, captures, map[model.TableID]*replication.ReplicationSet{})
+		checkpointTs, currentTables, captures, spanz.NewBtreeMap[*replication.ReplicationSet]())
 	require.Len(t, tasks, 0)
 
-	scheduler.addTask(model.TableID(1), "b")
-	replications[model.TableID(1)].State = replication.ReplicationSetStatePrepare
+	scheduler.addTask(tablepb.Span{TableID: 1}, "b")
+	replications.GetV(tablepb.Span{TableID: 1}).State = replication.ReplicationSetStatePrepare
 	tasks = scheduler.Schedule(checkpointTs, currentTables, captures, replications)
 	require.Len(t, tasks, 0)
 
-	scheduler.addTask(model.TableID(1), "b")
-	replications[model.TableID(1)].State = replication.ReplicationSetStateReplicating
+	scheduler.addTask(tablepb.Span{TableID: 1}, "b")
+	replications.GetV(tablepb.Span{TableID: 1}).State = replication.ReplicationSetStateReplicating
 	tasks = scheduler.Schedule(checkpointTs, currentTables, captures, replications)
 	require.Len(t, tasks, 1)
-	require.Equal(t, model.TableID(1), tasks[0].MoveTable.TableID)
+	require.Equal(t, model.TableID(1), tasks[0].MoveTable.Span.TableID)
 	require.Equal(t, "b", tasks[0].MoveTable.DestCapture)
-	require.Equal(t, scheduler.tasks[model.TableID(1)], tasks[0])
+	require.Equal(t, scheduler.tasks.GetV(tablepb.Span{TableID: 1}), tasks[0])
 
 	// the target capture is stopping
-	scheduler.addTask(model.TableID(1), "b")
+	scheduler.addTask(tablepb.Span{TableID: 1}, "b")
 	captures["b"].State = member.CaptureStateStopping
 	tasks = scheduler.Schedule(checkpointTs, currentTables, captures, replications)
 	require.Len(t, tasks, 0)
-	require.NotContains(t, scheduler.tasks, model.TableID(1))
+	require.False(t, scheduler.tasks.Has(tablepb.Span{TableID: 1}))
 }

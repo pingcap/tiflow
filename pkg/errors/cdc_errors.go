@@ -240,9 +240,14 @@ var (
 		"invalid partition num %d",
 		errors.RFCCodeText("CDC:ErrKafkaInvalidPartitionNum"),
 	)
-	ErrKafkaNewSaramaProducer = errors.Normalize(
-		"new sarama producer",
-		errors.RFCCodeText("CDC:ErrKafkaNewSaramaProducer"),
+	ErrKafkaInvalidRequiredAcks = errors.Normalize(
+		"invalid required acks %d, "+
+			"only support these values: 0(NoResponse),1(WaitForLocal) and -1(WaitForAll)",
+		errors.RFCCodeText("CDC:ErrKafkaInvalidRequiredAcks"),
+	)
+	ErrKafkaNewProducer = errors.Normalize(
+		"new kafka producer",
+		errors.RFCCodeText("CDC:ErrKafkaNewProducer"),
 	)
 	ErrKafkaInvalidClientID = errors.Normalize(
 		"invalid kafka client ID '%s'",
@@ -299,13 +304,13 @@ var (
 		"rawData size %d exceeds maximum file size %d",
 		errors.RFCCodeText("CDC:ErrFileSizeExceed"),
 	)
-	ErrS3StorageAPI = errors.Normalize(
-		"s3 storage api",
+	ErrExternalStorageAPI = errors.Normalize(
+		"external storage api",
 		errors.RFCCodeText("CDC:ErrS3StorageAPI"),
 	)
-	ErrS3StorageInitialize = errors.Normalize(
-		"new s3 storage for redo log",
-		errors.RFCCodeText("CDC:ErrS3StorageInitialize"),
+	ErrStorageInitialize = errors.Normalize(
+		"fail to open storage for redo log",
+		errors.RFCCodeText("CDC:ErrStorageInitialize"),
 	)
 	ErrCodecInvalidConfig = errors.Normalize(
 		"Codec invalid config",
@@ -318,6 +323,11 @@ var (
 	ErrSinkURIInvalid = errors.Normalize(
 		"sink uri invalid '%s'",
 		errors.RFCCodeText("CDC:ErrSinkURIInvalid"),
+	)
+	ErrIncompatibleSinkConfig = errors.Normalize(
+		"incompatible configuration in sink uri(%s) and config file(%s), "+
+			"please try to update the configuration only through sink uri",
+		errors.RFCCodeText("CDC:ErrIncompatibleSinkConfig"),
 	)
 	ErrSinkUnknownProtocol = errors.Normalize(
 		"unknown '%s' message protocol for sink",

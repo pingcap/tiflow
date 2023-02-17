@@ -20,6 +20,7 @@ import (
 	"net"
 	"net/url"
 	"strconv"
+	"strings"
 	"sync"
 	"sync/atomic"
 
@@ -27,7 +28,7 @@ import (
 	"github.com/pingcap/errors"
 	"github.com/pingcap/failpoint"
 	"github.com/pingcap/tidb/util"
-	"github.com/pingcap/tiflow/dm/config"
+	"github.com/pingcap/tiflow/dm/config/dbconfig"
 	tcontext "github.com/pingcap/tiflow/dm/pkg/context"
 	"github.com/pingcap/tiflow/dm/pkg/log"
 	"github.com/pingcap/tiflow/dm/pkg/retry"
@@ -38,11 +39,11 @@ import (
 
 var customID int64
 
-var netTimeout = utils.DefaultDBTimeout
+var netTimeout = DefaultDBTimeout
 
 // DBProvider providers BaseDB instance.
 type DBProvider interface {
-	Apply(config *config.DBConfig) (*BaseDB, error)
+	Apply(config ScopedDBConfig) (*BaseDB, error)
 }
 
 // DefaultDBProviderImpl is default DBProvider implement.
@@ -55,8 +56,35 @@ func init() {
 	DefaultDBProvider = &DefaultDBProviderImpl{}
 }
 
+type ScopedDBConfig struct {
+	*dbconfig.DBConfig
+	Scope terror.ErrScope
+}
+
+func UpstreamDBConfig(cfg *dbconfig.DBConfig) ScopedDBConfig {
+	return ScopedDBConfig{
+		DBConfig: cfg,
+		Scope:    terror.ScopeUpstream,
+	}
+}
+
+func DownstreamDBConfig(cfg *dbconfig.DBConfig) ScopedDBConfig {
+	return ScopedDBConfig{
+		DBConfig: cfg,
+		Scope:    terror.ScopeDownstream,
+	}
+}
+
+func GetUpstreamDB(cfg *dbconfig.DBConfig) (*BaseDB, error) {
+	return DefaultDBProvider.Apply(UpstreamDBConfig(cfg))
+}
+
+func GetDownstreamDB(cfg *dbconfig.DBConfig) (*BaseDB, error) {
+	return DefaultDBProvider.Apply(DownstreamDBConfig(cfg))
+}
+
 // Apply will build BaseDB with DBConfig.
-func (d *DefaultDBProviderImpl) Apply(config *config.DBConfig) (*BaseDB, error) {
+func (d *DefaultDBProviderImpl) Apply(config ScopedDBConfig) (*BaseDB, error) {
 	// maxAllowedPacket=0 can be used to automatically fetch the max_allowed_packet variable from server on every connection.
 	// https://github.com/go-sql-driver/mysql#maxallowedpacket
 	hostPort := net.JoinHostPort(config.Host, strconv.Itoa(config.Port))
@@ -107,16 +135,24 @@ func (d *DefaultDBProviderImpl) Apply(config *config.DBConfig) (*BaseDB, error) 
 		maxIdleConns = rawCfg.MaxIdleConns
 	}
 
+	var setFK bool
 	for key, val := range config.Session {
 		// for num such as 1/"1", format as key='1'
 		// for string, format as key='string'
 		// both are valid for mysql and tidb
+		if strings.ToLower(key) == "foreign_key_checks" {
+			setFK = true
+		}
 		dsn += fmt.Sprintf("&%s='%s'", key, url.QueryEscape(val))
+	}
+
+	if !setFK {
+		dsn += "&foreign_key_checks=0"
 	}
 
 	db, err := sql.Open("mysql", dsn)
 	if err != nil {
-		return nil, terror.DBErrorAdapt(err, terror.ErrDBDriverError)
+		return nil, terror.DBErrorAdapt(err, config.Scope, terror.ErrDBDriverError)
 	}
 
 	ctx, cancel := context.WithTimeout(context.Background(), netTimeout)
@@ -128,12 +164,12 @@ func (d *DefaultDBProviderImpl) Apply(config *config.DBConfig) (*BaseDB, error) 
 	if err != nil {
 		db.Close()
 		doFuncInClose()
-		return nil, terror.DBErrorAdapt(err, terror.ErrDBDriverError)
+		return nil, terror.DBErrorAdapt(err, config.Scope, terror.ErrDBDriverError)
 	}
 
 	db.SetMaxIdleConns(maxIdleConns)
 
-	return NewBaseDB(db, doFuncInClose), nil
+	return NewBaseDB(db, config.Scope, doFuncInClose), nil
 }
 
 // BaseDB wraps *sql.DB, control the BaseConn.
@@ -146,14 +182,43 @@ type BaseDB struct {
 
 	Retry retry.Strategy
 
+	Scope terror.ErrScope
 	// this function will do when close the BaseDB
 	doFuncInClose []func()
+
+	// only use in unit test
+	doNotClose bool
 }
 
-// NewBaseDB returns *BaseDB object.
-func NewBaseDB(db *sql.DB, doFuncInClose ...func()) *BaseDB {
+// NewBaseDB returns *BaseDB object for test.
+func NewBaseDB(db *sql.DB, scope terror.ErrScope, doFuncInClose ...func()) *BaseDB {
 	conns := make(map[*BaseConn]struct{})
-	return &BaseDB{DB: db, conns: conns, Retry: &retry.FiniteRetryStrategy{}, doFuncInClose: doFuncInClose}
+	return &BaseDB{
+		DB:            db,
+		conns:         conns,
+		Retry:         &retry.FiniteRetryStrategy{},
+		Scope:         scope,
+		doFuncInClose: doFuncInClose,
+	}
+}
+
+// NewBaseDBForTest returns *BaseDB object for test.
+func NewBaseDBForTest(db *sql.DB, doFuncInClose ...func()) *BaseDB {
+	conns := make(map[*BaseConn]struct{})
+	return &BaseDB{
+		DB:            db,
+		conns:         conns,
+		Retry:         &retry.FiniteRetryStrategy{},
+		Scope:         terror.ScopeNotSet,
+		doFuncInClose: doFuncInClose,
+	}
+}
+
+// NewMockDB returns *BaseDB object for mock.
+func NewMockDB(db *sql.DB, doFuncInClose ...func()) *BaseDB {
+	baseDB := NewBaseDBForTest(db, doFuncInClose...)
+	baseDB.doNotClose = true
+	return baseDB
 }
 
 // GetBaseConn retrieves *BaseConn which has own retryStrategy.
@@ -162,13 +227,13 @@ func (d *BaseDB) GetBaseConn(ctx context.Context) (*BaseConn, error) {
 	defer cancel()
 	conn, err := d.DB.Conn(ctx)
 	if err != nil {
-		return nil, terror.DBErrorAdapt(err, terror.ErrDBDriverError)
+		return nil, terror.DBErrorAdapt(err, d.Scope, terror.ErrDBDriverError)
 	}
 	err = conn.PingContext(ctx)
 	if err != nil {
-		return nil, terror.DBErrorAdapt(err, terror.ErrDBDriverError)
+		return nil, terror.DBErrorAdapt(err, d.Scope, terror.ErrDBDriverError)
 	}
-	baseConn := NewBaseConn(conn, d.Retry)
+	baseConn := NewBaseConn(conn, d.Scope, d.Retry)
 	d.mu.Lock()
 	defer d.mu.Unlock()
 	d.conns[baseConn] = struct{}{}
@@ -232,31 +297,49 @@ func (d *BaseDB) DoTxWithRetry(tctx *tcontext.Context, queries []string, args []
 	return err
 }
 
-// CloseBaseConn release BaseConn resource from BaseDB, and close BaseConn.
-func (d *BaseDB) CloseBaseConn(conn *BaseConn) error {
+// CloseConn release BaseConn resource from BaseDB, and returns the connection to the connection pool,
+// has the same meaning of sql.Conn.Close.
+func (d *BaseDB) CloseConn(conn *BaseConn) error {
 	d.mu.Lock()
 	defer d.mu.Unlock()
 	delete(d.conns, conn)
 	return conn.close()
 }
 
-// CloseBaseConnWithoutErr close the base connect and output a warn log if meets an error.
-func CloseBaseConnWithoutErr(d *BaseDB, conn *BaseConn) {
-	if err1 := d.CloseBaseConn(conn); err1 != nil {
+// CloseConnWithoutErr release BaseConn resource from BaseDB, and returns the connection to the connection pool,
+// has the same meaning of sql.Conn.Close, and log warning on error.
+func (d *BaseDB) CloseConnWithoutErr(conn *BaseConn) {
+	if err := d.CloseConn(conn); err != nil {
+		log.L().Warn("close db connection failed", zap.Error(err))
+	}
+}
+
+// ForceCloseConn release BaseConn resource from BaseDB, and close BaseConn completely(not return to the connection pool).
+func (d *BaseDB) ForceCloseConn(conn *BaseConn) error {
+	d.mu.Lock()
+	defer d.mu.Unlock()
+	delete(d.conns, conn)
+	return conn.forceClose()
+}
+
+// ForceCloseConnWithoutErr close the connection completely(not return to the conn pool),
+// and output a warning log if meets an error.
+func (d *BaseDB) ForceCloseConnWithoutErr(conn *BaseConn) {
+	if err1 := d.ForceCloseConn(conn); err1 != nil {
 		log.L().Warn("close db connection failed", zap.Error(err1))
 	}
 }
 
 // Close release *BaseDB resource.
 func (d *BaseDB) Close() error {
-	if d == nil || d.DB == nil {
+	if d == nil || d.DB == nil || d.doNotClose {
 		return nil
 	}
 	var err error
 	d.mu.Lock()
 	defer d.mu.Unlock()
 	for conn := range d.conns {
-		terr := conn.close()
+		terr := conn.forceClose()
 		if err == nil {
 			err = terr
 		}

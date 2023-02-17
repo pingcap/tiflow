@@ -14,16 +14,15 @@
 package util
 
 import (
+	"context"
 	"net/url"
 	"strings"
 
-	"github.com/Shopify/sarama"
-	"github.com/pingcap/tiflow/cdc/sink/codec/common"
-	"github.com/pingcap/tiflow/cdc/sink/mq/manager"
-	"github.com/pingcap/tiflow/cdc/sink/mq/producer/kafka"
+	"github.com/pingcap/tiflow/cdc/sinkv2/eventsink/mq/manager"
 	"github.com/pingcap/tiflow/pkg/config"
 	cerror "github.com/pingcap/tiflow/pkg/errors"
-	pkafka "github.com/pingcap/tiflow/pkg/sink/kafka"
+	"github.com/pingcap/tiflow/pkg/sink/codec/common"
+	"github.com/pingcap/tiflow/pkg/sink/kafka"
 )
 
 // GetTopic returns the topic name from the sink URI.
@@ -89,21 +88,21 @@ func GetEncoderConfig(
 
 // GetTopicManagerAndTryCreateTopic returns the topic manager and try to create the topic.
 func GetTopicManagerAndTryCreateTopic(
+	ctx context.Context,
 	topic string,
 	topicCfg *kafka.AutoCreateTopicConfig,
-	client sarama.Client,
-	adminClient pkafka.ClusterAdminClient,
+	adminClient kafka.ClusterAdminClient,
 ) (manager.TopicManager, error) {
 	topicManager, err := manager.NewKafkaTopicManager(
-		client,
+		ctx,
 		adminClient,
 		topicCfg,
 	)
 	if err != nil {
-		return nil, cerror.WrapError(cerror.ErrKafkaNewSaramaProducer, err)
+		return nil, cerror.WrapError(cerror.ErrKafkaNewProducer, err)
 	}
 
-	if _, err := topicManager.CreateTopicAndWaitUntilVisible(topic); err != nil {
+	if _, err := topicManager.CreateTopicAndWaitUntilVisible(ctx, topic); err != nil {
 		return nil, cerror.WrapError(cerror.ErrKafkaCreateTopic, err)
 	}
 

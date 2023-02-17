@@ -18,20 +18,30 @@ import (
 	"testing"
 
 	"github.com/pingcap/tiflow/cdc/model"
+	"github.com/pingcap/tiflow/cdc/processor/tablepb"
 	"github.com/pingcap/tiflow/cdc/scheduler/internal/v3/member"
 	"github.com/pingcap/tiflow/cdc/scheduler/internal/v3/replication"
+	"github.com/pingcap/tiflow/pkg/spanz"
 	"github.com/stretchr/testify/require"
 )
+
+func mapToSpanMap[T any](in map[model.TableID]T) *spanz.BtreeMap[T] {
+	out := spanz.NewBtreeMap[T]()
+	for tableID, v := range in {
+		out.ReplaceOrInsert(tablepb.Span{TableID: tableID}, v)
+	}
+	return out
+}
 
 func TestSchedulerBasic(t *testing.T) {
 	t.Parallel()
 
 	captures := map[model.CaptureID]*member.CaptureStatus{"a": {}, "b": {}}
-	currentTables := []model.TableID{1, 2, 3, 4}
+	currentTables := spanz.ArrayToSpan([]model.TableID{1, 2, 3, 4})
 
 	// Initial table dispatch.
 	// AddTable only
-	replications := map[model.TableID]*replication.ReplicationSet{}
+	replications := mapToSpanMap(map[model.TableID]*replication.ReplicationSet{})
 	b := newBasicScheduler(2, model.ChangeFeedID{})
 
 	// one capture stopping, another one is initialized
@@ -52,12 +62,12 @@ func TestSchedulerBasic(t *testing.T) {
 	tasks = b.Schedule(0, currentTables, captures, replications)
 	require.Len(t, tasks, 1)
 	require.Len(t, tasks[0].BurstBalance.AddTables, 2)
-	require.Equal(t, tasks[0].BurstBalance.AddTables[0].TableID, model.TableID(1))
-	require.Equal(t, tasks[0].BurstBalance.AddTables[1].TableID, model.TableID(2))
+	require.Equal(t, tasks[0].BurstBalance.AddTables[0].Span.TableID, model.TableID(1))
+	require.Equal(t, tasks[0].BurstBalance.AddTables[1].Span.TableID, model.TableID(2))
 
 	// Capture offline, causes replication.ReplicationSetStateAbsent.
 	// AddTable only.
-	replications = map[model.TableID]*replication.ReplicationSet{
+	replications = mapToSpanMap(map[model.TableID]*replication.ReplicationSet{
 		1: {
 			State: replication.ReplicationSetStateReplicating, Primary: "a",
 			Captures: map[string]replication.Role{
@@ -77,15 +87,15 @@ func TestSchedulerBasic(t *testing.T) {
 			},
 		},
 		4: {State: replication.ReplicationSetStateAbsent},
-	}
+	})
 	tasks = b.Schedule(1, currentTables, captures, replications)
 	require.Len(t, tasks, 1)
-	require.Equal(t, tasks[0].BurstBalance.AddTables[0].TableID, model.TableID(4))
+	require.Equal(t, tasks[0].BurstBalance.AddTables[0].Span.TableID, model.TableID(4))
 	require.Equal(t, tasks[0].BurstBalance.AddTables[0].CheckpointTs, model.Ts(1))
 
 	// DDL CREATE/DROP/TRUNCATE TABLE.
 	// AddTable 4, and RemoveTable 5.
-	replications = map[model.TableID]*replication.ReplicationSet{
+	replications = mapToSpanMap(map[model.TableID]*replication.ReplicationSet{
 		1: {
 			State: replication.ReplicationSetStateReplicating, Primary: "a",
 			Captures: map[string]replication.Role{
@@ -110,21 +120,21 @@ func TestSchedulerBasic(t *testing.T) {
 				"a": replication.RoleUndetermined, "b": replication.RoleSecondary,
 			},
 		},
-	}
+	})
 	tasks = b.Schedule(2, currentTables, captures, replications)
 	require.Len(t, tasks, 2)
 	if tasks[0].BurstBalance.AddTables != nil {
-		require.Equal(t, tasks[0].BurstBalance.AddTables[0].TableID, model.TableID(4))
+		require.Equal(t, tasks[0].BurstBalance.AddTables[0].Span.TableID, model.TableID(4))
 		require.Equal(t, tasks[0].BurstBalance.AddTables[0].CheckpointTs, model.Ts(2))
-		require.Equal(t, tasks[1].BurstBalance.RemoveTables[0].TableID, model.TableID(5))
+		require.Equal(t, tasks[1].BurstBalance.RemoveTables[0].Span.TableID, model.TableID(5))
 	} else {
-		require.Equal(t, tasks[1].BurstBalance.AddTables[0].TableID, model.TableID(4))
+		require.Equal(t, tasks[1].BurstBalance.AddTables[0].Span.TableID, model.TableID(4))
 		require.Equal(t, tasks[0].BurstBalance.AddTables[0].CheckpointTs, model.Ts(2))
-		require.Equal(t, tasks[0].BurstBalance.RemoveTables[0].TableID, model.TableID(5))
+		require.Equal(t, tasks[0].BurstBalance.RemoveTables[0].Span.TableID, model.TableID(5))
 	}
 
 	// RemoveTable only.
-	replications = map[model.TableID]*replication.ReplicationSet{
+	replications = mapToSpanMap(map[model.TableID]*replication.ReplicationSet{
 		1: {
 			State: replication.ReplicationSetStateReplicating, Primary: "a",
 			Captures: map[string]replication.Role{
@@ -155,10 +165,10 @@ func TestSchedulerBasic(t *testing.T) {
 				"b": replication.RoleUndetermined,
 			},
 		},
-	}
+	})
 	tasks = b.Schedule(3, currentTables, captures, replications)
 	require.Len(t, tasks, 1)
-	require.Equal(t, tasks[0].BurstBalance.RemoveTables[0].TableID, model.TableID(5))
+	require.Equal(t, tasks[0].BurstBalance.RemoveTables[0].Span.TableID, model.TableID(5))
 }
 
 func TestSchedulerPriority(t *testing.T) {
@@ -176,9 +186,9 @@ func benchmarkSchedulerBalance(
 	b *testing.B,
 	factory func(total int) (
 		name string,
-		currentTables []model.TableID,
+		currentTables []tablepb.Span,
 		captures map[model.CaptureID]*member.CaptureStatus,
-		replications map[model.TableID]*replication.ReplicationSet,
+		replications *spanz.BtreeMap[*replication.ReplicationSet],
 		sched scheduler,
 	),
 ) {
@@ -198,9 +208,9 @@ func benchmarkSchedulerBalance(
 func BenchmarkSchedulerBasicAddTables(b *testing.B) {
 	benchmarkSchedulerBalance(b, func(total int) (
 		name string,
-		currentTables []model.TableID,
+		currentTables []tablepb.Span,
 		captures map[model.CaptureID]*member.CaptureStatus,
-		replications map[model.TableID]*replication.ReplicationSet,
+		replications *spanz.BtreeMap[*replication.ReplicationSet],
 		sched scheduler,
 	) {
 		const captureCount = 8
@@ -208,11 +218,11 @@ func BenchmarkSchedulerBasicAddTables(b *testing.B) {
 		for i := 0; i < captureCount; i++ {
 			captures[fmt.Sprint(i)] = &member.CaptureStatus{}
 		}
-		currentTables = make([]model.TableID, 0, total)
+		currentTables = make([]tablepb.Span, 0, total)
 		for i := 0; i < total; i++ {
-			currentTables = append(currentTables, int64(10000+i))
+			currentTables = append(currentTables, tablepb.Span{TableID: int64(10000 + i)})
 		}
-		replications = map[model.TableID]*replication.ReplicationSet{}
+		replications = mapToSpanMap(map[model.TableID]*replication.ReplicationSet{})
 		name = fmt.Sprintf("AddTable %d", total)
 		sched = newBasicScheduler(50, model.ChangeFeedID{})
 		return name, currentTables, captures, replications, sched
@@ -222,9 +232,9 @@ func BenchmarkSchedulerBasicAddTables(b *testing.B) {
 func BenchmarkSchedulerBasicRemoveTables(b *testing.B) {
 	benchmarkSchedulerBalance(b, func(total int) (
 		name string,
-		currentTables []model.TableID,
+		currentTables []tablepb.Span,
 		captures map[model.CaptureID]*member.CaptureStatus,
-		replications map[model.TableID]*replication.ReplicationSet,
+		replications *spanz.BtreeMap[*replication.ReplicationSet],
 		sched scheduler,
 	) {
 		const captureCount = 8
@@ -232,12 +242,13 @@ func BenchmarkSchedulerBasicRemoveTables(b *testing.B) {
 		for i := 0; i < captureCount; i++ {
 			captures[fmt.Sprint(i)] = &member.CaptureStatus{}
 		}
-		currentTables = make([]model.TableID, 0, total)
-		replications = map[model.TableID]*replication.ReplicationSet{}
+		currentTables = make([]tablepb.Span, 0, total)
+		replications = mapToSpanMap(map[model.TableID]*replication.ReplicationSet{})
 		for i := 0; i < total; i++ {
-			replications[int64(10000+i)] = &replication.ReplicationSet{
-				Primary: fmt.Sprint(i % captureCount),
-			}
+			replications.ReplaceOrInsert(tablepb.Span{TableID: int64(10000 + i)},
+				&replication.ReplicationSet{
+					Primary: fmt.Sprint(i % captureCount),
+				})
 		}
 		name = fmt.Sprintf("RemoveTable %d", total)
 		sched = newBasicScheduler(50, model.ChangeFeedID{})
@@ -248,9 +259,9 @@ func BenchmarkSchedulerBasicRemoveTables(b *testing.B) {
 func BenchmarkSchedulerBasicAddRemoveTables(b *testing.B) {
 	benchmarkSchedulerBalance(b, func(total int) (
 		name string,
-		currentTables []model.TableID,
+		currentTables []tablepb.Span,
 		captures map[model.CaptureID]*member.CaptureStatus,
-		replications map[model.TableID]*replication.ReplicationSet,
+		replications *spanz.BtreeMap[*replication.ReplicationSet],
 		sched scheduler,
 	) {
 		const captureCount = 8
@@ -258,15 +269,16 @@ func BenchmarkSchedulerBasicAddRemoveTables(b *testing.B) {
 		for i := 0; i < captureCount; i++ {
 			captures[fmt.Sprint(i)] = &member.CaptureStatus{}
 		}
-		currentTables = make([]model.TableID, 0, total)
+		currentTables = make([]tablepb.Span, 0, total)
 		for i := 0; i < total/2; i++ {
-			currentTables = append(currentTables, int64(100000+i))
+			currentTables = append(currentTables, tablepb.Span{TableID: int64(100000 + i)})
 		}
-		replications = map[model.TableID]*replication.ReplicationSet{}
+		replications = mapToSpanMap(map[model.TableID]*replication.ReplicationSet{})
 		for i := 0; i < total/2; i++ {
-			replications[int64(200000+i)] = &replication.ReplicationSet{
-				Primary: fmt.Sprint(i % captureCount),
-			}
+			replications.ReplaceOrInsert(tablepb.Span{TableID: int64(200000 + i)},
+				&replication.ReplicationSet{
+					Primary: fmt.Sprint(i % captureCount),
+				})
 		}
 		name = fmt.Sprintf("AddRemoveTable %d", total)
 		sched = newBasicScheduler(50, model.ChangeFeedID{})

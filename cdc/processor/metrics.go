@@ -14,54 +14,12 @@
 package processor
 
 import (
-	"github.com/pingcap/tiflow/cdc/processor/pipeline"
+	"github.com/pingcap/tiflow/cdc/processor/memquota"
 	"github.com/pingcap/tiflow/cdc/processor/sinkmanager"
 	"github.com/prometheus/client_golang/prometheus"
 )
 
 var (
-	resolvedTsGauge = prometheus.NewGaugeVec(
-		prometheus.GaugeOpts{
-			Namespace: "ticdc",
-			Subsystem: "processor",
-			Name:      "resolved_ts",
-			Help:      "local resolved ts of processor",
-		}, []string{"namespace", "changefeed"})
-	resolvedTsLagGauge = prometheus.NewGaugeVec(
-		prometheus.GaugeOpts{
-			Namespace: "ticdc",
-			Subsystem: "processor",
-			Name:      "resolved_ts_lag",
-			Help:      "local resolved ts lag of processor",
-		}, []string{"namespace", "changefeed"})
-	resolvedTsMinTableIDGauge = prometheus.NewGaugeVec(
-		prometheus.GaugeOpts{
-			Namespace: "ticdc",
-			Subsystem: "processor",
-			Name:      "min_resolved_table_id",
-			Help:      "ID of the minimum resolved table",
-		}, []string{"namespace", "changefeed"})
-	checkpointTsGauge = prometheus.NewGaugeVec(
-		prometheus.GaugeOpts{
-			Namespace: "ticdc",
-			Subsystem: "processor",
-			Name:      "checkpoint_ts",
-			Help:      "global checkpoint ts of processor",
-		}, []string{"namespace", "changefeed"})
-	checkpointTsLagGauge = prometheus.NewGaugeVec(
-		prometheus.GaugeOpts{
-			Namespace: "ticdc",
-			Subsystem: "processor",
-			Name:      "checkpoint_ts_lag",
-			Help:      "global checkpoint ts lag of processor",
-		}, []string{"namespace", "changefeed"})
-	checkpointTsMinTableIDGauge = prometheus.NewGaugeVec(
-		prometheus.GaugeOpts{
-			Namespace: "ticdc",
-			Subsystem: "processor",
-			Name:      "min_checkpoint_table_id",
-			Help:      "ID of the minimum checkpoint table",
-		}, []string{"namespace", "changefeed"})
 	syncTableNumGauge = prometheus.NewGaugeVec(
 		prometheus.GaugeOpts{
 			Namespace: "ticdc",
@@ -99,16 +57,6 @@ var (
 			Help:      "Bucketed histogram of processorManager close processor time (s).",
 			Buckets:   prometheus.ExponentialBuckets(0.01 /* 10 ms */, 2, 18),
 		})
-
-	tableMemoryHistogram = prometheus.NewHistogramVec(
-		prometheus.HistogramOpts{
-			Namespace: "ticdc",
-			Subsystem: "processor",
-			Name:      "table_memory_consumption",
-			Help:      "each table's memory consumption after sorter, in bytes",
-			Buckets:   prometheus.ExponentialBuckets(256, 2.0, 20),
-		}, []string{"namespace", "changefeed"})
-
 	processorMemoryGauge = prometheus.NewGaugeVec(
 		prometheus.GaugeOpts{
 			Namespace: "ticdc",
@@ -116,7 +64,6 @@ var (
 			Name:      "memory_consumption",
 			Help:      "processor's memory consumption estimated in bytes",
 		}, []string{"namespace", "changefeed"})
-
 	remainKVEventsGauge = prometheus.NewGaugeVec(
 		prometheus.GaugeOpts{
 			Namespace: "ticdc",
@@ -128,20 +75,13 @@ var (
 
 // InitMetrics registers all metrics used in processor
 func InitMetrics(registry *prometheus.Registry) {
-	registry.MustRegister(resolvedTsGauge)
-	registry.MustRegister(resolvedTsLagGauge)
-	registry.MustRegister(resolvedTsMinTableIDGauge)
-	registry.MustRegister(checkpointTsGauge)
-	registry.MustRegister(checkpointTsLagGauge)
-	registry.MustRegister(checkpointTsMinTableIDGauge)
 	registry.MustRegister(syncTableNumGauge)
 	registry.MustRegister(processorErrorCounter)
 	registry.MustRegister(processorSchemaStorageGcTsGauge)
 	registry.MustRegister(processorTickDuration)
 	registry.MustRegister(processorCloseDuration)
-	registry.MustRegister(tableMemoryHistogram)
 	registry.MustRegister(processorMemoryGauge)
 	registry.MustRegister(remainKVEventsGauge)
-	pipeline.InitMetrics(registry)
 	sinkmanager.InitMetrics(registry)
+	memquota.InitMetrics(registry)
 }

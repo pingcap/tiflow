@@ -20,11 +20,11 @@ import (
 	"testing"
 
 	"github.com/DATA-DOG/go-sqlmock"
+	"github.com/go-sql-driver/mysql"
 	"github.com/phayes/freeport"
 	"github.com/pingcap/tiflow/cdc/model"
-	"github.com/pingcap/tiflow/cdc/redo"
 	"github.com/pingcap/tiflow/cdc/redo/reader"
-	"github.com/pingcap/tiflow/cdc/sink/mysql"
+	"github.com/pingcap/tiflow/cdc/sinkv2/eventsink/txn"
 	"github.com/stretchr/testify/require"
 )
 
@@ -32,16 +32,16 @@ import (
 type MockReader struct {
 	checkpointTs uint64
 	resolvedTs   uint64
-	redoLogCh    chan *model.RedoRowChangedEvent
-	ddlEventCh   chan *model.RedoDDLEvent
+	redoLogCh    chan *model.RowChangedEvent
+	ddlEventCh   chan *model.DDLEvent
 }
 
 // NewMockReader creates a new MockReader
 func NewMockReader(
 	checkpointTs uint64,
 	resolvedTs uint64,
-	redoLogCh chan *model.RedoRowChangedEvent,
-	ddlEventCh chan *model.RedoDDLEvent,
+	redoLogCh chan *model.RowChangedEvent,
+	ddlEventCh chan *model.DDLEvent,
 ) *MockReader {
 	return &MockReader{
 		checkpointTs: checkpointTs,
@@ -57,8 +57,8 @@ func (br *MockReader) ResetReader(ctx context.Context, startTs, endTs uint64) er
 }
 
 // ReadNextLog implements LogReader.ReadNextLog
-func (br *MockReader) ReadNextLog(ctx context.Context, maxNumberOfMessages uint64) ([]*model.RedoRowChangedEvent, error) {
-	cached := make([]*model.RedoRowChangedEvent, 0)
+func (br *MockReader) ReadNextLog(ctx context.Context, maxNumberOfMessages uint64) ([]*model.RowChangedEvent, error) {
+	cached := make([]*model.RowChangedEvent, 0)
 	for {
 		select {
 		case <-ctx.Done():
@@ -76,8 +76,8 @@ func (br *MockReader) ReadNextLog(ctx context.Context, maxNumberOfMessages uint6
 }
 
 // ReadNextDDL implements LogReader.ReadNextDDL
-func (br *MockReader) ReadNextDDL(ctx context.Context, maxNumberOfDDLs uint64) ([]*model.RedoDDLEvent, error) {
-	cached := make([]*model.RedoDDLEvent, 0)
+func (br *MockReader) ReadNextDDL(ctx context.Context, maxNumberOfDDLs uint64) ([]*model.DDLEvent, error) {
+	cached := make([]*model.DDLEvent, 0)
 	for {
 		select {
 		case <-ctx.Done():
@@ -110,8 +110,8 @@ func TestApplyDMLs(t *testing.T) {
 
 	checkpointTs := uint64(1000)
 	resolvedTs := uint64(2000)
-	redoLogCh := make(chan *model.RedoRowChangedEvent, 1024)
-	ddlEventCh := make(chan *model.RedoDDLEvent, 1024)
+	redoLogCh := make(chan *model.RowChangedEvent, 1024)
+	ddlEventCh := make(chan *model.DDLEvent, 1024)
 	createMockReader := func(ctx context.Context, cfg *RedoApplierConfig) (reader.RedoLogReader, error) {
 		return NewMockReader(checkpointTs, resolvedTs, redoLogCh, ddlEventCh), nil
 	}
@@ -145,6 +145,11 @@ func TestApplyDMLs(t *testing.T) {
 					sqlmock.NewRows(columns).
 						AddRow("tidb_placement_mode", "IGNORE"),
 				)
+			mock.ExpectQuery("show session variables like 'tidb_enable_external_ts_read';").
+				WillReturnRows(
+					sqlmock.NewRows(columns).
+						AddRow("tidb_enable_external_ts_read", "OFF"),
+				)
 			mock.ExpectQuery("select character_set_name from information_schema.character_sets " +
 				"where character_set_name = 'gbk';").WillReturnRows(
 				sqlmock.NewRows([]string{"character_set_name"}).AddRow("gbk"),
@@ -152,20 +157,27 @@ func TestApplyDMLs(t *testing.T) {
 			mock.ExpectClose()
 			return db, nil
 		}
+
 		// normal db
 		db, mock, err := sqlmock.New(sqlmock.QueryMatcherOption(sqlmock.QueryMatcherEqual))
 		require.Nil(t, err)
+		// Before we write data to downstream, we need to check whether the downstream is TiDB.
+		// So we mock a select tidb_version() query.
+		mock.ExpectQuery("select tidb_version()").WillReturnError(&mysql.MySQLError{
+			Number:  1305,
+			Message: "FUNCTION test.tidb_version does not exist",
+		})
 		mock.ExpectBegin()
-		mock.ExpectExec("REPLACE INTO `test`.`t1`(`a`,`b`) VALUES (?,?)").
+		mock.ExpectExec("REPLACE INTO `test`.`t1` (`a`,`b`) VALUES (?,?)").
 			WithArgs(1, "2").
 			WillReturnResult(sqlmock.NewResult(1, 1))
 		mock.ExpectCommit()
 
 		mock.ExpectBegin()
-		mock.ExpectExec("DELETE FROM `test`.`t1` WHERE `a` = ? LIMIT 1;").
-			WithArgs(1).
+		mock.ExpectExec("DELETE FROM `test`.`t1` WHERE (`a`,`b`) IN ((?,?))").
+			WithArgs(1, "2").
 			WillReturnResult(sqlmock.NewResult(1, 1))
-		mock.ExpectExec("REPLACE INTO `test`.`t1`(`a`,`b`) VALUES (?,?)").
+		mock.ExpectExec("REPLACE INTO `test`.`t1` (`a`,`b`) VALUES (?,?)").
 			WithArgs(2, "3").
 			WillReturnResult(sqlmock.NewResult(1, 1))
 		mock.ExpectCommit()
@@ -173,13 +185,13 @@ func TestApplyDMLs(t *testing.T) {
 		return db, nil
 	}
 
-	getDBConnBak := mysql.GetDBConnImpl
-	mysql.GetDBConnImpl = mockGetDBConn
+	getDBConnBak := txn.GetDBConnImpl
+	txn.GetDBConnImpl = mockGetDBConn
 	createRedoReaderBak := createRedoReader
 	createRedoReader = createMockReader
 	defer func() {
 		createRedoReader = createRedoReaderBak
-		mysql.GetDBConnImpl = getDBConnBak
+		txn.GetDBConnImpl = getDBConnBak
 	}()
 
 	dmls := []*model.RowChangedEvent{
@@ -228,7 +240,7 @@ func TestApplyDMLs(t *testing.T) {
 		},
 	}
 	for _, dml := range dmls {
-		redoLogCh <- redo.RowToRedo(dml)
+		redoLogCh <- dml
 	}
 	close(redoLogCh)
 	close(ddlEventCh)

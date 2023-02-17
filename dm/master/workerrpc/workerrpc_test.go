@@ -21,11 +21,11 @@ import (
 	"github.com/golang/mock/gomock"
 	. "github.com/pingcap/check"
 	"github.com/pingcap/errors"
-	"github.com/pingcap/tiflow/dm/config"
+	"github.com/pingcap/tiflow/dm/config/security"
 	"github.com/pingcap/tiflow/dm/pb"
 	"github.com/pingcap/tiflow/dm/pbmock"
 	"github.com/pingcap/tiflow/dm/pkg/terror"
-	"github.com/tikv/pd/pkg/tempurl"
+	"github.com/tikv/pd/pkg/utils/tempurl"
 )
 
 var _ = Suite(&testWorkerRPCSuite{})
@@ -47,7 +47,7 @@ func (t *testWorkerRPCSuite) TestGRPCClient(c *C) {
 	// get a random address for DM-worker
 	addr := tempurl.Alloc()[len("http://"):]
 	// NOTE: we don't wait for the gRPC connection establish now, in other words no need to wait for the DM-worker instance become online.
-	rpcCli, err := NewGRPCClient(addr, config.Security{})
+	rpcCli, err := NewGRPCClient(addr, security.Security{})
 	c.Assert(err, IsNil)
 
 	// replace the underlying DM-worker client.

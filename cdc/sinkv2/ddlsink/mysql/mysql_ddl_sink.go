@@ -148,35 +148,32 @@ func (m *mysqlDDLSink) execDDL(pctx context.Context, ddl *model.DDLEvent) error 
 	start := time.Now()
 	log.Info("Start exec DDL", zap.Any("DDL", ddl), zap.String("namespace", m.id.Namespace),
 		zap.String("changefeed", m.id.ID))
-	err := m.statistics.RecordDDLExecution(func() error {
-		tx, err := m.db.BeginTx(ctx, nil)
+	tx, err := m.db.BeginTx(ctx, nil)
+	if err != nil {
+		return err
+	}
+
+	if shouldSwitchDB {
+		_, err = tx.ExecContext(ctx, "USE "+quotes.QuoteName(ddl.TableInfo.TableName.Schema)+";")
 		if err != nil {
-			return err
-		}
-
-		if shouldSwitchDB {
-			_, err = tx.ExecContext(ctx, "USE "+quotes.QuoteName(ddl.TableInfo.TableName.Schema)+";")
-			if err != nil {
-				if rbErr := tx.Rollback(); rbErr != nil {
-					log.Error("Failed to rollback", zap.String("namespace", m.id.Namespace),
-						zap.String("changefeed", m.id.ID), zap.Error(err))
-				}
-				return err
-			}
-		}
-
-		if _, err = tx.ExecContext(ctx, ddl.Query); err != nil {
 			if rbErr := tx.Rollback(); rbErr != nil {
-				log.Error("Failed to rollback", zap.String("sql", ddl.Query),
-					zap.String("namespace", m.id.Namespace),
+				log.Error("Failed to rollback", zap.String("namespace", m.id.Namespace),
 					zap.String("changefeed", m.id.ID), zap.Error(err))
 			}
 			return err
 		}
+	}
 
-		return errors.Trace(tx.Commit())
-	})
-	if err != nil {
+	if _, err = tx.ExecContext(ctx, ddl.Query); err != nil {
+		if rbErr := tx.Rollback(); rbErr != nil {
+			log.Error("Failed to rollback", zap.String("sql", ddl.Query),
+				zap.String("namespace", m.id.Namespace),
+				zap.String("changefeed", m.id.ID), zap.Error(err))
+		}
+		return err
+	}
+
+	if err = tx.Commit(); err != nil {
 		log.Error("Failed to exec DDL", zap.String("sql", ddl.Query),
 			zap.Duration("duration", time.Since(start)),
 			zap.String("namespace", m.id.Namespace),
@@ -207,13 +204,16 @@ func (m *mysqlDDLSink) WriteCheckpointTs(_ context.Context, _ uint64, _ []*model
 }
 
 // Close closes the database connection.
-func (m *mysqlDDLSink) Close() error {
-	if err := m.db.Close(); err != nil {
-		return errors.Trace(err)
-	}
+func (m *mysqlDDLSink) Close() {
 	if m.statistics != nil {
 		m.statistics.Close()
 	}
-
-	return nil
+	if m.db != nil {
+		if err := m.db.Close(); err != nil {
+			log.Warn("MySQL ddl sink close db wit error",
+				zap.String("namespace", m.id.Namespace),
+				zap.String("changefeed", m.id.ID),
+				zap.Error(err))
+		}
+	}
 }

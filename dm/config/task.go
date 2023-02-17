@@ -30,9 +30,11 @@ import (
 	"github.com/dustin/go-humanize"
 	bf "github.com/pingcap/tidb-tools/pkg/binlog-filter"
 	"github.com/pingcap/tidb-tools/pkg/column-mapping"
+	"github.com/pingcap/tidb/br/pkg/lightning/config"
 	"github.com/pingcap/tidb/parser"
 	"github.com/pingcap/tidb/util/filter"
 	router "github.com/pingcap/tidb/util/table-router"
+	"github.com/pingcap/tiflow/dm/config/dbconfig"
 	"github.com/pingcap/tiflow/dm/pkg/log"
 	"github.com/pingcap/tiflow/dm/pkg/terror"
 	"github.com/pingcap/tiflow/dm/pkg/utils"
@@ -123,7 +125,7 @@ type Meta struct {
 }
 
 // Verify does verification on configs
-// NOTE: we can't decide to verify `binlog-name` or `binlog-gtid` until bound to a source (with `enable-gtid` set).
+// NOTE: we can't decide to verify `binlog-name` or `binlog-gtid` until being bound to a source (with `enable-gtid` set).
 func (m *Meta) Verify() error {
 	if m != nil && len(m.BinLogName) == 0 && len(m.BinLogGTID) == 0 {
 		return terror.ErrConfigMetaInvalid.Generate()
@@ -135,9 +137,10 @@ func (m *Meta) Verify() error {
 // MySQLInstance represents a sync config of a MySQL instance.
 type MySQLInstance struct {
 	// it represents a MySQL/MariaDB instance or a replica group
-	SourceID           string   `yaml:"source-id"`
-	Meta               *Meta    `yaml:"meta"`
-	FilterRules        []string `yaml:"filter-rules"`
+	SourceID    string   `yaml:"source-id"`
+	Meta        *Meta    `yaml:"meta"`
+	FilterRules []string `yaml:"filter-rules"`
+	// deprecated
 	ColumnMappingRules []string `yaml:"column-mapping-rules"`
 	RouteRules         []string `yaml:"route-rules"`
 	ExpressionFilters  []string `yaml:"expression-filters"`
@@ -241,13 +244,13 @@ const (
 	// LoadModeSQL means write data by sql statements, uses tidb-lightning tidb backend to load data.
 	// deprecated, use LoadModeLogical instead.
 	LoadModeSQL LoadMode = "sql"
-	// LoadModeLoader is the legacy sql mode, use loader to load data. this should be replaced by sql mode in new version.
-	// deprecated, loader will be removed in future.
-	LoadModeLoader = "loader"
+	// LoadModeLoader is the legacy sql mode, use loader to load data. this should be replaced by LoadModeLogical mode.
+	// deprecated, use LoadModeLogical instead.
+	LoadModeLoader LoadMode = "loader"
 	// LoadModeLogical means use tidb backend of lightning to load data, which uses SQL to load data.
-	LoadModeLogical = "logical"
+	LoadModeLogical LoadMode = "logical"
 	// LoadModePhysical means use local backend of lightning to load data, which ingest SST files to load data.
-	LoadModePhysical = "physical"
+	LoadModePhysical LoadMode = "physical"
 )
 
 // LogicalDuplicateResolveType defines the duplication resolution when meet duplicate rows for logical import.
@@ -272,17 +275,28 @@ const (
 	OnDuplicateManual PhysicalDuplicateResolveType = "manual"
 )
 
+// PhysicalChecksumType defines the configuration of checksum of physical import.
+type PhysicalChecksumType string
+
+const (
+	ChecksumRequired = "required"
+	ChecksumOptional = "optional"
+	ChecksumOff      = "off"
+)
+
 // LoaderConfig represents loader process unit's specific config.
 type LoaderConfig struct {
-	PoolSize   int      `yaml:"pool-size" toml:"pool-size" json:"pool-size"`
-	Dir        string   `yaml:"dir" toml:"dir" json:"dir"`
-	SQLMode    string   `yaml:"-" toml:"-" json:"-"` // wrote by dump unit (DM op) or jobmaster (DM in engine)
-	ImportMode LoadMode `yaml:"import-mode" toml:"import-mode" json:"import-mode"`
+	PoolSize           int      `yaml:"pool-size" toml:"pool-size" json:"pool-size"`
+	Dir                string   `yaml:"dir" toml:"dir" json:"dir"`
+	SortingDirPhysical string   `yaml:"sorting-dir-physical" toml:"sorting-dir-physical" json:"sorting-dir-physical"`
+	SQLMode            string   `yaml:"-" toml:"-" json:"-"` // wrote by dump unit (DM op) or jobmaster (DM in engine)
+	ImportMode         LoadMode `yaml:"import-mode" toml:"import-mode" json:"import-mode"`
 	// deprecated, use OnDuplicateLogical instead.
-	OnDuplicate        LogicalDuplicateResolveType `yaml:"on-duplicate" toml:"on-duplicate" json:"on-duplicate"`
-	OnDuplicateLogical LogicalDuplicateResolveType `yaml:"on-duplicate-logical" toml:"on-duplicate-logical" json:"on-duplicate-logical"`
-	// TODO: no effects now
+	OnDuplicate         LogicalDuplicateResolveType  `yaml:"on-duplicate" toml:"on-duplicate" json:"on-duplicate"`
+	OnDuplicateLogical  LogicalDuplicateResolveType  `yaml:"on-duplicate-logical" toml:"on-duplicate-logical" json:"on-duplicate-logical"`
 	OnDuplicatePhysical PhysicalDuplicateResolveType `yaml:"on-duplicate-physical" toml:"on-duplicate-physical" json:"on-duplicate-physical"`
+	DiskQuotaPhysical   config.ByteSize              `yaml:"disk-quota-physical" toml:"disk-quota-physical" json:"disk-quota-physical"`
+	ChecksumPhysical    PhysicalChecksumType         `yaml:"checksum-physical" toml:"checksum-physical" json:"checksum-physical"`
 }
 
 // DefaultLoaderConfig return default loader config for task.
@@ -312,7 +326,8 @@ func (m *LoaderConfig) adjust() error {
 	if m.ImportMode == "" {
 		m.ImportMode = LoadModeLogical
 	}
-	if strings.EqualFold(string(m.ImportMode), string(LoadModeSQL)) {
+	if strings.EqualFold(string(m.ImportMode), string(LoadModeSQL)) ||
+		strings.EqualFold(string(m.ImportMode), string(LoadModeLoader)) {
 		m.ImportMode = LoadModeLogical
 	}
 	m.ImportMode = LoadMode(strings.ToLower(string(m.ImportMode)))
@@ -347,6 +362,16 @@ func (m *LoaderConfig) adjust() error {
 	case OnDuplicateNone, OnDuplicateManual:
 	default:
 		return terror.ErrConfigInvalidPhysicalDuplicateResolution.Generate(m.OnDuplicatePhysical)
+	}
+
+	if m.ChecksumPhysical == "" {
+		m.ChecksumPhysical = ChecksumRequired
+	}
+	m.ChecksumPhysical = PhysicalChecksumType(strings.ToLower(string(m.ChecksumPhysical)))
+	switch m.ChecksumPhysical {
+	case ChecksumRequired, ChecksumOptional, ChecksumOff:
+	default:
+		return terror.ErrConfigInvalidPhysicalChecksum.Generate(m.ChecksumPhysical)
 	}
 
 	return nil
@@ -489,7 +514,7 @@ type TaskConfig struct {
 	// "strict" will add default collation as upstream, and downstream will occur error when downstream don't support
 	CollationCompatible string `yaml:"collation_compatible" toml:"collation_compatible" json:"collation_compatible"`
 
-	TargetDB *DBConfig `yaml:"target-database" toml:"target-database" json:"target-database"`
+	TargetDB *dbconfig.DBConfig `yaml:"target-database" toml:"target-database" json:"target-database"`
 
 	MySQLInstances []*MySQLInstance `yaml:"mysql-instances" toml:"mysql-instances" json:"mysql-instances"`
 
@@ -501,10 +526,11 @@ type TaskConfig struct {
 	// deprecated
 	OnlineDDLScheme string `yaml:"online-ddl-scheme" toml:"online-ddl-scheme" json:"online-ddl-scheme"`
 
-	Routes         map[string]*router.TableRule   `yaml:"routes" toml:"routes" json:"routes"`
-	Filters        map[string]*bf.BinlogEventRule `yaml:"filters" toml:"filters" json:"filters"`
-	ColumnMappings map[string]*column.Rule        `yaml:"column-mappings" toml:"column-mappings" json:"column-mappings"`
-	ExprFilter     map[string]*ExpressionFilter   `yaml:"expression-filter" toml:"expression-filter" json:"expression-filter"`
+	Routes  map[string]*router.TableRule   `yaml:"routes" toml:"routes" json:"routes"`
+	Filters map[string]*bf.BinlogEventRule `yaml:"filters" toml:"filters" json:"filters"`
+	// deprecated
+	ColumnMappings map[string]*column.Rule      `yaml:"column-mappings" toml:"column-mappings" json:"column-mappings"`
+	ExprFilter     map[string]*ExpressionFilter `yaml:"expression-filter" toml:"expression-filter" json:"expression-filter"`
 
 	// black-white-list is deprecated, use block-allow-list instead
 	BWList map[string]*filter.Rules `yaml:"black-white-list" toml:"black-white-list" json:"black-white-list"`
@@ -606,12 +632,11 @@ func (c *TaskConfig) RawDecode(data string) error {
 }
 
 // find unused items in config.
-var configRefPrefixes = []string{"RouteRules", "FilterRules", "ColumnMappingRules", "Mydumper", "Loader", "Syncer", "ExprFilter", "Validator"}
+var configRefPrefixes = []string{"RouteRules", "FilterRules", "Mydumper", "Loader", "Syncer", "ExprFilter", "Validator"}
 
 const (
 	routeRulesIdx = iota
 	filterRulesIdx
-	columnMappingIdx
 	mydumperIdx
 	loaderIdx
 	syncerIdx
@@ -642,6 +667,10 @@ func (c *TaskConfig) adjust() error {
 		return terror.ErrConfigShardModeNotSupport.Generate(c.ShardMode)
 	} else if c.ShardMode == "" && c.IsSharding {
 		c.ShardMode = ShardPessimistic // use the pessimistic mode as default for back compatible.
+	}
+
+	if len(c.ColumnMappings) > 0 {
+		return terror.ErrConfigColumnMappingDeprecated.Generate()
 	}
 
 	if c.CollationCompatible != "" && c.CollationCompatible != LooseCollationCompatible && c.CollationCompatible != StrictCollationCompatible {
@@ -754,12 +783,6 @@ func (c *TaskConfig) adjust() error {
 				return terror.ErrConfigFilterRuleNotFound.Generate(i, name)
 			}
 			globalConfigReferCount[configRefPrefixes[filterRulesIdx]+name]++
-		}
-		for _, name := range inst.ColumnMappingRules {
-			if _, ok := c.ColumnMappings[name]; !ok {
-				return terror.ErrConfigColumnMappingNotFound.Generate(i, name)
-			}
-			globalConfigReferCount[configRefPrefixes[columnMappingIdx]+name]++
 		}
 
 		// only when BAList is empty use BWList
@@ -913,11 +936,6 @@ func (c *TaskConfig) adjust() error {
 			unusedConfigs = append(unusedConfigs, filter)
 		}
 	}
-	for columnMapping := range c.ColumnMappings {
-		if globalConfigReferCount[configRefPrefixes[columnMappingIdx]+columnMapping] == 0 {
-			unusedConfigs = append(unusedConfigs, columnMapping)
-		}
-	}
 	for mydumper := range c.Mydumpers {
 		if globalConfigReferCount[configRefPrefixes[mydumperIdx]+mydumper] == 0 {
 			unusedConfigs = append(unusedConfigs, mydumper)
@@ -1010,7 +1028,7 @@ func checkDuplicateString(ruleNames []string) []string {
 }
 
 // AdjustTargetDBSessionCfg adjust session cfg of TiDB.
-func AdjustTargetDBSessionCfg(dbConfig *DBConfig, version *semver.Version) {
+func AdjustTargetDBSessionCfg(dbConfig *dbconfig.DBConfig, version *semver.Version) {
 	lowerMap := make(map[string]string, len(dbConfig.Session))
 	for k, v := range dbConfig.Session {
 		lowerMap[strings.ToLower(k)] = v
@@ -1022,24 +1040,6 @@ func AdjustTargetDBSessionCfg(dbConfig *DBConfig, version *semver.Version) {
 		}
 	}
 	dbConfig.Session = lowerMap
-}
-
-// AdjustDBTimeZone force adjust session `time_zone`.
-func AdjustDBTimeZone(config *DBConfig, timeZone string) {
-	for k, v := range config.Session {
-		if strings.ToLower(k) == "time_zone" {
-			if v != timeZone {
-				log.L().Warn("session variable 'time_zone' is overwritten by task config's timezone",
-					zap.String("time_zone", config.Session[k]))
-				config.Session[k] = timeZone
-			}
-			return
-		}
-	}
-	if config.Session == nil {
-		config.Session = make(map[string]string, 1)
-	}
-	config.Session["time_zone"] = timeZone
 }
 
 var (
@@ -1209,7 +1209,7 @@ type TaskConfigForDowngrade struct {
 	HeartbeatReportInterval int                                  `yaml:"heartbeat-report-interval"`
 	Timezone                string                               `yaml:"timezone"`
 	CaseSensitive           bool                                 `yaml:"case-sensitive"`
-	TargetDB                *DBConfig                            `yaml:"target-database"`
+	TargetDB                *dbconfig.DBConfig                   `yaml:"target-database"`
 	OnlineDDLScheme         string                               `yaml:"online-ddl-scheme"`
 	Routes                  map[string]*router.TableRule         `yaml:"routes"`
 	Filters                 map[string]*bf.BinlogEventRule       `yaml:"filters"`

@@ -48,7 +48,7 @@ const (
 	DefaultTableMemoryQuota = 10 * 1024 * 1024 // 10 MB
 
 	// DefaultChangefeedMemoryQuota is the default memory quota for each changefeed.
-	DefaultChangefeedMemoryQuota = 2 * 1024 * 1024 * 1024 // 2 GB
+	DefaultChangefeedMemoryQuota = 1024 * 1024 * 1024 // 1GB.
 )
 
 var (
@@ -107,12 +107,8 @@ var defaultServerConfig = &ServerConfig{
 	OwnerFlushInterval:     TomlDuration(50 * time.Millisecond),
 	ProcessorFlushInterval: TomlDuration(50 * time.Millisecond),
 	Sorter: &SorterConfig{
-		NumConcurrentWorker:    4,
-		ChunkSizeLimit:         128 * 1024 * 1024,       // 128MB
-		MaxMemoryPercentage:    30,                      // 30% is safe on machines with memory capacity <= 16GB
-		MaxMemoryConsumption:   16 * 1024 * 1024 * 1024, // 16GB
-		NumWorkerPoolGoroutine: 16,
-		SortDir:                DefaultSortDir,
+		MaxMemoryPercentage: 10, // 10% is safe on machines with memory capacity <= 16GB
+		SortDir:             DefaultSortDir,
 	},
 	Security:            &SecurityConfig{},
 	PerTableMemoryQuota: DefaultTableMemoryQuota,
@@ -125,12 +121,6 @@ var defaultServerConfig = &ServerConfig{
 		RegionRetryDuration: TomlDuration(time.Minute),
 	},
 	Debug: &DebugConfig{
-		TableActor: &TableActorConfig{
-			EventBatchSize: 32,
-		},
-		EnableNewScheduler: true,
-		// Default db sorter config
-		EnableDBSorter: true,
 		DB: &DBConfig{
 			Count: 8,
 			// Following configs are optimized for write/read throughput.
@@ -149,9 +139,8 @@ var defaultServerConfig = &ServerConfig{
 		},
 		Messages: defaultMessageConfig.Clone(),
 
-		Scheduler:           NewDefaultSchedulerConfig(),
-		EnableNewSink:       true,
-		EnablePullBasedSink: true,
+		Scheduler:         NewDefaultSchedulerConfig(),
+		EnableKafkaSinkV2: false,
 	},
 	ClusterID: "default",
 }

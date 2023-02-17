@@ -16,14 +16,20 @@ package checkpoint
 import (
 	"context"
 	"database/sql"
+	"encoding/json"
 	"fmt"
 	"regexp"
 	"testing"
 
 	"github.com/DATA-DOG/go-sqlmock"
 	"github.com/pingcap/log"
+	"github.com/pingcap/tidb/parser"
+	filter "github.com/pingcap/tidb/util/table-filter"
 	dmconfig "github.com/pingcap/tiflow/dm/config"
+	"github.com/pingcap/tiflow/dm/config/dbconfig"
 	"github.com/pingcap/tiflow/dm/pkg/conn"
+	dlog "github.com/pingcap/tiflow/dm/pkg/log"
+	"github.com/pingcap/tiflow/dm/pkg/schema"
 	frameModel "github.com/pingcap/tiflow/engine/framework/model"
 	"github.com/pingcap/tiflow/engine/jobmaster/dm/config"
 	"github.com/pingcap/tiflow/engine/jobmaster/dm/metadata"
@@ -48,7 +54,7 @@ func TestCheckpoint(t *testing.T) {
 	require.NoError(t, err)
 	defer db.Close()
 	mock.ExpectExec(regexp.QuoteMeta(fmt.Sprintf(`CREATE DATABASE IF NOT EXISTS %s`, "`meta`"))).WillReturnResult(sqlmock.NewResult(1, 1))
-	require.NoError(t, createMetaDatabase(context.Background(), jobCfg, conn.NewBaseDB(db)))
+	require.NoError(t, createMetaDatabase(context.Background(), jobCfg, conn.NewBaseDBForTest(db)))
 
 	mock.ExpectExec(regexp.QuoteMeta(fmt.Sprintf(`CREATE TABLE IF NOT EXISTS %s (
 		task_name varchar(255) NOT NULL,
@@ -56,7 +62,7 @@ func TestCheckpoint(t *testing.T) {
 		status varchar(10) NOT NULL DEFAULT 'init' COMMENT 'init,running,finished',
 		PRIMARY KEY (task_name, source_name)
 	);`, "`meta`.`test_lightning_checkpoint_list`"))).WillReturnResult(sqlmock.NewResult(1, 1))
-	require.NoError(t, createLoadCheckpointTable(context.Background(), jobID, jobCfg, conn.NewBaseDB(db)))
+	require.NoError(t, createLoadCheckpointTable(context.Background(), jobID, jobCfg, conn.NewBaseDBForTest(db)))
 
 	mock.ExpectExec(regexp.QuoteMeta(fmt.Sprintf(`CREATE TABLE IF NOT EXISTS %s (
 		id VARCHAR(32) NOT NULL,
@@ -74,15 +80,15 @@ func TestCheckpoint(t *testing.T) {
 		update_time timestamp NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
 		UNIQUE KEY uk_id_schema_table (id, cp_schema, cp_table)
 	)`, "`meta`.`test_syncer_checkpoint`"))).WillReturnResult(sqlmock.NewResult(1, 1))
-	require.NoError(t, createSyncCheckpointTable(context.Background(), jobID, jobCfg, conn.NewBaseDB(db)))
+	require.NoError(t, createSyncCheckpointTable(context.Background(), jobID, jobCfg, conn.NewBaseDBForTest(db)))
 
 	mock.ExpectExec(regexp.QuoteMeta("DROP TABLE IF EXISTS `meta`.`test_lightning_checkpoint_list`")).WillReturnResult(sqlmock.NewResult(1, 1))
-	require.NoError(t, dropLoadCheckpointTable(context.Background(), jobID, jobCfg, conn.NewBaseDB(db)))
+	require.NoError(t, dropLoadCheckpointTable(context.Background(), jobID, jobCfg, conn.NewBaseDBForTest(db)))
 
 	mock.ExpectExec(regexp.QuoteMeta("DROP TABLE IF EXISTS `meta`.`test_syncer_checkpoint`")).WillReturnResult(sqlmock.NewResult(1, 1))
 	mock.ExpectExec(regexp.QuoteMeta("DROP TABLE IF EXISTS `meta`.`test_syncer_sharding_meta`")).WillReturnResult(sqlmock.NewResult(1, 1))
 	mock.ExpectExec(regexp.QuoteMeta("DROP TABLE IF EXISTS `meta`.`test_onlineddl`")).WillReturnResult(sqlmock.NewResult(1, 1))
-	require.NoError(t, dropSyncCheckpointTable(context.Background(), jobID, jobCfg, conn.NewBaseDB(db)))
+	require.NoError(t, dropSyncCheckpointTable(context.Background(), jobID, jobCfg, conn.NewBaseDBForTest(db)))
 }
 
 func TestCheckpointLifeCycle(t *testing.T) {
@@ -197,7 +203,7 @@ func TestIsFresh(t *testing.T) {
 				MySQLInstance: dmconfig.MySQLInstance{
 					SourceID: source1,
 				},
-				DBCfg: &dmconfig.DBConfig{},
+				DBCfg: &dbconfig.DBConfig{},
 			},
 		},
 	}
@@ -267,4 +273,39 @@ func TestIsFresh(t *testing.T) {
 	isFresh, err = checkpointAgent.IsFresh(context.Background(), frameModel.WorkerDMSync, &metadata.Task{Cfg: taskCfg})
 	require.Error(t, err)
 	require.False(t, isFresh)
+}
+
+func TestFetchTableStmt(t *testing.T) {
+	var (
+		source   = "source"
+		database = "db"
+		table    = "table"
+	)
+	agent := NewAgentImpl("job_id", log.L())
+	db, mockDB, err := conn.InitMockDBNotClose()
+	require.NoError(t, err)
+	defer db.Close()
+
+	p := parser.New()
+	tracker, err := schema.NewTestTracker(context.Background(), "test-tracker", nil, dlog.L())
+	require.NoError(t, err)
+	stmt := "CREATE DATABASE `db`"
+	ret, err := p.ParseOneStmt(stmt, "", "")
+	require.NoError(t, err)
+	require.NoError(t, tracker.Exec(context.Background(), database, ret))
+
+	stmt = "CREATE TABLE `table` ( `id` int(11) DEFAULT NULL) ENGINE=InnoDB DEFAULT CHARSET=latin1"
+	ret, err = p.ParseOneStmt(stmt, "", "")
+	require.NoError(t, err)
+	require.NoError(t, tracker.Exec(context.Background(), database, ret))
+
+	tbInfo, err := tracker.GetTableInfo(&filter.Table{Schema: database, Name: table})
+	require.NoError(t, err)
+	bs, err := json.Marshal(tbInfo)
+	require.NoError(t, err)
+
+	mockDB.ExpectQuery(regexp.QuoteMeta("SELECT table_info FROM `meta`.`job_id_syncer_checkpoint` WHERE id = ? AND cp_schema = ? AND cp_table = ?")).WithArgs(source, database, table).WillReturnRows(sqlmock.NewRows([]string{"table_info"}).AddRow(bs))
+	tbStmt, err := agent.FetchTableStmt(context.Background(), "job_id", &config.JobCfg{MetaSchema: "meta"}, metadata.SourceTable{Source: source, Schema: database, Table: table})
+	require.NoError(t, err)
+	require.Equal(t, "CREATE TABLE `table` ( `id` int(11) DEFAULT NULL) ENGINE=InnoDB DEFAULT CHARSET=latin1 COLLATE=latin1_bin", tbStmt)
 }

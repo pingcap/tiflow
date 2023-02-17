@@ -21,11 +21,11 @@ import (
 	"github.com/pingcap/tiflow/cdc/contextutil"
 	"github.com/pingcap/tiflow/cdc/model"
 	"github.com/pingcap/tiflow/cdc/processor/sourcemanager/engine"
+	"github.com/pingcap/tiflow/cdc/processor/tablepb"
 	"github.com/pingcap/tiflow/cdc/puller"
 	"github.com/pingcap/tiflow/pkg/config"
 	cdccontext "github.com/pingcap/tiflow/pkg/context"
 	cerrors "github.com/pingcap/tiflow/pkg/errors"
-	"github.com/pingcap/tiflow/pkg/regionspan"
 	"github.com/pingcap/tiflow/pkg/upstream"
 	"github.com/pingcap/tiflow/pkg/util"
 )
@@ -33,37 +33,32 @@ import (
 // Wrapper is a wrapper of puller used by source manager.
 type Wrapper struct {
 	changefeed model.ChangeFeedID
-	tableID    model.TableID
+	span       tablepb.Span
 	tableName  string // quoted schema and table, used in metircs only
 	p          puller.Puller
 	startTs    model.Ts
 	// cancel is used to cancel the puller when remove or close the table.
 	cancel context.CancelFunc
 	// wg is used to wait the puller to exit.
-	wg sync.WaitGroup
+	wg      sync.WaitGroup
+	bdrMode bool
 }
 
 // NewPullerWrapper creates a new puller wrapper.
 func NewPullerWrapper(
 	changefeed model.ChangeFeedID,
-	tableID model.TableID,
+	span tablepb.Span,
 	tableName string,
 	startTs model.Ts,
+	bdrMode bool,
 ) *Wrapper {
 	return &Wrapper{
 		changefeed: changefeed,
-		tableID:    tableID,
+		span:       span,
 		tableName:  tableName,
 		startTs:    startTs,
+		bdrMode:    bdrMode,
 	}
-}
-
-// tableSpan returns the table span with the table ID.
-func (n *Wrapper) tableSpan() []regionspan.Span {
-	// start table puller
-	spans := make([]regionspan.Span, 0, 4)
-	spans = append(spans, regionspan.GetTableSpan(n.tableID))
-	return spans
 }
 
 // Start the puller wrapper.
@@ -91,11 +86,12 @@ func (n *Wrapper) Start(
 		up.KVStorage,
 		up.PDClock,
 		n.startTs,
-		n.tableSpan(),
+		[]tablepb.Span{n.span},
 		kvCfg,
 		n.changefeed,
-		n.tableID,
+		n.span.TableID,
 		n.tableName,
+		n.bdrMode,
 		false,
 	)
 	n.wg.Add(1)
@@ -118,7 +114,7 @@ func (n *Wrapper) Start(
 					continue
 				}
 				pEvent := model.NewPolymorphicEvent(rawKV)
-				if err := eventSortEngine.Add(n.tableID, pEvent); err != nil {
+				if err := eventSortEngine.Add(n.span, pEvent); err != nil {
 					errChan <- err
 				}
 			}

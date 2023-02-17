@@ -31,24 +31,25 @@ const (
 
 // Metrics groups syncer's metric variables.
 type Metrics struct {
-	BinlogReadDurationHistogram     prometheus.Observer
-	BinlogEventSizeHistogram        prometheus.Observer
-	ConflictDetectDurationHistogram prometheus.Observer
-	IdealQPS                        prometheus.Gauge
-	BinlogMasterPosGauge            prometheus.Gauge
-	BinlogSyncerPosGauge            prometheus.Gauge
-	BinlogMasterFileGauge           prometheus.Gauge
-	BinlogSyncerFileGauge           prometheus.Gauge
-	BinlogEventRowHistogram         prometheus.Observer
-	TxnHistogram                    prometheus.Observer
-	QueryHistogram                  prometheus.Observer
-	SyncerExitWithErrorCounter      prometheus.Counter
-	ReplicationLagGauge             prometheus.Gauge
-	ReplicationLagHistogram         prometheus.Observer
-	RemainingTimeGauge              prometheus.Gauge
-	ShardLockResolving              prometheus.Gauge
-	FinishedTransactionTotal        prometheus.Counter
-	FlushCheckPointsTimeInterval    prometheus.Observer
+	BinlogReadDurationHistogram      prometheus.Observer
+	BinlogEventSizeHistogram         prometheus.Observer
+	ConflictDetectDurationHistogram  prometheus.Observer
+	IdealQPS                         prometheus.Gauge
+	BinlogMasterPosGauge             prometheus.Gauge
+	BinlogSyncerPosGauge             prometheus.Gauge
+	BinlogMasterFileGauge            prometheus.Gauge
+	BinlogSyncerFileGauge            prometheus.Gauge
+	BinlogEventRowHistogram          prometheus.Observer
+	TxnHistogram                     prometheus.Observer
+	QueryHistogram                   prometheus.Observer
+	ExitWithResumableErrorCounter    prometheus.Counter
+	ExitWithNonResumableErrorCounter prometheus.Counter
+	ReplicationLagGauge              prometheus.Gauge
+	ReplicationLagHistogram          prometheus.Observer
+	RemainingTimeGauge               prometheus.Gauge
+	ShardLockResolving               prometheus.Gauge
+	FinishedTransactionTotal         prometheus.Counter
+	FlushCheckPointsTimeInterval     prometheus.Observer
 }
 
 // Proxies provides the ability to clean Metrics values when syncer is closed.
@@ -230,7 +231,7 @@ func (m *Proxies) Init(f promutil.Factory) {
 			Subsystem: "syncer",
 			Name:      "exit_with_error_count",
 			Help:      "counter for syncer exits with error",
-		}, []string{"task", "source_id"})
+		}, []string{"task", "source_id", "resumable_err"})
 	m.replicationLagGauge = f.NewGaugeVec(
 		prometheus.GaugeOpts{
 			Namespace: "dm",
@@ -308,7 +309,8 @@ func (m *Proxies) CacheForOneTask(taskName, workerName, sourceID string) *Proxie
 	ret.Metrics.BinlogEventRowHistogram = m.binlogEventRowHistogram.WithLabelValues(workerName, taskName, sourceID)
 	ret.Metrics.TxnHistogram = m.txnHistogram.WithLabelValues(taskName, workerName, sourceID)
 	ret.Metrics.QueryHistogram = m.queryHistogram.WithLabelValues(taskName, workerName, sourceID)
-	ret.Metrics.SyncerExitWithErrorCounter = m.syncerExitWithErrorCounter.WithLabelValues(taskName, sourceID)
+	ret.Metrics.ExitWithResumableErrorCounter = m.syncerExitWithErrorCounter.WithLabelValues(taskName, sourceID, "true")
+	ret.Metrics.ExitWithNonResumableErrorCounter = m.syncerExitWithErrorCounter.WithLabelValues(taskName, sourceID, "false")
 	ret.Metrics.ReplicationLagGauge = m.replicationLagGauge.WithLabelValues(taskName, sourceID, workerName)
 	ret.Metrics.ReplicationLagHistogram = m.replicationLagHistogram.WithLabelValues(taskName, sourceID, workerName)
 	ret.Metrics.RemainingTimeGauge = m.remainingTimeGauge.WithLabelValues(taskName, sourceID, workerName)

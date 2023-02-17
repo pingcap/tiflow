@@ -145,7 +145,7 @@ func TestVerifyAndComplete(t *testing.T) {
 		SinkURI: "blackhole://",
 		StartTs: 417257993615179777,
 		Config: &config.ReplicaConfig{
-			MemoryQuota:        2147483648,
+			MemoryQuota:        1073741824,
 			CaseSensitive:      true,
 			EnableOldValue:     true,
 			CheckGCSafePoint:   true,
@@ -699,6 +699,89 @@ func TestFixMQSinkProtocol(t *testing.T) {
 	for _, tc := range sinkURITestCases {
 		tc.info.fixMQSinkProtocol()
 		require.Equal(t, tc.expectedSinkURI, tc.info.SinkURI)
+	}
+}
+
+func TestFixMemoryQuotaIncompatible(t *testing.T) {
+	t.Parallel()
+
+	testCases := []struct {
+		info                *ChangeFeedInfo
+		expectedMemoryQuota uint64
+	}{
+		{
+			info: &ChangeFeedInfo{
+				CreatorVersion: "",
+				SinkURI:        "mysql://root:test@127.0.0.1:3306/",
+				Config: &config.ReplicaConfig{
+					Sink: &config.SinkConfig{Protocol: config.ProtocolDefault.String()},
+				},
+			},
+			expectedMemoryQuota: config.DefaultChangefeedMemoryQuota,
+		},
+		{
+			info: &ChangeFeedInfo{
+				CreatorVersion: "6.5.0",
+				SinkURI:        "mysql://root:test@127.0.0.1:3306/",
+				Config: &config.ReplicaConfig{
+					MemoryQuota: 0,
+					Sink:        &config.SinkConfig{Protocol: config.ProtocolDefault.String()},
+				},
+			},
+			expectedMemoryQuota: config.DefaultChangefeedMemoryQuota,
+		},
+		{
+			info: &ChangeFeedInfo{
+				CreatorVersion: "6.5.0",
+				SinkURI:        "mysql://root:test@127.0.0.1:3306/",
+				Config: &config.ReplicaConfig{
+					MemoryQuota: 10485760,
+					Sink:        &config.SinkConfig{Protocol: config.ProtocolDefault.String()},
+				},
+			},
+			expectedMemoryQuota: 10485760,
+		},
+	}
+
+	for _, tc := range testCases {
+		tc.info.FixIncompatible()
+		require.Equal(t, tc.expectedMemoryQuota, tc.info.Config.MemoryQuota)
+	}
+}
+
+func TestFixSchedulerIncompatible(t *testing.T) {
+	t.Parallel()
+
+	testCases := []struct {
+		info              *ChangeFeedInfo
+		expectedScheduler *config.ChangefeedSchedulerConfig
+	}{
+		{
+			info: &ChangeFeedInfo{
+				CreatorVersion: "",
+				SinkURI:        "mysql://root:test@127.0.0.1:3306/",
+				Config: &config.ReplicaConfig{
+					Sink: &config.SinkConfig{Protocol: config.ProtocolDefault.String()},
+				},
+			},
+			expectedScheduler: config.GetDefaultReplicaConfig().Clone().Scheduler,
+		},
+		{
+			info: &ChangeFeedInfo{
+				CreatorVersion: "6.5.0",
+				SinkURI:        "mysql://root:test@127.0.0.1:3306/",
+				Config: &config.ReplicaConfig{
+					Scheduler: &config.ChangefeedSchedulerConfig{},
+					Sink:      &config.SinkConfig{Protocol: config.ProtocolDefault.String()},
+				},
+			},
+			expectedScheduler: &config.ChangefeedSchedulerConfig{},
+		},
+	}
+
+	for _, tc := range testCases {
+		tc.info.FixIncompatible()
+		require.EqualValues(t, tc.expectedScheduler, tc.info.Config.Scheduler)
 	}
 }
 

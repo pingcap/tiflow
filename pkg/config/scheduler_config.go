@@ -19,10 +19,19 @@ import (
 	cerror "github.com/pingcap/tiflow/pkg/errors"
 )
 
+// ChangefeedSchedulerConfig is per changefeed scheduler settings.
+type ChangefeedSchedulerConfig struct {
+	// RegionPerSpan the number of regions in a span, must be greater than 1000.
+	// Set 0 to disable span replication.
+	RegionPerSpan int `toml:"region-per-span" json:"region-per-span"`
+}
+
 // SchedulerConfig configs TiCDC scheduler.
 type SchedulerConfig struct {
 	// HeartbeatTick is the number of owner tick to initial a heartbeat to captures.
 	HeartbeatTick int `toml:"heartbeat-tick" json:"heartbeat-tick"`
+	// CollectStatsTick is the number of owner tick to collect stats.
+	CollectStatsTick int `toml:"collect-stats-tick" json:"collect-stats-tick"`
 	// MaxTaskConcurrency the maximum of concurrent running schedule tasks.
 	MaxTaskConcurrency int `toml:"max-task-concurrency" json:"max-task-concurrency"`
 	// CheckBalanceInterval the interval of balance tables between each capture.
@@ -35,12 +44,18 @@ type SchedulerConfig struct {
 	// When there are only 2 captures, and a large number of tables, this can be helpful to prevent
 	// oom caused by all tables dispatched to only one capture.
 	AddTableBatchSize int `toml:"add-table-batch-size" json:"add-table-batch-size"`
+
+	// ChangefeedSettings is setting by changefeed.
+	ChangefeedSettings *ChangefeedSchedulerConfig `toml:"-" json:"-"`
 }
 
 // NewDefaultSchedulerConfig return the default scheduler configuration.
 func NewDefaultSchedulerConfig() *SchedulerConfig {
 	return &SchedulerConfig{
-		HeartbeatTick:      2,
+		HeartbeatTick: 2,
+		// By default, owner ticks every 50ms, we want to low the frequency of
+		// collecting stats to reduce memory allocation and CPU usage.
+		CollectStatsTick:   200, // 200 * 50ms = 10s.
 		MaxTaskConcurrency: 10,
 		// TODO: no need to check balance each minute, relax the interval.
 		CheckBalanceInterval: TomlDuration(time.Minute),
@@ -54,6 +69,10 @@ func (c *SchedulerConfig) ValidateAndAdjust() error {
 		return cerror.ErrInvalidServerOption.GenWithStackByArgs(
 			"heartbeat-tick must be larger than 0")
 	}
+	if c.CollectStatsTick <= 0 {
+		return cerror.ErrInvalidServerOption.GenWithStackByArgs(
+			"collect-stats-tick must be larger than 0")
+	}
 	if c.MaxTaskConcurrency <= 0 {
 		return cerror.ErrInvalidServerOption.GenWithStackByArgs(
 			"max-task-concurrency must be larger than 0")
@@ -62,7 +81,6 @@ func (c *SchedulerConfig) ValidateAndAdjust() error {
 		return cerror.ErrInvalidServerOption.GenWithStackByArgs(
 			"check-balance-interval must be larger than 1s")
 	}
-
 	if c.AddTableBatchSize <= 0 {
 		return cerror.ErrInvalidServerOption.GenWithStackByArgs(
 			"add-table-batch-size must be large than 0")

@@ -38,7 +38,7 @@ var (
 			Subsystem: "mounter",
 			Name:      "group_input_chan_size",
 			Help:      "The size of input channel of mounter group",
-		}, []string{"namespace", "changefeed", "index"})
+		}, []string{"namespace", "changefeed"})
 )
 
 // InitMetrics registers all metrics in this file

@@ -15,14 +15,15 @@ package cli
 
 import (
 	"bytes"
-	"io/ioutil"
+	"io"
 	"os"
 	"testing"
 
 	"github.com/golang/mock/gomock"
 	"github.com/pingcap/errors"
+	v2 "github.com/pingcap/tiflow/cdc/api/v2"
 	"github.com/pingcap/tiflow/cdc/model"
-	"github.com/pingcap/tiflow/pkg/api/v1/mock"
+	"github.com/pingcap/tiflow/pkg/api/v2/mock"
 	"github.com/stretchr/testify/require"
 )
 
@@ -35,7 +36,7 @@ func TestChangefeedListCli(t *testing.T) {
 	b := bytes.NewBufferString("")
 	cmd.SetOut(b)
 
-	cf.EXPECT().List(gomock.Any(), gomock.Any()).Return(&[]model.ChangefeedCommonInfo{
+	cf.EXPECT().List(gomock.Any(), gomock.Any()).Return([]v2.ChangefeedCommonInfo{
 		{
 			UpstreamID:     1,
 			Namespace:      "default",
@@ -88,7 +89,7 @@ func TestChangefeedListCli(t *testing.T) {
 	// when --all=false, should contains StateNormal, StateError, StateFailed, StateStopped changefeed
 	os.Args = []string{"list", "--all=false"}
 	require.Nil(t, cmd.Execute())
-	out, err := ioutil.ReadAll(b)
+	out, err := io.ReadAll(b)
 	require.Nil(t, err)
 	require.Contains(t, string(out), "error-1")
 	require.Contains(t, string(out), "normal-2")
@@ -98,7 +99,7 @@ func TestChangefeedListCli(t *testing.T) {
 	// when --all=true, should contains all changefeed
 	os.Args = []string{"list", "--all=true"}
 	require.Nil(t, cmd.Execute())
-	out, err = ioutil.ReadAll(b)
+	out, err = io.ReadAll(b)
 	require.Nil(t, err)
 	require.Contains(t, string(out), "error-1")
 	require.Contains(t, string(out), "normal-2")

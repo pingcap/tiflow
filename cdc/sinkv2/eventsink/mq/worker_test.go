@@ -20,15 +20,14 @@ import (
 	"time"
 
 	"github.com/pingcap/tiflow/cdc/model"
-	"github.com/pingcap/tiflow/cdc/sink/codec/builder"
-	"github.com/pingcap/tiflow/cdc/sink/codec/common"
-	mqv1 "github.com/pingcap/tiflow/cdc/sink/mq"
 	"github.com/pingcap/tiflow/cdc/sinkv2/eventsink"
 	"github.com/pingcap/tiflow/cdc/sinkv2/eventsink/mq/dmlproducer"
 	"github.com/pingcap/tiflow/cdc/sinkv2/metrics"
 	"github.com/pingcap/tiflow/cdc/sinkv2/tablesink/state"
 	"github.com/pingcap/tiflow/pkg/config"
 	"github.com/pingcap/tiflow/pkg/sink"
+	"github.com/pingcap/tiflow/pkg/sink/codec/builder"
+	"github.com/pingcap/tiflow/pkg/sink/codec/common"
 	"github.com/stretchr/testify/require"
 )
 
@@ -67,7 +66,7 @@ func TestNonBatchEncode_SendMessages(t *testing.T) {
 	worker, p := newNonBatchEncodeWorker(ctx, t)
 	defer worker.close()
 
-	key := mqv1.TopicPartitionKey{
+	key := TopicPartitionKey{
 		Topic:     "test",
 		Partition: 1,
 	}
@@ -124,7 +123,7 @@ func TestBatchEncode_Batch(t *testing.T) {
 	defer cancel()
 	worker, _ := newBatchEncodeWorker(ctx, t)
 	defer worker.close()
-	key := mqv1.TopicPartitionKey{
+	key := TopicPartitionKey{
 		Topic:     "test",
 		Partition: 1,
 	}
@@ -135,50 +134,36 @@ func TestBatchEncode_Batch(t *testing.T) {
 		Columns:  []*model.Column{{Name: "col1", Type: 1, Value: "aa"}},
 	}
 
-	events := make([]mqEvent, 0, 512)
 	for i := 0; i < 512; i++ {
-		events = append(events, mqEvent{
+		worker.msgChan.In() <- mqEvent{
 			key: key,
 			rowEvent: &eventsink.RowChangeCallbackableEvent{
 				Event:     row,
 				Callback:  func() {},
 				SinkState: &tableStatus,
 			},
-		})
+		}
 	}
 
 	// Test batching returns when the events count is equal to the batch size.
-	var wg sync.WaitGroup
 	batch := make([]mqEvent, 512)
-	wg.Add(1)
-	go func() {
-		defer wg.Done()
-		endIndex, err := worker.batch(ctx, batch)
-		require.NoError(t, err)
-		require.Equal(t, 512, endIndex)
-	}()
-	wg.Add(1)
-	go func() {
-		defer wg.Done()
-		for _, event := range events {
-			worker.msgChan.In() <- event
-		}
-	}()
-	wg.Wait()
+	endIndex, err := worker.batch(ctx, batch, time.Minute)
+	require.NoError(t, err)
+	require.Equal(t, 512, endIndex)
 }
 
 func TestBatchEncode_Group(t *testing.T) {
 	t.Parallel()
 
-	key1 := mqv1.TopicPartitionKey{
+	key1 := TopicPartitionKey{
 		Topic:     "test",
 		Partition: 1,
 	}
-	key2 := mqv1.TopicPartitionKey{
+	key2 := TopicPartitionKey{
 		Topic:     "test",
 		Partition: 2,
 	}
-	key3 := mqv1.TopicPartitionKey{
+	key3 := TopicPartitionKey{
 		Topic:     "test1",
 		Partition: 2,
 	}
@@ -268,11 +253,11 @@ func TestBatchEncode_Group(t *testing.T) {
 func TestBatchEncode_GroupWhenTableStopping(t *testing.T) {
 	t.Parallel()
 
-	key1 := mqv1.TopicPartitionKey{
+	key1 := TopicPartitionKey{
 		Topic:     "test",
 		Partition: 1,
 	}
-	key2 := mqv1.TopicPartitionKey{
+	key2 := TopicPartitionKey{
 		Topic:     "test",
 		Partition: 2,
 	}
@@ -335,15 +320,15 @@ func TestBatchEncode_GroupWhenTableStopping(t *testing.T) {
 func TestBatchEncode_SendMessages(t *testing.T) {
 	t.Parallel()
 
-	key1 := mqv1.TopicPartitionKey{
+	key1 := TopicPartitionKey{
 		Topic:     "test",
 		Partition: 1,
 	}
-	key2 := mqv1.TopicPartitionKey{
+	key2 := TopicPartitionKey{
 		Topic:     "test",
 		Partition: 2,
 	}
-	key3 := mqv1.TopicPartitionKey{
+	key3 := TopicPartitionKey{
 		Topic:     "test1",
 		Partition: 2,
 	}
@@ -444,13 +429,13 @@ func TestBatchEncode_SendMessages(t *testing.T) {
 		return len(mp.GetAllEvents()) == len(events)
 	}, 3*time.Second, 100*time.Millisecond)
 	require.Eventually(t, func() bool {
-		return len(mp.GetEvents(key1)) == 3
+		return len(mp.GetEvents(key1.Topic, key1.Partition)) == 3
 	}, 3*time.Second, 100*time.Millisecond)
 	require.Eventually(t, func() bool {
-		return len(mp.GetEvents(key2)) == 1
+		return len(mp.GetEvents(key2.Topic, key2.Partition)) == 1
 	}, 3*time.Second, 100*time.Millisecond)
 	require.Eventually(t, func() bool {
-		return len(mp.GetEvents(key3)) == 2
+		return len(mp.GetEvents(key3.Topic, key3.Partition)) == 2
 	}, 3*time.Second, 100*time.Millisecond)
 
 	cancel()
@@ -479,11 +464,11 @@ func TestBatchEncodeWorker_Abort(t *testing.T) {
 func TestNonBatchEncode_SendMessagesWhenTableStopping(t *testing.T) {
 	t.Parallel()
 
-	key1 := mqv1.TopicPartitionKey{
+	key1 := TopicPartitionKey{
 		Topic:     "test",
 		Partition: 1,
 	}
-	key2 := mqv1.TopicPartitionKey{
+	key2 := TopicPartitionKey{
 		Topic:     "test",
 		Partition: 2,
 	}

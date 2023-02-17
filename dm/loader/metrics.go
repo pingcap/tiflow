@@ -95,7 +95,7 @@ var (
 			Subsystem: "loader",
 			Name:      "exit_with_error_count",
 			Help:      "counter for loader exits with error",
-		}, []string{"task", "source_id"})
+		}, []string{"task", "source_id", "resumable_err"})
 
 	remainingTimeGauge = f.NewGaugeVec(
 		prometheus.GaugeOpts{
@@ -118,17 +118,4 @@ func RegisterMetrics(registry *prometheus.Registry) {
 	registry.MustRegister(progressGauge)
 	registry.MustRegister(loaderExitWithErrorCounter)
 	registry.MustRegister(remainingTimeGauge)
-}
-
-func (l *Loader) removeLabelValuesWithTaskInMetrics(task string) {
-	tidbExecutionErrorCounter.DeletePartialMatch(prometheus.Labels{"task": task})
-	txnHistogram.DeletePartialMatch(prometheus.Labels{"task": task})
-	queryHistogram.DeletePartialMatch(prometheus.Labels{"task": task})
-	stmtHistogram.DeletePartialMatch(prometheus.Labels{"task": task})
-	dataFileGauge.DeletePartialMatch(prometheus.Labels{"task": task})
-	tableGauge.DeletePartialMatch(prometheus.Labels{"task": task})
-	dataSizeGauge.DeletePartialMatch(prometheus.Labels{"task": task})
-	progressGauge.DeletePartialMatch(prometheus.Labels{"task": task})
-	loaderExitWithErrorCounter.DeletePartialMatch(prometheus.Labels{"task": task})
-	remainingTimeGauge.DeletePartialMatch(prometheus.Labels{"task": task})
 }

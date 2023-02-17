@@ -18,7 +18,7 @@ import (
 	"sync"
 
 	"github.com/pingcap/tidb/util/schemacmp"
-	"github.com/pingcap/tiflow/dm/config"
+	"github.com/pingcap/tiflow/dm/config/dbconfig"
 	"github.com/pingcap/tiflow/dm/pkg/log"
 	"github.com/pingcap/tiflow/dm/pkg/terror"
 	"github.com/pingcap/tiflow/dm/pkg/utils"
@@ -28,7 +28,7 @@ import (
 
 // DownstreamMeta used to fetch table info from downstream.
 type DownstreamMeta struct {
-	dbConfig *config.DBConfig
+	dbConfig *dbconfig.DBConfig
 	meta     string
 }
 
@@ -40,13 +40,13 @@ type LockKeeper struct {
 	locks map[string]*Lock // lockID -> Lock
 
 	downstreamMetaMap     map[string]*DownstreamMeta
-	getDownstreamMetaFunc func(string) (*config.DBConfig, string)
+	getDownstreamMetaFunc func(string) (*dbconfig.DBConfig, string)
 	// lockID -> column name -> source -> upSchema -> upTable -> int
 	dropColumns map[string]map[string]map[string]map[string]map[string]DropColumnStage
 }
 
 // NewLockKeeper creates a new LockKeeper instance.
-func NewLockKeeper(getDownstreamMetaFunc func(string) (*config.DBConfig, string)) *LockKeeper {
+func NewLockKeeper(getDownstreamMetaFunc func(string) (*dbconfig.DBConfig, string)) *LockKeeper {
 	return &LockKeeper{
 		locks:                 make(map[string]*Lock),
 		downstreamMetaMap:     make(map[string]*DownstreamMeta),

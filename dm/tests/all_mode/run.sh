@@ -147,74 +147,6 @@ function test_query_timeout() {
 	echo "[$(date)] <<<<<< finish test_query_timeout >>>>>>"
 }
 
-function test_stop_task_before_checkpoint() {
-	echo "[$(date)] <<<<<< start test_stop_task_before_checkpoint >>>>>>"
-	run_sql_file $cur/data/db1.prepare.sql $MYSQL_HOST1 $MYSQL_PORT1 $MYSQL_PASSWORD1
-	check_contains 'Query OK, 2 rows affected'
-	run_sql_file $cur/data/db2.prepare.sql $MYSQL_HOST2 $MYSQL_PORT2 $MYSQL_PASSWORD2
-	check_contains 'Query OK, 3 rows affected'
-
-	# start DM worker and master
-	run_dm_master $WORK_DIR/master $MASTER_PORT $cur/conf/dm-master.toml
-	check_rpc_alive $cur/../bin/check_master_online 127.0.0.1:$MASTER_PORT
-	check_metric $MASTER_PORT 'start_leader_counter' 3 0 2
-
-	export GO_FAILPOINTS='github.com/pingcap/tiflow/dm/loader/WaitLoaderStopAfterInitCheckpoint=return(5)'
-	run_dm_worker $WORK_DIR/worker1 $WORKER1_PORT $cur/conf/dm-worker1.toml
-	check_rpc_alive $cur/../bin/check_worker_online 127.0.0.1:$WORKER1_PORT
-	run_dm_worker $WORK_DIR/worker2 $WORKER2_PORT $cur/conf/dm-worker2.toml
-	check_rpc_alive $cur/../bin/check_worker_online 127.0.0.1:$WORKER2_PORT
-
-	# operate mysql config to worker
-	cp $cur/conf/source1.yaml $WORK_DIR/source1.yaml
-	cp $cur/conf/source2.yaml $WORK_DIR/source2.yaml
-	sed -i "/relay-binlog-name/i\relay-dir: $WORK_DIR/worker1/relay_log" $WORK_DIR/source1.yaml
-	sed -i "/relay-binlog-name/i\relay-dir: $WORK_DIR/worker2/relay_log" $WORK_DIR/source2.yaml
-	dmctl_operate_source create $WORK_DIR/source1.yaml $SOURCE_ID1
-	dmctl_operate_source create $WORK_DIR/source2.yaml $SOURCE_ID2
-
-	# generate uncomplete checkpoint
-	cp $cur/conf/dm-task.yaml $WORK_DIR/dm-task.yaml
-	sed -i "s/import-mode: sql/import-mode: loader/" $WORK_DIR/dm-task.yaml
-	dmctl_start_task "$WORK_DIR/dm-task.yaml" "--remove-meta"
-	check_log_contain_with_retry 'wait loader stop after init checkpoint' $WORK_DIR/worker1/log/dm-worker.log
-	check_log_contain_with_retry 'wait loader stop after init checkpoint' $WORK_DIR/worker2/log/dm-worker.log
-	run_dm_ctl $WORK_DIR "127.0.0.1:$MASTER_PORT" \
-		"stop-task test" \
-		"\"result\": true" 3
-
-	# restart dm-worker
-	pkill -9 dm-worker.test 2>/dev/null || true
-	check_port_offline $WORKER1_PORT 20
-	check_port_offline $WORKER2_PORT 20
-
-	export GO_FAILPOINTS='github.com/pingcap/tiflow/dm/loader/WaitLoaderStopBeforeLoadCheckpoint=return(5)'
-	run_dm_worker $WORK_DIR/worker1 $WORKER1_PORT $cur/conf/dm-worker1.toml
-	run_dm_worker $WORK_DIR/worker2 $WORKER2_PORT $cur/conf/dm-worker2.toml
-	check_rpc_alive $cur/../bin/check_worker_online 127.0.0.1:$WORKER1_PORT
-	check_rpc_alive $cur/../bin/check_worker_online 127.0.0.1:$WORKER2_PORT
-
-	# stop-task before load checkpoint
-	dmctl_start_task $WORK_DIR/dm-task.yaml
-	check_log_contain_with_retry 'wait loader stop before load checkpoint' $WORK_DIR/worker1/log/dm-worker.log
-	check_log_contain_with_retry 'wait loader stop before load checkpoint' $WORK_DIR/worker2/log/dm-worker.log
-	run_dm_ctl $WORK_DIR "127.0.0.1:$MASTER_PORT" \
-		"stop-task test" \
-		"\"result\": true" 3
-
-	dmctl_start_task $WORK_DIR/dm-task.yaml
-	check_sync_diff $WORK_DIR $cur/conf/diff_config.toml
-	run_dm_ctl $WORK_DIR "127.0.0.1:$MASTER_PORT" \
-		"stop-task test" \
-		"\"result\": true" 3
-
-	cleanup_process
-	cleanup_data all_mode
-
-	export GO_FAILPOINTS=''
-	echo "[$(date)] <<<<<< finish test_stop_task_before_checkpoint >>>>>>"
-}
-
 function test_fail_job_between_event() {
 	echo "[$(date)] <<<<<< start test_fail_job_between_event >>>>>>"
 	run_sql_file $cur/data/db1.prepare.sql $MYSQL_HOST1 $MYSQL_PORT1 $MYSQL_PASSWORD1
@@ -416,7 +348,6 @@ function run() {
 	test_fail_job_between_event
 	test_session_config
 	test_query_timeout
-	test_stop_task_before_checkpoint
 	test_regexpr_router regexpr-task.yaml
 	test_regexpr_router regexpr-task-lightning.yaml
 
@@ -621,7 +552,7 @@ function run() {
 	run_sql_source1 "create table all_mode.db_error (c int primary key);"
 	run_dm_ctl_with_retry $WORK_DIR "127.0.0.1:$MASTER_PORT" \
 		"query-status $ILLEGAL_CHAR_NAME" \
-		"Error 1049: Unknown database" 1
+		"Error 1049 (42000): Unknown database" 1
 
 	# stop task, task state should be cleaned
 	run_dm_ctl $WORK_DIR "127.0.0.1:$MASTER_PORT" \
@@ -649,6 +580,7 @@ function run() {
 function prepare_test_empty_gtid() {
 	run_sql 'DROP DATABASE if exists all_mode;' $TIDB_PORT $TIDB_PASSWORD
 	run_sql 'DROP DATABASE if exists all_mode;' $MYSQL_PORT1 $MYSQL_PASSWORD1
+	run_sql 'DROP DATABASE if exists xxx;' $MYSQL_PORT1 $MYSQL_PASSWORD1
 	run_sql 'CREATE DATABASE all_mode;' $MYSQL_PORT1 $MYSQL_PASSWORD1
 	run_sql "CREATE TABLE all_mode.t1(i TINYINT, j INT UNIQUE KEY);" $MYSQL_PORT1 $MYSQL_PASSWORD1
 
@@ -707,6 +639,35 @@ function test_source_and_target_with_empty_gtid() {
 
 	echo "check data"
 	check_sync_diff $WORK_DIR $cur/conf/diff_config-1.toml
+
+	# check checkpoint matches master when the last event is a ddl
+	# 1. ddl that dm will sync
+	run_sql_source1 "create table all_mode.t2(c int primary key)"
+	run_sql_tidb_with_retry "show create table all_mode.t2" "CREATE TABLE"
+	run_dm_ctl_with_retry $WORK_DIR "127.0.0.1:$MASTER_PORT" \
+		"query-status test" \
+		'"synced": true' 1
+	# 2. ddl cannot be parsed and should be skipped
+	run_sql_source1 "create FUNCTION all_mode.hello (s CHAR(20)) RETURNS CHAR(50) DETERMINISTIC RETURN 'a';"
+	check_log_contain_with_retry "RETURNS char(50)" $WORK_DIR/worker1/log/dm-worker.log
+	sleep 30 # we rely on heartbeat event to flush checkpoint here, below too
+	run_dm_ctl_with_retry $WORK_DIR "127.0.0.1:$MASTER_PORT" \
+		"query-status test" \
+		'"synced": true' 1
+	# 3. ddl can be parsed and dm don't handle
+	run_sql_source1 "analyze table all_mode.t1"
+	check_log_contain_with_retry "analyze table" $WORK_DIR/worker1/log/dm-worker.log
+	sleep 30
+	run_dm_ctl_with_retry $WORK_DIR "127.0.0.1:$MASTER_PORT" \
+		"query-status test" \
+		'"synced": true' 1
+	# 4. ddl that is filtered
+	run_sql_source1 "create database xxx"
+	check_log_contain_with_retry "CREATE DATABASE IF NOT EXISTS" $WORK_DIR/worker1/log/dm-worker.log
+	sleep 30
+	run_dm_ctl_with_retry $WORK_DIR "127.0.0.1:$MASTER_PORT" \
+		"query-status test" \
+		'"synced": true' 1
 
 	echo "<<<<<< test_source_and_target_with_empty_gtid success! >>>>>>"
 }

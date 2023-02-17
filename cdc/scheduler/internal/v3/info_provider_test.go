@@ -20,6 +20,7 @@ import (
 	"github.com/pingcap/tiflow/cdc/model"
 	"github.com/pingcap/tiflow/cdc/processor/tablepb"
 	"github.com/pingcap/tiflow/cdc/scheduler/internal"
+	"github.com/pingcap/tiflow/cdc/scheduler/internal/v3/keyspan"
 	"github.com/pingcap/tiflow/cdc/scheduler/internal/v3/member"
 	"github.com/pingcap/tiflow/pkg/config"
 	"github.com/stretchr/testify/require"
@@ -28,16 +29,21 @@ import (
 func TestInfoProvider(t *testing.T) {
 	t.Parallel()
 
-	coord := newCoordinator("a", model.ChangeFeedID{}, 1, &config.SchedulerConfig{
+	cfg := &config.SchedulerConfig{
 		HeartbeatTick:      math.MaxInt,
 		MaxTaskConcurrency: 1,
-	})
+		ChangefeedSettings: config.GetDefaultReplicaConfig().Scheduler,
+	}
+	coord := newCoordinator("a", model.ChangeFeedID{}, 1, cfg)
+	cfg.ChangefeedSettings = config.GetDefaultReplicaConfig().Scheduler
+	coord.reconciler = keyspan.NewReconciler(
+		model.ChangeFeedID{}, keyspan.NewMockRegionCache(), cfg.ChangefeedSettings.RegionPerSpan)
 	coord.captureM.Captures = map[model.CaptureID]*member.CaptureStatus{
 		"a": {Tables: []tablepb.TableStatus{{
-			TableID:    1,
+			Span:       tablepb.Span{TableID: 1},
 			Checkpoint: tablepb.Checkpoint{CheckpointTs: 1},
 		}, {
-			TableID:    2,
+			Span:       tablepb.Span{TableID: 2},
 			Checkpoint: tablepb.Checkpoint{CheckpointTs: 1},
 		}}},
 		"b": {},
@@ -62,6 +68,7 @@ func TestInfoProviderIsInitialized(t *testing.T) {
 	coord := newCoordinator("a", model.ChangeFeedID{}, 1, &config.SchedulerConfig{
 		HeartbeatTick:      math.MaxInt,
 		MaxTaskConcurrency: 1,
+		ChangefeedSettings: config.GetDefaultReplicaConfig().Scheduler,
 	})
 	var ip internal.InfoProvider = coord
 

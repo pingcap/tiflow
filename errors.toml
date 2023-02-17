@@ -441,6 +441,11 @@ error = '''
 illegal parameter for sorter: %s
 '''
 
+["CDC:ErrIncompatibleSinkConfig"]
+error = '''
+incompatible configuration in sink uri(%s) and config file(%s), please try to update the configuration only through sink uri
+'''
+
 ["CDC:ErrIndexKeyTableNotFound"]
 error = '''
 table not found with index ID %d in index kv
@@ -581,14 +586,19 @@ error = '''
 invalid partition num %d
 '''
 
+["CDC:ErrKafkaInvalidRequiredAcks"]
+error = '''
+invalid required acks %d, only support these values: 0(NoResponse),1(WaitForLocal) and -1(WaitForAll)
+'''
+
 ["CDC:ErrKafkaInvalidVersion"]
 error = '''
 invalid kafka version
 '''
 
-["CDC:ErrKafkaNewSaramaProducer"]
+["CDC:ErrKafkaNewProducer"]
 error = '''
-new sarama producer
+new kafka producer
 '''
 
 ["CDC:ErrKafkaProducerClosed"]
@@ -993,12 +1003,7 @@ failed to seek to the beginning of request body
 
 ["CDC:ErrS3StorageAPI"]
 error = '''
-s3 storage api
-'''
-
-["CDC:ErrS3StorageInitialize"]
-error = '''
-new s3 storage for redo log
+external storage api
 '''
 
 ["CDC:ErrScanLockFailed"]
@@ -1109,6 +1114,11 @@ start a stopped db system
 ["CDC:ErrStartTsBeforeGC"]
 error = '''
 fail to create or maintain changefeed because start-ts %d is earlier than or equal to GC safepoint at %d
+'''
+
+["CDC:ErrStorageInitialize"]
+error = '''
+fail to open storage for redo log
 '''
 
 ["CDC:ErrStorageSinkInvalidDateSeparator"]
@@ -1424,21 +1434,6 @@ job %s already exists
 ["DFLOW:ErrJobManagerGetJobDetailFail"]
 error = '''
 failed to get job detail from job master
-'''
-
-["DFLOW:ErrJobManagerReadRespBodyFail"]
-error = '''
-failed to read response body
-'''
-
-["DFLOW:ErrJobManagerRespStatusCode404"]
-error = '''
-get job detail response status code is 404
-'''
-
-["DFLOW:ErrJobManagerRespStatusCodeNot2XX"]
-error = '''
-get job detail response status code is not 2XX
 '''
 
 ["DFLOW:ErrJobNotFound"]

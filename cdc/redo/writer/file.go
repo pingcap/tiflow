@@ -32,6 +32,7 @@ import (
 	"github.com/pingcap/tiflow/cdc/redo/common"
 	cerror "github.com/pingcap/tiflow/pkg/errors"
 	"github.com/pingcap/tiflow/pkg/fsutil"
+	"github.com/pingcap/tiflow/pkg/redo"
 	"github.com/pingcap/tiflow/pkg/uuid"
 	"github.com/prometheus/client_golang/prometheus"
 	"github.com/uber-go/atomic"
@@ -44,8 +45,7 @@ const (
 	// pageBytes is the alignment for flushing records to the backing Writer.
 	// It should be a multiple of the minimum sector size so that log can safely
 	// distinguish between torn writes and ordinary data corruption.
-	pageBytes        = 8 * common.MinSectorSize
-	defaultS3Timeout = 15 * time.Second
+	pageBytes = 8 * redo.MinSectorSize
 )
 
 var (
@@ -73,15 +73,16 @@ type flusher interface {
 
 // FileWriterConfig is the configuration used by a Writer.
 type FileWriterConfig struct {
-	Dir          string
+	FileType     string
 	ChangeFeedID model.ChangeFeedID
 	CaptureID    string
-	FileType     string
-	CreateTime   time.Time
+
+	URI                url.URL
+	UseExternalStorage bool
+
 	// MaxLogSize is the maximum size of log in megabyte, defaults to defaultMaxLogSize.
 	MaxLogSize int64
-	S3Storage  bool
-	S3URI      url.URL
+	Dir        string
 }
 
 // Option define the writerOptions
@@ -148,10 +149,10 @@ func NewWriter(ctx context.Context, cfg *FileWriterConfig, opts ...Option) (*Wri
 	if cfg.MaxLogSize == 0 {
 		cfg.MaxLogSize = defaultMaxLogSize
 	}
-	var s3storage storage.ExternalStorage
-	if cfg.S3Storage {
+	var extStorage storage.ExternalStorage
+	if cfg.UseExternalStorage {
 		var err error
-		s3storage, err = common.InitS3storage(ctx, cfg.S3URI)
+		extStorage, err = redo.InitExternalStorage(ctx, cfg.URI)
 		if err != nil {
 			return nil, err
 		}
@@ -166,7 +167,7 @@ func NewWriter(ctx context.Context, cfg *FileWriterConfig, opts ...Option) (*Wri
 		cfg:       cfg,
 		op:        op,
 		uint64buf: make([]byte, 8),
-		storage:   s3storage,
+		storage:   extStorage,
 
 		metricFsyncDuration: common.RedoFsyncDurationHistogram.
 			WithLabelValues(cfg.ChangeFeedID.Namespace, cfg.ChangeFeedID.ID),
@@ -185,7 +186,7 @@ func NewWriter(ctx context.Context, cfg *FileWriterConfig, opts ...Option) (*Wri
 		return nil, cerror.WrapError(cerror.ErrRedoFileOp, errors.New("invalid redo dir path"))
 	}
 
-	err := os.MkdirAll(cfg.Dir, common.DefaultDirMode)
+	err := os.MkdirAll(cfg.Dir, redo.DefaultDirMode)
 	if err != nil {
 		return nil, cerror.WrapError(cerror.ErrRedoFileOp,
 			errors.Annotatef(err, "can't make dir: %s for redo writing", cfg.Dir))
@@ -194,7 +195,7 @@ func NewWriter(ctx context.Context, cfg *FileWriterConfig, opts ...Option) (*Wri
 	// if we use S3 as the remote storage, a file allocator can be leveraged to
 	// pre-allocate files for us.
 	// TODO: test whether this improvement can also be applied to NFS.
-	if cfg.S3Storage {
+	if cfg.UseExternalStorage {
 		w.allocator = fsutil.NewFileAllocator(cfg.Dir, cfg.FileType, defaultMaxLogSize)
 	}
 
@@ -296,7 +297,9 @@ func (w *Writer) Close() error {
 	common.RedoWriteBytesGauge.
 		DeleteLabelValues(w.cfg.ChangeFeedID.Namespace, w.cfg.ChangeFeedID.ID)
 
-	return w.close()
+	ctx, cancel := context.WithTimeout(context.Background(), redo.CloseTimeout)
+	defer cancel()
+	return w.close(ctx)
 }
 
 // IsRunning implement IsRunning interface
@@ -308,7 +311,7 @@ func (w *Writer) isGCRunning() bool {
 	return w.gcRunning.Load()
 }
 
-func (w *Writer) close() error {
+func (w *Writer) close(ctx context.Context) error {
 	if w.file == nil {
 		return nil
 	}
@@ -317,7 +320,7 @@ func (w *Writer) close() error {
 		return err
 	}
 
-	if w.cfg.S3Storage {
+	if w.cfg.UseExternalStorage {
 		off, err := w.file.Seek(0, io.SeekCurrent)
 		if err != nil {
 			return err
@@ -355,15 +358,12 @@ func (w *Writer) close() error {
 
 	// We only write content to S3 before closing the local file.
 	// By this way, we no longer need renaming object in S3.
-	if w.cfg.S3Storage {
-		ctx, cancel := context.WithTimeout(context.Background(), defaultS3Timeout)
-		defer cancel()
-
+	if w.cfg.UseExternalStorage {
 		err = w.writeToS3(ctx, w.ongoingFilePath)
 		if err != nil {
 			w.file.Close()
 			w.file = nil
-			return cerror.WrapError(cerror.ErrS3StorageAPI, err)
+			return cerror.WrapError(cerror.ErrExternalStorageAPI, err)
 		}
 	}
 
@@ -378,13 +378,13 @@ func (w *Writer) getLogFileName() string {
 	}
 	uid := w.uuidGenerator.NewString()
 	if model.DefaultNamespace == w.cfg.ChangeFeedID.Namespace {
-		return fmt.Sprintf(common.RedoLogFileFormatV1,
+		return fmt.Sprintf(redo.RedoLogFileFormatV1,
 			w.cfg.CaptureID, w.cfg.ChangeFeedID.ID, w.cfg.FileType,
-			w.commitTS.Load(), uid, common.LogEXT)
+			w.commitTS.Load(), uid, redo.LogEXT)
 	}
-	return fmt.Sprintf(common.RedoLogFileFormatV2,
+	return fmt.Sprintf(redo.RedoLogFileFormatV2,
 		w.cfg.CaptureID, w.cfg.ChangeFeedID.Namespace, w.cfg.ChangeFeedID.ID,
-		w.cfg.FileType, w.commitTS.Load(), uid, common.LogEXT)
+		w.cfg.FileType, w.commitTS.Load(), uid, redo.LogEXT)
 }
 
 // filePath always creates a new, unique file path, note this function is not
@@ -396,11 +396,11 @@ func (w *Writer) filePath() string {
 }
 
 func openTruncFile(name string) (*os.File, error) {
-	return os.OpenFile(name, os.O_CREATE|os.O_WRONLY|os.O_TRUNC, common.DefaultFileMode)
+	return os.OpenFile(name, os.O_CREATE|os.O_WRONLY|os.O_TRUNC, redo.DefaultFileMode)
 }
 
 func (w *Writer) openNew() error {
-	err := os.MkdirAll(w.cfg.Dir, common.DefaultDirMode)
+	err := os.MkdirAll(w.cfg.Dir, redo.DefaultDirMode)
 	if err != nil {
 		return cerror.WrapError(cerror.ErrRedoFileOp,
 			errors.Annotatef(err, "can't make dir: %s for new redo logfile", w.cfg.Dir))
@@ -411,7 +411,7 @@ func (w *Writer) openNew() error {
 	if w.allocator == nil {
 		w.commitTS.Store(w.eventCommitTS.Load())
 		w.maxCommitTS.Store(w.eventCommitTS.Load())
-		path := w.filePath() + common.TmpEXT
+		path := w.filePath() + redo.TmpEXT
 		f, err = openTruncFile(path)
 		if err != nil {
 			return cerror.WrapError(cerror.ErrRedoFileOp,
@@ -446,7 +446,9 @@ func (w *Writer) newPageWriter() error {
 }
 
 func (w *Writer) rotate() error {
-	if err := w.close(); err != nil {
+	ctx, cancel := context.WithTimeout(context.Background(), redo.DefaultTimeout)
+	defer cancel()
+	if err := w.close(ctx); err != nil {
 		return err
 	}
 	return w.openNew()
@@ -478,7 +480,7 @@ func (w *Writer) GC(checkPointTs uint64) error {
 		return cerror.WrapError(cerror.ErrRedoFileOp, errs)
 	}
 
-	if w.cfg.S3Storage {
+	if w.cfg.UseExternalStorage {
 		// since if fail delete in s3, do not block any path, so just log the error if any
 		go func() {
 			var errs error
@@ -487,7 +489,7 @@ func (w *Writer) GC(checkPointTs uint64) error {
 				errs = multierr.Append(errs, err)
 			}
 			if errs != nil {
-				errs = cerror.WrapError(cerror.ErrS3StorageAPI, errs)
+				errs = cerror.WrapError(cerror.ErrExternalStorageAPI, errs)
 				log.Warn("delete redo log in s3 fail", zap.Error(errs))
 			}
 		}()
@@ -499,11 +501,11 @@ func (w *Writer) GC(checkPointTs uint64) error {
 // shouldRemoved remove the file which commitTs in file name (max commitTs of all event ts in the file) < checkPointTs,
 // since all event ts < checkPointTs already sent to sink, the log is not needed any more for recovery
 func (w *Writer) shouldRemoved(checkPointTs uint64, f os.FileInfo) (bool, error) {
-	if filepath.Ext(f.Name()) != common.LogEXT {
+	if filepath.Ext(f.Name()) != redo.LogEXT {
 		return false, nil
 	}
 
-	commitTs, fileType, err := common.ParseLogFileName(f.Name())
+	commitTs, fileType, err := redo.ParseLogFileName(f.Name())
 	if err != nil {
 		return false, err
 	}
@@ -558,7 +560,7 @@ func (w *Writer) flushAndRotateFile() error {
 		return err
 	}
 
-	if !w.cfg.S3Storage {
+	if !w.cfg.UseExternalStorage {
 		return nil
 	}
 
@@ -614,7 +616,7 @@ func (w *Writer) writeToS3(ctx context.Context, name string) error {
 	// Key in s3: aws.String(rs.options.Prefix + name), prefix should be changefeed name
 	err = w.storage.WriteFile(ctx, filepath.Base(name), fileData)
 	if err != nil {
-		return cerror.WrapError(cerror.ErrS3StorageAPI, err)
+		return cerror.WrapError(cerror.ErrExternalStorageAPI, err)
 	}
 
 	// in case the page cache piling up triggered the OS memory reclaming which may cause

@@ -15,25 +15,33 @@ package sinkmanager
 
 import (
 	"context"
+	"sort"
+	"sync"
 	"sync/atomic"
+	"time"
 
 	"github.com/pingcap/errors"
 	"github.com/pingcap/log"
 	"github.com/pingcap/tiflow/cdc/model"
-	"github.com/pingcap/tiflow/cdc/processor/pipeline"
+	"github.com/pingcap/tiflow/cdc/processor/sourcemanager/engine"
 	"github.com/pingcap/tiflow/cdc/processor/tablepb"
 	sinkv2 "github.com/pingcap/tiflow/cdc/sinkv2/tablesink"
+	"github.com/tikv/client-go/v2/oracle"
 	"go.uber.org/zap"
 )
+
+var version uint64 = 0
 
 // tableSinkWrapper is a wrapper of TableSink, it is used in SinkManager to manage TableSink.
 // Because in the SinkManager, we write data to TableSink and RedoManager concurrently,
 // so current sink node can not be reused.
 type tableSinkWrapper struct {
+	version uint64
+
 	// changefeed used for logging.
 	changefeed model.ChangeFeedID
 	// tableID used for logging.
-	tableID model.TableID
+	span tablepb.Span
 	// tableSink is the underlying sink.
 	tableSink sinkv2.TableSink
 	// state used to control the lifecycle of the table.
@@ -52,33 +60,83 @@ type tableSinkWrapper struct {
 	receivedSorterCommitTs atomic.Uint64
 	// receivedEventCount is the number of events received from the sorter.
 	receivedEventCount atomic.Int64
+	// lastCleanTime indicates the last time the table has been cleaned.
+	lastCleanTime time.Time
+	// checkpointTs is the checkpoint ts of the table sink.
+	checkpointTs atomic.Uint64
+
+	// rangeEventCounts is for clean the table engine.
+	// If rangeEventCounts[i].events is greater than 0, it means there must be
+	// events in the range (rangeEventCounts[i-1].lastPos, rangeEventCounts[i].lastPos].
+	rangeEventCounts   []rangeEventCount
+	rangeEventCountsMu sync.Mutex
+}
+
+type rangeEventCount struct {
+	// firstPos and lastPos are used to merge many rangeEventCount into one.
+	firstPos engine.Position
+	lastPos  engine.Position
+	events   int
+}
+
+func newRangeEventCount(pos engine.Position, events int) rangeEventCount {
+	return rangeEventCount{
+		firstPos: pos,
+		lastPos:  pos,
+		events:   events,
+	}
 }
 
 func newTableSinkWrapper(
 	changefeed model.ChangeFeedID,
-	tableID model.TableID,
+	span tablepb.Span,
 	tableSink sinkv2.TableSink,
 	state tablepb.TableState,
 	startTs model.Ts,
 	targetTs model.Ts,
 ) *tableSinkWrapper {
-	return &tableSinkWrapper{
+	res := &tableSinkWrapper{
+		version:    atomic.AddUint64(&version, 1),
 		changefeed: changefeed,
-		tableID:    tableID,
+		span:       span,
 		tableSink:  tableSink,
 		state:      &state,
 		startTs:    startTs,
 		targetTs:   targetTs,
 	}
+	res.checkpointTs.Store(startTs)
+	res.receivedSorterResolvedTs.Store(startTs)
+	return res
 }
 
-func (t *tableSinkWrapper) start(replicateTs model.Ts) {
+func (t *tableSinkWrapper) start(startTs model.Ts, replicateTs model.Ts) {
+	if t.replicateTs != 0 {
+		log.Panic("The table sink has already started",
+			zap.String("namespace", t.changefeed.Namespace),
+			zap.String("changefeed", t.changefeed.ID),
+			zap.Stringer("span", &t.span),
+			zap.Uint64("startTs", startTs),
+			zap.Uint64("replicateTs", replicateTs),
+			zap.Uint64("oldReplicateTs", t.replicateTs),
+		)
+	}
 	log.Info("Sink is started",
 		zap.String("namespace", t.changefeed.Namespace),
 		zap.String("changefeed", t.changefeed.ID),
-		zap.Int64("tableID", t.tableID),
+		zap.Stringer("span", &t.span),
+		zap.Uint64("startTs", startTs),
 		zap.Uint64("replicateTs", replicateTs),
 	)
+	// This start ts maybe greater than the initial start ts of the table sink.
+	// Because in two phase scheduling, the table sink may be advanced to a later ts.
+	// And we can just continue to replicate the table sink from the new start ts.
+	t.checkpointTs.Store(startTs)
+	for {
+		old := t.receivedSorterResolvedTs.Load()
+		if startTs <= old || t.receivedSorterResolvedTs.CompareAndSwap(old, startTs) {
+			break
+		}
+	}
 	t.replicateTs = replicateTs
 	t.state.Store(tablepb.TableStateReplicating)
 }
@@ -88,10 +146,18 @@ func (t *tableSinkWrapper) appendRowChangedEvents(events ...*model.RowChangedEve
 }
 
 func (t *tableSinkWrapper) updateReceivedSorterResolvedTs(ts model.Ts) {
-	if t.state.Load() == tablepb.TableStatePreparing && ts > t.startTs {
-		t.state.Store(tablepb.TableStatePrepared)
+	for {
+		old := t.receivedSorterResolvedTs.Load()
+		if ts <= old {
+			return
+		}
+		if t.receivedSorterResolvedTs.CompareAndSwap(old, ts) {
+			if t.state.Load() == tablepb.TableStatePreparing {
+				t.state.Store(tablepb.TableStatePrepared)
+			}
+			return
+		}
 	}
-	t.receivedSorterResolvedTs.Store(ts)
 }
 
 func (t *tableSinkWrapper) updateReceivedSorterCommitTs(ts model.Ts) {
@@ -108,7 +174,12 @@ func (t *tableSinkWrapper) updateResolvedTs(ts model.ResolvedTs) error {
 }
 
 func (t *tableSinkWrapper) getCheckpointTs() model.ResolvedTs {
-	return t.tableSink.GetCheckpointTs()
+	currentCheckpointTs := t.checkpointTs.Load()
+	newCheckpointTs := t.tableSink.GetCheckpointTs()
+	if currentCheckpointTs > newCheckpointTs.ResolvedMark() {
+		return model.NewResolvedTs(currentCheckpointTs)
+	}
+	return newCheckpointTs
 }
 
 func (t *tableSinkWrapper) getReceivedSorterResolvedTs() model.Ts {
@@ -133,14 +204,69 @@ func (t *tableSinkWrapper) close(ctx context.Context) {
 	defer t.state.Store(tablepb.TableStateStopped)
 	t.tableSink.Close(ctx)
 	log.Info("Sink is closed",
-		zap.Int64("tableID", t.tableID),
+		zap.Stringer("span", &t.span),
 		zap.String("namespace", t.changefeed.Namespace),
 		zap.String("changefeed", t.changefeed.ID))
 }
 
+func (t *tableSinkWrapper) updateRangeEventCounts(eventCount rangeEventCount) {
+	t.rangeEventCountsMu.Lock()
+	defer t.rangeEventCountsMu.Unlock()
+
+	countsLen := len(t.rangeEventCounts)
+	if countsLen == 0 {
+		t.rangeEventCounts = append(t.rangeEventCounts, eventCount)
+		return
+	}
+	if t.rangeEventCounts[countsLen-1].lastPos.Compare(eventCount.lastPos) < 0 {
+		// If two rangeEventCounts are close enough, we can merge them into one record
+		// to save memory usage. When merging B into A, A.lastPos will be updated but
+		// A.firstPos will be kept so that we can determine whether to continue to merge
+		// more events or not based on timeDiff(C.lastPos, A.firstPos).
+		lastPhy := oracle.ExtractPhysical(t.rangeEventCounts[countsLen-1].firstPos.CommitTs)
+		currPhy := oracle.ExtractPhysical(eventCount.lastPos.CommitTs)
+		if (currPhy - lastPhy) >= 1000 { // 1000 means 1000ms.
+			t.rangeEventCounts = append(t.rangeEventCounts, eventCount)
+		} else {
+			t.rangeEventCounts[countsLen-1].lastPos = eventCount.lastPos
+			t.rangeEventCounts[countsLen-1].events += eventCount.events
+		}
+	}
+}
+
+func (t *tableSinkWrapper) cleanRangeEventCounts(upperBound engine.Position, minEvents int) bool {
+	t.rangeEventCountsMu.Lock()
+	defer t.rangeEventCountsMu.Unlock()
+
+	idx := sort.Search(len(t.rangeEventCounts), func(i int) bool {
+		return t.rangeEventCounts[i].lastPos.Compare(upperBound) > 0
+	})
+	if len(t.rangeEventCounts) == 0 || idx == 0 {
+		return false
+	}
+
+	count := 0
+	for _, events := range t.rangeEventCounts[0:idx] {
+		count += events.events
+	}
+	shouldClean := count >= minEvents
+
+	if !shouldClean {
+		// To reduce engine.CleanByTable calls.
+		t.rangeEventCounts[idx-1].events = count
+		t.rangeEventCounts = t.rangeEventCounts[idx-1:]
+	} else {
+		t.rangeEventCounts = t.rangeEventCounts[idx:]
+	}
+	return shouldClean
+}
+
 // convertRowChangedEvents uses to convert RowChangedEvents to TableSinkRowChangedEvents.
 // It will deal with the old value compatibility.
-func convertRowChangedEvents(changefeed model.ChangeFeedID, tableID model.TableID, enableOldValue bool, events ...*model.PolymorphicEvent) ([]*model.RowChangedEvent, uint64, error) {
+func convertRowChangedEvents(
+	changefeed model.ChangeFeedID, span tablepb.Span, enableOldValue bool,
+	events ...*model.PolymorphicEvent,
+) ([]*model.RowChangedEvent, uint64, error) {
 	size := 0
 	rowChangedEvents := make([]*model.RowChangedEvent, 0, len(events))
 	for _, e := range events {
@@ -148,7 +274,7 @@ func convertRowChangedEvents(changefeed model.ChangeFeedID, tableID model.TableI
 			log.Warn("skip emit nil event",
 				zap.String("namespace", changefeed.Namespace),
 				zap.String("changefeed", changefeed.ID),
-				zap.Int64("tableID", tableID),
+				zap.Stringer("span", &span),
 				zap.Any("event", e))
 			continue
 		}
@@ -160,7 +286,7 @@ func convertRowChangedEvents(changefeed model.ChangeFeedID, tableID model.TableI
 		// Just ignore these row changed events.
 		if colLen == 0 && preColLen == 0 {
 			log.Warn("skip emit empty row event",
-				zap.Int64("tableID", tableID),
+				zap.Stringer("span", &span),
 				zap.String("namespace", changefeed.Namespace),
 				zap.String("changefeed", changefeed.ID),
 				zap.Any("event", e))
@@ -173,8 +299,8 @@ func convertRowChangedEvents(changefeed model.ChangeFeedID, tableID model.TableI
 		// and after enable old value internally by default(but disable in the configuration).
 		// We need to handle the update event to be compatible with the old format.
 		if !enableOldValue && colLen != 0 && preColLen != 0 && colLen == preColLen {
-			if pipeline.ShouldSplitUpdateEvent(e) {
-				deleteEvent, insertEvent, err := pipeline.SplitUpdateEvent(e)
+			if shouldSplitUpdateEvent(e) {
+				deleteEvent, insertEvent, err := splitUpdateEvent(e)
 				if err != nil {
 					return nil, 0, errors.Trace(err)
 				}
@@ -190,4 +316,68 @@ func convertRowChangedEvents(changefeed model.ChangeFeedID, tableID model.TableI
 		}
 	}
 	return rowChangedEvents, uint64(size), nil
+}
+
+// shouldSplitUpdateEvent determines if the split event is needed to align the old format based on
+// whether the handle key column has been modified.
+// If the handle key column is modified,
+// we need to use splitUpdateEvent to split the update event into a delete and an insert event.
+func shouldSplitUpdateEvent(updateEvent *model.PolymorphicEvent) bool {
+	// nil event will never be split.
+	if updateEvent == nil {
+		return false
+	}
+
+	for i := range updateEvent.Row.Columns {
+		col := updateEvent.Row.Columns[i]
+		preCol := updateEvent.Row.PreColumns[i]
+		if col != nil && col.Flag.IsHandleKey() && preCol != nil && preCol.Flag.IsHandleKey() {
+			colValueString := model.ColumnValueString(col.Value)
+			preColValueString := model.ColumnValueString(preCol.Value)
+			// If one handle key columns is updated, we need to split the event row.
+			if colValueString != preColValueString {
+				return true
+			}
+		}
+	}
+	return false
+}
+
+// splitUpdateEvent splits an update event into a delete and an insert event.
+func splitUpdateEvent(
+	updateEvent *model.PolymorphicEvent,
+) (*model.PolymorphicEvent, *model.PolymorphicEvent, error) {
+	if updateEvent == nil {
+		return nil, nil, errors.New("nil event cannot be split")
+	}
+
+	// If there is an update to handle key columns,
+	// we need to split the event into two events to be compatible with the old format.
+	// NOTICE: Here we don't need a full deep copy because
+	// our two events need Columns and PreColumns respectively,
+	// so it won't have an impact and no more full deep copy wastes memory.
+	deleteEvent := *updateEvent
+	deleteEventRow := *updateEvent.Row
+	deleteEventRowKV := *updateEvent.RawKV
+	deleteEvent.Row = &deleteEventRow
+	deleteEvent.RawKV = &deleteEventRowKV
+
+	deleteEvent.Row.Columns = nil
+	for i := range deleteEvent.Row.PreColumns {
+		// NOTICE: Only the handle key pre column is retained in the delete event.
+		if deleteEvent.Row.PreColumns[i] != nil &&
+			!deleteEvent.Row.PreColumns[i].Flag.IsHandleKey() {
+			deleteEvent.Row.PreColumns[i] = nil
+		}
+	}
+
+	insertEvent := *updateEvent
+	insertEventRow := *updateEvent.Row
+	insertEventRowKV := *updateEvent.RawKV
+	insertEvent.Row = &insertEventRow
+	insertEvent.RawKV = &insertEventRowKV
+	// NOTICE: clean up pre cols for insert event.
+	insertEvent.Row.PreColumns = nil
+
+	return &deleteEvent, &insertEvent, nil
 }

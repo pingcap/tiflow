@@ -39,6 +39,8 @@ func TestWriteDDLEvent(t *testing.T) {
 	require.Nil(t, err)
 
 	ddlEvent := &model.DDLEvent{
+		Type:  timodel.ActionAddColumn,
+		Query: "alter table test.table1 add col2 varchar(64)",
 		TableInfo: &model.TableInfo{
 			Version: 100,
 			TableName: model.TableName{
@@ -70,7 +72,10 @@ func TestWriteDDLEvent(t *testing.T) {
 	require.JSONEq(t, `{
 		"Table": "table1",
 		"Schema": "test",
-		"Version": 100,
+		"Version": 1,
+		"TableVersion": 100,
+		"Query": "alter table test.table1 add col2 varchar(64)",
+		"Type": 5,
 		"TableColumns": [
 			{
 				"ColumnName": "col1",

@@ -3,7 +3,7 @@ FROM canal/osbase:v2
 # Solve the problem that centos 6.0 cannot yum install.
 RUN sed -i "s|enabled=1|enabled=0|g" /etc/yum/pluginconf.d/fastestmirror.conf
 RUN mv /etc/yum.repos.d/CentOS-Base.repo /etc/yum.repos.d/CentOS-Base.repo.backup
-RUN curl -o /etc/yum.repos.d/CentOS-Base.repo https://www.xmpan.com/Centos-6-Vault-Aliyun.repo
+COPY CentOS-Base.repo /etc/yum.repos.d/CentOS-Base.repo
 RUN yum clean all
 RUN yum makecache
 

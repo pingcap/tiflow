@@ -74,7 +74,7 @@ func NewSchemaStorage(
 	)
 	if meta == nil {
 		snap = schema.NewEmptySnapshot(forceReplicate)
-		snap.InitConcurrentDDLTables()
+		snap.InitPreExistingTables()
 	} else {
 		snap, err = schema.NewSnapshotFromMeta(meta, startTs, forceReplicate)
 		if err != nil {
@@ -188,7 +188,7 @@ func (s *schemaStorageImpl) HandleDDLJob(job *timodel.Job) error {
 		snap = lastSnap.Copy()
 	} else {
 		snap = schema.NewEmptySnapshot(s.forceReplicate)
-		snap.InitConcurrentDDLTables()
+		snap.InitPreExistingTables()
 	}
 	if err := snap.HandleDDL(job); err != nil {
 		log.Error("handle DDL failed",
@@ -271,4 +271,39 @@ func (s *schemaStorageImpl) skipJob(job *timodel.Job) bool {
 		zap.String("namespace", s.id.Namespace),
 		zap.String("changefeed", s.id.ID))
 	return !job.IsSynced() && !job.IsDone()
+}
+
+// MockSchemaStorage is for tests.
+type MockSchemaStorage struct {
+	Resolved uint64
+}
+
+// GetSnapshot implements SchemaStorage.
+func (s *MockSchemaStorage) GetSnapshot(ctx context.Context, ts uint64) (*schema.Snapshot, error) {
+	return nil, nil
+}
+
+// GetLastSnapshot implements SchemaStorage.
+func (s *MockSchemaStorage) GetLastSnapshot() *schema.Snapshot {
+	return nil
+}
+
+// HandleDDLJob implements SchemaStorage.
+func (s *MockSchemaStorage) HandleDDLJob(job *timodel.Job) error {
+	return nil
+}
+
+// AdvanceResolvedTs implements SchemaStorage.
+func (s *MockSchemaStorage) AdvanceResolvedTs(ts uint64) {
+	s.Resolved = ts
+}
+
+// ResolvedTs implements SchemaStorage.
+func (s *MockSchemaStorage) ResolvedTs() uint64 {
+	return s.Resolved
+}
+
+// DoGC implements SchemaStorage.
+func (s *MockSchemaStorage) DoGC(ts uint64) uint64 {
+	return s.Resolved
 }

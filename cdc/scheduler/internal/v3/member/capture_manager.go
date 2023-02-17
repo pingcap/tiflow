@@ -19,6 +19,8 @@ import (
 	"github.com/pingcap/tiflow/cdc/processor/tablepb"
 	"github.com/pingcap/tiflow/cdc/scheduler/internal/v3/replication"
 	"github.com/pingcap/tiflow/cdc/scheduler/schedulepb"
+	"github.com/pingcap/tiflow/pkg/config"
+	"github.com/pingcap/tiflow/pkg/spanz"
 	"go.uber.org/zap"
 )
 
@@ -121,8 +123,10 @@ type CaptureManager struct {
 	changes     *CaptureChanges
 
 	// A logical clock counter, for heartbeat.
-	tickCounter   int
-	heartbeatTick int
+	tickCounter      int
+	heartbeatTick    int
+	collectStatsTick int
+	pendingCollect   bool
 
 	changefeedID model.ChangeFeedID
 	ownerID      model.CaptureID
@@ -131,12 +135,13 @@ type CaptureManager struct {
 // NewCaptureManager returns a new capture manager.
 func NewCaptureManager(
 	ownerID model.CaptureID, changefeedID model.ChangeFeedID,
-	rev schedulepb.OwnerRevision, heartbeatTick int,
+	rev schedulepb.OwnerRevision, cfg *config.SchedulerConfig,
 ) *CaptureManager {
 	return &CaptureManager{
-		OwnerRev:      rev,
-		Captures:      make(map[model.CaptureID]*CaptureStatus),
-		heartbeatTick: heartbeatTick,
+		OwnerRev:         rev,
+		Captures:         make(map[model.CaptureID]*CaptureStatus),
+		heartbeatTick:    cfg.HeartbeatTick,
+		collectStatsTick: cfg.CollectStatsTick,
 
 		changefeedID: changefeedID,
 		ownerID:      ownerID,
@@ -160,35 +165,40 @@ func (c *CaptureManager) checkAllCaptureInitialized() bool {
 	return len(c.Captures) != 0
 }
 
-// Tick advances the logical lock of capture manager and produce heartbeat when
+// Tick advances the logical clock of capture manager and produce heartbeat when
 // necessary.
 func (c *CaptureManager) Tick(
-	reps map[model.TableID]*replication.ReplicationSet, drainingCapture model.CaptureID,
+	reps *spanz.BtreeMap[*replication.ReplicationSet], drainingCapture model.CaptureID,
 ) []*schedulepb.Message {
 	c.tickCounter++
-	if c.tickCounter < c.heartbeatTick {
+	if c.tickCounter%c.collectStatsTick == 0 {
+		c.pendingCollect = true
+	}
+	if c.tickCounter%c.heartbeatTick != 0 {
 		return nil
 	}
-	c.tickCounter = 0
-	tables := make(map[model.CaptureID][]model.TableID)
-	for tableID, rep := range reps {
+	tables := make(map[model.CaptureID][]tablepb.Span)
+	reps.Ascend(func(span tablepb.Span, rep *replication.ReplicationSet) bool {
 		for captureID := range rep.Captures {
-			tables[captureID] = append(tables[captureID], tableID)
+			tables[captureID] = append(tables[captureID], span)
 		}
-	}
+		return true
+	})
 	msgs := make([]*schedulepb.Message, 0, len(c.Captures))
 	for to := range c.Captures {
 		msgs = append(msgs, &schedulepb.Message{
 			To:      to,
 			MsgType: schedulepb.MsgHeartbeat,
 			Heartbeat: &schedulepb.Heartbeat{
-				TableIDs: tables[to],
+				Spans: tables[to],
 				// IsStopping let the receiver capture know that it should be stopping now.
 				// At the moment, this is triggered by `DrainCapture` scheduler.
-				IsStopping: drainingCapture == to,
+				IsStopping:   drainingCapture == to,
+				CollectStats: c.pendingCollect,
 			},
 		})
 	}
+	c.pendingCollect = false
 	return msgs
 }
 

@@ -12,5 +12,8 @@ delete from `t1` where `id` = 8;
 commit;
 
 begin;
-insert into `t1` values (1, '1'), (3, '3'), (5, '5'), (7, '7'), (9, '9');
+insert into `t1` values (19, '19'), (39, '39'), (59, '59'), (79, '79'), (99, '99');
 rollback;
+
+insert into `t1` values (200, '200'), (400, '400'), (600, '600'), (800, '800'), (1000, '1000');
+

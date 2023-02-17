@@ -32,6 +32,13 @@ fi
 "$MOCKGEN" -source cdc/capture/capture.go -destination cdc/capture/mock/capture_mock.go
 "$MOCKGEN" -source pkg/cmd/factory/factory.go -destination pkg/cmd/factory/mock/factory_mock.go -package mock_factory
 "$MOCKGEN" -source cdc/processor/sourcemanager/engine/engine.go -destination cdc/processor/sourcemanager/engine/mock/engine_mock.go
+"$MOCKGEN" -source pkg/api/v2/changefeed.go -destination pkg/api/v2/mock/changefeed_mock.go -package mock
+"$MOCKGEN" -source pkg/api/v2/tso.go -destination pkg/api/v2/mock/tso_mock.go -package mock
+"$MOCKGEN" -source pkg/api/v2/unsafe.go -destination pkg/api/v2/mock/unsafe_mock.go -package mock
+"$MOCKGEN" -source pkg/api/v2/status.go -destination pkg/api/v2/mock/status_mock.go -package mock
+"$MOCKGEN" -source pkg/api/v2/capture.go -destination pkg/api/v2/mock/capture_mock.go -package mock
+"$MOCKGEN" -source pkg/api/v2/processor.go -destination pkg/api/v2/mock/processor_mock.go -package mock
+"$MOCKGEN" -source pkg/sink/kafka/v2/client.go -destination pkg/sink/kafka/v2/mock/client_mock.go
 
 # DM mock
 "$MOCKGEN" -package pbmock -destination dm/pbmock/dmmaster.go github.com/pingcap/tiflow/dm/pb MasterClient,MasterServer

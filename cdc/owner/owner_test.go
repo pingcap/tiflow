@@ -32,7 +32,7 @@ import (
 	cerror "github.com/pingcap/tiflow/pkg/errors"
 	"github.com/pingcap/tiflow/pkg/etcd"
 	"github.com/pingcap/tiflow/pkg/orchestrator"
-	"github.com/pingcap/tiflow/pkg/pdutil"
+	"github.com/pingcap/tiflow/pkg/sink/observer"
 	"github.com/pingcap/tiflow/pkg/txnutil/gc"
 	"github.com/pingcap/tiflow/pkg/upstream"
 	"github.com/pingcap/tiflow/pkg/version"
@@ -63,19 +63,27 @@ func newOwner4Test(
 		changefeed model.ChangeFeedID,
 	) (puller.DDLPuller, error),
 	newSink func(changefeedID model.ChangeFeedID, info *model.ChangeFeedInfo, reportErr func(err error)) DDLSink,
-	newScheduler func(ctx cdcContext.Context, pdClock pdutil.Clock) (scheduler.Scheduler, error),
+	newScheduler func(
+		ctx cdcContext.Context, up *upstream.Upstream, cfg *config.SchedulerConfig,
+	) (scheduler.Scheduler, error),
+	newDownstreamObserver func(
+		ctx context.Context, sinkURIStr string, replCfg *config.ReplicaConfig,
+		opts ...observer.NewObserverOption,
+	) (observer.Observer, error),
 	pdClient pd.Client,
 ) Owner {
 	m := upstream.NewManager4Test(pdClient)
-	o := NewOwner(m).(*ownerImpl)
+	o := NewOwner(m, config.NewDefaultSchedulerConfig()).(*ownerImpl)
 	// Most tests do not need to test bootstrap.
 	o.bootstrapped = true
 	o.newChangefeed = func(
 		id model.ChangeFeedID,
 		state *orchestrator.ChangefeedReactorState,
 		up *upstream.Upstream,
+		cfg *config.SchedulerConfig,
 	) *changefeed {
-		return newChangefeed4Test(id, state, up, newDDLPuller, newSink, newScheduler)
+		return newChangefeed4Test(id, state, up, newDDLPuller, newSink,
+			newScheduler, newDownstreamObserver)
 	}
 	return o
 }
@@ -103,9 +111,16 @@ func createOwner4Test(ctx cdcContext.Context, t *testing.T) (*ownerImpl, *orches
 		},
 		// new scheduler
 		func(
-			ctx cdcContext.Context, pdClock pdutil.Clock,
+			ctx cdcContext.Context, up *upstream.Upstream, cfg *config.SchedulerConfig,
 		) (scheduler.Scheduler, error) {
 			return &mockScheduler{}, nil
+		},
+		// new downstream observer
+		func(
+			ctx context.Context, sinkURIStr string, replCfg *config.ReplicaConfig,
+			opts ...observer.NewObserverOption,
+		) (observer.Observer, error) {
+			return observer.NewDummyObserver(), nil
 		},
 		pdClient,
 	)
@@ -418,7 +433,7 @@ func TestAdminJob(t *testing.T) {
 func TestUpdateGCSafePoint(t *testing.T) {
 	mockPDClient := &gc.MockPDClient{}
 	m := upstream.NewManager4Test(mockPDClient)
-	o := NewOwner(m).(*ownerImpl)
+	o := NewOwner(m, config.NewDefaultSchedulerConfig()).(*ownerImpl)
 	ctx := cdcContext.NewBackendContext4Test(true)
 	ctx, cancel := cdcContext.WithCancel(ctx)
 	defer cancel()
@@ -956,6 +971,31 @@ func TestValidateChangefeed(t *testing.T) {
 	require.Error(t, o.ValidateChangefeed(&model.ChangeFeedInfo{
 		SinkURI: "wrong uri\n\t",
 	}))
+
+	// Test limit hit.
+	o.removedChangefeed[id] = time.Now()
+	o.removedSinkURI[url.URL{
+		Scheme: "mysql",
+		Host:   "host:1234",
+	}] = time.Now()
+
+	err := o.ValidateChangefeed(&model.ChangeFeedInfo{
+		ID:        id.ID,
+		Namespace: id.Namespace,
+	})
+	require.Regexp(t,
+		".*changefeed with same ID was just removed, please wait .*",
+		err.Error(),
+	)
+	err = o.ValidateChangefeed(&model.ChangeFeedInfo{
+		ID:        "unknown",
+		Namespace: "unknown",
+		SinkURI:   sinkURI,
+	})
+	require.Regexp(t,
+		".*changefeed with same sink URI was just removed, please wait .*",
+		err.Error(),
+	)
 
 	// Test limit passed.
 	o.removedChangefeed[id] = time.Now().Add(-2 * recreateChangefeedDelayLimit)

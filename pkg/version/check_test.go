@@ -29,7 +29,7 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	pd "github.com/tikv/pd/client"
-	"github.com/tikv/pd/pkg/tempurl"
+	"github.com/tikv/pd/pkg/utils/tempurl"
 )
 
 type mockPDClient struct {
@@ -215,19 +215,19 @@ func TestCheckClusterVersion(t *testing.T) {
 
 func TestCompareVersion(t *testing.T) {
 	// build on master branch, `vx.y.z-master`
-	masterVersion := semver.New(removeVAndHash("v6.3.0-master"))
+	masterVersion := semver.New(SanitizeVersion("v6.3.0-master"))
 	require.Equal(t, 1, masterVersion.Compare(*MinTiCDCVersion))
 
 	// pre-release version, `vx.y.z-alpha-nightly-yyyymmdd`
-	alphaVersion := semver.New(removeVAndHash("v6.3.0-alpha-nightly-20220202"))
+	alphaVersion := semver.New(SanitizeVersion("v6.3.0-alpha-nightly-20220202"))
 	require.Equal(t, 1, alphaVersion.Compare(*MinTiCDCVersion))
 
 	// release version, `vx.y.z.`
-	releaseVersion := semver.New(removeVAndHash("v6.3.0"))
+	releaseVersion := semver.New(SanitizeVersion("v6.3.0"))
 	require.Equal(t, 1, releaseVersion.Compare(*MinTiCDCVersion))
 
 	// build with uncommitted changes, `vx.y.z-dirty`
-	dirtyVersion := semver.New(removeVAndHash("v6.3.0-dirty"))
+	dirtyVersion := semver.New(SanitizeVersion("v6.3.0-dirty"))
 	require.Equal(t, 1, dirtyVersion.Compare(*MinTiCDCVersion))
 	require.Equal(t, 0, dirtyVersion.Compare(*semver.New("6.3.0")))
 }

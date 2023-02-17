@@ -20,6 +20,7 @@ import (
 
 	"github.com/gogo/protobuf/jsonpb"
 	dmconfig "github.com/pingcap/tiflow/dm/config"
+	"github.com/pingcap/tiflow/dm/config/dbconfig"
 	"github.com/pingcap/tiflow/dm/pb"
 	"github.com/pingcap/tiflow/engine/framework"
 	frameModel "github.com/pingcap/tiflow/engine/framework/model"
@@ -90,25 +91,31 @@ func TestQueryStatusAPI(t *testing.T) {
 		loadStatusBytes, _ = mar.MarshalToString(loadStatus)
 		syncStatusBytes, _ = mar.MarshalToString(syncStatus)
 		dumpStatusResp     = &dmpkg.QueryStatusResponse{
-			Unit:   frameModel.WorkerDMDump,
-			Stage:  metadata.StageRunning,
-			Status: []byte(dumpStatusBytes),
+			Unit:             frameModel.WorkerDMDump,
+			Stage:            metadata.StageRunning,
+			Status:           []byte(dumpStatusBytes),
+			IoTotalBytes:     0,
+			DumpIoTotalBytes: 0,
 		}
 		loadStatusResp = &dmpkg.QueryStatusResponse{
-			Unit:   frameModel.WorkerDMLoad,
-			Stage:  metadata.StageFinished,
-			Result: &dmpkg.ProcessResult{IsCanceled: false},
-			Status: []byte(loadStatusBytes),
+			Unit:             frameModel.WorkerDMLoad,
+			Stage:            metadata.StageFinished,
+			Result:           &dmpkg.ProcessResult{IsCanceled: false},
+			Status:           []byte(loadStatusBytes),
+			IoTotalBytes:     0,
+			DumpIoTotalBytes: 0,
 		}
 		syncStatusResp = &dmpkg.QueryStatusResponse{
-			Unit:   frameModel.WorkerDMSync,
-			Stage:  metadata.StagePaused,
-			Result: &dmpkg.ProcessResult{Errors: []*dmpkg.ProcessError{processError}},
-			Status: []byte(syncStatusBytes),
+			Unit:             frameModel.WorkerDMSync,
+			Stage:            metadata.StagePaused,
+			Result:           &dmpkg.ProcessResult{Errors: []*dmpkg.ProcessError{processError}},
+			Status:           []byte(syncStatusBytes),
+			IoTotalBytes:     0,
+			DumpIoTotalBytes: 0,
 		}
 		taskCfg = &config.TaskCfg{
 			JobCfg: config.JobCfg{
-				TargetDB: &dmconfig.DBConfig{},
+				TargetDB: &dbconfig.DBConfig{},
 				Upstreams: []*config.UpstreamCfg{
 					{
 						MySQLInstance: dmconfig.MySQLInstance{
@@ -117,7 +124,7 @@ func TestQueryStatusAPI(t *testing.T) {
 							Syncer:   &dmconfig.SyncerConfig{},
 							SourceID: "task-id",
 						},
-						DBCfg: &dmconfig.DBConfig{},
+						DBCfg: &dbconfig.DBConfig{},
 					},
 				},
 			},
@@ -171,7 +178,7 @@ func TestStopWorker(t *testing.T) {
 
 	taskCfg := &config.TaskCfg{
 		JobCfg: config.JobCfg{
-			TargetDB: &dmconfig.DBConfig{},
+			TargetDB: &dbconfig.DBConfig{},
 			Upstreams: []*config.UpstreamCfg{
 				{
 					MySQLInstance: dmconfig.MySQLInstance{
@@ -180,7 +187,7 @@ func TestStopWorker(t *testing.T) {
 						Syncer:   &dmconfig.SyncerConfig{},
 						SourceID: "task-id",
 					},
-					DBCfg: &dmconfig.DBConfig{},
+					DBCfg: &dbconfig.DBConfig{},
 				},
 			},
 		},
@@ -209,7 +216,7 @@ func TestOperateTask(t *testing.T) {
 
 	taskCfg := &config.TaskCfg{
 		JobCfg: config.JobCfg{
-			TargetDB: &dmconfig.DBConfig{},
+			TargetDB: &dbconfig.DBConfig{},
 			Upstreams: []*config.UpstreamCfg{
 				{
 					MySQLInstance: dmconfig.MySQLInstance{
@@ -218,7 +225,7 @@ func TestOperateTask(t *testing.T) {
 						Syncer:   &dmconfig.SyncerConfig{},
 						SourceID: "task-id",
 					},
-					DBCfg: &dmconfig.DBConfig{},
+					DBCfg: &dbconfig.DBConfig{},
 				},
 			},
 		},

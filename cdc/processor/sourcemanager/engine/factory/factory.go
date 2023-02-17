@@ -14,8 +14,10 @@
 package factory
 
 import (
+	"fmt"
 	"strconv"
 	"sync"
+	stdatomic "sync/atomic"
 	"time"
 
 	"github.com/cockroachdb/pebble"
@@ -23,8 +25,8 @@ import (
 	"github.com/pingcap/tiflow/cdc/model"
 	"github.com/pingcap/tiflow/cdc/processor/sourcemanager/engine"
 	epebble "github.com/pingcap/tiflow/cdc/processor/sourcemanager/engine/pebble"
-	metrics "github.com/pingcap/tiflow/cdc/sorter"
 	"github.com/pingcap/tiflow/pkg/config"
+	"go.uber.org/atomic"
 	"go.uber.org/multierr"
 )
 
@@ -35,6 +37,12 @@ const (
 	pebbleEngine sortEngineType = iota + 1
 
 	metricsCollectInterval = 15 * time.Second
+)
+
+var (
+	// Use singleton to be compatible with test cases.
+	factoryMu sync.Mutex
+	factory   *SortEngineFactory = nil
 )
 
 // SortEngineFactory is a manager to create or drop SortEngine.
@@ -54,6 +62,9 @@ type SortEngineFactory struct {
 	pebbleConfig *config.DBConfig
 	dbs          []*pebble.DB
 	writeStalls  []writeStall
+
+	// dbs is also readed in the background metrics collector.
+	dbInitialized *atomic.Bool
 }
 
 // Create creates a SortEngine. If an engine with same ID already exists,
@@ -73,6 +84,7 @@ func (f *SortEngineFactory) Create(ID model.ChangeFeedID) (e engine.SortEngine, 
 			if err != nil {
 				return
 			}
+			f.dbInitialized.Store(true)
 		}
 		e = epebble.New(ID, f.dbs)
 		f.engines[ID] = e
@@ -97,6 +109,10 @@ func (f *SortEngineFactory) Drop(ID model.ChangeFeedID) error {
 
 // Close will close all created engines and release all resources.
 func (f *SortEngineFactory) Close() (err error) {
+	factoryMu.Lock()
+	defer factoryMu.Unlock()
+	factory = nil
+
 	f.mu.Lock()
 	defer f.mu.Unlock()
 
@@ -114,17 +130,21 @@ func (f *SortEngineFactory) Close() (err error) {
 
 // NewForPebble will create a SortEngineFactory for the pebble implementation.
 func NewForPebble(dir string, memQuotaInBytes uint64, cfg *config.DBConfig) *SortEngineFactory {
-	manager := &SortEngineFactory{
-		engineType:      pebbleEngine,
-		dir:             dir,
-		memQuotaInBytes: memQuotaInBytes,
-		engines:         make(map[model.ChangeFeedID]engine.SortEngine),
-		closed:          make(chan struct{}),
-		pebbleConfig:    cfg,
+	factoryMu.Lock()
+	defer factoryMu.Unlock()
+	if factory == nil {
+		factory = &SortEngineFactory{
+			engineType:      pebbleEngine,
+			dir:             dir,
+			memQuotaInBytes: memQuotaInBytes,
+			engines:         make(map[model.ChangeFeedID]engine.SortEngine),
+			closed:          make(chan struct{}),
+			pebbleConfig:    cfg,
+			dbInitialized:   atomic.NewBool(false),
+		}
+		factory.startMetricsCollector()
 	}
-
-	manager.startMetricsCollector()
-	return manager
+	return factory
 }
 
 func (f *SortEngineFactory) startMetricsCollector() {
@@ -145,13 +165,24 @@ func (f *SortEngineFactory) startMetricsCollector() {
 }
 
 func (f *SortEngineFactory) collectMetrics() {
-	if f.engineType == pebbleEngine {
+	if f.engineType == pebbleEngine && f.dbInitialized.Load() {
 		for i, db := range f.dbs {
 			stats := db.Metrics()
 			id := strconv.Itoa(i + 1)
-			metrics.OnDiskDataSizeGauge.WithLabelValues(id).Set(float64(stats.DiskSpaceUsage()))
-			metrics.InMemoryDataSizeGauge.WithLabelValues(id).Set(float64(stats.BlockCache.Size))
-			// TODO(qupeng): add more metrics about db.
+			engine.OnDiskDataSize().WithLabelValues(id).Set(float64(stats.DiskSpaceUsage()))
+			engine.InMemoryDataSize().WithLabelValues(id).Set(float64(stats.BlockCache.Size))
+			engine.IteratorGauge().WithLabelValues(id).Set(float64(stats.TableIters))
+			engine.WriteDelayCount().WithLabelValues(id).
+				Set(float64(stdatomic.LoadUint64(&f.writeStalls[i].counter)))
+
+			metricLevelCount := engine.LevelCount().MustCurryWith(map[string]string{"id": id})
+			for level, metric := range stats.Levels {
+				metricLevelCount.WithLabelValues(fmt.Sprint(level)).Set(float64(metric.NumFiles))
+			}
+			engine.BlockCacheAccess().WithLabelValues(id, "hit").
+				Set(float64(stats.BlockCache.Hits))
+			engine.BlockCacheAccess().WithLabelValues(id, "miss").
+				Set(float64(stats.BlockCache.Misses))
 		}
 	}
 }

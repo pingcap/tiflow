@@ -16,12 +16,13 @@ package metrics
 import (
 	"github.com/pingcap/tiflow/cdc/sinkv2/metrics/cloudstorage"
 	"github.com/pingcap/tiflow/cdc/sinkv2/metrics/mq"
+	"github.com/pingcap/tiflow/cdc/sinkv2/metrics/tablesink"
 	"github.com/pingcap/tiflow/cdc/sinkv2/metrics/txn"
 	"github.com/prometheus/client_golang/prometheus"
 )
 
-// rowSizeLowBound is set to 128K, only track data event with size not smaller than it.
-const largeRowSizeLowBound = 128 * 1024
+// rowSizeLowBound is set to 2K, only track data event with size not smaller than it.
+const largeRowSizeLowBound = 2 * 1024
 
 // ---------- Metrics used in Statistics. ---------- //
 var (
@@ -42,7 +43,7 @@ var (
 			Subsystem: "sinkv2",
 			Name:      "large_row_size",
 			Help:      "The size of all received row changed events (in bytes).",
-			Buckets:   prometheus.ExponentialBuckets(largeRowSizeLowBound, 2, 10), // 128K~128M
+			Buckets:   prometheus.ExponentialBuckets(largeRowSizeLowBound, 2, 15), // 2K~32M
 		}, []string{"namespace", "changefeed", "type"}) // type is for `sinkType`
 
 	// ExecDDLHistogram records the exexution time of a DDL.
@@ -72,6 +73,7 @@ func InitMetrics(registry *prometheus.Registry) {
 	registry.MustRegister(LargeRowSizeHistogram)
 	registry.MustRegister(ExecutionErrorCounter)
 
+	tablesink.InitMetrics(registry)
 	txn.InitMetrics(registry)
 	mq.InitMetrics(registry)
 	cloudstorage.InitMetrics(registry)

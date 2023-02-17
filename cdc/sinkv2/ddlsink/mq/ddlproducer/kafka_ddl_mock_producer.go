@@ -15,10 +15,9 @@ package ddlproducer
 
 import (
 	"context"
+	"fmt"
 
-	"github.com/Shopify/sarama"
-	"github.com/pingcap/tiflow/cdc/sink/codec/common"
-	mqv1 "github.com/pingcap/tiflow/cdc/sink/mq"
+	"github.com/pingcap/tiflow/pkg/sink/codec/common"
 	"github.com/pingcap/tiflow/pkg/sink/kafka"
 )
 
@@ -26,15 +25,15 @@ var _ DDLProducer = (*MockDDLProducer)(nil)
 
 // MockDDLProducer is a mock producer for test.
 type MockDDLProducer struct {
-	events map[mqv1.TopicPartitionKey][]*common.Message
+	events map[string][]*common.Message
 }
 
 // NewMockDDLProducer creates a mock producer.
-func NewMockDDLProducer(_ context.Context, _ sarama.Client,
+func NewMockDDLProducer(_ context.Context, _ kafka.Factory,
 	_ kafka.ClusterAdminClient,
 ) (DDLProducer, error) {
 	return &MockDDLProducer{
-		events: make(map[mqv1.TopicPartitionKey][]*common.Message),
+		events: make(map[string][]*common.Message),
 	}, nil
 }
 
@@ -43,10 +42,7 @@ func (m *MockDDLProducer) SyncBroadcastMessage(ctx context.Context, topic string
 	totalPartitionsNum int32, message *common.Message,
 ) error {
 	for i := 0; i < int(totalPartitionsNum); i++ {
-		key := mqv1.TopicPartitionKey{
-			Topic:     topic,
-			Partition: int32(i),
-		}
+		key := fmt.Sprintf("%s-%d", topic, i)
 		if _, ok := m.events[key]; !ok {
 			m.events[key] = make([]*common.Message, 0)
 		}
@@ -57,13 +53,10 @@ func (m *MockDDLProducer) SyncBroadcastMessage(ctx context.Context, topic string
 }
 
 // SyncSendMessage stores a message to a partition of the topic.
-func (m *MockDDLProducer) SyncSendMessage(ctx context.Context, topic string,
+func (m *MockDDLProducer) SyncSendMessage(_ context.Context, topic string,
 	partitionNum int32, message *common.Message,
 ) error {
-	key := mqv1.TopicPartitionKey{
-		Topic:     topic,
-		Partition: partitionNum,
-	}
+	key := fmt.Sprintf("%s-%d", topic, partitionNum)
 	if _, ok := m.events[key]; !ok {
 		m.events[key] = make([]*common.Message, 0)
 	}
@@ -85,6 +78,9 @@ func (m *MockDDLProducer) GetAllEvents() []*common.Message {
 }
 
 // GetEvents returns the event filtered by the key.
-func (m *MockDDLProducer) GetEvents(key mqv1.TopicPartitionKey) []*common.Message {
+func (m *MockDDLProducer) GetEvents(topic string,
+	partitionNum int32,
+) []*common.Message {
+	key := fmt.Sprintf("%s-%d", topic, partitionNum)
 	return m.events[key]
 }

@@ -22,6 +22,8 @@ import (
 	"github.com/pingcap/errors"
 	"github.com/pingcap/failpoint"
 	"github.com/pingcap/tiflow/dm/config"
+	"github.com/pingcap/tiflow/dm/config/dbconfig"
+	"github.com/pingcap/tiflow/dm/config/security"
 	"github.com/pingcap/tiflow/dm/master/metrics"
 	"github.com/pingcap/tiflow/dm/master/workerrpc"
 	"github.com/pingcap/tiflow/dm/pb"
@@ -147,7 +149,7 @@ type Scheduler struct {
 	// - when the bounding worker become offline, in updateStatusToUnbound.
 	// delete:
 	// - remove source by user request (calling `RemoveSourceCfg`).
-	// - when bounded the source to a worker, in updateStatusToBound.
+	// - when bound the source to a worker, in updateStatusToBound.
 	unbounds map[string]struct{}
 
 	// a mirror of bounds whose element is not deleted when worker unbound. worker -> SourceBound
@@ -196,11 +198,11 @@ type Scheduler struct {
 	// task -> source -> worker
 	loadTasks map[string]map[string]string
 
-	securityCfg config.Security
+	securityCfg security.Security
 }
 
 // NewScheduler creates a new scheduler instance.
-func NewScheduler(pLogger *log.Logger, securityCfg config.Security) *Scheduler {
+func NewScheduler(pLogger *log.Logger, securityCfg security.Security) *Scheduler {
 	return &Scheduler{
 		logger:            pLogger.WithFields(zap.String("component", "scheduler")),
 		subtaskLatch:      newLatches(),
@@ -546,10 +548,10 @@ func (s *Scheduler) GetSourceCfgByID(source string) *config.SourceConfig {
 // transferWorkerAndSource swaps two sources between two workers (maybe empty). The input means before invocation of
 // this function, left worker and left source are bound, right worker and right source are bound. After this function,
 // left worker should be bound to right source and vice versa.
-// lworker, "", "", rsource				This means an unbounded source bounded to a free worker
+// lworker, "", "", rsource				This means an unbound source bound to a free worker
 // lworker, lsource, rworker, "" 		This means transfer a source from a worker to another free worker
-// lworker, lsource, "", rsource		This means transfer a worker from a bounded source to another unbounded source
-// lworker, lsource, rworker, rsource	This means transfer two bounded relations.
+// lworker, lsource, "", rsource		This means transfer a worker from a bound source to another unbound source
+// lworker, lsource, rworker, rsource	This means transfer two bound relations.
 func (s *Scheduler) transferWorkerAndSource(lworker, lsource, rworker, rsource string) error {
 	// in first four arrays, index 0 is for left worker, index 1 is for right worker
 	var (
@@ -643,7 +645,7 @@ func (s *Scheduler) transferWorkerAndSource(lworker, lsource, rworker, rsource s
 		}
 	}
 
-	// if one of the workers/sources become free/unbounded
+	// if one of the workers/sources become free/unbound
 	// try bound it.
 	for i := range inputWorkers {
 		another := i ^ 1 // make use of XOR to flip 0 and 1
@@ -850,6 +852,7 @@ func (s *Scheduler) AddSubTasks(latched bool, expectStage pb.Stage, cfgs ...conf
 	var (
 		taskNamesM    = make(map[string]struct{}, 1)
 		existSourcesM = make(map[string]struct{}, len(cfgs))
+		allSources    = make([]string, 0, len(cfgs))
 	)
 
 	for _, cfg := range cfgs {
@@ -871,6 +874,7 @@ func (s *Scheduler) AddSubTasks(latched bool, expectStage pb.Stage, cfgs ...conf
 
 	// 1. check whether exists.
 	for _, cfg := range cfgs {
+		allSources = append(allSources, cfg.SourceID)
 		v, ok := s.subTaskCfgs.Load(cfg.Name)
 		if !ok {
 			continue
@@ -917,7 +921,17 @@ func (s *Scheduler) AddSubTasks(latched bool, expectStage pb.Stage, cfgs ...conf
 		return terror.ErrSchedulerSourcesUnbound.Generate(unbounds)
 	}
 
-	// 4. put the configs and stages into etcd.
+	// 4. put the lightning status, configs and stages into etcd.
+	if cfgs[0].Mode != config.ModeIncrement && cfgs[0].LoaderConfig.ImportMode == config.LoadModePhysical {
+		if len(existSources) > 0 {
+			// don't support add new lightning subtask when some subtasks already exist.
+			return terror.ErrSchedulerSubTaskExist.Generate(taskNames[0], existSources)
+		}
+		_, err := ha.PutLightningNotReadyForAllSources(s.etcdCli, taskNames[0], allSources)
+		if err != nil {
+			return err
+		}
+	}
 	_, err := ha.PutSubTaskCfgStage(s.etcdCli, newCfgs, newStages, validatorStages)
 	if err != nil {
 		return err
@@ -1109,7 +1123,7 @@ func (s *Scheduler) getSubTaskCfgByTaskSource(task, source string) *config.SubTa
 }
 
 // GetDownstreamMetaByTask gets downstream db config and meta config by task name.
-func (s *Scheduler) GetDownstreamMetaByTask(task string) (*config.DBConfig, string) {
+func (s *Scheduler) GetDownstreamMetaByTask(task string) (*dbconfig.DBConfig, string) {
 	v, ok := s.subTaskCfgs.Load(task)
 	if !ok {
 		return nil, ""
@@ -2111,7 +2125,7 @@ func (s *Scheduler) observeWorkerEvent(ctx context.Context, rev int64) error {
 }
 
 // handleWorkerOnline handles the scheduler when a DM-worker become online.
-// This should try to bound an unbounded source to it.
+// This should try to bound an unbound source to it.
 // NOTE: this func need to hold the mutex.
 func (s *Scheduler) handleWorkerOnline(ev ha.WorkerEvent, toLock bool) error {
 	if toLock {
@@ -2164,13 +2178,13 @@ func (s *Scheduler) handleWorkerOnline(ev ha.WorkerEvent, toLock bool) error {
 		}
 	}
 
-	// 4. try to bound an unbounded source.
+	// 4. try to bind an unbound source.
 	_, err := s.tryBoundForWorker(w)
 	return err
 }
 
 // handleWorkerOffline handles the scheduler when a DM-worker become offline.
-// This should unbound any previous bounded source.
+// This should unbind any previous bound source.
 // NOTE: this func need to hold the mutex.
 func (s *Scheduler) handleWorkerOffline(ev ha.WorkerEvent, toLock bool) error {
 	if toLock {
@@ -2222,7 +2236,7 @@ func (s *Scheduler) handleWorkerOffline(ev ha.WorkerEvent, toLock bool) error {
 // - try to bind any unbound sources
 // if the source is bound to a relay enabled worker, we must check that the source is also the relay source of worker.
 // pulling binlog using relay or not is determined by whether the worker has enabled relay.
-func (s *Scheduler) tryBoundForWorker(w *Worker) (bounded bool, err error) {
+func (s *Scheduler) tryBoundForWorker(w *Worker) (bound bool, err error) {
 	// 1. handle this worker has unfinished load task.
 	worker, sourceID := s.getNextLoadTaskTransfer(w.BaseInfo().Name, "")
 	if sourceID != "" {
@@ -2565,8 +2579,8 @@ func (s *Scheduler) observeLoadTask(ctx context.Context, rev int64) error {
 	}
 }
 
-// RemoveLoadTask removes the loadtask by task.
-func (s *Scheduler) RemoveLoadTask(task string) error {
+// RemoveLoadTaskAndLightningStatus removes the loadtask and lightning status by task.
+func (s *Scheduler) RemoveLoadTaskAndLightningStatus(task string) error {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 
@@ -2578,24 +2592,25 @@ func (s *Scheduler) RemoveLoadTask(task string) error {
 		return err
 	}
 	delete(s.loadTasks, task)
-	return nil
+	_, err = ha.DeleteLightningStatusForTask(s.etcdCli, task)
+	return err
 }
 
 // getTransferWorkerAndSource tries to get transfer worker and source.
 // return (worker, source) that is used by transferWorkerAndSource, to try to resolve a paused load task that the source can't be bound to the worker which has its dump files.
 // worker, source	This means a subtask finish load stage, often called by handleLoadTaskDel.
 // worker, ""		This means a free worker online, often called by tryBoundForWorker.
-// "", source		This means a unbounded source online, often called by tryBoundForSource.
+// "", source		This means a unbound source online, often called by tryBoundForSource.
 func (s *Scheduler) getNextLoadTaskTransfer(worker, source string) (string, string) {
 	// origin worker not free, try to get a source.
 	if worker != "" {
-		// try to get a unbounded source
+		// try to get a unbound source
 		for sourceID := range s.unbounds {
 			if sourceID != source && s.hasLoadTaskByWorkerAndSource(worker, sourceID) {
 				return "", sourceID
 			}
 		}
-		// try to get a bounded source
+		// try to get a bound source
 		for sourceID, w := range s.bounds {
 			if sourceID != source && s.hasLoadTaskByWorkerAndSource(worker, sourceID) && !s.hasLoadTaskByWorkerAndSource(w.baseInfo.Name, sourceID) {
 				return w.baseInfo.Name, sourceID
@@ -2603,7 +2618,7 @@ func (s *Scheduler) getNextLoadTaskTransfer(worker, source string) (string, stri
 		}
 	}
 
-	// origin source bounded, try to get a worker
+	// origin source is bound, try to get a worker
 	if source != "" {
 		// try to get a free worker
 		for _, w := range s.workers {
@@ -2613,7 +2628,7 @@ func (s *Scheduler) getNextLoadTaskTransfer(worker, source string) (string, stri
 			}
 		}
 
-		// try to get a bounded worker
+		// try to get a bound worker
 		for _, w := range s.workers {
 			workerName := w.baseInfo.Name
 			if workerName != worker && w.Stage() == WorkerBound {

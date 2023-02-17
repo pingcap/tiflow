@@ -14,31 +14,33 @@ package cloudstorage
 
 import (
 	"context"
-	"sync"
 
+	"github.com/pingcap/errors"
 	"github.com/pingcap/tidb/br/pkg/storage"
 	"github.com/pingcap/tiflow/cdc/model"
 	"github.com/pingcap/tiflow/cdc/sinkv2/metrics"
 	"github.com/pingcap/tiflow/pkg/chann"
 	"github.com/pingcap/tiflow/pkg/hash"
 	"github.com/pingcap/tiflow/pkg/sink/cloudstorage"
+	"golang.org/x/sync/errgroup"
 )
 
 // dmlWriter manages a set of dmlWorkers and dispatches eventFragment to
 // the dmlWorker according to hash algorithm.
 type dmlWriter struct {
+	changefeedID   model.ChangeFeedID
 	workers        []*dmlWorker
-	workerChannels []*chann.Chann[eventFragment]
+	workerChannels []*chann.DrainableChann[eventFragment]
 	hasher         *hash.PositionInertia
 	storage        storage.ExternalStorage
 	config         *cloudstorage.Config
 	extension      string
-	wg             sync.WaitGroup
+	statistics     *metrics.Statistics
 	inputCh        <-chan eventFragment
 	errCh          chan<- error
 }
 
-func newDMLWriter(ctx context.Context,
+func newDMLWriter(
 	changefeedID model.ChangeFeedID,
 	storage storage.ExternalStorage,
 	config *cloudstorage.Config,
@@ -47,40 +49,53 @@ func newDMLWriter(ctx context.Context,
 	inputCh <-chan eventFragment,
 	errCh chan<- error,
 ) *dmlWriter {
-	w := &dmlWriter{
+	d := &dmlWriter{
+		changefeedID:   changefeedID,
 		storage:        storage,
-		workerChannels: make([]*chann.Chann[eventFragment], config.WorkerCount),
+		workerChannels: make([]*chann.DrainableChann[eventFragment], config.WorkerCount),
+		workers:        make([]*dmlWorker, config.WorkerCount),
 		hasher:         hash.NewPositionInertia(),
 		config:         config,
 		extension:      extension,
+		statistics:     statistics,
 		inputCh:        inputCh,
 		errCh:          errCh,
 	}
 
-	w.wg.Add(1)
-	go func() {
-		defer w.wg.Done()
-		w.dispatchFragToDMLWorker(ctx)
-	}()
-
 	for i := 0; i < config.WorkerCount; i++ {
-		d := newDMLWorker(i, changefeedID, storage, w.config, extension, statistics, errCh)
-		w.workerChannels[i] = chann.New[eventFragment]()
-		d.run(ctx, w.workerChannels[i])
-		w.workers = append(w.workers, d)
+		worker := newDMLWorker(i, changefeedID, storage, config, extension, statistics)
+		d.workers[i] = worker
+		d.workerChannels[i] = chann.NewAutoDrainChann[eventFragment]()
 	}
 
-	return w
+	return d
 }
 
-func (d *dmlWriter) dispatchFragToDMLWorker(ctx context.Context) {
+func (d *dmlWriter) run(ctx context.Context) error {
+	eg, ctx := errgroup.WithContext(ctx)
+	eg.Go(func() error {
+		return d.dispatchFragToDMLWorker(ctx)
+	})
+
+	for i := 0; i < d.config.WorkerCount; i++ {
+		worker := d.workers[i]
+		ch := d.workerChannels[i]
+		eg.Go(func() error {
+			return worker.run(ctx, ch)
+		})
+	}
+
+	return eg.Wait()
+}
+
+func (d *dmlWriter) dispatchFragToDMLWorker(ctx context.Context) error {
 	for {
 		select {
 		case <-ctx.Done():
-			return
+			return errors.Trace(ctx.Err())
 		case frag, ok := <-d.inputCh:
 			if !ok {
-				return
+				return nil
 			}
 			tableName := frag.TableName
 			d.hasher.Reset()
@@ -92,14 +107,10 @@ func (d *dmlWriter) dispatchFragToDMLWorker(ctx context.Context) {
 }
 
 func (d *dmlWriter) close() {
-	d.wg.Wait()
 	for _, w := range d.workers {
 		w.close()
 	}
 	for _, ch := range d.workerChannels {
-		ch.Close()
-		for range ch.Out() {
-			// drain the worker channel
-		}
+		ch.CloseAndDrain()
 	}
 }

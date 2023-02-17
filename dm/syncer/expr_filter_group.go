@@ -36,10 +36,9 @@ type ExprFilterGroup struct {
 	updateNewExprs map[string][]expression.Expression    // tableName -> expr
 	deleteExprs    map[string][]expression.Expression    // tableName -> expr
 
-	hasInsertFilter    map[string]struct{} // set(tableName)
-	hasUpdateOldFilter map[string]struct{} // set(tableName)
-	hasUpdateNewFilter map[string]struct{} // set(tableName)
-	hasDeleteFilter    map[string]struct{} // set(tableName)
+	hasInsertFilter map[string]struct{} // set(tableName)
+	hasUpdateFilter map[string]struct{} // set(tableName)
+	hasDeleteFilter map[string]struct{} // set(tableName)
 
 	tidbCtx sessionctx.Context
 	logCtx  *tcontext.Context
@@ -48,17 +47,16 @@ type ExprFilterGroup struct {
 // NewExprFilterGroup creates an ExprFilterGroup.
 func NewExprFilterGroup(logCtx *tcontext.Context, tidbCtx sessionctx.Context, exprConfig []*config.ExpressionFilter) *ExprFilterGroup {
 	ret := &ExprFilterGroup{
-		configs:            map[string][]*config.ExpressionFilter{},
-		insertExprs:        map[string][]expression.Expression{},
-		updateOldExprs:     map[string][]expression.Expression{},
-		updateNewExprs:     map[string][]expression.Expression{},
-		deleteExprs:        map[string][]expression.Expression{},
-		hasInsertFilter:    map[string]struct{}{},
-		hasUpdateOldFilter: map[string]struct{}{},
-		hasUpdateNewFilter: map[string]struct{}{},
-		hasDeleteFilter:    map[string]struct{}{},
-		tidbCtx:            tidbCtx,
-		logCtx:             logCtx,
+		configs:         map[string][]*config.ExpressionFilter{},
+		insertExprs:     map[string][]expression.Expression{},
+		updateOldExprs:  map[string][]expression.Expression{},
+		updateNewExprs:  map[string][]expression.Expression{},
+		deleteExprs:     map[string][]expression.Expression{},
+		hasInsertFilter: map[string]struct{}{},
+		hasUpdateFilter: map[string]struct{}{},
+		hasDeleteFilter: map[string]struct{}{},
+		tidbCtx:         tidbCtx,
+		logCtx:          logCtx,
 	}
 	for _, c := range exprConfig {
 		tableName := dbutil.TableName(c.Schema, c.Table)
@@ -67,11 +65,8 @@ func NewExprFilterGroup(logCtx *tcontext.Context, tidbCtx sessionctx.Context, ex
 		if c.InsertValueExpr != "" {
 			ret.hasInsertFilter[tableName] = struct{}{}
 		}
-		if c.UpdateOldValueExpr != "" {
-			ret.hasUpdateOldFilter[tableName] = struct{}{}
-		}
-		if c.UpdateNewValueExpr != "" {
-			ret.hasUpdateNewFilter[tableName] = struct{}{}
+		if c.UpdateOldValueExpr != "" || c.UpdateNewValueExpr != "" {
+			ret.hasUpdateFilter[tableName] = struct{}{}
 		}
 		if c.DeleteValueExpr != "" {
 			ret.hasDeleteFilter[tableName] = struct{}{}
@@ -117,8 +112,11 @@ func (g *ExprFilterGroup) GetUpdateExprs(table *filter.Table, ti *model.TableInf
 		return retOld, retNew, nil
 	}
 
-	if _, ok := g.hasUpdateOldFilter[tableID]; ok {
+	if _, ok := g.hasUpdateFilter[tableID]; ok {
 		for _, c := range g.configs[tableID] {
+			if c.UpdateOldValueExpr == "" && c.UpdateNewValueExpr == "" {
+				continue
+			}
 			if c.UpdateOldValueExpr != "" {
 				expr, err := getSimpleExprOfTable(g.tidbCtx, c.UpdateOldValueExpr, ti, g.logCtx.L())
 				if err != nil {
@@ -129,11 +127,7 @@ func (g *ExprFilterGroup) GetUpdateExprs(table *filter.Table, ti *model.TableInf
 			} else {
 				g.updateOldExprs[tableID] = append(g.updateOldExprs[tableID], expression.NewOne())
 			}
-		}
-	}
 
-	if _, ok := g.hasUpdateNewFilter[tableID]; ok {
-		for _, c := range g.configs[tableID] {
 			if c.UpdateNewValueExpr != "" {
 				expr, err := getSimpleExprOfTable(g.tidbCtx, c.UpdateNewValueExpr, ti, g.logCtx.L())
 				if err != nil {

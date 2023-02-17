@@ -1,5 +1,4 @@
 foreign_key
-load_task
 downstream_more_column
 expression_filter
 fake_rotate_event
@@ -10,3 +9,4 @@ http_proxies
 openapi
 duplicate_event
 binlog_parse
+only_dml

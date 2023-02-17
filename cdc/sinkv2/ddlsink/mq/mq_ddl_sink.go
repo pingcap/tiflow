@@ -20,17 +20,18 @@ import (
 	"github.com/pingcap/log"
 	"github.com/pingcap/tiflow/cdc/contextutil"
 	"github.com/pingcap/tiflow/cdc/model"
-	"github.com/pingcap/tiflow/cdc/sink/codec"
-	"github.com/pingcap/tiflow/cdc/sink/codec/builder"
-	"github.com/pingcap/tiflow/cdc/sink/codec/common"
-	"github.com/pingcap/tiflow/cdc/sink/mq/dispatcher"
-	"github.com/pingcap/tiflow/cdc/sink/mq/manager"
 	"github.com/pingcap/tiflow/cdc/sinkv2/ddlsink"
 	"github.com/pingcap/tiflow/cdc/sinkv2/ddlsink/mq/ddlproducer"
+	"github.com/pingcap/tiflow/cdc/sinkv2/eventsink/mq/dispatcher"
+	"github.com/pingcap/tiflow/cdc/sinkv2/eventsink/mq/manager"
 	"github.com/pingcap/tiflow/cdc/sinkv2/metrics"
 	"github.com/pingcap/tiflow/pkg/config"
 	cerror "github.com/pingcap/tiflow/pkg/errors"
 	"github.com/pingcap/tiflow/pkg/sink"
+	"github.com/pingcap/tiflow/pkg/sink/codec"
+	"github.com/pingcap/tiflow/pkg/sink/codec/builder"
+	"github.com/pingcap/tiflow/pkg/sink/codec/common"
+	"github.com/pingcap/tiflow/pkg/sink/kafka"
 	"go.uber.org/zap"
 )
 
@@ -54,10 +55,13 @@ type ddlSink struct {
 	producer ddlproducer.DDLProducer
 	// statistics is used to record DDL metrics.
 	statistics *metrics.Statistics
+	// admin is used to query kafka cluster information.
+	admin kafka.ClusterAdminClient
 }
 
 func newDDLSink(ctx context.Context,
 	producer ddlproducer.DDLProducer,
+	adminClient kafka.ClusterAdminClient,
 	topicManager manager.TopicManager,
 	eventRouter *dispatcher.EventRouter,
 	encoderConfig *common.Config,
@@ -77,6 +81,7 @@ func newDDLSink(ctx context.Context,
 		encoderBuilder: encoderBuilder,
 		producer:       producer,
 		statistics:     metrics.NewStatistics(ctx, sink.RowSink),
+		admin:          adminClient,
 	}
 
 	return s, nil
@@ -105,7 +110,7 @@ func (k *ddlSink) WriteDDLEvent(ctx context.Context, ddl *model.DDLEvent) error 
 		zap.String("namespace", k.id.Namespace),
 		zap.String("changefeed", k.id.ID))
 	if partitionRule == dispatcher.PartitionAll {
-		partitionNum, err := k.topicManager.GetPartitionNum(topic)
+		partitionNum, err := k.topicManager.GetPartitionNum(ctx, topic)
 		if err != nil {
 			return errors.Trace(err)
 		}
@@ -118,7 +123,7 @@ func (k *ddlSink) WriteDDLEvent(ctx context.Context, ddl *model.DDLEvent) error 
 	// which will be responsible for automatically creating topics when they don't exist.
 	// If it is not called here and kafka has `auto.create.topics.enable` turned on,
 	// then the auto-created topic will not be created as configured by ticdc.
-	_, err = k.topicManager.GetPartitionNum(topic)
+	_, err = k.topicManager.GetPartitionNum(ctx, topic)
 	if err != nil {
 		return errors.Trace(err)
 	}
@@ -144,7 +149,7 @@ func (k *ddlSink) WriteCheckpointTs(ctx context.Context,
 	// This will be compatible with the old behavior.
 	if len(tables) == 0 {
 		topic := k.eventRouter.GetDefaultTopic()
-		partitionNum, err := k.topicManager.GetPartitionNum(topic)
+		partitionNum, err := k.topicManager.GetPartitionNum(ctx, topic)
 		if err != nil {
 			return errors.Trace(err)
 		}
@@ -159,7 +164,7 @@ func (k *ddlSink) WriteCheckpointTs(ctx context.Context,
 	}
 	topics := k.eventRouter.GetActiveTopics(tableNames)
 	for _, topic := range topics {
-		partitionNum, err := k.topicManager.GetPartitionNum(topic)
+		partitionNum, err := k.topicManager.GetPartitionNum(ctx, topic)
 		if err != nil {
 			return errors.Trace(err)
 		}
@@ -171,7 +176,11 @@ func (k *ddlSink) WriteCheckpointTs(ctx context.Context,
 	return nil
 }
 
-func (k *ddlSink) Close() error {
-	k.producer.Close()
-	return nil
+func (k *ddlSink) Close() {
+	if k.producer != nil {
+		k.producer.Close()
+	}
+	if k.admin != nil {
+		k.admin.Close()
+	}
 }

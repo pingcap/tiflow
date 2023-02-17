@@ -32,35 +32,36 @@ import (
 	cerror "github.com/pingcap/tiflow/pkg/errors"
 	"github.com/pingcap/tiflow/pkg/orchestrator"
 	"github.com/pingcap/tiflow/pkg/pdutil"
+	redoCfg "github.com/pingcap/tiflow/pkg/redo"
+	"github.com/pingcap/tiflow/pkg/sink/observer"
 	"github.com/pingcap/tiflow/pkg/txnutil/gc"
 	"github.com/pingcap/tiflow/pkg/upstream"
 	"github.com/prometheus/client_golang/prometheus"
 	"github.com/tikv/client-go/v2/oracle"
+	"go.uber.org/atomic"
 	"go.uber.org/zap"
 )
 
 // newSchedulerFromCtx creates a new scheduler from context.
 // This function is factored out to facilitate unit testing.
 func newSchedulerFromCtx(
-	ctx cdcContext.Context, pdClock pdutil.Clock,
+	ctx cdcContext.Context, up *upstream.Upstream, cfg *config.SchedulerConfig,
 ) (ret scheduler.Scheduler, err error) {
 	changeFeedID := ctx.ChangefeedVars().ID
 	messageServer := ctx.GlobalVars().MessageServer
 	messageRouter := ctx.GlobalVars().MessageRouter
 	ownerRev := ctx.GlobalVars().OwnerRevision
 	captureID := ctx.GlobalVars().CaptureInfo.ID
-	cfg := config.GetGlobalServerConfig().Debug
 	ret, err = scheduler.NewScheduler(
 		ctx, captureID, changeFeedID,
-		messageServer, messageRouter, ownerRev, cfg.Scheduler, pdClock)
+		messageServer, messageRouter, ownerRev, up.RegionCache, up.PDClock, cfg)
 	return ret, errors.Trace(err)
 }
 
 func newScheduler(
-	ctx cdcContext.Context,
-	pdClock pdutil.Clock,
+	ctx cdcContext.Context, up *upstream.Upstream, cfg *config.SchedulerConfig,
 ) (scheduler.Scheduler, error) {
-	return newSchedulerFromCtx(ctx, pdClock)
+	return newSchedulerFromCtx(ctx, up, cfg)
 }
 
 type changefeed struct {
@@ -69,6 +70,7 @@ type changefeed struct {
 	state *orchestrator.ChangefeedReactorState
 
 	upstream  *upstream.Upstream
+	cfg       *config.SchedulerConfig
 	scheduler scheduler.Scheduler
 	// barriers will be created when a changefeed is initialized
 	// and will be destroyed when a changefeed is closed.
@@ -119,6 +121,9 @@ type changefeed struct {
 	metricsChangefeedBarrierTsGauge prometheus.Gauge
 	metricsChangefeedTickDuration   prometheus.Observer
 
+	downstreamObserver observer.Observer
+	observerLastTick   *atomic.Time
+
 	newDDLPuller func(ctx context.Context,
 		replicaConfig *config.ReplicaConfig,
 		up *upstream.Upstream,
@@ -127,7 +132,14 @@ type changefeed struct {
 	) (puller.DDLPuller, error)
 
 	newSink      func(changefeedID model.ChangeFeedID, info *model.ChangeFeedInfo, reportErr func(error)) DDLSink
-	newScheduler func(ctx cdcContext.Context, pdClock pdutil.Clock) (scheduler.Scheduler, error)
+	newScheduler func(
+		ctx cdcContext.Context, up *upstream.Upstream, cfg *config.SchedulerConfig,
+	) (scheduler.Scheduler, error)
+
+	newDownstreamObserver func(
+		ctx context.Context, sinkURIStr string, replCfg *config.ReplicaConfig,
+		opts ...observer.NewObserverOption,
+	) (observer.Observer, error)
 
 	lastDDLTs uint64 // Timestamp of the last executed DDL. Only used for tests.
 }
@@ -136,6 +148,7 @@ func newChangefeed(
 	id model.ChangeFeedID,
 	state *orchestrator.ChangefeedReactorState,
 	up *upstream.Upstream,
+	cfg *config.SchedulerConfig,
 ) *changefeed {
 	c := &changefeed{
 		id:    id,
@@ -149,10 +162,12 @@ func newChangefeed(
 		errCh:  make(chan error, defaultErrChSize),
 		cancel: func() {},
 
-		newDDLPuller: puller.NewDDLPuller,
-		newSink:      newDDLSink,
+		newDDLPuller:          puller.NewDDLPuller,
+		newSink:               newDDLSink,
+		newDownstreamObserver: observer.NewObserver,
 	}
 	c.newScheduler = newScheduler
+	c.cfg = cfg
 	return c
 }
 
@@ -165,12 +180,20 @@ func newChangefeed4Test(
 		changefeed model.ChangeFeedID,
 	) (puller.DDLPuller, error),
 	newSink func(changefeedID model.ChangeFeedID, info *model.ChangeFeedInfo, reportErr func(err error)) DDLSink,
-	newScheduler func(ctx cdcContext.Context, pdClock pdutil.Clock) (scheduler.Scheduler, error),
+	newScheduler func(
+		ctx cdcContext.Context, up *upstream.Upstream, cfg *config.SchedulerConfig,
+	) (scheduler.Scheduler, error),
+	newDownstreamObserver func(
+		ctx context.Context, sinkURIStr string, replCfg *config.ReplicaConfig,
+		opts ...observer.NewObserverOption,
+	) (observer.Observer, error),
 ) *changefeed {
-	c := newChangefeed(id, state, up)
+	cfg := config.NewDefaultSchedulerConfig()
+	c := newChangefeed(id, state, up, cfg)
 	c.newDDLPuller = newDDLPuller
 	c.newSink = newSink
 	c.newScheduler = newScheduler
+	c.newDownstreamObserver = newDownstreamObserver
 	return c
 }
 
@@ -397,6 +420,7 @@ func (c *changefeed) tick(ctx cdcContext.Context, captures map[model.CaptureID]*
 
 	c.updateStatus(newCheckpointTs, newResolvedTs)
 	c.updateMetrics(currentTs, newCheckpointTs, metricsResolvedTs)
+	c.tickDownstreamObserver(ctx)
 
 	return nil
 }
@@ -525,6 +549,13 @@ LOOP:
 		ctx.Throw(c.ddlPuller.Run(cancelCtx))
 	}()
 
+	c.downstreamObserver, err = c.newDownstreamObserver(
+		ctx, c.state.Info.SinkURI, c.state.Info.Config)
+	if err != nil {
+		return err
+	}
+	c.observerLastTick = atomic.NewTime(time.Time{})
+
 	stdCtx := contextutil.PutChangefeedIDInCtx(cancelCtx, c.id)
 	redoManagerOpts := redo.NewOwnerManagerOptions(c.errCh)
 	mgr, err := redo.NewManager(stdCtx, c.state.Info.Config.Consistent, redoManagerOpts)
@@ -540,7 +571,9 @@ LOOP:
 		zap.String("changefeed", c.id.ID))
 
 	// create scheduler
-	c.scheduler, err = c.newScheduler(ctx, c.upstream.PDClock)
+	cfg := *c.cfg
+	cfg.ChangefeedSettings = c.state.Info.Config.Scheduler
+	c.scheduler, err = c.newScheduler(ctx, c.upstream, &cfg)
 	if err != nil {
 		return errors.Trace(err)
 	}
@@ -615,6 +648,9 @@ func (c *changefeed) releaseResources(ctx cdcContext.Context) {
 		c.scheduler.Close(ctx)
 		c.scheduler = nil
 	}
+	if c.downstreamObserver != nil {
+		_ = c.downstreamObserver.Close()
+	}
 
 	c.cleanupMetrics()
 	c.schema = nil
@@ -662,7 +698,7 @@ func (c *changefeed) cleanupRedoManager(ctx context.Context) {
 			log.Warn("changefeed is removed, but state is not complete", zap.Any("state", c.state))
 			return
 		}
-		if !redo.IsConsistentEnabled(c.state.Info.Config.Consistent.Level) {
+		if !redoCfg.IsConsistentEnabled(c.state.Info.Config.Consistent.Level) {
 			return
 		}
 		// when removing a paused changefeed, the redo manager is nil, create a new one
@@ -1001,4 +1037,19 @@ func (c *changefeed) checkUpstream() (skip bool, err error) {
 		return true, nil
 	}
 	return
+}
+
+// tickDownstreamObserver checks whether needs to trigger tick of downstream
+// observer, if needed run it in an independent goroutine with 5s timeout.
+func (c *changefeed) tickDownstreamObserver(ctx context.Context) {
+	if time.Since(c.observerLastTick.Load()) > downstreamObserverTickDuration {
+		go func() {
+			cctx, cancel := context.WithTimeout(ctx, time.Second*5)
+			defer cancel()
+			if err := c.downstreamObserver.Tick(cctx); err != nil {
+				log.Error("backend observer tick error", zap.Error(err))
+			}
+			c.observerLastTick.Store(time.Now())
+		}()
+	}
 }

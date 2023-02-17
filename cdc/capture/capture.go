@@ -27,9 +27,7 @@ import (
 	"github.com/pingcap/tiflow/cdc/model"
 	"github.com/pingcap/tiflow/cdc/owner"
 	"github.com/pingcap/tiflow/cdc/processor"
-	"github.com/pingcap/tiflow/cdc/processor/pipeline/system"
 	"github.com/pingcap/tiflow/cdc/processor/sourcemanager/engine/factory"
-	ssystem "github.com/pingcap/tiflow/cdc/sorter/db/system"
 	"github.com/pingcap/tiflow/pkg/config"
 	cdcContext "github.com/pingcap/tiflow/pkg/context"
 	cerror "github.com/pingcap/tiflow/pkg/errors"
@@ -95,13 +93,7 @@ type captureImpl struct {
 	// createEtcdClient used to create etcd client when capture restarts
 	createEtcdClient createEtcdClientFunc
 	EtcdClient       etcd.CDCEtcdClient
-	tableActorSystem *system.System
 
-	// useSortEngine indicates whether to use the new pull based sort engine or
-	// the old push based sorter system. the latter will be removed after all sorter
-	// have been transformed into pull based sort engine.
-	useSortEngine     bool
-	sorterSystem      *ssystem.System
 	sortEngineFactory *factory.SortEngineFactory
 
 	// MessageServer is the receiver of the messages from the other nodes.
@@ -126,17 +118,16 @@ type captureImpl struct {
 		captureInfo *model.CaptureInfo,
 		upstreamManager *upstream.Manager,
 		liveness *model.Liveness,
+		cfg *config.SchedulerConfig,
 	) processor.Manager
-	newOwner func(upstreamManager *upstream.Manager) owner.Owner
+	newOwner func(upstreamManager *upstream.Manager, cfg *config.SchedulerConfig) owner.Owner
 }
 
 // NewCapture returns a new Capture instance
 func NewCapture(pdEndpoints []string,
 	createEtcdClient createEtcdClientFunc,
 	grpcService *p2p.ServerWrapper,
-	tableActorSystem *system.System,
 	sortEngineMangerFactory *factory.SortEngineFactory,
-	sorterSystem *ssystem.System,
 ) Capture {
 	return &captureImpl{
 		config:              config.GetGlobalServerConfig(),
@@ -145,15 +136,11 @@ func NewCapture(pdEndpoints []string,
 		grpcService:         grpcService,
 		cancel:              func() {},
 		pdEndpoints:         pdEndpoints,
-		tableActorSystem:    tableActorSystem,
 		newProcessorManager: processor.NewManager,
 		newOwner:            owner.NewOwner,
 		info:                &model.CaptureInfo{},
 		createEtcdClient:    createEtcdClient,
-
-		useSortEngine:     sortEngineMangerFactory != nil,
-		sortEngineFactory: sortEngineMangerFactory,
-		sorterSystem:      sorterSystem,
+		sortEngineFactory:   sortEngineMangerFactory,
 	}
 }
 
@@ -209,6 +196,11 @@ func (c *captureImpl) reset(ctx context.Context) error {
 
 	c.captureMu.Lock()
 	defer c.captureMu.Unlock()
+	c.info = &model.CaptureInfo{
+		ID:            uuid.New().String(),
+		AdvertiseAddr: c.config.AdvertiseAddr,
+		Version:       version.ReleaseVersion,
+	}
 	c.EtcdClient = etcdClient
 	c.migrator = migrate.NewMigrator(c.EtcdClient, c.pdEndpoints, c.config)
 
@@ -224,12 +216,6 @@ func (c *captureImpl) reset(ctx context.Context) error {
 		return cerror.WrapError(cerror.ErrNewCaptureFailed, err)
 	}
 
-	c.info = &model.CaptureInfo{
-		ID:            uuid.New().String(),
-		AdvertiseAddr: c.config.AdvertiseAddr,
-		Version:       version.ReleaseVersion,
-	}
-
 	if c.upstreamManager != nil {
 		c.upstreamManager.Close()
 	}
@@ -239,7 +225,8 @@ func (c *captureImpl) reset(ctx context.Context) error {
 		return cerror.WrapError(cerror.ErrNewCaptureFailed, err)
 	}
 
-	c.processorManager = c.newProcessorManager(c.info, c.upstreamManager, &c.liveness)
+	c.processorManager = c.newProcessorManager(
+		c.info, c.upstreamManager, &c.liveness, c.config.Debug.Scheduler)
 	if c.session != nil {
 		// It can't be handled even after it fails, so we ignore it.
 		_ = c.session.Close()
@@ -329,10 +316,8 @@ func (c *captureImpl) run(stdCtx context.Context) error {
 	ctx := cdcContext.NewContext(stdCtx, &cdcContext.GlobalVars{
 		CaptureInfo:       c.info,
 		EtcdClient:        c.EtcdClient,
-		TableActorSystem:  c.tableActorSystem,
 		MessageServer:     c.MessageServer,
 		MessageRouter:     c.MessageRouter,
-		SorterSystem:      c.sorterSystem,
 		SortEngineFactory: c.sortEngineFactory,
 	})
 
@@ -463,7 +448,7 @@ func (c *captureImpl) campaignOwner(ctx cdcContext.Context) error {
 			zap.String("captureID", c.info.ID),
 			zap.Int64("ownerRev", ownerRev))
 
-		owner := c.newOwner(c.upstreamManager)
+		owner := c.newOwner(c.upstreamManager, c.config.Debug.Scheduler)
 		c.setOwner(owner)
 
 		globalState := orchestrator.NewGlobalState(c.EtcdClient.GetClusterID())
@@ -574,6 +559,9 @@ func (c *captureImpl) resign(ctx context.Context) error {
 	failpoint.Inject("capture-resign-failed", func() {
 		failpoint.Return(errors.New("capture resign failed"))
 	})
+	if c.election == nil {
+		return nil
+	}
 	return cerror.WrapError(cerror.ErrCaptureResignOwner, c.election.resign(ctx))
 }
 
