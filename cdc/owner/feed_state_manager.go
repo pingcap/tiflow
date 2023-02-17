@@ -369,7 +369,7 @@ func (m *feedStateManager) patchState(feedState model.FeedState) {
 				zap.String("namespace", m.state.ID.Namespace),
 				zap.String("changefeed", m.state.ID.ID),
 				zap.Uint64("perviousEpoch", previous),
-				zap.Uint64("changefeedEpoch", info.Epoch))
+				zap.Uint64("currentEpoch", info.Epoch))
 		}
 		return info, changed, nil
 	})
