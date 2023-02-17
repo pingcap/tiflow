@@ -26,7 +26,6 @@ import (
 	"github.com/pingcap/tidb/parser/mysql"
 	"github.com/pingcap/tidb/parser/types"
 	"github.com/pingcap/tiflow/cdc/model"
-	"github.com/pingcap/tiflow/cdc/sink/codec/common"
 	"github.com/pingcap/tiflow/cdc/sinkv2/eventsink"
 	"github.com/pingcap/tiflow/cdc/sinkv2/metrics"
 	"github.com/pingcap/tiflow/engine/pkg/clock"
@@ -34,6 +33,7 @@ import (
 	"github.com/pingcap/tiflow/pkg/config"
 	"github.com/pingcap/tiflow/pkg/sink"
 	"github.com/pingcap/tiflow/pkg/sink/cloudstorage"
+	"github.com/pingcap/tiflow/pkg/sink/codec/common"
 	"github.com/pingcap/tiflow/pkg/util"
 	"github.com/stretchr/testify/require"
 )
