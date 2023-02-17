@@ -27,9 +27,9 @@ import (
 	"github.com/pingcap/tidb/parser/format"
 	"github.com/pingcap/tiflow/cdc/contextutil"
 	"github.com/pingcap/tiflow/cdc/model"
-	"github.com/pingcap/tiflow/cdc/sink/mysql"
 	"github.com/pingcap/tiflow/cdc/sinkv2/ddlsink"
 	"github.com/pingcap/tiflow/cdc/sinkv2/ddlsink/factory"
+	"github.com/pingcap/tiflow/cdc/syncpointstore"
 	cerror "github.com/pingcap/tiflow/pkg/errors"
 	"github.com/pingcap/tiflow/pkg/util"
 	"go.uber.org/zap"
@@ -61,7 +61,7 @@ type DDLSink interface {
 
 type ddlSinkImpl struct {
 	lastSyncPoint  model.Ts
-	syncPointStore mysql.SyncPointStore
+	syncPointStore syncpointstore.SyncPointStore
 
 	// It is used to record the checkpointTs and the names of the table at that time.
 	mu struct {
@@ -127,7 +127,7 @@ func ddlSinkInitializer(ctx context.Context, a *ddlSinkImpl) error {
 	if !a.info.Config.EnableSyncPoint {
 		return nil
 	}
-	syncPointStore, err := mysql.NewSyncPointStore(
+	syncPointStore, err := syncpointstore.NewSyncPointStore(
 		ctx, a.changefeedID, a.info.SinkURI, a.info.Config.SyncPointRetention)
 	if err != nil {
 		return errors.Trace(err)
