@@ -584,8 +584,8 @@ LOOP:
 	c.initialized = true
 	log.Info("changefeed initialized",
 		zap.String("namespace", c.state.ID.Namespace),
-		zap.Uint64("changefeedEpoch", epoch),
 		zap.String("changefeed", c.state.ID.ID),
+		zap.Uint64("changefeedEpoch", epoch),
 		zap.Uint64("checkpointTs", checkpointTs),
 		zap.Uint64("resolvedTs", resolvedTs),
 		zap.Stringer("info", c.state.Info))
