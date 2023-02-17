@@ -361,26 +361,31 @@ func (c *consumer) getNewFiles(ctx context.Context) (map[dmlPathKey]fileIndexRan
 	err := c.externalStorage.WalkDir(ctx, opt, func(path string, size int64) error {
 		var dmlkey dmlPathKey
 		var schemaKey schemaPathKey
+		var fileIdx uint64
+		var err error
 
 		if strings.HasSuffix(path, "metadata") {
 			return nil
 		}
 
 		if strings.HasSuffix(path, "schema.json") {
-			err := schemaKey.parseSchemaFilePath(path)
+			err = schemaKey.parseSchemaFilePath(path)
 			if err != nil {
 				log.Error("failed to parse schema file path", zap.Error(err))
 				// skip handling this file
+				return nil
 			}
-
-			return nil
-		}
-
-		fileIdx, err := dmlkey.parseDMLFilePath(c.replicationCfg.Sink.DateSeparator, path)
-		if err != nil {
-			log.Error("failed to parse dml file path", zap.Error(err))
-			// skip handling this file
-			return nil
+			// fake a dml key for schema.json file
+			dmlkey.schemaPathKey = schemaKey
+			dmlkey.partitionNum = 0
+			dmlkey.date = ""
+		} else {
+			fileIdx, err = dmlkey.parseDMLFilePath(c.replicationCfg.Sink.DateSeparator, path)
+			if err != nil {
+				log.Error("failed to parse dml file path", zap.Error(err))
+				// skip handling this file
+				return nil
+			}
 		}
 
 		if _, ok := c.tableDMLIdxMap[dmlkey]; !ok || fileIdx >= c.tableDMLIdxMap[dmlkey] {
@@ -559,19 +564,19 @@ func (c *consumer) handleNewFiles(
 		return nil
 	}
 	sort.Slice(keys, func(i, j int) bool {
-		if keys[i].schema != keys[j].schema {
-			return keys[i].schema < keys[j].schema
-		}
-		if keys[i].table != keys[j].table {
-			return keys[i].table < keys[j].table
-		}
 		if keys[i].version != keys[j].version {
 			return keys[i].version < keys[j].version
 		}
 		if keys[i].partitionNum != keys[j].partitionNum {
 			return keys[i].partitionNum < keys[j].partitionNum
 		}
-		return keys[i].date < keys[j].date
+		if keys[i].date != keys[j].date {
+			return keys[i].date < keys[j].date
+		}
+		if keys[i].schema != keys[j].schema {
+			return keys[i].schema < keys[j].schema
+		}
+		return keys[i].table < keys[j].table
 	})
 
 	for _, key := range keys {
@@ -579,9 +584,9 @@ func (c *consumer) handleNewFiles(
 		if err != nil {
 			return err
 		}
-		fileRange := dmlFileMap[key]
-		// execute ddl event before executing dml events in the first file
-		if len(tableDef.Query) > 0 && fileRange.start == 1 {
+		// if the key is a fake dml path key which is mainly used for
+		// sorting schema.json file before the dml files, then execute the ddl query.
+		if key.partitionNum == 0 && len(key.date) == 0 && len(tableDef.Query) > 0 {
 			ddlEvent, err := tableDef.ToDDLEvent()
 			if err != nil {
 				return err
@@ -590,8 +595,10 @@ func (c *consumer) handleNewFiles(
 				return errors.Trace(err)
 			}
 			log.Info("execute ddl event successfully", zap.String("query", tableDef.Query))
+			continue
 		}
 
+		fileRange := dmlFileMap[key]
 		for i := fileRange.start; i <= fileRange.end; i++ {
 			if err := c.syncExecDMLEvents(ctx, tableDef, key, i); err != nil {
 				return err
