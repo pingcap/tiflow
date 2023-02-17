@@ -22,13 +22,13 @@ import (
 	timodel "github.com/pingcap/tidb/parser/model"
 	"github.com/pingcap/tiflow/cdc/model"
 	cerror "github.com/pingcap/tiflow/pkg/errors"
-	internal2 "github.com/pingcap/tiflow/pkg/sink/codec/internal"
+	"github.com/pingcap/tiflow/pkg/sink/codec/internal"
 )
 
 type messageRow struct {
-	Update     map[string]internal2.Column `json:"u,omitempty"`
-	PreColumns map[string]internal2.Column `json:"p,omitempty"`
-	Delete     map[string]internal2.Column `json:"d,omitempty"`
+	Update     map[string]internal.Column `json:"u,omitempty"`
+	PreColumns map[string]internal.Column `json:"p,omitempty"`
+	Delete     map[string]internal.Column `json:"d,omitempty"`
 }
 
 func (m *messageRow) encode() ([]byte, error) {
@@ -44,13 +44,13 @@ func (m *messageRow) decode(data []byte) error {
 		return cerror.WrapError(cerror.ErrUnmarshalFailed, err)
 	}
 	for colName, column := range m.Update {
-		m.Update[colName] = internal2.FormatColumn(column)
+		m.Update[colName] = internal.FormatColumn(column)
 	}
 	for colName, column := range m.Delete {
-		m.Delete[colName] = internal2.FormatColumn(column)
+		m.Delete[colName] = internal.FormatColumn(column)
 	}
 	for colName, column := range m.PreColumns {
-		m.PreColumns[colName] = internal2.FormatColumn(column)
+		m.PreColumns[colName] = internal.FormatColumn(column)
 	}
 	return nil
 }
@@ -69,19 +69,19 @@ func (m *messageDDL) decode(data []byte) error {
 	return cerror.WrapError(cerror.ErrUnmarshalFailed, json.Unmarshal(data, m))
 }
 
-func newResolvedMessage(ts uint64) *internal2.MessageKey {
-	return &internal2.MessageKey{
+func newResolvedMessage(ts uint64) *internal.MessageKey {
+	return &internal.MessageKey{
 		Ts:   ts,
 		Type: model.MessageTypeResolved,
 	}
 }
 
-func rowChangeToMsg(e *model.RowChangedEvent) (*internal2.MessageKey, *messageRow) {
+func rowChangeToMsg(e *model.RowChangedEvent) (*internal.MessageKey, *messageRow) {
 	var partition *int64
 	if e.Table.IsPartition {
 		partition = &e.Table.TableID
 	}
-	key := &internal2.MessageKey{
+	key := &internal.MessageKey{
 		Ts:        e.CommitTs,
 		Schema:    e.Table.Schema,
 		Table:     e.Table.Table,
@@ -99,7 +99,7 @@ func rowChangeToMsg(e *model.RowChangedEvent) (*internal2.MessageKey, *messageRo
 	return key, value
 }
 
-func msgToRowChange(key *internal2.MessageKey, value *messageRow) *model.RowChangedEvent {
+func msgToRowChange(key *internal.MessageKey, value *messageRow) *model.RowChangedEvent {
 	e := new(model.RowChangedEvent)
 	// TODO: we lost the startTs from kafka message
 	// startTs-based txn filter is out of work
@@ -123,13 +123,13 @@ func msgToRowChange(key *internal2.MessageKey, value *messageRow) *model.RowChan
 	return e
 }
 
-func rowChangeColumns2CodecColumns(cols []*model.Column) map[string]internal2.Column {
-	jsonCols := make(map[string]internal2.Column, len(cols))
+func rowChangeColumns2CodecColumns(cols []*model.Column) map[string]internal.Column {
+	jsonCols := make(map[string]internal.Column, len(cols))
 	for _, col := range cols {
 		if col == nil {
 			continue
 		}
-		c := internal2.Column{}
+		c := internal.Column{}
 		c.FromRowChangeColumn(col)
 		jsonCols[col.Name] = c
 	}
@@ -139,7 +139,7 @@ func rowChangeColumns2CodecColumns(cols []*model.Column) map[string]internal2.Co
 	return jsonCols
 }
 
-func codecColumns2RowChangeColumns(cols map[string]internal2.Column) []*model.Column {
+func codecColumns2RowChangeColumns(cols map[string]internal.Column) []*model.Column {
 	sinkCols := make([]*model.Column, 0, len(cols))
 	for name, col := range cols {
 		c := col.ToRowChangeColumn(name)
@@ -154,8 +154,8 @@ func codecColumns2RowChangeColumns(cols map[string]internal2.Column) []*model.Co
 	return sinkCols
 }
 
-func ddlEventToMsg(e *model.DDLEvent) (*internal2.MessageKey, *messageDDL) {
-	key := &internal2.MessageKey{
+func ddlEventToMsg(e *model.DDLEvent) (*internal.MessageKey, *messageDDL) {
+	key := &internal.MessageKey{
 		Ts:     e.CommitTs,
 		Schema: e.TableInfo.TableName.Schema,
 		Table:  e.TableInfo.TableName.Table,
@@ -168,7 +168,7 @@ func ddlEventToMsg(e *model.DDLEvent) (*internal2.MessageKey, *messageDDL) {
 	return key, value
 }
 
-func msgToDDLEvent(key *internal2.MessageKey, value *messageDDL) *model.DDLEvent {
+func msgToDDLEvent(key *internal.MessageKey, value *messageDDL) *model.DDLEvent {
 	e := new(model.DDLEvent)
 	e.TableInfo = new(model.TableInfo)
 	// TODO: we lost the startTs from kafka message
