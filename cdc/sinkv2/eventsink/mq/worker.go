@@ -215,6 +215,7 @@ func (w *worker) batch(
 			return index, nil
 		}
 		if msg.rowEvent != nil {
+			w.statistics.ObserveRows(msg.rowEvent.Event)
 			events[index] = msg
 			index++
 		}
@@ -233,6 +234,7 @@ func (w *worker) batch(
 			}
 
 			if msg.rowEvent != nil {
+				w.statistics.ObserveRows(msg.rowEvent.Event)
 				events[index] = msg
 				index++
 			}
