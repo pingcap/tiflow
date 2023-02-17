@@ -26,7 +26,6 @@ import (
 	"github.com/pingcap/tidb/parser/mysql"
 	"github.com/pingcap/tidb/parser/types"
 	"github.com/pingcap/tiflow/cdc/model"
-	"github.com/pingcap/tiflow/cdc/sink/codec/common"
 	"github.com/pingcap/tiflow/cdc/sinkv2/eventsink"
 	"github.com/pingcap/tiflow/cdc/sinkv2/metrics"
 	"github.com/pingcap/tiflow/engine/pkg/clock"
@@ -34,6 +33,7 @@ import (
 	"github.com/pingcap/tiflow/pkg/config"
 	"github.com/pingcap/tiflow/pkg/sink"
 	"github.com/pingcap/tiflow/pkg/sink/cloudstorage"
+	"github.com/pingcap/tiflow/pkg/sink/codec/common"
 	"github.com/pingcap/tiflow/pkg/util"
 	"github.com/stretchr/testify/require"
 )
@@ -131,7 +131,7 @@ func TestDMLWorkerRun(t *testing.T) {
 	ctx, cancel := context.WithCancel(context.Background())
 	parentDir := t.TempDir()
 	d := testDMLWorker(ctx, t, parentDir)
-	fragCh := chann.New[eventFragment]()
+	fragCh := chann.NewAutoDrainChann[eventFragment]()
 	table1Dir := path.Join(parentDir, "test/table1/99")
 	// assume table1 and table2 are dispatched to the same DML worker
 	table1 := model.TableName{
@@ -208,8 +208,5 @@ func TestDMLWorkerRun(t *testing.T) {
 	cancel()
 	d.close()
 	wg.Wait()
-	fragCh.Close()
-	for range fragCh.Out() {
-		// drain the fragCh
-	}
+	fragCh.CloseAndDrain()
 }

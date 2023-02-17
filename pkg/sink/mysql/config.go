@@ -37,10 +37,10 @@ const (
 	txnModeOptimistic  = "optimistic"
 	txnModePessimistic = "pessimistic"
 
-	// defaultWorkerCount is the default number of workers.
-	defaultWorkerCount = 16
-	// defaultMaxTxnRow is the default max number of rows in a transaction.
-	defaultMaxTxnRow = 256
+	// DefaultWorkerCount is the default number of workers.
+	DefaultWorkerCount = 16
+	// DefaultMaxTxnRow is the default max number of rows in a transaction.
+	DefaultMaxTxnRow = 256
 	// defaultMaxMultiUpdateRowCount is the default max number of rows in a
 	// single multi update SQL.
 	defaultMaxMultiUpdateRowCount = 40
@@ -102,8 +102,8 @@ type Config struct {
 // NewConfig returns the default mysql backend config.
 func NewConfig() *Config {
 	return &Config{
-		WorkerCount:            defaultWorkerCount,
-		MaxTxnRow:              defaultMaxTxnRow,
+		WorkerCount:            DefaultWorkerCount,
+		MaxTxnRow:              DefaultMaxTxnRow,
 		MaxMultiUpdateRowCount: defaultMaxMultiUpdateRowCount,
 		MaxMultiUpdateRowSize:  defaultMaxMultiUpdateRowSize,
 		tidbTxnMode:            defaultTiDBTxnMode,

@@ -20,7 +20,6 @@ import (
 	"github.com/pingcap/errors"
 	"github.com/pingcap/log"
 	"github.com/pingcap/tiflow/cdc/model"
-	"github.com/pingcap/tiflow/cdc/sink/codec"
 	"github.com/pingcap/tiflow/cdc/sinkv2/eventsink"
 	"github.com/pingcap/tiflow/cdc/sinkv2/eventsink/mq/dmlproducer"
 	"github.com/pingcap/tiflow/cdc/sinkv2/metrics"
@@ -28,6 +27,7 @@ import (
 	"github.com/pingcap/tiflow/cdc/sinkv2/tablesink/state"
 	"github.com/pingcap/tiflow/pkg/chann"
 	"github.com/pingcap/tiflow/pkg/config"
+	"github.com/pingcap/tiflow/pkg/sink/codec"
 	"github.com/prometheus/client_golang/prometheus"
 	"go.uber.org/zap"
 	"golang.org/x/sync/errgroup"
@@ -62,7 +62,7 @@ type worker struct {
 	protocol config.Protocol
 	// msgChan caches the messages to be sent.
 	// It is an unbounded channel.
-	msgChan *chann.Chann[mqEvent]
+	msgChan *chann.DrainableChann[mqEvent]
 	// ticker used to force flush the messages when the interval is reached.
 	ticker *time.Ticker
 
@@ -93,7 +93,7 @@ func newWorker(
 	w := &worker{
 		changeFeedID:                      id,
 		protocol:                          protocol,
-		msgChan:                           chann.New[mqEvent](),
+		msgChan:                           chann.NewAutoDrainChann[mqEvent](),
 		ticker:                            time.NewTicker(flushInterval),
 		encoderGroup:                      codec.NewEncoderGroup(builder, encoderConcurrency, id),
 		producer:                          producer,
@@ -215,6 +215,7 @@ func (w *worker) batch(
 			return index, nil
 		}
 		if msg.rowEvent != nil {
+			w.statistics.ObserveRows(msg.rowEvent.Event)
 			events[index] = msg
 			index++
 		}
@@ -233,6 +234,7 @@ func (w *worker) batch(
 			}
 
 			if msg.rowEvent != nil {
+				w.statistics.ObserveRows(msg.rowEvent.Event)
 				events[index] = msg
 				index++
 			}
@@ -309,12 +311,7 @@ func (w *worker) sendMessages(ctx context.Context) error {
 }
 
 func (w *worker) close() {
-	w.msgChan.Close()
-	// We must finish consuming the data here,
-	// otherwise it will cause the channel to not close properly.
-	for range w.msgChan.Out() {
-		// Do nothing. We do not care about the data.
-	}
+	w.msgChan.CloseAndDrain()
 	w.producer.Close()
 
 	mq.WorkerSendMessageDuration.DeleteLabelValues(w.changeFeedID.Namespace, w.changeFeedID.ID)
