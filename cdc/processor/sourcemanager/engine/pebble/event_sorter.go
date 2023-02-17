@@ -44,7 +44,7 @@ type EventSorter struct {
 	// Read-only fields.
 	changefeedID model.ChangeFeedID
 	dbs          []*pebble.DB
-	channs       []*chann.Chann[eventWithTableID]
+	channs       []*chann.DrainableChann[eventWithTableID]
 	serde        encoding.MsgPackGenSerde
 
 	// To manage background goroutines.
@@ -71,9 +71,9 @@ type EventIter struct {
 
 // New creates an EventSorter instance.
 func New(ID model.ChangeFeedID, dbs []*pebble.DB) *EventSorter {
-	channs := make([]*chann.Chann[eventWithTableID], 0, len(dbs))
+	channs := make([]*chann.DrainableChann[eventWithTableID], 0, len(dbs))
 	for i := 0; i < len(dbs); i++ {
-		channs = append(channs, chann.New[eventWithTableID](chann.Cap(128)))
+		channs = append(channs, chann.NewAutoDrainChann[eventWithTableID](chann.Cap(128)))
 	}
 
 	eventSorter := &EventSorter{
@@ -331,9 +331,7 @@ func (s *EventSorter) Close() error {
 	close(s.closed)
 	s.wg.Wait()
 	for _, ch := range s.channs {
-		ch.Close()
-		for range ch.Out() {
-		}
+		ch.CloseAndDrain()
 	}
 
 	s.mu.RLock()
@@ -396,7 +394,7 @@ type eventWithTableID struct {
 
 type tableState struct {
 	uniqueID       uint32
-	ch             *chann.Chann[eventWithTableID]
+	ch             *chann.DrainableChann[eventWithTableID]
 	sortedResolved atomic.Uint64 // indicates events are ready for fetching.
 	// For statistics.
 	maxReceivedCommitTs   atomic.Uint64
