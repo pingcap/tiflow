@@ -29,6 +29,7 @@ import (
 	"github.com/pingcap/tiflow/cdc/processor/tablepb"
 	"github.com/pingcap/tiflow/cdc/redo"
 	"github.com/pingcap/tiflow/cdc/sinkv2/eventsink/factory"
+	"github.com/pingcap/tiflow/cdc/sinkv2/metrics/tablesink"
 	cerrors "github.com/pingcap/tiflow/pkg/errors"
 	"github.com/pingcap/tiflow/pkg/retry"
 	"github.com/pingcap/tiflow/pkg/spanz"
@@ -124,7 +125,6 @@ func New(
 	redoManager redo.LogManager,
 	sourceManager *sourcemanager.SourceManager,
 	errChan chan error,
-	metricsTableSinkTotalRows prometheus.Counter,
 ) (*SinkManager, error) {
 	tableSinkFactory, err := factory.New(
 		ctx,
@@ -152,7 +152,8 @@ func New(
 		sinkTaskChan:        make(chan *sinkTask),
 		sinkWorkerAvailable: make(chan struct{}, 1),
 
-		metricsTableSinkTotalRows: metricsTableSinkTotalRows,
+		metricsTableSinkTotalRows: tablesink.TotalRowsCountCounter.
+			WithLabelValues(changefeedID.Namespace, changefeedID.ID),
 	}
 
 	if redoManager != nil && redoManager.Enabled() {
