@@ -186,7 +186,7 @@ func (a *admin) GetTopicsMeta(
 	for _, topic := range resp.Topics {
 		if topic.Error != nil {
 			if !ignoreTopicError {
-				return nil, topic.Error
+				return nil, errors.Trace(topic.Error)
 			}
 			log.Warn("fetch topic meta failed",
 				zap.String("topic", topic.Name), zap.Error(topic.Error))
@@ -219,7 +219,7 @@ func (a *admin) CreateTopic(
 	if err != nil {
 		return errors.Trace(err)
 	}
-	
+
 	for _, err := range response.Errors {
 		if err != nil && !errors.Is(err, kafka.TopicAlreadyExists) {
 			return errors.Trace(err)

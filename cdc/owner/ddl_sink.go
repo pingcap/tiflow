@@ -28,7 +28,7 @@ import (
 	"github.com/pingcap/tiflow/cdc/contextutil"
 	"github.com/pingcap/tiflow/cdc/model"
 	"github.com/pingcap/tiflow/cdc/sink/mysql"
-	sinkv2 "github.com/pingcap/tiflow/cdc/sinkv2/ddlsink"
+	"github.com/pingcap/tiflow/cdc/sinkv2/ddlsink"
 	"github.com/pingcap/tiflow/cdc/sinkv2/ddlsink/factory"
 	cerror "github.com/pingcap/tiflow/pkg/errors"
 	"github.com/pingcap/tiflow/pkg/util"
@@ -76,7 +76,7 @@ type ddlSinkImpl struct {
 	ddlCh chan *model.DDLEvent
 	errCh chan error
 
-	sinkV2 sinkv2.DDLEventSink
+	sink ddlsink.DDLEventSink
 	// `sinkInitHandler` can be helpful in unit testing.
 	sinkInitHandler ddlSinkInitHandler
 
@@ -122,7 +122,7 @@ func ddlSinkInitializer(ctx context.Context, a *ddlSinkImpl) error {
 	if err != nil {
 		return errors.Trace(err)
 	}
-	a.sinkV2 = s
+	a.sink = s
 
 	if !a.info.Config.EnableSyncPoint {
 		return nil
@@ -198,7 +198,7 @@ func (s *ddlSinkImpl) run(ctx context.Context) {
 				s.mu.Unlock()
 				lastCheckpointTs = checkpointTs
 
-				if err := s.sinkV2.WriteCheckpointTs(ctx,
+				if err := s.sink.WriteCheckpointTs(ctx,
 					checkpointTs, tables); err != nil {
 					s.reportErr(err)
 					return
@@ -210,7 +210,7 @@ func (s *ddlSinkImpl) run(ctx context.Context) {
 					zap.String("changefeed", s.changefeedID.ID),
 					zap.Any("DDL", ddl))
 
-				err := s.sinkV2.WriteDDLEvent(ctx, ddl)
+				err := s.sink.WriteDDLEvent(ctx, ddl)
 				failpoint.Inject("InjectChangefeedDDLError", func() {
 					err = cerror.ErrExecDDLFailed.GenWithStackByArgs()
 				})
@@ -232,7 +232,7 @@ func (s *ddlSinkImpl) run(ctx context.Context) {
 					tables := s.mu.currentTables
 					s.mu.Unlock()
 					lastCheckpointTs = checkpointTs
-					if err := s.sinkV2.WriteCheckpointTs(ctx,
+					if err := s.sink.WriteCheckpointTs(ctx,
 						checkpointTs, tables); err != nil {
 						s.reportErr(err)
 						return
@@ -334,8 +334,8 @@ func (s *ddlSinkImpl) emitSyncPoint(ctx context.Context, checkpointTs uint64) er
 func (s *ddlSinkImpl) close(ctx context.Context) (err error) {
 	s.cancel()
 	// they will both be nil if changefeed return an error in initializing
-	if s.sinkV2 != nil {
-		s.sinkV2.Close()
+	if s.sink != nil {
+		s.sink.Close()
 	}
 	if s.syncPointStore != nil {
 		err = s.syncPointStore.Close()
