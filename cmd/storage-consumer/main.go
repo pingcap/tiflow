@@ -39,7 +39,9 @@ import (
 	"github.com/pingcap/tiflow/cdc/sink/codec/canal"
 	"github.com/pingcap/tiflow/cdc/sink/codec/common"
 	"github.com/pingcap/tiflow/cdc/sink/codec/csv"
-	"github.com/pingcap/tiflow/cdc/sinkv2/eventsink/factory"
+	"github.com/pingcap/tiflow/cdc/sinkv2/ddlsink"
+	ddlsinkfactory "github.com/pingcap/tiflow/cdc/sinkv2/ddlsink/factory"
+	eventsinkfactory "github.com/pingcap/tiflow/cdc/sinkv2/eventsink/factory"
 	"github.com/pingcap/tiflow/cdc/sinkv2/tablesink"
 	sinkutil "github.com/pingcap/tiflow/cdc/sinkv2/util"
 	"github.com/pingcap/tiflow/pkg/cmd/util"
@@ -228,15 +230,14 @@ type fileIndexRange struct {
 }
 
 type consumer struct {
-	sinkFactory     *factory.SinkFactory
+	sinkFactory     *eventsinkfactory.SinkFactory
+	ddlSink         ddlsink.DDLEventSink
 	replicationCfg  *config.ReplicaConfig
 	codecCfg        *common.Config
 	externalStorage storage.ExternalStorage
 	fileExtension   string
 	// tableDMLIdxMap maintains a map of <dmlPathKey, max file index>
 	tableDMLIdxMap map[dmlPathKey]uint64
-	// tableDDLSet maintains a set of schemaPathKey
-	tableDDLSet map[schemaPathKey]struct{}
 	// tableTsMap maintains a map of <TableID, max commit ts>
 	tableTsMap map[model.TableID]uint64
 	// tableSinkMap maintains a map of <TableID, TableSink>
@@ -289,19 +290,26 @@ func newConsumer(ctx context.Context) (*consumer, error) {
 	errCh := make(chan error, 1)
 	stdCtx := contextutil.PutChangefeedIDInCtx(ctx,
 		model.DefaultChangeFeedID(defaultChangefeedName))
-	sinkFactory, err := factory.New(
+	sinkFactory, err := eventsinkfactory.New(
 		stdCtx,
 		downstreamURIStr,
 		config.GetDefaultReplicaConfig(),
 		errCh,
 	)
 	if err != nil {
-		log.Error("failed to create sink", zap.Error(err))
+		log.Error("failed to create event sink factory", zap.Error(err))
+		return nil, err
+	}
+
+	ddlSink, err := ddlsinkfactory.New(ctx, downstreamURIStr, config.GetDefaultReplicaConfig())
+	if err != nil {
+		log.Error("failed to create ddl sink", zap.Error(err))
 		return nil, err
 	}
 
 	return &consumer{
 		sinkFactory:     sinkFactory,
+		ddlSink:         ddlSink,
 		replicationCfg:  replicaConfig,
 		codecCfg:        codecConfig,
 		externalStorage: storage,
@@ -336,31 +344,14 @@ func diffDMLMaps(map1, map2 map[dmlPathKey]uint64) map[dmlPathKey]fileIndexRange
 	return resMap
 }
 
-// set1 - set2
-func diffDDLSet(set1, set2 map[schemaPathKey]struct{}) map[schemaPathKey]struct{} {
-	resSet := make(map[schemaPathKey]struct{})
-	for k := range set1 {
-		if _, ok := set2[k]; !ok {
-			resSet[k] = struct{}{}
-		}
-	}
-
-	return resSet
-}
-
-// getNewFiles returns newly created dml files in specific ranges and ddl files (schema.json).
-func (c *consumer) getNewFiles(ctx context.Context) (map[dmlPathKey]fileIndexRange, map[schemaPathKey]struct{}, error) {
-	var tableDDLSet map[schemaPathKey]struct{}
+// getNewFiles returns newly created dml files in specific ranges
+func (c *consumer) getNewFiles(ctx context.Context) (map[dmlPathKey]fileIndexRange, error) {
 	tableDMLMap := make(map[dmlPathKey]fileIndexRange)
 	opt := &storage.WalkOption{SubDir: ""}
 
 	origDMLIdxMap := make(map[dmlPathKey]uint64, len(c.tableDMLIdxMap))
 	for k, v := range c.tableDMLIdxMap {
 		origDMLIdxMap[k] = v
-	}
-	origDDLSet := make(map[schemaPathKey]struct{}, len(c.tableDDLSet))
-	for k := range c.tableDDLSet {
-		origDDLSet[k] = struct{}{}
 	}
 
 	err := c.externalStorage.WalkDir(ctx, opt, func(path string, size int64) error {
@@ -377,7 +368,6 @@ func (c *consumer) getNewFiles(ctx context.Context) (map[dmlPathKey]fileIndexRan
 				log.Error("failed to parse schema file path", zap.Error(err))
 				// skip handling this file
 			}
-			c.tableDDLSet[schemaKey] = struct{}{}
 
 			return nil
 		}
@@ -396,12 +386,11 @@ func (c *consumer) getNewFiles(ctx context.Context) (map[dmlPathKey]fileIndexRan
 		return nil
 	})
 	if err != nil {
-		return tableDMLMap, tableDDLSet, err
+		return tableDMLMap, err
 	}
 
 	tableDMLMap = diffDMLMaps(c.tableDMLIdxMap, origDMLIdxMap)
-	tableDDLSet = diffDDLSet(c.tableDDLSet, origDDLSet)
-	return tableDMLMap, tableDDLSet, err
+	return tableDMLMap, err
 }
 
 // emitDMLEvents decodes RowChangedEvents from file content and emit them.
@@ -533,42 +522,10 @@ func (c *consumer) syncExecDMLEvents(
 	return nil
 }
 
-func (c *consumer) handleDDLFiles(ctx context.Context, ddlFileSet map[schemaPathKey]struct{}) error {
-	keys := make([]schemaPathKey, 0, len(ddlFileSet))
-	for k := range ddlFileSet {
-		keys = append(keys, k)
-	}
-
-	if len(keys) == 0 {
-		log.Info("no new ddl files found since last round")
-		return nil
-	}
-
-	sort.Slice(keys, func(i, j int) bool {
-		if keys[i].schema != keys[j].schema {
-			return keys[i].schema < keys[j].schema
-		}
-		if keys[i].table != keys[j].table {
-			return keys[i].table < keys[j].table
-		}
-		return keys[i].version < keys[j].version
-	})
-	for _, key := range keys {
-		tableDef, err := c.getTableDefFromFile(ctx, key)
-		if err != nil {
-			return err
-		}
-		_, err = tableDef.ToDDLEvent()
-		if err != nil {
-			return err
-		}
-		// TODO: use ddlsink to execute this ddl event
-	}
-
-	return nil
-}
-
-func (c *consumer) getTableDefFromFile(ctx context.Context, schemaKey schemaPathKey) (cloudstorage.TableDefinition, error) {
+func (c *consumer) getTableDefFromFile(
+	ctx context.Context,
+	schemaKey schemaPathKey,
+) (cloudstorage.TableDefinition, error) {
 	var tableDef cloudstorage.TableDefinition
 
 	schemaFilePath := schemaKey.generagteSchemaFilePath()
@@ -585,7 +542,10 @@ func (c *consumer) getTableDefFromFile(ctx context.Context, schemaKey schemaPath
 	return tableDef, nil
 }
 
-func (c *consumer) handleDMLFiles(ctx context.Context, dmlFileMap map[dmlPathKey]fileIndexRange) error {
+func (c *consumer) handleNewFiles(
+	ctx context.Context,
+	dmlFileMap map[dmlPathKey]fileIndexRange,
+) error {
 	keys := make([]dmlPathKey, 0, len(dmlFileMap))
 	for k := range dmlFileMap {
 		keys = append(keys, k)
@@ -615,8 +575,19 @@ func (c *consumer) handleDMLFiles(ctx context.Context, dmlFileMap map[dmlPathKey
 		if err != nil {
 			return err
 		}
-
 		fileRange := dmlFileMap[key]
+		// execute ddl event before executing dml events in the first file
+		if len(tableDef.Query) > 0 && fileRange.start == 1 {
+			ddlEvent, err := tableDef.ToDDLEvent()
+			if err != nil {
+				return err
+			}
+			if err := c.ddlSink.WriteDDLEvent(ctx, ddlEvent); err != nil {
+				return errors.Trace(err)
+			}
+			log.Info("execute ddl event successfully", zap.String("query", tableDef.Query))
+		}
+
 		for i := fileRange.start; i <= fileRange.end; i++ {
 			if err := c.syncExecDMLEvents(ctx, tableDef, key, i); err != nil {
 				return err
@@ -638,17 +609,12 @@ func (c *consumer) run(ctx context.Context) error {
 		case <-ticker.C:
 		}
 
-		dmlFileMap, ddlFileSet, err := c.getNewFiles(ctx)
+		dmlFileMap, err := c.getNewFiles(ctx)
 		if err != nil {
 			return errors.Trace(err)
 		}
 
-		err = c.handleDMLFiles(ctx, dmlFileMap)
-		if err != nil {
-			return errors.Trace(err)
-		}
-
-		err = c.handleDDLFiles(ctx, ddlFileSet)
+		err = c.handleNewFiles(ctx, dmlFileMap)
 		if err != nil {
 			return errors.Trace(err)
 		}
