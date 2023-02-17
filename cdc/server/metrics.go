@@ -23,7 +23,6 @@ import (
 	"github.com/pingcap/tiflow/cdc/puller/memorysorter"
 	redo "github.com/pingcap/tiflow/cdc/redo/common"
 	"github.com/pingcap/tiflow/cdc/scheduler"
-	sink "github.com/pingcap/tiflow/cdc/sink/metrics"
 	sinkv2 "github.com/pingcap/tiflow/cdc/sinkv2/metrics"
 	"github.com/pingcap/tiflow/pkg/etcd"
 	"github.com/pingcap/tiflow/pkg/orchestrator"
@@ -44,7 +43,6 @@ func init() {
 	initServerMetrics(registry)
 	kv.InitMetrics(registry)
 	puller.InitMetrics(registry)
-	sink.InitMetrics(registry)
 	sinkv2.InitMetrics(registry)
 	entry.InitMetrics(registry)
 	processor.InitMetrics(registry)
