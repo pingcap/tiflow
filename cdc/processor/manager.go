@@ -140,6 +140,7 @@ func (m *managerImpl) Tick(stdCtx context.Context, state orchestrator.ReactorSta
 		if currentChangefeedEpoch != p.changefeedEpoch {
 			// Changefeed has restarted due to error, the processor is stale.
 			m.closeProcessor(changefeedID, ctx)
+			continue
 		}
 		if err := p.Tick(ctx); err != nil {
 			// processor have already patched its error to tell the owner
