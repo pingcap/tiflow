@@ -24,13 +24,13 @@ import (
 	"github.com/pingcap/tiflow/pkg/config"
 	cerror "github.com/pingcap/tiflow/pkg/errors"
 	"github.com/pingcap/tiflow/pkg/sink/codec"
-	common2 "github.com/pingcap/tiflow/pkg/sink/codec/common"
+	"github.com/pingcap/tiflow/pkg/sink/codec/common"
 	"go.uber.org/zap"
 )
 
 // BatchEncoder encodes the events into the byte of a batch into.
 type BatchEncoder struct {
-	messageBuf   []*common2.Message
+	messageBuf   []*common.Message
 	callbackBuff []func()
 	curBatchSize int
 
@@ -63,7 +63,7 @@ func (d *BatchEncoder) AppendRowChangedEvent(
 
 	// for single message that longer than max-message-size, do not send it.
 	// 16 is the length of `keyLenByte` and `valueLenByte`, 8 is the length of `versionHead`
-	length := len(key) + len(value) + common2.MaxRecordOverhead + 16 + 8
+	length := len(key) + len(value) + common.MaxRecordOverhead + 16 + 8
 	if length > d.MaxMessageBytes {
 		log.Warn("Single message too large",
 			zap.Int("max-message-size", d.MaxMessageBytes), zap.Int("length", length), zap.Any("table", e.Table))
@@ -77,7 +77,7 @@ func (d *BatchEncoder) AppendRowChangedEvent(
 		d.tryBuildCallback()
 		versionHead := make([]byte, 8)
 		binary.BigEndian.PutUint64(versionHead, codec.BatchVersion1)
-		msg := common2.NewMsg(config.ProtocolOpen, versionHead, nil,
+		msg := common.NewMsg(config.ProtocolOpen, versionHead, nil,
 			0, model.MessageTypeRow, nil, nil)
 		d.messageBuf = append(d.messageBuf, msg)
 		d.curBatchSize = 0
@@ -102,7 +102,7 @@ func (d *BatchEncoder) AppendRowChangedEvent(
 }
 
 // EncodeDDLEvent implements the EventBatchEncoder interface
-func (d *BatchEncoder) EncodeDDLEvent(e *model.DDLEvent) (*common2.Message, error) {
+func (d *BatchEncoder) EncodeDDLEvent(e *model.DDLEvent) (*common.Message, error) {
 	keyMsg, valueMsg := ddlEventToMsg(e)
 	key, err := keyMsg.Encode()
 	if err != nil {
@@ -129,12 +129,12 @@ func (d *BatchEncoder) EncodeDDLEvent(e *model.DDLEvent) (*common2.Message, erro
 	valueBuf.Write(valueLenByte[:])
 	valueBuf.Write(value)
 
-	ret := common2.NewDDLMsg(config.ProtocolOpen, keyBuf.Bytes(), valueBuf.Bytes(), e)
+	ret := common.NewDDLMsg(config.ProtocolOpen, keyBuf.Bytes(), valueBuf.Bytes(), e)
 	return ret, nil
 }
 
 // EncodeCheckpointEvent implements the EventBatchEncoder interface
-func (d *BatchEncoder) EncodeCheckpointEvent(ts uint64) (*common2.Message, error) {
+func (d *BatchEncoder) EncodeCheckpointEvent(ts uint64) (*common.Message, error) {
 	keyMsg := newResolvedMessage(ts)
 	key, err := keyMsg.Encode()
 	if err != nil {
@@ -156,15 +156,15 @@ func (d *BatchEncoder) EncodeCheckpointEvent(ts uint64) (*common2.Message, error
 	valueBuf := new(bytes.Buffer)
 	valueBuf.Write(valueLenByte[:])
 
-	ret := common2.NewResolvedMsg(config.ProtocolOpen, keyBuf.Bytes(), valueBuf.Bytes(), ts)
+	ret := common.NewResolvedMsg(config.ProtocolOpen, keyBuf.Bytes(), valueBuf.Bytes(), ts)
 	return ret, nil
 }
 
 // Build implements the EventBatchEncoder interface
-func (d *BatchEncoder) Build() (messages []*common2.Message) {
+func (d *BatchEncoder) Build() (messages []*common.Message) {
 	d.tryBuildCallback()
 	ret := d.messageBuf
-	d.messageBuf = make([]*common2.Message, 0)
+	d.messageBuf = make([]*common.Message, 0)
 	return ret
 }
 
@@ -183,7 +183,7 @@ func (d *BatchEncoder) tryBuildCallback() {
 }
 
 type batchEncoderBuilder struct {
-	config *common2.Config
+	config *common.Config
 }
 
 // Build a BatchEncoder
@@ -196,7 +196,7 @@ func (b *batchEncoderBuilder) Build() codec.EventBatchEncoder {
 }
 
 // NewBatchEncoderBuilder creates an open-protocol batchEncoderBuilder.
-func NewBatchEncoderBuilder(config *common2.Config) codec.EncoderBuilder {
+func NewBatchEncoderBuilder(config *common.Config) codec.EncoderBuilder {
 	return &batchEncoderBuilder{config: config}
 }
 

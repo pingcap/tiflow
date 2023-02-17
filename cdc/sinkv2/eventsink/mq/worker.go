@@ -27,7 +27,7 @@ import (
 	"github.com/pingcap/tiflow/cdc/sinkv2/tablesink/state"
 	"github.com/pingcap/tiflow/pkg/chann"
 	"github.com/pingcap/tiflow/pkg/config"
-	codec2 "github.com/pingcap/tiflow/pkg/sink/codec"
+	"github.com/pingcap/tiflow/pkg/sink/codec"
 	"github.com/prometheus/client_golang/prometheus"
 	"go.uber.org/zap"
 	"golang.org/x/sync/errgroup"
@@ -66,7 +66,7 @@ type worker struct {
 	// ticker used to force flush the messages when the interval is reached.
 	ticker *time.Ticker
 
-	encoderGroup codec2.EncoderGroup
+	encoderGroup codec.EncoderGroup
 
 	// producer is used to send the messages to the Kafka broker.
 	producer dmlproducer.DMLProducer
@@ -85,7 +85,7 @@ type worker struct {
 func newWorker(
 	id model.ChangeFeedID,
 	protocol config.Protocol,
-	builder codec2.EncoderBuilder,
+	builder codec.EncoderBuilder,
 	encoderConcurrency int,
 	producer dmlproducer.DMLProducer,
 	statistics *metrics.Statistics,
@@ -95,7 +95,7 @@ func newWorker(
 		protocol:                          protocol,
 		msgChan:                           chann.NewAutoDrainChann[mqEvent](),
 		ticker:                            time.NewTicker(flushInterval),
-		encoderGroup:                      codec2.NewEncoderGroup(builder, encoderConcurrency, id),
+		encoderGroup:                      codec.NewEncoderGroup(builder, encoderConcurrency, id),
 		producer:                          producer,
 		metricMQWorkerSendMessageDuration: mq.WorkerSendMessageDuration.WithLabelValues(id.Namespace, id.ID),
 		metricMQWorkerBatchSize:           mq.WorkerBatchSize.WithLabelValues(id.Namespace, id.ID),
@@ -269,11 +269,11 @@ func (w *worker) group(
 func (w *worker) sendMessages(ctx context.Context) error {
 	inputCh := w.encoderGroup.Output()
 	ticker := time.NewTicker(15 * time.Second)
-	metric := codec2.EncoderGroupOutputChanSizeGauge.
+	metric := codec.EncoderGroupOutputChanSizeGauge.
 		WithLabelValues(w.changeFeedID.Namespace, w.changeFeedID.ID)
 	defer func() {
 		ticker.Stop()
-		codec2.EncoderGroupOutputChanSizeGauge.
+		codec.EncoderGroupOutputChanSizeGauge.
 			DeleteLabelValues(w.changeFeedID.Namespace, w.changeFeedID.ID)
 	}()
 	for {

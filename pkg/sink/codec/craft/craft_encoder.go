@@ -19,13 +19,13 @@ import (
 	"github.com/pingcap/tiflow/cdc/model"
 	"github.com/pingcap/tiflow/pkg/config"
 	"github.com/pingcap/tiflow/pkg/sink/codec"
-	common2 "github.com/pingcap/tiflow/pkg/sink/codec/common"
+	"github.com/pingcap/tiflow/pkg/sink/codec/common"
 )
 
 // BatchEncoder encodes the events into the byte of a batch into craft binary format.
 type BatchEncoder struct {
 	rowChangedBuffer *RowChangedEventBuffer
-	messageBuf       []*common2.Message
+	messageBuf       []*common.Message
 	callbackBuf      []func()
 
 	// configs
@@ -36,8 +36,8 @@ type BatchEncoder struct {
 }
 
 // EncodeCheckpointEvent implements the EventBatchEncoder interface
-func (e *BatchEncoder) EncodeCheckpointEvent(ts uint64) (*common2.Message, error) {
-	return common2.NewResolvedMsg(
+func (e *BatchEncoder) EncodeCheckpointEvent(ts uint64) (*common.Message, error) {
+	return common.NewResolvedMsg(
 		config.ProtocolCraft, nil,
 		NewResolvedEventEncoder(e.allocator, ts).Encode(), ts), nil
 }
@@ -60,19 +60,19 @@ func (e *BatchEncoder) AppendRowChangedEvent(
 }
 
 // EncodeDDLEvent implements the EventBatchEncoder interface
-func (e *BatchEncoder) EncodeDDLEvent(ev *model.DDLEvent) (*common2.Message, error) {
-	return common2.NewDDLMsg(config.ProtocolCraft,
+func (e *BatchEncoder) EncodeDDLEvent(ev *model.DDLEvent) (*common.Message, error) {
+	return common.NewDDLMsg(config.ProtocolCraft,
 		nil, NewDDLEventEncoder(e.allocator, ev).Encode(), ev), nil
 }
 
 // Build implements the EventBatchEncoder interface
-func (e *BatchEncoder) Build() []*common2.Message {
+func (e *BatchEncoder) Build() []*common.Message {
 	if e.rowChangedBuffer.Size() > 0 {
 		// flush buffered data to message buffer
 		e.flush()
 	}
 	ret := e.messageBuf
-	e.messageBuf = make([]*common2.Message, 0, 2)
+	e.messageBuf = make([]*common.Message, 0, 2)
 	return ret
 }
 
@@ -82,7 +82,7 @@ func (e *BatchEncoder) flush() {
 	schema := headers.GetSchema(0)
 	table := headers.GetTable(0)
 	rowsCnt := e.rowChangedBuffer.RowsCount()
-	message := common2.NewMsg(config.ProtocolCraft,
+	message := common.NewMsg(config.ProtocolCraft,
 		nil, e.rowChangedBuffer.Encode(), ts, model.MessageTypeRow, &schema, &table)
 	message.SetRowsCount(rowsCnt)
 	if len(e.callbackBuf) != 0 && len(e.callbackBuf) == rowsCnt {
@@ -106,7 +106,7 @@ func NewBatchEncoder() codec.EventBatchEncoder {
 }
 
 type batchEncoderBuilder struct {
-	config *common2.Config
+	config *common.Config
 }
 
 // Build a BatchEncoder
@@ -118,7 +118,7 @@ func (b *batchEncoderBuilder) Build() codec.EventBatchEncoder {
 }
 
 // NewBatchEncoderBuilder creates a craft batchEncoderBuilder.
-func NewBatchEncoderBuilder(config *common2.Config) codec.EncoderBuilder {
+func NewBatchEncoderBuilder(config *common.Config) codec.EncoderBuilder {
 	return &batchEncoderBuilder{config: config}
 }
 
@@ -126,7 +126,7 @@ func NewBatchEncoderBuilder(config *common2.Config) codec.EncoderBuilder {
 func NewBatchEncoderWithAllocator(allocator *SliceAllocator) codec.EventBatchEncoder {
 	return &BatchEncoder{
 		allocator:        allocator,
-		messageBuf:       make([]*common2.Message, 0, 2),
+		messageBuf:       make([]*common.Message, 0, 2),
 		callbackBuf:      make([]func(), 0),
 		rowChangedBuffer: NewRowChangedEventBuffer(allocator),
 	}

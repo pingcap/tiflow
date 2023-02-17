@@ -25,7 +25,7 @@ import (
 	"github.com/pingcap/tiflow/pkg/config"
 	cerror "github.com/pingcap/tiflow/pkg/errors"
 	"github.com/pingcap/tiflow/pkg/sink/codec"
-	common2 "github.com/pingcap/tiflow/pkg/sink/codec/common"
+	"github.com/pingcap/tiflow/pkg/sink/codec/common"
 	"go.uber.org/zap"
 )
 
@@ -38,15 +38,15 @@ type JSONBatchEncoder struct {
 	enableTiDBExtension bool
 	// the symbol separating two lines
 	terminator []byte
-	messages   []*common2.Message
+	messages   []*common.Message
 }
 
 // newJSONBatchEncoder creates a new JSONBatchEncoder
-func newJSONBatchEncoder(config *common2.Config) codec.EventBatchEncoder {
+func newJSONBatchEncoder(config *common.Config) codec.EventBatchEncoder {
 	encoder := &JSONBatchEncoder{
 		builder:             newCanalEntryBuilder(),
 		enableTiDBExtension: config.EnableTiDBExtension,
-		messages:            make([]*common2.Message, 0, 1),
+		messages:            make([]*common.Message, 0, 1),
 		terminator:          []byte(config.Terminator),
 	}
 	return encoder
@@ -292,7 +292,7 @@ func (c *JSONBatchEncoder) newJSONMessage4CheckpointEvent(ts uint64) *canalJSONM
 }
 
 // EncodeCheckpointEvent implements the EventBatchEncoder interface
-func (c *JSONBatchEncoder) EncodeCheckpointEvent(ts uint64) (*common2.Message, error) {
+func (c *JSONBatchEncoder) EncodeCheckpointEvent(ts uint64) (*common.Message, error) {
 	if !c.enableTiDBExtension {
 		return nil, nil
 	}
@@ -302,7 +302,7 @@ func (c *JSONBatchEncoder) EncodeCheckpointEvent(ts uint64) (*common2.Message, e
 	if err != nil {
 		return nil, cerror.WrapError(cerror.ErrCanalEncodeFailed, err)
 	}
-	return common2.NewResolvedMsg(config.ProtocolCanalJSON, nil, value, ts), nil
+	return common.NewResolvedMsg(config.ProtocolCanalJSON, nil, value, ts), nil
 }
 
 // AppendRowChangedEvent implements the interface EventJSONBatchEncoder
@@ -319,7 +319,7 @@ func (c *JSONBatchEncoder) AppendRowChangedEvent(
 	if len(c.terminator) > 0 {
 		value = append(value, c.terminator...)
 	}
-	m := &common2.Message{
+	m := &common.Message{
 		Key:      nil,
 		Value:    value,
 		Ts:       e.CommitTs,
@@ -336,7 +336,7 @@ func (c *JSONBatchEncoder) AppendRowChangedEvent(
 }
 
 // Build implements the EventBatchEncoder interface
-func (c *JSONBatchEncoder) Build() []*common2.Message {
+func (c *JSONBatchEncoder) Build() []*common.Message {
 	if len(c.messages) == 0 {
 		return nil
 	}
@@ -347,21 +347,21 @@ func (c *JSONBatchEncoder) Build() []*common2.Message {
 }
 
 // EncodeDDLEvent encodes DDL events
-func (c *JSONBatchEncoder) EncodeDDLEvent(e *model.DDLEvent) (*common2.Message, error) {
+func (c *JSONBatchEncoder) EncodeDDLEvent(e *model.DDLEvent) (*common.Message, error) {
 	message := c.newJSONMessageForDDL(e)
 	value, err := json.Marshal(message)
 	if err != nil {
 		return nil, cerror.WrapError(cerror.ErrCanalEncodeFailed, err)
 	}
-	return common2.NewDDLMsg(config.ProtocolCanalJSON, nil, value, e), nil
+	return common.NewDDLMsg(config.ProtocolCanalJSON, nil, value, e), nil
 }
 
 type jsonBatchEncoderBuilder struct {
-	config *common2.Config
+	config *common.Config
 }
 
 // NewJSONBatchEncoderBuilder creates a canal-json batchEncoderBuilder.
-func NewJSONBatchEncoderBuilder(config *common2.Config) codec.EncoderBuilder {
+func NewJSONBatchEncoderBuilder(config *common.Config) codec.EncoderBuilder {
 	return &jsonBatchEncoderBuilder{config: config}
 }
 

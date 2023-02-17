@@ -19,7 +19,7 @@ import (
 	"github.com/pingcap/errors"
 	"github.com/pingcap/tiflow/cdc/model"
 	cerror "github.com/pingcap/tiflow/pkg/errors"
-	codec2 "github.com/pingcap/tiflow/pkg/sink/codec"
+	"github.com/pingcap/tiflow/pkg/sink/codec"
 	"github.com/pingcap/tiflow/pkg/sink/codec/internal"
 )
 
@@ -224,10 +224,10 @@ func (b *BatchDecoder) decodeNextKey() error {
 }
 
 // NewBatchDecoder creates a new BatchDecoder.
-func NewBatchDecoder(key []byte, value []byte) (codec2.EventBatchDecoder, error) {
+func NewBatchDecoder(key []byte, value []byte) (codec.EventBatchDecoder, error) {
 	version := binary.BigEndian.Uint64(key[:8])
 	key = key[8:]
-	if version != codec2.BatchVersion1 {
+	if version != codec.BatchVersion1 {
 		return nil, cerror.ErrOpenProtocolCodecInvalidData.GenWithStack("unexpected key format version")
 	}
 	// if only decode one byte slice, we choose MixedDecoder
