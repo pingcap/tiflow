@@ -68,7 +68,7 @@ func newWorker(ctx context.Context, ID int, backend backend, errCh chan<- error,
 		workerCount: workerCount,
 
 		ID:      ID,
-		txnCh:   chann.NewAutoDrainChann[txnWithNotifier](chann.Cap(-1 /*unbounded*/)),
+		txnCh:   chann.NewDrainableChann[txnWithNotifier](chann.Cap(-1 /*unbounded*/)),
 		stopped: make(chan struct{}),
 		backend: backend,
 		errCh:   errCh,

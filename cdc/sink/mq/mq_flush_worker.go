@@ -56,7 +56,7 @@ type mqEvent struct {
 
 // flushWorker is responsible for sending messages to the Kafka producer on a batch basis.
 type flushWorker struct {
-	msgChan *chann.Chann[mqEvent]
+	msgChan *chann.DrainableChann[mqEvent]
 	ticker  *time.Ticker
 	// needsFlush is used to indicate whether the flush worker needs to flush the messages.
 	// It is also used to notify that the flush has completed.
@@ -74,7 +74,7 @@ func newFlushWorker(
 	statistics *metrics.Statistics,
 ) *flushWorker {
 	w := &flushWorker{
-		msgChan:    chann.New[mqEvent](),
+		msgChan:    chann.NewDrainableChann[mqEvent](),
 		ticker:     time.NewTicker(FlushInterval),
 		encoder:    encoder,
 		producer:   producer,

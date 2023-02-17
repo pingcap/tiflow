@@ -16,7 +16,7 @@ package chann
 import "testing"
 
 func TestCloseAndDrain(t *testing.T) {
-	ch := NewAutoDrainChann[int]()
+	ch := NewDrainableChann[int]()
 	for i := 0; i < 100; i++ {
 		ch.In() <- i
 	}

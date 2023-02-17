@@ -21,8 +21,8 @@ type DrainableChann[T any] struct {
 	*Chann[T]
 }
 
-// NewAutoDrainChann creates a new DrainableChann.
-func NewAutoDrainChann[T any](opts ...Opt) *DrainableChann[T] {
+// NewDrainableChann creates a new DrainableChann.
+func NewDrainableChann[T any](opts ...Opt) *DrainableChann[T] {
 	return &DrainableChann[T]{
 		Chann: New[T](opts...),
 	}

@@ -88,7 +88,7 @@ func newWorker(
 	w := &worker{
 		changeFeedID:                      id,
 		protocol:                          protocol,
-		msgChan:                           chann.NewAutoDrainChann[mqEvent](),
+		msgChan:                           chann.NewDrainableChann[mqEvent](),
 		ticker:                            time.NewTicker(flushInterval),
 		encoderGroup:                      codec.NewEncoderGroup(builder, encoderConcurrency, id),
 		producer:                          producer,

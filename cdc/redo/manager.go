@@ -183,7 +183,7 @@ func NewManager(ctx context.Context, cfg *config.ConsistentConfig, opts *Manager
 
 	// TODO: better to wait background goroutines after the context is canceled.
 	if m.opts.EnableBgRunner {
-		m.logBuffer = chann.NewAutoDrainChann[cacheEvents]()
+		m.logBuffer = chann.NewDrainableChann[cacheEvents]()
 		go m.bgUpdateLog(ctx, cfg.FlushIntervalInMs, opts.ErrCh)
 	}
 	if m.opts.EnableGCRunner {

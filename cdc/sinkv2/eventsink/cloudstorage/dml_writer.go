@@ -65,7 +65,7 @@ func newDMLWriter(
 	for i := 0; i < config.WorkerCount; i++ {
 		worker := newDMLWorker(i, changefeedID, storage, config, extension, statistics)
 		d.workers[i] = worker
-		d.workerChannels[i] = chann.NewAutoDrainChann[eventFragment]()
+		d.workerChannels[i] = chann.NewDrainableChann[eventFragment]()
 	}
 
 	return d
