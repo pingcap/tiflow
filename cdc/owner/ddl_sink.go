@@ -205,23 +205,12 @@ func (s *ddlSinkImpl) run(ctx context.Context) {
 				}
 
 			case ddl := <-s.ddlCh:
-				var err error
-				ddl.Query, err = addSpecialComment(ddl.Query)
-				if err != nil {
-					log.Error("Add special comment failed",
-						zap.String("namespace", s.changefeedID.Namespace),
-						zap.String("changefeed", s.changefeedID.ID),
-						zap.Error(err),
-						zap.Any("ddl", ddl))
-					s.reportErr(err)
-					return
-				}
 				log.Info("begin emit ddl event",
 					zap.String("namespace", s.changefeedID.Namespace),
 					zap.String("changefeed", s.changefeedID.ID),
 					zap.Any("DDL", ddl))
 
-				err = s.sinkV2.WriteDDLEvent(ctx, ddl)
+				err := s.sinkV2.WriteDDLEvent(ctx, ddl)
 				failpoint.Inject("InjectChangefeedDDLError", func() {
 					err = cerror.ErrExecDDLFailed.GenWithStackByArgs()
 				})
@@ -279,7 +268,7 @@ func (s *ddlSinkImpl) emitDDLEvent(ctx context.Context, ddl *model.DDLEvent) (bo
 	s.mu.Lock()
 	if ddl.Done {
 		// the DDL event is executed successfully, and done is true
-		log.Info("ddl already executed",
+		log.Info("ddl already executed, skip it",
 			zap.String("namespace", s.changefeedID.Namespace),
 			zap.String("changefeed", s.changefeedID.ID),
 			zap.Any("DDL", ddl))
@@ -287,7 +276,6 @@ func (s *ddlSinkImpl) emitDDLEvent(ctx context.Context, ddl *model.DDLEvent) (bo
 		s.mu.Unlock()
 		return true, nil
 	}
-	s.mu.Unlock()
 
 	ddlSentTs := s.ddlSentTsMap[ddl]
 	if ddl.CommitTs <= ddlSentTs {
@@ -296,8 +284,23 @@ func (s *ddlSinkImpl) emitDDLEvent(ctx context.Context, ddl *model.DDLEvent) (bo
 			zap.String("changefeed", s.changefeedID.ID),
 			zap.Uint64("ddlSentTs", ddlSentTs), zap.Any("DDL", ddl))
 		// the DDL event is executing and not finished yet, return false
+		s.mu.Unlock()
 		return false, nil
 	}
+
+	query, err := addSpecialComment(ddl.Query)
+	if err != nil {
+		log.Error("Add special comment failed",
+			zap.String("namespace", s.changefeedID.Namespace),
+			zap.String("changefeed", s.changefeedID.ID),
+			zap.Error(err),
+			zap.Any("ddl", ddl))
+		s.mu.Unlock()
+		return false, errors.Trace(err)
+	}
+	ddl.Query = query
+	s.mu.Unlock()
+
 	select {
 	case <-ctx.Done():
 		return false, errors.Trace(ctx.Err())
