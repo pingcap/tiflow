@@ -73,6 +73,7 @@ type processor struct {
 	cancel      context.CancelFunc
 	wg          sync.WaitGroup
 
+<<<<<<< HEAD
 	lazyInit            func(ctx cdcContext.Context) error
 	createTablePipeline func(ctx cdcContext.Context, tableID model.TableID, replicaInfo *model.TableReplicaInfo) (tablepipeline.TablePipeline, error)
 
@@ -98,6 +99,345 @@ func newProcessor(ctx cdcContext.Context) *processor {
 		captureInfo:   ctx.GlobalVars().CaptureInfo,
 		cancel:        func() {},
 		lastRedoFlush: time.Now(),
+=======
+	lazyInit func(ctx cdcContext.Context) error
+	newAgent func(
+		cdcContext.Context, *model.Liveness, uint64, *config.SchedulerConfig,
+	) (scheduler.Agent, error)
+	cfg *config.SchedulerConfig
+
+	liveness        *model.Liveness
+	agent           scheduler.Agent
+	changefeedEpoch uint64
+
+	metricSyncTableNumGauge      prometheus.Gauge
+	metricSchemaStorageGcTsGauge prometheus.Gauge
+	metricProcessorErrorCounter  prometheus.Counter
+	metricProcessorTickDuration  prometheus.Observer
+	metricsProcessorMemoryGauge  prometheus.Gauge
+	metricRemainKVEventGauge     prometheus.Gauge
+}
+
+// checkReadyForMessages checks whether all necessary Etcd keys have been established.
+func (p *processor) checkReadyForMessages() bool {
+	return p.changefeed != nil && p.changefeed.Status != nil
+}
+
+var _ scheduler.TableExecutor = (*processor)(nil)
+
+// AddTableSpan implements TableExecutor interface.
+// AddTableSpan may cause by the following scenario
+// 1. `Create Table`, a new table dispatched to the processor, `isPrepare` should be false
+// 2. Prepare phase for 2 phase scheduling, `isPrepare` should be true.
+// 3. Replicating phase for 2 phase scheduling, `isPrepare` should be false
+func (p *processor) AddTableSpan(
+	ctx context.Context, span tablepb.Span, startTs model.Ts, isPrepare bool,
+) (bool, error) {
+	if !p.checkReadyForMessages() {
+		return false, nil
+	}
+
+	if startTs == 0 {
+		log.Panic("table start ts must not be 0",
+			zap.String("captureID", p.captureInfo.ID),
+			zap.String("namespace", p.changefeedID.Namespace),
+			zap.String("changefeed", p.changefeedID.ID),
+			zap.Stringer("span", &span),
+			zap.Uint64("checkpointTs", startTs),
+			zap.Bool("isPrepare", isPrepare))
+	}
+
+	state, alreadyExist := p.sinkManager.GetTableState(span)
+
+	if alreadyExist {
+		switch state {
+		// table is still `preparing`, which means the table is `replicating` on other captures.
+		// no matter `isPrepare` or not, just ignore it should be ok.
+		case tablepb.TableStatePreparing:
+			log.Warn("table is still preparing, ignore the request",
+				zap.String("captureID", p.captureInfo.ID),
+				zap.String("namespace", p.changefeedID.Namespace),
+				zap.String("changefeed", p.changefeedID.ID),
+				zap.Stringer("span", &span),
+				zap.Uint64("checkpointTs", startTs),
+				zap.Bool("isPrepare", isPrepare))
+			return true, nil
+		case tablepb.TableStatePrepared:
+			// table is `prepared`, and a `isPrepare = false` request indicate that old table should
+			// be stopped on original capture already, it's safe to start replicating data now.
+			if !isPrepare {
+				if err := p.sinkManager.StartTable(span, startTs); err != nil {
+					return false, errors.Trace(err)
+				}
+			}
+			return true, nil
+		case tablepb.TableStateReplicating:
+			log.Warn("Ignore existing table",
+				zap.String("captureID", p.captureInfo.ID),
+				zap.String("namespace", p.changefeedID.Namespace),
+				zap.String("changefeed", p.changefeedID.ID),
+				zap.Stringer("span", &span),
+				zap.Uint64("checkpointTs", startTs),
+				zap.Bool("isPrepare", isPrepare))
+			return true, nil
+		case tablepb.TableStateStopped:
+			log.Warn("The same table exists but is stopped. Cancel it and continue.",
+				zap.String("captureID", p.captureInfo.ID),
+				zap.String("namespace", p.changefeedID.Namespace),
+				zap.String("changefeed", p.changefeedID.ID),
+				zap.Stringer("span", &span),
+				zap.Uint64("checkpointTs", startTs),
+				zap.Bool("isPrepare", isPrepare))
+			p.removeTable(span)
+		}
+	}
+
+	// table not found, can happen in 2 cases
+	// 1. this is a new table scheduling request, create the table and make it `replicating`
+	// 2. `prepare` phase for 2 phase scheduling, create the table and make it `preparing`
+	globalCheckpointTs := p.changefeed.Status.CheckpointTs
+	if startTs < globalCheckpointTs {
+		log.Warn("addTable: startTs < checkpoint",
+			zap.String("captureID", p.captureInfo.ID),
+			zap.String("namespace", p.changefeedID.Namespace),
+			zap.String("changefeed", p.changefeedID.ID),
+			zap.Stringer("span", &span),
+			zap.Uint64("checkpointTs", startTs),
+			zap.Bool("isPrepare", isPrepare))
+	}
+
+	p.sinkManager.AddTable(
+		span, startTs, p.changefeed.Info.TargetTs)
+	if p.redoManager.Enabled() {
+		p.redoManager.AddTable(span, startTs)
+	}
+	p.sourceManager.AddTable(
+		ctx.(cdcContext.Context), span, p.getTableName(ctx, span.TableID), startTs)
+
+	return true, nil
+}
+
+// RemoveTableSpan implements TableExecutor interface.
+func (p *processor) RemoveTableSpan(span tablepb.Span) bool {
+	if !p.checkReadyForMessages() {
+		return false
+	}
+
+	_, exist := p.sinkManager.GetTableState(span)
+	if !exist {
+		log.Warn("Table which will be deleted is not found",
+			zap.String("capture", p.captureInfo.ID),
+			zap.String("namespace", p.changefeedID.Namespace),
+			zap.String("changefeed", p.changefeedID.ID),
+			zap.Stringer("span", &span))
+		return true
+	}
+	p.sinkManager.AsyncStopTable(span)
+	return true
+}
+
+// IsAddTableSpanFinished implements TableExecutor interface.
+func (p *processor) IsAddTableSpanFinished(span tablepb.Span, isPrepare bool) bool {
+	if !p.checkReadyForMessages() {
+		return false
+	}
+
+	globalResolvedTs := p.changefeed.Status.ResolvedTs
+	globalCheckpointTs := p.changefeed.Status.CheckpointTs
+
+	var tableResolvedTs, tableCheckpointTs uint64
+	var state tablepb.TableState
+	done := func() bool {
+		state, alreadyExist := p.sinkManager.GetTableState(span)
+		if alreadyExist {
+			stats := p.sinkManager.GetTableStats(span)
+			tableResolvedTs = stats.ResolvedTs
+			tableCheckpointTs = stats.CheckpointTs
+		} else {
+			log.Panic("table which was added is not found",
+				zap.String("captureID", p.captureInfo.ID),
+				zap.String("namespace", p.changefeedID.Namespace),
+				zap.String("changefeed", p.changefeedID.ID),
+				zap.Stringer("span", &span),
+				zap.Bool("isPrepare", isPrepare))
+		}
+
+		if isPrepare {
+			return state == tablepb.TableStatePrepared
+		}
+
+		// The table is `replicating`, it's indicating that the `add table` must be finished.
+		return state == tablepb.TableStateReplicating
+	}
+	if !done() {
+		log.Debug("Add Table not finished",
+			zap.String("captureID", p.captureInfo.ID),
+			zap.String("namespace", p.changefeedID.Namespace),
+			zap.String("changefeed", p.changefeedID.ID),
+			zap.Stringer("span", &span),
+			zap.Uint64("tableResolvedTs", tableResolvedTs),
+			zap.Uint64("globalResolvedTs", globalResolvedTs),
+			zap.Uint64("tableCheckpointTs", tableCheckpointTs),
+			zap.Uint64("globalCheckpointTs", globalCheckpointTs),
+			zap.Any("state", state),
+			zap.Bool("isPrepare", isPrepare))
+		return false
+	}
+
+	log.Info("Add Table finished",
+		zap.String("captureID", p.captureInfo.ID),
+		zap.String("namespace", p.changefeedID.Namespace),
+		zap.String("changefeed", p.changefeedID.ID),
+		zap.Stringer("span", &span),
+		zap.Uint64("tableResolvedTs", tableResolvedTs),
+		zap.Uint64("globalResolvedTs", globalResolvedTs),
+		zap.Uint64("tableCheckpointTs", tableCheckpointTs),
+		zap.Uint64("globalCheckpointTs", globalCheckpointTs),
+		zap.Any("state", state),
+		zap.Bool("isPrepare", isPrepare))
+	return true
+}
+
+// IsRemoveTableSpanFinished implements TableExecutor interface.
+func (p *processor) IsRemoveTableSpanFinished(span tablepb.Span) (model.Ts, bool) {
+	if !p.checkReadyForMessages() {
+		return 0, false
+	}
+
+	var tableCheckpointTs uint64
+	state, alreadyExist := p.sinkManager.GetTableState(span)
+	if alreadyExist {
+		stats := p.sinkManager.GetTableStats(span)
+		tableCheckpointTs = stats.CheckpointTs
+	}
+
+	if !alreadyExist {
+		log.Warn("table should be removing but not found",
+			zap.String("captureID", p.captureInfo.ID),
+			zap.String("namespace", p.changefeedID.Namespace),
+			zap.String("changefeed", p.changefeedID.ID),
+			zap.Stringer("span", &span))
+		return 0, true
+	}
+
+	if state != tablepb.TableStateStopped {
+		log.Debug("table is still not stopped",
+			zap.String("captureID", p.captureInfo.ID),
+			zap.String("namespace", p.changefeedID.Namespace),
+			zap.String("changefeed", p.changefeedID.ID),
+			zap.Uint64("checkpointTs", tableCheckpointTs),
+			zap.Stringer("span", &span),
+			zap.Any("tableStatus", state))
+		return 0, false
+	}
+
+	stats := p.sinkManager.GetTableStats(span)
+	if p.redoManager.Enabled() {
+		p.redoManager.RemoveTable(span)
+	}
+	p.sinkManager.RemoveTable(span)
+	p.sourceManager.RemoveTable(span)
+	log.Info("table removed",
+		zap.String("captureID", p.captureInfo.ID),
+		zap.String("namespace", p.changefeedID.Namespace),
+		zap.String("changefeed", p.changefeedID.ID),
+		zap.Stringer("span", &span),
+		zap.Uint64("checkpointTs", stats.CheckpointTs))
+
+	return stats.CheckpointTs, true
+}
+
+// GetTableSpanCount implements TableExecutor interface.
+func (p *processor) GetTableSpanCount() int {
+	return len(p.sinkManager.GetAllCurrentTableSpans())
+}
+
+// GetTableSpanStatus implements TableExecutor interface
+func (p *processor) GetTableSpanStatus(span tablepb.Span, collectStat bool) tablepb.TableStatus {
+	state, exist := p.sinkManager.GetTableState(span)
+	if !exist {
+		return tablepb.TableStatus{
+			TableID: span.TableID,
+			Span:    span,
+			State:   tablepb.TableStateAbsent,
+		}
+	}
+	sinkStats := p.sinkManager.GetTableStats(span)
+	stats := tablepb.Stats{}
+	if collectStat {
+		stats = p.getStatsFromSourceManagerAndSinkManager(span, sinkStats)
+	}
+	return tablepb.TableStatus{
+		TableID: span.TableID,
+		Span:    span,
+		Checkpoint: tablepb.Checkpoint{
+			CheckpointTs: sinkStats.CheckpointTs,
+			ResolvedTs:   sinkStats.ResolvedTs,
+		},
+		State: state,
+		Stats: stats,
+	}
+}
+
+func (p *processor) getStatsFromSourceManagerAndSinkManager(
+	span tablepb.Span, sinkStats sinkmanager.TableStats,
+) tablepb.Stats {
+	pullerStats := p.sourceManager.GetTablePullerStats(span)
+	now, _ := p.upstream.PDClock.CurrentTime()
+
+	stats := tablepb.Stats{
+		RegionCount: pullerStats.RegionCount,
+		CurrentTs:   oracle.ComposeTS(oracle.GetPhysical(now), 0),
+		BarrierTs:   sinkStats.BarrierTs,
+		StageCheckpoints: map[string]tablepb.Checkpoint{
+			"puller-ingress": {
+				CheckpointTs: pullerStats.CheckpointTsIngress,
+				ResolvedTs:   pullerStats.ResolvedTsIngress,
+			},
+			"puller-egress": {
+				CheckpointTs: pullerStats.CheckpointTsEgress,
+				ResolvedTs:   pullerStats.ResolvedTsEgress,
+			},
+			"sink": {
+				CheckpointTs: sinkStats.CheckpointTs,
+				ResolvedTs:   sinkStats.ResolvedTs,
+			},
+		},
+	}
+
+	sortStats := p.sourceManager.GetTableSorterStats(span)
+	stats.StageCheckpoints["sorter-ingress"] = tablepb.Checkpoint{
+		CheckpointTs: sortStats.ReceivedMaxCommitTs,
+		ResolvedTs:   sortStats.ReceivedMaxResolvedTs,
+	}
+	stats.StageCheckpoints["sorter-egress"] = tablepb.Checkpoint{
+		CheckpointTs: sinkStats.ReceivedMaxCommitTs,
+		ResolvedTs:   sinkStats.ReceivedMaxCommitTs,
+	}
+
+	return stats
+}
+
+// newProcessor creates a new processor
+func newProcessor(
+	state *orchestrator.ChangefeedReactorState,
+	captureInfo *model.CaptureInfo,
+	changefeedID model.ChangeFeedID,
+	up *upstream.Upstream,
+	liveness *model.Liveness,
+	changefeedEpoch uint64,
+	cfg *config.SchedulerConfig,
+) *processor {
+	p := &processor{
+		changefeed:      state,
+		upstream:        up,
+		errCh:           make(chan error, 1),
+		changefeedID:    changefeedID,
+		captureInfo:     captureInfo,
+		cancel:          func() {},
+		liveness:        liveness,
+		changefeedEpoch: changefeedEpoch,
+>>>>>>> 0867f80e5f (cdc: add changefeed epoch to prevent unexpected state (#8268))
 
 		metricResolvedTsGauge:           resolvedTsGauge.WithLabelValues(changefeedID, advertiseAddr),
 		metricResolvedTsLagGauge:        resolvedTsLagGauge.WithLabelValues(changefeedID, advertiseAddr),
@@ -341,11 +681,78 @@ func (p *processor) lazyInitImpl(ctx cdcContext.Context) error {
 	if err != nil {
 		return err
 	}
+<<<<<<< HEAD
 	p.initialized = true
 	log.Info("run processor", cdcContext.ZapFieldCapture(ctx), cdcContext.ZapFieldChangefeed(ctx))
 	return nil
 }
 
+=======
+	log.Info("processor creates redo manager",
+		zap.String("namespace", p.changefeedID.Namespace),
+		zap.String("changefeed", p.changefeedID.ID))
+
+	engineFactory := ctx.GlobalVars().SortEngineFactory
+	sortEngine, err := engineFactory.Create(p.changefeedID)
+	if err != nil {
+		log.Info("Processor creates sort engine",
+			zap.String("namespace", p.changefeedID.Namespace),
+			zap.String("changefeed", p.changefeedID.ID),
+			zap.Error(err),
+			zap.Duration("duration", time.Since(start)))
+		return errors.Trace(err)
+	}
+	p.sourceManager = sourcemanager.New(p.changefeedID, p.upstream, p.mg,
+		sortEngine, p.errCh, p.changefeed.Info.Config.BDRMode)
+	p.sinkManager, err = sinkmanager.New(stdCtx, p.changefeedID,
+		p.changefeed.Info, p.upstream, p.schemaStorage,
+		p.redoManager, p.sourceManager,
+		p.errCh)
+	if err != nil {
+		log.Info("Processor creates sink manager fail",
+			zap.String("namespace", p.changefeedID.Namespace),
+			zap.String("changefeed", p.changefeedID.ID),
+			zap.Error(err),
+			zap.Duration("duration", time.Since(start)))
+		p.sourceManager = nil
+		_ = engineFactory.Drop(p.changefeedID)
+		return errors.Trace(err)
+	}
+	// Bind them so that sourceManager can notify sinkManager.
+	p.sourceManager.OnResolve(p.sinkManager.UpdateReceivedSorterResolvedTs)
+
+	p.agent, err = p.newAgent(ctx, p.liveness, p.changefeedEpoch, p.cfg)
+	if err != nil {
+		return err
+	}
+
+	p.initialized = true
+	log.Info("processor initialized",
+		zap.String("capture", p.captureInfo.ID),
+		zap.String("namespace", p.changefeedID.Namespace),
+		zap.String("changefeed", p.changefeedID.ID),
+		zap.Uint64("changefeedEpoch", p.changefeedEpoch))
+	return nil
+}
+
+func (p *processor) newAgentImpl(
+	ctx cdcContext.Context,
+	liveness *model.Liveness,
+	changefeedEpoch uint64,
+	cfg *config.SchedulerConfig,
+) (ret scheduler.Agent, err error) {
+	messageServer := ctx.GlobalVars().MessageServer
+	messageRouter := ctx.GlobalVars().MessageRouter
+	etcdClient := ctx.GlobalVars().EtcdClient
+	captureID := ctx.GlobalVars().CaptureInfo.ID
+	ret, err = scheduler.NewAgent(
+		ctx, captureID, liveness,
+		messageServer, messageRouter, etcdClient, p, p.changefeedID,
+		changefeedEpoch, cfg)
+	return ret, errors.Trace(err)
+}
+
+>>>>>>> 0867f80e5f (cdc: add changefeed epoch to prevent unexpected state (#8268))
 // handleErrorCh listen the error channel and throw the error if it is not expected.
 func (p *processor) handleErrorCh(ctx cdcContext.Context) error {
 	var err error

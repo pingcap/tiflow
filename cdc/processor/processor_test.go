@@ -47,9 +47,21 @@ func newProcessor4Test(
 	c *check.C,
 	createTablePipeline func(ctx cdcContext.Context, tableID model.TableID, replicaInfo *model.TableReplicaInfo) (tablepipeline.TablePipeline, error),
 ) *processor {
+<<<<<<< HEAD
 	p := newProcessor(ctx)
 	p.lazyInit = func(ctx cdcContext.Context) error { return nil }
 	p.sinkManager = &sink.Manager{}
+=======
+	up := upstream.NewUpstream4Test(nil)
+	p := newProcessor(
+		state,
+		captureInfo,
+		model.ChangeFeedID4Test("processor-test", "processor-test"), up, liveness, 0, cfg)
+	p.lazyInit = func(ctx cdcContext.Context) error {
+		p.agent = &mockAgent{executor: p}
+		return nil
+	}
+>>>>>>> 0867f80e5f (cdc: add changefeed epoch to prevent unexpected state (#8268))
 	p.redoManager = redo.NewDisabledManager()
 	p.createTablePipeline = createTablePipeline
 	p.schemaStorage = &mockSchemaStorage{c: c}
