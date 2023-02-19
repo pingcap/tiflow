@@ -23,7 +23,12 @@ import (
 	"github.com/pingcap/tiflow/cdc/entry"
 	"github.com/pingcap/tiflow/cdc/kv"
 	"github.com/pingcap/tiflow/cdc/model"
+<<<<<<< HEAD:cdc/capture/http_validator.go
 	"github.com/pingcap/tiflow/cdc/sink"
+=======
+	"github.com/pingcap/tiflow/cdc/owner"
+	"github.com/pingcap/tiflow/cdc/sinkv2/validator"
+>>>>>>> 0867f80e5f (cdc: add changefeed epoch to prevent unexpected state (#8268)):cdc/api/v1/validator.go
 	"github.com/pingcap/tiflow/pkg/config"
 	cerror "github.com/pingcap/tiflow/pkg/errors"
 	"github.com/pingcap/tiflow/pkg/filter"
@@ -114,6 +119,7 @@ func verifyCreateChangefeedConfig(ctx context.Context, changefeedConfig model.Ch
 
 	// init ChangefeedInfo
 	info := &model.ChangeFeedInfo{
+<<<<<<< HEAD:cdc/capture/http_validator.go
 		SinkURI:           changefeedConfig.SinkURI,
 		Opts:              make(map[string]string),
 		CreateTime:        time.Now(),
@@ -125,6 +131,33 @@ func verifyCreateChangefeedConfig(ctx context.Context, changefeedConfig model.Ch
 		SyncPointEnabled:  false,
 		SyncPointInterval: 10 * time.Minute,
 		CreatorVersion:    version.ReleaseVersion,
+=======
+		Namespace:      model.DefaultNamespace,
+		ID:             changefeedConfig.ID,
+		UpstreamID:     up.ID,
+		SinkURI:        changefeedConfig.SinkURI,
+		CreateTime:     time.Now(),
+		StartTs:        changefeedConfig.StartTS,
+		TargetTs:       changefeedConfig.TargetTS,
+		Config:         replicaConfig,
+		Engine:         sortEngine,
+		State:          model.StateNormal,
+		CreatorVersion: version.ReleaseVersion,
+		Epoch:          owner.GenerateChangefeedEpoch(ctx, up.PDClient),
+	}
+	f, err := filter.NewFilter(replicaConfig, "")
+	if err != nil {
+		return nil, err
+	}
+	tableInfos, ineligibleTables, _, err := entry.VerifyTables(f,
+		up.KVStorage, changefeedConfig.StartTS)
+	if err != nil {
+		return nil, err
+	}
+	err = f.Verify(tableInfos)
+	if err != nil {
+		return nil, err
+>>>>>>> 0867f80e5f (cdc: add changefeed epoch to prevent unexpected state (#8268)):cdc/api/v1/validator.go
 	}
 
 	if !replicaConfig.ForceReplicate && !changefeedConfig.IgnoreIneligibleTable {
