@@ -52,7 +52,7 @@ func newProcessor4Test(
 	p := newProcessor(
 		state,
 		captureInfo,
-		model.ChangeFeedID4Test("processor-test", "processor-test"), up, liveness)
+		model.ChangeFeedID4Test("processor-test", "processor-test"), up, liveness, 0)
 	p.lazyInit = func(ctx cdcContext.Context) error {
 		p.agent = &mockAgent{executor: p}
 		p.sinkV1 = mocksink.NewNormalMockSink()

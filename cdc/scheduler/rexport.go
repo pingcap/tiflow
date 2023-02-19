@@ -69,10 +69,11 @@ func NewAgent(
 	etcdClient etcd.CDCEtcdClient,
 	executor TableExecutor,
 	changefeedID model.ChangeFeedID,
+	changefeedEpoch uint64,
 ) (Agent, error) {
 	return v3agent.NewAgent(
 		ctx, captureID, liveness, changefeedID,
-		messageServer, messageRouter, etcdClient, executor,
+		messageServer, messageRouter, etcdClient, executor, changefeedEpoch,
 	)
 }
 
@@ -84,12 +85,13 @@ func NewScheduler(
 	messageServer *p2p.MessageServer,
 	messageRouter p2p.MessageRouter,
 	ownerRevision int64,
+	changefeedEpoch uint64,
 	cfg *config.SchedulerConfig,
 	pdClock pdutil.Clock,
 ) (Scheduler, error) {
 	return v3.NewCoordinator(
 		ctx, captureID, changeFeedID,
-		messageServer, messageRouter, ownerRevision, cfg, pdClock)
+		messageServer, messageRouter, ownerRevision, changefeedEpoch, cfg, pdClock)
 }
 
 // InitMetrics registers all metrics used in scheduler
