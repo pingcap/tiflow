@@ -34,7 +34,7 @@ var (
 // ReleaseSemver returns a valid Semantic Versions or an empty if the
 // ReleaseVersion is not set at compile time.
 func ReleaseSemver() string {
-	s := removeVAndHash(ReleaseVersion)
+	s := SanitizeVersion(ReleaseVersion)
 	v, err := semver.NewVersion(s)
 	if err != nil {
 		return ""

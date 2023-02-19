@@ -90,10 +90,12 @@ type processor struct {
 
 	lazyInit            func(ctx cdcContext.Context) error
 	createTablePipeline func(ctx cdcContext.Context, tableID model.TableID, replicaInfo *model.TableReplicaInfo) (tablepb.TablePipeline, error)
-	newAgent            func(cdcContext.Context, *model.Liveness) (scheduler.Agent, error)
+	newAgent            func(cdcContext.Context, *model.Liveness, uint64) (scheduler.Agent, error)
 
-	liveness     *model.Liveness
-	agent        scheduler.Agent
+	liveness        *model.Liveness
+	agent           scheduler.Agent
+	changefeedEpoch uint64
+
 	checkpointTs model.Ts
 	resolvedTs   model.Ts
 
@@ -526,16 +528,18 @@ func newProcessor(
 	changefeedID model.ChangeFeedID,
 	up *upstream.Upstream,
 	liveness *model.Liveness,
+	changefeedEpoch uint64,
 ) *processor {
 	p := &processor{
-		changefeed:   state,
-		upstream:     up,
-		tables:       make(map[model.TableID]tablepb.TablePipeline),
-		errCh:        make(chan error, 1),
-		changefeedID: changefeedID,
-		captureInfo:  captureInfo,
-		cancel:       func() {},
-		liveness:     liveness,
+		changefeed:      state,
+		upstream:        up,
+		tables:          make(map[model.TableID]tablepb.TablePipeline),
+		errCh:           make(chan error, 1),
+		changefeedID:    changefeedID,
+		captureInfo:     captureInfo,
+		cancel:          func() {},
+		liveness:        liveness,
+		changefeedEpoch: changefeedEpoch,
 
 		metricSyncTableNumGauge: syncTableNumGauge.
 			WithLabelValues(changefeedID.Namespace, changefeedID.ID),
@@ -884,7 +888,7 @@ func (p *processor) lazyInitImpl(ctx cdcContext.Context) error {
 			zap.Duration("duration", time.Since(start)))
 	}
 
-	p.agent, err = p.newAgent(ctx, p.liveness)
+	p.agent, err = p.newAgent(ctx, p.liveness, p.changefeedEpoch)
 	if err != nil {
 		return err
 	}
@@ -893,12 +897,13 @@ func (p *processor) lazyInitImpl(ctx cdcContext.Context) error {
 	log.Info("processor initialized",
 		zap.String("capture", p.captureInfo.ID),
 		zap.String("namespace", p.changefeedID.Namespace),
-		zap.String("changefeed", p.changefeedID.ID))
+		zap.String("changefeed", p.changefeedID.ID),
+		zap.Uint64("changefeedEpoch", p.changefeedEpoch))
 	return nil
 }
 
 func (p *processor) newAgentImpl(
-	ctx cdcContext.Context, liveness *model.Liveness,
+	ctx cdcContext.Context, liveness *model.Liveness, changefeedEpoch uint64,
 ) (ret scheduler.Agent, err error) {
 	messageServer := ctx.GlobalVars().MessageServer
 	messageRouter := ctx.GlobalVars().MessageRouter
@@ -906,7 +911,7 @@ func (p *processor) newAgentImpl(
 	captureID := ctx.GlobalVars().CaptureInfo.ID
 	ret, err = scheduler.NewAgent(
 		ctx, captureID, liveness,
-		messageServer, messageRouter, etcdClient, p, p.changefeedID)
+		messageServer, messageRouter, etcdClient, p, p.changefeedID, changefeedEpoch)
 	return ret, errors.Trace(err)
 }
 
