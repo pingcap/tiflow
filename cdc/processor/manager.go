@@ -72,6 +72,7 @@ type managerImpl struct {
 		model.ChangeFeedID,
 		*upstream.Upstream,
 		*model.Liveness,
+		uint64,
 		*config.SchedulerConfig,
 	) *processor
 	cfg *config.SchedulerConfig
@@ -115,6 +116,7 @@ func (m *managerImpl) Tick(stdCtx context.Context, state orchestrator.ReactorSta
 			m.closeProcessor(changefeedID, ctx)
 			continue
 		}
+		currentChangefeedEpoch := changefeedState.Info.Epoch
 		p, exist := m.processors[changefeedID]
 		if !exist {
 			up, ok := m.upstreamManager.Get(changefeedState.Info.UpstreamID)
@@ -127,13 +129,19 @@ func (m *managerImpl) Tick(stdCtx context.Context, state orchestrator.ReactorSta
 			cfg := *m.cfg
 			cfg.ChangefeedSettings = changefeedState.Info.Config.Scheduler
 			p = m.newProcessor(
-				changefeedState, m.captureInfo, changefeedID, up, m.liveness, &cfg)
+				changefeedState, m.captureInfo, changefeedID, up, m.liveness,
+				currentChangefeedEpoch, &cfg)
 			m.processors[changefeedID] = p
 		}
 		ctx := cdcContext.WithChangefeedVars(ctx, &cdcContext.ChangefeedVars{
 			ID:   changefeedID,
 			Info: changefeedState.Info,
 		})
+		if currentChangefeedEpoch != p.changefeedEpoch {
+			// Changefeed has restarted due to error, the processor is stale.
+			m.closeProcessor(changefeedID, ctx)
+			continue
+		}
 		if err := p.Tick(ctx); err != nil {
 			// processor have already patched its error to tell the owner
 			// manager can just close the processor and continue to tick other processors

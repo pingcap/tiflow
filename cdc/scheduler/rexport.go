@@ -70,11 +70,12 @@ func NewAgent(
 	etcdClient etcd.CDCEtcdClient,
 	executor TableExecutor,
 	changefeedID model.ChangeFeedID,
+	changefeedEpoch uint64,
 	cfg *config.SchedulerConfig,
 ) (Agent, error) {
 	return v3agent.NewAgent(
 		ctx, captureID, liveness, changefeedID,
-		messageServer, messageRouter, etcdClient, executor, cfg)
+		messageServer, messageRouter, etcdClient, executor, changefeedEpoch, cfg)
 }
 
 // NewScheduler returns two-phase scheduler.
@@ -85,13 +86,14 @@ func NewScheduler(
 	messageServer *p2p.MessageServer,
 	messageRouter p2p.MessageRouter,
 	ownerRevision int64,
+	changefeedEpoch uint64,
 	regionCache *tikv.RegionCache,
 	pdClock pdutil.Clock,
 	cfg *config.SchedulerConfig,
 ) (Scheduler, error) {
 	return v3.NewCoordinator(
-		ctx, captureID, changeFeedID,
-		messageServer, messageRouter, ownerRevision, regionCache, pdClock, cfg)
+		ctx, captureID, changeFeedID, messageServer, messageRouter, ownerRevision,
+		changefeedEpoch, regionCache, pdClock, cfg)
 }
 
 // InitMetrics registers all metrics used in scheduler
