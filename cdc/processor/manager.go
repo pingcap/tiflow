@@ -52,7 +52,20 @@ type Manager struct {
 	commandQueue    chan *command
 	upstreamManager *upstream.Manager
 
+<<<<<<< HEAD
 	newProcessor func(cdcContext.Context, *upstream.Upstream) *processor
+=======
+	newProcessor func(
+		*orchestrator.ChangefeedReactorState,
+		*model.CaptureInfo,
+		model.ChangeFeedID,
+		*upstream.Upstream,
+		*model.Liveness,
+		uint64,
+		*config.SchedulerConfig,
+	) *processor
+	cfg *config.SchedulerConfig
+>>>>>>> 0867f80e5f (cdc: add changefeed epoch to prevent unexpected state (#8268))
 
 	metricProcessorCloseDuration prometheus.Observer
 }
@@ -86,10 +99,31 @@ func (m *Manager) Tick(stdCtx context.Context, state orchestrator.ReactorState) 
 			m.closeProcessor(changefeedID)
 			continue
 		}
+<<<<<<< HEAD
+=======
+		currentChangefeedEpoch := changefeedState.Info.Epoch
+		p, exist := m.processors[changefeedID]
+		if !exist {
+			up, ok := m.upstreamManager.Get(changefeedState.Info.UpstreamID)
+			if !ok {
+				upstreamInfo := globalState.Upstreams[changefeedState.Info.UpstreamID]
+				up = m.upstreamManager.AddUpstream(upstreamInfo)
+			}
+			failpoint.Inject("processorManagerHandleNewChangefeedDelay", nil)
+
+			cfg := *m.cfg
+			cfg.ChangefeedSettings = changefeedState.Info.Config.Scheduler
+			p = m.newProcessor(
+				changefeedState, m.captureInfo, changefeedID, up, m.liveness,
+				currentChangefeedEpoch, &cfg)
+			m.processors[changefeedID] = p
+		}
+>>>>>>> 0867f80e5f (cdc: add changefeed epoch to prevent unexpected state (#8268))
 		ctx := cdcContext.WithChangefeedVars(ctx, &cdcContext.ChangefeedVars{
 			ID:   changefeedID,
 			Info: changefeedState.Info,
 		})
+<<<<<<< HEAD
 		processor, exist := m.processors[changefeedID]
 		if !exist {
 			upStream := m.upstreamManager.Get(changefeedState.Info.UpstreamID)
@@ -103,6 +137,17 @@ func (m *Manager) Tick(stdCtx context.Context, state orchestrator.ReactorState) 
 				continue
 			}
 			return state, errors.Trace(err)
+=======
+		if currentChangefeedEpoch != p.changefeedEpoch {
+			// Changefeed has restarted due to error, the processor is stale.
+			m.closeProcessor(changefeedID, ctx)
+			continue
+		}
+		if err := p.Tick(ctx); err != nil {
+			// processor have already patched its error to tell the owner
+			// manager can just close the processor and continue to tick other processors
+			m.closeProcessor(changefeedID, ctx)
+>>>>>>> 0867f80e5f (cdc: add changefeed epoch to prevent unexpected state (#8268))
 		}
 	}
 	// check if the processors in memory is leaked

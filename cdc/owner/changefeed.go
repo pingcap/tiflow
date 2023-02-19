@@ -42,13 +42,20 @@ import (
 
 // newSchedulerV2FromCtx creates a new schedulerV2 from context.
 // This function is factored out to facilitate unit testing.
+<<<<<<< HEAD
 func newSchedulerV2FromCtx(
 	ctx cdcContext.Context, startTs uint64,
 ) (scheduler.Scheduler, error) {
+=======
+func newSchedulerFromCtx(
+	ctx cdcContext.Context, up *upstream.Upstream, epoch uint64, cfg *config.SchedulerConfig,
+) (ret scheduler.Scheduler, err error) {
+>>>>>>> 0867f80e5f (cdc: add changefeed epoch to prevent unexpected state (#8268))
 	changeFeedID := ctx.ChangefeedVars().ID
 	messageServer := ctx.GlobalVars().MessageServer
 	messageRouter := ctx.GlobalVars().MessageRouter
 	ownerRev := ctx.GlobalVars().OwnerRevision
+<<<<<<< HEAD
 	ret, err := scheduler.NewScheduler(
 		ctx, changeFeedID, startTs, messageServer, messageRouter, ownerRev)
 	if err != nil {
@@ -59,6 +66,19 @@ func newSchedulerV2FromCtx(
 
 func newScheduler(ctx cdcContext.Context, startTs uint64) (scheduler.Scheduler, error) {
 	return newSchedulerV2FromCtx(ctx, startTs)
+=======
+	captureID := ctx.GlobalVars().CaptureInfo.ID
+	ret, err = scheduler.NewScheduler(
+		ctx, captureID, changeFeedID,
+		messageServer, messageRouter, ownerRev, epoch, up.RegionCache, up.PDClock, cfg)
+	return ret, errors.Trace(err)
+}
+
+func newScheduler(
+	ctx cdcContext.Context, up *upstream.Upstream, epoch uint64, cfg *config.SchedulerConfig,
+) (scheduler.Scheduler, error) {
+	return newSchedulerFromCtx(ctx, up, epoch, cfg)
+>>>>>>> 0867f80e5f (cdc: add changefeed epoch to prevent unexpected state (#8268))
 }
 
 type changefeed struct {
@@ -109,9 +129,39 @@ type changefeed struct {
 	metricsChangefeedResolvedTsLagGauge   prometheus.Gauge
 	metricsChangefeedTickDuration         prometheus.Observer
 
+<<<<<<< HEAD
 	newDDLPuller func(ctx cdcContext.Context, upStream *upstream.Upstream, startTs uint64) (DDLPuller, error)
 	newSink      func() DDLSink
 	newScheduler func(ctx cdcContext.Context, startTs uint64) (scheduler.Scheduler, error)
+=======
+	metricsChangefeedResolvedTsGauge       prometheus.Gauge
+	metricsChangefeedResolvedTsLagGauge    prometheus.Gauge
+	metricsChangefeedResolvedTsLagDuration prometheus.Observer
+	metricsCurrentPDTsGauge                prometheus.Gauge
+
+	metricsChangefeedBarrierTsGauge prometheus.Gauge
+	metricsChangefeedTickDuration   prometheus.Observer
+
+	downstreamObserver observer.Observer
+	observerLastTick   *atomic.Time
+
+	newDDLPuller func(ctx context.Context,
+		replicaConfig *config.ReplicaConfig,
+		up *upstream.Upstream,
+		startTs uint64,
+		changefeed model.ChangeFeedID,
+	) (puller.DDLPuller, error)
+
+	newSink      func(changefeedID model.ChangeFeedID, info *model.ChangeFeedInfo, reportErr func(error)) DDLSink
+	newScheduler func(
+		ctx cdcContext.Context, up *upstream.Upstream, epoch uint64, cfg *config.SchedulerConfig,
+	) (scheduler.Scheduler, error)
+
+	newDownstreamObserver func(
+		ctx context.Context, sinkURIStr string, replCfg *config.ReplicaConfig,
+		opts ...observer.NewObserverOption,
+	) (observer.Observer, error)
+>>>>>>> 0867f80e5f (cdc: add changefeed epoch to prevent unexpected state (#8268))
 
 	lastDDLTs uint64 // Timestamp of the last executed DDL. Only used for tests.
 }
@@ -122,8 +172,13 @@ func newChangefeed(id model.ChangeFeedID, upStream *upstream.Upstream) *changefe
 		// The scheduler will be created lazily.
 		scheduler:        nil,
 		barriers:         newBarriers(),
+<<<<<<< HEAD
 		feedStateManager: newFeedStateManager(),
 		upStream:         upStream,
+=======
+		feedStateManager: newFeedStateManager(up),
+		upstream:         up,
+>>>>>>> 0867f80e5f (cdc: add changefeed epoch to prevent unexpected state (#8268))
 
 		errCh:  make(chan error, defaultErrChSize),
 		cancel: func() {},
@@ -136,9 +191,27 @@ func newChangefeed(id model.ChangeFeedID, upStream *upstream.Upstream) *changefe
 }
 
 func newChangefeed4Test(
+<<<<<<< HEAD
 	id model.ChangeFeedID, upStream *upstream.Upstream,
 	newDDLPuller func(ctx cdcContext.Context, upStream *upstream.Upstream, startTs uint64) (DDLPuller, error),
 	newSink func() DDLSink,
+=======
+	id model.ChangeFeedID, state *orchestrator.ChangefeedReactorState, up *upstream.Upstream,
+	newDDLPuller func(ctx context.Context,
+		replicaConfig *config.ReplicaConfig,
+		up *upstream.Upstream,
+		startTs uint64,
+		changefeed model.ChangeFeedID,
+	) (puller.DDLPuller, error),
+	newSink func(changefeedID model.ChangeFeedID, info *model.ChangeFeedInfo, reportErr func(err error)) DDLSink,
+	newScheduler func(
+		ctx cdcContext.Context, up *upstream.Upstream, epoch uint64, cfg *config.SchedulerConfig,
+	) (scheduler.Scheduler, error),
+	newDownstreamObserver func(
+		ctx context.Context, sinkURIStr string, replCfg *config.ReplicaConfig,
+		opts ...observer.NewObserverOption,
+	) (observer.Observer, error),
+>>>>>>> 0867f80e5f (cdc: add changefeed epoch to prevent unexpected state (#8268))
 ) *changefeed {
 	c := newChangefeed(id, upStream)
 	c.newDDLPuller = newDDLPuller
@@ -470,9 +543,36 @@ LOOP:
 		zap.String("namespace", c.id.Namespace),
 		zap.String("changefeed", c.id.ID))
 
+<<<<<<< HEAD
 	// init metrics
 	c.metricsChangefeedBarrierTsGauge = changefeedBarrierTsGauge.
 		WithLabelValues(c.id.Namespace, c.id.ID)
+=======
+	// create scheduler
+	cfg := *c.cfg
+	cfg.ChangefeedSettings = c.state.Info.Config.Scheduler
+	epoch := c.state.Info.Epoch
+	c.scheduler, err = c.newScheduler(ctx, c.upstream, epoch, &cfg)
+	if err != nil {
+		return errors.Trace(err)
+	}
+
+	c.initMetrics()
+
+	c.initialized = true
+	log.Info("changefeed initialized",
+		zap.String("namespace", c.state.ID.Namespace),
+		zap.String("changefeed", c.state.ID.ID),
+		zap.Uint64("changefeedEpoch", epoch),
+		zap.Uint64("checkpointTs", checkpointTs),
+		zap.Uint64("resolvedTs", resolvedTs),
+		zap.Stringer("info", c.state.Info))
+
+	return nil
+}
+
+func (c *changefeed) initMetrics() {
+>>>>>>> 0867f80e5f (cdc: add changefeed epoch to prevent unexpected state (#8268))
 	c.metricsChangefeedCheckpointTsGauge = changefeedCheckpointTsGauge.
 		WithLabelValues(c.id.Namespace, c.id.ID)
 	c.metricsChangefeedCheckpointTsLagGauge = changefeedCheckpointTsLagGauge.

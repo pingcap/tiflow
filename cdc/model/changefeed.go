@@ -136,9 +136,15 @@ type ChangeFeedInfo struct {
 	State  FeedState             `json:"state"`
 	Error  *RunningError         `json:"error"`
 
+<<<<<<< HEAD
 	SyncPointEnabled  bool          `json:"sync-point-enabled"`
 	SyncPointInterval time.Duration `json:"sync-point-interval"`
 	CreatorVersion    string        `json:"creator-version"`
+=======
+	CreatorVersion string `json:"creator-version"`
+	// Epoch is the epoch of a changefeed, changes on every restart.
+	Epoch uint64 `json:"epoch"`
+>>>>>>> 0867f80e5f (cdc: add changefeed epoch to prevent unexpected state (#8268))
 }
 
 const changeFeedIDMaxLen = 128

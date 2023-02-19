@@ -60,9 +60,18 @@ func NewAgent(
 	etcdClient *etcd.CDCEtcdClient,
 	executor TableExecutor,
 	changefeedID model.ChangeFeedID,
+<<<<<<< HEAD
 ) (Agent, error) {
 	return base.NewAgent(
 		ctx, messageServer, messageRouter, etcdClient, executor, changefeedID)
+=======
+	changefeedEpoch uint64,
+	cfg *config.SchedulerConfig,
+) (Agent, error) {
+	return v3agent.NewAgent(
+		ctx, captureID, liveness, changefeedID,
+		messageServer, messageRouter, etcdClient, executor, changefeedEpoch, cfg)
+>>>>>>> 0867f80e5f (cdc: add changefeed epoch to prevent unexpected state (#8268))
 }
 
 // NewScheduler returns owner scheduler.
@@ -73,7 +82,23 @@ func NewScheduler(
 	messageServer *p2p.MessageServer,
 	messageRouter p2p.MessageRouter,
 	ownerRevision int64,
+<<<<<<< HEAD
 ) (Scheduler, error) {
 	return base.NewSchedulerV2(
 		ctx, changeFeedID, checkpointTs, messageServer, messageRouter, ownerRevision)
+=======
+	changefeedEpoch uint64,
+	regionCache *tikv.RegionCache,
+	pdClock pdutil.Clock,
+	cfg *config.SchedulerConfig,
+) (Scheduler, error) {
+	return v3.NewCoordinator(
+		ctx, captureID, changeFeedID, messageServer, messageRouter, ownerRevision,
+		changefeedEpoch, regionCache, pdClock, cfg)
+}
+
+// InitMetrics registers all metrics used in scheduler
+func InitMetrics(registry *prometheus.Registry) {
+	v3.InitMetrics(registry)
+>>>>>>> 0867f80e5f (cdc: add changefeed epoch to prevent unexpected state (#8268))
 }

@@ -202,7 +202,49 @@ func createChangefeed4Test(ctx cdcContext.Context, t *testing.T) (
 		info = ctx.ChangefeedVars().Info
 		return info, true, nil
 	})
+<<<<<<< HEAD
 	tester.MustUpdate("/tidb/cdc/capture/"+ctx.GlobalVars().CaptureInfo.ID, []byte(`{"id":"`+ctx.GlobalVars().CaptureInfo.ID+`","address":"127.0.0.1:8300"}`))
+=======
+
+	cf := newChangefeed4Test(ctx.ChangefeedVars().ID, state, up,
+		// new ddl puller
+		func(ctx context.Context,
+			replicaConfig *config.ReplicaConfig,
+			up *upstream.Upstream,
+			startTs uint64,
+			changefeed model.ChangeFeedID,
+		) (puller.DDLPuller, error) {
+			return &mockDDLPuller{resolvedTs: startTs - 1}, nil
+		},
+		// new ddl sink
+		func(_ model.ChangeFeedID, _ *model.ChangeFeedInfo, _ func(err error)) DDLSink {
+			return &mockDDLSink{
+				resetDDLDone:     true,
+				recordDDLHistory: false,
+			}
+		},
+		// new scheduler
+		func(
+			ctx cdcContext.Context, up *upstream.Upstream, epoch uint64,
+			cfg *config.SchedulerConfig,
+		) (scheduler.Scheduler, error) {
+			return &mockScheduler{}, nil
+		},
+		// new downstream observer
+		func(
+			ctx context.Context, sinkURIStr string, replCfg *config.ReplicaConfig,
+			opts ...observer.NewObserverOption,
+		) (observer.Observer, error) {
+			return observer.NewDummyObserver(), nil
+		},
+	)
+
+	cf.upstream = up
+
+	tester.MustUpdate(fmt.Sprintf("%s/capture/%s",
+		etcd.DefaultClusterAndMetaPrefix, ctx.GlobalVars().CaptureInfo.ID),
+		[]byte(`{"id":"`+ctx.GlobalVars().CaptureInfo.ID+`","address":"127.0.0.1:8300"}`))
+>>>>>>> 0867f80e5f (cdc: add changefeed epoch to prevent unexpected state (#8268))
 	tester.MustApplyPatches()
 	captures := map[model.CaptureID]*model.CaptureInfo{ctx.GlobalVars().CaptureInfo.ID: ctx.GlobalVars().CaptureInfo}
 	return cf, state, captures, tester
