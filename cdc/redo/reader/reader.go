@@ -105,6 +105,9 @@ func newLogReader(ctx context.Context, cfg *LogReaderConfig) (*LogReader, error)
 	if cfg == nil {
 		return nil, cerror.WrapError(cerror.ErrRedoConfigInvalid, errors.New("LogReaderConfig can not be nil"))
 	}
+	if cfg.WorkerNums == 0 {
+		cfg.WorkerNums = defaultWorkerNum
+	}
 
 	logReader := &LogReader{
 		cfg: cfg,
@@ -119,7 +122,7 @@ func newLogReader(ctx context.Context, cfg *LogReaderConfig) (*LogReader, error)
 		if err != nil {
 			return nil, cerror.WrapError(cerror.ErrRedoFileOp, err)
 		}
-		err = downLoadToLocal(ctx, cfg.Dir, extStorage, redo.RedoMetaFileType)
+		err = downLoadToLocal(ctx, cfg.Dir, extStorage, redo.RedoMetaFileType, cfg.WorkerNums)
 		if err != nil {
 			return nil, cerror.WrapError(cerror.ErrRedoDownloadFailed, err)
 		}
