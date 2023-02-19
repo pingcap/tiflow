@@ -56,6 +56,7 @@ func TestVerifyCreateChangefeedConfig(t *testing.T) {
 	require.NotNil(t, cfInfo)
 	require.NotEqual(t, "", cfInfo.ID)
 	require.Equal(t, model.DefaultNamespace, cfInfo.Namespace)
+	require.NotEqual(t, 0, cfInfo.Epoch)
 
 	cfg.ID = "abdc/sss"
 	cfInfo, err = h.verifyCreateChangefeedConfig(ctx, cfg, pdClient, provider, "en", storage)

@@ -253,6 +253,7 @@ func (APIV2HelpersImpl) verifyCreateChangefeedConfig(
 		Config:         replicaCfg,
 		State:          model.StateNormal,
 		CreatorVersion: version.ReleaseVersion,
+		Epoch:          owner.GenerateChangefeedEpoch(ctx, pdClient),
 	}, nil
 }
 
