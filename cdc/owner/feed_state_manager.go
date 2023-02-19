@@ -14,6 +14,7 @@
 package owner
 
 import (
+	"context"
 	"time"
 
 	"github.com/cenkalti/backoff/v4"
@@ -21,6 +22,13 @@ import (
 	"github.com/pingcap/log"
 	"github.com/pingcap/tiflow/cdc/model"
 	cerrors "github.com/pingcap/tiflow/pkg/errors"
+<<<<<<< HEAD
+=======
+	"github.com/pingcap/tiflow/pkg/orchestrator"
+	"github.com/pingcap/tiflow/pkg/upstream"
+	"github.com/tikv/client-go/v2/oracle"
+	pd "github.com/tikv/pd/client"
+>>>>>>> 0867f80e5f (cdc: add changefeed epoch to prevent unexpected state (#8268))
 	"go.uber.org/zap"
 )
 
@@ -45,7 +53,12 @@ const (
 // feedStateManager manages the ReactorState of a changefeed
 // when a error or a admin job occurs, the feedStateManager is responsible for controlling the ReactorState
 type feedStateManager struct {
+<<<<<<< HEAD
 	state           *model.ChangefeedReactorState
+=======
+	upstream        *upstream.Upstream
+	state           *orchestrator.ChangefeedReactorState
+>>>>>>> 0867f80e5f (cdc: add changefeed epoch to prevent unexpected state (#8268))
 	shouldBeRunning bool
 
 	adminJobQueue   []*model.AdminJob
@@ -56,8 +69,9 @@ type feedStateManager struct {
 }
 
 // newFeedStateManager creates feedStateManager and initialize the exponential backoff
-func newFeedStateManager() *feedStateManager {
+func newFeedStateManager(up *upstream.Upstream) *feedStateManager {
 	f := new(feedStateManager)
+	f.upstream = up
 
 	f.errBackoff = backoff.NewExponentialBackOff()
 	f.errBackoff.InitialInterval = defaultBackoffInitInterval
@@ -72,6 +86,7 @@ func newFeedStateManager() *feedStateManager {
 	return f
 }
 
+<<<<<<< HEAD
 // newFeedStateManager4Test creates feedStateManager for test
 func newFeedStateManager4Test() *feedStateManager {
 	f := new(feedStateManager)
@@ -89,6 +104,8 @@ func newFeedStateManager4Test() *feedStateManager {
 	return f
 }
 
+=======
+>>>>>>> 0867f80e5f (cdc: add changefeed epoch to prevent unexpected state (#8268))
 // resetErrBackoff reset the backoff-related fields
 func (m *feedStateManager) resetErrBackoff() {
 	m.errBackoff.Reset()
@@ -262,16 +279,21 @@ func (m *feedStateManager) pushAdminJob(job *model.AdminJob) {
 }
 
 func (m *feedStateManager) patchState(feedState model.FeedState) {
+	var updateEpoch bool
 	var adminJobType model.AdminJobType
 	switch feedState {
 	case model.StateNormal:
 		adminJobType = model.AdminNone
+		updateEpoch = false
 	case model.StateFinished:
 		adminJobType = model.AdminFinish
+		updateEpoch = true
 	case model.StateError, model.StateStopped, model.StateFailed:
 		adminJobType = model.AdminStop
+		updateEpoch = true
 	case model.StateRemoved:
 		adminJobType = model.AdminRemove
+		updateEpoch = true
 	default:
 		log.Panic("Unreachable")
 	}
@@ -297,6 +319,18 @@ func (m *feedStateManager) patchState(feedState model.FeedState) {
 		if info.AdminJobType != adminJobType {
 			info.AdminJobType = adminJobType
 			changed = true
+		}
+		if updateEpoch {
+			previous := info.Epoch
+			ctx, cancel := context.WithTimeout(context.TODO(), 5*time.Second)
+			defer cancel()
+			info.Epoch = GenerateChangefeedEpoch(ctx, m.upstream.PDClient)
+			changed = true
+			log.Info("update changefeed epoch",
+				zap.String("namespace", m.state.ID.Namespace),
+				zap.String("changefeed", m.state.ID.ID),
+				zap.Uint64("perviousEpoch", previous),
+				zap.Uint64("currentEpoch", info.Epoch))
 		}
 		return info, changed, nil
 	})
@@ -417,4 +451,14 @@ func (m *feedStateManager) handleError(errs ...*model.RunningError) {
 				zap.Duration("oldInterval", oldBackoffInterval), zap.Duration("newInterval", m.backoffInterval))
 		}
 	}
+}
+
+// GenerateChangefeedEpoch generates a unique changefeed epoch.
+func GenerateChangefeedEpoch(ctx context.Context, pdClient pd.Client) uint64 {
+	phyTs, logical, err := pdClient.GetTS(ctx)
+	if err != nil {
+		log.Warn("generate epoch using local timestamp due to error", zap.Error(err))
+		return uint64(time.Now().UnixNano())
+	}
+	return oracle.ComposeTS(phyTs, logical)
 }

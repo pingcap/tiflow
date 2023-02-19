@@ -14,13 +14,23 @@
 package owner
 
 import (
+<<<<<<< HEAD
 	"time"
 
 	"github.com/pingcap/check"
+=======
+	"context"
+	"fmt"
+	"testing"
+	"time"
+
+	"github.com/cenkalti/backoff/v4"
+>>>>>>> 0867f80e5f (cdc: add changefeed epoch to prevent unexpected state (#8268))
 	"github.com/pingcap/tiflow/cdc/model"
 	"github.com/pingcap/tiflow/pkg/config"
 	cdcContext "github.com/pingcap/tiflow/pkg/context"
 	"github.com/pingcap/tiflow/pkg/orchestrator"
+<<<<<<< HEAD
 	"github.com/pingcap/tiflow/pkg/util/testleak"
 )
 
@@ -31,6 +41,46 @@ type feedStateManagerSuite struct {
 
 func (s *feedStateManagerSuite) TestHandleJob(c *check.C) {
 	defer testleak.AfterTest(c)()
+=======
+	"github.com/pingcap/tiflow/pkg/upstream"
+	"github.com/stretchr/testify/require"
+	pd "github.com/tikv/pd/client"
+)
+
+type mockPD struct {
+	pd.Client
+}
+
+func (p *mockPD) GetTS(_ context.Context) (int64, int64, error) {
+	return 1, 2, nil
+}
+
+// newFeedStateManager4Test creates feedStateManager for test
+func newFeedStateManager4Test(
+	initialIntervalInMs time.Duration,
+	maxIntervalInMs time.Duration,
+	maxElapsedTimeInMs time.Duration,
+	multiplier float64,
+) *feedStateManager {
+	f := new(feedStateManager)
+	f.upstream = new(upstream.Upstream)
+	f.upstream.PDClient = &mockPD{}
+
+	f.errBackoff = backoff.NewExponentialBackOff()
+	f.errBackoff.InitialInterval = initialIntervalInMs * time.Millisecond
+	f.errBackoff.MaxInterval = maxIntervalInMs * time.Millisecond
+	f.errBackoff.MaxElapsedTime = maxElapsedTimeInMs * time.Millisecond
+	f.errBackoff.Multiplier = multiplier
+	f.errBackoff.RandomizationFactor = 0
+
+	f.resetErrBackoff()
+	f.lastErrorTime = time.Unix(0, 0)
+
+	return f
+}
+
+func TestHandleJob(t *testing.T) {
+>>>>>>> 0867f80e5f (cdc: add changefeed epoch to prevent unexpected state (#8268))
 	ctx := cdcContext.NewBackendContext4Test(true)
 	manager := newFeedStateManager4Test()
 	state := model.NewChangefeedReactorState(ctx.ChangefeedVars().ID)
@@ -243,12 +293,39 @@ func (s *feedStateManagerSuite) TestHandleError(c *check.C) {
 func (s *feedStateManagerSuite) TestChangefeedStatusNotExist(c *check.C) {
 	defer testleak.AfterTest(c)()
 	ctx := cdcContext.NewBackendContext4Test(true)
+<<<<<<< HEAD
 	manager := newFeedStateManager4Test()
 	state := model.NewChangefeedReactorState(ctx.ChangefeedVars().ID)
 	tester := orchestrator.NewReactorStateTester(c, state, map[string]string{
 		"/tidb/cdc/capture/d563bfc0-f406-4f34-bc7d-6dc2e35a44e5": `{"id":"d563bfc0-f406-4f34-bc7d-6dc2e35a44e5","address":"172.16.6.147:8300","version":"v5.0.0-master-dirty"}`,
 		"/tidb/cdc/changefeed/info/" + ctx.ChangefeedVars().ID:   `{"sink-uri":"blackhole:///","opts":{},"create-time":"2021-06-05T00:44:15.065939487+08:00","start-ts":425381670108266496,"target-ts":0,"admin-job-type":1,"sort-engine":"unified","config":{"case-sensitive":true,"enable-old-value":true,"force-replicate":false,"check-gc-safe-point":true,"filter":{"rules":["*.*"],"ignore-txn-start-ts":null},"mounter":{"worker-num":16},"sink":{"dispatchers":null,"protocol":"default"},"cyclic-replication":{"enable":false,"replica-id":0,"filter-replica-ids":null,"id-buckets":0,"sync-ddl":false},"scheduler":{"type":"table-number","polling-time":-1}},"state":"failed","history":[],"error":{"addr":"172.16.6.147:8300","code":"CDC:ErrSnapshotLostByGC","message":"[CDC:ErrSnapshotLostByGC]fail to create or maintain changefeed due to snapshot loss caused by GC. checkpoint-ts 425381670108266496 is earlier than GC safepoint at 0"},"sync-point-enabled":false,"sync-point-interval":600000000000,"creator-version":"v5.0.0-master-dirty"}`,
 		"/tidb/cdc/owner/156579d017f84a68":                       "d563bfc0-f406-4f34-bc7d-6dc2e35a44e5",
+=======
+	manager := newFeedStateManager4Test(0, 0, 0, 0)
+	state := orchestrator.NewChangefeedReactorState(etcd.DefaultCDCClusterID,
+		ctx.ChangefeedVars().ID)
+	tester := orchestrator.NewReactorStateTester(t, state, nil)
+	state.PatchInfo(func(info *model.ChangeFeedInfo) (*model.ChangeFeedInfo, bool, error) {
+		require.Nil(t, info)
+		return &model.ChangeFeedInfo{SinkURI: "123", Config: &config.ReplicaConfig{}}, true, nil
+	})
+	state.PatchTaskPosition(ctx.GlobalVars().CaptureInfo.ID,
+		func(position *model.TaskPosition) (*model.TaskPosition, bool, error) {
+			return &model.TaskPosition{Error: &model.RunningError{
+				Addr:    ctx.GlobalVars().CaptureInfo.AdvertiseAddr,
+				Code:    "CDC:ErrGCTTLExceeded",
+				Message: "fake error for test",
+			}}, true, nil
+		})
+	tester.MustApplyPatches()
+	manager.Tick(state)
+	// test handling fast failed error with non-nil ChangeFeedInfo
+	tester.MustApplyPatches()
+	// test handling fast failed error with nil ChangeFeedInfo
+	// set info to nil when this patch is applied
+	state.PatchInfo(func(info *model.ChangeFeedInfo) (*model.ChangeFeedInfo, bool, error) {
+		return nil, true, nil
+>>>>>>> 0867f80e5f (cdc: add changefeed epoch to prevent unexpected state (#8268))
 	})
 	manager.Tick(state)
 	c.Assert(manager.ShouldRunning(), check.IsFalse)
