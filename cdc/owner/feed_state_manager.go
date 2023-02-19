@@ -14,25 +14,87 @@
 package owner
 
 import (
+	"context"
 	"time"
 
 	"github.com/pingcap/errors"
 	"github.com/pingcap/log"
 	"github.com/pingcap/tiflow/cdc/model"
 	cerrors "github.com/pingcap/tiflow/pkg/errors"
+<<<<<<< HEAD
+=======
+	"github.com/pingcap/tiflow/pkg/orchestrator"
+	"github.com/pingcap/tiflow/pkg/upstream"
+	"github.com/tikv/client-go/v2/oracle"
+	pd "github.com/tikv/pd/client"
+>>>>>>> 0867f80e5f (cdc: add changefeed epoch to prevent unexpected state (#8268))
 	"go.uber.org/zap"
 )
 
 // feedStateManager manages the ReactorState of a changefeed
 // when an error or an admin job occurs, the feedStateManager is responsible for controlling the ReactorState
 type feedStateManager struct {
+<<<<<<< HEAD
 	state           *model.ChangefeedReactorState
+=======
+	upstream        *upstream.Upstream
+	state           *orchestrator.ChangefeedReactorState
+>>>>>>> 0867f80e5f (cdc: add changefeed epoch to prevent unexpected state (#8268))
 	shouldBeRunning bool
 
 	adminJobQueue []*model.AdminJob
 }
 
+<<<<<<< HEAD
 func (m *feedStateManager) Tick(state *model.ChangefeedReactorState) {
+=======
+// newFeedStateManager creates feedStateManager and initialize the exponential backoff
+func newFeedStateManager(up *upstream.Upstream) *feedStateManager {
+	f := new(feedStateManager)
+	f.upstream = up
+
+	f.errBackoff = backoff.NewExponentialBackOff()
+	f.errBackoff.InitialInterval = defaultBackoffInitInterval
+	f.errBackoff.MaxInterval = defaultBackoffMaxInterval
+	f.errBackoff.Multiplier = defaultBackoffMultiplier
+	f.errBackoff.RandomizationFactor = defaultBackoffRandomizationFactor
+	// MaxElapsedTime=0 means the backoff never stops
+	f.errBackoff.MaxElapsedTime = 0
+
+	f.resetErrBackoff()
+	f.lastErrorTime = time.Unix(0, 0)
+
+	return f
+}
+
+// resetErrBackoff reset the backoff-related fields
+func (m *feedStateManager) resetErrBackoff() {
+	m.errBackoff.Reset()
+	m.backoffInterval = m.errBackoff.NextBackOff()
+}
+
+// isChangefeedStable check if there are states other than 'normal' in this sliding window.
+func (m *feedStateManager) isChangefeedStable() bool {
+	for _, val := range m.stateHistory {
+		if val != model.StateNormal {
+			return false
+		}
+	}
+
+	return true
+}
+
+// shiftStateWindow shift the sliding window
+func (m *feedStateManager) shiftStateWindow(state model.FeedState) {
+	for i := 0; i < defaultStateWindowSize-1; i++ {
+		m.stateHistory[i] = m.stateHistory[i+1]
+	}
+
+	m.stateHistory[defaultStateWindowSize-1] = state
+}
+
+func (m *feedStateManager) Tick(state *orchestrator.ChangefeedReactorState) (adminJobPending bool) {
+>>>>>>> 0867f80e5f (cdc: add changefeed epoch to prevent unexpected state (#8268))
 	m.state = state
 	m.shouldBeRunning = true
 	defer func() {
@@ -174,16 +236,21 @@ func (m *feedStateManager) pushAdminJob(job *model.AdminJob) {
 }
 
 func (m *feedStateManager) patchState(feedState model.FeedState) {
+	var updateEpoch bool
 	var adminJobType model.AdminJobType
 	switch feedState {
 	case model.StateNormal:
 		adminJobType = model.AdminNone
+		updateEpoch = false
 	case model.StateFinished:
 		adminJobType = model.AdminFinish
+		updateEpoch = true
 	case model.StateError, model.StateStopped, model.StateFailed:
 		adminJobType = model.AdminStop
+		updateEpoch = true
 	case model.StateRemoved:
 		adminJobType = model.AdminRemove
+		updateEpoch = true
 	default:
 		log.Panic("Unreachable")
 	}
@@ -206,6 +273,18 @@ func (m *feedStateManager) patchState(feedState model.FeedState) {
 		if info.AdminJobType != adminJobType {
 			info.AdminJobType = adminJobType
 			changed = true
+		}
+		if updateEpoch {
+			previous := info.Epoch
+			ctx, cancel := context.WithTimeout(context.TODO(), 5*time.Second)
+			defer cancel()
+			info.Epoch = GenerateChangefeedEpoch(ctx, m.upstream.PDClient)
+			changed = true
+			log.Info("update changefeed epoch",
+				zap.String("namespace", m.state.ID.Namespace),
+				zap.String("changefeed", m.state.ID.ID),
+				zap.Uint64("perviousEpoch", previous),
+				zap.Uint64("currentEpoch", info.Epoch))
 		}
 		return info, changed, nil
 	})
@@ -289,4 +368,14 @@ func (m *feedStateManager) handleError(errs ...*model.RunningError) {
 		m.patchState(model.StateError)
 		return
 	}
+}
+
+// GenerateChangefeedEpoch generates a unique changefeed epoch.
+func GenerateChangefeedEpoch(ctx context.Context, pdClient pd.Client) uint64 {
+	phyTs, logical, err := pdClient.GetTS(ctx)
+	if err != nil {
+		log.Warn("generate epoch using local timestamp due to error", zap.Error(err))
+		return uint64(time.Now().UnixNano())
+	}
+	return oracle.ComposeTS(phyTs, logical)
 }

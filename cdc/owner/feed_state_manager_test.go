@@ -14,11 +14,21 @@
 package owner
 
 import (
+<<<<<<< HEAD
 	"github.com/pingcap/check"
+=======
+	"context"
+	"fmt"
+	"testing"
+	"time"
+
+	"github.com/cenkalti/backoff/v4"
+>>>>>>> 0867f80e5f (cdc: add changefeed epoch to prevent unexpected state (#8268))
 	"github.com/pingcap/tiflow/cdc/model"
 	"github.com/pingcap/tiflow/pkg/config"
 	cdcContext "github.com/pingcap/tiflow/pkg/context"
 	"github.com/pingcap/tiflow/pkg/orchestrator"
+<<<<<<< HEAD
 	"github.com/pingcap/tiflow/pkg/util/testleak"
 )
 
@@ -28,6 +38,46 @@ type feedStateManagerSuite struct{}
 
 func (s *feedStateManagerSuite) TestHandleJob(c *check.C) {
 	defer testleak.AfterTest(c)()
+=======
+	"github.com/pingcap/tiflow/pkg/upstream"
+	"github.com/stretchr/testify/require"
+	pd "github.com/tikv/pd/client"
+)
+
+type mockPD struct {
+	pd.Client
+}
+
+func (p *mockPD) GetTS(_ context.Context) (int64, int64, error) {
+	return 1, 2, nil
+}
+
+// newFeedStateManager4Test creates feedStateManager for test
+func newFeedStateManager4Test(
+	initialIntervalInMs time.Duration,
+	maxIntervalInMs time.Duration,
+	maxElapsedTimeInMs time.Duration,
+	multiplier float64,
+) *feedStateManager {
+	f := new(feedStateManager)
+	f.upstream = new(upstream.Upstream)
+	f.upstream.PDClient = &mockPD{}
+
+	f.errBackoff = backoff.NewExponentialBackOff()
+	f.errBackoff.InitialInterval = initialIntervalInMs * time.Millisecond
+	f.errBackoff.MaxInterval = maxIntervalInMs * time.Millisecond
+	f.errBackoff.MaxElapsedTime = maxElapsedTimeInMs * time.Millisecond
+	f.errBackoff.Multiplier = multiplier
+	f.errBackoff.RandomizationFactor = 0
+
+	f.resetErrBackoff()
+	f.lastErrorTime = time.Unix(0, 0)
+
+	return f
+}
+
+func TestHandleJob(t *testing.T) {
+>>>>>>> 0867f80e5f (cdc: add changefeed epoch to prevent unexpected state (#8268))
 	ctx := cdcContext.NewBackendContext4Test(true)
 	manager := new(feedStateManager)
 	state := model.NewChangefeedReactorState(ctx.ChangefeedVars().ID)
@@ -101,9 +151,16 @@ func (s *feedStateManagerSuite) TestHandleJob(c *check.C) {
 func (s *feedStateManagerSuite) TestMarkFinished(c *check.C) {
 	defer testleak.AfterTest(c)()
 	ctx := cdcContext.NewBackendContext4Test(true)
+<<<<<<< HEAD
 	manager := new(feedStateManager)
 	state := model.NewChangefeedReactorState(ctx.ChangefeedVars().ID)
 	tester := orchestrator.NewReactorStateTester(c, state, nil)
+=======
+	manager := newFeedStateManager4Test(0, 0, 0, 0)
+	state := orchestrator.NewChangefeedReactorState(etcd.DefaultCDCClusterID,
+		ctx.ChangefeedVars().ID)
+	tester := orchestrator.NewReactorStateTester(t, state, nil)
+>>>>>>> 0867f80e5f (cdc: add changefeed epoch to prevent unexpected state (#8268))
 	state.PatchInfo(func(info *model.ChangeFeedInfo) (*model.ChangeFeedInfo, bool, error) {
 		c.Assert(info, check.IsNil)
 		return &model.ChangeFeedInfo{SinkURI: "123", Config: &config.ReplicaConfig{}}, true, nil
