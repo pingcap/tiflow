@@ -39,11 +39,29 @@ type managerTester struct {
 // NewManager4Test creates a new processor manager for test
 func NewManager4Test(
 	t *testing.T,
+<<<<<<< HEAD
 	createTablePipeline func(ctx cdcContext.Context, tableID model.TableID, replicaInfo *model.TableReplicaInfo) (tablepipeline.TablePipeline, error),
 ) *Manager {
 	m := NewManager()
 	m.newProcessor = func(ctx cdcContext.Context) *processor {
 		return newProcessor4Test(ctx, t, createTablePipeline)
+=======
+	liveness *model.Liveness,
+) *managerImpl {
+	captureInfo := &model.CaptureInfo{ID: "capture-test", AdvertiseAddr: "127.0.0.1:0000"}
+	cfg := config.NewDefaultSchedulerConfig()
+	m := NewManager(captureInfo, upstream.NewManager4Test(nil), liveness, cfg).(*managerImpl)
+	m.newProcessor = func(
+		state *orchestrator.ChangefeedReactorState,
+		captureInfo *model.CaptureInfo,
+		changefeedID model.ChangeFeedID,
+		up *upstream.Upstream,
+		liveness *model.Liveness,
+		changefeedEpoch uint64,
+		cfg *config.SchedulerConfig,
+	) *processor {
+		return newProcessor4Test(t, state, captureInfo, m.liveness, cfg)
+>>>>>>> 0867f80e5f (cdc: add changefeed epoch to prevent unexpected state (#8268))
 	}
 	return m
 }

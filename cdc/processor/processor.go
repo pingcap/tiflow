@@ -73,6 +73,7 @@ type processor struct {
 	cancel      context.CancelFunc
 	wg          sync.WaitGroup
 
+<<<<<<< HEAD
 	lazyInit            func(ctx cdcContext.Context) error
 	createTablePipeline func(ctx cdcContext.Context, tableID model.TableID, replicaInfo *model.TableReplicaInfo) (tablepipeline.TablePipeline, error)
 	newAgent            func(ctx cdcContext.Context) (processorAgent, error)
@@ -82,6 +83,17 @@ type processor struct {
 	agent               processorAgent
 	checkpointTs        model.Ts
 	resolvedTs          model.Ts
+=======
+	lazyInit func(ctx cdcContext.Context) error
+	newAgent func(
+		cdcContext.Context, *model.Liveness, uint64, *config.SchedulerConfig,
+	) (scheduler.Agent, error)
+	cfg *config.SchedulerConfig
+
+	liveness        *model.Liveness
+	agent           scheduler.Agent
+	changefeedEpoch uint64
+>>>>>>> 0867f80e5f (cdc: add changefeed epoch to prevent unexpected state (#8268))
 
 	metricResolvedTsGauge           prometheus.Gauge
 	metricResolvedTsLagGauge        prometheus.Gauge
@@ -223,6 +235,7 @@ func (p *processor) GetCheckpoint() (checkpointTs, resolvedTs model.Ts) {
 }
 
 // newProcessor creates a new processor
+<<<<<<< HEAD
 func newProcessor(ctx cdcContext.Context) *processor {
 	changefeedID := ctx.ChangefeedVars().ID
 	advertiseAddr := ctx.GlobalVars().CaptureInfo.AdvertiseAddr
@@ -234,6 +247,26 @@ func newProcessor(ctx cdcContext.Context) *processor {
 		captureInfo:   ctx.GlobalVars().CaptureInfo,
 		cancel:        func() {},
 		lastRedoFlush: time.Now(),
+=======
+func newProcessor(
+	state *orchestrator.ChangefeedReactorState,
+	captureInfo *model.CaptureInfo,
+	changefeedID model.ChangeFeedID,
+	up *upstream.Upstream,
+	liveness *model.Liveness,
+	changefeedEpoch uint64,
+	cfg *config.SchedulerConfig,
+) *processor {
+	p := &processor{
+		changefeed:      state,
+		upstream:        up,
+		errCh:           make(chan error, 1),
+		changefeedID:    changefeedID,
+		captureInfo:     captureInfo,
+		cancel:          func() {},
+		liveness:        liveness,
+		changefeedEpoch: changefeedEpoch,
+>>>>>>> 0867f80e5f (cdc: add changefeed epoch to prevent unexpected state (#8268))
 
 		newSchedulerEnabled: conf.Debug.EnableNewScheduler,
 
@@ -496,6 +529,7 @@ func (p *processor) lazyInitImpl(ctx cdcContext.Context) error {
 		return err
 	}
 
+<<<<<<< HEAD
 	if p.newSchedulerEnabled {
 		p.agent, err = p.newAgent(ctx)
 		if err != nil {
@@ -516,6 +550,66 @@ func (p *processor) newAgentImpl(ctx cdcContext.Context) (processorAgent, error)
 		return nil, errors.Trace(err)
 	}
 	return ret, nil
+=======
+	engineFactory := ctx.GlobalVars().SortEngineFactory
+	sortEngine, err := engineFactory.Create(p.changefeedID)
+	if err != nil {
+		log.Info("Processor creates sort engine",
+			zap.String("namespace", p.changefeedID.Namespace),
+			zap.String("changefeed", p.changefeedID.ID),
+			zap.Error(err),
+			zap.Duration("duration", time.Since(start)))
+		return errors.Trace(err)
+	}
+	p.sourceManager = sourcemanager.New(p.changefeedID, p.upstream, p.mg,
+		sortEngine, p.errCh, p.changefeed.Info.Config.BDRMode)
+	p.sinkManager, err = sinkmanager.New(stdCtx, p.changefeedID,
+		p.changefeed.Info, p.upstream, p.schemaStorage,
+		p.redoManager, p.sourceManager,
+		p.errCh)
+	if err != nil {
+		log.Info("Processor creates sink manager fail",
+			zap.String("namespace", p.changefeedID.Namespace),
+			zap.String("changefeed", p.changefeedID.ID),
+			zap.Error(err),
+			zap.Duration("duration", time.Since(start)))
+		p.sourceManager = nil
+		_ = engineFactory.Drop(p.changefeedID)
+		return errors.Trace(err)
+	}
+	// Bind them so that sourceManager can notify sinkManager.
+	p.sourceManager.OnResolve(p.sinkManager.UpdateReceivedSorterResolvedTs)
+
+	p.agent, err = p.newAgent(ctx, p.liveness, p.changefeedEpoch, p.cfg)
+	if err != nil {
+		return err
+	}
+
+	p.initialized = true
+	log.Info("processor initialized",
+		zap.String("capture", p.captureInfo.ID),
+		zap.String("namespace", p.changefeedID.Namespace),
+		zap.String("changefeed", p.changefeedID.ID),
+		zap.Uint64("changefeedEpoch", p.changefeedEpoch))
+	return nil
+}
+
+func (p *processor) newAgentImpl(
+	ctx cdcContext.Context,
+	liveness *model.Liveness,
+	changefeedEpoch uint64,
+	cfg *config.SchedulerConfig,
+) (ret scheduler.Agent, err error) {
+	messageServer := ctx.GlobalVars().MessageServer
+	messageRouter := ctx.GlobalVars().MessageRouter
+	etcdClient := ctx.GlobalVars().EtcdClient
+	captureID := ctx.GlobalVars().CaptureInfo.ID
+	ret, err = scheduler.NewAgent(
+		ctx, captureID, liveness,
+		messageServer, messageRouter, etcdClient, p, p.changefeedID,
+		changefeedEpoch, cfg)
+	return ret, errors.Trace(err)
+>>>>>>> 0867f80e5f (cdc: add changefeed epoch to prevent unexpected state (#8268))
 }
 
 // handleErrorCh listen the error channel and throw the error if it is not expected.
