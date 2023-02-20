@@ -99,6 +99,14 @@ func TestCompleteOptions(t *testing.T) {
 	options = NewOptions()
 	err = options.Apply(ctx, sinkURI)
 	require.Regexp(t, ".*invalid required acks 3.*", errors.Cause(err))
+
+	// invalid kafka client id
+	uri = "kafka://127.0.0.1:9092/abc?kafka-client-id=^invalid$"
+	sinkURI, err = url.Parse(uri)
+	require.NoError(t, err)
+	options = NewOptions()
+	err = options.Apply(ctx, sinkURI)
+	require.True(t, cerror.ErrKafkaInvalidClientID.Equal(err))
 }
 
 func TestSetPartitionNum(t *testing.T) {

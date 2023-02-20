@@ -161,9 +161,10 @@ func (m *kafkaTopicManager) waitUntilTopicVisible(
 	ctx context.Context,
 	topicName string,
 ) error {
+	topics := []string{topicName}
 	err := retry.Do(ctx, func() error {
 		start := time.Now()
-		meta, err := m.admin.GetTopicsMeta(ctx, []string{topicName}, false)
+		meta, err := m.admin.GetTopicsMeta(ctx, topics, false)
 		if err != nil {
 			log.Warn(" topic not found, retry it",
 				zap.Error(err),
@@ -171,7 +172,7 @@ func (m *kafkaTopicManager) waitUntilTopicVisible(
 			)
 			return err
 		}
-		log.Info("newly created topic is visible",
+		log.Info("topic found",
 			zap.String("topic", topicName),
 			zap.Int32("partitionNumber", meta[topicName].NumPartitions),
 			zap.Duration("duration", time.Since(start)))
