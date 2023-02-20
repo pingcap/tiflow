@@ -151,19 +151,19 @@ func NewOptions() *Options {
 }
 
 // SetPartitionNum set the partition-num by the topic's partition count.
-func (c *Options) SetPartitionNum(realPartitionCount int32) error {
+func (o *Options) SetPartitionNum(realPartitionCount int32) error {
 	// user does not specify the `partition-num` in the sink-uri
-	if c.PartitionNum == 0 {
-		c.PartitionNum = realPartitionCount
+	if o.PartitionNum == 0 {
+		o.PartitionNum = realPartitionCount
 		log.Info("partitionNum is not set, set by topic's partition-num",
 			zap.Int32("partitionNum", realPartitionCount))
 		return nil
 	}
 
-	if c.PartitionNum < realPartitionCount {
+	if o.PartitionNum < realPartitionCount {
 		log.Warn("number of partition specified in sink-uri is less than that of the actual topic. "+
 			"Some partitions will not have messages dispatched to",
-			zap.Int32("sinkUriPartitions", c.PartitionNum),
+			zap.Int32("sinkUriPartitions", o.PartitionNum),
 			zap.Int32("topicPartitions", realPartitionCount))
 		return nil
 	}
@@ -171,17 +171,17 @@ func (c *Options) SetPartitionNum(realPartitionCount int32) error {
 	// Make sure that the user-specified `partition-num` is not greater than
 	// the real partition count, since messages would be dispatched to different
 	// partitions, this could prevent potential correctness problems.
-	if c.PartitionNum > realPartitionCount {
+	if o.PartitionNum > realPartitionCount {
 		return cerror.ErrKafkaInvalidPartitionNum.GenWithStack(
 			"the number of partition (%d) specified in sink-uri is more than that of actual topic (%d)",
-			c.PartitionNum, realPartitionCount)
+			o.PartitionNum, realPartitionCount)
 	}
 	return nil
 }
 
 // Apply the sinkURI to update Options
-func (c *Options) Apply(ctx context.Context, sinkURI *url.URL) error {
-	c.BrokerEndpoints = strings.Split(sinkURI.Host, ",")
+func (o *Options) Apply(ctx context.Context, sinkURI *url.URL) error {
+	o.BrokerEndpoints = strings.Split(sinkURI.Host, ",")
 	params := sinkURI.Query()
 	s := params.Get("partition-num")
 	if s != "" {
@@ -189,9 +189,9 @@ func (c *Options) Apply(ctx context.Context, sinkURI *url.URL) error {
 		if err != nil {
 			return err
 		}
-		c.PartitionNum = int32(a)
-		if c.PartitionNum <= 0 {
-			return cerror.ErrKafkaInvalidPartitionNum.GenWithStackByArgs(c.PartitionNum)
+		o.PartitionNum = int32(a)
+		if o.PartitionNum <= 0 {
+			return cerror.ErrKafkaInvalidPartitionNum.GenWithStackByArgs(o.PartitionNum)
 		}
 	}
 
@@ -201,12 +201,12 @@ func (c *Options) Apply(ctx context.Context, sinkURI *url.URL) error {
 		if err != nil {
 			return err
 		}
-		c.ReplicationFactor = int16(a)
+		o.ReplicationFactor = int16(a)
 	}
 
 	s = params.Get("kafka-version")
 	if s != "" {
-		c.Version = s
+		o.Version = s
 	}
 
 	s = params.Get("max-message-bytes")
@@ -215,12 +215,12 @@ func (c *Options) Apply(ctx context.Context, sinkURI *url.URL) error {
 		if err != nil {
 			return err
 		}
-		c.MaxMessageBytes = a
+		o.MaxMessageBytes = a
 	}
 
 	s = params.Get("compression")
 	if s != "" {
-		c.Compression = s
+		o.Compression = s
 	}
 
 	clientID, err := NewKafkaClientID(
@@ -230,7 +230,7 @@ func (c *Options) Apply(ctx context.Context, sinkURI *url.URL) error {
 	if err != nil {
 		return err
 	}
-	c.ClientID = clientID
+	o.ClientID = clientID
 
 	s = params.Get("auto-create-topic")
 	if s != "" {
@@ -238,7 +238,7 @@ func (c *Options) Apply(ctx context.Context, sinkURI *url.URL) error {
 		if err != nil {
 			return err
 		}
-		c.AutoCreate = autoCreate
+		o.AutoCreate = autoCreate
 	}
 
 	s = params.Get("dial-timeout")
@@ -247,7 +247,7 @@ func (c *Options) Apply(ctx context.Context, sinkURI *url.URL) error {
 		if err != nil {
 			return err
 		}
-		c.DialTimeout = a
+		o.DialTimeout = a
 	}
 
 	s = params.Get("write-timeout")
@@ -256,7 +256,7 @@ func (c *Options) Apply(ctx context.Context, sinkURI *url.URL) error {
 		if err != nil {
 			return err
 		}
-		c.WriteTimeout = a
+		o.WriteTimeout = a
 	}
 
 	s = params.Get("read-timeout")
@@ -265,7 +265,7 @@ func (c *Options) Apply(ctx context.Context, sinkURI *url.URL) error {
 		if err != nil {
 			return err
 		}
-		c.ReadTimeout = a
+		o.ReadTimeout = a
 	}
 
 	s = params.Get("required-acks")
@@ -274,15 +274,15 @@ func (c *Options) Apply(ctx context.Context, sinkURI *url.URL) error {
 		if err != nil {
 			return err
 		}
-		c.RequiredAcks = r
+		o.RequiredAcks = r
 	}
 
-	err = c.applySASL(params)
+	err = o.applySASL(params)
 	if err != nil {
 		return err
 	}
 
-	err = c.applyTLS(params)
+	err = o.applyTLS(params)
 	if err != nil {
 		return err
 	}
@@ -290,24 +290,24 @@ func (c *Options) Apply(ctx context.Context, sinkURI *url.URL) error {
 	return nil
 }
 
-func (c *Options) applyTLS(params url.Values) error {
+func (o *Options) applyTLS(params url.Values) error {
 	s := params.Get("ca")
 	if s != "" {
-		c.Credential.CAPath = s
+		o.Credential.CAPath = s
 	}
 
 	s = params.Get("cert")
 	if s != "" {
-		c.Credential.CertPath = s
+		o.Credential.CertPath = s
 	}
 
 	s = params.Get("key")
 	if s != "" {
-		c.Credential.KeyPath = s
+		o.Credential.KeyPath = s
 	}
 
-	if c.Credential != nil && !c.Credential.IsEmpty() &&
-		!c.Credential.IsTLSEnabled() {
+	if o.Credential != nil && !o.Credential.IsEmpty() &&
+		!o.Credential.IsTLSEnabled() {
 		return cerror.WrapError(cerror.ErrKafkaInvalidConfig,
 			errors.New("ca, cert and key files should all be supplied"))
 	}
@@ -325,29 +325,29 @@ func (c *Options) applyTLS(params url.Values) error {
 			return err
 		}
 
-		if c.Credential != nil && c.Credential.IsTLSEnabled() && !enableTLS {
+		if o.Credential != nil && o.Credential.IsTLSEnabled() && !enableTLS {
 			return cerror.WrapError(cerror.ErrKafkaInvalidConfig,
 				errors.New("credential files are supplied, but 'enable-tls' is set to false"))
 		}
-		c.EnableTLS = enableTLS
+		o.EnableTLS = enableTLS
 	} else {
-		if c.Credential != nil && c.Credential.IsTLSEnabled() {
-			c.EnableTLS = true
+		if o.Credential != nil && o.Credential.IsTLSEnabled() {
+			o.EnableTLS = true
 		}
 	}
 
 	return nil
 }
 
-func (c *Options) applySASL(params url.Values) error {
+func (o *Options) applySASL(params url.Values) error {
 	s := params.Get("sasl-user")
 	if s != "" {
-		c.SASL.SASLUser = s
+		o.SASL.SASLUser = s
 	}
 
 	s = params.Get("sasl-password")
 	if s != "" {
-		c.SASL.SASLPassword = s
+		o.SASL.SASLPassword = s
 	}
 
 	s = params.Get("sasl-mechanism")
@@ -356,7 +356,7 @@ func (c *Options) applySASL(params url.Values) error {
 		if err != nil {
 			return cerror.WrapError(cerror.ErrKafkaInvalidConfig, err)
 		}
-		c.SASL.SASLMechanism = mechanism
+		o.SASL.SASLMechanism = mechanism
 	}
 
 	s = params.Get("sasl-gssapi-auth-type")
@@ -365,37 +365,37 @@ func (c *Options) applySASL(params url.Values) error {
 		if err != nil {
 			return cerror.WrapError(cerror.ErrKafkaInvalidConfig, err)
 		}
-		c.SASL.GSSAPI.AuthType = authType
+		o.SASL.GSSAPI.AuthType = authType
 	}
 
 	s = params.Get("sasl-gssapi-keytab-path")
 	if s != "" {
-		c.SASL.GSSAPI.KeyTabPath = s
+		o.SASL.GSSAPI.KeyTabPath = s
 	}
 
 	s = params.Get("sasl-gssapi-kerberos-config-path")
 	if s != "" {
-		c.SASL.GSSAPI.KerberosConfigPath = s
+		o.SASL.GSSAPI.KerberosConfigPath = s
 	}
 
 	s = params.Get("sasl-gssapi-service-name")
 	if s != "" {
-		c.SASL.GSSAPI.ServiceName = s
+		o.SASL.GSSAPI.ServiceName = s
 	}
 
 	s = params.Get("sasl-gssapi-user")
 	if s != "" {
-		c.SASL.GSSAPI.Username = s
+		o.SASL.GSSAPI.Username = s
 	}
 
 	s = params.Get("sasl-gssapi-password")
 	if s != "" {
-		c.SASL.GSSAPI.Password = s
+		o.SASL.GSSAPI.Password = s
 	}
 
 	s = params.Get("sasl-gssapi-realm")
 	if s != "" {
-		c.SASL.GSSAPI.Realm = s
+		o.SASL.GSSAPI.Realm = s
 	}
 
 	s = params.Get("sasl-gssapi-disable-pafxfast")
@@ -404,7 +404,7 @@ func (c *Options) applySASL(params url.Values) error {
 		if err != nil {
 			return err
 		}
-		c.SASL.GSSAPI.DisablePAFXFAST = disablePAFXFAST
+		o.SASL.GSSAPI.DisablePAFXFAST = disablePAFXFAST
 	}
 
 	return nil
@@ -418,11 +418,11 @@ type AutoCreateTopicConfig struct {
 }
 
 // DeriveTopicConfig derive a `topicConfig` from the `Options`
-func (c *Options) DeriveTopicConfig() *AutoCreateTopicConfig {
+func (o *Options) DeriveTopicConfig() *AutoCreateTopicConfig {
 	return &AutoCreateTopicConfig{
-		AutoCreate:        c.AutoCreate,
-		PartitionNum:      c.PartitionNum,
-		ReplicationFactor: c.ReplicationFactor,
+		AutoCreate:        o.AutoCreate,
+		PartitionNum:      o.PartitionNum,
+		ReplicationFactor: o.ReplicationFactor,
 	}
 }
 

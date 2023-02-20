@@ -115,10 +115,10 @@ func TestSyncSendMessage(t *testing.T) {
 	require.NoError(t, err)
 
 	p, err := NewKafkaDDLProducer(ctx, factory, adminClient)
-	require.Nil(t, err)
+	require.NoError(t, err)
 
 	err = p.SyncSendMessage(ctx, topic, 0, &common.Message{Ts: 417318403368288260})
-	require.Nil(t, err)
+	require.NoError(t, err)
 
 	p.Close()
 	err = p.SyncSendMessage(ctx, topic, 0, &common.Message{Ts: 417318403368288260})
@@ -172,7 +172,7 @@ func TestProducerDoubleClose(t *testing.T) {
 	require.NoError(t, err)
 
 	p, err := NewKafkaDDLProducer(ctx, factory, adminClient)
-	require.Nil(t, err)
+	require.NoError(t, err)
 
 	p.Close()
 	p.Close()
