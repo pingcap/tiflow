@@ -27,6 +27,16 @@ var (
 			Buckets:   prometheus.ExponentialBuckets(0.001, 2, 20), // 1ms~524s
 		}, []string{"namespace", "changefeed"})
 
+	// QueueDuration = ConflictDetectDuration + (queue time in txn workers).
+	QueueDuration = prometheus.NewHistogramVec(
+		prometheus.HistogramOpts{
+			Namespace: "ticdc",
+			Subsystem: "sinkv2",
+			Name:      "txn_queue_duration",
+			Help:      "Bucketed histogram of queue time (s) for single DML statement.",
+			Buckets:   prometheus.ExponentialBuckets(0.001, 2, 20), // 1ms~524s
+		}, []string{"namespace", "changefeed"})
+
 	WorkerFlushDuration = prometheus.NewHistogramVec(
 		prometheus.HistogramOpts{
 			Namespace: "ticdc",
@@ -74,6 +84,7 @@ var (
 // InitMetrics registers all metrics in this file.
 func InitMetrics(registry *prometheus.Registry) {
 	registry.MustRegister(ConflictDetectDuration)
+	registry.MustRegister(QueueDuration)
 	registry.MustRegister(WorkerFlushDuration)
 	registry.MustRegister(WorkerBusyRatio)
 	registry.MustRegister(WorkerHandledRows)

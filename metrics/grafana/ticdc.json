@@ -7237,7 +7237,7 @@
               "exemplar": true,
               "expr": "histogram_quantile(0.999, sum(rate(ticdc_sinkv2_txn_conflict_detect_duration_bucket{k8s_cluster=\"$k8s_cluster\",tidb_cluster=\"$tidb_cluster\",changefeed=~\"$changefeed\",instance=~\"$ticdc_instance\"}[1m])) by (le,changefeed,instance))",
               "interval": "",
-              "legendFormat": "99.9-{{changefeed}}-{{instance}}",
+              "legendFormat": "{{changefeed}}-{{instance}}-detect-P999",
               "queryType": "randomWalk",
               "refId": "A"
             },
@@ -7246,7 +7246,23 @@
               "expr": "sum(rate(ticdc_sinkv2_txn_conflict_detect_duration_sum{k8s_cluster=\"$k8s_cluster\",tidb_cluster=\"$tidb_cluster\",changefeed=~\"$changefeed\",instance=~\"$ticdc_instance\"}[1m])) by (changefeed,instance) / \nsum(rate(ticdc_sinkv2_txn_conflict_detect_duration_count{k8s_cluster=\"$k8s_cluster\",tidb_cluster=\"$tidb_cluster\",changefeed=~\"$changefeed\",instance=~\"$ticdc_instance\"}[1m])) by (changefeed,instance)",
               "hide": false,
               "interval": "",
-              "legendFormat": "avg-{{changefeed}}-{{instance}}",
+              "legendFormat": "{changefeed}}-{{instance}}-detect-avg",
+              "refId": "B"
+            },
+            {
+              "exemplar": true,
+              "expr": "histogram_quantile(0.999, sum(rate(ticdc_sinkv2_txn_queue_duration_bucket{k8s_cluster=\"$k8s_cluster\",tidb_cluster=\"$tidb_cluster\",changefeed=~\"$changefeed\",instance=~\"$ticdc_instance\"}[1m])) by (le,changefeed,instance))",
+              "interval": "",
+              "legendFormat": "{{changefeed}}-{{instance}}-queue-P999",
+              "queryType": "randomWalk",
+              "refId": "A"
+            },
+            {
+              "exemplar": true,
+              "expr": "sum(rate(ticdc_sinkv2_txn_queue_duration_sum{k8s_cluster=\"$k8s_cluster\",tidb_cluster=\"$tidb_cluster\",changefeed=~\"$changefeed\",instance=~\"$ticdc_instance\"}[1m])) by (changefeed,instance) / \nsum(rate(ticdc_sinkv2_txn_conflict_detect_duration_count{k8s_cluster=\"$k8s_cluster\",tidb_cluster=\"$tidb_cluster\",changefeed=~\"$changefeed\",instance=~\"$ticdc_instance\"}[1m])) by (changefeed,instance)",
+              "hide": false,
+              "interval": "",
+              "legendFormat": "{changefeed}}-{{instance}}-queue-avg",
               "refId": "B"
             }
           ],
