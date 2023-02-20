@@ -298,13 +298,6 @@ func (w *worker) sendMessages(ctx context.Context) error {
 				start := time.Now()
 				if err := w.statistics.RecordBatchExecution(func() (int, error) {
 					if err := w.producer.AsyncSendMessage(ctx, future.Topic, future.Partition, message); err != nil {
-						log.Error("failed to send kafka message asynchronously",
-							zap.String("protocol", message.Protocol.String()),
-							zap.String("schema", *message.Schema),
-							zap.String("table", *message.Table),
-							zap.Int("keyLen", len(message.Key)),
-							zap.Int("valueLen", len(message.Value)),
-							zap.Error(err))
 						return 0, err
 					}
 					return message.GetRowsCount(), nil
