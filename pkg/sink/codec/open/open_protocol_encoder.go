@@ -61,14 +61,16 @@ func (d *BatchEncoder) AppendRowChangedEvent(
 	var valueLenByte [8]byte
 	binary.BigEndian.PutUint64(valueLenByte[:], uint64(len(value)))
 
-	// for single message that longer than max-message-bytes, do not send it.
+	// for single message that is longer than max-message-bytes, do not send it.
 	// 16 is the length of `keyLenByte` and `valueLenByte`, 8 is the length of `versionHead`
 	length := len(key) + len(value) + common.MaxRecordOverhead + 16 + 8
 	if length > d.MaxMessageBytes {
-		log.Warn("Single message too large for open-protocol",
+		log.Warn("Single message is too large for open-protocol",
 			zap.Int("maxMessageBytes", d.MaxMessageBytes),
 			zap.Int("length", length),
-			zap.Any("table", e.Table))
+			zap.Any("table", e.Table),
+			zap.Any("key", key),
+			zap.Any("value", value))
 		return cerror.ErrCodecRowTooLarge.GenWithStackByArgs()
 	}
 

@@ -321,9 +321,11 @@ func (c *JSONBatchEncoder) AppendRowChangedEvent(
 	if len(c.terminator) > 0 {
 		value = append(value, c.terminator...)
 	}
+
 	length := len(value) + common.MaxRecordOverhead
+	// for single message that is longer than max-message-bytes, do not send it.
 	if length > c.maxMessageBytes {
-		log.Warn("Single message too large for canal-json",
+		log.Warn("Single message is too large for canal-json",
 			zap.Int("maxMessageBytes", c.maxMessageBytes),
 			zap.Int("length", length),
 			zap.Any("table", e.Table),
