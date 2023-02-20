@@ -27,11 +27,16 @@ import (
 
 type txnEvent struct {
 	*eventsink.TxnCallbackableEvent
-	start time.Time
+	start            time.Time
+	conflictResolved time.Time
 }
 
 func newTxnEvent(event *eventsink.TxnCallbackableEvent) *txnEvent {
 	return &txnEvent{TxnCallbackableEvent: event, start: time.Now()}
+}
+
+func (e *txnEvent) OnConflictResolved() {
+	e.conflictResolved = time.Now()
 }
 
 // ConflictKeys implements causality.txnEvent interface.
