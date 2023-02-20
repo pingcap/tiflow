@@ -589,11 +589,77 @@ function run() {
 	run_sql_both_source "SET @@global.time_zone = 'SYSTEM';"
 }
 
+function test_last_event_ddl() {
+	echo "[$(date)] <<<<<< start test_last_event_ddl >>>>>>"
+	cleanup_process
+	cleanup_data all_mode
+
+	run_sql 'DROP DATABASE if exists all_mode;' $TIDB_PORT $TIDB_PASSWORD
+	run_sql 'DROP DATABASE if exists all_mode;' $MYSQL_PORT1 $MYSQL_PASSWORD1
+	run_sql 'DROP DATABASE if exists xxx;' $MYSQL_PORT1 $MYSQL_PASSWORD1
+	run_sql 'CREATE DATABASE all_mode;' $MYSQL_PORT1 $MYSQL_PASSWORD1
+
+	cp $cur/conf/source1.yaml $WORK_DIR/source1.yaml
+	cp $cur/conf/dm-master.toml $WORK_DIR/
+	cp $cur/conf/dm-worker1.toml $WORK_DIR/
+	cp $cur/conf/dm-task2.yaml $WORK_DIR/
+	# start DM worker and master
+	run_dm_master $WORK_DIR/master $MASTER_PORT $WORK_DIR/dm-master.toml
+	check_rpc_alive $cur/../bin/check_master_online 127.0.0.1:$MASTER_PORT
+	run_dm_worker $WORK_DIR/worker1 $WORKER1_PORT $WORK_DIR/dm-worker1.toml
+	check_rpc_alive $cur/../bin/check_worker_online 127.0.0.1:$WORKER1_PORT
+
+	run_dm_ctl_with_retry $WORK_DIR "127.0.0.1:$MASTER_PORT" \
+		"operate-source create $WORK_DIR/source1.yaml" \
+		"\"result\": true" 2 \
+		"\"source\": \"$SOURCE_ID1\"" 1
+	run_dm_ctl_with_retry $WORK_DIR "127.0.0.1:$MASTER_PORT" \
+		"start-task $WORK_DIR/dm-task2.yaml --remove-meta=true" \
+		"\"result\": true" 2
+	run_dm_ctl_with_retry $WORK_DIR "127.0.0.1:$MASTER_PORT" \
+		"query-status test" \
+		"\"result\": true" 2 \
+		"\"unit\": \"Sync\"" 1 \
+		"\"stage\": \"Running\"" 2
+
+	# check checkpoint matches master when the last event is a ddl
+	# 1. ddl that dm will sync
+	run_sql_source1 "create table all_mode.t2(c int primary key)"
+	run_sql_tidb_with_retry "show create table all_mode.t2" "CREATE TABLE"
+	run_dm_ctl_with_retry $WORK_DIR "127.0.0.1:$MASTER_PORT" \
+		"query-status test" \
+		'"synced": true' 1
+	# 2. ddl cannot be parsed and should be skipped
+	run_sql_source1 "create FUNCTION all_mode.hello (s CHAR(20)) RETURNS CHAR(50) DETERMINISTIC RETURN 'a';"
+	check_log_contain_with_retry "RETURNS char(50)" $WORK_DIR/worker1/log/dm-worker.log
+	sleep 30 # we rely on heartbeat event to flush checkpoint here, below too
+	run_dm_ctl_with_retry $WORK_DIR "127.0.0.1:$MASTER_PORT" \
+		"query-status test" \
+		'"synced": true' 1
+	# 3. ddl can be parsed and dm don't handle
+	run_sql_source1 "analyze table all_mode.t1"
+	check_log_contain_with_retry "analyze table" $WORK_DIR/worker1/log/dm-worker.log
+	sleep 30
+	run_dm_ctl_with_retry $WORK_DIR "127.0.0.1:$MASTER_PORT" \
+		"query-status test" \
+		'"synced": true' 1
+	# 4. ddl that is filtered
+	run_sql_source1 "create database xxx"
+	check_log_contain_with_retry "CREATE DATABASE IF NOT EXISTS" $WORK_DIR/worker1/log/dm-worker.log
+	sleep 30
+	run_dm_ctl_with_retry $WORK_DIR "127.0.0.1:$MASTER_PORT" \
+		"query-status test" \
+		'"synced": true' 1
+
+	echo "<<<<<< test_last_event_ddl success! >>>>>>"
+}
+
 cleanup_data_upstream all_mode
 cleanup_data all_mode
 # also cleanup dm processes in case of last run failed
 cleanup_process $*
 run $*
+test_last_event_ddl
 cleanup_process $*
 
 echo "[$(date)] <<<<<< test case $TEST_NAME success! >>>>>>"
