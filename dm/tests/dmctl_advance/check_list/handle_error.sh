@@ -10,7 +10,7 @@ function handle_error_invalid_binlogpos() {
 	binlog_pos="mysql-bin:shoud-bin-digital"
 	run_dm_ctl $WORK_DIR "127.0.0.1:$MASTER_PORT" \
 		"handle-error test-task --binlog-pos $binlog_pos skip" \
-		"\[.*\]Message: invalid --binlog-pos $binlog_pos in handle-error operation: the pos should be digital" 1
+		"\[.*\], Message: invalid --binlog-pos $binlog_pos in handle-error operation: the pos should be digital" 1
 }
 
 function handle_error_invalid_sqls() {

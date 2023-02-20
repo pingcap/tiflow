@@ -206,9 +206,15 @@ func (e *Error) Workaround() string {
 
 // ErrorWithoutWorkaround returns err msg without workaround, in some place like cloud we want display it separately.
 func (e *Error) ErrorWithoutWorkaround() string {
-	str := fmt.Sprintf("Message: %s", e.getMsg())
+	var str string
+	if e.getMsg() != "" {
+		str += fmt.Sprintf("Message: %s", e.getMsg())
+	}
 	if e.rawCause != nil {
-		str += fmt.Sprintf(", RawCause: %s", Message(e.rawCause))
+		if len(str) > 0 {
+			str += ", "
+		}
+		str += fmt.Sprintf("RawCause: %s", Message(e.rawCause))
 	}
 	return str
 }
@@ -216,7 +222,10 @@ func (e *Error) ErrorWithoutWorkaround() string {
 // Error implements error interface.
 func (e *Error) Error() string {
 	str := fmt.Sprintf(errBaseFormat, e.code, e.class, e.scope, e.level)
-	str += e.ErrorWithoutWorkaround()
+	tmp := e.ErrorWithoutWorkaround()
+	if tmp != "" {
+		str += ", " + tmp
+	}
 	if e.workaround != "" {
 		str += fmt.Sprintf(", Workaround: %s", e.workaround)
 	}

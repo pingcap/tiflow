@@ -35,9 +35,9 @@ func TestTError(t *testing.T) {
 		workaround            = "please check your network connection"
 		messageArgs           = "message with args: %s"
 		commonErr             = errors.New("common error")
-		errFormat             = errBaseFormat + "Message: %s, Workaround: %s"
-		errFormatWithArg      = errBaseFormat + "Message: %s: %s, Workaround: %s"
-		errFormatWithRawCause = errBaseFormat + "Message: %s, RawCause: %s, Workaround: %s"
+		errFormat             = errBaseFormat + ", Message: %s, Workaround: %s"
+		errFormatWithArg      = errBaseFormat + ", Message: %s: %s, Workaround: %s"
+		errFormatWithRawCause = errBaseFormat + ", Message: %s, RawCause: %s, Workaround: %s"
 	)
 
 	require.Equal(t, errClass2Str[ClassDatabase], ClassDatabase.String())
@@ -179,7 +179,7 @@ func TestTerrorWithOperate(t *testing.T) {
 		err              = New(code, class, scope, level, message, workaround)
 		arg              = "arg"
 		commonErr        = perrors.New("common error")
-		errFormatWithArg = errBaseFormat + "Message: %s: %s, Workaround: %s"
+		errFormatWithArg = errBaseFormat + ", Message: %s: %s, Workaround: %s"
 	)
 
 	// test WithScope

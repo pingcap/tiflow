@@ -180,7 +180,7 @@ func (t *testShardMetaSuite) TestShardingMeta(c *check.C) {
 	c.Assert(meta.GetActiveDDLItem(table3), check.IsNil)
 	c.Assert(meta.InSequenceSharding(), check.IsFalse)
 	_, err = meta.ActiveDDLFirstLocation()
-	c.Assert(err, check.ErrorMatches, fmt.Sprintf("\\[.*\\]Message: activeIdx %d larger than length of global DDLItems: .*", meta.ActiveIdx()))
+	c.Assert(err, check.ErrorMatches, fmt.Sprintf("\\[.*\\], Message: activeIdx %d larger than length of global DDLItems: .*", meta.ActiveIdx()))
 
 	sqls, args = meta.FlushData(sourceID, tableID)
 	c.Assert(sqls, check.HasLen, 1)
@@ -235,7 +235,7 @@ func (t *testShardMetaSuite) TestShardingMetaWrongSequence(c *check.C) {
 	}
 	active, err = meta.AddItem(items[4])
 	c.Assert(active, check.IsFalse)
-	c.Assert(err, check.ErrorMatches, "\\[.*\\]Message: detect inconsistent DDL sequence from source .*, right DDL sequence should be .*")
+	c.Assert(err, check.ErrorMatches, "\\[.*\\], Message: detect inconsistent DDL sequence from source .*, right DDL sequence should be .*")
 }
 
 func (t *testShardMetaSuite) TestFlushLoadMeta(c *check.C) {
