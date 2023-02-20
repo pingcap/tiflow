@@ -116,10 +116,12 @@ func (s *sink) WriteEvents(txnEvents ...*eventsink.TxnCallbackableEvent) error {
 // Close closes the sink. It won't wait for all pending items backend handled.
 func (s *sink) Close() error {
 	atomic.StoreInt32(&s.closed, 1)
-	s.conflictDetector.Close()
 	for _, w := range s.workers {
 		w.Close()
 	}
+	// workers could call callback, which will send data to channel in conflict
+	// detector, so we can't close conflict detector until all workers are closed.
+	s.conflictDetector.Close()
 	if s.cancel != nil {
 		s.cancel()
 		s.cancel = nil
