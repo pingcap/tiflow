@@ -2837,7 +2837,10 @@ func (s *Syncer) handleQueryEvent(ev *replication.QueryEvent, ec eventContext, o
 	}
 
 	if _, ok := stmt.(ast.DDLNode); !ok {
-		return nil
+		qec.tctx.L().Info("ddl that dm doesn't handle, skip it", zap.String("event", "query"),
+			zap.Stringer("queryEventContext", qec))
+		*ec.lastLocation = *ec.currentLocation // before record skip location, update lastLocation
+		return s.recordSkipSQLsLocation(&ec)
 	}
 
 	if qec.shardingReSync != nil {
