@@ -413,9 +413,9 @@ var (
 		"craft codec invalid data",
 		errors.RFCCodeText("CDC:ErrCraftCodecInvalidData"),
 	)
-	ErrCodecRowTooLarge = errors.Normalize(
-		"codec single row too large",
-		errors.RFCCodeText("CDC:ErrCodecRowTooLarge"),
+	ErrMessageTooLarge = errors.Normalize(
+		"message is too large",
+		errors.RFCCodeText("CDC:ErrMessageTooLarge"),
 	)
 	ErrStorageSinkInvalidDateSeparator = errors.Normalize(
 		"date separator in cloud storage sink is invalid",

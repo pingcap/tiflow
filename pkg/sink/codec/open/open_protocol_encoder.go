@@ -71,7 +71,7 @@ func (d *BatchEncoder) AppendRowChangedEvent(
 			zap.Any("table", e.Table),
 			zap.Any("key", key),
 			zap.Any("value", value))
-		return cerror.ErrCodecRowTooLarge.GenWithStackByArgs()
+		return cerror.ErrMessageTooLarge.GenWithStackByArgs()
 	}
 
 	if len(d.messageBuf) == 0 ||

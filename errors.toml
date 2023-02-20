@@ -246,11 +246,6 @@ error = '''
 Codec invalid config
 '''
 
-["CDC:ErrCodecRowTooLarge"]
-error = '''
-codec single row too large
-'''
-
 ["CDC:ErrConsistentLevel"]
 error = '''
 consistent level (%s) not support
@@ -669,6 +664,11 @@ maxwell encode failed
 ["CDC:ErrMaxwellInvalidData"]
 error = '''
 maxwell invalid data
+'''
+
+["CDC:ErrMessageTooLarge"]
+error = '''
+message is too large
 '''
 
 ["CDC:ErrMetaListDatabases"]

@@ -330,7 +330,7 @@ func (c *JSONBatchEncoder) AppendRowChangedEvent(
 			zap.Int("length", length),
 			zap.Any("table", e.Table),
 			zap.Any("value", value))
-		return cerror.ErrCodecRowTooLarge.GenWithStackByArgs()
+		return cerror.ErrMessageTooLarge.GenWithStackByArgs()
 	}
 	m := &common.Message{
 		Key:      nil,

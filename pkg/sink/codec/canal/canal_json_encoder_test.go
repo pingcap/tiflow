@@ -168,6 +168,7 @@ func TestBatching(t *testing.T) {
 	encoder := newJSONBatchEncoder(&common.Config{
 		EnableTiDBExtension: false,
 		Terminator:          "",
+		MaxMessageBytes:     config.DefaultMaxMessageBytes,
 	})
 	require.NotNil(t, encoder)
 
@@ -325,6 +326,7 @@ func TestCanalJSONAppendRowChangedEventWithCallback(t *testing.T) {
 	encoder := newJSONBatchEncoder(&common.Config{
 		EnableTiDBExtension: true,
 		Terminator:          "",
+		MaxMessageBytes:     config.DefaultMaxMessageBytes,
 	})
 	require.NotNil(t, encoder)
 
