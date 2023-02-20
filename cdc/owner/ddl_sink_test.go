@@ -410,6 +410,10 @@ func TestAddSpecialComment(t *testing.T) {
 			"ALTER TABLE t1 TTL_ENABLE='OFF'",
 			"ALTER TABLE `t1`",
 		},
+		{
+			"ALTER TABLE t1 TTL_JOB_INTERVAL='7h'",
+			"ALTER TABLE `t1` /*T![ttl] TTL_JOB_INTERVAL = '7h' */",
+		},
 	}
 	for _, ca := range testCase {
 		re, err := addSpecialComment(ca.input)
