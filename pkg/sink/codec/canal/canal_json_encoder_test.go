@@ -400,3 +400,32 @@ func TestCanalJSONAppendRowChangedEventWithCallback(t *testing.T) {
 	msgs[4].Callback()
 	require.Equal(t, 15, count, "expected one callback be called")
 }
+
+func TestMaxMessageBytes(t *testing.T) {
+	// the size of `testEvent` after being encoded by canal-json is 200
+	testEvent := &model.RowChangedEvent{
+		CommitTs: 1,
+		Table:    &model.TableName{Schema: "a", Table: "b"},
+		Columns: []*model.Column{{
+			Name:  "col1",
+			Type:  mysql.TypeVarchar,
+			Value: []byte("aa"),
+		}},
+	}
+
+	ctx := context.Background()
+	topic := ""
+
+	// the test message length is smaller than max-message-bytes
+	maxMessageBytes := 300
+	cfg := common.NewConfig(config.ProtocolCanalJSON).WithMaxMessageBytes(maxMessageBytes)
+	encoder := NewJSONBatchEncoderBuilder(cfg).Build()
+	err := encoder.AppendRowChangedEvent(ctx, topic, testEvent, nil)
+	require.Nil(t, err)
+
+	// the test message length is larger than max-message-bytes
+	cfg = cfg.WithMaxMessageBytes(100)
+	encoder = NewJSONBatchEncoderBuilder(cfg).Build()
+	err = encoder.AppendRowChangedEvent(ctx, topic, testEvent, nil)
+	require.NotNil(t, err)
+}
