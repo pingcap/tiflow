@@ -326,7 +326,8 @@ func (c *JSONBatchEncoder) AppendRowChangedEvent(
 		log.Warn("Single message too large for canal-json",
 			zap.Int("maxMessageBytes", c.maxMessageBytes),
 			zap.Int("length", length),
-			zap.Any("table", e.Table))
+			zap.Any("table", e.Table),
+			zap.Any("value", value))
 		return cerror.ErrCodecRowTooLarge.GenWithStackByArgs()
 	}
 	m := &common.Message{
