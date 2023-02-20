@@ -141,7 +141,10 @@ func NewCloudStorageSink(ctx context.Context,
 	go func() {
 		defer s.wg.Done()
 		if err := s.run(ctx); err != nil && errors.Cause(err) != context.Canceled {
-			errCh <- err
+			select {
+			case <-ctx.Done():
+			case errCh <- err:
+			}
 		}
 	}()
 
@@ -157,7 +160,8 @@ func (s *dmlSink) run(ctx context.Context) error {
 
 	// run the encoding workers.
 	for i := 0; i < defaultEncodingConcurrency; i++ {
-		worker := s.encodingWorkers[i]
+		idx := i
+		worker := s.encodingWorkers[idx]
 		eg.Go(func() error {
 			return worker.run(ctx)
 		})
