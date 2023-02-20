@@ -81,7 +81,7 @@ func (e *EventTableSink[E, P]) AppendRowChangedEvents(rows ...*model.RowChangedE
 func (e *EventTableSink[E, P]) UpdateResolvedTs(resolvedTs model.ResolvedTs) error {
 	// If resolvedTs is not greater than maxResolvedTs,
 	// the flush is unnecessary.
-	if !e.maxResolvedTs.Less(resolvedTs) {
+	if e.maxResolvedTs.EqualOrGreater(resolvedTs) {
 		return nil
 	}
 	e.maxResolvedTs = resolvedTs

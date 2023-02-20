@@ -121,8 +121,7 @@ func (ra *RedoApplier) consumeLogs(ctx context.Context) error {
 	}
 	log.Info("apply redo log starts", zap.Uint64("checkpointTs", checkpointTs), zap.Uint64("resolvedTs", resolvedTs))
 
-	cachedRows := make([]*model.RowChangedEvent, 0, emitBatch)
-	tableResolvedTsMap := make(map[model.TableID]model.Ts)
+	tableResolvedTsMap := make(map[model.TableID]model.ResolvedTs)
 	appliedLogCount := 0
 	for {
 		redoLogs, err := ra.rd.ReadNextLog(ctx, readBatch)
@@ -145,41 +144,36 @@ func (ra *RedoApplier) consumeLogs(ctx context.Context) error {
 				ra.tableSinks[tableID] = tableSink
 			}
 			if _, ok := tableResolvedTsMap[tableID]; !ok {
-				// Safe to use checkpointTs - 1 as the resolvedTs of a table.
-				tableResolvedTsMap[tableID] = checkpointTs - 1
+				tableResolvedTsMap[tableID] = model.NewResolvedTs(checkpointTs)
 			}
-			if len(cachedRows) >= emitBatch {
-				for _, row := range cachedRows {
-					tableID := row.Table.TableID
-					ra.tableSinks[tableID].AppendRowChangedEvents(row)
+			ra.tableSinks[tableID].AppendRowChangedEvents(redoLog)
+			if redoLog.CommitTs > tableResolvedTsMap[tableID].Ts {
+				// Use batch resolvedTs to flush data as quickly as possible.
+				tableResolvedTsMap[tableID] = model.ResolvedTs{
+					Mode:    model.BatchResolvedMode,
+					Ts:      redoLog.CommitTs,
+					BatchID: 1,
 				}
-				cachedRows = make([]*model.RowChangedEvent, 0, emitBatch)
-			}
-			cachedRows = append(cachedRows, redoLog)
-			if redoLog.CommitTs > tableResolvedTsMap[tableID] {
-				tableResolvedTsMap[tableID] = redoLog.CommitTs
 			}
 		}
 
-		for tableID, tableLastResolvedTs := range tableResolvedTsMap {
-			if err := ra.tableSinks[tableID].UpdateResolvedTs(
-				model.NewResolvedTs(tableLastResolvedTs)); err != nil {
+		for tableID, tableResolvedTs := range tableResolvedTsMap {
+			if err := ra.tableSinks[tableID].UpdateResolvedTs(tableResolvedTs); err != nil {
 				return err
+			}
+			if tableResolvedTs.IsBatchMode() {
+				tableResolvedTsMap[tableID] = tableResolvedTs.AdvanceBatch()
 			}
 		}
 	}
-	for _, row := range cachedRows {
-		tableID := row.Table.TableID
-		ra.tableSinks[tableID].AppendRowChangedEvents(row)
-	}
+
 	const warnDuration = 3 * time.Minute
 	const flushWaitDuration = 200 * time.Millisecond
 	ticker := time.NewTicker(warnDuration)
 	defer ticker.Stop()
 	for tableID := range tableResolvedTsMap {
 		resolvedTs := model.NewResolvedTs(resolvedTs)
-		if err := ra.tableSinks[tableID].UpdateResolvedTs(
-			resolvedTs); err != nil {
+		if err := ra.tableSinks[tableID].UpdateResolvedTs(resolvedTs); err != nil {
 			return err
 		}
 		// Make sure all events are flushed to downstream.
