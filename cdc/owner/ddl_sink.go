@@ -27,9 +27,9 @@ import (
 	"github.com/pingcap/tidb/parser/format"
 	"github.com/pingcap/tiflow/cdc/contextutil"
 	"github.com/pingcap/tiflow/cdc/model"
-	"github.com/pingcap/tiflow/cdc/sink/mysql"
 	sinkv2 "github.com/pingcap/tiflow/cdc/sinkv2/ddlsink"
 	"github.com/pingcap/tiflow/cdc/sinkv2/ddlsink/factory"
+	"github.com/pingcap/tiflow/cdc/syncpointstore"
 	cerror "github.com/pingcap/tiflow/pkg/errors"
 	"github.com/pingcap/tiflow/pkg/util"
 	"go.uber.org/zap"
@@ -61,7 +61,7 @@ type DDLSink interface {
 
 type ddlSinkImpl struct {
 	lastSyncPoint  model.Ts
-	syncPointStore mysql.SyncPointStore
+	syncPointStore syncpointstore.SyncPointStore
 
 	// It is used to record the checkpointTs and the names of the table at that time.
 	mu struct {
@@ -127,7 +127,7 @@ func ddlSinkInitializer(ctx context.Context, a *ddlSinkImpl) error {
 	if !a.info.Config.EnableSyncPoint {
 		return nil
 	}
-	syncPointStore, err := mysql.NewSyncPointStore(
+	syncPointStore, err := syncpointstore.NewSyncPointStore(
 		ctx, a.changefeedID, a.info.SinkURI, a.info.Config.SyncPointRetention)
 	if err != nil {
 		return errors.Trace(err)
@@ -205,23 +205,12 @@ func (s *ddlSinkImpl) run(ctx context.Context) {
 				}
 
 			case ddl := <-s.ddlCh:
-				var err error
-				ddl.Query, err = addSpecialComment(ddl.Query)
-				if err != nil {
-					log.Error("Add special comment failed",
-						zap.String("namespace", s.changefeedID.Namespace),
-						zap.String("changefeed", s.changefeedID.ID),
-						zap.Error(err),
-						zap.Any("ddl", ddl))
-					s.reportErr(err)
-					return
-				}
 				log.Info("begin emit ddl event",
 					zap.String("namespace", s.changefeedID.Namespace),
 					zap.String("changefeed", s.changefeedID.ID),
 					zap.Any("DDL", ddl))
 
-				err = s.sinkV2.WriteDDLEvent(ctx, ddl)
+				err := s.sinkV2.WriteDDLEvent(ctx, ddl)
 				failpoint.Inject("InjectChangefeedDDLError", func() {
 					err = cerror.ErrExecDDLFailed.GenWithStackByArgs()
 				})
@@ -279,7 +268,7 @@ func (s *ddlSinkImpl) emitDDLEvent(ctx context.Context, ddl *model.DDLEvent) (bo
 	s.mu.Lock()
 	if ddl.Done {
 		// the DDL event is executed successfully, and done is true
-		log.Info("ddl already executed",
+		log.Info("ddl already executed, skip it",
 			zap.String("namespace", s.changefeedID.Namespace),
 			zap.String("changefeed", s.changefeedID.ID),
 			zap.Any("DDL", ddl))
@@ -287,7 +276,6 @@ func (s *ddlSinkImpl) emitDDLEvent(ctx context.Context, ddl *model.DDLEvent) (bo
 		s.mu.Unlock()
 		return true, nil
 	}
-	s.mu.Unlock()
 
 	ddlSentTs := s.ddlSentTsMap[ddl]
 	if ddl.CommitTs <= ddlSentTs {
@@ -296,8 +284,23 @@ func (s *ddlSinkImpl) emitDDLEvent(ctx context.Context, ddl *model.DDLEvent) (bo
 			zap.String("changefeed", s.changefeedID.ID),
 			zap.Uint64("ddlSentTs", ddlSentTs), zap.Any("DDL", ddl))
 		// the DDL event is executing and not finished yet, return false
+		s.mu.Unlock()
 		return false, nil
 	}
+
+	query, err := addSpecialComment(ddl.Query)
+	if err != nil {
+		log.Error("Add special comment failed",
+			zap.String("namespace", s.changefeedID.Namespace),
+			zap.String("changefeed", s.changefeedID.ID),
+			zap.Error(err),
+			zap.Any("ddl", ddl))
+		s.mu.Unlock()
+		return false, errors.Trace(err)
+	}
+	ddl.Query = query
+	s.mu.Unlock()
+
 	select {
 	case <-ctx.Done():
 		return false, errors.Trace(ctx.Err())

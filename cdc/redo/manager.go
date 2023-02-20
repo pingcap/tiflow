@@ -137,7 +137,7 @@ type ManagerImpl struct {
 
 	rwlock    sync.RWMutex
 	writer    writer.RedoLogWriter
-	logBuffer *chann.Chann[cacheEvents]
+	logBuffer *chann.DrainableChann[cacheEvents]
 	closed    int32
 
 	flushing      int64
@@ -189,7 +189,7 @@ func NewManager(ctx context.Context, cfg *config.ConsistentConfig, opts *Manager
 
 	// TODO: better to wait background goroutines after the context is canceled.
 	if m.opts.EnableBgRunner {
-		m.logBuffer = chann.New[cacheEvents]()
+		m.logBuffer = chann.NewAutoDrainChann[cacheEvents]()
 		go m.bgUpdateLog(ctx, cfg.FlushIntervalInMs, opts.ErrCh)
 	}
 	if m.opts.EnableGCRunner {
@@ -520,9 +520,7 @@ func (m *ManagerImpl) bgUpdateLog(
 		defer m.rwlock.Unlock()
 		atomic.StoreInt32(&m.closed, 1)
 
-		m.logBuffer.Close()
-		for range m.logBuffer.Out() {
-		}
+		m.logBuffer.CloseAndDrain()
 		if err := m.writer.Close(); err != nil {
 			log.Error("redo manager fails to close writer",
 				zap.String("namespace", m.changeFeedID.Namespace),

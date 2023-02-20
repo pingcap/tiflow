@@ -346,7 +346,7 @@ func TestManagerError(t *testing.T) {
 	logMgr, err := NewManager(ctx, cfg, opts)
 	require.Nil(t, err)
 	logMgr.writer = writer.NewInvalidBlackHoleWriter(logMgr.writer)
-	logMgr.logBuffer = chann.New[cacheEvents]()
+	logMgr.logBuffer = chann.NewAutoDrainChann[cacheEvents]()
 	go logMgr.bgUpdateLog(ctx, cfg.FlushIntervalInMs, errCh)
 
 	testCases := []struct {
@@ -379,7 +379,7 @@ func TestManagerError(t *testing.T) {
 	logMgr, err = NewManager(ctx, cfg, opts)
 	require.Nil(t, err)
 	logMgr.writer = writer.NewInvalidBlackHoleWriter(logMgr.writer)
-	logMgr.logBuffer = chann.New[cacheEvents]()
+	logMgr.logBuffer = chann.NewAutoDrainChann[cacheEvents]()
 	go logMgr.bgUpdateLog(ctx, cfg.FlushIntervalInMs, errCh)
 
 	// bgUpdateLog exists because of writer.FlushLog failure.

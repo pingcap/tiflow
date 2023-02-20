@@ -16,6 +16,7 @@ package metrics
 import (
 	"github.com/pingcap/tiflow/cdc/sinkv2/metrics/cloudstorage"
 	"github.com/pingcap/tiflow/cdc/sinkv2/metrics/mq"
+	"github.com/pingcap/tiflow/cdc/sinkv2/metrics/tablesink"
 	"github.com/pingcap/tiflow/cdc/sinkv2/metrics/txn"
 	"github.com/prometheus/client_golang/prometheus"
 )
@@ -72,6 +73,7 @@ func InitMetrics(registry *prometheus.Registry) {
 	registry.MustRegister(LargeRowSizeHistogram)
 	registry.MustRegister(ExecutionErrorCounter)
 
+	tablesink.InitMetrics(registry)
 	txn.InitMetrics(registry)
 	mq.InitMetrics(registry)
 	cloudstorage.InitMetrics(registry)
