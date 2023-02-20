@@ -120,7 +120,7 @@ func newDMLWorker(
 }
 
 // run creates a set of background goroutines.
-func (d *dmlWorker) run(ctx context.Context, ch *chann.Chann[eventFragment]) error {
+func (d *dmlWorker) run(ctx context.Context, ch *chann.DrainableChann[eventFragment]) error {
 	log.Debug("dml worker started", zap.Int("workerID", d.id),
 		zap.String("namespace", d.changeFeedID.Namespace),
 		zap.String("changefeed", d.changeFeedID.ID))
@@ -273,7 +273,9 @@ func (d *dmlWorker) writeDataFile(ctx context.Context, path string, events []eve
 // dispatchFlushTasks dispatches flush tasks in two conditions:
 // 1. the flush interval exceeds the upper limit.
 // 2. the file size exceeds the upper limit.
-func (d *dmlWorker) dispatchFlushTasks(ctx context.Context, ch *chann.Chann[eventFragment]) error {
+func (d *dmlWorker) dispatchFlushTasks(ctx context.Context,
+	ch *chann.DrainableChann[eventFragment],
+) error {
 	tableSet := make(map[wrappedTable]struct{})
 	ticker := time.NewTicker(d.config.FlushInterval)
 
