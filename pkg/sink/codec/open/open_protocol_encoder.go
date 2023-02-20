@@ -66,7 +66,7 @@ func (d *BatchEncoder) AppendRowChangedEvent(
 	length := len(key) + len(value) + common.MaxRecordOverhead + 16 + 8
 	if length > d.MaxMessageBytes {
 		log.Warn("Single message too large for open-protocol",
-			zap.Int("max-message-bytes", d.MaxMessageBytes),
+			zap.Int("maxMessageBytes", d.MaxMessageBytes),
 			zap.Int("length", length),
 			zap.Any("table", e.Table))
 		return cerror.ErrCodecRowTooLarge.GenWithStackByArgs()

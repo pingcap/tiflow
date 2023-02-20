@@ -321,10 +321,10 @@ func (c *JSONBatchEncoder) AppendRowChangedEvent(
 	if len(c.terminator) > 0 {
 		value = append(value, c.terminator...)
 	}
-	length := len(value)
-	if len(value) > c.maxMessageBytes {
+	length := len(value) + common.MaxRecordOverhead
+	if length > c.maxMessageBytes {
 		log.Warn("Single message too large for canal-json",
-			zap.Int("max-message-bytes", c.maxMessageBytes),
+			zap.Int("maxMessageBytes", c.maxMessageBytes),
 			zap.Int("length", length),
 			zap.Any("table", e.Table))
 		return cerror.ErrCodecRowTooLarge.GenWithStackByArgs()
