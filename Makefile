@@ -109,8 +109,9 @@ cdc:
 kafka_consumer:
 	$(GOBUILD) -ldflags '$(LDFLAGS)' -o bin/cdc_kafka_consumer ./cmd/kafka-consumer/main.go
 
-install:
-	go install ./...
+cdc_test_image: 
+	@which docker || (echo "docker not found in ${PATH}"; exit 1)
+	docker build --platform linux/amd64 -f deployments/ticdc/docker/test.Dockerfile -t cdc:test ./ 
 
 unit_test: check_failpoint_ctl generate_mock generate-msgp-code generate-protobuf
 	mkdir -p "$(TEST_DIR)"
