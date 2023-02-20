@@ -246,6 +246,11 @@ error = '''
 Codec invalid config
 '''
 
+["CDC:ErrCodecRowTooLarge"]
+error = '''
+codec single row too large
+'''
+
 ["CDC:ErrConsistentLevel"]
 error = '''
 consistent level (%s) not support
