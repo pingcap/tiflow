@@ -22,14 +22,14 @@ import (
 
 	"github.com/pingcap/errors"
 	"github.com/pingcap/tiflow/cdc/model"
-	"github.com/pingcap/tiflow/cdc/sink"
+	"github.com/pingcap/tiflow/cdc/sinkv2/ddlsink"
 	cerror "github.com/pingcap/tiflow/pkg/errors"
 	"github.com/pingcap/tiflow/pkg/retry"
 	"github.com/stretchr/testify/require"
 )
 
 type mockSink struct {
-	sink.Sink
+	ddlsink.DDLEventSink
 	checkpointTs model.Ts
 	ddl          *model.DDLEvent
 	ddlMu        sync.Mutex

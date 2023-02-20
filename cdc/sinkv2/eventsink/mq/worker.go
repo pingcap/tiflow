@@ -20,7 +20,6 @@ import (
 	"github.com/pingcap/errors"
 	"github.com/pingcap/log"
 	"github.com/pingcap/tiflow/cdc/model"
-	"github.com/pingcap/tiflow/cdc/sink/codec"
 	"github.com/pingcap/tiflow/cdc/sinkv2/eventsink"
 	"github.com/pingcap/tiflow/cdc/sinkv2/eventsink/mq/dmlproducer"
 	"github.com/pingcap/tiflow/cdc/sinkv2/metrics"
@@ -28,6 +27,7 @@ import (
 	"github.com/pingcap/tiflow/cdc/sinkv2/tablesink/state"
 	"github.com/pingcap/tiflow/pkg/chann"
 	"github.com/pingcap/tiflow/pkg/config"
+	"github.com/pingcap/tiflow/pkg/sink/codec"
 	"github.com/prometheus/client_golang/prometheus"
 	"go.uber.org/zap"
 	"golang.org/x/sync/errgroup"
@@ -215,6 +215,7 @@ func (w *worker) batch(
 			return index, nil
 		}
 		if msg.rowEvent != nil {
+			w.statistics.ObserveRows(msg.rowEvent.Event)
 			events[index] = msg
 			index++
 		}
@@ -233,6 +234,7 @@ func (w *worker) batch(
 			}
 
 			if msg.rowEvent != nil {
+				w.statistics.ObserveRows(msg.rowEvent.Event)
 				events[index] = msg
 				index++
 			}

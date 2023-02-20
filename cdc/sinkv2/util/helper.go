@@ -18,10 +18,10 @@ import (
 	"net/url"
 	"strings"
 
-	"github.com/pingcap/tiflow/cdc/sink/codec/common"
-	"github.com/pingcap/tiflow/cdc/sink/mq/manager"
+	"github.com/pingcap/tiflow/cdc/sinkv2/eventsink/mq/manager"
 	"github.com/pingcap/tiflow/pkg/config"
 	cerror "github.com/pingcap/tiflow/pkg/errors"
+	"github.com/pingcap/tiflow/pkg/sink/codec/common"
 	"github.com/pingcap/tiflow/pkg/sink/kafka"
 )
 
