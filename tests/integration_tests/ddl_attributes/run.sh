@@ -45,6 +45,22 @@ function run() {
 		check_contains "CREATE TABLE \`placement_t1\` "
 	run_sql "show create table ddl_attributes.placement_t2;" ${DOWN_TIDB_HOST} ${DOWN_TIDB_PORT} &&
 		check_contains "CREATE TABLE \`placement_t2\` "
+
+	TTL_MARK='![ttl]'
+	CREATE_TTL_SQL_CONTAINS1="/*T${TTL_MARK} TTL=\`t\` + INTERVAL 1 DAY */ /*T${TTL_MARK} TTL_ENABLE='OFF' */ /*T${TTL_MARK} TTL_JOB_INTERVAL='1h' */"
+	CREATE_TTL_SQL_CONTAINS2="/*T${TTL_MARK} TTL=\`t\` + INTERVAL 1 DAY */ /*T${TTL_MARK} TTL_ENABLE='OFF' */ /*T${TTL_MARK} TTL_JOB_INTERVAL='7h' */"
+
+	run_sql "show create table ddl_attributes.ttl_t1;" ${DOWN_TIDB_HOST} ${DOWN_TIDB_PORT} &&
+		check_contains "$CREATE_TTL_SQL_CONTAINS1"
+	run_sql "show create table ddl_attributes.ttl_t2;" ${DOWN_TIDB_HOST} ${DOWN_TIDB_PORT} &&
+		check_contains "$CREATE_TTL_SQL_CONTAINS1"
+	run_sql "show create table ddl_attributes.ttl_t3;" ${DOWN_TIDB_HOST} ${DOWN_TIDB_PORT} &&
+		check_contains "$CREATE_TTL_SQL_CONTAINS1"
+	run_sql "show create table ddl_attributes.ttl_t4;" ${DOWN_TIDB_HOST} ${DOWN_TIDB_PORT} &&
+		check_not_contains "TTL_ENABLE" &&
+		check_not_contains "TTL="
+	run_sql "show create table ddl_attributes.ttl_t5;" ${DOWN_TIDB_HOST} ${DOWN_TIDB_PORT} &&
+		check_contains "$CREATE_TTL_SQL_CONTAINS2"
 }
 
 trap stop_tidb_cluster EXIT
