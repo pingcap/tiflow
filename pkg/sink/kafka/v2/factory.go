@@ -304,11 +304,11 @@ func (a *asyncWriter) AsyncSend(ctx context.Context, topic string,
 	default:
 	}
 	return a.w.WriteMessages(ctx, kafka.Message{
-		Topic:     topic,
-		Partition: int(partition),
-		Key:       key,
-		Value:     value,
-		Metadata:  callback,
+		Topic:      topic,
+		Partition:  int(partition),
+		Key:        key,
+		Value:      value,
+		WriterData: callback,
 	})
 }
 
@@ -333,7 +333,7 @@ func (a *asyncWriter) AsyncRunCallback(ctx context.Context) error {
 			return errors.Trace(err)
 		case msgs := <-a.successes:
 			for _, ack := range msgs {
-				callback := ack.Metadata.(func())
+				callback := ack.WriterData.(func())
 				if callback != nil {
 					callback()
 				}
