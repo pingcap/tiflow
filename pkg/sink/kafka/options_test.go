@@ -128,17 +128,17 @@ func TestClientID(t *testing.T) {
 		{
 			"domain:1234", "123-121-121-121",
 			"", false,
-			"TiCDC_producer_owner_domain_1234_default_123-121-121-121",
+			"TiCDC_producer_domain_1234_default_123-121-121-121",
 		},
 		{
 			"127.0.0.1:1234", "123-121-121-121",
 			"", false,
-			"TiCDC_producer_owner_127.0.0.1_1234_default_123-121-121-121",
+			"TiCDC_producer_127.0.0.1_1234_default_123-121-121-121",
 		},
 		{
 			"127.0.0.1:1234?:,\"", "123-121-121-121",
 			"", false,
-			"TiCDC_producer_owner_127.0.0.1_1234_____default_123-121-121-121",
+			"TiCDC_producer_127.0.0.1_1234_____default_123-121-121-121",
 		},
 		{
 			"中文", "123-121-121-121",

@@ -19,7 +19,6 @@ import (
 
 	"github.com/Shopify/sarama"
 	"github.com/pingcap/errors"
-	cerror "github.com/pingcap/tiflow/pkg/errors"
 	"github.com/pingcap/tiflow/pkg/security"
 	"github.com/stretchr/testify/require"
 )
@@ -30,9 +29,6 @@ func TestNewSaramaConfig(t *testing.T) {
 	_, err := NewSaramaConfig(options)
 	require.Regexp(t, "invalid version.*", errors.Cause(err))
 	options.Version = "2.6.0"
-	options.ClientID = "^invalid$"
-	_, err = NewSaramaConfig(options)
-	require.True(t, cerror.ErrKafkaInvalidClientID.Equal(err))
 
 	options.ClientID = "test-kafka-client"
 	compressionCases := []struct {

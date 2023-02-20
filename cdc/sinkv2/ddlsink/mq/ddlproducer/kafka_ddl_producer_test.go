@@ -59,6 +59,7 @@ func getOptions(addr string) *kafka.Options {
 	// Ref: https://github.com/Shopify/sarama/blob/89707055369768913defac
 	// 030c15cf08e9e57925/async_producer_test.go#L1445-L1447
 	options.Version = "0.9.0.0"
+	options.ClientID = "test-client"
 	options.PartitionNum = int32(kafka.DefaultMockPartitionNum)
 	options.AutoCreate = false
 	options.BrokerEndpoints = strings.Split(addr, ",")
@@ -84,11 +85,11 @@ func TestSyncBroadcastMessage(t *testing.T) {
 	require.NoError(t, err)
 
 	p, err := NewKafkaDDLProducer(ctx, factory, adminClient)
-	require.Nil(t, err)
+	require.NoError(t, err)
 
 	err = p.SyncBroadcastMessage(ctx, topic,
 		kafka.DefaultMockPartitionNum, &common.Message{Ts: 417318403368288260})
-	require.Nil(t, err)
+	require.NoError(t, err)
 
 	p.Close()
 	err = p.SyncBroadcastMessage(ctx, topic,
