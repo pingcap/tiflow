@@ -902,7 +902,7 @@ var (
 	ErrPreviousGTIDNotExist = New(codePreviousGTIDNotExist, ClassFunctional, ScopeInternal, LevelHigh, "no previous gtid event from binlog %s", "")
 
 	// pkg/utils.
-	ErrNoMasterStatus            = New(codeNoMasterStatus, ClassFunctional, ScopeUpstream, LevelMedium, "upstream returns an empty result for SHOW MASTER STATUS", "Please check the upstream settings like privileges, RDS settings to read data from SHOW MASTER STATUS.")
+	ErrNoMasterStatus            = New(codeNoMasterStatus, ClassFunctional, ScopeUpstream, LevelMedium, "upstream returns an empty result for SHOW MASTER STATUS", "Please make sure binlog is enabled, and check the upstream settings like privileges, RDS settings to read data from SHOW MASTER STATUS.")
 	ErrIncorrectReturnColumnsNum = New(codeIncorrectReturnColumnsNum, ClassFunctional, ScopeUpstream, LevelMedium, "upstream returns incorrect number of columns for SHOW MASTER STATUS", "Please check the upstream settings like privileges, RDS settings to read data from SHOW MASTER STATUS.")
 
 	// pkg/binlog.

@@ -16,8 +16,10 @@ package checker
 import (
 	"testing"
 
+	"github.com/pingcap/errors"
 	"github.com/pingcap/tidb/parser"
 	"github.com/pingcap/tidb/parser/ast"
+	"github.com/pingcap/tiflow/dm/pkg/terror"
 	"github.com/stretchr/testify/require"
 )
 
@@ -122,4 +124,13 @@ func TestGetColumnsAndIgnorable(t *testing.T) {
 		columns := getColumnsAndIgnorable(stmt.(*ast.CreateTableStmt))
 		require.Equal(t, c.expected, columns)
 	}
+}
+
+func TestMarkCheckError(t *testing.T) {
+	res := &Result{}
+	markCheckError(res, terror.ErrNoMasterStatus.Generate())
+	require.Equal(t, terror.ErrNoMasterStatus.Workaround(), res.Instruction)
+	res = &Result{}
+	markCheckError(res, errors.New("other err"))
+	require.Zero(t, len(res.Instruction))
 }
