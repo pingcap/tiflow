@@ -81,6 +81,9 @@ func newReader(ctx context.Context, cfg *readerConfig) ([]fileReader, error) {
 	if cfg == nil {
 		return nil, cerror.WrapError(cerror.ErrRedoConfigInvalid, errors.New("readerConfig can not be nil"))
 	}
+	if cfg.workerNums == 0 {
+		cfg.workerNums = defaultWorkerNum
+	}
 
 	if cfg.useExternalStorage {
 		extStorage, err := redo.InitExternalStorage(ctx, cfg.uri)
@@ -88,13 +91,10 @@ func newReader(ctx context.Context, cfg *readerConfig) ([]fileReader, error) {
 			return nil, err
 		}
 
-		err = downLoadToLocal(ctx, cfg.dir, extStorage, cfg.fileType)
+		err = downLoadToLocal(ctx, cfg.dir, extStorage, cfg.fileType, cfg.workerNums)
 		if err != nil {
 			return nil, cerror.WrapError(cerror.ErrRedoDownloadFailed, err)
 		}
-	}
-	if cfg.workerNums == 0 {
-		cfg.workerNums = defaultWorkerNum
 	}
 
 	rr, err := openSelectedFiles(ctx, cfg.dir, cfg.fileType, cfg.startTs, cfg.workerNums)
@@ -141,17 +141,26 @@ func selectDownLoadFile(
 }
 
 func downLoadToLocal(
-	ctx context.Context, dir string, extStorage storage.ExternalStorage, fixedType string,
+	ctx context.Context, dir string,
+	extStorage storage.ExternalStorage,
+	fixedType string, workerNum int,
 ) error {
 	files, err := selectDownLoadFile(ctx, extStorage, fixedType)
 	if err != nil {
 		return err
 	}
 
+	limit := make(chan struct{}, workerNum)
 	eg, eCtx := errgroup.WithContext(ctx)
 	for _, file := range files {
+		select {
+		case <-ctx.Done():
+			return ctx.Err()
+		case limit <- struct{}{}:
+		}
 		f := file
 		eg.Go(func() error {
+			defer func() { <-limit }()
 			data, err := extStorage.ReadFile(eCtx, f)
 			if err != nil {
 				return cerror.WrapError(cerror.ErrExternalStorageAPI, err)
