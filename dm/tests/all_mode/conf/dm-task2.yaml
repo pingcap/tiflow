@@ -1,0 +1,17 @@
+---
+name: test
+task-mode: all
+
+target-database:
+  host: "127.0.0.1"
+  port: 4000
+  user: "root"
+  password: ""
+
+mysql-instances:
+  - source-id: "mysql-replica-01"
+    black-white-list:  "instance"
+
+black-white-list:
+  instance:
+    do-dbs: ["all_mode"]
