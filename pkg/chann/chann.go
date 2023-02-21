@@ -122,6 +122,7 @@ type Chann[T any] struct {
 // Note that although the input arguments are  specified as variadic parameter
 // list, however, the function panics if there is more than one option is
 // provided.
+// DEPRECATED: use NewDrainableChann instead.
 func New[T any](opts ...Opt) *Chann[T] {
 	cfg := &config{
 		cap: -1, len: 0,
@@ -160,6 +161,7 @@ func (ch *Chann[T]) In() chan<- T { return ch.in }
 func (ch *Chann[T]) Out() <-chan T { return ch.out }
 
 // Close closes the channel gracefully.
+// DEPRECATED: use CloseAndDrain instead.
 func (ch *Chann[T]) Close() {
 	switch ch.cfg.typ {
 	case buffered, unbuffered:

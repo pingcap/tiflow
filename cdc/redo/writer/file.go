@@ -45,8 +45,7 @@ const (
 	// pageBytes is the alignment for flushing records to the backing Writer.
 	// It should be a multiple of the minimum sector size so that log can safely
 	// distinguish between torn writes and ordinary data corruption.
-	pageBytes        = 8 * redo.MinSectorSize
-	defaultS3Timeout = 15 * time.Second
+	pageBytes = 8 * redo.MinSectorSize
 )
 
 var (
@@ -298,7 +297,9 @@ func (w *Writer) Close() error {
 	common.RedoWriteBytesGauge.
 		DeleteLabelValues(w.cfg.ChangeFeedID.Namespace, w.cfg.ChangeFeedID.ID)
 
-	return w.close()
+	ctx, cancel := context.WithTimeout(context.Background(), redo.CloseTimeout)
+	defer cancel()
+	return w.close(ctx)
 }
 
 // IsRunning implement IsRunning interface
@@ -310,7 +311,7 @@ func (w *Writer) isGCRunning() bool {
 	return w.gcRunning.Load()
 }
 
-func (w *Writer) close() error {
+func (w *Writer) close(ctx context.Context) error {
 	if w.file == nil {
 		return nil
 	}
@@ -358,14 +359,11 @@ func (w *Writer) close() error {
 	// We only write content to S3 before closing the local file.
 	// By this way, we no longer need renaming object in S3.
 	if w.cfg.UseExternalStorage {
-		ctx, cancel := context.WithTimeout(context.Background(), defaultS3Timeout)
-		defer cancel()
-
 		err = w.writeToS3(ctx, w.ongoingFilePath)
 		if err != nil {
 			w.file.Close()
 			w.file = nil
-			return cerror.WrapError(cerror.ErrS3StorageAPI, err)
+			return cerror.WrapError(cerror.ErrExternalStorageAPI, err)
 		}
 	}
 
@@ -448,7 +446,9 @@ func (w *Writer) newPageWriter() error {
 }
 
 func (w *Writer) rotate() error {
-	if err := w.close(); err != nil {
+	ctx, cancel := context.WithTimeout(context.Background(), redo.DefaultTimeout)
+	defer cancel()
+	if err := w.close(ctx); err != nil {
 		return err
 	}
 	return w.openNew()
@@ -489,7 +489,7 @@ func (w *Writer) GC(checkPointTs uint64) error {
 				errs = multierr.Append(errs, err)
 			}
 			if errs != nil {
-				errs = cerror.WrapError(cerror.ErrS3StorageAPI, errs)
+				errs = cerror.WrapError(cerror.ErrExternalStorageAPI, errs)
 				log.Warn("delete redo log in s3 fail", zap.Error(errs))
 			}
 		}()
@@ -616,7 +616,7 @@ func (w *Writer) writeToS3(ctx context.Context, name string) error {
 	// Key in s3: aws.String(rs.options.Prefix + name), prefix should be changefeed name
 	err = w.storage.WriteFile(ctx, filepath.Base(name), fileData)
 	if err != nil {
-		return cerror.WrapError(cerror.ErrS3StorageAPI, err)
+		return cerror.WrapError(cerror.ErrExternalStorageAPI, err)
 	}
 
 	// in case the page cache piling up triggered the OS memory reclaming which may cause

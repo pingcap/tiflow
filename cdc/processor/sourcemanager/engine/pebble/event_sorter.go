@@ -44,7 +44,7 @@ type EventSorter struct {
 	changefeedID model.ChangeFeedID
 	uniqueID     uint32
 	dbs          []*pebble.DB
-	channs       []*chann.Chann[eventWithTableID]
+	channs       []*chann.DrainableChann[eventWithTableID]
 	serde        encoding.MsgPackGenSerde
 
 	// To manage background goroutines.
@@ -71,9 +71,9 @@ type EventIter struct {
 
 // New creates an EventSorter instance.
 func New(ID model.ChangeFeedID, dbs []*pebble.DB) *EventSorter {
-	channs := make([]*chann.Chann[eventWithTableID], 0, len(dbs))
+	channs := make([]*chann.DrainableChann[eventWithTableID], 0, len(dbs))
 	for i := 0; i < len(dbs); i++ {
-		channs = append(channs, chann.New[eventWithTableID](chann.Cap(128)))
+		channs = append(channs, chann.NewDrainableChann[eventWithTableID](chann.Cap(128)))
 	}
 
 	eventSorter := &EventSorter{
@@ -388,7 +388,7 @@ type eventWithTableID struct {
 }
 
 type tableState struct {
-	ch             *chann.Chann[eventWithTableID]
+	ch             *chann.DrainableChann[eventWithTableID]
 	sortedResolved atomic.Uint64 // indicates events are ready for fetching.
 	// For statistics.
 	maxReceivedCommitTs   atomic.Uint64
@@ -555,8 +555,8 @@ func (s *EventSorter) cleanTable(state *tableState, tableID model.TableID, upper
 
 // ----- Some internal variable and functions -----
 const (
-	batchCommitSize     int           = 16 * 1024 * 1024
-	batchCommitInterval time.Duration = 20 * time.Millisecond
+	batchCommitSize     int = 16 * 1024 * 1024
+	batchCommitInterval     = 20 * time.Millisecond
 )
 
 var uniqueIDGen uint32 = 0

@@ -299,8 +299,8 @@ var (
 		"rawData size %d exceeds maximum file size %d",
 		errors.RFCCodeText("CDC:ErrFileSizeExceed"),
 	)
-	ErrS3StorageAPI = errors.Normalize(
-		"s3 storage api",
+	ErrExternalStorageAPI = errors.Normalize(
+		"external storage api",
 		errors.RFCCodeText("CDC:ErrS3StorageAPI"),
 	)
 	ErrStorageInitialize = errors.Normalize(

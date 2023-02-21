@@ -50,6 +50,12 @@ type sink struct {
 	statistics *metrics.Statistics
 }
 
+// GetDBConnImpl is the implementation of pmysql.Factory.
+// Exported for testing.
+// Maybe we can use a better way to do this. Because this is not thread-safe.
+// You can use `SetupSuite` and `TearDownSuite` to do this to get a better way.
+var GetDBConnImpl pmysql.Factory = pmysql.CreateMySQLDBConn
+
 func newSink(ctx context.Context, backends []backend, errCh chan<- error, conflictDetectorSlots uint64) *sink {
 	workers := make([]*worker, 0, len(backends))
 	for i, backend := range backends {
@@ -69,11 +75,9 @@ func NewMySQLSink(
 	errCh chan<- error,
 	conflictDetectorSlots uint64,
 ) (*sink, error) {
-	var getConn pmysql.Factory = pmysql.CreateMySQLDBConn
-
 	ctx1, cancel := context.WithCancel(ctx)
 	statistics := metrics.NewStatistics(ctx1, psink.TxnSink)
-	backendImpls, err := mysql.NewMySQLBackends(ctx, sinkURI, replicaConfig, getConn, statistics)
+	backendImpls, err := mysql.NewMySQLBackends(ctx, sinkURI, replicaConfig, GetDBConnImpl, statistics)
 	if err != nil {
 		cancel()
 		return nil, err
@@ -112,10 +116,12 @@ func (s *sink) WriteEvents(txnEvents ...*eventsink.TxnCallbackableEvent) error {
 // Close closes the sink. It won't wait for all pending items backend handled.
 func (s *sink) Close() error {
 	atomic.StoreInt32(&s.closed, 1)
-	s.conflictDetector.Close()
 	for _, w := range s.workers {
 		w.Close()
 	}
+	// workers could call callback, which will send data to channel in conflict
+	// detector, so we can't close conflict detector until all workers are closed.
+	s.conflictDetector.Close()
 	if s.cancel != nil {
 		s.cancel()
 		s.cancel = nil
