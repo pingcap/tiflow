@@ -193,7 +193,6 @@ func redoLogFromV1(rv1 *codecv1.RedoLog) (r *model.RedoLog) {
 			PreColumns:          make([]*model.Column, 0, len(rv1.RedoRow.Row.PreColumns)),
 			IndexColumns:        rv1.RedoRow.Row.IndexColumns,
 			ApproximateDataSize: rv1.RedoRow.Row.ApproximateDataSize,
-			SplitTxn:            rv1.RedoRow.Row.SplitTxn,
 			ReplicatingTs:       rv1.RedoRow.Row.ReplicatingTs,
 		}
 		for _, c := range rv1.RedoRow.Row.Columns {

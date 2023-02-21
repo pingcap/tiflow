@@ -97,7 +97,7 @@ func (t *TxnEventAppender) Append(
 
 		// Split on big transactions or a new one. For 2 transactions,
 		// their commitTs can be same but startTs will be never same.
-		normalBoundary := row.SplitTxn || lastTxn.StartTs != row.StartTs
+		normalBoundary := lastTxn.StartTs != row.StartTs
 		// NOTICE: This is a special case for compatibility with old version.
 		// In our lots of protocols, we are ignoring the startTs of the row,
 		// so we can not use the startTs to identify a transaction.

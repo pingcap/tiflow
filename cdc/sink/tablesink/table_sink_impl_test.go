@@ -120,8 +120,6 @@ func getTestRows() []*model.RowChangedEvent {
 			Table:    tableInfo,
 			CommitTs: 105,
 			StartTs:  103,
-			// Batch1
-			SplitTxn: true,
 		},
 		{
 			Table:    tableInfo,
@@ -137,8 +135,6 @@ func getTestRows() []*model.RowChangedEvent {
 			Table:    tableInfo,
 			CommitTs: 105,
 			StartTs:  103,
-			// Batch2
-			SplitTxn: true,
 		},
 		{
 			Table:    tableInfo,
@@ -173,7 +169,7 @@ func TestAppendRowChangedEvents(t *testing.T) {
 		sink, &dmlsink.TxnEventAppender{}, prometheus.NewCounter(prometheus.CounterOpts{}))
 
 	tb.AppendRowChangedEvents(getTestRows()...)
-	require.Len(t, tb.eventBuffer, 7, "txn event buffer should have 7 txns")
+	require.Len(t, tb.eventBuffer, 6, "txn event buffer should have 6 txns")
 }
 
 func TestUpdateResolvedTs(t *testing.T) {
@@ -189,21 +185,21 @@ func TestUpdateResolvedTs(t *testing.T) {
 	err := tb.UpdateResolvedTs(model.NewResolvedTs(100))
 	require.Nil(t, err)
 	require.Equal(t, model.NewResolvedTs(100), tb.maxResolvedTs, "maxResolvedTs should be updated")
-	require.Len(t, tb.eventBuffer, 7, "txn event buffer should have 7 txns")
+	require.Len(t, tb.eventBuffer, 6, "txn event buffer should have 6 txns")
 	require.Len(t, sink.events, 0, "no event should not be flushed")
 
 	// One event will be flushed.
 	err = tb.UpdateResolvedTs(model.NewResolvedTs(101))
 	require.Nil(t, err)
 	require.Equal(t, model.NewResolvedTs(101), tb.maxResolvedTs, "maxResolvedTs should be updated")
-	require.Len(t, tb.eventBuffer, 6, "txn event buffer should have 6 txns")
+	require.Len(t, tb.eventBuffer, 5, "txn event buffer should have 5 txns")
 	require.Len(t, sink.events, 1, "one event should be flushed")
 
 	// Two events will be flushed.
 	err = tb.UpdateResolvedTs(model.NewResolvedTs(102))
 	require.Nil(t, err)
 	require.Equal(t, model.NewResolvedTs(102), tb.maxResolvedTs, "maxResolvedTs should be updated")
-	require.Len(t, tb.eventBuffer, 4, "txn event buffer should have 4 txns")
+	require.Len(t, tb.eventBuffer, 3, "txn event buffer should have 3 txns")
 	require.Len(t, sink.events, 3, "two events should be flushed")
 
 	// Same resolved ts will not be flushed.
@@ -215,7 +211,7 @@ func TestUpdateResolvedTs(t *testing.T) {
 		tb.maxResolvedTs,
 		"maxResolvedTs should not be updated",
 	)
-	require.Len(t, tb.eventBuffer, 4, "txn event buffer should still have 4 txns")
+	require.Len(t, tb.eventBuffer, 3, "txn event buffer should still have 3 txns")
 	require.Len(t, sink.events, 3, "no event should be flushed")
 
 	// All events will be flushed.
@@ -223,7 +219,7 @@ func TestUpdateResolvedTs(t *testing.T) {
 	require.Nil(t, err)
 	require.Equal(t, model.NewResolvedTs(105), tb.maxResolvedTs, "maxResolvedTs should be updated")
 	require.Len(t, tb.eventBuffer, 0, "txn event buffer should be empty")
-	require.Len(t, sink.events, 7, "all events should be flushed")
+	require.Len(t, sink.events, 6, "all events should be flushed")
 }
 
 func TestGetCheckpointTs(t *testing.T) {
@@ -274,7 +270,7 @@ func TestClose(t *testing.T) {
 	tb.AppendRowChangedEvents(getTestRows()...)
 	err := tb.UpdateResolvedTs(model.NewResolvedTs(105))
 	require.Nil(t, err)
-	require.Len(t, sink.events, 7, "all events should be flushed")
+	require.Len(t, sink.events, 6, "all events should be flushed")
 	var wg sync.WaitGroup
 	wg.Add(1)
 	go func() {
@@ -285,7 +281,7 @@ func TestClose(t *testing.T) {
 		return state.TableSinkStopping == tb.state.Load()
 	}, time.Second, time.Millisecond*10, "table should be stopping")
 	droppedEvents := sink.acknowledge(105)
-	require.Len(t, droppedEvents, 7, "all events should be dropped")
+	require.Len(t, droppedEvents, 6, "all events should be dropped")
 	wg.Wait()
 	require.Eventually(t, func() bool {
 		return state.TableSinkStopped == tb.state.Load()
@@ -303,7 +299,7 @@ func TestCloseCancellable(t *testing.T) {
 	tb.AppendRowChangedEvents(getTestRows()...)
 	err := tb.UpdateResolvedTs(model.NewResolvedTs(105))
 	require.Nil(t, err)
-	require.Len(t, sink.events, 7, "all events should be flushed")
+	require.Len(t, sink.events, 6, "all events should be flushed")
 	ctx, cancel := context.WithTimeout(context.Background(), time.Millisecond*10)
 	defer cancel()
 	var wg sync.WaitGroup
@@ -329,7 +325,7 @@ func TestCloseReentrant(t *testing.T) {
 	tb.AppendRowChangedEvents(getTestRows()...)
 	err := tb.UpdateResolvedTs(model.NewResolvedTs(105))
 	require.Nil(t, err)
-	require.Len(t, sink.events, 7, "all events should be flushed")
+	require.Len(t, sink.events, 6, "all events should be flushed")
 	ctx, cancel := context.WithTimeout(context.Background(), time.Millisecond*10)
 	defer cancel()
 	var wg sync.WaitGroup
@@ -358,7 +354,7 @@ func TestCheckpointTsFrozenWhenStopping(t *testing.T) {
 	tb.AppendRowChangedEvents(getTestRows()...)
 	err := tb.UpdateResolvedTs(model.NewResolvedTs(105))
 	require.Nil(t, err)
-	require.Len(t, sink.events, 7, "all events should be flushed")
+	require.Len(t, sink.events, 6, "all events should be flushed")
 	ctx, cancel := context.WithTimeout(context.Background(), time.Millisecond*10)
 	defer cancel()
 	var wg sync.WaitGroup
