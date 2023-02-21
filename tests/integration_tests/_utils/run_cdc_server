@@ -10,8 +10,6 @@
 
 set -e
 
-CUR=$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)
-
 workdir=
 tls=
 tls_dir=
@@ -26,7 +24,7 @@ pwd=$pwd
 log_level=debug
 restart=
 failpoint=$GO_FAILPOINTS
-config_path=$CUR/server.toml
+config_path=
 data_dir=
 curl_status_cmd=
 supposed_to_fail="no"
@@ -78,7 +76,7 @@ while [[ ${1} ]]; do
 		shift
 		;;
 	--config)
-		config_path="${2}"
+		config_path="--config ${2}"
 		shift
 		;;
 	--supposed-to-fail)
@@ -125,7 +123,7 @@ if [[ "$restart" == "true" ]]; then
 			--sorter-num-workerpool-goroutine 4 \
 			--data-dir "$data_dir" \
 			--cluster-id "$cluster_id" \
-			--config $config_path \
+			$config_path \
 			$tls \
 			$certcn \
 			$addr \
@@ -142,7 +140,7 @@ else
 		--sorter-num-workerpool-goroutine 4 \
 		--data-dir "$data_dir" \
 		--cluster-id "$cluster_id" \
-		--config $config_path \
+		$config_path \
 		$tls \
 		$certcn \
 		$addr \

@@ -1,3 +1,0 @@
-[debug]
-# todo: remove this after v2 is enabled as the default
-enable-kafka-sink-v2 = true
