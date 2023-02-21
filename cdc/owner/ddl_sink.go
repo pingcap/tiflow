@@ -27,8 +27,8 @@ import (
 	"github.com/pingcap/tidb/parser/format"
 	"github.com/pingcap/tiflow/cdc/contextutil"
 	"github.com/pingcap/tiflow/cdc/model"
-	sinkv2 "github.com/pingcap/tiflow/cdc/sinkv2/ddlsink"
-	"github.com/pingcap/tiflow/cdc/sinkv2/ddlsink/factory"
+	sinkv2 "github.com/pingcap/tiflow/cdc/sink/ddlsink"
+	"github.com/pingcap/tiflow/cdc/sink/ddlsink/factory"
 	"github.com/pingcap/tiflow/cdc/syncpointstore"
 	cerror "github.com/pingcap/tiflow/pkg/errors"
 	"github.com/pingcap/tiflow/pkg/util"
@@ -76,7 +76,7 @@ type ddlSinkImpl struct {
 	ddlCh chan *model.DDLEvent
 	errCh chan error
 
-	sinkV2 sinkv2.Sink
+	sink sinkv2.Sink
 	// `sinkInitHandler` can be helpful in unit testing.
 	sinkInitHandler ddlSinkInitHandler
 
@@ -115,14 +115,14 @@ type ddlSinkInitHandler func(ctx context.Context, a *ddlSinkImpl) error
 
 func ddlSinkInitializer(ctx context.Context, a *ddlSinkImpl) error {
 	ctx = contextutil.PutRoleInCtx(ctx, util.RoleOwner)
-	log.Info("Try to create ddlSink based on sinkV2",
+	log.Info("Try to create ddlSink based on sink",
 		zap.String("namespace", a.changefeedID.Namespace),
 		zap.String("changefeed", a.changefeedID.ID))
 	s, err := factory.New(ctx, a.info.SinkURI, a.info.Config)
 	if err != nil {
 		return errors.Trace(err)
 	}
-	a.sinkV2 = s
+	a.sink = s
 
 	if !a.info.Config.EnableSyncPoint {
 		return nil
@@ -198,7 +198,7 @@ func (s *ddlSinkImpl) run(ctx context.Context) {
 				s.mu.Unlock()
 				lastCheckpointTs = checkpointTs
 
-				if err := s.sinkV2.WriteCheckpointTs(ctx,
+				if err := s.sink.WriteCheckpointTs(ctx,
 					checkpointTs, tables); err != nil {
 					s.reportErr(err)
 					return
@@ -210,7 +210,7 @@ func (s *ddlSinkImpl) run(ctx context.Context) {
 					zap.String("changefeed", s.changefeedID.ID),
 					zap.Any("DDL", ddl))
 
-				err := s.sinkV2.WriteDDLEvent(ctx, ddl)
+				err := s.sink.WriteDDLEvent(ctx, ddl)
 				failpoint.Inject("InjectChangefeedDDLError", func() {
 					err = cerror.ErrExecDDLFailed.GenWithStackByArgs()
 				})
@@ -232,7 +232,7 @@ func (s *ddlSinkImpl) run(ctx context.Context) {
 					tables := s.mu.currentTables
 					s.mu.Unlock()
 					lastCheckpointTs = checkpointTs
-					if err := s.sinkV2.WriteCheckpointTs(ctx,
+					if err := s.sink.WriteCheckpointTs(ctx,
 						checkpointTs, tables); err != nil {
 						s.reportErr(err)
 						return
@@ -334,8 +334,8 @@ func (s *ddlSinkImpl) emitSyncPoint(ctx context.Context, checkpointTs uint64) er
 func (s *ddlSinkImpl) close(ctx context.Context) (err error) {
 	s.cancel()
 	// they will both be nil if changefeed return an error in initializing
-	if s.sinkV2 != nil {
-		s.sinkV2.Close()
+	if s.sink != nil {
+		s.sink.Close()
 	}
 	if s.syncPointStore != nil {
 		err = s.syncPointStore.Close()

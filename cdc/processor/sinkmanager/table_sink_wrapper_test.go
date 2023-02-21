@@ -20,8 +20,8 @@ import (
 
 	"github.com/pingcap/tiflow/cdc/model"
 	"github.com/pingcap/tiflow/cdc/processor/tablepb"
-	"github.com/pingcap/tiflow/cdc/sinkv2/dmlsink"
-	"github.com/pingcap/tiflow/cdc/sinkv2/tablesink"
+	"github.com/pingcap/tiflow/cdc/sink/dmlsink"
+	"github.com/pingcap/tiflow/cdc/sink/tablesink"
 	"github.com/pingcap/tiflow/pkg/spanz"
 	"github.com/prometheus/client_golang/prometheus"
 	"github.com/stretchr/testify/require"

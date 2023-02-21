@@ -24,7 +24,7 @@ import (
 	"github.com/phayes/freeport"
 	"github.com/pingcap/tiflow/cdc/model"
 	"github.com/pingcap/tiflow/cdc/redo/reader"
-	"github.com/pingcap/tiflow/cdc/sinkv2/dmlsink/txn"
+	"github.com/pingcap/tiflow/cdc/sink/dmlsink/txn"
 	"github.com/stretchr/testify/require"
 )
 

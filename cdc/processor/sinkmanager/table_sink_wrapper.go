@@ -25,7 +25,7 @@ import (
 	"github.com/pingcap/tiflow/cdc/model"
 	"github.com/pingcap/tiflow/cdc/processor/sourcemanager/engine"
 	"github.com/pingcap/tiflow/cdc/processor/tablepb"
-	sinkv2 "github.com/pingcap/tiflow/cdc/sinkv2/tablesink"
+	sinkv2 "github.com/pingcap/tiflow/cdc/sink/tablesink"
 	"github.com/tikv/client-go/v2/oracle"
 	"go.uber.org/zap"
 )

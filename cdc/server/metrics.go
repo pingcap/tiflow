@@ -23,7 +23,7 @@ import (
 	"github.com/pingcap/tiflow/cdc/puller/memorysorter"
 	redo "github.com/pingcap/tiflow/cdc/redo/common"
 	"github.com/pingcap/tiflow/cdc/scheduler"
-	sinkv2 "github.com/pingcap/tiflow/cdc/sinkv2/metrics"
+	sinkv2 "github.com/pingcap/tiflow/cdc/sink/metrics"
 	"github.com/pingcap/tiflow/pkg/etcd"
 	"github.com/pingcap/tiflow/pkg/orchestrator"
 	"github.com/pingcap/tiflow/pkg/p2p"
