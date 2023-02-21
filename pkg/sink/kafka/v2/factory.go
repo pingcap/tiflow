@@ -152,9 +152,8 @@ func completeSASLConfig(o *pkafka.Options) (sasl.Mechanism, error) {
 					client.DisablePAFXFAST(o.SASL.GSSAPI.DisablePAFXFAST))
 			}
 			if o.SASL.GSSAPI.DisablePAFXFAST {
-
 			}
-			//todo: clnt.Destroy()
+			// todo: clnt.Destroy()
 			err = clnt.Login()
 			if err != nil {
 				return nil, errors.Trace(err)
