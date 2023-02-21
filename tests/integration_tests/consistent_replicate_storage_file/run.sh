@@ -46,7 +46,7 @@ function run() {
 	# Inject the failpoint to prevent sink execution, but the global resolved can be moved forward.
 	# Then we can apply redo log to reach an eventual consistent state in downstream.
 	cleanup_process $CDC_BINARY
-	export GO_FAILPOINTS='github.com/pingcap/tiflow/cdc/sinkv2/eventsink/txn/mysql/MySQLSinkHangLongTime=return(true)'
+	export GO_FAILPOINTS='github.com/pingcap/tiflow/cdc/sink/dmlsink/txn/mysql/MySQLSinkHangLongTime=return(true)'
 	run_cdc_server --workdir $WORK_DIR --binary $CDC_BINARY
 	run_sql "create table consistent_replicate_storage_file.usertable2 like consistent_replicate_storage_file.usertable" ${UP_TIDB_HOST} ${UP_TIDB_PORT}
 	run_sql "ALTER TABLE consistent_replicate_storage_file.t1 EXCHANGE PARTITION p3 WITH TABLE consistent_replicate_storage_file.t2" ${UP_TIDB_HOST} ${UP_TIDB_PORT}
