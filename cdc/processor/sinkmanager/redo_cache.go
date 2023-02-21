@@ -136,12 +136,21 @@ func (e *eventAppender) pop(lowerBound, upperBound engine.Position) (res popResu
 	defer e.mu.Unlock()
 
 	if lowerBound.Compare(e.lowerBound) < 0 {
+		// if lowerBound is less than e.lowerBound, it means there is a gap between
+		// the required range and the cached range. For example, [100, 110) is required,
+		// but there is [120, ...) in the cache.
 		// NOTE: the caller will fetch events [lowerBound, res.boundary) from engine.
 		res.success = false
-		res.boundary = e.lowerBound
+		if e.lowerBound.Compare(upperBound.Next()) <= 0 {
+			res.boundary = e.lowerBound
+		} else {
+			res.boundary = upperBound.Next()
+		}
 		return
 	}
 	if !e.upperBound.Valid() {
+		// if e.upperBound is invalid, it means there are no resolved transactions
+		// in the cache.
 		// NOTE: the caller will fetch events [lowerBound, res.boundary) from engine.
 		res.success = false
 		res.boundary = upperBound.Next()
