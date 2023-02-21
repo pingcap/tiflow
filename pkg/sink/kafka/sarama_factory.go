@@ -18,12 +18,14 @@ import (
 	"github.com/pingcap/tiflow/cdc/model"
 	"github.com/pingcap/tiflow/pkg/errors"
 	"github.com/pingcap/tiflow/pkg/util"
+	"github.com/rcrowley/go-metrics"
 )
 
 type saramaFactory struct {
 	changefeedID model.ChangeFeedID
 	option       *Options
-	config       *sarama.Config
+
+	registry metrics.Registry
 }
 
 // NewSaramaFactory constructs a Factory with sarama implementation.
@@ -31,27 +33,31 @@ func NewSaramaFactory(
 	o *Options,
 	changefeedID model.ChangeFeedID,
 ) (Factory, error) {
-	saramaConfig, err := NewSaramaConfig(o)
-	if err != nil {
-		return nil, err
-	}
 	return &saramaFactory{
 		changefeedID: changefeedID,
 		option:       o,
-		config:       saramaConfig,
+		registry:     metrics.NewRegistry(),
 	}, nil
 }
 
 func (f *saramaFactory) AdminClient() (ClusterAdminClient, error) {
-	f.config.Producer.MaxMessageBytes = f.option.MaxMessageBytes
-	return newAdminClient(f.option.BrokerEndpoints, f.config, f.changefeedID)
+	config, err := NewSaramaConfig(f.option)
+	if err != nil {
+		return nil, err
+	}
+	return newAdminClient(f.option.BrokerEndpoints, config, f.changefeedID)
 }
 
 // SyncProducer returns a Sync Producer,
 // it should be the caller's responsibility to close the producer
 func (f *saramaFactory) SyncProducer() (SyncProducer, error) {
-	f.config.Producer.MaxMessageBytes = f.option.MaxMessageBytes
-	client, err := sarama.NewClient(f.option.BrokerEndpoints, f.config)
+	config, err := NewSaramaConfig(f.option)
+	if err != nil {
+		return nil, err
+	}
+	config.MetricRegistry = f.registry
+
+	client, err := sarama.NewClient(f.option.BrokerEndpoints, config)
 	if err != nil {
 		return nil, errors.Trace(err)
 	}
@@ -73,8 +79,13 @@ func (f *saramaFactory) AsyncProducer(
 	closedChan chan struct{},
 	failpointCh chan error,
 ) (AsyncProducer, error) {
-	f.config.Producer.MaxMessageBytes = f.option.MaxMessageBytes
-	client, err := sarama.NewClient(f.option.BrokerEndpoints, f.config)
+	config, err := NewSaramaConfig(f.option)
+	if err != nil {
+		return nil, err
+	}
+	config.MetricRegistry = f.registry
+
+	client, err := sarama.NewClient(f.option.BrokerEndpoints, config)
 	if err != nil {
 		return nil, errors.Trace(err)
 	}
@@ -96,5 +107,5 @@ func (f *saramaFactory) MetricsCollector(
 	adminClient ClusterAdminClient,
 ) MetricsCollector {
 	return NewSaramaMetricsCollector(
-		f.changefeedID, role, adminClient, f.config.MetricRegistry)
+		f.changefeedID, role, adminClient, f.registry)
 }

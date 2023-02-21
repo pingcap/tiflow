@@ -35,8 +35,8 @@ func TestNewSaramaFactory(t *testing.T) {
 	factory, ok := f.(*saramaFactory)
 	require.True(t, ok)
 	require.NotNil(t, factory)
-	require.NotNil(t, factory.config)
 	require.NotNil(t, factory.option)
+	require.NotNil(t, factory.registry)
 }
 
 func TestSyncProducer(t *testing.T) {
@@ -65,9 +65,7 @@ func TestSyncProducer(t *testing.T) {
 	sync, err := factory.SyncProducer()
 	require.NoError(t, err)
 	require.NotNil(t, sync)
-	defer sync.Close()
-
-	require.Equal(t, o.MaxMessageBytes, factory.config.Producer.MaxMessageBytes)
+	sync.Close()
 }
 
 func TestAsyncProducer(t *testing.T) {
@@ -93,7 +91,5 @@ func TestAsyncProducer(t *testing.T) {
 	async, err := f.AsyncProducer(make(chan struct{}, 1), make(chan error, 1))
 	require.NoError(t, err)
 	require.NotNil(t, async)
-	defer async.Close()
-
-	require.Equal(t, o.MaxMessageBytes, f.(*saramaFactory).config.Producer.MaxMessageBytes)
+	async.Close()
 }
