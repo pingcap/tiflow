@@ -29,7 +29,7 @@ import (
 )
 
 type mockSink struct {
-	ddlsink.DDLEventSink
+	ddlsink.Sink
 	checkpointTs model.Ts
 	ddl          *model.DDLEvent
 	ddlMu        sync.Mutex

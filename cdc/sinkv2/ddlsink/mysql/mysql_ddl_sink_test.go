@@ -69,7 +69,7 @@ func TestWriteDDLEvent(t *testing.T) {
 	sinkURI, err := url.Parse("mysql://127.0.0.1:4000")
 	require.Nil(t, err)
 	rc := config.GetDefaultReplicaConfig()
-	sink, err := NewMySQLDDLSink(ctx,
+	sink, err := NewDDLSink(ctx,
 		sinkURI, rc, mockGetDBConn)
 
 	require.Nil(t, err)

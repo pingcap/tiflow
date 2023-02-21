@@ -31,12 +31,12 @@ import (
 	pmysql "github.com/pingcap/tiflow/pkg/sink/mysql"
 )
 
-// New creates a new ddlsink.DDLEventSink by schema.
+// New creates a new ddlsink.Sink by schema.
 func New(
 	ctx context.Context,
 	sinkURIStr string,
 	cfg *config.ReplicaConfig,
-) (ddlsink.DDLEventSink, error) {
+) (ddlsink.Sink, error) {
 	sinkURI, err := config.GetSinkURIAndAdjustConfigWithSinkURI(sinkURIStr, cfg)
 	if err != nil {
 		return nil, err
@@ -51,11 +51,11 @@ func New(
 		return mq.NewKafkaDDLSink(ctx, sinkURI, cfg,
 			factoryCreator, ddlproducer.NewKafkaDDLProducer)
 	case sink.BlackHoleScheme:
-		return blackhole.New(), nil
+		return blackhole.NewDDLSink(), nil
 	case sink.MySQLSSLScheme, sink.MySQLScheme, sink.TiDBScheme, sink.TiDBSSLScheme:
-		return mysql.NewMySQLDDLSink(ctx, sinkURI, cfg, pmysql.CreateMySQLDBConn)
+		return mysql.NewDDLSink(ctx, sinkURI, cfg, pmysql.CreateMySQLDBConn)
 	case sink.S3Scheme, sink.FileScheme, sink.GCSScheme, sink.GSScheme, sink.AzblobScheme, sink.AzureScheme, sink.CloudStorageNoopScheme:
-		return cloudstorage.NewCloudStorageDDLSink(ctx, sinkURI)
+		return cloudstorage.NewDDLSink(ctx, sinkURI)
 	default:
 		return nil,
 			cerror.ErrSinkURIInvalid.GenWithStack("the sink scheme (%s) is not supported", schema)

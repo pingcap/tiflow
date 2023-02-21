@@ -30,10 +30,11 @@ import (
 	"github.com/pingcap/tiflow/pkg/util"
 )
 
-// Assert DDLEventSink implementation
-var _ ddlsink.DDLEventSink = (*ddlSink)(nil)
+// Assert Sink implementation
+var _ ddlsink.Sink = (*DDLSink)(nil)
 
-type ddlSink struct {
+// DDLSink is a sink that sends DDL events to the cloud storage system.
+type DDLSink struct {
 	// id indicates which changefeed this sink belongs to.
 	id model.ChangeFeedID
 	// statistic is used to record the DDL metrics
@@ -41,15 +42,15 @@ type ddlSink struct {
 	storage    storage.ExternalStorage
 }
 
-// NewCloudStorageDDLSink creates a ddl sink for cloud storage.
-func NewCloudStorageDDLSink(ctx context.Context, sinkURI *url.URL) (*ddlSink, error) {
+// NewDDLSink creates a ddl sink for cloud storage.
+func NewDDLSink(ctx context.Context, sinkURI *url.URL) (*DDLSink, error) {
 	storage, err := util.GetExternalStorageFromURI(ctx, sinkURI.String())
 	if err != nil {
 		return nil, err
 	}
 
 	changefeedID := contextutil.ChangefeedIDFromCtx(ctx)
-	d := &ddlSink{
+	d := &DDLSink{
 		id:         changefeedID,
 		storage:    storage,
 		statistics: metrics.NewStatistics(ctx, sink.TxnSink),
@@ -62,7 +63,8 @@ func generateSchemaPath(def cloudstorage.TableDefinition) string {
 	return fmt.Sprintf("%s/%s/%d/schema.json", def.Schema, def.Table, def.TableVersion)
 }
 
-func (d *ddlSink) WriteDDLEvent(ctx context.Context, ddl *model.DDLEvent) error {
+// WriteDDLEvent writes the ddl event to the cloud storage.
+func (d *DDLSink) WriteDDLEvent(ctx context.Context, ddl *model.DDLEvent) error {
 	var def cloudstorage.TableDefinition
 
 	if ddl.TableInfo.TableInfo == nil {
@@ -88,7 +90,8 @@ func (d *ddlSink) WriteDDLEvent(ctx context.Context, ddl *model.DDLEvent) error 
 	return errors.Trace(err)
 }
 
-func (d *ddlSink) WriteCheckpointTs(ctx context.Context,
+// WriteCheckpointTs writes the checkpoint ts to the cloud storage.
+func (d *DDLSink) WriteCheckpointTs(ctx context.Context,
 	ts uint64, tables []*model.TableInfo,
 ) error {
 	ckpt, err := json.Marshal(map[string]uint64{"checkpoint-ts": ts})
@@ -99,7 +102,8 @@ func (d *ddlSink) WriteCheckpointTs(ctx context.Context,
 	return errors.Trace(err)
 }
 
-func (d *ddlSink) Close() {
+// Close closes the sink.
+func (d *DDLSink) Close() {
 	if d.statistics != nil {
 		d.statistics.Close()
 	}

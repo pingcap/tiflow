@@ -44,10 +44,11 @@ const (
 	networkDriftDuration = 5 * time.Second
 )
 
-// Assert DDLEventSink implementation
-var _ ddlsink.DDLEventSink = (*mysqlDDLSink)(nil)
+// Assert Sink implementation
+var _ ddlsink.Sink = (*DDLSink)(nil)
 
-type mysqlDDLSink struct {
+// DDLSink is a sink that writes DDL events to MySQL.
+type DDLSink struct {
 	// id indicates which processor (changefeed) this sink belongs to.
 	id model.ChangeFeedID
 	// db is the database connection.
@@ -58,13 +59,13 @@ type mysqlDDLSink struct {
 	statistics *metrics.Statistics
 }
 
-// NewMySQLDDLSink creates a new mysqlDDLSink.
-func NewMySQLDDLSink(
+// NewDDLSink creates a new DDLSink.
+func NewDDLSink(
 	ctx context.Context,
 	sinkURI *url.URL,
 	replicaConfig *config.ReplicaConfig,
 	dbConnFactory pmysql.Factory,
-) (*mysqlDDLSink, error) {
+) (*DDLSink, error) {
 	changefeedID := contextutil.ChangefeedIDFromCtx(ctx)
 	cfg := pmysql.NewConfig()
 	err := cfg.Apply(ctx, changefeedID, sinkURI, replicaConfig)
@@ -82,7 +83,7 @@ func NewMySQLDDLSink(
 		return nil, err
 	}
 
-	m := &mysqlDDLSink{
+	m := &DDLSink{
 		id:         changefeedID,
 		db:         db,
 		cfg:        cfg,
@@ -95,12 +96,13 @@ func NewMySQLDDLSink(
 	return m, nil
 }
 
-func (m *mysqlDDLSink) WriteDDLEvent(ctx context.Context, ddl *model.DDLEvent) error {
+// WriteDDLEvent writes a DDL event to the mysql database.
+func (m *DDLSink) WriteDDLEvent(ctx context.Context, ddl *model.DDLEvent) error {
 	err := m.execDDLWithMaxRetries(ctx, ddl)
 	return errors.Trace(err)
 }
 
-func (m *mysqlDDLSink) execDDLWithMaxRetries(ctx context.Context, ddl *model.DDLEvent) error {
+func (m *DDLSink) execDDLWithMaxRetries(ctx context.Context, ddl *model.DDLEvent) error {
 	return retry.Do(ctx, func() error {
 		err := m.statistics.RecordDDLExecution(func() error { return m.execDDL(ctx, ddl) })
 		if err != nil {
@@ -128,7 +130,7 @@ func (m *mysqlDDLSink) execDDLWithMaxRetries(ctx context.Context, ddl *model.DDL
 		retry.WithIsRetryableErr(cerror.IsRetryableError))
 }
 
-func (m *mysqlDDLSink) execDDL(pctx context.Context, ddl *model.DDLEvent) error {
+func (m *DDLSink) execDDL(pctx context.Context, ddl *model.DDLEvent) error {
 	writeTimeout, _ := time.ParseDuration(m.cfg.WriteTimeout)
 	writeTimeout += networkDriftDuration
 	ctx, cancelFunc := context.WithTimeout(pctx, writeTimeout)
@@ -198,13 +200,14 @@ func needSwitchDB(ddl *model.DDLEvent) bool {
 	return true
 }
 
-func (m *mysqlDDLSink) WriteCheckpointTs(_ context.Context, _ uint64, _ []*model.TableInfo) error {
+// WriteCheckpointTs does nothing.
+func (m *DDLSink) WriteCheckpointTs(_ context.Context, _ uint64, _ []*model.TableInfo) error {
 	// Only for RowSink for now.
 	return nil
 }
 
 // Close closes the database connection.
-func (m *mysqlDDLSink) Close() {
+func (m *DDLSink) Close() {
 	if m.statistics != nil {
 		m.statistics.Close()
 	}

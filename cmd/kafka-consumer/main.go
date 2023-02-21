@@ -37,8 +37,8 @@ import (
 	"github.com/pingcap/tiflow/cdc/model"
 	"github.com/pingcap/tiflow/cdc/sinkv2/ddlsink"
 	ddlsinkfactory "github.com/pingcap/tiflow/cdc/sinkv2/ddlsink/factory"
-	eventsinkfactory "github.com/pingcap/tiflow/cdc/sinkv2/eventsink/factory"
-	"github.com/pingcap/tiflow/cdc/sinkv2/eventsink/mq/dispatcher"
+	eventsinkfactory "github.com/pingcap/tiflow/cdc/sinkv2/dmlsink/factory"
+	"github.com/pingcap/tiflow/cdc/sinkv2/dmlsink/mq/dispatcher"
 	"github.com/pingcap/tiflow/cdc/sinkv2/tablesink"
 	cmdUtil "github.com/pingcap/tiflow/pkg/cmd/util"
 	"github.com/pingcap/tiflow/pkg/config"
@@ -367,7 +367,7 @@ type Consumer struct {
 	ddlList              []*model.DDLEvent
 	ddlListMu            sync.Mutex
 	ddlWithMaxCommitTs   *model.DDLEvent
-	ddlSink              ddlsink.DDLEventSink
+	ddlSink              ddlsink.Sink
 	fakeTableIDGenerator *fakeTableIDGenerator
 
 	// sinkFactory is used to create table sink for each table.

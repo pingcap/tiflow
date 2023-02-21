@@ -35,7 +35,7 @@ func TestWriteDDLEvent(t *testing.T) {
 	uri := fmt.Sprintf("file:///%s", parentDir)
 	sinkURI, err := url.Parse(uri)
 	require.Nil(t, err)
-	sink, err := NewCloudStorageDDLSink(ctx, sinkURI)
+	sink, err := NewDDLSink(ctx, sinkURI)
 	require.Nil(t, err)
 
 	ddlEvent := &model.DDLEvent{
@@ -99,7 +99,7 @@ func TestWriteCheckpointTs(t *testing.T) {
 	uri := fmt.Sprintf("file:///%s", parentDir)
 	sinkURI, err := url.Parse(uri)
 	require.Nil(t, err)
-	sink, err := NewCloudStorageDDLSink(ctx, sinkURI)
+	sink, err := NewDDLSink(ctx, sinkURI)
 	require.Nil(t, err)
 	tables := []*model.TableInfo{
 		{

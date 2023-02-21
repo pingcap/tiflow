@@ -18,7 +18,7 @@ import (
 	"net/url"
 	"strings"
 
-	"github.com/pingcap/tiflow/cdc/sinkv2/eventsink/mq/manager"
+	"github.com/pingcap/tiflow/cdc/sinkv2/dmlsink/mq/manager"
 	"github.com/pingcap/tiflow/pkg/config"
 	cerror "github.com/pingcap/tiflow/pkg/errors"
 	"github.com/pingcap/tiflow/pkg/sink/codec/common"

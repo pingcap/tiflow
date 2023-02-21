@@ -22,7 +22,7 @@ import (
 	"github.com/pingcap/log"
 	"github.com/pingcap/tiflow/cdc/contextutil"
 	"github.com/pingcap/tiflow/cdc/sinkv2/ddlsink/mq/ddlproducer"
-	"github.com/pingcap/tiflow/cdc/sinkv2/eventsink/mq/dispatcher"
+	"github.com/pingcap/tiflow/cdc/sinkv2/dmlsink/mq/dispatcher"
 	"github.com/pingcap/tiflow/cdc/sinkv2/util"
 	"github.com/pingcap/tiflow/pkg/config"
 	cerror "github.com/pingcap/tiflow/pkg/errors"
@@ -37,7 +37,7 @@ func NewKafkaDDLSink(
 	replicaConfig *config.ReplicaConfig,
 	factoryCreator kafka.FactoryCreator,
 	producerCreator ddlproducer.Factory,
-) (_ *ddlSink, err error) {
+) (_ *DDLSink, err error) {
 	topic, err := util.GetTopic(sinkURI)
 	if err != nil {
 		return nil, errors.Trace(err)

@@ -19,8 +19,8 @@ import (
 	"github.com/pingcap/tiflow/cdc/model"
 )
 
-// DDLEventSink is the interface for sink of DDL events.
-type DDLEventSink interface {
+// Sink is the interface for sink of DDL events.
+type Sink interface {
 	// WriteDDLEvent writes a DDL event to the sink.
 	// Note: This is a synchronous and thread-safe method.
 	WriteDDLEvent(ctx context.Context, ddl *model.DDLEvent) error

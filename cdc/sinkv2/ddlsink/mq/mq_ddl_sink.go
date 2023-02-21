@@ -22,8 +22,8 @@ import (
 	"github.com/pingcap/tiflow/cdc/model"
 	"github.com/pingcap/tiflow/cdc/sinkv2/ddlsink"
 	"github.com/pingcap/tiflow/cdc/sinkv2/ddlsink/mq/ddlproducer"
-	"github.com/pingcap/tiflow/cdc/sinkv2/eventsink/mq/dispatcher"
-	"github.com/pingcap/tiflow/cdc/sinkv2/eventsink/mq/manager"
+	"github.com/pingcap/tiflow/cdc/sinkv2/dmlsink/mq/dispatcher"
+	"github.com/pingcap/tiflow/cdc/sinkv2/dmlsink/mq/manager"
 	"github.com/pingcap/tiflow/cdc/sinkv2/metrics"
 	"github.com/pingcap/tiflow/pkg/config"
 	cerror "github.com/pingcap/tiflow/pkg/errors"
@@ -35,10 +35,11 @@ import (
 	"go.uber.org/zap"
 )
 
-// Assert DDLEventSink implementation
-var _ ddlsink.DDLEventSink = (*ddlSink)(nil)
+// Assert Sink implementation
+var _ ddlsink.Sink = (*DDLSink)(nil)
 
-type ddlSink struct {
+// DDLSink is a sink that sends DDL events to the MQ system.
+type DDLSink struct {
 	// id indicates which processor (changefeed) this sink belongs to.
 	id model.ChangeFeedID
 	// protocol indicates the protocol used by this sink.
@@ -65,7 +66,7 @@ func newDDLSink(ctx context.Context,
 	topicManager manager.TopicManager,
 	eventRouter *dispatcher.EventRouter,
 	encoderConfig *common.Config,
-) (*ddlSink, error) {
+) (*DDLSink, error) {
 	changefeedID := contextutil.ChangefeedIDFromCtx(ctx)
 
 	encoderBuilder, err := builder.NewEventBatchEncoderBuilder(ctx, encoderConfig)
@@ -73,7 +74,7 @@ func newDDLSink(ctx context.Context,
 		return nil, cerror.WrapError(cerror.ErrKafkaInvalidConfig, err)
 	}
 
-	s := &ddlSink{
+	s := &DDLSink{
 		id:             changefeedID,
 		protocol:       encoderConfig.Protocol,
 		eventRouter:    eventRouter,
@@ -87,7 +88,8 @@ func newDDLSink(ctx context.Context,
 	return s, nil
 }
 
-func (k *ddlSink) WriteDDLEvent(ctx context.Context, ddl *model.DDLEvent) error {
+// WriteDDLEvent encodes the DDL event and sends it to the MQ system.
+func (k *DDLSink) WriteDDLEvent(ctx context.Context, ddl *model.DDLEvent) error {
 	encoder := k.encoderBuilder.Build()
 	msg, err := encoder.EncodeDDLEvent(ddl)
 	if err != nil {
@@ -133,7 +135,8 @@ func (k *ddlSink) WriteDDLEvent(ctx context.Context, ddl *model.DDLEvent) error 
 	return errors.Trace(err)
 }
 
-func (k *ddlSink) WriteCheckpointTs(ctx context.Context,
+// WriteCheckpointTs sends the checkpoint ts to the MQ system.
+func (k *DDLSink) WriteCheckpointTs(ctx context.Context,
 	ts uint64, tables []*model.TableInfo,
 ) error {
 	encoder := k.encoderBuilder.Build()
@@ -176,7 +179,8 @@ func (k *ddlSink) WriteCheckpointTs(ctx context.Context,
 	return nil
 }
 
-func (k *ddlSink) Close() {
+// Close closes the sink.
+func (k *DDLSink) Close() {
 	if k.producer != nil {
 		k.producer.Close()
 	}

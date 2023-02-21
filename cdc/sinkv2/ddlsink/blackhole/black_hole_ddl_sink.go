@@ -22,24 +22,27 @@ import (
 	"go.uber.org/zap"
 )
 
-// Assert DDLEventSink implementation
-var _ ddlsink.DDLEventSink = (*ddlSink)(nil)
+// Assert Sink implementation
+var _ ddlsink.Sink = (*DDLSink)(nil)
 
-type ddlSink struct{}
+// DDLSink is a black hole DDL sink.
+type DDLSink struct{}
 
-// New create a black hole DDL sink.
-func New() *ddlSink {
-	return &ddlSink{}
+// NewDDLSink create a black hole DDL sink.
+func NewDDLSink() *DDLSink {
+	return &DDLSink{}
 }
 
-func (d *ddlSink) WriteDDLEvent(ctx context.Context,
+// WriteDDLEvent do nothing.
+func (d *DDLSink) WriteDDLEvent(ctx context.Context,
 	ddl *model.DDLEvent,
 ) error {
 	log.Debug("BlackHoleSink: DDL Event", zap.Any("ddl", ddl))
 	return nil
 }
 
-func (d *ddlSink) WriteCheckpointTs(ctx context.Context,
+// WriteCheckpointTs do nothing.
+func (d *DDLSink) WriteCheckpointTs(ctx context.Context,
 	ts uint64, tables []*model.TableInfo,
 ) error {
 	log.Debug("BlackHoleSink: Checkpoint Ts Event", zap.Uint64("ts", ts), zap.Any("tables", tables))
@@ -47,4 +50,4 @@ func (d *ddlSink) WriteCheckpointTs(ctx context.Context,
 }
 
 // Close do nothing.
-func (d *ddlSink) Close() {}
+func (d *DDLSink) Close() {}

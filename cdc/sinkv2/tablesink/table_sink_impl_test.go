@@ -21,7 +21,7 @@ import (
 	"time"
 
 	"github.com/pingcap/tiflow/cdc/model"
-	"github.com/pingcap/tiflow/cdc/sinkv2/eventsink"
+	"github.com/pingcap/tiflow/cdc/sinkv2/dmlsink"
 	"github.com/pingcap/tiflow/cdc/sinkv2/tablesink/state"
 	"github.com/pingcap/tiflow/pkg/spanz"
 	"github.com/prometheus/client_golang/prometheus"
@@ -29,13 +29,13 @@ import (
 )
 
 // Assert EventSink implementation
-var _ eventsink.EventSink[*model.SingleTableTxn] = (*mockEventSink)(nil)
+var _ dmlsink.EventSink[*model.SingleTableTxn] = (*mockEventSink)(nil)
 
 type mockEventSink struct {
-	events []*eventsink.TxnCallbackableEvent
+	events []*dmlsink.TxnCallbackableEvent
 }
 
-func (m *mockEventSink) WriteEvents(rows ...*eventsink.TxnCallbackableEvent) error {
+func (m *mockEventSink) WriteEvents(rows ...*dmlsink.TxnCallbackableEvent) error {
 	m.events = append(m.events, rows...)
 	return nil
 }
@@ -43,8 +43,8 @@ func (m *mockEventSink) WriteEvents(rows ...*eventsink.TxnCallbackableEvent) err
 func (m *mockEventSink) Close() {}
 
 // acknowledge the txn events by call the callback function.
-func (m *mockEventSink) acknowledge(commitTs uint64) []*eventsink.TxnCallbackableEvent {
-	var droppedEvents []*eventsink.TxnCallbackableEvent
+func (m *mockEventSink) acknowledge(commitTs uint64) []*dmlsink.TxnCallbackableEvent {
+	var droppedEvents []*dmlsink.TxnCallbackableEvent
 	i := sort.Search(len(m.events), func(i int) bool {
 		return m.events[i].Event.GetCommitTs() > commitTs
 	})
@@ -63,7 +63,7 @@ func (m *mockEventSink) acknowledge(commitTs uint64) []*eventsink.TxnCallbackabl
 
 	// Remove the acked events from the event buffer.
 	m.events = append(
-		make([]*eventsink.TxnCallbackableEvent,
+		make([]*dmlsink.TxnCallbackableEvent,
 			0,
 			len(m.events[i:])),
 		m.events[i:]...,
@@ -154,7 +154,7 @@ func TestNewEventTableSink(t *testing.T) {
 	sink := &mockEventSink{}
 	tb := New[*model.SingleTableTxn](
 		model.DefaultChangeFeedID("1"), spanz.TableIDToComparableSpan(1),
-		sink, &eventsink.TxnEventAppender{}, prometheus.NewCounter(prometheus.CounterOpts{}))
+		sink, &dmlsink.TxnEventAppender{}, prometheus.NewCounter(prometheus.CounterOpts{}))
 
 	require.Equal(t, model.NewResolvedTs(0), tb.maxResolvedTs, "maxResolvedTs should start from 0")
 	require.NotNil(t, sink, tb.backendSink, "backendSink should be set")
@@ -170,7 +170,7 @@ func TestAppendRowChangedEvents(t *testing.T) {
 	sink := &mockEventSink{}
 	tb := New[*model.SingleTableTxn](
 		model.DefaultChangeFeedID("1"), spanz.TableIDToComparableSpan(1),
-		sink, &eventsink.TxnEventAppender{}, prometheus.NewCounter(prometheus.CounterOpts{}))
+		sink, &dmlsink.TxnEventAppender{}, prometheus.NewCounter(prometheus.CounterOpts{}))
 
 	tb.AppendRowChangedEvents(getTestRows()...)
 	require.Len(t, tb.eventBuffer, 7, "txn event buffer should have 7 txns")
@@ -182,7 +182,7 @@ func TestUpdateResolvedTs(t *testing.T) {
 	sink := &mockEventSink{}
 	tb := New[*model.SingleTableTxn](
 		model.DefaultChangeFeedID("1"), spanz.TableIDToComparableSpan(1),
-		sink, &eventsink.TxnEventAppender{}, prometheus.NewCounter(prometheus.CounterOpts{}))
+		sink, &dmlsink.TxnEventAppender{}, prometheus.NewCounter(prometheus.CounterOpts{}))
 
 	tb.AppendRowChangedEvents(getTestRows()...)
 	// No event will be flushed.
@@ -232,7 +232,7 @@ func TestGetCheckpointTs(t *testing.T) {
 	sink := &mockEventSink{}
 	tb := New[*model.SingleTableTxn](
 		model.DefaultChangeFeedID("1"), spanz.TableIDToComparableSpan(1),
-		sink, &eventsink.TxnEventAppender{}, prometheus.NewCounter(prometheus.CounterOpts{}))
+		sink, &dmlsink.TxnEventAppender{}, prometheus.NewCounter(prometheus.CounterOpts{}))
 
 	tb.AppendRowChangedEvents(getTestRows()...)
 	require.Equal(t, model.NewResolvedTs(0), tb.GetCheckpointTs(), "checkpointTs should be 0")
@@ -269,7 +269,7 @@ func TestClose(t *testing.T) {
 	sink := &mockEventSink{}
 	tb := New[*model.SingleTableTxn](
 		model.DefaultChangeFeedID("1"), spanz.TableIDToComparableSpan(1),
-		sink, &eventsink.TxnEventAppender{}, prometheus.NewCounter(prometheus.CounterOpts{}))
+		sink, &dmlsink.TxnEventAppender{}, prometheus.NewCounter(prometheus.CounterOpts{}))
 
 	tb.AppendRowChangedEvents(getTestRows()...)
 	err := tb.UpdateResolvedTs(model.NewResolvedTs(105))
@@ -298,7 +298,7 @@ func TestCloseCancellable(t *testing.T) {
 	sink := &mockEventSink{}
 	tb := New[*model.SingleTableTxn](
 		model.DefaultChangeFeedID("1"), spanz.TableIDToComparableSpan(1),
-		sink, &eventsink.TxnEventAppender{}, prometheus.NewCounter(prometheus.CounterOpts{}))
+		sink, &dmlsink.TxnEventAppender{}, prometheus.NewCounter(prometheus.CounterOpts{}))
 
 	tb.AppendRowChangedEvents(getTestRows()...)
 	err := tb.UpdateResolvedTs(model.NewResolvedTs(105))
@@ -324,7 +324,7 @@ func TestCloseReentrant(t *testing.T) {
 	sink := &mockEventSink{}
 	tb := New[*model.SingleTableTxn](
 		model.DefaultChangeFeedID("1"), spanz.TableIDToComparableSpan(1),
-		sink, &eventsink.TxnEventAppender{}, prometheus.NewCounter(prometheus.CounterOpts{}))
+		sink, &dmlsink.TxnEventAppender{}, prometheus.NewCounter(prometheus.CounterOpts{}))
 
 	tb.AppendRowChangedEvents(getTestRows()...)
 	err := tb.UpdateResolvedTs(model.NewResolvedTs(105))
@@ -353,7 +353,7 @@ func TestCheckpointTsFrozenWhenStopping(t *testing.T) {
 	sink := &mockEventSink{}
 	tb := New[*model.SingleTableTxn](
 		model.DefaultChangeFeedID("1"), spanz.TableIDToComparableSpan(1),
-		sink, &eventsink.TxnEventAppender{}, prometheus.NewCounter(prometheus.CounterOpts{}))
+		sink, &dmlsink.TxnEventAppender{}, prometheus.NewCounter(prometheus.CounterOpts{}))
 
 	tb.AppendRowChangedEvents(getTestRows()...)
 	err := tb.UpdateResolvedTs(model.NewResolvedTs(105))

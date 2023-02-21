@@ -22,7 +22,7 @@ import (
 	"github.com/pingcap/log"
 	"github.com/pingcap/tiflow/cdc/model"
 	"github.com/pingcap/tiflow/cdc/processor/tablepb"
-	"github.com/pingcap/tiflow/cdc/sinkv2/eventsink"
+	"github.com/pingcap/tiflow/cdc/sinkv2/dmlsink"
 	"github.com/pingcap/tiflow/cdc/sinkv2/tablesink/state"
 	"github.com/prometheus/client_golang/prometheus"
 	"go.uber.org/zap"
@@ -30,18 +30,18 @@ import (
 
 // Assert TableSink implementation
 var (
-	_ TableSink = (*EventTableSink[*model.RowChangedEvent])(nil)
-	_ TableSink = (*EventTableSink[*model.SingleTableTxn])(nil)
+	_ TableSink = (*EventTableSink[*model.RowChangedEvent, *dmlsink.RowChangeEventAppender])(nil)
+	_ TableSink = (*EventTableSink[*model.SingleTableTxn, *dmlsink.TxnEventAppender])(nil)
 )
 
 // EventTableSink is a table sink that can write events.
-type EventTableSink[E eventsink.TableEvent] struct {
+type EventTableSink[E dmlsink.TableEvent, P dmlsink.Appender[E]] struct {
 	changefeedID    model.ChangeFeedID
 	span            tablepb.Span
 	maxResolvedTs   model.ResolvedTs
-	backendSink     eventsink.EventSink[E]
+	backendSink     dmlsink.EventSink[E]
 	progressTracker *progressTracker
-	eventAppender   eventsink.Appender[E]
+	eventAppender   P
 	// NOTICE: It is ordered by commitTs.
 	eventBuffer []E
 	state       state.TableSinkState
@@ -51,14 +51,14 @@ type EventTableSink[E eventsink.TableEvent] struct {
 }
 
 // New an eventTableSink with given backendSink and event appender.
-func New[E eventsink.TableEvent](
+func New[E dmlsink.TableEvent, P dmlsink.Appender[E]](
 	changefeedID model.ChangeFeedID,
 	span tablepb.Span,
-	backendSink eventsink.EventSink[E],
-	appender eventsink.Appender[E],
+	backendSink dmlsink.EventSink[E],
+	appender P,
 	totalRowsCounter prometheus.Counter,
-) *EventTableSink[E] {
-	return &EventTableSink[E]{
+) *EventTableSink[E, P] {
+	return &EventTableSink[E, P]{
 		changefeedID:              changefeedID,
 		span:                      span,
 		maxResolvedTs:             model.NewResolvedTs(0),
@@ -72,13 +72,13 @@ func New[E eventsink.TableEvent](
 }
 
 // AppendRowChangedEvents appends row changed or txn events to the table sink.
-func (e *EventTableSink[E]) AppendRowChangedEvents(rows ...*model.RowChangedEvent) {
+func (e *EventTableSink[E, P]) AppendRowChangedEvents(rows ...*model.RowChangedEvent) {
 	e.eventBuffer = e.eventAppender.Append(e.eventBuffer, rows...)
 	e.metricsTableSinkTotalRows.Add(float64(len(rows)))
 }
 
 // UpdateResolvedTs advances the resolved ts of the table sink.
-func (e *EventTableSink[E]) UpdateResolvedTs(resolvedTs model.ResolvedTs) error {
+func (e *EventTableSink[E, P]) UpdateResolvedTs(resolvedTs model.ResolvedTs) error {
 	// If resolvedTs is not greater than maxResolvedTs,
 	// the flush is unnecessary.
 	if !e.maxResolvedTs.Less(resolvedTs) {
@@ -100,10 +100,10 @@ func (e *EventTableSink[E]) UpdateResolvedTs(resolvedTs model.ResolvedTs) error 
 	// otherwise we cannot GC the flushed values as soon as possible.
 	e.eventBuffer = append(make([]E, 0, len(e.eventBuffer[i:])), e.eventBuffer[i:]...)
 
-	resolvedCallbackableEvents := make([]*eventsink.CallbackableEvent[E], 0, len(resolvedEvents))
+	resolvedCallbackableEvents := make([]*dmlsink.CallbackableEvent[E], 0, len(resolvedEvents))
 	for _, ev := range resolvedEvents {
 		// We have to record the event ID for the callback.
-		ce := &eventsink.CallbackableEvent[E]{
+		ce := &dmlsink.CallbackableEvent[E]{
 			Event:     ev,
 			Callback:  e.progressTracker.addEvent(),
 			SinkState: &e.state,
@@ -116,13 +116,13 @@ func (e *EventTableSink[E]) UpdateResolvedTs(resolvedTs model.ResolvedTs) error 
 }
 
 // GetCheckpointTs returns the checkpoint ts of the table sink.
-func (e *EventTableSink[E]) GetCheckpointTs() model.ResolvedTs {
+func (e *EventTableSink[E, P]) GetCheckpointTs() model.ResolvedTs {
 	return e.progressTracker.advance()
 }
 
 // Close the table sink and wait for all callbacks be called.
 // Notice: It will be blocked until all callbacks be called.
-func (e *EventTableSink[E]) Close(ctx context.Context) {
+func (e *EventTableSink[E, P]) Close(ctx context.Context) {
 	currentState := e.state.Load()
 	if currentState == state.TableSinkStopping ||
 		currentState == state.TableSinkStopped {
