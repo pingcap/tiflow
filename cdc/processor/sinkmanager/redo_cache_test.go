@@ -27,12 +27,7 @@ func TestRedoEventCache(t *testing.T) {
 	var broken uint64
 	var popRes popResult
 
-<<<<<<< HEAD
-	appender := cache.maybeCreateAppender(3, engine.Position{StartTs: 1, CommitTs: 2})
-=======
-	span := spanz.TableIDToComparableSpan(3)
-	appender := cache.maybeCreateAppender(span, engine.Position{StartTs: 3, CommitTs: 4})
->>>>>>> 6f62a80d7d (redo(cdc): fix the bug that sink emits events post the barrier (#8314))
+	appender := cache.maybeCreateAppender(3, engine.Position{StartTs: 3, CommitTs: 4})
 
 	appender.push(&model.RowChangedEvent{StartTs: 3, CommitTs: 4}, 100, engine.Position{})
 	appender.push(&model.RowChangedEvent{StartTs: 3, CommitTs: 4}, 200, engine.Position{})
