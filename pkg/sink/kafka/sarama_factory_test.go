@@ -16,6 +16,7 @@ package kafka
 import (
 	"testing"
 
+	"github.com/Shopify/sarama"
 	"github.com/pingcap/tiflow/cdc/model"
 	"github.com/stretchr/testify/require"
 )
@@ -41,8 +42,18 @@ func TestNewSaramaFactory(t *testing.T) {
 func TestSyncProducer(t *testing.T) {
 	t.Parallel()
 
+	leader := sarama.NewMockBroker(t, 1)
+
+	metadataResponse := new(sarama.MetadataResponse)
+	metadataResponse.AddBroker(leader.Addr(), leader.BrokerID())
+	// Response for `sarama.NewClient`
+	leader.Returns(metadataResponse)
+
+	defer leader.Close()
+
 	o := NewOptions()
-	o.BrokerEndpoints = []string{"127.0.0.1:9092"}
+	o.Version = "0.9.0.0"
+	o.BrokerEndpoints = []string{leader.Addr()}
 	o.ClientID = "sarama-test"
 
 	f, err := NewSaramaFactory(o, model.DefaultChangeFeedID("sarama-test"))
@@ -52,6 +63,7 @@ func TestSyncProducer(t *testing.T) {
 	require.True(t, ok)
 
 	sync, err := factory.SyncProducer()
+	defer sync.Close()
 	require.NoError(t, err)
 	require.NotNil(t, sync)
 
@@ -61,14 +73,25 @@ func TestSyncProducer(t *testing.T) {
 func TestAsyncProducer(t *testing.T) {
 	t.Parallel()
 
+	leader := sarama.NewMockBroker(t, 1)
+
+	metadataResponse := new(sarama.MetadataResponse)
+	metadataResponse.AddBroker(leader.Addr(), leader.BrokerID())
+	// Response for `sarama.NewClient`
+	leader.Returns(metadataResponse)
+
+	defer leader.Close()
+
 	o := NewOptions()
-	o.BrokerEndpoints = []string{"127.0.0.1:9092"}
+	o.Version = "0.9.0.0"
+	o.BrokerEndpoints = []string{leader.Addr()}
 	o.ClientID = "sarama-test"
 
 	f, err := NewSaramaFactory(o, model.DefaultChangeFeedID("sarama-test"))
 	require.NoError(t, err)
 
 	async, err := f.AsyncProducer(make(chan struct{}, 1), make(chan error, 1))
+	defer async.Close()
 	require.NoError(t, err)
 	require.NotNil(t, async)
 
