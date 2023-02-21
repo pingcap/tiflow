@@ -65,7 +65,7 @@ require (
 	github.com/prometheus/client_model v0.3.0
 	github.com/r3labs/diff v1.1.0
 	github.com/rcrowley/go-metrics v0.0.0-20201227073835-cf1acfcdf475
-	github.com/segmentio/kafka-go v0.4.38
+	github.com/segmentio/kafka-go v0.4.39-0.20230217181906-f6986fb02ee7
 	github.com/shopspring/decimal v1.3.0
 	github.com/soheilhy/cmux v0.1.5
 	github.com/spf13/cobra v1.6.1
@@ -303,6 +303,3 @@ replace github.com/benbjohnson/clock v1.3.0 => github.com/benbjohnson/clock v1.1
 
 // copy from TiDB
 replace go.opencensus.io => go.opencensus.io v0.23.1-0.20220331163232-052120675fac
-
-// FIXME: remove this replace after https://github.com/segmentio/kafka-go/pull/1059 is merged
-replace github.com/segmentio/kafka-go v0.4.38 => github.com/3AceShowHand/kafka-go v0.0.0-20230109084533-cd584ac8c705
