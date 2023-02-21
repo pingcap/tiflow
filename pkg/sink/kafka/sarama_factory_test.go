@@ -63,9 +63,9 @@ func TestSyncProducer(t *testing.T) {
 	require.True(t, ok)
 
 	sync, err := factory.SyncProducer()
-	defer sync.Close()
 	require.NoError(t, err)
 	require.NotNil(t, sync)
+	defer sync.Close()
 
 	require.Equal(t, o.MaxMessageBytes, factory.config.Producer.MaxMessageBytes)
 }
@@ -91,9 +91,9 @@ func TestAsyncProducer(t *testing.T) {
 	require.NoError(t, err)
 
 	async, err := f.AsyncProducer(make(chan struct{}, 1), make(chan error, 1))
-	defer async.Close()
 	require.NoError(t, err)
 	require.NotNil(t, async)
+	defer async.Close()
 
 	require.Equal(t, o.MaxMessageBytes, f.(*saramaFactory).config.Producer.MaxMessageBytes)
 }
