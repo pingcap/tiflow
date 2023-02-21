@@ -211,6 +211,42 @@ func TestCheckClusterVersion(t *testing.T) {
 		err := CheckClusterVersion(context.Background(), &mock, pdAddrs, nil, false)
 		require.Regexp(t, ".*400 Bad Request.*", err)
 	}
+
+	// check retry success
+	{
+		retryTimes := 0
+		mock.getStatusCode = func() int {
+			if retryTimes < 4 {
+				retryTimes++
+				return http.StatusServiceUnavailable
+			}
+			return http.StatusOK
+		}
+
+		mock.getPDVersion = func() string {
+			return "7.9.9"
+		}
+		mock.getAllStores = func() []*metapb.Store {
+			return []*metapb.Store{{Version: "v7.9.9"}}
+		}
+		err := CheckClusterVersion(context.Background(), &mock, pdAddrs, nil, true)
+		require.Nil(t, err)
+	}
+
+	// check retry failed
+	{
+		retryTimes := 0
+		mock.getStatusCode = func() int {
+			if retryTimes < 5 {
+				retryTimes++
+				return http.StatusBadRequest
+			}
+			return http.StatusOK
+		}
+
+		err := CheckClusterVersion(context.Background(), &mock, pdAddrs, nil, false)
+		require.Regexp(t, ".*400 Bad Request.*", err)
+	}
 }
 
 func TestCompareVersion(t *testing.T) {
