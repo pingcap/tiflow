@@ -45,7 +45,7 @@ import (
 // newSchedulerFromCtx creates a new scheduler from context.
 // This function is factored out to facilitate unit testing.
 func newSchedulerFromCtx(
-	ctx cdcContext.Context, up *upstream.Upstream, cfg *config.SchedulerConfig,
+	ctx cdcContext.Context, up *upstream.Upstream, epoch uint64, cfg *config.SchedulerConfig,
 ) (ret scheduler.Scheduler, err error) {
 	changeFeedID := ctx.ChangefeedVars().ID
 	messageServer := ctx.GlobalVars().MessageServer
@@ -54,14 +54,14 @@ func newSchedulerFromCtx(
 	captureID := ctx.GlobalVars().CaptureInfo.ID
 	ret, err = scheduler.NewScheduler(
 		ctx, captureID, changeFeedID,
-		messageServer, messageRouter, ownerRev, up.RegionCache, up.PDClock, cfg)
+		messageServer, messageRouter, ownerRev, epoch, up.RegionCache, up.PDClock, cfg)
 	return ret, errors.Trace(err)
 }
 
 func newScheduler(
-	ctx cdcContext.Context, up *upstream.Upstream, cfg *config.SchedulerConfig,
+	ctx cdcContext.Context, up *upstream.Upstream, epoch uint64, cfg *config.SchedulerConfig,
 ) (scheduler.Scheduler, error) {
-	return newSchedulerFromCtx(ctx, up, cfg)
+	return newSchedulerFromCtx(ctx, up, epoch, cfg)
 }
 
 type changefeed struct {
@@ -133,7 +133,7 @@ type changefeed struct {
 
 	newSink      func(changefeedID model.ChangeFeedID, info *model.ChangeFeedInfo, reportErr func(error)) DDLSink
 	newScheduler func(
-		ctx cdcContext.Context, up *upstream.Upstream, cfg *config.SchedulerConfig,
+		ctx cdcContext.Context, up *upstream.Upstream, epoch uint64, cfg *config.SchedulerConfig,
 	) (scheduler.Scheduler, error)
 
 	newDownstreamObserver func(
@@ -156,7 +156,7 @@ func newChangefeed(
 		// The scheduler will be created lazily.
 		scheduler:        nil,
 		barriers:         newBarriers(),
-		feedStateManager: newFeedStateManager(),
+		feedStateManager: newFeedStateManager(up),
 		upstream:         up,
 
 		errCh:  make(chan error, defaultErrChSize),
@@ -181,7 +181,7 @@ func newChangefeed4Test(
 	) (puller.DDLPuller, error),
 	newSink func(changefeedID model.ChangeFeedID, info *model.ChangeFeedInfo, reportErr func(err error)) DDLSink,
 	newScheduler func(
-		ctx cdcContext.Context, up *upstream.Upstream, cfg *config.SchedulerConfig,
+		ctx cdcContext.Context, up *upstream.Upstream, epoch uint64, cfg *config.SchedulerConfig,
 	) (scheduler.Scheduler, error),
 	newDownstreamObserver func(
 		ctx context.Context, sinkURIStr string, replCfg *config.ReplicaConfig,
@@ -573,7 +573,8 @@ LOOP:
 	// create scheduler
 	cfg := *c.cfg
 	cfg.ChangefeedSettings = c.state.Info.Config.Scheduler
-	c.scheduler, err = c.newScheduler(ctx, c.upstream, &cfg)
+	epoch := c.state.Info.Epoch
+	c.scheduler, err = c.newScheduler(ctx, c.upstream, epoch, &cfg)
 	if err != nil {
 		return errors.Trace(err)
 	}
@@ -584,6 +585,7 @@ LOOP:
 	log.Info("changefeed initialized",
 		zap.String("namespace", c.state.ID.Namespace),
 		zap.String("changefeed", c.state.ID.ID),
+		zap.Uint64("changefeedEpoch", epoch),
 		zap.Uint64("checkpointTs", checkpointTs),
 		zap.Uint64("resolvedTs", resolvedTs),
 		zap.Stringer("info", c.state.Info))

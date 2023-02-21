@@ -23,11 +23,11 @@ function run_test() {
 	# Add a check table to reduce check time, or if we check data with sync diff
 	# directly, there maybe a lot of diff data at first because of the incremental scan
 	run_sql "CREATE table sorter.check1(id int primary key);" ${UP_TIDB_HOST} ${UP_TIDB_PORT}
-	check_table_exists "sorter.USERTABLE" ${DOWN_TIDB_HOST} ${DOWN_TIDB_PORT}
+	check_table_exists "sorter.usertable" ${DOWN_TIDB_HOST} ${DOWN_TIDB_PORT}
 	check_table_exists "sorter.check1" ${DOWN_TIDB_HOST} ${DOWN_TIDB_PORT} 90
 	check_sync_diff $WORK_DIR $CUR/conf/diff_config.toml
 
-	run_sql "truncate table sorter.USERTABLE" ${UP_TIDB_HOST} ${UP_TIDB_PORT}
+	run_sql "truncate table sorter.usertable" ${UP_TIDB_HOST} ${UP_TIDB_PORT}
 	check_sync_diff $WORK_DIR $CUR/conf/diff_config.toml
 	run_sql "CREATE table sorter.check2(id int primary key);" ${UP_TIDB_HOST} ${UP_TIDB_PORT}
 	check_table_exists "sorter.check2" ${DOWN_TIDB_HOST} ${DOWN_TIDB_PORT} 90
@@ -38,10 +38,10 @@ function run_test() {
 	check_table_exists "sorter.check3" ${DOWN_TIDB_HOST} ${DOWN_TIDB_PORT} 90
 	check_sync_diff $WORK_DIR $CUR/conf/diff_config.toml
 
-	run_sql "create table sorter.USERTABLE2 like sorter.USERTABLE" ${UP_TIDB_HOST} ${UP_TIDB_PORT}
-	run_sql "insert into sorter.USERTABLE2 select * from sorter.USERTABLE" ${UP_TIDB_HOST} ${UP_TIDB_PORT}
+	run_sql "create table sorter.usertable2 like sorter.usertable" ${UP_TIDB_HOST} ${UP_TIDB_PORT}
+	run_sql "insert into sorter.usertable2 select * from sorter.usertable" ${UP_TIDB_HOST} ${UP_TIDB_PORT}
 	run_sql "create table sorter.check4(id int primary key);" ${UP_TIDB_HOST} ${UP_TIDB_PORT}
-	check_table_exists "sorter.USERTABLE2" ${DOWN_TIDB_HOST} ${DOWN_TIDB_PORT}
+	check_table_exists "sorter.usertable2" ${DOWN_TIDB_HOST} ${DOWN_TIDB_PORT}
 	check_table_exists "sorter.check4" ${DOWN_TIDB_HOST} ${DOWN_TIDB_PORT} 90
 
 	check_sync_diff $WORK_DIR $CUR/conf/diff_config.toml
