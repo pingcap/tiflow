@@ -27,7 +27,7 @@ import (
 	"github.com/pingcap/tidb/parser/format"
 	"github.com/pingcap/tiflow/cdc/contextutil"
 	"github.com/pingcap/tiflow/cdc/model"
-	sinkv2 "github.com/pingcap/tiflow/cdc/sink/ddlsink"
+	"github.com/pingcap/tiflow/cdc/sink/ddlsink"
 	"github.com/pingcap/tiflow/cdc/sink/ddlsink/factory"
 	"github.com/pingcap/tiflow/cdc/syncpointstore"
 	cerror "github.com/pingcap/tiflow/pkg/errors"
@@ -40,7 +40,7 @@ const (
 )
 
 // DDLSink is a wrapper of the `Sink` interface for the owner
-// DDLSink should send `DDLEvent` and `CheckpointTs` to downstream sink,
+// DDLSink should send `DDLEvent` and `CheckpointTs` to downstream ddlsink,
 // If `SyncPointEnabled`, also send `syncPoint` to downstream.
 type DDLSink interface {
 	// run the DDLSink
@@ -54,7 +54,7 @@ type DDLSink interface {
 	// the caller of this function can call again and again until a true returned
 	emitDDLEvent(ctx context.Context, ddl *model.DDLEvent) (bool, error)
 	emitSyncPoint(ctx context.Context, checkpointTs uint64) error
-	// close the sink, cancel running goroutine.
+	// close the ddlsink, cancel running goroutine.
 	close(ctx context.Context) error
 	isInitialized() bool
 }
@@ -76,7 +76,7 @@ type ddlSinkImpl struct {
 	ddlCh chan *model.DDLEvent
 	errCh chan error
 
-	sink sinkv2.Sink
+	sink ddlsink.Sink
 	// `sinkInitHandler` can be helpful in unit testing.
 	sinkInitHandler ddlSinkInitHandler
 
@@ -115,7 +115,7 @@ type ddlSinkInitHandler func(ctx context.Context, a *ddlSinkImpl) error
 
 func ddlSinkInitializer(ctx context.Context, a *ddlSinkImpl) error {
 	ctx = contextutil.PutRoleInCtx(ctx, util.RoleOwner)
-	log.Info("Try to create ddlSink based on sink",
+	log.Info("Try to create ddlSink based on ddlsink",
 		zap.String("namespace", a.changefeedID.Namespace),
 		zap.String("changefeed", a.changefeedID.ID))
 	s, err := factory.New(ctx, a.info.SinkURI, a.info.Config)
@@ -152,7 +152,7 @@ func (s *ddlSinkImpl) run(ctx context.Context) {
 
 		start := time.Now()
 		if err := s.sinkInitHandler(ctx, s); err != nil {
-			log.Warn("ddl sink initialize failed",
+			log.Warn("ddl ddlsink initialize failed",
 				zap.String("namespace", s.changefeedID.Namespace),
 				zap.String("changefeed", s.changefeedID.ID),
 				zap.Duration("duration", time.Since(start)))
@@ -160,7 +160,7 @@ func (s *ddlSinkImpl) run(ctx context.Context) {
 			return
 		}
 		s.initialized.Store(true)
-		log.Info("ddl sink initialized, start processing...",
+		log.Info("ddl ddlsink initialized, start processing...",
 			zap.String("namespace", s.changefeedID.Namespace),
 			zap.String("changefeed", s.changefeedID.ID),
 			zap.Duration("duration", time.Since(start)))
@@ -327,7 +327,7 @@ func (s *ddlSinkImpl) emitSyncPoint(ctx context.Context, checkpointTs uint64) er
 		return nil
 	}
 	s.lastSyncPoint = checkpointTs
-	// TODO implement async sink syncPoint
+	// TODO implement async ddlsink syncPoint
 	return s.syncPointStore.SinkSyncPoint(ctx, s.changefeedID, checkpointTs)
 }
 
