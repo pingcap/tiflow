@@ -272,7 +272,9 @@ func (ddl *DDLWorker) HandleQueryEvent(ev *replication.QueryEvent, ec eventConte
 	}
 
 	if _, ok := stmt.(ast.DDLNode); !ok {
-		return nil
+		ddl.logger.Info("ddl that dm doesn't handle, skip it", zap.String("event", "query"),
+			zap.Stringer("queryEventContext", qec))
+		return ddl.recordSkipSQLsLocation(qec.eventContext)
 	}
 
 	if qec.shardingReSync != nil {

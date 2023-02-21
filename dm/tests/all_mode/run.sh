@@ -649,6 +649,7 @@ function run() {
 function prepare_test_empty_gtid() {
 	run_sql 'DROP DATABASE if exists all_mode;' $TIDB_PORT $TIDB_PASSWORD
 	run_sql 'DROP DATABASE if exists all_mode;' $MYSQL_PORT1 $MYSQL_PASSWORD1
+	run_sql 'DROP DATABASE if exists xxx;' $MYSQL_PORT1 $MYSQL_PASSWORD1
 	run_sql 'CREATE DATABASE all_mode;' $MYSQL_PORT1 $MYSQL_PASSWORD1
 	run_sql "CREATE TABLE all_mode.t1(i TINYINT, j INT UNIQUE KEY);" $MYSQL_PORT1 $MYSQL_PASSWORD1
 
@@ -707,6 +708,35 @@ function test_source_and_target_with_empty_gtid() {
 
 	echo "check data"
 	check_sync_diff $WORK_DIR $cur/conf/diff_config-1.toml
+
+	# check checkpoint matches master when the last event is a ddl
+	# 1. ddl that dm will sync
+	run_sql_source1 "create table all_mode.t2(c int primary key)"
+	run_sql_tidb_with_retry "show create table all_mode.t2" "CREATE TABLE"
+	run_dm_ctl_with_retry $WORK_DIR "127.0.0.1:$MASTER_PORT" \
+		"query-status test" \
+		'"synced": true' 1
+	# 2. ddl cannot be parsed and should be skipped
+	run_sql_source1 "create FUNCTION all_mode.hello (s CHAR(20)) RETURNS CHAR(50) DETERMINISTIC RETURN 'a';"
+	check_log_contain_with_retry "RETURNS char(50)" $WORK_DIR/worker1/log/dm-worker.log
+	sleep 30 # we rely on heartbeat event to flush checkpoint here, below too
+	run_dm_ctl_with_retry $WORK_DIR "127.0.0.1:$MASTER_PORT" \
+		"query-status test" \
+		'"synced": true' 1
+	# 3. ddl can be parsed and dm don't handle
+	run_sql_source1 "analyze table all_mode.t1"
+	check_log_contain_with_retry "analyze table" $WORK_DIR/worker1/log/dm-worker.log
+	sleep 30
+	run_dm_ctl_with_retry $WORK_DIR "127.0.0.1:$MASTER_PORT" \
+		"query-status test" \
+		'"synced": true' 1
+	# 4. ddl that is filtered
+	run_sql_source1 "create database xxx"
+	check_log_contain_with_retry "CREATE DATABASE IF NOT EXISTS" $WORK_DIR/worker1/log/dm-worker.log
+	sleep 30
+	run_dm_ctl_with_retry $WORK_DIR "127.0.0.1:$MASTER_PORT" \
+		"query-status test" \
+		'"synced": true' 1
 
 	echo "<<<<<< test_source_and_target_with_empty_gtid success! >>>>>>"
 }
