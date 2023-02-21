@@ -19,10 +19,14 @@ import (
 	"strings"
 	"time"
 
+	"github.com/jcmturner/gokrb5/v8/client"
+	"github.com/jcmturner/gokrb5/v8/config"
+	"github.com/jcmturner/gokrb5/v8/keytab"
 	"github.com/pingcap/log"
 	"github.com/pingcap/tiflow/cdc/contextutil"
 	"github.com/pingcap/tiflow/cdc/model"
 	"github.com/pingcap/tiflow/pkg/errors"
+	"github.com/pingcap/tiflow/pkg/security"
 	pkafka "github.com/pingcap/tiflow/pkg/sink/kafka"
 	"github.com/pingcap/tiflow/pkg/util"
 	"github.com/segmentio/kafka-go"
@@ -129,7 +133,33 @@ func completeSASLConfig(o *pkafka.Options) (sasl.Mechanism, error) {
 				}, nil
 			}
 		case pkafka.SASLTypeGSSAPI:
-			// todo: support gss api
+			cfg, err := config.Load(o.SASL.GSSAPI.KerberosConfigPath)
+			if err != nil {
+				return nil, errors.Trace(err)
+			}
+			var clnt *client.Client
+			switch o.SASL.GSSAPI.AuthType {
+			case security.UserAuth:
+				clnt = client.NewWithPassword(o.SASL.GSSAPI.Username, o.SASL.GSSAPI.Realm,
+					o.SASL.GSSAPI.Password, cfg,
+					client.DisablePAFXFAST(o.SASL.GSSAPI.DisablePAFXFAST))
+			case security.KeyTabAuth:
+				ktab, err := keytab.Load(o.SASL.GSSAPI.KeyTabPath)
+				if err != nil {
+					return nil, errors.Trace(err)
+				}
+				clnt = client.NewWithKeytab(o.SASL.GSSAPI.Username, o.SASL.GSSAPI.Realm, ktab, cfg,
+					client.DisablePAFXFAST(o.SASL.GSSAPI.DisablePAFXFAST))
+			}
+			if o.SASL.GSSAPI.DisablePAFXFAST {
+
+			}
+			//todo: clnt.Destroy()
+			err = clnt.Login()
+			if err != nil {
+				return nil, errors.Trace(err)
+			}
+			return Gokrb5v8(clnt, o.SASL.GSSAPI.ServiceName), nil
 		}
 	}
 	return nil, nil
