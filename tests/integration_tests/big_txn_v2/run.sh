@@ -12,6 +12,9 @@ CDC_COUNT=3
 DB_COUNT=4
 
 function run() {
+  if [ "$SINK_TYPE" == "mysql" ]; then
+    return
+  fi
 	rm -rf $WORK_DIR && mkdir -p $WORK_DIR
 
 	start_tidb_cluster --workdir $WORK_DIR

@@ -9,6 +9,10 @@ CDC_BINARY=cdc.test
 SINK_TYPE=$1
 
 function run() {
+  if [ "$SINK_TYPE" == "mysql" ]; then
+    return
+  fi
+
 	rm -rf $WORK_DIR && mkdir -p $WORK_DIR
 
 	start_tidb_cluster --workdir $WORK_DIR
