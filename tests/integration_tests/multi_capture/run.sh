@@ -45,7 +45,7 @@ function run() {
 
 	# check tables are created and data is synchronized
 	for i in $(seq $DB_COUNT); do
-		check_table_exists "multi_capture_$i.USERTABLE" ${DOWN_TIDB_HOST} ${DOWN_TIDB_PORT}
+		check_table_exists "multi_capture_$i.usertable" ${DOWN_TIDB_HOST} ${DOWN_TIDB_PORT}
 	done
 	check_sync_diff $WORK_DIR $CUR/conf/diff_config.toml
 
