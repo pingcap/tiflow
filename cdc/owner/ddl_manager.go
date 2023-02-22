@@ -39,6 +39,7 @@ var globalDDLs = []timodel.ActionType{
 	timodel.ActionCreateTable,
 	timodel.ActionRenameTable,
 	timodel.ActionRenameTables,
+	timodel.ActionExchangeTablePartition,
 }
 
 // ddlManager holds the pending DDL events of all tables and responsible for
