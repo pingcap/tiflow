@@ -22,7 +22,9 @@ import (
 	"github.com/pingcap/tiflow/cdc/model"
 	"github.com/pingcap/tiflow/cdc/processor/tablepb"
 	"github.com/pingcap/tiflow/cdc/scheduler/internal/v3/compat"
+	"github.com/pingcap/tiflow/cdc/scheduler/internal/v3/member"
 	"github.com/pingcap/tiflow/cdc/scheduler/internal/v3/replication"
+	"github.com/pingcap/tiflow/pkg/config"
 	"github.com/pingcap/tiflow/pkg/spanz"
 	"github.com/tikv/client-go/v2/tikv"
 	"go.uber.org/zap"
@@ -39,21 +41,21 @@ type Reconciler struct {
 	tableSpans map[model.TableID]splitSpans
 	spanCache  []tablepb.Span
 
-	regionCache   RegionCache
-	changefeedID  model.ChangeFeedID
-	regionPerSpan int
+	regionCache  RegionCache
+	changefeedID model.ChangeFeedID
+	config       *config.ChangefeedSchedulerConfig
 }
 
 // NewReconciler returns a Reconciler.
 func NewReconciler(
 	changefeedID model.ChangeFeedID, regionCache RegionCache,
-	regionPerSpan int,
+	config *config.ChangefeedSchedulerConfig,
 ) *Reconciler {
 	return &Reconciler{
-		tableSpans:    make(map[int64]splitSpans),
-		regionCache:   regionCache,
-		changefeedID:  changefeedID,
-		regionPerSpan: regionPerSpan,
+		tableSpans:   make(map[int64]splitSpans),
+		regionCache:  regionCache,
+		changefeedID: changefeedID,
+		config:       config,
 	}
 }
 
@@ -69,6 +71,7 @@ func (m *Reconciler) Reconcile(
 	ctx context.Context,
 	currentTables *replication.TableRanges,
 	replications *spanz.BtreeMap[*replication.ReplicationSet],
+	aliveCaptures map[model.CaptureID]*member.CaptureStatus,
 	compat *compat.Compat,
 ) []tablepb.Span {
 	tablesLenEqual := currentTables.Len() == len(m.tableSpans)
@@ -98,7 +101,7 @@ func (m *Reconciler) Reconcile(
 			tableSpan := spanz.TableIDToComparableSpan(tableID)
 			spans := []tablepb.Span{tableSpan}
 			if compat.CheckSpanReplicationEnabled() {
-				spans = m.splitSpan(ctx, tableSpan)
+				spans = m.splitSpan(ctx, tableSpan, len(aliveCaptures))
 			}
 			m.tableSpans[tableID] = splitSpans{
 				byAddTable: true,
@@ -182,7 +185,9 @@ func (m *Reconciler) Reconcile(
 	return m.spanCache
 }
 
-func (m *Reconciler) splitSpan(ctx context.Context, span tablepb.Span) []tablepb.Span {
+func (m *Reconciler) splitSpan(
+	ctx context.Context, span tablepb.Span, totalCaptures int,
+) []tablepb.Span {
 	bo := tikv.NewBackoffer(ctx, 500)
 	regions, err := m.regionCache.ListRegionIDsInKeyRange(bo, span.StartKey, span.EndKey)
 	if err != nil {
@@ -192,11 +197,15 @@ func (m *Reconciler) splitSpan(ctx context.Context, span tablepb.Span) []tablepb
 			zap.Error(err))
 		return []tablepb.Span{span}
 	}
-	if len(regions) <= m.regionPerSpan {
+	if len(regions) <= m.config.RegionPerSpan || totalCaptures == 0 {
 		return []tablepb.Span{span}
 	}
 
-	stepper := newEvenlySplitStepper(m.regionPerSpan, len(regions))
+	totalRegions := len(regions)
+	if totalRegions == 0 {
+		totalCaptures = 1
+	}
+	stepper := newEvenlySplitStepper(totalCaptures, totalRegions)
 	spans := make([]tablepb.Span, 0, stepper.SpanCount())
 	start, end := 0, stepper.Step()
 	for {
@@ -255,16 +264,20 @@ type evenlySplitStepper struct {
 	remain             int
 }
 
-func newEvenlySplitStepper(regionPerSpan int, totalRegion int) evenlySplitStepper {
+func newEvenlySplitStepper(totalCaptures int, totalRegion int) evenlySplitStepper {
 	extraRegionPerSpan := 0
-	spanCount, remain := totalRegion/regionPerSpan, totalRegion%regionPerSpan
-	if remain != 0 {
+	regionPerSpan, remain := totalRegion/totalCaptures, totalRegion%totalCaptures
+	if regionPerSpan == 0 {
+		regionPerSpan = 1
+		extraRegionPerSpan = 0
+		totalCaptures = totalRegion
+	} else if remain != 0 {
 		// Evenly distributes the remaining regions.
-		extraRegionPerSpan = int(math.Ceil(float64(remain) / float64(spanCount)))
+		extraRegionPerSpan = int(math.Ceil(float64(remain) / float64(totalCaptures)))
 	}
 	return evenlySplitStepper{
 		regionPerSpan:      regionPerSpan,
-		spanCount:          spanCount,
+		spanCount:          totalCaptures,
 		extraRegionPerSpan: extraRegionPerSpan,
 		remain:             remain,
 	}

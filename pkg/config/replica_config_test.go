@@ -167,8 +167,11 @@ func TestValidateAndAdjust(t *testing.T) {
 	cfg = GetDefaultReplicaConfig()
 	cfg.Scheduler.RegionPerSpan = 0
 	require.Nil(t, cfg.ValidateAndAdjust(nil))
+	require.Equal(t,
+		GetDefaultReplicaConfig().Scheduler.RegionPerSpan, cfg.Scheduler.RegionPerSpan)
 	cfg.Scheduler.RegionPerSpan = 999
-	require.Error(t, cfg.ValidateAndAdjust(nil))
+	require.Nil(t, cfg.ValidateAndAdjust(nil))
+	require.Equal(t, 999, cfg.Scheduler.RegionPerSpan)
 }
 
 func TestIsSinkCompatibleWithSpanReplication(t *testing.T) {

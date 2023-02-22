@@ -67,7 +67,8 @@ var defaultReplicaConfig = &ReplicaConfig{
 		Storage:           "",
 	},
 	Scheduler: &ChangefeedSchedulerConfig{
-		RegionPerSpan: 0,
+		EnableSplitSpan: false,
+		RegionPerSpan:   50_000,
 	},
 }
 
@@ -206,10 +207,6 @@ func (c *ReplicaConfig) ValidateAndAdjust(sinkURI *url.URL) error {
 	if c.Scheduler == nil {
 		c.FixScheduler()
 	}
-	if c.Scheduler.RegionPerSpan < 1000 && c.Scheduler.RegionPerSpan != 0 {
-		return cerror.ErrInvalidReplicaConfig.GenWithStackByArgs(
-			"region-per-span must be either 0 or greater than 1000")
-	}
 	// TODO: Remove the hack once span replication is compatible with all sinks.
 	if !isSinkCompatibleWithSpanReplication(sinkURI) {
 		c.Scheduler.RegionPerSpan = 0
@@ -220,7 +217,12 @@ func (c *ReplicaConfig) ValidateAndAdjust(sinkURI *url.URL) error {
 
 // FixScheduler adjusts scheduler to default value
 func (c *ReplicaConfig) FixScheduler() {
-	c.Scheduler = defaultReplicaConfig.Clone().Scheduler
+	if c.Scheduler == nil {
+		c.Scheduler = defaultReplicaConfig.Clone().Scheduler
+	}
+	if c.Scheduler.RegionPerSpan == 0 {
+		c.Scheduler.RegionPerSpan = defaultReplicaConfig.Scheduler.RegionPerSpan
+	}
 }
 
 // FixMemoryQuota adjusts memory quota to default value
