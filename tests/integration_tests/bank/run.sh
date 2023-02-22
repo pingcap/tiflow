@@ -25,7 +25,7 @@ function prepare() {
 
 	run_cdc_server --workdir $WORK_DIR --binary $CDC_BINARY
 
-	run_cdc_cli changefeed create --sink-uri="mysql://root@${DOWN_TIDB_HOST}:${DOWN_TIDB_PORT}/?cache-prep-stmts=false"
+	run_cdc_cli changefeed create --sink-uri="mysql://root@${DOWN_TIDB_HOST}:${DOWN_TIDB_PORT}/"
 }
 
 trap stop_tidb_cluster EXIT
