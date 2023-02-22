@@ -91,6 +91,13 @@ func newDDLManager(
 	sinkType model.DownStreamType,
 	bdrMode bool,
 ) *ddlManager {
+	log.Info("create ddl manager",
+		zap.String("namaspace", changefeedID.Namespace),
+		zap.String("changefeed", changefeedID.ID),
+		zap.Uint64("startTs", startTs),
+		zap.Uint64("checkpointTs", checkpointTs),
+		zap.Bool("bdrMode", bdrMode),
+	)
 	return &ddlManager{
 		changfeedID:   changefeedID,
 		ddlSink:       ddlSink,
@@ -405,14 +412,20 @@ func (m *ddlManager) allPhysicalTables(ctx context.Context) ([]model.TableID, er
 // schema.
 func (m *ddlManager) getSnapshotTs() uint64 {
 	ts := m.checkpointTs
+
+	if m.BDRMode {
+		ts = m.ddlResolvedTs
+	}
+	
 	if m.checkpointTs == m.startTs+1 {
+		log.Info("changefeed just started, use startTs to get snapshot",
+			zap.Uint64("startTs", m.startTs),
+			zap.Uint64("checkpointTs", m.checkpointTs),
+		)
 		// If checkpointTs is equal to startTs+1, it means that the changefeed
 		// is just started, and the physicalTablesCache is empty. So we need to
 		// get all tables from the snapshot at the startTs.
 		ts = m.startTs
-	}
-	if m.BDRMode {
-		ts = m.ddlResolvedTs
 	}
 	log.Debug("snapshotTs", zap.Uint64("ts", ts))
 	return ts
