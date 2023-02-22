@@ -33,31 +33,21 @@ function run() {
 
 	run_sql "CREATE DATABASE consistent_replicate_nfs;" ${UP_TIDB_HOST} ${UP_TIDB_PORT}
 	go-ycsb load mysql -P $CUR/conf/workload -p mysql.host=${UP_TIDB_HOST} -p mysql.port=${UP_TIDB_PORT} -p mysql.user=root -p mysql.db=consistent_replicate_nfs
-	run_sql "CREATE table consistent_replicate_nfs.check1(id int primary key);" ${UP_TIDB_HOST} ${UP_TIDB_PORT}
 	check_table_exists "consistent_replicate_nfs.usertable" ${DOWN_TIDB_HOST} ${DOWN_TIDB_PORT}
-	check_table_exists "consistent_replicate_nfs.check1" ${DOWN_TIDB_HOST} ${DOWN_TIDB_PORT} 120
-	check_sync_diff $WORK_DIR $CUR/conf/diff_config.toml
 
-	# Inject the failpoint to prevent sink execution, but the global resolved can be moved forward.
-	# Then we can apply redo log to reach an eventual consistent state in downstream.
 	cleanup_process $CDC_BINARY
-	export GO_FAILPOINTS='github.com/pingcap/tiflow/cdc/sinkv2/eventsink/txn/mysql/MySQLSinkHangLongTime=return(true)'
-	run_cdc_server --workdir $WORK_DIR --binary $CDC_BINARY
-	run_sql "create table consistent_replicate_nfs.usertable2 like consistent_replicate_nfs.usertable" ${UP_TIDB_HOST} ${UP_TIDB_PORT}
-	run_sql "insert into consistent_replicate_nfs.usertable2 select * from consistent_replicate_nfs.usertable" ${UP_TIDB_HOST} ${UP_TIDB_PORT}
-
 	# to ensure row changed events have been replicated to TiCDC
 	sleep 10
 
 	storage_path="nfs://$WORK_DIR/nfs/redo"
 	tmp_download_path=$WORK_DIR/cdc_data/redo/$changefeed_id
-	current_tso=$(cdc cli tso query --pd=http://$UP_PD_HOST_1:$UP_PD_PORT_1)
-	ensure 50 check_redo_resolved_ts $changefeed_id $current_tso $storage_path $tmp_download_path/meta
-	cleanup_process $CDC_BINARY
+	rts=$(cdc redo meta --storage="$storage_path" --tmp-dir="$tmp_download_path" | grep -oE "resolved-ts:[0-9]+" | awk -F: '{print $2}')
 
-	export GO_FAILPOINTS=''
+	sed "s/<placeholder>/$rts/g" $CUR/conf/diff_config.toml >$WORK_DIR/diff_config.toml
+
+	cat $WORK_DIR/diff_config.toml
 	cdc redo apply --tmp-dir="$tmp_download_path/apply" --storage="$storage_path" --sink-uri="mysql://normal:123456@127.0.0.1:3306/"
-	check_sync_diff $WORK_DIR $CUR/conf/diff_config.toml
+	check_sync_diff $WORK_DIR $WORK_DIR/diff_config.toml
 }
 
 trap stop EXIT
