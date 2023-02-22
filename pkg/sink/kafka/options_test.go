@@ -42,7 +42,8 @@ func TestCompleteOptions(t *testing.T) {
 	sinkURI, err := url.Parse(uri)
 	require.NoError(t, err)
 
-	err = options.Apply(sinkURI)
+	ctx := context.Background()
+	err = options.Apply(ctx, sinkURI)
 	require.NoError(t, err)
 	require.Equal(t, int32(1), options.PartitionNum)
 	require.Equal(t, int16(3), options.ReplicationFactor)
@@ -55,7 +56,7 @@ func TestCompleteOptions(t *testing.T) {
 	sinkURI, err = url.Parse(uri)
 	require.NoError(t, err)
 	options = NewOptions()
-	err = options.Apply(sinkURI)
+	err = options.Apply(ctx, sinkURI)
 	require.NoError(t, err)
 	require.Len(t, options.BrokerEndpoints, 3)
 
@@ -64,7 +65,7 @@ func TestCompleteOptions(t *testing.T) {
 	sinkURI, err = url.Parse(uri)
 	require.NoError(t, err)
 	options = NewOptions()
-	err = options.Apply(sinkURI)
+	err = options.Apply(ctx, sinkURI)
 	require.Regexp(t, ".*invalid syntax.*", errors.Cause(err))
 
 	// Illegal max-message-bytes.
@@ -72,7 +73,7 @@ func TestCompleteOptions(t *testing.T) {
 	sinkURI, err = url.Parse(uri)
 	require.NoError(t, err)
 	options = NewOptions()
-	err = options.Apply(sinkURI)
+	err = options.Apply(ctx, sinkURI)
 	require.Regexp(t, ".*invalid syntax.*", errors.Cause(err))
 
 	// Illegal partition-num.
@@ -80,7 +81,7 @@ func TestCompleteOptions(t *testing.T) {
 	sinkURI, err = url.Parse(uri)
 	require.NoError(t, err)
 	options = NewOptions()
-	err = options.Apply(sinkURI)
+	err = options.Apply(ctx, sinkURI)
 	require.Regexp(t, ".*invalid syntax.*", errors.Cause(err))
 
 	// Out of range partition-num.
@@ -88,7 +89,7 @@ func TestCompleteOptions(t *testing.T) {
 	sinkURI, err = url.Parse(uri)
 	require.NoError(t, err)
 	options = NewOptions()
-	err = options.Apply(sinkURI)
+	err = options.Apply(ctx, sinkURI)
 	require.Regexp(t, ".*invalid partition num.*", errors.Cause(err))
 
 	// Unknown required-acks.
@@ -96,8 +97,16 @@ func TestCompleteOptions(t *testing.T) {
 	sinkURI, err = url.Parse(uri)
 	require.NoError(t, err)
 	options = NewOptions()
-	err = options.Apply(sinkURI)
+	err = options.Apply(ctx, sinkURI)
 	require.Regexp(t, ".*invalid required acks 3.*", errors.Cause(err))
+
+	// invalid kafka client id
+	uri = "kafka://127.0.0.1:9092/abc?kafka-client-id=^invalid$"
+	sinkURI, err = url.Parse(uri)
+	require.NoError(t, err)
+	options = NewOptions()
+	err = options.Apply(ctx, sinkURI)
+	require.True(t, cerror.ErrKafkaInvalidClientID.Equal(err))
 }
 
 func TestSetPartitionNum(t *testing.T) {
@@ -118,7 +127,6 @@ func TestSetPartitionNum(t *testing.T) {
 
 func TestClientID(t *testing.T) {
 	testCases := []struct {
-		role         string
 		addr         string
 		changefeedID string
 		configuredID string
@@ -126,32 +134,32 @@ func TestClientID(t *testing.T) {
 		expected     string
 	}{
 		{
-			"owner", "domain:1234", "123-121-121-121",
+			"domain:1234", "123-121-121-121",
 			"", false,
-			"TiCDC_producer_owner_domain_1234_default_123-121-121-121",
+			"TiCDC_producer_domain_1234_default_123-121-121-121",
 		},
 		{
-			"owner", "127.0.0.1:1234", "123-121-121-121",
+			"127.0.0.1:1234", "123-121-121-121",
 			"", false,
-			"TiCDC_producer_owner_127.0.0.1_1234_default_123-121-121-121",
+			"TiCDC_producer_127.0.0.1_1234_default_123-121-121-121",
 		},
 		{
-			"owner", "127.0.0.1:1234?:,\"", "123-121-121-121",
+			"127.0.0.1:1234?:,\"", "123-121-121-121",
 			"", false,
-			"TiCDC_producer_owner_127.0.0.1_1234_____default_123-121-121-121",
+			"TiCDC_producer_127.0.0.1_1234_____default_123-121-121-121",
 		},
 		{
-			"owner", "中文", "123-121-121-121",
+			"中文", "123-121-121-121",
 			"", true, "",
 		},
 		{
-			"owner", "127.0.0.1:1234",
+			"127.0.0.1:1234",
 			"123-121-121-121", "cdc-changefeed-1", false,
 			"cdc-changefeed-1",
 		},
 	}
 	for _, tc := range testCases {
-		id, err := NewKafkaClientID(tc.role, tc.addr,
+		id, err := NewKafkaClientID(tc.addr,
 			model.DefaultChangeFeedID(tc.changefeedID), tc.configuredID)
 		if tc.hasError {
 			require.Error(t, err)
@@ -173,7 +181,8 @@ func TestTimeout(t *testing.T) {
 	sinkURI, err := url.Parse(uri)
 	require.NoError(t, err)
 
-	err = options.Apply(sinkURI)
+	ctx := context.Background()
+	err = options.Apply(ctx, sinkURI)
 	require.NoError(t, err)
 
 	require.Equal(t, 5*time.Second, options.DialTimeout)
@@ -192,7 +201,7 @@ func TestAdjustConfigTopicNotExist(t *testing.T) {
 	// topic not exist, `max-message-bytes` = `message.max.bytes`
 	options.MaxMessageBytes = adminClient.GetBrokerMessageMaxBytes()
 	ctx := context.Background()
-	saramaConfig, err := NewSaramaConfig(ctx, options)
+	saramaConfig, err := NewSaramaConfig(options)
 	require.Nil(t, err)
 
 	err = AdjustOptions(ctx, adminClient, options, "create-random1")
@@ -202,7 +211,7 @@ func TestAdjustConfigTopicNotExist(t *testing.T) {
 
 	// topic not exist, `max-message-bytes` > `message.max.bytes`
 	options.MaxMessageBytes = adminClient.GetBrokerMessageMaxBytes() + 1
-	saramaConfig, err = NewSaramaConfig(ctx, options)
+	saramaConfig, err = NewSaramaConfig(options)
 	require.Nil(t, err)
 	err = AdjustOptions(ctx, adminClient, options, "create-random2")
 	require.Nil(t, err)
@@ -211,7 +220,7 @@ func TestAdjustConfigTopicNotExist(t *testing.T) {
 
 	// topic not exist, `max-message-bytes` < `message.max.bytes`
 	options.MaxMessageBytes = adminClient.GetBrokerMessageMaxBytes() - 1
-	saramaConfig, err = NewSaramaConfig(ctx, options)
+	saramaConfig, err = NewSaramaConfig(options)
 	require.Nil(t, err)
 	err = AdjustOptions(ctx, adminClient, options, "create-random3")
 	require.Nil(t, err)
@@ -230,7 +239,7 @@ func TestAdjustConfigTopicExist(t *testing.T) {
 	options.MaxMessageBytes = adminClient.GetTopicMaxMessageBytes()
 
 	ctx := context.Background()
-	saramaConfig, err := NewSaramaConfig(ctx, options)
+	saramaConfig, err := NewSaramaConfig(options)
 	require.Nil(t, err)
 
 	err = AdjustOptions(ctx, adminClient, options, adminClient.GetDefaultMockTopicName())
@@ -241,7 +250,7 @@ func TestAdjustConfigTopicExist(t *testing.T) {
 
 	// topic exists, `max-message-bytes` > `max.message.bytes`
 	options.MaxMessageBytes = adminClient.GetTopicMaxMessageBytes() + 1
-	saramaConfig, err = NewSaramaConfig(context.Background(), options)
+	saramaConfig, err = NewSaramaConfig(options)
 	require.Nil(t, err)
 
 	err = AdjustOptions(ctx, adminClient, options, adminClient.GetDefaultMockTopicName())
@@ -252,7 +261,7 @@ func TestAdjustConfigTopicExist(t *testing.T) {
 
 	// topic exists, `max-message-bytes` < `max.message.bytes`
 	options.MaxMessageBytes = adminClient.GetTopicMaxMessageBytes() - 1
-	saramaConfig, err = NewSaramaConfig(ctx, options)
+	saramaConfig, err = NewSaramaConfig(options)
 	require.Nil(t, err)
 
 	err = AdjustOptions(ctx, adminClient, options, adminClient.GetDefaultMockTopicName())
@@ -274,7 +283,7 @@ func TestAdjustConfigTopicExist(t *testing.T) {
 	require.Nil(t, err)
 
 	options.MaxMessageBytes = adminClient.GetBrokerMessageMaxBytes() - 1
-	saramaConfig, err = NewSaramaConfig(ctx, options)
+	saramaConfig, err = NewSaramaConfig(options)
 	require.Nil(t, err)
 
 	err = AdjustOptions(ctx, adminClient, options, topicName)
@@ -287,7 +296,7 @@ func TestAdjustConfigTopicExist(t *testing.T) {
 	// When the topic exists, but the topic doesn't have `max.message.bytes`
 	// `max-message-bytes` > `message.max.bytes`
 	options.MaxMessageBytes = adminClient.GetBrokerMessageMaxBytes() + 1
-	saramaConfig, err = NewSaramaConfig(ctx, options)
+	saramaConfig, err = NewSaramaConfig(options)
 	require.Nil(t, err)
 
 	err = AdjustOptions(ctx, adminClient, options, topicName)
@@ -376,7 +385,7 @@ func TestSkipAdjustConfigMinInsyncReplicasWhenRequiredAcksIsNotWailAll(t *testin
 func TestCreateProducerFailed(t *testing.T) {
 	options := NewOptions()
 	options.Version = "invalid"
-	saramaConfig, err := NewSaramaConfig(context.Background(), options)
+	saramaConfig, err := NewSaramaConfig(options)
 	require.Regexp(t, "invalid version.*", errors.Cause(err))
 	require.Nil(t, saramaConfig)
 }
@@ -582,14 +591,13 @@ func TestConfigurationCombinations(t *testing.T) {
 		sinkURI, err := url.Parse(uri)
 		require.Nil(t, err)
 
+		ctx := context.Background()
 		options := NewOptions()
-		err = options.Apply(sinkURI)
+		err = options.Apply(ctx, sinkURI)
 		require.Nil(t, err)
 
-		ctx := context.Background()
-
 		changefeed := model.DefaultChangeFeedID("changefeed-test")
-		factory, err := NewMockFactory(ctx, options, changefeed)
+		factory, err := NewMockFactory(options, changefeed)
 		require.NoError(t, err)
 
 		adminClient, err := factory.AdminClient()
