@@ -72,12 +72,6 @@ func TestServerConfigValidateAndAdjust(t *testing.T) {
 	conf.AdvertiseAddr = "advertise"
 	require.Regexp(t, ".*does not contain a port", conf.ValidateAndAdjust())
 	conf.AdvertiseAddr = "advertise:1234"
-	conf.PerTableMemoryQuota = 1
-	require.Nil(t, conf.ValidateAndAdjust())
-	require.EqualValues(t, 1, conf.PerTableMemoryQuota)
-	conf.PerTableMemoryQuota = 0
-	require.Nil(t, conf.ValidateAndAdjust())
-	require.EqualValues(t, GetDefaultServerConfig().PerTableMemoryQuota, conf.PerTableMemoryQuota)
 	conf.Debug.Messages.ServerWorkerPoolSize = 0
 	require.Nil(t, conf.ValidateAndAdjust())
 	require.EqualValues(t, GetDefaultServerConfig().Debug.Messages.ServerWorkerPoolSize, conf.Debug.Messages.ServerWorkerPoolSize)
