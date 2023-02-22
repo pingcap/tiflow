@@ -39,7 +39,7 @@ type Factory interface {
 }
 
 // FactoryCreator defines the type of factory creator.
-type FactoryCreator func(context.Context, *Options, model.ChangeFeedID) (Factory, error)
+type FactoryCreator func(*Options, model.ChangeFeedID) (Factory, error)
 
 // SyncProducer is the kafka sync producer
 type SyncProducer interface {
