@@ -48,7 +48,6 @@ import (
 
 func newMySQLBackendWithoutDB(ctx context.Context) *mysqlBackend {
 	cfg := pmysql.NewConfig()
-	cfg.BatchReplaceEnabled = false
 	cfg.BatchDMLEnable = false
 	return &mysqlBackend{
 		statistics: metrics.NewStatistics(ctx, sink.TxnSink),
@@ -790,7 +789,7 @@ func TestMySQLSinkExecDMLError(t *testing.T) {
 	defer cancel()
 	changefeed := "test-changefeed"
 	contextutil.PutChangefeedIDInCtx(ctx, model.DefaultChangeFeedID(changefeed))
-	sinkURI, err := url.Parse("mysql://127.0.0.1:4000/?time-zone=UTC&worker-count=1&batch-replace-size=1")
+	sinkURI, err := url.Parse("mysql://127.0.0.1:4000/?time-zone=UTC&worker-count=1")
 	require.Nil(t, err)
 	sink, err := newMySQLBackend(ctx, sinkURI,
 		config.GetDefaultReplicaConfig(), mockGetDBConn)
