@@ -388,10 +388,6 @@ var (
 		"open-protocol codec invalid data",
 		errors.RFCCodeText("CDC:ErrOpenProtocolCodecInvalidData"),
 	)
-	ErrOpenProtocolCodecRowTooLarge = errors.Normalize(
-		"open-protocol codec single row too large",
-		errors.RFCCodeText("CDC:ErrOpenProtocolCodecRowTooLarge"),
-	)
 	ErrCanalDecodeFailed = errors.Normalize(
 		"canal decode failed",
 		errors.RFCCodeText("CDC:ErrCanalDecodeFailed"),
@@ -411,6 +407,10 @@ var (
 	ErrCraftCodecInvalidData = errors.Normalize(
 		"craft codec invalid data",
 		errors.RFCCodeText("CDC:ErrCraftCodecInvalidData"),
+	)
+	ErrMessageTooLarge = errors.Normalize(
+		"message is too large",
+		errors.RFCCodeText("CDC:ErrMessageTooLarge"),
 	)
 	ErrStorageSinkInvalidDateSeparator = errors.Normalize(
 		"date separator in cloud storage sink is invalid",
