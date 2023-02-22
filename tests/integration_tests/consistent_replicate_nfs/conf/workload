@@ -1,8 +1,8 @@
 threadcount=10
-recordcount=5000
+recordcount=50000
 operationcount=0
 workload=core
-fieldcount=100
+fieldcount=3
 
 readallfields=true
 
