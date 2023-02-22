@@ -48,7 +48,6 @@ import (
 
 func newMySQLBackendWithoutDB(ctx context.Context) *mysqlBackend {
 	cfg := pmysql.NewConfig()
-	cfg.BatchReplaceEnabled = false
 	cfg.BatchDMLEnable = false
 	return &mysqlBackend{
 		statistics: metrics.NewStatistics(ctx, sink.TxnSink),
@@ -66,6 +65,7 @@ func newMySQLBackend(
 	statistics := metrics.NewStatistics(ctx1, sink.TxnSink)
 	cancel() // Cancel background goroutines in returned metrics.Statistics.
 	raw := sinkURI.Query()
+	// TODO: use batch-dml-enable=true as default and unify generated SQL format.
 	raw.Set("batch-dml-enable", "false")
 	sinkURI.RawQuery = raw.Encode()
 
@@ -276,7 +276,7 @@ func TestNewMySQLBackendExecDML(t *testing.T) {
 		// normal db
 		db, mock := newTestMockDB(t)
 		mock.ExpectBegin()
-		mock.ExpectExec("INSERT INTO `s1`.`t1`(`a`,`b`) VALUES (?,?),(?,?)").
+		mock.ExpectExec("INSERT INTO `s1`.`t1` (`a`,`b`) VALUES (?,?),(?,?)").
 			WithArgs(1, "test", 2, "test").
 			WillReturnResult(sqlmock.NewResult(2, 2))
 		mock.ExpectCommit()
@@ -293,6 +293,7 @@ func TestNewMySQLBackendExecDML(t *testing.T) {
 	sink, err := newMySQLBackend(ctx, sinkURI,
 		config.GetDefaultReplicaConfig(), mockGetDBConn)
 	require.Nil(t, err)
+	sink.cfg.BatchDMLEnable = true
 
 	rows := []*model.RowChangedEvent{
 		{
@@ -398,7 +399,7 @@ func TestExecDMLRollbackErrDatabaseNotExists(t *testing.T) {
 		// normal db
 		db, mock := newTestMockDB(t)
 		mock.ExpectBegin()
-		mock.ExpectExec("REPLACE INTO `s1`.`t1`(`a`) VALUES (?),(?)").
+		mock.ExpectExec("REPLACE INTO `s1`.`t1` (`a`) VALUES (?),(?)").
 			WithArgs(1, 2).
 			WillReturnError(errDatabaseNotExists)
 		mock.ExpectRollback()
@@ -415,6 +416,7 @@ func TestExecDMLRollbackErrDatabaseNotExists(t *testing.T) {
 	sink, err := newMySQLBackend(ctx, sinkURI,
 		config.GetDefaultReplicaConfig(), mockGetDBConnErrDatabaseNotExists)
 	require.Nil(t, err)
+	sink.cfg.BatchDMLEnable = true
 
 	_ = sink.OnTxnEvent(&dmlsink.TxnCallbackableEvent{
 		Event: &model.SingleTableTxn{Rows: rows},
@@ -469,7 +471,7 @@ func TestExecDMLRollbackErrTableNotExists(t *testing.T) {
 		// normal db
 		db, mock := newTestMockDB(t)
 		mock.ExpectBegin()
-		mock.ExpectExec("REPLACE INTO `s1`.`t1`(`a`) VALUES (?),(?)").
+		mock.ExpectExec("REPLACE INTO `s1`.`t1` (`a`) VALUES (?),(?)").
 			WithArgs(1, 2).
 			WillReturnError(errTableNotExists)
 		mock.ExpectRollback()
@@ -486,6 +488,7 @@ func TestExecDMLRollbackErrTableNotExists(t *testing.T) {
 	sink, err := newMySQLBackend(ctx, sinkURI,
 		config.GetDefaultReplicaConfig(), mockGetDBConnErrDatabaseNotExists)
 	require.Nil(t, err)
+	sink.cfg.BatchDMLEnable = true
 
 	_ = sink.OnTxnEvent(&dmlsink.TxnCallbackableEvent{
 		Event: &model.SingleTableTxn{Rows: rows},
@@ -541,7 +544,7 @@ func TestExecDMLRollbackErrRetryable(t *testing.T) {
 		db, mock := newTestMockDB(t)
 		for i := 0; i < 2; i++ {
 			mock.ExpectBegin()
-			mock.ExpectExec("REPLACE INTO `s1`.`t1`(`a`) VALUES (?),(?)").
+			mock.ExpectExec("REPLACE INTO `s1`.`t1` (`a`) VALUES (?),(?)").
 				WithArgs(1, 2).
 				WillReturnError(errLockDeadlock)
 			mock.ExpectRollback()
@@ -559,6 +562,7 @@ func TestExecDMLRollbackErrRetryable(t *testing.T) {
 	sink, err := newMySQLBackend(ctx, sinkURI,
 		config.GetDefaultReplicaConfig(), mockGetDBConnErrDatabaseNotExists)
 	require.Nil(t, err)
+	sink.cfg.BatchDMLEnable = true
 	sink.setDMLMaxRetry(2)
 
 	_ = sink.OnTxnEvent(&dmlsink.TxnCallbackableEvent{
@@ -603,7 +607,7 @@ func TestMysqlSinkNotRetryErrDupEntry(t *testing.T) {
 		// normal db
 		db, mock := newTestMockDB(t)
 		mock.ExpectBegin()
-		mock.ExpectExec("INSERT INTO `s1`.`t1`(`a`) VALUES (?)").
+		mock.ExpectExec("INSERT INTO `s1`.`t1`(`a`) VALUES (?);").
 			WithArgs(1).
 			WillReturnResult(sqlmock.NewResult(1, 1))
 		mock.ExpectCommit().
@@ -780,7 +784,7 @@ func TestMySQLSinkExecDMLError(t *testing.T) {
 		// normal db
 		db, mock := newTestMockDB(t)
 		mock.ExpectBegin()
-		mock.ExpectExec("INSERT INTO `s1`.`t1`(`a`,`b`) VALUES (?,?)").WillDelayFor(1 * time.Second).
+		mock.ExpectExec("INSERT INTO `s1`.`t1`(`a`,`b`) VALUES (?,?);").WillDelayFor(1 * time.Second).
 			WillReturnError(&dmysql.MySQLError{Number: mysql.ErrNoSuchTable})
 		mock.ExpectClose()
 		return db, nil
@@ -790,7 +794,7 @@ func TestMySQLSinkExecDMLError(t *testing.T) {
 	defer cancel()
 	changefeed := "test-changefeed"
 	contextutil.PutChangefeedIDInCtx(ctx, model.DefaultChangeFeedID(changefeed))
-	sinkURI, err := url.Parse("mysql://127.0.0.1:4000/?time-zone=UTC&worker-count=1&batch-replace-size=1")
+	sinkURI, err := url.Parse("mysql://127.0.0.1:4000/?time-zone=UTC&worker-count=1")
 	require.Nil(t, err)
 	sink, err := newMySQLBackend(ctx, sinkURI,
 		config.GetDefaultReplicaConfig(), mockGetDBConn)
