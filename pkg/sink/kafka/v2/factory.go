@@ -141,9 +141,6 @@ func completeSASLConfig(o *pkafka.Options) (sasl.Mechanism, error) {
 				clnt = client.NewWithKeytab(o.SASL.GSSAPI.Username, o.SASL.GSSAPI.Realm, ktab, cfg,
 					client.DisablePAFXFAST(o.SASL.GSSAPI.DisablePAFXFAST))
 			}
-			if o.SASL.GSSAPI.DisablePAFXFAST {
-			}
-			// todo: clnt.Destroy()
 			err = clnt.Login()
 			if err != nil {
 				return nil, errors.Trace(err)
