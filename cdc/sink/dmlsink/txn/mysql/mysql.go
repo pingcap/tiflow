@@ -435,18 +435,6 @@ func (s *mysqlBackend) prepareDMLs() *preparedDMLs {
 	sqls := make([]string, 0, s.rows)
 	values := make([][]interface{}, 0, s.rows)
 	callbacks := make([]dmlsink.CallbackFunc, 0, len(s.events))
-	replaces := make(map[string][][]interface{})
-
-	// flushes the cached batch replace or insert DMLs,
-	// to keep the sequence of DMLs
-	flushCacheDMLs := func() {
-		if s.cfg.BatchReplaceEnabled && len(replaces) > 0 {
-			replaceSqls, replaceValues := reduceReplace(replaces, s.cfg.BatchReplaceSize)
-			sqls = append(sqls, replaceSqls...)
-			values = append(values, replaceValues...)
-			replaces = make(map[string][][]interface{})
-		}
-	}
 
 	// translateToInsert control the update and insert behavior
 	// we only translate into insert when old value is enabled and safe mode is disabled
@@ -503,7 +491,6 @@ func (s *mysqlBackend) prepareDMLs() *preparedDMLs {
 			// If the old value is enabled, is not in safe mode and is an update event, then translate to UPDATE.
 			// NOTICE: Only update events with the old value feature enabled will have both columns and preColumns.
 			if translateToInsert && len(row.PreColumns) != 0 && len(row.Columns) != 0 {
-				flushCacheDMLs()
 				query, args = prepareUpdate(quoteTable, row.PreColumns, row.Columns, s.cfg.ForceReplicate)
 				if query != "" {
 					sqls = append(sqls, query)
@@ -519,7 +506,6 @@ func (s *mysqlBackend) prepareDMLs() *preparedDMLs {
 			// For delete event:
 			// It will be translated directly into a DELETE SQL.
 			if len(row.PreColumns) != 0 {
-				flushCacheDMLs()
 				query, args = prepareDelete(quoteTable, row.PreColumns, s.cfg.ForceReplicate)
 				if query != "" {
 					sqls = append(sqls, query)
@@ -536,25 +522,14 @@ func (s *mysqlBackend) prepareDMLs() *preparedDMLs {
 			// INSERT(old value is enabled and not in safe mode)
 			// or REPLACE(old value is disabled or in safe mode) SQL.
 			if len(row.Columns) != 0 {
-				if s.cfg.BatchReplaceEnabled {
-					query, args = prepareReplace(quoteTable, row.Columns, false /* appendPlaceHolder */, translateToInsert)
-					if query != "" {
-						if _, ok := replaces[query]; !ok {
-							replaces[query] = make([][]interface{}, 0)
-						}
-						replaces[query] = append(replaces[query], args)
-					}
-				} else {
-					query, args = prepareReplace(quoteTable, row.Columns, true /* appendPlaceHolder */, translateToInsert)
-					if query != "" {
-						sqls = append(sqls, query)
-						values = append(values, args)
-					}
+				query, args = prepareReplace(quoteTable, row.Columns, true /* appendPlaceHolder */, translateToInsert)
+				if query != "" {
+					sqls = append(sqls, query)
+					values = append(values, args)
 				}
 			}
 		}
 	}
-	flushCacheDMLs()
 
 	if len(callbacks) == 0 {
 		callbacks = nil
