@@ -73,7 +73,7 @@ func (w *redoWorker) handleTasks(ctx context.Context, taskChan <-chan *redoTask)
 
 func (w *redoWorker) handleTask(ctx context.Context, task *redoTask) (finalErr error) {
 	lowerBound := task.lowerBound
-	upperBound := task.getUpperBound(task.tableSink)
+	upperBound := task.getUpperBound(task.tableSink.getReceivedSorterResolvedTs())
 	lowerPhs := oracle.GetTimeFromTS(lowerBound.CommitTs)
 	upperPhs := oracle.GetTimeFromTS(upperBound.CommitTs)
 	if upperPhs.Sub(lowerPhs) > maxTaskRange {

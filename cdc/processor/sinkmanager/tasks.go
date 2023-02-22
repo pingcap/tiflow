@@ -16,6 +16,7 @@ package sinkmanager
 import (
 	"time"
 
+	"github.com/pingcap/tiflow/cdc/model"
 	"github.com/pingcap/tiflow/cdc/processor/sourcemanager/engine"
 	"github.com/pingcap/tiflow/cdc/processor/tablepb"
 )
@@ -41,7 +42,7 @@ var (
 type writeSuccessCallback func(lastWrittenPos engine.Position)
 
 // Used to get an upper bound.
-type upperBoundGetter func(*tableSinkWrapper) engine.Position
+type upperBoundGetter func(sorterResolvedTs model.Ts) engine.Position
 
 // Used to abort the task processing of the table.
 type isCanceled func() bool
