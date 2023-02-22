@@ -22,14 +22,14 @@ import (
 
 	"github.com/pingcap/errors"
 	"github.com/pingcap/tiflow/cdc/model"
-	"github.com/pingcap/tiflow/cdc/sinkv2/ddlsink"
+	"github.com/pingcap/tiflow/cdc/sink/ddlsink"
 	cerror "github.com/pingcap/tiflow/pkg/errors"
 	"github.com/pingcap/tiflow/pkg/retry"
 	"github.com/stretchr/testify/require"
 )
 
 type mockSink struct {
-	ddlsink.DDLEventSink
+	ddlsink.Sink
 	checkpointTs model.Ts
 	ddl          *model.DDLEvent
 	ddlMu        sync.Mutex
@@ -63,7 +63,7 @@ func newDDLSink4Test(reportErr func(err error)) (DDLSink, *mockSink) {
 	mockSink := &mockSink{}
 	ddlSink := newDDLSink(model.DefaultChangeFeedID("changefeed-test"), &model.ChangeFeedInfo{}, reportErr)
 	ddlSink.(*ddlSinkImpl).sinkInitHandler = func(ctx context.Context, s *ddlSinkImpl) error {
-		s.sinkV2 = mockSink
+		s.sink = mockSink
 		return nil
 	}
 	return ddlSink, mockSink
@@ -385,6 +385,34 @@ func TestAddSpecialComment(t *testing.T) {
 			"ALTER PLACEMENT POLICY p3 PRIMARY_REGION='us-east-1' " +
 				"REGIONS='us-east-1,us-east-2,us-west-1';",
 			"",
+		},
+		{
+			"CREATE TABLE t1(t datetime) TTL=`t` + INTERVAL 1 DAY",
+			"CREATE TABLE `t1` (`t` DATETIME) /*T![ttl] TTL = `t` + INTERVAL 1 DAY */ /*T![ttl] TTL_ENABLE = 'OFF' */",
+		},
+		{
+			"CREATE TABLE t1(t datetime) TTL=`t` + INTERVAL 1 DAY TTL_ENABLE='ON'",
+			"CREATE TABLE `t1` (`t` DATETIME) /*T![ttl] TTL = `t` + INTERVAL 1 DAY */ /*T![ttl] TTL_ENABLE = 'OFF' */",
+		},
+		{
+			"ALTER TABLE t1 TTL=`t` + INTERVAL 1 DAY",
+			"ALTER TABLE `t1` /*T![ttl] TTL = `t` + INTERVAL 1 DAY */ /*T![ttl] TTL_ENABLE = 'OFF' */",
+		},
+		{
+			"ALTER TABLE t1 TTL=`t` + INTERVAL 1 DAY TTL_ENABLE='ON'",
+			"ALTER TABLE `t1` /*T![ttl] TTL = `t` + INTERVAL 1 DAY */ /*T![ttl] TTL_ENABLE = 'OFF' */",
+		},
+		{
+			"ALTER TABLE t1 TTL_ENABLE='ON'",
+			"ALTER TABLE `t1`",
+		},
+		{
+			"ALTER TABLE t1 TTL_ENABLE='OFF'",
+			"ALTER TABLE `t1`",
+		},
+		{
+			"ALTER TABLE t1 TTL_JOB_INTERVAL='7h'",
+			"ALTER TABLE `t1` /*T![ttl] TTL_JOB_INTERVAL = '7h' */",
 		},
 	}
 	for _, ca := range testCase {

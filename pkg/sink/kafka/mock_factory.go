@@ -14,8 +14,6 @@
 package kafka
 
 import (
-	"context"
-
 	"github.com/pingcap/tiflow/cdc/model"
 	"github.com/pingcap/tiflow/pkg/util"
 )
@@ -27,10 +25,10 @@ type MockFactory struct {
 }
 
 // NewMockFactory constructs a Factory with mock implementation.
-func NewMockFactory(ctx context.Context,
+func NewMockFactory(
 	o *Options, changefeedID model.ChangeFeedID,
 ) (Factory, error) {
-	helper, err := NewSaramaFactory(ctx, o, changefeedID)
+	helper, err := NewSaramaFactory(o, changefeedID)
 	if err != nil {
 		return nil, err
 	}

@@ -25,7 +25,7 @@ import (
 	"github.com/pingcap/tiflow/cdc/model"
 	"github.com/pingcap/tiflow/cdc/processor/sourcemanager/engine"
 	"github.com/pingcap/tiflow/cdc/processor/tablepb"
-	sinkv2 "github.com/pingcap/tiflow/cdc/sinkv2/tablesink"
+	"github.com/pingcap/tiflow/cdc/sink/tablesink"
 	"github.com/tikv/client-go/v2/oracle"
 	"go.uber.org/zap"
 )
@@ -43,7 +43,7 @@ type tableSinkWrapper struct {
 	// tableID used for logging.
 	span tablepb.Span
 	// tableSink is the underlying sink.
-	tableSink sinkv2.TableSink
+	tableSink tablesink.TableSink
 	// state used to control the lifecycle of the table.
 	state *tablepb.TableState
 	// startTs is the start ts of the table.
@@ -90,7 +90,7 @@ func newRangeEventCount(pos engine.Position, events int) rangeEventCount {
 func newTableSinkWrapper(
 	changefeed model.ChangeFeedID,
 	span tablepb.Span,
-	tableSink sinkv2.TableSink,
+	tableSink tablesink.TableSink,
 	state tablepb.TableState,
 	startTs model.Ts,
 	targetTs model.Ts,

@@ -14,7 +14,6 @@
 package v2
 
 import (
-	"context"
 	"testing"
 
 	"github.com/pingcap/tiflow/cdc/model"
@@ -31,29 +30,43 @@ func newOptions4Test() *pkafka.Options {
 }
 
 func newFactory4Test(o *pkafka.Options, t *testing.T) *factory {
-	f, err := NewFactory(context.Background(),
-		o, model.DefaultChangeFeedID("kafka-go-sink"))
+	f, err := NewFactory(o, model.DefaultChangeFeedID("kafka-go-sink"))
 	require.NoError(t, err)
 
 	return f.(*factory)
 }
 
-func TestNewWriter(t *testing.T) {
+func TestSyncProducer(t *testing.T) {
 	t.Parallel()
 
 	o := newOptions4Test()
 	factory := newFactory4Test(o, t)
 
-	sync, err := factory.newWriter(false)
+	sync, err := factory.SyncProducer()
 	require.NoError(t, err)
-	require.False(t, sync.Async)
 
-	async, err := factory.newWriter(true)
+	p, ok := sync.(*syncWriter)
+	require.True(t, ok)
+	require.False(t, p.w.Async)
+}
+
+func TestAsyncProducer(t *testing.T) {
+	t.Parallel()
+
+	o := newOptions4Test()
+	factory := newFactory4Test(o, t)
+
+	async, err := factory.AsyncProducer(make(chan struct{}, 1), make(chan error, 1))
 	require.NoError(t, err)
-	require.True(t, async.Async)
 
-	require.Equal(t, async.ReadTimeout, o.ReadTimeout)
-	require.Equal(t, async.WriteTimeout, o.WriteTimeout)
-	require.Equal(t, async.RequiredAcks, kafka.RequiredAcks(o.RequiredAcks))
-	require.Equal(t, async.BatchBytes, int64(o.MaxMessageBytes))
+	asyncP, ok := async.(*asyncWriter)
+	require.True(t, ok)
+	require.True(t, asyncP.w.Async)
+	require.NotNil(t, asyncP.successes)
+	require.NotNil(t, asyncP.closedChan)
+
+	require.Equal(t, asyncP.w.ReadTimeout, o.ReadTimeout)
+	require.Equal(t, asyncP.w.WriteTimeout, o.WriteTimeout)
+	require.Equal(t, asyncP.w.RequiredAcks, kafka.RequiredAcks(o.RequiredAcks))
+	require.Equal(t, asyncP.w.BatchBytes, int64(o.MaxMessageBytes))
 }

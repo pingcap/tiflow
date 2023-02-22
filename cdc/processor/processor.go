@@ -78,12 +78,13 @@ type processor struct {
 
 	lazyInit func(ctx cdcContext.Context) error
 	newAgent func(
-		cdcContext.Context, *model.Liveness, *config.SchedulerConfig,
+		cdcContext.Context, *model.Liveness, uint64, *config.SchedulerConfig,
 	) (scheduler.Agent, error)
 	cfg *config.SchedulerConfig
 
-	liveness *model.Liveness
-	agent    scheduler.Agent
+	liveness        *model.Liveness
+	agent           scheduler.Agent
+	changefeedEpoch uint64
 
 	metricSyncTableNumGauge      prometheus.Gauge
 	metricSchemaStorageGcTsGauge prometheus.Gauge
@@ -400,16 +401,18 @@ func newProcessor(
 	changefeedID model.ChangeFeedID,
 	up *upstream.Upstream,
 	liveness *model.Liveness,
+	changefeedEpoch uint64,
 	cfg *config.SchedulerConfig,
 ) *processor {
 	p := &processor{
-		changefeed:   state,
-		upstream:     up,
-		errCh:        make(chan error, 1),
-		changefeedID: changefeedID,
-		captureInfo:  captureInfo,
-		cancel:       func() {},
-		liveness:     liveness,
+		changefeed:      state,
+		upstream:        up,
+		errCh:           make(chan error, 1),
+		changefeedID:    changefeedID,
+		captureInfo:     captureInfo,
+		cancel:          func() {},
+		liveness:        liveness,
+		changefeedEpoch: changefeedEpoch,
 
 		metricSyncTableNumGauge: syncTableNumGauge.
 			WithLabelValues(changefeedID.Namespace, changefeedID.ID),
@@ -703,7 +706,7 @@ func (p *processor) lazyInitImpl(ctx cdcContext.Context) error {
 	// Bind them so that sourceManager can notify sinkManager.
 	p.sourceManager.OnResolve(p.sinkManager.UpdateReceivedSorterResolvedTs)
 
-	p.agent, err = p.newAgent(ctx, p.liveness, p.cfg)
+	p.agent, err = p.newAgent(ctx, p.liveness, p.changefeedEpoch, p.cfg)
 	if err != nil {
 		return err
 	}
@@ -712,12 +715,16 @@ func (p *processor) lazyInitImpl(ctx cdcContext.Context) error {
 	log.Info("processor initialized",
 		zap.String("capture", p.captureInfo.ID),
 		zap.String("namespace", p.changefeedID.Namespace),
-		zap.String("changefeed", p.changefeedID.ID))
+		zap.String("changefeed", p.changefeedID.ID),
+		zap.Uint64("changefeedEpoch", p.changefeedEpoch))
 	return nil
 }
 
 func (p *processor) newAgentImpl(
-	ctx cdcContext.Context, liveness *model.Liveness, cfg *config.SchedulerConfig,
+	ctx cdcContext.Context,
+	liveness *model.Liveness,
+	changefeedEpoch uint64,
+	cfg *config.SchedulerConfig,
 ) (ret scheduler.Agent, err error) {
 	messageServer := ctx.GlobalVars().MessageServer
 	messageRouter := ctx.GlobalVars().MessageRouter
@@ -725,7 +732,8 @@ func (p *processor) newAgentImpl(
 	captureID := ctx.GlobalVars().CaptureInfo.ID
 	ret, err = scheduler.NewAgent(
 		ctx, captureID, liveness,
-		messageServer, messageRouter, etcdClient, p, p.changefeedID, cfg)
+		messageServer, messageRouter, etcdClient, p, p.changefeedID,
+		changefeedEpoch, cfg)
 	return ret, errors.Trace(err)
 }
 
