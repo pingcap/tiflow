@@ -453,3 +453,40 @@ func (info *ChangeFeedInfo) fixMemoryQuota() {
 func (info *ChangeFeedInfo) fixScheduler() {
 	info.Config.FixScheduler()
 }
+
+type Barrier struct {
+	GlobalBarrierTs   Ts
+	TableBarrier      []TableBarrier
+	MinTableBarrierTs Ts
+}
+
+type TableBarrier struct {
+	ID        TableID
+	BarrierTs Ts
+}
+
+func NewBarrier(ts Ts) *Barrier {
+	return &Barrier{
+		GlobalBarrierTs: ts,
+	}
+}
+
+type DownStreamType int
+
+const (
+	// DB is the type of sink for database.
+	DB DownStreamType = iota
+	// Other is the type of kafka or storage.
+	Other
+	SinkTypeUnknown
+)
+
+func (t DownStreamType) String() string {
+	switch t {
+	case DB:
+		return "DB"
+	case Other:
+		return "Other"
+	}
+	return "unknown"
+}
