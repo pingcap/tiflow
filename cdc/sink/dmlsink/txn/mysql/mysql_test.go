@@ -66,7 +66,7 @@ func newMySQLBackend(
 	cancel() // Cancel background goroutines in returned metrics.Statistics.
 	raw := sinkURI.Query()
 	// TODO: use batch-dml-enable=true as default and unify generated SQL format.
-	raw.Set("batch-dml-enable", "false")
+	raw.Set("batch-dml-enable", "true")
 	sinkURI.RawQuery = raw.Encode()
 
 	backends, err := NewMySQLBackends(ctx, sinkURI, replicaConfig, dbConnFactory, statistics)
@@ -121,7 +121,7 @@ func TestPrepareDML(t *testing.T) {
 			},
 			expected: &preparedDMLs{
 				startTs:  []model.Ts{418658114257813514},
-				sqls:     []string{"DELETE FROM `common_1`.`uk_without_pk` WHERE `a1` = ? AND `a3` = ? LIMIT 1;"},
+				sqls:     []string{"DELETE FROM `common_1`.`uk_without_pk` WHERE `a1` = ? AND `a3` = ? LIMIT 1"},
 				values:   [][]interface{}{{1, 1}},
 				rowCount: 1,
 			},
@@ -147,7 +147,7 @@ func TestPrepareDML(t *testing.T) {
 			},
 			expected: &preparedDMLs{
 				startTs:  []model.Ts{418658114257813516},
-				sqls:     []string{"REPLACE INTO `common_1`.`uk_without_pk`(`a1`,`a3`) VALUES (?,?);"},
+				sqls:     []string{"REPLACE INTO `common_1`.`uk_without_pk` (`a1`,`a3`) VALUES (?,?)"},
 				values:   [][]interface{}{{2, 2}},
 				rowCount: 1,
 			},
@@ -293,7 +293,7 @@ func TestNewMySQLBackendExecDML(t *testing.T) {
 	sink, err := newMySQLBackend(ctx, sinkURI,
 		config.GetDefaultReplicaConfig(), mockGetDBConn)
 	require.Nil(t, err)
-	sink.cfg.BatchDMLEnable = true
+	// sink.cfg.BatchDMLEnable = true
 
 	rows := []*model.RowChangedEvent{
 		{
@@ -416,7 +416,7 @@ func TestExecDMLRollbackErrDatabaseNotExists(t *testing.T) {
 	sink, err := newMySQLBackend(ctx, sinkURI,
 		config.GetDefaultReplicaConfig(), mockGetDBConnErrDatabaseNotExists)
 	require.Nil(t, err)
-	sink.cfg.BatchDMLEnable = true
+	// sink.cfg.BatchDMLEnable = true
 
 	_ = sink.OnTxnEvent(&dmlsink.TxnCallbackableEvent{
 		Event: &model.SingleTableTxn{Rows: rows},
@@ -488,7 +488,7 @@ func TestExecDMLRollbackErrTableNotExists(t *testing.T) {
 	sink, err := newMySQLBackend(ctx, sinkURI,
 		config.GetDefaultReplicaConfig(), mockGetDBConnErrDatabaseNotExists)
 	require.Nil(t, err)
-	sink.cfg.BatchDMLEnable = true
+	// sink.cfg.BatchDMLEnable = true
 
 	_ = sink.OnTxnEvent(&dmlsink.TxnCallbackableEvent{
 		Event: &model.SingleTableTxn{Rows: rows},
@@ -562,7 +562,7 @@ func TestExecDMLRollbackErrRetryable(t *testing.T) {
 	sink, err := newMySQLBackend(ctx, sinkURI,
 		config.GetDefaultReplicaConfig(), mockGetDBConnErrDatabaseNotExists)
 	require.Nil(t, err)
-	sink.cfg.BatchDMLEnable = true
+	// sink.cfg.BatchDMLEnable = true
 	sink.setDMLMaxRetry(2)
 
 	_ = sink.OnTxnEvent(&dmlsink.TxnCallbackableEvent{
@@ -607,7 +607,7 @@ func TestMysqlSinkNotRetryErrDupEntry(t *testing.T) {
 		// normal db
 		db, mock := newTestMockDB(t)
 		mock.ExpectBegin()
-		mock.ExpectExec("INSERT INTO `s1`.`t1`(`a`) VALUES (?);").
+		mock.ExpectExec("INSERT INTO `s1`.`t1` (`a`) VALUES (?)").
 			WithArgs(1).
 			WillReturnResult(sqlmock.NewResult(1, 1))
 		mock.ExpectCommit().
@@ -784,7 +784,7 @@ func TestMySQLSinkExecDMLError(t *testing.T) {
 		// normal db
 		db, mock := newTestMockDB(t)
 		mock.ExpectBegin()
-		mock.ExpectExec("INSERT INTO `s1`.`t1`(`a`,`b`) VALUES (?,?);").WillDelayFor(1 * time.Second).
+		mock.ExpectExec("INSERT INTO `s1`.`t1` (`a`,`b`) VALUES (?,?),(?,?)").WillDelayFor(1 * time.Second).
 			WillReturnError(&dmysql.MySQLError{Number: mysql.ErrNoSuchTable})
 		mock.ExpectClose()
 		return db, nil
@@ -823,63 +823,6 @@ func TestMySQLSinkExecDMLError(t *testing.T) {
 		{
 			StartTs:  2,
 			CommitTs: 3,
-			Table:    &model.TableName{Schema: "s1", Table: "t1", TableID: 1},
-			Columns: []*model.Column{
-				{
-					Name:  "a",
-					Type:  mysql.TypeLong,
-					Flag:  model.HandleKeyFlag | model.PrimaryKeyFlag,
-					Value: 2,
-				},
-				{
-					Name:  "b",
-					Type:  mysql.TypeVarchar,
-					Flag:  0,
-					Value: "test",
-				},
-			},
-		},
-		{
-			StartTs:  3,
-			CommitTs: 4,
-			Table:    &model.TableName{Schema: "s1", Table: "t1", TableID: 1},
-			Columns: []*model.Column{
-				{
-					Name:  "a",
-					Type:  mysql.TypeLong,
-					Flag:  model.HandleKeyFlag | model.PrimaryKeyFlag,
-					Value: 3,
-				},
-				{
-					Name:  "b",
-					Type:  mysql.TypeVarchar,
-					Flag:  0,
-					Value: "test",
-				},
-			},
-		},
-		{
-			StartTs:  4,
-			CommitTs: 5,
-			Table:    &model.TableName{Schema: "s1", Table: "t1", TableID: 1},
-			Columns: []*model.Column{
-				{
-					Name:  "a",
-					Type:  mysql.TypeLong,
-					Flag:  model.HandleKeyFlag | model.PrimaryKeyFlag,
-					Value: 1,
-				},
-				{
-					Name:  "b",
-					Type:  mysql.TypeVarchar,
-					Flag:  0,
-					Value: "test",
-				},
-			},
-		},
-		{
-			StartTs:  5,
-			CommitTs: 6,
 			Table:    &model.TableName{Schema: "s1", Table: "t1", TableID: 1},
 			Columns: []*model.Column{
 				{
@@ -946,7 +889,7 @@ func TestMysqlSinkSafeModeOff(t *testing.T) {
 			expected: &preparedDMLs{
 				startTs: []model.Ts{418658114257813514},
 				sqls: []string{
-					"INSERT INTO `common_1`.`uk_without_pk`(`a1`,`a3`) VALUES (?,?);",
+					"INSERT INTO `common_1`.`uk_without_pk` (`a1`,`a3`) VALUES (?,?)",
 				},
 				values:   [][]interface{}{{1, 1}},
 				rowCount: 1,
@@ -974,7 +917,7 @@ func TestMysqlSinkSafeModeOff(t *testing.T) {
 			},
 			expected: &preparedDMLs{
 				startTs:  []model.Ts{418658114257813514},
-				sqls:     []string{"INSERT INTO `common_1`.`pk`(`a1`,`a3`) VALUES (?,?);"},
+				sqls:     []string{"INSERT INTO `common_1`.`pk` (`a1`,`a3`) VALUES (?,?)"},
 				values:   [][]interface{}{{1, 1}},
 				rowCount: 1,
 			},
@@ -1014,7 +957,7 @@ func TestMysqlSinkSafeModeOff(t *testing.T) {
 				startTs: []model.Ts{418658114257813516},
 				sqls: []string{
 					"UPDATE `common_1`.`uk_without_pk` SET `a1`=?,`a3`=? " +
-						"WHERE `a1`=? AND `a3`=? LIMIT 1;",
+						"WHERE `a1`=? AND `a3`=? LIMIT 1",
 				},
 				values:   [][]interface{}{{3, 3, 2, 2}},
 				rowCount: 1,
@@ -1054,7 +997,7 @@ func TestMysqlSinkSafeModeOff(t *testing.T) {
 			expected: &preparedDMLs{
 				startTs: []model.Ts{418658114257813516},
 				sqls: []string{"UPDATE `common_1`.`pk` SET `a1`=?,`a3`=? " +
-					"WHERE `a1`=? AND `a3`=? LIMIT 1;"},
+					"WHERE `a1`=? AND `a3`=? LIMIT 1"},
 				values:   [][]interface{}{{3, 3, 2, 2}},
 				rowCount: 1,
 			},
@@ -1099,8 +1042,8 @@ func TestMysqlSinkSafeModeOff(t *testing.T) {
 			expected: &preparedDMLs{
 				startTs: []model.Ts{418658114257813516},
 				sqls: []string{
-					"INSERT INTO `common_1`.`pk`(`a1`,`a3`) VALUES (?,?);",
-					"INSERT INTO `common_1`.`pk`(`a1`,`a3`) VALUES (?,?);",
+					"INSERT INTO `common_1`.`pk` (`a1`,`a3`) VALUES (?,?)",
+					"INSERT INTO `common_1`.`pk` (`a1`,`a3`) VALUES (?,?)",
 				},
 				values:   [][]interface{}{{3, 3}, {5, 5}},
 				rowCount: 2,
@@ -1129,7 +1072,7 @@ func TestMysqlSinkSafeModeOff(t *testing.T) {
 			expected: &preparedDMLs{
 				startTs: []model.Ts{418658114257813516},
 				sqls: []string{
-					"REPLACE INTO `common_1`.`pk`(`a1`,`a3`) VALUES (?,?);",
+					"REPLACE INTO `common_1`.`pk` (`a1`,`a3`) VALUES (?,?)",
 				},
 				values:   [][]interface{}{{3, 3}},
 				rowCount: 1,
@@ -1175,8 +1118,8 @@ func TestMysqlSinkSafeModeOff(t *testing.T) {
 			expected: &preparedDMLs{
 				startTs: []model.Ts{418658114257813516},
 				sqls: []string{
-					"REPLACE INTO `common_1`.`pk`(`a1`,`a3`) VALUES (?,?);",
-					"REPLACE INTO `common_1`.`pk`(`a1`,`a3`) VALUES (?,?);",
+					"REPLACE INTO `common_1`.`pk` (`a1`,`a3`) VALUES (?,?)",
+					"REPLACE INTO `common_1`.`pk` (`a1`,`a3`) VALUES (?,?)",
 				},
 				values:   [][]interface{}{{3, 3}, {5, 5}},
 				rowCount: 2,
