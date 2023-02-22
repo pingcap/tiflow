@@ -65,7 +65,6 @@ func newMySQLBackend(
 	statistics := metrics.NewStatistics(ctx1, sink.TxnSink)
 	cancel() // Cancel background goroutines in returned metrics.Statistics.
 	raw := sinkURI.Query()
-	// TODO: use batch-dml-enable=true as default and unify generated SQL format.
 	raw.Set("batch-dml-enable", "true")
 	sinkURI.RawQuery = raw.Encode()
 
@@ -293,7 +292,6 @@ func TestNewMySQLBackendExecDML(t *testing.T) {
 	sink, err := newMySQLBackend(ctx, sinkURI,
 		config.GetDefaultReplicaConfig(), mockGetDBConn)
 	require.Nil(t, err)
-	// sink.cfg.BatchDMLEnable = true
 
 	rows := []*model.RowChangedEvent{
 		{
@@ -416,7 +414,6 @@ func TestExecDMLRollbackErrDatabaseNotExists(t *testing.T) {
 	sink, err := newMySQLBackend(ctx, sinkURI,
 		config.GetDefaultReplicaConfig(), mockGetDBConnErrDatabaseNotExists)
 	require.Nil(t, err)
-	// sink.cfg.BatchDMLEnable = true
 
 	_ = sink.OnTxnEvent(&dmlsink.TxnCallbackableEvent{
 		Event: &model.SingleTableTxn{Rows: rows},
@@ -488,7 +485,6 @@ func TestExecDMLRollbackErrTableNotExists(t *testing.T) {
 	sink, err := newMySQLBackend(ctx, sinkURI,
 		config.GetDefaultReplicaConfig(), mockGetDBConnErrDatabaseNotExists)
 	require.Nil(t, err)
-	// sink.cfg.BatchDMLEnable = true
 
 	_ = sink.OnTxnEvent(&dmlsink.TxnCallbackableEvent{
 		Event: &model.SingleTableTxn{Rows: rows},
@@ -562,7 +558,6 @@ func TestExecDMLRollbackErrRetryable(t *testing.T) {
 	sink, err := newMySQLBackend(ctx, sinkURI,
 		config.GetDefaultReplicaConfig(), mockGetDBConnErrDatabaseNotExists)
 	require.Nil(t, err)
-	// sink.cfg.BatchDMLEnable = true
 	sink.setDMLMaxRetry(2)
 
 	_ = sink.OnTxnEvent(&dmlsink.TxnCallbackableEvent{
