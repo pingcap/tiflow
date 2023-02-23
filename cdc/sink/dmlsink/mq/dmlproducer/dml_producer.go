@@ -27,6 +27,10 @@ type DMLProducer interface {
 		ctx context.Context, topic string, partition int32, message *common.Message,
 	) error
 
+	//AsyncSendMessages(
+	//	ctx context.Context, topic string, partition int32, messages []*common.Message,
+	//) error
+
 	// Close closes the producer and client(s).
 	Close()
 }

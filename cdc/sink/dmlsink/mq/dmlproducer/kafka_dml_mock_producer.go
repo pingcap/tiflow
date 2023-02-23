@@ -57,6 +57,12 @@ func (m *MockDMLProducer) AsyncSendMessage(_ context.Context, topic string,
 	return nil
 }
 
+func (m *MockDMLProducer) AsyncSendMessages(_ context.Context, topic string,
+	partition int32, message []*common.Message,
+) error {
+	return nil
+}
+
 // Close do nothing.
 func (m *MockDMLProducer) Close() {}
 

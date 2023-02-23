@@ -133,6 +133,12 @@ func (k *kafkaDMLProducer) AsyncSendMessage(
 		message.Key, message.Value, message.Callback)
 }
 
+func (k *kafkaDMLProducer) AsyncSendMessages(
+	ctx context.Context, topic string, partition int32, messages []*common.Message,
+) error {
+	return nil
+}
+
 func (k *kafkaDMLProducer) Close() {
 	// We have to hold the lock to synchronize closing with writing.
 	k.closedMu.Lock()
