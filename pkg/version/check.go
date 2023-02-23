@@ -20,6 +20,7 @@ import (
 	"io"
 	"regexp"
 	"strings"
+	"time"
 
 	"github.com/coreos/go-semver/semver"
 	"github.com/pingcap/errors"
@@ -28,6 +29,7 @@ import (
 	"github.com/pingcap/tidb/util/engine"
 	cerror "github.com/pingcap/tiflow/pkg/errors"
 	"github.com/pingcap/tiflow/pkg/httputil"
+	"github.com/pingcap/tiflow/pkg/retry"
 	"github.com/pingcap/tiflow/pkg/security"
 	pd "github.com/tikv/pd/client"
 	"go.uber.org/zap"
@@ -83,7 +85,13 @@ func CheckClusterVersion(
 	}
 
 	for _, pdAddr := range pdAddrs {
-		err = checkPDVersion(ctx, pdAddr, credential)
+		// check pd version with retry, if the pdAddr is a service or lb address
+		// the http client may connect to an unhealthy PD that returns 503
+		err = retry.Do(ctx, func() error {
+			return checkPDVersion(ctx, pdAddr, credential)
+		}, retry.WithBackoffBaseDelay(time.Millisecond.Milliseconds()*10),
+			retry.WithBackoffMaxDelay(time.Second.Milliseconds()),
+			retry.WithMaxTries(5))
 		if err == nil {
 			break
 		}
