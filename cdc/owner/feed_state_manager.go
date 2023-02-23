@@ -431,6 +431,16 @@ func (m *feedStateManager) handleError(errs ...*model.RunningError) {
 		}
 	}
 
+	//  changefeed state from stopped to failed is allowed
+	// but stopped to error or normal is not allowed
+	if m.state.Info != nil && m.state.Info.State == model.StateStopped {
+		log.Warn("changefeed is stopped, ignore errors",
+			zap.String("changefeed", m.state.ID.ID),
+			zap.String("namespace", m.state.ID.Namespace),
+			zap.Any("errors", errs))
+		return
+	}
+
 	// we need to patch changefeed unretryable error to the changefeed info,
 	// so we have to iterate all errs here to check wether it is a unretryable
 	// error in errs
