@@ -24,7 +24,7 @@ import (
 	"github.com/phayes/freeport"
 	"github.com/pingcap/tiflow/cdc/model"
 	"github.com/pingcap/tiflow/cdc/redo/reader"
-	"github.com/pingcap/tiflow/cdc/sinkv2/eventsink/txn"
+	"github.com/pingcap/tiflow/cdc/sink/dmlsink/txn"
 	"github.com/stretchr/testify/require"
 )
 
@@ -246,7 +246,8 @@ func TestApplyDMLs(t *testing.T) {
 	close(ddlEventCh)
 
 	cfg := &RedoApplierConfig{
-		SinkURI: "mysql://127.0.0.1:4000/?worker-count=1&max-txn-row=1&tidb_placement_mode=ignore&safe-mode=true",
+		SinkURI: "mysql://127.0.0.1:4000/?worker-count=1&max-txn-row=1" +
+			"&tidb_placement_mode=ignore&safe-mode=true&cache-prep-stmts=false",
 	}
 	ap := NewRedoApplier(cfg)
 	err := ap.Apply(ctx)
