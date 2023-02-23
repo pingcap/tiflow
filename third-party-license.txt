@@ -1,0 +1,15 @@
+This project include code from go-sql-driver/mysql project.
+
+https://github.com/go-sql-driver/mysql
+
+Homepage: https://github.com/go-sql-driver/mysql
+License: Mozilla Public License Version 2.0 https://github.com/go-sql-driver/mysql/blob/master/LICENSE
+
+--------------------------------------------------------------------------------
+
+This project include code from golang-lru project.
+
+https://github.com/hashicorp/golang-lru
+
+Homepage: https://github.com/hashicorp/golang-lru
+License: Mozilla Public License Version 2.0 https://github.com/hashicorp/golang-lru/blob/master/LICENSE
