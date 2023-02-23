@@ -618,6 +618,7 @@ func (s *mysqlBackend) execDMLWithMaxRetries(pctx context.Context, dmls *prepare
 
 						s.stmtCache.Add(query, stmt)
 					}
+					//nolint:sqlclosecheck
 					_, execError = tx.Stmt(stmt.(*sql.Stmt)).ExecContext(ctx, args...)
 				} else {
 					_, execError = tx.ExecContext(ctx, query, args...)
