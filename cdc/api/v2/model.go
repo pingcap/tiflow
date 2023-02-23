@@ -387,6 +387,9 @@ func GetDefaultReplicaConfig() *ReplicaConfig {
 			FlushIntervalInMs: config.DefaultFlushIntervalInMs,
 			Storage:           "",
 		},
+		Scheduler: &ChangefeedSchedulerConfig{
+			RegionPerSpan: config.GetDefaultReplicaConfig().Scheduler.RegionPerSpan,
+		},
 	}
 }
 
