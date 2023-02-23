@@ -49,6 +49,7 @@ type worker struct {
 
 	// Metrics.
 	metricConflictDetectDuration prometheus.Observer
+	metricQueueDuration          prometheus.Observer
 	metricTxnWorkerFlushDuration prometheus.Observer
 	metricTxnWorkerBusyRatio     prometheus.Counter
 	metricTxnWorkerHandledRows   prometheus.Counter
@@ -74,6 +75,7 @@ func newWorker(ctx context.Context, ID int, backend backend, errCh chan<- error,
 		errCh:   errCh,
 
 		metricConflictDetectDuration: txn.ConflictDetectDuration.WithLabelValues(changefeedID.Namespace, changefeedID.ID),
+		metricQueueDuration:          txn.QueueDuration.WithLabelValues(changefeedID.Namespace, changefeedID.ID),
 		metricTxnWorkerFlushDuration: txn.WorkerFlushDuration.WithLabelValues(changefeedID.Namespace, changefeedID.ID),
 		metricTxnWorkerBusyRatio:     txn.WorkerBusyRatio.WithLabelValues(changefeedID.Namespace, changefeedID.ID),
 		metricTxnWorkerHandledRows:   txn.WorkerHandledRows.WithLabelValues(changefeedID.Namespace, changefeedID.ID, wid),
@@ -191,7 +193,8 @@ func (w *worker) onEvent(txn txnWithNotifier) bool {
 		return false
 	}
 
-	w.metricConflictDetectDuration.Observe(time.Since(txn.start).Seconds())
+	w.metricConflictDetectDuration.Observe(txn.conflictResolved.Sub(txn.start).Seconds())
+	w.metricQueueDuration.Observe(time.Since(txn.start).Seconds())
 	w.metricTxnWorkerHandledRows.Add(float64(len(txn.Event.Rows)))
 	w.wantMoreCallbacks = append(w.wantMoreCallbacks, txn.wantMore)
 	return w.backend.OnTxnEvent(txn.txnEvent.TxnCallbackableEvent)
