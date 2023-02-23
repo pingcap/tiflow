@@ -207,14 +207,28 @@ func (w *sinkWorker) tryEmitAndAdvance(
 	committedTxnSize *uint64,
 	pendingTxnSize *uint64,
 ) error {
-	// If used memory size exceeds the required limit, do a force acquire.
-	memoryHighUsage := *availableMem < usedMem
+	// If used memory size exceeds the required limit, do a force acquire to
+	// make sure the memory quota is not exceeded or leak.
+	// For example, if the memory quota is 100MB, and currently usedMem is 90MB,
+	// and availableMem is 100MB, then we can get event from the source manager
+	// but if the event size is 20MB, we just exceed the available memory quota temporarily.
+	// So we need to force acquire the memory quota to make up the difference.
+	exceedAvailableMem := *availableMem < usedMem
+	if exceedAvailableMem {
+		w.sinkMemQuota.ForceAcquire(usedMem - *availableMem)
+		log.Debug("MemoryQuotaTracing: force acquire memory for table sink task",
+			zap.String("namespace", w.changefeedID.Namespace),
+			zap.String("changefeed", w.changefeedID.ID),
+			zap.Stringer("span", &task.span),
+			zap.Uint64("memory", usedMem-*availableMem))
+		*availableMem = usedMem
+	}
 
 	// Do emit in such situations:
 	// 1. we use more memory than we required;
 	// 2. all events are received.
 	// 3. the pending batch size exceeds maxUpdateIntervalSize;
-	if memoryHighUsage || allFinished ||
+	if exceedAvailableMem || allFinished ||
 		needEmitAndAdvance(w.splitTxn, *committedTxnSize, *pendingTxnSize) {
 		if err := w.doEmitAndAdvance(
 			false,
@@ -236,7 +250,7 @@ func (w *sinkWorker) tryEmitAndAdvance(
 		return nil
 	}
 
-	if memoryHighUsage {
+	if usedMem >= *availableMem {
 		// We just finished a transaction, and the memory usage is still high.
 		// We need try to acquire memory for the next transaction. It is possible
 		// we can't acquire memory, but we finish the current transaction. So
@@ -286,6 +300,9 @@ func (w *sinkWorker) handleTask(ctx context.Context, task *sinkTask) (finalErr e
 
 	// First time to run the task, we have initialized memory quota for the table.
 	availableMem := requestMemSize
+	// How much memory we have used.
+	// This is used to calculate how much memory we need to acquire.
+	// Only when usedMem > availableMem we need to acquire memory.
 	usedMem := uint64(0)
 
 	// batchID is used to advance table sink with a given CommitTs, even if not all
@@ -293,7 +310,6 @@ func (w *sinkWorker) handleTask(ctx context.Context, task *sinkTask) (finalErr e
 	// is enabled or not. We split transactions with the same CommitTs even if splitTxn
 	// is false, and it won't break transaction atomicity to downstream.
 	batchID := uint64(1)
-	// ？？？ What does drained mean?
 	if w.eventCache != nil {
 		drained, err := w.fetchFromCache(task, &lowerBound, &upperBound, &batchID)
 		if err != nil {
