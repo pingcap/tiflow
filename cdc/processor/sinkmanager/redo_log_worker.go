@@ -76,8 +76,8 @@ func (w *redoWorker) handleTask(ctx context.Context, task *redoTask) (finalErr e
 	upperBound := task.getUpperBound(task.tableSink.getReceivedSorterResolvedTs())
 	lowerPhs := oracle.GetTimeFromTS(lowerBound.CommitTs)
 	upperPhs := oracle.GetTimeFromTS(upperBound.CommitTs)
-	if upperPhs.Sub(lowerPhs) > maxTaskRange {
-		upperCommitTs := oracle.GoTimeToTS(lowerPhs.Add(maxTaskRange))
+	if upperPhs.Sub(lowerPhs) > maxTaskTimeRange {
+		upperCommitTs := oracle.GoTimeToTS(lowerPhs.Add(maxTaskTimeRange))
 		upperBound = engine.Position{
 			StartTs:  upperCommitTs - 1,
 			CommitTs: upperCommitTs,

@@ -39,6 +39,7 @@ type sinkWorker struct {
 	// If it is enabled, we need to deal with the compatibility of the data format.
 	enableOldValue bool
 
+	// Metrics.
 	metricRedoEventCacheHit  prometheus.Counter
 	metricRedoEventCacheMiss prometheus.Counter
 }
@@ -81,49 +82,218 @@ func (w *sinkWorker) handleTasks(ctx context.Context, taskChan <-chan *sinkTask)
 	}
 }
 
-func (w *sinkWorker) handleTask(ctx context.Context, task *sinkTask) (finalErr error) {
+func validateAndAdjustBound(changefeedID model.ChangeFeedID,
+	task *sinkTask,
+) (engine.Position, engine.Position) {
 	lowerBound := task.lowerBound
 	upperBound := task.getUpperBound(task.tableSink.getReceivedSorterResolvedTs())
 
 	lowerPhs := oracle.GetTimeFromTS(lowerBound.CommitTs)
 	upperPhs := oracle.GetTimeFromTS(upperBound.CommitTs)
-	if upperPhs.Sub(lowerPhs) > maxTaskRange {
-		upperCommitTs := oracle.GoTimeToTS(lowerPhs.Add(maxTaskRange))
-		upperBound = engine.Position{
-			StartTs:  upperCommitTs - 1,
-			CommitTs: upperCommitTs,
-		}
+	// The time range of a task should not exceed maxTaskTimeRange.
+	// This would help for reduce changefeed latency.
+	if upperPhs.Sub(lowerPhs) > maxTaskTimeRange {
+		newUpperCommitTs := oracle.GoTimeToTS(lowerPhs.Add(maxTaskTimeRange))
+		upperBound = engine.GenCommitFence(newUpperCommitTs)
 	}
 
 	if !upperBound.IsCommitFence() {
-		log.Panic("sink task upperbound must be a ResolvedTs",
-			zap.String("namespace", w.changefeedID.Namespace),
-			zap.String("changefeed", w.changefeedID.ID),
+		log.Panic("Table sink task upperbound must be a ResolvedTs",
+			zap.String("namespace", changefeedID.Namespace),
+			zap.String("changefeed", changefeedID.ID),
 			zap.Stringer("span", &task.span),
 			zap.Any("upperBound", upperBound))
 	}
+
+	return lowerBound, upperBound
+}
+
+func needEmitAndAdvance(splitTxn bool, committedTxnSize uint64, pendingTxnSize uint64) bool {
+	// If splitTxn is true, we can safely emit all the events in the last transaction
+	// and current transaction. So we use `committedTxnSize+pendingTxnSize`.
+	splitTxnEmitCondition := splitTxn && committedTxnSize+pendingTxnSize >= maxUpdateIntervalSize
+	// If splitTxn is false, we need to emit the events when the size of the
+	// transaction is greater than maxUpdateIntervalSize.
+	// This could help to reduce the overhead of emit and advance too frequently.
+	noSplitTxnEmitCondition := !splitTxn && committedTxnSize >= maxUpdateIntervalSize
+	return splitTxnEmitCondition ||
+		noSplitTxnEmitCondition
+}
+
+func (w *sinkWorker) doEmitAndAdvance(
+	isLastTime bool,
+	events []*model.RowChangedEvent,
+	task *sinkTask,
+	currTxnCommitTs uint64,
+	lastTxnCommitTs uint64,
+	lastPos engine.Position,
+	// Mutable parameters!
+	batchID *uint64,
+	committedTxnSize *uint64,
+	pendingTxnSize *uint64,
+) (err error) {
+	// Append the events to the table sink first.
+	if len(events) > 0 {
+		task.tableSink.appendRowChangedEvents(events...)
+		events = events[:0]
+		if cap(events) > 1024 {
+			events = make([]*model.RowChangedEvent, 0, 1024)
+		}
+	}
+	log.Debug("check should advance or not",
+		zap.String("namespace", w.changefeedID.Namespace),
+		zap.String("changefeed", w.changefeedID.ID),
+		zap.Stringer("span", &task.span),
+		zap.Bool("splitTxn", w.splitTxn),
+		zap.Uint64("currTxnCommitTs", currTxnCommitTs),
+		zap.Uint64("lastTxnCommitTs", lastTxnCommitTs),
+		zap.Bool("isLastTime", isLastTime))
+
+	// If the current transaction is the last transaction, we need to emit all events
+	// and advance the table sink.
+	if currTxnCommitTs == lastPos.CommitTs {
+		// All transactions before currTxnCommitTs are resolved.
+		if lastPos.IsCommitFence() {
+			err = w.advanceTableSink(task, currTxnCommitTs, *committedTxnSize+*pendingTxnSize)
+		} else {
+			// This means all events of the current transaction have been fetched, but we can't
+			// ensure whether there are more transaction with the same CommitTs or not.
+			// So we need to advance the table sink with a batchID. It will make sure that
+			// we do not cross the CommitTs boundary.
+			err = w.advanceTableSinkWithBatchID(task, currTxnCommitTs,
+				*committedTxnSize+*pendingTxnSize, *batchID)
+			*batchID += 1
+		}
+
+		*committedTxnSize = 0
+		*pendingTxnSize = 0
+	} else if w.splitTxn && currTxnCommitTs > 0 {
+		// This branch will advance some complete transactions before currTxnCommitTs,
+		// and one partial transaction with `batchID`.
+		err = w.advanceTableSinkWithBatchID(task, currTxnCommitTs,
+			*committedTxnSize+*pendingTxnSize, *batchID)
+
+		*batchID += 1
+		*committedTxnSize = 0
+		*pendingTxnSize = 0
+	} else if !w.splitTxn && lastTxnCommitTs > 0 {
+		// If we don't split the transaction, we **only** advance the table sink
+		// by the last transaction commit ts.
+		err = w.advanceTableSink(task, lastTxnCommitTs, *committedTxnSize)
+		*committedTxnSize = 0
+		// If it is the last time we call `doEmitAndAdvance`, but `pendingTxnSize`
+		// hasn't been recorded yet. To avoid losing it, record it manually.
+		if isLastTime && *pendingTxnSize > 0 {
+			w.sinkMemQuota.Record(task.span, model.NewResolvedTs(currTxnCommitTs), *pendingTxnSize)
+			*pendingTxnSize = 0
+		}
+	}
+	return
+}
+
+func (w *sinkWorker) tryEmitAndAdvance(
+	allFinished bool,
+	txnFinished bool,
+	// Mutable parameters!
+	availableMem *uint64,
+	usedMem uint64,
+	task *sinkTask,
+	events []*model.RowChangedEvent,
+	currTxnCommitTs uint64,
+	lastTxnCommitTs uint64,
+	lastPos engine.Position,
+	// Mutable parameters!
+	batchID *uint64,
+	committedTxnSize *uint64,
+	pendingTxnSize *uint64,
+) error {
+	// If used memory size exceeds the required limit, do a force acquire.
+	memoryHighUsage := *availableMem < usedMem
+
+	// Do emit in such situations:
+	// 1. we use more memory than we required;
+	// 2. all events are received.
+	// 3. the pending batch size exceeds maxUpdateIntervalSize;
+	if memoryHighUsage || allFinished ||
+		needEmitAndAdvance(w.splitTxn, *committedTxnSize, *pendingTxnSize) {
+		if err := w.doEmitAndAdvance(
+			false,
+			events,
+			task,
+			currTxnCommitTs,
+			lastTxnCommitTs,
+			lastPos,
+			batchID,
+			committedTxnSize,
+			pendingTxnSize,
+		); err != nil {
+			return errors.Trace(err)
+		}
+	}
+
+	// All finished, no need to acquire memory.
+	if allFinished {
+		return nil
+	}
+
+	if memoryHighUsage {
+		// We just finished a transaction, and the memory usage is still high.
+		// We need try to acquire memory for the next transaction. It is possible
+		// we can't acquire memory, but we finish the current transaction. So
+		// we can wait for next round.
+		if txnFinished {
+			if w.sinkMemQuota.TryAcquire(requestMemSize) {
+				*availableMem += requestMemSize
+				log.Debug("MemoryQuotaTracing: try acquire memory for table sink task",
+					zap.String("namespace", w.changefeedID.Namespace),
+					zap.String("changefeed", w.changefeedID.ID),
+					zap.Stringer("span", &task.span),
+					zap.Uint64("memory", requestMemSize))
+			}
+		} else {
+			// The transaction is not finished and splitTxn is false, we need to
+			// force acquire memory. Because we can't leave rest data
+			// to the next round.
+			if !w.splitTxn {
+				w.sinkMemQuota.ForceAcquire(requestMemSize)
+				*availableMem += requestMemSize
+				log.Debug("MemoryQuotaTracing: force acquire memory for table sink task",
+					zap.String("namespace", w.changefeedID.Namespace),
+					zap.String("changefeed", w.changefeedID.ID),
+					zap.Stringer("span", &task.span),
+					zap.Uint64("memory", requestMemSize))
+			} else {
+				// NOTE: if splitTxn is true it's not required to force acquire memory.
+				// We can wait for a while because we already flushed some data to
+				// the table sink.
+				if err := w.sinkMemQuota.BlockAcquire(requestMemSize); err != nil {
+					return errors.Trace(err)
+				}
+				*availableMem += requestMemSize
+				log.Debug("MemoryQuotaTracing: block acquire memory for table sink task",
+					zap.String("namespace", w.changefeedID.Namespace),
+					zap.String("changefeed", w.changefeedID.ID),
+					zap.Stringer("span", &task.span),
+					zap.Uint64("memory", requestMemSize))
+			}
+		}
+	}
+	return nil
+}
+
+func (w *sinkWorker) handleTask(ctx context.Context, task *sinkTask) (finalErr error) {
+	lowerBound, upperBound := validateAndAdjustBound(w.changefeedID, task)
 
 	// First time to run the task, we have initialized memory quota for the table.
 	availableMem := requestMemSize
 	usedMem := uint64(0)
 
-	// Used to record the last written position.
-	// We need to use it to update the lower bound of the table sink.
-	var lastPos engine.Position
-
-	// To advance table sink in different cases: splitTxn is true or not.
-	committedTxnSize := uint64(0) // Can be used in `advanceTableSink`.
-	pendingTxnSize := uint64(0)   // Can be used in `advanceTableSinkWithBatchID`.
-	lastTxnCommitTs := uint64(0)  // Can be used in `advanceTableSink`
-	currTxnCommitTs := uint64(0)  // Can be used in `advanceTableSinkWithBatchID`.
-	events := make([]*model.RowChangedEvent, 0, 1024)
-
 	// batchID is used to advance table sink with a given CommitTs, even if not all
 	// transactions with the same CommitTs are collected, regardless of whether splitTxn
 	// is enabled or not. We split transactions with the same CommitTs even if splitTxn
-	// is false, and it won't break transaction atomicity to downstreams.
+	// is false, and it won't break transaction atomicity to downstream.
 	batchID := uint64(1)
-
+	// ？？？ What does drained mean?
 	if w.eventCache != nil {
 		drained, err := w.fetchFromCache(task, &lowerBound, &upperBound, &batchID)
 		if err != nil {
@@ -141,126 +311,26 @@ func (w *sinkWorker) handleTask(ctx context.Context, task *sinkTask) (finalErr e
 		}
 	}
 
-	needEmitAndAdvance := func() bool {
-		// For splitTxn is enabled or not, sizes of events can be advanced will be different.
-		return (w.splitTxn && committedTxnSize+pendingTxnSize >= maxUpdateIntervalSize) ||
-			(!w.splitTxn && committedTxnSize >= maxUpdateIntervalSize)
-	}
-	doEmitAndAdvance := func(isLastTime bool) (err error) {
-		if len(events) > 0 {
-			task.tableSink.appendRowChangedEvents(events...)
-			events = events[:0]
-			if cap(events) > 1024 {
-				events = make([]*model.RowChangedEvent, 0, 1024)
-			}
-		}
-		log.Debug("check should advance or not",
-			zap.String("namespace", w.changefeedID.Namespace),
-			zap.String("changefeed", w.changefeedID.ID),
-			zap.Stringer("span", &task.span),
-			zap.Bool("splitTxn", w.splitTxn),
-			zap.Uint64("currTxnCommitTs", currTxnCommitTs),
-			zap.Uint64("lastTxnCommitTs", lastTxnCommitTs),
-			zap.Bool("isLastTime", isLastTime))
-		if currTxnCommitTs == lastPos.CommitTs {
-			if lastPos.IsCommitFence() {
-				// All transactions before currTxnCommitTs are resolved.
-				err = w.advanceTableSink(task, currTxnCommitTs, committedTxnSize+pendingTxnSize)
-			} else {
-				// This means all events of the current transaction have been fetched, but we can't
-				// ensure whether there are more transaction with the same CommitTs or not.
-				err = w.advanceTableSinkWithBatchID(task, currTxnCommitTs, committedTxnSize+pendingTxnSize, batchID)
-				batchID += 1
-			}
-			committedTxnSize = 0
-			pendingTxnSize = 0
-		} else if w.splitTxn && currTxnCommitTs > 0 {
-			// This branch will advance some complete transactions before currTxnCommitTs,
-			// and one partial transaction with `batchID`.
-			err = w.advanceTableSinkWithBatchID(task, currTxnCommitTs, committedTxnSize+pendingTxnSize, batchID)
-			batchID += 1
-			committedTxnSize = 0
-			pendingTxnSize = 0
-		} else if !w.splitTxn && lastTxnCommitTs > 0 {
-			err = w.advanceTableSink(task, lastTxnCommitTs, committedTxnSize)
-			committedTxnSize = 0
-			// It's the last time we call `doEmitAndAdvance`, but `pendingTxnSize`
-			// hasn't been recorded yet. To avoid losing it, record it manually.
-			if isLastTime && pendingTxnSize > 0 {
-				w.sinkMemQuota.Record(task.span, model.NewResolvedTs(currTxnCommitTs), pendingTxnSize)
-				pendingTxnSize = 0
-			}
-		}
-		return
-	}
+	// Used to record the last written position.
+	// We need to use it to update the lower bound of the table sink.
+	var lastPos engine.Position
+	// Used to record the last written transaction commit ts.
+	committedTxnSize := uint64(0)
+	// Used to record the last written transaction commit ts.
+	lastTxnCommitTs := uint64(0)
+	// Used to record the size of the current transaction.
+	pendingTxnSize := uint64(0)
+	// Used to record the current transaction commit ts.
+	currTxnCommitTs := uint64(0)
+	events := make([]*model.RowChangedEvent, 0, 1024)
 
-	maybeEmitAndAdvance := func(allFinished, txnFinished bool) error {
-		// If used memory size exceeds the required limit, do a force acquire.
-		memoryHighUsage := availableMem < usedMem
-		if memoryHighUsage {
-			w.sinkMemQuota.ForceAcquire(usedMem - availableMem)
-			log.Debug("MemoryQuotaTracing: force acquire memory for table sink task",
-				zap.String("namespace", w.changefeedID.Namespace),
-				zap.String("changefeed", w.changefeedID.ID),
-				zap.Stringer("span", &task.span),
-				zap.Uint64("memory", usedMem-availableMem))
-			availableMem = usedMem
-		}
-
-		// Do emit in such situations:
-		// 1. we use more memory than we required;
-		// 2. the pending batch size exceeds maxUpdateIntervalSize;
-		// 3. all events are received.
-		if memoryHighUsage || allFinished || needEmitAndAdvance() {
-			if err := doEmitAndAdvance(false); err != nil {
-				return errors.Trace(err)
-			}
-		}
-
-		if allFinished {
-			return nil
-		}
-		if usedMem >= availableMem {
-			if txnFinished {
-				if w.sinkMemQuota.TryAcquire(requestMemSize) {
-					availableMem += requestMemSize
-					log.Debug("MemoryQuotaTracing: try acquire memory for table sink task",
-						zap.String("namespace", w.changefeedID.Namespace),
-						zap.String("changefeed", w.changefeedID.ID),
-						zap.Stringer("span", &task.span),
-						zap.Uint64("memory", requestMemSize))
-				}
-			} else {
-				if !w.splitTxn {
-					w.sinkMemQuota.ForceAcquire(requestMemSize)
-					availableMem += requestMemSize
-					log.Debug("MemoryQuotaTracing: force acquire memory for table sink task",
-						zap.String("namespace", w.changefeedID.Namespace),
-						zap.String("changefeed", w.changefeedID.ID),
-						zap.Stringer("span", &task.span),
-						zap.Uint64("memory", requestMemSize))
-				} else {
-					// NOTE: if splitTxn is true it's not required to force acquire memory.
-					if err := w.sinkMemQuota.BlockAcquire(requestMemSize); err != nil {
-						return errors.Trace(err)
-					}
-					availableMem += requestMemSize
-					log.Debug("MemoryQuotaTracing: block acquire memory for table sink task",
-						zap.String("namespace", w.changefeedID.Namespace),
-						zap.String("changefeed", w.changefeedID.ID),
-						zap.Stringer("span", &task.span),
-						zap.Uint64("memory", requestMemSize))
-				}
-			}
-		}
-		return nil
-	}
-
-	// lowerBound and upperBound are both closed intervals.
 	allEventSize := uint64(0)
 	allEventCount := 0
+	// lowerBound and upperBound are both closed intervals.
 	iter := w.sourceManager.FetchByTable(task.span, lowerBound, upperBound, w.sinkMemQuota)
+
 	defer func() {
+		// Collect metrics.
 		w.metricRedoEventCacheMiss.Add(float64(allEventSize))
 		task.tableSink.receivedEventCount.Add(int64(allEventCount))
 		outputEventCount.WithLabelValues(
@@ -269,6 +339,7 @@ func (w *sinkWorker) handleTask(ctx context.Context, task *sinkTask) (finalErr e
 			"kv",
 		).Add(float64(allEventCount))
 
+		// If eventCache is nil, update sorter commit ts and range event count.
 		if w.eventCache == nil {
 			task.tableSink.updateReceivedSorterCommitTs(currTxnCommitTs)
 			eventCount := newRangeEventCount(lastPos, allEventCount)
@@ -292,8 +363,8 @@ func (w *sinkWorker) handleTask(ctx context.Context, task *sinkTask) (finalErr e
 			zap.Bool("splitTxn", w.splitTxn),
 			zap.Any("lastPos", lastPos))
 
+		// Otherwise we can't ensure all events before `lastPos` are emitted.
 		if finalErr == nil {
-			// Otherwise we can't ensure all events before `lastPos` are emitted.
 			task.callback(lastPos)
 		}
 
@@ -308,23 +379,41 @@ func (w *sinkWorker) handleTask(ctx context.Context, task *sinkTask) (finalErr e
 		}
 	}()
 
+	// 1. We have enough memory to collect events.
+	// 2. The task is not canceled.
 	for availableMem > usedMem && !task.isCanceled() {
 		e, pos, err := iter.Next(ctx)
 		if err != nil {
 			return errors.Trace(err)
 		}
+
 		// There is no more data. It means that we finish this scan task.
 		if e == nil {
 			lastPos = upperBound
 			currTxnCommitTs = upperBound.CommitTs
 			lastTxnCommitTs = upperBound.CommitTs
-			return maybeEmitAndAdvance(true, true)
+			return w.tryEmitAndAdvance(
+				true,
+				true,
+				&availableMem,
+				usedMem,
+				task,
+				events,
+				currTxnCommitTs,
+				lastTxnCommitTs,
+				lastPos,
+				&batchID,
+				&committedTxnSize,
+				&pendingTxnSize,
+			)
 		}
 		allEventCount += 1
 
 		if pos.Valid() {
 			lastPos = pos
 		}
+
+		// Meet a new commit ts, we need to emit the previous events.
 		if currTxnCommitTs != e.CRTs {
 			lastTxnCommitTs = currTxnCommitTs
 			currTxnCommitTs = e.CRTs
@@ -341,17 +430,42 @@ func (w *sinkWorker) handleTask(ctx context.Context, task *sinkTask) (finalErr e
 			if err != nil {
 				return err
 			}
+
 			events = append(events, x...)
 			allEventSize += size
 			usedMem += size
 			pendingTxnSize += size
 		}
 
-		if err := maybeEmitAndAdvance(false, pos.Valid()); err != nil {
+		if err := w.tryEmitAndAdvance(
+			false,
+			pos.Valid(),
+			&availableMem,
+			usedMem,
+			task,
+			events,
+			currTxnCommitTs,
+			lastTxnCommitTs,
+			lastPos,
+			&batchID,
+			&committedTxnSize,
+			&pendingTxnSize,
+		); err != nil {
 			return errors.Trace(err)
 		}
 	}
-	return doEmitAndAdvance(true)
+
+	return w.doEmitAndAdvance(
+		true,
+		events,
+		task,
+		currTxnCommitTs,
+		lastTxnCommitTs,
+		lastPos,
+		&batchID,
+		&committedTxnSize,
+		&pendingTxnSize,
+	)
 }
 
 func (w *sinkWorker) fetchFromCache(
@@ -430,7 +544,9 @@ func (w *sinkWorker) fetchFromCache(
 	return
 }
 
-func (w *sinkWorker) advanceTableSinkWithBatchID(t *sinkTask, commitTs model.Ts, size uint64, batchID uint64) error {
+func (w *sinkWorker) advanceTableSinkWithBatchID(t *sinkTask, commitTs model.Ts,
+	size uint64, batchID uint64,
+) error {
 	resolvedTs := model.NewResolvedTs(commitTs)
 	resolvedTs.Mode = model.BatchResolvedMode
 	resolvedTs.BatchID = batchID
