@@ -8,13 +8,15 @@ WORK_DIR=$TEST_DIR/$TEST_NAME
 
 db_name=$TEST_NAME
 
-help_cnt=46
+# 44 normal help message + 1 "PASS" line
+help_cnt=45
 
 function run() {
 	# check dmctl output with help flag
 	# it should usage for root command
 	$PWD/bin/dmctl.test DEVEL --help >$WORK_DIR/help.log
-	help_msg=$(cat $WORK_DIR/help.log)
+	# since golang 1.20 there's one coverage line for each package, so we filter them
+	help_msg=$(cat $WORK_DIR/help.log | grep -v 'coverage:')
 	help_msg_cnt=$(echo "${help_msg}" | wc -l | xargs)
 	if [ "$help_msg_cnt" != $help_cnt ]; then
 		echo "dmctl case 1 help failed: $help_msg"
