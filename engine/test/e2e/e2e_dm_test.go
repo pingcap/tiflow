@@ -163,6 +163,9 @@ func testSimpleAllModeTask(
 	waitRow := func(where string, db string) {
 		require.Eventually(t, func() bool {
 			rs, err := tidb.Query("select 1 from " + db + ".t1 where " + where)
+			defer func(rs *sql.Rows) {
+				_ = rs.Close()
+			}(rs)
 			if err != nil {
 				t.Logf("query error: %v", err)
 				return false
