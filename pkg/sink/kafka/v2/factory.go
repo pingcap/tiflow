@@ -20,7 +20,6 @@ import (
 	"time"
 
 	"github.com/pingcap/log"
-	"github.com/pingcap/tiflow/cdc/contextutil"
 	"github.com/pingcap/tiflow/cdc/model"
 	"github.com/pingcap/tiflow/pkg/errors"
 	pkafka "github.com/pingcap/tiflow/pkg/sink/kafka"
@@ -33,35 +32,25 @@ import (
 )
 
 type factory struct {
+	// transport is used to contact kafka cluster and also maintain the `metadata cache`
+	// it's shared by the admin client and producers to keep the cache the same to make
+	// sure that the newly created topics can be found by the both.
+	transport    *kafka.Transport
 	changefeedID model.ChangeFeedID
 	options      *pkafka.Options
 }
 
 // NewFactory returns a factory implemented based on kafka-go
 func NewFactory(
-	ctx context.Context,
 	options *pkafka.Options,
 	changefeedID model.ChangeFeedID,
 ) (pkafka.Factory, error) {
-	captureAddr := contextutil.CaptureAddrFromCtx(ctx)
-	var role string
-	if contextutil.IsOwnerFromCtx(ctx) {
-		role = util.RoleOwner.String()
-	} else {
-		role = util.RoleProcessor.String()
-	}
-	clientID, err := pkafka.NewKafkaClientID(role, captureAddr, changefeedID, options.ClientID)
-	if err != nil {
-		return nil, errors.Trace(err)
-	}
-
 	transport, err := newTransport(options)
 	if err != nil {
 		return nil, errors.Trace(err)
 	}
-	transport.ClientID = clientID
-
 	return &factory{
+		transport:    transport,
 		changefeedID: changefeedID,
 		options:      options,
 	}, nil
@@ -89,6 +78,7 @@ func newTransport(o *pkafka.Options) (*kafka.Transport, error) {
 		SASL:        mechanism,
 		TLS:         tlsConfig,
 		DialTimeout: o.DialTimeout,
+		ClientID:    o.ClientID,
 	}, nil
 }
 
@@ -135,15 +125,11 @@ func completeSASLConfig(o *pkafka.Options) (sasl.Mechanism, error) {
 	return nil, nil
 }
 
-func (f *factory) newWriter(async bool) (*kafka.Writer, error) {
-	transport, err := newTransport(f.options)
-	if err != nil {
-		return nil, err
-	}
+func (f *factory) newWriter(async bool) *kafka.Writer {
 	w := &kafka.Writer{
 		Addr:         kafka.TCP(f.options.BrokerEndpoints...),
 		Balancer:     newManualPartitioner(),
-		Transport:    transport,
+		Transport:    f.transport,
 		ReadTimeout:  f.options.ReadTimeout,
 		WriteTimeout: f.options.WriteTimeout,
 		RequiredAcks: kafka.RequiredAcks(f.options.RequiredAcks),
@@ -171,39 +157,35 @@ func (f *factory) newWriter(async bool) (*kafka.Writer, error) {
 	log.Info("Kafka producer uses "+f.options.Compression+" compression algorithm",
 		zap.String("namespace", f.changefeedID.Namespace),
 		zap.String("changefeed", f.changefeedID.ID))
-	return w, nil
+	return w
 }
 
 func (f *factory) AdminClient() (pkafka.ClusterAdminClient, error) {
-	transport, err := newTransport(f.options)
-	if err != nil {
-		return nil, err
-	}
-	return newClusterAdminClient(f.options.BrokerEndpoints, transport, f.changefeedID), nil
+	return newClusterAdminClient(f.options.BrokerEndpoints, f.transport, f.changefeedID), nil
 }
 
 // SyncProducer creates a sync producer to writer message to kafka
 func (f *factory) SyncProducer() (pkafka.SyncProducer, error) {
-	w, err := f.newWriter(false)
-	if err != nil {
-		return nil, err
-	}
+	w := f.newWriter(false)
 	return &syncWriter{w: w}, nil
 }
+
+const (
+	defaultWait4ConfirmMessagesCount = 256
+)
 
 // AsyncProducer creates an async producer to writer message to kafka
 func (f *factory) AsyncProducer(closedChan chan struct{},
 	failpointCh chan error,
 ) (pkafka.AsyncProducer, error) {
-	w, err := f.newWriter(true)
-	if err != nil {
-		return nil, err
-	}
+	w := f.newWriter(true)
 	aw := &asyncWriter{
 		w:            w,
 		closedChan:   closedChan,
 		changefeedID: f.changefeedID,
 		failpointCh:  failpointCh,
+		successes:    make(chan []kafka.Message, defaultWait4ConfirmMessagesCount),
+		errorsChan:   make(chan error, 1),
 	}
 	w.Completion = aw.callBackRun
 	return aw, nil
@@ -321,12 +303,12 @@ func (a *asyncWriter) AsyncSend(ctx context.Context, topic string,
 		return nil
 	default:
 	}
-	return a.w.WriteMessages(context.Background(), kafka.Message{
-		Topic:     topic,
-		Partition: int(partition),
-		Key:       key,
-		Value:     value,
-		Metadata:  callback,
+	return a.w.WriteMessages(ctx, kafka.Message{
+		Topic:      topic,
+		Partition:  int(partition),
+		Key:        key,
+		Value:      value,
+		WriterData: callback,
 	})
 }
 
@@ -351,7 +333,7 @@ func (a *asyncWriter) AsyncRunCallback(ctx context.Context) error {
 			return errors.Trace(err)
 		case msgs := <-a.successes:
 			for _, ack := range msgs {
-				callback := ack.Metadata.(func())
+				callback := ack.WriterData.(func())
 				if callback != nil {
 					callback()
 				}

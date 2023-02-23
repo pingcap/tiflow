@@ -24,6 +24,12 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
+func TestDefaultReplicaConfig(t *testing.T) {
+	t.Parallel()
+	cfg := GetDefaultReplicaConfig()
+	require.NotNil(t, cfg.Scheduler)
+}
+
 func TestToAPIReplicaConfig(t *testing.T) {
 	cfg := config.GetDefaultReplicaConfig()
 	cfg.EnableOldValue = false
