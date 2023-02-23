@@ -183,8 +183,6 @@ func TestApplySinkURIParamsToConfig(t *testing.T) {
 	expected.MaxTxnRow = 20
 	expected.MaxMultiUpdateRowCount = 80
 	expected.MaxMultiUpdateRowSize = 512
-	expected.BatchReplaceEnabled = true
-	expected.BatchReplaceSize = 50
 	expected.SafeMode = false
 	expected.Timezone = `"UTC"`
 	expected.tidbTxnMode = "pessimistic"
@@ -193,8 +191,10 @@ func TestApplySinkURIParamsToConfig(t *testing.T) {
 	expected.PrepStmtCacheSize = 1000000
 	uriStr := "mysql://127.0.0.1:3306/?worker-count=64&max-txn-row=20" +
 		"&max-multi-update-row=80&max-multi-update-row-size=512" +
-		"&batch-replace-enable=true&batch-replace-size=50&safe-mode=false" +
-		"&tidb-txn-mode=pessimistic&cache-prep-stmts=true&prep-stmt-cache-size=1000000"
+		"&safe-mode=false" +
+		"&tidb-txn-mode=pessimistic" +
+		"&test-some-deprecated-config=true&test-deprecated-size-config=100" +
+		"&cache-prep-stmts=true&prep-stmt-cache-size=1000000"
 	uri, err := url.Parse(uriStr)
 	require.Nil(t, err)
 	cfg := NewConfig()
@@ -303,8 +303,6 @@ func TestParseSinkURIBadQueryString(t *testing.T) {
 		"mysql://127.0.0.1:3306/?max-txn-row=-1",
 		"mysql://127.0.0.1:3306/?max-txn-row=0",
 		"mysql://127.0.0.1:3306/?ssl-ca=only-ca-exists",
-		"mysql://127.0.0.1:3306/?batch-replace-enable=not-bool",
-		"mysql://127.0.0.1:3306/?batch-replace-enable=true&batch-replace-size=not-number",
 		"mysql://127.0.0.1:3306/?safe-mode=not-bool",
 		"mysql://127.0.0.1:3306/?time-zone=badtz",
 		"mysql://127.0.0.1:3306/?write-timeout=badduration",

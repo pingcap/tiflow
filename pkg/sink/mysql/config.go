@@ -57,12 +57,10 @@ const (
 	// The upper limit of max multi update row size(8KB).
 	maxMaxMultiUpdateRowSize = 8192
 
-	defaultTiDBTxnMode         = txnModeOptimistic
-	defaultBatchReplaceEnabled = true
-	defaultBatchReplaceSize    = 20
-	defaultReadTimeout         = "2m"
-	defaultWriteTimeout        = "2m"
-	defaultDialTimeout         = "2m"
+	defaultTiDBTxnMode  = txnModeOptimistic
+	defaultReadTimeout  = "2m"
+	defaultWriteTimeout = "2m"
+	defaultDialTimeout  = "2m"
 	// Note(dongmen): defaultSafeMode is set to false since v6.4.0.
 	defaultSafeMode       = false
 	defaultTxnIsolationRC = "READ-COMMITTED"
@@ -90,8 +88,6 @@ type Config struct {
 	MaxMultiUpdateRowCount int
 	MaxMultiUpdateRowSize  int
 	tidbTxnMode            string
-	BatchReplaceEnabled    bool
-	BatchReplaceSize       int
 	ReadTimeout            string
 	WriteTimeout           string
 	DialTimeout            string
@@ -116,8 +112,6 @@ func NewConfig() *Config {
 		MaxMultiUpdateRowCount: defaultMaxMultiUpdateRowCount,
 		MaxMultiUpdateRowSize:  defaultMaxMultiUpdateRowSize,
 		tidbTxnMode:            defaultTiDBTxnMode,
-		BatchReplaceEnabled:    defaultBatchReplaceEnabled,
-		BatchReplaceSize:       defaultBatchReplaceSize,
 		ReadTimeout:            defaultReadTimeout,
 		WriteTimeout:           defaultWriteTimeout,
 		DialTimeout:            defaultDialTimeout,
@@ -160,9 +154,6 @@ func (c *Config) Apply(
 		return err
 	}
 	if err = getSSLCA(query, changefeedID, &c.TLS); err != nil {
-		return err
-	}
-	if err = getBatchReplaceEnable(query, &c.BatchReplaceEnabled, &c.BatchReplaceSize); err != nil {
 		return err
 	}
 	if err = getSafeMode(query, &c.SafeMode); err != nil {
@@ -326,32 +317,6 @@ func getSSLCA(values url.Values, changefeedID model.ChangeFeedID, tls *string) e
 		return cerror.ErrMySQLConnectionError.Wrap(err).GenWithStack("fail to open MySQL connection")
 	}
 	*tls = "?tls=" + name
-	return nil
-}
-
-func getBatchReplaceEnable(values url.Values, batchReplaceEnabled *bool, batchReplaceSize *int) error {
-	s := values.Get("batch-replace-enable")
-	if len(s) > 0 {
-		enable, err := strconv.ParseBool(s)
-		if err != nil {
-			return cerror.WrapError(cerror.ErrMySQLInvalidConfig, err)
-		}
-		*batchReplaceEnabled = enable
-	}
-
-	if !*batchReplaceEnabled {
-		return nil
-	}
-
-	s = values.Get("batch-replace-size")
-	if len(s) == 0 {
-		return nil
-	}
-	size, err := strconv.Atoi(s)
-	if err != nil {
-		return cerror.WrapError(cerror.ErrMySQLInvalidConfig, err)
-	}
-	*batchReplaceSize = size
 	return nil
 }
 
