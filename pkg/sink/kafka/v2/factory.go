@@ -17,6 +17,7 @@ import (
 	"context"
 	"crypto/tls"
 	"strings"
+	"sync"
 	"time"
 
 	"github.com/pingcap/log"
@@ -152,7 +153,6 @@ func (f *factory) newWriter(async bool) *kafka.Writer {
 			zap.String("namespace", f.changefeedID.Namespace),
 			zap.String("changefeed", f.changefeedID.ID),
 			zap.String("compression", f.options.Compression))
-		f.options.Compression = "none"
 	}
 	log.Info("Kafka producer uses "+f.options.Compression+" compression algorithm",
 		zap.String("namespace", f.changefeedID.Namespace),
@@ -200,12 +200,16 @@ func (f *factory) AsyncProducer(
 			return
 		}
 
-		for _, msg := range messages {
-			callback := msg.WriterData.(func())
-			if callback != nil {
-				callback()
+		aw.done.Add(1)
+		go func() {
+			defer aw.done.Done()
+			for _, msg := range messages {
+				callback := msg.WriterData.(func())
+				if callback != nil {
+					callback()
+				}
 			}
-		}
+		}()
 	}
 
 	return aw, nil
@@ -283,6 +287,8 @@ type asyncWriter struct {
 	closedChan   chan struct{}
 	failpointCh  chan error
 	errorsChan   chan error
+
+	done sync.WaitGroup
 }
 
 // Close shuts down the producer and waits for any buffered messages to be
@@ -292,6 +298,7 @@ type asyncWriter struct {
 // Close on the underlying client.
 func (a *asyncWriter) Close() {
 	start := time.Now()
+	a.done.Wait()
 	if err := a.w.Close(); err != nil {
 		log.Warn("Close kafka async producer failed",
 			zap.String("namespace", a.changefeedID.Namespace),
