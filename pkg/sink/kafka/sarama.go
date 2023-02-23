@@ -14,7 +14,6 @@
 package kafka
 
 import (
-	"context"
 	"crypto/tls"
 	"strings"
 	"time"
@@ -22,32 +21,19 @@ import (
 	"github.com/Shopify/sarama"
 	"github.com/pingcap/errors"
 	"github.com/pingcap/log"
-	"github.com/pingcap/tiflow/cdc/contextutil"
 	cerror "github.com/pingcap/tiflow/pkg/errors"
 	"github.com/pingcap/tiflow/pkg/security"
 	"go.uber.org/zap"
 )
 
 // NewSaramaConfig return the default config and set the according version and metrics
-func NewSaramaConfig(ctx context.Context, o *Options) (*sarama.Config, error) {
+func NewSaramaConfig(o *Options) (*sarama.Config, error) {
 	config := sarama.NewConfig()
+	config.ClientID = o.ClientID
 
 	version, err := sarama.ParseKafkaVersion(o.Version)
 	if err != nil {
 		return nil, cerror.WrapError(cerror.ErrKafkaInvalidVersion, err)
-	}
-	var role string
-	if contextutil.IsOwnerFromCtx(ctx) {
-		role = "owner"
-	} else {
-		role = "processor"
-	}
-	captureAddr := contextutil.CaptureAddrFromCtx(ctx)
-	changefeedID := contextutil.ChangefeedIDFromCtx(ctx)
-
-	config.ClientID, err = NewKafkaClientID(role, captureAddr, changefeedID, o.ClientID)
-	if err != nil {
-		return nil, errors.Trace(err)
 	}
 	config.Version = version
 
