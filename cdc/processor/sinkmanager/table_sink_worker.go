@@ -315,6 +315,8 @@ func (w *sinkWorker) handleTask(ctx context.Context, task *sinkTask) (finalErr e
 		if err != nil {
 			return errors.Trace(err)
 		}
+		// We have drained all events from the cache, we can return directly.
+		// No need to get events from the source manager again.
 		if drained {
 			w.sinkMemQuota.Refund(availableMem - usedMem)
 			log.Debug("MemoryQuotaTracing: refund memory for table sink task",
