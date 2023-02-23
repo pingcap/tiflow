@@ -390,7 +390,8 @@ func GetDefaultReplicaConfig() *ReplicaConfig {
 			Storage:           "",
 		},
 		Scheduler: &ChangefeedSchedulerConfig{
-			RegionPerSpan: config.GetDefaultReplicaConfig().Scheduler.RegionPerSpan,
+			EnableSplitSpan: config.GetDefaultReplicaConfig().Scheduler.EnableSplitSpan,
+			RegionPerSpan:   config.GetDefaultReplicaConfig().Scheduler.RegionPerSpan,
 		},
 	}
 }
