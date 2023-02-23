@@ -22,14 +22,14 @@ import (
 
 	"github.com/pingcap/errors"
 	"github.com/pingcap/tiflow/cdc/model"
-	"github.com/pingcap/tiflow/cdc/sinkv2/ddlsink"
+	"github.com/pingcap/tiflow/cdc/sink/ddlsink"
 	cerror "github.com/pingcap/tiflow/pkg/errors"
 	"github.com/pingcap/tiflow/pkg/retry"
 	"github.com/stretchr/testify/require"
 )
 
 type mockSink struct {
-	ddlsink.DDLEventSink
+	ddlsink.Sink
 	checkpointTs model.Ts
 	ddl          *model.DDLEvent
 	ddlMu        sync.Mutex
@@ -63,7 +63,7 @@ func newDDLSink4Test(reportErr func(err error)) (DDLSink, *mockSink) {
 	mockSink := &mockSink{}
 	ddlSink := newDDLSink(model.DefaultChangeFeedID("changefeed-test"), &model.ChangeFeedInfo{}, reportErr)
 	ddlSink.(*ddlSinkImpl).sinkInitHandler = func(ctx context.Context, s *ddlSinkImpl) error {
-		s.sinkV2 = mockSink
+		s.sink = mockSink
 		return nil
 	}
 	return ddlSink, mockSink
