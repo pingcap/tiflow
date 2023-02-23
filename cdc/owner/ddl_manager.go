@@ -15,7 +15,6 @@ package owner
 
 import (
 	"context"
-
 	"github.com/pingcap/errors"
 	"github.com/pingcap/log"
 	timodel "github.com/pingcap/tidb/parser/model"
@@ -129,6 +128,7 @@ func (m *ddlManager) tick(
 	checkpointTs model.Ts,
 	tableCheckpoint map[model.TableName]model.Ts,
 ) ([]model.TableID, model.Barrier, error) {
+
 	barrier := model.Barrier{}
 
 	m.updateCheckpointTs(checkpointTs, tableCheckpoint)
@@ -184,8 +184,8 @@ func (m *ddlManager) tick(
 				}
 
 				// Add all valid DDL events to the pendingDDLs.
-				m.pendingDDLs[event.TableInfo.TableName] = append(
-					m.pendingDDLs[event.TableInfo.TableName], event)
+				m.pendingDDLs[event.TableInfo.TableName] =
+					append(m.pendingDDLs[event.TableInfo.TableName], event)
 			}
 
 			// Send DDL events to redo log.
@@ -205,15 +205,13 @@ func (m *ddlManager) tick(
 		}
 	}
 
-	// Use ddlPuller ResolvedTs to update ddlResolvedTs when
-	// there is no any pending ddl in ddlPuller.
+	// Use ddlPuller ResolvedTs to update ddlResolvedTs.
 	if m.ddlResolvedTs <= m.ddlPuller.ResolvedTs() {
 		m.ddlResolvedTs = m.ddlPuller.ResolvedTs()
 	}
 
-	// TODO: make ddl execution concurrent
-	for _, tableDDLs := range m.pendingDDLs {
-		nextDDL := tableDDLs[0]
+	nextDDL := m.getNextDDL()
+	if nextDDL != nil {
 		if m.checkpointTs > nextDDL.CommitTs {
 			log.Panic("checkpointTs is greater than next ddl commitTs",
 				zap.Uint64("checkpointTs", m.checkpointTs),
@@ -251,12 +249,6 @@ func (m *ddlManager) tick(
 		}
 	}
 
-	// gc pendingDDLs map
-	for table, tableDDLs := range m.pendingDDLs {
-		if len(tableDDLs) == 0 {
-			delete(m.pendingDDLs, table)
-		}
-	}
 	barrier = m.barrier()
 
 	return tableIDs, barrier, nil
@@ -273,8 +265,7 @@ func (m *ddlManager) executeDDL(ctx context.Context) error {
 		return err
 	}
 	if done {
-		m.pendingDDLs[m.executingDDL.TableInfo.TableName] = m.
-			pendingDDLs[m.executingDDL.TableInfo.TableName][1:]
+		m.pendingDDLs[m.executingDDL.TableInfo.TableName] = m.pendingDDLs[m.executingDDL.TableInfo.TableName][1:]
 		m.schema.schemaStorage.DoGC(m.executingDDL.CommitTs - 1)
 		m.justSentDDL = m.executingDDL
 		m.executingDDL = nil
@@ -282,10 +273,29 @@ func (m *ddlManager) executeDDL(ctx context.Context) error {
 	return nil
 }
 
+// getNextDDL returns the next ddl event to execute.
+func (m *ddlManager) getNextDDL() *model.DDLEvent {
+	if m.executingDDL != nil {
+		return m.executingDDL
+	}
+	var res *model.DDLEvent
+	for tb, ddls := range m.pendingDDLs {
+		if len(ddls) == 0 {
+			log.Debug("no more ddl event, gc the table from pendingDDLs",
+				zap.String("table", tb.String()))
+			delete(m.pendingDDLs, tb)
+			continue
+		}
+		if res == nil || res.CommitTs > ddls[0].CommitTs {
+			res = ddls[0]
+		}
+	}
+	return res
+}
+
 // updateCheckpointTs updates ddlHandler's tableCheckpoint and checkpointTs.
 func (m *ddlManager) updateCheckpointTs(checkpointTs model.Ts,
-	tableCheckpoint map[model.TableName]model.Ts,
-) {
+	tableCheckpoint map[model.TableName]model.Ts) {
 	m.checkpointTs = checkpointTs
 	// update tableCheckpoint
 	for table, ts := range tableCheckpoint {
@@ -293,7 +303,7 @@ func (m *ddlManager) updateCheckpointTs(checkpointTs model.Ts,
 	}
 
 	// gc tableCheckpoint
-	for table := range m.tableCheckpoint {
+	for table, _ := range m.tableCheckpoint {
 		if _, ok := tableCheckpoint[table]; !ok {
 			delete(m.tableCheckpoint, table)
 		}
@@ -416,17 +426,14 @@ func (m *ddlManager) getSnapshotTs() uint64 {
 	if m.BDRMode {
 		ts = m.ddlResolvedTs
 	}
-	
+
 	if m.checkpointTs == m.startTs+1 {
-		log.Info("changefeed just started, use startTs to get snapshot",
-			zap.Uint64("startTs", m.startTs),
-			zap.Uint64("checkpointTs", m.checkpointTs),
-		)
 		// If checkpointTs is equal to startTs+1, it means that the changefeed
 		// is just started, and the physicalTablesCache is empty. So we need to
 		// get all tables from the snapshot at the startTs.
 		ts = m.startTs
 	}
+
 	log.Debug("snapshotTs", zap.Uint64("ts", ts))
 	return ts
 }
@@ -443,7 +450,6 @@ func (m *ddlManager) cleanCache() {
 // It is a helper function to calculate tableBarrier.
 func getPhysicalTableIDs(ddl *model.DDLEvent) []model.TableID {
 	res := make([]model.TableID, 0, 1)
-	log.Info("getPhysicalTableIDs", zap.Any("ddl", ddl))
 	table := ddl.TableInfo
 	if ddl.PreTableInfo != nil {
 		table = ddl.PreTableInfo
