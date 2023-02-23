@@ -135,10 +135,6 @@ func (w *sinkWorker) doEmitAndAdvance(
 	// Append the events to the table sink first.
 	if len(events) > 0 {
 		task.tableSink.appendRowChangedEvents(events...)
-		events = events[:0]
-		if cap(events) > 1024 {
-			events = make([]*model.RowChangedEvent, 0, 1024)
-		}
 	}
 	log.Debug("check should advance or not",
 		zap.String("namespace", w.changefeedID.Namespace),
@@ -206,10 +202,10 @@ func (w *sinkWorker) tryEmitAndAdvance(
 	batchID *uint64,
 	committedTxnSize *uint64,
 	pendingTxnSize *uint64,
-) error {
+) (emitted bool, err error) {
 	// If used memory size exceeds the required limit, do a force acquire to
 	// make sure the memory quota is not exceeded or leak.
-	// For example, if the memory quota is 100MB, and currently usedMem is 90MB,
+	// For example, if the memory quota is 100MB, and current usedMem is 90MB,
 	// and availableMem is 100MB, then we can get event from the source manager
 	// but if the event size is 20MB, we just exceed the available memory quota temporarily.
 	// So we need to force acquire the memory quota to make up the difference.
@@ -241,13 +237,14 @@ func (w *sinkWorker) tryEmitAndAdvance(
 			committedTxnSize,
 			pendingTxnSize,
 		); err != nil {
-			return errors.Trace(err)
+			return false, errors.Trace(err)
 		}
+		emitted = true
 	}
 
 	// All finished, no need to acquire memory.
 	if allFinished {
-		return nil
+		return emitted, nil
 	}
 
 	if usedMem >= *availableMem {
@@ -281,7 +278,7 @@ func (w *sinkWorker) tryEmitAndAdvance(
 				// We can wait for a while because we already flushed some data to
 				// the table sink.
 				if err := w.sinkMemQuota.BlockAcquire(requestMemSize); err != nil {
-					return errors.Trace(err)
+					return emitted, errors.Trace(err)
 				}
 				*availableMem += requestMemSize
 				log.Debug("MemoryQuotaTracing: block acquire memory for table sink task",
@@ -292,7 +289,7 @@ func (w *sinkWorker) tryEmitAndAdvance(
 			}
 		}
 	}
-	return nil
+	return emitted, nil
 }
 
 func (w *sinkWorker) handleTask(ctx context.Context, task *sinkTask) (finalErr error) {
@@ -410,7 +407,7 @@ func (w *sinkWorker) handleTask(ctx context.Context, task *sinkTask) (finalErr e
 			lastPos = upperBound
 			currTxnCommitTs = upperBound.CommitTs
 			lastTxnCommitTs = upperBound.CommitTs
-			return w.tryEmitAndAdvance(
+			_, err := w.tryEmitAndAdvance(
 				true,
 				true,
 				&availableMem,
@@ -424,6 +421,7 @@ func (w *sinkWorker) handleTask(ctx context.Context, task *sinkTask) (finalErr e
 				&committedTxnSize,
 				&pendingTxnSize,
 			)
+			return err
 		}
 		allEventCount += 1
 
@@ -455,7 +453,7 @@ func (w *sinkWorker) handleTask(ctx context.Context, task *sinkTask) (finalErr e
 			pendingTxnSize += size
 		}
 
-		if err := w.tryEmitAndAdvance(
+		emitted, err := w.tryEmitAndAdvance(
 			false,
 			pos.Valid(),
 			&availableMem,
@@ -468,8 +466,16 @@ func (w *sinkWorker) handleTask(ctx context.Context, task *sinkTask) (finalErr e
 			&batchID,
 			&committedTxnSize,
 			&pendingTxnSize,
-		); err != nil {
+		)
+		if err != nil {
 			return errors.Trace(err)
+		}
+		// If we emit the events, we need to clear the events.
+		if emitted {
+			events = events[:0]
+			if cap(events) > 1024 {
+				events = make([]*model.RowChangedEvent, 0, 1024)
+			}
 		}
 	}
 
