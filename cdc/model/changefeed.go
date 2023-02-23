@@ -455,14 +455,14 @@ func (info *ChangeFeedInfo) fixScheduler() {
 }
 
 type Barrier struct {
-	GlobalBarrierTs   Ts
-	TableBarrier      []TableBarrier
-	MinTableBarrierTs Ts
+	GlobalBarrierTs   Ts             `json:"global-barrier-ts"`
+	TableBarrier      []TableBarrier `json:"table-barrier"`
+	MinTableBarrierTs Ts             `json:"min-table-barrier-ts"`
 }
 
 type TableBarrier struct {
-	ID        TableID
-	BarrierTs Ts
+	ID        TableID `json:"id"`
+	BarrierTs Ts      `json:"barrier-ts"`
 }
 
 func NewBarrier(ts Ts) *Barrier {
@@ -474,9 +474,9 @@ func NewBarrier(ts Ts) *Barrier {
 type DownStreamType int
 
 const (
-	// DB is the type of sink for database.
+	// DB is the type of Database.
 	DB DownStreamType = iota
-	// Other is the type of kafka or storage.
+	// Other is the type of MQ or Cloud Storage.
 	Other
 	SinkTypeUnknown
 )

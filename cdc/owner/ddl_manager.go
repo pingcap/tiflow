@@ -15,6 +15,7 @@ package owner
 
 import (
 	"context"
+
 	"github.com/pingcap/errors"
 	"github.com/pingcap/log"
 	timodel "github.com/pingcap/tidb/parser/model"
@@ -128,7 +129,6 @@ func (m *ddlManager) tick(
 	checkpointTs model.Ts,
 	tableCheckpoint map[model.TableName]model.Ts,
 ) ([]model.TableID, model.Barrier, error) {
-
 	barrier := model.Barrier{}
 
 	m.updateCheckpointTs(checkpointTs, tableCheckpoint)
@@ -182,10 +182,9 @@ func (m *ddlManager) tick(
 						zap.String("changefeed", m.changfeedID.ID), zap.Any("ddl", event))
 					continue
 				}
-
+				tableName := event.TableInfo.TableName
 				// Add all valid DDL events to the pendingDDLs.
-				m.pendingDDLs[event.TableInfo.TableName] =
-					append(m.pendingDDLs[event.TableInfo.TableName], event)
+				m.pendingDDLs[tableName] = append(m.pendingDDLs[tableName], event)
 			}
 
 			// Send DDL events to redo log.
@@ -226,11 +225,11 @@ func (m *ddlManager) tick(
 
 		// TiCDC guarantees all dml(s) that happen before a ddl was sent to
 		// downstream when this ddl is sent. So, we need to wait checkpointTs is
-		// fullyBlocked at ddl resolvedTs (equivalent to ddl barrierTs here) before we
+		// fullyBlocked at ddl commitTs (equivalent to ddl commitTs here) before we
 		// execute the next ddl.
 		// For example, let say there are some events are replicated by cdc:
 		// [dml-1(ts=5), dml-2(ts=8), ddl-1(ts=11), ddl-2(ts=12)].
-		// We need to wait `checkpointTs == ddlResolvedTs(ts=11)` before execute ddl-1.
+		// We need to wait `checkpointTs == ddlCommitTs(ts=11)` before execute ddl-1.
 		if m.checkpointTs == nextDDL.CommitTs {
 			log.Info("execute a ddl event",
 				zap.String("query", nextDDL.Query),
@@ -265,7 +264,10 @@ func (m *ddlManager) executeDDL(ctx context.Context) error {
 		return err
 	}
 	if done {
-		m.pendingDDLs[m.executingDDL.TableInfo.TableName] = m.pendingDDLs[m.executingDDL.TableInfo.TableName][1:]
+		tableName := m.executingDDL.TableInfo.TableName
+		// Set it to nil first to accelerate GC.
+		m.pendingDDLs[tableName][0] = nil
+		m.pendingDDLs[tableName] = m.pendingDDLs[tableName][1:]
 		m.schema.schemaStorage.DoGC(m.executingDDL.CommitTs - 1)
 		m.justSentDDL = m.executingDDL
 		m.executingDDL = nil
@@ -295,7 +297,8 @@ func (m *ddlManager) getNextDDL() *model.DDLEvent {
 
 // updateCheckpointTs updates ddlHandler's tableCheckpoint and checkpointTs.
 func (m *ddlManager) updateCheckpointTs(checkpointTs model.Ts,
-	tableCheckpoint map[model.TableName]model.Ts) {
+	tableCheckpoint map[model.TableName]model.Ts,
+) {
 	m.checkpointTs = checkpointTs
 	// update tableCheckpoint
 	for table, ts := range tableCheckpoint {
@@ -303,7 +306,7 @@ func (m *ddlManager) updateCheckpointTs(checkpointTs model.Ts,
 	}
 
 	// gc tableCheckpoint
-	for table, _ := range m.tableCheckpoint {
+	for table := range m.tableCheckpoint {
 		if _, ok := tableCheckpoint[table]; !ok {
 			delete(m.tableCheckpoint, table)
 		}
