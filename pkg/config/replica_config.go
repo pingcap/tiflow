@@ -205,7 +205,7 @@ func (c *ReplicaConfig) ValidateAndAdjust(sinkURI *url.URL) error {
 		c.FixMemoryQuota()
 	}
 	if c.Scheduler == nil {
-		c.FixScheduler()
+		c.FixScheduler(false)
 	}
 	// TODO: Remove the hack once span replication is compatible with all sinks.
 	if !isSinkCompatibleWithSpanReplication(sinkURI) {
@@ -216,12 +216,13 @@ func (c *ReplicaConfig) ValidateAndAdjust(sinkURI *url.URL) error {
 }
 
 // FixScheduler adjusts scheduler to default value
-func (c *ReplicaConfig) FixScheduler() {
+func (c *ReplicaConfig) FixScheduler(inheritV66 bool) {
 	if c.Scheduler == nil {
 		c.Scheduler = defaultReplicaConfig.Clone().Scheduler
+		return
 	}
-	if c.Scheduler.RegionPerSpan == 0 {
-		c.Scheduler.RegionPerSpan = defaultReplicaConfig.Scheduler.RegionPerSpan
+	if inheritV66 && c.Scheduler.RegionPerSpan != 0 {
+		c.Scheduler.EnableSplitSpan = true
 	}
 }
 
