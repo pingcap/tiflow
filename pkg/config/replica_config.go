@@ -68,7 +68,7 @@ var defaultReplicaConfig = &ReplicaConfig{
 	},
 	Scheduler: &ChangefeedSchedulerConfig{
 		EnableSplitSpan: false,
-		RegionPerSpan:   50_000,
+		RegionPerSpan:   100_000,
 	},
 }
 
@@ -209,7 +209,7 @@ func (c *ReplicaConfig) ValidateAndAdjust(sinkURI *url.URL) error {
 	}
 	// TODO: Remove the hack once span replication is compatible with all sinks.
 	if !isSinkCompatibleWithSpanReplication(sinkURI) {
-		c.Scheduler.RegionPerSpan = 0
+		c.Scheduler.EnableSplitSpan = false
 	}
 
 	return nil
