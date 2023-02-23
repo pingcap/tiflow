@@ -251,6 +251,23 @@ definitions:
       status:
         type: integer
     type: object
+  v2.ServerStatus:
+    properties:
+      cluster_id:
+        type: string
+      git_hash:
+        type: string
+      id:
+        type: string
+      is_owner:
+        type: boolean
+      liveness:
+        type: integer
+      pid:
+        type: integer
+      version:
+        type: string
+    type: object
 info:
   contact: {}
 paths:
@@ -824,4 +841,27 @@ paths:
       summary: Get processor detail information
       tags:
       - processor
+  /api/v2/status:
+    get:
+      consumes:
+      - application/json
+      description: This API is a synchronous interface. If the request is successful,
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/v2.ServerStatus'
+        "400":
+          description: Bad Request
+          schema:
+            $ref: '#/definitions/model.HTTPError'
+        "500":
+          description: Internal Server Error
+          schema:
+            $ref: '#/definitions/model.HTTPError'
+      summary: Get the status information of a TiCDC node
+      tags:
+      - common
 swagger: "2.0"

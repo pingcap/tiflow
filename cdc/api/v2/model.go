@@ -634,3 +634,18 @@ type ProcessorDetail struct {
 	// All table ids that this processor are replicating.
 	Tables []int64 `json:"table_ids"`
 }
+
+// Liveness is the liveness status of a capture.
+// Liveness can only be changed from alive to stopping, and no way back.
+type Liveness int32
+
+// ServerStatus holds some common information of a server
+type ServerStatus struct {
+	Version   string   `json:"version"`
+	GitHash   string   `json:"git_hash"`
+	ID        string   `json:"id"`
+	ClusterID string   `json:"cluster_id"`
+	Pid       int      `json:"pid"`
+	IsOwner   bool     `json:"is_owner"`
+	Liveness  Liveness `json:"liveness"`
+}
