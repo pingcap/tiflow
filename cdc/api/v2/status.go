@@ -26,6 +26,7 @@ import (
 // @Summary Get the status information of a TiCDC node
 // @Description This API is a synchronous interface. If the request is successful,
 // the status information of the corresponding node is returned.
+//
 // @Tags common
 // @Accept json
 // @Produce json

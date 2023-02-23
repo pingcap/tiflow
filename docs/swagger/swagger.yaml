@@ -194,6 +194,13 @@ definitions:
       error_msg:
         type: string
     type: object
+  model.MoveTableReq:
+    properties:
+      capture_id:
+        type: string
+      table_id:
+        type: integer
+    type: object
   model.ProcessorCommonInfo:
     properties:
       capture_id:
@@ -441,38 +448,12 @@ paths:
         name: changefeed_id
         required: true
         type: string
-      - description: changefeed target ts
+      - description: changefeed config
         in: body
-        name: target_ts
+        name: changefeedConfig
+        required: true
         schema:
-          type: integer
-      - description: sink uri
-        in: body
-        name: sink_uri
-        schema:
-          type: string
-      - description: filter rules
-        in: body
-        name: filter_rules
-        schema:
-          items:
-            type: string
-          type: array
-      - description: ignore transaction start ts
-        in: body
-        name: ignore_txn_start_ts
-        schema:
-          type: integer
-      - description: mounter worker nums
-        in: body
-        name: mounter_worker_num
-        schema:
-          type: integer
-      - description: sink config
-        in: body
-        name: sink_config
-        schema:
-          $ref: '#/definitions/config.SinkConfig'
+          $ref: '#/definitions/model.ChangefeedConfig'
       produces:
       - application/json
       responses:
@@ -524,7 +505,7 @@ paths:
       parameters:
       - description: changefeed_id
         in: path
-        name: changefeed-id
+        name: changefeed_id
         required: true
         type: string
       produces:
@@ -554,18 +535,12 @@ paths:
         name: changefeed_id
         required: true
         type: string
-      - description: table_id
+      - description: move table request
         in: body
-        name: table_id
+        name: MoveTable
         required: true
         schema:
-          type: integer
-      - description: capture_id
-        in: body
-        name: capture_id
-        required: true
-        schema:
-          type: string
+          $ref: '#/definitions/model.MoveTableReq'
       produces:
       - application/json
       responses:
@@ -701,6 +676,17 @@ paths:
       consumes:
       - application/json
       description: get the detail information of a processor
+      parameters:
+      - description: changefeed ID
+        in: path
+        name: changefeed_id
+        required: true
+        type: string
+      - description: capture ID
+        in: path
+        name: capture_id
+        required: true
+        type: string
       produces:
       - application/json
       responses:
@@ -823,6 +809,17 @@ paths:
   /api/v2/processors/{changefeed_id}/{capture_id}:
     get:
       description: get the detail information of a processor
+      parameters:
+      - description: changefeed ID
+        in: path
+        name: changefeed_id
+        required: true
+        type: string
+      - description: capture ID
+        in: path
+        name: capture_id
+        required: true
+        type: string
       produces:
       - application/json
       responses:

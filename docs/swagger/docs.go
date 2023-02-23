@@ -247,54 +247,12 @@ var doc = `{
                         "required": true
                     },
                     {
-                        "description": "changefeed target ts",
-                        "name": "target_ts",
+                        "description": "changefeed config",
+                        "name": "changefeedConfig",
                         "in": "body",
+                        "required": true,
                         "schema": {
-                            "type": "integer"
-                        }
-                    },
-                    {
-                        "description": "sink uri",
-                        "name": "sink_uri",
-                        "in": "body",
-                        "schema": {
-                            "type": "string"
-                        }
-                    },
-                    {
-                        "description": "filter rules",
-                        "name": "filter_rules",
-                        "in": "body",
-                        "schema": {
-                            "type": "array",
-                            "items": {
-                                "type": "string"
-                            }
-                        }
-                    },
-                    {
-                        "description": "ignore transaction start ts",
-                        "name": "ignore_txn_start_ts",
-                        "in": "body",
-                        "schema": {
-                            "type": "integer"
-                        }
-                    },
-                    {
-                        "description": "mounter worker nums",
-                        "name": "mounter_worker_num",
-                        "in": "body",
-                        "schema": {
-                            "type": "integer"
-                        }
-                    },
-                    {
-                        "description": "sink config",
-                        "name": "sink_config",
-                        "in": "body",
-                        "schema": {
-                            "$ref": "#/definitions/config.SinkConfig"
+                            "$ref": "#/definitions/model.ChangefeedConfig"
                         }
                     }
                 ],
@@ -414,7 +372,7 @@ var doc = `{
                     {
                         "type": "string",
                         "description": "changefeed_id",
-                        "name": "changefeed-id",
+                        "name": "changefeed_id",
                         "in": "path",
                         "required": true
                     }
@@ -460,21 +418,12 @@ var doc = `{
                         "required": true
                     },
                     {
-                        "description": "table_id",
-                        "name": "table_id",
+                        "description": "move table request",
+                        "name": "MoveTable",
                         "in": "body",
                         "required": true,
                         "schema": {
-                            "type": "integer"
-                        }
-                    },
-                    {
-                        "description": "capture_id",
-                        "name": "capture_id",
-                        "in": "body",
-                        "required": true,
-                        "schema": {
-                            "type": "string"
+                            "$ref": "#/definitions/model.MoveTableReq"
                         }
                     }
                 ],
@@ -684,6 +633,22 @@ var doc = `{
                     "processor"
                 ],
                 "summary": "Get processor detail information",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "description": "changefeed ID",
+                        "name": "changefeed_id",
+                        "in": "path",
+                        "required": true
+                    },
+                    {
+                        "type": "string",
+                        "description": "capture ID",
+                        "name": "capture_id",
+                        "in": "path",
+                        "required": true
+                    }
+                ],
                 "responses": {
                     "200": {
                         "description": "OK",
@@ -870,6 +835,22 @@ var doc = `{
                     "processor"
                 ],
                 "summary": "Get processor detail information",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "description": "changefeed ID",
+                        "name": "changefeed_id",
+                        "in": "path",
+                        "required": true
+                    },
+                    {
+                        "type": "string",
+                        "description": "capture ID",
+                        "name": "capture_id",
+                        "in": "path",
+                        "required": true
+                    }
+                ],
                 "responses": {
                     "200": {
                         "description": "OK",
@@ -1214,6 +1195,17 @@ var doc = `{
                 },
                 "error_msg": {
                     "type": "string"
+                }
+            }
+        },
+        "model.MoveTableReq": {
+            "type": "object",
+            "properties": {
+                "capture_id": {
+                    "type": "string"
+                },
+                "table_id": {
+                    "type": "integer"
                 }
             }
         },
