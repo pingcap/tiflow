@@ -1,4 +1,4 @@
-FROM gcr.io/pingcap-public/pingcap/alpine:alpine-3.14.6
+FROM rockylinux:9.0
 
 ADD tiflow /tiflow
 ADD tiflow-chaos-case /tiflow-chaos-case
