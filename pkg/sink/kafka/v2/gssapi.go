@@ -31,8 +31,8 @@ import (
 )
 
 const (
-	// https://tools.ietf.org/html/rfc4121#section-4.1
-	TOK_ID_KRB_AP_REQ = "\x01\x00"
+	// TokIdKrbApReq https://tools.ietf.org/html/rfc4121#section-4.1
+	TokIdKrbApReq = "\x01\x00"
 )
 
 // Gokrb5v8Client is the client for gokrbv8
@@ -140,16 +140,16 @@ func (m mechanism) Start(ctx context.Context) (sasl.StateMachine, []byte, error)
 	if err != nil {
 		return nil, nil, errors.Trace(err)
 	}
-	gssapiToken, err := getGssApiToken(bytes)
+	gssapiToken, err := getGssAPIToken(bytes)
 	if err != nil {
 		return nil, nil, errors.Trace(err)
 	}
 	return &gokrb5v8Session{authenticator.SubKey, false}, gssapiToken, nil
 }
 
-func getGssApiToken(bytes []byte) ([]byte, error) {
-	bytesWithPrefix := make([]byte, 0, len(TOK_ID_KRB_AP_REQ)+len(bytes))
-	bytesWithPrefix = append(bytesWithPrefix, TOK_ID_KRB_AP_REQ...)
+func getGssAPIToken(bytes []byte) ([]byte, error) {
+	bytesWithPrefix := make([]byte, 0, len(TokIdKrbApReq)+len(bytes))
+	bytesWithPrefix = append(bytesWithPrefix, TokIdKrbApReq...)
 	bytesWithPrefix = append(bytesWithPrefix, bytes...)
 
 	return prependGSSAPITokenTag(bytesWithPrefix)
