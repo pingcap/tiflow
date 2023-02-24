@@ -107,6 +107,15 @@ type Position struct {
 	CommitTs model.Ts
 }
 
+// GenCommitFence generates a Position which is a commit fence.
+// CommitFence indicates all transactions with same CommitTs are less than the position.
+func GenCommitFence(commitTs model.Ts) Position {
+	return Position{
+		StartTs:  commitTs - 1,
+		CommitTs: commitTs,
+	}
+}
+
 // Valid indicates whether the position is valid or not.
 func (p Position) Valid() bool {
 	return p.CommitTs != 0

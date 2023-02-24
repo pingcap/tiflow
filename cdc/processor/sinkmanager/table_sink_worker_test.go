@@ -31,6 +31,7 @@ import (
 	"github.com/pingcap/tiflow/pkg/upstream"
 	"github.com/stretchr/testify/require"
 	"github.com/stretchr/testify/suite"
+	"github.com/tikv/client-go/v2/oracle"
 )
 
 func createWorker(
@@ -195,7 +196,7 @@ func (suite *workerSuite) TestHandleTaskWithSplitTxnAndGotSomeFilteredEvents() {
 		StartTs:  0,
 		CommitTs: 1,
 	}
-	upperBoundGetter := func(_ *tableSinkWrapper) engine.Position {
+	upperBoundGetter := func(_ model.Ts) engine.Position {
 		return engine.Position{
 			StartTs:  3,
 			CommitTs: 4,
@@ -302,7 +303,7 @@ func (suite *workerSuite) TestHandleTaskWithSplitTxnAndAbortWhenNoMemAndOneTxnFi
 		StartTs:  0,
 		CommitTs: 1,
 	}
-	upperBoundGetter := func(_ *tableSinkWrapper) engine.Position {
+	upperBoundGetter := func(_ model.Ts) engine.Position {
 		return engine.Position{
 			StartTs:  3,
 			CommitTs: 4,
@@ -408,7 +409,7 @@ func (suite *workerSuite) TestHandleTaskWithSplitTxnAndAbortWhenNoMemAndBlocked(
 		StartTs:  0,
 		CommitTs: 1,
 	}
-	upperBoundGetter := func(_ *tableSinkWrapper) engine.Position {
+	upperBoundGetter := func(_ model.Ts) engine.Position {
 		return engine.Position{
 			StartTs:  13,
 			CommitTs: 14,
@@ -535,7 +536,7 @@ func (suite *workerSuite) TestHandleTaskWithSplitTxnAndOnlyAdvanceTableSinkWhenR
 		StartTs:  0,
 		CommitTs: 1,
 	}
-	upperBoundGetter := func(_ *tableSinkWrapper) engine.Position {
+	upperBoundGetter := func(_ model.Ts) engine.Position {
 		return engine.Position{
 			StartTs:  1,
 			CommitTs: 2,
@@ -663,7 +664,7 @@ func (suite *workerSuite) TestHandleTaskWithoutSplitTxnAndAbortWhenNoMemAndForce
 		StartTs:  0,
 		CommitTs: 1,
 	}
-	upperBoundGetter := func(_ *tableSinkWrapper) engine.Position {
+	upperBoundGetter := func(_ model.Ts) engine.Position {
 		return engine.Position{
 			StartTs:  3,
 			CommitTs: 4,
@@ -791,7 +792,7 @@ func (suite *workerSuite) TestHandleTaskWithoutSplitTxnOnlyAdvanceTableSinkWhenR
 		StartTs:  0,
 		CommitTs: 1,
 	}
-	upperBoundGetter := func(_ *tableSinkWrapper) engine.Position {
+	upperBoundGetter := func(_ model.Ts) engine.Position {
 		return engine.Position{
 			StartTs:  3,
 			CommitTs: 4,
@@ -910,7 +911,7 @@ func (suite *workerSuite) TestHandleTaskWithSplitTxnAndDoNotAdvanceTableUntilMee
 		StartTs:  0,
 		CommitTs: 1,
 	}
-	upperBoundGetter := func(_ *tableSinkWrapper) engine.Position {
+	upperBoundGetter := func(_ model.Ts) engine.Position {
 		return engine.Position{
 			StartTs:  3,
 			CommitTs: 4,
@@ -995,7 +996,7 @@ func (suite *workerSuite) TestHandleTaskWithSplitTxnAndAdvanceTableUntilTaskIsFi
 		StartTs:  0,
 		CommitTs: 1,
 	}
-	upperBoundGetter := func(_ *tableSinkWrapper) engine.Position {
+	upperBoundGetter := func(_ model.Ts) engine.Position {
 		return engine.Position{
 			StartTs:  3,
 			CommitTs: 4,
@@ -1067,7 +1068,7 @@ func (suite *workerSuite) TestHandleTaskWithSplitTxnAndAdvanceTableIfNoWorkload(
 		StartTs:  0,
 		CommitTs: 1,
 	}
-	upperBoundGetter := func(_ *tableSinkWrapper) engine.Position {
+	upperBoundGetter := func(_ model.Ts) engine.Position {
 		return engine.Position{
 			StartTs:  3,
 			CommitTs: 4,
@@ -1096,6 +1097,105 @@ func (suite *workerSuite) TestHandleTaskWithSplitTxnAndAdvanceTableIfNoWorkload(
 	}, 5*time.Second, 10*time.Millisecond, "Directly advance resolved mark to 4")
 	cancel()
 	wg.Wait()
+}
+
+func (suite *workerSuite) TestNeedEmitAndAdvance() {
+	// NOTICE: We set maxUpdateIntervalSize in SetupSuite.
+	for _, tc := range []struct {
+		name             string
+		splitTxn         bool
+		committedTxnSize uint64
+		pendingTxnSize   uint64
+		expected         bool
+	}{
+		{
+			name:             "split txn and not reach maxUpdateIntervalSize",
+			splitTxn:         true,
+			committedTxnSize: 200,
+			pendingTxnSize:   1,
+			expected:         false,
+		},
+		{
+			name:             "split txn and reach maxUpdateIntervalSize",
+			splitTxn:         true,
+			committedTxnSize: 900,
+			pendingTxnSize:   1,
+			expected:         true,
+		},
+		{
+			name:             "not split txn and not reach maxUpdateIntervalSize",
+			splitTxn:         false,
+			committedTxnSize: 200,
+			pendingTxnSize:   900, // Do not care about pendingTxnSize
+			expected:         false,
+		},
+		{
+			name:             "not split txn and reach maxUpdateIntervalSize",
+			splitTxn:         false,
+			committedTxnSize: 900,
+			pendingTxnSize:   300, // Do not care about pendingTxnSize
+			expected:         true,
+		},
+	} {
+		suite.Run(tc.name, func() {
+			require.Equal(suite.T(), tc.expected,
+				needEmitAndAdvance(tc.splitTxn, tc.committedTxnSize, tc.pendingTxnSize))
+		})
+	}
+}
+
+func (suite *workerSuite) TestValidateAndAdjustBound() {
+	for _, tc := range []struct {
+		name          string
+		lowerBound    engine.Position
+		taskTimeRange time.Duration
+		expectAdjust  bool
+	}{
+		{
+			name: "bigger than maxTaskTimeRange",
+			lowerBound: engine.Position{
+				StartTs:  439333515018895365,
+				CommitTs: 439333515018895366,
+			},
+			taskTimeRange: 10 * time.Second,
+			expectAdjust:  true,
+		},
+		{
+			name: "smaller than maxTaskTimeRange",
+			lowerBound: engine.Position{
+				StartTs:  439333515018895365,
+				CommitTs: 439333515018895366,
+			},
+			taskTimeRange: 1 * time.Second,
+			expectAdjust:  false,
+		},
+	} {
+		suite.Run(tc.name, func() {
+			changefeedID := model.DefaultChangeFeedID("1")
+			span := spanz.TableIDToComparableSpan(1)
+			wrapper, _ := createTableSinkWrapper(changefeedID, span)
+			task := &sinkTask{
+				span:       span,
+				lowerBound: tc.lowerBound,
+				getUpperBound: func(_ model.Ts) engine.Position {
+					lowerPhs := oracle.GetTimeFromTS(tc.lowerBound.CommitTs)
+					newUpperCommitTs := oracle.GoTimeToTS(lowerPhs.Add(tc.taskTimeRange))
+					upperBound := engine.GenCommitFence(newUpperCommitTs)
+					return upperBound
+				},
+				tableSink: wrapper,
+			}
+			lowerBound, upperBound := validateAndAdjustBound(changefeedID, task)
+			if tc.expectAdjust {
+				lowerPhs := oracle.GetTimeFromTS(lowerBound.CommitTs)
+				upperPhs := oracle.GetTimeFromTS(upperBound.CommitTs)
+				require.Equal(suite.T(), maxTaskTimeRange, upperPhs.Sub(lowerPhs))
+			} else {
+				require.Equal(suite.T(), tc.lowerBound, lowerBound)
+				require.Equal(suite.T(), task.getUpperBound(0), upperBound)
+			}
+		})
+	}
 }
 
 func TestWorkerSuite(t *testing.T) {

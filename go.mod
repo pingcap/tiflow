@@ -1,6 +1,6 @@
 module github.com/pingcap/tiflow
 
-go 1.19
+go 1.20
 
 require (
 	cloud.google.com/go/storage v1.27.0
@@ -43,6 +43,7 @@ require (
 	github.com/grpc-ecosystem/go-grpc-prometheus v1.2.0
 	github.com/grpc-ecosystem/grpc-gateway v1.16.0
 	github.com/grpc-ecosystem/grpc-gateway/v2 v2.11.0
+	github.com/hashicorp/golang-lru v0.5.1
 	github.com/integralist/go-findroot v0.0.0-20160518114804-ac90681525dc
 	github.com/jarcoal/httpmock v1.2.0
 	github.com/jmoiron/sqlx v1.3.3
