@@ -145,7 +145,8 @@ func completeSASLConfig(o *pkafka.Options) (sasl.Mechanism, error) {
 			if err != nil {
 				return nil, errors.Trace(err)
 			}
-			return Gokrb5v8(clnt, o.SASL.GSSAPI.ServiceName), nil
+			return Gokrb5v8(&gokrb5v8ClientImpl{clnt},
+				o.SASL.GSSAPI.ServiceName), nil
 		}
 	}
 	return nil, nil
