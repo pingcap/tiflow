@@ -120,6 +120,7 @@ func TestRegisterRoutes(t *testing.T) {
 	}
 
 	for i, tc := range testCases {
+		tc := tc
 		t.Run(fmt.Sprintf("case-%d", i), func(t *testing.T) {
 			t.Parallel()
 			req := httptest.NewRequest(tc.method, tc.path, nil)
@@ -181,6 +182,7 @@ func TestShouldForwardJobAPI(t *testing.T) {
 	}
 
 	for i, tc := range testCases {
+		tc := tc
 		t.Run(fmt.Sprintf("case-%d", i), func(t *testing.T) {
 			t.Parallel()
 			req, err := http.NewRequestWithContext(ctx, tc.method, tc.path, nil)
