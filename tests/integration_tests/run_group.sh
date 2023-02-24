@@ -4,7 +4,8 @@ set -eo pipefail
 
 CUR=$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)
 
-group=$1
+sink_type=$1
+group=$2
 
 # Define groups
 # Note: If new group is added, the group name must also be added to CI
@@ -51,5 +52,5 @@ fi
 # Run test cases
 if [[ -n $test_names ]]; then
 	echo "Run cases: ${test_names}"
-	"${CUR}"/run.sh "${test_names}"
+	"${CUR}"/run.sh "${sink_type}" "${test_names}"
 fi
