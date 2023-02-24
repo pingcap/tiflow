@@ -89,7 +89,7 @@ func NewCoordinator(
 	coord := newCoordinator(captureID, changefeedID, ownerRevision, cfg)
 	coord.trans = trans
 	coord.reconciler = keyspan.NewReconciler(
-		changefeedID, regionCache, cfg.ChangefeedSettings.RegionPerSpan)
+		changefeedID, regionCache, cfg.ChangefeedSettings)
 	coord.pdClock = pdClock
 	coord.changefeedEpoch = changefeedEpoch
 	return coord, nil
@@ -315,7 +315,8 @@ func (c *coordinator) poll(
 	// Generate schedule tasks based on the current status.
 	replications := c.replicationM.ReplicationSets()
 	runningTasks := c.replicationM.RunningTasks()
-	currentSpans := c.reconciler.Reconcile(ctx, &c.tableRanges, replications, c.compat)
+	currentSpans := c.reconciler.Reconcile(
+		ctx, &c.tableRanges, replications, c.captureM.Captures, c.compat)
 	allTasks := c.schedulerM.Schedule(
 		checkpointTs, currentSpans, c.captureM.Captures, replications, runningTasks)
 
