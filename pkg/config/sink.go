@@ -26,7 +26,7 @@ import (
 )
 
 // DefaultMaxMessageBytes sets the default value for max-message-bytes.
-const DefaultMaxMessageBytes = 10 * 1024 * 1024 // 10M
+const DefaultMaxMessageBytes = 1 * 1024 * 1024 // 10M
 
 const (
 	// TxnAtomicityKey specifies the key of the transaction-atomicity in the SinkURI.

@@ -128,7 +128,7 @@ func completeSASLConfig(o *pkafka.Options) (sasl.Mechanism, error) {
 func (f *factory) newWriter(async bool) *kafka.Writer {
 	w := &kafka.Writer{
 		Addr:         kafka.TCP(f.options.BrokerEndpoints...),
-		Balancer:     newManualPartitioner(),
+		Balancer:     &kafka.RoundRobin{},
 		Transport:    f.transport,
 		ReadTimeout:  f.options.ReadTimeout,
 		WriteTimeout: f.options.WriteTimeout,
@@ -170,10 +170,6 @@ func (f *factory) SyncProducer() (pkafka.SyncProducer, error) {
 	return &syncWriter{w: w}, nil
 }
 
-const (
-	defaultWait4ConfirmMessagesCount = 256
-)
-
 // AsyncProducer creates an async producer to writer message to kafka
 func (f *factory) AsyncProducer(closedChan chan struct{},
 	failpointCh chan error,
@@ -184,10 +180,20 @@ func (f *factory) AsyncProducer(closedChan chan struct{},
 		closedChan:   closedChan,
 		changefeedID: f.changefeedID,
 		failpointCh:  failpointCh,
-		successes:    make(chan []kafka.Message, defaultWait4ConfirmMessagesCount),
 		errorsChan:   make(chan error, 1),
 	}
-	w.Completion = aw.callBackRun
+	w.Completion = func(messages []kafka.Message, err error) {
+		if err != nil {
+			aw.errorsChan <- err
+			return
+		}
+		for _, ack := range messages {
+			callback := ack.WriterData.(func())
+			if callback != nil {
+				callback()
+			}
+		}
+	}
 	return aw, nil
 }
 
@@ -262,7 +268,6 @@ type asyncWriter struct {
 	changefeedID model.ChangeFeedID
 	closedChan   chan struct{}
 	failpointCh  chan error
-	successes    chan []kafka.Message
 	errorsChan   chan error
 }
 
@@ -331,13 +336,6 @@ func (a *asyncWriter) AsyncRunCallback(ctx context.Context) error {
 				zap.String("changefeed", a.changefeedID.ID),
 				zap.Error(err))
 			return errors.Trace(err)
-		case msgs := <-a.successes:
-			for _, ack := range msgs {
-				callback := ack.WriterData.(func())
-				if callback != nil {
-					callback()
-				}
-			}
 		case err := <-a.errorsChan:
 			// We should not wrap a nil pointer if the pointer
 			// is of a subtype of `error` because Go would store the type info
@@ -349,13 +347,5 @@ func (a *asyncWriter) AsyncRunCallback(ctx context.Context) error {
 			}
 			return errors.WrapError(errors.ErrKafkaAsyncSendMessage, err)
 		}
-	}
-}
-
-func (a *asyncWriter) callBackRun(messages []kafka.Message, err error) {
-	if err != nil {
-		a.errorsChan <- err
-	} else {
-		a.successes <- messages
 	}
 }
