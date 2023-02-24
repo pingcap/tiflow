@@ -86,7 +86,7 @@ EOF
 
 	# Update changefeed
 	run_cdc_cli changefeed update --pd=$pd_addr --config="$WORK_DIR/changefeed.toml" --no-confirm --changefeed-id $uuid
-	changefeed_info=$(curl -X GET "http://127.0.0.1:8300/api/v2/changefeeds/$uuid/meta_info" 2>&1)
+	changefeed_info=$(curl -s -X GET "http://127.0.0.1:8300/api/v2/changefeeds/$uuid/meta_info" 2>&1)
 	if [[ ! $changefeed_info == *"\"case_sensitive\":false"* ]]; then
 		echo "[$(date)] <<<<< changefeed info is not updated as expected ${changefeed_info} >>>>>"
 		exit 1
@@ -102,7 +102,7 @@ EOF
 		fi
 	else
 		# Currently, MySQL changefeed does not support scale out feature.
-		if [[ $changefeed_info == *"\"enable_split_span\":false"* ]]; then
+		if [[ $changefeed_info == *"\"enable_split_span\":true"* ]]; then
 			echo "[$(date)] <<<<< changefeed info is not updated as expected ${changefeed_info} >>>>>"
 			exit 1
 		fi
