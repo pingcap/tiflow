@@ -93,7 +93,8 @@ func TestNewAgent(t *testing.T) {
 	tableExector := newMockTableExecutor()
 	cfg := &config.SchedulerConfig{
 		ChangefeedSettings: &config.ChangefeedSchedulerConfig{
-			RegionPerSpan: 1,
+			EnableSplitSpan: true,
+			RegionPerSpan:   1,
 		},
 	}
 
@@ -881,7 +882,8 @@ func TestAgentTransportCompat(t *testing.T) {
 	a.trans = trans
 	a.compat = compat.New(&config.SchedulerConfig{
 		ChangefeedSettings: &config.ChangefeedSchedulerConfig{
-			RegionPerSpan: 1,
+			EnableSplitSpan: true,
+			RegionPerSpan:   1,
 		},
 	}, map[model.CaptureID]*model.CaptureInfo{})
 	ctx := context.Background()
@@ -970,7 +972,8 @@ func TestAgentDropMsgIfChangefeedEpochMismatch(t *testing.T) {
 	a.trans = trans
 	a.compat = compat.New(&config.SchedulerConfig{
 		ChangefeedSettings: &config.ChangefeedSchedulerConfig{
-			RegionPerSpan: 1,
+			EnableSplitSpan: true,
+			RegionPerSpan:   1,
 		},
 	}, map[model.CaptureID]*model.CaptureInfo{})
 	a.changefeedEpoch = 1

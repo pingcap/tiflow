@@ -21,8 +21,10 @@ import (
 
 // ChangefeedSchedulerConfig is per changefeed scheduler settings.
 type ChangefeedSchedulerConfig struct {
-	// RegionPerSpan the number of regions in a span, must be greater than 1000.
-	// Set 0 to disable span replication.
+	// EnableSplitSpan set true to split one table to multiple spans.
+	EnableSplitSpan bool `toml:"enable-split-span" json:"enable-split-span"`
+	// RegionPerSpan is the number of regions in a span, also it's the threshold
+	// of splitting a table.
 	RegionPerSpan int `toml:"region-per-span" json:"region-per-span"`
 }
 

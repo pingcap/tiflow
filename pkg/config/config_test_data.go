@@ -61,7 +61,8 @@ const (
     "storage": ""
   },
   "scheduler": {
-    "region-per-span": 0
+    "enable-split-span": false,
+    "region-per-span": 100000
   }
 }`
 
@@ -196,6 +197,7 @@ const (
     "storage": ""
   },
   "scheduler": {
+    "enable-split-span": true,
     "region-per-span": 100001
   }
 }`
@@ -251,6 +253,7 @@ const (
     "storage": ""
   },
   "scheduler": {
+    "enable-split-span": true,
     "region-per-span": 100001
   }
 }`
