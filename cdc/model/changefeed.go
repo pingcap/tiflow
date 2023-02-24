@@ -454,23 +454,27 @@ func (info *ChangeFeedInfo) fixScheduler() {
 	info.Config.FixScheduler()
 }
 
+// Barrier is a barrier for changefeed.
 type Barrier struct {
 	GlobalBarrierTs   Ts             `json:"global-barrier-ts"`
 	TableBarrier      []TableBarrier `json:"table-barrier"`
 	MinTableBarrierTs Ts             `json:"min-table-barrier-ts"`
 }
 
+// TableBarrier is a barrier for a table.
 type TableBarrier struct {
 	ID        TableID `json:"id"`
 	BarrierTs Ts      `json:"barrier-ts"`
 }
 
+// NewBarrier creates a Barrier.
 func NewBarrier(ts Ts) *Barrier {
 	return &Barrier{
 		GlobalBarrierTs: ts,
 	}
 }
 
+// DownStreamType is the type of downstream.
 type DownStreamType int
 
 const (
@@ -478,9 +482,9 @@ const (
 	DB DownStreamType = iota
 	// Other is the type of MQ or Cloud Storage.
 	Other
-	SinkTypeUnknown
 )
 
+// String implements fmt.Stringer interface.
 func (t DownStreamType) String() string {
 	switch t {
 	case DB:

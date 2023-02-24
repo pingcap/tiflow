@@ -11,6 +11,8 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
+// TODO: remove this tag after ddlManager is used.
+// nolint:unused,unparam
 package owner
 
 import (
@@ -162,7 +164,10 @@ func (m *ddlManager) tick(
 				return nil, barrier, err
 			}
 			// Apply ddl to update changefeed schema.
-			m.schema.HandleDDL(job)
+			err = m.schema.HandleDDL(job)
+			if err != nil {
+				return nil, barrier, err
+			}
 			// Clear the table cache after the schema is updated.
 			m.cleanCache()
 
@@ -191,7 +196,10 @@ func (m *ddlManager) tick(
 			// Fixme: get redo resolvedTs from redo log.
 			if m.redoManager.Enabled() {
 				for _, event := range events {
-					m.redoManager.EmitDDLEvent(ctx, event)
+					err := m.redoManager.EmitDDLEvent(ctx, event)
+					if err != nil {
+						return nil, barrier, err
+					}
 				}
 			}
 
