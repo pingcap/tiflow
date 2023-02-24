@@ -32,6 +32,7 @@ func main() {
 		log.Error("create kafka async producer failed", zap.Error(err))
 		return
 	}
+	defer asyncProducer.Close()
 
 	var key []byte
 	value := make([]byte, 10240)
