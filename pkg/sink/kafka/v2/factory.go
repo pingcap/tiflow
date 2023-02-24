@@ -128,7 +128,7 @@ func completeSASLConfig(o *pkafka.Options) (sasl.Mechanism, error) {
 func (f *factory) newWriter(async bool) *kafka.Writer {
 	w := &kafka.Writer{
 		Addr:         kafka.TCP(f.options.BrokerEndpoints...),
-		Balancer:     &kafka.RoundRobin{},
+		Balancer:     newManualPartitioner(),
 		Transport:    f.transport,
 		ReadTimeout:  f.options.ReadTimeout,
 		WriteTimeout: f.options.WriteTimeout,
