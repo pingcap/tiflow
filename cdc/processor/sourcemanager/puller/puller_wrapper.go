@@ -106,7 +106,7 @@ func (n *Wrapper) Start(
 				// Do not block sending error, because the err channel
 				// might be full and no goroutine receives.
 			default:
-				log.Warn("puller faill to send error",
+				log.Warn("puller fail to send error",
 					zap.String("namespace", n.changefeed.Namespace),
 					zap.String("changefeed", n.changefeed.ID),
 					zap.String("table", n.tableName),
