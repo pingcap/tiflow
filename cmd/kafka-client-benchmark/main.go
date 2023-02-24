@@ -11,6 +11,7 @@ import (
 	"github.com/pingcap/log"
 	"github.com/pingcap/tiflow/cdc/model"
 	"github.com/pingcap/tiflow/pkg/sink/kafka"
+	v2 "github.com/pingcap/tiflow/pkg/sink/kafka/v2"
 	"go.uber.org/zap"
 )
 
@@ -20,8 +21,8 @@ func main() {
 	option.BrokerEndpoints = []string{"127.0.0.1:9092"}
 	option.ClientID = "kafka-client"
 
-	//factory, err := v2.NewFactory(option, changefeed)
-	factory, err := kafka.NewSaramaFactory(option, changefeed)
+	factory, err := v2.NewFactory(option, changefeed)
+	//	factory, err := kafka.NewSaramaFactory(option, changefeed)
 	if err != nil {
 		log.Error("create kafka factory failed", zap.Error(err))
 		return
@@ -36,15 +37,17 @@ func main() {
 
 	var key []byte
 	value := make([]byte, 10240)
-	topic := "kafka-go-test"
+	topic := "kafka-client-benchmark"
 
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 
-	var total uint64
-	var ackTotal uint64
+	var (
+		total    uint64
+		ackTotal uint64
+		wg       sync.WaitGroup
+	)
 
-	var wg sync.WaitGroup
 	wg.Add(1)
 	go func() {
 		defer wg.Done()
