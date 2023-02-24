@@ -36,7 +36,7 @@ type SortEngine interface {
 	//
 	// NOTE: it's an asynchronous interface. To get the notification of when
 	// events are available for fetching, OnResolve is what you want.
-	Add(span tablepb.Span, events ...*model.PolymorphicEvent) error
+	Add(span tablepb.Span, events ...*model.PolymorphicEvent)
 
 	// GetResolvedTs gets resolved timestamp of the given table.
 	GetResolvedTs(span tablepb.Span) model.Ts
