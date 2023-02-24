@@ -103,7 +103,7 @@ func (n *Wrapper) Start(
 		if err != nil && !cerrors.Is(err, context.Canceled) {
 			select {
 			case errChan <- err:
-				// Do not blocking sending error, bcause there the err channal
+				// Do not block sending error, because there the err channel
 				// might be full and no goroutine receives.
 			default:
 				log.Warn("puller faill to send error",
