@@ -119,6 +119,38 @@ type ProcessorCommonInfo struct {
 	CaptureID    string `json:"capture_id"`
 }
 
+// JSONDuration used to wrap duration into json format
+type JSONDuration struct {
+	duration time.Duration
+}
+
+// MarshalJSON marshal duration to string
+func (d JSONDuration) MarshalJSON() ([]byte, error) {
+	return json.Marshal(d.duration.String())
+}
+
+// UnmarshalJSON unmarshal json value to wrapped duration
+func (d *JSONDuration) UnmarshalJSON(b []byte) error {
+	var v interface{}
+	if err := json.Unmarshal(b, &v); err != nil {
+		return err
+	}
+	switch value := v.(type) {
+	case float64:
+		d.duration = time.Duration(value)
+		return nil
+	case string:
+		var err error
+		d.duration, err = time.ParseDuration(value)
+		if err != nil {
+			return err
+		}
+		return nil
+	default:
+		return errors.New("invalid duration")
+	}
+}
+
 // ReplicaConfig is a duplicate of  config.ReplicaConfig
 type ReplicaConfig struct {
 	MemoryQuota           uint64                     `json:"memory_quota"`
@@ -129,8 +161,8 @@ type ReplicaConfig struct {
 	CheckGCSafePoint      bool                       `json:"check_gc_safe_point"`
 	EnableSyncPoint       bool                       `json:"enable_sync_point"`
 	BDRMode               bool                       `json:"bdr_mode"`
-	SyncPointInterval     time.Duration              `json:"sync_point_interval"`
-	SyncPointRetention    time.Duration              `json:"sync_point_retention"`
+	SyncPointInterval     JSONDuration               `json:"sync_point_interval" swaggertype:"string"`
+	SyncPointRetention    JSONDuration               `json:"sync_point_retention" swaggertype:"string"`
 	Filter                *FilterConfig              `json:"filter"`
 	Mounter               *MounterConfig             `json:"mounter"`
 	Sink                  *SinkConfig                `json:"sink"`
@@ -147,8 +179,8 @@ func (c *ReplicaConfig) ToInternalReplicaConfig() *config.ReplicaConfig {
 	res.ForceReplicate = c.ForceReplicate
 	res.CheckGCSafePoint = c.CheckGCSafePoint
 	res.EnableSyncPoint = c.EnableSyncPoint
-	res.SyncPointInterval = c.SyncPointInterval
-	res.SyncPointRetention = c.SyncPointRetention
+	res.SyncPointInterval = c.SyncPointInterval.duration
+	res.SyncPointRetention = c.SyncPointRetention.duration
 	res.BDRMode = c.BDRMode
 
 	if c.Filter != nil {
@@ -262,8 +294,8 @@ func ToAPIReplicaConfig(c *config.ReplicaConfig) *ReplicaConfig {
 		IgnoreIneligibleTable: false,
 		CheckGCSafePoint:      cloned.CheckGCSafePoint,
 		EnableSyncPoint:       cloned.EnableSyncPoint,
-		SyncPointInterval:     cloned.SyncPointInterval,
-		SyncPointRetention:    cloned.SyncPointRetention,
+		SyncPointInterval:     JSONDuration{cloned.SyncPointInterval},
+		SyncPointRetention:    JSONDuration{cloned.SyncPointRetention},
 		BDRMode:               cloned.BDRMode,
 	}
 
@@ -375,8 +407,8 @@ func GetDefaultReplicaConfig() *ReplicaConfig {
 		EnableOldValue:     true,
 		CheckGCSafePoint:   true,
 		EnableSyncPoint:    false,
-		SyncPointInterval:  10 * time.Second,
-		SyncPointRetention: 24 * time.Hour,
+		SyncPointInterval:  JSONDuration{10 * time.Second},
+		SyncPointRetention: JSONDuration{24 * time.Hour},
 		Filter: &FilterConfig{
 			Rules: []string{"*.*"},
 		},
@@ -553,11 +585,11 @@ type ResolveLockReq struct {
 
 // ChangeFeedInfo describes the detail of a ChangeFeed
 type ChangeFeedInfo struct {
-	UpstreamID uint64    `json:"upstream_id,omitempty"`
-	Namespace  string    `json:"namespace,omitempty"`
-	ID         string    `json:"id,omitempty"`
-	SinkURI    string    `json:"sink_uri,omitempty"`
-	CreateTime time.Time `json:"create_time"`
+	UpstreamID uint64         `json:"upstream_id,omitempty"`
+	Namespace  string         `json:"namespace,omitempty"`
+	ID         string         `json:"id,omitempty"`
+	SinkURI    string         `json:"sink_uri,omitempty"`
+	CreateTime model.JSONTime `json:"create_time"`
 	// Start sync at this commit ts if `StartTs` is specify or using the CreateTime of changefeed.
 	StartTs uint64 `json:"start_ts,omitempty"`
 	// The ChangeFeed will exits until sync to timestamp TargetTs

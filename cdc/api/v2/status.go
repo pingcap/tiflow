@@ -27,7 +27,7 @@ import (
 // @Description This API is a synchronous interface. If the request is successful,
 // the status information of the corresponding node is returned.
 //
-// @Tags common
+// @Tags common,v2
 // @Accept json
 // @Produce json
 // @Success 200 {object} ServerStatus
