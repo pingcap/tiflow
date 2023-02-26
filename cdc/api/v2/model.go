@@ -153,21 +153,23 @@ func (d *JSONDuration) UnmarshalJSON(b []byte) error {
 
 // ReplicaConfig is a duplicate of  config.ReplicaConfig
 type ReplicaConfig struct {
-	MemoryQuota           uint64                     `json:"memory_quota"`
-	CaseSensitive         bool                       `json:"case_sensitive"`
-	EnableOldValue        bool                       `json:"enable_old_value"`
-	ForceReplicate        bool                       `json:"force_replicate"`
-	IgnoreIneligibleTable bool                       `json:"ignore_ineligible_table"`
-	CheckGCSafePoint      bool                       `json:"check_gc_safe_point"`
-	EnableSyncPoint       bool                       `json:"enable_sync_point"`
-	BDRMode               bool                       `json:"bdr_mode"`
-	SyncPointInterval     JSONDuration               `json:"sync_point_interval" swaggertype:"string"`
-	SyncPointRetention    JSONDuration               `json:"sync_point_retention" swaggertype:"string"`
-	Filter                *FilterConfig              `json:"filter"`
-	Mounter               *MounterConfig             `json:"mounter"`
-	Sink                  *SinkConfig                `json:"sink"`
-	Consistent            *ConsistentConfig          `json:"consistent"`
-	Scheduler             *ChangefeedSchedulerConfig `json:"scheduler"`
+	MemoryQuota           uint64 `json:"memory_quota"`
+	CaseSensitive         bool   `json:"case_sensitive"`
+	EnableOldValue        bool   `json:"enable_old_value"`
+	ForceReplicate        bool   `json:"force_replicate"`
+	IgnoreIneligibleTable bool   `json:"ignore_ineligible_table"`
+	CheckGCSafePoint      bool   `json:"check_gc_safe_point"`
+	EnableSyncPoint       bool   `json:"enable_sync_point"`
+	BDRMode               bool   `json:"bdr_mode"`
+
+	SyncPointInterval  JSONDuration `json:"sync_point_interval" swaggertype:"string"`
+	SyncPointRetention JSONDuration `json:"sync_point_retention" swaggertype:"string"`
+
+	Filter     *FilterConfig              `json:"filter"`
+	Mounter    *MounterConfig             `json:"mounter"`
+	Sink       *SinkConfig                `json:"sink"`
+	Consistent *ConsistentConfig          `json:"consistent"`
+	Scheduler  *ChangefeedSchedulerConfig `json:"scheduler"`
 }
 
 // ToInternalReplicaConfig coverts *v2.ReplicaConfig into *config.ReplicaConfig
