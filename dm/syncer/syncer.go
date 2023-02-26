@@ -2343,6 +2343,35 @@ func (s *Syncer) Run(ctx context.Context) (err error) {
 			if err2 != nil {
 				return err2
 			}
+		case *replication.TransactionPayloadEvent:
+			for _, tpev := range ev.Events {
+				switch tpevt := tpev.Event.(type) {
+				case *replication.RowsEvent:
+					eventIndex++
+					s.metricsProxies.Metrics.BinlogEventRowHistogram.Observe(float64(len(tpevt.Rows)))
+					ec.header.EventType = replication.WRITE_ROWS_EVENTv2 // FIXME
+					sourceTable, err2 = s.handleRowsEvent(tpevt, ec)
+					if sourceTable != nil && err2 == nil && s.cfg.EnableGTID {
+						if _, ok := affectedSourceTables[sourceTable.Schema]; !ok {
+							affectedSourceTables[sourceTable.Schema] = make(map[string]struct{})
+						}
+						affectedSourceTables[sourceTable.Schema][sourceTable.Name] = struct{}{}
+					}
+				case *replication.QueryEvent:
+					originSQL = strings.TrimSpace(string(tpevt.Query))
+					err2 = s.ddlWorker.HandleQueryEvent(tpevt, ec, originSQL)
+				case *replication.XIDEvent:
+					eventType = "XID"
+					needContinue, err2 = funcCommit()
+				default:
+					s.tctx.L().Warn("unhandled event from transaction payload", zap.String("type", fmt.Sprintf("%T", tpevt)))
+				}
+			}
+			if needContinue {
+				continue
+			}
+		default:
+			s.tctx.L().Warn("unhandled event", zap.String("type", fmt.Sprintf("%T", ev)))
 		}
 		if err2 != nil {
 			if err := s.handleEventError(err2, startLocation, endLocation, e.Header.EventType == replication.QUERY_EVENT, originSQL); err != nil {

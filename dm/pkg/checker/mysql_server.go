@@ -35,14 +35,14 @@ func NewMySQLVersionChecker(db *sql.DB, dbinfo *dbutil.DBConfig) RealChecker {
 }
 
 // SupportedVersion defines the MySQL/MariaDB version that DM/syncer supports
-// * 5.6.0 <= MySQL Version < 8.0.0.
+// * 5.6.0 <= MySQL Version <= 8.0.24.
 var SupportedVersion = map[string]struct {
 	Min MySQLVersion
 	Max MySQLVersion
 }{
 	"mysql": {
 		MySQLVersion{5, 6, 0},
-		MySQLVersion{8, 0, 0},
+		MySQLVersion{8, 0, 24},
 	},
 }
 
@@ -96,8 +96,8 @@ func (pc *MySQLVersionChecker) checkVersion(value string, result *Result) *Error
 		return err
 	}
 
-	if !version.Lt(needVersion.Max) {
-		err := NewWarn("version suggested earlier than %v but got %v", needVersion.Max, version)
+	if !version.Le(needVersion.Max) {
+		err := NewWarn("version suggested %v or earlier but got %v", needVersion.Max, version)
 		err.Instruction = "It is recommended that you select a database version that meets the requirements before performing data migration. Otherwise data inconsistency or task exceptions might occur."
 		return err
 	}
