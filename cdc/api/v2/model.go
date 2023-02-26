@@ -279,7 +279,8 @@ func (c *ReplicaConfig) ToInternalReplicaConfig() *config.ReplicaConfig {
 	}
 	if c.Scheduler != nil {
 		res.Scheduler = &config.ChangefeedSchedulerConfig{
-			RegionPerSpan: c.Scheduler.RegionPerSpan,
+			EnableSplitSpan: c.Scheduler.EnableSplitSpan,
+			RegionPerSpan:   c.Scheduler.RegionPerSpan,
 		}
 	}
 	return res
@@ -396,7 +397,8 @@ func ToAPIReplicaConfig(c *config.ReplicaConfig) *ReplicaConfig {
 	}
 	if cloned.Scheduler != nil {
 		res.Scheduler = &ChangefeedSchedulerConfig{
-			RegionPerSpan: cloned.Scheduler.RegionPerSpan,
+			EnableSplitSpan: cloned.Scheduler.EnableSplitSpan,
+			RegionPerSpan:   cloned.Scheduler.RegionPerSpan,
 		}
 	}
 	return res
@@ -420,6 +422,10 @@ func GetDefaultReplicaConfig() *ReplicaConfig {
 			MaxLogSize:        64,
 			FlushIntervalInMs: config.DefaultFlushIntervalInMs,
 			Storage:           "",
+		},
+		Scheduler: &ChangefeedSchedulerConfig{
+			EnableSplitSpan: config.GetDefaultReplicaConfig().Scheduler.EnableSplitSpan,
+			RegionPerSpan:   config.GetDefaultReplicaConfig().Scheduler.RegionPerSpan,
 		},
 	}
 }
@@ -567,6 +573,8 @@ type ConsistentConfig struct {
 // ChangefeedSchedulerConfig is per changefeed scheduler settings.
 // This is a duplicate of config.ChangefeedSchedulerConfig
 type ChangefeedSchedulerConfig struct {
+	// EnableSplitSpan set true to split one table to multiple spans.
+	EnableSplitSpan bool `toml:"enable_split_span" json:"enable_split_span"`
 	// RegionPerSpan the number of regions in a span, must be greater than 1000.
 	// Set 0 to disable span replication.
 	RegionPerSpan int `toml:"region_per_span" json:"region_per_span"`

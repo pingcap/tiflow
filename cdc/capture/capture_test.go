@@ -149,7 +149,6 @@ func TestDrainWaitsOwnerResign(t *testing.T) {
 }
 
 type mockElection struct {
-	election
 	campaignRequestCh chan struct{}
 	campaignGrantCh   chan struct{}
 

@@ -14,6 +14,7 @@
 package kafka
 
 import (
+	"context"
 	"testing"
 
 	"github.com/Shopify/sarama"
@@ -88,7 +89,8 @@ func TestAsyncProducer(t *testing.T) {
 	f, err := NewSaramaFactory(o, model.DefaultChangeFeedID("sarama-test"))
 	require.NoError(t, err)
 
-	async, err := f.AsyncProducer(make(chan struct{}, 1), make(chan error, 1))
+	ctx := context.Background()
+	async, err := f.AsyncProducer(ctx, make(chan struct{}, 1), make(chan error, 1))
 	require.NoError(t, err)
 	require.NotNil(t, async)
 	async.Close()
