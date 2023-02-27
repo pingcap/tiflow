@@ -72,7 +72,7 @@ func (s *EventSorter) RemoveTable(span tablepb.Span) {
 }
 
 // Add implements engine.SortEngine.
-func (s *EventSorter) Add(span tablepb.Span, events ...*model.PolymorphicEvent) (err error) {
+func (s *EventSorter) Add(span tablepb.Span, events ...*model.PolymorphicEvent) {
 	value, exists := s.tables.Load(span)
 	if !exists {
 		log.Panic("add events into an unexist table", zap.Stringer("span", &span))
@@ -86,7 +86,6 @@ func (s *EventSorter) Add(span tablepb.Span, events ...*model.PolymorphicEvent) 
 			onResolve(span, resolvedTs)
 		}
 	}
-	return nil
 }
 
 // GetResolvedTs implements engine.SortEngine.
