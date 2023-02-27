@@ -26,6 +26,6 @@ func newManualPartitioner() kafka.Balancer {
 }
 
 //nolint:unused
-func (m manualPartitioner) Balance(msg kafka.Message, partitions ...int) (partition int) {
+func (m *manualPartitioner) Balance(msg kafka.Message, partitions ...int) (partition int) {
 	return msg.Partition
 }

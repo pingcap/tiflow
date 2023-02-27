@@ -87,7 +87,7 @@ func TestToAPIReplicaConfig(t *testing.T) {
 		}},
 	}
 	cfg.Mounter = &config.MounterConfig{WorkerNum: 11}
-	cfg.Scheduler = &config.ChangefeedSchedulerConfig{RegionPerSpan: 10001}
+	cfg.Scheduler = &config.ChangefeedSchedulerConfig{EnableSplitSpan: true, RegionPerSpan: 10001}
 	cfg2 := ToAPIReplicaConfig(cfg).ToInternalReplicaConfig()
 	require.Equal(t, "", cfg2.Sink.DispatchRules[0].DispatcherRule)
 	cfg.Sink.DispatchRules[0].DispatcherRule = ""
