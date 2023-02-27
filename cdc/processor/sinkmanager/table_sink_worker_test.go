@@ -62,8 +62,7 @@ func addEventsToSortEngine(
 ) {
 	sortEngine.AddTable(span)
 	for _, event := range events {
-		err := sortEngine.Add(span, event)
-		require.NoError(t, err)
+		sortEngine.Add(span, event)
 	}
 }
 
