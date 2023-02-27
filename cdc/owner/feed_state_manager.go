@@ -28,8 +28,6 @@ import (
 const (
 	// When errors occurred, and we need to do backoff, we start an exponential backoff
 	// with an interval from 10s to 30min (10s, 20s, 40s, 80s, 160s, 320s, 640s, 1280s, 1800s).
-	// And the backoff will be stopped after 72 min (about 9 tries) because if we do another 30min backoff,
-	// the total duration (72+30=102min) will exceed the MaxElapsedTime (90min).
 	// To avoid thunderherd, a random factor is also added.
 	defaultBackoffInitInterval        = 10 * time.Second
 	defaultBackoffMaxInterval         = 30 * time.Minute
@@ -67,9 +65,10 @@ func newFeedStateManager() *feedStateManager {
 	f.errBackoff = backoff.NewExponentialBackOff()
 	f.errBackoff.InitialInterval = defaultBackoffInitInterval
 	f.errBackoff.MaxInterval = defaultBackoffMaxInterval
-	f.errBackoff.MaxElapsedTime = defaultBackoffMaxElapsedTime
 	f.errBackoff.Multiplier = defaultBackoffMultiplier
 	f.errBackoff.RandomizationFactor = defaultBackoffRandomizationFactor
+	// MaxElapsedTime=0 means the backoff never stops
+	f.errBackoff.MaxElapsedTime = 0
 
 	f.resetErrBackoff()
 	f.lastErrorTime = time.Unix(0, 0)
@@ -444,21 +443,16 @@ func (m *feedStateManager) handleError(errs ...*model.RunningError) {
 		m.patchState(model.StateError)
 	} else {
 		oldBackoffInterval := m.backoffInterval
+		// NextBackOff will never return -1 because the backoff never stops
+		// with `MaxElapsedTime=0`
+		// ref: https://github.com/cenkalti/backoff/blob/v4/exponential.go#L121-L123
 		m.backoffInterval = m.errBackoff.NextBackOff()
 		m.lastErrorTime = time.Unix(0, 0)
 
-		// if the duration since backoff start exceeds MaxElapsedTime,
-		// we set the state of changefeed to "failed" and don't let it run again unless it is manually resumed.
-		if m.backoffInterval == backoff.Stop {
-			log.Warn("changefeed will not be restarted because it has been failing for a long time period",
-				zap.Duration("maxElapsedTime", m.errBackoff.MaxElapsedTime))
-			m.shouldBeRunning = false
-			m.patchState(model.StateFailed)
-		} else {
-			log.Info("changefeed restart backoff interval is changed",
-				zap.String("namespace", m.state.ID.Namespace),
-				zap.String("changefeed", m.state.ID.ID),
-				zap.Duration("oldInterval", oldBackoffInterval), zap.Duration("newInterval", m.backoffInterval))
-		}
+		log.Info("changefeed restart backoff interval is changed",
+			zap.String("namespace", m.state.ID.Namespace),
+			zap.String("changefeed", m.state.ID.ID),
+			zap.Duration("oldInterval", oldBackoffInterval),
+			zap.Duration("newInterval", m.backoffInterval))
 	}
 }

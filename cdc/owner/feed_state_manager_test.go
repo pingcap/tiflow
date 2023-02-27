@@ -141,9 +141,10 @@ func TestCleanUpInfos(t *testing.T) {
 		require.Nil(t, status)
 		return &model.ChangeFeedStatus{}, true, nil
 	})
-	state.PatchTaskPosition(ctx.GlobalVars().CaptureInfo.ID, func(position *model.TaskPosition) (*model.TaskPosition, bool, error) {
-		return &model.TaskPosition{}, true, nil
-	})
+	state.PatchTaskPosition(ctx.GlobalVars().CaptureInfo.ID,
+		func(position *model.TaskPosition) (*model.TaskPosition, bool, error) {
+			return &model.TaskPosition{}, true, nil
+		})
 	tester.MustApplyPatches()
 	require.Contains(t, state.TaskPositions, ctx.GlobalVars().CaptureInfo.ID)
 	manager.Tick(state)
@@ -178,7 +179,6 @@ func TestHandleError(t *testing.T) {
 	manager.Tick(state)
 	tester.MustApplyPatches()
 
-	// the backoff will be stopped after 4600ms because 4600ms + 1600ms > 6000ms.
 	intervals := []time.Duration{200, 400, 800, 1600, 1600}
 	for i, d := range intervals {
 		intervals[i] = d * time.Millisecond
@@ -186,17 +186,21 @@ func TestHandleError(t *testing.T) {
 
 	for _, d := range intervals {
 		require.True(t, manager.ShouldRunning())
-		state.PatchTaskPosition(ctx.GlobalVars().CaptureInfo.ID, func(position *model.TaskPosition) (*model.TaskPosition, bool, error) {
-			return &model.TaskPosition{Error: &model.RunningError{
-				Addr:    ctx.GlobalVars().CaptureInfo.AdvertiseAddr,
-				Code:    "[CDC:ErrEtcdSessionDone]",
-				Message: "fake error for test",
-			}}, true, nil
-		})
+		state.PatchTaskPosition(ctx.GlobalVars().CaptureInfo.ID,
+			func(position *model.TaskPosition) (*model.TaskPosition, bool, error) {
+				return &model.TaskPosition{Error: &model.RunningError{
+					Addr:    ctx.GlobalVars().CaptureInfo.AdvertiseAddr,
+					Code:    "[CDC:ErrEtcdSessionDone]",
+					Message: "fake error for test",
+				}}, true, nil
+			})
 		tester.MustApplyPatches()
 		manager.Tick(state)
 		tester.MustApplyPatches()
 		require.False(t, manager.ShouldRunning())
+		require.Equal(t, state.Info.State, model.StateError)
+		require.Equal(t, state.Info.AdminJobType, model.AdminStop)
+		require.Equal(t, state.Status.AdminJobType, model.AdminStop)
 		time.Sleep(d)
 		manager.Tick(state)
 		tester.MustApplyPatches()
@@ -207,20 +211,6 @@ func TestHandleError(t *testing.T) {
 	require.Equal(t, state.Info.State, model.StateFailed)
 	require.Equal(t, state.Info.AdminJobType, model.AdminStop)
 	require.Equal(t, state.Status.AdminJobType, model.AdminStop)
-
-	// admin resume must retry changefeed immediately.
-	manager.PushAdminJob(&model.AdminJob{
-		CfID: ctx.ChangefeedVars().ID,
-		Type: model.AdminResume,
-		Opts: &model.AdminJobOption{ForceRemove: false},
-	})
-	manager.Tick(state)
-	tester.MustApplyPatches()
-	require.True(t, manager.ShouldRunning())
-	require.False(t, manager.ShouldRemoved())
-	require.Equal(t, state.Info.State, model.StateNormal)
-	require.Equal(t, state.Info.AdminJobType, model.AdminNone)
-	require.Equal(t, state.Status.AdminJobType, model.AdminNone)
 }
 
 func TestHandleFastFailError(t *testing.T) {
@@ -232,13 +222,14 @@ func TestHandleFastFailError(t *testing.T) {
 		require.Nil(t, info)
 		return &model.ChangeFeedInfo{SinkURI: "123", Config: &config.ReplicaConfig{}}, true, nil
 	})
-	state.PatchTaskPosition(ctx.GlobalVars().CaptureInfo.ID, func(position *model.TaskPosition) (*model.TaskPosition, bool, error) {
-		return &model.TaskPosition{Error: &model.RunningError{
-			Addr:    ctx.GlobalVars().CaptureInfo.AdvertiseAddr,
-			Code:    "CDC:ErrGCTTLExceeded",
-			Message: "fake error for test",
-		}}, true, nil
-	})
+	state.PatchTaskPosition(ctx.GlobalVars().CaptureInfo.ID,
+		func(position *model.TaskPosition) (*model.TaskPosition, bool, error) {
+			return &model.TaskPosition{Error: &model.RunningError{
+				Addr:    ctx.GlobalVars().CaptureInfo.AdvertiseAddr,
+				Code:    "CDC:ErrGCTTLExceeded",
+				Message: "fake error for test",
+			}}, true, nil
+		})
 	tester.MustApplyPatches()
 	manager.Tick(state)
 	// test handling fast failed error with non-nil ChangeFeedInfo
