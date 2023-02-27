@@ -172,14 +172,6 @@ func (ch *Chann[T]) Close() {
 	}
 }
 
-// CloseAndDrain closes the channel and drains the channel to avoid the goroutine leak.
-func (ch *Chann[T]) CloseAndDrain() {
-	ch.Close()
-	// NOTICE: Drain the channel to avoid the goroutine leak.
-	for range ch.Out() {
-	}
-}
-
 // unboundedProcessing is a processing loop that implements unbounded
 // channel semantics.
 func (ch *Chann[T]) unboundedProcessing() {
