@@ -144,7 +144,11 @@ func (s *EventSorter) RemoveTable(tableID model.TableID) {
 }
 
 // Add implements engine.SortEngine.
+<<<<<<< HEAD
 func (s *EventSorter) Add(tableID model.TableID, events ...*model.PolymorphicEvent) error {
+=======
+func (s *EventSorter) Add(span tablepb.Span, events ...*model.PolymorphicEvent) {
+>>>>>>> 02b9286700 (cdc: fix sourcemanager.Close deadlock (#8370))
 	s.mu.RLock()
 	state, exists := s.tables[tableID]
 	s.mu.RUnlock()
@@ -178,8 +182,6 @@ func (s *EventSorter) Add(tableID model.TableID, events ...*model.PolymorphicEve
 	if maxResolvedTs > state.maxReceivedResolvedTs.Load() {
 		state.maxReceivedResolvedTs.Store(maxResolvedTs)
 	}
-
-	return nil
 }
 
 // GetResolvedTs implements engine.SortEngine.

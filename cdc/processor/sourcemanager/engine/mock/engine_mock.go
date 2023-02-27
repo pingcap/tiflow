@@ -36,15 +36,17 @@ func (m *MockSortEngine) EXPECT() *MockSortEngineMockRecorder {
 }
 
 // Add mocks base method.
+<<<<<<< HEAD
 func (m *MockSortEngine) Add(tableID model.TableID, events ...*model.PolymorphicEvent) error {
+=======
+func (m *MockSortEngine) Add(span tablepb.Span, events ...*model.PolymorphicEvent) {
+>>>>>>> 02b9286700 (cdc: fix sourcemanager.Close deadlock (#8370))
 	m.ctrl.T.Helper()
 	varargs := []interface{}{tableID}
 	for _, a := range events {
 		varargs = append(varargs, a)
 	}
-	ret := m.ctrl.Call(m, "Add", varargs...)
-	ret0, _ := ret[0].(error)
-	return ret0
+	m.ctrl.Call(m, "Add", varargs...)
 }
 
 // Add indicates an expected call of Add.

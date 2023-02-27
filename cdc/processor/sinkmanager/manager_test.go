@@ -131,8 +131,12 @@ func addTableAndAddEventsToSortEngine(
 		},
 	}
 	for _, event := range events {
+<<<<<<< HEAD
 		err := engine.Add(tableID, event)
 		require.NoError(t, err)
+=======
+		engine.Add(span, event)
+>>>>>>> 02b9286700 (cdc: fix sourcemanager.Close deadlock (#8370))
 	}
 }
 

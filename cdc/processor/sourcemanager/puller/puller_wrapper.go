@@ -18,6 +18,7 @@ import (
 	"sync"
 
 	"github.com/pingcap/failpoint"
+	"github.com/pingcap/log"
 	"github.com/pingcap/tiflow/cdc/contextutil"
 	"github.com/pingcap/tiflow/cdc/model"
 	"github.com/pingcap/tiflow/cdc/processor/sourcemanager/engine"
@@ -28,6 +29,7 @@ import (
 	"github.com/pingcap/tiflow/pkg/regionspan"
 	"github.com/pingcap/tiflow/pkg/upstream"
 	"github.com/pingcap/tiflow/pkg/util"
+	"go.uber.org/zap"
 )
 
 // Wrapper is a wrapper of puller used by source manager.
@@ -106,7 +108,17 @@ func (n *Wrapper) Start(
 		defer n.wg.Done()
 		err := n.p.Run(ctxC)
 		if err != nil && !cerrors.Is(err, context.Canceled) {
-			errChan <- err
+			select {
+			case errChan <- err:
+				// Do not block sending error, because the err channel
+				// might be full and no goroutine receives.
+			default:
+				log.Warn("puller fail to send error",
+					zap.String("namespace", n.changefeed.Namespace),
+					zap.String("changefeed", n.changefeed.ID),
+					zap.String("table", n.tableName),
+					zap.Error(err))
+			}
 		}
 	}()
 	n.wg.Add(1)
@@ -121,9 +133,13 @@ func (n *Wrapper) Start(
 					continue
 				}
 				pEvent := model.NewPolymorphicEvent(rawKV)
+<<<<<<< HEAD
 				if err := eventSortEngine.Add(n.tableID, pEvent); err != nil {
 					errChan <- err
 				}
+=======
+				eventSortEngine.Add(n.span, pEvent)
+>>>>>>> 02b9286700 (cdc: fix sourcemanager.Close deadlock (#8370))
 			}
 		}
 	}()

@@ -70,8 +70,13 @@ func (s *EventSorter) RemoveTable(tableID model.TableID) {
 }
 
 // Add implements engine.SortEngine.
+<<<<<<< HEAD
 func (s *EventSorter) Add(tableID model.TableID, events ...*model.PolymorphicEvent) (err error) {
 	value, exists := s.tables.Load(tableID)
+=======
+func (s *EventSorter) Add(span tablepb.Span, events ...*model.PolymorphicEvent) {
+	value, exists := s.tables.Load(span)
+>>>>>>> 02b9286700 (cdc: fix sourcemanager.Close deadlock (#8370))
 	if !exists {
 		log.Panic("add events into an unexist table", zap.Int64("tableID", tableID))
 	}
@@ -84,7 +89,6 @@ func (s *EventSorter) Add(tableID model.TableID, events ...*model.PolymorphicEve
 			onResolve(tableID, resolvedTs)
 		}
 	}
-	return nil
 }
 
 // GetResolvedTs implements engine.SortEngine.
