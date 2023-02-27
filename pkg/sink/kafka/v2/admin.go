@@ -248,4 +248,14 @@ func (a *admin) Close() {
 	log.Info("admin client close idle connections",
 		zap.String("namespace", a.changefeedID.Namespace),
 		zap.String("changefeed", a.changefeedID.ID))
+
+	if transport.SASL != nil {
+		m, ok := transport.SASL.(mechanism)
+		if ok && m.client != nil {
+			m.client.Destroy()
+			log.Info("destroy sasl sessions",
+				zap.String("namespace", a.changefeedID.Namespace),
+				zap.String("changefeed", a.changefeedID.ID))
+		}
+	}
 }
