@@ -19,22 +19,53 @@ import (
 	"encoding/binary"
 
 	"github.com/jcmturner/gokrb5/v8/client"
+	"github.com/jcmturner/gokrb5/v8/credentials"
 	"github.com/jcmturner/gokrb5/v8/crypto"
 	"github.com/jcmturner/gokrb5/v8/gssapi"
 	"github.com/jcmturner/gokrb5/v8/iana/chksumtype"
 	"github.com/jcmturner/gokrb5/v8/iana/keyusage"
 	"github.com/jcmturner/gokrb5/v8/messages"
 	"github.com/jcmturner/gokrb5/v8/types"
+	"github.com/pingcap/errors"
 	"github.com/segmentio/kafka-go/sasl"
 )
 
 const (
-	// https://tools.ietf.org/html/rfc4121#section-4.1
-	TOK_ID_KRB_AP_REQ = "\x01\x00"
+	// TokIDKrbApReq https://tools.ietf.org/html/rfc4121#section-4.1
+	TokIDKrbApReq = "\x01\x00"
 )
 
+// Gokrb5v8Client is the client for gokrbv8
+type Gokrb5v8Client interface {
+	// GetServiceTicket get a ticker form server
+	GetServiceTicket(spn string) (messages.Ticket, types.EncryptionKey, error)
+	// Destroy stops the auto-renewal of all sessions and removes
+	// the sessions and cache entries from the client.
+	Destroy()
+	// Credentials returns the client credentials
+	Credentials() *credentials.Credentials
+}
+
+type gokrb5v8ClientImpl struct {
+	client *client.Client
+}
+
+func (c *gokrb5v8ClientImpl) GetServiceTicket(spn string) (
+	messages.Ticket, types.EncryptionKey, error,
+) {
+	return c.client.GetServiceTicket(spn)
+}
+
+func (c *gokrb5v8ClientImpl) Credentials() *credentials.Credentials {
+	return c.client.Credentials
+}
+
+func (c *gokrb5v8ClientImpl) Destroy() {
+	c.client.Destroy()
+}
+
 type mechanism struct {
-	client      *client.Client
+	client      Gokrb5v8Client
 	serviceName string
 	host        string
 }
@@ -47,7 +78,7 @@ func (m mechanism) Name() string {
 //
 // client is a github.com/gokrb5/v8/client *Client instance.
 // kafkaServiceName is the name of the Kafka service in your Kerberos.
-func Gokrb5v8(client *client.Client, kafkaServiceName string) sasl.Mechanism {
+func Gokrb5v8(client Gokrb5v8Client, kafkaServiceName string) sasl.Mechanism {
 	return mechanism{client, kafkaServiceName, ""}
 }
 
@@ -74,26 +105,26 @@ func (m mechanism) Start(ctx context.Context) (sasl.StateMachine, []byte, error)
 		servicePrincipalName,
 	)
 	if err != nil {
-		return nil, nil, err
+		return nil, nil, errors.Trace(err)
 	}
 
 	authenticator, err := types.NewAuthenticator(
-		m.client.Credentials.Realm(),
-		m.client.Credentials.CName(),
+		m.client.Credentials().Realm(),
+		m.client.Credentials().CName(),
 	)
 	if err != nil {
-		return nil, nil, err
+		return nil, nil, errors.Trace(err)
 	}
 
 	encryptionType, err := crypto.GetEtype(key.KeyType)
 	if err != nil {
-		return nil, nil, err
+		return nil, nil, errors.Trace(err)
 	}
 
 	keySize := encryptionType.GetKeyByteSize()
 	err = authenticator.GenerateSeqNumberAndSubKey(key.KeyType, keySize)
 	if err != nil {
-		return nil, nil, err
+		return nil, nil, errors.Trace(err)
 	}
 
 	authenticator.Cksum = types.Checksum{
@@ -102,24 +133,26 @@ func (m mechanism) Start(ctx context.Context) (sasl.StateMachine, []byte, error)
 	}
 	apReq, err := messages.NewAPReq(ticket, key, authenticator)
 	if err != nil {
-		return nil, nil, err
+		return nil, nil, errors.Trace(err)
 	}
 
 	bytes, err := apReq.Marshal()
 	if err != nil {
-		return nil, nil, err
+		return nil, nil, errors.Trace(err)
 	}
+	gssapiToken, err := getGssAPIToken(bytes)
+	if err != nil {
+		return nil, nil, errors.Trace(err)
+	}
+	return &gokrb5v8Session{authenticator.SubKey, false}, gssapiToken, nil
+}
 
-	bytesWithPrefix := make([]byte, 0, len(TOK_ID_KRB_AP_REQ)+len(bytes))
-	bytesWithPrefix = append(bytesWithPrefix, TOK_ID_KRB_AP_REQ...)
+func getGssAPIToken(bytes []byte) ([]byte, error) {
+	bytesWithPrefix := make([]byte, 0, len(TokIDKrbApReq)+len(bytes))
+	bytesWithPrefix = append(bytesWithPrefix, TokIDKrbApReq...)
 	bytesWithPrefix = append(bytesWithPrefix, bytes...)
 
-	gssapiToken, err := prependGSSAPITokenTag(bytesWithPrefix)
-	if err != nil {
-		return nil, nil, err
-	}
-
-	return &gokrb5v8Session{authenticator.SubKey, false}, gssapiToken, nil
+	return prependGSSAPITokenTag(bytesWithPrefix)
 }
 
 func authenticatorPseudoChecksum() []byte {
@@ -187,7 +220,7 @@ func (s *gokrb5v8Session) Next(ctx context.Context, challenge []byte) (bool, []b
 	challengeToken := gssapi.WrapToken{}
 	err := challengeToken.Unmarshal(challenge, tokenIsFromGSSAcceptor)
 	if err != nil {
-		return false, nil, err
+		return false, nil, errors.Trace(err)
 	}
 
 	valid, err := challengeToken.Verify(
@@ -195,7 +228,7 @@ func (s *gokrb5v8Session) Next(ctx context.Context, challenge []byte) (bool, []b
 		keyusage.GSSAPI_ACCEPTOR_SEAL,
 	)
 	if !valid {
-		return false, nil, err
+		return false, nil, errors.Trace(err)
 	}
 
 	responseToken, err := gssapi.NewInitiatorWrapToken(
@@ -203,15 +236,15 @@ func (s *gokrb5v8Session) Next(ctx context.Context, challenge []byte) (bool, []b
 		s.key,
 	)
 	if err != nil {
-		return false, nil, err
+		return false, nil, errors.Trace(err)
 	}
 
 	response, err := responseToken.Marshal()
 	if err != nil {
-		return false, nil, err
+		return false, nil, errors.Trace(err)
 	}
 
-	// We are are done, but we can't return `true` yet because
+	// We are done, but we can't return `true` yet because
 	// the SASL loop calling this needs the first return to be
 	// `false` any time there are response bytes to send.
 	s.done = true
