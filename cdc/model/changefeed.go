@@ -480,8 +480,10 @@ type DownStreamType int
 const (
 	// DB is the type of Database.
 	DB DownStreamType = iota
-	// Other is the type of MQ or Cloud Storage.
-	Other
+	// MQ is the type of MQ or Cloud Storage.
+	MQ
+	// Storage is the type of Cloud Storage.
+	Storage
 )
 
 // String implements fmt.Stringer interface.
@@ -489,8 +491,10 @@ func (t DownStreamType) String() string {
 	switch t {
 	case DB:
 		return "DB"
-	case Other:
-		return "Other"
+	case MQ:
+		return "MQ"
+	case Storage:
+		return "Storage"
 	}
 	return "unknown"
 }

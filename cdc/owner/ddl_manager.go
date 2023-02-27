@@ -227,7 +227,7 @@ func (m *ddlManager) tick(
 
 		// TODO: Complete this logic, when sinkType is not DB,
 		// we should not block the execution of DDLs by the checkpointTs.
-		if m.sinkType == model.Other {
+		if m.sinkType != model.DB {
 			log.Panic("sink type is not DB, it never happens in current version")
 		}
 
