@@ -43,7 +43,10 @@ func (ch *DrainableChann[T]) Out() <-chan T {
 
 // CloseAndDrain closes the channel and drains the channel to avoid the goroutine leak.
 func (ch *DrainableChann[T]) CloseAndDrain() {
-	ch.inner.CloseAndDrain()
+	ch.inner.Close()
+	// NOTICE: Drain the channel to avoid the goroutine leak.
+	for range ch.Out() {
+	}
 }
 
 // Len returns an approximation of the length of the channel.
