@@ -779,6 +779,41 @@ func TestFixSchedulerIncompatible(t *testing.T) {
 			},
 			expectedScheduler: &config.ChangefeedSchedulerConfig{},
 		},
+		{
+			info: &ChangeFeedInfo{
+				CreatorVersion: "6.6.0",
+				SinkURI:        "mysql://root:test@127.0.0.1:3306/",
+				Config: &config.ReplicaConfig{
+					Scheduler: &config.ChangefeedSchedulerConfig{},
+					Sink:      &config.SinkConfig{Protocol: config.ProtocolDefault.String()},
+				},
+			},
+			expectedScheduler: &config.ChangefeedSchedulerConfig{},
+		},
+		{
+			info: &ChangeFeedInfo{
+				CreatorVersion: "6.6.0",
+				SinkURI:        "mysql://root:test@127.0.0.1:3306/",
+				Config: &config.ReplicaConfig{
+					Scheduler: &config.ChangefeedSchedulerConfig{RegionPerSpan: 1000},
+					Sink:      &config.SinkConfig{Protocol: config.ProtocolDefault.String()},
+				},
+			},
+			expectedScheduler: &config.ChangefeedSchedulerConfig{
+				RegionPerSpan: 1000, EnableSplitSpan: true,
+			},
+		},
+		{
+			info: &ChangeFeedInfo{
+				CreatorVersion: "6.7.0",
+				SinkURI:        "mysql://root:test@127.0.0.1:3306/",
+				Config: &config.ReplicaConfig{
+					Scheduler: &config.ChangefeedSchedulerConfig{RegionPerSpan: 1000},
+					Sink:      &config.SinkConfig{Protocol: config.ProtocolDefault.String()},
+				},
+			},
+			expectedScheduler: &config.ChangefeedSchedulerConfig{RegionPerSpan: 1000},
+		},
 	}
 
 	for _, tc := range testCases {
