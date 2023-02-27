@@ -1,5 +1,5 @@
 FROM golang:1.20-alpine as builder
-RUN apk add --no-cache git make bash
+RUN apk add --no-cache git make bash gcc musl-dev
 WORKDIR /go/src/github.com/pingcap/tiflow
 COPY . .
 ENV CDC_ENABLE_VENDOR=1

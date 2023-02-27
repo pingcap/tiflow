@@ -42,17 +42,11 @@ endif
 
 # Since TiDB add a new dependency on github.com/cloudfoundry/gosigar,
 # We need to add CGO_ENABLED=1 to make it work when build TiCDC in Darwin OS.
-# These logic is to check if the OS is Darwin, if so, add CGO_ENABLED=1.
 # ref: https://github.com/cloudfoundry/gosigar/issues/58#issuecomment-1150925711
 # ref: https://github.com/pingcap/tidb/pull/39526#issuecomment-1407952955
-OS    := "$(shell go env GOOS)"
-ifeq (${OS}, "linux")
-	CGO := 0
-else ifeq (${OS}, "darwin")
-	CGO := 1
-endif
-
-GOBUILD  := CGO_ENABLED=$(CGO) $(GO) build $(BUILD_FLAG) -trimpath $(GOVENDORFLAG)
+#
+# And github.com/DataDog/zstd also requires CGO_ENABLED=1
+GOBUILD  := CGO_ENABLED=1 $(GO) build $(BUILD_FLAG) -trimpath $(GOVENDORFLAG)
 GOBUILDNOVENDOR  := CGO_ENABLED=0 $(GO) build $(BUILD_FLAG) -trimpath
 GOTEST   := CGO_ENABLED=1 $(GO) test -p $(P) --race --tags=intest
 GOTESTNORACE := CGO_ENABLED=1 $(GO) test -p $(P)

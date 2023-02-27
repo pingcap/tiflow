@@ -1,7 +1,7 @@
 FROM golang:1.20-alpine as builder
 MAINTAINER siddontang
 
-RUN apk add --no-cache git make
+RUN apk add --no-cache git make gcc musl-dev
 
 RUN mkdir -p /go/src/github.com/pingcap/dm
 WORKDIR /go/src/github.com/pingcap/dm
