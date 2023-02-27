@@ -1796,6 +1796,10 @@ var doc = `{
         "v2.ChangefeedSchedulerConfig": {
             "type": "object",
             "properties": {
+                "enable_split_span": {
+                    "description": "EnableSplitSpan set true to split one table to multiple spans.",
+                    "type": "boolean"
+                },
                 "region_per_span": {
                     "description": "RegionPerSpan the number of regions in a span, must be greater than 1000.\nSet 0 to disable span replication.",
                     "type": "integer"
