@@ -601,6 +601,83 @@ func (s *mysqlBackend) prepareDMLs() *preparedDMLs {
 	}
 }
 
+// execute SQLs in the multi statements way.
+func (s *mysqlBackend) multiStmtExecute(
+	ctx context.Context, dmls *preparedDMLs, tx *sql.Tx, writeTimeout time.Duration,
+) error {
+	start := time.Now()
+	multiStmtSQL := ""
+	multiStmtArgs := []interface{}{}
+	for i, query := range dmls.sqls {
+		multiStmtSQL += query
+		if i != len(dmls.sqls)-1 {
+			multiStmtSQL += ";"
+		}
+		multiStmtArgs = append(multiStmtArgs, dmls.values[i]...)
+	}
+	ctx, cancelFunc := context.WithTimeout(ctx, writeTimeout)
+	_, execError := tx.ExecContext(ctx, multiStmtSQL, multiStmtArgs...)
+	if execError != nil {
+		err := logDMLTxnErr(
+			cerror.WrapError(cerror.ErrMySQLTxnError, execError),
+			start, s.changefeed, multiStmtSQL, dmls.rowCount, dmls.startTs)
+		if rbErr := tx.Rollback(); rbErr != nil {
+			if errors.Cause(rbErr) != context.Canceled {
+				log.Warn("failed to rollback txn", zap.Error(rbErr))
+			}
+		}
+		cancelFunc()
+		return err
+	}
+	cancelFunc()
+	return nil
+}
+
+// execute SQLs in each preparedDMLs one by one in the same transaction.
+func (s *mysqlBackend) sequenceExecute(
+	ctx context.Context, dmls *preparedDMLs, tx *sql.Tx, writeTimeout time.Duration,
+) error {
+	start := time.Now()
+	for i, query := range dmls.sqls {
+		args := dmls.values[i]
+		log.Debug("exec row", zap.Int("workerID", s.workerID),
+			zap.String("sql", query), zap.Any("args", args))
+		ctx, cancelFunc := context.WithTimeout(ctx, writeTimeout)
+		var execError error
+		if s.cachePrepStmts {
+			stmt, ok := s.stmtCache.Get(query)
+			if !ok {
+				var err error
+				stmt, err = s.db.Prepare(query)
+				if err != nil {
+					cancelFunc()
+					return errors.Trace(err)
+				}
+
+				s.stmtCache.Add(query, stmt)
+			}
+			//nolint:sqlclosecheck
+			_, execError = tx.Stmt(stmt.(*sql.Stmt)).ExecContext(ctx, args...)
+		} else {
+			_, execError = tx.ExecContext(ctx, query, args...)
+		}
+		if execError != nil {
+			err := logDMLTxnErr(
+				cerror.WrapError(cerror.ErrMySQLTxnError, execError),
+				start, s.changefeed, query, dmls.rowCount, dmls.startTs)
+			if rbErr := tx.Rollback(); rbErr != nil {
+				if errors.Cause(rbErr) != context.Canceled {
+					log.Warn("failed to rollback txn", zap.Error(rbErr))
+				}
+			}
+			cancelFunc()
+			return err
+		}
+		cancelFunc()
+	}
+	return nil
+}
+
 func (s *mysqlBackend) execDMLWithMaxRetries(pctx context.Context, dmls *preparedDMLs) error {
 	if len(dmls.sqls) != len(dmls.values) {
 		log.Panic("unexpected number of sqls and values",
@@ -630,42 +707,17 @@ func (s *mysqlBackend) execDMLWithMaxRetries(pctx context.Context, dmls *prepare
 					start, s.changefeed, "BEGIN", dmls.rowCount, dmls.startTs)
 			}
 
-			for i, query := range dmls.sqls {
-				args := dmls.values[i]
-				log.Debug("exec row", zap.Int("workerID", s.workerID),
-					zap.String("sql", query), zap.Any("args", args))
-				ctx, cancelFunc := context.WithTimeout(pctx, writeTimeout)
-				var execError error
-				if s.cachePrepStmts {
-					stmt, ok := s.stmtCache.Get(query)
-					if !ok {
-						var err error
-						stmt, err = s.db.Prepare(query)
-						if err != nil {
-							cancelFunc()
-							return 0, errors.Trace(err)
-						}
-
-						s.stmtCache.Add(query, stmt)
-					}
-					//nolint:sqlclosecheck
-					_, execError = tx.Stmt(stmt.(*sql.Stmt)).ExecContext(ctx, args...)
-				} else {
-					_, execError = tx.ExecContext(ctx, query, args...)
-				}
-				if execError != nil {
-					err := logDMLTxnErr(
-						cerror.WrapError(cerror.ErrMySQLTxnError, execError),
-						start, s.changefeed, query, dmls.rowCount, dmls.startTs)
-					if rbErr := tx.Rollback(); rbErr != nil {
-						if errors.Cause(rbErr) != context.Canceled {
-							log.Warn("failed to rollback txn", zap.Error(rbErr))
-						}
-					}
-					cancelFunc()
+			if s.cfg.MultiStmtEnable {
+				err = s.multiStmtExecute(pctx, dmls, tx, writeTimeout)
+				if err != nil {
 					return 0, err
 				}
-				cancelFunc()
+
+			} else {
+				err = s.sequenceExecute(pctx, dmls, tx, writeTimeout)
+				if err != nil {
+					return 0, err
+				}
 			}
 
 			// we set write source for each txn,
