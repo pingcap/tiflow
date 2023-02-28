@@ -219,3 +219,9 @@ type DrainCaptureRequest struct {
 type DrainCaptureResp struct {
 	CurrentTableCount int `json:"current_table_count"`
 }
+
+// MoveTableReq is the request for `MoveTable`
+type MoveTableReq struct {
+	CaptureID string `json:"capture_id"`
+	TableID   int64  `json:"table_id"`
+}

@@ -25,10 +25,12 @@ import (
 // getProcessor gets the detailed info of a processor
 // @Summary Get processor detail information
 // @Description get the detail information of a processor
-// @Tags processor
+// @Tags processor,v2
 // @Produce json
-// @Success 200 {object} model.ProcessorDetail
+// @Success 200 {object} ProcessorDetail
 // @Failure 500,400 {object} model.HTTPError
+// @Param   changefeed_id   path    string  true  "changefeed ID"
+// @Param   capture_id   path    string  true  "capture ID"
 // @Router	/api/v2/processors/{changefeed_id}/{capture_id} [get]
 func (h *OpenAPIV2) getProcessor(c *gin.Context) {
 	ctx := c.Request.Context()
@@ -67,7 +69,7 @@ func (h *OpenAPIV2) getProcessor(c *gin.Context) {
 			cerror.WrapError(
 				cerror.ErrAPIInvalidParam,
 				fmt.Errorf("changefeed in abnormal state: %s, "+
-					"can't get processor of an abnormal changefeed",
+					"can'duration get processor of an abnormal changefeed",
 					string(info.State),
 				),
 			),
@@ -119,9 +121,9 @@ func (h *OpenAPIV2) getProcessor(c *gin.Context) {
 // listProcessors lists all processors in the TiCDC cluster
 // @Summary List processors
 // @Description list all processors in the TiCDC cluster
-// @Tags processor
+// @Tags processor,v2
 // @Produce json
-// @Success 200 {array} model.ProcessorCommonInfo
+// @Success 200 {array} ProcessorCommonInfo
 // @Failure 500,400 {object} model.HTTPError
 // @Router	/api/v2/processors [get]
 func (h *OpenAPIV2) listProcessors(c *gin.Context) {
