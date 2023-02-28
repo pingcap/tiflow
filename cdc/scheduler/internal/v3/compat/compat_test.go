@@ -30,7 +30,8 @@ func TestCheckSpanReplicationEnabled(t *testing.T) {
 
 	c := New(&config.SchedulerConfig{
 		ChangefeedSettings: &config.ChangefeedSchedulerConfig{
-			RegionPerSpan: 1,
+			EnableSplitSpan: true,
+			RegionPerSpan:   1,
 		},
 	}, map[string]*model.CaptureInfo{})
 
@@ -291,7 +292,8 @@ func TestCheckChangefeedEpochEnabled(t *testing.T) {
 
 	c := New(&config.SchedulerConfig{
 		ChangefeedSettings: &config.ChangefeedSchedulerConfig{
-			RegionPerSpan: 1,
+			EnableSplitSpan: true,
+			RegionPerSpan:   1,
 		},
 	}, map[string]*model.CaptureInfo{})
 

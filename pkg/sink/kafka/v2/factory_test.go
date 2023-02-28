@@ -14,6 +14,7 @@
 package v2
 
 import (
+	"context"
 	"testing"
 
 	"github.com/pingcap/tiflow/cdc/model"
@@ -56,13 +57,13 @@ func TestAsyncProducer(t *testing.T) {
 	o := newOptions4Test()
 	factory := newFactory4Test(o, t)
 
-	async, err := factory.AsyncProducer(make(chan struct{}, 1), make(chan error, 1))
+	ctx := context.Background()
+	async, err := factory.AsyncProducer(ctx, make(chan struct{}, 1), make(chan error, 1))
 	require.NoError(t, err)
 
 	asyncP, ok := async.(*asyncWriter)
 	require.True(t, ok)
 	require.True(t, asyncP.w.Async)
-	require.NotNil(t, asyncP.successes)
 	require.NotNil(t, asyncP.closedChan)
 
 	require.Equal(t, asyncP.w.ReadTimeout, o.ReadTimeout)
