@@ -19,9 +19,13 @@ import (
 	"strings"
 	"time"
 
+	"github.com/jcmturner/gokrb5/v8/client"
+	"github.com/jcmturner/gokrb5/v8/config"
+	"github.com/jcmturner/gokrb5/v8/keytab"
 	"github.com/pingcap/log"
 	"github.com/pingcap/tiflow/cdc/model"
 	"github.com/pingcap/tiflow/pkg/errors"
+	"github.com/pingcap/tiflow/pkg/security"
 	pkafka "github.com/pingcap/tiflow/pkg/sink/kafka"
 	"github.com/pingcap/tiflow/pkg/util"
 	"github.com/segmentio/kafka-go"
@@ -119,7 +123,30 @@ func completeSASLConfig(o *pkafka.Options) (sasl.Mechanism, error) {
 				}, nil
 			}
 		case pkafka.SASLTypeGSSAPI:
-			// todo: support gss api
+			cfg, err := config.Load(o.SASL.GSSAPI.KerberosConfigPath)
+			if err != nil {
+				return nil, errors.Trace(err)
+			}
+			var clnt *client.Client
+			switch o.SASL.GSSAPI.AuthType {
+			case security.UserAuth:
+				clnt = client.NewWithPassword(o.SASL.GSSAPI.Username, o.SASL.GSSAPI.Realm,
+					o.SASL.GSSAPI.Password, cfg,
+					client.DisablePAFXFAST(o.SASL.GSSAPI.DisablePAFXFAST))
+			case security.KeyTabAuth:
+				ktab, err := keytab.Load(o.SASL.GSSAPI.KeyTabPath)
+				if err != nil {
+					return nil, errors.Trace(err)
+				}
+				clnt = client.NewWithKeytab(o.SASL.GSSAPI.Username, o.SASL.GSSAPI.Realm, ktab, cfg,
+					client.DisablePAFXFAST(o.SASL.GSSAPI.DisablePAFXFAST))
+			}
+			err = clnt.Login()
+			if err != nil {
+				return nil, errors.Trace(err)
+			}
+			return Gokrb5v8(&gokrb5v8ClientImpl{clnt},
+				o.SASL.GSSAPI.ServiceName), nil
 		}
 	}
 	return nil, nil
@@ -152,7 +179,6 @@ func (f *factory) newWriter(async bool) *kafka.Writer {
 			zap.String("namespace", f.changefeedID.Namespace),
 			zap.String("changefeed", f.changefeedID.ID),
 			zap.String("compression", f.options.Compression))
-		f.options.Compression = "none"
 	}
 	log.Info("Kafka producer uses "+f.options.Compression+" compression algorithm",
 		zap.String("namespace", f.changefeedID.Namespace),
@@ -170,12 +196,10 @@ func (f *factory) SyncProducer() (pkafka.SyncProducer, error) {
 	return &syncWriter{w: w}, nil
 }
 
-const (
-	defaultWait4ConfirmMessagesCount = 256
-)
-
 // AsyncProducer creates an async producer to writer message to kafka
-func (f *factory) AsyncProducer(closedChan chan struct{},
+func (f *factory) AsyncProducer(
+	ctx context.Context,
+	closedChan chan struct{},
 	failpointCh chan error,
 ) (pkafka.AsyncProducer, error) {
 	w := f.newWriter(true)
@@ -184,10 +208,32 @@ func (f *factory) AsyncProducer(closedChan chan struct{},
 		closedChan:   closedChan,
 		changefeedID: f.changefeedID,
 		failpointCh:  failpointCh,
-		successes:    make(chan []kafka.Message, defaultWait4ConfirmMessagesCount),
 		errorsChan:   make(chan error, 1),
 	}
-	w.Completion = aw.callBackRun
+
+	w.Completion = func(messages []kafka.Message, err error) {
+		if err != nil {
+			select {
+			case <-ctx.Done():
+				return
+			case aw.errorsChan <- err:
+			default:
+				log.Warn("async writer report error failed, since the err channel is full",
+					zap.String("namespace", aw.changefeedID.Namespace),
+					zap.String("changefeed", aw.changefeedID.ID),
+					zap.Error(err))
+			}
+			return
+		}
+
+		for _, msg := range messages {
+			callback := msg.WriterData.(func())
+			if callback != nil {
+				callback()
+			}
+		}
+	}
+
 	return aw, nil
 }
 
@@ -262,7 +308,6 @@ type asyncWriter struct {
 	changefeedID model.ChangeFeedID
 	closedChan   chan struct{}
 	failpointCh  chan error
-	successes    chan []kafka.Message
 	errorsChan   chan error
 }
 
@@ -316,46 +361,29 @@ func (a *asyncWriter) AsyncSend(ctx context.Context, topic string,
 // and run tha attached callback. the caller should call this
 // method in a background goroutine
 func (a *asyncWriter) AsyncRunCallback(ctx context.Context) error {
-	for {
-		select {
-		case <-ctx.Done():
-			return errors.Trace(ctx.Err())
-		case <-a.closedChan:
-			log.Warn("Receive from closed chan in kafka producer",
-				zap.String("namespace", a.changefeedID.Namespace),
-				zap.String("changefeed", a.changefeedID.ID))
+	select {
+	case <-ctx.Done():
+		return errors.Trace(ctx.Err())
+	case <-a.closedChan:
+		log.Warn("Receive from closed chan in kafka producer",
+			zap.String("namespace", a.changefeedID.Namespace),
+			zap.String("changefeed", a.changefeedID.ID))
+		return nil
+	case err := <-a.failpointCh:
+		log.Warn("Receive from failpoint chan in kafka producer",
+			zap.String("namespace", a.changefeedID.Namespace),
+			zap.String("changefeed", a.changefeedID.ID),
+			zap.Error(err))
+		return errors.Trace(err)
+	case err := <-a.errorsChan:
+		// We should not wrap a nil pointer if the pointer
+		// is of a subtype of `error` because Go would store the type info
+		// and the resulted `error` variable would not be nil,
+		// which will cause the pkg/error library to malfunction.
+		// See: https://go.dev/doc/faq#nil_error
+		if err == nil {
 			return nil
-		case err := <-a.failpointCh:
-			log.Warn("Receive from failpoint chan in kafka producer",
-				zap.String("namespace", a.changefeedID.Namespace),
-				zap.String("changefeed", a.changefeedID.ID),
-				zap.Error(err))
-			return errors.Trace(err)
-		case msgs := <-a.successes:
-			for _, ack := range msgs {
-				callback := ack.WriterData.(func())
-				if callback != nil {
-					callback()
-				}
-			}
-		case err := <-a.errorsChan:
-			// We should not wrap a nil pointer if the pointer
-			// is of a subtype of `error` because Go would store the type info
-			// and the resulted `error` variable would not be nil,
-			// which will cause the pkg/error library to malfunction.
-			// See: https://go.dev/doc/faq#nil_error
-			if err == nil {
-				return nil
-			}
-			return errors.WrapError(errors.ErrKafkaAsyncSendMessage, err)
 		}
-	}
-}
-
-func (a *asyncWriter) callBackRun(messages []kafka.Message, err error) {
-	if err != nil {
-		a.errorsChan <- err
-	} else {
-		a.successes <- messages
+		return errors.WrapError(errors.ErrKafkaAsyncSendMessage, err)
 	}
 }

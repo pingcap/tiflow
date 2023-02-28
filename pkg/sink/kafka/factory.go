@@ -33,7 +33,7 @@ type Factory interface {
 	// SyncProducer creates a sync producer to writer message to kafka
 	SyncProducer() (SyncProducer, error)
 	// AsyncProducer creates an async producer to writer message to kafka
-	AsyncProducer(closedChan chan struct{}, failpointCh chan error) (AsyncProducer, error)
+	AsyncProducer(ctx context.Context, closedChan chan struct{}, failpointCh chan error) (AsyncProducer, error)
 	// MetricsCollector returns the kafka metrics collector
 	MetricsCollector(role util.Role, adminClient ClusterAdminClient) MetricsCollector
 }
