@@ -733,6 +733,7 @@ func (suite *advancerSuite) TestTryAdvanceAndBlockAcquireWithSplitTxn() {
 	}
 
 	var wg sync.WaitGroup
+	down := make(chan struct{})
 
 	wg.Add(1)
 	go func() {
@@ -743,6 +744,7 @@ func (suite *advancerSuite) TestTryAdvanceAndBlockAcquireWithSplitTxn() {
 		)
 		require.ErrorIs(suite.T(), err, cerrors.ErrFlowControllerAborted)
 		wg.Done()
+		down <- struct{}{}
 	}()
 
 	wg.Add(1)
@@ -754,6 +756,8 @@ func (suite *advancerSuite) TestTryAdvanceAndBlockAcquireWithSplitTxn() {
 		sink.AckAllEvents()
 		// After ack, abort the blocked acquire.
 		memoryQuota.Close()
+		// Wait the blocked acquire is aborted, otherwise the test data race.
+		<-down
 		require.Eventually(suite.T(), func() bool {
 			expectedResolvedTs := model.NewResolvedTs(3)
 			return task.tableSink.getCheckpointTs() == expectedResolvedTs
