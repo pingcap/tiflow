@@ -70,7 +70,7 @@ func (s *EventSorter) RemoveTable(tableID model.TableID) {
 }
 
 // Add implements engine.SortEngine.
-func (s *EventSorter) Add(tableID model.TableID, events ...*model.PolymorphicEvent) (err error) {
+func (s *EventSorter) Add(tableID model.TableID, events ...*model.PolymorphicEvent) {
 	value, exists := s.tables.Load(tableID)
 	if !exists {
 		log.Panic("add events into an unexist table", zap.Int64("tableID", tableID))
@@ -84,7 +84,6 @@ func (s *EventSorter) Add(tableID model.TableID, events ...*model.PolymorphicEve
 			onResolve(tableID, resolvedTs)
 		}
 	}
-	return nil
 }
 
 // GetResolvedTs implements engine.SortEngine.
