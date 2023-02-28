@@ -19,6 +19,7 @@ import (
 	"database/sql/driver"
 	"fmt"
 	"net/url"
+	"strings"
 	"time"
 
 	dmysql "github.com/go-sql-driver/mysql"
@@ -607,7 +608,7 @@ func (s *mysqlBackend) multiStmtExecute(
 ) error {
 	start := time.Now()
 	multiStmtSQL := ""
-	multiStmtArgs := []interface{}{}
+	multiStmtArgs := []any{}
 	for i, query := range dmls.sqls {
 		multiStmtSQL += query
 		if i != len(dmls.sqls)-1 {
@@ -616,6 +617,12 @@ func (s *mysqlBackend) multiStmtExecute(
 		multiStmtArgs = append(multiStmtArgs, dmls.values[i]...)
 	}
 	ctx, cancelFunc := context.WithTimeout(ctx, writeTimeout)
+	if strings.Count(multiStmtSQL, "?") != len(multiStmtArgs) {
+		log.Warn("num of ? is not same to len(args)",
+			zap.Int("count_of_question", strings.Count(multiStmtSQL, "?")),
+			zap.Int("len(args)", len(multiStmtArgs)),
+		)
+	}
 	_, execError := tx.ExecContext(ctx, multiStmtSQL, multiStmtArgs...)
 	if execError != nil {
 		err := logDMLTxnErr(
