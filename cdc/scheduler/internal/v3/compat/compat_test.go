@@ -30,7 +30,8 @@ func TestCheckSpanReplicationEnabled(t *testing.T) {
 
 	c := New(&config.SchedulerConfig{
 		ChangefeedSettings: &config.ChangefeedSchedulerConfig{
-			RegionPerSpan: 1,
+			EnableSplitSpan: true,
+			RegionPerSpan:   1,
 		},
 	}, map[string]*model.CaptureInfo{})
 
@@ -284,4 +285,45 @@ func TestAfterTransportReceive(t *testing.T) {
 		HeartbeatResponse: heartbeatResp1,
 	}})
 	require.EqualValues(t, tablepb.Span{TableID: 1}, heartbeatResp1.Tables[0].Span)
+}
+
+func TestCheckChangefeedEpochEnabled(t *testing.T) {
+	t.Parallel()
+
+	c := New(&config.SchedulerConfig{
+		ChangefeedSettings: &config.ChangefeedSchedulerConfig{
+			EnableSplitSpan: true,
+			RegionPerSpan:   1,
+		},
+	}, map[string]*model.CaptureInfo{})
+
+	// Unknown capture always return false
+	require.False(t, c.CheckChangefeedEpochEnabled("unknown"))
+
+	// Add 1 supported capture.
+	require.True(t, c.UpdateCaptureInfo(map[string]*model.CaptureInfo{
+		"a": {Version: ChangefeedEpochMinVersion.String()},
+	}))
+	require.True(t, c.CheckChangefeedEpochEnabled("a"))
+	// Check again.
+	require.True(t, c.CheckChangefeedEpochEnabled("a"))
+
+	// Add 1 supported capture again.
+	require.True(t, c.UpdateCaptureInfo(map[string]*model.CaptureInfo{
+		"a": {Version: ChangefeedEpochMinVersion.String()},
+		"b": {Version: ChangefeedEpochMinVersion.String()},
+	}))
+	require.True(t, c.CheckChangefeedEpochEnabled("a"))
+	require.True(t, c.CheckChangefeedEpochEnabled("b"))
+
+	// Replace 1 unsupported capture.
+	unsupported := *ChangefeedEpochMinVersion
+	unsupported.Major--
+	require.True(t, c.UpdateCaptureInfo(map[string]*model.CaptureInfo{
+		"a": {Version: ChangefeedEpochMinVersion.String()},
+		"c": {Version: unsupported.String()},
+	}))
+	require.True(t, c.CheckChangefeedEpochEnabled("a"))
+	require.False(t, c.CheckChangefeedEpochEnabled("b"))
+	require.False(t, c.CheckChangefeedEpochEnabled("c"))
 }

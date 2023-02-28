@@ -18,6 +18,7 @@ import (
 	"encoding/json"
 	"flag"
 	"fmt"
+	"net/http"
 	"net/url"
 	"os"
 	"os/signal"
@@ -32,20 +33,24 @@ import (
 	"github.com/pingcap/errors"
 	"github.com/pingcap/log"
 	"github.com/pingcap/tidb/br/pkg/storage"
+	"github.com/pingcap/tiflow/cdc/contextutil"
 	"github.com/pingcap/tiflow/cdc/model"
-	"github.com/pingcap/tiflow/cdc/sink"
-	"github.com/pingcap/tiflow/cdc/sink/codec"
-	"github.com/pingcap/tiflow/cdc/sink/codec/canal"
-	"github.com/pingcap/tiflow/cdc/sink/codec/common"
-	"github.com/pingcap/tiflow/cdc/sink/codec/csv"
-	sinkutil "github.com/pingcap/tiflow/cdc/sinkv2/util"
+	"github.com/pingcap/tiflow/cdc/sink/dmlsink/factory"
+	"github.com/pingcap/tiflow/cdc/sink/tablesink"
+	sinkutil "github.com/pingcap/tiflow/cdc/sink/util"
 	"github.com/pingcap/tiflow/pkg/cmd/util"
 	"github.com/pingcap/tiflow/pkg/config"
 	"github.com/pingcap/tiflow/pkg/logutil"
 	"github.com/pingcap/tiflow/pkg/quotes"
 	psink "github.com/pingcap/tiflow/pkg/sink"
 	"github.com/pingcap/tiflow/pkg/sink/cloudstorage"
+	"github.com/pingcap/tiflow/pkg/sink/codec"
+	"github.com/pingcap/tiflow/pkg/sink/codec/canal"
+	"github.com/pingcap/tiflow/pkg/sink/codec/common"
+	"github.com/pingcap/tiflow/pkg/sink/codec/csv"
+	"github.com/pingcap/tiflow/pkg/spanz"
 	putil "github.com/pingcap/tiflow/pkg/util"
+	"github.com/prometheus/client_golang/prometheus"
 	"go.uber.org/zap"
 )
 
@@ -57,6 +62,11 @@ var (
 	logFile          string
 	logLevel         string
 	flushInterval    time.Duration
+)
+
+const (
+	defaultChangefeedName    = "storage-consumer"
+	defaultFlushWaitDuration = 200 * time.Millisecond
 )
 
 func init() {
@@ -218,7 +228,7 @@ type fileIndexRange struct {
 }
 
 type consumer struct {
-	sink            sink.Sink
+	sinkFactory     *factory.SinkFactory
 	replicationCfg  *config.ReplicaConfig
 	codecCfg        *common.Config
 	externalStorage storage.ExternalStorage
@@ -226,8 +236,11 @@ type consumer struct {
 	// tableIdxMap maintains a map of <dmlPathKey, max file index>
 	tableIdxMap map[dmlPathKey]uint64
 	// tableTsMap maintains a map of <TableID, max commit ts>
-	tableTsMap       map[model.TableID]uint64
+	tableTsMap map[model.TableID]uint64
+	// tableSinkMap maintains a map of <TableID, TableSink>
+	tableSinkMap     map[model.TableID]tablesink.TableSink
 	tableIDGenerator *fakeTableIDGenerator
+	errCh            chan error
 }
 
 func newConsumer(ctx context.Context) (*consumer, error) {
@@ -272,21 +285,29 @@ func newConsumer(ctx context.Context) (*consumer, error) {
 	}
 
 	errCh := make(chan error, 1)
-	s, err := sink.New(ctx, model.DefaultChangeFeedID("storage-consumer"),
-		downstreamURIStr, config.GetDefaultReplicaConfig(), errCh)
+	stdCtx := contextutil.PutChangefeedIDInCtx(ctx,
+		model.DefaultChangeFeedID(defaultChangefeedName))
+	sinkFactory, err := factory.New(
+		stdCtx,
+		downstreamURIStr,
+		config.GetDefaultReplicaConfig(),
+		errCh,
+	)
 	if err != nil {
 		log.Error("failed to create sink", zap.Error(err))
 		return nil, err
 	}
 
 	return &consumer{
-		sink:            s,
+		sinkFactory:     sinkFactory,
 		replicationCfg:  replicaConfig,
 		codecCfg:        codecConfig,
 		externalStorage: storage,
 		fileExtension:   extension,
+		errCh:           errCh,
 		tableIdxMap:     make(map[dmlPathKey]uint64),
 		tableTsMap:      make(map[model.TableID]uint64),
+		tableSinkMap:    make(map[model.TableID]tablesink.TableSink),
 		tableIDGenerator: &fakeTableIDGenerator{
 			tableIDs: make(map[string]int64),
 		},
@@ -428,6 +449,13 @@ func (c *consumer) emitDMLEvents(ctx context.Context, tableID int64, pathKey dml
 				return errors.Trace(err)
 			}
 
+			if _, ok := c.tableSinkMap[tableID]; !ok {
+				c.tableSinkMap[tableID] = c.sinkFactory.CreateTableSinkForConsumer(
+					model.DefaultChangeFeedID(defaultChangefeedName),
+					spanz.TableIDToComparableSpan(tableID),
+					prometheus.NewCounter(prometheus.CounterOpts{}))
+			}
+
 			if _, ok := c.tableTsMap[tableID]; !ok || row.CommitTs >= c.tableTsMap[tableID] {
 				c.tableTsMap[tableID] = row.CommitTs
 			} else {
@@ -448,8 +476,27 @@ func (c *consumer) emitDMLEvents(ctx context.Context, tableID int64, pathKey dml
 		zap.Int("decodeRowsCnt", cnt),
 		zap.Int("filteredRowsCnt", len(events)))
 
-	err = c.sink.EmitRowChangedEvents(ctx, events...)
+	c.tableSinkMap[tableID].AppendRowChangedEvents(events...)
 	return err
+}
+
+func (c *consumer) waitTableFlushComplete(ctx context.Context, tableID model.TableID) error {
+	for {
+		select {
+		case <-ctx.Done():
+			return ctx.Err()
+		case err := <-c.errCh:
+			return err
+		default:
+		}
+
+		maxResolvedTs := c.tableTsMap[tableID]
+		checkpoint := c.tableSinkMap[tableID].GetCheckpointTs()
+		if checkpoint.Ts == maxResolvedTs {
+			return nil
+		}
+		time.Sleep(defaultFlushWaitDuration)
+	}
 }
 
 func (c *consumer) run(ctx context.Context) error {
@@ -458,6 +505,8 @@ func (c *consumer) run(ctx context.Context) error {
 		select {
 		case <-ctx.Done():
 			return ctx.Err()
+		case err := <-c.errCh:
+			return err
 		case <-ticker.C:
 		}
 
@@ -507,7 +556,11 @@ func (c *consumer) run(ctx context.Context) error {
 				}
 
 				resolvedTs := model.NewResolvedTs(c.tableTsMap[tableID])
-				_, err = c.sink.FlushRowChangedEvents(ctx, tableID, resolvedTs)
+				err = c.tableSinkMap[tableID].UpdateResolvedTs(resolvedTs)
+				if err != nil {
+					return errors.Trace(err)
+				}
+				err = c.waitTableFlushComplete(ctx, tableID)
 				if err != nil {
 					return errors.Trace(err)
 				}
@@ -539,17 +592,42 @@ func (g *fakeTableIDGenerator) generateFakeTableID(schema, table string, partiti
 }
 
 func main() {
+	var consumer *consumer
+	var err error
+
+	go func() {
+		server := &http.Server{
+			Addr:              ":6060",
+			ReadHeaderTimeout: 5 * time.Second,
+		}
+
+		if err := server.ListenAndServe(); err != nil {
+			log.Fatal("http pprof", zap.Error(err))
+		}
+	}()
+
 	ctx, stop := signal.NotifyContext(context.Background(), syscall.SIGINT, syscall.SIGTERM)
-	defer stop()
-	consumer, err := newConsumer(ctx)
-	if err != nil {
-		log.Error("failed to create storage consumer", zap.Error(err))
-		os.Exit(1)
+	deferFunc := func() int {
+		stop()
+		if consumer != nil {
+			consumer.sinkFactory.Close()
+		}
+		if err != nil && err != context.Canceled {
+			return 1
+		}
+		return 0
 	}
 
-	if err := consumer.run(ctx); err != nil && errors.Cause(err) != context.Canceled {
-		log.Error("error occurred while running consumer", zap.Error(err))
-		os.Exit(1)
+	consumer, err = newConsumer(ctx)
+	if err != nil {
+		log.Error("failed to create storage consumer", zap.Error(err))
+		goto EXIT
 	}
-	os.Exit(0)
+
+	if err = consumer.run(ctx); err != nil {
+		log.Error("error occurred while running consumer", zap.Error(err))
+	}
+
+EXIT:
+	os.Exit(deferFunc())
 }

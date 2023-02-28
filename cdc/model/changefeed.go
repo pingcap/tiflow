@@ -146,6 +146,8 @@ type ChangeFeedInfo struct {
 	Error  *RunningError         `json:"error"`
 
 	CreatorVersion string `json:"creator-version"`
+	// Epoch is the epoch of a changefeed, changes on every restart.
+	Epoch uint64 `json:"epoch"`
 }
 
 const changeFeedIDMaxLen = 128
@@ -309,11 +311,10 @@ func (info *ChangeFeedInfo) FixIncompatible() {
 		log.Info("Fix incompatible memory quota completed", zap.String("changefeed", info.String()))
 	}
 
-	if info.Config.Scheduler == nil {
-		log.Info("Start fixing incompatible scheduler", zap.String("changefeed", info.String()))
-		info.fixScheduler()
-		log.Info("Fix incompatible scheduler completed", zap.String("changefeed", info.String()))
-	}
+	log.Info("Start fixing incompatible scheduler", zap.String("changefeed", info.String()))
+	inheritV66 := creatorVersionGate.ChangefeedInheritSchedulerConfigFromV66()
+	info.fixScheduler(inheritV66)
+	log.Info("Fix incompatible scheduler completed", zap.String("changefeed", info.String()))
 }
 
 // fixState attempts to fix state loss from upgrading the old owner to the new owner.
@@ -448,6 +449,6 @@ func (info *ChangeFeedInfo) fixMemoryQuota() {
 	info.Config.FixMemoryQuota()
 }
 
-func (info *ChangeFeedInfo) fixScheduler() {
-	info.Config.FixScheduler()
+func (info *ChangeFeedInfo) fixScheduler(inheritV66 bool) {
+	info.Config.FixScheduler(inheritV66)
 }

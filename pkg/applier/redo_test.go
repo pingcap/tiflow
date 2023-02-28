@@ -23,9 +23,8 @@ import (
 	"github.com/go-sql-driver/mysql"
 	"github.com/phayes/freeport"
 	"github.com/pingcap/tiflow/cdc/model"
-	"github.com/pingcap/tiflow/cdc/redo/common"
 	"github.com/pingcap/tiflow/cdc/redo/reader"
-	"github.com/pingcap/tiflow/cdc/sinkv2/eventsink/txn"
+	"github.com/pingcap/tiflow/cdc/sink/dmlsink/txn"
 	"github.com/stretchr/testify/require"
 )
 
@@ -33,16 +32,16 @@ import (
 type MockReader struct {
 	checkpointTs uint64
 	resolvedTs   uint64
-	redoLogCh    chan *model.RedoRowChangedEvent
-	ddlEventCh   chan *model.RedoDDLEvent
+	redoLogCh    chan *model.RowChangedEvent
+	ddlEventCh   chan *model.DDLEvent
 }
 
 // NewMockReader creates a new MockReader
 func NewMockReader(
 	checkpointTs uint64,
 	resolvedTs uint64,
-	redoLogCh chan *model.RedoRowChangedEvent,
-	ddlEventCh chan *model.RedoDDLEvent,
+	redoLogCh chan *model.RowChangedEvent,
+	ddlEventCh chan *model.DDLEvent,
 ) *MockReader {
 	return &MockReader{
 		checkpointTs: checkpointTs,
@@ -58,8 +57,8 @@ func (br *MockReader) ResetReader(ctx context.Context, startTs, endTs uint64) er
 }
 
 // ReadNextLog implements LogReader.ReadNextLog
-func (br *MockReader) ReadNextLog(ctx context.Context, maxNumberOfMessages uint64) ([]*model.RedoRowChangedEvent, error) {
-	cached := make([]*model.RedoRowChangedEvent, 0)
+func (br *MockReader) ReadNextLog(ctx context.Context, maxNumberOfMessages uint64) ([]*model.RowChangedEvent, error) {
+	cached := make([]*model.RowChangedEvent, 0)
 	for {
 		select {
 		case <-ctx.Done():
@@ -77,8 +76,8 @@ func (br *MockReader) ReadNextLog(ctx context.Context, maxNumberOfMessages uint6
 }
 
 // ReadNextDDL implements LogReader.ReadNextDDL
-func (br *MockReader) ReadNextDDL(ctx context.Context, maxNumberOfDDLs uint64) ([]*model.RedoDDLEvent, error) {
-	cached := make([]*model.RedoDDLEvent, 0)
+func (br *MockReader) ReadNextDDL(ctx context.Context, maxNumberOfDDLs uint64) ([]*model.DDLEvent, error) {
+	cached := make([]*model.DDLEvent, 0)
 	for {
 		select {
 		case <-ctx.Done():
@@ -111,8 +110,8 @@ func TestApplyDMLs(t *testing.T) {
 
 	checkpointTs := uint64(1000)
 	resolvedTs := uint64(2000)
-	redoLogCh := make(chan *model.RedoRowChangedEvent, 1024)
-	ddlEventCh := make(chan *model.RedoDDLEvent, 1024)
+	redoLogCh := make(chan *model.RowChangedEvent, 1024)
+	ddlEventCh := make(chan *model.DDLEvent, 1024)
 	createMockReader := func(ctx context.Context, cfg *RedoApplierConfig) (reader.RedoLogReader, error) {
 		return NewMockReader(checkpointTs, resolvedTs, redoLogCh, ddlEventCh), nil
 	}
@@ -241,13 +240,14 @@ func TestApplyDMLs(t *testing.T) {
 		},
 	}
 	for _, dml := range dmls {
-		redoLogCh <- common.RowToRedo(dml)
+		redoLogCh <- dml
 	}
 	close(redoLogCh)
 	close(ddlEventCh)
 
 	cfg := &RedoApplierConfig{
-		SinkURI: "mysql://127.0.0.1:4000/?worker-count=1&max-txn-row=1&tidb_placement_mode=ignore&safe-mode=true",
+		SinkURI: "mysql://127.0.0.1:4000/?worker-count=1&max-txn-row=1" +
+			"&tidb_placement_mode=ignore&safe-mode=true&cache-prep-stmts=false",
 	}
 	ap := NewRedoApplier(cfg)
 	err := ap.Apply(ctx)

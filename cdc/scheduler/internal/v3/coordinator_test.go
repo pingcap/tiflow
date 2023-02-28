@@ -20,6 +20,7 @@ import (
 
 	"github.com/pingcap/tiflow/cdc/model"
 	"github.com/pingcap/tiflow/cdc/processor/tablepb"
+	"github.com/pingcap/tiflow/cdc/scheduler/internal/v3/compat"
 	"github.com/pingcap/tiflow/cdc/scheduler/internal/v3/keyspan"
 	"github.com/pingcap/tiflow/cdc/scheduler/internal/v3/member"
 	"github.com/pingcap/tiflow/cdc/scheduler/internal/v3/replication"
@@ -42,7 +43,9 @@ func TestCoordinatorSendMsgs(t *testing.T) {
 	ctx := context.Background()
 	coord, trans := newTestCoordinator(&config.SchedulerConfig{
 		ChangefeedSettings: &config.ChangefeedSchedulerConfig{
-			RegionPerSpan: 10000, // Enable span replication.
+			// Enable span replication.
+			EnableSplitSpan: true,
+			RegionPerSpan:   10000,
 		},
 	})
 	coord.version = "6.2.0"
@@ -81,7 +84,9 @@ func TestCoordinatorRecvMsgs(t *testing.T) {
 	ctx := context.Background()
 	coord, trans := newTestCoordinator(&config.SchedulerConfig{
 		ChangefeedSettings: &config.ChangefeedSchedulerConfig{
-			RegionPerSpan: 10000, // Enable span replication.
+			// Enable span replication.
+			EnableSplitSpan: true,
+			RegionPerSpan:   10000,
 		},
 	})
 	coord.version = "6.2.0"
@@ -200,7 +205,7 @@ func newTestCoordinator(cfg *config.SchedulerConfig) (*coordinator, *transport.M
 	trans := transport.NewMockTrans()
 	coord.trans = trans
 	coord.reconciler = keyspan.NewReconciler(
-		model.ChangeFeedID{}, keyspan.NewMockRegionCache(), cfg.ChangefeedSettings.RegionPerSpan)
+		model.ChangeFeedID{}, keyspan.NewMockRegionCache(), cfg.ChangefeedSettings)
 	return coord, trans
 }
 
@@ -505,4 +510,73 @@ func TestCoordinatorAdvanceCheckpoint(t *testing.T) {
 	require.False(t, coord.captureM.CheckAllCaptureInitialized())
 	require.EqualValues(t, 3, cts)
 	require.EqualValues(t, 5, rts)
+}
+
+func TestCoordinatorDropMsgIfChangefeedEpochMismatch(t *testing.T) {
+	t.Parallel()
+
+	ctx := context.Background()
+	coord, trans := newTestCoordinator(&config.SchedulerConfig{
+		ChangefeedSettings: config.GetDefaultReplicaConfig().Scheduler,
+	})
+	coord.captureID = "0"
+	coord.changefeedEpoch = 1
+
+	unsupported := *compat.ChangefeedEpochMinVersion
+	unsupported.Major--
+	coord.compat.UpdateCaptureInfo(map[string]*model.CaptureInfo{
+		"1": {Version: compat.ChangefeedEpochMinVersion.String()},
+		"2": {Version: compat.ChangefeedEpochMinVersion.String()},
+		"3": {Version: unsupported.String()},
+	})
+	trans.RecvBuffer = append(trans.RecvBuffer,
+		&schedulepb.Message{
+			Header: &schedulepb.Message_Header{
+				OwnerRevision:   coord.revision,
+				ChangefeedEpoch: schedulepb.ChangefeedEpoch{Epoch: 1},
+			},
+			From: "1", To: coord.captureID, MsgType: schedulepb.MsgDispatchTableResponse,
+			DispatchTableResponse: &schedulepb.DispatchTableResponse{
+				Response: &schedulepb.DispatchTableResponse_AddTable{
+					AddTable: &schedulepb.AddTableResponse{
+						Status: &tablepb.TableStatus{},
+					},
+				},
+			},
+		})
+	trans.RecvBuffer = append(trans.RecvBuffer,
+		&schedulepb.Message{
+			Header: &schedulepb.Message_Header{
+				OwnerRevision:   coord.revision,
+				ChangefeedEpoch: schedulepb.ChangefeedEpoch{Epoch: 2},
+			},
+			From: "2", To: coord.captureID, MsgType: schedulepb.MsgDispatchTableResponse,
+			DispatchTableResponse: &schedulepb.DispatchTableResponse{
+				Response: &schedulepb.DispatchTableResponse_AddTable{
+					AddTable: &schedulepb.AddTableResponse{
+						Status: &tablepb.TableStatus{},
+					},
+				},
+			},
+		})
+	trans.RecvBuffer = append(trans.RecvBuffer,
+		&schedulepb.Message{
+			Header: &schedulepb.Message_Header{
+				OwnerRevision: coord.revision,
+			},
+			From: "3", To: coord.captureID, MsgType: schedulepb.MsgDispatchTableResponse,
+			DispatchTableResponse: &schedulepb.DispatchTableResponse{
+				Response: &schedulepb.DispatchTableResponse_AddTable{
+					AddTable: &schedulepb.AddTableResponse{
+						Status: &tablepb.TableStatus{},
+					},
+				},
+			},
+		})
+
+	msgs, err := coord.recvMsgs(ctx)
+	require.NoError(t, err)
+	require.Len(t, msgs, 2)
+	require.EqualValues(t, "1", msgs[0].From)
+	require.EqualValues(t, "3", msgs[1].From)
 }

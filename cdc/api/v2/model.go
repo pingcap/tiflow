@@ -89,40 +89,6 @@ type PDConfig struct {
 	CertAllowedCN []string `json:"cert_allowed_cn,omitempty"`
 }
 
-// ChangeFeedDetail holds detail info of a changefeed
-type ChangeFeedDetail struct {
-	UpstreamID     uint64                    `json:"upstream_id"`
-	Namespace      string                    `json:"namespace"`
-	ID             string                    `json:"id"`
-	SinkURI        string                    `json:"sink_uri"`
-	CreateTime     model.JSONTime            `json:"create_time"`
-	StartTs        uint64                    `json:"start_ts"`
-	ResolvedTs     uint64                    `json:"resolved_ts"`
-	TargetTs       uint64                    `json:"target_ts"`
-	CheckpointTSO  uint64                    `json:"checkpoint_tso"`
-	CheckpointTime model.JSONTime            `json:"checkpoint_time"`
-	Engine         model.SortEngine          `json:"sort_engine,omitempty"`
-	FeedState      model.FeedState           `json:"state"`
-	RunningError   *RunningError             `json:"error"`
-	ErrorHis       []int64                   `json:"error_history"`
-	CreatorVersion string                    `json:"creator_version"`
-	TaskStatus     []model.CaptureTaskStatus `json:"task_status,omitempty"`
-}
-
-// MarshalJSON use to marshal ChangefeedDetail
-func (c ChangeFeedDetail) MarshalJSON() ([]byte, error) {
-	// alias the original type to prevent recursive call of MarshalJSON
-	type Alias ChangeFeedDetail
-	if c.FeedState == model.StateNormal {
-		c.RunningError = nil
-	}
-	return json.Marshal(struct {
-		Alias
-	}{
-		Alias: Alias(c),
-	})
-}
-
 // ChangefeedCommonInfo holds some common usage information of a changefeed
 type ChangefeedCommonInfo struct {
 	UpstreamID     uint64              `json:"upstream_id"`
@@ -279,7 +245,8 @@ func (c *ReplicaConfig) ToInternalReplicaConfig() *config.ReplicaConfig {
 	}
 	if c.Scheduler != nil {
 		res.Scheduler = &config.ChangefeedSchedulerConfig{
-			RegionPerSpan: c.Scheduler.RegionPerSpan,
+			EnableSplitSpan: c.Scheduler.EnableSplitSpan,
+			RegionPerSpan:   c.Scheduler.RegionPerSpan,
 		}
 	}
 	return res
@@ -396,7 +363,8 @@ func ToAPIReplicaConfig(c *config.ReplicaConfig) *ReplicaConfig {
 	}
 	if cloned.Scheduler != nil {
 		res.Scheduler = &ChangefeedSchedulerConfig{
-			RegionPerSpan: cloned.Scheduler.RegionPerSpan,
+			EnableSplitSpan: cloned.Scheduler.EnableSplitSpan,
+			RegionPerSpan:   cloned.Scheduler.RegionPerSpan,
 		}
 	}
 	return res
@@ -420,6 +388,10 @@ func GetDefaultReplicaConfig() *ReplicaConfig {
 			MaxLogSize:        64,
 			FlushIntervalInMs: config.DefaultFlushIntervalInMs,
 			Storage:           "",
+		},
+		Scheduler: &ChangefeedSchedulerConfig{
+			EnableSplitSpan: config.GetDefaultReplicaConfig().Scheduler.EnableSplitSpan,
+			RegionPerSpan:   config.GetDefaultReplicaConfig().Scheduler.RegionPerSpan,
 		},
 	}
 }
@@ -567,6 +539,8 @@ type ConsistentConfig struct {
 // ChangefeedSchedulerConfig is per changefeed scheduler settings.
 // This is a duplicate of config.ChangefeedSchedulerConfig
 type ChangefeedSchedulerConfig struct {
+	// EnableSplitSpan set true to split one table to multiple spans.
+	EnableSplitSpan bool `toml:"enable_split_span" json:"enable_split_span"`
 	// RegionPerSpan the number of regions in a span, must be greater than 1000.
 	// Set 0 to disable span replication.
 	RegionPerSpan int `toml:"region_per_span" json:"region_per_span"`
@@ -603,6 +577,11 @@ type ChangeFeedInfo struct {
 	State          model.FeedState    `json:"state,omitempty"`
 	Error          *RunningError      `json:"error,omitempty"`
 	CreatorVersion string             `json:"creator_version,omitempty"`
+
+	ResolvedTs     uint64                    `json:"resolved_ts"`
+	CheckpointTs   uint64                    `json:"checkpoint_ts"`
+	CheckpointTime model.JSONTime            `json:"checkpoint_time"`
+	TaskStatus     []model.CaptureTaskStatus `json:"task_status,omitempty"`
 }
 
 // RunningError represents some running error from cdc components,

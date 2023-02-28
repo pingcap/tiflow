@@ -137,7 +137,7 @@ type ManagerImpl struct {
 
 	rwlock    sync.RWMutex
 	writer    writer.RedoLogWriter
-	logBuffer *chann.Chann[cacheEvents]
+	logBuffer *chann.DrainableChann[cacheEvents]
 	closed    int32
 
 	flushing      int64
@@ -189,7 +189,7 @@ func NewManager(ctx context.Context, cfg *config.ConsistentConfig, opts *Manager
 
 	// TODO: better to wait background goroutines after the context is canceled.
 	if m.opts.EnableBgRunner {
-		m.logBuffer = chann.New[cacheEvents]()
+		m.logBuffer = chann.NewAutoDrainChann[cacheEvents]()
 		go m.bgUpdateLog(ctx, cfg.FlushIntervalInMs, opts.ErrCh)
 	}
 	if m.opts.EnableGCRunner {
@@ -295,7 +295,7 @@ func (m *ManagerImpl) UpdateCheckpointTs(ckpt model.Ts) {
 // EmitDDLEvent sends DDL event to redo log writer
 func (m *ManagerImpl) EmitDDLEvent(ctx context.Context, ddl *model.DDLEvent) error {
 	return m.withLock(func(m *ManagerImpl) error {
-		return m.writer.SendDDL(ctx, common.DDLToRedo(ddl))
+		return m.writer.SendDDL(ctx, ddl)
 	})
 }
 
@@ -520,9 +520,7 @@ func (m *ManagerImpl) bgUpdateLog(
 		defer m.rwlock.Unlock()
 		atomic.StoreInt32(&m.closed, 1)
 
-		m.logBuffer.Close()
-		for range m.logBuffer.Out() {
-		}
+		m.logBuffer.CloseAndDrain()
 		if err := m.writer.Close(); err != nil {
 			log.Error("redo manager fails to close writer",
 				zap.String("namespace", m.changeFeedID.Namespace),
@@ -536,7 +534,7 @@ func (m *ManagerImpl) bgUpdateLog(
 	}()
 
 	var err error
-	logs := make([]*model.RedoRowChangedEvent, 0, 1024*1024)
+	logs := make([]*model.RowChangedEvent, 0, 1024*1024)
 	rtsMap := spanz.NewHashMap[model.Ts]()
 	releaseMemoryCbs := make([]func(), 0, 1024)
 
@@ -563,7 +561,7 @@ func (m *ManagerImpl) bgUpdateLog(
 			}
 
 			if cap(logs) > 1024*1024 {
-				logs = make([]*model.RedoRowChangedEvent, 0, 1024*1024)
+				logs = make([]*model.RowChangedEvent, 0, 1024*1024)
 			} else {
 				logs = logs[:0]
 			}
@@ -606,9 +604,7 @@ func (m *ManagerImpl) bgUpdateLog(
 				startToHandleEvent := time.Now()
 				switch cache.eventType {
 				case model.MessageTypeRow:
-					for _, row := range cache.rows {
-						logs = append(logs, common.RowToRedo(row))
-					}
+					logs = append(logs, cache.rows...)
 					if cache.releaseMemory != nil {
 						releaseMemoryCbs = append(releaseMemoryCbs, cache.releaseMemory)
 					}
@@ -643,9 +639,7 @@ func (m *ManagerImpl) bgUpdateLog(
 				startToHandleEvent := time.Now()
 				switch cache.eventType {
 				case model.MessageTypeRow:
-					for _, row := range cache.rows {
-						logs = append(logs, common.RowToRedo(row))
-					}
+					logs = append(logs, cache.rows...)
 					if cache.releaseMemory != nil {
 						releaseMemoryCbs = append(releaseMemoryCbs, cache.releaseMemory)
 					}

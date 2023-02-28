@@ -51,17 +51,18 @@ type coordinator struct {
 	// internal.Scheduler and internal.InfoProvider API.
 	mu sync.Mutex
 
-	version      string
-	revision     schedulepb.OwnerRevision
-	captureID    model.CaptureID
-	trans        transport.Transport
-	replicationM *replication.Manager
-	captureM     *member.CaptureManager
-	schedulerM   *scheduler.Manager
-	reconciler   *keyspan.Reconciler
-	compat       *compat.Compat
-	pdClock      pdutil.Clock
-	tableRanges  replication.TableRanges
+	version         string
+	revision        schedulepb.OwnerRevision
+	changefeedEpoch uint64
+	captureID       model.CaptureID
+	trans           transport.Transport
+	replicationM    *replication.Manager
+	captureM        *member.CaptureManager
+	schedulerM      *scheduler.Manager
+	reconciler      *keyspan.Reconciler
+	compat          *compat.Compat
+	pdClock         pdutil.Clock
+	tableRanges     replication.TableRanges
 
 	lastCollectTime time.Time
 	changefeedID    model.ChangeFeedID
@@ -75,6 +76,7 @@ func NewCoordinator(
 	messageServer *p2p.MessageServer,
 	messageRouter p2p.MessageRouter,
 	ownerRevision int64,
+	changefeedEpoch uint64,
 	regionCache keyspan.RegionCache,
 	pdClock pdutil.Clock,
 	cfg *config.SchedulerConfig,
@@ -87,8 +89,9 @@ func NewCoordinator(
 	coord := newCoordinator(captureID, changefeedID, ownerRevision, cfg)
 	coord.trans = trans
 	coord.reconciler = keyspan.NewReconciler(
-		changefeedID, regionCache, cfg.ChangefeedSettings.RegionPerSpan)
+		changefeedID, regionCache, cfg.ChangefeedSettings)
 	coord.pdClock = pdClock
+	coord.changefeedEpoch = changefeedEpoch
 	return coord, nil
 }
 
@@ -312,7 +315,8 @@ func (c *coordinator) poll(
 	// Generate schedule tasks based on the current status.
 	replications := c.replicationM.ReplicationSets()
 	runningTasks := c.replicationM.RunningTasks()
-	currentSpans := c.reconciler.Reconcile(ctx, &c.tableRanges, replications, c.compat)
+	currentSpans := c.reconciler.Reconcile(
+		ctx, &c.tableRanges, replications, c.captureM.Captures, c.compat)
 	allTasks := c.schedulerM.Schedule(
 		checkpointTs, currentSpans, c.captureM.Captures, replications, runningTasks)
 
@@ -341,12 +345,20 @@ func (c *coordinator) recvMsgs(ctx context.Context) ([]*schedulepb.Message, erro
 	}
 
 	n := 0
-	for _, val := range recvMsgs {
+	for _, msg := range recvMsgs {
 		// Filter stale messages and lost messages.
-		if val.Header.OwnerRevision == c.revision && val.To == c.captureID {
-			recvMsgs[n] = val
-			n++
+		if msg.Header.OwnerRevision != c.revision || msg.To != c.captureID {
+			// Owner revision must match and capture ID must match.
+			continue
 		}
+		if c.compat.CheckChangefeedEpochEnabled(msg.From) {
+			if msg.Header.ChangefeedEpoch.Epoch != c.changefeedEpoch {
+				// Changefeed epoch must match.
+				continue
+			}
+		}
+		recvMsgs[n] = msg
+		n++
 	}
 	c.compat.AfterTransportReceive(recvMsgs[:n])
 	return recvMsgs[:n], nil
@@ -371,6 +383,9 @@ func (c *coordinator) sendMsgs(ctx context.Context, msgs []*schedulepb.Message) 
 			Version:        c.version,
 			OwnerRevision:  c.revision,
 			ProcessorEpoch: epoch,
+			ChangefeedEpoch: schedulepb.ChangefeedEpoch{
+				Epoch: c.changefeedEpoch,
+			},
 		}
 		m.From = c.captureID
 	}

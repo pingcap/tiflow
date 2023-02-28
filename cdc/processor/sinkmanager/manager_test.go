@@ -28,7 +28,6 @@ import (
 	"github.com/pingcap/tiflow/pkg/config"
 	"github.com/pingcap/tiflow/pkg/spanz"
 	"github.com/pingcap/tiflow/pkg/upstream"
-	"github.com/prometheus/client_golang/prometheus"
 	"github.com/stretchr/testify/require"
 	pd "github.com/tikv/pd/client"
 )
@@ -61,7 +60,7 @@ func createManagerWithMemEngine(
 		ctx, changefeedID, changefeedInfo, up,
 		&entry.MockSchemaStorage{Resolved: math.MaxUint64},
 		nil, sm,
-		errChan, prometheus.NewCounter(prometheus.CounterOpts{}))
+		errChan)
 	require.NoError(t, err)
 	return manager, sortEngine
 }
@@ -132,8 +131,7 @@ func addTableAndAddEventsToSortEngine(
 		},
 	}
 	for _, event := range events {
-		err := engine.Add(span, event)
-		require.NoError(t, err)
+		engine.Add(span, event)
 	}
 }
 

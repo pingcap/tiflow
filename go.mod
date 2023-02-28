@@ -1,6 +1,6 @@
 module github.com/pingcap/tiflow
 
-go 1.19
+go 1.20
 
 require (
 	cloud.google.com/go/storage v1.27.0
@@ -17,7 +17,6 @@ require (
 	github.com/chzyer/readline v0.0.0-20180603132655-2972be24d48e
 	github.com/cockroachdb/pebble v0.0.0-20220415182917-06c9d3be25b3
 	github.com/coreos/go-semver v0.3.0
-	github.com/davecgh/go-spew v1.1.1
 	github.com/deepmap/oapi-codegen v1.9.0
 	github.com/docker/go-units v0.4.0
 	github.com/dustin/go-humanize v1.0.0
@@ -44,8 +43,10 @@ require (
 	github.com/grpc-ecosystem/go-grpc-prometheus v1.2.0
 	github.com/grpc-ecosystem/grpc-gateway v1.16.0
 	github.com/grpc-ecosystem/grpc-gateway/v2 v2.11.0
+	github.com/hashicorp/golang-lru v0.5.1
 	github.com/integralist/go-findroot v0.0.0-20160518114804-ac90681525dc
 	github.com/jarcoal/httpmock v1.2.0
+	github.com/jcmturner/gokrb5/v8 v8.4.3
 	github.com/jmoiron/sqlx v1.3.3
 	github.com/kami-zh/go-capturer v0.0.0-20171211120116-e492ea43421d
 	github.com/labstack/gommon v0.3.0
@@ -66,7 +67,7 @@ require (
 	github.com/prometheus/client_model v0.3.0
 	github.com/r3labs/diff v1.1.0
 	github.com/rcrowley/go-metrics v0.0.0-20201227073835-cf1acfcdf475
-	github.com/segmentio/kafka-go v0.4.38
+	github.com/segmentio/kafka-go v0.4.39-0.20230217181906-f6986fb02ee7
 	github.com/shopspring/decimal v1.3.0
 	github.com/soheilhy/cmux v0.1.5
 	github.com/spf13/cobra v1.6.1
@@ -97,10 +98,10 @@ require (
 	go.uber.org/ratelimit v0.2.0
 	go.uber.org/zap v1.24.0
 	golang.org/x/exp v0.0.0-20221023144134-a1e5550cf13e
-	golang.org/x/net v0.5.0
+	golang.org/x/net v0.7.0
 	golang.org/x/sync v0.1.0
 	golang.org/x/sys v0.5.0
-	golang.org/x/text v0.6.0
+	golang.org/x/text v0.7.0
 	golang.org/x/time v0.3.0
 	google.golang.org/genproto v0.0.0-20230202175211-008b39050e57
 	google.golang.org/grpc v1.52.3
@@ -144,6 +145,7 @@ require (
 	github.com/coreos/go-systemd/v22 v22.3.2 // indirect
 	github.com/cznic/mathutil v0.0.0-20181122101859-297441e03548 // indirect
 	github.com/danjacques/gofslock v0.0.0-20220131014315-6e321f4509c8 // indirect
+	github.com/davecgh/go-spew v1.1.1 // indirect
 	github.com/decred/dcrd/dcrec/secp256k1/v4 v4.1.0 // indirect
 	github.com/desertbit/timer v0.0.0-20180107155436-c41aec40b27f // indirect
 	github.com/dgraph-io/ristretto v0.1.1 // indirect
@@ -180,7 +182,6 @@ require (
 	github.com/jcmturner/aescts/v2 v2.0.0 // indirect
 	github.com/jcmturner/dnsutils/v2 v2.0.0 // indirect
 	github.com/jcmturner/gofork v1.7.6 // indirect
-	github.com/jcmturner/gokrb5/v8 v8.4.3 // indirect
 	github.com/jcmturner/rpc/v2 v2.0.3 // indirect
 	github.com/jedib0t/go-pretty/v6 v6.2.2 // indirect
 	github.com/jinzhu/inflection v1.0.0 // indirect
@@ -278,7 +279,7 @@ require (
 	go.opentelemetry.io/proto/otlp v0.7.0 // indirect
 	golang.org/x/crypto v0.5.0 // indirect
 	golang.org/x/oauth2 v0.3.0 // indirect
-	golang.org/x/term v0.4.0 // indirect
+	golang.org/x/term v0.5.0 // indirect
 	golang.org/x/tools v0.5.0 // indirect
 	golang.org/x/xerrors v0.0.0-20220907171357-04be3eba64a2 // indirect
 	google.golang.org/api v0.103.0 // indirect
@@ -303,6 +304,3 @@ replace github.com/benbjohnson/clock v1.3.0 => github.com/benbjohnson/clock v1.1
 
 // copy from TiDB
 replace go.opencensus.io => go.opencensus.io v0.23.1-0.20220331163232-052120675fac
-
-// FIXME: remove this replace after https://github.com/segmentio/kafka-go/pull/1059 is merged
-replace github.com/segmentio/kafka-go v0.4.38 => github.com/3AceShowHand/kafka-go v0.0.0-20230109084533-cd584ac8c705

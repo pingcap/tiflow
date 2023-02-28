@@ -1418,6 +1418,7 @@ func (s *Syncer) syncDDL(queueBucket string, db *dbconn.DBConn, ddlJobChan chan 
 						s.tctx.L().Warn("getting ddlCreateTime failed", zap.Error(err2))
 					}
 				}
+				//nolint:sqlclosecheck
 				row.Close()
 			}
 			affected, err = db.ExecuteSQLWithIgnore(s.syncCtx, s.metricsProxies, errorutil.IsIgnorableMySQLDDLError, ddlJob.ddls)

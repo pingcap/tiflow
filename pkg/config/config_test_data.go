@@ -61,7 +61,8 @@ const (
     "storage": ""
   },
   "scheduler": {
-    "region-per-span": 0
+    "enable-split-span": false,
+    "region-per-span": 100000
   }
 }`
 
@@ -98,7 +99,7 @@ const (
     "key-path": "",
     "cert-allowed-cn": null
   },
-  "per-table-memory-quota": 10485760,
+  "per-table-memory-quota": 0,
   "kv-client": {
     "worker-concurrent": 8,
     "worker-pool-size": 0,
@@ -196,6 +197,7 @@ const (
     "storage": ""
   },
   "scheduler": {
+    "enable-split-span": true,
     "region-per-span": 100001
   }
 }`
@@ -251,6 +253,7 @@ const (
     "storage": ""
   },
   "scheduler": {
+    "enable-split-span": true,
     "region-per-span": 100001
   }
 }`
