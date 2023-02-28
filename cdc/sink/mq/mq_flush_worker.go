@@ -262,10 +262,5 @@ func (w *flushWorker) flushAndNotify(ctx context.Context) error {
 }
 
 func (w *flushWorker) close() {
-	w.msgChan.Close()
-	// We must finish consuming the data here,
-	// otherwise it will cause the channel to not close properly.
-	for range w.msgChan.Out() {
-		// Do nothing. We do not care about the data.
-	}
+	w.msgChan.CloseAndDrain()
 }
