@@ -25,7 +25,7 @@ import (
 // @Tags owner,v2
 // @Accept json
 // @Produce json
-// @Success 202 {object} EmptyResponse
+// @Success 200 {object} EmptyResponse
 // @Failure 500,400 {object} model.HTTPError
 // @Router	/api/v2/owner/resign [post]
 func (h *OpenAPIV2) resignOwner(c *gin.Context) {

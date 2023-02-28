@@ -956,8 +956,8 @@ var doc = `{
                     }
                 ],
                 "responses": {
-                    "202": {
-                        "description": "Accepted",
+                    "200": {
+                        "description": "OK",
                         "schema": {
                             "$ref": "#/definitions/v2.EmptyResponse"
                         }
@@ -1010,8 +1010,11 @@ var doc = `{
                     }
                 ],
                 "responses": {
-                    "202": {
-                        "description": ""
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/v2.EmptyResponse"
+                        }
                     },
                     "400": {
                         "description": "Bad Request",
@@ -1117,8 +1120,8 @@ var doc = `{
                 ],
                 "summary": "Notify the owner to resign",
                 "responses": {
-                    "202": {
-                        "description": "Accepted",
+                    "200": {
+                        "description": "OK",
                         "schema": {
                             "$ref": "#/definitions/v2.EmptyResponse"
                         }
