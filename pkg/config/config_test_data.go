@@ -61,7 +61,7 @@ const (
     "storage": ""
   },
   "scheduler": {
-    "enable-split-span": false,
+    "enable-table-across-nodes": false,
     "region-per-span": 100000
   }
 }`
@@ -197,7 +197,7 @@ const (
     "storage": ""
   },
   "scheduler": {
-    "enable-split-span": true,
+    "enable-table-across-nodes": true,
     "region-per-span": 100001
   }
 }`
@@ -253,7 +253,7 @@ const (
     "storage": ""
   },
   "scheduler": {
-    "enable-split-span": true,
+    "enable-table-across-nodes": true,
     "region-per-span": 100001
   }
 }`
