@@ -329,9 +329,7 @@ func (s *EventSorter) Close() error {
 	close(s.closed)
 	s.wg.Wait()
 	for _, ch := range s.channs {
-		ch.Close()
-		for range ch.Out() {
-		}
+		ch.CloseAndDrain()
 	}
 
 	s.mu.RLock()
