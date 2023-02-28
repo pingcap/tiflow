@@ -15,6 +15,7 @@ package owner
 
 import (
 	"context"
+	"crypto/tls"
 	"io"
 	"net/url"
 	"os"
@@ -24,7 +25,11 @@ import (
 
 	"github.com/pingcap/errors"
 	"github.com/pingcap/failpoint"
+	"github.com/pingcap/kvproto/pkg/import_sstpb"
+	"github.com/pingcap/kvproto/pkg/metapb"
 	"github.com/pingcap/log"
+	"github.com/pingcap/tidb/br/pkg/conn/util"
+	"github.com/pingcap/tidb/br/pkg/utils"
 	"github.com/pingcap/tiflow/cdc/model"
 	"github.com/pingcap/tiflow/cdc/scheduler"
 	"github.com/pingcap/tiflow/pkg/config"
@@ -35,6 +40,9 @@ import (
 	"github.com/pingcap/tiflow/pkg/version"
 	"go.uber.org/zap"
 	"golang.org/x/time/rate"
+	"google.golang.org/grpc"
+	"google.golang.org/grpc/backoff"
+	"google.golang.org/grpc/keepalive"
 )
 
 type ownerJobType int
@@ -313,9 +321,88 @@ func (o *ownerImpl) Query(query *Query, done chan<- error) {
 	})
 }
 
+// TODO: https://github.com/pingcap/tidb/pull/41538/files
+func (o *ownerImpl) runningImport(upstreamID uint64) (error, bool) {
+	us, exist := o.upstreamManager.Get(upstreamID)
+	if !exist {
+		return errors.Errorf("Upstream(%s) not found", upstreamID), false
+	}
+	stores, err := util.GetAllTiKVStores(
+		context.TODO(),
+		us.PDClient,
+		util.SkipTiFlash,
+	)
+	if err != nil {
+		return errors.Annotate(err, "failed to get stores"), false
+	}
+	tlsConf, err := config.GetGlobalServerConfig().Security.ToTLSConfig()
+	if err != nil {
+		return errors.Annotate(
+			err, "failed get tls config from global server config",
+		), false
+	}
+	for _, s := range stores {
+		err, mode := getStoreImportMode(
+			context.TODO(), s, tlsConf,
+			keepalive.ClientParameters{}, // TODO
+		)
+		if err != nil {
+			return errors.Annotate(
+				err, "failed get switch mode for store",
+			), false
+		}
+		if *mode == import_sstpb.SwitchMode_Import {
+			return nil, true
+		}
+	}
+
+	return nil, true
+}
+
+// getStoreImportMode returns the sst service Switch Mode.
+func getStoreImportMode(
+	ctx context.Context,
+	store *metapb.Store,
+	tlsConf *tls.Config,
+	kal keepalive.ClientParameters,
+) (error, *import_sstpb.SwitchMode) {
+	bfConf := backoff.DefaultConfig
+	bfConf.MaxDelay = time.Second * 3
+	connection, err := utils.GRPCConn(
+		ctx,
+		store.GetAddress(),
+		tlsConf,
+		grpc.WithConnectParams(grpc.ConnectParams{Backoff: bfConf}),
+		grpc.WithKeepaliveParams(kal),
+	)
+	if err != nil {
+		return errors.Annotate(err, "failed to create grpc connection"), nil
+	}
+	client := import_sstpb.NewImportSSTClient(connection)
+	resp, err := client.GetMode(ctx, &import_sstpb.GetModeRequest{})
+	errConn := connection.Close()
+	if errConn != nil {
+		log.Error("close grpc connection failed in switch mode", zap.Error(err))
+	}
+	if err != nil {
+		return errors.Annotate(err, "failed to get mode"), nil
+	}
+	return nil, &resp.Mode
+}
+
 func (o *ownerImpl) ValidateChangefeed(info *model.ChangeFeedInfo) error {
 	o.ownerJobQueue.Lock()
 	defer o.ownerJobQueue.Unlock()
+
+	err, exist := o.runningImport(info.UpstreamID)
+	if err != nil {
+		return err
+	}
+	if exist {
+		return cerror.ErrUpstreamHasRunningImport.
+			GenWithStackByArgs(info.UpstreamID)
+	}
+
 	if hasCIEnv {
 		// Disable the check on CI platform, because many tests repeatedly
 		// create changefeed with same name and same sinkURI.
