@@ -37,21 +37,30 @@ const (
 	txnModeOptimistic  = "optimistic"
 	txnModePessimistic = "pessimistic"
 
-	// defaultWorkerCount is the default number of workers.
-	defaultWorkerCount = 16
-	// defaultMaxTxnRow is the default max number of rows in a transaction.
-	defaultMaxTxnRow = 256
+	// DefaultWorkerCount is the default number of workers.
+	DefaultWorkerCount = 16
+	// DefaultMaxTxnRow is the default max number of rows in a transaction.
+	DefaultMaxTxnRow = 256
+	// defaultMaxMultiUpdateRowCount is the default max number of rows in a
+	// single multi update SQL.
+	defaultMaxMultiUpdateRowCount = 40
+	// defaultMaxMultiUpdateRowSize(1KB) defines the default value of MaxMultiUpdateRowSize
+	// When row average size is larger MaxMultiUpdateRowSize,
+	// disable multi update, otherwise enable multi update.
+	defaultMaxMultiUpdateRowSize = 1024
 	// The upper limit of max worker counts.
 	maxWorkerCount = 1024
 	// The upper limit of max txn rows.
 	maxMaxTxnRow = 2048
+	// The upper limit of max multi update rows in a single SQL.
+	maxMaxMultiUpdateRowCount = 256
+	// The upper limit of max multi update row size(8KB).
+	maxMaxMultiUpdateRowSize = 8192
 
-	defaultTiDBTxnMode         = txnModeOptimistic
-	defaultBatchReplaceEnabled = true
-	defaultBatchReplaceSize    = 20
-	defaultReadTimeout         = "2m"
-	defaultWriteTimeout        = "2m"
-	defaultDialTimeout         = "2m"
+	defaultTiDBTxnMode  = txnModeOptimistic
+	defaultReadTimeout  = "2m"
+	defaultWriteTimeout = "2m"
+	defaultDialTimeout  = "2m"
 	// Note(dongmen): defaultSafeMode is set to false since v6.4.0.
 	defaultSafeMode       = false
 	defaultTxnIsolationRC = "READ-COMMITTED"
@@ -63,42 +72,53 @@ const (
 	BackoffMaxDelay = 60 * time.Second
 
 	defaultBatchDMLEnable = true
+
+	// defaultcachePrepStmts is the default value of cachePrepStmts
+	defaultCachePrepStmts = true
+	// defaultStmtCacheSize is the default size of prepared statement cache
+	defaultPrepStmtCacheSize = 10000
+	// The upper limit of the max size of prepared statement cache
+	maxPrepStmtCacheSize = 1000000
 )
 
 // Config is the configs for MySQL backend.
 type Config struct {
-	WorkerCount         int
-	MaxTxnRow           int
-	tidbTxnMode         string
-	BatchReplaceEnabled bool
-	BatchReplaceSize    int
-	ReadTimeout         string
-	WriteTimeout        string
-	DialTimeout         string
-	SafeMode            bool
-	Timezone            string
-	TLS                 string
-	ForceReplicate      bool
-	EnableOldValue      bool
+	WorkerCount            int
+	MaxTxnRow              int
+	MaxMultiUpdateRowCount int
+	MaxMultiUpdateRowSize  int
+	tidbTxnMode            string
+	ReadTimeout            string
+	WriteTimeout           string
+	DialTimeout            string
+	SafeMode               bool
+	Timezone               string
+	TLS                    string
+	ForceReplicate         bool
+	EnableOldValue         bool
 
-	IsTiDB         bool // IsTiDB is true if the downstream is TiDB
-	SourceID       uint64
-	BatchDMLEnable bool
+	IsTiDB            bool // IsTiDB is true if the downstream is TiDB
+	SourceID          uint64
+	BatchDMLEnable    bool
+	CachePrepStmts    bool
+	PrepStmtCacheSize int
 }
 
 // NewConfig returns the default mysql backend config.
 func NewConfig() *Config {
 	return &Config{
-		WorkerCount:         defaultWorkerCount,
-		MaxTxnRow:           defaultMaxTxnRow,
-		tidbTxnMode:         defaultTiDBTxnMode,
-		BatchReplaceEnabled: defaultBatchReplaceEnabled,
-		BatchReplaceSize:    defaultBatchReplaceSize,
-		ReadTimeout:         defaultReadTimeout,
-		WriteTimeout:        defaultWriteTimeout,
-		DialTimeout:         defaultDialTimeout,
-		SafeMode:            defaultSafeMode,
-		BatchDMLEnable:      defaultBatchDMLEnable,
+		WorkerCount:            DefaultWorkerCount,
+		MaxTxnRow:              DefaultMaxTxnRow,
+		MaxMultiUpdateRowCount: defaultMaxMultiUpdateRowCount,
+		MaxMultiUpdateRowSize:  defaultMaxMultiUpdateRowSize,
+		tidbTxnMode:            defaultTiDBTxnMode,
+		ReadTimeout:            defaultReadTimeout,
+		WriteTimeout:           defaultWriteTimeout,
+		DialTimeout:            defaultDialTimeout,
+		SafeMode:               defaultSafeMode,
+		BatchDMLEnable:         defaultBatchDMLEnable,
+		CachePrepStmts:         defaultCachePrepStmts,
+		PrepStmtCacheSize:      defaultPrepStmtCacheSize,
 	}
 }
 
@@ -124,13 +144,16 @@ func (c *Config) Apply(
 	if err = getMaxTxnRow(query, &c.MaxTxnRow); err != nil {
 		return err
 	}
+	if err = getMaxMultiUpdateRowCount(query, &c.MaxMultiUpdateRowCount); err != nil {
+		return err
+	}
+	if err = getMaxMultiUpdateRowSize(query, &c.MaxMultiUpdateRowSize); err != nil {
+		return err
+	}
 	if err = getTiDBTxnMode(query, &c.tidbTxnMode); err != nil {
 		return err
 	}
 	if err = getSSLCA(query, changefeedID, &c.TLS); err != nil {
-		return err
-	}
-	if err = getBatchReplaceEnable(query, &c.BatchReplaceEnabled, &c.BatchReplaceSize); err != nil {
 		return err
 	}
 	if err = getSafeMode(query, &c.SafeMode); err != nil {
@@ -149,6 +172,12 @@ func (c *Config) Apply(
 		return err
 	}
 	if err = getBatchDMLEnable(query, &c.BatchDMLEnable); err != nil {
+		return err
+	}
+	if err = getCachePrepStmts(query, &c.CachePrepStmts); err != nil {
+		return err
+	}
+	if err = getPrepStmtCacheSize(query, &c.PrepStmtCacheSize); err != nil {
 		return err
 	}
 	c.EnableOldValue = replicaConfig.EnableOldValue
@@ -205,6 +234,53 @@ func getMaxTxnRow(values url.Values, maxTxnRow *int) error {
 	return nil
 }
 
+func getMaxMultiUpdateRowCount(values url.Values, maxMultiUpdateRow *int) error {
+	s := values.Get("max-multi-update-row")
+	if len(s) == 0 {
+		return nil
+	}
+
+	c, err := strconv.Atoi(s)
+	if err != nil {
+		return cerror.WrapError(cerror.ErrMySQLInvalidConfig, err)
+	}
+	if c <= 0 {
+		return cerror.WrapError(cerror.ErrMySQLInvalidConfig,
+			fmt.Errorf("invalid max-multi-update-row %d, which must be greater than 0", c))
+	}
+	if c > maxMaxMultiUpdateRowCount {
+		log.Warn("max-multi-update-row too large",
+			zap.Int("original", c), zap.Int("override", maxMaxMultiUpdateRowCount))
+		c = maxMaxMultiUpdateRowCount
+	}
+	*maxMultiUpdateRow = c
+	return nil
+}
+
+func getMaxMultiUpdateRowSize(values url.Values, maxMultiUpdateRowSize *int) error {
+	s := values.Get("max-multi-update-row-size")
+	if len(s) == 0 {
+		return nil
+	}
+
+	c, err := strconv.Atoi(s)
+	if err != nil {
+		return cerror.WrapError(cerror.ErrMySQLInvalidConfig, err)
+	}
+	if c < 0 {
+		return cerror.WrapError(cerror.ErrMySQLInvalidConfig,
+			fmt.Errorf("invalid max-multi-update-row-size %d, "+
+				"which must be greater than or equal to 0", c))
+	}
+	if c > maxMaxMultiUpdateRowSize {
+		log.Warn("max-multi-update-row-size too large",
+			zap.Int("original", c), zap.Int("override", maxMaxMultiUpdateRowSize))
+		c = maxMaxMultiUpdateRowSize
+	}
+	*maxMultiUpdateRowSize = c
+	return nil
+}
+
 func getTiDBTxnMode(values url.Values, mode *string) error {
 	s := values.Get("tidb-txn-mode")
 	if len(s) == 0 {
@@ -241,32 +317,6 @@ func getSSLCA(values url.Values, changefeedID model.ChangeFeedID, tls *string) e
 		return cerror.ErrMySQLConnectionError.Wrap(err).GenWithStack("fail to open MySQL connection")
 	}
 	*tls = "?tls=" + name
-	return nil
-}
-
-func getBatchReplaceEnable(values url.Values, batchReplaceEnabled *bool, batchReplaceSize *int) error {
-	s := values.Get("batch-replace-enable")
-	if len(s) > 0 {
-		enable, err := strconv.ParseBool(s)
-		if err != nil {
-			return cerror.WrapError(cerror.ErrMySQLInvalidConfig, err)
-		}
-		*batchReplaceEnabled = enable
-	}
-
-	if !*batchReplaceEnabled {
-		return nil
-	}
-
-	s = values.Get("batch-replace-size")
-	if len(s) == 0 {
-		return nil
-	}
-	size, err := strconv.Atoi(s)
-	if err != nil {
-		return cerror.WrapError(cerror.ErrMySQLInvalidConfig, err)
-	}
-	*batchReplaceSize = size
 	return nil
 }
 
@@ -330,5 +380,40 @@ func getBatchDMLEnable(values url.Values, batchDMLEnable *bool) error {
 		}
 		*batchDMLEnable = enable
 	}
+	return nil
+}
+
+func getCachePrepStmts(values url.Values, cachePrepStmts *bool) error {
+	s := values.Get("cache-prep-stmts")
+	if len(s) > 0 {
+		enable, err := strconv.ParseBool(s)
+		if err != nil {
+			return cerror.WrapError(cerror.ErrMySQLInvalidConfig, err)
+		}
+		*cachePrepStmts = enable
+	}
+	return nil
+}
+
+func getPrepStmtCacheSize(values url.Values, prepStmtCacheSize *int) error {
+	s := values.Get("prep-stmt-cache-size")
+	if len(s) == 0 {
+		return nil
+	}
+
+	c, err := strconv.Atoi(s)
+	if err != nil {
+		return cerror.WrapError(cerror.ErrMySQLInvalidConfig, err)
+	}
+	if c <= 0 {
+		return cerror.WrapError(cerror.ErrMySQLInvalidConfig,
+			fmt.Errorf("invalid prep-stmt-cache-size %d, which must be greater than 0", c))
+	}
+	if c > maxPrepStmtCacheSize {
+		log.Warn("prep-stmt-cache-size too large",
+			zap.Int("original", c), zap.Int("override", maxPrepStmtCacheSize))
+		c = maxPrepStmtCacheSize
+	}
+	*prepStmtCacheSize = c
 	return nil
 }

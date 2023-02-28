@@ -102,7 +102,7 @@ func TestLogManagerInProcessor(t *testing.T) {
 	defer logMgr.Cleanup(ctx)
 
 	checkResolvedTs := func(mgr LogManager, expectedRts uint64) {
-		time.Sleep(time.Duration(config.MinFlushIntervalInMs+200) * time.Millisecond)
+		time.Sleep(time.Duration(config.DefaultFlushIntervalInMs+200) * time.Millisecond)
 		resolvedTs := mgr.GetMinResolvedTs()
 		require.Equal(t, expectedRts, resolvedTs)
 	}
@@ -336,7 +336,7 @@ func TestManagerError(t *testing.T) {
 	cfg := &config.ConsistentConfig{
 		Level:             string(redo.ConsistentLevelEventual),
 		Storage:           "blackhole://",
-		FlushIntervalInMs: config.MinFlushIntervalInMs,
+		FlushIntervalInMs: config.DefaultFlushIntervalInMs,
 	}
 
 	errCh := make(chan error, 1)
@@ -346,7 +346,7 @@ func TestManagerError(t *testing.T) {
 	logMgr, err := NewManager(ctx, cfg, opts)
 	require.Nil(t, err)
 	logMgr.writer = writer.NewInvalidBlackHoleWriter(logMgr.writer)
-	logMgr.logBuffer = chann.New[cacheEvents]()
+	logMgr.logBuffer = chann.NewAutoDrainChann[cacheEvents]()
 	go logMgr.bgUpdateLog(ctx, cfg.FlushIntervalInMs, errCh)
 
 	testCases := []struct {
@@ -379,7 +379,7 @@ func TestManagerError(t *testing.T) {
 	logMgr, err = NewManager(ctx, cfg, opts)
 	require.Nil(t, err)
 	logMgr.writer = writer.NewInvalidBlackHoleWriter(logMgr.writer)
-	logMgr.logBuffer = chann.New[cacheEvents]()
+	logMgr.logBuffer = chann.NewAutoDrainChann[cacheEvents]()
 	go logMgr.bgUpdateLog(ctx, cfg.FlushIntervalInMs, errCh)
 
 	// bgUpdateLog exists because of writer.FlushLog failure.
@@ -401,7 +401,7 @@ func TestReuseWritter(t *testing.T) {
 	cfg := &config.ConsistentConfig{
 		Level:             string(redo.ConsistentLevelEventual),
 		Storage:           "local://" + dir,
-		FlushIntervalInMs: config.MinFlushIntervalInMs,
+		FlushIntervalInMs: config.DefaultFlushIntervalInMs,
 	}
 
 	errCh := make(chan error, 1)
@@ -424,7 +424,8 @@ func TestReuseWritter(t *testing.T) {
 	time.Sleep(time.Duration(100) * time.Millisecond)
 
 	// The another redo manager shouldn't be influenced.
-	mgrs[1].flushLog(ctxs[1], func(err error) { opts.ErrCh <- err })
+	var workTimeSlice time.Duration
+	mgrs[1].flushLog(ctxs[1], func(err error) { opts.ErrCh <- err }, &workTimeSlice)
 	select {
 	case x := <-errCh:
 		log.Panic("shouldn't get an error", zap.Error(x))

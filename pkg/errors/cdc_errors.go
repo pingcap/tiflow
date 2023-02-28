@@ -240,9 +240,14 @@ var (
 		"invalid partition num %d",
 		errors.RFCCodeText("CDC:ErrKafkaInvalidPartitionNum"),
 	)
-	ErrKafkaNewSaramaProducer = errors.Normalize(
-		"new sarama producer",
-		errors.RFCCodeText("CDC:ErrKafkaNewSaramaProducer"),
+	ErrKafkaInvalidRequiredAcks = errors.Normalize(
+		"invalid required acks %d, "+
+			"only support these values: 0(NoResponse),1(WaitForLocal) and -1(WaitForAll)",
+		errors.RFCCodeText("CDC:ErrKafkaInvalidRequiredAcks"),
+	)
+	ErrKafkaNewProducer = errors.Normalize(
+		"new kafka producer",
+		errors.RFCCodeText("CDC:ErrKafkaNewProducer"),
 	)
 	ErrKafkaInvalidClientID = errors.Normalize(
 		"invalid kafka client ID '%s'",
@@ -299,8 +304,8 @@ var (
 		"rawData size %d exceeds maximum file size %d",
 		errors.RFCCodeText("CDC:ErrFileSizeExceed"),
 	)
-	ErrS3StorageAPI = errors.Normalize(
-		"s3 storage api",
+	ErrExternalStorageAPI = errors.Normalize(
+		"external storage api",
 		errors.RFCCodeText("CDC:ErrS3StorageAPI"),
 	)
 	ErrStorageInitialize = errors.Normalize(
@@ -388,10 +393,6 @@ var (
 		"open-protocol codec invalid data",
 		errors.RFCCodeText("CDC:ErrOpenProtocolCodecInvalidData"),
 	)
-	ErrOpenProtocolCodecRowTooLarge = errors.Normalize(
-		"open-protocol codec single row too large",
-		errors.RFCCodeText("CDC:ErrOpenProtocolCodecRowTooLarge"),
-	)
 	ErrCanalDecodeFailed = errors.Normalize(
 		"canal decode failed",
 		errors.RFCCodeText("CDC:ErrCanalDecodeFailed"),
@@ -411,6 +412,10 @@ var (
 	ErrCraftCodecInvalidData = errors.Normalize(
 		"craft codec invalid data",
 		errors.RFCCodeText("CDC:ErrCraftCodecInvalidData"),
+	)
+	ErrMessageTooLarge = errors.Normalize(
+		"message is too large",
+		errors.RFCCodeText("CDC:ErrMessageTooLarge"),
 	)
 	ErrStorageSinkInvalidDateSeparator = errors.Normalize(
 		"date separator in cloud storage sink is invalid",

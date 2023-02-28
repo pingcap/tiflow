@@ -29,6 +29,17 @@ import (
 // EmptyResponse return empty {} to http client
 type EmptyResponse struct{}
 
+// LogLevelReq log level request
+type LogLevelReq struct {
+	Level string `json:"log_level"`
+}
+
+// ListResponse is the response for all List APIs
+type ListResponse[T any] struct {
+	Total int `json:"total"`
+	Items []T `json:"items"`
+}
+
 // Tso contains timestamp get from PD
 type Tso struct {
 	Timestamp int64 `json:"timestamp"`
@@ -78,6 +89,17 @@ type PDConfig struct {
 	CertAllowedCN []string `json:"cert_allowed_cn,omitempty"`
 }
 
+// ChangefeedCommonInfo holds some common usage information of a changefeed
+type ChangefeedCommonInfo struct {
+	UpstreamID     uint64              `json:"upstream_id"`
+	Namespace      string              `json:"namespace"`
+	ID             string              `json:"id"`
+	FeedState      model.FeedState     `json:"state"`
+	CheckpointTSO  uint64              `json:"checkpoint_tso"`
+	CheckpointTime model.JSONTime      `json:"checkpoint_time"`
+	RunningError   *model.RunningError `json:"error"`
+}
+
 // ChangefeedConfig use by create changefeed api
 type ChangefeedConfig struct {
 	Namespace     string         `json:"namespace"`
@@ -90,22 +112,30 @@ type ChangefeedConfig struct {
 	PDConfig
 }
 
+// ProcessorCommonInfo holds the common info of a processor
+type ProcessorCommonInfo struct {
+	Namespace    string `json:"namespace"`
+	ChangeFeedID string `json:"changefeed_id"`
+	CaptureID    string `json:"capture_id"`
+}
+
 // ReplicaConfig is a duplicate of  config.ReplicaConfig
 type ReplicaConfig struct {
-	MemoryQuota           uint64            `json:"memory_quota"`
-	CaseSensitive         bool              `json:"case_sensitive"`
-	EnableOldValue        bool              `json:"enable_old_value"`
-	ForceReplicate        bool              `json:"force_replicate"`
-	IgnoreIneligibleTable bool              `json:"ignore_ineligible_table"`
-	CheckGCSafePoint      bool              `json:"check_gc_safe_point"`
-	EnableSyncPoint       bool              `json:"enable_sync_point"`
-	BDRMode               bool              `json:"bdr_mode"`
-	SyncPointInterval     time.Duration     `json:"sync_point_interval"`
-	SyncPointRetention    time.Duration     `json:"sync_point_retention"`
-	Filter                *FilterConfig     `json:"filter"`
-	Mounter               *MounterConfig    `json:"mounter"`
-	Sink                  *SinkConfig       `json:"sink"`
-	Consistent            *ConsistentConfig `json:"consistent"`
+	MemoryQuota           uint64                     `json:"memory_quota"`
+	CaseSensitive         bool                       `json:"case_sensitive"`
+	EnableOldValue        bool                       `json:"enable_old_value"`
+	ForceReplicate        bool                       `json:"force_replicate"`
+	IgnoreIneligibleTable bool                       `json:"ignore_ineligible_table"`
+	CheckGCSafePoint      bool                       `json:"check_gc_safe_point"`
+	EnableSyncPoint       bool                       `json:"enable_sync_point"`
+	BDRMode               bool                       `json:"bdr_mode"`
+	SyncPointInterval     time.Duration              `json:"sync_point_interval"`
+	SyncPointRetention    time.Duration              `json:"sync_point_retention"`
+	Filter                *FilterConfig              `json:"filter"`
+	Mounter               *MounterConfig             `json:"mounter"`
+	Sink                  *SinkConfig                `json:"sink"`
+	Consistent            *ConsistentConfig          `json:"consistent"`
+	Scheduler             *ChangefeedSchedulerConfig `json:"scheduler"`
 }
 
 // ToInternalReplicaConfig coverts *v2.ReplicaConfig into *config.ReplicaConfig
@@ -211,6 +241,12 @@ func (c *ReplicaConfig) ToInternalReplicaConfig() *config.ReplicaConfig {
 	if c.Mounter != nil {
 		res.Mounter = &config.MounterConfig{
 			WorkerNum: c.Mounter.WorkerNum,
+		}
+	}
+	if c.Scheduler != nil {
+		res.Scheduler = &config.ChangefeedSchedulerConfig{
+			EnableSplitSpan: c.Scheduler.EnableSplitSpan,
+			RegionPerSpan:   c.Scheduler.RegionPerSpan,
 		}
 	}
 	return res
@@ -325,6 +361,12 @@ func ToAPIReplicaConfig(c *config.ReplicaConfig) *ReplicaConfig {
 			WorkerNum: cloned.Mounter.WorkerNum,
 		}
 	}
+	if cloned.Scheduler != nil {
+		res.Scheduler = &ChangefeedSchedulerConfig{
+			EnableSplitSpan: cloned.Scheduler.EnableSplitSpan,
+			RegionPerSpan:   cloned.Scheduler.RegionPerSpan,
+		}
+	}
 	return res
 }
 
@@ -344,8 +386,12 @@ func GetDefaultReplicaConfig() *ReplicaConfig {
 		Consistent: &ConsistentConfig{
 			Level:             "none",
 			MaxLogSize:        64,
-			FlushIntervalInMs: config.MinFlushIntervalInMs,
+			FlushIntervalInMs: config.DefaultFlushIntervalInMs,
 			Storage:           "",
+		},
+		Scheduler: &ChangefeedSchedulerConfig{
+			EnableSplitSpan: config.GetDefaultReplicaConfig().Scheduler.EnableSplitSpan,
+			RegionPerSpan:   config.GetDefaultReplicaConfig().Scheduler.RegionPerSpan,
 		},
 	}
 }
@@ -490,6 +536,16 @@ type ConsistentConfig struct {
 	Storage           string `json:"storage"`
 }
 
+// ChangefeedSchedulerConfig is per changefeed scheduler settings.
+// This is a duplicate of config.ChangefeedSchedulerConfig
+type ChangefeedSchedulerConfig struct {
+	// EnableSplitSpan set true to split one table to multiple spans.
+	EnableSplitSpan bool `toml:"enable_split_span" json:"enable_split_span"`
+	// RegionPerSpan the number of regions in a span, must be greater than 1000.
+	// Set 0 to disable span replication.
+	RegionPerSpan int `toml:"region_per_span" json:"region_per_span"`
+}
+
 // EtcdData contains key/value pair of etcd data
 type EtcdData struct {
 	Key   string `json:"key,omitempty"`
@@ -521,9 +577,15 @@ type ChangeFeedInfo struct {
 	State          model.FeedState    `json:"state,omitempty"`
 	Error          *RunningError      `json:"error,omitempty"`
 	CreatorVersion string             `json:"creator_version,omitempty"`
+
+	ResolvedTs     uint64                    `json:"resolved_ts"`
+	CheckpointTs   uint64                    `json:"checkpoint_ts"`
+	CheckpointTime model.JSONTime            `json:"checkpoint_time"`
+	TaskStatus     []model.CaptureTaskStatus `json:"task_status,omitempty"`
 }
 
-// RunningError represents some running error from cdc components, such as processor.
+// RunningError represents some running error from cdc components,
+// such as processor.
 type RunningError struct {
 	Addr    string `json:"addr"`
 	Code    string `json:"code"`
@@ -573,4 +635,10 @@ func (info *ChangeFeedInfo) Unmarshal(data []byte) error {
 type UpstreamConfig struct {
 	ID uint64 `json:"id"`
 	PDConfig
+}
+
+// ProcessorDetail holds the detail info of a processor
+type ProcessorDetail struct {
+	// All table ids that this processor are replicating.
+	Tables []int64 `json:"table_ids"`
 }

@@ -14,7 +14,6 @@
 package kafka
 
 import (
-	"context"
 	"crypto/tls"
 	"strings"
 	"time"
@@ -22,32 +21,19 @@ import (
 	"github.com/Shopify/sarama"
 	"github.com/pingcap/errors"
 	"github.com/pingcap/log"
-	"github.com/pingcap/tiflow/cdc/contextutil"
 	cerror "github.com/pingcap/tiflow/pkg/errors"
 	"github.com/pingcap/tiflow/pkg/security"
 	"go.uber.org/zap"
 )
 
 // NewSaramaConfig return the default config and set the according version and metrics
-func NewSaramaConfig(ctx context.Context, o *Options) (*sarama.Config, error) {
+func NewSaramaConfig(o *Options) (*sarama.Config, error) {
 	config := sarama.NewConfig()
+	config.ClientID = o.ClientID
 
 	version, err := sarama.ParseKafkaVersion(o.Version)
 	if err != nil {
 		return nil, cerror.WrapError(cerror.ErrKafkaInvalidVersion, err)
-	}
-	var role string
-	if contextutil.IsOwnerFromCtx(ctx) {
-		role = "owner"
-	} else {
-		role = "processor"
-	}
-	captureAddr := contextutil.CaptureAddrFromCtx(ctx)
-	changefeedID := contextutil.ChangefeedIDFromCtx(ctx)
-
-	config.ClientID, err = newKafkaClientID(role, captureAddr, changefeedID, o.ClientID)
-	if err != nil {
-		return nil, errors.Trace(err)
 	}
 	config.Version = version
 
@@ -79,6 +65,7 @@ func NewSaramaConfig(ctx context.Context, o *Options) (*sarama.Config, error) {
 	config.Producer.Flush.Bytes = 0
 	config.Producer.Flush.Messages = 0
 	config.Producer.Flush.Frequency = time.Duration(0)
+	config.Producer.Flush.MaxMessages = o.MaxMessages
 
 	config.Net.DialTimeout = o.DialTimeout
 	config.Net.WriteTimeout = o.WriteTimeout
@@ -88,7 +75,7 @@ func NewSaramaConfig(ctx context.Context, o *Options) (*sarama.Config, error) {
 	config.Producer.MaxMessageBytes = o.MaxMessageBytes
 	config.Producer.Return.Successes = true
 	config.Producer.Return.Errors = true
-	config.Producer.RequiredAcks = sarama.WaitForAll
+	config.Producer.RequiredAcks = sarama.RequiredAcks(o.RequiredAcks)
 	compression := strings.ToLower(strings.TrimSpace(o.Compression))
 	switch compression {
 	case "none":
@@ -138,19 +125,19 @@ func completeSaramaSASLConfig(config *sarama.Config, o *Options) {
 		config.Net.SASL.Enable = true
 		config.Net.SASL.Mechanism = sarama.SASLMechanism(o.SASL.SASLMechanism)
 		switch o.SASL.SASLMechanism {
-		case sarama.SASLTypeSCRAMSHA256, sarama.SASLTypeSCRAMSHA512, sarama.SASLTypePlaintext:
+		case SASLTypeSCRAMSHA256, SASLTypeSCRAMSHA512, SASLTypePlaintext:
 			config.Net.SASL.User = o.SASL.SASLUser
 			config.Net.SASL.Password = o.SASL.SASLPassword
-			if strings.EqualFold(string(o.SASL.SASLMechanism), sarama.SASLTypeSCRAMSHA256) {
+			if strings.EqualFold(string(o.SASL.SASLMechanism), SASLTypeSCRAMSHA256) {
 				config.Net.SASL.SCRAMClientGeneratorFunc = func() sarama.SCRAMClient {
 					return &security.XDGSCRAMClient{HashGeneratorFcn: security.SHA256}
 				}
-			} else if strings.EqualFold(string(o.SASL.SASLMechanism), sarama.SASLTypeSCRAMSHA512) {
+			} else if strings.EqualFold(string(o.SASL.SASLMechanism), SASLTypeSCRAMSHA512) {
 				config.Net.SASL.SCRAMClientGeneratorFunc = func() sarama.SCRAMClient {
 					return &security.XDGSCRAMClient{HashGeneratorFcn: security.SHA512}
 				}
 			}
-		case sarama.SASLTypeGSSAPI:
+		case SASLTypeGSSAPI:
 			config.Net.SASL.GSSAPI.AuthType = int(o.SASL.GSSAPI.AuthType)
 			config.Net.SASL.GSSAPI.Username = o.SASL.GSSAPI.Username
 			config.Net.SASL.GSSAPI.ServiceName = o.SASL.GSSAPI.ServiceName

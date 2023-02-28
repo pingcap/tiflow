@@ -21,12 +21,15 @@ import (
 
 	"github.com/pingcap/errors"
 	"github.com/pingcap/log"
+	"github.com/pingcap/tiflow/cdc/entry"
 	"github.com/pingcap/tiflow/cdc/model"
+	"github.com/pingcap/tiflow/cdc/processor/memquota"
 	"github.com/pingcap/tiflow/cdc/processor/sourcemanager"
 	"github.com/pingcap/tiflow/cdc/processor/sourcemanager/engine"
 	"github.com/pingcap/tiflow/cdc/processor/tablepb"
 	"github.com/pingcap/tiflow/cdc/redo"
-	"github.com/pingcap/tiflow/cdc/sinkv2/eventsink/factory"
+	"github.com/pingcap/tiflow/cdc/sink/dmlsink/factory"
+	"github.com/pingcap/tiflow/cdc/sink/metrics/tablesink"
 	cerrors "github.com/pingcap/tiflow/pkg/errors"
 	"github.com/pingcap/tiflow/pkg/retry"
 	"github.com/pingcap/tiflow/pkg/spanz"
@@ -66,13 +69,14 @@ type SinkManager struct {
 	// up is the upstream and used to get the current pd time.
 	up *upstream.Upstream
 
+	// used to generate task upperbounds.
+	schemaStorage entry.SchemaStorage
+
 	// sinkProgressHeap is the heap of the table progress for sink.
 	sinkProgressHeap *tableProgresses
 	// redoProgressHeap is the heap of the table progress for redo.
 	redoProgressHeap *tableProgresses
 
-	// memQuota is used to control the total memory usage of the sink manager.
-	memQuota *memQuota
 	// eventCache caches events fetched from sort engine.
 	eventCache *redoEventCache
 	// redoManager is used to report the resolved ts of the table if redo log is enabled.
@@ -92,12 +96,16 @@ type SinkManager struct {
 	// sinkTaskChan is used to send tasks to sinkWorkers.
 	sinkTaskChan        chan *sinkTask
 	sinkWorkerAvailable chan struct{}
+	// sinkMemQuota is used to control the total memory usage of the table sink.
+	sinkMemQuota *memquota.MemQuota
 
 	// redoWorkers used to pull data from source manager.
 	redoWorkers []*redoWorker
 	// redoTaskChan is used to send tasks to redoWorkers.
 	redoTaskChan        chan *redoTask
 	redoWorkerAvailable chan struct{}
+	// redoMemQuota is used to control the total memory usage of the redo.
+	redoMemQuota *memquota.MemQuota
 
 	// wg is used to wait for all workers to exit.
 	wg sync.WaitGroup
@@ -113,10 +121,10 @@ func New(
 	changefeedID model.ChangeFeedID,
 	changefeedInfo *model.ChangeFeedInfo,
 	up *upstream.Upstream,
+	schemaStorage entry.SchemaStorage,
 	redoManager redo.LogManager,
 	sourceManager *sourcemanager.SourceManager,
 	errChan chan error,
-	metricsTableSinkTotalRows prometheus.Counter,
 ) (*SinkManager, error) {
 	tableSinkFactory, err := factory.New(
 		ctx,
@@ -134,16 +142,18 @@ func New(
 		ctx:           ctx,
 		cancel:        cancel,
 		up:            up,
-		memQuota:      newMemQuota(changefeedID, changefeedInfo.Config.MemoryQuota),
+		schemaStorage: schemaStorage,
 		sinkFactory:   tableSinkFactory,
 		sourceManager: sourceManager,
+		errChan:       errChan,
 
 		sinkProgressHeap:    newTableProgresses(),
 		sinkWorkers:         make([]*sinkWorker, 0, sinkWorkerNum),
 		sinkTaskChan:        make(chan *sinkTask),
 		sinkWorkerAvailable: make(chan struct{}, 1),
 
-		metricsTableSinkTotalRows: metricsTableSinkTotalRows,
+		metricsTableSinkTotalRows: tablesink.TotalRowsCountCounter.
+			WithLabelValues(changefeedID.Namespace, changefeedID.ID),
 	}
 
 	if redoManager != nil && redoManager.Enabled() {
@@ -152,8 +162,15 @@ func New(
 		m.redoWorkers = make([]*redoWorker, 0, redoWorkerNum)
 		m.redoTaskChan = make(chan *redoTask)
 		m.redoWorkerAvailable = make(chan struct{}, 1)
-		// Use 3/4 memory quota as redo event cache. A large value is helpful to cache hit ratio.
-		m.eventCache = newRedoEventCache(changefeedID, changefeedInfo.Config.MemoryQuota/4*3)
+
+		// Use 3/4 memory quota as redo quota, and 1/2 again for redo cache.
+		m.sinkMemQuota = memquota.NewMemQuota(changefeedID, changefeedInfo.Config.MemoryQuota/4*1, "sink")
+		redoQuota := changefeedInfo.Config.MemoryQuota / 4 * 3
+		m.redoMemQuota = memquota.NewMemQuota(changefeedID, redoQuota, "redo")
+		m.eventCache = newRedoEventCache(changefeedID, redoQuota/2*1)
+	} else {
+		m.sinkMemQuota = memquota.NewMemQuota(changefeedID, changefeedInfo.Config.MemoryQuota, "sink")
+		m.redoMemQuota = memquota.NewMemQuota(changefeedID, 0, "redo")
 	}
 
 	m.startWorkers(changefeedInfo.Config.Sink.TxnAtomicity.ShouldSplitTxn(), changefeedInfo.Config.EnableOldValue)
@@ -171,7 +188,8 @@ func New(
 // start all workers and report the error to the error channel.
 func (m *SinkManager) startWorkers(splitTxn bool, enableOldValue bool) {
 	for i := 0; i < sinkWorkerNum; i++ {
-		w := newSinkWorker(m.changefeedID, m.sourceManager, m.memQuota,
+		w := newSinkWorker(m.changefeedID, m.sourceManager,
+			m.sinkMemQuota, m.redoMemQuota,
 			m.eventCache, splitTxn, enableOldValue)
 		m.sinkWorkers = append(m.sinkWorkers, w)
 		m.wg.Add(1)
@@ -196,7 +214,7 @@ func (m *SinkManager) startWorkers(splitTxn bool, enableOldValue bool) {
 	}
 
 	for i := 0; i < redoWorkerNum; i++ {
-		w := newRedoWorker(m.changefeedID, m.sourceManager, m.memQuota,
+		w := newRedoWorker(m.changefeedID, m.sourceManager, m.redoMemQuota,
 			m.redoManager, m.eventCache, splitTxn, enableOldValue)
 		m.redoWorkers = append(m.redoWorkers, w)
 		m.wg.Add(1)
@@ -320,21 +338,24 @@ func (m *SinkManager) backgroundGC() {
 
 // generateSinkTasks generates tasks to fetch data from the source manager.
 func (m *SinkManager) generateSinkTasks() error {
-	// We use the barrier ts as the upper bound of the fetch tableSinkTask.
-	// Because it can not exceed the barrier ts.
-	// We also need to consider the resolved ts from sorter,
-	// Because if the redo log is enabled and the table just scheduled to this node,
-	// the resolved ts from sorter may be smaller than the barrier ts.
-	// So we use the min value of the barrier ts and the resolved ts from sorter.
-	getUpperBound := func(tableSink *tableSinkWrapper) engine.Position {
+	// Task upperbound is limited by barrierTs and schemaResolvedTs.
+	// But receivedSorterResolvedTs can be less than barrierTs, in which case
+	// the table is just scheduled to this node.
+	getUpperBound := func(tableSinkReceivedSorterResolvedTs model.Ts) engine.Position {
+		upperBoundTs := tableSinkReceivedSorterResolvedTs
+
 		barrierTs := m.lastBarrierTs.Load()
-		resolvedTs := tableSink.getReceivedSorterResolvedTs()
-		var upperBoundTs model.Ts
-		if resolvedTs > barrierTs {
+		if upperBoundTs > barrierTs {
 			upperBoundTs = barrierTs
-		} else {
-			upperBoundTs = resolvedTs
 		}
+
+		// If a task carries events after schemaResolvedTs, mounter group threads
+		// can be blocked on waiting schemaResolvedTs get advanced.
+		schemaTs := m.schemaStorage.ResolvedTs()
+		if upperBoundTs-1 > schemaTs {
+			upperBoundTs = schemaTs + 1
+		}
+
 		return engine.Position{StartTs: upperBoundTs - 1, CommitTs: upperBoundTs}
 	}
 
@@ -385,7 +406,7 @@ func (m *SinkManager) generateSinkTasks() error {
 			tableSink := tables[i]
 			slowestTableProgress := progs[i]
 			lowerBound := slowestTableProgress.nextLowerBoundPos
-			upperBound := getUpperBound(tableSink)
+			upperBound := getUpperBound(tableSink.getReceivedSorterResolvedTs())
 
 			// The table has no available progress.
 			if lowerBound.Compare(upperBound) >= 0 {
@@ -394,7 +415,7 @@ func (m *SinkManager) generateSinkTasks() error {
 			}
 
 			// No available memory, skip this round directly.
-			if !m.memQuota.tryAcquire(requestMemSize) {
+			if !m.sinkMemQuota.TryAcquire(requestMemSize) {
 				break LOOP
 			}
 
@@ -436,7 +457,7 @@ func (m *SinkManager) generateSinkTasks() error {
 					zap.Any("lowerBound", lowerBound),
 					zap.Any("currentUpperBound", upperBound))
 			default:
-				m.memQuota.refund(requestMemSize)
+				m.sinkMemQuota.Refund(requestMemSize)
 				log.Debug("MemoryQuotaTracing: refund memory for table sink task",
 					zap.String("namespace", m.changefeedID.Namespace),
 					zap.String("changefeed", m.changefeedID.ID),
@@ -472,8 +493,16 @@ func (m *SinkManager) generateSinkTasks() error {
 
 func (m *SinkManager) generateRedoTasks() error {
 	// We use the table's resolved ts as the upper bound to fetch events.
-	getUpperBound := func(tableSink *tableSinkWrapper) engine.Position {
-		upperBoundTs := tableSink.getReceivedSorterResolvedTs()
+	getUpperBound := func(tableSinkReceivedSorterResolvedTs model.Ts) engine.Position {
+		upperBoundTs := tableSinkReceivedSorterResolvedTs
+
+		// If a task carries events after schemaResolvedTs, mounter group threads
+		// can be blocked on waiting schemaResolvedTs get advanced.
+		schemaTs := m.schemaStorage.ResolvedTs()
+		if upperBoundTs-1 > schemaTs {
+			upperBoundTs = schemaTs + 1
+		}
+
 		return engine.Position{StartTs: upperBoundTs - 1, CommitTs: upperBoundTs}
 	}
 
@@ -523,7 +552,7 @@ func (m *SinkManager) generateRedoTasks() error {
 			tableSink := tables[i]
 			slowestTableProgress := progs[i]
 			lowerBound := slowestTableProgress.nextLowerBoundPos
-			upperBound := getUpperBound(tableSink)
+			upperBound := getUpperBound(tableSink.getReceivedSorterResolvedTs())
 
 			// The table has no available progress.
 			if lowerBound.Compare(upperBound) >= 0 {
@@ -532,7 +561,7 @@ func (m *SinkManager) generateRedoTasks() error {
 			}
 
 			// No available memory, skip this round directly.
-			if !m.memQuota.tryAcquire(requestMemSize) {
+			if !m.redoMemQuota.TryAcquire(requestMemSize) {
 				break LOOP
 			}
 
@@ -572,9 +601,10 @@ func (m *SinkManager) generateRedoTasks() error {
 					zap.String("changefeed", m.changefeedID.ID),
 					zap.Stringer("span", &tableSink.span),
 					zap.Any("lowerBound", lowerBound),
-					zap.Any("currentUpperBound", upperBound))
+					zap.Any("currentUpperBound", upperBound),
+					zap.Float64("lag", time.Since(oracle.GetTimeFromTS(upperBound.CommitTs)).Seconds()))
 			default:
-				m.memQuota.refund(requestMemSize)
+				m.redoMemQuota.Refund(requestMemSize)
 				log.Debug("MemoryQuotaTracing: refund memory for redo log task",
 					zap.String("namespace", m.changefeedID.Namespace),
 					zap.String("changefeed", m.changefeedID.ID),
@@ -653,7 +683,8 @@ func (m *SinkManager) AddTable(span tablepb.Span, startTs model.Ts, targetTs mod
 			zap.Stringer("span", &span))
 		return
 	}
-	m.memQuota.addTable(span)
+	m.sinkMemQuota.AddTable(span)
+	m.redoMemQuota.AddTable(span)
 	log.Info("Add table sink",
 		zap.String("namespace", m.changefeedID.Namespace),
 		zap.String("changefeed", m.changefeedID.ID),
@@ -733,7 +764,8 @@ func (m *SinkManager) AsyncStopTable(span tablepb.Span) {
 				zap.Stringer("span", &span))
 		}
 		tableSink.(*tableSinkWrapper).close(m.ctx)
-		cleanedBytes := m.memQuota.clean(span)
+		cleanedBytes := m.sinkMemQuota.Clean(span)
+		cleanedBytes += m.redoMemQuota.Clean(span)
 		log.Debug("MemoryQuotaTracing: Clean up memory quota for table sink task when removing table",
 			zap.String("namespace", m.changefeedID.Namespace),
 			zap.String("changefeed", m.changefeedID.ID),
@@ -806,7 +838,8 @@ func (m *SinkManager) GetTableStats(span tablepb.Span) TableStats {
 	tableSink := value.(*tableSinkWrapper)
 
 	checkpointTs := tableSink.getCheckpointTs()
-	m.memQuota.release(span, checkpointTs)
+	m.sinkMemQuota.Release(span, checkpointTs)
+	m.redoMemQuota.Release(span, checkpointTs)
 	var resolvedTs model.Ts
 	// If redo log is enabled, we have to use redo log's resolved ts to calculate processor's min resolved ts.
 	if m.redoManager != nil {
@@ -844,11 +877,8 @@ func (m *SinkManager) Close() error {
 		m.cancel()
 		m.cancel = nil
 	}
-	m.memQuota.close()
-	err := m.sinkFactory.Close()
-	if err != nil {
-		return errors.Trace(err)
-	}
+	m.sinkMemQuota.Close()
+	m.redoMemQuota.Close()
 	m.tableSinks.Range(func(_ tablepb.Span, value interface{}) bool {
 		sink := value.(*tableSinkWrapper)
 		sink.close(m.ctx)
@@ -857,11 +887,15 @@ func (m *SinkManager) Close() error {
 		}
 		return true
 	})
+	m.wg.Wait()
 	log.Info("All table sinks closed",
 		zap.String("namespace", m.changefeedID.Namespace),
 		zap.String("changefeed", m.changefeedID.ID),
 		zap.Duration("cost", time.Since(start)))
-	m.wg.Wait()
+	// todo: Add a unit test to cover this,
+	// Make sure all sink workers exited before closing the sink factory.
+	// Otherwise, it would panic in the sink when you try to write some data to a closed sink.
+	m.sinkFactory.Close()
 	log.Info("Closed sink manager",
 		zap.String("namespace", m.changefeedID.Namespace),
 		zap.String("changefeed", m.changefeedID.ID),

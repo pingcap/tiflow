@@ -26,7 +26,6 @@ func TestServerConfigMarshal(t *testing.T) {
 
 	conf := GetDefaultServerConfig()
 	conf.Addr = "192.155.22.33:8887"
-	conf.Sorter.ChunkSizeLimit = 999
 	b, err := conf.Marshal()
 	require.Nil(t, err)
 
@@ -41,11 +40,11 @@ func TestServerConfigClone(t *testing.T) {
 	t.Parallel()
 	conf := GetDefaultServerConfig()
 	conf.Addr = "192.155.22.33:8887"
-	conf.Sorter.ChunkSizeLimit = 999
+	conf.Sorter.SortDir = "/tmp"
 	conf2 := conf.Clone()
 	require.Equal(t, conf, conf2)
-	conf.Sorter.ChunkSizeLimit = 99
-	require.Equal(t, uint64(99), conf.Sorter.ChunkSizeLimit)
+	conf2.Sorter.SortDir = "/tmp/sorter"
+	require.Equal(t, "/tmp", conf.Sorter.SortDir)
 }
 
 func TestServerConfigValidateAndAdjust(t *testing.T) {
@@ -73,12 +72,6 @@ func TestServerConfigValidateAndAdjust(t *testing.T) {
 	conf.AdvertiseAddr = "advertise"
 	require.Regexp(t, ".*does not contain a port", conf.ValidateAndAdjust())
 	conf.AdvertiseAddr = "advertise:1234"
-	conf.PerTableMemoryQuota = 1
-	require.Nil(t, conf.ValidateAndAdjust())
-	require.EqualValues(t, 1, conf.PerTableMemoryQuota)
-	conf.PerTableMemoryQuota = 0
-	require.Nil(t, conf.ValidateAndAdjust())
-	require.EqualValues(t, GetDefaultServerConfig().PerTableMemoryQuota, conf.PerTableMemoryQuota)
 	conf.Debug.Messages.ServerWorkerPoolSize = 0
 	require.Nil(t, conf.ValidateAndAdjust())
 	require.EqualValues(t, GetDefaultServerConfig().Debug.Messages.ServerWorkerPoolSize, conf.Debug.Messages.ServerWorkerPoolSize)
@@ -139,12 +132,6 @@ func TestSchedulerConfigValidateAndAdjust(t *testing.T) {
 
 	conf = GetDefaultServerConfig().Clone().Debug.Scheduler
 	conf.AddTableBatchSize = 0
-	require.Error(t, conf.ValidateAndAdjust())
-
-	conf = GetDefaultServerConfig().Clone().Debug.Scheduler
-	conf.RegionPerSpan = 0
-	require.Nil(t, conf.ValidateAndAdjust())
-	conf.RegionPerSpan = 999
 	require.Error(t, conf.ValidateAndAdjust())
 }
 

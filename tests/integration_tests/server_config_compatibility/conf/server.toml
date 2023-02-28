@@ -1,0 +1,15 @@
+per-table-memory-quota = 1024
+[debug]
+# Ensure sure removed configarations are not used.
+# TiCDC should ignore the removed configuration silently.
+enable-pull-based-sink = true
+enable-db-sorter = true
+enable-new-sink = true
+
+[sorter]
+# Ensure that deprecated configurations are not used and will not be validated.
+# TiCDC should ignore the deprecated configuration silently.
+chunk-size-limit = -1
+max-memory-consumption = -1
+num-concurrent-worker = -1
+num-workerpool-goroutine = -1

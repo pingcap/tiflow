@@ -137,14 +137,16 @@ type ManagerImpl struct {
 
 	rwlock    sync.RWMutex
 	writer    writer.RedoLogWriter
-	logBuffer *chann.Chann[cacheEvents]
+	logBuffer *chann.DrainableChann[cacheEvents]
 	closed    int32
 
 	flushing      int64
 	lastFlushTime time.Time
 
-	metricWriteLogDuration prometheus.Observer
-	metricFlushLogDuration prometheus.Observer
+	metricWriteLogDuration    prometheus.Observer
+	metricFlushLogDuration    prometheus.Observer
+	metricTotalRowsCount      prometheus.Counter
+	metricRedoWorkerBusyRatio prometheus.Counter
 }
 
 // NewManager creates a new Manager
@@ -180,10 +182,14 @@ func NewManager(ctx context.Context, cfg *config.ConsistentConfig, opts *Manager
 		WithLabelValues(m.changeFeedID.Namespace, m.changeFeedID.ID)
 	m.metricFlushLogDuration = common.RedoFlushLogDurationHistogram.
 		WithLabelValues(m.changeFeedID.Namespace, m.changeFeedID.ID)
+	m.metricTotalRowsCount = common.RedoTotalRowsCountGauge.
+		WithLabelValues(m.changeFeedID.Namespace, m.changeFeedID.ID)
+	m.metricRedoWorkerBusyRatio = common.RedoWorkerBusyRatio.
+		WithLabelValues(m.changeFeedID.Namespace, m.changeFeedID.ID)
 
 	// TODO: better to wait background goroutines after the context is canceled.
 	if m.opts.EnableBgRunner {
-		m.logBuffer = chann.New[cacheEvents]()
+		m.logBuffer = chann.NewAutoDrainChann[cacheEvents]()
 		go m.bgUpdateLog(ctx, cfg.FlushIntervalInMs, opts.ErrCh)
 	}
 	if m.opts.EnableGCRunner {
@@ -203,7 +209,7 @@ func NewMockManager(ctx context.Context) (*ManagerImpl, error) {
 	cfg := &config.ConsistentConfig{
 		Level:             string(redo.ConsistentLevelEventual),
 		Storage:           "blackhole://",
-		FlushIntervalInMs: config.MinFlushIntervalInMs,
+		FlushIntervalInMs: config.DefaultFlushIntervalInMs,
 	}
 
 	errCh := make(chan error, 1)
@@ -289,7 +295,7 @@ func (m *ManagerImpl) UpdateCheckpointTs(ckpt model.Ts) {
 // EmitDDLEvent sends DDL event to redo log writer
 func (m *ManagerImpl) EmitDDLEvent(ctx context.Context, ddl *model.DDLEvent) error {
 	return m.withLock(func(m *ManagerImpl) error {
-		return m.writer.SendDDL(ctx, common.DDLToRedo(ddl))
+		return m.writer.SendDDL(ctx, ddl)
 	})
 }
 
@@ -372,6 +378,10 @@ func (m *ManagerImpl) Cleanup(ctx context.Context) error {
 		DeleteLabelValues(m.changeFeedID.Namespace, m.changeFeedID.ID)
 	common.RedoFlushLogDurationHistogram.
 		DeleteLabelValues(m.changeFeedID.Namespace, m.changeFeedID.ID)
+	common.RedoTotalRowsCountGauge.
+		DeleteLabelValues(m.changeFeedID.Namespace, m.changeFeedID.ID)
+	common.RedoWorkerBusyRatio.
+		DeleteLabelValues(m.changeFeedID.Namespace, m.changeFeedID.ID)
 	return m.withLock(func(m *ManagerImpl) error { return m.writer.DeleteAllLogs(ctx) })
 }
 
@@ -440,7 +450,13 @@ func (m *ManagerImpl) postFlushMeta(metaCheckpoint, metaResolved model.Ts) {
 	m.metaCheckpointTs.setFlushed(metaCheckpoint)
 }
 
-func (m *ManagerImpl) flushLog(ctx context.Context, handleErr func(err error)) {
+func (m *ManagerImpl) flushLog(
+	ctx context.Context, handleErr func(err error), workTimeSlice *time.Duration,
+) {
+	start := time.Now()
+	defer func() {
+		*workTimeSlice += time.Since(start)
+	}()
 	if !atomic.CompareAndSwapInt64(&m.flushing, 0, 1) {
 		log.Debug("Fail to update flush flag, " +
 			"the previous flush operation hasn't finished yet")
@@ -477,11 +493,10 @@ func (m *ManagerImpl) flushLog(ctx context.Context, handleErr func(err error)) {
 }
 
 func (m *ManagerImpl) onResolvedTsMsg(span tablepb.Span, resolvedTs model.Ts) {
-	value, loaded := m.rtsMap.Load(span)
-	if !loaded {
-		panic("onResolvedTsMsg is called for an invalid table")
+	// It's possible that the table is removed while redo log is still in writing.
+	if value, loaded := m.rtsMap.Load(span); loaded {
+		value.(*statefulRts).checkAndSetUnflushed(resolvedTs)
 	}
-	value.(*statefulRts).checkAndSetUnflushed(resolvedTs)
 }
 
 func (m *ManagerImpl) bgUpdateLog(
@@ -494,7 +509,8 @@ func (m *ManagerImpl) bgUpdateLog(
 
 	log.Info("redo manager bgUpdateLog is running",
 		zap.String("namespace", m.changeFeedID.Namespace),
-		zap.String("changefeed", m.changeFeedID.ID))
+		zap.String("changefeed", m.changeFeedID.ID),
+		zap.Int64("flushIntervalInMs", flushIntervalInMs))
 
 	ticker := time.NewTicker(time.Duration(flushIntervalInMs) * time.Millisecond)
 	defer func() {
@@ -504,9 +520,7 @@ func (m *ManagerImpl) bgUpdateLog(
 		defer m.rwlock.Unlock()
 		atomic.StoreInt32(&m.closed, 1)
 
-		m.logBuffer.Close()
-		for range m.logBuffer.Out() {
-		}
+		m.logBuffer.CloseAndDrain()
 		if err := m.writer.Close(); err != nil {
 			log.Error("redo manager fails to close writer",
 				zap.String("namespace", m.changeFeedID.Namespace),
@@ -520,11 +534,15 @@ func (m *ManagerImpl) bgUpdateLog(
 	}()
 
 	var err error
-	logs := make([]*model.RedoRowChangedEvent, 0, 1024*1024)
+	logs := make([]*model.RowChangedEvent, 0, 1024*1024)
 	rtsMap := spanz.NewHashMap[model.Ts]()
 	releaseMemoryCbs := make([]func(), 0, 1024)
 
-	emitBatch := func() {
+	emitBatch := func(workTimeSlice *time.Duration) {
+		start := time.Now()
+		defer func() {
+			*workTimeSlice += time.Since(start)
+		}()
 		if len(logs) > 0 {
 			start := time.Now()
 			err = m.writer.WriteLog(ctx, logs)
@@ -535,6 +553,7 @@ func (m *ManagerImpl) bgUpdateLog(
 				zap.Int("rows", len(logs)),
 				zap.Error(err),
 				zap.Duration("writeLogElapse", writeLogElapse))
+			m.metricTotalRowsCount.Add(float64(len(logs)))
 			m.metricWriteLogDuration.Observe(writeLogElapse.Seconds())
 
 			for _, releaseMemory := range releaseMemoryCbs {
@@ -542,7 +561,7 @@ func (m *ManagerImpl) bgUpdateLog(
 			}
 
 			if cap(logs) > 1024*1024 {
-				logs = make([]*model.RedoRowChangedEvent, 0, 1024*1024)
+				logs = make([]*model.RowChangedEvent, 0, 1024*1024)
 			} else {
 				logs = logs[:0]
 			}
@@ -566,23 +585,26 @@ func (m *ManagerImpl) bgUpdateLog(
 		}
 	}
 
+	overseerTicker := time.NewTicker(time.Second * 5)
+	defer overseerTicker.Stop()
+	var workTimeSlice time.Duration
+	startToWork := time.Now()
 	for {
 		if len(logs) > 0 || rtsMap.Len() > 0 {
 			select {
 			case <-ctx.Done():
 				return
 			case <-ticker.C:
-				emitBatch()
-				m.flushLog(ctx, handleErr)
+				emitBatch(&workTimeSlice)
+				m.flushLog(ctx, handleErr, &workTimeSlice)
 			case cache, ok := <-m.logBuffer.Out():
 				if !ok {
 					return // channel closed
 				}
+				startToHandleEvent := time.Now()
 				switch cache.eventType {
 				case model.MessageTypeRow:
-					for _, row := range cache.rows {
-						logs = append(logs, common.RowToRedo(row))
-					}
+					logs = append(logs, cache.rows...)
 					if cache.releaseMemory != nil {
 						releaseMemoryCbs = append(releaseMemoryCbs, cache.releaseMemory)
 					}
@@ -593,26 +615,31 @@ func (m *ManagerImpl) bgUpdateLog(
 				default:
 					log.Panic("redo manager receives unknown event type")
 				}
+				workTimeSlice += time.Since(startToHandleEvent)
+			case now := <-overseerTicker.C:
+				busyRatio := int(workTimeSlice.Seconds() / now.Sub(startToWork).Seconds() * 1000)
+				m.metricRedoWorkerBusyRatio.Add(float64(busyRatio))
+				startToWork = now
+				workTimeSlice = 0
 			case err = <-logErrCh:
 			default:
-				emitBatch()
+				emitBatch(&workTimeSlice)
 			}
 		} else {
 			select {
 			case <-ctx.Done():
 				return
 			case <-ticker.C:
-				emitBatch()
-				m.flushLog(ctx, handleErr)
+				emitBatch(&workTimeSlice)
+				m.flushLog(ctx, handleErr, &workTimeSlice)
 			case cache, ok := <-m.logBuffer.Out():
 				if !ok {
 					return // channel closed
 				}
+				startToHandleEvent := time.Now()
 				switch cache.eventType {
 				case model.MessageTypeRow:
-					for _, row := range cache.rows {
-						logs = append(logs, common.RowToRedo(row))
-					}
+					logs = append(logs, cache.rows...)
 					if cache.releaseMemory != nil {
 						releaseMemoryCbs = append(releaseMemoryCbs, cache.releaseMemory)
 					}
@@ -623,6 +650,12 @@ func (m *ManagerImpl) bgUpdateLog(
 				default:
 					log.Panic("redo manager receives unknown event type")
 				}
+				workTimeSlice += time.Since(startToHandleEvent)
+			case now := <-overseerTicker.C:
+				busyRatio := int(workTimeSlice.Seconds() / now.Sub(startToWork).Seconds() * 1000)
+				m.metricRedoWorkerBusyRatio.Add(float64(busyRatio))
+				startToWork = now
+				workTimeSlice = 0
 			case err = <-logErrCh:
 			}
 		}

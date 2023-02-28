@@ -17,6 +17,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"net/url"
+	"strings"
 	"time"
 
 	"github.com/pingcap/errors"
@@ -62,8 +63,12 @@ var defaultReplicaConfig = &ReplicaConfig{
 	Consistent: &ConsistentConfig{
 		Level:             "none",
 		MaxLogSize:        64,
-		FlushIntervalInMs: MinFlushIntervalInMs,
+		FlushIntervalInMs: DefaultFlushIntervalInMs,
 		Storage:           "",
+	},
+	Scheduler: &ChangefeedSchedulerConfig{
+		EnableSplitSpan: false,
+		RegionPerSpan:   100_000,
 	},
 }
 
@@ -104,6 +109,8 @@ type replicaConfig struct {
 	Mounter            *MounterConfig    `toml:"mounter" json:"mounter"`
 	Sink               *SinkConfig       `toml:"sink" json:"sink"`
 	Consistent         *ConsistentConfig `toml:"consistent" json:"consistent"`
+	// Scheduler is the configuration for scheduler.
+	Scheduler *ChangefeedSchedulerConfig `toml:"scheduler" json:"scheduler"`
 }
 
 // Marshal returns the json marshal format of a ReplicationConfig
@@ -197,8 +204,26 @@ func (c *ReplicaConfig) ValidateAndAdjust(sinkURI *url.URL) error {
 	if c.MemoryQuota == uint64(0) {
 		c.FixMemoryQuota()
 	}
+	if c.Scheduler == nil {
+		c.FixScheduler(false)
+	}
+	// TODO: Remove the hack once span replication is compatible with all sinks.
+	if !isSinkCompatibleWithSpanReplication(sinkURI) {
+		c.Scheduler.EnableSplitSpan = false
+	}
 
 	return nil
+}
+
+// FixScheduler adjusts scheduler to default value
+func (c *ReplicaConfig) FixScheduler(inheritV66 bool) {
+	if c.Scheduler == nil {
+		c.Scheduler = defaultReplicaConfig.Clone().Scheduler
+		return
+	}
+	if inheritV66 && c.Scheduler.RegionPerSpan != 0 {
+		c.Scheduler.EnableSplitSpan = true
+	}
 }
 
 // FixMemoryQuota adjusts memory quota to default value
@@ -221,4 +246,11 @@ func GetSinkURIAndAdjustConfigWithSinkURI(
 	}
 
 	return sinkURI, nil
+}
+
+// isSinkCompatibleWithSpanReplication returns true if the sink uri is
+// compatible with span replication.
+func isSinkCompatibleWithSpanReplication(u *url.URL) bool {
+	return u != nil &&
+		(strings.Contains(u.Scheme, "kafka") || strings.Contains(u.Scheme, "blackhole"))
 }

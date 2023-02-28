@@ -1080,6 +1080,14 @@ func (s *Syncer) handleJob(job *job) (added2Queue bool, err error) {
 		s.isTransactionEnd = true
 		return
 	case skip:
+		if job.eventHeader.EventType == replication.QUERY_EVENT {
+			// skipped ddl includes:
+			// - ddls that dm don't handle, such as analyze table(can be parsed), create function(cannot be parsed)
+			// - ddls related to db/table which is filtered
+			// for those ddls we record its location, so checkpoint can match master position if skipped ddl
+			// is the last binlog in source db
+			s.saveGlobalPoint(job.location)
+		}
 		s.updateReplicationJobTS(job, skipJobIdx)
 		return
 	}
@@ -1410,6 +1418,7 @@ func (s *Syncer) syncDDL(queueBucket string, db *dbconn.DBConn, ddlJobChan chan 
 						s.tctx.L().Warn("getting ddlCreateTime failed", zap.Error(err2))
 					}
 				}
+				//nolint:sqlclosecheck
 				row.Close()
 			}
 			affected, err = db.ExecuteSQLWithIgnore(s.syncCtx, s.metricsProxies, errorutil.IsIgnorableMySQLDDLError, ddlJob.ddls)

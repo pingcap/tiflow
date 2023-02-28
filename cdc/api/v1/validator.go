@@ -23,7 +23,8 @@ import (
 	"github.com/pingcap/tiflow/cdc/contextutil"
 	"github.com/pingcap/tiflow/cdc/entry"
 	"github.com/pingcap/tiflow/cdc/model"
-	"github.com/pingcap/tiflow/cdc/sink"
+	"github.com/pingcap/tiflow/cdc/owner"
+	"github.com/pingcap/tiflow/cdc/sink/validator"
 	"github.com/pingcap/tiflow/pkg/config"
 	cerror "github.com/pingcap/tiflow/pkg/errors"
 	"github.com/pingcap/tiflow/pkg/filter"
@@ -147,6 +148,7 @@ func verifyCreateChangefeedConfig(
 		Engine:         sortEngine,
 		State:          model.StateNormal,
 		CreatorVersion: version.ReleaseVersion,
+		Epoch:          owner.GenerateChangefeedEpoch(ctx, up.PDClient),
 	}
 	f, err := filter.NewFilter(replicaConfig, "")
 	if err != nil {
@@ -172,7 +174,7 @@ func verifyCreateChangefeedConfig(
 		return nil, cerror.ErrAPIInvalidParam.Wrap(errors.Annotatef(err, "invalid timezone:%s", changefeedConfig.TimeZone))
 	}
 	ctx = contextutil.PutTimezoneInCtx(ctx, tz)
-	if err := sink.Validate(ctx, info.SinkURI, info.Config); err != nil {
+	if err := validator.Validate(ctx, info.SinkURI, info.Config); err != nil {
 		return nil, err
 	}
 
@@ -230,7 +232,7 @@ func VerifyUpdateChangefeedConfig(ctx context.Context,
 			return nil, cerror.ErrChangefeedUpdateRefused.GenWithStackByCause(err)
 		}
 
-		if err := sink.Validate(ctx, newInfo.SinkURI, newInfo.Config); err != nil {
+		if err := validator.Validate(ctx, newInfo.SinkURI, newInfo.Config); err != nil {
 			return nil, cerror.ErrChangefeedUpdateRefused.GenWithStackByCause(err)
 		}
 	}

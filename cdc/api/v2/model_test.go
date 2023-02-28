@@ -24,6 +24,12 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
+func TestDefaultReplicaConfig(t *testing.T) {
+	t.Parallel()
+	cfg := GetDefaultReplicaConfig()
+	require.NotNil(t, cfg.Scheduler)
+}
+
 func TestToAPIReplicaConfig(t *testing.T) {
 	cfg := config.GetDefaultReplicaConfig()
 	cfg.EnableOldValue = false
@@ -81,6 +87,7 @@ func TestToAPIReplicaConfig(t *testing.T) {
 		}},
 	}
 	cfg.Mounter = &config.MounterConfig{WorkerNum: 11}
+	cfg.Scheduler = &config.ChangefeedSchedulerConfig{EnableSplitSpan: true, RegionPerSpan: 10001}
 	cfg2 := ToAPIReplicaConfig(cfg).ToInternalReplicaConfig()
 	require.Equal(t, "", cfg2.Sink.DispatchRules[0].DispatcherRule)
 	cfg.Sink.DispatchRules[0].DispatcherRule = ""

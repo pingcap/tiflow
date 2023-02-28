@@ -62,6 +62,8 @@ func iterPermutation(sequence []int, fn func(sequence []int)) {
 }
 
 func newAgent4Test() *agent {
+	cfg := config.GetDefaultServerConfig().Debug.Scheduler
+	cfg.ChangefeedSettings = config.GetDefaultReplicaConfig().Scheduler
 	a := &agent{
 		ownerInfo: ownerInfo{
 			CaptureInfo: model.CaptureInfo{
@@ -70,8 +72,7 @@ func newAgent4Test() *agent {
 			},
 			Revision: schedulepb.OwnerRevision{Revision: 1},
 		},
-		compat: compat.New(
-			config.GetDefaultServerConfig().Debug.Scheduler, map[string]*model.CaptureInfo{}),
+		compat: compat.New(cfg, map[string]*model.CaptureInfo{}),
 	}
 
 	a.Version = "agent-version-1"
@@ -90,7 +91,12 @@ func TestNewAgent(t *testing.T) {
 	me := mock_etcd.NewMockCDCEtcdClient(gomock.NewController(t))
 
 	tableExector := newMockTableExecutor()
-	cfg := &config.SchedulerConfig{RegionPerSpan: 1}
+	cfg := &config.SchedulerConfig{
+		ChangefeedSettings: &config.ChangefeedSchedulerConfig{
+			EnableSplitSpan: true,
+			RegionPerSpan:   1,
+		},
+	}
 
 	// owner and revision found successfully
 	me.EXPECT().GetOwnerID(gomock.Any()).Return("ownerID", nil).Times(1)
@@ -98,7 +104,7 @@ func TestNewAgent(t *testing.T) {
 		gomock.Any()).Return(int64(0), []*model.CaptureInfo{{ID: "ownerID"}}, nil).Times(1)
 	me.EXPECT().GetOwnerRevision(gomock.Any(), gomock.Any()).Return(int64(2333), nil).Times(1)
 	a, err := newAgent(
-		context.Background(), "capture-test", &liveness, changefeed, me, tableExector, cfg)
+		context.Background(), "capture-test", &liveness, changefeed, me, tableExector, 0, cfg)
 	require.NoError(t, err)
 	require.NotNil(t, a)
 
@@ -106,14 +112,14 @@ func TestNewAgent(t *testing.T) {
 	me.EXPECT().GetOwnerID(gomock.Any()).
 		Return("", concurrency.ErrElectionNoLeader).Times(1)
 	a, err = newAgent(
-		context.Background(), "capture-test", &liveness, changefeed, me, tableExector, cfg)
+		context.Background(), "capture-test", &liveness, changefeed, me, tableExector, 0, cfg)
 	require.NoError(t, err)
 	require.NotNil(t, a)
 
 	// owner not found since pd is unstable
 	me.EXPECT().GetOwnerID(gomock.Any()).Return("", cerror.ErrPDEtcdAPIError).Times(1)
 	a, err = newAgent(
-		context.Background(), "capture-test", &liveness, changefeed, me, tableExector, cfg)
+		context.Background(), "capture-test", &liveness, changefeed, me, tableExector, 0, cfg)
 	require.Error(t, err)
 	require.Nil(t, a)
 
@@ -124,7 +130,7 @@ func TestNewAgent(t *testing.T) {
 	me.EXPECT().GetOwnerRevision(gomock.Any(), gomock.Any()).
 		Return(int64(0), cerror.ErrPDEtcdAPIError).Times(1)
 	a, err = newAgent(
-		context.Background(), "capture-test", &liveness, changefeed, me, tableExector, cfg)
+		context.Background(), "capture-test", &liveness, changefeed, me, tableExector, 0, cfg)
 	require.Error(t, err)
 	require.Nil(t, a)
 
@@ -134,7 +140,7 @@ func TestNewAgent(t *testing.T) {
 	me.EXPECT().GetOwnerRevision(gomock.Any(), gomock.Any()).
 		Return(int64(0), cerror.ErrOwnerNotFound).Times(1)
 	a, err = newAgent(
-		context.Background(), "capture-test", &liveness, changefeed, me, tableExector, cfg)
+		context.Background(), "capture-test", &liveness, changefeed, me, tableExector, 0, cfg)
 	require.NoError(t, err)
 	require.NotNil(t, a)
 }
@@ -875,7 +881,10 @@ func TestAgentTransportCompat(t *testing.T) {
 	trans := transport.NewMockTrans()
 	a.trans = trans
 	a.compat = compat.New(&config.SchedulerConfig{
-		RegionPerSpan: 1,
+		ChangefeedSettings: &config.ChangefeedSchedulerConfig{
+			EnableSplitSpan: true,
+			RegionPerSpan:   1,
+		},
 	}, map[model.CaptureID]*model.CaptureInfo{})
 	ctx := context.Background()
 
@@ -951,6 +960,91 @@ func TestAgentTransportCompat(t *testing.T) {
 			},
 		},
 	}}, msgs)
+}
+
+func TestAgentDropMsgIfChangefeedEpochMismatch(t *testing.T) {
+	t.Parallel()
+
+	a := newAgent4Test()
+	mockTableExecutor := newMockTableExecutor()
+	a.tableM = newTableSpanManager(model.ChangeFeedID{}, mockTableExecutor)
+	trans := transport.NewMockTrans()
+	a.trans = trans
+	a.compat = compat.New(&config.SchedulerConfig{
+		ChangefeedSettings: &config.ChangefeedSchedulerConfig{
+			EnableSplitSpan: true,
+			RegionPerSpan:   1,
+		},
+	}, map[model.CaptureID]*model.CaptureInfo{})
+	a.changefeedEpoch = 1
+	ctx := context.Background()
+
+	// Enable changefeed epoch.
+	a.handleOwnerInfo(
+		"a", a.ownerInfo.Revision.Revision+1, compat.ChangefeedEpochMinVersion.String())
+
+	trans.RecvBuffer = append(trans.RecvBuffer, &schedulepb.Message{
+		Header: &schedulepb.Message_Header{
+			Version:         a.Version,
+			OwnerRevision:   a.ownerInfo.Revision,
+			ChangefeedEpoch: schedulepb.ChangefeedEpoch{Epoch: 1},
+		},
+		From: "a", To: a.CaptureID, MsgType: schedulepb.MsgDispatchTableRequest,
+		DispatchTableRequest: &schedulepb.DispatchTableRequest{
+			Request: &schedulepb.DispatchTableRequest_AddTable{
+				AddTable: &schedulepb.AddTableRequest{
+					TableID: 1,
+				},
+			},
+		},
+	})
+	trans.RecvBuffer = append(trans.RecvBuffer,
+		&schedulepb.Message{
+			Header: &schedulepb.Message_Header{
+				Version:         a.Version,
+				OwnerRevision:   a.ownerInfo.Revision,
+				ChangefeedEpoch: schedulepb.ChangefeedEpoch{Epoch: 2}, // mismatch
+			},
+			From: "a", To: a.CaptureID, MsgType: schedulepb.MsgDispatchTableRequest,
+			DispatchTableRequest: &schedulepb.DispatchTableRequest{
+				Request: &schedulepb.DispatchTableRequest_AddTable{
+					AddTable: &schedulepb.AddTableRequest{
+						TableID: 1,
+					},
+				},
+			},
+		})
+	msgs, err := a.recvMsgs(ctx)
+	require.NoError(t, err)
+	require.Len(t, msgs, 1)
+	require.EqualValues(t, "a", msgs[0].From)
+
+	// Disable changefeed epoch
+	unsupported := *compat.ChangefeedEpochMinVersion
+	unsupported.Major--
+	a.handleOwnerInfo(
+		"a", a.ownerInfo.Revision.Revision+1, unsupported.String())
+
+	trans.RecvBuffer = trans.RecvBuffer[:0]
+	trans.RecvBuffer = append(trans.RecvBuffer, &schedulepb.Message{
+		Header: &schedulepb.Message_Header{
+			Version:         unsupported.String(),
+			OwnerRevision:   a.ownerInfo.Revision,
+			ChangefeedEpoch: schedulepb.ChangefeedEpoch{Epoch: 2}, // mistmatch
+		},
+		From: "a", To: a.CaptureID, MsgType: schedulepb.MsgDispatchTableRequest,
+		DispatchTableRequest: &schedulepb.DispatchTableRequest{
+			Request: &schedulepb.DispatchTableRequest_AddTable{
+				AddTable: &schedulepb.AddTableRequest{
+					TableID: 1,
+				},
+			},
+		},
+	})
+	msgs, err = a.recvMsgs(ctx)
+	require.NoError(t, err)
+	require.Len(t, msgs, 1)
+	require.EqualValues(t, "a", msgs[0].From)
 }
 
 // MockTableExecutor is a mock implementation of TableExecutor.

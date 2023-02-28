@@ -124,11 +124,7 @@ func TestParseCfg(t *testing.T) {
 		"--cert", "bb",
 		"--key", "cc",
 		"--cert-allowed-cn", "dd,ee",
-		"--sorter-chunk-size-limit", "50000000",
-		"--sorter-max-memory-consumption", "60000",
 		"--sorter-max-memory-percentage", "70",
-		"--sorter-num-concurrent-worker", "80",
-		"--sorter-num-workerpool-goroutine", "90",
 		"--sort-dir", "/tmp/just_a_test",
 	}))
 
@@ -156,19 +152,14 @@ func TestParseCfg(t *testing.T) {
 		OwnerFlushInterval:     config.TomlDuration(150 * time.Millisecond),
 		ProcessorFlushInterval: config.TomlDuration(150 * time.Millisecond),
 		Sorter: &config.SorterConfig{
-			NumConcurrentWorker:    80,
-			ChunkSizeLimit:         50000000,
-			MaxMemoryPercentage:    70,
-			MaxMemoryConsumption:   60000,
-			NumWorkerPoolGoroutine: 90,
-			SortDir:                config.DefaultSortDir,
+			MaxMemoryPercentage: 70,
+			SortDir:             config.DefaultSortDir,
 		},
 		Security: &config.SecurityConfig{
 			CertPath:      "bb",
 			KeyPath:       "cc",
 			CertAllowedCN: []string{"dd", "ee"},
 		},
-		PerTableMemoryQuota: config.DefaultTableMemoryQuota,
 		KVClient: &config.KVClientConfig{
 			WorkerConcurrent:    8,
 			WorkerPoolSize:      0,
@@ -176,12 +167,7 @@ func TestParseCfg(t *testing.T) {
 			RegionRetryDuration: config.TomlDuration(time.Minute),
 		},
 		Debug: &config.DebugConfig{
-			TableActor: &config.TableActorConfig{
-				EventBatchSize: 32,
-			},
-			EnableDBSorter:      true,
-			EnableNewScheduler:  true,
-			EnablePullBasedSink: true,
+			EnableKafkaSinkV2: false,
 			DB: &config.DBConfig{
 				Count:                       8,
 				Concurrency:                 128,
@@ -213,9 +199,7 @@ func TestParseCfg(t *testing.T) {
 				MaxTaskConcurrency:   10,
 				CheckBalanceInterval: 60000000000,
 				AddTableBatchSize:    50,
-				RegionPerSpan:        0,
 			},
-			EnableNewSink: true,
 		},
 		ClusterID: "default",
 	}, o.serverConfig)
@@ -246,19 +230,14 @@ max-days = 1
 max-backups = 1
 
 [sorter]
-chunk-size-limit = 10000000
-max-memory-consumption = 2000000
 max-memory-percentage = 3
-num-concurrent-worker = 4
-num-workerpool-goroutine = 5
 sort-dir = "/tmp/just_a_test"
 
 [kv-client]
 region-retry-duration = "3s"
 
 [debug]
-enable-db-sorter = true
-enable-pull-based-sink = true
+enable-kafka-sink-v2 = true
 [debug.db]
 count = 5
 concurrency = 6
@@ -322,15 +301,10 @@ check-balance-interval = "10s"
 		OwnerFlushInterval:     config.TomlDuration(600 * time.Millisecond),
 		ProcessorFlushInterval: config.TomlDuration(600 * time.Millisecond),
 		Sorter: &config.SorterConfig{
-			NumConcurrentWorker:    4,
-			ChunkSizeLimit:         10000000,
-			MaxMemoryPercentage:    3,
-			MaxMemoryConsumption:   2000000,
-			NumWorkerPoolGoroutine: 5,
-			SortDir:                config.DefaultSortDir,
+			MaxMemoryPercentage: 3,
+			SortDir:             config.DefaultSortDir,
 		},
-		Security:            &config.SecurityConfig{},
-		PerTableMemoryQuota: config.DefaultTableMemoryQuota,
+		Security: &config.SecurityConfig{},
 		KVClient: &config.KVClientConfig{
 			WorkerConcurrent:    8,
 			WorkerPoolSize:      0,
@@ -338,12 +312,7 @@ check-balance-interval = "10s"
 			RegionRetryDuration: config.TomlDuration(3 * time.Second),
 		},
 		Debug: &config.DebugConfig{
-			TableActor: &config.TableActorConfig{
-				EventBatchSize: 32,
-			},
-			EnableDBSorter:      true,
-			EnablePullBasedSink: true,
-			EnableNewScheduler:  true,
+			EnableKafkaSinkV2: true,
 			DB: &config.DBConfig{
 				Count:                       5,
 				Concurrency:                 6,
@@ -374,9 +343,7 @@ check-balance-interval = "10s"
 				MaxTaskConcurrency:   11,
 				CheckBalanceInterval: config.TomlDuration(10 * time.Second),
 				AddTableBatchSize:    50,
-				RegionPerSpan:        0,
 			},
-			EnableNewSink: true,
 		},
 		ClusterID: "default",
 	}, o.serverConfig)
@@ -407,11 +374,7 @@ max-days = 1
 max-backups = 1
 
 [sorter]
-chunk-size-limit = 10000000
-max-memory-consumption = 2000000
 max-memory-percentage = 3
-num-concurrent-worker = 4
-num-workerpool-goroutine = 5
 sort-dir = "/tmp/just_a_test"
 
 [security]
@@ -437,10 +400,7 @@ cert-allowed-cn = ["dd","ee"]
 		"--owner-flush-interval", "150ms",
 		"--processor-flush-interval", "150ms",
 		"--ca", "",
-		"--sorter-chunk-size-limit", "50000000",
-		"--sorter-max-memory-consumption", "60000000",
 		"--sorter-max-memory-percentage", "70",
-		"--sorter-num-concurrent-worker", "3",
 		"--config", configPath,
 	}))
 
@@ -468,19 +428,14 @@ cert-allowed-cn = ["dd","ee"]
 		OwnerFlushInterval:     config.TomlDuration(150 * time.Millisecond),
 		ProcessorFlushInterval: config.TomlDuration(150 * time.Millisecond),
 		Sorter: &config.SorterConfig{
-			NumConcurrentWorker:    3,
-			ChunkSizeLimit:         50000000,
-			MaxMemoryPercentage:    70,
-			MaxMemoryConsumption:   60000000,
-			NumWorkerPoolGoroutine: 5,
-			SortDir:                config.DefaultSortDir,
+			MaxMemoryPercentage: 70,
+			SortDir:             config.DefaultSortDir,
 		},
 		Security: &config.SecurityConfig{
 			CertPath:      "bb",
 			KeyPath:       "cc",
 			CertAllowedCN: []string{"dd", "ee"},
 		},
-		PerTableMemoryQuota: config.DefaultTableMemoryQuota,
 		KVClient: &config.KVClientConfig{
 			WorkerConcurrent:    8,
 			WorkerPoolSize:      0,
@@ -488,12 +443,7 @@ cert-allowed-cn = ["dd","ee"]
 			RegionRetryDuration: config.TomlDuration(time.Minute),
 		},
 		Debug: &config.DebugConfig{
-			TableActor: &config.TableActorConfig{
-				EventBatchSize: 32,
-			},
-			EnableDBSorter:      true,
-			EnableNewScheduler:  true,
-			EnablePullBasedSink: true,
+			EnableKafkaSinkV2: false,
 			DB: &config.DBConfig{
 				Count:                       8,
 				Concurrency:                 128,
@@ -525,9 +475,7 @@ cert-allowed-cn = ["dd","ee"]
 				MaxTaskConcurrency:   10,
 				CheckBalanceInterval: 60000000000,
 				AddTableBatchSize:    50,
-				RegionPerSpan:        0,
 			},
-			EnableNewSink: true,
 		},
 		ClusterID: "default",
 	}, o.serverConfig)
@@ -556,12 +504,7 @@ unknown3 = 3
 	err = o.validate()
 	require.Nil(t, err)
 	require.Equal(t, &config.DebugConfig{
-		TableActor: &config.TableActorConfig{
-			EventBatchSize: 32,
-		},
-		EnableDBSorter:      true,
-		EnableNewScheduler:  true,
-		EnablePullBasedSink: true,
+		EnableKafkaSinkV2: false,
 		DB: &config.DBConfig{
 			Count:                       8,
 			Concurrency:                 128,
@@ -593,8 +536,6 @@ unknown3 = 3
 			MaxTaskConcurrency:   10,
 			CheckBalanceInterval: 60000000000,
 			AddTableBatchSize:    50,
-			RegionPerSpan:        0,
 		},
-		EnableNewSink: true,
 	}, o.serverConfig.Debug)
 }

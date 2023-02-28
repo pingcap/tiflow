@@ -50,4 +50,5 @@ func TestVerifyUpdateChangefeedConfig(t *testing.T) {
 	newInfo, err = VerifyUpdateChangefeedConfig(ctx, changefeedConfig, oldInfo)
 	require.Nil(t, err)
 	require.NotNil(t, newInfo)
+	require.NotEqual(t, 0, newInfo.Epoch)
 }

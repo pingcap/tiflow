@@ -62,9 +62,13 @@ func (c *mockPDClient) Close() {}
 
 type mockStatusProvider struct {
 	owner.StatusProvider
-	changefeedStatus *model.ChangeFeedStatus
-	changefeedInfo   *model.ChangeFeedInfo
-	err              error
+	changefeedStatus   *model.ChangeFeedStatus
+	changefeedInfo     *model.ChangeFeedInfo
+	processors         []*model.ProcInfoSnap
+	taskStatus         map[model.CaptureID]*model.TaskStatus
+	changefeedInfos    map[model.ChangeFeedID]*model.ChangeFeedInfo
+	changefeedStatuses map[model.ChangeFeedID]*model.ChangeFeedStatus
+	err                error
 }
 
 // GetChangeFeedStatus returns a changefeeds' runtime status.
@@ -79,4 +83,39 @@ func (m *mockStatusProvider) GetChangeFeedInfo(ctx context.Context,
 	changefeedID model.ChangeFeedID,
 ) (*model.ChangeFeedInfo, error) {
 	return m.changefeedInfo, m.err
+}
+
+// GetProcessors returns a list of mock processor infos.
+func (m *mockStatusProvider) GetProcessors(ctx context.Context) (
+	[]*model.ProcInfoSnap,
+	error,
+) {
+	return m.processors, m.err
+}
+
+// GetAllTaskStatuses returns a map of mock task statuses.
+func (m *mockStatusProvider) GetAllTaskStatuses(
+	ctx context.Context,
+	changefeedID model.ChangeFeedID,
+) (
+	map[model.CaptureID]*model.TaskStatus,
+	error,
+) {
+	return m.taskStatus, m.err
+}
+
+// GetAllChangeFeedInfo returns a list of mock changefeed info.
+func (m *mockStatusProvider) GetAllChangeFeedInfo(_ context.Context) (
+	map[model.ChangeFeedID]*model.ChangeFeedInfo,
+	error,
+) {
+	return m.changefeedInfos, m.err
+}
+
+// GetAllChangeFeedStatuses returns a list of mock changefeed status.
+func (m *mockStatusProvider) GetAllChangeFeedStatuses(_ context.Context) (
+	map[model.ChangeFeedID]*model.ChangeFeedStatus,
+	error,
+) {
+	return m.changefeedStatuses, m.err
 }

@@ -23,13 +23,21 @@ import (
 	"github.com/pingcap/tiflow/pkg/version"
 )
 
+var (
+	// SpanReplicationMinVersion is the min version that allows span replication.
+	SpanReplicationMinVersion = semver.New("6.6.0-alpha")
+	// ChangefeedEpochMinVersion is the min version that enables changefeed epoch.
+	ChangefeedEpochMinVersion = semver.New("6.7.0-alpha")
+)
+
 // Compat is a compatibility layer between span replication and table replication.
 type Compat struct {
-	enableSpanReplication bool
+	config      *config.ChangefeedSchedulerConfig
+	captureInfo map[model.CaptureID]*model.CaptureInfo
 
-	hasChecked    bool
-	regionPerSpan int
-	captureInfo   map[model.CaptureID]*model.CaptureInfo
+	spanReplicationHasChecked bool
+	spanReplicationEnabled    bool
+	changefeedEpoch           map[model.CaptureID]bool
 }
 
 // New returns a new Compat.
@@ -38,8 +46,9 @@ func New(
 	captureInfo map[model.CaptureID]*model.CaptureInfo,
 ) *Compat {
 	return &Compat{
-		regionPerSpan: config.RegionPerSpan,
-		captureInfo:   captureInfo,
+		config:          config.ChangefeedSettings,
+		captureInfo:     captureInfo,
+		changefeedEpoch: make(map[string]bool),
 	}
 }
 
@@ -50,46 +59,64 @@ func (c *Compat) UpdateCaptureInfo(
 ) bool {
 	if len(aliveCaptures) != len(c.captureInfo) {
 		c.captureInfo = aliveCaptures
-		c.hasChecked = false
+		c.spanReplicationHasChecked = false
+		c.changefeedEpoch = make(map[string]bool, len(aliveCaptures))
 		return true
 	}
-	for id := range aliveCaptures {
-		_, ok := c.captureInfo[id]
-		if !ok {
+	for id, alive := range aliveCaptures {
+		info, ok := c.captureInfo[id]
+		if !ok || info.Version != alive.Version {
 			c.captureInfo = aliveCaptures
-			c.hasChecked = false
+			c.spanReplicationHasChecked = false
+			c.changefeedEpoch = make(map[string]bool, len(aliveCaptures))
 			return true
 		}
 	}
 	return false
 }
 
-// SpanReplicationMinVersion is the min version that allows span replication.
-// For now, we ASSUME it is `v6.6.0-alpha`.
-// FIXME: correct the min version before we release the feature.
-var SpanReplicationMinVersion = semver.New("6.6.0-alpha")
-
 // CheckSpanReplicationEnabled check if the changefeed can enable span replication.
 func (c *Compat) CheckSpanReplicationEnabled() bool {
-	if c.hasChecked {
-		return c.enableSpanReplication
+	if c.spanReplicationHasChecked {
+		return c.spanReplicationEnabled
 	}
-	c.hasChecked = true
+	c.spanReplicationHasChecked = true
 
-	c.enableSpanReplication = c.regionPerSpan != 0
+	c.spanReplicationEnabled = c.config.EnableSplitSpan
 	for _, capture := range c.captureInfo {
 		if len(capture.Version) == 0 {
-			c.enableSpanReplication = false
+			c.spanReplicationEnabled = false
 			break
 		}
 		captureVer := semver.New(version.SanitizeVersion(capture.Version))
 		if captureVer.Compare(*SpanReplicationMinVersion) < 0 {
-			c.enableSpanReplication = false
+			c.spanReplicationEnabled = false
 			break
 		}
 	}
 
-	return c.enableSpanReplication
+	return c.spanReplicationEnabled
+}
+
+// CheckChangefeedEpochEnabled check if the changefeed enables epoch.
+func (c *Compat) CheckChangefeedEpochEnabled(captureID model.CaptureID) bool {
+	isEnabled, ok := c.changefeedEpoch[captureID]
+	if ok {
+		return isEnabled
+	}
+
+	captureInfo, ok := c.captureInfo[captureID]
+	if !ok {
+		return false
+	}
+	if len(captureInfo.Version) != 0 {
+		captureVer := semver.New(version.SanitizeVersion(captureInfo.Version))
+		isEnabled = captureVer.Compare(*ChangefeedEpochMinVersion) >= 0
+	} else {
+		isEnabled = false
+	}
+	c.changefeedEpoch[captureID] = isEnabled
+	return isEnabled
 }
 
 // BeforeTransportSend modifies messages in place before sending messages,

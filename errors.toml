@@ -586,14 +586,19 @@ error = '''
 invalid partition num %d
 '''
 
+["CDC:ErrKafkaInvalidRequiredAcks"]
+error = '''
+invalid required acks %d, only support these values: 0(NoResponse),1(WaitForLocal) and -1(WaitForAll)
+'''
+
 ["CDC:ErrKafkaInvalidVersion"]
 error = '''
 invalid kafka version
 '''
 
-["CDC:ErrKafkaNewSaramaProducer"]
+["CDC:ErrKafkaNewProducer"]
 error = '''
-new sarama producer
+new kafka producer
 '''
 
 ["CDC:ErrKafkaProducerClosed"]
@@ -659,6 +664,11 @@ maxwell encode failed
 ["CDC:ErrMaxwellInvalidData"]
 error = '''
 maxwell invalid data
+'''
+
+["CDC:ErrMessageTooLarge"]
+error = '''
+message is too large
 '''
 
 ["CDC:ErrMetaListDatabases"]
@@ -739,11 +749,6 @@ old value is not enabled
 ["CDC:ErrOpenProtocolCodecInvalidData"]
 error = '''
 open-protocol codec invalid data
-'''
-
-["CDC:ErrOpenProtocolCodecRowTooLarge"]
-error = '''
-open-protocol codec single row too large
 '''
 
 ["CDC:ErrOperateOnClosedNotifier"]
@@ -998,7 +1003,7 @@ failed to seek to the beginning of request body
 
 ["CDC:ErrS3StorageAPI"]
 error = '''
-s3 storage api
+external storage api
 '''
 
 ["CDC:ErrScanLockFailed"]

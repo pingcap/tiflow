@@ -145,7 +145,7 @@ func TestVerifyAndComplete(t *testing.T) {
 		SinkURI: "blackhole://",
 		StartTs: 417257993615179777,
 		Config: &config.ReplicaConfig{
-			MemoryQuota:        268435456,
+			MemoryQuota:        1073741824,
 			CaseSensitive:      true,
 			EnableOldValue:     true,
 			CheckGCSafePoint:   true,
@@ -678,21 +678,23 @@ func TestFixMQSinkProtocol(t *testing.T) {
 		},
 		{
 			info: &ChangeFeedInfo{
-				SinkURI: "kafka://127.0.0.1:9092/ticdc-test2?protocol=random&max-message-size=15",
+				SinkURI: "kafka://127.0.0.1:9092/ticdc-test2?protocol=random&max-message-bytes=15",
 				Config: &config.ReplicaConfig{
 					Sink: &config.SinkConfig{Protocol: config.ProtocolDefault.String()},
 				},
 			},
-			expectedSinkURI: "kafka://127.0.0.1:9092/ticdc-test2?max-message-size=15&protocol=open-protocol",
+			expectedSinkURI: "kafka://127.0.0.1:9092/ticdc-test2?max-message-bytes=15&" +
+				"protocol=open-protocol",
 		},
 		{
 			info: &ChangeFeedInfo{
-				SinkURI: "kafka://127.0.0.1:9092/ticdc-test2?protocol=default&max-message-size=15",
+				SinkURI: "kafka://127.0.0.1:9092/ticdc-test2?protocol=default&max-message-bytes=15",
 				Config: &config.ReplicaConfig{
 					Sink: &config.SinkConfig{Protocol: config.ProtocolDefault.String()},
 				},
 			},
-			expectedSinkURI: "kafka://127.0.0.1:9092/ticdc-test2?max-message-size=15&protocol=open-protocol",
+			expectedSinkURI: "kafka://127.0.0.1:9092/ticdc-test2?max-message-bytes=15&" +
+				"protocol=open-protocol",
 		},
 	}
 
@@ -746,6 +748,77 @@ func TestFixMemoryQuotaIncompatible(t *testing.T) {
 	for _, tc := range testCases {
 		tc.info.FixIncompatible()
 		require.Equal(t, tc.expectedMemoryQuota, tc.info.Config.MemoryQuota)
+	}
+}
+
+func TestFixSchedulerIncompatible(t *testing.T) {
+	t.Parallel()
+
+	testCases := []struct {
+		info              *ChangeFeedInfo
+		expectedScheduler *config.ChangefeedSchedulerConfig
+	}{
+		{
+			info: &ChangeFeedInfo{
+				CreatorVersion: "",
+				SinkURI:        "mysql://root:test@127.0.0.1:3306/",
+				Config: &config.ReplicaConfig{
+					Sink: &config.SinkConfig{Protocol: config.ProtocolDefault.String()},
+				},
+			},
+			expectedScheduler: config.GetDefaultReplicaConfig().Clone().Scheduler,
+		},
+		{
+			info: &ChangeFeedInfo{
+				CreatorVersion: "6.5.0",
+				SinkURI:        "mysql://root:test@127.0.0.1:3306/",
+				Config: &config.ReplicaConfig{
+					Scheduler: &config.ChangefeedSchedulerConfig{},
+					Sink:      &config.SinkConfig{Protocol: config.ProtocolDefault.String()},
+				},
+			},
+			expectedScheduler: &config.ChangefeedSchedulerConfig{},
+		},
+		{
+			info: &ChangeFeedInfo{
+				CreatorVersion: "6.6.0",
+				SinkURI:        "mysql://root:test@127.0.0.1:3306/",
+				Config: &config.ReplicaConfig{
+					Scheduler: &config.ChangefeedSchedulerConfig{},
+					Sink:      &config.SinkConfig{Protocol: config.ProtocolDefault.String()},
+				},
+			},
+			expectedScheduler: &config.ChangefeedSchedulerConfig{},
+		},
+		{
+			info: &ChangeFeedInfo{
+				CreatorVersion: "6.6.0",
+				SinkURI:        "mysql://root:test@127.0.0.1:3306/",
+				Config: &config.ReplicaConfig{
+					Scheduler: &config.ChangefeedSchedulerConfig{RegionPerSpan: 1000},
+					Sink:      &config.SinkConfig{Protocol: config.ProtocolDefault.String()},
+				},
+			},
+			expectedScheduler: &config.ChangefeedSchedulerConfig{
+				RegionPerSpan: 1000, EnableSplitSpan: true,
+			},
+		},
+		{
+			info: &ChangeFeedInfo{
+				CreatorVersion: "6.7.0",
+				SinkURI:        "mysql://root:test@127.0.0.1:3306/",
+				Config: &config.ReplicaConfig{
+					Scheduler: &config.ChangefeedSchedulerConfig{RegionPerSpan: 1000},
+					Sink:      &config.SinkConfig{Protocol: config.ProtocolDefault.String()},
+				},
+			},
+			expectedScheduler: &config.ChangefeedSchedulerConfig{RegionPerSpan: 1000},
+		},
+	}
+
+	for _, tc := range testCases {
+		tc.info.FixIncompatible()
+		require.EqualValues(t, tc.expectedScheduler, tc.info.Config.Scheduler)
 	}
 }
 

@@ -14,6 +14,9 @@
 package sinkmanager
 
 import (
+	"time"
+
+	"github.com/pingcap/tiflow/cdc/model"
 	"github.com/pingcap/tiflow/cdc/processor/sourcemanager/engine"
 	"github.com/pingcap/tiflow/cdc/processor/tablepb"
 )
@@ -29,13 +32,17 @@ const (
 var (
 	requestMemSize        = defaultRequestMemSize
 	maxUpdateIntervalSize = defaultMaxUpdateIntervalSize
+
+	// Sink manager schedules table tasks based on lag. Limit the max task range
+	// can be helpful to reduce changefeed latency.
+	maxTaskTimeRange = 5 * time.Second
 )
 
 // Used to record the progress of the table.
 type writeSuccessCallback func(lastWrittenPos engine.Position)
 
 // Used to get an upper bound.
-type upperBoundGetter func(*tableSinkWrapper) engine.Position
+type upperBoundGetter func(tableSinkReceivedSorterResolvedTs model.Ts) engine.Position
 
 // Used to abort the task processing of the table.
 type isCanceled func() bool

@@ -42,7 +42,7 @@ import (
 func TestLogWriterWriteLog(t *testing.T) {
 	type arg struct {
 		ctx  context.Context
-		rows []*model.RedoRowChangedEvent
+		rows []*model.RowChangedEvent
 	}
 	tests := []struct {
 		name      string
@@ -56,11 +56,9 @@ func TestLogWriterWriteLog(t *testing.T) {
 			name: "happy",
 			args: arg{
 				ctx: context.Background(),
-				rows: []*model.RedoRowChangedEvent{
+				rows: []*model.RowChangedEvent{
 					{
-						Row: &model.RowChangedEvent{
-							Table: &model.TableName{TableID: 111}, CommitTs: 1,
-						},
+						Table: &model.TableName{TableID: 111}, CommitTs: 1,
 					},
 				},
 			},
@@ -71,12 +69,10 @@ func TestLogWriterWriteLog(t *testing.T) {
 			name: "writer err",
 			args: arg{
 				ctx: context.Background(),
-				rows: []*model.RedoRowChangedEvent{
-					{Row: nil},
+				rows: []*model.RowChangedEvent{
+					nil,
 					{
-						Row: &model.RowChangedEvent{
-							Table: &model.TableName{TableID: 11}, CommitTs: 11,
-						},
+						Table: &model.TableName{TableID: 11}, CommitTs: 11,
 					},
 				},
 			},
@@ -88,7 +84,7 @@ func TestLogWriterWriteLog(t *testing.T) {
 			name: "len(rows)==0",
 			args: arg{
 				ctx:  context.Background(),
-				rows: []*model.RedoRowChangedEvent{},
+				rows: []*model.RowChangedEvent{},
 			},
 			writerErr: errors.New("err"),
 			isRunning: true,
@@ -97,7 +93,7 @@ func TestLogWriterWriteLog(t *testing.T) {
 			name: "isStopped",
 			args: arg{
 				ctx:  context.Background(),
-				rows: []*model.RedoRowChangedEvent{},
+				rows: []*model.RowChangedEvent{},
 			},
 			writerErr: cerror.ErrRedoWriterStopped,
 			isRunning: false,
@@ -107,7 +103,7 @@ func TestLogWriterWriteLog(t *testing.T) {
 			name: "context cancel",
 			args: arg{
 				ctx:  context.Background(),
-				rows: []*model.RedoRowChangedEvent{},
+				rows: []*model.RowChangedEvent{},
 			},
 			writerErr: nil,
 			isRunning: true,
@@ -129,8 +125,6 @@ func TestLogWriterWriteLog(t *testing.T) {
 			rowWriter: mockWriter,
 			ddlWriter: mockWriter,
 			meta:      &common.LogMeta{},
-			metricTotalRowsCount: common.RedoTotalRowsCountGauge.
-				WithLabelValues("default", ""),
 		}
 		if tt.name == "context cancel" {
 			ctx, cancel := context.WithCancel(context.Background())
@@ -153,7 +147,7 @@ func TestLogWriterSendDDL(t *testing.T) {
 	type arg struct {
 		ctx     context.Context
 		tableID int64
-		ddl     *model.RedoDDLEvent
+		ddl     *model.DDLEvent
 	}
 	tests := []struct {
 		name      string
@@ -168,7 +162,7 @@ func TestLogWriterSendDDL(t *testing.T) {
 			args: arg{
 				ctx:     context.Background(),
 				tableID: 1,
-				ddl:     &model.RedoDDLEvent{DDL: &model.DDLEvent{CommitTs: 1}},
+				ddl:     &model.DDLEvent{CommitTs: 1},
 			},
 			isRunning: true,
 			writerErr: nil,
@@ -178,7 +172,7 @@ func TestLogWriterSendDDL(t *testing.T) {
 			args: arg{
 				ctx:     context.Background(),
 				tableID: 1,
-				ddl:     &model.RedoDDLEvent{DDL: &model.DDLEvent{CommitTs: 1}},
+				ddl:     &model.DDLEvent{CommitTs: 1},
 			},
 			writerErr: errors.New("err"),
 			wantErr:   errors.New("err"),
@@ -199,7 +193,7 @@ func TestLogWriterSendDDL(t *testing.T) {
 			args: arg{
 				ctx:     context.Background(),
 				tableID: 1,
-				ddl:     &model.RedoDDLEvent{DDL: &model.DDLEvent{CommitTs: 1}},
+				ddl:     &model.DDLEvent{CommitTs: 1},
 			},
 			writerErr: cerror.ErrRedoWriterStopped,
 			isRunning: false,
@@ -210,7 +204,7 @@ func TestLogWriterSendDDL(t *testing.T) {
 			args: arg{
 				ctx:     context.Background(),
 				tableID: 1,
-				ddl:     &model.RedoDDLEvent{DDL: &model.DDLEvent{CommitTs: 1}},
+				ddl:     &model.DDLEvent{CommitTs: 1},
 			},
 			writerErr: nil,
 			isRunning: true,
@@ -314,7 +308,7 @@ func TestLogWriterFlushLog(t *testing.T) {
 		mockStorage := mockstorage.NewMockExternalStorage(controller)
 		if tt.isRunning && tt.name != "context cancel" {
 			mockStorage.EXPECT().WriteFile(gomock.Any(),
-				"cp_test-cf_meta.meta",
+				"cp_default_test-cf_meta_uid.meta",
 				gomock.Any()).Return(nil).Times(1)
 		}
 		mockWriter := &mockFileWriter{}
@@ -333,11 +327,12 @@ func TestLogWriterFlushLog(t *testing.T) {
 			UseExternalStorage: true,
 		}
 		writer := logWriter{
-			cfg:        cfg,
-			rowWriter:  mockWriter,
-			ddlWriter:  mockWriter,
-			meta:       &common.LogMeta{},
-			extStorage: mockStorage,
+			cfg:           cfg,
+			uuidGenerator: uuid.NewConstGenerator("uid"),
+			rowWriter:     mockWriter,
+			ddlWriter:     mockWriter,
+			meta:          &common.LogMeta{},
+			extStorage:    mockStorage,
 		}
 
 		if tt.name == "context cancel" {
@@ -421,7 +416,7 @@ func TestNewLogWriter(t *testing.T) {
 		CaptureID:    "cp",
 		MaxLogSize:   10,
 	}
-	l, err := newLogWriter(ctx, cfg)
+	l, err := newLogWriter(ctx, cfg, WithUUIDGenerator(func() uuid.Generator { return uuidGen }))
 	require.Nil(t, err)
 	err = l.Close()
 	require.Nil(t, err)
@@ -435,7 +430,7 @@ func TestNewLogWriter(t *testing.T) {
 	_, err = f.Write(data)
 	require.Nil(t, err)
 
-	l, err = newLogWriter(ctx, cfg)
+	l, err = newLogWriter(ctx, cfg, WithUUIDGenerator(func() uuid.Generator { return uuidGen }))
 	require.Nil(t, err)
 	err = l.Close()
 	require.Nil(t, err)

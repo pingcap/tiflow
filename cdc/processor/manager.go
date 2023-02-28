@@ -23,7 +23,6 @@ import (
 	"github.com/pingcap/failpoint"
 	"github.com/pingcap/log"
 	"github.com/pingcap/tiflow/cdc/model"
-	"github.com/pingcap/tiflow/cdc/sink"
 	"github.com/pingcap/tiflow/pkg/config"
 	cdcContext "github.com/pingcap/tiflow/pkg/context"
 	cerrors "github.com/pingcap/tiflow/pkg/errors"
@@ -73,6 +72,7 @@ type managerImpl struct {
 		model.ChangeFeedID,
 		*upstream.Upstream,
 		*model.Liveness,
+		uint64,
 		*config.SchedulerConfig,
 	) *processor
 	cfg *config.SchedulerConfig
@@ -116,6 +116,7 @@ func (m *managerImpl) Tick(stdCtx context.Context, state orchestrator.ReactorSta
 			m.closeProcessor(changefeedID, ctx)
 			continue
 		}
+		currentChangefeedEpoch := changefeedState.Info.Epoch
 		p, exist := m.processors[changefeedID]
 		if !exist {
 			up, ok := m.upstreamManager.Get(changefeedState.Info.UpstreamID)
@@ -125,20 +126,22 @@ func (m *managerImpl) Tick(stdCtx context.Context, state orchestrator.ReactorSta
 			}
 			failpoint.Inject("processorManagerHandleNewChangefeedDelay", nil)
 
-			// TODO: Remove the hack once span replication is compatible with
-			//       all sinks.
 			cfg := *m.cfg
-			if !sink.IsSinkCompatibleWithSpanReplication(changefeedState.Info.SinkURI) {
-				cfg.RegionPerSpan = 0
-			}
+			cfg.ChangefeedSettings = changefeedState.Info.Config.Scheduler
 			p = m.newProcessor(
-				changefeedState, m.captureInfo, changefeedID, up, m.liveness, &cfg)
+				changefeedState, m.captureInfo, changefeedID, up, m.liveness,
+				currentChangefeedEpoch, &cfg)
 			m.processors[changefeedID] = p
 		}
 		ctx := cdcContext.WithChangefeedVars(ctx, &cdcContext.ChangefeedVars{
 			ID:   changefeedID,
 			Info: changefeedState.Info,
 		})
+		if currentChangefeedEpoch != p.changefeedEpoch {
+			// Changefeed has restarted due to error, the processor is stale.
+			m.closeProcessor(changefeedID, ctx)
+			continue
+		}
 		if err := p.Tick(ctx); err != nil {
 			// processor have already patched its error to tell the owner
 			// manager can just close the processor and continue to tick other processors

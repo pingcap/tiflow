@@ -15,7 +15,7 @@ package config
 
 const (
 	testCfgTestReplicaConfigOutDated = `{
-  "memory-quota": 268435456,
+  "memory-quota": 1073741824,
   "case-sensitive": false,
   "enable-old-value": true,
   "force-replicate": true,
@@ -59,6 +59,10 @@ const (
     "max-log-size": 64,
     "flush-interval": 2000,
     "storage": ""
+  },
+  "scheduler": {
+    "enable-split-span": false,
+    "region-per-span": 100000
   }
 }`
 
@@ -82,12 +86,12 @@ const (
   "owner-flush-interval": 50000000,
   "processor-flush-interval": 50000000,
   "sorter": {
-    "num-concurrent-worker": 4,
-    "chunk-size-limit": 999,
     "max-memory-percentage": 10,
-    "max-memory-consumption": 17179869184,
-    "num-workerpool-goroutine": 16,
-    "sort-dir": "/tmp/sorter"
+    "sort-dir": "/tmp/sorter",
+    "max-memory-consumption": 0,
+    "num-workerpool-goroutine": 0,
+    "num-concurrent-worker": 0,
+    "chunk-size-limit": 0
   },
   "security": {
     "ca-path": "",
@@ -95,7 +99,7 @@ const (
     "key-path": "",
     "cert-allowed-cn": null
   },
-  "per-table-memory-quota": 10485760,
+  "per-table-memory-quota": 0,
   "kv-client": {
     "worker-concurrent": 8,
     "worker-pool-size": 0,
@@ -103,11 +107,6 @@ const (
     "region-retry-duration": 60000000000
   },
   "debug": {
-    "table-actor": {
-      "event-batch-size": 32
-    },
-    "enable-pull-based-sink": true,
-    "enable-db-sorter": true,
     "db": {
       "count": 8,
       "concurrency": 128,
@@ -122,7 +121,6 @@ const (
       "iterator-max-alive-duration": 10000,
       "iterator-slow-read-duration": 256
     },
-    "enable-new-scheduler": true,
     "messages": {
       "client-max-batch-interval": 10000000,
       "client-max-batch-size": 8388608,
@@ -138,16 +136,15 @@ const (
       "collect-stats-tick": 200,
       "max-task-concurrency": 10,
       "check-balance-interval": 60000000000,
-      "add-table-batch-size": 50,
-      "region-per-span": 0
+      "add-table-batch-size": 50
     },
-    "enable-new-sink": true
+    "enable-kafka-sink-v2": false
   },
   "cluster-id": "default"
 }`
 
 	testCfgTestReplicaConfigMarshal1 = `{
-  "memory-quota": 268435456,
+  "memory-quota": 1073741824,
   "case-sensitive": false,
   "enable-old-value": true,
   "force-replicate": true,
@@ -198,11 +195,15 @@ const (
     "max-log-size": 64,
     "flush-interval": 2000,
     "storage": ""
+  },
+  "scheduler": {
+    "enable-split-span": true,
+    "region-per-span": 100001
   }
 }`
 
 	testCfgTestReplicaConfigMarshal2 = `{
-  "memory-quota": 268435456,
+  "memory-quota": 1073741824,
   "case-sensitive": false,
   "enable-old-value": true,
   "force-replicate": true,
@@ -250,6 +251,10 @@ const (
     "max-log-size": 64,
     "flush-interval": 2000,
     "storage": ""
+  },
+  "scheduler": {
+    "enable-split-span": true,
+    "region-per-span": 100001
   }
 }`
 )

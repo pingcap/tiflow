@@ -70,6 +70,8 @@ function run() {
 	# Update changefeed failed because changefeed is running
 	cat - >"$WORK_DIR/changefeed.toml" <<EOF
 case-sensitive = false
+[scheduler]
+enable-split-span = true
 EOF
 	set +e
 	update_result=$(cdc cli changefeed update --pd=$pd_addr --config="$WORK_DIR/changefeed.toml" --no-confirm --changefeed-id $uuid)
@@ -84,7 +86,7 @@ EOF
 
 	# Update changefeed
 	run_cdc_cli changefeed update --pd=$pd_addr --config="$WORK_DIR/changefeed.toml" --no-confirm --changefeed-id $uuid
-	changefeed_info=$(curl -X GET "http://127.0.0.1:8300/api/v2/changefeeds/$uuid/meta_info" 2>&1)
+	changefeed_info=$(curl -s -X GET "http://127.0.0.1:8300/api/v2/changefeeds/$uuid/meta_info" 2>&1)
 	if [[ ! $changefeed_info == *"\"case_sensitive\":false"* ]]; then
 		echo "[$(date)] <<<<< changefeed info is not updated as expected ${changefeed_info} >>>>>"
 		exit 1
@@ -92,6 +94,18 @@ EOF
 	if [[ ! $changefeed_info == *"\"engine\":\"unified\""* ]]; then
 		echo "[$(date)] <<<<< changefeed info is not updated as expected ${changefeed_info} >>>>>"
 		exit 1
+	fi
+	if [ "$SINK_TYPE" == "kafka" ]; then
+		if [[ ! $changefeed_info == *"\"enable_split_span\":true"* ]]; then
+			echo "[$(date)] <<<<< changefeed info is not updated as expected ${changefeed_info} >>>>>"
+			exit 1
+		fi
+	else
+		# Currently, MySQL changefeed does not support scale out feature.
+		if [[ $changefeed_info == *"\"enable_split_span\":true"* ]]; then
+			echo "[$(date)] <<<<< changefeed info is not updated as expected ${changefeed_info} >>>>>"
+			exit 1
+		fi
 	fi
 
 	# Resume changefeed

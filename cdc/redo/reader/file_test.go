@@ -15,6 +15,7 @@ package reader
 
 import (
 	"bufio"
+	"context"
 	"fmt"
 	"io"
 	"os"
@@ -23,11 +24,11 @@ import (
 	"time"
 
 	"github.com/pingcap/tiflow/cdc/model"
+	"github.com/pingcap/tiflow/cdc/model/codec"
 	"github.com/pingcap/tiflow/cdc/redo/writer"
 	"github.com/pingcap/tiflow/pkg/redo"
 	"github.com/pingcap/tiflow/pkg/uuid"
 	"github.com/stretchr/testify/require"
-	"golang.org/x/net/context"
 )
 
 func TestReaderNewReader(t *testing.T) {
@@ -57,10 +58,9 @@ func TestReaderRead(t *testing.T) {
 		writer.WithUUIDGenerator(func() uuid.Generator { return uuidGen }),
 	)
 	require.Nil(t, err)
-	log := &model.RedoLog{
-		RedoRow: &model.RedoRowChangedEvent{Row: &model.RowChangedEvent{CommitTs: 1123}},
-	}
-	data, err := log.MarshalMsg(nil)
+	log := &model.RedoLog{}
+	log.RedoRow.Row = &model.RowChangedEvent{CommitTs: 1123}
+	data, err := codec.MarshalRedoLog(log, nil)
 	require.Nil(t, err)
 	w.AdvanceTs(11)
 	_, err = w.Write(data)
@@ -85,8 +85,7 @@ func TestReaderRead(t *testing.T) {
 	require.Nil(t, err)
 	require.Equal(t, 1, len(r))
 	defer r[0].Close() //nolint:errcheck
-	log = &model.RedoLog{}
-	err = r[0].Read(log)
+	log, err = r[0].Read()
 	require.Nil(t, err)
 	require.EqualValues(t, 1123, log.RedoRow.Row.CommitTs)
 	time.Sleep(1001 * time.Millisecond)
@@ -109,17 +108,15 @@ func TestReaderOpenSelectedFiles(t *testing.T) {
 		return fileName
 	}))
 	require.Nil(t, err)
-	log := &model.RedoLog{
-		RedoRow: &model.RedoRowChangedEvent{Row: &model.RowChangedEvent{CommitTs: 11}},
-	}
-	data, err := log.MarshalMsg(nil)
+	log := &model.RedoLog{}
+	log.RedoRow.Row = &model.RowChangedEvent{CommitTs: 11}
+	data, err := codec.MarshalRedoLog(log, nil)
 	require.Nil(t, err)
 	_, err = w.Write(data)
 	require.Nil(t, err)
-	log = &model.RedoLog{
-		RedoRow: &model.RedoRowChangedEvent{Row: &model.RowChangedEvent{CommitTs: 10}},
-	}
-	data, err = log.MarshalMsg(nil)
+	log = &model.RedoLog{}
+	log.RedoRow.Row = &model.RowChangedEvent{CommitTs: 10}
+	data, err = codec.MarshalRedoLog(log, nil)
 	require.Nil(t, err)
 	_, err = w.Write(data)
 	require.Nil(t, err)
@@ -235,8 +232,7 @@ func TestReaderOpenSelectedFiles(t *testing.T) {
 					closer:   r,
 				}
 				for {
-					rl := &model.RedoLog{}
-					err := r.Read(rl)
+					rl, err := r.Read()
 					if err == io.EOF {
 						break
 					}

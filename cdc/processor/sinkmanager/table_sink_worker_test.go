@@ -21,6 +21,7 @@ import (
 
 	"github.com/pingcap/tiflow/cdc/entry"
 	"github.com/pingcap/tiflow/cdc/model"
+	"github.com/pingcap/tiflow/cdc/processor/memquota"
 	"github.com/pingcap/tiflow/cdc/processor/sourcemanager"
 	"github.com/pingcap/tiflow/cdc/processor/sourcemanager/engine"
 	"github.com/pingcap/tiflow/cdc/processor/sourcemanager/engine/memory"
@@ -30,6 +31,7 @@ import (
 	"github.com/pingcap/tiflow/pkg/upstream"
 	"github.com/stretchr/testify/require"
 	"github.com/stretchr/testify/suite"
+	"github.com/tikv/client-go/v2/oracle"
 )
 
 func createWorker(
@@ -43,13 +45,13 @@ func createWorker(
 		&entry.MockMountGroup{}, sortEngine, make(chan error, 1), false)
 
 	// To avoid refund or release panics.
-	quota := newMemQuota(changefeedID, memQuota+1024*1024*1024)
-	quota.forceAcquire(1024 * 1024 * 1024)
+	quota := memquota.NewMemQuota(changefeedID, memQuota+1024*1024*1024, "")
+	quota.ForceAcquire(1024 * 1024 * 1024)
 	for _, span := range spans {
-		quota.addTable(span)
+		quota.AddTable(span)
 	}
 
-	return newSinkWorker(changefeedID, sm, quota, nil, splitTxn, false), sortEngine
+	return newSinkWorker(changefeedID, sm, quota, nil, nil, splitTxn, false), sortEngine
 }
 
 // nolint:unparam
@@ -60,8 +62,7 @@ func addEventsToSortEngine(
 ) {
 	sortEngine.AddTable(span)
 	for _, event := range events {
-		err := sortEngine.Add(span, event)
-		require.NoError(t, err)
+		sortEngine.Add(span, event)
 	}
 }
 
@@ -177,6 +178,7 @@ func (suite *workerSuite) TestHandleTaskWithSplitTxnAndGotSomeFilteredEvents() {
 	}
 
 	w, e := createWorker(changefeedID, eventSize, true)
+	defer w.sinkMemQuota.Close()
 	addEventsToSortEngine(suite.T(), events, e, span)
 
 	taskChan := make(chan *sinkTask)
@@ -193,7 +195,7 @@ func (suite *workerSuite) TestHandleTaskWithSplitTxnAndGotSomeFilteredEvents() {
 		StartTs:  0,
 		CommitTs: 1,
 	}
-	upperBoundGetter := func(_ *tableSinkWrapper) engine.Position {
+	upperBoundGetter := func(_ model.Ts) engine.Position {
 		return engine.Position{
 			StartTs:  3,
 			CommitTs: 4,
@@ -283,6 +285,7 @@ func (suite *workerSuite) TestHandleTaskWithSplitTxnAndAbortWhenNoMemAndOneTxnFi
 	}
 
 	w, e := createWorker(changefeedID, eventSize, true, span)
+	defer w.sinkMemQuota.Close()
 	addEventsToSortEngine(suite.T(), events, e, span)
 
 	taskChan := make(chan *sinkTask)
@@ -299,7 +302,7 @@ func (suite *workerSuite) TestHandleTaskWithSplitTxnAndAbortWhenNoMemAndOneTxnFi
 		StartTs:  0,
 		CommitTs: 1,
 	}
-	upperBoundGetter := func(_ *tableSinkWrapper) engine.Position {
+	upperBoundGetter := func(_ model.Ts) engine.Position {
 		return engine.Position{
 			StartTs:  3,
 			CommitTs: 4,
@@ -388,6 +391,7 @@ func (suite *workerSuite) TestHandleTaskWithSplitTxnAndAbortWhenNoMemAndBlocked(
 		},
 	}
 	w, e := createWorker(changefeedID, eventSize, true, span)
+	defer w.sinkMemQuota.Close()
 	addEventsToSortEngine(suite.T(), events, e, span)
 
 	taskChan := make(chan *sinkTask)
@@ -404,7 +408,7 @@ func (suite *workerSuite) TestHandleTaskWithSplitTxnAndAbortWhenNoMemAndBlocked(
 		StartTs:  0,
 		CommitTs: 1,
 	}
-	upperBoundGetter := func(_ *tableSinkWrapper) engine.Position {
+	upperBoundGetter := func(_ model.Ts) engine.Position {
 		return engine.Position{
 			StartTs:  13,
 			CommitTs: 14,
@@ -428,7 +432,7 @@ func (suite *workerSuite) TestHandleTaskWithSplitTxnAndAbortWhenNoMemAndBlocked(
 		return len(sink.GetEvents()) == 2
 	}, 5*time.Second, 10*time.Millisecond)
 	// Abort the task when no memory quota and blocked.
-	w.memQuota.close()
+	w.sinkMemQuota.Close()
 	cancel()
 	wg.Wait()
 	require.Len(suite.T(), sink.GetEvents(), 2, "Only two events should be sent to sink")
@@ -514,6 +518,7 @@ func (suite *workerSuite) TestHandleTaskWithSplitTxnAndOnlyAdvanceTableSinkWhenR
 		},
 	}
 	w, e := createWorker(changefeedID, eventSize, true, span)
+	defer w.sinkMemQuota.Close()
 	addEventsToSortEngine(suite.T(), events, e, span)
 
 	taskChan := make(chan *sinkTask)
@@ -530,7 +535,7 @@ func (suite *workerSuite) TestHandleTaskWithSplitTxnAndOnlyAdvanceTableSinkWhenR
 		StartTs:  0,
 		CommitTs: 1,
 	}
-	upperBoundGetter := func(_ *tableSinkWrapper) engine.Position {
+	upperBoundGetter := func(_ model.Ts) engine.Position {
 		return engine.Position{
 			StartTs:  1,
 			CommitTs: 2,
@@ -640,6 +645,7 @@ func (suite *workerSuite) TestHandleTaskWithoutSplitTxnAndAbortWhenNoMemAndForce
 		},
 	}
 	w, e := createWorker(changefeedID, eventSize, false, span)
+	defer w.sinkMemQuota.Close()
 	w.splitTxn = false
 	addEventsToSortEngine(suite.T(), events, e, span)
 
@@ -657,7 +663,7 @@ func (suite *workerSuite) TestHandleTaskWithoutSplitTxnAndAbortWhenNoMemAndForce
 		StartTs:  0,
 		CommitTs: 1,
 	}
-	upperBoundGetter := func(_ *tableSinkWrapper) engine.Position {
+	upperBoundGetter := func(_ model.Ts) engine.Position {
 		return engine.Position{
 			StartTs:  3,
 			CommitTs: 4,
@@ -768,6 +774,7 @@ func (suite *workerSuite) TestHandleTaskWithoutSplitTxnOnlyAdvanceTableSinkWhenR
 		},
 	}
 	w, e := createWorker(changefeedID, eventSize, false)
+	defer w.sinkMemQuota.Close()
 	addEventsToSortEngine(suite.T(), events, e, span)
 
 	taskChan := make(chan *sinkTask)
@@ -784,7 +791,7 @@ func (suite *workerSuite) TestHandleTaskWithoutSplitTxnOnlyAdvanceTableSinkWhenR
 		StartTs:  0,
 		CommitTs: 1,
 	}
-	upperBoundGetter := func(_ *tableSinkWrapper) engine.Position {
+	upperBoundGetter := func(_ model.Ts) engine.Position {
 		return engine.Position{
 			StartTs:  3,
 			CommitTs: 4,
@@ -886,6 +893,7 @@ func (suite *workerSuite) TestHandleTaskWithSplitTxnAndDoNotAdvanceTableUntilMee
 		},
 	}
 	w, e := createWorker(changefeedID, eventSize, true, span)
+	defer w.sinkMemQuota.Close()
 	addEventsToSortEngine(suite.T(), events, e, span)
 
 	taskChan := make(chan *sinkTask)
@@ -902,7 +910,7 @@ func (suite *workerSuite) TestHandleTaskWithSplitTxnAndDoNotAdvanceTableUntilMee
 		StartTs:  0,
 		CommitTs: 1,
 	}
-	upperBoundGetter := func(_ *tableSinkWrapper) engine.Position {
+	upperBoundGetter := func(_ model.Ts) engine.Position {
 		return engine.Position{
 			StartTs:  3,
 			CommitTs: 4,
@@ -970,6 +978,7 @@ func (suite *workerSuite) TestHandleTaskWithSplitTxnAndAdvanceTableUntilTaskIsFi
 		},
 	}
 	w, e := createWorker(changefeedID, eventSize, true, span)
+	defer w.sinkMemQuota.Close()
 	addEventsToSortEngine(suite.T(), events, e, span)
 
 	taskChan := make(chan *sinkTask)
@@ -986,7 +995,7 @@ func (suite *workerSuite) TestHandleTaskWithSplitTxnAndAdvanceTableUntilTaskIsFi
 		StartTs:  0,
 		CommitTs: 1,
 	}
-	upperBoundGetter := func(_ *tableSinkWrapper) engine.Position {
+	upperBoundGetter := func(_ model.Ts) engine.Position {
 		return engine.Position{
 			StartTs:  3,
 			CommitTs: 4,
@@ -1041,6 +1050,7 @@ func (suite *workerSuite) TestHandleTaskWithSplitTxnAndAdvanceTableIfNoWorkload(
 		},
 	}
 	w, e := createWorker(changefeedID, eventSize, true, span)
+	defer w.sinkMemQuota.Close()
 	addEventsToSortEngine(suite.T(), events, e, span)
 
 	taskChan := make(chan *sinkTask)
@@ -1057,7 +1067,7 @@ func (suite *workerSuite) TestHandleTaskWithSplitTxnAndAdvanceTableIfNoWorkload(
 		StartTs:  0,
 		CommitTs: 1,
 	}
-	upperBoundGetter := func(_ *tableSinkWrapper) engine.Position {
+	upperBoundGetter := func(_ model.Ts) engine.Position {
 		return engine.Position{
 			StartTs:  3,
 			CommitTs: 4,
@@ -1086,6 +1096,105 @@ func (suite *workerSuite) TestHandleTaskWithSplitTxnAndAdvanceTableIfNoWorkload(
 	}, 5*time.Second, 10*time.Millisecond, "Directly advance resolved mark to 4")
 	cancel()
 	wg.Wait()
+}
+
+func (suite *workerSuite) TestNeedEmitAndAdvance() {
+	// NOTICE: We set maxUpdateIntervalSize in SetupSuite.
+	for _, tc := range []struct {
+		name             string
+		splitTxn         bool
+		committedTxnSize uint64
+		pendingTxnSize   uint64
+		expected         bool
+	}{
+		{
+			name:             "split txn and not reach maxUpdateIntervalSize",
+			splitTxn:         true,
+			committedTxnSize: 200,
+			pendingTxnSize:   1,
+			expected:         false,
+		},
+		{
+			name:             "split txn and reach maxUpdateIntervalSize",
+			splitTxn:         true,
+			committedTxnSize: 900,
+			pendingTxnSize:   1,
+			expected:         true,
+		},
+		{
+			name:             "not split txn and not reach maxUpdateIntervalSize",
+			splitTxn:         false,
+			committedTxnSize: 200,
+			pendingTxnSize:   900, // Do not care about pendingTxnSize
+			expected:         false,
+		},
+		{
+			name:             "not split txn and reach maxUpdateIntervalSize",
+			splitTxn:         false,
+			committedTxnSize: 900,
+			pendingTxnSize:   300, // Do not care about pendingTxnSize
+			expected:         true,
+		},
+	} {
+		suite.Run(tc.name, func() {
+			require.Equal(suite.T(), tc.expected,
+				needEmitAndAdvance(tc.splitTxn, tc.committedTxnSize, tc.pendingTxnSize))
+		})
+	}
+}
+
+func (suite *workerSuite) TestValidateAndAdjustBound() {
+	for _, tc := range []struct {
+		name          string
+		lowerBound    engine.Position
+		taskTimeRange time.Duration
+		expectAdjust  bool
+	}{
+		{
+			name: "bigger than maxTaskTimeRange",
+			lowerBound: engine.Position{
+				StartTs:  439333515018895365,
+				CommitTs: 439333515018895366,
+			},
+			taskTimeRange: 10 * time.Second,
+			expectAdjust:  true,
+		},
+		{
+			name: "smaller than maxTaskTimeRange",
+			lowerBound: engine.Position{
+				StartTs:  439333515018895365,
+				CommitTs: 439333515018895366,
+			},
+			taskTimeRange: 1 * time.Second,
+			expectAdjust:  false,
+		},
+	} {
+		suite.Run(tc.name, func() {
+			changefeedID := model.DefaultChangeFeedID("1")
+			span := spanz.TableIDToComparableSpan(1)
+			wrapper, _ := createTableSinkWrapper(changefeedID, span)
+			task := &sinkTask{
+				span:       span,
+				lowerBound: tc.lowerBound,
+				getUpperBound: func(_ model.Ts) engine.Position {
+					lowerPhs := oracle.GetTimeFromTS(tc.lowerBound.CommitTs)
+					newUpperCommitTs := oracle.GoTimeToTS(lowerPhs.Add(tc.taskTimeRange))
+					upperBound := engine.GenCommitFence(newUpperCommitTs)
+					return upperBound
+				},
+				tableSink: wrapper,
+			}
+			lowerBound, upperBound := validateAndAdjustBound(changefeedID, task)
+			if tc.expectAdjust {
+				lowerPhs := oracle.GetTimeFromTS(lowerBound.CommitTs)
+				upperPhs := oracle.GetTimeFromTS(upperBound.CommitTs)
+				require.Equal(suite.T(), maxTaskTimeRange, upperPhs.Sub(lowerPhs))
+			} else {
+				require.Equal(suite.T(), tc.lowerBound, lowerBound)
+				require.Equal(suite.T(), task.getUpperBound(0), upperBound)
+			}
+		})
+	}
 }
 
 func TestWorkerSuite(t *testing.T) {
