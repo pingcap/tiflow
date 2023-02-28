@@ -323,12 +323,7 @@ func (k *mqSink) EmitDDLEvent(ctx context.Context, ddl *model.DDLEvent) error {
 // It is only called in the processor, and the processor destroys the
 // table sinks before closing it. So there is no writing after closing.
 func (k *mqSink) Close(_ context.Context) error {
-	k.resolvedBuffer.Close()
-	// We must finish consuming the data here,
-	// otherwise it will cause the channel to not close properly.
-	for range k.resolvedBuffer.Out() {
-		// Do nothing. We do not care about the data.
-	}
+	k.resolvedBuffer.CloseAndDrain()
 	// NOTICE: We must close the resolved buffer before closing the flush worker.
 	// Otherwise, bgFlushTs method will panic.
 	k.flushWorker.close()
