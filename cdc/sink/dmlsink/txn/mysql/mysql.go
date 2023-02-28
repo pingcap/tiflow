@@ -712,7 +712,6 @@ func (s *mysqlBackend) execDMLWithMaxRetries(pctx context.Context, dmls *prepare
 				if err != nil {
 					return 0, err
 				}
-
 			} else {
 				err = s.sequenceExecute(pctx, dmls, tx, writeTimeout)
 				if err != nil {
