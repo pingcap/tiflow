@@ -14,6 +14,8 @@
 package kafka
 
 import (
+	"context"
+
 	"github.com/pingcap/tiflow/cdc/model"
 	"github.com/pingcap/tiflow/pkg/util"
 )
@@ -48,10 +50,11 @@ func (f *MockFactory) SyncProducer() (SyncProducer, error) {
 
 // AsyncProducer creates an async producer
 func (f *MockFactory) AsyncProducer(
+	ctx context.Context,
 	closedChan chan struct{},
 	failpointCh chan error,
 ) (AsyncProducer, error) {
-	return f.helper.AsyncProducer(closedChan, failpointCh)
+	return f.helper.AsyncProducer(ctx, closedChan, failpointCh)
 }
 
 // MetricsCollector returns the metric collector

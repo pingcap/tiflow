@@ -14,6 +14,8 @@
 package kafka
 
 import (
+	"context"
+
 	"github.com/Shopify/sarama"
 	"github.com/pingcap/tiflow/cdc/model"
 	"github.com/pingcap/tiflow/pkg/errors"
@@ -76,6 +78,7 @@ func (f *saramaFactory) SyncProducer() (SyncProducer, error) {
 // AsyncProducer return an Async Producer,
 // it should be the caller's responsibility to close the producer
 func (f *saramaFactory) AsyncProducer(
+	_ context.Context,
 	closedChan chan struct{},
 	failpointCh chan error,
 ) (AsyncProducer, error) {

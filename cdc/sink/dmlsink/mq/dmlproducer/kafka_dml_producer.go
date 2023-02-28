@@ -66,7 +66,7 @@ func NewKafkaDMLProducer(
 
 	closeCh := make(chan struct{})
 	failpointCh := make(chan error, 1)
-	asyncProducer, err := factory.AsyncProducer(closeCh, failpointCh)
+	asyncProducer, err := factory.AsyncProducer(ctx, closeCh, failpointCh)
 	if err != nil {
 		return nil, cerror.WrapError(cerror.ErrKafkaNewProducer, err)
 	}
