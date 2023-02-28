@@ -448,7 +448,7 @@ func (p *processor) GetCheckpoint() (checkpointTs, resolvedTs model.Ts) {
 }
 
 // GetTableStatus implements TableExecutor interface
-func (p *processor) GetTableStatus(tableID model.TableID) tablepb.TableStatus {
+func (p *processor) GetTableStatus(tableID model.TableID, collectStat bool) tablepb.TableStatus {
 	if p.pullBasedSinking {
 		state, exist := p.sinkManager.GetTableState(tableID)
 		if !exist {
@@ -458,6 +458,10 @@ func (p *processor) GetTableStatus(tableID model.TableID) tablepb.TableStatus {
 			}
 		}
 		sinkStats := p.sinkManager.GetTableStats(tableID)
+		stats := tablepb.Stats{}
+		if collectStat {
+			stats = p.getStatsFromSourceManagerAndSinkManager(tableID, sinkStats)
+		}
 		return tablepb.TableStatus{
 			TableID: tableID,
 			Checkpoint: tablepb.Checkpoint{
@@ -465,7 +469,7 @@ func (p *processor) GetTableStatus(tableID model.TableID) tablepb.TableStatus {
 				ResolvedTs:   sinkStats.ResolvedTs,
 			},
 			State: state,
-			Stats: p.getStatsFromSourceManagerAndSinkManager(tableID, sinkStats),
+			Stats: stats,
 		}
 	}
 	table, ok := p.tables[tableID]
@@ -475,6 +479,10 @@ func (p *processor) GetTableStatus(tableID model.TableID) tablepb.TableStatus {
 			State:   tablepb.TableStateAbsent,
 		}
 	}
+	stats := tablepb.Stats{}
+	if collectStat {
+		stats = table.Stats()
+	}
 	return tablepb.TableStatus{
 		TableID: tableID,
 		Checkpoint: tablepb.Checkpoint{
@@ -482,7 +490,7 @@ func (p *processor) GetTableStatus(tableID model.TableID) tablepb.TableStatus {
 			ResolvedTs:   table.ResolvedTs(),
 		},
 		State: table.State(),
-		Stats: table.Stats(),
+		Stats: stats,
 	}
 }
 

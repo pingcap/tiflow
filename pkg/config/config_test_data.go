@@ -135,6 +135,7 @@ const (
     },
     "scheduler": {
       "heartbeat-tick": 2,
+      "collect-stats-tick": 200,
       "max-task-concurrency": 10,
       "check-balance-interval": 60000000000,
       "add-table-batch-size": 50

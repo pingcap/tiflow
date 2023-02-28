@@ -53,7 +53,7 @@ func newTable(
 func (t *table) getAndUpdateTableState() (tablepb.TableState, bool) {
 	oldState := t.state
 
-	meta := t.executor.GetTableStatus(t.id)
+	meta := t.executor.GetTableStatus(t.id, false)
 	t.state = meta.State
 
 	if oldState != t.state {
@@ -68,8 +68,8 @@ func (t *table) getAndUpdateTableState() (tablepb.TableState, bool) {
 	return t.state, false
 }
 
-func (t *table) getTableStatus() tablepb.TableStatus {
-	return t.executor.GetTableStatus(t.id)
+func (t *table) getTableStatus(collectStat bool) tablepb.TableStatus {
+	return t.executor.GetTableStatus(t.id, collectStat)
 }
 
 func newAddTableResponseMessage(status tablepb.TableStatus) *schedulepb.Message {
@@ -113,7 +113,7 @@ func (t *table) handleRemoveTableTask() *schedulepb.Message {
 				zap.String("changefeed", t.changefeedID.ID),
 				zap.Int64("tableID", t.id))
 			t.task = nil
-			return newRemoveTableResponseMessage(t.getTableStatus())
+			return newRemoveTableResponseMessage(t.getTableStatus(false))
 		case tablepb.TableStateStopping, // stopping now is useless
 			tablepb.TableStateStopped:
 			// release table resource, and get the latest checkpoint
@@ -121,12 +121,12 @@ func (t *table) handleRemoveTableTask() *schedulepb.Message {
 			checkpointTs, done := t.executor.IsRemoveTableFinished(t.id)
 			if !done {
 				// actually, this should never be hit, since we know that table is stopped.
-				status := t.getTableStatus()
+				status := t.getTableStatus(false)
 				status.State = tablepb.TableStateStopping
 				return newRemoveTableResponseMessage(status)
 			}
 			t.task = nil
-			status := t.getTableStatus()
+			status := t.getTableStatus(false)
 			status.State = tablepb.TableStateStopped
 			status.Checkpoint.CheckpointTs = checkpointTs
 			return newRemoveTableResponseMessage(status)
@@ -135,7 +135,7 @@ func (t *table) handleRemoveTableTask() *schedulepb.Message {
 			tablepb.TableStateReplicating:
 			done := t.executor.RemoveTable(t.task.TableID)
 			if !done {
-				status := t.getTableStatus()
+				status := t.getTableStatus(false)
 				status.State = tablepb.TableStateStopping
 				return newRemoveTableResponseMessage(status)
 			}
@@ -163,7 +163,7 @@ func (t *table) handleAddTableTask(ctx context.Context) (result *schedulepb.Mess
 					zap.String("changefeed", t.changefeedID.ID),
 					zap.Int64("tableID", t.id), zap.Any("task", t.task),
 					zap.Error(err))
-				status := t.getTableStatus()
+				status := t.getTableStatus(false)
 				return newAddTableResponseMessage(status), errors.Trace(err)
 			}
 			state, changed = t.getAndUpdateTableState()
@@ -173,7 +173,7 @@ func (t *table) handleAddTableTask(ctx context.Context) (result *schedulepb.Mess
 				zap.String("changefeed", t.changefeedID.ID),
 				zap.Int64("tableID", t.id), zap.Stringer("state", state))
 			t.task = nil
-			status := t.getTableStatus()
+			status := t.getTableStatus(false)
 			return newAddTableResponseMessage(status), nil
 		case tablepb.TableStatePrepared:
 			if t.task.IsPrepare {
@@ -183,7 +183,7 @@ func (t *table) handleAddTableTask(ctx context.Context) (result *schedulepb.Mess
 					zap.String("changefeed", t.changefeedID.ID),
 					zap.Int64("tableID", t.id), zap.Stringer("state", state))
 				t.task = nil
-				return newAddTableResponseMessage(t.getTableStatus()), nil
+				return newAddTableResponseMessage(t.getTableStatus(false)), nil
 			}
 
 			if t.task.status == dispatchTableTaskReceived {
@@ -194,7 +194,7 @@ func (t *table) handleAddTableTask(ctx context.Context) (result *schedulepb.Mess
 						zap.String("changefeed", t.changefeedID.ID),
 						zap.Int64("tableID", t.id), zap.Stringer("state", state),
 						zap.Error(err))
-					status := t.getTableStatus()
+					status := t.getTableStatus(false)
 					return newAddTableResponseMessage(status), errors.Trace(err)
 				}
 				t.task.status = dispatchTableTaskProcessed
@@ -202,7 +202,7 @@ func (t *table) handleAddTableTask(ctx context.Context) (result *schedulepb.Mess
 
 			done := t.executor.IsAddTableFinished(t.task.TableID, false)
 			if !done {
-				return newAddTableResponseMessage(t.getTableStatus()), nil
+				return newAddTableResponseMessage(t.getTableStatus(false)), nil
 			}
 			state, changed = t.getAndUpdateTableState()
 		case tablepb.TableStatePreparing:
@@ -224,7 +224,7 @@ func (t *table) handleAddTableTask(ctx context.Context) (result *schedulepb.Mess
 				zap.String("changefeed", t.changefeedID.ID),
 				zap.Int64("tableID", t.id))
 			t.task = nil
-			return newAddTableResponseMessage(t.getTableStatus()), nil
+			return newAddTableResponseMessage(t.getTableStatus(false)), nil
 		default:
 			log.Panic("schedulerv3: unknown table state",
 				zap.String("namespace", t.changefeedID.Namespace),
@@ -357,10 +357,12 @@ func (tm *tableManager) dropTable(tableID model.TableID) {
 	delete(tm.tables, tableID)
 }
 
-func (tm *tableManager) getTableStatus(tableID model.TableID) tablepb.TableStatus {
+func (tm *tableManager) getTableStatus(
+	tableID model.TableID, collectStat bool,
+) tablepb.TableStatus {
 	table, ok := tm.getTable(tableID)
 	if ok {
-		return table.getTableStatus()
+		return table.getTableStatus(collectStat)
 	}
 
 	return tablepb.TableStatus{

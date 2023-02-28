@@ -964,7 +964,9 @@ func (e *MockTableExecutor) GetCheckpoint() (checkpointTs, resolvedTs model.Ts) 
 }
 
 // GetTableStatus implements TableExecutor interface
-func (e *MockTableExecutor) GetTableStatus(tableID model.TableID) tablepb.TableStatus {
+func (e *MockTableExecutor) GetTableStatus(
+	tableID model.TableID, collectStat bool,
+) tablepb.TableStatus {
 	state, ok := e.tables[tableID]
 	if !ok {
 		state = tablepb.TableStateAbsent

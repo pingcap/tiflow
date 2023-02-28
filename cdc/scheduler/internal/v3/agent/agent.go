@@ -237,7 +237,7 @@ func (a *agent) handleMessageHeartbeat(request *schedulepb.Heartbeat) *schedulep
 	allTables := a.tableM.getAllTables()
 	result := make([]tablepb.TableStatus, 0, len(allTables))
 	for _, table := range allTables {
-		status := table.getTableStatus()
+		status := table.getTableStatus(request.CollectStats)
 		if table.task != nil && table.task.IsRemove {
 			status.State = tablepb.TableStateStopping
 		}
@@ -245,7 +245,7 @@ func (a *agent) handleMessageHeartbeat(request *schedulepb.Heartbeat) *schedulep
 	}
 	for _, tableID := range request.GetTableIDs() {
 		if _, ok := allTables[tableID]; !ok {
-			status := a.tableM.getTableStatus(tableID)
+			status := a.tableM.getTableStatus(tableID, request.CollectStats)
 			result = append(result, status)
 		}
 	}
