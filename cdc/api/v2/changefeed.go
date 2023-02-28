@@ -52,7 +52,7 @@ const (
 // @Accept json
 // @Produce json
 // @Param changefeed body ChangefeedConfig true "changefeed config"
-// @Success 200 {object} ChangeFeedInfo
+// @Success 201 {object} ChangeFeedInfo
 // @Failure 500,400 {object} model.HTTPError
 // @Router	/api/v2/changefeeds [post]
 func (h *OpenAPIV2) createChangefeed(c *gin.Context) {
@@ -685,7 +685,7 @@ func (h *OpenAPIV2) resumeChangefeed(c *gin.Context) {
 		_ = c.Error(err)
 		return
 	}
-	c.Status(http.StatusOK)
+	c.JSON(http.StatusOK, &EmptyResponse{})
 }
 
 // pauseChangefeed handles pause changefeed request

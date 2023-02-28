@@ -771,8 +771,8 @@ var doc = `{
                     }
                 ],
                 "responses": {
-                    "200": {
-                        "description": "OK",
+                    "201": {
+                        "description": "Created",
                         "schema": {
                             "$ref": "#/definitions/v2.ChangeFeedInfo"
                         }
@@ -1762,9 +1762,6 @@ var doc = `{
                     "type": "string"
                 },
                 "changefeed_id": {
-                    "type": "string"
-                },
-                "engine": {
                     "type": "string"
                 },
                 "key_path": {
