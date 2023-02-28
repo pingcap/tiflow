@@ -114,7 +114,6 @@ func TestVerifyUpdateChangefeedConfig(t *testing.T) {
 	require.Nil(t, newUpInfo)
 	cfg.StartTs = 2
 	cfg.TargetTs = 10
-	cfg.Engine = model.SortInMemory
 	cfg.ReplicaConfig = ToAPIReplicaConfig(config.GetDefaultReplicaConfig())
 	cfg.ReplicaConfig.EnableSyncPoint = true
 	cfg.ReplicaConfig.SyncPointInterval = JSONDuration{30 * time.Second}
