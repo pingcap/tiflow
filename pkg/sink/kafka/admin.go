@@ -19,6 +19,7 @@ import (
 	"io"
 	"net"
 	"strconv"
+	"strings"
 	"sync"
 	"syscall"
 
@@ -293,7 +294,11 @@ func (a *saramaAdminClient) CreateTopic(
 		ReplicationFactor: detail.ReplicationFactor,
 	}
 	query := func() error {
-		return a.admin.CreateTopic(detail.Name, request, validateOnly)
+		err := a.admin.CreateTopic(detail.Name, request, validateOnly)
+		if err != nil && !strings.Contains(err.Error(), sarama.ErrTopicAlreadyExists.Error()) {
+			return err
+		}
+		return nil
 	}
 	return a.queryClusterWithRetry(ctx, query)
 }
