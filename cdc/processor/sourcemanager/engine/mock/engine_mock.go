@@ -36,15 +36,13 @@ func (m *MockSortEngine) EXPECT() *MockSortEngineMockRecorder {
 }
 
 // Add mocks base method.
-func (m *MockSortEngine) Add(tableID model.TableID, events ...*model.PolymorphicEvent) error {
+func (m *MockSortEngine) Add(tableID model.TableID, events ...*model.PolymorphicEvent) {
 	m.ctrl.T.Helper()
 	varargs := []interface{}{tableID}
 	for _, a := range events {
 		varargs = append(varargs, a)
 	}
-	ret := m.ctrl.Call(m, "Add", varargs...)
-	ret0, _ := ret[0].(error)
-	return ret0
+	m.ctrl.Call(m, "Add", varargs...)
 }
 
 // Add indicates an expected call of Add.
