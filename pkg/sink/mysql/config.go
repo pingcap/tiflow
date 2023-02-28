@@ -75,10 +75,12 @@ const (
 
 	// defaultcachePrepStmts is the default value of cachePrepStmts
 	defaultCachePrepStmts = true
-	// defaultStmtCacheSize is the default size of prepared statement cache
-	defaultPrepStmtCacheSize = 1000
+	// defaultPrepStmtCacheSize is the default size of prepared statement cache
+	// default size = (default max_prepared_stmt_count) / (default worker count + 1)
+	// 16382 / (16 + 1) = 963
+	defaultPrepStmtCacheSize = 963
 	// The upper limit of the max size of prepared statement cache
-	maxPrepStmtCacheSize = 1000000
+	maxPrepStmtCacheSize = 1048576
 )
 
 // Config is the configs for MySQL backend.
