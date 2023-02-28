@@ -133,13 +133,7 @@ func (n *Wrapper) Start(
 					continue
 				}
 				pEvent := model.NewPolymorphicEvent(rawKV)
-<<<<<<< HEAD
-				if err := eventSortEngine.Add(n.tableID, pEvent); err != nil {
-					errChan <- err
-				}
-=======
-				eventSortEngine.Add(n.span, pEvent)
->>>>>>> 02b9286700 (cdc: fix sourcemanager.Close deadlock (#8370))
+				eventSortEngine.Add(n.tableID, pEvent)
 			}
 		}
 	}()

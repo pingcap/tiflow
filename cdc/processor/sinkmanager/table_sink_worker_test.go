@@ -56,12 +56,7 @@ func createWorker(
 func addEventsToSortEngine(t *testing.T, events []*model.PolymorphicEvent, sortEngine engine.SortEngine, tableID model.TableID) {
 	sortEngine.AddTable(tableID)
 	for _, event := range events {
-<<<<<<< HEAD
-		err := sortEngine.Add(tableID, event)
-		require.NoError(t, err)
-=======
-		sortEngine.Add(span, event)
->>>>>>> 02b9286700 (cdc: fix sourcemanager.Close deadlock (#8370))
+		sortEngine.Add(tableID, event)
 	}
 }
 

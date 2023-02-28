@@ -36,11 +36,7 @@ func (m *MockSortEngine) EXPECT() *MockSortEngineMockRecorder {
 }
 
 // Add mocks base method.
-<<<<<<< HEAD
-func (m *MockSortEngine) Add(tableID model.TableID, events ...*model.PolymorphicEvent) error {
-=======
-func (m *MockSortEngine) Add(span tablepb.Span, events ...*model.PolymorphicEvent) {
->>>>>>> 02b9286700 (cdc: fix sourcemanager.Close deadlock (#8370))
+func (m *MockSortEngine) Add(tableID model.TableID, events ...*model.PolymorphicEvent) {
 	m.ctrl.T.Helper()
 	varargs := []interface{}{tableID}
 	for _, a := range events {
