@@ -266,6 +266,11 @@ func TestParseSinkURIOverride(t *testing.T) {
 			require.EqualValues(t, sp.PrepStmtCacheSize, maxPrepStmtCacheSize)
 		},
 	}, {
+		uri: "mysql://127.0.0.1:3306/",
+		checker: func(sp *Config) {
+			require.EqualValues(t, sp.PrepStmtCacheSize, defaultPrepStmtCacheSize)
+		},
+	}, {
 		uri: "mysql://127.0.0.1:3306/?cache-prep-stmts=false",
 		checker: func(sp *Config) {
 			require.EqualValues(t, sp.CachePrepStmts, false)

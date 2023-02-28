@@ -76,7 +76,7 @@ const (
 	// defaultcachePrepStmts is the default value of cachePrepStmts
 	defaultCachePrepStmts = true
 	// defaultStmtCacheSize is the default size of prepared statement cache
-	defaultPrepStmtCacheSize = 10000
+	defaultPrepStmtCacheSize = 1000
 	// The upper limit of the max size of prepared statement cache
 	maxPrepStmtCacheSize = 1000000
 )
