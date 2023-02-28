@@ -19,7 +19,6 @@ import (
 	"database/sql/driver"
 	"fmt"
 	"net/url"
-	"strings"
 	"time"
 
 	dmysql "github.com/go-sql-driver/mysql"
@@ -27,6 +26,7 @@ import (
 	"github.com/pingcap/errors"
 	"github.com/pingcap/failpoint"
 	"github.com/pingcap/log"
+	"github.com/pingcap/tidb/errno"
 	"github.com/pingcap/tidb/parser/charset"
 	timodel "github.com/pingcap/tidb/parser/model"
 	"github.com/pingcap/tidb/parser/mysql"
@@ -617,12 +617,6 @@ func (s *mysqlBackend) multiStmtExecute(
 		multiStmtArgs = append(multiStmtArgs, dmls.values[i]...)
 	}
 	ctx, cancelFunc := context.WithTimeout(ctx, writeTimeout)
-	if strings.Count(multiStmtSQL, "?") != len(multiStmtArgs) {
-		log.Warn("num of ? is not same to len(args)",
-			zap.Int("count_of_question", strings.Count(multiStmtSQL, "?")),
-			zap.Int("len(args)", len(multiStmtArgs)),
-		)
-	}
 	_, execError := tx.ExecContext(ctx, multiStmtSQL, multiStmtArgs...)
 	if execError != nil {
 		err := logDMLTxnErr(
@@ -693,6 +687,7 @@ func (s *mysqlBackend) execDMLWithMaxRetries(pctx context.Context, dmls *prepare
 	}
 
 	start := time.Now()
+	exceedMaxPacket := false
 	return retry.Do(pctx, func() error {
 		writeTimeout, _ := time.ParseDuration(s.cfg.WriteTimeout)
 		writeTimeout += networkDriftDuration
@@ -714,9 +709,15 @@ func (s *mysqlBackend) execDMLWithMaxRetries(pctx context.Context, dmls *prepare
 					start, s.changefeed, "BEGIN", dmls.rowCount, dmls.startTs)
 			}
 
-			if s.cfg.MultiStmtEnable {
+			// If interplated SQL size exceeds maxAllowPacket, mysql driver will
+			// fall back to the sequantial way.
+			if s.cfg.MultiStmtEnable && !exceedMaxPacket {
 				err = s.multiStmtExecute(pctx, dmls, tx, writeTimeout)
 				if err != nil {
+					mysqlErr, ok := errors.Cause(err).(*dmysql.MySQLError)
+					if ok && mysqlErr.Number == uint16(errno.ErrPrepareMulti) {
+						exceedMaxPacket = true
+					}
 					return 0, err
 				}
 			} else {
