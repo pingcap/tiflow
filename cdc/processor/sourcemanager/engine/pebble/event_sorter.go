@@ -144,7 +144,7 @@ func (s *EventSorter) RemoveTable(tableID model.TableID) {
 }
 
 // Add implements engine.SortEngine.
-func (s *EventSorter) Add(tableID model.TableID, events ...*model.PolymorphicEvent) error {
+func (s *EventSorter) Add(tableID model.TableID, events ...*model.PolymorphicEvent) {
 	s.mu.RLock()
 	state, exists := s.tables[tableID]
 	s.mu.RUnlock()
@@ -178,8 +178,6 @@ func (s *EventSorter) Add(tableID model.TableID, events ...*model.PolymorphicEve
 	if maxResolvedTs > state.maxReceivedResolvedTs.Load() {
 		state.maxReceivedResolvedTs.Store(maxResolvedTs)
 	}
-
-	return nil
 }
 
 // GetResolvedTs implements engine.SortEngine.

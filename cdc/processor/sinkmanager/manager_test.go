@@ -131,8 +131,7 @@ func addTableAndAddEventsToSortEngine(
 		},
 	}
 	for _, event := range events {
-		err := engine.Add(tableID, event)
-		require.NoError(t, err)
+		engine.Add(tableID, event)
 	}
 }
 
