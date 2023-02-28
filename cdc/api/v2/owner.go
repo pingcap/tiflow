@@ -34,5 +34,5 @@ func (h *OpenAPIV2) resignOwner(c *gin.Context) {
 		o.AsyncStop()
 	}
 
-	c.JSON(http.StatusAccepted, &EmptyResponse{})
+	c.JSON(http.StatusOK, &EmptyResponse{})
 }
