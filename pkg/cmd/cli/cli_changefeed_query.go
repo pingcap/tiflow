@@ -103,7 +103,7 @@ func (o *queryChangefeedOptions) run(cmd *cobra.Command) error {
 		ID:             detail.ID,
 		SinkURI:        detail.SinkURI,
 		Config:         detail.Config,
-		CreateTime:     model.JSONTime(detail.CreateTime),
+		CreateTime:     detail.CreateTime,
 		StartTs:        detail.StartTs,
 		ResolvedTs:     detail.ResolvedTs,
 		TargetTs:       detail.TargetTs,

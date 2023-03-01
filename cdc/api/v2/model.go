@@ -119,23 +119,57 @@ type ProcessorCommonInfo struct {
 	CaptureID    string `json:"capture_id"`
 }
 
+// JSONDuration used to wrap duration into json format
+type JSONDuration struct {
+	duration time.Duration
+}
+
+// MarshalJSON marshal duration to string
+func (d JSONDuration) MarshalJSON() ([]byte, error) {
+	return json.Marshal(d.duration.String())
+}
+
+// UnmarshalJSON unmarshal json value to wrapped duration
+func (d *JSONDuration) UnmarshalJSON(b []byte) error {
+	var v interface{}
+	if err := json.Unmarshal(b, &v); err != nil {
+		return err
+	}
+	switch value := v.(type) {
+	case float64:
+		d.duration = time.Duration(value)
+		return nil
+	case string:
+		var err error
+		d.duration, err = time.ParseDuration(value)
+		if err != nil {
+			return err
+		}
+		return nil
+	default:
+		return errors.New("invalid duration")
+	}
+}
+
 // ReplicaConfig is a duplicate of  config.ReplicaConfig
 type ReplicaConfig struct {
-	MemoryQuota           uint64                     `json:"memory_quota"`
-	CaseSensitive         bool                       `json:"case_sensitive"`
-	EnableOldValue        bool                       `json:"enable_old_value"`
-	ForceReplicate        bool                       `json:"force_replicate"`
-	IgnoreIneligibleTable bool                       `json:"ignore_ineligible_table"`
-	CheckGCSafePoint      bool                       `json:"check_gc_safe_point"`
-	EnableSyncPoint       bool                       `json:"enable_sync_point"`
-	BDRMode               bool                       `json:"bdr_mode"`
-	SyncPointInterval     time.Duration              `json:"sync_point_interval"`
-	SyncPointRetention    time.Duration              `json:"sync_point_retention"`
-	Filter                *FilterConfig              `json:"filter"`
-	Mounter               *MounterConfig             `json:"mounter"`
-	Sink                  *SinkConfig                `json:"sink"`
-	Consistent            *ConsistentConfig          `json:"consistent"`
-	Scheduler             *ChangefeedSchedulerConfig `json:"scheduler"`
+	MemoryQuota           uint64 `json:"memory_quota"`
+	CaseSensitive         bool   `json:"case_sensitive"`
+	EnableOldValue        bool   `json:"enable_old_value"`
+	ForceReplicate        bool   `json:"force_replicate"`
+	IgnoreIneligibleTable bool   `json:"ignore_ineligible_table"`
+	CheckGCSafePoint      bool   `json:"check_gc_safe_point"`
+	EnableSyncPoint       bool   `json:"enable_sync_point"`
+	BDRMode               bool   `json:"bdr_mode"`
+
+	SyncPointInterval  JSONDuration `json:"sync_point_interval" swaggertype:"string"`
+	SyncPointRetention JSONDuration `json:"sync_point_retention" swaggertype:"string"`
+
+	Filter     *FilterConfig              `json:"filter"`
+	Mounter    *MounterConfig             `json:"mounter"`
+	Sink       *SinkConfig                `json:"sink"`
+	Consistent *ConsistentConfig          `json:"consistent"`
+	Scheduler  *ChangefeedSchedulerConfig `json:"scheduler"`
 }
 
 // ToInternalReplicaConfig coverts *v2.ReplicaConfig into *config.ReplicaConfig
@@ -147,8 +181,8 @@ func (c *ReplicaConfig) ToInternalReplicaConfig() *config.ReplicaConfig {
 	res.ForceReplicate = c.ForceReplicate
 	res.CheckGCSafePoint = c.CheckGCSafePoint
 	res.EnableSyncPoint = c.EnableSyncPoint
-	res.SyncPointInterval = c.SyncPointInterval
-	res.SyncPointRetention = c.SyncPointRetention
+	res.SyncPointInterval = c.SyncPointInterval.duration
+	res.SyncPointRetention = c.SyncPointRetention.duration
 	res.BDRMode = c.BDRMode
 
 	if c.Filter != nil {
@@ -245,8 +279,8 @@ func (c *ReplicaConfig) ToInternalReplicaConfig() *config.ReplicaConfig {
 	}
 	if c.Scheduler != nil {
 		res.Scheduler = &config.ChangefeedSchedulerConfig{
-			EnableSplitSpan: c.Scheduler.EnableSplitSpan,
-			RegionPerSpan:   c.Scheduler.RegionPerSpan,
+			EnableTableAcrossNodes: c.Scheduler.EnableTableAcrossNodes,
+			RegionPerSpan:          c.Scheduler.RegionPerSpan,
 		}
 	}
 	return res
@@ -263,8 +297,8 @@ func ToAPIReplicaConfig(c *config.ReplicaConfig) *ReplicaConfig {
 		IgnoreIneligibleTable: false,
 		CheckGCSafePoint:      cloned.CheckGCSafePoint,
 		EnableSyncPoint:       cloned.EnableSyncPoint,
-		SyncPointInterval:     cloned.SyncPointInterval,
-		SyncPointRetention:    cloned.SyncPointRetention,
+		SyncPointInterval:     JSONDuration{cloned.SyncPointInterval},
+		SyncPointRetention:    JSONDuration{cloned.SyncPointRetention},
 		BDRMode:               cloned.BDRMode,
 	}
 
@@ -363,8 +397,8 @@ func ToAPIReplicaConfig(c *config.ReplicaConfig) *ReplicaConfig {
 	}
 	if cloned.Scheduler != nil {
 		res.Scheduler = &ChangefeedSchedulerConfig{
-			EnableSplitSpan: cloned.Scheduler.EnableSplitSpan,
-			RegionPerSpan:   cloned.Scheduler.RegionPerSpan,
+			EnableTableAcrossNodes: cloned.Scheduler.EnableTableAcrossNodes,
+			RegionPerSpan:          cloned.Scheduler.RegionPerSpan,
 		}
 	}
 	return res
@@ -377,8 +411,8 @@ func GetDefaultReplicaConfig() *ReplicaConfig {
 		EnableOldValue:     true,
 		CheckGCSafePoint:   true,
 		EnableSyncPoint:    false,
-		SyncPointInterval:  10 * time.Second,
-		SyncPointRetention: 24 * time.Hour,
+		SyncPointInterval:  JSONDuration{10 * time.Second},
+		SyncPointRetention: JSONDuration{24 * time.Hour},
 		Filter: &FilterConfig{
 			Rules: []string{"*.*"},
 		},
@@ -390,8 +424,10 @@ func GetDefaultReplicaConfig() *ReplicaConfig {
 			Storage:           "",
 		},
 		Scheduler: &ChangefeedSchedulerConfig{
-			EnableSplitSpan: config.GetDefaultReplicaConfig().Scheduler.EnableSplitSpan,
-			RegionPerSpan:   config.GetDefaultReplicaConfig().Scheduler.RegionPerSpan,
+			EnableTableAcrossNodes: config.GetDefaultReplicaConfig().
+				Scheduler.EnableTableAcrossNodes,
+			RegionPerSpan: config.GetDefaultReplicaConfig().
+				Scheduler.RegionPerSpan,
 		},
 	}
 }
@@ -539,8 +575,9 @@ type ConsistentConfig struct {
 // ChangefeedSchedulerConfig is per changefeed scheduler settings.
 // This is a duplicate of config.ChangefeedSchedulerConfig
 type ChangefeedSchedulerConfig struct {
-	// EnableSplitSpan set true to split one table to multiple spans.
-	EnableSplitSpan bool `toml:"enable_split_span" json:"enable_split_span"`
+	// EnableTableAcrossNodes set true to split one table to multiple spans and
+	// distribute to multiple TiCDC nodes.
+	EnableTableAcrossNodes bool `toml:"enable_table_across_nodes" json:"enable_table_across_nodes"`
 	// RegionPerSpan the number of regions in a span, must be greater than 1000.
 	// Set 0 to disable span replication.
 	RegionPerSpan int `toml:"region_per_span" json:"region_per_span"`
@@ -561,11 +598,11 @@ type ResolveLockReq struct {
 
 // ChangeFeedInfo describes the detail of a ChangeFeed
 type ChangeFeedInfo struct {
-	UpstreamID uint64    `json:"upstream_id,omitempty"`
-	Namespace  string    `json:"namespace,omitempty"`
-	ID         string    `json:"id,omitempty"`
-	SinkURI    string    `json:"sink_uri,omitempty"`
-	CreateTime time.Time `json:"create_time"`
+	UpstreamID uint64         `json:"upstream_id,omitempty"`
+	Namespace  string         `json:"namespace,omitempty"`
+	ID         string         `json:"id,omitempty"`
+	SinkURI    string         `json:"sink_uri,omitempty"`
+	CreateTime model.JSONTime `json:"create_time"`
 	// Start sync at this commit ts if `StartTs` is specify or using the CreateTime of changefeed.
 	StartTs uint64 `json:"start_ts,omitempty"`
 	// The ChangeFeed will exits until sync to timestamp TargetTs
@@ -641,4 +678,19 @@ type UpstreamConfig struct {
 type ProcessorDetail struct {
 	// All table ids that this processor are replicating.
 	Tables []int64 `json:"table_ids"`
+}
+
+// Liveness is the liveness status of a capture.
+// Liveness can only be changed from alive to stopping, and no way back.
+type Liveness int32
+
+// ServerStatus holds some common information of a server
+type ServerStatus struct {
+	Version   string   `json:"version"`
+	GitHash   string   `json:"git_hash"`
+	ID        string   `json:"id"`
+	ClusterID string   `json:"cluster_id"`
+	Pid       int      `json:"pid"`
+	IsOwner   bool     `json:"is_owner"`
+	Liveness  Liveness `json:"liveness"`
 }
