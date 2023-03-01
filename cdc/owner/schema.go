@@ -14,11 +14,14 @@
 package owner
 
 import (
+	"context"
+
 	"github.com/pingcap/errors"
 	"github.com/pingcap/log"
 	tidbkv "github.com/pingcap/tidb/kv"
 	timeta "github.com/pingcap/tidb/meta"
 	timodel "github.com/pingcap/tidb/parser/model"
+	"github.com/pingcap/tiflow/cdc/entry"
 	"github.com/pingcap/tiflow/cdc/entry/schema"
 	"github.com/pingcap/tiflow/cdc/kv"
 	"github.com/pingcap/tiflow/cdc/model"
@@ -32,6 +35,7 @@ import (
 
 type schemaWrap4Owner struct {
 	schemaSnapshot              *schema.Snapshot
+	schemaStorage               entry.SchemaStorage
 	filter                      filter.Filter
 	config                      *config.ReplicaConfig
 	allPhysicalTablesCache      []model.TableID
@@ -105,7 +109,37 @@ func (s *schemaWrap4Owner) AllPhysicalTables() []model.TableID {
 	return s.allPhysicalTablesCache
 }
 
-// AllTableNames returns table info of all tables that are being replicated.
+// AllPhysicalTablesNew returns the table IDs of all tables and partition tables.
+// Todo: remove this function after AllPhysicalTables is removed.
+func (s *schemaWrap4Owner) AllPhysicalTablesNew(
+	ctx context.Context,
+	ts model.Ts,
+) ([]model.TableID, error) {
+	// NOTE: it's better to pre-allocate the vector. However, in the current implementation
+	// we can't know how many valid tables in the snapshot.
+	res := make([]model.TableID, 0)
+	snap, err := s.schemaStorage.GetSnapshot(ctx, ts)
+	if err != nil {
+		return nil, err
+	}
+	snap.IterTables(true, func(tblInfo *model.TableInfo) {
+		if s.shouldIgnoreTable(tblInfo) {
+			return
+		}
+		if pi := tblInfo.GetPartitionInfo(); pi != nil {
+			for _, partition := range pi.Definitions {
+				s.allPhysicalTablesCache = append(s.allPhysicalTablesCache, partition.ID)
+				res = append(res, partition.ID)
+			}
+		} else {
+			s.allPhysicalTablesCache = append(s.allPhysicalTablesCache, tblInfo.ID)
+			res = append(res, tblInfo.ID)
+		}
+	})
+	return res, nil
+}
+
+// AllTables returns table info of all tables that are being replicated.
 func (s *schemaWrap4Owner) AllTables() []*model.TableInfo {
 	tables := make([]*model.TableInfo, 0, len(s.allPhysicalTablesCache))
 	s.schemaSnapshot.IterTables(true, func(tblInfo *model.TableInfo) {
@@ -114,6 +148,25 @@ func (s *schemaWrap4Owner) AllTables() []*model.TableInfo {
 		}
 	})
 	return tables
+}
+
+// AllTablesNew returns table info of all tables that are being replicated.
+// TODO: rename this method to AllTables after the old AllTables is removed.
+func (s *schemaWrap4Owner) AllTablesNew(
+	ctx context.Context,
+	ts model.Ts,
+) ([]*model.TableInfo, error) {
+	tables := make([]*model.TableInfo, 0)
+	snap, err := s.schemaStorage.GetSnapshot(ctx, ts)
+	if err != nil {
+		return nil, err
+	}
+	snap.IterTables(true, func(tblInfo *model.TableInfo) {
+		if !s.shouldIgnoreTable(tblInfo) {
+			tables = append(tables, tblInfo)
+		}
+	})
+	return tables, nil
 }
 
 func (s *schemaWrap4Owner) HandleDDL(job *timodel.Job) error {
