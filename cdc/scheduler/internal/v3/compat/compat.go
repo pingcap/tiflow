@@ -32,8 +32,8 @@ var (
 
 // Compat is a compatibility layer between span replication and table replication.
 type Compat struct {
-	regionPerSpan int
-	captureInfo   map[model.CaptureID]*model.CaptureInfo
+	config      *config.ChangefeedSchedulerConfig
+	captureInfo map[model.CaptureID]*model.CaptureInfo
 
 	spanReplicationHasChecked bool
 	spanReplicationEnabled    bool
@@ -46,7 +46,7 @@ func New(
 	captureInfo map[model.CaptureID]*model.CaptureInfo,
 ) *Compat {
 	return &Compat{
-		regionPerSpan:   config.ChangefeedSettings.RegionPerSpan,
+		config:          config.ChangefeedSettings,
 		captureInfo:     captureInfo,
 		changefeedEpoch: make(map[string]bool),
 	}
@@ -82,7 +82,7 @@ func (c *Compat) CheckSpanReplicationEnabled() bool {
 	}
 	c.spanReplicationHasChecked = true
 
-	c.spanReplicationEnabled = c.regionPerSpan != 0
+	c.spanReplicationEnabled = c.config.EnableTableAcrossNodes
 	for _, capture := range c.captureInfo {
 		if len(capture.Version) == 0 {
 			c.spanReplicationEnabled = false

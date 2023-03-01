@@ -61,7 +61,8 @@ const (
     "storage": ""
   },
   "scheduler": {
-    "region-per-span": 0
+    "enable-table-across-nodes": false,
+    "region-per-span": 100000
   }
 }`
 
@@ -196,6 +197,7 @@ const (
     "storage": ""
   },
   "scheduler": {
+    "enable-table-across-nodes": true,
     "region-per-span": 100001
   }
 }`
@@ -251,6 +253,7 @@ const (
     "storage": ""
   },
   "scheduler": {
+    "enable-table-across-nodes": true,
     "region-per-span": 100001
   }
 }`

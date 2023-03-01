@@ -311,11 +311,10 @@ func (info *ChangeFeedInfo) FixIncompatible() {
 		log.Info("Fix incompatible memory quota completed", zap.String("changefeed", info.String()))
 	}
 
-	if info.Config.Scheduler == nil {
-		log.Info("Start fixing incompatible scheduler", zap.String("changefeed", info.String()))
-		info.fixScheduler()
-		log.Info("Fix incompatible scheduler completed", zap.String("changefeed", info.String()))
-	}
+	log.Info("Start fixing incompatible scheduler", zap.String("changefeed", info.String()))
+	inheritV66 := creatorVersionGate.ChangefeedInheritSchedulerConfigFromV66()
+	info.fixScheduler(inheritV66)
+	log.Info("Fix incompatible scheduler completed", zap.String("changefeed", info.String()))
 }
 
 // fixState attempts to fix state loss from upgrading the old owner to the new owner.
@@ -450,6 +449,51 @@ func (info *ChangeFeedInfo) fixMemoryQuota() {
 	info.Config.FixMemoryQuota()
 }
 
-func (info *ChangeFeedInfo) fixScheduler() {
-	info.Config.FixScheduler()
+func (info *ChangeFeedInfo) fixScheduler(inheritV66 bool) {
+	info.Config.FixScheduler(inheritV66)
+}
+
+// Barrier is a barrier for changefeed.
+type Barrier struct {
+	GlobalBarrierTs   Ts             `json:"global-barrier-ts"`
+	TableBarrier      []TableBarrier `json:"table-barrier"`
+	MinTableBarrierTs Ts             `json:"min-table-barrier-ts"`
+}
+
+// TableBarrier is a barrier for a table.
+type TableBarrier struct {
+	ID        TableID `json:"id"`
+	BarrierTs Ts      `json:"barrier-ts"`
+}
+
+// NewBarrier creates a Barrier.
+func NewBarrier(ts Ts) *Barrier {
+	return &Barrier{
+		GlobalBarrierTs: ts,
+	}
+}
+
+// DownStreamType is the type of downstream.
+type DownStreamType int
+
+const (
+	// DB is the type of Database.
+	DB DownStreamType = iota
+	// MQ is the type of MQ or Cloud Storage.
+	MQ
+	// Storage is the type of Cloud Storage.
+	Storage
+)
+
+// String implements fmt.Stringer interface.
+func (t DownStreamType) String() string {
+	switch t {
+	case DB:
+		return "DB"
+	case MQ:
+		return "MQ"
+	case Storage:
+		return "Storage"
+	}
+	return "unknown"
 }

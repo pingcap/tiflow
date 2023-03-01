@@ -341,8 +341,8 @@ func (m *SinkManager) generateSinkTasks() error {
 	// Task upperbound is limited by barrierTs and schemaResolvedTs.
 	// But receivedSorterResolvedTs can be less than barrierTs, in which case
 	// the table is just scheduled to this node.
-	getUpperBound := func(tableSink *tableSinkWrapper) engine.Position {
-		upperBoundTs := tableSink.getReceivedSorterResolvedTs()
+	getUpperBound := func(tableSinkReceivedSorterResolvedTs model.Ts) engine.Position {
+		upperBoundTs := tableSinkReceivedSorterResolvedTs
 
 		barrierTs := m.lastBarrierTs.Load()
 		if upperBoundTs > barrierTs {
@@ -406,7 +406,7 @@ func (m *SinkManager) generateSinkTasks() error {
 			tableSink := tables[i]
 			slowestTableProgress := progs[i]
 			lowerBound := slowestTableProgress.nextLowerBoundPos
-			upperBound := getUpperBound(tableSink)
+			upperBound := getUpperBound(tableSink.getReceivedSorterResolvedTs())
 
 			// The table has no available progress.
 			if lowerBound.Compare(upperBound) >= 0 {
@@ -493,8 +493,8 @@ func (m *SinkManager) generateSinkTasks() error {
 
 func (m *SinkManager) generateRedoTasks() error {
 	// We use the table's resolved ts as the upper bound to fetch events.
-	getUpperBound := func(tableSink *tableSinkWrapper) engine.Position {
-		upperBoundTs := tableSink.getReceivedSorterResolvedTs()
+	getUpperBound := func(tableSinkReceivedSorterResolvedTs model.Ts) engine.Position {
+		upperBoundTs := tableSinkReceivedSorterResolvedTs
 
 		// If a task carries events after schemaResolvedTs, mounter group threads
 		// can be blocked on waiting schemaResolvedTs get advanced.
@@ -552,7 +552,7 @@ func (m *SinkManager) generateRedoTasks() error {
 			tableSink := tables[i]
 			slowestTableProgress := progs[i]
 			lowerBound := slowestTableProgress.nextLowerBoundPos
-			upperBound := getUpperBound(tableSink)
+			upperBound := getUpperBound(tableSink.getReceivedSorterResolvedTs())
 
 			// The table has no available progress.
 			if lowerBound.Compare(upperBound) >= 0 {

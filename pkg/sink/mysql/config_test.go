@@ -187,11 +187,14 @@ func TestApplySinkURIParamsToConfig(t *testing.T) {
 	expected.Timezone = `"UTC"`
 	expected.tidbTxnMode = "pessimistic"
 	expected.EnableOldValue = true
+	expected.CachePrepStmts = true
+	expected.PrepStmtCacheSize = 1000000
 	uriStr := "mysql://127.0.0.1:3306/?worker-count=64&max-txn-row=20" +
 		"&max-multi-update-row=80&max-multi-update-row-size=512" +
 		"&safe-mode=false" +
 		"&tidb-txn-mode=pessimistic" +
-		"&test-some-deprecated-config=true&test-deprecated-size-config=100"
+		"&test-some-deprecated-config=true&test-deprecated-size-config=100" +
+		"&cache-prep-stmts=true&prep-stmt-cache-size=1000000"
 	uri, err := url.Parse(uriStr)
 	require.Nil(t, err)
 	cfg := NewConfig()
@@ -257,6 +260,16 @@ func TestParseSinkURIOverride(t *testing.T) {
 		checker: func(sp *Config) {
 			require.EqualValues(t, sp.tidbTxnMode, defaultTiDBTxnMode)
 		},
+	}, {
+		uri: "mysql://127.0.0.1:3306/?prep-stmt-cache-size=100000000",
+		checker: func(sp *Config) {
+			require.EqualValues(t, sp.PrepStmtCacheSize, maxPrepStmtCacheSize)
+		},
+	}, {
+		uri: "mysql://127.0.0.1:3306/?cache-prep-stmts=false",
+		checker: func(sp *Config) {
+			require.EqualValues(t, sp.CachePrepStmts, false)
+		},
 	}}
 	ctx := context.TODO()
 	var uri *url.URL
@@ -295,6 +308,9 @@ func TestParseSinkURIBadQueryString(t *testing.T) {
 		"mysql://127.0.0.1:3306/?write-timeout=badduration",
 		"mysql://127.0.0.1:3306/?read-timeout=badduration",
 		"mysql://127.0.0.1:3306/?timeout=badduration",
+		"mysql://127.0.0.1:3306/?prep-stmt-cache-size=not-number",
+		"mysql://127.0.0.1:3306/?prep-stmt-cache-size=-1",
+		"mysql://127.0.0.1:3306/?prep-stmt-cache-size=0",
 	}
 	ctx := context.TODO()
 	var uri *url.URL

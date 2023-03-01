@@ -22,6 +22,7 @@ import (
 	"time"
 
 	dmysql "github.com/go-sql-driver/mysql"
+	lru "github.com/hashicorp/golang-lru"
 	"github.com/pingcap/errors"
 	"github.com/pingcap/failpoint"
 	"github.com/pingcap/log"
@@ -65,6 +66,8 @@ type mysqlBackend struct {
 	statistics                    *metrics.Statistics
 	metricTxnSinkDMLBatchCommit   prometheus.Observer
 	metricTxnSinkDMLBatchCallback prometheus.Observer
+	// implement stmtCache to improve performance, especially when the downstream is TiDB
+	stmtCache *lru.Cache
 }
 
 // NewMySQLBackends creates a new MySQL sink using schema storage
@@ -99,8 +102,28 @@ func NewMySQLBackends(
 		return nil, err
 	}
 
-	db.SetMaxIdleConns(cfg.WorkerCount)
-	db.SetMaxOpenConns(cfg.WorkerCount)
+	// By default, cache-prep-stmts=true, an LRU cache is used for prepared statements,
+	// two connections are required to process a transaction.
+	// The first connection is held in the tx variable, which is used to manage the transaction.
+	// The second connection is requested through a call to s.db.Prepare
+	// in case of a cache miss for the statement query.
+	// The connection pool for CDC is configured with a static size, equal to the number of workers.
+	// CDC may hang at the "Get Connection" call is due to the limited size of the connection pool.
+	// When the connection pool is small,
+	// the chance of all connections being active at the same time increases,
+	// leading to exhaustion of available connections and a hang at the "Get Connection" call.
+	// This issue is less likely to occur when the connection pool is larger,
+	// as there are more connections available for use.
+	// Adding an extra connection to the connection pool solves the connection exhaustion issue.
+	db.SetMaxIdleConns(cfg.WorkerCount + 1)
+	db.SetMaxOpenConns(cfg.WorkerCount + 1)
+	stmtCache, err := lru.NewWithEvict(cfg.PrepStmtCacheSize, func(key, value interface{}) {
+		stmt := value.(*sql.Stmt)
+		stmt.Close()
+	})
+	if err != nil {
+		return nil, err
+	}
 
 	backends := make([]*mysqlBackend, 0, cfg.WorkerCount)
 	for i := 0; i < cfg.WorkerCount; i++ {
@@ -114,6 +137,7 @@ func NewMySQLBackends(
 
 			metricTxnSinkDMLBatchCommit:   txn.SinkDMLBatchCommit.WithLabelValues(changefeedID.Namespace, changefeedID.ID),
 			metricTxnSinkDMLBatchCallback: txn.SinkDMLBatchCallback.WithLabelValues(changefeedID.Namespace, changefeedID.ID),
+			stmtCache:                     stmtCache,
 		})
 	}
 
@@ -182,6 +206,9 @@ func (s *mysqlBackend) Flush(ctx context.Context) (err error) {
 
 // Close implements interface backend.
 func (s *mysqlBackend) Close() (err error) {
+	if s.stmtCache != nil {
+		s.stmtCache.Purge()
+	}
 	if s.db != nil {
 		err = s.db.Close()
 		s.db = nil
@@ -578,9 +605,27 @@ func (s *mysqlBackend) execDMLWithMaxRetries(pctx context.Context, dmls *prepare
 				log.Debug("exec row", zap.Int("workerID", s.workerID),
 					zap.String("sql", query), zap.Any("args", args))
 				ctx, cancelFunc := context.WithTimeout(pctx, writeTimeout)
-				if _, err := tx.ExecContext(ctx, query, args...); err != nil {
+				var execError error
+				if s.cfg.CachePrepStmts {
+					stmt, ok := s.stmtCache.Get(query)
+					if !ok {
+						var err error
+						stmt, err = s.db.Prepare(query)
+						if err != nil {
+							cancelFunc()
+							return 0, errors.Trace(err)
+						}
+
+						s.stmtCache.Add(query, stmt)
+					}
+					//nolint:sqlclosecheck
+					_, execError = tx.Stmt(stmt.(*sql.Stmt)).ExecContext(ctx, args...)
+				} else {
+					_, execError = tx.ExecContext(ctx, query, args...)
+				}
+				if execError != nil {
 					err := logDMLTxnErr(
-						cerror.WrapError(cerror.ErrMySQLTxnError, err),
+						cerror.WrapError(cerror.ErrMySQLTxnError, execError),
 						start, s.changefeed, query, dmls.rowCount, dmls.startTs)
 					if rbErr := tx.Rollback(); rbErr != nil {
 						if errors.Cause(rbErr) != context.Canceled {

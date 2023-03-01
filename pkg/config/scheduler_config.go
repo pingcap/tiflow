@@ -21,8 +21,11 @@ import (
 
 // ChangefeedSchedulerConfig is per changefeed scheduler settings.
 type ChangefeedSchedulerConfig struct {
-	// RegionPerSpan the number of regions in a span, must be greater than 1000.
-	// Set 0 to disable span replication.
+	// EnableTableAcrossNodes set true to split one table to multiple spans and
+	// distribute to multiple TiCDC nodes.
+	EnableTableAcrossNodes bool `toml:"enable-table-across-nodes" json:"enable-table-across-nodes"`
+	// RegionPerSpan is the number of regions in a span, also it's the threshold
+	// of splitting a table.
 	RegionPerSpan int `toml:"region-per-span" json:"region-per-span"`
 }
 
