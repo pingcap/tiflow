@@ -284,8 +284,6 @@ definitions:
         type: string
       creator_version:
         type: string
-      engine:
-        type: string
       error:
         $ref: '#/definitions/v2.RunningError'
       id:
@@ -340,8 +338,6 @@ definitions:
       cert_path:
         type: string
       changefeed_id:
-        type: string
-      engine:
         type: string
       key_path:
         type: string
