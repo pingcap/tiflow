@@ -26,7 +26,6 @@ import (
 	"github.com/pingcap/errors"
 	"github.com/pingcap/failpoint"
 	"github.com/pingcap/log"
-	"github.com/pingcap/tidb/errno"
 	"github.com/pingcap/tidb/parser/charset"
 	timodel "github.com/pingcap/tidb/parser/model"
 	"github.com/pingcap/tidb/parser/mysql"
@@ -711,13 +710,11 @@ func (s *mysqlBackend) execDMLWithMaxRetries(pctx context.Context, dmls *prepare
 
 			// If interplated SQL size exceeds maxAllowPacket, mysql driver will
 			// fall back to the sequantial way.
+			// error can be ErrPrepareMulti, ErrBadConn etc.
 			if s.cfg.MultiStmtEnable && !exceedMaxPacket {
 				err = s.multiStmtExecute(pctx, dmls, tx, writeTimeout)
 				if err != nil {
-					mysqlErr, ok := errors.Cause(err).(*dmysql.MySQLError)
-					if ok && mysqlErr.Number == uint16(errno.ErrPrepareMulti) {
-						exceedMaxPacket = true
-					}
+					exceedMaxPacket = true
 					return 0, err
 				}
 			} else {
@@ -769,6 +766,9 @@ func logDMLTxnErr(
 	err error, start time.Time, changefeed string,
 	query string, count int, startTs []model.Ts,
 ) error {
+	if len(query) > 1024 {
+		query = query[:1024]
+	}
 	if isRetryableDMLError(err) {
 		log.Warn("execute DMLs with error, retry later",
 			zap.Error(err), zap.Duration("duration", time.Since(start)),
