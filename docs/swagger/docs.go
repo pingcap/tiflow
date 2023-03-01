@@ -1680,9 +1680,6 @@ var doc = `{
                 "creator_version": {
                     "type": "string"
                 },
-                "engine": {
-                    "type": "string"
-                },
                 "error": {
                     "$ref": "#/definitions/v2.RunningError"
                 },
@@ -1762,9 +1759,6 @@ var doc = `{
                     "type": "string"
                 },
                 "changefeed_id": {
-                    "type": "string"
-                },
-                "engine": {
                     "type": "string"
                 },
                 "key_path": {

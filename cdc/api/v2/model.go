@@ -108,7 +108,6 @@ type ChangefeedConfig struct {
 	StartTs       uint64         `json:"start_ts"`
 	TargetTs      uint64         `json:"target_ts"`
 	SinkURI       string         `json:"sink_uri"`
-	Engine        string         `json:"engine"`
 	ReplicaConfig *ReplicaConfig `json:"replica_config"`
 	PDConfig
 }
@@ -614,7 +613,6 @@ type ChangeFeedInfo struct {
 	TargetTs uint64 `json:"target_ts,omitempty"`
 	// used for admin job notification, trigger watch event in capture
 	AdminJobType   model.AdminJobType `json:"admin_job_type,omitempty"`
-	Engine         string             `json:"engine,omitempty"`
 	Config         *ReplicaConfig     `json:"config,omitempty"`
 	State          model.FeedState    `json:"state,omitempty"`
 	Error          *RunningError      `json:"error,omitempty"`

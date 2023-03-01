@@ -1661,9 +1661,6 @@
                 "creator_version": {
                     "type": "string"
                 },
-                "engine": {
-                    "type": "string"
-                },
                 "error": {
                     "$ref": "#/definitions/v2.RunningError"
                 },
@@ -1743,9 +1740,6 @@
                     "type": "string"
                 },
                 "changefeed_id": {
-                    "type": "string"
-                },
-                "engine": {
                     "type": "string"
                 },
                 "key_path": {
