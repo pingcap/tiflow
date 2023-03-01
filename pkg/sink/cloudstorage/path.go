@@ -27,11 +27,13 @@ import (
 )
 
 const (
-	// 3 is the length of "CDC", and the file number contains at least 6 digits (e.g. CDC000001.csv).
+	// 3 is the length of "CDC", and the file number contains
+	// at least 6 digits (e.g. CDC000001.csv).
 	minFileNamePrefixLen = 9
 	defaultIndexFileName = "CDC.index"
 )
 
+// GenerateSchemaFilePath generates schema file path based on the table definition.
 func GenerateSchemaFilePath(def TableDefinition) string {
 	return fmt.Sprintf("%s/%s/%d/schema.json", def.Schema, def.Table, def.TableVersion)
 }
@@ -41,12 +43,13 @@ type indexWithDate struct {
 	currDate, prevDate string
 }
 
-// VersionedTable is used to wrap TableName with a version
+// VersionedTable is used to wrap TableName with a version.
 type VersionedTable struct {
 	model.TableName
 	Version uint64
 }
 
+// FilePathGenerator is used to generate data file path and index file path.
 type FilePathGenerator struct {
 	extension string
 	config    *Config
@@ -55,7 +58,12 @@ type FilePathGenerator struct {
 	fileIndex map[VersionedTable]*indexWithDate
 }
 
-func NewFilePathGenerator(config *Config, storage storage.ExternalStorage, extension string) *FilePathGenerator {
+// NewFilePathGenerator creates a FilePathGenerator.
+func NewFilePathGenerator(
+	config *Config,
+	storage storage.ExternalStorage,
+	extension string,
+) *FilePathGenerator {
 	return &FilePathGenerator{
 		config:    config,
 		extension: extension,
@@ -65,11 +73,14 @@ func NewFilePathGenerator(config *Config, storage storage.ExternalStorage, exten
 	}
 }
 
+// Contains checks if a VersionedTable is cached by FilePathGenerator before.
 func (f *FilePathGenerator) Contains(tbl VersionedTable) bool {
 	_, ok := f.fileIndex[tbl]
 	return ok
 }
 
+// GenerateDateStr generates a date string base on current time
+// and the date-separator configuration item.
 func (f *FilePathGenerator) GenerateDateStr() string {
 	var dateStr string
 
@@ -87,7 +98,7 @@ func (f *FilePathGenerator) GenerateDateStr() string {
 	return dateStr
 }
 
-func (f *FilePathGenerator) GenerateDataDirPath(tbl VersionedTable, date string) string {
+func (f *FilePathGenerator) generateDataDirPath(tbl VersionedTable, date string) string {
 	var elems []string
 
 	elems = append(elems, tbl.Schema)
@@ -106,6 +117,9 @@ func (f *FilePathGenerator) GenerateDataDirPath(tbl VersionedTable, date string)
 }
 
 func (f *FilePathGenerator) fetchIndexFromFileName(fileName string) (uint64, error) {
+	var fileIdx uint64
+	var err error
+
 	if len(fileName) < minFileNamePrefixLen+len(f.extension) ||
 		!strings.HasPrefix(fileName, "CDC") ||
 		!strings.HasSuffix(fileName, f.extension) {
@@ -115,17 +129,22 @@ func (f *FilePathGenerator) fetchIndexFromFileName(fileName string) (uint64, err
 
 	extIdx := strings.Index(fileName, f.extension)
 	fileIdxStr := fileName[3:extIdx]
-	if fileIdx, err := strconv.ParseUint(fileIdxStr, 10, 64); err != nil {
+	if fileIdx, err = strconv.ParseUint(fileIdxStr, 10, 64); err != nil {
 		return 0, cerror.WrapError(cerror.ErrStorageSinkInvalidFileName, err)
-	} else {
-		return fileIdx, nil
 	}
+
+	return fileIdx, nil
 }
 
-func (f *FilePathGenerator) GenerateDataFilePath(ctx context.Context, tbl VersionedTable, date string) (string, error) {
+// GenerateDataFilePath generates a canonical path for data file.
+func (f *FilePathGenerator) GenerateDataFilePath(
+	ctx context.Context,
+	tbl VersionedTable,
+	date string,
+) (string, error) {
 	var elems []string
 
-	elems = append(elems, f.GenerateDataDirPath(tbl, date))
+	elems = append(elems, f.generateDataDirPath(tbl, date))
 	if idx, ok := f.fileIndex[tbl]; !ok {
 		var fileIdx uint64
 
@@ -166,10 +185,11 @@ func (f *FilePathGenerator) GenerateDataFilePath(ctx context.Context, tbl Versio
 	return strings.Join(elems, "/"), nil
 }
 
+// GenerateIndexFilePath generates a canonical path for index file.
 func (f *FilePathGenerator) GenerateIndexFilePath(tbl VersionedTable, date string) string {
 	var elems []string
 
-	elems = append(elems, f.GenerateDataDirPath(tbl, date))
+	elems = append(elems, f.generateDataDirPath(tbl, date))
 	elems = append(elems, defaultIndexFileName)
 
 	return strings.Join(elems, "/")
