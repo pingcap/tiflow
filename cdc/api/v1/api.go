@@ -385,7 +385,7 @@ func (h *OpenAPI) PauseChangefeed(c *gin.Context) {
 // @Tags changefeed
 // @Accept json
 // @Produce json
-// @Param changefeed-id path string true "changefeed_id"
+// @Param changefeed_id path string true "changefeed_id"
 // @Success 202
 // @Failure 500,400 {object} model.HTTPError
 // @Router	/api/v1/changefeeds/{changefeed_id}/resume [post]
@@ -423,12 +423,7 @@ func (h *OpenAPI) ResumeChangefeed(c *gin.Context) {
 // @Accept json
 // @Produce json
 // @Param changefeed_id  path  string  true  "changefeed_id"
-// @Param target_ts body integer false "changefeed target ts"
-// @Param sink_uri body string false "sink uri"
-// @Param filter_rules body []string false "filter rules"
-// @Param ignore_txn_start_ts body integer false "ignore transaction start ts"
-// @Param mounter_worker_num body integer false "mounter worker nums"
-// @Param sink_config body config.SinkConfig false "sink config"
+// @Param changefeedConfig body model.ChangefeedConfig true "changefeed config"
 // @Success 202
 // @Failure 500,400 {object} model.HTTPError
 // @Router /api/v1/changefeeds/{changefeed_id} [put]
@@ -579,8 +574,7 @@ func (h *OpenAPI) RebalanceTables(c *gin.Context) {
 // @Accept json
 // @Produce json
 // @Param changefeed_id path string true "changefeed_id"
-// @Param table_id body integer true "table_id"
-// @Param capture_id body string true "capture_id"
+// @Param MoveTable body model.MoveTableReq true "move table request"
 // @Success 202
 // @Failure 500,400 {object} model.HTTPError
 // @Router /api/v1/changefeeds/{changefeed_id}/tables/move_table [post]
@@ -599,10 +593,7 @@ func (h *OpenAPI) MoveTable(c *gin.Context) {
 		return
 	}
 
-	data := struct {
-		CaptureID string `json:"capture_id"`
-		TableID   int64  `json:"table_id"`
-	}{}
+	data := model.MoveTableReq{}
 	err = c.BindJSON(&data)
 	if err != nil {
 		_ = c.Error(cerror.ErrAPIInvalidParam.Wrap(err))
@@ -647,6 +638,8 @@ func (h *OpenAPI) ResignOwner(c *gin.Context) {
 // @Tags processor
 // @Accept json
 // @Produce json
+// @Param   changefeed_id   path    string  true  "changefeed ID"
+// @Param   capture_id   path    string  true  "capture ID"
 // @Success 200 {object} model.ProcessorDetail
 // @Failure 500,400 {object} model.HTTPError
 // @Router	/api/v1/processors/{changefeed_id}/{capture_id} [get]
