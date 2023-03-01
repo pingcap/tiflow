@@ -57,20 +57,20 @@ var _ gc.Manager = (*mockManager)(nil)
 // newOwner4Test creates a new Owner for test
 func newOwner4Test(
 	newDDLPuller func(ctx context.Context,
-		replicaConfig *config.ReplicaConfig,
-		up *upstream.Upstream,
-		startTs uint64,
-		changefeed model.ChangeFeedID,
-	) (puller.DDLPuller, error),
+	replicaConfig *config.ReplicaConfig,
+	up *upstream.Upstream,
+	startTs uint64,
+	changefeed model.ChangeFeedID,
+) (puller.DDLPuller, error),
 	newSink func(changefeedID model.ChangeFeedID, info *model.ChangeFeedInfo, reportErr func(err error)) DDLSink,
 	newScheduler func(
-		ctx cdcContext.Context, up *upstream.Upstream, changefeedEpoch uint64,
-		cfg *config.SchedulerConfig,
-	) (scheduler.Scheduler, error),
+	ctx cdcContext.Context, up *upstream.Upstream, changefeedEpoch uint64,
+	cfg *config.SchedulerConfig,
+) (scheduler.Scheduler, error),
 	newDownstreamObserver func(
-		ctx context.Context, sinkURIStr string, replCfg *config.ReplicaConfig,
-		opts ...observer.NewObserverOption,
-	) (observer.Observer, error),
+	ctx context.Context, sinkURIStr string, replCfg *config.ReplicaConfig,
+	opts ...observer.NewObserverOption,
+) (observer.Observer, error),
 	pdClient pd.Client,
 ) Owner {
 	m := upstream.NewManager4Test(pdClient)
@@ -686,12 +686,12 @@ func TestCalculateGCSafepointTs(t *testing.T) {
 		upstreamID := uint64(i / 10)
 		cfInfo := &model.ChangeFeedInfo{UpstreamID: upstreamID, State: model.StateNormal}
 		cfStatus := &model.ChangeFeedStatus{CheckpointTs: uint64(i)}
-		changefeed := &orchestrator.ChangefeedReactorState{
+		cf := &orchestrator.ChangefeedReactorState{
 			ID:     cfID,
 			Info:   cfInfo,
 			Status: cfStatus,
 		}
-		state.Changefeeds[cfID] = changefeed
+		state.Changefeeds[cfID] = cf
 
 		// expectMinTsMap will be like map[upstreamID]{0, 10, 20, ..., 90}
 		if i%10 == 0 {
@@ -707,6 +707,25 @@ func TestCalculateGCSafepointTs(t *testing.T) {
 		}
 	}
 
+	// make sure failed changefeed is counted in gc safepoint.
+	countedFailedCF := &orchestrator.ChangefeedReactorState{
+		ID:     model.DefaultChangeFeedID("failedChangefeed-1"),
+		Info:   &model.ChangeFeedInfo{UpstreamID: 1, State: model.StateFailed},
+		Status: &model.ChangeFeedStatus{CheckpointTs: 7},
+	}
+	err := &model.RunningError{Message: cerror.ErrGCTTLExceeded.Error()}
+
+	// fast fail error changefeed should not be counted in gc safepoint.
+	uncountedFailedCf := &orchestrator.ChangefeedReactorState{
+		ID:     model.DefaultChangeFeedID("failedChangefeed-2"),
+		Info:   &model.ChangeFeedInfo{UpstreamID: 2, State: model.StateFailed, Error: err},
+		Status: &model.ChangeFeedStatus{CheckpointTs: 17},
+	}
+
+	state.Changefeeds[countedFailedCF.ID] = countedFailedCF
+	state.Changefeeds[uncountedFailedCf.ID] = uncountedFailedCf
+	expectMinTsMap[1] = 7
+	expectForceUpdateMap[1] = nil
 	minCheckpoinTsMap, forceUpdateMap := o.calculateGCSafepoint(state)
 
 	require.Equal(t, expectMinTsMap, minCheckpoinTsMap)
