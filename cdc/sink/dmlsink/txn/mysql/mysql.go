@@ -68,7 +68,7 @@ type mysqlBackend struct {
 	metricTxnSinkDMLBatchCallback prometheus.Observer
 	// implement stmtCache to improve performance, especially when the downstream is TiDB
 	stmtCache *lru.Cache
-	// Indiate if the CachePrepStmts should be enabled or not
+	// Indicate if the CachePrepStmts should be enabled or not
 	cachePrepStmts bool
 }
 
