@@ -503,6 +503,7 @@ type DDLPuller interface {
 	FrontDDL() (uint64, *timodel.Job)
 	// PopFrontDDL returns and pops the first DDL job in the internal queue
 	PopFrontDDL() (uint64, *timodel.Job)
+	ResolvedTs() uint64
 	// Close closes the DDLPuller
 	Close()
 }
@@ -676,4 +677,9 @@ func (h *ddlPullerImpl) Close() {
 		zap.String("namespace", h.changefeedID.Namespace),
 		zap.String("changefeed", h.changefeedID.ID))
 	h.cancel()
+}
+
+func (h *ddlPullerImpl) ResolvedTs() uint64 {
+	ts, _ := h.FrontDDL()
+	return ts
 }
