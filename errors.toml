@@ -216,16 +216,6 @@ error = '''
 invalid overwrite-checkpoint-ts %s, overwrite-checkpoint-ts only accept 'now' or a valid timestamp in integer
 '''
 
-["CDC:ErrCloudStorageDefragmentFailed"]
-error = '''
-cloud storage defragment encoded messages failed
-'''
-
-["CDC:ErrCloudStorageInvalidConfig"]
-error = '''
-cloud storage config invalid
-'''
-
 ["CDC:ErrClusterIDMismatch"]
 error = '''
 cluster ID mismatch, tikv cluster ID is %d and request cluster ID is %d
@@ -1121,9 +1111,19 @@ error = '''
 fail to open storage for redo log
 '''
 
+["CDC:ErrStorageSinkInvalidConfig"]
+error = '''
+storage sink config invalid
+'''
+
 ["CDC:ErrStorageSinkInvalidDateSeparator"]
 error = '''
-date separator in cloud storage sink is invalid
+date separator in storage sink is invalid
+'''
+
+["CDC:ErrStorageSinkInvalidFileName"]
+error = '''
+filename in storage sink is invalid
 '''
 
 ["CDC:ErrSupportGetOnly"]
