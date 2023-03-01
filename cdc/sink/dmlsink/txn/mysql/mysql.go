@@ -143,12 +143,15 @@ func NewMySQLBackends(
 		// to avoid error `Can't create more than max_prepared_stmt_count statements`
 		prepStmtCacheSize = int(maxPreparedStmtCount / (cfg.WorkerCount + 1))
 	}
-	stmtCache, err := lru.NewWithEvict(prepStmtCacheSize, func(key, value interface{}) {
-		stmt := value.(*sql.Stmt)
-		stmt.Close()
-	})
-	if err != nil {
-		return nil, err
+	var stmtCache *lru.Cache
+	if cachePrepStmts {
+		stmtCache, err = lru.NewWithEvict(prepStmtCacheSize, func(key, value interface{}) {
+			stmt := value.(*sql.Stmt)
+			stmt.Close()
+		})
+		if err != nil {
+			return nil, err
+		}
 	}
 
 	backends := make([]*mysqlBackend, 0, cfg.WorkerCount)
