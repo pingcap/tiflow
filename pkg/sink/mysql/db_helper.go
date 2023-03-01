@@ -328,7 +328,7 @@ func CheckIsTiDB(ctx context.Context, db *sql.DB) (bool, error) {
 
 // query the value of max_prepared_stmt_count
 func QueryMaxPreparedStmtCount(ctx context.Context, db *sql.DB) (int, error) {
-	row := db.QueryRowContext(ctx, "@@global.max_prepared_stmt_count;")
+	row := db.QueryRowContext(ctx, "select @@global.max_prepared_stmt_count;")
 	var maxPreparedStmtCount sql.NullInt32
 	err := row.Scan(&maxPreparedStmtCount)
 	if err != nil {
