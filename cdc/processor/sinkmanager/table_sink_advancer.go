@@ -158,13 +158,13 @@ func (a *tableSinkAdvancer) lastTimeAdvance() error {
 }
 
 // tryAdvanceAndAcquireMem tries to acquire the memory quota and advance the table sink.
-// allFinished indicates whether all the events have been fetched. Then we
+// allFetched indicates whether all the events have been fetched. Then we
 // do not need to acquire the memory quota anymore.
 // txnFinished indicates whether the current transaction has been finished.
 // If it is finished, it is OK to wait next round task to advance the table sink.
 // Otherwise, we need to advance the table at least to the current transaction.
 func (a *tableSinkAdvancer) tryAdvanceAndAcquireMem(
-	allFinished bool,
+	allFetched bool,
 	txnFinished bool,
 ) error {
 	// If used memory size exceeds the required limit, do a force acquire to
@@ -188,15 +188,15 @@ func (a *tableSinkAdvancer) tryAdvanceAndAcquireMem(
 	// 1. we use more memory than we required;
 	// 2. all events are received.
 	// 3. the pending batch size exceeds maxUpdateIntervalSize;
-	if exceedAvailableMem || allFinished ||
+	if exceedAvailableMem || allFetched ||
 		needEmitAndAdvance(a.splitTxn, a.committedTxnSize, a.pendingTxnSize) {
 		if err := a.advance(false); err != nil {
 			return errors.Trace(err)
 		}
 	}
 
-	// All finished, no need to acquire memory.
-	if allFinished {
+	// All fetched, no need to acquire memory.
+	if allFetched {
 		return nil
 	}
 

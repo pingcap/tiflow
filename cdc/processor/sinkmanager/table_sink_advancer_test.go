@@ -732,10 +732,7 @@ func (suite *advancerSuite) TestTryAdvanceAndBlockAcquireWithSplitTxn() {
 		CommitTs: 3,
 	}
 
-	var wg sync.WaitGroup
 	down := make(chan struct{})
-
-	wg.Add(1)
 	go func() {
 		// 4. Try advance and block acquire.
 		err := advancer.tryAdvanceAndAcquireMem(
@@ -743,10 +740,10 @@ func (suite *advancerSuite) TestTryAdvanceAndBlockAcquireWithSplitTxn() {
 			false,
 		)
 		require.ErrorIs(suite.T(), err, cerrors.ErrFlowControllerAborted)
-		wg.Done()
 		down <- struct{}{}
 	}()
 
+	var wg sync.WaitGroup
 	wg.Add(1)
 	go func() {
 		// Wait all events are flushed.
