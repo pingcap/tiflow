@@ -20,7 +20,6 @@ import (
 	"net/url"
 	"os"
 	"strings"
-	"sync"
 	"time"
 
 	"github.com/pingcap/log"
@@ -86,12 +85,10 @@ type LogReaderConfig struct {
 
 // LogReader implement RedoLogReader interface
 type LogReader struct {
-	cfg      *LogReaderConfig
-	meta     *common.LogMeta
-	rowCh    chan *model.RowChangedEvent
-	ddlCh    chan *model.DDLEvent
-	metaLock sync.Mutex
-	sync.Mutex
+	cfg   *LogReaderConfig
+	meta  *common.LogMeta
+	rowCh chan *model.RowChangedEvent
+	ddlCh chan *model.DDLEvent
 }
 
 // newLogReader creates a LogReader instance.
@@ -131,10 +128,7 @@ func (l *LogReader) Run(ctx context.Context) error {
 	}
 
 	if l.meta == nil {
-		_, _, err := l.ReadMeta(ctx)
-		if err != nil {
-			return err
-		}
+		return errors.Trace(errors.ErrRedoMetaFileNotFound.GenWithStackByArgs(l.cfg.Dir))
 	}
 
 	eg, egCtx := errgroup.WithContext(ctx)
@@ -176,7 +170,7 @@ func (l *LogReader) runDDLReader(egCtx context.Context) error {
 }
 
 func (l *LogReader) runReader(egCtx context.Context, cfg *readerConfig) error {
-	fileReaders, err := newReader(egCtx, cfg)
+	fileReaders, err := newReaders(egCtx, cfg)
 	if err != nil {
 		return errors.Trace(err)
 	}

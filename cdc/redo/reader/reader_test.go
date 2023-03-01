@@ -20,6 +20,7 @@ import (
 	"os"
 	"path/filepath"
 	"testing"
+	"time"
 
 	"github.com/google/uuid"
 	"github.com/pingcap/tiflow/cdc/model"
@@ -34,7 +35,8 @@ import (
 
 func genLogFile(
 	ctx context.Context, t *testing.T,
-	dir string, logType string, maxCommitTs uint64,
+	dir string, logType string,
+	minCommitTs, maxCommitTs uint64,
 ) {
 	cfg := &writer.LogWriterConfig{
 		MaxLogSizeInBytes: 100000,
@@ -46,20 +48,27 @@ func genLogFile(
 		return fileName
 	}))
 	require.Nil(t, err)
-	log := &model.RedoLog{}
 	if logType == redo.RedoRowLogFileType {
-		log.RedoRow.Row = &model.RowChangedEvent{CommitTs: maxCommitTs}
+		// generate unsorted logs
+		for ts := maxCommitTs; ts >= minCommitTs; ts-- {
+			event := &model.RowChangedEvent{CommitTs: ts}
+			log := event.ToRedoLog()
+			rawData, err := codec.MarshalRedoLog(log, nil)
+			require.Nil(t, err)
+			_, err = w.Write(rawData)
+			require.Nil(t, err)
+		}
 	} else if logType == redo.RedoDDLLogFileType {
-		log.RedoDDL.DDL = &model.DDLEvent{
+		event := &model.DDLEvent{
 			CommitTs:  maxCommitTs,
 			TableInfo: &model.TableInfo{},
 		}
-		log.Type = model.RedoLogTypeDDL
+		log := event.ToRedoLog()
+		rawData, err := codec.MarshalRedoLog(log, nil)
+		require.Nil(t, err)
+		_, err = w.Write(rawData)
+		require.Nil(t, err)
 	}
-	rawData, err := codec.MarshalRedoLog(log, nil)
-	require.Nil(t, err)
-	_, err = w.Write(rawData)
-	require.Nil(t, err)
 	err = w.Close()
 	require.Nil(t, err)
 }
@@ -75,16 +84,22 @@ func TestReadLogs(t *testing.T) {
 		ResolvedTs:   100,
 	}
 	for _, logType := range []string{redo.RedoRowLogFileType, redo.RedoDDLLogFileType} {
-		genLogFile(ctx, t, dir, logType, meta.CheckpointTs)
-		genLogFile(ctx, t, dir, logType, meta.CheckpointTs)
-		genLogFile(ctx, t, dir, logType, 12)
-		genLogFile(ctx, t, dir, logType, meta.ResolvedTs)
+		genLogFile(ctx, t, dir, logType, meta.CheckpointTs, meta.CheckpointTs)
+		genLogFile(ctx, t, dir, logType, meta.CheckpointTs, meta.CheckpointTs)
+		genLogFile(ctx, t, dir, logType, 12, 12)
+		genLogFile(ctx, t, dir, logType, meta.ResolvedTs, meta.ResolvedTs)
 	}
 	expectedRows := []uint64{12, meta.ResolvedTs}
 	expectedDDLs := []uint64{meta.CheckpointTs, meta.CheckpointTs, 12, meta.ResolvedTs}
 
+	uri, err := url.Parse(fmt.Sprintf("file://%s", dir))
+	require.NoError(t, err)
 	r := &LogReader{
-		cfg:   &LogReaderConfig{Dir: dir},
+		cfg: &LogReaderConfig{
+			Dir:                t.TempDir(),
+			URI:                *uri,
+			UseExternalStorage: true,
+		},
 		meta:  meta,
 		rowCh: make(chan *model.RowChangedEvent, defaultReaderChanSize),
 		ddlCh: make(chan *model.DDLEvent, defaultReaderChanSize),
@@ -120,14 +135,20 @@ func TestLogReaderClose(t *testing.T) {
 		ResolvedTs:   100,
 	}
 	for _, logType := range []string{redo.RedoRowLogFileType, redo.RedoDDLLogFileType} {
-		genLogFile(ctx, t, dir, logType, meta.CheckpointTs)
-		genLogFile(ctx, t, dir, logType, meta.CheckpointTs)
-		genLogFile(ctx, t, dir, logType, 12)
-		genLogFile(ctx, t, dir, logType, meta.ResolvedTs)
+		genLogFile(ctx, t, dir, logType, meta.CheckpointTs, meta.CheckpointTs)
+		genLogFile(ctx, t, dir, logType, meta.CheckpointTs, meta.CheckpointTs)
+		genLogFile(ctx, t, dir, logType, 12, 12)
+		genLogFile(ctx, t, dir, logType, meta.ResolvedTs, meta.CheckpointTs)
 	}
 
+	uri, err := url.Parse(fmt.Sprintf("file://%s", dir))
+	require.NoError(t, err)
 	r := &LogReader{
-		cfg:   &LogReaderConfig{Dir: dir},
+		cfg: &LogReaderConfig{
+			Dir:                t.TempDir(),
+			URI:                *uri,
+			UseExternalStorage: true,
+		},
 		meta:  meta,
 		rowCh: make(chan *model.RowChangedEvent, 1),
 		ddlCh: make(chan *model.DDLEvent, 1),
@@ -137,6 +158,7 @@ func TestLogReaderClose(t *testing.T) {
 		return r.Run(egCtx)
 	})
 
+	time.Sleep(2 * time.Second)
 	cancel()
 	require.ErrorIs(t, eg.Wait(), context.Canceled)
 }
