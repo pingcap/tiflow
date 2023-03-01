@@ -61,6 +61,13 @@ const (
 // captures with versions different from that of the owner
 const versionInconsistentLogRate = 1
 
+// keepalive configs for connecting to TiKV store.
+const (
+	tikvGrpcClientTTL      = 10 * time.Second
+	tikvGrpcClientTimeout  = 3 * time.Second
+	tikvGrpcNoStreamPermit = true
+)
+
 // Remove following variables once we fix https://github.com/pingcap/tiflow/issues/7657.
 var (
 	recreateChangefeedDelayLimit = 30 * time.Second
@@ -321,11 +328,14 @@ func (o *ownerImpl) Query(query *Query, done chan<- error) {
 	})
 }
 
-// TODO: https://github.com/pingcap/tidb/pull/41538/files
-func (o *ownerImpl) runningImport(upstreamID uint64) (error, bool) {
+// hasRunningImport check if the upstream has running import tasks, i.e.,
+// lightning/PiTR by checking the Swith Mode of the TiKV sst service.
+// It will iterate all TiKV stores, and return true if any of them is in the
+// SwitchMode_Import.
+func (o *ownerImpl) hasRunningImport(upstreamID uint64) (error, bool) {
 	us, exist := o.upstreamManager.Get(upstreamID)
 	if !exist {
-		return errors.Errorf("Upstream(%s) not found", upstreamID), false
+		return errors.Errorf("upstream(%d) not found", upstreamID), false
 	}
 	stores, err := util.GetAllTiKVStores(
 		context.TODO(),
@@ -344,7 +354,11 @@ func (o *ownerImpl) runningImport(upstreamID uint64) (error, bool) {
 	for _, s := range stores {
 		err, mode := getStoreImportMode(
 			context.TODO(), s, tlsConf,
-			keepalive.ClientParameters{}, // TODO
+			keepalive.ClientParameters{
+				Time:                tikvGrpcClientTTL,
+				Timeout:             tikvGrpcClientTimeout,
+				PermitWithoutStream: tikvGrpcNoStreamPermit,
+			},
 		)
 		if err != nil {
 			return errors.Annotate(
@@ -394,9 +408,13 @@ func (o *ownerImpl) ValidateChangefeed(info *model.ChangeFeedInfo) error {
 	o.ownerJobQueue.Lock()
 	defer o.ownerJobQueue.Unlock()
 
-	err, exist := o.runningImport(info.UpstreamID)
+	err, exist := o.hasRunningImport(info.UpstreamID)
 	if err != nil {
-		return err
+		return cerror.ErrUpstreamHasRunningImport.
+			GenWithStack(
+				"failed to check running import tasks %v for upstream %d",
+				err, info.UpstreamID,
+			)
 	}
 	if exist {
 		return cerror.ErrUpstreamHasRunningImport.
