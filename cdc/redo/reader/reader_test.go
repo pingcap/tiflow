@@ -20,12 +20,8 @@ import (
 	"os"
 	"path/filepath"
 	"testing"
-	"time"
 
-	"github.com/golang/mock/gomock"
 	"github.com/google/uuid"
-	mockstorage "github.com/pingcap/tidb/br/pkg/mock/storage"
-	"github.com/pingcap/tidb/br/pkg/storage"
 	"github.com/pingcap/tiflow/cdc/model"
 	"github.com/pingcap/tiflow/cdc/model/codec"
 	"github.com/pingcap/tiflow/cdc/redo/common"
@@ -35,45 +31,6 @@ import (
 	"github.com/stretchr/testify/require"
 	"golang.org/x/sync/errgroup"
 )
-
-func TestNewLogReader(t *testing.T) {
-	t.Parallel()
-
-	_, err := newLogReader(context.Background(), nil)
-	require.NotNil(t, err)
-
-	_, err = newLogReader(context.Background(), &LogReaderConfig{})
-	require.Nil(t, err)
-
-	dir := t.TempDir()
-
-	s3URI, err := url.Parse("s3://logbucket/test-changefeed?endpoint=http://111/")
-	require.Nil(t, err)
-
-	origin := redo.InitExternalStorage
-	defer func() {
-		redo.InitExternalStorage = origin
-	}()
-	controller := gomock.NewController(t)
-	mockStorage := mockstorage.NewMockExternalStorage(controller)
-	// no file to download
-	mockStorage.EXPECT().WalkDir(gomock.Any(), gomock.Any(), gomock.Any()).Return(nil)
-	redo.InitExternalStorage = func(
-		ctx context.Context, uri url.URL,
-	) (storage.ExternalStorage, error) {
-		return mockStorage, nil
-	}
-
-	// after init should rm the dir
-	_, err = newLogReader(context.Background(), &LogReaderConfig{
-		UseExternalStorage: true,
-		Dir:                dir,
-		URI:                *s3URI,
-	})
-	require.Nil(t, err)
-	_, err = os.Stat(dir)
-	require.True(t, os.IsNotExist(err))
-}
 
 func genLogFile(
 	ctx context.Context, t *testing.T,
@@ -184,40 +141,18 @@ func TestLogReaderClose(t *testing.T) {
 	require.ErrorIs(t, eg.Wait(), context.Canceled)
 }
 
-func TestLogReaderReadMeta(t *testing.T) {
-	dir := t.TempDir()
+func TestNewLogReaderAndReadMeta(t *testing.T) {
+	t.Parallel()
 
-	fileName := fmt.Sprintf("%s_%s_%d_%s%s", "cp",
-		"test-changefeed",
-		time.Now().Unix(), redo.RedoMetaFileType, redo.MetaEXT)
-	path := filepath.Join(dir, fileName)
-	f, err := os.Create(path)
-	require.Nil(t, err)
-	meta := &common.LogMeta{
+	dir := t.TempDir()
+	genMetaFile(t, dir, &common.LogMeta{
 		CheckpointTs: 11,
 		ResolvedTs:   22,
-	}
-	data, err := meta.MarshalMsg(nil)
-	require.Nil(t, err)
-	_, err = f.Write(data)
-	require.Nil(t, err)
-
-	fileName = fmt.Sprintf("%s_%s_%d_%s%s", "cp1",
-		"test-changefeed",
-		time.Now().Unix(), redo.RedoMetaFileType, redo.MetaEXT)
-	path = filepath.Join(dir, fileName)
-	f, err = os.Create(path)
-	require.Nil(t, err)
-	meta = &common.LogMeta{
+	})
+	genMetaFile(t, dir, &common.LogMeta{
 		CheckpointTs: 12,
 		ResolvedTs:   21,
-	}
-	data, err = meta.MarshalMsg(nil)
-	require.Nil(t, err)
-	_, err = f.Write(data)
-	require.Nil(t, err)
-
-	dir1 := t.TempDir()
+	})
 
 	tests := []struct {
 		name                             string
@@ -233,13 +168,13 @@ func TestLogReaderReadMeta(t *testing.T) {
 		},
 		{
 			name:    "no meta file",
-			dir:     dir1,
+			dir:     t.TempDir(),
 			wantErr: ".*no redo meta file found in dir*.",
 		},
 		{
 			name:    "wrong dir",
 			dir:     "xxx",
-			wantErr: ".*can't read log file directory*.",
+			wantErr: ".*fail to open storage for redo log*.",
 		},
 		{
 			name:             "context cancel",
@@ -250,24 +185,40 @@ func TestLogReaderReadMeta(t *testing.T) {
 		},
 	}
 	for _, tt := range tests {
-		l := &LogReader{
-			cfg: &LogReaderConfig{
-				Dir: tt.dir,
-			},
-		}
 		ctx := context.Background()
 		if tt.name == "context cancel" {
 			ctx1, cancel := context.WithCancel(context.Background())
 			cancel()
 			ctx = ctx1
 		}
-		cts, rts, err := l.ReadMeta(ctx)
+		uriStr := fmt.Sprintf("file://%s", tt.dir)
+		uri, err := url.Parse(uriStr)
+		require.Nil(t, err)
+		l, err := newLogReader(ctx, &LogReaderConfig{
+			Dir:                t.TempDir(),
+			URI:                *uri,
+			UseExternalStorage: redo.IsExternalStorage(uri.Scheme),
+		})
 		if tt.wantErr != "" {
 			require.Regexp(t, tt.wantErr, err, tt.name)
 		} else {
+			require.Nil(t, err, tt.name)
+			cts, rts, err := l.ReadMeta(ctx)
 			require.Nil(t, err, tt.name)
 			require.Equal(t, tt.wantCheckpointTs, cts, tt.name)
 			require.Equal(t, tt.wantResolvedTs, rts, tt.name)
 		}
 	}
+}
+
+func genMetaFile(t *testing.T, dir string, meta *common.LogMeta) {
+	fileName := fmt.Sprintf(redo.RedoMetaFileFormat, "capture", "default",
+		"changefeed", redo.RedoMetaFileType, uuid.NewString(), redo.MetaEXT)
+	path := filepath.Join(dir, fileName)
+	f, err := os.Create(path)
+	require.Nil(t, err)
+	data, err := meta.MarshalMsg(nil)
+	require.Nil(t, err)
+	_, err = f.Write(data)
+	require.Nil(t, err)
 }
