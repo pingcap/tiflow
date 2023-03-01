@@ -362,8 +362,10 @@ definitions:
     type: object
   v2.ChangefeedSchedulerConfig:
     properties:
-      enable_split_span:
-        description: EnableSplitSpan set true to split one table to multiple spans.
+      enable_table_across_nodes:
+        description: |-
+          EnableTableAcrossNodes set true to split one table to multiple spans and
+          distribute to multiple TiCDC nodes.
         type: boolean
       region_per_span:
         description: |-
