@@ -71,6 +71,10 @@ func (m *mockDDLPuller) Run(ctx context.Context) error {
 	return nil
 }
 
+func (m *mockDDLPuller) ResolvedTs() model.Ts {
+	return 1
+}
+
 type mockDDLSink struct {
 	// DDLSink
 	ddlExecuting *model.DDLEvent
