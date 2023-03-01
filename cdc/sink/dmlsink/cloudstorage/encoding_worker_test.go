@@ -23,6 +23,7 @@ import (
 	"github.com/pingcap/tiflow/cdc/sink/dmlsink"
 	"github.com/pingcap/tiflow/cdc/sink/util"
 	"github.com/pingcap/tiflow/pkg/config"
+	"github.com/pingcap/tiflow/pkg/sink/cloudstorage"
 	"github.com/pingcap/tiflow/pkg/sink/codec/builder"
 	"github.com/stretchr/testify/require"
 )
@@ -52,7 +53,7 @@ func TestEncodeEvents(t *testing.T) {
 	worker, fn := testEncodingWorker(ctx, t)
 	defer fn()
 	err := worker.encodeEvents(ctx, eventFragment{
-		versionedTable: versionedTable{
+		verTable: cloudstorage.VersionedTable{
 			TableName: model.TableName{
 				Schema:  "test",
 				Table:   "table1",
@@ -134,7 +135,7 @@ func TestEncodingWorkerRun(t *testing.T) {
 
 	for i := 0; i < 3; i++ {
 		frag := eventFragment{
-			versionedTable: versionedTable{
+			verTable: cloudstorage.VersionedTable{
 				TableName: table,
 			},
 			seqNumber: uint64(i + 1),

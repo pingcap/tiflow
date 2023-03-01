@@ -72,12 +72,12 @@ func (c *Config) Apply(
 	replicaConfig *config.ReplicaConfig,
 ) (err error) {
 	if sinkURI == nil {
-		return cerror.ErrCloudStorageInvalidConfig.GenWithStack("failed to open cloud storage sink, empty SinkURI")
+		return cerror.ErrStorageSinkInvalidConfig.GenWithStack("failed to open cloud storage sink, empty SinkURI")
 	}
 
 	scheme := strings.ToLower(sinkURI.Scheme)
 	if !psink.IsStorageScheme(scheme) {
-		return cerror.ErrCloudStorageInvalidConfig.GenWithStack("can't create cloud storage sink with unsupported scheme: %s", scheme)
+		return cerror.ErrStorageSinkInvalidConfig.GenWithStack("can't create cloud storage sink with unsupported scheme: %s", scheme)
 	}
 	query := sinkURI.Query()
 	if err = getWorkerCount(query, &c.WorkerCount); err != nil {
@@ -106,10 +106,10 @@ func getWorkerCount(values url.Values, workerCount *int) error {
 
 	c, err := strconv.Atoi(s)
 	if err != nil {
-		return cerror.WrapError(cerror.ErrCloudStorageInvalidConfig, err)
+		return cerror.WrapError(cerror.ErrStorageSinkInvalidConfig, err)
 	}
 	if c <= 0 {
-		return cerror.WrapError(cerror.ErrCloudStorageInvalidConfig,
+		return cerror.WrapError(cerror.ErrStorageSinkInvalidConfig,
 			fmt.Errorf("invalid worker-count %d, it must be greater than 0", c))
 	}
 	if c > maxWorkerCount {
@@ -130,7 +130,7 @@ func getFlushInterval(values url.Values, flushInterval *time.Duration) error {
 
 	d, err := time.ParseDuration(s)
 	if err != nil {
-		return cerror.WrapError(cerror.ErrCloudStorageInvalidConfig, err)
+		return cerror.WrapError(cerror.ErrStorageSinkInvalidConfig, err)
 	}
 
 	if d > maxFlushInterval {
@@ -156,7 +156,7 @@ func getFileSize(values url.Values, fileSize *int) error {
 
 	sz, err := strconv.Atoi(s)
 	if err != nil {
-		return cerror.WrapError(cerror.ErrCloudStorageInvalidConfig, err)
+		return cerror.WrapError(cerror.ErrStorageSinkInvalidConfig, err)
 	}
 	if sz > maxFileSize {
 		log.Warn("file-size is too large",

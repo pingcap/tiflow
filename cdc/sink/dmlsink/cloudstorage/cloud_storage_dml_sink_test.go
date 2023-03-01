@@ -90,22 +90,25 @@ func TestCloudStorageWriteEvents(t *testing.T) {
 		txns = append(txns, txn)
 	}
 	tableDir := path.Join(parentDir, "test/table1/33")
-	os.MkdirAll(tableDir, 0o755)
 	err = s.WriteEvents(txns...)
 	require.Nil(t, err)
 	time.Sleep(4 * time.Second)
 
 	files, err := os.ReadDir(tableDir)
 	require.Nil(t, err)
-	require.Len(t, files, 2)
+	require.Len(t, files, 3)
 	var fileNames []string
 	for _, f := range files {
 		fileNames = append(fileNames, f.Name())
 	}
-	require.ElementsMatch(t, []string{"CDC000001.json", "schema.json"}, fileNames)
+	require.ElementsMatch(t, []string{"CDC000001.json", "schema.json", "CDC.index"}, fileNames)
 	content, err := os.ReadFile(path.Join(tableDir, "CDC000001.json"))
 	require.Nil(t, err)
 	require.Greater(t, len(content), 0)
+
+	content, err = os.ReadFile(path.Join(tableDir, "CDC.index"))
+	require.Nil(t, err)
+	require.Equal(t, "CDC000001.json\n", string(content))
 
 	require.Equal(t, uint64(1000), atomic.LoadUint64(&cnt))
 	cancel()

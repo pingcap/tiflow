@@ -16,8 +16,7 @@ import (
 	"bytes"
 	"context"
 	"encoding/json"
-	"fmt"
-	"strings"
+	"path"
 	"sync"
 	"sync/atomic"
 	"time"
@@ -28,9 +27,7 @@ import (
 	"github.com/pingcap/tiflow/cdc/model"
 	"github.com/pingcap/tiflow/cdc/sink/metrics"
 	mcloudstorage "github.com/pingcap/tiflow/cdc/sink/metrics/cloudstorage"
-	"github.com/pingcap/tiflow/engine/pkg/clock"
 	"github.com/pingcap/tiflow/pkg/chann"
-	"github.com/pingcap/tiflow/pkg/config"
 	"github.com/pingcap/tiflow/pkg/sink/cloudstorage"
 	"github.com/prometheus/client_golang/prometheus"
 	"go.uber.org/zap"
@@ -48,27 +45,24 @@ type dmlWorker struct {
 	flushNotifyCh chan flushTask
 	// tableEvents maintains a mapping of <table, []eventFragment>.
 	tableEvents *tableEventsMap
-	// fileIndex maintains a mapping of <table, indexWithDate>.
-	fileIndex map[versionedTable]*indexWithDate
 	// fileSize maintains a mapping of <table, file size>.
-	fileSize         map[versionedTable]uint64
-	isClosed         uint64
-	extension        string
-	statistics       *metrics.Statistics
-	clock            clock.Clock
-	bufferPool       sync.Pool
-	metricWriteBytes prometheus.Gauge
-	metricFileCount  prometheus.Gauge
+	fileSize          map[cloudstorage.VersionedTable]uint64
+	isClosed          uint64
+	statistics        *metrics.Statistics
+	filePathGenerator *cloudstorage.FilePathGenerator
+	bufferPool        sync.Pool
+	metricWriteBytes  prometheus.Gauge
+	metricFileCount   prometheus.Gauge
 }
 
 type tableEventsMap struct {
 	mu        sync.Mutex
-	fragments map[versionedTable][]eventFragment
+	fragments map[cloudstorage.VersionedTable][]eventFragment
 }
 
 func newTableEventsMap() *tableEventsMap {
 	return &tableEventsMap{
-		fragments: make(map[versionedTable][]eventFragment),
+		fragments: make(map[cloudstorage.VersionedTable][]eventFragment),
 	}
 }
 
@@ -82,11 +76,6 @@ type flushTask struct {
 	targetTables []wrappedTable
 }
 
-type indexWithDate struct {
-	index              uint64
-	currDate, prevDate string
-}
-
 func newDMLWorker(
 	id int,
 	changefeedID model.ChangeFeedID,
@@ -96,17 +85,15 @@ func newDMLWorker(
 	statistics *metrics.Statistics,
 ) *dmlWorker {
 	d := &dmlWorker{
-		id:            id,
-		changeFeedID:  changefeedID,
-		storage:       storage,
-		config:        config,
-		tableEvents:   newTableEventsMap(),
-		flushNotifyCh: make(chan flushTask, 1),
-		fileIndex:     make(map[versionedTable]*indexWithDate),
-		fileSize:      make(map[versionedTable]uint64),
-		extension:     extension,
-		statistics:    statistics,
-		clock:         clock.New(),
+		id:                id,
+		changeFeedID:      changefeedID,
+		storage:           storage,
+		config:            config,
+		tableEvents:       newTableEventsMap(),
+		flushNotifyCh:     make(chan flushTask, 1),
+		fileSize:          make(map[cloudstorage.VersionedTable]uint64),
+		statistics:        statistics,
+		filePathGenerator: cloudstorage.NewFilePathGenerator(config, storage, extension),
 		bufferPool: sync.Pool{
 			New: func() interface{} {
 				return new(bytes.Buffer)
@@ -149,9 +136,9 @@ func (d *dmlWorker) flushMessages(ctx context.Context) error {
 				return nil
 			}
 			for _, tbl := range task.targetTables {
-				table := versionedTable{
+				table := cloudstorage.VersionedTable{
 					TableName: tbl.tableName,
-					version:   tbl.tableInfo.Version,
+					Version:   tbl.tableInfo.Version,
 				}
 				d.tableEvents.mu.Lock()
 				events := make([]eventFragment, len(d.tableEvents.fragments[table]))
@@ -173,13 +160,42 @@ func (d *dmlWorker) flushMessages(ctx context.Context) error {
 					return errors.Trace(err)
 				}
 
-				path := d.generateDataFilePath(table)
-				err = d.writeDataFile(ctx, path, events)
+				// make sure that `generateDateStr()` is invoked ONLY once before
+				// generating data file path and index file path. Because we don't expect the index
+				// file is written to a different dir if date change happens between
+				// generating data and index file.
+				date := d.filePathGenerator.GenerateDateStr()
+				dataFilePath, err := d.filePathGenerator.GenerateDataFilePath(ctx, table, date)
+				if err != nil {
+					log.Error("failed to generate data file path",
+						zap.Int("workerID", d.id),
+						zap.String("namespace", d.changeFeedID.Namespace),
+						zap.String("changefeed", d.changeFeedID.ID),
+						zap.Error(err))
+					return errors.Trace(err)
+				}
+				indexFilePath := d.filePathGenerator.GenerateIndexFilePath(table, date)
+
+				// first write the index file to external storage.
+				// the file content is simply the last elemement of the data file path
+				err = d.writeIndexFile(ctx, indexFilePath, path.Base(dataFilePath)+"\n")
+				if err != nil {
+					log.Error("failed to write index file to external storage",
+						zap.Int("workerID", d.id),
+						zap.String("namespace", d.changeFeedID.Namespace),
+						zap.String("changefeed", d.changeFeedID.ID),
+						zap.String("path", indexFilePath),
+						zap.Error(err))
+				}
+
+				// then write the data file to external storage.
+				err = d.writeDataFile(ctx, dataFilePath, events)
 				if err != nil {
 					log.Error("failed to write data file to external storage",
 						zap.Int("workerID", d.id),
 						zap.String("namespace", d.changeFeedID.Namespace),
 						zap.String("changefeed", d.changeFeedID.ID),
+						zap.String("path", dataFilePath),
 						zap.Error(err))
 					return errors.Trace(err)
 				}
@@ -189,7 +205,7 @@ func (d *dmlWorker) flushMessages(ctx context.Context) error {
 					zap.String("changefeed", d.changeFeedID.ID),
 					zap.String("schema", table.Schema),
 					zap.String("table", table.Table),
-					zap.String("path", path),
+					zap.String("path", dataFilePath),
 				)
 			}
 		}
@@ -202,13 +218,13 @@ func (d *dmlWorker) flushMessages(ctx context.Context) error {
 // if it hasn't been created when a DDL event was executed.
 func (d *dmlWorker) writeSchemaFile(
 	ctx context.Context,
-	table versionedTable,
+	table cloudstorage.VersionedTable,
 	tableInfo *model.TableInfo,
 ) error {
-	if _, ok := d.fileIndex[table]; !ok {
+	if ok := d.filePathGenerator.Contains(table); !ok {
 		var tableDetail cloudstorage.TableDefinition
 		tableDetail.FromTableInfo(tableInfo)
-		path := generateSchemaFilePath(tableDetail)
+		path := cloudstorage.GenerateSchemaFilePath(tableDetail)
 		// the file may have been created when a DDL event was executed.
 		exist, err := d.storage.FileExists(ctx, path)
 		if err != nil {
@@ -230,6 +246,11 @@ func (d *dmlWorker) writeSchemaFile(
 	}
 
 	return nil
+}
+
+func (d *dmlWorker) writeIndexFile(ctx context.Context, path, content string) error {
+	err := d.storage.WriteFile(ctx, path, []byte(content))
+	return err
 }
 
 func (d *dmlWorker) writeDataFile(ctx context.Context, path string, events []eventFragment) error {
@@ -309,9 +330,9 @@ func (d *dmlWorker) dispatchFlushTasks(ctx context.Context,
 					// the physical table id (useful for partition table)
 					// recorded in mounter while the later one does not.
 					// TODO: handle TableID of model.TableInfo.TableName properly.
-					tbl := versionedTable{
+					tbl := cloudstorage.VersionedTable{
 						TableName: elem.tableName,
-						version:   elem.tableInfo.Version,
+						Version:   elem.tableInfo.Version,
 					}
 					d.fileSize[tbl] = 0
 				}
@@ -322,13 +343,13 @@ func (d *dmlWorker) dispatchFlushTasks(ctx context.Context,
 			if !ok || atomic.LoadUint64(&d.isClosed) == 1 {
 				return nil
 			}
-			table := frag.versionedTable
+			table := frag.verTable
 			d.tableEvents.mu.Lock()
 			d.tableEvents.fragments[table] = append(d.tableEvents.fragments[table], frag)
 			d.tableEvents.mu.Unlock()
 
 			key := wrappedTable{
-				tableName: frag.TableName,
+				tableName: frag.verTable.TableName,
 				tableInfo: frag.event.Event.TableInfo,
 			}
 
@@ -356,54 +377,6 @@ func (d *dmlWorker) dispatchFlushTasks(ctx context.Context,
 			}
 		}
 	}
-}
-
-func generateSchemaFilePath(def cloudstorage.TableDefinition) string {
-	return fmt.Sprintf("%s/%s/%d/schema.json", def.Schema, def.Table, def.TableVersion)
-}
-
-func (d *dmlWorker) generateDataFilePath(tbl versionedTable) string {
-	var elems []string
-	var dateStr string
-
-	elems = append(elems, tbl.Schema)
-	elems = append(elems, tbl.Table)
-	elems = append(elems, fmt.Sprintf("%d", tbl.version))
-
-	if d.config.EnablePartitionSeparator && tbl.TableName.IsPartition {
-		elems = append(elems, fmt.Sprintf("%d", tbl.TableID))
-	}
-	currTime := d.clock.Now()
-	switch d.config.DateSeparator {
-	case config.DateSeparatorYear.String():
-		dateStr = currTime.Format("2006")
-		elems = append(elems, dateStr)
-	case config.DateSeparatorMonth.String():
-		dateStr = currTime.Format("2006-01")
-		elems = append(elems, dateStr)
-	case config.DateSeparatorDay.String():
-		dateStr = currTime.Format("2006-01-02")
-		elems = append(elems, dateStr)
-	default:
-	}
-
-	if idx, ok := d.fileIndex[tbl]; !ok {
-		d.fileIndex[tbl] = &indexWithDate{
-			currDate: dateStr,
-		}
-	} else {
-		idx.currDate = dateStr
-	}
-
-	// if date changed, reset the counter
-	if d.fileIndex[tbl].prevDate != d.fileIndex[tbl].currDate {
-		d.fileIndex[tbl].prevDate = d.fileIndex[tbl].currDate
-		d.fileIndex[tbl].index = 0
-	}
-	d.fileIndex[tbl].index++
-	elems = append(elems, fmt.Sprintf("CDC%06d%s", d.fileIndex[tbl].index, d.extension))
-
-	return strings.Join(elems, "/")
 }
 
 func (d *dmlWorker) close() {

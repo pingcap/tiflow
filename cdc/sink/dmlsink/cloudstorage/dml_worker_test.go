@@ -28,7 +28,6 @@ import (
 	"github.com/pingcap/tiflow/cdc/model"
 	"github.com/pingcap/tiflow/cdc/sink/dmlsink"
 	"github.com/pingcap/tiflow/cdc/sink/metrics"
-	"github.com/pingcap/tiflow/engine/pkg/clock"
 	"github.com/pingcap/tiflow/pkg/chann"
 	"github.com/pingcap/tiflow/pkg/config"
 	"github.com/pingcap/tiflow/pkg/sink"
@@ -52,79 +51,6 @@ func testDMLWorker(ctx context.Context, t *testing.T, dir string) *dmlWorker {
 	d := newDMLWorker(1, model.DefaultChangeFeedID("dml-worker-test"), storage,
 		cfg, ".json", statistics)
 	return d
-}
-
-func TestGenerateDataFilePath(t *testing.T) {
-	ctx, cancel := context.WithCancel(context.Background())
-	defer cancel()
-	dir := t.TempDir()
-	w := testDMLWorker(ctx, t, dir)
-	table := versionedTable{
-		TableName: model.TableName{
-			Schema: "test",
-			Table:  "table1",
-		},
-		version: 5,
-	}
-
-	// date-separator: none
-	path := w.generateDataFilePath(table)
-	require.Equal(t, "test/table1/5/CDC000001.json", path)
-	path = w.generateDataFilePath(table)
-	require.Equal(t, "test/table1/5/CDC000002.json", path)
-
-	// date-separator: year
-	mockClock := clock.NewMock()
-	w = testDMLWorker(ctx, t, dir)
-	w.config.DateSeparator = config.DateSeparatorYear.String()
-	w.clock = mockClock
-	mockClock.Set(time.Date(2022, 12, 31, 23, 59, 59, 0, time.UTC))
-	path = w.generateDataFilePath(table)
-	require.Equal(t, "test/table1/5/2022/CDC000001.json", path)
-	path = w.generateDataFilePath(table)
-	require.Equal(t, "test/table1/5/2022/CDC000002.json", path)
-	// year changed
-	mockClock.Set(time.Date(2023, 1, 1, 0, 0, 20, 0, time.UTC))
-	path = w.generateDataFilePath(table)
-	require.Equal(t, "test/table1/5/2023/CDC000001.json", path)
-	path = w.generateDataFilePath(table)
-	require.Equal(t, "test/table1/5/2023/CDC000002.json", path)
-
-	// date-separator: month
-	mockClock = clock.NewMock()
-	w = testDMLWorker(ctx, t, dir)
-	w.config.DateSeparator = config.DateSeparatorMonth.String()
-	w.clock = mockClock
-	mockClock.Set(time.Date(2022, 12, 31, 23, 59, 59, 0, time.UTC))
-	path = w.generateDataFilePath(table)
-	require.Equal(t, "test/table1/5/2022-12/CDC000001.json", path)
-	path = w.generateDataFilePath(table)
-	require.Equal(t, "test/table1/5/2022-12/CDC000002.json", path)
-	// month changed
-	mockClock.Set(time.Date(2023, 1, 1, 0, 0, 20, 0, time.UTC))
-	path = w.generateDataFilePath(table)
-	require.Equal(t, "test/table1/5/2023-01/CDC000001.json", path)
-	path = w.generateDataFilePath(table)
-	require.Equal(t, "test/table1/5/2023-01/CDC000002.json", path)
-
-	// date-separator: day
-	mockClock = clock.NewMock()
-	w = testDMLWorker(ctx, t, dir)
-	w.config.DateSeparator = config.DateSeparatorDay.String()
-	w.clock = mockClock
-	mockClock.Set(time.Date(2022, 12, 31, 23, 59, 59, 0, time.UTC))
-	path = w.generateDataFilePath(table)
-	require.Equal(t, "test/table1/5/2022-12-31/CDC000001.json", path)
-	path = w.generateDataFilePath(table)
-	require.Equal(t, "test/table1/5/2022-12-31/CDC000002.json", path)
-	// day changed
-	mockClock.Set(time.Date(2023, 1, 1, 0, 0, 20, 0, time.UTC))
-	path = w.generateDataFilePath(table)
-	require.Equal(t, "test/table1/5/2023-01-01/CDC000001.json", path)
-	path = w.generateDataFilePath(table)
-	require.Equal(t, "test/table1/5/2023-01-01/CDC000002.json", path)
-
-	w.close()
 }
 
 func TestDMLWorkerRun(t *testing.T) {
@@ -155,9 +81,9 @@ func TestDMLWorkerRun(t *testing.T) {
 	for i := 0; i < 5; i++ {
 		frag := eventFragment{
 			seqNumber: uint64(i),
-			versionedTable: versionedTable{
+			verTable: cloudstorage.VersionedTable{
 				TableName: table1,
-				version:   99,
+				Version:   99,
 			},
 			event: &dmlsink.TxnCallbackableEvent{
 				Event: &model.SingleTableTxn{
@@ -199,12 +125,12 @@ func TestDMLWorkerRun(t *testing.T) {
 	// check whether files for table1 has been generated
 	files, err := os.ReadDir(table1Dir)
 	require.Nil(t, err)
-	require.Len(t, files, 2)
+	require.Len(t, files, 3)
 	var fileNames []string
 	for _, f := range files {
 		fileNames = append(fileNames, f.Name())
 	}
-	require.ElementsMatch(t, []string{"CDC000001.json", "schema.json"}, fileNames)
+	require.ElementsMatch(t, []string{"CDC000001.json", "schema.json", "CDC.index"}, fileNames)
 	cancel()
 	d.close()
 	wg.Wait()

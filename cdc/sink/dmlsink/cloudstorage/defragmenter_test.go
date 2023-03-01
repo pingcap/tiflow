@@ -24,6 +24,7 @@ import (
 	"github.com/pingcap/tiflow/cdc/sink/dmlsink"
 	"github.com/pingcap/tiflow/cdc/sink/util"
 	"github.com/pingcap/tiflow/pkg/config"
+	"github.com/pingcap/tiflow/pkg/sink/cloudstorage"
 	"github.com/pingcap/tiflow/pkg/sink/codec/builder"
 	"github.com/stretchr/testify/require"
 )
@@ -54,7 +55,7 @@ func TestDeframenter(t *testing.T) {
 		go func(seq uint64) {
 			encoder := encoderBuilder.Build()
 			frag := eventFragment{
-				versionedTable: versionedTable{
+				verTable: cloudstorage.VersionedTable{
 					TableName: model.TableName{
 						Schema:  "test",
 						Table:   "table1",

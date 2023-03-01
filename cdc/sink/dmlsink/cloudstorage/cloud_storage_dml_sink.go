@@ -45,12 +45,6 @@ const (
 // Assert EventSink[E event.TableEvent] implementation
 var _ dmlsink.EventSink[*model.SingleTableTxn] = (*DMLSink)(nil)
 
-// versionedTable is used to wrap TableName with a version
-type versionedTable struct {
-	model.TableName
-	version uint64
-}
-
 // eventFragment is used to attach a sequence number to TxnCallbackableEvent.
 // The sequence number is mainly useful for TxnCallbackableEvent defragmentation.
 // e.g. TxnCallbackableEvent 1~5 are dispatched to a group of encoding workers, but the
@@ -60,8 +54,8 @@ type versionedTable struct {
 type eventFragment struct {
 	// event sequence number
 	seqNumber uint64
-	versionedTable
-	event *dmlsink.TxnCallbackableEvent
+	verTable  cloudstorage.VersionedTable
+	event     *dmlsink.TxnCallbackableEvent
 	// encodedMsgs denote the encoded messages after the event is handled in encodingWorker.
 	encodedMsgs []*common.Message
 }
@@ -121,7 +115,7 @@ func NewDMLSink(ctx context.Context,
 	}
 	encoderBuilder, err := builder.NewEventBatchEncoderBuilder(ctx, encoderConfig)
 	if err != nil {
-		return nil, cerror.WrapError(cerror.ErrCloudStorageInvalidConfig, err)
+		return nil, cerror.WrapError(cerror.ErrStorageSinkInvalidConfig, err)
 	}
 
 	s.changefeedID = contextutil.ChangefeedIDFromCtx(ctx)
@@ -169,7 +163,7 @@ func (s *DMLSink) run(ctx context.Context) error {
 
 // WriteEvents write events to cloud storage sink.
 func (s *DMLSink) WriteEvents(txns ...*dmlsink.CallbackableEvent[*model.SingleTableTxn]) error {
-	var tbl versionedTable
+	var tbl cloudstorage.VersionedTable
 
 	for _, txn := range txns {
 		if txn.GetTableSinkState() != state.TableSinkSinking {
@@ -179,16 +173,16 @@ func (s *DMLSink) WriteEvents(txns ...*dmlsink.CallbackableEvent[*model.SingleTa
 			continue
 		}
 
-		tbl = versionedTable{
+		tbl = cloudstorage.VersionedTable{
 			TableName: txn.Event.TableInfo.TableName,
-			version:   txn.Event.TableInfo.Version,
+			Version:   txn.Event.TableInfo.Version,
 		}
 		seq := atomic.AddUint64(&s.lastSeqNum, 1)
 		// emit a TxnCallbackableEvent encoupled with a sequence number starting from one.
 		s.msgCh <- eventFragment{
-			seqNumber:      seq,
-			versionedTable: tbl,
-			event:          txn,
+			seqNumber: seq,
+			verTable:  tbl,
+			event:     txn,
 		}
 	}
 
