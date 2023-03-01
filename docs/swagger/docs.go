@@ -1837,6 +1837,9 @@ var doc = `{
                 },
                 "storage": {
                     "type": "string"
+                },
+                "use_file_backend": {
+                    "type": "boolean"
                 }
             }
         },
