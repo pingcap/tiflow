@@ -55,6 +55,10 @@ func IsChangefeedFastFailError(err error) bool {
 		if ok && e.RFCCode() == rfcCode {
 			return true
 		}
+		errMesg := err.Error()
+		if strings.Contains(errMesg, string(e.RFCCode())) {
+			return true
+		}
 	}
 	return false
 }

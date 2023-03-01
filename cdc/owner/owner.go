@@ -794,10 +794,21 @@ func (o *ownerImpl) calculateGCSafepoint(state *orchestrator.GlobalReactorState)
 		if changefeedState.Info == nil {
 			continue
 		}
+
 		switch changefeedState.Info.State {
-		case model.StateNormal, model.StateStopped, model.StateError:
+		case model.StateNormal, model.StateStopped, model.StateError, model.StateFailed:
 		default:
 			continue
+		}
+
+		// If changefeed's error is FastFailError, we don't need to
+		// consider it when calculating GCSafepoint.
+		if changefeedState.Info.Error != nil {
+			runningErr := changefeedState.Info.Error
+			err := errors.New(runningErr.Message + runningErr.Code)
+			if cerror.IsChangefeedFastFailError(err) {
+				continue
+			}
 		}
 
 		checkpointTs := changefeedState.Info.GetCheckpointTs(changefeedState.Status)

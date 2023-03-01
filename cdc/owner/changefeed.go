@@ -254,13 +254,15 @@ func (c *changefeed) handleErr(ctx cdcContext.Context, err error) {
 
 func (c *changefeed) checkStaleCheckpointTs(ctx cdcContext.Context, checkpointTs uint64) error {
 	state := c.state.Info.State
-	if state == model.StateNormal || state == model.StateStopped || state == model.StateError {
+	switch state {
+	case model.StateNormal, model.StateStopped, model.StateError, model.StateFailed:
 		failpoint.Inject("InjectChangefeedFastFailError", func() error {
 			return cerror.ErrGCTTLExceeded.FastGen("InjectChangefeedFastFailError")
 		})
 		if err := c.upstream.GCManager.CheckStaleCheckpointTs(ctx, c.id, checkpointTs); err != nil {
 			return errors.Trace(err)
 		}
+	default:
 	}
 	return nil
 }
