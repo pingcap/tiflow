@@ -135,13 +135,12 @@ func NewMySQLBackends(
 	// Because each connection can not hold at lease one prepared statement.
 	if maxPreparedStmtCount == 0 || int(maxPreparedStmtCount/(cfg.WorkerCount+1)) == 0 {
 		cachePrepStmts = false
-		maxPreparedStmtCount = 1
-	}
-	// if maxPreparedStmtCount/(cfg.WorkerCount+1) < prepStmtCacheSize,
-	// it means that the prepared statement cache is too large on clientsize.
-	// adjust the size of the prepared statement cache on clientsize.
-	// to avoid error `Can't create more than max_prepared_stmt_count statements`
-	if int(maxPreparedStmtCount/(cfg.WorkerCount+1)) < prepStmtCacheSize {
+		prepStmtCacheSize = 1
+	} else if int(maxPreparedStmtCount/(cfg.WorkerCount+1)) < prepStmtCacheSize {
+		// if maxPreparedStmtCount/(cfg.WorkerCount+1) < prepStmtCacheSize,
+		// it means that the prepared statement cache is too large on clientsize.
+		// adjust the size of the prepared statement cache on clientsize.
+		// to avoid error `Can't create more than max_prepared_stmt_count statements`
 		prepStmtCacheSize = int(maxPreparedStmtCount / (cfg.WorkerCount + 1))
 	}
 	stmtCache, err := lru.NewWithEvict(prepStmtCacheSize, func(key, value interface{}) {
