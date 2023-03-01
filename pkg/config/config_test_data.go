@@ -59,7 +59,7 @@ const (
     "max-log-size": 64,
     "flush-interval": 2000,
     "storage": "",
-    "use-file-backend": true
+    "use-file-backend": false
   },
   "scheduler": {
     "enable-table-across-nodes": false,
@@ -196,7 +196,7 @@ const (
     "max-log-size": 64,
     "flush-interval": 2000,
     "storage": "",
-    "use-file-backend": true
+    "use-file-backend": false
   },
   "scheduler": {
     "enable-table-across-nodes": true,
@@ -253,7 +253,7 @@ const (
     "max-log-size": 64,
     "flush-interval": 2000,
     "storage": "",
-    "use-file-backend": true
+    "use-file-backend": false
   },
   "scheduler": {
     "enable-table-across-nodes": true,
