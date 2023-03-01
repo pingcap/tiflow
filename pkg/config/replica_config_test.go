@@ -53,7 +53,7 @@ func TestReplicaConfigMarshal(t *testing.T) {
 	conf.Sink.Terminator = ""
 	conf.Sink.DateSeparator = "month"
 	conf.Sink.EnablePartitionSeparator = true
-	conf.Scheduler.EnableSplitSpan = true
+	conf.Scheduler.EnableTableAcrossNodes = true
 	conf.Scheduler.RegionPerSpan = 100001
 
 	b, err := conf.Marshal()
@@ -168,7 +168,7 @@ func TestValidateAndAdjust(t *testing.T) {
 	cfg = GetDefaultReplicaConfig()
 	cfg.Scheduler = nil
 	require.Nil(t, cfg.ValidateAndAdjust(nil))
-	require.False(t, cfg.Scheduler.EnableSplitSpan)
+	require.False(t, cfg.Scheduler.EnableTableAcrossNodes)
 }
 
 func TestIsSinkCompatibleWithSpanReplication(t *testing.T) {

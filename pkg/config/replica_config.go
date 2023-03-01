@@ -69,8 +69,8 @@ var defaultReplicaConfig = &ReplicaConfig{
 		UseFileBackend:    false,
 	},
 	Scheduler: &ChangefeedSchedulerConfig{
-		EnableSplitSpan: false,
-		RegionPerSpan:   100_000,
+		EnableTableAcrossNodes: false,
+		RegionPerSpan:          100_000,
 	},
 }
 
@@ -211,7 +211,7 @@ func (c *ReplicaConfig) ValidateAndAdjust(sinkURI *url.URL) error {
 	}
 	// TODO: Remove the hack once span replication is compatible with all sinks.
 	if !isSinkCompatibleWithSpanReplication(sinkURI) {
-		c.Scheduler.EnableSplitSpan = false
+		c.Scheduler.EnableTableAcrossNodes = false
 	}
 
 	return nil
@@ -224,7 +224,7 @@ func (c *ReplicaConfig) FixScheduler(inheritV66 bool) {
 		return
 	}
 	if inheritV66 && c.Scheduler.RegionPerSpan != 0 {
-		c.Scheduler.EnableSplitSpan = true
+		c.Scheduler.EnableTableAcrossNodes = true
 	}
 }
 
