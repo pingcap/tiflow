@@ -247,54 +247,12 @@ var doc = `{
                         "required": true
                     },
                     {
-                        "description": "changefeed target ts",
-                        "name": "target_ts",
+                        "description": "changefeed config",
+                        "name": "changefeedConfig",
                         "in": "body",
+                        "required": true,
                         "schema": {
-                            "type": "integer"
-                        }
-                    },
-                    {
-                        "description": "sink uri",
-                        "name": "sink_uri",
-                        "in": "body",
-                        "schema": {
-                            "type": "string"
-                        }
-                    },
-                    {
-                        "description": "filter rules",
-                        "name": "filter_rules",
-                        "in": "body",
-                        "schema": {
-                            "type": "array",
-                            "items": {
-                                "type": "string"
-                            }
-                        }
-                    },
-                    {
-                        "description": "ignore transaction start ts",
-                        "name": "ignore_txn_start_ts",
-                        "in": "body",
-                        "schema": {
-                            "type": "integer"
-                        }
-                    },
-                    {
-                        "description": "mounter worker nums",
-                        "name": "mounter_worker_num",
-                        "in": "body",
-                        "schema": {
-                            "type": "integer"
-                        }
-                    },
-                    {
-                        "description": "sink config",
-                        "name": "sink_config",
-                        "in": "body",
-                        "schema": {
-                            "$ref": "#/definitions/config.SinkConfig"
+                            "$ref": "#/definitions/model.ChangefeedConfig"
                         }
                     }
                 ],
@@ -414,7 +372,7 @@ var doc = `{
                     {
                         "type": "string",
                         "description": "changefeed_id",
-                        "name": "changefeed-id",
+                        "name": "changefeed_id",
                         "in": "path",
                         "required": true
                     }
@@ -460,21 +418,12 @@ var doc = `{
                         "required": true
                     },
                     {
-                        "description": "table_id",
-                        "name": "table_id",
+                        "description": "move table request",
+                        "name": "MoveTable",
                         "in": "body",
                         "required": true,
                         "schema": {
-                            "type": "integer"
-                        }
-                    },
-                    {
-                        "description": "capture_id",
-                        "name": "capture_id",
-                        "in": "body",
-                        "required": true,
-                        "schema": {
-                            "type": "string"
+                            "$ref": "#/definitions/model.MoveTableReq"
                         }
                     }
                 ],
@@ -684,6 +633,22 @@ var doc = `{
                     "processor"
                 ],
                 "summary": "Get processor detail information",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "description": "changefeed ID",
+                        "name": "changefeed_id",
+                        "in": "path",
+                        "required": true
+                    },
+                    {
+                        "type": "string",
+                        "description": "capture ID",
+                        "name": "capture_id",
+                        "in": "path",
+                        "required": true
+                    }
+                ],
                 "responses": {
                     "200": {
                         "description": "OK",
@@ -751,7 +716,8 @@ var doc = `{
                     "application/json"
                 ],
                 "tags": [
-                    "changefeed"
+                    "changefeed",
+                    "v2"
                 ],
                 "summary": "List changefeed",
                 "parameters": [
@@ -768,8 +734,53 @@ var doc = `{
                         "schema": {
                             "type": "array",
                             "items": {
-                                "$ref": "#/definitions/model.ChangefeedCommonInfo"
+                                "$ref": "#/definitions/v2.ChangefeedCommonInfo"
                             }
+                        }
+                    },
+                    "500": {
+                        "description": "Internal Server Error",
+                        "schema": {
+                            "$ref": "#/definitions/model.HTTPError"
+                        }
+                    }
+                }
+            },
+            "post": {
+                "description": "create a new changefeed",
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "changefeed",
+                    "v2"
+                ],
+                "summary": "Create changefeed",
+                "parameters": [
+                    {
+                        "description": "changefeed config",
+                        "name": "changefeed",
+                        "in": "body",
+                        "required": true,
+                        "schema": {
+                            "$ref": "#/definitions/v2.ChangefeedConfig"
+                        }
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/v2.ChangeFeedInfo"
+                        }
+                    },
+                    "400": {
+                        "description": "Bad Request",
+                        "schema": {
+                            "$ref": "#/definitions/model.HTTPError"
                         }
                     },
                     "500": {
@@ -791,7 +802,8 @@ var doc = `{
                     "application/json"
                 ],
                 "tags": [
-                    "changefeed"
+                    "changefeed",
+                    "v2"
                 ],
                 "summary": "Get changefeed",
                 "parameters": [
@@ -807,7 +819,305 @@ var doc = `{
                     "200": {
                         "description": "OK",
                         "schema": {
-                            "$ref": "#/definitions/model.ChangefeedDetail"
+                            "$ref": "#/definitions/v2.ChangeFeedInfo"
+                        }
+                    },
+                    "400": {
+                        "description": "Bad Request",
+                        "schema": {
+                            "$ref": "#/definitions/model.HTTPError"
+                        }
+                    },
+                    "500": {
+                        "description": "Internal Server Error",
+                        "schema": {
+                            "$ref": "#/definitions/model.HTTPError"
+                        }
+                    }
+                }
+            },
+            "put": {
+                "description": "Update a changefeed",
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "changefeed",
+                    "v2"
+                ],
+                "summary": "Update a changefeed",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "description": "changefeed_id",
+                        "name": "changefeed_id",
+                        "in": "path",
+                        "required": true
+                    },
+                    {
+                        "description": "changefeed config",
+                        "name": "changefeedConfig",
+                        "in": "body",
+                        "required": true,
+                        "schema": {
+                            "$ref": "#/definitions/v2.ChangefeedConfig"
+                        }
+                    }
+                ],
+                "responses": {
+                    "202": {
+                        "description": "Accepted",
+                        "schema": {
+                            "$ref": "#/definitions/v2.ChangeFeedInfo"
+                        }
+                    },
+                    "400": {
+                        "description": "Bad Request",
+                        "schema": {
+                            "$ref": "#/definitions/model.HTTPError"
+                        }
+                    },
+                    "500": {
+                        "description": "Internal Server Error",
+                        "schema": {
+                            "$ref": "#/definitions/model.HTTPError"
+                        }
+                    }
+                }
+            },
+            "delete": {
+                "description": "Remove a changefeed",
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "changefeed",
+                    "v2"
+                ],
+                "summary": "Remove a changefeed",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "description": "changefeed_id",
+                        "name": "changefeed_id",
+                        "in": "path",
+                        "required": true
+                    }
+                ],
+                "responses": {
+                    "204": {
+                        "description": ""
+                    },
+                    "400": {
+                        "description": "Bad Request",
+                        "schema": {
+                            "$ref": "#/definitions/model.HTTPError"
+                        }
+                    },
+                    "500": {
+                        "description": "Internal Server Error",
+                        "schema": {
+                            "$ref": "#/definitions/model.HTTPError"
+                        }
+                    }
+                }
+            }
+        },
+        "/api/v2/changefeeds/{changefeed_id}/pause": {
+            "post": {
+                "description": "Pause a changefeed",
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "changefeed",
+                    "v2"
+                ],
+                "summary": "Pause a changefeed",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "description": "changefeed_id",
+                        "name": "changefeed_id",
+                        "in": "path",
+                        "required": true
+                    }
+                ],
+                "responses": {
+                    "202": {
+                        "description": "Accepted",
+                        "schema": {
+                            "$ref": "#/definitions/v2.EmptyResponse"
+                        }
+                    },
+                    "400": {
+                        "description": "Bad Request",
+                        "schema": {
+                            "$ref": "#/definitions/model.HTTPError"
+                        }
+                    },
+                    "500": {
+                        "description": "Internal Server Error",
+                        "schema": {
+                            "$ref": "#/definitions/model.HTTPError"
+                        }
+                    }
+                }
+            }
+        },
+        "/api/v2/changefeeds/{changefeed_id}/resume": {
+            "post": {
+                "description": "Resume a changefeed",
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "changefeed",
+                    "v2"
+                ],
+                "summary": "Resume a changefeed",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "description": "changefeed_id",
+                        "name": "changefeed_id",
+                        "in": "path",
+                        "required": true
+                    },
+                    {
+                        "description": "resume config",
+                        "name": "resumeConfig",
+                        "in": "body",
+                        "required": true,
+                        "schema": {
+                            "$ref": "#/definitions/v2.ResumeChangefeedConfig"
+                        }
+                    }
+                ],
+                "responses": {
+                    "202": {
+                        "description": ""
+                    },
+                    "400": {
+                        "description": "Bad Request",
+                        "schema": {
+                            "$ref": "#/definitions/model.HTTPError"
+                        }
+                    },
+                    "500": {
+                        "description": "Internal Server Error",
+                        "schema": {
+                            "$ref": "#/definitions/model.HTTPError"
+                        }
+                    }
+                }
+            }
+        },
+        "/api/v2/health": {
+            "get": {
+                "description": "Check the health status of a TiCDC cluster",
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "common",
+                    "v2"
+                ],
+                "summary": "Check the health status of a TiCDC cluster",
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/v2.EmptyResponse"
+                        }
+                    },
+                    "400": {
+                        "description": "Bad Request",
+                        "schema": {
+                            "$ref": "#/definitions/model.HTTPError"
+                        }
+                    },
+                    "500": {
+                        "description": "Internal Server Error",
+                        "schema": {
+                            "$ref": "#/definitions/model.HTTPError"
+                        }
+                    }
+                }
+            }
+        },
+        "/api/v2/log": {
+            "post": {
+                "description": "change TiCDC log level dynamically",
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "common",
+                    "v2"
+                ],
+                "summary": "Change TiCDC log level",
+                "parameters": [
+                    {
+                        "description": "log level",
+                        "name": "log_level",
+                        "in": "body",
+                        "required": true,
+                        "schema": {
+                            "$ref": "#/definitions/v2.LogLevelReq"
+                        }
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/v2.EmptyResponse"
+                        }
+                    },
+                    "400": {
+                        "description": "Bad Request",
+                        "schema": {
+                            "$ref": "#/definitions/model.HTTPError"
+                        }
+                    }
+                }
+            }
+        },
+        "/api/v2/owner/resign": {
+            "post": {
+                "description": "Notify the current owner to resign",
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "owner",
+                    "v2"
+                ],
+                "summary": "Notify the owner to resign",
+                "responses": {
+                    "202": {
+                        "description": "Accepted",
+                        "schema": {
+                            "$ref": "#/definitions/v2.EmptyResponse"
                         }
                     },
                     "400": {
@@ -832,7 +1142,8 @@ var doc = `{
                     "application/json"
                 ],
                 "tags": [
-                    "processor"
+                    "processor",
+                    "v2"
                 ],
                 "summary": "List processors",
                 "responses": {
@@ -841,7 +1152,7 @@ var doc = `{
                         "schema": {
                             "type": "array",
                             "items": {
-                                "$ref": "#/definitions/model.ProcessorCommonInfo"
+                                "$ref": "#/definitions/v2.ProcessorCommonInfo"
                             }
                         }
                     },
@@ -867,14 +1178,67 @@ var doc = `{
                     "application/json"
                 ],
                 "tags": [
-                    "processor"
+                    "processor",
+                    "v2"
                 ],
                 "summary": "Get processor detail information",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "description": "changefeed ID",
+                        "name": "changefeed_id",
+                        "in": "path",
+                        "required": true
+                    },
+                    {
+                        "type": "string",
+                        "description": "capture ID",
+                        "name": "capture_id",
+                        "in": "path",
+                        "required": true
+                    }
+                ],
                 "responses": {
                     "200": {
                         "description": "OK",
                         "schema": {
-                            "$ref": "#/definitions/model.ProcessorDetail"
+                            "$ref": "#/definitions/v2.ProcessorDetail"
+                        }
+                    },
+                    "400": {
+                        "description": "Bad Request",
+                        "schema": {
+                            "$ref": "#/definitions/model.HTTPError"
+                        }
+                    },
+                    "500": {
+                        "description": "Internal Server Error",
+                        "schema": {
+                            "$ref": "#/definitions/model.HTTPError"
+                        }
+                    }
+                }
+            }
+        },
+        "/api/v2/status": {
+            "get": {
+                "description": "This API is a synchronous interface. If the request is successful,",
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "common",
+                    "v2"
+                ],
+                "summary": "Get the status information of a TiCDC node",
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/v2.ServerStatus"
                         }
                     },
                     "400": {
@@ -1182,6 +1546,17 @@ var doc = `{
                 }
             }
         },
+        "model.MoveTableReq": {
+            "type": "object",
+            "properties": {
+                "capture_id": {
+                    "type": "string"
+                },
+                "table_id": {
+                    "type": "integer"
+                }
+            }
+        },
         "model.ProcessorCommonInfo": {
             "type": "object",
             "properties": {
@@ -1263,6 +1638,528 @@ var doc = `{
                 },
                 "status": {
                     "type": "integer"
+                }
+            }
+        },
+        "v2.CSVConfig": {
+            "type": "object",
+            "properties": {
+                "delimiter": {
+                    "type": "string"
+                },
+                "include_commit_ts": {
+                    "type": "boolean"
+                },
+                "null": {
+                    "type": "string"
+                },
+                "quote": {
+                    "type": "string"
+                }
+            }
+        },
+        "v2.ChangeFeedInfo": {
+            "type": "object",
+            "properties": {
+                "admin_job_type": {
+                    "description": "used for admin job notification, trigger watch event in capture",
+                    "type": "integer"
+                },
+                "checkpoint_time": {
+                    "type": "string"
+                },
+                "checkpoint_ts": {
+                    "type": "integer"
+                },
+                "config": {
+                    "$ref": "#/definitions/v2.ReplicaConfig"
+                },
+                "create_time": {
+                    "type": "string"
+                },
+                "creator_version": {
+                    "type": "string"
+                },
+                "engine": {
+                    "type": "string"
+                },
+                "error": {
+                    "$ref": "#/definitions/v2.RunningError"
+                },
+                "id": {
+                    "type": "string"
+                },
+                "namespace": {
+                    "type": "string"
+                },
+                "resolved_ts": {
+                    "type": "integer"
+                },
+                "sink_uri": {
+                    "type": "string"
+                },
+                "start_ts": {
+                    "description": "Start sync at this commit ts if ` + "`" + `StartTs` + "`" + ` is specify or using the CreateTime of changefeed.",
+                    "type": "integer"
+                },
+                "state": {
+                    "type": "string"
+                },
+                "target_ts": {
+                    "description": "The ChangeFeed will exits until sync to timestamp TargetTs",
+                    "type": "integer"
+                },
+                "task_status": {
+                    "type": "array",
+                    "items": {
+                        "$ref": "#/definitions/model.CaptureTaskStatus"
+                    }
+                },
+                "upstream_id": {
+                    "type": "integer"
+                }
+            }
+        },
+        "v2.ChangefeedCommonInfo": {
+            "type": "object",
+            "properties": {
+                "checkpoint_time": {
+                    "type": "string"
+                },
+                "checkpoint_tso": {
+                    "type": "integer"
+                },
+                "error": {
+                    "$ref": "#/definitions/model.RunningError"
+                },
+                "id": {
+                    "type": "string"
+                },
+                "namespace": {
+                    "type": "string"
+                },
+                "state": {
+                    "type": "string"
+                },
+                "upstream_id": {
+                    "type": "integer"
+                }
+            }
+        },
+        "v2.ChangefeedConfig": {
+            "type": "object",
+            "properties": {
+                "ca_path": {
+                    "type": "string"
+                },
+                "cert_allowed_cn": {
+                    "type": "array",
+                    "items": {
+                        "type": "string"
+                    }
+                },
+                "cert_path": {
+                    "type": "string"
+                },
+                "changefeed_id": {
+                    "type": "string"
+                },
+                "engine": {
+                    "type": "string"
+                },
+                "key_path": {
+                    "type": "string"
+                },
+                "namespace": {
+                    "type": "string"
+                },
+                "pd_addrs": {
+                    "type": "array",
+                    "items": {
+                        "type": "string"
+                    }
+                },
+                "replica_config": {
+                    "$ref": "#/definitions/v2.ReplicaConfig"
+                },
+                "sink_uri": {
+                    "type": "string"
+                },
+                "start_ts": {
+                    "type": "integer"
+                },
+                "target_ts": {
+                    "type": "integer"
+                }
+            }
+        },
+        "v2.ChangefeedSchedulerConfig": {
+            "type": "object",
+            "properties": {
+                "enable_split_span": {
+                    "description": "EnableSplitSpan set true to split one table to multiple spans.",
+                    "type": "boolean"
+                },
+                "region_per_span": {
+                    "description": "RegionPerSpan the number of regions in a span, must be greater than 1000.\nSet 0 to disable span replication.",
+                    "type": "integer"
+                }
+            }
+        },
+        "v2.ColumnSelector": {
+            "type": "object",
+            "properties": {
+                "columns": {
+                    "type": "array",
+                    "items": {
+                        "type": "string"
+                    }
+                },
+                "matcher": {
+                    "type": "array",
+                    "items": {
+                        "type": "string"
+                    }
+                }
+            }
+        },
+        "v2.ConsistentConfig": {
+            "type": "object",
+            "properties": {
+                "flush_interval": {
+                    "type": "integer"
+                },
+                "level": {
+                    "type": "string"
+                },
+                "max_log_size": {
+                    "type": "integer"
+                },
+                "storage": {
+                    "type": "string"
+                }
+            }
+        },
+        "v2.DispatchRule": {
+            "type": "object",
+            "properties": {
+                "matcher": {
+                    "type": "array",
+                    "items": {
+                        "type": "string"
+                    }
+                },
+                "partition": {
+                    "type": "string"
+                },
+                "topic": {
+                    "type": "string"
+                }
+            }
+        },
+        "v2.EmptyResponse": {
+            "type": "object"
+        },
+        "v2.EventFilterRule": {
+            "type": "object",
+            "properties": {
+                "ignore_delete_value_expr": {
+                    "type": "string"
+                },
+                "ignore_event": {
+                    "type": "array",
+                    "items": {
+                        "type": "string"
+                    }
+                },
+                "ignore_insert_value_expr": {
+                    "description": "sql expression",
+                    "type": "string"
+                },
+                "ignore_sql": {
+                    "description": "regular expression",
+                    "type": "array",
+                    "items": {
+                        "type": "string"
+                    }
+                },
+                "ignore_update_new_value_expr": {
+                    "type": "string"
+                },
+                "ignore_update_old_value_expr": {
+                    "type": "string"
+                },
+                "matcher": {
+                    "type": "array",
+                    "items": {
+                        "type": "string"
+                    }
+                }
+            }
+        },
+        "v2.FilterConfig": {
+            "type": "object",
+            "properties": {
+                "do_dbs": {
+                    "description": "DoDBs is an allowlist of schemas.",
+                    "type": "array",
+                    "items": {
+                        "type": "string"
+                    }
+                },
+                "do_tables": {
+                    "description": "DoTables is an allowlist of tables.",
+                    "type": "array",
+                    "items": {
+                        "$ref": "#/definitions/v2.Table"
+                    }
+                },
+                "event_filters": {
+                    "type": "array",
+                    "items": {
+                        "$ref": "#/definitions/v2.EventFilterRule"
+                    }
+                },
+                "ignore_dbs": {
+                    "description": "IgnoreDBs is a blocklist of schemas.",
+                    "type": "array",
+                    "items": {
+                        "type": "string"
+                    }
+                },
+                "ignore_tables": {
+                    "description": "IgnoreTables is a blocklist of tables.",
+                    "type": "array",
+                    "items": {
+                        "$ref": "#/definitions/v2.Table"
+                    }
+                },
+                "ignore_txn_start_ts": {
+                    "type": "array",
+                    "items": {
+                        "type": "integer"
+                    }
+                },
+                "rules": {
+                    "type": "array",
+                    "items": {
+                        "type": "string"
+                    }
+                }
+            }
+        },
+        "v2.LogLevelReq": {
+            "type": "object",
+            "properties": {
+                "log_level": {
+                    "type": "string"
+                }
+            }
+        },
+        "v2.MounterConfig": {
+            "type": "object",
+            "properties": {
+                "worker_num": {
+                    "type": "integer"
+                }
+            }
+        },
+        "v2.ProcessorCommonInfo": {
+            "type": "object",
+            "properties": {
+                "capture_id": {
+                    "type": "string"
+                },
+                "changefeed_id": {
+                    "type": "string"
+                },
+                "namespace": {
+                    "type": "string"
+                }
+            }
+        },
+        "v2.ProcessorDetail": {
+            "type": "object",
+            "properties": {
+                "table_ids": {
+                    "description": "All table ids that this processor are replicating.",
+                    "type": "array",
+                    "items": {
+                        "type": "integer"
+                    }
+                }
+            }
+        },
+        "v2.ReplicaConfig": {
+            "type": "object",
+            "properties": {
+                "bdr_mode": {
+                    "type": "boolean"
+                },
+                "case_sensitive": {
+                    "type": "boolean"
+                },
+                "check_gc_safe_point": {
+                    "type": "boolean"
+                },
+                "consistent": {
+                    "$ref": "#/definitions/v2.ConsistentConfig"
+                },
+                "enable_old_value": {
+                    "type": "boolean"
+                },
+                "enable_sync_point": {
+                    "type": "boolean"
+                },
+                "filter": {
+                    "$ref": "#/definitions/v2.FilterConfig"
+                },
+                "force_replicate": {
+                    "type": "boolean"
+                },
+                "ignore_ineligible_table": {
+                    "type": "boolean"
+                },
+                "memory_quota": {
+                    "type": "integer"
+                },
+                "mounter": {
+                    "$ref": "#/definitions/v2.MounterConfig"
+                },
+                "scheduler": {
+                    "$ref": "#/definitions/v2.ChangefeedSchedulerConfig"
+                },
+                "sink": {
+                    "$ref": "#/definitions/v2.SinkConfig"
+                },
+                "sync_point_interval": {
+                    "type": "string"
+                },
+                "sync_point_retention": {
+                    "type": "string"
+                }
+            }
+        },
+        "v2.ResumeChangefeedConfig": {
+            "type": "object",
+            "properties": {
+                "ca_path": {
+                    "type": "string"
+                },
+                "cert_allowed_cn": {
+                    "type": "array",
+                    "items": {
+                        "type": "string"
+                    }
+                },
+                "cert_path": {
+                    "type": "string"
+                },
+                "key_path": {
+                    "type": "string"
+                },
+                "overwrite_checkpoint_ts": {
+                    "type": "integer"
+                },
+                "pd_addrs": {
+                    "type": "array",
+                    "items": {
+                        "type": "string"
+                    }
+                }
+            }
+        },
+        "v2.RunningError": {
+            "type": "object",
+            "properties": {
+                "addr": {
+                    "type": "string"
+                },
+                "code": {
+                    "type": "string"
+                },
+                "message": {
+                    "type": "string"
+                }
+            }
+        },
+        "v2.ServerStatus": {
+            "type": "object",
+            "properties": {
+                "cluster_id": {
+                    "type": "string"
+                },
+                "git_hash": {
+                    "type": "string"
+                },
+                "id": {
+                    "type": "string"
+                },
+                "is_owner": {
+                    "type": "boolean"
+                },
+                "liveness": {
+                    "type": "integer"
+                },
+                "pid": {
+                    "type": "integer"
+                },
+                "version": {
+                    "type": "string"
+                }
+            }
+        },
+        "v2.SinkConfig": {
+            "type": "object",
+            "properties": {
+                "column_selectors": {
+                    "type": "array",
+                    "items": {
+                        "$ref": "#/definitions/v2.ColumnSelector"
+                    }
+                },
+                "csv": {
+                    "$ref": "#/definitions/v2.CSVConfig"
+                },
+                "date_separator": {
+                    "type": "string"
+                },
+                "dispatchers": {
+                    "type": "array",
+                    "items": {
+                        "$ref": "#/definitions/v2.DispatchRule"
+                    }
+                },
+                "enable_partition_separator": {
+                    "type": "boolean"
+                },
+                "encoder_concurrency": {
+                    "type": "integer"
+                },
+                "protocol": {
+                    "type": "string"
+                },
+                "schema_registry": {
+                    "type": "string"
+                },
+                "terminator": {
+                    "type": "string"
+                },
+                "transaction_atomicity": {
+                    "type": "string"
+                }
+            }
+        },
+        "v2.Table": {
+            "type": "object",
+            "properties": {
+                "database_name": {
+                    "description": "Schema is the name of the schema (database) containing this table.",
+                    "type": "string"
+                },
+                "table_name": {
+                    "description": "Name is the unqualified table name.",
+                    "type": "string"
                 }
             }
         }
