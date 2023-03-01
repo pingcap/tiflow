@@ -605,7 +605,6 @@ type ChangeFeedInfo struct {
 	TargetTs uint64 `json:"target_ts,omitempty"`
 	// used for admin job notification, trigger watch event in capture
 	AdminJobType   model.AdminJobType `json:"admin_job_type,omitempty"`
-	Engine         string             `json:"engine,omitempty"`
 	Config         *ReplicaConfig     `json:"config,omitempty"`
 	State          model.FeedState    `json:"state,omitempty"`
 	Error          *RunningError      `json:"error,omitempty"`
