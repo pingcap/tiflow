@@ -56,7 +56,7 @@ type ddlManager struct {
 	// schema store multiple version of schema, it is used by scheduler
 	schema *schemaWrap4Owner
 	// redoManager is used to send DDL events to redo log and get redo resolvedTs.
-	redoManager redo.LogManager
+	redoManager redo.DDLManager
 	// ddlSink is used to ddlSink DDL events to the downstream
 	ddlSink DDLSink
 	// tableCheckpoint store the tableCheckpoint of each table. We need to wait
@@ -89,7 +89,7 @@ func newDDLManager(
 	ddlSink DDLSink,
 	ddlPuller puller.DDLPuller,
 	schema *schemaWrap4Owner,
-	redoManager redo.LogManager,
+	redoManager redo.DDLManager,
 	sinkType model.DownStreamType,
 	bdrMode bool,
 ) *ddlManager {
