@@ -615,7 +615,8 @@ func (s *mysqlBackend) multiStmtExecute(
 		}
 		multiStmtArgs = append(multiStmtArgs, dmls.values[i]...)
 	}
-	ctx, cancelFunc := context.WithTimeout(ctx, writeTimeout)
+	ctx, cancel := context.WithTimeout(ctx, writeTimeout)
+	defer cancel()
 	_, execError := tx.ExecContext(ctx, multiStmtSQL, multiStmtArgs...)
 	if execError != nil {
 		err := logDMLTxnErr(
@@ -626,10 +627,8 @@ func (s *mysqlBackend) multiStmtExecute(
 				log.Warn("failed to rollback txn", zap.Error(rbErr))
 			}
 		}
-		cancelFunc()
 		return err
 	}
-	cancelFunc()
 	return nil
 }
 
