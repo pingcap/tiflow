@@ -764,7 +764,6 @@ func toAPIModel(
 		StartTs:        info.StartTs,
 		TargetTs:       info.TargetTs,
 		AdminJobType:   info.AdminJobType,
-		Engine:         info.Engine,
 		Config:         ToAPIReplicaConfig(info.Config),
 		State:          info.State,
 		Error:          runningError,

@@ -71,7 +71,7 @@ function run() {
 	cat - >"$WORK_DIR/changefeed.toml" <<EOF
 case-sensitive = false
 [scheduler]
-enable-split-span = true
+enable-table-across-nodes = true
 EOF
 	set +e
 	update_result=$(cdc cli changefeed update --pd=$pd_addr --config="$WORK_DIR/changefeed.toml" --no-confirm --changefeed-id $uuid)
@@ -91,18 +91,14 @@ EOF
 		echo "[$(date)] <<<<< changefeed info is not updated as expected ${changefeed_info} >>>>>"
 		exit 1
 	fi
-	if [[ ! $changefeed_info == *"\"engine\":\"unified\""* ]]; then
-		echo "[$(date)] <<<<< changefeed info is not updated as expected ${changefeed_info} >>>>>"
-		exit 1
-	fi
 	if [ "$SINK_TYPE" == "kafka" ]; then
-		if [[ ! $changefeed_info == *"\"enable_split_span\":true"* ]]; then
+		if [[ ! $changefeed_info == *"\"enable_table_across_nodes\":true"* ]]; then
 			echo "[$(date)] <<<<< changefeed info is not updated as expected ${changefeed_info} >>>>>"
 			exit 1
 		fi
 	else
 		# Currently, MySQL changefeed does not support scale out feature.
-		if [[ $changefeed_info == *"\"enable_split_span\":true"* ]]; then
+		if [[ $changefeed_info == *"\"enable_table_across_nodes\":true"* ]]; then
 			echo "[$(date)] <<<<< changefeed info is not updated as expected ${changefeed_info} >>>>>"
 			exit 1
 		fi

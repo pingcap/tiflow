@@ -1686,9 +1686,6 @@ var doc = `{
                 "creator_version": {
                     "type": "string"
                 },
-                "engine": {
-                    "type": "string"
-                },
                 "error": {
                     "$ref": "#/definitions/v2.RunningError"
                 },
@@ -1770,9 +1767,6 @@ var doc = `{
                 "changefeed_id": {
                     "type": "string"
                 },
-                "engine": {
-                    "type": "string"
-                },
                 "key_path": {
                     "type": "string"
                 },
@@ -1802,8 +1796,8 @@ var doc = `{
         "v2.ChangefeedSchedulerConfig": {
             "type": "object",
             "properties": {
-                "enable_split_span": {
-                    "description": "EnableSplitSpan set true to split one table to multiple spans.",
+                "enable_table_across_nodes": {
+                    "description": "EnableTableAcrossNodes set true to split one table to multiple spans and\ndistribute to multiple TiCDC nodes.",
                     "type": "boolean"
                 },
                 "region_per_span": {

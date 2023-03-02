@@ -107,7 +107,6 @@ type ChangefeedConfig struct {
 	StartTs       uint64         `json:"start_ts"`
 	TargetTs      uint64         `json:"target_ts"`
 	SinkURI       string         `json:"sink_uri"`
-	Engine        string         `json:"engine"`
 	ReplicaConfig *ReplicaConfig `json:"replica_config"`
 	PDConfig
 }
@@ -279,8 +278,8 @@ func (c *ReplicaConfig) ToInternalReplicaConfig() *config.ReplicaConfig {
 	}
 	if c.Scheduler != nil {
 		res.Scheduler = &config.ChangefeedSchedulerConfig{
-			EnableSplitSpan: c.Scheduler.EnableSplitSpan,
-			RegionPerSpan:   c.Scheduler.RegionPerSpan,
+			EnableTableAcrossNodes: c.Scheduler.EnableTableAcrossNodes,
+			RegionPerSpan:          c.Scheduler.RegionPerSpan,
 		}
 	}
 	return res
@@ -397,8 +396,8 @@ func ToAPIReplicaConfig(c *config.ReplicaConfig) *ReplicaConfig {
 	}
 	if cloned.Scheduler != nil {
 		res.Scheduler = &ChangefeedSchedulerConfig{
-			EnableSplitSpan: cloned.Scheduler.EnableSplitSpan,
-			RegionPerSpan:   cloned.Scheduler.RegionPerSpan,
+			EnableTableAcrossNodes: cloned.Scheduler.EnableTableAcrossNodes,
+			RegionPerSpan:          cloned.Scheduler.RegionPerSpan,
 		}
 	}
 	return res
@@ -424,8 +423,10 @@ func GetDefaultReplicaConfig() *ReplicaConfig {
 			Storage:           "",
 		},
 		Scheduler: &ChangefeedSchedulerConfig{
-			EnableSplitSpan: config.GetDefaultReplicaConfig().Scheduler.EnableSplitSpan,
-			RegionPerSpan:   config.GetDefaultReplicaConfig().Scheduler.RegionPerSpan,
+			EnableTableAcrossNodes: config.GetDefaultReplicaConfig().
+				Scheduler.EnableTableAcrossNodes,
+			RegionPerSpan: config.GetDefaultReplicaConfig().
+				Scheduler.RegionPerSpan,
 		},
 	}
 }
@@ -573,8 +574,9 @@ type ConsistentConfig struct {
 // ChangefeedSchedulerConfig is per changefeed scheduler settings.
 // This is a duplicate of config.ChangefeedSchedulerConfig
 type ChangefeedSchedulerConfig struct {
-	// EnableSplitSpan set true to split one table to multiple spans.
-	EnableSplitSpan bool `toml:"enable_split_span" json:"enable_split_span"`
+	// EnableTableAcrossNodes set true to split one table to multiple spans and
+	// distribute to multiple TiCDC nodes.
+	EnableTableAcrossNodes bool `toml:"enable_table_across_nodes" json:"enable_table_across_nodes"`
 	// RegionPerSpan the number of regions in a span, must be greater than 1000.
 	// Set 0 to disable span replication.
 	RegionPerSpan int `toml:"region_per_span" json:"region_per_span"`
@@ -606,7 +608,6 @@ type ChangeFeedInfo struct {
 	TargetTs uint64 `json:"target_ts,omitempty"`
 	// used for admin job notification, trigger watch event in capture
 	AdminJobType   model.AdminJobType `json:"admin_job_type,omitempty"`
-	Engine         string             `json:"engine,omitempty"`
 	Config         *ReplicaConfig     `json:"config,omitempty"`
 	State          model.FeedState    `json:"state,omitempty"`
 	Error          *RunningError      `json:"error,omitempty"`
