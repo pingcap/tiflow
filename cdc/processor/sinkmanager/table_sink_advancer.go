@@ -70,6 +70,7 @@ func newTableSinkAdvancer(
 	splitTxn bool,
 	sinkMemQuota *memquota.MemQuota,
 	availableMem uint64,
+	batchID uint64,
 ) *tableSinkAdvancer {
 	return &tableSinkAdvancer{
 		task:         task,
@@ -77,7 +78,7 @@ func newTableSinkAdvancer(
 		sinkMemQuota: sinkMemQuota,
 		availableMem: availableMem,
 		events:       make([]*model.RowChangedEvent, 0, bufferSize),
-		batchID:      batchIDInitialValue,
+		batchID:      batchID,
 	}
 }
 
