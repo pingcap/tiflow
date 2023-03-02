@@ -241,11 +241,46 @@ type RedoLog struct {
 	Type    RedoLogType         `msg:"type"`
 }
 
+// GetCommitTs returns the commit ts of the redo log.
+func (r *RedoLog) GetCommitTs() Ts {
+	switch r.Type {
+	case RedoLogTypeRow:
+		return r.RedoRow.Row.CommitTs
+	case RedoLogTypeDDL:
+		return r.RedoDDL.DDL.CommitTs
+	default:
+		log.Panic("invalid redo log type", zap.Any("type", r.Type))
+	}
+	return 0
+}
+
 // RedoRowChangedEvent represents the DML event used in RedoLog
 type RedoRowChangedEvent struct {
 	Row        *RowChangedEvent `msg:"row"`
 	Columns    []RedoColumn     `msg:"columns"`
 	PreColumns []RedoColumn     `msg:"pre-columns"`
+}
+
+// RedoDDLEvent represents DDL event used in redo log persistent
+type RedoDDLEvent struct {
+	DDL  *DDLEvent `msg:"ddl"`
+	Type byte      `msg:"type"`
+}
+
+// ToRedoLog converts row changed event to redo log
+func (row *RowChangedEvent) ToRedoLog() *RedoLog {
+	return &RedoLog{
+		RedoRow: RedoRowChangedEvent{Row: row},
+		Type:    RedoLogTypeRow,
+	}
+}
+
+// ToRedoLog converts ddl event to redo log
+func (ddl *DDLEvent) ToRedoLog() *RedoLog {
+	return &RedoLog{
+		RedoDDL: RedoDDLEvent{DDL: ddl},
+		Type:    RedoLogTypeDDL,
+	}
 }
 
 // RowChangedEvent represents a row changed event
@@ -596,12 +631,6 @@ type DDLEvent struct {
 	PreTableInfo *TableInfo       `msg:"-"`
 	Type         model.ActionType `msg:"-"`
 	Done         bool             `msg:"-"`
-}
-
-// RedoDDLEvent represents DDL event used in redo log persistent
-type RedoDDLEvent struct {
-	DDL  *DDLEvent `msg:"ddl"`
-	Type byte      `msg:"type"`
 }
 
 // FromJob fills the values with DDLEvent from DDL job
