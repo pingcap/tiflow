@@ -24,7 +24,7 @@ import (
 	"golang.org/x/sync/errgroup"
 )
 
-const (
+var (
 	defaultEncodingWorkerNum      = 16
 	defaultEncodingInputChanSize  = 128
 	defaultEncodingOutputChanSize = 2048

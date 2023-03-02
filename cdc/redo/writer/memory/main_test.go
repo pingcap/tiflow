@@ -20,5 +20,10 @@ import (
 )
 
 func TestMain(m *testing.M) {
+	bak := defaultEncodingInputChanSize
+	defer func() {
+		defaultEncodingInputChanSize = bak
+	}()
+	defaultEncodingInputChanSize = 0
 	leakutil.SetUpLeakTest(m)
 }
