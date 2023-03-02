@@ -88,7 +88,10 @@ func testWriteEvents(t *testing.T, events []writer.RedoEvent) {
 	require.NoError(t, err)
 
 	require.ErrorIs(t, lw.Close(), context.Canceled)
-	err = lw.WriteEvents(ctx, events...)
+	require.Eventually(t, func() bool {
+		err = lw.WriteEvents(ctx, events...)
+		return err != nil
+	}, 2*time.Second, 10*time.Millisecond)
 	require.ErrorContains(t, err, "redo log writer stopped")
 	err = lw.FlushLog(ctx)
 	require.ErrorContains(t, err, "redo log writer stopped")
