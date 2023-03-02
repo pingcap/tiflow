@@ -36,8 +36,9 @@ import (
 )
 
 func TestWriterWrite(t *testing.T) {
-	dir := t.TempDir()
+	t.Parallel()
 
+	dir := t.TempDir()
 	cfs := []model.ChangeFeedID{
 		model.DefaultChangeFeedID("test-cf"),
 		{
@@ -276,13 +277,22 @@ func TestWriterGC(t *testing.T) {
 }
 
 func TestAdvanceTs(t *testing.T) {
+	t.Parallel()
+
 	w := &Writer{}
 	w.AdvanceTs(111)
 	require.EqualValues(t, 111, w.eventCommitTS.Load())
 }
 
+<<<<<<< HEAD:cdc/redo/writer/file_test.go
 func TestNewWriter(t *testing.T) {
 	_, err := NewWriter(context.Background(), nil)
+=======
+func TestNewFileWriter(t *testing.T) {
+	t.Parallel()
+
+	_, err := NewFileWriter(context.Background(), nil)
+>>>>>>> 8430a081f2 (redo(ticdc): add unit tests for redo meta manager (#8363)):cdc/redo/writer/file/file_test.go
 	require.NotNil(t, err)
 
 	storageDir := t.TempDir()
@@ -350,6 +360,8 @@ func TestNewWriter(t *testing.T) {
 }
 
 func TestRotateFileWithFileAllocator(t *testing.T) {
+	t.Parallel()
+
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 	_, err := NewWriter(ctx, nil)
@@ -414,6 +426,8 @@ func TestRotateFileWithFileAllocator(t *testing.T) {
 }
 
 func TestRotateFileWithoutFileAllocator(t *testing.T) {
+	t.Parallel()
+
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 	_, err := NewWriter(ctx, nil)

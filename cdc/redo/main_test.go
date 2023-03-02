@@ -20,11 +20,14 @@ import (
 )
 
 func TestMain(m *testing.M) {
+<<<<<<< HEAD
 	originValue := defaultGCIntervalInMs
 	defaultGCIntervalInMs = 1
 	defer func() {
 		defaultGCIntervalInMs = originValue
 	}()
 
+=======
+>>>>>>> 8430a081f2 (redo(ticdc): add unit tests for redo meta manager (#8363))
 	leakutil.SetUpLeakTest(m)
 }
