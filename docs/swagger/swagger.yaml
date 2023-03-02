@@ -284,8 +284,6 @@ definitions:
         type: string
       creator_version:
         type: string
-      engine:
-        type: string
       error:
         $ref: '#/definitions/v2.RunningError'
       id:
@@ -341,8 +339,6 @@ definitions:
         type: string
       changefeed_id:
         type: string
-      engine:
-        type: string
       key_path:
         type: string
       namespace:
@@ -394,6 +390,8 @@ definitions:
         type: integer
       storage:
         type: string
+      use_file_backend:
+        type: boolean
     type: object
   v2.DispatchRule:
     properties:
