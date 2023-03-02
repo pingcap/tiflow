@@ -28,6 +28,11 @@ import (
 	"go.uber.org/zap"
 )
 
+// batchID is used to advance table sink with a given CommitTs, even if not all
+// transactions with the same CommitTs are collected, regardless of whether splitTxn
+// is enabled or not. We split transactions with the same CommitTs even if splitTxn
+// is false, and it won't break transaction atomicity to downstream.
+// NOTICE:
 // batchID is used to distinguish different batches of the same transaction.
 // We need to use a global variable because the same commit ts event may be
 // processed at different times.
@@ -132,14 +137,14 @@ func validateAndAdjustBound(changefeedID model.ChangeFeedID,
 
 func (w *sinkWorker) handleTask(ctx context.Context, task *sinkTask) (finalErr error) {
 	// We need to use a new batch ID for each task.
-	batchID := batchID.Add(1)
-	advancer := newTableSinkAdvancer(task, w.splitTxn, w.sinkMemQuota, requestMemSize, batchID)
+	batchID.Add(1)
+	advancer := newTableSinkAdvancer(task, w.splitTxn, w.sinkMemQuota, requestMemSize)
 	// The task is finished and some required memory isn't used.
 	defer advancer.cleanup()
 
 	lowerBound, upperBound := validateAndAdjustBound(w.changefeedID, task)
 	if w.eventCache != nil {
-		drained, err := w.fetchFromCache(task, &lowerBound, &upperBound, &advancer.batchID)
+		drained, err := w.fetchFromCache(task, &lowerBound, &upperBound)
 		if err != nil {
 			return errors.Trace(err)
 		}
@@ -247,7 +252,6 @@ func (w *sinkWorker) fetchFromCache(
 	task *sinkTask, // task is read-only here.
 	lowerBound *engine.Position,
 	upperBound *engine.Position,
-	batchID *uint64,
 ) (cacheDrained bool, err error) {
 	newLowerBound := *lowerBound
 	newUpperBound := *upperBound
@@ -277,8 +281,8 @@ func (w *sinkWorker) fetchFromCache(
 			resolvedTs = model.NewResolvedTs(popRes.boundary.CommitTs)
 			if !isCommitFence {
 				resolvedTs.Mode = model.BatchResolvedMode
-				resolvedTs.BatchID = *batchID
-				*batchID += 1
+				resolvedTs.BatchID = batchID.Load()
+				batchID.Add(1)
 			}
 		} else {
 			if isCommitFence {

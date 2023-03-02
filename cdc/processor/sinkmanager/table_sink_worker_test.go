@@ -633,7 +633,7 @@ func (suite *workerSuite) TestHandleTaskUseDifferentBatchIDEveryTime() {
 	}, 5*time.Second, 10*time.Millisecond)
 	require.Equal(suite.T(), 2, sink.GetWriteTimes(), "Only two times write to sink, "+
 		"because the max update interval size is 2 * event size")
-	require.Equal(suite.T(), uint64(1), batchID.Load())
+	require.Equal(suite.T(), uint64(3), batchID.Load())
 	sink.AckAllEvents()
 	require.Eventually(suite.T(), func() bool {
 		return wrapper.getCheckpointTs().ResolvedMark() == 2
@@ -660,7 +660,8 @@ func (suite *workerSuite) TestHandleTaskUseDifferentBatchIDEveryTime() {
 		isCanceled:    func() bool { return false },
 	}
 	wg.Wait()
-	require.Equal(suite.T(), uint64(2), batchID.Load(), "The batchID should be 2")
+	require.Equal(suite.T(), uint64(5), batchID.Load(), "The batchID should be 5, "+
+		"because the first task has 3 events, the second task has 1 event")
 }
 
 func (suite *workerSuite) TestValidateAndAdjustBound() {

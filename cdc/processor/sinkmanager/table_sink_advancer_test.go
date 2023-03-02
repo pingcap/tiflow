@@ -45,7 +45,7 @@ func (suite *advancerSuite) SetupSuite() {
 
 func (suite *advancerSuite) SetupTest() {
 	// reset batchID
-	batchID.Store(0)
+	batchID.Store(1)
 }
 
 func (suite *advancerSuite) TearDownSuite() {
@@ -124,7 +124,7 @@ func (suite *advancerSuite) TestAdvanceTableSinkWithBatchID() {
 	task, _ := suite.genSinkTask()
 	memoryQuota := suite.genMemQuota(512)
 	defer memoryQuota.Close()
-	advancer := newTableSinkAdvancer(task, true, memoryQuota, 512, batchID.Add(1))
+	advancer := newTableSinkAdvancer(task, true, memoryQuota, 512)
 	require.NotNil(suite.T(), advancer)
 
 	err := advanceTableSinkWithBatchID(task, 2, 256, 1, memoryQuota)
@@ -140,7 +140,7 @@ func (suite *advancerSuite) TestAdvanceTableSink() {
 	task, _ := suite.genSinkTask()
 	memoryQuota := suite.genMemQuota(512)
 	defer memoryQuota.Close()
-	advancer := newTableSinkAdvancer(task, true, memoryQuota, 512, batchID.Add(1))
+	advancer := newTableSinkAdvancer(task, true, memoryQuota, 512)
 	require.NotNil(suite.T(), advancer)
 
 	err := advanceTableSink(task, 2, 256, memoryQuota)
@@ -154,18 +154,16 @@ func (suite *advancerSuite) TestNewTableSinkAdvancer() {
 	task, _ := suite.genSinkTask()
 	memoryQuota := suite.genMemQuota(512)
 	defer memoryQuota.Close()
-	advancer := newTableSinkAdvancer(task, true, memoryQuota, 512, batchID.Add(1))
+	advancer := newTableSinkAdvancer(task, true, memoryQuota, 512)
 	require.NotNil(suite.T(), advancer)
 	require.Equal(suite.T(), uint64(512), advancer.availableMem)
-	require.Equal(suite.T(), uint64(batchIDInitialValue), advancer.batchID,
-		"batchID should be initialized to 1")
 }
 
 func (suite *advancerSuite) TestHasEnoughMem() {
 	memoryQuota := suite.genMemQuota(512)
 	defer memoryQuota.Close()
 	task, _ := suite.genSinkTask()
-	advancer := newTableSinkAdvancer(task, true, memoryQuota, 512, batchID.Add(1))
+	advancer := newTableSinkAdvancer(task, true, memoryQuota, 512)
 	require.NotNil(suite.T(), advancer)
 	require.True(suite.T(), advancer.hasEnoughMem())
 	for i := 0; i < 6; i++ {
@@ -180,7 +178,7 @@ func (suite *advancerSuite) TestCleanup() {
 	memoryQuota := suite.genMemQuota(512)
 	defer memoryQuota.Close()
 	task, _ := suite.genSinkTask()
-	advancer := newTableSinkAdvancer(task, true, memoryQuota, 512, batchID.Add(1))
+	advancer := newTableSinkAdvancer(task, true, memoryQuota, 512)
 	require.NotNil(suite.T(), advancer)
 	require.Equal(suite.T(), uint64(512), advancer.availableMem)
 	require.Equal(suite.T(), uint64(0), advancer.usedMem)
@@ -194,7 +192,7 @@ func (suite *advancerSuite) TestAppendEvents() {
 	memoryQuota := suite.genMemQuota(512)
 	defer memoryQuota.Close()
 	task, _ := suite.genSinkTask()
-	advancer := newTableSinkAdvancer(task, true, memoryQuota, 512, batchID.Add(1))
+	advancer := newTableSinkAdvancer(task, true, memoryQuota, 512)
 	require.NotNil(suite.T(), advancer)
 	require.True(suite.T(), advancer.hasEnoughMem())
 	for i := 0; i < 2; i++ {
@@ -209,7 +207,7 @@ func (suite *advancerSuite) TestTryMoveMoveToNextTxn() {
 	memoryQuota := suite.genMemQuota(512)
 	defer memoryQuota.Close()
 	task, _ := suite.genSinkTask()
-	advancer := newTableSinkAdvancer(task, true, memoryQuota, 512, batchID.Add(1))
+	advancer := newTableSinkAdvancer(task, true, memoryQuota, 512)
 	require.NotNil(suite.T(), advancer)
 
 	// Initial state.
@@ -256,7 +254,7 @@ func (suite *advancerSuite) TestAdvanceTheSameCommitTsEventsWithCommitFence() {
 	memoryQuota := suite.genMemQuota(768)
 	defer memoryQuota.Close()
 	task, sink := suite.genSinkTask()
-	advancer := newTableSinkAdvancer(task, true, memoryQuota, 768, batchID.Add(1))
+	advancer := newTableSinkAdvancer(task, true, memoryQuota, 768)
 	require.NotNil(suite.T(), advancer)
 
 	// 1. append 1 event with commit ts 1
@@ -299,7 +297,7 @@ func (suite *advancerSuite) TestAdvanceTheSameCommitTsEventsWithoutCommitFence()
 	memoryQuota := suite.genMemQuota(768)
 	defer memoryQuota.Close()
 	task, sink := suite.genSinkTask()
-	advancer := newTableSinkAdvancer(task, true, memoryQuota, 768, batchID.Add(1))
+	advancer := newTableSinkAdvancer(task, true, memoryQuota, 768)
 	require.NotNil(suite.T(), advancer)
 
 	// 1. append 1 event with commit ts 1
@@ -336,7 +334,7 @@ func (suite *advancerSuite) TestAdvanceTheSameCommitTsEventsWithoutCommitFence()
 	}, 5*time.Second, 10*time.Millisecond)
 	require.Equal(suite.T(), uint64(0), advancer.committedTxnSize)
 	require.Equal(suite.T(), uint64(0), advancer.pendingTxnSize)
-	require.Equal(suite.T(), uint64(2), advancer.batchID, "batch ID should be increased")
+	require.Equal(suite.T(), uint64(2), batchID.Load(), "batch ID should be increased")
 }
 
 // Test Scenario:
@@ -347,7 +345,7 @@ func (suite *advancerSuite) TestAdvanceDifferentCommitTsEventsWithSplitTxn() {
 	memoryQuota := suite.genMemQuota(768)
 	defer memoryQuota.Close()
 	task, sink := suite.genSinkTask()
-	advancer := newTableSinkAdvancer(task, true, memoryQuota, 768, batchID.Add(1))
+	advancer := newTableSinkAdvancer(task, true, memoryQuota, 768)
 	require.NotNil(suite.T(), advancer)
 
 	// 1. append 1 event with commit ts 2
@@ -386,7 +384,7 @@ func (suite *advancerSuite) TestAdvanceDifferentCommitTsEventsWithSplitTxn() {
 	}, 5*time.Second, 10*time.Millisecond)
 	require.Equal(suite.T(), uint64(0), advancer.committedTxnSize)
 	require.Equal(suite.T(), uint64(0), advancer.pendingTxnSize)
-	require.Equal(suite.T(), uint64(2), advancer.batchID, "batch ID should be increased")
+	require.Equal(suite.T(), uint64(2), batchID.Load(), "batch ID should be increased")
 }
 
 // Test Scenario:
@@ -398,7 +396,7 @@ func (suite *advancerSuite) TestAdvanceDifferentCommitTsEventsWithoutSplitTxn() 
 	defer memoryQuota.Close()
 	task, sink := suite.genSinkTask()
 	// Do not split txn.
-	advancer := newTableSinkAdvancer(task, false, memoryQuota, 768, batchID.Add(1))
+	advancer := newTableSinkAdvancer(task, false, memoryQuota, 768)
 	require.NotNil(suite.T(), advancer)
 
 	// 1. append 1 event with commit ts 2
@@ -440,7 +438,7 @@ func (suite *advancerSuite) TestAdvanceDifferentCommitTsEventsWithoutSplitTxn() 
 	}, 5*time.Second, 10*time.Millisecond)
 	require.Equal(suite.T(), uint64(0), advancer.committedTxnSize)
 	require.Equal(suite.T(), uint64(256), advancer.pendingTxnSize)
-	require.Equal(suite.T(), uint64(1), advancer.batchID, "batch ID should not be increased")
+	require.Equal(suite.T(), uint64(1), batchID.Load(), "batch ID should not be increased")
 }
 
 // Test Scenario:
@@ -453,7 +451,7 @@ func (suite *advancerSuite) TestLastTimeAdvanceDifferentCommitTsEventsWithoutSpl
 	defer memoryQuota.Close()
 	task, sink := suite.genSinkTask()
 	// Do not split txn.
-	advancer := newTableSinkAdvancer(task, false, memoryQuota, 768, batchID.Add(1))
+	advancer := newTableSinkAdvancer(task, false, memoryQuota, 768)
 	require.NotNil(suite.T(), advancer)
 
 	// 1. append 1 event with commit ts 2
@@ -497,7 +495,7 @@ func (suite *advancerSuite) TestLastTimeAdvanceDifferentCommitTsEventsWithoutSpl
 	require.Equal(suite.T(), uint64(0), advancer.pendingTxnSize,
 		"Last time advance should clear pending txn size,"+
 			"otherwise the memory quota will be leaked.")
-	require.Equal(suite.T(), uint64(1), advancer.batchID)
+	require.Equal(suite.T(), uint64(1), batchID.Load())
 }
 
 // Test Scenario:
@@ -508,7 +506,7 @@ func (suite *advancerSuite) TestTryAdvanceWhenExceedAvailableMem() {
 	memoryQuota := suite.genMemQuota(768)
 	defer memoryQuota.Close()
 	task, sink := suite.genSinkTask()
-	advancer := newTableSinkAdvancer(task, true, memoryQuota, 768, batchID.Add(1))
+	advancer := newTableSinkAdvancer(task, true, memoryQuota, 768)
 	require.NotNil(suite.T(), advancer)
 
 	// 1. append 1 event with commit ts 2
@@ -552,7 +550,7 @@ func (suite *advancerSuite) TestTryAdvanceWhenExceedAvailableMem() {
 	}, 5*time.Second, 10*time.Millisecond)
 	require.Equal(suite.T(), uint64(0), advancer.committedTxnSize)
 	require.Equal(suite.T(), uint64(0), advancer.pendingTxnSize)
-	require.Equal(suite.T(), uint64(1), advancer.batchID)
+	require.Equal(suite.T(), uint64(1), batchID.Load())
 }
 
 // Test Scenario:
@@ -562,7 +560,7 @@ func (suite *advancerSuite) TestTryAdvanceWhenReachTheMaxUpdateIntervalSizeAndTx
 	memoryQuota := suite.genMemQuota(768)
 	defer memoryQuota.Close()
 	task, sink := suite.genSinkTask()
-	advancer := newTableSinkAdvancer(task, true, memoryQuota, 768, batchID.Add(1))
+	advancer := newTableSinkAdvancer(task, true, memoryQuota, 768)
 	require.NotNil(suite.T(), advancer)
 
 	// 1. append 1 event with commit ts 2
@@ -601,7 +599,7 @@ func (suite *advancerSuite) TestTryAdvanceWhenReachTheMaxUpdateIntervalSizeAndTx
 	}, 5*time.Second, 10*time.Millisecond)
 	require.Equal(suite.T(), uint64(0), advancer.committedTxnSize)
 	require.Equal(suite.T(), uint64(0), advancer.pendingTxnSize)
-	require.Equal(suite.T(), uint64(1), advancer.batchID)
+	require.Equal(suite.T(), uint64(1), batchID.Load())
 }
 
 // Test Scenario:
@@ -611,7 +609,7 @@ func (suite *advancerSuite) TestFinish() {
 	memoryQuota := suite.genMemQuota(768)
 	defer memoryQuota.Close()
 	task, sink := suite.genSinkTask()
-	advancer := newTableSinkAdvancer(task, true, memoryQuota, 768, batchID.Add(1))
+	advancer := newTableSinkAdvancer(task, true, memoryQuota, 768)
 	require.NotNil(suite.T(), advancer)
 
 	// 1. append 1 event with commit ts 2
@@ -653,7 +651,7 @@ func (suite *advancerSuite) TestFinish() {
 	}, 5*time.Second, 10*time.Millisecond)
 	require.Equal(suite.T(), uint64(0), advancer.committedTxnSize)
 	require.Equal(suite.T(), uint64(0), advancer.pendingTxnSize)
-	require.Equal(suite.T(), uint64(1), advancer.batchID)
+	require.Equal(suite.T(), uint64(1), batchID.Load())
 }
 
 // Test Scenario:
@@ -663,7 +661,7 @@ func (suite *advancerSuite) TestTryAdvanceAndForceAcquireWithoutSplitTxn() {
 	memoryQuota := suite.genMemQuota(768)
 	defer memoryQuota.Close()
 	task, sink := suite.genSinkTask()
-	advancer := newTableSinkAdvancer(task, false, memoryQuota, 768, batchID.Add(1))
+	advancer := newTableSinkAdvancer(task, false, memoryQuota, 768)
 	require.NotNil(suite.T(), advancer)
 
 	// 1. append 1 event with commit ts 2
@@ -702,7 +700,7 @@ func (suite *advancerSuite) TestTryAdvanceAndForceAcquireWithoutSplitTxn() {
 	}, 5*time.Second, 10*time.Millisecond)
 	require.Equal(suite.T(), uint64(0), advancer.committedTxnSize)
 	require.Equal(suite.T(), uint64(0), advancer.pendingTxnSize)
-	require.Equal(suite.T(), uint64(1), advancer.batchID)
+	require.Equal(suite.T(), uint64(1), batchID.Load())
 }
 
 // Test Scenario:
@@ -712,7 +710,7 @@ func (suite *advancerSuite) TestTryAdvanceAndBlockAcquireWithSplitTxn() {
 	memoryQuota := suite.genMemQuota(768)
 	defer memoryQuota.Close()
 	task, sink := suite.genSinkTask()
-	advancer := newTableSinkAdvancer(task, true, memoryQuota, 768, batchID.Add(1))
+	advancer := newTableSinkAdvancer(task, true, memoryQuota, 768)
 	require.NotNil(suite.T(), advancer)
 
 	// 1. append 1 event with commit ts 2
@@ -766,7 +764,6 @@ func (suite *advancerSuite) TestTryAdvanceAndBlockAcquireWithSplitTxn() {
 		}, 5*time.Second, 10*time.Millisecond)
 		require.Equal(suite.T(), uint64(0), advancer.committedTxnSize)
 		require.Equal(suite.T(), uint64(0), advancer.pendingTxnSize)
-		require.Equal(suite.T(), uint64(1), advancer.batchID)
 		wg.Done()
 	}()
 	wg.Wait()

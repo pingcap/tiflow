@@ -23,8 +23,6 @@ import (
 )
 
 const (
-	// BatchID starts from 1.
-	batchIDInitialValue = 1
 	// bufferSize is the size of the buffer used to store the events.
 	bufferSize = 1024
 )
@@ -48,11 +46,6 @@ type tableSinkAdvancer struct {
 	lastPos engine.Position
 	// Buffer the events to be written to the table sink.
 	events []*model.RowChangedEvent
-	// batchID is used to advance table sink with a given CommitTs, even if not all
-	// transactions with the same CommitTs are collected, regardless of whether splitTxn
-	// is enabled or not. We split transactions with the same CommitTs even if splitTxn
-	// is false, and it won't break transaction atomicity to downstream.
-	batchID uint64
 
 	// Used to record the size of already appended transaction.
 	committedTxnSize uint64
@@ -70,7 +63,6 @@ func newTableSinkAdvancer(
 	splitTxn bool,
 	sinkMemQuota *memquota.MemQuota,
 	availableMem uint64,
-	batchID uint64,
 ) *tableSinkAdvancer {
 	return &tableSinkAdvancer{
 		task:         task,
@@ -78,7 +70,6 @@ func newTableSinkAdvancer(
 		sinkMemQuota: sinkMemQuota,
 		availableMem: availableMem,
 		events:       make([]*model.RowChangedEvent, 0, bufferSize),
-		batchID:      batchID,
 	}
 }
 
@@ -117,8 +108,8 @@ func (a *tableSinkAdvancer) advance(isLastTime bool) (err error) {
 			// So we need to advance the table sink with a batchID. It will make sure that
 			// we do not cross the CommitTs boundary.
 			err = advanceTableSinkWithBatchID(a.task, a.currTxnCommitTs,
-				a.committedTxnSize+a.pendingTxnSize, a.batchID, a.sinkMemQuota)
-			a.batchID += 1
+				a.committedTxnSize+a.pendingTxnSize, batchID.Load(), a.sinkMemQuota)
+			batchID.Add(1)
 		}
 
 		a.committedTxnSize = 0
@@ -129,9 +120,9 @@ func (a *tableSinkAdvancer) advance(isLastTime bool) (err error) {
 		// This will advance some complete transactions before currTxnCommitTs,
 		// and one partial transaction with `batchID`.
 		err = advanceTableSinkWithBatchID(a.task, a.currTxnCommitTs,
-			a.committedTxnSize+a.pendingTxnSize, a.batchID, a.sinkMemQuota)
+			a.committedTxnSize+a.pendingTxnSize, batchID.Load(), a.sinkMemQuota)
 
-		a.batchID += 1
+		batchID.Add(1)
 		a.committedTxnSize = 0
 		a.pendingTxnSize = 0
 	} else if !a.splitTxn && a.lastTxnCommitTs > 0 {
@@ -257,7 +248,6 @@ func (a *tableSinkAdvancer) tryMoveToNextTxn(commitTs model.Ts) {
 		// Move to the next transaction.
 		a.currTxnCommitTs = commitTs
 		a.pendingTxnSize = 0
-		a.batchID = batchIDInitialValue
 	}
 }
 
