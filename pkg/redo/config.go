@@ -28,13 +28,25 @@ import (
 )
 
 var (
-	// DefaultTimeout is the default timeout for writing external storage
-	DefaultTimeout = 15 * time.Minute
-	// CloseTimeout is the default timeout for close redo writer
-	CloseTimeout = 15 * time.Second
+	// DefaultGCIntervalInMs defines GC interval in meta manager, which can be changed in tests.
+	DefaultGCIntervalInMs = 5000 // 5 seconds
+	// DefaultMaxLogSize is the default max size of log file
+	DefaultMaxLogSize = int64(64)
 )
 
 const (
+	// DefaultTimeout is the default timeout for writing external storage.
+	DefaultTimeout = 15 * time.Minute
+	// CloseTimeout is the default timeout for close redo writer.
+	CloseTimeout = 15 * time.Second
+
+	// FlushWarnDuration is the warning duration for flushing external storage.
+	FlushWarnDuration = time.Second * 20
+	// DefaultFlushIntervalInMs is the default flush interval for redo log.
+	DefaultFlushIntervalInMs = 2000
+	// MinFlushIntervalInMs is the minimum flush interval for redo log.
+	MinFlushIntervalInMs = 50
+
 	// DefaultFileMode is the default mode when operation files
 	DefaultFileMode = 0o644
 	// DefaultDirMode is the default mode when operation dir
@@ -52,6 +64,12 @@ const (
 	// MinSectorSize is minimum sector size used when flushing log so that log can safely
 	// distinguish between torn writes and ordinary data corruption.
 	MinSectorSize = 512
+	// PageBytes is the alignment for flushing records to the backing Writer.
+	// It should be a multiple of the minimum sector size so that log can safely
+	// distinguish between torn writes and ordinary data corruption.
+	PageBytes = 8 * MinSectorSize
+	// Megabyte is the size of 1MB
+	Megabyte int64 = 1024 * 1024
 )
 
 const (
@@ -62,16 +80,6 @@ const (
 	// RedoDDLLogFileType is the default file type of ddl log file
 	RedoDDLLogFileType = "ddl"
 )
-
-// FileTypeConfig Specifies redo file type config.
-type FileTypeConfig struct {
-	// Whether emitting redo meta or not.
-	EmitMeta bool
-	// Whether emitting row events or not.
-	EmitRowEvents bool
-	// Whether emitting DDL events or not.
-	EmitDDLEvents bool
-}
 
 // ConsistentLevelType is the level of redo log consistent level.
 type ConsistentLevelType string
@@ -119,7 +127,7 @@ const (
 	consistentStorageAzblob ConsistentStorage = "azblob"
 	// consistentStorageAzure is an alias of Azure Blob storage.
 	consistentStorageAzure ConsistentStorage = "azure"
-	// consistentStorageFile is  an external storage based on local files and
+	// consistentStorageFile is an external storage based on local files and
 	// will only be used for testing.
 	consistentStorageFile ConsistentStorage = "file"
 	// consistentStorageNoop is a noop storage, which simply discard all data.
@@ -152,6 +160,13 @@ func IsLocalStorage(scheme string) bool {
 		return true
 	default:
 		return false
+	}
+}
+
+// FixLocalScheme convert local scheme to externally compatible scheme.
+func FixLocalScheme(uri *url.URL) {
+	if IsLocalStorage(uri.Scheme) {
+		uri.Scheme = string(consistentStorageFile)
 	}
 }
 

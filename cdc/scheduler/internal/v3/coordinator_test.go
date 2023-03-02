@@ -44,8 +44,8 @@ func TestCoordinatorSendMsgs(t *testing.T) {
 	coord, trans := newTestCoordinator(&config.SchedulerConfig{
 		ChangefeedSettings: &config.ChangefeedSchedulerConfig{
 			// Enable span replication.
-			EnableSplitSpan: true,
-			RegionPerSpan:   10000,
+			EnableTableAcrossNodes: true,
+			RegionPerSpan:          10000,
 		},
 	})
 	coord.version = "6.2.0"
@@ -85,8 +85,8 @@ func TestCoordinatorRecvMsgs(t *testing.T) {
 	coord, trans := newTestCoordinator(&config.SchedulerConfig{
 		ChangefeedSettings: &config.ChangefeedSchedulerConfig{
 			// Enable span replication.
-			EnableSplitSpan: true,
-			RegionPerSpan:   10000,
+			EnableTableAcrossNodes: true,
+			RegionPerSpan:          10000,
 		},
 	})
 	coord.version = "6.2.0"

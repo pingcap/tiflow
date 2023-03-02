@@ -45,6 +45,16 @@ const (
 
 // createChangefeed handles create changefeed request,
 // it returns the changefeed's changefeedInfo that it just created
+// CreateChangefeed creates a changefeed
+// @Summary Create changefeed
+// @Description create a new changefeed
+// @Tags changefeed,v2
+// @Accept json
+// @Produce json
+// @Param changefeed body ChangefeedConfig true "changefeed config"
+// @Success 200 {object} ChangeFeedInfo
+// @Failure 500,400 {object} model.HTTPError
+// @Router	/api/v2/changefeeds [post]
 func (h *OpenAPIV2) createChangefeed(c *gin.Context) {
 	ctx := c.Request.Context()
 	cfg := &ChangefeedConfig{ReplicaConfig: GetDefaultReplicaConfig()}
@@ -161,11 +171,11 @@ func (h *OpenAPIV2) createChangefeed(c *gin.Context) {
 // listChangeFeeds lists all changgefeeds in cdc cluster
 // @Summary List changefeed
 // @Description list all changefeeds in cdc cluster
-// @Tags changefeed
+// @Tags changefeed,v2
 // @Accept json
 // @Produce json
 // @Param state query string false "state"
-// @Success 200 {array} model.ChangefeedCommonInfo
+// @Success 200 {array} ChangefeedCommonInfo
 // @Failure 500 {object} model.HTTPError
 // @Router /api/v2/changefeeds [get]
 func (h *OpenAPIV2) listChangeFeeds(c *gin.Context) {
@@ -293,6 +303,17 @@ func (h *OpenAPIV2) verifyTable(c *gin.Context) {
 // Can only update a changefeed's: TargetTs, SinkURI,
 // ReplicaConfig, PDAddrs, CAPath, CertPath, KeyPath,
 // SyncPointEnabled, SyncPointInterval
+// UpdateChangefeed updates a changefeed
+// @Summary Update a changefeed
+// @Description Update a changefeed
+// @Tags changefeed,v2
+// @Accept json
+// @Produce json
+// @Param changefeed_id  path  string  true  "changefeed_id"
+// @Param changefeedConfig body ChangefeedConfig true "changefeed config"
+// @Success 202 {object} ChangeFeedInfo
+// @Failure 500,400 {object} model.HTTPError
+// @Router /api/v2/changefeeds/{changefeed_id} [put]
 func (h *OpenAPIV2) updateChangefeed(c *gin.Context) {
 	ctx := c.Request.Context()
 
@@ -392,11 +413,11 @@ func (h *OpenAPIV2) updateChangefeed(c *gin.Context) {
 // getChangefeed get detailed info of a changefeed
 // @Summary Get changefeed
 // @Description get detail information of a changefeed
-// @Tags changefeed
+// @Tags changefeed,v2
 // @Accept json
 // @Produce json
 // @Param changefeed_id  path  string  true  "changefeed_id"
-// @Success 200 {object} model.ChangefeedDetail
+// @Success 200 {object} ChangeFeedInfo
 // @Failure 500,400 {object} model.HTTPError
 // @Router /api/v2/changefeeds/{changefeed_id} [get]
 func (h *OpenAPIV2) getChangeFeed(c *gin.Context) {
@@ -455,7 +476,17 @@ func (h *OpenAPIV2) getChangeFeed(c *gin.Context) {
 	c.JSON(http.StatusOK, detail)
 }
 
-// deleteChangefeed handles delete changefeed request,
+// deleteChangefeed handles delete changefeed request
+// RemoveChangefeed removes a changefeed
+// @Summary Remove a changefeed
+// @Description Remove a changefeed
+// @Tags changefeed,v2
+// @Accept json
+// @Produce json
+// @Param changefeed_id path string true "changefeed_id"
+// @Success 204
+// @Failure 500,400 {object} model.HTTPError
+// @Router	/api/v2/changefeeds/{changefeed_id} [delete]
 func (h *OpenAPIV2) deleteChangefeed(c *gin.Context) {
 	ctx := c.Request.Context()
 	changefeedID := model.DefaultChangeFeedID(c.Param(apiOpVarChangefeedID))
@@ -558,6 +589,17 @@ func (h *OpenAPIV2) getChangeFeedMetaInfo(c *gin.Context) {
 }
 
 // resumeChangefeed handles resume changefeed request.
+// ResumeChangefeed resumes a changefeed
+// @Summary Resume a changefeed
+// @Description Resume a changefeed
+// @Tags changefeed,v2
+// @Accept json
+// @Produce json
+// @Param changefeed_id path string true "changefeed_id"
+// @Param resumeConfig body ResumeChangefeedConfig true "resume config"
+// @Success 202
+// @Failure 500,400 {object} model.HTTPError
+// @Router	/api/v2/changefeeds/{changefeed_id}/resume [post]
 func (h *OpenAPIV2) resumeChangefeed(c *gin.Context) {
 	ctx := c.Request.Context()
 	changefeedID := model.DefaultChangeFeedID(c.Param(apiOpVarChangefeedID))
@@ -647,6 +689,16 @@ func (h *OpenAPIV2) resumeChangefeed(c *gin.Context) {
 }
 
 // pauseChangefeed handles pause changefeed request
+// PauseChangefeed pauses a changefeed
+// @Summary Pause a changefeed
+// @Description Pause a changefeed
+// @Tags changefeed,v2
+// @Accept json
+// @Produce json
+// @Param changefeed_id  path  string  true  "changefeed_id"
+// @Success 202 {object} EmptyResponse
+// @Failure 500,400 {object} model.HTTPError
+// @Router /api/v2/changefeeds/{changefeed_id}/pause [post]
 func (h *OpenAPIV2) pauseChangefeed(c *gin.Context) {
 	ctx := c.Request.Context()
 
@@ -708,11 +760,10 @@ func toAPIModel(
 		Namespace:      info.Namespace,
 		ID:             info.ID,
 		SinkURI:        sinkURI,
-		CreateTime:     info.CreateTime,
+		CreateTime:     model.JSONTime(info.CreateTime),
 		StartTs:        info.StartTs,
 		TargetTs:       info.TargetTs,
 		AdminJobType:   info.AdminJobType,
-		Engine:         info.Engine,
 		Config:         ToAPIReplicaConfig(info.Config),
 		State:          info.State,
 		Error:          runningError,

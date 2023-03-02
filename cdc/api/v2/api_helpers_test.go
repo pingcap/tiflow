@@ -114,10 +114,9 @@ func TestVerifyUpdateChangefeedConfig(t *testing.T) {
 	require.Nil(t, newUpInfo)
 	cfg.StartTs = 2
 	cfg.TargetTs = 10
-	cfg.Engine = model.SortInMemory
 	cfg.ReplicaConfig = ToAPIReplicaConfig(config.GetDefaultReplicaConfig())
 	cfg.ReplicaConfig.EnableSyncPoint = true
-	cfg.ReplicaConfig.SyncPointInterval = 30 * time.Second
+	cfg.ReplicaConfig.SyncPointInterval = JSONDuration{30 * time.Second}
 	cfg.PDAddrs = []string{"a", "b"}
 	cfg.CertPath = "p1"
 	cfg.CAPath = "p2"
@@ -130,7 +129,6 @@ func TestVerifyUpdateChangefeedConfig(t *testing.T) {
 	newCfInfo.Config.Sink.TxnAtomicity = ""
 	require.Equal(t, uint64(0), newCfInfo.StartTs)
 	require.Equal(t, uint64(10), newCfInfo.TargetTs)
-	require.Equal(t, model.SortInMemory, newCfInfo.Engine)
 	require.Equal(t, true, newCfInfo.Config.EnableSyncPoint)
 	require.Equal(t, 30*time.Second, newCfInfo.Config.SyncPointInterval)
 	require.Equal(t, cfg.ReplicaConfig.ToInternalReplicaConfig(), newCfInfo.Config)

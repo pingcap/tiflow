@@ -800,7 +800,7 @@ func TestFixSchedulerIncompatible(t *testing.T) {
 				},
 			},
 			expectedScheduler: &config.ChangefeedSchedulerConfig{
-				RegionPerSpan: 1000, EnableSplitSpan: true,
+				RegionPerSpan: 1000, EnableTableAcrossNodes: true,
 			},
 		},
 		{

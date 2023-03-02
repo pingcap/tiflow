@@ -17,13 +17,14 @@ import (
 	"testing"
 
 	"github.com/pingcap/tiflow/pkg/leakutil"
+	"github.com/pingcap/tiflow/pkg/redo"
 )
 
 func TestMain(m *testing.M) {
-	originValue := defaultGCIntervalInMs
-	defaultGCIntervalInMs = 1
+	originValue := redo.DefaultGCIntervalInMs
+	redo.DefaultGCIntervalInMs = 1
 	defer func() {
-		defaultGCIntervalInMs = originValue
+		redo.DefaultGCIntervalInMs = originValue
 	}()
 
 	leakutil.SetUpLeakTest(m)

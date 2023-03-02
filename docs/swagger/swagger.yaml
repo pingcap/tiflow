@@ -194,6 +194,13 @@ definitions:
       error_msg:
         type: string
     type: object
+  model.MoveTableReq:
+    properties:
+      capture_id:
+        type: string
+      table_id:
+        type: integer
+    type: object
   model.ProcessorCommonInfo:
     properties:
       capture_id:
@@ -250,6 +257,355 @@ definitions:
         type: integer
       status:
         type: integer
+    type: object
+  v2.CSVConfig:
+    properties:
+      delimiter:
+        type: string
+      include_commit_ts:
+        type: boolean
+      "null":
+        type: string
+      quote:
+        type: string
+    type: object
+  v2.ChangeFeedInfo:
+    properties:
+      admin_job_type:
+        description: used for admin job notification, trigger watch event in capture
+        type: integer
+      checkpoint_time:
+        type: string
+      checkpoint_ts:
+        type: integer
+      config:
+        $ref: '#/definitions/v2.ReplicaConfig'
+      create_time:
+        type: string
+      creator_version:
+        type: string
+      error:
+        $ref: '#/definitions/v2.RunningError'
+      id:
+        type: string
+      namespace:
+        type: string
+      resolved_ts:
+        type: integer
+      sink_uri:
+        type: string
+      start_ts:
+        description: Start sync at this commit ts if `StartTs` is specify or using
+          the CreateTime of changefeed.
+        type: integer
+      state:
+        type: string
+      target_ts:
+        description: The ChangeFeed will exits until sync to timestamp TargetTs
+        type: integer
+      task_status:
+        items:
+          $ref: '#/definitions/model.CaptureTaskStatus'
+        type: array
+      upstream_id:
+        type: integer
+    type: object
+  v2.ChangefeedCommonInfo:
+    properties:
+      checkpoint_time:
+        type: string
+      checkpoint_tso:
+        type: integer
+      error:
+        $ref: '#/definitions/model.RunningError'
+      id:
+        type: string
+      namespace:
+        type: string
+      state:
+        type: string
+      upstream_id:
+        type: integer
+    type: object
+  v2.ChangefeedConfig:
+    properties:
+      ca_path:
+        type: string
+      cert_allowed_cn:
+        items:
+          type: string
+        type: array
+      cert_path:
+        type: string
+      changefeed_id:
+        type: string
+      key_path:
+        type: string
+      namespace:
+        type: string
+      pd_addrs:
+        items:
+          type: string
+        type: array
+      replica_config:
+        $ref: '#/definitions/v2.ReplicaConfig'
+      sink_uri:
+        type: string
+      start_ts:
+        type: integer
+      target_ts:
+        type: integer
+    type: object
+  v2.ChangefeedSchedulerConfig:
+    properties:
+      enable_table_across_nodes:
+        description: |-
+          EnableTableAcrossNodes set true to split one table to multiple spans and
+          distribute to multiple TiCDC nodes.
+        type: boolean
+      region_per_span:
+        description: |-
+          RegionPerSpan the number of regions in a span, must be greater than 1000.
+          Set 0 to disable span replication.
+        type: integer
+    type: object
+  v2.ColumnSelector:
+    properties:
+      columns:
+        items:
+          type: string
+        type: array
+      matcher:
+        items:
+          type: string
+        type: array
+    type: object
+  v2.ConsistentConfig:
+    properties:
+      flush_interval:
+        type: integer
+      level:
+        type: string
+      max_log_size:
+        type: integer
+      storage:
+        type: string
+      use_file_backend:
+        type: boolean
+    type: object
+  v2.DispatchRule:
+    properties:
+      matcher:
+        items:
+          type: string
+        type: array
+      partition:
+        type: string
+      topic:
+        type: string
+    type: object
+  v2.EmptyResponse:
+    type: object
+  v2.EventFilterRule:
+    properties:
+      ignore_delete_value_expr:
+        type: string
+      ignore_event:
+        items:
+          type: string
+        type: array
+      ignore_insert_value_expr:
+        description: sql expression
+        type: string
+      ignore_sql:
+        description: regular expression
+        items:
+          type: string
+        type: array
+      ignore_update_new_value_expr:
+        type: string
+      ignore_update_old_value_expr:
+        type: string
+      matcher:
+        items:
+          type: string
+        type: array
+    type: object
+  v2.FilterConfig:
+    properties:
+      do_dbs:
+        description: DoDBs is an allowlist of schemas.
+        items:
+          type: string
+        type: array
+      do_tables:
+        description: DoTables is an allowlist of tables.
+        items:
+          $ref: '#/definitions/v2.Table'
+        type: array
+      event_filters:
+        items:
+          $ref: '#/definitions/v2.EventFilterRule'
+        type: array
+      ignore_dbs:
+        description: IgnoreDBs is a blocklist of schemas.
+        items:
+          type: string
+        type: array
+      ignore_tables:
+        description: IgnoreTables is a blocklist of tables.
+        items:
+          $ref: '#/definitions/v2.Table'
+        type: array
+      ignore_txn_start_ts:
+        items:
+          type: integer
+        type: array
+      rules:
+        items:
+          type: string
+        type: array
+    type: object
+  v2.LogLevelReq:
+    properties:
+      log_level:
+        type: string
+    type: object
+  v2.MounterConfig:
+    properties:
+      worker_num:
+        type: integer
+    type: object
+  v2.ProcessorCommonInfo:
+    properties:
+      capture_id:
+        type: string
+      changefeed_id:
+        type: string
+      namespace:
+        type: string
+    type: object
+  v2.ProcessorDetail:
+    properties:
+      table_ids:
+        description: All table ids that this processor are replicating.
+        items:
+          type: integer
+        type: array
+    type: object
+  v2.ReplicaConfig:
+    properties:
+      bdr_mode:
+        type: boolean
+      case_sensitive:
+        type: boolean
+      check_gc_safe_point:
+        type: boolean
+      consistent:
+        $ref: '#/definitions/v2.ConsistentConfig'
+      enable_old_value:
+        type: boolean
+      enable_sync_point:
+        type: boolean
+      filter:
+        $ref: '#/definitions/v2.FilterConfig'
+      force_replicate:
+        type: boolean
+      ignore_ineligible_table:
+        type: boolean
+      memory_quota:
+        type: integer
+      mounter:
+        $ref: '#/definitions/v2.MounterConfig'
+      scheduler:
+        $ref: '#/definitions/v2.ChangefeedSchedulerConfig'
+      sink:
+        $ref: '#/definitions/v2.SinkConfig'
+      sync_point_interval:
+        type: string
+      sync_point_retention:
+        type: string
+    type: object
+  v2.ResumeChangefeedConfig:
+    properties:
+      ca_path:
+        type: string
+      cert_allowed_cn:
+        items:
+          type: string
+        type: array
+      cert_path:
+        type: string
+      key_path:
+        type: string
+      overwrite_checkpoint_ts:
+        type: integer
+      pd_addrs:
+        items:
+          type: string
+        type: array
+    type: object
+  v2.RunningError:
+    properties:
+      addr:
+        type: string
+      code:
+        type: string
+      message:
+        type: string
+    type: object
+  v2.ServerStatus:
+    properties:
+      cluster_id:
+        type: string
+      git_hash:
+        type: string
+      id:
+        type: string
+      is_owner:
+        type: boolean
+      liveness:
+        type: integer
+      pid:
+        type: integer
+      version:
+        type: string
+    type: object
+  v2.SinkConfig:
+    properties:
+      column_selectors:
+        items:
+          $ref: '#/definitions/v2.ColumnSelector'
+        type: array
+      csv:
+        $ref: '#/definitions/v2.CSVConfig'
+      date_separator:
+        type: string
+      dispatchers:
+        items:
+          $ref: '#/definitions/v2.DispatchRule'
+        type: array
+      enable_partition_separator:
+        type: boolean
+      encoder_concurrency:
+        type: integer
+      protocol:
+        type: string
+      schema_registry:
+        type: string
+      terminator:
+        type: string
+      transaction_atomicity:
+        type: string
+    type: object
+  v2.Table:
+    properties:
+      database_name:
+        description: Schema is the name of the schema (database) containing this table.
+        type: string
+      table_name:
+        description: Name is the unqualified table name.
+        type: string
     type: object
 info:
   contact: {}
@@ -424,38 +780,12 @@ paths:
         name: changefeed_id
         required: true
         type: string
-      - description: changefeed target ts
+      - description: changefeed config
         in: body
-        name: target_ts
+        name: changefeedConfig
+        required: true
         schema:
-          type: integer
-      - description: sink uri
-        in: body
-        name: sink_uri
-        schema:
-          type: string
-      - description: filter rules
-        in: body
-        name: filter_rules
-        schema:
-          items:
-            type: string
-          type: array
-      - description: ignore transaction start ts
-        in: body
-        name: ignore_txn_start_ts
-        schema:
-          type: integer
-      - description: mounter worker nums
-        in: body
-        name: mounter_worker_num
-        schema:
-          type: integer
-      - description: sink config
-        in: body
-        name: sink_config
-        schema:
-          $ref: '#/definitions/config.SinkConfig'
+          $ref: '#/definitions/model.ChangefeedConfig'
       produces:
       - application/json
       responses:
@@ -507,7 +837,7 @@ paths:
       parameters:
       - description: changefeed_id
         in: path
-        name: changefeed-id
+        name: changefeed_id
         required: true
         type: string
       produces:
@@ -537,18 +867,12 @@ paths:
         name: changefeed_id
         required: true
         type: string
-      - description: table_id
+      - description: move table request
         in: body
-        name: table_id
+        name: MoveTable
         required: true
         schema:
-          type: integer
-      - description: capture_id
-        in: body
-        name: capture_id
-        required: true
-        schema:
-          type: string
+          $ref: '#/definitions/model.MoveTableReq'
       produces:
       - application/json
       responses:
@@ -684,6 +1008,17 @@ paths:
       consumes:
       - application/json
       description: get the detail information of a processor
+      parameters:
+      - description: changefeed ID
+        in: path
+        name: changefeed_id
+        required: true
+        type: string
+      - description: capture ID
+        in: path
+        name: capture_id
+        required: true
+        type: string
       produces:
       - application/json
       responses:
@@ -742,7 +1077,7 @@ paths:
           description: OK
           schema:
             items:
-              $ref: '#/definitions/model.ChangefeedCommonInfo'
+              $ref: '#/definitions/v2.ChangefeedCommonInfo'
             type: array
         "500":
           description: Internal Server Error
@@ -751,7 +1086,65 @@ paths:
       summary: List changefeed
       tags:
       - changefeed
+      - v2
+    post:
+      consumes:
+      - application/json
+      description: create a new changefeed
+      parameters:
+      - description: changefeed config
+        in: body
+        name: changefeed
+        required: true
+        schema:
+          $ref: '#/definitions/v2.ChangefeedConfig'
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/v2.ChangeFeedInfo'
+        "400":
+          description: Bad Request
+          schema:
+            $ref: '#/definitions/model.HTTPError'
+        "500":
+          description: Internal Server Error
+          schema:
+            $ref: '#/definitions/model.HTTPError'
+      summary: Create changefeed
+      tags:
+      - changefeed
+      - v2
   /api/v2/changefeeds/{changefeed_id}:
+    delete:
+      consumes:
+      - application/json
+      description: Remove a changefeed
+      parameters:
+      - description: changefeed_id
+        in: path
+        name: changefeed_id
+        required: true
+        type: string
+      produces:
+      - application/json
+      responses:
+        "204":
+          description: ""
+        "400":
+          description: Bad Request
+          schema:
+            $ref: '#/definitions/model.HTTPError'
+        "500":
+          description: Internal Server Error
+          schema:
+            $ref: '#/definitions/model.HTTPError'
+      summary: Remove a changefeed
+      tags:
+      - changefeed
+      - v2
     get:
       consumes:
       - application/json
@@ -768,7 +1161,7 @@ paths:
         "200":
           description: OK
           schema:
-            $ref: '#/definitions/model.ChangefeedDetail'
+            $ref: '#/definitions/v2.ChangeFeedInfo'
         "400":
           description: Bad Request
           schema:
@@ -780,6 +1173,179 @@ paths:
       summary: Get changefeed
       tags:
       - changefeed
+      - v2
+    put:
+      consumes:
+      - application/json
+      description: Update a changefeed
+      parameters:
+      - description: changefeed_id
+        in: path
+        name: changefeed_id
+        required: true
+        type: string
+      - description: changefeed config
+        in: body
+        name: changefeedConfig
+        required: true
+        schema:
+          $ref: '#/definitions/v2.ChangefeedConfig'
+      produces:
+      - application/json
+      responses:
+        "202":
+          description: Accepted
+          schema:
+            $ref: '#/definitions/v2.ChangeFeedInfo'
+        "400":
+          description: Bad Request
+          schema:
+            $ref: '#/definitions/model.HTTPError'
+        "500":
+          description: Internal Server Error
+          schema:
+            $ref: '#/definitions/model.HTTPError'
+      summary: Update a changefeed
+      tags:
+      - changefeed
+      - v2
+  /api/v2/changefeeds/{changefeed_id}/pause:
+    post:
+      consumes:
+      - application/json
+      description: Pause a changefeed
+      parameters:
+      - description: changefeed_id
+        in: path
+        name: changefeed_id
+        required: true
+        type: string
+      produces:
+      - application/json
+      responses:
+        "202":
+          description: Accepted
+          schema:
+            $ref: '#/definitions/v2.EmptyResponse'
+        "400":
+          description: Bad Request
+          schema:
+            $ref: '#/definitions/model.HTTPError'
+        "500":
+          description: Internal Server Error
+          schema:
+            $ref: '#/definitions/model.HTTPError'
+      summary: Pause a changefeed
+      tags:
+      - changefeed
+      - v2
+  /api/v2/changefeeds/{changefeed_id}/resume:
+    post:
+      consumes:
+      - application/json
+      description: Resume a changefeed
+      parameters:
+      - description: changefeed_id
+        in: path
+        name: changefeed_id
+        required: true
+        type: string
+      - description: resume config
+        in: body
+        name: resumeConfig
+        required: true
+        schema:
+          $ref: '#/definitions/v2.ResumeChangefeedConfig'
+      produces:
+      - application/json
+      responses:
+        "202":
+          description: ""
+        "400":
+          description: Bad Request
+          schema:
+            $ref: '#/definitions/model.HTTPError'
+        "500":
+          description: Internal Server Error
+          schema:
+            $ref: '#/definitions/model.HTTPError'
+      summary: Resume a changefeed
+      tags:
+      - changefeed
+      - v2
+  /api/v2/health:
+    get:
+      description: Check the health status of a TiCDC cluster
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/v2.EmptyResponse'
+        "400":
+          description: Bad Request
+          schema:
+            $ref: '#/definitions/model.HTTPError'
+        "500":
+          description: Internal Server Error
+          schema:
+            $ref: '#/definitions/model.HTTPError'
+      summary: Check the health status of a TiCDC cluster
+      tags:
+      - common
+      - v2
+  /api/v2/log:
+    post:
+      consumes:
+      - application/json
+      description: change TiCDC log level dynamically
+      parameters:
+      - description: log level
+        in: body
+        name: log_level
+        required: true
+        schema:
+          $ref: '#/definitions/v2.LogLevelReq'
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/v2.EmptyResponse'
+        "400":
+          description: Bad Request
+          schema:
+            $ref: '#/definitions/model.HTTPError'
+      summary: Change TiCDC log level
+      tags:
+      - common
+      - v2
+  /api/v2/owner/resign:
+    post:
+      consumes:
+      - application/json
+      description: Notify the current owner to resign
+      produces:
+      - application/json
+      responses:
+        "202":
+          description: Accepted
+          schema:
+            $ref: '#/definitions/v2.EmptyResponse'
+        "400":
+          description: Bad Request
+          schema:
+            $ref: '#/definitions/model.HTTPError'
+        "500":
+          description: Internal Server Error
+          schema:
+            $ref: '#/definitions/model.HTTPError'
+      summary: Notify the owner to resign
+      tags:
+      - owner
+      - v2
   /api/v2/processors:
     get:
       description: list all processors in the TiCDC cluster
@@ -790,7 +1356,7 @@ paths:
           description: OK
           schema:
             items:
-              $ref: '#/definitions/model.ProcessorCommonInfo'
+              $ref: '#/definitions/v2.ProcessorCommonInfo'
             type: array
         "400":
           description: Bad Request
@@ -803,16 +1369,28 @@ paths:
       summary: List processors
       tags:
       - processor
+      - v2
   /api/v2/processors/{changefeed_id}/{capture_id}:
     get:
       description: get the detail information of a processor
+      parameters:
+      - description: changefeed ID
+        in: path
+        name: changefeed_id
+        required: true
+        type: string
+      - description: capture ID
+        in: path
+        name: capture_id
+        required: true
+        type: string
       produces:
       - application/json
       responses:
         "200":
           description: OK
           schema:
-            $ref: '#/definitions/model.ProcessorDetail'
+            $ref: '#/definitions/v2.ProcessorDetail'
         "400":
           description: Bad Request
           schema:
@@ -824,4 +1402,29 @@ paths:
       summary: Get processor detail information
       tags:
       - processor
+      - v2
+  /api/v2/status:
+    get:
+      consumes:
+      - application/json
+      description: This API is a synchronous interface. If the request is successful,
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/v2.ServerStatus'
+        "400":
+          description: Bad Request
+          schema:
+            $ref: '#/definitions/model.HTTPError'
+        "500":
+          description: Internal Server Error
+          schema:
+            $ref: '#/definitions/model.HTTPError'
+      summary: Get the status information of a TiCDC node
+      tags:
+      - common
+      - v2
 swagger: "2.0"
