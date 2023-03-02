@@ -55,6 +55,10 @@ func (f *factory) AsyncProducer(
 ) (pkafka.AsyncProducer, error) {
 	producer, err := kafka.NewProducer(&kafka.ConfigMap{
 		"bootstrap.servers": f.options.BrokerEndpoints,
+		"client.id":         f.options.ClientID,
+		"message.max.bytes": f.options.MaxMessageBytes,
+		// "max.in.flight":     5,
+		"request.required.acks": "all",
 	})
 	if err != nil {
 		return nil, err
@@ -79,9 +83,8 @@ func (f *factory) MetricsCollector(
 type asyncProducer struct {
 	producer *kafka.Producer
 
-	closedChan  chan struct{}
-	failpointCh chan error
-	//errorsChan   chan error
+	closedChan   chan struct{}
+	failpointCh  chan error
 	changefeedID model.ChangeFeedID
 }
 
