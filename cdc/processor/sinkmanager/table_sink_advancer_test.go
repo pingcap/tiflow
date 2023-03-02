@@ -45,6 +45,9 @@ func (suite *advancerSuite) SetupSuite() {
 
 func (suite *advancerSuite) SetupTest() {
 	// reset batchID
+	// We set batchID to 1 because we want to test the case that
+	// the first batchID is 1. Normally, the first batchID should
+	// never be 0.
 	batchID.Store(1)
 }
 
