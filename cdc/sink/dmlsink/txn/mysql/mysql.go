@@ -133,9 +133,9 @@ func NewMySQLBackends(
 	// if maxPreparedStmtCount/(cfg.WorkerCount+1) == 0, for each single connection,
 	// it means that the prepared statement cache is disabled on clientsize.
 	// Because each connection can not hold at lease one prepared statement.
-	if maxPreparedStmtCount == 0 || int(maxPreparedStmtCount/(cfg.WorkerCount+1)) == 0 {
+	if maxPreparedStmtCount == 0 || maxPreparedStmtCount/(cfg.WorkerCount+1) == 0 {
 		cachePrepStmts = false
-	} else if int(maxPreparedStmtCount/(cfg.WorkerCount+1)) < prepStmtCacheSize {
+	} else if maxPreparedStmtCount/(cfg.WorkerCount+1) < prepStmtCacheSize {
 		// if maxPreparedStmtCount/(cfg.WorkerCount+1) < prepStmtCacheSize,
 		// it means that the prepared statement cache is too large on clientsize.
 		// adjust the size of the prepared statement cache on clientsize.
