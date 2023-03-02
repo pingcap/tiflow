@@ -27,6 +27,8 @@ import (
 )
 
 func TestLogWriterWriteLog(t *testing.T) {
+	t.Parallel()
+
 	type arg struct {
 		ctx  context.Context
 		rows []writer.RedoEvent
@@ -122,6 +124,8 @@ func TestLogWriterWriteLog(t *testing.T) {
 }
 
 func TestLogWriterWriteDDL(t *testing.T) {
+	t.Parallel()
+
 	type arg struct {
 		ctx     context.Context
 		tableID int64
@@ -223,6 +227,8 @@ func TestLogWriterWriteDDL(t *testing.T) {
 }
 
 func TestLogWriterFlushLog(t *testing.T) {
+	t.Parallel()
+
 	type arg struct {
 		ctx     context.Context
 		tableID int64
