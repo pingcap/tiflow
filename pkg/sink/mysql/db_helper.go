@@ -334,8 +334,5 @@ func QueryMaxPreparedStmtCount(ctx context.Context, db *sql.DB) (int, error) {
 	if err != nil {
 		err = cerror.WrapError(cerror.ErrMySQLQueryError, err)
 	}
-	if !maxPreparedStmtCount.Valid {
-		int(maxPreparedStmtCount.Int32) = 0
-	}
 	return int(maxPreparedStmtCount.Int32), err
 }
