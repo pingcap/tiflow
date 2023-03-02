@@ -129,7 +129,8 @@ func NewMySQLBackends(
 	if err != nil {
 		return nil, err
 	}
-	// if maxPreparedStmtCount == 0, it means that the prepared statement cache is disabled on serverside.
+	// if maxPreparedStmtCount == 0,
+	// it means that the prepared statement cache is disabled on serverside.
 	// if maxPreparedStmtCount/(cfg.WorkerCount+1) == 0, for each single connection,
 	// it means that the prepared statement cache is disabled on clientsize.
 	// Because each connection can not hold at lease one prepared statement.
@@ -140,7 +141,7 @@ func NewMySQLBackends(
 		// it means that the prepared statement cache is too large on clientsize.
 		// adjust the size of the prepared statement cache on clientsize.
 		// to avoid error `Can't create more than max_prepared_stmt_count statements`
-		prepStmtCacheSize = int(maxPreparedStmtCount / (cfg.WorkerCount + 1))
+		prepStmtCacheSize = maxPreparedStmtCount / (cfg.WorkerCount + 1)
 	}
 	var stmtCache *lru.Cache
 	if cachePrepStmts {
