@@ -164,7 +164,6 @@ func (o *updateChangefeedOptions) applyChanges(oldInfo *v2.ChangeFeedInfo,
 		case "schema-registry":
 			newInfo.Config.Sink.SchemaRegistry = o.commonChangefeedOptions.schemaRegistry
 		case "sort-engine":
-			newInfo.Engine = o.commonChangefeedOptions.sortEngine
 		case "sort-dir":
 			log.Warn("this flag cannot be updated and will be ignored", zap.String("flagName", flag.Name))
 		case "changefeed-id", "no-confirm":
