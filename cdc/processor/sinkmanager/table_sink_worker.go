@@ -15,6 +15,7 @@ package sinkmanager
 
 import (
 	"context"
+	"sync/atomic"
 
 	"github.com/pingcap/errors"
 	"github.com/pingcap/log"
@@ -24,7 +25,6 @@ import (
 	"github.com/pingcap/tiflow/cdc/processor/sourcemanager/engine"
 	"github.com/prometheus/client_golang/prometheus"
 	"github.com/tikv/client-go/v2/oracle"
-	"go.uber.org/atomic"
 	"go.uber.org/zap"
 )
 
