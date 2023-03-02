@@ -58,10 +58,11 @@ const (
     "level": "none",
     "max-log-size": 64,
     "flush-interval": 2000,
-    "storage": ""
+    "storage": "",
+    "use-file-backend": false
   },
   "scheduler": {
-    "enable-split-span": false,
+    "enable-table-across-nodes": false,
     "region-per-span": 100000
   }
 }`
@@ -194,10 +195,11 @@ const (
     "level": "none",
     "max-log-size": 64,
     "flush-interval": 2000,
-    "storage": ""
+    "storage": "",
+    "use-file-backend": false
   },
   "scheduler": {
-    "enable-split-span": true,
+    "enable-table-across-nodes": true,
     "region-per-span": 100001
   }
 }`
@@ -250,10 +252,11 @@ const (
     "level": "none",
     "max-log-size": 64,
     "flush-interval": 2000,
-    "storage": ""
+    "storage": "",
+    "use-file-backend": false
   },
   "scheduler": {
-    "enable-split-span": true,
+    "enable-table-across-nodes": true,
     "region-per-span": 100001
   }
 }`

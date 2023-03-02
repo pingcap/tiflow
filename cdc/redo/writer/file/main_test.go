@@ -1,4 +1,4 @@
-// Copyright 2022 PingCAP, Inc.
+// Copyright 2023 PingCAP, Inc.
 //
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -11,21 +11,14 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-package redo
+package file
 
 import (
 	"testing"
 
 	"github.com/pingcap/tiflow/pkg/leakutil"
-	"github.com/pingcap/tiflow/pkg/redo"
 )
 
 func TestMain(m *testing.M) {
-	originValue := redo.DefaultGCIntervalInMs
-	redo.DefaultGCIntervalInMs = 1
-	defer func() {
-		redo.DefaultGCIntervalInMs = originValue
-	}()
-
 	leakutil.SetUpLeakTest(m)
 }

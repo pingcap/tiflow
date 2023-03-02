@@ -32,7 +32,7 @@ type redoWorker struct {
 	changefeedID   model.ChangeFeedID
 	sourceManager  *sourcemanager.SourceManager
 	memQuota       *memquota.MemQuota
-	redoManager    redo.LogManager
+	redoDMLMgr     redo.DMLManager
 	eventCache     *redoEventCache
 	splitTxn       bool
 	enableOldValue bool
@@ -42,7 +42,7 @@ func newRedoWorker(
 	changefeedID model.ChangeFeedID,
 	sourceManager *sourcemanager.SourceManager,
 	quota *memquota.MemQuota,
-	redoManager redo.LogManager,
+	redoDMLMgr redo.DMLManager,
 	eventCache *redoEventCache,
 	splitTxn bool,
 	enableOldValue bool,
@@ -51,7 +51,7 @@ func newRedoWorker(
 		changefeedID:   changefeedID,
 		sourceManager:  sourceManager,
 		memQuota:       quota,
-		redoManager:    redoManager,
+		redoDMLMgr:     redoDMLMgr,
 		eventCache:     eventCache,
 		splitTxn:       splitTxn,
 		enableOldValue: enableOldValue,
@@ -111,8 +111,8 @@ func (w *redoWorker) handleTask(ctx context.Context, task *redoTask) (finalErr e
 	var lastPos engine.Position
 
 	// To calculate advance the downstream to where.
-	emitedCommitTs := uint64(0)  // Has been sent by `redoManager.UpdateResolvedTs`.
-	lastTxnCommitTs := uint64(0) // Can be used in next `redoManager.UpdateResolvedTs`.
+	emitedCommitTs := uint64(0)  // Has been sent by `redoDMLMgr.UpdateResolvedTs`.
+	lastTxnCommitTs := uint64(0) // Can be used in next `redoDMLMgr.UpdateResolvedTs`.
 	currTxnCommitTs := uint64(0) // Still in pulling, not complete.
 
 	doEmitBatchEvents := func() error {
@@ -129,7 +129,7 @@ func (w *redoWorker) handleTask(ctx context.Context, task *redoTask) (finalErr e
 						zap.Uint64("memory", refundMem))
 				}
 			}
-			err := w.redoManager.EmitRowChangedEvents(ctx, task.span, releaseMem, rows...)
+			err := w.redoDMLMgr.EmitRowChangedEvents(ctx, task.span, releaseMem, rows...)
 			if err != nil {
 				return errors.Trace(err)
 			}
@@ -139,7 +139,7 @@ func (w *redoWorker) handleTask(ctx context.Context, task *redoTask) (finalErr e
 			cachedSize = 0
 		}
 		if lastTxnCommitTs > emitedCommitTs {
-			if err := w.redoManager.UpdateResolvedTs(ctx, task.span, lastTxnCommitTs); err != nil {
+			if err := w.redoDMLMgr.UpdateResolvedTs(ctx, task.span, lastTxnCommitTs); err != nil {
 				return errors.Trace(err)
 			}
 			log.Debug("update resolved ts to redo",

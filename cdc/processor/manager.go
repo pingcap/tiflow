@@ -38,9 +38,6 @@ const (
 	commandTpUnknown commandTp = iota
 	commandTpClose
 	commandTpWriteDebugInfo
-	// Query the number of tables in the manager.
-	// command payload is a buffer channel of int, make(chan int, 1).
-	commandTpQueryTableCount
 	processorLogsWarnDuration = 1 * time.Second
 )
 
@@ -53,7 +50,6 @@ type command struct {
 // Manager is a manager of processor, which maintains the state and behavior of processors
 type Manager interface {
 	orchestrator.Reactor
-	QueryTableCount(ctx context.Context, tableCh chan int, done chan<- error)
 	WriteDebugInfo(ctx context.Context, w io.Writer, done chan<- error)
 	AsyncClose()
 }
@@ -199,16 +195,6 @@ func (m *managerImpl) AsyncClose() {
 	}
 }
 
-// QueryTableCount query the number of tables in the manager.
-func (m *managerImpl) QueryTableCount(
-	ctx context.Context, tableCh chan int, done chan<- error,
-) {
-	err := m.sendCommand(ctx, commandTpQueryTableCount, tableCh, done)
-	if err != nil {
-		log.Warn("send command commandTpQueryTableCount failed", zap.Error(err))
-	}
-}
-
 // WriteDebugInfo write the debug info to Writer
 func (m *managerImpl) WriteDebugInfo(
 	ctx context.Context, w io.Writer, done chan<- error,
@@ -255,15 +241,6 @@ func (m *managerImpl) handleCommand(ctx cdcContext.Context) error {
 		err := m.writeDebugInfo(w)
 		if err != nil {
 			cmd.done <- err
-		}
-	case commandTpQueryTableCount:
-		count := 0
-		for _, p := range m.processors {
-			count += p.GetTableSpanCount()
-		}
-		select {
-		case cmd.payload.(chan int) <- count:
-		default:
 		}
 	default:
 		log.Warn("Unknown command in processor manager", zap.Any("command", cmd))
