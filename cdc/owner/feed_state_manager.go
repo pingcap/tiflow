@@ -358,18 +358,18 @@ func (m *feedStateManager) patchState(feedState model.FeedState) {
 		if info.AdminJobType != adminJobType {
 			info.AdminJobType = adminJobType
 			changed = true
-		}
-		if updateEpoch {
-			previous := info.Epoch
-			ctx, cancel := context.WithTimeout(context.TODO(), 5*time.Second)
-			defer cancel()
-			info.Epoch = GenerateChangefeedEpoch(ctx, m.upstream.PDClient)
-			changed = true
-			log.Info("update changefeed epoch",
-				zap.String("namespace", m.state.ID.Namespace),
-				zap.String("changefeed", m.state.ID.ID),
-				zap.Uint64("perviousEpoch", previous),
-				zap.Uint64("currentEpoch", info.Epoch))
+
+			if updateEpoch {
+				previous := info.Epoch
+				ctx, cancel := context.WithTimeout(context.TODO(), 5*time.Second)
+				defer cancel()
+				info.Epoch = GenerateChangefeedEpoch(ctx, m.upstream.PDClient)
+				log.Info("update changefeed epoch",
+					zap.String("namespace", m.state.ID.Namespace),
+					zap.String("changefeed", m.state.ID.ID),
+					zap.Uint64("perviousEpoch", previous),
+					zap.Uint64("currentEpoch", info.Epoch))
+			}
 		}
 		return info, changed, nil
 	})

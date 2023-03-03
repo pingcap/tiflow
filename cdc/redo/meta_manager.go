@@ -367,7 +367,7 @@ func (m *metaManager) flush(ctx context.Context, meta common.LogMeta) error {
 	if err != nil {
 		return errors.WrapError(errors.ErrMarshalFailed, err)
 	}
-	metaFile := m.getMetafileName()
+	metaFile := getMetafileName(m.captureID, m.changeFeedID, m.uuidGenerator)
 	if err := m.extStorage.WriteFile(ctx, metaFile, data); err != nil {
 		return errors.WrapError(errors.ErrExternalStorageAPI, err)
 	}
@@ -389,12 +389,6 @@ func (m *metaManager) flush(ctx context.Context, meta common.LogMeta) error {
 		zap.Any("cost", time.Since(start).Milliseconds()))
 	m.metricFlushLogDuration.Observe(time.Since(start).Seconds())
 	return nil
-}
-
-func (m *metaManager) getMetafileName() string {
-	return fmt.Sprintf(redo.RedoMetaFileFormat, m.captureID,
-		m.changeFeedID.Namespace, m.changeFeedID.ID,
-		redo.RedoMetaFileType, m.uuidGenerator.NewString(), redo.MetaEXT)
 }
 
 // Cleanup removes all redo logs of this manager, it is called when changefeed is removed
@@ -438,6 +432,8 @@ func (m *metaManager) bgFlushMeta(egCtx context.Context, flushIntervalInMs int64
 func (m *metaManager) bgGC(egCtx context.Context) error {
 	ticker := time.NewTicker(time.Duration(redo.DefaultGCIntervalInMs) * time.Millisecond)
 	defer ticker.Stop()
+
+	preCkpt := uint64(0)
 	for {
 		select {
 		case <-egCtx.Done():
@@ -447,9 +443,10 @@ func (m *metaManager) bgGC(egCtx context.Context) error {
 			return errors.Trace(egCtx.Err())
 		case <-ticker.C:
 			ckpt := m.metaCheckpointTs.getFlushed()
-			if ckpt == 0 {
+			if ckpt == preCkpt {
 				continue
 			}
+			preCkpt = ckpt
 			log.Debug("redo manager GC is triggered",
 				zap.Uint64("checkpointTs", ckpt),
 				zap.String("namespace", m.changeFeedID.Namespace),
@@ -465,6 +462,16 @@ func (m *metaManager) bgGC(egCtx context.Context) error {
 			}
 		}
 	}
+}
+
+func getMetafileName(
+	captureID model.CaptureID,
+	changeFeedID model.ChangeFeedID,
+	uuidGenerator uuid.Generator,
+) string {
+	return fmt.Sprintf(redo.RedoMetaFileFormat, captureID,
+		changeFeedID.Namespace, changeFeedID.ID,
+		redo.RedoMetaFileType, uuidGenerator.NewString(), redo.MetaEXT)
 }
 
 func getChangefeedMatcher(changeFeedID model.ChangeFeedID) string {
