@@ -33,9 +33,14 @@ import (
 
 type mockPD struct {
 	pd.Client
+
+	getTs func() (int64, int64, error)
 }
 
 func (p *mockPD) GetTS(_ context.Context) (int64, int64, error) {
+	if p.getTs != nil {
+		return p.getTs()
+	}
 	return 1, 2, nil
 }
 
@@ -636,5 +641,58 @@ func TestBackoffNeverStops(t *testing.T) {
 		time.Sleep(100 * time.Millisecond)
 		manager.Tick(state)
 		tester.MustApplyPatches()
+	}
+}
+
+func TestUpdateChangefeedEpoch(t *testing.T) {
+	ctx := cdcContext.NewBackendContext4Test(true)
+	// Set a long backoff time
+	manager := newFeedStateManager4Test(time.Hour, time.Hour, 0, 1.0)
+	state := orchestrator.NewChangefeedReactorState(etcd.DefaultCDCClusterID,
+		ctx.ChangefeedVars().ID)
+	tester := orchestrator.NewReactorStateTester(t, state, nil)
+	state.PatchInfo(func(info *model.ChangeFeedInfo) (*model.ChangeFeedInfo, bool, error) {
+		require.Nil(t, info)
+		return &model.ChangeFeedInfo{SinkURI: "123", Config: &config.ReplicaConfig{}}, true, nil
+	})
+	state.PatchStatus(func(status *model.ChangeFeedStatus) (*model.ChangeFeedStatus, bool, error) {
+		require.Nil(t, status)
+		return &model.ChangeFeedStatus{}, true, nil
+	})
+
+	tester.MustApplyPatches()
+	manager.Tick(state)
+	tester.MustApplyPatches()
+	require.Equal(t, state.Info.State, model.StateNormal)
+	require.True(t, manager.ShouldRunning())
+
+	for i := 1; i <= 30; i++ {
+		manager.upstream.PDClient.(*mockPD).getTs = func() (int64, int64, error) {
+			return int64(i), 0, nil
+		}
+		previousEpoch := state.Info.Epoch
+		previousState := state.Info.State
+		state.PatchTaskPosition(ctx.GlobalVars().CaptureInfo.ID,
+			func(position *model.TaskPosition) (*model.TaskPosition, bool, error) {
+				return &model.TaskPosition{Error: &model.RunningError{
+					Addr:    ctx.GlobalVars().CaptureInfo.AdvertiseAddr,
+					Code:    "[CDC:ErrEtcdSessionDone]",
+					Message: "fake error for test",
+				}}, true, nil
+			})
+		tester.MustApplyPatches()
+		manager.Tick(state)
+		tester.MustApplyPatches()
+		require.False(t, manager.ShouldRunning())
+		require.Equal(t, state.Info.State, model.StateError)
+		require.Equal(t, state.Info.AdminJobType, model.AdminStop)
+		require.Equal(t, state.Status.AdminJobType, model.AdminStop)
+
+		// Epoch only changes when State changes.
+		if previousState == state.Info.State {
+			require.Equal(t, previousEpoch, state.Info.Epoch)
+		} else {
+			require.NotEqual(t, previousEpoch, state.Info.Epoch)
+		}
 	}
 }
