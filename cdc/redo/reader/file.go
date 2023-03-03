@@ -32,6 +32,7 @@ import (
 	"github.com/pingcap/tiflow/cdc/model"
 	"github.com/pingcap/tiflow/cdc/model/codec"
 	"github.com/pingcap/tiflow/cdc/redo/writer"
+	"github.com/pingcap/tiflow/cdc/redo/writer/file"
 	cerror "github.com/pingcap/tiflow/pkg/errors"
 	"github.com/pingcap/tiflow/pkg/redo"
 	"go.uber.org/multierr"
@@ -264,11 +265,11 @@ func readFile(file *os.File) (logHeap, error) {
 
 // writFile if not safely closed, the sorted file will end up with .sort.tmp as the file name suffix
 func writFile(ctx context.Context, dir, name string, h logHeap) error {
-	cfg := &writer.FileWriterConfig{
-		Dir:        dir,
-		MaxLogSize: math.MaxInt32,
+	cfg := &writer.LogWriterConfig{
+		Dir:               dir,
+		MaxLogSizeInBytes: math.MaxInt32,
 	}
-	w, err := writer.NewWriter(ctx, cfg, writer.WithLogFileName(func() string { return name }))
+	w, err := file.NewFileWriter(ctx, cfg, writer.WithLogFileName(func() string { return name }))
 	if err != nil {
 		return err
 	}

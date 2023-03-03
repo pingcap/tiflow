@@ -32,6 +32,7 @@ import (
 	"github.com/pingcap/tiflow/cdc/model/codec"
 	"github.com/pingcap/tiflow/cdc/redo/common"
 	"github.com/pingcap/tiflow/cdc/redo/writer"
+	"github.com/pingcap/tiflow/cdc/redo/writer/file"
 	"github.com/pingcap/tiflow/pkg/redo"
 	"github.com/stretchr/testify/require"
 	"go.uber.org/multierr"
@@ -79,14 +80,14 @@ func TestLogReaderResetReader(t *testing.T) {
 
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
-	cfg := &writer.FileWriterConfig{
-		MaxLogSize: 100000,
-		Dir:        dir,
+	cfg := &writer.LogWriterConfig{
+		MaxLogSizeInBytes: 100000,
+		Dir:               dir,
 	}
 	fileName := fmt.Sprintf(redo.RedoLogFileFormatV2, "cp",
 		"default", "test-cf100",
 		redo.RedoDDLLogFileType, 100, uuid.NewString(), redo.LogEXT)
-	w, err := writer.NewWriter(ctx, cfg, writer.WithLogFileName(func() string {
+	w, err := file.NewFileWriter(ctx, cfg, writer.WithLogFileName(func() string {
 		return fileName
 	}))
 	require.Nil(t, err)
@@ -106,7 +107,7 @@ func TestLogReaderResetReader(t *testing.T) {
 	fileName = fmt.Sprintf(redo.RedoLogFileFormatV2, "cp",
 		"default", "test-cf10",
 		redo.RedoRowLogFileType, 10, uuid.NewString(), redo.LogEXT)
-	w, err = writer.NewWriter(ctx, cfg, writer.WithLogFileName(func() string {
+	w, err = file.NewFileWriter(ctx, cfg, writer.WithLogFileName(func() string {
 		return fileName
 	}))
 	require.Nil(t, err)
