@@ -34,7 +34,7 @@ function run() {
 
 	# this test contains `recover table`, which requires super privilege, so we
 	# can't use the normal user
-	SINK_URI="mysql://root@127.0.0.1:3306/?batch-dml-enable=true"
+	SINK_URI="mysql://root@127.0.0.1:3306/?batch-dml-enable=true&multi-stmt-enable=false"
 
 	changefeed_id="test"
 	run_cdc_cli changefeed create --sink-uri="$SINK_URI" -c ${changefeed_id}

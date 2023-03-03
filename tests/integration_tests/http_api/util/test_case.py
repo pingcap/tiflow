@@ -21,7 +21,7 @@ PD_ADDR = "http://127.0.0.1:2379"
 # Use this value here to test redo apply function works well
 # when use base64 encoded password
 ENPASSWORD="MTIzNDU2"
-SINK_URI="mysql://normal:%s@127.0.0.1:3306/" % ENPASSWORD
+SINK_URI="mysql://normal:%s@127.0.0.1:3306/?multi-stmt-enable=false" % ENPASSWORD
 
 physicalShiftBits = 18
 # we should write some SQLs in the run.sh after call create_changefeed

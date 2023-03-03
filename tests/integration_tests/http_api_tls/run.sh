@@ -58,7 +58,7 @@ function run() {
 	# wait for cdc run
 	sleep 2
 
-	SINK_URI="mysql://normal:123456@127.0.0.1:3306/"
+	SINK_URI="mysql://normal:123456@127.0.0.1:3306/?multi-stmt-enable=false"
 
 	python3 $CUR/util/test_case.py check_health $TLS_DIR
 	python3 $CUR/util/test_case.py get_status $TLS_DIR

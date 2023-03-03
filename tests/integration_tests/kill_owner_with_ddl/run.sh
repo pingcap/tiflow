@@ -48,7 +48,7 @@ function run() {
 	cd $WORK_DIR
 
 	pd_addr="http://$UP_PD_HOST_1:$UP_PD_PORT_1"
-	SINK_URI="mysql://normal:123456@127.0.0.1:3306/?max-txn-row=1"
+	SINK_URI="mysql://normal:123456@127.0.0.1:3306/?max-txn-row=1&multi-stmt-enable=false"
 
 	run_cdc_server --workdir $WORK_DIR --binary $CDC_BINARY --addr "127.0.0.1:8300" --pd $pd_addr
 	cdc cli changefeed create --pd=$pd_addr --sink-uri="$SINK_URI"

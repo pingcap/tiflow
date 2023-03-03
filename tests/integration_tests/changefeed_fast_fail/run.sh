@@ -27,7 +27,7 @@ function run() {
 	export GO_FAILPOINTS='github.com/pingcap/tiflow/cdc/owner/InjectChangefeedFastFailError=return(true)'
 	run_cdc_server --workdir $WORK_DIR --binary $CDC_BINARY
 
-	SINK_URI="mysql://normal:123456@127.0.0.1:3306/?max-txn-row=1"
+	SINK_URI="mysql://normal:123456@127.0.0.1:3306/?max-txn-row=1&multi-stmt-enable=false"
 
 	changefeedid="changefeed-fast-fail"
 	run_cdc_cli changefeed create --start-ts=$start_ts --sink-uri="$SINK_URI" -c $changefeedid

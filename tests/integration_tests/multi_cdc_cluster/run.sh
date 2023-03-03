@@ -30,7 +30,7 @@ function run() {
 	# run another cdc cluster
 	run_cdc_server --workdir $WORK_DIR --binary $CDC_BINARY --cluster-id "test2" --addr "127.0.0.1:8301" --logsuffix mult_cdc.server2
 
-	SINK_URI="mysql://normal:123456@127.0.0.1:3306/"
+	SINK_URI="mysql://normal:123456@127.0.0.1:3306/?multi-stmt-enable=false"
 
 	run_cdc_cli changefeed create --start-ts=$start_ts --sink-uri="$SINK_URI" --server "http://127.0.0.1:8300" --config="$CUR/conf/changefeed1.toml"
 	run_cdc_cli changefeed create --start-ts=$start_ts --sink-uri="$SINK_URI" --server "http://127.0.0.1:8301" --config="$CUR/conf/changefeed2.toml"

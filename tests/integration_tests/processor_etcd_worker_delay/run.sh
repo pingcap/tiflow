@@ -26,7 +26,7 @@ function run() {
 	TOPIC_NAME="processor-etcd-delay-$RANDOM"
 	case $SINK_TYPE in
 	kafka) SINK_URI="kafka://127.0.0.1:9092/$TOPIC_NAME?protocol=open-protocol&partition-num=4&kafka-version=${KAFKA_VERSION}&max-message-bytes=10485760" ;;
-	*) SINK_URI="mysql://normal:123456@127.0.0.1:3306/?max-txn-row=1" ;;
+	*) SINK_URI="mysql://normal:123456@127.0.0.1:3306/?max-txn-row=1&multi-stmt-enable=false" ;;
 	esac
 
 	export GO_FAILPOINTS='github.com/pingcap/tiflow/pkg/orchestrator/ProcessorEtcdDelay=return(true)'

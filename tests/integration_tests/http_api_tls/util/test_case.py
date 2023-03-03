@@ -14,7 +14,7 @@ BASE_URL0_V2 = "https://127.0.0.1:8300/api/v2"
 BASE_URL1_V2 = "https://127.0.0.1:8301/api/v2"
 
 TLS_PD_ADDR = "https://127.0.0.1:2579"
-SINK_URI="mysql://normal:123456@127.0.0.1:3306/"
+SINK_URI="mysql://normal:123456@127.0.0.1:3306/?multi-stmt-enable=false"
 
 physicalShiftBits = 18
 # we should write some SQLs in the run.sh after call create_changefeed

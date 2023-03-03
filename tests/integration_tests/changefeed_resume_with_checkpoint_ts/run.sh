@@ -22,7 +22,7 @@ function prepare() {
 
 function resume_changefeed_in_stopped_state() {
 	pd_addr="http://$UP_PD_HOST_1:$UP_PD_PORT_1"
-	SINK_URI="mysql://normal:123456@127.0.0.1:3306/?max-txn-row=1"
+	SINK_URI="mysql://normal:123456@127.0.0.1:3306/?max-txn-row=1&multi-stmt-enable=false"
 
 	run_cdc_server --workdir $WORK_DIR --binary $CDC_BINARY --addr "127.0.0.1:8300" --pd $pd_addr
 	changefeed_id=$(cdc cli changefeed create --pd=$pd_addr --sink-uri="$SINK_URI" 2>&1 | tail -n2 | head -n1 | awk '{print $2}')
@@ -85,7 +85,7 @@ function resume_changefeed_in_stopped_state() {
 function resume_changefeed_in_failed_state() {
 	export GO_FAILPOINTS='github.com/pingcap/tiflow/cdc/owner/InjectChangefeedFastFailError=1*return(true)'
 	pd_addr="http://$UP_PD_HOST_1:$UP_PD_PORT_1"
-	SINK_URI="mysql://normal:123456@127.0.0.1:3306/?max-txn-row=1"
+	SINK_URI="mysql://normal:123456@127.0.0.1:3306/?max-txn-row=1&multi-stmt-enable=false"
 	run_cdc_server --workdir $WORK_DIR --binary $CDC_BINARY --pd $pd_addr
 	ensure $MAX_RETRIES check_changefeed_state http://${UP_PD_HOST_1}:${UP_PD_PORT_1} $changefeed_id "failed" "ErrGCTTLExceeded" ""
 
