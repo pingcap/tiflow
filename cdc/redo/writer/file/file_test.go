@@ -35,8 +35,9 @@ import (
 )
 
 func TestWriterWrite(t *testing.T) {
-	dir := t.TempDir()
+	t.Parallel()
 
+	dir := t.TempDir()
 	cfs := []model.ChangeFeedID{
 		model.DefaultChangeFeedID("test-cf"),
 		{
@@ -193,12 +194,16 @@ func TestWriterWrite(t *testing.T) {
 }
 
 func TestAdvanceTs(t *testing.T) {
+	t.Parallel()
+
 	w := &Writer{}
 	w.AdvanceTs(111)
 	require.EqualValues(t, 111, w.eventCommitTS.Load())
 }
 
 func TestNewFileWriter(t *testing.T) {
+	t.Parallel()
+
 	_, err := NewFileWriter(context.Background(), nil)
 	require.NotNil(t, err)
 
@@ -267,6 +272,8 @@ func TestNewFileWriter(t *testing.T) {
 }
 
 func TestRotateFileWithFileAllocator(t *testing.T) {
+	t.Parallel()
+
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 	_, err := NewFileWriter(ctx, nil)
@@ -331,6 +338,8 @@ func TestRotateFileWithFileAllocator(t *testing.T) {
 }
 
 func TestRotateFileWithoutFileAllocator(t *testing.T) {
+	t.Parallel()
+
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 	_, err := NewFileWriter(ctx, nil)

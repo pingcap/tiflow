@@ -348,48 +348,6 @@ func (r *RowChangedEvent) PrimaryKeyColumnNames() []string {
 	return result
 }
 
-// PrimaryKeyColumns returns the column(s) corresponding to the handle key(s)
-func (r *RowChangedEvent) PrimaryKeyColumns() []*Column {
-	pkeyCols := make([]*Column, 0)
-
-	var cols []*Column
-	if r.IsDelete() {
-		cols = r.PreColumns
-	} else {
-		cols = r.Columns
-	}
-
-	for _, col := range cols {
-		if col != nil && (col.Flag.IsPrimaryKey()) {
-			pkeyCols = append(pkeyCols, col)
-		}
-	}
-
-	// It is okay not to have primary keys, so the empty array is an acceptable result
-	return pkeyCols
-}
-
-// HandleKeyColumns returns the column(s) corresponding to the handle key(s)
-func (r *RowChangedEvent) HandleKeyColumns() []*Column {
-	pkeyCols := make([]*Column, 0)
-
-	var cols []*Column
-	if r.IsDelete() {
-		cols = r.PreColumns
-	} else {
-		cols = r.Columns
-	}
-
-	for _, col := range cols {
-		if col != nil && col.Flag.IsHandleKey() {
-			pkeyCols = append(pkeyCols, col)
-		}
-	}
-
-	// It is okay not to have handle keys, so the empty array is an acceptable result
-	return pkeyCols
-}
-
 // HandleKeyColInfos returns the column(s) and colInfo(s) corresponding to the handle key(s)
 func (r *RowChangedEvent) HandleKeyColInfos() ([]*Column, []rowcodec.ColInfo) {
 	pkeyCols := make([]*Column, 0)
