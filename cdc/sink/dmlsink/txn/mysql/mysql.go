@@ -124,27 +124,27 @@ func NewMySQLBackends(
 	cachePrepStmts := cfg.CachePrepStmts
 	prepStmtCacheSize := cfg.PrepStmtCacheSize
 
-	// query the size of the prepared statement cache on serverside
-	maxPreparedStmtCount, err := pmysql.QueryMaxPreparedStmtCount(ctx, db)
-	if err != nil {
-		return nil, err
-	}
-	// if maxPreparedStmtCount == 0,
-	// it means that the prepared statement cache is disabled on serverside.
-	// if maxPreparedStmtCount/(cfg.WorkerCount+1) == 0, for each single connection,
-	// it means that the prepared statement cache is disabled on clientsize.
-	// Because each connection can not hold at lease one prepared statement.
-	if maxPreparedStmtCount == 0 || maxPreparedStmtCount/(cfg.WorkerCount+1) == 0 {
-		cachePrepStmts = false
-	} else if maxPreparedStmtCount/(cfg.WorkerCount+1) < prepStmtCacheSize {
-		// if maxPreparedStmtCount/(cfg.WorkerCount+1) < prepStmtCacheSize,
-		// it means that the prepared statement cache is too large on clientsize.
-		// adjust the size of the prepared statement cache on clientsize.
-		// to avoid error `Can't create more than max_prepared_stmt_count statements`
-		prepStmtCacheSize = maxPreparedStmtCount / (cfg.WorkerCount + 1)
-	}
 	var stmtCache *lru.Cache
 	if cachePrepStmts {
+		// query the size of the prepared statement cache on serverside
+		maxPreparedStmtCount, err := pmysql.QueryMaxPreparedStmtCount(ctx, db)
+		if err != nil {
+			return nil, err
+		}
+		// if maxPreparedStmtCount == 0,
+		// it means that the prepared statement cache is disabled on serverside.
+		// if maxPreparedStmtCount/(cfg.WorkerCount+1) == 0, for each single connection,
+		// it means that the prepared statement cache is disabled on clientsize.
+		// Because each connection can not hold at lease one prepared statement.
+		if maxPreparedStmtCount == 0 || maxPreparedStmtCount/(cfg.WorkerCount+1) == 0 {
+			cachePrepStmts = false
+		} else if maxPreparedStmtCount/(cfg.WorkerCount+1) < prepStmtCacheSize {
+			// if maxPreparedStmtCount/(cfg.WorkerCount+1) < prepStmtCacheSize,
+			// it means that the prepared statement cache is too large on clientsize.
+			// adjust the size of the prepared statement cache on clientsize.
+			// to avoid error `Can't create more than max_prepared_stmt_count statements`
+			prepStmtCacheSize = maxPreparedStmtCount / (cfg.WorkerCount + 1)
+		}
 		stmtCache, err = lru.NewWithEvict(prepStmtCacheSize, func(key, value interface{}) {
 			stmt := value.(*sql.Stmt)
 			stmt.Close()
