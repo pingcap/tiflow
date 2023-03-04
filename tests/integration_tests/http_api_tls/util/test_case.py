@@ -467,7 +467,7 @@ def delete_changefeed_v2():
     # remove changefeed
     url = BASE_URL0_V2+"/changefeeds/changefeed-test4"
     resp = rq.delete(url, cert=CERT, verify=VERIFY)
-    assert resp.status_code == rq.codes.no_content
+    assert resp.status_code == rq.codes.ok
 
     # check if remove changefeed success
     url = BASE_URL0+"/changefeeds/changefeed-test4"
