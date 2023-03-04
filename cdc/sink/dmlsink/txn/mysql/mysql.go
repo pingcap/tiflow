@@ -68,6 +68,8 @@ type mysqlBackend struct {
 	metricTxnSinkDMLBatchCallback prometheus.Observer
 	// implement stmtCache to improve performance, especially when the downstream is TiDB
 	stmtCache *lru.Cache
+	// Indicate if the CachePrepStmts should be enabled or not
+	cachePrepStmts bool
 }
 
 // NewMySQLBackends creates a new MySQL sink using schema storage
@@ -117,12 +119,39 @@ func NewMySQLBackends(
 	// Adding an extra connection to the connection pool solves the connection exhaustion issue.
 	db.SetMaxIdleConns(cfg.WorkerCount + 1)
 	db.SetMaxOpenConns(cfg.WorkerCount + 1)
-	stmtCache, err := lru.NewWithEvict(cfg.PrepStmtCacheSize, func(key, value interface{}) {
-		stmt := value.(*sql.Stmt)
-		stmt.Close()
-	})
-	if err != nil {
-		return nil, err
+
+	// Inherit the default value of the prepared statement cache from the SinkURI Options
+	cachePrepStmts := cfg.CachePrepStmts
+	prepStmtCacheSize := cfg.PrepStmtCacheSize
+
+	var stmtCache *lru.Cache
+	if cachePrepStmts {
+		// query the size of the prepared statement cache on serverside
+		maxPreparedStmtCount, err := pmysql.QueryMaxPreparedStmtCount(ctx, db)
+		if err != nil {
+			return nil, err
+		}
+		// if maxPreparedStmtCount == 0,
+		// it means that the prepared statement cache is disabled on serverside.
+		// if maxPreparedStmtCount/(cfg.WorkerCount+1) == 0, for each single connection,
+		// it means that the prepared statement cache is disabled on clientsize.
+		// Because each connection can not hold at lease one prepared statement.
+		if maxPreparedStmtCount == 0 || maxPreparedStmtCount/(cfg.WorkerCount+1) == 0 {
+			cachePrepStmts = false
+		} else if maxPreparedStmtCount/(cfg.WorkerCount+1) < prepStmtCacheSize {
+			// if maxPreparedStmtCount/(cfg.WorkerCount+1) < prepStmtCacheSize,
+			// it means that the prepared statement cache is too large on clientsize.
+			// adjust the size of the prepared statement cache on clientsize.
+			// to avoid error `Can't create more than max_prepared_stmt_count statements`
+			prepStmtCacheSize = maxPreparedStmtCount / (cfg.WorkerCount + 1)
+		}
+		stmtCache, err = lru.NewWithEvict(prepStmtCacheSize, func(key, value interface{}) {
+			stmt := value.(*sql.Stmt)
+			stmt.Close()
+		})
+		if err != nil {
+			return nil, err
+		}
 	}
 
 	backends := make([]*mysqlBackend, 0, cfg.WorkerCount)
@@ -138,6 +167,7 @@ func NewMySQLBackends(
 			metricTxnSinkDMLBatchCommit:   txn.SinkDMLBatchCommit.WithLabelValues(changefeedID.Namespace, changefeedID.ID),
 			metricTxnSinkDMLBatchCallback: txn.SinkDMLBatchCallback.WithLabelValues(changefeedID.Namespace, changefeedID.ID),
 			stmtCache:                     stmtCache,
+			cachePrepStmts:                cachePrepStmts,
 		})
 	}
 
@@ -606,7 +636,7 @@ func (s *mysqlBackend) execDMLWithMaxRetries(pctx context.Context, dmls *prepare
 					zap.String("sql", query), zap.Any("args", args))
 				ctx, cancelFunc := context.WithTimeout(pctx, writeTimeout)
 				var execError error
-				if s.cfg.CachePrepStmts {
+				if s.cachePrepStmts {
 					stmt, ok := s.stmtCache.Get(query)
 					if !ok {
 						var err error

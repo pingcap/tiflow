@@ -43,6 +43,14 @@ func (suite *advancerSuite) SetupSuite() {
 	suite.defaultTestMemQuota = 1024
 }
 
+func (suite *advancerSuite) SetupTest() {
+	// reset batchID
+	// We set batchID to 1 because we want to test the case that
+	// the first batchID is 1. Normally, the first batchID should
+	// never be 0.
+	batchID.Store(1)
+}
+
 func (suite *advancerSuite) TearDownSuite() {
 	requestMemSize = defaultRequestMemSize
 	maxUpdateIntervalSize = defaultMaxUpdateIntervalSize
@@ -152,8 +160,6 @@ func (suite *advancerSuite) TestNewTableSinkAdvancer() {
 	advancer := newTableSinkAdvancer(task, true, memoryQuota, 512)
 	require.NotNil(suite.T(), advancer)
 	require.Equal(suite.T(), uint64(512), advancer.availableMem)
-	require.Equal(suite.T(), uint64(batchIDInitialValue), advancer.batchID,
-		"batchID should be initialized to 1")
 }
 
 func (suite *advancerSuite) TestHasEnoughMem() {
@@ -331,7 +337,7 @@ func (suite *advancerSuite) TestAdvanceTheSameCommitTsEventsWithoutCommitFence()
 	}, 5*time.Second, 10*time.Millisecond)
 	require.Equal(suite.T(), uint64(0), advancer.committedTxnSize)
 	require.Equal(suite.T(), uint64(0), advancer.pendingTxnSize)
-	require.Equal(suite.T(), uint64(2), advancer.batchID, "batch ID should be increased")
+	require.Equal(suite.T(), uint64(2), batchID.Load(), "batch ID should be increased")
 }
 
 // Test Scenario:
@@ -381,7 +387,7 @@ func (suite *advancerSuite) TestAdvanceDifferentCommitTsEventsWithSplitTxn() {
 	}, 5*time.Second, 10*time.Millisecond)
 	require.Equal(suite.T(), uint64(0), advancer.committedTxnSize)
 	require.Equal(suite.T(), uint64(0), advancer.pendingTxnSize)
-	require.Equal(suite.T(), uint64(2), advancer.batchID, "batch ID should be increased")
+	require.Equal(suite.T(), uint64(2), batchID.Load(), "batch ID should be increased")
 }
 
 // Test Scenario:
@@ -435,7 +441,7 @@ func (suite *advancerSuite) TestAdvanceDifferentCommitTsEventsWithoutSplitTxn() 
 	}, 5*time.Second, 10*time.Millisecond)
 	require.Equal(suite.T(), uint64(0), advancer.committedTxnSize)
 	require.Equal(suite.T(), uint64(256), advancer.pendingTxnSize)
-	require.Equal(suite.T(), uint64(1), advancer.batchID, "batch ID should not be increased")
+	require.Equal(suite.T(), uint64(1), batchID.Load(), "batch ID should not be increased")
 }
 
 // Test Scenario:
@@ -492,7 +498,7 @@ func (suite *advancerSuite) TestLastTimeAdvanceDifferentCommitTsEventsWithoutSpl
 	require.Equal(suite.T(), uint64(0), advancer.pendingTxnSize,
 		"Last time advance should clear pending txn size,"+
 			"otherwise the memory quota will be leaked.")
-	require.Equal(suite.T(), uint64(1), advancer.batchID)
+	require.Equal(suite.T(), uint64(1), batchID.Load())
 }
 
 // Test Scenario:
@@ -547,7 +553,7 @@ func (suite *advancerSuite) TestTryAdvanceWhenExceedAvailableMem() {
 	}, 5*time.Second, 10*time.Millisecond)
 	require.Equal(suite.T(), uint64(0), advancer.committedTxnSize)
 	require.Equal(suite.T(), uint64(0), advancer.pendingTxnSize)
-	require.Equal(suite.T(), uint64(1), advancer.batchID)
+	require.Equal(suite.T(), uint64(1), batchID.Load())
 }
 
 // Test Scenario:
@@ -596,7 +602,7 @@ func (suite *advancerSuite) TestTryAdvanceWhenReachTheMaxUpdateIntervalSizeAndTx
 	}, 5*time.Second, 10*time.Millisecond)
 	require.Equal(suite.T(), uint64(0), advancer.committedTxnSize)
 	require.Equal(suite.T(), uint64(0), advancer.pendingTxnSize)
-	require.Equal(suite.T(), uint64(1), advancer.batchID)
+	require.Equal(suite.T(), uint64(1), batchID.Load())
 }
 
 // Test Scenario:
@@ -648,7 +654,7 @@ func (suite *advancerSuite) TestFinish() {
 	}, 5*time.Second, 10*time.Millisecond)
 	require.Equal(suite.T(), uint64(0), advancer.committedTxnSize)
 	require.Equal(suite.T(), uint64(0), advancer.pendingTxnSize)
-	require.Equal(suite.T(), uint64(1), advancer.batchID)
+	require.Equal(suite.T(), uint64(1), batchID.Load())
 }
 
 // Test Scenario:
@@ -697,7 +703,7 @@ func (suite *advancerSuite) TestTryAdvanceAndForceAcquireWithoutSplitTxn() {
 	}, 5*time.Second, 10*time.Millisecond)
 	require.Equal(suite.T(), uint64(0), advancer.committedTxnSize)
 	require.Equal(suite.T(), uint64(0), advancer.pendingTxnSize)
-	require.Equal(suite.T(), uint64(1), advancer.batchID)
+	require.Equal(suite.T(), uint64(1), batchID.Load())
 }
 
 // Test Scenario:
@@ -761,7 +767,6 @@ func (suite *advancerSuite) TestTryAdvanceAndBlockAcquireWithSplitTxn() {
 		}, 5*time.Second, 10*time.Millisecond)
 		require.Equal(suite.T(), uint64(0), advancer.committedTxnSize)
 		require.Equal(suite.T(), uint64(0), advancer.pendingTxnSize)
-		require.Equal(suite.T(), uint64(1), advancer.batchID)
 		wg.Done()
 	}()
 	wg.Wait()

@@ -437,14 +437,6 @@ func (info *ChangeFeedInfo) updateSinkURIAndConfigProtocol(uri *url.URL, newProt
 	info.Config.Sink.Protocol = newProtocol
 }
 
-// HasFastFailError returns true if the error in changefeed is fast-fail
-func (info *ChangeFeedInfo) HasFastFailError() bool {
-	if info.Error == nil {
-		return false
-	}
-	return cerror.IsChangefeedFastFailErrorCode(errors.RFCErrorCode(info.Error.Code))
-}
-
 func (info *ChangeFeedInfo) fixMemoryQuota() {
 	info.Config.FixMemoryQuota()
 }
