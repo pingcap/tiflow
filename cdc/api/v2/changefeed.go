@@ -498,7 +498,7 @@ func (h *OpenAPIV2) deleteChangefeed(c *gin.Context) {
 	_, err := h.capture.StatusProvider().GetChangeFeedStatus(ctx, changefeedID)
 	if err != nil {
 		if cerror.ErrChangeFeedNotExists.Equal(err) {
-			c.Status(http.StatusNoContent)
+			c.JSON(http.StatusOK, &EmptyResponse{})
 			return
 		}
 		_ = c.Error(err)

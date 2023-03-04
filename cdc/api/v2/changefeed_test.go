@@ -219,7 +219,7 @@ func TestCreateChangefeed(t *testing.T) {
 	mysqlSink, err = util.MaskSinkURI(mysqlSink)
 	require.Nil(t, err)
 	require.Equal(t, mysqlSink, resp.SinkURI)
-	require.Equal(t, http.StatusCreated, w.Code)
+	require.Equal(t, http.StatusOK, w.Code)
 }
 
 func TestGetChangeFeed(t *testing.T) {

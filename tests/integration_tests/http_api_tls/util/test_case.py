@@ -383,7 +383,7 @@ def create_changefeed_v2():
     data = json.dumps(data)
     headers = {"Content-Type": "application/json"}
     resp = rq.post(url, data=data, headers=headers, cert=CERT, verify=VERIFY)
-    assert resp.status_code == rq.codes.created
+    assert resp.status_code == rq.codes.ok
 
     # create changefeed 2
     data = {
@@ -404,7 +404,7 @@ def create_changefeed_v2():
     data = json.dumps(data)
     headers = {"Content-Type": "application/json"}
     resp = rq.post(url, data=data, headers=headers, cert=CERT, verify=VERIFY)
-    assert resp.status_code == rq.codes.created
+    assert resp.status_code == rq.codes.ok
 
     # create changefeed fail because sink_uri is invalid
     data = json.dumps({
@@ -445,13 +445,13 @@ def unsafe_apis():
     headers = {"Content-Type": "application/json"}
     resp = rq.delete(url, data=data, headers=headers, cert=CERT, verify=VERIFY)
     print("status code", resp.status_code)
-    assert resp.status_code == 204
+    assert resp.status_code == rq.codes.ok
 
     data = json.dumps({})
     headers = {"Content-Type": "application/json"}
     resp = rq.delete(url, data=data, headers=headers, cert=CERT, verify=VERIFY)
     print("status code", resp.status_code)
-    assert resp.status_code == 204
+    assert resp.status_code == rq.codes.ok
     print("pass test: delete service_gc_safepoint")
 
     # create changefeed fail because sink_uri is invalid
@@ -482,7 +482,7 @@ def delete_changefeed_v2():
     # test remove changefeed not exists
     url = BASE_URL0_V2+"/changefeeds/changefeed-not-exists"
     resp = rq.delete(url, cert=CERT, verify=VERIFY)
-    assert (resp.status_code == rq.codes.no_content)
+    assert (resp.status_code == rq.codes.ok)
 
     print("pass test: remove changefeed v2")
 
