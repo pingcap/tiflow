@@ -65,6 +65,13 @@ type mysqlBackend struct {
 	statistics                    *metrics.Statistics
 	metricTxnSinkDMLBatchCommit   prometheus.Observer
 	metricTxnSinkDMLBatchCallback prometheus.Observer
+<<<<<<< HEAD:cdc/sinkv2/eventsink/txn/mysql/mysql.go
+=======
+	// implement stmtCache to improve performance, especially when the downstream is TiDB
+	stmtCache *lru.Cache
+	// Indicate if the CachePrepStmts should be enabled or not
+	cachePrepStmts bool
+>>>>>>> 66aaf049e6 (sink(ticdc): make the size of prep stmt cache adaptive based on the value of max_prepared_stmt_count and worker count (#8387)):cdc/sink/dmlsink/txn/mysql/mysql.go
 }
 
 // NewMySQLBackends creates a new MySQL sink using schema storage
@@ -99,8 +106,60 @@ func NewMySQLBackends(
 		return nil, err
 	}
 
+<<<<<<< HEAD:cdc/sinkv2/eventsink/txn/mysql/mysql.go
 	db.SetMaxIdleConns(cfg.WorkerCount)
 	db.SetMaxOpenConns(cfg.WorkerCount)
+=======
+	// By default, cache-prep-stmts=true, an LRU cache is used for prepared statements,
+	// two connections are required to process a transaction.
+	// The first connection is held in the tx variable, which is used to manage the transaction.
+	// The second connection is requested through a call to s.db.Prepare
+	// in case of a cache miss for the statement query.
+	// The connection pool for CDC is configured with a static size, equal to the number of workers.
+	// CDC may hang at the "Get Connection" call is due to the limited size of the connection pool.
+	// When the connection pool is small,
+	// the chance of all connections being active at the same time increases,
+	// leading to exhaustion of available connections and a hang at the "Get Connection" call.
+	// This issue is less likely to occur when the connection pool is larger,
+	// as there are more connections available for use.
+	// Adding an extra connection to the connection pool solves the connection exhaustion issue.
+	db.SetMaxIdleConns(cfg.WorkerCount + 1)
+	db.SetMaxOpenConns(cfg.WorkerCount + 1)
+
+	// Inherit the default value of the prepared statement cache from the SinkURI Options
+	cachePrepStmts := cfg.CachePrepStmts
+	prepStmtCacheSize := cfg.PrepStmtCacheSize
+
+	var stmtCache *lru.Cache
+	if cachePrepStmts {
+		// query the size of the prepared statement cache on serverside
+		maxPreparedStmtCount, err := pmysql.QueryMaxPreparedStmtCount(ctx, db)
+		if err != nil {
+			return nil, err
+		}
+		// if maxPreparedStmtCount == 0,
+		// it means that the prepared statement cache is disabled on serverside.
+		// if maxPreparedStmtCount/(cfg.WorkerCount+1) == 0, for each single connection,
+		// it means that the prepared statement cache is disabled on clientsize.
+		// Because each connection can not hold at lease one prepared statement.
+		if maxPreparedStmtCount == 0 || maxPreparedStmtCount/(cfg.WorkerCount+1) == 0 {
+			cachePrepStmts = false
+		} else if maxPreparedStmtCount/(cfg.WorkerCount+1) < prepStmtCacheSize {
+			// if maxPreparedStmtCount/(cfg.WorkerCount+1) < prepStmtCacheSize,
+			// it means that the prepared statement cache is too large on clientsize.
+			// adjust the size of the prepared statement cache on clientsize.
+			// to avoid error `Can't create more than max_prepared_stmt_count statements`
+			prepStmtCacheSize = maxPreparedStmtCount / (cfg.WorkerCount + 1)
+		}
+		stmtCache, err = lru.NewWithEvict(prepStmtCacheSize, func(key, value interface{}) {
+			stmt := value.(*sql.Stmt)
+			stmt.Close()
+		})
+		if err != nil {
+			return nil, err
+		}
+	}
+>>>>>>> 66aaf049e6 (sink(ticdc): make the size of prep stmt cache adaptive based on the value of max_prepared_stmt_count and worker count (#8387)):cdc/sink/dmlsink/txn/mysql/mysql.go
 
 	backends := make([]*mysqlBackend, 0, cfg.WorkerCount)
 	for i := 0; i < cfg.WorkerCount; i++ {
@@ -114,6 +173,11 @@ func NewMySQLBackends(
 
 			metricTxnSinkDMLBatchCommit:   txn.SinkDMLBatchCommit.WithLabelValues(changefeedID.Namespace, changefeedID.ID),
 			metricTxnSinkDMLBatchCallback: txn.SinkDMLBatchCallback.WithLabelValues(changefeedID.Namespace, changefeedID.ID),
+<<<<<<< HEAD:cdc/sinkv2/eventsink/txn/mysql/mysql.go
+=======
+			stmtCache:                     stmtCache,
+			cachePrepStmts:                cachePrepStmts,
+>>>>>>> 66aaf049e6 (sink(ticdc): make the size of prep stmt cache adaptive based on the value of max_prepared_stmt_count and worker count (#8387)):cdc/sink/dmlsink/txn/mysql/mysql.go
 		})
 	}
 
@@ -603,7 +667,29 @@ func (s *mysqlBackend) execDMLWithMaxRetries(pctx context.Context, dmls *prepare
 				log.Debug("exec row", zap.Int("workerID", s.workerID),
 					zap.String("sql", query), zap.Any("args", args))
 				ctx, cancelFunc := context.WithTimeout(pctx, writeTimeout)
+<<<<<<< HEAD:cdc/sinkv2/eventsink/txn/mysql/mysql.go
 				if _, err := tx.ExecContext(ctx, query, args...); err != nil {
+=======
+				var execError error
+				if s.cachePrepStmts {
+					stmt, ok := s.stmtCache.Get(query)
+					if !ok {
+						var err error
+						stmt, err = s.db.Prepare(query)
+						if err != nil {
+							cancelFunc()
+							return 0, errors.Trace(err)
+						}
+
+						s.stmtCache.Add(query, stmt)
+					}
+					//nolint:sqlclosecheck
+					_, execError = tx.Stmt(stmt.(*sql.Stmt)).ExecContext(ctx, args...)
+				} else {
+					_, execError = tx.ExecContext(ctx, query, args...)
+				}
+				if execError != nil {
+>>>>>>> 66aaf049e6 (sink(ticdc): make the size of prep stmt cache adaptive based on the value of max_prepared_stmt_count and worker count (#8387)):cdc/sink/dmlsink/txn/mysql/mysql.go
 					err := logDMLTxnErr(
 						cerror.WrapError(cerror.ErrMySQLTxnError, err),
 						start, s.changefeed, query, dmls.rowCount, dmls.startTs)

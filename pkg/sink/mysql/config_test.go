@@ -258,6 +258,24 @@ func TestParseSinkURIOverride(t *testing.T) {
 		checker: func(sp *Config) {
 			require.EqualValues(t, sp.tidbTxnMode, defaultTiDBTxnMode)
 		},
+<<<<<<< HEAD
+=======
+	}, {
+		uri: "mysql://127.0.0.1:3306/?prep-stmt-cache-size=1048576",
+		checker: func(sp *Config) {
+			require.EqualValues(t, sp.PrepStmtCacheSize, maxPrepStmtCacheSize)
+		},
+	}, {
+		uri: "mysql://127.0.0.1:3306/",
+		checker: func(sp *Config) {
+			require.EqualValues(t, sp.PrepStmtCacheSize, defaultPrepStmtCacheSize)
+		},
+	}, {
+		uri: "mysql://127.0.0.1:3306/?cache-prep-stmts=false",
+		checker: func(sp *Config) {
+			require.EqualValues(t, sp.CachePrepStmts, false)
+		},
+>>>>>>> 66aaf049e6 (sink(ticdc): make the size of prep stmt cache adaptive based on the value of max_prepared_stmt_count and worker count (#8387))
 	}}
 	ctx := context.TODO()
 	var uri *url.URL

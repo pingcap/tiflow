@@ -74,6 +74,18 @@ const (
 	BackoffMaxDelay = 60 * time.Second
 
 	defaultBatchDMLEnable = true
+<<<<<<< HEAD
+=======
+
+	// defaultcachePrepStmts is the default value of cachePrepStmts
+	defaultCachePrepStmts = true
+	// defaultPrepStmtCacheSize is the default size of prepared statement cache
+	// default size = (default max_prepared_stmt_count) / (default worker count + 1)
+	// 16382 / (16 + 1) = 963
+	defaultPrepStmtCacheSize = 963
+	// The upper limit of the max size of prepared statement cache
+	maxPrepStmtCacheSize = 1048576
+>>>>>>> 66aaf049e6 (sink(ticdc): make the size of prep stmt cache adaptive based on the value of max_prepared_stmt_count and worker count (#8387))
 )
 
 // Config is the configs for MySQL backend.
