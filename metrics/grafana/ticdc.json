@@ -130,8 +130,8 @@
   "editable": true,
   "gnetId": null,
   "graphTooltip": 1,
-  "id": 27,
-  "iteration": 1676871792880,
+  "id": 28,
+  "iteration": 1678082968425,
   "links": [],
   "panels": [
     {
@@ -4310,182 +4310,6 @@
           }
         },
         {
-          "cards": {
-            "cardPadding": null,
-            "cardRound": null
-          },
-          "color": {
-            "cardColor": "#b4ff00",
-            "colorScale": "sqrt",
-            "colorScheme": "interpolateOranges",
-            "exponent": 0.5,
-            "mode": "spectrum"
-          },
-          "dataFormat": "timeseries",
-          "datasource": "${DS_TEST-CLUSTER}",
-          "description": "HeatMap of all table's memory consumption",
-          "fieldConfig": {
-            "defaults": {},
-            "overrides": []
-          },
-          "gridPos": {
-            "h": 7,
-            "w": 12,
-            "x": 0,
-            "y": 45
-          },
-          "heatmap": {},
-          "hideZeroBuckets": false,
-          "highlightCards": true,
-          "id": 149,
-          "legend": {
-            "show": false
-          },
-          "links": [],
-          "pluginVersion": "7.5.11",
-          "reverseYBuckets": false,
-          "targets": [
-            {
-              "exemplar": true,
-              "expr": "max(rate(ticdc_processor_table_memory_consumption_bucket{k8s_cluster=\"$k8s_cluster\", tidb_cluster=\"$tidb_cluster\", changefeed=~\"$changefeed\", instance=~\"$ticdc_instance\"}[1m])) by (le)",
-              "hide": false,
-              "interval": "",
-              "legendFormat": "{{le}}",
-              "refId": "A"
-            }
-          ],
-          "timeFrom": null,
-          "timeShift": null,
-          "title": "Table Memory Consumption",
-          "tooltip": {
-            "show": true,
-            "showHistogram": false
-          },
-          "type": "heatmap",
-          "xAxis": {
-            "show": true
-          },
-          "xBucketNumber": null,
-          "xBucketSize": null,
-          "yAxis": {
-            "decimals": null,
-            "format": "bytes",
-            "logBase": 1,
-            "max": null,
-            "min": null,
-            "show": true,
-            "splitFactor": null
-          },
-          "yBucketBound": "auto",
-          "yBucketNumber": null,
-          "yBucketSize": null
-        },
-        {
-          "aliasColors": {},
-          "bars": false,
-          "dashLength": 10,
-          "dashes": false,
-          "datasource": "${DS_TEST-CLUSTER}",
-          "fieldConfig": {
-            "defaults": {},
-            "overrides": []
-          },
-          "fill": 1,
-          "fillGradient": 0,
-          "gridPos": {
-            "h": 7,
-            "w": 12,
-            "x": 12,
-            "y": 45
-          },
-          "hiddenSeries": false,
-          "id": 164,
-          "legend": {
-            "alignAsTable": true,
-            "avg": false,
-            "current": true,
-            "max": true,
-            "min": false,
-            "show": true,
-            "total": false,
-            "values": true
-          },
-          "lines": true,
-          "linewidth": 1,
-          "links": [],
-          "nullPointMode": "null",
-          "options": {
-            "alertThreshold": true
-          },
-          "percentage": false,
-          "pluginVersion": "7.5.11",
-          "pointradius": 2,
-          "points": false,
-          "renderer": "flot",
-          "seriesOverrides": [],
-          "spaceLength": 10,
-          "stack": false,
-          "steppedLine": false,
-          "targets": [
-            {
-              "exemplar": true,
-              "expr": "sum(ticdc_processor_memory_consumption{k8s_cluster=\"$k8s_cluster\", tidb_cluster=\"$tidb_cluster\", changefeed=~\"$changefeed\", instance=~\"$ticdc_instance\"}) by (changefeed)",
-              "hide": false,
-              "interval": "",
-              "legendFormat": "{{changefeed}}",
-              "refId": "B"
-            },
-            {
-              "exemplar": true,
-              "expr": "max(ticdc_processor_memory_consumption{k8s_cluster=\"$k8s_cluster\", tidb_cluster=\"$tidb_cluster\", changefeed=~\"$changefeed\", instance=~\"$ticdc_instance\"}) by (changefeed, instance)",
-              "hide": false,
-              "interval": "",
-              "legendFormat": "{{changefeed}}-{{instance}}",
-              "refId": "A"
-            }
-          ],
-          "thresholds": [],
-          "timeFrom": null,
-          "timeRegions": [],
-          "timeShift": null,
-          "title": "Memory Consumption Per Processor",
-          "tooltip": {
-            "shared": true,
-            "sort": 0,
-            "value_type": "individual"
-          },
-          "type": "graph",
-          "xaxis": {
-            "buckets": null,
-            "mode": "time",
-            "name": null,
-            "show": true,
-            "values": []
-          },
-          "yaxes": [
-            {
-              "format": "bytes",
-              "label": null,
-              "logBase": 1,
-              "max": null,
-              "min": null,
-              "show": true
-            },
-            {
-              "format": "short",
-              "label": null,
-              "logBase": 1,
-              "max": null,
-              "min": null,
-              "show": true
-            }
-          ],
-          "yaxis": {
-            "align": false,
-            "alignLevel": null
-          }
-        },
-        {
           "datasource": "${DS_TEST-CLUSTER}",
           "description": "The status of each changefeed.\n\n0: Normal\n\n1: Error\n\n2: Failed\n\n3: Stopped\n\n4: Finished\n\n-1: Unknown",
           "fieldConfig": {
@@ -4623,7 +4447,7 @@
             "h": 7,
             "w": 12,
             "x": 0,
-            "y": 52
+            "y": 45
           },
           "id": 163,
           "links": [],
@@ -4676,7 +4500,7 @@
             "h": 7,
             "w": 12,
             "x": 12,
-            "y": 52
+            "y": 45
           },
           "hiddenSeries": false,
           "id": 514,
@@ -4795,7 +4619,7 @@
             "h": 7,
             "w": 12,
             "x": 0,
-            "y": 59
+            "y": 52
           },
           "hiddenSeries": false,
           "id": 102,
@@ -4898,7 +4722,7 @@
             "h": 7,
             "w": 12,
             "x": 12,
-            "y": 59
+            "y": 52
           },
           "hiddenSeries": false,
           "id": 82,
@@ -7187,7 +7011,7 @@
             "h": 8,
             "w": 12,
             "x": 0,
-            "y": 7
+            "y": 101
           },
           "hiddenSeries": false,
           "id": 618,
@@ -7309,7 +7133,7 @@
             "h": 8,
             "w": 12,
             "x": 12,
-            "y": 7
+            "y": 101
           },
           "hiddenSeries": false,
           "id": 620,
@@ -7415,7 +7239,7 @@
             "h": 8,
             "w": 12,
             "x": 0,
-            "y": 15
+            "y": 109
           },
           "hiddenSeries": false,
           "id": 619,
@@ -7513,7 +7337,7 @@
             "h": 8,
             "w": 12,
             "x": 12,
-            "y": 15
+            "y": 109
           },
           "hiddenSeries": false,
           "id": 634,
@@ -7610,7 +7434,7 @@
             "h": 8,
             "w": 12,
             "x": 0,
-            "y": 23
+            "y": 117
           },
           "hiddenSeries": false,
           "id": 635,
@@ -7730,7 +7554,7 @@
             "h": 7,
             "w": 12,
             "x": 0,
-            "y": 8
+            "y": 7
           },
           "hiddenSeries": false,
           "id": 653,
@@ -7838,7 +7662,7 @@
             "h": 7,
             "w": 12,
             "x": 12,
-            "y": 8
+            "y": 7
           },
           "hiddenSeries": false,
           "id": 628,
@@ -7941,7 +7765,7 @@
             "h": 7,
             "w": 12,
             "x": 0,
-            "y": 15
+            "y": 14
           },
           "hiddenSeries": false,
           "id": 627,
@@ -8044,7 +7868,7 @@
             "h": 7,
             "w": 12,
             "x": 12,
-            "y": 15
+            "y": 14
           },
           "hiddenSeries": false,
           "id": 630,
@@ -8147,7 +7971,7 @@
             "h": 7,
             "w": 12,
             "x": 0,
-            "y": 22
+            "y": 21
           },
           "hiddenSeries": false,
           "id": 629,
@@ -8250,7 +8074,7 @@
             "h": 7,
             "w": 12,
             "x": 12,
-            "y": 22
+            "y": 21
           },
           "hiddenSeries": false,
           "id": 631,
@@ -8353,7 +8177,7 @@
             "h": 7,
             "w": 12,
             "x": 0,
-            "y": 29
+            "y": 28
           },
           "hiddenSeries": false,
           "id": 626,
@@ -8454,7 +8278,7 @@
             "h": 7,
             "w": 12,
             "x": 12,
-            "y": 29
+            "y": 28
           },
           "hiddenSeries": false,
           "id": 709,
@@ -8552,7 +8376,7 @@
             "h": 7,
             "w": 12,
             "x": 0,
-            "y": 36
+            "y": 35
           },
           "hiddenSeries": false,
           "id": 710,
@@ -8650,7 +8474,7 @@
             "h": 7,
             "w": 12,
             "x": 12,
-            "y": 36
+            "y": 35
           },
           "hiddenSeries": false,
           "id": 711,
@@ -8756,7 +8580,7 @@
             "h": 7,
             "w": 12,
             "x": 0,
-            "y": 43
+            "y": 42
           },
           "hiddenSeries": false,
           "id": 712,
