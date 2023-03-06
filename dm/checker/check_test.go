@@ -24,8 +24,10 @@ import (
 	router "github.com/pingcap/tidb/util/table-router"
 	"github.com/pingcap/tiflow/dm/config"
 	"github.com/pingcap/tiflow/dm/ctl/common"
+	"github.com/pingcap/tiflow/dm/pkg/checker"
 	"github.com/pingcap/tiflow/dm/pkg/conn"
 	"github.com/pingcap/tiflow/dm/pkg/cputil"
+	"github.com/pingcap/tiflow/dm/pkg/terror"
 	"github.com/stretchr/testify/require"
 )
 
@@ -179,21 +181,21 @@ func TestTargetDBPrivilegeChecking(t *testing.T) {
 	mock := initMockDB(t)
 	mock.ExpectQuery("SHOW GRANTS").WillReturnRows(sqlmock.NewRows([]string{"Grants for User"}).
 		AddRow("GRANT SELECT,UPDATE,CREATE,DELETE,INSERT,ALTER ON *.* TO 'test'@'%'"))
-	msg, err := CheckSyncConfig(context.Background(), cfgs, common.DefaultErrorCnt, common.DefaultWarnCnt)
-	require.NoError(t, err)
-	require.Contains(t, msg, "lack of Drop global (*.*) privilege; lack of Index global (*.*) privilege; ")
+	_, err := CheckSyncConfig(context.Background(), cfgs, common.DefaultErrorCnt, common.DefaultWarnCnt)
+	require.Error(t, err)
+	require.Contains(t, err.(*terror.Error).Message(), "lack of Drop global (*.*) privilege; lack of Index global (*.*) privilege; ")
 
 	mock = initMockDB(t)
 	mock.ExpectQuery("SHOW GRANTS").WillReturnRows(sqlmock.NewRows([]string{"Grants for User"}).
 		AddRow("GRANT SELECT,UPDATE,CREATE,DELETE,INSERT,ALTER ON *.* TO 'test'@'%'"))
 	result, err := RunCheckOnConfigs(context.Background(), cfgs, false)
 	require.NoError(t, err)
-	require.Equal(t, int64(1), result.Summary.Warning)
+	require.Equal(t, int64(0), result.Summary.Warning)
+	require.Equal(t, checker.StateFailure, result.Results[0].State)
 	require.Contains(t, result.Results[0].Errors[0].ShortErr, "lack of Drop global (*.*) privilege")
 	require.Contains(t, result.Results[0].Errors[0].ShortErr, "lack of Index global (*.*) privilege")
 
 	// happy path
-
 	checkHappyPath(t, func() {
 		mock := initMockDB(t)
 		mock.ExpectQuery("SHOW GRANTS").WillReturnRows(sqlmock.NewRows([]string{"Grants for User"}).
