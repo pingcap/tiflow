@@ -5694,7 +5694,7 @@
           "timeFrom": null,
           "timeRegions": [],
           "timeShift": null,
-          "title": "Sink - Sink flush rows/s",
+          "title": "Sink flush rows/s",
           "tooltip": {
             "shared": true,
             "sort": 2,
@@ -5798,7 +5798,7 @@
           "timeFrom": null,
           "timeRegions": [],
           "timeShift": null,
-          "title": "Sink - Sink flush rows",
+          "title": "Sink flush rows",
           "tooltip": {
             "shared": true,
             "sort": 2,
