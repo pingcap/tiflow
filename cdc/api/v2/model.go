@@ -126,7 +126,7 @@ type JSONDuration struct {
 
 // MarshalJSON marshal duration to string
 func (d JSONDuration) MarshalJSON() ([]byte, error) {
-	return json.Marshal(d.duration.String())
+	return json.Marshal(d.duration.Nanoseconds())
 }
 
 // UnmarshalJSON unmarshal json value to wrapped duration
@@ -162,8 +162,8 @@ type ReplicaConfig struct {
 	EnableSyncPoint       bool   `json:"enable_sync_point"`
 	BDRMode               bool   `json:"bdr_mode"`
 
-	SyncPointInterval  *time.Duration `json:"sync_point_interval"`
-	SyncPointRetention *time.Duration `json:"sync_point_retention"`
+	SyncPointInterval  *JSONDuration `json:"sync_point_interval" swaggertype:"string"`
+	SyncPointRetention *JSONDuration `json:"sync_point_retention" swaggertype:"string"`
 
 	Filter     *FilterConfig              `json:"filter"`
 	Mounter    *MounterConfig             `json:"mounter"`
@@ -182,10 +182,10 @@ func (c *ReplicaConfig) ToInternalReplicaConfig() *config.ReplicaConfig {
 	res.CheckGCSafePoint = c.CheckGCSafePoint
 	res.EnableSyncPoint = c.EnableSyncPoint
 	if c.SyncPointInterval != nil {
-		res.SyncPointInterval = *c.SyncPointInterval
+		res.SyncPointInterval = c.SyncPointInterval.duration
 	}
 	if c.SyncPointRetention != nil {
-		res.SyncPointRetention = *c.SyncPointRetention
+		res.SyncPointRetention = c.SyncPointRetention.duration
 	}
 	res.BDRMode = c.BDRMode
 
@@ -302,8 +302,8 @@ func ToAPIReplicaConfig(c *config.ReplicaConfig) *ReplicaConfig {
 		IgnoreIneligibleTable: false,
 		CheckGCSafePoint:      cloned.CheckGCSafePoint,
 		EnableSyncPoint:       cloned.EnableSyncPoint,
-		SyncPointInterval:     &cloned.SyncPointInterval,
-		SyncPointRetention:    &cloned.SyncPointRetention,
+		SyncPointInterval:     &JSONDuration{cloned.SyncPointInterval},
+		SyncPointRetention:    &JSONDuration{cloned.SyncPointRetention},
 		BDRMode:               cloned.BDRMode,
 	}
 
@@ -412,15 +412,13 @@ func ToAPIReplicaConfig(c *config.ReplicaConfig) *ReplicaConfig {
 
 // GetDefaultReplicaConfig returns a default ReplicaConfig
 func GetDefaultReplicaConfig() *ReplicaConfig {
-	defaultSyncPointInterval := 10 * time.Second
-	defaultSyncPointRetention := 24 * time.Hour
 	return &ReplicaConfig{
 		CaseSensitive:      true,
 		EnableOldValue:     true,
 		CheckGCSafePoint:   true,
 		EnableSyncPoint:    false,
-		SyncPointInterval:  &defaultSyncPointInterval,
-		SyncPointRetention: &defaultSyncPointRetention,
+		SyncPointInterval:  &JSONDuration{10 * time.Second},
+		SyncPointRetention: &JSONDuration{24 * time.Hour},
 		Filter: &FilterConfig{
 			Rules: []string{"*.*"},
 		},
