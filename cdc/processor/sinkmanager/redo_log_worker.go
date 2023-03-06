@@ -72,25 +72,12 @@ func (w *redoWorker) handleTasks(ctx context.Context, taskChan <-chan *redoTask)
 }
 
 func (w *redoWorker) handleTask(ctx context.Context, task *redoTask) (finalErr error) {
-	lowerBound := task.lowerBound
-	upperBound := task.getUpperBound(task.tableSink.getReceivedSorterResolvedTs())
-	lowerPhs := oracle.GetTimeFromTS(lowerBound.CommitTs)
-	upperPhs := oracle.GetTimeFromTS(upperBound.CommitTs)
-	if upperPhs.Sub(lowerPhs) > maxTaskTimeRange {
-		upperCommitTs := oracle.GoTimeToTS(lowerPhs.Add(maxTaskTimeRange))
-		upperBound = engine.Position{
-			StartTs:  upperCommitTs - 1,
-			CommitTs: upperCommitTs,
-		}
-	}
-
-	if !upperBound.IsCommitFence() {
-		log.Panic("redo task upperbound must be a ResolvedTs",
-			zap.String("namespace", w.changefeedID.Namespace),
-			zap.String("changefeed", w.changefeedID.ID),
-			zap.Stringer("span", &task.span),
-			zap.Any("upperBound", upperBound))
-	}
+	lowerBound, upperBound := validateAndAdjustBound(
+		w.changefeedID,
+		&task.span,
+		task.lowerBound,
+		task.getUpperBound(task.tableSink.getReceivedSorterResolvedTs()),
+	)
 
 	var cache *eventAppender
 	if w.eventCache != nil {
