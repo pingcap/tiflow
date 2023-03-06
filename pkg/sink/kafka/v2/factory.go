@@ -42,6 +42,8 @@ type factory struct {
 	transport    *kafka.Transport
 	changefeedID model.ChangeFeedID
 	options      *pkafka.Options
+
+	writer *kafka.Writer
 }
 
 // NewFactory returns a factory implemented based on kafka-go
@@ -57,6 +59,7 @@ func NewFactory(
 		transport:    transport,
 		changefeedID: changefeedID,
 		options:      options,
+		writer:       &kafka.Writer{},
 	}, nil
 }
 
@@ -163,6 +166,7 @@ func (f *factory) newWriter(async bool) *kafka.Writer {
 		BatchBytes:   int64(f.options.MaxMessageBytes),
 		Async:        async,
 	}
+	f.writer = w
 	compression := strings.ToLower(strings.TrimSpace(f.options.Compression))
 	switch compression {
 	case "none":
@@ -242,7 +246,7 @@ func (f *factory) MetricsCollector(
 	role util.Role,
 	adminClient pkafka.ClusterAdminClient,
 ) pkafka.MetricsCollector {
-	return NewMetricsCollector(f.changefeedID, role, adminClient)
+	return NewMetricsCollector(f.changefeedID, role, adminClient, f.writer)
 }
 
 type syncWriter struct {
