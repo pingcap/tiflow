@@ -9,8 +9,7 @@ var (
 			Subsystem: "sink",
 			Name:      "kafka_producer_batch_duration",
 			Help:      "Kafka client internal batch message time cost in milliseconds",
-			Buckets:   prometheus.ExponentialBuckets(0.002
-			, 2.0, 10),
+			Buckets:   prometheus.ExponentialBuckets(0.002, 2.0, 10),
 		}, []string{"namespace", "changefeed"})
 
 	batchMessageCountHistogram = prometheus.NewHistogramVec(
