@@ -14,10 +14,13 @@
 package checker
 
 import (
+	"context"
 	"testing"
 
+	"github.com/DATA-DOG/go-sqlmock"
 	tc "github.com/pingcap/check"
 	"github.com/pingcap/tidb/parser/mysql"
+	"github.com/pingcap/tidb/util/dbutil"
 	"github.com/pingcap/tidb/util/filter"
 	"github.com/stretchr/testify/require"
 )
@@ -477,4 +480,21 @@ func TestVerifyTargetPrivilege(t *testing.T) {
 			require.Equal(t, cs.errStr, err.ShortErr, "grants: %v", cs.grants)
 		}
 	}
+}
+
+func TestTargetPrivilegeChecker(t *testing.T) {
+	db, dbMock, err := sqlmock.New()
+	require.NoError(t, err)
+
+	dbMock.ExpectQuery("SHOW GRANTS FOR CURRENT_USER").WillReturnRows(sqlmock.NewRows([]string{"Grants for root@%"}).
+		AddRow("GRANT ALL PRIVILEGES ON *.* TO 'root'@'%' WITH GRANT OPTION"))
+	checker := NewTargetPrivilegeChecker(db, &dbutil.DBConfig{})
+	res := checker.Check(context.TODO())
+	require.Equal(t, StateSuccess, res.State)
+
+	dbMock.ExpectQuery("SHOW GRANTS FOR CURRENT_USER").WillReturnRows(sqlmock.NewRows([]string{"Grants for root@%"}).
+		AddRow("GRANT SELECT ON test.* TO 'root'@'%'"))
+	checker = NewTargetPrivilegeChecker(db, &dbutil.DBConfig{})
+	res = checker.Check(context.TODO())
+	require.Equal(t, StateFailure, res.State)
 }

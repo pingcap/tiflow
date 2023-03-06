@@ -207,7 +207,7 @@ func (t *TargetPrivilegeChecker) Check(ctx context.Context) *Result {
 	if err2 != nil {
 		result.Errors = append(result.Errors, err2)
 		// set to error to avoid user skip this check unexpectedly
-		result.State = StateError
+		result.State = StateFailure
 	}
 	return result
 }
