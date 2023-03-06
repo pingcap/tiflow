@@ -94,10 +94,8 @@ func (c *Column) ToRowChangeColumn(name string) *model.Column {
 			if err != nil {
 				log.Panic("invalid column value, please report a bug", zap.Any("col", c), zap.Error(err))
 			}
-			col.Value = []byte(str)
-		} else {
-			col.Value = str
 		}
+		col.Value = []byte(str)
 	default:
 		col.Value = c.Value
 	}
