@@ -245,8 +245,36 @@ type RedoLog struct {
 // RedoRowChangedEvent represents the DML event used in RedoLog
 type RedoRowChangedEvent struct {
 	Row        *RowChangedEvent `msg:"row"`
+<<<<<<< HEAD
 	PreColumns []*RedoColumn    `msg:"pre-columns"`
 	Columns    []*RedoColumn    `msg:"columns"`
+=======
+	Columns    []RedoColumn     `msg:"columns"`
+	PreColumns []RedoColumn     `msg:"pre-columns"`
+}
+
+// RedoDDLEvent represents DDL event used in redo log persistent
+type RedoDDLEvent struct {
+	DDL       *DDLEvent `msg:"ddl"`
+	Type      byte      `msg:"type"`
+	TableName TableName `msg:"table-name"`
+}
+
+// ToRedoLog converts row changed event to redo log
+func (row *RowChangedEvent) ToRedoLog() *RedoLog {
+	return &RedoLog{
+		RedoRow: RedoRowChangedEvent{Row: row},
+		Type:    RedoLogTypeRow,
+	}
+}
+
+// ToRedoLog converts ddl event to redo log
+func (ddl *DDLEvent) ToRedoLog() *RedoLog {
+	return &RedoLog{
+		RedoDDL: RedoDDLEvent{DDL: ddl},
+		Type:    RedoLogTypeDDL,
+	}
+>>>>>>> 9499d6200d (redo(ticdc): support for applying ddl event in applier (#8362))
 }
 
 // RowChangedEvent represents a row changed event

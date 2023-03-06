@@ -16,8 +16,11 @@ package reader
 import (
 	"context"
 	"fmt"
+<<<<<<< HEAD
 	"io"
 	"io/ioutil"
+=======
+>>>>>>> 9499d6200d (redo(ticdc): support for applying ddl event in applier (#8362))
 	"net/url"
 	"os"
 	"path/filepath"
@@ -26,7 +29,6 @@ import (
 
 	"github.com/golang/mock/gomock"
 	"github.com/google/uuid"
-	"github.com/pingcap/errors"
 	mockstorage "github.com/pingcap/tidb/br/pkg/mock/storage"
 	"github.com/pingcap/tidb/br/pkg/storage"
 	"github.com/pingcap/tiflow/cdc/model"
@@ -35,10 +37,12 @@ import (
 	"github.com/pingcap/tiflow/pkg/redo"
 	"github.com/stretchr/testify/mock"
 	"github.com/stretchr/testify/require"
-	"go.uber.org/multierr"
+	"golang.org/x/sync/errgroup"
 )
 
 func TestNewLogReader(t *testing.T) {
+	t.Parallel()
+
 	_, err := newLogReader(context.Background(), nil)
 	require.NotNil(t, err)
 
@@ -77,6 +81,7 @@ func TestNewLogReader(t *testing.T) {
 	require.True(t, os.IsNotExist(err))
 }
 
+<<<<<<< HEAD
 func TestLogReaderResetReader(t *testing.T) {
 	dir, err := ioutil.TempDir("", "redo-ResetReader")
 	require.Nil(t, err)
@@ -99,16 +104,44 @@ func TestLogReaderResetReader(t *testing.T) {
 		RedoRow: &model.RedoRowChangedEvent{Row: &model.RowChangedEvent{CommitTs: 11}},
 	}
 	data, err := log.MarshalMsg(nil)
+=======
+func genLogFile(
+	ctx context.Context, t *testing.T,
+	dir string, logType string, maxCommitTs uint64,
+) {
+	cfg := &writer.LogWriterConfig{
+		MaxLogSizeInBytes: 100000,
+		Dir:               dir,
+	}
+	fileName := fmt.Sprintf(redo.RedoLogFileFormatV2, "capture", "default",
+		"changefeed", logType, maxCommitTs, uuid.NewString(), redo.LogEXT)
+	w, err := file.NewFileWriter(ctx, cfg, writer.WithLogFileName(func() string {
+		return fileName
+	}))
 	require.Nil(t, err)
-	_, err = w.Write(data)
+	log := &model.RedoLog{}
+	if logType == redo.RedoRowLogFileType {
+		log.RedoRow.Row = &model.RowChangedEvent{CommitTs: maxCommitTs}
+	} else if logType == redo.RedoDDLLogFileType {
+		log.RedoDDL.DDL = &model.DDLEvent{
+			CommitTs:  maxCommitTs,
+			TableInfo: &model.TableInfo{},
+		}
+		log.Type = model.RedoLogTypeDDL
+	}
+	rawData, err := codec.MarshalRedoLog(log, nil)
+>>>>>>> 9499d6200d (redo(ticdc): support for applying ddl event in applier (#8362))
+	require.Nil(t, err)
+	_, err = w.Write(rawData)
 	require.Nil(t, err)
 	err = w.Close()
 	require.Nil(t, err)
+}
 
-	path := filepath.Join(dir, fileName)
-	f, err := os.Open(path)
-	require.Nil(t, err)
+func TestReadLogs(t *testing.T) {
+	t.Parallel()
 
+<<<<<<< HEAD
 	fileName = fmt.Sprintf(redo.RedoLogFileFormatV2, "cp",
 		"default", "test-cf10",
 		redo.RedoRowLogFileType, 10, uuid.NewString(), redo.LogEXT)
@@ -128,120 +161,80 @@ func TestLogReaderResetReader(t *testing.T) {
 	path = filepath.Join(dir, fileName)
 	f1, err := os.Open(path)
 	require.Nil(t, err)
+=======
+	dir := t.TempDir()
+	ctx, cancel := context.WithCancel(context.Background())
+>>>>>>> 9499d6200d (redo(ticdc): support for applying ddl event in applier (#8362))
 
-	type arg struct {
-		ctx                      context.Context
-		startTs, endTs           uint64
-		resolvedTs, checkPointTs uint64
+	meta := &common.LogMeta{
+		CheckpointTs: 11,
+		ResolvedTs:   100,
 	}
-	tests := []struct {
-		name                   string
-		args                   arg
-		readerErr              error
-		wantErr                string
-		wantStartTs, wantEndTs uint64
-		rowFleName             string
-		ddlFleName             string
-	}{
-		{
-			name: "happy",
-			args: arg{
-				ctx:          context.Background(),
-				startTs:      1,
-				endTs:        101,
-				checkPointTs: 0,
-				resolvedTs:   200,
-			},
-			wantStartTs: 1,
-			wantEndTs:   101,
-			rowFleName:  f1.Name(),
-			ddlFleName:  f.Name(),
-		},
-		{
-			name: "context cancel",
-			args: arg{
-				ctx:          context.Background(),
-				startTs:      1,
-				endTs:        101,
-				checkPointTs: 0,
-				resolvedTs:   200,
-			},
-			wantErr: context.Canceled.Error(),
-		},
-		{
-			name: "invalid ts",
-			args: arg{
-				ctx:          context.Background(),
-				startTs:      1,
-				endTs:        0,
-				checkPointTs: 0,
-				resolvedTs:   200,
-			},
-			wantErr: ".*should match the boundary*.",
-		},
-		{
-			name: "invalid ts",
-			args: arg{
-				ctx:          context.Background(),
-				startTs:      201,
-				endTs:        10,
-				checkPointTs: 0,
-				resolvedTs:   200,
-			},
-			wantErr: ".*should match the boundary*.",
-		},
-		{
-			name: "reader close err",
-			args: arg{
-				ctx:          context.Background(),
-				startTs:      1,
-				endTs:        10,
-				checkPointTs: 0,
-				resolvedTs:   200,
-			},
-			wantErr:   "err",
-			readerErr: errors.New("err"),
-		},
+	for _, logType := range []string{redo.RedoRowLogFileType, redo.RedoDDLLogFileType} {
+		genLogFile(ctx, t, dir, logType, meta.CheckpointTs)
+		genLogFile(ctx, t, dir, logType, meta.CheckpointTs)
+		genLogFile(ctx, t, dir, logType, 12)
+		genLogFile(ctx, t, dir, logType, meta.ResolvedTs)
+	}
+	expectedRows := []uint64{12, meta.ResolvedTs}
+	expectedDDLs := []uint64{meta.CheckpointTs, meta.CheckpointTs, 12, meta.ResolvedTs}
+
+	r := &LogReader{
+		cfg:   &LogReaderConfig{Dir: dir},
+		meta:  meta,
+		rowCh: make(chan *model.RowChangedEvent, defaultReaderChanSize),
+		ddlCh: make(chan *model.DDLEvent, defaultReaderChanSize),
+	}
+	eg, egCtx := errgroup.WithContext(ctx)
+	eg.Go(func() error {
+		return r.Run(egCtx)
+	})
+
+	for _, ts := range expectedRows {
+		row, err := r.ReadNextRow(egCtx)
+		require.NoError(t, err)
+		require.Equal(t, ts, row.CommitTs)
+	}
+	for _, ts := range expectedDDLs {
+		ddl, err := r.ReadNextDDL(egCtx)
+		require.NoError(t, err)
+		require.Equal(t, ts, ddl.CommitTs)
 	}
 
-	for _, tt := range tests {
-		mockReader := &mockFileReader{}
-		mockReader.On("Close").Return(tt.readerErr)
-		r := &LogReader{
-			cfg:       &LogReaderConfig{Dir: dir},
-			rowReader: []fileReader{mockReader},
-			ddlReader: []fileReader{mockReader},
-			meta: &common.LogMeta{
-				CheckpointTs: tt.args.checkPointTs,
-				ResolvedTs:   tt.args.resolvedTs,
-			},
-		}
+	cancel()
+	require.ErrorIs(t, eg.Wait(), nil)
+}
 
-		if tt.name == "context cancel" {
-			ctx, cancel := context.WithCancel(context.Background())
-			cancel()
-			tt.args.ctx = ctx
-		} else {
-			ctx, cancel := context.WithCancel(context.Background())
-			defer cancel()
-			tt.args.ctx = ctx
-		}
-		err := r.ResetReader(tt.args.ctx, tt.args.startTs, tt.args.endTs)
-		if tt.wantErr != "" {
-			require.Regexp(t, tt.wantErr, err, tt.name)
-		} else {
-			require.Nil(t, err, tt.name)
-			mockReader.AssertNumberOfCalls(t, "Close", 2)
-			require.Equal(t, tt.rowFleName+redo.SortLogEXT,
-				r.rowReader[0].(*reader).fileName, tt.name)
-			require.Equal(t, tt.ddlFleName+redo.SortLogEXT,
-				r.ddlReader[0].(*reader).fileName, tt.name)
-			require.Equal(t, tt.wantStartTs, r.cfg.startTs, tt.name)
-			require.Equal(t, tt.wantEndTs, r.cfg.endTs, tt.name)
+func TestLogReaderClose(t *testing.T) {
+	t.Parallel()
 
-		}
+	dir := t.TempDir()
+	ctx, cancel := context.WithCancel(context.Background())
+
+	meta := &common.LogMeta{
+		CheckpointTs: 11,
+		ResolvedTs:   100,
 	}
-	time.Sleep(1001 * time.Millisecond)
+	for _, logType := range []string{redo.RedoRowLogFileType, redo.RedoDDLLogFileType} {
+		genLogFile(ctx, t, dir, logType, meta.CheckpointTs)
+		genLogFile(ctx, t, dir, logType, meta.CheckpointTs)
+		genLogFile(ctx, t, dir, logType, 12)
+		genLogFile(ctx, t, dir, logType, meta.ResolvedTs)
+	}
+
+	r := &LogReader{
+		cfg:   &LogReaderConfig{Dir: dir},
+		meta:  meta,
+		rowCh: make(chan *model.RowChangedEvent, 1),
+		ddlCh: make(chan *model.DDLEvent, 1),
+	}
+	eg, egCtx := errgroup.WithContext(ctx)
+	eg.Go(func() error {
+		return r.Run(egCtx)
+	})
+
+	cancel()
+	require.ErrorIs(t, eg.Wait(), context.Canceled)
 }
 
 func TestLogReaderReadMeta(t *testing.T) {
@@ -335,6 +328,7 @@ func TestLogReaderReadMeta(t *testing.T) {
 		}
 	}
 }
+<<<<<<< HEAD
 
 func TestLogReaderReadNextLog(t *testing.T) {
 	type arg struct {
@@ -759,3 +753,5 @@ func TestLogReaderClose(t *testing.T) {
 		}
 	}
 }
+=======
+>>>>>>> 9499d6200d (redo(ticdc): support for applying ddl event in applier (#8362))

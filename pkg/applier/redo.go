@@ -17,17 +17,26 @@ import (
 	"context"
 	"net/url"
 
-	"github.com/pingcap/errors"
 	"github.com/pingcap/log"
+	timodel "github.com/pingcap/tidb/parser/model"
 	"github.com/pingcap/tiflow/cdc/contextutil"
 	"github.com/pingcap/tiflow/cdc/model"
 	"github.com/pingcap/tiflow/cdc/redo/common"
 	"github.com/pingcap/tiflow/cdc/redo/reader"
+<<<<<<< HEAD
 	"github.com/pingcap/tiflow/cdc/sink"
 	"github.com/pingcap/tiflow/cdc/sink/mysql"
 	"github.com/pingcap/tiflow/pkg/config"
 	cerror "github.com/pingcap/tiflow/pkg/errors"
 	"github.com/pingcap/tiflow/pkg/filter"
+=======
+	"github.com/pingcap/tiflow/cdc/sink/ddlsink"
+	ddlfactory "github.com/pingcap/tiflow/cdc/sink/ddlsink/factory"
+	dmlfactory "github.com/pingcap/tiflow/cdc/sink/dmlsink/factory"
+	"github.com/pingcap/tiflow/cdc/sink/tablesink"
+	"github.com/pingcap/tiflow/pkg/config"
+	"github.com/pingcap/tiflow/pkg/errors"
+>>>>>>> 9499d6200d (redo(ticdc): support for applying ddl event in applier (#8362))
 	"github.com/pingcap/tiflow/pkg/redo"
 	"github.com/pingcap/tiflow/pkg/util"
 	"go.uber.org/zap"
@@ -36,11 +45,18 @@ import (
 
 const (
 	applierChangefeed = "redo-applier"
-	emitBatch         = mysql.DefaultMaxTxnRow
-	readBatch         = mysql.DefaultWorkerCount * emitBatch
+	warnDuration      = 3 * time.Minute
+	flushWaitDuration = 200 * time.Millisecond
 )
 
-var errApplyFinished = errors.New("apply finished, can exit safely")
+var (
+	// In the boundary case, non-idempotent DDLs will not be executed.
+	// TODO(CharlesCheung96): fix this
+	unsupportedDDL = map[timodel.ActionType]struct{}{
+		timodel.ActionExchangeTablePartition: {},
+	}
+	errApplyFinished = errors.New("apply finished, can exit safely")
+)
 
 // RedoApplierConfig is the configuration used by a redo log applier
 type RedoApplierConfig struct {
@@ -52,15 +68,35 @@ type RedoApplierConfig struct {
 // RedoApplier implements a redo log applier
 type RedoApplier struct {
 	cfg *RedoApplierConfig
+	rd  reader.RedoLogReader
 
+	ddlSink         ddlsink.Sink
+	appliedDDLCount uint64
+
+<<<<<<< HEAD
 	rd    reader.RedoLogReader
+=======
+	// sinkFactory is used to create table sinks.
+	sinkFactory *dmlfactory.SinkFactory
+	// tableSinks is a map from tableID to table sink.
+	// We create it when we need it, and close it after we finish applying the redo logs.
+	tableSinks         map[model.TableID]tablesink.TableSink
+	tableResolvedTsMap map[model.TableID]model.ResolvedTs
+	appliedLogCount    uint64
+
+>>>>>>> 9499d6200d (redo(ticdc): support for applying ddl event in applier (#8362))
 	errCh chan error
 }
 
 // NewRedoApplier creates a new RedoApplier instance
 func NewRedoApplier(cfg *RedoApplierConfig) *RedoApplier {
 	return &RedoApplier{
+<<<<<<< HEAD
 		cfg: cfg,
+=======
+		cfg:   cfg,
+		errCh: make(chan error, 1024),
+>>>>>>> 9499d6200d (redo(ticdc): support for applying ddl event in applier (#8362))
 	}
 }
 
@@ -69,7 +105,7 @@ func NewRedoApplier(cfg *RedoApplierConfig) *RedoApplier {
 func (rac *RedoApplierConfig) toLogReaderConfig() (string, *reader.LogReaderConfig, error) {
 	uri, err := url.Parse(rac.Storage)
 	if err != nil {
-		return "", nil, cerror.WrapError(cerror.ErrConsistentStorage, err)
+		return "", nil, errors.WrapError(errors.ErrConsistentStorage, err)
 	}
 	cfg := &reader.LogReaderConfig{
 		Dir:                uri.Path,
@@ -94,17 +130,47 @@ func (ra *RedoApplier) catchError(ctx context.Context) error {
 	}
 }
 
+func (ra *RedoApplier) initSink(ctx context.Context) (err error) {
+	replicaConfig := config.GetDefaultReplicaConfig()
+	ra.sinkFactory, err = dmlfactory.New(ctx, ra.cfg.SinkURI, replicaConfig, ra.errCh)
+	if err != nil {
+		return err
+	}
+	ra.ddlSink, err = ddlfactory.New(ctx, ra.cfg.SinkURI, replicaConfig)
+	if err != nil {
+		return err
+	}
+
+	ra.tableSinks = make(map[model.TableID]tablesink.TableSink)
+	ra.tableResolvedTsMap = make(map[model.TableID]model.ResolvedTs)
+	return nil
+}
+
 func (ra *RedoApplier) consumeLogs(ctx context.Context) error {
 	checkpointTs, resolvedTs, err := ra.rd.ReadMeta(ctx)
 	if err != nil {
 		return err
 	}
-	if checkpointTs == resolvedTs {
-		log.Info("apply redo log suncceed: checkpointTs == resolvedTs",
-			zap.Uint64("checkpointTs", checkpointTs),
-			zap.Uint64("resolvedTs", resolvedTs))
-		return errApplyFinished
+	log.Info("apply redo log starts",
+		zap.Uint64("checkpointTs", checkpointTs),
+		zap.Uint64("resolvedTs", resolvedTs))
+	if err := ra.initSink(ctx); err != nil {
+		return err
 	}
+	defer ra.sinkFactory.Close()
+
+	shouldApplyDDL := func(row *model.RowChangedEvent, ddl *model.DDLEvent) bool {
+		if ddl == nil {
+			return false
+		} else if row == nil {
+			// no more rows to apply
+			return true
+		}
+		// If all rows before the DDL (which means row.CommitTs <= ddl.CommitTs)
+		// are applied, we should apply this DDL.
+		return row.CommitTs > ddl.CommitTs
+	}
+<<<<<<< HEAD
 	err = ra.rd.ResetReader(ctx, checkpointTs, resolvedTs)
 	if err != nil {
 		return err
@@ -143,14 +209,22 @@ func (ra *RedoApplier) consumeLogs(ctx context.Context) error {
 	lastResolvedTs := checkpointTs
 	cachedRows := make([]*model.RowChangedEvent, 0, emitBatch)
 	tableResolvedTsMap := make(map[model.TableID]model.Ts)
+=======
+
+	row, err := ra.rd.ReadNextRow(ctx)
+	if err != nil {
+		return err
+	}
+	ddl, err := ra.rd.ReadNextDDL(ctx)
+	if err != nil {
+		return err
+	}
+>>>>>>> 9499d6200d (redo(ticdc): support for applying ddl event in applier (#8362))
 	for {
-		redoLogs, err := ra.rd.ReadNextLog(ctx, readBatch)
-		if err != nil {
-			return err
-		}
-		if len(redoLogs) == 0 {
+		if row == nil && ddl == nil {
 			break
 		}
+<<<<<<< HEAD
 
 		for _, redoLog := range redoLogs {
 			tableID := redoLog.Row.Table.TableID
@@ -193,7 +267,151 @@ func (ra *RedoApplier) consumeLogs(ctx context.Context) error {
 			return err
 		}
 	}
+=======
+		if shouldApplyDDL(row, ddl) {
+			if err := ra.applyDDL(ctx, ddl, checkpointTs, resolvedTs); err != nil {
+				return err
+			}
+			if ddl, err = ra.rd.ReadNextDDL(ctx); err != nil {
+				return err
+			}
+		} else {
+			if err := ra.applyRow(row, checkpointTs); err != nil {
+				return err
+			}
+			if row, err = ra.rd.ReadNextRow(ctx); err != nil {
+				return err
+			}
+		}
+	}
+	// wait all tables to flush data
+	for tableID := range ra.tableResolvedTsMap {
+		if err := ra.waitTableFlush(ctx, tableID, resolvedTs); err != nil {
+			return err
+		}
+		ra.tableSinks[tableID].Close(ctx)
+	}
+
+	log.Info("apply redo log finishes",
+		zap.Uint64("appliedLogCount", ra.appliedLogCount),
+		zap.Uint64("appliedDDLCount", ra.appliedDDLCount),
+		zap.Uint64("currentCheckpoint", resolvedTs))
+>>>>>>> 9499d6200d (redo(ticdc): support for applying ddl event in applier (#8362))
 	return errApplyFinished
+}
+
+func (ra *RedoApplier) applyDDL(
+	ctx context.Context, ddl *model.DDLEvent, checkpointTs, resolvedTs uint64,
+) error {
+	shouldSkip := func() bool {
+		if ddl.CommitTs == checkpointTs {
+			if _, ok := unsupportedDDL[ddl.Type]; ok {
+				log.Error("ignore unsupported DDL", zap.Any("ddl", ddl))
+				return true
+			}
+		}
+		if ddl.TableInfo == nil {
+			// Note this could omly happen when using old version of cdc, and the commit ts
+			// of the DDL should be equal to checkpoint ts or resolved ts.
+			log.Warn("ignore DDL without table info", zap.Any("ddl", ddl))
+			return true
+		}
+		return false
+	}
+	if ddl.CommitTs != checkpointTs && ddl.CommitTs != resolvedTs {
+		// TODO: move this panic to shouldSkip after redo log supports cross DDL events.
+		log.Panic("ddl commit ts is not equal to checkpoint ts or resolved ts")
+	}
+	if shouldSkip() {
+		return nil
+	}
+	log.Warn("apply DDL", zap.Any("ddl", ddl))
+	// Wait all tables to flush data before applying DDL.
+	// TODO: only block tables that are affected by this DDL.
+	for tableID := range ra.tableSinks {
+		if err := ra.waitTableFlush(ctx, tableID, ddl.CommitTs); err != nil {
+			return err
+		}
+	}
+	if err := ra.ddlSink.WriteDDLEvent(ctx, ddl); err != nil {
+		return err
+	}
+	ra.appliedDDLCount++
+	return nil
+}
+
+func (ra *RedoApplier) applyRow(
+	row *model.RowChangedEvent, checkpointTs model.Ts,
+) error {
+	tableID := row.Table.TableID
+	if _, ok := ra.tableSinks[tableID]; !ok {
+		tableSink := ra.sinkFactory.CreateTableSink(
+			model.DefaultChangeFeedID(applierChangefeed),
+			spanz.TableIDToComparableSpan(tableID),
+			prometheus.NewCounter(prometheus.CounterOpts{}),
+		)
+		ra.tableSinks[tableID] = tableSink
+	}
+	if _, ok := ra.tableResolvedTsMap[tableID]; !ok {
+		ra.tableResolvedTsMap[tableID] = model.NewResolvedTs(checkpointTs)
+	}
+	ra.tableSinks[tableID].AppendRowChangedEvents(row)
+	if row.CommitTs > ra.tableResolvedTsMap[tableID].Ts {
+		// Use batch resolvedTs to flush data as quickly as possible.
+		ra.tableResolvedTsMap[tableID] = model.ResolvedTs{
+			Mode:    model.BatchResolvedMode,
+			Ts:      row.CommitTs,
+			BatchID: 1,
+		}
+	} else if row.CommitTs < ra.tableResolvedTsMap[tableID].Ts {
+		log.Panic("commit ts of redo log regressed",
+			zap.Int64("tableID", tableID),
+			zap.Uint64("commitTs", row.CommitTs),
+			zap.Any("resolvedTs", ra.tableResolvedTsMap[tableID]))
+	}
+
+	ra.appliedLogCount++
+	if ra.appliedLogCount%mysql.DefaultMaxTxnRow == 0 {
+		for tableID, tableResolvedTs := range ra.tableResolvedTsMap {
+			if err := ra.tableSinks[tableID].UpdateResolvedTs(tableResolvedTs); err != nil {
+				return err
+			}
+			if tableResolvedTs.IsBatchMode() {
+				ra.tableResolvedTsMap[tableID] = tableResolvedTs.AdvanceBatch()
+			}
+		}
+	}
+	return nil
+}
+
+func (ra *RedoApplier) waitTableFlush(
+	ctx context.Context, tableID model.TableID, rts model.Ts,
+) error {
+	ticker := time.NewTicker(warnDuration)
+	defer ticker.Stop()
+
+	resolvedTs := model.NewResolvedTs(rts)
+	ra.tableResolvedTsMap[tableID] = resolvedTs
+	if err := ra.tableSinks[tableID].UpdateResolvedTs(resolvedTs); err != nil {
+		return err
+	}
+	// Make sure all events are flushed to downstream.
+	for !ra.tableSinks[tableID].GetCheckpointTs().EqualOrGreater(resolvedTs) {
+		select {
+		case <-ctx.Done():
+			return errors.Trace(ctx.Err())
+		case <-ticker.C:
+			log.Warn(
+				"Table sink is not catching up with resolved ts for a long time",
+				zap.Int64("tableID", tableID),
+				zap.Any("resolvedTs", resolvedTs),
+				zap.Any("checkpointTs", ra.tableSinks[tableID].GetCheckpointTs()),
+			)
+		default:
+			time.Sleep(flushWaitDuration)
+		}
+	}
+	return nil
 }
 
 var createRedoReader = createRedoReaderImpl
@@ -216,23 +434,29 @@ func (ra *RedoApplier) ReadMeta(ctx context.Context) (checkpointTs uint64, resol
 }
 
 // Apply applies redo log to given target
-func (ra *RedoApplier) Apply(ctx context.Context) error {
-	rd, err := createRedoReader(ctx, ra.cfg)
-	if err != nil {
+func (ra *RedoApplier) Apply(egCtx context.Context) (err error) {
+	eg, egCtx := errgroup.WithContext(egCtx)
+	egCtx = contextutil.PutRoleInCtx(egCtx, util.RoleRedoLogApplier)
+	if ra.rd, err = createRedoReader(egCtx, ra.cfg); err != nil {
 		return err
 	}
+<<<<<<< HEAD
 	ra.rd = rd
 	ra.errCh = make(chan error, 1024)
+=======
+>>>>>>> 9499d6200d (redo(ticdc): support for applying ddl event in applier (#8362))
 
-	wg, ctx := errgroup.WithContext(ctx)
-	wg.Go(func() error {
-		return ra.consumeLogs(ctx)
+	eg.Go(func() error {
+		return ra.rd.Run(egCtx)
 	})
-	wg.Go(func() error {
-		return ra.catchError(ctx)
+	eg.Go(func() error {
+		return ra.consumeLogs(egCtx)
+	})
+	eg.Go(func() error {
+		return ra.catchError(egCtx)
 	})
 
-	err = wg.Wait()
+	err = eg.Wait()
 	if errors.Cause(err) != errApplyFinished {
 		return err
 	}

@@ -27,18 +27,27 @@ func newBlackHoleReader() *BlackHoleReader {
 	return &BlackHoleReader{}
 }
 
-// ResetReader implements LogReader.ReadLog
-func (br *BlackHoleReader) ResetReader(ctx context.Context, startTs, endTs uint64) error {
+// Run implements LogReader.Run
+func (br *BlackHoleReader) Run(ctx context.Context) error {
 	return nil
 }
 
+<<<<<<< HEAD
 // ReadNextLog implements LogReader.ReadNextLog
 func (br *BlackHoleReader) ReadNextLog(ctx context.Context, maxNumberOfEvents uint64) ([]*model.RedoRowChangedEvent, error) {
+=======
+// ReadNextRow implements LogReader.ReadNextRow
+func (br *BlackHoleReader) ReadNextRow(ctx context.Context) (*model.RowChangedEvent, error) {
+>>>>>>> 9499d6200d (redo(ticdc): support for applying ddl event in applier (#8362))
 	return nil, nil
 }
 
 // ReadNextDDL implements LogReader.ReadNextDDL
+<<<<<<< HEAD
 func (br *BlackHoleReader) ReadNextDDL(ctx context.Context, maxNumberOfEvents uint64) ([]*model.RedoDDLEvent, error) {
+=======
+func (br *BlackHoleReader) ReadNextDDL(ctx context.Context) (*model.DDLEvent, error) {
+>>>>>>> 9499d6200d (redo(ticdc): support for applying ddl event in applier (#8362))
 	return nil, nil
 }
 
