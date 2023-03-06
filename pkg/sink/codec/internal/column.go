@@ -95,7 +95,7 @@ func (c *Column) ToRowChangeColumn(name string) *model.Column {
 				log.Panic("invalid column value, please report a bug", zap.Any("col", c), zap.Error(err))
 			}
 		}
-		col.Value = []byte(str)
+		col.Value = str
 	default:
 		col.Value = c.Value
 	}
