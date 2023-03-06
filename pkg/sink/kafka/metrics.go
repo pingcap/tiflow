@@ -20,7 +20,7 @@ var (
 	requestsInFlightGauge = prometheus.NewGaugeVec(
 		prometheus.GaugeOpts{
 			Namespace: "ticdc",
-			Subsystem: "sinkv2",
+			Subsystem: "sink",
 			Name:      "kafka_producer_in_flight_requests",
 			Help: "The current number of in-flight requests" +
 				" awaiting a response for all brokers.",
@@ -29,7 +29,7 @@ var (
 	outgoingByteRateGauge = prometheus.NewGaugeVec(
 		prometheus.GaugeOpts{
 			Namespace: "ticdc",
-			Subsystem: "sinkv2",
+			Subsystem: "sink",
 			Name:      "kafka_producer_outgoing_byte_rate",
 			Help:      "Bytes/second written off all brokers.",
 		}, []string{"namespace", "changefeed", "broker"})
@@ -37,7 +37,7 @@ var (
 	requestRateGauge = prometheus.NewGaugeVec(
 		prometheus.GaugeOpts{
 			Namespace: "ticdc",
-			Subsystem: "sinkv2",
+			Subsystem: "sink",
 			Name:      "kafka_producer_request_rate",
 			Help:      "Requests/second sent to all brokers.",
 		}, []string{"namespace", "changefeed", "broker"})
@@ -46,7 +46,7 @@ var (
 	requestLatencyInMsGauge = prometheus.NewGaugeVec(
 		prometheus.GaugeOpts{
 			Namespace: "ticdc",
-			Subsystem: "sinkv2",
+			Subsystem: "sink",
 			Name:      "kafka_producer_request_latency",
 			Help:      "The request latency in ms for all brokers.",
 		}, []string{"namespace", "changefeed", "broker"})
@@ -54,7 +54,7 @@ var (
 	compressionRatioGauge = prometheus.NewGaugeVec(
 		prometheus.GaugeOpts{
 			Namespace: "ticdc",
-			Subsystem: "sinkv2",
+			Subsystem: "sink",
 			Name:      "kafka_producer_compression_ratio",
 			Help:      "The compression ratio times 100 of record batches for all topics.",
 		}, []string{"namespace", "changefeed"})
@@ -62,7 +62,7 @@ var (
 	responseRateGauge = prometheus.NewGaugeVec(
 		prometheus.GaugeOpts{
 			Namespace: "ticdc",
-			Subsystem: "sinkv2",
+			Subsystem: "sink",
 			Name:      "kafka_producer_response_rate",
 			Help:      "Responses/second received from all brokers.",
 		}, []string{"namespace", "changefeed", "broker"})

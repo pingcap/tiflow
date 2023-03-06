@@ -16,7 +16,7 @@ import "github.com/prometheus/client_golang/prometheus"
 
 const (
 	namespace = "ticdc"
-	subsystem = "sinkv2"
+	subsystem = "sink"
 )
 
 // Metrics for cloud storage sink
