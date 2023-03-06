@@ -13,7 +13,9 @@
 
 package kafka
 
-import "github.com/prometheus/client_golang/prometheus"
+import (
+	"github.com/prometheus/client_golang/prometheus"
+)
 
 var (
 	// Counter inc by 1 once a request send, dec by 1 for a response received.

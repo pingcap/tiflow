@@ -14,7 +14,7 @@
 package mq
 
 import (
-	"github.com/pingcap/tiflow/pkg/config"
+	"github.com/pingcap/tiflow/pkg/sink/codec"
 	"github.com/pingcap/tiflow/pkg/sink/kafka"
 	v2 "github.com/pingcap/tiflow/pkg/sink/kafka/v2"
 	"github.com/prometheus/client_golang/prometheus"
@@ -55,10 +55,7 @@ func InitMetrics(registry *prometheus.Registry) {
 	registry.MustRegister(WorkerSendMessageDuration)
 	registry.MustRegister(WorkerBatchSize)
 	registry.MustRegister(WorkerBatchDuration)
-
-	if config.GetGlobalServerConfig().Debug.EnableKafkaSinkV2 {
-		v2.InitMetrics(registry)
-	} else {
-		kafka.InitMetrics(registry)
-	}
+	codec.InitMetrics(registry)
+	kafka.InitMetrics(registry)
+	v2.InitMetrics(registry)
 }
