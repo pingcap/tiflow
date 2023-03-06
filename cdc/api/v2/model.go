@@ -162,8 +162,8 @@ type ReplicaConfig struct {
 	EnableSyncPoint       bool   `json:"enable_sync_point"`
 	BDRMode               bool   `json:"bdr_mode"`
 
-	SyncPointInterval  time.Duration `json:"sync_point_interval"`
-	SyncPointRetention time.Duration `json:"sync_point_retention"`
+	SyncPointInterval  *time.Duration `json:"sync_point_interval"`
+	SyncPointRetention *time.Duration `json:"sync_point_retention"`
 
 	Filter     *FilterConfig              `json:"filter"`
 	Mounter    *MounterConfig             `json:"mounter"`
@@ -181,8 +181,12 @@ func (c *ReplicaConfig) ToInternalReplicaConfig() *config.ReplicaConfig {
 	res.ForceReplicate = c.ForceReplicate
 	res.CheckGCSafePoint = c.CheckGCSafePoint
 	res.EnableSyncPoint = c.EnableSyncPoint
-	res.SyncPointInterval = c.SyncPointInterval
-	res.SyncPointRetention = c.SyncPointRetention
+	if c.SyncPointInterval != nil {
+		res.SyncPointInterval = *c.SyncPointInterval
+	}
+	if c.SyncPointRetention != nil {
+		res.SyncPointRetention = *c.SyncPointRetention
+	}
 	res.BDRMode = c.BDRMode
 
 	if c.Filter != nil {
@@ -298,8 +302,8 @@ func ToAPIReplicaConfig(c *config.ReplicaConfig) *ReplicaConfig {
 		IgnoreIneligibleTable: false,
 		CheckGCSafePoint:      cloned.CheckGCSafePoint,
 		EnableSyncPoint:       cloned.EnableSyncPoint,
-		SyncPointInterval:     cloned.SyncPointInterval,
-		SyncPointRetention:    cloned.SyncPointRetention,
+		SyncPointInterval:     &cloned.SyncPointInterval,
+		SyncPointRetention:    &cloned.SyncPointRetention,
 		BDRMode:               cloned.BDRMode,
 	}
 
@@ -408,13 +412,15 @@ func ToAPIReplicaConfig(c *config.ReplicaConfig) *ReplicaConfig {
 
 // GetDefaultReplicaConfig returns a default ReplicaConfig
 func GetDefaultReplicaConfig() *ReplicaConfig {
+	defaultSyncPointInterval := 10 * time.Second
+	defaultSyncPointRetention := 24 * time.Hour
 	return &ReplicaConfig{
 		CaseSensitive:      true,
 		EnableOldValue:     true,
 		CheckGCSafePoint:   true,
 		EnableSyncPoint:    false,
-		SyncPointInterval:  10 * time.Second,
-		SyncPointRetention: 24 * time.Hour,
+		SyncPointInterval:  &defaultSyncPointInterval,
+		SyncPointRetention: &defaultSyncPointRetention,
 		Filter: &FilterConfig{
 			Rules: []string{"*.*"},
 		},
