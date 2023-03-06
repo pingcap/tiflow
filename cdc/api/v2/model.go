@@ -162,8 +162,8 @@ type ReplicaConfig struct {
 	EnableSyncPoint       bool   `json:"enable_sync_point"`
 	BDRMode               bool   `json:"bdr_mode"`
 
-	SyncPointInterval  JSONDuration `json:"sync_point_interval" swaggertype:"string"`
-	SyncPointRetention JSONDuration `json:"sync_point_retention" swaggertype:"string"`
+	SyncPointInterval  time.Duration `json:"sync_point_interval"`
+	SyncPointRetention time.Duration `json:"sync_point_retention"`
 
 	Filter     *FilterConfig              `json:"filter"`
 	Mounter    *MounterConfig             `json:"mounter"`
@@ -181,8 +181,8 @@ func (c *ReplicaConfig) ToInternalReplicaConfig() *config.ReplicaConfig {
 	res.ForceReplicate = c.ForceReplicate
 	res.CheckGCSafePoint = c.CheckGCSafePoint
 	res.EnableSyncPoint = c.EnableSyncPoint
-	res.SyncPointInterval = c.SyncPointInterval.duration
-	res.SyncPointRetention = c.SyncPointRetention.duration
+	res.SyncPointInterval = c.SyncPointInterval
+	res.SyncPointRetention = c.SyncPointRetention
 	res.BDRMode = c.BDRMode
 
 	if c.Filter != nil {
@@ -298,8 +298,8 @@ func ToAPIReplicaConfig(c *config.ReplicaConfig) *ReplicaConfig {
 		IgnoreIneligibleTable: false,
 		CheckGCSafePoint:      cloned.CheckGCSafePoint,
 		EnableSyncPoint:       cloned.EnableSyncPoint,
-		SyncPointInterval:     JSONDuration{cloned.SyncPointInterval},
-		SyncPointRetention:    JSONDuration{cloned.SyncPointRetention},
+		SyncPointInterval:     cloned.SyncPointInterval,
+		SyncPointRetention:    cloned.SyncPointRetention,
 		BDRMode:               cloned.BDRMode,
 	}
 
@@ -413,8 +413,8 @@ func GetDefaultReplicaConfig() *ReplicaConfig {
 		EnableOldValue:     true,
 		CheckGCSafePoint:   true,
 		EnableSyncPoint:    false,
-		SyncPointInterval:  JSONDuration{10 * time.Second},
-		SyncPointRetention: JSONDuration{24 * time.Hour},
+		SyncPointInterval:  10 * time.Second,
+		SyncPointRetention: 24 * time.Hour,
 		Filter: &FilterConfig{
 			Rules: []string{"*.*"},
 		},
