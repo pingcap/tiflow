@@ -49,7 +49,7 @@ const (
 	// defaultWorkerNum is the num of workers used to sort the log file to sorted file,
 	// will load the file to memory first then write the sorted file to disk
 	// the memory used is defaultWorkerNum * defaultMaxLogSize (64 * megabyte) total
-	defaultWorkerNum = 50
+	defaultWorkerNum = 16
 )
 
 type fileReader interface {
@@ -72,7 +72,7 @@ type readerConfig struct {
 type reader struct {
 	cfg      *readerConfig
 	mu       sync.Mutex
-	br       *bufio.Reader
+	br       io.Reader
 	fileName string
 	closer   io.Closer
 	// lastValidOff file offset following the last valid decoded record
@@ -145,19 +145,10 @@ func downLoadAndSortFiles(ctx context.Context, cfg *readerConfig) ([]io.ReadClos
 		if strings.HasSuffix(fileName, redo.SortLogEXT) {
 			log.Panic("should not download sorted log file")
 		}
-		sortedFileName := filepath.Base(fileName) + redo.SortLogEXT
-		sortedFileNames = append(sortedFileNames, sortedFileName)
+		sortedFileNames = append(sortedFileNames, getSortedFileName(fileName))
 		eg.Go(func() error {
 			defer func() { <-limit }()
-			data, err := extStorage.ReadFile(eCtx, fileName)
-			if err != nil {
-				return cerror.WrapError(cerror.ErrExternalStorageAPI, err)
-			}
-			if len(data) == 0 {
-				log.Warn("download file is empty", zap.String("file", fileName))
-				return nil
-			}
-			return sortAndWriteFile(ctx, sortedFileName, data, cfg)
+			return sortAndWriteFile(ctx, extStorage, fileName, cfg)
 		})
 	}
 	if err := eg.Wait(); err != nil {
@@ -178,6 +169,10 @@ func downLoadAndSortFiles(ctx context.Context, cfg *readerConfig) ([]io.ReadClos
 		ret = append(ret, f)
 	}
 	return ret, nil
+}
+
+func getSortedFileName(name string) string {
+	return filepath.Base(name) + redo.SortLogEXT
 }
 
 func selectDownLoadFile(
@@ -208,9 +203,9 @@ func selectDownLoadFile(
 	return files, nil
 }
 
-func readAllFromBuffer(br *bufio.Reader) (logHeap, error) {
+func readAllFromBuffer(buf []byte) (logHeap, error) {
 	r := &reader{
-		br: br,
+		br: bytes.NewReader(buf),
 	}
 	defer r.Close()
 
@@ -231,22 +226,34 @@ func readAllFromBuffer(br *bufio.Reader) (logHeap, error) {
 
 // sortAndWriteFile if not safely closed, the sorted file will end up with .sort.tmp as the file name suffix
 func sortAndWriteFile(
-	ctx context.Context, name string, data []byte, cfg *readerConfig,
+	egCtx context.Context,
+	extStorage storage.ExternalStorage,
+	fileName string, cfg *readerConfig,
 ) error {
+	sortedName := getSortedFileName(fileName)
 	writerCfg := &writer.LogWriterConfig{
 		Dir:               cfg.dir,
 		MaxLogSizeInBytes: math.MaxInt32,
 	}
-	w, err := file.NewFileWriter(ctx, writerCfg, writer.WithLogFileName(func() string {
-		return name
+	w, err := file.NewFileWriter(egCtx, writerCfg, writer.WithLogFileName(func() string {
+		return sortedName
 	}))
 	if err != nil {
 		return err
 	}
 
+	data, err := extStorage.ReadFile(egCtx, fileName)
+	if err != nil {
+		return cerror.WrapError(cerror.ErrExternalStorageAPI, err)
+	}
+	if len(data) == 0 {
+		log.Warn("download file is empty", zap.String("file", fileName))
+		return nil
+	}
+
 	// sort data
-	r := bytes.NewReader(data)
-	h, err := readAllFromBuffer(bufio.NewReader(r))
+	h, err := readAllFromBuffer(data)
+	data = nil
 	if err != nil {
 		return err
 	}
@@ -257,6 +264,8 @@ func sortAndWriteFile(
 		if item.GetCommitTs() > cfg.endTs {
 			// If the commitTs is greater than endTs, we should stop sorting
 			// and ignore the rest of the logs.
+			log.Info("ignore logs which commitTs is greater than resolvedTs",
+				zap.Any("filename", fileName), zap.Uint64("endTs", cfg.endTs))
 			break
 		}
 		if item.GetCommitTs() <= cfg.startTs {
