@@ -65,7 +65,6 @@ func TestNonBinaryStringCol(t *testing.T) {
 	require.Equal(t, row, row2)
 	mqCol2 := row2.Update["test"]
 	col2 := mqCol2.ToRowChangeColumn("test")
-	col2.Value = string(col2.Value.([]byte))
 	require.Equal(t, col, col2)
 }
 
