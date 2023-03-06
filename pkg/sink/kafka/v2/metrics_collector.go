@@ -72,7 +72,7 @@ func (m *MetricsCollector) collectMetrics() {
 
 	// batch related metrics
 	batchDurationHistogram.WithLabelValues(m.changefeedID.Namespace, m.changefeedID.ID).
-		Observe(float64(statistics.BatchTime.Avg.Milliseconds()))
+		Observe(statistics.BatchTime.Avg.Seconds())
 	batchMessageCountHistogram.WithLabelValues(m.changefeedID.Namespace, m.changefeedID.ID).
 		Observe(float64(statistics.BatchSize.Avg))
 	batchSizeHistogram.WithLabelValues(m.changefeedID.Namespace, m.changefeedID.ID).
@@ -82,7 +82,7 @@ func (m *MetricsCollector) collectMetrics() {
 	requestRateGauge.WithLabelValues(m.changefeedID.Namespace, m.changefeedID.ID).
 		Set(float64(statistics.Writes))
 	requestLatencyInMsGauge.WithLabelValues(m.changefeedID.Namespace, m.changefeedID.ID).
-		Set(float64(statistics.WriteTime.Avg.Milliseconds()))
+		Set(statistics.WriteTime.Avg.Seconds())
 
 	retryCount.WithLabelValues(m.changefeedID.Namespace, m.changefeedID.ID).
 		Set(float64(statistics.Retries))
