@@ -88,7 +88,7 @@ function test_privilege_precheck() {
 	run_sql_tidb "flush privileges;"
 	run_dm_ctl $WORK_DIR "127.0.0.1:$MASTER_PORT" \
 		"check-task $cur/conf/task-priv.yaml" \
-		"\"state\": fail" 1 \
+		"\"state\": \"fail\"" 1 \
 		"lack of Update global (*.*) privilege" 1
 	run_sql_tidb "grant update on *.* to 'test1'@'%';"
 	run_sql_tidb "flush privileges;"
