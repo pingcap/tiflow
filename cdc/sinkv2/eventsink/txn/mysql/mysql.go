@@ -385,10 +385,23 @@ func (s *mysqlBackend) batchSingleTxnDmls(
 
 	// handle update
 	if len(updateRows) > 0 {
-		for _, rows := range updateRows {
-			s, v := s.genUpdateSQL(rows...)
-			sqls = append(sqls, s...)
-			values = append(values, v...)
+		if s.cfg.IsTiDB {
+			for _, rows := range updateRows {
+				s, v := s.genUpdateSQL(rows...)
+				sqls = append(sqls, s...)
+				values = append(values, v...)
+			}
+			// The behavior of update statement differs between TiDB and MySQL.
+			// So we don't use batch update statement when downstream is MySQL.
+			// Ref:https://docs.pingcap.com/tidb/stable/sql-statement-update#mysql-compatibility
+		} else {
+			for _, rows := range updateRows {
+				for _, row := range rows {
+					sql, value := row.GenSQL(sqlmodel.DMLUpdate)
+					sqls = append(sqls, sql)
+					values = append(values, value)
+				}
+			}
 		}
 	}
 
