@@ -23,6 +23,7 @@ import (
 	"github.com/pingcap/errors"
 	"github.com/pingcap/log"
 	tidbkv "github.com/pingcap/tidb/kv"
+	"github.com/pingcap/tiflow/cdc/contextutil"
 	"github.com/pingcap/tiflow/cdc/entry"
 	"github.com/pingcap/tiflow/cdc/kv"
 	"github.com/pingcap/tiflow/cdc/model"
@@ -237,6 +238,7 @@ func (APIV2HelpersImpl) verifyCreateChangefeedConfig(
 	}
 
 	// verify sink
+	ctx = contextutil.PutChangefeedIDInCtx(ctx, model.NewChangefeedID(cfg.Namespace, cfg.ID))
 	if err := validator.Validate(ctx, cfg.SinkURI, replicaCfg); err != nil {
 		return nil, err
 	}
@@ -346,6 +348,7 @@ func (APIV2HelpersImpl) verifyUpdateChangefeedConfig(
 			return nil, nil, cerror.ErrChangefeedUpdateRefused.GenWithStackByCause(err)
 		}
 
+		ctx = contextutil.PutChangefeedIDInCtx(ctx, model.NewChangefeedID(cfg.Namespace, cfg.ID))
 		if err := validator.Validate(ctx, newInfo.SinkURI, newInfo.Config); err != nil {
 			return nil, nil, cerror.ErrChangefeedUpdateRefused.GenWithStackByCause(err)
 		}

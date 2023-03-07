@@ -66,8 +66,8 @@ func InitMetrics(registry *prometheus.Registry) {
 	registry.MustRegister(batchDurationHistogram)
 	registry.MustRegister(batchMessageCountHistogram)
 	registry.MustRegister(batchSizeHistogram)
-	registry.MustRegister(requestRateGauge)
 
+	registry.MustRegister(requestRateGauge)
 	registry.MustRegister(requestLatencyInMsGauge)
 
 	registry.MustRegister(retryCount)

@@ -53,6 +53,14 @@ func DefaultChangeFeedID(id string) ChangeFeedID {
 	}
 }
 
+// NewChangefeedID return a `ChangeFeedID` with given namespace and id
+func NewChangefeedID(namespace, id string) ChangeFeedID {
+	return ChangeFeedID{
+		Namespace: namespace,
+		ID:        id,
+	}
+}
+
 // ChangeFeedID4Test returns `ChangefeedID` with given namespace and id
 func ChangeFeedID4Test(namespace, id string) ChangeFeedID {
 	return ChangeFeedID{
