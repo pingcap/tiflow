@@ -17,10 +17,12 @@ import (
 	"context"
 	"time"
 
+	"github.com/labstack/gommon/log"
 	"github.com/pingcap/tiflow/cdc/model"
 	pkafka "github.com/pingcap/tiflow/pkg/sink/kafka"
 	"github.com/pingcap/tiflow/pkg/util"
 	"github.com/segmentio/kafka-go"
+	"go.uber.org/zap"
 )
 
 // MetricsCollector is the kafka metrics collector based on kafka-go library.
@@ -100,4 +102,8 @@ func (m *MetricsCollector) cleanupMetrics() {
 
 	retryCount.DeleteLabelValues(m.changefeedID.Namespace, m.changefeedID.ID)
 	errCount.DeleteLabelValues(m.changefeedID.Namespace, m.changefeedID.ID)
+
+	log.Info("metrics collector clean up all metrics",
+		zap.String("namespace", m.changefeedID.Namespace),
+		zap.String("changefeed", m.changefeedID.ID))
 }
