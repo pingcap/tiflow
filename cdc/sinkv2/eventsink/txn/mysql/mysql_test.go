@@ -1567,14 +1567,9 @@ func TestPrepareBatchDMLs(t *testing.T) {
 	ms.cfg.SafeMode = false
 	ms.cfg.EnableOldValue = true
 	for _, tc := range testCases {
-<<<<<<< HEAD:cdc/sinkv2/eventsink/txn/mysql/mysql_test.go
+		ms.cfg.IsTiDB = tc.isTiDB
 		ms.events = make([]*eventsink.TxnCallbackableEvent, 1)
 		ms.events[0] = &eventsink.TxnCallbackableEvent{
-=======
-		ms.cfg.IsTiDB = tc.isTiDB
-		ms.events = make([]*dmlsink.TxnCallbackableEvent, 1)
-		ms.events[0] = &dmlsink.TxnCallbackableEvent{
->>>>>>> bf37f0b992 (sink (ticdc): disable batch update dml when downstream is mysql (#8452)):cdc/sink/dmlsink/txn/mysql/mysql_test.go
 			Event: &model.SingleTableTxn{Rows: tc.input},
 		}
 		ms.rows = len(tc.input)
