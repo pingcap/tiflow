@@ -448,6 +448,9 @@ func (s *mysqlBackend) batchSingleTxnDmls(
 				sqls = append(sqls, s...)
 				values = append(values, v...)
 			}
+			// The behavior of update statement differs between TiDB and MySQL.
+			// So we don't use batch update statement when downstream is MySQL.
+			// Ref:https://docs.pingcap.com/tidb/stable/sql-statement-update#mysql-compatibility
 		} else {
 			for _, rows := range updateRows {
 				for _, row := range rows {
