@@ -17,6 +17,7 @@ import (
 	"bytes"
 	"context"
 	"encoding/json"
+	"time"
 
 	"github.com/pingcap/log"
 	"go.uber.org/zap"
@@ -58,27 +59,14 @@ func testChangefeed(ctx context.Context, client *CDCRESTClient) error {
 	if err := json.Unmarshal(resp.body, changefeedInfo1); err != nil {
 		log.Panic("unmarshal failed", zap.String("body", string(resp.body)), zap.Error(err))
 	}
+	ensureChangefeed(ctx, client, changefeedInfo1.ID, "normal")
 
 	// pause changefeed
 	resp = client.Post().WithURI("changefeeds/changefeed-test-v2-black-hole-1/pause").Do(ctx)
 	assertResponseIsOK(resp)
 	assertEmptyResponseBody(resp)
 
-	// check get changefeed
-	cf := &ChangeFeedInfo{}
-	for i := 0; i < 10; i++ {
-		resp = client.Get().WithURI("changefeeds/changefeed-test-v2-black-hole-1").Do(ctx)
-		assertResponseIsOK(resp)
-		if err := json.Unmarshal(resp.body, cf); err != nil {
-			log.Panic("unmarshal failed", zap.String("body", string(resp.body)), zap.Error(err))
-		}
-		if cf.State == "stopped" {
-			break
-		}
-	}
-	if cf.State != "stopped" {
-		log.Panic("pause changefeed failed", zap.Any("changefeed", cf))
-	}
+	ensureChangefeed(ctx, client, changefeedInfo1.ID, "stopped")
 
 	// update changefeed
 	data = `{
@@ -99,7 +87,7 @@ func testChangefeed(ctx context.Context, client *CDCRESTClient) error {
 
 	resp = client.Get().WithURI("changefeeds/changefeed-test-v2-black-hole-1").Do(ctx)
 	assertResponseIsOK(resp)
-	cf = &ChangeFeedInfo{}
+	cf := &ChangeFeedInfo{}
 	if err := json.Unmarshal(resp.body, cf); err != nil {
 		log.Panic("unmarshal failed", zap.String("body", string(resp.body)), zap.Error(err))
 	}
@@ -122,20 +110,7 @@ func testChangefeed(ctx context.Context, client *CDCRESTClient) error {
 	assertEmptyResponseBody(resp)
 
 	// check get changefeed
-	cf = &ChangeFeedInfo{}
-	for i := 0; i < 10; i++ {
-		resp = client.Get().WithURI("changefeeds/changefeed-test-v2-black-hole-1").Do(ctx)
-		assertResponseIsOK(resp)
-		if err := json.Unmarshal(resp.body, cf); err != nil {
-			log.Panic("unmarshal failed", zap.String("body", string(resp.body)), zap.Error(err))
-		}
-		if cf.State == "normal" {
-			break
-		}
-	}
-	if cf.State != "normal" {
-		log.Panic("pause changefeed failed", zap.Any("changefeed", cf))
-	}
+	ensureChangefeed(ctx, client, changefeedInfo1.ID, "normal")
 
 	resp = client.Delete().
 		WithURI("changefeeds/changefeed-test-v2-black-hole-1").Do(ctx)
@@ -149,6 +124,57 @@ func testChangefeed(ctx context.Context, client *CDCRESTClient) error {
 	}
 
 	println("pass test: changefeed apis")
+	return nil
+}
+
+func testCreateChangefeed(ctx context.Context, client *CDCRESTClient) error {
+	config := ChangefeedConfig{
+		ID:      "test-create-all",
+		SinkURI: "blackhole://create=test",
+		ReplicaConfig: &ReplicaConfig{
+			MemoryQuota:           0,
+			CaseSensitive:         false,
+			EnableOldValue:        false,
+			ForceReplicate:        false,
+			IgnoreIneligibleTable: false,
+			CheckGCSafePoint:      false,
+			EnableSyncPoint:       false,
+			BDRMode:               false,
+			Filter: &FilterConfig{
+				MySQLReplicationRules: nil,
+				IgnoreTxnStartTs:      nil,
+				EventFilters:          nil,
+			},
+			Mounter: &MounterConfig{},
+			Sink: &SinkConfig{
+				Protocol:                 "",
+				SchemaRegistry:           "",
+				CSVConfig:                nil,
+				DispatchRules:            nil,
+				ColumnSelectors:          nil,
+				TxnAtomicity:             "",
+				EncoderConcurrency:       0,
+				Terminator:               "",
+				DateSeparator:            "",
+				EnablePartitionSeparator: false,
+			},
+			Consistent: &ConsistentConfig{
+				Level:             "",
+				MaxLogSize:        0,
+				FlushIntervalInMs: 0,
+				Storage:           "",
+				UseFileBackend:    false,
+			},
+			Scheduler: &ChangefeedSchedulerConfig{},
+		},
+	}
+	resp := client.Post().
+		WithBody(&config).
+		WithURI("/changefeeds").
+		Do(ctx)
+	assertResponseIsOK(resp)
+	client.Delete().WithURI("/changefeeds/" + config.ID)
+	assertResponseIsOK(resp)
 	return nil
 }
 
@@ -200,6 +226,7 @@ func testResignOwner(ctx context.Context, client *CDCRESTClient) error {
 	resp := client.Post().WithURI("owner/resign").Do(ctx)
 	assertResponseIsOK(resp)
 	assertResponseIsOK(resp)
+	println("pass test: owner apis")
 	return nil
 }
 
@@ -231,4 +258,24 @@ func assertResponseIsOK(resp *Result) {
 	if resp.statusCode != 200 {
 		log.Panic("api status code is not 200", zap.Int("code", resp.statusCode))
 	}
+}
+
+func ensureChangefeed(ctx context.Context, client *CDCRESTClient, id, state string) {
+	var info *ChangeFeedInfo
+	for i := 0; i < 10; i++ {
+		resp := client.Get().
+			WithURI("/changefeeds/" + id).Do(ctx)
+		if resp.statusCode == 200 {
+			info = &ChangeFeedInfo{}
+			if err := json.Unmarshal(resp.body, info); err != nil {
+				log.Panic("unmarshal failed", zap.String("body", string(resp.body)), zap.Error(err))
+			}
+			if info.State == state {
+				return
+			}
+		}
+		log.Info("check changefeed failed", zap.Int("time", i), zap.Any("info", info))
+		time.Sleep(2 * time.Second)
+	}
+	log.Panic("ensure changefeed failed")
 }

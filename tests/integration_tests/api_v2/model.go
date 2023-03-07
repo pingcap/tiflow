@@ -172,8 +172,8 @@ type ReplicaConfig struct {
 	EnableSyncPoint       bool   `json:"enable_sync_point"`
 	BDRMode               bool   `json:"bdr_mode"`
 
-	SyncPointInterval  JSONDuration `json:"sync_point_interval" swaggertype:"string"`
-	SyncPointRetention JSONDuration `json:"sync_point_retention" swaggertype:"string"`
+	SyncPointInterval  *JSONDuration `json:"sync_point_interval" swaggertype:"string"`
+	SyncPointRetention *JSONDuration `json:"sync_point_retention" swaggertype:"string"`
 
 	Filter     *FilterConfig              `json:"filter"`
 	Mounter    *MounterConfig             `json:"mounter"`
@@ -290,19 +290,6 @@ type ChangefeedSchedulerConfig struct {
 	RegionPerSpan int `toml:"region_per_span" json:"region_per_span"`
 }
 
-// EtcdData contains key/value pair of etcd data
-type EtcdData struct {
-	Key   string `json:"key,omitempty"`
-	Value string `json:"value,omitempty"`
-}
-
-// ResolveLockReq contains request parameter to resolve lock
-type ResolveLockReq struct {
-	RegionID uint64 `json:"region_id,omitempty"`
-	Ts       uint64 `json:"ts,omitempty"`
-	PDConfig
-}
-
 // ChangeFeedInfo describes the detail of a ChangeFeed
 type ChangeFeedInfo struct {
 	UpstreamID uint64    `json:"upstream_id,omitempty"`
@@ -351,12 +338,6 @@ type RunningError struct {
 	Addr    string `json:"addr"`
 	Code    string `json:"code"`
 	Message string `json:"message"`
-}
-
-// UpstreamConfig contains info to connect to pd
-type UpstreamConfig struct {
-	ID uint64 `json:"id"`
-	PDConfig
 }
 
 // ProcessorDetail holds the detail info of a processor
