@@ -24,6 +24,8 @@ function prepare() {
 	run_sql "CREATE DATABASE api_v2" ${DOWN_TIDB_HOST} ${DOWN_TIDB_PORT}
 
 	run_cdc_server --workdir $WORK_DIR --binary $CDC_BINARY
+	cdc cli changefeed create -c="cf_blackhole" --sink-uri="blackhole://"
+	check_changefeed_state "http://${UP_PD_HOST_1}:${UP_PD_PORT_1}" "cf_blackhole" "normal" "null" ""
 }
 
 trap stop_tidb_cluster EXIT

@@ -73,18 +73,11 @@ func newAPIClient() (*CDCRESTClient, error) {
 	}, nil
 }
 
-func assertResponseIsOK(resp *Result) {
-	if resp.err != nil {
-		log.Panic("failed call api", zap.Error(resp.Error()))
-	}
-	if resp.statusCode != 200 {
-		log.Panic("api status code is not 200", zap.Int("code", resp.statusCode))
-	}
-}
-
 var cases = []func(ctx context.Context, client *CDCRESTClient) error{
 	testStatus,
 	testSetLogLevel,
+	testClusterHealth,
+	testChangefeed,
 }
 
 func run(ctx context.Context) error {
