@@ -808,11 +808,15 @@ func TestFixSchedulerIncompatible(t *testing.T) {
 				CreatorVersion: "6.7.0",
 				SinkURI:        "mysql://root:test@127.0.0.1:3306/",
 				Config: &config.ReplicaConfig{
-					Scheduler: &config.ChangefeedSchedulerConfig{RegionThreshold: 1000},
-					Sink:      &config.SinkConfig{Protocol: config.ProtocolDefault.String()},
+					Scheduler: &config.ChangefeedSchedulerConfig{
+						RegionThreshold: 1000, WriteKeyThreshold: 1000,
+					},
+					Sink: &config.SinkConfig{Protocol: config.ProtocolDefault.String()},
 				},
 			},
-			expectedScheduler: &config.ChangefeedSchedulerConfig{RegionThreshold: 1000},
+			expectedScheduler: &config.ChangefeedSchedulerConfig{
+				RegionThreshold: 1000, WriteKeyThreshold: 1000,
+			},
 		},
 	}
 

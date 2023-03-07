@@ -23,6 +23,8 @@ import (
 	"github.com/pingcap/tiflow/cdc/scheduler/internal/v3/member"
 	"github.com/pingcap/tiflow/cdc/scheduler/internal/v3/replication"
 	"github.com/pingcap/tiflow/pkg/config"
+	"github.com/pingcap/tiflow/pkg/errors"
+	"github.com/pingcap/tiflow/pkg/pdutil"
 	"github.com/pingcap/tiflow/pkg/spanz"
 	"github.com/pingcap/tiflow/pkg/upstream"
 	"go.uber.org/zap"
@@ -49,7 +51,7 @@ type Reconciler struct {
 	changefeedID model.ChangeFeedID
 	config       *config.ChangefeedSchedulerConfig
 
-	splitter splitter
+	splitter []splitter
 }
 
 // NewReconciler returns a Reconciler.
@@ -57,13 +59,20 @@ func NewReconciler(
 	changefeedID model.ChangeFeedID,
 	up *upstream.Upstream,
 	config *config.ChangefeedSchedulerConfig,
-) *Reconciler {
+) (*Reconciler, error) {
+	pdapi, err := pdutil.NewPDAPIClient(up.PDClient, up.SecurityConfig)
+	if err != nil {
+		return nil, errors.Trace(err)
+	}
 	return &Reconciler{
 		tableSpans:   make(map[int64]splittedSpans),
 		changefeedID: changefeedID,
 		config:       config,
-		splitter:     newRegionCountSplitter(changefeedID, up.RegionCache),
-	}
+		splitter: []splitter{
+			newWriteSplitter(changefeedID, pdapi),
+			newRegionCountSplitter(changefeedID, up.RegionCache),
+		},
+	}, nil
 }
 
 // Reconcile spans that need to be replicated based on current cluster status.
@@ -108,7 +117,13 @@ func (m *Reconciler) Reconcile(
 			tableSpan := spanz.TableIDToComparableSpan(tableID)
 			spans := []tablepb.Span{tableSpan}
 			if compat.CheckSpanReplicationEnabled() {
-				spans = m.splitter.split(ctx, tableSpan, len(aliveCaptures), m.config)
+				for _, splitter := range m.splitter {
+					spans = splitter.split(ctx, tableSpan, len(aliveCaptures), m.config)
+					if len(spans) <= 1 {
+						continue
+					}
+					break
+				}
 			}
 			m.tableSpans[tableID] = splittedSpans{
 				byAddTable: true,
