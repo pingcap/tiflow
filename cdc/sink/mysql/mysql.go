@@ -803,15 +803,15 @@ func convert2RowChanges(
 	return res
 }
 
-func convertBinaryToString(row *model.RowChangedEvent) {
-	for i, col := range row.Columns {
+func convertBinaryToString(cols []*model.Column) {
+	for i, col := range cols {
 		if col == nil {
 			continue
 		}
 		if col.Charset != "" && col.Charset != charset.CharsetBin {
 			colValBytes, ok := col.Value.([]byte)
 			if ok {
-				row.Columns[i].Value = string(colValBytes)
+				cols[i].Value = string(colValBytes)
 			}
 		}
 	}
@@ -833,7 +833,8 @@ func (s *mysqlSink) groupRowsByType(
 	deleteRow := make([]*sqlmodel.RowChange, 0, preAllocateSize)
 
 	for _, row := range singleTxnDMLs {
-		convertBinaryToString(row)
+		convertBinaryToString(row.Columns)
+		convertBinaryToString(row.PreColumns)
 
 		if row.IsInsert() {
 			insertRow = append(
