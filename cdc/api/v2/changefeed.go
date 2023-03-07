@@ -760,7 +760,7 @@ func toAPIModel(
 		Namespace:      info.Namespace,
 		ID:             info.ID,
 		SinkURI:        sinkURI,
-		CreateTime:     model.JSONTime(info.CreateTime),
+		CreateTime:     info.CreateTime,
 		StartTs:        info.StartTs,
 		TargetTs:       info.TargetTs,
 		AdminJobType:   info.AdminJobType,

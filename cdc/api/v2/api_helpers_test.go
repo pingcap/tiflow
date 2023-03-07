@@ -116,7 +116,7 @@ func TestVerifyUpdateChangefeedConfig(t *testing.T) {
 	cfg.TargetTs = 10
 	cfg.ReplicaConfig = ToAPIReplicaConfig(config.GetDefaultReplicaConfig())
 	cfg.ReplicaConfig.EnableSyncPoint = true
-	cfg.ReplicaConfig.SyncPointInterval = JSONDuration{30 * time.Second}
+	cfg.ReplicaConfig.SyncPointInterval = &JSONDuration{30 * time.Second}
 	cfg.PDAddrs = []string{"a", "b"}
 	cfg.CertPath = "p1"
 	cfg.CAPath = "p2"
