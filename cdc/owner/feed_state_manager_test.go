@@ -256,9 +256,8 @@ func TestHandleFastFailError(t *testing.T) {
 
 func TestHandleErrorWhenChangefeedIsPaused(t *testing.T) {
 	ctx := cdcContext.NewBackendContext4Test(true)
-	manager := newFeedStateManager4Test(0, 0, 0, 0)
-	manager.state = orchestrator.NewChangefeedReactorState(etcd.DefaultCDCClusterID,
-		ctx.ChangefeedVars().ID)
+	manager := newFeedStateManager4Test()
+	manager.state = orchestrator.NewChangefeedReactorState(ctx.ChangefeedVars().ID)
 	err := &model.RunningError{
 		Addr:    ctx.GlobalVars().CaptureInfo.AdvertiseAddr,
 		Code:    "CDC:ErrReachMaxTry",
