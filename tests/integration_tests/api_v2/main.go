@@ -75,9 +75,13 @@ func newAPIClient() (*CDCRESTClient, error) {
 
 var cases = []func(ctx context.Context, client *CDCRESTClient) error{
 	testStatus,
-	testSetLogLevel,
 	testClusterHealth,
 	testChangefeed,
+	testRemoveChangefeed,
+	testCapture,
+	testProcessor,
+	testResignOwner,
+	testSetLogLevel,
 }
 
 func run(ctx context.Context) error {

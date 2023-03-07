@@ -41,7 +41,7 @@ func testClusterHealth(ctx context.Context, client *CDCRESTClient) error {
 }
 
 func testChangefeed(ctx context.Context, client *CDCRESTClient) error {
-	//changefeed
+	// changefeed
 	data := `{
 		"changefeed_id": "changefeed-test-v2-black-hole-1",
 		"sink_uri": "blackhole://",
@@ -59,7 +59,7 @@ func testChangefeed(ctx context.Context, client *CDCRESTClient) error {
 		log.Panic("unmarshal failed", zap.String("body", string(resp.body)), zap.Error(err))
 	}
 
-	//pause changefeed
+	// pause changefeed
 	resp = client.Post().WithURI("changefeeds/changefeed-test-v2-black-hole-1/pause").Do(ctx)
 	assertResponseIsOK(resp)
 	assertEmptyResponseBody(resp)
@@ -79,6 +79,31 @@ func testChangefeed(ctx context.Context, client *CDCRESTClient) error {
 	if cf.State != "stopped" {
 		log.Panic("pause changefeed failed", zap.Any("changefeed", cf))
 	}
+
+	// update changefeed
+	data = `{
+		"sink_uri": "blackhole://?aa=bb",
+		"replica_config":{
+			"ignore_ineligible_table": true
+		}
+	}`
+	resp = client.Put().
+		WithBody(bytes.NewReader([]byte(data))).
+		WithURI("/changefeeds/changefeed-test-v2-black-hole-1").
+		Do(ctx)
+	assertResponseIsOK(resp)
+	changefeedInfo1 = &ChangeFeedInfo{}
+	if err := json.Unmarshal(resp.body, changefeedInfo1); err != nil {
+		log.Panic("unmarshal failed", zap.String("body", string(resp.body)), zap.Error(err))
+	}
+
+	resp = client.Get().WithURI("changefeeds/changefeed-test-v2-black-hole-1").Do(ctx)
+	assertResponseIsOK(resp)
+	cf = &ChangeFeedInfo{}
+	if err := json.Unmarshal(resp.body, cf); err != nil {
+		log.Panic("unmarshal failed", zap.String("body", string(resp.body)), zap.Error(err))
+	}
+
 	// list changefeed
 	resp = client.Get().WithURI("changefeeds?state=stopped").Do(ctx)
 	assertResponseIsOK(resp)
@@ -112,8 +137,70 @@ func testChangefeed(ctx context.Context, client *CDCRESTClient) error {
 		log.Panic("pause changefeed failed", zap.Any("changefeed", cf))
 	}
 
+	resp = client.Delete().
+		WithURI("changefeeds/changefeed-test-v2-black-hole-1").Do(ctx)
+	assertResponseIsOK(resp)
+	assertEmptyResponseBody(resp)
+
+	resp = client.Get().
+		WithURI("changefeeds/changefeed-test-v2-black-hole-1").Do(ctx)
+	if resp.statusCode == 200 {
+		log.Panic("delete changefeed failed", zap.Any("resp", resp))
+	}
+
 	println("pass test: changefeed apis")
-	return resp.err
+	return nil
+}
+
+func testRemoveChangefeed(ctx context.Context, client *CDCRESTClient) error {
+	resp := client.Delete().WithURI("changefeeds/changefeed-not-exist").Do(ctx)
+	assertResponseIsOK(resp)
+	println("pass test: delete changefeed apis")
+	return nil
+}
+
+func testCapture(ctx context.Context, client *CDCRESTClient) error {
+	resp := client.Get().WithURI("captures").Do(ctx)
+	assertResponseIsOK(resp)
+	captures := &ListResponse[Capture]{}
+	if err := json.Unmarshal(resp.body, captures); err != nil {
+		log.Panic("unmarshal failed", zap.String("body", string(resp.body)), zap.Error(err))
+	}
+	if len(captures.Items) != 1 {
+		log.Panic("capture size is not 1", zap.Any("resp", resp))
+	}
+	println("pass test: capture apis")
+	return nil
+}
+
+func testProcessor(ctx context.Context, client *CDCRESTClient) error {
+	resp := client.Get().WithURI("processors").Do(ctx)
+	assertResponseIsOK(resp)
+	processors := &ListResponse[ProcessorCommonInfo]{}
+	if err := json.Unmarshal(resp.body, processors); err != nil {
+		log.Panic("unmarshal failed", zap.String("body", string(resp.body)), zap.Error(err))
+	}
+	if len(processors.Items) == 0 {
+		log.Panic("processor size is 0", zap.Any("resp", resp))
+	}
+
+	processorDetail := &ProcessorDetail{}
+	resp = client.Get().
+		WithURI("processors/" + processors.Items[0].ChangeFeedID + "/" + processors.Items[0].CaptureID).
+		Do(ctx)
+	assertResponseIsOK(resp)
+	if err := json.Unmarshal(resp.body, processorDetail); err != nil {
+		log.Panic("unmarshal failed", zap.String("body", string(resp.body)), zap.Error(err))
+	}
+	println("pass test: processor apis")
+	return nil
+}
+
+func testResignOwner(ctx context.Context, client *CDCRESTClient) error {
+	resp := client.Post().WithURI("owner/resign").Do(ctx)
+	assertResponseIsOK(resp)
+	assertResponseIsOK(resp)
+	return nil
 }
 
 func testSetLogLevel(ctx context.Context, client *CDCRESTClient) error {

@@ -136,7 +136,7 @@ type JSONDuration struct {
 
 // MarshalJSON marshal duration to string
 func (d JSONDuration) MarshalJSON() ([]byte, error) {
-	return json.Marshal(d.duration.String())
+	return json.Marshal(d.duration.Nanoseconds())
 }
 
 // UnmarshalJSON unmarshal json value to wrapped duration
@@ -305,11 +305,11 @@ type ResolveLockReq struct {
 
 // ChangeFeedInfo describes the detail of a ChangeFeed
 type ChangeFeedInfo struct {
-	UpstreamID uint64   `json:"upstream_id,omitempty"`
-	Namespace  string   `json:"namespace,omitempty"`
-	ID         string   `json:"id,omitempty"`
-	SinkURI    string   `json:"sink_uri,omitempty"`
-	CreateTime JSONTime `json:"create_time"`
+	UpstreamID uint64    `json:"upstream_id,omitempty"`
+	Namespace  string    `json:"namespace,omitempty"`
+	ID         string    `json:"id,omitempty"`
+	SinkURI    string    `json:"sink_uri,omitempty"`
+	CreateTime time.Time `json:"create_time"`
 	// Start sync at this commit ts if `StartTs` is specify or using the CreateTime of changefeed.
 	StartTs uint64 `json:"start_ts,omitempty"`
 	// The ChangeFeed will exits until sync to timestamp TargetTs
