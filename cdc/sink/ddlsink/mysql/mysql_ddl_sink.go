@@ -44,6 +44,10 @@ const (
 	networkDriftDuration = 5 * time.Second
 )
 
+// GetDBConnImpl is the implementation of pmysql.Factory.
+// Exported for testing.
+var GetDBConnImpl pmysql.Factory = pmysql.CreateMySQLDBConn
+
 // Assert Sink implementation
 var _ ddlsink.Sink = (*DDLSink)(nil)
 
@@ -64,7 +68,6 @@ func NewDDLSink(
 	ctx context.Context,
 	sinkURI *url.URL,
 	replicaConfig *config.ReplicaConfig,
-	dbConnFactory pmysql.Factory,
 ) (*DDLSink, error) {
 	changefeedID := contextutil.ChangefeedIDFromCtx(ctx)
 	cfg := pmysql.NewConfig()
@@ -73,12 +76,12 @@ func NewDDLSink(
 		return nil, err
 	}
 
-	dsnStr, err := pmysql.GenerateDSN(ctx, sinkURI, cfg, dbConnFactory)
+	dsnStr, err := pmysql.GenerateDSN(ctx, sinkURI, cfg, GetDBConnImpl)
 	if err != nil {
 		return nil, err
 	}
 
-	db, err := dbConnFactory(ctx, dsnStr)
+	db, err := GetDBConnImpl(ctx, dsnStr)
 	if err != nil {
 		return nil, err
 	}
@@ -99,6 +102,10 @@ func NewDDLSink(
 // WriteDDLEvent writes a DDL event to the mysql database.
 func (m *DDLSink) WriteDDLEvent(ctx context.Context, ddl *model.DDLEvent) error {
 	err := m.execDDLWithMaxRetries(ctx, ddl)
+	// we should not retry changefeed if DDL failed by return an unretryable error.
+	if !errorutil.IsRetryableDDLError(err) {
+		return cerror.WrapChangefeedUnretryableErr(err)
+	}
 	return errors.Trace(err)
 }
 
@@ -127,7 +134,7 @@ func (m *DDLSink) execDDLWithMaxRetries(ctx context.Context, ddl *model.DDLEvent
 	}, retry.WithBackoffBaseDelay(pmysql.BackoffBaseDelay.Milliseconds()),
 		retry.WithBackoffMaxDelay(pmysql.BackoffMaxDelay.Milliseconds()),
 		retry.WithMaxTries(defaultDDLMaxRetry),
-		retry.WithIsRetryableErr(cerror.IsRetryableError))
+		retry.WithIsRetryableErr(errorutil.IsRetryableDDLError))
 }
 
 func (m *DDLSink) execDDL(pctx context.Context, ddl *model.DDLEvent) error {
