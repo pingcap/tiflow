@@ -219,7 +219,7 @@ func TestCreateChangefeed(t *testing.T) {
 	mysqlSink, err = util.MaskSinkURI(mysqlSink)
 	require.Nil(t, err)
 	require.Equal(t, mysqlSink, resp.SinkURI)
-	require.Equal(t, http.StatusCreated, w.Code)
+	require.Equal(t, http.StatusOK, w.Code)
 }
 
 func TestGetChangeFeed(t *testing.T) {
@@ -801,7 +801,7 @@ func TestDeleteChangefeed(t *testing.T) {
 	req, _ = http.NewRequestWithContext(context.Background(), remove.method,
 		fmt.Sprintf(remove.url, validID), nil)
 	router.ServeHTTP(w, req)
-	require.Equal(t, http.StatusNoContent, w.Code)
+	require.Equal(t, http.StatusOK, w.Code)
 
 	// case 3: query changefeed error
 	statusProvider.EXPECT().GetChangeFeedStatus(gomock.Any(), gomock.Any()).Return(
@@ -824,7 +824,7 @@ func TestDeleteChangefeed(t *testing.T) {
 	req, _ = http.NewRequestWithContext(context.Background(), remove.method,
 		fmt.Sprintf(remove.url, validID), nil)
 	router.ServeHTTP(w, req)
-	require.Equal(t, http.StatusNoContent, w.Code)
+	require.Equal(t, http.StatusOK, w.Code)
 
 	// case 5: remove changefeed failed
 	statusProvider.EXPECT().GetChangeFeedStatus(gomock.Any(), gomock.Any()).AnyTimes().Return(
