@@ -390,6 +390,8 @@ definitions:
         type: integer
       storage:
         type: string
+      use_file_backend:
+        type: boolean
     type: object
   v2.DispatchRule:
     properties:

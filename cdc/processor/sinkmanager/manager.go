@@ -79,8 +79,8 @@ type SinkManager struct {
 
 	// eventCache caches events fetched from sort engine.
 	eventCache *redoEventCache
-	// redoManager is used to report the resolved ts of the table if redo log is enabled.
-	redoManager redo.LogManager
+	// redoDMLMgr is used to report the resolved ts of the table if redo log is enabled.
+	redoDMLMgr redo.DMLManager
 	// sourceManager is used by the sink manager to fetch data.
 	sourceManager *sourcemanager.SourceManager
 
@@ -122,7 +122,7 @@ func New(
 	changefeedInfo *model.ChangeFeedInfo,
 	up *upstream.Upstream,
 	schemaStorage entry.SchemaStorage,
-	redoManager redo.LogManager,
+	redoDMLMgr redo.DMLManager,
 	sourceManager *sourcemanager.SourceManager,
 	errChan chan error,
 ) (*SinkManager, error) {
@@ -156,8 +156,8 @@ func New(
 			WithLabelValues(changefeedID.Namespace, changefeedID.ID),
 	}
 
-	if redoManager != nil && redoManager.Enabled() {
-		m.redoManager = redoManager
+	if redoDMLMgr != nil && redoDMLMgr.Enabled() {
+		m.redoDMLMgr = redoDMLMgr
 		m.redoProgressHeap = newTableProgresses()
 		m.redoWorkers = make([]*redoWorker, 0, redoWorkerNum)
 		m.redoTaskChan = make(chan *redoTask)
@@ -180,7 +180,7 @@ func New(
 	log.Info("Sink manager is created",
 		zap.String("namespace", changefeedID.Namespace),
 		zap.String("changefeed", changefeedID.ID),
-		zap.Bool("withRedoEnabled", m.redoManager != nil))
+		zap.Bool("withRedoEnabled", m.redoDMLMgr != nil))
 
 	return m, nil
 }
@@ -209,13 +209,13 @@ func (m *SinkManager) startWorkers(splitTxn bool, enableOldValue bool) {
 		}()
 	}
 
-	if m.redoManager == nil {
+	if m.redoDMLMgr == nil {
 		return
 	}
 
 	for i := 0; i < redoWorkerNum; i++ {
 		w := newRedoWorker(m.changefeedID, m.sourceManager, m.redoMemQuota,
-			m.redoManager, m.eventCache, splitTxn, enableOldValue)
+			m.redoDMLMgr, m.eventCache, splitTxn, enableOldValue)
 		m.redoWorkers = append(m.redoWorkers, w)
 		m.wg.Add(1)
 		go func() {
@@ -253,7 +253,7 @@ func (m *SinkManager) startGenerateTasks() {
 		}
 	}()
 
-	if m.redoManager == nil {
+	if m.redoDMLMgr == nil {
 		return
 	}
 
@@ -736,7 +736,7 @@ func (m *SinkManager) StartTable(span tablepb.Span, startTs model.Ts) error {
 		nextLowerBoundPos: engine.Position{StartTs: 0, CommitTs: startTs + 1},
 		version:           tableSink.(*tableSinkWrapper).version,
 	})
-	if m.redoManager != nil {
+	if m.redoDMLMgr != nil {
 		m.redoProgressHeap.push(&progress{
 			span:              span,
 			nextLowerBoundPos: engine.Position{StartTs: 0, CommitTs: startTs + 1},
@@ -842,8 +842,8 @@ func (m *SinkManager) GetTableStats(span tablepb.Span) TableStats {
 	m.redoMemQuota.Release(span, checkpointTs)
 	var resolvedTs model.Ts
 	// If redo log is enabled, we have to use redo log's resolved ts to calculate processor's min resolved ts.
-	if m.redoManager != nil {
-		resolvedTs = m.redoManager.GetResolvedTs(span)
+	if m.redoDMLMgr != nil {
+		resolvedTs = m.redoDMLMgr.GetResolvedTs(span)
 	} else {
 		resolvedTs = m.sourceManager.GetTableResolvedTs(span)
 	}

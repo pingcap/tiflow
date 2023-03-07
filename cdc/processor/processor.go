@@ -69,7 +69,7 @@ type processor struct {
 	sourceManager *sourcemanager.SourceManager
 	sinkManager   *sinkmanager.SinkManager
 
-	redoManager redo.LogManager
+	redoDMLMgr redo.DMLManager
 
 	initialized bool
 	errCh       chan error
@@ -184,8 +184,8 @@ func (p *processor) AddTableSpan(
 
 	p.sinkManager.AddTable(
 		span, startTs, p.changefeed.Info.TargetTs)
-	if p.redoManager.Enabled() {
-		p.redoManager.AddTable(span, startTs)
+	if p.redoDMLMgr.Enabled() {
+		p.redoDMLMgr.AddTable(span, startTs)
 	}
 	p.sourceManager.AddTable(
 		ctx.(cdcContext.Context), span, p.getTableName(ctx, span.TableID), startTs)
@@ -308,8 +308,8 @@ func (p *processor) IsRemoveTableSpanFinished(span tablepb.Span) (model.Ts, bool
 	}
 
 	stats := p.sinkManager.GetTableStats(span)
-	if p.redoManager.Enabled() {
-		p.redoManager.RemoveTable(span)
+	if p.redoDMLMgr.Enabled() {
+		p.redoDMLMgr.RemoveTable(span)
 	}
 	p.sinkManager.RemoveTable(span)
 	p.sourceManager.RemoveTable(span)
@@ -560,12 +560,6 @@ func (p *processor) tick(ctx cdcContext.Context) error {
 	p.pushResolvedTs2Table()
 
 	p.doGCSchemaStorage()
-
-	if p.redoManager != nil && p.redoManager.Enabled() {
-		ckpt := p.changefeed.Status.CheckpointTs
-		p.redoManager.UpdateCheckpointTs(ckpt)
-	}
-
 	if err := p.agent.Tick(ctx); err != nil {
 		return errors.Trace(err)
 	}
@@ -667,11 +661,16 @@ func (p *processor) lazyInitImpl(ctx cdcContext.Context) error {
 	p.changefeed.Info.Config.Sink.TiDBSourceID = sourceID
 
 	start := time.Now()
-
-	redoManagerOpts := redo.NewProcessorManagerOptions(errCh)
-	p.redoManager, err = redo.NewManager(stdCtx, p.changefeed.Info.Config.Consistent, redoManagerOpts)
+	p.redoDMLMgr, err = redo.NewDMLManager(stdCtx, p.changefeed.Info.Config.Consistent)
 	if err != nil {
 		return err
+	}
+	if p.redoDMLMgr.Enabled() {
+		p.wg.Add(1)
+		go func() {
+			defer p.wg.Done()
+			p.sendError(p.redoDMLMgr.Run(stdCtx))
+		}()
 	}
 	log.Info("processor creates redo manager",
 		zap.String("namespace", p.changefeedID.Namespace),
@@ -691,7 +690,7 @@ func (p *processor) lazyInitImpl(ctx cdcContext.Context) error {
 		sortEngine, p.errCh, p.changefeed.Info.Config.BDRMode)
 	p.sinkManager, err = sinkmanager.New(stdCtx, p.changefeedID,
 		p.changefeed.Info, p.upstream, p.schemaStorage,
-		p.redoManager, p.sourceManager,
+		p.redoDMLMgr, p.sourceManager,
 		p.errCh)
 	if err != nil {
 		log.Info("Processor creates sink manager fail",
@@ -889,8 +888,8 @@ func (p *processor) getTableName(ctx context.Context, tableID model.TableID) str
 }
 
 func (p *processor) removeTable(span tablepb.Span) {
-	if p.redoManager.Enabled() {
-		p.redoManager.RemoveTable(span)
+	if p.redoDMLMgr.Enabled() {
+		p.redoDMLMgr.RemoveTable(span)
 	}
 	p.sinkManager.RemoveTable(span)
 	p.sourceManager.RemoveTable(span)
