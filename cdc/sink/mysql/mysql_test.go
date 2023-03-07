@@ -2577,10 +2577,12 @@ func TestPrepareBatchDMLs(t *testing.T) {
 						Flag:  model.BinaryFlag | model.MultipleKeyFlag | model.HandleKeyFlag | model.UniqueKeyFlag,
 						Value: 1,
 					}, {
-						Name:  "a3",
-						Type:  mysql.TypeLong,
-						Flag:  model.BinaryFlag | model.MultipleKeyFlag | model.HandleKeyFlag | model.UniqueKeyFlag,
-						Value: 1,
+						Name:    "a3",
+						Type:    mysql.TypeVarchar,
+						Charset: charset.CharsetGBK,
+						Flag: model.BinaryFlag | model.MultipleKeyFlag |
+							model.HandleKeyFlag | model.UniqueKeyFlag,
+						Value: []byte("你好"),
 					}},
 					IndexColumns: [][]int{{1, 2}},
 				},
@@ -2594,17 +2596,19 @@ func TestPrepareBatchDMLs(t *testing.T) {
 						Flag:  model.BinaryFlag | model.MultipleKeyFlag | model.HandleKeyFlag | model.UniqueKeyFlag,
 						Value: 2,
 					}, {
-						Name:  "a3",
-						Type:  mysql.TypeLong,
-						Flag:  model.BinaryFlag | model.MultipleKeyFlag | model.HandleKeyFlag | model.UniqueKeyFlag,
-						Value: 2,
+						Name:    "a3",
+						Type:    mysql.TypeVarchar,
+						Charset: charset.CharsetGBK,
+						Flag: model.BinaryFlag | model.MultipleKeyFlag |
+							model.HandleKeyFlag | model.UniqueKeyFlag,
+						Value: []byte("世界"),
 					}},
 					IndexColumns: [][]int{{1, 2}},
 				},
 			},
 			expected: &preparedDMLs{
 				sqls:     []string{"DELETE FROM `common_1`.`uk_without_pk` WHERE (`a1`,`a3`) IN ((?,?),(?,?))"},
-				values:   [][]interface{}{{1, 1, 2, 2}},
+				values:   [][]interface{}{{1, "你好", 2, "世界"}},
 				rowCount: 2,
 			},
 		},
@@ -2620,10 +2624,11 @@ func TestPrepareBatchDMLs(t *testing.T) {
 						Flag:  model.BinaryFlag | model.MultipleKeyFlag | model.HandleKeyFlag,
 						Value: 1,
 					}, {
-						Name:  "a3",
-						Type:  mysql.TypeLong,
-						Flag:  model.BinaryFlag | model.MultipleKeyFlag | model.HandleKeyFlag,
-						Value: 1,
+						Name:    "a3",
+						Type:    mysql.TypeVarchar,
+						Charset: charset.CharsetGBK,
+						Flag:    model.BinaryFlag | model.MultipleKeyFlag | model.HandleKeyFlag,
+						Value:   "你好",
 					}},
 					IndexColumns: [][]int{{1, 1}},
 				},
@@ -2637,17 +2642,19 @@ func TestPrepareBatchDMLs(t *testing.T) {
 						Flag:  model.BinaryFlag | model.MultipleKeyFlag | model.HandleKeyFlag | model.HandleKeyFlag,
 						Value: 2,
 					}, {
-						Name:  "a3",
-						Type:  mysql.TypeLong,
-						Flag:  model.BinaryFlag | model.MultipleKeyFlag | model.HandleKeyFlag | model.HandleKeyFlag,
-						Value: 2,
+						Name:    "a3",
+						Type:    mysql.TypeVarchar,
+						Charset: charset.CharsetGBK,
+						Flag: model.BinaryFlag | model.MultipleKeyFlag |
+							model.HandleKeyFlag | model.HandleKeyFlag,
+						Value: "世界",
 					}},
 					IndexColumns: [][]int{{2, 2}},
 				},
 			},
 			expected: &preparedDMLs{
 				sqls:     []string{"INSERT INTO `common_1`.`uk_without_pk` (`a1`,`a3`) VALUES (?,?),(?,?)"},
-				values:   [][]interface{}{{1, 1, 2, 2}},
+				values:   [][]interface{}{{1, "你好", 2, "世界"}},
 				rowCount: 2,
 			},
 		},
@@ -2664,10 +2671,12 @@ func TestPrepareBatchDMLs(t *testing.T) {
 						Flag:  model.BinaryFlag | model.MultipleKeyFlag | model.HandleKeyFlag | model.UniqueKeyFlag,
 						Value: 1,
 					}, {
-						Name:  "a3",
-						Type:  mysql.TypeLong,
-						Flag:  model.BinaryFlag | model.MultipleKeyFlag | model.HandleKeyFlag | model.UniqueKeyFlag,
-						Value: 1,
+						Name:    "a3",
+						Type:    mysql.TypeVarchar,
+						Charset: charset.CharsetGBK,
+						Flag: model.BinaryFlag | model.MultipleKeyFlag |
+							model.HandleKeyFlag | model.UniqueKeyFlag,
+						Value: []byte("开发"),
 					}},
 					Columns: []*model.Column{nil, {
 						Name:  "a1",
@@ -2675,10 +2684,12 @@ func TestPrepareBatchDMLs(t *testing.T) {
 						Flag:  model.BinaryFlag | model.MultipleKeyFlag | model.HandleKeyFlag | model.UniqueKeyFlag,
 						Value: 2,
 					}, {
-						Name:  "a3",
-						Type:  mysql.TypeLong,
-						Flag:  model.BinaryFlag | model.MultipleKeyFlag | model.HandleKeyFlag | model.UniqueKeyFlag,
-						Value: 2,
+						Name:    "a3",
+						Type:    mysql.TypeVarchar,
+						Charset: charset.CharsetGBK,
+						Flag: model.BinaryFlag | model.MultipleKeyFlag |
+							model.HandleKeyFlag | model.UniqueKeyFlag,
+						Value: []byte("测试"),
 					}},
 					IndexColumns: [][]int{{1, 2}},
 				},
@@ -2692,10 +2703,12 @@ func TestPrepareBatchDMLs(t *testing.T) {
 						Flag:  model.BinaryFlag | model.MultipleKeyFlag | model.HandleKeyFlag | model.UniqueKeyFlag,
 						Value: 3,
 					}, {
-						Name:  "a3",
-						Type:  mysql.TypeLong,
-						Flag:  model.BinaryFlag | model.MultipleKeyFlag | model.HandleKeyFlag | model.UniqueKeyFlag,
-						Value: 3,
+						Name:    "a3",
+						Type:    mysql.TypeVarchar,
+						Charset: charset.CharsetGBK,
+						Flag: model.BinaryFlag | model.MultipleKeyFlag |
+							model.HandleKeyFlag | model.UniqueKeyFlag,
+						Value: []byte("纽约"),
 					}},
 					Columns: []*model.Column{nil, {
 						Name:  "a1",
@@ -2703,17 +2716,24 @@ func TestPrepareBatchDMLs(t *testing.T) {
 						Flag:  model.BinaryFlag | model.MultipleKeyFlag | model.HandleKeyFlag | model.UniqueKeyFlag,
 						Value: 4,
 					}, {
-						Name:  "a3",
-						Type:  mysql.TypeLong,
-						Flag:  model.BinaryFlag | model.MultipleKeyFlag | model.HandleKeyFlag | model.UniqueKeyFlag,
-						Value: 4,
+						Name:    "a3",
+						Type:    mysql.TypeVarchar,
+						Charset: charset.CharsetGBK,
+						Flag: model.BinaryFlag | model.MultipleKeyFlag |
+							model.HandleKeyFlag | model.UniqueKeyFlag,
+						Value: []byte("北京"),
 					}},
 					IndexColumns: [][]int{{1, 2}},
 				},
 			},
 			expected: &preparedDMLs{
-				sqls:     []string{"UPDATE `common_1`.`uk_without_pk` SET `a1` = ?, `a3` = ? WHERE `a1` = ? AND `a3` = ? LIMIT 1", "UPDATE `common_1`.`uk_without_pk` SET `a1` = ?, `a3` = ? WHERE `a1` = ? AND `a3` = ? LIMIT 1"},
-				values:   [][]interface{}{{2, 2, 1, 1}, {4, 4, 3, 3}},
+				sqls: []string{
+					"UPDATE `common_1`.`uk_without_pk` SET `a1` = ?, `a3` = ? " +
+						"WHERE `a1` = ? AND `a3` = ? LIMIT 1",
+					"UPDATE `common_1`.`uk_without_pk` SET `a1` = ?, `a3` = ? " +
+						"WHERE `a1` = ? AND `a3` = ? LIMIT 1",
+				},
+				values:   [][]interface{}{{2, "测试", 1, "开发"}, {4, "北京", 3, "纽约"}},
 				rowCount: 2,
 			},
 		},
@@ -2730,10 +2750,12 @@ func TestPrepareBatchDMLs(t *testing.T) {
 						Flag:  model.BinaryFlag | model.MultipleKeyFlag | model.HandleKeyFlag | model.UniqueKeyFlag,
 						Value: 2,
 					}, {
-						Name:  "a3",
-						Type:  mysql.TypeLong,
-						Flag:  model.BinaryFlag | model.MultipleKeyFlag | model.HandleKeyFlag | model.UniqueKeyFlag,
-						Value: 2,
+						Name:    "a3",
+						Type:    mysql.TypeVarchar,
+						Charset: charset.CharsetGBK,
+						Flag: model.BinaryFlag | model.MultipleKeyFlag |
+							model.HandleKeyFlag | model.UniqueKeyFlag,
+						Value: []byte("你好"),
 					}},
 
 					IndexColumns: [][]int{{1, 2}},
@@ -2748,10 +2770,12 @@ func TestPrepareBatchDMLs(t *testing.T) {
 						Flag:  model.BinaryFlag | model.MultipleKeyFlag | model.HandleKeyFlag | model.UniqueKeyFlag,
 						Value: 1,
 					}, {
-						Name:  "a3",
-						Type:  mysql.TypeLong,
-						Flag:  model.BinaryFlag | model.MultipleKeyFlag | model.HandleKeyFlag | model.UniqueKeyFlag,
-						Value: 1,
+						Name:    "a3",
+						Type:    mysql.TypeVarchar,
+						Charset: charset.CharsetGBK,
+						Flag: model.BinaryFlag | model.MultipleKeyFlag |
+							model.HandleKeyFlag | model.UniqueKeyFlag,
+						Value: []byte("世界"),
 					}},
 					IndexColumns: [][]int{{1, 2}},
 				},
@@ -2765,10 +2789,12 @@ func TestPrepareBatchDMLs(t *testing.T) {
 						Flag:  model.BinaryFlag | model.MultipleKeyFlag | model.HandleKeyFlag | model.UniqueKeyFlag,
 						Value: 2,
 					}, {
-						Name:  "a3",
-						Type:  mysql.TypeLong,
-						Flag:  model.BinaryFlag | model.MultipleKeyFlag | model.HandleKeyFlag | model.UniqueKeyFlag,
-						Value: 2,
+						Name:    "a3",
+						Type:    mysql.TypeVarchar,
+						Charset: charset.CharsetGBK,
+						Flag: model.BinaryFlag | model.MultipleKeyFlag |
+							model.HandleKeyFlag | model.UniqueKeyFlag,
+						Value: "你好",
 					}},
 					IndexColumns: [][]int{{1, 2}},
 				},
@@ -2778,7 +2804,7 @@ func TestPrepareBatchDMLs(t *testing.T) {
 					"DELETE FROM `common_1`.`uk_without_pk` WHERE (`a1`,`a3`) IN ((?,?),(?,?))",
 					"INSERT INTO `common_1`.`uk_without_pk` (`a1`,`a3`) VALUES (?,?)",
 				},
-				values:   [][]interface{}{{1, 1, 2, 2}, {2, 2}},
+				values:   [][]interface{}{{1, "世界", 2, "你好"}, {2, "你好"}},
 				rowCount: 3,
 			},
 		},
@@ -2794,6 +2820,8 @@ func TestPrepareBatchDMLs(t *testing.T) {
 		txns := []*model.SingleTableTxn{{Rows: tc.input}}
 		dmls := ms.prepareDMLs(txns, 1, 1)
 		require.Equal(t, tc.expected, dmls)
+		fmt.Println(dmls.sqls)
+		fmt.Println(dmls.values)
 	}
 }
 
