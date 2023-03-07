@@ -29,6 +29,8 @@ const (
 	defaultRequestMemSize = uint64(1024 * 1024) // 1MB
 	// Avoid update resolved ts too frequently, if there are too many small transactions.
 	defaultMaxUpdateIntervalSize = uint64(1024 * 256) // 256KB
+	// bufferSize is the size of the buffer used to store the events.
+	bufferSize = 1024
 )
 
 // Make these values be variables, so that we can mock them in unit tests.

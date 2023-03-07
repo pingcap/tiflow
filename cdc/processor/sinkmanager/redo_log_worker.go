@@ -22,8 +22,6 @@ import (
 	"github.com/pingcap/tiflow/cdc/model"
 	"github.com/pingcap/tiflow/cdc/processor/memquota"
 	"github.com/pingcap/tiflow/cdc/processor/sourcemanager"
-	"github.com/pingcap/tiflow/cdc/processor/sourcemanager/engine"
-	"github.com/pingcap/tiflow/cdc/processor/tablepb"
 	"github.com/pingcap/tiflow/cdc/redo"
 	"github.com/tikv/client-go/v2/oracle"
 	"go.uber.org/zap"
@@ -69,129 +67,6 @@ func (w *redoWorker) handleTasks(ctx context.Context, taskChan <-chan *redoTask)
 	}
 }
 
-func (w *redoWorker) emitEvents(
-	ctx context.Context,
-	span tablepb.Span,
-	events []*model.RowChangedEvent,
-	eventsSize *uint64,
-	cachedSize *uint64,
-	lastTxnCommitTs uint64,
-	emittedCommitTs *uint64,
-) error {
-	if len(events) > 0 {
-		// releaseMem is used to release the memory quota
-		// after the events are written to redo log.
-		var releaseMem func()
-		refundMem := *eventsSize - *cachedSize
-		if refundMem > 0 {
-			releaseMem = func() {
-				w.memQuota.Refund(refundMem)
-				log.Debug("MemoryQuotaTracing: refund memory for redo log task",
-					zap.String("namespace", w.changefeedID.Namespace),
-					zap.String("changefeed", w.changefeedID.ID),
-					zap.Stringer("span", &span),
-					zap.Uint64("memory", refundMem))
-			}
-		}
-		if err := w.redoDMLManager.EmitRowChangedEvents(ctx, span, releaseMem,
-			events...); err != nil {
-			return errors.Trace(err)
-		}
-		*eventsSize = 0
-		*cachedSize = 0
-	}
-	if lastTxnCommitTs > *emittedCommitTs {
-		if err := w.redoDMLManager.UpdateResolvedTs(ctx, span, lastTxnCommitTs); err != nil {
-			return errors.Trace(err)
-		}
-		log.Debug("update resolved ts to redo",
-			zap.String("namespace", w.changefeedID.Namespace),
-			zap.String("changefeed", w.changefeedID.ID),
-			zap.Stringer("span", &span),
-			zap.Uint64("resolvedTs", lastTxnCommitTs))
-		*emittedCommitTs = lastTxnCommitTs
-	}
-	return nil
-}
-
-func (w *redoWorker) maybeEmitEvents(
-	ctx context.Context,
-	span tablepb.Span,
-	events []*model.RowChangedEvent,
-	availableMemSize *uint64,
-	usedMemSize uint64,
-	eventsSize *uint64,
-	cachedSize *uint64,
-	lastTxnCommitTs uint64,
-	emittedCommitTs *uint64,
-	allFinished bool,
-	txnFinished bool,
-) (bool, error) {
-	var emitted bool
-	// If used memory size exceeds the required limit, do a force acquire.
-	exceedAvailableMem := *availableMemSize < usedMemSize
-	if exceedAvailableMem {
-		w.memQuota.ForceAcquire(usedMemSize - *availableMemSize)
-		log.Debug("MemoryQuotaTracing: force acquire memory for redo log task",
-			zap.String("namespace", w.changefeedID.Namespace),
-			zap.String("changefeed", w.changefeedID.ID),
-			zap.Stringer("span", &span),
-			zap.Uint64("memory", usedMemSize-*availableMemSize))
-		*availableMemSize = usedMemSize
-	}
-
-	// Do emit in such situations:
-	// 1. we use more memory than we required;
-	// 2. the pending batch size exceeds maxUpdateIntervalSize;
-	// 3. all events are received.
-	if exceedAvailableMem || *eventsSize >= maxUpdateIntervalSize || allFinished {
-		if err := w.emitEvents(
-			ctx,
-			span,
-			events,
-			eventsSize,
-			cachedSize,
-			lastTxnCommitTs,
-			emittedCommitTs,
-		); err != nil {
-			return false, errors.Trace(err)
-		}
-		emitted = true
-	}
-
-	if allFinished {
-		return false, nil
-	}
-
-	if usedMemSize >= *availableMemSize {
-		if txnFinished {
-			if w.memQuota.TryAcquire(requestMemSize) {
-				*availableMemSize += requestMemSize
-				log.Debug("MemoryQuotaTracing: try acquire memory for redo log task",
-					zap.String("namespace", w.changefeedID.Namespace),
-					zap.String("changefeed", w.changefeedID.ID),
-					zap.Stringer("span", &span),
-					zap.Uint64("memory", requestMemSize))
-			}
-		} else {
-			// NOTE: it's not required to use `forceAcquire` even if splitTxn is false.
-			// It's because memory will finally be `refund` after redo-logs are written.
-			err := w.memQuota.BlockAcquire(requestMemSize)
-			if err != nil {
-				return false, errors.Trace(err)
-			}
-			*availableMemSize += requestMemSize
-			log.Debug("MemoryQuotaTracing: block acquire memory for redo log task",
-				zap.String("namespace", w.changefeedID.Namespace),
-				zap.String("changefeed", w.changefeedID.ID),
-				zap.Stringer("span", &span),
-				zap.Uint64("memory", requestMemSize))
-		}
-	}
-
-	return emitted, nil
-}
-
 func (w *redoWorker) handleTask(ctx context.Context, task *redoTask) (finalErr error) {
 	lowerBound, upperBound := validateAndAdjustBound(
 		w.changefeedID,
@@ -205,33 +80,17 @@ func (w *redoWorker) handleTask(ctx context.Context, task *redoTask) (finalErr e
 		cache = w.eventCache.maybeCreateAppender(task.span, lowerBound)
 	}
 
-	// Events are pushed into redoEventCache if possible. Otherwise, their memory will
-	// be released after they are written into redo files. Then we need to release their
-	// memory quota, which can be calculated based on eventsSize and cachedSize.
-	eventsSize := uint64(0)
-	cachedSize := uint64(0)
-	events := make([]*model.RowChangedEvent, 0, 1024)
-
-	// Initialize the memory quota.
-	availableMemSize := requestMemSize
-	usedMemSize := uint64(0)
-
-	// Only used to calculate lowerBound when next time the table is scheduled.
-	var lastPos engine.Position
-
-	// emittedCommitTs is the commitTs of the last event that has been emitted.
-	emittedCommitTs := uint64(0)
-	// lastTxnCommitTs is the commitTs of the last event that has been received completely.
-	lastTxnCommitTs := uint64(0)
-	// currTxnCommitTs is the commitTs of the current event.
-	currTxnCommitTs := uint64(0)
+	advancer := newRedoLogAdvancer(task, w.memQuota, requestMemSize)
+	// The task is finished and some required memory isn't used.
+	defer advancer.cleanup()
 
 	iter := w.sourceManager.FetchByTable(task.span, lowerBound, upperBound, w.memQuota)
 	allEventCount := 0
+	cachedSize := uint64(0)
 
 	defer func() {
-		task.tableSink.updateReceivedSorterCommitTs(lastTxnCommitTs)
-		eventCount := newRangeEventCount(lastPos, allEventCount)
+		task.tableSink.updateReceivedSorterCommitTs(advancer.lastTxnCommitTs)
+		eventCount := newRangeEventCount(advancer.lastPos, allEventCount)
 		task.tableSink.updateRangeEventCounts(eventCount)
 
 		if err := iter.Close(); err != nil {
@@ -247,67 +106,46 @@ func (w *redoWorker) handleTask(ctx context.Context, task *redoTask) (finalErr e
 			zap.Stringer("span", &task.span),
 			zap.Any("lowerBound", lowerBound),
 			zap.Any("upperBound", upperBound),
-			zap.Any("lastPos", lastPos),
-			zap.Float64("lag", time.Since(oracle.GetTimeFromTS(lastPos.CommitTs)).Seconds()))
+			zap.Any("lastPos", advancer.lastPos),
+			zap.Float64("lag", time.Since(
+				oracle.GetTimeFromTS(advancer.lastPos.CommitTs)).Seconds()))
 
 		if finalErr == nil {
 			// Otherwise we can't ensure all events before `lastPos` are emitted.
-			task.callback(lastPos)
-		}
-
-		// There is no more events and some required memory isn't used.
-		if availableMemSize > usedMemSize {
-			w.memQuota.Refund(availableMemSize - usedMemSize)
-			log.Debug("MemoryQuotaTracing: refund memory for redo log task",
-				zap.String("namespace", w.changefeedID.Namespace),
-				zap.String("changefeed", w.changefeedID.ID),
-				zap.Stringer("span", &task.span),
-				zap.Uint64("memory", availableMemSize-usedMemSize))
+			task.callback(advancer.lastPos)
 		}
 	}()
 
-	for availableMemSize > usedMemSize && !task.isCanceled() {
+	for advancer.hasEnoughMem() && !task.isCanceled() {
 		e, pos, err := iter.Next(ctx)
 		if err != nil {
 			return errors.Trace(err)
 		}
 		// There is no more data. It means that we finish this scan task.
 		if e == nil {
-			lastPos = upperBound
-			lastTxnCommitTs = upperBound.CommitTs
 			if cache != nil {
 				// Still need to update cache upper boundary even if no events.
-				cache.pushBatch(nil, 0, lastPos)
+				cache.pushBatch(nil, 0, upperBound)
 			}
 
-			_, err := w.maybeEmitEvents(
+			return advancer.finish(
 				ctx,
-				task.span,
-				events,
-				&availableMemSize,
-				usedMemSize,
-				&eventsSize,
-				&cachedSize,
-				lastTxnCommitTs,
-				&emittedCommitTs,
-				true,
-				true,
+				cachedSize,
+				upperBound,
 			)
-			return err
 		}
+
 		allEventCount += 1
 
 		if pos.Valid() {
-			lastPos = pos
+			advancer.lastPos = pos
 		}
 
-		if currTxnCommitTs != e.CRTs {
-			lastTxnCommitTs = currTxnCommitTs
-			currTxnCommitTs = e.CRTs
-		}
+		advancer.tryMoveToNextTxn(e.CRTs)
 
+		// TODO: why we need to update the lastTxnCommitTs here?
 		if pos.IsCommitFence() {
-			lastTxnCommitTs = currTxnCommitTs
+			advancer.lastTxnCommitTs = advancer.currTxnCommitTs
 		}
 
 		var x []*model.RowChangedEvent
@@ -320,9 +158,7 @@ func (w *redoWorker) handleTask(ctx context.Context, task *redoTask) (finalErr e
 			if err != nil {
 				return errors.Trace(err)
 			}
-			usedMemSize += size
-			events = append(events, x...)
-			eventsSize += size
+			advancer.appendEvents(x, size)
 		}
 
 		if cache != nil {
@@ -334,36 +170,24 @@ func (w *redoWorker) handleTask(ctx context.Context, task *redoTask) (finalErr e
 			}
 		}
 
-		emitted, err := w.maybeEmitEvents(
+		advanced, err := advancer.tryAdvanceAndAcquireMem(
 			ctx,
-			task.span,
-			events,
-			&availableMemSize,
-			usedMemSize,
-			&eventsSize,
-			&cachedSize,
-			lastTxnCommitTs,
-			&emittedCommitTs,
+			cachedSize,
 			false,
 			pos.Valid(),
 		)
 		if err != nil {
 			return errors.Trace(err)
 		}
-
-		if emitted {
-			events = make([]*model.RowChangedEvent, 0, 1024)
+		if advanced {
+			cachedSize = 0
 		}
 	}
-	// Even if task is canceled we still call this again, to avoid somethings
+
+	// Even if task is canceled we still call this again, to avoid something
 	// are left and leak forever.
-	return w.emitEvents(
+	return advancer.advance(
 		ctx,
-		task.span,
-		events,
-		&eventsSize,
-		&cachedSize,
-		lastTxnCommitTs,
-		&emittedCommitTs,
+		cachedSize,
 	)
 }
