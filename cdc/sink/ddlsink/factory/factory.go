@@ -27,10 +27,10 @@ import (
 	cerror "github.com/pingcap/tiflow/pkg/errors"
 	"github.com/pingcap/tiflow/pkg/sink"
 	"github.com/pingcap/tiflow/pkg/sink/kafka"
-	v2 "github.com/pingcap/tiflow/pkg/sink/kafka/v2"
+	kafkaV2 "github.com/pingcap/tiflow/pkg/sink/kafka/v2"
 )
 
-// New creates a new ddlsink.Sink by schema.
+// New creates a new ddlsink.Sink by scheme.
 func New(
 	ctx context.Context,
 	sinkURIStr string,
@@ -40,12 +40,12 @@ func New(
 	if err != nil {
 		return nil, err
 	}
-	schema := strings.ToLower(sinkURI.Scheme)
-	switch schema {
+	scheme := strings.ToLower(sinkURI.Scheme)
+	switch scheme {
 	case sink.KafkaScheme, sink.KafkaSSLScheme:
 		factoryCreator := kafka.NewSaramaFactory
 		if config.GetGlobalServerConfig().Debug.EnableKafkaSinkV2 {
-			factoryCreator = v2.NewFactory
+			factoryCreator = kafkaV2.NewFactory
 		}
 		return mq.NewKafkaDDLSink(ctx, sinkURI, cfg,
 			factoryCreator, ddlproducer.NewKafkaDDLProducer)
@@ -57,6 +57,6 @@ func New(
 		return cloudstorage.NewDDLSink(ctx, sinkURI)
 	default:
 		return nil,
-			cerror.ErrSinkURIInvalid.GenWithStack("the sink scheme (%s) is not supported", schema)
+			cerror.ErrSinkURIInvalid.GenWithStack("the sink scheme (%s) is not supported", scheme)
 	}
 }
