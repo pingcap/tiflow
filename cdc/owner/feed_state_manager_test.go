@@ -197,7 +197,7 @@ func TestResumeChangefeedWithCheckpointTs(t *testing.T) {
 		func(position *model.TaskPosition) (*model.TaskPosition, bool, error) {
 			return &model.TaskPosition{Error: &model.RunningError{
 				Addr:    ctx.GlobalVars().CaptureInfo.AdvertiseAddr,
-				Code:    "CDC:ErrGCTTLExceeded",
+				Code:    "CDC:ErrStartTsBeforeGC",
 				Message: "fake error for test",
 			}}, true, nil
 		})
@@ -347,7 +347,7 @@ func TestHandleFastFailError(t *testing.T) {
 		func(position *model.TaskPosition) (*model.TaskPosition, bool, error) {
 			return &model.TaskPosition{Error: &model.RunningError{
 				Addr:    ctx.GlobalVars().CaptureInfo.AdvertiseAddr,
-				Code:    "CDC:ErrGCTTLExceeded",
+				Code:    "CDC:ErrStartTsBeforeGC",
 				Message: "fake error for test",
 			}}, true, nil
 		})

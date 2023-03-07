@@ -700,6 +700,20 @@ func (o *ownerImpl) updateGCSafepoint(
 	return nil
 }
 
+// ignoreFailedChangeFeedWhenGC checks if a failed changefeed should be ignored
+// when calculating the gc safepoint of the associated upstream.
+func (o *ownerImpl) ignoreFailedChangeFeedWhenGC(
+	state *orchestrator.ChangefeedReactorState,
+) bool {
+	upID := state.Info.UpstreamID
+	us, exist := o.upstreamManager.Get(upID)
+	if !exist {
+		log.Warn("upstream not found", zap.Uint64("ID", upID))
+		return false
+	}
+	return us.GCManager.IgnoreFailedChangeFeed(state.Status.CheckpointTs)
+}
+
 // calculateGCSafepoint calculates GCSafepoint for different upstream.
 // Note: we need to maintain a TiCDC service GC safepoint for each upstream TiDB cluster
 // to prevent upstream TiDB GC from removing data that is still needed by TiCDC.
@@ -714,8 +728,13 @@ func (o *ownerImpl) calculateGCSafepoint(state *orchestrator.GlobalReactorState)
 		if changefeedState.Info == nil {
 			continue
 		}
+
 		switch changefeedState.Info.State {
 		case model.StateNormal, model.StateStopped, model.StateError:
+		case model.StateFailed:
+			if o.ignoreFailedChangeFeedWhenGC(changefeedState) {
+				continue
+			}
 		default:
 			continue
 		}
