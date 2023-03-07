@@ -33,7 +33,7 @@ func TestChangefeedRemoveCli(t *testing.T) {
 
 	cmd := newCmdRemoveChangefeed(f)
 
-	cf.EXPECT().Get(gomock.Any(), "abc").Return(&v2.ChangeFeedDetail{}, nil)
+	cf.EXPECT().Get(gomock.Any(), "abc").Return(&v2.ChangeFeedInfo{}, nil)
 	cf.EXPECT().Delete(gomock.Any(), "abc").Return(nil)
 	cf.EXPECT().Get(gomock.Any(), "abc").Return(nil,
 		cerror.ErrChangeFeedNotExists.GenWithStackByArgs("abc"))

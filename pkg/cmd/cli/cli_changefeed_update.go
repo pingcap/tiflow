@@ -90,7 +90,7 @@ func (o *updateChangefeedOptions) complete(f factory.Factory) error {
 func (o *updateChangefeedOptions) run(cmd *cobra.Command) error {
 	ctx := cmdcontext.GetDefaultContext()
 
-	old, err := o.apiV2Client.Changefeeds().GetInfo(ctx, o.changefeedID)
+	old, err := o.apiV2Client.Changefeeds().Get(ctx, o.changefeedID)
 	if err != nil {
 		return err
 	}
@@ -99,7 +99,10 @@ func (o *updateChangefeedOptions) run(cmd *cobra.Command) error {
 	if err != nil {
 		return err
 	}
-
+	// sink uri is not changed, set old to empty to skip diff
+	if newInfo.SinkURI == "" {
+		old.SinkURI = ""
+	}
 	changelog, err := diff.Diff(old, newInfo)
 	if err != nil {
 		return err
@@ -145,6 +148,7 @@ func (o *updateChangefeedOptions) applyChanges(oldInfo *v2.ChangeFeedInfo,
 	if err != nil {
 		return nil, err
 	}
+	newInfo.SinkURI = ""
 	cmd.Flags().Visit(func(flag *pflag.Flag) {
 		switch flag.Name {
 		case "target-ts":
@@ -160,7 +164,6 @@ func (o *updateChangefeedOptions) applyChanges(oldInfo *v2.ChangeFeedInfo,
 		case "schema-registry":
 			newInfo.Config.Sink.SchemaRegistry = o.commonChangefeedOptions.schemaRegistry
 		case "sort-engine":
-			newInfo.Engine = o.commonChangefeedOptions.sortEngine
 		case "sort-dir":
 			log.Warn("this flag cannot be updated and will be ignored", zap.String("flagName", flag.Name))
 		case "changefeed-id", "no-confirm":

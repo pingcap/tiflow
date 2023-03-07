@@ -27,9 +27,9 @@ import (
 	"github.com/pingcap/tidb/parser/format"
 	"github.com/pingcap/tiflow/cdc/contextutil"
 	"github.com/pingcap/tiflow/cdc/model"
-	"github.com/pingcap/tiflow/cdc/sink/mysql"
-	sinkv2 "github.com/pingcap/tiflow/cdc/sinkv2/ddlsink"
-	"github.com/pingcap/tiflow/cdc/sinkv2/ddlsink/factory"
+	"github.com/pingcap/tiflow/cdc/sink/ddlsink"
+	"github.com/pingcap/tiflow/cdc/sink/ddlsink/factory"
+	"github.com/pingcap/tiflow/cdc/syncpointstore"
 	cerror "github.com/pingcap/tiflow/pkg/errors"
 	"github.com/pingcap/tiflow/pkg/util"
 	"go.uber.org/zap"
@@ -40,7 +40,7 @@ const (
 )
 
 // DDLSink is a wrapper of the `Sink` interface for the owner
-// DDLSink should send `DDLEvent` and `CheckpointTs` to downstream sink,
+// DDLSink should send `DDLEvent` and `CheckpointTs` to downstream,
 // If `SyncPointEnabled`, also send `syncPoint` to downstream.
 type DDLSink interface {
 	// run the DDLSink
@@ -54,14 +54,14 @@ type DDLSink interface {
 	// the caller of this function can call again and again until a true returned
 	emitDDLEvent(ctx context.Context, ddl *model.DDLEvent) (bool, error)
 	emitSyncPoint(ctx context.Context, checkpointTs uint64) error
-	// close the sink, cancel running goroutine.
+	// close the ddlsink, cancel running goroutine.
 	close(ctx context.Context) error
 	isInitialized() bool
 }
 
 type ddlSinkImpl struct {
 	lastSyncPoint  model.Ts
-	syncPointStore mysql.SyncPointStore
+	syncPointStore syncpointstore.SyncPointStore
 
 	// It is used to record the checkpointTs and the names of the table at that time.
 	mu struct {
@@ -76,7 +76,7 @@ type ddlSinkImpl struct {
 	ddlCh chan *model.DDLEvent
 	errCh chan error
 
-	sinkV2 sinkv2.DDLEventSink
+	sink ddlsink.Sink
 	// `sinkInitHandler` can be helpful in unit testing.
 	sinkInitHandler ddlSinkInitHandler
 
@@ -115,19 +115,19 @@ type ddlSinkInitHandler func(ctx context.Context, a *ddlSinkImpl) error
 
 func ddlSinkInitializer(ctx context.Context, a *ddlSinkImpl) error {
 	ctx = contextutil.PutRoleInCtx(ctx, util.RoleOwner)
-	log.Info("Try to create ddlSink based on sinkV2",
+	log.Info("Try to create ddlSink based on sink",
 		zap.String("namespace", a.changefeedID.Namespace),
 		zap.String("changefeed", a.changefeedID.ID))
 	s, err := factory.New(ctx, a.info.SinkURI, a.info.Config)
 	if err != nil {
 		return errors.Trace(err)
 	}
-	a.sinkV2 = s
+	a.sink = s
 
 	if !a.info.Config.EnableSyncPoint {
 		return nil
 	}
-	syncPointStore, err := mysql.NewSyncPointStore(
+	syncPointStore, err := syncpointstore.NewSyncPointStore(
 		ctx, a.changefeedID, a.info.SinkURI, a.info.Config.SyncPointRetention)
 	if err != nil {
 		return errors.Trace(err)
@@ -198,30 +198,19 @@ func (s *ddlSinkImpl) run(ctx context.Context) {
 				s.mu.Unlock()
 				lastCheckpointTs = checkpointTs
 
-				if err := s.sinkV2.WriteCheckpointTs(ctx,
+				if err := s.sink.WriteCheckpointTs(ctx,
 					checkpointTs, tables); err != nil {
 					s.reportErr(err)
 					return
 				}
 
 			case ddl := <-s.ddlCh:
-				var err error
-				ddl.Query, err = addSpecialComment(ddl.Query)
-				if err != nil {
-					log.Error("Add special comment failed",
-						zap.String("namespace", s.changefeedID.Namespace),
-						zap.String("changefeed", s.changefeedID.ID),
-						zap.Error(err),
-						zap.Any("ddl", ddl))
-					s.reportErr(err)
-					return
-				}
 				log.Info("begin emit ddl event",
 					zap.String("namespace", s.changefeedID.Namespace),
 					zap.String("changefeed", s.changefeedID.ID),
 					zap.Any("DDL", ddl))
 
-				err = s.sinkV2.WriteDDLEvent(ctx, ddl)
+				err := s.sink.WriteDDLEvent(ctx, ddl)
 				failpoint.Inject("InjectChangefeedDDLError", func() {
 					err = cerror.ErrExecDDLFailed.GenWithStackByArgs()
 				})
@@ -243,7 +232,7 @@ func (s *ddlSinkImpl) run(ctx context.Context) {
 					tables := s.mu.currentTables
 					s.mu.Unlock()
 					lastCheckpointTs = checkpointTs
-					if err := s.sinkV2.WriteCheckpointTs(ctx,
+					if err := s.sink.WriteCheckpointTs(ctx,
 						checkpointTs, tables); err != nil {
 						s.reportErr(err)
 						return
@@ -279,7 +268,7 @@ func (s *ddlSinkImpl) emitDDLEvent(ctx context.Context, ddl *model.DDLEvent) (bo
 	s.mu.Lock()
 	if ddl.Done {
 		// the DDL event is executed successfully, and done is true
-		log.Info("ddl already executed",
+		log.Info("ddl already executed, skip it",
 			zap.String("namespace", s.changefeedID.Namespace),
 			zap.String("changefeed", s.changefeedID.ID),
 			zap.Any("DDL", ddl))
@@ -287,7 +276,6 @@ func (s *ddlSinkImpl) emitDDLEvent(ctx context.Context, ddl *model.DDLEvent) (bo
 		s.mu.Unlock()
 		return true, nil
 	}
-	s.mu.Unlock()
 
 	ddlSentTs := s.ddlSentTsMap[ddl]
 	if ddl.CommitTs <= ddlSentTs {
@@ -296,8 +284,23 @@ func (s *ddlSinkImpl) emitDDLEvent(ctx context.Context, ddl *model.DDLEvent) (bo
 			zap.String("changefeed", s.changefeedID.ID),
 			zap.Uint64("ddlSentTs", ddlSentTs), zap.Any("DDL", ddl))
 		// the DDL event is executing and not finished yet, return false
+		s.mu.Unlock()
 		return false, nil
 	}
+
+	query, err := addSpecialComment(ddl.Query)
+	if err != nil {
+		log.Error("Add special comment failed",
+			zap.String("namespace", s.changefeedID.Namespace),
+			zap.String("changefeed", s.changefeedID.ID),
+			zap.Error(err),
+			zap.Any("ddl", ddl))
+		s.mu.Unlock()
+		return false, errors.Trace(err)
+	}
+	ddl.Query = query
+	s.mu.Unlock()
+
 	select {
 	case <-ctx.Done():
 		return false, errors.Trace(ctx.Err())
@@ -331,8 +334,8 @@ func (s *ddlSinkImpl) emitSyncPoint(ctx context.Context, checkpointTs uint64) er
 func (s *ddlSinkImpl) close(ctx context.Context) (err error) {
 	s.cancel()
 	// they will both be nil if changefeed return an error in initializing
-	if s.sinkV2 != nil {
-		s.sinkV2.Close()
+	if s.sink != nil {
+		s.sink.Close()
 	}
 	if s.syncPointStore != nil {
 		err = s.syncPointStore.Close()
@@ -368,6 +371,8 @@ func addSpecialComment(ddlQuery string) (string, error) {
 	restoreFlags |= format.RestoreStringSingleQuotes
 	// remove placement rule
 	restoreFlags |= format.SkipPlacementRuleForRestore
+	// force disable ttl
+	restoreFlags |= format.RestoreWithTTLEnableOff
 	if err = stms[0].Restore(format.NewRestoreCtx(restoreFlags, &sb)); err != nil {
 		return "", errors.Trace(err)
 	}

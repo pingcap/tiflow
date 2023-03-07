@@ -67,7 +67,7 @@ func (o *removeChangefeedOptions) run(cmd *cobra.Command) error {
 			err.Error())
 		return err
 	}
-	checkpointTs := changefeedDetail.CheckpointTSO
+	checkpointTs := changefeedDetail.CheckpointTs
 	sinkURI := changefeedDetail.SinkURI
 
 	err = o.apiClient.Changefeeds().Delete(ctx, o.changefeedID)

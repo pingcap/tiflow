@@ -49,12 +49,12 @@ func newProcessor4Test(
 	p := newProcessor(
 		state,
 		captureInfo,
-		model.ChangeFeedID4Test("processor-test", "processor-test"), up, liveness, cfg)
+		model.ChangeFeedID4Test("processor-test", "processor-test"), up, liveness, 0, cfg)
 	p.lazyInit = func(ctx cdcContext.Context) error {
 		p.agent = &mockAgent{executor: p}
 		return nil
 	}
-	p.redoManager = redo.NewDisabledManager()
+	p.redoDMLMgr = redo.NewDisabledDMLManager()
 	p.schemaStorage = &mockSchemaStorage{t: t, resolvedTs: math.MaxUint64}
 	return p
 }

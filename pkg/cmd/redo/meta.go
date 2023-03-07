@@ -29,7 +29,7 @@ func newMetaOptions() *metaOptions {
 	return &metaOptions{}
 }
 
-// run runs the `redo apply` command.
+// run runs the `redo meta` command.
 func (o *metaOptions) run(cmd *cobra.Command) error {
 	ctx := cmdcontext.GetDefaultContext()
 

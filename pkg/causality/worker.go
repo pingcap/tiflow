@@ -18,6 +18,9 @@ type (
 )
 
 type txnEvent interface {
+	// OnConflictResolved is called when the event leaves ConflictDetector.
+	OnConflictResolved()
+
 	// Keys are in range [0, math.MaxUint64) and must be deduped.
 	//
 	// NOTE: if the conflict detector is accessed by multiple threads concurrently,

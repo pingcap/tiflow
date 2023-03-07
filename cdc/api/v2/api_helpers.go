@@ -27,7 +27,7 @@ import (
 	"github.com/pingcap/tiflow/cdc/kv"
 	"github.com/pingcap/tiflow/cdc/model"
 	"github.com/pingcap/tiflow/cdc/owner"
-	"github.com/pingcap/tiflow/cdc/sinkv2/validator"
+	"github.com/pingcap/tiflow/cdc/sink/validator"
 	"github.com/pingcap/tiflow/pkg/config"
 	cerror "github.com/pingcap/tiflow/pkg/errors"
 	"github.com/pingcap/tiflow/pkg/filter"
@@ -249,10 +249,10 @@ func (APIV2HelpersImpl) verifyCreateChangefeedConfig(
 		CreateTime:     time.Now(),
 		StartTs:        cfg.StartTs,
 		TargetTs:       cfg.TargetTs,
-		Engine:         cfg.Engine,
 		Config:         replicaCfg,
 		State:          model.StateNormal,
 		CreatorVersion: version.ReleaseVersion,
+		Epoch:          owner.GenerateChangefeedEpoch(ctx, pdClient),
 	}, nil
 }
 
@@ -308,9 +308,6 @@ func (APIV2HelpersImpl) verifyUpdateChangefeedConfig(
 				cfg.TargetTs, newInfo.StartTs)
 		}
 		newInfo.TargetTs = cfg.TargetTs
-	}
-	if cfg.Engine != "" {
-		newInfo.Engine = cfg.Engine
 	}
 	if cfg.ReplicaConfig != nil {
 		configUpdated = true

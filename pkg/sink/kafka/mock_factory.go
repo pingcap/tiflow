@@ -27,10 +27,10 @@ type MockFactory struct {
 }
 
 // NewMockFactory constructs a Factory with mock implementation.
-func NewMockFactory(ctx context.Context,
+func NewMockFactory(
 	o *Options, changefeedID model.ChangeFeedID,
 ) (Factory, error) {
-	helper, err := NewSaramaFactory(ctx, o, changefeedID)
+	helper, err := NewSaramaFactory(o, changefeedID)
 	if err != nil {
 		return nil, err
 	}
@@ -50,10 +50,11 @@ func (f *MockFactory) SyncProducer() (SyncProducer, error) {
 
 // AsyncProducer creates an async producer
 func (f *MockFactory) AsyncProducer(
+	ctx context.Context,
 	closedChan chan struct{},
 	failpointCh chan error,
 ) (AsyncProducer, error) {
-	return f.helper.AsyncProducer(closedChan, failpointCh)
+	return f.helper.AsyncProducer(ctx, closedChan, failpointCh)
 }
 
 // MetricsCollector returns the metric collector

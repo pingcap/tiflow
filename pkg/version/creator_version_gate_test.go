@@ -195,3 +195,38 @@ func TestChangefeedAcceptProtocolInMysqlSinURI(t *testing.T) {
 		require.Equal(t, tc.expected, creatorVersionGate.ChangefeedAcceptProtocolInMysqlSinURI())
 	}
 }
+
+func TestChangefeedInheritSchedulerConfigFromV66(t *testing.T) {
+	t.Parallel()
+
+	testCases := []struct {
+		creatorVersion string
+		expected       bool
+	}{
+		{
+			creatorVersion: "",
+			expected:       false,
+		},
+		{
+			creatorVersion: "4.0.12",
+			expected:       false,
+		},
+		{
+			creatorVersion: "6.6.0-aplha",
+			expected:       true,
+		},
+		{
+			creatorVersion: "6.6.0",
+			expected:       true,
+		},
+		{
+			creatorVersion: "6.7.0",
+			expected:       false,
+		},
+	}
+
+	for _, tc := range testCases {
+		creatorVersionGate := CreatorVersionGate{version: tc.creatorVersion}
+		require.Equal(t, tc.expected, creatorVersionGate.ChangefeedInheritSchedulerConfigFromV66())
+	}
+}

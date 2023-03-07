@@ -781,7 +781,7 @@ tags = ["internal", "high"]
 [error.DM-functional-11125]
 message = "upstream returns an empty result for SHOW MASTER STATUS"
 description = ""
-workaround = "Please check the upstream settings like privileges, RDS settings to read data from SHOW MASTER STATUS."
+workaround = "Please make sure binlog is enabled, and check the upstream settings like privileges, RDS settings to read data from SHOW MASTER STATUS."
 tags = ["upstream", "medium"]
 
 [error.DM-binlog-op-11126]

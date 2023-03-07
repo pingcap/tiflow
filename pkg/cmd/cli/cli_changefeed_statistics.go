@@ -79,8 +79,9 @@ func (o *statisticsChangefeedOptions) runCliWithAPIClient(ctx context.Context, c
 		return err
 	}
 
-	sinkGap := oracle.ExtractPhysical(changefeed.ResolvedTs) - oracle.ExtractPhysical(changefeed.CheckpointTSO)
-	replicationGap := ts.Timestamp - oracle.ExtractPhysical(changefeed.CheckpointTSO)
+	sinkGap := oracle.ExtractPhysical(changefeed.ResolvedTs) -
+		oracle.ExtractPhysical(changefeed.CheckpointTs)
+	replicationGap := ts.Timestamp - oracle.ExtractPhysical(changefeed.CheckpointTs)
 	statistics := status{
 		SinkGap:        fmt.Sprintf("%dms", sinkGap),
 		ReplicationGap: fmt.Sprintf("%dms", replicationGap),

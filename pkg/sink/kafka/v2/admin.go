@@ -18,6 +18,7 @@ import (
 	"strconv"
 
 	"github.com/pingcap/log"
+	"github.com/pingcap/tiflow/cdc/model"
 	"github.com/pingcap/tiflow/pkg/errors"
 	pkafka "github.com/pingcap/tiflow/pkg/sink/kafka"
 	"github.com/segmentio/kafka-go"
@@ -25,35 +26,25 @@ import (
 )
 
 type admin struct {
-	client Client
+	client       Client
+	changefeedID model.ChangeFeedID
 }
 
-func newClusterAdminClient(endpoints []string) pkafka.ClusterAdminClient {
-	client := &kafka.Client{
-		Addr: kafka.TCP(endpoints...),
-	}
+func newClusterAdminClient(
+	endpoints []string,
+	transport *kafka.Transport,
+	changefeedID model.ChangeFeedID,
+) pkafka.ClusterAdminClient {
+	client := newClient(endpoints, transport)
 	return &admin{
-		client: client,
+		client:       client,
+		changefeedID: changefeedID,
 	}
 }
 
 func (a *admin) clusterMetadata(ctx context.Context) (*kafka.MetadataResponse, error) {
-	result, err := a.client.Metadata(ctx, &kafka.MetadataRequest{
-		Topics: []string{},
-	})
-	if err != nil {
-		return nil, errors.Trace(err)
-	}
-	return result, nil
-}
-
-func (a *admin) topicsMetadata(
-	ctx context.Context,
-	topics []string,
-) (*kafka.MetadataResponse, error) {
-	result, err := a.client.Metadata(ctx, &kafka.MetadataRequest{
-		Topics: topics,
-	})
+	// request is not set, so it will return all metadata
+	result, err := a.client.Metadata(ctx, &kafka.MetadataRequest{})
 	if err != nil {
 		return nil, errors.Trace(err)
 	}
@@ -63,7 +54,7 @@ func (a *admin) topicsMetadata(
 func (a *admin) GetAllBrokers(ctx context.Context) ([]pkafka.Broker, error) {
 	response, err := a.clusterMetadata(ctx)
 	if err != nil {
-		return nil, err
+		return nil, errors.Trace(err)
 	}
 
 	result := make([]pkafka.Broker, 0, len(response.Brokers))
@@ -78,7 +69,7 @@ func (a *admin) GetAllBrokers(ctx context.Context) ([]pkafka.Broker, error) {
 func (a *admin) GetCoordinator(ctx context.Context) (int, error) {
 	response, err := a.clusterMetadata(ctx)
 	if err != nil {
-		return 0, err
+		return 0, errors.Trace(err)
 	}
 
 	return response.Controller.ID, nil
@@ -125,7 +116,7 @@ func (a *admin) GetBrokerConfig(ctx context.Context, configName string) (string,
 func (a *admin) GetTopicsPartitions(ctx context.Context) (map[string]int32, error) {
 	response, err := a.clusterMetadata(ctx)
 	if err != nil {
-		return nil, err
+		return nil, errors.Trace(err)
 	}
 	result := make(map[string]int32, len(response.Topics))
 	for _, topic := range response.Topics {
@@ -137,7 +128,7 @@ func (a *admin) GetTopicsPartitions(ctx context.Context) (map[string]int32, erro
 func (a *admin) GetAllTopicsMeta(ctx context.Context) (map[string]pkafka.TopicDetail, error) {
 	response, err := a.clusterMetadata(ctx)
 	if err != nil {
-		return nil, err
+		return nil, errors.Trace(err)
 	}
 
 	describeTopicConfigsRequest := &kafka.DescribeConfigsRequest{
@@ -184,16 +175,18 @@ func (a *admin) GetTopicsMeta(
 	topics []string,
 	ignoreTopicError bool,
 ) (map[string]pkafka.TopicDetail, error) {
-	resp, err := a.topicsMetadata(ctx, topics)
+	resp, err := a.client.Metadata(ctx, &kafka.MetadataRequest{
+		Topics: topics,
+	})
 	if err != nil {
-		return nil, err
+		return nil, errors.Trace(err)
 	}
 
 	result := make(map[string]pkafka.TopicDetail, len(resp.Topics))
 	for _, topic := range resp.Topics {
 		if topic.Error != nil {
 			if !ignoreTopicError {
-				return nil, topic.Error
+				return nil, errors.Trace(topic.Error)
 			}
 			log.Warn("fetch topic meta failed",
 				zap.String("topic", topic.Name), zap.Error(topic.Error))
@@ -228,7 +221,7 @@ func (a *admin) CreateTopic(
 	}
 
 	for _, err := range response.Errors {
-		if err != nil {
+		if err != nil && !errors.Is(err, kafka.TopicAlreadyExists) {
 			return errors.Trace(err)
 		}
 	}
@@ -236,7 +229,33 @@ func (a *admin) CreateTopic(
 	return nil
 }
 
-func (a *admin) Close() error {
-	// todo: close the underline client after support transport configuration.
-	return nil
+func (a *admin) Close() {
+	client, ok := a.client.(*kafka.Client)
+	if !ok {
+		return
+	}
+
+	if client.Transport == nil {
+		return
+	}
+
+	transport, ok := client.Transport.(*kafka.Transport)
+	if !ok {
+		return
+	}
+
+	transport.CloseIdleConnections()
+	log.Info("admin client close idle connections",
+		zap.String("namespace", a.changefeedID.Namespace),
+		zap.String("changefeed", a.changefeedID.ID))
+
+	if transport.SASL != nil {
+		m, ok := transport.SASL.(mechanism)
+		if ok && m.client != nil {
+			m.client.Destroy()
+			log.Info("destroy sasl sessions",
+				zap.String("namespace", a.changefeedID.Namespace),
+				zap.String("changefeed", a.changefeedID.ID))
+		}
+	}
 }

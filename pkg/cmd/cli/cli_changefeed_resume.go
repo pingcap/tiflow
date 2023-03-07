@@ -33,7 +33,7 @@ type resumeChangefeedOptions struct {
 	apiClient apiv2client.APIV2Interface
 
 	changefeedID          string
-	changefeedDetail      *v2.ChangeFeedDetail
+	changefeedDetail      *v2.ChangeFeedInfo
 	noConfirm             bool
 	overwriteCheckpointTs string
 	currentTso            *v2.Tso
@@ -127,7 +127,7 @@ func (o *resumeChangefeedOptions) getTSO(ctx context.Context) (*v2.Tso, error) {
 }
 
 func (o *resumeChangefeedOptions) getChangefeedInfo(ctx context.Context) (
-	*v2.ChangeFeedDetail, error,
+	*v2.ChangeFeedInfo, error,
 ) {
 	detail, err := o.apiClient.Changefeeds().Get(ctx, o.changefeedID)
 	if err != nil {
@@ -142,7 +142,7 @@ func (o *resumeChangefeedOptions) confirmResumeChangefeedCheck(cmd *cobra.Comman
 	if !o.noConfirm {
 		if len(o.overwriteCheckpointTs) == 0 {
 			return confirmLargeDataGap(cmd, o.currentTso.Timestamp,
-				o.changefeedDetail.CheckpointTSO, "resume")
+				o.changefeedDetail.CheckpointTs, "resume")
 		}
 
 		return confirmOverwriteCheckpointTs(cmd, o.changefeedID, o.checkpointTs)

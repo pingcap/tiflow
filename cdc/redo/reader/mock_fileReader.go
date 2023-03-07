@@ -26,18 +26,27 @@ func (_m *mockFileReader) Close() error {
 	return r0
 }
 
-// Read provides a mock function with given fields: log
-func (_m *mockFileReader) Read(log *model.RedoLog) error {
-	ret := _m.Called(log)
+// Read provides a mock function with given fields:
+func (_m *mockFileReader) Read() (*model.RedoLog, error) {
+	ret := _m.Called()
 
-	var r0 error
-	if rf, ok := ret.Get(0).(func(*model.RedoLog) error); ok {
-		r0 = rf(log)
+	var r0 *model.RedoLog
+	if rf, ok := ret.Get(0).(func() *model.RedoLog); ok {
+		r0 = rf()
 	} else {
-		r0 = ret.Error(0)
+		if ret.Get(0) != nil {
+			r0 = ret.Get(0).(*model.RedoLog)
+		}
 	}
 
-	return r0
+	var r1 error
+	if rf, ok := ret.Get(1).(func() error); ok {
+		r1 = rf()
+	} else {
+		r1 = ret.Error(1)
+	}
+
+	return r0, r1
 }
 
 type mockConstructorTestingTnewMockFileReader interface {

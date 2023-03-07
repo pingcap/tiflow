@@ -28,7 +28,8 @@ import (
 	"github.com/pingcap/tiflow/cdc/processor/sourcemanager/engine"
 	"github.com/pingcap/tiflow/cdc/processor/tablepb"
 	"github.com/pingcap/tiflow/cdc/redo"
-	"github.com/pingcap/tiflow/cdc/sinkv2/eventsink/factory"
+	"github.com/pingcap/tiflow/cdc/sink/dmlsink/factory"
+	"github.com/pingcap/tiflow/cdc/sink/metrics/tablesink"
 	cerrors "github.com/pingcap/tiflow/pkg/errors"
 	"github.com/pingcap/tiflow/pkg/retry"
 	"github.com/pingcap/tiflow/pkg/spanz"
@@ -78,8 +79,8 @@ type SinkManager struct {
 
 	// eventCache caches events fetched from sort engine.
 	eventCache *redoEventCache
-	// redoManager is used to report the resolved ts of the table if redo log is enabled.
-	redoManager redo.LogManager
+	// redoDMLMgr is used to report the resolved ts of the table if redo log is enabled.
+	redoDMLMgr redo.DMLManager
 	// sourceManager is used by the sink manager to fetch data.
 	sourceManager *sourcemanager.SourceManager
 
@@ -121,10 +122,9 @@ func New(
 	changefeedInfo *model.ChangeFeedInfo,
 	up *upstream.Upstream,
 	schemaStorage entry.SchemaStorage,
-	redoManager redo.LogManager,
+	redoDMLMgr redo.DMLManager,
 	sourceManager *sourcemanager.SourceManager,
 	errChan chan error,
-	metricsTableSinkTotalRows prometheus.Counter,
 ) (*SinkManager, error) {
 	tableSinkFactory, err := factory.New(
 		ctx,
@@ -152,11 +152,12 @@ func New(
 		sinkTaskChan:        make(chan *sinkTask),
 		sinkWorkerAvailable: make(chan struct{}, 1),
 
-		metricsTableSinkTotalRows: metricsTableSinkTotalRows,
+		metricsTableSinkTotalRows: tablesink.TotalRowsCountCounter.
+			WithLabelValues(changefeedID.Namespace, changefeedID.ID),
 	}
 
-	if redoManager != nil && redoManager.Enabled() {
-		m.redoManager = redoManager
+	if redoDMLMgr != nil && redoDMLMgr.Enabled() {
+		m.redoDMLMgr = redoDMLMgr
 		m.redoProgressHeap = newTableProgresses()
 		m.redoWorkers = make([]*redoWorker, 0, redoWorkerNum)
 		m.redoTaskChan = make(chan *redoTask)
@@ -179,7 +180,7 @@ func New(
 	log.Info("Sink manager is created",
 		zap.String("namespace", changefeedID.Namespace),
 		zap.String("changefeed", changefeedID.ID),
-		zap.Bool("withRedoEnabled", m.redoManager != nil))
+		zap.Bool("withRedoEnabled", m.redoDMLMgr != nil))
 
 	return m, nil
 }
@@ -208,13 +209,13 @@ func (m *SinkManager) startWorkers(splitTxn bool, enableOldValue bool) {
 		}()
 	}
 
-	if m.redoManager == nil {
+	if m.redoDMLMgr == nil {
 		return
 	}
 
 	for i := 0; i < redoWorkerNum; i++ {
 		w := newRedoWorker(m.changefeedID, m.sourceManager, m.redoMemQuota,
-			m.redoManager, m.eventCache, splitTxn, enableOldValue)
+			m.redoDMLMgr, m.eventCache, splitTxn, enableOldValue)
 		m.redoWorkers = append(m.redoWorkers, w)
 		m.wg.Add(1)
 		go func() {
@@ -252,7 +253,7 @@ func (m *SinkManager) startGenerateTasks() {
 		}
 	}()
 
-	if m.redoManager == nil {
+	if m.redoDMLMgr == nil {
 		return
 	}
 
@@ -340,8 +341,8 @@ func (m *SinkManager) generateSinkTasks() error {
 	// Task upperbound is limited by barrierTs and schemaResolvedTs.
 	// But receivedSorterResolvedTs can be less than barrierTs, in which case
 	// the table is just scheduled to this node.
-	getUpperBound := func(tableSink *tableSinkWrapper) engine.Position {
-		upperBoundTs := tableSink.getReceivedSorterResolvedTs()
+	getUpperBound := func(tableSinkReceivedSorterResolvedTs model.Ts) engine.Position {
+		upperBoundTs := tableSinkReceivedSorterResolvedTs
 
 		barrierTs := m.lastBarrierTs.Load()
 		if upperBoundTs > barrierTs {
@@ -405,7 +406,7 @@ func (m *SinkManager) generateSinkTasks() error {
 			tableSink := tables[i]
 			slowestTableProgress := progs[i]
 			lowerBound := slowestTableProgress.nextLowerBoundPos
-			upperBound := getUpperBound(tableSink)
+			upperBound := getUpperBound(tableSink.getReceivedSorterResolvedTs())
 
 			// The table has no available progress.
 			if lowerBound.Compare(upperBound) >= 0 {
@@ -492,8 +493,8 @@ func (m *SinkManager) generateSinkTasks() error {
 
 func (m *SinkManager) generateRedoTasks() error {
 	// We use the table's resolved ts as the upper bound to fetch events.
-	getUpperBound := func(tableSink *tableSinkWrapper) engine.Position {
-		upperBoundTs := tableSink.getReceivedSorterResolvedTs()
+	getUpperBound := func(tableSinkReceivedSorterResolvedTs model.Ts) engine.Position {
+		upperBoundTs := tableSinkReceivedSorterResolvedTs
 
 		// If a task carries events after schemaResolvedTs, mounter group threads
 		// can be blocked on waiting schemaResolvedTs get advanced.
@@ -551,7 +552,7 @@ func (m *SinkManager) generateRedoTasks() error {
 			tableSink := tables[i]
 			slowestTableProgress := progs[i]
 			lowerBound := slowestTableProgress.nextLowerBoundPos
-			upperBound := getUpperBound(tableSink)
+			upperBound := getUpperBound(tableSink.getReceivedSorterResolvedTs())
 
 			// The table has no available progress.
 			if lowerBound.Compare(upperBound) >= 0 {
@@ -735,7 +736,7 @@ func (m *SinkManager) StartTable(span tablepb.Span, startTs model.Ts) error {
 		nextLowerBoundPos: engine.Position{StartTs: 0, CommitTs: startTs + 1},
 		version:           tableSink.(*tableSinkWrapper).version,
 	})
-	if m.redoManager != nil {
+	if m.redoDMLMgr != nil {
 		m.redoProgressHeap.push(&progress{
 			span:              span,
 			nextLowerBoundPos: engine.Position{StartTs: 0, CommitTs: startTs + 1},
@@ -841,8 +842,8 @@ func (m *SinkManager) GetTableStats(span tablepb.Span) TableStats {
 	m.redoMemQuota.Release(span, checkpointTs)
 	var resolvedTs model.Ts
 	// If redo log is enabled, we have to use redo log's resolved ts to calculate processor's min resolved ts.
-	if m.redoManager != nil {
-		resolvedTs = m.redoManager.GetResolvedTs(span)
+	if m.redoDMLMgr != nil {
+		resolvedTs = m.redoDMLMgr.GetResolvedTs(span)
 	} else {
 		resolvedTs = m.sourceManager.GetTableResolvedTs(span)
 	}

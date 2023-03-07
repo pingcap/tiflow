@@ -103,10 +103,10 @@ func (mr *MockChangefeedInterfaceMockRecorder) Delete(ctx, name interface{}) *go
 }
 
 // Get mocks base method.
-func (m *MockChangefeedInterface) Get(ctx context.Context, name string) (*v2.ChangeFeedDetail, error) {
+func (m *MockChangefeedInterface) Get(ctx context.Context, name string) (*v2.ChangeFeedInfo, error) {
 	m.ctrl.T.Helper()
 	ret := m.ctrl.Call(m, "Get", ctx, name)
-	ret0, _ := ret[0].(*v2.ChangeFeedDetail)
+	ret0, _ := ret[0].(*v2.ChangeFeedInfo)
 	ret1, _ := ret[1].(error)
 	return ret0, ret1
 }
@@ -115,21 +115,6 @@ func (m *MockChangefeedInterface) Get(ctx context.Context, name string) (*v2.Cha
 func (mr *MockChangefeedInterfaceMockRecorder) Get(ctx, name interface{}) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "Get", reflect.TypeOf((*MockChangefeedInterface)(nil).Get), ctx, name)
-}
-
-// GetInfo mocks base method.
-func (m *MockChangefeedInterface) GetInfo(ctx context.Context, name string) (*v2.ChangeFeedInfo, error) {
-	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "GetInfo", ctx, name)
-	ret0, _ := ret[0].(*v2.ChangeFeedInfo)
-	ret1, _ := ret[1].(error)
-	return ret0, ret1
-}
-
-// GetInfo indicates an expected call of GetInfo.
-func (mr *MockChangefeedInterfaceMockRecorder) GetInfo(ctx, name interface{}) *gomock.Call {
-	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetInfo", reflect.TypeOf((*MockChangefeedInterface)(nil).GetInfo), ctx, name)
 }
 
 // List mocks base method.

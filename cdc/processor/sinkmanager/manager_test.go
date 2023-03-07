@@ -28,7 +28,6 @@ import (
 	"github.com/pingcap/tiflow/pkg/config"
 	"github.com/pingcap/tiflow/pkg/spanz"
 	"github.com/pingcap/tiflow/pkg/upstream"
-	"github.com/prometheus/client_golang/prometheus"
 	"github.com/stretchr/testify/require"
 	pd "github.com/tikv/pd/client"
 )
@@ -61,7 +60,7 @@ func createManagerWithMemEngine(
 		ctx, changefeedID, changefeedInfo, up,
 		&entry.MockSchemaStorage{Resolved: math.MaxUint64},
 		nil, sm,
-		errChan, prometheus.NewCounter(prometheus.CounterOpts{}))
+		errChan)
 	require.NoError(t, err)
 	return manager, sortEngine
 }
@@ -71,6 +70,25 @@ func getChangefeedInfo() *model.ChangeFeedInfo {
 		Error:   nil,
 		SinkURI: "blackhole://",
 		Config:  config.GetDefaultReplicaConfig(),
+	}
+}
+
+func genRowChangedEvent(startTs, commitTs uint64, span tablepb.Span) *model.RowChangedEvent {
+	return &model.RowChangedEvent{
+		StartTs:  startTs,
+		CommitTs: commitTs,
+		Table: &model.TableName{
+			Schema:      "table",
+			Table:       "table",
+			TableID:     span.TableID,
+			IsPartition: false,
+		},
+		Columns: []*model.Column{
+			{Name: "a", Value: 2},
+		},
+		PreColumns: []*model.Column{
+			{Name: "a", Value: 1},
+		},
 	}
 }
 
@@ -132,8 +150,7 @@ func addTableAndAddEventsToSortEngine(
 		},
 	}
 	for _, event := range events {
-		err := engine.Add(span, event)
-		require.NoError(t, err)
+		engine.Add(span, event)
 	}
 }
 
