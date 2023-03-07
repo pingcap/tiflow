@@ -25,9 +25,9 @@ import (
 
 	_ "github.com/go-sql-driver/mysql" // for mysql
 	"github.com/pingcap/tidb/br/pkg/lightning/checkpoints"
+	"github.com/pingcap/tidb/br/pkg/lightning/importer"
+	"github.com/pingcap/tidb/br/pkg/lightning/importer/opts"
 	"github.com/pingcap/tidb/br/pkg/lightning/mydump"
-	"github.com/pingcap/tidb/br/pkg/lightning/restore"
-	"github.com/pingcap/tidb/br/pkg/lightning/restore/opts"
 	"github.com/pingcap/tidb/dumpling/export"
 	"github.com/pingcap/tidb/parser/mysql"
 	"github.com/pingcap/tidb/types"
@@ -439,11 +439,11 @@ func (c *Checker) Init(ctx context.Context) (err error) {
 		if err != nil {
 			return err
 		}
-		targetDB, err := restore.DBFromConfig(ctx, lCfg.TiDB)
+		targetDB, err := importer.DBFromConfig(ctx, lCfg.TiDB)
 		if err != nil {
 			return err
 		}
-		targetInfoGetter, err := restore.NewTargetInfoGetterImpl(lCfg, targetDB)
+		targetInfoGetter, err := importer.NewTargetInfoGetterImpl(lCfg, targetDB)
 		if err != nil {
 			return err
 		}
@@ -465,7 +465,7 @@ func (c *Checker) Init(ctx context.Context) (err error) {
 			})
 		}
 
-		builder := restore.NewPrecheckItemBuilder(
+		builder := importer.NewPrecheckItemBuilder(
 			lCfg,
 			dbMetas,
 			newLightningPrecheckAdaptor(targetInfoGetter, info),
@@ -477,28 +477,28 @@ func (c *Checker) Init(ctx context.Context) (err error) {
 				info.totalDataSize.Load(), targetInfoGetter))
 		}
 		if _, ok := c.checkingItems[config.LightningEmptyRegionChecking]; ok {
-			lChecker, err := builder.BuildPrecheckItem(restore.CheckTargetClusterEmptyRegion)
+			lChecker, err := builder.BuildPrecheckItem(importer.CheckTargetClusterEmptyRegion)
 			if err != nil {
 				return err
 			}
 			c.checkList = append(c.checkList, checker.NewLightningEmptyRegionChecker(lChecker))
 		}
 		if _, ok := c.checkingItems[config.LightningRegionDistributionChecking]; ok {
-			lChecker, err := builder.BuildPrecheckItem(restore.CheckTargetClusterRegionDist)
+			lChecker, err := builder.BuildPrecheckItem(importer.CheckTargetClusterRegionDist)
 			if err != nil {
 				return err
 			}
 			c.checkList = append(c.checkList, checker.NewLightningRegionDistributionChecker(lChecker))
 		}
 		if _, ok := c.checkingItems[config.LightningDownstreamVersionChecking]; ok {
-			lChecker, err := builder.BuildPrecheckItem(restore.CheckTargetClusterVersion)
+			lChecker, err := builder.BuildPrecheckItem(importer.CheckTargetClusterVersion)
 			if err != nil {
 				return err
 			}
 			c.checkList = append(c.checkList, checker.NewLightningClusterVersionChecker(lChecker))
 		}
 		if _, ok := c.checkingItems[config.LightningMutexFeatureChecking]; ok {
-			lChecker, err := builder.BuildPrecheckItem(restore.CheckTargetUsingCDCPITR)
+			lChecker, err := builder.BuildPrecheckItem(importer.CheckTargetUsingCDCPITR)
 			if err != nil {
 				return err
 			}
@@ -819,19 +819,19 @@ func sameTableNameDetection(tables map[filter.Table][]filter.Table) error {
 	return nil
 }
 
-// lightningPrecheckAdaptor implements the restore.PreRestoreInfoGetter interface.
+// lightningPrecheckAdaptor implements the importer.PreRestoreInfoGetter interface.
 type lightningPrecheckAdaptor struct {
-	restore.TargetInfoGetter
+	importer.TargetInfoGetter
 	allTables        map[string]*checkpoints.TidbDBInfo
-	sourceDataResult restore.EstimateSourceDataSizeResult
+	sourceDataResult importer.EstimateSourceDataSizeResult
 }
 
 func newLightningPrecheckAdaptor(
-	targetInfoGetter restore.TargetInfoGetter,
+	targetInfoGetter importer.TargetInfoGetter,
 	info *tablePairInfo,
 ) *lightningPrecheckAdaptor {
 	var (
-		sourceDataResult restore.EstimateSourceDataSizeResult
+		sourceDataResult importer.EstimateSourceDataSizeResult
 		allTables        = make(map[string]*checkpoints.TidbDBInfo)
 	)
 	if info != nil {
@@ -869,6 +869,6 @@ func (l *lightningPrecheckAdaptor) ReadFirstNRowsByFileMeta(ctx context.Context,
 	return nil, nil, errors.New("not implemented")
 }
 
-func (l *lightningPrecheckAdaptor) EstimateSourceDataSize(ctx context.Context, opts ...opts.GetPreInfoOption) (*restore.EstimateSourceDataSizeResult, error) {
+func (l *lightningPrecheckAdaptor) EstimateSourceDataSize(ctx context.Context, opts ...opts.GetPreInfoOption) (*importer.EstimateSourceDataSizeResult, error) {
 	return &l.sourceDataResult, nil
 }

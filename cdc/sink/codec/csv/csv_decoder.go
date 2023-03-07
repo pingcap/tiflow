@@ -55,7 +55,7 @@ func NewBatchDecoder(ctx context.Context,
 		Separator:       codecConfig.Delimiter,
 		Delimiter:       codecConfig.Quote,
 		Terminator:      codecConfig.Terminator,
-		Null:            codecConfig.NullString,
+		Null:            []string{codecConfig.NullString},
 		BackslashEscape: backslashEscape,
 	}
 	csvParser, err := mydump.NewCSVParser(ctx, cfg,
