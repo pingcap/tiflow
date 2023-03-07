@@ -114,6 +114,7 @@ type replicaConfig struct {
 	Consistent         *ConsistentConfig `toml:"consistent" json:"consistent"`
 	// Scheduler is the configuration for scheduler.
 	Scheduler *ChangefeedSchedulerConfig `toml:"scheduler" json:"scheduler"`
+	Integrity *IntegrityConfig           `toml:"integrity" json:"integrity"`
 }
 
 // Marshal returns the json marshal format of a ReplicationConfig
