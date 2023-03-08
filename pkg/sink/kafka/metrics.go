@@ -85,31 +85,28 @@ var (
 			Help:      "Kafka Client send request retry count",
 		}, []string{"namespace", "changefeed"})
 
-	BatchDurationHistogram = prometheus.NewHistogramVec(
-		prometheus.HistogramOpts{
+	BatchDurationGauge = prometheus.NewGaugeVec(
+		prometheus.GaugeOpts{
 			Namespace: "ticdc",
 			Subsystem: "sink",
 			Name:      "kafka_producer_batch_duration",
-			Help:      "Kafka client internal batch message time cost in milliseconds",
-			Buckets:   prometheus.ExponentialBuckets(0.002, 2.0, 10),
+			Help:      "Kafka client internal average batch message time cost in milliseconds",
 		}, []string{"namespace", "changefeed"})
 
-	BatchMessageCountHistogram = prometheus.NewHistogramVec(
-		prometheus.HistogramOpts{
+	BatchMessageCountGauge = prometheus.NewGaugeVec(
+		prometheus.GaugeOpts{
 			Namespace: "ticdc",
 			Subsystem: "sink",
 			Name:      "kafka_producer_batch_message_count",
-			Help:      "Kafka client internal batch message count",
-			Buckets:   prometheus.ExponentialBuckets(8, 2.0, 11),
+			Help:      "Kafka client internal average batch message count",
 		}, []string{"namespace", "changefeed"})
 
-	BatchSizeHistogram = prometheus.NewHistogramVec(
-		prometheus.HistogramOpts{
+	BatchSizeGauge = prometheus.NewGaugeVec(
+		prometheus.GaugeOpts{
 			Namespace: "ticdc",
 			Subsystem: "sink",
 			Name:      "kafka_producer_batch_size",
-			Help:      "Kafka client internal batch size in bytes",
-			Buckets:   prometheus.ExponentialBuckets(1024, 2.0, 18),
+			Help:      "Kafka client internal average batch size in bytes",
 		}, []string{"namespace", "changefeed"})
 )
 
@@ -123,9 +120,9 @@ func InitMetrics(registry *prometheus.Registry) {
 	registry.MustRegister(responseRateGauge)
 
 	// only used by kafka sink v2.
-	registry.MustRegister(BatchDurationHistogram)
-	registry.MustRegister(BatchMessageCountHistogram)
-	registry.MustRegister(BatchSizeHistogram)
+	registry.MustRegister(BatchDurationGauge)
+	registry.MustRegister(BatchMessageCountGauge)
+	registry.MustRegister(BatchSizeGauge)
 	registry.MustRegister(RetryCount)
 	registry.MustRegister(ErrorCount)
 }
