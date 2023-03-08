@@ -30,14 +30,16 @@ import (
 var _ redo.DMLManager = &mockRedoDMLManager{}
 
 type mockRedoDMLManager struct {
-	events      map[int64][]*model.RowChangedEvent
-	resolvedTss map[int64]model.Ts
+	events              map[int64][]*model.RowChangedEvent
+	resolvedTss         map[int64]model.Ts
+	releaseRowsMemories map[int64]func()
 }
 
-func NewMockRedoDMLManager() *mockRedoDMLManager {
+func newMockRedoDMLManager() *mockRedoDMLManager {
 	return &mockRedoDMLManager{
-		events:      make(map[int64][]*model.RowChangedEvent),
-		resolvedTss: make(map[int64]model.Ts),
+		events:              make(map[int64][]*model.RowChangedEvent),
+		resolvedTss:         make(map[int64]model.Ts),
+		releaseRowsMemories: make(map[int64]func()),
 	}
 }
 
@@ -75,12 +77,17 @@ func (m *mockRedoDMLManager) EmitRowChangedEvents(ctx context.Context,
 		m.events[span.TableID] = make([]*model.RowChangedEvent, 0)
 	}
 	m.events[span.TableID] = append(m.events[span.TableID], rows...)
+	m.releaseRowsMemories[span.TableID] = releaseRowsMemory
 
 	return nil
 }
 
 func (m *mockRedoDMLManager) getEvents(span tablepb.Span) []*model.RowChangedEvent {
 	return m.events[span.TableID]
+}
+
+func (m *mockRedoDMLManager) releaseRowsMemory(span tablepb.Span) {
+	m.releaseRowsMemories[span.TableID]()
 }
 
 type redoLogAdvancerSuite struct {
@@ -108,7 +115,7 @@ func TestRedoLogAdvancerSuite(t *testing.T) {
 }
 
 func (suite *redoLogAdvancerSuite) genRedoTaskAndRedoDMLManager() (*redoTask, *mockRedoDMLManager) {
-	redoDMLManager := NewMockRedoDMLManager()
+	redoDMLManager := newMockRedoDMLManager()
 	wrapper, _ := createTableSinkWrapper(suite.testChangefeedID, suite.testSpan)
 
 	task := &redoTask{
@@ -257,4 +264,7 @@ func (suite *redoLogAdvancerSuite) TestAdvance() {
 	require.Len(suite.T(), manager.getEvents(suite.testSpan), 3)
 	require.Equal(suite.T(), uint64(1), manager.GetResolvedTs(suite.testSpan))
 	require.Equal(suite.T(), uint64(0), advancer.pendingTxnSize)
+	require.Equal(suite.T(), uint64(768), memoryQuota.GetUsedBytes())
+	manager.releaseRowsMemory(suite.testSpan)
+	require.Equal(suite.T(), uint64(256), memoryQuota.GetUsedBytes())
 }
