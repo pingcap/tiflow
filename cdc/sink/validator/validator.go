@@ -36,6 +36,10 @@ func Validate(ctx context.Context, sinkURI string, cfg *config.ReplicaConfig) er
 		return err
 	}
 
+	if err := checkSyncPointSchemeCompatibility(uri, cfg); err != nil {
+		return err
+	}
+
 	if cfg.BDRMode {
 		err := checkBDRMode(ctx, uri, cfg)
 		if err != nil {
@@ -52,6 +56,22 @@ func Validate(ctx context.Context, sinkURI string, cfg *config.ReplicaConfig) er
 	cancel()
 	s.Close()
 
+	return nil
+}
+
+// checkSyncPointSchemeCompatibility checks if the sink scheme is compatible
+// with the syncpoint feature.
+func checkSyncPointSchemeCompatibility(
+	uri *url.URL,
+	cfg *config.ReplicaConfig,
+) error {
+	if cfg.EnableSyncPoint && !sink.IsMySQLCompatibleScheme(uri.Scheme) {
+		return cerror.ErrSinkURIInvalid.
+			GenWithStack(
+				"sink uri scheme is not supported with syncpoint enabled"+
+					"sink uri: %s", uri,
+			)
+	}
 	return nil
 }
 
