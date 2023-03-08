@@ -259,7 +259,7 @@ func parseJob(v []byte, startTs, CRTs uint64) (*timodel.Job, error) {
 		return nil, errors.Trace(err)
 	}
 	log.Debug("get new DDL job", zap.String("detail", job.String()))
-	if !job.IsDone() && !job.IsSynced() {
+	if !job.IsDone() {
 		return nil, nil
 	}
 	// FinishedTS is only set when the job is synced,
