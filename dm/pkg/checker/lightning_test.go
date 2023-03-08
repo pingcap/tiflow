@@ -17,7 +17,7 @@ import (
 	"context"
 	"testing"
 
-	"github.com/pingcap/tidb/br/pkg/lightning/restore"
+	"github.com/pingcap/tidb/br/pkg/lightning/importer"
 	"github.com/pingcap/tiflow/pkg/errors"
 	"github.com/stretchr/testify/require"
 )
@@ -28,17 +28,17 @@ type mockPrecheckItem struct {
 	msg  string
 }
 
-func (m mockPrecheckItem) Check(ctx context.Context) (*restore.CheckResult, error) {
+func (m mockPrecheckItem) Check(ctx context.Context) (*importer.CheckResult, error) {
 	if m.err != nil {
 		return nil, m.err
 	}
-	return &restore.CheckResult{
+	return &importer.CheckResult{
 		Passed:  m.pass,
 		Message: m.msg,
 	}, nil
 }
 
-func (m mockPrecheckItem) GetCheckItemID() restore.CheckItemID {
+func (m mockPrecheckItem) GetCheckItemID() importer.CheckItemID {
 	return "mock"
 }
 

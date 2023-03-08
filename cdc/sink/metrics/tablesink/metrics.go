@@ -18,7 +18,6 @@ import (
 )
 
 // TotalRowsCountCounter is the total count of rows that are processed by sink.
-// TODO(hi-rustin): change subsystem to sinkv2
 var TotalRowsCountCounter = prometheus.NewCounterVec(
 	prometheus.CounterOpts{
 		Namespace: "ticdc",
