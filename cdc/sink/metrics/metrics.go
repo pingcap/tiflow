@@ -30,7 +30,7 @@ var (
 	ExecBatchHistogram = prometheus.NewHistogramVec(
 		prometheus.HistogramOpts{
 			Namespace: "ticdc",
-			Subsystem: "sinkv2",
+			Subsystem: "sink",
 			Name:      "batch_row_count",
 			Help:      "Row count number for a given batch.",
 			Buckets:   prometheus.ExponentialBuckets(1, 2, 18),
@@ -40,7 +40,7 @@ var (
 	LargeRowSizeHistogram = prometheus.NewHistogramVec(
 		prometheus.HistogramOpts{
 			Namespace: "ticdc",
-			Subsystem: "sinkv2",
+			Subsystem: "sink",
 			Name:      "large_row_size",
 			Help:      "The size of all received row changed events (in bytes).",
 			Buckets:   prometheus.ExponentialBuckets(largeRowSizeLowBound, 2, 15), // 2K~32M
@@ -50,7 +50,7 @@ var (
 	ExecDDLHistogram = prometheus.NewHistogramVec(
 		prometheus.HistogramOpts{
 			Namespace: "ticdc",
-			Subsystem: "sinkv2",
+			Subsystem: "sink",
 			Name:      "ddl_exec_duration",
 			Help:      "Bucketed histogram of processing time (s) of a ddl.",
 			Buckets:   prometheus.ExponentialBuckets(0.01, 2, 18),
@@ -60,7 +60,7 @@ var (
 	ExecutionErrorCounter = prometheus.NewCounterVec(
 		prometheus.CounterOpts{
 			Namespace: "ticdc",
-			Subsystem: "sinkv2",
+			Subsystem: "sink",
 			Name:      "execution_error",
 			Help:      "Total count of execution errors.",
 		}, []string{"namespace", "changefeed", "type"}) // type is for `sinkType`
