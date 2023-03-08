@@ -197,6 +197,9 @@ func (f *factory) AdminClient() (pkafka.ClusterAdminClient, error) {
 // SyncProducer creates a sync producer to writer message to kafka
 func (f *factory) SyncProducer() (pkafka.SyncProducer, error) {
 	w := f.newWriter(false)
+	// set batch size to 1 to make sure the message is sent immediately
+	w.BatchTimeout = 1 * time.Millisecond
+	w.BatchSize = 1
 	return &syncWriter{w: w}, nil
 }
 
