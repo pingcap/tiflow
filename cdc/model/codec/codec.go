@@ -67,6 +67,9 @@ func postUnmarshal(r *model.RedoLog) {
 	}
 	if r.RedoDDL.DDL != nil {
 		r.RedoDDL.DDL.Type = timodel.ActionType(r.RedoDDL.Type)
+		r.RedoDDL.DDL.TableInfo = &model.TableInfo{
+			TableName: r.RedoDDL.TableName,
+		}
 	}
 }
 
@@ -106,6 +109,9 @@ func preMarshal(r *model.RedoLog) {
 	}
 	if r.RedoDDL.DDL != nil {
 		r.RedoDDL.Type = byte(r.RedoDDL.DDL.Type)
+		if r.RedoDDL.DDL.TableInfo != nil {
+			r.RedoDDL.TableName = r.RedoDDL.DDL.TableInfo.TableName
+		}
 	}
 }
 
