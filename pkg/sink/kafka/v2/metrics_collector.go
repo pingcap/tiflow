@@ -76,11 +76,11 @@ func (m *MetricsCollector) collectMetrics() {
 
 	// send request related metrics
 	pkafka.RequestRateGauge.WithLabelValues(m.changefeedID.Namespace, m.changefeedID.ID, "all").
-		Set(float64(statistics.Writes))
+		Set(float64(statistics.Writes / 5))
 	pkafka.RequestLatencyInMsGauge.WithLabelValues(m.changefeedID.Namespace, m.changefeedID.ID, "all").
 		Set(statistics.WriteTime.Avg.Seconds())
 	pkafka.OutgoingByteRateGauge.WithLabelValues(m.changefeedID.Namespace, m.changefeedID.ID, "all").
-		Set(float64(statistics.Bytes))
+		Set(float64(statistics.Bytes / 5))
 
 	pkafka.RetryCount.WithLabelValues(m.changefeedID.Namespace, m.changefeedID.ID).
 		Set(float64(statistics.Retries))
