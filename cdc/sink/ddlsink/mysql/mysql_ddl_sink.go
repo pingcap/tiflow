@@ -120,7 +120,7 @@ func (m *DDLSink) execDDLWithMaxRetries(ctx context.Context, ddl *model.DDLEvent
 					zap.String("namespace", m.id.Namespace),
 					zap.String("changefeed", m.id.ID),
 					zap.Error(err))
-				// If the error is ignorable, we will direly ignore the error.
+				// If the error is ignorable, we will ignore the error directly.
 				return nil
 			}
 			log.Warn("Execute DDL with error, retry later",
