@@ -35,7 +35,9 @@ import (
 	"github.com/pingcap/tidb/br/pkg/storage"
 	"github.com/pingcap/tiflow/cdc/contextutil"
 	"github.com/pingcap/tiflow/cdc/model"
-	"github.com/pingcap/tiflow/cdc/sink/dmlsink/factory"
+	"github.com/pingcap/tiflow/cdc/sink/ddlsink"
+	ddlfactory "github.com/pingcap/tiflow/cdc/sink/ddlsink/factory"
+	dmlfactory "github.com/pingcap/tiflow/cdc/sink/dmlsink/factory"
 	"github.com/pingcap/tiflow/cdc/sink/tablesink"
 	sinkutil "github.com/pingcap/tiflow/cdc/sink/util"
 	"github.com/pingcap/tiflow/pkg/cmd/util"
@@ -228,8 +230,8 @@ type fileIndexRange struct {
 }
 
 type consumer struct {
-	sinkFactory     *eventsinkfactory.SinkFactory
-	ddlSink         ddlsink.DDLEventSink
+	sinkFactory     *dmlfactory.SinkFactory
+	ddlSink         ddlsink.Sink
 	replicationCfg  *config.ReplicaConfig
 	codecCfg        *common.Config
 	externalStorage storage.ExternalStorage
@@ -288,7 +290,7 @@ func newConsumer(ctx context.Context) (*consumer, error) {
 	errCh := make(chan error, 1)
 	stdCtx := contextutil.PutChangefeedIDInCtx(ctx,
 		model.DefaultChangeFeedID(defaultChangefeedName))
-	sinkFactory, err := eventsinkfactory.New(
+	sinkFactory, err := dmlfactory.New(
 		stdCtx,
 		downstreamURIStr,
 		config.GetDefaultReplicaConfig(),
@@ -299,7 +301,7 @@ func newConsumer(ctx context.Context) (*consumer, error) {
 		return nil, err
 	}
 
-	ddlSink, err := ddlsinkfactory.New(ctx, downstreamURIStr, config.GetDefaultReplicaConfig())
+	ddlSink, err := ddlfactory.New(ctx, downstreamURIStr, config.GetDefaultReplicaConfig())
 	if err != nil {
 		log.Error("failed to create ddl sink", zap.Error(err))
 		return nil, err
