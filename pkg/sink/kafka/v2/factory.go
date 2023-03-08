@@ -211,7 +211,7 @@ func (f *factory) AsyncProducer(
 ) (pkafka.AsyncProducer, error) {
 	w := f.newWriter(true)
 	w.BatchTimeout = 10 * time.Millisecond
-	w.BatchSize = 1000
+	w.BatchSize = int(w.BatchBytes / 1024) // assume each message is 1KB
 	aw := &asyncWriter{
 		w:            w,
 		closedChan:   closedChan,
