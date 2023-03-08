@@ -45,7 +45,7 @@ func New(
 	case sink.KafkaScheme, sink.KafkaSSLScheme:
 		factoryCreator := kafka.NewSaramaFactory
 		if config.GetGlobalServerConfig().Debug.EnableKafkaSinkV2 {
-			factoryCreator = kafkaV2.NewFactory
+			factoryCreator = kafkav2.NewFactory
 		}
 		return mq.NewKafkaDDLSink(ctx, sinkURI, cfg,
 			factoryCreator, ddlproducer.NewKafkaDDLProducer)
