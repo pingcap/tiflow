@@ -79,7 +79,7 @@ function run() {
 	"storage")
 		run_sql "create database multi_tables_ddl_test" ${DOWN_TIDB_HOST} ${DOWN_TIDB_PORT}
 		SINK_URI="s3://logbucket/$TOPIC_NAME_1?flush-interval=5s&endpoint=http://127.0.0.1:24927&protocol=csv"
-		cdc cli changefeed create -c=$cf_normal --start-ts=$start_ts --sink-uri="$SINK_URI" --config="$CUR/conf/normal.toml" || sleep 3600
+		cdc cli changefeed create -c=$cf_normal --start-ts=$start_ts --sink-uri="$SINK_URI" --config="$CUR/conf/normal.toml"
 
 		SINK_URI="s3://logbucket/$TOPIC_NAME_2?flush-interval=5s&endpoint=http://127.0.0.1:24927&protocol=csv"
 		cdc cli changefeed create -c=$cf_err1 --start-ts=$start_ts --sink-uri="$SINK_URI" --config="$CUR/conf/error-1.toml"
@@ -104,7 +104,7 @@ function run() {
 	check_table_exists multi_tables_ddl_test.t7 ${DOWN_TIDB_HOST} ${DOWN_TIDB_PORT}
 	check_table_exists multi_tables_ddl_test.t88 ${DOWN_TIDB_HOST} ${DOWN_TIDB_PORT}
 	# sync_diff can't check non-exist table, so we check expected tables are created in downstream first
-	check_table_exists multi_tables_ddl_test.finish_mark ${DOWN_TIDB_HOST} ${DOWN_TIDB_PORT} || sleep 3600
+	check_table_exists multi_tables_ddl_test.finish_mark ${DOWN_TIDB_HOST} ${DOWN_TIDB_PORT}
 	echo "check table exists success"
 
 	# changefeed test-error will not report an error, "multi_tables_ddl_test.t555 to multi_tables_ddl_test.t55" patr will be skipped.
