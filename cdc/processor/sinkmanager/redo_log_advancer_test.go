@@ -29,7 +29,17 @@ import (
 
 var _ redo.DMLManager = &mockRedoDMLManager{}
 
-type mockRedoDMLManager struct{}
+type mockRedoDMLManager struct {
+	events      map[int64][]*model.RowChangedEvent
+	resolvedTss map[int64]model.Ts
+}
+
+func NewMockRedoDMLManager() *mockRedoDMLManager {
+	return &mockRedoDMLManager{
+		events:      make(map[int64][]*model.RowChangedEvent),
+		resolvedTss: make(map[int64]model.Ts),
+	}
+}
 
 func (m *mockRedoDMLManager) Enabled() bool {
 	panic("unreachable")
@@ -50,17 +60,27 @@ func (m *mockRedoDMLManager) RemoveTable(span tablepb.Span) {
 func (m *mockRedoDMLManager) UpdateResolvedTs(ctx context.Context,
 	span tablepb.Span, resolvedTs uint64,
 ) error {
-	panic("unreachable")
+	m.resolvedTss[span.TableID] = resolvedTs
+	return nil
 }
 
 func (m *mockRedoDMLManager) GetResolvedTs(span tablepb.Span) model.Ts {
-	panic("unreachable")
+	return m.resolvedTss[span.TableID]
 }
 
 func (m *mockRedoDMLManager) EmitRowChangedEvents(ctx context.Context,
 	span tablepb.Span, releaseRowsMemory func(), rows ...*model.RowChangedEvent,
 ) error {
-	panic("unreachable")
+	if _, ok := m.events[span.TableID]; !ok {
+		m.events[span.TableID] = make([]*model.RowChangedEvent, 0)
+	}
+	m.events[span.TableID] = append(m.events[span.TableID], rows...)
+
+	return nil
+}
+
+func (m *mockRedoDMLManager) getEvents(span tablepb.Span) []*model.RowChangedEvent {
+	return m.events[span.TableID]
 }
 
 type redoLogAdvancerSuite struct {
@@ -87,8 +107,8 @@ func TestRedoLogAdvancerSuite(t *testing.T) {
 	suite.Run(t, new(redoLogAdvancerSuite))
 }
 
-func (suite *redoLogAdvancerSuite) genRedoTaskAndRedoDMLManager() (*redoTask, redo.DMLManager) {
-	redoDMLManager := &mockRedoDMLManager{}
+func (suite *redoLogAdvancerSuite) genRedoTaskAndRedoDMLManager() (*redoTask, *mockRedoDMLManager) {
+	redoDMLManager := NewMockRedoDMLManager()
 	wrapper, _ := createTableSinkWrapper(suite.testChangefeedID, suite.testSpan)
 
 	task := &redoTask{
@@ -203,4 +223,38 @@ func (suite *redoLogAdvancerSuite) TestTryMoveMoveToNextTxn() {
 	advancer.tryMoveToNextTxn(2, pos)
 	require.Equal(suite.T(), uint64(2), advancer.lastTxnCommitTs)
 	require.Equal(suite.T(), uint64(2), advancer.currTxnCommitTs)
+}
+
+func (suite *redoLogAdvancerSuite) TestAdvance() {
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+	memoryQuota := suite.genMemQuota(768)
+	defer memoryQuota.Close()
+	task, manager := suite.genRedoTaskAndRedoDMLManager()
+	advancer := newRedoLogAdvancer(task, memoryQuota, 768, manager)
+	require.NotNil(suite.T(), advancer)
+
+	pos := engine.Position{StartTs: 1, CommitTs: 3}
+	// 1. append 1 event with commit ts 1
+	advancer.appendEvents([]*model.RowChangedEvent{
+		{CommitTs: 1},
+	}, 256)
+	require.Equal(suite.T(), uint64(256), advancer.usedMem)
+	advancer.tryMoveToNextTxn(1, pos)
+
+	// 2. append 2 events with commit ts 2
+	for i := 0; i < 2; i++ {
+		advancer.appendEvents([]*model.RowChangedEvent{
+			{CommitTs: 2},
+		}, 256)
+	}
+	advancer.tryMoveToNextTxn(2, pos)
+
+	require.Equal(suite.T(), uint64(768), advancer.pendingTxnSize)
+	err := advancer.advance(ctx, 256)
+	require.NoError(suite.T(), err)
+
+	require.Len(suite.T(), manager.getEvents(suite.testSpan), 3)
+	require.Equal(suite.T(), uint64(1), manager.GetResolvedTs(suite.testSpan))
+	require.Equal(suite.T(), uint64(0), advancer.pendingTxnSize)
 }
