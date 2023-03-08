@@ -63,8 +63,8 @@ cloud.google.com/go/storage v1.21.0/go.mod h1:XmRlxkgPjlBONznT2dDUU/5XlpU2OjMnKu
 cloud.google.com/go/storage v1.28.1 h1:F5QDG5ChchaAVQhINh24U99OWHURqrW8OmQcGKXcbgI=
 cloud.google.com/go/storage v1.28.1/go.mod h1:Qnisd4CqDdo6BGs2AD5LLnEsmSQ80wQ5ogcBBKhU86Y=
 dmitri.shuralyov.com/gpu/mtl v0.0.0-20190408044501-666a987793e9/go.mod h1:H6x//7gZCb22OMCxBHrMx7a5I7Hp++hsVxbQ4BYO7hU=
-github.com/3AceShowHand/kafka-go v0.0.0-20230308065226-39df0a914093 h1:gKWCO11dqPB1uex6j2FqVIuqq4bvtaVrN8QAhIOZYTg=
-github.com/3AceShowHand/kafka-go v0.0.0-20230308065226-39df0a914093/go.mod h1:T0MLgygYvmqmBvC+s8aCcbVNfJN4znVne5j0Pzowp/Q=
+github.com/3AceShowHand/kafka-go v0.0.0-20230308065552-39100b436e3e h1:LmtWaMBfmHui2IZwaxQl+UVPL/lLGxZxBCDu/XUn28w=
+github.com/3AceShowHand/kafka-go v0.0.0-20230308065552-39100b436e3e/go.mod h1:RmThA0arvq46ZbqGTlybhaf+TvwS+WeBdkMZUe+cxvc=
 github.com/AndreasBriese/bbloom v0.0.0-20190306092124-e2d15f34fcf9/go.mod h1:bOvUY6CB00SOBii9/FifXqc0awNKxLFCL/+pkDPuyl8=
 github.com/Azure/azure-sdk-for-go/sdk/azcore v0.20.0 h1:KQgdWmEOmaJKxaUUZwHAYh12t+b+ZJf8q3friycK1kA=
 github.com/Azure/azure-sdk-for-go/sdk/azcore v0.20.0/go.mod h1:ZPW/Z0kLCTdDZaDbYTetxc9Cxl/2lNqxYHYNOF2bti0=
