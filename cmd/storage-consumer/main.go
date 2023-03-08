@@ -315,7 +315,7 @@ func newConsumer(ctx context.Context) (*consumer, error) {
 		externalStorage: storage,
 		fileExtension:   extension,
 		errCh:           errCh,
-		tableIdxMap:     make(map[dmlPathKey]uint64),
+		tableDMLIdxMap:  make(map[dmlPathKey]uint64),
 		tableTsMap:      make(map[model.TableID]model.ResolvedTs),
 		tableSinkMap:    make(map[model.TableID]tablesink.TableSink),
 		tableIDGenerator: &fakeTableIDGenerator{
@@ -406,7 +406,6 @@ func (c *consumer) emitDMLEvents(
 	content []byte,
 ) error {
 	var (
-		events  []*model.RowChangedEvent
 		decoder codec.EventBatchDecoder
 		err     error
 	)
@@ -524,7 +523,7 @@ func (c *consumer) syncExecDMLEvents(
 		return errors.Trace(err)
 	}
 
-	resolvedTs := model.NewResolvedTs(c.tableTsMap[tableID])
+	resolvedTs := c.tableTsMap[tableID]
 	err = c.tableSinkMap[tableID].UpdateResolvedTs(resolvedTs)
 	if err != nil {
 		return errors.Trace(err)
