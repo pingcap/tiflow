@@ -143,11 +143,6 @@ func (w *redoWorker) handleTask(ctx context.Context, task *redoTask) (finalErr e
 
 		advancer.tryMoveToNextTxn(e.CRTs)
 
-		// TODO: why we need to update the lastTxnCommitTs here?
-		if pos.IsCommitFence() {
-			advancer.lastTxnCommitTs = advancer.currTxnCommitTs
-		}
-
 		var x []*model.RowChangedEvent
 		var size uint64
 		// NOTICE: The event can be filtered by the event filter.
