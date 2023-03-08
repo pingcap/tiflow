@@ -44,14 +44,13 @@ var (
 			Name:      "kafka_producer_request_rate",
 			Help:      "Requests/second sent to all brokers.",
 		}, []string{"namespace", "changefeed", "broker"})
-	// RequestLatencyInMsGauge Histogram update by `requestLatency`.
-	// requestLatency := time.Since(response.requestTime).
-	RequestLatencyInMsGauge = prometheus.NewGaugeVec(
+	// RequestLatencyGauge Histogram update by `requestLatency`.
+	RequestLatencyGauge = prometheus.NewGaugeVec(
 		prometheus.GaugeOpts{
 			Namespace: "ticdc",
 			Subsystem: "sink",
 			Name:      "kafka_producer_request_latency",
-			Help:      "The request latency in ms for all brokers.",
+			Help:      "The request latency for all brokers.",
 		}, []string{"namespace", "changefeed", "broker"})
 	// Histogram update by `compression-ratio`.
 	compressionRatioGauge = prometheus.NewGaugeVec(
@@ -116,7 +115,7 @@ func InitMetrics(registry *prometheus.Registry) {
 	registry.MustRegister(compressionRatioGauge)
 	registry.MustRegister(OutgoingByteRateGauge)
 	registry.MustRegister(RequestRateGauge)
-	registry.MustRegister(RequestLatencyInMsGauge)
+	registry.MustRegister(RequestLatencyGauge)
 	registry.MustRegister(requestsInFlightGauge)
 	registry.MustRegister(responseRateGauge)
 
