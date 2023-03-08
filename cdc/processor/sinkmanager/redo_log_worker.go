@@ -80,7 +80,7 @@ func (w *redoWorker) handleTask(ctx context.Context, task *redoTask) (finalErr e
 		cache = w.eventCache.maybeCreateAppender(task.span, lowerBound)
 	}
 
-	advancer := newRedoLogAdvancer(task, w.memQuota, requestMemSize)
+	advancer := newRedoLogAdvancer(task, w.memQuota, requestMemSize, w.redoDMLManager)
 	// The task is finished and some required memory isn't used.
 	defer advancer.cleanup()
 

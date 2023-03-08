@@ -93,7 +93,7 @@ func validateAndAdjustBound(
 	}
 
 	if !upperBound.IsCommitFence() {
-		log.Panic("Table sink task upperbound must be a ResolvedTs",
+		log.Panic("Task upperbound must be a ResolvedTs",
 			zap.String("namespace", changefeedID.Namespace),
 			zap.String("changefeed", changefeedID.ID),
 			zap.Stringer("span", span),

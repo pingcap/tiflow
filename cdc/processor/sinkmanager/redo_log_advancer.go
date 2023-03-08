@@ -60,12 +60,14 @@ func newRedoLogAdvancer(
 	task *redoTask,
 	memQuota *memquota.MemQuota,
 	availableMem uint64,
+	redoDMLManager redo.DMLManager,
 ) *redoLogAdvancer {
 	return &redoLogAdvancer{
-		task:         task,
-		memQuota:     memQuota,
-		availableMem: availableMem,
-		events:       make([]*model.RowChangedEvent, 0, bufferSize),
+		task:           task,
+		memQuota:       memQuota,
+		availableMem:   availableMem,
+		events:         make([]*model.RowChangedEvent, 0, bufferSize),
+		redoDMLManager: redoDMLManager,
 	}
 }
 
