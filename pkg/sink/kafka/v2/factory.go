@@ -246,7 +246,7 @@ func (f *factory) MetricsCollector(
 	role util.Role,
 	adminClient pkafka.ClusterAdminClient,
 ) pkafka.MetricsCollector {
-	return NewMetricsCollector(f.changefeedID, role, adminClient, f.writer)
+	return NewMetricsCollector(f.changefeedID, role, f.writer)
 }
 
 type syncWriter struct {

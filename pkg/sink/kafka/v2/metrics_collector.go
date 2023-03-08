@@ -29,7 +29,6 @@ import (
 type MetricsCollector struct {
 	changefeedID model.ChangeFeedID
 	role         util.Role
-	admin        pkafka.ClusterAdminClient
 	writer       *kafka.Writer
 }
 
@@ -37,23 +36,18 @@ type MetricsCollector struct {
 func NewMetricsCollector(
 	changefeedID model.ChangeFeedID,
 	role util.Role,
-	admin pkafka.ClusterAdminClient,
 	writer *kafka.Writer,
 ) *MetricsCollector {
 	return &MetricsCollector{
 		changefeedID: changefeedID,
 		role:         role,
-		admin:        admin,
 		writer:       writer,
 	}
 }
 
-// flushMetricsInterval specifies the interval of refresh sarama metrics.
-const flushMetricsInterval = 5 * time.Second
-
 // Run implement the MetricsCollector interface
 func (m *MetricsCollector) Run(ctx context.Context) {
-	ticker := time.NewTicker(flushMetricsInterval)
+	ticker := time.NewTicker(pkafka.RefreshMetricsInterval)
 	defer func() {
 		ticker.Stop()
 		m.cleanupMetrics()

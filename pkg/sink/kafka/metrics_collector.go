@@ -30,8 +30,8 @@ type MetricsCollector interface {
 	Run(ctx context.Context)
 }
 
-// flushMetricsInterval specifies the interval of refresh sarama metrics.
-const flushMetricsInterval = 5 * time.Second
+// RefreshMetricsInterval specifies the interval of refresh kafka client metrics.
+const RefreshMetricsInterval = 5 * time.Second
 
 // Sarama metrics names, see https://pkg.go.dev/github.com/Shopify/sarama#pkg-overview.
 const (
@@ -71,7 +71,7 @@ func NewSaramaMetricsCollector(
 }
 
 func (m *saramaMetricsCollector) Run(ctx context.Context) {
-	ticker := time.NewTicker(flushMetricsInterval)
+	ticker := time.NewTicker(RefreshMetricsInterval)
 	defer func() {
 		ticker.Stop()
 		m.cleanupMetrics()
