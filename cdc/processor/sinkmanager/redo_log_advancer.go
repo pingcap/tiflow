@@ -214,8 +214,8 @@ func (a *redoLogAdvancer) finish(
 // 2. If current position is a commit fence, it means the current transaction
 // is finished. We can safely move to the next transaction early. It would be
 // helpful to advance the redo log manager.
-func (a *redoLogAdvancer) tryMoveToNextTxn(commitTs model.Ts) {
-	if a.currTxnCommitTs != commitTs || a.lastPos.IsCommitFence() {
+func (a *redoLogAdvancer) tryMoveToNextTxn(commitTs model.Ts, pos engine.Position) {
+	if a.currTxnCommitTs != commitTs || pos.IsCommitFence() {
 		// Record the last transaction commitTs and size.
 		a.lastTxnCommitTs = a.currTxnCommitTs
 		// Move to the next transaction.

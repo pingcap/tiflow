@@ -141,7 +141,7 @@ func (w *redoWorker) handleTask(ctx context.Context, task *redoTask) (finalErr e
 			advancer.lastPos = pos
 		}
 
-		advancer.tryMoveToNextTxn(e.CRTs)
+		advancer.tryMoveToNextTxn(e.CRTs, pos)
 
 		var x []*model.RowChangedEvent
 		var size uint64

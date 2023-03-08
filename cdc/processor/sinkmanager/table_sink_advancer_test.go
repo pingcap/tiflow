@@ -201,6 +201,7 @@ func (suite *tableSinkAdvancerSuite) TestAppendEvents() {
 	for i := 0; i < 2; i++ {
 		advancer.appendEvents([]*model.RowChangedEvent{{}}, 256)
 	}
+	require.Equal(suite.T(), uint64(512), advancer.pendingTxnSize)
 	require.Equal(suite.T(), uint64(512), advancer.usedMem)
 	require.False(suite.T(), advancer.hasEnoughMem())
 	require.Len(suite.T(), advancer.events, 2)
