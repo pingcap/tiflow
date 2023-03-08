@@ -73,6 +73,25 @@ func getChangefeedInfo() *model.ChangeFeedInfo {
 	}
 }
 
+func genRowChangedEvent(startTs, commitTs uint64, span tablepb.Span) *model.RowChangedEvent {
+	return &model.RowChangedEvent{
+		StartTs:  startTs,
+		CommitTs: commitTs,
+		Table: &model.TableName{
+			Schema:      "table",
+			Table:       "table",
+			TableID:     span.TableID,
+			IsPartition: false,
+		},
+		Columns: []*model.Column{
+			{Name: "a", Value: 2},
+		},
+		PreColumns: []*model.Column{
+			{Name: "a", Value: 1},
+		},
+	}
+}
+
 // nolint:unparam
 // It is ok to use the same tableID in test.
 func addTableAndAddEventsToSortEngine(
@@ -131,8 +150,7 @@ func addTableAndAddEventsToSortEngine(
 		},
 	}
 	for _, event := range events {
-		err := engine.Add(span, event)
-		require.NoError(t, err)
+		engine.Add(span, event)
 	}
 }
 

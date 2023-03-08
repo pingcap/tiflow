@@ -26,6 +26,7 @@ import (
 	"github.com/pingcap/tiflow/cdc/model"
 	"github.com/pingcap/tiflow/cdc/model/codec"
 	"github.com/pingcap/tiflow/cdc/redo/writer"
+	"github.com/pingcap/tiflow/cdc/redo/writer/file"
 	"github.com/pingcap/tiflow/pkg/redo"
 	"github.com/pingcap/tiflow/pkg/uuid"
 	"github.com/stretchr/testify/require"
@@ -43,18 +44,18 @@ func TestReaderNewReader(t *testing.T) {
 func TestReaderRead(t *testing.T) {
 	dir := t.TempDir()
 
-	cfg := &writer.FileWriterConfig{
-		MaxLogSize:   100000,
-		Dir:          dir,
-		ChangeFeedID: model.DefaultChangeFeedID("test-cf"),
-		CaptureID:    "cp",
-		FileType:     redo.RedoRowLogFileType,
+	cfg := &writer.LogWriterConfig{
+		MaxLogSizeInBytes: 100000,
+		Dir:               dir,
+		ChangeFeedID:      model.DefaultChangeFeedID("test-cf"),
+		CaptureID:         "cp",
+		LogType:           redo.RedoRowLogFileType,
 	}
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 
 	uuidGen := uuid.NewConstGenerator("const-uuid")
-	w, err := writer.NewWriter(ctx, cfg,
+	w, err := file.NewFileWriter(ctx, cfg,
 		writer.WithUUIDGenerator(func() uuid.Generator { return uuidGen }),
 	)
 	require.Nil(t, err)
@@ -70,7 +71,7 @@ func TestReaderRead(t *testing.T) {
 	require.True(t, !w.IsRunning())
 	fileName := fmt.Sprintf(redo.RedoLogFileFormatV1, cfg.CaptureID,
 		cfg.ChangeFeedID.ID,
-		cfg.FileType, 11, uuidGen.NewString(), redo.LogEXT)
+		cfg.LogType, 11, uuidGen.NewString(), redo.LogEXT)
 	path := filepath.Join(cfg.Dir, fileName)
 	info, err := os.Stat(path)
 	require.Nil(t, err)
@@ -96,15 +97,15 @@ func TestReaderOpenSelectedFiles(t *testing.T) {
 
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
-	cfg := &writer.FileWriterConfig{
-		MaxLogSize: 100000,
-		Dir:        dir,
+	cfg := &writer.LogWriterConfig{
+		MaxLogSizeInBytes: 100000,
+		Dir:               dir,
 	}
 	uuidGen := uuid.NewGenerator()
 	fileName := fmt.Sprintf(redo.RedoLogFileFormatV2, "cp",
 		"default", "test-cf", redo.RedoDDLLogFileType, 11,
 		uuidGen.NewString(), redo.LogEXT+redo.TmpEXT)
-	w, err := writer.NewWriter(ctx, cfg, writer.WithLogFileName(func() string {
+	w, err := file.NewFileWriter(ctx, cfg, writer.WithLogFileName(func() string {
 		return fileName
 	}))
 	require.Nil(t, err)

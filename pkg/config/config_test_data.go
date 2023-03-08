@@ -58,10 +58,12 @@ const (
     "level": "none",
     "max-log-size": 64,
     "flush-interval": 2000,
-    "storage": ""
+    "storage": "",
+    "use-file-backend": false
   },
   "scheduler": {
-    "region-per-span": 0
+    "enable-table-across-nodes": false,
+    "region-per-span": 100000
   }
 }`
 
@@ -98,7 +100,7 @@ const (
     "key-path": "",
     "cert-allowed-cn": null
   },
-  "per-table-memory-quota": 10485760,
+  "per-table-memory-quota": 0,
   "kv-client": {
     "worker-concurrent": 8,
     "worker-pool-size": 0,
@@ -193,9 +195,11 @@ const (
     "level": "none",
     "max-log-size": 64,
     "flush-interval": 2000,
-    "storage": ""
+    "storage": "",
+    "use-file-backend": false
   },
   "scheduler": {
+    "enable-table-across-nodes": true,
     "region-per-span": 100001
   }
 }`
@@ -248,9 +252,11 @@ const (
     "level": "none",
     "max-log-size": 64,
     "flush-interval": 2000,
-    "storage": ""
+    "storage": "",
+    "use-file-backend": false
   },
   "scheduler": {
+    "enable-table-across-nodes": true,
     "region-per-span": 100001
   }
 }`

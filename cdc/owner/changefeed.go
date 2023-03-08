@@ -15,12 +15,15 @@ package owner
 
 import (
 	"context"
+	"fmt"
+	"strings"
 	"sync"
 	"time"
 
 	"github.com/pingcap/errors"
 	"github.com/pingcap/failpoint"
 	"github.com/pingcap/log"
+	"github.com/pingcap/tidb/errno"
 	timodel "github.com/pingcap/tidb/parser/model"
 	"github.com/pingcap/tiflow/cdc/contextutil"
 	"github.com/pingcap/tiflow/cdc/model"
@@ -45,7 +48,7 @@ import (
 // newSchedulerFromCtx creates a new scheduler from context.
 // This function is factored out to facilitate unit testing.
 func newSchedulerFromCtx(
-	ctx cdcContext.Context, up *upstream.Upstream, cfg *config.SchedulerConfig,
+	ctx cdcContext.Context, up *upstream.Upstream, epoch uint64, cfg *config.SchedulerConfig,
 ) (ret scheduler.Scheduler, err error) {
 	changeFeedID := ctx.ChangefeedVars().ID
 	messageServer := ctx.GlobalVars().MessageServer
@@ -54,14 +57,14 @@ func newSchedulerFromCtx(
 	captureID := ctx.GlobalVars().CaptureInfo.ID
 	ret, err = scheduler.NewScheduler(
 		ctx, captureID, changeFeedID,
-		messageServer, messageRouter, ownerRev, up.RegionCache, up.PDClock, cfg)
+		messageServer, messageRouter, ownerRev, epoch, up.RegionCache, up.PDClock, cfg)
 	return ret, errors.Trace(err)
 }
 
 func newScheduler(
-	ctx cdcContext.Context, up *upstream.Upstream, cfg *config.SchedulerConfig,
+	ctx cdcContext.Context, up *upstream.Upstream, epoch uint64, cfg *config.SchedulerConfig,
 ) (scheduler.Scheduler, error) {
-	return newSchedulerFromCtx(ctx, up, cfg)
+	return newSchedulerFromCtx(ctx, up, epoch, cfg)
 }
 
 type changefeed struct {
@@ -76,7 +79,8 @@ type changefeed struct {
 	// and will be destroyed when a changefeed is closed.
 	barriers         *barriers
 	feedStateManager *feedStateManager
-	redoManager      redo.LogManager
+	redoDDLMgr       redo.DDLManager
+	redoMetaMgr      redo.MetaManager
 
 	schema      *schemaWrap4Owner
 	sink        DDLSink
@@ -105,9 +109,9 @@ type changefeed struct {
 	// cancel the running goroutine start by `DDLPuller`
 	cancel context.CancelFunc
 
-	// The changefeed will start a backend goroutine in the function `initialize` for DDLPuller
-	// `ddlWg` is used to manage this backend goroutine.
-	ddlWg sync.WaitGroup
+	// The changefeed will start a backend goroutine in the function `initialize`
+	// for DDLPuller and redo manager. `wg` is used to manage this backend goroutine.
+	wg sync.WaitGroup
 
 	metricsChangefeedCheckpointTsGauge     prometheus.Gauge
 	metricsChangefeedCheckpointTsLagGauge  prometheus.Gauge
@@ -133,7 +137,7 @@ type changefeed struct {
 
 	newSink      func(changefeedID model.ChangeFeedID, info *model.ChangeFeedInfo, reportErr func(error)) DDLSink
 	newScheduler func(
-		ctx cdcContext.Context, up *upstream.Upstream, cfg *config.SchedulerConfig,
+		ctx cdcContext.Context, up *upstream.Upstream, epoch uint64, cfg *config.SchedulerConfig,
 	) (scheduler.Scheduler, error)
 
 	newDownstreamObserver func(
@@ -156,7 +160,7 @@ func newChangefeed(
 		// The scheduler will be created lazily.
 		scheduler:        nil,
 		barriers:         newBarriers(),
-		feedStateManager: newFeedStateManager(),
+		feedStateManager: newFeedStateManager(up),
 		upstream:         up,
 
 		errCh:  make(chan error, defaultErrChSize),
@@ -181,7 +185,7 @@ func newChangefeed4Test(
 	) (puller.DDLPuller, error),
 	newSink func(changefeedID model.ChangeFeedID, info *model.ChangeFeedInfo, reportErr func(err error)) DDLSink,
 	newScheduler func(
-		ctx cdcContext.Context, up *upstream.Upstream, cfg *config.SchedulerConfig,
+		ctx cdcContext.Context, up *upstream.Upstream, epoch uint64, cfg *config.SchedulerConfig,
 	) (scheduler.Scheduler, error),
 	newDownstreamObserver func(
 		ctx context.Context, sinkURIStr string, replCfg *config.ReplicaConfig,
@@ -367,13 +371,13 @@ func (c *changefeed) tick(ctx cdcContext.Context, captures map[model.CaptureID]*
 		newCheckpointTs = barrierTs
 	}
 	prevResolvedTs := c.state.Status.ResolvedTs
-	if c.redoManager.Enabled() {
-		var flushedCheckpointTs, flushedResolvedTs model.Ts
+	if c.redoMetaMgr.Enabled() {
 		// newResolvedTs can never exceed the barrier timestamp boundary. If redo is enabled,
 		// we can only upload it to etcd after it has been flushed into redo meta.
 		// NOTE: `UpdateMeta` handles regressed checkpointTs and resolvedTs internally.
-		c.redoManager.UpdateMeta(newCheckpointTs, newResolvedTs)
-		c.redoManager.GetFlushedMeta(&flushedCheckpointTs, &flushedResolvedTs)
+		c.redoMetaMgr.UpdateMeta(newCheckpointTs, newResolvedTs)
+		flushedMeta := c.redoMetaMgr.GetFlushedMeta()
+		flushedCheckpointTs, flushedResolvedTs := flushedMeta.CheckpointTs, flushedMeta.ResolvedTs
 		log.Debug("owner gets flushed meta",
 			zap.Uint64("flushedResolvedTs", flushedResolvedTs),
 			zap.Uint64("flushedCheckpointTs", flushedCheckpointTs),
@@ -543,9 +547,9 @@ LOOP:
 		return errors.Trace(err)
 	}
 
-	c.ddlWg.Add(1)
+	c.wg.Add(1)
 	go func() {
-		defer c.ddlWg.Done()
+		defer c.wg.Done()
 		ctx.Throw(c.ddlPuller.Run(cancelCtx))
 	}()
 
@@ -557,14 +561,32 @@ LOOP:
 	c.observerLastTick = atomic.NewTime(time.Time{})
 
 	stdCtx := contextutil.PutChangefeedIDInCtx(cancelCtx, c.id)
-	redoManagerOpts := redo.NewOwnerManagerOptions(c.errCh)
-	mgr, err := redo.NewManager(stdCtx, c.state.Info.Config.Consistent, redoManagerOpts)
-	c.redoManager = mgr
+	c.redoDDLMgr, err = redo.NewDDLManager(stdCtx, c.state.Info.Config.Consistent, ddlStartTs)
 	failpoint.Inject("ChangefeedNewRedoManagerError", func() {
 		err = errors.New("changefeed new redo manager injected error")
 	})
 	if err != nil {
 		return err
+	}
+	if c.redoDDLMgr.Enabled() {
+		c.wg.Add(1)
+		go func() {
+			defer c.wg.Done()
+			ctx.Throw(c.redoDDLMgr.Run(stdCtx))
+		}()
+	}
+
+	c.redoMetaMgr, err = redo.NewMetaManagerWithInit(stdCtx,
+		c.state.Info.Config.Consistent, checkpointTs)
+	if err != nil {
+		return err
+	}
+	if c.redoMetaMgr.Enabled() {
+		c.wg.Add(1)
+		go func() {
+			defer c.wg.Done()
+			ctx.Throw(c.redoMetaMgr.Run(stdCtx))
+		}()
 	}
 	log.Info("owner creates redo manager",
 		zap.String("namespace", c.id.Namespace),
@@ -573,7 +595,8 @@ LOOP:
 	// create scheduler
 	cfg := *c.cfg
 	cfg.ChangefeedSettings = c.state.Info.Config.Scheduler
-	c.scheduler, err = c.newScheduler(ctx, c.upstream, &cfg)
+	epoch := c.state.Info.Epoch
+	c.scheduler, err = c.newScheduler(ctx, c.upstream, epoch, &cfg)
 	if err != nil {
 		return errors.Trace(err)
 	}
@@ -584,6 +607,7 @@ LOOP:
 	log.Info("changefeed initialized",
 		zap.String("namespace", c.state.ID.Namespace),
 		zap.String("changefeed", c.state.ID.ID),
+		zap.Uint64("changefeedEpoch", epoch),
 		zap.Uint64("checkpointTs", checkpointTs),
 		zap.Uint64("resolvedTs", resolvedTs),
 		zap.Stringer("info", c.state.Info))
@@ -629,7 +653,7 @@ func (c *changefeed) releaseResources(ctx cdcContext.Context) {
 	if c.ddlPuller != nil {
 		c.ddlPuller.Close()
 	}
-	c.ddlWg.Wait()
+	c.wg.Wait()
 
 	if c.sink != nil {
 		canceledCtx, cancel := context.WithCancel(context.Background())
@@ -690,7 +714,7 @@ func (c *changefeed) cleanupMetrics() {
 	c.metricsChangefeedBarrierTsGauge = nil
 }
 
-// redoManagerCleanup cleanups redo logs if changefeed is removed and redo log is enabled
+// cleanup redo logs if changefeed is removed and redo log is enabled
 func (c *changefeed) cleanupRedoManager(ctx context.Context) {
 	if c.isRemoved {
 		if c.state == nil || c.state.Info == nil || c.state.Info.Config == nil ||
@@ -702,9 +726,8 @@ func (c *changefeed) cleanupRedoManager(ctx context.Context) {
 			return
 		}
 		// when removing a paused changefeed, the redo manager is nil, create a new one
-		if c.redoManager == nil {
-			redoManagerOpts := redo.NewManagerOptionsForClean()
-			redoManager, err := redo.NewManager(ctx, c.state.Info.Config.Consistent, redoManagerOpts)
+		if c.redoMetaMgr == nil {
+			redoMetaMgr, err := redo.NewMetaManager(ctx, c.state.Info.Config.Consistent)
 			if err != nil {
 				log.Info("owner creates redo manager for clean fail",
 					zap.String("namespace", c.id.Namespace),
@@ -712,9 +735,9 @@ func (c *changefeed) cleanupRedoManager(ctx context.Context) {
 					zap.Error(err))
 				return
 			}
-			c.redoManager = redoManager
+			c.redoMetaMgr = redoMetaMgr
 		}
-		err := c.redoManager.Cleanup(ctx)
+		err := c.redoMetaMgr.Cleanup(ctx)
 		if err != nil {
 			log.Error("cleanup redo logs failed", zap.String("changefeed", c.id.ID), zap.Error(err))
 		}
@@ -901,12 +924,12 @@ func (c *changefeed) asyncExecDDLJob(ctx cdcContext.Context,
 		if err != nil {
 			return false, errors.Trace(err)
 		}
-		if c.redoManager.Enabled() {
+		if c.redoDDLMgr.Enabled() {
 			for _, ddlEvent := range c.ddlEventCache {
 				// FIXME: seems it's not necessary to emit DDL to redo storage,
 				// because for a given redo meta with range (checkpointTs, resolvedTs],
 				// there must be no pending DDLs not flushed into DDL sink.
-				err = c.redoManager.EmitDDLEvent(ctx, ddlEvent)
+				err = c.redoDDLMgr.EmitDDLEvent(ctx, ddlEvent)
 				if err != nil {
 					return false, err
 				}
@@ -1043,13 +1066,23 @@ func (c *changefeed) checkUpstream() (skip bool, err error) {
 // observer, if needed run it in an independent goroutine with 5s timeout.
 func (c *changefeed) tickDownstreamObserver(ctx context.Context) {
 	if time.Since(c.observerLastTick.Load()) > downstreamObserverTickDuration {
+		c.observerLastTick.Store(time.Now())
+		select {
+		case <-ctx.Done():
+			return
+		default:
+		}
 		go func() {
 			cctx, cancel := context.WithTimeout(ctx, time.Second*5)
 			defer cancel()
 			if err := c.downstreamObserver.Tick(cctx); err != nil {
-				log.Error("backend observer tick error", zap.Error(err))
+				// Prometheus is not deployed, it happens in non production env.
+				if strings.Contains(err.Error(),
+					fmt.Sprintf(":%d", errno.ErrPrometheusAddrIsNotSet)) {
+					return
+				}
+				log.Warn("backend observer tick error", zap.Error(err))
 			}
-			c.observerLastTick.Store(time.Now())
 		}()
 	}
 }

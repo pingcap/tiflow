@@ -666,6 +666,11 @@ error = '''
 maxwell invalid data
 '''
 
+["CDC:ErrMessageTooLarge"]
+error = '''
+message is too large
+'''
+
 ["CDC:ErrMetaListDatabases"]
 error = '''
 meta store list databases
@@ -744,11 +749,6 @@ old value is not enabled
 ["CDC:ErrOpenProtocolCodecInvalidData"]
 error = '''
 open-protocol codec invalid data
-'''
-
-["CDC:ErrOpenProtocolCodecRowTooLarge"]
-error = '''
-open-protocol codec single row too large
 '''
 
 ["CDC:ErrOperateOnClosedNotifier"]

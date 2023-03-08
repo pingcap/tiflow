@@ -36,7 +36,7 @@ type SortEngine interface {
 	//
 	// NOTE: it's an asynchronous interface. To get the notification of when
 	// events are available for fetching, OnResolve is what you want.
-	Add(span tablepb.Span, events ...*model.PolymorphicEvent) error
+	Add(span tablepb.Span, events ...*model.PolymorphicEvent)
 
 	// GetResolvedTs gets resolved timestamp of the given table.
 	GetResolvedTs(span tablepb.Span) model.Ts
@@ -105,6 +105,15 @@ type EventIterator interface {
 type Position struct {
 	StartTs  model.Ts
 	CommitTs model.Ts
+}
+
+// GenCommitFence generates a Position which is a commit fence.
+// CommitFence indicates all transactions with same CommitTs are less than the position.
+func GenCommitFence(commitTs model.Ts) Position {
+	return Position{
+		StartTs:  commitTs - 1,
+		CommitTs: commitTs,
+	}
 }
 
 // Valid indicates whether the position is valid or not.

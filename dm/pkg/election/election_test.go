@@ -209,7 +209,7 @@ func testElection2After1(t *testElectionSuite, c *C, normalExit bool) {
 	defer cancel5()
 	_, err = NewElection(ctx5, cli, sessionTTL, key, ID3, addr3, t.notifyBlockTime)
 	c.Assert(terror.ErrElectionCampaignFail.Equal(err), IsTrue)
-	c.Assert(err, ErrorMatches, ".*, Message: fail to campaign leader: create the initial session, RawCause: context canceled.*")
+	c.Assert(err, ErrorMatches, ".*Message: fail to campaign leader: create the initial session, RawCause: context canceled.*")
 	cancel0()
 }
 

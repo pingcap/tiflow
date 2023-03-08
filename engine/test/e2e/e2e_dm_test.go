@@ -162,11 +162,15 @@ func testSimpleAllModeTask(
 	// check full phase
 	waitRow := func(where string, db string) {
 		require.Eventually(t, func() bool {
+			//nolint:sqlclosecheck
 			rs, err := tidb.Query("select 1 from " + db + ".t1 where " + where)
 			if err != nil {
 				t.Logf("query error: %v", err)
 				return false
 			}
+			defer func(rs *sql.Rows) {
+				_ = rs.Close()
+			}(rs)
 			if !rs.Next() {
 				t.Log("no rows")
 				return false

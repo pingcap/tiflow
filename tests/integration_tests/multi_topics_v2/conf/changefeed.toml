@@ -1,0 +1,4 @@
+[sink]
+dispatchers = [
+    { matcher = ['test.*'], topic = "{schema}_{table}" },
+]

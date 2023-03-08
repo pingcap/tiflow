@@ -130,7 +130,8 @@ func IsRetryableDDLError(err error) bool {
 		mysql.ErrNoSuchTable,
 		mysql.ErrNoSuchIndex,
 		mysql.ErrKeyColumnDoesNotExits,
-		mysql.ErrWrongColumnName:
+		mysql.ErrWrongColumnName,
+		mysql.ErrPartitionMgmtOnNonpartitioned:
 		return false
 	}
 	return true

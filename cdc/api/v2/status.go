@@ -22,6 +22,17 @@ import (
 	"github.com/pingcap/tiflow/pkg/version"
 )
 
+// serverStatus Get the status information of a TiCDC node
+// @Summary Get the status information of a TiCDC node
+// @Description This API is a synchronous interface. If the request is successful,
+// the status information of the corresponding node is returned.
+//
+// @Tags common,v2
+// @Accept json
+// @Produce json
+// @Success 200 {object} ServerStatus
+// @Failure 500,400 {object} model.HTTPError
+// @Router	/api/v2/status [get]
 func (h *OpenAPIV2) serverStatus(c *gin.Context) {
 	info, err := h.capture.Info()
 	if err != nil {

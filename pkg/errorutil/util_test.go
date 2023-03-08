@@ -95,7 +95,6 @@ func TestIsRetryableDDLError(t *testing.T) {
 		err error
 		ret bool
 	}{
-		{nil, false},
 		{errors.New("raw error"), false},
 		{newMysqlErr(tmysql.ErrNoDB, "Error: Duplicate key name 'some_key'"), false},
 		{newMysqlErr(tmysql.ErrParse, "Can't create database"), false},
@@ -105,6 +104,7 @@ func TestIsRetryableDDLError(t *testing.T) {
 		{newMysqlErr(tmysql.ErrNoSuchIndex, "index not exist"), false},
 		{newMysqlErr(tmysql.ErrWrongColumnName, "wrong column name'"), false},
 		{newMysqlErr(tmysql.ErrDupKeyName, "Duplicate key name 'some_key'"), true},
+		{newMysqlErr(tmysql.ErrPartitionMgmtOnNonpartitioned, "xx"), false},
 	}
 
 	for _, c := range cases {

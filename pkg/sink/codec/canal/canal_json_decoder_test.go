@@ -30,6 +30,7 @@ func TestNewCanalJSONBatchDecoder4RowMessage(t *testing.T) {
 		encoder := newJSONBatchEncoder(&common.Config{
 			EnableTiDBExtension: encodeEnable,
 			Terminator:          config.CRLF,
+			MaxMessageBytes:     config.DefaultMaxMessageBytes,
 		})
 		require.NotNil(t, encoder)
 

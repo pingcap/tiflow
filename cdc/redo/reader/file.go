@@ -25,6 +25,7 @@ import (
 	"os"
 	"path/filepath"
 	"sync"
+	"time"
 
 	"github.com/pingcap/errors"
 	"github.com/pingcap/log"
@@ -32,6 +33,7 @@ import (
 	"github.com/pingcap/tiflow/cdc/model"
 	"github.com/pingcap/tiflow/cdc/model/codec"
 	"github.com/pingcap/tiflow/cdc/redo/writer"
+	"github.com/pingcap/tiflow/cdc/redo/writer/file"
 	cerror "github.com/pingcap/tiflow/pkg/errors"
 	"github.com/pingcap/tiflow/pkg/redo"
 	"go.uber.org/multierr"
@@ -81,6 +83,10 @@ func newReader(ctx context.Context, cfg *readerConfig) ([]fileReader, error) {
 	if cfg == nil {
 		return nil, cerror.WrapError(cerror.ErrRedoConfigInvalid, errors.New("readerConfig can not be nil"))
 	}
+	if cfg.workerNums == 0 {
+		cfg.workerNums = defaultWorkerNum
+	}
+	start := time.Now()
 
 	if cfg.useExternalStorage {
 		extStorage, err := redo.InitExternalStorage(ctx, cfg.uri)
@@ -88,13 +94,10 @@ func newReader(ctx context.Context, cfg *readerConfig) ([]fileReader, error) {
 			return nil, err
 		}
 
-		err = downLoadToLocal(ctx, cfg.dir, extStorage, cfg.fileType)
+		err = downLoadToLocal(ctx, cfg.dir, extStorage, cfg.fileType, cfg.workerNums)
 		if err != nil {
 			return nil, cerror.WrapError(cerror.ErrRedoDownloadFailed, err)
 		}
-	}
-	if cfg.workerNums == 0 {
-		cfg.workerNums = defaultWorkerNum
 	}
 
 	rr, err := openSelectedFiles(ctx, cfg.dir, cfg.fileType, cfg.startTs, cfg.workerNums)
@@ -113,6 +116,9 @@ func newReader(ctx context.Context, cfg *readerConfig) ([]fileReader, error) {
 			})
 	}
 
+	log.Info("succeed to download and sort redo logs",
+		zap.String("type", cfg.fileType),
+		zap.Duration("duration", time.Since(start)))
 	return readers, nil
 }
 
@@ -141,17 +147,26 @@ func selectDownLoadFile(
 }
 
 func downLoadToLocal(
-	ctx context.Context, dir string, extStorage storage.ExternalStorage, fixedType string,
+	ctx context.Context, dir string,
+	extStorage storage.ExternalStorage,
+	fixedType string, workerNum int,
 ) error {
 	files, err := selectDownLoadFile(ctx, extStorage, fixedType)
 	if err != nil {
 		return err
 	}
 
+	limit := make(chan struct{}, workerNum)
 	eg, eCtx := errgroup.WithContext(ctx)
 	for _, file := range files {
+		select {
+		case <-ctx.Done():
+			return ctx.Err()
+		case limit <- struct{}{}:
+		}
 		f := file
 		eg.Go(func() error {
+			defer func() { <-limit }()
 			data, err := extStorage.ReadFile(eCtx, f)
 			if err != nil {
 				return cerror.WrapError(cerror.ErrExternalStorageAPI, err)
@@ -255,11 +270,11 @@ func readFile(file *os.File) (logHeap, error) {
 
 // writFile if not safely closed, the sorted file will end up with .sort.tmp as the file name suffix
 func writFile(ctx context.Context, dir, name string, h logHeap) error {
-	cfg := &writer.FileWriterConfig{
-		Dir:        dir,
-		MaxLogSize: math.MaxInt32,
+	cfg := &writer.LogWriterConfig{
+		Dir:               dir,
+		MaxLogSizeInBytes: math.MaxInt32,
 	}
-	w, err := writer.NewWriter(ctx, cfg, writer.WithLogFileName(func() string { return name }))
+	w, err := file.NewFileWriter(ctx, cfg, writer.WithLogFileName(func() string { return name }))
 	if err != nil {
 		return err
 	}

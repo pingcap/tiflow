@@ -24,6 +24,7 @@ import (
 	"github.com/pingcap/log"
 	"github.com/pingcap/tiflow/pkg/config/outdated"
 	cerror "github.com/pingcap/tiflow/pkg/errors"
+	"github.com/pingcap/tiflow/pkg/redo"
 	"go.uber.org/zap"
 )
 
@@ -62,12 +63,14 @@ var defaultReplicaConfig = &ReplicaConfig{
 	},
 	Consistent: &ConsistentConfig{
 		Level:             "none",
-		MaxLogSize:        64,
-		FlushIntervalInMs: DefaultFlushIntervalInMs,
+		MaxLogSize:        redo.DefaultMaxLogSize,
+		FlushIntervalInMs: redo.DefaultFlushIntervalInMs,
 		Storage:           "",
+		UseFileBackend:    false,
 	},
 	Scheduler: &ChangefeedSchedulerConfig{
-		RegionPerSpan: 0,
+		EnableTableAcrossNodes: false,
+		RegionPerSpan:          100_000,
 	},
 }
 
@@ -204,23 +207,25 @@ func (c *ReplicaConfig) ValidateAndAdjust(sinkURI *url.URL) error {
 		c.FixMemoryQuota()
 	}
 	if c.Scheduler == nil {
-		c.FixScheduler()
-	}
-	if c.Scheduler.RegionPerSpan < 1000 && c.Scheduler.RegionPerSpan != 0 {
-		return cerror.ErrInvalidReplicaConfig.GenWithStackByArgs(
-			"region-per-span must be either 0 or greater than 1000")
+		c.FixScheduler(false)
 	}
 	// TODO: Remove the hack once span replication is compatible with all sinks.
 	if !isSinkCompatibleWithSpanReplication(sinkURI) {
-		c.Scheduler.RegionPerSpan = 0
+		c.Scheduler.EnableTableAcrossNodes = false
 	}
 
 	return nil
 }
 
 // FixScheduler adjusts scheduler to default value
-func (c *ReplicaConfig) FixScheduler() {
-	c.Scheduler = defaultReplicaConfig.Clone().Scheduler
+func (c *ReplicaConfig) FixScheduler(inheritV66 bool) {
+	if c.Scheduler == nil {
+		c.Scheduler = defaultReplicaConfig.Clone().Scheduler
+		return
+	}
+	if inheritV66 && c.Scheduler.RegionPerSpan != 0 {
+		c.Scheduler.EnableTableAcrossNodes = true
+	}
 }
 
 // FixMemoryQuota adjusts memory quota to default value

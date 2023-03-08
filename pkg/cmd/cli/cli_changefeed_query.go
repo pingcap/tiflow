@@ -109,7 +109,6 @@ func (o *queryChangefeedOptions) run(cmd *cobra.Command) error {
 		TargetTs:       detail.TargetTs,
 		CheckpointTSO:  detail.CheckpointTs,
 		CheckpointTime: detail.CheckpointTime,
-		Engine:         detail.Engine,
 		FeedState:      detail.State,
 		RunningError:   detail.Error,
 		CreatorVersion: detail.CreatorVersion,

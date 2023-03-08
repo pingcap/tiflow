@@ -37,7 +37,6 @@ const (
 // However, in the old format (i.e. v1 format), the first 5 bytes are always same, which can be
 // confirmed in v1/codec_gen.go. So we reuse those bytes, and add a version field in them.
 var (
-	v1Header      = [v1HeaderLength]byte{0x83, 0xa3, 0x72, 0x6f}
 	versionPrefix = [versionPrefixLength]byte{0xff, 0xff}
 )
 
@@ -68,6 +67,9 @@ func postUnmarshal(r *model.RedoLog) {
 	}
 	if r.RedoDDL.DDL != nil {
 		r.RedoDDL.DDL.Type = timodel.ActionType(r.RedoDDL.Type)
+		r.RedoDDL.DDL.TableInfo = &model.TableInfo{
+			TableName: r.RedoDDL.TableName,
+		}
 	}
 }
 
@@ -107,6 +109,9 @@ func preMarshal(r *model.RedoLog) {
 	}
 	if r.RedoDDL.DDL != nil {
 		r.RedoDDL.Type = byte(r.RedoDDL.DDL.Type)
+		if r.RedoDDL.DDL.TableInfo != nil {
+			r.RedoDDL.TableName = r.RedoDDL.DDL.TableInfo.TableName
+		}
 	}
 }
 

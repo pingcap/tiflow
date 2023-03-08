@@ -14,29 +14,21 @@
 package kafka
 
 import (
-	"context"
 	"net/url"
 	"testing"
 
 	"github.com/Shopify/sarama"
 	"github.com/pingcap/errors"
-	"github.com/pingcap/tiflow/cdc/contextutil"
-	cerror "github.com/pingcap/tiflow/pkg/errors"
 	"github.com/pingcap/tiflow/pkg/security"
 	"github.com/stretchr/testify/require"
 )
 
 func TestNewSaramaConfig(t *testing.T) {
-	ctx := context.Background()
 	options := NewOptions()
 	options.Version = "invalid"
-	_, err := NewSaramaConfig(ctx, options)
+	_, err := NewSaramaConfig(options)
 	require.Regexp(t, "invalid version.*", errors.Cause(err))
-	ctx = contextutil.SetOwnerInCtx(ctx)
 	options.Version = "2.6.0"
-	options.ClientID = "^invalid$"
-	_, err = NewSaramaConfig(ctx, options)
-	require.True(t, cerror.ErrKafkaInvalidClientID.Equal(err))
 
 	options.ClientID = "test-kafka-client"
 	compressionCases := []struct {
@@ -52,7 +44,7 @@ func TestNewSaramaConfig(t *testing.T) {
 	}
 	for _, cc := range compressionCases {
 		options.Compression = cc.algorithm
-		cfg, err := NewSaramaConfig(ctx, options)
+		cfg, err := NewSaramaConfig(options)
 		require.NoError(t, err)
 		require.Equal(t, cc.expected, cfg.Producer.Compression)
 	}
@@ -63,7 +55,7 @@ func TestNewSaramaConfig(t *testing.T) {
 		CertPath: "/invalid/cert/path",
 		KeyPath:  "/invalid/key/path",
 	}
-	_, err = NewSaramaConfig(ctx, options)
+	_, err = NewSaramaConfig(options)
 	require.Regexp(t, ".*no such file or directory", errors.Cause(err))
 
 	saslOptions := NewOptions()
@@ -75,7 +67,7 @@ func TestNewSaramaConfig(t *testing.T) {
 		SASLMechanism: sarama.SASLTypeSCRAMSHA256,
 	}
 
-	cfg, err := NewSaramaConfig(ctx, saslOptions)
+	cfg, err := NewSaramaConfig(saslOptions)
 	require.NoError(t, err)
 	require.NotNil(t, cfg)
 	require.Equal(t, "user", cfg.Net.SASL.User)
@@ -143,6 +135,7 @@ func TestApplySASL(t *testing.T) {
 	}
 
 	for _, test := range tests {
+		test := test
 		t.Run(test.name, func(t *testing.T) {
 			t.Parallel()
 			options := NewOptions()
@@ -208,6 +201,7 @@ func TestApplyTLS(t *testing.T) {
 	}
 
 	for _, test := range tests {
+		test := test
 		t.Run(test.name, func(t *testing.T) {
 			t.Parallel()
 			options := NewOptions()
@@ -258,7 +252,7 @@ func TestCompleteSaramaSASLConfig(t *testing.T) {
 
 func TestSaramaTimeout(t *testing.T) {
 	options := NewOptions()
-	saramaConfig, err := NewSaramaConfig(context.Background(), options)
+	saramaConfig, err := NewSaramaConfig(options)
 	require.NoError(t, err)
 	require.Equal(t, options.DialTimeout, saramaConfig.Net.DialTimeout)
 	require.Equal(t, options.WriteTimeout, saramaConfig.Net.WriteTimeout)

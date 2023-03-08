@@ -37,8 +37,9 @@ type JSONBatchEncoder struct {
 	// which, at the moment, only includes `tidbWaterMarkType` and `_tidb` fields.
 	enableTiDBExtension bool
 	// the symbol separating two lines
-	terminator []byte
-	messages   []*common.Message
+	terminator      []byte
+	maxMessageBytes int
+	messages        []*common.Message
 }
 
 // newJSONBatchEncoder creates a new JSONBatchEncoder
@@ -48,6 +49,7 @@ func newJSONBatchEncoder(config *common.Config) codec.EventBatchEncoder {
 		enableTiDBExtension: config.EnableTiDBExtension,
 		messages:            make([]*common.Message, 0, 1),
 		terminator:          []byte(config.Terminator),
+		maxMessageBytes:     config.MaxMessageBytes,
 	}
 	return encoder
 }
@@ -318,6 +320,17 @@ func (c *JSONBatchEncoder) AppendRowChangedEvent(
 	}
 	if len(c.terminator) > 0 {
 		value = append(value, c.terminator...)
+	}
+
+	length := len(value) + common.MaxRecordOverhead
+	// for single message that is longer than max-message-bytes, do not send it.
+	if length > c.maxMessageBytes {
+		log.Warn("Single message is too large for canal-json",
+			zap.Int("maxMessageBytes", c.maxMessageBytes),
+			zap.Int("length", length),
+			zap.Any("table", e.Table),
+			zap.Any("value", value))
+		return cerror.ErrMessageTooLarge.GenWithStackByArgs()
 	}
 	m := &common.Message{
 		Key:      nil,

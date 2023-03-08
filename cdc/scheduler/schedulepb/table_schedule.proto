@@ -96,12 +96,15 @@ message OwnerRevision { int64 revision = 1; }
 
 message ProcessorEpoch { string epoch = 1; }
 
+message ChangefeedEpoch { uint64 epoch = 1; }
+
 message Message {
     message Header {
         // The semantic version of the node that sent this message.
         string version = 1;
         OwnerRevision owner_revision = 2 [(gogoproto.nullable) = false];
         ProcessorEpoch processor_epoch = 3 [(gogoproto.nullable) = false];
+        ChangefeedEpoch changefeed_epoch = 4 [(gogoproto.nullable) = false];
     }
     Header header = 1;
     MessageType msg_type = 2;
