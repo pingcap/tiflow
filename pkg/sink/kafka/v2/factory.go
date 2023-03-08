@@ -164,7 +164,6 @@ func (f *factory) newWriter(async bool) *kafka.Writer {
 		WriteTimeout: f.options.WriteTimeout,
 		RequiredAcks: kafka.RequiredAcks(f.options.RequiredAcks),
 		BatchBytes:   int64(f.options.MaxMessageBytes),
-		BatchTimeout: 1 * time.Millisecond,
 		Async:        async,
 	}
 	f.writer = w
@@ -199,6 +198,7 @@ func (f *factory) AdminClient() (pkafka.ClusterAdminClient, error) {
 func (f *factory) SyncProducer() (pkafka.SyncProducer, error) {
 	w := f.newWriter(false)
 	// set batch size to 1 to make sure the message is sent immediately
+	w.BatchTimeout = time.Millisecond
 	w.BatchSize = 1
 	return &syncWriter{w: w}, nil
 }
@@ -210,6 +210,7 @@ func (f *factory) AsyncProducer(
 	failpointCh chan error,
 ) (pkafka.AsyncProducer, error) {
 	w := f.newWriter(true)
+	w.BatchTimeout = 5 * time.Millisecond
 	w.BatchSize = int(w.BatchBytes / 1024) // assume each message is 1KB
 	aw := &asyncWriter{
 		w:            w,
