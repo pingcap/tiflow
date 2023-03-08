@@ -129,7 +129,7 @@ func (m *saramaMetricsCollector) collectBrokerMetrics() {
 		outgoingByteRateMetric := m.registry.Get(
 			getBrokerMetricName(outgoingByteRateMetricNamePrefix, brokerID))
 		if meter, ok := outgoingByteRateMetric.(metrics.Meter); ok {
-			outgoingByteRateGauge.
+			OutgoingByteRateGauge.
 				WithLabelValues(namespace, changefeedID, brokerID).
 				Set(meter.Snapshot().Rate1())
 		}
@@ -182,7 +182,7 @@ func (m *saramaMetricsCollector) cleanupBrokerMetrics() {
 	changefeedID := m.changefeedID.ID
 	for id := range m.brokers {
 		brokerID := strconv.Itoa(int(id))
-		outgoingByteRateGauge.
+		OutgoingByteRateGauge.
 			DeleteLabelValues(namespace, changefeedID, brokerID)
 		RequestRateGauge.
 			DeleteLabelValues(namespace, changefeedID, brokerID)

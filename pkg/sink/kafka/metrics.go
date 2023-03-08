@@ -27,8 +27,9 @@ var (
 			Help: "The current number of in-flight requests" +
 				" awaiting a response for all brokers.",
 		}, []string{"namespace", "changefeed", "broker"})
-	// Metrics for outgoing events. Meter mark for each request's size in bytes.
-	outgoingByteRateGauge = prometheus.NewGaugeVec(
+	// OutgoingByteRateGauge for outgoing events.
+	// Meter mark for each request's size in bytes.
+	OutgoingByteRateGauge = prometheus.NewGaugeVec(
 		prometheus.GaugeOpts{
 			Namespace: "ticdc",
 			Subsystem: "sink",
@@ -113,7 +114,7 @@ var (
 // InitMetrics registers all metrics in this file.
 func InitMetrics(registry *prometheus.Registry) {
 	registry.MustRegister(compressionRatioGauge)
-	registry.MustRegister(outgoingByteRateGauge)
+	registry.MustRegister(OutgoingByteRateGauge)
 	registry.MustRegister(RequestRateGauge)
 	registry.MustRegister(RequestLatencyInMsGauge)
 	registry.MustRegister(requestsInFlightGauge)
