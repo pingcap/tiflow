@@ -75,43 +75,59 @@ func (a *BatchEncoder) AppendRowChangedEvent(
 	message.Callback = callback
 	topic = sanitizeTopic(topic)
 
-	if !e.IsDelete() {
-		res, err := a.avroEncode(ctx, e, topic, false)
-		if err != nil {
-			log.Error("AppendRowChangedEvent: avro encoding failed", zap.Error(err))
-			return errors.Trace(err)
-		}
-
-		evlp, err := res.toEnvelope()
-		if err != nil {
-			log.Error("AppendRowChangedEvent: could not construct Avro envelope", zap.Error(err))
-			return errors.Trace(err)
-		}
-
-		message.Value = evlp
-	} else {
-		message.Value = nil
-	}
-
-	res, err := a.avroEncode(ctx, e, topic, true)
+	value, err := a.encodeValue(ctx, e, topic)
 	if err != nil {
-		log.Error("AppendRowChangedEvent: avro encoding failed", zap.Error(err))
-		return errors.Trace(err)
+		return err
 	}
+	message.Value = value
 
-	if res != nil {
-		evlp, err := res.toEnvelope()
-		if err != nil {
-			log.Error("AppendRowChangedEvent: could not construct Avro envelope", zap.Error(err))
-			return errors.Trace(err)
-		}
-		message.Key = evlp
-	} else {
-		message.Key = nil
+	key, err := a.encodeKey(ctx, e, topic)
+	if err != nil {
+		return err
 	}
+	message.Key = key
+
 	message.IncRowsCount()
 	a.result = append(a.result, message)
 	return nil
+}
+
+func (a *BatchEncoder) encodeKey(ctx context.Context, event *model.RowChangedEvent, topic string) ([]byte, error) {
+	result, err := a.avroEncode(ctx, event, topic, true)
+	if err != nil {
+		log.Error("AppendRowChangedEvent: avro encoding key failed", zap.Error(err))
+		return nil, errors.Trace(err)
+	}
+
+	if result == nil {
+		return nil, nil
+	}
+
+	envelope, err := result.toEnvelope()
+	if err != nil {
+		log.Error("AppendRowChangedEvent: could not construct Avro envelope", zap.Error(err))
+		return nil, errors.Trace(err)
+	}
+
+	return envelope, nil
+}
+
+func (a *BatchEncoder) encodeValue(ctx context.Context, event *model.RowChangedEvent, topic string) ([]byte, error) {
+	if event.IsDelete() {
+		return nil, nil
+	}
+
+	result, err := a.avroEncode(ctx, event, topic, false)
+	if err != nil {
+		log.Error("AppendRowChangedEvent: avro encoding value failed", zap.Error(err))
+		return nil, errors.Trace(err)
+	}
+	envelope, err := result.toEnvelope()
+	if err != nil {
+		log.Error("AppendRowChangedEvent: could not construct Avro envelope", zap.Error(err))
+		return nil, errors.Trace(err)
+	}
+	return envelope, nil
 }
 
 // EncodeCheckpointEvent is no-op for now
