@@ -30,8 +30,10 @@ import (
 	lcfg "github.com/pingcap/tidb/br/pkg/lightning/config"
 	"github.com/pingcap/tidb/br/pkg/lightning/errormanager"
 	"github.com/pingcap/tidb/dumpling/export"
+	"github.com/pingcap/tidb/util"
 	tidbpromutil "github.com/pingcap/tidb/util/promutil"
 	"github.com/pingcap/tiflow/dm/config"
+	"github.com/pingcap/tiflow/dm/config/dbconfig"
 	"github.com/pingcap/tiflow/dm/pb"
 	"github.com/pingcap/tiflow/dm/pkg/binlog"
 	"github.com/pingcap/tiflow/dm/pkg/conn"
@@ -192,13 +194,7 @@ func (l *LightningLoader) ignoreCheckpointError(ctx context.Context, cfg *lcfg.C
 	if status != lightningStatusRunning {
 		return nil
 	}
-	var cpdb checkpoints.DB
-	if l.cfg.ExtStorage != nil {
-		cpdb, err = checkpoints.NewFileCheckpointsDBWithExstorageFileName(
-			ctx, l.cfg.ExtStorage.URI(), l.cfg.ExtStorage, lightningCheckpointFileName)
-	} else {
-		cpdb, err = checkpoints.OpenCheckpointsDB(ctx, cfg)
-	}
+	cpdb, err := checkpoints.OpenCheckpointsDB(ctx, cfg)
 	if err != nil {
 		return err
 	}
@@ -256,8 +252,7 @@ func (l *LightningLoader) runLightning(ctx context.Context, cfg *lcfg.Config) (e
 	}
 	if l.cfg.ExtStorage != nil {
 		opts = append(opts,
-			lightning.WithDumpFileStorage(l.cfg.ExtStorage),
-			lightning.WithCheckpointStorage(l.cfg.ExtStorage, lightningCheckpointFileName))
+			lightning.WithDumpFileStorage(l.cfg.ExtStorage))
 	}
 	if l.cfg.FrameworkLogger != nil {
 		opts = append(opts, lightning.WithLogger(l.cfg.FrameworkLogger))
@@ -325,14 +320,25 @@ func GetLightningConfig(globalCfg *lcfg.GlobalConfig, subtaskCfg *config.SubTask
 	cfg.App.RegionConcurrency = subtaskCfg.LoaderConfig.PoolSize
 	cfg.Routes = subtaskCfg.RouteRules
 
-	cfg.Checkpoint.Driver = lcfg.CheckpointDriverFile
-	var cpPath string
-	// l.cfg.LoaderConfig.Dir may be a s3 path, and Lightning supports checkpoint in s3, we can use storage.AdjustPath to adjust path both local and s3.
-	cpPath, err := storage.AdjustPath(subtaskCfg.LoaderConfig.Dir, string(filepath.Separator)+lightningCheckpointFileName)
-	if err != nil {
-		return nil, err
+	if subtaskCfg.ExtStorage != nil {
+		// if we use bucket as dumper storage, write lightning checkpoint to downstream DB to avoid bucket ratelimit
+		// it's the default path for dm on cloud
+		cfg.Checkpoint.Driver = lcfg.CheckpointDriverMySQL
+		connParams, err := connParamFromDBConfig(&subtaskCfg.To)
+		if err != nil {
+			return nil, err
+		}
+		cfg.Checkpoint.MySQLParam = connParams
+	} else {
+		cfg.Checkpoint.Driver = lcfg.CheckpointDriverFile
+		var cpPath string
+		// l.cfg.LoaderConfig.Dir may be a s3 path, and Lightning supports checkpoint in s3, we can use storage.AdjustPath to adjust path both local and s3.
+		cpPath, err := storage.AdjustPath(subtaskCfg.LoaderConfig.Dir, string(filepath.Separator)+lightningCheckpointFileName)
+		if err != nil {
+			return nil, err
+		}
+		cfg.Checkpoint.DSN = cpPath
 	}
-	cfg.Checkpoint.DSN = cpPath
 	cfg.Checkpoint.KeepAfterSuccess = lcfg.CheckpointOrigin
 
 	cfg.TikvImporter.DiskQuota = subtaskCfg.LoaderConfig.DiskQuotaPhysical
@@ -595,4 +601,30 @@ func (l *LightningLoader) status() *pb.LoadStatus {
 // Status returns the unit's current status.
 func (l *LightningLoader) Status(_ *binlog.SourceStatus) interface{} {
 	return l.status()
+}
+
+func connParamFromDBConfig(config *dbconfig.DBConfig) (*common.MySQLConnectParam, error) {
+	params := &common.MySQLConnectParam{
+		Host:     config.Host,
+		Port:     config.Port,
+		User:     config.User,
+		Password: config.Password,
+	}
+
+	if config.Security != nil {
+		if loadErr := config.Security.LoadTLSContent(); loadErr != nil {
+			return nil, terror.ErrCtlLoadTLSCfg.Delegate(loadErr)
+		}
+		tlsConfig, err := util.NewTLSConfig(
+			util.WithCAContent(config.Security.SSLCABytes),
+			util.WithCertAndKeyContent(config.Security.SSLCertBytes, config.Security.SSLKeyBytes),
+			util.WithVerifyCommonName(config.Security.CertAllowedCN),
+		)
+		if err != nil {
+			return nil, terror.ErrConnInvalidTLSConfig.Delegate(err)
+		}
+		params.TLSConfig = tlsConfig
+	}
+
+	return params, nil
 }
