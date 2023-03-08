@@ -1156,12 +1156,14 @@ func TestMysqlSinkSafeModeOff(t *testing.T) {
 func TestPrepareBatchDMLs(t *testing.T) {
 	t.Parallel()
 	testCases := []struct {
+		isTiDB   bool
 		input    []*model.RowChangedEvent
 		expected *preparedDMLs
 	}{
 		// empty event
 		{
-			input: []*model.RowChangedEvent{},
+			isTiDB: true,
+			input:  []*model.RowChangedEvent{},
 			expected: &preparedDMLs{
 				startTs: []model.Ts{},
 				sqls:    []string{},
@@ -1169,6 +1171,7 @@ func TestPrepareBatchDMLs(t *testing.T) {
 			},
 		},
 		{ // delete event
+			isTiDB: false,
 			input: []*model.RowChangedEvent{
 				{
 					StartTs:  418658114257813514,
@@ -1217,6 +1220,7 @@ func TestPrepareBatchDMLs(t *testing.T) {
 			},
 		},
 		{ // insert event
+			isTiDB: true,
 			input: []*model.RowChangedEvent{
 				{
 					StartTs:  418658114257813516,
@@ -1265,6 +1269,7 @@ func TestPrepareBatchDMLs(t *testing.T) {
 		},
 		// update event
 		{
+			isTiDB: true,
 			input: []*model.RowChangedEvent{
 				{
 					StartTs:  418658114257813516,
@@ -1347,6 +1352,7 @@ func TestPrepareBatchDMLs(t *testing.T) {
 		},
 		// mixed event
 		{
+			isTiDB: true,
 			input: []*model.RowChangedEvent{
 				{
 					StartTs:  418658114257813514,
@@ -1417,6 +1423,98 @@ func TestPrepareBatchDMLs(t *testing.T) {
 				rowCount: 3,
 			},
 		},
+		// update event and downstream is mysql and without pk
+		{
+			isTiDB: false,
+			input: []*model.RowChangedEvent{
+				{
+					StartTs:  418658114257813516,
+					CommitTs: 418658114257813517,
+					Table:    &model.TableName{Schema: "common_1", Table: "uk_without_pk"},
+					PreColumns: []*model.Column{nil, {
+						Name: "a1",
+						Type: mysql.TypeLong,
+						Flag: model.BinaryFlag |
+							model.MultipleKeyFlag |
+							model.HandleKeyFlag |
+							model.UniqueKeyFlag,
+						Value: 1,
+					}, {
+						Name:    "a3",
+						Type:    mysql.TypeVarchar,
+						Charset: charset.CharsetGBK,
+						Flag: model.BinaryFlag | model.MultipleKeyFlag |
+							model.HandleKeyFlag | model.UniqueKeyFlag,
+						Value: []byte("开发"),
+					}},
+					Columns: []*model.Column{nil, {
+						Name: "a1",
+						Type: mysql.TypeLong,
+						Flag: model.BinaryFlag |
+							model.MultipleKeyFlag |
+							model.HandleKeyFlag |
+							model.UniqueKeyFlag,
+						Value: 2,
+					}, {
+						Name:    "a3",
+						Type:    mysql.TypeVarchar,
+						Charset: charset.CharsetGBK,
+						Flag: model.BinaryFlag | model.MultipleKeyFlag |
+							model.HandleKeyFlag | model.UniqueKeyFlag,
+						Value: []byte("测试"),
+					}},
+					IndexColumns: [][]int{{1, 2}},
+				},
+				{
+					StartTs:  418658114257813516,
+					CommitTs: 418658114257813517,
+					Table:    &model.TableName{Schema: "common_1", Table: "uk_without_pk"},
+					PreColumns: []*model.Column{nil, {
+						Name: "a1",
+						Type: mysql.TypeLong,
+						Flag: model.BinaryFlag |
+							model.MultipleKeyFlag |
+							model.HandleKeyFlag |
+							model.UniqueKeyFlag,
+						Value: 3,
+					}, {
+						Name:    "a3",
+						Type:    mysql.TypeVarchar,
+						Charset: charset.CharsetGBK,
+						Flag: model.BinaryFlag | model.MultipleKeyFlag |
+							model.HandleKeyFlag | model.UniqueKeyFlag,
+						Value: []byte("纽约"),
+					}},
+					Columns: []*model.Column{nil, {
+						Name: "a1",
+						Type: mysql.TypeLong,
+						Flag: model.BinaryFlag |
+							model.MultipleKeyFlag |
+							model.HandleKeyFlag | model.UniqueKeyFlag,
+						Value: 4,
+					}, {
+						Name:    "a3",
+						Type:    mysql.TypeVarchar,
+						Charset: charset.CharsetGBK,
+						Flag: model.BinaryFlag | model.MultipleKeyFlag |
+							model.HandleKeyFlag | model.UniqueKeyFlag,
+						Value: []byte("北京"),
+					}},
+					IndexColumns: [][]int{{1, 2}},
+				},
+			},
+			expected: &preparedDMLs{
+				startTs: []model.Ts{418658114257813516},
+				sqls: []string{
+					"UPDATE `common_1`.`uk_without_pk` SET `a1` = ?, " +
+						"`a3` = ? WHERE `a1` = ? AND `a3` = ? LIMIT 1",
+					"UPDATE `common_1`.`uk_without_pk` SET `a1` = ?, " +
+						"`a3` = ? WHERE `a1` = ? AND `a3` = ? LIMIT 1",
+				},
+				values:   [][]interface{}{{2, "测试", 1, "开发"}, {4, "北京", 3, "纽约"}},
+				rowCount: 2,
+			},
+		},
 	}
 
 	ctx, cancel := context.WithCancel(context.Background())
@@ -1426,6 +1524,7 @@ func TestPrepareBatchDMLs(t *testing.T) {
 	ms.cfg.SafeMode = false
 	ms.cfg.EnableOldValue = true
 	for _, tc := range testCases {
+		ms.cfg.IsTiDB = tc.isTiDB
 		ms.events = make([]*dmlsink.TxnCallbackableEvent, 1)
 		ms.events[0] = &dmlsink.TxnCallbackableEvent{
 			Event: &model.SingleTableTxn{Rows: tc.input},
