@@ -22,7 +22,7 @@ import (
 )
 
 // prepareUpdate builds a parametrics UPDATE statement as following
-// sql: `UPDATE `test`.`t` SET {} = ?, {} = ? WHERE {} = ?, {} = {}`
+// sql: `UPDATE `test`.`t` SET {} = ?, {} = ? WHERE {} = ?, {} = {} LIMIT 1`
 // `WHERE` conditions come from `preCols` and SET clause targets come from `cols`.
 func prepareUpdate(quoteTable string, preCols, cols []*model.Column, forceReplicate bool) (string, []interface{}) {
 	var builder strings.Builder
@@ -64,7 +64,7 @@ func prepareUpdate(quoteTable string, preCols, cols []*model.Column, forceReplic
 			args = append(args, wargs[i])
 		}
 	}
-	builder.WriteString(" LIMIT 1;")
+	builder.WriteString(" LIMIT 1")
 	sql := builder.String()
 	return sql, args
 }
@@ -93,12 +93,12 @@ func prepareReplace(
 
 	colList := "(" + buildColumnList(columnNames) + ")"
 	if translateToInsert {
-		builder.WriteString("INSERT INTO " + quoteTable + colList + " VALUES ")
+		builder.WriteString("INSERT INTO " + quoteTable + " " + colList + " VALUES ")
 	} else {
-		builder.WriteString("REPLACE INTO " + quoteTable + colList + " VALUES ")
+		builder.WriteString("REPLACE INTO " + quoteTable + " " + colList + " VALUES ")
 	}
 	if appendPlaceHolder {
-		builder.WriteString("(" + placeHolder(len(columnNames)) + ");")
+		builder.WriteString("(" + placeHolder(len(columnNames)) + ")")
 	}
 
 	return builder.String(), args
@@ -123,46 +123,8 @@ func appendQueryArgs(args []interface{}, col *model.Column) []interface{} {
 	return args
 }
 
-// reduceReplace groups SQLs with the same replace statement format, as following
-// sql: `REPLACE INTO `test`.`t` (`a`,`b`) VALUES (?,?),(?,?),(?,?)`
-// args: (1,"",2,"2",3,"")
-func reduceReplace(replaces map[string][][]interface{}, batchSize int) ([]string, [][]interface{}) {
-	nextHolderString := func(query string, valueNum int, last bool) string {
-		query += "(" + placeHolder(valueNum) + ")"
-		if !last {
-			query += ","
-		}
-		return query
-	}
-	sqls := make([]string, 0)
-	args := make([][]interface{}, 0)
-	for replace, vals := range replaces {
-		query := replace
-		cacheCount := 0
-		cacheArgs := make([]interface{}, 0)
-		last := false
-		for i, val := range vals {
-			cacheCount++
-			if i == len(vals)-1 || cacheCount >= batchSize {
-				last = true
-			}
-			query = nextHolderString(query, len(val), last)
-			cacheArgs = append(cacheArgs, val...)
-			if last {
-				sqls = append(sqls, query)
-				args = append(args, cacheArgs)
-				query = replace
-				cacheCount = 0
-				cacheArgs = make([]interface{}, 0, len(cacheArgs))
-				last = false
-			}
-		}
-	}
-	return sqls, args
-}
-
 // prepareDelete builds a parametric DELETE statement as following
-// sql: `DELETE FROM `test`.`t` WHERE x = ? AND y >= ?`
+// sql: `DELETE FROM `test`.`t` WHERE x = ? AND y >= ? LIMIT 1`
 func prepareDelete(quoteTable string, cols []*model.Column, forceReplicate bool) (string, []interface{}) {
 	var builder strings.Builder
 	builder.WriteString("DELETE FROM " + quoteTable + " WHERE ")
@@ -183,7 +145,7 @@ func prepareDelete(quoteTable string, cols []*model.Column, forceReplicate bool)
 			args = append(args, wargs[i])
 		}
 	}
-	builder.WriteString(" LIMIT 1;")
+	builder.WriteString(" LIMIT 1")
 	sql := builder.String()
 	return sql, args
 }

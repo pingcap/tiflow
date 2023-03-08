@@ -28,7 +28,6 @@ import (
 	"github.com/pingcap/tiflow/pkg/sink"
 	"github.com/pingcap/tiflow/pkg/sink/kafka"
 	v2 "github.com/pingcap/tiflow/pkg/sink/kafka/v2"
-	pmysql "github.com/pingcap/tiflow/pkg/sink/mysql"
 )
 
 // New creates a new ddlsink.Sink by schema.
@@ -53,7 +52,7 @@ func New(
 	case sink.BlackHoleScheme:
 		return blackhole.NewDDLSink(), nil
 	case sink.MySQLSSLScheme, sink.MySQLScheme, sink.TiDBScheme, sink.TiDBSSLScheme:
-		return mysql.NewDDLSink(ctx, sinkURI, cfg, pmysql.CreateMySQLDBConn)
+		return mysql.NewDDLSink(ctx, sinkURI, cfg)
 	case sink.S3Scheme, sink.FileScheme, sink.GCSScheme, sink.GSScheme, sink.AzblobScheme, sink.AzureScheme, sink.CloudStorageNoopScheme:
 		return cloudstorage.NewDDLSink(ctx, sinkURI)
 	default:

@@ -291,25 +291,3 @@ func TestManagerLiveness(t *testing.T) {
 	s.liveness.Store(model.LivenessCaptureStopping)
 	require.Equal(t, model.LivenessCaptureStopping, p.liveness.Load())
 }
-
-func TestQueryTableCount(t *testing.T) {
-	t.Skip("FIXME: add tables")
-	liveness := model.LivenessCaptureAlive
-	cfg := config.NewDefaultSchedulerConfig()
-	m := NewManager(&model.CaptureInfo{ID: "capture-test"}, nil, &liveness, cfg).(*managerImpl)
-	ctx := context.TODO()
-	m.processors[model.ChangeFeedID{ID: "test"}] = &processor{}
-
-	done := make(chan error, 1)
-	tableCh := make(chan int, 1)
-	err := m.sendCommand(ctx, commandTpQueryTableCount, tableCh, done)
-	require.Nil(t, err)
-	err = m.handleCommand(nil)
-	require.Nil(t, err)
-	select {
-	case count := <-tableCh:
-		require.Equal(t, 2, count)
-	case <-time.After(time.Second):
-		require.FailNow(t, "done must be closed")
-	}
-}

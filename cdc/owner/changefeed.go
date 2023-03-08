@@ -79,7 +79,8 @@ type changefeed struct {
 	// and will be destroyed when a changefeed is closed.
 	barriers         *barriers
 	feedStateManager *feedStateManager
-	redoManager      redo.LogManager
+	redoDDLMgr       redo.DDLManager
+	redoMetaMgr      redo.MetaManager
 
 	schema      *schemaWrap4Owner
 	sink        DDLSink
@@ -108,9 +109,9 @@ type changefeed struct {
 	// cancel the running goroutine start by `DDLPuller`
 	cancel context.CancelFunc
 
-	// The changefeed will start a backend goroutine in the function `initialize` for DDLPuller
-	// `ddlWg` is used to manage this backend goroutine.
-	ddlWg sync.WaitGroup
+	// The changefeed will start a backend goroutine in the function `initialize`
+	// for DDLPuller and redo manager. `wg` is used to manage this backend goroutine.
+	wg sync.WaitGroup
 
 	metricsChangefeedCheckpointTsGauge     prometheus.Gauge
 	metricsChangefeedCheckpointTsLagGauge  prometheus.Gauge
@@ -370,13 +371,13 @@ func (c *changefeed) tick(ctx cdcContext.Context, captures map[model.CaptureID]*
 		newCheckpointTs = barrierTs
 	}
 	prevResolvedTs := c.state.Status.ResolvedTs
-	if c.redoManager.Enabled() {
-		var flushedCheckpointTs, flushedResolvedTs model.Ts
+	if c.redoMetaMgr.Enabled() {
 		// newResolvedTs can never exceed the barrier timestamp boundary. If redo is enabled,
 		// we can only upload it to etcd after it has been flushed into redo meta.
 		// NOTE: `UpdateMeta` handles regressed checkpointTs and resolvedTs internally.
-		c.redoManager.UpdateMeta(newCheckpointTs, newResolvedTs)
-		c.redoManager.GetFlushedMeta(&flushedCheckpointTs, &flushedResolvedTs)
+		c.redoMetaMgr.UpdateMeta(newCheckpointTs, newResolvedTs)
+		flushedMeta := c.redoMetaMgr.GetFlushedMeta()
+		flushedCheckpointTs, flushedResolvedTs := flushedMeta.CheckpointTs, flushedMeta.ResolvedTs
 		log.Debug("owner gets flushed meta",
 			zap.Uint64("flushedResolvedTs", flushedResolvedTs),
 			zap.Uint64("flushedCheckpointTs", flushedCheckpointTs),
@@ -546,9 +547,9 @@ LOOP:
 		return errors.Trace(err)
 	}
 
-	c.ddlWg.Add(1)
+	c.wg.Add(1)
 	go func() {
-		defer c.ddlWg.Done()
+		defer c.wg.Done()
 		ctx.Throw(c.ddlPuller.Run(cancelCtx))
 	}()
 
@@ -560,14 +561,32 @@ LOOP:
 	c.observerLastTick = atomic.NewTime(time.Time{})
 
 	stdCtx := contextutil.PutChangefeedIDInCtx(cancelCtx, c.id)
-	redoManagerOpts := redo.NewOwnerManagerOptions(c.errCh)
-	mgr, err := redo.NewManager(stdCtx, c.state.Info.Config.Consistent, redoManagerOpts)
-	c.redoManager = mgr
+	c.redoDDLMgr, err = redo.NewDDLManager(stdCtx, c.state.Info.Config.Consistent, ddlStartTs)
 	failpoint.Inject("ChangefeedNewRedoManagerError", func() {
 		err = errors.New("changefeed new redo manager injected error")
 	})
 	if err != nil {
 		return err
+	}
+	if c.redoDDLMgr.Enabled() {
+		c.wg.Add(1)
+		go func() {
+			defer c.wg.Done()
+			ctx.Throw(c.redoDDLMgr.Run(stdCtx))
+		}()
+	}
+
+	c.redoMetaMgr, err = redo.NewMetaManagerWithInit(stdCtx,
+		c.state.Info.Config.Consistent, checkpointTs)
+	if err != nil {
+		return err
+	}
+	if c.redoMetaMgr.Enabled() {
+		c.wg.Add(1)
+		go func() {
+			defer c.wg.Done()
+			ctx.Throw(c.redoMetaMgr.Run(stdCtx))
+		}()
 	}
 	log.Info("owner creates redo manager",
 		zap.String("namespace", c.id.Namespace),
@@ -634,7 +653,7 @@ func (c *changefeed) releaseResources(ctx cdcContext.Context) {
 	if c.ddlPuller != nil {
 		c.ddlPuller.Close()
 	}
-	c.ddlWg.Wait()
+	c.wg.Wait()
 
 	if c.sink != nil {
 		canceledCtx, cancel := context.WithCancel(context.Background())
@@ -695,7 +714,7 @@ func (c *changefeed) cleanupMetrics() {
 	c.metricsChangefeedBarrierTsGauge = nil
 }
 
-// redoManagerCleanup cleanups redo logs if changefeed is removed and redo log is enabled
+// cleanup redo logs if changefeed is removed and redo log is enabled
 func (c *changefeed) cleanupRedoManager(ctx context.Context) {
 	if c.isRemoved {
 		if c.state == nil || c.state.Info == nil || c.state.Info.Config == nil ||
@@ -707,9 +726,8 @@ func (c *changefeed) cleanupRedoManager(ctx context.Context) {
 			return
 		}
 		// when removing a paused changefeed, the redo manager is nil, create a new one
-		if c.redoManager == nil {
-			redoManagerOpts := redo.NewManagerOptionsForClean()
-			redoManager, err := redo.NewManager(ctx, c.state.Info.Config.Consistent, redoManagerOpts)
+		if c.redoMetaMgr == nil {
+			redoMetaMgr, err := redo.NewMetaManager(ctx, c.state.Info.Config.Consistent)
 			if err != nil {
 				log.Info("owner creates redo manager for clean fail",
 					zap.String("namespace", c.id.Namespace),
@@ -717,9 +735,9 @@ func (c *changefeed) cleanupRedoManager(ctx context.Context) {
 					zap.Error(err))
 				return
 			}
-			c.redoManager = redoManager
+			c.redoMetaMgr = redoMetaMgr
 		}
-		err := c.redoManager.Cleanup(ctx)
+		err := c.redoMetaMgr.Cleanup(ctx)
 		if err != nil {
 			log.Error("cleanup redo logs failed", zap.String("changefeed", c.id.ID), zap.Error(err))
 		}
@@ -906,12 +924,12 @@ func (c *changefeed) asyncExecDDLJob(ctx cdcContext.Context,
 		if err != nil {
 			return false, errors.Trace(err)
 		}
-		if c.redoManager.Enabled() {
+		if c.redoDDLMgr.Enabled() {
 			for _, ddlEvent := range c.ddlEventCache {
 				// FIXME: seems it's not necessary to emit DDL to redo storage,
 				// because for a given redo meta with range (checkpointTs, resolvedTs],
 				// there must be no pending DDLs not flushed into DDL sink.
-				err = c.redoManager.EmitDDLEvent(ctx, ddlEvent)
+				err = c.redoDDLMgr.EmitDDLEvent(ctx, ddlEvent)
 				if err != nil {
 					return false, err
 				}

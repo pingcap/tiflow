@@ -61,6 +61,14 @@ func (m *mockSink) GetWriteTimes() int {
 
 func (m *mockSink) Close() {}
 
+func (m *mockSink) AckAllEvents() {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	for _, e := range m.events {
+		e.Callback()
+	}
+}
+
 //nolint:unparam
 func createTableSinkWrapper(
 	changefeedID model.ChangeFeedID, span tablepb.Span,

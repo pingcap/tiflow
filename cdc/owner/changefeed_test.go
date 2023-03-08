@@ -35,6 +35,7 @@ import (
 	cdcContext "github.com/pingcap/tiflow/pkg/context"
 	"github.com/pingcap/tiflow/pkg/etcd"
 	"github.com/pingcap/tiflow/pkg/orchestrator"
+	"github.com/pingcap/tiflow/pkg/redo"
 	"github.com/pingcap/tiflow/pkg/sink/observer"
 	"github.com/pingcap/tiflow/pkg/txnutil/gc"
 	"github.com/pingcap/tiflow/pkg/upstream"
@@ -501,7 +502,7 @@ func TestRemoveChangefeed(t *testing.T) {
 	info.Config.Consistent = &config.ConsistentConfig{
 		Level:             "eventual",
 		Storage:           filepath.Join("nfs://", dir),
-		FlushIntervalInMs: config.DefaultFlushIntervalInMs,
+		FlushIntervalInMs: redo.DefaultFlushIntervalInMs,
 	}
 	ctx = cdcContext.WithChangefeedVars(ctx, &cdcContext.ChangefeedVars{
 		ID:   ctx.ChangefeedVars().ID,
@@ -517,8 +518,9 @@ func TestRemovePausedChangefeed(t *testing.T) {
 	info.State = model.StateStopped
 	dir := t.TempDir()
 	info.Config.Consistent = &config.ConsistentConfig{
-		Level:   "eventual",
-		Storage: filepath.Join("nfs://", dir),
+		Level:             "eventual",
+		Storage:           filepath.Join("nfs://", dir),
+		FlushIntervalInMs: redo.DefaultFlushIntervalInMs,
 	}
 	ctx = cdcContext.WithChangefeedVars(ctx, &cdcContext.ChangefeedVars{
 		ID:   ctx.ChangefeedVars().ID,
@@ -555,10 +557,17 @@ func testChangefeedReleaseResource(
 	err := cf.tick(ctx, captures)
 	require.Nil(t, err)
 	cancel()
-	// check redo log dir is deleted
-	_, err = os.Stat(redoLogDir)
-	log.Error(err)
-	require.True(t, os.IsNotExist(err))
+
+	if cf.state.Info.Config.Consistent.UseFileBackend {
+		// check redo log dir is deleted
+		_, err = os.Stat(redoLogDir)
+		log.Error(err)
+		require.True(t, os.IsNotExist(err))
+	} else {
+		files, err := os.ReadDir(redoLogDir)
+		require.NoError(t, err)
+		require.Len(t, files, 1) // only delete mark
+	}
 }
 
 func TestExecRenameTablesDDL(t *testing.T) {

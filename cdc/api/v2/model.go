@@ -23,6 +23,7 @@ import (
 	"github.com/pingcap/tiflow/cdc/model"
 	"github.com/pingcap/tiflow/pkg/config"
 	cerror "github.com/pingcap/tiflow/pkg/errors"
+	"github.com/pingcap/tiflow/pkg/redo"
 	"github.com/pingcap/tiflow/pkg/security"
 )
 
@@ -107,7 +108,6 @@ type ChangefeedConfig struct {
 	StartTs       uint64         `json:"start_ts"`
 	TargetTs      uint64         `json:"target_ts"`
 	SinkURI       string         `json:"sink_uri"`
-	Engine        string         `json:"engine"`
 	ReplicaConfig *ReplicaConfig `json:"replica_config"`
 	PDConfig
 }
@@ -126,7 +126,7 @@ type JSONDuration struct {
 
 // MarshalJSON marshal duration to string
 func (d JSONDuration) MarshalJSON() ([]byte, error) {
-	return json.Marshal(d.duration.String())
+	return json.Marshal(d.duration.Nanoseconds())
 }
 
 // UnmarshalJSON unmarshal json value to wrapped duration
@@ -162,8 +162,8 @@ type ReplicaConfig struct {
 	EnableSyncPoint       bool   `json:"enable_sync_point"`
 	BDRMode               bool   `json:"bdr_mode"`
 
-	SyncPointInterval  JSONDuration `json:"sync_point_interval" swaggertype:"string"`
-	SyncPointRetention JSONDuration `json:"sync_point_retention" swaggertype:"string"`
+	SyncPointInterval  *JSONDuration `json:"sync_point_interval" swaggertype:"string"`
+	SyncPointRetention *JSONDuration `json:"sync_point_retention" swaggertype:"string"`
 
 	Filter     *FilterConfig              `json:"filter"`
 	Mounter    *MounterConfig             `json:"mounter"`
@@ -181,8 +181,12 @@ func (c *ReplicaConfig) ToInternalReplicaConfig() *config.ReplicaConfig {
 	res.ForceReplicate = c.ForceReplicate
 	res.CheckGCSafePoint = c.CheckGCSafePoint
 	res.EnableSyncPoint = c.EnableSyncPoint
-	res.SyncPointInterval = c.SyncPointInterval.duration
-	res.SyncPointRetention = c.SyncPointRetention.duration
+	if c.SyncPointInterval != nil {
+		res.SyncPointInterval = c.SyncPointInterval.duration
+	}
+	if c.SyncPointRetention != nil {
+		res.SyncPointRetention = c.SyncPointRetention.duration
+	}
 	res.BDRMode = c.BDRMode
 
 	if c.Filter != nil {
@@ -230,6 +234,7 @@ func (c *ReplicaConfig) ToInternalReplicaConfig() *config.ReplicaConfig {
 			MaxLogSize:        c.Consistent.MaxLogSize,
 			FlushIntervalInMs: c.Consistent.FlushIntervalInMs,
 			Storage:           c.Consistent.Storage,
+			UseFileBackend:    c.Consistent.UseFileBackend,
 		}
 	}
 	if c.Sink != nil {
@@ -297,8 +302,8 @@ func ToAPIReplicaConfig(c *config.ReplicaConfig) *ReplicaConfig {
 		IgnoreIneligibleTable: false,
 		CheckGCSafePoint:      cloned.CheckGCSafePoint,
 		EnableSyncPoint:       cloned.EnableSyncPoint,
-		SyncPointInterval:     JSONDuration{cloned.SyncPointInterval},
-		SyncPointRetention:    JSONDuration{cloned.SyncPointRetention},
+		SyncPointInterval:     &JSONDuration{cloned.SyncPointInterval},
+		SyncPointRetention:    &JSONDuration{cloned.SyncPointRetention},
 		BDRMode:               cloned.BDRMode,
 	}
 
@@ -388,6 +393,7 @@ func ToAPIReplicaConfig(c *config.ReplicaConfig) *ReplicaConfig {
 			MaxLogSize:        cloned.Consistent.MaxLogSize,
 			FlushIntervalInMs: cloned.Consistent.FlushIntervalInMs,
 			Storage:           cloned.Consistent.Storage,
+			UseFileBackend:    cloned.Consistent.UseFileBackend,
 		}
 	}
 	if cloned.Mounter != nil {
@@ -411,8 +417,8 @@ func GetDefaultReplicaConfig() *ReplicaConfig {
 		EnableOldValue:     true,
 		CheckGCSafePoint:   true,
 		EnableSyncPoint:    false,
-		SyncPointInterval:  JSONDuration{10 * time.Second},
-		SyncPointRetention: JSONDuration{24 * time.Hour},
+		SyncPointInterval:  &JSONDuration{10 * time.Second},
+		SyncPointRetention: &JSONDuration{24 * time.Hour},
 		Filter: &FilterConfig{
 			Rules: []string{"*.*"},
 		},
@@ -420,8 +426,9 @@ func GetDefaultReplicaConfig() *ReplicaConfig {
 		Consistent: &ConsistentConfig{
 			Level:             "none",
 			MaxLogSize:        64,
-			FlushIntervalInMs: config.DefaultFlushIntervalInMs,
+			FlushIntervalInMs: redo.DefaultFlushIntervalInMs,
 			Storage:           "",
+			UseFileBackend:    true,
 		},
 		Scheduler: &ChangefeedSchedulerConfig{
 			EnableTableAcrossNodes: config.GetDefaultReplicaConfig().
@@ -570,6 +577,7 @@ type ConsistentConfig struct {
 	MaxLogSize        int64  `json:"max_log_size"`
 	FlushIntervalInMs int64  `json:"flush_interval"`
 	Storage           string `json:"storage"`
+	UseFileBackend    bool   `json:"use_file_backend"`
 }
 
 // ChangefeedSchedulerConfig is per changefeed scheduler settings.
@@ -598,18 +606,17 @@ type ResolveLockReq struct {
 
 // ChangeFeedInfo describes the detail of a ChangeFeed
 type ChangeFeedInfo struct {
-	UpstreamID uint64         `json:"upstream_id,omitempty"`
-	Namespace  string         `json:"namespace,omitempty"`
-	ID         string         `json:"id,omitempty"`
-	SinkURI    string         `json:"sink_uri,omitempty"`
-	CreateTime model.JSONTime `json:"create_time"`
+	UpstreamID uint64    `json:"upstream_id,omitempty"`
+	Namespace  string    `json:"namespace,omitempty"`
+	ID         string    `json:"id,omitempty"`
+	SinkURI    string    `json:"sink_uri,omitempty"`
+	CreateTime time.Time `json:"create_time"`
 	// Start sync at this commit ts if `StartTs` is specify or using the CreateTime of changefeed.
 	StartTs uint64 `json:"start_ts,omitempty"`
 	// The ChangeFeed will exits until sync to timestamp TargetTs
 	TargetTs uint64 `json:"target_ts,omitempty"`
 	// used for admin job notification, trigger watch event in capture
 	AdminJobType   model.AdminJobType `json:"admin_job_type,omitempty"`
-	Engine         string             `json:"engine,omitempty"`
 	Config         *ReplicaConfig     `json:"config,omitempty"`
 	State          model.FeedState    `json:"state,omitempty"`
 	Error          *RunningError      `json:"error,omitempty"`
