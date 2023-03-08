@@ -239,7 +239,7 @@ type consumer struct {
 	// tableDMLIdxMap maintains a map of <dmlPathKey, max file index>
 	tableDMLIdxMap map[dmlPathKey]uint64
 	// tableTsMap maintains a map of <TableID, max commit ts>
-	tableTsMap map[model.TableID]uint64
+	tableTsMap map[model.TableID]model.ResolvedTs
 	// tableSinkMap maintains a map of <TableID, TableSink>
 	tableSinkMap     map[model.TableID]tablesink.TableSink
 	tableIDGenerator *fakeTableIDGenerator
@@ -315,8 +315,8 @@ func newConsumer(ctx context.Context) (*consumer, error) {
 		externalStorage: storage,
 		fileExtension:   extension,
 		errCh:           errCh,
-		tableDMLIdxMap:  make(map[dmlPathKey]uint64),
-		tableTsMap:      make(map[model.TableID]uint64),
+		tableIdxMap:     make(map[dmlPathKey]uint64),
+		tableTsMap:      make(map[model.TableID]model.ResolvedTs),
 		tableSinkMap:    make(map[model.TableID]tablesink.TableSink),
 		tableIDGenerator: &fakeTableIDGenerator{
 			tableIDs: make(map[string]int64),
@@ -427,6 +427,7 @@ func (c *consumer) emitDMLEvents(
 	}
 
 	cnt := 0
+	filteredCnt := 0
 	for {
 		tp, hasNext, err := decoder.HasNext()
 		if err != nil {
@@ -452,27 +453,31 @@ func (c *consumer) emitDMLEvents(
 					prometheus.NewCounter(prometheus.CounterOpts{}))
 			}
 
-			if _, ok := c.tableTsMap[tableID]; !ok || row.CommitTs >= c.tableTsMap[tableID] {
-				c.tableTsMap[tableID] = row.CommitTs
+			if _, ok := c.tableTsMap[tableID]; !ok || row.CommitTs >= c.tableTsMap[tableID].Ts {
+				c.tableTsMap[tableID] = model.ResolvedTs{
+					Mode:    model.BatchResolvedMode,
+					Ts:      row.CommitTs,
+					BatchID: 1,
+				}
 			} else {
 				log.Warn("row changed event commit ts fallback, ignore",
 					zap.Uint64("commitTs", row.CommitTs),
-					zap.Uint64("tableMaxCommitTs", c.tableTsMap[tableID]),
+					zap.Any("tableMaxCommitTs", c.tableTsMap[tableID]),
 					zap.Any("row", row),
 				)
 				continue
 			}
 			row.Table.TableID = tableID
-			events = append(events, row)
+			c.tableSinkMap[tableID].AppendRowChangedEvents(row)
+			filteredCnt++
 		}
 	}
 	log.Info("decode success", zap.String("schema", pathKey.schema),
 		zap.String("table", pathKey.table),
 		zap.Int64("version", pathKey.version),
 		zap.Int("decodeRowsCnt", cnt),
-		zap.Int("filteredRowsCnt", len(events)))
+		zap.Int("filteredRowsCnt", filteredCnt))
 
-	c.tableSinkMap[tableID].AppendRowChangedEvents(events...)
 	return err
 }
 
@@ -486,9 +491,14 @@ func (c *consumer) waitTableFlushComplete(ctx context.Context, tableID model.Tab
 		default:
 		}
 
-		maxResolvedTs := c.tableTsMap[tableID]
+		resolvedTs := c.tableTsMap[tableID]
+		err := c.tableSinkMap[tableID].UpdateResolvedTs(resolvedTs)
+		if err != nil {
+			return errors.Trace(err)
+		}
 		checkpoint := c.tableSinkMap[tableID].GetCheckpointTs()
-		if checkpoint.Ts == maxResolvedTs {
+		if checkpoint.Equal(resolvedTs) {
+			c.tableTsMap[tableID] = resolvedTs.AdvanceBatch()
 			return nil
 		}
 		time.Sleep(defaultFlushWaitDuration)
