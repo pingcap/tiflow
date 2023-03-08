@@ -35,17 +35,17 @@ var (
 			Name:      "kafka_producer_outgoing_byte_rate",
 			Help:      "Bytes/second written off all brokers.",
 		}, []string{"namespace", "changefeed", "broker"})
-	// Meter mark by 1 for each request.
-	requestRateGauge = prometheus.NewGaugeVec(
+	// RequestRateGauge Meter mark by 1 for each request.
+	RequestRateGauge = prometheus.NewGaugeVec(
 		prometheus.GaugeOpts{
 			Namespace: "ticdc",
 			Subsystem: "sink",
 			Name:      "kafka_producer_request_rate",
 			Help:      "Requests/second sent to all brokers.",
 		}, []string{"namespace", "changefeed", "broker"})
-	// Histogram update for each received response,
+	// RequestLatencyInMsGauge Histogram update by `requestLatency`.
 	// requestLatency := time.Since(response.requestTime).
-	requestLatencyInMsGauge = prometheus.NewGaugeVec(
+	RequestLatencyInMsGauge = prometheus.NewGaugeVec(
 		prometheus.GaugeOpts{
 			Namespace: "ticdc",
 			Subsystem: "sink",
@@ -68,14 +68,64 @@ var (
 			Name:      "kafka_producer_response_rate",
 			Help:      "Responses/second received from all brokers.",
 		}, []string{"namespace", "changefeed", "broker"})
+
+	RetryCount = prometheus.NewGaugeVec(
+		prometheus.GaugeOpts{
+			Namespace: "ticdc",
+			Subsystem: "sink",
+			Name:      "kafka_producer_retry_count",
+			Help:      "Kafka Client send request retry count",
+		}, []string{"namespace", "changefeed"})
+
+	ErrorCount = prometheus.NewGaugeVec(
+		prometheus.GaugeOpts{
+			Namespace: "ticdc",
+			Subsystem: "sink",
+			Name:      "kafka_producer_err_count",
+			Help:      "Kafka Client send request retry count",
+		}, []string{"namespace", "changefeed"})
+
+	BatchDurationHistogram = prometheus.NewHistogramVec(
+		prometheus.HistogramOpts{
+			Namespace: "ticdc",
+			Subsystem: "sink",
+			Name:      "kafka_producer_batch_duration",
+			Help:      "Kafka client internal batch message time cost in milliseconds",
+			Buckets:   prometheus.ExponentialBuckets(0.002, 2.0, 10),
+		}, []string{"namespace", "changefeed"})
+
+	BatchMessageCountHistogram = prometheus.NewHistogramVec(
+		prometheus.HistogramOpts{
+			Namespace: "ticdc",
+			Subsystem: "sink",
+			Name:      "kafka_producer_batch_message_count",
+			Help:      "Kafka client internal batch message count",
+			Buckets:   prometheus.ExponentialBuckets(8, 2.0, 11),
+		}, []string{"namespace", "changefeed"})
+
+	BatchSizeHistogram = prometheus.NewHistogramVec(
+		prometheus.HistogramOpts{
+			Namespace: "ticdc",
+			Subsystem: "sink",
+			Name:      "kafka_producer_batch_size",
+			Help:      "Kafka client internal batch size in bytes",
+			Buckets:   prometheus.ExponentialBuckets(1024, 2.0, 18),
+		}, []string{"namespace", "changefeed"})
 )
 
 // InitMetrics registers all metrics in this file.
 func InitMetrics(registry *prometheus.Registry) {
 	registry.MustRegister(compressionRatioGauge)
 	registry.MustRegister(outgoingByteRateGauge)
-	registry.MustRegister(requestRateGauge)
-	registry.MustRegister(requestLatencyInMsGauge)
+	registry.MustRegister(RequestRateGauge)
+	registry.MustRegister(RequestLatencyInMsGauge)
 	registry.MustRegister(requestsInFlightGauge)
 	registry.MustRegister(responseRateGauge)
+
+	// only used by kafka sink v2.
+	registry.MustRegister(BatchDurationHistogram)
+	registry.MustRegister(BatchMessageCountHistogram)
+	registry.MustRegister(BatchSizeHistogram)
+	registry.MustRegister(RetryCount)
+	registry.MustRegister(ErrorCount)
 }

@@ -137,7 +137,7 @@ func (m *saramaMetricsCollector) collectBrokerMetrics() {
 		requestRateMetric := m.registry.Get(
 			getBrokerMetricName(requestRateMetricNamePrefix, brokerID))
 		if meter, ok := requestRateMetric.(metrics.Meter); ok {
-			requestRateGauge.
+			RequestRateGauge.
 				WithLabelValues(namespace, changefeedID, brokerID).
 				Set(meter.Snapshot().Rate1())
 		}
@@ -145,7 +145,7 @@ func (m *saramaMetricsCollector) collectBrokerMetrics() {
 		requestLatencyMetric := m.registry.Get(
 			getBrokerMetricName(requestLatencyInMsMetricNamePrefix, brokerID))
 		if histogram, ok := requestLatencyMetric.(metrics.Histogram); ok {
-			requestLatencyInMsGauge.
+			RequestLatencyInMsGauge.
 				WithLabelValues(namespace, changefeedID, brokerID).
 				Set(histogram.Snapshot().Mean())
 		}
@@ -184,9 +184,9 @@ func (m *saramaMetricsCollector) cleanupBrokerMetrics() {
 		brokerID := strconv.Itoa(int(id))
 		outgoingByteRateGauge.
 			DeleteLabelValues(namespace, changefeedID, brokerID)
-		requestRateGauge.
+		RequestRateGauge.
 			DeleteLabelValues(namespace, changefeedID, brokerID)
-		requestLatencyInMsGauge.
+		RequestLatencyInMsGauge.
 			DeleteLabelValues(namespace, changefeedID, brokerID)
 		requestsInFlightGauge.
 			DeleteLabelValues(namespace, changefeedID, brokerID)

@@ -16,7 +16,6 @@ package mq
 import (
 	"github.com/pingcap/tiflow/pkg/sink/codec"
 	"github.com/pingcap/tiflow/pkg/sink/kafka"
-	v2 "github.com/pingcap/tiflow/pkg/sink/kafka/v2"
 	"github.com/prometheus/client_golang/prometheus"
 )
 
@@ -57,5 +56,4 @@ func InitMetrics(registry *prometheus.Registry) {
 	registry.MustRegister(WorkerBatchDuration)
 	codec.InitMetrics(registry)
 	kafka.InitMetrics(registry)
-	v2.InitMetrics(registry)
 }

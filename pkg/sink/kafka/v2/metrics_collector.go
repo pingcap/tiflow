@@ -73,35 +73,35 @@ func (m *MetricsCollector) collectMetrics() {
 	statistics := m.writer.Stats()
 
 	// batch related metrics
-	batchDurationHistogram.WithLabelValues(m.changefeedID.Namespace, m.changefeedID.ID).
+	pkafka.BatchDurationHistogram.WithLabelValues(m.changefeedID.Namespace, m.changefeedID.ID).
 		Observe(statistics.BatchTime.Avg.Seconds())
-	batchMessageCountHistogram.WithLabelValues(m.changefeedID.Namespace, m.changefeedID.ID).
+	pkafka.BatchMessageCountHistogram.WithLabelValues(m.changefeedID.Namespace, m.changefeedID.ID).
 		Observe(float64(statistics.BatchSize.Avg))
-	batchSizeHistogram.WithLabelValues(m.changefeedID.Namespace, m.changefeedID.ID).
+	pkafka.BatchSizeHistogram.WithLabelValues(m.changefeedID.Namespace, m.changefeedID.ID).
 		Observe(float64(statistics.BatchBytes.Avg))
 
 	// send batch related metrics
-	requestRateGauge.WithLabelValues(m.changefeedID.Namespace, m.changefeedID.ID).
+	pkafka.RequestRateGauge.WithLabelValues(m.changefeedID.Namespace, m.changefeedID.ID).
 		Set(float64(statistics.Writes))
-	requestLatencyInMsGauge.WithLabelValues(m.changefeedID.Namespace, m.changefeedID.ID).
+	pkafka.RequestLatencyInMsGauge.WithLabelValues(m.changefeedID.Namespace, m.changefeedID.ID).
 		Set(statistics.WriteTime.Avg.Seconds())
 
-	retryCount.WithLabelValues(m.changefeedID.Namespace, m.changefeedID.ID).
+	pkafka.RetryCount.WithLabelValues(m.changefeedID.Namespace, m.changefeedID.ID).
 		Set(float64(statistics.Retries))
-	errCount.WithLabelValues(m.changefeedID.Namespace, m.changefeedID.ID).
+	pkafka.ErrorCount.WithLabelValues(m.changefeedID.Namespace, m.changefeedID.ID).
 		Set(float64(statistics.Errors))
 }
 
 func (m *MetricsCollector) cleanupMetrics() {
-	batchDurationHistogram.DeleteLabelValues(m.changefeedID.Namespace, m.changefeedID.ID)
-	batchMessageCountHistogram.DeleteLabelValues(m.changefeedID.Namespace, m.changefeedID.ID)
-	batchSizeHistogram.DeleteLabelValues(m.changefeedID.Namespace, m.changefeedID.ID)
+	pkafka.BatchDurationHistogram.DeleteLabelValues(m.changefeedID.Namespace, m.changefeedID.ID)
+	pkafka.BatchMessageCountHistogram.DeleteLabelValues(m.changefeedID.Namespace, m.changefeedID.ID)
+	pkafka.BatchSizeHistogram.DeleteLabelValues(m.changefeedID.Namespace, m.changefeedID.ID)
 
-	requestRateGauge.DeleteLabelValues(m.changefeedID.Namespace, m.changefeedID.ID)
-	requestLatencyInMsGauge.DeleteLabelValues(m.changefeedID.Namespace, m.changefeedID.ID)
+	pkafka.RequestRateGauge.DeleteLabelValues(m.changefeedID.Namespace, m.changefeedID.ID)
+	pkafka.RequestLatencyInMsGauge.DeleteLabelValues(m.changefeedID.Namespace, m.changefeedID.ID)
 
-	retryCount.DeleteLabelValues(m.changefeedID.Namespace, m.changefeedID.ID)
-	errCount.DeleteLabelValues(m.changefeedID.Namespace, m.changefeedID.ID)
+	pkafka.RetryCount.DeleteLabelValues(m.changefeedID.Namespace, m.changefeedID.ID)
+	pkafka.ErrorCount.DeleteLabelValues(m.changefeedID.Namespace, m.changefeedID.ID)
 
 	log.Info("metrics collector clean up all metrics",
 		zap.String("namespace", m.changefeedID.Namespace),
