@@ -64,11 +64,13 @@ var (
 	logFile          string
 	logLevel         string
 	flushInterval    time.Duration
+	enableProfiling  bool
 )
 
 const (
-	defaultChangefeedName    = "storage-consumer"
-	defaultFlushWaitDuration = 200 * time.Millisecond
+	defaultChangefeedName         = "storage-consumer"
+	defaultFlushWaitDuration      = 200 * time.Millisecond
+	fakePartitionNumForSchemaFile = -1
 )
 
 func init() {
@@ -78,6 +80,7 @@ func init() {
 	flag.StringVar(&logFile, "log-file", "", "log file path")
 	flag.StringVar(&logLevel, "log-level", "info", "log level")
 	flag.DurationVar(&flushInterval, "flush-interval", 10*time.Second, "flush interval")
+	flag.BoolVar(&enableProfiling, "enable-profiling", false, "whether to enable profiling")
 	flag.Parse()
 
 	err := logutil.InitLogger(&logutil.Config{
@@ -98,11 +101,6 @@ func init() {
 	scheme := strings.ToLower(upstreamURI.Scheme)
 	if !psink.IsStorageScheme(scheme) {
 		log.Error("invalid storage scheme, the scheme of upstream-uri must be file/s3/azblob/gcs")
-		os.Exit(1)
-	}
-
-	if len(configFile) == 0 {
-		log.Error("changefeed configuration file must be provided")
 		os.Exit(1)
 	}
 }
@@ -248,13 +246,15 @@ type consumer struct {
 
 func newConsumer(ctx context.Context) (*consumer, error) {
 	replicaConfig := config.GetDefaultReplicaConfig()
-	err := util.StrictDecodeFile(configFile, "storage consumer", replicaConfig)
-	if err != nil {
-		log.Error("failed to decode config file", zap.Error(err))
-		return nil, err
+	if len(configFile) > 0 {
+		err := util.StrictDecodeFile(configFile, "storage consumer", replicaConfig)
+		if err != nil {
+			log.Error("failed to decode config file", zap.Error(err))
+			return nil, err
+		}
 	}
 
-	err = replicaConfig.ValidateAndAdjust(upstreamURI)
+	err := replicaConfig.ValidateAndAdjust(upstreamURI)
 	if err != nil {
 		log.Error("failed to validate replica config", zap.Error(err))
 		return nil, err
@@ -373,7 +373,7 @@ func (c *consumer) getNewFiles(ctx context.Context) (map[dmlPathKey]fileIndexRan
 			}
 			// fake a dml key for schema.json file
 			dmlkey.schemaPathKey = schemaKey
-			dmlkey.partitionNum = 0
+			dmlkey.partitionNum = fakePartitionNumForSchemaFile
 			dmlkey.date = ""
 		} else {
 			fileIdx, err = dmlkey.parseDMLFilePath(c.replicationCfg.Sink.DateSeparator, path)
@@ -592,7 +592,8 @@ func (c *consumer) handleNewFiles(
 		}
 		// if the key is a fake dml path key which is mainly used for
 		// sorting schema.json file before the dml files, then execute the ddl query.
-		if key.partitionNum == 0 && len(key.date) == 0 && len(tableDef.Query) > 0 {
+		if key.partitionNum == fakePartitionNumForSchemaFile &&
+			len(key.date) == 0 && len(tableDef.Query) > 0 {
 			ddlEvent, err := tableDef.ToDDLEvent()
 			if err != nil {
 				return err
@@ -664,16 +665,18 @@ func main() {
 	var consumer *consumer
 	var err error
 
-	go func() {
-		server := &http.Server{
-			Addr:              ":6060",
-			ReadHeaderTimeout: 5 * time.Second,
-		}
+	if enableProfiling {
+		go func() {
+			server := &http.Server{
+				Addr:              ":6060",
+				ReadHeaderTimeout: 5 * time.Second,
+			}
 
-		if err := server.ListenAndServe(); err != nil {
-			log.Fatal("http pprof", zap.Error(err))
-		}
-	}()
+			if err := server.ListenAndServe(); err != nil {
+				log.Fatal("http pprof", zap.Error(err))
+			}
+		}()
+	}
 
 	ctx, stop := signal.NotifyContext(context.Background(), syscall.SIGINT, syscall.SIGTERM)
 	deferFunc := func() int {
