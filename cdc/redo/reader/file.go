@@ -25,6 +25,7 @@ import (
 	"os"
 	"path/filepath"
 	"sync"
+	"time"
 
 	"github.com/pingcap/errors"
 	"github.com/pingcap/log"
@@ -85,6 +86,7 @@ func newReader(ctx context.Context, cfg *readerConfig) ([]fileReader, error) {
 	if cfg.workerNums == 0 {
 		cfg.workerNums = defaultWorkerNum
 	}
+	start := time.Now()
 
 	if cfg.useExternalStorage {
 		extStorage, err := redo.InitExternalStorage(ctx, cfg.uri)
@@ -114,6 +116,9 @@ func newReader(ctx context.Context, cfg *readerConfig) ([]fileReader, error) {
 			})
 	}
 
+	log.Info("succeed to download and sort redo logs",
+		zap.String("type", cfg.fileType),
+		zap.Duration("duration", time.Since(start)))
 	return readers, nil
 }
 

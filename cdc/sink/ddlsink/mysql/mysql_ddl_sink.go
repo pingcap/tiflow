@@ -44,6 +44,10 @@ const (
 	networkDriftDuration = 5 * time.Second
 )
 
+// GetDBConnImpl is the implementation of pmysql.Factory.
+// Exported for testing.
+var GetDBConnImpl pmysql.Factory = pmysql.CreateMySQLDBConn
+
 // Assert Sink implementation
 var _ ddlsink.Sink = (*DDLSink)(nil)
 
@@ -64,7 +68,6 @@ func NewDDLSink(
 	ctx context.Context,
 	sinkURI *url.URL,
 	replicaConfig *config.ReplicaConfig,
-	dbConnFactory pmysql.Factory,
 ) (*DDLSink, error) {
 	changefeedID := contextutil.ChangefeedIDFromCtx(ctx)
 	cfg := pmysql.NewConfig()
@@ -73,12 +76,12 @@ func NewDDLSink(
 		return nil, err
 	}
 
-	dsnStr, err := pmysql.GenerateDSN(ctx, sinkURI, cfg, dbConnFactory)
+	dsnStr, err := pmysql.GenerateDSN(ctx, sinkURI, cfg, GetDBConnImpl)
 	if err != nil {
 		return nil, err
 	}
 
-	db, err := dbConnFactory(ctx, dsnStr)
+	db, err := GetDBConnImpl(ctx, dsnStr)
 	if err != nil {
 		return nil, err
 	}
@@ -117,7 +120,7 @@ func (m *DDLSink) execDDLWithMaxRetries(ctx context.Context, ddl *model.DDLEvent
 					zap.String("namespace", m.id.Namespace),
 					zap.String("changefeed", m.id.ID),
 					zap.Error(err))
-				// If the error is ignorable, we will direly ignore the error.
+				// If the error is ignorable, we will ignore the error directly.
 				return nil
 			}
 			log.Warn("Execute DDL with error, retry later",

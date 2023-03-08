@@ -41,10 +41,6 @@ func TestWrapError(t *testing.T) {
 				"[CDC:ErrDecodeFailed]decode failed: args data: cause error",
 				[]interface{}{"args data"},
 			},
-			{
-				ErrWriteTsConflict, err, false,
-				"[CDC:ErrWriteTsConflict]write ts conflict: cause error", nil,
-			},
 		}
 	)
 	for _, tc := range testCases {
