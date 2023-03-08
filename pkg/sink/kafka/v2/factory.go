@@ -210,6 +210,8 @@ func (f *factory) AsyncProducer(
 	failpointCh chan error,
 ) (pkafka.AsyncProducer, error) {
 	w := f.newWriter(true)
+	w.BatchTimeout = 10 * time.Millisecond
+	w.BatchSize = 1000
 	aw := &asyncWriter{
 		w:            w,
 		closedChan:   closedChan,
