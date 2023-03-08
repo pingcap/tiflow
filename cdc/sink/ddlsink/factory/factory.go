@@ -27,7 +27,7 @@ import (
 	cerror "github.com/pingcap/tiflow/pkg/errors"
 	"github.com/pingcap/tiflow/pkg/sink"
 	"github.com/pingcap/tiflow/pkg/sink/kafka"
-	kafkaV2 "github.com/pingcap/tiflow/pkg/sink/kafka/v2"
+	kafkav2 "github.com/pingcap/tiflow/pkg/sink/kafka/v2"
 )
 
 // New creates a new ddlsink.Sink by scheme.
