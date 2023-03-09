@@ -85,7 +85,7 @@ func generateTxnEvents(
 func TestCloudStorageWriteEventsWithoutDateSeparator(t *testing.T) {
 	ctx, cancel := context.WithCancel(context.Background())
 	parentDir := t.TempDir()
-	uri := fmt.Sprintf("file:///%s", parentDir)
+	uri := fmt.Sprintf("file:///%s?flush-interval=2s", parentDir)
 	sinkURI, err := url.Parse(uri)
 	require.Nil(t, err)
 
@@ -104,7 +104,7 @@ func TestCloudStorageWriteEventsWithoutDateSeparator(t *testing.T) {
 	tableDir := path.Join(parentDir, "test/table1/33")
 	err = s.WriteEvents(txns...)
 	require.Nil(t, err)
-	time.Sleep(2 * time.Second)
+	time.Sleep(3 * time.Second)
 
 	files, err := os.ReadDir(tableDir)
 	require.Nil(t, err)
@@ -126,7 +126,7 @@ func TestCloudStorageWriteEventsWithoutDateSeparator(t *testing.T) {
 	// generating another dml file.
 	err = s.WriteEvents(txns...)
 	require.Nil(t, err)
-	time.Sleep(2 * time.Second)
+	time.Sleep(3 * time.Second)
 
 	files, err = os.ReadDir(tableDir)
 	require.Nil(t, err)
