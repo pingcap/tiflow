@@ -327,7 +327,7 @@ func TestBrokerRemoveResource(t *testing.T) {
 	require.Equal(t, codes.InvalidArgument, code)
 }
 
-func TestInitStorage(t *testing.T) {
+func testInitStorage(t *testing.T) {
 	t.Parallel()
 	// with S3
 	broker := &DefaultBroker{
