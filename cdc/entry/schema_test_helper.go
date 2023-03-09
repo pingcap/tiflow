@@ -66,6 +66,10 @@ func (s *SchemaTestHelper) DDL2Job(ddl string) *timodel.Job {
 	jobs, err := tiddl.GetLastNHistoryDDLJobs(s.GetCurrentMeta(), 1)
 	require.Nil(s.t, err)
 	require.Len(s.t, jobs, 1)
+	// Set State from Synced to Done.
+	// Because jobs are put to history queue after TiDB alter its state from
+	// Done to Synced.
+	jobs[0].State = timodel.JobStateDone
 	res := jobs[0]
 	if res.Type != timodel.ActionRenameTables {
 		return res
@@ -114,6 +118,12 @@ func (s *SchemaTestHelper) DDL2Jobs(ddl string, jobCnt int) []*timodel.Job {
 	jobs, err := tiddl.GetLastNHistoryDDLJobs(s.GetCurrentMeta(), jobCnt)
 	require.Nil(s.t, err)
 	require.Len(s.t, jobs, jobCnt)
+	// Set State from Synced to Done.
+	// Because jobs are put to history queue after TiDB alter its state from
+	// Done to Synced.
+	for i := range jobs {
+		jobs[i].State = timodel.JobStateDone
+	}
 	return jobs
 }
 

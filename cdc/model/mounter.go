@@ -215,3 +215,8 @@ func (r ResolvedTs) Greater(r1 ResolvedTs) bool {
 	}
 	return r.Ts > r1.Ts
 }
+
+// Equal judge whether the resolved ts is equal to the given ts.
+func (r ResolvedTs) Equal(r1 ResolvedTs) bool {
+	return r == r1
+}
