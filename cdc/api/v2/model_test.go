@@ -27,7 +27,7 @@ import (
 )
 
 // note: this is api published default value, not change it
-var defaultApiConfig = &ReplicaConfig{
+var defaultAPIConfig = &ReplicaConfig{
 	MemoryQuota:        config.DefaultChangefeedMemoryQuota,
 	CaseSensitive:      true,
 	EnableOldValue:     true,
@@ -69,7 +69,7 @@ var defaultApiConfig = &ReplicaConfig{
 
 func TestDefaultReplicaConfig(t *testing.T) {
 	t.Parallel()
-	require.Equal(t, defaultApiConfig, GetDefaultReplicaConfig())
+	require.Equal(t, defaultAPIConfig, GetDefaultReplicaConfig())
 	cfg := GetDefaultReplicaConfig()
 	require.NotNil(t, cfg.Scheduler)
 	cfg2 := cfg.toInternalReplicaConfigWithOriginConfig(&config.ReplicaConfig{})

@@ -186,8 +186,12 @@ func (c *ReplicaConfig) toInternalReplicaConfigWithOriginConfig(
 	res.ForceReplicate = c.ForceReplicate
 	res.CheckGCSafePoint = c.CheckGCSafePoint
 	res.EnableSyncPoint = c.EnableSyncPoint
-	res.SyncPointInterval = c.SyncPointInterval.duration
-	res.SyncPointRetention = c.SyncPointRetention.duration
+	if c.SyncPointInterval != nil {
+		res.SyncPointInterval = c.SyncPointInterval.duration
+	}
+	if c.SyncPointRetention != nil {
+		res.SyncPointRetention = c.SyncPointRetention.duration
+	}
 	res.BDRMode = c.BDRMode
 
 	if c.Filter != nil {
