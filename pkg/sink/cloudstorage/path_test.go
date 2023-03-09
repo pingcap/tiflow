@@ -39,7 +39,7 @@ func testFilePathGenerator(ctx context.Context, t *testing.T, dir string) *FileP
 	err = cfg.Apply(ctx, sinkURI, replicaConfig)
 	require.NoError(t, err)
 
-	f := NewFilePathGenerator(cfg, storage, ".json")
+	f := NewFilePathGenerator(cfg, storage, ".json", clock.New())
 	return f
 }
 
@@ -187,7 +187,11 @@ func TestGenerateDataFilePathWithIndexFile(t *testing.T) {
 	defer cancel()
 
 	dir := t.TempDir()
-	d := testFilePathGenerator(ctx, t, dir)
+	f := testFilePathGenerator(ctx, t, dir)
+	mockClock := clock.NewMock()
+	f.config.DateSeparator = config.DateSeparatorDay.String()
+	f.clock = mockClock
+	mockClock.Set(time.Date(2023, 3, 9, 23, 59, 59, 0, time.UTC))
 	table := VersionedTable{
 		TableName: model.TableName{
 			Schema: "test",
@@ -195,11 +199,11 @@ func TestGenerateDataFilePathWithIndexFile(t *testing.T) {
 		},
 		Version: 5,
 	}
-	date := d.GenerateDateStr()
-	indexFilePath := d.GenerateIndexFilePath(table, date)
-	err := d.storage.WriteFile(ctx, indexFilePath, []byte("CDC000005.json\n"))
+	date := f.GenerateDateStr()
+	indexFilePath := f.GenerateIndexFilePath(table, date)
+	err := f.storage.WriteFile(ctx, indexFilePath, []byte("CDC000005.json\n"))
 	require.NoError(t, err)
-	dataFilePath, err := d.GenerateDataFilePath(ctx, table, date)
+	dataFilePath, err := f.GenerateDataFilePath(ctx, table, date)
 	require.NoError(t, err)
-	require.Equal(t, "test/table1/5/CDC000006.json", dataFilePath)
+	require.Equal(t, "test/table1/5/2023-03-09/CDC000006.json", dataFilePath)
 }

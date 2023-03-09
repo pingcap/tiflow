@@ -27,6 +27,7 @@ import (
 	"github.com/pingcap/tiflow/cdc/model"
 	"github.com/pingcap/tiflow/cdc/sink/metrics"
 	mcloudstorage "github.com/pingcap/tiflow/cdc/sink/metrics/cloudstorage"
+	"github.com/pingcap/tiflow/engine/pkg/clock"
 	"github.com/pingcap/tiflow/pkg/chann"
 	"github.com/pingcap/tiflow/pkg/sink/cloudstorage"
 	"github.com/prometheus/client_golang/prometheus"
@@ -82,6 +83,7 @@ func newDMLWorker(
 	storage storage.ExternalStorage,
 	config *cloudstorage.Config,
 	extension string,
+	clock clock.Clock,
 	statistics *metrics.Statistics,
 ) *dmlWorker {
 	d := &dmlWorker{
@@ -93,7 +95,7 @@ func newDMLWorker(
 		flushNotifyCh:     make(chan flushTask, 1),
 		fileSize:          make(map[cloudstorage.VersionedTable]uint64),
 		statistics:        statistics,
-		filePathGenerator: cloudstorage.NewFilePathGenerator(config, storage, extension),
+		filePathGenerator: cloudstorage.NewFilePathGenerator(config, storage, extension, clock),
 		bufferPool: sync.Pool{
 			New: func() interface{} {
 				return new(bytes.Buffer)
@@ -104,6 +106,11 @@ func newDMLWorker(
 	}
 
 	return d
+}
+
+// setClock is used for unit test
+func (d *dmlWorker) setClock(clock clock.Clock) {
+	d.filePathGenerator.SetClock(clock)
 }
 
 // run creates a set of background goroutines.
@@ -189,6 +196,10 @@ func (d *dmlWorker) flushMessages(ctx context.Context) error {
 				}
 
 				// then write the data file to external storage.
+				// TODO: if system crashes when writing date file CDC000002.csv
+				// (file is not generated at all), then after TiCDC recovers from the crash,
+				// storage sink will generate a new file named CDC000003.csv,
+				// we will optimize this issue later.
 				err = d.writeDataFile(ctx, dataFilePath, events)
 				if err != nil {
 					log.Error("failed to write data file to external storage",

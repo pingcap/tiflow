@@ -28,6 +28,7 @@ import (
 	"github.com/pingcap/tiflow/cdc/model"
 	"github.com/pingcap/tiflow/cdc/sink/dmlsink"
 	"github.com/pingcap/tiflow/cdc/sink/metrics"
+	"github.com/pingcap/tiflow/engine/pkg/clock"
 	"github.com/pingcap/tiflow/pkg/chann"
 	"github.com/pingcap/tiflow/pkg/config"
 	"github.com/pingcap/tiflow/pkg/sink"
@@ -49,7 +50,7 @@ func testDMLWorker(ctx context.Context, t *testing.T, dir string) *dmlWorker {
 
 	statistics := metrics.NewStatistics(ctx, sink.TxnSink)
 	d := newDMLWorker(1, model.DefaultChangeFeedID("dml-worker-test"), storage,
-		cfg, ".json", statistics)
+		cfg, ".json", clock.New(), statistics)
 	return d
 }
 

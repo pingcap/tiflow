@@ -63,14 +63,20 @@ func NewFilePathGenerator(
 	config *Config,
 	storage storage.ExternalStorage,
 	extension string,
+	clock clock.Clock,
 ) *FilePathGenerator {
 	return &FilePathGenerator{
 		config:    config,
 		extension: extension,
 		storage:   storage,
-		clock:     clock.New(),
+		clock:     clock,
 		fileIndex: make(map[VersionedTable]*indexWithDate),
 	}
+}
+
+// SetClock is used for unit test
+func (f *FilePathGenerator) SetClock(clock clock.Clock) {
+	f.clock = clock
 }
 
 // Contains checks if a VersionedTable is cached by FilePathGenerator before.
@@ -163,10 +169,14 @@ func (f *FilePathGenerator) GenerateDataFilePath(
 			if err != nil {
 				return "", err
 			}
+
+			// TODO: if the file with maxFileIdx does not exist or is empty,
+			// we can reuse the old index number.
 			fileIdx = maxFileIdx
 		}
 
 		f.fileIndex[tbl] = &indexWithDate{
+			prevDate: date,
 			currDate: date,
 			index:    fileIdx,
 		}
