@@ -84,9 +84,9 @@ func (m *MetricsCollector) collectMetrics() {
 	pkafka.OutgoingByteRateGauge.WithLabelValues(m.changefeedID.Namespace, m.changefeedID.ID, "v2").
 		Set(float64(statistics.Bytes / 5))
 
-	pkafka.RetryCount.WithLabelValues(m.changefeedID.Namespace, m.changefeedID.ID).
+	pkafka.ClientRetryGauge.WithLabelValues(m.changefeedID.Namespace, m.changefeedID.ID).
 		Set(float64(statistics.Retries))
-	pkafka.ErrorCount.WithLabelValues(m.changefeedID.Namespace, m.changefeedID.ID).
+	pkafka.ClientErrorGauge.WithLabelValues(m.changefeedID.Namespace, m.changefeedID.ID).
 		Set(float64(statistics.Errors))
 }
 
@@ -105,8 +105,8 @@ func (m *MetricsCollector) cleanupMetrics() {
 	pkafka.OutgoingByteRateGauge.
 		DeleteLabelValues(m.changefeedID.Namespace, m.changefeedID.ID, "v2")
 
-	pkafka.RetryCount.DeleteLabelValues(m.changefeedID.Namespace, m.changefeedID.ID)
-	pkafka.ErrorCount.DeleteLabelValues(m.changefeedID.Namespace, m.changefeedID.ID)
+	pkafka.ClientRetryGauge.DeleteLabelValues(m.changefeedID.Namespace, m.changefeedID.ID)
+	pkafka.ClientErrorGauge.DeleteLabelValues(m.changefeedID.Namespace, m.changefeedID.ID)
 
 	log.Info("metrics collector clean up all metrics",
 		zap.String("namespace", m.changefeedID.Namespace),

@@ -67,22 +67,22 @@ var (
 			Help:      "Responses/second received from all brokers.",
 		}, []string{"namespace", "changefeed", "broker"})
 
-	// RetryCount only for kafka-go client to track internal retry count.
-	RetryCount = prometheus.NewGaugeVec(
+	// ClientRetryGauge only for kafka-go client to track internal retry count.
+	ClientRetryGauge = prometheus.NewGaugeVec(
 		prometheus.GaugeOpts{
 			Namespace: "ticdc",
 			Subsystem: "sink",
 			Name:      "kafka_producer_retry_count",
-			Help:      "Kafka Client send request retry count",
+			Help:      "Kafka client send request retry count",
 		}, []string{"namespace", "changefeed"})
 
-	// ErrorCount only for kafka-go client to track internal error count.
-	ErrorCount = prometheus.NewGaugeVec(
+	// ClientErrorGauge only for kafka-go client to track internal error count.
+	ClientErrorGauge = prometheus.NewGaugeVec(
 		prometheus.GaugeOpts{
 			Namespace: "ticdc",
 			Subsystem: "sink",
 			Name:      "kafka_producer_err_count",
-			Help:      "Kafka Client send request retry count",
+			Help:      "Kafka client send request retry count",
 		}, []string{"namespace", "changefeed"})
 
 	// BatchDurationGauge only for kafka-go client to track internal batch duration.
@@ -126,6 +126,6 @@ func InitMetrics(registry *prometheus.Registry) {
 	registry.MustRegister(BatchDurationGauge)
 	registry.MustRegister(BatchMessageCountGauge)
 	registry.MustRegister(BatchSizeGauge)
-	registry.MustRegister(RetryCount)
-	registry.MustRegister(ErrorCount)
+	registry.MustRegister(ClientRetryGauge)
+	registry.MustRegister(ClientErrorGauge)
 }
