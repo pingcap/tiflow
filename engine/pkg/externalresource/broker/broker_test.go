@@ -327,6 +327,7 @@ func TestBrokerRemoveResource(t *testing.T) {
 	require.Equal(t, codes.InvalidArgument, code)
 }
 
+// nolint: unused
 func testInitStorage(t *testing.T) {
 	t.Parallel()
 	// with S3
