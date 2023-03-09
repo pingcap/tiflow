@@ -832,6 +832,10 @@ func NewBatchEncoderBuilder(ctx context.Context,
 		return nil, errors.Trace(err)
 	}
 
+	log.Info(
+		"Successfully tested connectivity to Schema Registry",
+		zap.String("registryURL", config.AvroSchemaRegistry))
+
 	return &batchEncoderBuilder{
 		namespace:          contextutil.ChangefeedIDFromCtx(ctx).Namespace,
 		config:             config,

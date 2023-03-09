@@ -97,11 +97,6 @@ func NewAvroSchemaManager(
 		)
 	}
 
-	log.Info(
-		"Successfully tested connectivity to Schema Registry",
-		zap.String("registryURL", registryURL),
-	)
-
 	return &schemaManager{
 		registryURL:   registryURL,
 		cache:         make(map[string]*schemaCacheEntry, 1),
