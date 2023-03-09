@@ -238,7 +238,7 @@ func (suite *redoLogWorkerSuite) TestHandleTaskAbortWhenNoMemAndBlocked() {
 	require.Len(suite.T(), m.getEvents(suite.testSpan), 2, "Only two events should be sent to sink")
 }
 
-func (suite *redoLogWorkerSuite) TestHandleTaskWithSplitTxnAndAdvanceTableIfNoWorkload() {
+func (suite *redoLogWorkerSuite) TestHandleTaskWithSplitTxnAndAdvanceIfNoWorkload() {
 	ctx, cancel := context.WithCancel(context.Background())
 	events := []*model.PolymorphicEvent{
 		genPolymorphicResolvedEvent(4),
