@@ -285,7 +285,7 @@ func (c *ReplicaConfig) ToInternalReplicaConfig() *config.ReplicaConfig {
 	if c.Scheduler != nil {
 		res.Scheduler = &config.ChangefeedSchedulerConfig{
 			EnableTableAcrossNodes: c.Scheduler.EnableTableAcrossNodes,
-			RegionPerSpan:          c.Scheduler.RegionPerSpan,
+			RegionThreshold:        c.Scheduler.RegionThreshold,
 		}
 	}
 	return res
@@ -404,7 +404,7 @@ func ToAPIReplicaConfig(c *config.ReplicaConfig) *ReplicaConfig {
 	if cloned.Scheduler != nil {
 		res.Scheduler = &ChangefeedSchedulerConfig{
 			EnableTableAcrossNodes: cloned.Scheduler.EnableTableAcrossNodes,
-			RegionPerSpan:          cloned.Scheduler.RegionPerSpan,
+			RegionThreshold:        cloned.Scheduler.RegionThreshold,
 		}
 	}
 	return res
@@ -433,8 +433,8 @@ func GetDefaultReplicaConfig() *ReplicaConfig {
 		Scheduler: &ChangefeedSchedulerConfig{
 			EnableTableAcrossNodes: config.GetDefaultReplicaConfig().
 				Scheduler.EnableTableAcrossNodes,
-			RegionPerSpan: config.GetDefaultReplicaConfig().
-				Scheduler.RegionPerSpan,
+			RegionThreshold: config.GetDefaultReplicaConfig().
+				Scheduler.RegionThreshold,
 		},
 	}
 }
@@ -586,9 +586,8 @@ type ChangefeedSchedulerConfig struct {
 	// EnableTableAcrossNodes set true to split one table to multiple spans and
 	// distribute to multiple TiCDC nodes.
 	EnableTableAcrossNodes bool `toml:"enable_table_across_nodes" json:"enable_table_across_nodes"`
-	// RegionPerSpan the number of regions in a span, must be greater than 1000.
-	// Set 0 to disable span replication.
-	RegionPerSpan int `toml:"region_per_span" json:"region_per_span"`
+	// RegionThreshold is the region count threshold of splitting a table.
+	RegionThreshold int `toml:"region_threshold" json:"region_threshold"`
 }
 
 // EtcdData contains key/value pair of etcd data

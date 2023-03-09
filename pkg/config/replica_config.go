@@ -70,7 +70,7 @@ var defaultReplicaConfig = &ReplicaConfig{
 	},
 	Scheduler: &ChangefeedSchedulerConfig{
 		EnableTableAcrossNodes: false,
-		RegionPerSpan:          100_000,
+		RegionThreshold:        100_000,
 	},
 }
 
