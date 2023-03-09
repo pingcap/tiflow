@@ -107,6 +107,8 @@ INSERT INTO t0
 VALUES (2, '部署', "美国", "纽约", "世界,你好"
 	, 0xCAC0BDE7C4E3BAC3);
 
+SELECT sleep(5);
+
 UPDATE t0
 SET name = '开发'
 WHERE name = '测试'
