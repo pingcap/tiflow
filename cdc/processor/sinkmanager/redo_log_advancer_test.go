@@ -16,12 +16,14 @@ package sinkmanager
 import (
 	"context"
 	"testing"
+	"time"
 
 	"github.com/pingcap/tiflow/cdc/model"
 	"github.com/pingcap/tiflow/cdc/processor/memquota"
 	"github.com/pingcap/tiflow/cdc/processor/sourcemanager/engine"
 	"github.com/pingcap/tiflow/cdc/processor/tablepb"
 	"github.com/pingcap/tiflow/cdc/redo"
+	cerrors "github.com/pingcap/tiflow/pkg/errors"
 	"github.com/pingcap/tiflow/pkg/spanz"
 	"github.com/stretchr/testify/require"
 	"github.com/stretchr/testify/suite"
@@ -299,7 +301,7 @@ func (suite *redoLogAdvancerSuite) TestTryAdvanceWhenExceedAvailableMem() {
 
 	require.Equal(suite.T(), uint64(1024), advancer.pendingTxnSize)
 	require.Equal(suite.T(), uint64(768), memoryQuota.GetUsedBytes())
-	// 4. Try advance with txn is finished.
+	// 3. Try advance with txn is finished.
 	advanced, err := advancer.tryAdvanceAndAcquireMem(
 		ctx,
 		256,
@@ -318,4 +320,154 @@ func (suite *redoLogAdvancerSuite) TestTryAdvanceWhenExceedAvailableMem() {
 	manager.releaseRowsMemory(suite.testSpan)
 	require.Equal(suite.T(), uint64(256), memoryQuota.GetUsedBytes(),
 		"memory quota should be released after releaseRowsMemory is called")
+}
+
+func (suite *redoLogAdvancerSuite) TestTryAdvanceWhenReachTheMaxUpdateIntSizeAndTxnNotFinished() {
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+	memoryQuota := suite.genMemQuota(768)
+	defer memoryQuota.Close()
+	task, manager := suite.genRedoTaskAndRedoDMLManager()
+	advancer := newRedoLogAdvancer(task, memoryQuota, 768, manager)
+	require.NotNil(suite.T(), advancer)
+
+	pos := engine.Position{StartTs: 1, CommitTs: 2}
+	// 1. append 1 event with commit ts 2
+	advancer.appendEvents([]*model.RowChangedEvent{
+		{CommitTs: 2},
+	}, 256)
+	require.Equal(suite.T(), uint64(256), advancer.usedMem)
+	advancer.tryMoveToNextTxn(2, pos)
+
+	// 2. append 2 events with commit ts 3
+	for i := 0; i < 2; i++ {
+		advancer.appendEvents([]*model.RowChangedEvent{
+			{CommitTs: 3},
+		}, 256)
+	}
+	require.Equal(suite.T(), uint64(768), advancer.usedMem)
+	pos = engine.Position{StartTs: 1, CommitTs: 3}
+	advancer.tryMoveToNextTxn(3, pos)
+
+	// 3. Try advance with txn is not finished.
+	advanced, err := advancer.tryAdvanceAndAcquireMem(
+		ctx,
+		256,
+		false,
+		false,
+	)
+	require.NoError(suite.T(), err)
+	require.True(suite.T(), advanced)
+	require.Len(suite.T(), manager.getEvents(suite.testSpan), 3)
+	require.Equal(suite.T(), uint64(2), manager.GetResolvedTs(suite.testSpan))
+	require.Equal(suite.T(), uint64(0), advancer.pendingTxnSize)
+	manager.releaseRowsMemory(suite.testSpan)
+	require.Equal(suite.T(), uint64(512), memoryQuota.GetUsedBytes(),
+		"memory quota should be released after releaseRowsMemory is called")
+}
+
+func (suite *redoLogAdvancerSuite) TestFinish() {
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+	memoryQuota := suite.genMemQuota(768)
+	defer memoryQuota.Close()
+	task, manager := suite.genRedoTaskAndRedoDMLManager()
+	advancer := newRedoLogAdvancer(task, memoryQuota, 768, manager)
+	require.NotNil(suite.T(), advancer)
+
+	pos := engine.Position{StartTs: 1, CommitTs: 2}
+	// 1. append 1 event with commit ts 2
+	advancer.appendEvents([]*model.RowChangedEvent{
+		{CommitTs: 2},
+	}, 256)
+	require.Equal(suite.T(), uint64(256), advancer.usedMem)
+	advancer.tryMoveToNextTxn(2, pos)
+
+	// 2. append 2 events with commit ts 3
+	for i := 0; i < 2; i++ {
+		advancer.appendEvents([]*model.RowChangedEvent{
+			{CommitTs: 3},
+		}, 256)
+	}
+	require.Equal(suite.T(), uint64(768), advancer.usedMem)
+	pos = engine.Position{StartTs: 1, CommitTs: 3}
+	advancer.tryMoveToNextTxn(3, pos)
+
+	require.Equal(suite.T(), uint64(2), advancer.lastTxnCommitTs)
+	require.Equal(suite.T(), uint64(3), advancer.currTxnCommitTs)
+	// 3. Try finish.
+	err := advancer.finish(
+		ctx,
+		256,
+		pos,
+	)
+	require.NoError(suite.T(), err)
+
+	// All events should be flushed and the last pos should be updated.
+	require.Equal(suite.T(), pos, advancer.lastPos)
+	require.Equal(suite.T(), uint64(3), advancer.lastTxnCommitTs)
+	require.Equal(suite.T(), uint64(3), advancer.currTxnCommitTs)
+
+	require.Len(suite.T(), manager.getEvents(suite.testSpan), 3)
+	require.Equal(suite.T(), uint64(3), manager.GetResolvedTs(suite.testSpan))
+	require.Equal(suite.T(), uint64(0), advancer.pendingTxnSize)
+	manager.releaseRowsMemory(suite.testSpan)
+	require.Equal(suite.T(), uint64(256), memoryQuota.GetUsedBytes(),
+		"memory quota should be released after releaseRowsMemory is called")
+}
+
+func (suite *redoLogAdvancerSuite) TestTryAdvanceAndBlockAcquireWithSplitTxn() {
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+	memoryQuota := suite.genMemQuota(768)
+	defer memoryQuota.Close()
+	task, manager := suite.genRedoTaskAndRedoDMLManager()
+	advancer := newRedoLogAdvancer(task, memoryQuota, 768, manager)
+	require.NotNil(suite.T(), advancer)
+
+	pos := engine.Position{StartTs: 1, CommitTs: 2}
+	// 1. append 1 event with commit ts 2
+	advancer.appendEvents([]*model.RowChangedEvent{
+		{CommitTs: 2},
+	}, 256)
+	require.Equal(suite.T(), uint64(256), advancer.usedMem)
+	advancer.tryMoveToNextTxn(2, pos)
+
+	// 2. append 3 events with commit ts 3, this will exceed the memory quota.
+	for i := 0; i < 3; i++ {
+		advancer.appendEvents([]*model.RowChangedEvent{
+			{CommitTs: 3},
+		}, 256)
+	}
+	require.Equal(suite.T(), uint64(1024), advancer.usedMem)
+	pos = engine.Position{StartTs: 1, CommitTs: 3}
+	advancer.tryMoveToNextTxn(3, pos)
+
+	// 3. Last pos is a commit fence.
+	advancer.lastPos = engine.Position{
+		StartTs:  2,
+		CommitTs: 3,
+	}
+
+	down := make(chan struct{})
+	go func() {
+		// 4. Try advance and block acquire.
+		advanced, err := advancer.tryAdvanceAndAcquireMem(
+			ctx,
+			256,
+			false,
+			false,
+		)
+		require.False(suite.T(), advanced)
+		require.ErrorIs(suite.T(), err, cerrors.ErrFlowControllerAborted)
+		down <- struct{}{}
+	}()
+
+	// Wait all events are flushed.
+	require.Eventually(suite.T(), func() bool {
+		return len(manager.getEvents(suite.testSpan)) == 4
+	}, 5*time.Second, 10*time.Millisecond)
+	// After ack, abort the blocked acquire.
+	memoryQuota.Close()
+	<-down
 }
