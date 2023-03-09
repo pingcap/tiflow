@@ -2,7 +2,7 @@
   "__inputs": [
     {
       "name": "DS_TEST-CLUSTER",
-      "label": "test-cluster",
+      "label": "${DS_TEST-CLUSTER}",
       "description": "",
       "type": "datasource",
       "pluginId": "prometheus",
@@ -19408,8 +19408,8 @@
             },
             "runtime_instance": {
               "selected": false,
-              "text": "10.2.6.173:8300",
-              "value": "10.2.6.173:8300"
+              "text": "172.16.5.37:48112",
+              "value": "172.16.5.37:48112"
             }
           },
           "seriesOverrides": [
@@ -19594,8 +19594,8 @@
             },
             "runtime_instance": {
               "selected": false,
-              "text": "10.2.6.173:8300",
-              "value": "10.2.6.173:8300"
+              "text": "172.16.5.37:48112",
+              "value": "172.16.5.37:48112"
             }
           },
           "seriesOverrides": [],
@@ -19701,8 +19701,8 @@
             },
             "runtime_instance": {
               "selected": false,
-              "text": "10.2.6.173:8300",
-              "value": "10.2.6.173:8300"
+              "text": "172.16.5.37:48112",
+              "value": "172.16.5.37:48112"
             }
           },
           "seriesOverrides": [
@@ -19823,8 +19823,8 @@
             },
             "runtime_instance": {
               "selected": false,
-              "text": "10.2.6.173:8300",
-              "value": "10.2.6.173:8300"
+              "text": "172.16.5.37:48112",
+              "value": "172.16.5.37:48112"
             }
           },
           "seriesOverrides": [
@@ -19922,7 +19922,7 @@
       "type": "row"
     }
   ],
-  "refresh": "5s",
+  "refresh": "1m",
   "schemaVersion": 27,
   "style": "dark",
   "tags": [],
@@ -20204,7 +20204,7 @@
     ]
   },
   "timezone": "browser",
-  "title": "Test-Cluster-TiCDCxxx",
-  "uid": "YiGL8hBZ1xxx",
-  "version": 3
+  "title": "Test-Cluster-TiCDC",
+  "uid": "YiGL8hBZ1",
+  "version": 52
 }
