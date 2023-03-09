@@ -210,7 +210,7 @@ func (w *dmWorker) CloseImpl(ctx context.Context) {
 
 // setupStorage opens and configs external storage
 func (w *dmWorker) setupStorage(ctx context.Context) error {
-	rid := dm.NewDMResourceID(w.cfg.Name, w.cfg.SourceID, w.IsS3StorageEnabled())
+	rid := dm.NewDMResourceID(w.cfg.Name, w.cfg.SourceID, dm.GetDMStorageType(w.GetEnabledBucketStorage()))
 	opts := []broker.OpenStorageOption{}
 	if w.workerType == frameModel.WorkerDMDump {
 		// always use an empty storage for dumpling task

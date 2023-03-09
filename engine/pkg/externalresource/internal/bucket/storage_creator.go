@@ -11,7 +11,7 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-package s3
+package bucket
 
 import (
 	"context"
@@ -20,27 +20,25 @@ import (
 
 	brStorage "github.com/pingcap/tidb/br/pkg/storage"
 	"github.com/pingcap/tiflow/engine/pkg/externalresource/internal"
+	"github.com/pingcap/tiflow/engine/pkg/externalresource/model"
 	"github.com/pingcap/tiflow/pkg/errors"
 	"github.com/pingcap/tiflow/pkg/util"
 )
 
-// ExternalStorageFactory represents a factory used to create
+// Creator represents a creator used to create
 // brStorage.ExternalStorage.
-// Implementing mock or stub ExternalStorageFactory will make
+// Implementing mock or stub Creator will make
 // unit testing easier.
-type ExternalStorageFactory interface {
-	newS3ExternalStorageForScope(
-		ctx context.Context, scope internal.ResourceScope,
-	) (brStorage.ExternalStorage, error)
-
-	newS3ExternalStorageFromURI(ctx context.Context, uri string) (brStorage.ExternalStorage, error)
-
+type Creator interface {
+	newBucketForScope(ctx context.Context, scope internal.ResourceScope) (brStorage.ExternalStorage, error)
+	newBucketFromURI(ctx context.Context, uri string) (brStorage.ExternalStorage, error)
 	baseURI() string
+	resourceType() model.ResourceType
 }
 
-// ExternalStorageFactoryImpl implements ExternalStorageFactory.
+// CreatorImpl implements Creator.
 // It is exported for testing purposes.
-type ExternalStorageFactoryImpl struct {
+type CreatorImpl struct {
 	// Bucket represents a name of an s3 bucket.
 	Bucket string
 	// Prefix is an optional prefix in the S3 file path.
@@ -48,53 +46,55 @@ type ExternalStorageFactoryImpl struct {
 	Prefix string
 	// Options provide necessary information such as endpoints and access key
 	// for creating an s3 client.
-	Options *brStorage.S3BackendOptions
+	Options *brStorage.BackendOptions
+	// ResourceType is the bucket type of this creator
+	ResourceType model.ResourceType
 }
 
-// NewExternalStorageFactory creates a new ExternalStorageFactory with s3 options.
-func NewExternalStorageFactory(
-	bucket string, prefix string,
-	options *brStorage.S3BackendOptions,
-) *ExternalStorageFactoryImpl {
-	return &ExternalStorageFactoryImpl{Prefix: prefix, Bucket: bucket, Options: options}
+// NewCreator creates a new Creator
+func NewCreator(
+	config *model.Config,
+) *CreatorImpl {
+	options, bucket, prefix, tp := config.ToBrBackendOptions()
+	return &CreatorImpl{Prefix: prefix, Bucket: bucket, Options: options, ResourceType: tp}
 }
 
-func (f *ExternalStorageFactoryImpl) newS3ExternalStorageForScope(
+func (f *CreatorImpl) newBucketForScope(
 	ctx context.Context, scope internal.ResourceScope,
 ) (brStorage.ExternalStorage, error) {
-	// full uri path is `s3://bucket/prefix/executorID/workerID`
+	// full uri path is like: `s3://bucket/prefix/executorID/workerID`
 	uri := fmt.Sprintf("%s/%s", f.baseURI(), scope.BuildResPath())
-	return GetExternalStorageFromURI(ctx, uri, *f.Options)
+	return GetExternalStorageFromURI(ctx, uri, f.Options)
 }
 
-func (f *ExternalStorageFactoryImpl) baseURI() string {
-	uri := fmt.Sprintf("s3://%s", url.QueryEscape(f.Bucket))
+func (f *CreatorImpl) baseURI() string {
+	uri := fmt.Sprintf("%s://%s", string(f.ResourceType), url.QueryEscape(f.Bucket))
 	if f.Prefix != "" {
 		uri += "/" + url.QueryEscape(f.Prefix)
 	}
 	return uri
 }
 
-func (f *ExternalStorageFactoryImpl) newS3ExternalStorageFromURI(
+func (f *CreatorImpl) resourceType() model.ResourceType {
+	return f.ResourceType
+}
+
+func (f *CreatorImpl) newBucketFromURI(
 	ctx context.Context,
 	uri string,
 ) (brStorage.ExternalStorage, error) {
-	return GetExternalStorageFromURI(ctx, uri, *f.Options)
+	return GetExternalStorageFromURI(ctx, uri, f.Options)
 }
 
 // GetExternalStorageFromURI creates a new brStorage.ExternalStorage from a uri.
 func GetExternalStorageFromURI(
-	ctx context.Context, uri string, s3Opts brStorage.S3BackendOptions,
+	ctx context.Context, uri string, opts *brStorage.BackendOptions,
 ) (brStorage.ExternalStorage, error) {
-	opts := &brStorage.BackendOptions{
-		S3: s3Opts,
-	}
-
 	// Note that we may have network I/O here.
 	ret, err := util.GetExternalStorage(ctx, uri, opts, util.DefaultS3Retryer())
 	if err != nil {
 		retErr := errors.ErrFailToCreateExternalStorage.Wrap(errors.Trace(err))
-		return nil, retErr.GenWithStackByArgs("creating ExternalStorage for s3")
+		return nil, retErr.GenWithStackByArgs("creating ExternalStorage for bucket")
 	}
 	return ret, nil
 }
