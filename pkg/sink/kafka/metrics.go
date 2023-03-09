@@ -67,6 +67,7 @@ var (
 			Help:      "Responses/second received from all brokers.",
 		}, []string{"namespace", "changefeed", "broker"})
 
+	// RetryCount only for kafka-go client to track internal retry count.
 	RetryCount = prometheus.NewGaugeVec(
 		prometheus.GaugeOpts{
 			Namespace: "ticdc",
@@ -75,6 +76,7 @@ var (
 			Help:      "Kafka Client send request retry count",
 		}, []string{"namespace", "changefeed"})
 
+	// ErrorCount only for kafka-go client to track internal error count.
 	ErrorCount = prometheus.NewGaugeVec(
 		prometheus.GaugeOpts{
 			Namespace: "ticdc",
@@ -83,6 +85,7 @@ var (
 			Help:      "Kafka Client send request retry count",
 		}, []string{"namespace", "changefeed"})
 
+	// BatchDurationGauge only for kafka-go client to track internal batch duration.
 	BatchDurationGauge = prometheus.NewGaugeVec(
 		prometheus.GaugeOpts{
 			Namespace: "ticdc",
@@ -91,6 +94,7 @@ var (
 			Help:      "Kafka client internal average batch message time cost in milliseconds",
 		}, []string{"namespace", "changefeed"})
 
+	// BatchMessageCountGauge only for kafka-go client to track each batch's messages count.
 	BatchMessageCountGauge = prometheus.NewGaugeVec(
 		prometheus.GaugeOpts{
 			Namespace: "ticdc",
@@ -99,6 +103,7 @@ var (
 			Help:      "Kafka client internal average batch message count",
 		}, []string{"namespace", "changefeed"})
 
+	// BatchSizeGauge only for kafka-go client to track each batch's size in bytes.
 	BatchSizeGauge = prometheus.NewGaugeVec(
 		prometheus.GaugeOpts{
 			Namespace: "ticdc",

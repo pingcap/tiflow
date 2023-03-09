@@ -76,11 +76,12 @@ func (m *MetricsCollector) collectMetrics() {
 
 	// send request related metrics.
 	// metrics is collected each 5 seconds, divide by 5 to get per seconds average.
-	pkafka.RequestRateGauge.WithLabelValues(m.changefeedID.Namespace, m.changefeedID.ID, "all").
+	// since kafka-go does not support per broker metrics, so we add `v2` as the broker ID.
+	pkafka.RequestRateGauge.WithLabelValues(m.changefeedID.Namespace, m.changefeedID.ID, "v2").
 		Set(float64(statistics.Writes / 5))
-	pkafka.RequestLatencyGauge.WithLabelValues(m.changefeedID.Namespace, m.changefeedID.ID, "all").
+	pkafka.RequestLatencyGauge.WithLabelValues(m.changefeedID.Namespace, m.changefeedID.ID, "v2").
 		Set(statistics.WriteTime.Avg.Seconds())
-	pkafka.OutgoingByteRateGauge.WithLabelValues(m.changefeedID.Namespace, m.changefeedID.ID, "all").
+	pkafka.OutgoingByteRateGauge.WithLabelValues(m.changefeedID.Namespace, m.changefeedID.ID, "v2").
 		Set(float64(statistics.Bytes / 5))
 
 	pkafka.RetryCount.WithLabelValues(m.changefeedID.Namespace, m.changefeedID.ID).
@@ -90,13 +91,19 @@ func (m *MetricsCollector) collectMetrics() {
 }
 
 func (m *MetricsCollector) cleanupMetrics() {
-	pkafka.BatchDurationGauge.DeleteLabelValues(m.changefeedID.Namespace, m.changefeedID.ID)
-	pkafka.BatchMessageCountGauge.DeleteLabelValues(m.changefeedID.Namespace, m.changefeedID.ID)
-	pkafka.BatchSizeGauge.DeleteLabelValues(m.changefeedID.Namespace, m.changefeedID.ID)
+	pkafka.BatchDurationGauge.
+		DeleteLabelValues(m.changefeedID.Namespace, m.changefeedID.ID)
+	pkafka.BatchMessageCountGauge.
+		DeleteLabelValues(m.changefeedID.Namespace, m.changefeedID.ID)
+	pkafka.BatchSizeGauge.
+		DeleteLabelValues(m.changefeedID.Namespace, m.changefeedID.ID)
 
-	pkafka.RequestRateGauge.DeleteLabelValues(m.changefeedID.Namespace, m.changefeedID.ID, "all")
-	pkafka.RequestLatencyGauge.DeleteLabelValues(m.changefeedID.Namespace, m.changefeedID.ID, "all")
-	pkafka.OutgoingByteRateGauge.DeleteLabelValues(m.changefeedID.Namespace, m.changefeedID.ID, "all")
+	pkafka.RequestRateGauge.
+		DeleteLabelValues(m.changefeedID.Namespace, m.changefeedID.ID, "v2")
+	pkafka.RequestLatencyGauge.
+		DeleteLabelValues(m.changefeedID.Namespace, m.changefeedID.ID, "v2")
+	pkafka.OutgoingByteRateGauge.
+		DeleteLabelValues(m.changefeedID.Namespace, m.changefeedID.ID, "v2")
 
 	pkafka.RetryCount.DeleteLabelValues(m.changefeedID.Namespace, m.changefeedID.ID)
 	pkafka.ErrorCount.DeleteLabelValues(m.changefeedID.Namespace, m.changefeedID.ID)
