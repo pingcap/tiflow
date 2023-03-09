@@ -30,10 +30,8 @@ import (
 	lcfg "github.com/pingcap/tidb/br/pkg/lightning/config"
 	"github.com/pingcap/tidb/br/pkg/lightning/errormanager"
 	"github.com/pingcap/tidb/dumpling/export"
-	"github.com/pingcap/tidb/util"
 	tidbpromutil "github.com/pingcap/tidb/util/promutil"
 	"github.com/pingcap/tiflow/dm/config"
-	"github.com/pingcap/tiflow/dm/config/dbconfig"
 	"github.com/pingcap/tiflow/dm/pb"
 	"github.com/pingcap/tiflow/dm/pkg/binlog"
 	"github.com/pingcap/tiflow/dm/pkg/conn"
@@ -322,14 +320,8 @@ func GetLightningConfig(globalCfg *lcfg.GlobalConfig, subtaskCfg *config.SubTask
 
 	if subtaskCfg.ExtStorage != nil {
 		// NOTE: if we use bucket as dumper storage, write lightning checkpoint to downstream DB to avoid bucket ratelimit
-		// it's the default path for cloud dm
+		// it's the default path for cloud dm. Let lightning adjusts the config itself.
 		cfg.Checkpoint.Driver = lcfg.CheckpointDriverMySQL
-		// TODO: let the Config adjuest itself. But the ssl is base64? need test
-		//connParams, err := connParamFromDBConfig(&subtaskCfg.To)
-		//if err != nil {
-		//	return nil, err
-		//}
-		//cfg.Checkpoint.MySQLParam = connParams
 	} else {
 		// NOTE: for op dm, we recommend to keep data files and checkpoint file in the same place to avoid inconsistent deletion
 		cfg.Checkpoint.Driver = lcfg.CheckpointDriverFile
@@ -603,30 +595,4 @@ func (l *LightningLoader) status() *pb.LoadStatus {
 // Status returns the unit's current status.
 func (l *LightningLoader) Status(_ *binlog.SourceStatus) interface{} {
 	return l.status()
-}
-
-func connParamFromDBConfig(config *dbconfig.DBConfig) (*common.MySQLConnectParam, error) {
-	params := &common.MySQLConnectParam{
-		Host:     config.Host,
-		Port:     config.Port,
-		User:     config.User,
-		Password: config.Password,
-	}
-
-	if config.Security != nil {
-		if loadErr := config.Security.LoadTLSContent(); loadErr != nil {
-			return nil, terror.ErrCtlLoadTLSCfg.Delegate(loadErr)
-		}
-		tlsConfig, err := util.NewTLSConfig(
-			util.WithCAContent(config.Security.SSLCABytes),
-			util.WithCertAndKeyContent(config.Security.SSLCertBytes, config.Security.SSLKeyBytes),
-			util.WithVerifyCommonName(config.Security.CertAllowedCN),
-		)
-		if err != nil {
-			return nil, terror.ErrConnInvalidTLSConfig.Delegate(err)
-		}
-		params.TLSConfig = tlsConfig
-	}
-
-	return params, nil
 }
