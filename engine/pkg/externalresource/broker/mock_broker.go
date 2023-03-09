@@ -21,8 +21,8 @@ import (
 
 	"github.com/pingcap/log"
 	pb "github.com/pingcap/tiflow/engine/enginepb"
+	"github.com/pingcap/tiflow/engine/pkg/externalresource/internal/bucket"
 	"github.com/pingcap/tiflow/engine/pkg/externalresource/internal/local"
-	"github.com/pingcap/tiflow/engine/pkg/externalresource/internal/s3"
 	"github.com/pingcap/tiflow/engine/pkg/externalresource/manager"
 	resModel "github.com/pingcap/tiflow/engine/pkg/externalresource/model"
 	"github.com/pingcap/tiflow/engine/pkg/tenant"
@@ -63,7 +63,7 @@ func NewBrokerForTesting(executorID resModel.ExecutorID) *MockBroker {
 	if err != nil {
 		log.Panic("failed to make tempdir", zap.Error(err))
 	}
-	s3FileManager, _ := s3.NewFileManagerForUT(s3dir, executorID)
+	s3FileManager, _ := bucket.NewFileManagerForUT(s3dir, executorID)
 	broker.fileManagers[resModel.ResourceTypeS3] = s3FileManager
 
 	return &MockBroker{
