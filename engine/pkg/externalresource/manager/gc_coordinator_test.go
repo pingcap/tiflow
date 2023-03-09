@@ -21,7 +21,7 @@ import (
 
 	frameModel "github.com/pingcap/tiflow/engine/framework/model"
 	"github.com/pingcap/tiflow/engine/model"
-	"github.com/pingcap/tiflow/engine/pkg/externalresource/internal/s3"
+	"github.com/pingcap/tiflow/engine/pkg/externalresource/internal/bucket"
 	resModel "github.com/pingcap/tiflow/engine/pkg/externalresource/model"
 	pkgOrm "github.com/pingcap/tiflow/engine/pkg/orm"
 	"github.com/stretchr/testify/require"
@@ -139,9 +139,9 @@ func (h *gcTestHelper) LoadDefaultMockData(t *testing.T) {
 	for _, executor := range executors {
 		id := model.ExecutorID(executor)
 		err = h.Meta.CreateResource(context.Background(), &resModel.ResourceMeta{
-			ID:       s3.DummyResourceID,
-			Job:      s3.GetDummyJobID(id),
-			Worker:   s3.DummyWorkerID,
+			ID:       bucket.DummyResourceID,
+			Job:      bucket.GetDummyJobID(id),
+			Worker:   bucket.DummyWorkerID,
 			Executor: id,
 		})
 		require.NoError(t, err)
@@ -178,8 +178,8 @@ func TestGCCoordinatorRemoveExecutors(t *testing.T) {
 	for _, executor := range executors {
 		require.Eventually(t, func() bool {
 			return helper.IsRemoved(t, pkgOrm.ResourceKey{
-				JobID: s3.GetDummyJobID(model.ExecutorID(executor)),
-				ID:    s3.DummyResourceID,
+				JobID: bucket.GetDummyJobID(model.ExecutorID(executor)),
+				ID:    bucket.DummyResourceID,
 			})
 		}, 1*time.Second, 10*time.Millisecond)
 	}
@@ -239,4 +239,13 @@ func TestGCCoordinatorRemoveJobAndExecutor(t *testing.T) {
 	}, 1*time.Second, 10*time.Millisecond)
 
 	helper.Close()
+}
+
+func TestDummyBucketResource(t *testing.T) {
+	t.Parallel()
+	require.True(t, isDummyBucketResource(resModel.ResourceTypeS3, bucket.GetDummyResourceName()))
+	require.False(t, isDummyBucketResource(resModel.ResourceTypeS3, "xxx"))
+	require.True(t, isDummyBucketResource(resModel.ResourceTypeGCS, bucket.GetDummyResourceName()))
+	require.False(t, isDummyBucketResource(resModel.ResourceTypeGCS, "xxx"))
+	require.False(t, isDummyBucketResource(resModel.ResourceTypeLocalFile, bucket.GetDummyResourceName()))
 }
