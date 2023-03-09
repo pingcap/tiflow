@@ -324,11 +324,12 @@ func GetLightningConfig(globalCfg *lcfg.GlobalConfig, subtaskCfg *config.SubTask
 		// NOTE: if we use bucket as dumper storage, write lightning checkpoint to downstream DB to avoid bucket ratelimit
 		// it's the default path for cloud dm
 		cfg.Checkpoint.Driver = lcfg.CheckpointDriverMySQL
-		connParams, err := connParamFromDBConfig(&subtaskCfg.To)
-		if err != nil {
-			return nil, err
-		}
-		cfg.Checkpoint.MySQLParam = connParams
+		// TODO: let the Config adjuest itself. But the ssl is base64? need test
+		//connParams, err := connParamFromDBConfig(&subtaskCfg.To)
+		//if err != nil {
+		//	return nil, err
+		//}
+		//cfg.Checkpoint.MySQLParam = connParams
 	} else {
 		// NOTE: for op dm, we recommend to keep data files and checkpoint file in the same place to avoid inconsistent deletion
 		cfg.Checkpoint.Driver = lcfg.CheckpointDriverFile
