@@ -104,6 +104,8 @@ func NewLightning(cfg *config.SubTaskConfig, cli *clientv3.Client, workerName st
 func MakeGlobalConfig(cfg *config.SubTaskConfig) *lcfg.GlobalConfig {
 	lightningCfg := lcfg.NewGlobalConfig()
 	if cfg.To.Security != nil {
+		// try load from file or base64 first
+		_ = cfg.To.Security.LoadTLSContent()
 		lightningCfg.Security.CABytes = cfg.To.Security.SSLCABytes
 		lightningCfg.Security.CertBytes = cfg.To.Security.SSLCertBytes
 		lightningCfg.Security.KeyBytes = cfg.To.Security.SSLKeyBytes
