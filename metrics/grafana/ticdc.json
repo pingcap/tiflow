@@ -7305,7 +7305,7 @@
               "interval": "",
               "legendFormat": "{{changefeed}}-{{instance}}-detect-P999",
               "queryType": "randomWalk",
-              "refId": "A"
+              "refId": "C"
             },
             {
               "exemplar": true,
@@ -7313,7 +7313,7 @@
               "hide": false,
               "interval": "",
               "legendFormat": "{{changefeed}}-{{instance}}-detect-avg",
-              "refId": "B"
+              "refId": "D"
             },
             {
               "exemplar": true,
@@ -7325,7 +7325,11 @@
             },
             {
               "exemplar": true,
+<<<<<<< HEAD
               "expr": "sum(rate(ticdc_sinkv2_txn_queue_duration_sum{k8s_cluster=\"$k8s_cluster\",tidb_cluster=\"$tidb_cluster\",changefeed=~\"$changefeed\",instance=~\"$ticdc_instance\"}[1m])) by (changefeed,instance) / \nsum(rate(ticdc_sinkv2_queue_duration_count{k8s_cluster=\"$k8s_cluster\",tidb_cluster=\"$tidb_cluster\",changefeed=~\"$changefeed\",instance=~\"$ticdc_instance\"}[1m])) by (changefeed,instance)",
+=======
+              "expr": "sum(rate(ticdc_sink_txn_queue_duration_sum{k8s_cluster=\"$k8s_cluster\",tidb_cluster=\"$tidb_cluster\",changefeed=~\"$changefeed\",instance=~\"$ticdc_instance\"}[1m])) by (changefeed,instance) / \nsum(rate(ticdc_sink_txn_queue_duration_count{k8s_cluster=\"$k8s_cluster\",tidb_cluster=\"$tidb_cluster\",changefeed=~\"$changefeed\",instance=~\"$ticdc_instance\"}[1m])) by (changefeed,instance)",
+>>>>>>> 7f8a5f2326 (metrics(ticdc): fix conflict detect metric template (#8477))
               "hide": false,
               "interval": "",
               "legendFormat": "{{changefeed}}-{{instance}}-queue-avg",
