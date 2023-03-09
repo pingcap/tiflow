@@ -15,6 +15,7 @@ package sinkmanager
 
 import (
 	"context"
+	"sync"
 	"testing"
 	"time"
 
@@ -32,6 +33,7 @@ import (
 var _ redo.DMLManager = &mockRedoDMLManager{}
 
 type mockRedoDMLManager struct {
+	mu                  sync.Mutex
 	events              map[int64][]*model.RowChangedEvent
 	resolvedTss         map[int64]model.Ts
 	releaseRowsMemories map[int64]func()
@@ -64,17 +66,23 @@ func (m *mockRedoDMLManager) RemoveTable(span tablepb.Span) {
 func (m *mockRedoDMLManager) UpdateResolvedTs(ctx context.Context,
 	span tablepb.Span, resolvedTs uint64,
 ) error {
+	m.mu.Lock()
+	defer m.mu.Unlock()
 	m.resolvedTss[span.TableID] = resolvedTs
 	return nil
 }
 
 func (m *mockRedoDMLManager) GetResolvedTs(span tablepb.Span) model.Ts {
+	m.mu.Lock()
+	defer m.mu.Unlock()
 	return m.resolvedTss[span.TableID]
 }
 
 func (m *mockRedoDMLManager) EmitRowChangedEvents(ctx context.Context,
 	span tablepb.Span, releaseRowsMemory func(), rows ...*model.RowChangedEvent,
 ) error {
+	m.mu.Lock()
+	defer m.mu.Unlock()
 	if _, ok := m.events[span.TableID]; !ok {
 		m.events[span.TableID] = make([]*model.RowChangedEvent, 0)
 	}
@@ -85,10 +93,14 @@ func (m *mockRedoDMLManager) EmitRowChangedEvents(ctx context.Context,
 }
 
 func (m *mockRedoDMLManager) getEvents(span tablepb.Span) []*model.RowChangedEvent {
+	m.mu.Lock()
+	defer m.mu.Unlock()
 	return m.events[span.TableID]
 }
 
 func (m *mockRedoDMLManager) releaseRowsMemory(span tablepb.Span) {
+	m.mu.Lock()
+	defer m.mu.Unlock()
 	m.releaseRowsMemories[span.TableID]()
 }
 
