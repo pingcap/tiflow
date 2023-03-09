@@ -37,6 +37,7 @@ import (
 // It is used to calculate the memory quota.
 const testEventSize = 218
 
+//nolint:unparam
 func genPolymorphicEventWithNilRow(startTs,
 	commitTs uint64,
 ) *model.PolymorphicEvent {
@@ -323,7 +324,7 @@ func (suite *tableSinkWorkerSuite) TestHandleTaskWithSplitTxnAndAbortWhenNoMemAn
 
 // Test Scenario:
 // worker will advance the table sink only when it reaches the batch size.
-func (suite *tableSinkWorkerSuite) TestHandleTaskWithSplitTxnAndOnlyAdvanceTableSinkWhenReachOneBatchSize() {
+func (suite *tableSinkWorkerSuite) TestHandleTaskWithSplitTxnAndOnlyAdvanceWhenReachOneBatchSize() {
 	ctx, cancel := context.WithCancel(context.Background())
 	events := []*model.PolymorphicEvent{
 		genPolymorphicEvent(1, 2, suite.testSpan),
@@ -431,7 +432,7 @@ func (suite *tableSinkWorkerSuite) TestHandleTaskWithoutSplitTxnAndAbortWhenNoMe
 
 // Test Scenario:
 // worker will advance the table sink only when it reaches the max update interval size.
-func (suite *tableSinkWorkerSuite) TestHandleTaskWithoutSplitTxnOnlyAdvanceTableSinkWhenReachMaxUpdateIntervalSize() {
+func (suite *tableSinkWorkerSuite) TestTaskWithoutSplitTxnOnlyAdvanceWhenReachMaxUpdateIntSize() {
 	ctx, cancel := context.WithCancel(context.Background())
 	events := []*model.PolymorphicEvent{
 		genPolymorphicEvent(1, 2, suite.testSpan),

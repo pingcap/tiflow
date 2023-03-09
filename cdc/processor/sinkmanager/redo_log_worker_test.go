@@ -57,6 +57,7 @@ func TestRedoLogWorkerSuite(t *testing.T) {
 	suite.Run(t, new(redoLogWorkerSuite))
 }
 
+//nolint:unparam
 func (suite *redoLogWorkerSuite) createWorker(
 	memQuota uint64,
 ) (*redoWorker, engine.SortEngine, *mockRedoDMLManager) {
@@ -135,7 +136,7 @@ func (suite *redoLogWorkerSuite) TestHandleTaskGotSomeFilteredEvents() {
 	}
 	wg.Wait()
 	require.Len(suite.T(), m.getEvents(suite.testSpan), 3)
-	require.Len(suite.T(), w.eventCache.getAppender(suite.testSpan).events, 3)
+	require.Len(suite.T(), w.eventCache.getAppender(suite.testSpan).getEvents(), 3)
 }
 
 func (suite *redoLogWorkerSuite) TestHandleTaskAbortWhenNoMemAndOneTxnFinished() {
@@ -185,7 +186,7 @@ func (suite *redoLogWorkerSuite) TestHandleTaskAbortWhenNoMemAndOneTxnFinished()
 	}
 	wg.Wait()
 	require.Len(suite.T(), m.getEvents(suite.testSpan), 3)
-	require.Len(suite.T(), w.eventCache.getAppender(suite.testSpan).events, 3)
+	require.Len(suite.T(), w.eventCache.getAppender(suite.testSpan).getEvents(), 3)
 }
 
 func (suite *redoLogWorkerSuite) TestHandleTaskAbortWhenNoMemAndBlocked() {
@@ -200,7 +201,6 @@ func (suite *redoLogWorkerSuite) TestHandleTaskAbortWhenNoMemAndBlocked() {
 	// Only for three events.
 	eventSize := uint64(testEventSize * 3)
 	w, e, m := suite.createWorker(eventSize)
-	defer w.memQuota.Close()
 	suite.addEventsToSortEngine(events, e)
 
 	taskChan := make(chan *redoTask)
@@ -234,6 +234,52 @@ func (suite *redoLogWorkerSuite) TestHandleTaskAbortWhenNoMemAndBlocked() {
 	w.memQuota.Close()
 	cancel()
 	wg.Wait()
-	require.Len(suite.T(), w.eventCache.getAppender(suite.testSpan).events, 2)
+	require.Len(suite.T(), w.eventCache.getAppender(suite.testSpan).getEvents(), 2)
 	require.Len(suite.T(), m.getEvents(suite.testSpan), 2, "Only two events should be sent to sink")
+}
+
+func (suite *redoLogWorkerSuite) TestHandleTaskWithSplitTxnAndAdvanceTableIfNoWorkload() {
+	ctx, cancel := context.WithCancel(context.Background())
+	events := []*model.PolymorphicEvent{
+		genPolymorphicResolvedEvent(4),
+	}
+	// Only for three events.
+	eventSize := uint64(testEventSize * 3)
+	w, e, m := suite.createWorker(eventSize)
+	defer w.memQuota.Close()
+	suite.addEventsToSortEngine(events, e)
+
+	taskChan := make(chan *redoTask)
+	var wg sync.WaitGroup
+	wg.Add(1)
+	go func() {
+		defer wg.Done()
+		err := w.handleTasks(ctx, taskChan)
+		require.ErrorIs(suite.T(), err, context.Canceled)
+	}()
+
+	callback := func(lastWritePos engine.Position) {
+		require.Equal(suite.T(), engine.Position{
+			StartTs:  3,
+			CommitTs: 4,
+		}, lastWritePos)
+		require.Equal(suite.T(), engine.Position{
+			StartTs:  4,
+			CommitTs: 4,
+		}, lastWritePos.Next())
+	}
+	wrapper, _ := createTableSinkWrapper(suite.testChangefeedID, suite.testSpan)
+	taskChan <- &redoTask{
+		span:          suite.testSpan,
+		lowerBound:    genLowerBound(),
+		getUpperBound: genUpperBoundGetter(4),
+		tableSink:     wrapper,
+		callback:      callback,
+		isCanceled:    func() bool { return false },
+	}
+	require.Eventually(suite.T(), func() bool {
+		return m.GetResolvedTs(suite.testSpan) == 4
+	}, 5*time.Second, 10*time.Millisecond, "Directly advance resolved mark to 4")
+	cancel()
+	wg.Wait()
 }
