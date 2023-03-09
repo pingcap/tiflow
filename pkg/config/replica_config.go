@@ -225,6 +225,8 @@ func (c *ReplicaConfig) FixScheduler(inheritV66 bool) {
 	}
 	if inheritV66 && c.Scheduler.RegionPerSpan != 0 {
 		c.Scheduler.EnableTableAcrossNodes = true
+		c.Scheduler.RegionThreshold = c.Scheduler.RegionPerSpan
+		c.Scheduler.RegionPerSpan = 0
 	}
 }
 

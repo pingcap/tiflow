@@ -62,8 +62,8 @@ var defaultAPIConfig = &ReplicaConfig{
 	Scheduler: &ChangefeedSchedulerConfig{
 		EnableTableAcrossNodes: config.GetDefaultReplicaConfig().
 			Scheduler.EnableTableAcrossNodes,
-		RegionPerSpan: config.GetDefaultReplicaConfig().
-			Scheduler.RegionPerSpan,
+		RegionThreshold: config.GetDefaultReplicaConfig().
+			Scheduler.RegionThreshold,
 	},
 }
 
