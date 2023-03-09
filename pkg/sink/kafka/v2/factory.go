@@ -210,8 +210,10 @@ func (f *factory) AsyncProducer(
 	failpointCh chan error,
 ) (pkafka.AsyncProducer, error) {
 	w := f.newWriter(true)
+	// assume each message is 1KB,
+	// and set batch timeout to 5ms to avoid waste too much time on waiting for messages.
 	w.BatchTimeout = 5 * time.Millisecond
-	w.BatchSize = int(w.BatchBytes / 1024) // assume each message is 1KB
+	w.BatchSize = int(w.BatchBytes / 1024)
 	aw := &asyncWriter{
 		w:            w,
 		closedChan:   closedChan,

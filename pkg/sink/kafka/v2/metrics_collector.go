@@ -74,7 +74,8 @@ func (m *MetricsCollector) collectMetrics() {
 	pkafka.BatchSizeGauge.WithLabelValues(m.changefeedID.Namespace, m.changefeedID.ID).
 		Set(float64(statistics.BatchBytes.Avg))
 
-	// send request related metrics
+	// send request related metrics.
+	// metrics is collected each 5 seconds, divide by 5 to get per seconds average.
 	pkafka.RequestRateGauge.WithLabelValues(m.changefeedID.Namespace, m.changefeedID.ID, "all").
 		Set(float64(statistics.Writes / 5))
 	pkafka.RequestLatencyGauge.WithLabelValues(m.changefeedID.Namespace, m.changefeedID.ID, "all").
