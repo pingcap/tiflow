@@ -174,19 +174,20 @@ type ReplicaConfig struct {
 
 // ToInternalReplicaConfig coverts *v2.ReplicaConfig into *config.ReplicaConfig
 func (c *ReplicaConfig) ToInternalReplicaConfig() *config.ReplicaConfig {
-	res := config.GetDefaultReplicaConfig()
+	return c.toInternalReplicaConfigWithOriginConfig(config.GetDefaultReplicaConfig())
+}
+
+// ToInternalReplicaConfigWithOriginConfig coverts *v2.ReplicaConfig into *config.ReplicaConfig
+func (c *ReplicaConfig) toInternalReplicaConfigWithOriginConfig(
+	res *config.ReplicaConfig) *config.ReplicaConfig {
 	res.MemoryQuota = c.MemoryQuota
 	res.CaseSensitive = c.CaseSensitive
 	res.EnableOldValue = c.EnableOldValue
 	res.ForceReplicate = c.ForceReplicate
 	res.CheckGCSafePoint = c.CheckGCSafePoint
 	res.EnableSyncPoint = c.EnableSyncPoint
-	if c.SyncPointInterval != nil {
-		res.SyncPointInterval = c.SyncPointInterval.duration
-	}
-	if c.SyncPointRetention != nil {
-		res.SyncPointRetention = c.SyncPointRetention.duration
-	}
+	res.SyncPointInterval = c.SyncPointInterval.duration
+	res.SyncPointRetention = c.SyncPointRetention.duration
 	res.BDRMode = c.BDRMode
 
 	if c.Filter != nil {
@@ -413,22 +414,36 @@ func ToAPIReplicaConfig(c *config.ReplicaConfig) *ReplicaConfig {
 // GetDefaultReplicaConfig returns a default ReplicaConfig
 func GetDefaultReplicaConfig() *ReplicaConfig {
 	return &ReplicaConfig{
+		MemoryQuota:        config.DefaultChangefeedMemoryQuota,
 		CaseSensitive:      true,
 		EnableOldValue:     true,
 		CheckGCSafePoint:   true,
 		EnableSyncPoint:    false,
-		SyncPointInterval:  &JSONDuration{10 * time.Second},
+		SyncPointInterval:  &JSONDuration{10 * time.Minute},
 		SyncPointRetention: &JSONDuration{24 * time.Hour},
 		Filter: &FilterConfig{
 			Rules: []string{"*.*"},
 		},
-		Sink: &SinkConfig{},
+		Mounter: &MounterConfig{
+			WorkerNum: 16,
+		},
+		Sink: &SinkConfig{
+			CSVConfig: &CSVConfig{
+				Quote:      string(config.DoubleQuoteChar),
+				Delimiter:  config.Comma,
+				NullString: config.NULL,
+			},
+			EncoderConcurrency:       16,
+			Terminator:               config.CRLF,
+			DateSeparator:            config.DateSeparatorNone.String(),
+			EnablePartitionSeparator: false,
+		},
 		Consistent: &ConsistentConfig{
 			Level:             "none",
 			MaxLogSize:        64,
 			FlushIntervalInMs: redo.DefaultFlushIntervalInMs,
 			Storage:           "",
-			UseFileBackend:    true,
+			UseFileBackend:    false,
 		},
 		Scheduler: &ChangefeedSchedulerConfig{
 			EnableTableAcrossNodes: config.GetDefaultReplicaConfig().

@@ -28,6 +28,10 @@ func TestDefaultReplicaConfig(t *testing.T) {
 	t.Parallel()
 	cfg := GetDefaultReplicaConfig()
 	require.NotNil(t, cfg.Scheduler)
+	cfg2 := cfg.toInternalReplicaConfigWithOriginConfig(&config.ReplicaConfig{})
+	require.Equal(t, config.GetDefaultReplicaConfig(), cfg2)
+	cfg3 := ToAPIReplicaConfig(config.GetDefaultReplicaConfig())
+	require.Equal(t, cfg, cfg3)
 }
 
 func TestToAPIReplicaConfig(t *testing.T) {
