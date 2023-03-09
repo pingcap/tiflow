@@ -234,7 +234,7 @@ func (suite *redoLogWorkerSuite) TestHandleTaskAbortWhenNoMemAndBlocked() {
 	w.memQuota.Close()
 	cancel()
 	wg.Wait()
-	require.Len(suite.T(), w.eventCache.getAppender(suite.testSpan).getEvents(), 2)
+	require.Len(suite.T(), w.eventCache.getAppender(suite.testSpan).getEvents(), 3)
 	require.Len(suite.T(), m.getEvents(suite.testSpan), 2, "Only two events should be sent to sink")
 }
 
