@@ -178,7 +178,8 @@ func (c *ReplicaConfig) ToInternalReplicaConfig() *config.ReplicaConfig {
 
 // ToInternalReplicaConfigWithOriginConfig coverts *v2.ReplicaConfig into *config.ReplicaConfig
 func (c *ReplicaConfig) toInternalReplicaConfigWithOriginConfig(
-	res *config.ReplicaConfig) *config.ReplicaConfig {
+	res *config.ReplicaConfig,
+) *config.ReplicaConfig {
 	res.MemoryQuota = c.MemoryQuota
 	res.CaseSensitive = c.CaseSensitive
 	res.EnableOldValue = c.EnableOldValue
