@@ -51,8 +51,6 @@ type MemQuota struct {
 
 	// blockAcquireCond is used to notify the blocked acquire.
 	blockAcquireCond *sync.Cond
-	// condMu protects nothing, but sync.Cond needs a mutex.
-	condMu sync.Mutex
 
 	metricTotal prometheus.Gauge
 	metricUsed  prometheus.Gauge
@@ -66,15 +64,15 @@ type MemQuota struct {
 // NewMemQuota creates a MemQuota instance.
 func NewMemQuota(changefeedID model.ChangeFeedID, totalBytes uint64, comp string) *MemQuota {
 	m := &MemQuota{
-		changefeedID: changefeedID,
-		totalBytes:   totalBytes,
-		metricTotal:  MemoryQuota.WithLabelValues(changefeedID.Namespace, changefeedID.ID, "total", comp),
-		metricUsed:   MemoryQuota.WithLabelValues(changefeedID.Namespace, changefeedID.ID, "used", comp),
-		closeBg:      make(chan struct{}, 1),
+		changefeedID:     changefeedID,
+		totalBytes:       totalBytes,
+		blockAcquireCond: sync.NewCond(&sync.Mutex{}),
+		metricTotal:      MemoryQuota.WithLabelValues(changefeedID.Namespace, changefeedID.ID, "total", comp),
+		metricUsed:       MemoryQuota.WithLabelValues(changefeedID.Namespace, changefeedID.ID, "used", comp),
+		closeBg:          make(chan struct{}, 1),
 
 		tableMemory: spanz.NewHashMap[[]*memConsumeRecord](),
 	}
-	m.blockAcquireCond = sync.NewCond(&m.condMu)
 	m.metricTotal.Set(float64(totalBytes))
 	m.metricUsed.Set(float64(0))
 
@@ -127,9 +125,9 @@ func (m *MemQuota) BlockAcquire(nBytes uint64) error {
 		}
 		usedBytes := m.usedBytes.Load()
 		if usedBytes+nBytes > m.totalBytes {
-			m.condMu.Lock()
+			m.blockAcquireCond.L.Lock()
 			m.blockAcquireCond.Wait()
-			m.condMu.Unlock()
+			m.blockAcquireCond.L.Unlock()
 			continue
 		}
 		if m.usedBytes.CompareAndSwap(usedBytes, usedBytes+nBytes) {
