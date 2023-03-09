@@ -380,7 +380,7 @@ func (l *LightningLoader) getLightningConfig() (*lcfg.Config, error) {
 	cfg.TiDB.StrSQLMode = l.sqlMode
 	cfg.TiDB.Vars["time_zone"] = l.timeZone
 	// Call AdjustCheckPoint here since we may deal checkpoint before normal process
-	cfg.AdjustCheckPoint()
+	//cfg.AdjustCheckPoint()
 	return cfg, nil
 }
 
