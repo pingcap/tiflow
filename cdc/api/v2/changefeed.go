@@ -163,7 +163,7 @@ func (h *OpenAPIV2) createChangefeed(c *gin.Context) {
 	log.Info("Create changefeed successfully!",
 		zap.String("id", info.ID),
 		zap.String("changefeed", infoStr))
-	c.JSON(http.StatusCreated, toAPIModel(info,
+	c.JSON(http.StatusOK, toAPIModel(info,
 		info.StartTs, info.StartTs,
 		nil, true))
 }
@@ -311,7 +311,7 @@ func (h *OpenAPIV2) verifyTable(c *gin.Context) {
 // @Produce json
 // @Param changefeed_id  path  string  true  "changefeed_id"
 // @Param changefeedConfig body ChangefeedConfig true "changefeed config"
-// @Success 202 {object} ChangeFeedInfo
+// @Success 200 {object} ChangeFeedInfo
 // @Failure 500,400 {object} model.HTTPError
 // @Router /api/v2/changefeeds/{changefeed_id} [put]
 func (h *OpenAPIV2) updateChangefeed(c *gin.Context) {
@@ -484,7 +484,7 @@ func (h *OpenAPIV2) getChangeFeed(c *gin.Context) {
 // @Accept json
 // @Produce json
 // @Param changefeed_id path string true "changefeed_id"
-// @Success 204
+// @Success 200 {object} EmptyResponse
 // @Failure 500,400 {object} model.HTTPError
 // @Router	/api/v2/changefeeds/{changefeed_id} [delete]
 func (h *OpenAPIV2) deleteChangefeed(c *gin.Context) {
@@ -498,7 +498,7 @@ func (h *OpenAPIV2) deleteChangefeed(c *gin.Context) {
 	_, err := h.capture.StatusProvider().GetChangeFeedStatus(ctx, changefeedID)
 	if err != nil {
 		if cerror.ErrChangeFeedNotExists.Equal(err) {
-			c.Status(http.StatusNoContent)
+			c.JSON(http.StatusOK, &EmptyResponse{})
 			return
 		}
 		_ = c.Error(err)
@@ -535,7 +535,7 @@ func (h *OpenAPIV2) deleteChangefeed(c *gin.Context) {
 		_ = c.Error(err)
 		return
 	}
-	c.Status(http.StatusNoContent)
+	c.JSON(http.StatusOK, &EmptyResponse{})
 }
 
 // todo: remove this API
@@ -597,7 +597,7 @@ func (h *OpenAPIV2) getChangeFeedMetaInfo(c *gin.Context) {
 // @Produce json
 // @Param changefeed_id path string true "changefeed_id"
 // @Param resumeConfig body ResumeChangefeedConfig true "resume config"
-// @Success 202
+// @Success 200 {object} EmptyResponse
 // @Failure 500,400 {object} model.HTTPError
 // @Router	/api/v2/changefeeds/{changefeed_id}/resume [post]
 func (h *OpenAPIV2) resumeChangefeed(c *gin.Context) {
@@ -685,7 +685,7 @@ func (h *OpenAPIV2) resumeChangefeed(c *gin.Context) {
 		_ = c.Error(err)
 		return
 	}
-	c.Status(http.StatusOK)
+	c.JSON(http.StatusOK, &EmptyResponse{})
 }
 
 // pauseChangefeed handles pause changefeed request
@@ -696,7 +696,7 @@ func (h *OpenAPIV2) resumeChangefeed(c *gin.Context) {
 // @Accept json
 // @Produce json
 // @Param changefeed_id  path  string  true  "changefeed_id"
-// @Success 202 {object} EmptyResponse
+// @Success 200 {object} EmptyResponse
 // @Failure 500,400 {object} model.HTTPError
 // @Router /api/v2/changefeeds/{changefeed_id}/pause [post]
 func (h *OpenAPIV2) pauseChangefeed(c *gin.Context) {
@@ -760,11 +760,10 @@ func toAPIModel(
 		Namespace:      info.Namespace,
 		ID:             info.ID,
 		SinkURI:        sinkURI,
-		CreateTime:     model.JSONTime(info.CreateTime),
+		CreateTime:     info.CreateTime,
 		StartTs:        info.StartTs,
 		TargetTs:       info.TargetTs,
 		AdminJobType:   info.AdminJobType,
-		Engine:         info.Engine,
 		Config:         ToAPIReplicaConfig(info.Config),
 		State:          info.State,
 		Error:          runningError,

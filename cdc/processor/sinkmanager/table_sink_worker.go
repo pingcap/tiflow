@@ -15,6 +15,7 @@ package sinkmanager
 
 import (
 	"context"
+	"sync/atomic"
 
 	"github.com/pingcap/errors"
 	"github.com/pingcap/log"
@@ -26,6 +27,32 @@ import (
 	"github.com/tikv/client-go/v2/oracle"
 	"go.uber.org/zap"
 )
+
+// batchID is used to advance table sink with a given CommitTs, even if not all
+// transactions with the same CommitTs are collected, regardless of whether splitTxn
+// is enabled or not. We split transactions with the same CommitTs even if splitTxn
+// is false, and it won't break transaction atomicity to downstream.
+// NOTICE:
+// batchID is used to distinguish different batches of the same transaction.
+// We need to use a global variable because the same commit ts event may be
+// processed at different times.
+// For example:
+//  1. The commit ts is 1000, and the start ts is 998.
+//  2. Keep fetching events and flush them to the sink with batch ID 1.
+//  3. Because we don't have enough memory quota, we need to flush the events
+//     and wait for the next round of processing.
+//  4. The next round of processing starts at commit ts 1000, and the start ts
+//     is 999.
+//  5. The batch ID restarts from 1, and the commit ts still is 1000.
+//  6. We flush all the events with commit ts 1000 and batch ID 1 to the sink.
+//  7. We release the memory quota of the events earlier because the current
+//     round of processing is not finished.
+//
+// Therefore, we must use a global variable to ensure that the batch ID is
+// monotonically increasing.
+// We share this variable for all workers, it is OK that the batch ID is not
+// strictly increasing one by one.
+var batchID atomic.Uint64
 
 type sinkWorker struct {
 	changefeedID  model.ChangeFeedID
@@ -42,9 +69,10 @@ type sinkWorker struct {
 	// Metrics.
 	metricRedoEventCacheHit  prometheus.Counter
 	metricRedoEventCacheMiss prometheus.Counter
+	metricOutputEventCountKV prometheus.Counter
 }
 
-// newWorker creates a new worker.
+// newSinkWorker creates a new sink worker.
 func newSinkWorker(
 	changefeedID model.ChangeFeedID,
 	sourceManager *sourcemanager.SourceManager,
@@ -65,6 +93,7 @@ func newSinkWorker(
 
 		metricRedoEventCacheHit:  RedoEventCacheAccess.WithLabelValues(changefeedID.Namespace, changefeedID.ID, "hit"),
 		metricRedoEventCacheMiss: RedoEventCacheAccess.WithLabelValues(changefeedID.Namespace, changefeedID.ID, "miss"),
+		metricOutputEventCountKV: outputEventCount.WithLabelValues(changefeedID.Namespace, changefeedID.ID, "kv"),
 	}
 }
 
@@ -109,13 +138,15 @@ func validateAndAdjustBound(changefeedID model.ChangeFeedID,
 }
 
 func (w *sinkWorker) handleTask(ctx context.Context, task *sinkTask) (finalErr error) {
+	// We need to use a new batch ID for each task.
+	batchID.Add(1)
 	advancer := newTableSinkAdvancer(task, w.splitTxn, w.sinkMemQuota, requestMemSize)
 	// The task is finished and some required memory isn't used.
 	defer advancer.cleanup()
 
 	lowerBound, upperBound := validateAndAdjustBound(w.changefeedID, task)
 	if w.eventCache != nil {
-		drained, err := w.fetchFromCache(task, &lowerBound, &upperBound, &advancer.batchID)
+		drained, err := w.fetchFromCache(task, &lowerBound, &upperBound)
 		if err != nil {
 			return errors.Trace(err)
 		}
@@ -136,11 +167,7 @@ func (w *sinkWorker) handleTask(ctx context.Context, task *sinkTask) (finalErr e
 		// Collect metrics.
 		w.metricRedoEventCacheMiss.Add(float64(allEventSize))
 		task.tableSink.receivedEventCount.Add(int64(allEventCount))
-		outputEventCount.WithLabelValues(
-			task.tableSink.changefeed.Namespace,
-			task.tableSink.changefeed.ID,
-			"kv",
-		).Add(float64(allEventCount))
+		w.metricOutputEventCountKV.Add(float64(allEventCount))
 
 		// If eventCache is nil, update sorter commit ts and range event count.
 		if w.eventCache == nil {
@@ -223,7 +250,6 @@ func (w *sinkWorker) fetchFromCache(
 	task *sinkTask, // task is read-only here.
 	lowerBound *engine.Position,
 	upperBound *engine.Position,
-	batchID *uint64,
 ) (cacheDrained bool, err error) {
 	newLowerBound := *lowerBound
 	newUpperBound := *upperBound
@@ -237,11 +263,7 @@ func (w *sinkWorker) fetchFromCache(
 		newLowerBound = popRes.boundary.Next()
 		if len(popRes.events) > 0 {
 			task.tableSink.receivedEventCount.Add(int64(popRes.pushCount))
-			outputEventCount.WithLabelValues(
-				task.tableSink.changefeed.Namespace,
-				task.tableSink.changefeed.ID,
-				"kv",
-			).Add(float64(popRes.pushCount))
+			w.metricOutputEventCountKV.Add(float64(popRes.pushCount))
 			w.metricRedoEventCacheHit.Add(float64(popRes.size))
 			task.tableSink.appendRowChangedEvents(popRes.events...)
 		}
@@ -253,8 +275,8 @@ func (w *sinkWorker) fetchFromCache(
 			resolvedTs = model.NewResolvedTs(popRes.boundary.CommitTs)
 			if !isCommitFence {
 				resolvedTs.Mode = model.BatchResolvedMode
-				resolvedTs.BatchID = *batchID
-				*batchID += 1
+				resolvedTs.BatchID = batchID.Load()
+				batchID.Add(1)
 			}
 		} else {
 			if isCommitFence {
