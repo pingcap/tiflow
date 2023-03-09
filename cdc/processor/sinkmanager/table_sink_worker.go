@@ -68,9 +68,10 @@ type sinkWorker struct {
 	// Metrics.
 	metricRedoEventCacheHit  prometheus.Counter
 	metricRedoEventCacheMiss prometheus.Counter
+	metricOutputEventCountKV prometheus.Counter
 }
 
-// newWorker creates a new worker.
+// newSinkWorker creates a new sink worker.
 func newSinkWorker(
 	changefeedID model.ChangeFeedID,
 	sourceManager *sourcemanager.SourceManager,
@@ -91,6 +92,7 @@ func newSinkWorker(
 
 		metricRedoEventCacheHit:  RedoEventCacheAccess.WithLabelValues(changefeedID.Namespace, changefeedID.ID, "hit"),
 		metricRedoEventCacheMiss: RedoEventCacheAccess.WithLabelValues(changefeedID.Namespace, changefeedID.ID, "miss"),
+		metricOutputEventCountKV: outputEventCount.WithLabelValues(changefeedID.Namespace, changefeedID.ID, "kv"),
 	}
 }
 
@@ -143,11 +145,7 @@ func (w *sinkWorker) handleTask(ctx context.Context, task *sinkTask) (finalErr e
 		// Collect metrics.
 		w.metricRedoEventCacheMiss.Add(float64(allEventSize))
 		task.tableSink.receivedEventCount.Add(int64(allEventCount))
-		outputEventCount.WithLabelValues(
-			task.tableSink.changefeed.Namespace,
-			task.tableSink.changefeed.ID,
-			"kv",
-		).Add(float64(allEventCount))
+		w.metricOutputEventCountKV.Add(float64(allEventCount))
 
 		// If eventCache is nil, update sorter commit ts and range event count.
 		if w.eventCache == nil {
@@ -243,11 +241,7 @@ func (w *sinkWorker) fetchFromCache(
 		newLowerBound = popRes.boundary.Next()
 		if len(popRes.events) > 0 {
 			task.tableSink.receivedEventCount.Add(int64(popRes.pushCount))
-			outputEventCount.WithLabelValues(
-				task.tableSink.changefeed.Namespace,
-				task.tableSink.changefeed.ID,
-				"kv",
-			).Add(float64(popRes.pushCount))
+			w.metricOutputEventCountKV.Add(float64(popRes.pushCount))
 			w.metricRedoEventCacheHit.Add(float64(popRes.size))
 			task.tableSink.appendRowChangedEvents(popRes.events...)
 		}
