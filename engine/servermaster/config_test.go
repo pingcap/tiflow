@@ -110,3 +110,22 @@ func TestLoadConfigFromFile(t *testing.T) {
 	require.NoError(t, err)
 	require.Equal(t, cfg, cfg2)
 }
+
+func TestExternalStorageConfig(t *testing.T) {
+	t.Parallel()
+	cfg := GetDefaultMasterConfig()
+	err := cfg.AdjustAndValidate()
+	require.NoError(t, err)
+
+	cfg.Storage.S3.Bucket = "s3-bucket"
+	err = cfg.AdjustAndValidate()
+	require.NoError(t, err)
+
+	cfg.Storage.GCS.Bucket = "s3-bucket"
+	err = cfg.AdjustAndValidate()
+	require.Error(t, err)
+
+	cfg.Storage.S3.Bucket = ""
+	err = cfg.AdjustAndValidate()
+	require.NoError(t, err)
+}
