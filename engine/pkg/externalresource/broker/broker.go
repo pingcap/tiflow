@@ -23,8 +23,8 @@ import (
 	pb "github.com/pingcap/tiflow/engine/enginepb"
 	"github.com/pingcap/tiflow/engine/pkg/client"
 	"github.com/pingcap/tiflow/engine/pkg/externalresource/internal"
+	"github.com/pingcap/tiflow/engine/pkg/externalresource/internal/bucket"
 	"github.com/pingcap/tiflow/engine/pkg/externalresource/internal/local"
-	"github.com/pingcap/tiflow/engine/pkg/externalresource/internal/s3"
 	resModel "github.com/pingcap/tiflow/engine/pkg/externalresource/model"
 	"github.com/pingcap/tiflow/engine/pkg/tenant"
 	"github.com/pingcap/tiflow/pkg/errors"
@@ -52,7 +52,8 @@ type DefaultBroker struct {
 	executorID resModel.ExecutorID
 	client     client.ResourceManagerClient
 
-	fileManagers map[resModel.ResourceType]internal.FileManager
+	fileManagers      map[resModel.ResourceType]internal.FileManager
+	bucketFileManager internal.FileManager
 	// TODO: add monitor for closedWorkerCh
 	closedWorkerCh chan closedWorker
 
@@ -65,6 +66,9 @@ type DefaultBroker struct {
 	// will be cleaned up by GCCoordinator eventually.
 	s3dummyHandler Handle
 	cancel         context.CancelFunc
+
+	// storage config
+	config *resModel.Config
 }
 
 // NewBroker creates a new Impl instance.
@@ -83,9 +87,9 @@ func NewBroker(
 		return nil, errors.Trace(err)
 	}
 
-	// validate and check config
-	storageConfig.ValidateAndAdjust(executorID)
-	if err := PreCheckConfig(storageConfig); err != nil {
+	// adjust and check config
+	storageConfig.Adjust(executorID)
+	if err := PreCheckConfig(&storageConfig); err != nil {
 		return nil, err
 	}
 	return NewBrokerWithConfig(&storageConfig, executorID, client)
@@ -106,30 +110,45 @@ func NewBrokerWithConfig(
 		client:         client,
 		fileManagers:   make(map[resModel.ResourceType]internal.FileManager),
 		closedWorkerCh: make(chan closedWorker, defaultClosedWorkerChannelSize),
+		config:         config,
+	}
+	if err := broker.initStorage(); err != nil {
+		return nil, err
 	}
 
 	ctx, cancel := context.WithCancel(context.Background())
 	go broker.tick(ctx)
 	broker.cancel = cancel
 
-	// Initialize local file managers
-	if config == nil || !config.LocalEnabled() {
+	return broker, nil
+}
+
+func (b *DefaultBroker) initStorage() error {
+	if b.config == nil || !b.config.LocalEnabled() {
 		log.Panic("local file manager must be supported by resource broker")
 	}
-	broker.fileManagers[resModel.ResourceTypeLocalFile] = local.NewLocalFileManager(executorID, config.Local)
+	b.fileManagers[resModel.ResourceTypeLocalFile] = local.NewLocalFileManager(b.executorID, b.config.Local)
 
-	// Initialize s3 file managers
-	if !config.S3Enabled() {
-		log.Info("broker will not use s3 as external storage since s3 is not configured")
-		return broker, nil
+	if !b.config.S3Enabled() && !b.config.GCSEnabled() {
+		log.Info("broker will not use s3/gcs as external storage since s3/gcs are both not configured")
+		return nil
 	}
 
-	broker.fileManagers[resModel.ResourceTypeS3] = s3.NewFileManagerWithConfig(executorID, config.S3)
-	if err := broker.createDummyS3Resource(); err != nil {
-		return nil, err
+	if b.config.S3Enabled() {
+		log.Info("broker will use s3 as external storage since s3 is configured")
+		b.bucketFileManager = bucket.NewFileManagerWithConfig(b.executorID, b.config)
+		b.fileManagers[resModel.ResourceTypeS3] = b.bucketFileManager
+		return b.createDummyResource()
 	}
 
-	return broker, nil
+	if b.config.GCSEnabled() {
+		log.Info("broker will use gcs as external storage since gcs is configured")
+		b.bucketFileManager = bucket.NewFileManagerWithConfig(b.executorID, b.config)
+		b.fileManagers[resModel.ResourceTypeGCS] = b.bucketFileManager
+		return b.createDummyResource()
+	}
+
+	return nil
 }
 
 // OpenStorage implements Broker.OpenStorage
@@ -192,7 +211,7 @@ func (b *DefaultBroker) createResource(
 		ResourceScope: internal.ResourceScope{
 			ProjectInfo: projectInfo,
 			Executor:    b.executorID, /* executor id where resource is created */
-			WorkerID:    workerID,     /* creator id*/
+			WorkerID:    workerID,     /* creator id */
 		},
 	}
 	desc, err := fm.CreateResource(ctx, ident)
@@ -357,21 +376,16 @@ func (b *DefaultBroker) cleanOrRecreatePersistResource(
 	return desc, nil
 }
 
-func (b *DefaultBroker) createDummyS3Resource() error {
-	s3FileManager, ok := b.fileManagers[resModel.ResourceTypeS3]
-	if !ok {
-		return errors.New("S3 file manager not found")
-	}
-
+func (b *DefaultBroker) createDummyResource() error {
 	ctx, cancel := context.WithTimeout(context.Background(), defaultTimeout)
 	defer cancel()
-	desc, err := s3FileManager.CreateResource(ctx, s3.GetDummyIdent(b.executorID))
+	desc, err := b.bucketFileManager.CreateResource(ctx, bucket.GetDummyIdent(b.executorID))
 	if err != nil {
 		return err
 	}
 
-	handler, err := newResourceHandle(s3.GetDummyJobID(b.executorID), b.executorID,
-		s3FileManager, desc, false, b.client)
+	handler, err := newResourceHandle(bucket.GetDummyJobID(b.executorID), b.executorID,
+		b.bucketFileManager, desc, false, b.client)
 	if err != nil {
 		return err
 	}
@@ -390,11 +404,11 @@ func (b *DefaultBroker) Close() {
 	b.cancel()
 
 	// Try to clean up temporary files created by current executor
-	if fm, ok := b.fileManagers[resModel.ResourceTypeS3]; ok {
+	if b.bucketFileManager != nil {
 		ctx, cancel := context.WithTimeout(context.Background(), defaultTimeout)
 		defer cancel()
 
-		err := fm.RemoveTemporaryFiles(ctx, internal.ResourceScope{
+		err := b.bucketFileManager.RemoveTemporaryFiles(ctx, internal.ResourceScope{
 			Executor: b.executorID,
 			WorkerID: "", /* empty workID means remove all temp files in executor */
 		})
@@ -412,21 +426,27 @@ func (b *DefaultBroker) Close() {
 	}
 }
 
-// IsS3StorageEnabled returns true if s3 storage is enabled.
-func (b *DefaultBroker) IsS3StorageEnabled() bool {
-	_, ok := b.fileManagers[resModel.ResourceTypeS3]
-	return ok
+// GetEnabledBucketStorage returns true and the corresponding resource type if bucket storage is enabled.
+func (b *DefaultBroker) GetEnabledBucketStorage() (bool, resModel.ResourceType) {
+	if _, ok := b.fileManagers[resModel.ResourceTypeS3]; ok {
+		return true, resModel.ResourceTypeS3
+	}
+	if _, ok := b.fileManagers[resModel.ResourceTypeGCS]; ok {
+		return true, resModel.ResourceTypeGCS
+	}
+
+	return false, resModel.ResourceTypeNone
 }
 
 // PreCheckConfig checks the configuration of external storage.
-func PreCheckConfig(config resModel.Config) error {
+func PreCheckConfig(config *resModel.Config) error {
 	if config.LocalEnabled() {
 		if err := local.PreCheckConfig(config.Local); err != nil {
 			return err
 		}
 	}
-	if config.S3Enabled() {
-		if err := s3.PreCheckConfig(config.S3); err != nil {
+	if config.S3Enabled() || config.GCSEnabled() {
+		if err := bucket.PreCheckConfig(config); err != nil {
 			return err
 		}
 	}

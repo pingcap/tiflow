@@ -17,11 +17,17 @@ import (
 	resModel "github.com/pingcap/tiflow/engine/pkg/externalresource/model"
 )
 
-// NewDMResourceID returns a ResourceID in DM's style. Currently only support s3 resource.
-func NewDMResourceID(taskName, sourceName string, isS3Enabled bool) resModel.ResourceID {
+// GetDMStorageType return the storage type that DM uses
+func GetDMStorageType(bucketEnabled bool, bucketType resModel.ResourceType) resModel.ResourceType {
 	resType := resModel.ResourceTypeLocalFile
-	if isS3Enabled {
-		resType = resModel.ResourceTypeS3
+	if bucketEnabled {
+		resType = bucketType
 	}
+
+	return resType
+}
+
+// NewDMResourceID returns a ResourceID in DM's style. Currently only support s3/gcs resource.
+func NewDMResourceID(taskName, sourceName string, resType resModel.ResourceType) resModel.ResourceID {
 	return "/" + string(resType) + "/" + taskName + "-" + sourceName
 }
