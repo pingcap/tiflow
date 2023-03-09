@@ -105,7 +105,7 @@ func MakeGlobalConfig(cfg *config.SubTaskConfig) *lcfg.GlobalConfig {
 	lightningCfg := lcfg.NewGlobalConfig()
 	if cfg.To.Security != nil {
 		// try load from file or base64 first
-		_ = cfg.To.Security.LoadTLSContent()
+		//_ = cfg.To.Security.LoadTLSContent()
 		lightningCfg.Security.CABytes = cfg.To.Security.SSLCABytes
 		lightningCfg.Security.CertBytes = cfg.To.Security.SSLCertBytes
 		lightningCfg.Security.KeyBytes = cfg.To.Security.SSLKeyBytes
@@ -379,6 +379,8 @@ func (l *LightningLoader) getLightningConfig() (*lcfg.Config, error) {
 	}
 	cfg.TiDB.StrSQLMode = l.sqlMode
 	cfg.TiDB.Vars["time_zone"] = l.timeZone
+	// Call AdjustCheckPoint here since we may deal checkpoint before normal process
+	cfg.AdjustCheckPoint()
 	return cfg, nil
 }
 
