@@ -11,7 +11,7 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-package s3
+package bucket
 
 import (
 	"context"
@@ -188,7 +188,7 @@ func TestFileManagerShareResourceAcrossExecutors(t *testing.T) {
 	t.Parallel()
 
 	ctx := context.Background()
-	factory := newMockExternalStorageFactory(t.TempDir(), UtBucketName)
+	factory := newMockBucketCreator(t.TempDir(), UtBucketName)
 	fm1 := NewFileManagerForUTFromSharedStorageFactory("executor-1", factory)
 	fm2 := NewFileManagerForUTFromSharedStorageFactory("executor-2", factory)
 
@@ -237,7 +237,7 @@ func TestFileManagerCleanOrRecreatePersistedResource(t *testing.T) {
 	t.Parallel()
 
 	ctx := context.Background()
-	factory := newMockExternalStorageFactory(t.TempDir(), UtBucketName)
+	factory := newMockBucketCreator(t.TempDir(), UtBucketName)
 	fm1 := NewFileManagerForUTFromSharedStorageFactory("executor-1", factory)
 	fm2 := NewFileManagerForUTFromSharedStorageFactory("executor-2", factory)
 

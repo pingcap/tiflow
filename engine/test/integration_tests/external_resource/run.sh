@@ -17,7 +17,7 @@ function run() {
 	export ENGINE_S3_SECRET_KEY=engineSecret
 	export ENGINE_S3_ENDPOINT="http://127.0.0.1:9000/"
 
-	CGO_ENABLED=0 go test -timeout 300s -cover -count 1 -v -run ^TestIntegrationS3 github.com/pingcap/tiflow/engine/pkg/externalresource/internal/s3
+	CGO_ENABLED=0 go test -timeout 300s -cover -count 1 -v -run ^TestIntegrationS3 github.com/pingcap/tiflow/engine/pkg/externalresource/internal/bucket
 
 	CGO_ENABLED=0 go test -timeout 600s -cover -count 1 -v -run ^TestIntegrationBroker github.com/pingcap/tiflow/engine/pkg/externalresource/broker
 
