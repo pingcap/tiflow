@@ -23,7 +23,6 @@ import (
 	"github.com/pingcap/tiflow/cdc/model"
 	"github.com/pingcap/tiflow/pkg/config"
 	cerror "github.com/pingcap/tiflow/pkg/errors"
-	"github.com/pingcap/tiflow/pkg/redo"
 	"github.com/pingcap/tiflow/pkg/security"
 )
 
@@ -413,45 +412,7 @@ func ToAPIReplicaConfig(c *config.ReplicaConfig) *ReplicaConfig {
 
 // GetDefaultReplicaConfig returns a default ReplicaConfig
 func GetDefaultReplicaConfig() *ReplicaConfig {
-	return &ReplicaConfig{
-		MemoryQuota:        config.DefaultChangefeedMemoryQuota,
-		CaseSensitive:      true,
-		EnableOldValue:     true,
-		CheckGCSafePoint:   true,
-		EnableSyncPoint:    false,
-		SyncPointInterval:  &JSONDuration{10 * time.Minute},
-		SyncPointRetention: &JSONDuration{24 * time.Hour},
-		Filter: &FilterConfig{
-			Rules: []string{"*.*"},
-		},
-		Mounter: &MounterConfig{
-			WorkerNum: 16,
-		},
-		Sink: &SinkConfig{
-			CSVConfig: &CSVConfig{
-				Quote:      string(config.DoubleQuoteChar),
-				Delimiter:  config.Comma,
-				NullString: config.NULL,
-			},
-			EncoderConcurrency:       16,
-			Terminator:               config.CRLF,
-			DateSeparator:            config.DateSeparatorNone.String(),
-			EnablePartitionSeparator: false,
-		},
-		Consistent: &ConsistentConfig{
-			Level:             "none",
-			MaxLogSize:        64,
-			FlushIntervalInMs: redo.DefaultFlushIntervalInMs,
-			Storage:           "",
-			UseFileBackend:    false,
-		},
-		Scheduler: &ChangefeedSchedulerConfig{
-			EnableTableAcrossNodes: config.GetDefaultReplicaConfig().
-				Scheduler.EnableTableAcrossNodes,
-			RegionPerSpan: config.GetDefaultReplicaConfig().
-				Scheduler.RegionPerSpan,
-		},
-	}
+	return ToAPIReplicaConfig(config.GetDefaultReplicaConfig())
 }
 
 // FilterConfig represents filter config for a changefeed
