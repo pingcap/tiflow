@@ -287,8 +287,6 @@ type ChangefeedSchedulerConfig struct {
 	EnableTableAcrossNodes bool `toml:"enable_table_across_nodes" json:"enable_table_across_nodes"`
 	// RegionThreshold is the region count threshold of splitting a table.
 	RegionThreshold int `toml:"region_threshold" json:"region_threshold"`
-	// Deprecated.
-	RegionPerSpan int `toml:"region_per_span" json:"region_per_span"`
 }
 
 // ChangeFeedInfo describes the detail of a ChangeFeed
