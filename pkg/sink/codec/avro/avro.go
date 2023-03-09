@@ -63,29 +63,26 @@ func (a *BatchEncoder) AppendRowChangedEvent(
 	e *model.RowChangedEvent,
 	callback func(),
 ) error {
+	topic = sanitizeTopic(topic)
+	key, err := a.encodeKey(ctx, e, topic)
+	if err != nil {
+		return err
+	}
+	value, err := a.encodeValue(ctx, e, topic)
+	if err != nil {
+		return err
+	}
+
 	message := common.NewMsg(
 		config.ProtocolAvro,
-		nil,
-		nil,
+		key,
+		value,
 		e.CommitTs,
 		model.MessageTypeRow,
 		&e.Table.Schema,
 		&e.Table.Table,
 	)
 	message.Callback = callback
-	topic = sanitizeTopic(topic)
-
-	value, err := a.encodeValue(ctx, e, topic)
-	if err != nil {
-		return err
-	}
-	message.Value = value
-
-	key, err := a.encodeKey(ctx, e, topic)
-	if err != nil {
-		return err
-	}
-	message.Key = key
 
 	message.IncRowsCount()
 	a.result = append(a.result, message)
