@@ -38,6 +38,10 @@ func TestChangefeedQueryCli(t *testing.T) {
 	o.complete(f)
 	cmd := newCmdQueryChangefeed(f)
 
+	//check changefeed id
+	o.changefeedID = ""
+	require.NotNil(t, o.run(cmd))
+
 	cfV2.EXPECT().List(gomock.Any(), "all").Return([]v2.ChangefeedCommonInfo{
 		{
 			UpstreamID:     1,

@@ -79,6 +79,10 @@ func (o *queryChangefeedOptions) complete(f factory.Factory) error {
 
 // run the `cli changefeed query` command.
 func (o *queryChangefeedOptions) run(cmd *cobra.Command) error {
+	err := model.ValidateChangefeedID(o.changefeedID)
+	if err != nil {
+		return err
+	}
 	ctx := context.Background()
 	if o.simplified {
 		infos, err := o.apiClientV2.Changefeeds().List(ctx, "all")
