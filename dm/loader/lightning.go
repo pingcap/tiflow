@@ -321,8 +321,8 @@ func GetLightningConfig(globalCfg *lcfg.GlobalConfig, subtaskCfg *config.SubTask
 	cfg.Routes = subtaskCfg.RouteRules
 
 	if subtaskCfg.ExtStorage != nil {
-		// if we use bucket as dumper storage, write lightning checkpoint to downstream DB to avoid bucket ratelimit
-		// it's the default path for dm on cloud
+		// NOTE: if we use bucket as dumper storage, write lightning checkpoint to downstream DB to avoid bucket ratelimit
+		// it's the default path for cloud dm
 		cfg.Checkpoint.Driver = lcfg.CheckpointDriverMySQL
 		connParams, err := connParamFromDBConfig(&subtaskCfg.To)
 		if err != nil {
@@ -330,6 +330,7 @@ func GetLightningConfig(globalCfg *lcfg.GlobalConfig, subtaskCfg *config.SubTask
 		}
 		cfg.Checkpoint.MySQLParam = connParams
 	} else {
+		// NOTE: for op dm, we recommend to keep data files and checkpoint file in the same place to avoid inconsistent deletion
 		cfg.Checkpoint.Driver = lcfg.CheckpointDriverFile
 		var cpPath string
 		// l.cfg.LoaderConfig.Dir may be a s3 path, and Lightning supports checkpoint in s3, we can use storage.AdjustPath to adjust path both local and s3.
