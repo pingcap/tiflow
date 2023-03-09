@@ -95,7 +95,6 @@ func TestCloudStorageWriteEventsWithoutDateSeparator(t *testing.T) {
 	errCh := make(chan error, 5)
 	s, err := NewDMLSink(ctx, sinkURI, replicaConfig, errCh)
 	require.Nil(t, err)
-	s.writer.config.FlushInterval = time.Second
 	var cnt uint64 = 0
 	batch := 100
 	tableStatus := state.TableSinkSinking
@@ -156,7 +155,7 @@ func TestCloudStorageWriteEventsWithoutDateSeparator(t *testing.T) {
 func TestCloudStorageWriteEventsWithDateSeparator(t *testing.T) {
 	ctx, cancel := context.WithCancel(context.Background())
 	parentDir := t.TempDir()
-	uri := fmt.Sprintf("file:///%s", parentDir)
+	uri := fmt.Sprintf("file:///%s?flush-interval=2s", parentDir)
 	sinkURI, err := url.Parse(uri)
 	require.Nil(t, err)
 
@@ -167,7 +166,6 @@ func TestCloudStorageWriteEventsWithDateSeparator(t *testing.T) {
 	errCh := make(chan error, 5)
 	s, err := NewDMLSink(ctx, sinkURI, replicaConfig, errCh)
 	require.Nil(t, err)
-	s.writer.config.FlushInterval = time.Second
 	mockClock := clock.NewMock()
 	s.writer.setClock(mockClock)
 
@@ -180,7 +178,7 @@ func TestCloudStorageWriteEventsWithDateSeparator(t *testing.T) {
 	tableDir := path.Join(parentDir, "test/table1/33/2023-03-08")
 	err = s.WriteEvents(txns...)
 	require.Nil(t, err)
-	time.Sleep(1500 * time.Millisecond)
+	time.Sleep(3 * time.Second)
 
 	files, err := os.ReadDir(tableDir)
 	require.Nil(t, err)
@@ -204,7 +202,7 @@ func TestCloudStorageWriteEventsWithDateSeparator(t *testing.T) {
 	s.writer.setClock(mockClock)
 	err = s.WriteEvents(txns...)
 	require.Nil(t, err)
-	time.Sleep(1500 * time.Millisecond)
+	time.Sleep(3 * time.Second)
 
 	files, err = os.ReadDir(tableDir)
 	require.Nil(t, err)
@@ -228,7 +226,7 @@ func TestCloudStorageWriteEventsWithDateSeparator(t *testing.T) {
 	s.writer.setClock(mockClock)
 	err = s.WriteEvents(txns...)
 	require.Nil(t, err)
-	time.Sleep(1500 * time.Millisecond)
+	time.Sleep(3 * time.Second)
 
 	tableDir = path.Join(parentDir, "test/table1/33/2023-03-09")
 	files, err = os.ReadDir(tableDir)
@@ -255,13 +253,12 @@ func TestCloudStorageWriteEventsWithDateSeparator(t *testing.T) {
 	ctx, cancel = context.WithCancel(context.Background())
 	s, err = NewDMLSink(ctx, sinkURI, replicaConfig, errCh)
 	require.Nil(t, err)
-	s.writer.config.FlushInterval = time.Second
 	mockClock = clock.NewMock()
 	mockClock.Set(time.Date(2023, 3, 9, 0, 1, 10, 0, time.UTC))
 	s.writer.setClock(mockClock)
 	err = s.WriteEvents(txns...)
 	require.Nil(t, err)
-	time.Sleep(1500 * time.Millisecond)
+	time.Sleep(3 * time.Second)
 
 	files, err = os.ReadDir(tableDir)
 	require.Nil(t, err)
