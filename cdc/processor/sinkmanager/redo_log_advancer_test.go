@@ -266,5 +266,56 @@ func (suite *redoLogAdvancerSuite) TestAdvance() {
 	require.Equal(suite.T(), uint64(0), advancer.pendingTxnSize)
 	require.Equal(suite.T(), uint64(768), memoryQuota.GetUsedBytes())
 	manager.releaseRowsMemory(suite.testSpan)
-	require.Equal(suite.T(), uint64(256), memoryQuota.GetUsedBytes())
+	require.Equal(suite.T(), uint64(256), memoryQuota.GetUsedBytes(),
+		"memory quota should be released after releaseRowsMemory is called")
+}
+
+func (suite *redoLogAdvancerSuite) TestTryAdvanceWhenExceedAvailableMem() {
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+	memoryQuota := suite.genMemQuota(768)
+	defer memoryQuota.Close()
+	task, manager := suite.genRedoTaskAndRedoDMLManager()
+	advancer := newRedoLogAdvancer(task, memoryQuota, 768, manager)
+	require.NotNil(suite.T(), advancer)
+
+	pos := engine.Position{StartTs: 1, CommitTs: 2}
+	// 1. append 1 event with commit ts 2
+	advancer.appendEvents([]*model.RowChangedEvent{
+		{CommitTs: 2},
+	}, 256)
+	require.Equal(suite.T(), uint64(256), advancer.usedMem)
+	advancer.tryMoveToNextTxn(2, pos)
+
+	// 2. append 3 events with commit ts 3
+	for i := 0; i < 3; i++ {
+		advancer.appendEvents([]*model.RowChangedEvent{
+			{CommitTs: 3},
+		}, 256)
+	}
+	require.Equal(suite.T(), uint64(1024), advancer.usedMem)
+	pos = engine.Position{StartTs: 2, CommitTs: 3}
+	advancer.tryMoveToNextTxn(3, pos)
+
+	require.Equal(suite.T(), uint64(1024), advancer.pendingTxnSize)
+	require.Equal(suite.T(), uint64(768), memoryQuota.GetUsedBytes())
+	// 4. Try advance with txn is finished.
+	advanced, err := advancer.tryAdvanceAndAcquireMem(
+		ctx,
+		256,
+		false,
+		true,
+	)
+	require.NoError(suite.T(), err)
+	require.True(suite.T(), advanced)
+	require.Equal(suite.T(), uint64(1024), memoryQuota.GetUsedBytes(),
+		"Memory quota should be force acquired when exceed available memory.",
+	)
+
+	require.Len(suite.T(), manager.getEvents(suite.testSpan), 4)
+	require.Equal(suite.T(), uint64(3), manager.GetResolvedTs(suite.testSpan))
+	require.Equal(suite.T(), uint64(0), advancer.pendingTxnSize)
+	manager.releaseRowsMemory(suite.testSpan)
+	require.Equal(suite.T(), uint64(256), memoryQuota.GetUsedBytes(),
+		"memory quota should be released after releaseRowsMemory is called")
 }
