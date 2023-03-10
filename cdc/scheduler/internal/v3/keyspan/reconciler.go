@@ -197,7 +197,7 @@ func (m *Reconciler) splitSpan(
 			zap.Error(err))
 		return []tablepb.Span{span}
 	}
-	if len(regions) <= m.config.RegionPerSpan || totalCaptures == 0 {
+	if len(regions) <= m.config.RegionThreshold || totalCaptures == 0 {
 		return []tablepb.Span{span}
 	}
 

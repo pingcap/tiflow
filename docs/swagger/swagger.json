@@ -1834,8 +1834,8 @@
                     "description": "EnableTableAcrossNodes set true to split one table to multiple spans and\ndistribute to multiple TiCDC nodes.",
                     "type": "boolean"
                 },
-                "region_per_span": {
-                    "description": "RegionPerSpan the number of regions in a span, must be greater than 1000.\nSet 0 to disable span replication.",
+                "region_threshold": {
+                    "description": "RegionThreshold is the region count threshold of splitting a table.",
                     "type": "integer"
                 }
             }
