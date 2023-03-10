@@ -23,6 +23,14 @@ func LightningCheckpoint(task string) string {
 	return task + "_lightning_checkpoint_list"
 }
 
+// LightningCheckpointSchema returns lightning's checkpoint schema name
+func LightningCheckpointSchema(task string) string {
+	if task == "" {
+		return "tidb_lightning_checkpoint"
+	}
+	return task + "_tidb_lightning_checkpoint"
+}
+
 // SyncerCheckpoint returns syncer's checkpoint table name.
 func SyncerCheckpoint(task string) string {
 	return task + "_syncer_checkpoint"

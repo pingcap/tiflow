@@ -57,6 +57,10 @@ var (
 	sourceStatusCtxTimeOut      = 20 * time.Second
 )
 
+func buildLightningWorkerName(masterID frameModel.MasterID) string {
+	return "tiflow_" + string(masterID)
+}
+
 // unitHolderImpl wrap the dm-worker unit.
 type unitHolderImpl struct {
 	tp   framework.WorkerType
@@ -80,15 +84,18 @@ type unitHolderImpl struct {
 
 	// used to run background task
 	bgWg sync.WaitGroup
+
+	masterID frameModel.MasterID
 }
 
 var _ unitHolder = &unitHolderImpl{}
 
 // newUnitHolderImpl creates a UnitHolderImpl
-func newUnitHolderImpl(workerType framework.WorkerType, cfg *dmconfig.SubTaskConfig) *unitHolderImpl {
+func newUnitHolderImpl(workerType framework.WorkerType, cfg *dmconfig.SubTaskConfig, masterID frameModel.MasterID) *unitHolderImpl {
 	return &unitHolderImpl{
-		tp:  workerType,
-		cfg: cfg,
+		tp:       workerType,
+		cfg:      cfg,
+		masterID: masterID,
 	}
 }
 
@@ -121,7 +128,7 @@ func (u *unitHolderImpl) Init(ctx context.Context) error {
 			return err2
 		}
 		u.cfg.LoaderConfig.SQLMode = sqlMode
-		u.unit = loader.NewLightning(u.cfg, nil, "dataflow-worker")
+		u.unit = loader.NewLightning(u.cfg, nil, buildLightningWorkerName(u.masterID))
 	case frameModel.WorkerDMSync:
 		u.unit = syncer.NewSyncer(u.cfg, nil, nil)
 	}

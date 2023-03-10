@@ -36,6 +36,7 @@ import (
 	"github.com/pingcap/tiflow/dm/pb"
 	"github.com/pingcap/tiflow/dm/pkg/binlog"
 	"github.com/pingcap/tiflow/dm/pkg/conn"
+	"github.com/pingcap/tiflow/dm/pkg/cputil"
 	"github.com/pingcap/tiflow/dm/pkg/log"
 	"github.com/pingcap/tiflow/dm/pkg/storage"
 	"github.com/pingcap/tiflow/dm/pkg/terror"
@@ -308,7 +309,7 @@ func GetTaskInfoSchemaName(dmMetaSchema, taskName string) string {
 }
 
 // GetLightningConfig returns the lightning task config for the lightning global config and DM subtask config.
-func GetLightningConfig(globalCfg *lcfg.GlobalConfig, subtaskCfg *config.SubTaskConfig) (*lcfg.Config, error) {
+func GetLightningConfig(globalCfg *lcfg.GlobalConfig, subtaskCfg *config.SubTaskConfig, workerName string) (*lcfg.Config, error) {
 	cfg := lcfg.NewConfig()
 	if err := cfg.LoadFromGlobal(globalCfg); err != nil {
 		return nil, err
@@ -326,7 +327,8 @@ func GetLightningConfig(globalCfg *lcfg.GlobalConfig, subtaskCfg *config.SubTask
 		if err := cfg.Security.BuildTLSConfig(); err != nil {
 			return nil, err
 		}
-		cfg.Checkpoint.Schema = "tidb_lightning_checkpoint"
+		// for cloud dm, workerName is related with dm job id
+		cfg.Checkpoint.Schema = cputil.LightningCheckpointSchema(workerName)
 		cfg.Checkpoint.Driver = lcfg.CheckpointDriverMySQL
 		cfg.Checkpoint.MySQLParam = connParamFromConfig(cfg)
 	} else {
@@ -340,7 +342,7 @@ func GetLightningConfig(globalCfg *lcfg.GlobalConfig, subtaskCfg *config.SubTask
 		}
 		cfg.Checkpoint.DSN = cpPath
 	}
-	cfg.Checkpoint.KeepAfterSuccess = lcfg.CheckpointOrigin
+	cfg.Checkpoint.KeepAfterSuccess = lcfg.CheckpointRemove
 
 	cfg.TikvImporter.DiskQuota = subtaskCfg.LoaderConfig.DiskQuotaPhysical
 	cfg.TikvImporter.OnDuplicate = string(subtaskCfg.OnDuplicateLogical)
@@ -378,7 +380,7 @@ func GetLightningConfig(globalCfg *lcfg.GlobalConfig, subtaskCfg *config.SubTask
 }
 
 func (l *LightningLoader) getLightningConfig() (*lcfg.Config, error) {
-	cfg, err := GetLightningConfig(l.lightningGlobalConfig, l.cfg)
+	cfg, err := GetLightningConfig(l.lightningGlobalConfig, l.cfg, l.workerName)
 	if err != nil {
 		return nil, err
 	}
