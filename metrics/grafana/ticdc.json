@@ -8615,7 +8615,7 @@
           "timeFrom": null,
           "timeRegions": [],
           "timeShift": null,
-          "title": "Retry Count (1min)",
+          "title": "Retry Count",
           "tooltip": {
             "shared": true,
             "sort": 0,
@@ -8713,7 +8713,7 @@
           "timeFrom": null,
           "timeRegions": [],
           "timeShift": null,
-          "title": "Error Count (1m)",
+          "title": "Error Count",
           "tooltip": {
             "shared": true,
             "sort": 0,
