@@ -196,6 +196,11 @@ func subtaskCfg2BinlogSyncerCfg(cfg *config.SubTaskConfig, timezone *time.Locati
 		}
 	}
 
+	h := cfg.WorkerName
+	// https://github.com/mysql/mysql-server/blob/1bfe02bdad6604d54913c62614bde57a055c8332/include/my_hostname.h#L33-L42
+	if len(h) > 60 {
+		h = h[:60]
+	}
 	syncCfg := replication.BinlogSyncerConfig{
 		ServerID:                cfg.ServerID,
 		Flavor:                  cfg.Flavor,
@@ -206,6 +211,7 @@ func subtaskCfg2BinlogSyncerCfg(cfg *config.SubTaskConfig, timezone *time.Locati
 		TimestampStringLocation: timezone,
 		TLSConfig:               tlsConfig,
 		RowsEventDecodeFunc:     rowsEventDecodeFunc,
+		Localhost:               h,
 	}
 	// when retry count > 1, go-mysql will retry sync from the previous GTID set in GTID mode,
 	// which may get duplicate binlog event after retry success. so just set retry count = 1, and task
