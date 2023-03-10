@@ -31,24 +31,81 @@ import (
 	"github.com/pingcap/tiflow/pkg/upstream"
 	"github.com/stretchr/testify/require"
 	"github.com/stretchr/testify/suite"
-	"github.com/tikv/client-go/v2/oracle"
 )
 
 // testEventSize is the size of a test event.
 // It is used to calculate the memory quota.
 const testEventSize = 218
 
-type workerSuite struct {
+//nolint:unparam
+func genPolymorphicEventWithNilRow(startTs,
+	commitTs uint64,
+) *model.PolymorphicEvent {
+	return &model.PolymorphicEvent{
+		StartTs: startTs,
+		CRTs:    commitTs,
+		RawKV: &model.RawKVEntry{
+			OpType:  model.OpTypePut,
+			StartTs: startTs,
+			CRTs:    commitTs,
+		},
+		Row: nil,
+	}
+}
+
+func genPolymorphicResolvedEvent(resolvedTs uint64) *model.PolymorphicEvent {
+	return &model.PolymorphicEvent{
+		CRTs: resolvedTs,
+		RawKV: &model.RawKVEntry{
+			OpType: model.OpTypeResolved,
+			CRTs:   resolvedTs,
+		},
+	}
+}
+
+func genPolymorphicEvent(startTs, commitTs uint64, span tablepb.Span) *model.PolymorphicEvent {
+	return &model.PolymorphicEvent{
+		StartTs: startTs,
+		CRTs:    commitTs,
+		RawKV: &model.RawKVEntry{
+			OpType:  model.OpTypePut,
+			StartTs: startTs,
+			CRTs:    commitTs,
+		},
+		Row: genRowChangedEvent(startTs, commitTs, span),
+	}
+}
+
+func genRowChangedEvent(startTs, commitTs uint64, span tablepb.Span) *model.RowChangedEvent {
+	return &model.RowChangedEvent{
+		StartTs:  startTs,
+		CommitTs: commitTs,
+		Table: &model.TableName{
+			Schema:      "table",
+			Table:       "table",
+			TableID:     span.TableID,
+			IsPartition: false,
+		},
+		Columns: []*model.Column{
+			{Name: "a", Value: 2},
+		},
+		PreColumns: []*model.Column{
+			{Name: "a", Value: 1},
+		},
+	}
+}
+
+type tableSinkWorkerSuite struct {
 	suite.Suite
 	testChangefeedID model.ChangeFeedID
 	testSpan         tablepb.Span
 }
 
-func TestWorkerSuite(t *testing.T) {
-	suite.Run(t, new(workerSuite))
+func TestTableSinkWorkerSuite(t *testing.T) {
+	suite.Run(t, new(tableSinkWorkerSuite))
 }
 
-func (suite *workerSuite) SetupSuite() {
+func (suite *tableSinkWorkerSuite) SetupSuite() {
 	requestMemSize = testEventSize
 	// For one batch size.
 	// Advance table sink per 2 events.
@@ -57,17 +114,17 @@ func (suite *workerSuite) SetupSuite() {
 	suite.testSpan = spanz.TableIDToComparableSpan(1)
 }
 
-func (suite *workerSuite) SetupTest() {
+func (suite *tableSinkWorkerSuite) SetupTest() {
 	// reset batchID
 	batchID.Store(0)
 }
 
-func (suite *workerSuite) TearDownSuite() {
+func (suite *tableSinkWorkerSuite) TearDownSuite() {
 	requestMemSize = defaultRequestMemSize
 	maxUpdateIntervalSize = defaultMaxUpdateIntervalSize
 }
 
-func (suite *workerSuite) createWorker(
+func (suite *tableSinkWorkerSuite) createWorker(
 	memQuota uint64,
 	splitTxn bool,
 ) (*sinkWorker, engine.SortEngine) {
@@ -84,70 +141,13 @@ func (suite *workerSuite) createWorker(
 	return newSinkWorker(suite.testChangefeedID, sm, quota, nil, nil, splitTxn, false), sortEngine
 }
 
-func (suite *workerSuite) addEventsToSortEngine(
+func (suite *tableSinkWorkerSuite) addEventsToSortEngine(
 	events []*model.PolymorphicEvent,
 	sortEngine engine.SortEngine,
 ) {
 	sortEngine.AddTable(suite.testSpan)
 	for _, event := range events {
 		sortEngine.Add(suite.testSpan, event)
-	}
-}
-
-func (suite *workerSuite) genPolymorphicEventWithNilRow(startTs,
-	commitTs uint64,
-) *model.PolymorphicEvent {
-	return &model.PolymorphicEvent{
-		StartTs: startTs,
-		CRTs:    commitTs,
-		RawKV: &model.RawKVEntry{
-			OpType:  model.OpTypePut,
-			StartTs: startTs,
-			CRTs:    commitTs,
-		},
-		Row: nil,
-	}
-}
-
-func (suite *workerSuite) genPolymorphicResolvedEvent(resolvedTs uint64) *model.PolymorphicEvent {
-	return &model.PolymorphicEvent{
-		CRTs: resolvedTs,
-		RawKV: &model.RawKVEntry{
-			OpType: model.OpTypeResolved,
-			CRTs:   resolvedTs,
-		},
-	}
-}
-
-func (suite *workerSuite) genPolymorphicEvent(startTs, commitTs uint64) *model.PolymorphicEvent {
-	return &model.PolymorphicEvent{
-		StartTs: startTs,
-		CRTs:    commitTs,
-		RawKV: &model.RawKVEntry{
-			OpType:  model.OpTypePut,
-			StartTs: startTs,
-			CRTs:    commitTs,
-		},
-		Row: suite.genRowChangedEvent(startTs, commitTs),
-	}
-}
-
-func (suite *workerSuite) genRowChangedEvent(startTs, commitTs uint64) *model.RowChangedEvent {
-	return &model.RowChangedEvent{
-		StartTs:  startTs,
-		CommitTs: commitTs,
-		Table: &model.TableName{
-			Schema:      "table",
-			Table:       "table",
-			TableID:     suite.testSpan.TableID,
-			IsPartition: false,
-		},
-		Columns: []*model.Column{
-			{Name: "a", Value: 2},
-		},
-		PreColumns: []*model.Column{
-			{Name: "a", Value: 1},
-		},
 	}
 }
 
@@ -169,16 +169,16 @@ func genLowerBound() engine.Position {
 
 // Test Scenario:
 // Worker should ignore the filtered events(row is nil).
-func (suite *workerSuite) TestHandleTaskWithSplitTxnAndGotSomeFilteredEvents() {
+func (suite *tableSinkWorkerSuite) TestHandleTaskWithSplitTxnAndGotSomeFilteredEvents() {
 	ctx, cancel := context.WithCancel(context.Background())
 	events := []*model.PolymorphicEvent{
-		suite.genPolymorphicEvent(1, 2),
+		genPolymorphicEvent(1, 2, suite.testSpan),
 		// This event will be filtered, so its Row will be nil.
-		suite.genPolymorphicEventWithNilRow(1, 2),
-		suite.genPolymorphicEventWithNilRow(1, 2),
-		suite.genPolymorphicEvent(1, 3),
-		suite.genPolymorphicEvent(1, 4),
-		suite.genPolymorphicResolvedEvent(4),
+		genPolymorphicEventWithNilRow(1, 2),
+		genPolymorphicEventWithNilRow(1, 2),
+		genPolymorphicEvent(1, 3, suite.testSpan),
+		genPolymorphicEvent(1, 4, suite.testSpan),
+		genPolymorphicResolvedEvent(4),
 	}
 
 	// Only for three events.
@@ -222,14 +222,14 @@ func (suite *workerSuite) TestHandleTaskWithSplitTxnAndGotSomeFilteredEvents() {
 
 // Test Scenario:
 // worker will stop when no memory quota and meet the txn boundary.
-func (suite *workerSuite) TestHandleTaskWithSplitTxnAndAbortWhenNoMemAndOneTxnFinished() {
+func (suite *tableSinkWorkerSuite) TestHandleTaskWithSplitTxnAndAbortWhenNoMemAndOneTxnFinished() {
 	ctx, cancel := context.WithCancel(context.Background())
 	events := []*model.PolymorphicEvent{
-		suite.genPolymorphicEvent(1, 2),
-		suite.genPolymorphicEvent(1, 2),
-		suite.genPolymorphicEvent(1, 3),
-		suite.genPolymorphicEvent(2, 4),
-		suite.genPolymorphicResolvedEvent(4),
+		genPolymorphicEvent(1, 2, suite.testSpan),
+		genPolymorphicEvent(1, 2, suite.testSpan),
+		genPolymorphicEvent(1, 3, suite.testSpan),
+		genPolymorphicEvent(2, 4, suite.testSpan),
+		genPolymorphicResolvedEvent(4),
 	}
 
 	// Only for three events.
@@ -273,14 +273,14 @@ func (suite *workerSuite) TestHandleTaskWithSplitTxnAndAbortWhenNoMemAndOneTxnFi
 
 // Test Scenario:
 // worker will block when no memory quota until the mem quota is aborted.
-func (suite *workerSuite) TestHandleTaskWithSplitTxnAndAbortWhenNoMemAndBlocked() {
+func (suite *tableSinkWorkerSuite) TestHandleTaskWithSplitTxnAndAbortWhenNoMemAndBlocked() {
 	ctx, cancel := context.WithCancel(context.Background())
 	events := []*model.PolymorphicEvent{
-		suite.genPolymorphicEvent(1, 10),
-		suite.genPolymorphicEvent(1, 10),
-		suite.genPolymorphicEvent(1, 10),
-		suite.genPolymorphicEvent(1, 10),
-		suite.genPolymorphicResolvedEvent(14),
+		genPolymorphicEvent(1, 10, suite.testSpan),
+		genPolymorphicEvent(1, 10, suite.testSpan),
+		genPolymorphicEvent(1, 10, suite.testSpan),
+		genPolymorphicEvent(1, 10, suite.testSpan),
+		genPolymorphicResolvedEvent(14),
 	}
 	// Only for three events.
 	eventSize := uint64(testEventSize * 3)
@@ -324,16 +324,16 @@ func (suite *workerSuite) TestHandleTaskWithSplitTxnAndAbortWhenNoMemAndBlocked(
 
 // Test Scenario:
 // worker will advance the table sink only when it reaches the batch size.
-func (suite *workerSuite) TestHandleTaskWithSplitTxnAndOnlyAdvanceTableSinkWhenReachOneBatchSize() {
+func (suite *tableSinkWorkerSuite) TestHandleTaskWithSplitTxnAndOnlyAdvanceWhenReachOneBatchSize() {
 	ctx, cancel := context.WithCancel(context.Background())
 	events := []*model.PolymorphicEvent{
-		suite.genPolymorphicEvent(1, 2),
-		suite.genPolymorphicEvent(1, 2),
-		suite.genPolymorphicEvent(1, 2),
-		suite.genPolymorphicEvent(1, 2),
-		suite.genPolymorphicEvent(1, 2),
-		suite.genPolymorphicEvent(1, 3),
-		suite.genPolymorphicResolvedEvent(4),
+		genPolymorphicEvent(1, 2, suite.testSpan),
+		genPolymorphicEvent(1, 2, suite.testSpan),
+		genPolymorphicEvent(1, 2, suite.testSpan),
+		genPolymorphicEvent(1, 2, suite.testSpan),
+		genPolymorphicEvent(1, 2, suite.testSpan),
+		genPolymorphicEvent(1, 3, suite.testSpan),
+		genPolymorphicResolvedEvent(4),
 	}
 	// For five events.
 	eventSize := uint64(testEventSize * 5)
@@ -377,16 +377,16 @@ func (suite *workerSuite) TestHandleTaskWithSplitTxnAndOnlyAdvanceTableSinkWhenR
 
 // Test Scenario:
 // worker will force consume only one Txn when the memory quota is not enough.
-func (suite *workerSuite) TestHandleTaskWithoutSplitTxnAndAbortWhenNoMemAndForceConsume() {
+func (suite *tableSinkWorkerSuite) TestHandleTaskWithoutSplitTxnAndAbortWhenNoMemAndForceConsume() {
 	ctx, cancel := context.WithCancel(context.Background())
 	events := []*model.PolymorphicEvent{
-		suite.genPolymorphicEvent(1, 2),
-		suite.genPolymorphicEvent(1, 2),
-		suite.genPolymorphicEvent(1, 2),
-		suite.genPolymorphicEvent(1, 2),
-		suite.genPolymorphicEvent(1, 2),
-		suite.genPolymorphicEvent(1, 4),
-		suite.genPolymorphicResolvedEvent(5),
+		genPolymorphicEvent(1, 2, suite.testSpan),
+		genPolymorphicEvent(1, 2, suite.testSpan),
+		genPolymorphicEvent(1, 2, suite.testSpan),
+		genPolymorphicEvent(1, 2, suite.testSpan),
+		genPolymorphicEvent(1, 2, suite.testSpan),
+		genPolymorphicEvent(1, 4, suite.testSpan),
+		genPolymorphicResolvedEvent(5),
 	}
 
 	// Only for three events.
@@ -432,16 +432,16 @@ func (suite *workerSuite) TestHandleTaskWithoutSplitTxnAndAbortWhenNoMemAndForce
 
 // Test Scenario:
 // worker will advance the table sink only when it reaches the max update interval size.
-func (suite *workerSuite) TestHandleTaskWithoutSplitTxnOnlyAdvanceTableSinkWhenReachMaxUpdateIntervalSize() {
+func (suite *tableSinkWorkerSuite) TestTaskWithoutSplitTxnOnlyAdvanceWhenReachMaxUpdateIntSize() {
 	ctx, cancel := context.WithCancel(context.Background())
 	events := []*model.PolymorphicEvent{
-		suite.genPolymorphicEvent(1, 2),
-		suite.genPolymorphicEvent(1, 3),
-		suite.genPolymorphicEvent(1, 4),
-		suite.genPolymorphicEvent(1, 4),
-		suite.genPolymorphicEvent(1, 5),
-		suite.genPolymorphicEvent(1, 6),
-		suite.genPolymorphicResolvedEvent(6),
+		genPolymorphicEvent(1, 2, suite.testSpan),
+		genPolymorphicEvent(1, 3, suite.testSpan),
+		genPolymorphicEvent(1, 4, suite.testSpan),
+		genPolymorphicEvent(1, 4, suite.testSpan),
+		genPolymorphicEvent(1, 5, suite.testSpan),
+		genPolymorphicEvent(1, 6, suite.testSpan),
+		genPolymorphicResolvedEvent(6),
 	}
 	// Only for three events.
 	eventSize := uint64(testEventSize * 3)
@@ -486,11 +486,11 @@ func (suite *workerSuite) TestHandleTaskWithoutSplitTxnOnlyAdvanceTableSinkWhenR
 
 // Test Scenario:
 // worker will advance the table sink only when task is finished.
-func (suite *workerSuite) TestHandleTaskWithSplitTxnAndAdvanceTableWhenTaskIsFinished() {
+func (suite *tableSinkWorkerSuite) TestHandleTaskWithSplitTxnAndAdvanceTableWhenTaskIsFinished() {
 	ctx, cancel := context.WithCancel(context.Background())
 	events := []*model.PolymorphicEvent{
-		suite.genPolymorphicEvent(0, 1),
-		suite.genPolymorphicResolvedEvent(4),
+		genPolymorphicEvent(0, 1, suite.testSpan),
+		genPolymorphicResolvedEvent(4),
 	}
 	// Only for three events.
 	eventSize := uint64(testEventSize * 3)
@@ -539,10 +539,10 @@ func (suite *workerSuite) TestHandleTaskWithSplitTxnAndAdvanceTableWhenTaskIsFin
 
 // Test Scenario:
 // worker will advance the table sink directly when there are no events.
-func (suite *workerSuite) TestHandleTaskWithSplitTxnAndAdvanceTableIfNoWorkload() {
+func (suite *tableSinkWorkerSuite) TestHandleTaskWithSplitTxnAndAdvanceTableIfNoWorkload() {
 	ctx, cancel := context.WithCancel(context.Background())
 	events := []*model.PolymorphicEvent{
-		suite.genPolymorphicResolvedEvent(4),
+		genPolymorphicResolvedEvent(4),
 	}
 	// Only for three events.
 	eventSize := uint64(testEventSize * 3)
@@ -585,13 +585,13 @@ func (suite *workerSuite) TestHandleTaskWithSplitTxnAndAdvanceTableIfNoWorkload(
 	wg.Wait()
 }
 
-func (suite *workerSuite) TestHandleTaskUseDifferentBatchIDEveryTime() {
+func (suite *tableSinkWorkerSuite) TestHandleTaskUseDifferentBatchIDEveryTime() {
 	ctx, cancel := context.WithCancel(context.Background())
 	events := []*model.PolymorphicEvent{
-		suite.genPolymorphicEvent(1, 3),
-		suite.genPolymorphicEvent(1, 3),
-		suite.genPolymorphicEvent(1, 3),
-		suite.genPolymorphicResolvedEvent(4),
+		genPolymorphicEvent(1, 3, suite.testSpan),
+		genPolymorphicEvent(1, 3, suite.testSpan),
+		genPolymorphicEvent(1, 3, suite.testSpan),
+		genPolymorphicResolvedEvent(4),
 	}
 	// Only for three events.
 	eventSize := uint64(testEventSize * 3)
@@ -640,8 +640,8 @@ func (suite *workerSuite) TestHandleTaskUseDifferentBatchIDEveryTime() {
 	}, 5*time.Second, 10*time.Millisecond)
 
 	events = []*model.PolymorphicEvent{
-		suite.genPolymorphicEvent(2, 5),
-		suite.genPolymorphicResolvedEvent(6),
+		genPolymorphicEvent(2, 5, suite.testSpan),
+		genPolymorphicResolvedEvent(6),
 	}
 	e.Add(suite.testSpan, events...)
 	// Send another task to make sure the batchID is started from 2.
@@ -662,58 +662,4 @@ func (suite *workerSuite) TestHandleTaskUseDifferentBatchIDEveryTime() {
 	wg.Wait()
 	require.Equal(suite.T(), uint64(5), batchID.Load(), "The batchID should be 5, "+
 		"because the first task has 3 events, the second task has 1 event")
-}
-
-func (suite *workerSuite) TestValidateAndAdjustBound() {
-	for _, tc := range []struct {
-		name          string
-		lowerBound    engine.Position
-		taskTimeRange time.Duration
-		expectAdjust  bool
-	}{
-		{
-			name: "bigger than maxTaskTimeRange",
-			lowerBound: engine.Position{
-				StartTs:  439333515018895365,
-				CommitTs: 439333515018895366,
-			},
-			taskTimeRange: 10 * time.Second,
-			expectAdjust:  true,
-		},
-		{
-			name: "smaller than maxTaskTimeRange",
-			lowerBound: engine.Position{
-				StartTs:  439333515018895365,
-				CommitTs: 439333515018895366,
-			},
-			taskTimeRange: 1 * time.Second,
-			expectAdjust:  false,
-		},
-	} {
-		suite.Run(tc.name, func() {
-			changefeedID := model.DefaultChangeFeedID("1")
-			span := spanz.TableIDToComparableSpan(1)
-			wrapper, _ := createTableSinkWrapper(changefeedID, span)
-			task := &sinkTask{
-				span:       span,
-				lowerBound: tc.lowerBound,
-				getUpperBound: func(_ model.Ts) engine.Position {
-					lowerPhs := oracle.GetTimeFromTS(tc.lowerBound.CommitTs)
-					newUpperCommitTs := oracle.GoTimeToTS(lowerPhs.Add(tc.taskTimeRange))
-					upperBound := engine.GenCommitFence(newUpperCommitTs)
-					return upperBound
-				},
-				tableSink: wrapper,
-			}
-			lowerBound, upperBound := validateAndAdjustBound(changefeedID, task)
-			if tc.expectAdjust {
-				lowerPhs := oracle.GetTimeFromTS(lowerBound.CommitTs)
-				upperPhs := oracle.GetTimeFromTS(upperBound.CommitTs)
-				require.Equal(suite.T(), maxTaskTimeRange, upperPhs.Sub(lowerPhs))
-			} else {
-				require.Equal(suite.T(), tc.lowerBound, lowerBound)
-				require.Equal(suite.T(), task.getUpperBound(0), upperBound)
-			}
-		})
-	}
 }

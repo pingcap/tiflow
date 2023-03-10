@@ -215,7 +215,7 @@ func (m *SinkManager) startWorkers(splitTxn bool, enableOldValue bool) {
 
 	for i := 0; i < redoWorkerNum; i++ {
 		w := newRedoWorker(m.changefeedID, m.sourceManager, m.redoMemQuota,
-			m.redoDMLMgr, m.eventCache, splitTxn, enableOldValue)
+			m.redoDMLMgr, m.eventCache, enableOldValue)
 		m.redoWorkers = append(m.redoWorkers, w)
 		m.wg.Add(1)
 		go func() {

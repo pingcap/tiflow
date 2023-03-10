@@ -281,3 +281,11 @@ func (e *eventAppender) onBroken() (pendingSize uint64) {
 	}
 	return
 }
+
+// getEvents only used for test.
+func (e *eventAppender) getEvents() []*model.RowChangedEvent {
+	e.mu.Lock()
+	defer e.mu.Unlock()
+
+	return e.events
+}
