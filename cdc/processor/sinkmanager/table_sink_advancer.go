@@ -22,11 +22,6 @@ import (
 	"go.uber.org/zap"
 )
 
-const (
-	// bufferSize is the size of the buffer used to store the events.
-	bufferSize = 1024
-)
-
 type tableSinkAdvancer struct {
 	// NOTICE: This task is immutable, so please never modify it.
 	task *sinkTask
