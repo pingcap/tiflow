@@ -62,8 +62,8 @@ var defaultAPIConfig = &ReplicaConfig{
 	Scheduler: &ChangefeedSchedulerConfig{
 		EnableTableAcrossNodes: config.GetDefaultReplicaConfig().
 			Scheduler.EnableTableAcrossNodes,
-		RegionPerSpan: config.GetDefaultReplicaConfig().
-			Scheduler.RegionPerSpan,
+		RegionThreshold: config.GetDefaultReplicaConfig().
+			Scheduler.RegionThreshold,
 	},
 }
 
@@ -136,7 +136,7 @@ func TestToAPIReplicaConfig(t *testing.T) {
 	}
 	cfg.Mounter = &config.MounterConfig{WorkerNum: 11}
 	cfg.Scheduler = &config.ChangefeedSchedulerConfig{
-		EnableTableAcrossNodes: true, RegionPerSpan: 10001,
+		EnableTableAcrossNodes: true, RegionThreshold: 10001,
 	}
 	cfg2 := ToAPIReplicaConfig(cfg).ToInternalReplicaConfig()
 	require.Equal(t, "", cfg2.Sink.DispatchRules[0].DispatcherRule)
