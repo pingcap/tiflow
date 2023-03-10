@@ -114,4 +114,14 @@ func TestValidateSink(t *testing.T) {
 	err = Validate(ctx, sinkURI, replicateConfig)
 	require.NotNil(t, err)
 	require.Contains(t, err.Error(), "sink uri scheme is not supported in BDR mode")
+
+	// test sink-scheme/syncpoint error
+	replicateConfig.EnableSyncPoint = true
+	sinkURI = "kafka://"
+	err = Validate(ctx, sinkURI, replicateConfig)
+	require.NotNil(t, err)
+	require.Contains(
+		t, err.Error(),
+		"sink uri scheme is not supported with syncpoint enabled",
+	)
 }

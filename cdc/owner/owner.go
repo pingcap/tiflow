@@ -335,6 +335,7 @@ func (o *ownerImpl) ValidateChangefeed(info *model.ChangeFeedInfo) error {
 	if err != nil {
 		return cerror.ErrAPIInvalidParam.GenWithStack("invalid sink URI %s", err)
 	}
+
 	t, ok = o.removedSinkURI[url.URL{
 		Scheme: sinkURI.Scheme,
 		Host:   sinkURI.Host,
