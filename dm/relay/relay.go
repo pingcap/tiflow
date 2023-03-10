@@ -1151,6 +1151,12 @@ func (r *Relay) setSyncConfig() error {
 		}
 	}
 
+	h, _ := os.Hostname()
+	h = "dm-relay-" + h
+	// https://github.com/mysql/mysql-server/blob/1bfe02bdad6604d54913c62614bde57a055c8332/include/my_hostname.h#L33-L42
+	if len(h) > 60 {
+		h = h[:60]
+	}
 	syncerCfg := replication.BinlogSyncerConfig{
 		ServerID:  r.cfg.ServerID,
 		Flavor:    r.cfg.Flavor,
@@ -1160,6 +1166,7 @@ func (r *Relay) setSyncConfig() error {
 		Password:  r.cfg.From.Password,
 		Charset:   r.cfg.Charset,
 		TLSConfig: tlsConfig,
+		Localhost: h,
 	}
 	common.SetDefaultReplicationCfg(&syncerCfg, common.MaxBinlogSyncerReconnect)
 
