@@ -116,7 +116,7 @@ func TestSplitSpan(t *testing.T) {
 	for i, cs := range cases {
 		reconciler := NewReconciler(model.ChangeFeedID{}, cache, &config.ChangefeedSchedulerConfig{
 			EnableTableAcrossNodes: true,
-			RegionPerSpan:          1,
+			RegionThreshold:        1,
 		})
 		spans := reconciler.splitSpan(context.Background(), cs.span, cs.totalCaptures)
 		require.Equalf(t, cs.expectSpans, spans, "%d %s", i, &cs.span)
@@ -179,7 +179,7 @@ func TestEvenlySplitSpan(t *testing.T) {
 	for i, cs := range cases {
 		reconciler := NewReconciler(model.ChangeFeedID{}, cache, &config.ChangefeedSchedulerConfig{
 			EnableTableAcrossNodes: true,
-			RegionPerSpan:          1,
+			RegionThreshold:        1,
 		})
 		spans := reconciler.splitSpan(
 			context.Background(),
@@ -220,7 +220,7 @@ func TestSplitSpanRegionOutOfOrder(t *testing.T) {
 
 	reconciler := NewReconciler(model.ChangeFeedID{}, cache, &config.ChangefeedSchedulerConfig{
 		EnableTableAcrossNodes: true,
-		RegionPerSpan:          1,
+		RegionThreshold:        1,
 	})
 	span := tablepb.Span{TableID: 1, StartKey: []byte("t1"), EndKey: []byte("t2")}
 	spans := reconciler.splitSpan(context.Background(), span, 1)
@@ -269,7 +269,7 @@ func TestReconcile(t *testing.T) {
 	cfg := &config.SchedulerConfig{
 		ChangefeedSettings: &config.ChangefeedSchedulerConfig{
 			EnableTableAcrossNodes: true,
-			RegionPerSpan:          1,
+			RegionThreshold:        1,
 		},
 	}
 	compat := compat.New(cfg, map[string]*model.CaptureInfo{})
@@ -379,7 +379,7 @@ func TestCompatDisable(t *testing.T) {
 	cfg := &config.SchedulerConfig{
 		ChangefeedSettings: &config.ChangefeedSchedulerConfig{
 			EnableTableAcrossNodes: true,
-			RegionPerSpan:          1,
+			RegionThreshold:        1,
 		},
 	}
 	cm := compat.New(cfg, map[string]*model.CaptureInfo{
@@ -425,7 +425,7 @@ func TestBatchAddRateLimit(t *testing.T) {
 	cfg := &config.SchedulerConfig{
 		ChangefeedSettings: &config.ChangefeedSchedulerConfig{
 			EnableTableAcrossNodes: true,
-			RegionPerSpan:          1,
+			RegionThreshold:        1,
 		},
 	}
 	compat := compat.New(cfg, map[string]*model.CaptureInfo{})
