@@ -19,7 +19,7 @@ groups=(
 	["G02"]='drop_many_tables multi_cdc_cluster processor_stop_delay'
 	["G03"]='capture_suicide_while_balance_table row_format'
 	["G04"]='foreign_key canal_json_basic ddl_puller_lag'
-	["G05"]='partition_table changefeed_auto_stop sorter'
+	["G05"]='partition_table changefeed_auto_stop'
 	["G06"]='charset_gbk owner_remove_table_error bdr_mode'
 	["G07"]='clustered_index multi_tables_ddl big_txn_v2'
 	["G08"]='bank multi_source kafka_sink_error_resume'
@@ -38,7 +38,7 @@ groups=(
 	["G21"]='event_filter generate_column syncpoint sequence processor_resolved_ts_fallback'
 	["G22"]='big_txn csv_storage_basic changefeed_finish sink_hang canal_json_storage_basic'
 	["G23"]='multi_topics new_ci_collation_with_old_value batch_add_table multi_changefeed'
-	["G24"]='consistent_replicate_nfs processor_panic owner_resign '
+	["G24"]='consistent_replicate_nfs owner_resign api_v2'
 )
 
 # Get other cases not in groups, to avoid missing any case
