@@ -46,6 +46,9 @@ type indexWithDate struct {
 // VersionedTable is used to wrap TableName with a version.
 type VersionedTable struct {
 	model.TableName
+	// Version is consistent with the version of TableInfo recorded in
+	// schema storage. It can either be finished ts of a DDL event,
+	// or be the checkpoint ts when processor is restarted.
 	Version uint64
 }
 

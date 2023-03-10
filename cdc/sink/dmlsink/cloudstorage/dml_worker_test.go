@@ -82,7 +82,7 @@ func TestDMLWorkerRun(t *testing.T) {
 	for i := 0; i < 5; i++ {
 		frag := eventFragment{
 			seqNumber: uint64(i),
-			verTable: cloudstorage.VersionedTable{
+			versionedTable: cloudstorage.VersionedTable{
 				TableName: table1,
 				Version:   99,
 			},

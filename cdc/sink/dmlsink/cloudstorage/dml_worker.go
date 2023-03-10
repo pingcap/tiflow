@@ -354,13 +354,13 @@ func (d *dmlWorker) dispatchFlushTasks(ctx context.Context,
 			if !ok || atomic.LoadUint64(&d.isClosed) == 1 {
 				return nil
 			}
-			table := frag.verTable
+			table := frag.versionedTable
 			d.tableEvents.mu.Lock()
 			d.tableEvents.fragments[table] = append(d.tableEvents.fragments[table], frag)
 			d.tableEvents.mu.Unlock()
 
 			key := wrappedTable{
-				tableName: frag.verTable.TableName,
+				tableName: frag.versionedTable.TableName,
 				tableInfo: frag.event.Event.TableInfo,
 			}
 

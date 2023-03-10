@@ -53,9 +53,9 @@ var _ dmlsink.EventSink[*model.SingleTableTxn] = (*DMLSink)(nil)
 // at dmlWorker sequentially.
 type eventFragment struct {
 	// event sequence number
-	seqNumber uint64
-	verTable  cloudstorage.VersionedTable
-	event     *dmlsink.TxnCallbackableEvent
+	seqNumber      uint64
+	versionedTable cloudstorage.VersionedTable
+	event          *dmlsink.TxnCallbackableEvent
 	// encodedMsgs denote the encoded messages after the event is handled in encodingWorker.
 	encodedMsgs []*common.Message
 }
@@ -180,9 +180,9 @@ func (s *DMLSink) WriteEvents(txns ...*dmlsink.CallbackableEvent[*model.SingleTa
 		seq := atomic.AddUint64(&s.lastSeqNum, 1)
 		// emit a TxnCallbackableEvent encoupled with a sequence number starting from one.
 		s.msgCh <- eventFragment{
-			seqNumber: seq,
-			verTable:  tbl,
-			event:     txn,
+			seqNumber:      seq,
+			versionedTable: tbl,
+			event:          txn,
 		}
 	}
 

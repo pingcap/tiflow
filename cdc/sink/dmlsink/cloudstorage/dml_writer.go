@@ -107,7 +107,7 @@ func (d *dmlWriter) dispatchFragToDMLWorker(ctx context.Context) error {
 			if !ok {
 				return nil
 			}
-			tableName := frag.verTable.TableName
+			tableName := frag.versionedTable.TableName
 			d.hasher.Reset()
 			d.hasher.Write([]byte(tableName.Schema), []byte(tableName.Table))
 			workerID := d.hasher.Sum32() % uint32(d.config.WorkerCount)

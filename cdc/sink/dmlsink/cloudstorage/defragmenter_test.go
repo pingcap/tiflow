@@ -55,7 +55,7 @@ func TestDeframenter(t *testing.T) {
 		go func(seq uint64) {
 			encoder := encoderBuilder.Build()
 			frag := eventFragment{
-				verTable: cloudstorage.VersionedTable{
+				versionedTable: cloudstorage.VersionedTable{
 					TableName: model.TableName{
 						Schema:  "test",
 						Table:   "table1",
