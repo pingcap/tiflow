@@ -706,6 +706,42 @@ var doc = `{
                 }
             }
         },
+        "/api/v2/captures": {
+            "get": {
+                "description": "list all captures in cdc cluster",
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "capture",
+                    "v2"
+                ],
+                "summary": "List captures",
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "type": "array",
+                            "items": {
+                                "$ref": "#/definitions/v2.Capture"
+                            }
+                        }
+                    },
+                    "400": {
+                        "description": "Bad Request",
+                        "schema": {
+                            "$ref": "#/definitions/model.HTTPError"
+                        }
+                    },
+                    "500": {
+                        "description": "Internal Server Error",
+                        "schema": {
+                            "$ref": "#/definitions/model.HTTPError"
+                        }
+                    }
+                }
+            }
+        },
         "/api/v2/changefeeds": {
             "get": {
                 "description": "list all changefeeds in cdc cluster",
@@ -1664,6 +1700,23 @@ var doc = `{
                 }
             }
         },
+        "v2.Capture": {
+            "type": "object",
+            "properties": {
+                "address": {
+                    "type": "string"
+                },
+                "cluster_id": {
+                    "type": "string"
+                },
+                "id": {
+                    "type": "string"
+                },
+                "is_owner": {
+                    "type": "boolean"
+                }
+            }
+        },
         "v2.ChangeFeedInfo": {
             "type": "object",
             "properties": {
@@ -1800,8 +1853,8 @@ var doc = `{
                     "description": "EnableTableAcrossNodes set true to split one table to multiple spans and\ndistribute to multiple TiCDC nodes.",
                     "type": "boolean"
                 },
-                "region_per_span": {
-                    "description": "RegionPerSpan the number of regions in a span, must be greater than 1000.\nSet 0 to disable span replication.",
+                "region_threshold": {
+                    "description": "RegionThreshold is the region count threshold of splitting a table.",
                     "type": "integer"
                 }
             }
