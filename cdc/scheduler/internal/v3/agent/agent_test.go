@@ -94,7 +94,7 @@ func TestNewAgent(t *testing.T) {
 	cfg := &config.SchedulerConfig{
 		ChangefeedSettings: &config.ChangefeedSchedulerConfig{
 			EnableTableAcrossNodes: true,
-			RegionPerSpan:          1,
+			RegionThreshold:        1,
 		},
 	}
 
@@ -883,7 +883,7 @@ func TestAgentTransportCompat(t *testing.T) {
 	a.compat = compat.New(&config.SchedulerConfig{
 		ChangefeedSettings: &config.ChangefeedSchedulerConfig{
 			EnableTableAcrossNodes: true,
-			RegionPerSpan:          1,
+			RegionThreshold:        1,
 		},
 	}, map[model.CaptureID]*model.CaptureInfo{})
 	ctx := context.Background()
@@ -973,7 +973,7 @@ func TestAgentDropMsgIfChangefeedEpochMismatch(t *testing.T) {
 	a.compat = compat.New(&config.SchedulerConfig{
 		ChangefeedSettings: &config.ChangefeedSchedulerConfig{
 			EnableTableAcrossNodes: true,
-			RegionPerSpan:          1,
+			RegionThreshold:        1,
 		},
 	}, map[model.CaptureID]*model.CaptureInfo{})
 	a.changefeedEpoch = 1
