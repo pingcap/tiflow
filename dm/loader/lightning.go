@@ -326,6 +326,7 @@ func GetLightningConfig(globalCfg *lcfg.GlobalConfig, subtaskCfg *config.SubTask
 		if err := cfg.Security.BuildTLSConfig(); err != nil {
 			return nil, err
 		}
+		cfg.Checkpoint.Schema = "tidb_lightning_checkpoint"
 		cfg.Checkpoint.Driver = lcfg.CheckpointDriverMySQL
 		cfg.Checkpoint.MySQLParam = connParamFromConfig(cfg)
 	} else {
