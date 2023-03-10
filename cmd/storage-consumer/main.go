@@ -33,12 +33,20 @@ import (
 	"github.com/pingcap/log"
 	"github.com/pingcap/tidb/br/pkg/storage"
 	"github.com/pingcap/tiflow/cdc/model"
+<<<<<<< HEAD
 	"github.com/pingcap/tiflow/cdc/sink"
 	"github.com/pingcap/tiflow/cdc/sink/codec"
 	"github.com/pingcap/tiflow/cdc/sink/codec/canal"
 	"github.com/pingcap/tiflow/cdc/sink/codec/common"
 	"github.com/pingcap/tiflow/cdc/sink/codec/csv"
 	sinkutil "github.com/pingcap/tiflow/cdc/sinkv2/util"
+=======
+	"github.com/pingcap/tiflow/cdc/sink/ddlsink"
+	ddlfactory "github.com/pingcap/tiflow/cdc/sink/ddlsink/factory"
+	dmlfactory "github.com/pingcap/tiflow/cdc/sink/dmlsink/factory"
+	"github.com/pingcap/tiflow/cdc/sink/tablesink"
+	sinkutil "github.com/pingcap/tiflow/cdc/sink/util"
+>>>>>>> 855e4e13bd (consumer(ticdc): support handling DDL events in cloud storage consumer (#8278))
 	"github.com/pingcap/tiflow/pkg/cmd/util"
 	"github.com/pingcap/tiflow/pkg/config"
 	"github.com/pingcap/tiflow/pkg/logutil"
@@ -57,9 +65,18 @@ var (
 	logFile          string
 	logLevel         string
 	flushInterval    time.Duration
+	enableProfiling  bool
 )
 
+<<<<<<< HEAD
 const fakePartitionNumForSchemaFile = -1
+=======
+const (
+	defaultChangefeedName         = "storage-consumer"
+	defaultFlushWaitDuration      = 200 * time.Millisecond
+	fakePartitionNumForSchemaFile = -1
+)
+>>>>>>> 855e4e13bd (consumer(ticdc): support handling DDL events in cloud storage consumer (#8278))
 
 func init() {
 	flag.StringVar(&upstreamURIStr, "upstream-uri", "", "storage uri")
@@ -68,6 +85,7 @@ func init() {
 	flag.StringVar(&logFile, "log-file", "", "log file path")
 	flag.StringVar(&logLevel, "log-level", "info", "log level")
 	flag.DurationVar(&flushInterval, "flush-interval", 10*time.Second, "flush interval")
+	flag.BoolVar(&enableProfiling, "enable-profiling", false, "whether to enable profiling")
 	flag.Parse()
 
 	err := logutil.InitLogger(&logutil.Config{
@@ -88,11 +106,6 @@ func init() {
 	scheme := strings.ToLower(upstreamURI.Scheme)
 	if !psink.IsStorageScheme(scheme) {
 		log.Error("invalid storage scheme, the scheme of upstream-uri must be file/s3/azblob/gcs")
-		os.Exit(1)
-	}
-
-	if len(configFile) == 0 {
-		log.Error("changefeed configuration file must be provided")
 		os.Exit(1)
 	}
 }
@@ -220,13 +233,18 @@ type fileIndexRange struct {
 }
 
 type consumer struct {
+<<<<<<< HEAD
 	sink            sink.Sink
+=======
+	sinkFactory     *dmlfactory.SinkFactory
+	ddlSink         ddlsink.Sink
+>>>>>>> 855e4e13bd (consumer(ticdc): support handling DDL events in cloud storage consumer (#8278))
 	replicationCfg  *config.ReplicaConfig
 	codecCfg        *common.Config
 	externalStorage storage.ExternalStorage
 	fileExtension   string
-	// tableIdxMap maintains a map of <dmlPathKey, max file index>
-	tableIdxMap map[dmlPathKey]uint64
+	// tableDMLIdxMap maintains a map of <dmlPathKey, max file index>
+	tableDMLIdxMap map[dmlPathKey]uint64
 	// tableTsMap maintains a map of <TableID, max commit ts>
 	tableTsMap       map[model.TableID]uint64
 	tableIDGenerator *fakeTableIDGenerator
@@ -234,13 +252,15 @@ type consumer struct {
 
 func newConsumer(ctx context.Context) (*consumer, error) {
 	replicaConfig := config.GetDefaultReplicaConfig()
-	err := util.StrictDecodeFile(configFile, "storage consumer", replicaConfig)
-	if err != nil {
-		log.Error("failed to decode config file", zap.Error(err))
-		return nil, err
+	if len(configFile) > 0 {
+		err := util.StrictDecodeFile(configFile, "storage consumer", replicaConfig)
+		if err != nil {
+			log.Error("failed to decode config file", zap.Error(err))
+			return nil, err
+		}
 	}
 
-	err = replicaConfig.ValidateAndAdjust(upstreamURI)
+	err := replicaConfig.ValidateAndAdjust(upstreamURI)
 	if err != nil {
 		log.Error("failed to validate replica config", zap.Error(err))
 		return nil, err
@@ -274,21 +294,50 @@ func newConsumer(ctx context.Context) (*consumer, error) {
 	}
 
 	errCh := make(chan error, 1)
+<<<<<<< HEAD
 	s, err := sink.New(ctx, model.DefaultChangeFeedID("storage-consumer"),
 		downstreamURIStr, config.GetDefaultReplicaConfig(), errCh)
+=======
+	stdCtx := contextutil.PutChangefeedIDInCtx(ctx,
+		model.DefaultChangeFeedID(defaultChangefeedName))
+	sinkFactory, err := dmlfactory.New(
+		stdCtx,
+		downstreamURIStr,
+		config.GetDefaultReplicaConfig(),
+		errCh,
+	)
+>>>>>>> 855e4e13bd (consumer(ticdc): support handling DDL events in cloud storage consumer (#8278))
 	if err != nil {
-		log.Error("failed to create sink", zap.Error(err))
+		log.Error("failed to create event sink factory", zap.Error(err))
+		return nil, err
+	}
+
+	ddlSink, err := ddlfactory.New(ctx, downstreamURIStr, config.GetDefaultReplicaConfig())
+	if err != nil {
+		log.Error("failed to create ddl sink", zap.Error(err))
 		return nil, err
 	}
 
 	return &consumer{
+<<<<<<< HEAD
 		sink:            s,
+=======
+		sinkFactory:     sinkFactory,
+		ddlSink:         ddlSink,
+>>>>>>> 855e4e13bd (consumer(ticdc): support handling DDL events in cloud storage consumer (#8278))
 		replicationCfg:  replicaConfig,
 		codecCfg:        codecConfig,
 		externalStorage: storage,
 		fileExtension:   extension,
+<<<<<<< HEAD
 		tableIdxMap:     make(map[dmlPathKey]uint64),
 		tableTsMap:      make(map[model.TableID]uint64),
+=======
+		errCh:           errCh,
+		tableDMLIdxMap:  make(map[dmlPathKey]uint64),
+		tableTsMap:      make(map[model.TableID]model.ResolvedTs),
+		tableSinkMap:    make(map[model.TableID]tablesink.TableSink),
+>>>>>>> 855e4e13bd (consumer(ticdc): support handling DDL events in cloud storage consumer (#8278))
 		tableIDGenerator: &fakeTableIDGenerator{
 			tableIDs: make(map[string]int64),
 		},
@@ -296,7 +345,7 @@ func newConsumer(ctx context.Context) (*consumer, error) {
 }
 
 // map1 - map2
-func (c *consumer) difference(map1, map2 map[dmlPathKey]uint64) map[dmlPathKey]fileIndexRange {
+func diffDMLMaps(map1, map2 map[dmlPathKey]uint64) map[dmlPathKey]fileIndexRange {
 	resMap := make(map[dmlPathKey]fileIndexRange)
 	for k, v := range map1 {
 		if _, ok := map2[k]; !ok {
@@ -315,29 +364,36 @@ func (c *consumer) difference(map1, map2 map[dmlPathKey]uint64) map[dmlPathKey]f
 	return resMap
 }
 
-// getNewFiles returns dml files in specific ranges.
+// getNewFiles returns newly created dml files in specific ranges
 func (c *consumer) getNewFiles(ctx context.Context) (map[dmlPathKey]fileIndexRange, error) {
-	m := make(map[dmlPathKey]fileIndexRange)
+	tableDMLMap := make(map[dmlPathKey]fileIndexRange)
 	opt := &storage.WalkOption{SubDir: ""}
 
-	origTableMap := make(map[dmlPathKey]uint64, len(c.tableIdxMap))
-	for k, v := range c.tableIdxMap {
-		origTableMap[k] = v
+	origDMLIdxMap := make(map[dmlPathKey]uint64, len(c.tableDMLIdxMap))
+	for k, v := range c.tableDMLIdxMap {
+		origDMLIdxMap[k] = v
 	}
 
-	schemaSet := make(map[schemaPathKey]struct{})
 	err := c.externalStorage.WalkDir(ctx, opt, func(path string, size int64) error {
 		var dmlkey dmlPathKey
 		var schemaKey schemaPathKey
 		var fileIdx uint64
 		var err error
+<<<<<<< HEAD
+=======
+
+		if strings.HasSuffix(path, "metadata") {
+			return nil
+		}
+>>>>>>> 855e4e13bd (consumer(ticdc): support handling DDL events in cloud storage consumer (#8278))
 
 		if strings.HasSuffix(path, "schema.json") {
-			err := schemaKey.parseSchemaFilePath(path)
+			err = schemaKey.parseSchemaFilePath(path)
 			if err != nil {
 				log.Error("failed to parse schema file path", zap.Error(err))
 				// skip handling this file
 				return nil
+<<<<<<< HEAD
 			}
 			// fake a dml key for schema.json file, which is useful for putting DDL
 			// in front of the DML files when sorting.
@@ -371,48 +427,69 @@ func (c *consumer) getNewFiles(ctx context.Context) (map[dmlPathKey]fileIndexRan
 
 		if _, ok := c.tableIdxMap[dmlkey]; !ok || fileIdx >= c.tableIdxMap[dmlkey] {
 			c.tableIdxMap[dmlkey] = fileIdx
+=======
+			}
+			// fake a dml key for schema.json file, which is useful for putting DDL
+			// in front of the DML files when sorting.
+			// e.g, for the partitioned table:
+			//
+			// test/test1/439972354120482843/schema.json					(partitionNum = -1)
+			// test/test1/439972354120482843/55/2023-03-09/CDC000001.csv	(partitionNum = 55)
+			// test/test1/439972354120482843/66/2023-03-09/CDC000001.csv	(partitionNum = 66)
+			//
+			// and for the non-partitioned table:
+			// test/test2/439972354120482843/schema.json				(partitionNum = -1)
+			// test/test2/439972354120482843/2023-03-09/CDC000001.csv	(partitionNum = 0)
+			// test/test2/439972354120482843/2023-03-09/CDC000002.csv	(partitionNum = 0)
+			//
+			// the DDL event recorded in schema.json should be executed first, then the DML events
+			// in csv files can be executed.
+			dmlkey.schemaPathKey = schemaKey
+			dmlkey.partitionNum = fakePartitionNumForSchemaFile
+			dmlkey.date = ""
+		} else {
+			fileIdx, err = dmlkey.parseDMLFilePath(c.replicationCfg.Sink.DateSeparator, path)
+			if err != nil {
+				log.Error("failed to parse dml file path", zap.Error(err))
+				// skip handling this file
+				return nil
+			}
+		}
+
+		if _, ok := c.tableDMLIdxMap[dmlkey]; !ok || fileIdx >= c.tableDMLIdxMap[dmlkey] {
+			c.tableDMLIdxMap[dmlkey] = fileIdx
+>>>>>>> 855e4e13bd (consumer(ticdc): support handling DDL events in cloud storage consumer (#8278))
 		}
 
 		return nil
 	})
 	if err != nil {
-		return m, err
+		return tableDMLMap, err
 	}
 
-	// filter out those files whose "schema.json" file has not been generated yet.
-	// because we strongly rely on this schema file to get correct table definition
-	// and do message decoding.
-	for key := range c.tableIdxMap {
-		schemaKey := key.schemaPathKey
-		// cannot find the scheme file, filter out the item.
-		if _, ok := schemaSet[schemaKey]; !ok {
-			delete(c.tableIdxMap, key)
-		}
-	}
-
-	m = c.difference(c.tableIdxMap, origTableMap)
-	return m, err
+	tableDMLMap = diffDMLMaps(c.tableDMLIdxMap, origDMLIdxMap)
+	return tableDMLMap, err
 }
 
 // emitDMLEvents decodes RowChangedEvents from file content and emit them.
-func (c *consumer) emitDMLEvents(ctx context.Context, tableID int64, pathKey dmlPathKey, content []byte) error {
+func (c *consumer) emitDMLEvents(
+	ctx context.Context, tableID int64,
+	tableDetail cloudstorage.TableDefinition,
+	pathKey dmlPathKey,
+	content []byte,
+) error {
 	var (
+<<<<<<< HEAD
 		events      []*model.RowChangedEvent
 		tableDetail cloudstorage.TableDefinition
 		decoder     codec.EventBatchDecoder
 		err         error
+=======
+		decoder codec.EventBatchDecoder
+		err     error
+>>>>>>> 855e4e13bd (consumer(ticdc): support handling DDL events in cloud storage consumer (#8278))
 	)
 
-	schemaFilePath := pathKey.schemaPathKey.generagteSchemaFilePath()
-	schemaContent, err := c.externalStorage.ReadFile(ctx, schemaFilePath)
-	if err != nil {
-		return errors.Trace(err)
-	}
-
-	err = json.Unmarshal(schemaContent, &tableDetail)
-	if err != nil {
-		return errors.Trace(err)
-	}
 	tableInfo, err := tableDetail.ToTableInfo()
 	if err != nil {
 		return errors.Trace(err)
@@ -471,6 +548,144 @@ func (c *consumer) emitDMLEvents(ctx context.Context, tableID int64, pathKey dml
 	return err
 }
 
+<<<<<<< HEAD
+=======
+func (c *consumer) waitTableFlushComplete(ctx context.Context, tableID model.TableID) error {
+	for {
+		select {
+		case <-ctx.Done():
+			return ctx.Err()
+		case err := <-c.errCh:
+			return err
+		default:
+		}
+
+		resolvedTs := c.tableTsMap[tableID]
+		err := c.tableSinkMap[tableID].UpdateResolvedTs(resolvedTs)
+		if err != nil {
+			return errors.Trace(err)
+		}
+		checkpoint := c.tableSinkMap[tableID].GetCheckpointTs()
+		if checkpoint.Equal(resolvedTs) {
+			c.tableTsMap[tableID] = resolvedTs.AdvanceBatch()
+			return nil
+		}
+		time.Sleep(defaultFlushWaitDuration)
+	}
+}
+
+func (c *consumer) syncExecDMLEvents(
+	ctx context.Context,
+	tableDef cloudstorage.TableDefinition,
+	key dmlPathKey,
+	fileIdx uint64,
+) error {
+	filePath := key.generateDMLFilePath(fileIdx, c.fileExtension)
+	log.Debug("read from dml file path", zap.String("path", filePath))
+	content, err := c.externalStorage.ReadFile(ctx, filePath)
+	if err != nil {
+		return errors.Trace(err)
+	}
+	tableID := c.tableIDGenerator.generateFakeTableID(
+		key.schema, key.table, key.partitionNum)
+	err = c.emitDMLEvents(ctx, tableID, tableDef, key, content)
+	if err != nil {
+		return errors.Trace(err)
+	}
+
+	resolvedTs := c.tableTsMap[tableID]
+	err = c.tableSinkMap[tableID].UpdateResolvedTs(resolvedTs)
+	if err != nil {
+		return errors.Trace(err)
+	}
+	err = c.waitTableFlushComplete(ctx, tableID)
+	if err != nil {
+		return errors.Trace(err)
+	}
+
+	return nil
+}
+
+func (c *consumer) getTableDefFromFile(
+	ctx context.Context,
+	schemaKey schemaPathKey,
+) (cloudstorage.TableDefinition, error) {
+	var tableDef cloudstorage.TableDefinition
+
+	schemaFilePath := schemaKey.generagteSchemaFilePath()
+	schemaContent, err := c.externalStorage.ReadFile(ctx, schemaFilePath)
+	if err != nil {
+		return tableDef, errors.Trace(err)
+	}
+
+	err = json.Unmarshal(schemaContent, &tableDef)
+	if err != nil {
+		return tableDef, errors.Trace(err)
+	}
+
+	return tableDef, nil
+}
+
+func (c *consumer) handleNewFiles(
+	ctx context.Context,
+	dmlFileMap map[dmlPathKey]fileIndexRange,
+) error {
+	keys := make([]dmlPathKey, 0, len(dmlFileMap))
+	for k := range dmlFileMap {
+		keys = append(keys, k)
+	}
+	if len(keys) == 0 {
+		log.Info("no new dml files found since last round")
+		return nil
+	}
+	sort.Slice(keys, func(i, j int) bool {
+		if keys[i].version != keys[j].version {
+			return keys[i].version < keys[j].version
+		}
+		if keys[i].partitionNum != keys[j].partitionNum {
+			return keys[i].partitionNum < keys[j].partitionNum
+		}
+		if keys[i].date != keys[j].date {
+			return keys[i].date < keys[j].date
+		}
+		if keys[i].schema != keys[j].schema {
+			return keys[i].schema < keys[j].schema
+		}
+		return keys[i].table < keys[j].table
+	})
+
+	for _, key := range keys {
+		tableDef, err := c.getTableDefFromFile(ctx, key.schemaPathKey)
+		if err != nil {
+			return err
+		}
+		// if the key is a fake dml path key which is mainly used for
+		// sorting schema.json file before the dml files, then execute the ddl query.
+		if key.partitionNum == fakePartitionNumForSchemaFile &&
+			len(key.date) == 0 && len(tableDef.Query) > 0 {
+			ddlEvent, err := tableDef.ToDDLEvent()
+			if err != nil {
+				return err
+			}
+			if err := c.ddlSink.WriteDDLEvent(ctx, ddlEvent); err != nil {
+				return errors.Trace(err)
+			}
+			log.Info("execute ddl event successfully", zap.String("query", tableDef.Query))
+			continue
+		}
+
+		fileRange := dmlFileMap[key]
+		for i := fileRange.start; i <= fileRange.end; i++ {
+			if err := c.syncExecDMLEvents(ctx, tableDef, key, i); err != nil {
+				return err
+			}
+		}
+	}
+
+	return nil
+}
+
+>>>>>>> 855e4e13bd (consumer(ticdc): support handling DDL events in cloud storage consumer (#8278))
 func (c *consumer) run(ctx context.Context) error {
 	ticker := time.NewTicker(flushInterval)
 	for {
@@ -480,11 +695,12 @@ func (c *consumer) run(ctx context.Context) error {
 		case <-ticker.C:
 		}
 
-		fileMap, err := c.getNewFiles(ctx)
+		dmlFileMap, err := c.getNewFiles(ctx)
 		if err != nil {
 			return errors.Trace(err)
 		}
 
+<<<<<<< HEAD
 		keys := make([]dmlPathKey, 0, len(fileMap))
 		for k := range fileMap {
 			keys = append(keys, k)
@@ -531,6 +747,11 @@ func (c *consumer) run(ctx context.Context) error {
 					return errors.Trace(err)
 				}
 			}
+=======
+		err = c.handleNewFiles(ctx, dmlFileMap)
+		if err != nil {
+			return errors.Trace(err)
+>>>>>>> 855e4e13bd (consumer(ticdc): support handling DDL events in cloud storage consumer (#8278))
 		}
 	}
 }
@@ -558,6 +779,25 @@ func (g *fakeTableIDGenerator) generateFakeTableID(schema, table string, partiti
 }
 
 func main() {
+<<<<<<< HEAD
+=======
+	var consumer *consumer
+	var err error
+
+	if enableProfiling {
+		go func() {
+			server := &http.Server{
+				Addr:              ":6060",
+				ReadHeaderTimeout: 5 * time.Second,
+			}
+
+			if err := server.ListenAndServe(); err != nil {
+				log.Fatal("http pprof", zap.Error(err))
+			}
+		}()
+	}
+
+>>>>>>> 855e4e13bd (consumer(ticdc): support handling DDL events in cloud storage consumer (#8278))
 	ctx, stop := signal.NotifyContext(context.Background(), syscall.SIGINT, syscall.SIGTERM)
 	defer stop()
 	consumer, err := newConsumer(ctx)
