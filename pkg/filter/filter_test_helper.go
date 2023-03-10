@@ -66,6 +66,10 @@ func (s *testHelper) ddlToJob(ddl string) *timodel.Job {
 	jobs, err := tiddl.GetLastNHistoryDDLJobs(s.getCurrentMeta(), 1)
 	require.Nil(s.t, err)
 	require.Len(s.t, jobs, 1)
+	// Set State from Synced to Done.
+	// Because jobs are put to history queue after TiDB alter its state from
+	// Done to Synced.
+	jobs[0].State = timodel.JobStateDone
 	return jobs[0]
 }
 

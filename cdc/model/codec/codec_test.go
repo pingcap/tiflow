@@ -237,10 +237,11 @@ func TestDDLRedoConvert(t *testing.T) {
 	t.Parallel()
 
 	ddl := &model.DDLEvent{
-		StartTs:  1020,
-		CommitTs: 1030,
-		Type:     timodel.ActionAddColumn,
-		Query:    "ALTER TABLE test.t1 ADD COLUMN a int",
+		StartTs:   1020,
+		CommitTs:  1030,
+		TableInfo: &model.TableInfo{},
+		Type:      timodel.ActionAddColumn,
+		Query:     "ALTER TABLE test.t1 ADD COLUMN a int",
 	}
 
 	redoLog := &model.RedoLog{RedoDDL: model.RedoDDLEvent{DDL: ddl}}
