@@ -9,11 +9,16 @@ set -eux
 workdir=$1
 sink_uri=$2
 consumer_replica_config=$3
+log_suffix=$4
 pwd=$(pwd)
 
 echo "[$(date)] <<<<<< START storage consumer in $TEST_NAME case >>>>>>"
 cd $workdir
-cdc_storage_consumer --log-file $workdir/cdc_storage_consumer.log --log-level debug --upstream-uri $sink_uri --downstream-uri mysql://root@127.0.0.1:3306/?safe-mode=true --config $consumer_replica_config >>$workdir/cdc_storage_consumer_stdout.log 2>&1 &
+if [ "$consumer_replica_config" != "" ]; then
+	cdc_storage_consumer --log-file $workdir/cdc_storage_consumer$log_suffix.log --log-level debug --upstream-uri $sink_uri --downstream-uri "mysql://root@127.0.0.1:3306/?safe-mode=true&batch-dml-enable=false" --config $consumer_replica_config >>$workdir/cdc_storage_consumer_stdout.log 2>&1 &
+else
+	cdc_storage_consumer --log-file $workdir/cdc_storage_consumer$log_suffix.log --log-level debug --upstream-uri $sink_uri --downstream-uri "mysql://root@127.0.0.1:3306/?safe-mode=true&batch-dml-enable=false" >>$workdir/cdc_storage_consumer_stdout.log 2>&1 &
+fi
 
 cd $pwd
 

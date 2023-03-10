@@ -39,7 +39,9 @@ import (
 	"github.com/pingcap/tiflow/cdc/sink/codec/canal"
 	"github.com/pingcap/tiflow/cdc/sink/codec/common"
 	"github.com/pingcap/tiflow/cdc/sink/codec/csv"
-	"github.com/pingcap/tiflow/cdc/sinkv2/eventsink/factory"
+	"github.com/pingcap/tiflow/cdc/sinkv2/ddlsink"
+	ddlfactory "github.com/pingcap/tiflow/cdc/sinkv2/ddlsink/factory"
+	dmlfactory "github.com/pingcap/tiflow/cdc/sinkv2/eventsink/factory"
 	"github.com/pingcap/tiflow/cdc/sinkv2/tablesink"
 	sinkutil "github.com/pingcap/tiflow/cdc/sinkv2/util"
 	"github.com/pingcap/tiflow/pkg/cmd/util"
@@ -61,6 +63,7 @@ var (
 	logFile          string
 	logLevel         string
 	flushInterval    time.Duration
+	enableProfiling  bool
 )
 
 const (
@@ -76,6 +79,7 @@ func init() {
 	flag.StringVar(&logFile, "log-file", "", "log file path")
 	flag.StringVar(&logLevel, "log-level", "info", "log level")
 	flag.DurationVar(&flushInterval, "flush-interval", 10*time.Second, "flush interval")
+	flag.BoolVar(&enableProfiling, "enable-profiling", false, "whether to enable profiling")
 	flag.Parse()
 
 	err := logutil.InitLogger(&logutil.Config{
@@ -96,11 +100,6 @@ func init() {
 	scheme := strings.ToLower(upstreamURI.Scheme)
 	if !psink.IsStorageScheme(scheme) {
 		log.Error("invalid storage scheme, the scheme of upstream-uri must be file/s3/azblob/gcs")
-		os.Exit(1)
-	}
-
-	if len(configFile) == 0 {
-		log.Error("changefeed configuration file must be provided")
 		os.Exit(1)
 	}
 }
@@ -228,13 +227,14 @@ type fileIndexRange struct {
 }
 
 type consumer struct {
-	sinkFactory     *factory.SinkFactory
+	sinkFactory     *dmlfactory.SinkFactory
+	ddlSink         ddlsink.DDLEventSink
 	replicationCfg  *config.ReplicaConfig
 	codecCfg        *common.Config
 	externalStorage storage.ExternalStorage
 	fileExtension   string
-	// tableIdxMap maintains a map of <dmlPathKey, max file index>
-	tableIdxMap map[dmlPathKey]uint64
+	// tableDMLIdxMap maintains a map of <dmlPathKey, max file index>
+	tableDMLIdxMap map[dmlPathKey]uint64
 	// tableTsMap maintains a map of <TableID, max commit ts>
 	tableTsMap map[model.TableID]model.ResolvedTs
 	// tableSinkMap maintains a map of <TableID, TableSink>
@@ -245,13 +245,15 @@ type consumer struct {
 
 func newConsumer(ctx context.Context) (*consumer, error) {
 	replicaConfig := config.GetDefaultReplicaConfig()
-	err := util.StrictDecodeFile(configFile, "storage consumer", replicaConfig)
-	if err != nil {
-		log.Error("failed to decode config file", zap.Error(err))
-		return nil, err
+	if len(configFile) > 0 {
+		err := util.StrictDecodeFile(configFile, "storage consumer", replicaConfig)
+		if err != nil {
+			log.Error("failed to decode config file", zap.Error(err))
+			return nil, err
+		}
 	}
 
-	err = replicaConfig.ValidateAndAdjust(upstreamURI)
+	err := replicaConfig.ValidateAndAdjust(upstreamURI)
 	if err != nil {
 		log.Error("failed to validate replica config", zap.Error(err))
 		return nil, err
@@ -287,25 +289,32 @@ func newConsumer(ctx context.Context) (*consumer, error) {
 	errCh := make(chan error, 1)
 	stdCtx := contextutil.PutChangefeedIDInCtx(ctx,
 		model.DefaultChangeFeedID(defaultChangefeedName))
-	sinkFactory, err := factory.New(
+	sinkFactory, err := dmlfactory.New(
 		stdCtx,
 		downstreamURIStr,
 		config.GetDefaultReplicaConfig(),
 		errCh,
 	)
 	if err != nil {
-		log.Error("failed to create sink", zap.Error(err))
+		log.Error("failed to create event sink factory", zap.Error(err))
+		return nil, err
+	}
+
+	ddlSink, err := ddlfactory.New(ctx, downstreamURIStr, config.GetDefaultReplicaConfig())
+	if err != nil {
+		log.Error("failed to create ddl sink", zap.Error(err))
 		return nil, err
 	}
 
 	return &consumer{
 		sinkFactory:     sinkFactory,
+		ddlSink:         ddlSink,
 		replicationCfg:  replicaConfig,
 		codecCfg:        codecConfig,
 		externalStorage: storage,
 		fileExtension:   extension,
 		errCh:           errCh,
-		tableIdxMap:     make(map[dmlPathKey]uint64),
+		tableDMLIdxMap:  make(map[dmlPathKey]uint64),
 		tableTsMap:      make(map[model.TableID]model.ResolvedTs),
 		tableSinkMap:    make(map[model.TableID]tablesink.TableSink),
 		tableIDGenerator: &fakeTableIDGenerator{
@@ -315,7 +324,7 @@ func newConsumer(ctx context.Context) (*consumer, error) {
 }
 
 // map1 - map2
-func (c *consumer) difference(map1, map2 map[dmlPathKey]uint64) map[dmlPathKey]fileIndexRange {
+func diffDMLMaps(map1, map2 map[dmlPathKey]uint64) map[dmlPathKey]fileIndexRange {
 	resMap := make(map[dmlPathKey]fileIndexRange)
 	for k, v := range map1 {
 		if _, ok := map2[k]; !ok {
@@ -334,17 +343,16 @@ func (c *consumer) difference(map1, map2 map[dmlPathKey]uint64) map[dmlPathKey]f
 	return resMap
 }
 
-// getNewFiles returns dml files in specific ranges.
+// getNewFiles returns newly created dml files in specific ranges
 func (c *consumer) getNewFiles(ctx context.Context) (map[dmlPathKey]fileIndexRange, error) {
-	m := make(map[dmlPathKey]fileIndexRange)
+	tableDMLMap := make(map[dmlPathKey]fileIndexRange)
 	opt := &storage.WalkOption{SubDir: ""}
 
-	origTableMap := make(map[dmlPathKey]uint64, len(c.tableIdxMap))
-	for k, v := range c.tableIdxMap {
-		origTableMap[k] = v
+	origDMLIdxMap := make(map[dmlPathKey]uint64, len(c.tableDMLIdxMap))
+	for k, v := range c.tableDMLIdxMap {
+		origDMLIdxMap[k] = v
 	}
 
-	schemaSet := make(map[schemaPathKey]struct{})
 	err := c.externalStorage.WalkDir(ctx, opt, func(path string, size int64) error {
 		var dmlkey dmlPathKey
 		var schemaKey schemaPathKey
@@ -352,7 +360,7 @@ func (c *consumer) getNewFiles(ctx context.Context) (map[dmlPathKey]fileIndexRan
 		var err error
 
 		if strings.HasSuffix(path, "schema.json") {
-			err := schemaKey.parseSchemaFilePath(path)
+			err = schemaKey.parseSchemaFilePath(path)
 			if err != nil {
 				log.Error("failed to parse schema file path", zap.Error(err))
 				// skip handling this file
@@ -388,49 +396,32 @@ func (c *consumer) getNewFiles(ctx context.Context) (map[dmlPathKey]fileIndexRan
 			return nil
 		}
 
-		if _, ok := c.tableIdxMap[dmlkey]; !ok || fileIdx >= c.tableIdxMap[dmlkey] {
-			c.tableIdxMap[dmlkey] = fileIdx
+		if _, ok := c.tableDMLIdxMap[dmlkey]; !ok || fileIdx >= c.tableDMLIdxMap[dmlkey] {
+			c.tableDMLIdxMap[dmlkey] = fileIdx
 		}
 
 		return nil
 	})
 	if err != nil {
-		return m, err
+		return tableDMLMap, err
 	}
 
-	// filter out those files whose "schema.json" file has not been generated yet.
-	// because we strongly rely on this schema file to get correct table definition
-	// and do message decoding.
-	for key := range c.tableIdxMap {
-		schemaKey := key.schemaPathKey
-		// cannot find the scheme file, filter out the item.
-		if _, ok := schemaSet[schemaKey]; !ok {
-			delete(c.tableIdxMap, key)
-		}
-	}
-
-	m = c.difference(c.tableIdxMap, origTableMap)
-	return m, err
+	tableDMLMap = diffDMLMaps(c.tableDMLIdxMap, origDMLIdxMap)
+	return tableDMLMap, err
 }
 
 // emitDMLEvents decodes RowChangedEvents from file content and emit them.
-func (c *consumer) emitDMLEvents(ctx context.Context, tableID int64, pathKey dmlPathKey, content []byte) error {
+func (c *consumer) emitDMLEvents(
+	ctx context.Context, tableID int64,
+	tableDetail cloudstorage.TableDefinition,
+	pathKey dmlPathKey,
+	content []byte,
+) error {
 	var (
-		tableDetail cloudstorage.TableDefinition
-		decoder     codec.EventBatchDecoder
-		err         error
+		decoder codec.EventBatchDecoder
+		err     error
 	)
 
-	schemaFilePath := pathKey.schemaPathKey.generagteSchemaFilePath()
-	schemaContent, err := c.externalStorage.ReadFile(ctx, schemaFilePath)
-	if err != nil {
-		return errors.Trace(err)
-	}
-
-	err = json.Unmarshal(schemaContent, &tableDetail)
-	if err != nil {
-		return errors.Trace(err)
-	}
 	tableInfo, err := tableDetail.ToTableInfo()
 	if err != nil {
 		return errors.Trace(err)
@@ -525,6 +516,117 @@ func (c *consumer) waitTableFlushComplete(ctx context.Context, tableID model.Tab
 	}
 }
 
+func (c *consumer) syncExecDMLEvents(
+	ctx context.Context,
+	tableDef cloudstorage.TableDefinition,
+	key dmlPathKey,
+	fileIdx uint64,
+) error {
+	filePath := key.generateDMLFilePath(fileIdx, c.fileExtension)
+	log.Debug("read from dml file path", zap.String("path", filePath))
+	content, err := c.externalStorage.ReadFile(ctx, filePath)
+	if err != nil {
+		return errors.Trace(err)
+	}
+	tableID := c.tableIDGenerator.generateFakeTableID(
+		key.schema, key.table, key.partitionNum)
+	err = c.emitDMLEvents(ctx, tableID, tableDef, key, content)
+	if err != nil {
+		return errors.Trace(err)
+	}
+
+	resolvedTs := c.tableTsMap[tableID]
+	err = c.tableSinkMap[tableID].UpdateResolvedTs(resolvedTs)
+	if err != nil {
+		return errors.Trace(err)
+	}
+	err = c.waitTableFlushComplete(ctx, tableID)
+	if err != nil {
+		return errors.Trace(err)
+	}
+
+	return nil
+}
+
+func (c *consumer) getTableDefFromFile(
+	ctx context.Context,
+	schemaKey schemaPathKey,
+) (cloudstorage.TableDefinition, error) {
+	var tableDef cloudstorage.TableDefinition
+
+	schemaFilePath := schemaKey.generagteSchemaFilePath()
+	schemaContent, err := c.externalStorage.ReadFile(ctx, schemaFilePath)
+	if err != nil {
+		return tableDef, errors.Trace(err)
+	}
+
+	err = json.Unmarshal(schemaContent, &tableDef)
+	if err != nil {
+		return tableDef, errors.Trace(err)
+	}
+
+	return tableDef, nil
+}
+
+func (c *consumer) handleNewFiles(
+	ctx context.Context,
+	dmlFileMap map[dmlPathKey]fileIndexRange,
+) error {
+	keys := make([]dmlPathKey, 0, len(dmlFileMap))
+	for k := range dmlFileMap {
+		keys = append(keys, k)
+	}
+	if len(keys) == 0 {
+		log.Info("no new dml files found since last round")
+		return nil
+	}
+	sort.Slice(keys, func(i, j int) bool {
+		if keys[i].version != keys[j].version {
+			return keys[i].version < keys[j].version
+		}
+		if keys[i].partitionNum != keys[j].partitionNum {
+			return keys[i].partitionNum < keys[j].partitionNum
+		}
+		if keys[i].date != keys[j].date {
+			return keys[i].date < keys[j].date
+		}
+		if keys[i].schema != keys[j].schema {
+			return keys[i].schema < keys[j].schema
+		}
+		return keys[i].table < keys[j].table
+	})
+
+	for _, key := range keys {
+		tableDef, err := c.getTableDefFromFile(ctx, key.schemaPathKey)
+		if err != nil {
+			return err
+		}
+		// if the key is a fake dml path key which is mainly used for
+		// sorting schema.json file before the dml files, then execute the ddl query.
+		if key.partitionNum == fakePartitionNumForSchemaFile &&
+			len(key.date) == 0 && len(tableDef.Query) > 0 {
+			ddlEvent, err := tableDef.ToDDLEvent()
+			if err != nil {
+				return err
+			}
+			if err := c.ddlSink.WriteDDLEvent(ctx, ddlEvent); err != nil {
+				return errors.Trace(err)
+			}
+			log.Info("execute ddl event successfully", zap.String("query", tableDef.Query))
+			continue
+		}
+
+		fileRange := dmlFileMap[key]
+		for i := fileRange.start; i <= fileRange.end; i++ {
+			if err := c.syncExecDMLEvents(ctx, tableDef, key, i); err != nil {
+				return err
+			}
+		}
+	}
+
+	return nil
+}
+
 func (c *consumer) run(ctx context.Context) error {
 	ticker := time.NewTicker(flushInterval)
 	for {
@@ -536,56 +638,14 @@ func (c *consumer) run(ctx context.Context) error {
 		case <-ticker.C:
 		}
 
-		fileMap, err := c.getNewFiles(ctx)
+		dmlFileMap, err := c.getNewFiles(ctx)
 		if err != nil {
 			return errors.Trace(err)
 		}
 
-		keys := make([]dmlPathKey, 0, len(fileMap))
-		for k := range fileMap {
-			keys = append(keys, k)
-		}
-
-		if len(keys) == 0 {
-			log.Info("no new files found since last round")
-		}
-		sort.Slice(keys, func(i, j int) bool {
-			if keys[i].schema != keys[j].schema {
-				return keys[i].schema < keys[j].schema
-			}
-			if keys[i].table != keys[j].table {
-				return keys[i].table < keys[j].table
-			}
-			if keys[i].version != keys[j].version {
-				return keys[i].version < keys[j].version
-			}
-			if keys[i].partitionNum != keys[j].partitionNum {
-				return keys[i].partitionNum < keys[j].partitionNum
-			}
-			return keys[i].date < keys[j].date
-		})
-
-		for _, k := range keys {
-			fileRange := fileMap[k]
-			for i := fileRange.start; i <= fileRange.end; i++ {
-				filePath := k.generateDMLFilePath(i, c.fileExtension)
-				log.Debug("read from dml file path", zap.String("path", filePath))
-				content, err := c.externalStorage.ReadFile(ctx, filePath)
-				if err != nil {
-					return errors.Trace(err)
-				}
-				tableID := c.tableIDGenerator.generateFakeTableID(
-					k.schema, k.table, k.partitionNum)
-				err = c.emitDMLEvents(ctx, tableID, k, content)
-				if err != nil {
-					return errors.Trace(err)
-				}
-
-				err = c.waitTableFlushComplete(ctx, tableID)
-				if err != nil {
-					return errors.Trace(err)
-				}
-			}
+		err = c.handleNewFiles(ctx, dmlFileMap)
+		if err != nil {
+			return errors.Trace(err)
 		}
 	}
 }
@@ -616,16 +676,18 @@ func main() {
 	var consumer *consumer
 	var err error
 
-	go func() {
-		server := &http.Server{
-			Addr:              ":6060",
-			ReadHeaderTimeout: 5 * time.Second,
-		}
+	if enableProfiling {
+		go func() {
+			server := &http.Server{
+				Addr:              ":6060",
+				ReadHeaderTimeout: 5 * time.Second,
+			}
 
-		if err := server.ListenAndServe(); err != nil {
-			log.Fatal("http pprof", zap.Error(err))
-		}
-	}()
+			if err := server.ListenAndServe(); err != nil {
+				log.Fatal("http pprof", zap.Error(err))
+			}
+		}()
+	}
 
 	ctx, stop := signal.NotifyContext(context.Background(), syscall.SIGINT, syscall.SIGTERM)
 	deferFunc := func() int {
