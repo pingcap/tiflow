@@ -30,10 +30,9 @@ import (
 	lcfg "github.com/pingcap/tidb/br/pkg/lightning/config"
 	"github.com/pingcap/tidb/br/pkg/lightning/errormanager"
 	"github.com/pingcap/tidb/dumpling/export"
-	"github.com/pingcap/tidb/util"
+	"github.com/pingcap/tidb/parser/mysql"
 	tidbpromutil "github.com/pingcap/tidb/util/promutil"
 	"github.com/pingcap/tiflow/dm/config"
-	"github.com/pingcap/tiflow/dm/config/dbconfig"
 	"github.com/pingcap/tiflow/dm/pb"
 	"github.com/pingcap/tiflow/dm/pkg/binlog"
 	"github.com/pingcap/tiflow/dm/pkg/conn"
@@ -324,12 +323,11 @@ func GetLightningConfig(globalCfg *lcfg.GlobalConfig, subtaskCfg *config.SubTask
 		// NOTE: if we use bucket as dumper storage, write lightning checkpoint to downstream DB to avoid bucket ratelimit
 		// it's the default path for cloud dm.
 		// since we will use check Checkpoint in 'ignoreCheckpointError', MAKE SURE we have assigned the Checkpoint config properly here
-		cfg.Checkpoint.Driver = lcfg.CheckpointDriverMySQL
-		connParam, err = connParamFromDBConfig(&subtaskCfg.To)
-		if err != nil {
+		if err := cfg.Security.BuildTLSConfig(); err != nil {
 			return nil, err
 		}
-		cfg.Checkpoint.MySQLParam = connParam
+		cfg.Checkpoint.Driver = lcfg.CheckpointDriverMySQL
+		cfg.Checkpoint.MySQLParam = connParamFromConfig(cfg)
 	} else {
 		// NOTE: for op dm, we recommend to keep data files and checkpoint file in the same place to avoid inconsistent deletion
 		cfg.Checkpoint.Driver = lcfg.CheckpointDriverFile
@@ -605,28 +603,16 @@ func (l *LightningLoader) Status(_ *binlog.SourceStatus) interface{} {
 	return l.status()
 }
 
-func connParamFromDBConfig(config *dbconfig.DBConfig) (*common.MySQLConnectParam, error) {
-	params := &common.MySQLConnectParam{
-		Host:     config.Host,
-		Port:     config.Port,
-		User:     config.User,
-		Password: config.Password,
+func connParamFromConfig(config *lcfg.Config) *common.MySQLConnectParam {
+	return &common.MySQLConnectParam{
+		Host:     config.TiDB.Host,
+		Port:     config.TiDB.Port,
+		User:     config.TiDB.User,
+		Password: config.TiDB.Psw,
+		SQLMode:  mysql.DefaultSQLMode,
+		// TODO: keep same as Lightning defaultMaxAllowedPacket later
+		MaxAllowedPacket:         64 * 1024 * 1024,
+		TLSConfig:                config.Security.TLSConfig,
+		AllowFallbackToPlaintext: config.Security.AllowFallbackToPlaintext,
 	}
-
-	if config.Security != nil {
-		if loadErr := config.Security.LoadTLSContent(); loadErr != nil {
-			return nil, terror.ErrCtlLoadTLSCfg.Delegate(loadErr)
-		}
-		tlsConfig, err := util.NewTLSConfig(
-			util.WithCAContent(config.Security.SSLCABytes),
-			util.WithCertAndKeyContent(config.Security.SSLCertBytes, config.Security.SSLKeyBytes),
-			util.WithVerifyCommonName(config.Security.CertAllowedCN),
-		)
-		if err != nil {
-			return nil, terror.ErrConnInvalidTLSConfig.Delegate(err)
-		}
-		params.TLSConfig = tlsConfig
-	}
-
-	return params, nil
 }
