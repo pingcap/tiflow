@@ -31,11 +31,11 @@ echo -e "\ncreate job using: $job_id, $job_config \n" >/dev/stderr
 config=$(base64 -i ${job_config} | tr -d \\n)
 create_job_json=""
 if [ -z "$job_id" ]; then
-    create_job_json=$(echo "" | jq -R --arg TYPE "$job_type" --arg CONFIG "$config" --argjson SELECTORS "$selectors" \
-	    '{ type: $TYPE, config: $CONFIG, selectors: $SELECTORS }')
+	create_job_json=$(echo "" | jq -R --arg TYPE "$job_type" --arg CONFIG "$config" --argjson SELECTORS "$selectors" \
+		'{ type: $TYPE, config: $CONFIG, selectors: $SELECTORS }')
 else
-    create_job_json=$(echo "" | jq -R --arg JOBID "$job_id" --arg TYPE "$job_type" --arg CONFIG "$config" --argjson SELECTORS "$selectors" \
-	    '{ id: $JOBID, type: $TYPE, config: $CONFIG, selectors: $SELECTORS }')
+	create_job_json=$(echo "" | jq -R --arg JOBID "$job_id" --arg TYPE "$job_type" --arg CONFIG "$config" --argjson SELECTORS "$selectors" \
+		'{ id: $JOBID, type: $TYPE, config: $CONFIG, selectors: $SELECTORS }')
 fi
 
 echo -e "\ncreate_job_json: $create_job_json \n" >/dev/stderr

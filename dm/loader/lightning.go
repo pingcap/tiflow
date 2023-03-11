@@ -321,13 +321,12 @@ func GetLightningConfig(globalCfg *lcfg.GlobalConfig, subtaskCfg *config.SubTask
 	cfg.Routes = subtaskCfg.RouteRules
 
 	if subtaskCfg.ExtStorage != nil {
-		// NOTE: if we use bucket as dumper storage, write lightning checkpoint to downstream DB to avoid bucket ratelimit
-		// it's the default path for cloud dm.
+		// NOTE: If we use bucket as dumper storage, write lightning checkpoint to downstream DB to avoid bucket ratelimit
 		// since we will use check Checkpoint in 'ignoreCheckpointError', MAKE SURE we have assigned the Checkpoint config properly here
 		if err := cfg.Security.BuildTLSConfig(); err != nil {
 			return nil, err
 		}
-		// for cloud dm, workerName is related with dm job id
+		// To enable the loader worker failover, we need to use jobID+sourceID to isolate the checkpoint schema
 		cfg.Checkpoint.Schema = cputil.LightningCheckpointSchema(workerName, subtaskCfg.SourceID)
 		cfg.Checkpoint.Driver = lcfg.CheckpointDriverMySQL
 		cfg.Checkpoint.MySQLParam = connParamFromConfig(cfg)
