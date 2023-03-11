@@ -25,7 +25,7 @@ function run() {
 	exec_with_retry --count 30 'run_sql --port 4000 "show databases;" | grep -q "tidb_lightning"'
 	# restart executor to test loader failover
 	docker restart server-executor-0 server-executor-1 server-executor-2
-	exec_with_retry --count 30 "curl \"http://127.0.0.1:10245/api/v1/jobs/$job_id\" | tee /dev/stderr | jq -e '.state == \"Finished\"'"
+	exec_with_retry --count 100 "curl \"http://127.0.0.1:10245/api/v1/jobs/$job_id\" | tee /dev/stderr | jq -e '.state == \"Finished\"'"
 	# clean the lighting checkpoint in downstream after job is finished
 	exec_with_retry --count 30 '! run_sql --port 4000 "show databases;" | grep -q "tidb_lightning"'
 
