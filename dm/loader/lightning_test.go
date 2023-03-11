@@ -54,7 +54,9 @@ func TestGetLightiningConfig(t *testing.T) {
 	conf, err := GetLightningConfig(&lcfg.GlobalConfig{},
 		&config.SubTaskConfig{
 			ExtStorage: &storage.LocalStorage{},
-		}, "")
+		}, "job123")
 	require.NoError(t, err)
 	require.Equal(t, lcfg.CheckpointDriverMySQL, conf.Checkpoint.Driver)
+	require.Equal(t, lcfg.CheckpointRemove, conf.Checkpoint.KeepAfterSuccess)
+	require.Contains(t, conf.Checkpoint.Schema, "job123")
 }
