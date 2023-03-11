@@ -328,7 +328,7 @@ func GetLightningConfig(globalCfg *lcfg.GlobalConfig, subtaskCfg *config.SubTask
 			return nil, err
 		}
 		// for cloud dm, workerName is related with dm job id
-		cfg.Checkpoint.Schema = cputil.LightningCheckpointSchema(workerName)
+		cfg.Checkpoint.Schema = cputil.LightningCheckpointSchema(workerName, subtaskCfg.SourceID)
 		cfg.Checkpoint.Driver = lcfg.CheckpointDriverMySQL
 		cfg.Checkpoint.MySQLParam = connParamFromConfig(cfg)
 	} else {
@@ -342,7 +342,7 @@ func GetLightningConfig(globalCfg *lcfg.GlobalConfig, subtaskCfg *config.SubTask
 		}
 		cfg.Checkpoint.DSN = cpPath
 	}
-	cfg.Checkpoint.KeepAfterSuccess = lcfg.CheckpointOrigin
+	cfg.Checkpoint.KeepAfterSuccess = lcfg.CheckpointRemove
 
 	cfg.TikvImporter.DiskQuota = subtaskCfg.LoaderConfig.DiskQuotaPhysical
 	cfg.TikvImporter.OnDuplicate = string(subtaskCfg.OnDuplicateLogical)
