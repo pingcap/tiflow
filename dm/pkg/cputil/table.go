@@ -31,13 +31,13 @@ func LightningCheckpoint(task string) string {
 	return task + "_lightning_checkpoint_list"
 }
 
-// LightningCheckpointSchema returns lightning's checkpoint schema name
+// LightningCheckpointSchema returns lightning's checkpoint schema name.
 func LightningCheckpointSchema(task string, sourceID string) string {
 	if task == "" {
 		return "tidb_lightning_checkpoint"
 	}
 	return utils.TruncateStringQuiet(
-		fmt.Sprintf("%s_%s_tidb_lightning_checkpoint", task, utils.GenHashKey(sourceID)),
+		fmt.Sprintf("%s_%d_tidb_lightning_checkpoint", task, utils.GenHashKey(sourceID)),
 		maxSchemaLength)
 }
 
