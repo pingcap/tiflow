@@ -76,7 +76,8 @@ function run() {
 	exec_with_retry --count 60 "curl \"http://127.0.0.1:10245/api/v1/executors\" | tee /dev/stderr | jq -e '.executors | length == 3'"
 
 	# create job & wait for job finished
-	job_id=$(create_job "DM" "$WORK_DIR/job.yaml" "dm_tls")
+    # use job-id here to avoid unlegal checkpoint schema name
+	job_id=$(create_job "DM" "$WORK_DIR/job.yaml" "dm_tls" "1212")
 
 	# wait for dump and load finished
 	exec_with_retry --count 60 "curl \"http://127.0.0.1:10245/api/v1/jobs/$job_id/status\" | tee /dev/stderr | jq -e '.task_status.\"mysql-02\".status.unit == \"DMSyncTask\"'"

@@ -12,6 +12,7 @@ job_config=${2}
 tenant_id=""
 project_id=""
 selectors="[]"
+job_id=""
 
 if [ $# -ge 3 ]; then
 	tenant_id=${3}
@@ -22,14 +23,23 @@ fi
 if [ $# -ge 5 ]; then
 	selectors=${5}
 fi
+if [ $# -ge 6 ]; then
+	job_id=${6}
+fi
 
-echo -e "\ncreate job using: $job_config \n" >/dev/stderr
+echo -e "\ncreate job using: $job_id, $job_config \n" >/dev/stderr
 config=$(base64 -i ${job_config} | tr -d \\n)
-create_job_json=$(echo "" | jq -R --arg TYPE "$job_type" --arg CONFIG "$config" --argjson SELECTORS "$selectors" \
-	'{ type: $TYPE, config: $CONFIG, selectors: $SELECTORS }')
+create_job_json=""
+if [ $job_id -eq "" ]; then
+    create_job_json=$(echo "" | jq -R --arg TYPE "$job_type" --arg CONFIG "$config" --argjson SELECTORS "$selectors" \
+	    '{ type: $TYPE, config: $CONFIG, selectors: $SELECTORS }')
+else
+    create_job_json=$(echo "" | jq -R --arg JOBID "$job_id" --arg TYPE "$job_type" --arg CONFIG "$config" --argjson SELECTORS "$selectors" \
+	    '{ id: $JOBID, type: $TYPE, config: $CONFIG, selectors: $SELECTORS }')
+fi
+
 echo -e "\ncreate_job_json: $create_job_json \n" >/dev/stderr
 
-job_id=""
 retry_time=15
 i=0
 set +e
