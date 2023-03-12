@@ -527,9 +527,8 @@ function run() {
 	# source1 contains unsupported charset, so dump files is uncleaned. files are
 	# all_mode.no_diff2-schema.sql  all_mode.t1-schema.sql
 	# all_mode.no_diff-schema.sql   metadata
-	# all_mode-schema-create.sql    tidb_lightning_checkpoint.pb
-	ls $WORK_DIR/worker1/dumped_data.$ILLEGAL_CHAR_NAME
-	[ $(ls $WORK_DIR/worker1/dumped_data.$ILLEGAL_CHAR_NAME | wc -l) -eq 6 ]
+	# all_mode-schema-create.sql
+	[ $(ls $WORK_DIR/worker1/dumped_data.$ILLEGAL_CHAR_NAME | wc -l) -eq 5 ]
 	ls $WORK_DIR/worker2/dumped_data.$ILLEGAL_CHAR_NAME && exit 1 || echo "worker2 auto removed dump files"
 
 	echo "check no password in log"
