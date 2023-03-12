@@ -430,10 +430,18 @@ func (h *OpenAPI) UpdateChangefeed(c *gin.Context) {
 		_ = c.Error(err)
 		return
 	}
-	if info.State != model.StateStopped {
-		_ = c.Error(cerror.ErrChangefeedUpdateRefused.GenWithStackByArgs("can only update changefeed config when it is stopped"))
+
+	switch info.State {
+	case model.StateFailed, model.StateStopped:
+	default:
+		_ = c.Error(
+			cerror.ErrChangefeedUpdateRefused.GenWithStackByArgs(
+				"can only update changefeed config when it is stopped or failed",
+			),
+		)
 		return
 	}
+
 	info.ID = changefeedID.ID
 	info.Namespace = changefeedID.Namespace
 

@@ -24,7 +24,6 @@ import (
 	"github.com/pingcap/tiflow/cdc/processor/sourcemanager"
 	"github.com/pingcap/tiflow/cdc/processor/sourcemanager/engine"
 	"github.com/prometheus/client_golang/prometheus"
-	"github.com/tikv/client-go/v2/oracle"
 	"go.uber.org/zap"
 )
 
@@ -111,32 +110,6 @@ func (w *sinkWorker) handleTasks(ctx context.Context, taskChan <-chan *sinkTask)
 	}
 }
 
-func validateAndAdjustBound(changefeedID model.ChangeFeedID,
-	task *sinkTask,
-) (engine.Position, engine.Position) {
-	lowerBound := task.lowerBound
-	upperBound := task.getUpperBound(task.tableSink.getReceivedSorterResolvedTs())
-
-	lowerPhs := oracle.GetTimeFromTS(lowerBound.CommitTs)
-	upperPhs := oracle.GetTimeFromTS(upperBound.CommitTs)
-	// The time range of a task should not exceed maxTaskTimeRange.
-	// This would help for reduce changefeed latency.
-	if upperPhs.Sub(lowerPhs) > maxTaskTimeRange {
-		newUpperCommitTs := oracle.GoTimeToTS(lowerPhs.Add(maxTaskTimeRange))
-		upperBound = engine.GenCommitFence(newUpperCommitTs)
-	}
-
-	if !upperBound.IsCommitFence() {
-		log.Panic("Table sink task upperbound must be a ResolvedTs",
-			zap.String("namespace", changefeedID.Namespace),
-			zap.String("changefeed", changefeedID.ID),
-			zap.Stringer("span", &task.span),
-			zap.Any("upperBound", upperBound))
-	}
-
-	return lowerBound, upperBound
-}
-
 func (w *sinkWorker) handleTask(ctx context.Context, task *sinkTask) (finalErr error) {
 	// We need to use a new batch ID for each task.
 	batchID.Add(1)
@@ -144,7 +117,12 @@ func (w *sinkWorker) handleTask(ctx context.Context, task *sinkTask) (finalErr e
 	// The task is finished and some required memory isn't used.
 	defer advancer.cleanup()
 
-	lowerBound, upperBound := validateAndAdjustBound(w.changefeedID, task)
+	lowerBound, upperBound := validateAndAdjustBound(
+		w.changefeedID,
+		&task.span,
+		task.lowerBound,
+		task.getUpperBound(task.tableSink.getReceivedSorterResolvedTs()),
+	)
 	if w.eventCache != nil {
 		drained, err := w.fetchFromCache(task, &lowerBound, &upperBound)
 		if err != nil {
