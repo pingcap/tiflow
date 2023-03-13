@@ -17,11 +17,129 @@ import (
 	"bytes"
 	"context"
 	"encoding/json"
+	"reflect"
 	"time"
 
 	"github.com/pingcap/log"
+	"github.com/pingcap/tiflow/pkg/redo"
 	"go.uber.org/zap"
 )
+
+// customReplicaConfig some custom fake configs to test the compatibility
+var customReplicaConfig = &ReplicaConfig{
+	MemoryQuota:           1123450,
+	CaseSensitive:         false,
+	EnableOldValue:        false,
+	ForceReplicate:        false,
+	IgnoreIneligibleTable: false,
+	CheckGCSafePoint:      false,
+	EnableSyncPoint:       false,
+	BDRMode:               false,
+	SyncPointInterval:     &JSONDuration{11 * time.Minute},
+	SyncPointRetention:    &JSONDuration{25 * time.Hour},
+	Filter: &FilterConfig{
+		MySQLReplicationRules: &MySQLReplicationRules{
+			DoTables:     []*Table{{"a", "b"}, {"c", "d"}},
+			DoDBs:        []string{"a", "c"},
+			IgnoreTables: []*Table{{"d", "e"}, {"f", "g"}},
+			IgnoreDBs:    []string{"d", "x"},
+		},
+		IgnoreTxnStartTs: []uint64{1, 2, 3},
+		EventFilters: []EventFilterRule{{
+			Matcher:                  []string{"test.worker"},
+			IgnoreEvent:              []string{"update"},
+			IgnoreSQL:                []string{"^drop", "add column"},
+			IgnoreInsertValueExpr:    "id >= 100",
+			IgnoreUpdateNewValueExpr: "gender = 'male'",
+			IgnoreUpdateOldValueExpr: "age < 18",
+			IgnoreDeleteValueExpr:    "id > 100",
+		}},
+		Rules: []string{
+			"a.d", "b.x",
+		},
+	},
+	Mounter: &MounterConfig{
+		WorkerNum: 17,
+	},
+	Sink: &SinkConfig{
+		Protocol:       "arvo",
+		SchemaRegistry: "127.0.0.1:1234",
+		CSVConfig: &CSVConfig{
+			Delimiter:       "a",
+			Quote:           "c",
+			NullString:      "c",
+			IncludeCommitTs: true,
+		},
+		DispatchRules: []*DispatchRule{
+			{
+				[]string{"a.b"},
+				"1",
+				"test",
+			},
+		},
+		ColumnSelectors: []*ColumnSelector{
+			{
+				[]string{"a.b"},
+				[]string{"c"},
+			},
+		},
+		TxnAtomicity:             "table",
+		EncoderConcurrency:       20,
+		Terminator:               "a",
+		DateSeparator:            "month",
+		EnablePartitionSeparator: true,
+	},
+	Consistent: &ConsistentConfig{
+		Level:             "",
+		MaxLogSize:        65,
+		FlushIntervalInMs: 500,
+		Storage:           "local://test",
+		UseFileBackend:    true,
+	},
+	Scheduler: &ChangefeedSchedulerConfig{
+		EnableTableAcrossNodes: false,
+		RegionThreshold:        13,
+	},
+}
+
+// defaultReplicaConfig check if the default values is changed
+var defaultReplicaConfig = &ReplicaConfig{
+	MemoryQuota:        1024 * 1024 * 1024,
+	CaseSensitive:      true,
+	EnableOldValue:     true,
+	CheckGCSafePoint:   true,
+	EnableSyncPoint:    false,
+	SyncPointInterval:  &JSONDuration{time.Minute * 10},
+	SyncPointRetention: &JSONDuration{time.Hour * 24},
+	Filter: &FilterConfig{
+		Rules: []string{"*.*"},
+	},
+	Mounter: &MounterConfig{
+		WorkerNum: 16,
+	},
+	Sink: &SinkConfig{
+		CSVConfig: &CSVConfig{
+			Quote:      string("\""),
+			Delimiter:  ",",
+			NullString: "\\N",
+		},
+		EncoderConcurrency:       16,
+		Terminator:               "\r\n",
+		DateSeparator:            "none",
+		EnablePartitionSeparator: false,
+	},
+	Consistent: &ConsistentConfig{
+		Level:             "none",
+		MaxLogSize:        redo.DefaultMaxLogSize,
+		FlushIntervalInMs: redo.DefaultFlushIntervalInMs,
+		Storage:           "",
+		UseFileBackend:    false,
+	},
+	Scheduler: &ChangefeedSchedulerConfig{
+		EnableTableAcrossNodes: false,
+		RegionThreshold:        100_000,
+	},
+}
 
 func testStatus(ctx context.Context, client *CDCRESTClient) error {
 	resp := client.Get().WithURI("/status").Do(ctx)
@@ -42,13 +160,10 @@ func testClusterHealth(ctx context.Context, client *CDCRESTClient) error {
 }
 
 func testChangefeed(ctx context.Context, client *CDCRESTClient) error {
-	// changefeed
+	// changefeed with default value
 	data := `{
 		"changefeed_id": "changefeed-test-v2-black-hole-1",
-		"sink_uri": "blackhole://",
-		"replica_config":{
-			"ignore_ineligible_table": true
-		}
+		"sink_uri": "blackhole://"
 	}`
 	resp := client.Post().
 		WithBody(bytes.NewReader([]byte(data))).
@@ -60,6 +175,15 @@ func testChangefeed(ctx context.Context, client *CDCRESTClient) error {
 		log.Panic("unmarshal failed", zap.String("body", string(resp.body)), zap.Error(err))
 	}
 	ensureChangefeed(ctx, client, changefeedInfo1.ID, "normal")
+	resp = client.Get().WithURI("/changefeeds/" + changefeedInfo1.ID).Do(ctx)
+	assertResponseIsOK(resp)
+	cfInfo := &ChangeFeedInfo{}
+	if err := json.Unmarshal(resp.body, cfInfo); err != nil {
+		log.Panic("failed to unmarshal response", zap.String("body", string(resp.body)), zap.Error(err))
+	}
+	if !reflect.DeepEqual(cfInfo.Config, defaultReplicaConfig) {
+		log.Panic("config is not equals", zap.Any("add", defaultReplicaConfig), zap.Any("get", cfInfo.Config))
+	}
 
 	// pause changefeed
 	resp = client.Post().WithURI("changefeeds/changefeed-test-v2-black-hole-1/pause").Do(ctx)
@@ -85,11 +209,28 @@ func testChangefeed(ctx context.Context, client *CDCRESTClient) error {
 		log.Panic("unmarshal failed", zap.String("body", string(resp.body)), zap.Error(err))
 	}
 
+	// update with full custom config
+	newConfig := &ChangefeedConfig{
+		ReplicaConfig: customReplicaConfig,
+	}
+	cdata, err := json.Marshal(newConfig)
+	if err != nil {
+		log.Panic("marshal failed", zap.Error(err))
+	}
+	resp = client.Put().
+		WithBody(bytes.NewReader(cdata)).
+		WithURI("/changefeeds/changefeed-test-v2-black-hole-1").
+		Do(ctx)
+	assertResponseIsOK(resp)
+
 	resp = client.Get().WithURI("changefeeds/changefeed-test-v2-black-hole-1").Do(ctx)
 	assertResponseIsOK(resp)
 	cf := &ChangeFeedInfo{}
 	if err := json.Unmarshal(resp.body, cf); err != nil {
 		log.Panic("unmarshal failed", zap.String("body", string(resp.body)), zap.Error(err))
+	}
+	if !reflect.DeepEqual(cf.Config, customReplicaConfig) {
+		log.Panic("config is not equals", zap.Any("update", customReplicaConfig), zap.Any("get", cf.Config))
 	}
 
 	// list changefeed
@@ -129,51 +270,26 @@ func testChangefeed(ctx context.Context, client *CDCRESTClient) error {
 
 func testCreateChangefeed(ctx context.Context, client *CDCRESTClient) error {
 	config := ChangefeedConfig{
-		ID:      "test-create-all",
-		SinkURI: "blackhole://create=test",
-		ReplicaConfig: &ReplicaConfig{
-			MemoryQuota:           0,
-			CaseSensitive:         false,
-			EnableOldValue:        false,
-			ForceReplicate:        false,
-			IgnoreIneligibleTable: false,
-			CheckGCSafePoint:      false,
-			EnableSyncPoint:       false,
-			BDRMode:               false,
-			Filter: &FilterConfig{
-				MySQLReplicationRules: nil,
-				IgnoreTxnStartTs:      nil,
-				EventFilters:          nil,
-			},
-			Mounter: &MounterConfig{},
-			Sink: &SinkConfig{
-				Protocol:                 "",
-				SchemaRegistry:           "",
-				CSVConfig:                nil,
-				DispatchRules:            nil,
-				ColumnSelectors:          nil,
-				TxnAtomicity:             "",
-				EncoderConcurrency:       0,
-				Terminator:               "",
-				DateSeparator:            "",
-				EnablePartitionSeparator: false,
-			},
-			Consistent: &ConsistentConfig{
-				Level:             "",
-				MaxLogSize:        0,
-				FlushIntervalInMs: 0,
-				Storage:           "",
-				UseFileBackend:    false,
-			},
-			Scheduler: &ChangefeedSchedulerConfig{},
-		},
+		ID:            "test-create-all",
+		SinkURI:       "blackhole://create=test",
+		ReplicaConfig: customReplicaConfig,
 	}
 	resp := client.Post().
 		WithBody(&config).
 		WithURI("/changefeeds").
 		Do(ctx)
 	assertResponseIsOK(resp)
-	client.Delete().WithURI("/changefeeds/" + config.ID)
+	ensureChangefeed(ctx, client, config.ID, "normal")
+	resp = client.Get().WithURI("/changefeeds/" + config.ID).Do(ctx)
+	assertResponseIsOK(resp)
+	cfInfo := &ChangeFeedInfo{}
+	if err := json.Unmarshal(resp.body, cfInfo); err != nil {
+		log.Panic("failed to unmarshal response", zap.String("body", string(resp.body)), zap.Error(err))
+	}
+	if !reflect.DeepEqual(cfInfo.Config, config.ReplicaConfig) {
+		log.Panic("config is not equals", zap.Any("add", config.ReplicaConfig), zap.Any("get", cfInfo.Config))
+	}
+	resp = client.Delete().WithURI("/changefeeds/" + config.ID).Do(ctx)
 	assertResponseIsOK(resp)
 	return nil
 }
