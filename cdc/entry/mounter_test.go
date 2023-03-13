@@ -1273,10 +1273,11 @@ func TestFormatColVal(t *testing.T) {
 
 	var datum types.Datum
 	datum.SetFloat32(123.99)
+	
+	ftTypeFloatNotNull := types.NewFieldType(mysql.TypeFloat)
+	ftTypeFloatNotNull.SetFlag(mysql.NotNullFlag)
 
-	col := &timodel.ColumnInfo{
-		FieldType: *types.NewFieldType(mysql.TypeFloat),
-	}
+	col := &timodel.ColumnInfo{FieldType: *ftTypeFloatNotNull}
 
 	value, _, _, err := formatColVal(datum, col)
 	require.NoError(t, err)
