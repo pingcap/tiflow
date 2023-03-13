@@ -3563,9 +3563,9 @@ func (s *Syncer) getTableInfoFromCheckpoint(table *filter.Table) *model.TableInf
 }
 
 func (s *Syncer) RedirectDDL(ctx context.Context, req *dmproto.RedirectDDLRequest) error {
-	if optimistEngine, ok := s.optimist.(*shardddl.OptimistEngine); !ok {
+	optimistEngine, ok := s.optimist.(*shardddl.OptimistEngine)
+	if !ok {
 		return errors.New("syncer is not run for tiflow")
-	} else {
-		return optimistEngine.RedirectDDL(req)
 	}
+	return optimistEngine.RedirectDDL(req)
 }
