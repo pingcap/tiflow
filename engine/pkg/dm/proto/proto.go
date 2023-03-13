@@ -215,6 +215,7 @@ type CoordinateDDLResponse struct {
 	ConflictStage optimism.ConflictStage
 }
 
+// RedirectDDLRequest is redirect DDL request
 type RedirectDDLRequest struct {
 	SourceTable   metadata.SourceTable
 	TargetTable   metadata.TargetTable
