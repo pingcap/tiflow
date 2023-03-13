@@ -106,7 +106,7 @@ func createOwner4Test(ctx cdcContext.Context, t *testing.T) (*ownerImpl, *orches
 		) (puller.DDLPuller, error) {
 			return &mockDDLPuller{resolvedTs: startTs - 1}, nil
 		},
-		// new ddl sink
+		// new ddl ddlSink
 		func(changefeedID model.ChangeFeedID, info *model.ChangeFeedInfo, reportErr func(err error)) DDLSink {
 			return &mockDDLSink{}
 		},
@@ -477,7 +477,7 @@ func TestUpdateGCSafePoint(t *testing.T) {
 	require.Nil(t, err)
 
 	// switch the state of changefeed to normal, it must update GC safepoint to
-	// 1 (checkpoint Ts of changefeed-test1).
+	// 1 (tableCheckpoint Ts of changefeed-test1).
 	ch := make(chan struct{}, 1)
 	mockPDClient.UpdateServiceGCSafePointFunc = func(
 		ctx context.Context, serviceID string, ttl int64, safePoint uint64,
@@ -969,7 +969,7 @@ func TestValidateChangefeed(t *testing.T) {
 		SinkURI:   sinkURI,
 	}))
 
-	// Test invalid sink URI
+	// Test invalid ddlSink URI
 	require.Error(t, o.ValidateChangefeed(&model.ChangeFeedInfo{
 		SinkURI: "wrong uri\n\t",
 	}))
@@ -995,7 +995,7 @@ func TestValidateChangefeed(t *testing.T) {
 		SinkURI:   sinkURI,
 	})
 	require.Regexp(t,
-		".*changefeed with same sink URI was just removed, please wait .*",
+		".*changefeed with same ddlSink URI was just removed, please wait .*",
 		err.Error(),
 	)
 

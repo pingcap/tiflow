@@ -14,6 +14,8 @@
 package v1
 
 import (
+	"sync/atomic"
+
 	timodel "github.com/pingcap/tidb/parser/model"
 	"github.com/pingcap/tidb/util/rowcodec"
 	"github.com/pingcap/tiflow/cdc/model"
@@ -101,7 +103,7 @@ type DDLEvent struct {
 	TableInfo    *model.TableInfo   `msg:"-"`
 	PreTableInfo *model.TableInfo   `msg:"-"`
 	Type         timodel.ActionType `msg:"-"`
-	Done         bool               `msg:"-"`
+	Done         atomic.Bool        `msg:"-"`
 }
 
 // RedoDDLEvent represents DDL event used in redo log persistent

@@ -23,8 +23,7 @@ import (
 )
 
 func TestBarrier(t *testing.T) {
-	b := newBarriers()
-	b.Update(ddlJobBarrier, 2)
+	b := newBarrierCalculator()
 	b.Update(syncPointBarrier, 3)
 	b.Update(finishBarrier, 1)
 	tp, ts := b.Min()
@@ -32,11 +31,7 @@ func TestBarrier(t *testing.T) {
 	require.Equal(t, ts, uint64(1))
 
 	b.Update(finishBarrier, 4)
-	tp, ts = b.Min()
-	require.Equal(t, tp, ddlJobBarrier)
-	require.Equal(t, ts, uint64(2))
 
-	b.Remove(ddlJobBarrier)
 	tp, ts = b.Min()
 	require.Equal(t, tp, syncPointBarrier)
 	require.Equal(t, ts, uint64(3))
@@ -46,7 +41,6 @@ func TestBarrier(t *testing.T) {
 	require.Equal(t, tp, finishBarrier)
 	require.Equal(t, ts, uint64(1))
 
-	b.Update(ddlJobBarrier, 5)
 	tp, ts = b.Min()
 	require.Equal(t, tp, finishBarrier)
 	require.Equal(t, ts, uint64(1))
@@ -55,7 +49,7 @@ func TestBarrier(t *testing.T) {
 func TestBarrierRandom(t *testing.T) {
 	maxBarrierType := 50
 	maxBarrierTs := 1000000
-	b := newBarriers()
+	b := newBarrierCalculator()
 	expectedBarriers := make(map[barrierType]model.Ts)
 
 	// set a barrier which can not be removed to avoid the barrier map is empty

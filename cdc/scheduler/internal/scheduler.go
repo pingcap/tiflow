@@ -17,6 +17,7 @@ import (
 	"context"
 
 	"github.com/pingcap/tiflow/cdc/model"
+	"github.com/pingcap/tiflow/cdc/scheduler/schedulepb"
 )
 
 const (
@@ -42,6 +43,7 @@ type Scheduler interface {
 		currentTables []model.TableID,
 		// All captures that are alive according to the latest Etcd states.
 		aliveCaptures map[model.CaptureID]*model.CaptureInfo,
+		barrier *schedulepb.Barrier,
 	) (newCheckpointTs, newResolvedTs model.Ts, err error)
 
 	// MoveTable requests that a table be moved to target.

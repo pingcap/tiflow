@@ -333,7 +333,7 @@ func (o *ownerImpl) ValidateChangefeed(info *model.ChangeFeedInfo) error {
 
 	sinkURI, err := url.Parse(info.SinkURI)
 	if err != nil {
-		return cerror.ErrAPIInvalidParam.GenWithStack("invalid sink URI %s", err)
+		return cerror.ErrAPIInvalidParam.GenWithStack("invalid ddlSink URI %s", err)
 	}
 
 	t, ok = o.removedSinkURI[url.URL{
@@ -344,7 +344,7 @@ func (o *ownerImpl) ValidateChangefeed(info *model.ChangeFeedInfo) error {
 		remain := recreateChangefeedDelayLimit - time.Since(t)
 		if remain >= 0 {
 			return cerror.ErrAPIInvalidParam.GenWithStack(
-				"changefeed with same sink URI was just removed, please wait %s", remain)
+				"changefeed with same ddlSink URI was just removed, please wait %s", remain)
 		}
 	}
 	return nil
@@ -564,7 +564,7 @@ func (o *ownerImpl) handleJobs(ctx context.Context) {
 		close(job.done)
 	}
 
-	// Try GC removed changefeed id/sink URI after delay limit passed.
+	// Try GC removed changefeed id/ddlSink URI after delay limit passed.
 	for id, t := range o.removedChangefeed {
 		if time.Since(t) >= recreateChangefeedDelayLimit {
 			delete(o.removedChangefeed, id)

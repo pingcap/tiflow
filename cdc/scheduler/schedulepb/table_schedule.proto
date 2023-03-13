@@ -68,6 +68,20 @@ message DispatchTableResponse {
     }
 }
 
+message TableBarrier {
+    int64 table_id = 1 [
+        (gogoproto.casttype) = "github.com/pingcap/tiflow/cdc/model.TableID",
+        (gogoproto.customname) = "TableID"
+    ];
+    // The barrier timestamp of the table.
+    uint64 barrier_ts = 2;
+}
+
+message Barrier {
+    repeated TableBarrier table_barriers = 1;
+    uint64  global_barrier_ts = 2;
+}
+
 message Heartbeat {
     repeated int64 table_ids = 1 [
         (gogoproto.casttype) = "github.com/pingcap/tiflow/cdc/model.TableID",
@@ -77,6 +91,7 @@ message Heartbeat {
     bool is_stopping = 2;
     repeated processor.tablepb.Span spans = 3 [(gogoproto.nullable) = false];
     bool collect_stats = 4;
+    Barrier barrier = 5;
 }
 
 message HeartbeatResponse {

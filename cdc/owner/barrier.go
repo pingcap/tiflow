@@ -16,38 +16,36 @@ package owner
 import (
 	"math"
 
-	"github.com/pingcap/log"
 	"github.com/pingcap/tiflow/cdc/model"
 )
 
 type barrierType int
 
 const (
-	// ddlJobBarrier denotes a replication barrier caused by a DDL.
-	ddlJobBarrier barrierType = iota
 	// syncPointBarrier denotes a barrier for snapshot replication.
-	syncPointBarrier
+	syncPointBarrier barrierType = iota
 	// finishBarrier denotes a barrier for changefeed finished.
 	finishBarrier
 )
 
-// barriers stores some barrierType and barrierTs, and can calculate the min barrierTs
-// barriers is NOT-THREAD-SAFE
-type barriers struct {
+// barrierCalculator stores some barrierType and barrierTs, and can calculate the min barrierTs
+// barrierCalculator is NOT-THREAD-SAFE
+type barrierCalculator struct {
 	inner map[barrierType]model.Ts
 	dirty bool
 	min   barrierType
 }
 
-func newBarriers() *barriers {
-	return &barriers{
+func newBarrierCalculator() *barrierCalculator {
+	return &barrierCalculator{
 		inner: make(map[barrierType]model.Ts),
 		dirty: true,
 	}
 }
 
-func (b *barriers) Update(tp barrierType, barrierTs model.Ts) {
-	// the barriers structure was given the ability to handle a fallback barrierTs by design.
+func (b *barrierCalculator) Update(tp barrierType, barrierTs model.Ts) {
+	// the barrierCalculator structure was given the ability to
+	// handle a fallback barrierTs by design.
 	// but the barrierTs should never fall back in owner replication model
 	if !b.dirty && (tp == b.min || barrierTs <= b.inner[b.min]) {
 		b.dirty = true
@@ -55,7 +53,7 @@ func (b *barriers) Update(tp barrierType, barrierTs model.Ts) {
 	b.inner[tp] = barrierTs
 }
 
-func (b *barriers) Min() (tp barrierType, barrierTs model.Ts) {
+func (b *barrierCalculator) Min() (tp barrierType, barrierTs model.Ts) {
 	if !b.dirty {
 		return b.min, b.inner[b.min]
 	}
@@ -65,7 +63,7 @@ func (b *barriers) Min() (tp barrierType, barrierTs model.Ts) {
 	return tp, minTs
 }
 
-func (b *barriers) calcMin() (tp barrierType, barrierTs model.Ts) {
+func (b *barrierCalculator) calcMin() (tp barrierType, barrierTs model.Ts) {
 	barrierTs = uint64(math.MaxUint64)
 	for br, ts := range b.inner {
 		if ts <= barrierTs {
@@ -73,13 +71,10 @@ func (b *barriers) calcMin() (tp barrierType, barrierTs model.Ts) {
 			barrierTs = ts
 		}
 	}
-	if barrierTs == math.MaxUint64 {
-		log.Panic("the barriers is empty, please report a bug")
-	}
 	return
 }
 
-func (b *barriers) Remove(tp barrierType) {
+func (b *barrierCalculator) Remove(tp barrierType) {
 	delete(b.inner, tp)
 	b.dirty = true
 }

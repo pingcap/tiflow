@@ -259,9 +259,10 @@ func (p ProcessorsInfos) String() string {
 
 // ChangeFeedStatus stores information about a ChangeFeed
 type ChangeFeedStatus struct {
-	ResolvedTs   uint64       `json:"resolved-ts"`
-	CheckpointTs uint64       `json:"checkpoint-ts"`
-	AdminJobType AdminJobType `json:"admin-job-type"`
+	ResolvedTs        uint64       `json:"resolved-ts"`
+	CheckpointTs      uint64       `json:"checkpoint-ts"`
+	MinTableBarrierTs uint64       `json:"min-table-barrier-ts"`
+	AdminJobType      AdminJobType `json:"admin-job-type"`
 }
 
 // Marshal returns json encoded string of ChangeFeedStatus, only contains necessary fields stored in storage
