@@ -130,7 +130,7 @@
   "editable": true,
   "gnetId": null,
   "graphTooltip": 1,
-  "id": null,
+  "id": 29,
   "iteration": 1678334252705,
   "links": [],
   "panels": [
@@ -8321,7 +8321,7 @@
           "timeFrom": null,
           "timeRegions": [],
           "timeShift": null,
-          "title": "Producer Batch Message Count Percentile",
+          "title": "Producer Batch Message Count Percentile (Kafka-Go Only)",
           "tooltip": {
             "shared": true,
             "sort": 0,
@@ -8419,7 +8419,7 @@
           "timeFrom": null,
           "timeRegions": [],
           "timeShift": null,
-          "title": "Producer Batch Messages Duration Percentile",
+          "title": "Producer Batch Messages Duration Percentile (Kafka-Go Only)",
           "tooltip": {
             "shared": true,
             "sort": 0,
@@ -8517,7 +8517,7 @@
           "timeFrom": null,
           "timeRegions": [],
           "timeShift": null,
-          "title": "Producer Batch Bytes Percentile",
+          "title": "Producer Batch Bytes Percentile (Kafka-Go Only)",
           "tooltip": {
             "shared": true,
             "sort": 0,
@@ -8615,7 +8615,7 @@
           "timeFrom": null,
           "timeRegions": [],
           "timeShift": null,
-          "title": "Retry Count",
+          "title": "Retry Count (Kafka-Go Only)",
           "tooltip": {
             "shared": true,
             "sort": 0,
@@ -8713,7 +8713,7 @@
           "timeFrom": null,
           "timeRegions": [],
           "timeShift": null,
-          "title": "Error Count",
+          "title": "Error Count (Kafka-Go Only)",
           "tooltip": {
             "shared": true,
             "sort": 0,
