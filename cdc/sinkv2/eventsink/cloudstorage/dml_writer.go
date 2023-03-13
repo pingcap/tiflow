@@ -18,7 +18,12 @@ import (
 	"github.com/pingcap/errors"
 	"github.com/pingcap/tidb/br/pkg/storage"
 	"github.com/pingcap/tiflow/cdc/model"
+<<<<<<< HEAD:cdc/sinkv2/eventsink/cloudstorage/dml_writer.go
 	"github.com/pingcap/tiflow/cdc/sinkv2/metrics"
+=======
+	"github.com/pingcap/tiflow/cdc/sink/metrics"
+	"github.com/pingcap/tiflow/engine/pkg/clock"
+>>>>>>> 36bb8e9ecf (sink(ticdc): add an index file in storage sink to quickly find the largest file number (#8406)):cdc/sink/dmlsink/cloudstorage/dml_writer.go
 	"github.com/pingcap/tiflow/pkg/chann"
 	"github.com/pingcap/tiflow/pkg/hash"
 	"github.com/pingcap/tiflow/pkg/sink/cloudstorage"
@@ -35,6 +40,7 @@ type dmlWriter struct {
 	storage        storage.ExternalStorage
 	config         *cloudstorage.Config
 	extension      string
+	clock          clock.Clock
 	statistics     *metrics.Statistics
 	inputCh        <-chan eventFragment
 	errCh          chan<- error
@@ -55,6 +61,7 @@ func newDMLWriter(
 		workerChannels: make([]*chann.Chann[eventFragment], config.WorkerCount),
 		workers:        make([]*dmlWorker, config.WorkerCount),
 		hasher:         hash.NewPositionInertia(),
+		clock:          clock.New(),
 		config:         config,
 		extension:      extension,
 		statistics:     statistics,
@@ -63,12 +70,19 @@ func newDMLWriter(
 	}
 
 	for i := 0; i < config.WorkerCount; i++ {
-		worker := newDMLWorker(i, changefeedID, storage, config, extension, statistics)
+		worker := newDMLWorker(i, changefeedID, storage, config, extension, d.clock, statistics)
 		d.workers[i] = worker
 		d.workerChannels[i] = chann.New[eventFragment]()
 	}
 
 	return d
+}
+
+// setClock is used for unit test.
+func (d *dmlWriter) setClock(clock clock.Clock) {
+	for i := 0; i < d.config.WorkerCount; i++ {
+		d.workers[i].setClock(clock)
+	}
 }
 
 func (d *dmlWriter) run(ctx context.Context) error {
@@ -97,7 +111,7 @@ func (d *dmlWriter) dispatchFragToDMLWorker(ctx context.Context) error {
 			if !ok {
 				return nil
 			}
-			tableName := frag.TableName
+			tableName := frag.versionedTable.TableName
 			d.hasher.Reset()
 			d.hasher.Write([]byte(tableName.Schema), []byte(tableName.Table))
 			workerID := d.hasher.Sum32() % uint32(d.config.WorkerCount)

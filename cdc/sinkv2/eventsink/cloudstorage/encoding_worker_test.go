@@ -24,6 +24,11 @@ import (
 	"github.com/pingcap/tiflow/cdc/sinkv2/eventsink"
 	"github.com/pingcap/tiflow/cdc/sinkv2/util"
 	"github.com/pingcap/tiflow/pkg/config"
+<<<<<<< HEAD:cdc/sinkv2/eventsink/cloudstorage/encoding_worker_test.go
+=======
+	"github.com/pingcap/tiflow/pkg/sink/cloudstorage"
+	"github.com/pingcap/tiflow/pkg/sink/codec/builder"
+>>>>>>> 36bb8e9ecf (sink(ticdc): add an index file in storage sink to quickly find the largest file number (#8406)):cdc/sink/dmlsink/cloudstorage/encoding_worker_test.go
 	"github.com/stretchr/testify/require"
 )
 
@@ -52,7 +57,7 @@ func TestEncodeEvents(t *testing.T) {
 	worker, fn := testEncodingWorker(ctx, t)
 	defer fn()
 	err := worker.encodeEvents(ctx, eventFragment{
-		versionedTable: versionedTable{
+		versionedTable: cloudstorage.VersionedTable{
 			TableName: model.TableName{
 				Schema:  "test",
 				Table:   "table1",
@@ -134,7 +139,7 @@ func TestEncodingWorkerRun(t *testing.T) {
 
 	for i := 0; i < 3; i++ {
 		frag := eventFragment{
-			versionedTable: versionedTable{
+			versionedTable: cloudstorage.VersionedTable{
 				TableName: table,
 			},
 			seqNumber: uint64(i + 1),

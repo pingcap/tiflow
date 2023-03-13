@@ -328,18 +328,47 @@ func (c *consumer) getNewFiles(ctx context.Context) (map[dmlPathKey]fileIndexRan
 		var dmlkey dmlPathKey
 		var schemaKey schemaPathKey
 
-		if strings.HasSuffix(path, "metadata") {
-			return nil
-		}
-
 		if strings.HasSuffix(path, "schema.json") {
 			err := schemaKey.parseSchemaFilePath(path)
 			if err != nil {
 				log.Error("failed to parse schema file path", zap.Error(err))
+<<<<<<< HEAD
 			} else {
 				schemaSet[schemaKey] = struct{}{}
 			}
 
+=======
+				// skip handling this file
+				return nil
+			}
+			// fake a dml key for schema.json file, which is useful for putting DDL
+			// in front of the DML files when sorting.
+			// e.g, for the partitioned table:
+			//
+			// test/test1/439972354120482843/schema.json					(partitionNum = -1)
+			// test/test1/439972354120482843/55/2023-03-09/CDC000001.csv	(partitionNum = 55)
+			// test/test1/439972354120482843/66/2023-03-09/CDC000001.csv	(partitionNum = 66)
+			//
+			// and for the non-partitioned table:
+			// test/test2/439972354120482843/schema.json				(partitionNum = -1)
+			// test/test2/439972354120482843/2023-03-09/CDC000001.csv	(partitionNum = 0)
+			// test/test2/439972354120482843/2023-03-09/CDC000002.csv	(partitionNum = 0)
+			//
+			// the DDL event recorded in schema.json should be executed first, then the DML events
+			// in csv files can be executed.
+			dmlkey.schemaPathKey = schemaKey
+			dmlkey.partitionNum = fakePartitionNumForSchemaFile
+			dmlkey.date = ""
+		} else if strings.HasSuffix(path, c.fileExtension) {
+			fileIdx, err = dmlkey.parseDMLFilePath(c.replicationCfg.Sink.DateSeparator, path)
+			if err != nil {
+				log.Error("failed to parse dml file path", zap.Error(err))
+				// skip handling this file
+				return nil
+			}
+		} else {
+			log.Debug("ignore handling file", zap.String("path", path))
+>>>>>>> 36bb8e9ecf (sink(ticdc): add an index file in storage sink to quickly find the largest file number (#8406))
 			return nil
 		}
 

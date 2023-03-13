@@ -25,6 +25,11 @@ import (
 	"github.com/pingcap/tiflow/cdc/sinkv2/eventsink"
 	"github.com/pingcap/tiflow/cdc/sinkv2/util"
 	"github.com/pingcap/tiflow/pkg/config"
+<<<<<<< HEAD:cdc/sinkv2/eventsink/cloudstorage/defragmenter_test.go
+=======
+	"github.com/pingcap/tiflow/pkg/sink/cloudstorage"
+	"github.com/pingcap/tiflow/pkg/sink/codec/builder"
+>>>>>>> 36bb8e9ecf (sink(ticdc): add an index file in storage sink to quickly find the largest file number (#8406)):cdc/sink/dmlsink/cloudstorage/defragmenter_test.go
 	"github.com/stretchr/testify/require"
 )
 
@@ -54,7 +59,7 @@ func TestDeframenter(t *testing.T) {
 		go func(seq uint64) {
 			encoder := encoderBuilder.Build()
 			frag := eventFragment{
-				versionedTable: versionedTable{
+				versionedTable: cloudstorage.VersionedTable{
 					TableName: model.TableName{
 						Schema:  "test",
 						Table:   "table1",

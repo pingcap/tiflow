@@ -44,12 +44,6 @@ const (
 // Assert EventSink[E event.TableEvent] implementation
 var _ eventsink.EventSink[*model.SingleTableTxn] = (*dmlSink)(nil)
 
-// versionedTable is used to wrap TableName with a version
-type versionedTable struct {
-	model.TableName
-	version uint64
-}
-
 // eventFragment is used to attach a sequence number to TxnCallbackableEvent.
 // The sequence number is mainly useful for TxnCallbackableEvent defragmentation.
 // e.g. TxnCallbackableEvent 1~5 are dispatched to a group of encoding workers, but the
@@ -58,9 +52,15 @@ type versionedTable struct {
 // at dmlWorker sequentially.
 type eventFragment struct {
 	// event sequence number
+<<<<<<< HEAD:cdc/sinkv2/eventsink/cloudstorage/cloud_storage_dml_sink.go
 	seqNumber uint64
 	versionedTable
 	event *eventsink.TxnCallbackableEvent
+=======
+	seqNumber      uint64
+	versionedTable cloudstorage.VersionedTable
+	event          *dmlsink.TxnCallbackableEvent
+>>>>>>> 36bb8e9ecf (sink(ticdc): add an index file in storage sink to quickly find the largest file number (#8406)):cdc/sink/dmlsink/cloudstorage/cloud_storage_dml_sink.go
 	// encodedMsgs denote the encoded messages after the event is handled in encodingWorker.
 	encodedMsgs []*common.Message
 }
@@ -120,7 +120,7 @@ func NewCloudStorageSink(ctx context.Context,
 	}
 	encoderBuilder, err := builder.NewEventBatchEncoderBuilder(ctx, encoderConfig)
 	if err != nil {
-		return nil, cerror.WrapError(cerror.ErrCloudStorageInvalidConfig, err)
+		return nil, cerror.WrapError(cerror.ErrStorageSinkInvalidConfig, err)
 	}
 
 	s.changefeedID = contextutil.ChangefeedIDFromCtx(ctx)
@@ -167,8 +167,13 @@ func (s *dmlSink) run(ctx context.Context) error {
 }
 
 // WriteEvents write events to cloud storage sink.
+<<<<<<< HEAD:cdc/sinkv2/eventsink/cloudstorage/cloud_storage_dml_sink.go
 func (s *dmlSink) WriteEvents(txns ...*eventsink.CallbackableEvent[*model.SingleTableTxn]) error {
 	var tbl versionedTable
+=======
+func (s *DMLSink) WriteEvents(txns ...*dmlsink.CallbackableEvent[*model.SingleTableTxn]) error {
+	var tbl cloudstorage.VersionedTable
+>>>>>>> 36bb8e9ecf (sink(ticdc): add an index file in storage sink to quickly find the largest file number (#8406)):cdc/sink/dmlsink/cloudstorage/cloud_storage_dml_sink.go
 
 	for _, txn := range txns {
 		if txn.GetTableSinkState() != state.TableSinkSinking {
@@ -178,9 +183,9 @@ func (s *dmlSink) WriteEvents(txns ...*eventsink.CallbackableEvent[*model.Single
 			continue
 		}
 
-		tbl = versionedTable{
+		tbl = cloudstorage.VersionedTable{
 			TableName: txn.Event.TableInfo.TableName,
-			version:   txn.Event.TableInfo.Version,
+			Version:   txn.Event.TableInfo.Version,
 		}
 		seq := atomic.AddUint64(&s.lastSeqNum, 1)
 		// emit a TxnCallbackableEvent encoupled with a sequence number starting from one.
