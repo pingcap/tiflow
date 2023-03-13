@@ -37,7 +37,7 @@ func TestGetStatus(t *testing.T) {
 
 	etcdClient.EXPECT().
 		GetClusterID().Return("1234").AnyTimes()
-	cp.EXPECT().GetEtcdClient().Return(etcdClient, nil).AnyTimes()
+	cp.EXPECT().GetEtcdClient().Return(etcdClient).AnyTimes()
 	cp.EXPECT().IsReady().Return(true).AnyTimes()
 	cp.EXPECT().IsOwner().Return(true).AnyTimes()
 	cp.EXPECT().Liveness().Return(model.LivenessCaptureStopping).AnyTimes()
