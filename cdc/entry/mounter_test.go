@@ -1267,3 +1267,18 @@ func TestNewDMRowChange(t *testing.T) {
 		require.Equal(t, []interface{}{1, 2, 1, 2}, argsGot)
 	}
 }
+
+func TestFormatColVal(t *testing.T) {
+	t.Parallel()
+
+	var datum types.Datum
+	datum.SetFloat32(123.99)
+
+	col := &timodel.ColumnInfo{
+		FieldType: *types.NewFieldType(mysql.TypeFloat),
+	}
+
+	value, _, _, err := formatColVal(datum, col)
+	require.NoError(t, err)
+	require.EqualValues(t, float32(123.99), value)
+}
