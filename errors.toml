@@ -11,34 +11,9 @@ error = '''
 invalid api parameter
 '''
 
-["CDC:ErrActorDuplicate"]
-error = '''
-duplicated actor, already in use
-'''
-
-["CDC:ErrActorNotFound"]
-error = '''
-actor not found
-'''
-
-["CDC:ErrActorStopped"]
-error = '''
-actor stopped
-'''
-
 ["CDC:ErrAdminStopProcessor"]
 error = '''
 stop processor by admin command
-'''
-
-["CDC:ErrAsyncBroadcastNotSupport"]
-error = '''
-Async broadcasts not supported
-'''
-
-["CDC:ErrAsyncIOCancelled"]
-error = '''
-asynchronous IO operation is cancelled. Internal use only, report a bug if seen in log
 '''
 
 ["CDC:ErrAsyncPoolExited"]
@@ -71,21 +46,6 @@ error = '''
 to envelope failed
 '''
 
-["CDC:ErrAvroUnknownType"]
-error = '''
-unknown type for Avro: %v
-'''
-
-["CDC:ErrBufferLogTimeout"]
-error = '''
-send row changed events to log buffer timeout
-'''
-
-["CDC:ErrBufferReachLimit"]
-error = '''
-puller mem buffer reach size limit
-'''
-
 ["CDC:ErrCSVDecodeFailed"]
 error = '''
 csv decode failed
@@ -94,11 +54,6 @@ csv decode failed
 ["CDC:ErrCSVEncodeFailed"]
 error = '''
 csv encode failed
-'''
-
-["CDC:ErrCachedTSONotExists"]
-error = '''
-GetCachedCurrentVersion: cache entry does not exist
 '''
 
 ["CDC:ErrCanalDecodeFailed"]
@@ -156,11 +111,6 @@ error = '''
 changefeed not exists, %s
 '''
 
-["CDC:ErrChangefeedAbnormalState"]
-error = '''
-changefeed in abnormal state: %s, replication status: %+v
-'''
-
 ["CDC:ErrChangefeedUnretryable"]
 error = '''
 changefeed is in unretryable state, please check the error message, and you should manually handle it
@@ -179,16 +129,6 @@ changefeed update error: %s
 ["CDC:ErrCheckClusterVersionFromPD"]
 error = '''
 failed to request PD %s, please try again later
-'''
-
-["CDC:ErrCheckDataDirSatisfied"]
-error = '''
-check data dir satisfied failed
-'''
-
-["CDC:ErrCheckDirReadable"]
-error = '''
-check dir readable failed
 '''
 
 ["CDC:ErrCheckDirValid"]
@@ -216,16 +156,6 @@ error = '''
 invalid overwrite-checkpoint-ts %s, overwrite-checkpoint-ts only accept 'now' or a valid timestamp in integer
 '''
 
-["CDC:ErrCloudStorageDefragmentFailed"]
-error = '''
-cloud storage defragment encoded messages failed
-'''
-
-["CDC:ErrCloudStorageInvalidConfig"]
-error = '''
-cloud storage config invalid
-'''
-
 ["CDC:ErrClusterIDMismatch"]
 error = '''
 cluster ID mismatch, tikv cluster ID is %d and request cluster ID is %d
@@ -246,11 +176,6 @@ error = '''
 Codec invalid config
 '''
 
-["CDC:ErrConsistentLevel"]
-error = '''
-consistent level (%s) not support
-'''
-
 ["CDC:ErrConsistentStorage"]
 error = '''
 consistent storage (%s) not support
@@ -264,21 +189,6 @@ failed to convert ddl '%s' to filter event type
 ["CDC:ErrCraftCodecInvalidData"]
 error = '''
 craft codec invalid data
-'''
-
-["CDC:ErrCreateMarkTableFailed"]
-error = '''
-create mark table failed
-'''
-
-["CDC:ErrDBSorterError"]
-error = '''
-db error: %s
-'''
-
-["CDC:ErrDDLEventIgnored"]
-error = '''
-ddl event is ignored
 '''
 
 ["CDC:ErrDDLSchemaNotFound"]
@@ -366,19 +276,9 @@ error = '''
 invalid filter expression(s). Cannot find column '%s' from table '%s' in: %s
 '''
 
-["CDC:ErrFailedToFilterDDL"]
-error = '''
-failed to filter ddl event: %v, please report a bug
-'''
-
 ["CDC:ErrFailedToFilterDML"]
 error = '''
 failed to filter dml event: %v, please report a bug
-'''
-
-["CDC:ErrFetchHandleValue"]
-error = '''
-can't find handle column, please check if the pk is handle
 '''
 
 ["CDC:ErrFileSizeExceed"]
@@ -394,11 +294,6 @@ filter rule is invalid %v
 ["CDC:ErrFlowControllerAborted"]
 error = '''
 flow controller is aborted
-'''
-
-["CDC:ErrFlowControllerEventLargerThanQuota"]
-error = '''
-event is larger than the total memory quota, size: %d, quota: %d
 '''
 
 ["CDC:ErrGCTTLExceeded"]
@@ -421,16 +316,6 @@ error = '''
 get dir disk info failed
 '''
 
-["CDC:ErrGetRegionFailed"]
-error = '''
-get region failed
-'''
-
-["CDC:ErrGetStoreSnapshot"]
-error = '''
-get snapshot failed
-'''
-
 ["CDC:ErrGetTiKVRPCContext"]
 error = '''
 get tikv grpc context failed
@@ -446,11 +331,6 @@ error = '''
 incompatible configuration in sink uri(%s) and config file(%s), please try to update the configuration only through sink uri
 '''
 
-["CDC:ErrIndexKeyTableNotFound"]
-error = '''
-table not found with index ID %d in index kv
-'''
-
 ["CDC:ErrInternalServerError"]
 error = '''
 internal server error
@@ -459,11 +339,6 @@ internal server error
 ["CDC:ErrIntersectNoOverlap"]
 error = '''
 span doesn't overlap: %+v vs %+v
-'''
-
-["CDC:ErrInvalidAdminJobType"]
-error = '''
-invalid admin job type: %d
 '''
 
 ["CDC:ErrInvalidChangefeedID"]
@@ -501,11 +376,6 @@ error = '''
 bad namespace, please match the pattern "^[a-zA-Z0-9]+(\-[a-zA-Z0-9]+)*$", the length should no more than %d, eg, "simple-namespace-test",
 '''
 
-["CDC:ErrInvalidPullBasedSinkConfig"]
-error = '''
-invalid pull based sink config: %s
-'''
-
 ["CDC:ErrInvalidRecordKey"]
 error = '''
 invalid record key - %q
@@ -526,31 +396,6 @@ error = '''
 invalid server option
 '''
 
-["CDC:ErrInvalidTaskKey"]
-error = '''
-invalid task key: %s
-'''
-
-["CDC:ErrKVStorageBackoffFailed"]
-error = '''
-backoff failed
-'''
-
-["CDC:ErrKVStorageRegionError"]
-error = '''
-req with region error
-'''
-
-["CDC:ErrKVStorageRespEmpty"]
-error = '''
-tikv response body missing
-'''
-
-["CDC:ErrKVStorageSendReq"]
-error = '''
-send req to kv storage
-'''
-
 ["CDC:ErrKafkaAsyncSendMessage"]
 error = '''
 kafka async send message failed
@@ -564,11 +409,6 @@ kafka broker config item not found
 ["CDC:ErrKafkaCreateTopic"]
 error = '''
 kafka create topic failed
-'''
-
-["CDC:ErrKafkaFlushUnfinished"]
-error = '''
-flush not finished before producer close
 '''
 
 ["CDC:ErrKafkaInvalidClientID"]
@@ -616,19 +456,9 @@ error = '''
 invalid topic expression
 '''
 
-["CDC:ErrKafkaTopicNotExists"]
-error = '''
-kafka topic not exists after creation
-'''
-
 ["CDC:ErrLeaseExpired"]
 error = '''
 owner lease expired 
-'''
-
-["CDC:ErrLeaseTimeout"]
-error = '''
-owner lease timeout
 '''
 
 ["CDC:ErrLoadTimezone"]
@@ -636,24 +466,9 @@ error = '''
 load timezone
 '''
 
-["CDC:ErrLocateRegion"]
-error = '''
-locate region by id
-'''
-
-["CDC:ErrMailboxFull"]
-error = '''
-mailbox is full, please try again. Internal use only, report a bug if seen externally
-'''
-
 ["CDC:ErrMarshalFailed"]
 error = '''
 marshal failed
-'''
-
-["CDC:ErrMaxwellDecodeFailed"]
-error = '''
-maxwell decode failed
 '''
 
 ["CDC:ErrMaxwellEncodeFailed"]
@@ -716,11 +531,6 @@ error = '''
 new capture failed
 '''
 
-["CDC:ErrNewProcessorFailed"]
-error = '''
-new processor failed
-'''
-
 ["CDC:ErrNewSemVersion"]
 error = '''
 create sem version
@@ -756,39 +566,9 @@ error = '''
 operate on a closed notifier
 '''
 
-["CDC:ErrOwnerCampaignKeyDeleted"]
-error = '''
-owner campaign key deleted
-'''
-
-["CDC:ErrOwnerChangedUnexpectedly"]
-error = '''
-owner changed unexpectedly
-'''
-
-["CDC:ErrOwnerChangefeedNotFound"]
-error = '''
-changefeed %s not found in owner cache
-'''
-
-["CDC:ErrOwnerEtcdWatch"]
-error = '''
-etcd watch returns error
-'''
-
-["CDC:ErrOwnerInconsistentStates"]
-error = '''
-owner encountered inconsistent state. report a bug if this happens frequently. %s
-'''
-
 ["CDC:ErrOwnerNotFound"]
 error = '''
 owner not found
-'''
-
-["CDC:ErrOwnerSortDir"]
-error = '''
-owner sort dir
 '''
 
 ["CDC:ErrOwnerUnknown"]
@@ -834,11 +614,6 @@ peer-to-peer message duplicate connection: epoch %d
 ["CDC:ErrPeerMessageEncodeError"]
 error = '''
 failed to encode peer-to-peer message
-'''
-
-["CDC:ErrPeerMessageIllegalClientVersion"]
-error = '''
-peer-to-peer message client reported illegal version: %s
 '''
 
 ["CDC:ErrPeerMessageIllegalMeta"]
@@ -896,29 +671,9 @@ error = '''
 pending region cancelled due to stream disconnecting
 '''
 
-["CDC:ErrPipelineTryAgain"]
-error = '''
-pipeline is full, please try again. Internal use only, report a bug if seen externally
-'''
-
 ["CDC:ErrPrewriteNotMatch"]
 error = '''
 prewrite not match, key: %s, start-ts: %d, commit-ts: %d, type: %s, optype: %s
-'''
-
-["CDC:ErrProcessorDuplicateOperations"]
-error = '''
-table processor duplicate operation, table-id: %d
-'''
-
-["CDC:ErrProcessorEtcdWatch"]
-error = '''
-etcd watch returns error
-'''
-
-["CDC:ErrProcessorSortDir"]
-error = '''
-sort dir error
 '''
 
 ["CDC:ErrProcessorTableNotFound"]
@@ -991,11 +746,6 @@ error = '''
 replication set multiple primary: %s
 '''
 
-["CDC:ErrResolveLocks"]
-error = '''
-resolve locks failed
-'''
-
 ["CDC:ErrRewindRequestBodyError"]
 error = '''
 failed to seek to the beginning of request body
@@ -1004,11 +754,6 @@ failed to seek to the beginning of request body
 ["CDC:ErrS3StorageAPI"]
 error = '''
 external storage api
-'''
-
-["CDC:ErrScanLockFailed"]
-error = '''
-scan lock failed
 '''
 
 ["CDC:ErrSchedulerRequestFailed"]
@@ -1036,11 +781,6 @@ error = '''
 can not found schema snapshot, the specified ts(%d) is more than resolvedTs(%d)
 '''
 
-["CDC:ErrSendToClosedPipeline"]
-error = '''
-pipeline is closed, cannot send message
-'''
-
 ["CDC:ErrServeHTTP"]
 error = '''
 serve http error
@@ -1049,16 +789,6 @@ serve http error
 ["CDC:ErrServerIsNotReady"]
 error = '''
 cdc server is not ready
-'''
-
-["CDC:ErrServerNewPDClient"]
-error = '''
-server creates pd client failed
-'''
-
-["CDC:ErrServiceSafepointLost"]
-error = '''
-service safepoint lost. current safepoint is %d, please remove all changefeed(s) whose checkpoints are behind the current safepoint
 '''
 
 ["CDC:ErrSinkInvalidConfig"]
@@ -1101,16 +831,6 @@ error = '''
 table %d not found in schema snapshot
 '''
 
-["CDC:ErrSorterClosed"]
-error = '''
-sorter is closed
-'''
-
-["CDC:ErrStartAStoppedDBSystem"]
-error = '''
-start a stopped db system
-'''
-
 ["CDC:ErrStartTsBeforeGC"]
 error = '''
 fail to create or maintain changefeed because start-ts %d is earlier than or equal to GC safepoint at %d
@@ -1121,19 +841,19 @@ error = '''
 fail to open storage for redo log
 '''
 
+["CDC:ErrStorageSinkInvalidConfig"]
+error = '''
+storage sink config invalid
+'''
+
 ["CDC:ErrStorageSinkInvalidDateSeparator"]
 error = '''
-date separator in cloud storage sink is invalid
+date separator in storage sink is invalid
 '''
 
-["CDC:ErrSupportGetOnly"]
+["CDC:ErrStorageSinkInvalidFileName"]
 error = '''
-this api supports GET method only
-'''
-
-["CDC:ErrSupportPostOnly"]
-error = '''
-this api supports POST method only
+filename in storage sink is invalid
 '''
 
 ["CDC:ErrSyncRenameTableFailed"]
@@ -1151,29 +871,9 @@ error = '''
 some tables are not eligible to replicate(%v), if you want to ignore these tables, please set ignore_ineligible_table to true
 '''
 
-["CDC:ErrTableListenReplicated"]
-error = '''
-A table(%d) is being replicated by at least two processors(%s, %s), please report a bug
-'''
-
-["CDC:ErrTableProcessorStoppedSafely"]
-error = '''
-table processor stopped safely
-'''
-
 ["CDC:ErrTargetTsBeforeStartTs"]
 error = '''
 fail to create changefeed because target-ts %d is earlier than start-ts %d
-'''
-
-["CDC:ErrTaskPositionNotExists"]
-error = '''
-task position not exists, %s
-'''
-
-["CDC:ErrTaskStatusNotExists"]
-error = '''
-task status not exists, %s
 '''
 
 ["CDC:ErrTiKVEventFeed"]
@@ -1191,26 +891,6 @@ error = '''
 url format is invalid
 '''
 
-["CDC:ErrUnexpectedSnapshot"]
-error = '''
-unexpected snapshot, table %d
-'''
-
-["CDC:ErrUnifiedSorterBackendTerminating"]
-error = '''
-unified sorter backend is terminating
-'''
-
-["CDC:ErrUnifiedSorterIOError"]
-error = '''
-unified sorter IO error. Make sure your sort-dir is configured correctly by passing a valid argument or toml file to `cdc server`, or if you use TiUP, review the settings in `tiup cluster edit-config`. Details: %s
-'''
-
-["CDC:ErrUnimplemented"]
-error = '''
-unimplemented %s
-'''
-
 ["CDC:ErrUnknownKVEventType"]
 error = '''
 unknown kv optype: %s, entry: %v
@@ -1219,11 +899,6 @@ unknown kv optype: %s, entry: %v
 ["CDC:ErrUnknownMetaType"]
 error = '''
 unknown meta type %v
-'''
-
-["CDC:ErrUnknownSortEngine"]
-error = '''
-unknown sort engine %s
 '''
 
 ["CDC:ErrUnmarshalFailed"]
@@ -1261,11 +936,6 @@ error = '''
 version is incompatible: %s
 '''
 
-["CDC:ErrWaitHandleOperationTimeout"]
-error = '''
-waiting processor to handle the operation finished timeout
-'''
-
 ["CDC:ErrWorkerPoolGracefulUnregisterTimedOut"]
 error = '''
 workerpool handle graceful unregister timed out
@@ -1274,16 +944,6 @@ workerpool handle graceful unregister timed out
 ["CDC:ErrWorkerPoolHandleCancelled"]
 error = '''
 workerpool handle is cancelled
-'''
-
-["CDC:ErrWriteTsConflict"]
-error = '''
-write ts conflict
-'''
-
-["CDC:ErrWrongTableInfo"]
-error = '''
-wrong table info in unflatten, table id %d, index table id: %d
 '''
 
 ["CDC:ErrZeroLengthResponseBody"]
@@ -1724,10 +1384,5 @@ file lock conflict: %s
 ["ErrRequestForwardErr"]
 error = '''
 request forward error, an request can only forward to owner one time
-'''
-
-["ErrSortDirLockError"]
-error = '''
-error encountered when locking sort-dir
 '''
 

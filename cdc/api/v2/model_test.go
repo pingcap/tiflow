@@ -17,17 +17,65 @@ import (
 	"encoding/json"
 	"strings"
 	"testing"
+	"time"
 
 	bf "github.com/pingcap/tidb-tools/pkg/binlog-filter"
 	filter "github.com/pingcap/tidb/util/table-filter"
 	"github.com/pingcap/tiflow/pkg/config"
+	"github.com/pingcap/tiflow/pkg/redo"
 	"github.com/stretchr/testify/require"
 )
 
+// note: this is api published default value, not change it
+var defaultAPIConfig = &ReplicaConfig{
+	MemoryQuota:        config.DefaultChangefeedMemoryQuota,
+	CaseSensitive:      true,
+	EnableOldValue:     true,
+	CheckGCSafePoint:   true,
+	EnableSyncPoint:    false,
+	SyncPointInterval:  &JSONDuration{10 * time.Minute},
+	SyncPointRetention: &JSONDuration{24 * time.Hour},
+	Filter: &FilterConfig{
+		Rules: []string{"*.*"},
+	},
+	Mounter: &MounterConfig{
+		WorkerNum: 16,
+	},
+	Sink: &SinkConfig{
+		CSVConfig: &CSVConfig{
+			Quote:      string(config.DoubleQuoteChar),
+			Delimiter:  config.Comma,
+			NullString: config.NULL,
+		},
+		EncoderConcurrency:       16,
+		Terminator:               config.CRLF,
+		DateSeparator:            config.DateSeparatorNone.String(),
+		EnablePartitionSeparator: false,
+	},
+	Consistent: &ConsistentConfig{
+		Level:             "none",
+		MaxLogSize:        64,
+		FlushIntervalInMs: redo.DefaultFlushIntervalInMs,
+		Storage:           "",
+		UseFileBackend:    false,
+	},
+	Scheduler: &ChangefeedSchedulerConfig{
+		EnableTableAcrossNodes: config.GetDefaultReplicaConfig().
+			Scheduler.EnableTableAcrossNodes,
+		RegionThreshold: config.GetDefaultReplicaConfig().
+			Scheduler.RegionThreshold,
+	},
+}
+
 func TestDefaultReplicaConfig(t *testing.T) {
 	t.Parallel()
+	require.Equal(t, defaultAPIConfig, GetDefaultReplicaConfig())
 	cfg := GetDefaultReplicaConfig()
 	require.NotNil(t, cfg.Scheduler)
+	cfg2 := cfg.toInternalReplicaConfigWithOriginConfig(&config.ReplicaConfig{})
+	require.Equal(t, config.GetDefaultReplicaConfig(), cfg2)
+	cfg3 := ToAPIReplicaConfig(config.GetDefaultReplicaConfig())
+	require.Equal(t, cfg, cfg3)
 }
 
 func TestToAPIReplicaConfig(t *testing.T) {
@@ -88,7 +136,7 @@ func TestToAPIReplicaConfig(t *testing.T) {
 	}
 	cfg.Mounter = &config.MounterConfig{WorkerNum: 11}
 	cfg.Scheduler = &config.ChangefeedSchedulerConfig{
-		EnableTableAcrossNodes: true, RegionPerSpan: 10001,
+		EnableTableAcrossNodes: true, RegionThreshold: 10001,
 	}
 	cfg2 := ToAPIReplicaConfig(cfg).ToInternalReplicaConfig()
 	require.Equal(t, "", cfg2.Sink.DispatchRules[0].DispatcherRule)

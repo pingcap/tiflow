@@ -126,20 +126,6 @@ func (mr *MockOwnerMockRecorder) Tick(ctx, state interface{}) *gomock.Call {
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "Tick", reflect.TypeOf((*MockOwner)(nil).Tick), ctx, state)
 }
 
-// ValidateChangefeed mocks base method.
-func (m *MockOwner) ValidateChangefeed(info *model.ChangeFeedInfo) error {
-	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "ValidateChangefeed", info)
-	ret0, _ := ret[0].(error)
-	return ret0
-}
-
-// ValidateChangefeed indicates an expected call of ValidateChangefeed.
-func (mr *MockOwnerMockRecorder) ValidateChangefeed(info interface{}) *gomock.Call {
-	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "ValidateChangefeed", reflect.TypeOf((*MockOwner)(nil).ValidateChangefeed), info)
-}
-
 // WriteDebugInfo mocks base method.
 func (m *MockOwner) WriteDebugInfo(w io.Writer, done chan<- error) {
 	m.ctrl.T.Helper()

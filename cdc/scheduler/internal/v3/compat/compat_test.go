@@ -31,7 +31,7 @@ func TestCheckSpanReplicationEnabled(t *testing.T) {
 	c := New(&config.SchedulerConfig{
 		ChangefeedSettings: &config.ChangefeedSchedulerConfig{
 			EnableTableAcrossNodes: true,
-			RegionPerSpan:          1,
+			RegionThreshold:        1,
 		},
 	}, map[string]*model.CaptureInfo{})
 
@@ -85,7 +85,7 @@ func TestCheckSpanReplicationEnabled(t *testing.T) {
 	// Disable in config
 	c = New(&config.SchedulerConfig{
 		ChangefeedSettings: &config.ChangefeedSchedulerConfig{
-			RegionPerSpan: 0,
+			RegionThreshold: 0,
 		},
 	}, map[string]*model.CaptureInfo{
 		"a": {Version: SpanReplicationMinVersion.String()},
@@ -98,7 +98,7 @@ func TestBeforeTransportSend(t *testing.T) {
 
 	c := New(&config.SchedulerConfig{
 		ChangefeedSettings: &config.ChangefeedSchedulerConfig{
-			RegionPerSpan: 0, // Disable span replication.
+			RegionThreshold: 0, // Disable span replication.
 		},
 	}, map[string]*model.CaptureInfo{})
 	require.False(t, c.CheckSpanReplicationEnabled())
@@ -182,7 +182,7 @@ func TestAfterTransportReceive(t *testing.T) {
 
 	c := New(&config.SchedulerConfig{
 		ChangefeedSettings: &config.ChangefeedSchedulerConfig{
-			RegionPerSpan: 0, // Disable span replication.
+			RegionThreshold: 0, // Disable span replication.
 		},
 	}, map[string]*model.CaptureInfo{})
 	require.False(t, c.CheckSpanReplicationEnabled())
@@ -293,7 +293,7 @@ func TestCheckChangefeedEpochEnabled(t *testing.T) {
 	c := New(&config.SchedulerConfig{
 		ChangefeedSettings: &config.ChangefeedSchedulerConfig{
 			EnableTableAcrossNodes: true,
-			RegionPerSpan:          1,
+			RegionThreshold:        1,
 		},
 	}, map[string]*model.CaptureInfo{})
 

@@ -56,7 +56,6 @@ func TestCreateChangefeed(t *testing.T) {
 	apiV2 := NewOpenAPIV2ForTest(cp, helpers)
 	router := newRouter(apiV2)
 
-	o := mock_owner.NewMockOwner(gomock.NewController(t))
 	mockUpManager := upstream.NewManager4Test(pdClient)
 	statusProvider := &mockStatusProvider{}
 	etcdClient.EXPECT().
@@ -67,8 +66,6 @@ func TestCreateChangefeed(t *testing.T) {
 	cp.EXPECT().GetUpstreamManager().Return(mockUpManager, nil).AnyTimes()
 	cp.EXPECT().IsReady().Return(true).AnyTimes()
 	cp.EXPECT().IsOwner().Return(true).AnyTimes()
-	cp.EXPECT().GetOwner().Return(o, nil).AnyTimes()
-	o.EXPECT().ValidateChangefeed(gomock.Any()).Return(nil).AnyTimes()
 
 	// case 1: json format mismatches with the spec.
 	errConfig := struct {
@@ -477,6 +474,22 @@ func TestUpdateChangefeed(t *testing.T) {
 		fmt.Sprintf(update.url, validID), bytes.NewReader(body))
 	router.ServeHTTP(w, req)
 	require.Equal(t, http.StatusOK, w.Code)
+
+	// case 9: success with ChangeFeed.State equal to StateFailed
+	oldCfInfo.State = "failed"
+	helpers.EXPECT().
+		verifyUpdateChangefeedConfig(gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any()).
+		Return(oldCfInfo, &model.UpstreamInfo{}, nil).
+		Times(1)
+	etcdClient.EXPECT().
+		UpdateChangefeedAndUpstream(gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any()).
+		Return(nil).Times(1)
+
+	w = httptest.NewRecorder()
+	req, _ = http.NewRequestWithContext(context.Background(), update.method,
+		fmt.Sprintf(update.url, validID), bytes.NewReader(body))
+	router.ServeHTTP(w, req)
+	require.Equal(t, http.StatusOK, w.Code)
 }
 
 func TestListChangeFeeds(t *testing.T) {
@@ -838,4 +851,69 @@ func TestDeleteChangefeed(t *testing.T) {
 	require.Nil(t, err)
 	require.Contains(t, respErr.Code, "ErrReachMaxTry")
 	require.Equal(t, http.StatusInternalServerError, w.Code)
+}
+
+func TestPauseChangefeed(t *testing.T) {
+	resume := testCase{url: "/api/v2/changefeeds/%s/pause", method: "POST"}
+	helpers := NewMockAPIV2Helpers(gomock.NewController(t))
+	cp := mock_capture.NewMockCapture(gomock.NewController(t))
+	owner := mock_owner.NewMockOwner(gomock.NewController(t))
+	apiV2 := NewOpenAPIV2ForTest(cp, helpers)
+	router := newRouter(apiV2)
+
+	pdClient := &mockPDClient{}
+	etcdClient := mock_etcd.NewMockCDCEtcdClient(gomock.NewController(t))
+	mockUpManager := upstream.NewManager4Test(pdClient)
+	statusProvider := &mockStatusProvider{}
+
+	etcdClient.EXPECT().
+		GetEnsureGCServiceID(gomock.Any()).
+		Return(etcd.GcServiceIDForTest()).AnyTimes()
+	cp.EXPECT().StatusProvider().Return(statusProvider).AnyTimes()
+	cp.EXPECT().GetEtcdClient().Return(etcdClient, nil).AnyTimes()
+	cp.EXPECT().GetUpstreamManager().Return(mockUpManager, nil).AnyTimes()
+	cp.EXPECT().IsReady().Return(true).AnyTimes()
+	cp.EXPECT().IsOwner().Return(true).AnyTimes()
+	cp.EXPECT().GetOwner().Return(owner, nil).AnyTimes()
+	owner.EXPECT().EnqueueJob(gomock.Any(), gomock.Any()).
+		Do(func(adminJob model.AdminJob, done chan<- error) {
+			require.EqualValues(t, changeFeedID, adminJob.CfID)
+			require.EqualValues(t, model.AdminStop, adminJob.Type)
+			close(done)
+		}).AnyTimes()
+
+	// case 1: invalid changefeed id
+	w := httptest.NewRecorder()
+	invalidID := "@^Invalid"
+	req, _ := http.NewRequestWithContext(context.Background(),
+		resume.method, fmt.Sprintf(resume.url, invalidID), nil)
+	router.ServeHTTP(w, req)
+	respErr := model.HTTPError{}
+	err := json.NewDecoder(w.Body).Decode(&respErr)
+	require.Nil(t, err)
+	require.Contains(t, respErr.Code, "ErrAPIInvalidParam")
+
+	// case 2: failed to get changefeedInfo
+	validID := changeFeedID.ID
+	statusProvider.err = cerrors.ErrChangeFeedNotExists.GenWithStackByArgs(validID)
+	w = httptest.NewRecorder()
+	req, _ = http.NewRequestWithContext(context.Background(), resume.method,
+		fmt.Sprintf(resume.url, validID), nil)
+	router.ServeHTTP(w, req)
+	respErr = model.HTTPError{}
+	err = json.NewDecoder(w.Body).Decode(&respErr)
+	require.Nil(t, err)
+	require.Contains(t, respErr.Code, "ErrChangeFeedNotExists")
+	require.Equal(t, http.StatusBadRequest, w.Code)
+
+	// case 4: success without overwriting checkpointTs
+	statusProvider.err = nil
+	statusProvider.changefeedInfo = &model.ChangeFeedInfo{ID: validID}
+	require.Nil(t, err)
+	w = httptest.NewRecorder()
+	req, _ = http.NewRequestWithContext(context.Background(), resume.method,
+		fmt.Sprintf(resume.url, validID), nil)
+	router.ServeHTTP(w, req)
+	require.Equal(t, http.StatusOK, w.Code)
+	require.Equal(t, "{}", w.Body.String())
 }

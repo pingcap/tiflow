@@ -35,5 +35,4 @@ type DDLProducer interface {
 }
 
 // Factory is a function to create a producer.
-type Factory func(ctx context.Context, factory kafka.Factory,
-	adminClient kafka.ClusterAdminClient) (DDLProducer, error)
+type Factory func(ctx context.Context, factory kafka.Factory) (DDLProducer, error)

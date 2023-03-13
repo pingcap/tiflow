@@ -23,7 +23,6 @@ import (
 	"github.com/pingcap/tiflow/cdc/model"
 	"github.com/pingcap/tiflow/pkg/config"
 	cerror "github.com/pingcap/tiflow/pkg/errors"
-	"github.com/pingcap/tiflow/pkg/redo"
 	"github.com/pingcap/tiflow/pkg/security"
 )
 
@@ -174,7 +173,13 @@ type ReplicaConfig struct {
 
 // ToInternalReplicaConfig coverts *v2.ReplicaConfig into *config.ReplicaConfig
 func (c *ReplicaConfig) ToInternalReplicaConfig() *config.ReplicaConfig {
-	res := config.GetDefaultReplicaConfig()
+	return c.toInternalReplicaConfigWithOriginConfig(config.GetDefaultReplicaConfig())
+}
+
+// ToInternalReplicaConfigWithOriginConfig coverts *v2.ReplicaConfig into *config.ReplicaConfig
+func (c *ReplicaConfig) toInternalReplicaConfigWithOriginConfig(
+	res *config.ReplicaConfig,
+) *config.ReplicaConfig {
 	res.MemoryQuota = c.MemoryQuota
 	res.CaseSensitive = c.CaseSensitive
 	res.EnableOldValue = c.EnableOldValue
@@ -285,7 +290,7 @@ func (c *ReplicaConfig) ToInternalReplicaConfig() *config.ReplicaConfig {
 	if c.Scheduler != nil {
 		res.Scheduler = &config.ChangefeedSchedulerConfig{
 			EnableTableAcrossNodes: c.Scheduler.EnableTableAcrossNodes,
-			RegionPerSpan:          c.Scheduler.RegionPerSpan,
+			RegionThreshold:        c.Scheduler.RegionThreshold,
 		}
 	}
 	return res
@@ -404,7 +409,7 @@ func ToAPIReplicaConfig(c *config.ReplicaConfig) *ReplicaConfig {
 	if cloned.Scheduler != nil {
 		res.Scheduler = &ChangefeedSchedulerConfig{
 			EnableTableAcrossNodes: cloned.Scheduler.EnableTableAcrossNodes,
-			RegionPerSpan:          cloned.Scheduler.RegionPerSpan,
+			RegionThreshold:        cloned.Scheduler.RegionThreshold,
 		}
 	}
 	return res
@@ -412,31 +417,7 @@ func ToAPIReplicaConfig(c *config.ReplicaConfig) *ReplicaConfig {
 
 // GetDefaultReplicaConfig returns a default ReplicaConfig
 func GetDefaultReplicaConfig() *ReplicaConfig {
-	return &ReplicaConfig{
-		CaseSensitive:      true,
-		EnableOldValue:     true,
-		CheckGCSafePoint:   true,
-		EnableSyncPoint:    false,
-		SyncPointInterval:  &JSONDuration{10 * time.Second},
-		SyncPointRetention: &JSONDuration{24 * time.Hour},
-		Filter: &FilterConfig{
-			Rules: []string{"*.*"},
-		},
-		Sink: &SinkConfig{},
-		Consistent: &ConsistentConfig{
-			Level:             "none",
-			MaxLogSize:        64,
-			FlushIntervalInMs: redo.DefaultFlushIntervalInMs,
-			Storage:           "",
-			UseFileBackend:    true,
-		},
-		Scheduler: &ChangefeedSchedulerConfig{
-			EnableTableAcrossNodes: config.GetDefaultReplicaConfig().
-				Scheduler.EnableTableAcrossNodes,
-			RegionPerSpan: config.GetDefaultReplicaConfig().
-				Scheduler.RegionPerSpan,
-		},
-	}
+	return ToAPIReplicaConfig(config.GetDefaultReplicaConfig())
 }
 
 // FilterConfig represents filter config for a changefeed
@@ -586,9 +567,8 @@ type ChangefeedSchedulerConfig struct {
 	// EnableTableAcrossNodes set true to split one table to multiple spans and
 	// distribute to multiple TiCDC nodes.
 	EnableTableAcrossNodes bool `toml:"enable_table_across_nodes" json:"enable_table_across_nodes"`
-	// RegionPerSpan the number of regions in a span, must be greater than 1000.
-	// Set 0 to disable span replication.
-	RegionPerSpan int `toml:"region_per_span" json:"region_per_span"`
+	// RegionThreshold is the region count threshold of splitting a table.
+	RegionThreshold int `toml:"region_threshold" json:"region_threshold"`
 }
 
 // EtcdData contains key/value pair of etcd data
@@ -700,4 +680,12 @@ type ServerStatus struct {
 	Pid       int      `json:"pid"`
 	IsOwner   bool     `json:"is_owner"`
 	Liveness  Liveness `json:"liveness"`
+}
+
+// Capture holds common information of a capture in cdc
+type Capture struct {
+	ID            string `json:"id"`
+	IsOwner       bool   `json:"is_owner"`
+	AdvertiseAddr string `json:"address"`
+	ClusterID     string `json:"cluster_id"`
 }
