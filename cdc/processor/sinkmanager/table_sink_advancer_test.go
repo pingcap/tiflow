@@ -28,14 +28,14 @@ import (
 	"github.com/stretchr/testify/suite"
 )
 
-type advancerSuite struct {
+type tableSinkAdvancerSuite struct {
 	suite.Suite
 	testChangefeedID    model.ChangeFeedID
 	testSpan            tablepb.Span
 	defaultTestMemQuota uint64
 }
 
-func (suite *advancerSuite) SetupSuite() {
+func (suite *tableSinkAdvancerSuite) SetupSuite() {
 	requestMemSize = 256
 	maxUpdateIntervalSize = 512
 	suite.testChangefeedID = model.DefaultChangeFeedID("1")
@@ -43,7 +43,7 @@ func (suite *advancerSuite) SetupSuite() {
 	suite.defaultTestMemQuota = 1024
 }
 
-func (suite *advancerSuite) SetupTest() {
+func (suite *tableSinkAdvancerSuite) SetupTest() {
 	// reset batchID
 	// We set batchID to 1 because we want to test the case that
 	// the first batchID is 1. Normally, the first batchID should
@@ -51,16 +51,16 @@ func (suite *advancerSuite) SetupTest() {
 	batchID.Store(1)
 }
 
-func (suite *advancerSuite) TearDownSuite() {
+func (suite *tableSinkAdvancerSuite) TearDownSuite() {
 	requestMemSize = defaultRequestMemSize
 	maxUpdateIntervalSize = defaultMaxUpdateIntervalSize
 }
 
-func TestAdvancerSuite(t *testing.T) {
-	suite.Run(t, new(advancerSuite))
+func TestTableSinkAdvancerSuite(t *testing.T) {
+	suite.Run(t, new(tableSinkAdvancerSuite))
 }
 
-func (suite *advancerSuite) genSinkTask() (*sinkTask, *mockSink) {
+func (suite *tableSinkAdvancerSuite) genSinkTask() (*sinkTask, *mockSink) {
 	wrapper, sink := createTableSinkWrapper(suite.testChangefeedID, suite.testSpan)
 	task := &sinkTask{
 		span:      suite.testSpan,
@@ -70,14 +70,14 @@ func (suite *advancerSuite) genSinkTask() (*sinkTask, *mockSink) {
 	return task, sink
 }
 
-func (suite *advancerSuite) genMemQuota(initMemQuota uint64) *memquota.MemQuota {
+func (suite *tableSinkAdvancerSuite) genMemQuota(initMemQuota uint64) *memquota.MemQuota {
 	memoryQuota := memquota.NewMemQuota(suite.testChangefeedID, suite.defaultTestMemQuota, "sink")
 	memoryQuota.ForceAcquire(initMemQuota)
 	memoryQuota.AddTable(suite.testSpan)
 	return memoryQuota
 }
 
-func (suite *advancerSuite) TestNeedEmitAndAdvance() {
+func (suite *tableSinkAdvancerSuite) TestNeedEmitAndAdvance() {
 	for _, tc := range []struct {
 		name             string
 		splitTxn         bool
@@ -123,7 +123,7 @@ func (suite *advancerSuite) TestNeedEmitAndAdvance() {
 	}
 }
 
-func (suite *advancerSuite) TestAdvanceTableSinkWithBatchID() {
+func (suite *tableSinkAdvancerSuite) TestAdvanceTableSinkWithBatchID() {
 	task, _ := suite.genSinkTask()
 	memoryQuota := suite.genMemQuota(512)
 	defer memoryQuota.Close()
@@ -139,7 +139,7 @@ func (suite *advancerSuite) TestAdvanceTableSinkWithBatchID() {
 	require.Equal(suite.T(), expectedResolvedTs, task.tableSink.getCheckpointTs())
 }
 
-func (suite *advancerSuite) TestAdvanceTableSink() {
+func (suite *tableSinkAdvancerSuite) TestAdvanceTableSink() {
 	task, _ := suite.genSinkTask()
 	memoryQuota := suite.genMemQuota(512)
 	defer memoryQuota.Close()
@@ -153,7 +153,7 @@ func (suite *advancerSuite) TestAdvanceTableSink() {
 	require.Equal(suite.T(), expectedResolvedTs, task.tableSink.getCheckpointTs())
 }
 
-func (suite *advancerSuite) TestNewTableSinkAdvancer() {
+func (suite *tableSinkAdvancerSuite) TestNewTableSinkAdvancer() {
 	task, _ := suite.genSinkTask()
 	memoryQuota := suite.genMemQuota(512)
 	defer memoryQuota.Close()
@@ -162,7 +162,7 @@ func (suite *advancerSuite) TestNewTableSinkAdvancer() {
 	require.Equal(suite.T(), uint64(512), advancer.availableMem)
 }
 
-func (suite *advancerSuite) TestHasEnoughMem() {
+func (suite *tableSinkAdvancerSuite) TestHasEnoughMem() {
 	memoryQuota := suite.genMemQuota(512)
 	defer memoryQuota.Close()
 	task, _ := suite.genSinkTask()
@@ -177,7 +177,7 @@ func (suite *advancerSuite) TestHasEnoughMem() {
 		"hasEnoughMem should return false when usedMem > availableMem")
 }
 
-func (suite *advancerSuite) TestCleanup() {
+func (suite *tableSinkAdvancerSuite) TestCleanup() {
 	memoryQuota := suite.genMemQuota(512)
 	defer memoryQuota.Close()
 	task, _ := suite.genSinkTask()
@@ -191,7 +191,7 @@ func (suite *advancerSuite) TestCleanup() {
 		"memory quota should be released after cleanup")
 }
 
-func (suite *advancerSuite) TestAppendEvents() {
+func (suite *tableSinkAdvancerSuite) TestAppendEvents() {
 	memoryQuota := suite.genMemQuota(512)
 	defer memoryQuota.Close()
 	task, _ := suite.genSinkTask()
@@ -201,12 +201,13 @@ func (suite *advancerSuite) TestAppendEvents() {
 	for i := 0; i < 2; i++ {
 		advancer.appendEvents([]*model.RowChangedEvent{{}}, 256)
 	}
+	require.Equal(suite.T(), uint64(512), advancer.pendingTxnSize)
 	require.Equal(suite.T(), uint64(512), advancer.usedMem)
 	require.False(suite.T(), advancer.hasEnoughMem())
 	require.Len(suite.T(), advancer.events, 2)
 }
 
-func (suite *advancerSuite) TestTryMoveMoveToNextTxn() {
+func (suite *tableSinkAdvancerSuite) TestTryMoveMoveToNextTxn() {
 	memoryQuota := suite.genMemQuota(512)
 	defer memoryQuota.Close()
 	task, _ := suite.genSinkTask()
@@ -253,7 +254,7 @@ func (suite *advancerSuite) TestTryMoveMoveToNextTxn() {
 // Test Scenario:
 // When we meet a commit fence, we should flush all the events and advance the
 // table sink with the commit ts of the commit fence.
-func (suite *advancerSuite) TestAdvanceTheSameCommitTsEventsWithCommitFence() {
+func (suite *tableSinkAdvancerSuite) TestAdvanceTheSameCommitTsEventsWithCommitFence() {
 	memoryQuota := suite.genMemQuota(768)
 	defer memoryQuota.Close()
 	task, sink := suite.genSinkTask()
@@ -296,7 +297,7 @@ func (suite *advancerSuite) TestAdvanceTheSameCommitTsEventsWithCommitFence() {
 // Test Scenario:
 // When we do not meet a commit fence, we should flush all the events and advance the
 // table sink with the commit ts and batch ID.
-func (suite *advancerSuite) TestAdvanceTheSameCommitTsEventsWithoutCommitFence() {
+func (suite *tableSinkAdvancerSuite) TestAdvanceTheSameCommitTsEventsWithoutCommitFence() {
 	memoryQuota := suite.genMemQuota(768)
 	defer memoryQuota.Close()
 	task, sink := suite.genSinkTask()
@@ -344,7 +345,7 @@ func (suite *advancerSuite) TestAdvanceTheSameCommitTsEventsWithoutCommitFence()
 // When we meet a different commit ts event, and we support split txn,
 // we should flush all the events and advance the
 // table sink with the current commit ts and batch ID.
-func (suite *advancerSuite) TestAdvanceDifferentCommitTsEventsWithSplitTxn() {
+func (suite *tableSinkAdvancerSuite) TestAdvanceDifferentCommitTsEventsWithSplitTxn() {
 	memoryQuota := suite.genMemQuota(768)
 	defer memoryQuota.Close()
 	task, sink := suite.genSinkTask()
@@ -394,7 +395,7 @@ func (suite *advancerSuite) TestAdvanceDifferentCommitTsEventsWithSplitTxn() {
 // When we meet a different commit ts event, and we do **not** support split txn,
 // we should flush all the events and advance the
 // table sink with the current commit of the last event.
-func (suite *advancerSuite) TestAdvanceDifferentCommitTsEventsWithoutSplitTxn() {
+func (suite *tableSinkAdvancerSuite) TestAdvanceDifferentCommitTsEventsWithoutSplitTxn() {
 	memoryQuota := suite.genMemQuota(768)
 	defer memoryQuota.Close()
 	task, sink := suite.genSinkTask()
@@ -449,7 +450,7 @@ func (suite *advancerSuite) TestAdvanceDifferentCommitTsEventsWithoutSplitTxn() 
 // we should flush all the events and advance the
 // table sink with the current commit of the last event. Also we should clear the
 // pending txn size.
-func (suite *advancerSuite) TestLastTimeAdvanceDifferentCommitTsEventsWithoutSplitTxn() {
+func (suite *tableSinkAdvancerSuite) TestLastTimeAdvanceDifferentCommitTsEventsWithoutSplitTxn() {
 	memoryQuota := suite.genMemQuota(768)
 	defer memoryQuota.Close()
 	task, sink := suite.genSinkTask()
@@ -505,7 +506,7 @@ func (suite *advancerSuite) TestLastTimeAdvanceDifferentCommitTsEventsWithoutSpl
 // We receive some events and exceed the available memory quota.
 // We should advance the table sink and also make up the difference
 // between the available memory quota and the used memory quota.
-func (suite *advancerSuite) TestTryAdvanceWhenExceedAvailableMem() {
+func (suite *tableSinkAdvancerSuite) TestTryAdvanceWhenExceedAvailableMem() {
 	memoryQuota := suite.genMemQuota(768)
 	defer memoryQuota.Close()
 	task, sink := suite.genSinkTask()
@@ -559,7 +560,7 @@ func (suite *advancerSuite) TestTryAdvanceWhenExceedAvailableMem() {
 // Test Scenario:
 // We receive some events and reach the max update interval size.
 // We should advance the table sink.
-func (suite *advancerSuite) TestTryAdvanceWhenReachTheMaxUpdateIntervalSizeAndTxnNotFinished() {
+func (suite *tableSinkAdvancerSuite) TestTryAdvanceWhenReachTheMaxUpdateIntSizeAndTxnNotFinished() {
 	memoryQuota := suite.genMemQuota(768)
 	defer memoryQuota.Close()
 	task, sink := suite.genSinkTask()
@@ -608,7 +609,7 @@ func (suite *advancerSuite) TestTryAdvanceWhenReachTheMaxUpdateIntervalSizeAndTx
 // Test Scenario:
 // We receive some events and the task is finished.
 // We should advance the table sink.
-func (suite *advancerSuite) TestFinish() {
+func (suite *tableSinkAdvancerSuite) TestFinish() {
 	memoryQuota := suite.genMemQuota(768)
 	defer memoryQuota.Close()
 	task, sink := suite.genSinkTask()
@@ -660,7 +661,7 @@ func (suite *advancerSuite) TestFinish() {
 // Test Scenario:
 // We receive some events and do not support split txn.
 // We should advance the table sink and force acquire memory for next txn.
-func (suite *advancerSuite) TestTryAdvanceAndForceAcquireWithoutSplitTxn() {
+func (suite *tableSinkAdvancerSuite) TestTryAdvanceAndForceAcquireWithoutSplitTxn() {
 	memoryQuota := suite.genMemQuota(768)
 	defer memoryQuota.Close()
 	task, sink := suite.genSinkTask()
@@ -709,7 +710,7 @@ func (suite *advancerSuite) TestTryAdvanceAndForceAcquireWithoutSplitTxn() {
 // Test Scenario:
 // We receive some events and support split txn.
 // We should advance the table sink and block acquire memory for next txn.
-func (suite *advancerSuite) TestTryAdvanceAndBlockAcquireWithSplitTxn() {
+func (suite *tableSinkAdvancerSuite) TestTryAdvanceAndBlockAcquireWithSplitTxn() {
 	memoryQuota := suite.genMemQuota(768)
 	defer memoryQuota.Close()
 	task, sink := suite.genSinkTask()
