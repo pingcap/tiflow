@@ -1273,7 +1273,7 @@ func TestFormatColVal(t *testing.T) {
 
 	var datum types.Datum
 	datum.SetFloat32(123.99)
-	
+
 	ftTypeFloatNotNull := types.NewFieldType(mysql.TypeFloat)
 	ftTypeFloatNotNull.SetFlag(mysql.NotNullFlag)
 
