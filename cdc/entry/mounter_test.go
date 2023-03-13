@@ -16,6 +16,7 @@ package entry
 import (
 	"bytes"
 	"context"
+	"math"
 	"strings"
 	"testing"
 	"time"
@@ -1271,15 +1272,32 @@ func TestNewDMRowChange(t *testing.T) {
 func TestFormatColVal(t *testing.T) {
 	t.Parallel()
 
-	var datum types.Datum
-	datum.SetFloat32(123.99)
-
 	ftTypeFloatNotNull := types.NewFieldType(mysql.TypeFloat)
 	ftTypeFloatNotNull.SetFlag(mysql.NotNullFlag)
-
 	col := &timodel.ColumnInfo{FieldType: *ftTypeFloatNotNull}
 
+	var datum types.Datum
+
+	datum.SetFloat32(123.99)
 	value, _, _, err := formatColVal(datum, col)
 	require.NoError(t, err)
 	require.EqualValues(t, float32(123.99), value)
+
+	datum.SetFloat32(float32(math.NaN()))
+	value, _, warn, err := formatColVal(datum, col)
+	require.NoError(t, err)
+	require.Equal(t, float32(0), value)
+	require.NotZero(t, warn)
+
+	datum.SetFloat32(float32(math.Inf(1)))
+	value, _, warn, err = formatColVal(datum, col)
+	require.NoError(t, err)
+	require.Equal(t, float32(0), value)
+	require.NotZero(t, warn)
+
+	datum.SetFloat32(float32(math.Inf(-1)))
+	value, _, warn, err = formatColVal(datum, col)
+	require.NoError(t, err)
+	require.Equal(t, float32(0), value)
+	require.NotZero(t, warn)
 }
