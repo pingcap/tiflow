@@ -23,7 +23,10 @@ import (
 
 	"github.com/pingcap/errors"
 	"github.com/pingcap/tiflow/cdc/entry"
+	"github.com/pingcap/tiflow/cdc/entry/schema"
 	"github.com/pingcap/tiflow/cdc/model"
+	"github.com/pingcap/tiflow/cdc/processor/sinkmanager"
+	"github.com/pingcap/tiflow/cdc/processor/tablepb"
 	"github.com/pingcap/tiflow/cdc/redo"
 	"github.com/pingcap/tiflow/cdc/scheduler"
 	"github.com/pingcap/tiflow/pkg/config"
@@ -36,8 +39,6 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
-// processor needs to implement TableExecutor.
-
 func newProcessor4Test(
 	t *testing.T,
 	state *orchestrator.ChangefeedReactorState,
@@ -45,21 +46,36 @@ func newProcessor4Test(
 	liveness *model.Liveness,
 	cfg *config.SchedulerConfig,
 ) *processor {
-	up := upstream.NewUpstream4Test(nil)
+	changefeedID := model.ChangeFeedID4Test("processor-test", "processor-test")
+	up := upstream.NewUpstream4Test(&sinkmanager.MockPD{})
 	p := newProcessor(
 		state,
 		captureInfo,
-		model.ChangeFeedID4Test("processor-test", "processor-test"), up, liveness, 0, cfg)
+		changefeedID, up, liveness, 0, cfg)
 	p.lazyInit = func(ctx cdcContext.Context) error {
+		if p.initialized {
+			return nil
+		}
 		p.agent = &mockAgent{executor: p}
+		sinkManager, sourceManger, _ := sinkmanager.CreateManagerWithMemEngine(
+			t,
+			ctx,
+			changefeedID,
+			state.Info,
+			nil,
+		)
+		p.sinkManager = sinkManager
+		p.sourceManager = sourceManger
+		p.sourceManager.OnResolve(p.sinkManager.UpdateReceivedSorterResolvedTs)
+		p.initialized = true
 		return nil
 	}
+
 	p.redoDMLMgr = redo.NewDisabledDMLManager()
 	p.schemaStorage = &mockSchemaStorage{t: t, resolvedTs: math.MaxUint64}
 	return p
 }
 
-//nolint:unused
 func initProcessor4Test(
 	ctx cdcContext.Context, t *testing.T, liveness *model.Liveness,
 ) (*processor, *orchestrator.ReactorStateTester) {
@@ -139,6 +155,10 @@ func (s *mockSchemaStorage) DoGC(ts uint64) uint64 {
 	return ts
 }
 
+func (s *mockSchemaStorage) GetLastSnapshot() *schema.Snapshot {
+	return schema.NewEmptySnapshot(false)
+}
+
 type mockAgent struct {
 	// dummy to satisfy the interface
 	scheduler.Agent
@@ -161,14 +181,12 @@ func (a *mockAgent) Close() error {
 }
 
 func TestTableExecutorAddingTableIndirectly(t *testing.T) {
-	t.Skip("FIXME: Use pull-based-sink")
 	ctx := cdcContext.NewBackendContext4Test(true)
 	liveness := model.LivenessCaptureAlive
 	p, tester := initProcessor4Test(ctx, t, &liveness)
 
-	var err error
 	// init tick
-	err = p.Tick(ctx)
+	err := p.Tick(ctx)
 	require.Nil(t, err)
 	tester.MustApplyPatches()
 	p.changefeed.PatchStatus(func(status *model.ChangeFeedStatus) (*model.ChangeFeedStatus, bool, error) {
@@ -184,51 +202,68 @@ func TestTableExecutorAddingTableIndirectly(t *testing.T) {
 	tester.MustApplyPatches()
 
 	// table-1: `preparing` -> `prepared` -> `replicating`
-	ok, err := p.AddTableSpan(ctx, spanz.TableIDToComparableSpan(1), 20, true)
+	span := spanz.TableIDToComparableSpan(1)
+	ok, err := p.AddTableSpan(ctx, span, 20, true)
 	require.NoError(t, err)
 	require.True(t, ok)
 
-	//table1 := p.tableSpans.GetV(spanz.TableIDToComparableSpan(1)).(*mockTablePipeline)
-	//require.Equal(t, model.Ts(20), table1.resolvedTs)
-	//require.Equal(t, model.Ts(20), table1.checkpointTs)
-	//require.Equal(t, model.Ts(0), table1.sinkStartTs)
-	//
-	//require.Equal(t, 1, p.tableSpans.Len())
+	stats := p.sinkManager.GetTableStats(span)
+	require.Equal(t, model.Ts(20), stats.CheckpointTs)
+	require.Equal(t, model.Ts(20), stats.BarrierTs)
+	require.Equal(t, model.Ts(0), stats.ReceivedMaxCommitTs)
+	require.Equal(t, model.Ts(20), stats.ReceivedMaxResolvedTs)
+	require.Len(t, p.sinkManager.GetAllCurrentTableSpans(), 1)
 
 	done := p.IsAddTableSpanFinished(spanz.TableIDToComparableSpan(1), true)
 	require.False(t, done)
-	// require.Equal(t, tablepb.TableStatePreparing, table1.State())
+	state, ok := p.sinkManager.GetTableState(span)
+	require.True(t, ok)
+	require.Equal(t, tablepb.TableStatePreparing, state)
 
-	//// push the resolved ts, mock that sorterNode receive first resolved event
-	//table1.resolvedTs = 101
+	// Push the resolved ts, mock that sorterNode receive first resolved event.
+	p.sourceManager.Add(
+		span,
+		[]*model.PolymorphicEvent{{
+			CRTs: 101,
+			RawKV: &model.RawKVEntry{
+				OpType: model.OpTypeResolved,
+				CRTs:   101,
+			},
+		}}...,
+	)
 
 	err = p.Tick(ctx)
 	require.Nil(t, err)
 	tester.MustApplyPatches()
 
-	done = p.IsAddTableSpanFinished(spanz.TableIDToComparableSpan(1), true)
+	done = p.IsAddTableSpanFinished(span, true)
 	require.True(t, done)
-	// require.Equal(t, tablepb.TableStatePrepared, table1.State())
+	state, ok = p.sinkManager.GetTableState(span)
+	require.True(t, ok)
+	require.Equal(t, tablepb.TableStatePrepared, state)
 
 	ok, err = p.AddTableSpan(ctx, spanz.TableIDToComparableSpan(1), 30, true)
 	require.NoError(t, err)
 	require.True(t, ok)
-	// require.Equal(t, model.Ts(0), table1.sinkStartTs)
+	stats = p.sinkManager.GetTableStats(span)
+	require.Equal(t, model.Ts(20), stats.CheckpointTs)
+	require.Equal(t, model.Ts(20), stats.BarrierTs)
+	require.Equal(t, model.Ts(0), stats.ReceivedMaxCommitTs)
+	require.Equal(t, model.Ts(101), stats.ReceivedMaxResolvedTs)
 
+	// Start to replicate table-1.
 	ok, err = p.AddTableSpan(ctx, spanz.TableIDToComparableSpan(1), 30, false)
 	require.NoError(t, err)
 	require.True(t, ok)
-	// require.Equal(t, model.Ts(30), table1.sinkStartTs)
-
-	// table1.checkpointTs = 60
 
 	err = p.Tick(ctx)
 	require.Nil(t, err)
 	tester.MustApplyPatches()
 
-	done = p.IsAddTableSpanFinished(spanz.TableIDToComparableSpan(1), false)
-	require.True(t, done)
-	// require.Equal(t, tablepb.TableStateReplicating, table1.State())
+	// table-1: `prepared` -> `replicating`
+	state, ok = p.sinkManager.GetTableState(span)
+	require.True(t, ok)
+	require.Equal(t, tablepb.TableStateReplicating, state)
 
 	err = p.Close(ctx)
 	require.Nil(t, err)
