@@ -169,9 +169,9 @@ func (s *testCheckpointSuite) testGlobalCheckPoint(c *C, cp CheckPoint) {
 	s.mock.ExpectExec("(162)?"+flushCheckPointSQL).WithArgs(cpid, "", "", pos1.Name, pos1.Pos, "", "", 0, "", "null", true).WillReturnResult(sqlmock.NewResult(0, 1))
 	s.mock.ExpectCommit()
 	// Create a new snapshot, and discard it, then create a new snapshot again.
-	snap := cp.Snapshot(true)
+	cp.Snapshot(true)
 	cp.DiscardPendingSnapshots()
-	snap = cp.Snapshot(true)
+	snap := cp.Snapshot(true)
 	err = cp.FlushPointsExcept(tctx, snap.id, nil, nil, nil)
 	c.Assert(err, IsNil)
 	c.Assert(cp.GlobalPoint().Position, Equals, pos1)
