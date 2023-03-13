@@ -16,7 +16,9 @@ package keyspan
 import (
 	"bytes"
 
+	"github.com/pingcap/tiflow/cdc/model"
 	"github.com/pingcap/tiflow/cdc/processor/tablepb"
+	"github.com/pingcap/tiflow/pkg/config"
 	"github.com/pingcap/tiflow/pkg/spanz"
 	"github.com/tikv/client-go/v2/tikv"
 )
@@ -32,16 +34,16 @@ type RegionCache interface {
 	LocateRegionByID(bo *tikv.Backoffer, regionID uint64) (*tikv.KeyLocation, error)
 }
 
-// MockCache mocks tikv.RegionCache.
-type MockCache struct {
+// mockCache mocks tikv.RegionCache.
+type mockCache struct {
 	regions *spanz.BtreeMap[uint64]
 }
 
 // NewMockRegionCache returns a new MockCache.
-func NewMockRegionCache() *MockCache { return &MockCache{regions: spanz.NewBtreeMap[uint64]()} }
+func NewMockRegionCache() *mockCache { return &mockCache{regions: spanz.NewBtreeMap[uint64]()} }
 
 // ListRegionIDsInKeyRange lists ids of regions in [startKey,endKey].
-func (m *MockCache) ListRegionIDsInKeyRange(
+func (m *mockCache) ListRegionIDsInKeyRange(
 	bo *tikv.Backoffer, startKey, endKey []byte,
 ) (regionIDs []uint64, err error) {
 	m.regions.Ascend(func(loc tablepb.Span, id uint64) bool {
@@ -56,7 +58,7 @@ func (m *MockCache) ListRegionIDsInKeyRange(
 }
 
 // LocateRegionByID searches for the region with ID.
-func (m *MockCache) LocateRegionByID(
+func (m *mockCache) LocateRegionByID(
 	bo *tikv.Backoffer, regionID uint64,
 ) (loc *tikv.KeyLocation, err error) {
 	m.regions.Ascend(func(span tablepb.Span, id uint64) bool {
@@ -70,4 +72,15 @@ func (m *MockCache) LocateRegionByID(
 		return false
 	})
 	return
+}
+
+// NewReconcilerForTests returns a Reconciler.
+func NewReconcilerForTests(
+	cache RegionCache, config *config.ChangefeedSchedulerConfig,
+) *Reconciler {
+	return &Reconciler{
+		tableSpans: make(map[int64]splittedSpans),
+		config:     config,
+		splitter:   newRegionCountSplitter(model.ChangeFeedID{}, cache),
+	}
 }
