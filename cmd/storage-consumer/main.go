@@ -360,10 +360,6 @@ func (c *consumer) getNewFiles(ctx context.Context) (map[dmlPathKey]fileIndexRan
 		var fileIdx uint64
 		var err error
 
-		if strings.HasSuffix(path, "metadata") {
-			return nil
-		}
-
 		if strings.HasSuffix(path, "schema.json") {
 			err = schemaKey.parseSchemaFilePath(path)
 			if err != nil {
@@ -389,13 +385,16 @@ func (c *consumer) getNewFiles(ctx context.Context) (map[dmlPathKey]fileIndexRan
 			dmlkey.schemaPathKey = schemaKey
 			dmlkey.partitionNum = fakePartitionNumForSchemaFile
 			dmlkey.date = ""
-		} else {
+		} else if strings.HasSuffix(path, c.fileExtension) {
 			fileIdx, err = dmlkey.parseDMLFilePath(c.replicationCfg.Sink.DateSeparator, path)
 			if err != nil {
 				log.Error("failed to parse dml file path", zap.Error(err))
 				// skip handling this file
 				return nil
 			}
+		} else {
+			log.Debug("ignore handling file", zap.String("path", path))
+			return nil
 		}
 
 		if _, ok := c.tableDMLIdxMap[dmlkey]; !ok || fileIdx >= c.tableDMLIdxMap[dmlkey] {
