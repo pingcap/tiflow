@@ -699,7 +699,7 @@ func (s *mysqlBackend) execDMLWithMaxRetries(pctx context.Context, dmls *prepare
 	}
 
 	start := time.Now()
-	exceedMaxPacket := false
+	fallbackToSeqWay := false
 	return retry.Do(pctx, func() error {
 		writeTimeout, _ := time.ParseDuration(s.cfg.WriteTimeout)
 		writeTimeout += networkDriftDuration
@@ -724,10 +724,12 @@ func (s *mysqlBackend) execDMLWithMaxRetries(pctx context.Context, dmls *prepare
 			// If interplated SQL size exceeds maxAllowPacket, mysql driver will
 			// fall back to the sequantial way.
 			// error can be ErrPrepareMulti, ErrBadConn etc.
-			if s.cfg.MultiStmtEnable && !exceedMaxPacket {
+			// TODO: add a quick path to check whether we should fallback to
+			// the sequence way.
+			if s.cfg.MultiStmtEnable && !fallbackToSeqWay {
 				err = s.multiStmtExecute(pctx, dmls, tx, writeTimeout)
 				if err != nil {
-					exceedMaxPacket = true
+					fallbackToSeqWay = true
 					return 0, err
 				}
 			} else {
