@@ -66,12 +66,11 @@ func (mr *MockCaptureMockRecorder) Drain() *gomock.Call {
 }
 
 // GetEtcdClient mocks base method.
-func (m *MockCapture) GetEtcdClient() (etcd.CDCEtcdClient, error) {
+func (m *MockCapture) GetEtcdClient() etcd.CDCEtcdClient {
 	m.ctrl.T.Helper()
 	ret := m.ctrl.Call(m, "GetEtcdClient")
 	ret0, _ := ret[0].(etcd.CDCEtcdClient)
-	ret1, _ := ret[1].(error)
-	return ret0, ret1
+	return ret0
 }
 
 // GetEtcdClient indicates an expected call of GetEtcdClient.
