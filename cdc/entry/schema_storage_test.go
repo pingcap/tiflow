@@ -50,7 +50,7 @@ func TestSchema(t *testing.T) {
 	// `createSchema` job1
 	job := &timodel.Job{
 		ID:         3,
-		State:      timodel.JobStateSynced,
+		State:      timodel.JobStateDone,
 		SchemaID:   1,
 		Type:       timodel.ActionCreateSchema,
 		BinlogInfo: &timodel.HistoryInfo{SchemaVersion: 1, DBInfo: dbInfo, FinishedTS: 123},
@@ -66,7 +66,7 @@ func TestSchema(t *testing.T) {
 	// test drop schema
 	job = &timodel.Job{
 		ID:         6,
-		State:      timodel.JobStateSynced,
+		State:      timodel.JobStateDone,
 		SchemaID:   1,
 		Type:       timodel.ActionDropSchema,
 		BinlogInfo: &timodel.HistoryInfo{SchemaVersion: 3, DBInfo: dbInfo, FinishedTS: 124},
@@ -79,7 +79,7 @@ func TestSchema(t *testing.T) {
 
 	job = &timodel.Job{
 		ID:         3,
-		State:      timodel.JobStateSynced,
+		State:      timodel.JobStateDone,
 		SchemaID:   1,
 		Type:       timodel.ActionCreateSchema,
 		BinlogInfo: &timodel.HistoryInfo{SchemaVersion: 2, DBInfo: dbInfo, FinishedTS: 124},
@@ -94,7 +94,7 @@ func TestSchema(t *testing.T) {
 	// test schema drop schema error
 	job = &timodel.Job{
 		ID:         9,
-		State:      timodel.JobStateSynced,
+		State:      timodel.JobStateDone,
 		SchemaID:   1,
 		Type:       timodel.ActionDropSchema,
 		BinlogInfo: &timodel.HistoryInfo{SchemaVersion: 1, DBInfo: dbInfo, FinishedTS: 123},
@@ -151,7 +151,7 @@ func TestTable(t *testing.T) {
 	// `createSchema` job
 	job := &timodel.Job{
 		ID:         5,
-		State:      timodel.JobStateSynced,
+		State:      timodel.JobStateDone,
 		SchemaID:   3,
 		Type:       timodel.ActionCreateSchema,
 		BinlogInfo: &timodel.HistoryInfo{SchemaVersion: 1, DBInfo: dbInfo, FinishedTS: 123},
@@ -162,7 +162,7 @@ func TestTable(t *testing.T) {
 	// `createTable` job
 	job = &timodel.Job{
 		ID:         6,
-		State:      timodel.JobStateSynced,
+		State:      timodel.JobStateDone,
 		SchemaID:   3,
 		TableID:    2,
 		Type:       timodel.ActionCreateTable,
@@ -175,7 +175,7 @@ func TestTable(t *testing.T) {
 	tblInfo.Columns = []*timodel.ColumnInfo{colInfo}
 	job = &timodel.Job{
 		ID:         7,
-		State:      timodel.JobStateSynced,
+		State:      timodel.JobStateDone,
 		SchemaID:   3,
 		TableID:    2,
 		Type:       timodel.ActionAddColumn,
@@ -189,7 +189,7 @@ func TestTable(t *testing.T) {
 	tblInfo.Indices = []*timodel.IndexInfo{idxInfo}
 	job = &timodel.Job{
 		ID:         8,
-		State:      timodel.JobStateSynced,
+		State:      timodel.JobStateDone,
 		SchemaID:   3,
 		TableID:    2,
 		Type:       timodel.ActionAddIndex,
@@ -225,7 +225,7 @@ func TestTable(t *testing.T) {
 	}
 	job = &timodel.Job{
 		ID:         9,
-		State:      timodel.JobStateSynced,
+		State:      timodel.JobStateDone,
 		SchemaID:   3,
 		TableID:    2,
 		Type:       timodel.ActionTruncateTable,
@@ -252,7 +252,7 @@ func TestTable(t *testing.T) {
 	// check drop table
 	job = &timodel.Job{
 		ID:         9,
-		State:      timodel.JobStateSynced,
+		State:      timodel.JobStateDone,
 		SchemaID:   3,
 		TableID:    9,
 		Type:       timodel.ActionDropTable,
@@ -276,7 +276,7 @@ func TestTable(t *testing.T) {
 	// drop schema
 	job = &timodel.Job{
 		ID:         10,
-		State:      timodel.JobStateSynced,
+		State:      timodel.JobStateDone,
 		SchemaID:   3,
 		Type:       timodel.ActionDropSchema,
 		BinlogInfo: &timodel.HistoryInfo{SchemaVersion: 7, FinishedTS: 129},
@@ -398,7 +398,7 @@ func TestHandleRenameTables(t *testing.T) {
 		}
 		job := &timodel.Job{
 			ID:         i,
-			State:      timodel.JobStateSynced,
+			State:      timodel.JobStateDone,
 			SchemaID:   i,
 			Type:       timodel.ActionCreateSchema,
 			BinlogInfo: &timodel.HistoryInfo{SchemaVersion: i, DBInfo: dbInfo, FinishedTS: uint64(i)},
@@ -415,7 +415,7 @@ func TestHandleRenameTables(t *testing.T) {
 		}
 		job := &timodel.Job{
 			ID:         i,
-			State:      timodel.JobStateSynced,
+			State:      timodel.JobStateDone,
 			SchemaID:   i,
 			TableID:    10 + i,
 			Type:       timodel.ActionCreateTable,
@@ -492,7 +492,7 @@ func TestMultiVersionStorage(t *testing.T) {
 	// `createSchema` job1
 	job := &timodel.Job{
 		ID:         13,
-		State:      timodel.JobStateSynced,
+		State:      timodel.JobStateDone,
 		SchemaID:   11,
 		Type:       timodel.ActionCreateSchema,
 		BinlogInfo: &timodel.HistoryInfo{SchemaVersion: 1, DBInfo: dbInfo, FinishedTS: 100},
@@ -510,7 +510,7 @@ func TestMultiVersionStorage(t *testing.T) {
 	// `createTable` job
 	job = &timodel.Job{
 		ID:         16,
-		State:      timodel.JobStateSynced,
+		State:      timodel.JobStateDone,
 		SchemaID:   11,
 		TableID:    12,
 		Type:       timodel.ActionCreateTable,
@@ -530,7 +530,7 @@ func TestMultiVersionStorage(t *testing.T) {
 	// `createTable` job
 	job = &timodel.Job{
 		ID:         16,
-		State:      timodel.JobStateSynced,
+		State:      timodel.JobStateDone,
 		SchemaID:   11,
 		TableID:    13,
 		Type:       timodel.ActionCreateTable,
@@ -549,7 +549,7 @@ func TestMultiVersionStorage(t *testing.T) {
 	// `dropTable` job
 	job = &timodel.Job{
 		ID:         16,
-		State:      timodel.JobStateSynced,
+		State:      timodel.JobStateDone,
 		SchemaID:   11,
 		TableID:    12,
 		Type:       timodel.ActionDropTable,
@@ -562,7 +562,7 @@ func TestMultiVersionStorage(t *testing.T) {
 	// `dropSchema` job
 	job = &timodel.Job{
 		ID:         16,
-		State:      timodel.JobStateSynced,
+		State:      timodel.JobStateDone,
 		SchemaID:   11,
 		Type:       timodel.ActionDropSchema,
 		BinlogInfo: &timodel.HistoryInfo{SchemaVersion: 5, FinishedTS: 140, DBInfo: dbInfo},
@@ -618,7 +618,7 @@ func TestMultiVersionStorage(t *testing.T) {
 	require.False(t, exist)
 
 	lastSchemaTs := storage.DoGC(0)
-	// Snapshot.InitConcurrentDDLTables will create a schema with ts = 1
+	// Snapshot.InitPreExistingTables will create a schema with ts = 1
 	require.Equal(t, uint64(1), lastSchemaTs)
 
 	snap, err = storage.GetSnapshot(ctx, 100)
@@ -729,12 +729,21 @@ func TestExplicitTables(t *testing.T) {
 	snap3, err := schema.NewSnapshotFromMeta(meta2, ver2.Ver, true /* forceReplicate */)
 	require.Nil(t, err)
 
-	require.Equal(t, snap2.TableCount(true)-snap1.TableCount(true), 5)
-	// some system tables are also ineligible
-	require.GreaterOrEqual(t, snap2.TableCount(false), 4)
+	// we don't need to count system tables since TiCDC
+	// don't replicate them and TiDB change them frequently,
+	// so we don't need to consider them in the table count
+	systemTablesFilter := func(dbName, tableName string) bool {
+		return dbName != "mysql" && dbName != "information_schema"
+	}
+	require.Equal(t, 5, snap2.TableCount(true,
+		systemTablesFilter)-snap1.TableCount(true, systemTablesFilter))
+	// only test simple_test1 included
+	require.Equal(t, 1, snap2.TableCount(false, systemTablesFilter))
 
-	require.Equal(t, snap3.TableCount(true)-snap1.TableCount(true), 5)
-	require.Equal(t, snap3.TableCount(false), 45)
+	require.Equal(t, 5, snap3.TableCount(true,
+		systemTablesFilter)-snap1.TableCount(true, systemTablesFilter))
+	// since we create a snapshot from meta2 and forceReplicate is true, so all tables are included
+	require.Equal(t, 5, snap3.TableCount(false, systemTablesFilter))
 }
 
 /*
@@ -903,6 +912,12 @@ func getAllHistoryDDLJob(storage tidbkv.Storage) ([]*timodel.Job, error) {
 	jobs, err := ddl.GetAllHistoryDDLJobs(txnMeta)
 	if err != nil {
 		return nil, errors.Trace(err)
+	}
+	for i := range jobs {
+		// Set State from Synced to Done.
+		// Because jobs are put to history queue after TiDB alter its state from
+		// Done to Synced.
+		jobs[i].State = timodel.JobStateDone
 	}
 	return jobs, nil
 }

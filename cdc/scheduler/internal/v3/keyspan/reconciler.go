@@ -16,12 +16,15 @@ package keyspan
 import (
 	"bytes"
 	"context"
+	"math"
 
 	"github.com/pingcap/log"
 	"github.com/pingcap/tiflow/cdc/model"
 	"github.com/pingcap/tiflow/cdc/processor/tablepb"
 	"github.com/pingcap/tiflow/cdc/scheduler/internal/v3/compat"
+	"github.com/pingcap/tiflow/cdc/scheduler/internal/v3/member"
 	"github.com/pingcap/tiflow/cdc/scheduler/internal/v3/replication"
+	"github.com/pingcap/tiflow/pkg/config"
 	"github.com/pingcap/tiflow/pkg/spanz"
 	"github.com/tikv/client-go/v2/tikv"
 	"go.uber.org/zap"
@@ -38,21 +41,21 @@ type Reconciler struct {
 	tableSpans map[model.TableID]splitSpans
 	spanCache  []tablepb.Span
 
-	regionCache      RegionCache
-	changefeedID     model.ChangeFeedID
-	maxRegionPerSpan int
+	regionCache  RegionCache
+	changefeedID model.ChangeFeedID
+	config       *config.ChangefeedSchedulerConfig
 }
 
 // NewReconciler returns a Reconciler.
 func NewReconciler(
 	changefeedID model.ChangeFeedID, regionCache RegionCache,
-	maxRegionPerSpan int,
+	config *config.ChangefeedSchedulerConfig,
 ) *Reconciler {
 	return &Reconciler{
-		tableSpans:       make(map[int64]splitSpans),
-		regionCache:      regionCache,
-		changefeedID:     changefeedID,
-		maxRegionPerSpan: maxRegionPerSpan,
+		tableSpans:   make(map[int64]splitSpans),
+		regionCache:  regionCache,
+		changefeedID: changefeedID,
+		config:       config,
 	}
 }
 
@@ -66,14 +69,15 @@ func NewReconciler(
 // 6. Some captures fail, does NOT affect spans.
 func (m *Reconciler) Reconcile(
 	ctx context.Context,
-	currentTables []model.TableID,
-	replications *spanz.Map[*replication.ReplicationSet],
+	currentTables *replication.TableRanges,
+	replications *spanz.BtreeMap[*replication.ReplicationSet],
+	aliveCaptures map[model.CaptureID]*member.CaptureStatus,
 	compat *compat.Compat,
 ) []tablepb.Span {
-	tablesLenEqual := len(currentTables) == len(m.tableSpans)
+	tablesLenEqual := currentTables.Len() == len(m.tableSpans)
 	allTablesFound := true
 	updateCache := false
-	for _, tableID := range currentTables {
+	currentTables.Iter(func(tableID model.TableID, tableStart, tableEnd tablepb.Span) bool {
 		if _, ok := m.tableSpans[tableID]; !ok {
 			// Find a new table.
 			allTablesFound = false
@@ -81,7 +85,6 @@ func (m *Reconciler) Reconcile(
 		}
 
 		// Reconcile spans from current replications.
-		tableStart, tableEnd := spanz.TableIDToComparableRange(tableID)
 		coveredSpans, holes := replications.FindHoles(tableStart, tableEnd)
 		if len(coveredSpans) == 0 {
 			// No such spans in replications.
@@ -89,7 +92,7 @@ func (m *Reconciler) Reconcile(
 				// And we have seen such spans before, it means these spans are
 				// not yet be scheduled due to basic scheduler's batch add task
 				// rate limit.
-				continue
+				return true
 			}
 			// And we have not seen such spans before, maybe:
 			// 1. it's a table being added when starting a changefeed
@@ -98,7 +101,7 @@ func (m *Reconciler) Reconcile(
 			tableSpan := spanz.TableIDToComparableSpan(tableID)
 			spans := []tablepb.Span{tableSpan}
 			if compat.CheckSpanReplicationEnabled() {
-				spans = m.splitSpan(ctx, tableSpan)
+				spans = m.splitSpan(ctx, tableSpan, len(aliveCaptures))
 			}
 			m.tableSpans[tableID] = splitSpans{
 				byAddTable: true,
@@ -110,7 +113,7 @@ func (m *Reconciler) Reconcile(
 			if spans, ok := m.tableSpans[tableID]; ok && spans.byAddTable {
 				// These spans are split by reconciler add table. It may be
 				// still in progress because of basic scheduler rate limit.
-				continue
+				return true
 			}
 			// 3. owner switch after some captures failed.
 			log.Info("schedulerv3: detect owner switch after captures fail",
@@ -118,29 +121,36 @@ func (m *Reconciler) Reconcile(
 				zap.String("namespace", m.changefeedID.Namespace),
 				zap.Int64("tableID", tableID),
 				zap.Int("holes", len(holes)),
-				zap.Stringer("spanStart", &tableStart),
-				zap.Stringer("spanEnd", &tableEnd),
-				zap.Stringer("foundStart", &coveredSpans[0]),
-				zap.Stringer("foundEnd", &coveredSpans[len(coveredSpans)-1]))
-			for i := range holes {
-				holes[i].TableID = tableID
-				coveredSpans = append(coveredSpans, holes[i])
+				zap.String("spanStart", tableStart.String()),
+				zap.String("spanEnd", tableEnd.String()),
+				zap.String("foundStart", coveredSpans[0].String()),
+				zap.String("foundEnd", coveredSpans[len(coveredSpans)-1].String()))
+			spans := make([]tablepb.Span, 0, len(coveredSpans)+len(holes))
+			spans = append(spans, coveredSpans...)
+			for _, s := range holes {
+				spans = append(spans, tablepb.Span{
+					TableID:  tableID,
+					StartKey: s.StartKey,
+					EndKey:   s.EndKey,
+				})
 				// TODO: maybe we should split holes too.
 			}
 			m.tableSpans[tableID] = splitSpans{
 				byAddTable: false,
-				spans:      coveredSpans,
+				spans:      spans,
 			}
 			updateCache = true
 		} else {
 			// Found and no hole, maybe:
 			// 2. owner switch and no capture fails.
-			m.tableSpans[tableID] = splitSpans{
-				byAddTable: false,
-				spans:      coveredSpans,
-			}
+			ss := m.tableSpans[tableID]
+			ss.byAddTable = false
+			ss.spans = ss.spans[:0]
+			ss.spans = append(ss.spans, coveredSpans...)
+			m.tableSpans[tableID] = ss
 		}
-	}
+		return true
+	})
 
 	// 4. Drop table by DDL.
 	// For most of the time, remove tables are unlikely to happen.
@@ -151,10 +161,11 @@ func (m *Reconciler) Reconcile(
 	if !tablesLenEqual || !allTablesFound {
 		// The two sets are not identical. We need to find removed tables.
 		// Build a tableID hash set to improve performance.
-		currentTableSet := make(map[model.TableID]struct{}, len(currentTables))
-		for _, tableID := range currentTables {
+		currentTableSet := make(map[model.TableID]struct{}, currentTables.Len())
+		currentTables.Iter(func(tableID model.TableID, _, _ tablepb.Span) bool {
 			currentTableSet[tableID] = struct{}{}
-		}
+			return true
+		})
 		for tableID := range m.tableSpans {
 			_, ok := currentTableSet[tableID]
 			if !ok {
@@ -174,7 +185,9 @@ func (m *Reconciler) Reconcile(
 	return m.spanCache
 }
 
-func (m *Reconciler) splitSpan(ctx context.Context, span tablepb.Span) []tablepb.Span {
+func (m *Reconciler) splitSpan(
+	ctx context.Context, span tablepb.Span, totalCaptures int,
+) []tablepb.Span {
 	bo := tikv.NewBackoffer(ctx, 500)
 	regions, err := m.regionCache.ListRegionIDsInKeyRange(bo, span.StartKey, span.EndKey)
 	if err != nil {
@@ -184,12 +197,17 @@ func (m *Reconciler) splitSpan(ctx context.Context, span tablepb.Span) []tablepb
 			zap.Error(err))
 		return []tablepb.Span{span}
 	}
-	if len(regions) <= m.maxRegionPerSpan {
+	if len(regions) <= m.config.RegionThreshold || totalCaptures == 0 {
 		return []tablepb.Span{span}
 	}
 
-	spans := make([]tablepb.Span, 0, len(regions)/m.maxRegionPerSpan+1)
-	start, end := 0, m.maxRegionPerSpan
+	totalRegions := len(regions)
+	if totalRegions == 0 {
+		totalCaptures = 1
+	}
+	stepper := newEvenlySplitStepper(totalCaptures, totalRegions)
+	spans := make([]tablepb.Span, 0, stepper.SpanCount())
+	start, end := 0, stepper.Step()
 	for {
 		startRegion, err := m.regionCache.LocateRegionByID(bo, regions[start])
 		if err != nil {
@@ -226,8 +244,9 @@ func (m *Reconciler) splitSpan(ctx context.Context, span tablepb.Span) []tablepb
 			break
 		}
 		start = end
-		if end+m.maxRegionPerSpan < len(regions) {
-			end = end + m.maxRegionPerSpan
+		step := stepper.Step()
+		if end+step < len(regions) {
+			end = end + step
 		} else {
 			end = len(regions)
 		}
@@ -236,4 +255,42 @@ func (m *Reconciler) splitSpan(ctx context.Context, span tablepb.Span) []tablepb
 	spans[0].StartKey = span.StartKey
 	spans[len(spans)-1].EndKey = span.EndKey
 	return spans
+}
+
+type evenlySplitStepper struct {
+	spanCount          int
+	regionPerSpan      int
+	extraRegionPerSpan int
+	remain             int
+}
+
+func newEvenlySplitStepper(totalCaptures int, totalRegion int) evenlySplitStepper {
+	extraRegionPerSpan := 0
+	regionPerSpan, remain := totalRegion/totalCaptures, totalRegion%totalCaptures
+	if regionPerSpan == 0 {
+		regionPerSpan = 1
+		extraRegionPerSpan = 0
+		totalCaptures = totalRegion
+	} else if remain != 0 {
+		// Evenly distributes the remaining regions.
+		extraRegionPerSpan = int(math.Ceil(float64(remain) / float64(totalCaptures)))
+	}
+	return evenlySplitStepper{
+		regionPerSpan:      regionPerSpan,
+		spanCount:          totalCaptures,
+		extraRegionPerSpan: extraRegionPerSpan,
+		remain:             remain,
+	}
+}
+
+func (e *evenlySplitStepper) SpanCount() int {
+	return e.spanCount
+}
+
+func (e *evenlySplitStepper) Step() int {
+	if e.remain <= 0 {
+		return e.regionPerSpan
+	}
+	e.remain = e.remain - e.extraRegionPerSpan
+	return e.regionPerSpan + e.extraRegionPerSpan
 }

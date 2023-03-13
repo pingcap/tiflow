@@ -164,6 +164,10 @@ run() {
 		"binlog-schema list -s mysql-replica-01,mysql-replica-02 sequence_sharding_optimistic sharding_seq_opt t2" \
 		"\"result\": true" 3
 
+	run_dm_ctl $WORK_DIR "127.0.0.1:$MASTER_PORT" \
+		"binlog-schema delete -s mysql-replica-01 sequence_sharding_optimistic sharding_seq_opt t2" \
+		"\"result\": true" 2
+
 	# try to set another schema, `c3` `int` -> `bigint`.
 	echo 'CREATE TABLE `t1` ( `id` bigint(20) NOT NULL, `c2` varchar(20) DEFAULT NULL, `c3` bigint(11) DEFAULT NULL, PRIMARY KEY (`id`)) ENGINE=InnoDB DEFAULT CHARSET=latin1 COLLATE=latin1_bin' >${WORK_DIR}/schema.sql
 	run_dm_ctl $WORK_DIR "127.0.0.1:$MASTER_PORT" \

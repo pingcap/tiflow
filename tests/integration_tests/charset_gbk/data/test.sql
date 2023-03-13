@@ -4,7 +4,7 @@ CREATE DATABASE `charset_gbk_test0` CHARACTER SET utf8mb4;
 
 USE `charset_gbk_test0`;
 
-/* this is a test for columns which charset is gbk*/
+/* this is a test for columns which charset is gbk, with pk*/
 CREATE TABLE t0 (
 	id INT,
 	name varchar(128) CHARACTER SET gbk,
@@ -30,16 +30,16 @@ WHERE name = '测试';
 DELETE FROM t0
 WHERE name = '部署';
 
-/* this is a test for table which charset is gbk*/
+/* this is a test for table which charset is gbk, without pk but with uk */
 CREATE TABLE t1 (
-	id INT,
-	name varchar(128),
-	country char(32),
+	id INT NOT NULL,
+	name varchar(128) CHARACTER SET gbk NOT NULL,
+	country char(32) CHARACTER SET gbk,
 	city varchar(64),
-	description text,
+	description text CHARACTER SET gbk,
 	image tinyblob,
-	PRIMARY KEY (id)
-) ENGINE = InnoDB CHARSET = gbk;
+	UNIQUE KEY (id, name)
+) ENGINE = InnoDB CHARSET = utf8mb4;
 
 INSERT INTO t1
 VALUES (1, '测试', "中国", "上海", "你好,世界"
@@ -54,6 +54,32 @@ SET name = '开发'
 WHERE name = '测试';
 
 DELETE FROM t1
+WHERE name = '部署';
+
+/* this is a test for table which charset is gbk*/
+CREATE TABLE t2 (
+	id INT,
+	name varchar(128),
+	country char(32),
+	city varchar(64),
+	description text,
+	image tinyblob,
+	PRIMARY KEY (id)
+) ENGINE = InnoDB CHARSET = gbk;
+
+INSERT INTO t2
+VALUES (1, '测试', "中国", "上海", "你好,世界"
+	, 0xC4E3BAC3CAC0BDE7);
+
+INSERT INTO t2
+VALUES (2, '部署', "美国", "纽约", "世界,你好"
+	, 0xCAC0BDE7C4E3BAC3);
+
+UPDATE t2
+SET name = '开发'
+WHERE name = '测试';
+
+DELETE FROM t2
 WHERE name = '部署';
 
 /* this is a test for db which charset is gbk*/
@@ -80,6 +106,8 @@ VALUES (1, '测试', "中国", "上海", "你好,世界"
 INSERT INTO t0
 VALUES (2, '部署', "美国", "纽约", "世界,你好"
 	, 0xCAC0BDE7C4E3BAC3);
+
+SELECT sleep(5);
 
 UPDATE t0
 SET name = '开发'

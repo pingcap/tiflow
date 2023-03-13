@@ -17,7 +17,7 @@ import (
 	"context"
 
 	"github.com/pingcap/tiflow/cdc/model"
-	apiv1client "github.com/pingcap/tiflow/pkg/api/v1"
+	apiv2client "github.com/pingcap/tiflow/pkg/api/v2"
 	cmdcontext "github.com/pingcap/tiflow/pkg/cmd/context"
 	"github.com/pingcap/tiflow/pkg/cmd/factory"
 	"github.com/pingcap/tiflow/pkg/cmd/util"
@@ -31,7 +31,7 @@ type processorMeta struct {
 
 // queryProcessorOptions defines flags for the `cli processor query` command.
 type queryProcessorOptions struct {
-	apiClient apiv1client.APIV1Interface
+	apiClient apiv2client.APIV2Interface
 
 	changefeedID string
 	captureID    string
@@ -44,7 +44,7 @@ func newQueryProcessorOptions() *queryProcessorOptions {
 
 // complete adapts from the command line args to the data and client required.
 func (o *queryProcessorOptions) complete(f factory.Factory) error {
-	apiClient, err := f.APIV1Client()
+	apiClient, err := f.APIV2Client()
 	if err != nil {
 		return err
 	}

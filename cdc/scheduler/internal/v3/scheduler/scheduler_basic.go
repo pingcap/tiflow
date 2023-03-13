@@ -57,7 +57,7 @@ func (b *basicScheduler) Schedule(
 	checkpointTs model.Ts,
 	currentSpans []tablepb.Span,
 	captures map[model.CaptureID]*member.CaptureStatus,
-	replications *spanz.Map[*replication.ReplicationSet],
+	replications *spanz.BtreeMap[*replication.ReplicationSet],
 ) []*replication.ScheduleTask {
 	tasks := make([]*replication.ScheduleTask, 0)
 	tablesLenEqual := len(currentSpans) == replications.Len()
@@ -123,7 +123,7 @@ func (b *basicScheduler) Schedule(
 	// and for all tables in currentTables have a record in replications.
 	if !tablesLenEqual || !tablesAllFind {
 		// The two sets are not identical. We need to find removed tables.
-		intersectionTable := spanz.NewMap[struct{}]()
+		intersectionTable := spanz.NewBtreeMap[struct{}]()
 		for _, span := range currentSpans {
 			_, ok := replications.Get(span)
 			if !ok {
@@ -174,7 +174,7 @@ func newBurstAddTables(
 }
 
 func newBurstRemoveTables(
-	rmSpans []tablepb.Span, replications *spanz.Map[*replication.ReplicationSet],
+	rmSpans []tablepb.Span, replications *spanz.BtreeMap[*replication.ReplicationSet],
 	changefeedID model.ChangeFeedID,
 ) *replication.ScheduleTask {
 	tables := make([]replication.RemoveTable, 0, len(rmSpans))

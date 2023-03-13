@@ -27,7 +27,26 @@ import (
 	"github.com/pingcap/tiflow/pkg/util"
 )
 
+var (
+	// DefaultGCIntervalInMs defines GC interval in meta manager, which can be changed in tests.
+	DefaultGCIntervalInMs = 5000 // 5 seconds
+	// DefaultMaxLogSize is the default max size of log file
+	DefaultMaxLogSize = int64(64)
+)
+
 const (
+	// DefaultTimeout is the default timeout for writing external storage.
+	DefaultTimeout = 15 * time.Minute
+	// CloseTimeout is the default timeout for close redo writer.
+	CloseTimeout = 15 * time.Second
+
+	// FlushWarnDuration is the warning duration for flushing external storage.
+	FlushWarnDuration = time.Second * 20
+	// DefaultFlushIntervalInMs is the default flush interval for redo log.
+	DefaultFlushIntervalInMs = 2000
+	// MinFlushIntervalInMs is the minimum flush interval for redo log.
+	MinFlushIntervalInMs = 50
+
 	// DefaultFileMode is the default mode when operation files
 	DefaultFileMode = 0o644
 	// DefaultDirMode is the default mode when operation dir
@@ -39,14 +58,18 @@ const (
 	LogEXT = ".log"
 	// MetaEXT is the meta file ext of meta file after safely wrote to disk
 	MetaEXT = ".meta"
-	// MetaTmpEXT is the meta file ext of meta file before safely wrote to disk
-	MetaTmpEXT = ".mtmp"
 	// SortLogEXT is the sorted log file ext of log file after safely wrote to disk
 	SortLogEXT = ".sort"
 
 	// MinSectorSize is minimum sector size used when flushing log so that log can safely
 	// distinguish between torn writes and ordinary data corruption.
 	MinSectorSize = 512
+	// PageBytes is the alignment for flushing records to the backing Writer.
+	// It should be a multiple of the minimum sector size so that log can safely
+	// distinguish between torn writes and ordinary data corruption.
+	PageBytes = 8 * MinSectorSize
+	// Megabyte is the size of 1MB
+	Megabyte int64 = 1024 * 1024
 )
 
 const (
@@ -57,16 +80,6 @@ const (
 	// RedoDDLLogFileType is the default file type of ddl log file
 	RedoDDLLogFileType = "ddl"
 )
-
-// FileTypeConfig Specifies redo file type config.
-type FileTypeConfig struct {
-	// Whether emitting redo meta or not.
-	EmitMeta bool
-	// Whether emitting row events or not.
-	EmitRowEvents bool
-	// Whether emitting DDL events or not.
-	EmitDDLEvents bool
-}
 
 // ConsistentLevelType is the level of redo log consistent level.
 type ConsistentLevelType string
@@ -114,7 +127,7 @@ const (
 	consistentStorageAzblob ConsistentStorage = "azblob"
 	// consistentStorageAzure is an alias of Azure Blob storage.
 	consistentStorageAzure ConsistentStorage = "azure"
-	// consistentStorageFile is  an external storage based on local files and
+	// consistentStorageFile is an external storage based on local files and
 	// will only be used for testing.
 	consistentStorageFile ConsistentStorage = "file"
 	// consistentStorageNoop is a noop storage, which simply discard all data.
@@ -150,6 +163,13 @@ func IsLocalStorage(scheme string) bool {
 	}
 }
 
+// FixLocalScheme convert local scheme to externally compatible scheme.
+func FixLocalScheme(uri *url.URL) {
+	if IsLocalStorage(uri.Scheme) {
+		uri.Scheme = string(consistentStorageFile)
+	}
+}
+
 // IsBlackholeStorage returns whether a blackhole storage is used.
 func IsBlackholeStorage(scheme string) bool {
 	return ConsistentStorage(scheme) == consistentStorageBlackhole
@@ -157,13 +177,21 @@ func IsBlackholeStorage(scheme string) bool {
 
 // InitExternalStorage init an external storage.
 var InitExternalStorage = func(ctx context.Context, uri url.URL) (storage.ExternalStorage, error) {
+	s, err := util.GetExternalStorageWithTimeout(ctx, uri.String(), DefaultTimeout)
+	if err != nil {
+		return nil, errors.WrapChangefeedUnretryableErr(errors.ErrStorageInitialize, err)
+	}
+	return s, nil
+}
+
+func initExternalStorageForTest(ctx context.Context, uri url.URL) (storage.ExternalStorage, error) {
 	if ConsistentStorage(uri.Scheme) == consistentStorageS3 && len(uri.Host) == 0 {
 		// TODO: this branch is compatible with previous s3 logic and will be removed
 		// in the future.
 		return nil, errors.WrapChangefeedUnretryableErr(errors.ErrStorageInitialize,
 			errors.Errorf("please specify the bucket for %+v", uri))
 	}
-	s, err := util.GetExternalStorage(ctx, uri.String(), nil)
+	s, err := util.GetExternalStorageFromURI(ctx, uri.String())
 	if err != nil {
 		return nil, errors.WrapChangefeedUnretryableErr(errors.ErrStorageInitialize, err)
 	}
@@ -183,7 +211,7 @@ func ValidateStorage(uri *url.URL) error {
 	if IsExternalStorage(scheme) {
 		ctx, cancel := context.WithTimeout(context.Background(), 3*time.Second)
 		defer cancel()
-		_, err := InitExternalStorage(ctx, *uri)
+		_, err := initExternalStorageForTest(ctx, *uri)
 		return err
 	}
 
@@ -202,6 +230,9 @@ const (
 	// RedoLogFileFormatV2 is available since v6.1.0, which contains namespace information
 	// layout: captureID_namespace_changefeedID_fileType_maxEventCommitTs_uuid.fileExtName
 	RedoLogFileFormatV2 = "%s_%s_%s_%s_%d_%s%s"
+	// RedoMetaFileFormat is the format of redo meta file, which contains namespace information.
+	// layout: captureID_namespace_changefeedID_fileType_uuid.fileExtName
+	RedoMetaFileFormat = "%s_%s_%s_%s_%s%s"
 )
 
 // logFormat2ParseFormat converts redo log file name format to the space separated

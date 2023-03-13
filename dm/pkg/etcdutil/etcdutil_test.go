@@ -25,7 +25,7 @@ import (
 	"github.com/pingcap/tiflow/dm/pkg/log"
 	"github.com/pingcap/tiflow/dm/pkg/terror"
 	"github.com/stretchr/testify/require"
-	"github.com/tikv/pd/pkg/tempurl"
+	"github.com/tikv/pd/pkg/utils/tempurl"
 	"go.etcd.io/etcd/api/v3/etcdserverpb"
 	v3rpc "go.etcd.io/etcd/api/v3/v3rpc/rpctypes"
 	clientv3 "go.etcd.io/etcd/client/v3"

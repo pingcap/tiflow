@@ -19,7 +19,7 @@ import (
 
 	"github.com/golang/mock/gomock"
 	"github.com/pingcap/errors"
-	"github.com/pingcap/tiflow/pkg/api/v1/mock"
+	"github.com/pingcap/tiflow/pkg/api/v2/mock"
 	"github.com/stretchr/testify/require"
 )
 

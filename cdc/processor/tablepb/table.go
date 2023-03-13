@@ -34,39 +34,6 @@ func (s *TableState) Store(new TableState) {
 	atomic.StoreInt32((*int32)(s), int32(new))
 }
 
-// TablePipeline is a pipeline which capture the change log from tikv in a table
-type TablePipeline interface {
-	// ID returns the ID of source table and mark table
-	ID() (tableID TableID)
-	// Name returns the quoted schema and table name
-	Name() string
-	// ResolvedTs returns the resolved ts in this table pipeline
-	ResolvedTs() Ts
-	// CheckpointTs returns the checkpoint ts in this table pipeline
-	CheckpointTs() Ts
-	// UpdateBarrierTs updates the barrier ts in this table pipeline
-	UpdateBarrierTs(ts Ts)
-	// AsyncStop tells the pipeline to stop, and returns true is the pipeline is already stopped.
-	AsyncStop() bool
-
-	// Start the sink consume data from the given `ts`
-	Start(ts Ts)
-
-	// Stats returns statistic for a table.
-	Stats() Stats
-	// State returns the state of this table pipeline
-	State() TableState
-	// Cancel stops this table pipeline immediately and destroy all resources created by this table pipeline
-	Cancel()
-	// Wait waits for table pipeline destroyed
-	Wait()
-	// MemoryConsumption return the memory consumption in bytes
-	MemoryConsumption() uint64
-
-	// RemainEvents return the amount of kv events remain in sorter.
-	RemainEvents() int64
-}
-
 // TableID is the ID of the table
 type TableID = int64
 
@@ -74,6 +41,7 @@ type TableID = int64
 type Ts = uint64
 
 // Key is a custom type for bytes encoded in memcomparable format.
+// Key is read-only, must not be mutated.
 type Key []byte
 
 var (

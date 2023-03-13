@@ -35,6 +35,7 @@ import (
 	"github.com/pingcap/tiflow/engine/jobmaster/dm/runtime"
 	"github.com/pingcap/tiflow/engine/pkg/dm/message"
 	dmproto "github.com/pingcap/tiflow/engine/pkg/dm/proto"
+	resModel "github.com/pingcap/tiflow/engine/pkg/externalresource/model"
 	kvmock "github.com/pingcap/tiflow/engine/pkg/meta/mock"
 	"github.com/pingcap/tiflow/engine/pkg/promutil"
 	"github.com/pingcap/tiflow/pkg/errors"
@@ -182,7 +183,8 @@ func TestQueryStatusAPI(t *testing.T) {
 	)
 	messageAgent := &message.MockAgent{}
 	jm.messageAgent = messageAgent
-	jm.workerManager = NewWorkerManager(mockBaseJobmaster.ID(), nil, jm.metadata.JobStore(), jm.metadata.UnitStateStore(), nil, nil, nil, jm.Logger(), false)
+	jm.workerManager = NewWorkerManager(mockBaseJobmaster.ID(), nil, jm.metadata.JobStore(), jm.metadata.UnitStateStore(), nil, nil, nil, jm.Logger(),
+		resModel.ResourceTypeLocalFile)
 	jm.taskManager = NewTaskManager("test-job", nil, nil, nil, jm.Logger(), promutil.NewFactory4Test(t.TempDir()))
 	jm.workerManager.UpdateWorkerStatus(runtime.NewWorkerStatus("task3", frameModel.WorkerDMDump, "worker3", runtime.WorkerOnline, 4))
 	messageAgent.On("SendRequest", mock.Anything, "task3", mock.Anything, mock.Anything).Return(nil, context.DeadlineExceeded).Once()
@@ -501,7 +503,8 @@ func TestUpdateJobCfg(t *testing.T) {
 		}
 	)
 	jm.taskManager = NewTaskManager("test-job", nil, jm.metadata.JobStore(), messageAgent, jm.Logger(), promutil.NewFactory4Test(t.TempDir()))
-	jm.workerManager = NewWorkerManager(mockBaseJobmaster.ID(), nil, jm.metadata.JobStore(), jm.metadata.UnitStateStore(), jm, messageAgent, mockCheckpointAgent, jm.Logger(), false)
+	jm.workerManager = NewWorkerManager(mockBaseJobmaster.ID(), nil, jm.metadata.JobStore(), jm.metadata.UnitStateStore(), jm, messageAgent, mockCheckpointAgent, jm.Logger(),
+		resModel.ResourceTypeLocalFile)
 	funcBackup := master.CheckAndAdjustSourceConfigFunc
 	master.CheckAndAdjustSourceConfigFunc = func(ctx context.Context, cfg *dmconfig.SourceConfig) error { return nil }
 	defer func() {

@@ -51,12 +51,6 @@ type TableExecutor interface {
 	// or IsRemoveTableSpanFinished in between two calls to this method.
 	GetTableSpanCount() int
 
-	// GetCheckpoint returns the local checkpoint-ts and resolved-ts of
-	// the processor. Its calculation should take into consideration all
-	// tables that would have been returned if GetTableSpanCount had been
-	// called immediately before.
-	GetCheckpoint() (checkpointTs, resolvedTs model.Ts)
-
 	// GetTableSpanStatus return the checkpoint and resolved ts for the given table span.
 	GetTableSpanStatus(span tablepb.Span, collectStat bool) tablepb.TableStatus
 }

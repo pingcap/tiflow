@@ -253,7 +253,7 @@ function DM_027_CASE() {
 	run_sql_source1 "insert into ${shardddl1}.${tb3} values (5,6)"
 	run_dm_ctl_with_retry $WORK_DIR "127.0.0.1:$MASTER_PORT" \
 		"query-status test" \
-		"Error 1054: Unknown column 'val' in 'field list'" 1
+		"Error 1054 (42S22): Unknown column 'val' in 'field list'" 1
 }
 
 function DM_027() {

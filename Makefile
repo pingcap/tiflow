@@ -40,14 +40,23 @@ ifeq (${CDC_ENABLE_VENDOR}, 1)
 GOVENDORFLAG := -mod=vendor
 endif
 
-GOBUILD  := CGO_ENABLED=0 $(GO) build $(BUILD_FLAG) -trimpath $(GOVENDORFLAG)
+# Since TiDB add a new dependency on github.com/cloudfoundry/gosigar,
+# We need to add CGO_ENABLED=1 to make it work when build TiCDC in Darwin OS.
+# These logic is to check if the OS is Darwin, if so, add CGO_ENABLED=1.
+# ref: https://github.com/cloudfoundry/gosigar/issues/58#issuecomment-1150925711
+# ref: https://github.com/pingcap/tidb/pull/39526#issuecomment-1407952955
+OS    := "$(shell go env GOOS)"
+ifeq (${OS}, "linux")
+	CGO := 0
+else ifeq (${OS}, "darwin")
+	CGO := 1
+endif
+
+GOBUILD  := CGO_ENABLED=$(CGO) $(GO) build $(BUILD_FLAG) -trimpath $(GOVENDORFLAG)
 GOBUILDNOVENDOR  := CGO_ENABLED=0 $(GO) build $(BUILD_FLAG) -trimpath
-GOTEST   := CGO_ENABLED=1 $(GO) test -p $(P) --race
+GOTEST   := CGO_ENABLED=1 $(GO) test -p $(P) --race --tags=intest
 GOTESTNORACE := CGO_ENABLED=1 $(GO) test -p $(P)
 
-ARCH  := "$(shell uname -s)"
-LINUX := "Linux"
-MAC   := "Darwin"
 CDC_PKG := github.com/pingcap/tiflow
 DM_PKG := github.com/pingcap/tiflow/dm
 ENGINE_PKG := github.com/pingcap/tiflow/engine
@@ -59,7 +68,7 @@ PACKAGES_TICDC := $$($(PACKAGE_LIST_WITHOUT_DM_ENGINE))
 DM_PACKAGES := $$($(DM_PACKAGE_LIST))
 ENGINE_PACKAGE_LIST := go list github.com/pingcap/tiflow/engine/... | grep -vE 'pb|proto|engine/test/e2e'
 ENGINE_PACKAGES := $$($(ENGINE_PACKAGE_LIST))
-FILES := $$(find . -name '*.go' -type f | grep -vE 'vendor|kv_gen|proto|pb\.go|pb\.gw\.go|_mock.go')
+FILES := $$(find . -name '*.go' -type f | grep -vE 'vendor|_gen|proto|pb\.go|pb\.gw\.go|_mock.go')
 TEST_FILES := $$(find . -name '*_test.go' -type f | grep -vE 'vendor|kv_gen|integration|testing_utils')
 TEST_FILES_WITHOUT_DM := $$(find . -name '*_test.go' -type f | grep -vE 'vendor|kv_gen|integration|testing_utils|^\./dm')
 FAILPOINT_DIR := $$(for p in $(PACKAGES); do echo $${p\#"github.com/pingcap/$(PROJECT)/"}|grep -v "github.com/pingcap/$(PROJECT)"; done)
@@ -77,7 +86,7 @@ MAKE_FILES = $(shell find . \( -name 'Makefile' -o -name '*.mk' \) -print)
 
 RELEASE_VERSION =
 ifeq ($(RELEASE_VERSION),)
-	RELEASE_VERSION := v6.5.0-master
+	RELEASE_VERSION := v6.7.0-master
 	release_version_regex := ^v[0-9]\..*$$
 	release_branch_regex := "^release-[0-9]\.[0-9].*$$|^HEAD$$|^.*/*tags/v[0-9]\.[0-9]\..*$$"
 	ifneq ($(shell git rev-parse --abbrev-ref HEAD | grep -E $(release_branch_regex)),)
@@ -144,6 +153,10 @@ kafka_consumer:
 storage_consumer:
 	$(GOBUILD) -ldflags '$(LDFLAGS)' -o bin/cdc_storage_consumer ./cmd/storage-consumer/main.go
 
+cdc_test_image: 
+	@which docker || (echo "docker not found in ${PATH}"; exit 1)
+	docker build --platform linux/amd64 -f deployments/ticdc/docker/test.Dockerfile -t cdc:test ./ 
+
 install:
 	go install ./...
 
@@ -159,7 +172,7 @@ unit_test_in_verify_ci: check_failpoint_ctl tools/bin/gotestsum tools/bin/gocov 
 	mkdir -p "$(TEST_DIR)"
 	$(FAILPOINT_ENABLE)
 	@export log_level=error;\
-	CGO_ENABLED=1 tools/bin/gotestsum --junitfile cdc-junit-report.xml -- -v -timeout 5m -p $(P) --race \
+	CGO_ENABLED=1 tools/bin/gotestsum --junitfile cdc-junit-report.xml -- -v -timeout 5m -p $(P) --race --tags=intest \
 	-covermode=atomic -coverprofile="$(TEST_DIR)/cov.unit.out" $(PACKAGES_TICDC) \
 	|| { $(FAILPOINT_DISABLE); exit 1; }
 	tools/bin/gocov convert "$(TEST_DIR)/cov.unit.out" | tools/bin/gocov-xml > cdc-coverage.xml

@@ -34,11 +34,11 @@ type RegionCache interface {
 
 // MockCache mocks tikv.RegionCache.
 type MockCache struct {
-	regions *spanz.Map[uint64]
+	regions *spanz.BtreeMap[uint64]
 }
 
 // NewMockRegionCache returns a new MockCache.
-func NewMockRegionCache() *MockCache { return &MockCache{regions: spanz.NewMap[uint64]()} }
+func NewMockRegionCache() *MockCache { return &MockCache{regions: spanz.NewBtreeMap[uint64]()} }
 
 // ListRegionIDsInKeyRange lists ids of regions in [startKey,endKey].
 func (m *MockCache) ListRegionIDsInKeyRange(

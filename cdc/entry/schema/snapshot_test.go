@@ -199,9 +199,10 @@ func TestTable(t *testing.T) {
 			require.False(t, snap.IsIneligibleTableID(12))
 			require.False(t, snap.IsIneligibleTableID(12+65536))
 		}
-
 		// IterTables should get no available tables.
-		require.Equal(t, snap.TableCount(true), 0)
+		require.Equal(t, snap.TableCount(true, func(table, schema string) bool {
+			return true
+		}), 0)
 	}
 }
 

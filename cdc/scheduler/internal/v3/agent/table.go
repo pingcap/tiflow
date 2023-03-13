@@ -276,7 +276,7 @@ func (t *tableSpan) poll(ctx context.Context) (*schedulepb.Message, error) {
 }
 
 type tableSpanManager struct {
-	tables   *spanz.Map[*tableSpan]
+	tables   *spanz.BtreeMap[*tableSpan]
 	executor internal.TableExecutor
 
 	changefeedID model.ChangeFeedID
@@ -286,7 +286,7 @@ func newTableSpanManager(
 	changefeed model.ChangeFeedID, executor internal.TableExecutor,
 ) *tableSpanManager {
 	return &tableSpanManager{
-		tables:       spanz.NewMap[*tableSpan](),
+		tables:       spanz.NewBtreeMap[*tableSpan](),
 		executor:     executor,
 		changefeedID: changefeed,
 	}
@@ -320,7 +320,7 @@ func (tm *tableSpanManager) poll(ctx context.Context) ([]*schedulepb.Message, er
 	return result, err
 }
 
-func (tm *tableSpanManager) getAllTableSpans() *spanz.Map[*tableSpan] {
+func (tm *tableSpanManager) getAllTableSpans() *spanz.BtreeMap[*tableSpan] {
 	return tm.tables
 }
 
@@ -348,7 +348,7 @@ func (tm *tableSpanManager) dropTableSpan(span tablepb.Span) {
 		log.Warn("schedulerv3: tableManager drop table not found",
 			zap.String("namespace", tm.changefeedID.Namespace),
 			zap.String("changefeed", tm.changefeedID.ID),
-			zap.Stringer("span", &span))
+			zap.String("span", span.String()))
 		return
 	}
 	state, _ := table.getAndUpdateTableSpanState()
@@ -356,14 +356,14 @@ func (tm *tableSpanManager) dropTableSpan(span tablepb.Span) {
 		log.Panic("schedulerv3: tableManager drop table undesired",
 			zap.String("namespace", tm.changefeedID.Namespace),
 			zap.String("changefeed", tm.changefeedID.ID),
-			zap.Stringer("span", &span),
+			zap.String("span", span.String()),
 			zap.Stringer("state", table.state))
 	}
 
 	log.Debug("schedulerv3: tableManager drop table",
 		zap.String("namespace", tm.changefeedID.Namespace),
 		zap.String("changefeed", tm.changefeedID.ID),
-		zap.Stringer("span", &span))
+		zap.String("span", span.String()))
 	tm.tables.Delete(span)
 }
 

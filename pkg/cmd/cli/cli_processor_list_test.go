@@ -19,7 +19,7 @@ import (
 
 	"github.com/golang/mock/gomock"
 	"github.com/pingcap/errors"
-	"github.com/pingcap/tiflow/cdc/model"
+	v2 "github.com/pingcap/tiflow/cdc/api/v2"
 	"github.com/stretchr/testify/require"
 )
 
@@ -32,13 +32,13 @@ func TestProcessorListCli(t *testing.T) {
 	o.complete(f)
 	cmd := newCmdListProcessor(f)
 	os.Args = []string{"list"}
-	f.processor.EXPECT().List(gomock.Any()).
+	f.processors.EXPECT().List(gomock.Any()).
 		Return(nil, errors.New("test"))
 	require.NotNil(t, o.run(cmd))
 
 	cmd = newCmdListProcessor(f)
 	os.Args = []string{"list"}
-	f.processor.EXPECT().List(gomock.Any()).
-		Return(&[]model.ProcessorCommonInfo{{}}, nil)
+	f.processors.EXPECT().List(gomock.Any()).
+		Return([]v2.ProcessorCommonInfo{{}}, nil)
 	require.Nil(t, cmd.Execute())
 }

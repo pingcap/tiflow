@@ -76,7 +76,7 @@ func TestSchedulerManagerScheduler(t *testing.T) {
 	replications = mapToSpanMap(map[model.TableID]*replication.ReplicationSet{
 		1: {State: replication.ReplicationSetStateReplicating, Primary: "a"},
 	})
-	runningTasks = spanz.NewMap[*replication.ScheduleTask]()
+	runningTasks = spanz.NewBtreeMap[*replication.ScheduleTask]()
 	tasks = m.Schedule(0, currentSpans, captures, replications, runningTasks)
 	require.Len(t, tasks, 1)
 }

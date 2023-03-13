@@ -35,6 +35,7 @@ import (
 	"github.com/pingcap/tiflow/engine/jobmaster/dm/openapi"
 	"github.com/pingcap/tiflow/engine/pkg/dm/message"
 	dmproto "github.com/pingcap/tiflow/engine/pkg/dm/proto"
+	resModel "github.com/pingcap/tiflow/engine/pkg/externalresource/model"
 	"github.com/pingcap/tiflow/engine/pkg/meta/mock"
 	engineOpenAPI "github.com/pingcap/tiflow/engine/pkg/openapi"
 	"github.com/pingcap/tiflow/engine/pkg/promutil"
@@ -75,7 +76,7 @@ func (t *testDMOpenAPISuite) SetupSuite() {
 		}
 	)
 	jm.taskManager = NewTaskManager("test-job", nil, jm.metadata.JobStore(), jm.messageAgent, jm.Logger(), promutil.NewFactory4Test(t.T().TempDir()))
-	jm.workerManager = NewWorkerManager(mockBaseJobmaster.ID(), nil, jm.metadata.JobStore(), jm.metadata.UnitStateStore(), nil, jm.messageAgent, nil, jm.Logger(), false)
+	jm.workerManager = NewWorkerManager(mockBaseJobmaster.ID(), nil, jm.metadata.JobStore(), jm.metadata.UnitStateStore(), nil, jm.messageAgent, nil, jm.Logger(), resModel.ResourceTypeLocalFile)
 	jm.ddlCoordinator = NewDDLCoordinator(mockBaseJobmaster.ID(), metaClient, mockCheckpointAgent, jm.metadata.JobStore(), jm.Logger(), mockMessageAgent)
 	jm.initialized.Store(true)
 

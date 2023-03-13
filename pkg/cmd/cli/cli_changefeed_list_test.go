@@ -21,8 +21,9 @@ import (
 
 	"github.com/golang/mock/gomock"
 	"github.com/pingcap/errors"
+	v2 "github.com/pingcap/tiflow/cdc/api/v2"
 	"github.com/pingcap/tiflow/cdc/model"
-	"github.com/pingcap/tiflow/pkg/api/v1/mock"
+	"github.com/pingcap/tiflow/pkg/api/v2/mock"
 	"github.com/stretchr/testify/require"
 )
 
@@ -35,7 +36,7 @@ func TestChangefeedListCli(t *testing.T) {
 	b := bytes.NewBufferString("")
 	cmd.SetOut(b)
 
-	cf.EXPECT().List(gomock.Any(), gomock.Any()).Return(&[]model.ChangefeedCommonInfo{
+	cf.EXPECT().List(gomock.Any(), gomock.Any()).Return([]v2.ChangefeedCommonInfo{
 		{
 			UpstreamID:     1,
 			Namespace:      "default",

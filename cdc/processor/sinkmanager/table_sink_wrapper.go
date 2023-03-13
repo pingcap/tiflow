@@ -23,10 +23,9 @@ import (
 	"github.com/pingcap/errors"
 	"github.com/pingcap/log"
 	"github.com/pingcap/tiflow/cdc/model"
-	"github.com/pingcap/tiflow/cdc/processor/pipeline"
 	"github.com/pingcap/tiflow/cdc/processor/sourcemanager/engine"
 	"github.com/pingcap/tiflow/cdc/processor/tablepb"
-	sinkv2 "github.com/pingcap/tiflow/cdc/sinkv2/tablesink"
+	"github.com/pingcap/tiflow/cdc/sink/tablesink"
 	"github.com/tikv/client-go/v2/oracle"
 	"go.uber.org/zap"
 )
@@ -44,7 +43,7 @@ type tableSinkWrapper struct {
 	// tableID used for logging.
 	span tablepb.Span
 	// tableSink is the underlying sink.
-	tableSink sinkv2.TableSink
+	tableSink tablesink.TableSink
 	// state used to control the lifecycle of the table.
 	state *tablepb.TableState
 	// startTs is the start ts of the table.
@@ -91,7 +90,7 @@ func newRangeEventCount(pos engine.Position, events int) rangeEventCount {
 func newTableSinkWrapper(
 	changefeed model.ChangeFeedID,
 	span tablepb.Span,
-	tableSink sinkv2.TableSink,
+	tableSink tablesink.TableSink,
 	state tablepb.TableState,
 	startTs model.Ts,
 	targetTs model.Ts,
@@ -300,8 +299,8 @@ func convertRowChangedEvents(
 		// and after enable old value internally by default(but disable in the configuration).
 		// We need to handle the update event to be compatible with the old format.
 		if !enableOldValue && colLen != 0 && preColLen != 0 && colLen == preColLen {
-			if pipeline.ShouldSplitUpdateEvent(e) {
-				deleteEvent, insertEvent, err := pipeline.SplitUpdateEvent(e)
+			if shouldSplitUpdateEvent(e) {
+				deleteEvent, insertEvent, err := splitUpdateEvent(e)
 				if err != nil {
 					return nil, 0, errors.Trace(err)
 				}
@@ -317,4 +316,68 @@ func convertRowChangedEvents(
 		}
 	}
 	return rowChangedEvents, uint64(size), nil
+}
+
+// shouldSplitUpdateEvent determines if the split event is needed to align the old format based on
+// whether the handle key column has been modified.
+// If the handle key column is modified,
+// we need to use splitUpdateEvent to split the update event into a delete and an insert event.
+func shouldSplitUpdateEvent(updateEvent *model.PolymorphicEvent) bool {
+	// nil event will never be split.
+	if updateEvent == nil {
+		return false
+	}
+
+	for i := range updateEvent.Row.Columns {
+		col := updateEvent.Row.Columns[i]
+		preCol := updateEvent.Row.PreColumns[i]
+		if col != nil && col.Flag.IsHandleKey() && preCol != nil && preCol.Flag.IsHandleKey() {
+			colValueString := model.ColumnValueString(col.Value)
+			preColValueString := model.ColumnValueString(preCol.Value)
+			// If one handle key columns is updated, we need to split the event row.
+			if colValueString != preColValueString {
+				return true
+			}
+		}
+	}
+	return false
+}
+
+// splitUpdateEvent splits an update event into a delete and an insert event.
+func splitUpdateEvent(
+	updateEvent *model.PolymorphicEvent,
+) (*model.PolymorphicEvent, *model.PolymorphicEvent, error) {
+	if updateEvent == nil {
+		return nil, nil, errors.New("nil event cannot be split")
+	}
+
+	// If there is an update to handle key columns,
+	// we need to split the event into two events to be compatible with the old format.
+	// NOTICE: Here we don't need a full deep copy because
+	// our two events need Columns and PreColumns respectively,
+	// so it won't have an impact and no more full deep copy wastes memory.
+	deleteEvent := *updateEvent
+	deleteEventRow := *updateEvent.Row
+	deleteEventRowKV := *updateEvent.RawKV
+	deleteEvent.Row = &deleteEventRow
+	deleteEvent.RawKV = &deleteEventRowKV
+
+	deleteEvent.Row.Columns = nil
+	for i := range deleteEvent.Row.PreColumns {
+		// NOTICE: Only the handle key pre column is retained in the delete event.
+		if deleteEvent.Row.PreColumns[i] != nil &&
+			!deleteEvent.Row.PreColumns[i].Flag.IsHandleKey() {
+			deleteEvent.Row.PreColumns[i] = nil
+		}
+	}
+
+	insertEvent := *updateEvent
+	insertEventRow := *updateEvent.Row
+	insertEventRowKV := *updateEvent.RawKV
+	insertEvent.Row = &insertEventRow
+	insertEvent.RawKV = &insertEventRowKV
+	// NOTICE: clean up pre cols for insert event.
+	insertEvent.Row.PreColumns = nil
+
+	return &deleteEvent, &insertEvent, nil
 }

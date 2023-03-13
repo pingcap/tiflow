@@ -20,7 +20,7 @@ function prepare_dm_and_source() {
 
 	run_dm_worker $WORK_DIR/worker1 $WORKER1_PORT $cur/conf/dm-worker1.toml
 	check_rpc_alive $cur/../bin/check_worker_online 127.0.0.1:$WORKER1_PORT
-	# source 1 should bound to worker 1
+	# source 1 should be bound to worker 1
 	dmctl_operate_source create $cur/conf/source1.yaml $SOURCE_ID1
 
 	run_dm_worker $WORK_DIR/worker2 $WORKER2_PORT $cur/conf/dm-worker2.toml
@@ -564,7 +564,7 @@ function stopped_validator_fail_over() {
 		"new\/ignored\/resolved: 1\/0\/0" 1 \
 		"\"stage\": \"Running\"" 1 \
 		"\"stage\": \"Stopped\"" 1
-	# source1 bound to worker1, so source1 will bound to worker2. see prepare_dm_and_source
+	# source1 is bound to worker1, so source1 will be bound to worker2. see prepare_dm_and_source
 	kill_process worker1
 	# stopped task fail over, processed row status and table status is not loaded into memory, so they're zero
 	# but we can see errors, since it's loaded from db all the time

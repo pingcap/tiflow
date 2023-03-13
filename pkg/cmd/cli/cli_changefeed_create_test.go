@@ -162,10 +162,10 @@ func TestChangefeedCreateCli(t *testing.T) {
 	f.tso.EXPECT().Query(gomock.Any(), gomock.Any()).Return(&v2.Tso{
 		Timestamp: time.Now().Unix() * 1000,
 	}, nil)
-	f.changefeedsv2.EXPECT().VerifyTable(gomock.Any(), gomock.Any()).Return(&v2.Tables{
+	f.changefeeds.EXPECT().VerifyTable(gomock.Any(), gomock.Any()).Return(&v2.Tables{
 		IneligibleTables: []v2.TableName{{}},
 	}, nil)
-	f.changefeedsv2.EXPECT().Create(gomock.Any(), gomock.Any()).Return(&v2.ChangeFeedInfo{}, nil)
+	f.changefeeds.EXPECT().Create(gomock.Any(), gomock.Any()).Return(&v2.ChangeFeedInfo{}, nil)
 	require.Nil(t, cmd.Execute())
 
 	cmd = newCmdCreateChangefeed(f)

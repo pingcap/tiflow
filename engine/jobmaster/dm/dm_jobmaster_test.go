@@ -45,6 +45,7 @@ import (
 	"github.com/pingcap/tiflow/engine/pkg/dm/message"
 	dmproto "github.com/pingcap/tiflow/engine/pkg/dm/proto"
 	"github.com/pingcap/tiflow/engine/pkg/externalresource/broker"
+	resModel "github.com/pingcap/tiflow/engine/pkg/externalresource/model"
 	kvmock "github.com/pingcap/tiflow/engine/pkg/meta/mock"
 	metaModel "github.com/pingcap/tiflow/engine/pkg/meta/model"
 	pkgOrm "github.com/pingcap/tiflow/engine/pkg/orm"
@@ -575,8 +576,8 @@ func (m *MockBaseJobmaster) Exit(ctx context.Context, exitReason framework.ExitR
 	return args.Error(0)
 }
 
-func (m *MockBaseJobmaster) IsS3StorageEnabled() bool {
-	return false
+func (m *MockBaseJobmaster) GetEnabledBucketStorage() (bool, resModel.ResourceType) {
+	return false, resModel.ResourceTypeNone
 }
 
 func (m *MockBaseJobmaster) MetricFactory() promutil.Factory {

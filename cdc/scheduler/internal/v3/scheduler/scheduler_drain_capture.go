@@ -74,7 +74,7 @@ func (d *drainCaptureScheduler) Schedule(
 	_ model.Ts,
 	_ []tablepb.Span,
 	captures map[model.CaptureID]*member.CaptureStatus,
-	replications *spanz.Map[*replication.ReplicationSet],
+	replications *spanz.BtreeMap[*replication.ReplicationSet],
 ) []*replication.ScheduleTask {
 	d.mu.Lock()
 	defer d.mu.Unlock()

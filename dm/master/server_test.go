@@ -66,7 +66,7 @@ import (
 	"github.com/pingcap/tiflow/pkg/version"
 	"github.com/stretchr/testify/require"
 	"github.com/stretchr/testify/suite"
-	"github.com/tikv/pd/pkg/tempurl"
+	"github.com/tikv/pd/pkg/utils/tempurl"
 	clientv3 "go.etcd.io/etcd/client/v3"
 	"go.etcd.io/etcd/server/v3/verify"
 	"go.etcd.io/etcd/tests/v3/integration"
@@ -1841,7 +1841,7 @@ func (t *testMasterSuite) TestOperateSource() {
 	require.False(t.T(), resp.Result)
 	require.Contains(t.T(), resp.Msg, "source config with ID "+mysqlCfg.SourceID+" not exists")
 
-	// 5. start workers, the unbounded sources should be bounded
+	// 5. start workers, the unbound sources should be bound
 	var wg sync.WaitGroup
 	workerName1 := "worker1"
 	workerName2 := "worker2"

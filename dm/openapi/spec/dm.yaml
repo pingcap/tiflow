@@ -1864,7 +1864,7 @@ components:
         bound_source_name:
           type: string
           example: "mysql-01"
-          description: "bound source name of this worker node"
+          description: "source name bound to this worker node"
       required:
         - "name"
         - "addr"

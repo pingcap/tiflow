@@ -16,12 +16,12 @@ package sqlmodel
 import (
 	"strings"
 
+	"github.com/pingcap/log"
 	"github.com/pingcap/tidb/parser/ast"
 	"github.com/pingcap/tidb/parser/format"
 	"github.com/pingcap/tidb/parser/model"
 	"github.com/pingcap/tidb/parser/opcode"
 	driver "github.com/pingcap/tidb/types/parser_driver"
-	"github.com/pingcap/tiflow/dm/pkg/log"
 	"github.com/pingcap/tiflow/pkg/quotes"
 	"go.uber.org/zap"
 )
@@ -119,6 +119,152 @@ func GenDeleteSQL(changes ...*RowChange) (string, []interface{}) {
 		args = append(args, whereValues...)
 	}
 	buf.WriteString(")")
+	return buf.String(), args
+}
+
+// GenUpdateSQLFast generates the UPDATE SQL and its arguments.
+// Input `changes` should have same target table and same columns for WHERE
+// (typically same PK/NOT NULL UK), otherwise the behaviour is undefined.
+// It is a faster version compared with GenUpdateSQL.
+func GenUpdateSQLFast(changes ...*RowChange) (string, []any) {
+	if len(changes) == 0 {
+		log.L().DPanic("row changes is empty")
+		return "", nil
+	}
+	var buf strings.Builder
+	buf.Grow(1024)
+
+	// Generate UPDATE `db`.`table` SET
+	first := changes[0]
+	buf.WriteString("UPDATE ")
+	buf.WriteString(first.targetTable.QuoteString())
+	buf.WriteString(" SET ")
+
+	// Pre-generate essential sub statements used after WHEN, WHERE and IN.
+	var (
+		whereCaseStmt string
+		whenCaseStmt  string
+		inCaseStmt    string
+	)
+	whereColumns, _ := first.whereColumnsAndValues()
+	if len(whereColumns) == 1 {
+		// one field PK or UK, use `field`=? directly.
+		whereCaseStmt = quotes.QuoteName(whereColumns[0])
+		whenCaseStmt = whereCaseStmt + "=?"
+		inCaseStmt = valuesHolder(len(changes))
+	} else {
+		// multiple fields PK or UK, use ROW(...fields) expression.
+		whereValuesHolder := valuesHolder(len(whereColumns))
+		whereCaseStmt = "ROW("
+		for i, column := range whereColumns {
+			whereCaseStmt += quotes.QuoteName(column)
+			if i != len(whereColumns)-1 {
+				whereCaseStmt += ","
+			} else {
+				whereCaseStmt += ")"
+				whenCaseStmt = whereCaseStmt + "=ROW" + whereValuesHolder
+			}
+		}
+		var inCaseStmtBuf strings.Builder
+		// inCaseStmt sample:     IN (ROW(?,?,?),ROW(?,?,?))
+		//                           ^                     ^
+		// Buffer size count between |---------------------|
+		// equals to 3 * len(changes) for each `ROW`
+		// plus 1 * len(changes) - 1  for each `,` between every two ROW(?,?,?)
+		// plus len(whereValuesHolder) * len(changes)
+		// plus 2 for `(` and `)`
+		inCaseStmtBuf.Grow((4+len(whereValuesHolder))*len(changes) + 1)
+		inCaseStmtBuf.WriteString("(")
+		for i := range changes {
+			inCaseStmtBuf.WriteString("ROW")
+			inCaseStmtBuf.WriteString(whereValuesHolder)
+			if i != len(changes)-1 {
+				inCaseStmtBuf.WriteString(",")
+			} else {
+				inCaseStmtBuf.WriteString(")")
+			}
+		}
+		inCaseStmt = inCaseStmtBuf.String()
+	}
+
+	// Generate `ColumnName`=CASE WHEN .. THEN .. END
+	// Use this value in order to identify which is the first CaseWhenThen line,
+	// because generated column can happen any where and it will be skipped.
+	isFirstCaseWhenThenLine := true
+	for _, column := range first.targetTableInfo.Columns {
+		if isGenerated(first.targetTableInfo.Columns, column.Name) {
+			continue
+		}
+		if !isFirstCaseWhenThenLine {
+			// insert ", " after END of each lines except for the first line.
+			buf.WriteString(", ")
+		}
+
+		buf.WriteString(quotes.QuoteName(column.Name.String()) + "=CASE")
+		for range changes {
+			buf.WriteString(" WHEN ")
+			buf.WriteString(whenCaseStmt)
+			buf.WriteString(" THEN ?")
+		}
+		buf.WriteString(" END")
+		isFirstCaseWhenThenLine = false
+	}
+
+	// Generate WHERE .. IN ..
+	buf.WriteString(" WHERE ")
+	buf.WriteString(whereCaseStmt)
+	buf.WriteString(" IN ")
+	buf.WriteString(inCaseStmt)
+
+	// Build args of the UPDATE SQL
+	var assignValueColumnCount int
+	var skipColIdx []int
+	for i, col := range first.sourceTableInfo.Columns {
+		if isGenerated(first.targetTableInfo.Columns, col.Name) {
+			skipColIdx = append(skipColIdx, i)
+			continue
+		}
+		assignValueColumnCount++
+	}
+	args := make([]any, 0,
+		assignValueColumnCount*len(changes)*(len(whereColumns)+1)+len(changes)*len(whereColumns))
+	argsPerCol := make([][]any, assignValueColumnCount)
+	for i := 0; i < assignValueColumnCount; i++ {
+		argsPerCol[i] = make([]any, 0, len(changes)*(len(whereColumns)+1))
+	}
+	whereValuesAtTheEnd := make([]any, 0, len(changes)*len(whereColumns))
+	for _, change := range changes {
+		_, whereValues := change.whereColumnsAndValues()
+		// a simple check about different number of WHERE values, not trying to
+		// cover all cases
+		if len(whereValues) != len(whereColumns) {
+			log.Panic("len(whereValues) != len(whereColumns)",
+				zap.Int("len(whereValues)", len(whereValues)),
+				zap.Int("len(whereColumns)", len(whereColumns)),
+				zap.Any("whereValues", whereValues),
+				zap.Stringer("sourceTable", change.sourceTable))
+			return "", nil
+		}
+
+		whereValuesAtTheEnd = append(whereValuesAtTheEnd, whereValues...)
+
+		i := 0 // used as index of skipColIdx
+		writeableCol := 0
+		for j, val := range change.postValues {
+			if i < len(skipColIdx) && skipColIdx[i] == j {
+				i++
+				continue
+			}
+			argsPerCol[writeableCol] = append(argsPerCol[writeableCol], whereValues...)
+			argsPerCol[writeableCol] = append(argsPerCol[writeableCol], val)
+			writeableCol++
+		}
+	}
+	for _, a := range argsPerCol {
+		args = append(args, a...)
+	}
+	args = append(args, whereValuesAtTheEnd...)
+
 	return buf.String(), args
 }
 
@@ -224,7 +370,7 @@ func GenUpdateSQL(changes ...*RowChange) (string, []interface{}) {
 		// a simple check about different number of WHERE values, not trying to
 		// cover all cases
 		if len(whereValues) != len(whereColumns) {
-			log.L().DPanic("len(whereValues) != len(whereColumns)",
+			log.Panic("len(whereValues) != len(whereColumns)",
 				zap.Int("len(whereValues)", len(whereValues)),
 				zap.Int("len(whereColumns)", len(whereColumns)),
 				zap.Any("whereValues", whereValues),

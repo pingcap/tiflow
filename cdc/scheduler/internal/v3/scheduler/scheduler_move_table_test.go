@@ -64,7 +64,7 @@ func TestSchedulerMoveTable(t *testing.T) {
 	// move table not replicating
 	scheduler.addTask(tablepb.Span{TableID: 1}, "b")
 	tasks = scheduler.Schedule(
-		checkpointTs, currentTables, captures, spanz.NewMap[*replication.ReplicationSet]())
+		checkpointTs, currentTables, captures, spanz.NewBtreeMap[*replication.ReplicationSet]())
 	require.Len(t, tasks, 0)
 
 	scheduler.addTask(tablepb.Span{TableID: 1}, "b")

@@ -18,6 +18,8 @@ import (
 
 	"github.com/pingcap/errors"
 	"github.com/pingcap/tidb/br/pkg/lightning/common"
+	lcfg "github.com/pingcap/tidb/br/pkg/lightning/config"
+	"github.com/pingcap/tidb/br/pkg/storage"
 	"github.com/pingcap/tiflow/dm/config"
 	"github.com/pingcap/tiflow/dm/pkg/terror"
 	"github.com/stretchr/testify/require"
@@ -44,4 +46,15 @@ func TestConvertLightningError(t *testing.T) {
 	converted := convertLightningError(errors.Trace(err))
 	require.True(t, terror.ErrLoadLightningChecksum.Equal(converted))
 	require.Contains(t, converted.Error(), "checksum mismatched, KV number in source files: 4, KV number in TiDB cluster: 3")
+}
+
+func TestGetLightiningConfig(t *testing.T) {
+	t.Parallel()
+
+	conf, err := GetLightningConfig(&lcfg.GlobalConfig{},
+		&config.SubTaskConfig{
+			ExtStorage: &storage.LocalStorage{},
+		})
+	require.NoError(t, err)
+	require.Equal(t, lcfg.CheckpointDriverMySQL, conf.Checkpoint.Driver)
 }

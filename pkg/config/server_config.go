@@ -42,13 +42,8 @@ const (
 	// DebugConfigurationItem is the name of debug configurations
 	DebugConfigurationItem = "debug"
 
-	// DefaultTableMemoryQuota is the default memory quota for each table.
-	// It is larger than TiDB's txn-entry-size-limit.
-	// We can't set it to a larger value without risking oom in incremental scenarios.
-	DefaultTableMemoryQuota = 10 * 1024 * 1024 // 10 MB
-
 	// DefaultChangefeedMemoryQuota is the default memory quota for each changefeed.
-	DefaultChangefeedMemoryQuota = 256 * 1024 * 1024 // 256MB.
+	DefaultChangefeedMemoryQuota = 1024 * 1024 * 1024 // 1GB.
 )
 
 var (
@@ -107,15 +102,10 @@ var defaultServerConfig = &ServerConfig{
 	OwnerFlushInterval:     TomlDuration(50 * time.Millisecond),
 	ProcessorFlushInterval: TomlDuration(50 * time.Millisecond),
 	Sorter: &SorterConfig{
-		NumConcurrentWorker:    4,
-		ChunkSizeLimit:         128 * 1024 * 1024,       // 128MB
-		MaxMemoryPercentage:    10,                      // 10% is safe on machines with memory capacity <= 16GB
-		MaxMemoryConsumption:   16 * 1024 * 1024 * 1024, // 16GB
-		NumWorkerPoolGoroutine: 16,
-		SortDir:                DefaultSortDir,
+		MaxMemoryPercentage: 10, // 10% is safe on machines with memory capacity <= 16GB
+		SortDir:             DefaultSortDir,
 	},
-	Security:            &SecurityConfig{},
-	PerTableMemoryQuota: DefaultTableMemoryQuota,
+	Security: &SecurityConfig{},
 	KVClient: &KVClientConfig{
 		WorkerConcurrent: 8,
 		WorkerPoolSize:   0, // 0 will use NumCPU() * 2
@@ -125,12 +115,6 @@ var defaultServerConfig = &ServerConfig{
 		RegionRetryDuration: TomlDuration(time.Minute),
 	},
 	Debug: &DebugConfig{
-		TableActor: &TableActorConfig{
-			EventBatchSize: 32,
-		},
-		EnableNewScheduler: true,
-		// Default db sorter config
-		EnableDBSorter: true,
 		DB: &DBConfig{
 			Count: 8,
 			// Following configs are optimized for write/read throughput.
@@ -149,9 +133,8 @@ var defaultServerConfig = &ServerConfig{
 		},
 		Messages: defaultMessageConfig.Clone(),
 
-		Scheduler:           NewDefaultSchedulerConfig(),
-		EnableNewSink:       true,
-		EnablePullBasedSink: true,
+		Scheduler:         NewDefaultSchedulerConfig(),
+		EnableKafkaSinkV2: false,
 	},
 	ClusterID: "default",
 }
@@ -175,8 +158,10 @@ type ServerConfig struct {
 	OwnerFlushInterval     TomlDuration `toml:"owner-flush-interval" json:"owner-flush-interval"`
 	ProcessorFlushInterval TomlDuration `toml:"processor-flush-interval" json:"processor-flush-interval"`
 
-	Sorter              *SorterConfig   `toml:"sorter" json:"sorter"`
-	Security            *SecurityConfig `toml:"security" json:"security"`
+	Sorter   *SorterConfig   `toml:"sorter" json:"sorter"`
+	Security *SecurityConfig `toml:"security" json:"security"`
+	// DEPRECATED: after using pull based sink, this config is useless.
+	// Because we do not control the memory usage by table anymore.
 	PerTableMemoryQuota uint64          `toml:"per-table-memory-quota" json:"per-table-memory-quota"`
 	KVClient            *KVClientConfig `toml:"kv-client" json:"kv-client"`
 	Debug               *DebugConfig    `toml:"debug" json:"debug"`
@@ -276,10 +261,6 @@ func (c *ServerConfig) ValidateAndAdjust() error {
 	err := c.Sorter.ValidateAndAdjust()
 	if err != nil {
 		return err
-	}
-
-	if c.PerTableMemoryQuota == 0 {
-		c.PerTableMemoryQuota = defaultCfg.PerTableMemoryQuota
 	}
 
 	if c.KVClient == nil {

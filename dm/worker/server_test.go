@@ -37,7 +37,7 @@ import (
 	"github.com/pingcap/tiflow/dm/relay"
 	"github.com/pingcap/tiflow/dm/unit"
 	"github.com/stretchr/testify/require"
-	"github.com/tikv/pd/pkg/tempurl"
+	"github.com/tikv/pd/pkg/utils/tempurl"
 	v3rpc "go.etcd.io/etcd/api/v3/v3rpc/rpctypes"
 	clientv3 "go.etcd.io/etcd/client/v3"
 	"go.etcd.io/etcd/server/v3/embed"

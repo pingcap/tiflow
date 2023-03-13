@@ -607,13 +607,14 @@ func TestReplicationManagerAdvanceCheckpoint(t *testing.T) {
 	r.spans.ReplaceOrInsert(span2, rs)
 
 	// all tables are replicating
-	currentTables := []model.TableID{1, 2}
+	currentTables := &TableRanges{}
+	currentTables.UpdateTables([]model.TableID{1, 2})
 	checkpoint, resolved := r.AdvanceCheckpoint(currentTables, time.Now())
 	require.Equal(t, model.Ts(10), checkpoint)
 	require.Equal(t, model.Ts(20), resolved)
 
 	// some table not exist yet.
-	currentTables = append(currentTables, 3)
+	currentTables.UpdateTables([]model.TableID{1, 2, 3})
 	checkpoint, resolved = r.AdvanceCheckpoint(currentTables, time.Now())
 	require.Equal(t, checkpointCannotProceed, checkpoint)
 	require.Equal(t, checkpointCannotProceed, resolved)
@@ -644,7 +645,7 @@ func TestReplicationManagerAdvanceCheckpoint(t *testing.T) {
 	require.Equal(t, model.Ts(5), checkpoint)
 	require.Equal(t, model.Ts(20), resolved)
 
-	currentTables = append(currentTables, 4)
+	currentTables.UpdateTables([]model.TableID{1, 2, 3, 4})
 	span4 := spanz.TableIDToComparableSpan(4)
 	rs, err = NewReplicationSet(span4, model.Ts(3),
 		map[model.CaptureID]*tablepb.TableStatus{
@@ -664,7 +665,7 @@ func TestReplicationManagerAdvanceCheckpoint(t *testing.T) {
 	require.Equal(t, model.Ts(10), resolved)
 
 	// Split table 5 into 2 spans.
-	currentTables = append(currentTables, 5)
+	currentTables.UpdateTables([]model.TableID{1, 2, 3, 4, 5})
 	span5_1 := spanz.TableIDToComparableSpan(5)
 	span5_1.EndKey = append(span5_1.StartKey, 0)
 	span5_2 := spanz.TableIDToComparableSpan(5)

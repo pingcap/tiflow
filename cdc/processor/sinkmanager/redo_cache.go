@@ -31,7 +31,7 @@ type redoEventCache struct {
 	allocated uint64 // atomically shared in several goroutines.
 
 	mu     sync.Mutex
-	tables map[spanz.HashableSpan]*eventAppender
+	tables *spanz.HashMap[*eventAppender]
 
 	metricRedoEventCache prometheus.Gauge
 }
@@ -71,7 +71,7 @@ func newRedoEventCache(changefeedID model.ChangeFeedID, capacity uint64) *redoEv
 	return &redoEventCache{
 		capacity:  capacity,
 		allocated: 0,
-		tables:    make(map[spanz.HashableSpan]*eventAppender),
+		tables:    spanz.NewHashMap[*eventAppender](),
 
 		metricRedoEventCache: RedoEventCache.WithLabelValues(changefeedID.Namespace, changefeedID.ID),
 	}
@@ -79,7 +79,7 @@ func newRedoEventCache(changefeedID model.ChangeFeedID, capacity uint64) *redoEv
 
 func (r *redoEventCache) removeTable(span tablepb.Span) {
 	r.mu.Lock()
-	item, exists := r.tables[spanz.ToHashableSpan(span)]
+	item, exists := r.tables.Get(span)
 	defer r.mu.Unlock()
 	if exists {
 		item.mu.Lock()
@@ -92,7 +92,7 @@ func (r *redoEventCache) removeTable(span tablepb.Span) {
 		item.sizes = nil
 		item.pushCounts = nil
 		item.mu.Unlock()
-		delete(r.tables, spanz.ToHashableSpan(span))
+		r.tables.Delete(span)
 	}
 }
 
@@ -102,14 +102,14 @@ func (r *redoEventCache) maybeCreateAppender(
 	r.mu.Lock()
 	defer r.mu.Unlock()
 
-	item, exists := r.tables[spanz.ToHashableSpan(span)]
+	item, exists := r.tables.Get(span)
 	if !exists {
 		item = &eventAppender{
 			capacity:   r.capacity,
 			cache:      r,
 			lowerBound: lowerBound,
 		}
-		r.tables[spanz.ToHashableSpan(span)] = item
+		r.tables.ReplaceOrInsert(span, item)
 		return item
 	}
 
@@ -132,7 +132,7 @@ func (r *redoEventCache) maybeCreateAppender(
 func (r *redoEventCache) getAppender(span tablepb.Span) *eventAppender {
 	r.mu.Lock()
 	defer r.mu.Unlock()
-	return r.tables[spanz.ToHashableSpan(span)]
+	return r.tables.GetV(span)
 }
 
 func (e *eventAppender) pop(lowerBound, upperBound engine.Position) (res popResult) {
@@ -140,12 +140,21 @@ func (e *eventAppender) pop(lowerBound, upperBound engine.Position) (res popResu
 	defer e.mu.Unlock()
 
 	if lowerBound.Compare(e.lowerBound) < 0 {
+		// if lowerBound is less than e.lowerBound, it means there is a gap between
+		// the required range and the cached range. For example, [100, 110) is required,
+		// but there is [120, ...) in the cache.
 		// NOTE: the caller will fetch events [lowerBound, res.boundary) from engine.
 		res.success = false
-		res.boundary = e.lowerBound
+		if e.lowerBound.Compare(upperBound.Next()) <= 0 {
+			res.boundary = e.lowerBound
+		} else {
+			res.boundary = upperBound.Next()
+		}
 		return
 	}
 	if !e.upperBound.Valid() {
+		// if e.upperBound is invalid, it means there are no resolved transactions
+		// in the cache.
 		// NOTE: the caller will fetch events [lowerBound, res.boundary) from engine.
 		res.success = false
 		res.boundary = upperBound.Next()
@@ -271,4 +280,12 @@ func (e *eventAppender) onBroken() (pendingSize uint64) {
 		e.cache.metricRedoEventCache.Sub(float64(pendingSize))
 	}
 	return
+}
+
+// getEvents only used for test.
+func (e *eventAppender) getEvents() []*model.RowChangedEvent {
+	e.mu.Lock()
+	defer e.mu.Unlock()
+
+	return e.events
 }

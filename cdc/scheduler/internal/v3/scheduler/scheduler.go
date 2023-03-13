@@ -27,7 +27,7 @@ type scheduler interface {
 		checkpointTs model.Ts,
 		currentSpans []tablepb.Span,
 		aliveCaptures map[model.CaptureID]*member.CaptureStatus,
-		replications *spanz.Map[*replication.ReplicationSet],
+		replications *spanz.BtreeMap[*replication.ReplicationSet],
 	) []*replication.ScheduleTask
 }
 

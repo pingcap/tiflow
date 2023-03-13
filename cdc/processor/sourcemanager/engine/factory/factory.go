@@ -25,9 +25,7 @@ import (
 	"github.com/pingcap/tiflow/cdc/model"
 	"github.com/pingcap/tiflow/cdc/processor/sourcemanager/engine"
 	epebble "github.com/pingcap/tiflow/cdc/processor/sourcemanager/engine/pebble"
-	metrics "github.com/pingcap/tiflow/cdc/sorter"
 	"github.com/pingcap/tiflow/pkg/config"
-	dbMetrics "github.com/pingcap/tiflow/pkg/db"
 	"go.uber.org/atomic"
 	"go.uber.org/multierr"
 )
@@ -171,17 +169,20 @@ func (f *SortEngineFactory) collectMetrics() {
 		for i, db := range f.dbs {
 			stats := db.Metrics()
 			id := strconv.Itoa(i + 1)
-			metrics.OnDiskDataSizeGauge.WithLabelValues(id).Set(float64(stats.DiskSpaceUsage()))
-			metrics.InMemoryDataSizeGauge.WithLabelValues(id).Set(float64(stats.BlockCache.Size))
-			dbMetrics.IteratorGauge().WithLabelValues(id).Set(float64(stats.TableIters))
-			dbMetrics.WriteDelayCount().WithLabelValues(id).Set(float64(stdatomic.LoadUint64(&f.writeStalls[i].counter)))
+			engine.OnDiskDataSize().WithLabelValues(id).Set(float64(stats.DiskSpaceUsage()))
+			engine.InMemoryDataSize().WithLabelValues(id).Set(float64(stats.BlockCache.Size))
+			engine.IteratorGauge().WithLabelValues(id).Set(float64(stats.TableIters))
+			engine.WriteDelayCount().WithLabelValues(id).
+				Set(float64(stdatomic.LoadUint64(&f.writeStalls[i].counter)))
 
-			metricLevelCount := dbMetrics.LevelCount().MustCurryWith(map[string]string{"id": id})
+			metricLevelCount := engine.LevelCount().MustCurryWith(map[string]string{"id": id})
 			for level, metric := range stats.Levels {
 				metricLevelCount.WithLabelValues(fmt.Sprint(level)).Set(float64(metric.NumFiles))
 			}
-			dbMetrics.BlockCacheAccess().WithLabelValues(id, "hit").Set(float64(stats.BlockCache.Hits))
-			dbMetrics.BlockCacheAccess().WithLabelValues(id, "miss").Set(float64(stats.BlockCache.Misses))
+			engine.BlockCacheAccess().WithLabelValues(id, "hit").
+				Set(float64(stats.BlockCache.Hits))
+			engine.BlockCacheAccess().WithLabelValues(id, "miss").
+				Set(float64(stats.BlockCache.Misses))
 		}
 	}
 }

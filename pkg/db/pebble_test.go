@@ -20,8 +20,8 @@ import (
 	"time"
 
 	"github.com/cockroachdb/pebble"
-	"github.com/pingcap/tiflow/cdc/sorter/encoding"
 	"github.com/pingcap/tiflow/pkg/config"
+	"github.com/pingcap/tiflow/pkg/db/encoding"
 	"github.com/stretchr/testify/require"
 )
 

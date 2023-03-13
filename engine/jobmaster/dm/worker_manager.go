@@ -66,7 +66,7 @@ type WorkerManager struct {
 	checkpointAgent CheckpointAgent
 	logger          *zap.Logger
 
-	isS3StorageEnabled bool
+	storageType resModel.ResourceType
 
 	// workerStatusMap record the runtime worker status
 	// taskID -> WorkerStatus
@@ -83,19 +83,20 @@ func NewWorkerManager(
 	messageAgent message.Agent,
 	checkpointAgent CheckpointAgent,
 	pLogger *zap.Logger,
-	isS3StorageEnabled bool,
+	storageType resModel.ResourceType,
 ) *WorkerManager {
 	workerManager := &WorkerManager{
-		DefaultTicker:      ticker.NewDefaultTicker(WorkerNormalInterval, WorkerErrorInterval),
-		jobID:              jobID,
-		jobStore:           jobStore,
-		unitStore:          unitStore,
-		workerAgent:        workerAgent,
-		messageAgent:       messageAgent,
-		checkpointAgent:    checkpointAgent,
-		logger:             pLogger.With(zap.String("component", "worker_manager")),
-		isS3StorageEnabled: isS3StorageEnabled,
+		DefaultTicker:   ticker.NewDefaultTicker(WorkerNormalInterval, WorkerErrorInterval),
+		jobID:           jobID,
+		jobStore:        jobStore,
+		unitStore:       unitStore,
+		workerAgent:     workerAgent,
+		messageAgent:    messageAgent,
+		checkpointAgent: checkpointAgent,
+		logger:          pLogger.With(zap.String("component", "worker_manager")),
+		storageType:     storageType,
 	}
+
 	workerManager.DefaultTicker.Ticker = workerManager
 
 	for _, workerStatus := range initWorkerStatus {
@@ -268,7 +269,7 @@ func (wm *WorkerManager) checkAndScheduleWorkers(ctx context.Context, job *metad
 		// unfresh sync unit don't need local resource.(if we need to save table checkpoint for loadTableStructureFromDump in future, we can save it before saving global checkpoint.)
 		// TODO: storage should be created/discarded in jobmaster instead of worker.
 		if workerIdxInSeq(persistentTask.Cfg.TaskMode, nextUnit) != 0 && !(nextUnit == frameModel.WorkerDMSync && !isFresh) {
-			resID := NewDMResourceID(wm.jobID, persistentTask.Cfg.Upstreams[0].SourceID, wm.isS3StorageEnabled)
+			resID := NewDMResourceID(wm.jobID, persistentTask.Cfg.Upstreams[0].SourceID, wm.storageType)
 			resources = append(resources, resID)
 		}
 

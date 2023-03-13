@@ -69,6 +69,8 @@ type RowChange struct {
 
 	tp          RowChangeType
 	whereHandle *WhereHandle
+
+	approximateDataSize int64
 }
 
 // NewRowChange creates a new RowChange.
@@ -193,6 +195,17 @@ func (r *RowChange) UniqueNotNullIdx() *timodel.IndexInfo {
 // RowChange lazily initialize it.
 func (r *RowChange) SetWhereHandle(whereHandle *WhereHandle) {
 	r.whereHandle = whereHandle
+}
+
+// GetApproximateDataSize returns internal approximateDataSize, it could be zero
+// if this value is not set.
+func (r *RowChange) GetApproximateDataSize() int64 {
+	return r.approximateDataSize
+}
+
+// SetApproximateDataSize sets the approximate size of row change.
+func (r *RowChange) SetApproximateDataSize(approximateDataSize int64) {
+	r.approximateDataSize = approximateDataSize
 }
 
 func (r *RowChange) lazyInitWhereHandle() {

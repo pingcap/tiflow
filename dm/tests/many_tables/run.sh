@@ -103,7 +103,7 @@ function run() {
 	run_sql_tidb "select count(*) from dm_meta.test_syncer_checkpoint"
 	check_contains "count(*): $(($TABLE_NUM + 1))"
 
-	check_log_contains $WORK_DIR/worker1/log/dm-worker.log 'Error 8004: Transaction is too large'
+	check_log_contains $WORK_DIR/worker1/log/dm-worker.log 'Error 8004 (HY000): Transaction is too large'
 
 	# check https://github.com/pingcap/tiflow/issues/5063
 	check_time=100

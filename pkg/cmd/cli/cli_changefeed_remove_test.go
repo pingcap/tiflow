@@ -19,8 +19,8 @@ import (
 
 	"github.com/golang/mock/gomock"
 	"github.com/pingcap/errors"
-	"github.com/pingcap/tiflow/cdc/model"
-	"github.com/pingcap/tiflow/pkg/api/v1/mock"
+	v2 "github.com/pingcap/tiflow/cdc/api/v2"
+	"github.com/pingcap/tiflow/pkg/api/v2/mock"
 	cerror "github.com/pingcap/tiflow/pkg/errors"
 	"github.com/stretchr/testify/require"
 )
@@ -33,7 +33,7 @@ func TestChangefeedRemoveCli(t *testing.T) {
 
 	cmd := newCmdRemoveChangefeed(f)
 
-	cf.EXPECT().Get(gomock.Any(), "abc").Return(&model.ChangefeedDetail{}, nil)
+	cf.EXPECT().Get(gomock.Any(), "abc").Return(&v2.ChangeFeedInfo{}, nil)
 	cf.EXPECT().Delete(gomock.Any(), "abc").Return(nil)
 	cf.EXPECT().Get(gomock.Any(), "abc").Return(nil,
 		cerror.ErrChangeFeedNotExists.GenWithStackByArgs("abc"))

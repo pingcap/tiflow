@@ -54,7 +54,7 @@ func (r *rebalanceScheduler) Schedule(
 	_ model.Ts,
 	currentSpans []tablepb.Span,
 	captures map[model.CaptureID]*member.CaptureStatus,
-	replications *spanz.Map[*replication.ReplicationSet],
+	replications *spanz.BtreeMap[*replication.ReplicationSet],
 ) []*replication.ScheduleTask {
 	// rebalance is not triggered, or there is still some pending task,
 	// do not generate new tasks.
@@ -110,7 +110,7 @@ func (r *rebalanceScheduler) Schedule(
 func newBalanceMoveTables(
 	random *rand.Rand,
 	captures map[model.CaptureID]*member.CaptureStatus,
-	replications *spanz.Map[*replication.ReplicationSet],
+	replications *spanz.BtreeMap[*replication.ReplicationSet],
 	maxTaskLimit int,
 	changefeedID model.ChangeFeedID,
 ) []replication.MoveTable {

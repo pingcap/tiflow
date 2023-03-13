@@ -125,7 +125,7 @@ type Meta struct {
 }
 
 // Verify does verification on configs
-// NOTE: we can't decide to verify `binlog-name` or `binlog-gtid` until bound to a source (with `enable-gtid` set).
+// NOTE: we can't decide to verify `binlog-name` or `binlog-gtid` until being bound to a source (with `enable-gtid` set).
 func (m *Meta) Verify() error {
 	if m != nil && len(m.BinLogName) == 0 && len(m.BinLogGTID) == 0 {
 		return terror.ErrConfigMetaInvalid.Generate()

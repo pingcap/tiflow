@@ -128,6 +128,9 @@ const (
 	// monitor.
 	changefeedLogsWarnDuration = 1 * time.Second
 	schedulerLogsWarnDuration  = 1 * time.Second
+
+	// TiDB collects metric data every 1 minute
+	downstreamObserverTickDuration = 30 * time.Second
 )
 
 // InitMetrics registers all metrics used in owner

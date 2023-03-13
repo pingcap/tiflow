@@ -14,7 +14,7 @@
 package cli
 
 import (
-	apiv1client "github.com/pingcap/tiflow/pkg/api/v1"
+	apiv2client "github.com/pingcap/tiflow/pkg/api/v2"
 	cmdcontext "github.com/pingcap/tiflow/pkg/cmd/context"
 	"github.com/pingcap/tiflow/pkg/cmd/factory"
 	"github.com/pingcap/tiflow/pkg/cmd/util"
@@ -31,7 +31,7 @@ type capture struct {
 
 // listCaptureOptions defines flags for the `cli capture list` command.
 type listCaptureOptions struct {
-	apiv1Client apiv1client.APIV1Interface
+	apiv2Client apiv2client.APIV2Interface
 }
 
 // newListCaptureOptions creates new listCaptureOptions for the `cli capture list` command.
@@ -41,11 +41,11 @@ func newListCaptureOptions() *listCaptureOptions {
 
 // complete adapts from the command line args to the data and client required.
 func (o *listCaptureOptions) complete(f factory.Factory) error {
-	apiv1Client, err := f.APIV1Client()
+	apiv2Client, err := f.APIV2Client()
 	if err != nil {
 		return err
 	}
-	o.apiv1Client = apiv1Client
+	o.apiv2Client = apiv2Client
 	return nil
 }
 
@@ -53,12 +53,12 @@ func (o *listCaptureOptions) complete(f factory.Factory) error {
 func (o *listCaptureOptions) run(cmd *cobra.Command) error {
 	ctx := cmdcontext.GetDefaultContext()
 
-	raw, err := o.apiv1Client.Captures().List(ctx)
+	raw, err := o.apiv2Client.Captures().List(ctx)
 	if err != nil {
 		return err
 	}
-	captures := make([]*capture, 0, len(*raw))
-	for _, c := range *raw {
+	captures := make([]*capture, 0, len(raw))
+	for _, c := range raw {
 		captures = append(captures,
 			&capture{
 				ID:            c.ID,

@@ -21,18 +21,13 @@ import (
 	"github.com/pingcap/tiflow/pkg/redo"
 )
 
-const (
-	// MinFlushIntervalInMs is the minimum value of flush interval, which is set
-	// to two seconds to reduce the frequency of accessing external storage.
-	MinFlushIntervalInMs = 2000
-)
-
 // ConsistentConfig represents replication consistency config for a changefeed.
 type ConsistentConfig struct {
 	Level             string `toml:"level" json:"level"`
 	MaxLogSize        int64  `toml:"max-log-size" json:"max-log-size"`
 	FlushIntervalInMs int64  `toml:"flush-interval" json:"flush-interval"`
 	Storage           string `toml:"storage" json:"storage"`
+	UseFileBackend    bool   `toml:"use-file-backend" json:"use-file-backend"`
 }
 
 // ValidateAndAdjust validates the consistency config and adjusts it if necessary.
@@ -41,10 +36,17 @@ func (c *ConsistentConfig) ValidateAndAdjust() error {
 		return nil
 	}
 
-	if c.FlushIntervalInMs < MinFlushIntervalInMs {
+	if c.MaxLogSize == 0 {
+		c.MaxLogSize = redo.DefaultMaxLogSize
+	}
+
+	if c.FlushIntervalInMs == 0 {
+		c.FlushIntervalInMs = redo.DefaultFlushIntervalInMs
+	}
+	if c.FlushIntervalInMs < redo.MinFlushIntervalInMs {
 		return cerror.ErrInvalidReplicaConfig.FastGenByArgs(
 			fmt.Sprintf("The consistent.flush-interval:%d must be equal or greater than %d",
-				c.FlushIntervalInMs, MinFlushIntervalInMs))
+				c.FlushIntervalInMs, redo.MinFlushIntervalInMs))
 	}
 
 	uri, err := storage.ParseRawURL(c.Storage)

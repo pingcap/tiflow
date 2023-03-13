@@ -25,12 +25,15 @@ import (
 	"os"
 	"path/filepath"
 	"sync"
+	"time"
 
 	"github.com/pingcap/errors"
 	"github.com/pingcap/log"
 	"github.com/pingcap/tidb/br/pkg/storage"
 	"github.com/pingcap/tiflow/cdc/model"
+	"github.com/pingcap/tiflow/cdc/model/codec"
 	"github.com/pingcap/tiflow/cdc/redo/writer"
+	"github.com/pingcap/tiflow/cdc/redo/writer/file"
 	cerror "github.com/pingcap/tiflow/pkg/errors"
 	"github.com/pingcap/tiflow/pkg/redo"
 	"go.uber.org/multierr"
@@ -52,7 +55,7 @@ const (
 type fileReader interface {
 	io.Closer
 	// Read return the log from log file
-	Read(log *model.RedoLog) error
+	Read() (*model.RedoLog, error)
 }
 
 type readerConfig struct {
@@ -80,6 +83,10 @@ func newReader(ctx context.Context, cfg *readerConfig) ([]fileReader, error) {
 	if cfg == nil {
 		return nil, cerror.WrapError(cerror.ErrRedoConfigInvalid, errors.New("readerConfig can not be nil"))
 	}
+	if cfg.workerNums == 0 {
+		cfg.workerNums = defaultWorkerNum
+	}
+	start := time.Now()
 
 	if cfg.useExternalStorage {
 		extStorage, err := redo.InitExternalStorage(ctx, cfg.uri)
@@ -87,13 +94,10 @@ func newReader(ctx context.Context, cfg *readerConfig) ([]fileReader, error) {
 			return nil, err
 		}
 
-		err = downLoadToLocal(ctx, cfg.dir, extStorage, cfg.fileType)
+		err = downLoadToLocal(ctx, cfg.dir, extStorage, cfg.fileType, cfg.workerNums)
 		if err != nil {
 			return nil, cerror.WrapError(cerror.ErrRedoDownloadFailed, err)
 		}
-	}
-	if cfg.workerNums == 0 {
-		cfg.workerNums = defaultWorkerNum
 	}
 
 	rr, err := openSelectedFiles(ctx, cfg.dir, cfg.fileType, cfg.startTs, cfg.workerNums)
@@ -112,6 +116,9 @@ func newReader(ctx context.Context, cfg *readerConfig) ([]fileReader, error) {
 			})
 	}
 
+	log.Info("succeed to download and sort redo logs",
+		zap.String("type", cfg.fileType),
+		zap.Duration("duration", time.Since(start)))
 	return readers, nil
 }
 
@@ -133,27 +140,36 @@ func selectDownLoadFile(
 			return nil
 		})
 	if err != nil {
-		return nil, cerror.WrapError(cerror.ErrS3StorageAPI, err)
+		return nil, cerror.WrapError(cerror.ErrExternalStorageAPI, err)
 	}
 
 	return files, nil
 }
 
 func downLoadToLocal(
-	ctx context.Context, dir string, extStorage storage.ExternalStorage, fixedType string,
+	ctx context.Context, dir string,
+	extStorage storage.ExternalStorage,
+	fixedType string, workerNum int,
 ) error {
 	files, err := selectDownLoadFile(ctx, extStorage, fixedType)
 	if err != nil {
 		return err
 	}
 
+	limit := make(chan struct{}, workerNum)
 	eg, eCtx := errgroup.WithContext(ctx)
 	for _, file := range files {
+		select {
+		case <-ctx.Done():
+			return ctx.Err()
+		case limit <- struct{}{}:
+		}
 		f := file
 		eg.Go(func() error {
+			defer func() { <-limit }()
 			data, err := extStorage.ReadFile(eCtx, f)
 			if err != nil {
-				return cerror.WrapError(cerror.ErrS3StorageAPI, err)
+				return cerror.WrapError(cerror.ErrExternalStorageAPI, err)
 			}
 
 			err = os.MkdirAll(dir, redo.DefaultDirMode)
@@ -239,8 +255,7 @@ func readFile(file *os.File) (logHeap, error) {
 
 	h := logHeap{}
 	for {
-		rl := &model.RedoLog{}
-		err := r.Read(rl)
+		rl, err := r.Read()
 		if err != nil {
 			if err != io.EOF {
 				return nil, err
@@ -255,18 +270,18 @@ func readFile(file *os.File) (logHeap, error) {
 
 // writFile if not safely closed, the sorted file will end up with .sort.tmp as the file name suffix
 func writFile(ctx context.Context, dir, name string, h logHeap) error {
-	cfg := &writer.FileWriterConfig{
-		Dir:        dir,
-		MaxLogSize: math.MaxInt32,
+	cfg := &writer.LogWriterConfig{
+		Dir:               dir,
+		MaxLogSizeInBytes: math.MaxInt32,
 	}
-	w, err := writer.NewWriter(ctx, cfg, writer.WithLogFileName(func() string { return name }))
+	w, err := file.NewFileWriter(ctx, cfg, writer.WithLogFileName(func() string { return name }))
 	if err != nil {
 		return err
 	}
 
 	for h.Len() != 0 {
 		item := heap.Pop(&h).(*logWithIdx).data
-		data, err := item.MarshalMsg(nil)
+		data, err := codec.MarshalRedoLog(item, nil)
 		if err != nil {
 			return cerror.WrapError(cerror.ErrMarshalFailed, err)
 		}
@@ -373,16 +388,16 @@ func shouldOpen(startTs uint64, name, fixedType string) (bool, error) {
 
 // Read implement Read interface.
 // TODO: more general reader pair with writer in writer pkg
-func (r *reader) Read(redoLog *model.RedoLog) error {
+func (r *reader) Read() (*model.RedoLog, error) {
 	r.mu.Lock()
 	defer r.mu.Unlock()
 
 	lenField, err := readInt64(r.br)
 	if err != nil {
 		if err == io.EOF {
-			return err
+			return nil, err
 		}
-		return cerror.WrapError(cerror.ErrRedoFileOp, err)
+		return nil, cerror.WrapError(cerror.ErrRedoFileOp, err)
 	}
 
 	recBytes, padBytes := decodeFrameSize(lenField)
@@ -393,23 +408,23 @@ func (r *reader) Read(redoLog *model.RedoLog) error {
 			log.Warn("read redo log have unexpected io error",
 				zap.String("fileName", r.fileName),
 				zap.Error(err))
-			return io.EOF
+			return nil, io.EOF
 		}
-		return cerror.WrapError(cerror.ErrRedoFileOp, err)
+		return nil, cerror.WrapError(cerror.ErrRedoFileOp, err)
 	}
 
-	_, err = redoLog.UnmarshalMsg(data[:recBytes])
+	redoLog, _, err := codec.UnmarshalRedoLog(data[:recBytes])
 	if err != nil {
 		if r.isTornEntry(data) {
 			// just return io.EOF, since if torn write it is the last redoLog entry
-			return io.EOF
+			return nil, io.EOF
 		}
-		return cerror.WrapError(cerror.ErrUnmarshalFailed, err)
+		return nil, cerror.WrapError(cerror.ErrUnmarshalFailed, err)
 	}
 
 	// point last valid offset to the end of redoLog
 	r.lastValidOff += frameSizeBytes + recBytes + padBytes
-	return nil
+	return redoLog, nil
 }
 
 func readInt64(r io.Reader) (int64, error) {

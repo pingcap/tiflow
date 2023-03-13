@@ -78,8 +78,7 @@ function run() {
 		"checksum mismatched, KV number in source files: 6, KV number in TiDB cluster: 3" 1 \
 		'"unit": "Load"' 2
 	run_dm_ctl $WORK_DIR "127.0.0.1:$MASTER_PORT" \
-		"resume-task test" \
-		"\"result\": true" 3
+		"resume-task test"
 	run_dm_ctl_with_retry $WORK_DIR "127.0.0.1:$MASTER_PORT" \
 		"query-status test" \
 		'unit": "Sync"' 2

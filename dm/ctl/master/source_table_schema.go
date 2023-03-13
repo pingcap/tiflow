@@ -171,7 +171,7 @@ func newSourceTableSchemaDeleteCmd() *cobra.Command {
 			database := args[1]
 			table := args[2]
 			request := &pb.OperateSchemaRequest{
-				Op:         pb.SchemaOp_SetSchema,
+				Op:         pb.SchemaOp_RemoveSchema,
 				Task:       taskName,
 				Sources:    sources,
 				Database:   database,

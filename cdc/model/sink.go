@@ -236,16 +236,52 @@ const (
 // more info https://github.com/tinylib/msgp/issues/158, https://github.com/tinylib/msgp/issues/149
 // so define a RedoColumn, RedoDDLEvent instead of using the Column, DDLEvent
 type RedoLog struct {
-	RedoRow *RedoRowChangedEvent `msg:"row"`
-	RedoDDL *RedoDDLEvent        `msg:"ddl"`
-	Type    RedoLogType          `msg:"type"`
+	RedoRow RedoRowChangedEvent `msg:"row"`
+	RedoDDL RedoDDLEvent        `msg:"ddl"`
+	Type    RedoLogType         `msg:"type"`
+}
+
+// GetCommitTs returns the commit ts of the redo log.
+func (r *RedoLog) GetCommitTs() Ts {
+	switch r.Type {
+	case RedoLogTypeRow:
+		return r.RedoRow.Row.CommitTs
+	case RedoLogTypeDDL:
+		return r.RedoDDL.DDL.CommitTs
+	default:
+		log.Panic("invalid redo log type", zap.Any("type", r.Type))
+	}
+	return 0
 }
 
 // RedoRowChangedEvent represents the DML event used in RedoLog
 type RedoRowChangedEvent struct {
 	Row        *RowChangedEvent `msg:"row"`
-	PreColumns []*RedoColumn    `msg:"pre-columns"`
-	Columns    []*RedoColumn    `msg:"columns"`
+	Columns    []RedoColumn     `msg:"columns"`
+	PreColumns []RedoColumn     `msg:"pre-columns"`
+}
+
+// RedoDDLEvent represents DDL event used in redo log persistent
+type RedoDDLEvent struct {
+	DDL       *DDLEvent `msg:"ddl"`
+	Type      byte      `msg:"type"`
+	TableName TableName `msg:"table-name"`
+}
+
+// ToRedoLog converts row changed event to redo log
+func (row *RowChangedEvent) ToRedoLog() *RedoLog {
+	return &RedoLog{
+		RedoRow: RedoRowChangedEvent{Row: row},
+		Type:    RedoLogTypeRow,
+	}
+}
+
+// ToRedoLog converts ddl event to redo log
+func (ddl *DDLEvent) ToRedoLog() *RedoLog {
+	return &RedoLog{
+		RedoDDL: RedoDDLEvent{DDL: ddl},
+		Type:    RedoLogTypeDDL,
+	}
 }
 
 // RowChangedEvent represents a row changed event
@@ -259,8 +295,8 @@ type RowChangedEvent struct {
 	ColInfos  []rowcodec.ColInfo `json:"column-infos" msg:"-"`
 	TableInfo *TableInfo         `json:"-" msg:"-"`
 
-	Columns      []*Column `json:"columns" msg:"-"`
-	PreColumns   []*Column `json:"pre-columns" msg:"-"`
+	Columns      []*Column `json:"columns" msg:"columns"`
+	PreColumns   []*Column `json:"pre-columns" msg:"pre-columns"`
 	IndexColumns [][]int   `json:"-" msg:"index-columns"`
 
 	// ApproximateDataSize is the approximate size of protobuf binary
@@ -311,48 +347,6 @@ func (r *RowChangedEvent) PrimaryKeyColumnNames() []string {
 		}
 	}
 	return result
-}
-
-// PrimaryKeyColumns returns the column(s) corresponding to the handle key(s)
-func (r *RowChangedEvent) PrimaryKeyColumns() []*Column {
-	pkeyCols := make([]*Column, 0)
-
-	var cols []*Column
-	if r.IsDelete() {
-		cols = r.PreColumns
-	} else {
-		cols = r.Columns
-	}
-
-	for _, col := range cols {
-		if col != nil && (col.Flag.IsPrimaryKey()) {
-			pkeyCols = append(pkeyCols, col)
-		}
-	}
-
-	// It is okay not to have primary keys, so the empty array is an acceptable result
-	return pkeyCols
-}
-
-// HandleKeyColumns returns the column(s) corresponding to the handle key(s)
-func (r *RowChangedEvent) HandleKeyColumns() []*Column {
-	pkeyCols := make([]*Column, 0)
-
-	var cols []*Column
-	if r.IsDelete() {
-		cols = r.PreColumns
-	} else {
-		cols = r.Columns
-	}
-
-	for _, col := range cols {
-		if col != nil && col.Flag.IsHandleKey() {
-			pkeyCols = append(pkeyCols, col)
-		}
-	}
-
-	// It is okay not to have handle keys, so the empty array is an acceptable result
-	return pkeyCols
 }
 
 // HandleKeyColInfos returns the column(s) and colInfo(s) corresponding to the handle key(s)
@@ -429,7 +423,7 @@ type Column struct {
 	Type    byte           `json:"type" msg:"type"`
 	Charset string         `json:"charset" msg:"charset"`
 	Flag    ColumnFlagType `json:"flag" msg:"-"`
-	Value   interface{}    `json:"value" msg:"value"`
+	Value   interface{}    `json:"value" msg:"-"`
 	Default interface{}    `json:"default" msg:"-"`
 
 	// ApproximateBytes is approximate bytes consumed by the column.
@@ -438,8 +432,11 @@ type Column struct {
 
 // RedoColumn stores Column change
 type RedoColumn struct {
-	Column *Column `msg:"column"`
-	Flag   uint64  `msg:"flag"`
+	// Fields from Column and can't be marshaled directly in Column.
+	Value interface{} `msg:"column"`
+	// msgp transforms empty byte slice into nil, PTAL msgp#247.
+	ValueIsEmptyBytes bool   `msg:"value-is-empty-bytes"`
+	Flag              uint64 `msg:"flag"`
 }
 
 // BuildTiDBTableInfo builds a TiDB TableInfo from given information.
@@ -593,12 +590,6 @@ type DDLEvent struct {
 	PreTableInfo *TableInfo       `msg:"-"`
 	Type         model.ActionType `msg:"-"`
 	Done         bool             `msg:"-"`
-}
-
-// RedoDDLEvent represents DDL event used in redo log persistent
-type RedoDDLEvent struct {
-	DDL  *DDLEvent `msg:"ddl"`
-	Type byte      `msg:"type"`
 }
 
 // FromJob fills the values with DDLEvent from DDL job

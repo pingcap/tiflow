@@ -31,7 +31,7 @@ import (
 	"github.com/pingcap/tiflow/cdc/entry/schema"
 	"github.com/pingcap/tiflow/cdc/kv"
 	"github.com/pingcap/tiflow/cdc/model"
-	"github.com/pingcap/tiflow/cdc/sorter/memory"
+	"github.com/pingcap/tiflow/cdc/puller/memorysorter"
 	"github.com/pingcap/tiflow/pkg/config"
 	cerror "github.com/pingcap/tiflow/pkg/errors"
 	"github.com/pingcap/tiflow/pkg/filter"
@@ -92,7 +92,7 @@ func (p *ddlJobPullerImpl) Run(ctx context.Context) error {
 		return errors.Trace(p.puller.Run(ctx))
 	})
 
-	rawDDLCh := memory.SortOutput(ctx, p.puller.Output())
+	rawDDLCh := memorysorter.SortOutput(ctx, p.puller.Output())
 	eg.Go(
 		func() error {
 			for {
@@ -122,6 +122,7 @@ func (p *ddlJobPullerImpl) Run(ctx context.Context) error {
 					if err != nil {
 						return errors.Trace(err)
 					}
+					log.Info("handle job", zap.Stringer("job", job), zap.Bool("skip", skip))
 					if skip {
 						continue
 					}
@@ -323,11 +324,11 @@ func (p *ddlJobPullerImpl) handleJob(job *timodel.Job) (skip bool, err error) {
 	if p.schemaSnapshot == nil {
 		return false, nil
 	}
-
 	// Do this first to fill the schema name to its origin schema name.
 	if err := p.schemaSnapshot.FillSchemaName(job); err != nil {
 		// If we can't find a job's schema, check if it's been filtered.
-		if p.filter.ShouldIgnoreTable(job.SchemaName, job.TableName) {
+		if p.filter.ShouldIgnoreTable(job.SchemaName, job.TableName) ||
+			p.filter.ShouldDiscardDDL(job.Type, job.SchemaName, job.TableName) {
 			return true, nil
 		}
 		return true, errors.Trace(err)
@@ -491,6 +492,7 @@ func NewDDLJobPuller(
 			changefeed,
 			-1, DDLPullerTableName,
 			ddLPullerFilterLoop,
+			true,
 		),
 		kvStorage: kvStorage,
 		outputCh:  make(chan *model.DDLJobEntry, defaultPullerOutputChanSize),
@@ -507,6 +509,7 @@ type DDLPuller interface {
 	FrontDDL() (uint64, *timodel.Job)
 	// PopFrontDDL returns and pops the first DDL job in the internal queue
 	PopFrontDDL() (uint64, *timodel.Job)
+	ResolvedTs() uint64
 	// Close closes the DDLPuller
 	Close()
 }
@@ -680,4 +683,9 @@ func (h *ddlPullerImpl) Close() {
 		zap.String("namespace", h.changefeedID.Namespace),
 		zap.String("changefeed", h.changefeedID.ID))
 	h.cancel()
+}
+
+func (h *ddlPullerImpl) ResolvedTs() uint64 {
+	ts, _ := h.FrontDDL()
+	return ts
 }
