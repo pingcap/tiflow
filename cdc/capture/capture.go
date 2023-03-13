@@ -315,15 +315,13 @@ func (c *captureImpl) run(stdCtx context.Context) error {
 		// an unrecoverable serious errors (recoverable errors are intercepted in the owner tick)
 		// so we should restart the capture.
 		err := c.campaignOwner(ctx)
-		if err != nil {
-			log.Error("campaign owner routine exited with error, restart the capture",
+		if err != nil || c.liveness.Load() != model.LivenessCaptureStopping {
+			log.Warn("campaign owner routine exited, restart the capture",
 				zap.String("captureID", c.info.ID), zap.Error(err))
-		} else {
-			log.Info("campaign owner routine exited, restart the capture",
-				zap.String("captureID", c.info.ID))
+			// Throw ErrCaptureSuicide to restart capture.
+			return cerror.ErrCaptureSuicide.FastGenByArgs()
 		}
-		// If we throw an ErrCaptureSuicide error, the capture will restart.
-		return cerror.ErrCaptureSuicide.FastGenByArgs()
+		return nil
 	})
 
 	g.Go(func() error {
