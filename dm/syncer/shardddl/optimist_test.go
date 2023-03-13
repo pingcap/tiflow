@@ -62,6 +62,7 @@ func (t *testOptimistSuite) clearOptimistTestSourceInfoOperation() {
 }
 
 func createTableInfo(t *testing.T, p *parser.Parser, se sessionctx.Context, tableID int64, sql string) *model.TableInfo {
+	t.Helper()
 	node, err := p.ParseOneStmt(sql, "utf8mb4", "utf8mb4_bin")
 	require.NoError(t, err)
 	createStmtNode, ok := node.(*ast.CreateTableStmt)
