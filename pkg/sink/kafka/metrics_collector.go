@@ -30,8 +30,8 @@ type MetricsCollector interface {
 	Run(ctx context.Context)
 }
 
-// flushMetricsInterval specifies the interval of refresh sarama metrics.
-const flushMetricsInterval = 5 * time.Second
+// RefreshMetricsInterval specifies the interval of refresh kafka client metrics.
+const RefreshMetricsInterval = 5 * time.Second
 
 // Sarama metrics names, see https://pkg.go.dev/github.com/Shopify/sarama#pkg-overview.
 const (
@@ -71,7 +71,7 @@ func NewSaramaMetricsCollector(
 }
 
 func (m *saramaMetricsCollector) Run(ctx context.Context) {
-	ticker := time.NewTicker(flushMetricsInterval)
+	ticker := time.NewTicker(RefreshMetricsInterval)
 	defer func() {
 		ticker.Stop()
 		m.cleanupMetrics()
@@ -129,25 +129,25 @@ func (m *saramaMetricsCollector) collectBrokerMetrics() {
 		outgoingByteRateMetric := m.registry.Get(
 			getBrokerMetricName(outgoingByteRateMetricNamePrefix, brokerID))
 		if meter, ok := outgoingByteRateMetric.(metrics.Meter); ok {
-			outgoingByteRateGauge.
+			OutgoingByteRateGauge.
 				WithLabelValues(namespace, changefeedID, brokerID).
-				Set(meter.Snapshot().Rate1())
+				Set(meter.Snapshot().RateMean())
 		}
 
 		requestRateMetric := m.registry.Get(
 			getBrokerMetricName(requestRateMetricNamePrefix, brokerID))
 		if meter, ok := requestRateMetric.(metrics.Meter); ok {
-			requestRateGauge.
+			RequestRateGauge.
 				WithLabelValues(namespace, changefeedID, brokerID).
-				Set(meter.Snapshot().Rate1())
+				Set(meter.Snapshot().RateMean())
 		}
 
 		requestLatencyMetric := m.registry.Get(
 			getBrokerMetricName(requestLatencyInMsMetricNamePrefix, brokerID))
 		if histogram, ok := requestLatencyMetric.(metrics.Histogram); ok {
-			requestLatencyInMsGauge.
+			RequestLatencyGauge.
 				WithLabelValues(namespace, changefeedID, brokerID).
-				Set(histogram.Snapshot().Mean())
+				Set(histogram.Snapshot().Mean() / 1000) // convert millisecond to second.
 		}
 
 		requestsInFlightMetric := m.registry.Get(getBrokerMetricName(
@@ -163,7 +163,7 @@ func (m *saramaMetricsCollector) collectBrokerMetrics() {
 		if meter, ok := responseRateMetric.(metrics.Meter); ok {
 			responseRateGauge.
 				WithLabelValues(namespace, changefeedID, brokerID).
-				Set(meter.Snapshot().Rate1())
+				Set(meter.Snapshot().RateMean())
 		}
 	}
 }
@@ -182,11 +182,11 @@ func (m *saramaMetricsCollector) cleanupBrokerMetrics() {
 	changefeedID := m.changefeedID.ID
 	for id := range m.brokers {
 		brokerID := strconv.Itoa(int(id))
-		outgoingByteRateGauge.
+		OutgoingByteRateGauge.
 			DeleteLabelValues(namespace, changefeedID, brokerID)
-		requestRateGauge.
+		RequestRateGauge.
 			DeleteLabelValues(namespace, changefeedID, brokerID)
-		requestLatencyInMsGauge.
+		RequestLatencyGauge.
 			DeleteLabelValues(namespace, changefeedID, brokerID)
 		requestsInFlightGauge.
 			DeleteLabelValues(namespace, changefeedID, brokerID)
