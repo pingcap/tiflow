@@ -689,28 +689,28 @@ func TestGetDefaultZeroValue(t *testing.T) {
 		{
 			Name:    "mysql.TypeFloat + notnull + nodefault",
 			ColInfo: timodel.ColumnInfo{FieldType: *ftTypeFloatNotNull},
-			Res:     float64(0),
+			Res:     float32(0),
 			Default: nil,
 		},
 		// mysql.TypeFloat + notnull + default
 		{
 			Name: "mysql.TypeFloat + notnull + default",
 			ColInfo: timodel.ColumnInfo{
-				OriginDefaultValue: -3.1415,
+				OriginDefaultValue: float32(-3.1415),
 				FieldType:          *ftTypeFloatNotNull,
 			},
-			Res:     float64(-3.1415),
-			Default: float64(-3.1415),
+			Res:     float32(-3.1415),
+			Default: float32(-3.1415),
 		},
 		// mysql.TypeFloat + notnull + default + unsigned
 		{
 			Name: "mysql.TypeFloat + notnull + default + unsigned",
 			ColInfo: timodel.ColumnInfo{
-				OriginDefaultValue: 3.1415,
+				OriginDefaultValue: float32(3.1415),
 				FieldType:          *ftTypeFloatNotNullUnSigned,
 			},
-			Res:     float64(3.1415),
-			Default: float64(3.1415),
+			Res:     float32(3.1415),
+			Default: float32(3.1415),
 		},
 		// mysql.TypeFloat + notnull + unsigned
 		{
@@ -718,18 +718,18 @@ func TestGetDefaultZeroValue(t *testing.T) {
 			ColInfo: timodel.ColumnInfo{
 				FieldType: *ftTypeFloatNotNullUnSigned,
 			},
-			Res:     float64(0),
+			Res:     float32(0),
 			Default: nil,
 		},
 		// mysql.TypeFloat + null + default
 		{
 			Name: "mysql.TypeFloat + null + default",
 			ColInfo: timodel.ColumnInfo{
-				OriginDefaultValue: -3.1415,
+				OriginDefaultValue: float32(-3.1415),
 				FieldType:          *ftTypeFloatNull,
 			},
-			Res:     float64(-3.1415),
-			Default: float64(-3.1415),
+			Res:     float32(-3.1415),
+			Default: float32(-3.1415),
 		},
 		// mysql.TypeFloat + null + nodefault
 		{
