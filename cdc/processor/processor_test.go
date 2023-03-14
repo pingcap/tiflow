@@ -66,6 +66,8 @@ func newProcessor4Test(
 		)
 		p.sinkManager = sinkManager
 		p.sourceManager = sourceManger
+		// NOTICE: we have to bind the sourceManager to the sinkManager
+		// otherwise the sinkManager will not receive the resolvedTs.
 		p.sourceManager.OnResolve(p.sinkManager.UpdateReceivedSorterResolvedTs)
 		p.initialized = true
 		return nil
