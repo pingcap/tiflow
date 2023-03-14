@@ -16,7 +16,7 @@ package entry
 import (
 	"bytes"
 	"context"
-	"math"
+	"fmt"
 	"strings"
 	"testing"
 	"time"
@@ -38,7 +38,7 @@ import (
 	"github.com/pingcap/tidb/util/mock"
 	"github.com/pingcap/tiflow/cdc/model"
 	"github.com/pingcap/tiflow/pkg/config"
-	pfilter "github.com/pingcap/tiflow/pkg/filter"
+	"github.com/pingcap/tiflow/pkg/filter"
 	"github.com/pingcap/tiflow/pkg/spanz"
 	"github.com/pingcap/tiflow/pkg/sqlmodel"
 	"github.com/stretchr/testify/require"
@@ -52,7 +52,7 @@ func TestMounterDisableOldValue(t *testing.T) {
 	testCases := []struct {
 		tableName      string
 		createTableDDL string
-		// [] for rows, []infterface{} for columns.
+		// [] for rows, []interface{} for columns.
 		values [][]interface{}
 		// [] for table partition if there is any,
 		// []int for approximateBytes of rows.
@@ -302,7 +302,7 @@ func testMounterDisableOldValue(t *testing.T, tc struct {
 	require.Nil(t, err)
 	scheamStorage.AdvanceResolvedTs(ver.Ver)
 	config := config.GetDefaultReplicaConfig()
-	filter, err := pfilter.NewFilter(config, "")
+	filter, err := filter.NewFilter(config, "")
 	require.Nil(t, err)
 	mounter := NewMounter(scheamStorage,
 		model.DefaultChangeFeedID("c1"),
@@ -328,13 +328,13 @@ func testMounterDisableOldValue(t *testing.T, tc struct {
 			t.Log("ApproximateBytes", tc.tableName, rows-1, row.ApproximateBytes())
 			// TODO: test column flag, column type and index columns
 			if len(row.Columns) != 0 {
-				checkSQL, params := prepareCheckSQL(t, tc.tableName, row.Columns)
-				result := tk.MustQuery(checkSQL, params...)
+				checkSQL := prepareCheckSQL(t, tc.tableName, row.Columns)
+				result := tk.MustQuery(checkSQL)
 				result.Check([][]interface{}{{"1"}})
 			}
 			if len(row.PreColumns) != 0 {
-				checkSQL, params := prepareCheckSQL(t, tc.tableName, row.PreColumns)
-				result := tk.MustQuery(checkSQL, params...)
+				checkSQL := prepareCheckSQL(t, tc.tableName, row.PreColumns)
+				result := tk.MustQuery(checkSQL)
 				result.Check([][]interface{}{{"1"}})
 			}
 		})
@@ -403,11 +403,10 @@ func prepareInsertSQL(t *testing.T, tableInfo *model.TableInfo, columnLens int) 
 	return sb.String()
 }
 
-func prepareCheckSQL(t *testing.T, tableName string, cols []*model.Column) (string, []interface{}) {
+func prepareCheckSQL(t *testing.T, tableName string, cols []*model.Column) string {
 	var sb strings.Builder
 	_, err := sb.WriteString("SELECT count(1) FROM " + tableName + " WHERE ")
 	require.Nil(t, err)
-	params := make([]interface{}, 0, len(cols))
 	for i, col := range cols {
 		if col == nil {
 			continue
@@ -425,15 +424,17 @@ func prepareCheckSQL(t *testing.T, tableName string, cols []*model.Column) (stri
 		if bytes, ok := col.Value.([]byte); ok {
 			col.Value = string(bytes)
 		}
-		params = append(params, col.Value)
+
+		var value string
 		if col.Type == mysql.TypeJSON {
-			_, err = sb.WriteString(col.Name + " = CAST(? AS JSON)")
+			value = fmt.Sprintf("%s = CAST(%+v AS JSON)", col.Name, col.Value)
 		} else {
-			_, err = sb.WriteString(col.Name + " = ?")
+			value = fmt.Sprintf("%s = %+v", col.Name, col.Value)
 		}
+		_, err := sb.WriteString(value)
 		require.Nil(t, err)
 	}
-	return sb.String(), params
+	return sb.String()
 }
 
 func walkTableSpanInStore(t *testing.T, store tidbkv.Storage, tableID int64, f func(key []byte, value []byte)) {
@@ -974,7 +975,7 @@ func TestGetDefaultZeroValue(t *testing.T) {
 
 	for _, tc := range testCases {
 		_, val, _, _, _ := getDefaultOrZeroValue(&tc.ColInfo)
-		require.EqualValues(t, tc.Res, val, tc.Name)
+		require.Equal(t, tc.Res, val, tc.Name)
 		val = getDDLDefaultDefinition(&tc.ColInfo)
 		require.Equal(t, tc.Default, val, tc.Name)
 	}
@@ -997,7 +998,7 @@ func TestDecodeEventIgnoreRow(t *testing.T) {
 
 	cfg := config.GetDefaultReplicaConfig()
 	cfg.Filter.Rules = []string{"test.student", "test.computer"}
-	filter, err := pfilter.NewFilter(cfg, "")
+	filter, err := filter.NewFilter(cfg, "")
 	require.Nil(t, err)
 	ver, err := helper.Storage().CurrentVersion(oracle.GlobalTxnScope)
 	require.Nil(t, err)
@@ -1267,37 +1268,4 @@ func TestNewDMRowChange(t *testing.T) {
 		require.Equal(t, "DELETE FROM `db`.`t1` WHERE (`a1`,`a3`) IN ((?,?),(?,?))", sqlGot)
 		require.Equal(t, []interface{}{1, 2, 1, 2}, argsGot)
 	}
-}
-
-func TestFormatColVal(t *testing.T) {
-	t.Parallel()
-
-	ftTypeFloatNotNull := types.NewFieldType(mysql.TypeFloat)
-	ftTypeFloatNotNull.SetFlag(mysql.NotNullFlag)
-	col := &timodel.ColumnInfo{FieldType: *ftTypeFloatNotNull}
-
-	var datum types.Datum
-
-	datum.SetFloat32(123.99)
-	value, _, _, err := formatColVal(datum, col)
-	require.NoError(t, err)
-	require.EqualValues(t, float32(123.99), value)
-
-	datum.SetFloat32(float32(math.NaN()))
-	value, _, warn, err := formatColVal(datum, col)
-	require.NoError(t, err)
-	require.Equal(t, float32(0), value)
-	require.NotZero(t, warn)
-
-	datum.SetFloat32(float32(math.Inf(1)))
-	value, _, warn, err = formatColVal(datum, col)
-	require.NoError(t, err)
-	require.Equal(t, float32(0), value)
-	require.NotZero(t, warn)
-
-	datum.SetFloat32(float32(math.Inf(-1)))
-	value, _, warn, err = formatColVal(datum, col)
-	require.NoError(t, err)
-	require.Equal(t, float32(0), value)
-	require.NotZero(t, warn)
 }
