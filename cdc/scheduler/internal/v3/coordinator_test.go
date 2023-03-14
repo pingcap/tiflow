@@ -45,7 +45,7 @@ func TestCoordinatorSendMsgs(t *testing.T) {
 		ChangefeedSettings: &config.ChangefeedSchedulerConfig{
 			// Enable span replication.
 			EnableTableAcrossNodes: true,
-			RegionPerSpan:          10000,
+			RegionThreshold:        10000,
 		},
 	})
 	coord.version = "6.2.0"
@@ -86,7 +86,7 @@ func TestCoordinatorRecvMsgs(t *testing.T) {
 		ChangefeedSettings: &config.ChangefeedSchedulerConfig{
 			// Enable span replication.
 			EnableTableAcrossNodes: true,
-			RegionPerSpan:          10000,
+			RegionThreshold:        10000,
 		},
 	})
 	coord.version = "6.2.0"
@@ -130,7 +130,7 @@ func TestCoordinatorTransportCompat(t *testing.T) {
 
 	coord, trans := newTestCoordinator(&config.SchedulerConfig{
 		ChangefeedSettings: &config.ChangefeedSchedulerConfig{
-			RegionPerSpan: 0, // Disable span replication.
+			RegionThreshold: 0, // Disable span replication.
 		},
 	})
 
@@ -204,8 +204,8 @@ func newTestCoordinator(cfg *config.SchedulerConfig) (*coordinator, *transport.M
 	coord := newCoordinator("a", model.ChangeFeedID{}, 1, cfg)
 	trans := transport.NewMockTrans()
 	coord.trans = trans
-	coord.reconciler = keyspan.NewReconciler(
-		model.ChangeFeedID{}, keyspan.NewMockRegionCache(), cfg.ChangefeedSettings)
+	coord.reconciler = keyspan.NewReconcilerForTests(
+		keyspan.NewMockRegionCache(), cfg.ChangefeedSettings)
 	return coord, trans
 }
 

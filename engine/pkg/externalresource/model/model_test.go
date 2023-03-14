@@ -35,6 +35,19 @@ func TestParseResource(t *testing.T) {
 	require.NoError(t, err)
 	require.Equal(t, "my-local-resource/a/b/c", rawResName)
 	require.Equal(t, "/s3/my-local-resource/a/b/c", BuildResourceID(tp, suffix))
+
+	tp, suffix, err = ParseResourceID("/gs/my-local-resource/a/b/c")
+	require.NoError(t, err)
+	require.Equal(t, ResourceTypeGCS, tp)
+	rawResName, err = DecodeResourceName(suffix)
+	require.NoError(t, err)
+	require.Equal(t, "my-local-resource/a/b/c", rawResName)
+	require.Equal(t, "/gs/my-local-resource/a/b/c", BuildResourceID(tp, suffix))
+
+	_, _, err = ParseResourceID("/gcs/my-local-resource/a/b/c")
+	require.Error(t, err)
+	_, _, err = ParseResourceID("/none/my-local-resource/a/b/c")
+	require.Error(t, err)
 }
 
 func FuzzEncodeResourceName(f *testing.F) {

@@ -137,18 +137,6 @@ func (h *OpenAPIV2) createChangefeed(c *gin.Context) {
 		_ = c.Error(cerror.WrapError(cerror.ErrAPIInvalidParam, err))
 		return
 	}
-	o, err := h.capture.GetOwner()
-	if err != nil {
-		needRemoveGCSafePoint = true
-		_ = c.Error(cerror.WrapError(cerror.ErrAPIInvalidParam, err))
-		return
-	}
-	err = o.ValidateChangefeed(info)
-	if err != nil {
-		needRemoveGCSafePoint = true
-		_ = c.Error(cerror.WrapError(cerror.ErrAPIInvalidParam, err))
-		return
-	}
 
 	err = etcdClient.CreateChangefeedInfo(ctx,
 		upstreamInfo,
@@ -329,11 +317,18 @@ func (h *OpenAPIV2) updateChangefeed(c *gin.Context) {
 		_ = c.Error(err)
 		return
 	}
-	if oldCfInfo.State != model.StateStopped {
-		_ = c.Error(cerror.ErrChangefeedUpdateRefused.
-			GenWithStackByArgs("can only update changefeed config when it is stopped"))
+
+	switch oldCfInfo.State {
+	case model.StateStopped, model.StateFailed:
+	default:
+		_ = c.Error(
+			cerror.ErrChangefeedUpdateRefused.GenWithStackByArgs(
+				"can only update changefeed config when it is stopped or failed",
+			),
+		)
 		return
 	}
+
 	cfStatus, err := h.capture.StatusProvider().GetChangeFeedStatus(ctx, changefeedID)
 	if err != nil {
 		_ = c.Error(err)

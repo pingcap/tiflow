@@ -24,8 +24,9 @@ type ChangefeedSchedulerConfig struct {
 	// EnableTableAcrossNodes set true to split one table to multiple spans and
 	// distribute to multiple TiCDC nodes.
 	EnableTableAcrossNodes bool `toml:"enable-table-across-nodes" json:"enable-table-across-nodes"`
-	// RegionPerSpan is the number of regions in a span, also it's the threshold
-	// of splitting a table.
+	// RegionThreshold is the region count threshold of splitting a table.
+	RegionThreshold int `toml:"region-threshold" json:"region-threshold"`
+	// Deprecated.
 	RegionPerSpan int `toml:"region-per-span" json:"region-per-span"`
 }
 

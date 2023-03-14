@@ -18,6 +18,7 @@ import (
 	"fmt"
 
 	v2 "github.com/pingcap/tiflow/cdc/api/v2"
+	"github.com/pingcap/tiflow/cdc/model"
 	"github.com/pingcap/tiflow/pkg/api/internal/rest"
 )
 
@@ -131,9 +132,13 @@ func (c *changefeeds) Pause(ctx context.Context,
 func (c *changefeeds) Get(ctx context.Context,
 	name string,
 ) (*v2.ChangeFeedInfo, error) {
+	err := model.ValidateChangefeedID(name)
+	if err != nil {
+		return nil, err
+	}
 	result := new(v2.ChangeFeedInfo)
 	u := fmt.Sprintf("changefeeds/%s", name)
-	err := c.client.Get().
+	err = c.client.Get().
 		WithURI(u).
 		Do(ctx).
 		Into(result)
