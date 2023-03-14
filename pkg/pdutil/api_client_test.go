@@ -112,7 +112,7 @@ func TestListGcServiceSafePoint(t *testing.T) {
 	require.NoError(t, err)
 	defer pc.Close()
 	_, err = pc.ListGcServiceSafePoint(ctx)
-	require.Nil(t, err)
+	require.NoError(t, err)
 	mockClient.testServer.Close()
 }
 
@@ -151,17 +151,17 @@ func TestMetaLabelDecodeJSON(t *testing.T) {
 	require.Len(t, meta.SetRules, 2)
 	keys := meta.SetRules[1].Data.([]interface{})[0].(map[string]interface{})
 	startKey, err := hex.DecodeString(keys["start_key"].(string))
-	require.Nil(t, err)
+	require.NoError(t, err)
 	endKey, err := hex.DecodeString(keys["end_key"].(string))
-	require.Nil(t, err)
+	require.NoError(t, err)
 
 	_, startKey, err = codec.DecodeBytes(startKey, nil)
-	require.Nil(t, err)
+	require.NoError(t, err)
 	require.EqualValues(
 		t, spanz.JobTableID, tablecodec.DecodeTableID(startKey), keys["start_key"].(string))
 
 	_, endKey, err = codec.DecodeBytes(endKey, nil)
-	require.Nil(t, err)
+	require.NoError(t, err)
 	require.EqualValues(
 		t, spanz.JobTableID+1, tablecodec.DecodeTableID(endKey), keys["end_key"].(string))
 }
@@ -209,14 +209,14 @@ func TestScanRegions(t *testing.T) {
 		return RegionsInfo{Regions: regions[start:end]}
 	}
 	rs, err := pc.scanRegions(context.Background(), tablepb.Span{}, []string{mockPDServer.URL}, 1)
-	require.Nil(t, err)
+	require.NoError(t, err)
 	require.Equal(t, 7, len(rs))
 
 	handler = func(startKey, endKey []byte, limit int) RegionsInfo {
 		return RegionsInfo{Regions: regions}
 	}
 	rs, err = pc.scanRegions(context.Background(), tablepb.Span{}, []string{mockPDServer.URL}, 1024)
-	require.Nil(t, err)
+	require.NoError(t, err)
 	require.Equal(t, 7, len(rs))
 
 	i = 0
@@ -231,7 +231,7 @@ func TestScanRegions(t *testing.T) {
 		context.Background(),
 		tablepb.Span{StartKey: []byte{0, 2, 0}, EndKey: []byte{0, 3}},
 		[]string{mockPDServer.URL}, 1)
-	require.Nil(t, err)
+	require.NoError(t, err)
 	require.Equal(t, 1, len(rs))
 
 	i = 0
@@ -254,6 +254,6 @@ func TestScanRegions(t *testing.T) {
 		context.Background(),
 		tablepb.Span{StartKey: []byte{0, 2, 0}, EndKey: []byte{0, 4, 0}},
 		[]string{mockPDServer.URL}, 1)
-	require.Nil(t, err)
+	require.NoError(t, err)
 	require.Equal(t, 3, len(rs))
 }

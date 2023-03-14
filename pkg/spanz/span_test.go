@@ -31,8 +31,8 @@ func TestStartCompare(t *testing.T) {
 		res int
 	}{
 		{nil, nil, 0},
-		{nil, []byte{}, -1},
-		{[]byte{}, nil, 1},
+		{nil, []byte{}, 0},
+		{[]byte{}, nil, 0},
 		{[]byte{}, []byte{}, 0},
 		{[]byte{1}, []byte{2}, -1},
 		{[]byte{2}, []byte{1}, 1},
@@ -53,8 +53,8 @@ func TestEndCompare(t *testing.T) {
 		res int
 	}{
 		{nil, nil, 0},
-		{nil, []byte{}, 1},
-		{[]byte{}, nil, -1},
+		{nil, []byte{}, 0},
+		{[]byte{}, nil, 0},
 		{[]byte{}, []byte{}, 0},
 		{[]byte{1}, []byte{2}, -1},
 		{[]byte{2}, []byte{1}, 1},

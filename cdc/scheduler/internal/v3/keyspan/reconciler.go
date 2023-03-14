@@ -119,10 +119,9 @@ func (m *Reconciler) Reconcile(
 			if compat.CheckSpanReplicationEnabled() {
 				for _, splitter := range m.splitter {
 					spans = splitter.split(ctx, tableSpan, len(aliveCaptures), m.config)
-					if len(spans) <= 1 {
-						continue
+					if len(spans) > 1 {
+						break
 					}
-					break
 				}
 			}
 			m.tableSpans[tableID] = splittedSpans{

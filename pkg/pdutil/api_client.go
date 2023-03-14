@@ -165,10 +165,9 @@ func NewTestRegionInfo(regionID uint64, start, end []byte, writtenKeys uint64) R
 // NOTE: This type is a copy of github.com/tikv/pd/server/api.RegionInfo.
 // To reduce dependency tree, we do not import the api package directly.
 type RegionInfo struct {
-	ID       uint64 `json:"id"`
-	StartKey string `json:"start_key"`
-	EndKey   string `json:"end_key"`
-
+	ID          uint64 `json:"id"`
+	StartKey    string `json:"start_key"`
+	EndKey      string `json:"end_key"`
 	WrittenKeys uint64 `json:"written_keys"`
 }
 
