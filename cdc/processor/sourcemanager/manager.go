@@ -50,6 +50,15 @@ type SourceManager struct {
 	errChan chan error
 	// Used to indicate whether the changefeed is in BDR mode.
 	bdrMode bool
+
+	// pullerWrapperCreator is used to create a puller wrapper.
+	// Only used for testing.
+	pullerWrapperCreator func(changefeed model.ChangeFeedID,
+		span tablepb.Span,
+		tableName string,
+		startTs model.Ts,
+		bdrMode bool,
+	) pullerwrapper.Wrapper
 }
 
 // New creates a new source manager.
@@ -62,12 +71,33 @@ func New(
 	bdrMode bool,
 ) *SourceManager {
 	return &SourceManager{
-		changefeedID: changefeedID,
-		up:           up,
-		mg:           mg,
-		engine:       engine,
-		errChan:      errChan,
-		bdrMode:      bdrMode,
+		changefeedID:         changefeedID,
+		up:                   up,
+		mg:                   mg,
+		engine:               engine,
+		errChan:              errChan,
+		bdrMode:              bdrMode,
+		pullerWrapperCreator: pullerwrapper.NewPullerWrapper,
+	}
+}
+
+// NewForTest creates a new source manager for testing.
+func NewForTest(
+	changefeedID model.ChangeFeedID,
+	up *upstream.Upstream,
+	mg entry.MounterGroup,
+	engine engine.SortEngine,
+	errChan chan error,
+	bdrMode bool,
+) *SourceManager {
+	return &SourceManager{
+		changefeedID:         changefeedID,
+		up:                   up,
+		mg:                   mg,
+		engine:               engine,
+		errChan:              errChan,
+		bdrMode:              bdrMode,
+		pullerWrapperCreator: pullerwrapper.NewPullerWrapperForTest,
 	}
 }
 
@@ -77,7 +107,7 @@ func (m *SourceManager) AddTable(
 ) {
 	// Add table to the engine first, so that the engine can receive the events from the puller.
 	m.engine.AddTable(span)
-	p := pullerwrapper.NewPullerWrapper(m.changefeedID, span, tableName, startTs, m.bdrMode)
+	p := m.pullerWrapperCreator(m.changefeedID, span, tableName, startTs, m.bdrMode)
 	p.Start(ctx, m.up, m.engine, m.errChan)
 	m.pullers.Store(span, p)
 }
@@ -85,7 +115,7 @@ func (m *SourceManager) AddTable(
 // RemoveTable removes a table from the source manager. Stop puller and unregister table from the engine.
 func (m *SourceManager) RemoveTable(span tablepb.Span) {
 	if wrapper, ok := m.pullers.Load(span); ok {
-		wrapper.(*pullerwrapper.Wrapper).Close()
+		wrapper.(pullerwrapper.Wrapper).Close()
 		m.pullers.Delete(span)
 	}
 	m.engine.RemoveTable(span)
@@ -124,7 +154,7 @@ func (m *SourceManager) GetTablePullerStats(span tablepb.Span) puller.Stats {
 			zap.String("changefeed", m.changefeedID.ID),
 			zap.Stringer("span", &span))
 	}
-	return p.(*pullerwrapper.Wrapper).GetStats()
+	return p.(pullerwrapper.Wrapper).GetStats()
 }
 
 // GetTableSorterStats returns the sorter stats of the table.
@@ -144,7 +174,7 @@ func (m *SourceManager) Close() error {
 		zap.String("changefeed", m.changefeedID.ID))
 	start := time.Now()
 	m.pullers.Range(func(span tablepb.Span, value interface{}) bool {
-		value.(*pullerwrapper.Wrapper).Close()
+		value.(pullerwrapper.Wrapper).Close()
 		return true
 	})
 	log.Info("All pullers have been closed",
@@ -159,4 +189,9 @@ func (m *SourceManager) Close() error {
 		zap.String("changefeed", m.changefeedID.ID),
 		zap.Duration("cost", time.Since(start)))
 	return nil
+}
+
+// Add adds events to the engine. It is used for testing.
+func (m *SourceManager) Add(span tablepb.Span, events ...*model.PolymorphicEvent) {
+	m.engine.Add(span, events...)
 }

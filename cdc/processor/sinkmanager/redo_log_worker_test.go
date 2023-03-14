@@ -62,7 +62,7 @@ func (suite *redoLogWorkerSuite) createWorker(
 	memQuota uint64,
 ) (*redoWorker, engine.SortEngine, *mockRedoDMLManager) {
 	sortEngine := memory.New(context.Background())
-	sm := sourcemanager.New(suite.testChangefeedID, upstream.NewUpstream4Test(&mockPD{}),
+	sm := sourcemanager.New(suite.testChangefeedID, upstream.NewUpstream4Test(&MockPD{}),
 		&entry.MockMountGroup{}, sortEngine, make(chan error, 1), false)
 
 	// To avoid refund or release panics.
