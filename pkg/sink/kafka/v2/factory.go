@@ -42,6 +42,8 @@ type factory struct {
 	transport    *kafka.Transport
 	changefeedID model.ChangeFeedID
 	options      *pkafka.Options
+
+	writer *kafka.Writer
 }
 
 // NewFactory returns a factory implemented based on kafka-go
@@ -57,6 +59,7 @@ func NewFactory(
 		transport:    transport,
 		changefeedID: changefeedID,
 		options:      options,
+		writer:       &kafka.Writer{},
 	}, nil
 }
 
@@ -163,6 +166,7 @@ func (f *factory) newWriter(async bool) *kafka.Writer {
 		BatchBytes:   int64(f.options.MaxMessageBytes),
 		Async:        async,
 	}
+	f.writer = w
 	compression := strings.ToLower(strings.TrimSpace(f.options.Compression))
 	switch compression {
 	case "none":
@@ -193,6 +197,9 @@ func (f *factory) AdminClient() (pkafka.ClusterAdminClient, error) {
 // SyncProducer creates a sync producer to writer message to kafka
 func (f *factory) SyncProducer() (pkafka.SyncProducer, error) {
 	w := f.newWriter(false)
+	// set batch size to 1 to make sure the message is sent immediately
+	w.BatchTimeout = time.Millisecond
+	w.BatchSize = 1
 	return &syncWriter{w: w}, nil
 }
 
@@ -203,6 +210,10 @@ func (f *factory) AsyncProducer(
 	failpointCh chan error,
 ) (pkafka.AsyncProducer, error) {
 	w := f.newWriter(true)
+	// assume each message is 1KB,
+	// and set batch timeout to 5ms to avoid waste too much time on waiting for messages.
+	w.BatchTimeout = 5 * time.Millisecond
+	w.BatchSize = int(w.BatchBytes / 1024)
 	aw := &asyncWriter{
 		w:            w,
 		closedChan:   closedChan,
@@ -242,7 +253,7 @@ func (f *factory) MetricsCollector(
 	role util.Role,
 	adminClient pkafka.ClusterAdminClient,
 ) pkafka.MetricsCollector {
-	return NewMetricsCollector(f.changefeedID, role, adminClient)
+	return NewMetricsCollector(f.changefeedID, role, f.writer)
 }
 
 type syncWriter struct {

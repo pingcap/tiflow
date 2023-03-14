@@ -56,8 +56,7 @@ func newSchedulerFromCtx(
 	ownerRev := ctx.GlobalVars().OwnerRevision
 	captureID := ctx.GlobalVars().CaptureInfo.ID
 	ret, err = scheduler.NewScheduler(
-		ctx, captureID, changeFeedID,
-		messageServer, messageRouter, ownerRev, epoch, up.RegionCache, up.PDClock, cfg)
+		ctx, captureID, changeFeedID, messageServer, messageRouter, ownerRev, epoch, up, cfg)
 	return ret, errors.Trace(err)
 }
 
