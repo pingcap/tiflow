@@ -23,6 +23,7 @@ import (
 	"github.com/pingcap/tiflow/pkg/security"
 	pkafka "github.com/pingcap/tiflow/pkg/sink/kafka"
 	"github.com/segmentio/kafka-go"
+	"github.com/segmentio/kafka-go/sasl/plain"
 	"github.com/stretchr/testify/require"
 )
 
@@ -58,7 +59,7 @@ func TestSyncProducer(t *testing.T) {
 
 	p, ok := sync.(*syncWriter)
 	require.True(t, ok)
-	require.False(t, p.w.Async)
+	require.False(t, p.w.(*kafka.Writer).Async)
 }
 
 func TestAsyncProducer(t *testing.T) {
@@ -79,14 +80,15 @@ func TestAsyncProducer(t *testing.T) {
 	require.NoError(t, err)
 
 	asyncP, ok := async.(*asyncWriter)
+	w := asyncP.w.(*kafka.Writer)
 	require.True(t, ok)
-	require.True(t, asyncP.w.Async)
+	require.True(t, w.Async)
 	require.NotNil(t, asyncP.closedChan)
 
-	require.Equal(t, asyncP.w.ReadTimeout, o.ReadTimeout)
-	require.Equal(t, asyncP.w.WriteTimeout, o.WriteTimeout)
-	require.Equal(t, asyncP.w.RequiredAcks, kafka.RequiredAcks(o.RequiredAcks))
-	require.Equal(t, asyncP.w.BatchBytes, int64(o.MaxMessageBytes))
+	require.Equal(t, w.ReadTimeout, o.ReadTimeout)
+	require.Equal(t, w.WriteTimeout, o.WriteTimeout)
+	require.Equal(t, w.RequiredAcks, kafka.RequiredAcks(o.RequiredAcks))
+	require.Equal(t, w.BatchBytes, int64(o.MaxMessageBytes))
 
 	var (
 		async0, _ = factory.AsyncProducer(
@@ -188,4 +190,44 @@ func TestAsyncProducer(t *testing.T) {
 		t, retErr4.Error(),
 		cerror.Trace(ctx4.Err()).Error(),
 	)
+}
+
+func TestCompleteSASLConfig(t *testing.T) {
+	m, err := completeSASLConfig(&pkafka.Options{
+		SASL: nil,
+	})
+	require.Nil(t, m)
+	require.Nil(t, err)
+	m, err = completeSASLConfig(&pkafka.Options{
+		SASL: &security.SASL{
+			SASLUser:      "user",
+			SASLPassword:  "pass",
+			SASLMechanism: pkafka.SASLTypeSCRAMSHA256,
+		},
+	})
+	require.Nil(t, err)
+	require.Equal(t, pkafka.SASLTypeSCRAMSHA256, m.Name())
+	m, err = completeSASLConfig(&pkafka.Options{
+		SASL: &security.SASL{
+			SASLUser:      "user",
+			SASLPassword:  "pass",
+			SASLMechanism: pkafka.SASLTypeSCRAMSHA512,
+		},
+	})
+	require.Nil(t, m)
+	require.Nil(t, err)
+	require.Equal(t, pkafka.SASLTypeSCRAMSHA512, m.Name())
+	m, err = completeSASLConfig(&pkafka.Options{
+		SASL: &security.SASL{
+			SASLUser:      "user",
+			SASLPassword:  "pass",
+			SASLMechanism: pkafka.SASLTypePlaintext,
+		},
+	})
+	pm, ok := m.(plain.Mechanism)
+	require.True(t, ok)
+	require.Nil(t, err)
+	require.Equal(t, pkafka.SASLTypePlaintext, m.Name())
+	require.Equal(t, "user", pm.Username)
+	require.Equal(t, "pass", pm.Password)
 }
