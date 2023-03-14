@@ -194,14 +194,14 @@ func TestMounterDisableOldValue(t *testing.T) {
 	}, {
 		tableName: "tp_real",
 		createTableDDL: `create table tp_real
-		(
-			id        int auto_increment,
-			c_float   float   null,
-			c_double  double  null,
-			c_decimal decimal null,
-			constraint pk
-			primary key (id)
-		);`,
+	(
+		id        int auto_increment,
+		c_float   float   null,
+		c_double  double  null,
+		c_decimal decimal null,
+		constraint pk
+		primary key (id)
+	);`,
 		values: [][]interface{}{
 			{1},
 			{2, "2020.0202", "2020.0303", "2020.0404"},
@@ -329,12 +329,12 @@ func testMounterDisableOldValue(t *testing.T, tc struct {
 			// TODO: test column flag, column type and index columns
 			if len(row.Columns) != 0 {
 				checkSQL, params := prepareCheckSQL(t, tc.tableName, row.Columns)
-				result := tk.MustQuery(checkSQL, params)
+				result := tk.MustQuery(checkSQL, params...)
 				result.Check([][]interface{}{{"1"}})
 			}
 			if len(row.PreColumns) != 0 {
 				checkSQL, params := prepareCheckSQL(t, tc.tableName, row.PreColumns)
-				result := tk.MustQuery(checkSQL, params)
+				result := tk.MustQuery(checkSQL, params...)
 				result.Check([][]interface{}{{"1"}})
 			}
 		})
@@ -406,10 +406,11 @@ func prepareInsertSQL(t *testing.T, tableInfo *model.TableInfo, columnLens int) 
 func prepareCheckSQL(t *testing.T, tableName string, cols []*model.Column) (string, []interface{}) {
 	var sb strings.Builder
 	_, err := sb.WriteString("SELECT count(1) FROM " + tableName + " WHERE ")
-	params := make([]interface{}, 0, len(cols))
 	require.Nil(t, err)
+	params := make([]interface{}, 0, len(cols))
 	for i, col := range cols {
-		if col == nil {
+		// Since float type has precision problem, so skip it to avoid compare float number.
+		if col == nil || col.Type == mysql.TypeFloat {
 			continue
 		}
 		if i != 0 {
@@ -426,7 +427,6 @@ func prepareCheckSQL(t *testing.T, tableName string, cols []*model.Column) (stri
 			col.Value = string(bytes)
 		}
 		params = append(params, col.Value)
-
 		if col.Type == mysql.TypeJSON {
 			_, err = sb.WriteString(col.Name + " = CAST(? AS JSON)")
 		} else {
