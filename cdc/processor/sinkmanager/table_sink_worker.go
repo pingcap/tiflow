@@ -121,10 +121,7 @@ func (w *sinkWorker) handleTask(ctx context.Context, task *sinkTask) (finalErr e
 		w.changefeedID,
 		&task.span,
 		task.lowerBound,
-		task.getUpperBound(
-			task.tableSink.getReceivedSorterResolvedTs(),
-			task.tableSink.barrierTs.Load()),
-	)
+		task.getUpperBound(task.tableSink.getUpperBoundTs()))
 	if w.eventCache != nil {
 		drained, err := w.fetchFromCache(task, &lowerBound, &upperBound)
 		if err != nil {

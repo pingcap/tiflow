@@ -72,7 +72,7 @@ func (w *redoWorker) handleTask(ctx context.Context, task *redoTask) (finalErr e
 		w.changefeedID,
 		&task.span,
 		task.lowerBound,
-		task.getUpperBound(task.tableSink.getReceivedSorterResolvedTs(), 0),
+		task.getUpperBound(task.tableSink.getReceivedSorterResolvedTs()),
 	)
 
 	var cache *eventAppender

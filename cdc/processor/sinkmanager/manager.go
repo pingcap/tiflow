@@ -339,16 +339,8 @@ func (m *SinkManager) generateSinkTasks() error {
 	// But receivedSorterResolvedTs can be less than barrierTs, in which case
 	// the table is just scheduled to this node.
 	getUpperBound := func(
-		tableSinkReceivedSorterResolvedTs model.Ts,
-		tableBarrierTs model.Ts,
+		upperBoundTs model.Ts,
 	) engine.Position {
-		upperBoundTs := tableSinkReceivedSorterResolvedTs
-		barrierTs := tableBarrierTs
-
-		if upperBoundTs > barrierTs {
-			upperBoundTs = barrierTs
-		}
-
 		// If a task carries events after schemaResolvedTs, mounter group threads
 		// can be blocked on waiting schemaResolvedTs get advanced.
 		schemaTs := m.schemaStorage.ResolvedTs()
@@ -406,9 +398,7 @@ func (m *SinkManager) generateSinkTasks() error {
 			tableSink := tables[i]
 			slowestTableProgress := progs[i]
 			lowerBound := slowestTableProgress.nextLowerBoundPos
-			upperBound := getUpperBound(tableSink.getReceivedSorterResolvedTs(),
-				tableSink.barrierTs.Load())
-
+			upperBound := getUpperBound(tableSink.getUpperBoundTs())
 			// The table has no available progress.
 			if lowerBound.Compare(upperBound) >= 0 {
 				m.sinkProgressHeap.push(slowestTableProgress)
@@ -494,9 +484,7 @@ func (m *SinkManager) generateSinkTasks() error {
 
 func (m *SinkManager) generateRedoTasks() error {
 	// We use the table's resolved ts as the upper bound to fetch events.
-	getUpperBound := func(tableSinkReceivedSorterResolvedTs model.Ts, _ model.Ts) engine.Position {
-		upperBoundTs := tableSinkReceivedSorterResolvedTs
-
+	getUpperBound := func(upperBoundTs model.Ts) engine.Position {
 		// If a task carries events after schemaResolvedTs, mounter group threads
 		// can be blocked on waiting schemaResolvedTs get advanced.
 		schemaTs := m.schemaStorage.ResolvedTs()
@@ -553,7 +541,7 @@ func (m *SinkManager) generateRedoTasks() error {
 			tableSink := tables[i]
 			slowestTableProgress := progs[i]
 			lowerBound := slowestTableProgress.nextLowerBoundPos
-			upperBound := getUpperBound(tableSink.getReceivedSorterResolvedTs(), 0)
+			upperBound := getUpperBound(tableSink.getReceivedSorterResolvedTs())
 
 			// The table has no available progress.
 			if lowerBound.Compare(upperBound) >= 0 {

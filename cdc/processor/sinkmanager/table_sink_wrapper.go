@@ -200,6 +200,20 @@ func (t *tableSinkWrapper) getState() tablepb.TableState {
 	return t.state.Load()
 }
 
+// getUpperBoundTs returns the upperbound of the table sink.
+// It is used by sinkManager to generate sink task.
+// upperBoundTs should be the minimum of the following two values:
+// 1. the resolved ts of the sorter
+// 2. the barrier ts of the table
+func (t *tableSinkWrapper) getUpperBoundTs() model.Ts {
+	res := t.getReceivedSorterResolvedTs()
+	barrierTs := t.barrierTs.Load()
+	if res > barrierTs {
+		res = barrierTs
+	}
+	return res
+}
+
 func (t *tableSinkWrapper) close(ctx context.Context) {
 	t.state.Store(tablepb.TableStateStopping)
 	// table stopped state must be set after underlying sink is closed

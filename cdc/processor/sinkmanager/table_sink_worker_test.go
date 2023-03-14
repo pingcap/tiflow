@@ -151,8 +151,8 @@ func (suite *tableSinkWorkerSuite) addEventsToSortEngine(
 	}
 }
 
-func genUpperBoundGetter(commitTs model.Ts) func(_, _ model.Ts) engine.Position {
-	return func(_, _ model.Ts) engine.Position {
+func genUpperBoundGetter(commitTs model.Ts) func(_ model.Ts) engine.Position {
+	return func(_ model.Ts) engine.Position {
 		return engine.Position{
 			StartTs:  commitTs - 1,
 			CommitTs: commitTs,
