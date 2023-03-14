@@ -52,6 +52,7 @@ func newProcessor4Test(
 		state,
 		captureInfo,
 		changefeedID, up, liveness, 0, cfg)
+	errChan := make(chan error, 20)
 	p.lazyInit = func(ctx cdcContext.Context) error {
 		if p.initialized {
 			return nil
@@ -62,7 +63,7 @@ func newProcessor4Test(
 			ctx,
 			changefeedID,
 			state.Info,
-			nil,
+			errChan,
 		)
 		p.sinkManager = sinkManager
 		p.sourceManager = sourceManger
@@ -273,13 +274,11 @@ func TestTableExecutorAddingTableIndirectly(t *testing.T) {
 }
 
 func TestProcessorError(t *testing.T) {
-	t.Skip("FIXME: Use pull-based-sink")
 	ctx := cdcContext.NewBackendContext4Test(true)
 	liveness := model.LivenessCaptureAlive
 	p, tester := initProcessor4Test(ctx, t, &liveness)
-	var err error
 	// init tick
-	err = p.Tick(ctx)
+	err := p.Tick(ctx)
 	require.Nil(t, err)
 	tester.MustApplyPatches()
 
@@ -313,7 +312,6 @@ func TestProcessorError(t *testing.T) {
 }
 
 func TestProcessorExit(t *testing.T) {
-	t.Skip("FIXME: Use pull-based-sink")
 	ctx := cdcContext.NewBackendContext4Test(true)
 	liveness := model.LivenessCaptureAlive
 	p, tester := initProcessor4Test(ctx, t, &liveness)
@@ -338,12 +336,15 @@ func TestProcessorExit(t *testing.T) {
 }
 
 func TestProcessorClose(t *testing.T) {
-	t.Skip("FIXME: Use pull-based-sink")
 	ctx := cdcContext.NewBackendContext4Test(true)
 	liveness := model.LivenessCaptureAlive
 	p, tester := initProcessor4Test(ctx, t, &liveness)
-	var err error
 	// init tick
+	err := p.Tick(ctx)
+	require.Nil(t, err)
+	tester.MustApplyPatches()
+
+	// Do a no operation tick to lazy init the processor.
 	err = p.Tick(ctx)
 	require.Nil(t, err)
 	tester.MustApplyPatches()
@@ -373,13 +374,17 @@ func TestProcessorClose(t *testing.T) {
 
 	require.Nil(t, p.Close(ctx))
 	tester.MustApplyPatches()
-	// require.True(t,
-	//	p.tableSpans.GetV(spanz.TableIDToComparableSpan(1)).(*mockTablePipeline).canceled)
-	// require.True(t,
-	//	p.tableSpans.GetV(spanz.TableIDToComparableSpan(2)).(*mockTablePipeline).canceled)
+	require.Nil(t, p.sinkManager)
+	require.Nil(t, p.sourceManager)
+	require.Nil(t, p.agent)
 
 	p, tester = initProcessor4Test(ctx, t, &liveness)
 	// init tick
+	err = p.Tick(ctx)
+	require.Nil(t, err)
+	tester.MustApplyPatches()
+
+	// Do a no operation tick to lazy init the processor.
 	err = p.Tick(ctx)
 	require.Nil(t, err)
 	tester.MustApplyPatches()
@@ -408,10 +413,9 @@ func TestProcessorClose(t *testing.T) {
 		Code:    "CDC:ErrSinkURIInvalid",
 		Message: "[CDC:ErrSinkURIInvalid]sink uri invalid '%s'",
 	})
-	// require.True(
-	//	t, p.tableSpans.GetV(spanz.TableIDToComparableSpan(1)).(*mockTablePipeline).canceled)
-	// require.True(
-	//	t, p.tableSpans.GetV(spanz.TableIDToComparableSpan(2)).(*mockTablePipeline).canceled)
+	require.Nil(t, p.sinkManager)
+	require.Nil(t, p.sourceManager)
+	require.Nil(t, p.agent)
 }
 
 func TestPositionDeleted(t *testing.T) {
