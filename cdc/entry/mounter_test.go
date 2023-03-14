@@ -15,6 +15,7 @@ package entry
 
 import (
 	"context"
+	"math"
 	"strings"
 	"testing"
 	"time"
@@ -30,8 +31,14 @@ import (
 	"github.com/pingcap/tidb/types"
 	"github.com/pingcap/tiflow/cdc/model"
 	"github.com/pingcap/tiflow/pkg/config"
+<<<<<<< HEAD
 	pfilter "github.com/pingcap/tiflow/pkg/filter"
 	"github.com/pingcap/tiflow/pkg/regionspan"
+=======
+	"github.com/pingcap/tiflow/pkg/filter"
+	"github.com/pingcap/tiflow/pkg/spanz"
+	"github.com/pingcap/tiflow/pkg/sqlmodel"
+>>>>>>> d30f48b689 (mounter(ticdc): mount float32 value correctly to avoid the precision lost. (#8502))
 	"github.com/stretchr/testify/require"
 	"github.com/tikv/client-go/v2/oracle"
 	"go.uber.org/zap"
@@ -43,7 +50,7 @@ func TestMounterDisableOldValue(t *testing.T) {
 	testCases := []struct {
 		tableName      string
 		createTableDDL string
-		// [] for rows, []infterface{} for columns.
+		// [] for rows, []interface{} for columns.
 		values [][]interface{}
 		// [] for table partition if there is any,
 		// []int for approximateBytes of rows.
@@ -185,14 +192,14 @@ func TestMounterDisableOldValue(t *testing.T) {
 	}, {
 		tableName: "tp_real",
 		createTableDDL: `create table tp_real
-		(
-			id        int auto_increment,
-			c_float   float   null,
-			c_double  double  null,
-			c_decimal decimal null,
-			constraint pk
-			primary key (id)
-		);`,
+	(
+		id        int auto_increment,
+		c_float   float   null,
+		c_double  double  null,
+		c_decimal decimal null,
+		constraint pk
+		primary key (id)
+	);`,
 		values: [][]interface{}{
 			{1},
 			{2, "2020.0202", "2020.0303", "2020.0404"},
@@ -292,7 +299,7 @@ func testMounterDisableOldValue(t *testing.T, tc struct {
 	require.Nil(t, err)
 	scheamStorage.AdvanceResolvedTs(ver.Ver)
 	config := config.GetDefaultReplicaConfig()
-	filter, err := pfilter.NewFilter(config, "")
+	filter, err := filter.NewFilter(config, "")
 	require.Nil(t, err)
 	mounter := NewMounter(scheamStorage,
 		model.DefaultChangeFeedID("c1"),
@@ -399,7 +406,8 @@ func prepareCheckSQL(t *testing.T, tableName string, cols []*model.Column) (stri
 	require.Nil(t, err)
 	params := make([]interface{}, 0, len(cols))
 	for i, col := range cols {
-		if col == nil {
+		// Since float type has precision problem, so skip it to avoid compare float number.
+		if col == nil || col.Type == mysql.TypeFloat {
 			continue
 		}
 		if i != 0 {
@@ -674,28 +682,28 @@ func TestGetDefaultZeroValue(t *testing.T) {
 		{
 			Name:    "mysql.TypeFloat + notnull + nodefault",
 			ColInfo: timodel.ColumnInfo{FieldType: *ftTypeFloatNotNull},
-			Res:     float64(0),
+			Res:     float32(0),
 			Default: nil,
 		},
 		// mysql.TypeFloat + notnull + default
 		{
 			Name: "mysql.TypeFloat + notnull + default",
 			ColInfo: timodel.ColumnInfo{
-				OriginDefaultValue: -3.1415,
+				OriginDefaultValue: float32(-3.1415),
 				FieldType:          *ftTypeFloatNotNull,
 			},
-			Res:     float64(-3.1415),
-			Default: float64(-3.1415),
+			Res:     float32(-3.1415),
+			Default: float32(-3.1415),
 		},
 		// mysql.TypeFloat + notnull + default + unsigned
 		{
 			Name: "mysql.TypeFloat + notnull + default + unsigned",
 			ColInfo: timodel.ColumnInfo{
-				OriginDefaultValue: 3.1415,
+				OriginDefaultValue: float32(3.1415),
 				FieldType:          *ftTypeFloatNotNullUnSigned,
 			},
-			Res:     float64(3.1415),
-			Default: float64(3.1415),
+			Res:     float32(3.1415),
+			Default: float32(3.1415),
 		},
 		// mysql.TypeFloat + notnull + unsigned
 		{
@@ -703,18 +711,18 @@ func TestGetDefaultZeroValue(t *testing.T) {
 			ColInfo: timodel.ColumnInfo{
 				FieldType: *ftTypeFloatNotNullUnSigned,
 			},
-			Res:     float64(0),
+			Res:     float32(0),
 			Default: nil,
 		},
 		// mysql.TypeFloat + null + default
 		{
 			Name: "mysql.TypeFloat + null + default",
 			ColInfo: timodel.ColumnInfo{
-				OriginDefaultValue: -3.1415,
+				OriginDefaultValue: float32(-3.1415),
 				FieldType:          *ftTypeFloatNull,
 			},
-			Res:     float64(-3.1415),
-			Default: float64(-3.1415),
+			Res:     float32(-3.1415),
+			Default: float32(-3.1415),
 		},
 		// mysql.TypeFloat + null + nodefault
 		{
@@ -983,7 +991,7 @@ func TestDecodeEventIgnoreRow(t *testing.T) {
 
 	cfg := config.GetDefaultReplicaConfig()
 	cfg.Filter.Rules = []string{"test.student", "test.computer"}
-	filter, err := pfilter.NewFilter(cfg, "")
+	filter, err := filter.NewFilter(cfg, "")
 	require.Nil(t, err)
 	ver, err := helper.Storage().CurrentVersion(oracle.GlobalTxnScope)
 	require.Nil(t, err)
@@ -1082,3 +1090,211 @@ func TestDecodeEventIgnoreRow(t *testing.T) {
 		decodeAndCheckRowInTable(tableInfo.ID, toRawKV)
 	}
 }
+<<<<<<< HEAD
+=======
+
+func TestBuildTableInfo(t *testing.T) {
+	cases := []struct {
+		origin              string
+		recovered           string
+		recoveredWithNilCol string
+	}{
+		{
+			"CREATE TABLE t1 (c INT PRIMARY KEY)",
+			"CREATE TABLE `BuildTiDBTableInfo` (\n" +
+				"  `c` int(0) NOT NULL,\n" +
+				"  PRIMARY KEY (`c`(0)) /*T![clustered_index] CLUSTERED */\n" +
+				") ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_bin",
+			"CREATE TABLE `BuildTiDBTableInfo` (\n" +
+				"  `c` int(0) NOT NULL,\n" +
+				"  PRIMARY KEY (`c`(0)) /*T![clustered_index] CLUSTERED */\n" +
+				") ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_bin",
+		},
+		{
+			"CREATE TABLE t1 (" +
+				" c INT UNSIGNED," +
+				" c2 VARCHAR(10) NOT NULL," +
+				" c3 BIT(10) NOT NULL," +
+				" UNIQUE KEY (c2, c3)" +
+				")",
+			// CDC discards field length.
+			"CREATE TABLE `BuildTiDBTableInfo` (\n" +
+				"  `c` int(0) unsigned DEFAULT NULL,\n" +
+				"  `c2` varchar(0) NOT NULL,\n" +
+				"  `c3` bit(0) NOT NULL,\n" +
+				"  UNIQUE KEY `idx_0` (`c2`(0),`c3`(0))\n" +
+				") ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_bin",
+			"CREATE TABLE `BuildTiDBTableInfo` (\n" +
+				"  `omitted` unspecified GENERATED ALWAYS AS (pass_generated_check) VIRTUAL,\n" +
+				"  `c2` varchar(0) NOT NULL,\n" +
+				"  `c3` bit(0) NOT NULL,\n" +
+				"  UNIQUE KEY `idx_0` (`c2`(0),`c3`(0))\n" +
+				") ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_bin",
+		},
+		{
+			"CREATE TABLE t1 (" +
+				" c INT UNSIGNED," +
+				" gen INT AS (c+1) VIRTUAL," +
+				" c2 VARCHAR(10) NOT NULL," +
+				" gen2 INT AS (c+2) STORED," +
+				" c3 BIT(10) NOT NULL," +
+				" PRIMARY KEY (c, c2)" +
+				")",
+			// CDC discards virtual generated column, and generating expression of stored generated column.
+			"CREATE TABLE `BuildTiDBTableInfo` (\n" +
+				"  `c` int(0) unsigned NOT NULL,\n" +
+				"  `c2` varchar(0) NOT NULL,\n" +
+				"  `gen2` int(0) GENERATED ALWAYS AS (pass_generated_check) STORED,\n" +
+				"  `c3` bit(0) NOT NULL,\n" +
+				"  PRIMARY KEY (`c`(0),`c2`(0)) /*T![clustered_index] CLUSTERED */\n" +
+				") ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_bin",
+			"CREATE TABLE `BuildTiDBTableInfo` (\n" +
+				"  `c` int(0) unsigned NOT NULL,\n" +
+				"  `c2` varchar(0) NOT NULL,\n" +
+				"  `omitted` unspecified GENERATED ALWAYS AS (pass_generated_check) VIRTUAL,\n" +
+				"  `omitted` unspecified GENERATED ALWAYS AS (pass_generated_check) VIRTUAL,\n" +
+				"  PRIMARY KEY (`c`(0),`c2`(0)) /*T![clustered_index] CLUSTERED */\n" +
+				") ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_bin",
+		},
+		{
+			"CREATE TABLE `t1` (" +
+				"  `a` int(11) NOT NULL," +
+				"  `b` int(11) DEFAULT NULL," +
+				"  `c` int(11) DEFAULT NULL," +
+				"  PRIMARY KEY (`a`) /*T![clustered_index] CLUSTERED */," +
+				"  UNIQUE KEY `b` (`b`)" +
+				") ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_bin",
+			"CREATE TABLE `BuildTiDBTableInfo` (\n" +
+				"  `a` int(0) NOT NULL,\n" +
+				"  `b` int(0) DEFAULT NULL,\n" +
+				"  `c` int(0) DEFAULT NULL,\n" +
+				"  PRIMARY KEY (`a`(0)) /*T![clustered_index] CLUSTERED */,\n" +
+				"  UNIQUE KEY `idx_1` (`b`(0))\n" +
+				") ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_bin",
+			"CREATE TABLE `BuildTiDBTableInfo` (\n" +
+				"  `a` int(0) NOT NULL,\n" +
+				"  `omitted` unspecified GENERATED ALWAYS AS (pass_generated_check) VIRTUAL,\n" +
+				"  `omitted` unspecified GENERATED ALWAYS AS (pass_generated_check) VIRTUAL,\n" +
+				"  PRIMARY KEY (`a`(0)) /*T![clustered_index] CLUSTERED */\n" +
+				") ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_bin",
+		},
+	}
+	p := parser.New()
+	for _, c := range cases {
+		stmt, err := p.ParseOneStmt(c.origin, "", "")
+		require.NoError(t, err)
+		originTI, err := ddl.BuildTableInfoFromAST(stmt.(*ast.CreateTableStmt))
+		require.NoError(t, err)
+		cdcTableInfo := model.WrapTableInfo(0, "test", 0, originTI)
+		cols, _, err := datum2Column(cdcTableInfo, map[int64]types.Datum{}, true)
+		require.NoError(t, err)
+		recoveredTI := model.BuildTiDBTableInfo(cols, cdcTableInfo.IndexColumnsOffset)
+		handle := sqlmodel.GetWhereHandle(recoveredTI, recoveredTI)
+		require.NotNil(t, handle.UniqueNotNullIdx)
+		require.Equal(t, c.recovered, showCreateTable(t, recoveredTI))
+
+		// mimic the columns are set to nil when old value feature is disabled
+		for i := range cols {
+			if !cols[i].Flag.IsHandleKey() {
+				cols[i] = nil
+			}
+		}
+		recoveredTI = model.BuildTiDBTableInfo(cols, cdcTableInfo.IndexColumnsOffset)
+		handle = sqlmodel.GetWhereHandle(recoveredTI, recoveredTI)
+		require.NotNil(t, handle.UniqueNotNullIdx)
+		require.Equal(t, c.recoveredWithNilCol, showCreateTable(t, recoveredTI))
+	}
+}
+
+var tiCtx = mock.NewContext()
+
+func showCreateTable(t *testing.T, ti *timodel.TableInfo) string {
+	result := bytes.NewBuffer(make([]byte, 0, 512))
+	err := executor.ConstructResultOfShowCreateTable(tiCtx, ti, autoid.Allocators{}, result)
+	require.NoError(t, err)
+	return result.String()
+}
+
+func TestNewDMRowChange(t *testing.T) {
+	cases := []struct {
+		origin    string
+		recovered string
+	}{
+		{
+			"CREATE TABLE t1 (id INT," +
+				" a1 INT NOT NULL," +
+				" a3 INT NOT NULL," +
+				" UNIQUE KEY dex1(a1, a3));",
+			"CREATE TABLE `BuildTiDBTableInfo` (\n" +
+				"  `id` int(0) DEFAULT NULL,\n" +
+				"  `a1` int(0) NOT NULL,\n" +
+				"  `a3` int(0) NOT NULL,\n" +
+				"  UNIQUE KEY `idx_0` (`a1`(0),`a3`(0))\n" +
+				") ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_bin",
+		},
+	}
+	p := parser.New()
+	for _, c := range cases {
+		stmt, err := p.ParseOneStmt(c.origin, "", "")
+		require.NoError(t, err)
+		originTI, err := ddl.BuildTableInfoFromAST(stmt.(*ast.CreateTableStmt))
+		require.NoError(t, err)
+		cdcTableInfo := model.WrapTableInfo(0, "test", 0, originTI)
+		cols := []*model.Column{
+			{
+				Name: "id", Type: 3, Charset: "binary", Flag: 65, Value: 1, Default: nil,
+			},
+			{
+				Name: "a1", Type: 3, Charset: "binary", Flag: 51, Value: 1, Default: nil,
+			},
+			{
+				Name: "a3", Type: 3, Charset: "binary", Flag: 51, Value: 2, Default: nil,
+			},
+		}
+		recoveredTI := model.BuildTiDBTableInfo(cols, cdcTableInfo.IndexColumnsOffset)
+		require.Equal(t, c.recovered, showCreateTable(t, recoveredTI))
+		tableName := &model.TableName{Schema: "db", Table: "t1"}
+		rowChange := sqlmodel.NewRowChange(tableName, nil, []interface{}{1, 1, 2}, nil, recoveredTI, nil, nil)
+		sqlGot, argsGot := rowChange.GenSQL(sqlmodel.DMLDelete)
+		require.Equal(t, "DELETE FROM `db`.`t1` WHERE `a1` = ? AND `a3` = ? LIMIT 1", sqlGot)
+		require.Equal(t, []interface{}{1, 2}, argsGot)
+
+		sqlGot, argsGot = sqlmodel.GenDeleteSQL(rowChange, rowChange)
+		require.Equal(t, "DELETE FROM `db`.`t1` WHERE (`a1`,`a3`) IN ((?,?),(?,?))", sqlGot)
+		require.Equal(t, []interface{}{1, 2, 1, 2}, argsGot)
+	}
+}
+
+func TestFormatColVal(t *testing.T) {
+	t.Parallel()
+
+	ftTypeFloatNotNull := types.NewFieldType(mysql.TypeFloat)
+	ftTypeFloatNotNull.SetFlag(mysql.NotNullFlag)
+	col := &timodel.ColumnInfo{FieldType: *ftTypeFloatNotNull}
+
+	var datum types.Datum
+
+	datum.SetFloat32(123.99)
+	value, _, _, err := formatColVal(datum, col)
+	require.NoError(t, err)
+	require.EqualValues(t, float32(123.99), value)
+
+	datum.SetFloat32(float32(math.NaN()))
+	value, _, warn, err := formatColVal(datum, col)
+	require.NoError(t, err)
+	require.Equal(t, float32(0), value)
+	require.NotZero(t, warn)
+
+	datum.SetFloat32(float32(math.Inf(1)))
+	value, _, warn, err = formatColVal(datum, col)
+	require.NoError(t, err)
+	require.Equal(t, float32(0), value)
+	require.NotZero(t, warn)
+
+	datum.SetFloat32(float32(math.Inf(-1)))
+	value, _, warn, err = formatColVal(datum, col)
+	require.NoError(t, err)
+	require.Equal(t, float32(0), value)
+	require.NotZero(t, warn)
+}
+>>>>>>> d30f48b689 (mounter(ticdc): mount float32 value correctly to avoid the precision lost. (#8502))
