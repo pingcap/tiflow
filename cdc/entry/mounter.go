@@ -487,7 +487,15 @@ func formatColVal(datum types.Datum, tp byte) (
 			b = emptyBytes
 		}
 		return b, sizeOfBytes(b), "", nil
-	case mysql.TypeFloat, mysql.TypeDouble:
+	case mysql.TypeFloat:
+		v := datum.GetFloat32()
+		if math.IsNaN(float64(v)) || math.IsInf(float64(v), 1) || math.IsInf(float64(v), -1) {
+			warn = fmt.Sprintf("the value is invalid in column: %f", v)
+			v = 0
+		}
+		const sizeOfV = unsafe.Sizeof(v)
+		return v, int(sizeOfV), warn, nil
+	case mysql.TypeDouble:
 		v := datum.GetFloat64()
 		if math.IsNaN(v) || math.IsInf(v, 1) || math.IsInf(v, -1) {
 			warn = fmt.Sprintf("the value is invalid in column: %f", v)
