@@ -57,7 +57,7 @@ func newProcessor4Test(
 		if p.initialized {
 			return nil
 		}
-		p.agent = &mockAgent{executor: p}
+		p.agent = &mockAgent{executor: p, liveness: liveness}
 		sinkManager, sourceManger, _ := sinkmanager.CreateManagerWithMemEngine(
 			t,
 			ctx,
@@ -419,11 +419,20 @@ func TestProcessorClose(t *testing.T) {
 }
 
 func TestPositionDeleted(t *testing.T) {
-	t.Skip("FIXME: Use pull-based-sink")
 	ctx := cdcContext.NewBackendContext4Test(true)
 	liveness := model.LivenessCaptureAlive
 	p, tester := initProcessor4Test(ctx, t, &liveness)
-	var err error
+	// init tick
+	err := p.Tick(ctx)
+	require.Nil(t, err)
+	tester.MustApplyPatches()
+	require.Contains(t, p.changefeed.TaskPositions, p.captureInfo.ID)
+
+	// Do a no operation tick to lazy init the processor.
+	err = p.Tick(ctx)
+	require.Nil(t, err)
+	tester.MustApplyPatches()
+
 	// add table
 	done, err := p.AddTableSpan(ctx, spanz.TableIDToComparableSpan(1), 30, false)
 	require.Nil(t, err)
@@ -431,11 +440,6 @@ func TestPositionDeleted(t *testing.T) {
 	done, err = p.AddTableSpan(ctx, spanz.TableIDToComparableSpan(2), 40, false)
 	require.Nil(t, err)
 	require.True(t, done)
-	// init tick
-	err = p.Tick(ctx)
-	require.Nil(t, err)
-	tester.MustApplyPatches()
-	require.Contains(t, p.changefeed.TaskPositions, p.captureInfo.ID)
 
 	// some others delete the task position
 	p.changefeed.PatchTaskPosition(p.captureInfo.ID,
@@ -450,10 +454,12 @@ func TestPositionDeleted(t *testing.T) {
 	tester.MustApplyPatches()
 	require.Equal(t, &model.TaskPosition{}, p.changefeed.TaskPositions[p.captureInfo.ID])
 	require.Contains(t, p.changefeed.TaskPositions, p.captureInfo.ID)
+
+	require.Nil(t, p.Close(ctx))
+	tester.MustApplyPatches()
 }
 
 func TestSchemaGC(t *testing.T) {
-	t.Skip("FIXME: Use pull-based-sink")
 	ctx := cdcContext.NewBackendContext4Test(true)
 	liveness := model.LivenessCaptureAlive
 	p, tester := initProcessor4Test(ctx, t, &liveness)
@@ -474,6 +480,9 @@ func TestSchemaGC(t *testing.T) {
 	// GC Ts should be (checkpoint - 1).
 	require.Equal(t, p.schemaStorage.(*mockSchemaStorage).lastGcTs, uint64(49))
 	require.Equal(t, p.lastSchemaTs, uint64(49))
+
+	require.Nil(t, p.Close(ctx))
+	tester.MustApplyPatches()
 }
 
 //nolint:unused
@@ -514,7 +523,6 @@ func TestIgnorableError(t *testing.T) {
 }
 
 func TestUpdateBarrierTs(t *testing.T) {
-	t.Skip("FIXME: Use pull-based-sink")
 	ctx := cdcContext.NewBackendContext4Test(true)
 	liveness := model.LivenessCaptureAlive
 	p, tester := initProcessor4Test(ctx, t, &liveness)
@@ -525,7 +533,19 @@ func TestUpdateBarrierTs(t *testing.T) {
 	})
 	p.schemaStorage.(*mockSchemaStorage).resolvedTs = 10
 
-	done, err := p.AddTableSpan(ctx, spanz.TableIDToComparableSpan(1), 5, false)
+	// init tick
+	err := p.Tick(ctx)
+	require.Nil(t, err)
+	tester.MustApplyPatches()
+	require.Contains(t, p.changefeed.TaskPositions, p.captureInfo.ID)
+
+	// Do a no operation tick to lazy init the processor.
+	err = p.Tick(ctx)
+	require.Nil(t, err)
+	tester.MustApplyPatches()
+
+	span := spanz.TableIDToComparableSpan(1)
+	done, err := p.AddTableSpan(ctx, span, 5, false)
 	require.True(t, done)
 	require.Nil(t, err)
 	err = p.Tick(ctx)
@@ -540,29 +560,25 @@ func TestUpdateBarrierTs(t *testing.T) {
 	err = p.Tick(ctx)
 	require.Nil(t, err)
 	tester.MustApplyPatches()
-	// tb := p.tableSpans.GetV(spanz.TableIDToComparableSpan(1)).(*mockTablePipeline)
-	// require.Equal(t, tb.barrierTs, uint64(10))
+	status := p.sinkManager.GetTableStats(span)
+	require.Equal(t, status.BarrierTs, uint64(10))
 
 	// Schema storage has advanced too.
 	p.schemaStorage.(*mockSchemaStorage).resolvedTs = 15
 	err = p.Tick(ctx)
 	require.Nil(t, err)
 	tester.MustApplyPatches()
-	// tb = p.tableSpans.GetV(spanz.TableIDToComparableSpan(1)).(*mockTablePipeline)
-	// require.Equal(t, tb.barrierTs, uint64(15))
+	status = p.sinkManager.GetTableStats(span)
+	require.Equal(t, status.BarrierTs, uint64(15))
+
+	require.Nil(t, p.Close(ctx))
+	tester.MustApplyPatches()
 }
 
 func TestProcessorLiveness(t *testing.T) {
-	t.Skip("FIXME: Use pull-based-sink")
 	ctx := cdcContext.NewBackendContext4Test(true)
 	liveness := model.LivenessCaptureAlive
 	p, tester := initProcessor4Test(ctx, t, &liveness)
-	p.lazyInit = func(ctx cdcContext.Context) error {
-		// Mock the newAgent procedure in p.lazyInitImpl,
-		// by passing p.liveness to mockAgent.
-		p.agent = &mockAgent{executor: p, liveness: p.liveness}
-		return nil
-	}
 
 	// First tick for creating position.
 	err := p.Tick(ctx)
@@ -581,4 +597,7 @@ func TestProcessorLiveness(t *testing.T) {
 	// Force set liveness to alive.
 	*p.agent.(*mockAgent).liveness = model.LivenessCaptureAlive
 	require.Equal(t, model.LivenessCaptureAlive, p.liveness.Load())
+
+	require.Nil(t, p.Close(ctx))
+	tester.MustApplyPatches()
 }
