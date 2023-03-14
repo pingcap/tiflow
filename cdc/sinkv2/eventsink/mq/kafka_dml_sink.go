@@ -56,11 +56,16 @@ func NewKafkaDMLSink(
 	// We must close adminClient when this func return cause by an error
 	// otherwise the adminClient will never be closed and lead to a goroutine leak.
 	defer func() {
+<<<<<<< HEAD:cdc/sinkv2/eventsink/mq/kafka_dml_sink.go
 		if err != nil {
 			if closeErr := adminClient.Close(); closeErr != nil {
 				log.Error("Close admin client failed in kafka "+
 					"DML sink", zap.Error(closeErr))
 			}
+=======
+		if err != nil && adminClient != nil {
+			adminClient.Close()
+>>>>>>> f689c92f05 (kafka(ticdc): fix kafka sink panic when kill the downstream kafka  (#8526)):cdc/sink/dmlsink/mq/kafka_dml_sink.go
 		}
 	}()
 
@@ -88,7 +93,7 @@ func NewKafkaDMLSink(
 	// Preventing leaks when error occurs.
 	// This also closes the client in p.Close().
 	defer func() {
-		if err != nil {
+		if err != nil && p != nil {
 			p.Close()
 		}
 	}()
