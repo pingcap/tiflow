@@ -138,9 +138,6 @@ func (ra *RedoApplier) initSink(ctx context.Context) (err error) {
 }
 
 func (ra *RedoApplier) bgReleaseQuota(ctx context.Context) error {
-	ra.memQuota = memquota.NewMemQuota(model.DefaultChangeFeedID(applierChangefeed),
-		config.DefaultChangefeedMemoryQuota, "sink")
-	defer ra.memQuota.Close()
 	ticker := time.NewTicker(time.Second)
 	for {
 		select {
@@ -423,16 +420,21 @@ func (ra *RedoApplier) ReadMeta(ctx context.Context) (checkpointTs uint64, resol
 func (ra *RedoApplier) Apply(egCtx context.Context) (err error) {
 	eg, egCtx := errgroup.WithContext(egCtx)
 	egCtx = contextutil.PutRoleInCtx(egCtx, util.RoleRedoLogApplier)
+
 	if ra.rd, err = createRedoReader(egCtx, ra.cfg); err != nil {
 		return err
 	}
-
 	eg.Go(func() error {
 		return ra.rd.Run(egCtx)
 	})
+
+	ra.memQuota = memquota.NewMemQuota(model.DefaultChangeFeedID(applierChangefeed),
+		config.DefaultChangefeedMemoryQuota, "sink")
+	defer ra.memQuota.Close()
 	eg.Go(func() error {
 		return ra.bgReleaseQuota(egCtx)
 	})
+
 	eg.Go(func() error {
 		return ra.consumeLogs(egCtx)
 	})
