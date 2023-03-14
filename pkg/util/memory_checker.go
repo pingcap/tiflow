@@ -29,6 +29,7 @@ func CheckMemoryUsage(limit float64) (bool, error) {
 	return stat.UsedPercent < limit, nil
 }
 
+// WaitMemoryAvailable waits until the memory usage is less than the limit.
 func WaitMemoryAvailable(limit float64, timeout time.Duration) error {
 	start := time.Now()
 	for {
