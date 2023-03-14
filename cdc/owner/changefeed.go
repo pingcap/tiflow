@@ -92,9 +92,9 @@ type changefeed struct {
 	schema    *schemaWrap4Owner
 	ddlSink   DDLSink
 	ddlPuller puller.DDLPuller
-	// The changefeed will start a backend goroutine in the function `initialize` for DDLPuller
-	// `ddlWg` is used to manage this backend goroutine.
-	ddlWg sync.WaitGroup
+	// The changefeed will start a backend goroutine in the function `initialize`
+	// for DDLPuller and redo manager. `wg` is used to manage this backend goroutine.
+	wg sync.WaitGroup
 
 	// state related fields
 	initialized bool
@@ -313,6 +313,8 @@ func (c *changefeed) tick(ctx cdcContext.Context, captures map[model.CaptureID]*
 	}
 	// If there are other barriers less than ddl barrier,
 	// we should wait for them.
+	// Note: There may be some tableBarrierTs larger than otherBarrierTs,
+	// but we can ignore them because they will be handled in the processor.
 	if barrier.GlobalBarrierTs > otherBarrierTs {
 		barrier.GlobalBarrierTs = otherBarrierTs
 		minTableBarrierTs = otherBarrierTs
@@ -363,7 +365,7 @@ func (c *changefeed) tick(ctx cdcContext.Context, captures map[model.CaptureID]*
 		return nil
 	}
 
-	// If the owner is just initialized, GlobalBarrierTs can be `tableCheckpoint-1`.
+	// If the owner is just initialized, GlobalBarrierTs can be `checkpointTs-1`.
 	// In such case the `newResolvedTs` and `newCheckpointTs` may be larger
 	// than the GlobalBarrierTs, but it shouldn't be, so we need to handle it here.
 	if newResolvedTs > barrier.GlobalBarrierTs {
@@ -394,7 +396,7 @@ func (c *changefeed) tick(ctx cdcContext.Context, captures map[model.CaptureID]*
 			// as cdc can ensure newCheckpointTs can never exceed prevResolvedTs.
 			newResolvedTs = flushedResolvedTs
 		} else {
-			newResolvedTs = c.state.Status.ResolvedTs
+			newResolvedTs = prevResolvedTs
 		}
 		metricsResolvedTs = newResolvedTs
 	}
@@ -418,7 +420,7 @@ func (c *changefeed) tick(ctx cdcContext.Context, captures map[model.CaptureID]*
 
 	failpoint.Inject("ChangefeedOwnerDontUpdateCheckpoint", func() {
 		if c.lastDDLTs != 0 && c.state.Status.CheckpointTs >= c.lastDDLTs {
-			log.Info("owner won't update tableCheckpoint because of failpoint",
+			log.Info("owner won't update checkpoint because of failpoint",
 				zap.String("namespace", c.id.Namespace),
 				zap.String("changefeed", c.id.ID),
 				zap.Uint64("keepCheckpoint", c.state.Status.CheckpointTs),
@@ -427,8 +429,6 @@ func (c *changefeed) tick(ctx cdcContext.Context, captures map[model.CaptureID]*
 		}
 	})
 
-	// c.isFirstTick = false
-	// c.preResolvedTs = newResolvedTs
 	c.updateStatus(newCheckpointTs, newResolvedTs, minTableBarrierTs)
 	c.updateMetrics(currentTs, newCheckpointTs, metricsResolvedTs)
 	c.tickDownstreamObserver(ctx)
@@ -469,7 +469,7 @@ LOOP:
 	})
 
 	if c.state.Info.Config.CheckGCSafePoint {
-		// Check TiDB GC safepoint does not exceed the tableCheckpoint.
+		// Check TiDB GC safepoint does not exceed the checkpoint.
 		//
 		// We update TTL to 10 minutes,
 		//  1. to delete the service GC safepoint effectively,
@@ -507,6 +507,14 @@ LOOP:
 	}
 
 	var ddlStartTs model.Ts
+	// This means there was a ddl job when the changefeed was paused.
+	// We don't know whether the ddl job is finished or not, so we need to
+	// start the ddl puller from the `checkpointTs-1` to execute the ddl job
+	// again.
+	// FIXME: TiCDC can't handle some ddl jobs correctly in this situation.
+	// For example, if the ddl job is `add index`, TiCDC will execute the ddl
+	// job again and cause the index to be added twice. We need to fix this
+	// problem in the future. See:https://github.com/pingcap/tiflow/issues/2543
 	if checkpointTs == minTableBarrierTs {
 		ddlStartTs = checkpointTs - 1
 	} else {
@@ -546,9 +554,9 @@ LOOP:
 		return errors.Trace(err)
 	}
 
-	c.ddlWg.Add(1)
+	c.wg.Add(1)
 	go func() {
-		defer c.ddlWg.Done()
+		defer c.wg.Done()
 		ctx.Throw(c.ddlPuller.Run(cancelCtx))
 	}()
 
@@ -568,9 +576,9 @@ LOOP:
 		return err
 	}
 	if c.redoDDLMgr.Enabled() {
-		c.ddlWg.Add(1)
+		c.wg.Add(1)
 		go func() {
-			defer c.ddlWg.Done()
+			defer c.wg.Done()
 			ctx.Throw(c.redoDDLMgr.Run(stdCtx))
 		}()
 	}
@@ -581,9 +589,9 @@ LOOP:
 		return err
 	}
 	if c.redoMetaMgr.Enabled() {
-		c.ddlWg.Add(1)
+		c.wg.Add(1)
 		go func() {
-			defer c.ddlWg.Done()
+			defer c.wg.Done()
 			ctx.Throw(c.redoMetaMgr.Run(stdCtx))
 		}()
 	}
@@ -667,7 +675,7 @@ func (c *changefeed) releaseResources(ctx cdcContext.Context) {
 	if c.ddlPuller != nil {
 		c.ddlPuller.Close()
 	}
-	c.ddlWg.Wait()
+	c.wg.Wait()
 
 	if c.ddlSink != nil {
 		canceledCtx, cancel := context.WithCancel(context.Background())

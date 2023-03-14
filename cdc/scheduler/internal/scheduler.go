@@ -43,6 +43,9 @@ type Scheduler interface {
 		currentTables []model.TableID,
 		// All captures that are alive according to the latest Etcd states.
 		aliveCaptures map[model.CaptureID]*model.CaptureInfo,
+		// barrier contains the barrierTs of those tables that have
+		// ddl jobs that need to be replicated. The Scheduler will
+		// broadcast the barrierTs to all captures through the Heartbeat.
 		barrier *schedulepb.Barrier,
 	) (newCheckpointTs, newResolvedTs model.Ts, err error)
 

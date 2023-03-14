@@ -208,6 +208,10 @@ func (m *ddlManager) tick(
 						return nil, minTableBarrierTs, barrier, err
 					}
 				}
+				err := m.redoDDLManager.UpdateResolvedTs(ctx, m.ddlResolvedTs)
+				if err != nil {
+					return nil, minTableBarrierTs, barrier, err
+				}
 			}
 		}
 	}
@@ -371,7 +375,8 @@ func (m *ddlManager) barrier() (model.Ts, *schedulepb.Barrier) {
 		}
 
 		// minTableBarrierTs is the min commitTs of all tables DDLs,
-		// it is used to prevent the checkpointTs from advancing too fast.
+		// it is used to prevent the checkpointTs from advancing too fast
+		// when a changefeed is just resumed.
 		if ddl.CommitTs < minTableBarrierTs {
 			minTableBarrierTs = ddl.CommitTs
 		}
@@ -406,8 +411,6 @@ func (m *ddlManager) allTables(ctx context.Context) ([]*model.TableInfo, error) 
 	var err error
 
 	ts := m.getSnapshotTs()
-	// If there is an executing ddl at the checkpointTs, we need to get all tables
-	// before the ddl commitTs. So we always use the checkpointTs-1 to get the snapshot.
 	m.tableInfoCache, err = m.schema.AllTables(ctx, ts)
 	if err != nil {
 		return nil, err
@@ -431,8 +434,6 @@ func (m *ddlManager) allPhysicalTables(ctx context.Context) ([]model.TableID, er
 	var err error
 
 	ts := m.getSnapshotTs()
-	// If there is an executing ddl at the checkpointTs, we need to get all physical tables
-	// before the ddl commitTs. So we always use the checkpointTs-1 to get the snapshot.
 	m.physicalTablesCache, err = m.schema.AllPhysicalTables(ctx, ts)
 	if err != nil {
 		return nil, err
@@ -459,9 +460,9 @@ func (m *ddlManager) getSnapshotTs() (ts uint64) {
 	ts = m.checkpointTs
 
 	if m.checkpointTs == m.startTs+1 && m.executingDDL == nil {
-		// If checkpointTs is equal to startTs+1, it means that the changefeed
-		// is just started, and the physicalTablesCache is empty. So we need to
-		// get all tables from the snapshot at the startTs.
+		// If checkpointTs is equal to startTs+1, and executingDDL is nil
+		// it means that the changefeed is just started, and the physicalTablesCache
+		// is empty. So we need to get all tables from the snapshot at the startTs.
 		ts = m.startTs
 		log.Debug("changefeed is just started, use startTs to get snapshot",
 			zap.String("namespace", m.changfeedID.Namespace),
@@ -478,9 +479,7 @@ func (m *ddlManager) getSnapshotTs() (ts uint64) {
 			zap.String("changefeed", m.changfeedID.ID),
 			zap.Uint64("checkpointTs", m.checkpointTs),
 			zap.Uint64("snapshotTs", ts))
-		return
 	}
-
 	return
 }
 
