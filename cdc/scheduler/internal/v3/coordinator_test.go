@@ -204,8 +204,8 @@ func newTestCoordinator(cfg *config.SchedulerConfig) (*coordinator, *transport.M
 	coord := newCoordinator("a", model.ChangeFeedID{}, 1, cfg)
 	trans := transport.NewMockTrans()
 	coord.trans = trans
-	coord.reconciler = keyspan.NewReconciler(
-		model.ChangeFeedID{}, keyspan.NewMockRegionCache(), cfg.ChangefeedSettings)
+	coord.reconciler = keyspan.NewReconcilerForTests(
+		keyspan.NewMockRegionCache(), cfg.ChangefeedSettings)
 	return coord, trans
 }
 

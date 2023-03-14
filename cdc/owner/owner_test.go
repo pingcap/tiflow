@@ -18,7 +18,6 @@ import (
 	"context"
 	"fmt"
 	"math"
-	"net/url"
 	"testing"
 	"time"
 
@@ -106,7 +105,7 @@ func createOwner4Test(ctx cdcContext.Context, t *testing.T) (*ownerImpl, *orches
 		) (puller.DDLPuller, error) {
 			return &mockDDLPuller{resolvedTs: startTs - 1}, nil
 		},
-		// new ddl ddlSink
+		// new ddl sink
 		func(changefeedID model.ChangeFeedID, info *model.ChangeFeedInfo, reportErr func(err error)) DDLSink {
 			return &mockDDLSink{}
 		},
@@ -477,7 +476,7 @@ func TestUpdateGCSafePoint(t *testing.T) {
 	require.Nil(t, err)
 
 	// switch the state of changefeed to normal, it must update GC safepoint to
-	// 1 (tableCheckpoint Ts of changefeed-test1).
+	// 1 (checkpoint Ts of changefeed-test1).
 	ch := make(chan struct{}, 1)
 	mockPDClient.UpdateServiceGCSafePointFunc = func(
 		ctx context.Context, serviceID string, ttl int64, safePoint uint64,
@@ -921,103 +920,4 @@ func TestIsHealthy(t *testing.T) {
 	err = o.handleQueries(query)
 	require.NoError(t, err)
 	require.False(t, query.Data.(bool))
-}
-
-func TestValidateChangefeed(t *testing.T) {
-	t.Parallel()
-
-	// Test `ValidateChangefeed` by setting `hasCIEnv` to false.
-	//
-	// FIXME: We need a better way to enable following tests
-	//        Changing global variable in a unit test is BAD practice.
-	hasCIEnv = false
-
-	o := &ownerImpl{
-		changefeeds: make(map[model.ChangeFeedID]*changefeed),
-		// logLimiter:  rate.NewLimiter(1, 1),
-		removedChangefeed: make(map[model.ChangeFeedID]time.Time),
-		removedSinkURI:    make(map[url.URL]time.Time),
-	}
-
-	id := model.ChangeFeedID{Namespace: "a", ID: "b"}
-	sinkURI := "mysql://host:1234/"
-	o.changefeeds[id] = &changefeed{
-		state: &orchestrator.ChangefeedReactorState{
-			Info: &model.ChangeFeedInfo{SinkURI: sinkURI},
-		},
-		feedStateManager: &feedStateManager{},
-	}
-
-	o.pushOwnerJob(&ownerJob{
-		Tp:           ownerJobTypeAdminJob,
-		ChangefeedID: id,
-		AdminJob: &model.AdminJob{
-			CfID: id,
-			Type: model.AdminRemove,
-		},
-		done: make(chan<- error, 1),
-	})
-	o.handleJobs(context.Background())
-
-	require.Error(t, o.ValidateChangefeed(&model.ChangeFeedInfo{
-		ID:        id.ID,
-		Namespace: id.Namespace,
-	}))
-	require.Error(t, o.ValidateChangefeed(&model.ChangeFeedInfo{
-		ID:        "unknown",
-		Namespace: "unknown",
-		SinkURI:   sinkURI,
-	}))
-
-	// Test invalid ddlSink URI
-	require.Error(t, o.ValidateChangefeed(&model.ChangeFeedInfo{
-		SinkURI: "wrong uri\n\t",
-	}))
-
-	// Test limit hit.
-	o.removedChangefeed[id] = time.Now()
-	o.removedSinkURI[url.URL{
-		Scheme: "mysql",
-		Host:   "host:1234",
-	}] = time.Now()
-
-	err := o.ValidateChangefeed(&model.ChangeFeedInfo{
-		ID:        id.ID,
-		Namespace: id.Namespace,
-	})
-	require.Regexp(t,
-		".*changefeed with same ID was just removed, please wait .*",
-		err.Error(),
-	)
-	err = o.ValidateChangefeed(&model.ChangeFeedInfo{
-		ID:        "unknown",
-		Namespace: "unknown",
-		SinkURI:   sinkURI,
-	})
-	require.Regexp(t,
-		".*changefeed with same ddlSink URI was just removed, please wait .*",
-		err.Error(),
-	)
-
-	// Test limit passed.
-	o.removedChangefeed[id] = time.Now().Add(-2 * recreateChangefeedDelayLimit)
-	o.removedSinkURI[url.URL{
-		Scheme: "mysql",
-		Host:   "host:1234",
-	}] = time.Now().Add(-2 * recreateChangefeedDelayLimit)
-
-	require.Nil(t, o.ValidateChangefeed(&model.ChangeFeedInfo{
-		ID:        id.ID,
-		Namespace: id.Namespace,
-	}))
-	require.Nil(t, o.ValidateChangefeed(&model.ChangeFeedInfo{
-		ID:        "unknown",
-		Namespace: "unknown",
-		SinkURI:   sinkURI,
-	}))
-
-	// Test GC.
-	o.handleJobs(context.Background())
-	require.Equal(t, 0, len(o.removedChangefeed))
-	require.Equal(t, 0, len(o.removedSinkURI))
 }

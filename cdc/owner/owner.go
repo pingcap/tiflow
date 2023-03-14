@@ -16,8 +16,6 @@ package owner
 import (
 	"context"
 	"io"
-	"net/url"
-	"os"
 	"sync"
 	"sync/atomic"
 	"time"
@@ -52,16 +50,6 @@ const (
 // versionInconsistentLogRate represents the rate of log output when there are
 // captures with versions different from that of the owner
 const versionInconsistentLogRate = 1
-
-// Remove following variables once we fix https://github.com/pingcap/tiflow/issues/7657.
-var (
-	recreateChangefeedDelayLimit = 30 * time.Second
-	hasCIEnv                     = func() bool {
-		// Most CI platform has the "CI" environment variable.
-		_, ok := os.LookupEnv("CI")
-		return ok
-	}()
-)
 
 // Export field names for pretty printing.
 type ownerJob struct {
@@ -102,7 +90,6 @@ type Owner interface {
 	DrainCapture(query *scheduler.Query, done chan<- error)
 	WriteDebugInfo(w io.Writer, done chan<- error)
 	Query(query *Query, done chan<- error)
-	ValidateChangefeed(info *model.ChangeFeedInfo) error
 	AsyncStop()
 }
 
@@ -135,12 +122,6 @@ type ownerImpl struct {
 		cfg *config.SchedulerConfig,
 	) *changefeed
 	cfg *config.SchedulerConfig
-
-	// removedChangefeed is a workload of https://github.com/pingcap/tiflow/issues/7657
-	// by delaying recreate changefeed with the same ID.
-	// TODO: remove these fields after the issue is resolved.
-	removedChangefeed map[model.ChangeFeedID]time.Time
-	removedSinkURI    map[url.URL]time.Time
 }
 
 // NewOwner creates a new Owner
@@ -149,14 +130,12 @@ func NewOwner(
 	cfg *config.SchedulerConfig,
 ) Owner {
 	return &ownerImpl{
-		upstreamManager:   upstreamManager,
-		changefeeds:       make(map[model.ChangeFeedID]*changefeed),
-		lastTickTime:      time.Now(),
-		newChangefeed:     newChangefeed,
-		logLimiter:        rate.NewLimiter(versionInconsistentLogRate, versionInconsistentLogRate),
-		removedChangefeed: make(map[model.ChangeFeedID]time.Time),
-		removedSinkURI:    make(map[url.URL]time.Time),
-		cfg:               cfg,
+		upstreamManager: upstreamManager,
+		changefeeds:     make(map[model.ChangeFeedID]*changefeed),
+		lastTickTime:    time.Now(),
+		newChangefeed:   newChangefeed,
+		logLimiter:      rate.NewLimiter(versionInconsistentLogRate, versionInconsistentLogRate),
+		cfg:             cfg,
 	}
 }
 
@@ -311,43 +290,6 @@ func (o *ownerImpl) Query(query *Query, done chan<- error) {
 		query: query,
 		done:  done,
 	})
-}
-
-func (o *ownerImpl) ValidateChangefeed(info *model.ChangeFeedInfo) error {
-	o.ownerJobQueue.Lock()
-	defer o.ownerJobQueue.Unlock()
-	if hasCIEnv {
-		// Disable the check on CI platform, because many tests repeatedly
-		// create changefeed with same name and same sinkURI.
-		return nil
-	}
-
-	t, ok := o.removedChangefeed[model.ChangeFeedID{ID: info.ID, Namespace: info.Namespace}]
-	if ok {
-		remain := recreateChangefeedDelayLimit - time.Since(t)
-		if remain >= 0 {
-			return cerror.ErrAPIInvalidParam.GenWithStack(
-				"changefeed with same ID was just removed, please wait %s", remain)
-		}
-	}
-
-	sinkURI, err := url.Parse(info.SinkURI)
-	if err != nil {
-		return cerror.ErrAPIInvalidParam.GenWithStack("invalid ddlSink URI %s", err)
-	}
-
-	t, ok = o.removedSinkURI[url.URL{
-		Scheme: sinkURI.Scheme,
-		Host:   sinkURI.Host,
-	}]
-	if ok {
-		remain := recreateChangefeedDelayLimit - time.Since(t)
-		if remain >= 0 {
-			return cerror.ErrAPIInvalidParam.GenWithStack(
-				"changefeed with same ddlSink URI was just removed, please wait %s", remain)
-		}
-	}
-	return nil
 }
 
 // AsyncStop stops the owner asynchronously
@@ -531,17 +473,6 @@ func (o *ownerImpl) handleJobs(ctx context.Context) {
 		}
 		switch job.Tp {
 		case ownerJobTypeAdminJob:
-			if job.AdminJob.Type == model.AdminRemove {
-				now := time.Now()
-				o.removedChangefeed[changefeedID] = now
-				uri, err := url.Parse(cfReactor.state.Info.SinkURI)
-				if err == nil {
-					o.removedSinkURI[url.URL{
-						Scheme: uri.Scheme,
-						Host:   uri.Host,
-					}] = now
-				}
-			}
 			cfReactor.feedStateManager.PushAdminJob(job.AdminJob)
 		case ownerJobTypeScheduleTable:
 			// Scheduler is created lazily, it is nil before initialization.
@@ -562,18 +493,6 @@ func (o *ownerImpl) handleJobs(ctx context.Context) {
 			// TODO: implement this function
 		}
 		close(job.done)
-	}
-
-	// Try GC removed changefeed id/ddlSink URI after delay limit passed.
-	for id, t := range o.removedChangefeed {
-		if time.Since(t) >= recreateChangefeedDelayLimit {
-			delete(o.removedChangefeed, id)
-		}
-	}
-	for s, t := range o.removedSinkURI {
-		if time.Since(t) >= recreateChangefeedDelayLimit {
-			delete(o.removedSinkURI, s)
-		}
 	}
 }
 
