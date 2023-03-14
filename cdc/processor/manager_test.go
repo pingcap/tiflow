@@ -76,7 +76,6 @@ func (s *managerTester) resetSuit(ctx cdcContext.Context, t *testing.T) {
 }
 
 func TestChangefeed(t *testing.T) {
-	t.Skip("FIXME: Use pull-based-sink")
 	ctx := cdcContext.NewBackendContext4Test(false)
 	s := &managerTester{}
 	s.resetSuit(ctx, t)
@@ -130,7 +129,6 @@ func TestChangefeed(t *testing.T) {
 }
 
 func TestDebugInfo(t *testing.T) {
-	t.Skip("FIXME: Use pull-based-sink")
 	ctx := cdcContext.NewBackendContext4Test(false)
 	s := &managerTester{}
 	s.resetSuit(ctx, t)
@@ -163,6 +161,12 @@ func TestDebugInfo(t *testing.T) {
 	require.Nil(t, err)
 	s.tester.MustApplyPatches()
 	require.Len(t, s.manager.processors, 1)
+
+	// Do a no operation tick to lazy init the processor.
+	_, err = s.manager.Tick(ctx, s.state)
+	require.Nil(t, err)
+	s.tester.MustApplyPatches()
+
 	done := make(chan struct{})
 	go func() {
 		defer close(done)
@@ -186,7 +190,6 @@ func TestDebugInfo(t *testing.T) {
 }
 
 func TestClose(t *testing.T) {
-	t.Skip("FIXME: Use pull-based-sink")
 	ctx := cdcContext.NewBackendContext4Test(false)
 	s := &managerTester{}
 	s.resetSuit(ctx, t)
@@ -228,7 +231,6 @@ func TestClose(t *testing.T) {
 }
 
 func TestSendCommandError(t *testing.T) {
-	t.Skip("FIXME: Use pull-based-sink")
 	liveness := model.LivenessCaptureAlive
 	cfg := config.NewDefaultSchedulerConfig()
 	m := NewManager(&model.CaptureInfo{ID: "capture-test"}, nil, &liveness, cfg).(*managerImpl)
@@ -247,7 +249,6 @@ func TestSendCommandError(t *testing.T) {
 }
 
 func TestManagerLiveness(t *testing.T) {
-	t.Skip("FIXME: Use pull-based-sink")
 	ctx := cdcContext.NewBackendContext4Test(false)
 	s := &managerTester{}
 	s.resetSuit(ctx, t)
