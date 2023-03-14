@@ -160,7 +160,7 @@ func (m *ddlManager) tick(
 		if job == nil {
 			m.schema.schemaStorage.AdvanceResolvedTs(ts)
 			if m.redoDDLManager.Enabled() {
-				err := m.redoDDLManager.UpdateResolvedTs(ctx, m.ddlResolvedTs)
+				err := m.redoDDLManager.UpdateResolvedTs(ctx, ts)
 				if err != nil {
 					return nil, minTableBarrierTs, barrier, err
 				}
