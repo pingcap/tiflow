@@ -16,7 +16,6 @@ package entry
 import (
 	"bytes"
 	"context"
-	"fmt"
 	"strings"
 	"testing"
 	"time"
@@ -328,13 +327,13 @@ func testMounterDisableOldValue(t *testing.T, tc struct {
 			t.Log("ApproximateBytes", tc.tableName, rows-1, row.ApproximateBytes())
 			// TODO: test column flag, column type and index columns
 			if len(row.Columns) != 0 {
-				checkSQL := prepareCheckSQL(t, tc.tableName, row.Columns)
-				result := tk.MustQuery(checkSQL)
+				checkSQL, params := prepareCheckSQL(t, tc.tableName, row.Columns)
+				result := tk.MustQuery(checkSQL, params)
 				result.Check([][]interface{}{{"1"}})
 			}
 			if len(row.PreColumns) != 0 {
-				checkSQL := prepareCheckSQL(t, tc.tableName, row.PreColumns)
-				result := tk.MustQuery(checkSQL)
+				checkSQL, params := prepareCheckSQL(t, tc.tableName, row.PreColumns)
+				result := tk.MustQuery(checkSQL, params)
 				result.Check([][]interface{}{{"1"}})
 			}
 		})
@@ -403,9 +402,10 @@ func prepareInsertSQL(t *testing.T, tableInfo *model.TableInfo, columnLens int) 
 	return sb.String()
 }
 
-func prepareCheckSQL(t *testing.T, tableName string, cols []*model.Column) string {
+func prepareCheckSQL(t *testing.T, tableName string, cols []*model.Column) (string, []interface{}) {
 	var sb strings.Builder
 	_, err := sb.WriteString("SELECT count(1) FROM " + tableName + " WHERE ")
+	params := make([]interface{}, 0, len(cols))
 	require.Nil(t, err)
 	for i, col := range cols {
 		if col == nil {
@@ -424,17 +424,16 @@ func prepareCheckSQL(t *testing.T, tableName string, cols []*model.Column) strin
 		if bytes, ok := col.Value.([]byte); ok {
 			col.Value = string(bytes)
 		}
+		params = append(params, col.Value)
 
-		var value string
 		if col.Type == mysql.TypeJSON {
-			value = fmt.Sprintf("%s = CAST(%+v AS JSON)", col.Name, col.Value)
+			_, err = sb.WriteString(col.Name + " = CAST(? AS JSON)")
 		} else {
-			value = fmt.Sprintf("%s = %+v", col.Name, col.Value)
+			_, err = sb.WriteString(col.Name + " = ?")
 		}
-		_, err := sb.WriteString(value)
 		require.Nil(t, err)
 	}
-	return sb.String()
+	return sb.String(), params
 }
 
 func walkTableSpanInStore(t *testing.T, store tidbkv.Storage, tableID int64, f func(key []byte, value []byte)) {
