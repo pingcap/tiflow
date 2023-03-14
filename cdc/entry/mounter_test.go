@@ -16,6 +16,7 @@ package entry
 import (
 	"bytes"
 	"context"
+	"math"
 	"strings"
 	"testing"
 	"time"
@@ -38,7 +39,14 @@ import (
 	"github.com/pingcap/tidb/testkit"
 	"github.com/pingcap/tidb/types"
 	"github.com/pingcap/tiflow/cdc/model"
+<<<<<<< HEAD
 	"github.com/pingcap/tiflow/pkg/regionspan"
+=======
+	"github.com/pingcap/tiflow/pkg/config"
+	"github.com/pingcap/tiflow/pkg/filter"
+	"github.com/pingcap/tiflow/pkg/spanz"
+	"github.com/pingcap/tiflow/pkg/sqlmodel"
+>>>>>>> d30f48b689 (mounter(ticdc): mount float32 value correctly to avoid the precision lost. (#8502))
 	"github.com/stretchr/testify/require"
 	"github.com/tikv/client-go/v2/oracle"
 	"go.uber.org/zap"
@@ -50,7 +58,7 @@ func TestMounterDisableOldValue(t *testing.T) {
 	testCases := []struct {
 		tableName      string
 		createTableDDL string
-		// [] for rows, []infterface{} for columns.
+		// [] for rows, []interface{} for columns.
 		values [][]interface{}
 		// [] for table partition if there is any,
 		// []int for approximateBytes of rows.
@@ -192,14 +200,14 @@ func TestMounterDisableOldValue(t *testing.T) {
 	}, {
 		tableName: "tp_real",
 		createTableDDL: `create table tp_real
-		(
-			id        int auto_increment,
-			c_float   float   null,
-			c_double  double  null,
-			c_decimal decimal null,
-			constraint pk
-			primary key (id)
-		);`,
+	(
+		id        int auto_increment,
+		c_float   float   null,
+		c_double  double  null,
+		c_decimal decimal null,
+		constraint pk
+		primary key (id)
+	);`,
 		values: [][]interface{}{
 			{1},
 			{2, "2020.0202", "2020.0303", "2020.0404"},
@@ -298,6 +306,12 @@ func testMounterDisableOldValue(t *testing.T, tc struct {
 	ver, err := store.CurrentVersion(oracle.GlobalTxnScope)
 	require.Nil(t, err)
 	scheamStorage.AdvanceResolvedTs(ver.Ver)
+<<<<<<< HEAD
+=======
+	config := config.GetDefaultReplicaConfig()
+	filter, err := filter.NewFilter(config, "")
+	require.Nil(t, err)
+>>>>>>> d30f48b689 (mounter(ticdc): mount float32 value correctly to avoid the precision lost. (#8502))
 	mounter := NewMounter(scheamStorage,
 		model.DefaultChangeFeedID("c1"),
 		time.UTC, false).(*mounter)
@@ -404,7 +418,8 @@ func prepareCheckSQL(t *testing.T, tableName string, cols []*model.Column) (stri
 	require.Nil(t, err)
 	params := make([]interface{}, 0, len(cols))
 	for i, col := range cols {
-		if col == nil {
+		// Since float type has precision problem, so skip it to avoid compare float number.
+		if col == nil || col.Type == mysql.TypeFloat {
 			continue
 		}
 		if i != 0 {
@@ -679,28 +694,28 @@ func TestGetDefaultZeroValue(t *testing.T) {
 		{
 			Name:    "mysql.TypeFloat + notnull + nodefault",
 			ColInfo: timodel.ColumnInfo{FieldType: *ftTypeFloatNotNull},
-			Res:     float64(0),
+			Res:     float32(0),
 			Default: nil,
 		},
 		// mysql.TypeFloat + notnull + default
 		{
 			Name: "mysql.TypeFloat + notnull + default",
 			ColInfo: timodel.ColumnInfo{
-				OriginDefaultValue: -3.1415,
+				OriginDefaultValue: float32(-3.1415),
 				FieldType:          *ftTypeFloatNotNull,
 			},
-			Res:     float64(-3.1415),
-			Default: float64(-3.1415),
+			Res:     float32(-3.1415),
+			Default: float32(-3.1415),
 		},
 		// mysql.TypeFloat + notnull + default + unsigned
 		{
 			Name: "mysql.TypeFloat + notnull + default + unsigned",
 			ColInfo: timodel.ColumnInfo{
-				OriginDefaultValue: 3.1415,
+				OriginDefaultValue: float32(3.1415),
 				FieldType:          *ftTypeFloatNotNullUnSigned,
 			},
-			Res:     float64(3.1415),
-			Default: float64(3.1415),
+			Res:     float32(3.1415),
+			Default: float32(3.1415),
 		},
 		// mysql.TypeFloat + notnull + unsigned
 		{
@@ -708,18 +723,18 @@ func TestGetDefaultZeroValue(t *testing.T) {
 			ColInfo: timodel.ColumnInfo{
 				FieldType: *ftTypeFloatNotNullUnSigned,
 			},
-			Res:     float64(0),
+			Res:     float32(0),
 			Default: nil,
 		},
 		// mysql.TypeFloat + null + default
 		{
 			Name: "mysql.TypeFloat + null + default",
 			ColInfo: timodel.ColumnInfo{
-				OriginDefaultValue: -3.1415,
+				OriginDefaultValue: float32(-3.1415),
 				FieldType:          *ftTypeFloatNull,
 			},
-			Res:     float64(-3.1415),
-			Default: float64(-3.1415),
+			Res:     float32(-3.1415),
+			Default: float32(-3.1415),
 		},
 		// mysql.TypeFloat + null + nodefault
 		{
@@ -971,6 +986,126 @@ func TestGetDefaultZeroValue(t *testing.T) {
 	}
 }
 
+<<<<<<< HEAD
+=======
+// TestDecodeEventIgnoreRow tests a PolymorphicEvent.Row is nil
+// if this event should be filter out by filter.
+func TestDecodeEventIgnoreRow(t *testing.T) {
+	helper := NewSchemaTestHelper(t)
+	defer helper.Close()
+	helper.Tk().MustExec("use test;")
+
+	ddls := []string{
+		"create table test.student(id int primary key, name char(50), age int, gender char(10))",
+		"create table test.computer(id int primary key, brand char(50), price int)",
+		"create table test.poet(id int primary key, name char(50), works char(100))",
+	}
+
+	cfID := model.DefaultChangeFeedID("changefeed-test-ignore-event")
+
+	cfg := config.GetDefaultReplicaConfig()
+	cfg.Filter.Rules = []string{"test.student", "test.computer"}
+	filter, err := filter.NewFilter(cfg, "")
+	require.Nil(t, err)
+	ver, err := helper.Storage().CurrentVersion(oracle.GlobalTxnScope)
+	require.Nil(t, err)
+	schemaStorage, err := NewSchemaStorage(helper.GetCurrentMeta(),
+		ver.Ver, false, cfID)
+	require.Nil(t, err)
+	// apply ddl to schemaStorage
+	for _, ddl := range ddls {
+		job := helper.DDL2Job(ddl)
+		err = schemaStorage.HandleDDLJob(job)
+		require.Nil(t, err)
+	}
+
+	ts := schemaStorage.GetLastSnapshot().CurrentTs()
+	schemaStorage.AdvanceResolvedTs(ver.Ver)
+	mounter := NewMounter(schemaStorage, cfID, time.Local, filter, true).(*mounter)
+
+	type testCase struct {
+		schema  string
+		table   string
+		columns []interface{}
+		ignored bool
+	}
+
+	testCases := []testCase{
+		{
+			schema:  "test",
+			table:   "student",
+			columns: []interface{}{1, "dongmen", 20, "male"},
+			ignored: false,
+		},
+		{
+			schema:  "test",
+			table:   "computer",
+			columns: []interface{}{1, "apple", 19999},
+			ignored: false,
+		},
+		// This case should be ignored by its table name.
+		{
+			schema:  "test",
+			table:   "poet",
+			columns: []interface{}{1, "李白", "静夜思"},
+			ignored: true,
+		},
+	}
+
+	ignoredTables := make([]string, 0)
+	tables := make([]string, 0)
+	for _, tc := range testCases {
+		tableInfo, ok := schemaStorage.GetLastSnapshot().TableByName(tc.schema, tc.table)
+		require.True(t, ok)
+		// TODO: add other dml event type
+		insertSQL := prepareInsertSQL(t, tableInfo, len(tc.columns))
+		if tc.ignored {
+			ignoredTables = append(ignoredTables, tc.table)
+		} else {
+			tables = append(tables, tc.table)
+		}
+		helper.tk.MustExec(insertSQL, tc.columns...)
+	}
+	ctx := context.Background()
+
+	decodeAndCheckRowInTable := func(tableID int64, f func(key []byte, value []byte) *model.RawKVEntry) int {
+		var rows int
+		walkTableSpanInStore(t, helper.Storage(), tableID, func(key []byte, value []byte) {
+			rawKV := f(key, value)
+			pEvent := model.NewPolymorphicEvent(rawKV)
+			err := mounter.DecodeEvent(ctx, pEvent)
+			require.Nil(t, err)
+			if pEvent.Row == nil {
+				return
+			}
+			row := pEvent.Row
+			rows++
+			require.Equal(t, row.Table.Schema, "test")
+			// Now we only allow filter dml event by table, so we only check row's table.
+			require.NotContains(t, ignoredTables, row.Table.Table)
+			require.Contains(t, tables, row.Table.Table)
+		})
+		return rows
+	}
+
+	toRawKV := func(key []byte, value []byte) *model.RawKVEntry {
+		return &model.RawKVEntry{
+			OpType:  model.OpTypePut,
+			Key:     key,
+			Value:   value,
+			StartTs: ts - 1,
+			CRTs:    ts + 1,
+		}
+	}
+
+	for _, tc := range testCases {
+		tableInfo, ok := schemaStorage.GetLastSnapshot().TableByName(tc.schema, tc.table)
+		require.True(t, ok)
+		decodeAndCheckRowInTable(tableInfo.ID, toRawKV)
+	}
+}
+
+>>>>>>> d30f48b689 (mounter(ticdc): mount float32 value correctly to avoid the precision lost. (#8502))
 func TestBuildTableInfo(t *testing.T) {
 	cases := []struct {
 		origin              string
@@ -1141,4 +1276,37 @@ func TestNewDMRowChange(t *testing.T) {
 		require.Equal(t, "DELETE FROM `db`.`t1` WHERE (`a1`,`a3`) IN ((?,?),(?,?))", sqlGot)
 		require.Equal(t, []interface{}{1, 2, 1, 2}, argsGot)
 	}
+}
+
+func TestFormatColVal(t *testing.T) {
+	t.Parallel()
+
+	ftTypeFloatNotNull := types.NewFieldType(mysql.TypeFloat)
+	ftTypeFloatNotNull.SetFlag(mysql.NotNullFlag)
+	col := &timodel.ColumnInfo{FieldType: *ftTypeFloatNotNull}
+
+	var datum types.Datum
+
+	datum.SetFloat32(123.99)
+	value, _, _, err := formatColVal(datum, col)
+	require.NoError(t, err)
+	require.EqualValues(t, float32(123.99), value)
+
+	datum.SetFloat32(float32(math.NaN()))
+	value, _, warn, err := formatColVal(datum, col)
+	require.NoError(t, err)
+	require.Equal(t, float32(0), value)
+	require.NotZero(t, warn)
+
+	datum.SetFloat32(float32(math.Inf(1)))
+	value, _, warn, err = formatColVal(datum, col)
+	require.NoError(t, err)
+	require.Equal(t, float32(0), value)
+	require.NotZero(t, warn)
+
+	datum.SetFloat32(float32(math.Inf(-1)))
+	value, _, warn, err = formatColVal(datum, col)
+	require.NoError(t, err)
+	require.Equal(t, float32(0), value)
+	require.NotZero(t, warn)
 }
