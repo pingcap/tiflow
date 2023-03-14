@@ -163,7 +163,7 @@ func NewTestRegionInfo(regionID uint64, start, end []byte, writtenKeys uint64) R
 
 // RegionInfo records detail region info for api usage.
 // NOTE: This type is a copy of github.com/tikv/pd/server/api.RegionInfo.
-// To reduce dependency tree, we do not import the api package driectly.
+// To reduce dependency tree, we do not import the api package directly.
 type RegionInfo struct {
 	ID       uint64 `json:"id"`
 	StartKey string `json:"start_key"`
