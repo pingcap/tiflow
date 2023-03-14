@@ -17,7 +17,6 @@ import (
 	"fmt"
 	"strconv"
 	"sync"
-	"sync/atomic"
 	"unsafe"
 
 	"github.com/pingcap/log"
@@ -590,7 +589,7 @@ type DDLEvent struct {
 	TableInfo    *TableInfo       `msg:"-"`
 	PreTableInfo *TableInfo       `msg:"-"`
 	Type         model.ActionType `msg:"-"`
-	Done         atomic.Bool      `msg:"-"`
+	Done         bool             `msg:"-"`
 }
 
 // FromJob fills the values with DDLEvent from DDL job

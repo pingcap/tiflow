@@ -156,8 +156,15 @@ func (m *ddlManager) tick(
 	// drain all ddl jobs from ddlPuller
 	for {
 		ts, job := m.ddlPuller.PopFrontDDL()
+		// no more ddl jobs
 		if job == nil {
 			m.schema.schemaStorage.AdvanceResolvedTs(ts)
+			if m.redoDDLManager.Enabled() {
+				err := m.redoDDLManager.UpdateResolvedTs(ctx, m.ddlResolvedTs)
+				if err != nil {
+					return nil, minTableBarrierTs, barrier, err
+				}
+			}
 			break
 		}
 
@@ -207,10 +214,6 @@ func (m *ddlManager) tick(
 					if err != nil {
 						return nil, minTableBarrierTs, barrier, err
 					}
-				}
-				err := m.redoDDLManager.UpdateResolvedTs(ctx, m.ddlResolvedTs)
-				if err != nil {
-					return nil, minTableBarrierTs, barrier, err
 				}
 			}
 		}

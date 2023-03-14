@@ -216,8 +216,8 @@ func redoLogFromV1(rv1 *codecv1.RedoLog) (r *model.RedoLog) {
 			TableInfo:    rv1.RedoDDL.DDL.TableInfo,
 			PreTableInfo: rv1.RedoDDL.DDL.PreTableInfo,
 			Type:         rv1.RedoDDL.DDL.Type,
+			Done:         rv1.RedoDDL.DDL.Done,
 		}
-		r.RedoDDL.DDL.Done.Store(rv1.RedoDDL.DDL.Done.Load())
 	}
 	return
 }
