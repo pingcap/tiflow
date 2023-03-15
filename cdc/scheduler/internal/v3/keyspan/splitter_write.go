@@ -111,7 +111,7 @@ func splitRegionsByWrittenKeys(
 			currentWrittenKeys := regions[idx].WrittenKeys
 			if (idx > pageStartIdx) &&
 				((restPages >= restRegions) ||
-					(2*accWrittenKeys+currentWrittenKeys > 2*uint64(i)*writtenKeysPerPage)) {
+					(accWrittenKeys+currentWrittenKeys > writtenKeysPerPage)) {
 				spans = append(spans, tablepb.Span{
 					TableID:  tableID,
 					StartKey: tablepb.Key(decodeKey(regions[pageStartIdx].StartKey)),
@@ -121,6 +121,8 @@ func splitRegionsByWrittenKeys(
 				weights = append(weights, int(pageWrittenKeys))
 				pageWrittenKeys = 0
 				pageStartIdx = idx
+				writtenKeysPerPage = (totalWriteNormalized - accWrittenKeys) / uint64(restPages)
+				accWrittenKeys = 0
 				break
 			}
 			pageWrittenKeys += currentWrittenKeys

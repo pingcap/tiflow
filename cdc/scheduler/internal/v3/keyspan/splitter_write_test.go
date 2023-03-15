@@ -82,18 +82,18 @@ func TestSplitRegionsByWrittenKeysUniform(t *testing.T) {
 	info = splitRegionsByWrittenKeys(0, cloneRegions(regions), 0, 3) // [2,3], [4,5,6], [7,8]
 	re.Len(info.Counts, 3)
 	re.EqualValues(2, info.Counts[0])
-	re.EqualValues(3, info.Counts[1])
-	re.EqualValues(2, info.Counts[2])
+	re.EqualValues(2, info.Counts[1])
+	re.EqualValues(3, info.Counts[2])
 	re.Len(info.Weights, 3)
 	re.EqualValues(202, info.Weights[0])
-	re.EqualValues(303, info.Weights[1])
-	re.EqualValues(202, info.Weights[2])
+	re.EqualValues(202, info.Weights[1])
+	re.EqualValues(303, info.Weights[2])
 	re.Len(info.Spans, 3)
 	re.EqualValues(startKeys[2], info.Spans[0].StartKey)
 	re.EqualValues(endKeys[3], info.Spans[0].EndKey)
 	re.EqualValues(startKeys[4], info.Spans[1].StartKey)
-	re.EqualValues(endKeys[6], info.Spans[1].EndKey)
-	re.EqualValues(startKeys[7], info.Spans[2].StartKey)
+	re.EqualValues(endKeys[5], info.Spans[1].EndKey)
+	re.EqualValues(startKeys[6], info.Spans[2].StartKey)
 	re.EqualValues(endKeys[8], info.Spans[2].EndKey)
 
 	// Pages > regons
@@ -115,7 +115,7 @@ func TestSplitRegionsByWrittenKeysUniform(t *testing.T) {
 	}
 }
 
-func TestSplitRegionsByWrittenKeysHotspot(t *testing.T) {
+func TestSplitRegionsByWrittenKeysHotspot1(t *testing.T) {
 	t.Parallel()
 	re := require.New(t)
 
@@ -126,20 +126,40 @@ func TestSplitRegionsByWrittenKeysHotspot(t *testing.T) {
 	info := splitRegionsByWrittenKeys(0, regions, 0, 4) // [2], [3,4], [5,6,7], [8]
 	re.Len(info.Counts, 4)
 	re.EqualValues(1, info.Counts[0])
-	re.EqualValues(2, info.Counts[1])
-	re.EqualValues(3, info.Counts[2])
+	re.EqualValues(1, info.Counts[1])
+	re.EqualValues(4, info.Counts[2])
 	re.EqualValues(1, info.Counts[3])
 	re.Len(info.Weights, 4)
 	re.EqualValues(101, info.Weights[0])
-	re.EqualValues(103, info.Weights[1])
-	re.EqualValues(6, info.Weights[2])
+	re.EqualValues(2, info.Weights[1])
+	re.EqualValues(107, info.Weights[2])
 	re.EqualValues(101, info.Weights[3])
 	re.Len(info.Spans, 4)
 	re.EqualValues(startKeys[2], info.Spans[0].StartKey)
 	re.EqualValues(endKeys[2], info.Spans[0].EndKey)
 	re.EqualValues(startKeys[3], info.Spans[1].StartKey)
-	re.EqualValues(endKeys[4], info.Spans[1].EndKey)
-	re.EqualValues(startKeys[5], info.Spans[2].StartKey)
+	re.EqualValues(endKeys[3], info.Spans[1].EndKey)
+	re.EqualValues(startKeys[4], info.Spans[2].StartKey)
+	re.EqualValues(endKeys[7], info.Spans[2].EndKey)
+	re.EqualValues(startKeys[8], info.Spans[3].StartKey)
+	re.EqualValues(endKeys[8], info.Spans[3].EndKey)
+}
+
+func TestSplitRegionsByWrittenKeysHotspot2(t *testing.T) {
+	t.Parallel()
+	re := require.New(t)
+
+	// Hotspots
+	regions, startKeys, endKeys := prepareRegionsInfo(
+		[7]int{1000, 1, 1, 1, 100, 1, 99})
+
+	info := splitRegionsByWrittenKeys(0, regions, 0, 4) // [2], [3,4,5], [6,7], [8]
+	re.Len(info.Spans, 4)
+	re.EqualValues(startKeys[2], info.Spans[0].StartKey)
+	re.EqualValues(endKeys[2], info.Spans[0].EndKey)
+	re.EqualValues(startKeys[3], info.Spans[1].StartKey)
+	re.EqualValues(endKeys[5], info.Spans[1].EndKey)
+	re.EqualValues(startKeys[6], info.Spans[2].StartKey)
 	re.EqualValues(endKeys[7], info.Spans[2].EndKey)
 	re.EqualValues(startKeys[8], info.Spans[3].StartKey)
 	re.EqualValues(endKeys[8], info.Spans[3].EndKey)
