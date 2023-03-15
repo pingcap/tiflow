@@ -77,9 +77,13 @@ message TableBarrier {
     uint64 barrier_ts = 2;
 }
 
+// Barrier contains the barrierTs of those tables that have
+// ddl jobs that need to be replicated. The Scheduler will
+// broadcast the barrierTs to all captures through the Heartbeat.
 message Barrier {
     repeated TableBarrier table_barriers = 1;
-    uint64  global_barrier_ts = 2;
+    uint64  global_barrier_ts = 2 [
+        (gogoproto.casttype) = "github.com/pingcap/tiflow/cdc/processor/tablepb.Ts"];
 }
 
 message Heartbeat {
