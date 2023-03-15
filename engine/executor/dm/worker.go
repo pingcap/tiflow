@@ -129,7 +129,7 @@ func newDMWorker(
 		workerType:     workerType,
 		taskID:         dmSubtaskCfg.SourceID,
 		masterID:       masterID,
-		unitHolder:     newUnitHolderImpl(workerType, dmSubtaskCfg, masterID),
+		unitHolder:     newUnitHolderImpl(workerType, dmSubtaskCfg),
 		autoResume:     autoResume,
 		cfgModRevision: cfg.ModRevision,
 		needExtStorage: cfg.NeedExtStorage,
