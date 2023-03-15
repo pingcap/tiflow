@@ -523,7 +523,12 @@ func columnToAvroSchema(
 			Type:       "long",
 			Parameters: map[string]string{tidbType: tt},
 		}, nil
-	case mysql.TypeFloat, mysql.TypeDouble:
+	case mysql.TypeFloat:
+		return avroSchema{
+			Type:       "float",
+			Parameters: map[string]string{tidbType: tt},
+		}, nil
+	case mysql.TypeDouble:
 		return avroSchema{
 			Type:       "double",
 			Parameters: map[string]string{tidbType: tt},
