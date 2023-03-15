@@ -179,8 +179,6 @@ func (s *ManyTypesCase) Run(ctx *framework.TaskContext) error {
 
 	_, ok = s.Task.(*canal.SingleTableTask)
 	if ok {
-		data["t_float"] = 2.45678
-
 		data["t_tinyint"] = 127
 		data["t_smallint"] = 32767
 		data["t_mediumint"] = 8388607
