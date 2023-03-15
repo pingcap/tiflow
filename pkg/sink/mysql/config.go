@@ -76,10 +76,6 @@ const (
 
 	// defaultcachePrepStmts is the default value of cachePrepStmts
 	defaultCachePrepStmts = true
-	// defaultPrepStmtCacheSize is the default size of prepared statement cache
-	// default size = (default max_prepared_stmt_count) / (default worker count + 1)
-	// 16382 / (16 + 1) = 963
-	defaultPrepStmtCacheSize = 963
 	// The upper limit of the max size of prepared statement cache
 	maxPrepStmtCacheSize = 1048576
 )
@@ -100,12 +96,11 @@ type Config struct {
 	ForceReplicate         bool
 	EnableOldValue         bool
 
-	IsTiDB            bool // IsTiDB is true if the downstream is TiDB
-	SourceID          uint64
-	BatchDMLEnable    bool
-	MultiStmtEnable   bool
-	CachePrepStmts    bool
-	PrepStmtCacheSize int
+	IsTiDB          bool // IsTiDB is true if the downstream is TiDB
+	SourceID        uint64
+	BatchDMLEnable  bool
+	MultiStmtEnable bool
+	CachePrepStmts  bool
 }
 
 // NewConfig returns the default mysql backend config.
@@ -123,7 +118,6 @@ func NewConfig() *Config {
 		BatchDMLEnable:         defaultBatchDMLEnable,
 		MultiStmtEnable:        defaultMultiStmtEnable,
 		CachePrepStmts:         defaultCachePrepStmts,
-		PrepStmtCacheSize:      defaultPrepStmtCacheSize,
 	}
 }
 
@@ -183,9 +177,6 @@ func (c *Config) Apply(
 		return err
 	}
 	if err = getCachePrepStmts(query, &c.CachePrepStmts); err != nil {
-		return err
-	}
-	if err = getPrepStmtCacheSize(query, &c.PrepStmtCacheSize); err != nil {
 		return err
 	}
 	c.EnableOldValue = replicaConfig.EnableOldValue

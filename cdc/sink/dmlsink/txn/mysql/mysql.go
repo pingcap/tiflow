@@ -51,6 +51,8 @@ const (
 	networkDriftDuration = 5 * time.Second
 
 	defaultDMLMaxRetry uint64 = 8
+
+	prepStmtCacheSize int = 16 * 1024
 )
 
 type mysqlBackend struct {
@@ -122,9 +124,6 @@ func NewMySQLBackends(
 
 	// Inherit the default value of the prepared statement cache from the SinkURI Options
 	cachePrepStmts := cfg.CachePrepStmts
-	prepStmtCacheSize := cfg.PrepStmtCacheSize
-
-	var stmtCache *lru.Cache
 	if cachePrepStmts {
 		// query the size of the prepared statement cache on serverside
 		maxPreparedStmtCount, err := pmysql.QueryMaxPreparedStmtCount(ctx, db)
@@ -138,13 +137,11 @@ func NewMySQLBackends(
 		// Because each connection can not hold at lease one prepared statement.
 		if maxPreparedStmtCount == 0 || maxPreparedStmtCount/(cfg.WorkerCount+1) == 0 {
 			cachePrepStmts = false
-		} else if maxPreparedStmtCount/(cfg.WorkerCount+1) < prepStmtCacheSize {
-			// if maxPreparedStmtCount/(cfg.WorkerCount+1) < prepStmtCacheSize,
-			// it means that the prepared statement cache is too large on clientsize.
-			// adjust the size of the prepared statement cache on clientsize.
-			// to avoid error `Can't create more than max_prepared_stmt_count statements`
-			prepStmtCacheSize = maxPreparedStmtCount / (cfg.WorkerCount + 1)
 		}
+	}
+
+	var stmtCache *lru.Cache
+	if cachePrepStmts {
 		stmtCache, err = lru.NewWithEvict(prepStmtCacheSize, func(key, value interface{}) {
 			stmt := value.(*sql.Stmt)
 			stmt.Close()
@@ -656,23 +653,25 @@ func (s *mysqlBackend) sequenceExecute(
 		log.Debug("exec row", zap.Int("workerID", s.workerID),
 			zap.String("sql", query), zap.Any("args", args))
 		ctx, cancelFunc := context.WithTimeout(ctx, writeTimeout)
-		var execError error
-		if s.cachePrepStmts {
-			stmt, ok := s.stmtCache.Get(query)
-			if !ok {
-				var err error
-				stmt, err = s.db.Prepare(query)
-				if err != nil {
-					cancelFunc()
-					return errors.Trace(err)
-				}
 
+		var prepStmt *sql.Stmt
+		if s.cachePrepStmts {
+			if stmt, ok := s.stmtCache.Get(query); ok {
+				prepStmt = stmt.(*sql.Stmt)
+			} else if stmt, err := s.db.Prepare(query); err == nil {
+				prepStmt = stmt
 				s.stmtCache.Add(query, stmt)
+			} else {
+				s.stmtCache.RemoveOldest()
 			}
-			//nolint:sqlclosecheck
-			_, execError = tx.Stmt(stmt.(*sql.Stmt)).ExecContext(ctx, args...)
-		} else {
+		}
+
+		var execError error
+		if prepStmt == nil {
 			_, execError = tx.ExecContext(ctx, query, args...)
+		} else {
+			//nolint:sqlclosecheck
+			_, execError = tx.Stmt(prepStmt).ExecContext(ctx, args...)
 		}
 		if execError != nil {
 			err := logDMLTxnErr(
