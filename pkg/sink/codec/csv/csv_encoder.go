@@ -50,16 +50,6 @@ func (b *BatchEncoder) AppendTxnEvent(
 	return nil
 }
 
-// EncodeDDLEvent implements the RowEventEncoder interface
-func (b *BatchEncoder) EncodeDDLEvent(e *model.DDLEvent) (*common.Message, error) {
-	return nil, nil
-}
-
-// EncodeCheckpointEvent implements the RowEventEncoder interface
-func (b *BatchEncoder) EncodeCheckpointEvent(ts uint64) (*common.Message, error) {
-	return nil, nil
-}
-
 // Build implements the RowEventEncoder interface
 func (b *BatchEncoder) Build() (messages []*common.Message) {
 	if b.batchSize == 0 {
