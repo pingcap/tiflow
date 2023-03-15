@@ -11,6 +11,8 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
+// TODO: remove this tag after ddlManager is used.
+// nolint:unused,unparam
 package owner
 
 import (
