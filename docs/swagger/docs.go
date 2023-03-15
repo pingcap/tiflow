@@ -1856,6 +1856,10 @@ var doc = `{
                 "region_threshold": {
                     "description": "RegionThreshold is the region count threshold of splitting a table.",
                     "type": "integer"
+                },
+                "write_key_threshold": {
+                    "description": "WriteKeyThreshold is the written keys threshold of splitting a table.",
+                    "type": "integer"
                 }
             }
         },
