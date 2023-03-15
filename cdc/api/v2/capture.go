@@ -102,11 +102,7 @@ func (h *OpenAPIV2) listCaptures(c *gin.Context) {
 	}
 	ownerID := info.ID
 
-	etcdClient, err := h.capture.GetEtcdClient()
-	if err != nil {
-		_ = c.Error(err)
-		return
-	}
+	etcdClient := h.capture.GetEtcdClient()
 
 	captures := make([]Capture, 0, len(captureInfos))
 	for _, c := range captureInfos {
