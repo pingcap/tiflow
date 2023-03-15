@@ -309,7 +309,7 @@ func GetTaskInfoSchemaName(dmMetaSchema, taskName string) string {
 }
 
 // GetLightningConfig returns the lightning task config for the lightning global config and DM subtask config.
-func GetLightningConfig(globalCfg *lcfg.GlobalConfig, subtaskCfg *config.SubTaskConfig, workerName string) (*lcfg.Config, error) {
+func GetLightningConfig(globalCfg *lcfg.GlobalConfig, subtaskCfg *config.SubTaskConfig) (*lcfg.Config, error) {
 	cfg := lcfg.NewConfig()
 	if err := cfg.LoadFromGlobal(globalCfg); err != nil {
 		return nil, err
@@ -327,7 +327,7 @@ func GetLightningConfig(globalCfg *lcfg.GlobalConfig, subtaskCfg *config.SubTask
 			return nil, err
 		}
 		// To enable the loader worker failover, we need to use jobID+sourceID to isolate the checkpoint schema
-		cfg.Checkpoint.Schema = cputil.LightningCheckpointSchema(workerName, subtaskCfg.SourceID)
+		cfg.Checkpoint.Schema = cputil.LightningCheckpointSchema(subtaskCfg.Name, subtaskCfg.SourceID)
 		cfg.Checkpoint.Driver = lcfg.CheckpointDriverMySQL
 		cfg.Checkpoint.MySQLParam = connParamFromConfig(cfg)
 	} else {
@@ -379,7 +379,7 @@ func GetLightningConfig(globalCfg *lcfg.GlobalConfig, subtaskCfg *config.SubTask
 }
 
 func (l *LightningLoader) getLightningConfig() (*lcfg.Config, error) {
-	cfg, err := GetLightningConfig(l.lightningGlobalConfig, l.cfg, l.workerName)
+	cfg, err := GetLightningConfig(l.lightningGlobalConfig, l.cfg)
 	if err != nil {
 		return nil, err
 	}

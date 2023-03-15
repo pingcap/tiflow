@@ -424,7 +424,7 @@ func (c *Checker) Init(ctx context.Context) (err error) {
 	if instance.cfg.Mode != config.ModeIncrement &&
 		instance.cfg.LoaderConfig.ImportMode == config.LoadModePhysical &&
 		hasLightningPrecheck {
-		lCfg, err := loader.GetLightningConfig(loader.MakeGlobalConfig(instance.cfg), instance.cfg, "")
+		lCfg, err := loader.GetLightningConfig(loader.MakeGlobalConfig(instance.cfg), instance.cfg)
 		if err != nil {
 			return err
 		}
