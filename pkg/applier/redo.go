@@ -247,7 +247,7 @@ func (ra *RedoApplier) resetQuota(rowSize uint64) error {
 	}
 
 	oldQuota := ra.pendingQuota
-	ra.pendingQuota = uint64(rowSize * mysql.DefaultMaxTxnRow)
+	ra.pendingQuota = rowSize * mysql.DefaultMaxTxnRow
 	if ra.pendingQuota > config.DefaultChangefeedMemoryQuota {
 		ra.pendingQuota = config.DefaultChangefeedMemoryQuota
 	} else if ra.pendingQuota < 64*1024 {
