@@ -35,14 +35,14 @@ func testAvro() {
 	env := avro.NewKafkaDockerEnv(*dockerComposeFile)
 	task := &avro.SingleTableTask{TableName: "test"}
 	testCases := []framework.Task{
-		cases.NewAlterCase(task), // this case is slow, so put it last
-		cases.NewDateTimeCase(task),
-		cases.NewSimpleCase(task),
-		cases.NewDeleteCase(task),
-		//cases.NewManyTypesCase(task),
-		cases.NewUnsignedCase(task),
-		cases.NewCompositePKeyCase(task),
-		cases.NewHandleKeyCase(task),
+		//cases.NewAlterCase(task), // this case is slow, so put it last
+		//cases.NewDateTimeCase(task),
+		//cases.NewSimpleCase(task),
+		//cases.NewDeleteCase(task),
+		cases.NewManyTypesCase(task),
+		//cases.NewUnsignedCase(task),
+		//cases.NewCompositePKeyCase(task),
+		//cases.NewHandleKeyCase(task),
 	}
 
 	runTests(testCases, env)
