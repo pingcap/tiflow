@@ -16,7 +16,6 @@ package server
 import (
 	"context"
 	"fmt"
-	"io"
 	"net"
 	"net/http"
 	"os"
@@ -35,6 +34,7 @@ import (
 	cerror "github.com/pingcap/tiflow/pkg/errors"
 	"github.com/pingcap/tiflow/pkg/etcd"
 	"github.com/pingcap/tiflow/pkg/fsutil"
+	clogutil "github.com/pingcap/tiflow/pkg/logutil"
 	"github.com/pingcap/tiflow/pkg/p2p"
 	"github.com/pingcap/tiflow/pkg/pdutil"
 	"github.com/pingcap/tiflow/pkg/tcpserver"
@@ -238,11 +238,11 @@ func (s *server) startStatusHTTP(lis net.Listener) error {
 	lis = netutil.LimitListener(lis, maxHTTPConnection)
 	conf := config.GetGlobalServerConfig()
 
-	// discard gin log output
-	gin.DefaultWriter = io.Discard
+	logWritter := clogutil.InitGinLogWritter()
 	router := gin.New()
-	// add gin.Recovery() to handle unexpected panic
-	router.Use(gin.Recovery())
+	// add gin.RecoveryWithWriter() to handle unexpected panic (logging and
+	// returning status code 500)
+	router.Use(gin.RecoveryWithWriter(logWritter))
 	// router.
 	// Register APIs.
 	cdc.RegisterRoutes(router, s.capture, registry)
