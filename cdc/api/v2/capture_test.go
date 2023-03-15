@@ -87,36 +87,7 @@ func TestListCaptures(t *testing.T) {
 		require.Equal(t, http.StatusInternalServerError, w.Code)
 	}
 
-	// case 3: etcd client failed.
-	{
-		ctrl := gomock.NewController(t)
-		cp := mock_capture.NewMockCapture(ctrl)
-		cp.EXPECT().IsReady().Return(true).AnyTimes()
-		cp.EXPECT().IsOwner().Return(true).AnyTimes()
-		statusProvider := mock_owner.NewMockStatusProvider(ctrl)
-		cp.EXPECT().StatusProvider().Return(statusProvider)
-		statusProvider.EXPECT().GetCaptures(gomock.Any()).Return([]*model.CaptureInfo{}, nil)
-		cp.EXPECT().Info().Return(model.CaptureInfo{}, nil)
-		cp.EXPECT().GetEtcdClient().Return(nil, errors.New("fake etcd"))
-
-		apiV2 := NewOpenAPIV2ForTest(cp, APIV2HelpersImpl{})
-		router := newRouter(apiV2)
-		w := httptest.NewRecorder()
-		req, _ := http.NewRequestWithContext(
-			context.Background(),
-			"GET",
-			"/api/v2/captures",
-			nil,
-		)
-		router.ServeHTTP(w, req)
-		respErr := model.HTTPError{}
-		err := json.NewDecoder(w.Body).Decode(&respErr)
-		require.Nil(t, err)
-		require.Contains(t, respErr.Error, "fake etcd")
-		require.Equal(t, http.StatusInternalServerError, w.Code)
-	}
-
-	// case 4: success
+	// case 3: success
 	{
 		ctrl := gomock.NewController(t)
 		cp := mock_capture.NewMockCapture(ctrl)
@@ -139,7 +110,7 @@ func TestListCaptures(t *testing.T) {
 		}, nil)
 		etcdClient := mock_etcd.NewMockCDCEtcdClient(ctrl)
 		etcdClient.EXPECT().GetClusterID().AnyTimes().Return("cdc-cluster-id")
-		cp.EXPECT().GetEtcdClient().AnyTimes().Return(etcdClient, nil)
+		cp.EXPECT().GetEtcdClient().AnyTimes().Return(etcdClient)
 
 		apiV2 := NewOpenAPIV2ForTest(cp, APIV2HelpersImpl{})
 		router := newRouter(apiV2)

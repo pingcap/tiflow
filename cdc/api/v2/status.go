@@ -39,11 +39,7 @@ func (h *OpenAPIV2) serverStatus(c *gin.Context) {
 		_ = c.Error(err)
 		return
 	}
-	etcdClient, err := h.capture.GetEtcdClient()
-	if err != nil {
-		_ = c.Error(err)
-		return
-	}
+	etcdClient := h.capture.GetEtcdClient()
 	status := model.ServerStatus{
 		Version:   version.ReleaseVersion,
 		GitHash:   version.GitHash,
