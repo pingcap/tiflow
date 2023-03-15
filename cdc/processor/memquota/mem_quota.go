@@ -68,9 +68,11 @@ func NewMemQuota(changefeedID model.ChangeFeedID, totalBytes uint64, comp string
 		changefeedID:     changefeedID,
 		totalBytes:       totalBytes,
 		blockAcquireCond: sync.NewCond(&sync.Mutex{}),
-		metricTotal:      MemoryQuota.WithLabelValues(changefeedID.Namespace, changefeedID.ID, "total", comp),
-		metricUsed:       MemoryQuota.WithLabelValues(changefeedID.Namespace, changefeedID.ID, "used", comp),
-		closeBg:          make(chan struct{}, 1),
+		metricTotal: MemoryQuota.WithLabelValues(changefeedID.Namespace,
+			changefeedID.ID, "total", comp),
+		metricUsed: MemoryQuota.WithLabelValues(changefeedID.Namespace,
+			changefeedID.ID, "used", comp),
+		closeBg: make(chan struct{}, 1),
 
 		tableMemory: spanz.NewHashMap[[]*MemConsumeRecord](),
 	}
