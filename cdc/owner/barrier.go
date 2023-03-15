@@ -28,23 +28,23 @@ const (
 	finishBarrier
 )
 
-// barrierCalculator stores some barrierType and barrierTs, and can calculate the min barrierTs
-// barrierCalculator is NOT-THREAD-SAFE
-type barrierCalculator struct {
+// barriers stores some barrierType and barrierTs, and can calculate the min barrierTs
+// barriers is NOT-THREAD-SAFE
+type barriers struct {
 	inner map[barrierType]model.Ts
 	dirty bool
 	min   barrierType
 }
 
-func newBarrierCalculator() *barrierCalculator {
-	return &barrierCalculator{
+func newBarriers() *barriers {
+	return &barriers{
 		inner: make(map[barrierType]model.Ts),
 		dirty: true,
 	}
 }
 
-func (b *barrierCalculator) Update(tp barrierType, barrierTs model.Ts) {
-	// the barrierCalculator structure was given the ability to
+func (b *barriers) Update(tp barrierType, barrierTs model.Ts) {
+	// the barriers structure was given the ability to
 	// handle a fallback barrierTs by design.
 	// but the barrierTs should never fall back in owner replication model
 	if !b.dirty && (tp == b.min || barrierTs <= b.inner[b.min]) {
@@ -53,7 +53,7 @@ func (b *barrierCalculator) Update(tp barrierType, barrierTs model.Ts) {
 	b.inner[tp] = barrierTs
 }
 
-func (b *barrierCalculator) Min() (tp barrierType, barrierTs model.Ts) {
+func (b *barriers) Min() (tp barrierType, barrierTs model.Ts) {
 	if !b.dirty {
 		return b.min, b.inner[b.min]
 	}
@@ -63,7 +63,7 @@ func (b *barrierCalculator) Min() (tp barrierType, barrierTs model.Ts) {
 	return tp, minTs
 }
 
-func (b *barrierCalculator) calcMin() (tp barrierType, barrierTs model.Ts) {
+func (b *barriers) calcMin() (tp barrierType, barrierTs model.Ts) {
 	barrierTs = uint64(math.MaxUint64)
 	for br, ts := range b.inner {
 		if ts <= barrierTs {
@@ -74,7 +74,7 @@ func (b *barrierCalculator) calcMin() (tp barrierType, barrierTs model.Ts) {
 	return
 }
 
-func (b *barrierCalculator) Remove(tp barrierType) {
+func (b *barriers) Remove(tp barrierType) {
 	delete(b.inner, tp)
 	b.dirty = true
 }

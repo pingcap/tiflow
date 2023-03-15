@@ -23,7 +23,7 @@ import (
 )
 
 func TestBarrier(t *testing.T) {
-	b := newBarrierCalculator()
+	b := newBarriers()
 	b.Update(syncPointBarrier, 3)
 	b.Update(finishBarrier, 1)
 	tp, ts := b.Min()
@@ -49,7 +49,7 @@ func TestBarrier(t *testing.T) {
 func TestBarrierRandom(t *testing.T) {
 	maxBarrierType := 50
 	maxBarrierTs := 1000000
-	b := newBarrierCalculator()
+	b := newBarriers()
 	expectedBarriers := make(map[barrierType]model.Ts)
 
 	// set a barrier which can not be removed to avoid the barrier map is empty

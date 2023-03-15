@@ -73,10 +73,10 @@ type changefeed struct {
 	upstream  *upstream.Upstream
 	cfg       *config.SchedulerConfig
 	scheduler scheduler.Scheduler
-	// barrierCalculator will be created when a changefeed is initialized
+	// barriers will be created when a changefeed is initialized
 	// and will be destroyed when a changefeed is closed.
-	barrierCalculator *barrierCalculator
-	feedStateManager  *feedStateManager
+	barriers         *barriers
+	feedStateManager *feedStateManager
 	// preResolvedTs calculated by the scheduler in the last tick.
 	// we need to use it to prevent the barrier from being advanced too fast,
 	// when Redo is enabled.
@@ -154,10 +154,10 @@ func newChangefeed(
 		id:    id,
 		state: state,
 		// The scheduler will be created lazily.
-		scheduler:         nil,
-		barrierCalculator: newBarrierCalculator(),
-		feedStateManager:  newFeedStateManager(up),
-		upstream:          up,
+		scheduler:        nil,
+		barriers:         newBarriers(),
+		feedStateManager: newFeedStateManager(up),
+		upstream:         up,
 
 		errCh:  make(chan error, defaultErrChSize),
 		cancel: func() {},
@@ -521,11 +521,11 @@ LOOP:
 		ddlStartTs = checkpointTs
 	}
 
-	c.barrierCalculator = newBarrierCalculator()
+	c.barriers = newBarriers()
 	if c.state.Info.Config.EnableSyncPoint {
-		c.barrierCalculator.Update(syncPointBarrier, resolvedTs)
+		c.barriers.Update(syncPointBarrier, resolvedTs)
 	}
-	c.barrierCalculator.Update(finishBarrier, c.state.Info.GetTargetTs())
+	c.barriers.Update(finishBarrier, c.state.Info.GetTargetTs())
 
 	c.schema, err = newSchemaWrap4Owner(c.upstream.KVStorage, ddlStartTs, c.state.Info.Config, c.id)
 	if err != nil {
@@ -700,7 +700,7 @@ func (c *changefeed) releaseResources(ctx cdcContext.Context) {
 
 	c.cleanupMetrics()
 	c.schema = nil
-	c.barrierCalculator = nil
+	c.barriers = nil
 	c.initialized = false
 	c.isReleased = true
 
@@ -853,7 +853,7 @@ func (c *changefeed) preflightCheck(captures map[model.CaptureID]*model.CaptureI
 // handleBarrier calculates the barrierTs of the changefeed.
 // barrierTs is used to control the data that can be flush to downstream.
 func (c *changefeed) handleBarrier(ctx cdcContext.Context) (uint64, error) {
-	barrierTp, barrierTs := c.barrierCalculator.Min()
+	barrierTp, barrierTs := c.barriers.Min()
 
 	c.metricsChangefeedBarrierTsGauge.Set(float64(oracle.ExtractPhysical(barrierTs)))
 
@@ -874,7 +874,7 @@ func (c *changefeed) handleBarrier(ctx cdcContext.Context) (uint64, error) {
 		if err := c.ddlSink.emitSyncPoint(ctx, barrierTs); err != nil {
 			return 0, errors.Trace(err)
 		}
-		c.barrierCalculator.Update(syncPointBarrier, nextSyncPointTs)
+		c.barriers.Update(syncPointBarrier, nextSyncPointTs)
 	case finishBarrier:
 		if fullyBlocked {
 			c.feedStateManager.MarkFinished()
