@@ -191,55 +191,58 @@ func (f *FilePathGenerator) GenerateIndexFilePath(tbl VersionedTable, date strin
 
 func (f *FilePathGenerator) getNextFileIdxFromIndexFile(
 	ctx context.Context, tbl VersionedTable, date string,
-) (fileIdx uint64, err error) {
+) (uint64, error) {
 	indexFile := f.GenerateIndexFilePath(tbl, date)
 	exist, err := f.storage.FileExists(ctx, indexFile)
 	if err != nil {
-		return fileIdx, err
+		return 0, err
 	}
-	if exist {
-		data, err := f.storage.ReadFile(ctx, indexFile)
+	if !exist {
+		return 0, nil
+	}
+
+	data, err := f.storage.ReadFile(ctx, indexFile)
+	if err != nil {
+		return 0, err
+	}
+	fileName := strings.TrimSuffix(string(data), "\n")
+	maxFileIdx, err := f.fetchIndexFromFileName(fileName)
+	if err != nil {
+		return 0, err
+	}
+
+	lastFilePath := strings.Join([]string{
+		f.generateDataDirPath(tbl, date),                  // file dir
+		fmt.Sprintf("CDC%06d%s", maxFileIdx, f.extension), // file name
+	}, "/")
+
+	var lastFileExists, lastFileIsEmpty bool
+	lastFileExists, err = f.storage.FileExists(ctx, lastFilePath)
+	if err != nil {
+		return 0, err
+	}
+
+	if lastFileExists {
+		fileReader, err := f.storage.Open(ctx, lastFilePath)
 		if err != nil {
-			return fileIdx, err
+			return 0, err
 		}
-		fileName := strings.TrimSuffix(string(data), "\n")
-		maxFileIdx, err := f.fetchIndexFromFileName(fileName)
-		if err != nil {
-			return fileIdx, err
+		readBytes, err := fileReader.Read(make([]byte, 1))
+		if err != nil && err != io.EOF {
+			return 0, err
 		}
-
-		lastFilePath := strings.Join([]string{
-			f.generateDataDirPath(tbl, date),                  // file dir
-			fmt.Sprintf("CDC%06d%s", maxFileIdx, f.extension), // file name
-		}, "/")
-
-		var lastFileExists, lastFileIsEmpty bool
-		lastFileExists, err = f.storage.FileExists(ctx, lastFilePath)
-		if err != nil {
-			return fileIdx, err
-		}
-
-		if lastFileExists {
-			fileReader, err := f.storage.Open(ctx, lastFilePath)
-			if err != nil {
-				return fileIdx, err
-			}
-			readBytes, err := fileReader.Read(make([]byte, 1))
-			if err != nil && err != io.EOF {
-				return fileIdx, err
-			}
-			lastFileIsEmpty = readBytes == 0
-			if err := fileReader.Close(); err != nil {
-				return fileIdx, err
-			}
-		}
-
-		if lastFileExists && !lastFileIsEmpty {
-			fileIdx = maxFileIdx
-		} else {
-			// Reuse the old index number if the last file does not exist.
-			fileIdx = maxFileIdx - 1
+		lastFileIsEmpty = readBytes == 0
+		if err := fileReader.Close(); err != nil {
+			return 0, err
 		}
 	}
-	return fileIdx, err
+
+	var fileIdx uint64
+	if lastFileExists && !lastFileIsEmpty {
+		fileIdx = maxFileIdx
+	} else {
+		// Reuse the old index number if the last file does not exist.
+		fileIdx = maxFileIdx - 1
+	}
+	return fileIdx, nil
 }
