@@ -341,6 +341,8 @@ func GetLightningConfig(globalCfg *lcfg.GlobalConfig, subtaskCfg *config.SubTask
 		}
 		cfg.Checkpoint.DSN = cpPath
 	}
+	// TODO: Fix me. Remove strategy may cause the re-import if the process exits unexpectly between removing lightning
+	// checkpoint meta and updating dm checkpoint meta to 'finished'.
 	cfg.Checkpoint.KeepAfterSuccess = lcfg.CheckpointRemove
 
 	cfg.TikvImporter.DiskQuota = subtaskCfg.LoaderConfig.DiskQuotaPhysical
