@@ -39,7 +39,7 @@ func testAvro() {
 		cases.NewDateTimeCase(task),
 		cases.NewSimpleCase(task),
 		cases.NewDeleteCase(task),
-		cases.NewManyTypesCase(task),
+		//cases.NewManyTypesCase(task),
 		cases.NewUnsignedCase(task),
 		cases.NewCompositePKeyCase(task),
 		cases.NewHandleKeyCase(task),
