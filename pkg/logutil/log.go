@@ -16,11 +16,13 @@ package logutil
 import (
 	"bytes"
 	"context"
+	"io"
 	"os"
 	"strconv"
 	"strings"
 
 	"github.com/Shopify/sarama"
+	"github.com/gin-gonic/gin"
 	"github.com/go-sql-driver/mysql"
 	"github.com/pingcap/errors"
 	"github.com/pingcap/log"
@@ -232,11 +234,11 @@ func initSaramaLogger(level zapcore.Level) error {
 	return nil
 }
 
-type grpcLoggerWriter struct {
+type loggerWriter struct {
 	logFunc func(msg string, fields ...zap.Field)
 }
 
-func (l *grpcLoggerWriter) Write(p []byte) (int, error) {
+func (l *loggerWriter) Write(p []byte) (int, error) {
 	p = bytes.TrimSpace(p)
 	l.logFunc(string(p))
 	return len(p), nil
@@ -291,7 +293,7 @@ func initGRPCLogger(level zapcore.Level) error {
 	if err != nil {
 		return err
 	}
-	writer := &grpcLoggerWriter{logFunc: logFunc}
+	writer := &loggerWriter{logFunc: logFunc}
 	grpclog.SetLoggerV2(grpclog.NewLoggerV2WithVerbosity(writer, writer, writer, v))
 	return nil
 }
@@ -327,4 +329,20 @@ func ShortError(err error) zap.Field {
 // WithComponent return a logger with specified component scope
 func WithComponent(component string) *zap.Logger {
 	return log.L().With(zap.String("component", component))
+}
+
+// InitGinLogWritter initialize loggers for Gin.
+func InitGinLogWritter() io.Writer {
+	currentLevel := log.GetLevel()
+	if currentLevel == zapcore.DebugLevel {
+		gin.SetMode(gin.DebugMode)
+	} else {
+		gin.SetMode(gin.ReleaseMode)
+	}
+	logger := WithComponent("gin")
+	logFunc, _ := levelToFunc(logger, currentLevel)
+	gin.DefaultWriter = &loggerWriter{logFunc: logFunc}
+	logFunc, _ = levelToFunc(logger, zapcore.ErrorLevel)
+	gin.DefaultErrorWriter = &loggerWriter{logFunc: logFunc}
+	return gin.DefaultErrorWriter
 }
