@@ -683,7 +683,16 @@ func columnToAvroData(
 			return strconv.FormatUint(col.Value.(uint64), 10), "string", nil
 		}
 		return col.Value.(int64), "long", nil
-	case mysql.TypeFloat, mysql.TypeDouble:
+	case mysql.TypeFloat:
+		if v, ok := col.Value.(string); ok {
+			n, err := strconv.ParseFloat(v, 32)
+			if err != nil {
+				return nil, "", cerror.WrapError(cerror.ErrAvroEncodeFailed, err)
+			}
+			return n, "float", nil
+		}
+		return col.Value.(float32), "float", nil
+	case mysql.TypeDouble:
 		if v, ok := col.Value.(string); ok {
 			n, err := strconv.ParseFloat(v, 64)
 			if err != nil {
