@@ -87,11 +87,10 @@ type unitHolderImpl struct {
 var _ unitHolder = &unitHolderImpl{}
 
 // newUnitHolderImpl creates a UnitHolderImpl
-func newUnitHolderImpl(workerType framework.WorkerType, cfg *dmconfig.SubTaskConfig, masterID frameModel.MasterID) *unitHolderImpl {
+func newUnitHolderImpl(workerType framework.WorkerType, cfg *dmconfig.SubTaskConfig) *unitHolderImpl {
 	return &unitHolderImpl{
 		tp:       workerType,
 		cfg:      cfg,
-		masterID: masterID,
 	}
 }
 
