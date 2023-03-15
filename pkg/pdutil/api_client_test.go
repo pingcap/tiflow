@@ -178,7 +178,7 @@ func TestScanRegions(t *testing.T) {
 		NewTestRegionInfo(7, []byte{1, 0}, []byte{1, 1}, 5),
 		NewTestRegionInfo(8, []byte{1, 1}, []byte(""), 6),
 	}
-	var handler func(startKey, endKey []byte, limit int) RegionsInfo
+	var handler func() RegionsInfo
 	mockPDServer := httptest.NewServer(http.HandlerFunc(
 		func(w http.ResponseWriter, r *http.Request) {
 			w.WriteHeader(http.StatusOK)
@@ -186,7 +186,7 @@ func TestScanRegions(t *testing.T) {
 			endKey, _ := hex.DecodeString(r.URL.Query()["end_key"][0])
 			limit, _ := strconv.Atoi(r.URL.Query()["limit"][0])
 			t.Log(startKey, endKey, limit)
-			info := handler(startKey, endKey, limit)
+			info := handler()
 			info.Count = len(info.Regions)
 			data, _ := json.Marshal(info)
 			t.Logf("%s", string(data))
@@ -199,7 +199,7 @@ func TestScanRegions(t *testing.T) {
 	pc := pdAPIClient{httpClient: httpcli}
 
 	i := 0
-	handler = func(startKey, endKey []byte, limit int) RegionsInfo {
+	handler = func() RegionsInfo {
 		start := i
 		end := i + 1
 		i++
@@ -212,7 +212,7 @@ func TestScanRegions(t *testing.T) {
 	require.NoError(t, err)
 	require.Equal(t, 7, len(rs))
 
-	handler = func(startKey, endKey []byte, limit int) RegionsInfo {
+	handler = func() RegionsInfo {
 		return RegionsInfo{Regions: regions}
 	}
 	rs, err = pc.scanRegions(context.Background(), tablepb.Span{}, []string{mockPDServer.URL}, 1024)
@@ -220,7 +220,7 @@ func TestScanRegions(t *testing.T) {
 	require.Equal(t, 7, len(rs))
 
 	i = 0
-	handler = func(startKey, endKey []byte, limit int) RegionsInfo {
+	handler = func() RegionsInfo {
 		if i != 0 {
 			require.FailNow(t, "must only request once")
 		}
@@ -235,7 +235,7 @@ func TestScanRegions(t *testing.T) {
 	require.Equal(t, 1, len(rs))
 
 	i = 0
-	handler = func(startKey, endKey []byte, limit int) RegionsInfo {
+	handler = func() RegionsInfo {
 		if i == 0 {
 			i++
 			return RegionsInfo{Regions: regions[2:3]}

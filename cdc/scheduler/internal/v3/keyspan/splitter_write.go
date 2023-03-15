@@ -81,7 +81,7 @@ func splitRegionsByWrittenKeys(
 	for i := range regions {
 		totalWrite += regions[i].WrittenKeys
 		// Override 0 to 1 to reflect the baseline cost of a region.
-		// Also it makes split evenly when there is no write throughtput.
+		// Also it makes split evenly when there is no write.
 		regions[i].WrittenKeys++
 		totalWriteNormalized += regions[i].WrittenKeys
 	}

@@ -173,7 +173,7 @@ type RegionInfo struct {
 
 // RegionsInfo contains some regions with the detailed region info.
 // NOTE: This type is a copy of github.com/tikv/pd/server/api.RegionInfo.
-// To reduce dependency tree, we do not import the api package driectly.
+// To reduce dependency tree, we do not import the api package directly.
 type RegionsInfo struct {
 	Count   int          `json:"count"`
 	Regions []RegionInfo `json:"regions"`
@@ -196,7 +196,7 @@ func (pc *pdAPIClient) scanRegions(
 	scan := func(endpoint string, startKey, endKey []byte) ([]RegionInfo, error) {
 		query := url.Values{}
 		query.Add("key", string(startKey))
-		query.Add("end_key", string(span.EndKey))
+		query.Add("end_key", string(endKey))
 		query.Add("limit", strconv.Itoa(scanLimit))
 		u, _ := url.Parse(endpoint + scanRegionAPI)
 		u.RawQuery = query.Encode()
