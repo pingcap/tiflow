@@ -210,6 +210,7 @@ func createChangefeed4Test(ctx cdcContext.Context, t *testing.T,
 			up *upstream.Upstream,
 			startTs uint64,
 			changefeed model.ChangeFeedID,
+			schemaStorage entry.SchemaStorage,
 		) (puller.DDLPuller, error) {
 			return &mockDDLPuller{resolvedTs: startTs - 1}, nil
 		},

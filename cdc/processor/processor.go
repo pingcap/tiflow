@@ -779,6 +779,16 @@ func (p *processor) createAndDriveSchemaStorage(ctx cdcContext.Context) (entry.S
 		ddlStartTs = checkpointTs - 1
 	}
 
+	meta, err := kv.GetSnapshotMeta(kvStorage, ddlStartTs)
+	if err != nil {
+		return nil, errors.Trace(err)
+	}
+	schemaStorage, err := entry.NewSchemaStorage(meta, ddlStartTs,
+		p.changefeed.Info.Config.ForceReplicate, p.changefeedID)
+	if err != nil {
+		return nil, errors.Trace(err)
+	}
+
 	kvCfg := config.GetGlobalServerConfig().KVClient
 	stdCtx := contextutil.PutTableInfoInCtx(ctx, -1, puller.DDLPullerTableName)
 	stdCtx = contextutil.PutChangefeedIDInCtx(stdCtx, p.changefeedID)
@@ -794,16 +804,8 @@ func (p *processor) createAndDriveSchemaStorage(ctx cdcContext.Context) (entry.S
 		kvCfg,
 		p.changefeed.Info.Config,
 		p.changefeedID,
+		p.schemaStorage,
 	)
-	if err != nil {
-		return nil, errors.Trace(err)
-	}
-	meta, err := kv.GetSnapshotMeta(kvStorage, ddlStartTs)
-	if err != nil {
-		return nil, errors.Trace(err)
-	}
-	schemaStorage, err := entry.NewSchemaStorage(meta, ddlStartTs,
-		p.changefeed.Info.Config.ForceReplicate, p.changefeedID)
 	if err != nil {
 		return nil, errors.Trace(err)
 	}

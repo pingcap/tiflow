@@ -29,7 +29,6 @@ import (
 	"github.com/pingcap/tidb/sessionctx/variable"
 	"github.com/pingcap/tidb/util/codec"
 	"github.com/pingcap/tiflow/cdc/entry"
-	"github.com/pingcap/tiflow/cdc/entry/schema"
 	"github.com/pingcap/tiflow/cdc/kv"
 	"github.com/pingcap/tiflow/cdc/model"
 	"github.com/pingcap/tiflow/pkg/config"
@@ -127,9 +126,9 @@ func newMockDDLJobPuller(t *testing.T, puller Puller, needSchemaSnap bool) (DDLJ
 		ts := helper.GetCurrentMeta().StartTS
 		meta, err := kv.GetSnapshotMeta(kvStorage, ts)
 		require.Nil(t, err)
-		schemaSnap, err := schema.NewSingleSnapshotFromMeta(meta, ts, false)
+		schemaStorage, err := entry.NewSchemaStorage(meta, ts, false, model.DefaultChangeFeedID("test"))
 		require.Nil(t, err)
-		res.schemaSnapshot = schemaSnap
+		res.schemaStorage = schemaStorage
 		res.kvStorage = kvStorage
 	}
 	return res, helper
@@ -515,8 +514,11 @@ func TestDDLPuller(t *testing.T) {
 	mockPuller := newMockPuller(t, startTs)
 	ctx := cdcContext.NewBackendContext4Test(true)
 	up := upstream.NewUpstream4Test(nil)
+
+	schemaStorage, err := entry.NewSchemaStorage(nil, startTs, false, model.DefaultChangeFeedID("test"))
+	require.NoError(t, err)
 	p, err := NewDDLPuller(
-		ctx, ctx.ChangefeedVars().Info.Config, up, startTs, ctx.ChangefeedVars().ID)
+		ctx, ctx.ChangefeedVars().Info.Config, up, startTs, ctx.ChangefeedVars().ID, schemaStorage)
 	require.Nil(t, err)
 	p.(*ddlPullerImpl).ddlJobPuller, _ = newMockDDLJobPuller(t, mockPuller, false)
 
@@ -638,8 +640,10 @@ func TestResolvedTsStuck(t *testing.T) {
 	mockPuller := newMockPuller(t, startTs)
 	ctx := cdcContext.NewBackendContext4Test(true)
 	up := upstream.NewUpstream4Test(nil)
+	schemaStorage, err := entry.NewSchemaStorage(nil, startTs, false, model.DefaultChangeFeedID("test"))
+	require.NoError(t, err)
 	p, err := NewDDLPuller(
-		ctx, ctx.ChangefeedVars().Info.Config, up, startTs, ctx.ChangefeedVars().ID)
+		ctx, ctx.ChangefeedVars().Info.Config, up, startTs, ctx.ChangefeedVars().ID, schemaStorage)
 	require.Nil(t, err)
 
 	mockClock := clock.NewMock()
