@@ -28,8 +28,11 @@ import (
 	"github.com/pingcap/tiflow/pkg/sink/codec/open"
 )
 
-// NewEventBatchEncoderBuilder returns an EncoderBuilder
-func NewEventBatchEncoderBuilder(ctx context.Context, c *common.Config) (codec.EncoderBuilder, error) {
+// NewRowEventEncoderBuilder returns an RowEventEncoderBuilder
+func NewRowEventEncoderBuilder(
+	ctx context.Context,
+	c *common.Config,
+) (codec.RowEventEncoderBuilder, error) {
 	switch c.Protocol {
 	case config.ProtocolDefault, config.ProtocolOpen:
 		return open.NewBatchEncoderBuilder(c), nil
@@ -43,8 +46,19 @@ func NewEventBatchEncoderBuilder(ctx context.Context, c *common.Config) (codec.E
 		return canal.NewJSONBatchEncoderBuilder(c), nil
 	case config.ProtocolCraft:
 		return craft.NewBatchEncoderBuilder(c), nil
+
+	default:
+		return nil, cerror.ErrSinkUnknownProtocol.GenWithStackByArgs(c.Protocol)
+	}
+}
+
+// NewTxnEventEncoderBuilder returns an TxnEventEncoderBuilder.
+func NewTxnEventEncoderBuilder(
+	c *common.Config,
+) (codec.TxnEventEncoderBuilder, error) {
+	switch c.Protocol {
 	case config.ProtocolCsv:
-		return csv.NewBatchEncoderBuilder(c), nil
+		return csv.NewTxnEventEncoderBuilder(c), nil
 	default:
 		return nil, cerror.ErrSinkUnknownProtocol.GenWithStackByArgs(c.Protocol)
 	}

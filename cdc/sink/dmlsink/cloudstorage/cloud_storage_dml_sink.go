@@ -113,7 +113,7 @@ func NewDMLSink(ctx context.Context,
 	if err != nil {
 		return nil, errors.Trace(err)
 	}
-	encoderBuilder, err := builder.NewEventBatchEncoderBuilder(ctx, encoderConfig)
+	encoderBuilder, err := builder.NewTxnEventEncoderBuilder(encoderConfig)
 	if err != nil {
 		return nil, cerror.WrapError(cerror.ErrStorageSinkInvalidConfig, err)
 	}

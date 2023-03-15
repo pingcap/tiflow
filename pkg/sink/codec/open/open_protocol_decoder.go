@@ -30,7 +30,7 @@ type BatchMixedDecoder struct {
 	nextKeyLen uint64
 }
 
-// HasNext implements the EventBatchDecoder interface
+// HasNext implements the RowEventDecoder interface
 func (b *BatchMixedDecoder) HasNext() (model.MessageType, bool, error) {
 	if !b.hasNext() {
 		return 0, false, nil
@@ -41,7 +41,7 @@ func (b *BatchMixedDecoder) HasNext() (model.MessageType, bool, error) {
 	return b.nextKey.Type, true, nil
 }
 
-// NextResolvedEvent implements the EventBatchDecoder interface
+// NextResolvedEvent implements the RowEventDecoder interface
 func (b *BatchMixedDecoder) NextResolvedEvent() (uint64, error) {
 	if b.nextKey == nil {
 		if err := b.decodeNextKey(); err != nil {
@@ -59,7 +59,7 @@ func (b *BatchMixedDecoder) NextResolvedEvent() (uint64, error) {
 	return resolvedTs, nil
 }
 
-// NextRowChangedEvent implements the EventBatchDecoder interface
+// NextRowChangedEvent implements the RowEventDecoder interface
 func (b *BatchMixedDecoder) NextRowChangedEvent() (*model.RowChangedEvent, error) {
 	if b.nextKey == nil {
 		if err := b.decodeNextKey(); err != nil {
@@ -82,7 +82,7 @@ func (b *BatchMixedDecoder) NextRowChangedEvent() (*model.RowChangedEvent, error
 	return rowEvent, nil
 }
 
-// NextDDLEvent implements the EventBatchDecoder interface
+// NextDDLEvent implements the RowEventDecoder interface
 func (b *BatchMixedDecoder) NextDDLEvent() (*model.DDLEvent, error) {
 	if b.nextKey == nil {
 		if err := b.decodeNextKey(); err != nil {
@@ -131,7 +131,7 @@ type BatchDecoder struct {
 	nextKeyLen uint64
 }
 
-// HasNext implements the EventBatchDecoder interface
+// HasNext implements the RowEventDecoder interface
 func (b *BatchDecoder) HasNext() (model.MessageType, bool, error) {
 	if !b.hasNext() {
 		return 0, false, nil
@@ -142,7 +142,7 @@ func (b *BatchDecoder) HasNext() (model.MessageType, bool, error) {
 	return b.nextKey.Type, true, nil
 }
 
-// NextResolvedEvent implements the EventBatchDecoder interface
+// NextResolvedEvent implements the RowEventDecoder interface
 func (b *BatchDecoder) NextResolvedEvent() (uint64, error) {
 	if b.nextKey == nil {
 		if err := b.decodeNextKey(); err != nil {
@@ -160,7 +160,7 @@ func (b *BatchDecoder) NextResolvedEvent() (uint64, error) {
 	return resolvedTs, nil
 }
 
-// NextRowChangedEvent implements the EventBatchDecoder interface
+// NextRowChangedEvent implements the RowEventDecoder interface
 func (b *BatchDecoder) NextRowChangedEvent() (*model.RowChangedEvent, error) {
 	if b.nextKey == nil {
 		if err := b.decodeNextKey(); err != nil {
@@ -183,7 +183,7 @@ func (b *BatchDecoder) NextRowChangedEvent() (*model.RowChangedEvent, error) {
 	return rowEvent, nil
 }
 
-// NextDDLEvent implements the EventBatchDecoder interface
+// NextDDLEvent implements the RowEventDecoder interface
 func (b *BatchDecoder) NextDDLEvent() (*model.DDLEvent, error) {
 	if b.nextKey == nil {
 		if err := b.decodeNextKey(); err != nil {
@@ -224,7 +224,7 @@ func (b *BatchDecoder) decodeNextKey() error {
 }
 
 // NewBatchDecoder creates a new BatchDecoder.
-func NewBatchDecoder(key []byte, value []byte) (codec.EventBatchDecoder, error) {
+func NewBatchDecoder(key []byte, value []byte) (codec.RowEventDecoder, error) {
 	version := binary.BigEndian.Uint64(key[:8])
 	key = key[8:]
 	if version != codec.BatchVersion1 {

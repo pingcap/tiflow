@@ -43,7 +43,7 @@ type JSONBatchEncoder struct {
 }
 
 // newJSONBatchEncoder creates a new JSONBatchEncoder
-func newJSONBatchEncoder(config *common.Config) codec.EventBatchEncoder {
+func newJSONBatchEncoder(config *common.Config) codec.RowEventEncoder {
 	encoder := &JSONBatchEncoder{
 		builder:             newCanalEntryBuilder(),
 		enableTiDBExtension: config.EnableTiDBExtension,
@@ -293,7 +293,7 @@ func (c *JSONBatchEncoder) newJSONMessage4CheckpointEvent(ts uint64) *canalJSONM
 	}
 }
 
-// EncodeCheckpointEvent implements the EventBatchEncoder interface
+// EncodeCheckpointEvent implements the RowEventEncoder interface
 func (c *JSONBatchEncoder) EncodeCheckpointEvent(ts uint64) (*common.Message, error) {
 	if !c.enableTiDBExtension {
 		return nil, nil
@@ -348,7 +348,7 @@ func (c *JSONBatchEncoder) AppendRowChangedEvent(
 	return nil
 }
 
-// Build implements the EventBatchEncoder interface
+// Build implements the RowEventEncoder interface
 func (c *JSONBatchEncoder) Build() []*common.Message {
 	if len(c.messages) == 0 {
 		return nil
@@ -374,11 +374,11 @@ type jsonBatchEncoderBuilder struct {
 }
 
 // NewJSONBatchEncoderBuilder creates a canal-json batchEncoderBuilder.
-func NewJSONBatchEncoderBuilder(config *common.Config) codec.EncoderBuilder {
+func NewJSONBatchEncoderBuilder(config *common.Config) codec.RowEventEncoderBuilder {
 	return &jsonBatchEncoderBuilder{config: config}
 }
 
 // Build a `JSONBatchEncoder`
-func (b *jsonBatchEncoderBuilder) Build() codec.EventBatchEncoder {
+func (b *jsonBatchEncoderBuilder) Build() codec.RowEventEncoder {
 	return newJSONBatchEncoder(b.config)
 }

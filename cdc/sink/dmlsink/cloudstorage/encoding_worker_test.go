@@ -35,7 +35,7 @@ func testEncodingWorker(ctx context.Context, t *testing.T) (*encodingWorker, fun
 	encoderConfig, err := util.GetEncoderConfig(sinkURI, config.ProtocolOpen,
 		config.GetDefaultReplicaConfig(), config.DefaultMaxMessageBytes)
 	require.Nil(t, err)
-	encoderBuilder, err := builder.NewEventBatchEncoderBuilder(context.TODO(), encoderConfig)
+	encoderBuilder, err := builder.NewTxnEventEncoderBuilder(encoderConfig)
 	require.Nil(t, err)
 	encoder := encoderBuilder.Build()
 	changefeedID := model.DefaultChangeFeedID("test-encode")
