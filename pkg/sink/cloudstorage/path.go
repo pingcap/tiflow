@@ -16,6 +16,7 @@ package cloudstorage
 import (
 	"context"
 	"fmt"
+	"io"
 	"strconv"
 	"strings"
 
@@ -219,11 +220,18 @@ func (f *FilePathGenerator) getNextFileIdxFromIndexFile(
 		}
 
 		if lastFileExists {
-			data, err := f.storage.ReadFile(ctx, lastFilePath)
+			fileReader, err := f.storage.Open(ctx, lastFilePath)
 			if err != nil {
 				return fileIdx, err
 			}
-			lastFileIsEmpty = len(data) == 0
+			readBytes, err := fileReader.Read(make([]byte, 1))
+			if err != nil && err != io.EOF {
+				return fileIdx, err
+			}
+			lastFileIsEmpty = readBytes == 0
+			if err := fileReader.Close(); err != nil {
+				return fileIdx, err
+			}
 		}
 
 		if lastFileExists && !lastFileIsEmpty {
