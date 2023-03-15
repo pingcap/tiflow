@@ -35,6 +35,7 @@ import (
 	"github.com/pingcap/tiflow/pkg/p2p"
 	"github.com/pingcap/tiflow/pkg/pdutil"
 	"github.com/pingcap/tiflow/pkg/spanz"
+	"github.com/pingcap/tiflow/pkg/upstream"
 	"github.com/pingcap/tiflow/pkg/version"
 	"go.uber.org/zap"
 )
@@ -77,8 +78,7 @@ func NewCoordinator(
 	messageRouter p2p.MessageRouter,
 	ownerRevision int64,
 	changefeedEpoch uint64,
-	regionCache keyspan.RegionCache,
-	pdClock pdutil.Clock,
+	up *upstream.Upstream,
 	cfg *config.SchedulerConfig,
 ) (internal.Scheduler, error) {
 	trans, err := transport.NewTransport(
@@ -88,9 +88,8 @@ func NewCoordinator(
 	}
 	coord := newCoordinator(captureID, changefeedID, ownerRevision, cfg)
 	coord.trans = trans
-	coord.reconciler = keyspan.NewReconciler(
-		changefeedID, regionCache, cfg.ChangefeedSettings)
-	coord.pdClock = pdClock
+	coord.reconciler = keyspan.NewReconciler(changefeedID, up, cfg.ChangefeedSettings)
+	coord.pdClock = up.PDClock
 	coord.changefeedEpoch = changefeedEpoch
 	return coord, nil
 }
@@ -125,11 +124,12 @@ func (c *coordinator) Tick(
 	currentTables []model.TableID,
 	// All captures that are alive according to the latest Etcd states.
 	aliveCaptures map[model.CaptureID]*model.CaptureInfo,
+	barrier *schedulepb.Barrier,
 ) (newCheckpointTs, newResolvedTs model.Ts, err error) {
 	c.mu.Lock()
 	defer c.mu.Unlock()
 
-	return c.poll(ctx, checkpointTs, currentTables, aliveCaptures)
+	return c.poll(ctx, checkpointTs, currentTables, aliveCaptures, barrier)
 }
 
 // MoveTable implement the scheduler interface
@@ -257,7 +257,7 @@ func (c *coordinator) Close(ctx context.Context) {
 
 func (c *coordinator) poll(
 	ctx context.Context, checkpointTs model.Ts, currentTables []model.TableID,
-	aliveCaptures map[model.CaptureID]*model.CaptureInfo,
+	aliveCaptures map[model.CaptureID]*model.CaptureInfo, barrier *schedulepb.Barrier,
 ) (newCheckpointTs, newResolvedTs model.Ts, err error) {
 	c.maybeCollectMetrics()
 	if c.compat.UpdateCaptureInfo(aliveCaptures) {
@@ -273,7 +273,8 @@ func (c *coordinator) poll(
 
 	var msgBuf []*schedulepb.Message
 	c.captureM.HandleMessage(recvMsgs)
-	msgs := c.captureM.Tick(c.replicationM.ReplicationSets(), c.schedulerM.DrainingTarget())
+	msgs := c.captureM.Tick(c.replicationM.ReplicationSets(),
+		c.schedulerM.DrainingTarget(), barrier)
 	msgBuf = append(msgBuf, msgs...)
 	msgs = c.captureM.HandleAliveCaptureUpdate(aliveCaptures)
 	msgBuf = append(msgBuf, msgs...)
