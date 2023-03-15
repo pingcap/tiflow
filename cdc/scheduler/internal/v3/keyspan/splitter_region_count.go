@@ -54,6 +54,12 @@ func (m *regionCountSplitter) split(
 		return []tablepb.Span{span}
 	}
 	if len(regions) <= config.RegionThreshold || totalCaptures == 0 {
+		log.Info("schedulerv3: skip split span by region count",
+			zap.String("namespace", m.changefeedID.Namespace),
+			zap.String("changefeed", m.changefeedID.ID),
+			zap.Int("totalCaptures", totalCaptures),
+			zap.Int("regionCount", len(regions)),
+			zap.Int("regionThreshold", config.RegionThreshold))
 		return []tablepb.Span{span}
 	}
 
@@ -110,6 +116,13 @@ func (m *regionCountSplitter) split(
 	// Make sure spans does not exceed [startKey, endKey).
 	spans[0].StartKey = span.StartKey
 	spans[len(spans)-1].EndKey = span.EndKey
+	log.Info("schedulerv3: split span by region count",
+		zap.String("namespace", m.changefeedID.Namespace),
+		zap.String("changefeed", m.changefeedID.ID),
+		zap.Int("spans", len(spans)),
+		zap.Int("totalCaptures", totalCaptures),
+		zap.Int("regionCount", len(regions)),
+		zap.Int("regionThreshold", config.RegionThreshold))
 	return spans
 }
 

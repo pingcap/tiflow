@@ -49,16 +49,28 @@ func (m *writeSplitter) split(
 	regions, err := m.pdAPIClient.ScanRegions(ctx, span)
 	if err != nil {
 		// Skip split.
+		log.Warn("schedulerv3: scan regions failed, skip split span",
+			zap.String("namespace", m.changefeedID.Namespace),
+			zap.String("changefeed", m.changefeedID.ID),
+			zap.Error(err))
 		return nil
 	}
 	if totalCaptures <= 1 {
+		log.Warn("schedulerv3: only one capture, skip split span",
+			zap.String("namespace", m.changefeedID.Namespace),
+			zap.String("changefeed", m.changefeedID.ID),
+			zap.Error(err))
 		return []tablepb.Span{span}
 	}
 	info := splitRegionsByWrittenKeys(span.TableID, regions, config.WriteKeyThreshold, totalCaptures)
 	log.Info("schedulerv3: split span by written keys",
+		zap.String("namespace", m.changefeedID.Namespace),
+		zap.String("changefeed", m.changefeedID.ID),
 		zap.Ints("counts", info.Counts),
 		zap.Ints("weights", info.Weights),
-		zap.String("span", span.String()))
+		zap.Int("spans", len(info.Spans)),
+		zap.Int("totalCaptures", totalCaptures),
+		zap.Int("writeKeyThreshold", config.WriteKeyThreshold))
 	return info.Spans
 }
 
