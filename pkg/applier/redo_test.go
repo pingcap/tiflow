@@ -203,7 +203,8 @@ func TestApply(t *testing.T) {
 
 	cfg := &RedoApplierConfig{
 		SinkURI: "mysql://127.0.0.1:4000/?worker-count=1&max-txn-row=1" +
-			"&tidb_placement_mode=ignore&safe-mode=true&cache-prep-stmts=false",
+			"&tidb_placement_mode=ignore&safe-mode=true&cache-prep-stmts=false" +
+			"&multi-stmt-enable=false",
 	}
 	ap := NewRedoApplier(cfg)
 	err := ap.Apply(ctx)
