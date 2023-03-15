@@ -203,7 +203,27 @@ func TestGenerateDataFilePathWithIndexFile(t *testing.T) {
 	indexFilePath := f.GenerateIndexFilePath(table, date)
 	err := f.storage.WriteFile(ctx, indexFilePath, []byte("CDC000005.json\n"))
 	require.NoError(t, err)
+
+	// index file exists, but the file is not exist
 	dataFilePath, err := f.GenerateDataFilePath(ctx, table, date)
+	require.NoError(t, err)
+	require.Equal(t, "test/table1/5/2023-03-09/CDC000005.json", dataFilePath)
+
+	// cleanup cached file index
+	delete(f.fileIndex, table)
+	// index file exists, and the file is empty
+	err = f.storage.WriteFile(ctx, dataFilePath, []byte(""))
+	require.NoError(t, err)
+	dataFilePath, err = f.GenerateDataFilePath(ctx, table, date)
+	require.NoError(t, err)
+	require.Equal(t, "test/table1/5/2023-03-09/CDC000005.json", dataFilePath)
+
+	// cleanup cached file index
+	delete(f.fileIndex, table)
+	// index file exists, and the file is not empty
+	err = f.storage.WriteFile(ctx, dataFilePath, []byte("test"))
+	require.NoError(t, err)
+	dataFilePath, err = f.GenerateDataFilePath(ctx, table, date)
 	require.NoError(t, err)
 	require.Equal(t, "test/table1/5/2023-03-09/CDC000006.json", dataFilePath)
 }
