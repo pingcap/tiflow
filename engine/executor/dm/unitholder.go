@@ -80,8 +80,6 @@ type unitHolderImpl struct {
 
 	// used to run background task
 	bgWg sync.WaitGroup
-
-	masterID frameModel.MasterID
 }
 
 var _ unitHolder = &unitHolderImpl{}
