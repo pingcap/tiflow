@@ -87,8 +87,8 @@ var _ unitHolder = &unitHolderImpl{}
 // newUnitHolderImpl creates a UnitHolderImpl
 func newUnitHolderImpl(workerType framework.WorkerType, cfg *dmconfig.SubTaskConfig) *unitHolderImpl {
 	return &unitHolderImpl{
-		tp:       workerType,
-		cfg:      cfg,
+		tp:  workerType,
+		cfg: cfg,
 	}
 }
 
