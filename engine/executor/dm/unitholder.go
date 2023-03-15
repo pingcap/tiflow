@@ -121,7 +121,7 @@ func (u *unitHolderImpl) Init(ctx context.Context) error {
 			return err2
 		}
 		u.cfg.LoaderConfig.SQLMode = sqlMode
-		u.unit = loader.NewLightning(u.cfg, nil, u.masterID)
+		u.unit = loader.NewLightning(u.cfg, nil, "dataflow-worker")
 	case frameModel.WorkerDMSync:
 		u.unit = syncer.NewSyncer(u.cfg, nil, nil)
 	}
