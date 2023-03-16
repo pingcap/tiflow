@@ -76,8 +76,6 @@ const (
 
 	// defaultcachePrepStmts is the default value of cachePrepStmts
 	defaultCachePrepStmts = true
-	// The upper limit of the max size of prepared statement cache
-	maxPrepStmtCacheSize = 1048576
 )
 
 // Config is the configs for MySQL backend.
@@ -403,28 +401,5 @@ func getCachePrepStmts(values url.Values, cachePrepStmts *bool) error {
 		}
 		*cachePrepStmts = enable
 	}
-	return nil
-}
-
-func getPrepStmtCacheSize(values url.Values, prepStmtCacheSize *int) error {
-	s := values.Get("prep-stmt-cache-size")
-	if len(s) == 0 {
-		return nil
-	}
-
-	c, err := strconv.Atoi(s)
-	if err != nil {
-		return cerror.WrapError(cerror.ErrMySQLInvalidConfig, err)
-	}
-	if c <= 0 {
-		return cerror.WrapError(cerror.ErrMySQLInvalidConfig,
-			fmt.Errorf("invalid prep-stmt-cache-size %d, which must be greater than 0", c))
-	}
-	if c > maxPrepStmtCacheSize {
-		log.Warn("prep-stmt-cache-size too large",
-			zap.Int("original", c), zap.Int("override", maxPrepStmtCacheSize))
-		c = maxPrepStmtCacheSize
-	}
-	*prepStmtCacheSize = c
 	return nil
 }
