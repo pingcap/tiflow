@@ -15,6 +15,7 @@ package etcd
 
 import (
 	"context"
+	"crypto/tls"
 	"fmt"
 	"net/url"
 	"strings"
@@ -29,11 +30,16 @@ import (
 	"github.com/tikv/pd/pkg/utils/tempurl"
 	"go.etcd.io/etcd/api/v3/mvccpb"
 	"go.etcd.io/etcd/api/v3/v3rpc/rpctypes"
+	"go.etcd.io/etcd/client/pkg/v3/logutil"
 	clientv3 "go.etcd.io/etcd/client/v3"
 	"go.etcd.io/etcd/client/v3/concurrency"
 	"go.etcd.io/etcd/server/v3/embed"
 	"go.uber.org/zap"
+	"go.uber.org/zap/zapcore"
+	"google.golang.org/grpc"
+	"google.golang.org/grpc/backoff"
 	"google.golang.org/grpc/codes"
+	"google.golang.org/grpc/credentials"
 )
 
 // DefaultCDCClusterID is the default value of cdc cluster id
@@ -651,6 +657,39 @@ func getFreeListenURLs(n int) (urls []*url.URL, retErr error) {
 	}
 
 	return
+}
+
+// GetEtcdClient returns the Etcd client associated with the given endpoints
+// and tls configuration.
+func GetEtcdClient(
+	endpoints []string,
+	tlsCfg *tls.Config,
+) (*clientv3.Client, error) {
+	logConfig := &logutil.DefaultZapLoggerConfig
+	logConfig.Level = zap.NewAtomicLevelAt(zapcore.ErrorLevel)
+	return clientv3.New(
+		clientv3.Config{
+			Endpoints:   endpoints,
+			TLS:         tlsCfg,
+			LogConfig:   logConfig,
+			DialTimeout: 5 * time.Second,
+			DialOptions: []grpc.DialOption{
+				grpc.WithTransportCredentials(credentials.NewTLS(tlsCfg)),
+				grpc.WithBlock(),
+				grpc.WithConnectParams(
+					grpc.ConnectParams{
+						Backoff: backoff.Config{
+							BaseDelay:  time.Second,
+							Multiplier: 1.1,
+							Jitter:     0.1,
+							MaxDelay:   3 * time.Second,
+						},
+						MinConnectTimeout: 3 * time.Second,
+					},
+				),
+			},
+		},
+	)
 }
 
 // SetupEmbedEtcd starts an embed etcd server

@@ -22,6 +22,7 @@ import (
 	"github.com/google/uuid"
 	"github.com/pingcap/errors"
 	"github.com/pingcap/log"
+	toolutils "github.com/pingcap/tidb-tools/pkg/utils"
 	tidbkv "github.com/pingcap/tidb/kv"
 	"github.com/pingcap/tiflow/cdc/entry"
 	"github.com/pingcap/tiflow/cdc/kv"
@@ -30,6 +31,7 @@ import (
 	"github.com/pingcap/tiflow/cdc/sink/validator"
 	"github.com/pingcap/tiflow/pkg/config"
 	cerror "github.com/pingcap/tiflow/pkg/errors"
+	"github.com/pingcap/tiflow/pkg/etcd"
 	"github.com/pingcap/tiflow/pkg/filter"
 	"github.com/pingcap/tiflow/pkg/security"
 	"github.com/pingcap/tiflow/pkg/txnutil/gc"
@@ -37,10 +39,16 @@ import (
 	"github.com/r3labs/diff"
 	"github.com/tikv/client-go/v2/oracle"
 	pd "github.com/tikv/pd/client"
+	clientv3 "go.etcd.io/etcd/client/v3"
 	"go.uber.org/zap"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/backoff"
 )
+
+// RegisterImportTaskPrefix denotes the key prefix associated with the entries
+// containning import/restore information in the embedded Etcd of the
+// upstream PD.
+const RegisterImportTaskPrefix = "/tidb/brie/import"
 
 // APIV2Helpers is a collections of helper functions of OpenAPIV2.
 // Defining it as an interface to make APIs more testable.
@@ -256,7 +264,7 @@ func (APIV2HelpersImpl) verifyCreateChangefeedConfig(
 	}, nil
 }
 
-// verifyUpstream verifies the upstream config before updating a changefeed
+// verifyUpstream verifies the upstream config before creating/updating a changefeed
 func (h APIV2HelpersImpl) verifyUpstream(ctx context.Context,
 	changefeedConfig *ChangefeedConfig,
 	cfInfo *model.ChangeFeedInfo,
@@ -281,6 +289,51 @@ func (h APIV2HelpersImpl) verifyUpstream(ctx context.Context,
 		return cerror.ErrUpstreamMissMatch.
 			GenWithStackByArgs(cfInfo.UpstreamID, pdClient.GetClusterID(ctx))
 	}
+
+	// check if the upstream cluster has running import tasks.
+	return hasRunningImport(ctx, changefeedConfig)
+}
+
+// hasRunningImport checks if there is running import tasks on the
+// upstream cluster.
+func hasRunningImport(ctx context.Context, cfg *ChangefeedConfig) error {
+	tlsCfg, err := toolutils.ToTLSConfig(cfg.CAPath, cfg.CertPath, cfg.KeyPath)
+	if err != nil {
+		return err
+	}
+
+	cli, err := etcd.GetEtcdClient(cfg.PDAddrs, tlsCfg)
+	if err != nil {
+		return err
+	}
+
+	resp, err := cli.KV.Get(
+		ctx, RegisterImportTaskPrefix, clientv3.WithPrefix(),
+	)
+	if err != nil {
+		return errors.Annotatef(
+			err, "failed to list import task related entries")
+	}
+
+	for _, kv := range resp.Kvs {
+		leaseResp, err := cli.Lease.TimeToLive(ctx, clientv3.LeaseID(kv.Lease))
+		if err != nil {
+			return errors.Annotatef(
+				err, "failed to get time-to-live of lease: %x", kv.Lease,
+			)
+		}
+		// the lease has expired
+		if leaseResp.TTL <= 0 {
+			continue
+		}
+		return errors.New(
+			"There are lightning/restore tasks running" +
+				"please stop or wait for them to finish. " +
+				"If the lightning/restore task is terminated by system, " +
+				"please wait until the ttl decreases to 0.",
+		)
+	}
+
 	return nil
 }
 
