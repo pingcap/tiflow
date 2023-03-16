@@ -26,9 +26,10 @@ import (
 	"go.uber.org/zap"
 )
 
-type memConsumeRecord struct {
-	resolvedTs model.ResolvedTs
-	size       uint64
+// MemConsumeRecord is used to trace memory usage.
+type MemConsumeRecord struct {
+	ResolvedTs model.ResolvedTs
+	Size       uint64
 }
 
 // MemQuota is used to trace memory usage.
@@ -49,8 +50,6 @@ type MemQuota struct {
 
 	// blockAcquireCond is used to notify the blocked acquire.
 	blockAcquireCond *sync.Cond
-	// condMu protects nothing, but sync.Cond needs a mutex.
-	condMu sync.Mutex
 
 	metricTotal prometheus.Gauge
 	metricUsed  prometheus.Gauge
@@ -58,21 +57,31 @@ type MemQuota struct {
 	// mu protects the following fields.
 	mu sync.Mutex
 	// tableMemory is the memory usage of each table.
+<<<<<<< HEAD
 	tableMemory map[model.TableID][]*memConsumeRecord
+=======
+	tableMemory *spanz.HashMap[[]*MemConsumeRecord]
+>>>>>>> 7848c0caad (redo(ticdc): limit memory usage in applier (#8494))
 }
 
 // NewMemQuota creates a MemQuota instance.
 func NewMemQuota(changefeedID model.ChangeFeedID, totalBytes uint64, comp string) *MemQuota {
 	m := &MemQuota{
-		changefeedID: changefeedID,
-		totalBytes:   totalBytes,
-		metricTotal:  MemoryQuota.WithLabelValues(changefeedID.Namespace, changefeedID.ID, "total", comp),
-		metricUsed:   MemoryQuota.WithLabelValues(changefeedID.Namespace, changefeedID.ID, "used", comp),
-		closeBg:      make(chan struct{}, 1),
+		changefeedID:     changefeedID,
+		totalBytes:       totalBytes,
+		blockAcquireCond: sync.NewCond(&sync.Mutex{}),
+		metricTotal: MemoryQuota.WithLabelValues(changefeedID.Namespace,
+			changefeedID.ID, "total", comp),
+		metricUsed: MemoryQuota.WithLabelValues(changefeedID.Namespace,
+			changefeedID.ID, "used", comp),
+		closeBg: make(chan struct{}, 1),
 
+<<<<<<< HEAD
 		tableMemory: make(map[model.TableID][]*memConsumeRecord),
+=======
+		tableMemory: spanz.NewHashMap[[]*MemConsumeRecord](),
+>>>>>>> 7848c0caad (redo(ticdc): limit memory usage in applier (#8494))
 	}
-	m.blockAcquireCond = sync.NewCond(&m.condMu)
 	m.metricTotal.Set(float64(totalBytes))
 	m.metricUsed.Set(float64(0))
 
@@ -125,9 +134,9 @@ func (m *MemQuota) BlockAcquire(nBytes uint64) error {
 		}
 		usedBytes := m.usedBytes.Load()
 		if usedBytes+nBytes > m.totalBytes {
-			m.condMu.Lock()
+			m.blockAcquireCond.L.Lock()
 			m.blockAcquireCond.Wait()
-			m.condMu.Unlock()
+			m.blockAcquireCond.L.Unlock()
 			continue
 		}
 		if m.usedBytes.CompareAndSwap(usedBytes, usedBytes+nBytes) {
@@ -155,7 +164,11 @@ func (m *MemQuota) Refund(nBytes uint64) {
 func (m *MemQuota) AddTable(tableID model.TableID) {
 	m.mu.Lock()
 	defer m.mu.Unlock()
+<<<<<<< HEAD
 	m.tableMemory[tableID] = make([]*memConsumeRecord, 0, 2)
+=======
+	m.tableMemory.ReplaceOrInsert(span, make([]*MemConsumeRecord, 0, 2))
+>>>>>>> 7848c0caad (redo(ticdc): limit memory usage in applier (#8494))
 }
 
 // Record records the memory usage of a table.
@@ -177,10 +190,17 @@ func (m *MemQuota) Record(tableID model.TableID, resolved model.ResolvedTs, nByt
 		}
 		return
 	}
+<<<<<<< HEAD
 	m.tableMemory[tableID] = append(m.tableMemory[tableID], &memConsumeRecord{
 		resolvedTs: resolved,
 		size:       nBytes,
 	})
+=======
+	m.tableMemory.ReplaceOrInsert(span, append(m.tableMemory.GetV(span), &MemConsumeRecord{
+		ResolvedTs: resolved,
+		Size:       nBytes,
+	}))
+>>>>>>> 7848c0caad (redo(ticdc): limit memory usage in applier (#8494))
 }
 
 // Release try to use resolvedTs to release the memory quota.
@@ -197,11 +217,11 @@ func (m *MemQuota) Release(tableID model.TableID, resolved model.ResolvedTs) {
 	}
 	records := m.tableMemory[tableID]
 	i := sort.Search(len(records), func(i int) bool {
-		return records[i].resolvedTs.Greater(resolved)
+		return records[i].ResolvedTs.Greater(resolved)
 	})
 	var toRelease uint64 = 0
 	for j := 0; j < i; j++ {
-		toRelease += records[j].size
+		toRelease += records[j].Size
 	}
 	m.tableMemory[tableID] = records[i:]
 	if toRelease == 0 {
@@ -236,7 +256,7 @@ func (m *MemQuota) Clean(tableID model.TableID) uint64 {
 	cleaned := uint64(0)
 	records := m.tableMemory[tableID]
 	for _, record := range records {
-		cleaned += record.size
+		cleaned += record.Size
 	}
 	delete(m.tableMemory, tableID)
 

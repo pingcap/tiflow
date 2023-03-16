@@ -21,6 +21,7 @@ import (
 	"os"
 	"path/filepath"
 	"sync"
+	"time"
 
 	"github.com/pingcap/errors"
 	"github.com/pingcap/log"
@@ -28,8 +29,23 @@ import (
 	"github.com/pingcap/tiflow/cdc/redo/common"
 	cerror "github.com/pingcap/tiflow/pkg/errors"
 	"github.com/pingcap/tiflow/pkg/redo"
+<<<<<<< HEAD
 	"go.uber.org/multierr"
 	"go.uber.org/zap"
+=======
+	"github.com/pingcap/tiflow/pkg/sink/mysql"
+	"github.com/pingcap/tiflow/pkg/util"
+	"go.uber.org/multierr"
+	"go.uber.org/zap"
+	"golang.org/x/sync/errgroup"
+)
+
+const (
+	emitBatch             = mysql.DefaultMaxTxnRow
+	defaultReaderChanSize = mysql.DefaultWorkerCount * emitBatch
+	maxTotalMemoryUsage   = 90.0
+	maxWaitDuration       = time.Minute * 2
+>>>>>>> 7848c0caad (redo(ticdc): limit memory usage in applier (#8494))
 )
 
 // RedoLogReader is a reader abstraction for redo log storage layer
@@ -277,6 +293,56 @@ func (l *LogReader) ReadNextLog(ctx context.Context, maxNumberOfEvents uint64) (
 
 		ld := &logWithIdx{
 			data: rl,
+<<<<<<< HEAD
+=======
+			idx:  i,
+		}
+		redoLogHeap = append(redoLogHeap, ld)
+	}
+	heap.Init(&redoLogHeap)
+
+	for redoLogHeap.Len() != 0 {
+		item := heap.Pop(&redoLogHeap).(*logWithIdx)
+
+		switch cfg.fileType {
+		case redo.RedoRowLogFileType:
+			row := item.data.RedoRow.Row
+			// By design only data (startTs,endTs] is needed,
+			// so filter out data may beyond the boundary.
+			if row != nil && row.CommitTs > cfg.startTs && row.CommitTs <= cfg.endTs {
+				select {
+				case <-egCtx.Done():
+					return errors.Trace(egCtx.Err())
+				case l.rowCh <- row:
+				}
+			}
+			err := util.WaitMemoryAvailable(maxTotalMemoryUsage, maxWaitDuration)
+			if err != nil {
+				return errors.Trace(err)
+			}
+
+		case redo.RedoDDLLogFileType:
+			ddl := item.data.RedoDDL.DDL
+			if ddl != nil && ddl.CommitTs > cfg.startTs && ddl.CommitTs <= cfg.endTs {
+				select {
+				case <-egCtx.Done():
+					return errors.Trace(egCtx.Err())
+				case l.ddlCh <- ddl:
+				}
+			}
+		}
+
+		// read next and push again
+		rl, err := fileReaders[item.idx].Read()
+		if err != nil {
+			if err != io.EOF {
+				return errors.Trace(err)
+			}
+			continue
+		}
+		ld := &logWithIdx{
+			data: rl,
+>>>>>>> 7848c0caad (redo(ticdc): limit memory usage in applier (#8494))
 			idx:  item.idx,
 		}
 		heap.Push(&l.rowHeap, ld)

@@ -1261,9 +1261,15 @@ error = '''
 version is incompatible: %s
 '''
 
+<<<<<<< HEAD
 ["CDC:ErrWaitHandleOperationTimeout"]
 error = '''
 waiting processor to handle the operation finished timeout
+=======
+["CDC:ErrWaitFreeMemoryTimeout"]
+error = '''
+wait free memory timeout
+>>>>>>> 7848c0caad (redo(ticdc): limit memory usage in applier (#8494))
 '''
 
 ["CDC:ErrWorkerPoolGracefulUnregisterTimedOut"]
