@@ -50,6 +50,7 @@ func (m *regionCountSplitter) split(
 		log.Warn("schedulerv3: list regions failed, skip split span",
 			zap.String("namespace", m.changefeedID.Namespace),
 			zap.String("changefeed", m.changefeedID.ID),
+			zap.String("span", span.String()),
 			zap.Error(err))
 		return []tablepb.Span{span}
 	}
@@ -57,6 +58,7 @@ func (m *regionCountSplitter) split(
 		log.Info("schedulerv3: skip split span by region count",
 			zap.String("namespace", m.changefeedID.Namespace),
 			zap.String("changefeed", m.changefeedID.ID),
+			zap.String("span", span.String()),
 			zap.Int("totalCaptures", totalCaptures),
 			zap.Int("regionCount", len(regions)),
 			zap.Int("regionThreshold", config.RegionThreshold))
@@ -76,6 +78,7 @@ func (m *regionCountSplitter) split(
 			log.Warn("schedulerv3: get regions failed, skip split span",
 				zap.String("namespace", m.changefeedID.Namespace),
 				zap.String("changefeed", m.changefeedID.ID),
+				zap.String("span", span.String()),
 				zap.Error(err))
 			return []tablepb.Span{span}
 		}
@@ -84,6 +87,7 @@ func (m *regionCountSplitter) split(
 			log.Warn("schedulerv3: get regions failed, skip split span",
 				zap.String("namespace", m.changefeedID.Namespace),
 				zap.String("changefeed", m.changefeedID.ID),
+				zap.String("span", span.String()),
 				zap.Error(err))
 			return []tablepb.Span{span}
 		}
@@ -92,6 +96,7 @@ func (m *regionCountSplitter) split(
 			log.Warn("schedulerv3: list region out of order detected",
 				zap.String("namespace", m.changefeedID.Namespace),
 				zap.String("changefeed", m.changefeedID.ID),
+				zap.String("span", span.String()),
 				zap.Stringer("lastSpan", &spans[len(spans)-1]),
 				zap.Stringer("region", startRegion))
 			return []tablepb.Span{span}
@@ -119,6 +124,7 @@ func (m *regionCountSplitter) split(
 	log.Info("schedulerv3: split span by region count",
 		zap.String("namespace", m.changefeedID.Namespace),
 		zap.String("changefeed", m.changefeedID.ID),
+		zap.String("span", span.String()),
 		zap.Int("spans", len(spans)),
 		zap.Int("totalCaptures", totalCaptures),
 		zap.Int("regionCount", len(regions)),

@@ -52,6 +52,7 @@ func (m *writeSplitter) split(
 		log.Warn("schedulerv3: scan regions failed, skip split span",
 			zap.String("namespace", m.changefeedID.Namespace),
 			zap.String("changefeed", m.changefeedID.ID),
+			zap.String("span", span.String()),
 			zap.Error(err))
 		return nil
 	}
@@ -59,6 +60,7 @@ func (m *writeSplitter) split(
 		log.Warn("schedulerv3: only one capture, skip split span",
 			zap.String("namespace", m.changefeedID.Namespace),
 			zap.String("changefeed", m.changefeedID.ID),
+			zap.String("span", span.String()),
 			zap.Error(err))
 		return []tablepb.Span{span}
 	}
@@ -66,6 +68,7 @@ func (m *writeSplitter) split(
 	log.Info("schedulerv3: split span by written keys",
 		zap.String("namespace", m.changefeedID.Namespace),
 		zap.String("changefeed", m.changefeedID.ID),
+		zap.String("span", span.String()),
 		zap.Ints("counts", info.Counts),
 		zap.Ints("weights", info.Weights),
 		zap.Int("spans", len(info.Spans)),
