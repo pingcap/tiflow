@@ -548,6 +548,10 @@ func (r *Manager) AdvanceCheckpoint(
 			log.Warn("schedulerv3: cannot advance checkpoint since missing span",
 				zap.String("namespace", r.changefeedID.Namespace),
 				zap.String("changefeed", r.changefeedID.ID),
+				zap.Bool("tableSpanFound", tableSpanFound),
+				zap.Bool("tableSpanStartFound", tableSpanStartFound),
+				zap.Bool("tableSpanEndFound", tableSpanEndFound),
+				zap.Bool("tableHasHole", tableHasHole),
 				zap.Int64("tableID", tableID))
 			cannotProceed = true
 			return false
