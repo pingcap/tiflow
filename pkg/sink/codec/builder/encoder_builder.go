@@ -43,7 +43,7 @@ func NewRowEventEncoderBuilder(
 	case config.ProtocolMaxwell:
 		return maxwell.NewBatchEncoderBuilder(), nil
 	case config.ProtocolCanalJSON:
-		return canal.NewJSONBatchEncoderBuilder(c), nil
+		return canal.NewJSONRowEventEncoderBuilder(c), nil
 	case config.ProtocolCraft:
 		return craft.NewBatchEncoderBuilder(c), nil
 
@@ -59,6 +59,8 @@ func NewTxnEventEncoderBuilder(
 	switch c.Protocol {
 	case config.ProtocolCsv:
 		return csv.NewTxnEventEncoderBuilder(c), nil
+	case config.ProtocolCanalJSON:
+		return canal.NewJSONTxnEventEncoderBuilder(c), nil
 	default:
 		return nil, cerror.ErrSinkUnknownProtocol.GenWithStackByArgs(c.Protocol)
 	}
