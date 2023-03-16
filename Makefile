@@ -6,7 +6,7 @@
 	mysql_docker_integration_test mysql_docker_integration_test_with_build \
 	build_mysql_integration_test_images clean_integration_test_images \
 	dm dm-master dm-worker dmctl dm-syncer dm_coverage \
-	engine tiflow tiflow-demo tiflow-chaos-case engine_image help \
+	engine tiflow tiflow-chaos-case engine_image help \
 	format-makefiles check-makefiles
 
 .DEFAULT_GOAL := default
@@ -501,9 +501,6 @@ engine: tiflow
 
 tiflow:
 	$(GOBUILD) -ldflags '$(LDFLAGS)' -o bin/tiflow ./cmd/tiflow/main.go
-
-tiflow-demo:
-	$(GOBUILD) -ldflags '$(LDFLAGS)' -o bin/tiflow-demoserver ./cmd/tiflow-demoserver
 
 tiflow-chaos-case:
 	$(GOBUILD) -ldflags '$(LDFLAGS)' -o bin/tiflow-chaos-case ./engine/chaos/cases
