@@ -55,6 +55,7 @@ func TestReplicaConfigMarshal(t *testing.T) {
 	conf.Sink.EnablePartitionSeparator = true
 	conf.Scheduler.EnableTableAcrossNodes = true
 	conf.Scheduler.RegionThreshold = 100001
+	conf.Scheduler.WriteKeyThreshold = 100001
 
 	b, err := conf.Marshal()
 	require.Nil(t, err)
