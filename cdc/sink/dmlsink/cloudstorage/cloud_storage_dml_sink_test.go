@@ -25,6 +25,7 @@ import (
 	timodel "github.com/pingcap/tidb/parser/model"
 	"github.com/pingcap/tidb/parser/mysql"
 	"github.com/pingcap/tidb/parser/types"
+	"github.com/pingcap/tidb/util/rowcodec"
 	"github.com/pingcap/tiflow/cdc/model"
 	"github.com/pingcap/tiflow/cdc/sink/dmlsink"
 	"github.com/pingcap/tiflow/cdc/sink/tablesink/state"
@@ -73,6 +74,10 @@ func generateTxnEvents(
 					{Name: "c1", Value: i*batch + j},
 					{Name: "c2", Value: "hello world"},
 				},
+				ColInfos: []rowcodec.ColInfo{
+					{ID: 1, Ft: types.NewFieldType(mysql.TypeLong)},
+					{ID: 2, Ft: types.NewFieldType(mysql.TypeVarchar)},
+				},
 			}
 			txn.Event.Rows = append(txn.Event.Rows, row)
 		}
@@ -90,7 +95,7 @@ func TestCloudStorageWriteEventsWithoutDateSeparator(t *testing.T) {
 	require.Nil(t, err)
 
 	replicaConfig := config.GetDefaultReplicaConfig()
-	replicaConfig.Sink.Protocol = config.ProtocolOpen.String()
+	replicaConfig.Sink.Protocol = config.ProtocolCsv.String()
 
 	errCh := make(chan error, 5)
 	s, err := NewDMLSink(ctx, sinkURI, replicaConfig, errCh)
@@ -113,14 +118,14 @@ func TestCloudStorageWriteEventsWithoutDateSeparator(t *testing.T) {
 	for _, f := range files {
 		fileNames = append(fileNames, f.Name())
 	}
-	require.ElementsMatch(t, []string{"CDC000001.json", "schema.json", "CDC.index"}, fileNames)
-	content, err := os.ReadFile(path.Join(tableDir, "CDC000001.json"))
+	require.ElementsMatch(t, []string{"CDC000001.csv", "schema.json", "CDC.index"}, fileNames)
+	content, err := os.ReadFile(path.Join(tableDir, "CDC000001.csv"))
 	require.Nil(t, err)
 	require.Greater(t, len(content), 0)
 
 	content, err = os.ReadFile(path.Join(tableDir, "CDC.index"))
 	require.Nil(t, err)
-	require.Equal(t, "CDC000001.json\n", string(content))
+	require.Equal(t, "CDC000001.csv\n", string(content))
 	require.Equal(t, uint64(1000), atomic.LoadUint64(&cnt))
 
 	// generating another dml file.
@@ -136,16 +141,16 @@ func TestCloudStorageWriteEventsWithoutDateSeparator(t *testing.T) {
 		fileNames = append(fileNames, f.Name())
 	}
 	require.ElementsMatch(t, []string{
-		"CDC000001.json", "CDC000002.json",
+		"CDC000001.csv", "CDC000002.csv",
 		"schema.json", "CDC.index",
 	}, fileNames)
-	content, err = os.ReadFile(path.Join(tableDir, "CDC000002.json"))
+	content, err = os.ReadFile(path.Join(tableDir, "CDC000002.csv"))
 	require.Nil(t, err)
 	require.Greater(t, len(content), 0)
 
 	content, err = os.ReadFile(path.Join(tableDir, "CDC.index"))
 	require.Nil(t, err)
-	require.Equal(t, "CDC000002.json\n", string(content))
+	require.Equal(t, "CDC000002.csv\n", string(content))
 	require.Equal(t, uint64(2000), atomic.LoadUint64(&cnt))
 
 	cancel()
@@ -160,7 +165,7 @@ func TestCloudStorageWriteEventsWithDateSeparator(t *testing.T) {
 	require.Nil(t, err)
 
 	replicaConfig := config.GetDefaultReplicaConfig()
-	replicaConfig.Sink.Protocol = config.ProtocolOpen.String()
+	replicaConfig.Sink.Protocol = config.ProtocolCsv.String()
 	replicaConfig.Sink.DateSeparator = config.DateSeparatorDay.String()
 
 	errCh := make(chan error, 5)
@@ -187,14 +192,14 @@ func TestCloudStorageWriteEventsWithDateSeparator(t *testing.T) {
 	for _, f := range files {
 		fileNames = append(fileNames, f.Name())
 	}
-	require.ElementsMatch(t, []string{"CDC000001.json", "CDC.index"}, fileNames)
-	content, err := os.ReadFile(path.Join(tableDir, "CDC000001.json"))
+	require.ElementsMatch(t, []string{"CDC000001.csv", "CDC.index"}, fileNames)
+	content, err := os.ReadFile(path.Join(tableDir, "CDC000001.csv"))
 	require.Nil(t, err)
 	require.Greater(t, len(content), 0)
 
 	content, err = os.ReadFile(path.Join(tableDir, "CDC.index"))
 	require.Nil(t, err)
-	require.Equal(t, "CDC000001.json\n", string(content))
+	require.Equal(t, "CDC000001.csv\n", string(content))
 	require.Equal(t, uint64(1000), atomic.LoadUint64(&cnt))
 
 	// test date (day) is NOT changed.
@@ -211,14 +216,14 @@ func TestCloudStorageWriteEventsWithDateSeparator(t *testing.T) {
 	for _, f := range files {
 		fileNames = append(fileNames, f.Name())
 	}
-	require.ElementsMatch(t, []string{"CDC000001.json", "CDC000002.json", "CDC.index"}, fileNames)
-	content, err = os.ReadFile(path.Join(tableDir, "CDC000002.json"))
+	require.ElementsMatch(t, []string{"CDC000001.csv", "CDC000002.csv", "CDC.index"}, fileNames)
+	content, err = os.ReadFile(path.Join(tableDir, "CDC000002.csv"))
 	require.Nil(t, err)
 	require.Greater(t, len(content), 0)
 
 	content, err = os.ReadFile(path.Join(tableDir, "CDC.index"))
 	require.Nil(t, err)
-	require.Equal(t, "CDC000002.json\n", string(content))
+	require.Equal(t, "CDC000002.csv\n", string(content))
 	require.Equal(t, uint64(2000), atomic.LoadUint64(&cnt))
 
 	// test date (day) is changed.
@@ -236,14 +241,14 @@ func TestCloudStorageWriteEventsWithDateSeparator(t *testing.T) {
 	for _, f := range files {
 		fileNames = append(fileNames, f.Name())
 	}
-	require.ElementsMatch(t, []string{"CDC000001.json", "CDC.index"}, fileNames)
-	content, err = os.ReadFile(path.Join(tableDir, "CDC000001.json"))
+	require.ElementsMatch(t, []string{"CDC000001.csv", "CDC.index"}, fileNames)
+	content, err = os.ReadFile(path.Join(tableDir, "CDC000001.csv"))
 	require.Nil(t, err)
 	require.Greater(t, len(content), 0)
 
 	content, err = os.ReadFile(path.Join(tableDir, "CDC.index"))
 	require.Nil(t, err)
-	require.Equal(t, "CDC000001.json\n", string(content))
+	require.Equal(t, "CDC000001.csv\n", string(content))
 	require.Equal(t, uint64(3000), atomic.LoadUint64(&cnt))
 	cancel()
 	s.Close()
@@ -267,14 +272,14 @@ func TestCloudStorageWriteEventsWithDateSeparator(t *testing.T) {
 	for _, f := range files {
 		fileNames = append(fileNames, f.Name())
 	}
-	require.ElementsMatch(t, []string{"CDC000001.json", "CDC000002.json", "CDC.index"}, fileNames)
-	content, err = os.ReadFile(path.Join(tableDir, "CDC000002.json"))
+	require.ElementsMatch(t, []string{"CDC000001.csv", "CDC000002.csv", "CDC.index"}, fileNames)
+	content, err = os.ReadFile(path.Join(tableDir, "CDC000002.csv"))
 	require.Nil(t, err)
 	require.Greater(t, len(content), 0)
 
 	content, err = os.ReadFile(path.Join(tableDir, "CDC.index"))
 	require.Nil(t, err)
-	require.Equal(t, "CDC000002.json\n", string(content))
+	require.Equal(t, "CDC000002.csv\n", string(content))
 	require.Equal(t, uint64(1000), atomic.LoadUint64(&cnt))
 
 	cancel()
