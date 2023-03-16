@@ -41,10 +41,14 @@ import (
 	"github.com/pingcap/tiflow/pkg/util"
 	p2pProto "github.com/pingcap/tiflow/proto/p2p"
 	pd "github.com/tikv/pd/client"
+	"go.etcd.io/etcd/client/pkg/v3/logutil"
+	clientv3 "go.etcd.io/etcd/client/v3"
 	"go.uber.org/zap"
+	"go.uber.org/zap/zapcore"
 	"golang.org/x/net/netutil"
 	"golang.org/x/sync/errgroup"
 	"google.golang.org/grpc"
+	"google.golang.org/grpc/backoff"
 )
 
 const (
@@ -119,10 +123,18 @@ func New(pdEndpoints []string) (*server, error) {
 func (s *server) prepare(ctx context.Context) error {
 	conf := config.GetGlobalServerConfig()
 
+	grpcTLSOption, err := conf.Security.ToGRPCDialOption()
+	if err != nil {
+		return errors.Trace(err)
+	}
+
 	tlsConfig, err := conf.Security.ToTLSConfig()
 	if err != nil {
 		return errors.Trace(err)
 	}
+
+	logConfig := logutil.DefaultZapLoggerConfig
+	logConfig.Level = zap.NewAtomicLevelAt(zapcore.ErrorLevel)
 
 	// we do not pass a `context` to the etcd client,
 	// to prevent it's cancelled when the server is closing.
@@ -132,7 +144,25 @@ func (s *server) prepare(ctx context.Context) error {
 	// the key will be kept for the lease TTL, which is 10 seconds,
 	// then cause the new owner cannot be elected immediately after the old owner offline.
 	// see https://github.com/etcd-io/etcd/blob/525d53bd41/client/v3/concurrency/election.go#L98
-	etcdCli, err := etcd.GetEtcdClient(s.pdEndpoints, tlsConfig)
+	etcdCli, err := clientv3.New(clientv3.Config{
+		Endpoints:   s.pdEndpoints,
+		TLS:         tlsConfig,
+		LogConfig:   &logConfig,
+		DialTimeout: 5 * time.Second,
+		DialOptions: []grpc.DialOption{
+			grpcTLSOption,
+			grpc.WithBlock(),
+			grpc.WithConnectParams(grpc.ConnectParams{
+				Backoff: backoff.Config{
+					BaseDelay:  time.Second,
+					Multiplier: 1.1,
+					Jitter:     0.1,
+					MaxDelay:   3 * time.Second,
+				},
+				MinConnectTimeout: 3 * time.Second,
+			}),
+		},
+	})
 	if err != nil {
 		return errors.Trace(err)
 	}
