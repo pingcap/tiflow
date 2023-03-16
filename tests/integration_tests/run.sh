@@ -42,6 +42,15 @@ run_case() {
 		OUT_DIR=$OUT_DIR \
 		TEST_NAME=$case \
 		bash "$script" "$sink_type"
+
+	# Log data race and panic from TiCDC.
+	if [ -f /tmp/tidb_cdc_test/$case/stdout.log ]; then
+		badlog=$(grep -E "DATA RACE|panic" /tmp/tidb_cdc_test/$case/stdout.log)
+		if [ ! -z $badlog ]; then
+			cat /tmp/tidb_cdc_test/$case/stdout.log
+			exit 1
+		fi
+	fi
 }
 
 sink_type=$1
