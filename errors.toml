@@ -936,6 +936,11 @@ error = '''
 version is incompatible: %s
 '''
 
+["CDC:ErrWaitFreeMemoryTimeout"]
+error = '''
+wait free memory timeout
+'''
+
 ["CDC:ErrWorkerPoolGracefulUnregisterTimedOut"]
 error = '''
 workerpool handle graceful unregister timed out

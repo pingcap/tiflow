@@ -26,6 +26,8 @@ type ChangefeedSchedulerConfig struct {
 	EnableTableAcrossNodes bool `toml:"enable-table-across-nodes" json:"enable-table-across-nodes"`
 	// RegionThreshold is the region count threshold of splitting a table.
 	RegionThreshold int `toml:"region-threshold" json:"region-threshold"`
+	// WriteKeyThreshold is the written keys threshold of splitting a table.
+	WriteKeyThreshold int `toml:"write-key-threshold" json:"write-key-threshold"`
 	// Deprecated.
 	RegionPerSpan int `toml:"region-per-span" json:"region-per-span"`
 }
