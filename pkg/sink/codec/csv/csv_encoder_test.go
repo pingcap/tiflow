@@ -62,9 +62,7 @@ func TestCSVBatchCodec(t *testing.T) {
 		},
 		{
 			Table: &model.TableName{Schema: "test", Table: "table1"},
-			Rows: []*model.RowChangedEvent{
-				{},
-			},
+			Rows:  nil,
 		},
 	}
 

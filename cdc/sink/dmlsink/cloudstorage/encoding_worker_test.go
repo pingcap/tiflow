@@ -148,6 +148,10 @@ func TestEncodingWorkerRun(t *testing.T) {
 					{Name: "c1", Value: 100},
 					{Name: "c2", Value: "hello world"},
 				},
+				ColInfos: []rowcodec.ColInfo{
+					{ID: 1, Ft: types.NewFieldType(mysql.TypeLong)},
+					{ID: 2, Ft: types.NewFieldType(mysql.TypeVarchar)},
+				},
 			},
 		},
 	}
