@@ -205,7 +205,7 @@ func (a *BatchEncoder) avroEncode(
 		return schema, nil
 	}
 
-	avroCodec, registryID, err := schemaManager.GetCachedOrRegister(
+	avroCodec, schemaID, err := schemaManager.GetCachedOrRegister(
 		ctx,
 		topic,
 		e.TableInfo.Version,
@@ -237,7 +237,7 @@ func (a *BatchEncoder) avroEncode(
 
 	return &avroEncodeResult{
 		data:     bin,
-		schemaID: registryID,
+		schemaID: schemaID,
 	}, nil
 }
 
