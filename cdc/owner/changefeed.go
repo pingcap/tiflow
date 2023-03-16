@@ -372,6 +372,10 @@ func (c *changefeed) tick(ctx cdcContext.Context, captures map[model.CaptureID]*
 	}
 
 	prevResolvedTs := c.state.Status.ResolvedTs
+	// FIXME: resolvedTs will move forward too early, which may cause data loss.
+	// if newResolvedTs == math.MaxUint64 {
+	// 	newResolvedTs = prevResolvedTs
+	// }
 	if c.redoMetaMgr.Enabled() {
 		// newResolvedTs can never exceed the barrier timestamp boundary. If redo is enabled,
 		// we can only upload it to etcd after it has been flushed into redo meta.
