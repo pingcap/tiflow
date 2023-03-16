@@ -155,12 +155,12 @@ func NewMySQLBackends(
 			return nil, err
 		}
 	}
-	maxAllowedPacket := int64(variable.DefMaxAllowedPacket)
-	if cfg.MultiStmtEnable {
-		maxAllowedPacket, err = pmysql.QueryMaxAllowedPacket(ctx, db)
-		if err != nil {
-			log.Warn("failed to query max_allowed_packet", zap.Error(err))
-		}
+
+	var maxAllowedPacket int64
+	maxAllowedPacket, err = pmysql.QueryMaxAllowedPacket(ctx, db)
+	if err != nil {
+		log.Warn("failed to query max_allowed_packet, use default value", zap.Error(err))
+		maxAllowedPacket = int64(variable.DefMaxAllowedPacket)
 	}
 
 	backends := make([]*mysqlBackend, 0, cfg.WorkerCount)
