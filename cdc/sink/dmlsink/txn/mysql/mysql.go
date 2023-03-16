@@ -417,6 +417,29 @@ func (s *mysqlBackend) batchSingleTxnDmls(
 ) (sqls []string, values [][]interface{}) {
 	insertRows, updateRows, deleteRows := s.groupRowsByType(event, tableInfo, !translateToInsert)
 
+	// handle update
+	if len(updateRows) > 0 {
+		if s.cfg.IsTiDB {
+			for _, rows := range updateRows {
+				s, v := s.genUpdateSQL(rows...)
+				sqls = append(sqls, s...)
+				values = append(values, v...)
+			}
+			// The behavior of update statement differs between TiDB and MySQL.
+			// So we don't use batch update statement when downstream is MySQL.
+			// Ref:https://docs.pingcap.com/tidb/stable/sql-statement-update#mysql-compatibility
+		} else {
+			for _, rows := range updateRows {
+				for _, row := range rows {
+					sql, value := row.GenSQL(sqlmodel.DMLUpdate)
+					sqls = append(sqls, sql)
+					values = append(values, value)
+				}
+			}
+		}
+	}
+
+	// handle delete
 	if len(deleteRows) > 0 {
 		for _, rows := range deleteRows {
 			sql, value := sqlmodel.GenDeleteSQL(rows...)
@@ -436,28 +459,6 @@ func (s *mysqlBackend) batchSingleTxnDmls(
 				sql, value := sqlmodel.GenInsertSQL(sqlmodel.DMLReplace, rows...)
 				sqls = append(sqls, sql)
 				values = append(values, value)
-			}
-		}
-	}
-
-	// handle update
-	if len(updateRows) > 0 {
-		if s.cfg.IsTiDB {
-			for _, rows := range updateRows {
-				s, v := s.genUpdateSQL(rows...)
-				sqls = append(sqls, s...)
-				values = append(values, v...)
-			}
-			// The behavior of update statement differs between TiDB and MySQL.
-			// So we don't use batch update statement when downstream is MySQL.
-			// Ref:https://docs.pingcap.com/tidb/stable/sql-statement-update#mysql-compatibility
-		} else {
-			for _, rows := range updateRows {
-				for _, row := range rows {
-					sql, value := row.GenSQL(sqlmodel.DMLUpdate)
-					sqls = append(sqls, sql)
-					values = append(values, value)
-				}
 			}
 		}
 	}
