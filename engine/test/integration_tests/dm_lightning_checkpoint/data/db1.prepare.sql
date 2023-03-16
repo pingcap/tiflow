@@ -2,29 +2,9 @@ drop user if exists 'dm_full';
 flush privileges;
 create user 'dm_full'@'%' identified by '123456';
 grant all privileges on *.* to 'dm_full'@'%';
-revoke replication slave, replication client, super on *.* from 'dm_full'@'%';
-revoke create temporary tables, lock tables, create routine, alter routine, event, create tablespace, file, shutdown, execute, process, index on *.* from 'dm_full'@'%'; # privileges not supported by TiDB
-flush privileges;
-
-drop database if exists dm_full_empty_db;
-create database dm_full_empty_db;
-
-drop database if exists dm_full_empty_table;
-create database dm_full_empty_table;
-create table dm_full_empty_table.t1 (id int primary key);
-
-drop database if exists dm_full_route_schema;
-create database dm_full_route_schema;
-create table dm_full_route_schema.t1 (id int primary key);
-insert into dm_full_route_schema.t1 values (1);
-
-drop database if exists `dm_full_special/ch"ar`;
-create database `dm_full_special/ch"ar`;
-create table `dm_full_special/ch"ar`.`t/b"1` (id int primary key, name varchar(255));
-insert into `dm_full_special/ch"ar`.`t/b"1` values (1, 'a');
 
 drop database if exists `dm_full`;
-create database `dm_full`;
+create database `dm_full` CHARACTER SET = utf8mb4 COLLATE = utf8mb4_bin;
 use `dm_full`;
 create table t1 (
     id int,
