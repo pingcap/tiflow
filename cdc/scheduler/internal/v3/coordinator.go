@@ -88,9 +88,12 @@ func NewCoordinator(
 	}
 	coord := newCoordinator(captureID, changefeedID, ownerRevision, cfg)
 	coord.trans = trans
-	coord.reconciler = keyspan.NewReconciler(changefeedID, up, cfg.ChangefeedSettings)
 	coord.pdClock = up.PDClock
 	coord.changefeedEpoch = changefeedEpoch
+	coord.reconciler, err = keyspan.NewReconciler(changefeedID, up, cfg.ChangefeedSettings)
+	if err != nil {
+		return nil, errors.Trace(err)
+	}
 	return coord, nil
 }
 
