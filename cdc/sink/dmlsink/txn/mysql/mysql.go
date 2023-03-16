@@ -53,6 +53,7 @@ const (
 
 	defaultDMLMaxRetry uint64 = 8
 
+	// To limit memory usage for prepared statements.
 	prepStmtCacheSize int = 16 * 1024
 )
 
