@@ -276,7 +276,9 @@ func (ra *RedoApplier) applyDDL(
 	}
 	if ddl.CommitTs != checkpointTs && ddl.CommitTs != resolvedTs {
 		// TODO: move this panic to shouldSkip after redo log supports cross DDL events.
-		log.Panic("ddl commit ts is not equal to checkpoint ts or resolved ts")
+		log.Error("ddl commit ts is not equal to checkpoint ts or resolved ts",
+			zap.Any("ddl", ddl), zap.Uint64("checkpointTs", checkpointTs),
+			zap.Uint64("resolvedTs", resolvedTs))
 	}
 	if shouldSkip() {
 		return nil

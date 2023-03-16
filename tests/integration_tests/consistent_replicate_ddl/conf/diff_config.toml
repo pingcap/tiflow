@@ -21,7 +21,6 @@ check-struct-only = false
     port = 4000
     user = "root"
     password = ""
-    snapshot = "<placeholder>"
 
 [data-sources.mysql]
     host = "127.0.0.1"
