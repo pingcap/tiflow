@@ -921,3 +921,62 @@ func getAllHistoryDDLJob(storage tidbkv.Storage) ([]*timodel.Job, error) {
 	}
 	return jobs, nil
 }
+
+// This test is used to show how the schemaStorage choose a handleKey of a table.
+// The handleKey is chosen by the following rules:
+// 1. If the table has a primary key, the handleKey is the first column of the primary key.
+// 2. If the table has not null unique key, the handleKey is the first column of the unique key.
+// 3. If the table has no primary key and no not null unique key, it has no handleKey.
+func TestHandleKey(t *testing.T) {
+	store, err := mockstore.NewMockStore()
+	require.Nil(t, err)
+	defer store.Close() //nolint:errcheck
+
+	session.SetSchemaLease(0)
+	session.DisableStats4Test()
+	domain, err := session.BootstrapSession(store)
+	require.Nil(t, err)
+	defer domain.Close()
+	domain.SetStatsUpdating(true)
+	tk := testkit.NewTestKit(t, store)
+	tk.MustExec("create database test2")
+	tk.MustExec("create table test.simple_test1 (id bigint primary key)")
+	tk.MustExec("create table test.simple_test2 (id bigint, age int NOT NULL, " +
+		"name char NOT NULL, UNIQUE KEY(age, name))")
+	tk.MustExec("create table test.simple_test3 (id bigint, age int)")
+	ver, err := store.CurrentVersion(oracle.GlobalTxnScope)
+	require.Nil(t, err)
+	meta, err := kv.GetSnapshotMeta(store, ver.Ver)
+	require.Nil(t, err)
+	snap, err := schema.NewSnapshotFromMeta(meta, ver.Ver, false)
+	require.Nil(t, err)
+	tb1, ok := snap.TableByName("test", "simple_test1")
+	require.True(t, ok)
+	require.Equal(t, int64(-1), tb1.HandleIndexID) // pk is handleKey
+	columnID := int64(1)
+	flag := tb1.ColumnsFlag[columnID]
+	require.True(t, flag.IsHandleKey())
+	for _, column := range tb1.Columns {
+		if column.ID == columnID {
+			require.True(t, column.Name.O == "id")
+		}
+	}
+
+	// unique key is handleKey
+	tb2, ok := snap.TableByName("test", "simple_test2")
+	require.True(t, ok)
+	require.Equal(t, int64(1), tb2.HandleIndexID)
+	columnID = int64(2)
+	flag = tb2.ColumnsFlag[columnID]
+	require.True(t, flag.IsHandleKey())
+	for _, column := range tb2.Columns {
+		if column.ID == columnID {
+			require.True(t, column.Name.O == "age")
+		}
+	}
+
+	// unique key is handleKey
+	tb3, ok := snap.TableByName("test", "simple_test3")
+	require.True(t, ok)
+	require.Equal(t, int64(-2), tb3.HandleIndexID)
+}
