@@ -29,6 +29,7 @@ import (
 	"github.com/pingcap/tidb/parser/charset"
 	timodel "github.com/pingcap/tidb/parser/model"
 	"github.com/pingcap/tidb/parser/mysql"
+	"github.com/pingcap/tidb/sessionctx/variable"
 	"github.com/pingcap/tiflow/cdc/contextutil"
 	"github.com/pingcap/tiflow/cdc/model"
 	"github.com/pingcap/tiflow/cdc/sink/dmlsink"
@@ -69,7 +70,8 @@ type mysqlBackend struct {
 	// implement stmtCache to improve performance, especially when the downstream is TiDB
 	stmtCache *lru.Cache
 	// Indicate if the CachePrepStmts should be enabled or not
-	cachePrepStmts bool
+	cachePrepStmts   bool
+	maxAllowedPacket int64
 }
 
 // NewMySQLBackends creates a new MySQL sink using schema storage
@@ -153,6 +155,13 @@ func NewMySQLBackends(
 			return nil, err
 		}
 	}
+	maxAllowedPacket := int64(variable.DefMaxAllowedPacket)
+	if cfg.MultiStmtEnable {
+		maxAllowedPacket, err = pmysql.QueryMaxAllowedPacket(ctx, db)
+		if err != nil {
+			log.Warn("failed to query max_allowed_packet", zap.Error(err))
+		}
+	}
 
 	backends := make([]*mysqlBackend, 0, cfg.WorkerCount)
 	for i := 0; i < cfg.WorkerCount; i++ {
@@ -168,6 +177,7 @@ func NewMySQLBackends(
 			metricTxnSinkDMLBatchCallback: txn.SinkDMLBatchCallback.WithLabelValues(changefeedID.Namespace, changefeedID.ID),
 			stmtCache:                     stmtCache,
 			cachePrepStmts:                cachePrepStmts,
+			maxAllowedPacket:              maxAllowedPacket,
 		})
 	}
 
@@ -252,11 +262,12 @@ func (s *mysqlBackend) MaxFlushInterval() time.Duration {
 }
 
 type preparedDMLs struct {
-	startTs   []model.Ts
-	sqls      []string
-	values    [][]interface{}
-	callbacks []dmlsink.CallbackFunc
-	rowCount  int
+	startTs         []model.Ts
+	sqls            []string
+	values          [][]interface{}
+	callbacks       []dmlsink.CallbackFunc
+	rowCount        int
+	approximateSize int64
 }
 
 // convert2RowChanges is a helper function that convert the row change representation
@@ -512,6 +523,7 @@ func (s *mysqlBackend) prepareDMLs() *preparedDMLs {
 	translateToInsert := s.cfg.EnableOldValue && !s.cfg.SafeMode
 
 	rowCount := 0
+	approximateSize := int64(0)
 	for _, event := range s.events {
 		if len(event.Event.Rows) == 0 {
 			continue
@@ -599,6 +611,8 @@ func (s *mysqlBackend) prepareDMLs() *preparedDMLs {
 					values = append(values, args)
 				}
 			}
+
+			approximateSize += row.ApproximateDataSize
 		}
 	}
 
@@ -607,11 +621,12 @@ func (s *mysqlBackend) prepareDMLs() *preparedDMLs {
 	}
 
 	return &preparedDMLs{
-		startTs:   startTs,
-		sqls:      sqls,
-		values:    values,
-		callbacks: callbacks,
-		rowCount:  rowCount,
+		startTs:         startTs,
+		sqls:            sqls,
+		values:          values,
+		callbacks:       callbacks,
+		rowCount:        rowCount,
+		approximateSize: approximateSize,
 	}
 }
 
@@ -699,7 +714,7 @@ func (s *mysqlBackend) execDMLWithMaxRetries(pctx context.Context, dmls *prepare
 	}
 
 	start := time.Now()
-	fallbackToSeqWay := false
+	fallbackToSeqWay := dmls.approximateSize > s.maxAllowedPacket
 	return retry.Do(pctx, func() error {
 		writeTimeout, _ := time.ParseDuration(s.cfg.WriteTimeout)
 		writeTimeout += networkDriftDuration
@@ -721,7 +736,7 @@ func (s *mysqlBackend) execDMLWithMaxRetries(pctx context.Context, dmls *prepare
 					start, s.changefeed, "BEGIN", dmls.rowCount, dmls.startTs)
 			}
 
-			// If interplated SQL size exceeds maxAllowPacket, mysql driver will
+			// If interplated SQL size exceeds maxAllowedPacket, mysql driver will
 			// fall back to the sequantial way.
 			// error can be ErrPrepareMulti, ErrBadConn etc.
 			// TODO: add a quick path to check whether we should fallback to

@@ -336,3 +336,13 @@ func QueryMaxPreparedStmtCount(ctx context.Context, db *sql.DB) (int, error) {
 	}
 	return int(maxPreparedStmtCount.Int32), err
 }
+
+// QueryMaxAllowedPacket gets the value of max_allowed_packet
+func QueryMaxAllowedPacket(ctx context.Context, db *sql.DB) (int64, error) {
+	row := db.QueryRowContext(ctx, "select @@global.max_allowed_packet;")
+	var maxAllowedPacket sql.NullInt64
+	if err := row.Scan(&maxAllowedPacket); err != nil {
+		return 0, cerror.WrapError(cerror.ErrMySQLQueryError, err)
+	}
+	return maxAllowedPacket.Int64, nil
+}
