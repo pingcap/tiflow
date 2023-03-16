@@ -1393,7 +1393,7 @@ func TestPrepareBatchDMLs(t *testing.T) {
 				rowCount: 2,
 			},
 		},
-		// mixed event, and test update, insert, delete are ordered
+		// mixed event, and test delete， update, insert are ordered
 		{
 			isTiDB: true,
 			input: []*model.RowChangedEvent{
@@ -1523,20 +1523,20 @@ func TestPrepareBatchDMLs(t *testing.T) {
 			expected: &preparedDMLs{
 				startTs: []model.Ts{418658114257813514},
 				sqls: []string{
+					"DELETE FROM `common_1`.`uk_without_pk` WHERE (`a1`,`a3`) IN ((?,?),(?,?))",
 					"UPDATE `common_1`.`uk_without_pk` SET `a1`=CASE " +
 						"WHEN ROW(`a1`,`a3`)=ROW(?,?) THEN ? WHEN ROW(`a1`,`a3`)=ROW(?,?) " +
 						"THEN ? END, `a3`=CASE WHEN ROW(`a1`,`a3`)=ROW(?,?) " +
 						"THEN ? WHEN ROW(`a1`,`a3`)=ROW(?,?) THEN ? END WHERE " +
 						"ROW(`a1`,`a3`) IN (ROW(?,?),ROW(?,?))",
-					"DELETE FROM `common_1`.`uk_without_pk` WHERE (`a1`,`a3`) IN ((?,?),(?,?))",
 					"INSERT INTO `common_1`.`uk_without_pk` (`a1`,`a3`) VALUES (?,?)",
 				},
 				values: [][]interface{}{
+					{1, "世界", 2, "你好"},
 					{
 						1, "开发", 2, 3, "纽约", 4, 1, "开发", "测试", 3,
 						"纽约", "北京", 1, "开发", 3, "纽约",
 					},
-					{1, "世界", 2, "你好"},
 					{2, "你好"},
 				},
 				rowCount: 5,

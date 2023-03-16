@@ -360,6 +360,15 @@ func (s *mysqlBackend) batchSingleTxnDmls(
 ) (sqls []string, values [][]interface{}) {
 	insertRows, updateRows, deleteRows := s.groupRowsByType(event, tableInfo, !translateToInsert)
 
+	// handle delete
+	if len(deleteRows) > 0 {
+		for _, rows := range deleteRows {
+			sql, value := sqlmodel.GenDeleteSQL(rows...)
+			sqls = append(sqls, sql)
+			values = append(values, value)
+		}
+	}
+
 	// handle update
 	if len(updateRows) > 0 {
 		if s.cfg.IsTiDB {
@@ -379,15 +388,6 @@ func (s *mysqlBackend) batchSingleTxnDmls(
 					values = append(values, value)
 				}
 			}
-		}
-	}
-
-	// handle delete
-	if len(deleteRows) > 0 {
-		for _, rows := range deleteRows {
-			sql, value := sqlmodel.GenDeleteSQL(rows...)
-			sqls = append(sqls, sql)
-			values = append(values, value)
 		}
 	}
 
