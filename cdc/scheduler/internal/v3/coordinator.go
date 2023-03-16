@@ -35,6 +35,7 @@ import (
 	"github.com/pingcap/tiflow/pkg/p2p"
 	"github.com/pingcap/tiflow/pkg/pdutil"
 	"github.com/pingcap/tiflow/pkg/spanz"
+	"github.com/pingcap/tiflow/pkg/upstream"
 	"github.com/pingcap/tiflow/pkg/version"
 	"go.uber.org/zap"
 )
@@ -77,8 +78,7 @@ func NewCoordinator(
 	messageRouter p2p.MessageRouter,
 	ownerRevision int64,
 	changefeedEpoch uint64,
-	regionCache keyspan.RegionCache,
-	pdClock pdutil.Clock,
+	up *upstream.Upstream,
 	cfg *config.SchedulerConfig,
 ) (internal.Scheduler, error) {
 	trans, err := transport.NewTransport(
@@ -88,10 +88,12 @@ func NewCoordinator(
 	}
 	coord := newCoordinator(captureID, changefeedID, ownerRevision, cfg)
 	coord.trans = trans
-	coord.reconciler = keyspan.NewReconciler(
-		changefeedID, regionCache, cfg.ChangefeedSettings)
-	coord.pdClock = pdClock
+	coord.pdClock = up.PDClock
 	coord.changefeedEpoch = changefeedEpoch
+	coord.reconciler, err = keyspan.NewReconciler(changefeedID, up, cfg.ChangefeedSettings)
+	if err != nil {
+		return nil, errors.Trace(err)
+	}
 	return coord, nil
 }
 

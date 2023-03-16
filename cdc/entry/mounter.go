@@ -259,7 +259,7 @@ func parseJob(v []byte, startTs, CRTs uint64) (*timodel.Job, error) {
 		return nil, errors.Trace(err)
 	}
 	log.Debug("get new DDL job", zap.String("detail", job.String()))
-	if !job.IsDone() && !job.IsSynced() {
+	if !job.IsDone() {
 		return nil, nil
 	}
 	// FinishedTS is only set when the job is synced,
@@ -455,7 +455,15 @@ func formatColVal(datum types.Datum, col *timodel.ColumnInfo) (
 			b = emptyBytes
 		}
 		return b, sizeOfBytes(b), "", nil
-	case mysql.TypeFloat, mysql.TypeDouble:
+	case mysql.TypeFloat:
+		v := datum.GetFloat32()
+		if math.IsNaN(float64(v)) || math.IsInf(float64(v), 1) || math.IsInf(float64(v), -1) {
+			warn = fmt.Sprintf("the value is invalid in column: %f", v)
+			v = 0
+		}
+		const sizeOfV = unsafe.Sizeof(v)
+		return v, int(sizeOfV), warn, nil
+	case mysql.TypeDouble:
 		v := datum.GetFloat64()
 		if math.IsNaN(v) || math.IsInf(v, 1) || math.IsInf(v, -1) {
 			warn = fmt.Sprintf("the value is invalid in column: %f", v)

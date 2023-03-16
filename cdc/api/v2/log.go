@@ -34,7 +34,7 @@ import (
 // @Failure 400 {object} model.HTTPError
 // @Router	/api/v2/log [post]
 func (h *OpenAPIV2) setLogLevel(c *gin.Context) {
-	req := &LogLevelReq{}
+	req := &LogLevelReq{Level: "info"}
 	err := c.BindJSON(&req)
 	if err != nil {
 		_ = c.Error(cerror.ErrAPIInvalidParam.GenWithStack("invalid log level: %s", err.Error()))

@@ -269,6 +269,17 @@ definitions:
       quote:
         type: string
     type: object
+  v2.Capture:
+    properties:
+      address:
+        type: string
+      cluster_id:
+        type: string
+      id:
+        type: string
+      is_owner:
+        type: boolean
+    type: object
   v2.ChangeFeedInfo:
     properties:
       admin_job_type:
@@ -363,10 +374,13 @@ definitions:
           EnableTableAcrossNodes set true to split one table to multiple spans and
           distribute to multiple TiCDC nodes.
         type: boolean
-      region_per_span:
-        description: |-
-          RegionPerSpan the number of regions in a span, must be greater than 1000.
-          Set 0 to disable span replication.
+      region_threshold:
+        description: RegionThreshold is the region count threshold of splitting a
+          table.
+        type: integer
+      write_key_threshold:
+        description: WriteKeyThreshold is the written keys threshold of splitting
+          a table.
         type: integer
     type: object
   v2.ColumnSelector:
@@ -1060,6 +1074,30 @@ paths:
       summary: Get server status
       tags:
       - common
+  /api/v2/captures:
+    get:
+      description: list all captures in cdc cluster
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            items:
+              $ref: '#/definitions/v2.Capture'
+            type: array
+        "400":
+          description: Bad Request
+          schema:
+            $ref: '#/definitions/model.HTTPError'
+        "500":
+          description: Internal Server Error
+          schema:
+            $ref: '#/definitions/model.HTTPError'
+      summary: List captures
+      tags:
+      - capture
+      - v2
   /api/v2/changefeeds:
     get:
       consumes:

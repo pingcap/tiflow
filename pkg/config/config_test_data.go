@@ -63,7 +63,7 @@ const (
   },
   "scheduler": {
     "enable-table-across-nodes": false,
-    "region-per-span": 100000
+    "region-threshold": 100000
   }
 }`
 
@@ -200,7 +200,9 @@ const (
   },
   "scheduler": {
     "enable-table-across-nodes": true,
-    "region-per-span": 100001
+    "region-per-span": 0,
+    "region-threshold": 100001,
+    "write-key-threshold": 100001
   }
 }`
 
@@ -257,7 +259,8 @@ const (
   },
   "scheduler": {
     "enable-table-across-nodes": true,
-    "region-per-span": 100001
+    "region-threshold": 100001,
+    "write-key-threshold": 100001
   }
 }`
 )
