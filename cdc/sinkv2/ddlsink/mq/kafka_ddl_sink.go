@@ -60,7 +60,7 @@ func NewKafkaDDLSink(
 	// We must close adminClient when this func return cause by an error
 	// otherwise the adminClient will never be closed and lead to a goroutine leak.
 	defer func() {
-		if err != nil {
+		if err != nil && adminClient != nil {
 			if closeErr := adminClient.Close(); closeErr != nil {
 				log.Error("Close admin client failed in kafka "+
 					"DDL sink", zap.Error(closeErr))
@@ -93,7 +93,7 @@ func NewKafkaDDLSink(
 	// Preventing leaks when error occurs.
 	// This also closes the client in p.Close().
 	defer func() {
-		if err != nil {
+		if err != nil && p != nil {
 			p.Close()
 		}
 	}()
