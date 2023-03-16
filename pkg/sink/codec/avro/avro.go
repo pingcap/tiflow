@@ -51,8 +51,9 @@ type BatchEncoder struct {
 }
 
 type avroEncodeResult struct {
-	data       []byte
-	registryID int
+	data []byte
+	// schemaID is the ID of the Avro schema used to encode the data.
+	schemaID int
 }
 
 // AppendRowChangedEvent appends a row change event to the encoder
@@ -235,8 +236,8 @@ func (a *BatchEncoder) avroEncode(
 	}
 
 	return &avroEncodeResult{
-		data:       bin,
-		registryID: registryID,
+		data:     bin,
+		schemaID: registryID,
 	}, nil
 }
 
@@ -797,7 +798,7 @@ const magicByte = uint8(0)
 // -and-ksqldb-viewing-kafka-messages-bytes-as-hex/
 func (r *avroEncodeResult) toEnvelope() ([]byte, error) {
 	buf := new(bytes.Buffer)
-	data := []interface{}{magicByte, int32(r.registryID), r.data}
+	data := []interface{}{magicByte, int32(r.schemaID), r.data}
 	for _, v := range data {
 		err := binary.Write(buf, binary.BigEndian, v)
 		if err != nil {

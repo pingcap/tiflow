@@ -49,7 +49,7 @@ type schemaManager struct {
 
 type schemaCacheEntry struct {
 	tiSchemaID uint64
-	registryID int
+	schemaID   int
 	codec      *goavro.Codec
 }
 
@@ -205,9 +205,9 @@ func (m *schemaManager) Lookup(
 		log.Info("Avro schema lookup cache hit",
 			zap.String("key", key),
 			zap.Uint64("tiSchemaID", tiSchemaID),
-			zap.Int("registryID", entry.registryID))
+			zap.Int("schemaID", entry.schemaID))
 		m.cacheRWLock.RUnlock()
-		return entry.codec, entry.registryID, nil
+		return entry.codec, entry.schemaID, nil
 	}
 	m.cacheRWLock.RUnlock()
 
@@ -273,7 +273,7 @@ func (m *schemaManager) Lookup(
 		log.Error("Creating Avro codec failed", zap.Error(err))
 		return nil, 0, cerror.WrapError(cerror.ErrAvroSchemaAPIError, err)
 	}
-	cacheEntry.registryID = jsonResp.RegistryID
+	cacheEntry.schemaID = jsonResp.RegistryID
 	cacheEntry.tiSchemaID = tiSchemaID
 
 	m.cacheRWLock.Lock()
@@ -282,10 +282,10 @@ func (m *schemaManager) Lookup(
 
 	log.Info("Avro schema lookup successful with cache miss",
 		zap.Uint64("tiSchemaID", cacheEntry.tiSchemaID),
-		zap.Int("registryID", cacheEntry.registryID),
+		zap.Int("schemaID", cacheEntry.schemaID),
 		zap.String("schema", cacheEntry.codec.Schema()))
 
-	return cacheEntry.codec, cacheEntry.registryID, nil
+	return cacheEntry.codec, cacheEntry.schemaID, nil
 }
 
 // SchemaGenerator represents a function that returns an Avro schema in JSON.
@@ -308,9 +308,9 @@ func (m *schemaManager) GetCachedOrRegister(
 		log.Debug("Avro schema GetCachedOrRegister cache hit",
 			zap.String("key", key),
 			zap.Uint64("tiSchemaID", tiSchemaID),
-			zap.Int("registryID", entry.registryID))
+			zap.Int("schemaID", entry.schemaID))
 		m.cacheRWLock.RUnlock()
-		return entry.codec, entry.registryID, nil
+		return entry.codec, entry.schemaID, nil
 	}
 	m.cacheRWLock.RUnlock()
 
@@ -341,7 +341,7 @@ func (m *schemaManager) GetCachedOrRegister(
 
 	cacheEntry := &schemaCacheEntry{
 		tiSchemaID: tiSchemaID,
-		registryID: id,
+		schemaID:   id,
 		codec:      codec,
 	}
 
@@ -351,7 +351,7 @@ func (m *schemaManager) GetCachedOrRegister(
 
 	log.Info("Avro schema GetCachedOrRegister successful with cache miss",
 		zap.Uint64("tiSchemaID", cacheEntry.tiSchemaID),
-		zap.Int("registryID", cacheEntry.registryID),
+		zap.Int("schemaID", cacheEntry.schemaID),
 		zap.String("schema", cacheEntry.codec.Schema()))
 
 	return codec, id, nil
