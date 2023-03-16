@@ -88,11 +88,6 @@ func (h *OpenAPIV2) createChangefeed(c *gin.Context) {
 		_ = c.Error(cerror.WrapError(cerror.ErrNewStore, err))
 		return
 	}
-	etcdClient, err := h.capture.GetEtcdClient()
-	if err != nil {
-		_ = c.Error(err)
-		return
-	}
 	// We should not close kvStorage since all kvStorage in cdc is the same one.
 	// defer kvStorage.Close()
 	// TODO: We should get a kvStorage from upstream instead of creating a new one
@@ -101,7 +96,7 @@ func (h *OpenAPIV2) createChangefeed(c *gin.Context) {
 		cfg,
 		pdClient,
 		h.capture.StatusProvider(),
-		etcdClient.GetEnsureGCServiceID(gc.EnsureGCServiceCreating),
+		h.capture.GetEtcdClient().GetEnsureGCServiceID(gc.EnsureGCServiceCreating),
 		kvStorage)
 	if err != nil {
 		_ = c.Error(err)
@@ -115,7 +110,7 @@ func (h *OpenAPIV2) createChangefeed(c *gin.Context) {
 		err := gc.UndoEnsureChangefeedStartTsSafety(
 			ctx,
 			pdClient,
-			etcdClient.GetEnsureGCServiceID(gc.EnsureGCServiceCreating),
+			h.capture.GetEtcdClient().GetEnsureGCServiceID(gc.EnsureGCServiceCreating),
 			model.DefaultChangeFeedID(cfg.ID),
 		)
 		if err != nil {
@@ -138,7 +133,7 @@ func (h *OpenAPIV2) createChangefeed(c *gin.Context) {
 		return
 	}
 
-	err = etcdClient.CreateChangefeedInfo(ctx,
+	err = h.capture.GetEtcdClient().CreateChangefeedInfo(ctx,
 		upstreamInfo,
 		info,
 		model.DefaultChangeFeedID(info.ID))
@@ -335,14 +330,9 @@ func (h *OpenAPIV2) updateChangefeed(c *gin.Context) {
 		return
 	}
 
-	etcdClient, err := h.capture.GetEtcdClient()
-	if err != nil {
-		_ = c.Error(err)
-		return
-	}
 	oldCfInfo.Namespace = changefeedID.Namespace
 	oldCfInfo.ID = changefeedID.ID
-	OldUpInfo, err := etcdClient.GetUpstreamInfo(ctx, oldCfInfo.UpstreamID,
+	OldUpInfo, err := h.capture.GetEtcdClient().GetUpstreamInfo(ctx, oldCfInfo.UpstreamID,
 		oldCfInfo.Namespace)
 	if err != nil {
 		_ = c.Error(err)
@@ -395,8 +385,8 @@ func (h *OpenAPIV2) updateChangefeed(c *gin.Context) {
 		zap.String("changefeedInfo", newCfInfo.String()),
 		zap.Any("upstreamInfo", newUpInfo))
 
-	err = etcdClient.UpdateChangefeedAndUpstream(ctx, newUpInfo, newCfInfo,
-		changefeedID)
+	err = h.capture.GetEtcdClient().
+		UpdateChangefeedAndUpstream(ctx, newUpInfo, newCfInfo, changefeedID)
 	if err != nil {
 		_ = c.Error(errors.Trace(err))
 		return
@@ -636,15 +626,10 @@ func (h *OpenAPIV2) resumeChangefeed(c *gin.Context) {
 	}
 	defer pdClient.Close()
 
-	etcdClient, err := h.capture.GetEtcdClient()
-	if err != nil {
-		_ = c.Error(err)
-		return
-	}
 	if err := h.helpers.verifyResumeChangefeedConfig(
 		ctx,
 		pdClient,
-		etcdClient.GetEnsureGCServiceID(gc.EnsureGCServiceResuming),
+		h.capture.GetEtcdClient().GetEnsureGCServiceID(gc.EnsureGCServiceResuming),
 		changefeedID,
 		cfg.OverwriteCheckpointTs); err != nil {
 		_ = c.Error(err)
@@ -658,7 +643,7 @@ func (h *OpenAPIV2) resumeChangefeed(c *gin.Context) {
 		err := gc.UndoEnsureChangefeedStartTsSafety(
 			ctx,
 			pdClient,
-			etcdClient.GetEnsureGCServiceID(gc.EnsureGCServiceResuming),
+			h.capture.GetEtcdClient().GetEnsureGCServiceID(gc.EnsureGCServiceResuming),
 			changefeedID,
 		)
 		if err != nil {

@@ -71,7 +71,8 @@ const (
 	// BackoffMaxDelay indicates the max delay time for retrying.
 	BackoffMaxDelay = 60 * time.Second
 
-	defaultBatchDMLEnable = true
+	defaultBatchDMLEnable  = true
+	defaultMultiStmtEnable = true
 
 	// defaultcachePrepStmts is the default value of cachePrepStmts
 	defaultCachePrepStmts = true
@@ -102,6 +103,7 @@ type Config struct {
 	IsTiDB            bool // IsTiDB is true if the downstream is TiDB
 	SourceID          uint64
 	BatchDMLEnable    bool
+	MultiStmtEnable   bool
 	CachePrepStmts    bool
 	PrepStmtCacheSize int
 }
@@ -119,6 +121,7 @@ func NewConfig() *Config {
 		DialTimeout:            defaultDialTimeout,
 		SafeMode:               defaultSafeMode,
 		BatchDMLEnable:         defaultBatchDMLEnable,
+		MultiStmtEnable:        defaultMultiStmtEnable,
 		CachePrepStmts:         defaultCachePrepStmts,
 		PrepStmtCacheSize:      defaultPrepStmtCacheSize,
 	}
@@ -174,6 +177,9 @@ func (c *Config) Apply(
 		return err
 	}
 	if err = getBatchDMLEnable(query, &c.BatchDMLEnable); err != nil {
+		return err
+	}
+	if err = getMultiStmtEnable(query, &c.MultiStmtEnable); err != nil {
 		return err
 	}
 	if err = getCachePrepStmts(query, &c.CachePrepStmts); err != nil {
@@ -381,6 +387,18 @@ func getBatchDMLEnable(values url.Values, batchDMLEnable *bool) error {
 			return cerror.WrapError(cerror.ErrMySQLInvalidConfig, err)
 		}
 		*batchDMLEnable = enable
+	}
+	return nil
+}
+
+func getMultiStmtEnable(values url.Values, multiStmtEnable *bool) error {
+	s := values.Get("multi-stmt-enable")
+	if len(s) > 0 {
+		enable, err := strconv.ParseBool(s)
+		if err != nil {
+			return cerror.WrapError(cerror.ErrMySQLInvalidConfig, err)
+		}
+		*multiStmtEnable = enable
 	}
 	return nil
 }
