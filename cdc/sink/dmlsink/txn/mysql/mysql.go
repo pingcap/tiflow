@@ -18,6 +18,7 @@ import (
 	"database/sql"
 	"database/sql/driver"
 	"fmt"
+	"math"
 	"net/url"
 	"time"
 
@@ -65,9 +66,11 @@ type mysqlBackend struct {
 	events []*dmlsink.TxnCallbackableEvent
 	rows   int
 
-	statistics                    *metrics.Statistics
-	metricTxnSinkDMLBatchCommit   prometheus.Observer
-	metricTxnSinkDMLBatchCallback prometheus.Observer
+	statistics                      *metrics.Statistics
+	metricTxnSinkDMLBatchCommit     prometheus.Observer
+	metricTxnSinkDMLBatchCallback   prometheus.Observer
+	metricTxnPrepareStatementErrors prometheus.Counter
+
 	// implement stmtCache to improve performance, especially when the downstream is TiDB
 	stmtCache *lru.Cache
 	// Indicate if the CachePrepStmts should be enabled or not
@@ -130,6 +133,10 @@ func NewMySQLBackends(
 		if err != nil {
 			return nil, err
 		}
+		if maxPreparedStmtCount == -1 {
+			// NOTE: seems TiDB doesn't follow MySQL's specification.
+			maxPreparedStmtCount = math.MaxInt
+		}
 		// if maxPreparedStmtCount == 0,
 		// it means that the prepared statement cache is disabled on serverside.
 		// if maxPreparedStmtCount/(cfg.WorkerCount+1) == 0, for each single connection,
@@ -161,10 +168,11 @@ func NewMySQLBackends(
 			dmlMaxRetry: defaultDMLMaxRetry,
 			statistics:  statistics,
 
-			metricTxnSinkDMLBatchCommit:   txn.SinkDMLBatchCommit.WithLabelValues(changefeedID.Namespace, changefeedID.ID),
-			metricTxnSinkDMLBatchCallback: txn.SinkDMLBatchCallback.WithLabelValues(changefeedID.Namespace, changefeedID.ID),
-			stmtCache:                     stmtCache,
-			cachePrepStmts:                cachePrepStmts,
+			metricTxnSinkDMLBatchCommit:     txn.SinkDMLBatchCommit.WithLabelValues(changefeedID.Namespace, changefeedID.ID),
+			metricTxnSinkDMLBatchCallback:   txn.SinkDMLBatchCallback.WithLabelValues(changefeedID.Namespace, changefeedID.ID),
+			metricTxnPrepareStatementErrors: txn.PrepareStatementErrors.WithLabelValues(changefeedID.Namespace, changefeedID.ID),
+			stmtCache:                       stmtCache,
+			cachePrepStmts:                  cachePrepStmts,
 		})
 	}
 
@@ -662,7 +670,10 @@ func (s *mysqlBackend) sequenceExecute(
 				prepStmt = stmt
 				s.stmtCache.Add(query, stmt)
 			} else {
+				// Generally it means the downstream database doesn't allow
+				// too many preapred statements. So clean some of them.
 				s.stmtCache.RemoveOldest()
+				s.metricTxnPrepareStatementErrors.Inc()
 			}
 		}
 

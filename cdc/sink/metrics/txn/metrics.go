@@ -79,6 +79,14 @@ var (
 			Help:      "Duration of execuing a batch of callbacks",
 			Buckets:   prometheus.ExponentialBuckets(0.01, 2, 18), // 10ms~1300s
 		}, []string{"namespace", "changefeed"})
+
+	PrepareStatementErrors = prometheus.NewCounterVec(
+		prometheus.CounterOpts{
+			Namespace: "ticdc",
+			Subsystem: "sink",
+			Name:      "txn_prepare_statement_errors",
+			Help:      "Prepare statement errors",
+		}, []string{"namespace", "changefeed"})
 )
 
 // InitMetrics registers all metrics in this file.
@@ -90,4 +98,5 @@ func InitMetrics(registry *prometheus.Registry) {
 	registry.MustRegister(WorkerHandledRows)
 	registry.MustRegister(SinkDMLBatchCommit)
 	registry.MustRegister(SinkDMLBatchCallback)
+	registry.MustRegister(PrepareStatementErrors)
 }
