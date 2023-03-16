@@ -9,7 +9,7 @@ check-struct-only = false
 [task]
     output-dir = "/tmp/engine_test/output"
 
-    source-instances = ["mysql1"]
+    source-instances = ["mysql1", "mysql2"]
 
     target-instance = "tidb0"
 
@@ -19,6 +19,12 @@ check-struct-only = false
 [data-sources.mysql1]
 host = "127.0.0.1"
 port = 3306
+user = "root"
+password = ""
+
+[data-sources.mysql2]
+host = "127.0.0.1"
+port = 3307
 user = "root"
 password = ""
 

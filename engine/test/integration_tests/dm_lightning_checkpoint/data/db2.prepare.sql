@@ -5,7 +5,7 @@ grant all privileges on *.* to 'dm_full2'@'%';
 flush privileges;
 
 drop database if exists `dm_full2`;
-create database `dm_full2`;
+create database `dm_full2` CHARACTER SET = utf8mb4 COLLATE = utf8mb4_bin;
 use `dm_full2`;
 create table t1 (
     id int,

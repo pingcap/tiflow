@@ -17,16 +17,20 @@ function run() {
 
 	# prepare MySQL global variables and data
 	run_sql_file --port 3306 $CUR_DIR/data/db1.prepare.sql
+	run_sql_file --port 3307 $CUR_DIR/data/db2.prepare.sql
 
 	# create job & wait for job finished
 	job_id=$(create_job "DM" "$CUR_DIR/conf/job.yaml" "checkpoint")
-	exec_with_retry --count 30 "curl \"http://127.0.0.1:10245/api/v1/jobs/$job_id/status\" | tee /dev/stderr | jq -e '.task_status.\"mysql-01\".status.unit == \"DMLoadTask\"'"
-	exec_with_retry --count 30 'run_sql --port 4000 "show databases;" | grep -q "checkpoint"'
-	# restart executor to test loader failover
-	docker restart server-executor-0 server-executor-1 server-executor-2
-	exec_with_retry --count 100 "curl \"http://127.0.0.1:10245/api/v1/jobs/$job_id\" | tee /dev/stderr | jq -e '.state == \"Finished\"'"
+	job_id2=$(create_job "DM" "$CUR_DIR/conf/job2.yaml" "checkpoint2")
+	exec_with_retry --count 30 "curl \"http://127.0.0.1:10245/api/v1/jobs/$job_id/status\" | tee /dev/stderr | jq -e '.task_status.\"mysql-01\".status.unit == \"DMLoadTask\"'" &
+	exec_with_retry --count 30 "curl \"http://127.0.0.1:10245/api/v1/jobs/$job_id2/status\" | tee /dev/stderr | jq -e '.task_status.\"mysql-02\".status.unit == \"DMLoadTask\"'"
+	exec_with_retry --count 30 'run_sql --port 4000 "show databases;" | grep -q "checkpoint"' 
+	exec_with_retry --count 30 'run_sql --port 4000 "show databases;" | grep -q "checkpoint2"'
+	exec_with_retry --count 100 "curl \"http://127.0.0.1:10245/api/v1/jobs/$job_id\" | tee /dev/stderr | jq -e '.state == \"Finished\"'" &
+	exec_with_retry --count 100 "curl \"http://127.0.0.1:10245/api/v1/jobs/$job_id2\" | tee /dev/stderr | jq -e '.state == \"Finished\"'"
 	# clean the lighting checkpoint in downstream after job is finished
 	exec_with_retry --count 30 '! run_sql --port 4000 "show databases;" | grep -q "checkpoint"'
+	exec_with_retry --count 30 '! run_sql --port 4000 "show databases;" | grep -q "checkpoint2"'
 
 	# check data
 	check_sync_diff $WORK_DIR $CUR_DIR/conf/diff_config.toml
