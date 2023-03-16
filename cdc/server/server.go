@@ -16,7 +16,6 @@ package server
 import (
 	"context"
 	"fmt"
-	"io"
 	"net"
 	"net/http"
 	"os"
@@ -35,6 +34,7 @@ import (
 	cerror "github.com/pingcap/tiflow/pkg/errors"
 	"github.com/pingcap/tiflow/pkg/etcd"
 	"github.com/pingcap/tiflow/pkg/fsutil"
+	clogutil "github.com/pingcap/tiflow/pkg/logutil"
 	"github.com/pingcap/tiflow/pkg/p2p"
 	"github.com/pingcap/tiflow/pkg/pdutil"
 	"github.com/pingcap/tiflow/pkg/tcpserver"
@@ -135,42 +135,41 @@ func (s *server) prepare(ctx context.Context) error {
 	logConfig := logutil.DefaultZapLoggerConfig
 	logConfig.Level = zap.NewAtomicLevelAt(zapcore.ErrorLevel)
 
-	createEtcdClient := func() (etcd.CDCEtcdClient, error) {
-		etcdCli, err := clientv3.New(clientv3.Config{
-			Endpoints:   s.pdEndpoints,
-			TLS:         tlsConfig,
-			LogConfig:   &logConfig,
-			DialTimeout: 5 * time.Second,
-			DialOptions: []grpc.DialOption{
-				grpcTLSOption,
-				grpc.WithBlock(),
-				grpc.WithConnectParams(grpc.ConnectParams{
-					Backoff: backoff.Config{
-						BaseDelay:  time.Second,
-						Multiplier: 1.1,
-						Jitter:     0.1,
-						MaxDelay:   3 * time.Second,
-					},
-					MinConnectTimeout: 3 * time.Second,
-				}),
-			},
-		})
-		if err != nil {
-			return nil, cerror.WrapError(cerror.ErrNewCaptureFailed, err)
-		}
-		cdcEtcdClient, err := etcd.NewCDCEtcdClient(ctx, etcdCli, conf.ClusterID)
-		if err != nil {
-			etcdCli.Close()
-			return nil, cerror.WrapError(cerror.ErrNewCaptureFailed, err)
-		}
-		return cdcEtcdClient, nil
-	}
-
-	cdcEtcdClient, err := createEtcdClient()
+	// we do not pass a `context` to the etcd client,
+	// to prevent it's cancelled when the server is closing.
+	// For example, when the non-owner node goes offline,
+	// it would resign the campaign key which was put by call `campaign`,
+	// if this is not done due to the passed context cancelled,
+	// the key will be kept for the lease TTL, which is 10 seconds,
+	// then cause the new owner cannot be elected immediately after the old owner offline.
+	// see https://github.com/etcd-io/etcd/blob/525d53bd41/client/v3/concurrency/election.go#L98
+	etcdCli, err := clientv3.New(clientv3.Config{
+		Endpoints:   s.pdEndpoints,
+		TLS:         tlsConfig,
+		LogConfig:   &logConfig,
+		DialTimeout: 5 * time.Second,
+		DialOptions: []grpc.DialOption{
+			grpcTLSOption,
+			grpc.WithBlock(),
+			grpc.WithConnectParams(grpc.ConnectParams{
+				Backoff: backoff.Config{
+					BaseDelay:  time.Second,
+					Multiplier: 1.1,
+					Jitter:     0.1,
+					MaxDelay:   3 * time.Second,
+				},
+				MinConnectTimeout: 3 * time.Second,
+			}),
+		},
+	})
 	if err != nil {
 		return cerror.WrapError(cerror.ErrNewCaptureFailed, err)
 	}
 
+	cdcEtcdClient, err := etcd.NewCDCEtcdClient(ctx, etcdCli, conf.ClusterID)
+	if err != nil {
+		return cerror.WrapError(cerror.ErrNewCaptureFailed, err)
+	}
 	s.etcdClient = cdcEtcdClient
 
 	err = s.initDir(ctx)
@@ -183,8 +182,7 @@ func (s *server) prepare(ctx context.Context) error {
 	}
 
 	s.capture = capture.NewCapture(
-		s.pdEndpoints, createEtcdClient, s.grpcService,
-		s.sortEngineFactory)
+		s.pdEndpoints, cdcEtcdClient, s.grpcService, s.sortEngineFactory)
 
 	return nil
 }
@@ -238,11 +236,11 @@ func (s *server) startStatusHTTP(lis net.Listener) error {
 	lis = netutil.LimitListener(lis, maxHTTPConnection)
 	conf := config.GetGlobalServerConfig()
 
-	// discard gin log output
-	gin.DefaultWriter = io.Discard
+	logWritter := clogutil.InitGinLogWritter()
 	router := gin.New()
-	// add gin.Recovery() to handle unexpected panic
-	router.Use(gin.Recovery())
+	// add gin.RecoveryWithWriter() to handle unexpected panic (logging and
+	// returning status code 500)
+	router.Use(gin.RecoveryWithWriter(logWritter))
 	// router.
 	// Register APIs.
 	cdc.RegisterRoutes(router, s.capture, registry)
