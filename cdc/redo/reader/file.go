@@ -224,7 +224,8 @@ func readAllFromBuffer(buf []byte) (logHeap, error) {
 	return h, nil
 }
 
-// sortAndWriteFile if not safely closed, the sorted file will end up with .sort.tmp as the file name suffix
+// sortAndWriteFile read file from external storage, then sort the file and write
+// to local storage.
 func sortAndWriteFile(
 	egCtx context.Context,
 	extStorage storage.ExternalStorage,
