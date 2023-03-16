@@ -975,7 +975,7 @@ func TestHandleKey(t *testing.T) {
 		}
 	}
 
-	// unique key is handleKey
+	// has no handleKey
 	tb3, ok := snap.TableByName("test", "simple_test3")
 	require.True(t, ok)
 	require.Equal(t, int64(-2), tb3.HandleIndexID)
