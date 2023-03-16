@@ -74,7 +74,8 @@ message TableBarrier {
         (gogoproto.customname) = "TableID"
     ];
     // The barrier timestamp of the table.
-    uint64 barrier_ts = 2;
+    uint64 barrier_ts = 2 [
+        (gogoproto.casttype) = "github.com/pingcap/tiflow/cdc/processor/tablepb.Ts"];
 }
 
 // Barrier contains the barrierTs of those tables that have

@@ -91,8 +91,7 @@ func (sm *Manager) Schedule(
 			log.Info("schedulerv3: new schedule task",
 				zap.String("namespace", sm.changefeedID.Namespace),
 				zap.String("changefeed", sm.changefeedID.ID),
-				zap.Int("taskNumber", len(tasks)),
-				zap.Any("task", tasks),
+				zap.Int("task", len(tasks)),
 				zap.String("scheduler", scheduler.Name()))
 			return tasks
 		}
