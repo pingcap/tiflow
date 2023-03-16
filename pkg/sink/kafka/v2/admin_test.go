@@ -468,8 +468,7 @@ func TestCreateTopic(t *testing.T) {
 	require.NoError(t, err)
 }
 
-type fr struct {
-}
+type fr struct{}
 
 func (f fr) RoundTrip(context.Context, net.Addr, kafka.Request) (kafka.Response, error) {
 	return nil, nil
@@ -492,14 +491,16 @@ func TestAdminClose(t *testing.T) {
 	ad = &admin{
 		client: &kafka.Client{
 			Transport: &kafka.Transport{
-				SASL: plain.Mechanism{}},
+				SASL: plain.Mechanism{},
+			},
 		},
 	}
 	ad.Close()
 	ad = &admin{
 		client: &kafka.Client{
 			Transport: &kafka.Transport{
-				SASL: mechanism{client: client}},
+				SASL: mechanism{client: client},
+			},
 		},
 	}
 	client.EXPECT().Destroy()
