@@ -97,11 +97,6 @@ func NewAvroSchemaManager(
 		)
 	}
 
-	log.Info(
-		"Successfully tested connectivity to Schema Registry",
-		zap.String("registryURL", registryURL),
-	)
-
 	return &schemaManager{
 		registryURL:   registryURL,
 		cache:         make(map[string]*schemaCacheEntry, 1),
@@ -112,7 +107,7 @@ func NewAvroSchemaManager(
 // Register a schema in schema registry, no cache
 func (m *schemaManager) Register(
 	ctx context.Context,
-	topicName string,
+	key string,
 	codec *goavro.Codec,
 ) (int, error) {
 	// The Schema Registry expects the JSON to be without newline characters
@@ -130,9 +125,7 @@ func (m *schemaManager) Register(
 		log.Error("Could not marshal request to the Registry", zap.Error(err))
 		return 0, cerror.WrapError(cerror.ErrAvroSchemaAPIError, err)
 	}
-	uri := m.registryURL + "/subjects/" + url.QueryEscape(
-		m.topicNameToSchemaSubject(topicName),
-	) + "/versions"
+	uri := m.registryURL + "/subjects/" + url.QueryEscape(key) + "/versions"
 	log.Info("Registering schema", zap.String("uri", uri), zap.ByteString("payload", payload))
 
 	req, err := http.NewRequestWithContext(ctx, "POST", uri, bytes.NewReader(payload))
@@ -332,20 +325,25 @@ func (m *schemaManager) GetCachedOrRegister(
 
 	codec, err := goavro.NewCodec(schema)
 	if err != nil {
-		log.Error("GetCachedOrRegister: Could not make goavro codec", zap.Error(err))
+		log.Error("GetCachedOrRegister: Could not make goavro codec",
+			zap.String("key", key),
+			zap.Error(err))
 		return nil, 0, cerror.WrapError(cerror.ErrAvroSchemaAPIError, err)
 	}
 
-	id, err := m.Register(ctx, topicName, codec)
+	id, err := m.Register(ctx, key, codec)
 	if err != nil {
-		log.Error("GetCachedOrRegister: Could not register schema", zap.Error(err))
+		log.Error("GetCachedOrRegister: Could not register schema",
+			zap.String("key", key),
+			zap.Error(err))
 		return nil, 0, errors.Trace(err)
 	}
 
-	cacheEntry := new(schemaCacheEntry)
-	cacheEntry.codec = codec
-	cacheEntry.registryID = id
-	cacheEntry.tiSchemaID = tiSchemaID
+	cacheEntry := &schemaCacheEntry{
+		tiSchemaID: tiSchemaID,
+		registryID: id,
+		codec:      codec,
+	}
 
 	m.cacheRWLock.Lock()
 	m.cache[key] = cacheEntry
