@@ -825,6 +825,9 @@ func TestAvroEncode(t *testing.T) {
 		if k == "_tidb_op" {
 			require.Equal(t, "c", v.(string))
 		}
+		if k == "float" {
+			require.Equal(t, float32(3.14), v)
+		}
 	}
 }
 
