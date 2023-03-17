@@ -206,12 +206,12 @@ func (t *tableSinkWrapper) getState() tablepb.TableState {
 // 1. the resolved ts of the sorter
 // 2. the barrier ts of the table
 func (t *tableSinkWrapper) getUpperBoundTs() model.Ts {
-	res := t.getReceivedSorterResolvedTs()
+	resolvedTs := t.getReceivedSorterResolvedTs()
 	barrierTs := t.barrierTs.Load()
-	if res > barrierTs {
-		res = barrierTs
+	if resolvedTs > barrierTs {
+		resolvedTs = barrierTs
 	}
-	return res
+	return resolvedTs
 }
 
 func (t *tableSinkWrapper) close(ctx context.Context) {

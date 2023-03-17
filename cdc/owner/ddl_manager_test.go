@@ -15,6 +15,7 @@ package owner
 
 import (
 	"encoding/json"
+	"fmt"
 	"testing"
 
 	timodel "github.com/pingcap/tidb/parser/model"
@@ -93,13 +94,13 @@ func TestBarriers(t *testing.T) {
 	dm.justSentDDL = newFakeDDLEvent(tableID1,
 		"test_1", timodel.ActionDropColumn, 1)
 	dm.pendingDDLs[tableName1] = append(dm.pendingDDLs[tableName1],
-		newFakeDDLEvent(tableID1, "test_1", timodel.ActionAddColumn, 2))
+		newFakeDDLEvent(tableID1, tableName1.Table, timodel.ActionAddColumn, 2))
 
 	tableID2 := int64(2)
 	tableName2 := model.TableName{Table: "test_2", TableID: tableID2}
 	dm.pendingDDLs[tableName2] = append(dm.pendingDDLs[tableName2],
 		// this ddl commitTs will become globalBarrierTs
-		newFakeDDLEvent(tableID2, "test_2", timodel.ActionCreateTable, 4))
+		newFakeDDLEvent(tableID2, tableName2.Table, timodel.ActionCreateTable, 4))
 
 	expectedMinTableBarrier := uint64(1)
 	expectedBarrier := &schedulepb.Barrier{
@@ -116,6 +117,20 @@ func TestBarriers(t *testing.T) {
 	minTableBarrierTs, barrier := dm.barrier()
 	require.Equal(t, expectedMinTableBarrier, minTableBarrierTs)
 	require.Equal(t, expectedBarrier, barrier)
+
+	// test tableBarrier limit
+	dm.pendingDDLs = make(map[model.TableName][]*model.DDLEvent)
+	dm.ddlResolvedTs = 1024
+	for i := 0; i < 512; i++ {
+		tableID := int64(i)
+		tableName := model.TableName{Table: fmt.Sprintf("test_%d", i), TableID: tableID}
+		dm.pendingDDLs[tableName] = append(dm.pendingDDLs[tableName],
+			newFakeDDLEvent(tableID, tableName.Table, timodel.ActionAddColumn, uint64(i)))
+	}
+	minTableBarrierTs, barrier = dm.barrier()
+	require.Equal(t, uint64(0), minTableBarrierTs)
+	require.Equal(t, uint64(256), barrier.GlobalBarrierTs)
+	require.Equal(t, 256, len(barrier.TableBarriers))
 }
 
 func TestGetSnapshotTs(t *testing.T) {

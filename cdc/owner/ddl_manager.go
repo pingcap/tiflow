@@ -15,6 +15,7 @@ package owner
 
 import (
 	"context"
+	"sort"
 	"time"
 
 	"github.com/pingcap/errors"
@@ -27,6 +28,10 @@ import (
 	"github.com/pingcap/tiflow/cdc/scheduler/schedulepb"
 	"go.uber.org/zap"
 )
+
+// tableBarrierNumberLimit is used to limit the number
+// of tableBarrier in a single barrier.
+const tableBarrierNumberLimit = 256
 
 // globalDDLs is the DDLs that affect all tables in the changefeed.
 // we need to wait all tables checkpointTs reach the DDL commitTs
@@ -396,6 +401,16 @@ func (m *ddlManager) barrier() (model.Ts, *schedulepb.Barrier) {
 			TableID:   tb,
 			BarrierTs: barrierTs,
 		})
+	}
+
+	// Limit the tableBarrier size to avoid too large barrier. Since it will
+	// cause the scheduler to be slow.
+	sort.Slice(tableBarrier, func(i, j int) bool {
+		return tableBarrier[i].BarrierTs < tableBarrier[j].BarrierTs
+	})
+	if len(tableBarrier) > tableBarrierNumberLimit {
+		globalBarrierTs = tableBarrier[tableBarrierNumberLimit].BarrierTs
+		tableBarrier = tableBarrier[:tableBarrierNumberLimit]
 	}
 
 	m.justSentDDL = nil

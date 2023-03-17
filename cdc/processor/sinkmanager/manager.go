@@ -339,16 +339,16 @@ func (m *SinkManager) generateSinkTasks() error {
 	// But receivedSorterResolvedTs can be less than barrierTs, in which case
 	// the table is just scheduled to this node.
 	getUpperBound := func(
-		upperBoundTs model.Ts,
+		tableSinkUpperBoundTs model.Ts,
 	) engine.Position {
 		// If a task carries events after schemaResolvedTs, mounter group threads
 		// can be blocked on waiting schemaResolvedTs get advanced.
 		schemaTs := m.schemaStorage.ResolvedTs()
-		if upperBoundTs-1 > schemaTs {
-			upperBoundTs = schemaTs + 1
+		if tableSinkUpperBoundTs-1 > schemaTs {
+			tableSinkUpperBoundTs = schemaTs + 1
 		}
 
-		return engine.Position{StartTs: upperBoundTs - 1, CommitTs: upperBoundTs}
+		return engine.Position{StartTs: tableSinkUpperBoundTs - 1, CommitTs: tableSinkUpperBoundTs}
 	}
 
 	dispatchTasks := func() error {
@@ -484,15 +484,15 @@ func (m *SinkManager) generateSinkTasks() error {
 
 func (m *SinkManager) generateRedoTasks() error {
 	// We use the table's resolved ts as the upper bound to fetch events.
-	getUpperBound := func(upperBoundTs model.Ts) engine.Position {
+	getUpperBound := func(tableSinkUpperBoundTs model.Ts) engine.Position {
 		// If a task carries events after schemaResolvedTs, mounter group threads
 		// can be blocked on waiting schemaResolvedTs get advanced.
 		schemaTs := m.schemaStorage.ResolvedTs()
-		if upperBoundTs-1 > schemaTs {
-			upperBoundTs = schemaTs + 1
+		if tableSinkUpperBoundTs-1 > schemaTs {
+			tableSinkUpperBoundTs = schemaTs + 1
 		}
 
-		return engine.Position{StartTs: upperBoundTs - 1, CommitTs: upperBoundTs}
+		return engine.Position{StartTs: tableSinkUpperBoundTs - 1, CommitTs: tableSinkUpperBoundTs}
 	}
 
 	dispatchTasks := func() error {
