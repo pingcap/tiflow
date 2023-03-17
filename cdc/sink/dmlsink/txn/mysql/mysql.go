@@ -650,6 +650,8 @@ func (s *mysqlBackend) multiStmtExecute(
 		}
 		multiStmtArgs = append(multiStmtArgs, dmls.values[i]...)
 	}
+	log.Debug("exec row", zap.Int("workerID", s.workerID),
+		zap.String("sql", multiStmtSQL), zap.Any("args", multiStmtArgs))
 	ctx, cancel := context.WithTimeout(ctx, writeTimeout)
 	defer cancel()
 	_, execError := tx.ExecContext(ctx, multiStmtSQL, multiStmtArgs...)
