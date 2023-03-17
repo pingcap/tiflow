@@ -299,6 +299,9 @@ func (s *syncWriter) SendMessages(
 // object passes out of scope, as it may otherwise leak memory.
 // You must call this before calling Close on the underlying client.
 func (s *syncWriter) Close() {
+	log.Info("kafka sync producer start closing",
+		zap.String("namespace", s.changefeedID.Namespace),
+		zap.String("changefeed", s.changefeedID.ID))
 	start := time.Now()
 	if err := s.w.Close(); err != nil {
 		log.Warn("Close kafka sync producer failed",
@@ -328,19 +331,24 @@ type asyncWriter struct {
 // shutting down, or you may lose messages. You must call this before calling
 // Close on the underlying client.
 func (a *asyncWriter) Close() {
-	start := time.Now()
-	if err := a.w.Close(); err != nil {
-		log.Warn("Close kafka async producer failed",
-			zap.String("namespace", a.changefeedID.Namespace),
-			zap.String("changefeed", a.changefeedID.ID),
-			zap.Duration("duration", time.Since(start)),
-			zap.Error(err))
-	} else {
-		log.Info("Close kafka async producer success",
-			zap.String("namespace", a.changefeedID.Namespace),
-			zap.String("changefeed", a.changefeedID.ID),
-			zap.Duration("duration", time.Since(start)))
-	}
+	log.Info("kafka async producer start closing",
+		zap.String("namespace", a.changefeedID.Namespace),
+		zap.String("changefeed", a.changefeedID.ID))
+	go func() {
+		start := time.Now()
+		if err := a.w.Close(); err != nil {
+			log.Warn("Close kafka async producer failed",
+				zap.String("namespace", a.changefeedID.Namespace),
+				zap.String("changefeed", a.changefeedID.ID),
+				zap.Duration("duration", time.Since(start)),
+				zap.Error(err))
+		} else {
+			log.Info("Close kafka async producer success",
+				zap.String("namespace", a.changefeedID.Namespace),
+				zap.String("changefeed", a.changefeedID.ID),
+				zap.Duration("duration", time.Since(start)))
+		}
+	}()
 }
 
 // AsyncSend is the input channel for the user to write messages to that they
