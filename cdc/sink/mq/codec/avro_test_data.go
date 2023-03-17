@@ -241,7 +241,7 @@ var expectedSchemaWithoutExtension = `{
     {
       "name": "float",
       "type": {
-        "type": "double",
+        "type": "float",
         "connect.parameters": {
           "tidb_type": "FLOAT"
         }
@@ -253,7 +253,7 @@ var expectedSchemaWithoutExtension = `{
       "type": [
         "null",
         {
-          "type": "double",
+          "type": "float",
           "connect.parameters": {
             "tidb_type": "FLOAT"
           }
@@ -1053,7 +1053,7 @@ var expectedSchemaWithExtension = `{
     {
       "name": "float",
       "type": {
-        "type": "double",
+        "type": "float",
         "connect.parameters": {
           "tidb_type": "FLOAT"
         }
@@ -1065,7 +1065,7 @@ var expectedSchemaWithExtension = `{
       "type": [
         "null",
         {
-          "type": "double",
+          "type": "float",
           "connect.parameters": {
             "tidb_type": "FLOAT"
           }
