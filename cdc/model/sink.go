@@ -51,6 +51,10 @@ const (
 	// BinaryFlag means the column charset is binary
 	BinaryFlag ColumnFlagType = 1 << ColumnFlagType(iota)
 	// HandleKeyFlag means the column is selected as the handle key
+	// The handleKey is chosen by the following rules:
+	// 1. If the table has a primary key, the handleKey is the first column of the primary key.
+	// 2. If the table has not null unique key, the handleKey is the first column of the unique key.
+	// 3. If the table has no primary key and no not null unique key, it has no handleKey.
 	HandleKeyFlag
 	// GeneratedColumnFlag means the column is a generated column
 	GeneratedColumnFlag

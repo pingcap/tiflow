@@ -15,80 +15,22 @@ package sinkmanager
 
 import (
 	"context"
-	"math"
 	"testing"
 	"time"
 
-	"github.com/pingcap/tiflow/cdc/entry"
 	"github.com/pingcap/tiflow/cdc/model"
-	"github.com/pingcap/tiflow/cdc/processor/sourcemanager"
 	"github.com/pingcap/tiflow/cdc/processor/sourcemanager/engine"
-	"github.com/pingcap/tiflow/cdc/processor/sourcemanager/engine/memory"
 	"github.com/pingcap/tiflow/cdc/processor/tablepb"
 	"github.com/pingcap/tiflow/pkg/config"
 	"github.com/pingcap/tiflow/pkg/spanz"
-	"github.com/pingcap/tiflow/pkg/upstream"
 	"github.com/stretchr/testify/require"
-	pd "github.com/tikv/pd/client"
 )
-
-type mockPD struct {
-	pd.Client
-	ts int64
-}
-
-func (p *mockPD) GetTS(_ context.Context) (int64, int64, error) {
-	if p.ts != 0 {
-		return p.ts, p.ts, nil
-	}
-	return math.MaxInt64, math.MaxInt64, nil
-}
-
-// nolint:revive
-// In test it is ok move the ctx to the second parameter.
-func createManagerWithMemEngine(
-	t *testing.T,
-	ctx context.Context,
-	changefeedID model.ChangeFeedID,
-	changefeedInfo *model.ChangeFeedInfo,
-	errChan chan error,
-) (*SinkManager, engine.SortEngine) {
-	sortEngine := memory.New(context.Background())
-	up := upstream.NewUpstream4Test(&mockPD{})
-	sm := sourcemanager.New(changefeedID, up, &entry.MockMountGroup{}, sortEngine, errChan, false)
-	manager, err := New(
-		ctx, changefeedID, changefeedInfo, up,
-		&entry.MockSchemaStorage{Resolved: math.MaxUint64},
-		nil, sm,
-		errChan)
-	require.NoError(t, err)
-	return manager, sortEngine
-}
 
 func getChangefeedInfo() *model.ChangeFeedInfo {
 	return &model.ChangeFeedInfo{
 		Error:   nil,
 		SinkURI: "blackhole://",
 		Config:  config.GetDefaultReplicaConfig(),
-	}
-}
-
-func genRowChangedEvent(startTs, commitTs uint64, span tablepb.Span) *model.RowChangedEvent {
-	return &model.RowChangedEvent{
-		StartTs:  startTs,
-		CommitTs: commitTs,
-		Table: &model.TableName{
-			Schema:      "table",
-			Table:       "table",
-			TableID:     span.TableID,
-			IsPartition: false,
-		},
-		Columns: []*model.Column{
-			{Name: "a", Value: 2},
-		},
-		PreColumns: []*model.Column{
-			{Name: "a", Value: 1},
-		},
 	}
 }
 
@@ -161,7 +103,8 @@ func TestAddTable(t *testing.T) {
 	defer cancel()
 
 	changefeedInfo := getChangefeedInfo()
-	manager, _ := createManagerWithMemEngine(t, ctx, model.DefaultChangeFeedID("1"), changefeedInfo, make(chan error, 1))
+	manager, _, _ := CreateManagerWithMemEngine(t, ctx, model.DefaultChangeFeedID("1"),
+		changefeedInfo, make(chan error, 1))
 	defer func() {
 		err := manager.Close()
 		require.NoError(t, err)
@@ -189,7 +132,8 @@ func TestRemoveTable(t *testing.T) {
 	defer cancel()
 
 	changefeedInfo := getChangefeedInfo()
-	manager, e := createManagerWithMemEngine(t, ctx, model.DefaultChangeFeedID("1"), changefeedInfo, make(chan error, 1))
+	manager, _, e := CreateManagerWithMemEngine(t, ctx, model.DefaultChangeFeedID("1"),
+		changefeedInfo, make(chan error, 1))
 	defer func() {
 		err := manager.Close()
 		require.NoError(t, err)
@@ -231,7 +175,8 @@ func TestUpdateBarrierTs(t *testing.T) {
 	defer cancel()
 
 	changefeedInfo := getChangefeedInfo()
-	manager, _ := createManagerWithMemEngine(t, ctx, model.DefaultChangeFeedID("1"), changefeedInfo, make(chan error, 1))
+	manager, _, _ := CreateManagerWithMemEngine(t, ctx, model.DefaultChangeFeedID("1"),
+		changefeedInfo, make(chan error, 1))
 	defer func() {
 		err := manager.Close()
 		require.NoError(t, err)
@@ -249,7 +194,8 @@ func TestGenerateTableSinkTaskWithBarrierTs(t *testing.T) {
 	defer cancel()
 
 	changefeedInfo := getChangefeedInfo()
-	manager, e := createManagerWithMemEngine(t, ctx, model.DefaultChangeFeedID("1"), changefeedInfo, make(chan error, 1))
+	manager, _, e := CreateManagerWithMemEngine(t, ctx, model.DefaultChangeFeedID("1"),
+		changefeedInfo, make(chan error, 1))
 	defer func() {
 		err := manager.Close()
 		require.NoError(t, err)
@@ -277,7 +223,8 @@ func TestGenerateTableSinkTaskWithResolvedTs(t *testing.T) {
 	defer cancel()
 
 	changefeedInfo := getChangefeedInfo()
-	manager, e := createManagerWithMemEngine(t, ctx, model.DefaultChangeFeedID("1"), changefeedInfo, make(chan error, 1))
+	manager, _, e := CreateManagerWithMemEngine(t, ctx, model.DefaultChangeFeedID("1"),
+		changefeedInfo, make(chan error, 1))
 	defer func() {
 		err := manager.Close()
 		require.NoError(t, err)
@@ -307,7 +254,8 @@ func TestGetTableStatsToReleaseMemQuota(t *testing.T) {
 	defer cancel()
 
 	changefeedInfo := getChangefeedInfo()
-	manager, e := createManagerWithMemEngine(t, ctx, model.DefaultChangeFeedID("1"), changefeedInfo, make(chan error, 1))
+	manager, _, e := CreateManagerWithMemEngine(t, ctx, model.DefaultChangeFeedID("1"),
+		changefeedInfo, make(chan error, 1))
 	defer func() {
 		err := manager.Close()
 		require.NoError(t, err)
@@ -334,7 +282,8 @@ func TestDoNotGenerateTableSinkTaskWhenTableIsNotReplicating(t *testing.T) {
 	defer cancel()
 
 	changefeedInfo := getChangefeedInfo()
-	manager, e := createManagerWithMemEngine(t, ctx, model.DefaultChangeFeedID("1"), changefeedInfo, make(chan error, 1))
+	manager, _, e := CreateManagerWithMemEngine(t, ctx, model.DefaultChangeFeedID("1"),
+		changefeedInfo, make(chan error, 1))
 	defer func() {
 		err := manager.Close()
 		require.NoError(t, err)
@@ -359,7 +308,8 @@ func TestClose(t *testing.T) {
 	defer cancel()
 
 	changefeedInfo := getChangefeedInfo()
-	manager, _ := createManagerWithMemEngine(t, ctx, model.DefaultChangeFeedID("1"), changefeedInfo, make(chan error, 1))
+	manager, _, _ := CreateManagerWithMemEngine(t, ctx, model.DefaultChangeFeedID("1"),
+		changefeedInfo, make(chan error, 1))
 
 	err := manager.Close()
 	require.NoError(t, err)
@@ -375,7 +325,8 @@ func TestUpdateReceivedSorterResolvedTsOfNonExistTable(t *testing.T) {
 	defer cancel()
 
 	changefeedInfo := getChangefeedInfo()
-	manager, _ := createManagerWithMemEngine(t, ctx, model.DefaultChangeFeedID("1"), changefeedInfo, make(chan error, 1))
+	manager, _, _ := CreateManagerWithMemEngine(t, ctx, model.DefaultChangeFeedID("1"),
+		changefeedInfo, make(chan error, 1))
 	defer func() {
 		err := manager.Close()
 		require.NoError(t, err)

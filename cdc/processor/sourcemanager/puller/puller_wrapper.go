@@ -33,7 +33,19 @@ import (
 )
 
 // Wrapper is a wrapper of puller used by source manager.
-type Wrapper struct {
+type Wrapper interface {
+	Start(
+		ctx cdccontext.Context,
+		up *upstream.Upstream,
+		eventSortEngine engine.SortEngine,
+		errChan chan<- error,
+	)
+	GetStats() puller.Stats
+	Close()
+}
+
+// WrapperImpl is a wrapper of puller used by source manager.
+type WrapperImpl struct {
 	changefeed model.ChangeFeedID
 	span       tablepb.Span
 	tableName  string // quoted schema and table, used in metircs only
@@ -53,8 +65,8 @@ func NewPullerWrapper(
 	tableName string,
 	startTs model.Ts,
 	bdrMode bool,
-) *Wrapper {
-	return &Wrapper{
+) Wrapper {
+	return &WrapperImpl{
 		changefeed: changefeed,
 		span:       span,
 		tableName:  tableName,
@@ -65,7 +77,7 @@ func NewPullerWrapper(
 
 // Start the puller wrapper.
 // We use cdc context to put capture info and role into context.
-func (n *Wrapper) Start(
+func (n *WrapperImpl) Start(
 	ctx cdccontext.Context,
 	up *upstream.Upstream,
 	eventSortEngine engine.SortEngine,
@@ -134,12 +146,12 @@ func (n *Wrapper) Start(
 }
 
 // GetStats returns the puller stats.
-func (n *Wrapper) GetStats() puller.Stats {
+func (n *WrapperImpl) GetStats() puller.Stats {
 	return n.p.Stats()
 }
 
 // Close the puller wrapper.
-func (n *Wrapper) Close() {
+func (n *WrapperImpl) Close() {
 	n.cancel()
 	n.wg.Wait()
 }

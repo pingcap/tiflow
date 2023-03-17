@@ -204,8 +204,8 @@ func newTestCoordinator(cfg *config.SchedulerConfig) (*coordinator, *transport.M
 	coord := newCoordinator("a", model.ChangeFeedID{}, 1, cfg)
 	trans := transport.NewMockTrans()
 	coord.trans = trans
-	coord.reconciler = keyspan.NewReconciler(
-		model.ChangeFeedID{}, keyspan.NewMockRegionCache(), cfg.ChangefeedSettings)
+	coord.reconciler = keyspan.NewReconcilerForTests(
+		keyspan.NewMockRegionCache(), cfg.ChangefeedSettings)
 	return coord, trans
 }
 
@@ -226,7 +226,7 @@ func TestCoordinatorHeartbeat(t *testing.T) {
 	ctx := context.Background()
 	currentTables := []model.TableID{1, 2, 3}
 	aliveCaptures := map[model.CaptureID]*model.CaptureInfo{"a": {}, "b": {}}
-	_, _, err := coord.poll(ctx, 0, currentTables, aliveCaptures)
+	_, _, err := coord.poll(ctx, 0, currentTables, aliveCaptures, nil)
 	require.Nil(t, err)
 	msgs := trans.SendBuffer
 	require.Len(t, msgs, 2)
@@ -258,7 +258,7 @@ func TestCoordinatorHeartbeat(t *testing.T) {
 		},
 	})
 	trans.SendBuffer = []*schedulepb.Message{}
-	_, _, err = coord.poll(ctx, 0, currentTables, aliveCaptures)
+	_, _, err = coord.poll(ctx, 0, currentTables, aliveCaptures, nil)
 	require.Nil(t, err)
 	require.True(t, coord.captureM.CheckAllCaptureInitialized())
 	msgs = trans.SendBuffer
@@ -299,7 +299,7 @@ func TestCoordinatorAddCapture(t *testing.T) {
 	ctx := context.Background()
 	currentTables := []model.TableID{1, 2, 3}
 	aliveCaptures := map[model.CaptureID]*model.CaptureInfo{"a": {}, "b": {}}
-	_, _, err = coord.poll(ctx, 0, currentTables, aliveCaptures)
+	_, _, err = coord.poll(ctx, 0, currentTables, aliveCaptures, nil)
 	require.Nil(t, err)
 	msgs = trans.SendBuffer
 	require.Len(t, msgs, 1)
@@ -315,7 +315,7 @@ func TestCoordinatorAddCapture(t *testing.T) {
 		HeartbeatResponse: &schedulepb.HeartbeatResponse{},
 	})
 	trans.SendBuffer = []*schedulepb.Message{}
-	_, _, err = coord.poll(ctx, 0, currentTables, aliveCaptures)
+	_, _, err = coord.poll(ctx, 0, currentTables, aliveCaptures, nil)
 	require.Nil(t, err)
 	msgs = trans.SendBuffer
 	require.Len(t, msgs, 1)
@@ -356,7 +356,7 @@ func TestCoordinatorRemoveCapture(t *testing.T) {
 	ctx := context.Background()
 	currentTables := []model.TableID{1, 2, 3}
 	aliveCaptures := map[model.CaptureID]*model.CaptureInfo{"a": {}, "b": {}}
-	_, _, err = coord.poll(ctx, 0, currentTables, aliveCaptures)
+	_, _, err = coord.poll(ctx, 0, currentTables, aliveCaptures, nil)
 	require.Nil(t, err)
 	msgs = trans.SendBuffer
 	require.Len(t, msgs, 1)
@@ -431,7 +431,7 @@ func TestCoordinatorAdvanceCheckpoint(t *testing.T) {
 	ctx := context.Background()
 	currentTables := []model.TableID{1, 2}
 	aliveCaptures := map[model.CaptureID]*model.CaptureInfo{"a": {}, "b": {}}
-	_, _, err := coord.poll(ctx, 0, currentTables, aliveCaptures)
+	_, _, err := coord.poll(ctx, 0, currentTables, aliveCaptures, nil)
 	require.Nil(t, err)
 
 	// Initialize captures.
@@ -470,7 +470,7 @@ func TestCoordinatorAdvanceCheckpoint(t *testing.T) {
 			},
 		},
 	})
-	cts, rts, err := coord.poll(ctx, 0, currentTables, aliveCaptures)
+	cts, rts, err := coord.poll(ctx, 0, currentTables, aliveCaptures, nil)
 	require.Nil(t, err)
 	require.True(t, coord.captureM.CheckAllCaptureInitialized())
 	require.EqualValues(t, 2, cts)
@@ -505,7 +505,7 @@ func TestCoordinatorAdvanceCheckpoint(t *testing.T) {
 			},
 		},
 	})
-	cts, rts, err = coord.poll(ctx, 0, currentTables, aliveCaptures)
+	cts, rts, err = coord.poll(ctx, 0, currentTables, aliveCaptures, nil)
 	require.Nil(t, err)
 	require.False(t, coord.captureM.CheckAllCaptureInitialized())
 	require.EqualValues(t, 3, cts)

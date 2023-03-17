@@ -21,6 +21,7 @@ import (
 	"os"
 	"path/filepath"
 	"sync"
+	"time"
 
 	"github.com/pingcap/log"
 	"github.com/pingcap/tiflow/cdc/model"
@@ -28,6 +29,7 @@ import (
 	"github.com/pingcap/tiflow/pkg/errors"
 	"github.com/pingcap/tiflow/pkg/redo"
 	"github.com/pingcap/tiflow/pkg/sink/mysql"
+	"github.com/pingcap/tiflow/pkg/util"
 	"go.uber.org/multierr"
 	"go.uber.org/zap"
 	"golang.org/x/sync/errgroup"
@@ -36,6 +38,8 @@ import (
 const (
 	emitBatch             = mysql.DefaultMaxTxnRow
 	defaultReaderChanSize = mysql.DefaultWorkerCount * emitBatch
+	maxTotalMemoryUsage   = 90.0
+	maxWaitDuration       = time.Minute * 2
 )
 
 // RedoLogReader is a reader abstraction for redo log storage layer
@@ -231,6 +235,11 @@ func (l *LogReader) runReader(egCtx context.Context, cfg *readerConfig) error {
 				case l.rowCh <- row:
 				}
 			}
+			err := util.WaitMemoryAvailable(maxTotalMemoryUsage, maxWaitDuration)
+			if err != nil {
+				return errors.Trace(err)
+			}
+
 		case redo.RedoDDLLogFileType:
 			ddl := item.data.RedoDDL.DDL
 			if ddl != nil && ddl.CommitTs > cfg.startTs && ddl.CommitTs <= cfg.endTs {

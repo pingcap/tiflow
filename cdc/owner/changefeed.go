@@ -56,8 +56,7 @@ func newSchedulerFromCtx(
 	ownerRev := ctx.GlobalVars().OwnerRevision
 	captureID := ctx.GlobalVars().CaptureInfo.ID
 	ret, err = scheduler.NewScheduler(
-		ctx, captureID, changeFeedID,
-		messageServer, messageRouter, ownerRev, epoch, up.RegionCache, up.PDClock, cfg)
+		ctx, captureID, changeFeedID, messageServer, messageRouter, ownerRev, epoch, up, cfg)
 	return ret, errors.Trace(err)
 }
 
@@ -334,7 +333,7 @@ func (c *changefeed) tick(ctx cdcContext.Context, captures map[model.CaptureID]*
 
 	startTime := time.Now()
 	newCheckpointTs, newResolvedTs, err := c.scheduler.Tick(
-		ctx, c.state.Status.CheckpointTs, c.schema.AllPhysicalTables(), captures)
+		ctx, c.state.Status.CheckpointTs, c.schema.AllPhysicalTables(), captures, nil)
 	// metricsResolvedTs to store the min resolved ts among all tables and show it in metrics
 	metricsResolvedTs := newResolvedTs
 	costTime := time.Since(startTime)

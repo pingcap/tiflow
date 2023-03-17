@@ -23,9 +23,8 @@ import (
 	"github.com/pingcap/tiflow/pkg/config"
 	"github.com/pingcap/tiflow/pkg/etcd"
 	"github.com/pingcap/tiflow/pkg/p2p"
-	"github.com/pingcap/tiflow/pkg/pdutil"
+	"github.com/pingcap/tiflow/pkg/upstream"
 	"github.com/prometheus/client_golang/prometheus"
-	"github.com/tikv/client-go/v2/tikv"
 )
 
 // TableExecutor is an abstraction for "Processor".
@@ -87,13 +86,12 @@ func NewScheduler(
 	messageRouter p2p.MessageRouter,
 	ownerRevision int64,
 	changefeedEpoch uint64,
-	regionCache *tikv.RegionCache,
-	pdClock pdutil.Clock,
+	up *upstream.Upstream,
 	cfg *config.SchedulerConfig,
 ) (Scheduler, error) {
 	return v3.NewCoordinator(
 		ctx, captureID, changeFeedID, messageServer, messageRouter, ownerRevision,
-		changefeedEpoch, regionCache, pdClock, cfg)
+		changefeedEpoch, up, cfg)
 }
 
 // InitMetrics registers all metrics used in scheduler
