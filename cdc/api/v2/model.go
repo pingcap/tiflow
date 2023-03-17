@@ -291,6 +291,7 @@ func (c *ReplicaConfig) toInternalReplicaConfigWithOriginConfig(
 		res.Scheduler = &config.ChangefeedSchedulerConfig{
 			EnableTableAcrossNodes: c.Scheduler.EnableTableAcrossNodes,
 			RegionThreshold:        c.Scheduler.RegionThreshold,
+			WriteKeyThreshold:      c.Scheduler.WriteKeyThreshold,
 		}
 	}
 	return res
@@ -410,6 +411,7 @@ func ToAPIReplicaConfig(c *config.ReplicaConfig) *ReplicaConfig {
 		res.Scheduler = &ChangefeedSchedulerConfig{
 			EnableTableAcrossNodes: cloned.Scheduler.EnableTableAcrossNodes,
 			RegionThreshold:        cloned.Scheduler.RegionThreshold,
+			WriteKeyThreshold:      cloned.Scheduler.WriteKeyThreshold,
 		}
 	}
 	return res
@@ -569,6 +571,8 @@ type ChangefeedSchedulerConfig struct {
 	EnableTableAcrossNodes bool `toml:"enable_table_across_nodes" json:"enable_table_across_nodes"`
 	// RegionThreshold is the region count threshold of splitting a table.
 	RegionThreshold int `toml:"region_threshold" json:"region_threshold"`
+	// WriteKeyThreshold is the written keys threshold of splitting a table.
+	WriteKeyThreshold int `toml:"write_key_threshold" json:"write_key_threshold"`
 }
 
 // EtcdData contains key/value pair of etcd data

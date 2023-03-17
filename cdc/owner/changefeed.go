@@ -165,7 +165,6 @@ func newChangefeed(
 		newDDLPuller:          puller.NewDDLPuller,
 		newSink:               newDDLSink,
 		newDownstreamObserver: observer.NewObserver,
-		// isFirstTick:           true,
 	}
 	c.newScheduler = newScheduler
 	c.cfg = cfg

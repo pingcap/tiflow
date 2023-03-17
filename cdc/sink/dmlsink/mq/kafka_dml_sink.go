@@ -62,7 +62,7 @@ func NewKafkaDMLSink(
 	// We must close adminClient when this func return cause by an error
 	// otherwise the adminClient will never be closed and lead to a goroutine leak.
 	defer func() {
-		if err != nil {
+		if err != nil && adminClient != nil {
 			adminClient.Close()
 		}
 	}()
@@ -86,7 +86,7 @@ func NewKafkaDMLSink(
 	// Preventing leaks when error occurs.
 	// This also closes the client in p.Close().
 	defer func() {
-		if err != nil {
+		if err != nil && p != nil {
 			p.Close()
 		}
 	}()

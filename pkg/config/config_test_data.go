@@ -201,7 +201,8 @@ const (
   "scheduler": {
     "enable-table-across-nodes": true,
     "region-per-span": 0,
-    "region-threshold": 100001
+    "region-threshold": 100001,
+    "write-key-threshold": 100001
   }
 }`
 
@@ -258,7 +259,8 @@ const (
   },
   "scheduler": {
     "enable-table-across-nodes": true,
-    "region-threshold": 100001
+    "region-threshold": 100001,
+    "write-key-threshold": 100001
   }
 }`
 )

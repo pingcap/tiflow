@@ -421,8 +421,7 @@ func (m *ddlManager) allTables(ctx context.Context) ([]*model.TableInfo, error) 
 	log.Debug("changefeed current tables updated",
 		zap.String("namespace", m.changfeedID.Namespace),
 		zap.String("changefeed", m.changfeedID.ID),
-		zap.Uint64("checkpointTs", m.checkpointTs),
-		zap.Uint64("snapshotTs", ts),
+		zap.Uint64("checkpointTs", ts),
 		zap.Any("tables", m.tableInfoCache),
 	)
 	return m.tableInfoCache, nil
@@ -477,13 +476,17 @@ func (m *ddlManager) getSnapshotTs() (ts uint64) {
 
 	if m.BDRMode {
 		ts = m.ddlResolvedTs
-		log.Debug("changefeed is in BDR mode, use ddlResolvedTs to get snapshot",
-			zap.String("namespace", m.changfeedID.Namespace),
-			zap.String("changefeed", m.changfeedID.ID),
-			zap.Uint64("checkpointTs", m.checkpointTs),
-			zap.Uint64("snapshotTs", ts))
 	}
-	return
+
+	if m.checkpointTs == m.startTs+1 {
+		// If checkpointTs is equal to startTs+1, it means that the changefeed
+		// is just started, and the physicalTablesCache is empty. So we need to
+		// get all tables from the snapshot at the startTs.
+		ts = m.startTs
+	}
+
+	log.Debug("snapshotTs", zap.Uint64("ts", ts))
+	return ts
 }
 
 // cleanCache cleans the tableInfoCache and physicalTablesCache.
