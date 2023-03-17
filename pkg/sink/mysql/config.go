@@ -73,7 +73,15 @@ const (
 	// BackoffMaxDelay indicates the max delay time for retrying.
 	BackoffMaxDelay = 60 * time.Second
 
+<<<<<<< HEAD
 	defaultBatchDMLEnable = true
+=======
+	defaultBatchDMLEnable  = true
+	defaultMultiStmtEnable = true
+
+	// defaultcachePrepStmts is the default value of cachePrepStmts
+	defaultCachePrepStmts = true
+>>>>>>> a59888c6df (sink(cdc): fallback when preparing statements meets error (#8532))
 )
 
 // Config is the configs for MySQL backend.
@@ -94,9 +102,17 @@ type Config struct {
 	ForceReplicate         bool
 	EnableOldValue         bool
 
+<<<<<<< HEAD
 	IsTiDB         bool // IsTiDB is true if the downstream is TiDB
 	SourceID       uint64
 	BatchDMLEnable bool
+=======
+	IsTiDB          bool // IsTiDB is true if the downstream is TiDB
+	SourceID        uint64
+	BatchDMLEnable  bool
+	MultiStmtEnable bool
+	CachePrepStmts  bool
+>>>>>>> a59888c6df (sink(cdc): fallback when preparing statements meets error (#8532))
 }
 
 // NewConfig returns the default mysql backend config.
@@ -114,6 +130,11 @@ func NewConfig() *Config {
 		DialTimeout:            defaultDialTimeout,
 		SafeMode:               defaultSafeMode,
 		BatchDMLEnable:         defaultBatchDMLEnable,
+<<<<<<< HEAD
+=======
+		MultiStmtEnable:        defaultMultiStmtEnable,
+		CachePrepStmts:         defaultCachePrepStmts,
+>>>>>>> a59888c6df (sink(cdc): fallback when preparing statements meets error (#8532))
 	}
 }
 
@@ -172,6 +193,15 @@ func (c *Config) Apply(
 	if err = getBatchDMLEnable(query, &c.BatchDMLEnable); err != nil {
 		return err
 	}
+<<<<<<< HEAD
+=======
+	if err = getMultiStmtEnable(query, &c.MultiStmtEnable); err != nil {
+		return err
+	}
+	if err = getCachePrepStmts(query, &c.CachePrepStmts); err != nil {
+		return err
+	}
+>>>>>>> a59888c6df (sink(cdc): fallback when preparing statements meets error (#8532))
 	c.EnableOldValue = replicaConfig.EnableOldValue
 	c.ForceReplicate = replicaConfig.ForceReplicate
 	c.SourceID = replicaConfig.Sink.TiDBSourceID
@@ -400,3 +430,30 @@ func getBatchDMLEnable(values url.Values, batchDMLEnable *bool) error {
 	}
 	return nil
 }
+<<<<<<< HEAD
+=======
+
+func getMultiStmtEnable(values url.Values, multiStmtEnable *bool) error {
+	s := values.Get("multi-stmt-enable")
+	if len(s) > 0 {
+		enable, err := strconv.ParseBool(s)
+		if err != nil {
+			return cerror.WrapError(cerror.ErrMySQLInvalidConfig, err)
+		}
+		*multiStmtEnable = enable
+	}
+	return nil
+}
+
+func getCachePrepStmts(values url.Values, cachePrepStmts *bool) error {
+	s := values.Get("cache-prep-stmts")
+	if len(s) > 0 {
+		enable, err := strconv.ParseBool(s)
+		if err != nil {
+			return cerror.WrapError(cerror.ErrMySQLInvalidConfig, err)
+		}
+		*cachePrepStmts = enable
+	}
+	return nil
+}
+>>>>>>> a59888c6df (sink(cdc): fallback when preparing statements meets error (#8532))

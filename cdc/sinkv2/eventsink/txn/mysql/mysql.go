@@ -18,6 +18,7 @@ import (
 	"database/sql"
 	"database/sql/driver"
 	"fmt"
+	"math"
 	"net/url"
 	"time"
 
@@ -50,6 +51,9 @@ const (
 	networkDriftDuration = 5 * time.Second
 
 	defaultDMLMaxRetry uint64 = 8
+
+	// To limit memory usage for prepared statements.
+	prepStmtCacheSize int = 16 * 1024
 )
 
 type mysqlBackend struct {
@@ -62,9 +66,21 @@ type mysqlBackend struct {
 	events []*eventsink.TxnCallbackableEvent
 	rows   int
 
+<<<<<<< HEAD:cdc/sinkv2/eventsink/txn/mysql/mysql.go
 	statistics                    *metrics.Statistics
 	metricTxnSinkDMLBatchCommit   prometheus.Observer
 	metricTxnSinkDMLBatchCallback prometheus.Observer
+=======
+	statistics                      *metrics.Statistics
+	metricTxnSinkDMLBatchCommit     prometheus.Observer
+	metricTxnSinkDMLBatchCallback   prometheus.Observer
+	metricTxnPrepareStatementErrors prometheus.Counter
+
+	// implement stmtCache to improve performance, especially when the downstream is TiDB
+	stmtCache *lru.Cache
+	// Indicate if the CachePrepStmts should be enabled or not
+	cachePrepStmts bool
+>>>>>>> a59888c6df (sink(cdc): fallback when preparing statements meets error (#8532)):cdc/sink/dmlsink/txn/mysql/mysql.go
 }
 
 // NewMySQLBackends creates a new MySQL sink using schema storage
@@ -99,8 +115,59 @@ func NewMySQLBackends(
 		return nil, err
 	}
 
+<<<<<<< HEAD:cdc/sinkv2/eventsink/txn/mysql/mysql.go
 	db.SetMaxIdleConns(cfg.WorkerCount)
 	db.SetMaxOpenConns(cfg.WorkerCount)
+=======
+	// By default, cache-prep-stmts=true, an LRU cache is used for prepared statements,
+	// two connections are required to process a transaction.
+	// The first connection is held in the tx variable, which is used to manage the transaction.
+	// The second connection is requested through a call to s.db.Prepare
+	// in case of a cache miss for the statement query.
+	// The connection pool for CDC is configured with a static size, equal to the number of workers.
+	// CDC may hang at the "Get Connection" call is due to the limited size of the connection pool.
+	// When the connection pool is small,
+	// the chance of all connections being active at the same time increases,
+	// leading to exhaustion of available connections and a hang at the "Get Connection" call.
+	// This issue is less likely to occur when the connection pool is larger,
+	// as there are more connections available for use.
+	// Adding an extra connection to the connection pool solves the connection exhaustion issue.
+	db.SetMaxIdleConns(cfg.WorkerCount + 1)
+	db.SetMaxOpenConns(cfg.WorkerCount + 1)
+
+	// Inherit the default value of the prepared statement cache from the SinkURI Options
+	cachePrepStmts := cfg.CachePrepStmts
+	if cachePrepStmts {
+		// query the size of the prepared statement cache on serverside
+		maxPreparedStmtCount, err := pmysql.QueryMaxPreparedStmtCount(ctx, db)
+		if err != nil {
+			return nil, err
+		}
+		if maxPreparedStmtCount == -1 {
+			// NOTE: seems TiDB doesn't follow MySQL's specification.
+			maxPreparedStmtCount = math.MaxInt
+		}
+		// if maxPreparedStmtCount == 0,
+		// it means that the prepared statement cache is disabled on serverside.
+		// if maxPreparedStmtCount/(cfg.WorkerCount+1) == 0, for each single connection,
+		// it means that the prepared statement cache is disabled on clientsize.
+		// Because each connection can not hold at lease one prepared statement.
+		if maxPreparedStmtCount == 0 || maxPreparedStmtCount/(cfg.WorkerCount+1) == 0 {
+			cachePrepStmts = false
+		}
+	}
+
+	var stmtCache *lru.Cache
+	if cachePrepStmts {
+		stmtCache, err = lru.NewWithEvict(prepStmtCacheSize, func(key, value interface{}) {
+			stmt := value.(*sql.Stmt)
+			stmt.Close()
+		})
+		if err != nil {
+			return nil, err
+		}
+	}
+>>>>>>> a59888c6df (sink(cdc): fallback when preparing statements meets error (#8532)):cdc/sink/dmlsink/txn/mysql/mysql.go
 
 	backends := make([]*mysqlBackend, 0, cfg.WorkerCount)
 	for i := 0; i < cfg.WorkerCount; i++ {
@@ -112,8 +179,16 @@ func NewMySQLBackends(
 			dmlMaxRetry: defaultDMLMaxRetry,
 			statistics:  statistics,
 
+<<<<<<< HEAD:cdc/sinkv2/eventsink/txn/mysql/mysql.go
 			metricTxnSinkDMLBatchCommit:   txn.SinkDMLBatchCommit.WithLabelValues(changefeedID.Namespace, changefeedID.ID),
 			metricTxnSinkDMLBatchCallback: txn.SinkDMLBatchCallback.WithLabelValues(changefeedID.Namespace, changefeedID.ID),
+=======
+			metricTxnSinkDMLBatchCommit:     txn.SinkDMLBatchCommit.WithLabelValues(changefeedID.Namespace, changefeedID.ID),
+			metricTxnSinkDMLBatchCallback:   txn.SinkDMLBatchCallback.WithLabelValues(changefeedID.Namespace, changefeedID.ID),
+			metricTxnPrepareStatementErrors: txn.PrepareStatementErrors.WithLabelValues(changefeedID.Namespace, changefeedID.ID),
+			stmtCache:                       stmtCache,
+			cachePrepStmts:                  cachePrepStmts,
+>>>>>>> a59888c6df (sink(cdc): fallback when preparing statements meets error (#8532)):cdc/sink/dmlsink/txn/mysql/mysql.go
 		})
 	}
 
@@ -569,6 +644,90 @@ func (s *mysqlBackend) prepareDMLs() *preparedDMLs {
 	}
 }
 
+<<<<<<< HEAD:cdc/sinkv2/eventsink/txn/mysql/mysql.go
+=======
+// execute SQLs in the multi statements way.
+func (s *mysqlBackend) multiStmtExecute(
+	ctx context.Context, dmls *preparedDMLs, tx *sql.Tx, writeTimeout time.Duration,
+) error {
+	start := time.Now()
+	multiStmtSQL := ""
+	multiStmtArgs := []any{}
+	for i, query := range dmls.sqls {
+		multiStmtSQL += query
+		if i != len(dmls.sqls)-1 {
+			multiStmtSQL += ";"
+		}
+		multiStmtArgs = append(multiStmtArgs, dmls.values[i]...)
+	}
+	ctx, cancel := context.WithTimeout(ctx, writeTimeout)
+	defer cancel()
+	_, execError := tx.ExecContext(ctx, multiStmtSQL, multiStmtArgs...)
+	if execError != nil {
+		err := logDMLTxnErr(
+			cerror.WrapError(cerror.ErrMySQLTxnError, execError),
+			start, s.changefeed, multiStmtSQL, dmls.rowCount, dmls.startTs)
+		if rbErr := tx.Rollback(); rbErr != nil {
+			if errors.Cause(rbErr) != context.Canceled {
+				log.Warn("failed to rollback txn", zap.Error(rbErr))
+			}
+		}
+		return err
+	}
+	return nil
+}
+
+// execute SQLs in each preparedDMLs one by one in the same transaction.
+func (s *mysqlBackend) sequenceExecute(
+	ctx context.Context, dmls *preparedDMLs, tx *sql.Tx, writeTimeout time.Duration,
+) error {
+	start := time.Now()
+	for i, query := range dmls.sqls {
+		args := dmls.values[i]
+		log.Debug("exec row", zap.Int("workerID", s.workerID),
+			zap.String("sql", query), zap.Any("args", args))
+		ctx, cancelFunc := context.WithTimeout(ctx, writeTimeout)
+
+		var prepStmt *sql.Stmt
+		if s.cachePrepStmts {
+			if stmt, ok := s.stmtCache.Get(query); ok {
+				prepStmt = stmt.(*sql.Stmt)
+			} else if stmt, err := s.db.Prepare(query); err == nil {
+				prepStmt = stmt
+				s.stmtCache.Add(query, stmt)
+			} else {
+				// Generally it means the downstream database doesn't allow
+				// too many preapred statements. So clean some of them.
+				s.stmtCache.RemoveOldest()
+				s.metricTxnPrepareStatementErrors.Inc()
+			}
+		}
+
+		var execError error
+		if prepStmt == nil {
+			_, execError = tx.ExecContext(ctx, query, args...)
+		} else {
+			//nolint:sqlclosecheck
+			_, execError = tx.Stmt(prepStmt).ExecContext(ctx, args...)
+		}
+		if execError != nil {
+			err := logDMLTxnErr(
+				cerror.WrapError(cerror.ErrMySQLTxnError, execError),
+				start, s.changefeed, query, dmls.rowCount, dmls.startTs)
+			if rbErr := tx.Rollback(); rbErr != nil {
+				if errors.Cause(rbErr) != context.Canceled {
+					log.Warn("failed to rollback txn", zap.Error(rbErr))
+				}
+			}
+			cancelFunc()
+			return err
+		}
+		cancelFunc()
+	}
+	return nil
+}
+
+>>>>>>> a59888c6df (sink(cdc): fallback when preparing statements meets error (#8532)):cdc/sink/dmlsink/txn/mysql/mysql.go
 func (s *mysqlBackend) execDMLWithMaxRetries(pctx context.Context, dmls *preparedDMLs) error {
 	if len(dmls.sqls) != len(dmls.values) {
 		log.Panic("unexpected number of sqls and values",

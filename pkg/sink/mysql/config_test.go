@@ -189,6 +189,10 @@ func TestApplySinkURIParamsToConfig(t *testing.T) {
 	expected.Timezone = `"UTC"`
 	expected.tidbTxnMode = "pessimistic"
 	expected.EnableOldValue = true
+<<<<<<< HEAD
+=======
+	expected.CachePrepStmts = true
+>>>>>>> a59888c6df (sink(cdc): fallback when preparing statements meets error (#8532))
 	uriStr := "mysql://127.0.0.1:3306/?worker-count=64&max-txn-row=20" +
 		"&max-multi-update-row=80&max-multi-update-row-size=512" +
 		"&batch-replace-enable=true&batch-replace-size=50&safe-mode=false" +
@@ -258,6 +262,14 @@ func TestParseSinkURIOverride(t *testing.T) {
 		checker: func(sp *Config) {
 			require.EqualValues(t, sp.tidbTxnMode, defaultTiDBTxnMode)
 		},
+<<<<<<< HEAD
+=======
+	}, {
+		uri: "mysql://127.0.0.1:3306/?cache-prep-stmts=false",
+		checker: func(sp *Config) {
+			require.EqualValues(t, sp.CachePrepStmts, false)
+		},
+>>>>>>> a59888c6df (sink(cdc): fallback when preparing statements meets error (#8532))
 	}}
 	ctx := context.TODO()
 	var uri *url.URL
