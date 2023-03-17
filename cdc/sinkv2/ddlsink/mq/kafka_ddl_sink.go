@@ -53,6 +53,14 @@ func NewKafkaDDLSink(
 	if err != nil {
 		return nil, cerror.WrapError(cerror.ErrKafkaNewProducer, err)
 	}
+<<<<<<< HEAD:cdc/sinkv2/ddlsink/mq/kafka_ddl_sink.go
+=======
+
+	adminClient, err := factory.AdminClient()
+	if err != nil {
+		return nil, cerror.WrapError(cerror.ErrKafkaNewProducer, err)
+	}
+>>>>>>> 51ba7f3b10 (kafka(ticdc): ddl sink create admin client check error. (#8560)):cdc/sink/ddlsink/mq/kafka_ddl_sink.go
 	// We must close adminClient when this func return cause by an error
 	// otherwise the adminClient will never be closed and lead to a goroutine leak.
 	defer func() {
