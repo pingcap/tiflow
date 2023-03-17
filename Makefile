@@ -197,7 +197,7 @@ check_third_party_binary:
 	@which bin/jq
 	@which bin/minio
 
-integration_test_build: check_failpoint_ctl
+integration_test_build: check_failpoint_ctl storage_consumer kafka_consumer
 	$(FAILPOINT_ENABLE)
 	$(GOTEST) -ldflags '$(LDFLAGS)' -c -cover -covermode=atomic \
 		-coverpkg=github.com/pingcap/tiflow/... \
