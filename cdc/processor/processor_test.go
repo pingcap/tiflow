@@ -28,7 +28,9 @@ import (
 	"github.com/pingcap/tiflow/cdc/processor/tablepb"
 	"github.com/pingcap/tiflow/cdc/redo"
 	"github.com/pingcap/tiflow/cdc/scheduler"
+	"github.com/pingcap/tiflow/cdc/scheduler/schedulepb"
 	mocksink "github.com/pingcap/tiflow/cdc/sink/mock"
+	"github.com/pingcap/tiflow/pkg/config"
 	cdcContext "github.com/pingcap/tiflow/pkg/context"
 	cerror "github.com/pingcap/tiflow/pkg/errors"
 	"github.com/pingcap/tiflow/pkg/etcd"
@@ -247,12 +249,12 @@ type mockAgent struct {
 	isClosed         bool
 }
 
-func (a *mockAgent) Tick(_ context.Context) error {
+func (a *mockAgent) Tick(_ context.Context) (*schedulepb.Barrier, error) {
 	if len(a.executor.GetAllCurrentTables()) == 0 {
-		return nil
+		return nil, nil
 	}
 	a.lastCheckpointTs, _ = a.executor.GetCheckpoint()
-	return nil
+	return nil, nil
 }
 
 func (a *mockAgent) GetLastSentCheckpointTs() (checkpointTs model.Ts) {

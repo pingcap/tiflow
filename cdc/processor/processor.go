@@ -715,7 +715,7 @@ func (p *processor) tick(ctx cdcContext.Context) error {
 	p.handlePosition(oracle.GetPhysical(pdTime))
 
 	p.doGCSchemaStorage()
-	if err := p.agent.Tick(ctx); err != nil {
+	if _, err := p.agent.Tick(ctx); err != nil {
 		return errors.Trace(err)
 	}
 	return nil

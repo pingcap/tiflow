@@ -439,6 +439,24 @@ func (info *ChangeFeedInfo) fixMemoryQuota() {
 	info.Config.FixMemoryQuota()
 }
 
+// DownstreamType returns the type of the downstream.
+func (info *ChangeFeedInfo) DownstreamType() (DownstreamType, error) {
+	uri, err := url.Parse(info.SinkURI)
+	if err != nil {
+		return Unknown, errors.Trace(err)
+	}
+	if sink.IsMySQLCompatibleScheme(uri.Scheme) {
+		return DB, nil
+	}
+	if sink.IsMQScheme(uri.Scheme) {
+		return MQ, nil
+	}
+	if sink.IsStorageScheme(uri.Scheme) {
+		return Storage, nil
+	}
+	return Unknown, nil
+}
+
 // Barrier is a barrier for changefeed.
 type Barrier struct {
 	GlobalBarrierTs   Ts             `json:"global-barrier-ts"`
@@ -460,19 +478,21 @@ func NewBarrier(ts Ts) *Barrier {
 }
 
 // DownStreamType is the type of downstream.
-type DownStreamType int
+type DownstreamType int
 
 const (
 	// DB is the type of Database.
-	DB DownStreamType = iota
+	DB DownstreamType = iota
 	// MQ is the type of MQ or Cloud Storage.
 	MQ
 	// Storage is the type of Cloud Storage.
 	Storage
+	// Unknown is the type of Unknown.
+	Unknown
 )
 
 // String implements fmt.Stringer interface.
-func (t DownStreamType) String() string {
+func (t DownstreamType) String() string {
 	switch t {
 	case DB:
 		return "DB"
@@ -481,5 +501,5 @@ func (t DownStreamType) String() string {
 	case Storage:
 		return "Storage"
 	}
-	return "unknown"
+	return "Unknown"
 }
