@@ -279,9 +279,11 @@ func (c *TablesChecker) handleOpts(r *Result) (func(options []*incompatibilityOp
 				}
 			}
 		}, func() {
+			instructionSlice := make([]string, 0, len(resultInstructions))
 			for k := range resultInstructions {
-				r.Instruction += k + "; "
+				instructionSlice = append(instructionSlice, k)
 			}
+			r.Instruction += strings.Join(instructionSlice, "; ")
 		}
 }
 

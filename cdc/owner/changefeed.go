@@ -333,7 +333,7 @@ func (c *changefeed) tick(ctx cdcContext.Context, captures map[model.CaptureID]*
 
 	startTime := time.Now()
 	newCheckpointTs, newResolvedTs, err := c.scheduler.Tick(
-		ctx, c.state.Status.CheckpointTs, c.schema.AllPhysicalTables(), captures)
+		ctx, c.state.Status.CheckpointTs, c.schema.AllPhysicalTables(), captures, nil)
 	// metricsResolvedTs to store the min resolved ts among all tables and show it in metrics
 	metricsResolvedTs := newResolvedTs
 	costTime := time.Since(startTime)
