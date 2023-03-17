@@ -435,7 +435,9 @@ func (c *consumer) emitDMLEvents(
 			return errors.Trace(err)
 		}
 	case config.ProtocolCanalJSON:
-		decoder = canal.NewBatchDecoder(content, false, c.codecCfg.Terminator)
+		// Always enable tidb extension for canal-json protocol
+		// because we need to get the commit ts from the extension field.
+		decoder = canal.NewBatchDecoder(content, true, c.codecCfg.Terminator)
 	}
 
 	cnt := 0
