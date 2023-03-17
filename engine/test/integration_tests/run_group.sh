@@ -44,5 +44,7 @@ fi
 # Run test cases
 if [[ -n $test_names ]]; then
 	echo "Run cases: ${test_names}"
-	"${CUR}"/run.sh "${test_names}"
+    mkdir -p /tmp/tiflow_engine_test
+	"${CUR}"/run.sh "${test_names}" 2>&1 | tee /tmp/tiflow_engine_test/engine_it.log
+    ./engine/test/utils/check_log.sh
 fi
