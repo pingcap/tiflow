@@ -15,6 +15,7 @@ package checker
 
 import (
 	"context"
+	"strings"
 	"testing"
 
 	"github.com/DATA-DOG/go-sqlmock"
@@ -217,6 +218,7 @@ func TestTablesChecker(t *testing.T) {
 	require.Len(t, result.Errors, 2)
 	require.NoError(t, mock.ExpectationsWereMet())
 	require.NoError(t, downMock.ExpectationsWereMet())
+	require.False(t, strings.HasSuffix(result.Instruction, "; "))
 
 	// 3. test #5759
 
@@ -311,6 +313,7 @@ func TestTablesChecker(t *testing.T) {
 		result.Errors[4].ShortErr)
 	require.NoError(t, mock.ExpectationsWereMet())
 	require.NoError(t, downMock.ExpectationsWereMet())
+	require.False(t, strings.HasSuffix(result.Instruction, "; "))
 
 	// 5. check extended columns
 	commonMock()
@@ -346,6 +349,7 @@ func TestTablesChecker(t *testing.T) {
 	result = checker.Check(ctx)
 	require.Equal(t, StateFailure, result.State)
 	require.Len(t, result.Errors, 2)
+	require.False(t, strings.HasSuffix(result.Instruction, "; "))
 	require.Equal(t,
 		"table `test-db`.`test-table-1` upstream table must not contain extended column [ext1]",
 		result.Errors[0].ShortErr)
