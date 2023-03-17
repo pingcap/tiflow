@@ -42,8 +42,8 @@ stop() {
 s3cmd --access_key=$MINIO_ACCESS_KEY --secret_key=$MINIO_SECRET_KEY --host=$S3_ENDPOINT --host-bucket=$S3_ENDPOINT --no-ssl mb s3://logbucket
 
 function run() {
-  # Now, we run the storage tests in mysql sink tests.
-  # It's a temporary solution, we will move it to a new test pipeline later.
+	# Now, we run the storage tests in mysql sink tests.
+	# It's a temporary solution, we will move it to a new test pipeline later.
 	if [ "$SINK_TYPE" != "mysql" ]; then
 		return
 	fi
