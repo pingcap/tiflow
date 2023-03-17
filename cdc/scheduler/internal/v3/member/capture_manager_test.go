@@ -186,9 +186,9 @@ func TestCaptureManagerTick(t *testing.T) {
 	cm := NewCaptureManager("", model.ChangeFeedID{}, rev, config.NewDefaultSchedulerConfig())
 
 	// No heartbeat if there is no capture.
-	msgs := cm.Tick(spanz.NewBtreeMap[*replication.ReplicationSet](), captureIDNotDraining)
+	msgs := cm.Tick(spanz.NewBtreeMap[*replication.ReplicationSet](), captureIDNotDraining, nil)
 	require.Empty(t, msgs)
-	msgs = cm.Tick(spanz.NewBtreeMap[*replication.ReplicationSet](), captureIDNotDraining)
+	msgs = cm.Tick(spanz.NewBtreeMap[*replication.ReplicationSet](), captureIDNotDraining, nil)
 	require.Empty(t, msgs)
 
 	ms := map[model.CaptureID]*model.CaptureInfo{
@@ -198,9 +198,9 @@ func TestCaptureManagerTick(t *testing.T) {
 	cm.HandleAliveCaptureUpdate(ms)
 
 	// Heartbeat even if capture is uninitialized.
-	msgs = cm.Tick(spanz.NewBtreeMap[*replication.ReplicationSet](), captureIDNotDraining)
+	msgs = cm.Tick(spanz.NewBtreeMap[*replication.ReplicationSet](), captureIDNotDraining, nil)
 	require.Empty(t, msgs)
-	msgs = cm.Tick(spanz.NewBtreeMap[*replication.ReplicationSet](), captureIDNotDraining)
+	msgs = cm.Tick(spanz.NewBtreeMap[*replication.ReplicationSet](), captureIDNotDraining, nil)
 	require.ElementsMatch(t, []*schedulepb.Message{
 		{To: "1", MsgType: schedulepb.MsgHeartbeat, Heartbeat: &schedulepb.Heartbeat{}},
 		{To: "2", MsgType: schedulepb.MsgHeartbeat, Heartbeat: &schedulepb.Heartbeat{}},
@@ -210,9 +210,9 @@ func TestCaptureManagerTick(t *testing.T) {
 	for _, s := range []CaptureState{CaptureStateInitialized, CaptureStateStopping} {
 		cm.Captures["1"].State = s
 		cm.Captures["2"].State = s
-		msgs = cm.Tick(spanz.NewBtreeMap[*replication.ReplicationSet](), captureIDNotDraining)
+		msgs = cm.Tick(spanz.NewBtreeMap[*replication.ReplicationSet](), captureIDNotDraining, nil)
 		require.Empty(t, msgs)
-		msgs = cm.Tick(spanz.NewBtreeMap[*replication.ReplicationSet](), captureIDNotDraining)
+		msgs = cm.Tick(spanz.NewBtreeMap[*replication.ReplicationSet](), captureIDNotDraining, nil)
 		require.ElementsMatch(t, []*schedulepb.Message{
 			{To: "1", MsgType: schedulepb.MsgHeartbeat, Heartbeat: &schedulepb.Heartbeat{}},
 			{To: "2", MsgType: schedulepb.MsgHeartbeat, Heartbeat: &schedulepb.Heartbeat{}},
@@ -220,7 +220,7 @@ func TestCaptureManagerTick(t *testing.T) {
 	}
 
 	// TableID in heartbeat.
-	msgs = cm.Tick(spanz.NewBtreeMap[*replication.ReplicationSet](), captureIDNotDraining)
+	msgs = cm.Tick(spanz.NewBtreeMap[*replication.ReplicationSet](), captureIDNotDraining, nil)
 	require.Empty(t, msgs)
 
 	tables := spanz.NewBtreeMap[*replication.ReplicationSet]()
@@ -241,7 +241,7 @@ func TestCaptureManagerTick(t *testing.T) {
 		}})
 	tables.ReplaceOrInsert(tablepb.Span{TableID: 4}, &replication.ReplicationSet{})
 
-	msgs = cm.Tick(tables, captureIDNotDraining)
+	msgs = cm.Tick(tables, captureIDNotDraining, nil)
 	require.Len(t, msgs, 2)
 	if msgs[0].To == "1" {
 		require.ElementsMatch(t,
@@ -276,7 +276,7 @@ func TestCaptureManagerCollectStatsTick(t *testing.T) {
 	// heartbeat :   x   x   x   x
 	// collect   :     x     x
 	for i := 1; i <= 8; i++ {
-		msgs := cm.Tick(spanz.NewBtreeMap[*replication.ReplicationSet](), captureIDNotDraining)
+		msgs := cm.Tick(spanz.NewBtreeMap[*replication.ReplicationSet](), captureIDNotDraining, nil)
 		if i%2 == 0 {
 			require.Len(t, msgs, 2)
 			collect := i == 4 || i == 6
