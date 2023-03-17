@@ -174,19 +174,19 @@ func newChangefeed(
 func newChangefeed4Test(
 	id model.ChangeFeedID, state *orchestrator.ChangefeedReactorState, up *upstream.Upstream,
 	newDDLPuller func(ctx context.Context,
-		replicaConfig *config.ReplicaConfig,
-		up *upstream.Upstream,
-		startTs uint64,
-		changefeed model.ChangeFeedID,
-	) (puller.DDLPuller, error),
+	replicaConfig *config.ReplicaConfig,
+	up *upstream.Upstream,
+	startTs uint64,
+	changefeed model.ChangeFeedID,
+) (puller.DDLPuller, error),
 	newSink func(changefeedID model.ChangeFeedID, info *model.ChangeFeedInfo, reportErr func(err error)) DDLSink,
 	newScheduler func(
-		ctx cdcContext.Context, up *upstream.Upstream, epoch uint64, cfg *config.SchedulerConfig,
-	) (scheduler.Scheduler, error),
+	ctx cdcContext.Context, up *upstream.Upstream, epoch uint64, cfg *config.SchedulerConfig,
+) (scheduler.Scheduler, error),
 	newDownstreamObserver func(
-		ctx context.Context, sinkURIStr string, replCfg *config.ReplicaConfig,
-		opts ...observer.NewObserverOption,
-	) (observer.Observer, error),
+	ctx context.Context, sinkURIStr string, replCfg *config.ReplicaConfig,
+	opts ...observer.NewObserverOption,
+) (observer.Observer, error),
 ) *changefeed {
 	cfg := config.NewDefaultSchedulerConfig()
 	c := newChangefeed(id, state, up, cfg)
@@ -364,13 +364,9 @@ func (c *changefeed) tick(ctx cdcContext.Context, captures map[model.CaptureID]*
 		return nil
 	}
 
-	// If the owner is just initialized, GlobalBarrierTs can be `checkpointTs-1`.
-	// In such case the `newResolvedTs` and `newCheckpointTs` may be larger
-	// than the GlobalBarrierTs, but it shouldn't be, so we need to handle it here.
-	if newResolvedTs > barrier.GlobalBarrierTs {
-		newResolvedTs = barrier.GlobalBarrierTs
-	}
-
+	// If the owner is just initialized, minTableBarrierTs can be `checkpointTs-1`.
+	// In such case `newCheckpointTs` may be larger minTableBarrierTs,
+	// but it shouldn't be, so we need to handle it here.
 	if newCheckpointTs > minTableBarrierTs {
 		newCheckpointTs = minTableBarrierTs
 	}
