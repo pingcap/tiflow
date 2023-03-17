@@ -29,6 +29,7 @@ import (
 	"github.com/pingcap/tiflow/cdc/processor/tablepb"
 	"github.com/pingcap/tiflow/cdc/redo"
 	"github.com/pingcap/tiflow/cdc/scheduler"
+	"github.com/pingcap/tiflow/cdc/scheduler/schedulepb"
 	"github.com/pingcap/tiflow/pkg/config"
 	cdcContext "github.com/pingcap/tiflow/pkg/context"
 	cerror "github.com/pingcap/tiflow/pkg/errors"
@@ -171,11 +172,11 @@ type mockAgent struct {
 	isClosed bool
 }
 
-func (a *mockAgent) Tick(_ context.Context) error {
+func (a *mockAgent) Tick(_ context.Context) (*schedulepb.Barrier, error) {
 	if a.executor.GetTableSpanCount() == 0 {
-		return nil
+		return nil, nil
 	}
-	return nil
+	return nil, nil
 }
 
 func (a *mockAgent) Close() error {
