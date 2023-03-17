@@ -359,11 +359,21 @@ func (s *mysqlBackend) batchSingleTxnDmls(
 ) (sqls []string, values [][]interface{}) {
 	insertRows, updateRows, deleteRows := s.groupRowsByType(event, tableInfo, !translateToInsert)
 
+	// handle delete
 	if len(deleteRows) > 0 {
 		for _, rows := range deleteRows {
 			sql, value := sqlmodel.GenDeleteSQL(rows...)
 			sqls = append(sqls, sql)
 			values = append(values, value)
+		}
+	}
+
+	// handle update
+	if len(updateRows) > 0 {
+		for _, rows := range updateRows {
+			s, v := s.genUpdateSQL(rows...)
+			sqls = append(sqls, s...)
+			values = append(values, v...)
 		}
 	}
 
@@ -379,15 +389,6 @@ func (s *mysqlBackend) batchSingleTxnDmls(
 				sqls = append(sqls, sql)
 				values = append(values, value)
 			}
-		}
-	}
-
-	// handle update
-	if len(updateRows) > 0 {
-		for _, rows := range updateRows {
-			s, v := s.genUpdateSQL(rows...)
-			sqls = append(sqls, s...)
-			values = append(values, v...)
 		}
 	}
 
