@@ -216,12 +216,6 @@ func testWriteMeta(t *testing.T, m *metaManager) {
 func TestGCAndCleanup(t *testing.T) {
 	t.Parallel()
 
-	originValue := redo.DefaultGCIntervalInMs
-	redo.DefaultGCIntervalInMs = 20
-	defer func() {
-		redo.DefaultGCIntervalInMs = originValue
-	}()
-
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 	captureID := "test-capture"
