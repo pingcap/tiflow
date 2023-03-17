@@ -430,6 +430,12 @@ func TestIsGlobalDDL(t *testing.T) {
 			},
 			ret: false,
 		},
+		{
+			ddl: &model.DDLEvent{
+				Type: timodel.ActionDropColumn,
+			},
+			ret: false,
+		},
 	}
 
 	for _, c := range cases {

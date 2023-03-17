@@ -215,9 +215,7 @@ func (s *schemaWrap4Owner) BuildDDLEvents(
 	var tableInfo *model.TableInfo
 	ddlEvents := make([]*model.DDLEvent, 0)
 	snap := s.schemaStorage.GetLastSnapshot()
-	if err != nil {
-		return nil, err
-	}
+
 	switch job.Type {
 	case timodel.ActionRenameTables:
 		ddlEvents, err = s.parseRenameTables(snap, job)

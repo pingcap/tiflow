@@ -33,22 +33,50 @@ import (
 // of tableBarrier in a single barrier.
 const tableBarrierNumberLimit = 256
 
-// globalDDLs is the DDLs that affect all tables in the changefeed.
+// nonGlobalDDLs are the DDLs that only affect related table
+// so that we should only block related table before execute them.
+var nonGlobalDDLs = map[timodel.ActionType]struct{}{
+	timodel.ActionDropTable:                    {},
+	timodel.ActionAddColumn:                    {},
+	timodel.ActionDropColumn:                   {},
+	timodel.ActionAddIndex:                     {},
+	timodel.ActionDropIndex:                    {},
+	timodel.ActionTruncateTable:                {},
+	timodel.ActionModifyColumn:                 {},
+	timodel.ActionSetDefaultValue:              {},
+	timodel.ActionModifyTableComment:           {},
+	timodel.ActionRenameIndex:                  {},
+	timodel.ActionAddTablePartition:            {},
+	timodel.ActionDropTablePartition:           {},
+	timodel.ActionCreateView:                   {},
+	timodel.ActionModifyTableCharsetAndCollate: {},
+	timodel.ActionTruncateTablePartition:       {},
+	timodel.ActionDropView:                     {},
+	timodel.ActionRecoverTable:                 {},
+	timodel.ActionAddPrimaryKey:                {},
+	timodel.ActionDropPrimaryKey:               {},
+	timodel.ActionRebaseAutoID:                 {},
+	timodel.ActionAlterIndexVisibility:         {},
+	timodel.ActionMultiSchemaChange:            {},
+	timodel.ActionReorganizePartition:          {},
+	timodel.ActionAlterTTLInfo:                 {},
+	timodel.ActionAlterTTLRemove:               {},
+}
+
+// The ddls below is globalDDLs, they affect all tables in the changefeed.
 // we need to wait all tables checkpointTs reach the DDL commitTs
 // before we can execute the DDL.
-var globalDDLs = []timodel.ActionType{
-	timodel.ActionCreateSchema,
-	timodel.ActionDropSchema,
-	timodel.ActionModifySchemaCharsetAndCollate,
-	// We treat create table ddl as a global ddl, because before we execute the ddl,
-	// there is no a tablePipeline for the new table. So we can't prevent the checkpointTs
-	// from advancing. To solve this problem, we just treat create table ddl as a global ddl here.
-	// TODO: Find a better way to handle create table ddl.
-	timodel.ActionCreateTable,
-	timodel.ActionRenameTable,
-	timodel.ActionRenameTables,
-	timodel.ActionExchangeTablePartition,
-}
+//timodel.ActionCreateSchema
+//timodel.ActionDropSchema
+//timodel.ActionModifySchemaCharsetAndCollate
+//// We treat create table ddl as a global ddl, because before we execute the ddl,
+//// there is no a tablePipeline for the new table. So we can't prevent the checkpointTs
+//// from advancing. To solve this problem, we just treat create table ddl as a global ddl here.
+//// TODO: Find a better way to handle create table ddl.
+//timodel.ActionCreateTable
+//timodel.ActionRenameTable
+//timodel.ActionRenameTables
+//timodel.ActionExchangeTablePartition
 
 // ddlManager holds the pending DDL events of all tables and responsible for
 // executing them to downstream.
@@ -537,10 +565,6 @@ func getPhysicalTableIDs(ddl *model.DDLEvent) []model.TableID {
 
 // isGlobalDDL returns whether the ddl is a global ddl.
 func isGlobalDDL(ddl *model.DDLEvent) bool {
-	for _, tp := range globalDDLs {
-		if ddl.Type == tp {
-			return true
-		}
-	}
-	return false
+	_, ok := nonGlobalDDLs[ddl.Type]
+	return !ok
 }
