@@ -96,7 +96,6 @@ func (sm *Manager) Schedule(
 			return tasks
 		}
 	}
-
 	return nil
 }
 
