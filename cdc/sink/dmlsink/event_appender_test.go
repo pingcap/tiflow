@@ -106,8 +106,6 @@ func TestTxnEventAppenderWithoutIgnoreStartTs(t *testing.T) {
 			Table:    tableInfo,
 			CommitTs: 105,
 			StartTs:  103,
-			// Batch1
-			SplitTxn: true,
 		},
 		{
 			Table:    tableInfo,
@@ -123,8 +121,6 @@ func TestTxnEventAppenderWithoutIgnoreStartTs(t *testing.T) {
 			Table:    tableInfo,
 			CommitTs: 105,
 			StartTs:  103,
-			// Batch2
-			SplitTxn: true,
 		},
 		{
 			Table:    tableInfo,
@@ -246,8 +242,6 @@ func TestTxnEventAppenderWithIgnoreStartTs(t *testing.T) {
 			Table:    tableInfo,
 			CommitTs: 105,
 			StartTs:  0,
-			// Batch1
-			SplitTxn: true,
 		},
 		{
 			Table:    tableInfo,
@@ -263,8 +257,6 @@ func TestTxnEventAppenderWithIgnoreStartTs(t *testing.T) {
 			Table:    tableInfo,
 			CommitTs: 105,
 			StartTs:  0,
-			// Batch2
-			SplitTxn: true,
 		},
 		{
 			Table:    tableInfo,
