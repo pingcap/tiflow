@@ -202,7 +202,7 @@ func (t *tableSinkWrapper) close(ctx context.Context) {
 	t.state.Store(tablepb.TableStateStopping)
 	// table stopped state must be set after underlying sink is closed
 	defer t.state.Store(tablepb.TableStateStopped)
-	t.tableSink.Close(ctx)
+	t.tableSink.Close()
 	log.Info("Sink is closed",
 		zap.Stringer("span", &t.span),
 		zap.String("namespace", t.changefeed.Namespace),

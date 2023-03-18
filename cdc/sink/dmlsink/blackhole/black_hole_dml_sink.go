@@ -44,3 +44,8 @@ func (s *DMLSink) WriteEvents(rows ...*dmlsink.CallbackableEvent[*model.RowChang
 
 // Close do nothing.
 func (s *DMLSink) Close() {}
+
+// Dead returns a checker.
+func (s *DMLSink) Dead() <-chan struct{} {
+	return make(chan struct{}, 0)
+}
