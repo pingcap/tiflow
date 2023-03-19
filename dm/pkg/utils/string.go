@@ -40,3 +40,15 @@ func TruncateString(s string, n int) string {
 func TruncateInterface(v interface{}, n int) string {
 	return TruncateString(fmt.Sprintf("%+v", v), n)
 }
+
+// TruncateStringQuiet returns a string with only the leading (at most) n runes of the input string.
+func TruncateStringQuiet(s string, n int) string {
+	if n < 0 {
+		n = defaultStringLenLimit
+	}
+	if len(s) <= n {
+		return s
+	}
+
+	return s[:n]
+}
