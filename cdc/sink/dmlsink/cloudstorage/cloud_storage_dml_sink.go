@@ -89,7 +89,7 @@ func NewDMLSink(ctx context.Context,
 	replicaConfig *config.ReplicaConfig,
 	errCh chan error,
 ) (*DMLSink, error) {
-	ctx, cancel = context.WithCancel(ctx)
+	ctx, cancel := context.WithCancel(ctx)
 	s := &DMLSink{cancel: cancel, dead: make(chan struct{})}
 
 	// create cloud storage config and then apply the params of sinkURI to it.
