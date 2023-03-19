@@ -77,6 +77,7 @@ type DMLSink struct {
 	// last sequence number
 	lastSeqNum uint64
 
+	cancel func()
 	wg     sync.WaitGroup
 	dead   chan struct{}
 	isDead atomic.Bool
@@ -88,7 +89,8 @@ func NewDMLSink(ctx context.Context,
 	replicaConfig *config.ReplicaConfig,
 	errCh chan error,
 ) (*DMLSink, error) {
-	s := &DMLSink{dead: make(chan struct{})}
+	ctx, cancel = context.WithCancel(ctx)
+	s := &DMLSink{cancel: cancel, dead: make(chan struct{})}
 
 	// create cloud storage config and then apply the params of sinkURI to it.
 	cfg := cloudstorage.NewConfig()
@@ -203,6 +205,10 @@ func (s *DMLSink) WriteEvents(txns ...*dmlsink.CallbackableEvent[*model.SingleTa
 
 // Close closes the cloud storage sink.
 func (s *DMLSink) Close() {
+	if s.cancel != nil {
+		s.cancel()
+	}
+
 	if s.defragmenter != nil {
 		s.defragmenter.close()
 	}

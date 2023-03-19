@@ -47,5 +47,5 @@ func (s *DMLSink) Close() {}
 
 // Dead returns a checker.
 func (s *DMLSink) Dead() <-chan struct{} {
-	return make(chan struct{}, 0)
+	return make(chan struct{})
 }
