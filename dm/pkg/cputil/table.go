@@ -13,6 +13,14 @@
 
 package cputil
 
+import (
+	"fmt"
+
+	"github.com/pingcap/tiflow/dm/pkg/utils"
+)
+
+const maxSchemaLength = 64
+
 // LoaderCheckpoint returns loader's checkpoint table name.
 func LoaderCheckpoint(task string) string {
 	return task + "_loader_checkpoint"
@@ -21,6 +29,16 @@ func LoaderCheckpoint(task string) string {
 // LightningCheckpoint returns lightning's checkpoint table name.
 func LightningCheckpoint(task string) string {
 	return task + "_lightning_checkpoint_list"
+}
+
+// LightningCheckpointSchema returns lightning's checkpoint schema name.
+func LightningCheckpointSchema(task string, sourceID string) string {
+	if task == "" {
+		return "tidb_lightning_checkpoint"
+	}
+	return utils.TruncateStringQuiet(
+		fmt.Sprintf("%s_%d_tidb_lightning_checkpoint", task, utils.GenHashKey(sourceID)),
+		maxSchemaLength)
 }
 
 // SyncerCheckpoint returns syncer's checkpoint table name.
