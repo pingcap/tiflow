@@ -198,7 +198,7 @@ func (t *tableSinkWrapper) getState() tablepb.TableState {
 	return t.state.Load()
 }
 
-func (t *tableSinkWrapper) close(ctx context.Context) {
+func (t *tableSinkWrapper) close(_ context.Context) {
 	t.state.Store(tablepb.TableStateStopping)
 	// table stopped state must be set after underlying sink is closed
 	defer t.state.Store(tablepb.TableStateStopped)

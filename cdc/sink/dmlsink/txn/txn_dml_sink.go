@@ -91,29 +91,17 @@ func newSink(ctx context.Context, backends []backend,
 	errCh chan<- error, conflictDetectorSlots uint64,
 ) *dmlSink {
 	ctx, cancel := context.WithCancel(ctx)
-
-	workers := make([]*worker, 0, len(backends))
-	for i, backend := range backends {
-		w := newWorker(ctx, i, backend, len(backends))
-		workers = append(workers, w)
-	}
-
-	detector := causality.NewConflictDetector[*worker, *txnEvent](workers, conflictDetectorSlots)
 	sink := &dmlSink{
-		conflictDetector: detector,
-		workers:          workers,
-		cancel:           cancel,
-		dead:             make(chan struct{}),
+		workers: make([]*worker, 0, len(backends)),
+		cancel:  cancel,
+		dead:    make(chan struct{}),
 	}
 
 	g, ctx := errgroup.WithContext(ctx)
-	for _, w := range sink.workers {
-		c := make(chan struct{})
-		g.Go(func() error {
-			close(c)
-			return w.runLoop()
-		})
-		<-c
+	for i, backend := range backends {
+		w := newWorker(ctx, i, backend, len(backends))
+		g.Go(func() error { return w.runLoop() })
+		sink.workers = append(sink.workers, w)
 	}
 
 	sink.wg.Add(1)
@@ -130,6 +118,7 @@ func newSink(ctx context.Context, backends []backend,
 		}
 	}()
 
+	sink.conflictDetector = causality.NewConflictDetector[*worker, *txnEvent](sink.workers, conflictDetectorSlots)
 	return sink
 }
 
