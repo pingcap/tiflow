@@ -61,6 +61,10 @@ func (m *mockSink) GetWriteTimes() int {
 
 func (m *mockSink) Close() {}
 
+func (m *mockSink) Dead() <-chan struct{} {
+	return make(chan struct{})
+}
+
 func (m *mockSink) AckAllEvents() {
 	m.mu.Lock()
 	defer m.mu.Unlock()

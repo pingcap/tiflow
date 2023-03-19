@@ -157,6 +157,7 @@ func (s *dmlSink) Close() {
 	if s.cancel != nil {
 		s.cancel()
 	}
+	s.wg.Wait()
 
 	for _, w := range s.workers {
 		w.close()
@@ -168,7 +169,6 @@ func (s *dmlSink) Close() {
 	if s.statistics != nil {
 		s.statistics.Close()
 	}
-	s.wg.Wait()
 }
 
 // Dead checks whether it's dead or not.

@@ -208,6 +208,7 @@ func (s *DMLSink) Close() {
 	if s.cancel != nil {
 		s.cancel()
 	}
+	s.wg.Wait()
 
 	if s.defragmenter != nil {
 		s.defragmenter.close()
@@ -224,7 +225,6 @@ func (s *DMLSink) Close() {
 	if s.statistics != nil {
 		s.statistics.Close()
 	}
-	s.wg.Wait()
 }
 
 // Dead checks whether it's dead or not.
