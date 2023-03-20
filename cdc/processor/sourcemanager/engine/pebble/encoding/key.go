@@ -111,11 +111,9 @@ func EncodeKey(uniqueID uint32, tableID uint64, event *model.PolymorphicEvent) [
 
 // getDMLOrder returns the order of the dml types: delete<update<insert
 func getDMLOrder(rowKV *model.RawKVEntry) uint16 {
-	// delete
 	if rowKV.OpType == model.OpTypeDelete {
 		return typeDelete
-	} else if rowKV.OldValue != nil {
-		//update
+	} else if len(rowKV.OldValue) > 0 {
 		return typeUpdate
 	}
 	return typeInsert
