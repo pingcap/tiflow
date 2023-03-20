@@ -117,9 +117,9 @@ func newSink(ctx context.Context, backends []backend,
 		}
 	}()
 
-	sink.conflictDetector = causality.NewConflictDetector[*worker, *txnEvent](workers, causality.Config{
+	sink.conflictDetector = causality.NewConflictDetector[*worker, *txnEvent](sink.workers, causality.Config{
 		// TODO: use SingleConflictDispatchSerialize if batch dml across txns is enabled.
-		SingleConflictDispathType: causality.SingleConflictDispatchPipeline,
+		OnSingleConflict: causality.SingleConflictDispatchPipeline,
 		NumSlots:                  conflictDetectorSlots,
 	})
 	return sink

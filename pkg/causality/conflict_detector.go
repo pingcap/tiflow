@@ -31,7 +31,7 @@ const (
 	// all dependences are committed.
 	SingleConflictDispatchSerialize SingleConflictDispathType = SingleConflictDispathType(iota)
 	// SingleConflictDispatchPipeline means we can dispatch a single event directly.
-	SingleConflictDispatchPipeline SingleConflictDispathType
+	SingleConflictDispatchPipeline
 )
 
 type Config struct {
