@@ -458,7 +458,7 @@ invalid topic expression
 
 ["CDC:ErrLeaseExpired"]
 error = '''
-owner lease expired
+owner lease expired 
 '''
 
 ["CDC:ErrLoadTimezone"]
