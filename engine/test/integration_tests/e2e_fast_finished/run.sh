@@ -15,7 +15,7 @@ function run() {
 	sleep 3s
 
 	for conf in $(ls $CUR_DIR/conf/*.json); do
-		job_id=$(create_job "FakeJob" "$conf" "tiflow_job_finished")
+		job_id=$(create_job "FakeJob" "$conf" "" "tiflow_job_finished")
 		exec_with_retry --count 100 "curl \"http://127.0.0.1:10245/api/v1/jobs/$job_id\" | tee /dev/stderr | jq -e '.state == \"Finished\"'"
 		echo "job $job_id finished"
 	done

@@ -11,38 +11,72 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-// TODO: remove this tag after ddlManager is used.
-// nolint:unused,unparam
 package owner
 
 import (
 	"context"
+	"sort"
+	"time"
 
 	"github.com/pingcap/errors"
+	"github.com/pingcap/failpoint"
 	"github.com/pingcap/log"
 	timodel "github.com/pingcap/tidb/parser/model"
 	"github.com/pingcap/tiflow/cdc/model"
 	"github.com/pingcap/tiflow/cdc/puller"
 	"github.com/pingcap/tiflow/cdc/redo"
+	"github.com/pingcap/tiflow/cdc/scheduler/schedulepb"
 	"go.uber.org/zap"
 )
 
-// globalDDLs is the DDLs that affect all tables in the changefeed.
+// tableBarrierNumberLimit is used to limit the number
+// of tableBarrier in a single barrier.
+const tableBarrierNumberLimit = 256
+
+// nonGlobalDDLs are the DDLs that only affect related table
+// so that we should only block related table before execute them.
+var nonGlobalDDLs = map[timodel.ActionType]struct{}{
+	timodel.ActionDropTable:                    {},
+	timodel.ActionAddColumn:                    {},
+	timodel.ActionDropColumn:                   {},
+	timodel.ActionAddIndex:                     {},
+	timodel.ActionDropIndex:                    {},
+	timodel.ActionTruncateTable:                {},
+	timodel.ActionModifyColumn:                 {},
+	timodel.ActionSetDefaultValue:              {},
+	timodel.ActionModifyTableComment:           {},
+	timodel.ActionRenameIndex:                  {},
+	timodel.ActionAddTablePartition:            {},
+	timodel.ActionDropTablePartition:           {},
+	timodel.ActionCreateView:                   {},
+	timodel.ActionModifyTableCharsetAndCollate: {},
+	timodel.ActionTruncateTablePartition:       {},
+	timodel.ActionDropView:                     {},
+	timodel.ActionRecoverTable:                 {},
+	timodel.ActionAddPrimaryKey:                {},
+	timodel.ActionDropPrimaryKey:               {},
+	timodel.ActionRebaseAutoID:                 {},
+	timodel.ActionAlterIndexVisibility:         {},
+	timodel.ActionMultiSchemaChange:            {},
+	timodel.ActionReorganizePartition:          {},
+	timodel.ActionAlterTTLInfo:                 {},
+	timodel.ActionAlterTTLRemove:               {},
+}
+
+// The ddls below is globalDDLs, they affect all tables in the changefeed.
 // we need to wait all tables checkpointTs reach the DDL commitTs
 // before we can execute the DDL.
-var globalDDLs = []timodel.ActionType{
-	timodel.ActionCreateSchema,
-	timodel.ActionDropSchema,
-	timodel.ActionModifySchemaCharsetAndCollate,
-	// We treat create table ddl as a global ddl, because before we execute the ddl,
-	// there is no a tablePipeline for the new table. So we can't prevent the checkpointTs
-	// from advancing. To solve this problem, we just treat create table ddl as a global ddl here.
-	// TODO: Find a better way to handle create table ddl.
-	timodel.ActionCreateTable,
-	timodel.ActionRenameTable,
-	timodel.ActionRenameTables,
-	timodel.ActionExchangeTablePartition,
-}
+//timodel.ActionCreateSchema
+//timodel.ActionDropSchema
+//timodel.ActionModifySchemaCharsetAndCollate
+//// We treat create table ddl as a global ddl, because before we execute the ddl,
+//// there is no a tablePipeline for the new table. So we can't prevent the checkpointTs
+//// from advancing. To solve this problem, we just treat create table ddl as a global ddl here.
+//// TODO: Find a better way to handle create table ddl.
+//timodel.ActionCreateTable
+//timodel.ActionRenameTable
+//timodel.ActionRenameTables
+//timodel.ActionExchangeTablePartition
 
 // ddlManager holds the pending DDL events of all tables and responsible for
 // executing them to downstream.
@@ -55,8 +89,8 @@ type ddlManager struct {
 	ddlPuller puller.DDLPuller
 	// schema store multiple version of schema, it is used by scheduler
 	schema *schemaWrap4Owner
-	// redoManager is used to send DDL events to redo log and get redo resolvedTs.
-	redoManager redo.DDLManager
+	// redoDDLManager is used to send DDL events to redo log and get redo resolvedTs.
+	redoDDLManager redo.DDLManager
 	// ddlSink is used to ddlSink DDL events to the downstream
 	ddlSink DDLSink
 	// tableCheckpoint store the tableCheckpoint of each table. We need to wait
@@ -78,7 +112,7 @@ type ddlManager struct {
 	physicalTablesCache []model.TableID
 
 	BDRMode       bool
-	sinkType      model.DownStreamType
+	sinkType      model.DownstreamType
 	ddlResolvedTs model.Ts
 }
 
@@ -90,7 +124,7 @@ func newDDLManager(
 	ddlPuller puller.DDLPuller,
 	schema *schemaWrap4Owner,
 	redoManager redo.DDLManager,
-	sinkType model.DownStreamType,
+	sinkType model.DownstreamType,
 	bdrMode bool,
 ) *ddlManager {
 	log.Info("create ddl manager",
@@ -99,17 +133,18 @@ func newDDLManager(
 		zap.Uint64("startTs", startTs),
 		zap.Uint64("checkpointTs", checkpointTs),
 		zap.Bool("bdrMode", bdrMode),
-	)
+		zap.Stringer("sinkType", sinkType))
+
 	return &ddlManager{
-		changfeedID:   changefeedID,
-		ddlSink:       ddlSink,
-		ddlPuller:     ddlPuller,
-		schema:        schema,
-		redoManager:   redoManager,
-		startTs:       startTs,
-		checkpointTs:  checkpointTs,
-		ddlResolvedTs: checkpointTs,
-		BDRMode:       bdrMode,
+		changfeedID:    changefeedID,
+		ddlSink:        ddlSink,
+		ddlPuller:      ddlPuller,
+		schema:         schema,
+		redoDDLManager: redoManager,
+		startTs:        startTs,
+		checkpointTs:   checkpointTs,
+		ddlResolvedTs:  checkpointTs,
+		BDRMode:        bdrMode,
 		// use the passed sinkType after we support get resolvedTs from sink
 		sinkType:        model.DB,
 		tableCheckpoint: make(map[model.TableName]model.Ts),
@@ -130,27 +165,39 @@ func (m *ddlManager) tick(
 	ctx context.Context,
 	checkpointTs model.Ts,
 	tableCheckpoint map[model.TableName]model.Ts,
-) ([]model.TableID, model.Barrier, error) {
-	barrier := model.Barrier{}
+) ([]model.TableID, model.Ts, *schedulepb.Barrier, error) {
+	minTableBarrierTs := model.Ts(0)
+	var barrier *schedulepb.Barrier
+	m.justSentDDL = nil
 
 	m.updateCheckpointTs(checkpointTs, tableCheckpoint)
 
 	currentTables, err := m.allTables(ctx)
 	if err != nil {
-		return nil, barrier, errors.Trace(err)
+		return nil, minTableBarrierTs, barrier, errors.Trace(err)
+	}
+
+	if m.executingDDL == nil {
+		m.ddlSink.emitCheckpointTs(m.checkpointTs, currentTables)
 	}
 
 	tableIDs, err := m.allPhysicalTables(ctx)
 	if err != nil {
-		return nil, barrier, errors.Trace(err)
+		return nil, minTableBarrierTs, barrier, errors.Trace(err)
 	}
 
-	m.ddlSink.emitCheckpointTs(m.checkpointTs, currentTables)
-
+	// drain all ddl jobs from ddlPuller
 	for {
 		ts, job := m.ddlPuller.PopFrontDDL()
+		// no more ddl jobs
 		if job == nil {
 			m.schema.schemaStorage.AdvanceResolvedTs(ts)
+			if m.redoDDLManager.Enabled() {
+				err := m.redoDDLManager.UpdateResolvedTs(ctx, ts)
+				if err != nil {
+					return nil, minTableBarrierTs, barrier, err
+				}
+			}
 			break
 		}
 
@@ -161,12 +208,12 @@ func (m *ddlManager) tick(
 				zap.Any("ddlJob", job))
 			events, err := m.schema.BuildDDLEvents(job)
 			if err != nil {
-				return nil, barrier, err
+				return nil, minTableBarrierTs, barrier, err
 			}
 			// Apply ddl to update changefeed schema.
 			err = m.schema.HandleDDL(job)
 			if err != nil {
-				return nil, barrier, err
+				return nil, minTableBarrierTs, barrier, err
 			}
 			// Clear the table cache after the schema is updated.
 			m.cleanCache()
@@ -194,21 +241,14 @@ func (m *ddlManager) tick(
 
 			// Send DDL events to redo log.
 			// Fixme: get redo resolvedTs from redo log.
-			if m.redoManager.Enabled() {
+			if m.redoDDLManager.Enabled() {
 				for _, event := range events {
-					err := m.redoManager.EmitDDLEvent(ctx, event)
+					err := m.redoDDLManager.EmitDDLEvent(ctx, event)
 					if err != nil {
-						return nil, barrier, err
+						return nil, minTableBarrierTs, barrier, err
 					}
 				}
 			}
-
-			// Refresh checkpointTs and tableInfoCache when a ddl job is received
-			currentTables, err := m.allTables(ctx)
-			if err != nil {
-				return nil, barrier, err
-			}
-			m.ddlSink.emitCheckpointTs(m.checkpointTs, currentTables)
 		}
 	}
 
@@ -228,7 +268,7 @@ func (m *ddlManager) tick(
 		// TODO: Complete this logic, when sinkType is not DB,
 		// we should not block the execution of DDLs by the checkpointTs.
 		if m.sinkType != model.DB {
-			log.Panic("sink type is not DB, it never happens in current version")
+			log.Panic("Downstream type is not DB, it never happens in current version")
 		}
 
 		// TiCDC guarantees all dml(s) that happen before a ddl was sent to
@@ -251,28 +291,41 @@ func (m *ddlManager) tick(
 
 			err := m.executeDDL(ctx)
 			if err != nil {
-				return nil, barrier, err
+				return nil, minTableBarrierTs, barrier, err
 			}
 		}
 	}
 
-	barrier = m.barrier()
+	minTableBarrierTs, barrier = m.barrier()
 
-	return tableIDs, barrier, nil
+	return tableIDs, minTableBarrierTs, barrier, nil
 }
 
 // executeDDL executes ddlManager.executingDDL.
 func (m *ddlManager) executeDDL(ctx context.Context) error {
-	m.justSentDDL = nil
 	if m.executingDDL == nil {
 		return nil
 	}
+	failpoint.Inject("ExecuteNotDone", func() {
+		// This ddl will never finish executing.
+		// It is used to test the logic that a ddl only block the related table
+		// and other tables can still advance.
+		if m.executingDDL.TableInfo.TableName.Table == "ddl_not_done" {
+			time.Sleep(time.Second * 1)
+			failpoint.Return(nil)
+		}
+	})
 	done, err := m.ddlSink.emitDDLEvent(ctx, m.executingDDL)
 	if err != nil {
 		return err
 	}
 	if done {
 		tableName := m.executingDDL.TableInfo.TableName
+		log.Info("execute a ddl event successfully",
+			zap.String("ddl", m.executingDDL.Query),
+			zap.Uint64("commitTs", m.executingDDL.CommitTs),
+			zap.Stringer("table", tableName),
+		)
 		// Set it to nil first to accelerate GC.
 		m.pendingDDLs[tableName][0] = nil
 		m.pendingDDLs[tableName] = m.pendingDDLs[tableName][1:]
@@ -333,9 +386,9 @@ func (m *ddlManager) getAllTableNextDDL() []*model.DDLEvent {
 }
 
 // barrier returns ddlResolvedTs and tableBarrier
-func (m *ddlManager) barrier() model.Barrier {
-	var tableBarrier []model.TableBarrier
-
+func (m *ddlManager) barrier() (model.Ts, *schedulepb.Barrier) {
+	tableBarrierMap := make(map[model.TableID]model.Ts)
+	var tableBarrier []*schedulepb.TableBarrier
 	minTableBarrierTs := m.ddlResolvedTs
 	globalBarrierTs := m.ddlResolvedTs
 
@@ -353,25 +406,45 @@ func (m *ddlManager) barrier() model.Barrier {
 		} else {
 			ids := getPhysicalTableIDs(ddl)
 			for _, id := range ids {
-				tableBarrier = append(tableBarrier, model.TableBarrier{
-					ID:        id,
-					BarrierTs: ddl.CommitTs,
-				})
+				tableBarrierMap[id] = ddl.CommitTs
 			}
 		}
 
 		// minTableBarrierTs is the min commitTs of all tables DDLs,
-		// it is used to prevent the checkpointTs from advancing too fast.
+		// it is used to prevent the checkpointTs from advancing too fast
+		// when a changefeed is just resumed.
 		if ddl.CommitTs < minTableBarrierTs {
 			minTableBarrierTs = ddl.CommitTs
 		}
 	}
 
+	for tb, barrierTs := range tableBarrierMap {
+		if barrierTs > globalBarrierTs {
+			delete(tableBarrierMap, tb)
+		}
+	}
+
+	for tb, barrierTs := range tableBarrierMap {
+		tableBarrier = append(tableBarrier, &schedulepb.TableBarrier{
+			TableID:   tb,
+			BarrierTs: barrierTs,
+		})
+	}
+
+	// Limit the tableBarrier size to avoid too large barrier. Since it will
+	// cause the scheduler to be slow.
+	sort.Slice(tableBarrier, func(i, j int) bool {
+		return tableBarrier[i].BarrierTs < tableBarrier[j].BarrierTs
+	})
+	if len(tableBarrier) > tableBarrierNumberLimit {
+		globalBarrierTs = tableBarrier[tableBarrierNumberLimit].BarrierTs
+		tableBarrier = tableBarrier[:tableBarrierNumberLimit]
+	}
+
 	m.justSentDDL = nil
-	return model.Barrier{
-		GlobalBarrierTs:   globalBarrierTs,
-		TableBarrier:      tableBarrier,
-		MinTableBarrierTs: minTableBarrierTs,
+	return minTableBarrierTs, &schedulepb.Barrier{
+		TableBarriers:   tableBarrier,
+		GlobalBarrierTs: globalBarrierTs,
 	}
 }
 
@@ -384,9 +457,7 @@ func (m *ddlManager) allTables(ctx context.Context) ([]*model.TableInfo, error) 
 	var err error
 
 	ts := m.getSnapshotTs()
-	// If there is an executing ddl at the checkpointTs, we need to get all tables
-	// before the ddl commitTs. So we always use the checkpointTs-1 to get the snapshot.
-	m.tableInfoCache, err = m.schema.AllTablesNew(ctx, ts)
+	m.tableInfoCache, err = m.schema.AllTables(ctx, ts)
 	if err != nil {
 		return nil, err
 	}
@@ -408,16 +479,15 @@ func (m *ddlManager) allPhysicalTables(ctx context.Context) ([]model.TableID, er
 	var err error
 
 	ts := m.getSnapshotTs()
-	// If there is an executing ddl at the checkpointTs, we need to get all physical tables
-	// before the ddl commitTs. So we always use the checkpointTs-1 to get the snapshot.
-	m.physicalTablesCache, err = m.schema.AllPhysicalTablesNew(ctx, ts)
+	m.physicalTablesCache, err = m.schema.AllPhysicalTables(ctx, ts)
 	if err != nil {
 		return nil, err
 	}
 	log.Debug("changefeed physical tables updated",
 		zap.String("namespace", m.changfeedID.Namespace),
 		zap.String("changefeed", m.changfeedID.ID),
-		zap.Uint64("checkpointTs", ts),
+		zap.Uint64("checkpointTs", m.checkpointTs),
+		zap.Uint64("snapshotTs", ts),
 		zap.Any("tables", m.physicalTablesCache),
 	)
 	return m.physicalTablesCache, nil
@@ -431,18 +501,24 @@ func (m *ddlManager) allPhysicalTables(ctx context.Context) ([]model.TableID, er
 // Since TiCDC ignore the DDLs in BDRMode, we don't need to care about whether
 // the DDLs are executed or not. We should use the ddlResolvedTs to get the up-to-date
 // schema.
-func (m *ddlManager) getSnapshotTs() uint64 {
-	ts := m.checkpointTs
+func (m *ddlManager) getSnapshotTs() (ts uint64) {
+	ts = m.checkpointTs
+
+	if m.checkpointTs == m.startTs+1 && m.executingDDL == nil {
+		// If checkpointTs is equal to startTs+1, and executingDDL is nil
+		// it means that the changefeed is just started, and the physicalTablesCache
+		// is empty. So we need to get all tables from the snapshot at the startTs.
+		ts = m.startTs
+		log.Debug("changefeed is just started, use startTs to get snapshot",
+			zap.String("namespace", m.changfeedID.Namespace),
+			zap.String("changefeed", m.changfeedID.ID),
+			zap.Uint64("startTs", m.startTs),
+			zap.Uint64("checkpointTs", m.checkpointTs))
+		return
+	}
 
 	if m.BDRMode {
 		ts = m.ddlResolvedTs
-	}
-
-	if m.checkpointTs == m.startTs+1 {
-		// If checkpointTs is equal to startTs+1, it means that the changefeed
-		// is just started, and the physicalTablesCache is empty. So we need to
-		// get all tables from the snapshot at the startTs.
-		ts = m.startTs
 	}
 
 	log.Debug("snapshotTs", zap.Uint64("ts", ts))
@@ -482,10 +558,6 @@ func getPhysicalTableIDs(ddl *model.DDLEvent) []model.TableID {
 
 // isGlobalDDL returns whether the ddl is a global ddl.
 func isGlobalDDL(ddl *model.DDLEvent) bool {
-	for _, tp := range globalDDLs {
-		if ddl.Type == tp {
-			return true
-		}
-	}
-	return false
+	_, ok := nonGlobalDDLs[ddl.Type]
+	return !ok
 }

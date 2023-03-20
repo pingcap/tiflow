@@ -25,7 +25,6 @@ import (
 	"github.com/DATA-DOG/go-sqlmock"
 	"github.com/go-mysql-org/go-mysql/mysql"
 	. "github.com/pingcap/check"
-	"github.com/pingcap/errors"
 	"github.com/pingcap/log"
 	tidbddl "github.com/pingcap/tidb/ddl"
 	"github.com/pingcap/tidb/parser/ast"
@@ -169,8 +168,11 @@ func (s *testCheckpointSuite) testGlobalCheckPoint(c *C, cp CheckPoint) {
 	s.mock.ExpectBegin()
 	s.mock.ExpectExec("(162)?"+flushCheckPointSQL).WithArgs(cpid, "", "", pos1.Name, pos1.Pos, "", "", 0, "", "null", true).WillReturnResult(sqlmock.NewResult(0, 1))
 	s.mock.ExpectCommit()
-	err = cp.FlushPointsExcept(tctx, cp.Snapshot(true).id, nil, nil, nil)
-	c.Log(errors.ErrorStack(err))
+	// Create a new snapshot, and discard it, then create a new snapshot again.
+	cp.Snapshot(true)
+	cp.DiscardPendingSnapshots()
+	snap := cp.Snapshot(true)
+	err = cp.FlushPointsExcept(tctx, snap.id, nil, nil, nil)
 	c.Assert(err, IsNil)
 	c.Assert(cp.GlobalPoint().Position, Equals, pos1)
 	c.Assert(cp.FlushedGlobalPoint().Position, Equals, pos1)
@@ -267,7 +269,7 @@ func (s *testCheckpointSuite) testGlobalCheckPoint(c *C, cp CheckPoint) {
 
 	// should flush because checkpoint hasn't been updated before (cp.globalPointCheckOrSaveTime.IsZero() == true).
 	snapshot := cp.Snapshot(true)
-	c.Assert(snapshot.id, Equals, 3)
+	c.Assert(snapshot.id, Equals, 4)
 
 	s.mock.ExpectQuery(loadCheckPointSQL).WillReturnRows(sqlmock.NewRows(nil))
 	err = cp.Load(tctx)
