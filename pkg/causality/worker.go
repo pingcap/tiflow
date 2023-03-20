@@ -19,8 +19,8 @@ type (
 
 type txnEvent interface {
 	// OnConflictResolved is called when the event leaves ConflictDetector.
-    // 
-    // `serialized` indicates whether all dependences are committed or not.
+	//
+	// `serialized` indicates whether all dependences are committed or not.
 	OnConflictResolved(serialized bool)
 
 	// Keys are in range [0, math.MaxUint64) and must be deduped.
