@@ -521,13 +521,6 @@ func (m *ddlManager) getSnapshotTs() (ts uint64) {
 		ts = m.ddlResolvedTs
 	}
 
-	if m.checkpointTs == m.startTs+1 {
-		// If checkpointTs is equal to startTs+1, it means that the changefeed
-		// is just started, and the physicalTablesCache is empty. So we need to
-		// get all tables from the snapshot at the startTs.
-		ts = m.startTs
-	}
-
 	log.Debug("snapshotTs", zap.Uint64("ts", ts))
 	return ts
 }

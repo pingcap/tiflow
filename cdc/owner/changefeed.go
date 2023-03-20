@@ -77,17 +77,11 @@ type changefeed struct {
 	// and will be destroyed when a changefeed is closed.
 	barriers         *barriers
 	feedStateManager *feedStateManager
-	// preResolvedTs calculated by the scheduler in the last tick.
-	// we need to use it to prevent the barrier from being advanced too fast,
-	// when Redo is enabled.
-	// preResolvedTs model.Ts
 
 	// ddl related fields
 	ddlManager  *ddlManager
 	redoDDLMgr  redo.DDLManager
 	redoMetaMgr redo.MetaManager
-	// preResolvedTs model.Ts
-	// isFirstTick   bool
 
 	schema    *schemaWrap4Owner
 	ddlSink   DDLSink
@@ -523,7 +517,8 @@ LOOP:
 	}
 
 	c.barriers = newBarriers()
-	if c.state.Info.Config.EnableSyncPoint {
+	if c.state.Info.Config.EnableSyncPoint { // preResolvedTs model.Ts
+
 		c.barriers.Update(syncPointBarrier, resolvedTs)
 	}
 	c.barriers.Update(finishBarrier, c.state.Info.GetTargetTs())
