@@ -44,7 +44,7 @@ run_case() {
 		bash "$script" "$sink_type"
 
 	# Log data race and panic from TiCDC.
-	check_logs $OUT_DIR/$TEST_NAME
+	$CUR/_utils/check_logs $OUT_DIR/$TEST_NAME
 }
 
 sink_type=$1
