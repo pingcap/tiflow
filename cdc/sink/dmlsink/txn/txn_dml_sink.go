@@ -97,9 +97,9 @@ func newSink(ctx context.Context, backends []backend,
 		dead:    make(chan struct{}),
 	}
 
-	g, ctx := errgroup.WithContext(ctx)
+	g, ctx1 := errgroup.WithContext(ctx)
 	for i, backend := range backends {
-		w := newWorker(ctx, i, backend, len(backends))
+		w := newWorker(ctx1, i, backend, len(backends))
 		g.Go(func() error { return w.runLoop() })
 		sink.workers = append(sink.workers, w)
 	}
