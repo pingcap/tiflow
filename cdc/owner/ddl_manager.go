@@ -321,7 +321,11 @@ func (m *ddlManager) shouldExecDDL(nextDDL *model.DDLEvent) bool {
 		// need to wait `redoCheckpointTs == ddlCommitTs(ts=11)` before execute ddl-1.
 		redoCheckpointReachBarrier = flushed.CheckpointTs == nextDDL.CommitTs
 	}
-	return checkpointReachBarrier && redoCheckpointReachBarrier
+
+	// If redo is enabled, m.ddlResolvedTs may be stuck by redoDDLManager, so we need to
+	// wait nextDDL to be written to redo log.
+	redoDDLResolvedTsExceedBarrier := m.ddlResolvedTs >= nextDDL.CommitTs
+	return checkpointReachBarrier && redoCheckpointReachBarrier && redoDDLResolvedTsExceedBarrier
 }
 
 // executeDDL executes ddlManager.executingDDL.
