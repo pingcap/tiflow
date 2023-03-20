@@ -15,7 +15,7 @@ function run() {
 	sleep 3
 
 	selectors='[{ "label": "name", "target": "exec-1", "op": "Eq" }]'
-	job_id=$(create_job "FakeJob" $CUR_DIR/conf/fake_job.json "tenant_id_e2e_selector" "project_id_e2e_selector" "$selectors")
+	job_id=$(create_job "FakeJob" $CUR_DIR/conf/fake_job.json "fake_job" "tenant_id_e2e_selector" "project_id_e2e_selector" "$selectors")
 	echo "job_id: $job_id"
 
 	exec_with_retry --count 100 "curl \"http://127.0.0.1:10245/api/v1/jobs/$job_id\" | tee /dev/stderr | jq -e '.state == \"Finished\"'"
