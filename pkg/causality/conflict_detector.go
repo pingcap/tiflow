@@ -95,12 +95,12 @@ func NewConflictDetector[Worker worker[Txn], Txn txnEvent](
 func (d *ConflictDetector[Worker, Txn]) Add(txn Txn) {
 	conflictKeys := txn.ConflictKeys(d.cfg.NumSlots)
 	node := internal.NewNode(d.cfg.OnSingleConflict == SingleConflictDispatchPipeline)
-	node.OnResolved = func(workerID int64, allDependeesCommitted bool) {
+	node.OnResolved = func(workerID int64, serialized bool) {
 		unlock := func() {
 			node.Remove()
 			d.garbageNodes.In() <- txnFinishedEvent{node, conflictKeys}
 		}
-		txn.OnConflictResolved(allDependeesCommitted)
+		txn.OnConflictResolved(serialized)
 		d.sendToWorker(txn, unlock, workerID)
 	}
 	node.RandWorkerID = func() int64 { return d.nextWorkerID.Add(1) % int64(len(d.workers)) }

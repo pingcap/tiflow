@@ -66,7 +66,7 @@ func TestNodeSingleDependency(t *testing.T) {
 	nodeA := NewNode(true)
 	nodeB := NewNode(true)
 	nodeB.RandWorkerID = func() workerID { return 100 }
-	nodeB.OnResolved = func(_ workerID, serialize bool) { require.False(t, serialize) }
+	nodeB.OnResolved = func(_ workerID, serialized bool) { require.False(t, serialized) }
 	nodeB.DependOn(map[int64]*Node{nodeA.NodeID(): nodeA}, 0)
 	require.True(t, nodeA.assignTo(resolveTo(1)))
 	require.Equal(t, workerID(1), nodeA.assignedWorkerID())
@@ -76,7 +76,7 @@ func TestNodeSingleDependency(t *testing.T) {
 	nodeC := NewNode(true)
 	nodeD := NewNode(true)
 	nodeD.RandWorkerID = func() workerID { return 100 }
-	nodeD.OnResolved = func(_ workerID, serialize bool) { require.True(t, serialize) }
+	nodeD.OnResolved = func(_ workerID, serialized bool) { require.True(t, serialized) }
 	nodeD.DependOn(map[int64]*Node{nodeA.NodeID(): nodeC}, 999)
 	require.True(t, nodeC.assignTo(resolveTo(2)))
 	require.Equal(t, workerID(2), nodeC.assignedWorkerID())
@@ -97,7 +97,7 @@ func TestNodeMultipleDependencies(t *testing.T) {
 	nodeC := NewNode(true)
 
 	nodeC.RandWorkerID = func() workerID { return 100 }
-	nodeC.OnResolved = func(_ workerID, serialize bool) { require.True(t, serialize) }
+	nodeC.OnResolved = func(_ workerID, serialized bool) { require.True(t, serialized) }
 	nodeC.DependOn(map[int64]*Node{nodeA.NodeID(): nodeA, nodeB.NodeID(): nodeB}, 999)
 
 	require.True(t, nodeA.assignTo(resolveTo(1)))
@@ -116,7 +116,7 @@ func TestNodeResolveImmediately(t *testing.T) {
 	// Node A depends on 0 unresolved dependencies and some resolved dependencies.
 	nodeA := NewNode(true)
 	nodeA.RandWorkerID = func() workerID { return workerID(100) }
-	nodeA.OnResolved = func(_ workerID, serialize bool) { require.True(t, serialize) }
+	nodeA.OnResolved = func(_ workerID, serialized bool) { require.True(t, serialized) }
 	nodeA.DependOn(nil, 999)
 	require.Equal(t, workerID(100), nodeA.assignedWorkerID())
 
@@ -127,7 +127,7 @@ func TestNodeResolveImmediately(t *testing.T) {
 	require.True(t, nodeC.assignTo(resolveTo(1)))
 	nodeD := NewNode(true)
 	nodeD.RandWorkerID = func() workerID { return workerID(100) }
-	nodeD.OnResolved = func(_ workerID, serialize bool) { require.False(t, serialize) }
+	nodeD.OnResolved = func(_ workerID, serialized bool) { require.False(t, serialized) }
 	nodeD.DependOn(map[int64]*Node{nodeB.NodeID(): nodeB, nodeC.NodeID(): nodeC}, 0)
 	require.Equal(t, workerID(1), nodeD.assignedWorkerID())
 
@@ -136,7 +136,7 @@ func TestNodeResolveImmediately(t *testing.T) {
 	nodeC.Remove()
 	nodeE := NewNode(true)
 	nodeE.RandWorkerID = func() workerID { return workerID(100) }
-	nodeC.OnResolved = func(_ workerID, serialize bool) { require.True(t, serialize) }
+	nodeC.OnResolved = func(_ workerID, serialized bool) { require.True(t, serialized) }
 	nodeE.DependOn(map[int64]*Node{nodeB.NodeID(): nodeB, nodeC.NodeID(): nodeC}, 999)
 	require.Equal(t, workerID(100), nodeE.assignedWorkerID())
 }

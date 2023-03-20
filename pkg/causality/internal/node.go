@@ -50,7 +50,7 @@ type Node struct {
 	singleConflictPipeline bool
 
 	// Set the callback that the node is resolved.
-	OnResolved func(id workerID, allDependeesCommitted bool)
+	OnResolved func(id workerID, serialized bool)
 	// Set the id generator to get a random ID.
 	RandWorkerID func() workerID
 	// Set the callback that the node is notified.
@@ -212,7 +212,7 @@ func (n *Node) assignTo(resolveRes resolveResult) bool {
 
 	n.assignedTo = resolveRes.assignedTo
 	if n.OnResolved != nil {
-		n.OnResolved(n.assignedTo, resolveRes.allDependeesCommitted)
+		n.OnResolved(n.assignedTo, resolveRes.serialized)
 		n.OnResolved = nil
 	}
 
@@ -282,9 +282,9 @@ func (n *Node) doResolve(resolvedDependees, removedDependees int32) resolveResul
 			// If all dependees are assigned to one same worker, we can assign
 			// this node to the same worker directly.
 			return resolveResult{
-				resolved:              true,
-				assignedTo:            firstDep,
-				allDependeesCommitted: false,
+				resolved:   true,
+				assignedTo: firstDep,
+				serialized: false,
 			}
 		}
 	}
@@ -323,32 +323,32 @@ func (n *Node) assignedWorkerID() workerID {
 }
 
 type resolveResult struct {
-	resolved              bool
-	assignedTo            int64
-	allDependeesCommitted bool
+	resolved   bool
+	assignedTo int64
+	serialized bool
 }
 
 func noConflict() resolveResult {
 	return resolveResult{
-		resolved:              true,
-		assignedTo:            assignedToAny,
-		allDependeesCommitted: true,
+		resolved:   true,
+		assignedTo: assignedToAny,
+		serialized: true,
 	}
 }
 
 func unresolved() resolveResult {
 	return resolveResult{
-		resolved:              false,
-		assignedTo:            unassigned,
-		allDependeesCommitted: false,
+		resolved:   false,
+		assignedTo: unassigned,
+		serialized: false,
 	}
 }
 
 func resolveTo(w workerID) resolveResult {
 	return resolveResult{
-		resolved:              true,
-		assignedTo:            w,
-		allDependeesCommitted: true,
+		resolved:   true,
+		assignedTo: w,
+		serialized: true,
 	}
 }
 
