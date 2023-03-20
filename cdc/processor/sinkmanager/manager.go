@@ -761,7 +761,7 @@ func (m *SinkManager) AsyncStopTable(tableID model.TableID) {
 				zap.String("changefeed", m.changefeedID.ID),
 				zap.Int64("tableID", tableID))
 		}
-		tableSink.(*tableSinkWrapper).close(m.ctx)
+		tableSink.(*tableSinkWrapper).close()
 		cleanedBytes := m.sinkMemQuota.Clean(tableID)
 		cleanedBytes += m.redoMemQuota.Clean(tableID)
 		log.Debug("MemoryQuotaTracing: Clean up memory quota for table sink task when removing table",
@@ -880,7 +880,7 @@ func (m *SinkManager) Close() error {
 	m.redoMemQuota.Close()
 	m.tableSinks.Range(func(key, value interface{}) bool {
 		sink := value.(*tableSinkWrapper)
-		sink.close(m.ctx)
+		sink.close()
 		if m.eventCache != nil {
 			m.eventCache.removeTable(sink.tableID)
 		}
@@ -894,10 +894,7 @@ func (m *SinkManager) Close() error {
 	// todo: Add a unit test to cover this,
 	// Make sure all sink workers exited before closing the sink factory.
 	// Otherwise, it would panic in the sink when you try to write some data to a closed sink.
-	err := m.sinkFactory.Close()
-	if err != nil {
-		return errors.Trace(err)
-	}
+	m.sinkFactory.Close()
 	log.Info("Closed sink manager",
 		zap.String("namespace", m.changefeedID.Namespace),
 		zap.String("changefeed", m.changefeedID.ID),

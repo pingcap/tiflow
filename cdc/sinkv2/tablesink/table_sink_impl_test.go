@@ -14,7 +14,6 @@
 package tablesink
 
 import (
-	"context"
 	"sort"
 	"sync"
 	"testing"
@@ -31,6 +30,7 @@ import (
 var _ eventsink.EventSink[*model.SingleTableTxn] = (*mockEventSink)(nil)
 
 type mockEventSink struct {
+	dead   chan struct{}
 	events []*eventsink.TxnCallbackableEvent
 }
 
@@ -39,9 +39,12 @@ func (m *mockEventSink) WriteEvents(rows ...*eventsink.TxnCallbackableEvent) err
 	return nil
 }
 
-func (m *mockEventSink) Close() error {
-	// Do nothing.
-	return nil
+func (m *mockEventSink) Close() {
+	close(m.dead)
+}
+
+func (m *mockEventSink) Dead() <-chan struct{} {
+	return m.dead
 }
 
 // acknowledge the txn events by call the callback function.
@@ -153,7 +156,7 @@ func getTestRows() []*model.RowChangedEvent {
 func TestNewEventTableSink(t *testing.T) {
 	t.Parallel()
 
-	sink := &mockEventSink{}
+	sink := &mockEventSink{dead: make(chan struct{})}
 	tb := New[*model.SingleTableTxn](model.DefaultChangeFeedID("1"),
 		1, sink, &eventsink.TxnEventAppender{}, prometheus.NewCounter(prometheus.CounterOpts{}))
 
@@ -169,7 +172,7 @@ func TestNewEventTableSink(t *testing.T) {
 func TestAppendRowChangedEvents(t *testing.T) {
 	t.Parallel()
 
-	sink := &mockEventSink{}
+	sink := &mockEventSink{dead: make(chan struct{})}
 	tb := New[*model.SingleTableTxn](model.DefaultChangeFeedID("1"),
 		1, sink, &eventsink.TxnEventAppender{}, prometheus.NewCounter(prometheus.CounterOpts{}))
 
@@ -180,7 +183,7 @@ func TestAppendRowChangedEvents(t *testing.T) {
 func TestUpdateResolvedTs(t *testing.T) {
 	t.Parallel()
 
-	sink := &mockEventSink{}
+	sink := &mockEventSink{dead: make(chan struct{})}
 	tb := New[*model.SingleTableTxn](model.DefaultChangeFeedID("1"),
 		1, sink, &eventsink.TxnEventAppender{}, prometheus.NewCounter(prometheus.CounterOpts{}))
 
@@ -229,7 +232,7 @@ func TestUpdateResolvedTs(t *testing.T) {
 func TestGetCheckpointTs(t *testing.T) {
 	t.Parallel()
 
-	sink := &mockEventSink{}
+	sink := &mockEventSink{dead: make(chan struct{})}
 	tb := New[*model.SingleTableTxn](model.DefaultChangeFeedID("1"),
 		1, sink, &eventsink.TxnEventAppender{}, prometheus.NewCounter(prometheus.CounterOpts{}))
 
@@ -265,7 +268,7 @@ func TestGetCheckpointTs(t *testing.T) {
 func TestClose(t *testing.T) {
 	t.Parallel()
 
-	sink := &mockEventSink{}
+	sink := &mockEventSink{dead: make(chan struct{})}
 	tb := New[*model.SingleTableTxn](model.DefaultChangeFeedID("1"),
 		1, sink, &eventsink.TxnEventAppender{}, prometheus.NewCounter(prometheus.CounterOpts{}))
 
@@ -276,7 +279,7 @@ func TestClose(t *testing.T) {
 	var wg sync.WaitGroup
 	wg.Add(1)
 	go func() {
-		tb.Close(context.Background())
+		tb.Close()
 		wg.Done()
 	}()
 	require.Eventually(t, func() bool {
@@ -293,7 +296,7 @@ func TestClose(t *testing.T) {
 func TestCloseCancellable(t *testing.T) {
 	t.Parallel()
 
-	sink := &mockEventSink{}
+	sink := &mockEventSink{dead: make(chan struct{})}
 	tb := New[*model.SingleTableTxn](model.DefaultChangeFeedID("1"),
 		1, sink, &eventsink.TxnEventAppender{}, prometheus.NewCounter(prometheus.CounterOpts{}))
 
@@ -301,12 +304,16 @@ func TestCloseCancellable(t *testing.T) {
 	err := tb.UpdateResolvedTs(model.NewResolvedTs(105))
 	require.Nil(t, err)
 	require.Len(t, sink.events, 7, "all events should be flushed")
-	ctx, cancel := context.WithTimeout(context.Background(), time.Millisecond*10)
-	defer cancel()
+
+	go func() {
+		time.Sleep(time.Millisecond * 10)
+		sink.Close()
+	}()
+
 	var wg sync.WaitGroup
 	wg.Add(1)
 	go func() {
-		tb.Close(ctx)
+		tb.Close()
 		wg.Done()
 	}()
 	wg.Wait()
@@ -318,7 +325,7 @@ func TestCloseCancellable(t *testing.T) {
 func TestCloseReentrant(t *testing.T) {
 	t.Parallel()
 
-	sink := &mockEventSink{}
+	sink := &mockEventSink{dead: make(chan struct{})}
 	tb := New[*model.SingleTableTxn](model.DefaultChangeFeedID("1"),
 		1, sink, &eventsink.TxnEventAppender{}, prometheus.NewCounter(prometheus.CounterOpts{}))
 
@@ -326,19 +333,23 @@ func TestCloseReentrant(t *testing.T) {
 	err := tb.UpdateResolvedTs(model.NewResolvedTs(105))
 	require.Nil(t, err)
 	require.Len(t, sink.events, 7, "all events should be flushed")
-	ctx, cancel := context.WithTimeout(context.Background(), time.Millisecond*10)
-	defer cancel()
+
+	go func() {
+		time.Sleep(time.Millisecond * 10)
+		sink.Close()
+	}()
+
 	var wg sync.WaitGroup
 	wg.Add(1)
 	go func() {
-		tb.Close(ctx)
+		tb.Close()
 		wg.Done()
 	}()
 	wg.Wait()
 	require.Eventually(t, func() bool {
 		return state.TableSinkStopped == tb.state.Load()
 	}, 5*time.Second, time.Millisecond*10, "table should be stopped")
-	tb.Close(ctx)
+	tb.Close()
 }
 
 // TestCheckpointTsFrozenWhenStopping make sure wo do not update checkpoint
@@ -346,7 +357,7 @@ func TestCloseReentrant(t *testing.T) {
 func TestCheckpointTsFrozenWhenStopping(t *testing.T) {
 	t.Parallel()
 
-	sink := &mockEventSink{}
+	sink := &mockEventSink{dead: make(chan struct{})}
 	tb := New[*model.SingleTableTxn](model.DefaultChangeFeedID("1"),
 		1, sink, &eventsink.TxnEventAppender{}, prometheus.NewCounter(prometheus.CounterOpts{}))
 
@@ -354,13 +365,17 @@ func TestCheckpointTsFrozenWhenStopping(t *testing.T) {
 	err := tb.UpdateResolvedTs(model.NewResolvedTs(105))
 	require.Nil(t, err)
 	require.Len(t, sink.events, 7, "all events should be flushed")
-	ctx, cancel := context.WithTimeout(context.Background(), time.Millisecond*10)
-	defer cancel()
+
+	go func() {
+		time.Sleep(time.Millisecond * 10)
+		sink.Close()
+	}()
+
 	var wg sync.WaitGroup
 	wg.Add(1)
 	go func() {
 		defer wg.Done()
-		tb.Close(ctx)
+		tb.Close()
 	}()
 	require.Eventually(t, func() bool {
 		return state.TableSinkStopping == tb.state.Load()

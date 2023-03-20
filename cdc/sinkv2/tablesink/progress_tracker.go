@@ -14,7 +14,6 @@
 package tablesink
 
 import (
-	"context"
 	"math"
 	"sync"
 	"sync/atomic"
@@ -268,13 +267,14 @@ func (r *progressTracker) freezeProcess() {
 }
 
 // close is used to close the progress tracker.
-func (r *progressTracker) close(ctx context.Context) {
+func (r *progressTracker) close(backendDead <-chan struct{}) {
 	r.mu.Lock()
 	if !r.frozen {
 		log.Panic("the progress tracker should be frozen before closing")
 	}
 	r.closed = true
 	r.mu.Unlock()
+
 	blockTicker := time.NewTicker(warnDuration)
 	defer blockTicker.Stop()
 	// Used to block for loop for a while to prevent CPU spin.
@@ -282,20 +282,20 @@ func (r *progressTracker) close(ctx context.Context) {
 	defer waitingTicker.Stop()
 	for {
 		select {
-		case <-ctx.Done():
-			// If the context is canceled, we should return immediately.
+		case <-backendDead:
+			// The backend is dead, stop waiting.
+			r.advance()
 			return
-		case <-blockTicker.C:
-			log.Warn("Close process doesn't return in time, may be stuck",
-				zap.Int64("tableID", r.tableID),
-				zap.Int("trackingCount", r.trackingCount()),
-				zap.Any("lastMinResolvedTs", r.advance()),
-			)
 		case <-waitingTicker.C:
 			r.advance()
 			if r.trackingCount() == 0 {
 				return
 			}
+		case <-blockTicker.C:
+			log.Warn("Close process doesn't return in time, may be stuck",
+				zap.Int64("tableID", r.tableID),
+				zap.Int("trackingCount", r.trackingCount()),
+				zap.Any("lastMinResolvedTs", r.advance()))
 		}
 	}
 }
