@@ -163,7 +163,7 @@ func (f *factory) newWriter(async bool) *kafka.Writer {
 		ReadTimeout:  f.options.ReadTimeout,
 		WriteTimeout: f.options.WriteTimeout,
 		// For kafka cluster with a bad network condition,
-		// do not waster too much time to prevent long time blocking.
+		// do not waste too much time to prevent long time blocking.
 		MaxAttempts:     2,
 		WriteBackoffMin: 10 * time.Millisecond,
 		RequiredAcks:    kafka.RequiredAcks(f.options.RequiredAcks),
@@ -204,7 +204,10 @@ func (f *factory) SyncProducer() (pkafka.SyncProducer, error) {
 	// set batch size to 1 to make sure the message is sent immediately
 	w.BatchTimeout = time.Millisecond
 	w.BatchSize = 1
-	return &syncWriter{w: w}, nil
+	return &syncWriter{
+		w:            w,
+		changefeedID: f.changefeedID,
+	}, nil
 }
 
 // AsyncProducer creates an async producer to writer message to kafka
