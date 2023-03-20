@@ -25,7 +25,7 @@ type txnForTest struct {
 	done func()
 }
 
-func (t *txnForTest) OnConflictResolved() {}
+func (t *txnForTest) OnConflictResolved(allDependeesCommitted bool) {}
 
 func (t *txnForTest) ConflictKeys(numSlots uint64) []uint64 {
 	return t.keys

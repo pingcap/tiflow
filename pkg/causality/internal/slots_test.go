@@ -30,7 +30,7 @@ func TestSlotsTrivial(t *testing.T) {
 	nodes := make([]*Node, 0, 1000)
 
 	for i := 0; i < count; i++ {
-		node := NewNode()
+		node := NewNode(true)
 		node.RandWorkerID = func() workerID { return 100 }
 		slots.Add(node, []uint64{1, 2, 3, 4, 5})
 		nodes = append(nodes, node)
@@ -55,7 +55,7 @@ func TestSlotsConcurrentOps(t *testing.T) {
 	freeNodeChan := make(chan *Node, N)
 	inuseNodeChan := make(chan *Node, N)
 	newNode := func() *Node {
-		node := NewNode()
+		node := NewNode(true)
 		node.RandWorkerID = func() workerID { return 100 }
 		return node
 	}

@@ -21,17 +21,35 @@ import (
 	"go.uber.org/atomic"
 )
 
+// SingleConflictDispathType describes how to dispatch a single conflict event.
+// If all dependences of an event are dispatched to one worker, we say the event
+// has a single conflict.
+type SingleConflictDispathType int
+
+const (
+	// SingleConflictDispatchSerialize means can only dispatch a single event when
+	// all dependences are committed.
+	SingleConflictDispatchSerialize SingleConflictDispathType = SingleConflictDispathType(iota)
+	// SingleConflictDispatchPipeline means we can dispatch a single event directly.
+	SingleConflictDispatchPipeline SingleConflictDispathType
+)
+
+type Config struct {
+	OnSingleConflict SingleConflictDispathType
+	NumSlots         uint64
+}
+
 // ConflictDetector implements a logic that dispatches transaction
 // to different workers in a way that transactions modifying the same
 // keys are never executed concurrently and have their original orders
 // preserved.
 type ConflictDetector[Worker worker[Txn], Txn txnEvent] struct {
+	cfg     Config
 	workers []Worker
 
 	// slots are used to find all unfinished transactions
 	// conflicting with an incoming transactions.
-	slots    *internal.Slots[*internal.Node]
-	numSlots uint64
+	slots *internal.Slots[*internal.Node]
 
 	// nextWorkerID is used to dispatch transactions round-robin.
 	nextWorkerID atomic.Int64
@@ -51,12 +69,12 @@ type txnFinishedEvent struct {
 // NewConflictDetector creates a new ConflictDetector.
 func NewConflictDetector[Worker worker[Txn], Txn txnEvent](
 	workers []Worker,
-	numSlots uint64,
+	cfg Config,
 ) *ConflictDetector[Worker, Txn] {
 	ret := &ConflictDetector[Worker, Txn]{
+		cfg:           cfg,
 		workers:       workers,
-		slots:         internal.NewSlots[*internal.Node](numSlots),
-		numSlots:      numSlots,
+		slots:         internal.NewSlots[*internal.Node](cfg.NumSlots),
 		notifiedNodes: chann.NewAutoDrainChann[func()](),
 		garbageNodes:  chann.NewAutoDrainChann[txnFinishedEvent](),
 		closeCh:       make(chan struct{}),
@@ -75,13 +93,14 @@ func NewConflictDetector[Worker worker[Txn], Txn txnEvent](
 //
 // NOTE: if multiple threads access this concurrently, Txn.ConflictKeys must be sorted.
 func (d *ConflictDetector[Worker, Txn]) Add(txn Txn) {
-	conflictKeys := txn.ConflictKeys(d.numSlots)
-	node := internal.NewNode()
-	node.OnResolved = func(workerID int64) {
+	conflictKeys := txn.ConflictKeys(d.cfg.NumSlots)
+	node := internal.NewNode(d.cfg.OnSingleConflict == SingleConflictDispatchPipeline)
+	node.OnResolved = func(workerID int64, allDependeesCommitted bool) {
 		unlock := func() {
 			node.Remove()
 			d.garbageNodes.In() <- txnFinishedEvent{node, conflictKeys}
 		}
+		txn.OnConflictResolved(allDependeesCommitted)
 		d.sendToWorker(txn, unlock, workerID)
 	}
 	node.RandWorkerID = func() int64 { return d.nextWorkerID.Add(1) % int64(len(d.workers)) }
@@ -121,7 +140,6 @@ func (d *ConflictDetector[Worker, Txn]) sendToWorker(txn Txn, unlock func(), wor
 	if workerID < 0 {
 		panic("must assign with a valid workerID")
 	}
-	txn.OnConflictResolved()
 	worker := d.workers[workerID]
 	worker.Add(txn, unlock)
 }

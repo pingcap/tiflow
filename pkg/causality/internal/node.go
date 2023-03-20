@@ -46,10 +46,11 @@ var (
 // in conflict detection.
 type Node struct {
 	// Immutable fields.
-	id int64
+	id                     int64
+	singleConflictPipeline bool
 
 	// Set the callback that the node is resolved.
-	OnResolved func(id workerID)
+	OnResolved func(id workerID, allDependeesCommitted bool)
 	// Set the id generator to get a random ID.
 	RandWorkerID func() workerID
 	// Set the callback that the node is notified.
@@ -82,7 +83,7 @@ type Node struct {
 }
 
 // NewNode creates a new node.
-func NewNode() (ret *Node) {
+func NewNode(singleConflictPipeline bool) (ret *Node) {
 	defer func() {
 		ret.id = genNextNodeID()
 		ret.OnResolved = nil
@@ -96,6 +97,7 @@ func NewNode() (ret *Node) {
 	}()
 
 	ret = new(Node)
+	ret.singleConflictPipeline = singleConflictPipeline
 	return
 }
 
@@ -199,7 +201,7 @@ func (n *Node) Free() {
 }
 
 // assignTo assigns a node to a worker. Returns `true` on success.
-func (n *Node) assignTo(workerID int64) bool {
+func (n *Node) assignTo(resolveRes resolveResult) bool {
 	n.mu.Lock()
 	defer n.mu.Unlock()
 
@@ -208,9 +210,9 @@ func (n *Node) assignTo(workerID int64) bool {
 		return false
 	}
 
-	n.assignedTo = workerID
+	n.assignedTo = resolveRes.assignedTo
 	if n.OnResolved != nil {
-		n.OnResolved(workerID)
+		n.OnResolved(n.assignedTo, resolveRes.allDependeesCommitted)
 		n.OnResolved = nil
 	}
 
@@ -228,14 +230,15 @@ func (n *Node) assignTo(workerID int64) bool {
 }
 
 func (n *Node) maybeResolve(resolvedDependees, removedDependees int32) {
-	if workerNum, ok := n.tryResolve(resolvedDependees, removedDependees); ok {
-		if workerNum < 0 {
+	resolveRes := n.tryResolve(resolvedDependees, removedDependees)
+	if resolveRes.resolved {
+		if resolveRes.assignedTo < 0 {
 			panic("Node.tryResolve must return a valid worker ID")
 		}
 		if n.OnNotified != nil {
-			n.OnNotified(func() { n.assignTo(workerNum) })
+			n.OnNotified(func() { n.assignTo(resolveRes) })
 		} else {
-			n.assignTo(workerNum)
+			n.assignTo(resolveRes)
 		}
 	}
 }
@@ -244,21 +247,28 @@ func (n *Node) maybeResolve(resolvedDependees, removedDependees int32) {
 // Returns (_, false) if there is a conflict,
 // returns (rand, true) if there is no conflict,
 // returns (N, true) if only worker N can be used.
-func (n *Node) tryResolve(resolvedDependees, removedDependees int32) (int64, bool) {
-	assignedTo, resolved := n.doResolve(resolvedDependees, removedDependees)
-	if resolved && assignedTo == assignedToAny {
-		assignedTo = n.RandWorkerID()
+func (n *Node) tryResolve(resolvedDependees, removedDependees int32) resolveResult {
+	resolveRes := n.doResolve(resolvedDependees, removedDependees)
+	if resolveRes.resolved && resolveRes.assignedTo == assignedToAny {
+		resolveRes.assignedTo = n.RandWorkerID()
 	}
-	return assignedTo, resolved
+	return resolveRes
 }
 
-func (n *Node) doResolve(resolvedDependees, removedDependees int32) (int64, bool) {
+func (n *Node) doResolve(resolvedDependees, removedDependees int32) resolveResult {
 	if n.totalDependees == 0 {
 		// No conflicts, can select any workers.
-		return assignedToAny, true
+		return noConflict()
 	}
 
-	if resolvedDependees == n.totalDependees {
+	// All dependees are removed, so assign the node to any worker is fine.
+	if removedDependees == n.totalDependees {
+		return noConflict()
+	}
+
+	// If single conflict pipeline is allowed, check whether all dependences are
+	// dispatched into one same worker or not.
+	if n.singleConflictPipeline && resolvedDependees == n.totalDependees {
 		firstDep := stdatomic.LoadInt64(&n.resolvedList[0])
 		hasDiffDep := false
 		for i := 1; i < int(n.totalDependees); i++ {
@@ -271,16 +281,15 @@ func (n *Node) doResolve(resolvedDependees, removedDependees int32) (int64, bool
 		if !hasDiffDep {
 			// If all dependees are assigned to one same worker, we can assign
 			// this node to the same worker directly.
-			return firstDep, true
+			return resolveResult{
+				resolved:              true,
+				assignedTo:            firstDep,
+				allDependeesCommitted: false,
+			}
 		}
 	}
 
-	// All dependees are removed, so assign the node to any worker is fine.
-	if removedDependees == n.totalDependees {
-		return assignedToAny, true
-	}
-
-	return unassigned, false
+	return unresolved()
 }
 
 func (n *Node) getOrCreateDependers() *btree.BTreeG[*Node] {
@@ -311,6 +320,36 @@ func (n *Node) assignedWorkerID() workerID {
 	defer n.mu.Unlock()
 
 	return n.assignedTo
+}
+
+type resolveResult struct {
+	resolved              bool
+	assignedTo            int64
+	allDependeesCommitted bool
+}
+
+func noConflict() resolveResult {
+	return resolveResult{
+		resolved:              true,
+		assignedTo:            assignedToAny,
+		allDependeesCommitted: true,
+	}
+}
+
+func unresolved() resolveResult {
+	return resolveResult{
+		resolved:              false,
+		assignedTo:            unassigned,
+		allDependeesCommitted: false,
+	}
+}
+
+func resolveTo(w workerID) resolveResult {
+	return resolveResult{
+		resolved:              true,
+		assignedTo:            w,
+		allDependeesCommitted: true,
+	}
 }
 
 func genNextNodeID() int64 {

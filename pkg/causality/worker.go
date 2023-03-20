@@ -19,7 +19,7 @@ type (
 
 type txnEvent interface {
 	// OnConflictResolved is called when the event leaves ConflictDetector.
-	OnConflictResolved()
+	OnConflictResolved(allDependeesCommitted bool)
 
 	// Keys are in range [0, math.MaxUint64) and must be deduped.
 	//

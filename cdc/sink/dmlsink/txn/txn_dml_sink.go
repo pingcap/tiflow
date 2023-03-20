@@ -62,7 +62,6 @@ func NewMySQLSink(
 	sinkURI *url.URL,
 	replicaConfig *config.ReplicaConfig,
 	errCh chan<- error,
-	conflictDetectorSlots uint64,
 ) (*dmlSink, error) {
 	ctx1, cancel := context.WithCancel(ctx)
 	statistics := metrics.NewStatistics(ctx1, psink.TxnSink)
@@ -77,7 +76,7 @@ func NewMySQLSink(
 	for _, impl := range backendImpls {
 		backends = append(backends, impl)
 	}
-	sink := newSink(ctx, backends, errCh, conflictDetectorSlots)
+	sink := newSink(ctx, backends, errCh, DefaultConflictDetectorSlots)
 	sink.statistics = statistics
 	sink.cancel = cancel
 
@@ -93,7 +92,11 @@ func newSink(ctx context.Context, backends []backend,
 		w.runBackgroundLoop()
 		workers = append(workers, w)
 	}
-	detector := causality.NewConflictDetector[*worker, *txnEvent](workers, conflictDetectorSlots)
+	detector := causality.NewConflictDetector[*worker, *txnEvent](workers, causality.Config{
+		// TODO: use SingleConflictDispatchSerialize if batch dml across txns is enabled.
+		SingleConflictDispathType: causality.SingleConflictDispatchPipeline,
+		NumSlots:                  conflictDetectorSlots,
+	})
 	return &dmlSink{conflictDetector: detector, workers: workers}
 }
 
