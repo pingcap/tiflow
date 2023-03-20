@@ -182,13 +182,12 @@ func (c *captureImpl) GetEtcdClient() etcd.CDCEtcdClient {
 func (c *captureImpl) reset(ctx context.Context) error {
 	lease, err := c.EtcdClient.GetEtcdClient().Grant(ctx, int64(c.config.CaptureSessionTTL))
 	if err != nil {
-		return cerror.WrapError(cerror.ErrNewCaptureFailed, err)
+		return errors.Trace(err)
 	}
 	sess, err := concurrency.NewSession(
-		c.EtcdClient.GetEtcdClient().Unwrap(),
-		concurrency.WithLease(lease.ID))
+		c.EtcdClient.GetEtcdClient().Unwrap(), concurrency.WithLease(lease.ID))
 	if err != nil {
-		return cerror.WrapError(cerror.ErrNewCaptureFailed, err)
+		return errors.Trace(err)
 	}
 
 	c.captureMu.Lock()
@@ -205,7 +204,7 @@ func (c *captureImpl) reset(ctx context.Context) error {
 	c.upstreamManager = upstream.NewManager(ctx, c.EtcdClient.GetGCServiceID())
 	_, err = c.upstreamManager.AddDefaultUpstream(c.pdEndpoints, c.config.Security)
 	if err != nil {
-		return cerror.WrapError(cerror.ErrNewCaptureFailed, err)
+		return errors.Trace(err)
 	}
 
 	c.processorManager = c.newProcessorManager(

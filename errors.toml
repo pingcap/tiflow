@@ -458,7 +458,7 @@ invalid topic expression
 
 ["CDC:ErrLeaseExpired"]
 error = '''
-owner lease expired 
+owner lease expired
 '''
 
 ["CDC:ErrLoadTimezone"]
@@ -524,11 +524,6 @@ MySQL txn error
 ["CDC:ErrMySQLWorkerPanic"]
 error = '''
 MySQL worker panic
-'''
-
-["CDC:ErrNewCaptureFailed"]
-error = '''
-new capture failed
 '''
 
 ["CDC:ErrNewSemVersion"]
