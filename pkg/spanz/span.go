@@ -120,17 +120,17 @@ func KeyInSpan(k tablepb.Key, span tablepb.Span) bool {
 // StartCompare compares two start keys.
 // The result will be 0 if lhs==rhs, -1 if lhs < rhs, and +1 if lhs > rhs
 func StartCompare(lhs []byte, rhs []byte) int {
-	if lhs == nil && rhs == nil {
+	if len(lhs) == 0 && len(rhs) == 0 {
 		return 0
 	}
 
 	// Nil means Negative infinity.
 	// It's difference with EndCompare.
-	if lhs == nil {
+	if len(lhs) == 0 {
 		return -1
 	}
 
-	if rhs == nil {
+	if len(rhs) == 0 {
 		return 1
 	}
 
@@ -140,17 +140,17 @@ func StartCompare(lhs []byte, rhs []byte) int {
 // EndCompare compares two end keys.
 // The result will be 0 if lhs==rhs, -1 if lhs < rhs, and +1 if lhs > rhs
 func EndCompare(lhs []byte, rhs []byte) int {
-	if lhs == nil && rhs == nil {
+	if len(lhs) == 0 && len(rhs) == 0 {
 		return 0
 	}
 
 	// Nil means Positive infinity.
 	// It's difference with StartCompare.
-	if lhs == nil {
+	if len(lhs) == 0 {
 		return 1
 	}
 
-	if rhs == nil {
+	if len(rhs) == 0 {
 		return -1
 	}
 
@@ -160,8 +160,8 @@ func EndCompare(lhs []byte, rhs []byte) int {
 // Intersect return to intersect part of lhs and rhs span.
 // Return error if there's no intersect part
 func Intersect(lhs tablepb.Span, rhs tablepb.Span) (span tablepb.Span, err error) {
-	if lhs.StartKey != nil && EndCompare(lhs.StartKey, rhs.EndKey) >= 0 ||
-		rhs.StartKey != nil && EndCompare(rhs.StartKey, lhs.EndKey) >= 0 {
+	if len(lhs.StartKey) != 0 && EndCompare(lhs.StartKey, rhs.EndKey) >= 0 ||
+		len(rhs.StartKey) != 0 && EndCompare(rhs.StartKey, lhs.EndKey) >= 0 {
 		return tablepb.Span{}, errors.ErrIntersectNoOverlap.GenWithStackByArgs(lhs, rhs)
 	}
 

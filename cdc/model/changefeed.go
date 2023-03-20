@@ -437,6 +437,24 @@ func (info *ChangeFeedInfo) updateSinkURIAndConfigProtocol(uri *url.URL, newProt
 	info.Config.Sink.Protocol = newProtocol
 }
 
+// DownstreamType returns the type of the downstream.
+func (info *ChangeFeedInfo) DownstreamType() (DownstreamType, error) {
+	uri, err := url.Parse(info.SinkURI)
+	if err != nil {
+		return Unknown, errors.Trace(err)
+	}
+	if sink.IsMySQLCompatibleScheme(uri.Scheme) {
+		return DB, nil
+	}
+	if sink.IsMQScheme(uri.Scheme) {
+		return MQ, nil
+	}
+	if sink.IsStorageScheme(uri.Scheme) {
+		return Storage, nil
+	}
+	return Unknown, nil
+}
+
 func (info *ChangeFeedInfo) fixMemoryQuota() {
 	info.Config.FixMemoryQuota()
 }
@@ -445,40 +463,22 @@ func (info *ChangeFeedInfo) fixScheduler(inheritV66 bool) {
 	info.Config.FixScheduler(inheritV66)
 }
 
-// Barrier is a barrier for changefeed.
-type Barrier struct {
-	GlobalBarrierTs   Ts             `json:"global-barrier-ts"`
-	TableBarrier      []TableBarrier `json:"table-barrier"`
-	MinTableBarrierTs Ts             `json:"min-table-barrier-ts"`
-}
-
-// TableBarrier is a barrier for a table.
-type TableBarrier struct {
-	ID        TableID `json:"id"`
-	BarrierTs Ts      `json:"barrier-ts"`
-}
-
-// NewBarrier creates a Barrier.
-func NewBarrier(ts Ts) *Barrier {
-	return &Barrier{
-		GlobalBarrierTs: ts,
-	}
-}
-
-// DownStreamType is the type of downstream.
-type DownStreamType int
+// DownstreamType is the type of downstream.
+type DownstreamType int
 
 const (
 	// DB is the type of Database.
-	DB DownStreamType = iota
+	DB DownstreamType = iota
 	// MQ is the type of MQ or Cloud Storage.
 	MQ
 	// Storage is the type of Cloud Storage.
 	Storage
+	// Unknown is the type of Unknown.
+	Unknown
 )
 
 // String implements fmt.Stringer interface.
-func (t DownStreamType) String() string {
+func (t DownstreamType) String() string {
 	switch t {
 	case DB:
 		return "DB"
@@ -487,5 +487,5 @@ func (t DownStreamType) String() string {
 	case Storage:
 		return "Storage"
 	}
-	return "unknown"
+	return "Unknown"
 }
