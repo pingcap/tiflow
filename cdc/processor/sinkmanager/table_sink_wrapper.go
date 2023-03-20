@@ -14,7 +14,6 @@
 package sinkmanager
 
 import (
-	"context"
 	"sort"
 	"sync"
 	"sync/atomic"
@@ -198,7 +197,7 @@ func (t *tableSinkWrapper) getState() tablepb.TableState {
 	return t.state.Load()
 }
 
-func (t *tableSinkWrapper) close(_ context.Context) {
+func (t *tableSinkWrapper) close() {
 	t.state.Store(tablepb.TableStateStopping)
 	// table stopped state must be set after underlying sink is closed
 	defer t.state.Store(tablepb.TableStateStopped)
