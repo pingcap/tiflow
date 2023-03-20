@@ -34,6 +34,7 @@ const (
 	SingleConflictDispatchPipeline
 )
 
+// Config is used to configure ConflictDetector.
 type Config struct {
 	OnSingleConflict SingleConflictDispathType
 	NumSlots         uint64
