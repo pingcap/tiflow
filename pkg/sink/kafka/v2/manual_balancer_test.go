@@ -1,4 +1,4 @@
-// Copyright 2022 PingCAP, Inc.
+// Copyright 2023 PingCAP, Inc.
 //
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -11,15 +11,16 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-package dmlsink
+package v2
 
-// EventSink is the interface for event sink.
-type EventSink[E TableEvent] interface {
-	// WriteEvents writes events to the sink.
-	// This is an asynchronously and thread-safe method.
-	WriteEvents(events ...*CallbackableEvent[E]) error
-	// Close closes the sink.
-	Close()
-	// The EventSink meets internal errors and has been dead already.
-	Dead() <-chan struct{}
+import (
+	"testing"
+
+	"github.com/segmentio/kafka-go"
+	"github.com/stretchr/testify/require"
+)
+
+func TestManualPartition(t *testing.T) {
+	mp := &manualPartitioner{}
+	require.Equal(t, 6, mp.Balance(kafka.Message{Partition: 6}, 2, 3, 4))
 }
