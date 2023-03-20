@@ -14,7 +14,6 @@
 package sinkmanager
 
 import (
-	"context"
 	"sort"
 	"sync"
 	"sync/atomic"
@@ -40,7 +39,7 @@ type tableSinkWrapper struct {
 
 	// changefeed used for logging.
 	changefeed model.ChangeFeedID
-	// tableID used for logging.
+	// tableSpan used for logging.
 	span tablepb.Span
 	// tableSink is the underlying sink.
 	tableSink tablesink.TableSink
@@ -52,6 +51,8 @@ type tableSinkWrapper struct {
 	targetTs model.Ts
 	// replicateTs is the ts that the table sink has started to replicate.
 	replicateTs model.Ts
+	// barrierTs is the barrier bound of the table sink.
+	barrierTs atomic.Uint64
 	// receivedSorterResolvedTs is the resolved ts received from the sorter.
 	// We use this to advance the redo log.
 	receivedSorterResolvedTs atomic.Uint64
@@ -198,11 +199,25 @@ func (t *tableSinkWrapper) getState() tablepb.TableState {
 	return t.state.Load()
 }
 
-func (t *tableSinkWrapper) close(ctx context.Context) {
+// getUpperBoundTs returns the upperbound of the table sink.
+// It is used by sinkManager to generate sink task.
+// upperBoundTs should be the minimum of the following two values:
+// 1. the resolved ts of the sorter
+// 2. the barrier ts of the table
+func (t *tableSinkWrapper) getUpperBoundTs() model.Ts {
+	resolvedTs := t.getReceivedSorterResolvedTs()
+	barrierTs := t.barrierTs.Load()
+	if resolvedTs > barrierTs {
+		resolvedTs = barrierTs
+	}
+	return resolvedTs
+}
+
+func (t *tableSinkWrapper) close() {
 	t.state.Store(tablepb.TableStateStopping)
 	// table stopped state must be set after underlying sink is closed
 	defer t.state.Store(tablepb.TableStateStopped)
-	t.tableSink.Close(ctx)
+	t.tableSink.Close()
 	log.Info("Sink is closed",
 		zap.Stringer("span", &t.span),
 		zap.String("namespace", t.changefeed.Namespace),

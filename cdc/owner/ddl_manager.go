@@ -11,12 +11,11 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-// TODO: remove this tag after ddlManager is used.
-// nolint:unused,unparam
 package owner
 
 import (
 	"context"
+	"sort"
 	"time"
 
 	"github.com/pingcap/errors"
@@ -30,22 +29,54 @@ import (
 	"go.uber.org/zap"
 )
 
-// globalDDLs is the DDLs that affect all tables in the changefeed.
+// tableBarrierNumberLimit is used to limit the number
+// of tableBarrier in a single barrier.
+const tableBarrierNumberLimit = 256
+
+// nonGlobalDDLs are the DDLs that only affect related table
+// so that we should only block related table before execute them.
+var nonGlobalDDLs = map[timodel.ActionType]struct{}{
+	timodel.ActionDropTable:                    {},
+	timodel.ActionAddColumn:                    {},
+	timodel.ActionDropColumn:                   {},
+	timodel.ActionAddIndex:                     {},
+	timodel.ActionDropIndex:                    {},
+	timodel.ActionTruncateTable:                {},
+	timodel.ActionModifyColumn:                 {},
+	timodel.ActionSetDefaultValue:              {},
+	timodel.ActionModifyTableComment:           {},
+	timodel.ActionRenameIndex:                  {},
+	timodel.ActionAddTablePartition:            {},
+	timodel.ActionDropTablePartition:           {},
+	timodel.ActionCreateView:                   {},
+	timodel.ActionModifyTableCharsetAndCollate: {},
+	timodel.ActionTruncateTablePartition:       {},
+	timodel.ActionDropView:                     {},
+	timodel.ActionRecoverTable:                 {},
+	timodel.ActionAddPrimaryKey:                {},
+	timodel.ActionDropPrimaryKey:               {},
+	timodel.ActionRebaseAutoID:                 {},
+	timodel.ActionAlterIndexVisibility:         {},
+	timodel.ActionMultiSchemaChange:            {},
+	timodel.ActionReorganizePartition:          {},
+	timodel.ActionAlterTTLInfo:                 {},
+	timodel.ActionAlterTTLRemove:               {},
+}
+
+// The ddls below is globalDDLs, they affect all tables in the changefeed.
 // we need to wait all tables checkpointTs reach the DDL commitTs
 // before we can execute the DDL.
-var globalDDLs = []timodel.ActionType{
-	timodel.ActionCreateSchema,
-	timodel.ActionDropSchema,
-	timodel.ActionModifySchemaCharsetAndCollate,
-	// We treat create table ddl as a global ddl, because before we execute the ddl,
-	// there is no a tablePipeline for the new table. So we can't prevent the checkpointTs
-	// from advancing. To solve this problem, we just treat create table ddl as a global ddl here.
-	// TODO: Find a better way to handle create table ddl.
-	timodel.ActionCreateTable,
-	timodel.ActionRenameTable,
-	timodel.ActionRenameTables,
-	timodel.ActionExchangeTablePartition,
-}
+//timodel.ActionCreateSchema
+//timodel.ActionDropSchema
+//timodel.ActionModifySchemaCharsetAndCollate
+//// We treat create table ddl as a global ddl, because before we execute the ddl,
+//// there is no a tablePipeline for the new table. So we can't prevent the checkpointTs
+//// from advancing. To solve this problem, we just treat create table ddl as a global ddl here.
+//// TODO: Find a better way to handle create table ddl.
+//timodel.ActionCreateTable
+//timodel.ActionRenameTable
+//timodel.ActionRenameTables
+//timodel.ActionExchangeTablePartition
 
 // ddlManager holds the pending DDL events of all tables and responsible for
 // executing them to downstream.
@@ -400,6 +431,16 @@ func (m *ddlManager) barrier() (model.Ts, *schedulepb.Barrier) {
 		})
 	}
 
+	// Limit the tableBarrier size to avoid too large barrier. Since it will
+	// cause the scheduler to be slow.
+	sort.Slice(tableBarrier, func(i, j int) bool {
+		return tableBarrier[i].BarrierTs < tableBarrier[j].BarrierTs
+	})
+	if len(tableBarrier) > tableBarrierNumberLimit {
+		globalBarrierTs = tableBarrier[tableBarrierNumberLimit].BarrierTs
+		tableBarrier = tableBarrier[:tableBarrierNumberLimit]
+	}
+
 	m.justSentDDL = nil
 	return minTableBarrierTs, &schedulepb.Barrier{
 		TableBarriers:   tableBarrier,
@@ -416,15 +457,14 @@ func (m *ddlManager) allTables(ctx context.Context) ([]*model.TableInfo, error) 
 	var err error
 
 	ts := m.getSnapshotTs()
-	m.tableInfoCache, err = m.schema.AllTablesNew(ctx, ts)
+	m.tableInfoCache, err = m.schema.AllTables(ctx, ts)
 	if err != nil {
 		return nil, err
 	}
 	log.Debug("changefeed current tables updated",
 		zap.String("namespace", m.changfeedID.Namespace),
 		zap.String("changefeed", m.changfeedID.ID),
-		zap.Uint64("checkpointTs", m.checkpointTs),
-		zap.Uint64("snapshotTs", ts),
+		zap.Uint64("checkpointTs", ts),
 		zap.Any("tables", m.tableInfoCache),
 	)
 	return m.tableInfoCache, nil
@@ -439,7 +479,7 @@ func (m *ddlManager) allPhysicalTables(ctx context.Context) ([]model.TableID, er
 	var err error
 
 	ts := m.getSnapshotTs()
-	m.physicalTablesCache, err = m.schema.AllPhysicalTablesNew(ctx, ts)
+	m.physicalTablesCache, err = m.schema.AllPhysicalTables(ctx, ts)
 	if err != nil {
 		return nil, err
 	}
@@ -479,13 +519,10 @@ func (m *ddlManager) getSnapshotTs() (ts uint64) {
 
 	if m.BDRMode {
 		ts = m.ddlResolvedTs
-		log.Debug("changefeed is in BDR mode, use ddlResolvedTs to get snapshot",
-			zap.String("namespace", m.changfeedID.Namespace),
-			zap.String("changefeed", m.changfeedID.ID),
-			zap.Uint64("checkpointTs", m.checkpointTs),
-			zap.Uint64("snapshotTs", ts))
 	}
-	return
+
+	log.Debug("snapshotTs", zap.Uint64("ts", ts))
+	return ts
 }
 
 // cleanCache cleans the tableInfoCache and physicalTablesCache.
@@ -521,10 +558,6 @@ func getPhysicalTableIDs(ddl *model.DDLEvent) []model.TableID {
 
 // isGlobalDDL returns whether the ddl is a global ddl.
 func isGlobalDDL(ddl *model.DDLEvent) bool {
-	for _, tp := range globalDDLs {
-		if ddl.Type == tp {
-			return true
-		}
-	}
-	return false
+	_, ok := nonGlobalDDLs[ddl.Type]
+	return !ok
 }
