@@ -16,6 +16,7 @@ package v2
 import (
 	"context"
 	"fmt"
+	"net"
 	"testing"
 
 	"github.com/golang/mock/gomock"
@@ -24,6 +25,7 @@ import (
 	pkafka "github.com/pingcap/tiflow/pkg/sink/kafka"
 	mock "github.com/pingcap/tiflow/pkg/sink/kafka/v2/mock"
 	"github.com/segmentio/kafka-go"
+	"github.com/segmentio/kafka-go/sasl/plain"
 	"github.com/stretchr/testify/require"
 )
 
@@ -373,6 +375,57 @@ func TestGetTopicMeta(t *testing.T) {
 	require.Nil(t, result)
 }
 
+func TestGetTopicsPartitions(t *testing.T) {
+	t.Parallel()
+
+	ctx := context.Background()
+	admin, client := newClusterAdminClientWithMock(t)
+
+	// cannot get topics meta from kafka
+	client.EXPECT().Metadata(gomock.Any(), gomock.Any()).
+		Return(nil, fmt.Errorf("kafka.(*Client).Metadata"))
+	result, err := admin.GetTopicsPartitions(ctx)
+	require.Error(t, err)
+	require.Nil(t, result)
+
+	client.EXPECT().Metadata(gomock.Any(), gomock.Any()).
+		Return(&kafka.MetadataResponse{}, nil)
+	result, err = admin.GetTopicsPartitions(ctx)
+	require.NoError(t, err)
+	require.Len(t, result, 0)
+
+	client.EXPECT().Metadata(gomock.Any(), gomock.Any()).
+		Return(&kafka.MetadataResponse{
+			Topics: []kafka.Topic{
+				{
+					Name: "topic-1",
+					Partitions: []kafka.Partition{
+						{}, {}, // 2 partitions
+					},
+					Error: errors.New("topic error found"),
+				},
+				{
+					Name: "topic-2",
+					Partitions: []kafka.Partition{
+						{}, {}, {}, // 3 partitions
+					},
+					Error: nil,
+				},
+				{
+					Name:  "topic-3",
+					Error: nil,
+				},
+			},
+		}, nil)
+	// ignore topic error
+	result, err = admin.GetTopicsPartitions(ctx)
+	require.NoError(t, err)
+	require.Len(t, result, 3)
+	require.Equal(t, int32(2), result["topic-1"])
+	require.Equal(t, int32(3), result["topic-2"])
+	require.Equal(t, int32(0), result["topic-3"])
+}
+
 func TestCreateTopic(t *testing.T) {
 	t.Parallel()
 
@@ -413,4 +466,43 @@ func TestCreateTopic(t *testing.T) {
 		ConfigEntries:     nil,
 	}, false)
 	require.NoError(t, err)
+}
+
+type fr struct{}
+
+func (f fr) RoundTrip(context.Context, net.Addr, kafka.Request) (kafka.Response, error) {
+	return nil, nil
+}
+
+func TestAdminClose(t *testing.T) {
+	client := mock.NewMockGokrb5v8Client(gomock.NewController(t))
+	ad := &admin{}
+	ad.Close()
+	ad = &admin{
+		client: &kafka.Client{},
+	}
+	ad.Close()
+	ad = &admin{
+		client: &kafka.Client{
+			Transport: fr{},
+		},
+	}
+	ad.Close()
+	ad = &admin{
+		client: &kafka.Client{
+			Transport: &kafka.Transport{
+				SASL: plain.Mechanism{},
+			},
+		},
+	}
+	ad.Close()
+	ad = &admin{
+		client: &kafka.Client{
+			Transport: &kafka.Transport{
+				SASL: mechanism{client: client},
+			},
+		},
+	}
+	client.EXPECT().Destroy()
+	ad.Close()
 }
