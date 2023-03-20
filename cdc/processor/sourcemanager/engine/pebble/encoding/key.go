@@ -22,8 +22,7 @@ import (
 )
 
 const (
-	typeUnknown = iota
-	typeDelete
+	typeDelete = iota + 1
 	typeUpdate
 	typeInsert
 )
