@@ -16,7 +16,6 @@ package sinkmanager
 import (
 	"context"
 	"sync"
-	"sync/atomic"
 	"time"
 
 	"github.com/pingcap/errors"
@@ -339,22 +338,17 @@ func (m *SinkManager) generateSinkTasks() error {
 	// Task upperbound is limited by barrierTs and schemaResolvedTs.
 	// But receivedSorterResolvedTs can be less than barrierTs, in which case
 	// the table is just scheduled to this node.
-	getUpperBound := func(tableSink *tableSinkWrapper) engine.Position {
-		upperBoundTs := tableSink.getReceivedSorterResolvedTs()
-
-		barrierTs := m.lastBarrierTs.Load()
-		if upperBoundTs > barrierTs {
-			upperBoundTs = barrierTs
-		}
-
+	getUpperBound := func(
+		tableSinkUpperBoundTs model.Ts,
+	) engine.Position {
 		// If a task carries events after schemaResolvedTs, mounter group threads
 		// can be blocked on waiting schemaResolvedTs get advanced.
 		schemaTs := m.schemaStorage.ResolvedTs()
-		if upperBoundTs-1 > schemaTs {
-			upperBoundTs = schemaTs + 1
+		if tableSinkUpperBoundTs > schemaTs+1 {
+			tableSinkUpperBoundTs = schemaTs + 1
 		}
 
-		return engine.Position{StartTs: upperBoundTs - 1, CommitTs: upperBoundTs}
+		return engine.Position{StartTs: tableSinkUpperBoundTs - 1, CommitTs: tableSinkUpperBoundTs}
 	}
 
 	dispatchTasks := func() error {
@@ -404,8 +398,7 @@ func (m *SinkManager) generateSinkTasks() error {
 			tableSink := tables[i]
 			slowestTableProgress := progs[i]
 			lowerBound := slowestTableProgress.nextLowerBoundPos
-			upperBound := getUpperBound(tableSink)
-
+			upperBound := getUpperBound(tableSink.getUpperBoundTs())
 			// The table has no available progress.
 			if lowerBound.Compare(upperBound) >= 0 {
 				m.sinkProgressHeap.push(slowestTableProgress)
@@ -491,17 +484,15 @@ func (m *SinkManager) generateSinkTasks() error {
 
 func (m *SinkManager) generateRedoTasks() error {
 	// We use the table's resolved ts as the upper bound to fetch events.
-	getUpperBound := func(tableSink *tableSinkWrapper) engine.Position {
-		upperBoundTs := tableSink.getReceivedSorterResolvedTs()
-
+	getUpperBound := func(tableSinkUpperBoundTs model.Ts) engine.Position {
 		// If a task carries events after schemaResolvedTs, mounter group threads
 		// can be blocked on waiting schemaResolvedTs get advanced.
 		schemaTs := m.schemaStorage.ResolvedTs()
-		if upperBoundTs-1 > schemaTs {
-			upperBoundTs = schemaTs + 1
+		if tableSinkUpperBoundTs > schemaTs+1 {
+			tableSinkUpperBoundTs = schemaTs + 1
 		}
 
-		return engine.Position{StartTs: upperBoundTs - 1, CommitTs: upperBoundTs}
+		return engine.Position{StartTs: tableSinkUpperBoundTs - 1, CommitTs: tableSinkUpperBoundTs}
 	}
 
 	dispatchTasks := func() error {
@@ -550,7 +541,7 @@ func (m *SinkManager) generateRedoTasks() error {
 			tableSink := tables[i]
 			slowestTableProgress := progs[i]
 			lowerBound := slowestTableProgress.nextLowerBoundPos
-			upperBound := getUpperBound(tableSink)
+			upperBound := getUpperBound(tableSink.getReceivedSorterResolvedTs())
 
 			// The table has no available progress.
 			if lowerBound.Compare(upperBound) >= 0 {
@@ -651,16 +642,33 @@ func (m *SinkManager) UpdateReceivedSorterResolvedTs(tableID model.TableID, ts m
 	tableSink.(*tableSinkWrapper).updateReceivedSorterResolvedTs(ts)
 }
 
-// UpdateBarrierTs updates the barrier ts of all tables in the sink manager.
-func (m *SinkManager) UpdateBarrierTs(ts model.Ts) {
-	// It is safe to do not use compare and swap here.
-	// Only the processor will update the barrier ts.
-	// Other goroutines will only read the barrier ts.
-	// So it is safe to do not use compare and swap here, just Load and Store.
-	if ts <= m.lastBarrierTs.Load() {
-		return
-	}
-	m.lastBarrierTs.Store(ts)
+// UpdateBarrierTs update all tableSink's barrierTs in the SinkManager
+func (m *SinkManager) UpdateBarrierTs(
+	globalBarrierTs model.Ts,
+	tableBarrier map[model.TableID]model.Ts,
+) {
+	m.tableSinks.Range(func(span tablepb.Span, value interface{}) bool {
+		tableSink := value.(*tableSinkWrapper)
+		lastBarrierTs := tableSink.barrierTs.Load()
+		// It is safe to do not use compare and swap here.
+		// Only the processor will update the barrier ts.
+		// Other goroutines will only read the barrier ts.
+		// So it is safe to do not use compare and swap here, just Load and Store.
+		if tableBarrierTs, ok := tableBarrier[tableSink.span.TableID]; ok {
+			barrierTs := tableBarrierTs
+			if barrierTs > globalBarrierTs {
+				barrierTs = globalBarrierTs
+			}
+			if barrierTs > lastBarrierTs {
+				tableSink.barrierTs.Store(barrierTs)
+			}
+		} else {
+			if globalBarrierTs > lastBarrierTs {
+				tableSink.barrierTs.Store(globalBarrierTs)
+			}
+		}
+		return true
+	})
 }
 
 // AddTable adds a table(TableSink) to the sink manager.
@@ -850,7 +858,7 @@ func (m *SinkManager) GetTableStats(tableID model.TableID) TableStats {
 	return TableStats{
 		CheckpointTs:          checkpointTs.ResolvedMark(),
 		ResolvedTs:            resolvedTs,
-		BarrierTs:             m.lastBarrierTs.Load(),
+		BarrierTs:             tableSink.barrierTs.Load(),
 		ReceivedMaxCommitTs:   tableSink.getReceivedSorterCommitTs(),
 		ReceivedMaxResolvedTs: tableSink.getReceivedSorterResolvedTs(),
 	}

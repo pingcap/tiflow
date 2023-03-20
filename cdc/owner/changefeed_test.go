@@ -15,7 +15,6 @@ package owner
 
 import (
 	"context"
-	"encoding/json"
 	"fmt"
 	"math"
 	"os"
@@ -24,7 +23,6 @@ import (
 	"testing"
 	"time"
 
-	"github.com/labstack/gommon/log"
 	"github.com/pingcap/errors"
 	timodel "github.com/pingcap/tidb/parser/model"
 	"github.com/pingcap/tiflow/cdc/entry"
@@ -74,7 +72,8 @@ func (m *mockDDLPuller) Run(ctx context.Context) error {
 }
 
 func (m *mockDDLPuller) ResolvedTs() model.Ts {
-	return 1
+	ts, _ := m.FrontDDL()
+	return ts
 }
 
 type mockDDLSink struct {
@@ -214,7 +213,7 @@ func createChangefeed4Test(ctx cdcContext.Context, t *testing.T,
 		) (puller.DDLPuller, error) {
 			return &mockDDLPuller{resolvedTs: startTs - 1}, nil
 		},
-		// new ddl sink
+		// new ddl ddlSink
 		func(_ model.ChangeFeedID, _ *model.ChangeFeedInfo, _ func(err error)) DDLSink {
 			return &mockDDLSink{
 				resetDDLDone:     true,
@@ -317,26 +316,30 @@ func TestExecDDL(t *testing.T) {
 	}
 	// pre check and initialize
 	tickThreeTime()
-	require.Len(t, cf.schema.AllPhysicalTables(), 1)
+	tableIDs, err := cf.schema.AllPhysicalTables(ctx, startTs-1)
+	require.Nil(t, err)
+	require.Len(t, tableIDs, 1)
 
 	job = helper.DDL2Job("drop table test0.table0")
 	// ddl puller resolved ts grow up
-	mockDDLPuller := cf.ddlPuller.(*mockDDLPuller)
+	mockDDLPuller := cf.ddlManager.ddlPuller.(*mockDDLPuller)
 	mockDDLPuller.resolvedTs = startTs
-	mockDDLSink := cf.sink.(*mockDDLSink)
+	mockDDLSink := cf.ddlManager.ddlSink.(*mockDDLSink)
 	job.BinlogInfo.FinishedTS = mockDDLPuller.resolvedTs
 	mockDDLPuller.ddlQueue = append(mockDDLPuller.ddlQueue, job)
-	// three tick to make sure all barriers set in initialize is handled
+	// three tick to make sure all barrier set in initialize is handled
 	tickThreeTime()
 	require.Equal(t, cf.state.Status.CheckpointTs, mockDDLPuller.resolvedTs)
 	// The ephemeral table should have left no trace in the schema cache
-	require.Len(t, cf.schema.AllPhysicalTables(), 0)
+	tableIDs, err = cf.schema.AllPhysicalTables(ctx, mockDDLPuller.resolvedTs)
+	require.Nil(t, err)
+	require.Len(t, tableIDs, 0)
 
 	// executing the ddl finished
 	mockDDLSink.ddlDone = true
 	mockDDLPuller.resolvedTs += 1000
 	tickThreeTime()
-	require.Equal(t, cf.state.Status.CheckpointTs, mockDDLPuller.resolvedTs)
+	require.Equal(t, mockDDLPuller.resolvedTs, cf.state.Status.CheckpointTs)
 
 	// handle create database
 	job = helper.DDL2Job("create database test1")
@@ -396,24 +399,30 @@ func TestEmitCheckpointTs(t *testing.T) {
 	}
 	// pre check and initialize
 	tickThreeTime()
-	mockDDLSink := cf.sink.(*mockDDLSink)
+	mockDDLSink := cf.ddlManager.ddlSink.(*mockDDLSink)
 
-	require.Len(t, cf.schema.AllTables(), 1)
+	tables, err := cf.ddlManager.allTables(ctx)
+	require.Nil(t, err)
+
+	require.Len(t, tables, 1)
 	ts, names := mockDDLSink.getCheckpointTsAndTableNames()
 	require.Equal(t, ts, startTs)
 	require.Len(t, names, 1)
 
 	job = helper.DDL2Job("drop table test0.table0")
 	// ddl puller resolved ts grow up
-	mockDDLPuller := cf.ddlPuller.(*mockDDLPuller)
-	mockDDLPuller.resolvedTs = startTs
+	mockDDLPuller := cf.ddlManager.ddlPuller.(*mockDDLPuller)
+	mockDDLPuller.resolvedTs = startTs + 1000
+	cf.state.Status.CheckpointTs = mockDDLPuller.resolvedTs
 	job.BinlogInfo.FinishedTS = mockDDLPuller.resolvedTs
 	mockDDLPuller.ddlQueue = append(mockDDLPuller.ddlQueue, job)
-	// three tick to make sure all barriers set in initialize is handled
+	// three tick to make sure all barrier set in initialize is handled
 	tickThreeTime()
 	require.Equal(t, cf.state.Status.CheckpointTs, mockDDLPuller.resolvedTs)
+	tables, err = cf.ddlManager.allTables(ctx)
+	require.Nil(t, err)
 	// The ephemeral table should have left no trace in the schema cache
-	require.Len(t, cf.schema.AllTables(), 0)
+	require.Len(t, tables, 0)
 	// We can't use the new schema because the ddl hasn't been executed yet.
 	ts, names = mockDDLSink.getCheckpointTsAndTableNames()
 	require.Equal(t, ts, mockDDLPuller.resolvedTs)
@@ -421,7 +430,7 @@ func TestEmitCheckpointTs(t *testing.T) {
 
 	// executing the ddl finished
 	mockDDLSink.ddlDone = true
-	mockDDLPuller.resolvedTs += 1000
+	mockDDLPuller.resolvedTs += 2000
 	tickThreeTime()
 	require.Equal(t, cf.state.Status.CheckpointTs, mockDDLPuller.resolvedTs)
 	ts, names = mockDDLSink.getCheckpointTsAndTableNames()
@@ -444,8 +453,8 @@ func TestSyncPoint(t *testing.T) {
 	cf.Tick(ctx, captures)
 	tester.MustApplyPatches()
 
-	mockDDLPuller := cf.ddlPuller.(*mockDDLPuller)
-	mockDDLSink := cf.sink.(*mockDDLSink)
+	mockDDLPuller := cf.ddlManager.ddlPuller.(*mockDDLPuller)
+	mockDDLSink := cf.ddlManager.ddlSink.(*mockDDLSink)
 	// add 5s to resolvedTs
 	mockDDLPuller.resolvedTs = oracle.GoTimeToTS(oracle.GetTimeFromTS(mockDDLPuller.resolvedTs).Add(5 * time.Second))
 	// tick 20 times
@@ -474,7 +483,7 @@ func TestFinished(t *testing.T) {
 	cf.Tick(ctx, captures)
 	tester.MustApplyPatches()
 
-	mockDDLPuller := cf.ddlPuller.(*mockDDLPuller)
+	mockDDLPuller := cf.ddlManager.ddlPuller.(*mockDDLPuller)
 	mockDDLPuller.resolvedTs += 2000
 	// tick many times to make sure the change feed is stopped
 	for i := 0; i <= 10; i++ {
@@ -553,215 +562,12 @@ func testChangefeedReleaseResource(
 	if cf.state.Info.Config.Consistent.UseFileBackend {
 		// check redo log dir is deleted
 		_, err = os.Stat(redoLogDir)
-		log.Error(err)
 		require.True(t, os.IsNotExist(err))
 	} else {
 		files, err := os.ReadDir(redoLogDir)
 		require.NoError(t, err)
 		require.Len(t, files, 1) // only delete mark
 	}
-}
-
-func TestExecRenameTablesDDL(t *testing.T) {
-	helper := entry.NewSchemaTestHelper(t)
-	defer helper.Close()
-	ctx := cdcContext.NewBackendContext4Test(true)
-	cf, captures, tester := createChangefeed4Test(ctx, t)
-	defer cf.Close(ctx)
-	// pre check
-	cf.Tick(ctx, captures)
-	tester.MustApplyPatches()
-
-	// initialize
-	cf.Tick(ctx, captures)
-	tester.MustApplyPatches()
-	mockDDLSink := cf.sink.(*mockDDLSink)
-
-	var oldSchemaIDs, newSchemaIDs, oldTableIDs []int64
-	var newTableNames, oldSchemaNames []timodel.CIStr
-
-	execCreateStmt := func(tp, actualDDL, expectedDDL string) {
-		job := helper.DDL2Job(actualDDL)
-		done, err := cf.asyncExecDDLJob(ctx, job)
-		if tp == "database" {
-			oldSchemaIDs = append(oldSchemaIDs, job.SchemaID)
-		} else {
-			oldTableIDs = append(oldTableIDs, job.TableID)
-		}
-		require.Nil(t, err)
-		require.Equal(t, false, done)
-		require.Equal(t, expectedDDL, mockDDLSink.ddlExecuting.Query)
-		mockDDLSink.ddlDone = true
-		done, err = cf.asyncExecDDLJob(ctx, job)
-		require.Nil(t, err)
-		require.Equal(t, true, done)
-		require.Equal(t, expectedDDL, mockDDLSink.ddlExecuting.Query)
-	}
-
-	execCreateStmt("database", "create database test1",
-		"create database test1")
-	execCreateStmt("table", "create table test1.tb1(id int primary key)",
-		"create table test1.tb1(id int primary key)")
-	execCreateStmt("database", "create database test2",
-		"create database test2")
-	execCreateStmt("table", "create table test2.tb2(id int primary key)",
-		"create table test2.tb2(id int primary key)")
-
-	require.Len(t, oldSchemaIDs, 2)
-	require.Len(t, oldTableIDs, 2)
-	newSchemaIDs = []int64{oldSchemaIDs[1], oldSchemaIDs[0]}
-	oldSchemaNames = []timodel.CIStr{
-		timodel.NewCIStr("test1"),
-		timodel.NewCIStr("test2"),
-	}
-	newTableNames = []timodel.CIStr{
-		timodel.NewCIStr("tb20"),
-		timodel.NewCIStr("tb10"),
-	}
-	require.Len(t, newSchemaIDs, 2)
-	require.Len(t, oldSchemaNames, 2)
-	require.Len(t, newTableNames, 2)
-	args := []interface{}{
-		oldSchemaIDs, newSchemaIDs, newTableNames,
-		oldTableIDs, oldSchemaNames,
-	}
-	rawArgs, err := json.Marshal(args)
-	require.Nil(t, err)
-	job := helper.DDL2Job(
-		"rename table test1.tb1 to test2.tb10, test2.tb2 to test1.tb20")
-	// the RawArgs field in job fetched from tidb snapshot meta is incorrent,
-	// so we manually construct `job.RawArgs` to do the workaround.
-	job.RawArgs = rawArgs
-
-	mockDDLSink.recordDDLHistory = true
-	done, err := cf.asyncExecDDLJob(ctx, job)
-	require.Nil(t, err)
-	require.Equal(t, false, done)
-	require.Len(t, mockDDLSink.ddlHistory, 2)
-	require.Equal(t, "RENAME TABLE `test1`.`tb1` TO `test2`.`tb10`",
-		mockDDLSink.ddlHistory[0])
-	require.Equal(t, "RENAME TABLE `test2`.`tb2` TO `test1`.`tb20`",
-		mockDDLSink.ddlHistory[1])
-
-	// mock all of the rename table statements have been done
-	mockDDLSink.resetDDLDone = false
-	mockDDLSink.ddlDone = true
-	done, err = cf.asyncExecDDLJob(ctx, job)
-	require.Nil(t, err)
-	require.Equal(t, true, done)
-}
-
-func TestExecDropTablesDDL(t *testing.T) {
-	helper := entry.NewSchemaTestHelper(t)
-	defer helper.Close()
-	ctx := cdcContext.NewBackendContext4Test(true)
-	cf, captures, tester := createChangefeed4Test(ctx, t)
-	defer cf.Close(ctx)
-
-	// pre check
-	cf.Tick(ctx, captures)
-	tester.MustApplyPatches()
-	// initialize
-	cf.Tick(ctx, captures)
-	tester.MustApplyPatches()
-
-	mockDDLSink := cf.sink.(*mockDDLSink)
-	execCreateStmt := func(actualDDL, expectedDDL string) {
-		job := helper.DDL2Job(actualDDL)
-		done, err := cf.asyncExecDDLJob(ctx, job)
-		require.Nil(t, err)
-		require.Equal(t, false, done)
-		require.Equal(t, expectedDDL, mockDDLSink.ddlExecuting.Query)
-		mockDDLSink.ddlDone = true
-		done, err = cf.asyncExecDDLJob(ctx, job)
-		require.Nil(t, err)
-		require.Equal(t, true, done)
-	}
-
-	execCreateStmt("create database test1",
-		"create database test1")
-	execCreateStmt("create table test1.tb1(id int primary key)",
-		"create table test1.tb1(id int primary key)")
-	execCreateStmt("create table test1.tb2(id int primary key)",
-		"create table test1.tb2(id int primary key)")
-
-	// drop tables is different from rename tables, it will generate
-	// multiple DDL jobs instead of one.
-	jobs := helper.DDL2Jobs("drop table test1.tb1, test1.tb2", 2)
-	require.Len(t, jobs, 2)
-
-	execDropStmt := func(job *timodel.Job, expectedDDL string) {
-		done, err := cf.asyncExecDDLJob(ctx, job)
-		require.Nil(t, err)
-		require.Equal(t, false, done)
-		require.Equal(t, mockDDLSink.ddlExecuting.Query, expectedDDL)
-		mockDDLSink.ddlDone = true
-		done, err = cf.asyncExecDDLJob(ctx, job)
-		require.Nil(t, err)
-		require.Equal(t, true, done)
-	}
-
-	execDropStmt(jobs[0], "DROP TABLE `test1`.`tb2`")
-	execDropStmt(jobs[1], "DROP TABLE `test1`.`tb1`")
-}
-
-func TestExecDropViewsDDL(t *testing.T) {
-	helper := entry.NewSchemaTestHelper(t)
-	defer helper.Close()
-	ctx := cdcContext.NewBackendContext4Test(true)
-	cf, captures, tester := createChangefeed4Test(ctx, t)
-	defer cf.Close(ctx)
-
-	// pre check
-	cf.Tick(ctx, captures)
-	tester.MustApplyPatches()
-	// initialize
-	cf.Tick(ctx, captures)
-	tester.MustApplyPatches()
-
-	mockDDLSink := cf.sink.(*mockDDLSink)
-	execCreateStmt := func(actualDDL, expectedDDL string) {
-		job := helper.DDL2Job(actualDDL)
-		done, err := cf.asyncExecDDLJob(ctx, job)
-		require.Nil(t, err)
-		require.Equal(t, false, done)
-		require.Equal(t, expectedDDL, mockDDLSink.ddlExecuting.Query)
-		mockDDLSink.ddlDone = true
-		done, err = cf.asyncExecDDLJob(ctx, job)
-		require.Nil(t, err)
-		require.Equal(t, true, done)
-	}
-	execCreateStmt("create database test1",
-		"create database test1")
-	execCreateStmt("create table test1.tb1(id int primary key)",
-		"create table test1.tb1(id int primary key)")
-	execCreateStmt("create view test1.view1 as "+
-		"select * from test1.tb1 where id > 100",
-		"create view test1.view1 as "+
-			"select * from test1.tb1 where id > 100")
-	execCreateStmt("create view test1.view2 as "+
-		"select * from test1.tb1 where id > 200",
-		"create view test1.view2 as "+
-			"select * from test1.tb1 where id > 200")
-
-	// drop views is similar to drop tables, it will also generate
-	// multiple DDL jobs.
-	jobs := helper.DDL2Jobs("drop view test1.view1, test1.view2", 2)
-	require.Len(t, jobs, 2)
-
-	execDropStmt := func(job *timodel.Job, expectedDDL string) {
-		done, err := cf.asyncExecDDLJob(ctx, job)
-		require.Nil(t, err)
-		require.Equal(t, false, done)
-		require.Equal(t, expectedDDL, mockDDLSink.ddlExecuting.Query)
-		mockDDLSink.ddlDone = true
-		done, err = cf.asyncExecDDLJob(ctx, job)
-		require.Nil(t, err)
-		require.Equal(t, true, done)
-	}
-
-	execDropStmt(jobs[0], "DROP VIEW `test1`.`view2`")
-	execDropStmt(jobs[1], "DROP VIEW `test1`.`view1`")
 }
 
 func TestBarrierAdvance(t *testing.T) {
@@ -777,30 +583,27 @@ func TestBarrierAdvance(t *testing.T) {
 
 		// The changefeed load the info from etcd.
 		cf.state.Status = &model.ChangeFeedStatus{
-			ResolvedTs:   cf.state.Info.StartTs + 10,
-			CheckpointTs: cf.state.Info.StartTs,
+			ResolvedTs:        cf.state.Info.StartTs + 10,
+			CheckpointTs:      cf.state.Info.StartTs,
+			MinTableBarrierTs: cf.state.Info.StartTs,
 		}
 
 		// Do the preflightCheck and initialize the changefeed.
 		cf.Tick(ctx, captures)
 		tester.MustApplyPatches()
 
-		// add 5s to resolvedTs.
-		mockDDLPuller := cf.ddlPuller.(*mockDDLPuller)
-		mockDDLPuller.resolvedTs = oracle.GoTimeToTS(oracle.GetTimeFromTS(mockDDLPuller.resolvedTs).Add(5 * time.Second))
-
 		barrier, err := cf.handleBarrier(ctx)
 		require.Nil(t, err)
-		if i == 0 {
-			require.Equal(t, mockDDLPuller.resolvedTs, barrier)
-		}
 
+		if i == 0 {
+			require.Equal(t, uint64(math.MaxUint64), barrier)
+		}
 		// sync-point is enabled, sync point barrier is ticked
 		if i == 1 {
 			require.Equal(t, cf.state.Info.StartTs+10, barrier)
 		}
 
-		// Suppose checkpoint has been advanced.
+		// Suppose tableCheckpoint has been advanced.
 		cf.state.Status.CheckpointTs = cf.state.Status.ResolvedTs
 
 		// Need more 1 tick to advance barrier if sync-point is enabled.
@@ -813,6 +616,6 @@ func TestBarrierAdvance(t *testing.T) {
 		// Then the last tick barrier must be advanced correctly.
 		barrier, err = cf.handleBarrier(ctx)
 		require.Nil(t, err)
-		require.Equal(t, mockDDLPuller.resolvedTs, barrier)
+		require.Less(t, cf.state.Info.StartTs+10, barrier)
 	}
 }

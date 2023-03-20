@@ -503,6 +503,7 @@ type DDLPuller interface {
 	FrontDDL() (uint64, *timodel.Job)
 	// PopFrontDDL returns and pops the first DDL job in the internal queue
 	PopFrontDDL() (uint64, *timodel.Job)
+	// ResolvedTs returns the resolved ts of the DDLPuller
 	ResolvedTs() uint64
 	// Close closes the DDLPuller
 	Close()

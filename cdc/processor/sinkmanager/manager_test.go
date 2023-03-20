@@ -183,7 +183,7 @@ func TestRemoveTable(t *testing.T) {
 	err := manager.StartTable(tableID, 0)
 	require.NoError(t, err)
 	addTableAndAddEventsToSortEngine(t, e, tableID)
-	manager.UpdateBarrierTs(4)
+	manager.UpdateBarrierTs(4, nil)
 	manager.UpdateReceivedSorterResolvedTs(tableID, 5)
 
 	// Check all the events are sent to sink and record the memory usage.
@@ -238,7 +238,7 @@ func TestGenerateTableSinkTaskWithBarrierTs(t *testing.T) {
 	tableID := model.TableID(1)
 	manager.AddTable(tableID, 1, 100)
 	addTableAndAddEventsToSortEngine(t, e, tableID)
-	manager.UpdateBarrierTs(4)
+	manager.UpdateBarrierTs(4, nil)
 	manager.UpdateReceivedSorterResolvedTs(tableID, 5)
 	err := manager.StartTable(tableID, 0)
 	require.NoError(t, err)
@@ -268,7 +268,7 @@ func TestGenerateTableSinkTaskWithResolvedTs(t *testing.T) {
 	addTableAndAddEventsToSortEngine(t, e, tableID)
 	// This would happen when the table just added to this node and redo log is enabled.
 	// So there is possibility that the resolved ts is smaller than the global barrier ts.
-	manager.UpdateBarrierTs(4)
+	manager.UpdateBarrierTs(4, nil)
 	manager.UpdateReceivedSorterResolvedTs(tableID, 3)
 	err := manager.StartTable(tableID, 0)
 	require.NoError(t, err)
@@ -297,7 +297,7 @@ func TestGetTableStatsToReleaseMemQuota(t *testing.T) {
 	manager.AddTable(tableID, 1, 100)
 	addTableAndAddEventsToSortEngine(t, e, tableID)
 
-	manager.UpdateBarrierTs(4)
+	manager.UpdateBarrierTs(4, nil)
 	manager.UpdateReceivedSorterResolvedTs(tableID, 5)
 	err := manager.StartTable(tableID, 0)
 	require.NoError(t, err)
@@ -323,7 +323,7 @@ func TestDoNotGenerateTableSinkTaskWhenTableIsNotReplicating(t *testing.T) {
 	tableID := model.TableID(1)
 	manager.AddTable(tableID, 1, 100)
 	addTableAndAddEventsToSortEngine(t, e, tableID)
-	manager.UpdateBarrierTs(4)
+	manager.UpdateBarrierTs(4, nil)
 	manager.UpdateReceivedSorterResolvedTs(tableID, 5)
 
 	require.Equal(t, uint64(0), manager.sinkMemQuota.GetUsedBytes())
