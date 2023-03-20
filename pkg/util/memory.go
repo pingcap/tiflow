@@ -26,7 +26,8 @@ import (
 const memoryMax uint64 = math.MaxUint64
 
 // GetMemoryLimit gets the memory limit of current process based on cgroup.
-// If the cgourp is not enabled or set to max, returns the available memory of host.
+// If the cgourp is not set or memory.max is set to max, returns the available
+// memory of host.
 func GetMemoryLimit() (uint64, error) {
 	totalMemory, err := memlimit.FromCgroup()
 	if err != nil || totalMemory == memoryMax {
