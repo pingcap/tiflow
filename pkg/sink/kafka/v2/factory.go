@@ -162,9 +162,13 @@ func (f *factory) newWriter(async bool) *kafka.Writer {
 		Transport:    f.transport,
 		ReadTimeout:  f.options.ReadTimeout,
 		WriteTimeout: f.options.WriteTimeout,
-		RequiredAcks: kafka.RequiredAcks(f.options.RequiredAcks),
-		BatchBytes:   int64(f.options.MaxMessageBytes),
-		Async:        async,
+		// For kafka cluster with a bad network condition,
+		// do not waster too much time to prevent long time blocking.
+		MaxAttempts:     2,
+		WriteBackoffMin: 10 * time.Millisecond,
+		RequiredAcks:    kafka.RequiredAcks(f.options.RequiredAcks),
+		BatchBytes:      int64(f.options.MaxMessageBytes),
+		Async:           async,
 	}
 	f.writer = w
 	compression := strings.ToLower(strings.TrimSpace(f.options.Compression))
