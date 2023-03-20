@@ -44,6 +44,10 @@ const (
 
 	// DefaultChangefeedMemoryQuota is the default memory quota for each changefeed.
 	DefaultChangefeedMemoryQuota = 1024 * 1024 * 1024 // 1GB.
+
+	// DefaultMaxMemoryPercentage is the default max memory percentage
+	// cdc server will set memory limit to 70% of the memory limit of this process.
+	DefaultMaxMemoryPercentage = 70
 )
 
 var (
@@ -136,7 +140,8 @@ var defaultServerConfig = &ServerConfig{
 		Scheduler:         NewDefaultSchedulerConfig(),
 		EnableKafkaSinkV2: false,
 	},
-	ClusterID: "default",
+	ClusterID:           "default",
+	MaxMemoryPercentage: DefaultMaxMemoryPercentage,
 }
 
 // ServerConfig represents a config for server
@@ -166,6 +171,7 @@ type ServerConfig struct {
 	KVClient            *KVClientConfig `toml:"kv-client" json:"kv-client"`
 	Debug               *DebugConfig    `toml:"debug" json:"debug"`
 	ClusterID           string          `toml:"cluster-id" json:"cluster-id"`
+	MaxMemoryPercentage int             `toml:"max-memory-percentage" json:"max-memory-percentage"`
 }
 
 // Marshal returns the json marshal format of a ServerConfig
@@ -275,6 +281,10 @@ func (c *ServerConfig) ValidateAndAdjust() error {
 	}
 	if err = c.Debug.ValidateAndAdjust(); err != nil {
 		return errors.Trace(err)
+	}
+	if c.MaxMemoryPercentage >= 100 {
+		log.Warn("server max-memory-percentage must be less than 100, set to default value")
+		c.MaxMemoryPercentage = DefaultMaxMemoryPercentage
 	}
 
 	return nil
