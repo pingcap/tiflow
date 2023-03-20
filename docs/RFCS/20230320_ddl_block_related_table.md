@@ -1,3 +1,16 @@
+# Proposal: Make DDL only block related table
+
+- Author(s):    [asddongmen](https://github.com/asddongmen)
+- Last updated: 2023-03-20
+
+## Abstract
+
+This proposal introduces a solution to make DDL replication in TiCDC only blocks related table syncnization progress,  which can effectively reducing the checkpoint lag increasing caused by DDL synchronization.
+Table of contents:
+
+- [Background](#Background)
+- [Implementation](#Implementation)
+
 ## Background
 
 ![ddl_handle_logic](../media/ddl_block_related_table_1.png)
@@ -6,7 +19,7 @@ As shown in the figure above, TiCDC currently blocks the synchronization progres
 
 In this implementation, if a large number of DDL events occur in a short period of time, the checkpoint lag of the `changefeed` may increase. Especially in the scenario where a table in the `changefeed` is executing a time consuming DDL, while other tables need to synchronize a large number of row changes.
 
-## Solution
+## Implementation
 
 To reduce the impact of DDL synchronization on `changefeed` synchronizing, we hope that `changefeed` will only block the progress of related tables when executing DDL events.
 
