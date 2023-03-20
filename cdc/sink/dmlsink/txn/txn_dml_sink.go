@@ -33,8 +33,9 @@ import (
 )
 
 const (
-	// DefaultConflictDetectorSlots indicates the default slot count of conflict detector.
-	DefaultConflictDetectorSlots uint64 = 16 * 1024
+	// defaultConflictDetectorSlots indicates the default slot count of conflict detector.
+	// it's not configurable for users but can be adjusted by tests.
+	defaultConflictDetectorSlots uint64 = 16 * 1024
 )
 
 // Assert EventSink[E event.TableEvent] implementation
@@ -79,7 +80,7 @@ func NewMySQLSink(
 	for _, impl := range backendImpls {
 		backends = append(backends, impl)
 	}
-	sink := newSink(ctx, backends, errCh, DefaultConflictDetectorSlots)
+	sink := newSink(ctx, backends, errCh, defaultConflictDetectorSlots)
 	sink.statistics = statistics
 	sink.cancel = cancel
 
