@@ -297,3 +297,16 @@ func TestConvertRowChangedEventsWhenDisableOldValue(t *testing.T) {
 	require.Equal(t, 1, len(result))
 	require.Equal(t, uint64(216), size)
 }
+
+func TestGetUpperBoundTs(t *testing.T) {
+	t.Parallel()
+	wrapper, _ := createTableSinkWrapper(
+		model.DefaultChangeFeedID("1"), spanz.TableIDToComparableSpan(1))
+	// Test when there is no resolved ts.
+	wrapper.barrierTs.Store(uint64(10))
+	wrapper.receivedSorterResolvedTs.Store(uint64(11))
+	require.Equal(t, uint64(10), wrapper.getUpperBoundTs())
+
+	wrapper.barrierTs.Store(uint64(12))
+	require.Equal(t, uint64(11), wrapper.getUpperBoundTs())
+}

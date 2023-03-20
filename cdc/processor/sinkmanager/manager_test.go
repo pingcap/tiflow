@@ -146,7 +146,7 @@ func TestRemoveTable(t *testing.T) {
 	err := manager.StartTable(span, 0)
 	require.NoError(t, err)
 	addTableAndAddEventsToSortEngine(t, e, span)
-	manager.UpdateBarrierTs(4)
+	manager.UpdateBarrierTs(4, nil)
 	manager.UpdateReceivedSorterResolvedTs(span, 5)
 
 	// Check all the events are sent to sink and record the memory usage.
@@ -168,25 +168,6 @@ func TestRemoveTable(t *testing.T) {
 	require.Equal(t, uint64(0), manager.sinkMemQuota.GetUsedBytes(), "After remove table, the memory usage should be 0.")
 }
 
-func TestUpdateBarrierTs(t *testing.T) {
-	t.Parallel()
-
-	ctx, cancel := context.WithCancel(context.Background())
-	defer cancel()
-
-	changefeedInfo := getChangefeedInfo()
-	manager, _, _ := CreateManagerWithMemEngine(t, ctx, model.DefaultChangeFeedID("1"),
-		changefeedInfo, make(chan error, 1))
-	defer func() {
-		err := manager.Close()
-		require.NoError(t, err)
-	}()
-	manager.UpdateBarrierTs(100)
-	require.Equal(t, uint64(100), manager.lastBarrierTs.Load())
-	manager.UpdateBarrierTs(50)
-	require.Equal(t, uint64(100), manager.lastBarrierTs.Load())
-}
-
 func TestGenerateTableSinkTaskWithBarrierTs(t *testing.T) {
 	t.Parallel()
 
@@ -203,7 +184,7 @@ func TestGenerateTableSinkTaskWithBarrierTs(t *testing.T) {
 	span := spanz.TableIDToComparableSpan(1)
 	manager.AddTable(span, 1, 100)
 	addTableAndAddEventsToSortEngine(t, e, span)
-	manager.UpdateBarrierTs(4)
+	manager.UpdateBarrierTs(4, nil)
 	manager.UpdateReceivedSorterResolvedTs(span, 5)
 	err := manager.StartTable(span, 0)
 	require.NoError(t, err)
@@ -234,7 +215,7 @@ func TestGenerateTableSinkTaskWithResolvedTs(t *testing.T) {
 	addTableAndAddEventsToSortEngine(t, e, span)
 	// This would happen when the table just added to this node and redo log is enabled.
 	// So there is possibility that the resolved ts is smaller than the global barrier ts.
-	manager.UpdateBarrierTs(4)
+	manager.UpdateBarrierTs(4, nil)
 	manager.UpdateReceivedSorterResolvedTs(span, 3)
 	err := manager.StartTable(span, 0)
 	require.NoError(t, err)
@@ -264,7 +245,7 @@ func TestGetTableStatsToReleaseMemQuota(t *testing.T) {
 	manager.AddTable(span, 1, 100)
 	addTableAndAddEventsToSortEngine(t, e, span)
 
-	manager.UpdateBarrierTs(4)
+	manager.UpdateBarrierTs(4, nil)
 	manager.UpdateReceivedSorterResolvedTs(span, 5)
 	err := manager.StartTable(span, 0)
 	require.NoError(t, err)
@@ -291,7 +272,7 @@ func TestDoNotGenerateTableSinkTaskWhenTableIsNotReplicating(t *testing.T) {
 	span := spanz.TableIDToComparableSpan(1)
 	manager.AddTable(span, 1, 100)
 	addTableAndAddEventsToSortEngine(t, e, span)
-	manager.UpdateBarrierTs(4)
+	manager.UpdateBarrierTs(4, nil)
 	manager.UpdateReceivedSorterResolvedTs(span, 5)
 
 	require.Equal(t, uint64(0), manager.sinkMemQuota.GetUsedBytes())
