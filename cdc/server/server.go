@@ -200,7 +200,6 @@ func (s *server) createSortEngineFactory() error {
 	// Sorter dir has been set and checked when server starts.
 	// See https://github.com/pingcap/tiflow/blob/9dad09/cdc/server.go#L275
 	sortDir := config.GetGlobalServerConfig().Sorter.SortDir
-
 	totalMemory, err := util.GetMemoryLimit()
 	if err != nil {
 		return errors.Trace(err)
