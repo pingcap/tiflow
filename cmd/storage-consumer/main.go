@@ -82,7 +82,7 @@ func init() {
 	flag.StringVar(&logLevel, "log-level", "info", "log level")
 	flag.DurationVar(&flushInterval, "flush-interval", 10*time.Second, "flush interval")
 	flag.BoolVar(&enableProfiling, "enable-profiling", false, "whether to enable profiling")
-	flag.StringVar(&timezone, "tz", "System", "Specify time zone of Kafka consumer")
+	flag.StringVar(&timezone, "tz", "System", "Specify time zone of storage consumer")
 	flag.Parse()
 
 	err := logutil.InitLogger(&logutil.Config{
