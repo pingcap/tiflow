@@ -190,7 +190,7 @@ func (ra *RedoApplier) consumeLogs(ctx context.Context) error {
 			break
 		}
 		if shouldApplyDDL(row, ddl) {
-			if err := ra.applyDDL(ctx, ddl, checkpointTs, resolvedTs); err != nil {
+			if err := ra.applyDDL(ctx, ddl, checkpointTs); err != nil {
 				return err
 			}
 			if ddl, err = ra.rd.ReadNextDDL(ctx); err != nil {
@@ -257,7 +257,7 @@ func (ra *RedoApplier) resetQuota(rowSize uint64) error {
 }
 
 func (ra *RedoApplier) applyDDL(
-	ctx context.Context, ddl *model.DDLEvent, checkpointTs, resolvedTs uint64,
+	ctx context.Context, ddl *model.DDLEvent, checkpointTs uint64,
 ) error {
 	shouldSkip := func() bool {
 		if ddl.CommitTs == checkpointTs {
