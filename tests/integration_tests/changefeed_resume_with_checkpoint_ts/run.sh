@@ -136,5 +136,4 @@ prepare
 resume_changefeed_in_stopped_state $*
 resume_changefeed_in_failed_state $*
 
-check_logs $WORK_DIR
 echo "[$(date)] <<<<<< run test case $TEST_NAME success! >>>>>>"

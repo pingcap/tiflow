@@ -87,5 +87,4 @@ prepare
 sleep 5
 check
 
-check_logs $WORK_DIR
 echo "[$(date)] <<<<<< run test case $TEST_NAME success! >>>>>>"

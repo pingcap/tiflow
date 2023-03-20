@@ -129,5 +129,4 @@ function run_batch_size_limit() {
 trap stop_tidb_cluster EXIT
 run_length_limit $*
 run_batch_size_limit $*
-check_logs $WORK_DIR
 echo "[$(date)] <<<<<< run test case $TEST_NAME success! >>>>>>"

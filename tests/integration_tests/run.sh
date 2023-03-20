@@ -44,13 +44,7 @@ run_case() {
 		bash "$script" "$sink_type"
 
 	# Log data race and panic from TiCDC.
-	if [ -f /tmp/tidb_cdc_test/$case/stdout.log ]; then
-		badlog=$(grep -E "DATA RACE|panic" /tmp/tidb_cdc_test/$case/stdout.log)
-		if [ ! -z $badlog ]; then
-			cat /tmp/tidb_cdc_test/$case/stdout.log
-			exit 1
-		fi
-	fi
+	check_logs $OUT_DIR/$TEST_NAME
 }
 
 sink_type=$1
