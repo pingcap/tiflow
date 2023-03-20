@@ -43,4 +43,13 @@ func (s *Sink) WriteEvents(rows ...*eventsink.CallbackableEvent[*model.RowChange
 }
 
 // Close do nothing.
+<<<<<<< HEAD:cdc/sinkv2/eventsink/blackhole/black_hole_dml_sink.go
 func (s *Sink) Close() {}
+=======
+func (s *DMLSink) Close() {}
+
+// Dead returns a checker.
+func (s *DMLSink) Dead() <-chan struct{} {
+	return make(chan struct{})
+}
+>>>>>>> f491ab9aad (sink(cdc): don't block table sink when dml backends exit (#8585)):cdc/sink/dmlsink/blackhole/black_hole_dml_sink.go

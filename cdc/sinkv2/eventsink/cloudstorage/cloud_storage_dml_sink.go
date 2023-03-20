@@ -81,7 +81,11 @@ type dmlSink struct {
 	statistics *metrics.Statistics
 	// last sequence number
 	lastSeqNum uint64
-	wg         sync.WaitGroup
+
+	cancel func()
+	wg     sync.WaitGroup
+	dead   chan struct{}
+	isDead atomic.Bool
 }
 
 // NewCloudStorageSink creates a cloud storage sink.
@@ -89,8 +93,15 @@ func NewCloudStorageSink(ctx context.Context,
 	sinkURI *url.URL,
 	replicaConfig *config.ReplicaConfig,
 	errCh chan error,
+<<<<<<< HEAD:cdc/sinkv2/eventsink/cloudstorage/cloud_storage_dml_sink.go
 ) (*dmlSink, error) {
 	s := &dmlSink{}
+=======
+) (*DMLSink, error) {
+	ctx, cancel := context.WithCancel(ctx)
+	s := &DMLSink{cancel: cancel, dead: make(chan struct{})}
+
+>>>>>>> f491ab9aad (sink(cdc): don't block table sink when dml backends exit (#8585)):cdc/sink/dmlsink/cloudstorage/cloud_storage_dml_sink.go
 	// create cloud storage config and then apply the params of sinkURI to it.
 	cfg := cloudstorage.NewConfig()
 	err := cfg.Apply(ctx, sinkURI, replicaConfig)
@@ -140,8 +151,14 @@ func NewCloudStorageSink(ctx context.Context,
 	s.wg.Add(1)
 	go func() {
 		defer s.wg.Done()
-		if err := s.run(ctx); err != nil && errors.Cause(err) != context.Canceled {
-			errCh <- err
+		err := s.run(ctx)
+		s.isDead.Store(true)
+		close(s.dead)
+		if err != nil && errors.Cause(err) != context.Canceled {
+			select {
+			case <-ctx.Done():
+			case errCh <- err:
+			}
 		}
 	}()
 
@@ -167,8 +184,15 @@ func (s *dmlSink) run(ctx context.Context) error {
 }
 
 // WriteEvents write events to cloud storage sink.
+<<<<<<< HEAD:cdc/sinkv2/eventsink/cloudstorage/cloud_storage_dml_sink.go
 func (s *dmlSink) WriteEvents(txns ...*eventsink.CallbackableEvent[*model.SingleTableTxn]) error {
 	var tbl versionedTable
+=======
+func (s *DMLSink) WriteEvents(txns ...*dmlsink.CallbackableEvent[*model.SingleTableTxn]) error {
+	if s.isDead.Load() {
+		return errors.Trace(errors.New("dead dmlSink"))
+	}
+>>>>>>> f491ab9aad (sink(cdc): don't block table sink when dml backends exit (#8585)):cdc/sink/dmlsink/cloudstorage/cloud_storage_dml_sink.go
 
 	for _, txn := range txns {
 		if txn.GetTableSinkState() != state.TableSinkSinking {
@@ -178,7 +202,11 @@ func (s *dmlSink) WriteEvents(txns ...*eventsink.CallbackableEvent[*model.Single
 			continue
 		}
 
+<<<<<<< HEAD:cdc/sinkv2/eventsink/cloudstorage/cloud_storage_dml_sink.go
 		tbl = versionedTable{
+=======
+		tbl := cloudstorage.VersionedTable{
+>>>>>>> f491ab9aad (sink(cdc): don't block table sink when dml backends exit (#8585)):cdc/sink/dmlsink/cloudstorage/cloud_storage_dml_sink.go
 			TableName: txn.Event.TableInfo.TableName,
 			version:   txn.Event.TableInfo.Version,
 		}
@@ -195,7 +223,16 @@ func (s *dmlSink) WriteEvents(txns ...*eventsink.CallbackableEvent[*model.Single
 }
 
 // Close closes the cloud storage sink.
+<<<<<<< HEAD:cdc/sinkv2/eventsink/cloudstorage/cloud_storage_dml_sink.go
 func (s *dmlSink) Close() {
+=======
+func (s *DMLSink) Close() {
+	if s.cancel != nil {
+		s.cancel()
+	}
+	s.wg.Wait()
+
+>>>>>>> f491ab9aad (sink(cdc): don't block table sink when dml backends exit (#8585)):cdc/sink/dmlsink/cloudstorage/cloud_storage_dml_sink.go
 	if s.defragmenter != nil {
 		s.defragmenter.close()
 	}
@@ -211,5 +248,9 @@ func (s *dmlSink) Close() {
 	if s.statistics != nil {
 		s.statistics.Close()
 	}
-	s.wg.Wait()
+}
+
+// Dead checks whether it's dead or not.
+func (s *DMLSink) Dead() <-chan struct{} {
+	return s.dead
 }

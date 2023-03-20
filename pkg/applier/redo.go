@@ -174,9 +174,18 @@ func (ra *RedoApplier) consumeLogs(ctx context.Context) error {
 			}
 		}
 	}
+<<<<<<< HEAD
 	err = s.EmitRowChangedEvents(ctx, cachedRows...)
 	if err != nil {
 		return err
+=======
+	// wait all tables to flush data
+	for tableID := range ra.tableResolvedTsMap {
+		if err := ra.waitTableFlush(ctx, tableID, resolvedTs); err != nil {
+			return err
+		}
+		ra.tableSinks[tableID].Close()
+>>>>>>> f491ab9aad (sink(cdc): don't block table sink when dml backends exit (#8585))
 	}
 
 	for tableID := range tableResolvedTsMap {

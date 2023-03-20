@@ -762,7 +762,7 @@ func (m *SinkManager) AsyncStopTable(span tablepb.Span) {
 				zap.String("changefeed", m.changefeedID.ID),
 				zap.Stringer("span", &span))
 		}
-		tableSink.(*tableSinkWrapper).close(m.ctx)
+		tableSink.(*tableSinkWrapper).close()
 		cleanedBytes := m.sinkMemQuota.Clean(span)
 		cleanedBytes += m.redoMemQuota.Clean(span)
 		log.Debug("MemoryQuotaTracing: Clean up memory quota for table sink task when removing table",
@@ -880,7 +880,7 @@ func (m *SinkManager) Close() error {
 	m.redoMemQuota.Close()
 	m.tableSinks.Range(func(_ tablepb.Span, value interface{}) bool {
 		sink := value.(*tableSinkWrapper)
-		sink.close(m.ctx)
+		sink.close()
 		if m.eventCache != nil {
 			m.eventCache.removeTable(sink.span)
 		}

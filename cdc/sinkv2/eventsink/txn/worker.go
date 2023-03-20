@@ -16,8 +16,6 @@ package txn
 import (
 	"context"
 	"fmt"
-	"runtime"
-	"sync"
 	"time"
 
 	"github.com/pingcap/log"
@@ -25,7 +23,6 @@ import (
 	"github.com/pingcap/tiflow/cdc/sinkv2/metrics/txn"
 	"github.com/pingcap/tiflow/cdc/sinkv2/tablesink/state"
 	"github.com/pingcap/tiflow/pkg/chann"
-	cerror "github.com/pingcap/tiflow/pkg/errors"
 	"github.com/prometheus/client_golang/prometheus"
 	"go.uber.org/zap"
 )
@@ -41,11 +38,14 @@ type worker struct {
 	workerCount int
 
 	ID      int
+<<<<<<< HEAD:cdc/sinkv2/eventsink/txn/worker.go
 	txnCh   *chann.Chann[txnWithNotifier]
 	stopped chan struct{}
 	wg      sync.WaitGroup
+=======
+	txnCh   *chann.DrainableChann[txnWithNotifier]
+>>>>>>> f491ab9aad (sink(cdc): don't block table sink when dml backends exit (#8585)):cdc/sink/dmlsink/txn/worker.go
 	backend backend
-	errCh   chan<- error
 
 	// Metrics.
 	metricConflictDetectDuration prometheus.Observer
@@ -59,7 +59,7 @@ type worker struct {
 	wantMoreCallbacks []func()
 }
 
-func newWorker(ctx context.Context, ID int, backend backend, errCh chan<- error, workerCount int) *worker {
+func newWorker(ctx context.Context, ID int, backend backend, workerCount int) *worker {
 	wid := fmt.Sprintf("%d", ID)
 	changefeedID := contextutil.ChangefeedIDFromCtx(ctx)
 	return &worker{
@@ -68,10 +68,13 @@ func newWorker(ctx context.Context, ID int, backend backend, errCh chan<- error,
 		workerCount: workerCount,
 
 		ID:      ID,
+<<<<<<< HEAD:cdc/sinkv2/eventsink/txn/worker.go
 		txnCh:   chann.New[txnWithNotifier](chann.Cap(-1 /*unbounded*/)),
 		stopped: make(chan struct{}),
+=======
+		txnCh:   chann.NewAutoDrainChann[txnWithNotifier](chann.Cap(-1 /*unbounded*/)),
+>>>>>>> f491ab9aad (sink(cdc): don't block table sink when dml backends exit (#8585)):cdc/sink/dmlsink/txn/worker.go
 		backend: backend,
-		errCh:   errCh,
 
 		metricConflictDetectDuration: txn.ConflictDetectDuration.WithLabelValues(changefeedID.Namespace, changefeedID.ID),
 		metricTxnWorkerFlushDuration: txn.WorkerFlushDuration.WithLabelValues(changefeedID.Namespace, changefeedID.ID),
@@ -91,6 +94,7 @@ func (w *worker) Add(txn *txnEvent, unlock func()) {
 	w.txnCh.In() <- txnWithNotifier{txn, unlock}
 }
 
+<<<<<<< HEAD:cdc/sinkv2/eventsink/txn/worker.go
 func (w *worker) Close() {
 	log.Info("Closing txn worker",
 		zap.String("changefeed", w.changefeed),
@@ -113,10 +117,63 @@ func (w *worker) runBackgroundLoop() {
 		defer func() {
 			if err := w.backend.Close(); err != nil {
 				log.Info("Transaction sink backend close fail",
+=======
+func (w *worker) close() {
+	w.txnCh.CloseAndDrain()
+}
+
+// Run a loop.
+func (w *worker) runLoop() error {
+	defer func() {
+		if err := w.backend.Close(); err != nil {
+			log.Info("Transaction dmlSink backend close fail",
+				zap.String("changefeedID", w.changefeed),
+				zap.Int("workerID", w.ID),
+				zap.Error(err))
+		}
+	}()
+	log.Info("Transaction dmlSink worker starts",
+		zap.String("changefeedID", w.changefeed),
+		zap.Int("workerID", w.ID))
+
+	ticker := time.NewTicker(w.flushInterval)
+	defer ticker.Stop()
+
+	needFlush := false
+	var flushTimeSlice, totalTimeSlice time.Duration
+	overseerTicker := time.NewTicker(time.Second)
+	defer overseerTicker.Stop()
+	startToWork := time.Now()
+	for {
+		select {
+		case <-w.ctx.Done():
+			log.Info("Transaction dmlSink worker exits as canceled",
+				zap.String("changefeedID", w.changefeed),
+				zap.Int("workerID", w.ID))
+			return nil
+		case txn := <-w.txnCh.Out():
+			if txn.txnEvent != nil {
+				needFlush = w.onEvent(txn)
+			}
+		case <-ticker.C:
+			needFlush = true
+		case now := <-overseerTicker.C:
+			totalTimeSlice = now.Sub(startToWork)
+			busyRatio := int(flushTimeSlice.Seconds() / totalTimeSlice.Seconds() * 1000)
+			w.metricTxnWorkerBusyRatio.Add(float64(busyRatio) / float64(w.workerCount))
+			startToWork = now
+			flushTimeSlice = 0
+		}
+		if needFlush {
+			if err := w.doFlush(&flushTimeSlice); err != nil {
+				log.Error("Transaction dmlSink worker exits unexpectly",
+>>>>>>> f491ab9aad (sink(cdc): don't block table sink when dml backends exit (#8585)):cdc/sink/dmlsink/txn/worker.go
 					zap.String("changefeedID", w.changefeed),
 					zap.Int("workerID", w.ID),
 					zap.Error(err))
+				return err
 			}
+<<<<<<< HEAD:cdc/sinkv2/eventsink/txn/worker.go
 		}()
 		defer func() {
 			var r interface{}
@@ -175,11 +232,18 @@ func (w *worker) runBackgroundLoop() {
 			zap.String("changefeedID", w.changefeed),
 			zap.Int("workerID", w.ID))
 	}()
+=======
+			needFlush = false
+		}
+	}
+>>>>>>> f491ab9aad (sink(cdc): don't block table sink when dml backends exit (#8585)):cdc/sink/dmlsink/txn/worker.go
 }
 
 // onEvent is called when a new event is received.
 // It returns true if the event is sent to backend.
 func (w *worker) onEvent(txn txnWithNotifier) bool {
+	w.hasPending = true
+
 	if txn.txnEvent.GetTableSinkState() != state.TableSinkSinking {
 		// The table where the event comes from is in stopping, so it's safe
 		// to drop the event directly.
@@ -197,7 +261,7 @@ func (w *worker) onEvent(txn txnWithNotifier) bool {
 
 // doFlush flushes the backend.
 // It returns true only if it can no longer be flushed.
-func (w *worker) doFlush(flushTimeSlice *time.Duration) (needStop bool) {
+func (w *worker) doFlush(flushTimeSlice *time.Duration) error {
 	if w.hasPending {
 		start := time.Now()
 		defer func() {
@@ -211,11 +275,7 @@ func (w *worker) doFlush(flushTimeSlice *time.Duration) (needStop bool) {
 				zap.String("changefeedID", w.changefeed),
 				zap.Int("workerID", w.ID),
 				zap.Error(err))
-			select {
-			case <-w.ctx.Done():
-			case w.errCh <- err:
-			}
-			return true
+			return err
 		}
 		// Flush successfully, call callbacks to notify conflict detector.
 		for _, wantMore := range w.wantMoreCallbacks {
@@ -229,5 +289,5 @@ func (w *worker) doFlush(flushTimeSlice *time.Duration) (needStop bool) {
 	}
 
 	w.hasPending = false
-	return false
+	return nil
 }

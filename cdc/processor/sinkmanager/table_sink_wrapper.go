@@ -14,7 +14,6 @@
 package sinkmanager
 
 import (
-	"context"
 	"sort"
 	"sync"
 	"sync/atomic"
@@ -198,11 +197,29 @@ func (t *tableSinkWrapper) getState() tablepb.TableState {
 	return t.state.Load()
 }
 
+<<<<<<< HEAD
 func (t *tableSinkWrapper) close(ctx context.Context) {
+=======
+// getUpperBoundTs returns the upperbound of the table sink.
+// It is used by sinkManager to generate sink task.
+// upperBoundTs should be the minimum of the following two values:
+// 1. the resolved ts of the sorter
+// 2. the barrier ts of the table
+func (t *tableSinkWrapper) getUpperBoundTs() model.Ts {
+	resolvedTs := t.getReceivedSorterResolvedTs()
+	barrierTs := t.barrierTs.Load()
+	if resolvedTs > barrierTs {
+		resolvedTs = barrierTs
+	}
+	return resolvedTs
+}
+
+func (t *tableSinkWrapper) close() {
+>>>>>>> f491ab9aad (sink(cdc): don't block table sink when dml backends exit (#8585))
 	t.state.Store(tablepb.TableStateStopping)
 	// table stopped state must be set after underlying sink is closed
 	defer t.state.Store(tablepb.TableStateStopped)
-	t.tableSink.Close(ctx)
+	t.tableSink.Close()
 	log.Info("Sink is closed",
 		zap.Stringer("span", &t.span),
 		zap.String("namespace", t.changefeed.Namespace),

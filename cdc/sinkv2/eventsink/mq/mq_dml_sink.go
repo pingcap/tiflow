@@ -15,9 +15,9 @@ package mq
 
 import (
 	"context"
+	"sync/atomic"
 
 	"github.com/pingcap/errors"
-	"github.com/pingcap/log"
 	"github.com/pingcap/tiflow/cdc/contextutil"
 	"github.com/pingcap/tiflow/cdc/model"
 	"github.com/pingcap/tiflow/cdc/sink/codec/builder"
@@ -32,7 +32,13 @@ import (
 	"github.com/pingcap/tiflow/pkg/config"
 	cerror "github.com/pingcap/tiflow/pkg/errors"
 	"github.com/pingcap/tiflow/pkg/sink"
+<<<<<<< HEAD:cdc/sinkv2/eventsink/mq/mq_dml_sink.go
 	"go.uber.org/zap"
+=======
+	"github.com/pingcap/tiflow/pkg/sink/codec/builder"
+	"github.com/pingcap/tiflow/pkg/sink/codec/common"
+	"github.com/pingcap/tiflow/pkg/sink/kafka"
+>>>>>>> f491ab9aad (sink(cdc): don't block table sink when dml backends exit (#8585)):cdc/sink/dmlsink/mq/mq_dml_sink.go
 )
 
 // Assert EventSink[E event.TableEvent] implementation
@@ -55,6 +61,8 @@ type dmlSink struct {
 
 	ctx    context.Context
 	cancel context.CancelFunc
+	dead   chan struct{}
+	isDead atomic.Bool
 }
 
 func newSink(
@@ -85,20 +93,18 @@ func newSink(
 		topicManager: topicManager,
 		ctx:          ctx,
 		cancel:       cancel,
+		dead:         make(chan struct{}),
 	}
 
 	// Spawn a goroutine to send messages by the worker.
 	go func() {
-		if err := s.worker.run(ctx); err != nil && errors.Cause(err) != context.Canceled {
+		err := s.worker.run(ctx)
+		s.isDead.Store(true)
+		close(s.dead)
+		if err != nil && errors.Cause(err) != context.Canceled {
 			select {
 			case <-ctx.Done():
-				return
 			case errCh <- err:
-			default:
-				log.Error("Error channel is full in DML sink",
-					zap.String("namespace", changefeedID.Namespace),
-					zap.String("changefeed", changefeedID.ID),
-					zap.Error(err))
 			}
 		}
 	}()
@@ -108,7 +114,15 @@ func newSink(
 
 // WriteEvents writes events to the sink.
 // This is an asynchronously and thread-safe method.
+<<<<<<< HEAD:cdc/sinkv2/eventsink/mq/mq_dml_sink.go
 func (s *dmlSink) WriteEvents(rows ...*eventsink.RowChangeCallbackableEvent) error {
+=======
+func (s *dmlSink) WriteEvents(rows ...*dmlsink.RowChangeCallbackableEvent) error {
+	if s.isDead.Load() {
+		return errors.Trace(errors.New("dead dmlSink"))
+	}
+
+>>>>>>> f491ab9aad (sink(cdc): don't block table sink when dml backends exit (#8585)):cdc/sink/dmlsink/mq/mq_dml_sink.go
 	for _, row := range rows {
 		if row.GetTableSinkState() != state.TableSinkSinking {
 			// The table where the event comes from is in stopping, so it's safe
@@ -139,7 +153,13 @@ func (s *dmlSink) Close() {
 	if s.cancel != nil {
 		s.cancel()
 	}
+
 	if s.worker != nil {
 		s.worker.close()
 	}
+}
+
+// Dead checks whether it's dead or not.
+func (s *dmlSink) Dead() <-chan struct{} {
+	return s.dead
 }
