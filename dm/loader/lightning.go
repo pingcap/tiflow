@@ -36,6 +36,7 @@ import (
 	"github.com/pingcap/tiflow/dm/pb"
 	"github.com/pingcap/tiflow/dm/pkg/binlog"
 	"github.com/pingcap/tiflow/dm/pkg/conn"
+	"github.com/pingcap/tiflow/dm/pkg/cputil"
 	"github.com/pingcap/tiflow/dm/pkg/log"
 	"github.com/pingcap/tiflow/dm/pkg/storage"
 	"github.com/pingcap/tiflow/dm/pkg/terror"
@@ -320,13 +321,13 @@ func GetLightningConfig(globalCfg *lcfg.GlobalConfig, subtaskCfg *config.SubTask
 	cfg.Routes = subtaskCfg.RouteRules
 
 	if subtaskCfg.ExtStorage != nil {
-		// NOTE: if we use bucket as dumper storage, write lightning checkpoint to downstream DB to avoid bucket ratelimit
-		// it's the default path for cloud dm.
+		// NOTE: If we use bucket as dumper storage, write lightning checkpoint to downstream DB to avoid bucket ratelimit
 		// since we will use check Checkpoint in 'ignoreCheckpointError', MAKE SURE we have assigned the Checkpoint config properly here
 		if err := cfg.Security.BuildTLSConfig(); err != nil {
 			return nil, err
 		}
-		cfg.Checkpoint.Schema = "tidb_lightning_checkpoint"
+		// To enable the loader worker failover, we need to use jobID+sourceID to isolate the checkpoint schema
+		cfg.Checkpoint.Schema = cputil.LightningCheckpointSchema(subtaskCfg.Name, subtaskCfg.SourceID)
 		cfg.Checkpoint.Driver = lcfg.CheckpointDriverMySQL
 		cfg.Checkpoint.MySQLParam = connParamFromConfig(cfg)
 	} else {
@@ -340,7 +341,9 @@ func GetLightningConfig(globalCfg *lcfg.GlobalConfig, subtaskCfg *config.SubTask
 		}
 		cfg.Checkpoint.DSN = cpPath
 	}
-	cfg.Checkpoint.KeepAfterSuccess = lcfg.CheckpointOrigin
+	// TODO: Fix me. Remove strategy may cause the re-import if the process exits unexpectly between removing lightning
+	// checkpoint meta and updating dm checkpoint meta to 'finished'.
+	cfg.Checkpoint.KeepAfterSuccess = lcfg.CheckpointRemove
 
 	cfg.TikvImporter.DiskQuota = subtaskCfg.LoaderConfig.DiskQuotaPhysical
 	cfg.TikvImporter.OnDuplicate = string(subtaskCfg.OnDuplicateLogical)
