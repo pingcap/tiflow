@@ -210,7 +210,7 @@ func TestTableExecutorAddingTableIndirectly(t *testing.T) {
 	ok, err := p.AddTableSpan(ctx, span, 20, true)
 	require.NoError(t, err)
 	require.True(t, ok)
-
+	p.sinkManager.UpdateBarrierTs(20, nil)
 	stats := p.sinkManager.GetTableStats(span)
 	require.Equal(t, model.Ts(20), stats.CheckpointTs)
 	require.Equal(t, model.Ts(20), stats.BarrierTs)
@@ -561,16 +561,18 @@ func TestUpdateBarrierTs(t *testing.T) {
 	err = p.Tick(ctx)
 	require.Nil(t, err)
 	tester.MustApplyPatches()
+	p.updateBarrierTs(&schedulepb.Barrier{GlobalBarrierTs: 20, TableBarriers: nil})
 	status := p.sinkManager.GetTableStats(span)
-	require.Equal(t, status.BarrierTs, uint64(10))
+	require.Equal(t, uint64(10), status.BarrierTs)
 
 	// Schema storage has advanced too.
 	p.schemaStorage.(*mockSchemaStorage).resolvedTs = 15
 	err = p.Tick(ctx)
 	require.Nil(t, err)
 	tester.MustApplyPatches()
+	p.updateBarrierTs(&schedulepb.Barrier{GlobalBarrierTs: 20, TableBarriers: nil})
 	status = p.sinkManager.GetTableStats(span)
-	require.Equal(t, status.BarrierTs, uint64(15))
+	require.Equal(t, uint64(15), status.BarrierTs)
 
 	require.Nil(t, p.Close(ctx))
 	tester.MustApplyPatches()
