@@ -1,4 +1,4 @@
-// Copyright 2022 PingCAP, Inc.
+// Copyright 2023 PingCAP, Inc.
 //
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -11,15 +11,19 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-package dmlsink
+package v2
 
-// EventSink is the interface for event sink.
-type EventSink[E TableEvent] interface {
-	// WriteEvents writes events to the sink.
-	// This is an asynchronously and thread-safe method.
-	WriteEvents(events ...*CallbackableEvent[E]) error
-	// Close closes the sink.
-	Close()
-	// The EventSink meets internal errors and has been dead already.
-	Dead() <-chan struct{}
+import (
+	"context"
+
+	"github.com/segmentio/kafka-go"
+)
+
+// Writer is the interface of the kafka-go writer, it contains a subset of all methods which is used
+// by the kafka sink.
+// This interface is mainly used to support mock kafka-go client in unit test.
+type Writer interface {
+	Stats() kafka.WriterStats
+	WriteMessages(ctx context.Context, msgs ...kafka.Message) error
+	Close() error
 }
