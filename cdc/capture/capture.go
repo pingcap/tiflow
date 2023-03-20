@@ -262,18 +262,23 @@ func (c *captureImpl) Run(ctx context.Context) error {
 			}
 			return errors.Trace(err)
 		}
-		err = c.reset(ctx)
-		if err != nil {
-			log.Error("reset capture failed", zap.Error(err))
-			return errors.Trace(err)
-		}
 		err = c.run(ctx)
 		// if capture suicided, reset the capture and run again.
 		// if the canceled error throw, there are two possible scenarios:
-		//   1. the internal context canceled, it means some error happened in the internal, and the routine is exited, we should restart the capture
-		//   2. the parent context canceled, it means that the caller of the capture hope the capture to exit, and this loop will return in the above `select` block
-		// TODO: make sure the internal cancel should return the real error instead of context.Canceled
-		if cerror.ErrCaptureSuicide.Equal(err) || context.Canceled == errors.Cause(err) {
+		//   1. the internal context canceled, it means some error happened in
+		//      the internal, and the routine is exited, we should restart
+		//      the capture.
+		//   2. the parent context canceled, it means that the caller of
+		//      the capture hope the capture to exit, and this loop will return
+		//      in the above `select` block.
+		// if there are some **internal** context deadline exceeded (IO/network
+		// timeout), reset the capture and run again.
+		//
+		// TODO: make sure the internal cancel should return the real error
+		//       instead of context.Canceled.
+		if cerror.ErrCaptureSuicide.Equal(err) ||
+			context.Canceled == errors.Cause(err) ||
+			context.DeadlineExceeded == errors.Cause(err) {
 			log.Info("capture recovered", zap.String("captureID", c.info.ID))
 			continue
 		}
@@ -282,7 +287,13 @@ func (c *captureImpl) Run(ctx context.Context) error {
 }
 
 func (c *captureImpl) run(stdCtx context.Context) error {
-	err := c.register(stdCtx)
+	err := c.reset(stdCtx)
+	if err != nil {
+		log.Error("reset capture failed", zap.Error(err))
+		return errors.Trace(err)
+	}
+
+	err = c.register(stdCtx)
 	if err != nil {
 		return errors.Trace(err)
 	}
