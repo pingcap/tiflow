@@ -57,7 +57,7 @@ type RowEventEncoderBuilder interface {
 // TxnEventEncoder is an abstraction for txn events encoder.
 type TxnEventEncoder interface {
 	// AppendTxnEvent append a txn event into the buffer.
-	AppendTxnEvent(context.Context, string, *model.SingleTableTxn, func()) error
+	AppendTxnEvent(*model.SingleTableTxn, func()) error
 	MessageBuilder
 }
 

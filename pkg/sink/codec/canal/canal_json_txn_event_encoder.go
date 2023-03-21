@@ -15,7 +15,6 @@ package canal
 
 import (
 	"bytes"
-	"context"
 
 	"github.com/pingcap/errors"
 	"github.com/pingcap/log"
@@ -49,8 +48,6 @@ type JSONTxnEventEncoder struct {
 
 // AppendTxnEvent appends a txn event to the encoder.
 func (j *JSONTxnEventEncoder) AppendTxnEvent(
-	_ context.Context,
-	_ string,
 	txn *model.SingleTableTxn,
 	callback func(),
 ) error {

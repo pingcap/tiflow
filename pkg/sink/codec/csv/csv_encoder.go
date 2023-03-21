@@ -15,7 +15,6 @@ package csv
 
 import (
 	"bytes"
-	"context"
 
 	"github.com/pingcap/tiflow/cdc/model"
 	"github.com/pingcap/tiflow/pkg/config"
@@ -33,8 +32,6 @@ type BatchEncoder struct {
 
 // AppendTxnEvent implements the TxnEventEncoder interface
 func (b *BatchEncoder) AppendTxnEvent(
-	_ context.Context,
-	_ string,
 	e *model.SingleTableTxn,
 	callback func(),
 ) error {

@@ -69,7 +69,7 @@ func TestEncodeEvents(t *testing.T) {
 			Ft:            types.NewFieldType(mysql.TypeString),
 		},
 	}
-	err := worker.encodeEvents(ctx, eventFragment{
+	err := worker.encodeEvents(eventFragment{
 		versionedTable: cloudstorage.VersionedTable{
 			TableName: model.TableName{
 				Schema:  "test",

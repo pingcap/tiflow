@@ -66,7 +66,7 @@ func (w *encodingWorker) run(ctx context.Context) error {
 				if !ok || atomic.LoadUint64(&w.isClosed) == 1 {
 					return nil
 				}
-				err := w.encodeEvents(ctx, frag)
+				err := w.encodeEvents(frag)
 				if err != nil {
 					return errors.Trace(err)
 				}
@@ -77,8 +77,8 @@ func (w *encodingWorker) run(ctx context.Context) error {
 	return eg.Wait()
 }
 
-func (w *encodingWorker) encodeEvents(ctx context.Context, frag eventFragment) error {
-	err := w.encoder.AppendTxnEvent(ctx, "", frag.event.Event, frag.event.Callback)
+func (w *encodingWorker) encodeEvents(frag eventFragment) error {
+	err := w.encoder.AppendTxnEvent(frag.event.Event, frag.event.Callback)
 	if err != nil {
 		return errors.Trace(err)
 	}

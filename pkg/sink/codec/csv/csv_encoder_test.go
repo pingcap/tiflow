@@ -14,7 +14,6 @@
 package csv
 
 import (
-	"context"
 	"testing"
 
 	"github.com/pingcap/tidb/parser/mysql"
@@ -74,7 +73,7 @@ func TestCSVBatchCodec(t *testing.T) {
 			NullString:      "\\N",
 			IncludeCommitTs: true,
 		})
-		err := encoder.AppendTxnEvent(context.Background(), "", cs, nil)
+		err := encoder.AppendTxnEvent(cs, nil)
 		require.Nil(t, err)
 		messages := encoder.Build()
 		if len(cs.Rows) == 0 {
@@ -122,7 +121,7 @@ func TestCSVAppendRowChangedEventWithCallback(t *testing.T) {
 	require.Len(t, msgs, 0, "no message should be built and no panic")
 
 	// Append the event.
-	err := encoder.AppendTxnEvent(context.Background(), "", txn, callback)
+	err := encoder.AppendTxnEvent(txn, callback)
 	require.Nil(t, err)
 	require.Equal(t, 0, count, "nothing should be called")
 

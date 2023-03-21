@@ -101,7 +101,7 @@ func TestDeframenter(t *testing.T) {
 				}
 				frag.event.Event.Rows = append(frag.event.Event.Rows, row)
 			}
-			err := encoder.AppendTxnEvent(ctx, "", frag.event.Event, nil)
+			err := encoder.AppendTxnEvent(frag.event.Event, nil)
 			require.NoError(t, err)
 			frag.encodedMsgs = encoder.Build()
 
