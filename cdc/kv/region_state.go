@@ -123,30 +123,41 @@ func (s *regionFeedState) getRegionMeta() (uint64, tablepb.Span, time.Time, stri
 }
 
 type syncRegionFeedStateMap struct {
-	mu     sync.RWMutex
-	states map[uint64]*regionFeedState
+	mu sync.RWMutex
+	// statesInternal is an internal field and must not be accessed from outside.
+	statesInternal map[uint64]*regionFeedState
 }
 
 func newSyncRegionFeedStateMap() *syncRegionFeedStateMap {
 	return &syncRegionFeedStateMap{
-		mu:     sync.RWMutex{},
-		states: make(map[uint64]*regionFeedState),
+		mu:             sync.RWMutex{},
+		statesInternal: make(map[uint64]*regionFeedState),
+	}
+}
+
+func (m *syncRegionFeedStateMap) iter(fn func(requestID uint64, state *regionFeedState) bool) {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	for requestID, state := range m.statesInternal {
+		if !fn(requestID, state) {
+			break
+		}
 	}
 }
 
 func (m *syncRegionFeedStateMap) setByRequestID(requestID uint64, state *regionFeedState) {
 	m.mu.Lock()
 	defer m.mu.Unlock()
-	m.states[requestID] = state
+	m.statesInternal[requestID] = state
 }
 
 func (m *syncRegionFeedStateMap) takeByRequestID(requestID uint64) (*regionFeedState, bool) {
 	m.mu.Lock()
 	defer m.mu.Unlock()
 
-	state, ok := m.states[requestID]
+	state, ok := m.statesInternal[requestID]
 	if ok {
-		delete(m.states, requestID)
+		delete(m.statesInternal, requestID)
 	}
 	return state, ok
 }
@@ -155,34 +166,34 @@ func (m *syncRegionFeedStateMap) takeAll() map[uint64]*regionFeedState {
 	m.mu.Lock()
 	defer m.mu.Unlock()
 
-	state := m.states
-	m.states = make(map[uint64]*regionFeedState)
+	state := m.statesInternal
+	m.statesInternal = make(map[uint64]*regionFeedState)
 	return state
 }
 
 func (m *syncRegionFeedStateMap) setByRegionID(regionID uint64, state *regionFeedState) {
 	m.mu.Lock()
 	defer m.mu.Unlock()
-	m.states[regionID] = state
+	m.statesInternal[regionID] = state
 }
 
 func (m *syncRegionFeedStateMap) getByRegionID(regionID uint64) (*regionFeedState, bool) {
 	m.mu.RLock()
 	defer m.mu.RUnlock()
-	result, ok := m.states[regionID]
+	result, ok := m.statesInternal[regionID]
 	return result, ok
 }
 
 func (m *syncRegionFeedStateMap) delByRegionID(regionID uint64) {
 	m.mu.Lock()
 	defer m.mu.Unlock()
-	delete(m.states, regionID)
+	delete(m.statesInternal, regionID)
 }
 
 func (m *syncRegionFeedStateMap) len() int {
 	m.mu.RLock()
 	defer m.mu.RUnlock()
-	return len(m.states)
+	return len(m.statesInternal)
 }
 
 type regionStateManagerInterface interface {
