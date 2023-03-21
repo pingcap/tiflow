@@ -44,9 +44,12 @@ type indexWithDate struct {
 	currDate, prevDate string
 }
 
-// VersionedTable is used to wrap TableName with a version.
+// VersionedTable is used to wrap TableNameWithPhysicTableID with a version.
 type VersionedTable struct {
-	model.TableName
+	// Because we need to generate different file paths for different
+	// tables, we need to use the physical table ID instead of the
+	// logical table ID.(Especially when the table is a partitioned table).
+	TableNameWithPhysicTableID model.TableName
 	// Version is consistent with the version of TableInfo recorded in
 	// schema storage. It can either be finished ts of a DDL event,
 	// or be the checkpoint ts when processor is restarted.
@@ -111,12 +114,12 @@ func (f *FilePathGenerator) GenerateDateStr() string {
 func (f *FilePathGenerator) generateDataDirPath(tbl VersionedTable, date string) string {
 	var elems []string
 
-	elems = append(elems, tbl.Schema)
-	elems = append(elems, tbl.Table)
+	elems = append(elems, tbl.TableNameWithPhysicTableID.Schema)
+	elems = append(elems, tbl.TableNameWithPhysicTableID.Table)
 	elems = append(elems, fmt.Sprintf("%d", tbl.Version))
 
-	if f.config.EnablePartitionSeparator && tbl.TableName.IsPartition {
-		elems = append(elems, fmt.Sprintf("%d", tbl.TableID))
+	if f.config.EnablePartitionSeparator && tbl.TableNameWithPhysicTableID.IsPartition {
+		elems = append(elems, fmt.Sprintf("%d", tbl.TableNameWithPhysicTableID.TableID))
 	}
 
 	if len(date) != 0 {
