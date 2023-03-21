@@ -23,6 +23,7 @@ import (
 	"github.com/pingcap/tiflow/cdc/model"
 	"github.com/pingcap/tiflow/pkg/config"
 	cerror "github.com/pingcap/tiflow/pkg/errors"
+	"github.com/pingcap/tiflow/pkg/redo"
 	"github.com/pingcap/tiflow/pkg/security"
 )
 
@@ -163,6 +164,7 @@ func (c *ReplicaConfig) ToInternalReplicaConfig() *config.ReplicaConfig {
 			MaxLogSize:        c.Consistent.MaxLogSize,
 			FlushIntervalInMs: c.Consistent.FlushIntervalInMs,
 			Storage:           c.Consistent.Storage,
+			UseFileBackend:    c.Consistent.UseFileBackend,
 		}
 	}
 	if c.Sink != nil {
@@ -315,6 +317,7 @@ func ToAPIReplicaConfig(c *config.ReplicaConfig) *ReplicaConfig {
 			MaxLogSize:        cloned.Consistent.MaxLogSize,
 			FlushIntervalInMs: cloned.Consistent.FlushIntervalInMs,
 			Storage:           cloned.Consistent.Storage,
+			UseFileBackend:    cloned.Consistent.UseFileBackend,
 		}
 	}
 	if cloned.Mounter != nil {
@@ -341,8 +344,9 @@ func GetDefaultReplicaConfig() *ReplicaConfig {
 		Consistent: &ConsistentConfig{
 			Level:             "none",
 			MaxLogSize:        64,
-			FlushIntervalInMs: config.DefaultFlushIntervalInMs,
+			FlushIntervalInMs: redo.DefaultFlushIntervalInMs,
 			Storage:           "",
+			UseFileBackend:    true,
 		},
 	}
 }
@@ -485,6 +489,7 @@ type ConsistentConfig struct {
 	MaxLogSize        int64  `json:"max_log_size"`
 	FlushIntervalInMs int64  `json:"flush_interval"`
 	Storage           string `json:"storage"`
+	UseFileBackend    bool   `json:"use_file_backend"`
 }
 
 // EtcdData contains key/value pair of etcd data
