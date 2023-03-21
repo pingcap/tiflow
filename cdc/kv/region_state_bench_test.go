@@ -55,7 +55,7 @@ func TestSyncRegionFeedStateMapConcurrentAccess(t *testing.T) {
 			default:
 			}
 			m.iter(func(requestID uint64, state *regionFeedState) bool {
-				_ = state.initialized
+				_ = state.initialized.Load()
 				return true
 			})
 		}
