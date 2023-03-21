@@ -113,7 +113,7 @@ func EncodeKey(uniqueID uint32, tableID uint64, event *model.PolymorphicEvent) [
 func getDMLOrder(rowKV *model.RawKVEntry) uint16 {
 	if rowKV.OpType == model.OpTypeDelete {
 		return typeDelete
-	} else if rowKV.OldValue == nil {
+	} else if rowKV.OldValue != nil {
 		return typeUpdate
 	}
 	return typeInsert
