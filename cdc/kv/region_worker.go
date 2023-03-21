@@ -782,9 +782,9 @@ func (w *regionWorker) handleResolvedTs(
 // all existing regions to re-establish
 func (w *regionWorker) evictAllRegions() {
 	for _, states := range w.statesManager.states {
-		for regionID, regionState := range states.states {
+		states.iter(func(regionID uint64, regionState *regionFeedState) bool {
 			if regionState.isStopped() {
-				continue
+				return true
 			}
 			regionState.markStopped()
 			w.delRegionState(regionID)
@@ -796,7 +796,8 @@ func (w *regionWorker) evictAllRegions() {
 			errInfo := newRegionErrorInfo(regionState.sri,
 				cerror.ErrEventFeedAborted.FastGenByArgs())
 			w.session.onRegionFail(w.parentCtx, errInfo, revokeToken)
-		}
+			return true
+		})
 	}
 }
 
