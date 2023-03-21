@@ -42,7 +42,9 @@ stop() {
 s3cmd --access_key=$MINIO_ACCESS_KEY --secret_key=$MINIO_SECRET_KEY --host=$S3_ENDPOINT --host-bucket=$S3_ENDPOINT --no-ssl mb s3://logbucket
 
 function run() {
-	if [ "$SINK_TYPE" != "storage" ]; then
+	# Now, we run the storage tests in mysql sink tests.
+	# It's a temporary solution, we will move it to a new test pipeline later.
+	if [ "$SINK_TYPE" != "mysql" ]; then
 		return
 	fi
 
@@ -58,7 +60,7 @@ function run() {
 	run_sql_file $CUR/data/data.sql ${UP_TIDB_HOST} ${UP_TIDB_PORT}
 	run_storage_consumer $WORK_DIR "s3://logbucket/storage_test?endpoint=http://127.0.0.1:24927/" $CUR/conf/changefeed.toml ""
 	sleep 8
-	check_sync_diff $WORK_DIR $CUR/conf/diff_config.toml
+	check_sync_diff $WORK_DIR $CUR/conf/diff_config.toml 100
 }
 
 trap stop EXIT
