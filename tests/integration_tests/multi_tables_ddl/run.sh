@@ -76,20 +76,6 @@ function run() {
 		run_kafka_consumer $WORK_DIR "kafka://127.0.0.1:9092/$TOPIC_NAME_2?protocol=open-protocol&partition-num=4&version=${KAFKA_VERSION}&max-message-bytes=10485760"
 		run_kafka_consumer $WORK_DIR "kafka://127.0.0.1:9092/$TOPIC_NAME_3?protocol=open-protocol&partition-num=4&version=${KAFKA_VERSION}&max-message-bytes=10485760"
 		;;
-	"storage")
-		run_sql "create database multi_tables_ddl_test" ${DOWN_TIDB_HOST} ${DOWN_TIDB_PORT}
-		SINK_URI="s3://logbucket/$TOPIC_NAME_1?flush-interval=5s&endpoint=http://127.0.0.1:24927&protocol=csv"
-		cdc cli changefeed create -c=$cf_normal --start-ts=$start_ts --sink-uri="$SINK_URI" --config="$CUR/conf/normal.toml"
-
-		SINK_URI="s3://logbucket/$TOPIC_NAME_2?flush-interval=5s&endpoint=http://127.0.0.1:24927&protocol=csv"
-		cdc cli changefeed create -c=$cf_err1 --start-ts=$start_ts --sink-uri="$SINK_URI" --config="$CUR/conf/error-1.toml"
-
-		SINK_URI="s3://logbucket/$TOPIC_NAME_3?flush-interval=5s&endpoint=http://127.0.0.1:24927&protocol=csv"
-		cdc cli changefeed create -c=$cf_err2 --start-ts=$start_ts --sink-uri="$SINK_URI" --config="$CUR/conf/error-2.toml"
-		run_storage_consumer $WORK_DIR "s3://logbucket/$TOPIC_NAME_1?endpoint=http://127.0.0.1:24927&protocol=csv" "$CUR/conf/normal.toml" 1
-		run_storage_consumer $WORK_DIR "s3://logbucket/$TOPIC_NAME_2?endpoint=http://127.0.0.1:24927&protocol=csv" "$CUR/conf/error-1.toml" 2
-		run_storage_consumer $WORK_DIR "s3://logbucket/$TOPIC_NAME_3?endpoint=http://127.0.0.1:24927&protocol=csv" "$CUR/conf/error-2.toml" 3
-		;;
 	*)
 		SINK_URI="mysql://normal:123456@127.0.0.1:3306/"
 		cdc cli changefeed create -c=$cf_normal --start-ts=$start_ts --sink-uri="$SINK_URI" --config="$CUR/conf/normal.toml"
@@ -107,7 +93,7 @@ function run() {
 	check_table_exists multi_tables_ddl_test.finish_mark ${DOWN_TIDB_HOST} ${DOWN_TIDB_PORT}
 	echo "check table exists success"
 
-	# changefeed test-error will not report an error, "multi_tables_ddl_test.t555 to multi_tables_ddl_test.t55" patr will be skipped.
+	# changefeed test-error will not report an error, "multi_tables_ddl_test.t555 to multi_tables_ddl_test.t55" part will be skipped.
 	run_sql "rename table multi_tables_ddl_test.t7 to multi_tables_ddl_test.t77, multi_tables_ddl_test.t555 to multi_tables_ddl_test.t55;" ${UP_TIDB_HOST} ${UP_TIDB_PORT}
 
 	check_changefeed_state "http://${UP_PD_HOST_1}:${UP_PD_PORT_1}" $cf_normal "normal" "null" ""

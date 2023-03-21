@@ -99,16 +99,6 @@ Use `../run-engine.sh stop ./deployments/engine/docker-compose/1m1e.yaml` to des
 
 sudo rm -rf /tmp/df/master
 
-## Run Demo
-
-```bash
-sudo rm -rf /tmp/df/master
-../run-engine.sh deploy ./deployments/engine/docker-compose/3m3e.yaml ./deployments/engine/docker-compose/demo.yaml
-
-cd ../../../ # root dir of tiflow
-./bin/tiflow cli job create --master-addrs ${$server-master-ip0}:${port0} --job-type CVSDemo --job-config ./deployments/engine/docker-compose/config/demo.json
-```
-
 ## Manager engine cluster by [helm](https://github.com/helm/helm) in local K8s
 ### Install tools
 * [helm](https://helm.sh/docs/intro/install/)

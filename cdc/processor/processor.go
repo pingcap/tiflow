@@ -34,6 +34,7 @@ import (
 	"github.com/pingcap/tiflow/cdc/puller"
 	"github.com/pingcap/tiflow/cdc/redo"
 	"github.com/pingcap/tiflow/cdc/scheduler"
+	"github.com/pingcap/tiflow/cdc/scheduler/schedulepb"
 	"github.com/pingcap/tiflow/pkg/config"
 	cdcContext "github.com/pingcap/tiflow/pkg/context"
 	cerror "github.com/pingcap/tiflow/pkg/errors"
@@ -557,12 +558,17 @@ func (p *processor) tick(ctx cdcContext.Context) error {
 	if err := p.lazyInit(ctx); err != nil {
 		return errors.Trace(err)
 	}
-	p.pushResolvedTs2Table()
 
-	p.doGCSchemaStorage()
-	if err := p.agent.Tick(ctx); err != nil {
+	barrier, err := p.agent.Tick(ctx)
+	if err != nil {
 		return errors.Trace(err)
 	}
+
+	if barrier != nil && barrier.GlobalBarrierTs != 0 {
+		p.updateBarrierTs(barrier)
+	}
+	p.doGCSchemaStorage()
+
 	return nil
 }
 
@@ -850,18 +856,29 @@ func (p *processor) sendError(err error) {
 	}
 }
 
-// pushResolvedTs2Table sends global resolved ts to all the table pipelines.
-func (p *processor) pushResolvedTs2Table() {
-	resolvedTs := p.changefeed.Status.ResolvedTs
+// updateBarrierTs updates barrierTs for all tables.
+func (p *processor) updateBarrierTs(barrier *schedulepb.Barrier) {
+	tableBarrier := p.calculateTableBarrierTs(barrier)
+	globalBarrierTs := barrier.GetGlobalBarrierTs()
+	// when redo is enable, globalBarrierTs must less than or equal to global resolvedTs
+	if p.redoDMLMgr.Enabled() {
+		if globalBarrierTs > p.changefeed.Status.ResolvedTs {
+			globalBarrierTs = p.changefeed.Status.ResolvedTs
+		}
+	}
 	schemaResolvedTs := p.schemaStorage.ResolvedTs()
-	if schemaResolvedTs < resolvedTs {
+	if schemaResolvedTs < globalBarrierTs {
 		// Do not update barrier ts that is larger than
 		// DDL puller's resolved ts.
 		// When DDL puller stall, resolved events that outputted by sorter
 		// may pile up in memory, as they have to wait DDL.
-		resolvedTs = schemaResolvedTs
+		globalBarrierTs = schemaResolvedTs
 	}
-	p.sinkManager.UpdateBarrierTs(resolvedTs)
+	log.Debug("update barrierTs",
+		zap.Any("tableBarriers", barrier.GetTableBarriers()),
+		zap.Uint64("globalBarrierTs", globalBarrierTs))
+
+	p.sinkManager.UpdateBarrierTs(globalBarrierTs, tableBarrier)
 }
 
 func (p *processor) getTableName(ctx context.Context, tableID model.TableID) string {
@@ -1034,4 +1051,14 @@ func (p *processor) WriteDebugInfo(w io.Writer) error {
 	}
 
 	return nil
+}
+
+func (p *processor) calculateTableBarrierTs(
+	barrier *schedulepb.Barrier,
+) map[model.TableID]model.Ts {
+	tableBarrierTs := make(map[model.TableID]model.Ts)
+	for _, tb := range barrier.TableBarriers {
+		tableBarrierTs[tb.TableID] = tb.BarrierTs
+	}
+	return tableBarrierTs
 }

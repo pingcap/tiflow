@@ -268,6 +268,10 @@ type CheckPoint interface {
 	// Snapshot make a snapshot of current checkpoint. If returns nil, it means nothing has changed since last call.
 	Snapshot(isSyncFlush bool) *SnapshotInfo
 
+	// DiscardPendingSnapshots discards all pending snapshots. It's used when we create a snapshot but are unable to
+	// call FlushPointsExcept() to flush the snapshot due to some error.
+	DiscardPendingSnapshots()
+
 	// FlushPointsExcept flushes the global checkpoint and tables'
 	// checkpoints except exceptTables, it also flushes SQLs with Args providing
 	// by extraSQLs and extraArgs. Currently extraSQLs contain shard meta only.
@@ -369,7 +373,7 @@ type RemoteCheckPoint struct {
 	needFlushSafeModeExitPoint atomic.Bool
 
 	logCtx *tcontext.Context
-	// these fields are used for async flush checkpoint
+
 	snapshots   []*remoteCheckpointSnapshot
 	snapshotSeq int
 }
@@ -454,6 +458,14 @@ func (cp *RemoteCheckPoint) Snapshot(isSyncFlush bool) *SnapshotInfo {
 		id:        id,
 		globalPos: globalPoint.location,
 	}
+}
+
+// DiscardPendingSnapshots discard all pending snapshots.
+func (cp *RemoteCheckPoint) DiscardPendingSnapshots() {
+	cp.Lock()
+	defer cp.Unlock()
+
+	cp.snapshots = nil
 }
 
 // Init implements CheckPoint.Init.
@@ -700,7 +712,7 @@ func (cp *RemoteCheckPoint) FlushPointsExcept(
 	cp.Lock()
 
 	if len(cp.snapshots) == 0 || cp.snapshots[0].id != snapshotID {
-		cp.logCtx.Logger.DPanic("snapshot not found", zap.Int("id", snapshotID))
+		return errors.Errorf("snapshot %d not found", snapshotID)
 	}
 	snapshotCp := cp.snapshots[0]
 	cp.snapshots = cp.snapshots[1:]
