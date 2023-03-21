@@ -14,14 +14,56 @@
 package kv
 
 import (
+	"context"
 	"fmt"
 	"runtime"
 	"sync"
 	"testing"
+	"time"
 
 	"github.com/pingcap/tiflow/pkg/spanz"
 	"github.com/tikv/client-go/v2/tikv"
 )
+
+func TestSyncRegionFeedStateMapConcurrentAccess(t *testing.T) {
+	t.Parallel()
+
+	m := newSyncRegionFeedStateMap()
+	ctx, cancel := context.WithCancel(context.Background())
+	wg := &sync.WaitGroup{}
+	wg.Add(1)
+	go func() {
+		defer wg.Done()
+		for {
+			select {
+			case <-ctx.Done():
+				return
+			default:
+			}
+			m.setByRequestID(1, &regionFeedState{})
+			m.setByRequestID(2, &regionFeedState{})
+			m.setByRequestID(3, &regionFeedState{})
+		}
+	}()
+	wg.Add(1)
+	go func() {
+		defer wg.Done()
+		for {
+			select {
+			case <-ctx.Done():
+				return
+			default:
+			}
+			m.iter(func(requestID uint64, state *regionFeedState) bool {
+				_ = state.initialized.Load()
+				return true
+			})
+		}
+	}()
+	time.Sleep(time.Second)
+	cancel()
+	wg.Wait()
+}
 
 // regionStateManagerWithSyncMap is only used for benchmark to compare the performance
 // between customized `syncRegionStateMap` and `sync.Map`.
