@@ -124,7 +124,7 @@ func (s *regionFeedState) getRegionMeta() (uint64, tablepb.Span, time.Time, stri
 
 type syncRegionFeedStateMap struct {
 	mu sync.RWMutex
-	// statesInternal is internal field must not be accessed from outside.
+	// statesInternal is an internal field and must not be accessed from outside.
 	statesInternal map[uint64]*regionFeedState
 }
 
