@@ -26,7 +26,7 @@ import (
 	"golang.org/x/text/encoding/charmap"
 )
 
-func TestBuildJSONBatchEncoder(t *testing.T) {
+func TestBuildCanalJSONRowEventEncoder(t *testing.T) {
 	t.Parallel()
 	cfg := common.NewConfig(config.ProtocolCanalJSON)
 
