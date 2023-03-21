@@ -619,7 +619,7 @@ func (s *mysqlBackend) prepareDMLs() *preparedDMLs {
 				}
 			}
 
-			approximateSize += row.ApproximateDataSize
+			approximateSize += int64(len(query)) + row.ApproximateDataSize
 		}
 	}
 
@@ -728,7 +728,9 @@ func (s *mysqlBackend) execDMLWithMaxRetries(pctx context.Context, dmls *prepare
 	}
 
 	start := time.Now()
-	fallbackToSeqWay := dmls.approximateSize > s.maxAllowedPacket
+	// approximateSize is multiplied by 2 because in extreme circustumas, every
+	// byte in dmls can be escaped and adds one byte.
+	fallbackToSeqWay := dmls.approximateSize*2 > s.maxAllowedPacket
 	return retry.Do(pctx, func() error {
 		writeTimeout, _ := time.ParseDuration(s.cfg.WriteTimeout)
 		writeTimeout += networkDriftDuration
