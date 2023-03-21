@@ -115,6 +115,7 @@ func adjustValueFromBinlogData(
 	return value, nil
 }
 
+// nolint:dupl
 func (s *Syncer) genAndFilterInsertDMLs(tctx *tcontext.Context, param *genDMLParam, filterExprs []expression.Expression) ([]*sqlmodel.RowChange, error) {
 	var (
 		tableID         = utils.GenTableID(param.targetTable)
@@ -168,6 +169,7 @@ RowLoop:
 	return dmls, nil
 }
 
+// nolint:dupl
 func (s *Syncer) genAndFilterUpdateDMLs(
 	tctx *tcontext.Context,
 	param *genDMLParam,
@@ -244,6 +246,7 @@ RowLoop:
 	return dmls, nil
 }
 
+// nolint:dupl
 func (s *Syncer) genAndFilterDeleteDMLs(tctx *tcontext.Context, param *genDMLParam, filterExprs []expression.Expression) ([]*sqlmodel.RowChange, error) {
 	var (
 		tableID    = utils.GenTableID(param.targetTable)

@@ -14,6 +14,7 @@ create database `ignore_db`;
 use `ignore_db`;
 create table `ignore_table`(id int);
 
+use `all_mode`;
 CREATE TABLE t3 (
     id INT PRIMARY KEY,
     j JSON,
