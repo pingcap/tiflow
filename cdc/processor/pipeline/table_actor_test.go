@@ -15,6 +15,7 @@ package pipeline
 
 import (
 	"context"
+	"fmt"
 	"sync"
 	"testing"
 	"time"
@@ -30,6 +31,7 @@ import (
 	"github.com/pingcap/tiflow/pkg/config"
 	cdcContext "github.com/pingcap/tiflow/pkg/context"
 	pmessage "github.com/pingcap/tiflow/pkg/pipeline/message"
+	redoCfg "github.com/pingcap/tiflow/pkg/redo"
 	"github.com/pingcap/tiflow/pkg/upstream"
 	"github.com/stretchr/testify/require"
 	"go.uber.org/atomic"
@@ -47,17 +49,17 @@ func TestAsyncStopFailed(t *testing.T) {
 	}()
 
 	tbl := &tableActor{
-		stopped:     0,
-		tableID:     1,
-		router:      tableActorRouter,
-		redoManager: redo.NewDisabledManager(),
-		cancel:      func() {},
-		reportErr:   func(err error) {},
-		state:       tablepb.TableStatePreparing,
-		upstream:    upstream.NewUpstream4Test(&mockPD{}),
+		stopped:    0,
+		tableID:    1,
+		router:     tableActorRouter,
+		redoDMLMgr: redo.NewDisabledDMLManager(),
+		cancel:     func() {},
+		reportErr:  func(err error) {},
+		state:      tablepb.TableStatePreparing,
+		upstream:   upstream.NewUpstream4Test(&mockPD{}),
 	}
 	tbl.sinkNode = newSinkNode(1, mocksink.NewNormalMockSink(), nil,
-		0, 0, &mockFlowController{}, tbl.redoManager,
+		0, 0, &mockFlowController{}, tbl.redoDMLMgr,
 		&tbl.state, model.DefaultChangeFeedID("changefeed-test"), true, false)
 	require.True(t, tbl.AsyncStop())
 
@@ -71,10 +73,10 @@ func TestAsyncStopFailed(t *testing.T) {
 
 func TestTableActorInterface(t *testing.T) {
 	table := &tableActor{
-		tableID:     1,
-		redoManager: redo.NewDisabledManager(),
-		tableName:   "t1",
-		state:       tablepb.TableStatePreparing,
+		tableID:    1,
+		redoDMLMgr: redo.NewDisabledDMLManager(),
+		tableName:  "t1",
+		state:      tablepb.TableStatePreparing,
 		replicaConfig: &config.ReplicaConfig{
 			Consistent: &config.ConsistentConfig{
 				Level: "node",
@@ -98,14 +100,22 @@ func TestTableActorInterface(t *testing.T) {
 
 	require.Equal(t, model.Ts(5), table.ResolvedTs())
 	ctx, cancel := context.WithCancel(context.Background())
-	defer cancel()
-	table.redoManager, _ = redo.NewMockManager(ctx)
-	table.redoManager.AddTable(table.tableID, 0)
+	eg, egCtx := errgroup.WithContext(ctx)
+	table.redoDMLMgr, _ = redo.NewDMLManager(ctx, &config.ConsistentConfig{
+		Level:             string(redoCfg.ConsistentLevelEventual),
+		FlushIntervalInMs: redoCfg.MinFlushIntervalInMs,
+		Storage:           fmt.Sprintf("file://tmp/%s", t.TempDir()),
+	})
+	eg.Go(func() error {
+		return table.redoDMLMgr.Run(egCtx)
+	})
+	table.redoDMLMgr.AddTable(table.tableID, 0)
 	require.Equal(t, model.Ts(0), table.ResolvedTs())
-	table.redoManager.UpdateResolvedTs(ctx, table.tableID, model.Ts(6))
+	table.redoDMLMgr.UpdateResolvedTs(ctx, table.tableID, model.Ts(6))
 	require.Eventually(t, func() bool { return table.ResolvedTs() == model.Ts(6) },
 		time.Second*5, time.Millisecond*500)
-	table.redoManager.Cleanup(ctx)
+	cancel()
+	require.ErrorIs(t, eg.Wait(), context.Canceled)
 
 	table.sinkNode.state.Store(tablepb.TableStateStopped)
 	require.Equal(t, tablepb.TableStateStopped, table.State())
@@ -122,14 +132,14 @@ func TestTableActorCancel(t *testing.T) {
 	}()
 
 	tbl := &tableActor{
-		state:       tablepb.TableStatePreparing,
-		stopped:     0,
-		tableID:     1,
-		redoManager: redo.NewDisabledManager(),
-		router:      tableActorRouter,
-		cancel:      func() {},
-		reportErr:   func(err error) {},
-		upstream:    upstream.NewUpstream4Test(&mockPD{}),
+		state:      tablepb.TableStatePreparing,
+		stopped:    0,
+		tableID:    1,
+		redoDMLMgr: redo.NewDisabledDMLManager(),
+		router:     tableActorRouter,
+		cancel:     func() {},
+		reportErr:  func(err error) {},
+		upstream:   upstream.NewUpstream4Test(&mockPD{}),
 	}
 	tbl.sinkNode = &sinkNode{
 		state:          &tbl.state,
@@ -148,7 +158,7 @@ func TestTableActorCancel(t *testing.T) {
 func TestTableActorWait(t *testing.T) {
 	ctx, cancel := context.WithCancel(context.TODO())
 	eg, _ := errgroup.WithContext(ctx)
-	tbl := &tableActor{wg: eg, redoManager: redo.NewDisabledManager()}
+	tbl := &tableActor{wg: eg, redoDMLMgr: redo.NewDisabledDMLManager()}
 	wg := sync.WaitGroup{}
 	wg.Add(1)
 	stopped := false
@@ -166,7 +176,7 @@ func TestHandleError(t *testing.T) {
 	canceled := false
 	reporterErr := false
 	table := &tableActor{
-		redoManager: redo.NewDisabledManager(),
+		redoDMLMgr: redo.NewDisabledDMLManager(),
 		cancel: func() {
 			canceled = true
 		},
@@ -409,7 +419,7 @@ func TestNewTableActor(t *testing.T) {
 	tbl, err := NewTableActor(cctx, upstream.NewUpstream4Test(&mockPD{}), nil, 1, "t1",
 		&model.TableReplicaInfo{
 			StartTs: 0,
-		}, mocksink.NewNormalMockSink(), nil, redo.NewDisabledManager(), 10)
+		}, mocksink.NewNormalMockSink(), nil, redo.NewDisabledDMLManager(), 10)
 	require.NotNil(t, tbl)
 	require.Nil(t, err)
 	require.Equal(t, tablepb.TableStatePreparing, tbl.State())
@@ -425,7 +435,7 @@ func TestNewTableActor(t *testing.T) {
 	tbl, err = NewTableActor(cctx, upstream.NewUpstream4Test(&mockPD{}), nil, 1, "t1",
 		&model.TableReplicaInfo{
 			StartTs: 0,
-		}, mocksink.NewNormalMockSink(), nil, redo.NewDisabledManager(), 10)
+		}, mocksink.NewNormalMockSink(), nil, redo.NewDisabledDMLManager(), 10)
 	require.Nil(t, tbl)
 	require.NotNil(t, err)
 
@@ -454,8 +464,8 @@ func TestTableActorStart(t *testing.T) {
 		return nil
 	}
 	tbl := &tableActor{
-		redoManager: redo.NewDisabledManager(),
-		globalVars:  globalVars,
+		redoDMLMgr: redo.NewDisabledDMLManager(),
+		globalVars: globalVars,
 		changefeedVars: &cdcContext.ChangefeedVars{
 			ID: model.DefaultChangeFeedID("changefeed-id-test"),
 			Info: &model.ChangeFeedInfo{
