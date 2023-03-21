@@ -308,23 +308,28 @@ func (m *ddlManager) shouldExecDDL(nextDDL *model.DDLEvent) bool {
 	// execute the next ddl.
 	// For example, let say there are some events are replicated by cdc:
 	// [dml-1(ts=5), dml-2(ts=8), dml-3(ts=11), ddl-1(ts=11), ddl-2(ts=12)].
-	// We need to wait `checkpointTs == ddlCommitTs(ts=11)` before execute ddl-1.
+	// We need to wait `checkpointTs == ddlCommitTs(ts=11)` before executing ddl-1.
 	checkpointReachBarrier := m.checkpointTs == nextDDL.CommitTs
 
 	redoCheckpointReachBarrier := true
+	redoDDLResolvedTsExceedBarrier := true
 	if m.redoMetaManager.Enabled() {
+		if !m.redoDDLManager.Enabled() {
+			log.Panic("Redo meta manager is enabled but redo ddl manager is not enabled")
+		}
 		flushed := m.redoMetaManager.GetFlushedMeta()
 		// Use the same example as above, let say there are some events are replicated by cdc:
 		// [dml-1(ts=5), dml-2(ts=8), dml-3(ts=11), ddl-1(ts=11), ddl-2(ts=12)].
 		// Suppose redoCheckpointTs=10 and ddl-1(ts=11) is executed, the redo apply operation
 		// would fail when applying the old data dml-3(ts=11) to a new schmea. Therefore, We
-		// need to wait `redoCheckpointTs == ddlCommitTs(ts=11)` before execute ddl-1.
+		// need to wait `redoCheckpointTs == ddlCommitTs(ts=11)` before executing ddl-1.
 		redoCheckpointReachBarrier = flushed.CheckpointTs == nextDDL.CommitTs
+
+		// If redo is enabled, m.ddlResolvedTs == redoDDLManager.GetResolvedTs(), so we need to
+		// wait nextDDL to be written to redo log before executing this DDL.
+		redoDDLResolvedTsExceedBarrier = m.ddlResolvedTs >= nextDDL.CommitTs
 	}
 
-	// If redo is enabled, m.ddlResolvedTs may be stuck by redoDDLManager, so we need to
-	// wait nextDDL to be written to redo log.
-	redoDDLResolvedTsExceedBarrier := m.ddlResolvedTs >= nextDDL.CommitTs
 	return checkpointReachBarrier && redoCheckpointReachBarrier && redoDDLResolvedTsExceedBarrier
 }
 
