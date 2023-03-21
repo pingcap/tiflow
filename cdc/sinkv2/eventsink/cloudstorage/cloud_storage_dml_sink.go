@@ -187,8 +187,8 @@ func (s *dmlSink) WriteEvents(txns ...*eventsink.CallbackableEvent[*model.Single
 		}
 
 		tbl := cloudstorage.VersionedTable{
-			TableName: txn.Event.TableInfo.TableName,
-			Version:   txn.Event.TableInfo.Version,
+			TableNameWithPhysicTableID: *txn.Event.Table,
+			Version:                    txn.Event.TableInfo.Version,
 		}
 		seq := atomic.AddUint64(&s.lastSeqNum, 1)
 		// emit a TxnCallbackableEvent encoupled with a sequence number starting from one.
