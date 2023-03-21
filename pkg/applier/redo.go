@@ -139,6 +139,7 @@ func (ra *RedoApplier) initSink(ctx context.Context) (err error) {
 
 func (ra *RedoApplier) bgReleaseQuota(ctx context.Context) error {
 	ticker := time.NewTicker(time.Second)
+	defer ticker.Stop()
 	for {
 		select {
 		case <-ctx.Done():
