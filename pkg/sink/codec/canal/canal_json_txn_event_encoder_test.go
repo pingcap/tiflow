@@ -71,3 +71,60 @@ func TestCanalJSONTxnEventEncoderMaxMessageBytes(t *testing.T) {
 	err = encoder.AppendTxnEvent(testEvent, nil)
 	require.NotNil(t, err)
 }
+
+func TestCanalJSONAppendTxnEventEncoderWithCallback(t *testing.T) {
+	t.Parallel()
+
+	cfg := common.NewConfig(config.ProtocolCanalJSON)
+	encoder := NewJSONTxnEventEncoderBuilder(cfg).Build()
+	require.NotNil(t, encoder)
+
+	count := 0
+
+	txn := &model.SingleTableTxn{
+		Table: &model.TableName{Schema: "a", Table: "b"},
+		Rows: []*model.RowChangedEvent{
+			{
+				CommitTs: 1,
+				Table:    &model.TableName{Schema: "a", Table: "b"},
+				Columns: []*model.Column{{
+					Name:  "col1",
+					Type:  mysql.TypeVarchar,
+					Value: []byte("aa"),
+				}},
+			},
+			{
+				CommitTs: 2,
+				Table:    &model.TableName{Schema: "a", Table: "b"},
+				Columns: []*model.Column{{
+					Name:  "col1",
+					Type:  mysql.TypeVarchar,
+					Value: []byte("bb"),
+				}},
+			},
+		},
+	}
+
+	// Empty build makes sure that the callback build logic not broken.
+	msgs := encoder.Build()
+	require.Len(t, msgs, 0, "no message should be built and no panic")
+
+	// Append the events.
+	callback := func() {
+		count++
+	}
+	err := encoder.AppendTxnEvent(txn, callback)
+	require.Nil(t, err)
+	require.Equal(t, 0, count, "nothing should be called")
+
+	msgs = encoder.Build()
+	require.Len(t, msgs, 1, "expected one message")
+	msgs[0].Callback()
+	require.Equal(t, 1, count, "expected one callback be called")
+	// Assert the build reset all the internal states.
+	require.Nil(t, encoder.(*JSONTxnEventEncoder).txnSchema)
+	require.Nil(t, encoder.(*JSONTxnEventEncoder).txnTable)
+	require.Nil(t, encoder.(*JSONTxnEventEncoder).callback)
+	require.Equal(t, 0, encoder.(*JSONTxnEventEncoder).batchSize)
+	require.Equal(t, 0, encoder.(*JSONTxnEventEncoder).valueBuf.Len())
+}
