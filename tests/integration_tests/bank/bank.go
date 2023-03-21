@@ -52,6 +52,7 @@ func main() {
 
 	var (
 		upstream, downstream          string
+		downstreamAPIEndpoint         string
 		accounts, tables, concurrency int
 		interval, testRound           int64
 		cleanupOnly                   bool
@@ -64,11 +65,13 @@ func main() {
 			if len(upstream) == 0 || len(downstream) == 0 {
 				log.Fatal("upstream and downstream should not be empty")
 			}
-			run(ctx, upstream, downstream, accounts, tables, concurrency, interval, testRound, cleanupOnly)
+			run(ctx, upstream, downstream, downstreamAPIEndpoint,
+				accounts, tables, concurrency, interval, testRound, cleanupOnly)
 		},
 	}
 	cmd.PersistentFlags().StringVarP(&upstream, "upstream", "u", "", "Upstream TiDB DSN, please specify target database in DSN")
 	cmd.PersistentFlags().StringVarP(&downstream, "downstream", "d", "", "Downstream TiDB DSN, please specify target database in DSN")
+	cmd.PersistentFlags().StringVarP(&downstreamAPIEndpoint, "downstreamEndpoint", "a", "", "Downstream TiDB API endpoint")
 	cmd.PersistentFlags().Int64Var(&interval, "interval", 1000, "Interval of verify tables")
 	cmd.PersistentFlags().Int64Var(&testRound, "test-round", 50000, "Total around of upstream updates")
 	cmd.PersistentFlags().IntVar(&tables, "tables", 5, "The number of tables for db")
