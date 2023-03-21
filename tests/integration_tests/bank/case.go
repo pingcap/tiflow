@@ -632,6 +632,8 @@ func getDownStreamSyncedEndTs(ctx context.Context, db *sql.DB, tidbAPIEndpoint, 
 }
 
 func tryGetEndTs(db *sql.DB, tidbAPIEndpoint, tableName string) (result uint64, ok bool) {
+	// Note: We should not use `END_TS` in the table, because it is encoded in
+	// the format `2023-03-16 18:12:51`, it's not precise enough.
 	query := "SELECT JOB_ID FROM information_schema.ddl_jobs WHERE table_name = ?"
 	log.Info("try get end ts", zap.String("query", query), zap.String("tableName", tableName))
 	var jobID uint64
