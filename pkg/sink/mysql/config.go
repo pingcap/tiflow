@@ -72,7 +72,7 @@ const (
 	BackoffMaxDelay = 60 * time.Second
 
 	defaultBatchDMLEnable  = true
-	defaultMultiStmtEnable = true
+	defaultMultiStmtEnable = false
 
 	// defaultcachePrepStmts is the default value of cachePrepStmts
 	defaultCachePrepStmts = true
