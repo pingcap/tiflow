@@ -559,6 +559,25 @@ LOOP:
 		zap.String("namespace", c.id.Namespace),
 		zap.String("changefeed", c.id.ID))
 
+<<<<<<< HEAD
+=======
+	downstreamType, err := c.state.Info.DownstreamType()
+	if err != nil {
+		return errors.Trace(err)
+	}
+	c.ddlManager = newDDLManager(
+		c.id,
+		ddlStartTs,
+		c.state.Status.CheckpointTs,
+		c.ddlSink,
+		c.ddlPuller,
+		c.schema,
+		c.redoDDLMgr,
+		c.redoMetaMgr,
+		downstreamType,
+		c.state.Info.Config.BDRMode)
+
+>>>>>>> 9ec0cd5a6 (tests(ticdc): add ddl test for redo (#8411))
 	// create scheduler
 	c.scheduler, err = c.newScheduler(ctx, c.upstream.PDClock)
 	if err != nil {

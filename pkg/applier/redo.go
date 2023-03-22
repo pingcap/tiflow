@@ -131,6 +131,7 @@ func (ra *RedoApplier) consumeLogs(ctx context.Context) error {
 		if len(redoLogs) == 0 {
 			break
 		}
+<<<<<<< HEAD
 		appliedLogCount += len(redoLogs)
 
 		for _, redoLog := range redoLogs {
@@ -160,6 +161,10 @@ func (ra *RedoApplier) consumeLogs(ctx context.Context) error {
 
 		for tableID, tableResolvedTs := range tableResolvedTsMap {
 			if err := ra.tableSinks[tableID].UpdateResolvedTs(tableResolvedTs); err != nil {
+=======
+		if shouldApplyDDL(row, ddl) {
+			if err := ra.applyDDL(ctx, ddl, checkpointTs); err != nil {
+>>>>>>> 9ec0cd5a6 (tests(ticdc): add ddl test for redo (#8411))
 				return err
 			}
 			if tableResolvedTs.IsBatchMode() {
@@ -168,8 +173,148 @@ func (ra *RedoApplier) consumeLogs(ctx context.Context) error {
 		}
 	}
 
+<<<<<<< HEAD
 	const warnDuration = 3 * time.Minute
 	const flushWaitDuration = 200 * time.Millisecond
+=======
+	log.Info("apply redo log finishes",
+		zap.Uint64("appliedLogCount", ra.appliedLogCount),
+		zap.Uint64("appliedDDLCount", ra.appliedDDLCount),
+		zap.Uint64("currentCheckpoint", resolvedTs))
+	return errApplyFinished
+}
+
+func (ra *RedoApplier) resetQuota(rowSize uint64) error {
+	if rowSize >= config.DefaultChangefeedMemoryQuota || rowSize < ra.pendingQuota {
+		log.Panic("row size exceeds memory quota",
+			zap.Uint64("rowSize", rowSize),
+			zap.Uint64("memoryQuota", config.DefaultChangefeedMemoryQuota))
+	}
+
+	// flush all tables before acquire new quota
+	for tableID, tableRecord := range ra.tableResolvedTsMap {
+		if !tableRecord.ResolvedTs.IsBatchMode() {
+			log.Panic("table resolved ts should always be in batch mode when apply redo log")
+		}
+
+		if err := ra.tableSinks[tableID].UpdateResolvedTs(tableRecord.ResolvedTs); err != nil {
+			return err
+		}
+		ra.memQuota.Record(spanz.TableIDToComparableSpan(tableID),
+			tableRecord.ResolvedTs, tableRecord.Size)
+
+		// reset new record
+		ra.tableResolvedTsMap[tableID] = &memquota.MemConsumeRecord{
+			ResolvedTs: tableRecord.ResolvedTs.AdvanceBatch(),
+			Size:       0,
+		}
+	}
+
+	oldQuota := ra.pendingQuota
+	ra.pendingQuota = rowSize * mysql.DefaultMaxTxnRow
+	if ra.pendingQuota > config.DefaultChangefeedMemoryQuota {
+		ra.pendingQuota = config.DefaultChangefeedMemoryQuota
+	} else if ra.pendingQuota < 64*1024 {
+		ra.pendingQuota = 64 * 1024
+	}
+	return ra.memQuota.BlockAcquire(ra.pendingQuota - oldQuota)
+}
+
+func (ra *RedoApplier) applyDDL(
+	ctx context.Context, ddl *model.DDLEvent, checkpointTs uint64,
+) error {
+	shouldSkip := func() bool {
+		if ddl.CommitTs == checkpointTs {
+			if _, ok := unsupportedDDL[ddl.Type]; ok {
+				log.Error("ignore unsupported DDL", zap.Any("ddl", ddl))
+				return true
+			}
+		}
+		if ddl.TableInfo == nil {
+			// Note this could omly happen when using old version of cdc, and the commit ts
+			// of the DDL should be equal to checkpoint ts or resolved ts.
+			log.Warn("ignore DDL without table info", zap.Any("ddl", ddl))
+			return true
+		}
+		return false
+	}
+	if shouldSkip() {
+		return nil
+	}
+	log.Warn("apply DDL", zap.Any("ddl", ddl))
+	// Wait all tables to flush data before applying DDL.
+	// TODO: only block tables that are affected by this DDL.
+	for tableID := range ra.tableSinks {
+		if err := ra.waitTableFlush(ctx, tableID, ddl.CommitTs); err != nil {
+			return err
+		}
+	}
+	if err := ra.ddlSink.WriteDDLEvent(ctx, ddl); err != nil {
+		return err
+	}
+	ra.appliedDDLCount++
+	return nil
+}
+
+func (ra *RedoApplier) applyRow(
+	row *model.RowChangedEvent, checkpointTs model.Ts,
+) error {
+	rowSize := uint64(row.ApproximateBytes())
+	if rowSize > ra.pendingQuota {
+		if err := ra.resetQuota(uint64(row.ApproximateBytes())); err != nil {
+			return err
+		}
+	}
+	ra.pendingQuota -= rowSize
+
+	tableID := row.Table.TableID
+	if _, ok := ra.tableSinks[tableID]; !ok {
+		tableSink := ra.sinkFactory.CreateTableSink(
+			model.DefaultChangeFeedID(applierChangefeed),
+			spanz.TableIDToComparableSpan(tableID),
+			prometheus.NewCounter(prometheus.CounterOpts{}),
+		)
+		ra.tableSinks[tableID] = tableSink
+	}
+	if _, ok := ra.tableResolvedTsMap[tableID]; !ok {
+		ra.tableResolvedTsMap[tableID] = &memquota.MemConsumeRecord{
+			ResolvedTs: model.ResolvedTs{
+				Mode:    model.BatchResolvedMode,
+				Ts:      checkpointTs,
+				BatchID: 1,
+			},
+			Size: 0,
+		}
+	}
+
+	ra.tableSinks[tableID].AppendRowChangedEvents(row)
+	record := ra.tableResolvedTsMap[tableID]
+	record.Size += rowSize
+	if row.CommitTs > record.ResolvedTs.Ts {
+		// Use batch resolvedTs to flush data as quickly as possible.
+		ra.tableResolvedTsMap[tableID] = &memquota.MemConsumeRecord{
+			ResolvedTs: model.ResolvedTs{
+				Mode:    model.BatchResolvedMode,
+				Ts:      row.CommitTs,
+				BatchID: 1,
+			},
+			Size: record.Size,
+		}
+	} else if row.CommitTs < ra.tableResolvedTsMap[tableID].ResolvedTs.Ts {
+		log.Panic("commit ts of redo log regressed",
+			zap.Int64("tableID", tableID),
+			zap.Uint64("commitTs", row.CommitTs),
+			zap.Any("resolvedTs", ra.tableResolvedTsMap[tableID]))
+	}
+
+	ra.appliedLogCount++
+	return nil
+}
+
+func (ra *RedoApplier) waitTableFlush(
+	ctx context.Context, tableID model.TableID, rts model.Ts,
+) error {
+>>>>>>> 9ec0cd5a6 (tests(ticdc): add ddl test for redo (#8411))
 	ticker := time.NewTicker(warnDuration)
 	defer ticker.Stop()
 	for tableID := range tableResolvedTsMap {
