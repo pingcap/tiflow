@@ -20,10 +20,8 @@ import (
 	"github.com/pingcap/tidb/br/pkg/lightning/common"
 	lcfg "github.com/pingcap/tidb/br/pkg/lightning/config"
 	"github.com/pingcap/tidb/br/pkg/storage"
-	"github.com/pingcap/tidb/br/pkg/version/build"
 	"github.com/pingcap/tiflow/dm/config"
 	"github.com/pingcap/tiflow/dm/pkg/terror"
-	"github.com/pingcap/tiflow/pkg/version"
 	"github.com/stretchr/testify/require"
 )
 
@@ -62,16 +60,4 @@ func TestGetLightiningConfig(t *testing.T) {
 	require.Equal(t, lcfg.CheckpointDriverMySQL, conf.Checkpoint.Driver)
 	require.Equal(t, lcfg.CheckpointRemove, conf.Checkpoint.KeepAfterSuccess)
 	require.Contains(t, conf.Checkpoint.Schema, "job123")
-}
-
-func TestLightiningVersion(t *testing.T) {
-	t.Parallel()
-
-	conf := &config.SubTaskConfig{
-		Name:       "job123",
-		ExtStorage: &storage.LocalStorage{},
-	}
-	version.ReleaseVersion = "test"
-	_ = NewLightning(conf, nil, "")
-	require.Equal(t, "test", build.ReleaseVersion)
 }
