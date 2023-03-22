@@ -14,7 +14,6 @@
 package tablesink
 
 import (
-	"context"
 	"sync"
 	"testing"
 	"time"
@@ -134,7 +133,7 @@ func TestCloseTracker(t *testing.T) {
 	wg.Add(1)
 	go func() {
 		tracker.freezeProcess()
-		tracker.close(context.Background())
+		tracker.close(make(chan struct{}))
 		wg.Done()
 	}()
 
@@ -159,14 +158,17 @@ func TestCloseTrackerCancellable(t *testing.T) {
 	tracker.addResolvedTs(model.NewResolvedTs(3))
 	require.Equal(t, 3, tracker.trackingCount(), "event should be added")
 
-	ctx, cancel := context.WithTimeout(context.Background(), time.Millisecond*10)
-	defer cancel()
+	dead := make(chan struct{})
+	go func() {
+		time.Sleep(time.Millisecond * 10)
+		close(dead)
+	}()
 
 	var wg sync.WaitGroup
 	wg.Add(1)
 	go func() {
 		tracker.freezeProcess()
-		tracker.close(ctx)
+		tracker.close(dead)
 		wg.Done()
 	}()
 	wg.Wait()
@@ -221,7 +223,7 @@ func TestClosedTrackerDoNotAdvanceCheckpointTs(t *testing.T) {
 	wg.Add(1)
 	go func() {
 		tracker.freezeProcess()
-		tracker.close(context.Background())
+		tracker.close(make(chan struct{}))
 		wg.Done()
 	}()
 	require.Eventually(t, func() bool {
