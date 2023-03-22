@@ -117,7 +117,44 @@ func NewCapture4Test(o owner.Owner) *Capture {
 	return res
 }
 
+<<<<<<< HEAD
 func (c *Capture) reset(ctx context.Context) error {
+=======
+// NewCaptureWithManager4Test returns a new Capture instance for test.
+func NewCaptureWithManager4Test(o owner.Owner, m *upstream.Manager) *captureImpl {
+	res := &captureImpl{
+		upstreamManager: m,
+		migrator:        &migrate.NoOpMigrator{},
+	}
+	res.owner = o
+	return res
+}
+
+// GetUpstreamManager is a Getter of capture's upstream manager
+func (c *captureImpl) GetUpstreamManager() (*upstream.Manager, error) {
+	if c.upstreamManager == nil {
+		return nil, cerror.ErrUpstreamManagerNotReady
+	}
+	return c.upstreamManager, nil
+}
+
+func (c *captureImpl) GetEtcdClient() etcd.CDCEtcdClient {
+	return c.EtcdClient
+}
+
+// reset the capture before run it.
+func (c *captureImpl) reset(ctx context.Context) error {
+	lease, err := c.EtcdClient.GetEtcdClient().Grant(ctx, int64(c.config.CaptureSessionTTL))
+	if err != nil {
+		return errors.Trace(err)
+	}
+	sess, err := concurrency.NewSession(
+		c.EtcdClient.GetEtcdClient().Unwrap(), concurrency.WithLease(lease.ID))
+	if err != nil {
+		return errors.Trace(err)
+	}
+
+>>>>>>> 94497b4d54 (cdc: retry internal context deadline exceeded  (#8602))
 	c.captureMu.Lock()
 	defer c.captureMu.Unlock()
 	conf := config.GetGlobalServerConfig()
@@ -126,7 +163,22 @@ func (c *Capture) reset(ctx context.Context) error {
 		AdvertiseAddr: conf.AdvertiseAddr,
 		Version:       version.ReleaseVersion,
 	}
+<<<<<<< HEAD
 	c.processorManager = c.newProcessorManager()
+=======
+
+	if c.upstreamManager != nil {
+		c.upstreamManager.Close()
+	}
+	c.upstreamManager = upstream.NewManager(ctx, c.EtcdClient.GetGCServiceID())
+	_, err = c.upstreamManager.AddDefaultUpstream(c.pdEndpoints, c.config.Security)
+	if err != nil {
+		return errors.Trace(err)
+	}
+
+	c.processorManager = c.newProcessorManager(
+		c.info, c.upstreamManager, &c.liveness, c.config.Debug.Scheduler)
+>>>>>>> 94497b4d54 (cdc: retry internal context deadline exceeded  (#8602))
 	if c.session != nil {
 		// It can't be handled even after it fails, so we ignore it.
 		_ = c.session.Close()
@@ -243,17 +295,30 @@ func (c *Capture) Run(ctx context.Context) error {
 			}
 			return errors.Trace(err)
 		}
+<<<<<<< HEAD
 		err = c.reset(ctx)
 		if err != nil {
 			return errors.Trace(err)
 		}
+=======
+>>>>>>> 94497b4d54 (cdc: retry internal context deadline exceeded  (#8602))
 		err = c.run(ctx)
 		// if capture suicided, reset the capture and run again.
 		// if the canceled error throw, there are two possible scenarios:
-		//   1. the internal context canceled, it means some error happened in the internal, and the routine is exited, we should restart the capture
-		//   2. the parent context canceled, it means that the caller of the capture hope the capture to exit, and this loop will return in the above `select` block
-		// TODO: make sure the internal cancel should return the real error instead of context.Canceled
-		if cerror.ErrCaptureSuicide.Equal(err) || context.Canceled == errors.Cause(err) {
+		//   1. the internal context canceled, it means some error happened in
+		//      the internal, and the routine is exited, we should restart
+		//      the capture.
+		//   2. the parent context canceled, it means that the caller of
+		//      the capture hope the capture to exit, and this loop will return
+		//      in the above `select` block.
+		// if there are some **internal** context deadline exceeded (IO/network
+		// timeout), reset the capture and run again.
+		//
+		// TODO: make sure the internal cancel should return the real error
+		//       instead of context.Canceled.
+		if cerror.ErrCaptureSuicide.Equal(err) ||
+			context.Canceled == errors.Cause(err) ||
+			context.DeadlineExceeded == errors.Cause(err) {
 			log.Info("capture recovered", zap.String("captureID", c.info.ID))
 			continue
 		}
@@ -261,6 +326,7 @@ func (c *Capture) Run(ctx context.Context) error {
 	}
 }
 
+<<<<<<< HEAD
 func (c *Capture) run(stdCtx context.Context) error {
 	ctx := cdcContext.NewContext(stdCtx, &cdcContext.GlobalVars{
 		PDClient:         c.PDClient,
@@ -276,6 +342,16 @@ func (c *Capture) run(stdCtx context.Context) error {
 		MessageRouter:    c.MessageRouter,
 	})
 	err := c.register(ctx)
+=======
+func (c *captureImpl) run(stdCtx context.Context) error {
+	err := c.reset(stdCtx)
+	if err != nil {
+		log.Error("reset capture failed", zap.Error(err))
+		return errors.Trace(err)
+	}
+
+	err = c.register(stdCtx)
+>>>>>>> 94497b4d54 (cdc: retry internal context deadline exceeded  (#8602))
 	if err != nil {
 		return errors.Trace(err)
 	}
