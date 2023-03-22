@@ -912,6 +912,18 @@ func (s *mysqlSink) batchSingleTxnDmls(
 		}
 	}
 
+	// handle update
+	if len(updateRows) > 0 {
+		// TODO: use sql.GenUpdateSQL to generate update sql after we optimize the func.
+		for _, rows := range updateRows {
+			for _, row := range rows {
+				sql, value := row.GenSQL(sqlmodel.DMLUpdate)
+				sqls = append(sqls, sql)
+				values = append(values, value)
+			}
+		}
+	}
+
 	// handle insert
 	if len(insertRows) > 0 {
 		for _, rows := range insertRows {
@@ -921,18 +933,6 @@ func (s *mysqlSink) batchSingleTxnDmls(
 				values = append(values, value)
 			} else {
 				sql, value := sqlmodel.GenInsertSQL(sqlmodel.DMLReplace, rows...)
-				sqls = append(sqls, sql)
-				values = append(values, value)
-			}
-		}
-	}
-
-	// handle update
-	if len(updateRows) > 0 {
-		// TODO: use sql.GenUpdateSQL to generate update sql after we optimize the func.
-		for _, rows := range updateRows {
-			for _, row := range rows {
-				sql, value := row.GenSQL(sqlmodel.DMLUpdate)
 				sqls = append(sqls, sql)
 				values = append(values, value)
 			}
