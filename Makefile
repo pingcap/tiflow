@@ -59,7 +59,6 @@ GOTESTNORACE := CGO_ENABLED=1 $(GO) test -p $(P)
 
 CDC_PKG := github.com/pingcap/tiflow
 DM_PKG := github.com/pingcap/tiflow/dm
-
 ENGINE_PKG := github.com/pingcap/tiflow/engine
 PACKAGE_LIST := go list ./... | grep -vE 'vendor|proto|tiflow/tests|integration|testing_utils|pb|pbmock|tiflow/bin'
 PACKAGE_LIST_WITHOUT_DM_ENGINE := $(PACKAGE_LIST) | grep -vE 'github.com/pingcap/tiflow/cmd|github.com/pingcap/tiflow/dm|github.com/pingcap/tiflow/engine'
