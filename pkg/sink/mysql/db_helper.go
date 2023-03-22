@@ -118,6 +118,8 @@ func generateDSNByConfig(
 	dsnCfg.Params["readTimeout"] = cfg.ReadTimeout
 	dsnCfg.Params["writeTimeout"] = cfg.WriteTimeout
 	dsnCfg.Params["timeout"] = cfg.DialTimeout
+	// auto fetch max_allowed_packet on every new connection
+	dsnCfg.Params["maxAllowedPacket"] = "0"
 
 	autoRandom, err := checkTiDBVariable(ctx, testDB, "allow_auto_random_explicit_insert", "1")
 	if err != nil {
