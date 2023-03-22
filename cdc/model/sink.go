@@ -290,6 +290,8 @@ type RowChangedEvent struct {
 	ColInfos []rowcodec.ColInfo `json:"column-infos" msg:"-"`
 	// NOTICE: We probably store the logical ID inside TableInfo's TableName,
 	// not the physical ID.
+	// For normal table, there is only one ID, which is the physical ID.
+	// AKA TIDB_TABLE_ID.
 	// For partitioned table, there are two kinds of ID:
 	// 1. TIDB_PARTITION_ID is the physical ID of the partition.
 	// 2. TIDB_TABLE_ID is the logical ID of the table.
