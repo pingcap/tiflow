@@ -29,7 +29,6 @@ import (
 	"github.com/pingcap/tidb/br/pkg/lightning/common"
 	lcfg "github.com/pingcap/tidb/br/pkg/lightning/config"
 	"github.com/pingcap/tidb/br/pkg/lightning/errormanager"
-	"github.com/pingcap/tidb/br/pkg/version/build"
 	"github.com/pingcap/tidb/dumpling/export"
 	"github.com/pingcap/tidb/parser/mysql"
 	tidbpromutil "github.com/pingcap/tidb/util/promutil"
@@ -44,7 +43,6 @@ import (
 	"github.com/pingcap/tiflow/dm/pkg/utils"
 	"github.com/pingcap/tiflow/dm/unit"
 	"github.com/pingcap/tiflow/engine/pkg/promutil"
-	"github.com/pingcap/tiflow/pkg/version"
 	"github.com/prometheus/client_golang/prometheus"
 	clientv3 "go.etcd.io/etcd/client/v3"
 	"go.uber.org/atomic"
@@ -83,11 +81,6 @@ type LightningLoader struct {
 	lastErr        error
 
 	speedRecorder *export.SpeedRecorder
-}
-
-func init() {
-	build.ReleaseVersion = version.ReleaseVersion
-	build.BuildTS = version.BuildTS
 }
 
 // NewLightning creates a new Loader importing data with lightning.
