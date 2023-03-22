@@ -36,6 +36,7 @@ const (
 	// To avoid thunderherd, a random factor is also added.
 	defaultBackoffInitInterval        = 10 * time.Second
 	defaultBackoffMaxInterval         = 30 * time.Minute
+	defaultBackoffMaxElapsedTime      = 90 * time.Minute
 	defaultBackoffRandomizationFactor = 0.1
 	defaultBackoffMultiplier          = 2.0
 
@@ -73,8 +74,8 @@ func newFeedStateManager(up *upstream.Upstream) *feedStateManager {
 	f.errBackoff.MaxInterval = defaultBackoffMaxInterval
 	f.errBackoff.Multiplier = defaultBackoffMultiplier
 	f.errBackoff.RandomizationFactor = defaultBackoffRandomizationFactor
-	// MaxElapsedTime=0 means the backoff never stops
-	f.errBackoff.MaxElapsedTime = 0
+	// backoff will stop once the defaultBackoffMaxElapsedTime has elapsed.
+	f.errBackoff.MaxElapsedTime = defaultBackoffMaxElapsedTime
 
 	f.resetErrBackoff()
 	f.lastErrorTime = time.Unix(0, 0)
@@ -502,11 +503,24 @@ func (m *feedStateManager) handleError(errs ...*model.RunningError) {
 		m.patchState(model.StateError)
 	} else {
 		oldBackoffInterval := m.backoffInterval
-		// NextBackOff will never return -1 because the backoff never stops
-		// with `MaxElapsedTime=0`
-		// ref: https://github.com/cenkalti/backoff/blob/v4/exponential.go#L121-L123
+
 		m.backoffInterval = m.errBackoff.NextBackOff()
 		m.lastErrorTime = time.Unix(0, 0)
+
+		// NextBackOff() will return -1 once the MaxElapsedTime has elapsed.
+		if m.backoffInterval == m.errBackoff.Stop {
+			log.Warn("The changefeed won't be restarted "+
+				"as it has been experiencing failures for "+
+				"an extended duration",
+				zap.Duration(
+					"maxElapsedTime",
+					m.errBackoff.MaxElapsedTime,
+				),
+			)
+			m.shouldBeRunning = false
+			m.patchState(model.StateFailed)
+			return
+		}
 
 		log.Info("changefeed restart backoff interval is changed",
 			zap.String("namespace", m.state.ID.Namespace),
