@@ -27,6 +27,7 @@ import (
 	cdcContext "github.com/pingcap/tiflow/pkg/context"
 	"github.com/pingcap/tiflow/pkg/etcd"
 	mock_etcd "github.com/pingcap/tiflow/pkg/etcd/mock"
+	"github.com/prometheus/client_golang/prometheus"
 	"github.com/stretchr/testify/require"
 	"go.etcd.io/etcd/client/pkg/v3/logutil"
 	clientv3 "go.etcd.io/etcd/client/v3"
@@ -75,6 +76,55 @@ func TestReset(t *testing.T) {
 	require.NotNil(t, info)
 	cancel()
 	wg.Wait()
+}
+
+type mockEtcdClient struct {
+	etcd.CDCEtcdClient
+	clientv3.Lease
+	called chan struct{}
+}
+
+func (m *mockEtcdClient) GetEtcdClient() *etcd.Client {
+	cli := &clientv3.Client{Lease: m}
+	return etcd.Wrap(cli, map[string]prometheus.Counter{})
+}
+
+func (m *mockEtcdClient) Grant(_ context.Context, _ int64) (*clientv3.LeaseGrantResponse, error) {
+	select {
+	case m.called <- struct{}{}:
+	default:
+	}
+	return nil, context.DeadlineExceeded
+}
+
+func TestRetryInternalContextDeadlineExceeded(t *testing.T) {
+	ctx, cancel := context.WithCancel(context.Background())
+
+	called := make(chan struct{}, 2)
+	cp := NewCapture4Test(nil)
+	// In the current implementation, the first RPC is grant.
+	// the mock client always retry DeadlineExceeded for the RPC.
+	cp.EtcdClient = &mockEtcdClient{called: called}
+
+	errCh := make(chan error, 1)
+	go func() {
+		errCh <- cp.Run(ctx)
+	}()
+	time.Sleep(100 * time.Millisecond)
+	// Waiting for Grant to be called.
+	<-called
+	time.Sleep(100 * time.Millisecond)
+	// Make sure it retrys
+	<-called
+
+	// Do not retry context canceled.
+	cancel()
+	select {
+	case err := <-errCh:
+		require.NoError(t, err)
+	case <-time.After(5 * time.Second):
+		require.Fail(t, "timeout")
+	}
 }
 
 func TestInfo(t *testing.T) {
