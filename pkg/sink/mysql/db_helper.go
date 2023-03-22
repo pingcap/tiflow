@@ -27,7 +27,6 @@ import (
 	"github.com/pingcap/log"
 	"github.com/pingcap/tidb/parser/charset"
 	tmysql "github.com/pingcap/tidb/parser/mysql"
-	"github.com/pingcap/tidb/sessionctx/variable"
 	dmutils "github.com/pingcap/tiflow/dm/pkg/conn"
 	cerror "github.com/pingcap/tiflow/pkg/errors"
 	"go.uber.org/zap"
@@ -119,7 +118,8 @@ func generateDSNByConfig(
 	dsnCfg.Params["readTimeout"] = cfg.ReadTimeout
 	dsnCfg.Params["writeTimeout"] = cfg.WriteTimeout
 	dsnCfg.Params["timeout"] = cfg.DialTimeout
-	dsnCfg.Params["maxAllowedPacket"] = strconv.Itoa(int(variable.DefMaxAllowedPacket))
+	// auto fetch max_allowed_packet on every new connection
+	dsnCfg.Params["maxAllowedPacket"] = "0"
 
 	autoRandom, err := checkTiDBVariable(ctx, testDB, "allow_auto_random_explicit_insert", "1")
 	if err != nil {
