@@ -614,6 +614,7 @@ LOOP:
 		c.ddlPuller,
 		c.schema,
 		c.redoDDLMgr,
+		c.redoMetaMgr,
 		downstreamType,
 		c.state.Info.Config.BDRMode)
 

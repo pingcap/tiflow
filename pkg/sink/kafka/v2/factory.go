@@ -258,7 +258,7 @@ func (f *factory) MetricsCollector(
 
 type syncWriter struct {
 	changefeedID model.ChangeFeedID
-	w            *kafka.Writer
+	w            Writer
 }
 
 func (s *syncWriter) SendMessage(
@@ -315,7 +315,7 @@ func (s *syncWriter) Close() {
 }
 
 type asyncWriter struct {
-	w            *kafka.Writer
+	w            Writer
 	changefeedID model.ChangeFeedID
 	closedChan   chan struct{}
 	failpointCh  chan error

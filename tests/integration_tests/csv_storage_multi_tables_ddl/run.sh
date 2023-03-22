@@ -41,6 +41,12 @@ stop() {
 s3cmd --access_key=$MINIO_ACCESS_KEY --secret_key=$MINIO_SECRET_KEY --host=$S3_ENDPOINT --host-bucket=$S3_ENDPOINT --no-ssl mb s3://logbucket
 
 function run() {
+	# Now, we run the storage tests in mysql sink tests.
+	# It's a temporary solution, we will move it to a new test pipeline later.
+	if [ "$SINK_TYPE" != "mysql" ]; then
+		return
+	fi
+
 	start_tidb_cluster --workdir $WORK_DIR
 	cd $WORK_DIR
 
@@ -61,28 +67,18 @@ function run() {
 	cf_err1="test-error-1"
 	cf_err2="test-error-2"
 
-	case $SINK_TYPE in
-	"kafka")
-		SINK_URI="kafka://127.0.0.1:9092/$TOPIC_NAME_1?protocol=open-protocol&partition-num=4&kafka-version=${KAFKA_VERSION}&max-message-bytes=10485760"
-		cdc cli changefeed create -c=$cf_normal --start-ts=$start_ts --sink-uri="$SINK_URI" --config="$CUR/conf/normal.toml"
+	run_sql "create database multi_tables_ddl_test" ${DOWN_TIDB_HOST} ${DOWN_TIDB_PORT}
+	SINK_URI="s3://logbucket/$TOPIC_NAME_1?flush-interval=5s&endpoint=http://127.0.0.1:24927&protocol=csv"
+	cdc cli changefeed create -c=$cf_normal --start-ts=$start_ts --sink-uri="$SINK_URI" --config="$CUR/conf/normal.toml"
 
-		SINK_URI="kafka://127.0.0.1:9092/$TOPIC_NAME_2?protocol=open-protocol&partition-num=4&kafka-version=${KAFKA_VERSION}&max-message-bytes=10485760"
-		cdc cli changefeed create -c=$cf_err1 --start-ts=$start_ts --sink-uri="$SINK_URI" --config="$CUR/conf/error-1.toml"
+	SINK_URI="s3://logbucket/$TOPIC_NAME_2?flush-interval=5s&endpoint=http://127.0.0.1:24927&protocol=csv"
+	cdc cli changefeed create -c=$cf_err1 --start-ts=$start_ts --sink-uri="$SINK_URI" --config="$CUR/conf/error-1.toml"
 
-		SINK_URI="kafka://127.0.0.1:9092/$TOPIC_NAME_3?protocol=open-protocol&partition-num=4&kafka-version=${KAFKA_VERSION}&max-message-bytes=10485760"
-		cdc cli changefeed create -c=$cf_err2 --start-ts=$start_ts --sink-uri="$SINK_URI" --config="$CUR/conf/error-2.toml"
-
-		run_kafka_consumer $WORK_DIR "kafka://127.0.0.1:9092/$TOPIC_NAME_1?protocol=open-protocol&partition-num=4&version=${KAFKA_VERSION}&max-message-bytes=10485760"
-		run_kafka_consumer $WORK_DIR "kafka://127.0.0.1:9092/$TOPIC_NAME_2?protocol=open-protocol&partition-num=4&version=${KAFKA_VERSION}&max-message-bytes=10485760"
-		run_kafka_consumer $WORK_DIR "kafka://127.0.0.1:9092/$TOPIC_NAME_3?protocol=open-protocol&partition-num=4&version=${KAFKA_VERSION}&max-message-bytes=10485760"
-		;;
-	*)
-		SINK_URI="mysql://normal:123456@127.0.0.1:3306/"
-		cdc cli changefeed create -c=$cf_normal --start-ts=$start_ts --sink-uri="$SINK_URI" --config="$CUR/conf/normal.toml"
-		cdc cli changefeed create -c=$cf_err1 --start-ts=$start_ts --sink-uri="$SINK_URI" --config="$CUR/conf/error-1.toml"
-		cdc cli changefeed create -c=$cf_err2 --start-ts=$start_ts --sink-uri="$SINK_URI" --config="$CUR/conf/error-2.toml"
-		;;
-	esac
+	SINK_URI="s3://logbucket/$TOPIC_NAME_3?flush-interval=5s&endpoint=http://127.0.0.1:24927&protocol=csv"
+	cdc cli changefeed create -c=$cf_err2 --start-ts=$start_ts --sink-uri="$SINK_URI" --config="$CUR/conf/error-2.toml"
+	run_storage_consumer $WORK_DIR "s3://logbucket/$TOPIC_NAME_1?endpoint=http://127.0.0.1:24927&protocol=csv" "$CUR/conf/normal.toml" 1
+	run_storage_consumer $WORK_DIR "s3://logbucket/$TOPIC_NAME_2?endpoint=http://127.0.0.1:24927&protocol=csv" "$CUR/conf/error-1.toml" 2
+	run_storage_consumer $WORK_DIR "s3://logbucket/$TOPIC_NAME_3?endpoint=http://127.0.0.1:24927&protocol=csv" "$CUR/conf/error-2.toml" 3
 
 	run_sql_file $CUR/data/test.sql ${UP_TIDB_HOST} ${UP_TIDB_PORT}
 	check_table_exists multi_tables_ddl_test.t55 ${DOWN_TIDB_HOST} ${DOWN_TIDB_PORT}
@@ -93,14 +89,14 @@ function run() {
 	check_table_exists multi_tables_ddl_test.finish_mark ${DOWN_TIDB_HOST} ${DOWN_TIDB_PORT}
 	echo "check table exists success"
 
-	# changefeed test-error will not report an error, "multi_tables_ddl_test.t555 to multi_tables_ddl_test.t55" part will be skipped.
+	# changefeed test-error will not report an error, "multi_tables_ddl_test.t555 to multi_tables_ddl_test.t55" patr will be skipped.
 	run_sql "rename table multi_tables_ddl_test.t7 to multi_tables_ddl_test.t77, multi_tables_ddl_test.t555 to multi_tables_ddl_test.t55;" ${UP_TIDB_HOST} ${UP_TIDB_PORT}
 
 	check_changefeed_state "http://${UP_PD_HOST_1}:${UP_PD_PORT_1}" $cf_normal "normal" "null" ""
 	check_changefeed_state "http://${UP_PD_HOST_1}:${UP_PD_PORT_1}" $cf_err1 "normal" "null" ""
 	check_changefeed_state "http://${UP_PD_HOST_1}:${UP_PD_PORT_1}" $cf_err2 "error" "ErrSyncRenameTableFailed" ""
 
-	check_sync_diff $WORK_DIR $CUR/conf/diff_config.toml 60
+	check_sync_diff $WORK_DIR $CUR/conf/diff_config.toml 100
 
 	cleanup_process $CDC_BINARY
 }

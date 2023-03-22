@@ -21,7 +21,6 @@ import (
 	"github.com/pingcap/tiflow/cdc/model"
 	pkafka "github.com/pingcap/tiflow/pkg/sink/kafka"
 	"github.com/pingcap/tiflow/pkg/util"
-	"github.com/segmentio/kafka-go"
 	"go.uber.org/zap"
 )
 
@@ -29,14 +28,14 @@ import (
 type MetricsCollector struct {
 	changefeedID model.ChangeFeedID
 	role         util.Role
-	writer       *kafka.Writer
+	writer       Writer
 }
 
 // NewMetricsCollector return a kafka metrics collector
 func NewMetricsCollector(
 	changefeedID model.ChangeFeedID,
 	role util.Role,
-	writer *kafka.Writer,
+	writer Writer,
 ) *MetricsCollector {
 	return &MetricsCollector{
 		changefeedID: changefeedID,
