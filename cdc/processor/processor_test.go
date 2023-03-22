@@ -57,7 +57,7 @@ func newProcessor4Test(
 		p.sinkV1 = mocksink.NewNormalMockSink()
 		return nil
 	}
-	p.redoManager = redo.NewDisabledManager()
+	p.redoDMLMgr = redo.NewDisabledDMLManager()
 	p.createTablePipeline = createTablePipeline
 	p.schemaStorage = &mockSchemaStorage{t: t, resolvedTs: math.MaxUint64}
 	return p

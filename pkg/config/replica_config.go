@@ -23,6 +23,7 @@ import (
 	"github.com/pingcap/log"
 	"github.com/pingcap/tiflow/pkg/config/outdated"
 	cerror "github.com/pingcap/tiflow/pkg/errors"
+	"github.com/pingcap/tiflow/pkg/redo"
 	"go.uber.org/zap"
 )
 
@@ -61,9 +62,10 @@ var defaultReplicaConfig = &ReplicaConfig{
 	},
 	Consistent: &ConsistentConfig{
 		Level:             "none",
-		MaxLogSize:        64,
-		FlushIntervalInMs: DefaultFlushIntervalInMs,
+		MaxLogSize:        redo.DefaultMaxLogSize,
+		FlushIntervalInMs: redo.DefaultFlushIntervalInMs,
 		Storage:           "",
+		UseFileBackend:    false,
 	},
 }
 

@@ -81,7 +81,7 @@ type processor struct {
 	sourceManager *sourcemanager.SourceManager
 	sinkManager   *sinkmanager.SinkManager
 
-	redoManager redo.LogManager
+	redoDMLMgr redo.DMLManager
 
 	initialized bool
 	errCh       chan error
@@ -215,8 +215,8 @@ func (p *processor) AddTable(
 
 	if p.pullBasedSinking {
 		p.sinkManager.AddTable(tableID, startTs, p.changefeed.Info.TargetTs)
-		if p.redoManager.Enabled() {
-			p.redoManager.AddTable(tableID, startTs)
+		if p.redoDMLMgr.Enabled() {
+			p.redoDMLMgr.AddTable(tableID, startTs)
 		}
 		p.sourceManager.AddTable(ctx.(cdcContext.Context), tableID, p.getTableName(ctx, tableID), startTs)
 	} else {
@@ -400,8 +400,8 @@ func (p *processor) IsRemoveTableFinished(tableID model.TableID) (model.Ts, bool
 
 	if p.pullBasedSinking {
 		stats := p.sinkManager.GetTableStats(tableID)
-		if p.redoManager.Enabled() {
-			p.redoManager.RemoveTable(tableID)
+		if p.redoDMLMgr.Enabled() {
+			p.redoDMLMgr.RemoveTable(tableID)
 		}
 		p.sinkManager.RemoveTable(tableID)
 		p.sourceManager.RemoveTable(tableID)
@@ -715,12 +715,6 @@ func (p *processor) tick(ctx cdcContext.Context) error {
 	p.handlePosition(oracle.GetPhysical(pdTime))
 
 	p.doGCSchemaStorage()
-
-	if p.redoManager != nil && p.redoManager.Enabled() {
-		ckpt := p.changefeed.Status.CheckpointTs
-		p.redoManager.UpdateCheckpointTs(ckpt)
-	}
-
 	if err := p.agent.Tick(ctx); err != nil {
 		return errors.Trace(err)
 	}
@@ -825,10 +819,16 @@ func (p *processor) lazyInitImpl(ctx cdcContext.Context) error {
 	conf := config.GetGlobalServerConfig()
 	p.pullBasedSinking = conf.Debug.EnablePullBasedSink
 
-	redoManagerOpts := redo.NewProcessorManagerOptions(errCh)
-	p.redoManager, err = redo.NewManager(stdCtx, p.changefeed.Info.Config.Consistent, redoManagerOpts)
+	p.redoDMLMgr, err = redo.NewDMLManager(stdCtx, p.changefeed.Info.Config.Consistent)
 	if err != nil {
 		return err
+	}
+	if p.redoDMLMgr.Enabled() {
+		p.wg.Add(1)
+		go func() {
+			defer p.wg.Done()
+			p.sendError(p.redoDMLMgr.Run(stdCtx))
+		}()
 	}
 	log.Info("processor creates redo manager",
 		zap.String("namespace", p.changefeedID.Namespace),
@@ -849,7 +849,7 @@ func (p *processor) lazyInitImpl(ctx cdcContext.Context) error {
 			sortEngine, p.errCh, p.changefeed.Info.Config.BDRMode)
 		p.sinkManager, err = sinkmanager.New(stdCtx, p.changefeedID,
 			p.changefeed.Info, p.upstream, p.schemaStorage,
-			p.redoManager, p.sourceManager,
+			p.redoDMLMgr, p.sourceManager,
 			p.errCh, p.metricsTableSinkTotalRows)
 		if err != nil {
 			log.Info("Processor creates sink manager fail",
@@ -1166,8 +1166,8 @@ func (p *processor) createTablePipelineImpl(
 		return nil
 	})
 
-	if p.redoManager.Enabled() {
-		p.redoManager.AddTable(tableID, replicaInfo.StartTs)
+	if p.redoDMLMgr.Enabled() {
+		p.redoDMLMgr.AddTable(tableID, replicaInfo.StartTs)
 	}
 
 	tableName := p.getTableName(ctx, tableID)
@@ -1186,7 +1186,7 @@ func (p *processor) createTablePipelineImpl(
 			replicaInfo,
 			s,
 			nil,
-			p.redoManager,
+			p.redoDMLMgr,
 			p.changefeed.Info.GetTargetTs())
 		if err != nil {
 			return nil, errors.Trace(err)
@@ -1202,7 +1202,7 @@ func (p *processor) createTablePipelineImpl(
 			replicaInfo,
 			nil,
 			s,
-			p.redoManager,
+			p.redoDMLMgr,
 			p.changefeed.Info.GetTargetTs())
 		if err != nil {
 			return nil, errors.Trace(err)
@@ -1213,8 +1213,8 @@ func (p *processor) createTablePipelineImpl(
 }
 
 func (p *processor) removeTable(table tablepb.TablePipeline, tableID model.TableID) {
-	if p.redoManager.Enabled() {
-		p.redoManager.RemoveTable(tableID)
+	if p.redoDMLMgr.Enabled() {
+		p.redoDMLMgr.RemoveTable(tableID)
 	}
 	if p.pullBasedSinking {
 		p.sinkManager.RemoveTable(tableID)
