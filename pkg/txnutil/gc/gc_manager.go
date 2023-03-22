@@ -28,10 +28,10 @@ import (
 	"go.uber.org/zap"
 )
 
-// failedFeedDataRetentionTime is the duration during which data related to a
+// gcTTL is the duration during which data related to a
 // failed feed will be retained, and beyond which point the data will be deleted
 // by garbage collection.
-const failedFeedDataRetentionTime = 24 * time.Hour
+const gcTTL = 24 * time.Hour
 
 // gcSafepointUpdateInterval is the minimum interval that CDC can update gc safepoint
 var gcSafepointUpdateInterval = 1 * time.Minute
@@ -134,10 +134,10 @@ func (m *gcManager) IgnoreFailedChangeFeed(
 		)
 		return false
 	}
-	// ignore the change feed if its current checkpoint TS is earlier
+	// ignore the changefeed if its current checkpoint TS is earlier
 	// than the (currentPDTso - failedFeedDataRetentionTime).
 	gcSafepointUpperBound := checkpointTs - 1
 	return pdTime.Sub(
 		oracle.GetTimeFromTS(gcSafepointUpperBound),
-	) > failedFeedDataRetentionTime
+	) > gcTTL
 }
