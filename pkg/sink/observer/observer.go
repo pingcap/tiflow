@@ -58,9 +58,7 @@ func NewObserver(
 	for _, opt := range opts {
 		opt(options)
 	}
-	// clone the config to avoid data race
-	replCfg = replCfg.Clone()
-	sinkURI, err := config.GetSinkURIAndAdjustConfigWithSinkURI(sinkURIStr, replCfg)
+	sinkURI, replCfg, err := config.GetSinkURIAndAdjustConfigWithSinkURI(sinkURIStr, replCfg)
 	if err != nil {
 		return nil, err
 	}

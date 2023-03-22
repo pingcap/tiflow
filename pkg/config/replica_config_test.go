@@ -17,6 +17,7 @@ import (
 	"bytes"
 	"encoding/json"
 	"net/url"
+	"sync"
 	"testing"
 	"time"
 
@@ -227,5 +228,24 @@ func TestIsSinkCompatibleWithSpanReplication(t *testing.T) {
 		require.Nil(t, e)
 		compatible := isSinkCompatibleWithSpanReplication(u)
 		require.Equal(t, compatible, tt.compatible, tt.name)
+	}
+}
+
+// This test is to ensure that the func GetSinkURIAndAdjustConfigWithSinkURI
+// is concurrent safe.
+func TestGetSinkURIAndAdjustConfigWithSinkURI(t *testing.T) {
+	t.Parallel()
+	cfg := GetDefaultReplicaConfig()
+	sinkURI := "blackhole://"
+	count := 10
+	wg := sync.WaitGroup{}
+	wg.Add(count)
+	for i := 0; i < count; i++ {
+		go func() {
+			defer wg.Done()
+			_, newCfg, err := GetSinkURIAndAdjustConfigWithSinkURI(sinkURI, cfg)
+			require.NoError(t, err)
+			require.True(t, cfg != newCfg)
+		}()
 	}
 }

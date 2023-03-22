@@ -36,7 +36,7 @@ func New(
 	sinkURIStr string,
 	cfg *config.ReplicaConfig,
 ) (ddlsink.Sink, error) {
-	sinkURI, err := config.GetSinkURIAndAdjustConfigWithSinkURI(sinkURIStr, cfg)
+	sinkURI, cfg, err := config.GetSinkURIAndAdjustConfigWithSinkURI(sinkURIStr, cfg)
 	if err != nil {
 		return nil, err
 	}

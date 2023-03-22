@@ -240,17 +240,19 @@ func (c *ReplicaConfig) FixMemoryQuota() {
 func GetSinkURIAndAdjustConfigWithSinkURI(
 	sinkURIStr string,
 	config *ReplicaConfig,
-) (*url.URL, error) {
+) (*url.URL, *ReplicaConfig, error) {
+	// clone config to avoid data race
+	cfg := config.Clone()
 	// parse sinkURI as a URI
 	sinkURI, err := url.Parse(sinkURIStr)
 	if err != nil {
-		return nil, cerror.WrapError(cerror.ErrSinkURIInvalid, err)
+		return nil, nil, cerror.WrapError(cerror.ErrSinkURIInvalid, err)
 	}
-	if err := config.ValidateAndAdjust(sinkURI); err != nil {
-		return nil, err
+	if err := cfg.ValidateAndAdjust(sinkURI); err != nil {
+		return nil, nil, err
 	}
 
-	return sinkURI, nil
+	return sinkURI, cfg, nil
 }
 
 // isSinkCompatibleWithSpanReplication returns true if the sink uri is
