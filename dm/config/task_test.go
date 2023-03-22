@@ -666,6 +666,10 @@ func TestGenAndFromSubTaskConfigs(t *testing.T) {
 				OnDuplicateLogical:  OnDuplicateReplace,
 				OnDuplicatePhysical: OnDuplicateNone,
 				ChecksumPhysical:    ChecksumRequired,
+				PDAddr:              "http://test:2379",
+				RangeConcurrency:    32,
+				CompressKVPairs:     "gzip",
+				Analyze:             true,
 			},
 			SyncerConfig: SyncerConfig{
 				WorkerCount:             32,
@@ -824,6 +828,10 @@ func TestGenAndFromSubTaskConfigs(t *testing.T) {
 	stCfg2.EnableHeartbeat = false
 	require.Equal(t, stCfg1.String(), stCfgs[0].String())
 	require.Equal(t, stCfg2.String(), stCfgs[1].String())
+	// adjust loader config
+	stCfg1.Mode = "full"
+	require.NoError(t, stCfg1.Adjust(false))
+	require.Equal(t, stCfgs[0].SortingDirPhysical, stCfg1.SortingDirPhysical)
 }
 
 func TestMetaVerify(t *testing.T) {
