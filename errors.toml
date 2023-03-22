@@ -546,6 +546,7 @@ error = '''
 MySQL worker panic
 '''
 
+<<<<<<< HEAD
 ["CDC:ErrNewCaptureFailed"]
 error = '''
 new capture failed
@@ -556,6 +557,8 @@ error = '''
 new processor failed
 '''
 
+=======
+>>>>>>> 94497b4d54 (cdc: retry internal context deadline exceeded  (#8602))
 ["CDC:ErrNewSemVersion"]
 error = '''
 create sem version
