@@ -296,7 +296,7 @@ type RowChangedEvent struct {
 	RowID int64 `json:"row-id" msg:"-"` // Deprecated. It is empty when the RowID comes from clustered index table.
 
 	// Table contains the table name and table ID.
-	// NOTICE: We store the physical ID here, not the logical ID.
+	// NOTICE: We store the physical table ID here, not the logical table ID.
 	Table    *TableName         `json:"table" msg:"table"`
 	ColInfos []rowcodec.ColInfo `json:"column-infos" msg:"-"`
 	// NOTICE: We probably store the logical ID inside TableInfo's TableName,
