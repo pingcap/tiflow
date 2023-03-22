@@ -22,10 +22,10 @@ import (
 	"path/filepath"
 	"time"
 
+	"github.com/dustin/go-humanize"
 	"github.com/gin-gonic/gin"
 	"github.com/pingcap/errors"
 	"github.com/pingcap/log"
-	"github.com/pingcap/tidb/util/memory"
 	"github.com/pingcap/tiflow/cdc"
 	"github.com/pingcap/tiflow/cdc/capture"
 	"github.com/pingcap/tiflow/cdc/kv"
@@ -38,6 +38,7 @@ import (
 	"github.com/pingcap/tiflow/pkg/p2p"
 	"github.com/pingcap/tiflow/pkg/pdutil"
 	"github.com/pingcap/tiflow/pkg/tcpserver"
+	"github.com/pingcap/tiflow/pkg/util"
 	p2pProto "github.com/pingcap/tiflow/proto/p2p"
 	pd "github.com/tikv/pd/client"
 	"go.etcd.io/etcd/client/pkg/v3/logutil"
@@ -199,13 +200,14 @@ func (s *server) createSortEngineFactory() error {
 	// Sorter dir has been set and checked when server starts.
 	// See https://github.com/pingcap/tiflow/blob/9dad09/cdc/server.go#L275
 	sortDir := config.GetGlobalServerConfig().Sorter.SortDir
-	totalMemory, err := memory.MemTotal()
+	totalMemory, err := util.GetMemoryLimit()
 	if err != nil {
 		return errors.Trace(err)
 	}
 	memPercentage := float64(conf.Sorter.MaxMemoryPercentage) / 100
 	memInBytes := uint64(float64(totalMemory) * memPercentage)
 	s.sortEngineFactory = factory.NewForPebble(sortDir, memInBytes, conf.Debug.DB)
+	log.Info("sorter engine memory limit", zap.String("memory", humanize.Bytes(memInBytes)))
 
 	return nil
 }
