@@ -12,11 +12,11 @@ group=$1
 # Putting multiple light tests together and heavy tests in a separate group.
 declare -A groups
 groups=(
-	["G00"]='dm_many_tables dm_full_mode dm_case_sensitive'
-	["G01"]='dm_tls dm_basic e2e_with_selectors e2e_node_failure'
-	["G02"]="dm_many_tables_local dm_new_collation_off external_resource"
-	["G03"]="dm_collation dm_sql_mode"
-	["G04"]="e2e_basic e2e_worker_error e2e_fast_finished"
+	["G00"]='dm_basic dm_case_sensitive dm_collation'
+	["G01"]='dm_full_mode dm_lightning_checkpoint dm_many_tables'
+	["G02"]="dm_many_tables_local dm_new_collation_off dm_sql_mode"
+	["G03"]="dm_tls e2e_fast_finished e2e_node_failure e2e_with_selectors"
+	["G04"]="e2e_worker_error external_resource"
 )
 
 # Get other cases not in groups, to avoid missing any case
