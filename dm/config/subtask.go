@@ -345,11 +345,13 @@ func (c *SubTaskConfig) Adjust(verifyDecryptPassword bool) error {
 		}
 		c.LoaderConfig.Dir = newDir
 
-		if storage.IsLocalDiskPath(newDir) {
-			// lightning will not recursively create directories, so we use same level dir
-			c.LoaderConfig.SortingDirPhysical = newDir + ".sorting"
-		} else {
-			c.LoaderConfig.SortingDirPhysical = "./sorting." + url.PathEscape(c.Name)
+		if c.LoaderConfig.SortingDirPhysical == "" {
+			if storage.IsLocalDiskPath(newDir) {
+				// lightning will not recursively create directories, so we use same level dir
+				c.LoaderConfig.SortingDirPhysical = newDir + ".sorting"
+			} else {
+				c.LoaderConfig.SortingDirPhysical = "./sorting." + url.PathEscape(c.Name)
+			}
 		}
 	}
 

@@ -297,6 +297,10 @@ type LoaderConfig struct {
 	OnDuplicatePhysical PhysicalDuplicateResolveType `yaml:"on-duplicate-physical" toml:"on-duplicate-physical" json:"on-duplicate-physical"`
 	DiskQuotaPhysical   config.ByteSize              `yaml:"disk-quota-physical" toml:"disk-quota-physical" json:"disk-quota-physical"`
 	ChecksumPhysical    PhysicalChecksumType         `yaml:"checksum-physical" toml:"checksum-physical" json:"checksum-physical"`
+	RangeConcurrency    int                          `yaml:"range-concurrency" toml:"range-concurrency" json:"range-concurrency"`
+	CompressKVPairs     string                       `yaml:"compress-kv-pairs" toml:"compress-kv-pairs" json:"compress-kv-pairs"`
+	Analyze             bool                         `yaml:"analyze" toml:"analyze" json:"analyze"`
+	PDAddr              string                       `yaml:"pd-addr" toml:"pd-addr" json:"pd-addr"`
 }
 
 // DefaultLoaderConfig return default loader config for task.
