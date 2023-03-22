@@ -248,4 +248,5 @@ func TestGetSinkURIAndAdjustConfigWithSinkURI(t *testing.T) {
 			require.True(t, cfg != newCfg)
 		}()
 	}
+	wg.Wait()
 }
