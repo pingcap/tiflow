@@ -376,11 +376,15 @@ Storage sink is a new feature, For tests, we focus on the functional tests,  sce
 
 ### Functional Tests
 
-Regular unit testing and integration testing cover the correctness of data replication using csv and canal-json protocol. In addition, we will manually test the correctness and stability of data synchronization using different external storage.
+- Regular unit testing and integration testing cover the correctness of data replication using csv and canal-json protocol.
+- Manually test the availability and correctness of data synchronization using different external storage.
 
 ### Scenario Tests
 
-We will run stability and chaos tests under different workloads.
+Run stability and chaos tests under different workloads.
+  - The upstream and downstream data are consistent.
+  - Throughput and latency are stable for most scenario.
+
 
 ### Compatibility Tests
 
@@ -395,10 +399,7 @@ or downgrade compatibility issues.
 
 ### Benchmark Tests
 
-TODO: The following two parts need to be measured
-
-- The performance of this feature under different parameters
-- The performance influence on the online workload
+Perform benchmark tests under common scenarios, big data scenarios, multi-table scenarios, and wide table scenarios with different parameters.
 
 ## Impacts & Risks
 
