@@ -27,6 +27,7 @@ import (
 	"github.com/pingcap/log"
 	"github.com/pingcap/tidb/parser/charset"
 	tmysql "github.com/pingcap/tidb/parser/mysql"
+	"github.com/pingcap/tidb/sessionctx/variable"
 	dmutils "github.com/pingcap/tiflow/dm/pkg/conn"
 	cerror "github.com/pingcap/tiflow/pkg/errors"
 	"go.uber.org/zap"
@@ -118,6 +119,7 @@ func generateDSNByConfig(
 	dsnCfg.Params["readTimeout"] = cfg.ReadTimeout
 	dsnCfg.Params["writeTimeout"] = cfg.WriteTimeout
 	dsnCfg.Params["timeout"] = cfg.DialTimeout
+	dsnCfg.Params["maxAllowedPacket"] = strconv.Itoa(int(variable.DefMaxAllowedPacket))
 
 	autoRandom, err := checkTiDBVariable(ctx, testDB, "allow_auto_random_explicit_insert", "1")
 	if err != nil {
@@ -339,7 +341,7 @@ func QueryMaxPreparedStmtCount(ctx context.Context, db *sql.DB) (int, error) {
 
 // QueryMaxAllowedPacket gets the value of max_allowed_packet
 func QueryMaxAllowedPacket(ctx context.Context, db *sql.DB) (int64, error) {
-	row := db.QueryRowContext(ctx, "select @@global.max_allowed_packet;")
+	row := db.QueryRowContext(ctx, "select @@session.max_allowed_packet;")
 	var maxAllowedPacket sql.NullInt64
 	if err := row.Scan(&maxAllowedPacket); err != nil {
 		return 0, cerror.WrapError(cerror.ErrMySQLQueryError, err)
