@@ -85,20 +85,13 @@ type LightningLoader struct {
 	speedRecorder *export.SpeedRecorder
 }
 
-func initLightningVersionInfo() {
+func init() {
 	build.ReleaseVersion = version.ReleaseVersion
 	build.BuildTS = version.BuildTS
-	build.GitHash = version.GitHash
-	build.GitBranch = version.GitBranch
 }
-
-var syncLightningVersionOnce sync.Once
 
 // NewLightning creates a new Loader importing data with lightning.
 func NewLightning(cfg *config.SubTaskConfig, cli *clientv3.Client, workerName string) *LightningLoader {
-	syncLightningVersionOnce.Do(
-		initLightningVersionInfo,
-	)
 	lightningCfg := MakeGlobalConfig(cfg)
 	logger := log.L()
 	if cfg.FrameworkLogger != nil {
