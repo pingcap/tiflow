@@ -20,4 +20,6 @@ type EventSink[E TableEvent] interface {
 	WriteEvents(events ...*CallbackableEvent[E]) error
 	// Close closes the sink.
 	Close()
+	// The EventSink meets internal errors and has been dead already.
+	Dead() <-chan struct{}
 }

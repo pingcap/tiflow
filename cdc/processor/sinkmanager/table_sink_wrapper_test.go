@@ -14,7 +14,6 @@
 package sinkmanager
 
 import (
-	"context"
 	"sync"
 	"testing"
 
@@ -61,6 +60,10 @@ func (m *mockSink) GetWriteTimes() int {
 
 func (m *mockSink) Close() {}
 
+func (m *mockSink) Dead() <-chan struct{} {
+	return make(chan struct{})
+}
+
 func (m *mockSink) AckAllEvents() {
 	m.mu.Lock()
 	defer m.mu.Unlock()
@@ -95,7 +98,7 @@ func TestTableSinkWrapperClose(t *testing.T) {
 	wrapper, _ := createTableSinkWrapper(
 		model.DefaultChangeFeedID("1"), spanz.TableIDToComparableSpan(1))
 	require.Equal(t, tablepb.TableStatePreparing, wrapper.getState())
-	wrapper.close(context.Background())
+	wrapper.close()
 	require.Equal(t, tablepb.TableStateStopped, wrapper.getState(), "table sink state should be stopped")
 }
 
