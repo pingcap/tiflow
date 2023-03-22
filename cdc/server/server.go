@@ -168,9 +168,16 @@ func (s *server) prepare(ctx context.Context) error {
 
 	cdcEtcdClient, err := createEtcdClient()
 	if err != nil {
-		return cerror.WrapError(cerror.ErrNewCaptureFailed, err)
+		return errors.Trace(err)
 	}
 
+<<<<<<< HEAD
+=======
+	cdcEtcdClient, err := etcd.NewCDCEtcdClient(ctx, etcdCli, conf.ClusterID)
+	if err != nil {
+		return errors.Trace(err)
+	}
+>>>>>>> 94497b4d54 (cdc: retry internal context deadline exceeded  (#8602))
 	s.etcdClient = cdcEtcdClient
 
 	err = s.initDir(ctx)
