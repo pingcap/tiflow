@@ -51,7 +51,6 @@ const (
 	defaultWorkerNum = 50
 )
 
-//go:generate mockery --name=fileReader --inpackage --quiet
 type fileReader interface {
 	io.Closer
 	// Read return the log from log file
