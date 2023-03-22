@@ -29,16 +29,16 @@ color-green() { # Green
 }
 
 function download() {
-    local url=$1
-    local file_name=$2
-    local file_path=$3
-    if [[ -f "${file_path}" ]]; then
-        echo "file ${file_name} already exists, skip download"
-        return
-    fi
+	local url=$1
+	local file_name=$2
+	local file_path=$3
+	if [[ -f "${file_path}" ]]; then
+		echo "file ${file_name} already exists, skip download"
+		return
+	fi
 	echo ">>>"
-    echo "download ${file_name} from ${url}"
-    wget --no-verbose --retry-connrefused --waitretry=1 -t 3 -O "${file_path}" "${url}"
+	echo "download ${file_name} from ${url}"
+	wget --no-verbose --retry-connrefused --waitretry=1 -t 3 -O "${file_path}" "${url}"
 }
 
 # Specify the download branch.
@@ -74,11 +74,11 @@ mkdir -p bin
 
 color-green "Download binaries..."
 download "$tidb_download_url" "tidb-server.tar.gz" "tmp/tidb-server.tar.gz"
-tar -xz -C third_bin bin/tidb-server  -f tmp/tidb-server.tar.gz && mv third_bin/bin/tidb-server third_bin/
+tar -xz -C third_bin bin/tidb-server -f tmp/tidb-server.tar.gz && mv third_bin/bin/tidb-server third_bin/
 download "$pd_download_url" "pd-server.tar.gz" "tmp/pd-server.tar.gz"
 tar -xz -C third_bin 'bin/*' -f tmp/pd-server.tar.gz && mv third_bin/bin/* third_bin/
 download "$tikv_download_url" "tikv-server.tar.gz" "tmp/tikv-server.tar.gz"
-tar -xz -C third_bin bin/tikv-server  -f tmp/tikv-server.tar.gz && mv third_bin/bin/tikv-server third_bin/
+tar -xz -C third_bin bin/tikv-server -f tmp/tikv-server.tar.gz && mv third_bin/bin/tikv-server third_bin/
 download "$tiflash_download_url" "tiflash.tar.gz" "tmp/tiflash.tar.gz"
 tar -xz -C third_bin -f tmp/tiflash.tar.gz
 mv third_bin/tiflash third_bin/_tiflash
@@ -89,7 +89,7 @@ tar -xz -C third_bin -f tmp/minio.tar.gz
 download "$go_ycsb_download_url" "go-ycsb" "third_bin/go-ycsb"
 download "$jq_download_url" "jq" "third_bin/jq"
 download "$etcd_download_url" "etcd.tar.gz" "tmp/etcd.tar.gz"
-tar -xz -C third_bin  etcd-v3.4.7-linux-amd64/etcdctl  -f tmp/etcd.tar.gz
+tar -xz -C third_bin etcd-v3.4.7-linux-amd64/etcdctl -f tmp/etcd.tar.gz
 mv third_bin/etcd-v3.4.7-linux-amd64/etcdctl third_bin/ && rm -rf third_bin/etcd-v3.4.7-linux-amd64
 download "$sync_diff_inspector_url" "sync_diff_inspector.tar.gz" "tmp/sync_diff_inspector.tar.gz"
 tar -xz -C third_bin -f tmp/sync_diff_inspector.tar.gz

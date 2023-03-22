@@ -15,8 +15,8 @@ groups=(
 	["G00"]='dm_many_tables dm_full_mode dm_case_sensitive'
 	["G01"]='dm_tls dm_basic e2e_with_selectors e2e_node_failure'
 	["G02"]="dm_many_tables_local dm_new_collation_off external_resource"
-    ["G03"]="dm_collation dm_sql_mode"
-    ["G04"]="e2e_basic e2e_worker_error e2e_fast_finished"
+	["G03"]="dm_collation dm_sql_mode"
+	["G04"]="e2e_basic e2e_worker_error e2e_fast_finished"
 )
 
 # Get other cases not in groups, to avoid missing any case
@@ -44,7 +44,7 @@ fi
 # Run test cases
 if [[ -n $test_names ]]; then
 	echo "Run cases: ${test_names}"
-    mkdir -p /tmp/tiflow_engine_test
+	mkdir -p /tmp/tiflow_engine_test
 	"${CUR}"/run.sh "${test_names}" 2>&1 | tee /tmp/tiflow_engine_test/engine_it.log
-    ./engine/test/utils/check_log.sh
+	./engine/test/utils/check_log.sh
 fi

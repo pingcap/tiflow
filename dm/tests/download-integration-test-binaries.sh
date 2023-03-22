@@ -29,16 +29,16 @@ color-green() { # Green
 }
 
 function download() {
-    local url=$1
-    local file_name=$2
-    local file_path=$3
-    if [[ -f "${file_path}" ]]; then
-        echo "file ${file_name} already exists, skip download"
-        return
-    fi
+	local url=$1
+	local file_name=$2
+	local file_path=$3
+	if [[ -f "${file_path}" ]]; then
+		echo "file ${file_name} already exists, skip download"
+		return
+	fi
 	echo ">>>"
-    echo "download ${file_name} from ${url}"
-    wget --no-verbose --retry-connrefused --waitretry=1 -t 3 -O "${file_path}" "${url}"
+	echo "download ${file_name} from ${url}"
+	wget --no-verbose --retry-connrefused --waitretry=1 -t 3 -O "${file_path}" "${url}"
 }
 
 # Specify the download branch.
@@ -72,11 +72,11 @@ mkdir -p bin
 
 color-green "Download binaries..."
 download "$tidb_download_url" "tidb-server.tar.gz" "tmp/tidb-server.tar.gz"
-tar -xz -C third_bin bin/tidb-server  -f tmp/tidb-server.tar.gz && mv third_bin/bin/tidb-server third_bin/
+tar -xz -C third_bin bin/tidb-server -f tmp/tidb-server.tar.gz && mv third_bin/bin/tidb-server third_bin/
 download "$pd_download_url" "pd-server.tar.gz" "tmp/pd-server.tar.gz"
 tar -xz -C third_bin 'bin/*' -f tmp/pd-server.tar.gz && mv third_bin/bin/* third_bin/
 download "$tikv_download_url" "tikv-server.tar.gz" "tmp/tikv-server.tar.gz"
-tar -xz -C third_bin bin/tikv-server  -f tmp/tikv-server.tar.gz && mv third_bin/bin/tikv-server third_bin/
+tar -xz -C third_bin bin/tikv-server -f tmp/tikv-server.tar.gz && mv third_bin/bin/tikv-server third_bin/
 download "$tidb_tools_download_url" "tidb-tools.tar.gz" "tmp/tidb-tools.tar.gz"
 tar -xz -C third_bin 'bin/sync_diff_inspector' -f tmp/tidb-tools.tar.gz && mv third_bin/bin/sync_diff_inspector third_bin/
 download "$minio_download_url" "minio.tar.gz" "tmp/minio.tar.gz"
