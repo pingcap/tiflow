@@ -42,7 +42,7 @@ func createDDLManagerForTest(t *testing.T) *ddlManager {
 		ddlSink,
 		ddlPuller,
 		schema,
-		nil,
+		nil, nil,
 		model.DB, false)
 	return res
 }
