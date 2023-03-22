@@ -33,7 +33,7 @@
 
 ## Introduction
 
-This document provides a complete design on implementing storage sink that provides 
+This document provides a complete design on implementing storage sink, which provides 
 the ability to output changelogs to NFS, Amazon S3, GCP and Azure Blob Storage.
 
 ## Motivation or Background
@@ -47,37 +47,25 @@ and scenarios.
 
 ## Detailed Design
 
-Explain the design in enough detail that: it is reasonably clear how the feature would be implemented, corner cases are dissected by example, how the feature is used, etc.
-
-It's better to describe the pseudo-code of the key algorithm, API interfaces, the UML graph, what components are needed to be changed in this section.
-
-Compatibility is important, please also take into consideration, a checklist:
-
-- Compatibility with other features
-- Compatibility with other internal components, like owner, processor, sink, etc.
-- Compatibility with other external components, like PD, TiKV, TiDB, TiUP, K8s, etc.
-- Upgrade compatibility
-- Downgrade compatibility
-
 ### Storage path structure
 
 This section describes the storage path structure of data change records, metadata, and DDL events. 
 Using the csv protocol as an example, files containing row change events should be organized as follows: 
 
 ```
-s3://bucket/prefix1/prefix2
-├── metadata
-└── schema1
-    └── table1
-        └── 2022-03-15
-            ├── 9999
-            │   ├── CDC.index
-            │   ├── CDC000001.csv
-            │   └── schema.json
-            └── 10000
-                ├── CDC.index
-                ├── CDC000001.csv
-                └── schema.json
+s3://bucket/prefix1/prefix2                 <prefix>
+├── metadata                                
+└── schema1                                 <schema>
+    └── table1                              <table>
+        ├── 10000                           <table-version-separator>
+            ├── 13                          <partition-separator, optional>
+            │   ├── 2023-03-23              <date-separator, optional>
+            │   │   ├── CDC000001.csv
+            │   │   └── CDC.index
+            │   └── 2023-03-24              <date-separator, optional>
+            │       ├── CDC000001.csv
+            │       └── CDC.index
+            └── schema.json
 ```
 
 #### Data change records
