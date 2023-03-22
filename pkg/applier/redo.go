@@ -211,7 +211,7 @@ func (ra *RedoApplier) consumeLogs(ctx context.Context) error {
 		if err := ra.waitTableFlush(ctx, tableID, resolvedTs); err != nil {
 			return err
 		}
-		ra.tableSinks[tableID].Close(ctx)
+		ra.tableSinks[tableID].Close()
 	}
 
 	log.Info("apply redo log finishes",
