@@ -665,11 +665,11 @@ func TestGenAndFromSubTaskConfigs(t *testing.T) {
 				ImportMode:          LoadModePhysical,
 				OnDuplicateLogical:  OnDuplicateReplace,
 				OnDuplicatePhysical: OnDuplicateNone,
-				ChecksumPhysical:    ChecksumRequired,
+				ChecksumPhysical:    OpLevelRequired,
+				Analyze:             OpLevelOptional,
 				PDAddr:              "http://test:2379",
 				RangeConcurrency:    32,
 				CompressKVPairs:     "gzip",
-				Analyze:             true,
 			},
 			SyncerConfig: SyncerConfig{
 				WorkerCount:             32,
@@ -1131,6 +1131,7 @@ func TestLoadConfigAdjust(t *testing.T) {
 		OnDuplicateLogical:  "replace",
 		OnDuplicatePhysical: "none",
 		ChecksumPhysical:    "required",
+		Analyze:             "optional",
 	}, cfg)
 
 	// test deprecated OnDuplicate will write to OnDuplicateLogical

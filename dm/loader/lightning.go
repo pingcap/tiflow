@@ -359,12 +359,20 @@ func GetLightningConfig(globalCfg *lcfg.GlobalConfig, subtaskCfg *config.SubTask
 		cfg.TikvImporter.DuplicateResolution = lcfg.DupeResAlgNone
 	}
 	switch subtaskCfg.ChecksumPhysical {
-	case config.ChecksumRequired:
+	case config.OpLevelRequired:
 		cfg.PostRestore.Checksum = lcfg.OpLevelRequired
-	case config.ChecksumOptional:
+	case config.OpLevelOptional:
 		cfg.PostRestore.Checksum = lcfg.OpLevelOptional
-	case config.ChecksumOff:
+	case config.OpLevelOff:
 		cfg.PostRestore.Checksum = lcfg.OpLevelOff
+	}
+	switch subtaskCfg.Analyze {
+	case config.OpLevelRequired:
+		cfg.PostRestore.Analyze = lcfg.OpLevelRequired
+	case config.OpLevelOptional:
+		cfg.PostRestore.Analyze = lcfg.OpLevelOptional
+	case config.OpLevelOff:
+		cfg.PostRestore.Analyze = lcfg.OpLevelOff
 	}
 	cfg.TiDB.Vars = make(map[string]string)
 	cfg.Routes = subtaskCfg.RouteRules
@@ -382,12 +390,6 @@ func GetLightningConfig(globalCfg *lcfg.GlobalConfig, subtaskCfg *config.SubTask
 		if err != nil {
 			return nil, err
 		}
-	}
-	if subtaskCfg.Analyze {
-		cfg.PostRestore.Analyze = lcfg.OpLevelRequired
-	} else {
-		// don't analyze table by default
-		cfg.PostRestore.Analyze = lcfg.OpLevelOff
 	}
 
 	cfg.TiDB.Vars = map[string]string{
