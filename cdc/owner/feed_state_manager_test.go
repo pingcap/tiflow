@@ -254,6 +254,22 @@ func TestHandleFastFailError(t *testing.T) {
 	tester.MustApplyPatches()
 }
 
+func TestHandleErrorWhenChangefeedIsPaused(t *testing.T) {
+	ctx := cdcContext.NewBackendContext4Test(true)
+	manager := newFeedStateManager4Test()
+	manager.state = orchestrator.NewChangefeedReactorState(ctx.ChangefeedVars().ID)
+	err := &model.RunningError{
+		Addr:    ctx.GlobalVars().CaptureInfo.AdvertiseAddr,
+		Code:    "CDC:ErrReachMaxTry",
+		Message: "fake error for test",
+	}
+	manager.state.Info = &model.ChangeFeedInfo{
+		State: model.StateStopped,
+	}
+	manager.handleError(err)
+	require.Equal(t, model.StateStopped, manager.state.Info.State)
+}
+
 func TestChangefeedStatusNotExist(t *testing.T) {
 	changefeedInfo := `
 {
