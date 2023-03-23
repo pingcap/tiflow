@@ -498,8 +498,6 @@ func NewDDLJobPuller(
 type DDLPuller interface {
 	// Run runs the DDLPuller
 	Run(ctx context.Context) error
-	// FrontDDL returns the first DDL job in the internal queue
-	FrontDDL() (uint64, *timodel.Job)
 	// PopFrontDDL returns and pops the first DDL job in the internal queue
 	PopFrontDDL() (uint64, *timodel.Job)
 	// ResolvedTs returns the resolved ts of the DDLPuller
@@ -650,17 +648,6 @@ func (h *ddlPullerImpl) Run(ctx context.Context) error {
 	return g.Wait()
 }
 
-// FrontDDL return the first pending DDL job
-func (h *ddlPullerImpl) FrontDDL() (uint64, *timodel.Job) {
-	h.mu.Lock()
-	defer h.mu.Unlock()
-	if len(h.pendingDDLJobs) == 0 {
-		return atomic.LoadUint64(&h.resolvedTS), nil
-	}
-	job := h.pendingDDLJobs[0]
-	return job.BinlogInfo.FinishedTS, job
-}
-
 // PopFrontDDL return the first pending DDL job and remove it from the pending list
 func (h *ddlPullerImpl) PopFrontDDL() (uint64, *timodel.Job) {
 	h.mu.Lock()
@@ -682,6 +669,11 @@ func (h *ddlPullerImpl) Close() {
 }
 
 func (h *ddlPullerImpl) ResolvedTs() uint64 {
-	ts, _ := h.FrontDDL()
-	return ts
+	h.mu.Lock()
+	defer h.mu.Unlock()
+	if len(h.pendingDDLJobs) == 0 {
+		return atomic.LoadUint64(&h.resolvedTS)
+	}
+	job := h.pendingDDLJobs[0]
+	return job.BinlogInfo.FinishedTS
 }
