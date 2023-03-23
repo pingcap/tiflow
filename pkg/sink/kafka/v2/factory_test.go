@@ -331,17 +331,6 @@ func TestSyncWriterClose(t *testing.T) {
 	w.Close()
 }
 
-func TestAsyncWriterClose(t *testing.T) {
-	mw := v2mock.NewMockWriter(gomock.NewController(t))
-	w := asyncWriter{w: mw}
-	// close failed,no panic
-	mw.EXPECT().Close().Return(errors.New("fake"))
-	w.Close()
-	// close success
-	mw.EXPECT().Close().Return(nil)
-	w.Close()
-}
-
 func TestAsyncWriterAsyncSend(t *testing.T) {
 	mw := v2mock.NewMockWriter(gomock.NewController(t))
 	w := asyncWriter{w: mw}

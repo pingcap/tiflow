@@ -172,7 +172,7 @@ func (d *dmlPathKey) generateDMLFilePath(idx uint64, extension string) string {
 func (d *dmlPathKey) parseDMLFilePath(dateSeparator, path string) (uint64, error) {
 	var partitionNum int64
 
-	str := `(\w+)\/(\w+)\/(\d+)\/(\d+\/)*`
+	str := `(\w+)\/(\w+)\/(\d+)\/(\d+)?\/*`
 	switch dateSeparator {
 	case config.DateSeparatorNone.String():
 		str += `(\d{4})*`
