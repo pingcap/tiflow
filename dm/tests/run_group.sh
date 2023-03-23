@@ -26,10 +26,9 @@ groups=(
 	["G08"]="shardddl1 shardddl1_1 shardddl2 shardddl2_1"
 	["G09"]="shardddl3 shardddl3_1 shardddl4 shardddl4_1 sharding sequence_sharding"
 	["G10"]="others others_2 others_3"
-	["G11"]="start_task print_status http_apis new_relay"
+	["G11"]="start_task print_status http_apis new_relay all_mode"
 	["G12"]="import_v10x sharding2 ha"
-	["G13"]="tls"
-	["G14"]="all_mode"
+	["TLS_GROUP"]="tls"
 )
 
 # Get other cases not in groups, to avoid missing any case
