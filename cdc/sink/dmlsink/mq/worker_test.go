@@ -34,7 +34,7 @@ import (
 func newBatchEncodeWorker(ctx context.Context, t *testing.T) (*worker, dmlproducer.DMLProducer) {
 	// 200 is about the size of a rowEvent change.
 	encoderConfig := common.NewConfig(config.ProtocolOpen).WithMaxMessageBytes(200)
-	builder, err := builder.NewEventBatchEncoderBuilder(context.Background(), encoderConfig)
+	builder, err := builder.NewRowEventEncoderBuilder(context.Background(), encoderConfig)
 	require.Nil(t, err)
 	p, err := dmlproducer.NewDMLMockProducer(context.Background(), nil, nil, nil)
 	require.Nil(t, err)
@@ -47,7 +47,7 @@ func newBatchEncodeWorker(ctx context.Context, t *testing.T) (*worker, dmlproduc
 func newNonBatchEncodeWorker(ctx context.Context, t *testing.T) (*worker, dmlproducer.DMLProducer) {
 	// 300 is about the size of a rowEvent change.
 	encoderConfig := common.NewConfig(config.ProtocolCanalJSON).WithMaxMessageBytes(300)
-	builder, err := builder.NewEventBatchEncoderBuilder(context.Background(), encoderConfig)
+	builder, err := builder.NewRowEventEncoderBuilder(context.Background(), encoderConfig)
 	require.Nil(t, err)
 	p, err := dmlproducer.NewDMLMockProducer(context.Background(), nil, nil, nil)
 	require.Nil(t, err)

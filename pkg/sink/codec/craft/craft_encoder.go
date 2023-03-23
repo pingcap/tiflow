@@ -35,14 +35,14 @@ type BatchEncoder struct {
 	allocator *SliceAllocator
 }
 
-// EncodeCheckpointEvent implements the EventBatchEncoder interface
+// EncodeCheckpointEvent implements the RowEventEncoder interface
 func (e *BatchEncoder) EncodeCheckpointEvent(ts uint64) (*common.Message, error) {
 	return common.NewResolvedMsg(
 		config.ProtocolCraft, nil,
 		NewResolvedEventEncoder(e.allocator, ts).Encode(), ts), nil
 }
 
-// AppendRowChangedEvent implements the EventBatchEncoder interface
+// AppendRowChangedEvent implements the RowEventEncoder interface
 func (e *BatchEncoder) AppendRowChangedEvent(
 	_ context.Context,
 	_ string,
@@ -59,13 +59,13 @@ func (e *BatchEncoder) AppendRowChangedEvent(
 	return nil
 }
 
-// EncodeDDLEvent implements the EventBatchEncoder interface
+// EncodeDDLEvent implements the RowEventEncoder interface
 func (e *BatchEncoder) EncodeDDLEvent(ev *model.DDLEvent) (*common.Message, error) {
 	return common.NewDDLMsg(config.ProtocolCraft,
 		nil, NewDDLEventEncoder(e.allocator, ev).Encode(), ev), nil
 }
 
-// Build implements the EventBatchEncoder interface
+// Build implements the RowEventEncoder interface
 func (e *BatchEncoder) Build() []*common.Message {
 	if e.rowChangedBuffer.Size() > 0 {
 		// flush buffered data to message buffer
@@ -98,7 +98,7 @@ func (e *BatchEncoder) flush() {
 }
 
 // NewBatchEncoder creates a new BatchEncoder.
-func NewBatchEncoder() codec.EventBatchEncoder {
+func NewBatchEncoder() codec.RowEventEncoder {
 	// 64 is a magic number that come up with these assumptions and manual benchmark.
 	// 1. Most table will not have more than 64 columns
 	// 2. It only worth allocating slices in batch for slices that's small enough
@@ -110,7 +110,7 @@ type batchEncoderBuilder struct {
 }
 
 // Build a BatchEncoder
-func (b *batchEncoderBuilder) Build() codec.EventBatchEncoder {
+func (b *batchEncoderBuilder) Build() codec.RowEventEncoder {
 	encoder := NewBatchEncoder()
 	encoder.(*BatchEncoder).MaxMessageBytes = b.config.MaxMessageBytes
 	encoder.(*BatchEncoder).MaxBatchSize = b.config.MaxBatchSize
@@ -118,12 +118,12 @@ func (b *batchEncoderBuilder) Build() codec.EventBatchEncoder {
 }
 
 // NewBatchEncoderBuilder creates a craft batchEncoderBuilder.
-func NewBatchEncoderBuilder(config *common.Config) codec.EncoderBuilder {
+func NewBatchEncoderBuilder(config *common.Config) codec.RowEventEncoderBuilder {
 	return &batchEncoderBuilder{config: config}
 }
 
 // NewBatchEncoderWithAllocator creates a new BatchEncoder with given allocator.
-func NewBatchEncoderWithAllocator(allocator *SliceAllocator) codec.EventBatchEncoder {
+func NewBatchEncoderWithAllocator(allocator *SliceAllocator) codec.RowEventEncoder {
 	return &BatchEncoder{
 		allocator:        allocator,
 		messageBuf:       make([]*common.Message, 0, 2),
