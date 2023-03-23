@@ -83,6 +83,7 @@ func validateAndAdjustBound(
 	span *tablepb.Span,
 	lowerBound, upperBound engine.Position,
 ) (engine.Position, engine.Position) {
+	oldUpperBound := upperBound
 	lowerPhs := oracle.GetTimeFromTS(lowerBound.CommitTs)
 	upperPhs := oracle.GetTimeFromTS(upperBound.CommitTs)
 	// The time range of a task should not exceed maxTaskTimeRange.
@@ -99,6 +100,6 @@ func validateAndAdjustBound(
 			zap.Stringer("span", span),
 			zap.Any("upperBound", upperBound))
 	}
-
+	log.Warn("fizz:validateAndAdjustBound", zap.Uint64("lowerBound", lowerBound.CommitTs), zap.Uint64("oldUpperBound", oldUpperBound.CommitTs), zap.Uint64("upperBound", upperBound.CommitTs))
 	return lowerBound, upperBound
 }

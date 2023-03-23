@@ -347,7 +347,7 @@ func (m *SinkManager) generateSinkTasks() error {
 		if tableSinkUpperBoundTs-1 > schemaTs {
 			tableSinkUpperBoundTs = schemaTs + 1
 		}
-
+		log.Warn("fizz: generateSinkTasks: tableSinkUpperBoundTs", zap.Uint64("tableSinkUpperBoundTs", tableSinkUpperBoundTs))
 		return engine.Position{StartTs: tableSinkUpperBoundTs - 1, CommitTs: tableSinkUpperBoundTs}
 	}
 

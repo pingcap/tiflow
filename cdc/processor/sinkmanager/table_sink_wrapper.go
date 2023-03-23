@@ -156,6 +156,7 @@ func (t *tableSinkWrapper) updateReceivedSorterResolvedTs(ts model.Ts) {
 			if t.state.Load() == tablepb.TableStatePreparing {
 				t.state.Store(tablepb.TableStatePrepared)
 			}
+			log.Warn("fizz:Received sorter resolved ts is updated", zap.String("table", t.span.String()), zap.Uint64("resolvedTs", ts))
 			return
 		}
 	}
@@ -207,6 +208,7 @@ func (t *tableSinkWrapper) getState() tablepb.TableState {
 func (t *tableSinkWrapper) getUpperBoundTs() model.Ts {
 	resolvedTs := t.getReceivedSorterResolvedTs()
 	barrierTs := t.barrierTs.Load()
+	log.Warn("fizz:getUpperBoundTs", zap.String("table", t.span.String()), zap.Uint64("resolvedTs", resolvedTs), zap.Uint64("barrierTs", barrierTs))
 	if resolvedTs > barrierTs {
 		resolvedTs = barrierTs
 	}
