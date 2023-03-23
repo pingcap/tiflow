@@ -526,11 +526,6 @@ error = '''
 MySQL worker panic
 '''
 
-["CDC:ErrNewCaptureFailed"]
-error = '''
-new capture failed
-'''
-
 ["CDC:ErrNewSemVersion"]
 error = '''
 create sem version
