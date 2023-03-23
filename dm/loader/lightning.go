@@ -114,6 +114,9 @@ func MakeGlobalConfig(cfg *config.SubTaskConfig) *lcfg.GlobalConfig {
 	lightningCfg.TiDB.Psw = cfg.To.Password
 	lightningCfg.TiDB.User = cfg.To.User
 	lightningCfg.TiDB.Port = cfg.To.Port
+	if len(cfg.LoaderConfig.PDAddr) > 0 {
+		lightningCfg.TiDB.PdAddr = cfg.LoaderConfig.PDAddr
+	}
 	lightningCfg.TikvImporter.Backend = lcfg.BackendTiDB
 	if cfg.LoaderConfig.ImportMode == config.LoadModePhysical {
 		lightningCfg.TikvImporter.Backend = lcfg.BackendLocal
@@ -356,12 +359,20 @@ func GetLightningConfig(globalCfg *lcfg.GlobalConfig, subtaskCfg *config.SubTask
 		cfg.TikvImporter.DuplicateResolution = lcfg.DupeResAlgNone
 	}
 	switch subtaskCfg.ChecksumPhysical {
-	case config.ChecksumRequired:
+	case config.OpLevelRequired:
 		cfg.PostRestore.Checksum = lcfg.OpLevelRequired
-	case config.ChecksumOptional:
+	case config.OpLevelOptional:
 		cfg.PostRestore.Checksum = lcfg.OpLevelOptional
-	case config.ChecksumOff:
+	case config.OpLevelOff:
 		cfg.PostRestore.Checksum = lcfg.OpLevelOff
+	}
+	switch subtaskCfg.Analyze {
+	case config.OpLevelRequired:
+		cfg.PostRestore.Analyze = lcfg.OpLevelRequired
+	case config.OpLevelOptional:
+		cfg.PostRestore.Analyze = lcfg.OpLevelOptional
+	case config.OpLevelOff:
+		cfg.PostRestore.Analyze = lcfg.OpLevelOff
 	}
 	cfg.TiDB.Vars = make(map[string]string)
 	cfg.Routes = subtaskCfg.RouteRules
@@ -370,6 +381,17 @@ func GetLightningConfig(globalCfg *lcfg.GlobalConfig, subtaskCfg *config.SubTask
 			cfg.TiDB.Vars[k] = v
 		}
 	}
+
+	if subtaskCfg.RangeConcurrency > 0 {
+		cfg.TikvImporter.RangeConcurrency = subtaskCfg.RangeConcurrency
+	}
+	if len(subtaskCfg.CompressKVPairs) > 0 {
+		err := cfg.TikvImporter.CompressKVPairs.FromStringValue(subtaskCfg.CompressKVPairs)
+		if err != nil {
+			return nil, err
+		}
+	}
+
 	cfg.TiDB.Vars = map[string]string{
 		// always set transaction mode to optimistic
 		"tidb_txn_mode": "optimistic",
