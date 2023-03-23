@@ -19,6 +19,9 @@ import (
 	"sync"
 	"testing"
 
+	"github.com/pingcap/tidb/parser/mysql"
+	"github.com/pingcap/tidb/types"
+	"github.com/pingcap/tidb/util/rowcodec"
 	"github.com/pingcap/tiflow/cdc/model"
 	"github.com/pingcap/tiflow/cdc/sink/dmlsink"
 	"github.com/pingcap/tiflow/cdc/sink/util"
@@ -32,10 +35,10 @@ func testEncodingWorker(ctx context.Context, t *testing.T) (*encodingWorker, fun
 	uri := fmt.Sprintf("file:///%s", t.TempDir())
 	sinkURI, err := url.Parse(uri)
 	require.Nil(t, err)
-	encoderConfig, err := util.GetEncoderConfig(sinkURI, config.ProtocolOpen,
+	encoderConfig, err := util.GetEncoderConfig(sinkURI, config.ProtocolCsv,
 		config.GetDefaultReplicaConfig(), config.DefaultMaxMessageBytes)
 	require.Nil(t, err)
-	encoderBuilder, err := builder.NewEventBatchEncoderBuilder(context.TODO(), encoderConfig)
+	encoderBuilder, err := builder.NewTxnEventEncoderBuilder(encoderConfig)
 	require.Nil(t, err)
 	encoder := encoderBuilder.Build()
 	changefeedID := model.DefaultChangeFeedID("test-encode")
@@ -52,7 +55,21 @@ func TestEncodeEvents(t *testing.T) {
 	ctx, cancel := context.WithCancel(context.Background())
 	worker, fn := testEncodingWorker(ctx, t)
 	defer fn()
-	err := worker.encodeEvents(ctx, eventFragment{
+	colInfos := []rowcodec.ColInfo{
+		{
+			ID:            1,
+			IsPKHandle:    false,
+			VirtualGenCol: false,
+			Ft:            types.NewFieldType(mysql.TypeLong),
+		},
+		{
+			ID:            2,
+			IsPKHandle:    false,
+			VirtualGenCol: false,
+			Ft:            types.NewFieldType(mysql.TypeString),
+		},
+	}
+	err := worker.encodeEvents(eventFragment{
 		versionedTable: cloudstorage.VersionedTable{
 			TableNameWithPhysicTableID: model.TableName{
 				Schema:  "test",
@@ -81,6 +98,7 @@ func TestEncodeEvents(t *testing.T) {
 							{Name: "c1", Value: 100},
 							{Name: "c2", Value: "hello world"},
 						},
+						ColInfos: colInfos,
 					},
 					{
 						Table: &model.TableName{
@@ -92,6 +110,7 @@ func TestEncodeEvents(t *testing.T) {
 							{Name: "c1", Value: 200},
 							{Name: "c2", Value: "你好，世界"},
 						},
+						ColInfos: colInfos,
 					},
 				},
 			},
@@ -128,6 +147,10 @@ func TestEncodingWorkerRun(t *testing.T) {
 				Columns: []*model.Column{
 					{Name: "c1", Value: 100},
 					{Name: "c2", Value: "hello world"},
+				},
+				ColInfos: []rowcodec.ColInfo{
+					{ID: 1, Ft: types.NewFieldType(mysql.TypeLong)},
+					{ID: 2, Ft: types.NewFieldType(mysql.TypeVarchar)},
 				},
 			},
 		},

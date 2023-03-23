@@ -43,7 +43,7 @@ func NewBatchDecoder(ctx context.Context,
 	codecConfig *common.Config,
 	tableInfo *model.TableInfo,
 	value []byte,
-) (codec.EventBatchDecoder, error) {
+) (codec.RowEventDecoder, error) {
 	var backslashEscape bool
 
 	// if quote is not set in config, we should unespace backslash
@@ -74,7 +74,7 @@ func NewBatchDecoder(ctx context.Context,
 	}, nil
 }
 
-// HasNext implements the EventBatchDecoder interface.
+// HasNext implements the RowEventDecoder interface.
 func (b *batchDecoder) HasNext() (model.MessageType, bool, error) {
 	err := b.parser.ReadRow()
 	if err != nil {
@@ -93,12 +93,12 @@ func (b *batchDecoder) HasNext() (model.MessageType, bool, error) {
 	return model.MessageTypeRow, true, nil
 }
 
-// NextResolvedEvent implements the EventBatchDecoder interface.
+// NextResolvedEvent implements the RowEventDecoder interface.
 func (b *batchDecoder) NextResolvedEvent() (uint64, error) {
 	return 0, nil
 }
 
-// NextRowChangedEvent implements the EventBatchDecoder interface.
+// NextRowChangedEvent implements the RowEventDecoder interface.
 func (b *batchDecoder) NextRowChangedEvent() (*model.RowChangedEvent, error) {
 	if b.closed {
 		return nil, cerror.WrapError(cerror.ErrCSVDecodeFailed, errors.New("no csv row can be found"))
@@ -111,7 +111,7 @@ func (b *batchDecoder) NextRowChangedEvent() (*model.RowChangedEvent, error) {
 	return e, nil
 }
 
-// NextDDLEvent implements the EventBatchDecoder interface.
+// NextDDLEvent implements the RowEventDecoder interface.
 func (b *batchDecoder) NextDDLEvent() (*model.DDLEvent, error) {
 	return nil, nil
 }
