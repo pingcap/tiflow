@@ -20,6 +20,9 @@ import (
 	"testing"
 	"time"
 
+	"github.com/pingcap/tidb/parser/mysql"
+	"github.com/pingcap/tidb/types"
+	"github.com/pingcap/tidb/util/rowcodec"
 	"github.com/pingcap/tiflow/cdc/model"
 	"github.com/pingcap/tiflow/cdc/sink/dmlsink"
 	"github.com/pingcap/tiflow/cdc/sink/util"
@@ -36,10 +39,10 @@ func TestDeframenter(t *testing.T) {
 	txnCnt := 50
 	sinkURI, err := url.Parse(uri)
 	require.Nil(t, err)
-	encoderConfig, err := util.GetEncoderConfig(sinkURI, config.ProtocolCanalJSON,
+	encoderConfig, err := util.GetEncoderConfig(sinkURI, config.ProtocolCsv,
 		config.GetDefaultReplicaConfig(), config.DefaultMaxMessageBytes)
 	require.Nil(t, err)
-	encoderBuilder, err := builder.NewEventBatchEncoderBuilder(ctx, encoderConfig)
+	encoderBuilder, err := builder.NewTxnEventEncoderBuilder(encoderConfig)
 	require.Nil(t, err)
 
 	var seqNumbers []uint64
@@ -81,10 +84,25 @@ func TestDeframenter(t *testing.T) {
 						{Name: "c1", Value: j + 1},
 						{Name: "c2", Value: "hello world"},
 					},
+					ColInfos: []rowcodec.ColInfo{
+						{
+							ID:            1,
+							IsPKHandle:    false,
+							VirtualGenCol: false,
+							Ft:            types.NewFieldType(mysql.TypeLong),
+						},
+						{
+							ID:            2,
+							IsPKHandle:    false,
+							VirtualGenCol: false,
+							Ft:            types.NewFieldType(mysql.TypeString),
+						},
+					},
 				}
 				frag.event.Event.Rows = append(frag.event.Event.Rows, row)
-				encoder.AppendRowChangedEvent(ctx, "", row, nil)
 			}
+			err := encoder.AppendTxnEvent(frag.event.Event, nil)
+			require.NoError(t, err)
 			frag.encodedMsgs = encoder.Build()
 
 			for _, msg := range frag.encodedMsgs {

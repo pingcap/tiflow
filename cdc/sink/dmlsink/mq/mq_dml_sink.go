@@ -74,7 +74,7 @@ func newDMLSink(
 ) (*dmlSink, error) {
 	changefeedID := contextutil.ChangefeedIDFromCtx(ctx)
 
-	encoderBuilder, err := builder.NewEventBatchEncoderBuilder(ctx, encoderConfig)
+	encoderBuilder, err := builder.NewRowEventEncoderBuilder(ctx, encoderConfig)
 	if err != nil {
 		return nil, cerror.WrapError(cerror.ErrKafkaInvalidConfig, err)
 	}
