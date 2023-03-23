@@ -34,7 +34,7 @@ import (
 )
 
 type schemaWrap4Owner struct {
-	schemaStorage               entry.SchemaStorage
+	entry.SchemaStorage
 	filter                      filter.Filter
 	config                      *config.ReplicaConfig
 	id                          model.ChangeFeedID
@@ -55,7 +55,7 @@ func newSchemaWrap4Owner(
 		}
 	}
 
-	schemaStorage, err := entry.NewSchemaStorage(meta, startTs, config.ForceReplicate, id)
+	schemaStorage, err := entry.NewSchemaStorage(meta, startTs, config.ForceReplicate, id, util.RoleOwner)
 	if err != nil {
 		return nil, errors.Trace(err)
 	}
@@ -65,14 +65,15 @@ func newSchemaWrap4Owner(
 	if err != nil {
 		return nil, errors.Trace(err)
 	}
-	return &schemaWrap4Owner{
-		schemaStorage: schemaStorage,
-		filter:        f,
-		config:        config,
-		id:            id,
+	schema := &schemaWrap4Owner{
+		filter: f,
+		config: config,
+		id:     id,
 		metricIgnoreDDLEventCounter: changefeedIgnoredDDLEventCounter.
 			WithLabelValues(id.Namespace, id.ID),
-	}, nil
+	}
+	schema.SchemaStorage = schemaStorage
+	return schema, nil
 }
 
 // AllPhysicalTables returns the table IDs of all tables and partition tables.
@@ -83,7 +84,7 @@ func (s *schemaWrap4Owner) AllPhysicalTables(
 	// NOTE: it's better to pre-allocate the vector. However, in the current implementation
 	// we can't know how many valid tables in the snapshot.
 	res := make([]model.TableID, 0)
-	snap, err := s.schemaStorage.GetSnapshot(ctx, ts)
+	snap, err := s.GetSnapshot(ctx, ts)
 	if err != nil {
 		return nil, err
 	}
@@ -115,7 +116,7 @@ func (s *schemaWrap4Owner) AllTables(
 	ts model.Ts,
 ) ([]*model.TableInfo, error) {
 	tables := make([]*model.TableInfo, 0)
-	snap, err := s.schemaStorage.GetSnapshot(ctx, ts)
+	snap, err := s.GetSnapshot(ctx, ts)
 	if err != nil {
 		return nil, err
 	}
@@ -127,30 +128,8 @@ func (s *schemaWrap4Owner) AllTables(
 	return tables, nil
 }
 
-func (s *schemaWrap4Owner) HandleDDL(job *timodel.Job) error {
-	err := s.schemaStorage.HandleDDLJob(job)
-	if err != nil {
-		log.Error("owner update schema failed",
-			zap.String("namespace", s.id.Namespace),
-			zap.String("changefeed", s.id.ID),
-			zap.String("DDL", job.Query),
-			zap.Stringer("job", job),
-			zap.Error(err),
-			zap.Any("role", util.RoleOwner))
-		return errors.Trace(err)
-	}
-	log.Info("owner update schema snapshot",
-		zap.String("namespace", s.id.Namespace),
-		zap.String("changefeed", s.id.ID),
-		zap.String("DDL", job.Query),
-		zap.Stringer("job", job),
-		zap.Any("role", util.RoleOwner))
-
-	return nil
-}
-
 func (s *schemaWrap4Owner) IsIneligibleTableID(tableID model.TableID) bool {
-	return s.schemaStorage.GetLastSnapshot().IsIneligibleTableID(tableID)
+	return s.GetLastSnapshot().IsIneligibleTableID(tableID)
 }
 
 // parseRenameTables gets a list of DDLEvent from a rename tables DDL job.
@@ -208,13 +187,19 @@ func (s *schemaWrap4Owner) parseRenameTables(
 // The result contains more than one DDLEvent for a rename tables job.
 // Note: If BuildDDLEvents return (nil, nil), it means the DDL Job should be ignored.
 func (s *schemaWrap4Owner) BuildDDLEvents(
+	ctx context.Context,
 	job *timodel.Job,
 ) ([]*model.DDLEvent, error) {
 	var err error
 	var preTableInfo *model.TableInfo
 	var tableInfo *model.TableInfo
 	ddlEvents := make([]*model.DDLEvent, 0)
-	snap := s.schemaStorage.GetLastSnapshot()
+
+	//Note: Need to build ddl event from the snapshot before the DDL job is executed.
+	snap, err := s.GetSnapshot(ctx, job.BinlogInfo.FinishedTS-1)
+	if err != nil {
+		return nil, errors.Trace(err)
+	}
 
 	switch job.Type {
 	case timodel.ActionRenameTables:
