@@ -230,6 +230,9 @@ func (a *admin) CreateTopic(
 }
 
 func (a *admin) Close() {
+	log.Info("admin client start closing",
+		zap.String("namespace", a.changefeedID.Namespace),
+		zap.String("changefeed", a.changefeedID.ID))
 	client, ok := a.client.(*kafka.Client)
 	if !ok {
 		return
@@ -258,4 +261,7 @@ func (a *admin) Close() {
 				zap.String("changefeed", a.changefeedID.ID))
 		}
 	}
+	log.Info("kafka admin client is fully closed",
+		zap.String("namespace", a.changefeedID.Namespace),
+		zap.String("changefeed", a.changefeedID.ID))
 }
