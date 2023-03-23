@@ -13,9 +13,6 @@ group=$1
 # Putting multiple light tests together and heavy tests in a separate group.
 declare -A groups
 groups=(
-	["G00"]='ha_cases_1 ha_cases_2 ha_cases2'
-	["G01"]='ha_cases3 ha_cases3_1 ha_master'
-	["G02"]="handle_error handle_error_2 handle_error_3"
 	["G00"]="ha_cases_1 ha_cases_2 ha_cases2"
 	["G01"]="ha_cases3 ha_cases3_1 ha_master"
 	["G02"]="handle_error handle_error_2 handle_error_3"
@@ -23,11 +20,11 @@ groups=(
 	["G04"]="import_goroutine_leak incremental_mode initial_unit"
 	["G05"]="load_interrupt many_tables online_ddl"
 	["G06"]="relay_interrupt safe_mode sequence_safe_mode"
-	["G08"]="shardddl1 shardddl1_1 shardddl2 shardddl2_1"
-	["G09"]="shardddl3 shardddl3_1 shardddl4 shardddl4_1 sharding sequence_sharding"
-	["G10"]="others others_2 others_3"
-	["G11"]="start_task print_status http_apis new_relay all_mode"
-	["G12"]="import_v10x sharding2 ha"
+	["G07"]="shardddl1 shardddl1_1 shardddl2 shardddl2_1"
+	["G08"]="shardddl3 shardddl3_1 shardddl4 shardddl4_1 sharding sequence_sharding"
+	["G09"]="others others_2 others_3"
+	["G10"]="start_task print_status http_apis new_relay all_mode"
+	["G11"]="import_v10x sharding2 ha"
 	["TLS_GROUP"]="tls"
 )
 
