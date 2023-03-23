@@ -133,6 +133,27 @@ func TestEncodeKey(t *testing.T) {
 			CRTs:    3,
 		}),
 	)
+
+	// update < insert
+	mustLess(
+		0, 0,
+		1, 1,
+		model.NewPolymorphicEvent(&model.RawKVEntry{
+			OpType:   model.OpTypePut,
+			Key:      []byte{2},
+			StartTs:  1,
+			CRTs:     1,
+			Value:    []byte{2},
+			OldValue: []byte{2},
+		}),
+		model.NewPolymorphicEvent(&model.RawKVEntry{
+			OpType:  model.OpTypePut,
+			Key:     []byte{2},
+			StartTs: 1,
+			CRTs:    1,
+			Value:   []byte{2},
+		}),
+	)
 }
 
 func TestEncodeTsKey(t *testing.T) {
