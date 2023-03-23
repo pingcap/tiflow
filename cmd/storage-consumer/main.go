@@ -426,7 +426,7 @@ func (c *consumer) emitDMLEvents(
 	content []byte,
 ) error {
 	var (
-		decoder codec.EventBatchDecoder
+		decoder codec.RowEventDecoder
 		err     error
 	)
 
