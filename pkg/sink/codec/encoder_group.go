@@ -49,7 +49,7 @@ type EncoderGroup interface {
 type encoderGroup struct {
 	changefeedID model.ChangeFeedID
 
-	builder EncoderBuilder
+	builder RowEventEncoderBuilder
 	count   int
 	inputCh []chan *future
 	index   uint64
@@ -58,7 +58,9 @@ type encoderGroup struct {
 }
 
 // NewEncoderGroup creates a new EncoderGroup instance
-func NewEncoderGroup(builder EncoderBuilder, count int, changefeedID model.ChangeFeedID) *encoderGroup {
+func NewEncoderGroup(builder RowEventEncoderBuilder,
+	count int, changefeedID model.ChangeFeedID,
+) *encoderGroup {
 	if count <= 0 {
 		count = defaultEncoderGroupSize
 	}

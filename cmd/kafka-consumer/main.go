@@ -515,7 +515,7 @@ func (c *Consumer) ConsumeClaim(session sarama.ConsumerGroupSession, claim saram
 	eventGroups := make(map[int64]*eventsGroup)
 	for message := range claim.Messages() {
 		var (
-			decoder codec.EventBatchDecoder
+			decoder codec.RowEventDecoder
 			err     error
 		)
 		switch c.protocol {

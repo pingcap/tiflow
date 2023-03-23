@@ -809,7 +809,7 @@ const (
 // NewBatchEncoderBuilder creates an avro batchEncoderBuilder.
 func NewBatchEncoderBuilder(ctx context.Context,
 	config *common.Config,
-) (codec.EncoderBuilder, error) {
+) (codec.RowEventEncoderBuilder, error) {
 	keySchemaManager, err := NewAvroSchemaManager(
 		ctx,
 		nil,
@@ -839,7 +839,7 @@ func NewBatchEncoderBuilder(ctx context.Context,
 }
 
 // Build an AvroEventBatchEncoder.
-func (b *batchEncoderBuilder) Build() codec.EventBatchEncoder {
+func (b *batchEncoderBuilder) Build() codec.RowEventEncoder {
 	encoder := &BatchEncoder{}
 	encoder.namespace = b.namespace
 	encoder.keySchemaManager = b.keySchemaManager
