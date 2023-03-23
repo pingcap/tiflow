@@ -45,3 +45,28 @@ func TestConvertLightningError(t *testing.T) {
 	require.True(t, terror.ErrLoadLightningChecksum.Equal(converted))
 	require.Contains(t, converted.Error(), "checksum mismatched, KV number in source files: 4, KV number in TiDB cluster: 3")
 }
+<<<<<<< HEAD
+=======
+
+func TestGetLightiningConfig(t *testing.T) {
+	t.Parallel()
+
+	conf, err := GetLightningConfig(&lcfg.GlobalConfig{},
+		&config.SubTaskConfig{
+			Name:       "job123",
+			ExtStorage: &storage.LocalStorage{},
+			LoaderConfig: config.LoaderConfig{
+				RangeConcurrency: 32,
+				CompressKVPairs:  "gzip",
+				Analyze:          "required",
+			},
+		})
+	require.NoError(t, err)
+	require.Equal(t, lcfg.CheckpointDriverMySQL, conf.Checkpoint.Driver)
+	require.Equal(t, lcfg.CheckpointRemove, conf.Checkpoint.KeepAfterSuccess)
+	require.Contains(t, conf.Checkpoint.Schema, "job123")
+	require.Equal(t, 32, conf.TikvImporter.RangeConcurrency)
+	require.Equal(t, lcfg.CompressionGzip, conf.TikvImporter.CompressKVPairs)
+	require.Equal(t, lcfg.OpLevelRequired, conf.PostRestore.Analyze)
+}
+>>>>>>> 4a196c5d34 (dm: fix lightning config problem (#8653))
