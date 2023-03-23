@@ -470,6 +470,13 @@ dm_integration_test: check_third_party_binary_for_dm install_test_python_dep
 	cd dm && ln -sf ../bin .
 	cd dm && ./tests/run.sh $(CASE)
 
+dm_integration_test_in_group: check_third_party_binary_for_dm install_test_python_dep
+	@which bin/dm-master.test
+	@which bin/dm-worker.test
+	@which bin/dm-syncer.test
+	cd dm && ln -sf ../bin .
+	cd dm && ./tests/run_group.sh $(GROUP)
+
 dm_compatibility_test: check_third_party_binary_for_dm
 	@which bin/dm-master.test.current
 	@which bin/dm-worker.test.current
