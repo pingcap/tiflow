@@ -33,14 +33,14 @@ type BatchEncoder struct {
 	batchSize   int
 }
 
-// EncodeCheckpointEvent implements the EventBatchEncoder interface
+// EncodeCheckpointEvent implements the RowEventEncoder interface
 func (d *BatchEncoder) EncodeCheckpointEvent(ts uint64) (*common.Message, error) {
 	// For maxwell now, there is no such a corresponding type to ResolvedEvent so far.
 	// Therefore the event is ignored.
 	return nil, nil
 }
 
-// AppendRowChangedEvent implements the EventBatchEncoder interface
+// AppendRowChangedEvent implements the RowEventEncoder interface
 func (d *BatchEncoder) AppendRowChangedEvent(
 	_ context.Context,
 	_ string,
@@ -60,7 +60,7 @@ func (d *BatchEncoder) AppendRowChangedEvent(
 	return nil
 }
 
-// EncodeDDLEvent implements the EventBatchEncoder interface
+// EncodeDDLEvent implements the RowEventEncoder interface
 // DDL message unresolved tso
 func (d *BatchEncoder) EncodeDDLEvent(e *model.DDLEvent) (*common.Message, error) {
 	keyMsg, valueMsg := ddlEventToMaxwellMsg(e)
@@ -76,7 +76,7 @@ func (d *BatchEncoder) EncodeDDLEvent(e *model.DDLEvent) (*common.Message, error
 	return common.NewDDLMsg(config.ProtocolMaxwell, key, value, e), nil
 }
 
-// Build implements the EventBatchEncoder interface
+// Build implements the RowEventEncoder interface
 func (d *BatchEncoder) Build() []*common.Message {
 	if d.batchSize == 0 {
 		return nil
@@ -98,7 +98,7 @@ func (d *BatchEncoder) Build() []*common.Message {
 	return []*common.Message{ret}
 }
 
-// reset implements the EventBatchEncoder interface
+// reset implements the RowEventEncoder interface
 func (d *BatchEncoder) reset() {
 	d.keyBuf.Reset()
 	d.valueBuf.Reset()
@@ -109,7 +109,7 @@ func (d *BatchEncoder) reset() {
 }
 
 // newBatchEncoder creates a new maxwell BatchEncoder.
-func newBatchEncoder() codec.EventBatchEncoder {
+func newBatchEncoder() codec.RowEventEncoder {
 	batch := &BatchEncoder{
 		keyBuf:      &bytes.Buffer{},
 		valueBuf:    &bytes.Buffer{},
@@ -122,11 +122,11 @@ func newBatchEncoder() codec.EventBatchEncoder {
 type batchEncoderBuilder struct{}
 
 // NewBatchEncoderBuilder creates a maxwell batchEncoderBuilder.
-func NewBatchEncoderBuilder() codec.EncoderBuilder {
+func NewBatchEncoderBuilder() codec.RowEventEncoderBuilder {
 	return &batchEncoderBuilder{}
 }
 
 // Build a `maxwellBatchEncoder`
-func (b *batchEncoderBuilder) Build() codec.EventBatchEncoder {
+func (b *batchEncoderBuilder) Build() codec.RowEventEncoder {
 	return newBatchEncoder()
 }

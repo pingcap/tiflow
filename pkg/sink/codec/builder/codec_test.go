@@ -55,7 +55,9 @@ func checkCompressedSize(messages []*common.Message) (int, int) {
 	return originalSize, buff.Len()
 }
 
-func encodeRowCase(t *testing.T, encoder codec.EventBatchEncoder, events []*model.RowChangedEvent) []*common.Message {
+func encodeRowCase(t *testing.T, encoder codec.RowEventEncoder,
+	events []*model.RowChangedEvent,
+) []*common.Message {
 	msg, err := codecEncodeRowCase(encoder, events)
 	require.Nil(t, err)
 	return msg
@@ -206,7 +208,9 @@ func codecEncodeRowChangedPB2(events []*model.RowChangedEvent) []byte {
 	}
 }
 
-func codecEncodeRowCase(encoder codec.EventBatchEncoder, events []*model.RowChangedEvent) ([]*common.Message, error) {
+func codecEncodeRowCase(encoder codec.RowEventEncoder,
+	events []*model.RowChangedEvent,
+) ([]*common.Message, error) {
 	for _, event := range events {
 		err := encoder.AppendRowChangedEvent(context.Background(), "", event, nil)
 		if err != nil {

@@ -14,7 +14,6 @@
 package csv
 
 import (
-	"context"
 	"testing"
 
 	"github.com/pingcap/tidb/parser/mysql"
@@ -26,30 +25,45 @@ import (
 )
 
 func TestCSVBatchCodec(t *testing.T) {
-	testCases := [][]*model.RowChangedEvent{{
+	testCases := []*model.SingleTableTxn{
 		{
-			CommitTs: 1,
-			Table:    &model.TableName{Schema: "test", Table: "table1"},
-			Columns:  []*model.Column{{Name: "tiny", Value: int64(1), Type: mysql.TypeTiny}},
-			ColInfos: []rowcodec.ColInfo{{
-				ID:            1,
-				IsPKHandle:    false,
-				VirtualGenCol: false,
-				Ft:            types.NewFieldType(mysql.TypeTiny),
-			}},
+			Table: &model.TableName{Schema: "test", Table: "table1"},
+			Rows: []*model.RowChangedEvent{
+				{
+					CommitTs: 1,
+					Table:    &model.TableName{Schema: "test", Table: "table1"},
+					Columns: []*model.Column{{
+						Name:  "tiny",
+						Value: int64(1), Type: mysql.TypeTiny,
+					}},
+					ColInfos: []rowcodec.ColInfo{{
+						ID:            1,
+						IsPKHandle:    false,
+						VirtualGenCol: false,
+						Ft:            types.NewFieldType(mysql.TypeTiny),
+					}},
+				},
+				{
+					CommitTs: 2,
+					Table:    &model.TableName{Schema: "test", Table: "table1"},
+					Columns: []*model.Column{{
+						Name:  "tiny",
+						Value: int64(2), Type: mysql.TypeTiny,
+					}},
+					ColInfos: []rowcodec.ColInfo{{
+						ID:            1,
+						IsPKHandle:    false,
+						VirtualGenCol: false,
+						Ft:            types.NewFieldType(mysql.TypeTiny),
+					}},
+				},
+			},
 		},
 		{
-			CommitTs: 2,
-			Table:    &model.TableName{Schema: "test", Table: "table1"},
-			Columns:  []*model.Column{{Name: "tiny", Value: int64(2), Type: mysql.TypeTiny}},
-			ColInfos: []rowcodec.ColInfo{{
-				ID:            1,
-				IsPKHandle:    false,
-				VirtualGenCol: false,
-				Ft:            types.NewFieldType(mysql.TypeTiny),
-			}},
+			Table: &model.TableName{Schema: "test", Table: "table1"},
+			Rows:  nil,
 		},
-	}, {}}
+	}
 
 	for _, cs := range testCases {
 		encoder := newBatchEncoder(&common.Config{
@@ -59,17 +73,15 @@ func TestCSVBatchCodec(t *testing.T) {
 			NullString:      "\\N",
 			IncludeCommitTs: true,
 		})
-		for _, row := range cs {
-			err := encoder.AppendRowChangedEvent(context.Background(), "", row, nil)
-			require.Nil(t, err)
-		}
+		err := encoder.AppendTxnEvent(cs, nil)
+		require.Nil(t, err)
 		messages := encoder.Build()
-		if len(cs) == 0 {
+		if len(cs.Rows) == 0 {
 			require.Nil(t, messages)
 			continue
 		}
 		require.Len(t, messages, 1)
-		require.Equal(t, len(cs), messages[0].GetRowsCount())
+		require.Equal(t, len(cs.Rows), messages[0].GetRowsCount())
 	}
 }
 
@@ -95,49 +107,26 @@ func TestCSVAppendRowChangedEventWithCallback(t *testing.T) {
 			Ft:            types.NewFieldType(mysql.TypeTiny),
 		}},
 	}
-	tests := []struct {
-		row      *model.RowChangedEvent
-		callback func()
-	}{
-		{
-			row: row,
-			callback: func() {
-				count += 1
-			},
-		},
-		{
-			row: row,
-			callback: func() {
-				count += 2
-			},
-		},
-		{
-			row: row,
-			callback: func() {
-				count += 3
-			},
-		},
-		{
-			row: row,
-			callback: func() {
-				count += 4
-			},
-		},
+
+	txn := &model.SingleTableTxn{
+		Table: row.Table,
+		Rows:  []*model.RowChangedEvent{row},
+	}
+	callback := func() {
+		count += 1
 	}
 
 	// Empty build makes sure that the callback build logic not broken.
 	msgs := encoder.Build()
 	require.Len(t, msgs, 0, "no message should be built and no panic")
 
-	// Append the events.
-	for _, test := range tests {
-		err := encoder.AppendRowChangedEvent(context.Background(), "", test.row, test.callback)
-		require.Nil(t, err)
-	}
+	// Append the event.
+	err := encoder.AppendTxnEvent(txn, callback)
+	require.Nil(t, err)
 	require.Equal(t, 0, count, "nothing should be called")
 
 	msgs = encoder.Build()
 	require.Len(t, msgs, 1, "expected one message")
 	msgs[0].Callback()
-	require.Equal(t, 10, count, "expected all callbacks to be called")
+	require.Equal(t, 1, count, "expected all callbacks to be called")
 }

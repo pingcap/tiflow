@@ -39,7 +39,7 @@ type BatchEncoder struct {
 	MaxBatchSize    int
 }
 
-// AppendRowChangedEvent implements the EventBatchEncoder interface
+// AppendRowChangedEvent implements the RowEventEncoder interface
 func (d *BatchEncoder) AppendRowChangedEvent(
 	_ context.Context,
 	_ string,
@@ -105,7 +105,7 @@ func (d *BatchEncoder) AppendRowChangedEvent(
 	return nil
 }
 
-// EncodeDDLEvent implements the EventBatchEncoder interface
+// EncodeDDLEvent implements the RowEventEncoder interface
 func (d *BatchEncoder) EncodeDDLEvent(e *model.DDLEvent) (*common.Message, error) {
 	keyMsg, valueMsg := ddlEventToMsg(e)
 	key, err := keyMsg.Encode()
@@ -137,7 +137,7 @@ func (d *BatchEncoder) EncodeDDLEvent(e *model.DDLEvent) (*common.Message, error
 	return ret, nil
 }
 
-// EncodeCheckpointEvent implements the EventBatchEncoder interface
+// EncodeCheckpointEvent implements the RowEventEncoder interface
 func (d *BatchEncoder) EncodeCheckpointEvent(ts uint64) (*common.Message, error) {
 	keyMsg := newResolvedMessage(ts)
 	key, err := keyMsg.Encode()
@@ -164,7 +164,7 @@ func (d *BatchEncoder) EncodeCheckpointEvent(ts uint64) (*common.Message, error)
 	return ret, nil
 }
 
-// Build implements the EventBatchEncoder interface
+// Build implements the RowEventEncoder interface
 func (d *BatchEncoder) Build() (messages []*common.Message) {
 	d.tryBuildCallback()
 	ret := d.messageBuf
@@ -191,7 +191,7 @@ type batchEncoderBuilder struct {
 }
 
 // Build a BatchEncoder
-func (b *batchEncoderBuilder) Build() codec.EventBatchEncoder {
+func (b *batchEncoderBuilder) Build() codec.RowEventEncoder {
 	encoder := NewBatchEncoder()
 	encoder.(*BatchEncoder).MaxMessageBytes = b.config.MaxMessageBytes
 	encoder.(*BatchEncoder).MaxBatchSize = b.config.MaxBatchSize
@@ -200,12 +200,12 @@ func (b *batchEncoderBuilder) Build() codec.EventBatchEncoder {
 }
 
 // NewBatchEncoderBuilder creates an open-protocol batchEncoderBuilder.
-func NewBatchEncoderBuilder(config *common.Config) codec.EncoderBuilder {
+func NewBatchEncoderBuilder(config *common.Config) codec.RowEventEncoderBuilder {
 	return &batchEncoderBuilder{config: config}
 }
 
 // NewBatchEncoder creates a new BatchEncoder.
-func NewBatchEncoder() codec.EventBatchEncoder {
+func NewBatchEncoder() codec.RowEventEncoder {
 	batch := &BatchEncoder{}
 	return batch
 }
