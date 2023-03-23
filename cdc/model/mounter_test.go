@@ -83,23 +83,6 @@ func TestResolvedTs(t *testing.T) {
 	smallerBatchResolvedTs := ResolvedTs{Mode: BatchResolvedMode, Ts: 0, BatchID: batchID}
 	require.True(t, batchResolvedTs1.EqualOrGreater(smallerBatchResolvedTs))
 }
-<<<<<<< HEAD
-=======
-
-func TestResolvedTsEqual(t *testing.T) {
-	t1 := ResolvedTs{Mode: BatchResolvedMode, Ts: 1, BatchID: 1}
-	t2 := ResolvedTs{Mode: BatchResolvedMode, Ts: 1, BatchID: 1}
-	require.True(t, t1.Equal(t2))
-
-	t3 := NewResolvedTs(1)
-	require.False(t, t1.Equal(t3))
-
-	t4 := ResolvedTs{Mode: BatchResolvedMode, Ts: 1, BatchID: 2}
-	require.False(t, t1.Equal(t4))
-
-	t5 := ResolvedTs{Mode: BatchResolvedMode, Ts: 2, BatchID: 1}
-	require.False(t, t1.Equal(t5))
-}
 
 func TestComparePolymorphicEvents(t *testing.T) {
 	cases := []struct {
@@ -130,4 +113,3 @@ func TestComparePolymorphicEvents(t *testing.T) {
 		require.True(t, ComparePolymorphicEvents(item.a, item.b))
 	}
 }
->>>>>>> f375c3d1af (sorter(ticdc): fix dml order (#8598))
