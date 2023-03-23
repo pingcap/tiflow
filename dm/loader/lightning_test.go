@@ -58,7 +58,7 @@ func TestGetLightiningConfig(t *testing.T) {
 			LoaderConfig: config.LoaderConfig{
 				RangeConcurrency: 32,
 				CompressKVPairs:  "gzip",
-				Analyze:          true,
+				Analyze:          "required",
 			},
 		})
 	require.NoError(t, err)
