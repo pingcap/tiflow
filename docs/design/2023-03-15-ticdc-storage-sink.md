@@ -300,7 +300,7 @@ The Enum and Set types are defined as follows in `schema.json`:
 
 ##### Transactional constraints
 - In a single CSV file, the commit-ts of a row is equal to or smaller than that of the subsequent row.
-- The same transactions of a single table are stored in the same CSV file.
+- The same transactions of a single table are stored in the same CSV file when `transaction-atomicity` is set to table level.
 - Multiple tables of the same transaction can be stored in different CSV files.
 
 ##### Definition of the data format
@@ -371,7 +371,7 @@ Storage sink is a new feature, For tests, we focus on the functional tests,  sce
 
 Run stability and chaos tests under different workloads.
   - The upstream and downstream data are consistent.
-  - Throughput and latency are stable for most scenario.
+  - Throughput and latency are stable for most scenarios.
 
 
 ### Compatibility Tests
