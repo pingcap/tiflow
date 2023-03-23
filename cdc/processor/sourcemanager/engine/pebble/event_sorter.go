@@ -225,6 +225,7 @@ func (s *EventSorter) FetchByTable(span tablepb.Span, lowerBound, upperBound eng
 			zap.String("changefeed", s.changefeedID.ID),
 			zap.Stringer("span", &span),
 			zap.Uint64("upperBound", upperBound.CommitTs),
+			zap.Uint64("fizz:lowerBound", lowerBound.CommitTs),
 			zap.Uint64("resolved", sortedResolved))
 	}
 
@@ -515,6 +516,7 @@ func (s *EventSorter) handleEvents(
 				return false
 			}
 			ts.sortedResolved.Store(resolved)
+			log.Warn("fizz:update resolved", zap.String("fizz:table", span.String()), zap.Uint64("resolved", resolved))
 			for _, onResolve := range s.onResolves {
 				onResolve(span, resolved)
 			}
