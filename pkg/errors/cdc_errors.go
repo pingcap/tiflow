@@ -499,10 +499,6 @@ var (
 		"capture suicide",
 		errors.RFCCodeText("CDC:ErrCaptureSuicide"),
 	)
-	ErrNewCaptureFailed = errors.Normalize(
-		"new capture failed",
-		errors.RFCCodeText("CDC:ErrNewCaptureFailed"),
-	)
 	ErrCaptureRegister = errors.Normalize(
 		"capture register to etcd failed",
 		errors.RFCCodeText("CDC:ErrCaptureRegister"),
