@@ -30,7 +30,7 @@ groups=(
 	["G11"]="start_task print_status http_apis new_relay"
 	["G12"]="import_v10x sharding2 ha"
 	["G13"]="tls"
-	["G14"]="all_mode"  
+	["G14"]="all_mode"
 )
 
 # Get other cases not in groups, to avoid missing any case
