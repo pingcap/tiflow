@@ -55,7 +55,8 @@ func newSchemaWrap4Owner(
 		}
 	}
 
-	schemaStorage, err := entry.NewSchemaStorage(meta, startTs, config.ForceReplicate, id, util.RoleOwner)
+	schemaStorage, err := entry.NewSchemaStorage(
+		meta, startTs, config.ForceReplicate, id, util.RoleOwner)
 	if err != nil {
 		return nil, errors.Trace(err)
 	}
@@ -195,7 +196,7 @@ func (s *schemaWrap4Owner) BuildDDLEvents(
 	var tableInfo *model.TableInfo
 	ddlEvents := make([]*model.DDLEvent, 0)
 
-	//Note: Need to build ddl event from the snapshot before the DDL job is executed.
+	// Note: Need to build ddl event from the snapshot before the DDL job is executed.
 	snap, err := s.GetSnapshot(ctx, job.BinlogInfo.FinishedTS-1)
 	if err != nil {
 		return nil, errors.Trace(err)

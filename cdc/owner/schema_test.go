@@ -167,8 +167,9 @@ func TestBuildDDLEventsFromSingleTableDDL(t *testing.T) {
 		config.GetDefaultReplicaConfig(), dummyChangeFeedID)
 	require.Nil(t, err)
 	// add normal table
+	ctx := context.Background()
 	job := helper.DDL2Job("create table test.t1(id int primary key)")
-	events, err := schema.BuildDDLEvents(job)
+	events, err := schema.BuildDDLEvents(ctx, job)
 	require.Nil(t, err)
 	require.Len(t, events, 1)
 	compareEvents(t, events[0], &model.DDLEvent{
@@ -192,7 +193,7 @@ func TestBuildDDLEventsFromSingleTableDDL(t *testing.T) {
 	})
 	require.Nil(t, schema.HandleDDLJob(job))
 	job = helper.DDL2Job("ALTER TABLE test.t1 ADD COLUMN c1 CHAR(16) NOT NULL")
-	events, err = schema.BuildDDLEvents(job)
+	events, err = schema.BuildDDLEvents(ctx, job)
 	require.Nil(t, err)
 	require.Len(t, events, 1)
 	compareEvents(t, events[0], &model.DDLEvent{
@@ -237,15 +238,16 @@ func TestBuildDDLEventsFromRenameTablesDDL(t *testing.T) {
 	schema, err := newSchemaWrap4Owner(helper.Storage(), ver.Ver,
 		config.GetDefaultReplicaConfig(), dummyChangeFeedID)
 	require.Nil(t, err)
+	ctx := context.Background()
 	job := helper.DDL2Job("create database test1")
-	events, err := schema.BuildDDLEvents(job)
+	events, err := schema.BuildDDLEvents(ctx, job)
 	require.Nil(t, err)
 	require.Len(t, events, 1)
 	require.Nil(t, schema.HandleDDLJob(job))
 	schemaID := job.SchemaID
 	// add test.t1
 	job = helper.DDL2Job("create table test1.t1(id int primary key)")
-	events, err = schema.BuildDDLEvents(job)
+	events, err = schema.BuildDDLEvents(ctx, job)
 	require.Nil(t, err)
 	require.Len(t, events, 1)
 	require.Nil(t, schema.HandleDDLJob(job))
@@ -253,7 +255,7 @@ func TestBuildDDLEventsFromRenameTablesDDL(t *testing.T) {
 
 	// add test.t2
 	job = helper.DDL2Job("create table test1.t2(id int primary key)")
-	events, err = schema.BuildDDLEvents(job)
+	events, err = schema.BuildDDLEvents(ctx, job)
 	require.Nil(t, err)
 	require.Len(t, events, 1)
 	require.Nil(t, schema.HandleDDLJob(job))
@@ -283,7 +285,7 @@ func TestBuildDDLEventsFromRenameTablesDDL(t *testing.T) {
 	// so we manually construct `job.RawArgs` to do the workaround.
 	job.RawArgs = rawArgs
 
-	events, err = schema.BuildDDLEvents(job)
+	events, err = schema.BuildDDLEvents(ctx, job)
 	require.Nil(t, err)
 	require.Len(t, events, 2)
 	fmt.Printf("events[0]:%+v\n", events[0])
@@ -360,15 +362,16 @@ func TestBuildDDLEventsFromDropTablesDDL(t *testing.T) {
 		config.GetDefaultReplicaConfig(), dummyChangeFeedID)
 	require.Nil(t, err)
 	// add test.t1
+	ctx := context.Background()
 	job := helper.DDL2Job("create table test.t1(id int primary key)")
-	events, err := schema.BuildDDLEvents(job)
+	events, err := schema.BuildDDLEvents(ctx, job)
 	require.Nil(t, err)
 	require.Len(t, events, 1)
 	require.Nil(t, schema.HandleDDLJob(job))
 
 	// add test.t2
 	job = helper.DDL2Job("create table test.t2(id int primary key)")
-	events, err = schema.BuildDDLEvents(job)
+	events, err = schema.BuildDDLEvents(ctx, job)
 	require.Nil(t, err)
 	require.Len(t, events, 1)
 	require.Nil(t, schema.HandleDDLJob(job))
@@ -376,7 +379,7 @@ func TestBuildDDLEventsFromDropTablesDDL(t *testing.T) {
 	jobs := helper.DDL2Jobs("drop table test.t1, test.t2", 2)
 	t1DropJob := jobs[1]
 	t2DropJob := jobs[0]
-	events, err = schema.BuildDDLEvents(t1DropJob)
+	events, err = schema.BuildDDLEvents(ctx, t1DropJob)
 	require.Nil(t, err)
 	require.Len(t, events, 1)
 	require.Nil(t, schema.HandleDDLJob(t1DropJob))
@@ -411,7 +414,7 @@ func TestBuildDDLEventsFromDropTablesDDL(t *testing.T) {
 		},
 	})
 
-	events, err = schema.BuildDDLEvents(t2DropJob)
+	events, err = schema.BuildDDLEvents(ctx, t2DropJob)
 	require.Nil(t, err)
 	require.Len(t, events, 1)
 	require.Nil(t, schema.HandleDDLJob(t2DropJob))
@@ -456,16 +459,17 @@ func TestBuildDDLEventsFromDropViewsDDL(t *testing.T) {
 	schema, err := newSchemaWrap4Owner(helper.Storage(), ver.Ver,
 		config.GetDefaultReplicaConfig(), dummyChangeFeedID)
 	require.Nil(t, err)
+	ctx := context.Background()
 	// add test.tb1
 	job := helper.DDL2Job("create table test.tb1(id int primary key)")
-	events, err := schema.BuildDDLEvents(job)
+	events, err := schema.BuildDDLEvents(ctx, job)
 	require.Nil(t, err)
 	require.Len(t, events, 1)
 	require.Nil(t, schema.HandleDDLJob(job))
 
 	// add test.tb2
 	job = helper.DDL2Job("create table test.tb2(id int primary key)")
-	events, err = schema.BuildDDLEvents(job)
+	events, err = schema.BuildDDLEvents(ctx, job)
 	require.Nil(t, err)
 	require.Len(t, events, 1)
 	require.Nil(t, schema.HandleDDLJob(job))
@@ -473,7 +477,7 @@ func TestBuildDDLEventsFromDropViewsDDL(t *testing.T) {
 	// add test.view1
 	job = helper.DDL2Job(
 		"create view test.view1 as select * from test.tb1 where id > 100")
-	events, err = schema.BuildDDLEvents(job)
+	events, err = schema.BuildDDLEvents(ctx, job)
 	require.Nil(t, err)
 	require.Len(t, events, 1)
 	require.Nil(t, schema.HandleDDLJob(job))
@@ -481,7 +485,7 @@ func TestBuildDDLEventsFromDropViewsDDL(t *testing.T) {
 	// add test.view2
 	job = helper.DDL2Job(
 		"create view test.view2 as select * from test.tb2 where id > 100")
-	events, err = schema.BuildDDLEvents(job)
+	events, err = schema.BuildDDLEvents(ctx, job)
 	require.Nil(t, err)
 	require.Len(t, events, 1)
 	require.Nil(t, schema.HandleDDLJob(job))
@@ -489,7 +493,7 @@ func TestBuildDDLEventsFromDropViewsDDL(t *testing.T) {
 	jobs := helper.DDL2Jobs("drop view test.view1, test.view2", 2)
 	view1DropJob := jobs[1]
 	view2DropJob := jobs[0]
-	events, err = schema.BuildDDLEvents(view1DropJob)
+	events, err = schema.BuildDDLEvents(ctx, view1DropJob)
 	require.Nil(t, err)
 	require.Len(t, events, 1)
 	require.Nil(t, schema.HandleDDLJob(view1DropJob))
@@ -524,7 +528,7 @@ func TestBuildDDLEventsFromDropViewsDDL(t *testing.T) {
 		},
 	})
 
-	events, err = schema.BuildDDLEvents(view2DropJob)
+	events, err = schema.BuildDDLEvents(ctx, view2DropJob)
 	require.Nil(t, err)
 	require.Len(t, events, 1)
 	require.Nil(t, schema.HandleDDLJob(view2DropJob))
@@ -572,45 +576,45 @@ func TestBuildIgnoredDDLJob(t *testing.T) {
 	schema, err := newSchemaWrap4Owner(helper.Storage(), ver.Ver,
 		cfg, dummyChangeFeedID)
 	require.Nil(t, err)
-
+	ctx := context.Background()
 	// test case 1: Will not filter out create test.tb1 ddl.
 	job := helper.DDL2Job("create table test.tb1(id int primary key)")
-	events, err := schema.BuildDDLEvents(job)
+	events, err := schema.BuildDDLEvents(ctx, job)
 	require.Nil(t, err)
 	require.Len(t, events, 1)
 	require.Nil(t, schema.HandleDDLJob(job))
 
 	// test case 2: Will not filter out create test.tb2 ddl.
 	job = helper.DDL2Job("create table test.tb2(id int primary key)")
-	events, err = schema.BuildDDLEvents(job)
+	events, err = schema.BuildDDLEvents(ctx, job)
 	require.Nil(t, err)
 	require.Len(t, events, 1)
 	require.Nil(t, schema.HandleDDLJob(job))
 
 	// test case 3: Will not filter out alter test.tb1 ddl.
 	job = helper.DDL2Job("alter table test.tb1 add age int")
-	events, err = schema.BuildDDLEvents(job)
+	events, err = schema.BuildDDLEvents(ctx, job)
 	require.Nil(t, err)
 	require.Len(t, events, 1)
 	require.Nil(t, schema.HandleDDLJob(job))
 
 	// test case 4: Will not filter out alter test.tb2 ddl.
 	job = helper.DDL2Job("alter table test.tb2 add name char(10)")
-	events, err = schema.BuildDDLEvents(job)
+	events, err = schema.BuildDDLEvents(ctx, job)
 	require.Nil(t, err)
 	require.Len(t, events, 1)
 	require.Nil(t, schema.HandleDDLJob(job))
 
 	// test case 5: Will filter create test.tb3 ddl.
 	job = helper.DDL2Job("create table test.tb3(id int primary key)")
-	events, err = schema.BuildDDLEvents(job)
+	events, err = schema.BuildDDLEvents(ctx, job)
 	require.Nil(t, err)
 	require.Len(t, events, 0)
 	require.Nil(t, schema.HandleDDLJob(job))
 
 	// test case 5: Will filter out drop test.tb3 ddl.
 	job = helper.DDL2Job("alter table test.tb3 add location char(100)")
-	events, err = schema.BuildDDLEvents(job)
+	events, err = schema.BuildDDLEvents(ctx, job)
 	require.Nil(t, err)
 	require.Len(t, events, 0)
 }

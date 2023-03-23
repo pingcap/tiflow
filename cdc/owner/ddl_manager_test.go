@@ -164,7 +164,7 @@ func TestExecRenameTablesDDL(t *testing.T) {
 	execCreateStmt := func(tp, actualDDL, expectedDDL string) {
 		mockDDLSink.ddlDone = false
 		job := helper.DDL2Job(actualDDL)
-		events, err := dm.schema.BuildDDLEvents(job)
+		events, err := dm.schema.BuildDDLEvents(ctx, job)
 		require.Nil(t, err)
 		err = dm.schema.HandleDDLJob(job)
 		require.Nil(t, err)
@@ -225,7 +225,7 @@ func TestExecRenameTablesDDL(t *testing.T) {
 
 	mockDDLSink.recordDDLHistory = true
 	mockDDLSink.ddlDone = false
-	events, err := dm.schema.BuildDDLEvents(job)
+	events, err := dm.schema.BuildDDLEvents(ctx, job)
 	require.Nil(t, err)
 	for _, event := range events {
 		done, err := dm.ddlSink.emitDDLEvent(ctx, event)
@@ -258,7 +258,7 @@ func TestExecDropTablesDDL(t *testing.T) {
 
 	execCreateStmt := func(actualDDL, expectedDDL string) {
 		job := helper.DDL2Job(actualDDL)
-		events, err := dm.schema.BuildDDLEvents(job)
+		events, err := dm.schema.BuildDDLEvents(ctx, job)
 		require.Nil(t, err)
 		err = dm.schema.HandleDDLJob(job)
 		require.Nil(t, err)
@@ -289,7 +289,7 @@ func TestExecDropTablesDDL(t *testing.T) {
 	require.Len(t, jobs, 2)
 
 	execDropStmt := func(job *timodel.Job, expectedDDL string) {
-		events, err := dm.schema.BuildDDLEvents(job)
+		events, err := dm.schema.BuildDDLEvents(ctx, job)
 		require.Nil(t, err)
 		err = dm.schema.HandleDDLJob(job)
 		require.Nil(t, err)
@@ -320,7 +320,7 @@ func TestExecDropViewsDDL(t *testing.T) {
 
 	execCreateStmt := func(actualDDL, expectedDDL string) {
 		job := helper.DDL2Job(actualDDL)
-		events, err := dm.schema.BuildDDLEvents(job)
+		events, err := dm.schema.BuildDDLEvents(ctx, job)
 		require.Nil(t, err)
 		err = dm.schema.HandleDDLJob(job)
 		require.Nil(t, err)
@@ -356,7 +356,7 @@ func TestExecDropViewsDDL(t *testing.T) {
 	require.Len(t, jobs, 2)
 
 	execDropStmt := func(job *timodel.Job, expectedDDL string) {
-		events, err := dm.schema.BuildDDLEvents(job)
+		events, err := dm.schema.BuildDDLEvents(ctx, job)
 		require.Nil(t, err)
 		err = dm.schema.HandleDDLJob(job)
 		require.Nil(t, err)
