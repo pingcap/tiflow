@@ -166,7 +166,7 @@ func TestExecRenameTablesDDL(t *testing.T) {
 		job := helper.DDL2Job(actualDDL)
 		events, err := dm.schema.BuildDDLEvents(job)
 		require.Nil(t, err)
-		err = dm.schema.HandleDDL(job)
+		err = dm.schema.HandleDDLJob(job)
 		require.Nil(t, err)
 
 		for _, event := range events {
@@ -260,7 +260,7 @@ func TestExecDropTablesDDL(t *testing.T) {
 		job := helper.DDL2Job(actualDDL)
 		events, err := dm.schema.BuildDDLEvents(job)
 		require.Nil(t, err)
-		err = dm.schema.HandleDDL(job)
+		err = dm.schema.HandleDDLJob(job)
 		require.Nil(t, err)
 		mockDDLSink.ddlDone = false
 
@@ -291,7 +291,7 @@ func TestExecDropTablesDDL(t *testing.T) {
 	execDropStmt := func(job *timodel.Job, expectedDDL string) {
 		events, err := dm.schema.BuildDDLEvents(job)
 		require.Nil(t, err)
-		err = dm.schema.HandleDDL(job)
+		err = dm.schema.HandleDDLJob(job)
 		require.Nil(t, err)
 		mockDDLSink.ddlDone = false
 
@@ -322,7 +322,7 @@ func TestExecDropViewsDDL(t *testing.T) {
 		job := helper.DDL2Job(actualDDL)
 		events, err := dm.schema.BuildDDLEvents(job)
 		require.Nil(t, err)
-		err = dm.schema.HandleDDL(job)
+		err = dm.schema.HandleDDLJob(job)
 		require.Nil(t, err)
 		mockDDLSink.ddlDone = false
 		for _, event := range events {
@@ -358,7 +358,7 @@ func TestExecDropViewsDDL(t *testing.T) {
 	execDropStmt := func(job *timodel.Job, expectedDDL string) {
 		events, err := dm.schema.BuildDDLEvents(job)
 		require.Nil(t, err)
-		err = dm.schema.HandleDDL(job)
+		err = dm.schema.HandleDDLJob(job)
 		require.Nil(t, err)
 		mockDDLSink.ddlDone = false
 		for _, event := range events {

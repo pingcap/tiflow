@@ -15,6 +15,7 @@ package entry
 
 import (
 	"context"
+	"github.com/pingcap/tiflow/pkg/util"
 	"sort"
 	"sync"
 	"sync/atomic"
@@ -59,13 +60,15 @@ type schemaStorageImpl struct {
 
 	forceReplicate bool
 
-	id model.ChangeFeedID
+	id   model.ChangeFeedID
+	role util.Role
 }
 
 // NewSchemaStorage creates a new schema storage
 func NewSchemaStorage(
 	meta *timeta.Meta, startTs uint64,
 	forceReplicate bool, id model.ChangeFeedID,
+	role util.Role,
 ) (SchemaStorage, error) {
 	var (
 		snap    *schema.Snapshot
@@ -94,6 +97,7 @@ func NewSchemaStorage(
 		forceReplicate: forceReplicate,
 		id:             id,
 		schemaVersion:  version,
+		role:           role,
 	}
 	return schema, nil
 }
@@ -139,7 +143,8 @@ func (s *schemaStorageImpl) GetSnapshot(ctx context.Context, ts uint64) (*schema
 				zap.Uint64("ts", ts),
 				zap.Duration("duration", now.Sub(startTime)),
 				zap.String("namespace", s.id.Namespace),
-				zap.String("changefeed", s.id.ID))
+				zap.String("changefeed", s.id.ID),
+				zap.String("role", s.role.String()))
 			logTime = now
 		}
 		return err
@@ -182,7 +187,7 @@ func (s *schemaStorageImpl) HandleDDLJob(job *timodel.Job) error {
 				zap.Uint64("finishTs", job.BinlogInfo.FinishedTS),
 				zap.Int64("schemaVersion", s.schemaVersion),
 				zap.Int64("jobSchemaVersion", job.BinlogInfo.SchemaVersion),
-			)
+				zap.String("role", s.role.String()))
 			return nil
 		}
 		snap = lastSnap.Copy()
@@ -196,7 +201,8 @@ func (s *schemaStorageImpl) HandleDDLJob(job *timodel.Job) error {
 			zap.String("changefeed", s.id.ID),
 			zap.String("DDL", job.Query),
 			zap.Stringer("job", job), zap.Error(err),
-			zap.Uint64("finishTs", job.BinlogInfo.FinishedTS))
+			zap.Uint64("finishTs", job.BinlogInfo.FinishedTS),
+			zap.String("role", s.role.String()))
 		return errors.Trace(err)
 	}
 	log.Info("handle DDL",
@@ -204,7 +210,8 @@ func (s *schemaStorageImpl) HandleDDLJob(job *timodel.Job) error {
 		zap.String("changefeed", s.id.ID),
 		zap.String("DDL", job.Query),
 		zap.Stringer("job", job),
-		zap.Uint64("finishTs", job.BinlogInfo.FinishedTS))
+		zap.Uint64("finishTs", job.BinlogInfo.FinishedTS),
+		zap.String("role", s.role.String()))
 
 	s.snaps = append(s.snaps, snap)
 	s.schemaVersion = job.BinlogInfo.SchemaVersion
@@ -272,7 +279,8 @@ func (s *schemaStorageImpl) skipJob(job *timodel.Job) bool {
 	log.Debug("handle DDL new commit",
 		zap.String("DDL", job.Query), zap.Stringer("job", job),
 		zap.String("namespace", s.id.Namespace),
-		zap.String("changefeed", s.id.ID))
+		zap.String("changefeed", s.id.ID),
+		zap.String("role", s.role.String()))
 	return !job.IsDone()
 }
 

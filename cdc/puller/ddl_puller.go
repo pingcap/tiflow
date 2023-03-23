@@ -393,6 +393,19 @@ func (p *ddlJobPullerImpl) handleJob(job *timodel.Job) (skip bool, err error) {
 		return true, nil
 	}
 
+	err = p.schemaStorage.HandleDDLJob(job)
+	if err != nil {
+		log.Error("handle ddl job failed",
+			zap.String("namespace", p.changefeedID.Namespace),
+			zap.String("changefeed", p.changefeedID.ID),
+			zap.String("query", job.Query),
+			zap.String("schema", job.SchemaName),
+			zap.String("table", job.BinlogInfo.TableInfo.Name.O),
+			zap.String("job", job.String()),
+			zap.Error(err))
+		return true, errors.Trace(err)
+	}
+
 	p.setResolvedTs(job.BinlogInfo.FinishedTS)
 	p.schemaVersion = job.BinlogInfo.SchemaVersion
 
