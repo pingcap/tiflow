@@ -54,7 +54,7 @@ func TestEncodeEvents(t *testing.T) {
 	defer fn()
 	err := worker.encodeEvents(ctx, eventFragment{
 		versionedTable: cloudstorage.VersionedTable{
-			TableName: model.TableName{
+			TableNameWithPhysicTableID: model.TableName{
 				Schema:  "test",
 				Table:   "table1",
 				TableID: 100,
@@ -136,7 +136,7 @@ func TestEncodingWorkerRun(t *testing.T) {
 	for i := 0; i < 3; i++ {
 		frag := eventFragment{
 			versionedTable: cloudstorage.VersionedTable{
-				TableName: table,
+				TableNameWithPhysicTableID: table,
 			},
 			seqNumber: uint64(i + 1),
 			event: &dmlsink.TxnCallbackableEvent{

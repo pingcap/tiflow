@@ -10,6 +10,7 @@
 // distributed under the License is distributed on an "AS IS" BASIS,
 // See the License for the specific language governing permissions and
 // limitations under the License.
+
 package cloudstorage
 
 import (
@@ -48,7 +49,7 @@ func TestGenerateDataFilePath(t *testing.T) {
 	defer cancel()
 
 	table := VersionedTable{
-		TableName: model.TableName{
+		TableNameWithPhysicTableID: model.TableName{
 			Schema: "test",
 			Table:  "table1",
 		},
@@ -193,7 +194,7 @@ func TestGenerateDataFilePathWithIndexFile(t *testing.T) {
 	f.clock = mockClock
 	mockClock.Set(time.Date(2023, 3, 9, 23, 59, 59, 0, time.UTC))
 	table := VersionedTable{
-		TableName: model.TableName{
+		TableNameWithPhysicTableID: model.TableName{
 			Schema: "test",
 			Table:  "table1",
 		},
