@@ -170,20 +170,20 @@ func newChangefeed(
 func newChangefeed4Test(
 	id model.ChangeFeedID, state *orchestrator.ChangefeedReactorState, up *upstream.Upstream,
 	newDDLPuller func(ctx context.Context,
-	replicaConfig *config.ReplicaConfig,
-	up *upstream.Upstream,
-	startTs uint64,
-	changefeed model.ChangeFeedID,
-	schemaStorage entry.SchemaStorage,
-) (puller.DDLPuller, error),
+		replicaConfig *config.ReplicaConfig,
+		up *upstream.Upstream,
+		startTs uint64,
+		changefeed model.ChangeFeedID,
+		schemaStorage entry.SchemaStorage,
+	) (puller.DDLPuller, error),
 	newSink func(changefeedID model.ChangeFeedID, info *model.ChangeFeedInfo, reportErr func(err error)) DDLSink,
 	newScheduler func(
-	ctx cdcContext.Context, up *upstream.Upstream, epoch uint64, cfg *config.SchedulerConfig,
-) (scheduler.Scheduler, error),
+		ctx cdcContext.Context, up *upstream.Upstream, epoch uint64, cfg *config.SchedulerConfig,
+	) (scheduler.Scheduler, error),
 	newDownstreamObserver func(
-	ctx context.Context, sinkURIStr string, replCfg *config.ReplicaConfig,
-	opts ...observer.NewObserverOption,
-) (observer.Observer, error),
+		ctx context.Context, sinkURIStr string, replCfg *config.ReplicaConfig,
+		opts ...observer.NewObserverOption,
+	) (observer.Observer, error),
 ) *changefeed {
 	cfg := config.NewDefaultSchedulerConfig()
 	c := newChangefeed(id, state, up, cfg)
@@ -552,7 +552,7 @@ LOOP:
 		c.state.Info.Config,
 		c.upstream, ddlStartTs,
 		c.id,
-		c.schema.schemaStorage)
+		c.schema)
 	if err != nil {
 		return errors.Trace(err)
 	}
