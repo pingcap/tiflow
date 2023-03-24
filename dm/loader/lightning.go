@@ -348,7 +348,9 @@ func GetLightningConfig(globalCfg *lcfg.GlobalConfig, subtaskCfg *config.SubTask
 	// checkpoint meta and updating dm checkpoint meta to 'finished'.
 	cfg.Checkpoint.KeepAfterSuccess = lcfg.CheckpointRemove
 
-	cfg.TikvImporter.DiskQuota = subtaskCfg.LoaderConfig.DiskQuotaPhysical
+	if subtaskCfg.LoaderConfig.DiskQuotaPhysical > 0 {
+		cfg.TikvImporter.DiskQuota = subtaskCfg.LoaderConfig.DiskQuotaPhysical
+	}
 	cfg.TikvImporter.OnDuplicate = string(subtaskCfg.OnDuplicateLogical)
 	cfg.TikvImporter.IncrementalImport = true
 	switch subtaskCfg.OnDuplicatePhysical {
