@@ -105,6 +105,11 @@ func TestIsRetryableDDLError(t *testing.T) {
 		{newMysqlErr(tmysql.ErrNoSuchIndex, "index not exist"), false},
 		{newMysqlErr(tmysql.ErrWrongColumnName, "wrong column name'"), false},
 		{newMysqlErr(tmysql.ErrDupKeyName, "Duplicate key name 'some_key'"), true},
+<<<<<<< HEAD
+=======
+		{newMysqlErr(tmysql.ErrPartitionMgmtOnNonpartitioned, "xx"), false},
+		{mysql.ErrInvalidConn, true},
+>>>>>>> 5b5b73460e (*(pkg): retry on invalid connection (#8670))
 	}
 
 	for _, c := range cases {
