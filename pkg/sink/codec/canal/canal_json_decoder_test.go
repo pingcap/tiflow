@@ -27,7 +27,7 @@ func TestNewCanalJSONBatchDecoder4RowMessage(t *testing.T) {
 	t.Parallel()
 	expectedDecodedValue := collectExpectedDecodedValue(testColumnsTable)
 	for _, encodeEnable := range []bool{false, true} {
-		encoder := newJSONBatchEncoder(&common.Config{
+		encoder := newJSONRowEventEncoder(&common.Config{
 			EnableTiDBExtension: encodeEnable,
 			Terminator:          config.CRLF,
 			MaxMessageBytes:     config.DefaultMaxMessageBytes,
@@ -84,7 +84,10 @@ func TestNewCanalJSONBatchDecoder4RowMessage(t *testing.T) {
 func TestNewCanalJSONBatchDecoder4DDLMessage(t *testing.T) {
 	t.Parallel()
 	for _, encodeEnable := range []bool{false, true} {
-		encoder := &JSONBatchEncoder{builder: newCanalEntryBuilder(), enableTiDBExtension: encodeEnable}
+		encoder := &JSONRowEventEncoder{
+			builder:             newCanalEntryBuilder(),
+			enableTiDBExtension: encodeEnable,
+		}
 		require.NotNil(t, encoder)
 
 		result, err := encoder.EncodeDDLEvent(testCaseDDL)

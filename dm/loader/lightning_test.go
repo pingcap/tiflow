@@ -55,9 +55,17 @@ func TestGetLightiningConfig(t *testing.T) {
 		&config.SubTaskConfig{
 			Name:       "job123",
 			ExtStorage: &storage.LocalStorage{},
+			LoaderConfig: config.LoaderConfig{
+				RangeConcurrency: 32,
+				CompressKVPairs:  "gzip",
+				Analyze:          "required",
+			},
 		})
 	require.NoError(t, err)
 	require.Equal(t, lcfg.CheckpointDriverMySQL, conf.Checkpoint.Driver)
 	require.Equal(t, lcfg.CheckpointRemove, conf.Checkpoint.KeepAfterSuccess)
 	require.Contains(t, conf.Checkpoint.Schema, "job123")
+	require.Equal(t, 32, conf.TikvImporter.RangeConcurrency)
+	require.Equal(t, lcfg.CompressionGzip, conf.TikvImporter.CompressKVPairs)
+	require.Equal(t, lcfg.OpLevelRequired, conf.PostRestore.Analyze)
 }

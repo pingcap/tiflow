@@ -83,8 +83,8 @@ func TestDMLWorkerRun(t *testing.T) {
 		frag := eventFragment{
 			seqNumber: uint64(i),
 			versionedTable: cloudstorage.VersionedTable{
-				TableName: table1,
-				Version:   99,
+				TableNameWithPhysicTableID: table1,
+				Version:                    99,
 			},
 			event: &dmlsink.TxnCallbackableEvent{
 				Event: &model.SingleTableTxn{

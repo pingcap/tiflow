@@ -164,12 +164,12 @@ func (s *server) prepare(ctx context.Context) error {
 		},
 	})
 	if err != nil {
-		return cerror.WrapError(cerror.ErrNewCaptureFailed, err)
+		return errors.Trace(err)
 	}
 
 	cdcEtcdClient, err := etcd.NewCDCEtcdClient(ctx, etcdCli, conf.ClusterID)
 	if err != nil {
-		return cerror.WrapError(cerror.ErrNewCaptureFailed, err)
+		return errors.Trace(err)
 	}
 	s.etcdClient = cdcEtcdClient
 
