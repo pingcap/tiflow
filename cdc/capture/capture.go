@@ -147,9 +147,7 @@ func (c *Capture) reset(ctx context.Context) error {
 		c.tableActorSystem = system.NewSystem()
 		err = c.tableActorSystem.Start(ctx)
 		if err != nil {
-			return errors.Annotate(
-				cerror.WrapError(cerror.ErrNewCaptureFailed, err),
-				"create table actor system")
+			return errors.Trace(err)
 		}
 	}
 	if conf.Debug.EnableDBSorter {
@@ -166,9 +164,7 @@ func (c *Capture) reset(ctx context.Context) error {
 		c.sorterSystem = ssystem.NewSystem(sortDir, memPercentage, conf.Debug.DB)
 		err = c.sorterSystem.Start(ctx)
 		if err != nil {
-			return errors.Annotate(
-				cerror.WrapError(cerror.ErrNewCaptureFailed, err),
-				"create sorter system")
+			return errors.Trace(err)
 		}
 	}
 
