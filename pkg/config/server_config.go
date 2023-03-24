@@ -46,8 +46,8 @@ const (
 	DefaultChangefeedMemoryQuota = 1024 * 1024 * 1024 // 1GB.
 
 	// DefaultMaxMemoryPercentage is the default max memory percentage
-	// cdc server will set memory limit to 70% of the memory limit of this process.
-	DefaultMaxMemoryPercentage = 70
+	// cdc server disables soft memory limit by default.
+	DefaultMaxMemoryPercentage = 0
 )
 
 var (
