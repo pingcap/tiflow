@@ -68,4 +68,7 @@ func TestGetLightiningConfig(t *testing.T) {
 	require.Equal(t, 32, conf.TikvImporter.RangeConcurrency)
 	require.Equal(t, lcfg.CompressionGzip, conf.TikvImporter.CompressKVPairs)
 	require.Equal(t, lcfg.OpLevelRequired, conf.PostRestore.Analyze)
+	lightningDefaultQuota := lcfg.NewConfig().TikvImporter.DiskQuota
+	// when we don't set dm loader disk quota, it should be equal to lightning's default quota
+	require.Equal(t, lightningDefaultQuota, conf.TikvImporter.DiskQuota)
 }
