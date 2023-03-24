@@ -74,6 +74,7 @@ cat - >"$OUT_DIR/tikv-config-tls.toml" <<EOF
 [storage]
 # Disable creating a large temp file.
 reserve-space = "0MB"
+engine = "partitioned-raft-kv"
 [rocksdb]
 max-open-files = 4096
 [raftdb]
