@@ -75,7 +75,10 @@
 
 ## Writing new tests
 
-New integration tests can be written as shell scripts in `tests/TEST_NAME/run.sh`. The script should exit with a nonzero error code on failure.
+1. New integration tests can be written as shell scripts in `tests/TEST_NAME/run.sh`. The script should exit with a nonzero error code on failure.
+2. Add TEST_NAME to existing group in [run_group.sh](./run_group.sh), or add a new group for it.
+3. If you add a new group, the name of the new group must be added to CI.
+   * [dm-integration-test](https://github.com/PingCAP-QE/ci/blob/main/pipelines/pingcap/tiflow/latest/pull_dm_integration_test.groovy)
 
 > Note the integration test runs in parallel, and new added test case is not listed in CI, so remember to add the `TEST_NAME` of new added test case to file `others_integration_2.txt` in a newline.
 
