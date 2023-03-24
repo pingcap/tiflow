@@ -26,8 +26,11 @@ Besides, make sure you have run the docker daemon. We recommend that you provide
 
 ## Writing new tests
 
-New integration tests can be written as shell scripts in `engine/test/integration_tests/TEST_NAME/run.sh`. The script should
+1. New integration tests can be written as shell scripts in `engine/test/integration_tests/TEST_NAME/run.sh`. The script should
 exit with a nonzero error code on failure.
+2. Add TEST_NAME to existing group in [run_group.sh](./run_group.sh), or add a new group for it.
+3. If you add a new group, the name of the new group must be added to CI.
+   * [engine-integration-test](https://github.com/PingCAP-QE/ci/blob/main/pipelines/pingcap/tiflow/latest/pull_engine_integration_test.groovy)
 
 ## Debug
 
