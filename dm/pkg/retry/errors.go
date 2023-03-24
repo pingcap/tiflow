@@ -97,5 +97,7 @@ func IsConnectionError(err error) bool {
 
 // IsUnretryableConnectionError checks whether it's an unretryable connection error or not.
 func IsUnretryableConnectionError(err error) bool {
+	// Can't ensure whether the last write has reached the downstream or not.
+	// If the last write isn't idempotent, retry it may cause problems.
 	return errors.Cause(err) == dmysql.ErrInvalidConn
 }
