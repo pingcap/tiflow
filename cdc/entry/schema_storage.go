@@ -35,8 +35,9 @@ import (
 
 // SchemaStorage stores the schema information with multi-version
 type SchemaStorage interface {
-	// GetSnapshot returns the snapshot which of ts is specified.
-	// It may block caller when ts is larger than ResolvedTs.
+	// GetSnapshot returns the snapshot which currentTs is less than(but most close to)
+	// or equal to the ts.
+	// It may block caller when ts is larger than SchemaStorage ResolvedTs.
 	GetSnapshot(ctx context.Context, ts uint64) (*schema.Snapshot, error)
 	// GetLastSnapshot returns the last snapshot
 	GetLastSnapshot() *schema.Snapshot
@@ -102,6 +103,8 @@ func NewSchemaStorage(
 	return schema, nil
 }
 
+// getSnapshot returns the snapshot which currentTs is less than(but most close to)
+// or equal to the ts.
 func (s *schemaStorageImpl) getSnapshot(ts uint64) (*schema.Snapshot, error) {
 	gcTs := atomic.LoadUint64(&s.gcTs)
 	if ts < gcTs {
@@ -115,10 +118,16 @@ func (s *schemaStorageImpl) getSnapshot(ts uint64) (*schema.Snapshot, error) {
 	}
 	s.snapsMu.RLock()
 	defer s.snapsMu.RUnlock()
+	// Here we search for the first snapshot whose currentTs is larger than ts.
+	// So the result index -1 is the snapshot we want.
 	i := sort.Search(len(s.snaps), func(i int) bool {
 		return s.snaps[i].CurrentTs() > ts
 	})
-	if i <= 0 {
+	// i == 0 has two meanings:
+	// 1. The schema storage is empty.
+	// 2. The ts is smaller than the first snapshot.
+	// In both cases, we should return an error.
+	if i == 0 {
 		// Unexpected error, caller should fail immediately.
 		return nil, cerror.ErrSchemaSnapshotNotFound.GenWithStackByArgs(ts)
 	}

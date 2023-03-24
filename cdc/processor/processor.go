@@ -811,35 +811,8 @@ func (p *processor) createAndDriveSchemaStorage(ctx cdcContext.Context) (entry.S
 	p.wg.Add(1)
 	go func() {
 		defer p.wg.Done()
+		// ddlPuller will update the schemaStorage.
 		p.sendError(ddlPuller.Run(stdCtx))
-	}()
-	p.wg.Add(1)
-	go func() {
-		defer p.wg.Done()
-		var jobEntry *model.DDLJobEntry
-		for {
-			select {
-			case <-ctx.Done():
-				return
-			case jobEntry = <-ddlPuller.Output():
-			}
-			failpoint.Inject("processorDDLResolved", nil)
-			if jobEntry.OpType == model.OpTypeResolved {
-				schemaStorage.AdvanceResolvedTs(jobEntry.CRTs)
-			}
-			job, err := jobEntry.Job, jobEntry.Err
-			if err != nil {
-				p.sendError(errors.Trace(err))
-				return
-			}
-			if job == nil {
-				continue
-			}
-			if err := schemaStorage.HandleDDLJob(job); err != nil {
-				p.sendError(errors.Trace(err))
-				return
-			}
-		}
 	}()
 	return schemaStorage, nil
 }

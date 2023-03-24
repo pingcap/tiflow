@@ -343,11 +343,14 @@ func (m *SinkManager) generateSinkTasks() error {
 	) engine.Position {
 		// If a task carries events after schemaResolvedTs, mounter group threads
 		// can be blocked on waiting schemaResolvedTs get advanced.
+		if tableSinkUpperBoundTs == 0 {
+			log.Error("tableSinkUpperBoundTs shouldn't be 0",
+				zap.Uint64("tableSinkUpperBoundTs", tableSinkUpperBoundTs))
+		}
 		schemaTs := m.schemaStorage.ResolvedTs()
 		if tableSinkUpperBoundTs-1 > schemaTs {
 			tableSinkUpperBoundTs = schemaTs + 1
 		}
-		log.Warn("fizz: generateSinkTasks: tableSinkUpperBoundTs", zap.Uint64("tableSinkUpperBoundTs", tableSinkUpperBoundTs))
 		return engine.Position{StartTs: tableSinkUpperBoundTs - 1, CommitTs: tableSinkUpperBoundTs}
 	}
 
