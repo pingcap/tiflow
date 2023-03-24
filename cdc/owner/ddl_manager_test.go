@@ -164,6 +164,7 @@ func TestExecRenameTablesDDL(t *testing.T) {
 	execCreateStmt := func(tp, actualDDL, expectedDDL string) {
 		mockDDLSink.ddlDone = false
 		job := helper.DDL2Job(actualDDL)
+		dm.schema.AdvanceResolvedTs(job.BinlogInfo.FinishedTS - 1)
 		events, err := dm.schema.BuildDDLEvents(ctx, job)
 		require.Nil(t, err)
 		err = dm.schema.HandleDDLJob(job)
@@ -225,6 +226,7 @@ func TestExecRenameTablesDDL(t *testing.T) {
 
 	mockDDLSink.recordDDLHistory = true
 	mockDDLSink.ddlDone = false
+	dm.schema.AdvanceResolvedTs(job.BinlogInfo.FinishedTS - 1)
 	events, err := dm.schema.BuildDDLEvents(ctx, job)
 	require.Nil(t, err)
 	for _, event := range events {
@@ -258,6 +260,7 @@ func TestExecDropTablesDDL(t *testing.T) {
 
 	execCreateStmt := func(actualDDL, expectedDDL string) {
 		job := helper.DDL2Job(actualDDL)
+		dm.schema.AdvanceResolvedTs(job.BinlogInfo.FinishedTS - 1)
 		events, err := dm.schema.BuildDDLEvents(ctx, job)
 		require.Nil(t, err)
 		err = dm.schema.HandleDDLJob(job)
@@ -289,6 +292,7 @@ func TestExecDropTablesDDL(t *testing.T) {
 	require.Len(t, jobs, 2)
 
 	execDropStmt := func(job *timodel.Job, expectedDDL string) {
+		dm.schema.AdvanceResolvedTs(job.BinlogInfo.FinishedTS - 1)
 		events, err := dm.schema.BuildDDLEvents(ctx, job)
 		require.Nil(t, err)
 		err = dm.schema.HandleDDLJob(job)
@@ -320,6 +324,7 @@ func TestExecDropViewsDDL(t *testing.T) {
 
 	execCreateStmt := func(actualDDL, expectedDDL string) {
 		job := helper.DDL2Job(actualDDL)
+		dm.schema.AdvanceResolvedTs(job.BinlogInfo.FinishedTS - 1)
 		events, err := dm.schema.BuildDDLEvents(ctx, job)
 		require.Nil(t, err)
 		err = dm.schema.HandleDDLJob(job)
@@ -356,6 +361,7 @@ func TestExecDropViewsDDL(t *testing.T) {
 	require.Len(t, jobs, 2)
 
 	execDropStmt := func(job *timodel.Job, expectedDDL string) {
+		dm.schema.AdvanceResolvedTs(job.BinlogInfo.FinishedTS - 1)
 		events, err := dm.schema.BuildDDLEvents(ctx, job)
 		require.Nil(t, err)
 		err = dm.schema.HandleDDLJob(job)

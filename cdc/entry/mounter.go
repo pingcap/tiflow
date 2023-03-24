@@ -135,8 +135,8 @@ func (m *mounter) unmarshalAndMountRowChanged(ctx context.Context, raw *model.Ra
 		PhysicalTableID: physicalTableID,
 		Delete:          raw.OpType == model.OpTypeDelete,
 	}
-	// when async commit is enabled, the commitTs of DMLs may be equals with DDL finishedTs
-	// a DML whose commitTs is equal to a DDL finishedTs using the schema info before the DDL
+	// When async commit is enabled, the commitTs of DMLs may be equals with DDL finishedTs.
+	// A DML whose commitTs is equal to a DDL finishedTs should use the schema info before the DDL.
 	snap, err := m.schemaStorage.GetSnapshot(ctx, raw.CRTs-1)
 	if err != nil {
 		return nil, errors.Trace(err)
