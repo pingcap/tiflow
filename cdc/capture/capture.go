@@ -24,12 +24,6 @@ import (
 	"github.com/pingcap/errors"
 	"github.com/pingcap/failpoint"
 	"github.com/pingcap/log"
-	"github.com/pingcap/tiflow/pkg/util"
-	"go.etcd.io/etcd/client/v3/concurrency"
-	"go.etcd.io/etcd/server/v3/mvcc"
-	"go.uber.org/zap"
-	"golang.org/x/time/rate"
-
 	"github.com/pingcap/tiflow/cdc/model"
 	"github.com/pingcap/tiflow/cdc/owner"
 	"github.com/pingcap/tiflow/cdc/processor"
@@ -42,7 +36,12 @@ import (
 	"github.com/pingcap/tiflow/pkg/orchestrator"
 	"github.com/pingcap/tiflow/pkg/p2p"
 	"github.com/pingcap/tiflow/pkg/upstream"
+	"github.com/pingcap/tiflow/pkg/util"
 	"github.com/pingcap/tiflow/pkg/version"
+	"go.etcd.io/etcd/client/v3/concurrency"
+	"go.etcd.io/etcd/server/v3/mvcc"
+	"go.uber.org/zap"
+	"golang.org/x/time/rate"
 )
 
 const cleanMetaDuration = 10 * time.Second
@@ -113,9 +112,7 @@ func (c *Capture) reset(ctx context.Context) error {
 	sess, err := concurrency.NewSession(c.EtcdClient.Client.Unwrap(),
 		concurrency.WithTTL(conf.CaptureSessionTTL))
 	if err != nil {
-		return errors.Annotate(
-			cerror.WrapError(cerror.ErrNewCaptureFailed, err),
-			"create capture session")
+		return errors.Trace(err)
 	}
 
 	c.captureMu.Lock()
@@ -132,9 +129,7 @@ func (c *Capture) reset(ctx context.Context) error {
 	c.UpstreamManager = upstream.NewManager(ctx)
 	err = c.UpstreamManager.Add(upstream.DefaultUpstreamID, c.pdEndpoints, conf.Security)
 	if err != nil {
-		return errors.Annotate(
-			cerror.WrapError(cerror.ErrNewCaptureFailed, err),
-			"add default upstream failed")
+		return errors.Trace(err)
 	}
 
 	c.processorManager = c.newProcessorManager(c.UpstreamManager)
@@ -152,9 +147,7 @@ func (c *Capture) reset(ctx context.Context) error {
 		c.tableActorSystem = system.NewSystem()
 		err = c.tableActorSystem.Start(ctx)
 		if err != nil {
-			return errors.Annotate(
-				cerror.WrapError(cerror.ErrNewCaptureFailed, err),
-				"create table actor system")
+			return errors.Trace(err)
 		}
 	}
 	if conf.Debug.EnableDBSorter {
@@ -171,9 +164,7 @@ func (c *Capture) reset(ctx context.Context) error {
 		c.sorterSystem = ssystem.NewSystem(sortDir, memPercentage, conf.Debug.DB)
 		err = c.sorterSystem.Start(ctx)
 		if err != nil {
-			return errors.Annotate(
-				cerror.WrapError(cerror.ErrNewCaptureFailed, err),
-				"create sorter system")
+			return errors.Trace(err)
 		}
 	}
 
@@ -224,17 +215,23 @@ func (c *Capture) Run(ctx context.Context) error {
 			}
 			return errors.Trace(err)
 		}
-		err = c.reset(ctx)
-		if err != nil {
-			return errors.Trace(err)
-		}
 		err = c.run(ctx)
 		// if capture suicided, reset the capture and run again.
 		// if the canceled error throw, there are two possible scenarios:
-		//   1. the internal context canceled, it means some error happened in the internal, and the routine is exited, we should restart the capture
-		//   2. the parent context canceled, it means that the caller of the capture hope the capture to exit, and this loop will return in the above `select` block
-		// TODO: make sure the internal cancel should return the real error instead of context.Canceled
-		if cerror.ErrCaptureSuicide.Equal(err) || context.Canceled == errors.Cause(err) {
+		//   1. the internal context canceled, it means some error happened in
+		//      the internal, and the routine is exited, we should restart
+		//      the capture.
+		//   2. the parent context canceled, it means that the caller of
+		//      the capture hope the capture to exit, and this loop will return
+		//      in the above `select` block.
+		// if there are some **internal** context deadline exceeded (IO/network
+		// timeout), reset the capture and run again.
+		//
+		// TODO: make sure the internal cancel should return the real error
+		//       instead of context.Canceled.
+		if cerror.ErrCaptureSuicide.Equal(err) ||
+			context.Canceled == errors.Cause(err) ||
+			context.DeadlineExceeded == errors.Cause(err) {
 			log.Info("capture recovered", zap.String("captureID", c.info.ID))
 			continue
 		}
@@ -243,6 +240,12 @@ func (c *Capture) Run(ctx context.Context) error {
 }
 
 func (c *Capture) run(stdCtx context.Context) error {
+	err := c.reset(stdCtx)
+	if err != nil {
+		log.Error("reset capture failed", zap.Error(err))
+		return errors.Trace(err)
+	}
+
 	ctx := cdcContext.NewContext(stdCtx, &cdcContext.GlobalVars{
 		CaptureInfo:      c.info,
 		EtcdClient:       c.EtcdClient,
@@ -251,7 +254,7 @@ func (c *Capture) run(stdCtx context.Context) error {
 		MessageServer:    c.MessageServer,
 		MessageRouter:    c.MessageRouter,
 	})
-	err := c.register(ctx)
+	err = c.register(ctx)
 	if err != nil {
 		return errors.Trace(err)
 	}
