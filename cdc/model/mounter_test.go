@@ -83,3 +83,33 @@ func TestResolvedTs(t *testing.T) {
 	smallerBatchResolvedTs := ResolvedTs{Mode: BatchResolvedMode, Ts: 0, BatchID: batchID}
 	require.True(t, batchResolvedTs1.EqualOrGreater(smallerBatchResolvedTs))
 }
+
+func TestComparePolymorphicEvents(t *testing.T) {
+	cases := []struct {
+		a *PolymorphicEvent
+		b *PolymorphicEvent
+	}{
+		{
+			a: NewPolymorphicEvent(&RawKVEntry{
+				OpType: OpTypeDelete,
+			}),
+			b: NewPolymorphicEvent(&RawKVEntry{
+				OpType: OpTypePut,
+			}),
+		},
+		{
+			a: NewPolymorphicEvent(&RawKVEntry{
+				OpType:   OpTypePut,
+				OldValue: []byte{0},
+				Value:    []byte{0},
+			}),
+			b: NewPolymorphicEvent(&RawKVEntry{
+				OpType: OpTypePut,
+				Value:  []byte{0},
+			}),
+		},
+	}
+	for _, item := range cases {
+		require.True(t, ComparePolymorphicEvents(item.a, item.b))
+	}
+}
