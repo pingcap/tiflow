@@ -345,11 +345,16 @@ func (APIV2HelpersImpl) verifyUpdateChangefeedConfig(
 		if err != nil {
 			return nil, nil, cerror.ErrChangefeedUpdateRefused.GenWithStackByCause(err)
 		}
-		sinkURIParsed, err := url.Parse(cfg.SinkURI)
+
+		// use the sinkURI to validate and adjust the new config
+		sinkURI := oldInfo.SinkURI
+		if sinkURIUpdated {
+			sinkURI = newInfo.SinkURI
+		}
+		sinkURIParsed, err := url.Parse(sinkURI)
 		if err != nil {
 			return nil, nil, cerror.ErrChangefeedUpdateRefused.GenWithStackByCause(err)
 		}
-
 		err = newInfo.Config.ValidateAndAdjust(sinkURIParsed)
 		if err != nil {
 			return nil, nil, cerror.ErrChangefeedUpdateRefused.GenWithStackByCause(err)
