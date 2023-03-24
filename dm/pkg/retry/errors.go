@@ -89,8 +89,13 @@ var (
 func IsConnectionError(err error) bool {
 	err = errors.Cause(err)
 	switch err {
-	case driver.ErrBadConn, dmysql.ErrInvalidConn, tmysql.ErrBadConn, gmysql.ErrBadConn:
+	case driver.ErrBadConn, tmysql.ErrBadConn, gmysql.ErrBadConn:
 		return true
 	}
 	return false
+}
+
+// IsUnretryableConnectionError checks whether it's an unretryable connection error or not.
+func IsUnretryableConnectionError(err error) bool {
+	return errors.Cause(err) == dmysql.ErrInvalidConn
 }
