@@ -125,4 +125,6 @@ exit with a nonzero error code on failure.
 
 2. Add TEST_NAME to existing group in [run_group.sh](./run_group.sh), or add a new group for it.
 
-3. If you add a new group, the name of the new group must be added to [CI](https://github.com/PingCAP-QE/ci/blob/main/pipelines/pingcap/tiflow/latest/pull_cdc_integration_mysql_test.groovy). 
+3. If you add a new group, the name of the new group must be added to [CI].
+   * [cdc-integration-kafka-test](https://github.com/PingCAP-QE/ci/blob/main/pipelines/pingcap/tiflow/latest/pod-pull_cdc_integration_kafka_test.yaml)
+   * [cdc-integration-mysql-test](https://github.com/PingCAP-QE/ci/blob/main/pipelines/pingcap/tiflow/latest/pull_cdc_integration_test.groovy)

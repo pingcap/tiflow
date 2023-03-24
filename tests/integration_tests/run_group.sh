@@ -9,7 +9,8 @@ group=$2
 
 # Define groups
 # Note: If new group is added, the group name must also be added to CI
-# https://github.com/PingCAP-QE/ci/blob/main/pipelines/tikv/migration/latest/pull_integration_test.groovy
+# * https://github.com/PingCAP-QE/ci/blob/main/pipelines/pingcap/tiflow/latest/pull_cdc_integration_kafka_test.groovy
+# * https://github.com/PingCAP-QE/ci/blob/main/pipelines/pingcap/tiflow/latest/pull_cdc_integration_test.groovy
 # Each group of tests consumes as much time as possible, thus reducing CI waiting time.
 # Putting multiple light tests together and heavy tests in a separate group.
 declare -A groups
