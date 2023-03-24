@@ -50,7 +50,7 @@ type DDLSink struct {
 	// It is also responsible for creating topics.
 	topicManager manager.TopicManager
 	// encoderBuilder builds encoder for the sink.
-	encoderBuilder codec.EncoderBuilder
+	encoderBuilder codec.RowEventEncoderBuilder
 	// producer used to send events to the MQ system.
 	// Usually it is a sync producer.
 	producer ddlproducer.DDLProducer
@@ -69,7 +69,7 @@ func newDDLSink(ctx context.Context,
 ) (*DDLSink, error) {
 	changefeedID := contextutil.ChangefeedIDFromCtx(ctx)
 
-	encoderBuilder, err := builder.NewEventBatchEncoderBuilder(ctx, encoderConfig)
+	encoderBuilder, err := builder.NewRowEventEncoderBuilder(ctx, encoderConfig)
 	if err != nil {
 		return nil, cerror.WrapError(cerror.ErrKafkaInvalidConfig, err)
 	}
