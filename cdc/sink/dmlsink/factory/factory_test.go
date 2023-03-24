@@ -56,9 +56,9 @@ func newForTest(ctx context.Context,
 	cfg *config.ReplicaConfig,
 	errCh chan error,
 ) (*SinkFactory, error) {
-	sinkURI, err := config.GetSinkURIAndAdjustConfigWithSinkURI(sinkURIStr, cfg)
+	sinkURI, err := url.Parse(sinkURIStr)
 	if err != nil {
-		return nil, err
+		return nil, cerror.WrapError(cerror.ErrSinkURIInvalid, err)
 	}
 
 	s := &SinkFactory{}

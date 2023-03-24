@@ -236,23 +236,6 @@ func (c *ReplicaConfig) FixMemoryQuota() {
 	c.MemoryQuota = DefaultChangefeedMemoryQuota
 }
 
-// GetSinkURIAndAdjustConfigWithSinkURI parses sinkURI as a URI and adjust config with sinkURI.
-func GetSinkURIAndAdjustConfigWithSinkURI(
-	sinkURIStr string,
-	config *ReplicaConfig,
-) (*url.URL, error) {
-	// parse sinkURI as a URI
-	sinkURI, err := url.Parse(sinkURIStr)
-	if err != nil {
-		return nil, cerror.WrapError(cerror.ErrSinkURIInvalid, err)
-	}
-	if err := config.ValidateAndAdjust(sinkURI); err != nil {
-		return nil, err
-	}
-
-	return sinkURI, nil
-}
-
 // isSinkCompatibleWithSpanReplication returns true if the sink uri is
 // compatible with span replication.
 func isSinkCompatibleWithSpanReplication(u *url.URL) bool {
