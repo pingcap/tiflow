@@ -148,7 +148,11 @@ func (h *OpenAPIV2) createChangefeed(c *gin.Context) {
 	}
 	err = hasRunningImport(ctx, cli)
 	if err != nil {
-		_ = c.Error(err)
+		log.Error("failed to create changefeed", zap.Error(err))
+		_ = c.Error(
+			cerror.ErrUpstreamHasRunningImport.Wrap(err).
+				FastGenByArgs(info.UpstreamID),
+		)
 		return
 	}
 
@@ -199,7 +203,6 @@ func hasRunningImport(ctx context.Context, cli *clientv3.Client) error {
 				"If the task is terminated by system, " +
 				"please wait until the task lease ttl(3 mins) decreases to 0.",
 		)
-		log.Error("failed to create changefeed", zap.Error(err))
 		return err
 	}
 
