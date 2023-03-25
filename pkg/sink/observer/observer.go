@@ -15,10 +15,12 @@ package observer
 
 import (
 	"context"
+	"net/url"
 	"strings"
 
 	"github.com/pingcap/tiflow/cdc/contextutil"
 	"github.com/pingcap/tiflow/pkg/config"
+	cerror "github.com/pingcap/tiflow/pkg/errors"
 	"github.com/pingcap/tiflow/pkg/sink"
 	pmysql "github.com/pingcap/tiflow/pkg/sink/mysql"
 )
@@ -58,9 +60,10 @@ func NewObserver(
 	for _, opt := range opts {
 		opt(options)
 	}
-	sinkURI, err := config.GetSinkURIAndAdjustConfigWithSinkURI(sinkURIStr, replCfg)
+
+	sinkURI, err := url.Parse(sinkURIStr)
 	if err != nil {
-		return nil, err
+		return nil, cerror.WrapError(cerror.ErrSinkURIInvalid, err)
 	}
 
 	scheme := strings.ToLower(sinkURI.Scheme)

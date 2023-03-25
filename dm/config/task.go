@@ -275,13 +275,13 @@ const (
 	OnDuplicateManual PhysicalDuplicateResolveType = "manual"
 )
 
-// PhysicalChecksumType defines the configuration of checksum of physical import.
-type PhysicalChecksumType string
+// PhysicalPostOpLevel defines the configuration of checksum/analyze of physical import.
+type PhysicalPostOpLevel string
 
 const (
-	ChecksumRequired = "required"
-	ChecksumOptional = "optional"
-	ChecksumOff      = "off"
+	OpLevelRequired = "required"
+	OpLevelOptional = "optional"
+	OpLevelOff      = "off"
 )
 
 // LoaderConfig represents loader process unit's specific config.
@@ -296,7 +296,11 @@ type LoaderConfig struct {
 	OnDuplicateLogical  LogicalDuplicateResolveType  `yaml:"on-duplicate-logical" toml:"on-duplicate-logical" json:"on-duplicate-logical"`
 	OnDuplicatePhysical PhysicalDuplicateResolveType `yaml:"on-duplicate-physical" toml:"on-duplicate-physical" json:"on-duplicate-physical"`
 	DiskQuotaPhysical   config.ByteSize              `yaml:"disk-quota-physical" toml:"disk-quota-physical" json:"disk-quota-physical"`
-	ChecksumPhysical    PhysicalChecksumType         `yaml:"checksum-physical" toml:"checksum-physical" json:"checksum-physical"`
+	ChecksumPhysical    PhysicalPostOpLevel          `yaml:"checksum-physical" toml:"checksum-physical" json:"checksum-physical"`
+	Analyze             PhysicalPostOpLevel          `yaml:"analyze" toml:"analyze" json:"analyze"`
+	RangeConcurrency    int                          `yaml:"range-concurrency" toml:"range-concurrency" json:"range-concurrency"`
+	CompressKVPairs     string                       `yaml:"compress-kv-pairs" toml:"compress-kv-pairs" json:"compress-kv-pairs"`
+	PDAddr              string                       `yaml:"pd-addr" toml:"pd-addr" json:"pd-addr"`
 }
 
 // DefaultLoaderConfig return default loader config for task.
@@ -365,13 +369,23 @@ func (m *LoaderConfig) adjust() error {
 	}
 
 	if m.ChecksumPhysical == "" {
-		m.ChecksumPhysical = ChecksumRequired
+		m.ChecksumPhysical = OpLevelRequired
 	}
-	m.ChecksumPhysical = PhysicalChecksumType(strings.ToLower(string(m.ChecksumPhysical)))
+	m.ChecksumPhysical = PhysicalPostOpLevel(strings.ToLower(string(m.ChecksumPhysical)))
 	switch m.ChecksumPhysical {
-	case ChecksumRequired, ChecksumOptional, ChecksumOff:
+	case OpLevelRequired, OpLevelOptional, OpLevelOff:
 	default:
 		return terror.ErrConfigInvalidPhysicalChecksum.Generate(m.ChecksumPhysical)
+	}
+
+	if m.Analyze == "" {
+		m.Analyze = OpLevelOptional
+	}
+	m.Analyze = PhysicalPostOpLevel(strings.ToLower(string(m.Analyze)))
+	switch m.Analyze {
+	case OpLevelRequired, OpLevelOptional, OpLevelOff:
+	default:
+		return terror.ErrConfigInvalidLoadAnalyze.Generate(m.Analyze)
 	}
 
 	return nil
