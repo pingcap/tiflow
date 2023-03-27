@@ -29,6 +29,7 @@ check_db_status() {
 		if mysqladmin -h "$1" -P "$2" -u root ping >/dev/null 2>&1; then
 			break
 		fi
+		echo "wait for ready: $1:$2"
 		sleep 1
 	done
 	echo "$3 is alive"
