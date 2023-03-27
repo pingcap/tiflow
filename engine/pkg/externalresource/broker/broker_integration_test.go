@@ -25,8 +25,8 @@ import (
 	"github.com/pingcap/log"
 	brStorage "github.com/pingcap/tidb/br/pkg/storage"
 	pb "github.com/pingcap/tiflow/engine/enginepb"
+	"github.com/pingcap/tiflow/engine/pkg/externalresource/internal/bucket"
 	"github.com/pingcap/tiflow/engine/pkg/externalresource/internal/local"
-	"github.com/pingcap/tiflow/engine/pkg/externalresource/internal/s3"
 	"github.com/pingcap/tiflow/engine/pkg/externalresource/manager"
 	resModel "github.com/pingcap/tiflow/engine/pkg/externalresource/model"
 	"github.com/pingcap/tiflow/engine/pkg/tenant"
@@ -69,7 +69,7 @@ func newBrokerForS3WithPrefix(
 	log.Warn("s3 prefix", zap.String("s3prefix", s3Prefix))
 	tmpDir := t.TempDir()
 	cli := manager.NewMockClient()
-	s3Cfg, err := s3.GetS3OptionsForUT()
+	s3Cfg, err := bucket.GetS3OptionsForUT()
 	if err != nil {
 		// skip integration tests in ut
 		t.Skipf("server not configured for s3 integration: %s", err.Error())
@@ -79,17 +79,17 @@ func newBrokerForS3WithPrefix(
 	cli.On("CreateResource", mock.Anything,
 		&pb.CreateResourceRequest{
 			ProjectInfo:     &pb.ProjectInfo{},
-			ResourceId:      s3.DummyResourceID,
+			ResourceId:      bucket.DummyResourceID,
 			CreatorExecutor: string(executorID),
-			JobId:           s3.GetDummyJobID(executorID),
-			CreatorWorkerId: s3.DummyWorkerID,
+			JobId:           bucket.GetDummyJobID(executorID),
+			CreatorWorkerId: bucket.DummyWorkerID,
 		}, mock.Anything).Return(nil)
 
 	broker, err := NewBrokerWithConfig(&resModel.Config{
 		Local: resModel.LocalFileConfig{BaseDir: tmpDir},
 		S3: resModel.S3Config{
 			S3BackendOptions: *s3Cfg,
-			Bucket:           s3.UtBucketName,
+			Bucket:           bucket.UtBucketName,
 			Prefix:           s3Prefix,
 		},
 	}, executorID, cli)
@@ -97,13 +97,13 @@ func newBrokerForS3WithPrefix(
 	cli.AssertExpectations(t)
 	cli.ExpectedCalls = nil
 
-	rootURI := fmt.Sprintf("s3://%s/%s/%s", url.QueryEscape(s3.UtBucketName),
+	rootURI := fmt.Sprintf("s3://%s/%s/%s", url.QueryEscape(bucket.UtBucketName),
 		s3Prefix, url.QueryEscape(string(executorID)))
-	rootStrorage, err := s3.GetExternalStorageFromURI(context.Background(), rootURI, *s3Cfg)
+	rootStrorage, err := bucket.GetExternalStorageFromURI(context.Background(), rootURI, &brStorage.BackendOptions{S3: *s3Cfg})
 	require.NoError(t, err)
 
 	// check dummy resource exists
-	checkFile(t, rootStrorage, s3.GetDummyResPath(".keep"), fileExists)
+	checkFile(t, rootStrorage, bucket.GetDummyResPath(".keep"), fileExists)
 	return broker, cli, tmpDir, rootStrorage, s3Prefix
 }
 
@@ -115,8 +115,8 @@ func closeBrokerForS3(
 	cli.On("RemoveResource", mock.Anything,
 		&pb.RemoveResourceRequest{
 			ResourceKey: &pb.ResourceKey{
-				JobId:      s3.GetDummyJobID(broker.executorID),
-				ResourceId: s3.DummyResourceID,
+				JobId:      bucket.GetDummyJobID(broker.executorID),
+				ResourceId: bucket.DummyResourceID,
 			},
 		}, mock.Anything).Return(nil)
 	broker.Close()
@@ -135,7 +135,7 @@ func checkFile(t *testing.T, storage brStorage.ExternalStorage, path string, exp
 			return "exist"
 		}
 		return "not exist"
-	})
+	}())
 }
 
 func checkS3ResourceForWorker(
@@ -203,7 +203,7 @@ func createS3ResourceForWorker(
 				ProjectId: fakeProjectInfo.ProjectID(),
 			},
 			ResourceId:      resID,
-			CreatorExecutor: s3.MockExecutorID,
+			CreatorExecutor: bucket.MockExecutorID,
 			JobId:           fakeJobID,
 			CreatorWorkerId: creator,
 		}, mock.Anything).Return(nil)
@@ -221,7 +221,7 @@ func getExistingS3ResourceForWorker(
 	cli.On("QueryResource", mock.Anything,
 		&pb.QueryResourceRequest{ResourceKey: &pb.ResourceKey{JobId: fakeJobID, ResourceId: persistedRes}}, mock.Anything).
 		Return(&pb.QueryResourceResponse{
-			CreatorExecutor: s3.MockExecutorID,
+			CreatorExecutor: bucket.MockExecutorID,
 			JobId:           fakeJobID,
 			CreatorWorkerId: creator,
 		}, nil)
@@ -235,7 +235,7 @@ func getExistingS3ResourceForWorker(
 
 func TestIntegrationBrokerOpenNewS3Storage(t *testing.T) {
 	t.Parallel()
-	brk, cli, dir, rootStrorage, _ := newBrokerForS3(t, s3.MockExecutorID)
+	brk, cli, dir, rootStrorage, _ := newBrokerForS3(t, bucket.MockExecutorID)
 
 	// test local file works well under this condition
 	resID := "/local/test-1"
@@ -264,7 +264,7 @@ func TestIntegrationBrokerOpenNewS3Storage(t *testing.T) {
 			ProjectId: fakeProjectInfo.ProjectID(),
 		},
 		ResourceId:      resID,
-		CreatorExecutor: s3.MockExecutorID,
+		CreatorExecutor: bucket.MockExecutorID,
 		JobId:           fakeJobID,
 		CreatorWorkerId: "worker-1",
 	}, mock.Anything).Return(nil)
@@ -295,7 +295,7 @@ func TestIntegrationBrokerOpenNewS3Storage(t *testing.T) {
 
 func TestIntegrationBrokerOpenExistingS3Storage(t *testing.T) {
 	t.Parallel()
-	brk, cli, _, rootStrorage, s3Prefix := newBrokerForS3(t, s3.MockExecutorID)
+	brk, cli, _, rootStrorage, s3Prefix := newBrokerForS3(t, bucket.MockExecutorID)
 
 	testFiles := []string{"1.txt", "inner1/2.txt", "inner1/inner2/3.txt"}
 
@@ -347,7 +347,7 @@ func TestIntegrationBrokerOpenExistingS3Storage(t *testing.T) {
 
 func TestIntegrationBrokerGCClosedWorker(t *testing.T) {
 	t.Parallel()
-	brk, cli, _, rootStrorage, _ := newBrokerForS3(t, s3.MockExecutorID)
+	brk, cli, _, rootStrorage, _ := newBrokerForS3(t, bucket.MockExecutorID)
 
 	ctx, cancel := context.WithTimeout(context.Background(), 60*time.Second)
 	defer cancel()

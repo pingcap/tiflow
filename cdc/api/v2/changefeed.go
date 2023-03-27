@@ -45,6 +45,16 @@ const (
 
 // createChangefeed handles create changefeed request,
 // it returns the changefeed's changefeedInfo that it just created
+// CreateChangefeed creates a changefeed
+// @Summary Create changefeed
+// @Description create a new changefeed
+// @Tags changefeed,v2
+// @Accept json
+// @Produce json
+// @Param changefeed body ChangefeedConfig true "changefeed config"
+// @Success 200 {object} ChangeFeedInfo
+// @Failure 500,400 {object} model.HTTPError
+// @Router	/api/v2/changefeeds [post]
 func (h *OpenAPIV2) createChangefeed(c *gin.Context) {
 	ctx := c.Request.Context()
 	cfg := &ChangefeedConfig{ReplicaConfig: GetDefaultReplicaConfig()}
@@ -78,11 +88,6 @@ func (h *OpenAPIV2) createChangefeed(c *gin.Context) {
 		_ = c.Error(cerror.WrapError(cerror.ErrNewStore, err))
 		return
 	}
-	etcdClient, err := h.capture.GetEtcdClient()
-	if err != nil {
-		_ = c.Error(err)
-		return
-	}
 	// We should not close kvStorage since all kvStorage in cdc is the same one.
 	// defer kvStorage.Close()
 	// TODO: We should get a kvStorage from upstream instead of creating a new one
@@ -91,7 +96,7 @@ func (h *OpenAPIV2) createChangefeed(c *gin.Context) {
 		cfg,
 		pdClient,
 		h.capture.StatusProvider(),
-		etcdClient.GetEnsureGCServiceID(gc.EnsureGCServiceCreating),
+		h.capture.GetEtcdClient().GetEnsureGCServiceID(gc.EnsureGCServiceCreating),
 		kvStorage)
 	if err != nil {
 		_ = c.Error(err)
@@ -105,7 +110,7 @@ func (h *OpenAPIV2) createChangefeed(c *gin.Context) {
 		err := gc.UndoEnsureChangefeedStartTsSafety(
 			ctx,
 			pdClient,
-			etcdClient.GetEnsureGCServiceID(gc.EnsureGCServiceCreating),
+			h.capture.GetEtcdClient().GetEnsureGCServiceID(gc.EnsureGCServiceCreating),
 			model.DefaultChangeFeedID(cfg.ID),
 		)
 		if err != nil {
@@ -127,20 +132,8 @@ func (h *OpenAPIV2) createChangefeed(c *gin.Context) {
 		_ = c.Error(cerror.WrapError(cerror.ErrAPIInvalidParam, err))
 		return
 	}
-	o, err := h.capture.GetOwner()
-	if err != nil {
-		needRemoveGCSafePoint = true
-		_ = c.Error(cerror.WrapError(cerror.ErrAPIInvalidParam, err))
-		return
-	}
-	err = o.ValidateChangefeed(info)
-	if err != nil {
-		needRemoveGCSafePoint = true
-		_ = c.Error(cerror.WrapError(cerror.ErrAPIInvalidParam, err))
-		return
-	}
 
-	err = etcdClient.CreateChangefeedInfo(ctx,
+	err = h.capture.GetEtcdClient().CreateChangefeedInfo(ctx,
 		upstreamInfo,
 		info,
 		model.DefaultChangeFeedID(info.ID))
@@ -153,7 +146,7 @@ func (h *OpenAPIV2) createChangefeed(c *gin.Context) {
 	log.Info("Create changefeed successfully!",
 		zap.String("id", info.ID),
 		zap.String("changefeed", infoStr))
-	c.JSON(http.StatusCreated, toAPIModel(info,
+	c.JSON(http.StatusOK, toAPIModel(info,
 		info.StartTs, info.StartTs,
 		nil, true))
 }
@@ -161,11 +154,11 @@ func (h *OpenAPIV2) createChangefeed(c *gin.Context) {
 // listChangeFeeds lists all changgefeeds in cdc cluster
 // @Summary List changefeed
 // @Description list all changefeeds in cdc cluster
-// @Tags changefeed
+// @Tags changefeed,v2
 // @Accept json
 // @Produce json
 // @Param state query string false "state"
-// @Success 200 {array} model.ChangefeedCommonInfo
+// @Success 200 {array} ChangefeedCommonInfo
 // @Failure 500 {object} model.HTTPError
 // @Router /api/v2/changefeeds [get]
 func (h *OpenAPIV2) listChangeFeeds(c *gin.Context) {
@@ -293,6 +286,17 @@ func (h *OpenAPIV2) verifyTable(c *gin.Context) {
 // Can only update a changefeed's: TargetTs, SinkURI,
 // ReplicaConfig, PDAddrs, CAPath, CertPath, KeyPath,
 // SyncPointEnabled, SyncPointInterval
+// UpdateChangefeed updates a changefeed
+// @Summary Update a changefeed
+// @Description Update a changefeed
+// @Tags changefeed,v2
+// @Accept json
+// @Produce json
+// @Param changefeed_id  path  string  true  "changefeed_id"
+// @Param changefeedConfig body ChangefeedConfig true "changefeed config"
+// @Success 200 {object} ChangeFeedInfo
+// @Failure 500,400 {object} model.HTTPError
+// @Router /api/v2/changefeeds/{changefeed_id} [put]
 func (h *OpenAPIV2) updateChangefeed(c *gin.Context) {
 	ctx := c.Request.Context()
 
@@ -308,25 +312,27 @@ func (h *OpenAPIV2) updateChangefeed(c *gin.Context) {
 		_ = c.Error(err)
 		return
 	}
-	if oldCfInfo.State != model.StateStopped {
-		_ = c.Error(cerror.ErrChangefeedUpdateRefused.
-			GenWithStackByArgs("can only update changefeed config when it is stopped"))
+
+	switch oldCfInfo.State {
+	case model.StateStopped, model.StateFailed:
+	default:
+		_ = c.Error(
+			cerror.ErrChangefeedUpdateRefused.GenWithStackByArgs(
+				"can only update changefeed config when it is stopped or failed",
+			),
+		)
 		return
 	}
+
 	cfStatus, err := h.capture.StatusProvider().GetChangeFeedStatus(ctx, changefeedID)
 	if err != nil {
 		_ = c.Error(err)
 		return
 	}
 
-	etcdClient, err := h.capture.GetEtcdClient()
-	if err != nil {
-		_ = c.Error(err)
-		return
-	}
 	oldCfInfo.Namespace = changefeedID.Namespace
 	oldCfInfo.ID = changefeedID.ID
-	OldUpInfo, err := etcdClient.GetUpstreamInfo(ctx, oldCfInfo.UpstreamID,
+	OldUpInfo, err := h.capture.GetEtcdClient().GetUpstreamInfo(ctx, oldCfInfo.UpstreamID,
 		oldCfInfo.Namespace)
 	if err != nil {
 		_ = c.Error(err)
@@ -379,8 +385,8 @@ func (h *OpenAPIV2) updateChangefeed(c *gin.Context) {
 		zap.String("changefeedInfo", newCfInfo.String()),
 		zap.Any("upstreamInfo", newUpInfo))
 
-	err = etcdClient.UpdateChangefeedAndUpstream(ctx, newUpInfo, newCfInfo,
-		changefeedID)
+	err = h.capture.GetEtcdClient().
+		UpdateChangefeedAndUpstream(ctx, newUpInfo, newCfInfo, changefeedID)
 	if err != nil {
 		_ = c.Error(errors.Trace(err))
 		return
@@ -392,11 +398,11 @@ func (h *OpenAPIV2) updateChangefeed(c *gin.Context) {
 // getChangefeed get detailed info of a changefeed
 // @Summary Get changefeed
 // @Description get detail information of a changefeed
-// @Tags changefeed
+// @Tags changefeed,v2
 // @Accept json
 // @Produce json
 // @Param changefeed_id  path  string  true  "changefeed_id"
-// @Success 200 {object} model.ChangefeedDetail
+// @Success 200 {object} ChangeFeedInfo
 // @Failure 500,400 {object} model.HTTPError
 // @Router /api/v2/changefeeds/{changefeed_id} [get]
 func (h *OpenAPIV2) getChangeFeed(c *gin.Context) {
@@ -455,7 +461,17 @@ func (h *OpenAPIV2) getChangeFeed(c *gin.Context) {
 	c.JSON(http.StatusOK, detail)
 }
 
-// deleteChangefeed handles delete changefeed request,
+// deleteChangefeed handles delete changefeed request
+// RemoveChangefeed removes a changefeed
+// @Summary Remove a changefeed
+// @Description Remove a changefeed
+// @Tags changefeed,v2
+// @Accept json
+// @Produce json
+// @Param changefeed_id path string true "changefeed_id"
+// @Success 200 {object} EmptyResponse
+// @Failure 500,400 {object} model.HTTPError
+// @Router	/api/v2/changefeeds/{changefeed_id} [delete]
 func (h *OpenAPIV2) deleteChangefeed(c *gin.Context) {
 	ctx := c.Request.Context()
 	changefeedID := model.DefaultChangeFeedID(c.Param(apiOpVarChangefeedID))
@@ -467,7 +483,7 @@ func (h *OpenAPIV2) deleteChangefeed(c *gin.Context) {
 	_, err := h.capture.StatusProvider().GetChangeFeedStatus(ctx, changefeedID)
 	if err != nil {
 		if cerror.ErrChangeFeedNotExists.Equal(err) {
-			c.Status(http.StatusNoContent)
+			c.JSON(http.StatusOK, &EmptyResponse{})
 			return
 		}
 		_ = c.Error(err)
@@ -504,7 +520,7 @@ func (h *OpenAPIV2) deleteChangefeed(c *gin.Context) {
 		_ = c.Error(err)
 		return
 	}
-	c.Status(http.StatusNoContent)
+	c.JSON(http.StatusOK, &EmptyResponse{})
 }
 
 // todo: remove this API
@@ -558,6 +574,17 @@ func (h *OpenAPIV2) getChangeFeedMetaInfo(c *gin.Context) {
 }
 
 // resumeChangefeed handles resume changefeed request.
+// ResumeChangefeed resumes a changefeed
+// @Summary Resume a changefeed
+// @Description Resume a changefeed
+// @Tags changefeed,v2
+// @Accept json
+// @Produce json
+// @Param changefeed_id path string true "changefeed_id"
+// @Param resumeConfig body ResumeChangefeedConfig true "resume config"
+// @Success 200 {object} EmptyResponse
+// @Failure 500,400 {object} model.HTTPError
+// @Router	/api/v2/changefeeds/{changefeed_id}/resume [post]
 func (h *OpenAPIV2) resumeChangefeed(c *gin.Context) {
 	ctx := c.Request.Context()
 	changefeedID := model.DefaultChangeFeedID(c.Param(apiOpVarChangefeedID))
@@ -599,15 +626,10 @@ func (h *OpenAPIV2) resumeChangefeed(c *gin.Context) {
 	}
 	defer pdClient.Close()
 
-	etcdClient, err := h.capture.GetEtcdClient()
-	if err != nil {
-		_ = c.Error(err)
-		return
-	}
 	if err := h.helpers.verifyResumeChangefeedConfig(
 		ctx,
 		pdClient,
-		etcdClient.GetEnsureGCServiceID(gc.EnsureGCServiceResuming),
+		h.capture.GetEtcdClient().GetEnsureGCServiceID(gc.EnsureGCServiceResuming),
 		changefeedID,
 		cfg.OverwriteCheckpointTs); err != nil {
 		_ = c.Error(err)
@@ -621,7 +643,7 @@ func (h *OpenAPIV2) resumeChangefeed(c *gin.Context) {
 		err := gc.UndoEnsureChangefeedStartTsSafety(
 			ctx,
 			pdClient,
-			etcdClient.GetEnsureGCServiceID(gc.EnsureGCServiceResuming),
+			h.capture.GetEtcdClient().GetEnsureGCServiceID(gc.EnsureGCServiceResuming),
 			changefeedID,
 		)
 		if err != nil {
@@ -643,10 +665,20 @@ func (h *OpenAPIV2) resumeChangefeed(c *gin.Context) {
 		_ = c.Error(err)
 		return
 	}
-	c.Status(http.StatusOK)
+	c.JSON(http.StatusOK, &EmptyResponse{})
 }
 
 // pauseChangefeed handles pause changefeed request
+// PauseChangefeed pauses a changefeed
+// @Summary Pause a changefeed
+// @Description Pause a changefeed
+// @Tags changefeed,v2
+// @Accept json
+// @Produce json
+// @Param changefeed_id  path  string  true  "changefeed_id"
+// @Success 200 {object} EmptyResponse
+// @Failure 500,400 {object} model.HTTPError
+// @Router /api/v2/changefeeds/{changefeed_id}/pause [post]
 func (h *OpenAPIV2) pauseChangefeed(c *gin.Context) {
 	ctx := c.Request.Context()
 
@@ -712,7 +744,6 @@ func toAPIModel(
 		StartTs:        info.StartTs,
 		TargetTs:       info.TargetTs,
 		AdminJobType:   info.AdminJobType,
-		Engine:         info.Engine,
 		Config:         ToAPIReplicaConfig(info.Config),
 		State:          info.State,
 		Error:          runningError,

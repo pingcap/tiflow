@@ -269,6 +269,7 @@ const (
 	codeConfigInvalidLoadPhysicalDuplicateResolution
 	codeConfigInvalidLoadPhysicalChecksum
 	codeConfigColumnMappingDeprecated
+	codeConfigInvalidLoadAnalyze
 )
 
 // Binlog operation error code list.
@@ -902,7 +903,7 @@ var (
 	ErrPreviousGTIDNotExist = New(codePreviousGTIDNotExist, ClassFunctional, ScopeInternal, LevelHigh, "no previous gtid event from binlog %s", "")
 
 	// pkg/utils.
-	ErrNoMasterStatus            = New(codeNoMasterStatus, ClassFunctional, ScopeUpstream, LevelMedium, "upstream returns an empty result for SHOW MASTER STATUS", "Please check the upstream settings like privileges, RDS settings to read data from SHOW MASTER STATUS.")
+	ErrNoMasterStatus            = New(codeNoMasterStatus, ClassFunctional, ScopeUpstream, LevelMedium, "upstream returns an empty result for SHOW MASTER STATUS", "Please make sure binlog is enabled, and check the upstream settings like privileges, RDS settings to read data from SHOW MASTER STATUS.")
 	ErrIncorrectReturnColumnsNum = New(codeIncorrectReturnColumnsNum, ClassFunctional, ScopeUpstream, LevelMedium, "upstream returns incorrect number of columns for SHOW MASTER STATUS", "Please check the upstream settings like privileges, RDS settings to read data from SHOW MASTER STATUS.")
 
 	// pkg/binlog.
@@ -979,6 +980,7 @@ var (
 	ErrConfigInvalidPhysicalDuplicateResolution = New(codeConfigInvalidLoadPhysicalDuplicateResolution, ClassConfig, ScopeInternal, LevelMedium, "invalid load on-duplicate-physical option '%s'", "Please choose a valid value in ['none', 'manual'] or leave it empty.")
 	ErrConfigInvalidPhysicalChecksum            = New(codeConfigInvalidLoadPhysicalChecksum, ClassConfig, ScopeInternal, LevelMedium, "invalid load checksum-physical option '%s'", "Please choose a valid value in ['required', 'optional', 'off'] or leave it empty.")
 	ErrConfigColumnMappingDeprecated            = New(codeConfigColumnMappingDeprecated, ClassConfig, ScopeInternal, LevelHigh, "column-mapping is not supported since v6.6.0", "Please use extract-table/extract-schema/extract-source to handle data conflict when merge tables. See https://docs.pingcap.com/tidb/v6.4/task-configuration-file-full#task-configuration-file-template-advanced")
+	ErrConfigInvalidLoadAnalyze                 = New(codeConfigInvalidLoadAnalyze, ClassConfig, ScopeInternal, LevelMedium, "invalid load analyze option '%s'", "Please choose a valid value in ['required', 'optional', 'off'] or leave it empty.")
 
 	// Binlog operation error.
 	ErrBinlogExtractPosition = New(codeBinlogExtractPosition, ClassBinlogOp, ScopeInternal, LevelHigh, "", "")

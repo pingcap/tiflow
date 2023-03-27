@@ -36,8 +36,8 @@ func TestInfoProvider(t *testing.T) {
 	}
 	coord := newCoordinator("a", model.ChangeFeedID{}, 1, cfg)
 	cfg.ChangefeedSettings = config.GetDefaultReplicaConfig().Scheduler
-	coord.reconciler = keyspan.NewReconciler(
-		model.ChangeFeedID{}, keyspan.NewMockRegionCache(), cfg.ChangefeedSettings.RegionPerSpan)
+	coord.reconciler = keyspan.NewReconcilerForTests(
+		keyspan.NewMockRegionCache(), cfg.ChangefeedSettings)
 	coord.captureM.Captures = map[model.CaptureID]*member.CaptureStatus{
 		"a": {Tables: []tablepb.TableStatus{{
 			Span:       tablepb.Span{TableID: 1},

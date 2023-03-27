@@ -18,15 +18,18 @@ import (
 	"net/url"
 	"time"
 
-	"github.com/pingcap/errors"
 	"github.com/pingcap/log"
+	timodel "github.com/pingcap/tidb/parser/model"
 	"github.com/pingcap/tiflow/cdc/contextutil"
 	"github.com/pingcap/tiflow/cdc/model"
+	"github.com/pingcap/tiflow/cdc/processor/memquota"
 	"github.com/pingcap/tiflow/cdc/redo/reader"
-	"github.com/pingcap/tiflow/cdc/sinkv2/eventsink/factory"
-	"github.com/pingcap/tiflow/cdc/sinkv2/tablesink"
+	"github.com/pingcap/tiflow/cdc/sink/ddlsink"
+	ddlfactory "github.com/pingcap/tiflow/cdc/sink/ddlsink/factory"
+	dmlfactory "github.com/pingcap/tiflow/cdc/sink/dmlsink/factory"
+	"github.com/pingcap/tiflow/cdc/sink/tablesink"
 	"github.com/pingcap/tiflow/pkg/config"
-	cerror "github.com/pingcap/tiflow/pkg/errors"
+	"github.com/pingcap/tiflow/pkg/errors"
 	"github.com/pingcap/tiflow/pkg/redo"
 	"github.com/pingcap/tiflow/pkg/sink/mysql"
 	"github.com/pingcap/tiflow/pkg/spanz"
@@ -38,11 +41,18 @@ import (
 
 const (
 	applierChangefeed = "redo-applier"
-	emitBatch         = mysql.DefaultMaxTxnRow
-	readBatch         = mysql.DefaultWorkerCount * emitBatch
+	warnDuration      = 3 * time.Minute
+	flushWaitDuration = 200 * time.Millisecond
 )
 
-var errApplyFinished = errors.New("apply finished, can exit safely")
+var (
+	// In the boundary case, non-idempotent DDLs will not be executed.
+	// TODO(CharlesCheung96): fix this
+	unsupportedDDL = map[timodel.ActionType]struct{}{
+		timodel.ActionExchangeTablePartition: {},
+	}
+	errApplyFinished = errors.New("apply finished, can exit safely")
+)
 
 // RedoApplierConfig is the configuration used by a redo log applier
 type RedoApplierConfig struct {
@@ -54,22 +64,30 @@ type RedoApplierConfig struct {
 // RedoApplier implements a redo log applier
 type RedoApplier struct {
 	cfg *RedoApplierConfig
+	rd  reader.RedoLogReader
 
-	rd reader.RedoLogReader
+	ddlSink         ddlsink.Sink
+	appliedDDLCount uint64
+
+	memQuota     *memquota.MemQuota
+	pendingQuota uint64
+
 	// sinkFactory is used to create table sinks.
-	sinkFactory *factory.SinkFactory
+	sinkFactory *dmlfactory.SinkFactory
 	// tableSinks is a map from tableID to table sink.
 	// We create it when we need it, and close it after we finish applying the redo logs.
-	tableSinks map[model.TableID]tablesink.TableSink
-	errCh      chan error
+	tableSinks         map[model.TableID]tablesink.TableSink
+	tableResolvedTsMap map[model.TableID]*memquota.MemConsumeRecord
+	appliedLogCount    uint64
+
+	errCh chan error
 }
 
 // NewRedoApplier creates a new RedoApplier instance
 func NewRedoApplier(cfg *RedoApplierConfig) *RedoApplier {
 	return &RedoApplier{
-		cfg:        cfg,
-		tableSinks: make(map[model.TableID]tablesink.TableSink),
-		errCh:      make(chan error, 1024),
+		cfg:   cfg,
+		errCh: make(chan error, 1024),
 	}
 }
 
@@ -78,7 +96,7 @@ func NewRedoApplier(cfg *RedoApplierConfig) *RedoApplier {
 func (rac *RedoApplierConfig) toLogReaderConfig() (string, *reader.LogReaderConfig, error) {
 	uri, err := url.Parse(rac.Storage)
 	if err != nil {
-		return "", nil, cerror.WrapError(cerror.ErrConsistentStorage, err)
+		return "", nil, errors.WrapError(errors.ErrConsistentStorage, err)
 	}
 	cfg := &reader.LogReaderConfig{
 		Dir:                uri.Path,
@@ -103,107 +121,287 @@ func (ra *RedoApplier) catchError(ctx context.Context) error {
 	}
 }
 
+func (ra *RedoApplier) initSink(ctx context.Context) (err error) {
+	replicaConfig := config.GetDefaultReplicaConfig()
+	ra.sinkFactory, err = dmlfactory.New(ctx, ra.cfg.SinkURI, replicaConfig, ra.errCh)
+	if err != nil {
+		return err
+	}
+	ra.ddlSink, err = ddlfactory.New(ctx, ra.cfg.SinkURI, replicaConfig)
+	if err != nil {
+		return err
+	}
+
+	ra.tableSinks = make(map[model.TableID]tablesink.TableSink)
+	ra.tableResolvedTsMap = make(map[model.TableID]*memquota.MemConsumeRecord)
+	return nil
+}
+
+func (ra *RedoApplier) bgReleaseQuota(ctx context.Context) error {
+	ticker := time.NewTicker(time.Second)
+	defer ticker.Stop()
+	for {
+		select {
+		case <-ctx.Done():
+			return errors.Trace(ctx.Err())
+		case <-ticker.C:
+			for tableID, tableSink := range ra.tableSinks {
+				checkpointTs := tableSink.GetCheckpointTs()
+				ra.memQuota.Release(spanz.TableIDToComparableSpan(tableID), checkpointTs)
+			}
+		}
+	}
+}
+
 func (ra *RedoApplier) consumeLogs(ctx context.Context) error {
 	checkpointTs, resolvedTs, err := ra.rd.ReadMeta(ctx)
 	if err != nil {
 		return err
 	}
-	if checkpointTs == resolvedTs {
-		log.Info("apply redo log suncceed: checkpointTs == resolvedTs",
-			zap.Uint64("checkpointTs", checkpointTs),
-			zap.Uint64("resolvedTs", resolvedTs))
-		return errApplyFinished
+	log.Info("apply redo log starts",
+		zap.Uint64("checkpointTs", checkpointTs),
+		zap.Uint64("resolvedTs", resolvedTs))
+	if err := ra.initSink(ctx); err != nil {
+		return err
+	}
+	defer ra.sinkFactory.Close()
+
+	shouldApplyDDL := func(row *model.RowChangedEvent, ddl *model.DDLEvent) bool {
+		if ddl == nil {
+			return false
+		} else if row == nil {
+			// no more rows to apply
+			return true
+		}
+		// If all rows before the DDL (which means row.CommitTs <= ddl.CommitTs)
+		// are applied, we should apply this DDL.
+		return row.CommitTs > ddl.CommitTs
 	}
 
-	err = ra.rd.ResetReader(ctx, checkpointTs, resolvedTs)
+	row, err := ra.rd.ReadNextRow(ctx)
 	if err != nil {
 		return err
 	}
-	log.Info("apply redo log starts", zap.Uint64("checkpointTs", checkpointTs), zap.Uint64("resolvedTs", resolvedTs))
-
-	cachedRows := make([]*model.RowChangedEvent, 0, emitBatch)
-	tableResolvedTsMap := make(map[model.TableID]model.Ts)
-	appliedLogCount := 0
+	ddl, err := ra.rd.ReadNextDDL(ctx)
+	if err != nil {
+		return err
+	}
 	for {
-		redoLogs, err := ra.rd.ReadNextLog(ctx, readBatch)
-		if err != nil {
-			return err
-		}
-		if len(redoLogs) == 0 {
+		if row == nil && ddl == nil {
 			break
 		}
-		appliedLogCount += len(redoLogs)
-
-		for _, redoLog := range redoLogs {
-			tableID := redoLog.Table.TableID
-			if _, ok := ra.tableSinks[tableID]; !ok {
-				tableSink := ra.sinkFactory.CreateTableSink(
-					model.DefaultChangeFeedID(applierChangefeed),
-					spanz.TableIDToComparableSpan(tableID),
-					prometheus.NewCounter(prometheus.CounterOpts{}),
-				)
-				ra.tableSinks[tableID] = tableSink
+		if shouldApplyDDL(row, ddl) {
+			if err := ra.applyDDL(ctx, ddl, checkpointTs); err != nil {
+				return err
 			}
-			if _, ok := tableResolvedTsMap[tableID]; !ok {
-				// Safe to use checkpointTs - 1 as the resolvedTs of a table.
-				tableResolvedTsMap[tableID] = checkpointTs - 1
+			if ddl, err = ra.rd.ReadNextDDL(ctx); err != nil {
+				return err
 			}
-			if len(cachedRows) >= emitBatch {
-				for _, row := range cachedRows {
-					tableID := row.Table.TableID
-					ra.tableSinks[tableID].AppendRowChangedEvents(row)
-				}
-				cachedRows = make([]*model.RowChangedEvent, 0, emitBatch)
+		} else {
+			if err := ra.applyRow(row, checkpointTs); err != nil {
+				return err
 			}
-			cachedRows = append(cachedRows, redoLog)
-			if redoLog.CommitTs > tableResolvedTsMap[tableID] {
-				tableResolvedTsMap[tableID] = redoLog.CommitTs
-			}
-		}
-
-		for tableID, tableLastResolvedTs := range tableResolvedTsMap {
-			if err := ra.tableSinks[tableID].UpdateResolvedTs(
-				model.NewResolvedTs(tableLastResolvedTs)); err != nil {
+			if row, err = ra.rd.ReadNextRow(ctx); err != nil {
 				return err
 			}
 		}
 	}
-	for _, row := range cachedRows {
-		tableID := row.Table.TableID
-		ra.tableSinks[tableID].AppendRowChangedEvents(row)
-	}
-	const warnDuration = 3 * time.Minute
-	const flushWaitDuration = 200 * time.Millisecond
-	ticker := time.NewTicker(warnDuration)
-	defer ticker.Stop()
-	for tableID := range tableResolvedTsMap {
-		resolvedTs := model.NewResolvedTs(resolvedTs)
-		if err := ra.tableSinks[tableID].UpdateResolvedTs(
-			resolvedTs); err != nil {
+	// wait all tables to flush data
+	for tableID := range ra.tableResolvedTsMap {
+		if err := ra.waitTableFlush(ctx, tableID, resolvedTs); err != nil {
 			return err
 		}
-		// Make sure all events are flushed to downstream.
-		for !ra.tableSinks[tableID].GetCheckpointTs().EqualOrGreater(resolvedTs) {
-			select {
-			case <-ctx.Done():
-				return errors.Trace(ctx.Err())
-			case <-ticker.C:
-				log.Warn(
-					"Table sink is not catching up with resolved ts for a long time",
-					zap.Int64("tableID", tableID),
-					zap.Any("resolvedTs", resolvedTs),
-					zap.Any("checkpointTs", ra.tableSinks[tableID].GetCheckpointTs()),
-				)
-
-			default:
-				time.Sleep(flushWaitDuration)
-			}
-		}
-		ra.tableSinks[tableID].Close(ctx)
+		ra.tableSinks[tableID].Close()
 	}
 
-	log.Info("apply redo log finishes", zap.Int("appliedLogCount", appliedLogCount))
+	log.Info("apply redo log finishes",
+		zap.Uint64("appliedLogCount", ra.appliedLogCount),
+		zap.Uint64("appliedDDLCount", ra.appliedDDLCount),
+		zap.Uint64("currentCheckpoint", resolvedTs))
 	return errApplyFinished
+}
+
+func (ra *RedoApplier) resetQuota(rowSize uint64) error {
+	if rowSize >= config.DefaultChangefeedMemoryQuota || rowSize < ra.pendingQuota {
+		log.Panic("row size exceeds memory quota",
+			zap.Uint64("rowSize", rowSize),
+			zap.Uint64("memoryQuota", config.DefaultChangefeedMemoryQuota))
+	}
+
+	// flush all tables before acquire new quota
+	for tableID, tableRecord := range ra.tableResolvedTsMap {
+		if !tableRecord.ResolvedTs.IsBatchMode() {
+			log.Panic("table resolved ts should always be in batch mode when apply redo log")
+		}
+
+		if err := ra.tableSinks[tableID].UpdateResolvedTs(tableRecord.ResolvedTs); err != nil {
+			return err
+		}
+		ra.memQuota.Record(spanz.TableIDToComparableSpan(tableID),
+			tableRecord.ResolvedTs, tableRecord.Size)
+
+		// reset new record
+		ra.tableResolvedTsMap[tableID] = &memquota.MemConsumeRecord{
+			ResolvedTs: tableRecord.ResolvedTs.AdvanceBatch(),
+			Size:       0,
+		}
+	}
+
+	oldQuota := ra.pendingQuota
+	ra.pendingQuota = rowSize * mysql.DefaultMaxTxnRow
+	if ra.pendingQuota > config.DefaultChangefeedMemoryQuota {
+		ra.pendingQuota = config.DefaultChangefeedMemoryQuota
+	} else if ra.pendingQuota < 64*1024 {
+		ra.pendingQuota = 64 * 1024
+	}
+	return ra.memQuota.BlockAcquire(ra.pendingQuota - oldQuota)
+}
+
+func (ra *RedoApplier) applyDDL(
+	ctx context.Context, ddl *model.DDLEvent, checkpointTs uint64,
+) error {
+	shouldSkip := func() bool {
+		if ddl.CommitTs == checkpointTs {
+			if _, ok := unsupportedDDL[ddl.Type]; ok {
+				log.Error("ignore unsupported DDL", zap.Any("ddl", ddl))
+				return true
+			}
+		}
+		if ddl.TableInfo == nil {
+			// Note this could omly happen when using old version of cdc, and the commit ts
+			// of the DDL should be equal to checkpoint ts or resolved ts.
+			log.Warn("ignore DDL without table info", zap.Any("ddl", ddl))
+			return true
+		}
+		return false
+	}
+	if shouldSkip() {
+		return nil
+	}
+	log.Warn("apply DDL", zap.Any("ddl", ddl))
+	// Wait all tables to flush data before applying DDL.
+	// TODO: only block tables that are affected by this DDL.
+	for tableID := range ra.tableSinks {
+		if err := ra.waitTableFlush(ctx, tableID, ddl.CommitTs); err != nil {
+			return err
+		}
+	}
+	if err := ra.ddlSink.WriteDDLEvent(ctx, ddl); err != nil {
+		return err
+	}
+	ra.appliedDDLCount++
+	return nil
+}
+
+func (ra *RedoApplier) applyRow(
+	row *model.RowChangedEvent, checkpointTs model.Ts,
+) error {
+	rowSize := uint64(row.ApproximateBytes())
+	if rowSize > ra.pendingQuota {
+		if err := ra.resetQuota(uint64(row.ApproximateBytes())); err != nil {
+			return err
+		}
+	}
+	ra.pendingQuota -= rowSize
+
+	tableID := row.Table.TableID
+	if _, ok := ra.tableSinks[tableID]; !ok {
+		tableSink := ra.sinkFactory.CreateTableSink(
+			model.DefaultChangeFeedID(applierChangefeed),
+			spanz.TableIDToComparableSpan(tableID),
+			prometheus.NewCounter(prometheus.CounterOpts{}),
+		)
+		ra.tableSinks[tableID] = tableSink
+	}
+	if _, ok := ra.tableResolvedTsMap[tableID]; !ok {
+		// Initialize table record using checkpointTs.
+		ra.tableResolvedTsMap[tableID] = &memquota.MemConsumeRecord{
+			ResolvedTs: model.ResolvedTs{
+				Mode:    model.BatchResolvedMode,
+				Ts:      checkpointTs,
+				BatchID: 1,
+			},
+			Size: 0,
+		}
+	}
+
+	ra.tableSinks[tableID].AppendRowChangedEvents(row)
+	record := ra.tableResolvedTsMap[tableID]
+	record.Size += rowSize
+	if row.CommitTs > record.ResolvedTs.Ts {
+		// Use batch resolvedTs to flush data as quickly as possible.
+		ra.tableResolvedTsMap[tableID] = &memquota.MemConsumeRecord{
+			ResolvedTs: model.ResolvedTs{
+				Mode:    model.BatchResolvedMode,
+				Ts:      row.CommitTs,
+				BatchID: 1,
+			},
+			Size: record.Size,
+		}
+	} else if row.CommitTs < ra.tableResolvedTsMap[tableID].ResolvedTs.Ts {
+		log.Panic("commit ts of redo log regressed",
+			zap.Int64("tableID", tableID),
+			zap.Uint64("commitTs", row.CommitTs),
+			zap.Any("resolvedTs", ra.tableResolvedTsMap[tableID]))
+	}
+
+	ra.appliedLogCount++
+	return nil
+}
+
+func (ra *RedoApplier) waitTableFlush(
+	ctx context.Context, tableID model.TableID, rts model.Ts,
+) error {
+	ticker := time.NewTicker(warnDuration)
+	defer ticker.Stop()
+
+	oldTableRecord := ra.tableResolvedTsMap[tableID]
+	if oldTableRecord.ResolvedTs.Ts < rts {
+		// Use new batch resolvedTs to flush data.
+		ra.tableResolvedTsMap[tableID] = &memquota.MemConsumeRecord{
+			ResolvedTs: model.ResolvedTs{
+				Mode:    model.BatchResolvedMode,
+				Ts:      rts,
+				BatchID: 1,
+			},
+			Size: ra.tableResolvedTsMap[tableID].Size,
+		}
+	} else if oldTableRecord.ResolvedTs.Ts > rts {
+		log.Panic("resolved ts of redo log regressed",
+			zap.Any("oldResolvedTs", oldTableRecord),
+			zap.Any("newResolvedTs", rts))
+	}
+
+	tableRecord := ra.tableResolvedTsMap[tableID]
+	if err := ra.tableSinks[tableID].UpdateResolvedTs(tableRecord.ResolvedTs); err != nil {
+		return err
+	}
+	ra.memQuota.Record(spanz.TableIDToComparableSpan(tableID),
+		tableRecord.ResolvedTs, tableRecord.Size)
+
+	// Make sure all events are flushed to downstream.
+	for !ra.tableSinks[tableID].GetCheckpointTs().EqualOrGreater(tableRecord.ResolvedTs) {
+		select {
+		case <-ctx.Done():
+			return errors.Trace(ctx.Err())
+		case <-ticker.C:
+			log.Warn(
+				"Table sink is not catching up with resolved ts for a long time",
+				zap.Int64("tableID", tableID),
+				zap.Any("resolvedTs", tableRecord.ResolvedTs),
+				zap.Any("checkpointTs", ra.tableSinks[tableID].GetCheckpointTs()),
+			)
+		default:
+			time.Sleep(flushWaitDuration)
+		}
+	}
+
+	// reset new record
+	ra.tableResolvedTsMap[tableID] = &memquota.MemConsumeRecord{
+		ResolvedTs: tableRecord.ResolvedTs.AdvanceBatch(),
+		Size:       0,
+	}
+	return nil
 }
 
 var createRedoReader = createRedoReaderImpl
@@ -226,40 +424,32 @@ func (ra *RedoApplier) ReadMeta(ctx context.Context) (checkpointTs uint64, resol
 }
 
 // Apply applies redo log to given target
-func (ra *RedoApplier) Apply(ctx context.Context) error {
-	rd, err := createRedoReader(ctx, ra.cfg)
-	if err != nil {
+func (ra *RedoApplier) Apply(egCtx context.Context) (err error) {
+	eg, egCtx := errgroup.WithContext(egCtx)
+	egCtx = contextutil.PutRoleInCtx(egCtx, util.RoleRedoLogApplier)
+
+	if ra.rd, err = createRedoReader(egCtx, ra.cfg); err != nil {
 		return err
 	}
-	ra.rd = rd
-	defer func() {
-		if err = ra.rd.Close(); err != nil {
-			log.Warn("Close redo reader failed", zap.Error(err))
-		}
-	}()
-	// MySQL sink will use the following replication config
-	// - EnableOldValue: default true
-	// - ForceReplicate: default false
-	// - filter: default []string{"*.*"}
-	replicaConfig := config.GetDefaultReplicaConfig()
-	ctx = contextutil.PutRoleInCtx(ctx, util.RoleRedoLogApplier)
-	sinkFactory, err := factory.New(ctx,
-		ra.cfg.SinkURI, replicaConfig, ra.errCh)
-	if err != nil {
-		return err
-	}
-	ra.sinkFactory = sinkFactory
-	defer sinkFactory.Close()
-
-	wg, ctx := errgroup.WithContext(ctx)
-	wg.Go(func() error {
-		return ra.consumeLogs(ctx)
-	})
-	wg.Go(func() error {
-		return ra.catchError(ctx)
+	eg.Go(func() error {
+		return ra.rd.Run(egCtx)
 	})
 
-	err = wg.Wait()
+	ra.memQuota = memquota.NewMemQuota(model.DefaultChangeFeedID(applierChangefeed),
+		config.DefaultChangefeedMemoryQuota, "sink")
+	defer ra.memQuota.Close()
+	eg.Go(func() error {
+		return ra.bgReleaseQuota(egCtx)
+	})
+
+	eg.Go(func() error {
+		return ra.consumeLogs(egCtx)
+	})
+	eg.Go(func() error {
+		return ra.catchError(egCtx)
+	})
+
+	err = eg.Wait()
 	if errors.Cause(err) != errApplyFinished {
 		return err
 	}

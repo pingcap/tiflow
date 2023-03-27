@@ -23,7 +23,8 @@ import (
 	"github.com/pingcap/tiflow/cdc/contextutil"
 	"github.com/pingcap/tiflow/cdc/entry"
 	"github.com/pingcap/tiflow/cdc/model"
-	"github.com/pingcap/tiflow/cdc/sinkv2/validator"
+	"github.com/pingcap/tiflow/cdc/owner"
+	"github.com/pingcap/tiflow/cdc/sink/validator"
 	"github.com/pingcap/tiflow/pkg/config"
 	cerror "github.com/pingcap/tiflow/pkg/errors"
 	"github.com/pingcap/tiflow/pkg/filter"
@@ -76,17 +77,13 @@ func verifyCreateChangefeedConfig(
 		}
 		changefeedConfig.StartTS = oracle.ComposeTS(ts, logical)
 	}
-	etcdClient, err := capture.GetEtcdClient()
-	if err != nil {
-		return nil, err
-	}
 
 	// Ensure the start ts is valid in the next 1 hour.
 	const ensureTTL = 60 * 60
 	if err := gc.EnsureChangefeedStartTsSafety(
 		ctx,
 		up.PDClient,
-		etcdClient.GetEnsureGCServiceID(gc.EnsureGCServiceCreating),
+		capture.GetEtcdClient().GetEnsureGCServiceID(gc.EnsureGCServiceCreating),
 		model.DefaultChangeFeedID(changefeedConfig.ID),
 		ensureTTL, changefeedConfig.StartTS); err != nil {
 		if !cerror.ErrStartTsBeforeGC.Equal(err) {
@@ -147,6 +144,7 @@ func verifyCreateChangefeedConfig(
 		Engine:         sortEngine,
 		State:          model.StateNormal,
 		CreatorVersion: version.ReleaseVersion,
+		Epoch:          owner.GenerateChangefeedEpoch(ctx, up.PDClient),
 	}
 	f, err := filter.NewFilter(replicaConfig, "")
 	if err != nil {

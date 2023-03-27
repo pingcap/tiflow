@@ -131,6 +131,10 @@ func ComparePolymorphicEvents(i, j *PolymorphicEvent) bool {
 		if i.RawKV.OpType == OpTypeDelete && j.RawKV.OpType != OpTypeDelete {
 			return true
 		}
+		// update DML
+		if i.RawKV.OldValue != nil && j.RawKV.OldValue == nil {
+			return true
+		}
 	}
 	return i.CRTs < j.CRTs
 }
@@ -162,6 +166,19 @@ func NewResolvedTs(t uint64) ResolvedTs {
 // IsBatchMode returns true if the resolved ts is BatchResolvedMode.
 func (r ResolvedTs) IsBatchMode() bool {
 	return r.Mode == BatchResolvedMode
+}
+
+// AdvanceBatch advances the batch id of the resolved ts.
+func (r ResolvedTs) AdvanceBatch() ResolvedTs {
+	if !r.IsBatchMode() {
+		log.Panic("can't advance batch since resolved ts is not in batch mode",
+			zap.Any("resolved", r))
+	}
+	return ResolvedTs{
+		Mode:    BatchResolvedMode,
+		Ts:      r.Ts,
+		BatchID: r.BatchID + 1,
+	}
 }
 
 // ResolvedMark returns a timestamp `ts` based on the r.mode, which marks that all events
@@ -201,4 +218,9 @@ func (r ResolvedTs) Greater(r1 ResolvedTs) bool {
 		return r.BatchID > r1.BatchID
 	}
 	return r.Ts > r1.Ts
+}
+
+// Equal judge whether the resolved ts is equal to the given ts.
+func (r ResolvedTs) Equal(r1 ResolvedTs) bool {
+	return r == r1
 }

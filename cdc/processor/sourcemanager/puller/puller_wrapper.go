@@ -18,6 +18,7 @@ import (
 	"sync"
 
 	"github.com/pingcap/failpoint"
+	"github.com/pingcap/log"
 	"github.com/pingcap/tiflow/cdc/contextutil"
 	"github.com/pingcap/tiflow/cdc/model"
 	"github.com/pingcap/tiflow/cdc/processor/sourcemanager/engine"
@@ -28,10 +29,23 @@ import (
 	cerrors "github.com/pingcap/tiflow/pkg/errors"
 	"github.com/pingcap/tiflow/pkg/upstream"
 	"github.com/pingcap/tiflow/pkg/util"
+	"go.uber.org/zap"
 )
 
 // Wrapper is a wrapper of puller used by source manager.
-type Wrapper struct {
+type Wrapper interface {
+	Start(
+		ctx cdccontext.Context,
+		up *upstream.Upstream,
+		eventSortEngine engine.SortEngine,
+		errChan chan<- error,
+	)
+	GetStats() puller.Stats
+	Close()
+}
+
+// WrapperImpl is a wrapper of puller used by source manager.
+type WrapperImpl struct {
 	changefeed model.ChangeFeedID
 	span       tablepb.Span
 	tableName  string // quoted schema and table, used in metircs only
@@ -51,8 +65,8 @@ func NewPullerWrapper(
 	tableName string,
 	startTs model.Ts,
 	bdrMode bool,
-) *Wrapper {
-	return &Wrapper{
+) Wrapper {
+	return &WrapperImpl{
 		changefeed: changefeed,
 		span:       span,
 		tableName:  tableName,
@@ -63,7 +77,7 @@ func NewPullerWrapper(
 
 // Start the puller wrapper.
 // We use cdc context to put capture info and role into context.
-func (n *Wrapper) Start(
+func (n *WrapperImpl) Start(
 	ctx cdccontext.Context,
 	up *upstream.Upstream,
 	eventSortEngine engine.SortEngine,
@@ -99,7 +113,17 @@ func (n *Wrapper) Start(
 		defer n.wg.Done()
 		err := n.p.Run(ctxC)
 		if err != nil && !cerrors.Is(err, context.Canceled) {
-			errChan <- err
+			select {
+			case errChan <- err:
+				// Do not block sending error, because the err channel
+				// might be full and no goroutine receives.
+			default:
+				log.Warn("puller fail to send error",
+					zap.String("namespace", n.changefeed.Namespace),
+					zap.String("changefeed", n.changefeed.ID),
+					zap.String("table", n.tableName),
+					zap.Error(err))
+			}
 		}
 	}()
 	n.wg.Add(1)
@@ -114,9 +138,7 @@ func (n *Wrapper) Start(
 					continue
 				}
 				pEvent := model.NewPolymorphicEvent(rawKV)
-				if err := eventSortEngine.Add(n.span, pEvent); err != nil {
-					errChan <- err
-				}
+				eventSortEngine.Add(n.span, pEvent)
 			}
 		}
 	}()
@@ -124,12 +146,12 @@ func (n *Wrapper) Start(
 }
 
 // GetStats returns the puller stats.
-func (n *Wrapper) GetStats() puller.Stats {
+func (n *WrapperImpl) GetStats() puller.Stats {
 	return n.p.Stats()
 }
 
 // Close the puller wrapper.
-func (n *Wrapper) Close() {
+func (n *WrapperImpl) Close() {
 	n.cancel()
 	n.wg.Wait()
 }

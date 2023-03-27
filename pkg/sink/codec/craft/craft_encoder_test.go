@@ -110,10 +110,10 @@ func TestBuildCraftBatchEncoder(t *testing.T) {
 
 func testBatchCodec(
 	t *testing.T,
-	encoderBuilder codec.EncoderBuilder,
-	newDecoder func(value []byte) (codec.EventBatchDecoder, error),
+	encoderBuilder codec.RowEventEncoderBuilder,
+	newDecoder func(value []byte) (codec.RowEventDecoder, error),
 ) {
-	checkRowDecoder := func(decoder codec.EventBatchDecoder, cs []*model.RowChangedEvent) {
+	checkRowDecoder := func(decoder codec.RowEventDecoder, cs []*model.RowChangedEvent) {
 		index := 0
 		for {
 			tp, hasNext, err := decoder.HasNext()
@@ -128,7 +128,7 @@ func testBatchCodec(
 			index++
 		}
 	}
-	checkDDLDecoder := func(decoder codec.EventBatchDecoder, cs []*model.DDLEvent) {
+	checkDDLDecoder := func(decoder codec.RowEventDecoder, cs []*model.DDLEvent) {
 		index := 0
 		for {
 			tp, hasNext, err := decoder.HasNext()
@@ -143,7 +143,7 @@ func testBatchCodec(
 			index++
 		}
 	}
-	checkTSDecoder := func(decoder codec.EventBatchDecoder, cs []uint64) {
+	checkTSDecoder := func(decoder codec.RowEventDecoder, cs []uint64) {
 		index := 0
 		for {
 			tp, hasNext, err := decoder.HasNext()

@@ -261,16 +261,19 @@ func (s *schemaStorageImpl) DoGC(ts uint64) (lastSchemaTs uint64) {
 }
 
 // SkipJob skip the job should not be executed
-// TiDB write DDL Binlog for every DDL Job, we must ignore jobs that are cancelled or rollback
-// For older version TiDB, it write DDL Binlog in the txn that the state of job is changed to *synced*
-// Now, it write DDL Binlog in the txn that the state of job is changed to *done* (before change to *synced*)
+// TiDB write DDL Binlog for every DDL Job,
+// we must ignore jobs that are cancelled or rollback
+// For older version TiDB, it writes DDL Binlog in the txn
+// that the state of job is changed to *synced*
+// Now, it writes DDL Binlog in the txn that the state of
+// job is changed to *done* (before change to *synced*)
 // At state *done*, it will be always and only changed to *synced*.
 func (s *schemaStorageImpl) skipJob(job *timodel.Job) bool {
 	log.Debug("handle DDL new commit",
 		zap.String("DDL", job.Query), zap.Stringer("job", job),
 		zap.String("namespace", s.id.Namespace),
 		zap.String("changefeed", s.id.ID))
-	return !job.IsSynced() && !job.IsDone()
+	return !job.IsDone()
 }
 
 // MockSchemaStorage is for tests.

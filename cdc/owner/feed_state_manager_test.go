@@ -14,18 +14,59 @@
 package owner
 
 import (
+	"context"
 	"fmt"
 	"testing"
 	"time"
 
+	"github.com/cenkalti/backoff/v4"
 	"github.com/pingcap/tiflow/cdc/model"
 	"github.com/pingcap/tiflow/pkg/config"
 	cdcContext "github.com/pingcap/tiflow/pkg/context"
 	cerror "github.com/pingcap/tiflow/pkg/errors"
 	"github.com/pingcap/tiflow/pkg/etcd"
 	"github.com/pingcap/tiflow/pkg/orchestrator"
+	"github.com/pingcap/tiflow/pkg/upstream"
 	"github.com/stretchr/testify/require"
+	pd "github.com/tikv/pd/client"
 )
+
+type mockPD struct {
+	pd.Client
+
+	getTs func() (int64, int64, error)
+}
+
+func (p *mockPD) GetTS(_ context.Context) (int64, int64, error) {
+	if p.getTs != nil {
+		return p.getTs()
+	}
+	return 1, 2, nil
+}
+
+// newFeedStateManager4Test creates feedStateManager for test
+func newFeedStateManager4Test(
+	initialIntervalInMs time.Duration,
+	maxIntervalInMs time.Duration,
+	maxElapsedTimeInMs time.Duration,
+	multiplier float64,
+) *feedStateManager {
+	f := new(feedStateManager)
+	f.upstream = new(upstream.Upstream)
+	f.upstream.PDClient = &mockPD{}
+
+	f.errBackoff = backoff.NewExponentialBackOff()
+	f.errBackoff.InitialInterval = initialIntervalInMs * time.Millisecond
+	f.errBackoff.MaxInterval = maxIntervalInMs * time.Millisecond
+	f.errBackoff.MaxElapsedTime = maxElapsedTimeInMs * time.Millisecond
+	f.errBackoff.Multiplier = multiplier
+	f.errBackoff.RandomizationFactor = 0
+
+	f.resetErrBackoff()
+	f.lastErrorTime = time.Unix(0, 0)
+
+	return f
+}
 
 func TestHandleJob(t *testing.T) {
 	ctx := cdcContext.NewBackendContext4Test(true)
@@ -294,7 +335,7 @@ func TestHandleError(t *testing.T) {
 
 func TestHandleFastFailError(t *testing.T) {
 	ctx := cdcContext.NewBackendContext4Test(true)
-	manager := new(feedStateManager)
+	manager := newFeedStateManager4Test(0, 0, 0, 0)
 	state := orchestrator.NewChangefeedReactorState(etcd.DefaultCDCClusterID,
 		ctx.ChangefeedVars().ID)
 	tester := orchestrator.NewReactorStateTester(t, state, nil)
@@ -325,10 +366,27 @@ func TestHandleFastFailError(t *testing.T) {
 	tester.MustApplyPatches()
 }
 
+func TestHandleErrorWhenChangefeedIsPaused(t *testing.T) {
+	ctx := cdcContext.NewBackendContext4Test(true)
+	manager := newFeedStateManager4Test(0, 0, 0, 0)
+	manager.state = orchestrator.NewChangefeedReactorState(etcd.DefaultCDCClusterID,
+		ctx.ChangefeedVars().ID)
+	err := &model.RunningError{
+		Addr:    ctx.GlobalVars().CaptureInfo.AdvertiseAddr,
+		Code:    "CDC:ErrReachMaxTry",
+		Message: "fake error for test",
+	}
+	manager.state.Info = &model.ChangeFeedInfo{
+		State: model.StateStopped,
+	}
+	manager.handleError(err)
+	require.Equal(t, model.StateStopped, manager.state.Info.State)
+}
+
 func TestChangefeedStatusNotExist(t *testing.T) {
 	changefeedInfo := `
 {
-    "sink-uri": "blackhole:///",
+    "ddlSink-uri": "blackhole:///",
     "create-time": "2021-06-05T00:44:15.065939487+08:00",
     "start-ts": 425381670108266496,
     "target-ts": 0,
@@ -348,7 +406,7 @@ func TestChangefeedStatusNotExist(t *testing.T) {
         "mounter": {
             "worker-num": 16
         },
-        "sink": {
+        "ddlSink": {
             "dispatchers": null,
             "protocol": "open-protocol"
         }
@@ -359,7 +417,7 @@ func TestChangefeedStatusNotExist(t *testing.T) {
         "addr": "172.16.6.147:8300",
         "code": "CDC:ErrSnapshotLostByGC",
         "message": ` + "\"[CDC:ErrSnapshotLostByGC]fail to create or maintain changefeed " +
-		"due to snapshot loss caused by GC. checkpoint-ts 425381670108266496 " +
+		"due to snapshot loss caused by GC. tableCheckpoint-ts 425381670108266496 " +
 		"is earlier than GC safepoint at 0\"" + `
     },
     "sync-point-enabled": false,
@@ -583,5 +641,58 @@ func TestBackoffNeverStops(t *testing.T) {
 		time.Sleep(100 * time.Millisecond)
 		manager.Tick(state)
 		tester.MustApplyPatches()
+	}
+}
+
+func TestUpdateChangefeedEpoch(t *testing.T) {
+	ctx := cdcContext.NewBackendContext4Test(true)
+	// Set a long backoff time
+	manager := newFeedStateManager4Test(time.Hour, time.Hour, 0, 1.0)
+	state := orchestrator.NewChangefeedReactorState(etcd.DefaultCDCClusterID,
+		ctx.ChangefeedVars().ID)
+	tester := orchestrator.NewReactorStateTester(t, state, nil)
+	state.PatchInfo(func(info *model.ChangeFeedInfo) (*model.ChangeFeedInfo, bool, error) {
+		require.Nil(t, info)
+		return &model.ChangeFeedInfo{SinkURI: "123", Config: &config.ReplicaConfig{}}, true, nil
+	})
+	state.PatchStatus(func(status *model.ChangeFeedStatus) (*model.ChangeFeedStatus, bool, error) {
+		require.Nil(t, status)
+		return &model.ChangeFeedStatus{}, true, nil
+	})
+
+	tester.MustApplyPatches()
+	manager.Tick(state)
+	tester.MustApplyPatches()
+	require.Equal(t, state.Info.State, model.StateNormal)
+	require.True(t, manager.ShouldRunning())
+
+	for i := 1; i <= 30; i++ {
+		manager.upstream.PDClient.(*mockPD).getTs = func() (int64, int64, error) {
+			return int64(i), 0, nil
+		}
+		previousEpoch := state.Info.Epoch
+		previousState := state.Info.State
+		state.PatchTaskPosition(ctx.GlobalVars().CaptureInfo.ID,
+			func(position *model.TaskPosition) (*model.TaskPosition, bool, error) {
+				return &model.TaskPosition{Error: &model.RunningError{
+					Addr:    ctx.GlobalVars().CaptureInfo.AdvertiseAddr,
+					Code:    "[CDC:ErrEtcdSessionDone]",
+					Message: "fake error for test",
+				}}, true, nil
+			})
+		tester.MustApplyPatches()
+		manager.Tick(state)
+		tester.MustApplyPatches()
+		require.False(t, manager.ShouldRunning())
+		require.Equal(t, state.Info.State, model.StateError)
+		require.Equal(t, state.Info.AdminJobType, model.AdminStop)
+		require.Equal(t, state.Status.AdminJobType, model.AdminStop)
+
+		// Epoch only changes when State changes.
+		if previousState == state.Info.State {
+			require.Equal(t, previousEpoch, state.Info.Epoch)
+		} else {
+			require.NotEqual(t, previousEpoch, state.Info.Epoch)
+		}
 	}
 }

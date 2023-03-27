@@ -34,6 +34,7 @@ import (
 	"github.com/pingcap/tiflow/cdc/puller"
 	"github.com/pingcap/tiflow/cdc/redo"
 	"github.com/pingcap/tiflow/cdc/scheduler"
+	"github.com/pingcap/tiflow/cdc/scheduler/schedulepb"
 	"github.com/pingcap/tiflow/pkg/config"
 	cdcContext "github.com/pingcap/tiflow/pkg/context"
 	cerror "github.com/pingcap/tiflow/pkg/errors"
@@ -69,7 +70,7 @@ type processor struct {
 	sourceManager *sourcemanager.SourceManager
 	sinkManager   *sinkmanager.SinkManager
 
-	redoManager redo.LogManager
+	redoDMLMgr redo.DMLManager
 
 	initialized bool
 	errCh       chan error
@@ -78,12 +79,13 @@ type processor struct {
 
 	lazyInit func(ctx cdcContext.Context) error
 	newAgent func(
-		cdcContext.Context, *model.Liveness, *config.SchedulerConfig,
+		cdcContext.Context, *model.Liveness, uint64, *config.SchedulerConfig,
 	) (scheduler.Agent, error)
 	cfg *config.SchedulerConfig
 
-	liveness *model.Liveness
-	agent    scheduler.Agent
+	liveness        *model.Liveness
+	agent           scheduler.Agent
+	changefeedEpoch uint64
 
 	metricSyncTableNumGauge      prometheus.Gauge
 	metricSchemaStorageGcTsGauge prometheus.Gauge
@@ -183,8 +185,8 @@ func (p *processor) AddTableSpan(
 
 	p.sinkManager.AddTable(
 		span, startTs, p.changefeed.Info.TargetTs)
-	if p.redoManager.Enabled() {
-		p.redoManager.AddTable(span, startTs)
+	if p.redoDMLMgr.Enabled() {
+		p.redoDMLMgr.AddTable(span, startTs)
 	}
 	p.sourceManager.AddTable(
 		ctx.(cdcContext.Context), span, p.getTableName(ctx, span.TableID), startTs)
@@ -307,8 +309,8 @@ func (p *processor) IsRemoveTableSpanFinished(span tablepb.Span) (model.Ts, bool
 	}
 
 	stats := p.sinkManager.GetTableStats(span)
-	if p.redoManager.Enabled() {
-		p.redoManager.RemoveTable(span)
+	if p.redoDMLMgr.Enabled() {
+		p.redoDMLMgr.RemoveTable(span)
 	}
 	p.sinkManager.RemoveTable(span)
 	p.sourceManager.RemoveTable(span)
@@ -400,16 +402,18 @@ func newProcessor(
 	changefeedID model.ChangeFeedID,
 	up *upstream.Upstream,
 	liveness *model.Liveness,
+	changefeedEpoch uint64,
 	cfg *config.SchedulerConfig,
 ) *processor {
 	p := &processor{
-		changefeed:   state,
-		upstream:     up,
-		errCh:        make(chan error, 1),
-		changefeedID: changefeedID,
-		captureInfo:  captureInfo,
-		cancel:       func() {},
-		liveness:     liveness,
+		changefeed:      state,
+		upstream:        up,
+		errCh:           make(chan error, 1),
+		changefeedID:    changefeedID,
+		captureInfo:     captureInfo,
+		cancel:          func() {},
+		liveness:        liveness,
+		changefeedEpoch: changefeedEpoch,
 
 		metricSyncTableNumGauge: syncTableNumGauge.
 			WithLabelValues(changefeedID.Namespace, changefeedID.ID),
@@ -554,18 +558,17 @@ func (p *processor) tick(ctx cdcContext.Context) error {
 	if err := p.lazyInit(ctx); err != nil {
 		return errors.Trace(err)
 	}
-	p.pushResolvedTs2Table()
 
-	p.doGCSchemaStorage()
-
-	if p.redoManager != nil && p.redoManager.Enabled() {
-		ckpt := p.changefeed.Status.CheckpointTs
-		p.redoManager.UpdateCheckpointTs(ckpt)
-	}
-
-	if err := p.agent.Tick(ctx); err != nil {
+	barrier, err := p.agent.Tick(ctx)
+	if err != nil {
 		return errors.Trace(err)
 	}
+
+	if barrier != nil && barrier.GlobalBarrierTs != 0 {
+		p.updateBarrierTs(barrier)
+	}
+	p.doGCSchemaStorage()
+
 	return nil
 }
 
@@ -664,11 +667,16 @@ func (p *processor) lazyInitImpl(ctx cdcContext.Context) error {
 	p.changefeed.Info.Config.Sink.TiDBSourceID = sourceID
 
 	start := time.Now()
-
-	redoManagerOpts := redo.NewProcessorManagerOptions(errCh)
-	p.redoManager, err = redo.NewManager(stdCtx, p.changefeed.Info.Config.Consistent, redoManagerOpts)
+	p.redoDMLMgr, err = redo.NewDMLManager(stdCtx, p.changefeed.Info.Config.Consistent)
 	if err != nil {
 		return err
+	}
+	if p.redoDMLMgr.Enabled() {
+		p.wg.Add(1)
+		go func() {
+			defer p.wg.Done()
+			p.sendError(p.redoDMLMgr.Run(stdCtx))
+		}()
 	}
 	log.Info("processor creates redo manager",
 		zap.String("namespace", p.changefeedID.Namespace),
@@ -688,7 +696,7 @@ func (p *processor) lazyInitImpl(ctx cdcContext.Context) error {
 		sortEngine, p.errCh, p.changefeed.Info.Config.BDRMode)
 	p.sinkManager, err = sinkmanager.New(stdCtx, p.changefeedID,
 		p.changefeed.Info, p.upstream, p.schemaStorage,
-		p.redoManager, p.sourceManager,
+		p.redoDMLMgr, p.sourceManager,
 		p.errCh)
 	if err != nil {
 		log.Info("Processor creates sink manager fail",
@@ -703,7 +711,7 @@ func (p *processor) lazyInitImpl(ctx cdcContext.Context) error {
 	// Bind them so that sourceManager can notify sinkManager.
 	p.sourceManager.OnResolve(p.sinkManager.UpdateReceivedSorterResolvedTs)
 
-	p.agent, err = p.newAgent(ctx, p.liveness, p.cfg)
+	p.agent, err = p.newAgent(ctx, p.liveness, p.changefeedEpoch, p.cfg)
 	if err != nil {
 		return err
 	}
@@ -712,12 +720,16 @@ func (p *processor) lazyInitImpl(ctx cdcContext.Context) error {
 	log.Info("processor initialized",
 		zap.String("capture", p.captureInfo.ID),
 		zap.String("namespace", p.changefeedID.Namespace),
-		zap.String("changefeed", p.changefeedID.ID))
+		zap.String("changefeed", p.changefeedID.ID),
+		zap.Uint64("changefeedEpoch", p.changefeedEpoch))
 	return nil
 }
 
 func (p *processor) newAgentImpl(
-	ctx cdcContext.Context, liveness *model.Liveness, cfg *config.SchedulerConfig,
+	ctx cdcContext.Context,
+	liveness *model.Liveness,
+	changefeedEpoch uint64,
+	cfg *config.SchedulerConfig,
 ) (ret scheduler.Agent, err error) {
 	messageServer := ctx.GlobalVars().MessageServer
 	messageRouter := ctx.GlobalVars().MessageRouter
@@ -725,7 +737,8 @@ func (p *processor) newAgentImpl(
 	captureID := ctx.GlobalVars().CaptureInfo.ID
 	ret, err = scheduler.NewAgent(
 		ctx, captureID, liveness,
-		messageServer, messageRouter, etcdClient, p, p.changefeedID, cfg)
+		messageServer, messageRouter, etcdClient, p, p.changefeedID,
+		changefeedEpoch, cfg)
 	return ret, errors.Trace(err)
 }
 
@@ -843,18 +856,29 @@ func (p *processor) sendError(err error) {
 	}
 }
 
-// pushResolvedTs2Table sends global resolved ts to all the table pipelines.
-func (p *processor) pushResolvedTs2Table() {
-	resolvedTs := p.changefeed.Status.ResolvedTs
+// updateBarrierTs updates barrierTs for all tables.
+func (p *processor) updateBarrierTs(barrier *schedulepb.Barrier) {
+	tableBarrier := p.calculateTableBarrierTs(barrier)
+	globalBarrierTs := barrier.GetGlobalBarrierTs()
+	// when redo is enable, globalBarrierTs must less than or equal to global resolvedTs
+	if p.redoDMLMgr.Enabled() {
+		if globalBarrierTs > p.changefeed.Status.ResolvedTs {
+			globalBarrierTs = p.changefeed.Status.ResolvedTs
+		}
+	}
 	schemaResolvedTs := p.schemaStorage.ResolvedTs()
-	if schemaResolvedTs < resolvedTs {
+	if schemaResolvedTs < globalBarrierTs {
 		// Do not update barrier ts that is larger than
 		// DDL puller's resolved ts.
 		// When DDL puller stall, resolved events that outputted by sorter
 		// may pile up in memory, as they have to wait DDL.
-		resolvedTs = schemaResolvedTs
+		globalBarrierTs = schemaResolvedTs
 	}
-	p.sinkManager.UpdateBarrierTs(resolvedTs)
+	log.Debug("update barrierTs",
+		zap.Any("tableBarriers", barrier.GetTableBarriers()),
+		zap.Uint64("globalBarrierTs", globalBarrierTs))
+
+	p.sinkManager.UpdateBarrierTs(globalBarrierTs, tableBarrier)
 }
 
 func (p *processor) getTableName(ctx context.Context, tableID model.TableID) string {
@@ -881,8 +905,8 @@ func (p *processor) getTableName(ctx context.Context, tableID model.TableID) str
 }
 
 func (p *processor) removeTable(span tablepb.Span) {
-	if p.redoManager.Enabled() {
-		p.redoManager.RemoveTable(span)
+	if p.redoDMLMgr.Enabled() {
+		p.redoDMLMgr.RemoveTable(span)
 	}
 	p.sinkManager.RemoveTable(span)
 	p.sourceManager.RemoveTable(span)
@@ -1027,4 +1051,14 @@ func (p *processor) WriteDebugInfo(w io.Writer) error {
 	}
 
 	return nil
+}
+
+func (p *processor) calculateTableBarrierTs(
+	barrier *schedulepb.Barrier,
+) map[model.TableID]model.Ts {
+	tableBarrierTs := make(map[model.TableID]model.Ts)
+	for _, tb := range barrier.TableBarriers {
+		tableBarrierTs[tb.TableID] = tb.BarrierTs
+	}
+	return tableBarrierTs
 }

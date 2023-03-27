@@ -146,6 +146,8 @@ type ChangeFeedInfo struct {
 	Error  *RunningError         `json:"error"`
 
 	CreatorVersion string `json:"creator-version"`
+	// Epoch is the epoch of a changefeed, changes on every restart.
+	Epoch uint64 `json:"epoch"`
 }
 
 const changeFeedIDMaxLen = 128
@@ -309,11 +311,10 @@ func (info *ChangeFeedInfo) FixIncompatible() {
 		log.Info("Fix incompatible memory quota completed", zap.String("changefeed", info.String()))
 	}
 
-	if info.Config.Scheduler == nil {
-		log.Info("Start fixing incompatible scheduler", zap.String("changefeed", info.String()))
-		info.fixScheduler()
-		log.Info("Fix incompatible scheduler completed", zap.String("changefeed", info.String()))
-	}
+	log.Info("Start fixing incompatible scheduler", zap.String("changefeed", info.String()))
+	inheritV66 := creatorVersionGate.ChangefeedInheritSchedulerConfigFromV66()
+	info.fixScheduler(inheritV66)
+	log.Info("Fix incompatible scheduler completed", zap.String("changefeed", info.String()))
 }
 
 // fixState attempts to fix state loss from upgrading the old owner to the new owner.
@@ -436,18 +437,55 @@ func (info *ChangeFeedInfo) updateSinkURIAndConfigProtocol(uri *url.URL, newProt
 	info.Config.Sink.Protocol = newProtocol
 }
 
-// HasFastFailError returns true if the error in changefeed is fast-fail
-func (info *ChangeFeedInfo) HasFastFailError() bool {
-	if info.Error == nil {
-		return false
+// DownstreamType returns the type of the downstream.
+func (info *ChangeFeedInfo) DownstreamType() (DownstreamType, error) {
+	uri, err := url.Parse(info.SinkURI)
+	if err != nil {
+		return Unknown, errors.Trace(err)
 	}
-	return cerror.IsChangefeedFastFailErrorCode(errors.RFCErrorCode(info.Error.Code))
+	if sink.IsMySQLCompatibleScheme(uri.Scheme) {
+		return DB, nil
+	}
+	if sink.IsMQScheme(uri.Scheme) {
+		return MQ, nil
+	}
+	if sink.IsStorageScheme(uri.Scheme) {
+		return Storage, nil
+	}
+	return Unknown, nil
 }
 
 func (info *ChangeFeedInfo) fixMemoryQuota() {
 	info.Config.FixMemoryQuota()
 }
 
-func (info *ChangeFeedInfo) fixScheduler() {
-	info.Config.FixScheduler()
+func (info *ChangeFeedInfo) fixScheduler(inheritV66 bool) {
+	info.Config.FixScheduler(inheritV66)
+}
+
+// DownstreamType is the type of downstream.
+type DownstreamType int
+
+const (
+	// DB is the type of Database.
+	DB DownstreamType = iota
+	// MQ is the type of MQ or Cloud Storage.
+	MQ
+	// Storage is the type of Cloud Storage.
+	Storage
+	// Unknown is the type of Unknown.
+	Unknown
+)
+
+// String implements fmt.Stringer interface.
+func (t DownstreamType) String() string {
+	switch t {
+	case DB:
+		return "DB"
+	case MQ:
+		return "MQ"
+	case Storage:
+		return "Storage"
+	}
+	return "Unknown"
 }

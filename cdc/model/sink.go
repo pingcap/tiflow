@@ -51,6 +51,10 @@ const (
 	// BinaryFlag means the column charset is binary
 	BinaryFlag ColumnFlagType = 1 << ColumnFlagType(iota)
 	// HandleKeyFlag means the column is selected as the handle key
+	// The handleKey is chosen by the following rules:
+	// 1. If the table has a primary key, the handleKey is the first column of the primary key.
+	// 2. If the table has not null unique key, the handleKey is the first column of the unique key.
+	// 3. If the table has no primary key and no not null unique key, it has no handleKey.
 	HandleKeyFlag
 	// GeneratedColumnFlag means the column is a generated column
 	GeneratedColumnFlag
@@ -241,11 +245,47 @@ type RedoLog struct {
 	Type    RedoLogType         `msg:"type"`
 }
 
+// GetCommitTs returns the commit ts of the redo log.
+func (r *RedoLog) GetCommitTs() Ts {
+	switch r.Type {
+	case RedoLogTypeRow:
+		return r.RedoRow.Row.CommitTs
+	case RedoLogTypeDDL:
+		return r.RedoDDL.DDL.CommitTs
+	default:
+		log.Panic("invalid redo log type", zap.Any("type", r.Type))
+	}
+	return 0
+}
+
 // RedoRowChangedEvent represents the DML event used in RedoLog
 type RedoRowChangedEvent struct {
 	Row        *RowChangedEvent `msg:"row"`
 	Columns    []RedoColumn     `msg:"columns"`
 	PreColumns []RedoColumn     `msg:"pre-columns"`
+}
+
+// RedoDDLEvent represents DDL event used in redo log persistent
+type RedoDDLEvent struct {
+	DDL       *DDLEvent `msg:"ddl"`
+	Type      byte      `msg:"type"`
+	TableName TableName `msg:"table-name"`
+}
+
+// ToRedoLog converts row changed event to redo log
+func (row *RowChangedEvent) ToRedoLog() *RedoLog {
+	return &RedoLog{
+		RedoRow: RedoRowChangedEvent{Row: row},
+		Type:    RedoLogTypeRow,
+	}
+}
+
+// ToRedoLog converts ddl event to redo log
+func (ddl *DDLEvent) ToRedoLog() *RedoLog {
+	return &RedoLog{
+		RedoDDL: RedoDDLEvent{DDL: ddl},
+		Type:    RedoLogTypeDDL,
+	}
 }
 
 // RowChangedEvent represents a row changed event
@@ -255,9 +295,21 @@ type RowChangedEvent struct {
 
 	RowID int64 `json:"row-id" msg:"-"` // Deprecated. It is empty when the RowID comes from clustered index table.
 
-	Table     *TableName         `json:"table" msg:"table"`
-	ColInfos  []rowcodec.ColInfo `json:"column-infos" msg:"-"`
-	TableInfo *TableInfo         `json:"-" msg:"-"`
+	// Table contains the table name and table ID.
+	// NOTICE: We store the physical table ID here, not the logical table ID.
+	Table    *TableName         `json:"table" msg:"table"`
+	ColInfos []rowcodec.ColInfo `json:"column-infos" msg:"-"`
+	// NOTICE: We probably store the logical ID inside TableInfo's TableName,
+	// not the physical ID.
+	// For normal table, there is only one ID, which is the physical ID.
+	// AKA TIDB_TABLE_ID.
+	// For partitioned table, there are two kinds of ID:
+	// 1. TIDB_PARTITION_ID is the physical ID of the partition.
+	// 2. TIDB_TABLE_ID is the logical ID of the table.
+	// In general, we always use the physical ID to represent a table, but we
+	// record the logical ID from the DDL event(job.BinlogInfo.TableInfo).
+	// So be careful when using the TableInfo.
+	TableInfo *TableInfo `json:"-" msg:"-"`
 
 	Columns      []*Column `json:"columns" msg:"columns"`
 	PreColumns   []*Column `json:"pre-columns" msg:"pre-columns"`
@@ -311,48 +363,6 @@ func (r *RowChangedEvent) PrimaryKeyColumnNames() []string {
 		}
 	}
 	return result
-}
-
-// PrimaryKeyColumns returns the column(s) corresponding to the handle key(s)
-func (r *RowChangedEvent) PrimaryKeyColumns() []*Column {
-	pkeyCols := make([]*Column, 0)
-
-	var cols []*Column
-	if r.IsDelete() {
-		cols = r.PreColumns
-	} else {
-		cols = r.Columns
-	}
-
-	for _, col := range cols {
-		if col != nil && (col.Flag.IsPrimaryKey()) {
-			pkeyCols = append(pkeyCols, col)
-		}
-	}
-
-	// It is okay not to have primary keys, so the empty array is an acceptable result
-	return pkeyCols
-}
-
-// HandleKeyColumns returns the column(s) corresponding to the handle key(s)
-func (r *RowChangedEvent) HandleKeyColumns() []*Column {
-	pkeyCols := make([]*Column, 0)
-
-	var cols []*Column
-	if r.IsDelete() {
-		cols = r.PreColumns
-	} else {
-		cols = r.Columns
-	}
-
-	for _, col := range cols {
-		if col != nil && col.Flag.IsHandleKey() {
-			pkeyCols = append(pkeyCols, col)
-		}
-	}
-
-	// It is okay not to have handle keys, so the empty array is an acceptable result
-	return pkeyCols
 }
 
 // HandleKeyColInfos returns the column(s) and colInfo(s) corresponding to the handle key(s)
@@ -598,12 +608,6 @@ type DDLEvent struct {
 	Done         bool             `msg:"-"`
 }
 
-// RedoDDLEvent represents DDL event used in redo log persistent
-type RedoDDLEvent struct {
-	DDL  *DDLEvent `msg:"ddl"`
-	Type byte      `msg:"type"`
-}
-
 // FromJob fills the values with DDLEvent from DDL job
 func (d *DDLEvent) FromJob(job *model.Job, preTableInfo *TableInfo, tableInfo *TableInfo) {
 	// populating DDLEvent of an `rename tables` job is handled in `FromRenameTablesJob()`
@@ -660,7 +664,6 @@ func (d *DDLEvent) FromRenameTablesJob(job *model.Job,
 //
 //msgp:ignore SingleTableTxn
 type SingleTableTxn struct {
-	// data fields of SingleTableTxn
 	Table     *TableName
 	TableInfo *TableInfo
 	StartTs   uint64

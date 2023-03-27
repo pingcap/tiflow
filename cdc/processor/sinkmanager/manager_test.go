@@ -15,55 +15,16 @@ package sinkmanager
 
 import (
 	"context"
-	"math"
 	"testing"
 	"time"
 
-	"github.com/pingcap/tiflow/cdc/entry"
 	"github.com/pingcap/tiflow/cdc/model"
-	"github.com/pingcap/tiflow/cdc/processor/sourcemanager"
 	"github.com/pingcap/tiflow/cdc/processor/sourcemanager/engine"
-	"github.com/pingcap/tiflow/cdc/processor/sourcemanager/engine/memory"
 	"github.com/pingcap/tiflow/cdc/processor/tablepb"
 	"github.com/pingcap/tiflow/pkg/config"
 	"github.com/pingcap/tiflow/pkg/spanz"
-	"github.com/pingcap/tiflow/pkg/upstream"
 	"github.com/stretchr/testify/require"
-	pd "github.com/tikv/pd/client"
 )
-
-type mockPD struct {
-	pd.Client
-	ts int64
-}
-
-func (p *mockPD) GetTS(_ context.Context) (int64, int64, error) {
-	if p.ts != 0 {
-		return p.ts, p.ts, nil
-	}
-	return math.MaxInt64, math.MaxInt64, nil
-}
-
-// nolint:revive
-// In test it is ok move the ctx to the second parameter.
-func createManagerWithMemEngine(
-	t *testing.T,
-	ctx context.Context,
-	changefeedID model.ChangeFeedID,
-	changefeedInfo *model.ChangeFeedInfo,
-	errChan chan error,
-) (*SinkManager, engine.SortEngine) {
-	sortEngine := memory.New(context.Background())
-	up := upstream.NewUpstream4Test(&mockPD{})
-	sm := sourcemanager.New(changefeedID, up, &entry.MockMountGroup{}, sortEngine, errChan, false)
-	manager, err := New(
-		ctx, changefeedID, changefeedInfo, up,
-		&entry.MockSchemaStorage{Resolved: math.MaxUint64},
-		nil, sm,
-		errChan)
-	require.NoError(t, err)
-	return manager, sortEngine
-}
 
 func getChangefeedInfo() *model.ChangeFeedInfo {
 	return &model.ChangeFeedInfo{
@@ -131,8 +92,7 @@ func addTableAndAddEventsToSortEngine(
 		},
 	}
 	for _, event := range events {
-		err := engine.Add(span, event)
-		require.NoError(t, err)
+		engine.Add(span, event)
 	}
 }
 
@@ -143,7 +103,8 @@ func TestAddTable(t *testing.T) {
 	defer cancel()
 
 	changefeedInfo := getChangefeedInfo()
-	manager, _ := createManagerWithMemEngine(t, ctx, model.DefaultChangeFeedID("1"), changefeedInfo, make(chan error, 1))
+	manager, _, _ := CreateManagerWithMemEngine(t, ctx, model.DefaultChangeFeedID("1"),
+		changefeedInfo, make(chan error, 1))
 	defer func() {
 		err := manager.Close()
 		require.NoError(t, err)
@@ -171,7 +132,8 @@ func TestRemoveTable(t *testing.T) {
 	defer cancel()
 
 	changefeedInfo := getChangefeedInfo()
-	manager, e := createManagerWithMemEngine(t, ctx, model.DefaultChangeFeedID("1"), changefeedInfo, make(chan error, 1))
+	manager, _, e := CreateManagerWithMemEngine(t, ctx, model.DefaultChangeFeedID("1"),
+		changefeedInfo, make(chan error, 1))
 	defer func() {
 		err := manager.Close()
 		require.NoError(t, err)
@@ -184,7 +146,7 @@ func TestRemoveTable(t *testing.T) {
 	err := manager.StartTable(span, 0)
 	require.NoError(t, err)
 	addTableAndAddEventsToSortEngine(t, e, span)
-	manager.UpdateBarrierTs(4)
+	manager.UpdateBarrierTs(4, nil)
 	manager.UpdateReceivedSorterResolvedTs(span, 5)
 
 	// Check all the events are sent to sink and record the memory usage.
@@ -206,24 +168,6 @@ func TestRemoveTable(t *testing.T) {
 	require.Equal(t, uint64(0), manager.sinkMemQuota.GetUsedBytes(), "After remove table, the memory usage should be 0.")
 }
 
-func TestUpdateBarrierTs(t *testing.T) {
-	t.Parallel()
-
-	ctx, cancel := context.WithCancel(context.Background())
-	defer cancel()
-
-	changefeedInfo := getChangefeedInfo()
-	manager, _ := createManagerWithMemEngine(t, ctx, model.DefaultChangeFeedID("1"), changefeedInfo, make(chan error, 1))
-	defer func() {
-		err := manager.Close()
-		require.NoError(t, err)
-	}()
-	manager.UpdateBarrierTs(100)
-	require.Equal(t, uint64(100), manager.lastBarrierTs.Load())
-	manager.UpdateBarrierTs(50)
-	require.Equal(t, uint64(100), manager.lastBarrierTs.Load())
-}
-
 func TestGenerateTableSinkTaskWithBarrierTs(t *testing.T) {
 	t.Parallel()
 
@@ -231,7 +175,8 @@ func TestGenerateTableSinkTaskWithBarrierTs(t *testing.T) {
 	defer cancel()
 
 	changefeedInfo := getChangefeedInfo()
-	manager, e := createManagerWithMemEngine(t, ctx, model.DefaultChangeFeedID("1"), changefeedInfo, make(chan error, 1))
+	manager, _, e := CreateManagerWithMemEngine(t, ctx, model.DefaultChangeFeedID("1"),
+		changefeedInfo, make(chan error, 1))
 	defer func() {
 		err := manager.Close()
 		require.NoError(t, err)
@@ -239,7 +184,7 @@ func TestGenerateTableSinkTaskWithBarrierTs(t *testing.T) {
 	span := spanz.TableIDToComparableSpan(1)
 	manager.AddTable(span, 1, 100)
 	addTableAndAddEventsToSortEngine(t, e, span)
-	manager.UpdateBarrierTs(4)
+	manager.UpdateBarrierTs(4, nil)
 	manager.UpdateReceivedSorterResolvedTs(span, 5)
 	err := manager.StartTable(span, 0)
 	require.NoError(t, err)
@@ -259,7 +204,8 @@ func TestGenerateTableSinkTaskWithResolvedTs(t *testing.T) {
 	defer cancel()
 
 	changefeedInfo := getChangefeedInfo()
-	manager, e := createManagerWithMemEngine(t, ctx, model.DefaultChangeFeedID("1"), changefeedInfo, make(chan error, 1))
+	manager, _, e := CreateManagerWithMemEngine(t, ctx, model.DefaultChangeFeedID("1"),
+		changefeedInfo, make(chan error, 1))
 	defer func() {
 		err := manager.Close()
 		require.NoError(t, err)
@@ -269,7 +215,7 @@ func TestGenerateTableSinkTaskWithResolvedTs(t *testing.T) {
 	addTableAndAddEventsToSortEngine(t, e, span)
 	// This would happen when the table just added to this node and redo log is enabled.
 	// So there is possibility that the resolved ts is smaller than the global barrier ts.
-	manager.UpdateBarrierTs(4)
+	manager.UpdateBarrierTs(4, nil)
 	manager.UpdateReceivedSorterResolvedTs(span, 3)
 	err := manager.StartTable(span, 0)
 	require.NoError(t, err)
@@ -289,7 +235,8 @@ func TestGetTableStatsToReleaseMemQuota(t *testing.T) {
 	defer cancel()
 
 	changefeedInfo := getChangefeedInfo()
-	manager, e := createManagerWithMemEngine(t, ctx, model.DefaultChangeFeedID("1"), changefeedInfo, make(chan error, 1))
+	manager, _, e := CreateManagerWithMemEngine(t, ctx, model.DefaultChangeFeedID("1"),
+		changefeedInfo, make(chan error, 1))
 	defer func() {
 		err := manager.Close()
 		require.NoError(t, err)
@@ -298,7 +245,7 @@ func TestGetTableStatsToReleaseMemQuota(t *testing.T) {
 	manager.AddTable(span, 1, 100)
 	addTableAndAddEventsToSortEngine(t, e, span)
 
-	manager.UpdateBarrierTs(4)
+	manager.UpdateBarrierTs(4, nil)
 	manager.UpdateReceivedSorterResolvedTs(span, 5)
 	err := manager.StartTable(span, 0)
 	require.NoError(t, err)
@@ -316,7 +263,8 @@ func TestDoNotGenerateTableSinkTaskWhenTableIsNotReplicating(t *testing.T) {
 	defer cancel()
 
 	changefeedInfo := getChangefeedInfo()
-	manager, e := createManagerWithMemEngine(t, ctx, model.DefaultChangeFeedID("1"), changefeedInfo, make(chan error, 1))
+	manager, _, e := CreateManagerWithMemEngine(t, ctx, model.DefaultChangeFeedID("1"),
+		changefeedInfo, make(chan error, 1))
 	defer func() {
 		err := manager.Close()
 		require.NoError(t, err)
@@ -324,7 +272,7 @@ func TestDoNotGenerateTableSinkTaskWhenTableIsNotReplicating(t *testing.T) {
 	span := spanz.TableIDToComparableSpan(1)
 	manager.AddTable(span, 1, 100)
 	addTableAndAddEventsToSortEngine(t, e, span)
-	manager.UpdateBarrierTs(4)
+	manager.UpdateBarrierTs(4, nil)
 	manager.UpdateReceivedSorterResolvedTs(span, 5)
 
 	require.Equal(t, uint64(0), manager.sinkMemQuota.GetUsedBytes())
@@ -341,7 +289,8 @@ func TestClose(t *testing.T) {
 	defer cancel()
 
 	changefeedInfo := getChangefeedInfo()
-	manager, _ := createManagerWithMemEngine(t, ctx, model.DefaultChangeFeedID("1"), changefeedInfo, make(chan error, 1))
+	manager, _, _ := CreateManagerWithMemEngine(t, ctx, model.DefaultChangeFeedID("1"),
+		changefeedInfo, make(chan error, 1))
 
 	err := manager.Close()
 	require.NoError(t, err)
@@ -357,7 +306,8 @@ func TestUpdateReceivedSorterResolvedTsOfNonExistTable(t *testing.T) {
 	defer cancel()
 
 	changefeedInfo := getChangefeedInfo()
-	manager, _ := createManagerWithMemEngine(t, ctx, model.DefaultChangeFeedID("1"), changefeedInfo, make(chan error, 1))
+	manager, _, _ := CreateManagerWithMemEngine(t, ctx, model.DefaultChangeFeedID("1"),
+		changefeedInfo, make(chan error, 1))
 	defer func() {
 		err := manager.Close()
 		require.NoError(t, err)

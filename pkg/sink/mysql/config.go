@@ -57,12 +57,10 @@ const (
 	// The upper limit of max multi update row size(8KB).
 	maxMaxMultiUpdateRowSize = 8192
 
-	defaultTiDBTxnMode         = txnModeOptimistic
-	defaultBatchReplaceEnabled = true
-	defaultBatchReplaceSize    = 20
-	defaultReadTimeout         = "2m"
-	defaultWriteTimeout        = "2m"
-	defaultDialTimeout         = "2m"
+	defaultTiDBTxnMode  = txnModeOptimistic
+	defaultReadTimeout  = "2m"
+	defaultWriteTimeout = "2m"
+	defaultDialTimeout  = "2m"
 	// Note(dongmen): defaultSafeMode is set to false since v6.4.0.
 	defaultSafeMode       = false
 	defaultTxnIsolationRC = "READ-COMMITTED"
@@ -73,7 +71,11 @@ const (
 	// BackoffMaxDelay indicates the max delay time for retrying.
 	BackoffMaxDelay = 60 * time.Second
 
-	defaultBatchDMLEnable = true
+	defaultBatchDMLEnable  = true
+	defaultMultiStmtEnable = true
+
+	// defaultcachePrepStmts is the default value of cachePrepStmts
+	defaultCachePrepStmts = true
 )
 
 // Config is the configs for MySQL backend.
@@ -83,8 +85,6 @@ type Config struct {
 	MaxMultiUpdateRowCount int
 	MaxMultiUpdateRowSize  int
 	tidbTxnMode            string
-	BatchReplaceEnabled    bool
-	BatchReplaceSize       int
 	ReadTimeout            string
 	WriteTimeout           string
 	DialTimeout            string
@@ -94,9 +94,11 @@ type Config struct {
 	ForceReplicate         bool
 	EnableOldValue         bool
 
-	IsTiDB         bool // IsTiDB is true if the downstream is TiDB
-	SourceID       uint64
-	BatchDMLEnable bool
+	IsTiDB          bool // IsTiDB is true if the downstream is TiDB
+	SourceID        uint64
+	BatchDMLEnable  bool
+	MultiStmtEnable bool
+	CachePrepStmts  bool
 }
 
 // NewConfig returns the default mysql backend config.
@@ -107,13 +109,13 @@ func NewConfig() *Config {
 		MaxMultiUpdateRowCount: defaultMaxMultiUpdateRowCount,
 		MaxMultiUpdateRowSize:  defaultMaxMultiUpdateRowSize,
 		tidbTxnMode:            defaultTiDBTxnMode,
-		BatchReplaceEnabled:    defaultBatchReplaceEnabled,
-		BatchReplaceSize:       defaultBatchReplaceSize,
 		ReadTimeout:            defaultReadTimeout,
 		WriteTimeout:           defaultWriteTimeout,
 		DialTimeout:            defaultDialTimeout,
 		SafeMode:               defaultSafeMode,
 		BatchDMLEnable:         defaultBatchDMLEnable,
+		MultiStmtEnable:        defaultMultiStmtEnable,
+		CachePrepStmts:         defaultCachePrepStmts,
 	}
 }
 
@@ -151,9 +153,6 @@ func (c *Config) Apply(
 	if err = getSSLCA(query, changefeedID, &c.TLS); err != nil {
 		return err
 	}
-	if err = getBatchReplaceEnable(query, &c.BatchReplaceEnabled, &c.BatchReplaceSize); err != nil {
-		return err
-	}
 	if err = getSafeMode(query, &c.SafeMode); err != nil {
 		return err
 	}
@@ -170,6 +169,12 @@ func (c *Config) Apply(
 		return err
 	}
 	if err = getBatchDMLEnable(query, &c.BatchDMLEnable); err != nil {
+		return err
+	}
+	if err = getMultiStmtEnable(query, &c.MultiStmtEnable); err != nil {
+		return err
+	}
+	if err = getCachePrepStmts(query, &c.CachePrepStmts); err != nil {
 		return err
 	}
 	c.EnableOldValue = replicaConfig.EnableOldValue
@@ -312,32 +317,6 @@ func getSSLCA(values url.Values, changefeedID model.ChangeFeedID, tls *string) e
 	return nil
 }
 
-func getBatchReplaceEnable(values url.Values, batchReplaceEnabled *bool, batchReplaceSize *int) error {
-	s := values.Get("batch-replace-enable")
-	if len(s) > 0 {
-		enable, err := strconv.ParseBool(s)
-		if err != nil {
-			return cerror.WrapError(cerror.ErrMySQLInvalidConfig, err)
-		}
-		*batchReplaceEnabled = enable
-	}
-
-	if !*batchReplaceEnabled {
-		return nil
-	}
-
-	s = values.Get("batch-replace-size")
-	if len(s) == 0 {
-		return nil
-	}
-	size, err := strconv.Atoi(s)
-	if err != nil {
-		return cerror.WrapError(cerror.ErrMySQLInvalidConfig, err)
-	}
-	*batchReplaceSize = size
-	return nil
-}
-
 func getSafeMode(values url.Values, safeMode *bool) error {
 	s := values.Get("safe-mode")
 	if len(s) == 0 {
@@ -397,6 +376,30 @@ func getBatchDMLEnable(values url.Values, batchDMLEnable *bool) error {
 			return cerror.WrapError(cerror.ErrMySQLInvalidConfig, err)
 		}
 		*batchDMLEnable = enable
+	}
+	return nil
+}
+
+func getMultiStmtEnable(values url.Values, multiStmtEnable *bool) error {
+	s := values.Get("multi-stmt-enable")
+	if len(s) > 0 {
+		enable, err := strconv.ParseBool(s)
+		if err != nil {
+			return cerror.WrapError(cerror.ErrMySQLInvalidConfig, err)
+		}
+		*multiStmtEnable = enable
+	}
+	return nil
+}
+
+func getCachePrepStmts(values url.Values, cachePrepStmts *bool) error {
+	s := values.Get("cache-prep-stmts")
+	if len(s) > 0 {
+		enable, err := strconv.ParseBool(s)
+		if err != nil {
+			return cerror.WrapError(cerror.ErrMySQLInvalidConfig, err)
+		}
+		*cachePrepStmts = enable
 	}
 	return nil
 }

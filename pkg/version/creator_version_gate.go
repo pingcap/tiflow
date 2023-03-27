@@ -92,3 +92,14 @@ func (g *CreatorVersionGate) ChangefeedAcceptProtocolInMysqlSinURI() bool {
 	creatorVersion := semver.New(SanitizeVersion(g.version))
 	return creatorVersion.LessThan(changefeedAcceptProtocolInMysqlSinURI)
 }
+
+// ChangefeedInheritSchedulerConfigFromV66 determines whether to inherit
+// changefeed scheduler config created by v6.6.0.
+func (g *CreatorVersionGate) ChangefeedInheritSchedulerConfigFromV66() bool {
+	if g.version == "" {
+		return false
+	}
+
+	creatorVersion := semver.New(SanitizeVersion(g.version))
+	return creatorVersion.Major == 6 && creatorVersion.Minor == 6
+}

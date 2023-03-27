@@ -54,6 +54,7 @@ func NewManager4Test(
 		changefeedID model.ChangeFeedID,
 		up *upstream.Upstream,
 		liveness *model.Liveness,
+		changefeedEpoch uint64,
 		cfg *config.SchedulerConfig,
 	) *processor {
 		return newProcessor4Test(t, state, captureInfo, m.liveness, cfg)
@@ -75,7 +76,6 @@ func (s *managerTester) resetSuit(ctx cdcContext.Context, t *testing.T) {
 }
 
 func TestChangefeed(t *testing.T) {
-	t.Skip("FIXME: Use pull-based-sink")
 	ctx := cdcContext.NewBackendContext4Test(false)
 	s := &managerTester{}
 	s.resetSuit(ctx, t)
@@ -129,7 +129,6 @@ func TestChangefeed(t *testing.T) {
 }
 
 func TestDebugInfo(t *testing.T) {
-	t.Skip("FIXME: Use pull-based-sink")
 	ctx := cdcContext.NewBackendContext4Test(false)
 	s := &managerTester{}
 	s.resetSuit(ctx, t)
@@ -162,6 +161,12 @@ func TestDebugInfo(t *testing.T) {
 	require.Nil(t, err)
 	s.tester.MustApplyPatches()
 	require.Len(t, s.manager.processors, 1)
+
+	// Do a no operation tick to lazy init the processor.
+	_, err = s.manager.Tick(ctx, s.state)
+	require.Nil(t, err)
+	s.tester.MustApplyPatches()
+
 	done := make(chan struct{})
 	go func() {
 		defer close(done)
@@ -185,7 +190,6 @@ func TestDebugInfo(t *testing.T) {
 }
 
 func TestClose(t *testing.T) {
-	t.Skip("FIXME: Use pull-based-sink")
 	ctx := cdcContext.NewBackendContext4Test(false)
 	s := &managerTester{}
 	s.resetSuit(ctx, t)
@@ -227,7 +231,6 @@ func TestClose(t *testing.T) {
 }
 
 func TestSendCommandError(t *testing.T) {
-	t.Skip("FIXME: Use pull-based-sink")
 	liveness := model.LivenessCaptureAlive
 	cfg := config.NewDefaultSchedulerConfig()
 	m := NewManager(&model.CaptureInfo{ID: "capture-test"}, nil, &liveness, cfg).(*managerImpl)
@@ -246,7 +249,6 @@ func TestSendCommandError(t *testing.T) {
 }
 
 func TestManagerLiveness(t *testing.T) {
-	t.Skip("FIXME: Use pull-based-sink")
 	ctx := cdcContext.NewBackendContext4Test(false)
 	s := &managerTester{}
 	s.resetSuit(ctx, t)
@@ -289,26 +291,4 @@ func TestManagerLiveness(t *testing.T) {
 	require.Equal(t, model.LivenessCaptureAlive, p.liveness.Load())
 	s.liveness.Store(model.LivenessCaptureStopping)
 	require.Equal(t, model.LivenessCaptureStopping, p.liveness.Load())
-}
-
-func TestQueryTableCount(t *testing.T) {
-	t.Skip("FIXME: add tables")
-	liveness := model.LivenessCaptureAlive
-	cfg := config.NewDefaultSchedulerConfig()
-	m := NewManager(&model.CaptureInfo{ID: "capture-test"}, nil, &liveness, cfg).(*managerImpl)
-	ctx := context.TODO()
-	m.processors[model.ChangeFeedID{ID: "test"}] = &processor{}
-
-	done := make(chan error, 1)
-	tableCh := make(chan int, 1)
-	err := m.sendCommand(ctx, commandTpQueryTableCount, tableCh, done)
-	require.Nil(t, err)
-	err = m.handleCommand(nil)
-	require.Nil(t, err)
-	select {
-	case count := <-tableCh:
-		require.Equal(t, 2, count)
-	case <-time.After(time.Second):
-		require.FailNow(t, "done must be closed")
-	}
 }

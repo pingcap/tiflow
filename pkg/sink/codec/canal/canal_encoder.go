@@ -36,14 +36,14 @@ type BatchEncoder struct {
 	entryBuilder *canalEntryBuilder
 }
 
-// EncodeCheckpointEvent implements the EventBatchEncoder interface
+// EncodeCheckpointEvent implements the RowEventEncoder interface
 func (d *BatchEncoder) EncodeCheckpointEvent(ts uint64) (*common.Message, error) {
 	// For canal now, there is no such a corresponding type to ResolvedEvent so far.
 	// Therefore, the event is ignored.
 	return nil, nil
 }
 
-// AppendRowChangedEvent implements the EventBatchEncoder interface
+// AppendRowChangedEvent implements the RowEventEncoder interface
 func (d *BatchEncoder) AppendRowChangedEvent(
 	_ context.Context,
 	_ string,
@@ -65,7 +65,7 @@ func (d *BatchEncoder) AppendRowChangedEvent(
 	return nil
 }
 
-// EncodeDDLEvent implements the EventBatchEncoder interface
+// EncodeDDLEvent implements the RowEventEncoder interface
 func (d *BatchEncoder) EncodeDDLEvent(e *model.DDLEvent) (*common.Message, error) {
 	entry, err := d.entryBuilder.fromDDLEvent(e)
 	if err != nil {
@@ -98,7 +98,7 @@ func (d *BatchEncoder) EncodeDDLEvent(e *model.DDLEvent) (*common.Message, error
 	return common.NewDDLMsg(config.ProtocolCanal, nil, b, e), nil
 }
 
-// Build implements the EventBatchEncoder interface
+// Build implements the RowEventEncoder interface
 func (d *BatchEncoder) Build() []*common.Message {
 	rowCount := len(d.messages.Messages)
 	if rowCount == 0 {
@@ -156,7 +156,7 @@ func (d *BatchEncoder) resetPacket() {
 }
 
 // newBatchEncoder creates a new canalBatchEncoder.
-func newBatchEncoder() codec.EventBatchEncoder {
+func newBatchEncoder() codec.RowEventEncoder {
 	encoder := &BatchEncoder{
 		messages:     &canal.Messages{},
 		callbackBuf:  make([]func(), 0),
@@ -170,11 +170,11 @@ func newBatchEncoder() codec.EventBatchEncoder {
 type batchEncoderBuilder struct{}
 
 // Build a `canalBatchEncoder`
-func (b *batchEncoderBuilder) Build() codec.EventBatchEncoder {
+func (b *batchEncoderBuilder) Build() codec.RowEventEncoder {
 	return newBatchEncoder()
 }
 
 // NewBatchEncoderBuilder creates a canal batchEncoderBuilder.
-func NewBatchEncoderBuilder() codec.EncoderBuilder {
+func NewBatchEncoderBuilder() codec.RowEventEncoderBuilder {
 	return &batchEncoderBuilder{}
 }

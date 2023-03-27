@@ -11,11 +11,9 @@ RUN ./download-integration-test-binaries.sh master
 RUN ls ./bin
 
 # Download go into /usr/local dir.
-ENV GOLANG_VERSION 1.19
+ENV GOLANG_VERSION 1.20
 ENV GOLANG_DOWNLOAD_URL https://dl.google.com/go/go$GOLANG_VERSION.linux-amd64.tar.gz
-ENV GOLANG_DOWNLOAD_SHA256 464b6b66591f6cf055bc5df90a9750bf5fbc9d038722bb84a9d56a2bea974be6
 RUN curl -fsSL "$GOLANG_DOWNLOAD_URL" -o golang.tar.gz \
-	&& echo "$GOLANG_DOWNLOAD_SHA256  golang.tar.gz" | sha256sum -c - \
 	&& tar -C /usr/local -xzf golang.tar.gz \
 	&& rm golang.tar.gz
 
@@ -59,6 +57,6 @@ COPY . .
 # Clean bin dir and build TiCDC.
 # We always need to clean before we build, please don't adjust its order.
 RUN make clean
-RUN make integration_test_build kafka_consumer storage_consumer cdc
+RUN make integration_test_build cdc
 COPY --from=downloader /root/download/bin/* ./bin/
 RUN make check_third_party_binary

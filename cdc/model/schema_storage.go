@@ -33,7 +33,17 @@ const (
 // TableInfo provides meta data describing a DB table.
 type TableInfo struct {
 	*model.TableInfo
-	SchemaID  int64
+	SchemaID int64
+	// NOTICE: We probably store the logical ID inside TableName,
+	// not the physical ID.
+	// For normal table, there is only one ID, which is the physical ID.
+	// AKA TIDB_TABLE_ID.
+	// For partitioned table, there are two kinds of ID:
+	// 1. TIDB_PARTITION_ID is the physical ID of the partition.
+	// 2. TIDB_TABLE_ID is the logical ID of the table.
+	// In general, we always use the physical ID to represent a table, but we
+	// record the logical ID from the DDL event(job.BinlogInfo.TableInfo).
+	// So be careful when using the TableInfo.
 	TableName TableName
 	// Version record the tso of create the table info.
 	Version       uint64

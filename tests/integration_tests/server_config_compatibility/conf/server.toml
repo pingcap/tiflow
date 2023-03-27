@@ -1,3 +1,4 @@
+per-table-memory-quota = 1024
 [debug]
 # Ensure sure removed configarations are not used.
 # TiCDC should ignore the removed configuration silently.

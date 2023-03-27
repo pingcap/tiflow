@@ -609,6 +609,7 @@ func (s *Syncer) reset() {
 	}
 	// create new job chans
 	s.newJobChans()
+	s.checkpoint.DiscardPendingSnapshots()
 	s.checkpointFlushWorker = &checkpointFlushWorker{
 		input:              make(chan *checkpointFlushTask, 16),
 		cp:                 s.checkpoint,
@@ -1418,6 +1419,7 @@ func (s *Syncer) syncDDL(queueBucket string, db *dbconn.DBConn, ddlJobChan chan 
 						s.tctx.L().Warn("getting ddlCreateTime failed", zap.Error(err2))
 					}
 				}
+				//nolint:sqlclosecheck
 				row.Close()
 			}
 			affected, err = db.ExecuteSQLWithIgnore(s.syncCtx, s.metricsProxies, errorutil.IsIgnorableMySQLDDLError, ddlJob.ddls)

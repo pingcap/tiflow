@@ -59,7 +59,8 @@ func (s *EventSorter) IsTableBased() bool {
 
 // AddTable implements engine.SortEngine.
 func (s *EventSorter) AddTable(span tablepb.Span) {
-	if _, exists := s.tables.LoadOrStore(span, &tableSorter{}); exists {
+	resolvedTs := model.Ts(0)
+	if _, exists := s.tables.LoadOrStore(span, &tableSorter{resolvedTs: &resolvedTs}); exists {
 		log.Panic("add an exist table", zap.Stringer("span", &span))
 	}
 }
@@ -72,7 +73,7 @@ func (s *EventSorter) RemoveTable(span tablepb.Span) {
 }
 
 // Add implements engine.SortEngine.
-func (s *EventSorter) Add(span tablepb.Span, events ...*model.PolymorphicEvent) (err error) {
+func (s *EventSorter) Add(span tablepb.Span, events ...*model.PolymorphicEvent) {
 	value, exists := s.tables.Load(span)
 	if !exists {
 		log.Panic("add events into an unexist table", zap.Stringer("span", &span))
@@ -86,7 +87,6 @@ func (s *EventSorter) Add(span tablepb.Span, events ...*model.PolymorphicEvent) 
 			onResolve(span, resolvedTs)
 		}
 	}
-	return nil
 }
 
 // GetResolvedTs implements engine.SortEngine.
@@ -146,8 +146,8 @@ func (s *EventSorter) GetStatsByTable(span tablepb.Span) engine.TableStats {
 }
 
 // ReceivedEvents implements engine.SortEngine.
+// Do not use this function, it is only used for testing.
 func (s *EventSorter) ReceivedEvents() int64 {
-	log.Panic("ReceivedEvents should never be called")
 	return 0
 }
 

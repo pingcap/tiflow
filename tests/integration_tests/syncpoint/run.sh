@@ -168,7 +168,7 @@ function run() {
 
 	goSql
 
-	check_table_exists "testSync.USERTABLE" ${DOWN_TIDB_HOST} ${DOWN_TIDB_PORT}
+	check_table_exists "testSync.usertable" ${DOWN_TIDB_HOST} ${DOWN_TIDB_PORT}
 	check_table_exists "testSync.simple1" ${DOWN_TIDB_HOST} ${DOWN_TIDB_PORT}
 	check_table_exists "testSync.simple2" ${DOWN_TIDB_HOST} ${DOWN_TIDB_PORT}
 

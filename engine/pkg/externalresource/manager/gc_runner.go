@@ -22,8 +22,8 @@ import (
 	"github.com/pingcap/tiflow/engine/pkg/client"
 	"github.com/pingcap/tiflow/engine/pkg/clock"
 	"github.com/pingcap/tiflow/engine/pkg/externalresource/internal"
+	"github.com/pingcap/tiflow/engine/pkg/externalresource/internal/bucket"
 	"github.com/pingcap/tiflow/engine/pkg/externalresource/internal/local"
-	"github.com/pingcap/tiflow/engine/pkg/externalresource/internal/s3"
 	resModel "github.com/pingcap/tiflow/engine/pkg/externalresource/model"
 	pkgOrm "github.com/pingcap/tiflow/engine/pkg/orm"
 	"github.com/pingcap/tiflow/pkg/errors"
@@ -74,7 +74,10 @@ func NewGCRunner(
 		gcRunner.gcHandlers[localType] = local.NewFileResourceController(executorClients)
 	}
 	if config != nil && config.S3Enabled() {
-		gcRunner.gcHandlers[resModel.ResourceTypeS3] = s3.NewResourceController(config.S3)
+		gcRunner.gcHandlers[resModel.ResourceTypeS3] = bucket.NewResourceController(config)
+	}
+	if config != nil && config.GCSEnabled() {
+		gcRunner.gcHandlers[resModel.ResourceTypeGCS] = bucket.NewResourceController(config)
 	}
 	return gcRunner
 }
@@ -250,7 +253,7 @@ func (r *DefaultGCRunner) mustCleanupS3Executors(
 		}
 
 		// Remove s3 dummy meta record
-		_, err = r.client.DeleteResource(ctx, s3.GetDummyResourceKey(id))
+		_, err = r.client.DeleteResource(ctx, bucket.GetDummyResourceKey(id))
 		if err != nil {
 			return err
 		}

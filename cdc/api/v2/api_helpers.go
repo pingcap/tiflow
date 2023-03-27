@@ -27,7 +27,7 @@ import (
 	"github.com/pingcap/tiflow/cdc/kv"
 	"github.com/pingcap/tiflow/cdc/model"
 	"github.com/pingcap/tiflow/cdc/owner"
-	"github.com/pingcap/tiflow/cdc/sinkv2/validator"
+	"github.com/pingcap/tiflow/cdc/sink/validator"
 	"github.com/pingcap/tiflow/pkg/config"
 	cerror "github.com/pingcap/tiflow/pkg/errors"
 	"github.com/pingcap/tiflow/pkg/filter"
@@ -249,10 +249,10 @@ func (APIV2HelpersImpl) verifyCreateChangefeedConfig(
 		CreateTime:     time.Now(),
 		StartTs:        cfg.StartTs,
 		TargetTs:       cfg.TargetTs,
-		Engine:         cfg.Engine,
 		Config:         replicaCfg,
 		State:          model.StateNormal,
 		CreatorVersion: version.ReleaseVersion,
+		Epoch:          owner.GenerateChangefeedEpoch(ctx, pdClient),
 	}, nil
 }
 
@@ -309,9 +309,6 @@ func (APIV2HelpersImpl) verifyUpdateChangefeedConfig(
 		}
 		newInfo.TargetTs = cfg.TargetTs
 	}
-	if cfg.Engine != "" {
-		newInfo.Engine = cfg.Engine
-	}
 	if cfg.ReplicaConfig != nil {
 		configUpdated = true
 		newInfo.Config = cfg.ReplicaConfig.ToInternalReplicaConfig()
@@ -345,6 +342,20 @@ func (APIV2HelpersImpl) verifyUpdateChangefeedConfig(
 		newCfg := newInfo.Config.Sink
 		oldCfg := oldInfo.Config.Sink
 		err := newCfg.CheckCompatibilityWithSinkURI(oldCfg, newInfo.SinkURI)
+		if err != nil {
+			return nil, nil, cerror.ErrChangefeedUpdateRefused.GenWithStackByCause(err)
+		}
+
+		// use the sinkURI to validate and adjust the new config
+		sinkURI := oldInfo.SinkURI
+		if sinkURIUpdated {
+			sinkURI = newInfo.SinkURI
+		}
+		sinkURIParsed, err := url.Parse(sinkURI)
+		if err != nil {
+			return nil, nil, cerror.ErrChangefeedUpdateRefused.GenWithStackByCause(err)
+		}
+		err = newInfo.Config.ValidateAndAdjust(sinkURIParsed)
 		if err != nil {
 			return nil, nil, cerror.ErrChangefeedUpdateRefused.GenWithStackByCause(err)
 		}

@@ -54,22 +54,26 @@ type agent struct {
 }
 
 type agentInfo struct {
-	Version      string
-	CaptureID    model.CaptureID
-	ChangeFeedID model.ChangeFeedID
-	Epoch        schedulepb.ProcessorEpoch
+	Version         string
+	CaptureID       model.CaptureID
+	ChangeFeedID    model.ChangeFeedID
+	Epoch           schedulepb.ProcessorEpoch
+	changefeedEpoch uint64
 }
 
 func (a agentInfo) resetEpoch() {
 	a.Epoch = schedulepb.ProcessorEpoch{Epoch: uuid.New().String()}
 }
 
-func newAgentInfo(changefeedID model.ChangeFeedID, captureID model.CaptureID) agentInfo {
+func newAgentInfo(
+	changefeedID model.ChangeFeedID, captureID model.CaptureID, changefeedEpoch uint64,
+) agentInfo {
 	result := agentInfo{
-		Version:      version.ReleaseSemver(),
-		CaptureID:    captureID,
-		ChangeFeedID: changefeedID,
-		Epoch:        schedulepb.ProcessorEpoch{},
+		Version:         version.ReleaseSemver(),
+		CaptureID:       captureID,
+		ChangeFeedID:    changefeedID,
+		Epoch:           schedulepb.ProcessorEpoch{},
+		changefeedEpoch: changefeedEpoch,
 	}
 	result.resetEpoch()
 
@@ -88,10 +92,11 @@ func newAgent(
 	changeFeedID model.ChangeFeedID,
 	etcdClient etcd.CDCEtcdClient,
 	tableExecutor internal.TableExecutor,
+	changefeedEpoch uint64,
 	cfg *config.SchedulerConfig,
 ) (internal.Agent, error) {
 	result := &agent{
-		agentInfo: newAgentInfo(changeFeedID, captureID),
+		agentInfo: newAgentInfo(changeFeedID, captureID, changefeedEpoch),
 		tableM:    newTableSpanManager(changeFeedID, tableExecutor),
 		liveness:  liveness,
 		compat:    compat.New(cfg, map[model.CaptureID]*model.CaptureInfo{}),
@@ -175,10 +180,12 @@ func NewAgent(ctx context.Context,
 	messageRouter p2p.MessageRouter,
 	etcdClient etcd.CDCEtcdClient,
 	tableExecutor internal.TableExecutor,
+	changefeedEpoch uint64,
 	cfg *config.SchedulerConfig,
 ) (internal.Agent, error) {
 	result, err := newAgent(
-		ctx, captureID, liveness, changeFeedID, etcdClient, tableExecutor, cfg)
+		ctx, captureID, liveness, changeFeedID, etcdClient, tableExecutor,
+		changefeedEpoch, cfg)
 	if err != nil {
 		return nil, errors.Trace(err)
 	}
@@ -194,26 +201,26 @@ func NewAgent(ctx context.Context,
 }
 
 // Tick implement agent interface
-func (a *agent) Tick(ctx context.Context) error {
+func (a *agent) Tick(ctx context.Context) (*schedulepb.Barrier, error) {
 	inboundMessages, err := a.recvMsgs(ctx)
 	if err != nil {
-		return errors.Trace(err)
+		return nil, errors.Trace(err)
 	}
 
-	outboundMessages := a.handleMessage(inboundMessages)
+	outboundMessages, barrier := a.handleMessage(inboundMessages)
 
 	responses, err := a.tableM.poll(ctx)
 	if err != nil {
-		return errors.Trace(err)
+		return nil, errors.Trace(err)
 	}
 
 	outboundMessages = append(outboundMessages, responses...)
 
 	if err := a.sendMsgs(ctx, outboundMessages); err != nil {
-		return errors.Trace(err)
+		return nil, errors.Trace(err)
 	}
 
-	return nil
+	return barrier, nil
 }
 
 func (a *agent) handleLivenessUpdate(liveness model.Liveness) {
@@ -228,8 +235,11 @@ func (a *agent) handleLivenessUpdate(liveness model.Liveness) {
 	}
 }
 
-func (a *agent) handleMessage(msg []*schedulepb.Message) []*schedulepb.Message {
+func (a *agent) handleMessage(msg []*schedulepb.Message) (
+	[]*schedulepb.Message, *schedulepb.Barrier,
+) {
 	result := make([]*schedulepb.Message, 0)
+	var barrier *schedulepb.Barrier
 	for _, message := range msg {
 		ownerCaptureID := message.GetFrom()
 		header := message.GetHeader()
@@ -243,8 +253,9 @@ func (a *agent) handleMessage(msg []*schedulepb.Message) []*schedulepb.Message {
 
 		switch message.GetMsgType() {
 		case schedulepb.MsgHeartbeat:
-			response := a.handleMessageHeartbeat(message.GetHeartbeat())
-			result = append(result, response)
+			var reMsg *schedulepb.Message
+			reMsg, barrier = a.handleMessageHeartbeat(message.GetHeartbeat())
+			result = append(result, reMsg)
 		case schedulepb.MsgDispatchTableRequest:
 			a.handleMessageDispatchTableRequest(message.DispatchTableRequest, processorEpoch)
 		default:
@@ -255,10 +266,12 @@ func (a *agent) handleMessage(msg []*schedulepb.Message) []*schedulepb.Message {
 				zap.Any("message", message))
 		}
 	}
-	return result
+	return result, barrier
 }
 
-func (a *agent) handleMessageHeartbeat(request *schedulepb.Heartbeat) *schedulepb.Message {
+func (a *agent) handleMessageHeartbeat(request *schedulepb.Heartbeat) (
+	*schedulepb.Message, *schedulepb.Barrier,
+) {
 	allTables := a.tableM.getAllTableSpans()
 	result := make([]tablepb.TableStatus, 0, allTables.Len())
 	allTables.Ascend(func(span tablepb.Span, table *tableSpan) bool {
@@ -295,7 +308,7 @@ func (a *agent) handleMessageHeartbeat(request *schedulepb.Heartbeat) *schedulep
 		zap.String("changefeed", a.ChangeFeedID.ID),
 		zap.Any("message", message))
 
-	return message
+	return message, request.GetBarrier()
 }
 
 type dispatchTableTaskStatus int32
@@ -415,8 +428,9 @@ func (a *agent) handleOwnerInfo(id model.CaptureID, revision int64, version stri
 
 		a.resetEpoch()
 
+		captureInfo := a.ownerInfo.CaptureInfo
 		a.compat.UpdateCaptureInfo(map[model.CaptureID]*model.CaptureInfo{
-			id: &a.ownerInfo.CaptureInfo,
+			id: &captureInfo,
 		})
 		log.Info("schedulerv3: new owner in power",
 			zap.String("capture", a.CaptureID),
@@ -450,12 +464,17 @@ func (a *agent) recvMsgs(ctx context.Context) ([]*schedulepb.Message, error) {
 	}
 
 	n := 0
-	for _, val := range messages {
+	for _, msg := range messages {
 		// only receive not staled messages
-		if !a.handleOwnerInfo(val.From, val.Header.OwnerRevision.Revision, val.Header.Version) {
+		if !a.handleOwnerInfo(msg.From, msg.Header.OwnerRevision.Revision, msg.Header.Version) {
 			continue
 		}
-		messages[n] = val
+		// Check changefeed epoch, drop message if mismatch.
+		if a.compat.CheckChangefeedEpochEnabled(msg.From) &&
+			msg.Header.ChangefeedEpoch.Epoch != a.changefeedEpoch {
+			continue
+		}
+		messages[n] = msg
 		n++
 	}
 	a.compat.AfterTransportReceive(messages[:n])
@@ -476,6 +495,9 @@ func (a *agent) sendMsgs(ctx context.Context, msgs []*schedulepb.Message) error 
 			Version:        a.Version,
 			OwnerRevision:  a.ownerInfo.Revision,
 			ProcessorEpoch: a.Epoch,
+			ChangefeedEpoch: schedulepb.ChangefeedEpoch{
+				Epoch: a.changefeedEpoch,
+			},
 		}
 		m.From = a.CaptureID
 		m.To = a.ownerInfo.ID

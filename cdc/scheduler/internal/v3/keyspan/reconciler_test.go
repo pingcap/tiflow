@@ -15,168 +15,21 @@ package keyspan
 
 import (
 	"context"
-	"fmt"
 	"testing"
 
 	"github.com/pingcap/tiflow/cdc/model"
 	"github.com/pingcap/tiflow/cdc/processor/tablepb"
 	"github.com/pingcap/tiflow/cdc/scheduler/internal/v3/compat"
+	"github.com/pingcap/tiflow/cdc/scheduler/internal/v3/member"
 	"github.com/pingcap/tiflow/cdc/scheduler/internal/v3/replication"
 	"github.com/pingcap/tiflow/pkg/config"
 	"github.com/pingcap/tiflow/pkg/spanz"
 	"github.com/stretchr/testify/require"
 )
 
-func TestSplitSpan(t *testing.T) {
-	t.Parallel()
-
-	cache := NewMockRegionCache()
-	cache.regions.ReplaceOrInsert(tablepb.Span{StartKey: []byte("t1_0"), EndKey: []byte("t1_1")}, 1)
-	cache.regions.ReplaceOrInsert(tablepb.Span{StartKey: []byte("t1_1"), EndKey: []byte("t1_2")}, 2)
-	cache.regions.ReplaceOrInsert(tablepb.Span{StartKey: []byte("t1_2"), EndKey: []byte("t1_3")}, 3)
-	cache.regions.ReplaceOrInsert(tablepb.Span{StartKey: []byte("t1_3"), EndKey: []byte("t1_4")}, 4)
-	cache.regions.ReplaceOrInsert(tablepb.Span{StartKey: []byte("t1_4"), EndKey: []byte("t2_2")}, 5)
-	cache.regions.ReplaceOrInsert(tablepb.Span{StartKey: []byte("t2_2"), EndKey: []byte("t2_3")}, 6)
-
-	cases := []struct {
-		regionPerSpan int
-		span          tablepb.Span
-		expectSpans   []tablepb.Span
-	}{
-		{
-			regionPerSpan: 1,
-			span:          tablepb.Span{TableID: 1, StartKey: []byte("t1"), EndKey: []byte("t2")},
-			expectSpans: []tablepb.Span{
-				{TableID: 1, StartKey: []byte("t1"), EndKey: []byte("t1_1")},
-				{TableID: 1, StartKey: []byte("t1_1"), EndKey: []byte("t1_2")},
-				{TableID: 1, StartKey: []byte("t1_2"), EndKey: []byte("t1_3")},
-				{TableID: 1, StartKey: []byte("t1_3"), EndKey: []byte("t1_4")},
-				{TableID: 1, StartKey: []byte("t1_4"), EndKey: []byte("t2")},
-			},
-		},
-		{
-			regionPerSpan: 2,
-			span:          tablepb.Span{TableID: 1, StartKey: []byte("t1"), EndKey: []byte("t2")},
-			expectSpans: []tablepb.Span{
-				{TableID: 1, StartKey: []byte("t1"), EndKey: []byte("t1_3")},
-				{TableID: 1, StartKey: []byte("t1_3"), EndKey: []byte("t2")},
-			},
-		},
-		{
-			regionPerSpan: 5,
-			span:          tablepb.Span{TableID: 1, StartKey: []byte("t1"), EndKey: []byte("t2")},
-			expectSpans: []tablepb.Span{
-				{TableID: 1, StartKey: []byte("t1"), EndKey: []byte("t2")},
-			},
-		},
-		{
-			regionPerSpan: 6,
-			span:          tablepb.Span{TableID: 1, StartKey: []byte("t1"), EndKey: []byte("t2")},
-			expectSpans: []tablepb.Span{
-				{TableID: 1, StartKey: []byte("t1"), EndKey: []byte("t2")},
-			},
-		},
-		{
-			regionPerSpan: 1,
-			span:          tablepb.Span{TableID: 2, StartKey: []byte("t2"), EndKey: []byte("t3")},
-			expectSpans: []tablepb.Span{
-				{TableID: 2, StartKey: []byte("t2"), EndKey: []byte("t2_2")},
-				{TableID: 2, StartKey: []byte("t2_2"), EndKey: []byte("t3")},
-			},
-		},
-	}
-
-	for i, cs := range cases {
-		reconciler := NewReconciler(model.ChangeFeedID{}, cache, cs.regionPerSpan)
-		spans := reconciler.splitSpan(context.Background(), cs.span)
-		require.Equalf(t, cs.expectSpans, spans, "%d %s", i, &cs.span)
-	}
-}
-
-func TestEvenlySplitSpan(t *testing.T) {
-	t.Parallel()
-
-	cache := NewMockRegionCache()
-	totalRegion := 1000
-	for i := 0; i < totalRegion; i++ {
-		cache.regions.ReplaceOrInsert(tablepb.Span{
-			StartKey: []byte(fmt.Sprintf("t1_%09d", i)),
-			EndKey:   []byte(fmt.Sprintf("t1_%09d", i+1)),
-		}, uint64(i+1))
-	}
-
-	cases := []struct {
-		regionPerSpan  int
-		expectSpansMin int
-		expectSpansMax int
-	}{
-		{
-			regionPerSpan:  1,
-			expectSpansMin: 1,
-			expectSpansMax: 1,
-		},
-		{
-			regionPerSpan:  10,
-			expectSpansMin: 10,
-			expectSpansMax: 10,
-		},
-		{
-			regionPerSpan:  70,
-			expectSpansMin: 70,
-			expectSpansMax: 74,
-		},
-		{
-			regionPerSpan:  173,
-			expectSpansMin: 173,
-			expectSpansMax: 200,
-		},
-		{
-			regionPerSpan:  313,
-			expectSpansMin: 313,
-			expectSpansMax: 340,
-		},
-	}
-	for i, cs := range cases {
-		reconciler := NewReconciler(model.ChangeFeedID{}, cache, cs.regionPerSpan)
-		spans := reconciler.splitSpan(
-			context.Background(),
-			tablepb.Span{TableID: 1, StartKey: []byte("t1"), EndKey: []byte("t2")})
-		require.Equalf(t, totalRegion/cs.regionPerSpan, len(spans), "%d %v", i, cs)
-
-		for _, span := range spans {
-			start, end := 0, 1000
-			if len(span.StartKey) > len("t1") {
-				_, err := fmt.Sscanf(string(span.StartKey), "t1_%d", &start)
-				require.Nil(t, err, "%d %v %s", i, cs, span.StartKey)
-			}
-			if len(span.EndKey) > len("t2") {
-				_, err := fmt.Sscanf(string(span.EndKey), "t1_%d", &end)
-				require.Nil(t, err, "%d %v %s", i, cs, span.EndKey)
-			}
-			require.GreaterOrEqual(t, end-start, cs.expectSpansMin, "%d %v", i, cs)
-			require.LessOrEqual(t, end-start, cs.expectSpansMax, "%d %v", i, cs)
-		}
-	}
-}
-
-func TestSplitSpanRegionOutOfOrder(t *testing.T) {
-	t.Parallel()
-
-	cache := NewMockRegionCache()
-	cache.regions.ReplaceOrInsert(tablepb.Span{StartKey: []byte("t1_0"), EndKey: []byte("t1_1")}, 1)
-	cache.regions.ReplaceOrInsert(tablepb.Span{StartKey: []byte("t1_1"), EndKey: []byte("t1_4")}, 2)
-	cache.regions.ReplaceOrInsert(tablepb.Span{StartKey: []byte("t1_2"), EndKey: []byte("t1_3")}, 3)
-
-	reconciler := NewReconciler(model.ChangeFeedID{}, cache, 1)
-	span := tablepb.Span{TableID: 1, StartKey: []byte("t1"), EndKey: []byte("t2")}
-	spans := reconciler.splitSpan(context.Background(), span)
-	require.Equal(
-		t, []tablepb.Span{{TableID: 1, StartKey: []byte("t1"), EndKey: []byte("t2")}}, spans)
-}
-
 func prepareSpanCache(
 	t *testing.T, ss [][3]uint8, // table ID, start key suffix, end key suffix.
-) ([]tablepb.Span, *MockCache) {
+) ([]tablepb.Span, *mockCache) {
 	cache := NewMockRegionCache()
 	allSpan := make([]tablepb.Span, 0)
 	for i, s := range ss {
@@ -213,17 +66,26 @@ func TestReconcile(t *testing.T) {
 	})
 
 	cfg := &config.SchedulerConfig{
-		ChangefeedSettings: &config.ChangefeedSchedulerConfig{RegionPerSpan: 1},
+		ChangefeedSettings: &config.ChangefeedSchedulerConfig{
+			EnableTableAcrossNodes: true,
+			RegionThreshold:        1,
+		},
 	}
 	compat := compat.New(cfg, map[string]*model.CaptureInfo{})
+	captures := map[model.CaptureID]*member.CaptureStatus{
+		"1": nil,
+		"2": nil,
+		"3": nil,
+		"4": nil,
+	}
 	ctx := context.Background()
 
 	// Test 1. changefeed initialization.
 	reps := spanz.NewBtreeMap[*replication.ReplicationSet]()
-	reconciler := NewReconciler(model.ChangeFeedID{}, cache, cfg.ChangefeedSettings.RegionPerSpan)
+	reconciler := NewReconcilerForTests(cache, cfg.ChangefeedSettings)
 	currentTables := &replication.TableRanges{}
 	currentTables.UpdateTables([]model.TableID{1})
-	spans := reconciler.Reconcile(ctx, currentTables, reps, compat)
+	spans := reconciler.Reconcile(ctx, currentTables, reps, captures, compat)
 	require.Equal(t, allSpan[:4], spans)
 	require.Equal(t, allSpan[:4], reconciler.tableSpans[1].spans)
 	require.Equal(t, 1, len(reconciler.tableSpans))
@@ -232,16 +94,16 @@ func TestReconcile(t *testing.T) {
 	for _, span := range reconciler.tableSpans[1].spans {
 		reps.ReplaceOrInsert(span, nil)
 	}
-	reconciler = NewReconciler(model.ChangeFeedID{}, cache, cfg.ChangefeedSettings.RegionPerSpan)
+	reconciler = NewReconcilerForTests(cache, cfg.ChangefeedSettings)
 	currentTables.UpdateTables([]model.TableID{1})
-	spans = reconciler.Reconcile(ctx, currentTables, reps, compat)
+	spans = reconciler.Reconcile(ctx, currentTables, reps, captures, compat)
 	require.Equal(t, allSpan[:4], spans)
 	require.Equal(t, allSpan[:4], reconciler.tableSpans[1].spans)
 	require.Equal(t, 1, len(reconciler.tableSpans))
 
 	// Test 3. add table 2.
 	currentTables.UpdateTables([]model.TableID{1, 2})
-	spans = reconciler.Reconcile(ctx, currentTables, reps, compat)
+	spans = reconciler.Reconcile(ctx, currentTables, reps, captures, compat)
 	spanz.Sort(spans)
 	require.Equal(t, allSpan, spans)
 	require.Equal(t, allSpan[:4], reconciler.tableSpans[1].spans)
@@ -253,7 +115,7 @@ func TestReconcile(t *testing.T) {
 		reps.ReplaceOrInsert(span, nil)
 	}
 	currentTables.UpdateTables([]model.TableID{1})
-	spans = reconciler.Reconcile(ctx, currentTables, reps, compat)
+	spans = reconciler.Reconcile(ctx, currentTables, reps, captures, compat)
 	require.Equal(t, allSpan[:4], spans)
 	require.Equal(t, allSpan[:4], reconciler.tableSpans[1].spans)
 	require.Equal(t, 1, len(reconciler.tableSpans))
@@ -262,7 +124,7 @@ func TestReconcile(t *testing.T) {
 	// Start span is missing.
 	reps.Delete(allSpan[0])
 	currentTables.UpdateTables([]model.TableID{1})
-	spans = reconciler.Reconcile(ctx, currentTables, reps, compat)
+	spans = reconciler.Reconcile(ctx, currentTables, reps, captures, compat)
 	spanz.Sort(spans)
 	require.Equal(t, allSpan[:4], spans)
 	spanz.Sort(reconciler.tableSpans[1].spans)
@@ -273,7 +135,7 @@ func TestReconcile(t *testing.T) {
 	reps.ReplaceOrInsert(allSpan[0], nil)
 	reps.Delete(allSpan[3])
 	currentTables.UpdateTables([]model.TableID{1})
-	spans = reconciler.Reconcile(ctx, currentTables, reps, compat)
+	spans = reconciler.Reconcile(ctx, currentTables, reps, captures, compat)
 	spanz.Sort(spans)
 	require.Equal(t, allSpan[:4], spans)
 	spanz.Sort(reconciler.tableSpans[1].spans)
@@ -285,7 +147,7 @@ func TestReconcile(t *testing.T) {
 	reps.Delete(allSpan[1])
 	reps.Delete(allSpan[2])
 	currentTables.UpdateTables([]model.TableID{1})
-	spans = reconciler.Reconcile(ctx, currentTables, reps, compat)
+	spans = reconciler.Reconcile(ctx, currentTables, reps, captures, compat)
 	expectedSpan := allSpan[:1]
 	expectedSpan = append(expectedSpan, tablepb.Span{
 		TableID:  1,
@@ -314,18 +176,24 @@ func TestCompatDisable(t *testing.T) {
 
 	// changefeed initialization with span replication disabled.
 	cfg := &config.SchedulerConfig{
-		ChangefeedSettings: &config.ChangefeedSchedulerConfig{RegionPerSpan: 1},
+		ChangefeedSettings: &config.ChangefeedSchedulerConfig{
+			EnableTableAcrossNodes: true,
+			RegionThreshold:        1,
+		},
 	}
 	cm := compat.New(cfg, map[string]*model.CaptureInfo{
 		"1": {Version: "4.0.0"},
 	})
+	captures := map[model.CaptureID]*member.CaptureStatus{
+		"1": nil,
+	}
 	require.False(t, cm.CheckSpanReplicationEnabled())
 	ctx := context.Background()
 	reps := spanz.NewBtreeMap[*replication.ReplicationSet]()
-	reconciler := NewReconciler(model.ChangeFeedID{}, cache, cfg.ChangefeedSettings.RegionPerSpan)
+	reconciler := NewReconcilerForTests(cache, cfg.ChangefeedSettings)
 	currentTables := &replication.TableRanges{}
 	currentTables.UpdateTables([]model.TableID{1})
-	spans := reconciler.Reconcile(ctx, currentTables, reps, cm)
+	spans := reconciler.Reconcile(ctx, currentTables, reps, captures, cm)
 	require.Equal(t, []tablepb.Span{spanz.TableIDToComparableSpan(1)}, spans)
 	require.Equal(t, 1, len(reconciler.tableSpans))
 	reps.ReplaceOrInsert(spanz.TableIDToComparableSpan(1), nil)
@@ -334,9 +202,10 @@ func TestCompatDisable(t *testing.T) {
 	cm.UpdateCaptureInfo(map[string]*model.CaptureInfo{
 		"2": {Version: compat.SpanReplicationMinVersion.String()},
 	})
+	captures["2"] = nil
 	require.True(t, cm.CheckSpanReplicationEnabled())
 	currentTables.UpdateTables([]model.TableID{1, 2})
-	spans = reconciler.Reconcile(ctx, currentTables, reps, cm)
+	spans = reconciler.Reconcile(ctx, currentTables, reps, captures, cm)
 	spanz.Sort(spans)
 	require.Equal(t, spanz.TableIDToComparableSpan(1), spans[0])
 	require.Equal(t, allSpan[4:], spans[1:])
@@ -353,31 +222,39 @@ func TestBatchAddRateLimit(t *testing.T) {
 	})
 
 	cfg := &config.SchedulerConfig{
-		ChangefeedSettings: &config.ChangefeedSchedulerConfig{RegionPerSpan: 1},
+		ChangefeedSettings: &config.ChangefeedSchedulerConfig{
+			EnableTableAcrossNodes: true,
+			RegionThreshold:        1,
+		},
 	}
 	compat := compat.New(cfg, map[string]*model.CaptureInfo{})
+	captures := map[model.CaptureID]*member.CaptureStatus{
+		"1": nil,
+		"2": nil,
+		"3": nil,
+	}
 	ctx := context.Background()
 
 	// Add table 2.
 	reps := spanz.NewBtreeMap[*replication.ReplicationSet]()
-	reconciler := NewReconciler(model.ChangeFeedID{}, cache, cfg.ChangefeedSettings.RegionPerSpan)
+	reconciler := NewReconcilerForTests(cache, cfg.ChangefeedSettings)
 	currentTables := &replication.TableRanges{}
 	currentTables.UpdateTables([]model.TableID{2})
-	spans := reconciler.Reconcile(ctx, currentTables, reps, compat)
+	spans := reconciler.Reconcile(ctx, currentTables, reps, captures, compat)
 	require.Equal(t, allSpan, spans)
 	require.Equal(t, allSpan, reconciler.tableSpans[2].spans)
 	require.Equal(t, 1, len(reconciler.tableSpans))
 
 	// Simulate batch add rate limited
 	currentTables.UpdateTables([]model.TableID{2})
-	spans = reconciler.Reconcile(ctx, currentTables, reps, compat)
+	spans = reconciler.Reconcile(ctx, currentTables, reps, captures, compat)
 	require.Equal(t, allSpan, spans)
 	require.Equal(t, allSpan, reconciler.tableSpans[2].spans)
 	require.Equal(t, 1, len(reconciler.tableSpans))
 
 	reps.ReplaceOrInsert(allSpan[0], nil)
 	currentTables.UpdateTables([]model.TableID{2})
-	spans = reconciler.Reconcile(ctx, currentTables, reps, compat)
+	spans = reconciler.Reconcile(ctx, currentTables, reps, captures, compat)
 	require.Equal(t, allSpan, spans)
 	require.Equal(t, allSpan, reconciler.tableSpans[2].spans)
 	require.Equal(t, 1, len(reconciler.tableSpans))

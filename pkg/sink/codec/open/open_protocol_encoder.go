@@ -39,7 +39,7 @@ type BatchEncoder struct {
 	MaxBatchSize    int
 }
 
-// AppendRowChangedEvent implements the EventBatchEncoder interface
+// AppendRowChangedEvent implements the RowEventEncoder interface
 func (d *BatchEncoder) AppendRowChangedEvent(
 	_ context.Context,
 	_ string,
@@ -61,13 +61,17 @@ func (d *BatchEncoder) AppendRowChangedEvent(
 	var valueLenByte [8]byte
 	binary.BigEndian.PutUint64(valueLenByte[:], uint64(len(value)))
 
-	// for single message that longer than max-message-size, do not send it.
+	// for single message that is longer than max-message-bytes, do not send it.
 	// 16 is the length of `keyLenByte` and `valueLenByte`, 8 is the length of `versionHead`
 	length := len(key) + len(value) + common.MaxRecordOverhead + 16 + 8
 	if length > d.MaxMessageBytes {
-		log.Warn("Single message too large",
-			zap.Int("max-message-size", d.MaxMessageBytes), zap.Int("length", length), zap.Any("table", e.Table))
-		return cerror.ErrOpenProtocolCodecRowTooLarge.GenWithStackByArgs()
+		log.Warn("Single message is too large for open-protocol",
+			zap.Int("maxMessageBytes", d.MaxMessageBytes),
+			zap.Int("length", length),
+			zap.Any("table", e.Table),
+			zap.Any("key", key),
+			zap.Any("value", value))
+		return cerror.ErrMessageTooLarge.GenWithStackByArgs()
 	}
 
 	if len(d.messageBuf) == 0 ||
@@ -101,7 +105,7 @@ func (d *BatchEncoder) AppendRowChangedEvent(
 	return nil
 }
 
-// EncodeDDLEvent implements the EventBatchEncoder interface
+// EncodeDDLEvent implements the RowEventEncoder interface
 func (d *BatchEncoder) EncodeDDLEvent(e *model.DDLEvent) (*common.Message, error) {
 	keyMsg, valueMsg := ddlEventToMsg(e)
 	key, err := keyMsg.Encode()
@@ -133,7 +137,7 @@ func (d *BatchEncoder) EncodeDDLEvent(e *model.DDLEvent) (*common.Message, error
 	return ret, nil
 }
 
-// EncodeCheckpointEvent implements the EventBatchEncoder interface
+// EncodeCheckpointEvent implements the RowEventEncoder interface
 func (d *BatchEncoder) EncodeCheckpointEvent(ts uint64) (*common.Message, error) {
 	keyMsg := newResolvedMessage(ts)
 	key, err := keyMsg.Encode()
@@ -160,7 +164,7 @@ func (d *BatchEncoder) EncodeCheckpointEvent(ts uint64) (*common.Message, error)
 	return ret, nil
 }
 
-// Build implements the EventBatchEncoder interface
+// Build implements the RowEventEncoder interface
 func (d *BatchEncoder) Build() (messages []*common.Message) {
 	d.tryBuildCallback()
 	ret := d.messageBuf
@@ -187,7 +191,7 @@ type batchEncoderBuilder struct {
 }
 
 // Build a BatchEncoder
-func (b *batchEncoderBuilder) Build() codec.EventBatchEncoder {
+func (b *batchEncoderBuilder) Build() codec.RowEventEncoder {
 	encoder := NewBatchEncoder()
 	encoder.(*BatchEncoder).MaxMessageBytes = b.config.MaxMessageBytes
 	encoder.(*BatchEncoder).MaxBatchSize = b.config.MaxBatchSize
@@ -196,12 +200,12 @@ func (b *batchEncoderBuilder) Build() codec.EventBatchEncoder {
 }
 
 // NewBatchEncoderBuilder creates an open-protocol batchEncoderBuilder.
-func NewBatchEncoderBuilder(config *common.Config) codec.EncoderBuilder {
+func NewBatchEncoderBuilder(config *common.Config) codec.RowEventEncoderBuilder {
 	return &batchEncoderBuilder{config: config}
 }
 
 // NewBatchEncoder creates a new BatchEncoder.
-func NewBatchEncoder() codec.EventBatchEncoder {
+func NewBatchEncoder() codec.RowEventEncoder {
 	batch := &BatchEncoder{}
 	return batch
 }
