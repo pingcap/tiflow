@@ -25,6 +25,8 @@ const (
 )
 
 var (
+	// ErrNoLimit is returned when the memory limit is not set.
+	ErrNoLimit = errors.New("memory is not limited")
 	// ErrNoCgroup is returned when the process is not in cgroup.
 	ErrNoCgroup = errors.New("process is not in cgroup")
 	// ErrCgroupsNotSupported is returned when the system does not support cgroups.
