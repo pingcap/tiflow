@@ -106,7 +106,6 @@ func (p *ddlJobPullerImpl) Run(ctx context.Context) error {
 				}
 				if ddlRawKV.OpType == model.OpTypeResolved {
 					if ddlRawKV.CRTs > p.getResolvedTs() {
-						p.schemaStorage.AdvanceResolvedTs(ddlRawKV.CRTs)
 						p.setResolvedTs(ddlRawKV.CRTs)
 					}
 				}
