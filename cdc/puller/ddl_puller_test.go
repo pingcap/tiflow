@@ -524,9 +524,7 @@ func TestDDLPuller(t *testing.T) {
 	mockPuller := newMockPuller(t, startTs)
 	ctx := cdcContext.NewBackendContext4Test(true)
 	up := upstream.NewUpstream4Test(nil)
-	meta, err := kv.GetSnapshotMeta(up.KVStorage, startTs)
-	require.Nil(t, err)
-	schemaStorage, err := entry.NewSchemaStorage(meta,
+	schemaStorage, err := entry.NewSchemaStorage(nil,
 		startTs,
 		ctx.ChangefeedVars().Info.Config.ForceReplicate,
 		ctx.ChangefeedVars().ID,
@@ -579,7 +577,6 @@ func TestDDLPuller(t *testing.T) {
 
 	mockPuller.appendResolvedTs(20)
 	waitResolvedTsGrowing(t, p, 16)
-	require.Equal(t, ddl.ID, int64(1))
 	resolvedTs, ddl = p.PopFrontDDL()
 	require.Equal(t, resolvedTs, uint64(16))
 	require.Equal(t, ddl.ID, int64(1))
@@ -650,11 +647,9 @@ func TestResolvedTsStuck(t *testing.T) {
 	mockPuller := newMockPuller(t, startTs)
 	ctx := cdcContext.NewBackendContext4Test(true)
 	up := upstream.NewUpstream4Test(nil)
-	meta, err := kv.GetSnapshotMeta(up.KVStorage, startTs)
-	require.Nil(t, err)
-	schemaStorage, err := entry.NewSchemaStorage(meta,
+	schemaStorage, err := entry.NewSchemaStorage(nil,
 		startTs,
-		ctx.ChangefeedVars().Info.Config.ForceReplicate,
+		true,
 		ctx.ChangefeedVars().ID,
 		util.RoleTester,
 	)
@@ -687,7 +682,7 @@ func TestResolvedTsStuck(t *testing.T) {
 
 	mockPuller.appendResolvedTs(30)
 	waitResolvedTsGrowing(t, p, 30)
-	require.Equal(t, logs.Len(), 0)
+	require.Equal(t, 0, logs.Len())
 
 	mockClock.Add(2 * ddlPullerStuckWarnDuration)
 	for i := 0; i < 20; i++ {
