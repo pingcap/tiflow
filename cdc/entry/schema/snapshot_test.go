@@ -92,9 +92,9 @@ func TestSchema(t *testing.T) {
 	require.Nil(t, snap.inner.replaceSchema(&timodel.DBInfo{ID: 1, Name: dbName}, 140))
 	snap2 := snap.Copy()
 
-	// dropSchema only success if the schema ID exists.
-	require.Error(t, snap.inner.dropSchema(2, 150))
-	require.Nil(t, snap.inner.dropSchema(1, 170))
+	// DropSchema only success if the schema ID exists.
+	require.Error(t, snap.inner.DropSchema(2, 150))
+	require.Nil(t, snap.inner.DropSchema(1, 170))
 	snap3 := snap.Copy()
 
 	var db *timodel.DBInfo
@@ -186,9 +186,9 @@ func TestTable(t *testing.T) {
 			require.True(t, snap.IsIneligibleTableID(12+65536))
 		}
 
-		// dropTable should check the table exists or not.
-		require.Error(t, snap.inner.dropTable(11, 190))
-		require.Nil(t, snap.inner.dropTable(12, 200))
+		// DropTable should check the table exists or not.
+		require.Error(t, snap.inner.DropTable(11, 190))
+		require.Nil(t, snap.inner.DropTable(12, 200))
 		_, ok = snap.PhysicalTableByID(12)
 		require.False(t, ok)
 		_, ok = snap.PhysicalTableByID(12 + 65536)
@@ -222,7 +222,7 @@ func TestUpdatePartition(t *testing.T) {
 	require.Error(t, snap.inner.updatePartition(newTbInfo(1, "DB_1", 11), 120))
 
 	// updatePartition fails if the new table is not partitioned.
-	require.Nil(t, snap.inner.dropTable(11, 130))
+	require.Nil(t, snap.inner.DropTable(11, 130))
 	require.Nil(t, snap.inner.createTable(newTbInfo(1, "DB_1", 11), 140))
 	newTb = newTbInfo(1, "DB_1", 11)
 	newTb.Partition = nil
@@ -265,7 +265,7 @@ func TestExchangePartition(t *testing.T) {
 	targetTb.Partition = nil
 	require.Nil(t, snap.inner.createTable(targetTb, 110))
 	require.Error(t, snap.inner.exchangePartition(newTbInfo(1, "DB_1", 11), 120))
-	require.Nil(t, snap.inner.dropTable(targetTbID, 125))
+	require.Nil(t, snap.inner.DropTable(targetTbID, 125))
 
 	// prepare the target table.
 	targetTb = newTbInfo(1, "DB_1", targetTbID)
@@ -307,13 +307,13 @@ func TestDrop(t *testing.T) {
 	require.Nil(t, snap.inner.createSchema(newDBInfo(1), 11))
 	require.Nil(t, snap.inner.createSchema(newDBInfo(2), 12))
 	require.Nil(t, snap.inner.replaceSchema(newDBInfo(2), 13))
-	require.Nil(t, snap.inner.dropSchema(2, 14))
+	require.Nil(t, snap.inner.DropSchema(2, 14))
 
 	require.Nil(t, snap.inner.createTable(newTbInfo(1, "DB_1", 3), 15))
 	require.Nil(t, snap.inner.createTable(newTbInfo(1, "DB_1", 4), 16))
 	require.Nil(t, snap.inner.replaceTable(newTbInfo(1, "DB_1", 4), 17))
 	require.Nil(t, snap.inner.truncateTable(4, newTbInfo(1, "DB_1", 5), 18))
-	require.Nil(t, snap.inner.dropTable(5, 19))
+	require.Nil(t, snap.inner.DropTable(5, 19))
 	snap.Drop()
 
 	// After the latest snapshot is dropped, check schema and table count.
