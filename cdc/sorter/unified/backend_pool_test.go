@@ -23,9 +23,9 @@ import (
 	"time"
 
 	"github.com/pingcap/failpoint"
-	"github.com/pingcap/tidb/util/memory"
 	"github.com/pingcap/tiflow/pkg/config"
 	"github.com/pingcap/tiflow/pkg/fsutil"
+	"github.com/pingcap/tiflow/pkg/util"
 	"github.com/stretchr/testify/require"
 )
 
@@ -313,11 +313,11 @@ func TestCleanUpStaleLockNoPermission(t *testing.T) {
 // getting the current system memory pressure. Such a failure is usually caused by a lack of file descriptor quota
 // set by the operating system.
 func TestGetMemoryPressureFailure(t *testing.T) {
-	origin := memory.MemTotal
+	origin := util.MemTotal
 	defer func() {
-		memory.MemTotal = origin
+		util.MemTotal = origin
 	}()
-	memory.MemTotal = func() (uint64, error) { return 0, nil }
+	util.MemTotal = func() (uint64, error) { return 0, nil }
 
 	dir := t.TempDir()
 	backEndPool, err := newBackEndPool(dir)
