@@ -341,12 +341,6 @@ func (m *SinkManager) generateSinkTasks() error {
 	getUpperBound := func(
 		tableSinkUpperBoundTs model.Ts,
 	) engine.Position {
-		// If a task carries events after schemaResolvedTs, mounter group threads
-		// can be blocked on waiting schemaResolvedTs get advanced.
-		if tableSinkUpperBoundTs == 0 {
-			log.Error("tableSinkUpperBoundTs shouldn't be 0",
-				zap.Uint64("tableSinkUpperBoundTs", tableSinkUpperBoundTs))
-		}
 		schemaTs := m.schemaStorage.ResolvedTs()
 		if tableSinkUpperBoundTs-1 > schemaTs {
 			tableSinkUpperBoundTs = schemaTs + 1
