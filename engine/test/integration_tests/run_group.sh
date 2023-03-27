@@ -49,3 +49,4 @@ if [[ -n $test_names ]]; then
 	"${CUR}"/run.sh "${test_names}" 2>&1 | tee /tmp/tiflow_engine_test/engine_it.log
 	./engine/test/utils/check_log.sh
 fi
+
