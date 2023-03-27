@@ -119,6 +119,10 @@ func ComparePolymorphicEvents(i, j *PolymorphicEvent) bool {
 		if i.RawKV.OpType == OpTypeDelete && j.RawKV.OpType != OpTypeDelete {
 			return true
 		}
+		// update DML
+		if i.RawKV.OldValue != nil && j.RawKV.OldValue == nil {
+			return true
+		}
 	}
 	return i.CRTs < j.CRTs
 }
