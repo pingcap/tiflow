@@ -11,11 +11,11 @@ fi
 
 # Check stdout.log, stdout$logsuffix.log, cdc_kafka_consumer_stdout$log_suffix.log
 # cdc_storage_consumer_stdout.log
-grep -q -E 'DATA RACE|panic:' $WORK_DIR/*out*.log
-
-if [ $? -eq 0 ]; then
-	cat $WORK_DIR/stdout.log
-	exit 1
-else
-	exit 0
-fi
+for f in "$WORK_DIR"/*out*.log; do
+	if grep -q -E 'DATA RACE|panic:' "$f"; then
+		cat "$f"
+		exit 1
+	else
+		exit 0
+	fi
+done
