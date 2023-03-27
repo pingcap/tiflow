@@ -787,8 +787,12 @@ func (p *processor) createAndDriveSchemaStorage(ctx cdcContext.Context) (entry.S
 	if err != nil {
 		return nil, errors.Trace(err)
 	}
+	f, err := filter.NewFilter(p.changefeed.Info.Config, "")
+	if err != nil {
+		return nil, errors.Trace(err)
+	}
 	schemaStorage, err := entry.NewSchemaStorage(meta, ddlStartTs,
-		p.changefeed.Info.Config.ForceReplicate, p.changefeedID, util.RoleProcessor)
+		p.changefeed.Info.Config.ForceReplicate, p.changefeedID, util.RoleProcessor, f)
 	if err != nil {
 		return nil, errors.Trace(err)
 	}
@@ -801,9 +805,9 @@ func (p *processor) createAndDriveSchemaStorage(ctx cdcContext.Context) (entry.S
 		p.upstream.PDClock,
 		ddlStartTs,
 		kvCfg,
-		p.changefeed.Info.Config,
 		p.changefeedID,
 		schemaStorage,
+		f,
 	)
 	if err != nil {
 		return nil, errors.Trace(err)

@@ -455,21 +455,17 @@ func NewDDLJobPuller(
 	pdClock pdutil.Clock,
 	checkpointTs uint64,
 	cfg *config.KVClientConfig,
-	replicaConfig *config.ReplicaConfig,
 	changefeed model.ChangeFeedID,
 	schemaStorage entry.SchemaStorage,
+	filter filter.Filter,
 ) (DDLJobPuller, error) {
-	f, err := filter.NewFilter(replicaConfig, "")
-	if err != nil {
-		return nil, errors.Trace(err)
-	}
 	spans := spanz.GetAllDDLSpan()
 	for i := range spans {
 		spans[i].TableID = -1
 	}
 	return &ddlJobPullerImpl{
 		changefeedID:  changefeed,
-		filter:        f,
+		filter:        filter,
 		schemaStorage: schemaStorage,
 		puller: New(
 			ctx,
@@ -527,6 +523,7 @@ func NewDDLPuller(ctx context.Context,
 	startTs uint64,
 	changefeed model.ChangeFeedID,
 	schemaStorage entry.SchemaStorage,
+	filter filter.Filter,
 ) (DDLPuller, error) {
 	// add "_ddl_puller" to make it different from table pullers.
 	changefeed.ID += "_ddl_puller"
@@ -545,9 +542,9 @@ func NewDDLPuller(ctx context.Context,
 			up.PDClock,
 			startTs,
 			config.GetGlobalServerConfig().KVClient,
-			replicaConfig,
 			changefeed,
 			schemaStorage,
+			filter,
 		)
 		if err != nil {
 			return nil, errors.Trace(err)

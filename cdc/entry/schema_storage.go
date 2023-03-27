@@ -15,6 +15,7 @@ package entry
 
 import (
 	"context"
+	"github.com/pingcap/tiflow/pkg/filter"
 	"sort"
 	"sync"
 	"sync/atomic"
@@ -24,7 +25,7 @@ import (
 	"github.com/pingcap/log"
 	timeta "github.com/pingcap/tidb/meta"
 	timodel "github.com/pingcap/tidb/parser/model"
-	"github.com/pingcap/tiflow/cdc/entry/schema"
+	schema "github.com/pingcap/tiflow/cdc/entry/schema"
 	"github.com/pingcap/tiflow/cdc/model"
 	cerror "github.com/pingcap/tiflow/pkg/errors"
 	"github.com/pingcap/tiflow/pkg/retry"
@@ -69,7 +70,7 @@ type schemaStorageImpl struct {
 func NewSchemaStorage(
 	meta *timeta.Meta, startTs uint64,
 	forceReplicate bool, id model.ChangeFeedID,
-	role util.Role,
+	role util.Role, filter filter.Filter,
 ) (SchemaStorage, error) {
 	var (
 		snap    *schema.Snapshot
@@ -80,7 +81,7 @@ func NewSchemaStorage(
 		snap = schema.NewEmptySnapshot(forceReplicate)
 		snap.InitPreExistingTables()
 	} else {
-		snap, err = schema.NewSnapshotFromMeta(meta, startTs, forceReplicate)
+		snap, err = schema.NewSnapshotFromMeta(meta, startTs, forceReplicate, filter)
 		if err != nil {
 			return nil, errors.Trace(err)
 		}
@@ -92,6 +93,7 @@ func NewSchemaStorage(
 	if err != nil {
 		return nil, errors.Trace(err)
 	}
+
 	schema := &schemaStorageImpl{
 		snaps:          []*schema.Snapshot{snap},
 		resolvedTs:     startTs,

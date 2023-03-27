@@ -15,6 +15,7 @@ package schema
 
 import (
 	"fmt"
+	"github.com/pingcap/tiflow/pkg/filter"
 	"math"
 	"strings"
 	"sync"
@@ -117,7 +118,7 @@ func GetSchemaVersion(meta *timeta.Meta) (int64, error) {
 }
 
 // NewSingleSnapshotFromMeta creates a new single schema snapshot from a tidb meta
-func NewSingleSnapshotFromMeta(meta *timeta.Meta, currentTs uint64, forceReplicate bool) (*Snapshot, error) {
+func NewSingleSnapshotFromMeta(meta *timeta.Meta, currentTs uint64, forceReplicate bool, filter filter.Filter) (*Snapshot, error) {
 	// meta is nil only in unit tests
 	if meta == nil {
 		snap := NewEmptySnapshot(forceReplicate)
@@ -125,11 +126,11 @@ func NewSingleSnapshotFromMeta(meta *timeta.Meta, currentTs uint64, forceReplica
 		snap.inner.currentTs = currentTs
 		return snap, nil
 	}
-	return NewSnapshotFromMeta(meta, currentTs, forceReplicate)
+	return NewSnapshotFromMeta(meta, currentTs, forceReplicate, filter)
 }
 
 // NewSnapshotFromMeta creates a schema snapshot from meta.
-func NewSnapshotFromMeta(meta *timeta.Meta, currentTs uint64, forceReplicate bool) (*Snapshot, error) {
+func NewSnapshotFromMeta(meta *timeta.Meta, currentTs uint64, forceReplicate bool, filter filter.Filter) (*Snapshot, error) {
 	snap := NewEmptySnapshot(forceReplicate)
 	dbinfos, err := meta.ListDatabases()
 	if err != nil {
@@ -139,6 +140,9 @@ func NewSnapshotFromMeta(meta *timeta.Meta, currentTs uint64, forceReplicate boo
 	tag := negative(currentTs)
 
 	for _, dbinfo := range dbinfos {
+		if filter.ShouldIgnoreTable(dbinfo.Name.O, "") {
+			continue
+		}
 		vid := newVersionedID(dbinfo.ID, tag)
 		vid.target = dbinfo
 		snap.inner.schemas.ReplaceOrInsert(vid)
@@ -153,6 +157,9 @@ func NewSnapshotFromMeta(meta *timeta.Meta, currentTs uint64, forceReplicate boo
 		}
 		for _, tableInfo := range tableInfos {
 			tableInfo := model.WrapTableInfo(dbinfo.ID, dbinfo.Name.O, currentTs, tableInfo)
+			if filter.ShouldIgnoreTable(tableInfo.TableName.Schema, tableInfo.TableName.Table) {
+				continue
+			}
 			snap.inner.tables.ReplaceOrInsert(versionedID{
 				id:     tableInfo.ID,
 				tag:    tag,
@@ -181,7 +188,9 @@ func NewSnapshotFromMeta(meta *timeta.Meta, currentTs uint64, forceReplicate boo
 			}
 		}
 	}
-
+	log.Info("new schema snapshot",
+		zap.Int("schema count", snap.inner.schemas.Len()),
+		zap.Int("table count", snap.inner.tables.Len()))
 	snap.inner.currentTs = currentTs
 	return snap, nil
 }
