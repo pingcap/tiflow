@@ -25,6 +25,7 @@ import (
 
 const memoryMax uint64 = math.MaxUint64
 
+// MemTotal returns the memory limit of current process based on cgroup.
 var MemTotal func() (uint64, error) = GetMemoryLimit
 
 // GetMemoryLimit gets the memory limit of current process based on cgroup.
