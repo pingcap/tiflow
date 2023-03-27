@@ -1362,13 +1362,7 @@ func (p *processor) Close(ctx cdcContext.Context) error {
 				zap.String("namespace", p.changefeedID.Namespace),
 				zap.String("changefeed", p.changefeedID.ID))
 			start := time.Now()
-			if err := p.sinkV2Factory.Close(); err != nil && errors.Cause(err) != context.Canceled {
-				log.Info("processor close sink failed",
-					zap.String("namespace", p.changefeedID.Namespace),
-					zap.String("changefeed", p.changefeedID.ID),
-					zap.Duration("duration", time.Since(start)))
-				return errors.Trace(err)
-			}
+			p.sinkV2Factory.Close()
 			log.Info("processor close sink success",
 				zap.String("namespace", p.changefeedID.Namespace),
 				zap.String("changefeed", p.changefeedID.ID),
