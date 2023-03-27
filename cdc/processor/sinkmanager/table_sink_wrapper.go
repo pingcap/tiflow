@@ -207,6 +207,7 @@ func (t *tableSinkWrapper) getState() tablepb.TableState {
 func (t *tableSinkWrapper) getUpperBoundTs() model.Ts {
 	resolvedTs := t.getReceivedSorterResolvedTs()
 	barrierTs := t.barrierTs.Load()
+	log.Info("fizz: Get upper bound ts", zap.Int64("table", t.span.TableID), zap.Uint64("resolvedTs", resolvedTs), zap.Uint64("barrierTs", barrierTs))
 	if resolvedTs > barrierTs {
 		resolvedTs = barrierTs
 	}

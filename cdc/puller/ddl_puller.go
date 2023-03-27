@@ -22,7 +22,6 @@ import (
 
 	"github.com/benbjohnson/clock"
 	"github.com/pingcap/errors"
-	"github.com/pingcap/failpoint"
 	"github.com/pingcap/log"
 	tidbkv "github.com/pingcap/tidb/kv"
 	timodel "github.com/pingcap/tidb/parser/model"
@@ -105,7 +104,6 @@ func (p *ddlJobPullerImpl) Run(ctx context.Context) error {
 				if ddlRawKV == nil {
 					continue
 				}
-				failpoint.Inject("ddlPullerDelay", nil)
 				if ddlRawKV.OpType == model.OpTypeResolved {
 					if ddlRawKV.CRTs > p.getResolvedTs() {
 						p.schemaStorage.AdvanceResolvedTs(ddlRawKV.CRTs)
