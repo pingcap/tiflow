@@ -57,6 +57,7 @@ const (
 type processor struct {
 	changefeedID model.ChangeFeedID
 	captureInfo  *model.CaptureInfo
+	globalVars   *cdcContext.GlobalVars
 	changefeed   *orchestrator.ChangefeedReactorState
 
 	upstream      *upstream.Upstream
@@ -607,6 +608,9 @@ func (p *processor) lazyInitImpl(ctx cdcContext.Context) error {
 	if p.initialized {
 		return nil
 	}
+
+	p.globalVars = ctx.GlobalVars()
+
 	ctx, cancel := cdcContext.WithCancel(ctx)
 	p.cancel = cancel
 	// We don't close this error channel, since it is only safe to close channel
@@ -953,7 +957,7 @@ func (p *processor) refreshMetrics() {
 	p.metricRemainKVEventGauge.Set(float64(sortEngineReceivedEvents - tableSinksReceivedEvents))
 }
 
-func (p *processor) Close(ctx cdcContext.Context) error {
+func (p *processor) Close() error {
 	log.Info("processor closing ...",
 		zap.String("namespace", p.changefeedID.Namespace),
 		zap.String("changefeed", p.changefeedID.ID))
@@ -990,9 +994,8 @@ func (p *processor) Close(ctx cdcContext.Context) error {
 			zap.String("changefeed", p.changefeedID.ID))
 		p.sourceManager = nil
 	}
-	engineFactory := ctx.GlobalVars().SortEngineFactory
-	if engineFactory != nil {
-		if err := engineFactory.Drop(p.changefeedID); err != nil {
+	if p.globalVars != nil && p.globalVars.SortEngineFactory != nil {
+		if err := p.globalVars.SortEngineFactory.Drop(p.changefeedID); err != nil {
 			log.Error("drop event sort engine fail",
 				zap.String("namespace", p.changefeedID.Namespace),
 				zap.String("changefeed", p.changefeedID.ID),
