@@ -103,9 +103,7 @@ func NewManager(
 func (m *managerImpl) Tick(stdCtx context.Context, state orchestrator.ReactorState) (nextState orchestrator.ReactorState, err error) {
 	ctx := stdCtx.(cdcContext.Context)
 	globalState := state.(*orchestrator.GlobalReactorState)
-	if err := m.handleCommand(); err != nil {
-		return state, err
-	}
+	m.handleCommand()
 
 	var inactiveChangefeedCount int
 	for changefeedID, changefeedState := range globalState.Changefeeds {
@@ -192,7 +190,6 @@ func (m *managerImpl) Close() {
 		m.closeProcessor(changefeedID)
 	}
 	// FIXME: we should drain command queue and signal callers an error.
-	return
 }
 
 // WriteDebugInfo write the debug info to Writer
@@ -221,12 +218,12 @@ func (m *managerImpl) sendCommand(
 	return nil
 }
 
-func (m *managerImpl) handleCommand() error {
+func (m *managerImpl) handleCommand() {
 	var cmd *command
 	select {
 	case cmd = <-m.commandQueue:
 	default:
-		return nil
+		return
 	}
 	defer close(cmd.done)
 	switch cmd.tp {
@@ -239,7 +236,6 @@ func (m *managerImpl) handleCommand() error {
 	default:
 		log.Warn("Unknown command in processor manager", zap.Any("command", cmd))
 	}
-	return nil
 }
 
 func (m *managerImpl) writeDebugInfo(w io.Writer) error {
