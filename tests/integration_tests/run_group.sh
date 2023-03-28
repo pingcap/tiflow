@@ -69,3 +69,4 @@ if [[ -n $test_names ]]; then
 	echo "Run cases: ${test_names}"
 	"${CUR}"/run.sh "${sink_type}" "${test_names}"
 fi
+
