@@ -107,6 +107,7 @@ func newTableSinkWrapper(
 	}
 	res.checkpointTs.Store(startTs)
 	res.receivedSorterResolvedTs.Store(startTs)
+	res.barrierTs.Store(startTs)
 	return res
 }
 
