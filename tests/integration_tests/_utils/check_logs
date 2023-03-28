@@ -4,11 +4,6 @@ WORK_DIR=$1
 
 set +e
 
-## check data race
-if [ ! -f $WORK_DIR/stdout.log ]; then
-	exit 0
-fi
-
 # Check stdout.log, stdout$logsuffix.log, cdc_kafka_consumer_stdout$log_suffix.log
 # cdc_storage_consumer_stdout.log
 for f in "$WORK_DIR"/*out*.log; do
