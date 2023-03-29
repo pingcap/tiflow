@@ -477,7 +477,7 @@ func NewBarrier(ts Ts) *Barrier {
 	}
 }
 
-// DownStreamType is the type of downstream.
+// DownstreamType is the type of downstream.
 type DownstreamType int
 
 const (
