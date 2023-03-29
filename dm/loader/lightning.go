@@ -105,6 +105,10 @@ func NewLightning(cfg *config.SubTaskConfig, cli *clientv3.Client, workerName st
 // MakeGlobalConfig converts subtask config to lightning global config.
 func MakeGlobalConfig(cfg *config.SubTaskConfig) *lcfg.GlobalConfig {
 	lightningCfg := lcfg.NewGlobalConfig()
+	// don't run lightning precheck if all checking items are ignored
+	if len(cfg.IgnoreCheckingItems) == 1 && cfg.IgnoreCheckingItems[0] == config.AllChecking {
+		lightningCfg.App.CheckRequirements = false
+	}
 	if cfg.To.Security != nil {
 		lightningCfg.Security.CABytes = cfg.To.Security.SSLCABytes
 		lightningCfg.Security.CertBytes = cfg.To.Security.SSLCertBytes

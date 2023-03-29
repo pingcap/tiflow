@@ -51,16 +51,16 @@ func TestConvertLightningError(t *testing.T) {
 func TestGetLightiningConfig(t *testing.T) {
 	t.Parallel()
 
-	conf, err := GetLightningConfig(&lcfg.GlobalConfig{},
-		&config.SubTaskConfig{
-			Name:       "job123",
-			ExtStorage: &storage.LocalStorage{},
-			LoaderConfig: config.LoaderConfig{
-				RangeConcurrency: 32,
-				CompressKVPairs:  "gzip",
-				Analyze:          "required",
-			},
-		})
+	subtaskCfg := &config.SubTaskConfig{
+		Name:       "job123",
+		ExtStorage: &storage.LocalStorage{},
+		LoaderConfig: config.LoaderConfig{
+			RangeConcurrency: 32,
+			CompressKVPairs:  "gzip",
+			Analyze:          "required",
+		},
+	}
+	conf, err := GetLightningConfig(MakeGlobalConfig(subtaskCfg), subtaskCfg)
 	require.NoError(t, err)
 	require.Equal(t, lcfg.CheckpointDriverMySQL, conf.Checkpoint.Driver)
 	require.Equal(t, lcfg.CheckpointRemove, conf.Checkpoint.KeepAfterSuccess)
@@ -71,6 +71,13 @@ func TestGetLightiningConfig(t *testing.T) {
 	lightningDefaultQuota := lcfg.NewConfig().TikvImporter.DiskQuota
 	// when we don't set dm loader disk quota, it should be equal to lightning's default quota
 	require.Equal(t, lightningDefaultQuota, conf.TikvImporter.DiskQuota)
+	// will check requirements by default
+	require.True(t, conf.App.CheckRequirements)
+	subtaskCfg.IgnoreCheckingItems = []string{config.AllChecking}
+	conf, err = GetLightningConfig(MakeGlobalConfig(subtaskCfg), subtaskCfg)
+	require.NoError(t, err)
+	// will not check requirements when ignore all checking items
+	require.False(t, conf.App.CheckRequirements)
 }
 
 func TestLightningConfigCompatibility(t *testing.T) {
