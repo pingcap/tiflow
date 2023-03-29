@@ -67,7 +67,7 @@ message TableBarrier {
     ];
     // The barrier timestamp of the table.
     uint64 barrier_ts = 2 [
-        (gogoproto.casttype) = "github.com/pingcap/tiflow/cdc/processor/tablepb.Ts"];
+        (gogoproto.casttype) = "github.com/pingcap/tiflow/cdc/model.Ts"];
 }
 
 // Barrier contains the barrierTs of those tables that have
@@ -76,7 +76,7 @@ message TableBarrier {
 message Barrier {
     repeated TableBarrier table_barriers = 1;
     uint64  global_barrier_ts = 2 [
-        (gogoproto.casttype) = "github.com/pingcap/tiflow/cdc/processor/tablepb.Ts"];
+        (gogoproto.casttype) = "github.com/pingcap/tiflow/cdc/model.Ts"];
 }
 
 message Heartbeat {

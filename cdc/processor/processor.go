@@ -282,6 +282,7 @@ func (p *processor) IsAddTableFinished(tableID model.TableID, isPrepare bool) bo
 
 	localResolvedTs := p.resolvedTs
 	globalResolvedTs := p.changefeed.Status.ResolvedTs
+	localCheckpointTs := p.agent.GetLastSentCheckpointTs()
 	globalCheckpointTs := p.changefeed.Status.CheckpointTs
 
 	var tableResolvedTs, tableCheckpointTs uint64
@@ -1138,8 +1139,11 @@ func (p *processor) updateBarrierTs(barrier *schedulepb.Barrier) {
 	if p.pullBasedSinking {
 		p.sinkManager.UpdateBarrierTs(globalBarrierTs, tableBarrier)
 	} else {
-		for _, table := range p.tables {
-			// FIXME: consider the table barrierTs
+		for id, table := range p.tables {
+			if _, ok := tableBarrier[id]; ok {
+				table.UpdateBarrierTs(tableBarrier[id])
+				continue
+			}
 			table.UpdateBarrierTs(globalBarrierTs)
 		}
 	}

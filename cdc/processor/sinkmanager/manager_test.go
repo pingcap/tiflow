@@ -205,24 +205,6 @@ func TestRemoveTable(t *testing.T) {
 	require.Equal(t, uint64(0), manager.sinkMemQuota.GetUsedBytes(), "After remove table, the memory usage should be 0.")
 }
 
-func TestUpdateBarrierTs(t *testing.T) {
-	t.Parallel()
-
-	ctx, cancel := context.WithCancel(context.Background())
-	defer cancel()
-
-	changefeedInfo := getChangefeedInfo()
-	manager, _ := createManagerWithMemEngine(t, ctx, model.DefaultChangeFeedID("1"), changefeedInfo, make(chan error, 1))
-	defer func() {
-		err := manager.Close()
-		require.NoError(t, err)
-	}()
-	manager.UpdateBarrierTs(100)
-	require.Equal(t, uint64(100), manager.lastBarrierTs.Load())
-	manager.UpdateBarrierTs(50)
-	require.Equal(t, uint64(100), manager.lastBarrierTs.Load())
-}
-
 func TestGenerateTableSinkTaskWithBarrierTs(t *testing.T) {
 	t.Parallel()
 

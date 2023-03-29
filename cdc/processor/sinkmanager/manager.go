@@ -85,8 +85,6 @@ type SinkManager struct {
 	sinkFactory *factory.SinkFactory
 	// tableSinks is a map from tableID to tableSink.
 	tableSinks sync.Map
-	// lastBarrierTs is the last barrier ts.
-	lastBarrierTs atomic.Uint64
 
 	// sinkWorkers used to pull data from source manager.
 	sinkWorkers []*sinkWorker
@@ -647,14 +645,14 @@ func (m *SinkManager) UpdateBarrierTs(
 	globalBarrierTs model.Ts,
 	tableBarrier map[model.TableID]model.Ts,
 ) {
-	m.tableSinks.Range(func(span tablepb.Span, value interface{}) bool {
+	m.tableSinks.Range(func(tableID, value interface{}) bool {
 		tableSink := value.(*tableSinkWrapper)
 		lastBarrierTs := tableSink.barrierTs.Load()
 		// It is safe to do not use compare and swap here.
 		// Only the processor will update the barrier ts.
 		// Other goroutines will only read the barrier ts.
 		// So it is safe to do not use compare and swap here, just Load and Store.
-		if tableBarrierTs, ok := tableBarrier[tableSink.span.TableID]; ok {
+		if tableBarrierTs, ok := tableBarrier[tableSink.tableID]; ok {
 			barrierTs := tableBarrierTs
 			if barrierTs > globalBarrierTs {
 				barrierTs = globalBarrierTs

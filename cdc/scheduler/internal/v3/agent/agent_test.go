@@ -648,7 +648,7 @@ func TestAgentTick(t *testing.T) {
 			ProcessorEpoch: a.Epoch,
 		},
 		MsgType: schedulepb.MsgDispatchTableRequest,
-		From:    a.ownerInfo.ID,
+		From:    a.ownerInfo.CaptureID,
 		DispatchTableRequest: &schedulepb.DispatchTableRequest{
 			Request: &schedulepb.DispatchTableRequest_AddTable{
 				AddTable: &schedulepb.AddTableRequest{
