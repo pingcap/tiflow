@@ -1187,7 +1187,7 @@ workaround = "Please choose a valid value in ['none', 'manual'] or leave it empt
 tags = ["internal", "medium"]
 
 [error.DM-config-20063]
-message = "invalid load checksum-physical option '%s'"
+message = "invalid load checksum or checksum-physical option '%s'"
 description = ""
 workaround = "Please choose a valid value in ['required', 'optional', 'off'] or leave it empty."
 tags = ["internal", "medium"]
