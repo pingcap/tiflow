@@ -911,6 +911,11 @@ error = '''
 upstream has been closed
 '''
 
+["CDC:ErrUpstreamHasRunningImport"]
+error = '''
+upstream has running import tasks, upstream-id: %d
+'''
+
 ["CDC:ErrUpstreamManagerNotReady"]
 error = '''
 upstream manager not ready
