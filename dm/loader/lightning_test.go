@@ -72,3 +72,28 @@ func TestGetLightiningConfig(t *testing.T) {
 	// when we don't set dm loader disk quota, it should be equal to lightning's default quota
 	require.Equal(t, lightningDefaultQuota, conf.TikvImporter.DiskQuota)
 }
+
+func TestLightningConfigCompatibility(t *testing.T) {
+	t.Parallel()
+
+	subtaskCfg := &config.SubTaskConfig{
+		SourceID:   "mysql-replica-01",
+		Name:       "job123",
+		Mode:       "full",
+		ExtStorage: &storage.LocalStorage{},
+		LoaderConfig: config.LoaderConfig{
+			ImportMode:         "physical",
+			SortingDirPhysical: "./dumped_dir",
+			DiskQuotaPhysical:  1,
+			ChecksumPhysical:   "off",
+		},
+	}
+	require.NoError(t, subtaskCfg.Adjust(false))
+	cfg, err := GetLightningConfig(MakeGlobalConfig(subtaskCfg), subtaskCfg)
+	require.NoError(t, err)
+
+	// test deprecated configurations will write to new ones
+	require.Equal(t, "./dumped_dir", cfg.TikvImporter.SortedKVDir)
+	require.Equal(t, 1, int(cfg.TikvImporter.DiskQuota))
+	require.Equal(t, lcfg.OpLevelOff, cfg.PostRestore.Checksum)
+}

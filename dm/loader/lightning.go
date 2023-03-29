@@ -123,7 +123,7 @@ func MakeGlobalConfig(cfg *config.SubTaskConfig) *lcfg.GlobalConfig {
 	}
 	lightningCfg.PostRestore.Checksum = lcfg.OpLevelOff
 	if lightningCfg.TikvImporter.Backend == lcfg.BackendLocal {
-		lightningCfg.TikvImporter.SortedKVDir = cfg.SortingDirPhysical
+		lightningCfg.TikvImporter.SortedKVDir = cfg.SortingDir
 	}
 	lightningCfg.Mydumper.SourceDir = cfg.Dir
 	lightningCfg.App.Config.File = "" // make lightning not init logger, see more in https://github.com/pingcap/tidb/pull/29291
@@ -348,7 +348,9 @@ func GetLightningConfig(globalCfg *lcfg.GlobalConfig, subtaskCfg *config.SubTask
 	// checkpoint meta and updating dm checkpoint meta to 'finished'.
 	cfg.Checkpoint.KeepAfterSuccess = lcfg.CheckpointRemove
 
-	if subtaskCfg.LoaderConfig.DiskQuotaPhysical > 0 {
+	if subtaskCfg.LoaderConfig.DiskQuota > 0 {
+		cfg.TikvImporter.DiskQuota = subtaskCfg.LoaderConfig.DiskQuota
+	} else if subtaskCfg.LoaderConfig.DiskQuotaPhysical > 0 {
 		cfg.TikvImporter.DiskQuota = subtaskCfg.LoaderConfig.DiskQuotaPhysical
 	}
 	cfg.TikvImporter.OnDuplicate = string(subtaskCfg.OnDuplicateLogical)
@@ -360,7 +362,7 @@ func GetLightningConfig(globalCfg *lcfg.GlobalConfig, subtaskCfg *config.SubTask
 	case config.OnDuplicateNone:
 		cfg.TikvImporter.DuplicateResolution = lcfg.DupeResAlgNone
 	}
-	switch subtaskCfg.ChecksumPhysical {
+	switch subtaskCfg.Checksum {
 	case config.OpLevelRequired:
 		cfg.PostRestore.Checksum = lcfg.OpLevelRequired
 	case config.OpLevelOptional:
