@@ -15,7 +15,6 @@ package entry
 
 import (
 	"context"
-	"github.com/pingcap/tiflow/pkg/filter"
 	"sort"
 	"sync"
 	"sync/atomic"
@@ -28,6 +27,7 @@ import (
 	schema "github.com/pingcap/tiflow/cdc/entry/schema"
 	"github.com/pingcap/tiflow/cdc/model"
 	cerror "github.com/pingcap/tiflow/pkg/errors"
+	"github.com/pingcap/tiflow/pkg/filter"
 	"github.com/pingcap/tiflow/pkg/retry"
 	"github.com/pingcap/tiflow/pkg/util"
 	"go.uber.org/zap"
