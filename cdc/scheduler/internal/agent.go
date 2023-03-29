@@ -16,9 +16,8 @@ package internal
 import (
 	"context"
 
-	"github.com/pingcap/tiflow/cdc/scheduler/schedulepb"
-
 	"github.com/pingcap/tiflow/cdc/model"
+	"github.com/pingcap/tiflow/cdc/scheduler/schedulepb"
 )
 
 // Agent is an interface for an object inside Processor that is responsible
