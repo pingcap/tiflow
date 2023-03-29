@@ -631,14 +631,16 @@ func TestUpdateBarrierTs(t *testing.T) {
 	err = p.Tick(ctx)
 	require.Nil(t, err)
 	tester.MustApplyPatches()
+	p.updateBarrierTs(&schedulepb.Barrier{GlobalBarrierTs: 20, TableBarriers: nil})
 	tb := p.tables[model.TableID(1)].(*mockTablePipeline)
-	require.Equal(t, tb.barrierTs, uint64(10))
+	require.Equal(t, uint64(10), tb.barrierTs)
 
 	// Schema storage has advanced too.
 	p.schemaStorage.(*mockSchemaStorage).resolvedTs = 15
 	err = p.Tick(ctx)
 	require.Nil(t, err)
 	tester.MustApplyPatches()
+	p.updateBarrierTs(&schedulepb.Barrier{GlobalBarrierTs: 20, TableBarriers: nil})
 	tb = p.tables[model.TableID(1)].(*mockTablePipeline)
 	require.Equal(t, tb.barrierTs, uint64(15))
 }
