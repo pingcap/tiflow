@@ -15,7 +15,6 @@ package schema
 
 import (
 	"fmt"
-	"github.com/pingcap/tiflow/pkg/filter"
 	"math"
 	"strings"
 	"sync"
@@ -32,6 +31,7 @@ import (
 	"github.com/pingcap/tidb/session"
 	"github.com/pingcap/tiflow/cdc/model"
 	cerror "github.com/pingcap/tiflow/pkg/errors"
+	"github.com/pingcap/tiflow/pkg/filter"
 	"go.uber.org/zap"
 )
 
@@ -118,7 +118,12 @@ func GetSchemaVersion(meta *timeta.Meta) (int64, error) {
 }
 
 // NewSingleSnapshotFromMeta creates a new single schema snapshot from a tidb meta
-func NewSingleSnapshotFromMeta(meta *timeta.Meta, currentTs uint64, forceReplicate bool, filter filter.Filter) (*Snapshot, error) {
+func NewSingleSnapshotFromMeta(
+	meta *timeta.Meta,
+	currentTs uint64,
+	forceReplicate bool,
+	filter filter.Filter,
+) (*Snapshot, error) {
 	// meta is nil only in unit tests
 	if meta == nil {
 		snap := NewEmptySnapshot(forceReplicate)
@@ -130,7 +135,12 @@ func NewSingleSnapshotFromMeta(meta *timeta.Meta, currentTs uint64, forceReplica
 }
 
 // NewSnapshotFromMeta creates a schema snapshot from meta.
-func NewSnapshotFromMeta(meta *timeta.Meta, currentTs uint64, forceReplicate bool, filter filter.Filter) (*Snapshot, error) {
+func NewSnapshotFromMeta(
+	meta *timeta.Meta,
+	currentTs uint64,
+	forceReplicate bool,
+	filter filter.Filter,
+) (*Snapshot, error) {
 	snap := NewEmptySnapshot(forceReplicate)
 	dbinfos, err := meta.ListDatabases()
 	if err != nil {
@@ -188,9 +198,6 @@ func NewSnapshotFromMeta(meta *timeta.Meta, currentTs uint64, forceReplicate boo
 			}
 		}
 	}
-	log.Info("new schema snapshot",
-		zap.Int("schema count", snap.inner.schemas.Len()),
-		zap.Int("table count", snap.inner.tables.Len()))
 	snap.inner.currentTs = currentTs
 	return snap, nil
 }

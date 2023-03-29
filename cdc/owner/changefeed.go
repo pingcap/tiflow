@@ -16,7 +16,6 @@ package owner
 import (
 	"context"
 	"fmt"
-	"github.com/pingcap/tiflow/pkg/filter"
 	"strings"
 	"sync"
 	"time"
@@ -34,6 +33,7 @@ import (
 	"github.com/pingcap/tiflow/pkg/config"
 	cdcContext "github.com/pingcap/tiflow/pkg/context"
 	cerror "github.com/pingcap/tiflow/pkg/errors"
+	"github.com/pingcap/tiflow/pkg/filter"
 	"github.com/pingcap/tiflow/pkg/orchestrator"
 	"github.com/pingcap/tiflow/pkg/pdutil"
 	redoCfg "github.com/pingcap/tiflow/pkg/redo"
@@ -530,6 +530,9 @@ LOOP:
 	c.barriers.Update(finishBarrier, c.state.Info.GetTargetTs())
 
 	filter, err := filter.NewFilter(c.state.Info.Config, "")
+	if err != nil {
+		return errors.Trace(err)
+	}
 	c.schema, err = newSchemaWrap4Owner(
 		c.upstream.KVStorage,
 		ddlStartTs,

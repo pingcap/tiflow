@@ -131,12 +131,15 @@ func newMockDDLJobPuller(
 		ts := helper.GetCurrentMeta().StartTS
 		meta, err := kv.GetSnapshotMeta(kvStorage, ts)
 		require.Nil(t, err)
+		f, err := filter.NewFilter(config.GetDefaultReplicaConfig(), "")
+		require.Nil(t, err)
 		schemaStorage, err := entry.NewSchemaStorage(
 			meta,
 			ts,
 			false,
 			model.DefaultChangeFeedID("test"),
-			util.RoleTester)
+			util.RoleTester,
+			f)
 		require.Nil(t, err)
 		res.schemaStorage = schemaStorage
 		res.kvStorage = kvStorage
@@ -526,15 +529,22 @@ func TestDDLPuller(t *testing.T) {
 	up := upstream.NewUpstream4Test(nil)
 	meta, err := kv.GetSnapshotMeta(up.KVStorage, startTs)
 	require.Nil(t, err)
+	f, err := filter.NewFilter(ctx.ChangefeedVars().Info.Config, "")
+	require.Nil(t, err)
 	schemaStorage, err := entry.NewSchemaStorage(meta,
 		startTs,
 		ctx.ChangefeedVars().Info.Config.ForceReplicate,
 		ctx.ChangefeedVars().ID,
 		util.RoleTester,
+		f,
 	)
 	require.Nil(t, err)
 	p, err := NewDDLPuller(
-		ctx, ctx.ChangefeedVars().Info.Config, up, startTs, ctx.ChangefeedVars().ID, schemaStorage)
+		ctx, ctx.ChangefeedVars().Info.Config,
+		up, startTs,
+		ctx.ChangefeedVars().ID,
+		schemaStorage,
+		f)
 	require.Nil(t, err)
 	p.(*ddlPullerImpl).ddlJobPuller, _ = newMockDDLJobPuller(t, mockPuller, false)
 
@@ -652,15 +662,22 @@ func TestResolvedTsStuck(t *testing.T) {
 	up := upstream.NewUpstream4Test(nil)
 	meta, err := kv.GetSnapshotMeta(up.KVStorage, startTs)
 	require.Nil(t, err)
+	f, err := filter.NewFilter(config.GetDefaultReplicaConfig(), "")
+	require.Nil(t, err)
 	schemaStorage, err := entry.NewSchemaStorage(meta,
 		startTs,
 		ctx.ChangefeedVars().Info.Config.ForceReplicate,
 		ctx.ChangefeedVars().ID,
 		util.RoleTester,
+		f,
 	)
 	require.Nil(t, err)
 	p, err := NewDDLPuller(
-		ctx, ctx.ChangefeedVars().Info.Config, up, startTs, ctx.ChangefeedVars().ID, schemaStorage)
+		ctx, ctx.ChangefeedVars().Info.Config,
+		up, startTs,
+		ctx.ChangefeedVars().ID,
+		schemaStorage,
+		f)
 	require.Nil(t, err)
 
 	mockClock := clock.NewMock()

@@ -31,6 +31,7 @@ import (
 	cdcContext "github.com/pingcap/tiflow/pkg/context"
 	cerror "github.com/pingcap/tiflow/pkg/errors"
 	"github.com/pingcap/tiflow/pkg/etcd"
+	"github.com/pingcap/tiflow/pkg/filter"
 	"github.com/pingcap/tiflow/pkg/orchestrator"
 	"github.com/pingcap/tiflow/pkg/sink/observer"
 	"github.com/pingcap/tiflow/pkg/txnutil/gc"
@@ -62,6 +63,7 @@ func newOwner4Test(
 		startTs uint64,
 		changefeed model.ChangeFeedID,
 		schemaStorage entry.SchemaStorage,
+		filter filter.Filter,
 	) (puller.DDLPuller, error),
 	newSink func(changefeedID model.ChangeFeedID, info *model.ChangeFeedInfo, reportErr func(err error)) DDLSink,
 	newScheduler func(
@@ -105,6 +107,7 @@ func createOwner4Test(ctx cdcContext.Context, t *testing.T) (*ownerImpl, *orches
 			startTs uint64,
 			changefeed model.ChangeFeedID,
 			schemaStorage entry.SchemaStorage,
+			filter filter.Filter,
 		) (puller.DDLPuller, error) {
 			return &mockDDLPuller{resolvedTs: startTs - 1}, nil
 		},
