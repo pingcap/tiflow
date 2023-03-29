@@ -287,7 +287,7 @@ func TestConvertRowChangedEventsWhenDisableOldValue(t *testing.T) {
 func TestGetUpperBoundTs(t *testing.T) {
 	t.Parallel()
 	wrapper, _ := createTableSinkWrapper(
-		model.DefaultChangeFeedID("1"), spanz.TableIDToComparableSpan(1))
+		model.DefaultChangeFeedID("1"), 1)
 	// Test when there is no resolved ts.
 	wrapper.barrierTs.Store(uint64(10))
 	wrapper.receivedSorterResolvedTs.Store(uint64(11))
