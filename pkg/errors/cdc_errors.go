@@ -787,6 +787,10 @@ var (
 		"upstream has been closed",
 		errors.RFCCodeText("CDC:ErrUpstreamClosed"),
 	)
+	ErrUpstreamHasRunningImport = errors.Normalize(
+		"upstream has running import tasks, upstream-id: %d",
+		errors.RFCCodeText("CDC:ErrUpstreamHasRunningImport"),
+	)
 
 	// ReplicationSet error
 	ErrReplicationSetInconsistent = errors.Normalize(
