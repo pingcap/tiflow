@@ -35,8 +35,9 @@ type BatchEncoder struct {
 	curBatchSize int
 
 	// configs
-	MaxMessageBytes int
-	MaxBatchSize    int
+	MaxMessageBytes         int
+	MaxBatchSize            int
+	OnlyOutputUpdatedColumn bool
 }
 
 // AppendRowChangedEvent implements the RowEventEncoder interface
@@ -51,7 +52,7 @@ func (d *BatchEncoder) AppendRowChangedEvent(
 	if err != nil {
 		return errors.Trace(err)
 	}
-	value, err := valueMsg.encode()
+	value, err := valueMsg.encode(d.OnlyOutputUpdatedColumn)
 	if err != nil {
 		return errors.Trace(err)
 	}
@@ -195,6 +196,7 @@ func (b *batchEncoderBuilder) Build() codec.RowEventEncoder {
 	encoder := NewBatchEncoder()
 	encoder.(*BatchEncoder).MaxMessageBytes = b.config.MaxMessageBytes
 	encoder.(*BatchEncoder).MaxBatchSize = b.config.MaxBatchSize
+	encoder.(*BatchEncoder).OnlyOutputUpdatedColumn = b.config.OnlyOutputUpdatedColumn
 
 	return encoder
 }

@@ -47,6 +47,9 @@ type Config struct {
 	NullString      string
 	IncludeCommitTs bool
 	Terminator      string
+
+	//for open protocol
+	OnlyOutputUpdatedColumn bool
 }
 
 // NewConfig return a Config for codec

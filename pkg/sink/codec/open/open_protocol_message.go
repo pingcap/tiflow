@@ -31,7 +31,16 @@ type messageRow struct {
 	Delete     map[string]internal.Column `json:"d,omitempty"`
 }
 
-func (m *messageRow) encode() ([]byte, error) {
+func (m *messageRow) encode(outputOnlyUpdatedColumn bool) ([]byte, error) {
+	// check if the column is updated, if not do not output it
+	if outputOnlyUpdatedColumn {
+		for col, value := range m.Update {
+			oldValue, ok := m.PreColumns[col]
+			if ok && string(oldValue) == string(value) {
+				delete(m.PreColumns, col)
+			}
+		}
+	}
 	data, err := json.Marshal(m)
 	return data, cerror.WrapError(cerror.ErrMarshalFailed, err)
 }
