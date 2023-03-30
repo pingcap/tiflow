@@ -357,6 +357,16 @@ func GetLightningConfig(globalCfg *lcfg.GlobalConfig, subtaskCfg *config.SubTask
 	} else if subtaskCfg.LoaderConfig.DiskQuotaPhysical > 0 {
 		cfg.TikvImporter.DiskQuota = subtaskCfg.LoaderConfig.DiskQuotaPhysical
 	}
+	if subtaskCfg.LoaderConfig.DistSQLScanConcurrency > 0 {
+		cfg.TiDB.DistSQLScanConcurrency = subtaskCfg.LoaderConfig.DistSQLScanConcurrency
+	}
+	if subtaskCfg.LoaderConfig.IndexSerialScanConcurrency > 0 {
+		cfg.TiDB.IndexSerialScanConcurrency = subtaskCfg.LoaderConfig.IndexSerialScanConcurrency
+	}
+	if subtaskCfg.LoaderConfig.ChecksumTableConcurrency > 0 {
+		cfg.TiDB.ChecksumTableConcurrency = subtaskCfg.LoaderConfig.ChecksumTableConcurrency
+	}
+
 	cfg.TikvImporter.OnDuplicate = string(subtaskCfg.OnDuplicateLogical)
 	cfg.TikvImporter.IncrementalImport = true
 	switch subtaskCfg.OnDuplicatePhysical {

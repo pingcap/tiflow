@@ -301,12 +301,15 @@ type LoaderConfig struct {
 	DiskQuotaPhysical config.ByteSize `yaml:"disk-quota-physical" toml:"disk-quota-physical" json:"disk-quota-physical"`
 	DiskQuota         config.ByteSize `yaml:"disk-quota" toml:"disk-quota" json:"disk-quota"`
 	// deprecated, use Checksum instead.
-	ChecksumPhysical PhysicalPostOpLevel `yaml:"checksum-physical" toml:"checksum-physical" json:"checksum-physical"`
-	Checksum         PhysicalPostOpLevel `yaml:"checksum" toml:"checksum" json:"checksum"`
-	Analyze          PhysicalPostOpLevel `yaml:"analyze" toml:"analyze" json:"analyze"`
-	RangeConcurrency int                 `yaml:"range-concurrency" toml:"range-concurrency" json:"range-concurrency"`
-	CompressKVPairs  string              `yaml:"compress-kv-pairs" toml:"compress-kv-pairs" json:"compress-kv-pairs"`
-	PDAddr           string              `yaml:"pd-addr" toml:"pd-addr" json:"pd-addr"`
+	ChecksumPhysical           PhysicalPostOpLevel `yaml:"checksum-physical" toml:"checksum-physical" json:"checksum-physical"`
+	Checksum                   PhysicalPostOpLevel `yaml:"checksum" toml:"checksum" json:"checksum"`
+	Analyze                    PhysicalPostOpLevel `yaml:"analyze" toml:"analyze" json:"analyze"`
+	RangeConcurrency           int                 `yaml:"range-concurrency" toml:"range-concurrency" json:"range-concurrency"`
+	CompressKVPairs            string              `yaml:"compress-kv-pairs" toml:"compress-kv-pairs" json:"compress-kv-pairs"`
+	PDAddr                     string              `yaml:"pd-addr" toml:"pd-addr" json:"pd-addr"`
+	DistSQLScanConcurrency     int                 `yaml:"distsql-scan-concurrency" toml:"distsql-scan-concurrency" json:"distsql-scan-concurrency"`
+	IndexSerialScanConcurrency int                 `yaml:"index-serial-scan-concurrency" toml:"index-serial-scan-concurrency" json:"index-serial-scan-concurrency"`
+	ChecksumTableConcurrency   int                 `yaml:"checksum-table-concurrency" toml:"checksum-table-concurrency" json:"checksum-table-concurrency"`
 }
 
 // DefaultLoaderConfig return default loader config for task.

@@ -55,9 +55,12 @@ func TestGetLightiningConfig(t *testing.T) {
 		Name:       "job123",
 		ExtStorage: &storage.LocalStorage{},
 		LoaderConfig: config.LoaderConfig{
-			RangeConcurrency: 32,
-			CompressKVPairs:  "gzip",
-			Analyze:          "required",
+			RangeConcurrency:           32,
+			CompressKVPairs:            "gzip",
+			Analyze:                    "required",
+			DistSQLScanConcurrency:     120,
+			IndexSerialScanConcurrency: 120,
+			ChecksumTableConcurrency:   120,
 		},
 	}
 	conf, err := GetLightningConfig(MakeGlobalConfig(subtaskCfg), subtaskCfg)
@@ -73,8 +76,17 @@ func TestGetLightiningConfig(t *testing.T) {
 	require.Equal(t, lightningDefaultQuota, conf.TikvImporter.DiskQuota)
 	// will check requirements by default
 	require.True(t, conf.App.CheckRequirements)
+	require.Equal(t, 120, conf.TiDB.DistSQLScanConcurrency)
+	require.Equal(t, 120, conf.TiDB.IndexSerialScanConcurrency)
+	require.Equal(t, 120, conf.TiDB.ChecksumTableConcurrency)
 	subtaskCfg.IgnoreCheckingItems = []string{config.AllChecking}
+	subtaskCfg.DistSQLScanConcurrency = 0
+	subtaskCfg.IndexSerialScanConcurrency = 0
+	subtaskCfg.ChecksumTableConcurrency = 0
 	conf, err = GetLightningConfig(MakeGlobalConfig(subtaskCfg), subtaskCfg)
+	require.Greater(t, conf.TiDB.DistSQLScanConcurrency, 0)
+	require.Greater(t, conf.TiDB.IndexSerialScanConcurrency, 0)
+	require.Greater(t, conf.TiDB.ChecksumTableConcurrency, 0)
 	require.NoError(t, err)
 	// will not check requirements when ignore all checking items
 	require.False(t, conf.App.CheckRequirements)

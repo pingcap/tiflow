@@ -131,6 +131,9 @@ loaders:
     range-concurrency: 0
     compress-kv-pairs: ""
     pd-addr: ""
+    distsql-scan-concurrency: 0
+    index-serial-scan-concurrency: 0
+    checksum-table-concurrency: 0
 syncers:
   sync-01:
     meta-file: ""
