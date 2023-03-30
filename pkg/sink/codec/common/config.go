@@ -48,7 +48,7 @@ type Config struct {
 	IncludeCommitTs bool
 	Terminator      string
 
-	//for open protocol
+	// for open protocol
 	OnlyOutputUpdatedColumn bool
 }
 

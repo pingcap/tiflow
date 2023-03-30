@@ -19,6 +19,7 @@ import (
 	"github.com/pingcap/tidb/parser/mysql"
 	"github.com/pingcap/tiflow/cdc/model"
 	"github.com/pingcap/tiflow/pkg/sink/codec/internal"
+	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
 
@@ -28,7 +29,7 @@ func TestFormatCol(t *testing.T) {
 		Type:  mysql.TypeString,
 		Value: "测",
 	}}}
-	rowEncode, err := row.encode()
+	rowEncode, err := row.encode(false)
 	require.Nil(t, err)
 	row2 := new(messageRow)
 	err = row2.decode(rowEncode)
@@ -39,7 +40,7 @@ func TestFormatCol(t *testing.T) {
 		Type:  mysql.TypeBlob,
 		Value: []byte("测"),
 	}}}
-	rowEncode, err = row.encode()
+	rowEncode, err = row.encode(false)
 	require.Nil(t, err)
 	row2 = new(messageRow)
 	err = row2.decode(rowEncode)
@@ -57,7 +58,7 @@ func TestNonBinaryStringCol(t *testing.T) {
 	mqCol := internal.Column{}
 	mqCol.FromRowChangeColumn(col)
 	row := &messageRow{Update: map[string]internal.Column{"test": mqCol}}
-	rowEncode, err := row.encode()
+	rowEncode, err := row.encode(false)
 	require.Nil(t, err)
 	row2 := new(messageRow)
 	err = row2.decode(rowEncode)
@@ -80,7 +81,7 @@ func TestVarBinaryCol(t *testing.T) {
 	mqCol := internal.Column{}
 	mqCol.FromRowChangeColumn(col)
 	row := &messageRow{Update: map[string]internal.Column{"test": mqCol}}
-	rowEncode, err := row.encode()
+	rowEncode, err := row.encode(false)
 	require.Nil(t, err)
 	row2 := new(messageRow)
 	err = row2.decode(rowEncode)
@@ -89,4 +90,46 @@ func TestVarBinaryCol(t *testing.T) {
 	mqCol2 := row2.Update["test"]
 	col2 := mqCol2.ToRowChangeColumn("test")
 	require.Equal(t, col, col2)
+}
+
+func TestOnlyOutputUpdatedColumn(t *testing.T) {
+	t.Parallel()
+	cases := []struct {
+		pre     interface{}
+		updated interface{}
+		output  bool
+	}{
+		{
+			pre:     []byte{0x89, 0x50, 0x4E, 0x47, 0x0D, 0x0A, 0x1A, 0x0A},
+			updated: []byte{0x89, 0x50, 0x4E, 0x47, 0x0D, 0x0A, 0x1A, 0x0A},
+			output:  false,
+		},
+		{
+			pre:     uint64(1),
+			updated: uint64(1),
+			output:  false,
+		},
+		{
+			pre:     nil,
+			updated: nil,
+			output:  false,
+		},
+	}
+
+	for _, cs := range cases {
+		col := internal.Column{
+			Value: cs.pre,
+		}
+		col2 := internal.Column{
+			Value: cs.updated,
+		}
+		row := &messageRow{
+			Update:     map[string]internal.Column{"test": col2},
+			PreColumns: map[string]internal.Column{"test": col},
+		}
+		_, err := row.encode(true)
+		require.Nil(t, err)
+		_, ok := row.PreColumns["test"]
+		assert.Equal(t, cs.output, ok)
+	}
 }

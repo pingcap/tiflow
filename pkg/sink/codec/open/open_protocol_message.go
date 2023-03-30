@@ -16,6 +16,7 @@ package open
 import (
 	"bytes"
 	"encoding/json"
+	"reflect"
 	"sort"
 	"strings"
 
@@ -36,13 +37,41 @@ func (m *messageRow) encode(outputOnlyUpdatedColumn bool) ([]byte, error) {
 	if outputOnlyUpdatedColumn {
 		for col, value := range m.Update {
 			oldValue, ok := m.PreColumns[col]
-			if ok && string(oldValue) == string(value) {
+			if !ok {
+				continue
+			}
+			// sql type is not equal
+			if value.Type != oldValue.Type {
+				continue
+			}
+			// not euqual
+			if isColumnValueEqual(oldValue.Value, value.Value) {
 				delete(m.PreColumns, col)
 			}
 		}
 	}
 	data, err := json.Marshal(m)
 	return data, cerror.WrapError(cerror.ErrMarshalFailed, err)
+}
+
+func isColumnValueEqual(preValue, updatedValue interface{}) bool {
+	if preValue == nil || updatedValue == nil {
+		return preValue == updatedValue
+	}
+
+	preValueBytes, ok := preValue.([]byte)
+	if !ok {
+		return reflect.DeepEqual(preValue, updatedValue)
+	}
+
+	updateValuedBytes, ok := updatedValue.([]byte)
+	if !ok {
+		return false
+	}
+	if preValueBytes == nil || updateValuedBytes == nil {
+		return preValueBytes == nil && updateValuedBytes == nil
+	}
+	return bytes.Equal(preValueBytes, updateValuedBytes)
 }
 
 func (m *messageRow) decode(data []byte) error {

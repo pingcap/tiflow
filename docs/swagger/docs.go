@@ -1387,6 +1387,9 @@ var doc = `{
                 "encoder-concurrency": {
                     "type": "integer"
                 },
+                "onlyOutputUpdatedColumn": {
+                    "type": "boolean"
+                },
                 "protocol": {
                     "type": "string"
                 },
@@ -2195,6 +2198,9 @@ var doc = `{
                 },
                 "encoder_concurrency": {
                     "type": "integer"
+                },
+                "only_output_updated_column": {
+                    "type": "boolean"
                 },
                 "protocol": {
                     "type": "string"

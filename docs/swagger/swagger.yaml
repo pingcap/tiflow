@@ -60,6 +60,8 @@ definitions:
         type: boolean
       encoder-concurrency:
         type: integer
+      onlyOutputUpdatedColumn:
+        type: boolean
       protocol:
         type: string
       schema-registry:
@@ -603,6 +605,8 @@ definitions:
         type: boolean
       encoder_concurrency:
         type: integer
+      only_output_updated_column:
+        type: boolean
       protocol:
         type: string
       schema_registry:
