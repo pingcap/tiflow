@@ -185,7 +185,7 @@ func TestRemoveTable(t *testing.T) {
 	addTableAndAddEventsToSortEngine(t, e, tableID)
 	manager.UpdateBarrierTs(4, nil)
 	manager.UpdateReceivedSorterResolvedTs(tableID, 5)
-
+	manager.schemaStorage.AdvanceResolvedTs(5)
 	// Check all the events are sent to sink and record the memory usage.
 	require.Eventually(t, func() bool {
 		return manager.sinkMemQuota.GetUsedBytes() == 872
@@ -222,6 +222,7 @@ func TestGenerateTableSinkTaskWithBarrierTs(t *testing.T) {
 	addTableAndAddEventsToSortEngine(t, e, tableID)
 	manager.UpdateBarrierTs(4, nil)
 	manager.UpdateReceivedSorterResolvedTs(tableID, 5)
+	manager.schemaStorage.AdvanceResolvedTs(5)
 	err := manager.StartTable(tableID, 0)
 	require.NoError(t, err)
 
@@ -252,6 +253,7 @@ func TestGenerateTableSinkTaskWithResolvedTs(t *testing.T) {
 	// So there is possibility that the resolved ts is smaller than the global barrier ts.
 	manager.UpdateBarrierTs(4, nil)
 	manager.UpdateReceivedSorterResolvedTs(tableID, 3)
+	manager.schemaStorage.AdvanceResolvedTs(4)
 	err := manager.StartTable(tableID, 0)
 	require.NoError(t, err)
 
@@ -281,6 +283,7 @@ func TestGetTableStatsToReleaseMemQuota(t *testing.T) {
 
 	manager.UpdateBarrierTs(4, nil)
 	manager.UpdateReceivedSorterResolvedTs(tableID, 5)
+	manager.schemaStorage.AdvanceResolvedTs(5)
 	err := manager.StartTable(tableID, 0)
 	require.NoError(t, err)
 
