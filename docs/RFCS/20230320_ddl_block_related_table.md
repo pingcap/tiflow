@@ -5,7 +5,7 @@
 
 ## Abstract
 
-This proposal introduces a solution to make DDL replication in TiCDC only blocks related table syncnization progress,  which can effectively reducing the checkpoint lag increasing caused by DDL synchronization.
+This proposal introduces a solution to make DDL events in TiCDC only blocks related table syncnization progress, which can effectively reducing the checkpoint lag caused by DDL synchronization.
 Table of contents:
 
 - [Background](#Background)
@@ -15,7 +15,7 @@ Table of contents:
 
 ![ddl_handle_logic](../media/ddl_block_related_table_1.png)
 
-As shown in the figure above, TiCDC currently blocks the synchronization progress of all tables in all processors through the `barrierTs` mechanism before synchronizing DDL. When the `checkpointTs` reach with the `barrierTs`, the DDL is executed, and then the `barrierTs` is pushed forward to resume synchronization.
+As shown in the figure above, TiCDC currently blocks the synchronization progress of all tables in all processors through the `barrierTs` mechanism before synchronizing DDL. The DDL is executed once the `checkpoinTs` have reached the `barrierTs`, after which the `barrierTs` is advanced to resume synchronization.
 
 In this implementation, if a large number of DDL events occur in a short period of time, the checkpoint lag of the `changefeed` may increase. Especially in the scenario where a table in the `changefeed` is executing a time consuming DDL, while other tables need to synchronize a large number of row changes.
 
