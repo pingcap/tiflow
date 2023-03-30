@@ -247,11 +247,11 @@ type mockAgent struct {
 	isClosed bool
 }
 
-func (a *mockAgent) Tick(_ context.Context) error {
+func (a *mockAgent) Tick(_ context.Context) (*schedulepb.Barrier, error) {
 	if len(a.executor.GetAllCurrentTables()) == 0 {
-		return nil
+		return nil, nil
 	}
-	return nil
+	return nil, nil
 }
 
 func (a *mockAgent) Close() error {
