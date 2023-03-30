@@ -1,6 +1,6 @@
 # Proposal: Make DDL only block related table
 
-- Author(s):    [asddongmen](https://github.com/asddongmen)
+- Author(s): [asddongmen](https://github.com/asddongmen)
 - Last updated: 2023-03-20
 
 ## Abstract
@@ -34,7 +34,6 @@ To decouple `ddlBarrierTs` and simplify the relevant logic of DDL processing in 
 After introducing `ddlManager`, the interaction sequence diagram of the components involved in DDL synchronization is as follows:
 
 ![ddl_manager_logic](../media/ddl_block_related_table_2.png)
-
 
 First, when the DDL event sent by the upstream reaches `ddlManager`, it applies to the `schemaStorage` in memory and updates the current table information. Then, it caches the DDL in the `pendingDDLs` field, calculates the `tableBarrier` of the tables that need to execute DDL, and returns the `globalBarrierTs` of the tables that do not need to execute DDL to the `owner`.
 
