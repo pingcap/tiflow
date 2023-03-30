@@ -819,6 +819,15 @@ func (m *SinkManager) GetAllCurrentTableSpans() []tablepb.Span {
 	return spans
 }
 
+func (m *SinkManager) GetAllCurrentTableSpansCount() int {
+	res := 0
+	m.tableSinks.Range(func(key tablepb.Span, value interface{}) bool {
+		res++
+		return true
+	})
+	return res
+}
+
 // GetTableState returns the table(TableSink) state.
 func (m *SinkManager) GetTableState(span tablepb.Span) (tablepb.TableState, bool) {
 	tableSink, ok := m.tableSinks.Load(span)
