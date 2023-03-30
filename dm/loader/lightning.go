@@ -622,9 +622,14 @@ func (l *LightningLoader) Update(ctx context.Context, cfg *config.SubTaskConfig)
 }
 
 func (l *LightningLoader) status() *pb.LoadStatus {
-	metrics := l.core.Metrics()
-	finished := int64(metric.ReadCounter(metrics.BytesCounter.WithLabelValues(metric.BytesStateRestored)))
-	total := int64(metric.ReadCounter(metrics.BytesCounter.WithLabelValues(metric.BytesStateTotalRestore)))
+	var finished, total int64
+	// when lightning is not running, we should use the Status to get the progress
+	if metrics := l.core.Metrics(); metrics != nil {
+		finished = int64(metric.ReadCounter(metrics.BytesCounter.WithLabelValues(metric.BytesStateRestored)))
+		total = int64(metric.ReadCounter(metrics.BytesCounter.WithLabelValues(metric.BytesStateTotalRestore)))
+	} else {
+		finished, total = l.core.Status()
+	}
 	progress := percent(finished, total, l.finish.Load())
 	currentSpeed := int64(l.speedRecorder.GetSpeed(float64(finished)))
 
