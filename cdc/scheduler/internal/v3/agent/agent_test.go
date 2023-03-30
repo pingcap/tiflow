@@ -957,21 +957,9 @@ func (e *MockTableExecutor) GetAllCurrentTables() []model.TableID {
 	return result
 }
 
-<<<<<<< HEAD
-// GetCheckpoint returns the last checkpoint.
-func (e *MockTableExecutor) GetCheckpoint() (checkpointTs, resolvedTs model.Ts) {
-	args := e.Called()
-	return args.Get(0).(model.Ts), args.Get(1).(model.Ts)
-}
-
 // GetTableStatus implements TableExecutor interface
 func (e *MockTableExecutor) GetTableStatus(
 	tableID model.TableID, collectStat bool,
-=======
-// GetTableSpanStatus implements TableExecutor interface
-func (e *MockTableExecutor) GetTableSpanStatus(
-	span tablepb.Span, collectStat bool,
->>>>>>> a7600c4f08 (processor,scheduler(ticdc): clean up unused method and metrics (#8049))
 ) tablepb.TableStatus {
 	state, ok := e.tables[tableID]
 	if !ok {

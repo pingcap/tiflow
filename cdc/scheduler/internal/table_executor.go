@@ -51,17 +51,6 @@ type TableExecutor interface {
 	// or IsRemoveTableFinished in between two calls to this method.
 	GetAllCurrentTables() []model.TableID
 
-<<<<<<< HEAD
-	// GetCheckpoint returns the local checkpoint-ts and resolved-ts of
-	// the processor. Its calculation should take into consideration all
-	// tables that would have been returned if GetAllCurrentTables had been
-	// called immediately before.
-	GetCheckpoint() (checkpointTs, resolvedTs model.Ts)
-
 	// GetTableStatus return the checkpoint and resolved ts for the given table.
 	GetTableStatus(tableID model.TableID, collectStat bool) tablepb.TableStatus
-=======
-	// GetTableSpanStatus return the checkpoint and resolved ts for the given table span.
-	GetTableSpanStatus(span tablepb.Span, collectStat bool) tablepb.TableStatus
->>>>>>> a7600c4f08 (processor,scheduler(ticdc): clean up unused method and metrics (#8049))
 }

@@ -427,18 +427,8 @@ func (p *processor) GetAllCurrentTables() []model.TableID {
 	return ret
 }
 
-<<<<<<< HEAD
-// GetCheckpoint implements TableExecutor interface.
-func (p *processor) GetCheckpoint() (checkpointTs, resolvedTs model.Ts) {
-	return p.checkpointTs, p.resolvedTs
-}
-
 // GetTableStatus implements TableExecutor interface
 func (p *processor) GetTableStatus(tableID model.TableID, collectStat bool) tablepb.TableStatus {
-=======
-// GetTableSpanStatus implements TableExecutor interface
-func (p *processor) GetTableSpanStatus(span tablepb.Span, collectStat bool) tablepb.TableStatus {
->>>>>>> a7600c4f08 (processor,scheduler(ticdc): clean up unused method and metrics (#8049))
 	if p.pullBasedSinking {
 		state, exist := p.sinkManager.GetTableState(tableID)
 		if !exist {
@@ -1021,71 +1011,6 @@ func (p *processor) sendError(err error) {
 	}
 }
 
-<<<<<<< HEAD
-// handlePosition calculates the local resolved ts and local checkpoint ts.
-// resolvedTs = min(schemaStorage's resolvedTs, all table's resolvedTs).
-// table's resolvedTs = redo's resolvedTs if redo enable, else sorter's resolvedTs.
-// checkpointTs = min(resolvedTs, all table's checkpointTs).
-func (p *processor) handlePosition(currentTs int64) {
-	minResolvedTs := uint64(math.MaxUint64)
-	minResolvedTableID := int64(0)
-	if p.schemaStorage != nil {
-		minResolvedTs = p.schemaStorage.ResolvedTs()
-	}
-	minCheckpointTs := minResolvedTs
-	minCheckpointTableID := int64(0)
-	if p.pullBasedSinking {
-		tableIDs := p.sinkManager.GetAllCurrentTableIDs()
-		for _, tableID := range tableIDs {
-			stats := p.sinkManager.GetTableStats(tableID)
-			log.Debug("sink manager gets table stats",
-				zap.String("namespace", p.changefeedID.Namespace),
-				zap.String("changefeed", p.changefeedID.ID),
-				zap.Int64("tableID", tableID),
-				zap.Any("stats", stats))
-			if stats.ResolvedTs < minResolvedTs {
-				minResolvedTs = stats.ResolvedTs
-				minResolvedTableID = tableID
-			}
-			if stats.CheckpointTs < minCheckpointTs {
-				minCheckpointTs = stats.CheckpointTs
-				minCheckpointTableID = tableID
-			}
-		}
-	} else {
-		for _, table := range p.tables {
-			ts := table.ResolvedTs()
-			if ts < minResolvedTs {
-				minResolvedTs = ts
-				minResolvedTableID = table.ID()
-			}
-		}
-
-		for _, table := range p.tables {
-			ts := table.CheckpointTs()
-			if ts < minCheckpointTs {
-				minCheckpointTs = ts
-				minCheckpointTableID = table.ID()
-			}
-		}
-	}
-
-	resolvedPhyTs := oracle.ExtractPhysical(minResolvedTs)
-	p.metricResolvedTsLagGauge.Set(float64(currentTs-resolvedPhyTs) / 1e3)
-	p.metricResolvedTsGauge.Set(float64(resolvedPhyTs))
-	p.metricMinResolvedTableIDGauge.Set(float64(minResolvedTableID))
-
-	checkpointPhyTs := oracle.ExtractPhysical(minCheckpointTs)
-	p.metricCheckpointTsLagGauge.Set(float64(currentTs-checkpointPhyTs) / 1e3)
-	p.metricCheckpointTsGauge.Set(float64(checkpointPhyTs))
-	p.metricMinCheckpointTableIDGauge.Set(float64(minCheckpointTableID))
-
-	p.checkpointTs = minCheckpointTs
-	p.resolvedTs = minResolvedTs
-}
-
-=======
->>>>>>> a7600c4f08 (processor,scheduler(ticdc): clean up unused method and metrics (#8049))
 // pushResolvedTs2Table sends global resolved ts to all the table pipelines.
 func (p *processor) pushResolvedTs2Table() {
 	resolvedTs := p.changefeed.Status.ResolvedTs
