@@ -120,12 +120,15 @@ loaders:
   load-01:
     pool-size: 16
     dir: ./dumped_data
+    sorting-dir-physical: ""
     sorting-dir: ./dumped_data.test.sorting
     import-mode: logical
     on-duplicate: ""
     on-duplicate-logical: replace
     on-duplicate-physical: none
+    disk-quota-physical: 0
     disk-quota: 0
+    checksum-physical: ""
     checksum: required
     analyze: optional
     range-concurrency: 0
