@@ -9,16 +9,16 @@
 - [Motivation or Background](#motivation-or-background)
 - [Detailed Design](#detailed-design)
   - [Storage path structure](#storage-path-structure)
-     - [Data change records](#data-change-records)
-     - [Index files](#index-files)
-     - [Metadata](#metadata)
-     - [DDL events](#ddl-events)
+    - [Data change records](#data-change-records)
+    - [Index files](#index-files)
+    - [Metadata](#metadata)
+    - [DDL events](#ddl-events)
   - [Data type in schema](#data-type-in-schema)
-     - [Integer types](#integer-types)
-     - [Decimal types](#decimal-types)
-     - [Date and time types](#date-and-time-types)
-     - [String types](#string-types)
-     - [Enum and Set types](#enum-and-set-types)
+    - [Integer types](#integer-types)
+    - [Decimal types](#decimal-types)
+    - [Date and time types](#date-and-time-types)
+    - [String types](#string-types)
+    - [Enum and Set types](#enum-and-set-types)
   - [Protocols](#protocols)
     - [CSV](#csv)
     - [Canal json](#canal-json)
@@ -33,28 +33,28 @@
 
 ## Introduction
 
-This document provides a complete design on implementing storage sink, which provides 
+This document provides a complete design on implementing storage sink, which provides
 the ability to output changelogs to NFS, Amazon S3, GCP and Azure Blob Storage.
 
 ## Motivation or Background
 
-External storage services, such as Amazon S3, GCP and Azure Blob Storage, are designed 
-to handle large volumes of data and provide high availability and durability. By 
-leveraging such services, TiCDC can provide a scalable and cost-effective way to 
-store and manage TiDB's incremental changelogs, and enable users to build flexible 
-end-to-end data integration pipelines that can support a wide range of use cases 
+External storage services, such as Amazon S3, GCP and Azure Blob Storage, are designed
+to handle large volumes of data and provide high availability and durability. By
+leveraging such services, TiCDC can provide a scalable and cost-effective way to
+store and manage TiDB's incremental changelogs, and enable users to build flexible
+end-to-end data integration pipelines that can support a wide range of use cases
 and scenarios.
 
 ## Detailed Design
 
 ### Storage path structure
 
-This section describes the storage path structure of data change records, metadata, and DDL events. 
-Using the csv protocol as an example, files containing row change events should be organized as follows: 
+This section describes the storage path structure of data change records, metadata, and DDL events.
+Using the csv protocol as an example, files containing row change events should be organized as follows:
 
 ```
 s3://bucket/prefix1/prefix2                 <prefix>
-├── metadata                                
+├── metadata
 └── schema1                                 <schema>
     └── table1                              <table>
         ├── 10000                           <table-version-separator>
@@ -83,10 +83,10 @@ Data change records are saved to the following path:
 - `table-version-separator`: specifies the separator that separates the path by the table version, for example, <code>s3://bucket/prefix1/prefix2/schema1/table1/**9999**</code>.
 - `partition-separator`: specifies the separator that separates the path by the table partition, for example, <code>s3://bucket/prefix1/prefix2/schema1/table1/9999/**20**</code>.
 - `date-separator`: classifies the files by the transaction commit date. Value options are:
-    - `none`: no `date-separator`. For example, all files with `test.table1` version being `9999` are saved to `s3://bucket/prefix1/prefix2/schema1/table1/9999`.
-    - `year`: the separator is the year of the transaction commit date, for example, <code>s3://bucket/prefix1/prefix2/schema1/table1/9999/**2022**</code>.
-    - `month`: the separator is the year and month of the transaction commit date, for example, <code>s3://bucket/prefix1/prefix2/schema1/table1/9999/**2022-01**</code>.
-    - `day`: the separator is the year, month, and day of the transaction commit date, for example, <code>s3://bucket/prefix1/prefix2/schema1/table1/9999/**2022-01-02**</code>.
+  - `none`: no `date-separator`. For example, all files with `test.table1` version being `9999` are saved to `s3://bucket/prefix1/prefix2/schema1/table1/9999`.
+  - `year`: the separator is the year of the transaction commit date, for example, <code>s3://bucket/prefix1/prefix2/schema1/table1/9999/**2022**</code>.
+  - `month`: the separator is the year and month of the transaction commit date, for example, <code>s3://bucket/prefix1/prefix2/schema1/table1/9999/**2022-01**</code>.
+  - `day`: the separator is the year, month, and day of the transaction commit date, for example, <code>s3://bucket/prefix1/prefix2/schema1/table1/9999/**2022-01-02**</code>.
 - `num`: saves the serial number of the file that records the data change, for example, <code>s3://bucket/prefix1/prefix2/schema1/table1/9999/2022-01-02/CDC**000005**.csv</code>.
 - `extension`: specifies the extension of the file. TiDB v6.5.0 supports the CSV and Canal-JSON formats.
 
@@ -125,7 +125,7 @@ Metadata is a JSON-formatted file, for example:
 
 ```json
 {
-    "checkpoint-ts":433305438660591626
+  "checkpoint-ts": 433305438660591626
 }
 ```
 
@@ -145,39 +145,39 @@ The following is a `schema.json` file:
 
 ```json
 {
-    "Table":"table1",
-    "Schema":"test",
-    "Version":1,
-    "TableVersion":10000,
-    "Query": "ALTER TABLE test.table1 ADD OfficeLocation blob(20)",
-    "TableColumns":[
-        {
-            "ColumnName":"Id",
-            "ColumnType":"INT",
-            "ColumnNullable":"false",
-            "ColumnIsPk":"true"
-        },
-        {
-            "ColumnName":"LastName",
-            "ColumnType":"CHAR",
-            "ColumnLength":"20"
-        },
-        {
-            "ColumnName":"FirstName",
-            "ColumnType":"VARCHAR",
-            "ColumnLength":"30"
-        },
-        {
-            "ColumnName":"HireDate",
-            "ColumnType":"DATETIME"
-        },
-        {
-            "ColumnName":"OfficeLocation",
-            "ColumnType":"BLOB",
-            "ColumnLength":"20"
-        }
-    ],
-    "TableColumnsTotal":"5"
+  "Table": "table1",
+  "Schema": "test",
+  "Version": 1,
+  "TableVersion": 10000,
+  "Query": "ALTER TABLE test.table1 ADD OfficeLocation blob(20)",
+  "TableColumns": [
+    {
+      "ColumnName": "Id",
+      "ColumnType": "INT",
+      "ColumnNullable": "false",
+      "ColumnIsPk": "true"
+    },
+    {
+      "ColumnName": "LastName",
+      "ColumnType": "CHAR",
+      "ColumnLength": "20"
+    },
+    {
+      "ColumnName": "FirstName",
+      "ColumnType": "VARCHAR",
+      "ColumnLength": "30"
+    },
+    {
+      "ColumnName": "HireDate",
+      "ColumnType": "DATETIME"
+    },
+    {
+      "ColumnName": "OfficeLocation",
+      "ColumnType": "BLOB",
+      "ColumnLength": "20"
+    }
+  ],
+  "TableColumnsTotal": "5"
 }
 ```
 
@@ -187,18 +187,18 @@ The following is a `schema.json` file:
 - `TableVersion`: Table version.
 - `Query`：DDL statement.
 - `TableColumns`: An array of one or more maps, each of which describes a column in the source table.
-    - `ColumnName`: Column name.
-    - `ColumnType`: Column type. For details, see [Data type](#data-type).
-    - `ColumnLength`: Column length. For details, see [Data type](#data-type).
-    - `ColumnPrecision`: Column precision. For details, see [Data type](#data-type).
-    - `ColumnScale`: The number of digits following the decimal point (the scale). For details, see [Data type](#data-type).
-    - `ColumnNullable`: The column can be NULL when the value of this option is `true`.
-    - `ColumnIsPk`: The column is part of the primary key when the value of this option is `true`.
+  - `ColumnName`: Column name.
+  - `ColumnType`: Column type. For details, see [Data type](#data-type).
+  - `ColumnLength`: Column length. For details, see [Data type](#data-type).
+  - `ColumnPrecision`: Column precision. For details, see [Data type](#data-type).
+  - `ColumnScale`: The number of digits following the decimal point (the scale). For details, see [Data type](#data-type).
+  - `ColumnNullable`: The column can be NULL when the value of this option is `true`.
+  - `ColumnIsPk`: The column is part of the primary key when the value of this option is `true`.
 - `TableColumnsTotal`: The size of the `TableColumns` array.
 
 ### Data type in schema
 
-This section describes the data types used in the `schema.json` file. The data types are defined as `T(M[, D])`. 
+This section describes the data types used in the `schema.json` file. The data types are defined as `T(M[, D])`.
 
 #### Integer types
 
@@ -211,9 +211,9 @@ Integer types are defined as follows in `schema.json`:
 
 ```json
 {
-    "ColumnName":"COL1",
-    "ColumnType":"{IT} [UNSIGNED]",
-    "ColumnPrecision":"{M}"
+  "ColumnName": "COL1",
+  "ColumnType": "{IT} [UNSIGNED]",
+  "ColumnPrecision": "{M}"
 }
 ```
 
@@ -229,10 +229,10 @@ Decimal types are defined as follows in `schema.json`:
 
 ```json
 {
-    "ColumnName":"COL1",
-    "ColumnType":"{DT} [UNSIGNED]",
-    "ColumnPrecision":"{M}",
-    "ColumnScale":"{D}"
+  "ColumnName": "COL1",
+  "ColumnType": "{DT} [UNSIGNED]",
+  "ColumnPrecision": "{M}",
+  "ColumnScale": "{D}"
 }
 ```
 
@@ -246,8 +246,8 @@ The date types are defined as follows in `schema.json`:
 
 ```json
 {
-    "ColumnName":"COL1",
-    "ColumnType":"{DT}"
+  "ColumnName": "COL1",
+  "ColumnType": "{DT}"
 }
 ```
 
@@ -260,9 +260,9 @@ The time types are defined as follows in `schema.json`:
 
 ```json
 {
-    "ColumnName":"COL1",
-    "ColumnType":"{TT}",
-    "ColumnScale":"{M}"
+  "ColumnName": "COL1",
+  "ColumnType": "{TT}",
+  "ColumnScale": "{M}"
 }
 ```
 
@@ -277,9 +277,9 @@ The string types are defined as follows in `schema.json`:
 
 ```json
 {
-    "ColumnName":"COL1",
-    "ColumnType":"{ST}",
-    "ColumnLength":"{M}"
+  "ColumnName": "COL1",
+  "ColumnType": "{ST}",
+  "ColumnLength": "{M}"
 }
 ```
 
@@ -289,8 +289,8 @@ The Enum and Set types are defined as follows in `schema.json`:
 
 ```json
 {
-    "ColumnName":"COL1",
-    "ColumnType":"{ENUM/SET}",
+  "ColumnName": "COL1",
+  "ColumnType": "{ENUM/SET}"
 }
 ```
 
@@ -299,6 +299,7 @@ The Enum and Set types are defined as follows in `schema.json`:
 #### CSV
 
 ##### Transactional constraints
+
 - In a single CSV file, the commit-ts of a row is equal to or smaller than that of the subsequent row.
 - The same transactions of a single table are stored in the same CSV file when `transaction-atomicity` is set to table level.
 - Multiple tables of the same transaction can be stored in different CSV files.
@@ -337,22 +338,21 @@ The DML events of this table are stored in the CSV format as follows:
 
 ##### Data type mapping
 
-
-| MySQL type                                          | CSV type | Example                          | Description                                   |
-|-----------------------------------------------------|----------|------------------------------|---------------------------------------|
-| `BOOLEAN`/`TINYINT`/`SMALLINT`/`INT`/`MEDIUMINT`/`BIGINT` | Integer | `123` | - |
-| `FLOAT`/`DOUBLE`                                        | Float    | `153.123`                      |  -                                     |
-| `NULL`                                                | Null     | `\N`                          | -                                      |
-| `TIMESTAMP`/`DATETIME`                                  | String   | `"1973-12-30 15:30:00.123456"` | Format: `yyyy-MM-dd HH:mm:ss.%06d`         |
-| `DATE`                                                | String   | `"2000-01-01"`                 | Format: `yyyy-MM-dd`                       |
-| `TIME`                                                | String   | `"23:59:59"`                   | Format: `yyyy-MM-dd`                         |
-| `YEAR`                                                | Integer  | `1970`                         |  -                                     |
-| `VARCHAR`/`JSON`/`TINYTEXT`/`MEDIUMTEXT`/`LONGTEXT`/`TEXT`/`CHAR` | String   | `"test"`                       | UTF-8 encoded                       |
-| `VARBINARY`/`TINYBLOB`/`MEDIUMBLOB`/`LONGBLOB`/`BLOB`/`BINARY`  | String   | `"6Zi/5pav"`                   | base64 encoded                      |
-| `BIT`                                                 | Integer  | `81`                           | -                                      |
-| `DECIMAL`                                             | String   | `"129012.1230000"`             | -                                      |
-| `ENUM`                                                | String   | `"a"`                          | -                                     |
-| `SET`                                                 | String   | `"a,b"`                        | -                                     |
+| MySQL type                                                        | CSV type | Example                        | Description                        |
+| ----------------------------------------------------------------- | -------- | ------------------------------ | ---------------------------------- |
+| `BOOLEAN`/`TINYINT`/`SMALLINT`/`INT`/`MEDIUMINT`/`BIGINT`         | Integer  | `123`                          | -                                  |
+| `FLOAT`/`DOUBLE`                                                  | Float    | `153.123`                      | -                                  |
+| `NULL`                                                            | Null     | `\N`                           | -                                  |
+| `TIMESTAMP`/`DATETIME`                                            | String   | `"1973-12-30 15:30:00.123456"` | Format: `yyyy-MM-dd HH:mm:ss.%06d` |
+| `DATE`                                                            | String   | `"2000-01-01"`                 | Format: `yyyy-MM-dd`               |
+| `TIME`                                                            | String   | `"23:59:59"`                   | Format: `yyyy-MM-dd`               |
+| `YEAR`                                                            | Integer  | `1970`                         | -                                  |
+| `VARCHAR`/`JSON`/`TINYTEXT`/`MEDIUMTEXT`/`LONGTEXT`/`TEXT`/`CHAR` | String   | `"test"`                       | UTF-8 encoded                      |
+| `VARBINARY`/`TINYBLOB`/`MEDIUMBLOB`/`LONGBLOB`/`BLOB`/`BINARY`    | String   | `"6Zi/5pav"`                   | base64 encoded                     |
+| `BIT`                                                             | Integer  | `81`                           | -                                  |
+| `DECIMAL`                                                         | String   | `"129012.1230000"`             | -                                  |
+| `ENUM`                                                            | String   | `"a"`                          | -                                  |
+| `SET`                                                             | String   | `"a,b"`                        | -                                  |
 
 #### Canal json
 
@@ -360,7 +360,7 @@ Storage sink uses the same canal-json protocol as the mq sink. The [official doc
 
 ## Test Design
 
-Storage sink is a new feature, For tests, we focus on the functional tests,  scenario tests and benchmark.
+Storage sink is a new feature, For tests, we focus on the functional tests, scenario tests and benchmark.
 
 ### Functional Tests
 
@@ -370,9 +370,9 @@ Storage sink is a new feature, For tests, we focus on the functional tests,  sce
 ### Scenario Tests
 
 Run stability and chaos tests under different workloads.
-  - The upstream and downstream data are consistent.
-  - Throughput and latency are stable for most scenarios.
 
+- The upstream and downstream data are consistent.
+- Throughput and latency are stable for most scenarios.
 
 ### Compatibility Tests
 
@@ -397,8 +397,6 @@ N/A
 
 N/A
 
-
 ## Unresolved Questions
 
 N/A
-
