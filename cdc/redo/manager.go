@@ -45,6 +45,7 @@ type redoManager interface {
 	// Enabled returns whether the manager is enabled
 	Enabled() bool
 	Run(ctx context.Context) error
+	Close()
 }
 
 // DDLManager defines an interface that is used to manage ddl logs in owner.
@@ -249,10 +250,17 @@ func newLogManager(
 	return m, nil
 }
 
+// Run implements pkg/util.Runnable.
 func (m *logManager) Run(ctx context.Context) error {
-	defer m.close()
-	return m.bgUpdateLog(ctx)
+	if m.Enabled() {
+		defer m.close()
+		return m.bgUpdateLog(ctx)
+	}
+	return nil
 }
+
+// Close implements pkg/util.Runnable.
+func (m *logManager) Close() {}
 
 // Enabled returns whether this log manager is enabled
 func (m *logManager) Enabled() bool {
