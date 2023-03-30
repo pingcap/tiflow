@@ -44,7 +44,7 @@ func (m *messageRow) encode(outputOnlyUpdatedColumn bool) ([]byte, error) {
 			if value.Type != oldValue.Type {
 				continue
 			}
-			// not euqual
+			// not equal
 			if isColumnValueEqual(oldValue.Value, value.Value) {
 				delete(m.PreColumns, col)
 			}
