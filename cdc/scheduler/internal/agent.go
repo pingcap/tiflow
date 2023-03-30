@@ -16,7 +16,6 @@ package internal
 import (
 	"context"
 
-	"github.com/pingcap/tiflow/cdc/model"
 	"github.com/pingcap/tiflow/cdc/scheduler/schedulepb"
 )
 
@@ -28,9 +27,6 @@ import (
 type Agent interface {
 	// Tick is called periodically by the processor to drive the Agent's internal logic.
 	Tick(context.Context) (*schedulepb.Barrier, error)
-
-	// GetLastSentCheckpointTs returns the last checkpoint-ts already sent to the Owner.
-	GetLastSentCheckpointTs() (checkpointTs model.Ts)
 
 	// Close closes the messenger and does the necessary cleanup.
 	Close() error

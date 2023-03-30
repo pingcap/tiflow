@@ -960,12 +960,6 @@ func (e *MockTableExecutor) GetAllCurrentTables() []model.TableID {
 	return result
 }
 
-// GetCheckpoint returns the last checkpoint.
-func (e *MockTableExecutor) GetCheckpoint() (checkpointTs, resolvedTs model.Ts) {
-	args := e.Called()
-	return args.Get(0).(model.Ts), args.Get(1).(model.Ts)
-}
-
 // GetTableStatus implements TableExecutor interface
 func (e *MockTableExecutor) GetTableStatus(
 	tableID model.TableID, collectStat bool,
