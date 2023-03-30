@@ -6435,8 +6435,6 @@
         "x": 0,
         "y": 4
       },
-<<<<<<< HEAD
-=======
       "id": 717,
       "panels": [
         {
@@ -6651,7 +6649,6 @@
         "x": 0,
         "y": 5
       },
->>>>>>> a7600c4f08 (processor,scheduler(ticdc): clean up unused method and metrics (#8049))
       "id": 608,
       "panels": [
         {
