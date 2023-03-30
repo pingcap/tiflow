@@ -29,6 +29,7 @@ import (
 	"github.com/pingcap/tidb/br/pkg/lightning/common"
 	lcfg "github.com/pingcap/tidb/br/pkg/lightning/config"
 	"github.com/pingcap/tidb/br/pkg/lightning/errormanager"
+	"github.com/pingcap/tidb/br/pkg/lightning/metric"
 	"github.com/pingcap/tidb/dumpling/export"
 	"github.com/pingcap/tidb/parser/mysql"
 	tidbpromutil "github.com/pingcap/tidb/util/promutil"
@@ -621,7 +622,9 @@ func (l *LightningLoader) Update(ctx context.Context, cfg *config.SubTaskConfig)
 }
 
 func (l *LightningLoader) status() *pb.LoadStatus {
-	finished, total := l.core.Status()
+	metrics := l.core.Metrics()
+	finished := int64(metric.ReadCounter(metrics.BytesCounter.WithLabelValues(metric.BytesStateRestored)))
+	total := int64(metric.ReadCounter(metrics.BytesCounter.WithLabelValues(metric.BytesStateTotalRestore)))
 	progress := percent(finished, total, l.finish.Load())
 	currentSpeed := int64(l.speedRecorder.GetSpeed(float64(finished)))
 
