@@ -183,7 +183,7 @@ func (m *managerImpl) closeProcessor(changefeedID model.ChangeFeedID) {
 	}
 }
 
-// Close the manager itself and all processors. 
+// Close the manager itself and all processors.
 // Note: This method must not be called with `Tick`. Please be careful.
 func (m *managerImpl) Close() {
 	log.Info("processor.Manager is closing")
