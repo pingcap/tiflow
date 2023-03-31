@@ -28,6 +28,7 @@ import (
 	"github.com/pingcap/tiflow/cdc/processor/tablepb"
 	"github.com/pingcap/tiflow/cdc/redo"
 	"github.com/pingcap/tiflow/cdc/scheduler"
+	"github.com/pingcap/tiflow/cdc/scheduler/schedulepb"
 	mocksink "github.com/pingcap/tiflow/cdc/sink/mock"
 	cdcContext "github.com/pingcap/tiflow/pkg/context"
 	cerror "github.com/pingcap/tiflow/pkg/errors"
@@ -246,11 +247,11 @@ type mockAgent struct {
 	isClosed bool
 }
 
-func (a *mockAgent) Tick(_ context.Context) error {
+func (a *mockAgent) Tick(_ context.Context) (*schedulepb.Barrier, error) {
 	if len(a.executor.GetAllCurrentTables()) == 0 {
-		return nil
+		return nil, nil
 	}
-	return nil
+	return nil, nil
 }
 
 func (a *mockAgent) Close() error {
@@ -587,14 +588,16 @@ func TestUpdateBarrierTs(t *testing.T) {
 	err = p.Tick(ctx)
 	require.Nil(t, err)
 	tester.MustApplyPatches()
+	p.updateBarrierTs(&schedulepb.Barrier{GlobalBarrierTs: 20, TableBarriers: nil})
 	tb := p.tables[model.TableID(1)].(*mockTablePipeline)
-	require.Equal(t, tb.barrierTs, uint64(10))
+	require.Equal(t, uint64(10), tb.barrierTs)
 
 	// Schema storage has advanced too.
 	p.schemaStorage.(*mockSchemaStorage).resolvedTs = 15
 	err = p.Tick(ctx)
 	require.Nil(t, err)
 	tester.MustApplyPatches()
+	p.updateBarrierTs(&schedulepb.Barrier{GlobalBarrierTs: 20, TableBarriers: nil})
 	tb = p.tables[model.TableID(1)].(*mockTablePipeline)
 	require.Equal(t, tb.barrierTs, uint64(15))
 }

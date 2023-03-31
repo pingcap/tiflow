@@ -167,7 +167,7 @@ func (c *CaptureManager) checkAllCaptureInitialized() bool {
 // Tick advances the logical clock of capture manager and produce heartbeat when
 // necessary.
 func (c *CaptureManager) Tick(
-	reps map[model.TableID]*replication.ReplicationSet, drainingCapture model.CaptureID,
+	reps map[model.TableID]*replication.ReplicationSet, drainingCapture model.CaptureID, barrier *schedulepb.Barrier,
 ) []*schedulepb.Message {
 	c.tickCounter++
 	if c.tickCounter%c.collectStatsTick == 0 {
@@ -193,6 +193,7 @@ func (c *CaptureManager) Tick(
 				// At the moment, this is triggered by `DrainCapture` scheduler.
 				IsStopping:   drainingCapture == to,
 				CollectStats: c.pendingCollect,
+				Barrier:      barrier,
 			},
 		})
 	}
