@@ -114,6 +114,16 @@ func TestOnlyOutputUpdatedColumn(t *testing.T) {
 			updated: nil,
 			output:  false,
 		},
+		{
+			pre:     float64(6.2),
+			updated: float32(6.2),
+			output:  true,
+		},
+		{
+			pre:     uint64(1),
+			updated: int64(1),
+			output:  true,
+		},
 	}
 
 	for _, cs := range cases {
