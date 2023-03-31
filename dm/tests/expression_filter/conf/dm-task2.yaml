@@ -45,7 +45,18 @@ expression-filter:
     table: "t5"
     update-old-value-expr: "c = 1"
     update-new-value-expr: "c = 2"
+<<<<<<< HEAD
 
+=======
+  only_muller:
+    schema: "expr_filter"
+    table: "t6"
+    insert-value-expr: "name != 'Müller…'"
+  e02:
+    schema: expr_filter
+    table: t7
+    update-new-value-expr: "r = 'a'"
+>>>>>>> fe2f347c52 (syncer(dm): fix wrong MySQL latin1 decoder (#8705))
 
 black-white-list: # compatible with deprecated config
   instance:

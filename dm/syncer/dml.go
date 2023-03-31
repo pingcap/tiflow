@@ -61,6 +61,7 @@ func (op dmlOpType) String() (str string) {
 	return
 }
 
+<<<<<<< HEAD
 // genDMLParam stores pruned columns, data as well as the original columns, data, index.
 type genDMLParam struct {
 	targetTableID   string              // as a key in map like `schema`.`table`
@@ -71,6 +72,11 @@ type genDMLParam struct {
 	columns         []*model.ColumnInfo // pruned columns
 	sourceTableInfo *model.TableInfo    // all table info
 }
+=======
+// latin1Decider is not usually ISO8859_1 in MySQL.
+// ref https://dev.mysql.com/doc/refman/8.0/en/charset-we-sets.html
+var latin1Decoder = charmap.Windows1252.NewDecoder()
+>>>>>>> fe2f347c52 (syncer(dm): fix wrong MySQL latin1 decoder (#8705))
 
 func extractValueFromData(data []interface{}, columns []*model.ColumnInfo) []interface{} {
 	value := make([]interface{}, 0, len(data))
