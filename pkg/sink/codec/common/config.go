@@ -64,6 +64,8 @@ func NewConfig(protocol config.Protocol) *Config {
 		AvroSchemaRegistry:             "",
 		AvroDecimalHandlingMode:        "precise",
 		AvroBigintUnsignedHandlingMode: "long",
+
+		OnlyOutputUpdatedColumn: false,
 	}
 }
 
@@ -74,6 +76,7 @@ const (
 	codecOPTAvroDecimalHandlingMode        = "avro-decimal-handling-mode"
 	codecOPTAvroBigintUnsignedHandlingMode = "avro-bigint-unsigned-handling-mode"
 	codecOPTAvroSchemaRegistry             = "schema-registry"
+	codecOPTOnlyOutputUpdatedColumn        = "only-output-updated-column"
 )
 
 const (
@@ -134,6 +137,15 @@ func (c *Config) Apply(sinkURI *url.URL, config *config.ReplicaConfig) error {
 			c.NullString = config.Sink.CSVConfig.NullString
 			c.IncludeCommitTs = config.Sink.CSVConfig.IncludeCommitTs
 		}
+
+		c.OnlyOutputUpdatedColumn = config.Sink.OnlyOutputUpdatedColumn
+	}
+	if s := params.Get(codecOPTOnlyOutputUpdatedColumn); s != "" {
+		a, err := strconv.ParseBool(s)
+		if err != nil {
+			return err
+		}
+		c.OnlyOutputUpdatedColumn = a
 	}
 
 	return nil
