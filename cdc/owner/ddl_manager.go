@@ -206,8 +206,6 @@ func (m *ddlManager) tick(
 			if err != nil {
 				return nil, minTableBarrierTs, barrier, err
 			}
-			// Clear the table cache after the schema is updated.
-			m.cleanCache()
 
 			for _, event := range events {
 				// If changefeed is in BDRMode, skip ddl.
@@ -244,7 +242,7 @@ func (m *ddlManager) tick(
 
 	// advance resolvedTs
 	ddlRts := m.ddlPuller.ResolvedTs()
-	m.schemaStorage.AdvanceResolvedTs(ddlRts)
+	m.schema.AdvanceResolvedTs(ddlRts)
 	if m.redoDDLManager.Enabled() {
 		err := m.redoDDLManager.UpdateResolvedTs(ctx, ddlRts)
 		if err != nil {
@@ -281,7 +279,6 @@ func (m *ddlManager) tick(
 
 			if m.executingDDL == nil {
 				m.executingDDL = nextDDL
-				m.cleanCache()
 			}
 
 			err := m.executeDDL(ctx)
@@ -359,6 +356,7 @@ func (m *ddlManager) executeDDL(ctx context.Context) error {
 		m.schema.DoGC(m.executingDDL.CommitTs - 1)
 		m.justSentDDL = m.executingDDL
 		m.executingDDL = nil
+		m.cleanCache()
 	}
 	return nil
 }
