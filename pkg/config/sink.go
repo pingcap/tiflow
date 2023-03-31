@@ -109,7 +109,8 @@ type SinkConfig struct {
 	Terminator               string            `toml:"terminator" json:"terminator"`
 	DateSeparator            string            `toml:"date-separator" json:"date-separator"`
 	EnablePartitionSeparator bool              `toml:"enable-partition-separator" json:"enable-partition-separator"`
-	OnlyOutputUpdatedColumns bool              `toml:"only-output-updated-columns" json:"only-output-updated-columns"`
+
+	OnlyOutputUpdatedColumns bool `toml:"only-output-updated-columns" json:"only-output-updated-columns"`
 
 	// TiDBSourceID is the source ID of the upstream TiDB,
 	// which is used to set the `tidb_cdc_write_source` session variable.

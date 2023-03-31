@@ -60,7 +60,7 @@ definitions:
         type: boolean
       encoder-concurrency:
         type: integer
-      onlyOutputUpdatedColumn:
+      only-output-updated-columns:
         type: boolean
       protocol:
         type: string
@@ -605,7 +605,7 @@ definitions:
         type: boolean
       encoder_concurrency:
         type: integer
-      only_output_updated_column:
+      only_output_updated_columns:
         type: boolean
       protocol:
         type: string
