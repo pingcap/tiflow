@@ -42,8 +42,8 @@ update t5 set should_skip = 1, c = 2 where c = 1;
 insert into t5 values (4, 1, 1); -- check this `should_skip = 1` row must be updated to `should_skip = 0` in TiDB
 update t5 set should_skip = 0, c = 3 where c = 1;
 
-insert into t6 (id, name, msg) values (1, 'Müller', 'Müller'), (2, 'X Æ A-12', 'X Æ A-12');
-alter table t6 add column name2 varchar(20) character set latin1 default 'Müller';
+insert into t6 (id, name, msg) values (1, 'Müller…', 'Müller…'), (2, 'X Æ A-12', 'X Æ A-12');
+alter table t6 add column name2 varchar(20) character set latin1 default 'Müller…';
 
 -- test https://github.com/pingcap/tiflow/issues/7774
 UPDATE t7 SET s = s + 1 WHERE a = 1;
