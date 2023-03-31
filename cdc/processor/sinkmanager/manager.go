@@ -342,7 +342,7 @@ func (m *SinkManager) generateSinkTasks() error {
 		tableSinkUpperBoundTs model.Ts,
 	) engine.Position {
 		schemaTs := m.schemaStorage.ResolvedTs()
-		if tableSinkUpperBoundTs-1 > schemaTs {
+		if tableSinkUpperBoundTs > schemaTs+1 {
 			tableSinkUpperBoundTs = schemaTs + 1
 		}
 		return engine.Position{StartTs: tableSinkUpperBoundTs - 1, CommitTs: tableSinkUpperBoundTs}
@@ -485,7 +485,7 @@ func (m *SinkManager) generateRedoTasks() error {
 		// If a task carries events after schemaResolvedTs, mounter group threads
 		// can be blocked on waiting schemaResolvedTs get advanced.
 		schemaTs := m.schemaStorage.ResolvedTs()
-		if tableSinkUpperBoundTs-1 > schemaTs {
+		if tableSinkUpperBoundTs > schemaTs+1 {
 			tableSinkUpperBoundTs = schemaTs + 1
 		}
 
