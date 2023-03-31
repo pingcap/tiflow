@@ -18,6 +18,7 @@ import (
 	"time"
 )
 
+// Hang will block the goroutine for a given duration, or return when `ctx` is done.
 func Hang(ctx context.Context, dur time.Duration) {
 	timer := time.NewTimer(dur)
 	select {
