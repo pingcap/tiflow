@@ -462,6 +462,8 @@ func isProcessorIgnorableError(err error) bool {
 // the `state` parameter is sent by the etcd worker, the `state` must be a snapshot of KVs in etcd
 // The main logic of processor is in this function, including the calculation of many kinds of ts,
 // maintain table pipeline, error handling, etc.
+//
+// It can be called in etcd ticks, so it should never be blocked.
 func (p *processor) Tick(ctx cdcContext.Context) error {
 	// check upstream error first
 	if err := p.upstream.Error(); err != nil {
@@ -957,6 +959,7 @@ func (p *processor) refreshMetrics() {
 	p.metricRemainKVEventGauge.Set(float64(sortEngineReceivedEvents - tableSinksReceivedEvents))
 }
 
+// Close the processor. It can be called in etcd ticks, so it should never be blocked.
 func (p *processor) Close() error {
 	log.Info("processor closing ...",
 		zap.String("namespace", p.changefeedID.Namespace),
