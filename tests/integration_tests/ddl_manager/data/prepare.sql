@@ -40,15 +40,15 @@ drop table  t2;
 create table t3 (
                     a int, primary key (a)
 ) partition by hash(a) partitions 5;
-insert into t values (1),(2),(3),(4),(5),(6);
-insert into t values (7),(8),(9);
-alter table t truncate partition p3;
+insert into t3 values (1),(2),(3),(4),(5),(6);
+insert into t3 values (7),(8),(9);
+alter table t3 truncate partition p3;
 
 create table t4 (a int primary key) PARTITION BY RANGE ( a ) ( PARTITION p0 VALUES LESS THAN (6),PARTITION p1 VALUES LESS THAN (11),PARTITION p2 VALUES LESS THAN (21));
-insert into t1 values (1),(2),(3),(4),(5),(6);
-insert into t1 values (7),(8),(9);
-insert into t1 values (11),(12),(20);
-alter table t1 add partition (partition p3 values less than (30), partition p4 values less than (40));
+insert into t4 values (1),(2),(3),(4),(5),(6);
+insert into t4 values (7),(8),(9);
+insert into t4 values (11),(12),(20);
+alter table t4 add partition (partition p3 values less than (30), partition p4 values less than (40));
 
 CREATE TABLE t5 (
                     id INT AUTO_INCREMENT PRIMARY KEY,
