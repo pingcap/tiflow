@@ -310,7 +310,6 @@ func (c *changefeed) tick(ctx cdcContext.Context, captures map[model.CaptureID]*
 	// but we can ignore them because they will be handled in the processor.
 	if barrier.GlobalBarrierTs > otherBarrierTs {
 		barrier.GlobalBarrierTs = otherBarrierTs
-		minTableBarrierTs = otherBarrierTs
 	}
 
 	log.Debug("owner handles barrier",

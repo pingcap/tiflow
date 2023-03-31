@@ -15,6 +15,7 @@ package owner
 
 import (
 	"context"
+	"math/rand"
 	"sort"
 	"time"
 
@@ -211,8 +212,6 @@ func (m *ddlManager) tick(
 			if err != nil {
 				return nil, minTableBarrierTs, barrier, err
 			}
-			// Clear the table cache after the schema is updated.
-			m.cleanCache()
 
 			for _, event := range events {
 				// If changefeed is in BDRMode, skip ddl.
@@ -286,7 +285,6 @@ func (m *ddlManager) tick(
 
 			if m.executingDDL == nil {
 				m.executingDDL = nextDDL
-				m.cleanCache()
 			}
 
 			err := m.executeDDL(ctx)
@@ -347,6 +345,13 @@ func (m *ddlManager) executeDDL(ctx context.Context) error {
 			failpoint.Return(nil)
 		}
 	})
+
+	failpoint.Inject("ExecuteDDLSlowly", func() {
+		lag := time.Duration(rand.Intn(5000)) * time.Millisecond
+		log.Warn("execute ddl slowly", zap.Duration("lag", lag))
+		time.Sleep(lag)
+	})
+
 	done, err := m.ddlSink.emitDDLEvent(ctx, m.executingDDL)
 	if err != nil {
 		return err
@@ -364,6 +369,7 @@ func (m *ddlManager) executeDDL(ctx context.Context) error {
 		m.schema.schemaStorage.DoGC(m.executingDDL.CommitTs - 1)
 		m.justSentDDL = m.executingDDL
 		m.executingDDL = nil
+		m.cleanCache()
 	}
 	return nil
 }
