@@ -62,6 +62,19 @@ function complex_behaviour() {
 	run_sql_tidb "select count(8) from expr_filter.t5 where should_skip = 1"
 	check_contains "count(8): 0"
 
+<<<<<<< HEAD
+=======
+	run_sql_tidb "select count(9) from expr_filter.t6 where name = 'Müller…' and msg = 'Müller…' and name2 = 'Müller…'"
+	check_contains "count(9): 2"
+	run_sql_tidb "select count(10) from expr_filter.t6 where name != 'Müller…'"
+	check_contains "count(10): 0"
+
+	run_sql_tidb "select count(11) from expr_filter.t7 where r = 'a' and s = 2"
+	check_contains "count(11): 1"
+	run_sql_tidb "select count(12) from expr_filter.t7 where r = 'a' and s = 3"
+	check_contains "count(12): 0"
+
+>>>>>>> fe2f347c52 (syncer(dm): fix wrong MySQL latin1 decoder (#8705))
 	insert_num=$(grep -o '"number of filtered insert"=[0-9]\+' $WORK_DIR/worker1/log/dm-worker.log | grep -o '[0-9]\+' | awk '{n += $1}; END{print n}')
 	[ $insert_num -eq 5 ]
 	update_num=$(grep -o '"number of filtered update"=[0-9]\+' $WORK_DIR/worker1/log/dm-worker.log | grep -o '[0-9]\+' | awk '{n += $1}; END{print n}')

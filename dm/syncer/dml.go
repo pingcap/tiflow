@@ -43,6 +43,13 @@ type genDMLParam struct {
 	extendData      [][]interface{}  // all data include extend data
 }
 
+<<<<<<< HEAD
+=======
+// latin1Decider is not usually ISO8859_1 in MySQL.
+// ref https://dev.mysql.com/doc/refman/8.0/en/charset-we-sets.html
+var latin1Decoder = charmap.Windows1252.NewDecoder()
+
+>>>>>>> fe2f347c52 (syncer(dm): fix wrong MySQL latin1 decoder (#8705))
 // extractValueFromData adjust the values obtained from go-mysql so that
 // - the values can be correctly converted to TiDB datum
 // - the values are in the correct type that go-sql-driver/mysql uses.
