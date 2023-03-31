@@ -76,7 +76,11 @@ type DMLSink struct {
 	statistics *metrics.Statistics
 	// last sequence number
 	lastSeqNum uint64
-	wg         sync.WaitGroup
+
+	cancel func()
+	wg     sync.WaitGroup
+	dead   chan struct{}
+	isDead atomic.Bool
 }
 
 // NewDMLSink creates a cloud storage sink.
@@ -85,7 +89,9 @@ func NewDMLSink(ctx context.Context,
 	replicaConfig *config.ReplicaConfig,
 	errCh chan error,
 ) (*DMLSink, error) {
-	s := &DMLSink{}
+	ctx, cancel := context.WithCancel(ctx)
+	s := &DMLSink{cancel: cancel, dead: make(chan struct{})}
+
 	// create cloud storage config and then apply the params of sinkURI to it.
 	cfg := cloudstorage.NewConfig()
 	err := cfg.Apply(ctx, sinkURI, replicaConfig)
@@ -113,7 +119,7 @@ func NewDMLSink(ctx context.Context,
 	if err != nil {
 		return nil, errors.Trace(err)
 	}
-	encoderBuilder, err := builder.NewEventBatchEncoderBuilder(ctx, encoderConfig)
+	encoderBuilder, err := builder.NewTxnEventEncoderBuilder(encoderConfig)
 	if err != nil {
 		return nil, cerror.WrapError(cerror.ErrStorageSinkInvalidConfig, err)
 	}
@@ -135,8 +141,14 @@ func NewDMLSink(ctx context.Context,
 	s.wg.Add(1)
 	go func() {
 		defer s.wg.Done()
-		if err := s.run(ctx); err != nil && errors.Cause(err) != context.Canceled {
-			errCh <- err
+		err := s.run(ctx)
+		s.isDead.Store(true)
+		close(s.dead)
+		if err != nil && errors.Cause(err) != context.Canceled {
+			select {
+			case <-ctx.Done():
+			case errCh <- err:
+			}
 		}
 	}()
 
@@ -163,7 +175,9 @@ func (s *DMLSink) run(ctx context.Context) error {
 
 // WriteEvents write events to cloud storage sink.
 func (s *DMLSink) WriteEvents(txns ...*dmlsink.CallbackableEvent[*model.SingleTableTxn]) error {
-	var tbl cloudstorage.VersionedTable
+	if s.isDead.Load() {
+		return errors.Trace(errors.New("dead dmlSink"))
+	}
 
 	for _, txn := range txns {
 		if txn.GetTableSinkState() != state.TableSinkSinking {
@@ -173,9 +187,9 @@ func (s *DMLSink) WriteEvents(txns ...*dmlsink.CallbackableEvent[*model.SingleTa
 			continue
 		}
 
-		tbl = cloudstorage.VersionedTable{
-			TableName: txn.Event.TableInfo.TableName,
-			Version:   txn.Event.TableInfo.Version,
+		tbl := cloudstorage.VersionedTable{
+			TableNameWithPhysicTableID: *txn.Event.Table,
+			Version:                    txn.Event.TableInfo.Version,
 		}
 		seq := atomic.AddUint64(&s.lastSeqNum, 1)
 		// emit a TxnCallbackableEvent encoupled with a sequence number starting from one.
@@ -191,6 +205,11 @@ func (s *DMLSink) WriteEvents(txns ...*dmlsink.CallbackableEvent[*model.SingleTa
 
 // Close closes the cloud storage sink.
 func (s *DMLSink) Close() {
+	if s.cancel != nil {
+		s.cancel()
+	}
+	s.wg.Wait()
+
 	if s.defragmenter != nil {
 		s.defragmenter.close()
 	}
@@ -206,5 +225,9 @@ func (s *DMLSink) Close() {
 	if s.statistics != nil {
 		s.statistics.Close()
 	}
-	s.wg.Wait()
+}
+
+// Dead checks whether it's dead or not.
+func (s *DMLSink) Dead() <-chan struct{} {
+	return s.dead
 }

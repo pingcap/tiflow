@@ -127,6 +127,10 @@ loaders:
     on-duplicate-physical: none
     disk-quota-physical: 0
     checksum-physical: required
+    analyze: optional
+    range-concurrency: 0
+    compress-kv-pairs: ""
+    pd-addr: ""
 syncers:
   sync-01:
     meta-file: ""

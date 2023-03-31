@@ -25,22 +25,43 @@ const (
 	BatchVersion1 uint64 = 1
 )
 
-// EventBatchEncoder is an abstraction for events encoder
-type EventBatchEncoder interface {
+// DDLEventBatchEncoder is an abstraction for DDL event encoder.
+type DDLEventBatchEncoder interface {
 	// EncodeCheckpointEvent appends a checkpoint event into the batch.
 	// This event will be broadcast to all partitions to signal a global checkpoint.
 	EncodeCheckpointEvent(ts uint64) (*common.Message, error)
-	// AppendRowChangedEvent appends the calling context, a row changed event and the dispatch
-	// topic into the batch
-	AppendRowChangedEvent(context.Context, string, *model.RowChangedEvent, func()) error
 	// EncodeDDLEvent appends a DDL event into the batch
 	EncodeDDLEvent(e *model.DDLEvent) (*common.Message, error)
+}
+
+// MessageBuilder is an abstraction to build message.
+type MessageBuilder interface {
 	// Build builds the batch and returns the bytes of key and value.
 	// Should be called after `AppendRowChangedEvent`
 	Build() []*common.Message
 }
 
-// EncoderBuilder builds encoder with context.
-type EncoderBuilder interface {
-	Build() EventBatchEncoder
+// RowEventEncoder is an abstraction for events encoder
+type RowEventEncoder interface {
+	DDLEventBatchEncoder
+	// AppendRowChangedEvent appends a row changed event into the batch or buffer.
+	AppendRowChangedEvent(context.Context, string, *model.RowChangedEvent, func()) error
+	MessageBuilder
+}
+
+// RowEventEncoderBuilder builds row encoder with context.
+type RowEventEncoderBuilder interface {
+	Build() RowEventEncoder
+}
+
+// TxnEventEncoder is an abstraction for txn events encoder.
+type TxnEventEncoder interface {
+	// AppendTxnEvent append a txn event into the buffer.
+	AppendTxnEvent(*model.SingleTableTxn, func()) error
+	MessageBuilder
+}
+
+// TxnEventEncoderBuilder builds txn encoder with context.
+type TxnEventEncoderBuilder interface {
+	Build() TxnEventEncoder
 }

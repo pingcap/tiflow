@@ -29,32 +29,11 @@ import (
 	"go.uber.org/zap"
 )
 
-// JSONBatchEncoder encodes Canal json messages in JSON format
-type JSONBatchEncoder struct {
-	builder *canalEntryBuilder
-
-	// When it is true, canal-json would generate TiDB extension information
-	// which, at the moment, only includes `tidbWaterMarkType` and `_tidb` fields.
-	enableTiDBExtension bool
-	// the symbol separating two lines
-	terminator      []byte
-	maxMessageBytes int
-	messages        []*common.Message
-}
-
-// newJSONBatchEncoder creates a new JSONBatchEncoder
-func newJSONBatchEncoder(config *common.Config) codec.EventBatchEncoder {
-	encoder := &JSONBatchEncoder{
-		builder:             newCanalEntryBuilder(),
-		enableTiDBExtension: config.EnableTiDBExtension,
-		messages:            make([]*common.Message, 0, 1),
-		terminator:          []byte(config.Terminator),
-		maxMessageBytes:     config.MaxMessageBytes,
-	}
-	return encoder
-}
-
-func (c *JSONBatchEncoder) newJSONMessageForDML(e *model.RowChangedEvent) ([]byte, error) {
+func newJSONMessageForDML(
+	builder *canalEntryBuilder,
+	enableTiDBExtension bool,
+	e *model.RowChangedEvent,
+) ([]byte, error) {
 	isDelete := e.IsDelete()
 	mysqlTypeMap := make(map[string]string, len(e.Columns))
 
@@ -78,7 +57,7 @@ func (c *JSONBatchEncoder) newJSONMessageForDML(e *model.RowChangedEvent) ([]byt
 				if err != nil {
 					return cerror.WrapError(cerror.ErrCanalEncodeFailed, err)
 				}
-				value, err := c.builder.formatValue(col.Value, javaType)
+				value, err := builder.formatValue(col.Value, javaType)
 				if err != nil {
 					return cerror.WrapError(cerror.ErrCanalEncodeFailed, err)
 				}
@@ -235,7 +214,7 @@ func (c *JSONBatchEncoder) newJSONMessageForDML(e *model.RowChangedEvent) ([]byt
 		log.Panic("unreachable event type", zap.Any("event", e))
 	}
 
-	if c.enableTiDBExtension {
+	if enableTiDBExtension {
 		const prefix string = ",\"_tidb\":"
 		out.RawString(prefix)
 		out.RawByte('{')
@@ -258,7 +237,29 @@ func eventTypeString(e *model.RowChangedEvent) string {
 	return "UPDATE"
 }
 
-func (c *JSONBatchEncoder) newJSONMessageForDDL(e *model.DDLEvent) canalJSONMessageInterface {
+// JSONRowEventEncoder encodes row event in JSON format
+type JSONRowEventEncoder struct {
+	builder *canalEntryBuilder
+
+	// When it is true, canal-json would generate TiDB extension information
+	// which, at the moment, only includes `tidbWaterMarkType` and `_tidb` fields.
+	enableTiDBExtension bool
+	maxMessageBytes     int
+	messages            []*common.Message
+}
+
+// newJSONRowEventEncoder creates a new JSONRowEventEncoder
+func newJSONRowEventEncoder(config *common.Config) codec.RowEventEncoder {
+	encoder := &JSONRowEventEncoder{
+		builder:             newCanalEntryBuilder(),
+		enableTiDBExtension: config.EnableTiDBExtension,
+		messages:            make([]*common.Message, 0, 1),
+		maxMessageBytes:     config.MaxMessageBytes,
+	}
+	return encoder
+}
+
+func (c *JSONRowEventEncoder) newJSONMessageForDDL(e *model.DDLEvent) canalJSONMessageInterface {
 	msg := &JSONMessage{
 		ID:            0, // ignored by both Canal Adapter and Flink
 		Schema:        e.TableInfo.TableName.Schema,
@@ -280,7 +281,9 @@ func (c *JSONBatchEncoder) newJSONMessageForDDL(e *model.DDLEvent) canalJSONMess
 	}
 }
 
-func (c *JSONBatchEncoder) newJSONMessage4CheckpointEvent(ts uint64) *canalJSONMessageWithTiDBExtension {
+func (c *JSONRowEventEncoder) newJSONMessage4CheckpointEvent(
+	ts uint64,
+) *canalJSONMessageWithTiDBExtension {
 	return &canalJSONMessageWithTiDBExtension{
 		JSONMessage: &JSONMessage{
 			ID:            0,
@@ -293,8 +296,8 @@ func (c *JSONBatchEncoder) newJSONMessage4CheckpointEvent(ts uint64) *canalJSONM
 	}
 }
 
-// EncodeCheckpointEvent implements the EventBatchEncoder interface
-func (c *JSONBatchEncoder) EncodeCheckpointEvent(ts uint64) (*common.Message, error) {
+// EncodeCheckpointEvent implements the RowEventEncoder interface
+func (c *JSONRowEventEncoder) EncodeCheckpointEvent(ts uint64) (*common.Message, error) {
 	if !c.enableTiDBExtension {
 		return nil, nil
 	}
@@ -308,18 +311,15 @@ func (c *JSONBatchEncoder) EncodeCheckpointEvent(ts uint64) (*common.Message, er
 }
 
 // AppendRowChangedEvent implements the interface EventJSONBatchEncoder
-func (c *JSONBatchEncoder) AppendRowChangedEvent(
+func (c *JSONRowEventEncoder) AppendRowChangedEvent(
 	_ context.Context,
 	_ string,
 	e *model.RowChangedEvent,
 	callback func(),
 ) error {
-	value, err := c.newJSONMessageForDML(e)
+	value, err := newJSONMessageForDML(c.builder, c.enableTiDBExtension, e)
 	if err != nil {
 		return errors.Trace(err)
-	}
-	if len(c.terminator) > 0 {
-		value = append(value, c.terminator...)
 	}
 
 	length := len(value) + common.MaxRecordOverhead
@@ -348,8 +348,8 @@ func (c *JSONBatchEncoder) AppendRowChangedEvent(
 	return nil
 }
 
-// Build implements the EventBatchEncoder interface
-func (c *JSONBatchEncoder) Build() []*common.Message {
+// Build implements the RowEventEncoder interface
+func (c *JSONRowEventEncoder) Build() []*common.Message {
 	if len(c.messages) == 0 {
 		return nil
 	}
@@ -360,7 +360,7 @@ func (c *JSONBatchEncoder) Build() []*common.Message {
 }
 
 // EncodeDDLEvent encodes DDL events
-func (c *JSONBatchEncoder) EncodeDDLEvent(e *model.DDLEvent) (*common.Message, error) {
+func (c *JSONRowEventEncoder) EncodeDDLEvent(e *model.DDLEvent) (*common.Message, error) {
 	message := c.newJSONMessageForDDL(e)
 	value, err := json.Marshal(message)
 	if err != nil {
@@ -369,16 +369,16 @@ func (c *JSONBatchEncoder) EncodeDDLEvent(e *model.DDLEvent) (*common.Message, e
 	return common.NewDDLMsg(config.ProtocolCanalJSON, nil, value, e), nil
 }
 
-type jsonBatchEncoderBuilder struct {
+type jsonRowEventEncoderBuilder struct {
 	config *common.Config
 }
 
-// NewJSONBatchEncoderBuilder creates a canal-json batchEncoderBuilder.
-func NewJSONBatchEncoderBuilder(config *common.Config) codec.EncoderBuilder {
-	return &jsonBatchEncoderBuilder{config: config}
+// NewJSONRowEventEncoderBuilder creates a canal-json batchEncoderBuilder.
+func NewJSONRowEventEncoderBuilder(config *common.Config) codec.RowEventEncoderBuilder {
+	return &jsonRowEventEncoderBuilder{config: config}
 }
 
-// Build a `JSONBatchEncoder`
-func (b *jsonBatchEncoderBuilder) Build() codec.EventBatchEncoder {
-	return newJSONBatchEncoder(b.config)
+// Build a `jsonRowEventEncoderBuilder`
+func (b *jsonRowEventEncoderBuilder) Build() codec.RowEventEncoder {
+	return newJSONRowEventEncoder(b.config)
 }

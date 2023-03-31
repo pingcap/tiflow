@@ -526,11 +526,6 @@ error = '''
 MySQL worker panic
 '''
 
-["CDC:ErrNewCaptureFailed"]
-error = '''
-new capture failed
-'''
-
 ["CDC:ErrNewSemVersion"]
 error = '''
 create sem version
@@ -914,6 +909,11 @@ updating service safepoint failed
 ["CDC:ErrUpstreamClosed"]
 error = '''
 upstream has been closed
+'''
+
+["CDC:ErrUpstreamHasRunningImport"]
+error = '''
+upstream has running import tasks, upstream-id: %d
 '''
 
 ["CDC:ErrUpstreamManagerNotReady"]
