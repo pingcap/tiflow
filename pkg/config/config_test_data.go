@@ -189,7 +189,8 @@ const (
     "transaction-atomicity": "",
     "terminator": "",
     "date-separator": "month",
-    "enable-partition-separator": true
+    "enable-partition-separator": true,
+    "only-output-updated-columns": false
   },
   "consistent": {
     "level": "none",
@@ -248,7 +249,8 @@ const (
     },
     "terminator": "",
     "date-separator": "month",
-    "enable-partition-separator": true
+    "enable-partition-separator": true,
+    "only-output-updated-columns": false
   },
   "consistent": {
     "level": "none",

@@ -49,7 +49,7 @@ type Config struct {
 	Terminator      string
 
 	// for open protocol
-	OnlyOutputUpdatedColumn bool
+	OnlyOutputUpdatedColumns bool
 }
 
 // NewConfig return a Config for codec
@@ -65,7 +65,7 @@ func NewConfig(protocol config.Protocol) *Config {
 		AvroDecimalHandlingMode:        "precise",
 		AvroBigintUnsignedHandlingMode: "long",
 
-		OnlyOutputUpdatedColumn: false,
+		OnlyOutputUpdatedColumns: false,
 	}
 }
 
@@ -76,7 +76,7 @@ const (
 	codecOPTAvroDecimalHandlingMode        = "avro-decimal-handling-mode"
 	codecOPTAvroBigintUnsignedHandlingMode = "avro-bigint-unsigned-handling-mode"
 	codecOPTAvroSchemaRegistry             = "schema-registry"
-	codecOPTOnlyOutputUpdatedColumn        = "only-output-updated-column"
+	codecOPTOnlyOutputUpdatedColumns       = "only-output-updated-columns"
 )
 
 const (
@@ -138,14 +138,20 @@ func (c *Config) Apply(sinkURI *url.URL, config *config.ReplicaConfig) error {
 			c.IncludeCommitTs = config.Sink.CSVConfig.IncludeCommitTs
 		}
 
-		c.OnlyOutputUpdatedColumn = config.Sink.OnlyOutputUpdatedColumn
+		c.OnlyOutputUpdatedColumns = config.Sink.OnlyOutputUpdatedColumns
 	}
-	if s := params.Get(codecOPTOnlyOutputUpdatedColumn); s != "" {
+	if s := params.Get(codecOPTOnlyOutputUpdatedColumns); s != "" {
 		a, err := strconv.ParseBool(s)
 		if err != nil {
 			return err
 		}
-		c.OnlyOutputUpdatedColumn = a
+		c.OnlyOutputUpdatedColumns = a
+	}
+	if c.OnlyOutputUpdatedColumns && !config.EnableOldValue {
+		return cerror.ErrCodecInvalidConfig.GenWithStack(
+			`old value must be enabled when configuration "%s" is true.`,
+			codecOPTOnlyOutputUpdatedColumns,
+		)
 	}
 
 	return nil

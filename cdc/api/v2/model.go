@@ -280,7 +280,7 @@ func (c *ReplicaConfig) toInternalReplicaConfigWithOriginConfig(
 			Terminator:               c.Sink.Terminator,
 			DateSeparator:            c.Sink.DateSeparator,
 			EnablePartitionSeparator: c.Sink.EnablePartitionSeparator,
-			OnlyOutputUpdatedColumn:  c.Sink.OnlyOutputUpdatedColumn,
+			OnlyOutputUpdatedColumns: c.Sink.OnlyOutputUpdatedColumns,
 		}
 	}
 	if c.Mounter != nil {
@@ -392,7 +392,7 @@ func ToAPIReplicaConfig(c *config.ReplicaConfig) *ReplicaConfig {
 			Terminator:               cloned.Sink.Terminator,
 			DateSeparator:            cloned.Sink.DateSeparator,
 			EnablePartitionSeparator: cloned.Sink.EnablePartitionSeparator,
-			OnlyOutputUpdatedColumn:  cloned.Sink.OnlyOutputUpdatedColumn,
+			OnlyOutputUpdatedColumns: cloned.Sink.OnlyOutputUpdatedColumns,
 		}
 	}
 	if cloned.Consistent != nil {
@@ -529,7 +529,7 @@ type SinkConfig struct {
 	Terminator               string            `json:"terminator"`
 	DateSeparator            string            `json:"date_separator"`
 	EnablePartitionSeparator bool              `json:"enable_partition_separator"`
-	OnlyOutputUpdatedColumn  bool              `json:"only_output_updated_column"`
+	OnlyOutputUpdatedColumns bool              `json:"only_output_updated_columns"`
 }
 
 // CSVConfig denotes the csv config
