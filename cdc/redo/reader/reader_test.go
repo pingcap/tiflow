@@ -23,11 +23,13 @@ import (
 	"testing"
 	"time"
 
-	"github.com/golang/mock/gomock"
 	"github.com/google/uuid"
+<<<<<<< HEAD
 	"github.com/pingcap/errors"
 	mockstorage "github.com/pingcap/tidb/br/pkg/mock/storage"
 	"github.com/pingcap/tidb/br/pkg/storage"
+=======
+>>>>>>> e05cef8fe0 (redo(ticdc): simplify reader initialization (#8407))
 	"github.com/pingcap/tiflow/cdc/model"
 	"github.com/pingcap/tiflow/cdc/redo/common"
 	"github.com/pingcap/tiflow/cdc/redo/writer"
@@ -38,6 +40,7 @@ import (
 	"go.uber.org/multierr"
 )
 
+<<<<<<< HEAD
 func TestNewLogReader(t *testing.T) {
 	_, err := newLogReader(context.Background(), nil)
 	require.NotNil(t, err)
@@ -80,6 +83,13 @@ func TestLogReaderResetReader(t *testing.T) {
 
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
+=======
+func genLogFile(
+	ctx context.Context, t *testing.T,
+	dir string, logType string,
+	minCommitTs, maxCommitTs uint64,
+) {
+>>>>>>> e05cef8fe0 (redo(ticdc): simplify reader initialization (#8407))
 	cfg := &writer.LogWriterConfig{
 		MaxLogSizeInBytes: 100000,
 		Dir:               dir,
@@ -91,6 +101,7 @@ func TestLogReaderResetReader(t *testing.T) {
 		return fileName
 	}))
 	require.Nil(t, err)
+<<<<<<< HEAD
 	log := &model.RedoLog{
 		RedoRow: &model.RedoRowChangedEvent{Row: &model.RowChangedEvent{CommitTs: 11}},
 	}
@@ -98,6 +109,29 @@ func TestLogReaderResetReader(t *testing.T) {
 	require.Nil(t, err)
 	_, err = w.Write(data)
 	require.Nil(t, err)
+=======
+	if logType == redo.RedoRowLogFileType {
+		// generate unsorted logs
+		for ts := maxCommitTs; ts >= minCommitTs; ts-- {
+			event := &model.RowChangedEvent{CommitTs: ts}
+			log := event.ToRedoLog()
+			rawData, err := codec.MarshalRedoLog(log, nil)
+			require.Nil(t, err)
+			_, err = w.Write(rawData)
+			require.Nil(t, err)
+		}
+	} else if logType == redo.RedoDDLLogFileType {
+		event := &model.DDLEvent{
+			CommitTs:  maxCommitTs,
+			TableInfo: &model.TableInfo{},
+		}
+		log := event.ToRedoLog()
+		rawData, err := codec.MarshalRedoLog(log, nil)
+		require.Nil(t, err)
+		_, err = w.Write(rawData)
+		require.Nil(t, err)
+	}
+>>>>>>> e05cef8fe0 (redo(ticdc): simplify reader initialization (#8407))
 	err = w.Close()
 	require.Nil(t, err)
 
@@ -115,6 +149,7 @@ func TestLogReaderResetReader(t *testing.T) {
 	log = &model.RedoLog{
 		RedoRow: &model.RedoRowChangedEvent{Row: &model.RowChangedEvent{CommitTs: 11}},
 	}
+<<<<<<< HEAD
 	data, err = log.MarshalMsg(nil)
 	require.Nil(t, err)
 	_, err = w.Write(data)
@@ -129,6 +164,28 @@ func TestLogReaderResetReader(t *testing.T) {
 		ctx                      context.Context
 		startTs, endTs           uint64
 		resolvedTs, checkPointTs uint64
+=======
+	for _, logType := range []string{redo.RedoRowLogFileType, redo.RedoDDLLogFileType} {
+		genLogFile(ctx, t, dir, logType, meta.CheckpointTs, meta.CheckpointTs)
+		genLogFile(ctx, t, dir, logType, meta.CheckpointTs, meta.CheckpointTs)
+		genLogFile(ctx, t, dir, logType, 12, 12)
+		genLogFile(ctx, t, dir, logType, meta.ResolvedTs, meta.ResolvedTs)
+	}
+	expectedRows := []uint64{12, meta.ResolvedTs}
+	expectedDDLs := []uint64{meta.CheckpointTs, meta.CheckpointTs, 12, meta.ResolvedTs}
+
+	uri, err := url.Parse(fmt.Sprintf("file://%s", dir))
+	require.NoError(t, err)
+	r := &LogReader{
+		cfg: &LogReaderConfig{
+			Dir:                t.TempDir(),
+			URI:                *uri,
+			UseExternalStorage: true,
+		},
+		meta:  meta,
+		rowCh: make(chan *model.RowChangedEvent, defaultReaderChanSize),
+		ddlCh: make(chan *model.DDLEvent, defaultReaderChanSize),
+>>>>>>> e05cef8fe0 (redo(ticdc): simplify reader initialization (#8407))
 	}
 	tests := []struct {
 		name                   string
@@ -237,43 +294,51 @@ func TestLogReaderResetReader(t *testing.T) {
 
 		}
 	}
+<<<<<<< HEAD
 	time.Sleep(1001 * time.Millisecond)
+=======
+	for _, logType := range []string{redo.RedoRowLogFileType, redo.RedoDDLLogFileType} {
+		genLogFile(ctx, t, dir, logType, meta.CheckpointTs, meta.CheckpointTs)
+		genLogFile(ctx, t, dir, logType, meta.CheckpointTs, meta.CheckpointTs)
+		genLogFile(ctx, t, dir, logType, 12, 12)
+		genLogFile(ctx, t, dir, logType, meta.ResolvedTs, meta.CheckpointTs)
+	}
+
+	uri, err := url.Parse(fmt.Sprintf("file://%s", dir))
+	require.NoError(t, err)
+	r := &LogReader{
+		cfg: &LogReaderConfig{
+			Dir:                t.TempDir(),
+			URI:                *uri,
+			UseExternalStorage: true,
+		},
+		meta:  meta,
+		rowCh: make(chan *model.RowChangedEvent, 1),
+		ddlCh: make(chan *model.DDLEvent, 1),
+	}
+	eg, egCtx := errgroup.WithContext(ctx)
+	eg.Go(func() error {
+		return r.Run(egCtx)
+	})
+
+	time.Sleep(2 * time.Second)
+	cancel()
+	require.ErrorIs(t, eg.Wait(), context.Canceled)
+>>>>>>> e05cef8fe0 (redo(ticdc): simplify reader initialization (#8407))
 }
 
-func TestLogReaderReadMeta(t *testing.T) {
-	dir := t.TempDir()
+func TestNewLogReaderAndReadMeta(t *testing.T) {
+	t.Parallel()
 
-	fileName := fmt.Sprintf("%s_%s_%d_%s%s", "cp",
-		"test-changefeed",
-		time.Now().Unix(), redo.RedoMetaFileType, redo.MetaEXT)
-	path := filepath.Join(dir, fileName)
-	f, err := os.Create(path)
-	require.Nil(t, err)
-	meta := &common.LogMeta{
+	dir := t.TempDir()
+	genMetaFile(t, dir, &common.LogMeta{
 		CheckpointTs: 11,
 		ResolvedTs:   22,
-	}
-	data, err := meta.MarshalMsg(nil)
-	require.Nil(t, err)
-	_, err = f.Write(data)
-	require.Nil(t, err)
-
-	fileName = fmt.Sprintf("%s_%s_%d_%s%s", "cp1",
-		"test-changefeed",
-		time.Now().Unix(), redo.RedoMetaFileType, redo.MetaEXT)
-	path = filepath.Join(dir, fileName)
-	f, err = os.Create(path)
-	require.Nil(t, err)
-	meta = &common.LogMeta{
+	})
+	genMetaFile(t, dir, &common.LogMeta{
 		CheckpointTs: 12,
 		ResolvedTs:   21,
-	}
-	data, err = meta.MarshalMsg(nil)
-	require.Nil(t, err)
-	_, err = f.Write(data)
-	require.Nil(t, err)
-
-	dir1 := t.TempDir()
+	})
 
 	tests := []struct {
 		name                             string
@@ -289,13 +354,13 @@ func TestLogReaderReadMeta(t *testing.T) {
 		},
 		{
 			name:    "no meta file",
-			dir:     dir1,
+			dir:     t.TempDir(),
 			wantErr: ".*no redo meta file found in dir*.",
 		},
 		{
 			name:    "wrong dir",
 			dir:     "xxx",
-			wantErr: ".*can't read log file directory*.",
+			wantErr: ".*fail to open storage for redo log*.",
 		},
 		{
 			name:             "context cancel",
@@ -306,21 +371,25 @@ func TestLogReaderReadMeta(t *testing.T) {
 		},
 	}
 	for _, tt := range tests {
-		l := &LogReader{
-			cfg: &LogReaderConfig{
-				Dir: tt.dir,
-			},
-		}
 		ctx := context.Background()
 		if tt.name == "context cancel" {
 			ctx1, cancel := context.WithCancel(context.Background())
 			cancel()
 			ctx = ctx1
 		}
-		cts, rts, err := l.ReadMeta(ctx)
+		uriStr := fmt.Sprintf("file://%s", tt.dir)
+		uri, err := url.Parse(uriStr)
+		require.Nil(t, err)
+		l, err := newLogReader(ctx, &LogReaderConfig{
+			Dir:                t.TempDir(),
+			URI:                *uri,
+			UseExternalStorage: redo.IsExternalStorage(uri.Scheme),
+		})
 		if tt.wantErr != "" {
 			require.Regexp(t, tt.wantErr, err, tt.name)
 		} else {
+			require.Nil(t, err, tt.name)
+			cts, rts, err := l.ReadMeta(ctx)
 			require.Nil(t, err, tt.name)
 			require.Equal(t, tt.wantCheckpointTs, cts, tt.name)
 			require.Equal(t, tt.wantResolvedTs, rts, tt.name)
@@ -328,6 +397,7 @@ func TestLogReaderReadMeta(t *testing.T) {
 	}
 }
 
+<<<<<<< HEAD
 func TestLogReaderReadNextLog(t *testing.T) {
 	type arg struct {
 		ctx    context.Context
@@ -750,4 +820,16 @@ func TestLogReaderClose(t *testing.T) {
 			require.Nil(t, err, tt.name)
 		}
 	}
+=======
+func genMetaFile(t *testing.T, dir string, meta *common.LogMeta) {
+	fileName := fmt.Sprintf(redo.RedoMetaFileFormat, "capture", "default",
+		"changefeed", redo.RedoMetaFileType, uuid.NewString(), redo.MetaEXT)
+	path := filepath.Join(dir, fileName)
+	f, err := os.Create(path)
+	require.Nil(t, err)
+	data, err := meta.MarshalMsg(nil)
+	require.Nil(t, err)
+	_, err = f.Write(data)
+	require.Nil(t, err)
+>>>>>>> e05cef8fe0 (redo(ticdc): simplify reader initialization (#8407))
 }

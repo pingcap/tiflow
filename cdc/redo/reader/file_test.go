@@ -14,28 +14,34 @@
 package reader
 
 import (
+<<<<<<< HEAD
 	"bufio"
+=======
+	"context"
+>>>>>>> e05cef8fe0 (redo(ticdc): simplify reader initialization (#8407))
 	"fmt"
 	"io"
-	"os"
-	"path/filepath"
+	"net/url"
 	"testing"
-	"time"
 
+<<<<<<< HEAD
 	"github.com/pingcap/tiflow/cdc/model"
 	"github.com/pingcap/tiflow/cdc/redo/writer"
 	"github.com/pingcap/tiflow/cdc/redo/writer/file"
+=======
+	"github.com/pingcap/log"
+>>>>>>> e05cef8fe0 (redo(ticdc): simplify reader initialization (#8407))
 	"github.com/pingcap/tiflow/pkg/redo"
-	"github.com/pingcap/tiflow/pkg/uuid"
 	"github.com/stretchr/testify/require"
 	"golang.org/x/net/context"
 )
 
 func TestReaderNewReader(t *testing.T) {
-	_, err := newReader(context.Background(), nil)
+	_, err := newReaders(context.Background(), nil)
 	require.NotNil(t, err)
 
 	dir := t.TempDir()
+<<<<<<< HEAD
 	_, err = newReader(context.Background(), &readerConfig{dir: dir})
 	require.Nil(t, err)
 }
@@ -91,17 +97,29 @@ func TestReaderRead(t *testing.T) {
 	require.Nil(t, err)
 	require.EqualValues(t, 1123, log.RedoRow.Row.CommitTs)
 	time.Sleep(1001 * time.Millisecond)
+=======
+	require.Panics(t, func() {
+		_, err = newReaders(context.Background(), &readerConfig{dir: dir})
+	})
+>>>>>>> e05cef8fe0 (redo(ticdc): simplify reader initialization (#8407))
 }
 
-func TestReaderOpenSelectedFiles(t *testing.T) {
+func TestFileReaderRead(t *testing.T) {
 	dir := t.TempDir()
-
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
-	cfg := &writer.LogWriterConfig{
-		MaxLogSizeInBytes: 100000,
-		Dir:               dir,
+
+	uri, err := url.Parse(fmt.Sprintf("file://%s", dir))
+	require.NoError(t, err)
+	cfg := &readerConfig{
+		dir:                t.TempDir(),
+		startTs:            10,
+		endTs:              12,
+		fileType:           redo.RedoRowLogFileType,
+		uri:                *uri,
+		useExternalStorage: true,
 	}
+<<<<<<< HEAD
 	uuidGen := uuid.NewGenerator()
 	fileName := fmt.Sprintf(redo.RedoLogFileFormatV2, "cp",
 		"default", "test-cf", redo.RedoDDLLogFileType, 11,
@@ -129,34 +147,35 @@ func TestReaderOpenSelectedFiles(t *testing.T) {
 	path := filepath.Join(cfg.Dir, fileName)
 	f, err := os.Open(path)
 	require.Nil(t, err)
+=======
+	// log file with maxCommitTs<=startTs, fileter when download file
+	genLogFile(ctx, t, dir, redo.RedoRowLogFileType, 1, cfg.startTs)
+	// normal log file, include [10, 11, 12] and [11, 12, ... 20]
+	genLogFile(ctx, t, dir, redo.RedoRowLogFileType, cfg.startTs, cfg.endTs+2)
+	genLogFile(ctx, t, dir, redo.RedoRowLogFileType, cfg.endTs-1, 20)
+	// log file with minCommitTs>endTs, filtered when sort file
+	genLogFile(ctx, t, dir, redo.RedoRowLogFileType, 2000, 2023)
+>>>>>>> e05cef8fe0 (redo(ticdc): simplify reader initialization (#8407))
 
-	// no data, wil not open
-	fileName = fmt.Sprintf(redo.RedoLogFileFormatV2, "cp",
-		"default", "test-cf11", redo.RedoDDLLogFileType, 10,
-		uuidGen.NewString(), redo.LogEXT)
-	path = filepath.Join(dir, fileName)
-	_, err = os.Create(path)
-	require.Nil(t, err)
+	log.Info("start to read redo log files")
+	readers, err := newReaders(ctx, cfg)
+	require.NoError(t, err)
+	require.Equal(t, 2, len(readers))
+	defer readers[0].Close() //nolint:errcheck
 
-	// SortLogEXT, wil open
-	fileName = fmt.Sprintf(redo.RedoLogFileFormatV2, "cp", "default",
-		"test-cf111", redo.RedoDDLLogFileType, 10, uuidGen.NewString(),
-		redo.LogEXT) + redo.SortLogEXT
-	path = filepath.Join(dir, fileName)
-	f1, err := os.Create(path)
-	require.Nil(t, err)
-
-	dir1 := t.TempDir()
-	fileName = fmt.Sprintf(redo.RedoLogFileFormatV2, "cp", "default", "test-cf",
-		redo.RedoDDLLogFileType, 11, uuidGen.NewString(), redo.LogEXT+"test")
-	path = filepath.Join(dir1, fileName)
-	_, err = os.Create(path)
-	require.Nil(t, err)
-
-	type arg struct {
-		dir, fixedName string
-		startTs        uint64
+	for _, r := range readers {
+		log, err := r.Read()
+		require.NoError(t, err)
+		require.EqualValues(t, 11, log.RedoRow.Row.CommitTs)
+		log, err = r.Read()
+		require.NoError(t, err)
+		require.EqualValues(t, 12, log.RedoRow.Row.CommitTs)
+		log, err = r.Read()
+		require.Nil(t, log)
+		require.ErrorIs(t, err, io.EOF)
+		require.NoError(t, r.Close())
 	}
+<<<<<<< HEAD
 
 	tests := []struct {
 		name    string
@@ -250,4 +269,6 @@ func TestReaderOpenSelectedFiles(t *testing.T) {
 		}
 	}
 	time.Sleep(1001 * time.Millisecond)
+=======
+>>>>>>> e05cef8fe0 (redo(ticdc): simplify reader initialization (#8407))
 }
