@@ -243,18 +243,17 @@ func sortAndWriteFile(
 		return err
 	}
 
-	data, err := extStorage.ReadFile(egCtx, fileName)
+	fileContent, err := extStorage.ReadFile(egCtx, fileName)
 	if err != nil {
 		return cerror.WrapError(cerror.ErrExternalStorageAPI, err)
 	}
-	if len(data) == 0 {
+	if len(fileContent) == 0 {
 		log.Warn("download file is empty", zap.String("file", fileName))
 		return nil
 	}
 
 	// sort data
-	h, err := readAllFromBuffer(data)
-	data = nil
+	h, err := readAllFromBuffer(fileContent)
 	if err != nil {
 		return err
 	}
