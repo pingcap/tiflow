@@ -347,7 +347,7 @@ check-balance-interval = "10s"
 			},
 		},
 		ClusterID:           "default",
-		MaxMemoryPercentage: 0,
+		MaxMemoryPercentage: config.DefaultMaxMemoryPercentage,
 	}, o.serverConfig)
 }
 
