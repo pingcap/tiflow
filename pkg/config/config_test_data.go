@@ -142,7 +142,7 @@ const (
     "enable-kafka-sink-v2": false
   },
   "cluster-id": "default",
-  "max-memory-percentage": 0
+  "max-memory-percentage": 70
 }`
 
 	testCfgTestReplicaConfigMarshal1 = `{

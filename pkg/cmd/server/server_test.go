@@ -202,7 +202,7 @@ func TestParseCfg(t *testing.T) {
 			},
 		},
 		ClusterID:           "default",
-		MaxMemoryPercentage: 0,
+		MaxMemoryPercentage: config.DefaultMaxMemoryPercentage,
 	}, o.serverConfig)
 }
 
@@ -480,7 +480,7 @@ cert-allowed-cn = ["dd","ee"]
 			},
 		},
 		ClusterID:           "default",
-		MaxMemoryPercentage: 0,
+		MaxMemoryPercentage: config.DefaultMaxMemoryPercentage,
 	}, o.serverConfig)
 }
 
