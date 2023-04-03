@@ -132,7 +132,8 @@ func newStatusProvider() *mockStatusProvider {
 		Return(map[model.CaptureID]*model.TaskStatus{captureID: {}}, nil)
 
 	statusProvider.On("GetChangeFeedInfo", mock.Anything).
-		Return(&model.ChangeFeedInfo{State: model.StateNormal,
+		Return(&model.ChangeFeedInfo{
+			State:          model.StateNormal,
 			CreatorVersion: "v6.5.1",
 		}, nil)
 
