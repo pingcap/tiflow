@@ -26,7 +26,6 @@ import (
 	"github.com/gin-gonic/gin"
 	"github.com/pingcap/errors"
 	"github.com/pingcap/log"
-	"github.com/pingcap/tidb/util/memory"
 	"github.com/pingcap/tiflow/cdc"
 	"github.com/pingcap/tiflow/cdc/capture"
 	"github.com/pingcap/tiflow/cdc/kv"
@@ -41,6 +40,7 @@ import (
 	"github.com/pingcap/tiflow/pkg/p2p"
 	"github.com/pingcap/tiflow/pkg/pdutil"
 	"github.com/pingcap/tiflow/pkg/tcpserver"
+	"github.com/pingcap/tiflow/pkg/util"
 	p2pProto "github.com/pingcap/tiflow/proto/p2p"
 	pd "github.com/tikv/pd/client"
 	"go.etcd.io/etcd/client/pkg/v3/logutil"
@@ -229,7 +229,7 @@ func (s *server) startActorSystems(ctx context.Context) error {
 	sortDir := config.GetGlobalServerConfig().Sorter.SortDir
 
 	if s.useEventSortEngine {
-		totalMemory, err := memory.MemTotal()
+		totalMemory, err := util.GetMemoryLimit()
 		if err != nil {
 			return errors.Trace(err)
 		}
