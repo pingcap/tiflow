@@ -213,7 +213,7 @@ func TestTableExecutorAddingTableIndirectly(t *testing.T) {
 	require.Equal(t, model.Ts(20), stats.BarrierTs)
 	require.Equal(t, model.Ts(0), stats.ReceivedMaxCommitTs)
 	require.Equal(t, model.Ts(20), stats.ReceivedMaxResolvedTs)
-	require.Len(t, 1, len(p.sinkManager.GetAllCurrentTableSpans()))
+	require.Len(t, p.sinkManager.GetAllCurrentTableSpans(), 1)
 	require.Equal(t, 1, p.sinkManager.GetAllCurrentTableSpansCount())
 
 	done := p.IsAddTableSpanFinished(spanz.TableIDToComparableSpan(1), true)
