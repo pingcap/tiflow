@@ -800,6 +800,7 @@ func convert2RowChanges(
 			tableInfo,
 			nil, nil)
 	}
+	res.SetApproximateDataSize(row.ApproximateDataSize)
 	return res
 }
 
@@ -876,7 +877,7 @@ func (s *mysqlSink) groupRowsByType(
 				updateRow = append(
 					updateRow,
 					convert2RowChanges(row, tableInfo, sqlmodel.RowChangeUpdate))
-				if len(updateRow) >= s.params.maxTxnRow {
+				if len(updateRow) >= s.params.batchUpdateRowCount {
 					updateRows = append(updateRows, updateRow)
 					updateRow = make([]*sqlmodel.RowChange, 0, s.params.maxTxnRow)
 				}
@@ -1126,6 +1127,28 @@ func (s *mysqlSink) execDMLs(ctx context.Context, txns []*model.SingleTableTxn, 
 		return errors.Trace(err)
 	}
 	return nil
+}
+
+func (s *mysqlSink) genUpdateSQL(rows ...*sqlmodel.RowChange) ([]string, [][]interface{}) {
+	size, count := 0, 0
+	for _, r := range rows {
+		size += int(r.GetApproximateDataSize())
+		count++
+	}
+	if size < defaultMaxBatchUpdateRowSize*count {
+		// use batch update
+		sql, value := sqlmodel.GenUpdateSQLFast(rows...)
+		return []string{sql}, [][]interface{}{value}
+	}
+	// each row has one independent update SQL.
+	sqls := make([]string, 0, len(rows))
+	values := make([][]interface{}, 0, len(rows))
+	for _, row := range rows {
+		sql, value := row.GenSQL(sqlmodel.DMLUpdate)
+		sqls = append(sqls, sql)
+		values = append(values, value)
+	}
+	return sqls, values
 }
 
 // if the column value type is []byte and charset is not binary, we get its string
