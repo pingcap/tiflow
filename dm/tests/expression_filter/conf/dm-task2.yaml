@@ -56,7 +56,7 @@ expression-filter:
   only_muller:
     schema: "expr_filter"
     table: "t6"
-    insert-value-expr: "name != 'Müller'"
+    insert-value-expr: "name != 'Müller…'"
   e02:
     schema: expr_filter
     table: t7

@@ -62,9 +62,9 @@ function complex_behaviour() {
 	run_sql_tidb "select count(8) from expr_filter.t5 where should_skip = 1"
 	check_contains "count(8): 0"
 
-	run_sql_tidb "select count(9) from expr_filter.t6 where name = 'Müller' and msg = 'Müller' and name2 = 'Müller'"
+	run_sql_tidb "select count(9) from expr_filter.t6 where name = 'Müller…' and msg = 'Müller…' and name2 = 'Müller…'"
 	check_contains "count(9): 2"
-	run_sql_tidb "select count(10) from expr_filter.t6 where name != 'Müller'"
+	run_sql_tidb "select count(10) from expr_filter.t6 where name != 'Müller…'"
 	check_contains "count(10): 0"
 
 	run_sql_tidb "select count(11) from expr_filter.t7 where r = 'a' and s = 2"
