@@ -24,14 +24,14 @@ type defragmenter struct {
 	future      map[uint64]eventFragment
 	wg          sync.WaitGroup
 	inputCh     chan eventFragment
-	outputCh    chan eventFragment
+
+	outputFn func(eventFragment)
 }
 
 func newDefragmenter(ctx context.Context) *defragmenter {
 	d := &defragmenter{
-		future:   make(map[uint64]eventFragment),
-		inputCh:  make(chan eventFragment, defaultChannelSize),
-		outputCh: make(chan eventFragment, defaultChannelSize),
+		future:  make(map[uint64]eventFragment),
+		inputCh: make(chan eventFragment, defaultChannelSize),
 	}
 	d.wg.Add(1)
 	go func() {
@@ -43,10 +43,6 @@ func newDefragmenter(ctx context.Context) *defragmenter {
 
 func (d *defragmenter) registerFrag(frag eventFragment) {
 	d.inputCh <- frag
-}
-
-func (d *defragmenter) orderedOut() <-chan eventFragment {
-	return d.outputCh
 }
 
 func (d *defragmenter) defragMsgs(ctx context.Context) {
@@ -76,7 +72,7 @@ func (d *defragmenter) writeMsgsConsecutive(
 	ctx context.Context,
 	start eventFragment,
 ) {
-	d.outputCh <- start
+	d.outputFn(start)
 
 	d.lastWritten++
 	for {
@@ -89,7 +85,7 @@ func (d *defragmenter) writeMsgsConsecutive(
 		next := d.lastWritten + 1
 		if frag, ok := d.future[next]; ok {
 			delete(d.future, next)
-			d.outputCh <- frag
+			d.outputFn(frag)
 			d.lastWritten = next
 		} else {
 			return
