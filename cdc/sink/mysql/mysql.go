@@ -188,6 +188,12 @@ func NewMySQLSink(
 		return nil, err
 	}
 
+	isTiDB, err := CheckIsTiDB(ctx, db)
+	if err != nil {
+		return nil, err
+	}
+	params.isTiDB = isTiDB
+
 	log.Info("Start mysql sink")
 
 	db.SetMaxIdleConns(params.workerCount)
@@ -916,11 +922,22 @@ func (s *mysqlSink) batchSingleTxnDmls(
 	// handle update
 	if len(updateRows) > 0 {
 		// TODO: use sql.GenUpdateSQL to generate update sql after we optimize the func.
-		for _, rows := range updateRows {
-			for _, row := range rows {
-				sql, value := row.GenSQL(sqlmodel.DMLUpdate)
-				sqls = append(sqls, sql)
-				values = append(values, value)
+		if s.params.isTiDB {
+			for _, rows := range updateRows {
+				s, v := s.genUpdateSQL(rows...)
+				sqls = append(sqls, s...)
+				values = append(values, v...)
+			}
+		} else {
+			// The behavior of batch update statement differs between TiDB and MySQL.
+			// So we don't use batch update statement when downstream is MySQL.
+			// Ref:https://docs.pingcap.com/tidb/stable/sql-statement-update#mysql-compatibility
+			for _, rows := range updateRows {
+				for _, row := range rows {
+					sql, value := row.GenSQL(sqlmodel.DMLUpdate)
+					sqls = append(sqls, sql)
+					values = append(values, value)
+				}
 			}
 		}
 	}

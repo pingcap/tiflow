@@ -107,6 +107,7 @@ type sinkParams struct {
 	tls                 string
 	batchDMLEnable      bool
 	batchUpdateRowCount int
+	isTiDB              bool
 }
 
 func (s *sinkParams) Clone() *sinkParams {
