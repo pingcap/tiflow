@@ -28,14 +28,16 @@ import (
 	"github.com/pingcap/tiflow/cdc/model"
 	cerror "github.com/pingcap/tiflow/pkg/errors"
 	"github.com/pingcap/tiflow/pkg/retry"
+	"github.com/pingcap/tiflow/pkg/util"
 	"go.uber.org/zap"
 	"go.uber.org/zap/zapcore"
 )
 
 // SchemaStorage stores the schema information with multi-version
 type SchemaStorage interface {
-	// GetSnapshot returns the snapshot which of ts is specified.
-	// It may block caller when ts is larger than ResolvedTs.
+	// GetSnapshot returns the snapshot which currentTs is less than(but most close to)
+	// or equal to the ts.
+	// It may block caller when ts is larger than SchemaStorage ResolvedTs.
 	GetSnapshot(ctx context.Context, ts uint64) (*schema.Snapshot, error)
 	// GetLastSnapshot returns the last snapshot
 	GetLastSnapshot() *schema.Snapshot
@@ -59,13 +61,15 @@ type schemaStorageImpl struct {
 
 	forceReplicate bool
 
-	id model.ChangeFeedID
+	id   model.ChangeFeedID
+	role util.Role
 }
 
 // NewSchemaStorage creates a new schema storage
 func NewSchemaStorage(
 	meta *timeta.Meta, startTs uint64,
 	forceReplicate bool, id model.ChangeFeedID,
+	role util.Role,
 ) (SchemaStorage, error) {
 	var (
 		snap    *schema.Snapshot
@@ -94,10 +98,13 @@ func NewSchemaStorage(
 		forceReplicate: forceReplicate,
 		id:             id,
 		schemaVersion:  version,
+		role:           role,
 	}
 	return schema, nil
 }
 
+// getSnapshot returns the snapshot which currentTs is less than(but most close to)
+// or equal to the ts.
 func (s *schemaStorageImpl) getSnapshot(ts uint64) (*schema.Snapshot, error) {
 	gcTs := atomic.LoadUint64(&s.gcTs)
 	if ts < gcTs {
@@ -111,10 +118,16 @@ func (s *schemaStorageImpl) getSnapshot(ts uint64) (*schema.Snapshot, error) {
 	}
 	s.snapsMu.RLock()
 	defer s.snapsMu.RUnlock()
+	// Here we search for the first snapshot whose currentTs is larger than ts.
+	// So the result index -1 is the snapshot we want.
 	i := sort.Search(len(s.snaps), func(i int) bool {
 		return s.snaps[i].CurrentTs() > ts
 	})
-	if i <= 0 {
+	// i == 0 has two meanings:
+	// 1. The schema storage is empty.
+	// 2. The ts is smaller than the first snapshot.
+	// In both cases, we should return an error.
+	if i == 0 {
 		// Unexpected error, caller should fail immediately.
 		return nil, cerror.ErrSchemaSnapshotNotFound.GenWithStackByArgs(ts)
 	}
@@ -139,7 +152,8 @@ func (s *schemaStorageImpl) GetSnapshot(ctx context.Context, ts uint64) (*schema
 				zap.Uint64("ts", ts),
 				zap.Duration("duration", now.Sub(startTime)),
 				zap.String("namespace", s.id.Namespace),
-				zap.String("changefeed", s.id.ID))
+				zap.String("changefeed", s.id.ID),
+				zap.String("role", s.role.String()))
 			logTime = now
 		}
 		return err
@@ -182,7 +196,7 @@ func (s *schemaStorageImpl) HandleDDLJob(job *timodel.Job) error {
 				zap.Uint64("finishTs", job.BinlogInfo.FinishedTS),
 				zap.Int64("schemaVersion", s.schemaVersion),
 				zap.Int64("jobSchemaVersion", job.BinlogInfo.SchemaVersion),
-			)
+				zap.String("role", s.role.String()))
 			return nil
 		}
 		snap = lastSnap.Copy()
@@ -196,7 +210,8 @@ func (s *schemaStorageImpl) HandleDDLJob(job *timodel.Job) error {
 			zap.String("changefeed", s.id.ID),
 			zap.String("DDL", job.Query),
 			zap.Stringer("job", job), zap.Error(err),
-			zap.Uint64("finishTs", job.BinlogInfo.FinishedTS))
+			zap.Uint64("finishTs", job.BinlogInfo.FinishedTS),
+			zap.String("role", s.role.String()))
 		return errors.Trace(err)
 	}
 	log.Info("handle DDL",
@@ -204,7 +219,8 @@ func (s *schemaStorageImpl) HandleDDLJob(job *timodel.Job) error {
 		zap.String("changefeed", s.id.ID),
 		zap.String("DDL", job.Query),
 		zap.Stringer("job", job),
-		zap.Uint64("finishTs", job.BinlogInfo.FinishedTS))
+		zap.Uint64("finishTs", job.BinlogInfo.FinishedTS),
+		zap.String("role", s.role.String()))
 
 	s.snaps = append(s.snaps, snap)
 	s.schemaVersion = job.BinlogInfo.SchemaVersion
@@ -272,7 +288,8 @@ func (s *schemaStorageImpl) skipJob(job *timodel.Job) bool {
 	log.Debug("handle DDL new commit",
 		zap.String("DDL", job.Query), zap.Stringer("job", job),
 		zap.String("namespace", s.id.Namespace),
-		zap.String("changefeed", s.id.ID))
+		zap.String("changefeed", s.id.ID),
+		zap.String("role", s.role.String()))
 	return !job.IsDone()
 }
 

@@ -99,6 +99,5 @@ func validateAndAdjustBound(
 			zap.Stringer("span", span),
 			zap.Any("upperBound", upperBound))
 	}
-
 	return lowerBound, upperBound
 }
