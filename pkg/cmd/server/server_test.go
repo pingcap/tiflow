@@ -201,7 +201,8 @@ func TestParseCfg(t *testing.T) {
 				AddTableBatchSize:    50,
 			},
 		},
-		ClusterID: "default",
+		ClusterID:           "default",
+		MaxMemoryPercentage: config.DefaultMaxMemoryPercentage,
 	}, o.serverConfig)
 }
 
@@ -345,7 +346,8 @@ check-balance-interval = "10s"
 				AddTableBatchSize:    50,
 			},
 		},
-		ClusterID: "default",
+		ClusterID:           "default",
+		MaxMemoryPercentage: config.DefaultMaxMemoryPercentage,
 	}, o.serverConfig)
 }
 
@@ -477,7 +479,8 @@ cert-allowed-cn = ["dd","ee"]
 				AddTableBatchSize:    50,
 			},
 		},
-		ClusterID: "default",
+		ClusterID:           "default",
+		MaxMemoryPercentage: config.DefaultMaxMemoryPercentage,
 	}, o.serverConfig)
 }
 
