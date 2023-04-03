@@ -84,7 +84,7 @@ func (w *sinkWorker) handleTasks(ctx context.Context, taskChan <-chan *sinkTask)
 
 func (w *sinkWorker) handleTask(ctx context.Context, task *sinkTask) (finalErr error) {
 	lowerBound := task.lowerBound
-	upperBound := task.getUpperBound(task.tableSink)
+	upperBound := task.getUpperBound(task.tableSink.getUpperBoundTs())
 	lowerPhs := oracle.GetTimeFromTS(lowerBound.CommitTs)
 	upperPhs := oracle.GetTimeFromTS(upperBound.CommitTs)
 	if upperPhs.Sub(lowerPhs) > maxTaskRange {

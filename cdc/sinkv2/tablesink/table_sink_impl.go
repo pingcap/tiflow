@@ -14,7 +14,6 @@
 package tablesink
 
 import (
-	"context"
 	"fmt"
 	"sort"
 	"time"
@@ -123,7 +122,7 @@ func (e *EventTableSink[E]) GetCheckpointTs() model.ResolvedTs {
 
 // Close the table sink and wait for all callbacks be called.
 // Notice: It will be blocked until all callbacks be called.
-func (e *EventTableSink[E]) Close(ctx context.Context) {
+func (e *EventTableSink[E]) Close() {
 	currentState := e.state.Load()
 	if currentState == state.TableSinkStopping ||
 		currentState == state.TableSinkStopped {
@@ -148,7 +147,7 @@ func (e *EventTableSink[E]) Close(ctx context.Context) {
 		zap.String("changefeed", e.changefeedID.ID),
 		zap.Int64("tableID", e.tableID),
 		zap.Uint64("checkpointTs", stoppingCheckpointTs.Ts))
-	e.progressTracker.close(ctx)
+	e.progressTracker.close(e.backendSink.Dead())
 	e.state.Store(state.TableSinkStopped)
 	stoppedCheckpointTs := e.GetCheckpointTs()
 	log.Info("Table sink stopped",
