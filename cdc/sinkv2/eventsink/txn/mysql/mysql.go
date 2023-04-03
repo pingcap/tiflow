@@ -28,6 +28,7 @@ import (
 	"github.com/pingcap/tidb/parser/charset"
 	timodel "github.com/pingcap/tidb/parser/model"
 	"github.com/pingcap/tidb/parser/mysql"
+	"github.com/pingcap/tidb/sessionctx/variable"
 	"github.com/pingcap/tiflow/cdc/contextutil"
 	"github.com/pingcap/tiflow/cdc/model"
 	"github.com/pingcap/tiflow/cdc/sinkv2/eventsink"
@@ -65,6 +66,8 @@ type mysqlBackend struct {
 	statistics                    *metrics.Statistics
 	metricTxnSinkDMLBatchCommit   prometheus.Observer
 	metricTxnSinkDMLBatchCallback prometheus.Observer
+
+	maxAllowedPacket int64
 }
 
 // NewMySQLBackends creates a new MySQL sink using schema storage
@@ -102,6 +105,13 @@ func NewMySQLBackends(
 	db.SetMaxIdleConns(cfg.WorkerCount)
 	db.SetMaxOpenConns(cfg.WorkerCount)
 
+	var maxAllowedPacket int64
+	maxAllowedPacket, err = pmysql.QueryMaxAllowedPacket(ctx, db)
+	if err != nil {
+		log.Warn("failed to query max_allowed_packet, use default value", zap.Error(err))
+		maxAllowedPacket = int64(variable.DefMaxAllowedPacket)
+	}
+
 	backends := make([]*mysqlBackend, 0, cfg.WorkerCount)
 	for i := 0; i < cfg.WorkerCount; i++ {
 		backends = append(backends, &mysqlBackend{
@@ -114,6 +124,8 @@ func NewMySQLBackends(
 
 			metricTxnSinkDMLBatchCommit:   txn.SinkDMLBatchCommit.WithLabelValues(changefeedID.Namespace, changefeedID.ID),
 			metricTxnSinkDMLBatchCallback: txn.SinkDMLBatchCallback.WithLabelValues(changefeedID.Namespace, changefeedID.ID),
+
+			maxAllowedPacket: maxAllowedPacket,
 		})
 	}
 
@@ -195,11 +207,12 @@ func (s *mysqlBackend) MaxFlushInterval() time.Duration {
 }
 
 type preparedDMLs struct {
-	startTs   []model.Ts
-	sqls      []string
-	values    [][]interface{}
-	callbacks []eventsink.CallbackFunc
-	rowCount  int
+	startTs         []model.Ts
+	sqls            []string
+	values          [][]interface{}
+	callbacks       []eventsink.CallbackFunc
+	rowCount        int
+	approximateSize int64
 }
 
 // convert2RowChanges is a helper function that convert the row change representation
@@ -468,6 +481,7 @@ func (s *mysqlBackend) prepareDMLs() *preparedDMLs {
 	translateToInsert := s.cfg.EnableOldValue && !s.cfg.SafeMode
 
 	rowCount := 0
+	approximateSize := int64(0)
 	for _, event := range s.events {
 		if len(event.Event.Rows) == 0 {
 			continue
@@ -507,6 +521,10 @@ func (s *mysqlBackend) prepareDMLs() *preparedDMLs {
 				sql, value := s.batchSingleTxnDmls(event, tableInfo, translateToInsert)
 				sqls = append(sqls, sql...)
 				values = append(values, value...)
+				approximateSize += int64(len(sql))
+				for _, row := range event.Event.Rows {
+					approximateSize += row.ApproximateDataSize
+				}
 				continue
 			}
 		}
@@ -524,6 +542,7 @@ func (s *mysqlBackend) prepareDMLs() *preparedDMLs {
 					sqls = append(sqls, query)
 					values = append(values, args)
 				}
+				approximateSize += int64(len(query)) + row.ApproximateDataSize
 				continue
 			}
 
@@ -567,6 +586,8 @@ func (s *mysqlBackend) prepareDMLs() *preparedDMLs {
 					}
 				}
 			}
+
+			approximateSize += int64(len(query)) + row.ApproximateDataSize
 		}
 	}
 	flushCacheDMLs()
@@ -576,11 +597,12 @@ func (s *mysqlBackend) prepareDMLs() *preparedDMLs {
 	}
 
 	return &preparedDMLs{
-		startTs:   startTs,
-		sqls:      sqls,
-		values:    values,
-		callbacks: callbacks,
-		rowCount:  rowCount,
+		startTs:         startTs,
+		sqls:            sqls,
+		values:          values,
+		callbacks:       callbacks,
+		rowCount:        rowCount,
+		approximateSize: approximateSize,
 	}
 }
 
@@ -598,6 +620,8 @@ func (s *mysqlBackend) multiStmtExecute(
 		}
 		multiStmtArgs = append(multiStmtArgs, dmls.values[i]...)
 	}
+	log.Debug("exec row", zap.Int("workerID", s.workerID),
+		zap.String("sql", multiStmtSQL), zap.Any("args", multiStmtArgs))
 	ctx, cancel := context.WithTimeout(ctx, writeTimeout)
 	defer cancel()
 	_, execError := tx.ExecContext(ctx, multiStmtSQL, multiStmtArgs...)
@@ -651,7 +675,7 @@ func (s *mysqlBackend) execDMLWithMaxRetries(pctx context.Context, dmls *prepare
 	}
 
 	start := time.Now()
-	fallbackToSeqWay := false
+	fallbackToSeqWay := dmls.approximateSize*2 > s.maxAllowedPacket
 	return retry.Do(pctx, func() error {
 		writeTimeout, _ := time.ParseDuration(s.cfg.WriteTimeout)
 		writeTimeout += networkDriftDuration
@@ -673,6 +697,9 @@ func (s *mysqlBackend) execDMLWithMaxRetries(pctx context.Context, dmls *prepare
 					start, s.changefeed, "BEGIN", dmls.rowCount, dmls.startTs)
 			}
 
+			// If interplated SQL size exceeds maxAllowedPacket, mysql driver will
+			// fall back to the sequantial way.
+			// error can be ErrPrepareMulti, ErrBadConn etc.
 			if s.cfg.MultiStmtEnable && !fallbackToSeqWay {
 				err = s.multiStmtExecute(pctx, dmls, tx, writeTimeout)
 				if err != nil {
