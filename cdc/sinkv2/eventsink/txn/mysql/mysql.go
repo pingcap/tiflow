@@ -584,6 +584,65 @@ func (s *mysqlBackend) prepareDMLs() *preparedDMLs {
 	}
 }
 
+// execute SQLs in the multi statements way.
+func (s *mysqlBackend) multiStmtExecute(
+	ctx context.Context, dmls *preparedDMLs, tx *sql.Tx, writeTimeout time.Duration,
+) error {
+	start := time.Now()
+	multiStmtSQL := ""
+	multiStmtArgs := []any{}
+	for i, query := range dmls.sqls {
+		multiStmtSQL += query
+		if i != len(dmls.sqls)-1 {
+			multiStmtSQL += ";"
+		}
+		multiStmtArgs = append(multiStmtArgs, dmls.values[i]...)
+	}
+	ctx, cancel := context.WithTimeout(ctx, writeTimeout)
+	defer cancel()
+	_, execError := tx.ExecContext(ctx, multiStmtSQL, multiStmtArgs...)
+	if execError != nil {
+		err := logDMLTxnErr(
+			cerror.WrapError(cerror.ErrMySQLTxnError, execError),
+			start, s.changefeed, multiStmtSQL, dmls.rowCount, dmls.startTs)
+		if rbErr := tx.Rollback(); rbErr != nil {
+			if errors.Cause(rbErr) != context.Canceled {
+				log.Warn("failed to rollback txn", zap.Error(rbErr))
+			}
+		}
+		return err
+	}
+	return nil
+}
+
+// execute SQLs in each preparedDMLs one by one in the same transaction.
+func (s *mysqlBackend) sequenceExecute(
+	ctx context.Context, dmls *preparedDMLs, tx *sql.Tx, writeTimeout time.Duration,
+) error {
+	start := time.Now()
+	for i, query := range dmls.sqls {
+		args := dmls.values[i]
+		log.Debug("exec row", zap.Int("workerID", s.workerID),
+			zap.String("sql", query), zap.Any("args", args))
+		ctx, cancelFunc := context.WithTimeout(ctx, writeTimeout)
+		_, execError := tx.ExecContext(ctx, query, args...)
+		if execError != nil {
+			err := logDMLTxnErr(
+				cerror.WrapError(cerror.ErrMySQLTxnError, execError),
+				start, s.changefeed, query, dmls.rowCount, dmls.startTs)
+			if rbErr := tx.Rollback(); rbErr != nil {
+				if errors.Cause(rbErr) != context.Canceled {
+					log.Warn("failed to rollback txn", zap.Error(rbErr))
+				}
+			}
+			cancelFunc()
+			return err
+		}
+		cancelFunc()
+	}
+	return nil
+}
+
 func (s *mysqlBackend) execDMLWithMaxRetries(pctx context.Context, dmls *preparedDMLs) error {
 	if len(dmls.sqls) != len(dmls.values) {
 		log.Panic("unexpected number of sqls and values",
@@ -592,6 +651,7 @@ func (s *mysqlBackend) execDMLWithMaxRetries(pctx context.Context, dmls *prepare
 	}
 
 	start := time.Now()
+	fallbackToSeqWay := false
 	return retry.Do(pctx, func() error {
 		writeTimeout, _ := time.ParseDuration(s.cfg.WriteTimeout)
 		writeTimeout += networkDriftDuration
@@ -613,24 +673,17 @@ func (s *mysqlBackend) execDMLWithMaxRetries(pctx context.Context, dmls *prepare
 					start, s.changefeed, "BEGIN", dmls.rowCount, dmls.startTs)
 			}
 
-			for i, query := range dmls.sqls {
-				args := dmls.values[i]
-				log.Debug("exec row", zap.Int("workerID", s.workerID),
-					zap.String("sql", query), zap.Any("args", args))
-				ctx, cancelFunc := context.WithTimeout(pctx, writeTimeout)
-				if _, err := tx.ExecContext(ctx, query, args...); err != nil {
-					err := logDMLTxnErr(
-						cerror.WrapError(cerror.ErrMySQLTxnError, err),
-						start, s.changefeed, query, dmls.rowCount, dmls.startTs)
-					if rbErr := tx.Rollback(); rbErr != nil {
-						if errors.Cause(rbErr) != context.Canceled {
-							log.Warn("failed to rollback txn", zap.Error(rbErr))
-						}
-					}
-					cancelFunc()
+			if s.cfg.MultiStmtEnable && !fallbackToSeqWay {
+				err = s.multiStmtExecute(pctx, dmls, tx, writeTimeout)
+				if err != nil {
+					fallbackToSeqWay = true
 					return 0, err
 				}
-				cancelFunc()
+			} else {
+				err = s.sequenceExecute(pctx, dmls, tx, writeTimeout)
+				if err != nil {
+					return 0, err
+				}
 			}
 
 			// we set write source for each txn,
@@ -675,6 +728,9 @@ func logDMLTxnErr(
 	err error, start time.Time, changefeed string,
 	query string, count int, startTs []model.Ts,
 ) error {
+	if len(query) > 1024 {
+		query = query[:1024]
+	}
 	if isRetryableDMLError(err) {
 		log.Warn("execute DMLs with error, retry later",
 			zap.Error(err), zap.Duration("duration", time.Since(start)),
