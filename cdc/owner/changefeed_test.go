@@ -500,7 +500,8 @@ func TestFinished(t *testing.T) {
 		cf.Tick(ctx, captures)
 		tester.MustApplyPatches()
 	}
-
+	fmt.Println("checkpoint ts", cf.state.Status.CheckpointTs)
+	fmt.Println("target ts", cf.state.Info.TargetTs)
 	require.Equal(t, cf.state.Status.CheckpointTs, cf.state.Info.TargetTs)
 	require.Equal(t, cf.state.Info.State, model.StateFinished)
 }
