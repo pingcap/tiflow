@@ -15,7 +15,6 @@ package cloudstorage
 import (
 	"context"
 
-	"github.com/pingcap/errors"
 	"github.com/pingcap/tidb/br/pkg/storage"
 	"github.com/pingcap/tiflow/cdc/model"
 	"github.com/pingcap/tiflow/cdc/sink/metrics"
@@ -38,7 +37,6 @@ type dmlWriter struct {
 	extension      string
 	clock          clock.Clock
 	statistics     *metrics.Statistics
-	inputCh        <-chan eventFragment
 	errCh          chan<- error
 }
 
@@ -48,7 +46,6 @@ func newDMLWriter(
 	config *cloudstorage.Config,
 	extension string,
 	statistics *metrics.Statistics,
-	inputCh <-chan eventFragment,
 	errCh chan<- error,
 ) *dmlWriter {
 	d := &dmlWriter{
@@ -61,7 +58,6 @@ func newDMLWriter(
 		config:         config,
 		extension:      extension,
 		statistics:     statistics,
-		inputCh:        inputCh,
 		errCh:          errCh,
 	}
 
@@ -83,9 +79,6 @@ func (d *dmlWriter) setClock(clock clock.Clock) {
 
 func (d *dmlWriter) run(ctx context.Context) error {
 	eg, ctx := errgroup.WithContext(ctx)
-	eg.Go(func() error {
-		return d.dispatchFragToDMLWorker(ctx)
-	})
 
 	for i := 0; i < d.config.WorkerCount; i++ {
 		worker := d.workers[i]
@@ -98,22 +91,12 @@ func (d *dmlWriter) run(ctx context.Context) error {
 	return eg.Wait()
 }
 
-func (d *dmlWriter) dispatchFragToDMLWorker(ctx context.Context) error {
-	for {
-		select {
-		case <-ctx.Done():
-			return errors.Trace(ctx.Err())
-		case frag, ok := <-d.inputCh:
-			if !ok {
-				return nil
-			}
-			tableName := frag.versionedTable.TableNameWithPhysicTableID
-			d.hasher.Reset()
-			d.hasher.Write([]byte(tableName.Schema), []byte(tableName.Table))
-			workerID := d.hasher.Sum32() % uint32(d.config.WorkerCount)
-			d.workerChannels[workerID].In() <- frag
-		}
-	}
+func (d *dmlWriter) dispatchFragToDMLWorker(frag eventFragment) {
+	tableName := frag.versionedTable.TableNameWithPhysicTableID
+	d.hasher.Reset()
+	d.hasher.Write([]byte(tableName.Schema), []byte(tableName.Table))
+	workerID := d.hasher.Sum32() % uint32(d.config.WorkerCount)
+	d.workerChannels[workerID].In() <- frag
 }
 
 func (d *dmlWriter) close() {

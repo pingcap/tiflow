@@ -137,8 +137,8 @@ func NewDMLSink(ctx context.Context,
 		w := newEncodingWorker(i, s.changefeedID, encoder, s.msgCh, s.defragmenter)
 		s.encodingWorkers = append(s.encodingWorkers, w)
 	}
-	orderedCh := s.defragmenter.orderedOut()
-	s.writer = newDMLWriter(s.changefeedID, storage, cfg, ext, s.statistics, orderedCh, errCh)
+	s.writer = newDMLWriter(s.changefeedID, storage, cfg, ext, s.statistics, errCh)
+	s.defragmenter.outputFn = s.writer.dispatchFragToDMLWorker
 
 	s.wg.Add(1)
 	go func() {

@@ -34,7 +34,12 @@ import (
 
 func TestDeframenter(t *testing.T) {
 	ctx, cancel := context.WithCancel(context.Background())
+	outputCh := make(chan eventFragment, 1024)
+	outputFn := func(frag eventFragment) {
+		outputCh <- frag
+	}
 	defrag := newDefragmenter(ctx)
+	defrag.outputFn = outputFn
 	uri := "file:///tmp/test"
 	txnCnt := 50
 	sinkURI, err := url.Parse(uri)
@@ -116,7 +121,7 @@ func TestDeframenter(t *testing.T) {
 LOOP:
 	for {
 		select {
-		case frag := <-defrag.orderedOut():
+		case frag := <-outputCh:
 			for _, msg := range frag.encodedMsgs {
 				curSeq, err := strconv.Atoi(string(msg.Key))
 				require.Nil(t, err)
