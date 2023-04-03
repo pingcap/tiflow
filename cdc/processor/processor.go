@@ -57,6 +57,7 @@ const (
 type processor struct {
 	changefeedID model.ChangeFeedID
 	captureInfo  *model.CaptureInfo
+	globalVars   *cdcContext.GlobalVars
 	changefeed   *orchestrator.ChangefeedReactorState
 
 	upstream      *upstream.Upstream
@@ -456,6 +457,8 @@ func isProcessorIgnorableError(err error) bool {
 // the `state` parameter is sent by the etcd worker, the `state` must be a snapshot of KVs in etcd
 // The main logic of processor is in this function, including the calculation of many kinds of ts,
 // maintain table pipeline, error handling, etc.
+//
+// It can be called in etcd ticks, so it should never be blocked.
 func (p *processor) Tick(ctx cdcContext.Context) error {
 	// check upstream error first
 	if err := p.upstream.Error(); err != nil {
@@ -602,6 +605,9 @@ func (p *processor) lazyInitImpl(ctx cdcContext.Context) error {
 	if p.initialized {
 		return nil
 	}
+
+	p.globalVars = ctx.GlobalVars()
+
 	ctx, cancel := cdcContext.WithCancel(ctx)
 	p.cancel = cancel
 	// We don't close this error channel, since it is only safe to close channel
@@ -947,7 +953,8 @@ func (p *processor) refreshMetrics() {
 	p.metricRemainKVEventGauge.Set(float64(sortEngineReceivedEvents - tableSinksReceivedEvents))
 }
 
-func (p *processor) Close(ctx cdcContext.Context) error {
+// Close the processor. It can be called in etcd ticks, so it should never be blocked.
+func (p *processor) Close() error {
 	log.Info("processor closing ...",
 		zap.String("namespace", p.changefeedID.Namespace),
 		zap.String("changefeed", p.changefeedID.ID))
@@ -984,9 +991,8 @@ func (p *processor) Close(ctx cdcContext.Context) error {
 			zap.String("changefeed", p.changefeedID.ID))
 		p.sourceManager = nil
 	}
-	engineFactory := ctx.GlobalVars().SortEngineFactory
-	if engineFactory != nil {
-		if err := engineFactory.Drop(p.changefeedID); err != nil {
+	if p.globalVars != nil && p.globalVars.SortEngineFactory != nil {
+		if err := p.globalVars.SortEngineFactory.Drop(p.changefeedID); err != nil {
 			log.Error("drop event sort engine fail",
 				zap.String("namespace", p.changefeedID.Namespace),
 				zap.String("changefeed", p.changefeedID.ID),
