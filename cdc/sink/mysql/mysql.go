@@ -183,16 +183,17 @@ func NewMySQLSink(
 			"some types of DDL may fail to be executed",
 			zap.String("hostname", hostName), zap.String("port", port))
 	}
-	db, err := GetDBConnImpl(ctx, dsnStr)
-	if err != nil {
-		return nil, err
-	}
 
-	isTiDB, err := CheckIsTiDB(ctx, db)
+	isTiDB, err := CheckIsTiDB(ctx, testDB)
 	if err != nil {
 		return nil, err
 	}
 	params.isTiDB = isTiDB
+
+	db, err := GetDBConnImpl(ctx, dsnStr)
+	if err != nil {
+		return nil, err
+	}
 
 	log.Info("Start mysql sink")
 
