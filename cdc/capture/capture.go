@@ -599,7 +599,7 @@ func (c *captureImpl) AsyncClose() {
 	c.captureMu.Lock()
 	defer c.captureMu.Unlock()
 	if c.processorManager != nil {
-		c.processorManager.AsyncClose()
+		c.processorManager.Close()
 	}
 	log.Info("processor manager closed", zap.String("captureID", c.info.ID))
 
