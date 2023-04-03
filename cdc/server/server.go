@@ -23,6 +23,7 @@ import (
 	"path/filepath"
 	"time"
 
+	"github.com/dustin/go-humanize"
 	"github.com/gin-gonic/gin"
 	"github.com/pingcap/errors"
 	"github.com/pingcap/log"
@@ -207,15 +208,6 @@ func (s *server) prepare(ctx context.Context) error {
 	return nil
 }
 
-<<<<<<< HEAD
-func (s *server) startActorSystems(ctx context.Context) error {
-	if s.tableActorSystem != nil {
-		s.tableActorSystem.Stop()
-	}
-	s.tableActorSystem = system.NewSystem()
-	s.tableActorSystem.Start(ctx)
-
-=======
 func (s *server) setMemoryLimit() error {
 	conf := config.GetGlobalServerConfig()
 	totalMemory, err := util.GetMemoryLimit()
@@ -234,8 +226,13 @@ func (s *server) setMemoryLimit() error {
 	return nil
 }
 
-func (s *server) createSortEngineFactory() error {
->>>>>>> 97664e66e6 (server(ticdc): add server memory limit (#8676))
+func (s *server) startActorSystems(ctx context.Context) error {
+	if s.tableActorSystem != nil {
+		s.tableActorSystem.Stop()
+	}
+	s.tableActorSystem = system.NewSystem()
+	s.tableActorSystem.Start(ctx)
+
 	conf := config.GetGlobalServerConfig()
 	if !conf.Debug.EnableDBSorter {
 		return nil
@@ -267,6 +264,10 @@ func (s *server) createSortEngineFactory() error {
 		} else {
 			panic("only pebble is transformed to EventSortEngine")
 		}
+		log.Info("sorter engine memory limit",
+			zap.Uint64("bytes", memInBytes),
+			zap.String("memory", humanize.IBytes(memInBytes)),
+		)
 	} else {
 		memPercentage := float64(conf.Sorter.MaxMemoryPercentage) / 100
 		s.sorterSystem = ssystem.NewSystem(sortDir, memPercentage, conf.Debug.DB)
@@ -275,16 +276,6 @@ func (s *server) createSortEngineFactory() error {
 			return errors.Trace(err)
 		}
 	}
-<<<<<<< HEAD
-=======
-	memPercentage := float64(conf.Sorter.MaxMemoryPercentage) / 100
-	memInBytes := uint64(float64(totalMemory) * memPercentage)
-	s.sortEngineFactory = factory.NewForPebble(sortDir, memInBytes, conf.Debug.DB)
-	log.Info("sorter engine memory limit",
-		zap.Uint64("bytes", memInBytes),
-		zap.String("memory", humanize.IBytes(memInBytes)),
-	)
->>>>>>> 97664e66e6 (server(ticdc): add server memory limit (#8676))
 
 	return nil
 }
