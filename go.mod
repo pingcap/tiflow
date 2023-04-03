@@ -133,12 +133,8 @@ require (
 	github.com/carlmjohnson/flagext v0.21.0 // indirect
 	github.com/cespare/xxhash/v2 v2.2.0 // indirect
 	github.com/cheggaaa/pb/v3 v3.0.8 // indirect
-<<<<<<< HEAD
-	github.com/cloudfoundry/gosigar v1.3.4 // indirect
-=======
 	github.com/cilium/ebpf v0.4.0 // indirect
-	github.com/cloudfoundry/gosigar v1.3.6 // indirect
->>>>>>> 7dc2617115 (sorter(ticdc): use correct cgroup memory limit in some scenarios (#8589))
+	github.com/cloudfoundry/gosigar v1.3.4 // indirect
 	github.com/cockroachdb/errors v1.8.1 // indirect
 	github.com/cockroachdb/logtags v0.0.0-20190617123548-eb05cc24525f // indirect
 	github.com/cockroachdb/redact v1.0.8 // indirect

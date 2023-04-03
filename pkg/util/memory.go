@@ -15,13 +15,11 @@ package util
 
 import (
 	"math"
-	"time"
 
 	"github.com/KimMachineGun/automemlimit/memlimit"
 	"github.com/pingcap/log"
 	"github.com/pingcap/tidb/util/memory"
 	"github.com/pingcap/tiflow/pkg/errors"
-	"github.com/shirou/gopsutil/v3/mem"
 	"go.uber.org/zap"
 )
 
@@ -40,30 +38,4 @@ func GetMemoryLimit() (uint64, error) {
 		}
 	}
 	return totalMemory, nil
-}
-
-// CheckMemoryUsage checks if the memory usage is less than the limit.
-func CheckMemoryUsage(limit float64) (bool, error) {
-	stat, err := mem.VirtualMemory()
-	if err != nil {
-		return false, err
-	}
-	return stat.UsedPercent < limit, nil
-}
-
-// WaitMemoryAvailable waits until the memory usage is less than the limit.
-func WaitMemoryAvailable(limit float64, timeout time.Duration) error {
-	start := time.Now()
-	for {
-		hasFreeMemory, err := CheckMemoryUsage(limit)
-		if err != nil {
-			return err
-		}
-		if hasFreeMemory {
-			return nil
-		}
-		if time.Since(start) > timeout {
-			return errors.ErrWaitFreeMemoryTimeout.GenWithStackByArgs()
-		}
-	}
 }

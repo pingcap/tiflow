@@ -23,7 +23,6 @@ import (
 	"path/filepath"
 	"time"
 
-	"github.com/dustin/go-humanize"
 	"github.com/gin-gonic/gin"
 	"github.com/pingcap/errors"
 	"github.com/pingcap/log"
@@ -228,10 +227,9 @@ func (s *server) startActorSystems(ctx context.Context) error {
 	// Sorter dir has been set and checked when server starts.
 	// See https://github.com/pingcap/tiflow/blob/9dad09/cdc/server.go#L275
 	sortDir := config.GetGlobalServerConfig().Sorter.SortDir
-<<<<<<< HEAD
 
 	if s.useEventSortEngine {
-		totalMemory, err := memory.MemTotal()
+		totalMemory, err := util.GetMemoryLimit()
 		if err != nil {
 			return errors.Trace(err)
 		}
@@ -250,16 +248,6 @@ func (s *server) startActorSystems(ctx context.Context) error {
 			return errors.Trace(err)
 		}
 	}
-=======
-	totalMemory, err := util.GetMemoryLimit()
-	if err != nil {
-		return errors.Trace(err)
-	}
-	memPercentage := float64(conf.Sorter.MaxMemoryPercentage) / 100
-	memInBytes := uint64(float64(totalMemory) * memPercentage)
-	s.sortEngineFactory = factory.NewForPebble(sortDir, memInBytes, conf.Debug.DB)
-	log.Info("sorter engine memory limit", zap.String("memory", humanize.Bytes(memInBytes)))
->>>>>>> 7dc2617115 (sorter(ticdc): use correct cgroup memory limit in some scenarios (#8589))
 
 	return nil
 }
