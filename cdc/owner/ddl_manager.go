@@ -147,7 +147,7 @@ func newDDLManager(
 		redoMetaManager: redoMetaManager,
 		startTs:         startTs,
 		checkpointTs:    checkpointTs,
-		ddlResolvedTs:   checkpointTs,
+		ddlResolvedTs:   startTs,
 		BDRMode:         bdrMode,
 		// use the passed sinkType after we support get resolvedTs from sink
 		sinkType:        model.DB,
@@ -202,7 +202,11 @@ func (m *ddlManager) tick(
 			log.Info("handle a ddl job",
 				zap.String("namespace", m.changfeedID.Namespace),
 				zap.String("ID", m.changfeedID.ID),
-				zap.Any("ddlJob", job))
+				zap.Int64("tableID", job.TableID),
+				zap.Int64("jobID", job.ID),
+				zap.String("query", job.Query),
+				zap.Uint64("finishedTs", job.BinlogInfo.FinishedTS),
+			)
 			events, err := m.schema.BuildDDLEvents(job)
 			if err != nil {
 				return nil, minTableBarrierTs, barrier, err
@@ -502,7 +506,8 @@ func (m *ddlManager) allTables(ctx context.Context) ([]*model.TableInfo, error) 
 	log.Debug("changefeed current tables updated",
 		zap.String("namespace", m.changfeedID.Namespace),
 		zap.String("changefeed", m.changfeedID.ID),
-		zap.Uint64("checkpointTs", ts),
+		zap.Uint64("checkpointTs", m.checkpointTs),
+		zap.Uint64("snapshotTs", ts),
 		zap.Any("tables", m.tableInfoCache),
 	)
 	return m.tableInfoCache, nil
@@ -542,8 +547,8 @@ func (m *ddlManager) allPhysicalTables(ctx context.Context) ([]model.TableID, er
 func (m *ddlManager) getSnapshotTs() (ts uint64) {
 	ts = m.checkpointTs
 
-	if m.checkpointTs == m.startTs+1 && m.executingDDL == nil {
-		// If checkpointTs is equal to startTs+1, and executingDDL is nil
+	if m.ddlResolvedTs == m.startTs && m.executingDDL == nil {
+		// If ddlResolvedTs is equal to startTs, and executingDDL is nil
 		// it means that the changefeed is just started, and the physicalTablesCache
 		// is empty. So we need to get all tables from the snapshot at the startTs.
 		ts = m.startTs
@@ -551,7 +556,9 @@ func (m *ddlManager) getSnapshotTs() (ts uint64) {
 			zap.String("namespace", m.changfeedID.Namespace),
 			zap.String("changefeed", m.changfeedID.ID),
 			zap.Uint64("startTs", m.startTs),
-			zap.Uint64("checkpointTs", m.checkpointTs))
+			zap.Uint64("checkpointTs", m.checkpointTs),
+			zap.Uint64("ddlResolvedTs", m.ddlResolvedTs),
+		)
 		return
 	}
 
