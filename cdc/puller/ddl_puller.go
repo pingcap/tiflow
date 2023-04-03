@@ -28,7 +28,6 @@ import (
 	"github.com/pingcap/tidb/parser/mysql"
 	"github.com/pingcap/tiflow/cdc/contextutil"
 	"github.com/pingcap/tiflow/cdc/entry"
-	"github.com/pingcap/tiflow/cdc/entry/schema"
 	"github.com/pingcap/tiflow/cdc/kv"
 	"github.com/pingcap/tiflow/cdc/model"
 	"github.com/pingcap/tiflow/cdc/puller/memorysorter"
@@ -68,13 +67,13 @@ type DDLJobPuller interface {
 // Note: All unexported methods of `ddlJobPullerImpl` should
 // be called in the same one goroutine.
 type ddlJobPullerImpl struct {
-	changefeedID   model.ChangeFeedID
-	puller         Puller
-	kvStorage      tidbkv.Storage
-	schemaSnapshot *schema.Snapshot
-	resolvedTs     uint64
-	schemaVersion  int64
-	filter         filter.Filter
+	changefeedID  model.ChangeFeedID
+	puller        Puller
+	kvStorage     tidbkv.Storage
+	schemaStorage entry.SchemaStorage
+	resolvedTs    uint64
+	schemaVersion int64
+	filter        filter.Filter
 	// ddlJobsTable is initialized when receive the first concurrent DDL job.
 	// It holds the info of table `tidb_ddl_jobs` of upstream TiDB.
 	ddlJobsTable *model.TableInfo
@@ -105,8 +104,11 @@ func (p *ddlJobPullerImpl) Run(ctx context.Context) error {
 				if ddlRawKV == nil {
 					continue
 				}
-
 				if ddlRawKV.OpType == model.OpTypeResolved {
+					// Only nil in unit test case.
+					if p.schemaStorage != nil {
+						p.schemaStorage.AdvanceResolvedTs(ddlRawKV.CRTs)
+					}
 					if ddlRawKV.CRTs > p.getResolvedTs() {
 						p.setResolvedTs(ddlRawKV.CRTs)
 					}
@@ -243,12 +245,13 @@ func (p *ddlJobPullerImpl) handleRenameTables(job *timodel.Job) (skip bool, err 
 	// 2. old table name does not match and new table name matches the filter rule, return error.
 	// 3. old table name and new table name do not match the filter rule, skip it.
 	remainTables := make([]*timodel.TableInfo, 0, len(multiTableInfos))
+	snap := p.schemaStorage.GetLastSnapshot()
 	for i, tableInfo := range multiTableInfos {
-		schema, ok := p.schemaSnapshot.SchemaByID(newSchemaIDs[i])
+		schema, ok := snap.SchemaByID(newSchemaIDs[i])
 		if !ok {
 			return true, cerror.ErrSnapshotSchemaNotFound.GenWithStackByArgs(newSchemaIDs[i])
 		}
-		table, ok := p.schemaSnapshot.PhysicalTableByID(tableInfo.ID)
+		table, ok := snap.PhysicalTableByID(tableInfo.ID)
 		if !ok {
 			// if a table is not found and its new name is in filter rule, return error.
 			if !p.filter.ShouldDiscardDDL(job.Type, schema.Name.O, newTableNames[i].O) {
@@ -321,11 +324,12 @@ func (p *ddlJobPullerImpl) handleRenameTables(job *timodel.Job) (skip bool, err 
 // It split rename tables DDL job and fill the job table name.
 func (p *ddlJobPullerImpl) handleJob(job *timodel.Job) (skip bool, err error) {
 	// Only nil in test.
-	if p.schemaSnapshot == nil {
+	if p.schemaStorage == nil {
 		return false, nil
 	}
+	snap := p.schemaStorage.GetLastSnapshot()
 	// Do this first to fill the schema name to its origin schema name.
-	if err := p.schemaSnapshot.FillSchemaName(job); err != nil {
+	if err := snap.FillSchemaName(job); err != nil {
 		// If we can't find a job's schema, check if it's been filtered.
 		if p.filter.ShouldIgnoreTable(job.SchemaName, job.TableName) ||
 			p.filter.ShouldDiscardDDL(job.Type, job.SchemaName, job.TableName) {
@@ -357,7 +361,7 @@ func (p *ddlJobPullerImpl) handleJob(job *timodel.Job) (skip bool, err error) {
 			return true, errors.Trace(err)
 		}
 	case timodel.ActionRenameTable:
-		oldTable, ok := p.schemaSnapshot.PhysicalTableByID(job.TableID)
+		oldTable, ok := snap.PhysicalTableByID(job.TableID)
 		if !ok {
 			// 1. If we can not find the old table, and the new table name is in filter rule, return error.
 			if !p.filter.ShouldDiscardDDL(job.Type, job.SchemaName, job.BinlogInfo.TableInfo.Name.O) {
@@ -392,7 +396,7 @@ func (p *ddlJobPullerImpl) handleJob(job *timodel.Job) (skip bool, err error) {
 		return true, nil
 	}
 
-	err = p.schemaSnapshot.HandleDDL(job)
+	err = p.schemaStorage.HandleDDLJob(job)
 	if err != nil {
 		log.Error("handle ddl job failed",
 			zap.String("namespace", p.changefeedID.Namespace),
@@ -457,16 +461,8 @@ func NewDDLJobPuller(
 	cfg *config.KVClientConfig,
 	replicaConfig *config.ReplicaConfig,
 	changefeed model.ChangeFeedID,
+	schemaStorage entry.SchemaStorage,
 ) (DDLJobPuller, error) {
-	meta, err := kv.GetSnapshotMeta(kvStorage, checkpointTs)
-	if err != nil {
-		return nil, errors.Trace(err)
-	}
-	schemaSnap, err := schema.NewSingleSnapshotFromMeta(meta, checkpointTs, replicaConfig.ForceReplicate)
-	if err != nil {
-		return nil, errors.Trace(err)
-	}
-
 	f, err := filter.NewFilter(replicaConfig, "")
 	if err != nil {
 		return nil, errors.Trace(err)
@@ -476,9 +472,9 @@ func NewDDLJobPuller(
 		spans[i].TableID = -1
 	}
 	return &ddlJobPullerImpl{
-		changefeedID:   changefeed,
-		filter:         f,
-		schemaSnapshot: schemaSnap,
+		changefeedID:  changefeed,
+		filter:        f,
+		schemaStorage: schemaStorage,
 		puller: New(
 			ctx,
 			pdCli,
@@ -505,8 +501,6 @@ func NewDDLJobPuller(
 type DDLPuller interface {
 	// Run runs the DDLPuller
 	Run(ctx context.Context) error
-	// FrontDDL returns the first DDL job in the internal queue
-	FrontDDL() (uint64, *timodel.Job)
 	// PopFrontDDL returns and pops the first DDL job in the internal queue
 	PopFrontDDL() (uint64, *timodel.Job)
 	// ResolvedTs returns the resolved ts of the DDLPuller
@@ -536,6 +530,7 @@ func NewDDLPuller(ctx context.Context,
 	up *upstream.Upstream,
 	startTs uint64,
 	changefeed model.ChangeFeedID,
+	schemaStorage entry.SchemaStorage,
 ) (DDLPuller, error) {
 	// add "_ddl_puller" to make it different from table pullers.
 	changefeed.ID += "_ddl_puller"
@@ -556,6 +551,7 @@ func NewDDLPuller(ctx context.Context,
 			config.GetGlobalServerConfig().KVClient,
 			replicaConfig,
 			changefeed,
+			schemaStorage,
 		)
 		if err != nil {
 			return nil, errors.Trace(err)
@@ -655,17 +651,6 @@ func (h *ddlPullerImpl) Run(ctx context.Context) error {
 	return g.Wait()
 }
 
-// FrontDDL return the first pending DDL job
-func (h *ddlPullerImpl) FrontDDL() (uint64, *timodel.Job) {
-	h.mu.Lock()
-	defer h.mu.Unlock()
-	if len(h.pendingDDLJobs) == 0 {
-		return atomic.LoadUint64(&h.resolvedTS), nil
-	}
-	job := h.pendingDDLJobs[0]
-	return job.BinlogInfo.FinishedTS, job
-}
-
 // PopFrontDDL return the first pending DDL job and remove it from the pending list
 func (h *ddlPullerImpl) PopFrontDDL() (uint64, *timodel.Job) {
 	h.mu.Lock()
@@ -687,6 +672,11 @@ func (h *ddlPullerImpl) Close() {
 }
 
 func (h *ddlPullerImpl) ResolvedTs() uint64 {
-	ts, _ := h.FrontDDL()
-	return ts
+	h.mu.Lock()
+	defer h.mu.Unlock()
+	if len(h.pendingDDLJobs) == 0 {
+		return atomic.LoadUint64(&h.resolvedTS)
+	}
+	job := h.pendingDDLJobs[0]
+	return job.BinlogInfo.FinishedTS
 }
