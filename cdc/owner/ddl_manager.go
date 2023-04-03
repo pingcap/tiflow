@@ -206,12 +206,7 @@ func (m *ddlManager) tick(
 				zap.String("namespace", m.changfeedID.Namespace),
 				zap.String("ID", m.changfeedID.ID),
 				zap.Any("ddlJob", job))
-			events, err := m.schema.BuildDDLEvents(job)
-			if err != nil {
-				return nil, minTableBarrierTs, barrier, err
-			}
-			// Apply ddl to update changefeed schema.
-			err = m.schema.HandleDDL(job)
+			events, err := m.schema.BuildDDLEvents(ctx, job)
 			if err != nil {
 				return nil, minTableBarrierTs, barrier, err
 			}
@@ -252,9 +247,27 @@ func (m *ddlManager) tick(
 		}
 	}
 
+<<<<<<< HEAD
 	// Use ddlPuller ResolvedTs to update ddlResolvedTs.
 	if m.ddlResolvedTs <= m.ddlPuller.ResolvedTs() {
 		m.ddlResolvedTs = m.ddlPuller.ResolvedTs()
+=======
+	// advance resolvedTs
+	ddlRts := m.ddlPuller.ResolvedTs()
+	m.schema.AdvanceResolvedTs(ddlRts)
+	if m.redoDDLManager.Enabled() {
+		err := m.redoDDLManager.UpdateResolvedTs(ctx, ddlRts)
+		if err != nil {
+			return nil, minTableBarrierTs, barrier, err
+		}
+		redoFlushedDDLRts := m.redoDDLManager.GetResolvedTs()
+		if redoFlushedDDLRts < ddlRts {
+			ddlRts = redoFlushedDDLRts
+		}
+	}
+	if m.ddlResolvedTs <= ddlRts {
+		m.ddlResolvedTs = ddlRts
+>>>>>>> 294efb080b (ddl_puller (ticdc): only create a schemStorage in a changefeed or processor (#8633))
 	}
 
 	nextDDL := m.getNextDDL()
@@ -329,7 +342,7 @@ func (m *ddlManager) executeDDL(ctx context.Context) error {
 		// Set it to nil first to accelerate GC.
 		m.pendingDDLs[tableName][0] = nil
 		m.pendingDDLs[tableName] = m.pendingDDLs[tableName][1:]
-		m.schema.schemaStorage.DoGC(m.executingDDL.CommitTs - 1)
+		m.schema.DoGC(m.executingDDL.CommitTs - 1)
 		m.justSentDDL = m.executingDDL
 		m.executingDDL = nil
 	}

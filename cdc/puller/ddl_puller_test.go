@@ -28,7 +28,6 @@ import (
 	timodel "github.com/pingcap/tidb/parser/model"
 	"github.com/pingcap/tidb/util/codec"
 	"github.com/pingcap/tiflow/cdc/entry"
-	"github.com/pingcap/tiflow/cdc/entry/schema"
 	"github.com/pingcap/tiflow/cdc/kv"
 	"github.com/pingcap/tiflow/cdc/model"
 	"github.com/pingcap/tiflow/pkg/config"
@@ -36,6 +35,7 @@ import (
 	"github.com/pingcap/tiflow/pkg/filter"
 	"github.com/pingcap/tiflow/pkg/retry"
 	"github.com/pingcap/tiflow/pkg/upstream"
+	"github.com/pingcap/tiflow/pkg/util"
 	"github.com/stretchr/testify/require"
 	"go.uber.org/zap"
 	"go.uber.org/zap/zaptest/observer"
@@ -114,7 +114,11 @@ func (m *mockPuller) appendResolvedTs(ts model.Ts) {
 	})
 }
 
-func newMockDDLJobPuller(t *testing.T, puller Puller, needSchemaSnap bool) (DDLJobPuller, *entry.SchemaTestHelper) {
+func newMockDDLJobPuller(
+	t *testing.T,
+	puller Puller,
+	needSchemaStorage bool,
+) (DDLJobPuller, *entry.SchemaTestHelper) {
 	res := &ddlJobPullerImpl{
 		puller: puller,
 		outputCh: make(
@@ -124,15 +128,20 @@ func newMockDDLJobPuller(t *testing.T, puller Puller, needSchemaSnap bool) (DDLJ
 			WithLabelValues("ddl", "test"),
 	}
 	var helper *entry.SchemaTestHelper
-	if needSchemaSnap {
+	if needSchemaStorage {
 		helper = entry.NewSchemaTestHelper(t)
 		kvStorage := helper.Storage()
 		ts := helper.GetCurrentMeta().StartTS
 		meta, err := kv.GetSnapshotMeta(kvStorage, ts)
 		require.Nil(t, err)
-		schemaSnap, err := schema.NewSingleSnapshotFromMeta(meta, ts, false)
+		schemaStorage, err := entry.NewSchemaStorage(
+			meta,
+			ts,
+			false,
+			model.DefaultChangeFeedID("test"),
+			util.RoleTester)
 		require.Nil(t, err)
-		res.schemaSnapshot = schemaSnap
+		res.schemaStorage = schemaStorage
 		res.kvStorage = kvStorage
 	}
 	return res, helper
@@ -496,8 +505,15 @@ func TestDDLPuller(t *testing.T) {
 	mockPuller := newMockPuller(t, startTs)
 	ctx := cdcContext.NewBackendContext4Test(true)
 	up := upstream.NewUpstream4Test(nil)
+	schemaStorage, err := entry.NewSchemaStorage(nil,
+		startTs,
+		ctx.ChangefeedVars().Info.Config.ForceReplicate,
+		ctx.ChangefeedVars().ID,
+		util.RoleTester,
+	)
+	require.Nil(t, err)
 	p, err := NewDDLPuller(
-		ctx, ctx.ChangefeedVars().Info.Config, up, startTs, ctx.ChangefeedVars().ID)
+		ctx, ctx.ChangefeedVars().Info.Config, up, startTs, ctx.ChangefeedVars().ID, schemaStorage)
 	require.Nil(t, err)
 	p.(*ddlPullerImpl).ddlJobPuller, _ = newMockDDLJobPuller(t, mockPuller, false)
 
@@ -511,11 +527,7 @@ func TestDDLPuller(t *testing.T) {
 	defer wg.Wait()
 	defer p.Close()
 
-	// test initialize state
-	resolvedTs, ddl := p.FrontDDL()
-	require.Equal(t, resolvedTs, startTs)
-	require.Nil(t, ddl)
-	resolvedTs, ddl = p.PopFrontDDL()
+	resolvedTs, ddl := p.PopFrontDDL()
 	require.Equal(t, resolvedTs, startTs)
 	require.Nil(t, ddl)
 
@@ -540,15 +552,12 @@ func TestDDLPuller(t *testing.T) {
 		BinlogInfo: &timodel.HistoryInfo{SchemaVersion: 1, FinishedTS: 16},
 		Query:      "create table t2(id int)",
 	})
-	resolvedTs, ddl = p.FrontDDL()
+	resolvedTs, ddl = p.PopFrontDDL()
 	require.Equal(t, resolvedTs, uint64(15))
 	require.Nil(t, ddl)
 
 	mockPuller.appendResolvedTs(20)
 	waitResolvedTsGrowing(t, p, 16)
-	resolvedTs, ddl = p.FrontDDL()
-	require.Equal(t, resolvedTs, uint64(16))
-	require.Equal(t, ddl.ID, int64(1))
 	resolvedTs, ddl = p.PopFrontDDL()
 	require.Equal(t, resolvedTs, uint64(16))
 	require.Equal(t, ddl.ID, int64(1))
@@ -619,8 +628,15 @@ func TestResolvedTsStuck(t *testing.T) {
 	mockPuller := newMockPuller(t, startTs)
 	ctx := cdcContext.NewBackendContext4Test(true)
 	up := upstream.NewUpstream4Test(nil)
+	schemaStorage, err := entry.NewSchemaStorage(nil,
+		startTs,
+		true,
+		ctx.ChangefeedVars().ID,
+		util.RoleTester,
+	)
+	require.Nil(t, err)
 	p, err := NewDDLPuller(
-		ctx, ctx.ChangefeedVars().Info.Config, up, startTs, ctx.ChangefeedVars().ID)
+		ctx, ctx.ChangefeedVars().Info.Config, up, startTs, ctx.ChangefeedVars().ID, schemaStorage)
 	require.Nil(t, err)
 
 	mockClock := clock.NewMock()
@@ -641,16 +657,13 @@ func TestResolvedTsStuck(t *testing.T) {
 	defer p.Close()
 
 	// test initialize state
-	resolvedTs, ddl := p.FrontDDL()
-	require.Equal(t, resolvedTs, startTs)
-	require.Nil(t, ddl)
-	resolvedTs, ddl = p.PopFrontDDL()
+	resolvedTs, ddl := p.PopFrontDDL()
 	require.Equal(t, resolvedTs, startTs)
 	require.Nil(t, ddl)
 
 	mockPuller.appendResolvedTs(30)
 	waitResolvedTsGrowing(t, p, 30)
-	require.Equal(t, logs.Len(), 0)
+	require.Equal(t, 0, logs.Len())
 
 	mockClock.Add(2 * ddlPullerStuckWarnDuration)
 	for i := 0; i < 20; i++ {
@@ -672,7 +685,7 @@ func TestResolvedTsStuck(t *testing.T) {
 // DDL, DDL resolved ts reaches targetTs.
 func waitResolvedTsGrowing(t *testing.T, p DDLPuller, targetTs model.Ts) {
 	err := retry.Do(context.Background(), func() error {
-		resolvedTs, _ := p.FrontDDL()
+		resolvedTs := p.ResolvedTs()
 		if resolvedTs < targetTs {
 			return errors.New("resolvedTs < targetTs")
 		}

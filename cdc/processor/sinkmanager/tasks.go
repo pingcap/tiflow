@@ -71,3 +71,30 @@ type redoTask struct {
 	callback      writeSuccessCallback
 	isCanceled    isCanceled
 }
+<<<<<<< HEAD
+=======
+
+func validateAndAdjustBound(
+	changefeedID model.ChangeFeedID,
+	span *tablepb.Span,
+	lowerBound, upperBound engine.Position,
+) (engine.Position, engine.Position) {
+	lowerPhs := oracle.GetTimeFromTS(lowerBound.CommitTs)
+	upperPhs := oracle.GetTimeFromTS(upperBound.CommitTs)
+	// The time range of a task should not exceed maxTaskTimeRange.
+	// This would help for reduce changefeed latency.
+	if upperPhs.Sub(lowerPhs) > maxTaskTimeRange {
+		newUpperCommitTs := oracle.GoTimeToTS(lowerPhs.Add(maxTaskTimeRange))
+		upperBound = engine.GenCommitFence(newUpperCommitTs)
+	}
+
+	if !upperBound.IsCommitFence() {
+		log.Panic("Task upperbound must be a ResolvedTs",
+			zap.String("namespace", changefeedID.Namespace),
+			zap.String("changefeed", changefeedID.ID),
+			zap.Stringer("span", span),
+			zap.Any("upperBound", upperBound))
+	}
+	return lowerBound, upperBound
+}
+>>>>>>> 294efb080b (ddl_puller (ticdc): only create a schemStorage in a changefeed or processor (#8633))
