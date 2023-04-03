@@ -606,6 +606,8 @@ type DDLEvent struct {
 	PreTableInfo *TableInfo       `msg:"-"`
 	Type         model.ActionType `msg:"-"`
 	Done         bool             `msg:"-"`
+	Charset      string           `msg:"-"`
+	Collate      string           `msg:"-"`
 }
 
 // FromJob fills the values with DDLEvent from DDL job
