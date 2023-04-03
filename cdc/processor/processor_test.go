@@ -248,9 +248,12 @@ type mockAgent struct {
 }
 
 func (a *mockAgent) Tick(_ context.Context) (*schedulepb.Barrier, error) {
+<<<<<<< HEAD
 	if len(a.executor.GetAllCurrentTables()) == 0 {
 		return nil, nil
 	}
+=======
+>>>>>>> 4db7aba72c (scheduler, sink (ticdc): remove useless code and refine a method (#8703))
 	return nil, nil
 }
 
@@ -285,6 +288,17 @@ func TestTableExecutorAddingTableIndirectly(t *testing.T) {
 	ok, err := p.AddTable(ctx, 1, 20, true)
 	require.NoError(t, err)
 	require.True(t, ok)
+<<<<<<< HEAD
+=======
+	p.sinkManager.UpdateBarrierTs(20, nil)
+	stats := p.sinkManager.GetTableStats(span)
+	require.Equal(t, model.Ts(20), stats.CheckpointTs)
+	require.Equal(t, model.Ts(20), stats.BarrierTs)
+	require.Equal(t, model.Ts(0), stats.ReceivedMaxCommitTs)
+	require.Equal(t, model.Ts(20), stats.ReceivedMaxResolvedTs)
+	require.Len(t, p.sinkManager.GetAllCurrentTableSpans(), 1)
+	require.Equal(t, 1, p.sinkManager.GetAllCurrentTableSpansCount())
+>>>>>>> 4db7aba72c (scheduler, sink (ticdc): remove useless code and refine a method (#8703))
 
 	table1 := p.tables[1].(*mockTablePipeline)
 	require.Equal(t, model.Ts(20), table1.resolvedTs)
