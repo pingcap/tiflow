@@ -325,11 +325,6 @@ func (p *processor) IsRemoveTableSpanFinished(span tablepb.Span) (model.Ts, bool
 	return stats.CheckpointTs, true
 }
 
-// GetTableSpanCount implements TableExecutor interface.
-func (p *processor) GetTableSpanCount() int {
-	return len(p.sinkManager.GetAllCurrentTableSpans())
-}
-
 // GetTableSpanStatus implements TableExecutor interface
 func (p *processor) GetTableSpanStatus(span tablepb.Span, collectStat bool) tablepb.TableStatus {
 	state, exist := p.sinkManager.GetTableState(span)
@@ -949,8 +944,7 @@ func (p *processor) refreshMetrics() {
 	if !p.initialized {
 		return
 	}
-	tableSpans := p.sinkManager.GetAllCurrentTableSpans()
-	p.metricSyncTableNumGauge.Set(float64(len(tableSpans)))
+	p.metricSyncTableNumGauge.Set(float64(p.sinkManager.GetAllCurrentTableSpansCount()))
 	sortEngineReceivedEvents := p.sourceManager.ReceivedEvents()
 	tableSinksReceivedEvents := p.sinkManager.ReceivedEvents()
 	p.metricRemainKVEventGauge.Set(float64(sortEngineReceivedEvents - tableSinksReceivedEvents))

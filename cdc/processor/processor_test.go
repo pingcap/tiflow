@@ -173,9 +173,6 @@ type mockAgent struct {
 }
 
 func (a *mockAgent) Tick(_ context.Context) (*schedulepb.Barrier, error) {
-	if a.executor.GetTableSpanCount() == 0 {
-		return nil, nil
-	}
 	return nil, nil
 }
 
@@ -217,6 +214,7 @@ func TestTableExecutorAddingTableIndirectly(t *testing.T) {
 	require.Equal(t, model.Ts(0), stats.ReceivedMaxCommitTs)
 	require.Equal(t, model.Ts(20), stats.ReceivedMaxResolvedTs)
 	require.Len(t, p.sinkManager.GetAllCurrentTableSpans(), 1)
+	require.Equal(t, 1, p.sinkManager.GetAllCurrentTableSpansCount())
 
 	done := p.IsAddTableSpanFinished(spanz.TableIDToComparableSpan(1), true)
 	require.False(t, done)
