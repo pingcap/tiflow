@@ -571,6 +571,13 @@ func (s *mysqlBackend) prepareDMLs() *preparedDMLs {
 				sql, value := s.batchSingleTxnDmls(event, tableInfo, translateToInsert)
 				sqls = append(sqls, sql...)
 				values = append(values, value...)
+
+				for _, stmt := range sql {
+					approximateSize += int64(len(stmt))
+				}
+				for _, row := range event.Event.Rows {
+					approximateSize += row.ApproximateDataSize
+				}
 				continue
 			}
 		}
@@ -587,6 +594,7 @@ func (s *mysqlBackend) prepareDMLs() *preparedDMLs {
 					sqls = append(sqls, query)
 					values = append(values, args)
 				}
+				approximateSize += int64(len(query)) + row.ApproximateDataSize
 				continue
 			}
 
