@@ -43,14 +43,6 @@ type TableExecutor interface {
 	// return true and corresponding checkpoint otherwise.
 	IsRemoveTableSpanFinished(span tablepb.Span) (model.Ts, bool)
 
-	// GetTableSpanCount should return the number of table spans that are being run,
-	// being added and being removed.
-	//
-	// NOTE: two subsequent calls to the method should return the same
-	// result, unless there is a call to AddTable, RemoveTable, IsAddTableFinished
-	// or IsRemoveTableSpanFinished in between two calls to this method.
-	GetTableSpanCount() int
-
 	// GetTableSpanStatus return the checkpoint and resolved ts for the given table span.
 	GetTableSpanStatus(span tablepb.Span, collectStat bool) tablepb.TableStatus
 }

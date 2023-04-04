@@ -42,23 +42,23 @@ import (
 	"github.com/tikv/client-go/v2/oracle"
 )
 
+var _ puller.DDLPuller = (*mockDDLPuller)(nil)
+
 type mockDDLPuller struct {
 	// DDLPuller
-	resolvedTs model.Ts
-	ddlQueue   []*timodel.Job
-}
-
-func (m *mockDDLPuller) FrontDDL() (uint64, *timodel.Job) {
-	if len(m.ddlQueue) > 0 {
-		return m.ddlQueue[0].BinlogInfo.FinishedTS, m.ddlQueue[0]
-	}
-	return m.resolvedTs, nil
+	resolvedTs    model.Ts
+	ddlQueue      []*timodel.Job
+	schemaStorage entry.SchemaStorage
 }
 
 func (m *mockDDLPuller) PopFrontDDL() (uint64, *timodel.Job) {
 	if len(m.ddlQueue) > 0 {
 		job := m.ddlQueue[0]
 		m.ddlQueue = m.ddlQueue[1:]
+		err := m.schemaStorage.HandleDDLJob(job)
+		if err != nil {
+			panic(fmt.Sprintf("handle ddl job failed: %v", err))
+		}
 		return job.BinlogInfo.FinishedTS, job
 	}
 	return m.resolvedTs, nil
@@ -72,8 +72,10 @@ func (m *mockDDLPuller) Run(ctx context.Context) error {
 }
 
 func (m *mockDDLPuller) ResolvedTs() model.Ts {
-	ts, _ := m.FrontDDL()
-	return ts
+	if len(m.ddlQueue) > 0 {
+		return m.ddlQueue[0].BinlogInfo.FinishedTS
+	}
+	return m.resolvedTs
 }
 
 type mockDDLSink struct {
@@ -210,8 +212,9 @@ func createChangefeed4Test(ctx cdcContext.Context, t *testing.T,
 			up *upstream.Upstream,
 			startTs uint64,
 			changefeed model.ChangeFeedID,
+			schemaStorage entry.SchemaStorage,
 		) (puller.DDLPuller, error) {
-			return &mockDDLPuller{resolvedTs: startTs - 1}, nil
+			return &mockDDLPuller{resolvedTs: startTs - 1, schemaStorage: schemaStorage}, nil
 		},
 		// new ddl ddlSink
 		func(_ model.ChangeFeedID, _ *model.ChangeFeedInfo, _ func(err error)) DDLSink {
@@ -423,6 +426,7 @@ func TestEmitCheckpointTs(t *testing.T) {
 	// ddl puller resolved ts grow up
 	mockDDLPuller := cf.ddlManager.ddlPuller.(*mockDDLPuller)
 	mockDDLPuller.resolvedTs = startTs + 1000
+	cf.ddlManager.schema.AdvanceResolvedTs(mockDDLPuller.resolvedTs)
 	cf.state.Status.CheckpointTs = mockDDLPuller.resolvedTs
 	job.BinlogInfo.FinishedTS = mockDDLPuller.resolvedTs
 	mockDDLPuller.ddlQueue = append(mockDDLPuller.ddlQueue, job)

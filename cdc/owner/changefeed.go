@@ -25,6 +25,7 @@ import (
 	"github.com/pingcap/log"
 	"github.com/pingcap/tidb/errno"
 	"github.com/pingcap/tiflow/cdc/contextutil"
+	"github.com/pingcap/tiflow/cdc/entry"
 	"github.com/pingcap/tiflow/cdc/model"
 	"github.com/pingcap/tiflow/cdc/puller"
 	"github.com/pingcap/tiflow/cdc/redo"
@@ -123,6 +124,7 @@ type changefeed struct {
 		up *upstream.Upstream,
 		startTs uint64,
 		changefeed model.ChangeFeedID,
+		schemaStorage entry.SchemaStorage,
 	) (puller.DDLPuller, error)
 
 	newSink      func(changefeedID model.ChangeFeedID, info *model.ChangeFeedInfo, reportErr func(error)) DDLSink
@@ -172,6 +174,7 @@ func newChangefeed4Test(
 		up *upstream.Upstream,
 		startTs uint64,
 		changefeed model.ChangeFeedID,
+		schemaStorage entry.SchemaStorage,
 	) (puller.DDLPuller, error),
 	newSink func(changefeedID model.ChangeFeedID, info *model.ChangeFeedInfo, reportErr func(err error)) DDLSink,
 	newScheduler func(
@@ -554,7 +557,11 @@ LOOP:
 	c.ddlSink = c.newSink(c.id, c.state.Info, ctx.Throw)
 	c.ddlSink.run(cancelCtx)
 
-	c.ddlPuller, err = c.newDDLPuller(cancelCtx, c.state.Info.Config, c.upstream, ddlStartTs, c.id)
+	c.ddlPuller, err = c.newDDLPuller(cancelCtx,
+		c.state.Info.Config,
+		c.upstream, ddlStartTs,
+		c.id,
+		c.schema)
 	if err != nil {
 		return errors.Trace(err)
 	}
