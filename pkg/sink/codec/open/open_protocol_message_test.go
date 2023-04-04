@@ -15,6 +15,7 @@ package open
 
 import (
 	"testing"
+	"time"
 
 	"github.com/pingcap/tidb/parser/mysql"
 	"github.com/pingcap/tiflow/cdc/model"
@@ -123,6 +124,21 @@ func TestOnlyOutputUpdatedColumn(t *testing.T) {
 			pre:     uint64(1),
 			updated: int64(1),
 			output:  true,
+		},
+		{
+			pre:     time.Time{},
+			updated: time.Time{},
+			output:  false,
+		},
+		{
+			pre:     "time.Time{}",
+			updated: time.Time{},
+			output:  true,
+		},
+		{
+			pre:     "time.Time{}",
+			updated: "time.Time{}",
+			output:  false,
 		},
 	}
 
