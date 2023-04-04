@@ -194,7 +194,7 @@ func (ra *RedoApplier) consumeLogs(ctx context.Context) error {
 				time.Sleep(flushWaitDuration)
 			}
 		}
-		ra.tableSinks[tableID].Close(ctx)
+		ra.tableSinks[tableID].Close()
 	}
 
 	log.Info("apply redo log finishes", zap.Int("appliedLogCount", appliedLogCount))

@@ -16,6 +16,7 @@ package txn
 import (
 	"context"
 	"net/url"
+	"sync"
 	"sync/atomic"
 
 	"github.com/pingcap/errors"
@@ -28,6 +29,7 @@ import (
 	"github.com/pingcap/tiflow/pkg/config"
 	psink "github.com/pingcap/tiflow/pkg/sink"
 	pmysql "github.com/pingcap/tiflow/pkg/sink/mysql"
+	"golang.org/x/sync/errgroup"
 )
 
 const (
@@ -43,9 +45,10 @@ type sink struct {
 	conflictDetector *causality.ConflictDetector[*worker, *txnEvent]
 	workers          []*worker
 	cancel           func()
-	// set when the sink is closed explicitly. and then subsequence `WriteEvents` call
-	// should return an error.
-	closed int32
+
+	wg     sync.WaitGroup
+	dead   chan struct{}
+	isDead atomic.Bool
 
 	statistics *metrics.Statistics
 }
@@ -56,17 +59,6 @@ type sink struct {
 // You can use `SetupSuite` and `TearDownSuite` to do this to get a better way.
 var GetDBConnImpl pmysql.Factory = pmysql.CreateMySQLDBConn
 
-func newSink(ctx context.Context, backends []backend, errCh chan<- error, conflictDetectorSlots uint64) *sink {
-	workers := make([]*worker, 0, len(backends))
-	for i, backend := range backends {
-		w := newWorker(ctx, i, backend, errCh, len(backends))
-		w.runBackgroundLoop()
-		workers = append(workers, w)
-	}
-	detector := causality.NewConflictDetector[*worker, *txnEvent](workers, conflictDetectorSlots)
-	return &sink{conflictDetector: detector, workers: workers}
-}
-
 // NewMySQLSink creates a mysql sink with given parameters.
 func NewMySQLSink(
 	ctx context.Context,
@@ -75,8 +67,9 @@ func NewMySQLSink(
 	errCh chan<- error,
 	conflictDetectorSlots uint64,
 ) (*sink, error) {
-	ctx1, cancel := context.WithCancel(ctx)
-	statistics := metrics.NewStatistics(ctx1, psink.TxnSink)
+	ctx, cancel := context.WithCancel(ctx)
+	statistics := metrics.NewStatistics(ctx, psink.TxnSink)
+
 	backendImpls, err := mysql.NewMySQLBackends(ctx, sinkURI, replicaConfig, GetDBConnImpl, statistics)
 	if err != nil {
 		cancel()
@@ -94,10 +87,45 @@ func NewMySQLSink(
 	return sink, nil
 }
 
+func newSink(ctx context.Context, backends []backend,
+	errCh chan<- error, conflictDetectorSlots uint64,
+) *sink {
+	ctx, cancel := context.WithCancel(ctx)
+	sink := &sink{
+		workers: make([]*worker, 0, len(backends)),
+		cancel:  cancel,
+		dead:    make(chan struct{}),
+	}
+
+	g, ctx1 := errgroup.WithContext(ctx)
+	for i, backend := range backends {
+		w := newWorker(ctx1, i, backend, len(backends))
+		g.Go(func() error { return w.runLoop() })
+		sink.workers = append(sink.workers, w)
+	}
+
+	sink.wg.Add(1)
+	go func() {
+		defer sink.wg.Done()
+		err := g.Wait()
+		sink.isDead.Store(true)
+		close(sink.dead)
+		if err != nil && errors.Cause(err) != context.Canceled {
+			select {
+			case <-ctx.Done():
+			case errCh <- err:
+			}
+		}
+	}()
+
+	sink.conflictDetector = causality.NewConflictDetector[*worker, *txnEvent](sink.workers, conflictDetectorSlots)
+	return sink
+}
+
 // WriteEvents writes events to the sink.
 func (s *sink) WriteEvents(txnEvents ...*eventsink.TxnCallbackableEvent) error {
-	if atomic.LoadInt32(&s.closed) != 0 {
-		return errors.Trace(errors.New("closed sink"))
+	if s.isDead.Load() {
+		return errors.Trace(errors.New("dead sink"))
 	}
 
 	for _, txn := range txnEvents {
@@ -114,20 +142,25 @@ func (s *sink) WriteEvents(txnEvents ...*eventsink.TxnCallbackableEvent) error {
 }
 
 // Close closes the sink. It won't wait for all pending items backend handled.
-func (s *sink) Close() error {
-	atomic.StoreInt32(&s.closed, 1)
+func (s *sink) Close() {
+	if s.cancel != nil {
+		s.cancel()
+	}
+	s.wg.Wait()
+
 	for _, w := range s.workers {
-		w.Close()
+		w.close()
 	}
 	// workers could call callback, which will send data to channel in conflict
 	// detector, so we can't close conflict detector until all workers are closed.
 	s.conflictDetector.Close()
-	if s.cancel != nil {
-		s.cancel()
-		s.cancel = nil
-	}
+
 	if s.statistics != nil {
 		s.statistics.Close()
 	}
-	return nil
+}
+
+// Dead checks whether it's dead or not.
+func (s *sink) Dead() <-chan struct{} {
+	return s.dead
 }

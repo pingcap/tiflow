@@ -17,7 +17,6 @@ import (
 	"context"
 	"fmt"
 	"io"
-	"math"
 	"strconv"
 	"sync"
 	"time"
@@ -36,6 +35,7 @@ import (
 	"github.com/pingcap/tiflow/cdc/puller"
 	"github.com/pingcap/tiflow/cdc/redo"
 	"github.com/pingcap/tiflow/cdc/scheduler"
+	"github.com/pingcap/tiflow/cdc/scheduler/schedulepb"
 	sinkv1 "github.com/pingcap/tiflow/cdc/sink"
 	sinkmetric "github.com/pingcap/tiflow/cdc/sink/metrics"
 	"github.com/pingcap/tiflow/cdc/sinkv2/eventsink/factory"
@@ -81,7 +81,7 @@ type processor struct {
 	sourceManager *sourcemanager.SourceManager
 	sinkManager   *sinkmanager.SinkManager
 
-	redoManager redo.LogManager
+	redoDMLMgr redo.DMLManager
 
 	initialized bool
 	errCh       chan error
@@ -97,20 +97,14 @@ type processor struct {
 	checkpointTs model.Ts
 	resolvedTs   model.Ts
 
-	metricResolvedTsGauge           prometheus.Gauge
-	metricResolvedTsLagGauge        prometheus.Gauge
-	metricMinResolvedTableIDGauge   prometheus.Gauge
-	metricCheckpointTsGauge         prometheus.Gauge
-	metricCheckpointTsLagGauge      prometheus.Gauge
-	metricMinCheckpointTableIDGauge prometheus.Gauge
-	metricSyncTableNumGauge         prometheus.Gauge
-	metricSchemaStorageGcTsGauge    prometheus.Gauge
-	metricProcessorErrorCounter     prometheus.Counter
-	metricProcessorTickDuration     prometheus.Observer
-	metricsTableSinkTotalRows       prometheus.Counter
-	metricsTableMemoryHistogram     prometheus.Observer
-	metricsProcessorMemoryGauge     prometheus.Gauge
-	metricRemainKVEventGauge        prometheus.Gauge
+	metricSyncTableNumGauge      prometheus.Gauge
+	metricSchemaStorageGcTsGauge prometheus.Gauge
+	metricProcessorErrorCounter  prometheus.Counter
+	metricProcessorTickDuration  prometheus.Observer
+	metricsTableSinkTotalRows    prometheus.Counter
+	metricsTableMemoryHistogram  prometheus.Observer
+	metricsProcessorMemoryGauge  prometheus.Gauge
+	metricRemainKVEventGauge     prometheus.Gauge
 }
 
 // checkReadyForMessages checks whether all necessary Etcd keys have been established.
@@ -215,8 +209,8 @@ func (p *processor) AddTable(
 
 	if p.pullBasedSinking {
 		p.sinkManager.AddTable(tableID, startTs, p.changefeed.Info.TargetTs)
-		if p.redoManager.Enabled() {
-			p.redoManager.AddTable(tableID, startTs)
+		if p.redoDMLMgr.Enabled() {
+			p.redoDMLMgr.AddTable(tableID, startTs)
 		}
 		p.sourceManager.AddTable(ctx.(cdcContext.Context), tableID, p.getTableName(ctx, tableID), startTs)
 	} else {
@@ -279,9 +273,7 @@ func (p *processor) IsAddTableFinished(tableID model.TableID, isPrepare bool) bo
 		return false
 	}
 
-	localResolvedTs := p.resolvedTs
 	globalResolvedTs := p.changefeed.Status.ResolvedTs
-	localCheckpointTs := p.agent.GetLastSentCheckpointTs()
 	globalCheckpointTs := p.changefeed.Status.CheckpointTs
 
 	var tableResolvedTs, tableCheckpointTs uint64
@@ -328,10 +320,8 @@ func (p *processor) IsAddTableFinished(tableID model.TableID, isPrepare bool) bo
 			zap.String("changefeed", p.changefeedID.ID),
 			zap.Int64("tableID", tableID),
 			zap.Uint64("tableResolvedTs", tableResolvedTs),
-			zap.Uint64("localResolvedTs", localResolvedTs),
 			zap.Uint64("globalResolvedTs", globalResolvedTs),
 			zap.Uint64("tableCheckpointTs", tableCheckpointTs),
-			zap.Uint64("localCheckpointTs", localCheckpointTs),
 			zap.Uint64("globalCheckpointTs", globalCheckpointTs),
 			zap.Any("state", state),
 			zap.Bool("isPrepare", isPrepare))
@@ -344,10 +334,8 @@ func (p *processor) IsAddTableFinished(tableID model.TableID, isPrepare bool) bo
 		zap.String("changefeed", p.changefeedID.ID),
 		zap.Int64("tableID", tableID),
 		zap.Uint64("tableResolvedTs", tableResolvedTs),
-		zap.Uint64("localResolvedTs", localResolvedTs),
 		zap.Uint64("globalResolvedTs", globalResolvedTs),
 		zap.Uint64("tableCheckpointTs", tableCheckpointTs),
-		zap.Uint64("localCheckpointTs", localCheckpointTs),
 		zap.Uint64("globalCheckpointTs", globalCheckpointTs),
 		zap.Any("state", state),
 		zap.Bool("isPrepare", isPrepare))
@@ -400,8 +388,8 @@ func (p *processor) IsRemoveTableFinished(tableID model.TableID) (model.Ts, bool
 
 	if p.pullBasedSinking {
 		stats := p.sinkManager.GetTableStats(tableID)
-		if p.redoManager.Enabled() {
-			p.redoManager.RemoveTable(tableID)
+		if p.redoDMLMgr.Enabled() {
+			p.redoDMLMgr.RemoveTable(tableID)
 		}
 		p.sinkManager.RemoveTable(tableID)
 		p.sourceManager.RemoveTable(tableID)
@@ -549,18 +537,6 @@ func newProcessor(
 		cancel:       func() {},
 		liveness:     liveness,
 
-		metricResolvedTsGauge: resolvedTsGauge.
-			WithLabelValues(changefeedID.Namespace, changefeedID.ID),
-		metricResolvedTsLagGauge: resolvedTsLagGauge.
-			WithLabelValues(changefeedID.Namespace, changefeedID.ID),
-		metricMinResolvedTableIDGauge: resolvedTsMinTableIDGauge.
-			WithLabelValues(changefeedID.Namespace, changefeedID.ID),
-		metricCheckpointTsGauge: checkpointTsGauge.
-			WithLabelValues(changefeedID.Namespace, changefeedID.ID),
-		metricCheckpointTsLagGauge: checkpointTsLagGauge.
-			WithLabelValues(changefeedID.Namespace, changefeedID.ID),
-		metricMinCheckpointTableIDGauge: checkpointTsMinTableIDGauge.
-			WithLabelValues(changefeedID.Namespace, changefeedID.ID),
 		metricSyncTableNumGauge: syncTableNumGauge.
 			WithLabelValues(changefeedID.Namespace, changefeedID.ID),
 		metricProcessorErrorCounter: processorErrorCounter.
@@ -708,22 +684,17 @@ func (p *processor) tick(ctx cdcContext.Context) error {
 	if err := p.lazyInit(ctx); err != nil {
 		return errors.Trace(err)
 	}
-	p.pushResolvedTs2Table()
-	// it is no need to check the error here, because we will use
-	// local time when an error return, which is acceptable
-	pdTime, _ := p.upstream.PDClock.CurrentTime()
-	p.handlePosition(oracle.GetPhysical(pdTime))
 
-	p.doGCSchemaStorage()
-
-	if p.redoManager != nil && p.redoManager.Enabled() {
-		ckpt := p.changefeed.Status.CheckpointTs
-		p.redoManager.UpdateCheckpointTs(ckpt)
-	}
-
-	if err := p.agent.Tick(ctx); err != nil {
+	barrier, err := p.agent.Tick(ctx)
+	if err != nil {
 		return errors.Trace(err)
 	}
+
+	if barrier != nil && barrier.GlobalBarrierTs != 0 {
+		p.updateBarrierTs(barrier)
+	}
+	p.doGCSchemaStorage()
+
 	return nil
 }
 
@@ -825,10 +796,16 @@ func (p *processor) lazyInitImpl(ctx cdcContext.Context) error {
 	conf := config.GetGlobalServerConfig()
 	p.pullBasedSinking = conf.Debug.EnablePullBasedSink
 
-	redoManagerOpts := redo.NewProcessorManagerOptions(errCh)
-	p.redoManager, err = redo.NewManager(stdCtx, p.changefeed.Info.Config.Consistent, redoManagerOpts)
+	p.redoDMLMgr, err = redo.NewDMLManager(stdCtx, p.changefeed.Info.Config.Consistent)
 	if err != nil {
 		return err
+	}
+	if p.redoDMLMgr.Enabled() {
+		p.wg.Add(1)
+		go func() {
+			defer p.wg.Done()
+			p.sendError(p.redoDMLMgr.Run(stdCtx))
+		}()
 	}
 	log.Info("processor creates redo manager",
 		zap.String("namespace", p.changefeedID.Namespace),
@@ -849,7 +826,7 @@ func (p *processor) lazyInitImpl(ctx cdcContext.Context) error {
 			sortEngine, p.errCh, p.changefeed.Info.Config.BDRMode)
 		p.sinkManager, err = sinkmanager.New(stdCtx, p.changefeedID,
 			p.changefeed.Info, p.upstream, p.schemaStorage,
-			p.redoManager, p.sourceManager,
+			p.redoDMLMgr, p.sourceManager,
 			p.errCh, p.metricsTableSinkTotalRows)
 		if err != nil {
 			log.Info("Processor creates sink manager fail",
@@ -1047,84 +1024,36 @@ func (p *processor) sendError(err error) {
 	}
 }
 
-// handlePosition calculates the local resolved ts and local checkpoint ts.
-// resolvedTs = min(schemaStorage's resolvedTs, all table's resolvedTs).
-// table's resolvedTs = redo's resolvedTs if redo enable, else sorter's resolvedTs.
-// checkpointTs = min(resolvedTs, all table's checkpointTs).
-func (p *processor) handlePosition(currentTs int64) {
-	minResolvedTs := uint64(math.MaxUint64)
-	minResolvedTableID := int64(0)
-	if p.schemaStorage != nil {
-		minResolvedTs = p.schemaStorage.ResolvedTs()
-	}
-	minCheckpointTs := minResolvedTs
-	minCheckpointTableID := int64(0)
-	if p.pullBasedSinking {
-		tableIDs := p.sinkManager.GetAllCurrentTableIDs()
-		for _, tableID := range tableIDs {
-			stats := p.sinkManager.GetTableStats(tableID)
-			log.Debug("sink manager gets table stats",
-				zap.String("namespace", p.changefeedID.Namespace),
-				zap.String("changefeed", p.changefeedID.ID),
-				zap.Int64("tableID", tableID),
-				zap.Any("stats", stats))
-			if stats.ResolvedTs < minResolvedTs {
-				minResolvedTs = stats.ResolvedTs
-				minResolvedTableID = tableID
-			}
-			if stats.CheckpointTs < minCheckpointTs {
-				minCheckpointTs = stats.CheckpointTs
-				minCheckpointTableID = tableID
-			}
-		}
-	} else {
-		for _, table := range p.tables {
-			ts := table.ResolvedTs()
-			if ts < minResolvedTs {
-				minResolvedTs = ts
-				minResolvedTableID = table.ID()
-			}
-		}
-
-		for _, table := range p.tables {
-			ts := table.CheckpointTs()
-			if ts < minCheckpointTs {
-				minCheckpointTs = ts
-				minCheckpointTableID = table.ID()
-			}
+// updateBarrierTs updates barrierTs for all tables.
+func (p *processor) updateBarrierTs(barrier *schedulepb.Barrier) {
+	tableBarrier := p.calculateTableBarrierTs(barrier)
+	globalBarrierTs := barrier.GetGlobalBarrierTs()
+	// when redo is enable, globalBarrierTs must less than or equal to global resolvedTs
+	if p.redoDMLMgr.Enabled() {
+		if globalBarrierTs > p.changefeed.Status.ResolvedTs {
+			globalBarrierTs = p.changefeed.Status.ResolvedTs
 		}
 	}
-
-	resolvedPhyTs := oracle.ExtractPhysical(minResolvedTs)
-	p.metricResolvedTsLagGauge.Set(float64(currentTs-resolvedPhyTs) / 1e3)
-	p.metricResolvedTsGauge.Set(float64(resolvedPhyTs))
-	p.metricMinResolvedTableIDGauge.Set(float64(minResolvedTableID))
-
-	checkpointPhyTs := oracle.ExtractPhysical(minCheckpointTs)
-	p.metricCheckpointTsLagGauge.Set(float64(currentTs-checkpointPhyTs) / 1e3)
-	p.metricCheckpointTsGauge.Set(float64(checkpointPhyTs))
-	p.metricMinCheckpointTableIDGauge.Set(float64(minCheckpointTableID))
-
-	p.checkpointTs = minCheckpointTs
-	p.resolvedTs = minResolvedTs
-}
-
-// pushResolvedTs2Table sends global resolved ts to all the table pipelines.
-func (p *processor) pushResolvedTs2Table() {
-	resolvedTs := p.changefeed.Status.ResolvedTs
 	schemaResolvedTs := p.schemaStorage.ResolvedTs()
-	if schemaResolvedTs < resolvedTs {
+	if schemaResolvedTs < globalBarrierTs {
 		// Do not update barrier ts that is larger than
 		// DDL puller's resolved ts.
 		// When DDL puller stall, resolved events that outputted by sorter
 		// may pile up in memory, as they have to wait DDL.
-		resolvedTs = schemaResolvedTs
+		globalBarrierTs = schemaResolvedTs
 	}
+	log.Debug("update barrierTs",
+		zap.Any("tableBarriers", barrier.GetTableBarriers()),
+		zap.Uint64("globalBarrierTs", globalBarrierTs))
 	if p.pullBasedSinking {
-		p.sinkManager.UpdateBarrierTs(resolvedTs)
+		p.sinkManager.UpdateBarrierTs(globalBarrierTs, tableBarrier)
 	} else {
-		for _, table := range p.tables {
-			table.UpdateBarrierTs(resolvedTs)
+		for id, table := range p.tables {
+			if _, ok := tableBarrier[id]; ok {
+				table.UpdateBarrierTs(tableBarrier[id])
+				continue
+			}
+			table.UpdateBarrierTs(globalBarrierTs)
 		}
 	}
 }
@@ -1166,8 +1095,8 @@ func (p *processor) createTablePipelineImpl(
 		return nil
 	})
 
-	if p.redoManager.Enabled() {
-		p.redoManager.AddTable(tableID, replicaInfo.StartTs)
+	if p.redoDMLMgr.Enabled() {
+		p.redoDMLMgr.AddTable(tableID, replicaInfo.StartTs)
 	}
 
 	tableName := p.getTableName(ctx, tableID)
@@ -1186,7 +1115,7 @@ func (p *processor) createTablePipelineImpl(
 			replicaInfo,
 			s,
 			nil,
-			p.redoManager,
+			p.redoDMLMgr,
 			p.changefeed.Info.GetTargetTs())
 		if err != nil {
 			return nil, errors.Trace(err)
@@ -1202,7 +1131,7 @@ func (p *processor) createTablePipelineImpl(
 			replicaInfo,
 			nil,
 			s,
-			p.redoManager,
+			p.redoDMLMgr,
 			p.changefeed.Info.GetTargetTs())
 		if err != nil {
 			return nil, errors.Trace(err)
@@ -1213,8 +1142,8 @@ func (p *processor) createTablePipelineImpl(
 }
 
 func (p *processor) removeTable(table tablepb.TablePipeline, tableID model.TableID) {
-	if p.redoManager.Enabled() {
-		p.redoManager.RemoveTable(tableID)
+	if p.redoDMLMgr.Enabled() {
+		p.redoDMLMgr.RemoveTable(tableID)
 	}
 	if p.pullBasedSinking {
 		p.sinkManager.RemoveTable(tableID)
@@ -1362,13 +1291,7 @@ func (p *processor) Close(ctx cdcContext.Context) error {
 				zap.String("namespace", p.changefeedID.Namespace),
 				zap.String("changefeed", p.changefeedID.ID))
 			start := time.Now()
-			if err := p.sinkV2Factory.Close(); err != nil && errors.Cause(err) != context.Canceled {
-				log.Info("processor close sink failed",
-					zap.String("namespace", p.changefeedID.Namespace),
-					zap.String("changefeed", p.changefeedID.ID),
-					zap.Duration("duration", time.Since(start)))
-				return errors.Trace(err)
-			}
+			p.sinkV2Factory.Close()
 			log.Info("processor close sink success",
 				zap.String("namespace", p.changefeedID.Namespace),
 				zap.String("changefeed", p.changefeedID.ID),
@@ -1402,14 +1325,6 @@ func (p *processor) Close(ctx cdcContext.Context) error {
 }
 
 func (p *processor) cleanupMetrics() {
-	resolvedTsGauge.DeleteLabelValues(p.changefeedID.Namespace, p.changefeedID.ID)
-	resolvedTsLagGauge.DeleteLabelValues(p.changefeedID.Namespace, p.changefeedID.ID)
-	resolvedTsMinTableIDGauge.DeleteLabelValues(p.changefeedID.Namespace, p.changefeedID.ID)
-
-	checkpointTsGauge.DeleteLabelValues(p.changefeedID.Namespace, p.changefeedID.ID)
-	checkpointTsLagGauge.DeleteLabelValues(p.changefeedID.Namespace, p.changefeedID.ID)
-	checkpointTsMinTableIDGauge.DeleteLabelValues(p.changefeedID.Namespace, p.changefeedID.ID)
-
 	syncTableNumGauge.DeleteLabelValues(p.changefeedID.Namespace, p.changefeedID.ID)
 	processorErrorCounter.DeleteLabelValues(p.changefeedID.Namespace, p.changefeedID.ID)
 	processorSchemaStorageGcTsGauge.DeleteLabelValues(p.changefeedID.Namespace, p.changefeedID.ID)
@@ -1446,4 +1361,14 @@ func (p *processor) WriteDebugInfo(w io.Writer) error {
 		}
 	}
 	return nil
+}
+
+func (p *processor) calculateTableBarrierTs(
+	barrier *schedulepb.Barrier,
+) map[model.TableID]model.Ts {
+	tableBarrierTs := make(map[model.TableID]model.Ts)
+	for _, tb := range barrier.TableBarriers {
+		tableBarrierTs[tb.TableID] = tb.BarrierTs
+	}
+	return tableBarrierTs
 }

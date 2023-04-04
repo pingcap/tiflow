@@ -360,26 +360,12 @@ func (s *mysqlBackend) batchSingleTxnDmls(
 ) (sqls []string, values [][]interface{}) {
 	insertRows, updateRows, deleteRows := s.groupRowsByType(event, tableInfo, !translateToInsert)
 
+	// handle delete
 	if len(deleteRows) > 0 {
 		for _, rows := range deleteRows {
 			sql, value := sqlmodel.GenDeleteSQL(rows...)
 			sqls = append(sqls, sql)
 			values = append(values, value)
-		}
-	}
-
-	// handle insert
-	if len(insertRows) > 0 {
-		for _, rows := range insertRows {
-			if translateToInsert {
-				sql, value := sqlmodel.GenInsertSQL(sqlmodel.DMLInsert, rows...)
-				sqls = append(sqls, sql)
-				values = append(values, value)
-			} else {
-				sql, value := sqlmodel.GenInsertSQL(sqlmodel.DMLReplace, rows...)
-				sqls = append(sqls, sql)
-				values = append(values, value)
-			}
 		}
 	}
 
@@ -401,6 +387,21 @@ func (s *mysqlBackend) batchSingleTxnDmls(
 					sqls = append(sqls, sql)
 					values = append(values, value)
 				}
+			}
+		}
+	}
+
+	// handle insert
+	if len(insertRows) > 0 {
+		for _, rows := range insertRows {
+			if translateToInsert {
+				sql, value := sqlmodel.GenInsertSQL(sqlmodel.DMLInsert, rows...)
+				sqls = append(sqls, sql)
+				values = append(values, value)
+			} else {
+				sql, value := sqlmodel.GenInsertSQL(sqlmodel.DMLReplace, rows...)
+				sqls = append(sqls, sql)
+				values = append(values, value)
 			}
 		}
 	}

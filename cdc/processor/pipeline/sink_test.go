@@ -59,7 +59,7 @@ func TestState(t *testing.T) {
 	// test stop at targetTs
 	targetTs := model.Ts(10)
 	node := newSinkNode(1, mocksink.NewNormalMockSink(), nil,
-		0, targetTs, &mockFlowController{}, redo.NewDisabledManager(),
+		0, targetTs, &mockFlowController{}, redo.NewDisabledDMLManager(),
 		&state, model.DefaultChangeFeedID("changefeed-id-test-status"), true, true)
 	require.Equal(t, tablepb.TableStatePrepared, node.State())
 
@@ -129,7 +129,7 @@ func TestState(t *testing.T) {
 	// test the stop at ts command
 	state = tablepb.TableStatePrepared
 	node = newSinkNode(1, mocksink.NewNormalMockSink(), nil,
-		0, 10, &mockFlowController{}, redo.NewDisabledManager(),
+		0, 10, &mockFlowController{}, redo.NewDisabledDMLManager(),
 		&state, model.DefaultChangeFeedID("changefeed-id-test-status"), true, false)
 	require.Equal(t, tablepb.TableStatePrepared, node.State())
 
@@ -169,7 +169,7 @@ func TestState(t *testing.T) {
 	// test the stop at ts command is after then resolvedTs and checkpointTs is greater than stop ts
 	state = tablepb.TableStatePrepared
 	node = newSinkNode(1, mocksink.NewNormalMockSink(), nil,
-		0, 10, &mockFlowController{}, redo.NewDisabledManager(),
+		0, 10, &mockFlowController{}, redo.NewDisabledDMLManager(),
 		&state, model.DefaultChangeFeedID("changefeed-id-test-status"), true, false)
 	require.Equal(t, tablepb.TableStatePrepared, node.State())
 
@@ -216,7 +216,7 @@ func TestStopStatus(t *testing.T) {
 	node := newSinkNode(1,
 		mocksink.NewMockCloseControlSink(closeCh),
 		nil, 0, 100,
-		&mockFlowController{}, redo.NewDisabledManager(), &state,
+		&mockFlowController{}, redo.NewDisabledDMLManager(), &state,
 		model.DefaultChangeFeedID("changefeed-id-test-state"), true, false)
 	require.Equal(t, tablepb.TableStatePrepared, node.State())
 
@@ -250,7 +250,7 @@ func TestManyTs(t *testing.T) {
 	defer cancel()
 	state := tablepb.TableStatePrepared
 	sink := mocksink.NewNormalMockSink()
-	node := newSinkNode(1, sink, nil, 0, 10, &mockFlowController{}, redo.NewDisabledManager(),
+	node := newSinkNode(1, sink, nil, 0, 10, &mockFlowController{}, redo.NewDisabledDMLManager(),
 		&state, model.DefaultChangeFeedID("changefeed-id-test"), true, false)
 	require.Equal(t, tablepb.TableStatePrepared, node.State())
 
@@ -409,7 +409,7 @@ func TestIgnoreEmptyRowChangeEvent(t *testing.T) {
 	defer cancel()
 	state := tablepb.TableStatePreparing
 	sink := mocksink.NewNormalMockSink()
-	node := newSinkNode(1, sink, nil, 0, 10, &mockFlowController{}, redo.NewDisabledManager(),
+	node := newSinkNode(1, sink, nil, 0, 10, &mockFlowController{}, redo.NewDisabledDMLManager(),
 		&state, model.DefaultChangeFeedID("changefeed-id-test"), true, false)
 
 	// empty row, no Columns and PreColumns.
@@ -428,7 +428,7 @@ func TestSplitUpdateEventWhenEnableOldValue(t *testing.T) {
 	defer cancel()
 	state := tablepb.TableStatePreparing
 	sink := mocksink.NewNormalMockSink()
-	node := newSinkNode(1, sink, nil, 0, 10, &mockFlowController{}, redo.NewDisabledManager(),
+	node := newSinkNode(1, sink, nil, 0, 10, &mockFlowController{}, redo.NewDisabledDMLManager(),
 		&state, model.DefaultChangeFeedID("changefeed-id-test"), true, false)
 
 	// nil row.
@@ -483,7 +483,7 @@ func TestSplitUpdateEventWhenDisableOldValue(t *testing.T) {
 	state := tablepb.TableStatePreparing
 	sink := mocksink.NewNormalMockSink()
 	enableOldValue := false
-	node := newSinkNode(1, sink, nil, 0, 10, &mockFlowController{}, redo.NewDisabledManager(),
+	node := newSinkNode(1, sink, nil, 0, 10, &mockFlowController{}, redo.NewDisabledDMLManager(),
 		&state, model.DefaultChangeFeedID("changefeed-id-test"), enableOldValue, false)
 
 	// nil row.
@@ -615,7 +615,7 @@ func TestFlushSinkReleaseFlowController(t *testing.T) {
 	flowController := &flushFlowController{}
 	sink := mocksink.NewMockFlushSink()
 	// sNode is a sinkNode
-	sNode := newSinkNode(1, sink, nil, 0, 10, flowController, redo.NewDisabledManager(),
+	sNode := newSinkNode(1, sink, nil, 0, 10, flowController, redo.NewDisabledDMLManager(),
 		&state, model.DefaultChangeFeedID("changefeed-id-test"), true, false)
 	sNode.barrierTs = 10
 
@@ -637,7 +637,7 @@ func TestSplitTxn(t *testing.T) {
 	flowController := &flushFlowController{}
 	sink := mocksink.NewMockFlushSink()
 	// sNode is a sinkNode
-	sNode := newSinkNode(1, sink, nil, 0, 10, flowController, redo.NewDisabledManager(),
+	sNode := newSinkNode(1, sink, nil, 0, 10, flowController, redo.NewDisabledDMLManager(),
 		&state, model.DefaultChangeFeedID("changefeed-id-test"), true, false)
 	msg := pmessage.PolymorphicEventMessage(&model.PolymorphicEvent{
 		CRTs:  1,
@@ -684,7 +684,7 @@ func TestSinkStatsRace(t *testing.T) {
 	flowController := &flushFlowController{}
 	sink := mocksink.NewMockFlushSink()
 	// sNode is a sinkNode
-	sNode := newSinkNode(1, sink, nil, 0, 10, flowController, redo.NewDisabledManager(),
+	sNode := newSinkNode(1, sink, nil, 0, 10, flowController, redo.NewDisabledDMLManager(),
 		&state, model.DefaultChangeFeedID("changefeed-id-test"), true, false)
 
 	ctx, cancel := context.WithCancel(context.Background())

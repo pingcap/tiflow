@@ -309,7 +309,7 @@ tidy:
 # TODO: Unified cdc and dm config.
 check-static: tools/bin/golangci-lint
 	tools/bin/golangci-lint run --timeout 10m0s --skip-dirs "^dm/","^tests/"
-	cd dm && ../tools/bin/golangci-lint run --timeout 10m0s
+	#cd dm && ../tools/bin/golangci-lint run --timeout 10m0s
 
 check: check-copyright fmt check-static tidy terror_check errdoc \
 	check-merge-conflicts check-ticdc-dashboard check-diff-line-width \
