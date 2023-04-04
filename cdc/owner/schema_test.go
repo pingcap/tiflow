@@ -14,6 +14,7 @@
 package owner
 
 import (
+	"context"
 	"encoding/json"
 	"fmt"
 	"sort"
@@ -39,15 +40,22 @@ func TestAllPhysicalTables(t *testing.T) {
 	schema, err := newSchemaWrap4Owner(helper.Storage(), ver.Ver,
 		config.GetDefaultReplicaConfig(), dummyChangeFeedID)
 	require.Nil(t, err)
-	require.Len(t, schema.AllPhysicalTables(), 0)
+	tableIDs, err := schema.AllPhysicalTables(context.Background(), ver.Ver)
+	require.Nil(t, err)
+	require.Len(t, tableIDs, 0)
 	// add normal table
 	job := helper.DDL2Job("create table test.t1(id int primary key)")
 	tableIDT1 := job.BinlogInfo.TableInfo.ID
 	require.Nil(t, schema.HandleDDL(job))
-	require.Equal(t, schema.AllPhysicalTables(), []model.TableID{tableIDT1})
+	tableIDs, err = schema.AllPhysicalTables(context.Background(), job.BinlogInfo.FinishedTS)
+	require.Nil(t, err)
+	require.Equal(t, tableIDs, []model.TableID{tableIDT1})
 	// add ineligible table
-	require.Nil(t, schema.HandleDDL(helper.DDL2Job("create table test.t2(id int)")))
-	require.Equal(t, schema.AllPhysicalTables(), []model.TableID{tableIDT1})
+	job = helper.DDL2Job("create table test.t2(id int)")
+	require.Nil(t, schema.HandleDDL(job))
+	tableIDs, err = schema.AllPhysicalTables(context.Background(), job.BinlogInfo.FinishedTS)
+	require.Nil(t, err)
+	require.Equal(t, tableIDs, []model.TableID{tableIDT1})
 	// add partition table
 	job = helper.DDL2Job(`CREATE TABLE test.employees  (
 			id INT NOT NULL AUTO_INCREMENT PRIMARY KEY,
@@ -74,8 +82,10 @@ func TestAllPhysicalTables(t *testing.T) {
 		})
 	}
 	sortTableIDs(expectedTableIDs)
-	sortTableIDs(schema.AllPhysicalTables())
-	require.Equal(t, schema.AllPhysicalTables(), expectedTableIDs)
+	tableIDs, err = schema.AllPhysicalTables(context.Background(), job.BinlogInfo.FinishedTS)
+	require.Nil(t, err)
+	sortTableIDs(tableIDs)
+	require.Equal(t, tableIDs, expectedTableIDs)
 }
 
 func TestAllTables(t *testing.T) {
@@ -86,21 +96,28 @@ func TestAllTables(t *testing.T) {
 	schema, err := newSchemaWrap4Owner(helper.Storage(), ver.Ver,
 		config.GetDefaultReplicaConfig(), dummyChangeFeedID)
 	require.Nil(t, err)
-	require.Len(t, schema.AllTables(), 0)
+	tableInfos, err := schema.AllTables(context.Background(), ver.Ver)
+	require.Nil(t, err)
+	require.Len(t, tableInfos, 0)
 	// add normal table
 	job := helper.DDL2Job("create table test.t1(id int primary key)")
 	require.Nil(t, schema.HandleDDL(job))
-	require.Len(t, schema.AllTables(), 1)
-	tableName := schema.AllTables()[0].TableName
+	tableInfos, err = schema.AllTables(context.Background(), job.BinlogInfo.FinishedTS)
+	require.Nil(t, err)
+	require.Len(t, tableInfos, 1)
+	tableName := tableInfos[0].TableName
 	require.Equal(t, tableName, model.TableName{
 		Schema:  "test",
 		Table:   "t1",
 		TableID: 84,
 	})
 	// add ineligible table
-	require.Nil(t, schema.HandleDDL(helper.DDL2Job("create table test.t2(id int)")))
-	require.Len(t, schema.AllTables(), 1)
-	tableName = schema.AllTables()[0].TableName
+	job = helper.DDL2Job("create table test.t2(id int)")
+	require.Nil(t, schema.HandleDDL(job))
+	tableInfos, err = schema.AllTables(context.Background(), job.BinlogInfo.FinishedTS)
+	require.Nil(t, err)
+	require.Len(t, tableInfos, 1)
+	tableName = tableInfos[0].TableName
 	require.Equal(t, tableName, model.TableName{
 		Schema:  "test",
 		Table:   "t1",

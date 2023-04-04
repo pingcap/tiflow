@@ -68,7 +68,7 @@ type tableActor struct {
 	// backend tableSink
 	tableSinkV1 sinkv1.Sink
 	tableSinkV2 sinkv2.TableSink
-	redoManager redo.LogManager
+	redoDMLMgr  redo.DMLManager
 
 	state tablepb.TableState
 
@@ -117,7 +117,7 @@ func NewTableActor(
 	replicaInfo *model.TableReplicaInfo,
 	sinkV1 sinkv1.Sink,
 	sinkV2 sinkv2.TableSink,
-	redoManager redo.LogManager,
+	redoDMLMgr redo.DMLManager,
 	targetTs model.Ts,
 ) (tablepb.TablePipeline, error) {
 	config := cdcCtx.ChangefeedVars().Info.Config
@@ -148,7 +148,7 @@ func NewTableActor(
 		replicaConfig: config,
 		tableSinkV1:   sinkV1,
 		tableSinkV2:   sinkV2,
-		redoManager:   redoManager,
+		redoDMLMgr:    redoDMLMgr,
 		targetTs:      targetTs,
 		started:       false,
 
@@ -179,7 +179,7 @@ func NewTableActor(
 		zap.String("tableName", tableName),
 		zap.Uint64("checkpointTs", replicaInfo.StartTs),
 		zap.Uint64("quota", table.memoryQuota),
-		zap.Bool("redoLogEnabled", table.redoManager.Enabled()),
+		zap.Bool("redoLogEnabled", table.redoDMLMgr.Enabled()),
 		zap.Bool("splitTxn", table.replicaConfig.Sink.TxnAtomicity.ShouldSplitTxn()),
 		zap.Duration("duration", time.Since(startTime)))
 	return table, nil
@@ -296,10 +296,10 @@ func (t *tableActor) start(sdtTableContext context.Context) error {
 	splitTxn := t.replicaConfig.Sink.TxnAtomicity.ShouldSplitTxn()
 
 	flowController := flowcontrol.NewTableFlowController(t.memoryQuota,
-		t.redoManager.Enabled(), splitTxn)
+		t.redoDMLMgr.Enabled(), splitTxn)
 	sorterNode := newSorterNode(t.tableName, t.tableID,
 		t.replicaInfo.StartTs, flowController,
-		t.mg, &t.state, t.changefeedID, t.redoManager.Enabled(),
+		t.mg, &t.state, t.changefeedID, t.redoDMLMgr.Enabled(),
 		t.upstream.PDClient,
 	)
 	t.sortNode = sorterNode
@@ -336,7 +336,7 @@ func (t *tableActor) start(sdtTableContext context.Context) error {
 		t.tableID,
 		t.tableSinkV1,
 		t.tableSinkV2,
-		t.replicaInfo.StartTs, t.targetTs, flowController, t.redoManager,
+		t.replicaInfo.StartTs, t.targetTs, flowController, t.redoDMLMgr,
 		&t.state, t.changefeedID, t.replicaConfig.EnableOldValue, splitTxn,
 	)
 	t.sinkNode = actorSinkNode
@@ -413,8 +413,8 @@ func (t *tableActor) ResolvedTs() model.Ts {
 	// will be able to cooperate replication state directly. Then we will add
 	// another replication barrier for consistent replication instead of reusing
 	// the global resolved-ts.
-	if t.redoManager.Enabled() {
-		return t.redoManager.GetResolvedTs(t.tableID)
+	if t.redoDMLMgr.Enabled() {
+		return t.redoDMLMgr.GetResolvedTs(t.tableID)
 	}
 	return t.sortNode.ResolvedTs()
 }
