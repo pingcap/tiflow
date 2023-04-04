@@ -244,6 +244,7 @@ func (m *ddlManager) tick(
 
 	// advance resolvedTs
 	ddlRts := m.ddlPuller.ResolvedTs()
+	m.schema.AdvanceResolvedTs(ddlRts)
 	if m.redoDDLManager.Enabled() {
 		err := m.redoDDLManager.UpdateResolvedTs(ctx, ddlRts)
 		if err != nil {

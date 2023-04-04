@@ -33,6 +33,7 @@ import (
 	"github.com/pingcap/tiflow/pkg/upstream"
 	"github.com/pingcap/tiflow/pkg/util"
 	"github.com/tikv/client-go/v2/oracle"
+	clientv3 "go.etcd.io/etcd/client/v3"
 	"go.uber.org/zap"
 )
 
@@ -133,6 +134,28 @@ func (h *OpenAPIV2) createChangefeed(c *gin.Context) {
 		return
 	}
 
+	// cannot create changefeed if there are running lightning/restore tasks
+	tlsCfg, err := credential.ToTLSConfig()
+	if err != nil {
+		_ = c.Error(err)
+		return
+	}
+
+	cli, err := h.helpers.getEtcdClient(cfg.PDAddrs, tlsCfg)
+	if err != nil {
+		_ = c.Error(err)
+		return
+	}
+	err = hasRunningImport(ctx, cli)
+	if err != nil {
+		log.Error("failed to create changefeed", zap.Error(err))
+		_ = c.Error(
+			cerror.ErrUpstreamHasRunningImport.Wrap(err).
+				FastGenByArgs(info.UpstreamID),
+		)
+		return
+	}
+
 	err = h.capture.GetEtcdClient().CreateChangefeedInfo(ctx,
 		upstreamInfo,
 		info,
@@ -149,6 +172,41 @@ func (h *OpenAPIV2) createChangefeed(c *gin.Context) {
 	c.JSON(http.StatusOK, toAPIModel(info,
 		info.StartTs, info.StartTs,
 		nil, true))
+}
+
+// hasRunningImport checks if there is running import tasks on the
+// upstream cluster.
+func hasRunningImport(ctx context.Context, cli *clientv3.Client) error {
+	resp, err := cli.KV.Get(
+		ctx, RegisterImportTaskPrefix, clientv3.WithPrefix(),
+	)
+	if err != nil {
+		return errors.Annotatef(
+			err, "failed to list import task related entries")
+	}
+
+	for _, kv := range resp.Kvs {
+		leaseResp, err := cli.Lease.TimeToLive(ctx, clientv3.LeaseID(kv.Lease))
+		if err != nil {
+			return errors.Annotatef(
+				err, "failed to get time-to-live of lease: %x", kv.Lease,
+			)
+		}
+		// the lease has expired
+		if leaseResp.TTL <= 0 {
+			continue
+		}
+
+		err = errors.New(
+			"There are lightning/restore tasks running" +
+				"please stop or wait for them to finish. " +
+				"If the task is terminated by system, " +
+				"please wait until the task lease ttl(3 mins) decreases to 0.",
+		)
+		return err
+	}
+
+	return nil
 }
 
 // listChangeFeeds lists all changgefeeds in cdc cluster

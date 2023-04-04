@@ -105,6 +105,10 @@ func (p *ddlJobPullerImpl) Run(ctx context.Context) error {
 					continue
 				}
 				if ddlRawKV.OpType == model.OpTypeResolved {
+					// Only nil in unit test case.
+					if p.schemaStorage != nil {
+						p.schemaStorage.AdvanceResolvedTs(ddlRawKV.CRTs)
+					}
 					if ddlRawKV.CRTs > p.getResolvedTs() {
 						p.setResolvedTs(ddlRawKV.CRTs)
 					}

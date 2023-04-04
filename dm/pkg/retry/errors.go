@@ -17,6 +17,7 @@ import (
 	"database/sql/driver"
 
 	gmysql "github.com/go-mysql-org/go-mysql/mysql"
+	dmysql "github.com/go-sql-driver/mysql"
 	"github.com/pingcap/errors"
 	tmysql "github.com/pingcap/tidb/parser/mysql"
 	"github.com/pingcap/tiflow/dm/pkg/terror"
@@ -92,4 +93,11 @@ func IsConnectionError(err error) bool {
 		return true
 	}
 	return false
+}
+
+// IsUnretryableConnectionError checks whether it's an unretryable connection error or not.
+func IsUnretryableConnectionError(err error) bool {
+	// Can't ensure whether the last write has reached the downstream or not.
+	// If the last write isn't idempotent, retry it may cause problems.
+	return errors.Cause(err) == dmysql.ErrInvalidConn
 }

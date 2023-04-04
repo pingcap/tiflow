@@ -470,6 +470,13 @@ dm_integration_test: check_third_party_binary_for_dm install_test_python_dep
 	cd dm && ln -sf ../bin .
 	cd dm && ./tests/run.sh $(CASE)
 
+dm_integration_test_in_group: check_third_party_binary_for_dm install_test_python_dep
+	@which bin/dm-master.test
+	@which bin/dm-worker.test
+	@which bin/dm-syncer.test
+	cd dm && ln -sf ../bin .
+	cd dm && ./tests/run_group.sh $(GROUP)
+
 dm_compatibility_test: check_third_party_binary_for_dm
 	@which bin/dm-master.test.current
 	@which bin/dm-worker.test.current
@@ -552,3 +559,7 @@ engine_unit_test_in_verify_ci: check_failpoint_ctl tools/bin/gotestsum tools/bin
 	tools/bin/gocov convert "$(ENGINE_TEST_DIR)/cov.unit_test.out" | tools/bin/gocov-xml > engine-coverage.xml
 	$(FAILPOINT_DISABLE)
 	@bash <(curl -s https://codecov.io/bash) -F engine -f $(ENGINE_TEST_DIR)/cov.unit_test.out -t $(TICDC_CODECOV_TOKEN)
+
+prepare_test_binaries:
+	cd scripts && ./download-integration-test-binaries.sh master && cd ..
+	touch prepare_test_binaries
