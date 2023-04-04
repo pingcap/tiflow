@@ -64,6 +64,7 @@ var (
 	logLevel         string
 	flushInterval    time.Duration
 	enableProfiling  bool
+	timezone         string
 )
 
 const (
@@ -80,6 +81,7 @@ func init() {
 	flag.StringVar(&logLevel, "log-level", "info", "log level")
 	flag.DurationVar(&flushInterval, "flush-interval", 10*time.Second, "flush interval")
 	flag.BoolVar(&enableProfiling, "enable-profiling", false, "whether to enable profiling")
+	flag.StringVar(&timezone, "tz", "System", "Specify time zone of storage consumer")
 	flag.Parse()
 
 	err := logutil.InitLogger(&logutil.Config{
@@ -244,6 +246,11 @@ type consumer struct {
 }
 
 func newConsumer(ctx context.Context) (*consumer, error) {
+	tz, err := putil.GetTimezone(timezone)
+	if err != nil {
+		return nil, errors.Annotate(err, "can not load timezone")
+	}
+	ctx = contextutil.PutTimezoneInCtx(ctx, tz)
 	replicaConfig := config.GetDefaultReplicaConfig()
 	if len(configFile) > 0 {
 		err := util.StrictDecodeFile(configFile, "storage consumer", replicaConfig)
@@ -253,7 +260,7 @@ func newConsumer(ctx context.Context) (*consumer, error) {
 		}
 	}
 
-	err := replicaConfig.ValidateAndAdjust(upstreamURI)
+	err = replicaConfig.ValidateAndAdjust(upstreamURI)
 	if err != nil {
 		log.Error("failed to validate replica config", zap.Error(err))
 		return nil, err
@@ -434,7 +441,9 @@ func (c *consumer) emitDMLEvents(
 			return errors.Trace(err)
 		}
 	case config.ProtocolCanalJSON:
-		decoder = canal.NewBatchDecoder(content, false, c.codecCfg.Terminator)
+		// Always enable tidb extension for canal-json protocol
+		// because we need to get the commit ts from the extension field.
+		decoder = canal.NewBatchDecoder(content, true, c.codecCfg.Terminator)
 	}
 
 	cnt := 0
@@ -458,7 +467,7 @@ func (c *consumer) emitDMLEvents(
 			}
 
 			if _, ok := c.tableSinkMap[tableID]; !ok {
-				c.tableSinkMap[tableID] = c.sinkFactory.CreateTableSink(
+				c.tableSinkMap[tableID] = c.sinkFactory.CreateTableSinkForConsumer(
 					model.DefaultChangeFeedID(defaultChangefeedName),
 					tableID,
 					prometheus.NewCounter(prometheus.CounterOpts{}))
