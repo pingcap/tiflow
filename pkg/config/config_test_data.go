@@ -143,7 +143,8 @@ const (
     },
     "enable-new-sink": true
   },
-  "cluster-id": "default"
+  "cluster-id": "default",
+  "max-memory-percentage": 70
 }`
 
 	testCfgTestReplicaConfigMarshal1 = `{
