@@ -601,7 +601,7 @@ func TestBuildIgnoredDDLJob(t *testing.T) {
 	cfg := config.GetDefaultReplicaConfig()
 	// only replicate ddl event of test.tb1 and test.tb2
 	cfg.Filter.Rules = []string{"test.tb1", "test.tb2"}
-	f, err := filter.NewFilter(config.GetDefaultReplicaConfig(), "")
+	f, err := filter.NewFilter(cfg, "")
 	require.Nil(t, err)
 	schema, err := newSchemaWrap4Owner(helper.Storage(), ver.Ver,
 		cfg, dummyChangeFeedID, f)
