@@ -326,11 +326,7 @@ func (p *ddlJobPullerImpl) handleJob(job *timodel.Job) (skip bool, err error) {
 	if p.schemaStorage == nil {
 		return false, nil
 	}
-<<<<<<< HEAD
-
-=======
 	snap := p.schemaStorage.GetLastSnapshot()
->>>>>>> 294efb080b (ddl_puller (ticdc): only create a schemStorage in a changefeed or processor (#8633))
 	// Do this first to fill the schema name to its origin schema name.
 	if err := snap.FillSchemaName(job); err != nil {
 		// If we can't find a job's schema, check if it's been filtered.

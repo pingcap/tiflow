@@ -288,14 +288,9 @@ func (s *schemaStorageImpl) skipJob(job *timodel.Job) bool {
 	log.Debug("handle DDL new commit",
 		zap.String("DDL", job.Query), zap.Stringer("job", job),
 		zap.String("namespace", s.id.Namespace),
-<<<<<<< HEAD
-		zap.String("changefeed", s.id.ID))
-	return !job.IsSynced() && !job.IsDone()
-=======
 		zap.String("changefeed", s.id.ID),
 		zap.String("role", s.role.String()))
 	return !job.IsDone()
->>>>>>> 294efb080b (ddl_puller (ticdc): only create a schemStorage in a changefeed or processor (#8633))
 }
 
 // MockSchemaStorage is for tests.
