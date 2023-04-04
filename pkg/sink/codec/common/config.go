@@ -18,8 +18,10 @@ import (
 	"strconv"
 
 	"github.com/pingcap/errors"
+	"github.com/pingcap/log"
 	"github.com/pingcap/tiflow/pkg/config"
 	cerror "github.com/pingcap/tiflow/pkg/errors"
+	"go.uber.org/zap"
 )
 
 // defaultMaxBatchSize sets the default value for max-batch-size
@@ -146,9 +148,10 @@ func (c *Config) WithMaxMessageBytes(bytes int) *Config {
 func (c *Config) Validate() error {
 	if c.EnableTiDBExtension &&
 		!(c.Protocol == config.ProtocolCanalJSON || c.Protocol == config.ProtocolAvro) {
-		return cerror.ErrCodecInvalidConfig.GenWithStack(
-			`enable-tidb-extension only supports canal-json/avro protocol`,
-		)
+		log.Warn("ignore invalid config, enable-tidb-extension"+
+			"only supports canal-json/avro protocol",
+			zap.Bool("enableTidbExtension", c.EnableTiDBExtension),
+			zap.String("protocol", c.Protocol.String()))
 	}
 
 	if c.Protocol == config.ProtocolAvro {
