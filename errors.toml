@@ -1261,6 +1261,11 @@ error = '''
 version is incompatible: %s
 '''
 
+["CDC:ErrWaitFreeMemoryTimeout"]
+error = '''
+wait free memory timeout
+'''
+
 ["CDC:ErrWaitHandleOperationTimeout"]
 error = '''
 waiting processor to handle the operation finished timeout

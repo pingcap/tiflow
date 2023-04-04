@@ -235,15 +235,15 @@ var avroTestColumns = []*avroTestColumnTuple{
 		int64(1), "long",
 	},
 	{
-		model.Column{Name: "float", Value: float64(3.14), Type: mysql.TypeFloat},
+		model.Column{Name: "float", Value: float32(3.14), Type: mysql.TypeFloat},
 		rowcodec.ColInfo{
 			ID:            11,
 			IsPKHandle:    false,
 			VirtualGenCol: false,
 			Ft:            types.NewFieldType(mysql.TypeFloat),
 		},
-		avroSchema{Type: "double", Parameters: map[string]string{"tidb_type": "FLOAT"}},
-		float64(3.14), "double",
+		avroSchema{Type: "float", Parameters: map[string]string{"tidb_type": "FLOAT"}},
+		float32(3.14), "float",
 	},
 	{
 		model.Column{Name: "double", Value: float64(3.14), Type: mysql.TypeDouble},
@@ -824,6 +824,9 @@ func TestAvroEncode(t *testing.T) {
 	for k, v := range res.(map[string]interface{}) {
 		if k == "_tidb_op" {
 			require.Equal(t, "c", v.(string))
+		}
+		if k == "float" {
+			require.Equal(t, float32(3.14), v)
 		}
 	}
 }

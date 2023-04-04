@@ -263,8 +263,9 @@ type RedoRowChangedEvent struct {
 
 // RedoDDLEvent represents DDL event used in redo log persistent
 type RedoDDLEvent struct {
-	DDL  *DDLEvent `msg:"ddl"`
-	Type byte      `msg:"type"`
+	DDL       *DDLEvent `msg:"ddl"`
+	Type      byte      `msg:"type"`
+	TableName TableName `msg:"table-name"`
 }
 
 // ToRedoLog converts row changed event to redo log
