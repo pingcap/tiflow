@@ -734,6 +734,7 @@ func toAPIModel(
 	}
 	return apiInfoModel
 }
+
 func getCaptureDefaultUpstream(cp capture.Capture) (*upstream.Upstream, error) {
 	upManager, err := cp.GetUpstreamManager()
 	if err != nil {
