@@ -74,7 +74,7 @@ const (
 	BackoffMaxDelay = 60 * time.Second
 
 	defaultBatchDMLEnable  = true
-	defaultMultiStmtEnable = true
+	defaultMultiStmtEnable = false
 )
 
 // Config is the configs for MySQL backend.
