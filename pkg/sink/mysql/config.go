@@ -37,10 +37,10 @@ const (
 	txnModeOptimistic  = "optimistic"
 	txnModePessimistic = "pessimistic"
 
-	// defaultWorkerCount is the default number of workers.
-	defaultWorkerCount = 16
-	// defaultMaxTxnRow is the default max number of rows in a transaction.
-	defaultMaxTxnRow = 256
+	// DefaultWorkerCount is the default number of workers.
+	DefaultWorkerCount = 16
+	// DefaultMaxTxnRow is the default max number of rows in a transaction.
+	DefaultMaxTxnRow = 256
 	// defaultMaxMultiUpdateRowCount is the default max number of rows in a
 	// single multi update SQL.
 	defaultMaxMultiUpdateRowCount = 40
@@ -73,7 +73,8 @@ const (
 	// BackoffMaxDelay indicates the max delay time for retrying.
 	BackoffMaxDelay = 60 * time.Second
 
-	defaultBatchDMLEnable = true
+	defaultBatchDMLEnable  = true
+	defaultMultiStmtEnable = true
 )
 
 // Config is the configs for MySQL backend.
@@ -94,16 +95,17 @@ type Config struct {
 	ForceReplicate         bool
 	EnableOldValue         bool
 
-	IsTiDB         bool // IsTiDB is true if the downstream is TiDB
-	SourceID       uint64
-	BatchDMLEnable bool
+	IsTiDB          bool // IsTiDB is true if the downstream is TiDB
+	SourceID        uint64
+	BatchDMLEnable  bool
+	MultiStmtEnable bool
 }
 
 // NewConfig returns the default mysql backend config.
 func NewConfig() *Config {
 	return &Config{
-		WorkerCount:            defaultWorkerCount,
-		MaxTxnRow:              defaultMaxTxnRow,
+		WorkerCount:            DefaultWorkerCount,
+		MaxTxnRow:              DefaultMaxTxnRow,
 		MaxMultiUpdateRowCount: defaultMaxMultiUpdateRowCount,
 		MaxMultiUpdateRowSize:  defaultMaxMultiUpdateRowSize,
 		tidbTxnMode:            defaultTiDBTxnMode,
@@ -114,6 +116,7 @@ func NewConfig() *Config {
 		DialTimeout:            defaultDialTimeout,
 		SafeMode:               defaultSafeMode,
 		BatchDMLEnable:         defaultBatchDMLEnable,
+		MultiStmtEnable:        defaultMultiStmtEnable,
 	}
 }
 
@@ -170,6 +173,9 @@ func (c *Config) Apply(
 		return err
 	}
 	if err = getBatchDMLEnable(query, &c.BatchDMLEnable); err != nil {
+		return err
+	}
+	if err = getMultiStmtEnable(query, &c.MultiStmtEnable); err != nil {
 		return err
 	}
 	c.EnableOldValue = replicaConfig.EnableOldValue
@@ -397,6 +403,18 @@ func getBatchDMLEnable(values url.Values, batchDMLEnable *bool) error {
 			return cerror.WrapError(cerror.ErrMySQLInvalidConfig, err)
 		}
 		*batchDMLEnable = enable
+	}
+	return nil
+}
+
+func getMultiStmtEnable(values url.Values, multiStmtEnable *bool) error {
+	s := values.Get("multi-stmt-enable")
+	if len(s) > 0 {
+		enable, err := strconv.ParseBool(s)
+		if err != nil {
+			return cerror.WrapError(cerror.ErrMySQLInvalidConfig, err)
+		}
+		*multiStmtEnable = enable
 	}
 	return nil
 }

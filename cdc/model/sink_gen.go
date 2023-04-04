@@ -667,6 +667,12 @@ func (z *RedoDDLEvent) DecodeMsg(dc *msgp.Reader) (err error) {
 				err = msgp.WrapError(err, "Type")
 				return
 			}
+		case "table-name":
+			err = z.TableName.DecodeMsg(dc)
+			if err != nil {
+				err = msgp.WrapError(err, "TableName")
+				return
+			}
 		default:
 			err = dc.Skip()
 			if err != nil {
@@ -680,9 +686,9 @@ func (z *RedoDDLEvent) DecodeMsg(dc *msgp.Reader) (err error) {
 
 // EncodeMsg implements msgp.Encodable
 func (z *RedoDDLEvent) EncodeMsg(en *msgp.Writer) (err error) {
-	// map header, size 2
+	// map header, size 3
 	// write "ddl"
-	err = en.Append(0x82, 0xa3, 0x64, 0x64, 0x6c)
+	err = en.Append(0x83, 0xa3, 0x64, 0x64, 0x6c)
 	if err != nil {
 		return
 	}
@@ -734,15 +740,25 @@ func (z *RedoDDLEvent) EncodeMsg(en *msgp.Writer) (err error) {
 		err = msgp.WrapError(err, "Type")
 		return
 	}
+	// write "table-name"
+	err = en.Append(0xaa, 0x74, 0x61, 0x62, 0x6c, 0x65, 0x2d, 0x6e, 0x61, 0x6d, 0x65)
+	if err != nil {
+		return
+	}
+	err = z.TableName.EncodeMsg(en)
+	if err != nil {
+		err = msgp.WrapError(err, "TableName")
+		return
+	}
 	return
 }
 
 // MarshalMsg implements msgp.Marshaler
 func (z *RedoDDLEvent) MarshalMsg(b []byte) (o []byte, err error) {
 	o = msgp.Require(b, z.Msgsize())
-	// map header, size 2
+	// map header, size 3
 	// string "ddl"
-	o = append(o, 0x82, 0xa3, 0x64, 0x64, 0x6c)
+	o = append(o, 0x83, 0xa3, 0x64, 0x64, 0x6c)
 	if z.DDL == nil {
 		o = msgp.AppendNil(o)
 	} else {
@@ -760,6 +776,13 @@ func (z *RedoDDLEvent) MarshalMsg(b []byte) (o []byte, err error) {
 	// string "type"
 	o = append(o, 0xa4, 0x74, 0x79, 0x70, 0x65)
 	o = msgp.AppendByte(o, z.Type)
+	// string "table-name"
+	o = append(o, 0xaa, 0x74, 0x61, 0x62, 0x6c, 0x65, 0x2d, 0x6e, 0x61, 0x6d, 0x65)
+	o, err = z.TableName.MarshalMsg(o)
+	if err != nil {
+		err = msgp.WrapError(err, "TableName")
+		return
+	}
 	return
 }
 
@@ -839,6 +862,12 @@ func (z *RedoDDLEvent) UnmarshalMsg(bts []byte) (o []byte, err error) {
 				err = msgp.WrapError(err, "Type")
 				return
 			}
+		case "table-name":
+			bts, err = z.TableName.UnmarshalMsg(bts)
+			if err != nil {
+				err = msgp.WrapError(err, "TableName")
+				return
+			}
 		default:
 			bts, err = msgp.Skip(bts)
 			if err != nil {
@@ -859,7 +888,7 @@ func (z *RedoDDLEvent) Msgsize() (s int) {
 	} else {
 		s += 1 + 9 + msgp.Uint64Size + 10 + msgp.Uint64Size + 6 + msgp.StringPrefixSize + len(z.DDL.Query)
 	}
-	s += 5 + msgp.ByteSize
+	s += 5 + msgp.ByteSize + 11 + z.TableName.Msgsize()
 	return
 }
 

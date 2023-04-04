@@ -118,6 +118,8 @@ func generateDSNByConfig(
 	dsnCfg.Params["readTimeout"] = cfg.ReadTimeout
 	dsnCfg.Params["writeTimeout"] = cfg.WriteTimeout
 	dsnCfg.Params["timeout"] = cfg.DialTimeout
+	// auto fetch max_allowed_packet on every new connection
+	dsnCfg.Params["maxAllowedPacket"] = "0"
 
 	autoRandom, err := checkTiDBVariable(ctx, testDB, "allow_auto_random_explicit_insert", "1")
 	if err != nil {
@@ -324,4 +326,14 @@ func CheckIsTiDB(ctx context.Context, db *sql.DB) (bool, error) {
 		return false, errors.Trace(err)
 	}
 	return true, nil
+}
+
+// QueryMaxAllowedPacket gets the value of max_allowed_packet
+func QueryMaxAllowedPacket(ctx context.Context, db *sql.DB) (int64, error) {
+	row := db.QueryRowContext(ctx, "select @@global.max_allowed_packet;")
+	var maxAllowedPacket sql.NullInt64
+	if err := row.Scan(&maxAllowedPacket); err != nil {
+		return 0, cerror.WrapError(cerror.ErrMySQLQueryError, err)
+	}
+	return maxAllowedPacket.Int64, nil
 }

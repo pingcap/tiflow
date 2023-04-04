@@ -86,8 +86,7 @@ func TestReaderRead(t *testing.T) {
 	require.Nil(t, err)
 	require.Equal(t, 1, len(r))
 	defer r[0].Close() //nolint:errcheck
-	log = &model.RedoLog{}
-	err = r[0].Read(log)
+	log, err = r[0].Read()
 	require.Nil(t, err)
 	require.EqualValues(t, 1123, log.RedoRow.Row.CommitTs)
 	time.Sleep(1001 * time.Millisecond)
@@ -236,8 +235,7 @@ func TestReaderOpenSelectedFiles(t *testing.T) {
 					closer:   r,
 				}
 				for {
-					rl := &model.RedoLog{}
-					err := r.Read(rl)
+					rl, err := r.Read()
 					if err == io.EOF {
 						break
 					}
