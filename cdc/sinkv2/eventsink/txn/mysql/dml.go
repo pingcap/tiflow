@@ -22,7 +22,7 @@ import (
 )
 
 // prepareUpdate builds a parametrics UPDATE statement as following
-// sql: `UPDATE `test`.`t` SET {} = ?, {} = ? WHERE {} = ?, {} = {}`
+// sql: `UPDATE `test`.`t` SET {} = ?, {} = ? WHERE {} = ?, {} = {} LIMIT 1`
 // `WHERE` conditions come from `preCols` and SET clause targets come from `cols`.
 func prepareUpdate(quoteTable string, preCols, cols []*model.Column, forceReplicate bool) (string, []interface{}) {
 	var builder strings.Builder
@@ -64,7 +64,7 @@ func prepareUpdate(quoteTable string, preCols, cols []*model.Column, forceReplic
 			args = append(args, wargs[i])
 		}
 	}
-	builder.WriteString(" LIMIT 1;")
+	builder.WriteString(" LIMIT 1")
 	sql := builder.String()
 	return sql, args
 }
@@ -93,12 +93,12 @@ func prepareReplace(
 
 	colList := "(" + buildColumnList(columnNames) + ")"
 	if translateToInsert {
-		builder.WriteString("INSERT INTO " + quoteTable + colList + " VALUES ")
+		builder.WriteString("INSERT INTO " + quoteTable + " " + colList + " VALUES ")
 	} else {
-		builder.WriteString("REPLACE INTO " + quoteTable + colList + " VALUES ")
+		builder.WriteString("REPLACE INTO " + quoteTable + " " + colList + " VALUES ")
 	}
 	if appendPlaceHolder {
-		builder.WriteString("(" + placeHolder(len(columnNames)) + ");")
+		builder.WriteString("(" + placeHolder(len(columnNames)) + ")")
 	}
 
 	return builder.String(), args
@@ -162,7 +162,7 @@ func reduceReplace(replaces map[string][][]interface{}, batchSize int) ([]string
 }
 
 // prepareDelete builds a parametric DELETE statement as following
-// sql: `DELETE FROM `test`.`t` WHERE x = ? AND y >= ?`
+// sql: `DELETE FROM `test`.`t` WHERE x = ? AND y >= ? LIMIT 1`
 func prepareDelete(quoteTable string, cols []*model.Column, forceReplicate bool) (string, []interface{}) {
 	var builder strings.Builder
 	builder.WriteString("DELETE FROM " + quoteTable + " WHERE ")
@@ -183,7 +183,7 @@ func prepareDelete(quoteTable string, cols []*model.Column, forceReplicate bool)
 			args = append(args, wargs[i])
 		}
 	}
-	builder.WriteString(" LIMIT 1;")
+	builder.WriteString(" LIMIT 1")
 	sql := builder.String()
 	return sql, args
 }
