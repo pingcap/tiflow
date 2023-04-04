@@ -467,7 +467,7 @@ func (c *consumer) emitDMLEvents(
 			}
 
 			if _, ok := c.tableSinkMap[tableID]; !ok {
-				c.tableSinkMap[tableID] = c.sinkFactory.CreateTableSink(
+				c.tableSinkMap[tableID] = c.sinkFactory.CreateTableSinkForConsumer(
 					model.DefaultChangeFeedID(defaultChangefeedName),
 					tableID,
 					prometheus.NewCounter(prometheus.CounterOpts{}))
