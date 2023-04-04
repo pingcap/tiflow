@@ -23,8 +23,18 @@ import (
 	"go.uber.org/zap"
 )
 
+// SetLogLevel changes TiCDC log level dynamically.
+// @Summary Change TiCDC log level
+// @Description change TiCDC log level dynamically
+// @Tags common,v2
+// @Accept json
+// @Produce json
+// @Param log_level body LogLevelReq true "log level"
+// @Success 200 {object} EmptyResponse
+// @Failure 400 {object} model.HTTPError
+// @Router	/api/v2/log [post]
 func (h *OpenAPIV2) setLogLevel(c *gin.Context) {
-	req := &LogLevelReq{}
+	req := &LogLevelReq{Level: "info"}
 	err := c.BindJSON(&req)
 	if err != nil {
 		_ = c.Error(cerror.ErrAPIInvalidParam.GenWithStack("invalid log level: %s", err.Error()))

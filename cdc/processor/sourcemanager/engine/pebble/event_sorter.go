@@ -146,7 +146,7 @@ func (s *EventSorter) RemoveTable(span tablepb.Span) {
 }
 
 // Add implements engine.SortEngine.
-func (s *EventSorter) Add(span tablepb.Span, events ...*model.PolymorphicEvent) error {
+func (s *EventSorter) Add(span tablepb.Span, events ...*model.PolymorphicEvent) {
 	s.mu.RLock()
 	state, exists := s.tables.Get(span)
 	s.mu.RUnlock()
@@ -180,8 +180,6 @@ func (s *EventSorter) Add(span tablepb.Span, events ...*model.PolymorphicEvent) 
 	if maxResolvedTs > state.maxReceivedResolvedTs.Load() {
 		state.maxReceivedResolvedTs.Store(maxResolvedTs)
 	}
-
-	return nil
 }
 
 // GetResolvedTs implements engine.SortEngine.
@@ -227,6 +225,7 @@ func (s *EventSorter) FetchByTable(span tablepb.Span, lowerBound, upperBound eng
 			zap.String("changefeed", s.changefeedID.ID),
 			zap.Stringer("span", &span),
 			zap.Uint64("upperBound", upperBound.CommitTs),
+			zap.Uint64("lowerBound", lowerBound.CommitTs),
 			zap.Uint64("resolved", sortedResolved))
 	}
 

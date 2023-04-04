@@ -18,6 +18,8 @@ import (
 
 	"github.com/pingcap/errors"
 	"github.com/pingcap/tidb/br/pkg/lightning/common"
+	lcfg "github.com/pingcap/tidb/br/pkg/lightning/config"
+	"github.com/pingcap/tidb/br/pkg/storage"
 	"github.com/pingcap/tiflow/dm/config"
 	"github.com/pingcap/tiflow/dm/pkg/terror"
 	"github.com/stretchr/testify/require"
@@ -44,4 +46,29 @@ func TestConvertLightningError(t *testing.T) {
 	converted := convertLightningError(errors.Trace(err))
 	require.True(t, terror.ErrLoadLightningChecksum.Equal(converted))
 	require.Contains(t, converted.Error(), "checksum mismatched, KV number in source files: 4, KV number in TiDB cluster: 3")
+}
+
+func TestGetLightiningConfig(t *testing.T) {
+	t.Parallel()
+
+	conf, err := GetLightningConfig(&lcfg.GlobalConfig{},
+		&config.SubTaskConfig{
+			Name:       "job123",
+			ExtStorage: &storage.LocalStorage{},
+			LoaderConfig: config.LoaderConfig{
+				RangeConcurrency: 32,
+				CompressKVPairs:  "gzip",
+				Analyze:          "required",
+			},
+		})
+	require.NoError(t, err)
+	require.Equal(t, lcfg.CheckpointDriverMySQL, conf.Checkpoint.Driver)
+	require.Equal(t, lcfg.CheckpointRemove, conf.Checkpoint.KeepAfterSuccess)
+	require.Contains(t, conf.Checkpoint.Schema, "job123")
+	require.Equal(t, 32, conf.TikvImporter.RangeConcurrency)
+	require.Equal(t, lcfg.CompressionGzip, conf.TikvImporter.CompressKVPairs)
+	require.Equal(t, lcfg.OpLevelRequired, conf.PostRestore.Analyze)
+	lightningDefaultQuota := lcfg.NewConfig().TikvImporter.DiskQuota
+	// when we don't set dm loader disk quota, it should be equal to lightning's default quota
+	require.Equal(t, lightningDefaultQuota, conf.TikvImporter.DiskQuota)
 }

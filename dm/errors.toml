@@ -1198,6 +1198,12 @@ description = ""
 workaround = "Please use extract-table/extract-schema/extract-source to handle data conflict when merge tables. See https://docs.pingcap.com/tidb/v6.4/task-configuration-file-full#task-configuration-file-template-advanced"
 tags = ["internal", "high"]
 
+[error.DM-config-20065]
+message = "invalid load analyze option '%s'"
+description = ""
+workaround = "Please choose a valid value in ['required', 'optional', 'off'] or leave it empty."
+tags = ["internal", "medium"]
+
 [error.DM-binlog-op-22001]
 message = ""
 description = ""

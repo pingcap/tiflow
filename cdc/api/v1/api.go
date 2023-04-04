@@ -256,6 +256,7 @@ func (h *OpenAPI) GetChangefeed(c *gin.Context) {
 		Engine:         info.Engine,
 		FeedState:      info.State,
 		TaskStatus:     taskStatus,
+		CreatorVersion: info.CreatorVersion,
 	}
 
 	c.IndentedJSON(http.StatusOK, changefeedDetail)
@@ -305,17 +306,6 @@ func (h *OpenAPI) CreateChangefeed(c *gin.Context) {
 		return
 	}
 
-	o, err := h.capture.GetOwner()
-	if err != nil {
-		_ = c.Error(err)
-		return
-	}
-	err = o.ValidateChangefeed(info)
-	if err != nil {
-		_ = c.Error(err)
-		return
-	}
-
 	upstreamInfo := &model.UpstreamInfo{
 		ID:            up.ID,
 		PDEndpoints:   strings.Join(up.PdEndpoints, ","),
@@ -324,12 +314,7 @@ func (h *OpenAPI) CreateChangefeed(c *gin.Context) {
 		CAPath:        up.SecurityConfig.CAPath,
 		CertAllowedCN: up.SecurityConfig.CertAllowedCN,
 	}
-	etcdClient, err := h.capture.GetEtcdClient()
-	if err != nil {
-		_ = c.Error(err)
-		return
-	}
-	err = etcdClient.CreateChangefeedInfo(
+	err = h.capture.GetEtcdClient().CreateChangefeedInfo(
 		ctx, upstreamInfo,
 		info, model.DefaultChangeFeedID(changefeedConfig.ID))
 	if err != nil {
@@ -385,7 +370,7 @@ func (h *OpenAPI) PauseChangefeed(c *gin.Context) {
 // @Tags changefeed
 // @Accept json
 // @Produce json
-// @Param changefeed-id path string true "changefeed_id"
+// @Param changefeed_id path string true "changefeed_id"
 // @Success 202
 // @Failure 500,400 {object} model.HTTPError
 // @Router	/api/v1/changefeeds/{changefeed_id}/resume [post]
@@ -423,12 +408,7 @@ func (h *OpenAPI) ResumeChangefeed(c *gin.Context) {
 // @Accept json
 // @Produce json
 // @Param changefeed_id  path  string  true  "changefeed_id"
-// @Param target_ts body integer false "changefeed target ts"
-// @Param sink_uri body string false "sink uri"
-// @Param filter_rules body []string false "filter rules"
-// @Param ignore_txn_start_ts body integer false "ignore transaction start ts"
-// @Param mounter_worker_num body integer false "mounter worker nums"
-// @Param sink_config body config.SinkConfig false "sink config"
+// @Param changefeedConfig body model.ChangefeedConfig true "changefeed config"
 // @Success 202
 // @Failure 500,400 {object} model.HTTPError
 // @Router /api/v1/changefeeds/{changefeed_id} [put]
@@ -446,10 +426,18 @@ func (h *OpenAPI) UpdateChangefeed(c *gin.Context) {
 		_ = c.Error(err)
 		return
 	}
-	if info.State != model.StateStopped {
-		_ = c.Error(cerror.ErrChangefeedUpdateRefused.GenWithStackByArgs("can only update changefeed config when it is stopped"))
+
+	switch info.State {
+	case model.StateFailed, model.StateStopped:
+	default:
+		_ = c.Error(
+			cerror.ErrChangefeedUpdateRefused.GenWithStackByArgs(
+				"can only update changefeed config when it is stopped or failed",
+			),
+		)
 		return
 	}
+
 	info.ID = changefeedID.ID
 	info.Namespace = changefeedID.Namespace
 
@@ -466,12 +454,8 @@ func (h *OpenAPI) UpdateChangefeed(c *gin.Context) {
 		_ = c.Error(err)
 		return
 	}
-	etcdClient, err := h.capture.GetEtcdClient()
-	if err != nil {
-		_ = c.Error(err)
-		return
-	}
-	err = etcdClient.SaveChangeFeedInfo(ctx, newInfo, changefeedID)
+
+	err = h.capture.GetEtcdClient().SaveChangeFeedInfo(ctx, newInfo, changefeedID)
 	if err != nil {
 		_ = c.Error(err)
 		return
@@ -579,8 +563,7 @@ func (h *OpenAPI) RebalanceTables(c *gin.Context) {
 // @Accept json
 // @Produce json
 // @Param changefeed_id path string true "changefeed_id"
-// @Param table_id body integer true "table_id"
-// @Param capture_id body string true "capture_id"
+// @Param MoveTable body model.MoveTableReq true "move table request"
 // @Success 202
 // @Failure 500,400 {object} model.HTTPError
 // @Router /api/v1/changefeeds/{changefeed_id}/tables/move_table [post]
@@ -599,10 +582,7 @@ func (h *OpenAPI) MoveTable(c *gin.Context) {
 		return
 	}
 
-	data := struct {
-		CaptureID string `json:"capture_id"`
-		TableID   int64  `json:"table_id"`
-	}{}
+	data := model.MoveTableReq{}
 	err = c.BindJSON(&data)
 	if err != nil {
 		_ = c.Error(cerror.ErrAPIInvalidParam.Wrap(err))
@@ -647,6 +627,8 @@ func (h *OpenAPI) ResignOwner(c *gin.Context) {
 // @Tags processor
 // @Accept json
 // @Produce json
+// @Param   changefeed_id   path    string  true  "changefeed ID"
+// @Param   capture_id   path    string  true  "capture ID"
 // @Success 200 {object} model.ProcessorDetail
 // @Failure 500,400 {object} model.HTTPError
 // @Router	/api/v1/processors/{changefeed_id}/{capture_id} [get]
@@ -765,12 +747,6 @@ func (h *OpenAPI) ListCapture(c *gin.Context) {
 	}
 	ownerID := info.ID
 
-	etcdClient, err := h.capture.GetEtcdClient()
-	if err != nil {
-		_ = c.Error(err)
-		return
-	}
-
 	captures := make([]*model.Capture, 0, len(captureInfos))
 	for _, c := range captureInfos {
 		isOwner := c.ID == ownerID
@@ -779,7 +755,7 @@ func (h *OpenAPI) ListCapture(c *gin.Context) {
 				ID:            c.ID,
 				IsOwner:       isOwner,
 				AdvertiseAddr: c.AdvertiseAddr,
-				ClusterID:     etcdClient.GetClusterID(),
+				ClusterID:     h.capture.GetEtcdClient().GetClusterID(),
 			})
 	}
 
@@ -870,17 +846,12 @@ func (h *OpenAPI) ServerStatus(c *gin.Context) {
 		_ = c.Error(err)
 		return
 	}
-	etcdClient, err := h.capture.GetEtcdClient()
-	if err != nil {
-		_ = c.Error(err)
-		return
-	}
 	status := model.ServerStatus{
 		Version:   version.ReleaseVersion,
 		GitHash:   version.GitHash,
 		Pid:       os.Getpid(),
 		ID:        info.ID,
-		ClusterID: etcdClient.GetClusterID(),
+		ClusterID: h.capture.GetEtcdClient().GetClusterID(),
 		IsOwner:   h.capture.IsOwner(),
 		Liveness:  h.capture.Liveness(),
 	}

@@ -215,13 +215,18 @@ func (m *feedStateManager) handleAdminJob() (jobsPending bool) {
 		jobsPending = true
 
 		// remove info
-		m.state.PatchInfo(func(info *model.ChangeFeedInfo) (*model.ChangeFeedInfo, bool, error) {
+		m.state.PatchInfo(func(info *model.ChangeFeedInfo) (
+			*model.ChangeFeedInfo, bool, error,
+		) {
 			return nil, true, nil
 		})
 		// remove changefeedStatus
-		m.state.PatchStatus(func(status *model.ChangeFeedStatus) (*model.ChangeFeedStatus, bool, error) {
-			return nil, true, nil
-		})
+		m.state.PatchStatus(
+			func(status *model.ChangeFeedStatus) (
+				*model.ChangeFeedStatus, bool, error,
+			) {
+				return nil, true, nil
+			})
 		checkpointTs := m.state.Info.GetCheckpointTs(m.state.Status)
 
 		log.Info("the changefeed is removed",
@@ -268,11 +273,12 @@ func (m *feedStateManager) handleAdminJob() (jobsPending bool) {
 			if job.OverwriteCheckpointTs > 0 {
 				oldCheckpointTs := status.CheckpointTs
 				status = &model.ChangeFeedStatus{
-					ResolvedTs:   job.OverwriteCheckpointTs,
-					CheckpointTs: job.OverwriteCheckpointTs,
-					AdminJobType: model.AdminNone,
+					ResolvedTs:        job.OverwriteCheckpointTs,
+					CheckpointTs:      job.OverwriteCheckpointTs,
+					MinTableBarrierTs: job.OverwriteCheckpointTs,
+					AdminJobType:      model.AdminNone,
 				}
-				log.Info("overwriting the checkpoint ts",
+				log.Info("overwriting the tableCheckpoint ts",
 					zap.String("namespace", m.state.ID.Namespace),
 					zap.String("changefeed", m.state.ID.ID),
 					zap.Any("oldCheckpointTs", oldCheckpointTs),
@@ -358,18 +364,18 @@ func (m *feedStateManager) patchState(feedState model.FeedState) {
 		if info.AdminJobType != adminJobType {
 			info.AdminJobType = adminJobType
 			changed = true
-		}
-		if updateEpoch {
-			previous := info.Epoch
-			ctx, cancel := context.WithTimeout(context.TODO(), 5*time.Second)
-			defer cancel()
-			info.Epoch = GenerateChangefeedEpoch(ctx, m.upstream.PDClient)
-			changed = true
-			log.Info("update changefeed epoch",
-				zap.String("namespace", m.state.ID.Namespace),
-				zap.String("changefeed", m.state.ID.ID),
-				zap.Uint64("perviousEpoch", previous),
-				zap.Uint64("currentEpoch", info.Epoch))
+
+			if updateEpoch {
+				previous := info.Epoch
+				ctx, cancel := context.WithTimeout(context.TODO(), 5*time.Second)
+				defer cancel()
+				info.Epoch = GenerateChangefeedEpoch(ctx, m.upstream.PDClient)
+				log.Info("update changefeed epoch",
+					zap.String("namespace", m.state.ID.Namespace),
+					zap.String("changefeed", m.state.ID.ID),
+					zap.Uint64("perviousEpoch", previous),
+					zap.Uint64("currentEpoch", info.Epoch))
+			}
 		}
 		return info, changed, nil
 	})

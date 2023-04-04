@@ -16,7 +16,6 @@ package sinkmanager
 import (
 	"context"
 	"sync"
-	"sync/atomic"
 	"time"
 
 	"github.com/pingcap/errors"
@@ -79,8 +78,8 @@ type SinkManager struct {
 
 	// eventCache caches events fetched from sort engine.
 	eventCache *redoEventCache
-	// redoManager is used to report the resolved ts of the table if redo log is enabled.
-	redoManager redo.LogManager
+	// redoDMLMgr is used to report the resolved ts of the table if redo log is enabled.
+	redoDMLMgr redo.DMLManager
 	// sourceManager is used by the sink manager to fetch data.
 	sourceManager *sourcemanager.SourceManager
 
@@ -88,8 +87,6 @@ type SinkManager struct {
 	sinkFactory *factory.SinkFactory
 	// tableSinks is a map from tableID to tableSink.
 	tableSinks spanz.SyncMap
-	// lastBarrierTs is the last barrier ts.
-	lastBarrierTs atomic.Uint64
 
 	// sinkWorkers used to pull data from source manager.
 	sinkWorkers []*sinkWorker
@@ -122,7 +119,7 @@ func New(
 	changefeedInfo *model.ChangeFeedInfo,
 	up *upstream.Upstream,
 	schemaStorage entry.SchemaStorage,
-	redoManager redo.LogManager,
+	redoDMLMgr redo.DMLManager,
 	sourceManager *sourcemanager.SourceManager,
 	errChan chan error,
 ) (*SinkManager, error) {
@@ -156,8 +153,8 @@ func New(
 			WithLabelValues(changefeedID.Namespace, changefeedID.ID),
 	}
 
-	if redoManager != nil && redoManager.Enabled() {
-		m.redoManager = redoManager
+	if redoDMLMgr != nil && redoDMLMgr.Enabled() {
+		m.redoDMLMgr = redoDMLMgr
 		m.redoProgressHeap = newTableProgresses()
 		m.redoWorkers = make([]*redoWorker, 0, redoWorkerNum)
 		m.redoTaskChan = make(chan *redoTask)
@@ -180,7 +177,7 @@ func New(
 	log.Info("Sink manager is created",
 		zap.String("namespace", changefeedID.Namespace),
 		zap.String("changefeed", changefeedID.ID),
-		zap.Bool("withRedoEnabled", m.redoManager != nil))
+		zap.Bool("withRedoEnabled", m.redoDMLMgr != nil))
 
 	return m, nil
 }
@@ -209,13 +206,13 @@ func (m *SinkManager) startWorkers(splitTxn bool, enableOldValue bool) {
 		}()
 	}
 
-	if m.redoManager == nil {
+	if m.redoDMLMgr == nil {
 		return
 	}
 
 	for i := 0; i < redoWorkerNum; i++ {
 		w := newRedoWorker(m.changefeedID, m.sourceManager, m.redoMemQuota,
-			m.redoManager, m.eventCache, splitTxn, enableOldValue)
+			m.redoDMLMgr, m.eventCache, enableOldValue)
 		m.redoWorkers = append(m.redoWorkers, w)
 		m.wg.Add(1)
 		go func() {
@@ -253,7 +250,7 @@ func (m *SinkManager) startGenerateTasks() {
 		}
 	}()
 
-	if m.redoManager == nil {
+	if m.redoDMLMgr == nil {
 		return
 	}
 
@@ -341,22 +338,14 @@ func (m *SinkManager) generateSinkTasks() error {
 	// Task upperbound is limited by barrierTs and schemaResolvedTs.
 	// But receivedSorterResolvedTs can be less than barrierTs, in which case
 	// the table is just scheduled to this node.
-	getUpperBound := func(tableSinkReceivedSorterResolvedTs model.Ts) engine.Position {
-		upperBoundTs := tableSinkReceivedSorterResolvedTs
-
-		barrierTs := m.lastBarrierTs.Load()
-		if upperBoundTs > barrierTs {
-			upperBoundTs = barrierTs
-		}
-
-		// If a task carries events after schemaResolvedTs, mounter group threads
-		// can be blocked on waiting schemaResolvedTs get advanced.
+	getUpperBound := func(
+		tableSinkUpperBoundTs model.Ts,
+	) engine.Position {
 		schemaTs := m.schemaStorage.ResolvedTs()
-		if upperBoundTs-1 > schemaTs {
-			upperBoundTs = schemaTs + 1
+		if tableSinkUpperBoundTs > schemaTs+1 {
+			tableSinkUpperBoundTs = schemaTs + 1
 		}
-
-		return engine.Position{StartTs: upperBoundTs - 1, CommitTs: upperBoundTs}
+		return engine.Position{StartTs: tableSinkUpperBoundTs - 1, CommitTs: tableSinkUpperBoundTs}
 	}
 
 	dispatchTasks := func() error {
@@ -406,8 +395,7 @@ func (m *SinkManager) generateSinkTasks() error {
 			tableSink := tables[i]
 			slowestTableProgress := progs[i]
 			lowerBound := slowestTableProgress.nextLowerBoundPos
-			upperBound := getUpperBound(tableSink.getReceivedSorterResolvedTs())
-
+			upperBound := getUpperBound(tableSink.getUpperBoundTs())
 			// The table has no available progress.
 			if lowerBound.Compare(upperBound) >= 0 {
 				m.sinkProgressHeap.push(slowestTableProgress)
@@ -493,17 +481,15 @@ func (m *SinkManager) generateSinkTasks() error {
 
 func (m *SinkManager) generateRedoTasks() error {
 	// We use the table's resolved ts as the upper bound to fetch events.
-	getUpperBound := func(tableSinkReceivedSorterResolvedTs model.Ts) engine.Position {
-		upperBoundTs := tableSinkReceivedSorterResolvedTs
-
+	getUpperBound := func(tableSinkUpperBoundTs model.Ts) engine.Position {
 		// If a task carries events after schemaResolvedTs, mounter group threads
 		// can be blocked on waiting schemaResolvedTs get advanced.
 		schemaTs := m.schemaStorage.ResolvedTs()
-		if upperBoundTs-1 > schemaTs {
-			upperBoundTs = schemaTs + 1
+		if tableSinkUpperBoundTs > schemaTs+1 {
+			tableSinkUpperBoundTs = schemaTs + 1
 		}
 
-		return engine.Position{StartTs: upperBoundTs - 1, CommitTs: upperBoundTs}
+		return engine.Position{StartTs: tableSinkUpperBoundTs - 1, CommitTs: tableSinkUpperBoundTs}
 	}
 
 	dispatchTasks := func() error {
@@ -653,16 +639,33 @@ func (m *SinkManager) UpdateReceivedSorterResolvedTs(span tablepb.Span, ts model
 	tableSink.(*tableSinkWrapper).updateReceivedSorterResolvedTs(ts)
 }
 
-// UpdateBarrierTs updates the barrier ts of all tables in the sink manager.
-func (m *SinkManager) UpdateBarrierTs(ts model.Ts) {
-	// It is safe to do not use compare and swap here.
-	// Only the processor will update the barrier ts.
-	// Other goroutines will only read the barrier ts.
-	// So it is safe to do not use compare and swap here, just Load and Store.
-	if ts <= m.lastBarrierTs.Load() {
-		return
-	}
-	m.lastBarrierTs.Store(ts)
+// UpdateBarrierTs update all tableSink's barrierTs in the SinkManager
+func (m *SinkManager) UpdateBarrierTs(
+	globalBarrierTs model.Ts,
+	tableBarrier map[model.TableID]model.Ts,
+) {
+	m.tableSinks.Range(func(span tablepb.Span, value interface{}) bool {
+		tableSink := value.(*tableSinkWrapper)
+		lastBarrierTs := tableSink.barrierTs.Load()
+		// It is safe to do not use compare and swap here.
+		// Only the processor will update the barrier ts.
+		// Other goroutines will only read the barrier ts.
+		// So it is safe to do not use compare and swap here, just Load and Store.
+		if tableBarrierTs, ok := tableBarrier[tableSink.span.TableID]; ok {
+			barrierTs := tableBarrierTs
+			if barrierTs > globalBarrierTs {
+				barrierTs = globalBarrierTs
+			}
+			if barrierTs > lastBarrierTs {
+				tableSink.barrierTs.Store(barrierTs)
+			}
+		} else {
+			if globalBarrierTs > lastBarrierTs {
+				tableSink.barrierTs.Store(globalBarrierTs)
+			}
+		}
+		return true
+	})
 }
 
 // AddTable adds a table(TableSink) to the sink manager.
@@ -736,7 +739,7 @@ func (m *SinkManager) StartTable(span tablepb.Span, startTs model.Ts) error {
 		nextLowerBoundPos: engine.Position{StartTs: 0, CommitTs: startTs + 1},
 		version:           tableSink.(*tableSinkWrapper).version,
 	})
-	if m.redoManager != nil {
+	if m.redoDMLMgr != nil {
 		m.redoProgressHeap.push(&progress{
 			span:              span,
 			nextLowerBoundPos: engine.Position{StartTs: 0, CommitTs: startTs + 1},
@@ -763,7 +766,7 @@ func (m *SinkManager) AsyncStopTable(span tablepb.Span) {
 				zap.String("changefeed", m.changefeedID.ID),
 				zap.Stringer("span", &span))
 		}
-		tableSink.(*tableSinkWrapper).close(m.ctx)
+		tableSink.(*tableSinkWrapper).close()
 		cleanedBytes := m.sinkMemQuota.Clean(span)
 		cleanedBytes += m.redoMemQuota.Clean(span)
 		log.Debug("MemoryQuotaTracing: Clean up memory quota for table sink task when removing table",
@@ -803,7 +806,7 @@ func (m *SinkManager) RemoveTable(span tablepb.Span) {
 	}
 }
 
-// GetAllCurrentTableSpans returns all spans in the sink manager.
+// GetAllCurrentTableSpans returns all spans in the sinkManager.
 func (m *SinkManager) GetAllCurrentTableSpans() []tablepb.Span {
 	var spans []tablepb.Span
 	m.tableSinks.Range(func(key tablepb.Span, value interface{}) bool {
@@ -811,6 +814,16 @@ func (m *SinkManager) GetAllCurrentTableSpans() []tablepb.Span {
 		return true
 	})
 	return spans
+}
+
+// GetAllCurrentTableSpansCount returns the table spans count in the sinkManager.
+func (m *SinkManager) GetAllCurrentTableSpansCount() int {
+	res := 0
+	m.tableSinks.Range(func(key tablepb.Span, value interface{}) bool {
+		res++
+		return true
+	})
+	return res
 }
 
 // GetTableState returns the table(TableSink) state.
@@ -842,8 +855,8 @@ func (m *SinkManager) GetTableStats(span tablepb.Span) TableStats {
 	m.redoMemQuota.Release(span, checkpointTs)
 	var resolvedTs model.Ts
 	// If redo log is enabled, we have to use redo log's resolved ts to calculate processor's min resolved ts.
-	if m.redoManager != nil {
-		resolvedTs = m.redoManager.GetResolvedTs(span)
+	if m.redoDMLMgr != nil {
+		resolvedTs = m.redoDMLMgr.GetResolvedTs(span)
 	} else {
 		resolvedTs = m.sourceManager.GetTableResolvedTs(span)
 	}
@@ -851,7 +864,7 @@ func (m *SinkManager) GetTableStats(span tablepb.Span) TableStats {
 	return TableStats{
 		CheckpointTs:          checkpointTs.ResolvedMark(),
 		ResolvedTs:            resolvedTs,
-		BarrierTs:             m.lastBarrierTs.Load(),
+		BarrierTs:             tableSink.barrierTs.Load(),
 		ReceivedMaxCommitTs:   tableSink.getReceivedSorterCommitTs(),
 		ReceivedMaxResolvedTs: tableSink.getReceivedSorterResolvedTs(),
 	}
@@ -881,7 +894,7 @@ func (m *SinkManager) Close() error {
 	m.redoMemQuota.Close()
 	m.tableSinks.Range(func(_ tablepb.Span, value interface{}) bool {
 		sink := value.(*tableSinkWrapper)
-		sink.close(m.ctx)
+		sink.close()
 		if m.eventCache != nil {
 			m.eventCache.removeTable(sink.span)
 		}

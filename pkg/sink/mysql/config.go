@@ -71,14 +71,11 @@ const (
 	// BackoffMaxDelay indicates the max delay time for retrying.
 	BackoffMaxDelay = 60 * time.Second
 
-	defaultBatchDMLEnable = true
+	defaultBatchDMLEnable  = true
+	defaultMultiStmtEnable = true
 
 	// defaultcachePrepStmts is the default value of cachePrepStmts
 	defaultCachePrepStmts = true
-	// defaultStmtCacheSize is the default size of prepared statement cache
-	defaultPrepStmtCacheSize = 10000
-	// The upper limit of the max size of prepared statement cache
-	maxPrepStmtCacheSize = 1000000
 )
 
 // Config is the configs for MySQL backend.
@@ -97,11 +94,11 @@ type Config struct {
 	ForceReplicate         bool
 	EnableOldValue         bool
 
-	IsTiDB            bool // IsTiDB is true if the downstream is TiDB
-	SourceID          uint64
-	BatchDMLEnable    bool
-	CachePrepStmts    bool
-	PrepStmtCacheSize int
+	IsTiDB          bool // IsTiDB is true if the downstream is TiDB
+	SourceID        uint64
+	BatchDMLEnable  bool
+	MultiStmtEnable bool
+	CachePrepStmts  bool
 }
 
 // NewConfig returns the default mysql backend config.
@@ -117,8 +114,8 @@ func NewConfig() *Config {
 		DialTimeout:            defaultDialTimeout,
 		SafeMode:               defaultSafeMode,
 		BatchDMLEnable:         defaultBatchDMLEnable,
+		MultiStmtEnable:        defaultMultiStmtEnable,
 		CachePrepStmts:         defaultCachePrepStmts,
-		PrepStmtCacheSize:      defaultPrepStmtCacheSize,
 	}
 }
 
@@ -174,10 +171,10 @@ func (c *Config) Apply(
 	if err = getBatchDMLEnable(query, &c.BatchDMLEnable); err != nil {
 		return err
 	}
-	if err = getCachePrepStmts(query, &c.CachePrepStmts); err != nil {
+	if err = getMultiStmtEnable(query, &c.MultiStmtEnable); err != nil {
 		return err
 	}
-	if err = getPrepStmtCacheSize(query, &c.PrepStmtCacheSize); err != nil {
+	if err = getCachePrepStmts(query, &c.CachePrepStmts); err != nil {
 		return err
 	}
 	c.EnableOldValue = replicaConfig.EnableOldValue
@@ -383,6 +380,18 @@ func getBatchDMLEnable(values url.Values, batchDMLEnable *bool) error {
 	return nil
 }
 
+func getMultiStmtEnable(values url.Values, multiStmtEnable *bool) error {
+	s := values.Get("multi-stmt-enable")
+	if len(s) > 0 {
+		enable, err := strconv.ParseBool(s)
+		if err != nil {
+			return cerror.WrapError(cerror.ErrMySQLInvalidConfig, err)
+		}
+		*multiStmtEnable = enable
+	}
+	return nil
+}
+
 func getCachePrepStmts(values url.Values, cachePrepStmts *bool) error {
 	s := values.Get("cache-prep-stmts")
 	if len(s) > 0 {
@@ -392,28 +401,5 @@ func getCachePrepStmts(values url.Values, cachePrepStmts *bool) error {
 		}
 		*cachePrepStmts = enable
 	}
-	return nil
-}
-
-func getPrepStmtCacheSize(values url.Values, prepStmtCacheSize *int) error {
-	s := values.Get("prep-stmt-cache-size")
-	if len(s) == 0 {
-		return nil
-	}
-
-	c, err := strconv.Atoi(s)
-	if err != nil {
-		return cerror.WrapError(cerror.ErrMySQLInvalidConfig, err)
-	}
-	if c <= 0 {
-		return cerror.WrapError(cerror.ErrMySQLInvalidConfig,
-			fmt.Errorf("invalid prep-stmt-cache-size %d, which must be greater than 0", c))
-	}
-	if c > maxPrepStmtCacheSize {
-		log.Warn("prep-stmt-cache-size too large",
-			zap.Int("original", c), zap.Int("override", maxPrepStmtCacheSize))
-		c = maxPrepStmtCacheSize
-	}
-	*prepStmtCacheSize = c
 	return nil
 }

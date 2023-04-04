@@ -223,13 +223,13 @@ func NewDefaultBatchTester() *BatchTester {
 	}
 }
 
-// TestBatchCodec tests bunch of cases for EventBatchDecoder.
+// TestBatchCodec tests bunch of cases for RowEventDecoder.
 func (s *BatchTester) TestBatchCodec(
 	t *testing.T,
-	encoderBuilder codec.EncoderBuilder,
-	newDecoder func(key []byte, value []byte) (codec.EventBatchDecoder, error),
+	encoderBuilder codec.RowEventEncoderBuilder,
+	newDecoder func(key []byte, value []byte) (codec.RowEventDecoder, error),
 ) {
-	checkRowDecoder := func(decoder codec.EventBatchDecoder, cs []*model.RowChangedEvent) {
+	checkRowDecoder := func(decoder codec.RowEventDecoder, cs []*model.RowChangedEvent) {
 		index := 0
 		for {
 			tp, hasNext, err := decoder.HasNext()
@@ -245,7 +245,7 @@ func (s *BatchTester) TestBatchCodec(
 			index++
 		}
 	}
-	checkDDLDecoder := func(decoder codec.EventBatchDecoder, cs []*model.DDLEvent) {
+	checkDDLDecoder := func(decoder codec.RowEventDecoder, cs []*model.DDLEvent) {
 		index := 0
 		for {
 			tp, hasNext, err := decoder.HasNext()
@@ -260,7 +260,7 @@ func (s *BatchTester) TestBatchCodec(
 			index++
 		}
 	}
-	checkTSDecoder := func(decoder codec.EventBatchDecoder, cs []uint64) {
+	checkTSDecoder := func(decoder codec.RowEventDecoder, cs []uint64) {
 		index := 0
 		for {
 			tp, hasNext, err := decoder.HasNext()

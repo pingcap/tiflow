@@ -609,6 +609,7 @@ func (s *Syncer) reset() {
 	}
 	// create new job chans
 	s.newJobChans()
+	s.checkpoint.DiscardPendingSnapshots()
 	s.checkpointFlushWorker = &checkpointFlushWorker{
 		input:              make(chan *checkpointFlushTask, 16),
 		cp:                 s.checkpoint,

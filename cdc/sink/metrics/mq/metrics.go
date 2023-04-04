@@ -14,6 +14,7 @@
 package mq
 
 import (
+	"github.com/pingcap/tiflow/pkg/sink/codec"
 	"github.com/pingcap/tiflow/pkg/sink/kafka"
 	"github.com/prometheus/client_golang/prometheus"
 )
@@ -23,7 +24,7 @@ var (
 	WorkerSendMessageDuration = prometheus.NewHistogramVec(
 		prometheus.HistogramOpts{
 			Namespace: "ticdc",
-			Subsystem: "sinkv2",
+			Subsystem: "sink",
 			Name:      "mq_worker_send_message_duration",
 			Help:      "Send Message duration(s) for MQ worker.",
 			Buckets:   prometheus.ExponentialBuckets(0.001, 2, 20), // 1ms~524s
@@ -32,7 +33,7 @@ var (
 	WorkerBatchSize = prometheus.NewHistogramVec(
 		prometheus.HistogramOpts{
 			Namespace: "ticdc",
-			Subsystem: "sinkv2",
+			Subsystem: "sink",
 			Name:      "mq_worker_batch_size",
 			Help:      "Batch size for MQ worker.",
 			Buckets:   prometheus.ExponentialBuckets(4, 2, 10), // 4 ~ 2048
@@ -41,7 +42,7 @@ var (
 	WorkerBatchDuration = prometheus.NewHistogramVec(
 		prometheus.HistogramOpts{
 			Namespace: "ticdc",
-			Subsystem: "sinkv2",
+			Subsystem: "sink",
 			Name:      "mq_worker_batch_duration",
 			Help:      "Batch duration for MQ worker.",
 			Buckets:   prometheus.ExponentialBuckets(0.004, 2, 10), // 4ms ~ 2s
@@ -53,5 +54,6 @@ func InitMetrics(registry *prometheus.Registry) {
 	registry.MustRegister(WorkerSendMessageDuration)
 	registry.MustRegister(WorkerBatchSize)
 	registry.MustRegister(WorkerBatchDuration)
+	codec.InitMetrics(registry)
 	kafka.InitMetrics(registry)
 }

@@ -16,17 +16,17 @@ package server
 import (
 	"context"
 	"fmt"
-	"io"
 	"net"
 	"net/http"
 	"os"
 	"path/filepath"
 	"time"
 
+	"github.com/dustin/go-humanize"
 	"github.com/gin-gonic/gin"
 	"github.com/pingcap/errors"
 	"github.com/pingcap/log"
-	"github.com/pingcap/tidb/util/memory"
+	"github.com/pingcap/tidb/util/gctuner"
 	"github.com/pingcap/tiflow/cdc"
 	"github.com/pingcap/tiflow/cdc/capture"
 	"github.com/pingcap/tiflow/cdc/kv"
@@ -35,9 +35,11 @@ import (
 	cerror "github.com/pingcap/tiflow/pkg/errors"
 	"github.com/pingcap/tiflow/pkg/etcd"
 	"github.com/pingcap/tiflow/pkg/fsutil"
+	clogutil "github.com/pingcap/tiflow/pkg/logutil"
 	"github.com/pingcap/tiflow/pkg/p2p"
 	"github.com/pingcap/tiflow/pkg/pdutil"
 	"github.com/pingcap/tiflow/pkg/tcpserver"
+	"github.com/pingcap/tiflow/pkg/util"
 	p2pProto "github.com/pingcap/tiflow/proto/p2p"
 	pd "github.com/tikv/pd/client"
 	"go.etcd.io/etcd/client/pkg/v3/logutil"
@@ -135,42 +137,41 @@ func (s *server) prepare(ctx context.Context) error {
 	logConfig := logutil.DefaultZapLoggerConfig
 	logConfig.Level = zap.NewAtomicLevelAt(zapcore.ErrorLevel)
 
-	createEtcdClient := func() (etcd.CDCEtcdClient, error) {
-		etcdCli, err := clientv3.New(clientv3.Config{
-			Endpoints:   s.pdEndpoints,
-			TLS:         tlsConfig,
-			LogConfig:   &logConfig,
-			DialTimeout: 5 * time.Second,
-			DialOptions: []grpc.DialOption{
-				grpcTLSOption,
-				grpc.WithBlock(),
-				grpc.WithConnectParams(grpc.ConnectParams{
-					Backoff: backoff.Config{
-						BaseDelay:  time.Second,
-						Multiplier: 1.1,
-						Jitter:     0.1,
-						MaxDelay:   3 * time.Second,
-					},
-					MinConnectTimeout: 3 * time.Second,
-				}),
-			},
-		})
-		if err != nil {
-			return nil, cerror.WrapError(cerror.ErrNewCaptureFailed, err)
-		}
-		cdcEtcdClient, err := etcd.NewCDCEtcdClient(ctx, etcdCli, conf.ClusterID)
-		if err != nil {
-			etcdCli.Close()
-			return nil, cerror.WrapError(cerror.ErrNewCaptureFailed, err)
-		}
-		return cdcEtcdClient, nil
-	}
-
-	cdcEtcdClient, err := createEtcdClient()
+	// we do not pass a `context` to the etcd client,
+	// to prevent it's cancelled when the server is closing.
+	// For example, when the non-owner node goes offline,
+	// it would resign the campaign key which was put by call `campaign`,
+	// if this is not done due to the passed context cancelled,
+	// the key will be kept for the lease TTL, which is 10 seconds,
+	// then cause the new owner cannot be elected immediately after the old owner offline.
+	// see https://github.com/etcd-io/etcd/blob/525d53bd41/client/v3/concurrency/election.go#L98
+	etcdCli, err := clientv3.New(clientv3.Config{
+		Endpoints:   s.pdEndpoints,
+		TLS:         tlsConfig,
+		LogConfig:   &logConfig,
+		DialTimeout: 5 * time.Second,
+		DialOptions: []grpc.DialOption{
+			grpcTLSOption,
+			grpc.WithBlock(),
+			grpc.WithConnectParams(grpc.ConnectParams{
+				Backoff: backoff.Config{
+					BaseDelay:  time.Second,
+					Multiplier: 1.1,
+					Jitter:     0.1,
+					MaxDelay:   3 * time.Second,
+				},
+				MinConnectTimeout: 3 * time.Second,
+			}),
+		},
+	})
 	if err != nil {
-		return cerror.WrapError(cerror.ErrNewCaptureFailed, err)
+		return errors.Trace(err)
 	}
 
+	cdcEtcdClient, err := etcd.NewCDCEtcdClient(ctx, etcdCli, conf.ClusterID)
+	if err != nil {
+		return errors.Trace(err)
+	}
 	s.etcdClient = cdcEtcdClient
 
 	err = s.initDir(ctx)
@@ -182,10 +183,31 @@ func (s *server) prepare(ctx context.Context) error {
 		return errors.Trace(err)
 	}
 
-	s.capture = capture.NewCapture(
-		s.pdEndpoints, createEtcdClient, s.grpcService,
-		s.sortEngineFactory)
+	if err := s.setMemoryLimit(); err != nil {
+		return errors.Trace(err)
+	}
 
+	s.capture = capture.NewCapture(
+		s.pdEndpoints, cdcEtcdClient, s.grpcService, s.sortEngineFactory)
+
+	return nil
+}
+
+func (s *server) setMemoryLimit() error {
+	conf := config.GetGlobalServerConfig()
+	totalMemory, err := util.GetMemoryLimit()
+	if err != nil {
+		return errors.Trace(err)
+	}
+	if conf.MaxMemoryPercentage > 0 {
+		goMemLimit := totalMemory * uint64(conf.MaxMemoryPercentage) / 100
+		gctuner.EnableGOGCTuner.Store(true)
+		gctuner.Tuning(goMemLimit)
+		log.Info("enable gctuner, set memory limit",
+			zap.Uint64("bytes", goMemLimit),
+			zap.String("memory", humanize.IBytes(goMemLimit)),
+		)
+	}
 	return nil
 }
 
@@ -201,13 +223,17 @@ func (s *server) createSortEngineFactory() error {
 	// Sorter dir has been set and checked when server starts.
 	// See https://github.com/pingcap/tiflow/blob/9dad09/cdc/server.go#L275
 	sortDir := config.GetGlobalServerConfig().Sorter.SortDir
-	totalMemory, err := memory.MemTotal()
+	totalMemory, err := util.GetMemoryLimit()
 	if err != nil {
 		return errors.Trace(err)
 	}
 	memPercentage := float64(conf.Sorter.MaxMemoryPercentage) / 100
 	memInBytes := uint64(float64(totalMemory) * memPercentage)
 	s.sortEngineFactory = factory.NewForPebble(sortDir, memInBytes, conf.Debug.DB)
+	log.Info("sorter engine memory limit",
+		zap.Uint64("bytes", memInBytes),
+		zap.String("memory", humanize.IBytes(memInBytes)),
+	)
 
 	return nil
 }
@@ -238,11 +264,11 @@ func (s *server) startStatusHTTP(lis net.Listener) error {
 	lis = netutil.LimitListener(lis, maxHTTPConnection)
 	conf := config.GetGlobalServerConfig()
 
-	// discard gin log output
-	gin.DefaultWriter = io.Discard
+	logWritter := clogutil.InitGinLogWritter()
 	router := gin.New()
-	// add gin.Recovery() to handle unexpected panic
-	router.Use(gin.Recovery())
+	// add gin.RecoveryWithWriter() to handle unexpected panic (logging and
+	// returning status code 500)
+	router.Use(gin.RecoveryWithWriter(logWritter))
 	// router.
 	// Register APIs.
 	cdc.RegisterRoutes(router, s.capture, registry)

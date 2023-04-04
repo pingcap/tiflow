@@ -107,7 +107,6 @@ type ChangefeedConfig struct {
 	StartTs       uint64         `json:"start_ts"`
 	TargetTs      uint64         `json:"target_ts"`
 	SinkURI       string         `json:"sink_uri"`
-	Engine        string         `json:"engine"`
 	ReplicaConfig *ReplicaConfig `json:"replica_config"`
 	PDConfig
 }
@@ -119,36 +118,80 @@ type ProcessorCommonInfo struct {
 	CaptureID    string `json:"capture_id"`
 }
 
+// JSONDuration used to wrap duration into json format
+type JSONDuration struct {
+	duration time.Duration
+}
+
+// MarshalJSON marshal duration to string
+func (d JSONDuration) MarshalJSON() ([]byte, error) {
+	return json.Marshal(d.duration.Nanoseconds())
+}
+
+// UnmarshalJSON unmarshal json value to wrapped duration
+func (d *JSONDuration) UnmarshalJSON(b []byte) error {
+	var v interface{}
+	if err := json.Unmarshal(b, &v); err != nil {
+		return err
+	}
+	switch value := v.(type) {
+	case float64:
+		d.duration = time.Duration(value)
+		return nil
+	case string:
+		var err error
+		d.duration, err = time.ParseDuration(value)
+		if err != nil {
+			return err
+		}
+		return nil
+	default:
+		return errors.New("invalid duration")
+	}
+}
+
 // ReplicaConfig is a duplicate of  config.ReplicaConfig
 type ReplicaConfig struct {
-	MemoryQuota           uint64                     `json:"memory_quota"`
-	CaseSensitive         bool                       `json:"case_sensitive"`
-	EnableOldValue        bool                       `json:"enable_old_value"`
-	ForceReplicate        bool                       `json:"force_replicate"`
-	IgnoreIneligibleTable bool                       `json:"ignore_ineligible_table"`
-	CheckGCSafePoint      bool                       `json:"check_gc_safe_point"`
-	EnableSyncPoint       bool                       `json:"enable_sync_point"`
-	BDRMode               bool                       `json:"bdr_mode"`
-	SyncPointInterval     time.Duration              `json:"sync_point_interval"`
-	SyncPointRetention    time.Duration              `json:"sync_point_retention"`
-	Filter                *FilterConfig              `json:"filter"`
-	Mounter               *MounterConfig             `json:"mounter"`
-	Sink                  *SinkConfig                `json:"sink"`
-	Consistent            *ConsistentConfig          `json:"consistent"`
-	Scheduler             *ChangefeedSchedulerConfig `json:"scheduler"`
+	MemoryQuota           uint64 `json:"memory_quota"`
+	CaseSensitive         bool   `json:"case_sensitive"`
+	EnableOldValue        bool   `json:"enable_old_value"`
+	ForceReplicate        bool   `json:"force_replicate"`
+	IgnoreIneligibleTable bool   `json:"ignore_ineligible_table"`
+	CheckGCSafePoint      bool   `json:"check_gc_safe_point"`
+	EnableSyncPoint       bool   `json:"enable_sync_point"`
+	BDRMode               bool   `json:"bdr_mode"`
+
+	SyncPointInterval  *JSONDuration `json:"sync_point_interval" swaggertype:"string"`
+	SyncPointRetention *JSONDuration `json:"sync_point_retention" swaggertype:"string"`
+
+	Filter     *FilterConfig              `json:"filter"`
+	Mounter    *MounterConfig             `json:"mounter"`
+	Sink       *SinkConfig                `json:"sink"`
+	Consistent *ConsistentConfig          `json:"consistent"`
+	Scheduler  *ChangefeedSchedulerConfig `json:"scheduler"`
 }
 
 // ToInternalReplicaConfig coverts *v2.ReplicaConfig into *config.ReplicaConfig
 func (c *ReplicaConfig) ToInternalReplicaConfig() *config.ReplicaConfig {
-	res := config.GetDefaultReplicaConfig()
+	return c.toInternalReplicaConfigWithOriginConfig(config.GetDefaultReplicaConfig())
+}
+
+// ToInternalReplicaConfigWithOriginConfig coverts *v2.ReplicaConfig into *config.ReplicaConfig
+func (c *ReplicaConfig) toInternalReplicaConfigWithOriginConfig(
+	res *config.ReplicaConfig,
+) *config.ReplicaConfig {
 	res.MemoryQuota = c.MemoryQuota
 	res.CaseSensitive = c.CaseSensitive
 	res.EnableOldValue = c.EnableOldValue
 	res.ForceReplicate = c.ForceReplicate
 	res.CheckGCSafePoint = c.CheckGCSafePoint
 	res.EnableSyncPoint = c.EnableSyncPoint
-	res.SyncPointInterval = c.SyncPointInterval
-	res.SyncPointRetention = c.SyncPointRetention
+	if c.SyncPointInterval != nil {
+		res.SyncPointInterval = c.SyncPointInterval.duration
+	}
+	if c.SyncPointRetention != nil {
+		res.SyncPointRetention = c.SyncPointRetention.duration
+	}
 	res.BDRMode = c.BDRMode
 
 	if c.Filter != nil {
@@ -196,6 +239,7 @@ func (c *ReplicaConfig) ToInternalReplicaConfig() *config.ReplicaConfig {
 			MaxLogSize:        c.Consistent.MaxLogSize,
 			FlushIntervalInMs: c.Consistent.FlushIntervalInMs,
 			Storage:           c.Consistent.Storage,
+			UseFileBackend:    c.Consistent.UseFileBackend,
 		}
 	}
 	if c.Sink != nil {
@@ -245,8 +289,9 @@ func (c *ReplicaConfig) ToInternalReplicaConfig() *config.ReplicaConfig {
 	}
 	if c.Scheduler != nil {
 		res.Scheduler = &config.ChangefeedSchedulerConfig{
-			EnableSplitSpan: c.Scheduler.EnableSplitSpan,
-			RegionPerSpan:   c.Scheduler.RegionPerSpan,
+			EnableTableAcrossNodes: c.Scheduler.EnableTableAcrossNodes,
+			RegionThreshold:        c.Scheduler.RegionThreshold,
+			WriteKeyThreshold:      c.Scheduler.WriteKeyThreshold,
 		}
 	}
 	return res
@@ -263,8 +308,8 @@ func ToAPIReplicaConfig(c *config.ReplicaConfig) *ReplicaConfig {
 		IgnoreIneligibleTable: false,
 		CheckGCSafePoint:      cloned.CheckGCSafePoint,
 		EnableSyncPoint:       cloned.EnableSyncPoint,
-		SyncPointInterval:     cloned.SyncPointInterval,
-		SyncPointRetention:    cloned.SyncPointRetention,
+		SyncPointInterval:     &JSONDuration{cloned.SyncPointInterval},
+		SyncPointRetention:    &JSONDuration{cloned.SyncPointRetention},
 		BDRMode:               cloned.BDRMode,
 	}
 
@@ -354,6 +399,7 @@ func ToAPIReplicaConfig(c *config.ReplicaConfig) *ReplicaConfig {
 			MaxLogSize:        cloned.Consistent.MaxLogSize,
 			FlushIntervalInMs: cloned.Consistent.FlushIntervalInMs,
 			Storage:           cloned.Consistent.Storage,
+			UseFileBackend:    cloned.Consistent.UseFileBackend,
 		}
 	}
 	if cloned.Mounter != nil {
@@ -363,8 +409,9 @@ func ToAPIReplicaConfig(c *config.ReplicaConfig) *ReplicaConfig {
 	}
 	if cloned.Scheduler != nil {
 		res.Scheduler = &ChangefeedSchedulerConfig{
-			EnableSplitSpan: cloned.Scheduler.EnableSplitSpan,
-			RegionPerSpan:   cloned.Scheduler.RegionPerSpan,
+			EnableTableAcrossNodes: cloned.Scheduler.EnableTableAcrossNodes,
+			RegionThreshold:        cloned.Scheduler.RegionThreshold,
+			WriteKeyThreshold:      cloned.Scheduler.WriteKeyThreshold,
 		}
 	}
 	return res
@@ -372,28 +419,7 @@ func ToAPIReplicaConfig(c *config.ReplicaConfig) *ReplicaConfig {
 
 // GetDefaultReplicaConfig returns a default ReplicaConfig
 func GetDefaultReplicaConfig() *ReplicaConfig {
-	return &ReplicaConfig{
-		CaseSensitive:      true,
-		EnableOldValue:     true,
-		CheckGCSafePoint:   true,
-		EnableSyncPoint:    false,
-		SyncPointInterval:  10 * time.Second,
-		SyncPointRetention: 24 * time.Hour,
-		Filter: &FilterConfig{
-			Rules: []string{"*.*"},
-		},
-		Sink: &SinkConfig{},
-		Consistent: &ConsistentConfig{
-			Level:             "none",
-			MaxLogSize:        64,
-			FlushIntervalInMs: config.DefaultFlushIntervalInMs,
-			Storage:           "",
-		},
-		Scheduler: &ChangefeedSchedulerConfig{
-			EnableSplitSpan: config.GetDefaultReplicaConfig().Scheduler.EnableSplitSpan,
-			RegionPerSpan:   config.GetDefaultReplicaConfig().Scheduler.RegionPerSpan,
-		},
-	}
+	return ToAPIReplicaConfig(config.GetDefaultReplicaConfig())
 }
 
 // FilterConfig represents filter config for a changefeed
@@ -534,16 +560,19 @@ type ConsistentConfig struct {
 	MaxLogSize        int64  `json:"max_log_size"`
 	FlushIntervalInMs int64  `json:"flush_interval"`
 	Storage           string `json:"storage"`
+	UseFileBackend    bool   `json:"use_file_backend"`
 }
 
 // ChangefeedSchedulerConfig is per changefeed scheduler settings.
 // This is a duplicate of config.ChangefeedSchedulerConfig
 type ChangefeedSchedulerConfig struct {
-	// EnableSplitSpan set true to split one table to multiple spans.
-	EnableSplitSpan bool `toml:"enable_split_span" json:"enable_split_span"`
-	// RegionPerSpan the number of regions in a span, must be greater than 1000.
-	// Set 0 to disable span replication.
-	RegionPerSpan int `toml:"region_per_span" json:"region_per_span"`
+	// EnableTableAcrossNodes set true to split one table to multiple spans and
+	// distribute to multiple TiCDC nodes.
+	EnableTableAcrossNodes bool `toml:"enable_table_across_nodes" json:"enable_table_across_nodes"`
+	// RegionThreshold is the region count threshold of splitting a table.
+	RegionThreshold int `toml:"region_threshold" json:"region_threshold"`
+	// WriteKeyThreshold is the written keys threshold of splitting a table.
+	WriteKeyThreshold int `toml:"write_key_threshold" json:"write_key_threshold"`
 }
 
 // EtcdData contains key/value pair of etcd data
@@ -572,7 +601,6 @@ type ChangeFeedInfo struct {
 	TargetTs uint64 `json:"target_ts,omitempty"`
 	// used for admin job notification, trigger watch event in capture
 	AdminJobType   model.AdminJobType `json:"admin_job_type,omitempty"`
-	Engine         string             `json:"engine,omitempty"`
 	Config         *ReplicaConfig     `json:"config,omitempty"`
 	State          model.FeedState    `json:"state,omitempty"`
 	Error          *RunningError      `json:"error,omitempty"`
@@ -641,4 +669,27 @@ type UpstreamConfig struct {
 type ProcessorDetail struct {
 	// All table ids that this processor are replicating.
 	Tables []int64 `json:"table_ids"`
+}
+
+// Liveness is the liveness status of a capture.
+// Liveness can only be changed from alive to stopping, and no way back.
+type Liveness int32
+
+// ServerStatus holds some common information of a server
+type ServerStatus struct {
+	Version   string   `json:"version"`
+	GitHash   string   `json:"git_hash"`
+	ID        string   `json:"id"`
+	ClusterID string   `json:"cluster_id"`
+	Pid       int      `json:"pid"`
+	IsOwner   bool     `json:"is_owner"`
+	Liveness  Liveness `json:"liveness"`
+}
+
+// Capture holds common information of a capture in cdc
+type Capture struct {
+	ID            string `json:"id"`
+	IsOwner       bool   `json:"is_owner"`
+	AdvertiseAddr string `json:"address"`
+	ClusterID     string `json:"cluster_id"`
 }

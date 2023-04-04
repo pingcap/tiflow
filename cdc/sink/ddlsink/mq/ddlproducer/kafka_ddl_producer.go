@@ -24,7 +24,6 @@ import (
 	cerror "github.com/pingcap/tiflow/pkg/errors"
 	"github.com/pingcap/tiflow/pkg/sink/codec/common"
 	"github.com/pingcap/tiflow/pkg/sink/kafka"
-	"github.com/pingcap/tiflow/pkg/util"
 	"go.uber.org/zap"
 )
 
@@ -37,8 +36,6 @@ type kafkaDDLProducer struct {
 	id model.ChangeFeedID
 	// syncProducer is used to send messages to kafka synchronously.
 	syncProducer kafka.SyncProducer
-	// metricsCollector is used to report metrics.
-	metricsCollector kafka.MetricsCollector
 	// closedMu is used to protect `closed`.
 	// We need to ensure that closed producers are never written to.
 	closedMu sync.RWMutex
@@ -48,9 +45,7 @@ type kafkaDDLProducer struct {
 }
 
 // NewKafkaDDLProducer creates a new kafka producer for replicating DDL.
-func NewKafkaDDLProducer(ctx context.Context, factory kafka.Factory,
-	adminClient kafka.ClusterAdminClient,
-) (DDLProducer, error) {
+func NewKafkaDDLProducer(ctx context.Context, factory kafka.Factory) (DDLProducer, error) {
 	changefeedID := contextutil.ChangefeedIDFromCtx(ctx)
 
 	syncProducer, err := factory.SyncProducer()
@@ -58,19 +53,11 @@ func NewKafkaDDLProducer(ctx context.Context, factory kafka.Factory,
 		return nil, cerror.WrapError(cerror.ErrKafkaNewProducer, err)
 	}
 
-	metricsCollector := factory.MetricsCollector(
-		util.RoleOwner,
-		adminClient,
-	)
 	p := &kafkaDDLProducer{
-		id:               changefeedID,
-		metricsCollector: metricsCollector,
-		syncProducer:     syncProducer,
-		closed:           false,
+		id:           changefeedID,
+		syncProducer: syncProducer,
+		closed:       false,
 	}
-
-	// Start collecting metrics.
-	go p.metricsCollector.Run(ctx)
 
 	return p, nil
 }

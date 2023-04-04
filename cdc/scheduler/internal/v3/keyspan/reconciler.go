@@ -14,9 +14,7 @@
 package keyspan
 
 import (
-	"bytes"
 	"context"
-	"math"
 
 	"github.com/pingcap/log"
 	"github.com/pingcap/tiflow/cdc/model"
@@ -25,12 +23,21 @@ import (
 	"github.com/pingcap/tiflow/cdc/scheduler/internal/v3/member"
 	"github.com/pingcap/tiflow/cdc/scheduler/internal/v3/replication"
 	"github.com/pingcap/tiflow/pkg/config"
+	"github.com/pingcap/tiflow/pkg/errors"
+	"github.com/pingcap/tiflow/pkg/pdutil"
 	"github.com/pingcap/tiflow/pkg/spanz"
-	"github.com/tikv/client-go/v2/tikv"
+	"github.com/pingcap/tiflow/pkg/upstream"
 	"go.uber.org/zap"
 )
 
-type splitSpans struct {
+type splitter interface {
+	split(
+		ctx context.Context, span tablepb.Span, totalCaptures int,
+		config *config.ChangefeedSchedulerConfig,
+	) []tablepb.Span
+}
+
+type splittedSpans struct {
 	byAddTable bool
 	spans      []tablepb.Span
 }
@@ -38,25 +45,34 @@ type splitSpans struct {
 // Reconciler reconciles span and table mapping, make sure spans are in
 // a desired state and covers all table ranges.
 type Reconciler struct {
-	tableSpans map[model.TableID]splitSpans
+	tableSpans map[model.TableID]splittedSpans
 	spanCache  []tablepb.Span
 
-	regionCache  RegionCache
 	changefeedID model.ChangeFeedID
 	config       *config.ChangefeedSchedulerConfig
+
+	splitter []splitter
 }
 
 // NewReconciler returns a Reconciler.
 func NewReconciler(
-	changefeedID model.ChangeFeedID, regionCache RegionCache,
+	changefeedID model.ChangeFeedID,
+	up *upstream.Upstream,
 	config *config.ChangefeedSchedulerConfig,
-) *Reconciler {
+) (*Reconciler, error) {
+	pdapi, err := pdutil.NewPDAPIClient(up.PDClient, up.SecurityConfig)
+	if err != nil {
+		return nil, errors.Trace(err)
+	}
 	return &Reconciler{
-		tableSpans:   make(map[int64]splitSpans),
-		regionCache:  regionCache,
+		tableSpans:   make(map[int64]splittedSpans),
 		changefeedID: changefeedID,
 		config:       config,
-	}
+		splitter: []splitter{
+			newWriteSplitter(changefeedID, pdapi),
+			newRegionCountSplitter(changefeedID, up.RegionCache),
+		},
+	}, nil
 }
 
 // Reconcile spans that need to be replicated based on current cluster status.
@@ -101,9 +117,14 @@ func (m *Reconciler) Reconcile(
 			tableSpan := spanz.TableIDToComparableSpan(tableID)
 			spans := []tablepb.Span{tableSpan}
 			if compat.CheckSpanReplicationEnabled() {
-				spans = m.splitSpan(ctx, tableSpan, len(aliveCaptures))
+				for _, splitter := range m.splitter {
+					spans = splitter.split(ctx, tableSpan, len(aliveCaptures), m.config)
+					if len(spans) > 1 {
+						break
+					}
+				}
 			}
-			m.tableSpans[tableID] = splitSpans{
+			m.tableSpans[tableID] = splittedSpans{
 				byAddTable: true,
 				spans:      spans,
 			}
@@ -135,7 +156,7 @@ func (m *Reconciler) Reconcile(
 				})
 				// TODO: maybe we should split holes too.
 			}
-			m.tableSpans[tableID] = splitSpans{
+			m.tableSpans[tableID] = splittedSpans{
 				byAddTable: false,
 				spans:      spans,
 			}
@@ -183,114 +204,4 @@ func (m *Reconciler) Reconcile(
 		}
 	}
 	return m.spanCache
-}
-
-func (m *Reconciler) splitSpan(
-	ctx context.Context, span tablepb.Span, totalCaptures int,
-) []tablepb.Span {
-	bo := tikv.NewBackoffer(ctx, 500)
-	regions, err := m.regionCache.ListRegionIDsInKeyRange(bo, span.StartKey, span.EndKey)
-	if err != nil {
-		log.Warn("schedulerv3: list regions failed, skip split span",
-			zap.String("namespace", m.changefeedID.Namespace),
-			zap.String("changefeed", m.changefeedID.ID),
-			zap.Error(err))
-		return []tablepb.Span{span}
-	}
-	if len(regions) <= m.config.RegionPerSpan || totalCaptures == 0 {
-		return []tablepb.Span{span}
-	}
-
-	totalRegions := len(regions)
-	if totalRegions == 0 {
-		totalCaptures = 1
-	}
-	stepper := newEvenlySplitStepper(totalCaptures, totalRegions)
-	spans := make([]tablepb.Span, 0, stepper.SpanCount())
-	start, end := 0, stepper.Step()
-	for {
-		startRegion, err := m.regionCache.LocateRegionByID(bo, regions[start])
-		if err != nil {
-			log.Warn("schedulerv3: get regions failed, skip split span",
-				zap.String("namespace", m.changefeedID.Namespace),
-				zap.String("changefeed", m.changefeedID.ID),
-				zap.Error(err))
-			return []tablepb.Span{span}
-		}
-		endRegion, err := m.regionCache.LocateRegionByID(bo, regions[end-1])
-		if err != nil {
-			log.Warn("schedulerv3: get regions failed, skip split span",
-				zap.String("namespace", m.changefeedID.Namespace),
-				zap.String("changefeed", m.changefeedID.ID),
-				zap.Error(err))
-			return []tablepb.Span{span}
-		}
-		if len(spans) > 0 &&
-			bytes.Compare(spans[len(spans)-1].EndKey, startRegion.StartKey) > 0 {
-			log.Warn("schedulerv3: list region out of order detected",
-				zap.String("namespace", m.changefeedID.Namespace),
-				zap.String("changefeed", m.changefeedID.ID),
-				zap.Stringer("lastSpan", &spans[len(spans)-1]),
-				zap.Stringer("region", startRegion))
-			return []tablepb.Span{span}
-		}
-		spans = append(spans, tablepb.Span{
-			TableID:  span.TableID,
-			StartKey: startRegion.StartKey,
-			EndKey:   endRegion.EndKey,
-		})
-
-		if end == len(regions) {
-			break
-		}
-		start = end
-		step := stepper.Step()
-		if end+step < len(regions) {
-			end = end + step
-		} else {
-			end = len(regions)
-		}
-	}
-	// Make sure spans does not exceed [startKey, endKey).
-	spans[0].StartKey = span.StartKey
-	spans[len(spans)-1].EndKey = span.EndKey
-	return spans
-}
-
-type evenlySplitStepper struct {
-	spanCount          int
-	regionPerSpan      int
-	extraRegionPerSpan int
-	remain             int
-}
-
-func newEvenlySplitStepper(totalCaptures int, totalRegion int) evenlySplitStepper {
-	extraRegionPerSpan := 0
-	regionPerSpan, remain := totalRegion/totalCaptures, totalRegion%totalCaptures
-	if regionPerSpan == 0 {
-		regionPerSpan = 1
-		extraRegionPerSpan = 0
-		totalCaptures = totalRegion
-	} else if remain != 0 {
-		// Evenly distributes the remaining regions.
-		extraRegionPerSpan = int(math.Ceil(float64(remain) / float64(totalCaptures)))
-	}
-	return evenlySplitStepper{
-		regionPerSpan:      regionPerSpan,
-		spanCount:          totalCaptures,
-		extraRegionPerSpan: extraRegionPerSpan,
-		remain:             remain,
-	}
-}
-
-func (e *evenlySplitStepper) SpanCount() int {
-	return e.spanCount
-}
-
-func (e *evenlySplitStepper) Step() int {
-	if e.remain <= 0 {
-		return e.regionPerSpan
-	}
-	e.remain = e.remain - e.extraRegionPerSpan
-	return e.regionPerSpan + e.extraRegionPerSpan
 }

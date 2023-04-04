@@ -58,11 +58,12 @@ const (
     "level": "none",
     "max-log-size": 64,
     "flush-interval": 2000,
-    "storage": ""
+    "storage": "",
+    "use-file-backend": false
   },
   "scheduler": {
-    "enable-split-span": false,
-    "region-per-span": 100000
+    "enable-table-across-nodes": false,
+    "region-threshold": 100000
   }
 }`
 
@@ -140,7 +141,8 @@ const (
     },
     "enable-kafka-sink-v2": false
   },
-  "cluster-id": "default"
+  "cluster-id": "default",
+  "max-memory-percentage": 70
 }`
 
 	testCfgTestReplicaConfigMarshal1 = `{
@@ -194,11 +196,14 @@ const (
     "level": "none",
     "max-log-size": 64,
     "flush-interval": 2000,
-    "storage": ""
+    "storage": "",
+    "use-file-backend": false
   },
   "scheduler": {
-    "enable-split-span": true,
-    "region-per-span": 100001
+    "enable-table-across-nodes": true,
+    "region-per-span": 0,
+    "region-threshold": 100001,
+    "write-key-threshold": 100001
   }
 }`
 
@@ -250,11 +255,13 @@ const (
     "level": "none",
     "max-log-size": 64,
     "flush-interval": 2000,
-    "storage": ""
+    "storage": "",
+    "use-file-backend": false
   },
   "scheduler": {
-    "enable-split-span": true,
-    "region-per-span": 100001
+    "enable-table-across-nodes": true,
+    "region-threshold": 100001,
+    "write-key-threshold": 100001
   }
 }`
 )

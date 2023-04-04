@@ -24,6 +24,7 @@ import (
 	"github.com/pingcap/log"
 	"github.com/pingcap/tiflow/pkg/config/outdated"
 	cerror "github.com/pingcap/tiflow/pkg/errors"
+	"github.com/pingcap/tiflow/pkg/redo"
 	"go.uber.org/zap"
 )
 
@@ -62,13 +63,15 @@ var defaultReplicaConfig = &ReplicaConfig{
 	},
 	Consistent: &ConsistentConfig{
 		Level:             "none",
-		MaxLogSize:        64,
-		FlushIntervalInMs: DefaultFlushIntervalInMs,
+		MaxLogSize:        redo.DefaultMaxLogSize,
+		FlushIntervalInMs: redo.DefaultFlushIntervalInMs,
 		Storage:           "",
+		UseFileBackend:    false,
 	},
 	Scheduler: &ChangefeedSchedulerConfig{
-		EnableSplitSpan: false,
-		RegionPerSpan:   100_000,
+		EnableTableAcrossNodes: false,
+		RegionThreshold:        100_000,
+		WriteKeyThreshold:      0,
 	},
 }
 
@@ -209,7 +212,7 @@ func (c *ReplicaConfig) ValidateAndAdjust(sinkURI *url.URL) error {
 	}
 	// TODO: Remove the hack once span replication is compatible with all sinks.
 	if !isSinkCompatibleWithSpanReplication(sinkURI) {
-		c.Scheduler.EnableSplitSpan = false
+		c.Scheduler.EnableTableAcrossNodes = false
 	}
 
 	return nil
@@ -222,30 +225,15 @@ func (c *ReplicaConfig) FixScheduler(inheritV66 bool) {
 		return
 	}
 	if inheritV66 && c.Scheduler.RegionPerSpan != 0 {
-		c.Scheduler.EnableSplitSpan = true
+		c.Scheduler.EnableTableAcrossNodes = true
+		c.Scheduler.RegionThreshold = c.Scheduler.RegionPerSpan
+		c.Scheduler.RegionPerSpan = 0
 	}
 }
 
 // FixMemoryQuota adjusts memory quota to default value
 func (c *ReplicaConfig) FixMemoryQuota() {
 	c.MemoryQuota = DefaultChangefeedMemoryQuota
-}
-
-// GetSinkURIAndAdjustConfigWithSinkURI parses sinkURI as a URI and adjust config with sinkURI.
-func GetSinkURIAndAdjustConfigWithSinkURI(
-	sinkURIStr string,
-	config *ReplicaConfig,
-) (*url.URL, error) {
-	// parse sinkURI as a URI
-	sinkURI, err := url.Parse(sinkURIStr)
-	if err != nil {
-		return nil, cerror.WrapError(cerror.ErrSinkURIInvalid, err)
-	}
-	if err := config.ValidateAndAdjust(sinkURI); err != nil {
-		return nil, err
-	}
-
-	return sinkURI, nil
 }
 
 // isSinkCompatibleWithSpanReplication returns true if the sink uri is

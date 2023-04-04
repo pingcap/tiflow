@@ -18,6 +18,7 @@ import (
 	"database/sql"
 	"database/sql/driver"
 	"fmt"
+	"math"
 	"net/url"
 	"time"
 
@@ -29,6 +30,7 @@ import (
 	"github.com/pingcap/tidb/parser/charset"
 	timodel "github.com/pingcap/tidb/parser/model"
 	"github.com/pingcap/tidb/parser/mysql"
+	"github.com/pingcap/tidb/sessionctx/variable"
 	"github.com/pingcap/tiflow/cdc/contextutil"
 	"github.com/pingcap/tiflow/cdc/model"
 	"github.com/pingcap/tiflow/cdc/sink/dmlsink"
@@ -39,6 +41,7 @@ import (
 	"github.com/pingcap/tiflow/pkg/retry"
 	pmysql "github.com/pingcap/tiflow/pkg/sink/mysql"
 	"github.com/pingcap/tiflow/pkg/sqlmodel"
+	"github.com/pingcap/tiflow/pkg/util"
 	"github.com/prometheus/client_golang/prometheus"
 	"go.uber.org/zap"
 )
@@ -51,6 +54,9 @@ const (
 	networkDriftDuration = 5 * time.Second
 
 	defaultDMLMaxRetry uint64 = 8
+
+	// To limit memory usage for prepared statements.
+	prepStmtCacheSize int = 16 * 1024
 )
 
 type mysqlBackend struct {
@@ -63,11 +69,16 @@ type mysqlBackend struct {
 	events []*dmlsink.TxnCallbackableEvent
 	rows   int
 
-	statistics                    *metrics.Statistics
-	metricTxnSinkDMLBatchCommit   prometheus.Observer
-	metricTxnSinkDMLBatchCallback prometheus.Observer
+	statistics                      *metrics.Statistics
+	metricTxnSinkDMLBatchCommit     prometheus.Observer
+	metricTxnSinkDMLBatchCallback   prometheus.Observer
+	metricTxnPrepareStatementErrors prometheus.Counter
+
 	// implement stmtCache to improve performance, especially when the downstream is TiDB
 	stmtCache *lru.Cache
+	// Indicate if the CachePrepStmts should be enabled or not
+	cachePrepStmts   bool
+	maxAllowedPacket int64
 }
 
 // NewMySQLBackends creates a new MySQL sink using schema storage
@@ -117,12 +128,45 @@ func NewMySQLBackends(
 	// Adding an extra connection to the connection pool solves the connection exhaustion issue.
 	db.SetMaxIdleConns(cfg.WorkerCount + 1)
 	db.SetMaxOpenConns(cfg.WorkerCount + 1)
-	stmtCache, err := lru.NewWithEvict(cfg.PrepStmtCacheSize, func(key, value interface{}) {
-		stmt := value.(*sql.Stmt)
-		stmt.Close()
-	})
+
+	// Inherit the default value of the prepared statement cache from the SinkURI Options
+	cachePrepStmts := cfg.CachePrepStmts
+	if cachePrepStmts {
+		// query the size of the prepared statement cache on serverside
+		maxPreparedStmtCount, err := pmysql.QueryMaxPreparedStmtCount(ctx, db)
+		if err != nil {
+			return nil, err
+		}
+		if maxPreparedStmtCount == -1 {
+			// NOTE: seems TiDB doesn't follow MySQL's specification.
+			maxPreparedStmtCount = math.MaxInt
+		}
+		// if maxPreparedStmtCount == 0,
+		// it means that the prepared statement cache is disabled on serverside.
+		// if maxPreparedStmtCount/(cfg.WorkerCount+1) == 0, for each single connection,
+		// it means that the prepared statement cache is disabled on clientsize.
+		// Because each connection can not hold at lease one prepared statement.
+		if maxPreparedStmtCount == 0 || maxPreparedStmtCount/(cfg.WorkerCount+1) == 0 {
+			cachePrepStmts = false
+		}
+	}
+
+	var stmtCache *lru.Cache
+	if cachePrepStmts {
+		stmtCache, err = lru.NewWithEvict(prepStmtCacheSize, func(key, value interface{}) {
+			stmt := value.(*sql.Stmt)
+			stmt.Close()
+		})
+		if err != nil {
+			return nil, err
+		}
+	}
+
+	var maxAllowedPacket int64
+	maxAllowedPacket, err = pmysql.QueryMaxAllowedPacket(ctx, db)
 	if err != nil {
-		return nil, err
+		log.Warn("failed to query max_allowed_packet, use default value", zap.Error(err))
+		maxAllowedPacket = int64(variable.DefMaxAllowedPacket)
 	}
 
 	backends := make([]*mysqlBackend, 0, cfg.WorkerCount)
@@ -135,9 +179,12 @@ func NewMySQLBackends(
 			dmlMaxRetry: defaultDMLMaxRetry,
 			statistics:  statistics,
 
-			metricTxnSinkDMLBatchCommit:   txn.SinkDMLBatchCommit.WithLabelValues(changefeedID.Namespace, changefeedID.ID),
-			metricTxnSinkDMLBatchCallback: txn.SinkDMLBatchCallback.WithLabelValues(changefeedID.Namespace, changefeedID.ID),
-			stmtCache:                     stmtCache,
+			metricTxnSinkDMLBatchCommit:     txn.SinkDMLBatchCommit.WithLabelValues(changefeedID.Namespace, changefeedID.ID),
+			metricTxnSinkDMLBatchCallback:   txn.SinkDMLBatchCallback.WithLabelValues(changefeedID.Namespace, changefeedID.ID),
+			metricTxnPrepareStatementErrors: txn.PrepareStatementErrors.WithLabelValues(changefeedID.Namespace, changefeedID.ID),
+			stmtCache:                       stmtCache,
+			cachePrepStmts:                  cachePrepStmts,
+			maxAllowedPacket:                maxAllowedPacket,
 		})
 	}
 
@@ -222,11 +269,12 @@ func (s *mysqlBackend) MaxFlushInterval() time.Duration {
 }
 
 type preparedDMLs struct {
-	startTs   []model.Ts
-	sqls      []string
-	values    [][]interface{}
-	callbacks []dmlsink.CallbackFunc
-	rowCount  int
+	startTs         []model.Ts
+	sqls            []string
+	values          [][]interface{}
+	callbacks       []dmlsink.CallbackFunc
+	rowCount        int
+	approximateSize int64
 }
 
 // convert2RowChanges is a helper function that convert the row change representation
@@ -287,15 +335,15 @@ func convert2RowChanges(
 	return res
 }
 
-func convertBinaryToString(row *model.RowChangedEvent) {
-	for i, col := range row.Columns {
+func convertBinaryToString(cols []*model.Column) {
+	for i, col := range cols {
 		if col == nil {
 			continue
 		}
 		if col.Charset != "" && col.Charset != charset.CharsetBin {
 			colValBytes, ok := col.Value.([]byte)
 			if ok {
-				row.Columns[i].Value = string(colValBytes)
+				cols[i].Value = string(colValBytes)
 			}
 		}
 	}
@@ -316,7 +364,8 @@ func (s *mysqlBackend) groupRowsByType(
 	deleteRow := make([]*sqlmodel.RowChange, 0, preAllocateSize)
 
 	for _, row := range event.Event.Rows {
-		convertBinaryToString(row)
+		convertBinaryToString(row.Columns)
+		convertBinaryToString(row.PreColumns)
 
 		if row.IsInsert() {
 			insertRow = append(
@@ -386,11 +435,34 @@ func (s *mysqlBackend) batchSingleTxnDmls(
 ) (sqls []string, values [][]interface{}) {
 	insertRows, updateRows, deleteRows := s.groupRowsByType(event, tableInfo, !translateToInsert)
 
+	// handle delete
 	if len(deleteRows) > 0 {
 		for _, rows := range deleteRows {
 			sql, value := sqlmodel.GenDeleteSQL(rows...)
 			sqls = append(sqls, sql)
 			values = append(values, value)
+		}
+	}
+
+	// handle update
+	if len(updateRows) > 0 {
+		if s.cfg.IsTiDB {
+			for _, rows := range updateRows {
+				s, v := s.genUpdateSQL(rows...)
+				sqls = append(sqls, s...)
+				values = append(values, v...)
+			}
+			// The behavior of update statement differs between TiDB and MySQL.
+			// So we don't use batch update statement when downstream is MySQL.
+			// Ref:https://docs.pingcap.com/tidb/stable/sql-statement-update#mysql-compatibility
+		} else {
+			for _, rows := range updateRows {
+				for _, row := range rows {
+					sql, value := row.GenSQL(sqlmodel.DMLUpdate)
+					sqls = append(sqls, sql)
+					values = append(values, value)
+				}
+			}
 		}
 	}
 
@@ -406,15 +478,6 @@ func (s *mysqlBackend) batchSingleTxnDmls(
 				sqls = append(sqls, sql)
 				values = append(values, value)
 			}
-		}
-	}
-
-	// handle update
-	if len(updateRows) > 0 {
-		for _, rows := range updateRows {
-			s, v := s.genUpdateSQL(rows...)
-			sqls = append(sqls, s...)
-			values = append(values, v...)
 		}
 	}
 
@@ -468,6 +531,7 @@ func (s *mysqlBackend) prepareDMLs() *preparedDMLs {
 	translateToInsert := s.cfg.EnableOldValue && !s.cfg.SafeMode
 
 	rowCount := 0
+	approximateSize := int64(0)
 	for _, event := range s.events {
 		if len(event.Event.Rows) == 0 {
 			continue
@@ -507,6 +571,13 @@ func (s *mysqlBackend) prepareDMLs() *preparedDMLs {
 				sql, value := s.batchSingleTxnDmls(event, tableInfo, translateToInsert)
 				sqls = append(sqls, sql...)
 				values = append(values, value...)
+
+				for _, stmt := range sql {
+					approximateSize += int64(len(stmt))
+				}
+				for _, row := range event.Event.Rows {
+					approximateSize += row.ApproximateDataSize
+				}
 				continue
 			}
 		}
@@ -523,6 +594,7 @@ func (s *mysqlBackend) prepareDMLs() *preparedDMLs {
 					sqls = append(sqls, query)
 					values = append(values, args)
 				}
+				approximateSize += int64(len(query)) + row.ApproximateDataSize
 				continue
 			}
 
@@ -555,6 +627,8 @@ func (s *mysqlBackend) prepareDMLs() *preparedDMLs {
 					values = append(values, args)
 				}
 			}
+
+			approximateSize += int64(len(query)) + row.ApproximateDataSize
 		}
 	}
 
@@ -563,12 +637,96 @@ func (s *mysqlBackend) prepareDMLs() *preparedDMLs {
 	}
 
 	return &preparedDMLs{
-		startTs:   startTs,
-		sqls:      sqls,
-		values:    values,
-		callbacks: callbacks,
-		rowCount:  rowCount,
+		startTs:         startTs,
+		sqls:            sqls,
+		values:          values,
+		callbacks:       callbacks,
+		rowCount:        rowCount,
+		approximateSize: approximateSize,
 	}
+}
+
+// execute SQLs in the multi statements way.
+func (s *mysqlBackend) multiStmtExecute(
+	ctx context.Context, dmls *preparedDMLs, tx *sql.Tx, writeTimeout time.Duration,
+) error {
+	start := time.Now()
+	multiStmtSQL := ""
+	multiStmtArgs := []any{}
+	for i, query := range dmls.sqls {
+		multiStmtSQL += query
+		if i != len(dmls.sqls)-1 {
+			multiStmtSQL += ";"
+		}
+		multiStmtArgs = append(multiStmtArgs, dmls.values[i]...)
+	}
+	log.Debug("exec row", zap.Int("workerID", s.workerID),
+		zap.String("sql", multiStmtSQL), zap.Any("args", multiStmtArgs))
+	ctx, cancel := context.WithTimeout(ctx, writeTimeout)
+	defer cancel()
+	_, execError := tx.ExecContext(ctx, multiStmtSQL, multiStmtArgs...)
+	if execError != nil {
+		err := logDMLTxnErr(
+			cerror.WrapError(cerror.ErrMySQLTxnError, execError),
+			start, s.changefeed, multiStmtSQL, dmls.rowCount, dmls.startTs)
+		if rbErr := tx.Rollback(); rbErr != nil {
+			if errors.Cause(rbErr) != context.Canceled {
+				log.Warn("failed to rollback txn", zap.Error(rbErr))
+			}
+		}
+		return err
+	}
+	return nil
+}
+
+// execute SQLs in each preparedDMLs one by one in the same transaction.
+func (s *mysqlBackend) sequenceExecute(
+	ctx context.Context, dmls *preparedDMLs, tx *sql.Tx, writeTimeout time.Duration,
+) error {
+	start := time.Now()
+	for i, query := range dmls.sqls {
+		args := dmls.values[i]
+		log.Debug("exec row", zap.Int("workerID", s.workerID),
+			zap.String("sql", query), zap.Any("args", args))
+		ctx, cancelFunc := context.WithTimeout(ctx, writeTimeout)
+
+		var prepStmt *sql.Stmt
+		if s.cachePrepStmts {
+			if stmt, ok := s.stmtCache.Get(query); ok {
+				prepStmt = stmt.(*sql.Stmt)
+			} else if stmt, err := s.db.Prepare(query); err == nil {
+				prepStmt = stmt
+				s.stmtCache.Add(query, stmt)
+			} else {
+				// Generally it means the downstream database doesn't allow
+				// too many preapred statements. So clean some of them.
+				s.stmtCache.RemoveOldest()
+				s.metricTxnPrepareStatementErrors.Inc()
+			}
+		}
+
+		var execError error
+		if prepStmt == nil {
+			_, execError = tx.ExecContext(ctx, query, args...)
+		} else {
+			//nolint:sqlclosecheck
+			_, execError = tx.Stmt(prepStmt).ExecContext(ctx, args...)
+		}
+		if execError != nil {
+			err := logDMLTxnErr(
+				cerror.WrapError(cerror.ErrMySQLTxnError, execError),
+				start, s.changefeed, query, dmls.rowCount, dmls.startTs)
+			if rbErr := tx.Rollback(); rbErr != nil {
+				if errors.Cause(rbErr) != context.Canceled {
+					log.Warn("failed to rollback txn", zap.Error(rbErr))
+				}
+			}
+			cancelFunc()
+			return err
+		}
+		cancelFunc()
+	}
+	return nil
 }
 
 func (s *mysqlBackend) execDMLWithMaxRetries(pctx context.Context, dmls *preparedDMLs) error {
@@ -579,6 +737,9 @@ func (s *mysqlBackend) execDMLWithMaxRetries(pctx context.Context, dmls *prepare
 	}
 
 	start := time.Now()
+	// approximateSize is multiplied by 2 because in extreme circustumas, every
+	// byte in dmls can be escaped and adds one byte.
+	fallbackToSeqWay := dmls.approximateSize*2 > s.maxAllowedPacket
 	return retry.Do(pctx, func() error {
 		writeTimeout, _ := time.ParseDuration(s.cfg.WriteTimeout)
 		writeTimeout += networkDriftDuration
@@ -588,9 +749,7 @@ func (s *mysqlBackend) execDMLWithMaxRetries(pctx context.Context, dmls *prepare
 			err := logDMLTxnErr(errors.Trace(driver.ErrBadConn), start, s.changefeed, "failpoint", 0, nil)
 			failpoint.Return(err)
 		})
-		failpoint.Inject("MySQLSinkHangLongTime", func() {
-			time.Sleep(time.Hour)
-		})
+		failpoint.Inject("MySQLSinkHangLongTime", func() { util.Hang(pctx, time.Hour) })
 
 		err := s.statistics.RecordBatchExecution(func() (int, error) {
 			tx, err := s.db.BeginTx(pctx, nil)
@@ -600,42 +759,22 @@ func (s *mysqlBackend) execDMLWithMaxRetries(pctx context.Context, dmls *prepare
 					start, s.changefeed, "BEGIN", dmls.rowCount, dmls.startTs)
 			}
 
-			for i, query := range dmls.sqls {
-				args := dmls.values[i]
-				log.Debug("exec row", zap.Int("workerID", s.workerID),
-					zap.String("sql", query), zap.Any("args", args))
-				ctx, cancelFunc := context.WithTimeout(pctx, writeTimeout)
-				var execError error
-				if s.cfg.CachePrepStmts {
-					stmt, ok := s.stmtCache.Get(query)
-					if !ok {
-						var err error
-						stmt, err = s.db.Prepare(query)
-						if err != nil {
-							cancelFunc()
-							return 0, errors.Trace(err)
-						}
-
-						s.stmtCache.Add(query, stmt)
-					}
-					//nolint:sqlclosecheck
-					_, execError = tx.Stmt(stmt.(*sql.Stmt)).ExecContext(ctx, args...)
-				} else {
-					_, execError = tx.ExecContext(ctx, query, args...)
-				}
-				if execError != nil {
-					err := logDMLTxnErr(
-						cerror.WrapError(cerror.ErrMySQLTxnError, execError),
-						start, s.changefeed, query, dmls.rowCount, dmls.startTs)
-					if rbErr := tx.Rollback(); rbErr != nil {
-						if errors.Cause(rbErr) != context.Canceled {
-							log.Warn("failed to rollback txn", zap.Error(rbErr))
-						}
-					}
-					cancelFunc()
+			// If interplated SQL size exceeds maxAllowedPacket, mysql driver will
+			// fall back to the sequantial way.
+			// error can be ErrPrepareMulti, ErrBadConn etc.
+			// TODO: add a quick path to check whether we should fallback to
+			// the sequence way.
+			if s.cfg.MultiStmtEnable && !fallbackToSeqWay {
+				err = s.multiStmtExecute(pctx, dmls, tx, writeTimeout)
+				if err != nil {
+					fallbackToSeqWay = true
 					return 0, err
 				}
-				cancelFunc()
+			} else {
+				err = s.sequenceExecute(pctx, dmls, tx, writeTimeout)
+				if err != nil {
+					return 0, err
+				}
 			}
 
 			// we set write source for each txn,
@@ -680,6 +819,9 @@ func logDMLTxnErr(
 	err error, start time.Time, changefeed string,
 	query string, count int, startTs []model.Ts,
 ) error {
+	if len(query) > 1024 {
+		query = query[:1024]
+	}
 	if isRetryableDMLError(err) {
 		log.Warn("execute DMLs with error, retry later",
 			zap.Error(err), zap.Duration("duration", time.Since(start)),

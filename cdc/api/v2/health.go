@@ -21,6 +21,13 @@ import (
 	cerror "github.com/pingcap/tiflow/pkg/errors"
 )
 
+// @Summary Check the health status of a TiCDC cluster
+// @Description Check the health status of a TiCDC cluster
+// @Tags common,v2
+// @Produce json
+// @Success 200 {object} EmptyResponse
+// @Failure 500,400 {object} model.HTTPError
+// @Router	/api/v2/health [get]
 func (h *OpenAPIV2) health(c *gin.Context) {
 	if !h.capture.IsOwner() {
 		middleware.ForwardToOwnerMiddleware(h.capture)(c)

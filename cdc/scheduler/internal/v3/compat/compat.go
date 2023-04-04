@@ -82,7 +82,7 @@ func (c *Compat) CheckSpanReplicationEnabled() bool {
 	}
 	c.spanReplicationHasChecked = true
 
-	c.spanReplicationEnabled = c.config.EnableSplitSpan
+	c.spanReplicationEnabled = c.config.EnableTableAcrossNodes
 	for _, capture := range c.captureInfo {
 		if len(capture.Version) == 0 {
 			c.spanReplicationEnabled = false

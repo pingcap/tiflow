@@ -20,6 +20,7 @@ import (
 	"fmt"
 	"net/http"
 	"net/http/httptest"
+	"path/filepath"
 	"sort"
 	"testing"
 
@@ -37,6 +38,8 @@ import (
 	"github.com/pingcap/tiflow/pkg/util"
 	"github.com/stretchr/testify/require"
 	pd "github.com/tikv/pd/client"
+	clientv3 "go.etcd.io/etcd/client/v3"
+	"go.etcd.io/etcd/tests/v3/integration"
 )
 
 var (
@@ -55,20 +58,22 @@ func TestCreateChangefeed(t *testing.T) {
 	etcdClient := mock_etcd.NewMockCDCEtcdClient(gomock.NewController(t))
 	apiV2 := NewOpenAPIV2ForTest(cp, helpers)
 	router := newRouter(apiV2)
+	integration.BeforeTestExternal(t)
+	testEtcdCluster := integration.NewClusterV3(
+		t, &integration.ClusterConfig{Size: 2},
+	)
+	defer testEtcdCluster.Terminate(t)
 
-	o := mock_owner.NewMockOwner(gomock.NewController(t))
 	mockUpManager := upstream.NewManager4Test(pdClient)
 	statusProvider := &mockStatusProvider{}
 	etcdClient.EXPECT().
 		GetEnsureGCServiceID(gomock.Any()).
 		Return(etcd.GcServiceIDForTest()).AnyTimes()
 	cp.EXPECT().StatusProvider().Return(statusProvider).AnyTimes()
-	cp.EXPECT().GetEtcdClient().Return(etcdClient, nil).AnyTimes()
+	cp.EXPECT().GetEtcdClient().Return(etcdClient).AnyTimes()
 	cp.EXPECT().GetUpstreamManager().Return(mockUpManager, nil).AnyTimes()
 	cp.EXPECT().IsReady().Return(true).AnyTimes()
 	cp.EXPECT().IsOwner().Return(true).AnyTimes()
-	cp.EXPECT().GetOwner().Return(o, nil).AnyTimes()
-	o.EXPECT().ValidateChangefeed(gomock.Any()).Return(nil).AnyTimes()
 
 	// case 1: json format mismatches with the spec.
 	errConfig := struct {
@@ -165,6 +170,9 @@ func TestCreateChangefeed(t *testing.T) {
 	require.Equal(t, http.StatusBadRequest, w.Code)
 
 	// case 5:
+	helpers.EXPECT().
+		getEtcdClient(gomock.Any(), gomock.Any()).
+		Return(testEtcdCluster.RandClient(), nil)
 	helpers.EXPECT().getVerfiedTables(gomock.Any(), gomock.Any(), gomock.Any()).
 		Return(nil, nil, nil).
 		AnyTimes()
@@ -204,6 +212,9 @@ func TestCreateChangefeed(t *testing.T) {
 	require.Equal(t, http.StatusInternalServerError, w.Code)
 
 	// case 6: success
+	helpers.EXPECT().
+		getEtcdClient(gomock.Any(), gomock.Any()).
+		Return(testEtcdCluster.RandClient(), nil)
 	etcdClient.EXPECT().
 		CreateChangefeedInfo(gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any()).
 		Return(nil).
@@ -219,7 +230,7 @@ func TestCreateChangefeed(t *testing.T) {
 	mysqlSink, err = util.MaskSinkURI(mysqlSink)
 	require.Nil(t, err)
 	require.Equal(t, mysqlSink, resp.SinkURI)
-	require.Equal(t, http.StatusCreated, w.Code)
+	require.Equal(t, http.StatusOK, w.Code)
 }
 
 func TestGetChangeFeed(t *testing.T) {
@@ -372,7 +383,7 @@ func TestUpdateChangefeed(t *testing.T) {
 	etcdClient.EXPECT().
 		GetUpstreamInfo(gomock.Any(), gomock.Eq(uint64(100)), gomock.Any()).
 		Return(nil, cerrors.ErrUpstreamNotFound).Times(1)
-	cp.EXPECT().GetEtcdClient().Return(etcdClient, nil).AnyTimes()
+	cp.EXPECT().GetEtcdClient().Return(etcdClient).AnyTimes()
 
 	w = httptest.NewRecorder()
 	req, _ = http.NewRequestWithContext(context.Background(), update.method,
@@ -389,7 +400,7 @@ func TestUpdateChangefeed(t *testing.T) {
 	etcdClient.EXPECT().
 		GetUpstreamInfo(gomock.Any(), gomock.Eq(uint64(1)), gomock.Any()).
 		Return(nil, nil).AnyTimes()
-	cp.EXPECT().GetEtcdClient().Return(etcdClient, nil).AnyTimes()
+	cp.EXPECT().GetEtcdClient().Return(etcdClient).AnyTimes()
 
 	w = httptest.NewRecorder()
 	req, _ = http.NewRequestWithContext(context.Background(), update.method,
@@ -464,6 +475,22 @@ func TestUpdateChangefeed(t *testing.T) {
 	require.Equal(t, http.StatusInternalServerError, w.Code)
 
 	// case 8: success
+	helpers.EXPECT().
+		verifyUpdateChangefeedConfig(gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any()).
+		Return(oldCfInfo, &model.UpstreamInfo{}, nil).
+		Times(1)
+	etcdClient.EXPECT().
+		UpdateChangefeedAndUpstream(gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any()).
+		Return(nil).Times(1)
+
+	w = httptest.NewRecorder()
+	req, _ = http.NewRequestWithContext(context.Background(), update.method,
+		fmt.Sprintf(update.url, validID), bytes.NewReader(body))
+	router.ServeHTTP(w, req)
+	require.Equal(t, http.StatusOK, w.Code)
+
+	// case 9: success with ChangeFeed.State equal to StateFailed
+	oldCfInfo.State = "failed"
 	helpers.EXPECT().
 		verifyUpdateChangefeedConfig(gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any()).
 		Return(oldCfInfo, &model.UpstreamInfo{}, nil).
@@ -659,7 +686,7 @@ func TestResumeChangefeed(t *testing.T) {
 		GetEnsureGCServiceID(gomock.Any()).
 		Return(etcd.GcServiceIDForTest()).AnyTimes()
 	cp.EXPECT().StatusProvider().Return(statusProvider).AnyTimes()
-	cp.EXPECT().GetEtcdClient().Return(etcdClient, nil).AnyTimes()
+	cp.EXPECT().GetEtcdClient().Return(etcdClient).AnyTimes()
 	cp.EXPECT().GetUpstreamManager().Return(mockUpManager, nil).AnyTimes()
 	cp.EXPECT().IsReady().Return(true).AnyTimes()
 	cp.EXPECT().IsOwner().Return(true).AnyTimes()
@@ -770,7 +797,7 @@ func TestDeleteChangefeed(t *testing.T) {
 		GetEnsureGCServiceID(gomock.Any()).
 		Return(etcd.GcServiceIDForTest()).AnyTimes()
 	cp.EXPECT().StatusProvider().Return(statusProvider).AnyTimes()
-	cp.EXPECT().GetEtcdClient().Return(etcdClient, nil).AnyTimes()
+	cp.EXPECT().GetEtcdClient().Return(etcdClient).AnyTimes()
 	cp.EXPECT().GetUpstreamManager().Return(mockUpManager, nil).AnyTimes()
 	cp.EXPECT().IsReady().Return(true).AnyTimes()
 	cp.EXPECT().IsOwner().Return(true).AnyTimes()
@@ -801,7 +828,7 @@ func TestDeleteChangefeed(t *testing.T) {
 	req, _ = http.NewRequestWithContext(context.Background(), remove.method,
 		fmt.Sprintf(remove.url, validID), nil)
 	router.ServeHTTP(w, req)
-	require.Equal(t, http.StatusNoContent, w.Code)
+	require.Equal(t, http.StatusOK, w.Code)
 
 	// case 3: query changefeed error
 	statusProvider.EXPECT().GetChangeFeedStatus(gomock.Any(), gomock.Any()).Return(
@@ -824,7 +851,7 @@ func TestDeleteChangefeed(t *testing.T) {
 	req, _ = http.NewRequestWithContext(context.Background(), remove.method,
 		fmt.Sprintf(remove.url, validID), nil)
 	router.ServeHTTP(w, req)
-	require.Equal(t, http.StatusNoContent, w.Code)
+	require.Equal(t, http.StatusOK, w.Code)
 
 	// case 5: remove changefeed failed
 	statusProvider.EXPECT().GetChangeFeedStatus(gomock.Any(), gomock.Any()).AnyTimes().Return(
@@ -838,4 +865,97 @@ func TestDeleteChangefeed(t *testing.T) {
 	require.Nil(t, err)
 	require.Contains(t, respErr.Code, "ErrReachMaxTry")
 	require.Equal(t, http.StatusInternalServerError, w.Code)
+}
+
+func TestPauseChangefeed(t *testing.T) {
+	resume := testCase{url: "/api/v2/changefeeds/%s/pause", method: "POST"}
+	helpers := NewMockAPIV2Helpers(gomock.NewController(t))
+	cp := mock_capture.NewMockCapture(gomock.NewController(t))
+	owner := mock_owner.NewMockOwner(gomock.NewController(t))
+	apiV2 := NewOpenAPIV2ForTest(cp, helpers)
+	router := newRouter(apiV2)
+
+	pdClient := &mockPDClient{}
+	etcdClient := mock_etcd.NewMockCDCEtcdClient(gomock.NewController(t))
+	mockUpManager := upstream.NewManager4Test(pdClient)
+	statusProvider := &mockStatusProvider{}
+
+	etcdClient.EXPECT().
+		GetEnsureGCServiceID(gomock.Any()).
+		Return(etcd.GcServiceIDForTest()).AnyTimes()
+	cp.EXPECT().StatusProvider().Return(statusProvider).AnyTimes()
+	cp.EXPECT().GetEtcdClient().Return(etcdClient).AnyTimes()
+	cp.EXPECT().GetUpstreamManager().Return(mockUpManager, nil).AnyTimes()
+	cp.EXPECT().IsReady().Return(true).AnyTimes()
+	cp.EXPECT().IsOwner().Return(true).AnyTimes()
+	cp.EXPECT().GetOwner().Return(owner, nil).AnyTimes()
+	owner.EXPECT().EnqueueJob(gomock.Any(), gomock.Any()).
+		Do(func(adminJob model.AdminJob, done chan<- error) {
+			require.EqualValues(t, changeFeedID, adminJob.CfID)
+			require.EqualValues(t, model.AdminStop, adminJob.Type)
+			close(done)
+		}).AnyTimes()
+
+	// case 1: invalid changefeed id
+	w := httptest.NewRecorder()
+	invalidID := "@^Invalid"
+	req, _ := http.NewRequestWithContext(context.Background(),
+		resume.method, fmt.Sprintf(resume.url, invalidID), nil)
+	router.ServeHTTP(w, req)
+	respErr := model.HTTPError{}
+	err := json.NewDecoder(w.Body).Decode(&respErr)
+	require.Nil(t, err)
+	require.Contains(t, respErr.Code, "ErrAPIInvalidParam")
+
+	// case 2: failed to get changefeedInfo
+	validID := changeFeedID.ID
+	statusProvider.err = cerrors.ErrChangeFeedNotExists.GenWithStackByArgs(validID)
+	w = httptest.NewRecorder()
+	req, _ = http.NewRequestWithContext(context.Background(), resume.method,
+		fmt.Sprintf(resume.url, validID), nil)
+	router.ServeHTTP(w, req)
+	respErr = model.HTTPError{}
+	err = json.NewDecoder(w.Body).Decode(&respErr)
+	require.Nil(t, err)
+	require.Contains(t, respErr.Code, "ErrChangeFeedNotExists")
+	require.Equal(t, http.StatusBadRequest, w.Code)
+
+	// case 4: success without overwriting checkpointTs
+	statusProvider.err = nil
+	statusProvider.changefeedInfo = &model.ChangeFeedInfo{ID: validID}
+	require.Nil(t, err)
+	w = httptest.NewRecorder()
+	req, _ = http.NewRequestWithContext(context.Background(), resume.method,
+		fmt.Sprintf(resume.url, validID), nil)
+	router.ServeHTTP(w, req)
+	require.Equal(t, http.StatusOK, w.Code)
+	require.Equal(t, "{}", w.Body.String())
+}
+
+func TestHasRunningImport(t *testing.T) {
+	integration.BeforeTestExternal(t)
+	testEtcdCluster := integration.NewClusterV3(
+		t, &integration.ClusterConfig{Size: 1},
+	)
+	defer testEtcdCluster.Terminate(t)
+
+	ctx := context.Background()
+	client := testEtcdCluster.RandClient()
+	hasImport := hasRunningImport(ctx, client)
+	require.NoError(t, hasImport)
+
+	lease, err := client.Lease.Grant(ctx, 3*60)
+	require.NoError(t, err)
+
+	_, err = client.KV.Put(
+		ctx, filepath.Join(RegisterImportTaskPrefix, "pitr"),
+		"", clientv3.WithLease(lease.ID),
+	)
+	require.NoError(t, err)
+
+	hasImport = hasRunningImport(ctx, client)
+	require.NotNil(t, hasImport)
+	require.Contains(
+		t, hasImport.Error(), "There are lightning/restore tasks running",
+	)
 }

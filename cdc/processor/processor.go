@@ -34,6 +34,7 @@ import (
 	"github.com/pingcap/tiflow/cdc/puller"
 	"github.com/pingcap/tiflow/cdc/redo"
 	"github.com/pingcap/tiflow/cdc/scheduler"
+	"github.com/pingcap/tiflow/cdc/scheduler/schedulepb"
 	"github.com/pingcap/tiflow/pkg/config"
 	cdcContext "github.com/pingcap/tiflow/pkg/context"
 	cerror "github.com/pingcap/tiflow/pkg/errors"
@@ -56,6 +57,7 @@ const (
 type processor struct {
 	changefeedID model.ChangeFeedID
 	captureInfo  *model.CaptureInfo
+	globalVars   *cdcContext.GlobalVars
 	changefeed   *orchestrator.ChangefeedReactorState
 
 	upstream      *upstream.Upstream
@@ -69,7 +71,7 @@ type processor struct {
 	sourceManager *sourcemanager.SourceManager
 	sinkManager   *sinkmanager.SinkManager
 
-	redoManager redo.LogManager
+	redoDMLMgr redo.DMLManager
 
 	initialized bool
 	errCh       chan error
@@ -184,8 +186,8 @@ func (p *processor) AddTableSpan(
 
 	p.sinkManager.AddTable(
 		span, startTs, p.changefeed.Info.TargetTs)
-	if p.redoManager.Enabled() {
-		p.redoManager.AddTable(span, startTs)
+	if p.redoDMLMgr.Enabled() {
+		p.redoDMLMgr.AddTable(span, startTs)
 	}
 	p.sourceManager.AddTable(
 		ctx.(cdcContext.Context), span, p.getTableName(ctx, span.TableID), startTs)
@@ -308,8 +310,8 @@ func (p *processor) IsRemoveTableSpanFinished(span tablepb.Span) (model.Ts, bool
 	}
 
 	stats := p.sinkManager.GetTableStats(span)
-	if p.redoManager.Enabled() {
-		p.redoManager.RemoveTable(span)
+	if p.redoDMLMgr.Enabled() {
+		p.redoDMLMgr.RemoveTable(span)
 	}
 	p.sinkManager.RemoveTable(span)
 	p.sourceManager.RemoveTable(span)
@@ -321,11 +323,6 @@ func (p *processor) IsRemoveTableSpanFinished(span tablepb.Span) (model.Ts, bool
 		zap.Uint64("checkpointTs", stats.CheckpointTs))
 
 	return stats.CheckpointTs, true
-}
-
-// GetTableSpanCount implements TableExecutor interface.
-func (p *processor) GetTableSpanCount() int {
-	return len(p.sinkManager.GetAllCurrentTableSpans())
 }
 
 // GetTableSpanStatus implements TableExecutor interface
@@ -460,6 +457,8 @@ func isProcessorIgnorableError(err error) bool {
 // the `state` parameter is sent by the etcd worker, the `state` must be a snapshot of KVs in etcd
 // The main logic of processor is in this function, including the calculation of many kinds of ts,
 // maintain table pipeline, error handling, etc.
+//
+// It can be called in etcd ticks, so it should never be blocked.
 func (p *processor) Tick(ctx cdcContext.Context) error {
 	// check upstream error first
 	if err := p.upstream.Error(); err != nil {
@@ -557,18 +556,17 @@ func (p *processor) tick(ctx cdcContext.Context) error {
 	if err := p.lazyInit(ctx); err != nil {
 		return errors.Trace(err)
 	}
-	p.pushResolvedTs2Table()
 
-	p.doGCSchemaStorage()
-
-	if p.redoManager != nil && p.redoManager.Enabled() {
-		ckpt := p.changefeed.Status.CheckpointTs
-		p.redoManager.UpdateCheckpointTs(ckpt)
-	}
-
-	if err := p.agent.Tick(ctx); err != nil {
+	barrier, err := p.agent.Tick(ctx)
+	if err != nil {
 		return errors.Trace(err)
 	}
+
+	if barrier != nil && barrier.GlobalBarrierTs != 0 {
+		p.updateBarrierTs(barrier)
+	}
+	p.doGCSchemaStorage()
+
 	return nil
 }
 
@@ -607,6 +605,9 @@ func (p *processor) lazyInitImpl(ctx cdcContext.Context) error {
 	if p.initialized {
 		return nil
 	}
+
+	p.globalVars = ctx.GlobalVars()
+
 	ctx, cancel := cdcContext.WithCancel(ctx)
 	p.cancel = cancel
 	// We don't close this error channel, since it is only safe to close channel
@@ -667,11 +668,16 @@ func (p *processor) lazyInitImpl(ctx cdcContext.Context) error {
 	p.changefeed.Info.Config.Sink.TiDBSourceID = sourceID
 
 	start := time.Now()
-
-	redoManagerOpts := redo.NewProcessorManagerOptions(errCh)
-	p.redoManager, err = redo.NewManager(stdCtx, p.changefeed.Info.Config.Consistent, redoManagerOpts)
+	p.redoDMLMgr, err = redo.NewDMLManager(stdCtx, p.changefeed.Info.Config.Consistent)
 	if err != nil {
 		return err
+	}
+	if p.redoDMLMgr.Enabled() {
+		p.wg.Add(1)
+		go func() {
+			defer p.wg.Done()
+			p.sendError(p.redoDMLMgr.Run(stdCtx))
+		}()
 	}
 	log.Info("processor creates redo manager",
 		zap.String("namespace", p.changefeedID.Namespace),
@@ -691,7 +697,7 @@ func (p *processor) lazyInitImpl(ctx cdcContext.Context) error {
 		sortEngine, p.errCh, p.changefeed.Info.Config.BDRMode)
 	p.sinkManager, err = sinkmanager.New(stdCtx, p.changefeedID,
 		p.changefeed.Info, p.upstream, p.schemaStorage,
-		p.redoManager, p.sourceManager,
+		p.redoDMLMgr, p.sourceManager,
 		p.errCh)
 	if err != nil {
 		log.Info("Processor creates sink manager fail",
@@ -778,6 +784,15 @@ func (p *processor) createAndDriveSchemaStorage(ctx cdcContext.Context) (entry.S
 	stdCtx := contextutil.PutTableInfoInCtx(ctx, -1, puller.DDLPullerTableName)
 	stdCtx = contextutil.PutChangefeedIDInCtx(stdCtx, p.changefeedID)
 	stdCtx = contextutil.PutRoleInCtx(stdCtx, util.RoleProcessor)
+	meta, err := kv.GetSnapshotMeta(kvStorage, ddlStartTs)
+	if err != nil {
+		return nil, errors.Trace(err)
+	}
+	schemaStorage, err := entry.NewSchemaStorage(meta, ddlStartTs,
+		p.changefeed.Info.Config.ForceReplicate, p.changefeedID, util.RoleProcessor)
+	if err != nil {
+		return nil, errors.Trace(err)
+	}
 	ddlPuller, err := puller.NewDDLJobPuller(
 		stdCtx,
 		p.upstream.PDClient,
@@ -789,24 +804,18 @@ func (p *processor) createAndDriveSchemaStorage(ctx cdcContext.Context) (entry.S
 		kvCfg,
 		p.changefeed.Info.Config,
 		p.changefeedID,
+		schemaStorage,
 	)
-	if err != nil {
-		return nil, errors.Trace(err)
-	}
-	meta, err := kv.GetSnapshotMeta(kvStorage, ddlStartTs)
-	if err != nil {
-		return nil, errors.Trace(err)
-	}
-	schemaStorage, err := entry.NewSchemaStorage(meta, ddlStartTs,
-		p.changefeed.Info.Config.ForceReplicate, p.changefeedID)
 	if err != nil {
 		return nil, errors.Trace(err)
 	}
 	p.wg.Add(1)
 	go func() {
 		defer p.wg.Done()
+		// ddlPuller will update the schemaStorage.
 		p.sendError(ddlPuller.Run(stdCtx))
 	}()
+
 	p.wg.Add(1)
 	go func() {
 		defer p.wg.Done()
@@ -821,20 +830,14 @@ func (p *processor) createAndDriveSchemaStorage(ctx cdcContext.Context) (entry.S
 			if jobEntry.OpType == model.OpTypeResolved {
 				schemaStorage.AdvanceResolvedTs(jobEntry.CRTs)
 			}
-			job, err := jobEntry.Job, jobEntry.Err
+			err := jobEntry.Err
 			if err != nil {
-				p.sendError(errors.Trace(err))
-				return
-			}
-			if job == nil {
-				continue
-			}
-			if err := schemaStorage.HandleDDLJob(job); err != nil {
 				p.sendError(errors.Trace(err))
 				return
 			}
 		}
 	}()
+
 	return schemaStorage, nil
 }
 
@@ -851,18 +854,29 @@ func (p *processor) sendError(err error) {
 	}
 }
 
-// pushResolvedTs2Table sends global resolved ts to all the table pipelines.
-func (p *processor) pushResolvedTs2Table() {
-	resolvedTs := p.changefeed.Status.ResolvedTs
+// updateBarrierTs updates barrierTs for all tables.
+func (p *processor) updateBarrierTs(barrier *schedulepb.Barrier) {
+	tableBarrier := p.calculateTableBarrierTs(barrier)
+	globalBarrierTs := barrier.GetGlobalBarrierTs()
+	// when redo is enable, globalBarrierTs must less than or equal to global resolvedTs
+	if p.redoDMLMgr.Enabled() {
+		if globalBarrierTs > p.changefeed.Status.ResolvedTs {
+			globalBarrierTs = p.changefeed.Status.ResolvedTs
+		}
+	}
 	schemaResolvedTs := p.schemaStorage.ResolvedTs()
-	if schemaResolvedTs < resolvedTs {
+	if schemaResolvedTs < globalBarrierTs {
 		// Do not update barrier ts that is larger than
 		// DDL puller's resolved ts.
 		// When DDL puller stall, resolved events that outputted by sorter
 		// may pile up in memory, as they have to wait DDL.
-		resolvedTs = schemaResolvedTs
+		globalBarrierTs = schemaResolvedTs
 	}
-	p.sinkManager.UpdateBarrierTs(resolvedTs)
+	log.Debug("update barrierTs",
+		zap.Any("tableBarriers", barrier.GetTableBarriers()),
+		zap.Uint64("globalBarrierTs", globalBarrierTs))
+
+	p.sinkManager.UpdateBarrierTs(globalBarrierTs, tableBarrier)
 }
 
 func (p *processor) getTableName(ctx context.Context, tableID model.TableID) string {
@@ -889,8 +903,8 @@ func (p *processor) getTableName(ctx context.Context, tableID model.TableID) str
 }
 
 func (p *processor) removeTable(span tablepb.Span) {
-	if p.redoManager.Enabled() {
-		p.redoManager.RemoveTable(span)
+	if p.redoDMLMgr.Enabled() {
+		p.redoDMLMgr.RemoveTable(span)
 	}
 	p.sinkManager.RemoveTable(span)
 	p.sourceManager.RemoveTable(span)
@@ -930,14 +944,14 @@ func (p *processor) refreshMetrics() {
 	if !p.initialized {
 		return
 	}
-	tableSpans := p.sinkManager.GetAllCurrentTableSpans()
-	p.metricSyncTableNumGauge.Set(float64(len(tableSpans)))
+	p.metricSyncTableNumGauge.Set(float64(p.sinkManager.GetAllCurrentTableSpansCount()))
 	sortEngineReceivedEvents := p.sourceManager.ReceivedEvents()
 	tableSinksReceivedEvents := p.sinkManager.ReceivedEvents()
 	p.metricRemainKVEventGauge.Set(float64(sortEngineReceivedEvents - tableSinksReceivedEvents))
 }
 
-func (p *processor) Close(ctx cdcContext.Context) error {
+// Close the processor. It can be called in etcd ticks, so it should never be blocked.
+func (p *processor) Close() error {
 	log.Info("processor closing ...",
 		zap.String("namespace", p.changefeedID.Namespace),
 		zap.String("changefeed", p.changefeedID.ID))
@@ -974,9 +988,8 @@ func (p *processor) Close(ctx cdcContext.Context) error {
 			zap.String("changefeed", p.changefeedID.ID))
 		p.sourceManager = nil
 	}
-	engineFactory := ctx.GlobalVars().SortEngineFactory
-	if engineFactory != nil {
-		if err := engineFactory.Drop(p.changefeedID); err != nil {
+	if p.globalVars != nil && p.globalVars.SortEngineFactory != nil {
+		if err := p.globalVars.SortEngineFactory.Drop(p.changefeedID); err != nil {
 			log.Error("drop event sort engine fail",
 				zap.String("namespace", p.changefeedID.Namespace),
 				zap.String("changefeed", p.changefeedID.ID),
@@ -1035,4 +1048,14 @@ func (p *processor) WriteDebugInfo(w io.Writer) error {
 	}
 
 	return nil
+}
+
+func (p *processor) calculateTableBarrierTs(
+	barrier *schedulepb.Barrier,
+) map[model.TableID]model.Ts {
+	tableBarrierTs := make(map[model.TableID]model.Ts)
+	for _, tb := range barrier.TableBarriers {
+		tableBarrierTs[tb.TableID] = tb.BarrierTs
+	}
+	return tableBarrierTs
 }

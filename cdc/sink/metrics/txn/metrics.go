@@ -21,7 +21,7 @@ var (
 	ConflictDetectDuration = prometheus.NewHistogramVec(
 		prometheus.HistogramOpts{
 			Namespace: "ticdc",
-			Subsystem: "sinkv2",
+			Subsystem: "sink",
 			Name:      "txn_conflict_detect_duration",
 			Help:      "Bucketed histogram of conflict detect time (s) for single DML statement.",
 			Buckets:   prometheus.ExponentialBuckets(0.001, 2, 20), // 1ms~524s
@@ -31,7 +31,7 @@ var (
 	QueueDuration = prometheus.NewHistogramVec(
 		prometheus.HistogramOpts{
 			Namespace: "ticdc",
-			Subsystem: "sinkv2",
+			Subsystem: "sink",
 			Name:      "txn_queue_duration",
 			Help:      "Bucketed histogram of queue time (s) for single DML statement.",
 			Buckets:   prometheus.ExponentialBuckets(0.001, 2, 20), // 1ms~524s
@@ -40,7 +40,7 @@ var (
 	WorkerFlushDuration = prometheus.NewHistogramVec(
 		prometheus.HistogramOpts{
 			Namespace: "ticdc",
-			Subsystem: "sinkv2",
+			Subsystem: "sink",
 			Name:      "txn_worker_flush_duration",
 			Help:      "Flush duration (s) for txn worker.",
 			Buckets:   prometheus.ExponentialBuckets(0.001, 2, 20), // 1ms~524s
@@ -49,7 +49,7 @@ var (
 	WorkerBusyRatio = prometheus.NewCounterVec(
 		prometheus.CounterOpts{
 			Namespace: "ticdc",
-			Subsystem: "sinkv2",
+			Subsystem: "sink",
 			Name:      "txn_worker_busy_ratio",
 			Help:      "Busy ratio (X ms in 1s) for all workers.",
 		}, []string{"namespace", "changefeed"})
@@ -57,7 +57,7 @@ var (
 	WorkerHandledRows = prometheus.NewCounterVec(
 		prometheus.CounterOpts{
 			Namespace: "ticdc",
-			Subsystem: "sinkv2",
+			Subsystem: "sink",
 			Name:      "txn_worker_handled_rows",
 			Help:      "Busy ratio (X ms in 1s) for all workers.",
 		}, []string{"namespace", "changefeed", "id"})
@@ -65,7 +65,7 @@ var (
 	SinkDMLBatchCommit = prometheus.NewHistogramVec(
 		prometheus.HistogramOpts{
 			Namespace: "ticdc",
-			Subsystem: "sinkv2",
+			Subsystem: "sink",
 			Name:      "txn_sink_dml_batch_commit",
 			Help:      "Duration of committing a DML batch",
 			Buckets:   prometheus.ExponentialBuckets(0.01, 2, 18), // 10ms~1310s
@@ -74,10 +74,18 @@ var (
 	SinkDMLBatchCallback = prometheus.NewHistogramVec(
 		prometheus.HistogramOpts{
 			Namespace: "ticdc",
-			Subsystem: "sinkv2",
+			Subsystem: "sink",
 			Name:      "txn_sink_dml_batch_callback",
 			Help:      "Duration of execuing a batch of callbacks",
 			Buckets:   prometheus.ExponentialBuckets(0.01, 2, 18), // 10ms~1300s
+		}, []string{"namespace", "changefeed"})
+
+	PrepareStatementErrors = prometheus.NewCounterVec(
+		prometheus.CounterOpts{
+			Namespace: "ticdc",
+			Subsystem: "sink",
+			Name:      "txn_prepare_statement_errors",
+			Help:      "Prepare statement errors",
 		}, []string{"namespace", "changefeed"})
 )
 
@@ -90,4 +98,5 @@ func InitMetrics(registry *prometheus.Registry) {
 	registry.MustRegister(WorkerHandledRows)
 	registry.MustRegister(SinkDMLBatchCommit)
 	registry.MustRegister(SinkDMLBatchCallback)
+	registry.MustRegister(PrepareStatementErrors)
 }

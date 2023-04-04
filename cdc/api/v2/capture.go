@@ -18,7 +18,6 @@ import (
 
 	"github.com/gin-gonic/gin"
 	"github.com/pingcap/tiflow/cdc/api"
-	"github.com/pingcap/tiflow/cdc/model"
 	cerror "github.com/pingcap/tiflow/pkg/errors"
 )
 
@@ -82,6 +81,13 @@ func (h *OpenAPIV2) drainCapture(c *gin.Context) {
 }
 
 // listCaptures lists all captures
+// @Summary List captures
+// @Description list all captures in cdc cluster
+// @Tags capture,v2
+// @Produce json
+// @Success 200 {array} Capture
+// @Failure 500,400 {object} model.HTTPError
+// @Router	/api/v2/captures [get]
 func (h *OpenAPIV2) listCaptures(c *gin.Context) {
 	ctx := c.Request.Context()
 	captureInfos, err := h.capture.StatusProvider().GetCaptures(ctx)
@@ -96,24 +102,20 @@ func (h *OpenAPIV2) listCaptures(c *gin.Context) {
 	}
 	ownerID := info.ID
 
-	etcdClient, err := h.capture.GetEtcdClient()
-	if err != nil {
-		_ = c.Error(err)
-		return
-	}
+	etcdClient := h.capture.GetEtcdClient()
 
-	captures := make([]model.Capture, 0, len(captureInfos))
+	captures := make([]Capture, 0, len(captureInfos))
 	for _, c := range captureInfos {
 		isOwner := c.ID == ownerID
 		captures = append(captures,
-			model.Capture{
+			Capture{
 				ID:            c.ID,
 				IsOwner:       isOwner,
 				AdvertiseAddr: c.AdvertiseAddr,
 				ClusterID:     etcdClient.GetClusterID(),
 			})
 	}
-	resp := &ListResponse[model.Capture]{
+	resp := &ListResponse[Capture]{
 		Total: len(captureInfos),
 		Items: captures,
 	}
