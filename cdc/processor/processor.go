@@ -418,18 +418,6 @@ func (p *processor) IsRemoveTableFinished(tableID model.TableID) (model.Ts, bool
 	return checkpointTs, true
 }
 
-// GetAllCurrentTables implements TableExecutor interface.
-func (p *processor) GetAllCurrentTables() []model.TableID {
-	if p.pullBasedSinking {
-		return p.sinkManager.GetAllCurrentTableIDs()
-	}
-	ret := make([]model.TableID, 0, len(p.tables))
-	for tableID := range p.tables {
-		ret = append(ret, tableID)
-	}
-	return ret
-}
-
 // GetCheckpoint implements TableExecutor interface.
 func (p *processor) GetCheckpoint() (checkpointTs, resolvedTs model.Ts) {
 	return p.checkpointTs, p.resolvedTs
@@ -1185,8 +1173,7 @@ func (p *processor) doGCSchemaStorage() {
 
 func (p *processor) refreshMetrics() {
 	if p.pullBasedSinking {
-		tables := p.sinkManager.GetAllCurrentTableIDs()
-		p.metricSyncTableNumGauge.Set(float64(len(tables)))
+		p.metricSyncTableNumGauge.Set(float64(p.sinkManager.GetAllTableCount()))
 		sortEngineReceivedEvents := p.sourceManager.ReceivedEvents()
 		tableSinksReceivedEvents := p.sinkManager.ReceivedEvents()
 		p.metricRemainKVEventGauge.Set(float64(sortEngineReceivedEvents - tableSinksReceivedEvents))

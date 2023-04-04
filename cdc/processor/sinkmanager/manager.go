@@ -817,6 +817,15 @@ func (m *SinkManager) GetAllCurrentTableIDs() []model.TableID {
 	return tableIDs
 }
 
+// GetAllTableCount returns the number of tables in the sink manager.
+func (m *SinkManager) GetAllTableCount() (count int) {
+	m.tableSinks.Range(func(key, value interface{}) bool {
+		count++
+		return true
+	})
+	return
+}
+
 // GetTableState returns the table(TableSink) state.
 func (m *SinkManager) GetTableState(tableID model.TableID) (tablepb.TableState, bool) {
 	tableSink, ok := m.tableSinks.Load(tableID)
