@@ -807,32 +807,14 @@ func (m *SinkManager) RemoveTable(tableID model.TableID) {
 	}
 }
 
-<<<<<<< HEAD
 // GetAllCurrentTableIDs returns all the table IDs in the sink manager.
 func (m *SinkManager) GetAllCurrentTableIDs() []model.TableID {
 	var tableIDs []model.TableID
 	m.tableSinks.Range(func(key, value interface{}) bool {
 		tableIDs = append(tableIDs, key.(model.TableID))
-=======
-// GetAllCurrentTableSpans returns all spans in the sinkManager.
-func (m *SinkManager) GetAllCurrentTableSpans() []tablepb.Span {
-	var spans []tablepb.Span
-	m.tableSinks.Range(func(key tablepb.Span, value interface{}) bool {
-		spans = append(spans, key)
->>>>>>> 4db7aba72c (scheduler, sink (ticdc): remove useless code and refine a method (#8703))
 		return true
 	})
 	return tableIDs
-}
-
-// GetAllCurrentTableSpansCount returns the table spans count in the sinkManager.
-func (m *SinkManager) GetAllCurrentTableSpansCount() int {
-	res := 0
-	m.tableSinks.Range(func(key tablepb.Span, value interface{}) bool {
-		res++
-		return true
-	})
-	return res
 }
 
 // GetTableState returns the table(TableSink) state.

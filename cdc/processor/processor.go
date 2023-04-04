@@ -418,7 +418,6 @@ func (p *processor) IsRemoveTableFinished(tableID model.TableID) (model.Ts, bool
 	return checkpointTs, true
 }
 
-<<<<<<< HEAD
 // GetAllCurrentTables implements TableExecutor interface.
 func (p *processor) GetAllCurrentTables() []model.TableID {
 	if p.pullBasedSinking {
@@ -451,12 +450,6 @@ func (p *processor) GetTableStatus(tableID model.TableID, collectStat bool) tabl
 		if collectStat {
 			stats = p.getStatsFromSourceManagerAndSinkManager(tableID, sinkStats)
 		}
-=======
-// GetTableSpanStatus implements TableExecutor interface
-func (p *processor) GetTableSpanStatus(span tablepb.Span, collectStat bool) tablepb.TableStatus {
-	state, exist := p.sinkManager.GetTableState(span)
-	if !exist {
->>>>>>> 4db7aba72c (scheduler, sink (ticdc): remove useless code and refine a method (#8703))
 		return tablepb.TableStatus{
 			TableID: tableID,
 			Checkpoint: tablepb.Checkpoint{
@@ -1213,13 +1206,6 @@ func (p *processor) refreshMetrics() {
 		p.metricSyncTableNumGauge.Set(float64(len(p.tables)))
 		p.metricRemainKVEventGauge.Set(float64(totalEvents))
 	}
-<<<<<<< HEAD
-=======
-	p.metricSyncTableNumGauge.Set(float64(p.sinkManager.GetAllCurrentTableSpansCount()))
-	sortEngineReceivedEvents := p.sourceManager.ReceivedEvents()
-	tableSinksReceivedEvents := p.sinkManager.ReceivedEvents()
-	p.metricRemainKVEventGauge.Set(float64(sortEngineReceivedEvents - tableSinksReceivedEvents))
->>>>>>> 4db7aba72c (scheduler, sink (ticdc): remove useless code and refine a method (#8703))
 }
 
 func (p *processor) Close(ctx cdcContext.Context) error {

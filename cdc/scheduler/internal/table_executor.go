@@ -43,7 +43,6 @@ type TableExecutor interface {
 	// return true and corresponding checkpoint otherwise.
 	IsRemoveTableFinished(tableID model.TableID) (model.Ts, bool)
 
-<<<<<<< HEAD
 	// GetAllCurrentTables should return all tables that are being run,
 	// being added and being removed.
 	//
@@ -54,8 +53,4 @@ type TableExecutor interface {
 
 	// GetTableStatus return the checkpoint and resolved ts for the given table.
 	GetTableStatus(tableID model.TableID, collectStat bool) tablepb.TableStatus
-=======
-	// GetTableSpanStatus return the checkpoint and resolved ts for the given table span.
-	GetTableSpanStatus(span tablepb.Span, collectStat bool) tablepb.TableStatus
->>>>>>> 4db7aba72c (scheduler, sink (ticdc): remove useless code and refine a method (#8703))
 }
