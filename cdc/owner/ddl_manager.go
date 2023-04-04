@@ -207,7 +207,7 @@ func (m *ddlManager) tick(
 				zap.String("query", job.Query),
 				zap.Uint64("finishedTs", job.BinlogInfo.FinishedTS),
 			)
-			events, err := m.schema.BuildDDLEvents(ctx,job)
+			events, err := m.schema.BuildDDLEvents(ctx, job)
 			if err != nil {
 				return nil, minTableBarrierTs, barrier, err
 			}
