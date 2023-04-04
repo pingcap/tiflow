@@ -65,7 +65,7 @@ func TestPrepareUpdate(t *testing.T) {
 				},
 				{Name: "b", Type: mysql.TypeVarchar, Flag: 0, Value: "test2"},
 			},
-			expectedSQL:  "UPDATE `test`.`t1` SET `a`=?,`b`=? WHERE `a`=? LIMIT 1;",
+			expectedSQL:  "UPDATE `test`.`t1` SET `a`=?,`b`=? WHERE `a`=? LIMIT 1",
 			expectedArgs: []interface{}{1, "test2", 1},
 		},
 		{
@@ -109,7 +109,7 @@ func TestPrepareUpdate(t *testing.T) {
 					Value: 100,
 				},
 			},
-			expectedSQL:  "UPDATE `test`.`t1` SET `a`=?,`b`=? WHERE `a`=? AND `b`=? LIMIT 1;",
+			expectedSQL:  "UPDATE `test`.`t1` SET `a`=?,`b`=? WHERE `a`=? AND `b`=? LIMIT 1",
 			expectedArgs: []interface{}{2, "test2", 1, "test"},
 		},
 		{
@@ -153,7 +153,7 @@ func TestPrepareUpdate(t *testing.T) {
 					Value: 100,
 				},
 			},
-			expectedSQL:  "UPDATE `test`.`t1` SET `a`=?,`b`=? WHERE `a`=? AND `b`=? LIMIT 1;",
+			expectedSQL:  "UPDATE `test`.`t1` SET `a`=?,`b`=? WHERE `a`=? AND `b`=? LIMIT 1",
 			expectedArgs: []interface{}{2, []byte("世界"), 1, []byte("你好")},
 		},
 		{
@@ -200,7 +200,7 @@ func TestPrepareUpdate(t *testing.T) {
 					Value: 100,
 				},
 			},
-			expectedSQL:  "UPDATE `test`.`t1` SET `a`=?,`b`=? WHERE `a`=? AND `b`=? LIMIT 1;",
+			expectedSQL:  "UPDATE `test`.`t1` SET `a`=?,`b`=? WHERE `a`=? AND `b`=? LIMIT 1",
 			expectedArgs: []interface{}{2, []byte("世界"), 1, []byte("你好")},
 		},
 		{
@@ -247,7 +247,7 @@ func TestPrepareUpdate(t *testing.T) {
 					Value: 100,
 				},
 			},
-			expectedSQL:  "UPDATE `test`.`t1` SET `a`=?,`b`=? WHERE `a`=? AND `b`=? LIMIT 1;",
+			expectedSQL:  "UPDATE `test`.`t1` SET `a`=?,`b`=? WHERE `a`=? AND `b`=? LIMIT 1",
 			expectedArgs: []interface{}{2, "世界", 1, "你好"},
 		},
 	}
@@ -288,7 +288,7 @@ func TestPrepareDelete(t *testing.T) {
 					Value: "test",
 				},
 			},
-			expectedSQL:  "DELETE FROM `test`.`t1` WHERE `a` = ? LIMIT 1;",
+			expectedSQL:  "DELETE FROM `test`.`t1` WHERE `a` = ? LIMIT 1",
 			expectedArgs: []interface{}{1},
 		},
 		{
@@ -313,7 +313,7 @@ func TestPrepareDelete(t *testing.T) {
 					Value: 100,
 				},
 			},
-			expectedSQL:  "DELETE FROM `test`.`t1` WHERE `a` = ? AND `b` = ? LIMIT 1;",
+			expectedSQL:  "DELETE FROM `test`.`t1` WHERE `a` = ? AND `b` = ? LIMIT 1",
 			expectedArgs: []interface{}{1, "test"},
 		},
 		{
@@ -337,7 +337,7 @@ func TestPrepareDelete(t *testing.T) {
 					Value: 100,
 				},
 			},
-			expectedSQL:  "DELETE FROM `test`.`t1` WHERE `a` = ? AND `b` = ? LIMIT 1;",
+			expectedSQL:  "DELETE FROM `test`.`t1` WHERE `a` = ? AND `b` = ? LIMIT 1",
 			expectedArgs: []interface{}{1, []byte("你好")},
 		},
 		{
@@ -363,7 +363,7 @@ func TestPrepareDelete(t *testing.T) {
 					Value: 100,
 				},
 			},
-			expectedSQL:  "DELETE FROM `test`.`t1` WHERE `a` = ? AND `b` = ? LIMIT 1;",
+			expectedSQL:  "DELETE FROM `test`.`t1` WHERE `a` = ? AND `b` = ? LIMIT 1",
 			expectedArgs: []interface{}{1, []byte("你好")},
 		},
 		{
@@ -389,7 +389,7 @@ func TestPrepareDelete(t *testing.T) {
 					Value: 100,
 				},
 			},
-			expectedSQL:  "DELETE FROM `test`.`t1` WHERE `a` = ? AND `b` = ? LIMIT 1;",
+			expectedSQL:  "DELETE FROM `test`.`t1` WHERE `a` = ? AND `b` = ? LIMIT 1",
 			expectedArgs: []interface{}{1, "你好"},
 		},
 	}
@@ -643,7 +643,7 @@ func TestMapReplace(t *testing.T) {
 					Value: uint8(255),
 				},
 			},
-			expectedQuery: "REPLACE INTO `test`.`t1`(`a`,`b`,`d`) VALUES ",
+			expectedQuery: "REPLACE INTO `test`.`t1` (`a`,`b`,`d`) VALUES ",
 			expectedArgs:  []interface{}{1, "varchar", uint8(255)},
 		},
 		{
@@ -670,7 +670,7 @@ func TestMapReplace(t *testing.T) {
 					Value: uint8(255),
 				},
 			},
-			expectedQuery: "REPLACE INTO `test`.`t1`(`a`,`b`,`c`,`d`) VALUES ",
+			expectedQuery: "REPLACE INTO `test`.`t1` (`a`,`b`,`c`,`d`) VALUES ",
 			expectedArgs:  []interface{}{1, "varchar", 1, uint8(255)},
 		},
 		{
@@ -705,7 +705,7 @@ func TestMapReplace(t *testing.T) {
 					Value: []byte("你好,世界"),
 				},
 			},
-			expectedQuery: "REPLACE INTO `test`.`t1`(`a`,`b`,`c`,`d`,`e`) VALUES ",
+			expectedQuery: "REPLACE INTO `test`.`t1` (`a`,`b`,`c`,`d`,`e`) VALUES ",
 			expectedArgs: []interface{}{
 				1, "你好", "世界", []byte("你好,世界"),
 				[]byte("你好,世界"),
