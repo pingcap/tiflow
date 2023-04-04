@@ -38,13 +38,8 @@ import (
 	"github.com/pingcap/tidb/util/mock"
 	"github.com/pingcap/tiflow/cdc/model"
 	"github.com/pingcap/tiflow/pkg/config"
-<<<<<<< HEAD
-	pfilter "github.com/pingcap/tiflow/pkg/filter"
-	"github.com/pingcap/tiflow/pkg/regionspan"
-=======
 	"github.com/pingcap/tiflow/pkg/filter"
-	"github.com/pingcap/tiflow/pkg/spanz"
->>>>>>> d30f48b689 (mounter(ticdc): mount float32 value correctly to avoid the precision lost. (#8502))
+	"github.com/pingcap/tiflow/pkg/regionspan"
 	"github.com/pingcap/tiflow/pkg/sqlmodel"
 	"github.com/stretchr/testify/require"
 	"github.com/tikv/client-go/v2/oracle"
