@@ -19,8 +19,7 @@ import (
 	"io"
 	"net/url"
 	"os"
-	"path/filepath"
-	"sync"
+	"strings"
 	"time"
 
 	"github.com/pingcap/log"
@@ -86,12 +85,10 @@ type LogReaderConfig struct {
 
 // LogReader implement RedoLogReader interface
 type LogReader struct {
-	cfg      *LogReaderConfig
-	meta     *common.LogMeta
-	rowCh    chan *model.RowChangedEvent
-	ddlCh    chan *model.DDLEvent
-	metaLock sync.Mutex
-	sync.Mutex
+	cfg   *LogReaderConfig
+	meta  *common.LogMeta
+	rowCh chan *model.RowChangedEvent
+	ddlCh chan *model.DDLEvent
 }
 
 // newLogReader creates a LogReader instance.
@@ -112,20 +109,12 @@ func newLogReader(ctx context.Context, cfg *LogReaderConfig) (*LogReader, error)
 		rowCh: make(chan *model.RowChangedEvent, defaultReaderChanSize),
 		ddlCh: make(chan *model.DDLEvent, defaultReaderChanSize),
 	}
-	if cfg.UseExternalStorage {
-		extStorage, err := redo.InitExternalStorage(ctx, cfg.URI)
-		if err != nil {
-			return nil, err
-		}
-		// remove logs in local dir first, if have logs left belongs to previous changefeed with the same name may have error when apply logs
-		err = os.RemoveAll(cfg.Dir)
-		if err != nil {
-			return nil, errors.WrapError(errors.ErrRedoFileOp, err)
-		}
-		err = downLoadToLocal(ctx, cfg.Dir, extStorage, redo.RedoMetaFileType, cfg.WorkerNums)
-		if err != nil {
-			return nil, errors.WrapError(errors.ErrRedoDownloadFailed, err)
-		}
+	// remove logs in local dir first, if have logs left belongs to previous changefeed with the same name may have error when apply logs
+	if err := os.RemoveAll(cfg.Dir); err != nil {
+		return nil, errors.WrapError(errors.ErrRedoFileOp, err)
+	}
+	if err := logReader.initMeta(ctx); err != nil {
+		return nil, err
 	}
 	return logReader, nil
 }
@@ -139,10 +128,7 @@ func (l *LogReader) Run(ctx context.Context) error {
 	}
 
 	if l.meta == nil {
-		_, _, err := l.ReadMeta(ctx)
-		if err != nil {
-			return err
-		}
+		return errors.Trace(errors.ErrRedoMetaFileNotFound.GenWithStackByArgs(l.cfg.Dir))
 	}
 
 	eg, egCtx := errgroup.WithContext(ctx)
@@ -184,7 +170,7 @@ func (l *LogReader) runDDLReader(egCtx context.Context) error {
 }
 
 func (l *LogReader) runReader(egCtx context.Context, cfg *readerConfig) error {
-	fileReaders, err := newReader(egCtx, cfg)
+	fileReaders, err := newReaders(egCtx, cfg)
 	if err != nil {
 		return errors.Trace(err)
 	}
@@ -288,50 +274,45 @@ func (l *LogReader) ReadNextDDL(ctx context.Context) (*model.DDLEvent, error) {
 	}
 }
 
-// ReadMeta implement ReadMeta interface
-func (l *LogReader) ReadMeta(ctx context.Context) (checkpointTs, resolvedTs uint64, err error) {
+func (l *LogReader) initMeta(ctx context.Context) error {
 	select {
 	case <-ctx.Done():
-		return 0, 0, errors.Trace(ctx.Err())
+		return errors.Trace(ctx.Err())
 	default:
 	}
-
-	l.metaLock.Lock()
-	defer l.metaLock.Unlock()
-
-	if l.meta != nil {
-		return l.meta.CheckpointTs, l.meta.ResolvedTs, nil
-	}
-
-	files, err := os.ReadDir(l.cfg.Dir)
+	extStorage, err := redo.InitExternalStorage(ctx, l.cfg.URI)
 	if err != nil {
-		err = errors.Annotate(err, "can't read log file directory")
-		return 0, 0, errors.WrapError(errors.ErrRedoFileOp, err)
+		return err
 	}
-
 	metas := make([]*common.LogMeta, 0, 64)
-	for _, file := range files {
-		if filepath.Ext(file.Name()) == redo.MetaEXT {
-			path := filepath.Join(l.cfg.Dir, file.Name())
-			fileData, err := os.ReadFile(path)
-			if err != nil {
-				return 0, 0, errors.WrapError(errors.ErrRedoFileOp, err)
-			}
-
-			log.Debug("unmarshal redo meta", zap.Int("size", len(fileData)))
-			meta := &common.LogMeta{}
-			_, err = meta.UnmarshalMsg(fileData)
-			if err != nil {
-				return 0, 0, errors.WrapError(errors.ErrRedoFileOp, err)
-			}
-			metas = append(metas, meta)
+	err = extStorage.WalkDir(ctx, nil, func(path string, size int64) error {
+		if !strings.HasSuffix(path, redo.MetaEXT) {
+			return nil
 		}
-	}
 
+		data, err := extStorage.ReadFile(ctx, path)
+		if err != nil && !util.IsNotExistInExtStorage(err) {
+			return err
+		}
+		if len(data) != 0 {
+			var meta common.LogMeta
+			_, err = meta.UnmarshalMsg(data)
+			if err != nil {
+				return err
+			}
+			metas = append(metas, &meta)
+		}
+		return nil
+	})
+	if err != nil {
+		return errors.WrapError(errors.ErrRedoMetaInitialize,
+			errors.Annotate(err, "read meta file fail"))
+	}
 	if len(metas) == 0 {
-		return 0, 0, errors.ErrRedoMetaFileNotFound.GenWithStackByArgs(l.cfg.Dir)
+		return errors.ErrRedoMetaFileNotFound.GenWithStackByArgs(l.cfg.Dir)
 	}
 
+	var checkpointTs, resolvedTs uint64
 	common.ParseMeta(metas, &checkpointTs, &resolvedTs)
 	if resolvedTs < checkpointTs {
 		log.Panic("in all meta files, resolvedTs is less than checkpointTs",
@@ -339,7 +320,15 @@ func (l *LogReader) ReadMeta(ctx context.Context) (checkpointTs, resolvedTs uint
 			zap.Uint64("checkpointTs", checkpointTs))
 	}
 	l.meta = &common.LogMeta{CheckpointTs: checkpointTs, ResolvedTs: resolvedTs}
-	return
+	return nil
+}
+
+// ReadMeta implement ReadMeta interface
+func (l *LogReader) ReadMeta(ctx context.Context) (checkpointTs, resolvedTs uint64, err error) {
+	if l.meta == nil {
+		return 0, 0, errors.Trace(errors.ErrRedoMetaFileNotFound.GenWithStackByArgs(l.cfg.Dir))
+	}
+	return l.meta.CheckpointTs, l.meta.ResolvedTs, nil
 }
 
 type logWithIdx struct {
