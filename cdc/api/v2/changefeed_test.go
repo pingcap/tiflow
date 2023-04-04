@@ -37,7 +37,6 @@ import (
 	"github.com/pingcap/tiflow/pkg/util"
 	"github.com/stretchr/testify/require"
 	pd "github.com/tikv/pd/client"
-	"go.etcd.io/etcd/tests/v3/integration"
 )
 
 var (
@@ -56,11 +55,7 @@ func TestCreateChangefeed(t *testing.T) {
 	etcdClient := mock_etcd.NewMockCDCEtcdClient(gomock.NewController(t))
 	apiV2 := NewOpenAPIV2ForTest(cp, helpers)
 	router := newRouter(apiV2)
-	integration.BeforeTestExternal(t)
-	testEtcdCluster := integration.NewClusterV3(
-		t, &integration.ClusterConfig{Size: 2},
-	)
-	defer testEtcdCluster.Terminate(t)
+	o := mock_owner.NewMockOwner(gomock.NewController(t))
 
 	mockUpManager := upstream.NewManager4Test(pdClient)
 	statusProvider := &mockStatusProvider{}
@@ -72,6 +67,8 @@ func TestCreateChangefeed(t *testing.T) {
 	cp.EXPECT().GetUpstreamManager().Return(mockUpManager, nil).AnyTimes()
 	cp.EXPECT().IsReady().Return(true).AnyTimes()
 	cp.EXPECT().IsOwner().Return(true).AnyTimes()
+	cp.EXPECT().GetOwner().Return(o, nil).AnyTimes()
+	o.EXPECT().ValidateChangefeed(gomock.Any()).Return(nil).AnyTimes()
 
 	// case 1: json format mismatches with the spec.
 	errConfig := struct {
