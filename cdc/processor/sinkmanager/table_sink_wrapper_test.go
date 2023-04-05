@@ -14,7 +14,6 @@
 package sinkmanager
 
 import (
-	"context"
 	"sync"
 	"testing"
 
@@ -58,8 +57,10 @@ func (m *mockSink) GetWriteTimes() int {
 	return m.writeTimes
 }
 
-func (m *mockSink) Close() error {
-	return nil
+func (m *mockSink) Close() {}
+
+func (m *mockSink) Dead() <-chan struct{} {
+	return make(chan struct{})
 }
 
 //nolint:unparam
@@ -84,7 +85,7 @@ func TestTableSinkWrapperClose(t *testing.T) {
 
 	wrapper, _ := createTableSinkWrapper(model.DefaultChangeFeedID("1"), 1)
 	require.Equal(t, tablepb.TableStatePreparing, wrapper.getState())
-	wrapper.close(context.Background())
+	wrapper.close()
 	require.Equal(t, tablepb.TableStateStopped, wrapper.getState(), "table sink state should be stopped")
 }
 
@@ -281,4 +282,17 @@ func TestConvertRowChangedEventsWhenDisableOldValue(t *testing.T) {
 	require.NoError(t, err)
 	require.Equal(t, 1, len(result))
 	require.Equal(t, uint64(216), size)
+}
+
+func TestGetUpperBoundTs(t *testing.T) {
+	t.Parallel()
+	wrapper, _ := createTableSinkWrapper(
+		model.DefaultChangeFeedID("1"), 1)
+	// Test when there is no resolved ts.
+	wrapper.barrierTs.Store(uint64(10))
+	wrapper.receivedSorterResolvedTs.Store(uint64(11))
+	require.Equal(t, uint64(10), wrapper.getUpperBoundTs())
+
+	wrapper.barrierTs.Store(uint64(12))
+	require.Equal(t, uint64(11), wrapper.getUpperBoundTs())
 }

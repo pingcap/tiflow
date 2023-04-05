@@ -34,7 +34,7 @@ func TestWriteDDLEvent(t *testing.T) {
 	t.Parallel()
 
 	dbIndex := 0
-	mockGetDBConn := func(ctx context.Context, dsnStr string) (*sql.DB, error) {
+	GetDBConnImpl = func(ctx context.Context, dsnStr string) (*sql.DB, error) {
 		defer func() {
 			dbIndex++
 		}()
@@ -69,8 +69,7 @@ func TestWriteDDLEvent(t *testing.T) {
 	sinkURI, err := url.Parse("mysql://127.0.0.1:4000")
 	require.Nil(t, err)
 	rc := config.GetDefaultReplicaConfig()
-	sink, err := NewMySQLDDLSink(ctx,
-		sinkURI, rc, mockGetDBConn)
+	sink, err := NewMySQLDDLSink(ctx, sinkURI, rc)
 
 	require.Nil(t, err)
 

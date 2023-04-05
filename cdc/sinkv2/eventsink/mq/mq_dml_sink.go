@@ -15,9 +15,9 @@ package mq
 
 import (
 	"context"
+	"sync/atomic"
 
 	"github.com/pingcap/errors"
-	"github.com/pingcap/log"
 	"github.com/pingcap/tiflow/cdc/contextutil"
 	"github.com/pingcap/tiflow/cdc/model"
 	"github.com/pingcap/tiflow/cdc/sink/codec/builder"
@@ -32,7 +32,6 @@ import (
 	"github.com/pingcap/tiflow/pkg/config"
 	cerror "github.com/pingcap/tiflow/pkg/errors"
 	"github.com/pingcap/tiflow/pkg/sink"
-	"go.uber.org/zap"
 )
 
 // Assert EventSink[E event.TableEvent] implementation
@@ -52,6 +51,11 @@ type dmlSink struct {
 	// topicManager used to manage topics.
 	// It is also responsible for creating topics.
 	topicManager manager.TopicManager
+
+	ctx    context.Context
+	cancel context.CancelFunc
+	dead   chan struct{}
+	isDead atomic.Bool
 }
 
 func newSink(ctx context.Context,
@@ -69,6 +73,7 @@ func newSink(ctx context.Context,
 		return nil, cerror.WrapError(cerror.ErrKafkaInvalidConfig, err)
 	}
 
+	ctx, cancel := context.WithCancel(ctx)
 	statistics := metrics.NewStatistics(ctx, sink.RowSink)
 	worker := newWorker(changefeedID, encoderConfig.Protocol,
 		encoderBuilder, encoderConcurrency, producer, statistics)
@@ -78,20 +83,21 @@ func newSink(ctx context.Context,
 		worker:       worker,
 		eventRouter:  eventRouter,
 		topicManager: topicManager,
+
+		ctx:    ctx,
+		cancel: cancel,
+		dead:   make(chan struct{}),
 	}
 
 	// Spawn a goroutine to send messages by the worker.
 	go func() {
-		if err := s.worker.run(ctx); err != nil && errors.Cause(err) != context.Canceled {
+		err := s.worker.run(ctx)
+		s.isDead.Store(true)
+		close(s.dead)
+		if err != nil && errors.Cause(err) != context.Canceled {
 			select {
 			case <-ctx.Done():
-				return
 			case errCh <- err:
-			default:
-				log.Error("Error channel is full in DML sink",
-					zap.String("namespace", changefeedID.Namespace),
-					zap.String("changefeed", changefeedID.ID),
-					zap.Error(err))
 			}
 		}
 	}()
@@ -102,6 +108,10 @@ func newSink(ctx context.Context,
 // WriteEvents writes events to the sink.
 // This is an asynchronously and thread-safe method.
 func (s *dmlSink) WriteEvents(rows ...*eventsink.RowChangeCallbackableEvent) error {
+	if s.isDead.Load() {
+		return errors.Trace(errors.New("dead dmlSink"))
+	}
+
 	for _, row := range rows {
 		if row.GetTableSinkState() != state.TableSinkSinking {
 			// The table where the event comes from is in stopping, so it's safe
@@ -128,7 +138,17 @@ func (s *dmlSink) WriteEvents(rows ...*eventsink.RowChangeCallbackableEvent) err
 }
 
 // Close closes the sink.
-func (s *dmlSink) Close() error {
-	s.worker.close()
-	return nil
+func (s *dmlSink) Close() {
+	if s.cancel != nil {
+		s.cancel()
+	}
+
+	if s.worker != nil {
+		s.worker.close()
+	}
+}
+
+// Dead checks whether it's dead or not.
+func (s *dmlSink) Dead() <-chan struct{} {
+	return s.dead
 }

@@ -19,33 +19,36 @@ import (
 	"io"
 	"net/url"
 	"os"
-	"path/filepath"
-	"sync"
+	"strings"
+	"time"
 
-	"github.com/pingcap/errors"
 	"github.com/pingcap/log"
 	"github.com/pingcap/tiflow/cdc/model"
 	"github.com/pingcap/tiflow/cdc/redo/common"
-	cerror "github.com/pingcap/tiflow/pkg/errors"
+	"github.com/pingcap/tiflow/pkg/errors"
 	"github.com/pingcap/tiflow/pkg/redo"
+	"github.com/pingcap/tiflow/pkg/sink/mysql"
+	"github.com/pingcap/tiflow/pkg/util"
 	"go.uber.org/multierr"
 	"go.uber.org/zap"
+	"golang.org/x/sync/errgroup"
+)
+
+const (
+	emitBatch             = mysql.DefaultMaxTxnRow
+	defaultReaderChanSize = mysql.DefaultWorkerCount * emitBatch
+	maxTotalMemoryUsage   = 90.0
+	maxWaitDuration       = time.Minute * 2
 )
 
 // RedoLogReader is a reader abstraction for redo log storage layer
 type RedoLogReader interface {
-	io.Closer
-
-	// ResetReader setup the reader boundary
-	ResetReader(ctx context.Context, startTs, endTs uint64) error
-
-	// ReadNextLog reads up to `maxNumberOfMessages` messages from current cursor.
-	// The returned redo logs sorted by commit-ts
-	ReadNextLog(ctx context.Context, maxNumberOfEvents uint64) ([]*model.RedoRowChangedEvent, error)
-
-	// ReadNextDDL reads `maxNumberOfDDLs` ddl events from redo logs from current cursor
-	ReadNextDDL(ctx context.Context, maxNumberOfEvents uint64) ([]*model.RedoDDLEvent, error)
-
+	// Run read and decode redo logs in background.
+	Run(ctx context.Context) error
+	// ReadNextRow read one row event from redo logs.
+	ReadNextRow(ctx context.Context) (*model.RowChangedEvent, error)
+	// ReadNextDDL read one ddl event from redo logs.
+	ReadNextDDL(ctx context.Context) (*model.DDLEvent, error)
 	// ReadMeta reads meta from redo logs and returns the latest checkpointTs and resolvedTs
 	ReadMeta(ctx context.Context) (checkpointTs, resolvedTs uint64, err error)
 }
@@ -55,7 +58,7 @@ func NewRedoLogReader(
 	ctx context.Context, storageType string, cfg *LogReaderConfig,
 ) (rd RedoLogReader, err error) {
 	if !redo.IsValidConsistentStorage(storageType) {
-		return nil, cerror.ErrConsistentStorage.GenWithStackByArgs(storageType)
+		return nil, errors.ErrConsistentStorage.GenWithStackByArgs(storageType)
 	}
 	if redo.IsBlackholeStorage(storageType) {
 		return newBlackHoleReader(), nil
@@ -65,9 +68,6 @@ func NewRedoLogReader(
 
 // LogReaderConfig is the config for LogReader
 type LogReaderConfig struct {
-	startTs uint64
-	endTs   uint64
-
 	// Dir is the folder contains the redo logs need to apply when OP environment or
 	// the folder used to download redo logs to if using external storage, such as s3
 	// and gcs.
@@ -85,16 +85,10 @@ type LogReaderConfig struct {
 
 // LogReader implement RedoLogReader interface
 type LogReader struct {
-	cfg       *LogReaderConfig
-	rowReader []fileReader
-	ddlReader []fileReader
-	rowHeap   logHeap
-	ddlHeap   logHeap
-	meta      *common.LogMeta
-	rowLock   sync.Mutex
-	ddlLock   sync.Mutex
-	metaLock  sync.Mutex
-	sync.Mutex
+	cfg   *LogReaderConfig
+	meta  *common.LogMeta
+	rowCh chan *model.RowChangedEvent
+	ddlCh chan *model.DDLEvent
 }
 
 // newLogReader creates a LogReader instance.
@@ -103,35 +97,30 @@ type LogReader struct {
 // if s3 will download logs first, if OP environment need fetch the redo logs to local dir first
 func newLogReader(ctx context.Context, cfg *LogReaderConfig) (*LogReader, error) {
 	if cfg == nil {
-		return nil, cerror.WrapError(cerror.ErrRedoConfigInvalid, errors.New("LogReaderConfig can not be nil"))
+		err := errors.New("LogReaderConfig can not be nil")
+		return nil, errors.WrapError(errors.ErrRedoConfigInvalid, err)
 	}
 	if cfg.WorkerNums == 0 {
 		cfg.WorkerNums = defaultWorkerNum
 	}
 
 	logReader := &LogReader{
-		cfg: cfg,
+		cfg:   cfg,
+		rowCh: make(chan *model.RowChangedEvent, defaultReaderChanSize),
+		ddlCh: make(chan *model.DDLEvent, defaultReaderChanSize),
 	}
-	if cfg.UseExternalStorage {
-		extStorage, err := redo.InitExternalStorage(ctx, cfg.URI)
-		if err != nil {
-			return nil, err
-		}
-		// remove logs in local dir first, if have logs left belongs to previous changefeed with the same name may have error when apply logs
-		err = os.RemoveAll(cfg.Dir)
-		if err != nil {
-			return nil, cerror.WrapError(cerror.ErrRedoFileOp, err)
-		}
-		err = downLoadToLocal(ctx, cfg.Dir, extStorage, redo.RedoMetaFileType, cfg.WorkerNums)
-		if err != nil {
-			return nil, cerror.WrapError(cerror.ErrRedoDownloadFailed, err)
-		}
+	// remove logs in local dir first, if have logs left belongs to previous changefeed with the same name may have error when apply logs
+	if err := os.RemoveAll(cfg.Dir); err != nil {
+		return nil, errors.WrapError(errors.ErrRedoFileOp, err)
+	}
+	if err := logReader.initMeta(ctx); err != nil {
+		return nil, err
 	}
 	return logReader, nil
 }
 
-// ResetReader implement ResetReader interface
-func (l *LogReader) ResetReader(ctx context.Context, startTs, endTs uint64) error {
+// Run implements the `RedoLogReader` interface.
+func (l *LogReader) Run(ctx context.Context) error {
 	select {
 	case <-ctx.Done():
 		return errors.Trace(ctx.Err())
@@ -139,258 +128,191 @@ func (l *LogReader) ResetReader(ctx context.Context, startTs, endTs uint64) erro
 	}
 
 	if l.meta == nil {
-		_, _, err := l.ReadMeta(ctx)
-		if err != nil {
-			return err
-		}
+		return errors.Trace(errors.ErrRedoMetaFileNotFound.GenWithStackByArgs(l.cfg.Dir))
 	}
 
-	if startTs > endTs || startTs > l.meta.ResolvedTs || endTs <= l.meta.CheckpointTs {
-		return errors.Errorf(
-			"startTs, endTs (%d, %d] should match the boundary: (%d, %d]",
-			startTs, endTs, l.meta.CheckpointTs, l.meta.ResolvedTs)
-	}
-	return l.setUpReader(ctx, startTs, endTs)
+	eg, egCtx := errgroup.WithContext(ctx)
+	eg.Go(func() error {
+		return l.runRowReader(egCtx)
+	})
+	eg.Go(func() error {
+		return l.runDDLReader(egCtx)
+	})
+	return eg.Wait()
 }
 
-func (l *LogReader) setUpReader(ctx context.Context, startTs, endTs uint64) error {
-	l.Lock()
-	defer l.Unlock()
-
-	var errs error
-	errs = multierr.Append(errs, l.setUpRowReader(ctx, startTs, endTs))
-	errs = multierr.Append(errs, l.setUpDDLReader(ctx, startTs, endTs))
-
-	return errs
-}
-
-func (l *LogReader) setUpRowReader(ctx context.Context, startTs, endTs uint64) error {
-	l.rowLock.Lock()
-	defer l.rowLock.Unlock()
-
-	err := l.closeRowReader()
-	if err != nil {
-		return err
-	}
-
+func (l *LogReader) runRowReader(egCtx context.Context) error {
+	defer close(l.rowCh)
 	rowCfg := &readerConfig{
-		startTs:            startTs,
-		endTs:              endTs,
+		startTs:            l.meta.CheckpointTs,
+		endTs:              l.meta.ResolvedTs,
 		dir:                l.cfg.Dir,
 		fileType:           redo.RedoRowLogFileType,
 		uri:                l.cfg.URI,
 		useExternalStorage: l.cfg.UseExternalStorage,
 		workerNums:         l.cfg.WorkerNums,
 	}
-	l.rowReader, err = newReader(ctx, rowCfg)
-	if err != nil {
-		return err
-	}
-
-	l.rowHeap = logHeap{}
-	l.cfg.startTs = startTs
-	l.cfg.endTs = endTs
-	return nil
+	return l.runReader(egCtx, rowCfg)
 }
 
-func (l *LogReader) setUpDDLReader(ctx context.Context, startTs, endTs uint64) error {
-	l.ddlLock.Lock()
-	defer l.ddlLock.Unlock()
-
-	err := l.closeDDLReader()
-	if err != nil {
-		return err
-	}
-
+func (l *LogReader) runDDLReader(egCtx context.Context) error {
+	defer close(l.ddlCh)
 	ddlCfg := &readerConfig{
-		startTs:            startTs,
-		endTs:              endTs,
+		startTs:            l.meta.CheckpointTs - 1,
+		endTs:              l.meta.ResolvedTs,
 		dir:                l.cfg.Dir,
 		fileType:           redo.RedoDDLLogFileType,
 		uri:                l.cfg.URI,
 		useExternalStorage: l.cfg.UseExternalStorage,
 		workerNums:         l.cfg.WorkerNums,
 	}
-	l.ddlReader, err = newReader(ctx, ddlCfg)
-	if err != nil {
-		return err
-	}
+	return l.runReader(egCtx, ddlCfg)
+}
 
-	l.ddlHeap = logHeap{}
-	l.cfg.startTs = startTs
-	l.cfg.endTs = endTs
+func (l *LogReader) runReader(egCtx context.Context, cfg *readerConfig) error {
+	fileReaders, err := newReaders(egCtx, cfg)
+	if err != nil {
+		return errors.Trace(err)
+	}
+	defer func() {
+		var errs error
+		for _, r := range fileReaders {
+			errs = multierr.Append(errs, r.Close())
+		}
+		if errs != nil {
+			log.Error("close row reader failed", zap.Error(errs))
+		}
+	}()
+
+	// init heap
+	redoLogHeap, err := newLogHeap(fileReaders)
+	if err != nil {
+		return errors.Trace(err)
+	}
+	for i := 0; i < len(fileReaders); i++ {
+		rl, err := fileReaders[i].Read()
+		if err != nil {
+			if err != io.EOF {
+				return errors.Trace(err)
+			}
+			continue
+		}
+
+		ld := &logWithIdx{
+			data: rl,
+			idx:  i,
+		}
+		redoLogHeap = append(redoLogHeap, ld)
+	}
+	heap.Init(&redoLogHeap)
+
+	for redoLogHeap.Len() != 0 {
+		item := heap.Pop(&redoLogHeap).(*logWithIdx)
+
+		switch cfg.fileType {
+		case redo.RedoRowLogFileType:
+			row := common.LogToRow(item.data.RedoRow)
+			// By design only data (startTs,endTs] is needed,
+			// so filter out data may beyond the boundary.
+			if row != nil && row.CommitTs > cfg.startTs && row.CommitTs <= cfg.endTs {
+				select {
+				case <-egCtx.Done():
+					return errors.Trace(egCtx.Err())
+				case l.rowCh <- row:
+				}
+			}
+			err := util.WaitMemoryAvailable(maxTotalMemoryUsage, maxWaitDuration)
+			if err != nil {
+				return errors.Trace(err)
+			}
+
+		case redo.RedoDDLLogFileType:
+			ddl := common.LogToDDL(item.data.RedoDDL)
+			if ddl != nil && ddl.CommitTs > cfg.startTs && ddl.CommitTs <= cfg.endTs {
+				select {
+				case <-egCtx.Done():
+					return errors.Trace(egCtx.Err())
+				case l.ddlCh <- ddl:
+				}
+			}
+		}
+
+		// read next and push again
+		rl, err := fileReaders[item.idx].Read()
+		if err != nil {
+			if err != io.EOF {
+				return errors.Trace(err)
+			}
+			continue
+		}
+		ld := &logWithIdx{
+			data: rl,
+			idx:  item.idx,
+		}
+		heap.Push(&redoLogHeap, ld)
+	}
 	return nil
 }
 
-// ReadNextLog implement ReadNextLog interface
-func (l *LogReader) ReadNextLog(ctx context.Context, maxNumberOfEvents uint64) ([]*model.RedoRowChangedEvent, error) {
+// ReadNextRow implement the `RedoLogReader` interface.
+func (l *LogReader) ReadNextRow(ctx context.Context) (*model.RowChangedEvent, error) {
 	select {
 	case <-ctx.Done():
 		return nil, errors.Trace(ctx.Err())
-	default:
+	case row := <-l.rowCh:
+		return row, nil
 	}
-
-	l.rowLock.Lock()
-	defer l.rowLock.Unlock()
-
-	// init heap
-	if l.rowHeap.Len() == 0 {
-		for i := 0; i < len(l.rowReader); i++ {
-			rl := &model.RedoLog{}
-			err := l.rowReader[i].Read(rl)
-			if err != nil {
-				if err != io.EOF {
-					return nil, err
-				}
-				continue
-			}
-
-			ld := &logWithIdx{
-				data: rl,
-				idx:  i,
-			}
-			l.rowHeap = append(l.rowHeap, ld)
-		}
-		heap.Init(&l.rowHeap)
-	}
-
-	ret := []*model.RedoRowChangedEvent{}
-	var i uint64
-	for l.rowHeap.Len() != 0 && i < maxNumberOfEvents {
-		item := heap.Pop(&l.rowHeap).(*logWithIdx)
-		if item.data.RedoRow != nil && item.data.RedoRow.Row != nil &&
-			// by design only data (startTs,endTs] is needed, so filter out data may beyond the boundary
-			item.data.RedoRow.Row.CommitTs > l.cfg.startTs &&
-			item.data.RedoRow.Row.CommitTs <= l.cfg.endTs {
-			ret = append(ret, item.data.RedoRow)
-			i++
-		}
-
-		rl := &model.RedoLog{}
-		err := l.rowReader[item.idx].Read(rl)
-		if err != nil {
-			if err != io.EOF {
-				return nil, err
-			}
-			continue
-		}
-
-		ld := &logWithIdx{
-			data: rl,
-			idx:  item.idx,
-		}
-		heap.Push(&l.rowHeap, ld)
-	}
-
-	return ret, nil
 }
 
-// ReadNextDDL implement ReadNextDDL interface
-func (l *LogReader) ReadNextDDL(ctx context.Context, maxNumberOfEvents uint64) ([]*model.RedoDDLEvent, error) {
+// ReadNextDDL implement the `RedoLogReader` interface.
+func (l *LogReader) ReadNextDDL(ctx context.Context) (*model.DDLEvent, error) {
 	select {
 	case <-ctx.Done():
 		return nil, errors.Trace(ctx.Err())
-	default:
+	case ddl := <-l.ddlCh:
+		return ddl, nil
 	}
-
-	l.ddlLock.Lock()
-	defer l.ddlLock.Unlock()
-
-	// init heap
-	if l.ddlHeap.Len() == 0 {
-		for i := 0; i < len(l.ddlReader); i++ {
-			rl := &model.RedoLog{}
-			err := l.ddlReader[i].Read(rl)
-			if err != nil {
-				if err != io.EOF {
-					return nil, err
-				}
-				continue
-			}
-
-			ld := &logWithIdx{
-				data: rl,
-				idx:  i,
-			}
-			l.ddlHeap = append(l.ddlHeap, ld)
-		}
-		heap.Init(&l.ddlHeap)
-	}
-
-	ret := []*model.RedoDDLEvent{}
-	var i uint64
-	for l.ddlHeap.Len() != 0 && i < maxNumberOfEvents {
-		item := heap.Pop(&l.ddlHeap).(*logWithIdx)
-		if item.data.RedoDDL != nil && item.data.RedoDDL.DDL != nil &&
-			// by design only data (startTs,endTs] is needed, so filter out data may beyond the boundary
-			item.data.RedoDDL.DDL.CommitTs > l.cfg.startTs &&
-			item.data.RedoDDL.DDL.CommitTs <= l.cfg.endTs {
-			ret = append(ret, item.data.RedoDDL)
-			i++
-		}
-
-		rl := &model.RedoLog{}
-		err := l.ddlReader[item.idx].Read(rl)
-		if err != nil {
-			if err != io.EOF {
-				return nil, err
-			}
-			continue
-		}
-
-		ld := &logWithIdx{
-			data: rl,
-			idx:  item.idx,
-		}
-		heap.Push(&l.ddlHeap, ld)
-	}
-
-	return ret, nil
 }
 
-// ReadMeta implement ReadMeta interface
-func (l *LogReader) ReadMeta(ctx context.Context) (checkpointTs, resolvedTs uint64, err error) {
+func (l *LogReader) initMeta(ctx context.Context) error {
 	select {
 	case <-ctx.Done():
-		return 0, 0, errors.Trace(ctx.Err())
+		return errors.Trace(ctx.Err())
 	default:
 	}
-
-	l.metaLock.Lock()
-	defer l.metaLock.Unlock()
-
-	if l.meta != nil {
-		return l.meta.CheckpointTs, l.meta.ResolvedTs, nil
-	}
-
-	files, err := os.ReadDir(l.cfg.Dir)
+	extStorage, err := redo.InitExternalStorage(ctx, l.cfg.URI)
 	if err != nil {
-		return 0, 0, cerror.WrapError(cerror.ErrRedoFileOp, errors.Annotate(err, "can't read log file directory"))
+		return err
 	}
-
 	metas := make([]*common.LogMeta, 0, 64)
-	for _, file := range files {
-		if filepath.Ext(file.Name()) == redo.MetaEXT {
-			path := filepath.Join(l.cfg.Dir, file.Name())
-			fileData, err := os.ReadFile(path)
-			if err != nil {
-				return 0, 0, cerror.WrapError(cerror.ErrRedoFileOp, err)
-			}
-
-			log.Debug("unmarshal redo meta", zap.Int("size", len(fileData)))
-			meta := &common.LogMeta{}
-			_, err = meta.UnmarshalMsg(fileData)
-			if err != nil {
-				return 0, 0, cerror.WrapError(cerror.ErrRedoFileOp, err)
-			}
-			metas = append(metas, meta)
+	err = extStorage.WalkDir(ctx, nil, func(path string, size int64) error {
+		if !strings.HasSuffix(path, redo.MetaEXT) {
+			return nil
 		}
-	}
 
+		data, err := extStorage.ReadFile(ctx, path)
+		if err != nil && !util.IsNotExistInExtStorage(err) {
+			return err
+		}
+		if len(data) != 0 {
+			var meta common.LogMeta
+			_, err = meta.UnmarshalMsg(data)
+			if err != nil {
+				return err
+			}
+			metas = append(metas, &meta)
+		}
+		return nil
+	})
+	if err != nil {
+		return errors.WrapError(errors.ErrRedoMetaInitialize,
+			errors.Annotate(err, "read meta file fail"))
+	}
 	if len(metas) == 0 {
-		return 0, 0, cerror.ErrRedoMetaFileNotFound.GenWithStackByArgs(l.cfg.Dir)
+		return errors.ErrRedoMetaFileNotFound.GenWithStackByArgs(l.cfg.Dir)
 	}
 
+	var checkpointTs, resolvedTs uint64
 	common.ParseMeta(metas, &checkpointTs, &resolvedTs)
 	if resolvedTs < checkpointTs {
 		log.Panic("in all meta files, resolvedTs is less than checkpointTs",
@@ -398,41 +320,15 @@ func (l *LogReader) ReadMeta(ctx context.Context) (checkpointTs, resolvedTs uint
 			zap.Uint64("checkpointTs", checkpointTs))
 	}
 	l.meta = &common.LogMeta{CheckpointTs: checkpointTs, ResolvedTs: resolvedTs}
-	return
+	return nil
 }
 
-func (l *LogReader) closeRowReader() error {
-	var errs error
-	for _, r := range l.rowReader {
-		errs = multierr.Append(errs, r.Close())
+// ReadMeta implement ReadMeta interface
+func (l *LogReader) ReadMeta(ctx context.Context) (checkpointTs, resolvedTs uint64, err error) {
+	if l.meta == nil {
+		return 0, 0, errors.Trace(errors.ErrRedoMetaFileNotFound.GenWithStackByArgs(l.cfg.Dir))
 	}
-	return errs
-}
-
-func (l *LogReader) closeDDLReader() error {
-	var errs error
-	for _, r := range l.ddlReader {
-		errs = multierr.Append(errs, r.Close())
-	}
-	return errs
-}
-
-// Close the backing file readers
-func (l *LogReader) Close() error {
-	if l == nil {
-		return nil
-	}
-
-	var errs error
-
-	l.rowLock.Lock()
-	errs = multierr.Append(errs, l.closeRowReader())
-	l.rowLock.Unlock()
-
-	l.ddlLock.Lock()
-	errs = multierr.Append(errs, l.closeDDLReader())
-	l.ddlLock.Unlock()
-	return errs
+	return l.meta.CheckpointTs, l.meta.ResolvedTs, nil
 }
 
 type logWithIdx struct {
@@ -441,6 +337,27 @@ type logWithIdx struct {
 }
 
 type logHeap []*logWithIdx
+
+func newLogHeap(fileReaders []fileReader) (logHeap, error) {
+	h := logHeap{}
+	for i := 0; i < len(fileReaders); i++ {
+		rl, err := fileReaders[i].Read()
+		if err != nil {
+			if err != io.EOF {
+				return nil, err
+			}
+			continue
+		}
+
+		ld := &logWithIdx{
+			data: rl,
+			idx:  i,
+		}
+		h = append(h, ld)
+	}
+	heap.Init(&h)
+	return h, nil
+}
 
 func (h logHeap) Len() int {
 	return len(h)

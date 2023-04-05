@@ -43,6 +43,9 @@ func (s *Sink) WriteEvents(rows ...*eventsink.CallbackableEvent[*model.RowChange
 }
 
 // Close do nothing.
-func (s *Sink) Close() error {
-	return nil
+func (s *Sink) Close() {}
+
+// Dead returns a checker.
+func (s *Sink) Dead() <-chan struct{} {
+	return make(chan struct{})
 }
