@@ -34,7 +34,8 @@ const defaultMaxBatchSize = 256
 
 // SourceManager is the manager of the source engine and puller.
 type SourceManager struct {
-	ctx context.Context
+	ctx   context.Context
+	ready chan struct{}
 
 	// changefeedID is the changefeed ID.
 	// We use it to create the puller and log.
@@ -71,6 +72,7 @@ func New(
 	bdrMode bool,
 ) *SourceManager {
 	return &SourceManager{
+		ready:                make(chan struct{}),
 		changefeedID:         changefeedID,
 		up:                   up,
 		mg:                   mg,
@@ -90,6 +92,7 @@ func NewForTest(
 	bdrMode bool,
 ) *SourceManager {
 	return &SourceManager{
+		ready:                make(chan struct{}),
 		changefeedID:         changefeedID,
 		up:                   up,
 		mg:                   mg,
@@ -167,11 +170,20 @@ func (m *SourceManager) ReceivedEvents() int64 {
 // Run implements util.Runnable.
 func (m *SourceManager) Run(ctx context.Context) error {
 	m.ctx = ctx
+	close(m.ready)
 	select {
 	case err := <-m.errChan:
 		return err
 	case <-m.ctx.Done():
 		return m.ctx.Err()
+	}
+}
+
+// WaitForReady implements util.Runnable.
+func (m *SourceManager) WaitForReady(ctx context.Context) {
+	select {
+	case <-ctx.Done():
+	case <-m.ready:
 	}
 }
 

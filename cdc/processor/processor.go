@@ -80,7 +80,6 @@ type processor struct {
 	sinkManager component[*sinkmanager.SinkManager]
 
 	initialized bool
-	errCh       chan error
 	cancel      context.CancelFunc
 	wg          sync.WaitGroup
 
@@ -414,7 +413,6 @@ func newProcessor(
 	p := &processor{
 		changefeed:      state,
 		upstream:        up,
-		errCh:           make(chan error, 1),
 		changefeedID:    changefeedID,
 		captureInfo:     captureInfo,
 		cancel:          func() {},
@@ -709,10 +707,14 @@ func (p *processor) newAgentImpl(
 }
 
 // handleErrorCh listen the error channel and throw the error if it is not expected.
-func (p *processor) handleErrorCh() error {
-	var err error
+func (p *processor) handleErrorCh() (err error) {
+	// TODO(qupeng): handle different errors in different ways.
 	select {
-	case err = <-p.errCh:
+	case err = <-p.ddlHandler.errors:
+	case err = <-p.mg.errors:
+	case err = <-p.redo.errors:
+	case err = <-p.sourceManager.errors:
+	case err = <-p.sinkManager.errors:
 	default:
 		return nil
 	}
@@ -775,19 +777,6 @@ func (p *processor) initDDLHandler(ctx context.Context) error {
 	}
 	p.ddlHandler.r = &ddlHandler{puller: ddlPuller, schemaStorage: schemaStorage}
 	return nil
-}
-
-func (p *processor) sendError(err error) {
-	if err == nil {
-		return
-	}
-	select {
-	case p.errCh <- err:
-	default:
-		if !isProcessorIgnorableError(err) {
-			log.Error("processor receives redundant error", zap.Error(err))
-		}
-	}
 }
 
 // updateBarrierTs updates barrierTs for all tables.
@@ -892,11 +881,13 @@ func (p *processor) Close() error {
 		zap.String("namespace", p.changefeedID.Namespace),
 		zap.String("changefeed", p.changefeedID.ID))
 
-	p.sinkManager.stop()
-	p.sourceManager.stop()
-	p.redo.stop()
-	p.mg.stop()
-	p.ddlHandler.stop()
+	p.sinkManager.stop(p.changefeedID)
+	p.sinkManager.r = nil
+	p.sourceManager.stop(p.changefeedID)
+	p.sourceManager.r = nil
+	p.redo.stop(p.changefeedID)
+	p.mg.stop(p.changefeedID)
+	p.ddlHandler.stop(p.changefeedID)
 
 	if p.engineFactory != nil {
 		if err := p.engineFactory.Drop(p.changefeedID); err != nil {
@@ -994,7 +985,7 @@ func (c *component[R]) spawn(ctx context.Context) {
 	go func() {
 		defer c.wg.Done()
 		err := c.r.Run(c.ctx)
-		if errors.Cause(err) != context.Canceled {
+		if err != nil && errors.Cause(err) != context.Canceled {
 			log.Error("processor sub-component fails",
 				zap.String("namespace", changefeedID.Namespace),
 				zap.String("changefeed", changefeedID.ID),
@@ -1006,19 +997,20 @@ func (c *component[R]) spawn(ctx context.Context) {
 			}
 		}
 	}()
+	c.r.WaitForReady(ctx)
 	log.Info("processor sub-component starts",
 		zap.String("namespace", changefeedID.Namespace),
 		zap.String("changefeed", changefeedID.ID),
 		zap.String("name", c.name))
 }
 
-func (c *component[R]) stop() {
-	changefeedID := contextutil.ChangefeedIDFromCtx(c.ctx)
+func (c *component[R]) stop(changefeedID model.ChangeFeedID) {
 	if c.cancel == nil {
 		log.Info("processor sub-component isn't started",
 			zap.String("namespace", changefeedID.Namespace),
 			zap.String("changefeed", changefeedID.ID),
 			zap.String("name", c.name))
+		return
 	}
 	log.Info("processor sub-component is in stopping",
 		zap.String("namespace", changefeedID.Namespace),
@@ -1058,5 +1050,7 @@ func (d *ddlHandler) Run(ctx context.Context) error {
 	})
 	return g.Wait()
 }
+
+func (d *ddlHandler) WaitForReady(_ context.Context) {}
 
 func (d *ddlHandler) Close() {}

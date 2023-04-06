@@ -32,6 +32,7 @@ import (
 	"github.com/pingcap/tiflow/pkg/errors"
 	"github.com/pingcap/tiflow/pkg/redo"
 	"github.com/pingcap/tiflow/pkg/spanz"
+	"github.com/pingcap/tiflow/pkg/util"
 	"github.com/prometheus/client_golang/prometheus"
 	"go.uber.org/zap"
 )
@@ -42,10 +43,10 @@ var (
 )
 
 type redoManager interface {
+	util.Runnable
+
 	// Enabled returns whether the manager is enabled
 	Enabled() bool
-	Run(ctx context.Context) error
-	Close()
 }
 
 // DDLManager defines an interface that is used to manage ddl logs in owner.
@@ -258,6 +259,9 @@ func (m *logManager) Run(ctx context.Context) error {
 	}
 	return nil
 }
+
+// WaitForReady implements pkg/util.Runnable.
+func (m *logManager) WaitForReady(_ context.Context) {}
 
 // Close implements pkg/util.Runnable.
 func (m *logManager) Close() {}

@@ -156,6 +156,8 @@ func (m *metaManager) Run(ctx context.Context) error {
 	return eg.Wait()
 }
 
+func (m *metaManager) WaitForReady(_ context.Context) {}
+
 func (m *metaManager) Close() {}
 
 // UpdateMeta updates meta.

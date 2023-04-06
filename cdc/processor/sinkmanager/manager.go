@@ -105,6 +105,7 @@ type SinkManager struct {
 
 	// To control lifetime of all sub-goroutines.
 	managerCtx context.Context
+	ready      chan struct{}
 
 	// To control lifetime of sink and redo tasks.
 	sinkEg *errgroup.Group
@@ -159,6 +160,7 @@ func New(
 		m.redoMemQuota = memquota.NewMemQuota(changefeedID, 0, "redo")
 	}
 
+	m.ready = make(chan struct{})
 	return m
 }
 
@@ -232,8 +234,12 @@ func (m *SinkManager) Run(ctx context.Context) (err error) {
 		zap.String("changefeed", m.changefeedID.ID),
 		zap.Bool("withRedoEnabled", m.redoDMLMgr != nil))
 
+	close(m.ready)
+
 	// TODO(qupeng): handle different errors in different ways.
 	select {
+	case <-ctx.Done():
+		err = ctx.Err()
 	case err = <-managerErrors:
 	case err = <-sinkErrors:
 	case err = <-redoErrors:
@@ -879,6 +885,14 @@ func (m *SinkManager) ReceivedEvents() int64 {
 	return totalReceivedEvents
 }
 
+// WaitForReady implements pkg/util.Runnable.
+func (m *SinkManager) WaitForReady(ctx context.Context) {
+	select {
+	case <-ctx.Done():
+	case <-m.ready:
+	}
+}
+
 // Close closes the manager. Must be called after `Run` returned.
 func (m *SinkManager) Close() {
 	log.Info("Closing sink manager",
@@ -886,6 +900,7 @@ func (m *SinkManager) Close() {
 		zap.String("changefeed", m.changefeedID.ID))
 
 	start := time.Now()
+	m.wg.Wait()
 	m.sinkMemQuota.Close()
 	m.redoMemQuota.Close()
 	m.tableSinks.Range(func(_ tablepb.Span, value interface{}) bool {

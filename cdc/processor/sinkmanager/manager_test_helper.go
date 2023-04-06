@@ -67,9 +67,27 @@ func CreateManagerWithMemEngine(
 
 	sourceManager := sourcemanager.NewForTest(changefeedID, up, mg, sortEngine, false)
 	go func() { handleError(sourceManager.Run(ctx)) }()
+	sourceManager.WaitForReady(ctx)
 
 	sinkManager := New(changefeedID, changefeedInfo, up, schemaStorage, nil, sourceManager)
 	go func() { handleError(sinkManager.Run(ctx)) }()
+	sinkManager.WaitForReady(ctx)
 
+	return sinkManager, sourceManager, sortEngine
+}
+
+// nolint:revive
+// In test it is ok move the ctx to the second parameter.
+func NewManagerWithMemEngine(
+	t *testing.T,
+	changefeedID model.ChangeFeedID,
+	changefeedInfo *model.ChangeFeedInfo,
+) (*SinkManager, *sourcemanager.SourceManager, engine.SortEngine) {
+	sortEngine := memory.New(context.Background())
+	up := upstream.NewUpstream4Test(&MockPD{})
+	mg := &entry.MockMountGroup{}
+	schemaStorage := &entry.MockSchemaStorage{Resolved: math.MaxUint64}
+	sourceManager := sourcemanager.NewForTest(changefeedID, up, mg, sortEngine, false)
+	sinkManager := New(changefeedID, changefeedInfo, up, schemaStorage, nil, sourceManager)
 	return sinkManager, sourceManager, sortEngine
 }

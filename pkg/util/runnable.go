@@ -17,10 +17,21 @@ import (
 	"context"
 )
 
+// Runnable is for handling sub components in a unified way.
+//
+// For example:
+// r := createRunable()
+// ctx, cancel := context.WithCancel(context.Background())
+// go func() { handleError(r.Run(ctx)) }()
+// r.WaitForReady()
+// cancel()
+// r.Close()
 type Runnable interface {
 	// Run all sub goroutines and block the current one. If an error occurs
 	// in any sub goroutine, return it and cancel all others.
 	Run(ctx context.Context) error
+    // WaitForReady blocks the current goroutine until `Run` initializes itself.
+    WaitForReady(ctx context.Context)
 	// Close all internal resources.
 	Close()
 }

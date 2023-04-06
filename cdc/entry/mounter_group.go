@@ -101,6 +101,8 @@ func (m *mounterGroup) Run(ctx context.Context) error {
 	return g.Wait()
 }
 
+func (m *mounterGroup) WaitForReady(_ context.Context) {}
+
 func (m *mounterGroup) Close() {}
 
 func (m *mounterGroup) runWorker(ctx context.Context) error {
@@ -148,11 +150,15 @@ type MockMountGroup struct {
 	IsFull bool
 }
 
-// Run implements MountGroup.
+// Run implements util.Runnable.
 func (m *MockMountGroup) Run(ctx context.Context) error {
 	return nil
 }
 
+// WaitForReady implements util.Runnable.
+func (m *MockMountGroup) WaitForReady(_ context.Context) {}
+
+// Close implements util.Runnable.
 func (m *MockMountGroup) Close() {}
 
 // AddEvent implements MountGroup.
