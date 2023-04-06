@@ -144,8 +144,8 @@ func (d *dmlWorker) flushMessages(ctx context.Context) error {
 			}
 			for _, tbl := range task.targetTables {
 				table := cloudstorage.VersionedTable{
-					TableName: tbl.tableName,
-					Version:   tbl.tableInfo.Version,
+					TableNameWithPhysicTableID: tbl.tableName,
+					Version:                    tbl.tableInfo.Version,
 				}
 				d.tableEvents.mu.Lock()
 				events := make([]eventFragment, len(d.tableEvents.fragments[table]))
@@ -214,8 +214,8 @@ func (d *dmlWorker) flushMessages(ctx context.Context) error {
 				log.Debug("write file to storage success", zap.Int("workerID", d.id),
 					zap.String("namespace", d.changeFeedID.Namespace),
 					zap.String("changefeed", d.changeFeedID.ID),
-					zap.String("schema", table.Schema),
-					zap.String("table", table.Table),
+					zap.String("schema", table.TableNameWithPhysicTableID.Schema),
+					zap.String("table", table.TableNameWithPhysicTableID.Table),
 					zap.String("path", dataFilePath),
 				)
 			}
@@ -336,14 +336,9 @@ func (d *dmlWorker) dispatchFlushTasks(ctx context.Context,
 				log.Debug("flush task is emitted successfully when flush interval exceeds",
 					zap.Any("tables", task.targetTables))
 				for elem := range tableSet {
-					// we should get TableName using elem.tableName instead of
-					// elem.tableInfo.TableName because the former one contains
-					// the physical table id (useful for partition table)
-					// recorded in mounter while the later one does not.
-					// TODO: handle TableID of model.TableInfo.TableName properly.
 					tbl := cloudstorage.VersionedTable{
-						TableName: elem.tableName,
-						Version:   elem.tableInfo.Version,
+						TableNameWithPhysicTableID: elem.tableName,
+						Version:                    elem.tableInfo.Version,
 					}
 					d.fileSize[tbl] = 0
 				}
@@ -360,7 +355,7 @@ func (d *dmlWorker) dispatchFlushTasks(ctx context.Context,
 			d.tableEvents.mu.Unlock()
 
 			key := wrappedTable{
-				tableName: frag.versionedTable.TableName,
+				tableName: frag.versionedTable.TableNameWithPhysicTableID,
 				tableInfo: frag.event.Event.TableInfo,
 			}
 
