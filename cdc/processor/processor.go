@@ -951,6 +951,15 @@ func (p *processor) createAndDriveSchemaStorage(ctx cdcContext.Context) (entry.S
 	stdCtx := contextutil.PutTableInfoInCtx(ctx, -1, puller.DDLPullerTableName)
 	stdCtx = contextutil.PutChangefeedIDInCtx(stdCtx, p.changefeedID)
 	stdCtx = contextutil.PutRoleInCtx(stdCtx, util.RoleProcessor)
+	meta, err := kv.GetSnapshotMeta(kvStorage, ddlStartTs)
+	if err != nil {
+		return nil, errors.Trace(err)
+	}
+	schemaStorage, err := entry.NewSchemaStorage(meta, ddlStartTs,
+		p.changefeed.Info.Config.ForceReplicate, p.changefeedID, util.RoleProcessor)
+	if err != nil {
+		return nil, errors.Trace(err)
+	}
 	ddlPuller, err := puller.NewDDLJobPuller(
 		stdCtx,
 		p.upstream.PDClient,
@@ -962,24 +971,18 @@ func (p *processor) createAndDriveSchemaStorage(ctx cdcContext.Context) (entry.S
 		kvCfg,
 		p.changefeed.Info.Config,
 		p.changefeedID,
+		schemaStorage,
 	)
-	if err != nil {
-		return nil, errors.Trace(err)
-	}
-	meta, err := kv.GetSnapshotMeta(kvStorage, ddlStartTs)
-	if err != nil {
-		return nil, errors.Trace(err)
-	}
-	schemaStorage, err := entry.NewSchemaStorage(meta, ddlStartTs,
-		p.changefeed.Info.Config.ForceReplicate, p.changefeedID)
 	if err != nil {
 		return nil, errors.Trace(err)
 	}
 	p.wg.Add(1)
 	go func() {
 		defer p.wg.Done()
+		// ddlPuller will update the schemaStorage.
 		p.sendError(ddlPuller.Run(stdCtx))
 	}()
+
 	p.wg.Add(1)
 	go func() {
 		defer p.wg.Done()
@@ -994,20 +997,14 @@ func (p *processor) createAndDriveSchemaStorage(ctx cdcContext.Context) (entry.S
 			if jobEntry.OpType == model.OpTypeResolved {
 				schemaStorage.AdvanceResolvedTs(jobEntry.CRTs)
 			}
-			job, err := jobEntry.Job, jobEntry.Err
+			err := jobEntry.Err
 			if err != nil {
-				p.sendError(errors.Trace(err))
-				return
-			}
-			if job == nil {
-				continue
-			}
-			if err := schemaStorage.HandleDDLJob(job); err != nil {
 				p.sendError(errors.Trace(err))
 				return
 			}
 		}
 	}()
+
 	return schemaStorage, nil
 }
 

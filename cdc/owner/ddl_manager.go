@@ -202,12 +202,7 @@ func (m *ddlManager) tick(
 				zap.String("namespace", m.changfeedID.Namespace),
 				zap.String("ID", m.changfeedID.ID),
 				zap.Any("ddlJob", job))
-			events, err := m.schema.BuildDDLEvents(job)
-			if err != nil {
-				return nil, minTableBarrierTs, barrier, err
-			}
-			// Apply ddl to update changefeed schema.
-			err = m.schema.HandleDDL(job)
+			events, err := m.schema.BuildDDLEvents(ctx, job)
 			if err != nil {
 				return nil, minTableBarrierTs, barrier, err
 			}
@@ -249,7 +244,7 @@ func (m *ddlManager) tick(
 
 	// advance resolvedTs
 	ddlRts := m.ddlPuller.ResolvedTs()
-	m.schema.schemaStorage.AdvanceResolvedTs(ddlRts)
+	m.schema.AdvanceResolvedTs(ddlRts)
 	if m.redoDDLManager.Enabled() {
 		err := m.redoDDLManager.UpdateResolvedTs(ctx, ddlRts)
 		if err != nil {
@@ -361,7 +356,7 @@ func (m *ddlManager) executeDDL(ctx context.Context) error {
 		// Set it to nil first to accelerate GC.
 		m.pendingDDLs[tableName][0] = nil
 		m.pendingDDLs[tableName] = m.pendingDDLs[tableName][1:]
-		m.schema.schemaStorage.DoGC(m.executingDDL.CommitTs - 1)
+		m.schema.DoGC(m.executingDDL.CommitTs - 1)
 		m.justSentDDL = m.executingDDL
 		m.executingDDL = nil
 	}
