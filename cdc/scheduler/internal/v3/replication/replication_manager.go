@@ -34,6 +34,7 @@ const (
 	defaultSlowTableHeapSize  = 4
 	logSlowTablesLagThreshold = 30 * time.Second
 	logSlowTablesInterval     = 1 * time.Minute
+	logMissingTableInterval   = 30 * time.Second
 )
 
 // Callback is invoked when something is done.
@@ -106,6 +107,7 @@ type Manager struct { //nolint:revive
 	acceptBurstBalanceTask int
 
 	lastLogSlowTablesTime time.Time
+	lastLogMissTime       time.Time
 }
 
 // NewReplicationManager returns a new replication manager.
@@ -495,11 +497,15 @@ func (r *Manager) AdvanceCheckpoint(
 	for _, tableID := range currentTables {
 		table, ok := r.tables[tableID]
 		if !ok {
-			// Can not advance checkpoint there is a table missing.
-			log.Warn("schedulerv3: cannot advance checkpoint since missing table",
-				zap.String("namespace", r.changefeedID.Namespace),
-				zap.String("changefeed", r.changefeedID.ID),
-				zap.Int64("tableID", tableID))
+			now := time.Now()
+			if now.Sub(r.lastLogMissTime) > logMissingTableInterval {
+				// Can not advance checkpoint there is a table missing.
+				log.Warn("schedulerv3: cannot advance checkpoint since missing table",
+					zap.String("namespace", r.changefeedID.Namespace),
+					zap.String("changefeed", r.changefeedID.ID),
+					zap.Int64("tableID", tableID))
+				r.lastLogMissTime = now
+			}
 			return checkpointCannotProceed, checkpointCannotProceed
 		}
 		// Find the minimum checkpoint ts and resolved ts.
