@@ -1,0 +1,5 @@
+[filter]
+rules = ["multi_tables_ddl_test.t9", "multi_tables_ddl_test.t10"]
+
+[sink.csv]
+include-commit-ts = true

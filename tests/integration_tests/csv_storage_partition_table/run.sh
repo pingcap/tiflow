@@ -52,8 +52,7 @@ function run() {
 	cd $WORK_DIR
 	run_cdc_server --workdir $WORK_DIR --binary $CDC_BINARY
 
-	# Enable tidb extension to generate the commit ts.
-	SINK_URI="s3://logbucket/storage_test?flush-interval=5s&enable-tidb-extension=true&endpoint=http://127.0.0.1:24927/"
+	SINK_URI="s3://logbucket/storage_test?flush-interval=5s&endpoint=http://127.0.0.1:24927/"
 	run_cdc_cli changefeed create --sink-uri="$SINK_URI" --config=$CUR/conf/changefeed.toml
 
 	run_sql_file $CUR/data/schema.sql ${UP_TIDB_HOST} ${UP_TIDB_PORT}
@@ -62,6 +61,15 @@ function run() {
 	run_storage_consumer $WORK_DIR "s3://logbucket/storage_test?endpoint=http://127.0.0.1:24927/" $CUR/conf/changefeed.toml ""
 	sleep 8
 	check_sync_diff $WORK_DIR $CUR/conf/diff_config.toml 100
+
+	output=$(s3cmd --access_key=$MINIO_ACCESS_KEY --secret_key=$MINIO_SECRET_KEY --host=$S3_ENDPOINT --host-bucket=$S3_ENDPOINT --no-ssl ls s3://logbucket --recursive | grep -e 'CDC.index' | wc -l)
+
+	if [ "$output" -ne 3 ]; then
+		echo "TEST FAILED: There are $output index files, not 3. We expect 3 index files for 3 partitions."
+		exit 1
+	else
+		echo "Find 3 index files, which is expected for 3 partitions."
+	fi
 }
 
 trap stop EXIT
