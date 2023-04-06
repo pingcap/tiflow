@@ -198,8 +198,6 @@ func (s *schemaWrap4Owner) parseRenameTables(
 			newSchemaName, preTableInfo,
 			model.WrapTableInfo(newSchemaIDs[i], newSchemaName,
 				job.BinlogInfo.FinishedTS, tableInfo))
-		event.Charset = job.Charset
-		event.Collate = job.Collate
 		ddlEvents = append(ddlEvents, event)
 	}
 
@@ -246,8 +244,6 @@ func (s *schemaWrap4Owner) BuildDDLEvents(
 			}
 		}
 		event.FromJob(job, preTableInfo, tableInfo)
-		event.Charset = job.Charset
-		event.Collate = job.Collate
 		ddlEvents = append(ddlEvents, event)
 	}
 	// filter out ddl here
