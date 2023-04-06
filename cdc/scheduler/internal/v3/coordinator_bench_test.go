@@ -47,7 +47,7 @@ func benchmarkCoordinator(
 		b.ResetTimer()
 		b.Run(name, func(b *testing.B) {
 			for i := 0; i < b.N; i++ {
-				coord.poll(ctx, 0, currentTables, captures)
+				coord.poll(ctx, 0, currentTables, captures, nil)
 			}
 		})
 		b.StopTimer()

@@ -345,7 +345,7 @@ func TestHandleErrorWhenChangefeedIsPaused(t *testing.T) {
 func TestChangefeedStatusNotExist(t *testing.T) {
 	changefeedInfo := `
 {
-    "sink-uri": "blackhole:///",
+    "ddlSink-uri": "blackhole:///",
     "create-time": "2021-06-05T00:44:15.065939487+08:00",
     "start-ts": 425381670108266496,
     "target-ts": 0,
@@ -365,7 +365,7 @@ func TestChangefeedStatusNotExist(t *testing.T) {
         "mounter": {
             "worker-num": 16
         },
-        "sink": {
+        "ddlSink": {
             "dispatchers": null,
             "protocol": "open-protocol"
         }
@@ -376,7 +376,7 @@ func TestChangefeedStatusNotExist(t *testing.T) {
         "addr": "172.16.6.147:8300",
         "code": "CDC:ErrSnapshotLostByGC",
         "message": ` + "\"[CDC:ErrSnapshotLostByGC]fail to create or maintain changefeed " +
-		"due to snapshot loss caused by GC. checkpoint-ts 425381670108266496 " +
+		"due to snapshot loss caused by GC. tableCheckpoint-ts 425381670108266496 " +
 		"is earlier than GC safepoint at 0\"" + `
     },
     "sync-point-enabled": false,
