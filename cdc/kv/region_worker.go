@@ -792,20 +792,34 @@ func (w *regionWorker) handleResolvedTs(
 // evictAllRegions is used when gRPC stream meets error and re-establish, notify
 // all existing regions to re-establish
 func (w *regionWorker) evictAllRegions() {
+	deletes := make([]struct {
+		regionID    uint64
+		regionState *regionFeedState
+	}, 0)
 	for _, states := range w.statesManager.states {
-		for regionID, regionState := range states.states {
+		deletes = deletes[:0]
+		states.iter(func(regionID uint64, regionState *regionFeedState) bool {
 			if regionState.isStopped() {
-				continue
+				return true
 			}
 			regionState.markStopped()
-			w.delRegionState(regionID)
-			regionState.setRegionInfoResolvedTs()
-			revokeToken := !regionState.isInitialized()
+			deletes = append(deletes, struct {
+				regionID    uint64
+				regionState *regionFeedState
+			}{
+				regionID: regionID, regionState: regionState,
+			})
+			return true
+		})
+		for _, del := range deletes {
+			w.delRegionState(del.regionID)
+			del.regionState.setRegionInfoResolvedTs()
+			revokeToken := !del.regionState.isInitialized()
 			// since the context used in region worker will be cancelled after
 			// region worker exits, we must use the parent context to prevent
 			// regionErrorInfo loss.
-			errInfo := newRegionErrorInfo(regionState.sri,
-				cerror.ErrEventFeedAborted.FastGenByArgs())
+			errInfo := newRegionErrorInfo(
+				del.regionState.sri, cerror.ErrEventFeedAborted.FastGenByArgs())
 			w.session.onRegionFail(w.parentCtx, errInfo, revokeToken)
 		}
 	}
