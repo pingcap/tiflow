@@ -175,11 +175,10 @@ type ReplicaConfig struct {
 	SyncPointInterval  *JSONDuration `json:"sync_point_interval" swaggertype:"string"`
 	SyncPointRetention *JSONDuration `json:"sync_point_retention" swaggertype:"string"`
 
-	Filter     *FilterConfig              `json:"filter"`
-	Mounter    *MounterConfig             `json:"mounter"`
-	Sink       *SinkConfig                `json:"sink"`
-	Consistent *ConsistentConfig          `json:"consistent"`
-	Scheduler  *ChangefeedSchedulerConfig `json:"scheduler"`
+	Filter     *FilterConfig     `json:"filter"`
+	Mounter    *MounterConfig    `json:"mounter"`
+	Sink       *SinkConfig       `json:"sink"`
+	Consistent *ConsistentConfig `json:"consistent"`
 }
 
 // FilterConfig represents filter config for a changefeed

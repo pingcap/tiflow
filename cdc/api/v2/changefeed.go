@@ -644,7 +644,7 @@ func (h *OpenAPIV2) resumeChangefeed(c *gin.Context) {
 		_ = c.Error(err)
 		return
 	}
-	c.Status(http.StatusOK)
+	c.JSON(http.StatusOK, &EmptyResponse{})
 }
 
 // pauseChangefeed handles pause changefeed request

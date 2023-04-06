@@ -96,10 +96,6 @@ var customReplicaConfig = &ReplicaConfig{
 		Storage:           "local://test",
 		UseFileBackend:    true,
 	},
-	Scheduler: &ChangefeedSchedulerConfig{
-		EnableTableAcrossNodes: false,
-		RegionThreshold:        13,
-	},
 }
 
 // defaultReplicaConfig check if the default values is changed
@@ -134,10 +130,6 @@ var defaultReplicaConfig = &ReplicaConfig{
 		FlushIntervalInMs: redo.DefaultFlushIntervalInMs,
 		Storage:           "",
 		UseFileBackend:    false,
-	},
-	Scheduler: &ChangefeedSchedulerConfig{
-		EnableTableAcrossNodes: false,
-		RegionThreshold:        100_000,
 	},
 }
 
