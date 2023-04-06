@@ -24,6 +24,7 @@ import (
 	"github.com/pingcap/tiflow/cdc/sinkv2/eventsink"
 	"github.com/pingcap/tiflow/cdc/sinkv2/util"
 	"github.com/pingcap/tiflow/pkg/config"
+	"github.com/pingcap/tiflow/pkg/sink/cloudstorage"
 	"github.com/stretchr/testify/require"
 )
 
@@ -52,8 +53,8 @@ func TestEncodeEvents(t *testing.T) {
 	worker, fn := testEncodingWorker(ctx, t)
 	defer fn()
 	err := worker.encodeEvents(ctx, eventFragment{
-		versionedTable: versionedTable{
-			TableName: model.TableName{
+		versionedTable: cloudstorage.VersionedTable{
+			TableNameWithPhysicTableID: model.TableName{
 				Schema:  "test",
 				Table:   "table1",
 				TableID: 100,
@@ -134,8 +135,8 @@ func TestEncodingWorkerRun(t *testing.T) {
 
 	for i := 0; i < 3; i++ {
 		frag := eventFragment{
-			versionedTable: versionedTable{
-				TableName: table,
+			versionedTable: cloudstorage.VersionedTable{
+				TableNameWithPhysicTableID: table,
 			},
 			seqNumber: uint64(i + 1),
 			event: &eventsink.TxnCallbackableEvent{

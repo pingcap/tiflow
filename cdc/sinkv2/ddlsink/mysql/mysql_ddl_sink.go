@@ -44,7 +44,11 @@ const (
 	networkDriftDuration = 5 * time.Second
 )
 
-// Assert DDLEventSink implementation
+// GetDBConnImpl is the implementation of pmysql.Factory.
+// Exported for testing.
+var GetDBConnImpl pmysql.Factory = pmysql.CreateMySQLDBConn
+
+// Assert Sink implementation
 var _ ddlsink.DDLEventSink = (*mysqlDDLSink)(nil)
 
 type mysqlDDLSink struct {
@@ -63,7 +67,6 @@ func NewMySQLDDLSink(
 	ctx context.Context,
 	sinkURI *url.URL,
 	replicaConfig *config.ReplicaConfig,
-	dbConnFactory pmysql.Factory,
 ) (*mysqlDDLSink, error) {
 	changefeedID := contextutil.ChangefeedIDFromCtx(ctx)
 	cfg := pmysql.NewConfig()
@@ -72,12 +75,12 @@ func NewMySQLDDLSink(
 		return nil, err
 	}
 
-	dsnStr, err := pmysql.GenerateDSN(ctx, sinkURI, cfg, dbConnFactory)
+	dsnStr, err := pmysql.GenerateDSN(ctx, sinkURI, cfg, GetDBConnImpl)
 	if err != nil {
 		return nil, err
 	}
 
-	db, err := dbConnFactory(ctx, dsnStr)
+	db, err := GetDBConnImpl(ctx, dsnStr)
 	if err != nil {
 		return nil, err
 	}

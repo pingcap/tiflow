@@ -43,7 +43,13 @@ func (r *RowChangeEventAppender) Append(
 var _ Appender[*model.SingleTableTxn] = (*TxnEventAppender)(nil)
 
 // TxnEventAppender is the appender for SingleTableTxn.
-type TxnEventAppender struct{}
+type TxnEventAppender struct {
+	// IgnoreStartTs indicates whether to ignore the startTs of the row.
+	// This is used by consumer to keep compatibility with the old version.
+	// Most of our protocols are ignoring the startTs of the row, so we
+	// can not use the startTs to identify a transaction.
+	IgnoreStartTs bool
+}
 
 // Append appends the given rows to the given txn buffer.
 // The callers of this function should **make sure** that
@@ -91,7 +97,12 @@ func (t *TxnEventAppender) Append(
 
 		// Split on big transactions or a new one. For 2 transactions,
 		// their commitTs can be same but startTs will be never same.
-		if row.SplitTxn || lastTxn.StartTs != row.StartTs {
+		normalBoundary := row.SplitTxn || lastTxn.StartTs != row.StartTs
+		// NOTICE: This is a special case for compatibility with old version.
+		// In our lots of protocols, we are ignoring the startTs of the row,
+		// so we can not use the startTs to identify a transaction.
+		ignoreStartTsBoundary := t.IgnoreStartTs && lastCommitTs != row.CommitTs
+		if normalBoundary || ignoreStartTsBoundary {
 			buffer = append(buffer, &model.SingleTableTxn{
 				StartTs:   row.StartTs,
 				CommitTs:  row.CommitTs,
