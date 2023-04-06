@@ -141,8 +141,11 @@ func (n *WrapperImpl) GetStats() puller.Stats {
 
 // Close the puller wrapper.
 func (n *WrapperImpl) Close() {
-	if n.cancel != nil {
-		n.cancel()
-		n.eg.Wait()
+	if n.cancel == nil {
+		return
 	}
+	n.cancel()
+	n.cancel = nil
+	// The returned error can be ignored because the table is in removing.
+	_ = n.eg.Wait()
 }

@@ -80,8 +80,6 @@ type processor struct {
 	sinkManager component[*sinkmanager.SinkManager]
 
 	initialized bool
-	cancel      context.CancelFunc
-	wg          sync.WaitGroup
 
 	lazyInit func(ctx cdcContext.Context) error
 	newAgent func(
@@ -415,7 +413,6 @@ func newProcessor(
 		upstream:        up,
 		changefeedID:    changefeedID,
 		captureInfo:     captureInfo,
-		cancel:          func() {},
 		liveness:        liveness,
 		changefeedEpoch: changefeedEpoch,
 
@@ -958,13 +955,6 @@ func (p *processor) calculateTableBarrierTs(
 		tableBarrierTs[tb.TableID] = tb.BarrierTs
 	}
 	return tableBarrierTs
-}
-
-type runnable interface {
-	// Start all sub goroutines in place.
-	Run(ctx context.Context) error
-	// Release all internal resources.
-	Close()
 }
 
 type component[R util.Runnable] struct {

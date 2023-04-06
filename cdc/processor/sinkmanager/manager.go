@@ -167,9 +167,15 @@ func New(
 // Run implements util.Runnable.
 func (m *SinkManager) Run(ctx context.Context) (err error) {
 	var managerCancel, taskCancel context.CancelFunc
-
+	var taskCtx, sinkCtx, redoCtx context.Context
 	m.managerCtx, managerCancel = context.WithCancel(ctx)
+	taskCtx, taskCancel = context.WithCancel(m.managerCtx)
 	managerErrors := make(chan error, 16)
+	defer func() {
+		taskCancel()
+		managerCancel()
+		m.wg.Wait()
+	}()
 
 	m.sinkFactory, err = factory.New(
 		m.managerCtx,
@@ -182,8 +188,6 @@ func (m *SinkManager) Run(ctx context.Context) (err error) {
 
 	m.backgroundGC(managerErrors)
 
-	var taskCtx, sinkCtx, redoCtx context.Context
-	taskCtx, taskCancel = context.WithCancel(m.managerCtx)
 	m.sinkEg, sinkCtx = errgroup.WithContext(taskCtx)
 	m.redoEg, redoCtx = errgroup.WithContext(taskCtx)
 
@@ -244,9 +248,6 @@ func (m *SinkManager) Run(ctx context.Context) (err error) {
 	case err = <-sinkErrors:
 	case err = <-redoErrors:
 	}
-	taskCancel()
-	managerCancel()
-	m.wg.Wait()
 
 	log.Info("Sink manager exists",
 		zap.String("namespace", m.changefeedID.Namespace),
