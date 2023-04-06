@@ -114,6 +114,11 @@ func IsRetryableDDLError(err error) bool {
 		return true
 	}
 
+	// All DDLs should be idempotent in theory.
+	if dmretry.IsUnretryableConnectionError(err) {
+		return true
+	}
+
 	err = errors.Cause(err)
 	mysqlErr, ok := err.(*gmysql.MySQLError)
 	if !ok {

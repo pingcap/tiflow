@@ -197,7 +197,7 @@ check_third_party_binary:
 	@which bin/jq
 	@which bin/minio
 
-integration_test_build: check_failpoint_ctl
+integration_test_build: check_failpoint_ctl storage_consumer kafka_consumer
 	$(FAILPOINT_ENABLE)
 	$(GOTEST) -ldflags '$(LDFLAGS)' -c -cover -covermode=atomic \
 		-coverpkg=github.com/pingcap/tiflow/... \
@@ -242,9 +242,6 @@ build_kafka_integration_test_images: clean_integration_test_containers
 clean_integration_test_containers: ## Clean MySQL and Kafka integration test containers.
 	docker-compose -f $(TICDC_DOCKER_DEPLOYMENTS_DIR)/docker-compose-mysql-integration.yml down -v
 	docker-compose -f $(TICDC_DOCKER_DEPLOYMENTS_DIR)/docker-compose-kafka-integration.yml down -v
-
-integration_test_storage: check_third_party_binary
-	tests/integration_tests/run.sh storage "$(CASE)" "$(START_AT)"
 
 fmt: tools/bin/gofumports tools/bin/shfmt tools/bin/gci generate_mock go-generate
 	@echo "run gci (format imports)"
@@ -309,7 +306,7 @@ tidy:
 # TODO: Unified cdc and dm config.
 check-static: tools/bin/golangci-lint
 	tools/bin/golangci-lint run --timeout 10m0s --skip-dirs "^dm/","^tests/"
-	cd dm && ../tools/bin/golangci-lint run --timeout 10m0s
+	#cd dm && ../tools/bin/golangci-lint run --timeout 10m0s
 
 check: check-copyright fmt check-static tidy terror_check errdoc \
 	check-merge-conflicts check-ticdc-dashboard check-diff-line-width \

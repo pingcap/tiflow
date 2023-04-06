@@ -131,6 +131,10 @@ func ComparePolymorphicEvents(i, j *PolymorphicEvent) bool {
 		if i.RawKV.OpType == OpTypeDelete && j.RawKV.OpType != OpTypeDelete {
 			return true
 		}
+		// update DML
+		if i.RawKV.OldValue != nil && j.RawKV.OldValue == nil {
+			return true
+		}
 	}
 	return i.CRTs < j.CRTs
 }
@@ -214,4 +218,9 @@ func (r ResolvedTs) Greater(r1 ResolvedTs) bool {
 		return r.BatchID > r1.BatchID
 	}
 	return r.Ts > r1.Ts
+}
+
+// Equal judge whether the resolved ts is equal to the given ts.
+func (r ResolvedTs) Equal(r1 ResolvedTs) bool {
+	return r == r1
 }

@@ -256,6 +256,7 @@ func (h *OpenAPI) GetChangefeed(c *gin.Context) {
 		Engine:         info.Engine,
 		FeedState:      info.State,
 		TaskStatus:     taskStatus,
+		CreatorVersion: info.CreatorVersion,
 	}
 
 	c.IndentedJSON(http.StatusOK, changefeedDetail)

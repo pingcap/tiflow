@@ -23,10 +23,11 @@ import (
 	"path/filepath"
 	"time"
 
+	"github.com/dustin/go-humanize"
 	"github.com/gin-gonic/gin"
 	"github.com/pingcap/errors"
 	"github.com/pingcap/log"
-	"github.com/pingcap/tidb/util/memory"
+	"github.com/pingcap/tidb/util/gctuner"
 	"github.com/pingcap/tiflow/cdc"
 	"github.com/pingcap/tiflow/cdc/capture"
 	"github.com/pingcap/tiflow/cdc/kv"
@@ -41,6 +42,7 @@ import (
 	"github.com/pingcap/tiflow/pkg/p2p"
 	"github.com/pingcap/tiflow/pkg/pdutil"
 	"github.com/pingcap/tiflow/pkg/tcpserver"
+	"github.com/pingcap/tiflow/pkg/util"
 	p2pProto "github.com/pingcap/tiflow/proto/p2p"
 	pd "github.com/tikv/pd/client"
 	"go.etcd.io/etcd/client/pkg/v3/logutil"
@@ -195,10 +197,32 @@ func (s *server) prepare(ctx context.Context) error {
 		return errors.Trace(err)
 	}
 
+	if err := s.setMemoryLimit(); err != nil {
+		return errors.Trace(err)
+	}
+
 	s.capture = capture.NewCapture(
 		s.pdEndpoints, cdcEtcdClient, s.grpcService,
 		s.tableActorSystem, s.sortEngineFactory, s.sorterSystem)
 
+	return nil
+}
+
+func (s *server) setMemoryLimit() error {
+	conf := config.GetGlobalServerConfig()
+	totalMemory, err := util.GetMemoryLimit()
+	if err != nil {
+		return errors.Trace(err)
+	}
+	if conf.MaxMemoryPercentage > 0 {
+		goMemLimit := totalMemory * uint64(conf.MaxMemoryPercentage) / 100
+		gctuner.EnableGOGCTuner.Store(true)
+		gctuner.Tuning(goMemLimit)
+		log.Info("enable gctuner, set memory limit",
+			zap.Uint64("bytes", goMemLimit),
+			zap.String("memory", humanize.IBytes(goMemLimit)),
+		)
+	}
 	return nil
 }
 
@@ -229,7 +253,7 @@ func (s *server) startActorSystems(ctx context.Context) error {
 	sortDir := config.GetGlobalServerConfig().Sorter.SortDir
 
 	if s.useEventSortEngine {
-		totalMemory, err := memory.MemTotal()
+		totalMemory, err := util.GetMemoryLimit()
 		if err != nil {
 			return errors.Trace(err)
 		}
@@ -240,6 +264,10 @@ func (s *server) startActorSystems(ctx context.Context) error {
 		} else {
 			panic("only pebble is transformed to EventSortEngine")
 		}
+		log.Info("sorter engine memory limit",
+			zap.Uint64("bytes", memInBytes),
+			zap.String("memory", humanize.IBytes(memInBytes)),
+		)
 	} else {
 		memPercentage := float64(conf.Sorter.MaxMemoryPercentage) / 100
 		s.sorterSystem = ssystem.NewSystem(sortDir, memPercentage, conf.Debug.DB)
