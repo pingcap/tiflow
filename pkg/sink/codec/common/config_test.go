@@ -80,7 +80,7 @@ func TestConfigApplyValidate(t *testing.T) {
 	require.True(t, c.EnableTiDBExtension)
 
 	err = c.Validate()
-	require.ErrorContains(t, err, "enable-tidb-extension only supports canal-json/avro protocol")
+	require.NoError(t, err)
 
 	// avro
 	uri = "kafka://127.0.0.1:9092/abc?protocol=avro"
