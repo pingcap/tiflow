@@ -290,7 +290,7 @@ func (s *schemaStorageImpl) skipJob(job *timodel.Job) bool {
 		zap.String("namespace", s.id.Namespace),
 		zap.String("changefeed", s.id.ID),
 		zap.String("role", s.role.String()))
-	return !job.IsDone()
+	return !job.IsSynced() && !job.IsDone()
 }
 
 // MockSchemaStorage is for tests.
