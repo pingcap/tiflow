@@ -248,9 +248,6 @@ type mockAgent struct {
 }
 
 func (a *mockAgent) Tick(_ context.Context) (*schedulepb.Barrier, error) {
-	if len(a.executor.GetAllCurrentTables()) == 0 {
-		return nil, nil
-	}
 	return nil, nil
 }
 

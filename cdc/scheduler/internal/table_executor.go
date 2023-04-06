@@ -43,14 +43,6 @@ type TableExecutor interface {
 	// return true and corresponding checkpoint otherwise.
 	IsRemoveTableFinished(tableID model.TableID) (model.Ts, bool)
 
-	// GetAllCurrentTables should return all tables that are being run,
-	// being added and being removed.
-	//
-	// NOTE: two subsequent calls to the method should return the same
-	// result, unless there is a call to AddTable, RemoveTable, IsAddTableFinished
-	// or IsRemoveTableFinished in between two calls to this method.
-	GetAllCurrentTables() []model.TableID
-
 	// GetTableStatus return the checkpoint and resolved ts for the given table.
 	GetTableStatus(tableID model.TableID, collectStat bool) tablepb.TableStatus
 }
