@@ -44,18 +44,91 @@ func (m *mockManager) CheckStaleCheckpointTs(
 
 var _ gc.Manager = (*mockManager)(nil)
 
+<<<<<<< HEAD
 func createOwner4Test(ctx cdcContext.Context, t *testing.T) (*Owner, *orchestrator.GlobalReactorState, *orchestrator.ReactorStateTester) {
 	ctx.GlobalVars().PDClient = &gc.MockPDClient{
+=======
+// newOwner4Test creates a new Owner for test
+func newOwner4Test(
+	newDDLPuller func(ctx context.Context,
+		replicaConfig *config.ReplicaConfig,
+		up *upstream.Upstream,
+		startTs uint64,
+		changefeed model.ChangeFeedID,
+	) (puller.DDLPuller, error),
+	newSink func(changefeedID model.ChangeFeedID, info *model.ChangeFeedInfo, reportErr func(err error)) DDLSink,
+	newScheduler func(
+		ctx cdcContext.Context, up *upstream.Upstream, changefeedEpoch uint64,
+		cfg *config.SchedulerConfig,
+	) (scheduler.Scheduler, error),
+	newDownstreamObserver func(
+		ctx context.Context, sinkURIStr string, replCfg *config.ReplicaConfig,
+		opts ...observer.NewObserverOption,
+	) (observer.Observer, error),
+	pdClient pd.Client,
+) Owner {
+	m := upstream.NewManager4Test(pdClient)
+	o := NewOwner(m, config.NewDefaultSchedulerConfig()).(*ownerImpl)
+	// Most tests do not need to test bootstrap.
+	o.bootstrapped = true
+	o.newChangefeed = func(
+		id model.ChangeFeedID,
+		state *orchestrator.ChangefeedReactorState,
+		up *upstream.Upstream,
+		cfg *config.SchedulerConfig,
+	) *changefeed {
+		return newChangefeed4Test(id, state, up, newDDLPuller, newSink,
+			newScheduler, newDownstreamObserver)
+	}
+	return o
+}
+
+func createOwner4Test(ctx cdcContext.Context, t *testing.T) (*ownerImpl, *orchestrator.GlobalReactorState, *orchestrator.ReactorStateTester) {
+	pdClient := &gc.MockPDClient{
+>>>>>>> 0867f80e5f (cdc: add changefeed epoch to prevent unexpected state (#8268))
 		UpdateServiceGCSafePointFunc: func(ctx context.Context, serviceID string, ttl int64, safePoint uint64) (uint64, error) {
 			return safePoint, nil
 		},
 	}
+<<<<<<< HEAD
 	owner := NewOwner4Test(func(ctx cdcContext.Context, startTs uint64) (DDLPuller, error) {
 		return &mockDDLPuller{resolvedTs: startTs - 1}, nil
 	}, func() DDLSink {
 		return &mockDDLSink{}
 	},
 		ctx.GlobalVars().PDClient,
+=======
+
+	owner := newOwner4Test(
+		// new ddl puller
+		func(ctx context.Context,
+			replicaConfig *config.ReplicaConfig,
+			up *upstream.Upstream,
+			startTs uint64,
+			changefeed model.ChangeFeedID,
+		) (puller.DDLPuller, error) {
+			return &mockDDLPuller{resolvedTs: startTs - 1}, nil
+		},
+		// new ddl sink
+		func(changefeedID model.ChangeFeedID, info *model.ChangeFeedInfo, reportErr func(err error)) DDLSink {
+			return &mockDDLSink{}
+		},
+		// new scheduler
+		func(
+			ctx cdcContext.Context, up *upstream.Upstream, changefeedEpoch uint64,
+			cfg *config.SchedulerConfig,
+		) (scheduler.Scheduler, error) {
+			return &mockScheduler{}, nil
+		},
+		// new downstream observer
+		func(
+			ctx context.Context, sinkURIStr string, replCfg *config.ReplicaConfig,
+			opts ...observer.NewObserverOption,
+		) (observer.Observer, error) {
+			return observer.NewDummyObserver(), nil
+		},
+		pdClient,
+>>>>>>> 0867f80e5f (cdc: add changefeed epoch to prevent unexpected state (#8268))
 	)
 	state := orchestrator.NewGlobalState()
 	tester := orchestrator.NewReactorStateTester(t, state, nil)
