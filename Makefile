@@ -140,7 +140,7 @@ format-makefiles: $(MAKE_FILES)
 bank:
 	$(GOBUILD) -ldflags '$(LDFLAGS)' -o bin/bank ./tests/bank/bank.go ./tests/bank/case.go
 
-build-failpoint: check_failpoint_ctl
+build-cdc-with-failpoint: check_failpoint_ctl
 	$(FAILPOINT_ENABLE)
 	$(GOBUILD) -ldflags '$(LDFLAGS)' -o bin/cdc ./cmd/cdc/main.go
 	$(FAILPOINT_DISABLE)
