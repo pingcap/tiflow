@@ -45,6 +45,15 @@ type PolymorphicEvent struct {
 	finished chan struct{}
 }
 
+// NewEmptyPolymorphicEvent creates a new empty PolymorphicEvent.
+func NewEmptyPolymorphicEvent(ts uint64) *PolymorphicEvent {
+	return &PolymorphicEvent{
+		CRTs:  ts,
+		RawKV: &RawKVEntry{},
+		Row:   &RowChangedEvent{},
+	}
+}
+
 // NewPolymorphicEvent creates a new PolymorphicEvent with a raw KV.
 func NewPolymorphicEvent(rawKV *RawKVEntry) *PolymorphicEvent {
 	if rawKV.OpType == OpTypeResolved {
