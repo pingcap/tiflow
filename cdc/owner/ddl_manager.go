@@ -211,10 +211,6 @@ func (m *ddlManager) tick(
 			if err != nil {
 				return nil, minTableBarrierTs, barrier, err
 			}
-			// Apply ddl to update changefeed schema.
-			if err != nil {
-				return nil, minTableBarrierTs, barrier, err
-			}
 
 			for _, event := range events {
 				// If changefeed is in BDRMode, skip ddl.
@@ -546,10 +542,9 @@ func (m *ddlManager) allPhysicalTables(ctx context.Context) ([]model.TableID, er
 func (m *ddlManager) getSnapshotTs() (ts uint64) {
 	ts = m.checkpointTs
 
-	if m.ddlResolvedTs == m.startTs && m.executingDDL == nil {
-		// If ddlResolvedTs is equal to startTs, and executingDDL is nil
-		// it means that the changefeed is just started, and the physicalTablesCache
-		// is empty. So we need to get all tables from the snapshot at the startTs.
+	if m.ddlResolvedTs == m.startTs {
+		// If ddlResolvedTs is equal to startTs it means that the changefeed is just started,
+		// So we need to get all tables from the snapshot at the startTs.
 		ts = m.startTs
 		log.Debug("changefeed is just started, use startTs to get snapshot",
 			zap.String("namespace", m.changfeedID.Namespace),
