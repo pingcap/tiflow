@@ -1472,9 +1472,8 @@ func (s *Syncer) Run(ctx context.Context) (err error) {
 	// 2. then since we are confident that Load unit is done we can delete the load task etcd KV.
 	//    TODO: we can't handle panic between 1. and 2., or fail to delete the load task etcd KV.
 	// 3. then we initiate schema tracker
-	// 4. - when it's a fresh task, load the table structure from dump files into schema tracker.
-	//      if it's also a optimistic sharding task, also load the table structure into checkpoints because shard tables
-	//      may not have same table structure so we can't fetch the downstream table structure for them lazily.
+	// 4. - when it's a fresh task, load the table structure from dump files into schema tracker,
+	//      and flush them into checkpoint again.
 	//    - when it's a resumed task, load the table structure from checkpoints into schema tracker.
 	//    TODO: we can't handle failure between 1. and 4. After 1. it's not a fresh task.
 	// 5. finally clean the dump files
@@ -1501,6 +1500,15 @@ func (s *Syncer) Run(ctx context.Context) (err error) {
 		if err != nil {
 			s.tctx.L().Warn("error happened when load table structure from dump files", zap.Error(err))
 			cleanDumpFile = false
+<<<<<<< HEAD
+=======
+		} else {
+			err = s.flushCheckPoints()
+			if err != nil {
+				s.tctx.L().Warn("error happened when flush table structure from dump files", zap.Error(err))
+				cleanDumpFile = false
+			}
+>>>>>>> ad0ae1a3c (syncer(dm): split big transaction when flush checkpoint (#7259))
 		}
 	} else {
 		err = s.checkpoint.LoadIntoSchemaTracker(ctx, s.schemaTracker)
@@ -3115,6 +3123,7 @@ func (s *Syncer) loadTableStructureFromDump(ctx context.Context) error {
 	var dbs, tables []string
 	var tableFiles [][2]string // [db, filename]
 	for f := range files {
+		// TODO: handle db/table name escaped bu dumpling.
 		if db, ok := utils.GetDBFromDumpFilename(f); ok {
 			dbs = append(dbs, db)
 			continue
@@ -3170,10 +3179,12 @@ func (s *Syncer) loadTableStructureFromDump(ctx context.Context) error {
 					zap.ByteString("statement", stmt),
 					zap.Error(err))
 				setFirstErr(err)
+				continue
 			}
-			// TODO: we should save table checkpoint here, but considering when
-			// the first time of flushing checkpoint, user may encounter https://github.com/pingcap/tiflow/issues/5010
-			// we should fix that problem first.
+			s.saveTablePoint(
+				&filter.Table{Schema: db, Name: stmtNode.(*ast.CreateTableStmt).Table.Name.O},
+				s.getFlushedGlobalPoint(),
+			)
 		}
 	}
 	return firstErr
@@ -3720,3 +3731,88 @@ func calculateChanSize(queueSize, workerCount int, compact bool) int {
 	}
 	return chanSize
 }
+<<<<<<< HEAD
+=======
+
+func (s *Syncer) setGlobalPointByTime(tctx *tcontext.Context, timeStr string) error {
+	t, err := utils.ParseStartTimeInLoc(timeStr, s.upstreamTZ)
+	if err != nil {
+		return err
+	}
+
+	var (
+		loc   *binlog.Location
+		posTp binlog.PosType
+	)
+
+	if s.relay != nil {
+		subDir := s.relay.Status(nil).(*pb.RelayStatus).RelaySubDir
+		relayDir := path.Join(s.cfg.RelayDir, subDir)
+		finder := binlog.NewLocalBinlogPosFinder(tctx, s.cfg.EnableGTID, s.cfg.Flavor, relayDir)
+		loc, posTp, err = finder.FindByTimestamp(t.Unix())
+	} else {
+		finder := binlog.NewRemoteBinlogPosFinder(tctx, s.fromDB.BaseDB, s.syncCfg, s.cfg.EnableGTID)
+		loc, posTp, err = finder.FindByTimestamp(t.Unix())
+	}
+	if err != nil {
+		s.tctx.L().Error("fail to find binlog position by timestamp",
+			zap.Time("time", t),
+			zap.Error(err))
+		return err
+	}
+
+	switch posTp {
+	case binlog.InRangeBinlogPos:
+		s.tctx.L().Info("find binlog position by timestamp",
+			zap.String("time", timeStr),
+			zap.Stringer("pos", loc))
+	case binlog.BelowLowerBoundBinlogPos:
+		s.tctx.L().Warn("fail to find binlog location by timestamp because the timestamp is too early, will use the earliest binlog location",
+			zap.String("time", timeStr),
+			zap.Any("location", loc))
+	case binlog.AboveUpperBoundBinlogPos:
+		return terror.ErrConfigStartTimeTooLate.Generate(timeStr)
+	}
+
+	err = s.checkpoint.DeleteAllTablePoint(tctx)
+	if err != nil {
+		return err
+	}
+	s.checkpoint.SaveGlobalPointForcibly(*loc)
+	s.tctx.L().Info("Will replicate from the specified time, the location recorded in checkpoint and config file will be ignored",
+		zap.String("time", timeStr),
+		zap.Any("locationOfTheTime", loc))
+	return nil
+}
+
+func (s *Syncer) getFlushedGlobalPoint() binlog.Location {
+	return s.checkpoint.FlushedGlobalPoint()
+}
+
+func (s *Syncer) getInitExecutedLoc() binlog.Location {
+	s.RLock()
+	defer s.RUnlock()
+	return s.initExecutedLoc.Clone()
+}
+
+func (s *Syncer) initInitExecutedLoc() {
+	s.Lock()
+	defer s.Unlock()
+	if s.initExecutedLoc == nil {
+		p := s.checkpoint.GlobalPoint()
+		s.initExecutedLoc = &p
+	}
+}
+
+func (s *Syncer) getTrackedTableInfo(table *filter.Table) (*model.TableInfo, error) {
+	return s.schemaTracker.GetTableInfo(table)
+}
+
+func (s *Syncer) getDownStreamTableInfo(tctx *tcontext.Context, tableID string, originTI *model.TableInfo) (*schema.DownstreamTableInfo, error) {
+	return s.schemaTracker.GetDownStreamTableInfo(tctx, tableID, originTI)
+}
+
+func (s *Syncer) getTableInfoFromCheckpoint(table *filter.Table) *model.TableInfo {
+	return s.checkpoint.GetTableInfo(table.Schema, table.Name)
+}
+>>>>>>> ad0ae1a3c (syncer(dm): split big transaction when flush checkpoint (#7259))

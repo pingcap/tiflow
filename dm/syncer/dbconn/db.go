@@ -231,10 +231,64 @@ func (conn *DBConn) ExecuteSQLWithIgnore(tctx *tcontext.Context, ignoreError fun
 	return ret.(int), nil
 }
 
+<<<<<<< HEAD
 func isRetryableError(err error) bool {
 	err = errors.Cause(err) // check the original error
 	mysqlErr, ok := err.(*mysql.MySQLError)
 	if !ok {
+=======
+// ExecuteSQL does some SQL executions.
+func (conn *DBConn) ExecuteSQL(
+	tctx *tcontext.Context,
+	metricProxies *metrics.Proxies,
+	queries []string,
+	args ...[]interface{},
+) (int, error) {
+	return conn.ExecuteSQLWithIgnore(tctx, metricProxies, nil, queries, args...)
+}
+
+// ExecuteSQLAutoSplit wraps BaseConn.ExecuteSQLAutoSplit.
+// TODO: refine DBConn and BaseConn.
+func (conn *DBConn) ExecuteSQLAutoSplit(
+	tctx *tcontext.Context,
+	metricProxies *metrics.Proxies,
+	queries []string,
+	args ...[]interface{},
+) error {
+	if conn == nil {
+		// only happens in test
+		return nil
+	}
+	var m *prometheus.HistogramVec
+	if metricProxies != nil {
+		m = metricProxies.StmtHistogram
+	}
+	return conn.baseConn.ExecuteSQLsAutoSplit(tctx, m, conn.cfg.Name, queries, args...)
+}
+
+func (conn *DBConn) retryableFn(tctx *tcontext.Context, queries, args any) func(int, error) bool {
+	return func(retryTime int, err error) bool {
+		if retry.IsConnectionError(err) {
+			err = conn.ResetConn(tctx)
+			if err != nil {
+				tctx.L().Error("reset connection failed", zap.Int("retry", retryTime),
+					zap.String("queries", utils.TruncateInterface(queries, -1)),
+					zap.String("arguments", utils.TruncateInterface(args, -1)),
+					log.ShortError(err))
+				return false
+			}
+			tctx.L().Warn("execute sql failed by connection error", zap.Int("retry", retryTime),
+				zap.Error(err))
+			return true
+		}
+		if dbutil.IsRetryableError(err) {
+			tctx.L().Warn("execute statements", zap.Int("retry", retryTime),
+				zap.String("queries", utils.TruncateInterface(queries, -1)),
+				zap.String("arguments", utils.TruncateInterface(args, -1)),
+				log.ShortError(err))
+			return true
+		}
+>>>>>>> ad0ae1a3c (syncer(dm): split big transaction when flush checkpoint (#7259))
 		return false
 	}
 
