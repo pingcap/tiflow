@@ -319,7 +319,6 @@ type RowChangedEvent struct {
 	Checksum uint64 `json:"-" msg:"-"`
 	// PreChecksum corresponds to the checksum of the PreColumns
 	PreChecksum uint64 `json:"-" msg:"-"`
-	IsWriteOnly bool   `json:"-" msg:"-"`
 
 	// ApproximateDataSize is the approximate size of protobuf binary
 	// representation of this event.

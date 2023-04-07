@@ -57,6 +57,9 @@ type rowKVEntry struct {
 	// or row data that does not contain any Datum.
 	RowExist    bool
 	PreRowExist bool
+
+	RowChecksum    uint64
+	PreRowChecksum uint64
 }
 
 // Mounter is used to parse SQL events from KV events
@@ -75,6 +78,8 @@ type mounter struct {
 	filter                       pfilter.Filter
 	metricTotalRows              prometheus.Gauge
 	metricIgnoredDMLEventCounter prometheus.Counter
+
+	enableIntegrityCheck bool
 }
 
 // NewMounter creates a mounter
@@ -83,6 +88,7 @@ func NewMounter(schemaStorage SchemaStorage,
 	tz *time.Location,
 	filter pfilter.Filter,
 	enableOldValue bool,
+	enableIntegrityCheck bool,
 ) Mounter {
 	return &mounter{
 		schemaStorage:  schemaStorage,
@@ -93,7 +99,8 @@ func NewMounter(schemaStorage SchemaStorage,
 			WithLabelValues(changefeedID.Namespace, changefeedID.ID),
 		metricIgnoredDMLEventCounter: ignoredDMLEventCounter.
 			WithLabelValues(changefeedID.Namespace, changefeedID.ID),
-		tz: tz,
+		tz:                   tz,
+		enableIntegrityCheck: enableIntegrityCheck,
 	}
 }
 
@@ -141,19 +148,21 @@ func (m *mounter) unmarshalAndMountRowChanged(ctx context.Context, raw *model.Ra
 	if err != nil {
 		return nil, errors.Trace(err)
 	}
-	row, err := func() (*model.RowChangedEvent, error) {
-		if snap.IsIneligibleTableID(physicalTableID) {
-			log.Debug("skip the DML of ineligible table", zap.Uint64("ts", raw.CRTs), zap.Int64("tableID", physicalTableID))
+	if snap.IsIneligibleTableID(physicalTableID) {
+		log.Debug("skip the DML of ineligible table",
+			zap.Uint64("ts", raw.CRTs), zap.Int64("tableID", physicalTableID))
+		return nil, nil
+	}
+	tableInfo, exist := snap.PhysicalTableByID(physicalTableID)
+	if !exist {
+		if snap.IsTruncateTableID(physicalTableID) {
+			log.Debug("skip the DML of truncated table",
+				zap.Uint64("ts", raw.CRTs), zap.Int64("tableID", physicalTableID))
 			return nil, nil
 		}
-		tableInfo, exist := snap.PhysicalTableByID(physicalTableID)
-		if !exist {
-			if snap.IsTruncateTableID(physicalTableID) {
-				log.Debug("skip the DML of truncated table", zap.Uint64("ts", raw.CRTs), zap.Int64("tableID", physicalTableID))
-				return nil, nil
-			}
-			return nil, cerror.ErrSnapshotTableNotFound.GenWithStackByArgs(physicalTableID)
-		}
+		return nil, cerror.ErrSnapshotTableNotFound.GenWithStackByArgs(physicalTableID)
+	}
+	row, err := func() (*model.RowChangedEvent, error) {
 		if bytes.HasPrefix(key, recordPrefix) {
 			rowKV, err := m.unmarshalRowKVEntry(tableInfo, raw.Key, raw.Value, raw.OldValue, baseInfo)
 			if err != nil {
@@ -181,11 +190,22 @@ func (m *mounter) unmarshalAndMountRowChanged(ctx context.Context, raw *model.Ra
 		}
 		return nil, nil
 	}()
+
+	if m.enableIntegrityCheck {
+		if err := m.checksumIntegrityCheck(row, tableInfo); err != nil {
+			return nil, errors.Trace(err)
+		}
+	}
+
 	if err != nil && !cerror.IsChangefeedUnRetryableError(err) {
 		log.Error("failed to mount and unmarshals entry, start to print debug info", zap.Error(err))
 		snap.PrintStatus(log.Error)
 	}
 	return row, err
+}
+
+func (m *mounter) checksumIntegrityCheck(row *model.RowChangedEvent, tableInfo *model.TableInfo) error {
+	return nil
 }
 
 func (m *mounter) unmarshalRowKVEntry(tableInfo *model.TableInfo, rawKey []byte, rawValue []byte, rawOldValue []byte, base baseKVEntry) (*rowKVEntry, error) {
@@ -208,7 +228,18 @@ func (m *mounter) unmarshalRowKVEntry(tableInfo *model.TableInfo, rawKey []byte,
 	if err != nil {
 		return nil, errors.Trace(err)
 	}
+
+	rowChecksum, err := extractChecksum(rawValue)
+	if err != nil {
+		return nil, errors.Trace(err)
+	}
+
 	preRow, preRowExist, err := decodeRow(rawOldValue)
+	if err != nil {
+		return nil, errors.Trace(err)
+	}
+
+	preRowChecksum, err := extractChecksum(rawOldValue)
 	if err != nil {
 		return nil, errors.Trace(err)
 	}
@@ -220,6 +251,9 @@ func (m *mounter) unmarshalRowKVEntry(tableInfo *model.TableInfo, rawKey []byte,
 		PreRow:      preRow,
 		RowExist:    rowExist,
 		PreRowExist: preRowExist,
+
+		RowChecksum:    rowChecksum,
+		PreRowChecksum: preRowChecksum,
 	}, nil
 }
 
@@ -378,10 +412,14 @@ func (m *mounter) mountRowKVEntry(tableInfo *model.TableInfo, row *rowKVEntry, d
 			TableID:     row.PhysicalTableID,
 			IsPartition: tableInfo.GetPartitionInfo() != nil,
 		},
-		ColInfos:            colInfos,
-		TableInfo:           tableInfo,
-		Columns:             cols,
-		PreColumns:          preCols,
+		ColInfos:   colInfos,
+		TableInfo:  tableInfo,
+		Columns:    cols,
+		PreColumns: preCols,
+
+		Checksum:    row.RowChecksum,
+		PreChecksum: row.PreRowChecksum,
+
 		IndexColumns:        tableInfo.IndexColumnsOffset,
 		ApproximateDataSize: dataSize,
 	}, rawRow, nil
