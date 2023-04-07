@@ -9,4 +9,4 @@ create table t2 (id int primary key,
 );
 
 create table t6 (id int, name varchar(20), msg text, primary key(`id`)) character set latin1;
-insert into t6 (id, name, msg) values (0, 'Müller', 'Müller');
+insert into t6 (id, name, msg) values (0, 'Müller…', 'Müller…');
