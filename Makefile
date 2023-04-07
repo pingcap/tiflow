@@ -141,6 +141,7 @@ bank:
 	$(GOBUILD) -ldflags '$(LDFLAGS)' -o bin/bank ./tests/bank/bank.go ./tests/bank/case.go
 
 build-cdc-with-failpoint: check_failpoint_ctl
+build-cdc-with-failpoint: ## Build cdc with failpoint enabled.
 	$(FAILPOINT_ENABLE)
 	$(GOBUILD) -ldflags '$(LDFLAGS)' -o bin/cdc ./cmd/cdc/main.go
 	$(FAILPOINT_DISABLE)
