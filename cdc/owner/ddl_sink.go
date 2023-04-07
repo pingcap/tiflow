@@ -288,7 +288,7 @@ func (s *ddlSinkImpl) emitDDLEvent(ctx context.Context, ddl *model.DDLEvent) (bo
 		return false, nil
 	}
 
-	query, err := addSpecialComment(ddl)
+	query, err := s.addSpecialComment(ddl)
 	if err != nil {
 		log.Error("Add special comment failed",
 			zap.String("namespace", s.changefeedID.Namespace),
@@ -352,13 +352,15 @@ func (s *ddlSinkImpl) isInitialized() bool {
 }
 
 // addSpecialComment translate tidb feature to comment
-func addSpecialComment(ddl *model.DDLEvent) (string, error) {
+func (s *ddlSinkImpl) addSpecialComment(ddl *model.DDLEvent) (string, error) {
 	stms, _, err := parser.New().Parse(ddl.Query, ddl.Charset, ddl.Collate)
 	if err != nil {
 		return "", errors.Trace(err)
 	}
 	if len(stms) != 1 {
 		log.Panic("invalid ddlQuery statement size",
+			zap.String("namespace", s.changefeedID.Namespace),
+			zap.String("changefeed", s.changefeedID.ID),
 			zap.String("ddlQuery", ddl.Query))
 	}
 	var sb strings.Builder
@@ -380,6 +382,8 @@ func addSpecialComment(ddl *model.DDLEvent) (string, error) {
 
 	result := sb.String()
 	log.Info("add special comment to DDL",
+		zap.String("namespace", s.changefeedID.Namespace),
+		zap.String("changefeed", s.changefeedID.ID),
 		zap.String("DDL", ddl.Query),
 		zap.String("charset", ddl.Charset),
 		zap.String("collate", ddl.Collate),
