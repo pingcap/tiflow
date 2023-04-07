@@ -3,8 +3,6 @@ RUN apk add --no-cache git make bash findutils
 WORKDIR /go/src/github.com/pingcap/tiflow
 COPY . .
 
-RUN echo $(go env)
-
 RUN --mount=type=cache,target=/root/.cache/go-build,target=/go/pkg/mod make build-failpoint
 
 FROM alpine:3.15
