@@ -249,7 +249,6 @@ func (APIV2HelpersImpl) verifyCreateChangefeedConfig(
 		CreateTime:     time.Now(),
 		StartTs:        cfg.StartTs,
 		TargetTs:       cfg.TargetTs,
-		Engine:         cfg.Engine,
 		Config:         replicaCfg,
 		State:          model.StateNormal,
 		CreatorVersion: version.ReleaseVersion,
@@ -308,9 +307,6 @@ func (APIV2HelpersImpl) verifyUpdateChangefeedConfig(
 				cfg.TargetTs, newInfo.StartTs)
 		}
 		newInfo.TargetTs = cfg.TargetTs
-	}
-	if cfg.Engine != "" {
-		newInfo.Engine = cfg.Engine
 	}
 	if cfg.ReplicaConfig != nil {
 		configUpdated = true

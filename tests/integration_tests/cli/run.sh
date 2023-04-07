@@ -89,10 +89,6 @@ EOF
 		echo "[$(date)] <<<<< changefeed info is not updated as expected ${changefeed_info} >>>>>"
 		exit 1
 	fi
-	if [[ ! $changefeed_info == *"\"engine\":\"unified\""* ]]; then
-		echo "[$(date)] <<<<< changefeed info is not updated as expected ${changefeed_info} >>>>>"
-		exit 1
-	fi
 
 	# Resume changefeed
 	run_cdc_cli changefeed --changefeed-id $uuid resume && sleep 3
