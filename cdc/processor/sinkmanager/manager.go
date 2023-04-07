@@ -339,13 +339,10 @@ func (m *SinkManager) generateSinkTasks() error {
 	getUpperBound := func(
 		tableSinkUpperBoundTs model.Ts,
 	) engine.Position {
-		// If a task carries events after schemaResolvedTs, mounter group threads
-		// can be blocked on waiting schemaResolvedTs get advanced.
 		schemaTs := m.schemaStorage.ResolvedTs()
 		if tableSinkUpperBoundTs > schemaTs+1 {
 			tableSinkUpperBoundTs = schemaTs + 1
 		}
-
 		return engine.Position{StartTs: tableSinkUpperBoundTs - 1, CommitTs: tableSinkUpperBoundTs}
 	}
 
@@ -815,6 +812,15 @@ func (m *SinkManager) GetAllCurrentTableIDs() []model.TableID {
 		return true
 	})
 	return tableIDs
+}
+
+// GetAllTableCount returns the number of tables in the sink manager.
+func (m *SinkManager) GetAllTableCount() (count int) {
+	m.tableSinks.Range(func(key, value interface{}) bool {
+		count++
+		return true
+	})
+	return
 }
 
 // GetTableState returns the table(TableSink) state.
