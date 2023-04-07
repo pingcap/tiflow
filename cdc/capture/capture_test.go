@@ -20,6 +20,11 @@ import (
 	"time"
 
 	"github.com/pingcap/tiflow/pkg/etcd"
+<<<<<<< HEAD
+=======
+	mock_etcd "github.com/pingcap/tiflow/pkg/etcd/mock"
+	"github.com/prometheus/client_golang/prometheus"
+>>>>>>> 94497b4d54 (cdc: retry internal context deadline exceeded  (#8602))
 	"github.com/stretchr/testify/require"
 	"go.etcd.io/etcd/clientv3"
 )
@@ -60,3 +65,175 @@ func TestReset(t *testing.T) {
 	cancel()
 	wg.Wait()
 }
+<<<<<<< HEAD
+=======
+
+type mockEtcdClient struct {
+	etcd.CDCEtcdClient
+	clientv3.Lease
+	called chan struct{}
+}
+
+func (m *mockEtcdClient) GetEtcdClient() *etcd.Client {
+	cli := &clientv3.Client{Lease: m}
+	return etcd.Wrap(cli, map[string]prometheus.Counter{})
+}
+
+func (m *mockEtcdClient) Grant(_ context.Context, _ int64) (*clientv3.LeaseGrantResponse, error) {
+	select {
+	case m.called <- struct{}{}:
+	default:
+	}
+	return nil, context.DeadlineExceeded
+}
+
+func TestRetryInternalContextDeadlineExceeded(t *testing.T) {
+	ctx, cancel := context.WithCancel(context.Background())
+
+	called := make(chan struct{}, 2)
+	cp := NewCapture4Test(nil)
+	// In the current implementation, the first RPC is grant.
+	// the mock client always retry DeadlineExceeded for the RPC.
+	cp.EtcdClient = &mockEtcdClient{called: called}
+
+	errCh := make(chan error, 1)
+	go func() {
+		errCh <- cp.Run(ctx)
+	}()
+	time.Sleep(100 * time.Millisecond)
+	// Waiting for Grant to be called.
+	<-called
+	time.Sleep(100 * time.Millisecond)
+	// Make sure it retrys
+	<-called
+
+	// Do not retry context canceled.
+	cancel()
+	select {
+	case err := <-errCh:
+		require.NoError(t, err)
+	case <-time.After(5 * time.Second):
+		require.Fail(t, "timeout")
+	}
+}
+
+func TestInfo(t *testing.T) {
+	cp := NewCapture4Test(nil)
+	cp.info = nil
+	require.NotPanics(t, func() { cp.Info() })
+}
+
+func TestDrainCaptureBySignal(t *testing.T) {
+	t.Parallel()
+
+	ctrl := gomock.NewController(t)
+	mm := mock_processor.NewMockManager(ctrl)
+	me := mock_etcd.NewMockCDCEtcdClient(ctrl)
+	cp := &captureImpl{
+		info: &model.CaptureInfo{
+			ID:            "capture-for-test",
+			AdvertiseAddr: "127.0.0.1", Version: "test",
+		},
+		processorManager: mm,
+		config:           config.GetDefaultServerConfig(),
+		EtcdClient:       me,
+	}
+	require.Equal(t, model.LivenessCaptureAlive, cp.Liveness())
+
+	done := cp.Drain()
+	select {
+	case <-done:
+		require.Equal(t, model.LivenessCaptureStopping, cp.Liveness())
+	case <-time.After(time.Second):
+		require.Fail(t, "timeout")
+	}
+}
+
+func TestDrainWaitsOwnerResign(t *testing.T) {
+	t.Parallel()
+
+	ctrl := gomock.NewController(t)
+	mo := mock_owner.NewMockOwner(ctrl)
+	mm := mock_processor.NewMockManager(ctrl)
+	me := mock_etcd.NewMockCDCEtcdClient(ctrl)
+	cp := &captureImpl{
+		EtcdClient: me,
+		info: &model.CaptureInfo{
+			ID:            "capture-for-test",
+			AdvertiseAddr: "127.0.0.1", Version: "test",
+		},
+		processorManager: mm,
+		owner:            mo,
+		config:           config.GetDefaultServerConfig(),
+	}
+	require.Equal(t, model.LivenessCaptureAlive, cp.Liveness())
+
+	mo.EXPECT().AsyncStop().Do(func() {}).AnyTimes()
+
+	done := cp.Drain()
+	select {
+	case <-time.After(3 * time.Second):
+		require.Fail(t, "timeout")
+	case <-done:
+		require.Equal(t, model.LivenessCaptureStopping, cp.Liveness())
+	}
+}
+
+type mockElection struct {
+	campaignRequestCh chan struct{}
+	campaignGrantCh   chan struct{}
+
+	campaignFlag, resignFlag bool
+}
+
+func (e *mockElection) campaign(ctx context.Context, key string) error {
+	e.campaignRequestCh <- struct{}{}
+	<-e.campaignGrantCh
+	e.campaignFlag = true
+	return nil
+}
+
+func (e *mockElection) resign(ctx context.Context) error {
+	e.resignFlag = true
+	return nil
+}
+
+func TestCampaignLiveness(t *testing.T) {
+	t.Parallel()
+
+	me := &mockElection{
+		campaignRequestCh: make(chan struct{}, 1),
+		campaignGrantCh:   make(chan struct{}, 1),
+	}
+	cp := &captureImpl{
+		config:   config.GetDefaultServerConfig(),
+		info:     &model.CaptureInfo{ID: "test"},
+		election: me,
+	}
+	ctx := cdcContext.NewContext4Test(context.Background(), true)
+
+	cp.liveness.Store(model.LivenessCaptureStopping)
+	err := cp.campaignOwner(ctx)
+	require.Nil(t, err)
+	require.False(t, me.campaignFlag)
+
+	// Force set alive.
+	cp.liveness = model.LivenessCaptureAlive
+	wg := sync.WaitGroup{}
+	wg.Add(1)
+	go func() {
+		defer wg.Done()
+		// Grant campaign
+		g := <-me.campaignRequestCh
+		// Set liveness to stopping
+		cp.liveness.Store(model.LivenessCaptureStopping)
+		me.campaignGrantCh <- g
+	}()
+	err = cp.campaignOwner(ctx)
+	require.Nil(t, err)
+	require.True(t, me.campaignFlag)
+	require.True(t, me.resignFlag)
+
+	wg.Wait()
+}
+>>>>>>> 94497b4d54 (cdc: retry internal context deadline exceeded  (#8602))
