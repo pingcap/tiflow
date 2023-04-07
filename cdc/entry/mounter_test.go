@@ -278,10 +278,11 @@ func testMounterDisableOldValue(t *testing.T, tc struct {
 
 	tk.MustExec(tc.createTableDDL)
 
-	jobs, err := getAllHistoryDDLJob(store)
-	require.Nil(t, err)
 	f, err := filter.NewFilter(config.GetDefaultReplicaConfig(), "")
 	require.Nil(t, err)
+	jobs, err := getAllHistoryDDLJob(store, f)
+	require.Nil(t, err)
+
 	scheamStorage, err := NewSchemaStorage(nil, 0, false, dummyChangeFeedID, util.RoleTester, f)
 	require.Nil(t, err)
 	for _, job := range jobs {
