@@ -31,6 +31,7 @@ import (
 	"github.com/pingcap/tidb/tablecodec"
 	"github.com/pingcap/tidb/types"
 	"github.com/pingcap/tiflow/cdc/model"
+	"github.com/pingcap/tiflow/pkg/config"
 	cerror "github.com/pingcap/tiflow/pkg/errors"
 	pfilter "github.com/pingcap/tiflow/pkg/filter"
 	"github.com/prometheus/client_golang/prometheus"
@@ -79,7 +80,7 @@ type mounter struct {
 	metricTotalRows              prometheus.Gauge
 	metricIgnoredDMLEventCounter prometheus.Counter
 
-	enableIntegrityCheck bool
+	integrity *config.IntegrityConfig
 }
 
 // NewMounter creates a mounter
@@ -88,7 +89,7 @@ func NewMounter(schemaStorage SchemaStorage,
 	tz *time.Location,
 	filter pfilter.Filter,
 	enableOldValue bool,
-	enableIntegrityCheck bool,
+	integrity *config.IntegrityConfig,
 ) Mounter {
 	return &mounter{
 		schemaStorage:  schemaStorage,
@@ -99,8 +100,8 @@ func NewMounter(schemaStorage SchemaStorage,
 			WithLabelValues(changefeedID.Namespace, changefeedID.ID),
 		metricIgnoredDMLEventCounter: ignoredDMLEventCounter.
 			WithLabelValues(changefeedID.Namespace, changefeedID.ID),
-		tz:                   tz,
-		enableIntegrityCheck: enableIntegrityCheck,
+		tz:        tz,
+		integrity: integrity,
 	}
 }
 
@@ -191,7 +192,7 @@ func (m *mounter) unmarshalAndMountRowChanged(ctx context.Context, raw *model.Ra
 		return nil, nil
 	}()
 
-	if m.enableIntegrityCheck {
+	if m.integrity.Enabled() {
 		if err := m.checksumIntegrityCheck(row, tableInfo); err != nil {
 			return nil, errors.Trace(err)
 		}
@@ -205,6 +206,8 @@ func (m *mounter) unmarshalAndMountRowChanged(ctx context.Context, raw *model.Ra
 }
 
 func (m *mounter) checksumIntegrityCheck(row *model.RowChangedEvent, tableInfo *model.TableInfo) error {
+
+	// if checksum mismatch, check the integrity handle level to decide the next step.
 	return nil
 }
 

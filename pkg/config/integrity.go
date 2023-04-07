@@ -71,11 +71,15 @@ func (c *IntegrityConfig) Validate() error {
 		return cerror.ErrInvalidReplicaConfig.GenWithStackByArgs()
 	}
 
-	if c.IntegrityCheckLevel == IntegrityCheckLevelCorrectness {
+	if c.Enabled() {
 		log.Info("integrity check is enabled, it may affect the performance of the changefeed",
 			zap.Any("integrity-check", c.IntegrityCheckLevel),
 			zap.Any("corruption-handle-level", c.CorruptionHandleLevel))
 	}
 
 	return nil
+}
+
+func (c *IntegrityConfig) Enabled() bool {
+	return c.IntegrityCheckLevel == IntegrityCheckLevelCorrectness
 }
