@@ -380,7 +380,10 @@ func addSpecialComment(ddl *model.DDLEvent) (string, error) {
 
 	result := sb.String()
 	log.Info("add special comment to DDL",
-		zap.String("DDL", ddl.Query), zap.String("result", result))
+		zap.String("DDL", ddl.Query),
+		zap.String("charset", ddl.Charset),
+		zap.String("collate", ddl.Collate),
+		zap.String("result", result))
 
 	return result, nil
 }
