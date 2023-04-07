@@ -49,7 +49,7 @@ expression-filter:
   only_muller:
     schema: "expr_filter"
     table: "t6"
-    insert-value-expr: "name != 'Müller'"
+    insert-value-expr: "name != 'Müller…'"
 
 black-white-list: # compatible with deprecated config
   instance:
