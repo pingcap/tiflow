@@ -21,18 +21,18 @@ import (
 
 // IntegrityConfig represents integrity check config for a changefeed.
 type IntegrityConfig struct {
-	IntegrityCheck        IntegrityCheckType        `toml:"integrity-check" json:"integrity-check"`
-	CorruptionHandleLevel CorruptionHandleLevelType `toml:"corruption-handle-option" json:"corruption-handle-option"`
+	IntegrityCheckLevel   IntegrityCheckLevelType   `toml:"integrity-check-level" json:"integrity-check-level"`
+	CorruptionHandleLevel CorruptionHandleLevelType `toml:"corruption-handle-level" json:"corruption-handle-level"`
 }
 
-// IntegrityCheckType is the level of redo log consistent level.
-type IntegrityCheckType string
+// IntegrityCheckLevelType is the level of the integrity check level's type.
+type IntegrityCheckLevelType string
 
 const (
-	// IntegrityCheckNone means no integrity check, the default value.
-	IntegrityCheckNone IntegrityCheckType = "none"
-	// IntegrityCheckCorrectness means check each row data correctness.
-	IntegrityCheckCorrectness IntegrityCheckType = "correctness"
+	// IntegrityCheckLevelNone means no integrity check, the default value.
+	IntegrityCheckLevelNone IntegrityCheckLevelType = "none"
+	// IntegrityCheckLevelCorrectness means check each row data correctness.
+	IntegrityCheckLevelCorrectness IntegrityCheckLevelType = "correctness"
 )
 
 type CorruptionHandleLevelType string
@@ -45,9 +45,9 @@ const (
 	CorruptionHandleLevelError CorruptionHandleLevelType = "error"
 )
 
-func (t IntegrityCheckType) valid() bool {
+func (t IntegrityCheckLevelType) valid() bool {
 	switch t {
-	case IntegrityCheckNone, IntegrityCheckCorrectness:
+	case IntegrityCheckLevelNone, IntegrityCheckLevelCorrectness:
 		return true
 	default:
 	}
@@ -64,16 +64,16 @@ func (t CorruptionHandleLevelType) valid() bool {
 }
 
 func (c *IntegrityConfig) Validate() error {
-	if !c.IntegrityCheck.valid() {
+	if !c.IntegrityCheckLevel.valid() {
 		return cerror.ErrInvalidReplicaConfig.GenWithStackByArgs()
 	}
 	if !c.CorruptionHandleLevel.valid() {
 		return cerror.ErrInvalidReplicaConfig.GenWithStackByArgs()
 	}
 
-	if c.IntegrityCheck == IntegrityCheckCorrectness {
+	if c.IntegrityCheckLevel == IntegrityCheckLevelCorrectness {
 		log.Info("integrity check is enabled, it may affect the performance of the changefeed",
-			zap.Any("integrity-check", c.IntegrityCheck),
+			zap.Any("integrity-check", c.IntegrityCheckLevel),
 			zap.Any("corruption-handle-level", c.CorruptionHandleLevel))
 	}
 

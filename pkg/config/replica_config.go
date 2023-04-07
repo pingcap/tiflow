@@ -73,6 +73,10 @@ var defaultReplicaConfig = &ReplicaConfig{
 		RegionThreshold:        100_000,
 		WriteKeyThreshold:      0,
 	},
+	Integrity: &IntegrityConfig{
+		IntegrityCheckLevel:   IntegrityCheckLevelNone,
+		CorruptionHandleLevel: CorruptionHandleLevelWarn,
+	},
 }
 
 // GetDefaultReplicaConfig returns the default replica config.
@@ -214,6 +218,12 @@ func (c *ReplicaConfig) ValidateAndAdjust(sinkURI *url.URL) error {
 	// TODO: Remove the hack once span replication is compatible with all sinks.
 	if !isSinkCompatibleWithSpanReplication(sinkURI) {
 		c.Scheduler.EnableTableAcrossNodes = false
+	}
+
+	if c.Integrity != nil {
+		if err := c.Integrity.Validate(); err != nil {
+			return err
+		}
 	}
 
 	return nil
