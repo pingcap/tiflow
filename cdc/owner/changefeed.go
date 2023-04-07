@@ -309,7 +309,16 @@ func (c *changefeed) tick(ctx cdcContext.Context, captures map[model.CaptureID]*
 	// Note: There may be some tableBarrierTs larger than otherBarrierTs,
 	// but we can ignore them because they will be handled in the processor.
 	if barrier.GlobalBarrierTs > otherBarrierTs {
+		log.Debug("There are other barriers less than ddl barrier, wait for them",
+			zap.Uint64("otherBarrierTs", otherBarrierTs),
+			zap.Uint64("ddlBarrierTs", barrier.GlobalBarrierTs))
 		barrier.GlobalBarrierTs = otherBarrierTs
+	}
+
+	if minTableBarrierTs > otherBarrierTs {
+		log.Debug("There are other barriers less than min table barrier, wait for them",
+			zap.Uint64("otherBarrierTs", otherBarrierTs),
+			zap.Uint64("ddlBarrierTs", barrier.GlobalBarrierTs))
 		minTableBarrierTs = otherBarrierTs
 	}
 

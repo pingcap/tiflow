@@ -15,6 +15,7 @@ package owner
 
 import (
 	"context"
+	"math/rand"
 	"sort"
 	"time"
 
@@ -146,7 +147,7 @@ func newDDLManager(
 		redoMetaManager: redoMetaManager,
 		startTs:         startTs,
 		checkpointTs:    checkpointTs,
-		ddlResolvedTs:   checkpointTs,
+		ddlResolvedTs:   startTs,
 		BDRMode:         bdrMode,
 		// use the passed sinkType after we support get resolvedTs from sink
 		sinkType:        model.DB,
@@ -201,6 +202,7 @@ func (m *ddlManager) tick(
 			log.Info("handle a ddl job",
 				zap.String("namespace", m.changfeedID.Namespace),
 				zap.String("ID", m.changfeedID.ID),
+<<<<<<< HEAD
 				zap.Any("ddlJob", job))
 			events, err := m.schema.BuildDDLEvents(job)
 			if err != nil {
@@ -208,11 +210,17 @@ func (m *ddlManager) tick(
 			}
 			// Apply ddl to update changefeed schema.
 			err = m.schema.HandleDDL(job)
+=======
+				zap.Int64("tableID", job.TableID),
+				zap.Int64("jobID", job.ID),
+				zap.String("query", job.Query),
+				zap.Uint64("finishedTs", job.BinlogInfo.FinishedTS),
+			)
+			events, err := m.schema.BuildDDLEvents(ctx, job)
+>>>>>>> 0d82a607c5 (ddl_manager (ticdc): Fix a panic in ddlManager. (#8716))
 			if err != nil {
 				return nil, minTableBarrierTs, barrier, err
 			}
-			// Clear the table cache after the schema is updated.
-			m.cleanCache()
 
 			for _, event := range events {
 				// If changefeed is in BDRMode, skip ddl.
@@ -286,7 +294,6 @@ func (m *ddlManager) tick(
 
 			if m.executingDDL == nil {
 				m.executingDDL = nextDDL
-				m.cleanCache()
 			}
 
 			err := m.executeDDL(ctx)
@@ -347,6 +354,13 @@ func (m *ddlManager) executeDDL(ctx context.Context) error {
 			failpoint.Return(nil)
 		}
 	})
+
+	failpoint.Inject("ExecuteDDLSlowly", func() {
+		lag := time.Duration(rand.Intn(5000)) * time.Millisecond
+		log.Warn("execute ddl slowly", zap.Duration("lag", lag))
+		time.Sleep(lag)
+	})
+
 	done, err := m.ddlSink.emitDDLEvent(ctx, m.executingDDL)
 	if err != nil {
 		return err
@@ -364,6 +378,7 @@ func (m *ddlManager) executeDDL(ctx context.Context) error {
 		m.schema.schemaStorage.DoGC(m.executingDDL.CommitTs - 1)
 		m.justSentDDL = m.executingDDL
 		m.executingDDL = nil
+		m.cleanCache()
 	}
 	return nil
 }
@@ -496,7 +511,8 @@ func (m *ddlManager) allTables(ctx context.Context) ([]*model.TableInfo, error) 
 	log.Debug("changefeed current tables updated",
 		zap.String("namespace", m.changfeedID.Namespace),
 		zap.String("changefeed", m.changfeedID.ID),
-		zap.Uint64("checkpointTs", ts),
+		zap.Uint64("checkpointTs", m.checkpointTs),
+		zap.Uint64("snapshotTs", ts),
 		zap.Any("tables", m.tableInfoCache),
 	)
 	return m.tableInfoCache, nil
@@ -536,16 +552,17 @@ func (m *ddlManager) allPhysicalTables(ctx context.Context) ([]model.TableID, er
 func (m *ddlManager) getSnapshotTs() (ts uint64) {
 	ts = m.checkpointTs
 
-	if m.checkpointTs == m.startTs+1 && m.executingDDL == nil {
-		// If checkpointTs is equal to startTs+1, and executingDDL is nil
-		// it means that the changefeed is just started, and the physicalTablesCache
-		// is empty. So we need to get all tables from the snapshot at the startTs.
+	if m.ddlResolvedTs == m.startTs {
+		// If ddlResolvedTs is equal to startTs it means that the changefeed is just started,
+		// So we need to get all tables from the snapshot at the startTs.
 		ts = m.startTs
 		log.Debug("changefeed is just started, use startTs to get snapshot",
 			zap.String("namespace", m.changfeedID.Namespace),
 			zap.String("changefeed", m.changfeedID.ID),
 			zap.Uint64("startTs", m.startTs),
-			zap.Uint64("checkpointTs", m.checkpointTs))
+			zap.Uint64("checkpointTs", m.checkpointTs),
+			zap.Uint64("ddlResolvedTs", m.ddlResolvedTs),
+		)
 		return
 	}
 

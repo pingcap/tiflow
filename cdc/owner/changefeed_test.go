@@ -431,8 +431,8 @@ func TestEmitCheckpointTs(t *testing.T) {
 	require.Equal(t, cf.state.Status.CheckpointTs, mockDDLPuller.resolvedTs)
 	tables, err = cf.ddlManager.allTables(ctx)
 	require.Nil(t, err)
-	// The ephemeral table should have left no trace in the schema cache
-	require.Len(t, tables, 0)
+	// The ephemeral table should only be deleted after the ddl is executed.
+	require.Len(t, tables, 1)
 	// We can't use the new schema because the ddl hasn't been executed yet.
 	ts, names = mockDDLSink.getCheckpointTsAndTableNames()
 	require.Equal(t, ts, mockDDLPuller.resolvedTs)
@@ -500,7 +500,8 @@ func TestFinished(t *testing.T) {
 		cf.Tick(ctx, captures)
 		tester.MustApplyPatches()
 	}
-
+	fmt.Println("checkpoint ts", cf.state.Status.CheckpointTs)
+	fmt.Println("target ts", cf.state.Info.TargetTs)
 	require.Equal(t, cf.state.Status.CheckpointTs, cf.state.Info.TargetTs)
 	require.Equal(t, cf.state.Info.State, model.StateFinished)
 }
