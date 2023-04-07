@@ -118,7 +118,6 @@ function run() {
 	curl -X POST 127.0.0.1:$WORKER1_PORT/debug/pprof/goroutine?debug=2 >$WORK_DIR/goroutine.worker1
 	check_log_contains $WORK_DIR/goroutine.worker1 "chan send"
 
-	# try to kill, but can't kill (NOTE: the port will be shutdown, but the process still exists)
 	ps aux | grep dm-worker | awk '{print $2}' | xargs kill || true
 	sleep 5
 	worker_cnt=$(ps aux | grep dm-worker | grep -v "grep" | wc -l)
