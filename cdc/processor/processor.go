@@ -420,18 +420,6 @@ func (p *processor) IsRemoveTableFinished(tableID model.TableID) (model.Ts, bool
 	return checkpointTs, true
 }
 
-// GetAllCurrentTables implements TableExecutor interface.
-func (p *processor) GetAllCurrentTables() []model.TableID {
-	if p.pullBasedSinking {
-		return p.sinkManager.GetAllCurrentTableIDs()
-	}
-	ret := make([]model.TableID, 0, len(p.tables))
-	for tableID := range p.tables {
-		ret = append(ret, tableID)
-	}
-	return ret
-}
-
 // GetCheckpoint implements TableExecutor interface.
 func (p *processor) GetCheckpoint() (checkpointTs, resolvedTs model.Ts) {
 	return p.checkpointTs, p.resolvedTs
@@ -956,6 +944,15 @@ func (p *processor) createAndDriveSchemaStorage(ctx cdcContext.Context) (entry.S
 	stdCtx := contextutil.PutTableInfoInCtx(ctx, -1, puller.DDLPullerTableName)
 	stdCtx = contextutil.PutChangefeedIDInCtx(stdCtx, p.changefeedID)
 	stdCtx = contextutil.PutRoleInCtx(stdCtx, util.RoleProcessor)
+	meta, err := kv.GetSnapshotMeta(kvStorage, ddlStartTs)
+	if err != nil {
+		return nil, errors.Trace(err)
+	}
+	schemaStorage, err := entry.NewSchemaStorage(meta, ddlStartTs,
+		p.changefeed.Info.Config.ForceReplicate, p.changefeedID, util.RoleProcessor)
+	if err != nil {
+		return nil, errors.Trace(err)
+	}
 	ddlPuller, err := puller.NewDDLJobPuller(
 		stdCtx,
 		p.upstream.PDClient,
@@ -967,24 +964,18 @@ func (p *processor) createAndDriveSchemaStorage(ctx cdcContext.Context) (entry.S
 		kvCfg,
 		p.changefeed.Info.Config,
 		p.changefeedID,
+		schemaStorage,
 	)
-	if err != nil {
-		return nil, errors.Trace(err)
-	}
-	meta, err := kv.GetSnapshotMeta(kvStorage, ddlStartTs)
-	if err != nil {
-		return nil, errors.Trace(err)
-	}
-	schemaStorage, err := entry.NewSchemaStorage(meta, ddlStartTs,
-		p.changefeed.Info.Config.ForceReplicate, p.changefeedID)
 	if err != nil {
 		return nil, errors.Trace(err)
 	}
 	p.wg.Add(1)
 	go func() {
 		defer p.wg.Done()
+		// ddlPuller will update the schemaStorage.
 		p.sendError(ddlPuller.Run(stdCtx))
 	}()
+
 	p.wg.Add(1)
 	go func() {
 		defer p.wg.Done()
@@ -999,20 +990,14 @@ func (p *processor) createAndDriveSchemaStorage(ctx cdcContext.Context) (entry.S
 			if jobEntry.OpType == model.OpTypeResolved {
 				schemaStorage.AdvanceResolvedTs(jobEntry.CRTs)
 			}
-			job, err := jobEntry.Job, jobEntry.Err
+			err := jobEntry.Err
 			if err != nil {
-				p.sendError(errors.Trace(err))
-				return
-			}
-			if job == nil {
-				continue
-			}
-			if err := schemaStorage.HandleDDLJob(job); err != nil {
 				p.sendError(errors.Trace(err))
 				return
 			}
 		}
 	}()
+
 	return schemaStorage, nil
 }
 
@@ -1190,8 +1175,7 @@ func (p *processor) doGCSchemaStorage() {
 
 func (p *processor) refreshMetrics() {
 	if p.pullBasedSinking {
-		tables := p.sinkManager.GetAllCurrentTableIDs()
-		p.metricSyncTableNumGauge.Set(float64(len(tables)))
+		p.metricSyncTableNumGauge.Set(float64(p.sinkManager.GetAllTableCount()))
 		sortEngineReceivedEvents := p.sourceManager.ReceivedEvents()
 		tableSinksReceivedEvents := p.sinkManager.ReceivedEvents()
 		p.metricRemainKVEventGauge.Set(float64(sortEngineReceivedEvents - tableSinksReceivedEvents))
