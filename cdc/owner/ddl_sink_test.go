@@ -533,14 +533,23 @@ func TestAddSpecialComment(t *testing.T) {
 			result: "ALTER TABLE `t` ADD INDEX `j`((CAST(JSON_EXTRACT(`j`, _UTF8'$.number[*]') " +
 				"AS SIGNED ARRAY)))",
 		},
+		{
+			event: &model.DDLEvent{
+				Query: "alter table t add index j((cast(j->'$.number[*]' as signed array)))",
+			},
+			result: "ALTER TABLE `t` ADD INDEX `j`((CAST(JSON_EXTRACT(`j`, _UTF8MB4'$.number[*]') " +
+				"AS SIGNED ARRAY)))",
+		},
 	}
+
+	s := &ddlSinkImpl{}
 	for _, ca := range testCase {
-		re, err := addSpecialComment(ca.event)
+		re, err := s.addSpecialComment(ca.event)
 		require.Nil(t, err)
-		require.Equal(t, re, ca.result)
+		require.Equal(t, ca.result, re)
 	}
 	require.Panics(t, func() {
-		_, _ = addSpecialComment(&model.DDLEvent{
+		_, _ = s.addSpecialComment(&model.DDLEvent{
 			Query: "alter table t force, auto_increment = 12;alter table t force, " +
 				"auto_increment = 12;",
 		})
