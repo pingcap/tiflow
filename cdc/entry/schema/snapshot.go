@@ -22,13 +22,8 @@ import (
 	"github.com/google/btree"
 	"github.com/pingcap/errors"
 	"github.com/pingcap/log"
-	"github.com/pingcap/tidb/ddl"
 	timeta "github.com/pingcap/tidb/meta"
-	"github.com/pingcap/tidb/parser"
-	"github.com/pingcap/tidb/parser/ast"
 	timodel "github.com/pingcap/tidb/parser/model"
-	"github.com/pingcap/tidb/parser/mysql"
-	"github.com/pingcap/tidb/session"
 	"github.com/pingcap/tiflow/cdc/model"
 	cerror "github.com/pingcap/tiflow/pkg/errors"
 	"github.com/pingcap/tiflow/pkg/filter"
@@ -127,7 +122,6 @@ func NewSingleSnapshotFromMeta(
 	// meta is nil only in unit tests
 	if meta == nil {
 		snap := NewEmptySnapshot(forceReplicate)
-		snap.InitPreExistingTables()
 		snap.inner.currentTs = currentTs
 		return snap, nil
 	}
@@ -219,60 +213,6 @@ func NewEmptySnapshot(forceReplicate bool) *Snapshot {
 	}
 
 	return &Snapshot{inner: inner, rwlock: new(sync.RWMutex)}
-}
-
-// these constants imitate TiDB's session.InitDDLJobTables in an empty Snapshot.
-const (
-	mysqlDBID      = int64(1)
-	dummyTS        = uint64(1)
-	mdlCreateTable = "create table mysql.tidb_mdl_info(job_id BIGINT NOT NULL PRIMARY KEY, version BIGINT NOT NULL, table_ids text(65535));"
-)
-
-// InitPreExistingTables initializes the pre-existing tables in an empty Snapshot.
-// Since v6.2.0, tables of concurrent DDL will be directly written as meta KV in
-// TiKV, without being written to history DDL jobs. So the Snapshot which is not
-// build from meta needs this method to handle history DDL.
-// Since v6.5.0, Backfill tables is written as meta KV in TiKV, so the Snapshot
-// which is not build from meta needs this method to handle history DDL.
-// See:https://github.com/pingcap/tidb/pull/39616
-func (s *Snapshot) InitPreExistingTables() {
-	ddlJobTableIDs := [...]int64{ddl.JobTableID, ddl.ReorgTableID, ddl.HistoryTableID}
-	backfillTableIDs := [...]int64{ddl.BackgroundSubtaskTableID, ddl.BackgroundSubtaskHistoryTableID}
-
-	mysqlDBInfo := &timodel.DBInfo{
-		ID:      mysqlDBID,
-		Name:    timodel.NewCIStr(mysql.SystemDB),
-		Charset: mysql.UTF8MB4Charset,
-		Collate: mysql.UTF8MB4DefaultCollation,
-		State:   timodel.StatePublic,
-	}
-	_ = s.inner.createSchema(mysqlDBInfo, dummyTS)
-
-	p := parser.New()
-	for i, table := range session.DDLJobTables {
-		stmt, _ := p.ParseOneStmt(table.SQL, "", "")
-		tblInfo, _ := ddl.BuildTableInfoFromAST(stmt.(*ast.CreateTableStmt))
-		tblInfo.State = timodel.StatePublic
-		tblInfo.ID = ddlJobTableIDs[i]
-		wrapped := model.WrapTableInfo(mysqlDBID, mysql.SystemDB, dummyTS, tblInfo)
-		_ = s.inner.createTable(wrapped, dummyTS)
-	}
-
-	for i, table := range session.BackfillTables {
-		stmt, _ := p.ParseOneStmt(table.SQL, "", "")
-		tblInfo, _ := ddl.BuildTableInfoFromAST(stmt.(*ast.CreateTableStmt))
-		tblInfo.State = timodel.StatePublic
-		tblInfo.ID = backfillTableIDs[i]
-		wrapped := model.WrapTableInfo(mysqlDBID, mysql.SystemDB, dummyTS, tblInfo)
-		_ = s.inner.createTable(wrapped, dummyTS)
-	}
-
-	stmt, _ := p.ParseOneStmt(mdlCreateTable, "", "")
-	tblInfo, _ := ddl.BuildTableInfoFromAST(stmt.(*ast.CreateTableStmt))
-	tblInfo.State = timodel.StatePublic
-	tblInfo.ID = ddl.MDLTableID
-	wrapped := model.WrapTableInfo(mysqlDBID, mysql.SystemDB, dummyTS, tblInfo)
-	_ = s.inner.createTable(wrapped, dummyTS)
 }
 
 // Copy creates a new schema snapshot based on the given one. The copied one shares same internal

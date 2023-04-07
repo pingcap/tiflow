@@ -20,6 +20,7 @@ import (
 	"testing"
 
 	"github.com/pingcap/errors"
+	"github.com/pingcap/log"
 	ticonfig "github.com/pingcap/tidb/config"
 	"github.com/pingcap/tidb/ddl"
 	"github.com/pingcap/tidb/domain"
@@ -40,6 +41,7 @@ import (
 	"github.com/pingcap/tiflow/pkg/util"
 	"github.com/stretchr/testify/require"
 	"github.com/tikv/client-go/v2/oracle"
+	"go.uber.org/zap"
 )
 
 func TestSchema(t *testing.T) {
@@ -623,8 +625,7 @@ func TestMultiVersionStorage(t *testing.T) {
 	require.False(t, exist)
 
 	lastSchemaTs := storage.DoGC(0)
-	// Snapshot.InitPreExistingTables will create a schema with ts = 1
-	require.Equal(t, uint64(1), lastSchemaTs)
+	require.Equal(t, uint64(0), lastSchemaTs)
 
 	snap, err = storage.GetSnapshot(ctx, 100)
 	require.Nil(t, err)
@@ -873,10 +874,12 @@ func TestSchemaStorage(t *testing.T) {
 			tk.MustExec(ddlSQL)
 		}
 
-		jobs, err := getAllHistoryDDLJob(store)
-		require.Nil(t, err)
 		f, err := filter.NewFilter(config.GetDefaultReplicaConfig(), "")
 		require.Nil(t, err)
+
+		jobs, err := getAllHistoryDDLJob(store, f)
+		require.Nil(t, err)
+
 		schemaStorage, err := NewSchemaStorage(nil, 0, false, dummyChangeFeedID, util.RoleTester, f)
 		require.Nil(t, err)
 		for _, job := range jobs {
@@ -904,7 +907,7 @@ func TestSchemaStorage(t *testing.T) {
 	}
 }
 
-func getAllHistoryDDLJob(storage tidbkv.Storage) ([]*timodel.Job, error) {
+func getAllHistoryDDLJob(storage tidbkv.Storage, f filter.Filter) ([]*timodel.Job, error) {
 	s, err := session.CreateSession(storage)
 	if err != nil {
 		return nil, errors.Trace(err)
@@ -923,14 +926,22 @@ func getAllHistoryDDLJob(storage tidbkv.Storage) ([]*timodel.Job, error) {
 	txnMeta := timeta.NewMeta(txn)
 
 	jobs, err := ddl.GetAllHistoryDDLJobs(txnMeta)
+	res := make([]*timodel.Job, 0)
 	if err != nil {
 		return nil, errors.Trace(err)
 	}
-	for i := range jobs {
+	for i, job := range jobs {
+		ignoreSchema := f.ShouldIgnoreSchema(job.SchemaName)
+		ignoreTable := f.ShouldIgnoreTable(job.SchemaName, job.TableName)
+		if ignoreSchema || ignoreTable {
+			log.Info("Ignore ddl job", zap.Stringer("job", job))
+			continue
+		}
 		// Set State from Synced to Done.
 		// Because jobs are put to history queue after TiDB alter its state from
 		// Done to Synced.
 		jobs[i].State = timodel.JobStateDone
+		res = append(res, job)
 	}
 	return jobs, nil
 }

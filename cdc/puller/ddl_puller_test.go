@@ -699,8 +699,7 @@ func TestResolvedTsStuck(t *testing.T) {
 
 	mockPuller.appendResolvedTs(30)
 	waitResolvedTsGrowing(t, p, 30)
-	require.Equal(t, 1, logs.Len())
-	require.Contains(t, logs.All()[0].Message, "this table is ineligible to replicate")
+	require.Equal(t, 0, logs.Len())
 
 	mockClock.Add(2 * ddlPullerStuckWarnDuration)
 	for i := 0; i < 20; i++ {

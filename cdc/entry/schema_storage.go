@@ -79,7 +79,7 @@ func NewSchemaStorage(
 	)
 	if meta == nil {
 		snap = schema.NewEmptySnapshot(forceReplicate)
-		snap.InitPreExistingTables()
+		// snap.InitPreExistingTables()
 	} else {
 		snap, err = schema.NewSnapshotFromMeta(meta, startTs, forceReplicate, filter)
 		if err != nil {
@@ -204,7 +204,6 @@ func (s *schemaStorageImpl) HandleDDLJob(job *timodel.Job) error {
 		snap = lastSnap.Copy()
 	} else {
 		snap = schema.NewEmptySnapshot(s.forceReplicate)
-		snap.InitPreExistingTables()
 	}
 	if err := snap.HandleDDL(job); err != nil {
 		log.Error("handle DDL failed",
