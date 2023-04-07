@@ -15,6 +15,8 @@ package util
 import (
 	"testing"
 
+	"github.com/pingcap/tidb/parser/mysql"
+	"github.com/pingcap/tiflow/cdc/model"
 	"github.com/stretchr/testify/require"
 )
 
@@ -23,4 +25,22 @@ func TestMaskSinkURI(t *testing.T) {
 	maskedURI, err := MaskSinkURI(uri)
 	require.NoError(t, err)
 	require.Equal(t, "mysql://root:xxxx@127.0.0.1:3306/?time-zone=Asia/Shanghai", maskedURI)
+}
+
+func TestEncodeBinaryToMaxwell(t *testing.T) {
+	t.Parallel()
+
+	column := &model.Column{
+		Name: "varbinary", Type: mysql.TypeVarchar, Value: []uint8("测试varbinary"),
+		Flag: model.BinaryFlag,
+	}
+
+	e := &model.RowChangedEvent{
+		Table:   &model.TableName{Schema: "a", Table: "b"},
+		Columns: []*model.Column{column},
+	}
+
+	key, msg := rowChangeToMaxwellMsg(e)
+	require.NotNil(t, key)
+	require.NotNil(t, msg)
 }
