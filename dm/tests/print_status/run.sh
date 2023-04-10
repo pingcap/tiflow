@@ -64,8 +64,12 @@ function check_print_status() {
 	echo "checking print status"
 	# check load unit print status
 	status_file=$WORK_DIR/worker1/log/loader_status.log
+<<<<<<< HEAD
 	grep -oP "\[unit=load\] \[finished_bytes=[0-9]+\] \[total_bytes=59637\] \[total_file_count=3\] \[progress=.*\]" $WORK_DIR/worker1/log/dm-worker.log >$status_file
 	#grep -oP "loader.*\Kfinished_bytes = [0-9]+, total_bytes = [0-9]+, total_file_count = [0-9]+, progress = .*" $WORK_DIR/worker1/log/dm-worker.log > $status_file
+=======
+	grep -oP "\[unit=lightning-load\] \[IsCanceled=false\] \[finished_bytes=59674\] \[total_bytes=59674\] \[progress=.*\]" $WORK_DIR/worker1/log/dm-worker.log >$status_file
+>>>>>>> 4ab802a50e (ddl(ticdc): add charset and collate to ddl event (#8723))
 	status_count=$(wc -l $status_file | awk '{print $1}')
 	[ $status_count -ge 2 ]
 	count=0
