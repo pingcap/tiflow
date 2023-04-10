@@ -405,6 +405,12 @@ type DDLEvent struct {
 	PreTableInfo *SimpleTableInfo `msg:"pre-table-info"`
 	Query        string           `msg:"query"`
 	Type         model.ActionType `msg:"-"`
+<<<<<<< HEAD
+=======
+	Done         bool             `msg:"-"`
+	Charset      string           `msg:"-"`
+	Collate      string           `msg:"-"`
+>>>>>>> 4ab802a50e (ddl(ticdc): add charset and collate to ddl event (#8723))
 }
 
 // RedoDDLEvent represents DDL event used in redo log persistent
@@ -421,6 +427,7 @@ func (d *DDLEvent) FromJob(job *model.Job, preTableInfo *TableInfo) {
 	d.CommitTs = job.BinlogInfo.FinishedTS
 	d.Query = job.Query
 	d.Type = job.Type
+<<<<<<< HEAD
 
 	if job.BinlogInfo.TableInfo != nil {
 		tableName := job.BinlogInfo.TableInfo.Name.O
@@ -436,6 +443,15 @@ func (d *DDLEvent) FromJob(job *model.Job, preTableInfo *TableInfo) {
 		d.TableInfo.TableID = job.TableID
 	}
 	d.fillPreTableInfo(preTableInfo)
+=======
+	d.PreTableInfo = preTableInfo
+	d.TableInfo = tableInfo
+
+	d.Charset = job.Charset
+	d.Collate = job.Collate
+	// rebuild the query if necessary
+	rebuildQuery()
+>>>>>>> 4ab802a50e (ddl(ticdc): add charset and collate to ddl event (#8723))
 }
 
 func (d *DDLEvent) fillPreTableInfo(preTableInfo *TableInfo) {
@@ -447,11 +463,26 @@ func (d *DDLEvent) fillPreTableInfo(preTableInfo *TableInfo) {
 	d.PreTableInfo.Table = preTableInfo.TableName.Table
 	d.PreTableInfo.TableID = preTableInfo.ID
 
+<<<<<<< HEAD
 	d.PreTableInfo.ColumnInfo = make([]*ColumnInfo, len(preTableInfo.Columns))
 	for i, colInfo := range preTableInfo.Columns {
 		d.PreTableInfo.ColumnInfo[i] = new(ColumnInfo)
 		d.PreTableInfo.ColumnInfo[i].FromTiColumnInfo(colInfo)
 	}
+=======
+	d.StartTs = job.StartTS
+	d.CommitTs = job.BinlogInfo.FinishedTS
+	oldTableName := preTableInfo.Name.O
+	newTableName := tableInfo.Name.O
+	d.Query = fmt.Sprintf("RENAME TABLE `%s`.`%s` TO `%s`.`%s`",
+		oldSchemaName, oldTableName, newSchemaName, newTableName)
+	d.Type = model.ActionRenameTable
+	d.PreTableInfo = preTableInfo
+	d.TableInfo = tableInfo
+
+	d.Charset = job.Charset
+	d.Collate = job.Collate
+>>>>>>> 4ab802a50e (ddl(ticdc): add charset and collate to ddl event (#8723))
 }
 
 // SingleTableTxn represents a transaction which includes many row events in a single table

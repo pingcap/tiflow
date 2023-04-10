@@ -82,9 +82,53 @@ func (s *schemaSuite) TestIsIneligibleTableID(c *check.C) {
 	helper := entry.NewSchemaTestHelper(c)
 	defer helper.Close()
 	ver, err := helper.Storage().CurrentVersion(oracle.GlobalTxnScope)
+<<<<<<< HEAD
 	c.Assert(err, check.IsNil)
 	schema, err := newSchemaWrap4Owner(helper.Storage(), ver.Ver, config.GetDefaultReplicaConfig())
 	c.Assert(err, check.IsNil)
+=======
+	require.Nil(t, err)
+	schema, err := newSchemaWrap4Owner(helper.Storage(), ver.Ver,
+		config.GetDefaultReplicaConfig(), dummyChangeFeedID)
+	require.Nil(t, err)
+	tableInfos, err := schema.AllTables(context.Background(), ver.Ver)
+	require.Nil(t, err)
+	require.Len(t, tableInfos, 0)
+	// add normal table
+	job := helper.DDL2Job("create table test.t1(id int primary key)")
+	require.Nil(t, schema.HandleDDLJob(job))
+	tableInfos, err = schema.AllTables(context.Background(), job.BinlogInfo.FinishedTS)
+	require.Nil(t, err)
+	require.Len(t, tableInfos, 1)
+	tableName := tableInfos[0].TableName
+	require.Equal(t, tableName, model.TableName{
+		Schema:  "test",
+		Table:   "t1",
+		TableID: 88,
+	})
+	// add ineligible table
+	job = helper.DDL2Job("create table test.t2(id int)")
+	require.Nil(t, schema.HandleDDLJob(job))
+	tableInfos, err = schema.AllTables(context.Background(), job.BinlogInfo.FinishedTS)
+	require.Nil(t, err)
+	require.Len(t, tableInfos, 1)
+	tableName = tableInfos[0].TableName
+	require.Equal(t, tableName, model.TableName{
+		Schema:  "test",
+		Table:   "t1",
+		TableID: 88,
+	})
+}
+
+func TestIsIneligibleTableID(t *testing.T) {
+	helper := entry.NewSchemaTestHelper(t)
+	defer helper.Close()
+	ver, err := helper.Storage().CurrentVersion(oracle.GlobalTxnScope)
+	require.Nil(t, err)
+	schema, err := newSchemaWrap4Owner(helper.Storage(), ver.Ver,
+		config.GetDefaultReplicaConfig(), dummyChangeFeedID)
+	require.Nil(t, err)
+>>>>>>> 4ab802a50e (ddl(ticdc): add charset and collate to ddl event (#8723))
 	// add normal table
 	job := helper.DDL2Job("create table test.t1(id int primary key)")
 	tableIDT1 := job.BinlogInfo.TableInfo.ID
