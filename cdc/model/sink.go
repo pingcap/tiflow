@@ -666,9 +666,15 @@ func (d *DDLEvent) FromRenameTablesJob(job *model.Job,
 type SingleTableTxn struct {
 	Table     *TableName
 	TableInfo *TableInfo
-	StartTs   uint64
-	CommitTs  uint64
-	Rows      []*RowChangedEvent
+	// TableInfoVersion is the version of the table info, it is used to generate data path
+	// in storage sink. Generally, TableInfoVersion equals to `SingleTableTxn.TableInfo.Version`.
+	// Besides, if one table is just scheduled to a new processor, the TableInfoVersion should be
+	// greater than or equal to the startTs of table sink.
+	TableInfoVersion uint64
+
+	StartTs  uint64
+	CommitTs uint64
+	Rows     []*RowChangedEvent
 
 	// control fields of SingleTableTxn
 	// FinishWg is a barrier txn, after this txn is received, the worker must

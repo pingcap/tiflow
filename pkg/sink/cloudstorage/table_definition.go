@@ -17,11 +17,13 @@ import (
 	"strings"
 
 	"github.com/pingcap/errors"
+	"github.com/pingcap/log"
 	"github.com/pingcap/tidb/parser/charset"
 	timodel "github.com/pingcap/tidb/parser/model"
 	"github.com/pingcap/tidb/parser/mysql"
 	"github.com/pingcap/tidb/parser/types"
 	"github.com/pingcap/tiflow/cdc/model"
+	"go.uber.org/zap"
 )
 
 const defaultTableDefinitionVersion = 1
@@ -167,7 +169,12 @@ type TableDefinition struct {
 
 // FromDDLEvent converts from DDLEvent to TableDefinition.
 func (t *TableDefinition) FromDDLEvent(event *model.DDLEvent) {
-	t.FromTableInfo(event.TableInfo)
+	if event.CommitTs != event.TableInfo.Version {
+		log.Panic("commit ts and table info version should be equal",
+			zap.Any("event", event), zap.Any("tableInfo", event.TableInfo),
+		)
+	}
+	t.FromTableInfo(event.TableInfo, event.TableInfo.Version)
 	t.Query = event.Query
 	t.Type = event.Type
 }
@@ -188,11 +195,12 @@ func (t *TableDefinition) ToDDLEvent() (*model.DDLEvent, error) {
 }
 
 // FromTableInfo converts from TableInfo to TableDefinition.
-func (t *TableDefinition) FromTableInfo(info *model.TableInfo) {
+func (t *TableDefinition) FromTableInfo(info *model.TableInfo, tableInfoVersion model.Ts) {
+	t.Version = defaultTableDefinitionVersion
+	t.TableVersion = tableInfoVersion
+
 	t.Table = info.TableName.Table
 	t.Schema = info.TableName.Schema
-	t.Version = defaultTableDefinitionVersion
-	t.TableVersion = info.Version
 	t.TotalColumns = len(info.Columns)
 	for _, col := range info.Columns {
 		var tableCol TableCol

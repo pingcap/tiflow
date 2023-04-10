@@ -79,7 +79,7 @@ func createTableSinkWrapper(
 	tableState := tablepb.TableStatePreparing
 	sink := newMockSink()
 	innerTableSink := tablesink.New[*model.RowChangedEvent](
-		changefeedID, span,
+		changefeedID, span, model.Ts(0),
 		sink, &dmlsink.RowChangeEventAppender{}, prometheus.NewCounter(prometheus.CounterOpts{}))
 	wrapper := newTableSinkWrapper(
 		changefeedID,
