@@ -498,6 +498,8 @@ type DDLEvent struct {
 	Query        string           `msg:"query"`
 	Type         model.ActionType `msg:"-"`
 	Done         bool             `msg:"-"`
+	Charset      string           `msg:"-"`
+	Collate      string           `msg:"-"`
 }
 
 // RedoDDLEvent represents DDL event used in redo log persistent
@@ -532,10 +534,18 @@ func (d *DDLEvent) FromJob(job *model.Job, preTableInfo *TableInfo) {
 	d.StartTs = job.StartTS
 	d.CommitTs = job.BinlogInfo.FinishedTS
 	d.Type = job.Type
+<<<<<<< HEAD
 	// fill PreTableInfo for the event.
 	d.fillPreTableInfo(preTableInfo)
 	// fill TableInfo for the event.
 	d.fillTableInfo(job.BinlogInfo.TableInfo, job.SchemaName)
+=======
+	d.PreTableInfo = preTableInfo
+	d.TableInfo = tableInfo
+
+	d.Charset = job.Charset
+	d.Collate = job.Collate
+>>>>>>> 4ab802a50e (ddl(ticdc): add charset and collate to ddl event (#8723))
 	// rebuild the query if necessary
 	rebuildQuery()
 }
@@ -556,6 +566,7 @@ func (d *DDLEvent) FromRenameTablesJob(job *model.Job,
 	d.Query = fmt.Sprintf("RENAME TABLE `%s`.`%s` TO `%s`.`%s`",
 		oldSchemaName, oldTableName, newSchemaName, newTableName)
 	d.Type = model.ActionRenameTable
+<<<<<<< HEAD
 	// fill PreTableInfo for the event.
 	d.fillPreTableInfo(preTableInfo)
 	// fill TableInfo for the event.
@@ -599,6 +610,13 @@ func (d *DDLEvent) fillPreTableInfo(preTableInfo *TableInfo) {
 		d.PreTableInfo.ColumnInfo[i] = new(ColumnInfo)
 		d.PreTableInfo.ColumnInfo[i].FromTiColumnInfo(colInfo)
 	}
+=======
+	d.PreTableInfo = preTableInfo
+	d.TableInfo = tableInfo
+
+	d.Charset = job.Charset
+	d.Collate = job.Collate
+>>>>>>> 4ab802a50e (ddl(ticdc): add charset and collate to ddl event (#8723))
 }
 
 // SingleTableTxn represents a transaction which includes many row events in a single table
