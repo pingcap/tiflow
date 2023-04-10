@@ -229,12 +229,12 @@ func (m *mounter) unmarshalRowKVEntry(
 		rowExist, preRowExist bool
 	)
 
-	row, rowExist, err = m.decodeRow(rawValue, recordID, tableInfo)
+	row, rowExist, err = m.decodeRow(rawValue, recordID, tableInfo, false)
 	if err != nil {
 		return nil, errors.Trace(err)
 	}
 
-	preRow, preRowExist, err = m.decodeRow(rawOldValue, recordID, tableInfo)
+	preRow, preRowExist, err = m.decodeRow(rawOldValue, recordID, tableInfo, true)
 	if err != nil {
 		return nil, errors.Trace(err)
 	}
@@ -249,7 +249,7 @@ func (m *mounter) unmarshalRowKVEntry(
 }
 
 func (m *mounter) decodeRow(
-	rawValue []byte, recordID kv.Handle, tableInfo *model.TableInfo,
+	rawValue []byte, recordID kv.Handle, tableInfo *model.TableInfo, isPreColumns bool,
 ) (map[int64]types.Datum, bool, error) {
 	if len(rawValue) == 0 {
 		return map[int64]types.Datum{}, false, nil
@@ -261,20 +261,19 @@ func (m *mounter) decodeRow(
 	)
 
 	if rowcodec.IsNewFormat(rawValue) {
-		// decodeRowV2 decodes value data using new encoding format.
-		// Ref: https://github.com/pingcap/tidb/pull/12634
-		//
-		//	https://github.com/pingcap/tidb/blob/master/docs/design/2018-07-19-row-format.md
-		m.decoder = rowcodec.NewDatumMapDecoder(reqCols, m.tz)
-		datums, err = m.decoder.DecodeToDatumMap(rawValue, nil)
-		if err != nil {
-			return nil, false, cerror.WrapError(cerror.ErrDecodeRowToDatum, err)
+		decoder := rowcodec.NewDatumMapDecoder(reqCols, m.tz)
+		if isPreColumns {
+			m.preDecoder = decoder
+		} else {
+			m.decoder = decoder
 		}
+		datums, err = decodeRowV2(decoder, rawValue)
 	} else {
 		datums, err = decodeRowV1(rawValue, tableInfo, m.tz)
-		if err != nil {
-			return nil, false, errors.Trace(err)
-		}
+	}
+
+	if err != nil {
+		return nil, false, errors.Trace(err)
 	}
 
 	datums, err = tablecodec.DecodeHandleToDatumMap(recordID, handleColIDs, handleColFt, m.tz, datums)
@@ -385,23 +384,14 @@ func datum2Column(
 	return cols, rawCols, columnIDs, nil
 }
 
-func (m *mounter) verifyChecksum(columnIDs []int64, datums []types.Datum) (uint32, error) {
-	encoder := &rowcodec.Encoder{}
-	checksum, err := encoder.Checksum(
-		&stmtctx.StatementContext{
-			TimeZone: m.tz,
-		}, columnIDs, datums)
-	if err != nil {
-		return 0, errors.Trace(err)
+func verifyChecksum(
+	decoder *rowcodec.DatumMapDecoder, checksum uint32,
+) (uint32, error) {
+	if decoder == nil {
+		log.Panic("row codec decoder is nil")
 	}
 
-	if m.decoder == nil {
-		log.Panic("row codec decoder is nil",
-			zap.String("namespace", m.changefeedID.Namespace),
-			zap.String("changefeed", m.changefeedID.ID))
-	}
-
-	first, ok := m.decoder.GetChecksum()
+	first, ok := decoder.GetChecksum()
 	if !ok {
 		return checksum, errors.New("cannot found the checksum from the event")
 	}
@@ -411,7 +401,7 @@ func (m *mounter) verifyChecksum(columnIDs []int64, datums []types.Datum) (uint3
 		return checksum, nil
 	}
 
-	extra, ok := m.decoder.GetExtraChecksum()
+	extra, ok := decoder.GetExtraChecksum()
 	if !ok {
 		return checksum, errors.New("cannot found the extract checksum from the event")
 	}
@@ -423,22 +413,23 @@ func (m *mounter) verifyChecksum(columnIDs []int64, datums []types.Datum) (uint3
 	log.Error("checksum mismatch",
 		zap.Uint32("checksum", checksum),
 		zap.Uint32("first", first),
-		zap.Uint32("extra", extra),
-		zap.Int64s("columnIDs", columnIDs),
-		zap.Any("datums", datums))
+		zap.Uint32("extra", extra))
 	return checksum, errors.New("checksum mismatch")
 }
 
 func (m *mounter) mountRowKVEntry(tableInfo *model.TableInfo, row *rowKVEntry, dataSize int64) (*model.RowChangedEvent, model.RowChangedDatums, error) {
-	var err error
+	var (
+		rawRow    model.RowChangedDatums
+		columnIDs []int64
+		err       error
+	)
+
 	// Decode previous columns.
 	var (
-		preCols      []*model.Column
-		preRawCols   []types.Datum
-		preColumnIDs []int64
-		preChecksum  uint32
+		preCols     []*model.Column
+		preRawCols  []types.Datum
+		preChecksum uint32
 	)
-	var rawRow model.RowChangedDatums
 	// Since we now always use old value internally,
 	// we need to control the output(sink will use the PreColumns field to determine whether to output old value).
 	// Normally old value is output when only enableOldValue is on,
@@ -447,13 +438,17 @@ func (m *mounter) mountRowKVEntry(tableInfo *model.TableInfo, row *rowKVEntry, d
 	if row.PreRowExist {
 		// FIXME(leoppro): using pre table info to mounter pre column datum
 		// the pre column and current column in one event may using different table info
-		preCols, preRawCols, preColumnIDs, err = datum2Column(tableInfo, row.PreRow, m.enableOldValue)
+		preCols, preRawCols, columnIDs, err = datum2Column(tableInfo, row.PreRow, m.enableOldValue)
 		if err != nil {
 			return nil, rawRow, errors.Trace(err)
 		}
 
 		if m.integrity.Enabled() {
-			preChecksum, err = m.verifyChecksum(preColumnIDs, preRawCols)
+			preChecksum, err = m.encoder.Checksum(m.sctx, columnIDs, preRawCols)
+			if err != nil {
+				return nil, rawRow, errors.Trace(err)
+			}
+			preChecksum, err = verifyChecksum(m.preDecoder, preChecksum)
 			if err != nil {
 				log.Error("pre columns checksum mismatch",
 					zap.Uint32("checksum", preChecksum),
@@ -476,19 +471,22 @@ func (m *mounter) mountRowKVEntry(tableInfo *model.TableInfo, row *rowKVEntry, d
 	}
 
 	var (
-		cols       []*model.Column
-		rawCols    []types.Datum
-		columnsIDs []int64
-		checksum   uint32
+		cols     []*model.Column
+		rawCols  []types.Datum
+		checksum uint32
 	)
 	if row.RowExist {
-		cols, rawCols, columnsIDs, err = datum2Column(tableInfo, row.Row, true)
+		cols, rawCols, columnIDs, err = datum2Column(tableInfo, row.Row, true)
 		if err != nil {
 			return nil, rawRow, errors.Trace(err)
 		}
 
 		if m.integrity.Enabled() {
-			checksum, err = m.verifyChecksum(columnsIDs, rawCols)
+			checksum, err = m.encoder.Checksum(m.sctx, columnIDs, rawCols)
+			if err != nil {
+				return nil, rawRow, errors.Trace(err)
+			}
+			checksum, err = verifyChecksum(m.decoder, checksum)
 			if err != nil {
 				log.Error("checksum mismatch",
 					zap.Uint32("checksum", preChecksum),

@@ -175,7 +175,8 @@ func decodeRow(b []byte, recordID kv.Handle, tableInfo *model.TableInfo, tz *tim
 		err    error
 	)
 	if rowcodec.IsNewFormat(b) {
-		datums, err = decodeRowV2(b, reqCols, tz)
+		encoder := rowcodec.NewDatumMapDecoder(reqCols, tz)
+		datums, err = decodeRowV2(encoder, b)
 	} else {
 		datums, err = decodeRowV1(b, tableInfo, tz)
 	}
@@ -236,8 +237,9 @@ func decodeRowV1(b []byte, tableInfo *model.TableInfo, tz *time.Location) (map[i
 // Ref: https://github.com/pingcap/tidb/pull/12634
 //
 //	https://github.com/pingcap/tidb/blob/master/docs/design/2018-07-19-row-format.md
-func decodeRowV2(data []byte, columns []rowcodec.ColInfo, tz *time.Location) (map[int64]types.Datum, error) {
-	decoder := rowcodec.NewDatumMapDecoder(columns, tz)
+func decodeRowV2(
+	decoder *rowcodec.DatumMapDecoder, data []byte,
+) (map[int64]types.Datum, error) {
 	datums, err := decoder.DecodeToDatumMap(data, nil)
 	if err != nil {
 		return datums, cerror.WrapError(cerror.ErrDecodeRowToDatum, err)
