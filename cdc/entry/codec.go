@@ -170,10 +170,17 @@ func decodeRow(b []byte, recordID kv.Handle, tableInfo *model.TableInfo, tz *tim
 		return map[int64]types.Datum{}, nil
 	}
 	handleColIDs, handleColFt, reqCols := tableInfo.GetRowColInfos()
-	var datums map[int64]types.Datum
-	var err error
+	var (
+		datums map[int64]types.Datum
+		err    error
+	)
 	if rowcodec.IsNewFormat(b) {
-		datums, err = decodeRowV2(b, reqCols, tz)
+		decoder := rowcodec.NewDatumMapDecoder(reqCols, tz)
+		datums, err = decoder.DecodeToDatumMap(b, nil)
+		if err != nil {
+			return datums, cerror.WrapError(cerror.ErrDecodeRowToDatum, err)
+		}
+		return datums, nil
 	} else {
 		datums, err = decodeRowV1(b, tableInfo, tz)
 	}
@@ -228,19 +235,6 @@ func decodeRowV1(b []byte, tableInfo *model.TableInfo, tz *time.Location) (map[i
 		row[id] = datum
 	}
 	return row, nil
-}
-
-// decodeRowV2 decodes value data using new encoding format.
-// Ref: https://github.com/pingcap/tidb/pull/12634
-//
-//	https://github.com/pingcap/tidb/blob/master/docs/design/2018-07-19-row-format.md
-func decodeRowV2(data []byte, columns []rowcodec.ColInfo, tz *time.Location) (map[int64]types.Datum, error) {
-	decoder := rowcodec.NewDatumMapDecoder(columns, tz)
-	datums, err := decoder.DecodeToDatumMap(data, nil)
-	if err != nil {
-		return datums, cerror.WrapError(cerror.ErrDecodeRowToDatum, err)
-	}
-	return datums, nil
 }
 
 // unflatten converts a raw datum to a column datum.
