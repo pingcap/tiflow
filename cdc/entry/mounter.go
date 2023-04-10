@@ -276,7 +276,8 @@ func (m *mounter) decodeRow(
 		return nil, false, errors.Trace(err)
 	}
 
-	datums, err = tablecodec.DecodeHandleToDatumMap(recordID, handleColIDs, handleColFt, m.tz, datums)
+	datums, err = tablecodec.DecodeHandleToDatumMap(
+		recordID, handleColIDs, handleColFt, m.tz, datums)
 	if err != nil {
 		return nil, false, errors.Trace(err)
 	}
@@ -486,7 +487,8 @@ func (m *mounter) mountRowKVEntry(tableInfo *model.TableInfo, row *rowKVEntry, d
 				zap.Any("tableInfo", tableInfo),
 				zap.Any("row", row))
 			if m.integrity.ErrorHandle() {
-				return nil, rawRow, cerror.ErrCorruptedDataMutation.GenWithStackByArgs(m.changefeedID.Namespace, m.changefeedID.ID, row)
+				return nil, rawRow, cerror.ErrCorruptedDataMutation.
+					GenWithStackByArgs(m.changefeedID.Namespace, m.changefeedID.ID, row)
 			}
 
 			corrupted = true
@@ -525,7 +527,8 @@ func (m *mounter) mountRowKVEntry(tableInfo *model.TableInfo, row *rowKVEntry, d
 				zap.Int64s("columnIDs", columnIDs),
 				zap.Any("rawCols", rawCols))
 			if m.integrity.ErrorHandle() {
-				return nil, rawRow, cerror.ErrCorruptedDataMutation.GenWithStackByArgs(m.changefeedID.Namespace, m.changefeedID.ID, row)
+				return nil, rawRow, cerror.ErrCorruptedDataMutation.
+					GenWithStackByArgs(m.changefeedID.Namespace, m.changefeedID.ID, row)
 			}
 			corrupted = true
 		}
