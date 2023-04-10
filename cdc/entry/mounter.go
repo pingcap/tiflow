@@ -384,44 +384,76 @@ func datum2Column(
 	return cols, rawCols, columnIDs, nil
 }
 
-func verifyChecksum(
-	decoder *rowcodec.DatumMapDecoder, checksum uint32,
-) (uint32, error) {
-	if decoder == nil {
-		log.Panic("row codec decoder is nil")
+// return error if cannot get the expected checksum from the decoder
+// return false if the checksum is not matched
+// return true if the checksum is matched and the checksum is the matched one.
+func (m *mounter) verifyChecksum(
+	columnIDs []int64, rawColumns []types.Datum, isPreRow bool,
+) (uint32, bool, error) {
+	if !m.integrity.Enabled() {
+		return 0, true, nil
 	}
 
+	var decoder *rowcodec.DatumMapDecoder
+	if isPreRow {
+		decoder = m.preDecoder
+	} else {
+		decoder = m.decoder
+	}
+	if decoder == nil {
+		return 0, false, errors.New("cannot found the decoder to get the checksum")
+	}
+
+	// if the checksum cannot be found, which means the upstream TiDB checksum is not enabled,
+	// so return matched as true to skip check the event.
 	first, ok := decoder.GetChecksum()
 	if !ok {
-		return checksum, errors.New("cannot found the checksum from the event")
+		return 0, true, nil
+	}
+
+	checksum, err := m.encoder.Checksum(m.sctx, columnIDs, rawColumns)
+	if err != nil {
+		log.Error("failed to calculate the checksum", zap.Error(err))
+		return 0, false, errors.Trace(err)
 	}
 
 	// the first checksum matched, it hits in the most case.
 	if checksum == first {
-		return checksum, nil
+		return checksum, true, nil
 	}
 
 	extra, ok := decoder.GetExtraChecksum()
 	if !ok {
-		return checksum, errors.New("cannot found the extract checksum from the event")
+		log.Error("cannot found the extra checksum, the first checksum mismatched",
+			zap.Uint32("checksum", checksum),
+			zap.Uint32("first", first),
+			zap.Uint32("extra", extra))
+		return checksum, false, errors.New("cannot found the extra checksum from the event")
 	}
 
 	if checksum == extra {
-		return checksum, nil
+		log.Warn("extra checksum matched, this may happen the upstream TiDB is during the DDL"+
+			"execution phase",
+			zap.Uint32("checksum", checksum),
+			zap.Uint32("extra", extra))
+		return checksum, true, nil
 	}
 
 	log.Error("checksum mismatch",
 		zap.Uint32("checksum", checksum),
 		zap.Uint32("first", first),
 		zap.Uint32("extra", extra))
-	return checksum, errors.New("checksum mismatch")
+	return checksum, false, nil
 }
 
 func (m *mounter) mountRowKVEntry(tableInfo *model.TableInfo, row *rowKVEntry, dataSize int64) (*model.RowChangedEvent, model.RowChangedDatums, error) {
 	var (
 		rawRow    model.RowChangedDatums
 		columnIDs []int64
+		matched   bool
 		err       error
+
+		corrupted bool
 	)
 
 	// Decode previous columns.
@@ -443,19 +475,21 @@ func (m *mounter) mountRowKVEntry(tableInfo *model.TableInfo, row *rowKVEntry, d
 			return nil, rawRow, errors.Trace(err)
 		}
 
-		if m.integrity.Enabled() {
-			preChecksum, err = m.encoder.Checksum(m.sctx, columnIDs, preRawCols)
-			if err != nil {
-				return nil, rawRow, errors.Trace(err)
+		preChecksum, matched, err = m.verifyChecksum(columnIDs, preRawCols, true)
+		if err != nil {
+			return nil, rawRow, errors.Trace(err)
+		}
+
+		if !matched {
+			log.Error("pre columns checksum mismatch",
+				zap.Uint32("checksum", preChecksum),
+				zap.Any("tableInfo", tableInfo),
+				zap.Any("row", row))
+			if m.integrity.ErrorHandle() {
+				return nil, rawRow, cerror.ErrCorruptedDataMutation.GenWithStackByArgs(m.changefeedID.Namespace, m.changefeedID.ID, row)
 			}
-			preChecksum, err = verifyChecksum(m.preDecoder, preChecksum)
-			if err != nil {
-				log.Error("pre columns checksum mismatch",
-					zap.Uint32("checksum", preChecksum),
-					zap.Any("tableInfo", tableInfo),
-					zap.Any("row", row))
-				return nil, rawRow, errors.Trace(err)
-			}
+
+			corrupted = true
 		}
 
 		// NOTICE: When the old Value feature is off,
@@ -481,19 +515,19 @@ func (m *mounter) mountRowKVEntry(tableInfo *model.TableInfo, row *rowKVEntry, d
 			return nil, rawRow, errors.Trace(err)
 		}
 
-		if m.integrity.Enabled() {
-			checksum, err = m.encoder.Checksum(m.sctx, columnIDs, rawCols)
-			if err != nil {
-				return nil, rawRow, errors.Trace(err)
+		checksum, matched, err = m.verifyChecksum(columnIDs, rawCols, false)
+		if err != nil {
+			return nil, rawRow, errors.Trace(err)
+		}
+		if !matched {
+			log.Error("columns checksum mismatch",
+				zap.Uint32("checksum", preChecksum),
+				zap.Int64s("columnIDs", columnIDs),
+				zap.Any("rawCols", rawCols))
+			if m.integrity.ErrorHandle() {
+				return nil, rawRow, cerror.ErrCorruptedDataMutation.GenWithStackByArgs(m.changefeedID.Namespace, m.changefeedID.ID, row)
 			}
-			checksum, err = verifyChecksum(m.decoder, checksum)
-			if err != nil {
-				log.Error("checksum mismatch",
-					zap.Uint32("checksum", preChecksum),
-					zap.Any("tableInfo", tableInfo),
-					zap.Any("row", row))
-				return nil, rawRow, errors.Trace(err)
-			}
+			corrupted = true
 		}
 	}
 
@@ -524,6 +558,7 @@ func (m *mounter) mountRowKVEntry(tableInfo *model.TableInfo, row *rowKVEntry, d
 
 		Checksum:    checksum,
 		PreChecksum: preChecksum,
+		Corrupted:   corrupted,
 
 		IndexColumns:        tableInfo.IndexColumnsOffset,
 		ApproximateDataSize: dataSize,

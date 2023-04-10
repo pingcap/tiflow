@@ -35,8 +35,8 @@ type Config struct {
 	MaxMessageBytes int
 	MaxBatchSize    int
 
-	// canal-json only
-	EnableTiDBExtension bool
+	EnableTiDBExtension     bool
+	RowLevelCheckSumEnabled bool
 
 	// avro only
 	AvroSchemaRegistry             string

@@ -319,6 +319,8 @@ type RowChangedEvent struct {
 	Checksum uint32 `json:"-" msg:"-"`
 	// PreChecksum corresponds to the checksum of the PreColumns
 	PreChecksum uint32 `json:"-" msg:"-"`
+	// Corrupted indicates whether the event is corrupted by the checksum mismatch.
+	Corrupted bool `json:"-" msg:"-"`
 
 	// ApproximateDataSize is the approximate size of protobuf binary
 	// representation of this event.

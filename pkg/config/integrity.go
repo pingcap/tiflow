@@ -73,8 +73,8 @@ func (c *IntegrityConfig) Validate() error {
 
 	if c.Enabled() {
 		log.Info("integrity check is enabled, it may affect the performance of the changefeed",
-			zap.Any("integrity-check", c.IntegrityCheckLevel),
-			zap.Any("corruption-handle-level", c.CorruptionHandleLevel))
+			zap.Any("integrityCheckLevel", c.IntegrityCheckLevel),
+			zap.Any("corruptionHandleLevel", c.CorruptionHandleLevel))
 	}
 
 	return nil
@@ -82,4 +82,8 @@ func (c *IntegrityConfig) Validate() error {
 
 func (c *IntegrityConfig) Enabled() bool {
 	return c.IntegrityCheckLevel == IntegrityCheckLevelCorrectness
+}
+
+func (c *IntegrityConfig) ErrorHandle() bool {
+	return c.CorruptionHandleLevel == CorruptionHandleLevelError
 }
