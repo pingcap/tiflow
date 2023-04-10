@@ -166,15 +166,13 @@ func (m *mounter) unmarshalAndMountRowChanged(ctx context.Context, raw *model.Ra
 	}
 	row, err := func() (*model.RowChangedEvent, error) {
 		if snap.IsIneligibleTableID(physicalTableID) {
-			log.Debug("skip the DML of ineligible table",
-				zap.Uint64("ts", raw.CRTs), zap.Int64("tableID", physicalTableID))
+			log.Debug("skip the DML of ineligible table", zap.Uint64("ts", raw.CRTs), zap.Int64("tableID", physicalTableID))
 			return nil, nil
 		}
 		tableInfo, exist := snap.PhysicalTableByID(physicalTableID)
 		if !exist {
 			if snap.IsTruncateTableID(physicalTableID) {
-				log.Debug("skip the DML of truncated table",
-					zap.Uint64("ts", raw.CRTs), zap.Int64("tableID", physicalTableID))
+				log.Debug("skip the DML of truncated table", zap.Uint64("ts", raw.CRTs), zap.Int64("tableID", physicalTableID))
 				return nil, nil
 			}
 			return nil, cerror.ErrSnapshotTableNotFound.GenWithStackByArgs(physicalTableID)
@@ -206,7 +204,6 @@ func (m *mounter) unmarshalAndMountRowChanged(ctx context.Context, raw *model.Ra
 		}
 		return nil, nil
 	}()
-
 	if err != nil && !cerror.IsChangefeedUnRetryableError(err) {
 		log.Error("failed to mount and unmarshals entry, start to print debug info", zap.Error(err))
 		snap.PrintStatus(log.Error)
@@ -270,11 +267,14 @@ func (m *mounter) decodeRow(
 		//	https://github.com/pingcap/tidb/blob/master/docs/design/2018-07-19-row-format.md
 		m.decoder = rowcodec.NewDatumMapDecoder(reqCols, m.tz)
 		datums, err = m.decoder.DecodeToDatumMap(rawValue, nil)
+		if err != nil {
+			return nil, false, cerror.WrapError(cerror.ErrDecodeRowToDatum, err)
+		}
 	} else {
 		datums, err = decodeRowV1(rawValue, tableInfo, m.tz)
-	}
-	if err != nil {
-		return nil, false, errors.Trace(err)
+		if err != nil {
+			return nil, false, errors.Trace(err)
+		}
 	}
 
 	datums, err = tablecodec.DecodeHandleToDatumMap(recordID, handleColIDs, handleColFt, m.tz, datums)
