@@ -95,7 +95,11 @@ func TestAllTables(t *testing.T) {
 	require.Equal(t, tableName, model.TableName{
 		Schema:  "test",
 		Table:   "t1",
+<<<<<<< HEAD
 		TableID: 70,
+=======
+		TableID: 88,
+>>>>>>> 4ab802a50e (ddl(ticdc): add charset and collate to ddl event (#8723))
 	})
 	// add ineligible table
 	require.Nil(t, schema.HandleDDL(helper.DDL2Job("create table test.t2(id int)")))
@@ -104,7 +108,11 @@ func TestAllTables(t *testing.T) {
 	require.Equal(t, tableName, model.TableName{
 		Schema:  "test",
 		Table:   "t1",
+<<<<<<< HEAD
 		TableID: 70,
+=======
+		TableID: 88,
+>>>>>>> 4ab802a50e (ddl(ticdc): add charset and collate to ddl event (#8723))
 	})
 }
 
