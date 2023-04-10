@@ -262,8 +262,8 @@ type JSONRowEventEncoder struct {
 
 	// When it is true, canal-json would generate TiDB extension information
 	// which, at the moment, only includes `tidbWaterMarkType` and `_tidb` fields.
-	enableTiDBExtension     bool
-	rowLevelChecksumEnabled bool
+	enableTiDBExtension bool
+	enableRowChecksum   bool
 
 	maxMessageBytes int
 	messages        []*common.Message
@@ -272,11 +272,11 @@ type JSONRowEventEncoder struct {
 // newJSONRowEventEncoder creates a new JSONRowEventEncoder
 func newJSONRowEventEncoder(config *common.Config) codec.RowEventEncoder {
 	encoder := &JSONRowEventEncoder{
-		builder:                 newCanalEntryBuilder(),
-		enableTiDBExtension:     config.EnableTiDBExtension,
-		rowLevelChecksumEnabled: config.RowLevelCheckSumEnabled,
-		messages:                make([]*common.Message, 0, 1),
-		maxMessageBytes:         config.MaxMessageBytes,
+		builder:             newCanalEntryBuilder(),
+		enableTiDBExtension: config.EnableTiDBExtension,
+		enableRowChecksum:   config.EnableRowChecksum,
+		messages:            make([]*common.Message, 0, 1),
+		maxMessageBytes:     config.MaxMessageBytes,
 	}
 	return encoder
 }
@@ -339,7 +339,7 @@ func (c *JSONRowEventEncoder) AppendRowChangedEvent(
 	e *model.RowChangedEvent,
 	callback func(),
 ) error {
-	value, err := newJSONMessageForDML(c.builder, c.enableTiDBExtension, c.rowLevelChecksumEnabled, e)
+	value, err := newJSONMessageForDML(c.builder, c.enableTiDBExtension, c.enableRowChecksum, e)
 	if err != nil {
 		return errors.Trace(err)
 	}

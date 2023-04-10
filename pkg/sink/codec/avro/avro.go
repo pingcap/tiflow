@@ -45,7 +45,9 @@ type BatchEncoder struct {
 	valueSchemaManager *schemaManager
 	result             []*common.Message
 
-	enableTiDBExtension        bool
+	enableTiDBExtension bool
+	enableRowChecksum   bool
+
 	decimalHandlingMode        string
 	bigintUnsignedHandlingMode string
 }
@@ -846,6 +848,7 @@ func (b *batchEncoderBuilder) Build() codec.RowEventEncoder {
 	encoder.valueSchemaManager = b.valueSchemaManager
 	encoder.result = make([]*common.Message, 0, 1024)
 	encoder.enableTiDBExtension = b.config.EnableTiDBExtension
+	encoder.enableRowChecksum = b.config.EnableRowChecksum
 	encoder.decimalHandlingMode = b.config.AvroDecimalHandlingMode
 	encoder.bigintUnsignedHandlingMode = b.config.AvroBigintUnsignedHandlingMode
 

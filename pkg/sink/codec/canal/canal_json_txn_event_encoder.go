@@ -33,6 +33,7 @@ type JSONTxnEventEncoder struct {
 	// When it is true, canal-json would generate TiDB extension information
 	// which, at the moment, only includes `tidbWaterMarkType` and `_tidb` fields.
 	enableTiDBExtension bool
+	enableRowChecksum   bool
 	// the symbol separating two lines
 	terminator      []byte
 	maxMessageBytes int
@@ -102,6 +103,7 @@ func newJSONTxnEventEncoder(config *common.Config) codec.TxnEventEncoder {
 	encoder := &JSONTxnEventEncoder{
 		builder:             newCanalEntryBuilder(),
 		enableTiDBExtension: config.EnableTiDBExtension,
+		enableRowChecksum:   config.EnableRowChecksum,
 		valueBuf:            &bytes.Buffer{},
 		terminator:          []byte(config.Terminator),
 		maxMessageBytes:     config.MaxMessageBytes,
