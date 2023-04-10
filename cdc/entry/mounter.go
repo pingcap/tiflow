@@ -81,9 +81,16 @@ type mounter struct {
 
 	integrity *config.IntegrityConfig
 
-	// decoder is used to decode the raw value, also used to extract checksum, it should not be nil
-	// for the new row format v2, and it should be reset after decode each one event.
-	decoder *rowcodec.DatumMapDecoder
+	// decoder and preDecoder are used to decode the raw value, also used to extract checksum,
+	// they should not be nil for the new row format v2,
+	// and should be reset after decode each one event.
+	decoder    *rowcodec.DatumMapDecoder
+	preDecoder *rowcodec.DatumMapDecoder
+
+	// encoder is used to calculate the checksum.
+	encoder *rowcodec.Encoder
+	// sctx hold some information can be used by the encoder to calculate the checksum.
+	sctx *stmtctx.StatementContext
 }
 
 // NewMounter creates a mounter
@@ -105,6 +112,11 @@ func NewMounter(schemaStorage SchemaStorage,
 			WithLabelValues(changefeedID.Namespace, changefeedID.ID),
 		tz:        tz,
 		integrity: integrity,
+
+		encoder: &rowcodec.Encoder{},
+		sctx: &stmtctx.StatementContext{
+			TimeZone: tz,
+		},
 	}
 }
 
@@ -152,21 +164,21 @@ func (m *mounter) unmarshalAndMountRowChanged(ctx context.Context, raw *model.Ra
 	if err != nil {
 		return nil, errors.Trace(err)
 	}
-	if snap.IsIneligibleTableID(physicalTableID) {
-		log.Debug("skip the DML of ineligible table",
-			zap.Uint64("ts", raw.CRTs), zap.Int64("tableID", physicalTableID))
-		return nil, nil
-	}
-	tableInfo, exist := snap.PhysicalTableByID(physicalTableID)
-	if !exist {
-		if snap.IsTruncateTableID(physicalTableID) {
-			log.Debug("skip the DML of truncated table",
+	row, err := func() (*model.RowChangedEvent, error) {
+		if snap.IsIneligibleTableID(physicalTableID) {
+			log.Debug("skip the DML of ineligible table",
 				zap.Uint64("ts", raw.CRTs), zap.Int64("tableID", physicalTableID))
 			return nil, nil
 		}
-		return nil, cerror.ErrSnapshotTableNotFound.GenWithStackByArgs(physicalTableID)
-	}
-	row, err := func() (*model.RowChangedEvent, error) {
+		tableInfo, exist := snap.PhysicalTableByID(physicalTableID)
+		if !exist {
+			if snap.IsTruncateTableID(physicalTableID) {
+				log.Debug("skip the DML of truncated table",
+					zap.Uint64("ts", raw.CRTs), zap.Int64("tableID", physicalTableID))
+				return nil, nil
+			}
+			return nil, cerror.ErrSnapshotTableNotFound.GenWithStackByArgs(physicalTableID)
+		}
 		if bytes.HasPrefix(key, recordPrefix) {
 			rowKV, err := m.unmarshalRowKVEntry(tableInfo, raw.Key, raw.Value, raw.OldValue, baseInfo)
 			if err != nil {
@@ -195,23 +207,11 @@ func (m *mounter) unmarshalAndMountRowChanged(ctx context.Context, raw *model.Ra
 		return nil, nil
 	}()
 
-	if m.integrity.Enabled() {
-		if err := m.checksumIntegrityCheck(row, tableInfo); err != nil {
-			return nil, errors.Trace(err)
-		}
-	}
-
 	if err != nil && !cerror.IsChangefeedUnRetryableError(err) {
 		log.Error("failed to mount and unmarshals entry, start to print debug info", zap.Error(err))
 		snap.PrintStatus(log.Error)
 	}
 	return row, err
-}
-
-func (m *mounter) checksumIntegrityCheck(row *model.RowChangedEvent, tableInfo *model.TableInfo) error {
-
-	// if checksum mismatch, check the integrity handle level to decide the next step.
-	return nil
 }
 
 func (m *mounter) unmarshalRowKVEntry(
