@@ -30,7 +30,6 @@ import (
 	"github.com/pingcap/tiflow/cdc/model"
 	"github.com/pingcap/tiflow/cdc/processor/sinkmanager"
 	"github.com/pingcap/tiflow/cdc/processor/sourcemanager"
-	"github.com/pingcap/tiflow/cdc/processor/sourcemanager/engine/factory"
 	"github.com/pingcap/tiflow/cdc/processor/tablepb"
 	"github.com/pingcap/tiflow/cdc/puller"
 	"github.com/pingcap/tiflow/cdc/redo"
@@ -59,9 +58,8 @@ const (
 type processor struct {
 	changefeedID model.ChangeFeedID
 	captureInfo  *model.CaptureInfo
+	globalVars   *cdcContext.GlobalVars
 	changefeed   *orchestrator.ChangefeedReactorState
-
-	engineFactory *factory.SortEngineFactory
 
 	upstream     *upstream.Upstream
 	lastSchemaTs model.Ts
@@ -327,11 +325,6 @@ func (p *processor) IsRemoveTableSpanFinished(span tablepb.Span) (model.Ts, bool
 	return stats.CheckpointTs, true
 }
 
-// GetTableSpanCount implements TableExecutor interface.
-func (p *processor) GetTableSpanCount() int {
-	return len(p.sinkManager.r.GetAllCurrentTableSpans())
-}
-
 // GetTableSpanStatus implements TableExecutor interface
 func (p *processor) GetTableSpanStatus(span tablepb.Span, collectStat bool) tablepb.TableStatus {
 	state, exist := p.sinkManager.r.GetTableState(span)
@@ -462,6 +455,8 @@ func isProcessorIgnorableError(err error) bool {
 // the `state` parameter is sent by the etcd worker, the `state` must be a snapshot of KVs in etcd
 // The main logic of processor is in this function, including the calculation of many kinds of ts,
 // maintain table pipeline, error handling, etc.
+//
+// It can be called in etcd ticks, so it should never be blocked.
 func (p *processor) Tick(ctx cdcContext.Context) error {
 	// check upstream error first
 	if err := p.upstream.Error(); err != nil {
@@ -609,6 +604,7 @@ func (p *processor) lazyInitImpl(etcdCtx cdcContext.Context) (err error) {
 		return nil
 	}
 
+	p.globalVars = etcdCtx.GlobalVars()
 	prcCtx := cdcContext.NewContext(context.Background(), etcdCtx.GlobalVars())
 	prcCtx = cdcContext.WithChangefeedVars(prcCtx, etcdCtx.ChangefeedVars())
 	stdCtx := contextutil.PutChangefeedIDInCtx(prcCtx, p.changefeedID)
@@ -647,8 +643,7 @@ func (p *processor) lazyInitImpl(etcdCtx cdcContext.Context) (err error) {
 	p.redo.name = "RedoManager"
 	p.redo.spawn(stdCtx)
 
-	p.engineFactory = prcCtx.GlobalVars().SortEngineFactory
-	sortEngine, err := p.engineFactory.Create(p.changefeedID)
+	sortEngine, err := p.globalVars.SortEngineFactory.Create(p.changefeedID)
 	log.Info("Processor creates sort engine",
 		zap.String("namespace", p.changefeedID.Namespace),
 		zap.String("changefeed", p.changefeedID.ID),
@@ -886,8 +881,8 @@ func (p *processor) Close() error {
 	p.mg.stop(p.changefeedID)
 	p.ddlHandler.stop(p.changefeedID)
 
-	if p.engineFactory != nil {
-		if err := p.engineFactory.Drop(p.changefeedID); err != nil {
+	if p.globalVars.SortEngineFactory != nil {
+		if err := p.globalVars.SortEngineFactory.Drop(p.changefeedID); err != nil {
 			log.Error("Processor drop event sort engine fail",
 				zap.String("namespace", p.changefeedID.Namespace),
 				zap.String("changefeed", p.changefeedID.ID),
