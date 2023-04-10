@@ -307,6 +307,7 @@ func (ra *RedoApplier) applyRow(
 		tableSink := ra.sinkFactory.CreateTableSink(
 			model.DefaultChangeFeedID(applierChangefeed),
 			tableID,
+			checkpointTs,
 			prometheus.NewCounter(prometheus.CounterOpts{}),
 		)
 		ra.tableSinks[tableID] = tableSink
