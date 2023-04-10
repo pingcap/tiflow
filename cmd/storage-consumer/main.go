@@ -470,6 +470,7 @@ func (c *consumer) emitDMLEvents(
 				c.tableSinkMap[tableID] = c.sinkFactory.CreateTableSinkForConsumer(
 					model.DefaultChangeFeedID(defaultChangefeedName),
 					tableID,
+					row.CommitTs,
 					prometheus.NewCounter(prometheus.CounterOpts{}))
 			}
 

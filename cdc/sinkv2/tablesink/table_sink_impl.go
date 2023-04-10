@@ -34,9 +34,11 @@ var (
 
 // EventTableSink is a table sink that can write events.
 type EventTableSink[E eventsink.TableEvent] struct {
-	changefeedID    model.ChangeFeedID
-	tableID         model.TableID
-	eventID         uint64
+	changefeedID model.ChangeFeedID
+	tableID      model.TableID
+	eventID      uint64
+	// startTs is the initial checkpointTs of the table sink.
+	startTs         model.Ts
 	maxResolvedTs   model.ResolvedTs
 	backendSink     eventsink.EventSink[E]
 	progressTracker *progressTracker
@@ -53,6 +55,7 @@ type EventTableSink[E eventsink.TableEvent] struct {
 func New[E eventsink.TableEvent](
 	changefeedID model.ChangeFeedID,
 	tableID model.TableID,
+	startTs model.Ts,
 	backendSink eventsink.EventSink[E],
 	appender eventsink.Appender[E],
 	totalRowsCounter prometheus.Counter,
@@ -61,6 +64,7 @@ func New[E eventsink.TableEvent](
 		changefeedID:              changefeedID,
 		tableID:                   tableID,
 		eventID:                   0,
+		startTs:                   startTs,
 		maxResolvedTs:             model.NewResolvedTs(0),
 		backendSink:               backendSink,
 		progressTracker:           newProgressTracker(tableID, defaultBufferSize),

@@ -44,8 +44,9 @@ func generateTxnEvents(
 	for i := 0; i < 10; i++ {
 		txn := &eventsink.TxnCallbackableEvent{
 			Event: &model.SingleTableTxn{
-				CommitTs: 100,
-				Table:    &model.TableName{Schema: "test", Table: "table1"},
+				CommitTs:         100,
+				Table:            &model.TableName{Schema: "test", Table: "table1"},
+				TableInfoVersion: 33,
 				TableInfo: &model.TableInfo{
 					TableName: model.TableName{
 						Schema: "test", Table: "table1",

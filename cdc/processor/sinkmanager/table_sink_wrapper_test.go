@@ -67,7 +67,7 @@ func (m *mockSink) Dead() <-chan struct{} {
 func createTableSinkWrapper(changefeedID model.ChangeFeedID, tableID model.TableID) (*tableSinkWrapper, *mockSink) {
 	tableState := tablepb.TableStatePreparing
 	sink := newMockSink()
-	innerTableSink := tablesink.New[*model.RowChangedEvent](changefeedID, tableID,
+	innerTableSink := tablesink.New[*model.RowChangedEvent](changefeedID, tableID, model.Ts(0),
 		sink, &eventsink.RowChangeEventAppender{}, prometheus.NewCounter(prometheus.CounterOpts{}))
 	wrapper := newTableSinkWrapper(
 		changefeedID,
