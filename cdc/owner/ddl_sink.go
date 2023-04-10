@@ -227,6 +227,23 @@ func (s *ddlSinkImpl) emitDDLEvent(ctx cdcContext.Context, ddl *model.DDLEvent) 
 		// the DDL event is executing and not finished yet, return false
 		return false, nil
 	}
+<<<<<<< HEAD
+=======
+
+	query, err := s.addSpecialComment(ddl)
+	if err != nil {
+		log.Error("Add special comment failed",
+			zap.String("namespace", s.changefeedID.Namespace),
+			zap.String("changefeed", s.changefeedID.ID),
+			zap.Error(err),
+			zap.Any("ddl", ddl))
+		s.mu.Unlock()
+		return false, errors.Trace(err)
+	}
+	ddl.Query = query
+	s.mu.Unlock()
+
+>>>>>>> 4ab802a50e (ddl(ticdc): add charset and collate to ddl event (#8723))
 	select {
 	case <-ctx.Done():
 		return false, errors.Trace(ctx.Err())
@@ -264,5 +281,57 @@ func (s *ddlSinkImpl) close(ctx context.Context) (err error) {
 		err = s.syncPointStore.Close()
 	}
 	s.wg.Wait()
+<<<<<<< HEAD
 	return err
+=======
+	if err != nil && errors.Cause(err) != context.Canceled {
+		return err
+	}
+	return nil
+}
+
+func (s *ddlSinkImpl) isInitialized() bool {
+	return s.initialized.Load().(bool)
+}
+
+// addSpecialComment translate tidb feature to comment
+func (s *ddlSinkImpl) addSpecialComment(ddl *model.DDLEvent) (string, error) {
+	stms, _, err := parser.New().Parse(ddl.Query, ddl.Charset, ddl.Collate)
+	if err != nil {
+		return "", errors.Trace(err)
+	}
+	if len(stms) != 1 {
+		log.Panic("invalid ddlQuery statement size",
+			zap.String("namespace", s.changefeedID.Namespace),
+			zap.String("changefeed", s.changefeedID.ID),
+			zap.String("ddlQuery", ddl.Query))
+	}
+	var sb strings.Builder
+	// translate TiDB feature to special comment
+	restoreFlags := format.RestoreTiDBSpecialComment
+	// escape the keyword
+	restoreFlags |= format.RestoreNameBackQuotes
+	// upper case keyword
+	restoreFlags |= format.RestoreKeyWordUppercase
+	// wrap string with single quote
+	restoreFlags |= format.RestoreStringSingleQuotes
+	// remove placement rule
+	restoreFlags |= format.SkipPlacementRuleForRestore
+	// force disable ttl
+	restoreFlags |= format.RestoreWithTTLEnableOff
+	if err = stms[0].Restore(format.NewRestoreCtx(restoreFlags, &sb)); err != nil {
+		return "", errors.Trace(err)
+	}
+
+	result := sb.String()
+	log.Info("add special comment to DDL",
+		zap.String("namespace", s.changefeedID.Namespace),
+		zap.String("changefeed", s.changefeedID.ID),
+		zap.String("DDL", ddl.Query),
+		zap.String("charset", ddl.Charset),
+		zap.String("collate", ddl.Collate),
+		zap.String("result", result))
+
+	return result, nil
+>>>>>>> 4ab802a50e (ddl(ticdc): add charset and collate to ddl event (#8723))
 }
