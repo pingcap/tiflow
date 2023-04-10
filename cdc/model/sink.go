@@ -606,6 +606,8 @@ type DDLEvent struct {
 	PreTableInfo *TableInfo       `msg:"-"`
 	Type         model.ActionType `msg:"-"`
 	Done         bool             `msg:"-"`
+	Charset      string           `msg:"-"`
+	Collate      string           `msg:"-"`
 }
 
 // FromJob fills the values with DDLEvent from DDL job
@@ -636,6 +638,9 @@ func (d *DDLEvent) FromJob(job *model.Job, preTableInfo *TableInfo, tableInfo *T
 	d.Type = job.Type
 	d.PreTableInfo = preTableInfo
 	d.TableInfo = tableInfo
+
+	d.Charset = job.Charset
+	d.Collate = job.Collate
 	// rebuild the query if necessary
 	rebuildQuery()
 }
@@ -658,6 +663,9 @@ func (d *DDLEvent) FromRenameTablesJob(job *model.Job,
 	d.Type = model.ActionRenameTable
 	d.PreTableInfo = preTableInfo
 	d.TableInfo = tableInfo
+
+	d.Charset = job.Charset
+	d.Collate = job.Collate
 }
 
 // SingleTableTxn represents a transaction which includes many row events in a single table
