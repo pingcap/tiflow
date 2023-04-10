@@ -673,7 +673,7 @@ func (m *SinkManager) AddTable(span tablepb.Span, startTs model.Ts, targetTs mod
 	sinkWrapper := newTableSinkWrapper(
 		m.changefeedID,
 		span,
-		m.sinkFactory.CreateTableSink(m.changefeedID, span, m.metricsTableSinkTotalRows),
+		m.sinkFactory.CreateTableSink(m.changefeedID, span, startTs, m.metricsTableSinkTotalRows),
 		tablepb.TableStatePreparing,
 		startTs,
 		targetTs,
