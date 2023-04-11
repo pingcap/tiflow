@@ -85,7 +85,7 @@ type worker struct {
 func newWorker(
 	id model.ChangeFeedID,
 	protocol config.Protocol,
-	builder codec.EncoderBuilder,
+	builder codec.RowEventEncoderBuilder,
 	encoderConcurrency int,
 	producer dmlproducer.DMLProducer,
 	statistics *metrics.Statistics,

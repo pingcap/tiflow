@@ -44,13 +44,16 @@ type indexWithDate struct {
 	currDate, prevDate string
 }
 
-// VersionedTable is used to wrap TableName with a version.
-type VersionedTable struct {
-	model.TableName
-	// Version is consistent with the version of TableInfo recorded in
+// VersionedTableName is used to wrap TableNameWithPhysicTableID with a version.
+type VersionedTableName struct {
+	// Because we need to generate different file paths for different
+	// tables, we need to use the physical table ID instead of the
+	// logical table ID.(Especially when the table is a partitioned table).
+	TableNameWithPhysicTableID model.TableName
+	// TableInfoVersion is consistent with the version of TableInfo recorded in
 	// schema storage. It can either be finished ts of a DDL event,
 	// or be the checkpoint ts when processor is restarted.
-	Version uint64
+	TableInfoVersion uint64
 }
 
 // FilePathGenerator is used to generate data file path and index file path.
@@ -59,7 +62,7 @@ type FilePathGenerator struct {
 	config    *Config
 	clock     clock.Clock
 	storage   storage.ExternalStorage
-	fileIndex map[VersionedTable]*indexWithDate
+	fileIndex map[VersionedTableName]*indexWithDate
 }
 
 // NewFilePathGenerator creates a FilePathGenerator.
@@ -74,7 +77,7 @@ func NewFilePathGenerator(
 		extension: extension,
 		storage:   storage,
 		clock:     clock,
-		fileIndex: make(map[VersionedTable]*indexWithDate),
+		fileIndex: make(map[VersionedTableName]*indexWithDate),
 	}
 }
 
@@ -84,7 +87,7 @@ func (f *FilePathGenerator) SetClock(clock clock.Clock) {
 }
 
 // Contains checks if a VersionedTable is cached by FilePathGenerator before.
-func (f *FilePathGenerator) Contains(tbl VersionedTable) bool {
+func (f *FilePathGenerator) Contains(tbl VersionedTableName) bool {
 	_, ok := f.fileIndex[tbl]
 	return ok
 }
@@ -108,15 +111,15 @@ func (f *FilePathGenerator) GenerateDateStr() string {
 	return dateStr
 }
 
-func (f *FilePathGenerator) generateDataDirPath(tbl VersionedTable, date string) string {
+func (f *FilePathGenerator) generateDataDirPath(tbl VersionedTableName, date string) string {
 	var elems []string
 
-	elems = append(elems, tbl.Schema)
-	elems = append(elems, tbl.Table)
-	elems = append(elems, fmt.Sprintf("%d", tbl.Version))
+	elems = append(elems, tbl.TableNameWithPhysicTableID.Schema)
+	elems = append(elems, tbl.TableNameWithPhysicTableID.Table)
+	elems = append(elems, fmt.Sprintf("%d", tbl.TableInfoVersion))
 
-	if f.config.EnablePartitionSeparator && tbl.TableName.IsPartition {
-		elems = append(elems, fmt.Sprintf("%d", tbl.TableID))
+	if f.config.EnablePartitionSeparator && tbl.TableNameWithPhysicTableID.IsPartition {
+		elems = append(elems, fmt.Sprintf("%d", tbl.TableNameWithPhysicTableID.TableID))
 	}
 
 	if len(date) != 0 {
@@ -149,7 +152,7 @@ func (f *FilePathGenerator) fetchIndexFromFileName(fileName string) (uint64, err
 // GenerateDataFilePath generates a canonical path for data file.
 func (f *FilePathGenerator) GenerateDataFilePath(
 	ctx context.Context,
-	tbl VersionedTable,
+	tbl VersionedTableName,
 	date string,
 ) (string, error) {
 	var elems []string
@@ -180,7 +183,7 @@ func (f *FilePathGenerator) GenerateDataFilePath(
 }
 
 // GenerateIndexFilePath generates a canonical path for index file.
-func (f *FilePathGenerator) GenerateIndexFilePath(tbl VersionedTable, date string) string {
+func (f *FilePathGenerator) GenerateIndexFilePath(tbl VersionedTableName, date string) string {
 	var elems []string
 
 	elems = append(elems, f.generateDataDirPath(tbl, date))
@@ -190,7 +193,7 @@ func (f *FilePathGenerator) GenerateIndexFilePath(tbl VersionedTable, date strin
 }
 
 func (f *FilePathGenerator) getNextFileIdxFromIndexFile(
-	ctx context.Context, tbl VersionedTable, date string,
+	ctx context.Context, tbl VersionedTableName, date string,
 ) (uint64, error) {
 	indexFile := f.GenerateIndexFilePath(tbl, date)
 	exist, err := f.storage.FileExists(ctx, indexFile)

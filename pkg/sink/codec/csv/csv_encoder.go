@@ -15,7 +15,6 @@ package csv
 
 import (
 	"bytes"
-	"context"
 
 	"github.com/pingcap/tiflow/cdc/model"
 	"github.com/pingcap/tiflow/pkg/config"
@@ -25,42 +24,30 @@ import (
 
 // BatchEncoder encodes the events into the byte of a batch into.
 type BatchEncoder struct {
-	valueBuf    *bytes.Buffer
-	callbackBuf []func()
-	batchSize   int
-	config      *common.Config
+	valueBuf  *bytes.Buffer
+	callback  func()
+	batchSize int
+	config    *common.Config
 }
 
-// AppendRowChangedEvent implements the EventBatchEncoder interface
-func (b *BatchEncoder) AppendRowChangedEvent(
-	_ context.Context,
-	_ string,
-	e *model.RowChangedEvent,
+// AppendTxnEvent implements the TxnEventEncoder interface
+func (b *BatchEncoder) AppendTxnEvent(
+	e *model.SingleTableTxn,
 	callback func(),
 ) error {
-	row, err := rowChangedEvent2CSVMsg(b.config, e)
-	if err != nil {
-		return err
+	for _, rowEvent := range e.Rows {
+		row, err := rowChangedEvent2CSVMsg(b.config, rowEvent)
+		if err != nil {
+			return err
+		}
+		b.valueBuf.Write(row.encode())
+		b.batchSize++
 	}
-	b.valueBuf.Write(row.encode())
-	b.batchSize++
-	if callback != nil {
-		b.callbackBuf = append(b.callbackBuf, callback)
-	}
+	b.callback = callback
 	return nil
 }
 
-// EncodeDDLEvent implements the EventBatchEncoder interface
-func (b *BatchEncoder) EncodeDDLEvent(e *model.DDLEvent) (*common.Message, error) {
-	return nil, nil
-}
-
-// EncodeCheckpointEvent implements the EventBatchEncoder interface
-func (b *BatchEncoder) EncodeCheckpointEvent(ts uint64) (*common.Message, error) {
-	return nil, nil
-}
-
-// Build implements the EventBatchEncoder interface
+// Build implements the RowEventEncoder interface
 func (b *BatchEncoder) Build() (messages []*common.Message) {
 	if b.batchSize == 0 {
 		return nil
@@ -69,26 +56,19 @@ func (b *BatchEncoder) Build() (messages []*common.Message) {
 	ret := common.NewMsg(config.ProtocolCsv, nil,
 		b.valueBuf.Bytes(), 0, model.MessageTypeRow, nil, nil)
 	ret.SetRowsCount(b.batchSize)
-	if len(b.callbackBuf) != 0 {
-		callbacks := b.callbackBuf
-		ret.Callback = func() {
-			for _, cb := range callbacks {
-				cb()
-			}
-		}
-		b.valueBuf.Reset()
-		b.callbackBuf = make([]func(), 0)
-		b.batchSize = 0
-	}
+	ret.Callback = b.callback
+	b.valueBuf.Reset()
+	b.callback = nil
+	b.batchSize = 0
+
 	return []*common.Message{ret}
 }
 
 // newBatchEncoder creates a new csv BatchEncoder.
-func newBatchEncoder(config *common.Config) codec.EventBatchEncoder {
+func newBatchEncoder(config *common.Config) codec.TxnEventEncoder {
 	return &BatchEncoder{
-		config:      config,
-		valueBuf:    &bytes.Buffer{},
-		callbackBuf: make([]func(), 0),
+		config:   config,
+		valueBuf: &bytes.Buffer{},
 	}
 }
 
@@ -96,12 +76,12 @@ type batchEncoderBuilder struct {
 	config *common.Config
 }
 
-// NewBatchEncoderBuilder creates a csv batchEncoderBuilder.
-func NewBatchEncoderBuilder(config *common.Config) codec.EncoderBuilder {
+// NewTxnEventEncoderBuilder creates a csv batchEncoderBuilder.
+func NewTxnEventEncoderBuilder(config *common.Config) codec.TxnEventEncoderBuilder {
 	return &batchEncoderBuilder{config: config}
 }
 
 // Build a csv BatchEncoder
-func (b *batchEncoderBuilder) Build() codec.EventBatchEncoder {
+func (b *batchEncoderBuilder) Build() codec.TxnEventEncoder {
 	return newBatchEncoder(b.config)
 }

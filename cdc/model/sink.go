@@ -295,9 +295,21 @@ type RowChangedEvent struct {
 
 	RowID int64 `json:"row-id" msg:"-"` // Deprecated. It is empty when the RowID comes from clustered index table.
 
-	Table     *TableName         `json:"table" msg:"table"`
-	ColInfos  []rowcodec.ColInfo `json:"column-infos" msg:"-"`
-	TableInfo *TableInfo         `json:"-" msg:"-"`
+	// Table contains the table name and table ID.
+	// NOTICE: We store the physical table ID here, not the logical table ID.
+	Table    *TableName         `json:"table" msg:"table"`
+	ColInfos []rowcodec.ColInfo `json:"column-infos" msg:"-"`
+	// NOTICE: We probably store the logical ID inside TableInfo's TableName,
+	// not the physical ID.
+	// For normal table, there is only one ID, which is the physical ID.
+	// AKA TIDB_TABLE_ID.
+	// For partitioned table, there are two kinds of ID:
+	// 1. TIDB_PARTITION_ID is the physical ID of the partition.
+	// 2. TIDB_TABLE_ID is the logical ID of the table.
+	// In general, we always use the physical ID to represent a table, but we
+	// record the logical ID from the DDL event(job.BinlogInfo.TableInfo).
+	// So be careful when using the TableInfo.
+	TableInfo *TableInfo `json:"-" msg:"-"`
 
 	Columns      []*Column `json:"columns" msg:"columns"`
 	PreColumns   []*Column `json:"pre-columns" msg:"pre-columns"`
@@ -594,6 +606,8 @@ type DDLEvent struct {
 	PreTableInfo *TableInfo       `msg:"-"`
 	Type         model.ActionType `msg:"-"`
 	Done         bool             `msg:"-"`
+	Charset      string           `msg:"-"`
+	Collate      string           `msg:"-"`
 }
 
 // FromJob fills the values with DDLEvent from DDL job
@@ -624,6 +638,9 @@ func (d *DDLEvent) FromJob(job *model.Job, preTableInfo *TableInfo, tableInfo *T
 	d.Type = job.Type
 	d.PreTableInfo = preTableInfo
 	d.TableInfo = tableInfo
+
+	d.Charset = job.Charset
+	d.Collate = job.Collate
 	// rebuild the query if necessary
 	rebuildQuery()
 }
@@ -646,18 +663,26 @@ func (d *DDLEvent) FromRenameTablesJob(job *model.Job,
 	d.Type = model.ActionRenameTable
 	d.PreTableInfo = preTableInfo
 	d.TableInfo = tableInfo
+
+	d.Charset = job.Charset
+	d.Collate = job.Collate
 }
 
 // SingleTableTxn represents a transaction which includes many row events in a single table
 //
 //msgp:ignore SingleTableTxn
 type SingleTableTxn struct {
-	// data fields of SingleTableTxn
 	Table     *TableName
 	TableInfo *TableInfo
-	StartTs   uint64
-	CommitTs  uint64
-	Rows      []*RowChangedEvent
+	// TableInfoVersion is the version of the table info, it is used to generate data path
+	// in storage sink. Generally, TableInfoVersion equals to `SingleTableTxn.TableInfo.Version`.
+	// Besides, if one table is just scheduled to a new processor, the TableInfoVersion should be
+	// greater than or equal to the startTs of table sink.
+	TableInfoVersion uint64
+
+	StartTs  uint64
+	CommitTs uint64
+	Rows     []*RowChangedEvent
 
 	// control fields of SingleTableTxn
 	// FinishWg is a barrier txn, after this txn is received, the worker must

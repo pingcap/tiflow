@@ -15,6 +15,7 @@ package owner
 
 import (
 	"context"
+	"math/rand"
 	"sort"
 	"time"
 
@@ -90,7 +91,8 @@ type ddlManager struct {
 	// schema store multiple version of schema, it is used by scheduler
 	schema *schemaWrap4Owner
 	// redoDDLManager is used to send DDL events to redo log and get redo resolvedTs.
-	redoDDLManager redo.DDLManager
+	redoDDLManager  redo.DDLManager
+	redoMetaManager redo.MetaManager
 	// ddlSink is used to ddlSink DDL events to the downstream
 	ddlSink DDLSink
 	// tableCheckpoint store the tableCheckpoint of each table. We need to wait
@@ -124,6 +126,7 @@ func newDDLManager(
 	ddlPuller puller.DDLPuller,
 	schema *schemaWrap4Owner,
 	redoManager redo.DDLManager,
+	redoMetaManager redo.MetaManager,
 	sinkType model.DownstreamType,
 	bdrMode bool,
 ) *ddlManager {
@@ -136,15 +139,16 @@ func newDDLManager(
 		zap.Stringer("sinkType", sinkType))
 
 	return &ddlManager{
-		changfeedID:    changefeedID,
-		ddlSink:        ddlSink,
-		ddlPuller:      ddlPuller,
-		schema:         schema,
-		redoDDLManager: redoManager,
-		startTs:        startTs,
-		checkpointTs:   checkpointTs,
-		ddlResolvedTs:  checkpointTs,
-		BDRMode:        bdrMode,
+		changfeedID:     changefeedID,
+		ddlSink:         ddlSink,
+		ddlPuller:       ddlPuller,
+		schema:          schema,
+		redoDDLManager:  redoManager,
+		redoMetaManager: redoMetaManager,
+		startTs:         startTs,
+		checkpointTs:    checkpointTs,
+		ddlResolvedTs:   startTs,
+		BDRMode:         bdrMode,
 		// use the passed sinkType after we support get resolvedTs from sink
 		sinkType:        model.DB,
 		tableCheckpoint: make(map[model.TableName]model.Ts),
@@ -188,16 +192,9 @@ func (m *ddlManager) tick(
 
 	// drain all ddl jobs from ddlPuller
 	for {
-		ts, job := m.ddlPuller.PopFrontDDL()
+		_, job := m.ddlPuller.PopFrontDDL()
 		// no more ddl jobs
 		if job == nil {
-			m.schema.schemaStorage.AdvanceResolvedTs(ts)
-			if m.redoDDLManager.Enabled() {
-				err := m.redoDDLManager.UpdateResolvedTs(ctx, ts)
-				if err != nil {
-					return nil, minTableBarrierTs, barrier, err
-				}
-			}
 			break
 		}
 
@@ -205,18 +202,15 @@ func (m *ddlManager) tick(
 			log.Info("handle a ddl job",
 				zap.String("namespace", m.changfeedID.Namespace),
 				zap.String("ID", m.changfeedID.ID),
-				zap.Any("ddlJob", job))
-			events, err := m.schema.BuildDDLEvents(job)
+				zap.Int64("tableID", job.TableID),
+				zap.Int64("jobID", job.ID),
+				zap.String("query", job.Query),
+				zap.Uint64("finishedTs", job.BinlogInfo.FinishedTS),
+			)
+			events, err := m.schema.BuildDDLEvents(ctx, job)
 			if err != nil {
 				return nil, minTableBarrierTs, barrier, err
 			}
-			// Apply ddl to update changefeed schema.
-			err = m.schema.HandleDDL(job)
-			if err != nil {
-				return nil, minTableBarrierTs, barrier, err
-			}
-			// Clear the table cache after the schema is updated.
-			m.cleanCache()
 
 			for _, event := range events {
 				// If changefeed is in BDRMode, skip ddl.
@@ -240,7 +234,6 @@ func (m *ddlManager) tick(
 			}
 
 			// Send DDL events to redo log.
-			// Fixme: get redo resolvedTs from redo log.
 			if m.redoDDLManager.Enabled() {
 				for _, event := range events {
 					err := m.redoDDLManager.EmitDDLEvent(ctx, event)
@@ -252,9 +245,21 @@ func (m *ddlManager) tick(
 		}
 	}
 
-	// Use ddlPuller ResolvedTs to update ddlResolvedTs.
-	if m.ddlResolvedTs <= m.ddlPuller.ResolvedTs() {
-		m.ddlResolvedTs = m.ddlPuller.ResolvedTs()
+	// advance resolvedTs
+	ddlRts := m.ddlPuller.ResolvedTs()
+	m.schema.AdvanceResolvedTs(ddlRts)
+	if m.redoDDLManager.Enabled() {
+		err := m.redoDDLManager.UpdateResolvedTs(ctx, ddlRts)
+		if err != nil {
+			return nil, minTableBarrierTs, barrier, err
+		}
+		redoFlushedDDLRts := m.redoDDLManager.GetResolvedTs()
+		if redoFlushedDDLRts < ddlRts {
+			ddlRts = redoFlushedDDLRts
+		}
+	}
+	if m.ddlResolvedTs <= ddlRts {
+		m.ddlResolvedTs = ddlRts
 	}
 
 	nextDDL := m.getNextDDL()
@@ -271,14 +276,7 @@ func (m *ddlManager) tick(
 			log.Panic("Downstream type is not DB, it never happens in current version")
 		}
 
-		// TiCDC guarantees all dml(s) that happen before a ddl was sent to
-		// downstream when this ddl is sent. So, we need to wait checkpointTs is
-		// fullyBlocked at ddl commitTs (equivalent to ddl commitTs here) before we
-		// execute the next ddl.
-		// For example, let say there are some events are replicated by cdc:
-		// [dml-1(ts=5), dml-2(ts=8), ddl-1(ts=11), ddl-2(ts=12)].
-		// We need to wait `checkpointTs == ddlCommitTs(ts=11)` before execute ddl-1.
-		if m.checkpointTs == nextDDL.CommitTs {
+		if m.shouldExecDDL(nextDDL) {
 			log.Info("execute a ddl event",
 				zap.String("query", nextDDL.Query),
 				zap.Uint64("commitTs", nextDDL.CommitTs),
@@ -286,7 +284,6 @@ func (m *ddlManager) tick(
 
 			if m.executingDDL == nil {
 				m.executingDDL = nextDDL
-				m.cleanCache()
 			}
 
 			err := m.executeDDL(ctx)
@@ -299,6 +296,38 @@ func (m *ddlManager) tick(
 	minTableBarrierTs, barrier = m.barrier()
 
 	return tableIDs, minTableBarrierTs, barrier, nil
+}
+
+func (m *ddlManager) shouldExecDDL(nextDDL *model.DDLEvent) bool {
+	// TiCDC guarantees all dml(s) that happen before a ddl was sent to
+	// downstream when this ddl is sent. So, we need to wait checkpointTs is
+	// fullyBlocked at ddl commitTs (equivalent to ddl commitTs here) before we
+	// execute the next ddl.
+	// For example, let say there are some events are replicated by cdc:
+	// [dml-1(ts=5), dml-2(ts=8), dml-3(ts=11), ddl-1(ts=11), ddl-2(ts=12)].
+	// We need to wait `checkpointTs == ddlCommitTs(ts=11)` before executing ddl-1.
+	checkpointReachBarrier := m.checkpointTs == nextDDL.CommitTs
+
+	redoCheckpointReachBarrier := true
+	redoDDLResolvedTsExceedBarrier := true
+	if m.redoMetaManager.Enabled() {
+		if !m.redoDDLManager.Enabled() {
+			log.Panic("Redo meta manager is enabled but redo ddl manager is not enabled")
+		}
+		flushed := m.redoMetaManager.GetFlushedMeta()
+		// Use the same example as above, let say there are some events are replicated by cdc:
+		// [dml-1(ts=5), dml-2(ts=8), dml-3(ts=11), ddl-1(ts=11), ddl-2(ts=12)].
+		// Suppose redoCheckpointTs=10 and ddl-1(ts=11) is executed, the redo apply operation
+		// would fail when applying the old data dml-3(ts=11) to a new schmea. Therefore, We
+		// need to wait `redoCheckpointTs == ddlCommitTs(ts=11)` before executing ddl-1.
+		redoCheckpointReachBarrier = flushed.CheckpointTs == nextDDL.CommitTs
+
+		// If redo is enabled, m.ddlResolvedTs == redoDDLManager.GetResolvedTs(), so we need to
+		// wait nextDDL to be written to redo log before executing this DDL.
+		redoDDLResolvedTsExceedBarrier = m.ddlResolvedTs >= nextDDL.CommitTs
+	}
+
+	return checkpointReachBarrier && redoCheckpointReachBarrier && redoDDLResolvedTsExceedBarrier
 }
 
 // executeDDL executes ddlManager.executingDDL.
@@ -315,6 +344,13 @@ func (m *ddlManager) executeDDL(ctx context.Context) error {
 			failpoint.Return(nil)
 		}
 	})
+
+	failpoint.Inject("ExecuteDDLSlowly", func() {
+		lag := time.Duration(rand.Intn(5000)) * time.Millisecond
+		log.Warn("execute ddl slowly", zap.Duration("lag", lag))
+		time.Sleep(lag)
+	})
+
 	done, err := m.ddlSink.emitDDLEvent(ctx, m.executingDDL)
 	if err != nil {
 		return err
@@ -329,9 +365,10 @@ func (m *ddlManager) executeDDL(ctx context.Context) error {
 		// Set it to nil first to accelerate GC.
 		m.pendingDDLs[tableName][0] = nil
 		m.pendingDDLs[tableName] = m.pendingDDLs[tableName][1:]
-		m.schema.schemaStorage.DoGC(m.executingDDL.CommitTs - 1)
+		m.schema.DoGC(m.executingDDL.CommitTs - 1)
 		m.justSentDDL = m.executingDDL
 		m.executingDDL = nil
+		m.cleanCache()
 	}
 	return nil
 }
@@ -464,7 +501,8 @@ func (m *ddlManager) allTables(ctx context.Context) ([]*model.TableInfo, error) 
 	log.Debug("changefeed current tables updated",
 		zap.String("namespace", m.changfeedID.Namespace),
 		zap.String("changefeed", m.changfeedID.ID),
-		zap.Uint64("checkpointTs", ts),
+		zap.Uint64("checkpointTs", m.checkpointTs),
+		zap.Uint64("snapshotTs", ts),
 		zap.Any("tables", m.tableInfoCache),
 	)
 	return m.tableInfoCache, nil
@@ -504,16 +542,17 @@ func (m *ddlManager) allPhysicalTables(ctx context.Context) ([]model.TableID, er
 func (m *ddlManager) getSnapshotTs() (ts uint64) {
 	ts = m.checkpointTs
 
-	if m.checkpointTs == m.startTs+1 && m.executingDDL == nil {
-		// If checkpointTs is equal to startTs+1, and executingDDL is nil
-		// it means that the changefeed is just started, and the physicalTablesCache
-		// is empty. So we need to get all tables from the snapshot at the startTs.
+	if m.ddlResolvedTs == m.startTs {
+		// If ddlResolvedTs is equal to startTs it means that the changefeed is just started,
+		// So we need to get all tables from the snapshot at the startTs.
 		ts = m.startTs
 		log.Debug("changefeed is just started, use startTs to get snapshot",
 			zap.String("namespace", m.changfeedID.Namespace),
 			zap.String("changefeed", m.changfeedID.ID),
 			zap.Uint64("startTs", m.startTs),
-			zap.Uint64("checkpointTs", m.checkpointTs))
+			zap.Uint64("checkpointTs", m.checkpointTs),
+			zap.Uint64("ddlResolvedTs", m.ddlResolvedTs),
+		)
 		return
 	}
 

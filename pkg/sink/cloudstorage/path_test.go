@@ -10,6 +10,7 @@
 // distributed under the License is distributed on an "AS IS" BASIS,
 // See the License for the specific language governing permissions and
 // limitations under the License.
+
 package cloudstorage
 
 import (
@@ -47,12 +48,12 @@ func TestGenerateDataFilePath(t *testing.T) {
 	ctx, cancel := context.WithCancel(context.TODO())
 	defer cancel()
 
-	table := VersionedTable{
-		TableName: model.TableName{
+	table := VersionedTableName{
+		TableNameWithPhysicTableID: model.TableName{
 			Schema: "test",
 			Table:  "table1",
 		},
-		Version: 5,
+		TableInfoVersion: 5,
 	}
 
 	dir := t.TempDir()
@@ -192,12 +193,12 @@ func TestGenerateDataFilePathWithIndexFile(t *testing.T) {
 	f.config.DateSeparator = config.DateSeparatorDay.String()
 	f.clock = mockClock
 	mockClock.Set(time.Date(2023, 3, 9, 23, 59, 59, 0, time.UTC))
-	table := VersionedTable{
-		TableName: model.TableName{
+	table := VersionedTableName{
+		TableNameWithPhysicTableID: model.TableName{
 			Schema: "test",
 			Table:  "table1",
 		},
-		Version: 5,
+		TableInfoVersion: 5,
 	}
 	date := f.GenerateDateStr()
 	indexFilePath := f.GenerateIndexFilePath(table, date)

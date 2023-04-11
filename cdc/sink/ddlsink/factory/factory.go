@@ -15,6 +15,7 @@ package factory
 
 import (
 	"context"
+	"net/url"
 	"strings"
 
 	"github.com/pingcap/tiflow/cdc/sink/ddlsink"
@@ -36,9 +37,9 @@ func New(
 	sinkURIStr string,
 	cfg *config.ReplicaConfig,
 ) (ddlsink.Sink, error) {
-	sinkURI, err := config.GetSinkURIAndAdjustConfigWithSinkURI(sinkURIStr, cfg)
+	sinkURI, err := url.Parse(sinkURIStr)
 	if err != nil {
-		return nil, err
+		return nil, cerror.WrapError(cerror.ErrSinkURIInvalid, err)
 	}
 	scheme := strings.ToLower(sinkURI.Scheme)
 	switch scheme {

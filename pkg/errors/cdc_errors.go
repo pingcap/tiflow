@@ -499,10 +499,6 @@ var (
 		"capture suicide",
 		errors.RFCCodeText("CDC:ErrCaptureSuicide"),
 	)
-	ErrNewCaptureFailed = errors.Normalize(
-		"new capture failed",
-		errors.RFCCodeText("CDC:ErrNewCaptureFailed"),
-	)
 	ErrCaptureRegister = errors.Normalize(
 		"capture register to etcd failed",
 		errors.RFCCodeText("CDC:ErrCaptureRegister"),
@@ -790,6 +786,10 @@ var (
 	ErrUpstreamClosed = errors.Normalize(
 		"upstream has been closed",
 		errors.RFCCodeText("CDC:ErrUpstreamClosed"),
+	)
+	ErrUpstreamHasRunningImport = errors.Normalize(
+		"upstream has running import tasks, upstream-id: %d",
+		errors.RFCCodeText("CDC:ErrUpstreamHasRunningImport"),
 	)
 
 	// ReplicationSet error

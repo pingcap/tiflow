@@ -47,7 +47,7 @@ type dmlWorker struct {
 	// tableEvents maintains a mapping of <table, []eventFragment>.
 	tableEvents *tableEventsMap
 	// fileSize maintains a mapping of <table, file size>.
-	fileSize          map[cloudstorage.VersionedTable]uint64
+	fileSize          map[cloudstorage.VersionedTableName]uint64
 	isClosed          uint64
 	statistics        *metrics.Statistics
 	filePathGenerator *cloudstorage.FilePathGenerator
@@ -58,17 +58,17 @@ type dmlWorker struct {
 
 type tableEventsMap struct {
 	mu        sync.Mutex
-	fragments map[cloudstorage.VersionedTable][]eventFragment
+	fragments map[cloudstorage.VersionedTableName][]eventFragment
 }
 
 func newTableEventsMap() *tableEventsMap {
 	return &tableEventsMap{
-		fragments: make(map[cloudstorage.VersionedTable][]eventFragment),
+		fragments: make(map[cloudstorage.VersionedTableName][]eventFragment),
 	}
 }
 
 type wrappedTable struct {
-	tableName model.TableName
+	cloudstorage.VersionedTableName
 	tableInfo *model.TableInfo
 }
 
@@ -93,7 +93,7 @@ func newDMLWorker(
 		config:            config,
 		tableEvents:       newTableEventsMap(),
 		flushNotifyCh:     make(chan flushTask, 1),
-		fileSize:          make(map[cloudstorage.VersionedTable]uint64),
+		fileSize:          make(map[cloudstorage.VersionedTableName]uint64),
 		statistics:        statistics,
 		filePathGenerator: cloudstorage.NewFilePathGenerator(config, storage, extension, clock),
 		bufferPool: sync.Pool{
@@ -143,10 +143,7 @@ func (d *dmlWorker) flushMessages(ctx context.Context) error {
 				return nil
 			}
 			for _, tbl := range task.targetTables {
-				table := cloudstorage.VersionedTable{
-					TableName: tbl.tableName,
-					Version:   tbl.tableInfo.Version,
-				}
+				table := tbl.VersionedTableName
 				d.tableEvents.mu.Lock()
 				events := make([]eventFragment, len(d.tableEvents.fragments[table]))
 				copy(events, d.tableEvents.fragments[table])
@@ -184,7 +181,7 @@ func (d *dmlWorker) flushMessages(ctx context.Context) error {
 				indexFilePath := d.filePathGenerator.GenerateIndexFilePath(table, date)
 
 				// first write the index file to external storage.
-				// the file content is simply the last elemement of the data file path
+				// the file content is simply the last element of the data file path
 				err = d.writeIndexFile(ctx, indexFilePath, path.Base(dataFilePath)+"\n")
 				if err != nil {
 					log.Error("failed to write index file to external storage",
@@ -214,8 +211,8 @@ func (d *dmlWorker) flushMessages(ctx context.Context) error {
 				log.Debug("write file to storage success", zap.Int("workerID", d.id),
 					zap.String("namespace", d.changeFeedID.Namespace),
 					zap.String("changefeed", d.changeFeedID.ID),
-					zap.String("schema", table.Schema),
-					zap.String("table", table.Table),
+					zap.String("schema", table.TableNameWithPhysicTableID.Schema),
+					zap.String("table", table.TableNameWithPhysicTableID.Table),
 					zap.String("path", dataFilePath),
 				)
 			}
@@ -229,12 +226,12 @@ func (d *dmlWorker) flushMessages(ctx context.Context) error {
 // if it hasn't been created when a DDL event was executed.
 func (d *dmlWorker) writeSchemaFile(
 	ctx context.Context,
-	table cloudstorage.VersionedTable,
+	table cloudstorage.VersionedTableName,
 	tableInfo *model.TableInfo,
 ) error {
 	if ok := d.filePathGenerator.Contains(table); !ok {
 		var tableDetail cloudstorage.TableDefinition
-		tableDetail.FromTableInfo(tableInfo)
+		tableDetail.FromTableInfo(tableInfo, table.TableInfoVersion)
 		path := cloudstorage.GenerateSchemaFilePath(tableDetail)
 		// the file may have been created when a DDL event was executed.
 		exist, err := d.storage.FileExists(ctx, path)
@@ -336,15 +333,7 @@ func (d *dmlWorker) dispatchFlushTasks(ctx context.Context,
 				log.Debug("flush task is emitted successfully when flush interval exceeds",
 					zap.Any("tables", task.targetTables))
 				for elem := range tableSet {
-					// we should get TableName using elem.tableName instead of
-					// elem.tableInfo.TableName because the former one contains
-					// the physical table id (useful for partition table)
-					// recorded in mounter while the later one does not.
-					// TODO: handle TableID of model.TableInfo.TableName properly.
-					tbl := cloudstorage.VersionedTable{
-						TableName: elem.tableName,
-						Version:   elem.tableInfo.Version,
-					}
+					tbl := elem.VersionedTableName
 					d.fileSize[tbl] = 0
 				}
 				tableSet = make(map[wrappedTable]struct{})
@@ -360,8 +349,8 @@ func (d *dmlWorker) dispatchFlushTasks(ctx context.Context,
 			d.tableEvents.mu.Unlock()
 
 			key := wrappedTable{
-				tableName: frag.versionedTable.TableName,
-				tableInfo: frag.event.Event.TableInfo,
+				VersionedTableName: table,
+				tableInfo:          frag.event.Event.TableInfo,
 			}
 
 			tableSet[key] = struct{}{}

@@ -14,11 +14,33 @@
 package util
 
 import (
+	"math"
 	"time"
 
+	"github.com/KimMachineGun/automemlimit/memlimit"
+	"github.com/pingcap/log"
+	"github.com/pingcap/tidb/util/memory"
 	"github.com/pingcap/tiflow/pkg/errors"
 	"github.com/shirou/gopsutil/v3/mem"
+	"go.uber.org/zap"
 )
+
+const memoryMax uint64 = math.MaxUint64
+
+// GetMemoryLimit gets the memory limit of current process based on cgroup.
+// If the cgourp is not set or memory.max is set to max, returns the available
+// memory of host.
+func GetMemoryLimit() (uint64, error) {
+	totalMemory, err := memlimit.FromCgroup()
+	if err != nil || totalMemory == memoryMax {
+		log.Info("no cgroup memory limit", zap.Error(err))
+		totalMemory, err = memory.MemTotal()
+		if err != nil {
+			return 0, errors.Trace(err)
+		}
+	}
+	return totalMemory, nil
+}
 
 // CheckMemoryUsage checks if the memory usage is less than the limit.
 func CheckMemoryUsage(limit float64) (bool, error) {

@@ -56,9 +56,9 @@ func newForTest(ctx context.Context,
 	cfg *config.ReplicaConfig,
 	errCh chan error,
 ) (*SinkFactory, error) {
-	sinkURI, err := config.GetSinkURIAndAdjustConfigWithSinkURI(sinkURIStr, cfg)
+	sinkURI, err := url.Parse(sinkURIStr)
 	if err != nil {
-		return nil, err
+		return nil, cerror.WrapError(cerror.ErrSinkURIInvalid, err)
 	}
 
 	s := &SinkFactory{}
@@ -104,7 +104,7 @@ func TestSinkFactory(t *testing.T) {
 	require.NotNil(t, sinkFactory.rowSink)
 
 	tableSink := sinkFactory.CreateTableSink(model.DefaultChangeFeedID("1"),
-		spanz.TableIDToComparableSpan(1), prometheus.NewCounter(prometheus.CounterOpts{}))
+		spanz.TableIDToComparableSpan(1), 0, prometheus.NewCounter(prometheus.CounterOpts{}))
 	require.NotNil(t, tableSink, "table sink can be created")
 
 	sinkFactory.Close()

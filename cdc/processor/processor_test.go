@@ -173,9 +173,6 @@ type mockAgent struct {
 }
 
 func (a *mockAgent) Tick(_ context.Context) (*schedulepb.Barrier, error) {
-	if a.executor.GetTableSpanCount() == 0 {
-		return nil, nil
-	}
 	return nil, nil
 }
 
@@ -217,6 +214,7 @@ func TestTableExecutorAddingTableIndirectly(t *testing.T) {
 	require.Equal(t, model.Ts(0), stats.ReceivedMaxCommitTs)
 	require.Equal(t, model.Ts(20), stats.ReceivedMaxResolvedTs)
 	require.Len(t, p.sinkManager.GetAllCurrentTableSpans(), 1)
+	require.Equal(t, 1, p.sinkManager.GetAllCurrentTableSpansCount())
 
 	done := p.IsAddTableSpanFinished(spanz.TableIDToComparableSpan(1), true)
 	require.False(t, done)
@@ -269,7 +267,7 @@ func TestTableExecutorAddingTableIndirectly(t *testing.T) {
 	require.True(t, ok)
 	require.Equal(t, tablepb.TableStateReplicating, state)
 
-	err = p.Close(ctx)
+	err = p.Close()
 	require.Nil(t, err)
 	require.Nil(t, p.agent)
 }
@@ -373,7 +371,7 @@ func TestProcessorClose(t *testing.T) {
 	tester.MustApplyPatches()
 	require.Contains(t, p.changefeed.TaskPositions, p.captureInfo.ID)
 
-	require.Nil(t, p.Close(ctx))
+	require.Nil(t, p.Close())
 	tester.MustApplyPatches()
 	require.Nil(t, p.sinkManager)
 	require.Nil(t, p.sourceManager)
@@ -407,7 +405,7 @@ func TestProcessorClose(t *testing.T) {
 	require.Error(t, err)
 	tester.MustApplyPatches()
 
-	require.Nil(t, p.Close(ctx))
+	require.Nil(t, p.Close())
 	tester.MustApplyPatches()
 	require.Equal(t, p.changefeed.TaskPositions[p.captureInfo.ID].Error, &model.RunningError{
 		Addr:    "127.0.0.1:0000",
@@ -456,7 +454,7 @@ func TestPositionDeleted(t *testing.T) {
 	require.Equal(t, &model.TaskPosition{}, p.changefeed.TaskPositions[p.captureInfo.ID])
 	require.Contains(t, p.changefeed.TaskPositions, p.captureInfo.ID)
 
-	require.Nil(t, p.Close(ctx))
+	require.Nil(t, p.Close())
 	tester.MustApplyPatches()
 }
 
@@ -482,7 +480,7 @@ func TestSchemaGC(t *testing.T) {
 	require.Equal(t, p.schemaStorage.(*mockSchemaStorage).lastGcTs, uint64(49))
 	require.Equal(t, p.lastSchemaTs, uint64(49))
 
-	require.Nil(t, p.Close(ctx))
+	require.Nil(t, p.Close())
 	tester.MustApplyPatches()
 }
 
@@ -574,7 +572,7 @@ func TestUpdateBarrierTs(t *testing.T) {
 	status = p.sinkManager.GetTableStats(span)
 	require.Equal(t, uint64(15), status.BarrierTs)
 
-	require.Nil(t, p.Close(ctx))
+	require.Nil(t, p.Close())
 	tester.MustApplyPatches()
 }
 
@@ -601,6 +599,6 @@ func TestProcessorLiveness(t *testing.T) {
 	*p.agent.(*mockAgent).liveness = model.LivenessCaptureAlive
 	require.Equal(t, model.LivenessCaptureAlive, p.liveness.Load())
 
-	require.Nil(t, p.Close(ctx))
+	require.Nil(t, p.Close())
 	tester.MustApplyPatches()
 }

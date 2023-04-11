@@ -26,34 +26,34 @@ import (
 	"golang.org/x/text/encoding/charmap"
 )
 
-func TestBuildJSONBatchEncoder(t *testing.T) {
+func TestBuildCanalJSONRowEventEncoder(t *testing.T) {
 	t.Parallel()
 	cfg := common.NewConfig(config.ProtocolCanalJSON)
 
-	builder := &jsonBatchEncoderBuilder{config: cfg}
-	encoder, ok := builder.Build().(*JSONBatchEncoder)
+	builder := &jsonRowEventEncoderBuilder{config: cfg}
+	encoder, ok := builder.Build().(*JSONRowEventEncoder)
 	require.True(t, ok)
 	require.False(t, encoder.enableTiDBExtension)
 
 	cfg.EnableTiDBExtension = true
-	builder = &jsonBatchEncoderBuilder{config: cfg}
-	encoder, ok = builder.Build().(*JSONBatchEncoder)
+	builder = &jsonRowEventEncoderBuilder{config: cfg}
+	encoder, ok = builder.Build().(*JSONRowEventEncoder)
 	require.True(t, ok)
 	require.True(t, encoder.enableTiDBExtension)
 }
 
 func TestNewCanalJSONMessage4DML(t *testing.T) {
 	t.Parallel()
-	e := newJSONBatchEncoder(&common.Config{
+	e := newJSONRowEventEncoder(&common.Config{
 		EnableTiDBExtension: false,
 		Terminator:          "",
 	})
 	require.NotNil(t, e)
 
-	encoder, ok := e.(*JSONBatchEncoder)
+	encoder, ok := e.(*JSONRowEventEncoder)
 	require.True(t, ok)
 
-	data, err := encoder.newJSONMessageForDML(testCaseInsert)
+	data, err := newJSONMessageForDML(encoder.builder, encoder.enableTiDBExtension, testCaseInsert)
 	require.Nil(t, err)
 	var msg canalJSONMessageInterface = &JSONMessage{}
 	err = json.Unmarshal(data, msg)
@@ -96,7 +96,7 @@ func TestNewCanalJSONMessage4DML(t *testing.T) {
 		require.Equal(t, item.expectedEncodedValue, obtainedValue)
 	}
 
-	data, err = encoder.newJSONMessageForDML(testCaseUpdate)
+	data, err = newJSONMessageForDML(encoder.builder, encoder.enableTiDBExtension, testCaseUpdate)
 	require.Nil(t, err)
 	jsonMsg = &JSONMessage{}
 	err = json.Unmarshal(data, jsonMsg)
@@ -105,7 +105,7 @@ func TestNewCanalJSONMessage4DML(t *testing.T) {
 	require.NotNil(t, jsonMsg.Old)
 	require.Equal(t, "UPDATE", jsonMsg.EventType)
 
-	data, err = encoder.newJSONMessageForDML(testCaseDelete)
+	data, err = newJSONMessageForDML(encoder.builder, encoder.enableTiDBExtension, testCaseDelete)
 	require.Nil(t, err)
 	jsonMsg = &JSONMessage{}
 	err = json.Unmarshal(data, jsonMsg)
@@ -114,15 +114,15 @@ func TestNewCanalJSONMessage4DML(t *testing.T) {
 	require.Nil(t, jsonMsg.Old)
 	require.Equal(t, "DELETE", jsonMsg.EventType)
 
-	e = newJSONBatchEncoder(&common.Config{
+	e = newJSONRowEventEncoder(&common.Config{
 		EnableTiDBExtension: true,
 		Terminator:          "",
 	})
 	require.NotNil(t, e)
 
-	encoder, ok = e.(*JSONBatchEncoder)
+	encoder, ok = e.(*JSONRowEventEncoder)
 	require.True(t, ok)
-	data, err = encoder.newJSONMessageForDML(testCaseUpdate)
+	data, err = newJSONMessageForDML(encoder.builder, encoder.enableTiDBExtension, testCaseUpdate)
 	require.Nil(t, err)
 
 	withExtension := &canalJSONMessageWithTiDBExtension{}
@@ -135,7 +135,7 @@ func TestNewCanalJSONMessage4DML(t *testing.T) {
 
 func TestNewCanalJSONMessageFromDDL(t *testing.T) {
 	t.Parallel()
-	encoder := &JSONBatchEncoder{builder: newCanalEntryBuilder()}
+	encoder := &JSONRowEventEncoder{builder: newCanalEntryBuilder()}
 	require.NotNil(t, encoder)
 
 	message := encoder.newJSONMessageForDDL(testCaseDDL)
@@ -150,7 +150,7 @@ func TestNewCanalJSONMessageFromDDL(t *testing.T) {
 	require.Equal(t, testCaseDDL.Query, msg.Query)
 	require.Equal(t, "CREATE", msg.EventType)
 
-	encoder = &JSONBatchEncoder{builder: newCanalEntryBuilder(), enableTiDBExtension: true}
+	encoder = &JSONRowEventEncoder{builder: newCanalEntryBuilder(), enableTiDBExtension: true}
 	require.NotNil(t, encoder)
 
 	message = encoder.newJSONMessageForDDL(testCaseDDL)
@@ -165,7 +165,7 @@ func TestNewCanalJSONMessageFromDDL(t *testing.T) {
 
 func TestBatching(t *testing.T) {
 	t.Parallel()
-	encoder := newJSONBatchEncoder(&common.Config{
+	encoder := newJSONRowEventEncoder(&common.Config{
 		EnableTiDBExtension: false,
 		Terminator:          "",
 		MaxMessageBytes:     config.DefaultMaxMessageBytes,
@@ -195,14 +195,18 @@ func TestBatching(t *testing.T) {
 		}
 	}
 
-	require.Len(t, encoder.(*JSONBatchEncoder).messages, 0)
+	require.Len(t, encoder.(*JSONRowEventEncoder).messages, 0)
 }
 
 func TestEncodeCheckpointEvent(t *testing.T) {
 	t.Parallel()
 	var watermark uint64 = 2333
 	for _, enable := range []bool{false, true} {
-		encoder := &JSONBatchEncoder{builder: newCanalEntryBuilder(), enableTiDBExtension: enable}
+		encoder := &JSONRowEventEncoder{
+			builder:             newCanalEntryBuilder(),
+			enableTiDBExtension: enable,
+		}
+
 		require.NotNil(t, encoder)
 
 		msg, err := encoder.EncodeCheckpointEvent(watermark)
@@ -239,7 +243,7 @@ func TestEncodeCheckpointEvent(t *testing.T) {
 func TestCheckpointEventValueMarshal(t *testing.T) {
 	t.Parallel()
 	var watermark uint64 = 1024
-	encoder := &JSONBatchEncoder{
+	encoder := &JSONRowEventEncoder{
 		builder:             newCanalEntryBuilder(),
 		enableTiDBExtension: true,
 	}
@@ -286,7 +290,7 @@ func TestCheckpointEventValueMarshal(t *testing.T) {
 
 func TestDDLEventWithExtensionValueMarshal(t *testing.T) {
 	t.Parallel()
-	encoder := &JSONBatchEncoder{builder: newCanalEntryBuilder(), enableTiDBExtension: true}
+	encoder := &JSONRowEventEncoder{builder: newCanalEntryBuilder(), enableTiDBExtension: true}
 	require.NotNil(t, encoder)
 
 	message := encoder.newJSONMessageForDDL(testCaseDDL)
@@ -323,7 +327,7 @@ func TestDDLEventWithExtensionValueMarshal(t *testing.T) {
 }
 
 func TestCanalJSONAppendRowChangedEventWithCallback(t *testing.T) {
-	encoder := newJSONBatchEncoder(&common.Config{
+	encoder := newJSONRowEventEncoder(&common.Config{
 		EnableTiDBExtension: true,
 		Terminator:          "",
 		MaxMessageBytes:     config.DefaultMaxMessageBytes,
@@ -421,13 +425,13 @@ func TestMaxMessageBytes(t *testing.T) {
 	// the test message length is smaller than max-message-bytes
 	maxMessageBytes := 300
 	cfg := common.NewConfig(config.ProtocolCanalJSON).WithMaxMessageBytes(maxMessageBytes)
-	encoder := NewJSONBatchEncoderBuilder(cfg).Build()
+	encoder := NewJSONRowEventEncoderBuilder(cfg).Build()
 	err := encoder.AppendRowChangedEvent(ctx, topic, testEvent, nil)
 	require.Nil(t, err)
 
 	// the test message length is larger than max-message-bytes
 	cfg = cfg.WithMaxMessageBytes(100)
-	encoder = NewJSONBatchEncoderBuilder(cfg).Build()
+	encoder = NewJSONRowEventEncoderBuilder(cfg).Build()
 	err = encoder.AppendRowChangedEvent(ctx, topic, testEvent, nil)
 	require.NotNil(t, err)
 }

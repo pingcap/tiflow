@@ -36,7 +36,7 @@ type batchDecoder struct {
 func NewBatchDecoder(data []byte,
 	enableTiDBExtension bool,
 	terminator string,
-) codec.EventBatchDecoder {
+) codec.RowEventDecoder {
 	return &batchDecoder{
 		data:                data,
 		msg:                 nil,
@@ -45,7 +45,7 @@ func NewBatchDecoder(data []byte,
 	}
 }
 
-// HasNext implements the EventBatchDecoder interface
+// HasNext implements the RowEventDecoder interface
 func (b *batchDecoder) HasNext() (model.MessageType, bool, error) {
 	var (
 		msg         canalJSONMessageInterface = &JSONMessage{}
@@ -86,7 +86,7 @@ func (b *batchDecoder) HasNext() (model.MessageType, bool, error) {
 	return b.msg.messageType(), true, nil
 }
 
-// NextRowChangedEvent implements the EventBatchDecoder interface
+// NextRowChangedEvent implements the RowEventDecoder interface
 // `HasNext` should be called before this.
 func (b *batchDecoder) NextRowChangedEvent() (*model.RowChangedEvent, error) {
 	if b.msg == nil || b.msg.messageType() != model.MessageTypeRow {
@@ -101,7 +101,7 @@ func (b *batchDecoder) NextRowChangedEvent() (*model.RowChangedEvent, error) {
 	return result, nil
 }
 
-// NextDDLEvent implements the EventBatchDecoder interface
+// NextDDLEvent implements the RowEventDecoder interface
 // `HasNext` should be called before this.
 func (b *batchDecoder) NextDDLEvent() (*model.DDLEvent, error) {
 	if b.msg == nil || b.msg.messageType() != model.MessageTypeDDL {
@@ -114,7 +114,7 @@ func (b *batchDecoder) NextDDLEvent() (*model.DDLEvent, error) {
 	return result, nil
 }
 
-// NextResolvedEvent implements the EventBatchDecoder interface
+// NextResolvedEvent implements the RowEventDecoder interface
 // `HasNext` should be called before this.
 func (b *batchDecoder) NextResolvedEvent() (uint64, error) {
 	if b.msg == nil || b.msg.messageType() != model.MessageTypeResolved {

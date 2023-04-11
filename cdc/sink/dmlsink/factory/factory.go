@@ -15,6 +15,7 @@ package factory
 
 import (
 	"context"
+	"net/url"
 	"strings"
 
 	"github.com/pingcap/log"
@@ -52,9 +53,9 @@ func New(
 	cfg *config.ReplicaConfig,
 	errCh chan error,
 ) (*SinkFactory, error) {
-	sinkURI, err := config.GetSinkURIAndAdjustConfigWithSinkURI(sinkURIStr, cfg)
+	sinkURI, err := url.Parse(sinkURIStr)
 	if err != nil {
-		return nil, err
+		return nil, cerror.WrapError(cerror.ErrSinkURIInvalid, err)
 	}
 
 	s := &SinkFactory{}
@@ -96,15 +97,17 @@ func New(
 
 // CreateTableSink creates a TableSink by schema.
 func (s *SinkFactory) CreateTableSink(
-	changefeedID model.ChangeFeedID, span tablepb.Span, totalRowsCounter prometheus.Counter,
+	changefeedID model.ChangeFeedID,
+	span tablepb.Span, startTs model.Ts,
+	totalRowsCounter prometheus.Counter,
 ) tablesink.TableSink {
 	if s.txnSink != nil {
-		return tablesink.New(changefeedID, span,
-			s.txnSink, &dmlsink.TxnEventAppender{}, totalRowsCounter)
+		return tablesink.New(changefeedID, span, startTs, s.txnSink,
+			&dmlsink.TxnEventAppender{TableSinkStartTs: startTs}, totalRowsCounter)
 	}
 
-	return tablesink.New(changefeedID, span,
-		s.rowSink, &dmlsink.RowChangeEventAppender{}, totalRowsCounter)
+	return tablesink.New(changefeedID, span, startTs, s.rowSink,
+		&dmlsink.RowChangeEventAppender{}, totalRowsCounter)
 }
 
 // CreateTableSinkForConsumer creates a TableSink by schema for consumer.
@@ -112,17 +115,20 @@ func (s *SinkFactory) CreateTableSink(
 // CreateTableSinkForConsumer will not create a new sink for each table.
 // NOTICE: This only used for the consumer. Please do not use it in the processor.
 func (s *SinkFactory) CreateTableSinkForConsumer(
-	changefeedID model.ChangeFeedID, span tablepb.Span, totalRowsCounter prometheus.Counter,
+	changefeedID model.ChangeFeedID,
+	span tablepb.Span, startTs model.Ts,
+	totalRowsCounter prometheus.Counter,
 ) tablesink.TableSink {
 	if s.txnSink != nil {
-		return tablesink.New(changefeedID, span,
+		return tablesink.New(changefeedID, span, startTs, s.txnSink,
 			// IgnoreStartTs is true because the consumer can
 			// **not** get the start ts of the row changed event.
-			s.txnSink, &dmlsink.TxnEventAppender{IgnoreStartTs: true}, totalRowsCounter)
+			&dmlsink.TxnEventAppender{TableSinkStartTs: startTs, IgnoreStartTs: true},
+			totalRowsCounter)
 	}
 
-	return tablesink.New(changefeedID, span,
-		s.rowSink, &dmlsink.RowChangeEventAppender{}, totalRowsCounter)
+	return tablesink.New(changefeedID, span, startTs, s.rowSink,
+		&dmlsink.RowChangeEventAppender{}, totalRowsCounter)
 }
 
 // Close closes the sink.
