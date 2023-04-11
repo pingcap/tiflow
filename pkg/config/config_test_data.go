@@ -52,6 +52,7 @@ const (
         "rule": "r2"
       }
     ],
+    "enable-partition-separator": true,
     "protocol": "open-protocol"
   },
   "consistent": {

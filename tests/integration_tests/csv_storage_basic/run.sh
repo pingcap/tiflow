@@ -8,13 +8,6 @@ WORK_DIR=$OUT_DIR/$TEST_NAME
 CDC_BINARY=cdc.test
 SINK_TYPE=$1
 
-rm -rf "$WORK_DIR"
-mkdir -p "$WORK_DIR"
-
-stop() {
-	stop_tidb_cluster
-}
-
 function run() {
 	# Now, we run the storage tests in mysql sink tests.
 	# It's a temporary solution, we will move it to a new test pipeline later.
@@ -22,6 +15,7 @@ function run() {
 		return
 	fi
 
+	rm -rf $WORK_DIR && mkdir -p $WORK_DIR
 	start_tidb_cluster --workdir $WORK_DIR
 	cd $WORK_DIR
 	run_cdc_server --workdir $WORK_DIR --binary $CDC_BINARY
@@ -37,7 +31,7 @@ function run() {
 	check_sync_diff $WORK_DIR $CUR/conf/diff_config.toml 100
 }
 
-trap stop EXIT
+trap stop_tidb_cluster EXIT
 run $*
 check_logs $WORK_DIR
 echo "[$(date)] <<<<<< run test case $TEST_NAME success! >>>>>>"
