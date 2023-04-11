@@ -21,55 +21,51 @@ import (
 
 // IntegrityConfig represents integrity check config for a changefeed.
 type IntegrityConfig struct {
-	IntegrityCheckLevel   IntegrityCheckLevelType   `toml:"integrity-check-level" json:"integrity-check-level"`
-	CorruptionHandleLevel CorruptionHandleLevelType `toml:"corruption-handle-level" json:"corruption-handle-level"`
+	IntegrityCheckLevel   string `toml:"integrity-check-level" json:"integrity-check-level"`
+	CorruptionHandleLevel string `toml:"corruption-handle-level" json:"corruption-handle-level"`
 }
-
-// IntegrityCheckLevelType is the level of the integrity check level's type.
-type IntegrityCheckLevelType string
 
 const (
 	// IntegrityCheckLevelNone means no integrity check, the default value.
-	IntegrityCheckLevelNone IntegrityCheckLevelType = "none"
+	IntegrityCheckLevelNone string = "none"
 	// IntegrityCheckLevelCorrectness means check each row data correctness.
-	IntegrityCheckLevelCorrectness IntegrityCheckLevelType = "correctness"
+	IntegrityCheckLevelCorrectness string = "correctness"
 )
-
-// CorruptionHandleLevelType is the level of the corruption handle level's type.
-type CorruptionHandleLevelType string
 
 const (
 	// CorruptionHandleLevelWarn is the default value,
 	// log the corrupted event, and mark it as corrupted and send it to the downstream.
-	CorruptionHandleLevelWarn CorruptionHandleLevelType = "warn"
+	CorruptionHandleLevelWarn string = "warn"
 	// CorruptionHandleLevelError means log the corrupted event, and then stopped the changefeed.
-	CorruptionHandleLevelError CorruptionHandleLevelType = "error"
+	CorruptionHandleLevelError string = "error"
 )
 
-func (t IntegrityCheckLevelType) valid() bool {
-	switch t {
-	case IntegrityCheckLevelNone, IntegrityCheckLevelCorrectness:
-		return true
-	default:
-	}
-	return false
-}
-
-func (t CorruptionHandleLevelType) valid() bool {
-	switch t {
-	case CorruptionHandleLevelWarn, CorruptionHandleLevelError:
-		return true
-	default:
-	}
-	return false
-}
+//func (t IntegrityCheckLevelType) valid() bool {
+//	switch t {
+//	case IntegrityCheckLevelNone, IntegrityCheckLevelCorrectness:
+//		return true
+//	default:
+//	}
+//	return false
+//}
+//
+//func (t CorruptionHandleLevelType) valid() bool {
+//	switch t {
+//	case CorruptionHandleLevelWarn, CorruptionHandleLevelError:
+//		return true
+//	default:
+//	}
+//	return false
+//}
 
 // Validate the integrity config.
 func (c *IntegrityConfig) Validate() error {
-	if !c.IntegrityCheckLevel.valid() {
+	if c.IntegrityCheckLevel != IntegrityCheckLevelNone &&
+		c.IntegrityCheckLevel != IntegrityCheckLevelCorrectness {
 		return cerror.ErrInvalidReplicaConfig.GenWithStackByArgs()
 	}
-	if !c.CorruptionHandleLevel.valid() {
+	if c.CorruptionHandleLevel != CorruptionHandleLevelWarn &&
+		c.CorruptionHandleLevel != CorruptionHandleLevelError {
 		return cerror.ErrInvalidReplicaConfig.GenWithStackByArgs()
 	}
 

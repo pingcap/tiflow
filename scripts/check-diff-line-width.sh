@@ -21,7 +21,7 @@ set -e
 BASE_HASH=$(git --no-pager log -E --grep='\(#[0-9]+\)$' -n 1 --format=format:%H)
 # Please contact TiFlow maintainers before changing following settings.
 WARN_THRESHOLD=80
-ERROR_THRESHOLD=120
+ERROR_THRESHOLD=100
 
 git --no-pager diff $BASE_HASH -U0 -- cdc pkg cmd \
 	-- ':(exclude)*_gen.go' \
