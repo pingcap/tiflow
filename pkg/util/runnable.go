@@ -29,9 +29,14 @@ import (
 type Runnable interface {
 	// Run all sub goroutines and block the current one. If an error occurs
 	// in any sub goroutine, return it and cancel all others.
+	//
+	// Generally a Runnable object can have some internal resources, like file
+	// descriptors, channels or memory buffers. Those resources may be still
+	// necessary by other components after this Runnable is returned. We can use
+	// Close to release them.
 	Run(ctx context.Context) error
 	// WaitForReady blocks the current goroutine until `Run` initializes itself.
 	WaitForReady(ctx context.Context)
-	// Close all internal resources.
+	// Close all internal resources synchronously.
 	Close()
 }

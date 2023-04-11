@@ -604,11 +604,14 @@ func (p *processor) lazyInitImpl(etcdCtx cdcContext.Context) (err error) {
 		return nil
 	}
 
-	// TODO: maybe put all things into global vars or changefeed vars is better.
+	// Here we use a seperated context for sub-components, so we can custom the
+	// order of stopping all sub-components when closing the processor.
 	prcCtx := cdcContext.NewContext(context.Background(), etcdCtx.GlobalVars())
 	prcCtx = cdcContext.WithChangefeedVars(prcCtx, etcdCtx.ChangefeedVars())
 	p.globalVars = prcCtx.GlobalVars()
 
+	// NOTE: We must call contextutil.Put* to put some variables into the new context.
+	// Maybe it's better to put all things into global vars or changefeed vars.
 	stdCtx := contextutil.PutTimezoneInCtx(prcCtx, contextutil.TimezoneFromCtx(etcdCtx))
 	stdCtx = contextutil.PutChangefeedIDInCtx(stdCtx, p.changefeedID)
 	stdCtx = contextutil.PutRoleInCtx(stdCtx, util.RoleProcessor)
@@ -870,6 +873,7 @@ func (p *processor) refreshMetrics() {
 	p.metricRemainKVEventGauge.Set(float64(sortEngineReceivedEvents - tableSinksReceivedEvents))
 }
 
+// Close closes the processor. It must be called explicitly to stop all sub-components.
 func (p *processor) Close() error {
 	log.Info("processor closing ...",
 		zap.String("namespace", p.changefeedID.Namespace),
