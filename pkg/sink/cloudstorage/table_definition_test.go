@@ -355,7 +355,7 @@ func TestTableDefinition(t *testing.T) {
 	columns = append(columns, col)
 
 	tableInfo.TableInfo = &timodel.TableInfo{Columns: columns}
-	def.FromTableInfo(tableInfo)
+	def.FromTableInfo(tableInfo, tableInfo.Version)
 	encodedDef, err := json.MarshalIndent(def, "", "    ")
 	require.NoError(t, err)
 	require.JSONEq(t, `{
@@ -394,6 +394,7 @@ func TestTableDefinition(t *testing.T) {
 
 	def = TableDefinition{}
 	event := &model.DDLEvent{
+		CommitTs:  tableInfo.Version,
 		Type:      timodel.ActionAddColumn,
 		Query:     "alter table test.table1 add Birthday date",
 		TableInfo: tableInfo,
