@@ -40,24 +40,6 @@ const (
 	CorruptionHandleLevelError string = "error"
 )
 
-//func (t IntegrityCheckLevelType) valid() bool {
-//	switch t {
-//	case IntegrityCheckLevelNone, IntegrityCheckLevelCorrectness:
-//		return true
-//	default:
-//	}
-//	return false
-//}
-//
-//func (t CorruptionHandleLevelType) valid() bool {
-//	switch t {
-//	case CorruptionHandleLevelWarn, CorruptionHandleLevelError:
-//		return true
-//	default:
-//	}
-//	return false
-//}
-
 // Validate the integrity config.
 func (c *IntegrityConfig) Validate() error {
 	if c.IntegrityCheckLevel != IntegrityCheckLevelNone &&
