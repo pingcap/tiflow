@@ -604,7 +604,7 @@ func (p *processor) lazyInitImpl(etcdCtx cdcContext.Context) (err error) {
 		return nil
 	}
 
-	// Here we use a seperated context for sub-components, so we can custom the
+	// Here we use a separated context for sub-components, so we can custom the
 	// order of stopping all sub-components when closing the processor.
 	prcCtx := cdcContext.NewContext(context.Background(), etcdCtx.GlobalVars())
 	prcCtx = cdcContext.WithChangefeedVars(prcCtx, etcdCtx.ChangefeedVars())
