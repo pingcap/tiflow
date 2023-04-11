@@ -145,7 +145,7 @@ func NewSnapshotFromMeta(
 
 	for _, dbinfo := range dbinfos {
 		if filter.ShouldIgnoreSchema(dbinfo.Name.O) {
-			log.Info("ignore database", zap.String("db", dbinfo.Name.O))
+			log.Debug("ignore database", zap.String("db", dbinfo.Name.O))
 			continue
 		}
 		vid := newVersionedID(dbinfo.ID, tag)
@@ -163,7 +163,7 @@ func NewSnapshotFromMeta(
 		for _, tableInfo := range tableInfos {
 			tableInfo := model.WrapTableInfo(dbinfo.ID, dbinfo.Name.O, currentTs, tableInfo)
 			if filter.ShouldIgnoreTable(tableInfo.TableName.Schema, tableInfo.TableName.Table) {
-				log.Info("ignore table", zap.String("table", tableInfo.TableName.String()))
+				log.Debug("ignore table", zap.String("table", tableInfo.TableName.String()))
 				continue
 			}
 			snap.inner.tables.ReplaceOrInsert(versionedID{
