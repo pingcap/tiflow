@@ -2008,6 +2008,17 @@ var doc = `{
                 }
             }
         },
+        "v2.IntegrityConfig": {
+            "type": "object",
+            "properties": {
+                "corruption_handle_level": {
+                    "type": "string"
+                },
+                "integrity_check_level": {
+                    "type": "string"
+                }
+            }
+        },
         "v2.LogLevelReq": {
             "type": "object",
             "properties": {
@@ -2079,6 +2090,9 @@ var doc = `{
                 },
                 "ignore_ineligible_table": {
                     "type": "boolean"
+                },
+                "integrity": {
+                    "$ref": "#/definitions/v2.IntegrityConfig"
                 },
                 "memory_quota": {
                     "type": "integer"
