@@ -17,6 +17,7 @@ import (
 	"bytes"
 	"context"
 	"encoding/binary"
+	"strconv"
 
 	"github.com/pingcap/errors"
 	"github.com/pingcap/log"
@@ -34,6 +35,8 @@ type BatchEncoder struct {
 	callbackBuff []func()
 	curBatchSize int
 
+	enableRowChecksum bool
+
 	// configs
 	MaxMessageBytes int
 	MaxBatchSize    int
@@ -47,6 +50,12 @@ func (d *BatchEncoder) AppendRowChangedEvent(
 	callback func(),
 ) error {
 	keyMsg, valueMsg := rowChangeToMsg(e)
+	if d.enableRowChecksum {
+		keyMsg.Checksum = strconv.FormatUint(uint64(e.Checksum), 10)
+		keyMsg.OldChecksum = strconv.FormatUint(uint64(e.PreChecksum), 10)
+		keyMsg.Corrupted = e.Corrupted
+	}
+
 	key, err := keyMsg.Encode()
 	if err != nil {
 		return errors.Trace(err)
@@ -195,6 +204,7 @@ func (b *batchEncoderBuilder) Build() codec.RowEventEncoder {
 	encoder := NewBatchEncoder()
 	encoder.(*BatchEncoder).MaxMessageBytes = b.config.MaxMessageBytes
 	encoder.(*BatchEncoder).MaxBatchSize = b.config.MaxBatchSize
+	encoder.(*BatchEncoder).enableRowChecksum = b.config.EnableRowChecksum
 
 	return encoder
 }
