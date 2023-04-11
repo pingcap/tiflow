@@ -81,7 +81,7 @@ type processor struct {
 
 	lazyInit func(ctx cdcContext.Context) error
 	newAgent func(
-		cdcContext.Context, *model.Liveness, uint64, *config.SchedulerConfig,
+		context.Context, *model.Liveness, uint64, *config.SchedulerConfig,
 	) (scheduler.Agent, error)
 	cfg *config.SchedulerConfig
 
@@ -607,11 +607,12 @@ func (p *processor) lazyInitImpl(etcdCtx cdcContext.Context) (err error) {
 	// TODO: maybe put all things into global vars or changefeed vars is better.
 	prcCtx := cdcContext.NewContext(context.Background(), etcdCtx.GlobalVars())
 	prcCtx = cdcContext.WithChangefeedVars(prcCtx, etcdCtx.ChangefeedVars())
-	stdCtx := contextutil.PutTimezoneInCtx(prcCtx, contextutil.TimezoneFromCtx(etcdCtx))
-	stdCtx = contextutil.PutChangefeedIDInCtx(prcCtx, p.changefeedID)
-	stdCtx = contextutil.PutRoleInCtx(stdCtx, util.RoleProcessor)
-	stdCtx = contextutil.PutCaptureAddrInCtx(stdCtx, prcCtx.GlobalVars().CaptureInfo.AdvertiseAddr)
 	p.globalVars = prcCtx.GlobalVars()
+
+	stdCtx := contextutil.PutTimezoneInCtx(prcCtx, contextutil.TimezoneFromCtx(etcdCtx))
+	stdCtx = contextutil.PutChangefeedIDInCtx(stdCtx, p.changefeedID)
+	stdCtx = contextutil.PutRoleInCtx(stdCtx, util.RoleProcessor)
+	stdCtx = contextutil.PutCaptureAddrInCtx(stdCtx, p.globalVars.CaptureInfo.AdvertiseAddr)
 
 	tz := contextutil.TimezoneFromCtx(stdCtx)
 	p.filter, err = filter.NewFilter(p.changefeed.Info.Config, util.GetTimeZoneName(tz))
@@ -669,7 +670,7 @@ func (p *processor) lazyInitImpl(etcdCtx cdcContext.Context) (err error) {
 	// Bind them so that sourceManager can notify sinkManager.r.
 	p.sourceManager.r.OnResolve(p.sinkManager.r.UpdateReceivedSorterResolvedTs)
 
-	p.agent, err = p.newAgent(prcCtx, p.liveness, p.changefeedEpoch, p.cfg)
+	p.agent, err = p.newAgent(stdCtx, p.liveness, p.changefeedEpoch, p.cfg)
 	if err != nil {
 		return err
 	}
@@ -684,15 +685,15 @@ func (p *processor) lazyInitImpl(etcdCtx cdcContext.Context) (err error) {
 }
 
 func (p *processor) newAgentImpl(
-	ctx cdcContext.Context,
+	ctx context.Context,
 	liveness *model.Liveness,
 	changefeedEpoch uint64,
 	cfg *config.SchedulerConfig,
 ) (ret scheduler.Agent, err error) {
-	messageServer := ctx.GlobalVars().MessageServer
-	messageRouter := ctx.GlobalVars().MessageRouter
-	etcdClient := ctx.GlobalVars().EtcdClient
-	captureID := ctx.GlobalVars().CaptureInfo.ID
+	messageServer := p.globalVars.MessageServer
+	messageRouter := p.globalVars.MessageRouter
+	etcdClient := p.globalVars.EtcdClient
+	captureID := p.globalVars.CaptureInfo.ID
 	ret, err = scheduler.NewAgent(
 		ctx, captureID, liveness,
 		messageServer, messageRouter, etcdClient, p, p.changefeedID,
@@ -882,7 +883,7 @@ func (p *processor) Close() error {
 	p.mg.stop(p.changefeedID)
 	p.ddlHandler.stop(p.changefeedID)
 
-	if p.globalVars.SortEngineFactory != nil {
+	if p.globalVars != nil && p.globalVars.SortEngineFactory != nil {
 		if err := p.globalVars.SortEngineFactory.Drop(p.changefeedID); err != nil {
 			log.Error("Processor drop event sort engine fail",
 				zap.String("namespace", p.changefeedID.Namespace),
