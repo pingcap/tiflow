@@ -79,7 +79,6 @@ func NewSchemaStorage(
 	)
 	if meta == nil {
 		snap = schema.NewEmptySnapshot(forceReplicate)
-		// snap.InitPreExistingTables()
 	} else {
 		snap, err = schema.NewSnapshotFromMeta(meta, startTs, forceReplicate, filter)
 		if err != nil {
