@@ -159,7 +159,7 @@ func TestNewEventTableSink(t *testing.T) {
 
 	sink := &mockEventSink{dead: make(chan struct{})}
 	tb := New[*model.SingleTableTxn](
-		model.DefaultChangeFeedID("1"), spanz.TableIDToComparableSpan(1),
+		model.DefaultChangeFeedID("1"), spanz.TableIDToComparableSpan(1), model.Ts(0),
 		sink, &dmlsink.TxnEventAppender{}, prometheus.NewCounter(prometheus.CounterOpts{}))
 
 	require.Equal(t, model.NewResolvedTs(0), tb.maxResolvedTs, "maxResolvedTs should start from 0")
@@ -175,7 +175,7 @@ func TestAppendRowChangedEvents(t *testing.T) {
 
 	sink := &mockEventSink{dead: make(chan struct{})}
 	tb := New[*model.SingleTableTxn](
-		model.DefaultChangeFeedID("1"), spanz.TableIDToComparableSpan(1),
+		model.DefaultChangeFeedID("1"), spanz.TableIDToComparableSpan(1), model.Ts(0),
 		sink, &dmlsink.TxnEventAppender{}, prometheus.NewCounter(prometheus.CounterOpts{}))
 
 	tb.AppendRowChangedEvents(getTestRows()...)
@@ -187,7 +187,7 @@ func TestUpdateResolvedTs(t *testing.T) {
 
 	sink := &mockEventSink{dead: make(chan struct{})}
 	tb := New[*model.SingleTableTxn](
-		model.DefaultChangeFeedID("1"), spanz.TableIDToComparableSpan(1),
+		model.DefaultChangeFeedID("1"), spanz.TableIDToComparableSpan(1), model.Ts(0),
 		sink, &dmlsink.TxnEventAppender{}, prometheus.NewCounter(prometheus.CounterOpts{}))
 
 	tb.AppendRowChangedEvents(getTestRows()...)
@@ -237,7 +237,7 @@ func TestGetCheckpointTs(t *testing.T) {
 
 	sink := &mockEventSink{dead: make(chan struct{})}
 	tb := New[*model.SingleTableTxn](
-		model.DefaultChangeFeedID("1"), spanz.TableIDToComparableSpan(1),
+		model.DefaultChangeFeedID("1"), spanz.TableIDToComparableSpan(1), model.Ts(0),
 		sink, &dmlsink.TxnEventAppender{}, prometheus.NewCounter(prometheus.CounterOpts{}))
 
 	tb.AppendRowChangedEvents(getTestRows()...)
@@ -274,7 +274,7 @@ func TestClose(t *testing.T) {
 
 	sink := &mockEventSink{dead: make(chan struct{})}
 	tb := New[*model.SingleTableTxn](
-		model.DefaultChangeFeedID("1"), spanz.TableIDToComparableSpan(1),
+		model.DefaultChangeFeedID("1"), spanz.TableIDToComparableSpan(1), model.Ts(0),
 		sink, &dmlsink.TxnEventAppender{}, prometheus.NewCounter(prometheus.CounterOpts{}))
 
 	tb.AppendRowChangedEvents(getTestRows()...)
@@ -303,7 +303,7 @@ func TestCloseCancellable(t *testing.T) {
 
 	sink := &mockEventSink{dead: make(chan struct{})}
 	tb := New[*model.SingleTableTxn](
-		model.DefaultChangeFeedID("1"), spanz.TableIDToComparableSpan(1),
+		model.DefaultChangeFeedID("1"), spanz.TableIDToComparableSpan(1), model.Ts(0),
 		sink, &dmlsink.TxnEventAppender{}, prometheus.NewCounter(prometheus.CounterOpts{}))
 
 	tb.AppendRowChangedEvents(getTestRows()...)
@@ -333,7 +333,7 @@ func TestCloseReentrant(t *testing.T) {
 
 	sink := &mockEventSink{dead: make(chan struct{})}
 	tb := New[*model.SingleTableTxn](
-		model.DefaultChangeFeedID("1"), spanz.TableIDToComparableSpan(1),
+		model.DefaultChangeFeedID("1"), spanz.TableIDToComparableSpan(1), model.Ts(0),
 		sink, &dmlsink.TxnEventAppender{}, prometheus.NewCounter(prometheus.CounterOpts{}))
 
 	tb.AppendRowChangedEvents(getTestRows()...)
@@ -366,7 +366,7 @@ func TestCheckpointTsFrozenWhenStopping(t *testing.T) {
 
 	sink := &mockEventSink{dead: make(chan struct{})}
 	tb := New[*model.SingleTableTxn](
-		model.DefaultChangeFeedID("1"), spanz.TableIDToComparableSpan(1),
+		model.DefaultChangeFeedID("1"), spanz.TableIDToComparableSpan(1), model.Ts(0),
 		sink, &dmlsink.TxnEventAppender{}, prometheus.NewCounter(prometheus.CounterOpts{}))
 
 	tb.AppendRowChangedEvents(getTestRows()...)

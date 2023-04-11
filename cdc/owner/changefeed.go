@@ -25,6 +25,7 @@ import (
 	"github.com/pingcap/log"
 	"github.com/pingcap/tidb/errno"
 	"github.com/pingcap/tiflow/cdc/contextutil"
+	"github.com/pingcap/tiflow/cdc/entry"
 	"github.com/pingcap/tiflow/cdc/model"
 	"github.com/pingcap/tiflow/cdc/puller"
 	"github.com/pingcap/tiflow/cdc/redo"
@@ -123,6 +124,7 @@ type changefeed struct {
 		up *upstream.Upstream,
 		startTs uint64,
 		changefeed model.ChangeFeedID,
+		schemaStorage entry.SchemaStorage,
 	) (puller.DDLPuller, error)
 
 	newSink      func(changefeedID model.ChangeFeedID, info *model.ChangeFeedInfo, reportErr func(error)) DDLSink
@@ -172,6 +174,7 @@ func newChangefeed4Test(
 		up *upstream.Upstream,
 		startTs uint64,
 		changefeed model.ChangeFeedID,
+		schemaStorage entry.SchemaStorage,
 	) (puller.DDLPuller, error),
 	newSink func(changefeedID model.ChangeFeedID, info *model.ChangeFeedInfo, reportErr func(err error)) DDLSink,
 	newScheduler func(
@@ -309,7 +312,16 @@ func (c *changefeed) tick(ctx cdcContext.Context, captures map[model.CaptureID]*
 	// Note: There may be some tableBarrierTs larger than otherBarrierTs,
 	// but we can ignore them because they will be handled in the processor.
 	if barrier.GlobalBarrierTs > otherBarrierTs {
+		log.Debug("There are other barriers less than ddl barrier, wait for them",
+			zap.Uint64("otherBarrierTs", otherBarrierTs),
+			zap.Uint64("ddlBarrierTs", barrier.GlobalBarrierTs))
 		barrier.GlobalBarrierTs = otherBarrierTs
+	}
+
+	if minTableBarrierTs > otherBarrierTs {
+		log.Debug("There are other barriers less than min table barrier, wait for them",
+			zap.Uint64("otherBarrierTs", otherBarrierTs),
+			zap.Uint64("ddlBarrierTs", barrier.GlobalBarrierTs))
 		minTableBarrierTs = otherBarrierTs
 	}
 
@@ -545,7 +557,11 @@ LOOP:
 	c.ddlSink = c.newSink(c.id, c.state.Info, ctx.Throw)
 	c.ddlSink.run(cancelCtx)
 
-	c.ddlPuller, err = c.newDDLPuller(cancelCtx, c.state.Info.Config, c.upstream, ddlStartTs, c.id)
+	c.ddlPuller, err = c.newDDLPuller(cancelCtx,
+		c.state.Info.Config,
+		c.upstream, ddlStartTs,
+		c.id,
+		c.schema)
 	if err != nil {
 		return errors.Trace(err)
 	}

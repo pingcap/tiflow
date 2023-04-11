@@ -20,6 +20,7 @@ import (
 	"fmt"
 	"net/http"
 	"net/http/httptest"
+	"path/filepath"
 	"sort"
 	"testing"
 
@@ -37,6 +38,8 @@ import (
 	"github.com/pingcap/tiflow/pkg/util"
 	"github.com/stretchr/testify/require"
 	pd "github.com/tikv/pd/client"
+	clientv3 "go.etcd.io/etcd/client/v3"
+	"go.etcd.io/etcd/tests/v3/integration"
 )
 
 var (
@@ -55,6 +58,11 @@ func TestCreateChangefeed(t *testing.T) {
 	etcdClient := mock_etcd.NewMockCDCEtcdClient(gomock.NewController(t))
 	apiV2 := NewOpenAPIV2ForTest(cp, helpers)
 	router := newRouter(apiV2)
+	integration.BeforeTestExternal(t)
+	testEtcdCluster := integration.NewClusterV3(
+		t, &integration.ClusterConfig{Size: 2},
+	)
+	defer testEtcdCluster.Terminate(t)
 
 	mockUpManager := upstream.NewManager4Test(pdClient)
 	statusProvider := &mockStatusProvider{}
@@ -162,6 +170,9 @@ func TestCreateChangefeed(t *testing.T) {
 	require.Equal(t, http.StatusBadRequest, w.Code)
 
 	// case 5:
+	helpers.EXPECT().
+		getEtcdClient(gomock.Any(), gomock.Any()).
+		Return(testEtcdCluster.RandClient(), nil)
 	helpers.EXPECT().getVerfiedTables(gomock.Any(), gomock.Any(), gomock.Any()).
 		Return(nil, nil, nil).
 		AnyTimes()
@@ -201,6 +212,9 @@ func TestCreateChangefeed(t *testing.T) {
 	require.Equal(t, http.StatusInternalServerError, w.Code)
 
 	// case 6: success
+	helpers.EXPECT().
+		getEtcdClient(gomock.Any(), gomock.Any()).
+		Return(testEtcdCluster.RandClient(), nil)
 	etcdClient.EXPECT().
 		CreateChangefeedInfo(gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any()).
 		Return(nil).
@@ -916,4 +930,32 @@ func TestPauseChangefeed(t *testing.T) {
 	router.ServeHTTP(w, req)
 	require.Equal(t, http.StatusOK, w.Code)
 	require.Equal(t, "{}", w.Body.String())
+}
+
+func TestHasRunningImport(t *testing.T) {
+	integration.BeforeTestExternal(t)
+	testEtcdCluster := integration.NewClusterV3(
+		t, &integration.ClusterConfig{Size: 1},
+	)
+	defer testEtcdCluster.Terminate(t)
+
+	ctx := context.Background()
+	client := testEtcdCluster.RandClient()
+	hasImport := hasRunningImport(ctx, client)
+	require.NoError(t, hasImport)
+
+	lease, err := client.Lease.Grant(ctx, 3*60)
+	require.NoError(t, err)
+
+	_, err = client.KV.Put(
+		ctx, filepath.Join(RegisterImportTaskPrefix, "pitr"),
+		"", clientv3.WithLease(lease.ID),
+	)
+	require.NoError(t, err)
+
+	hasImport = hasRunningImport(ctx, client)
+	require.NotNil(t, hasImport)
+	require.Contains(
+		t, hasImport.Error(), "There are lightning/restore tasks running",
+	)
 }

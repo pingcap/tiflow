@@ -41,6 +41,7 @@ import (
 	"github.com/pingcap/tiflow/pkg/retry"
 	pmysql "github.com/pingcap/tiflow/pkg/sink/mysql"
 	"github.com/pingcap/tiflow/pkg/sqlmodel"
+	"github.com/pingcap/tiflow/pkg/util"
 	"github.com/prometheus/client_golang/prometheus"
 	"go.uber.org/zap"
 )
@@ -570,6 +571,13 @@ func (s *mysqlBackend) prepareDMLs() *preparedDMLs {
 				sql, value := s.batchSingleTxnDmls(event, tableInfo, translateToInsert)
 				sqls = append(sqls, sql...)
 				values = append(values, value...)
+
+				for _, stmt := range sql {
+					approximateSize += int64(len(stmt))
+				}
+				for _, row := range event.Event.Rows {
+					approximateSize += row.ApproximateDataSize
+				}
 				continue
 			}
 		}
@@ -586,6 +594,7 @@ func (s *mysqlBackend) prepareDMLs() *preparedDMLs {
 					sqls = append(sqls, query)
 					values = append(values, args)
 				}
+				approximateSize += int64(len(query)) + row.ApproximateDataSize
 				continue
 			}
 
@@ -740,9 +749,7 @@ func (s *mysqlBackend) execDMLWithMaxRetries(pctx context.Context, dmls *prepare
 			err := logDMLTxnErr(errors.Trace(driver.ErrBadConn), start, s.changefeed, "failpoint", 0, nil)
 			failpoint.Return(err)
 		})
-		failpoint.Inject("MySQLSinkHangLongTime", func() {
-			time.Sleep(time.Hour)
-		})
+		failpoint.Inject("MySQLSinkHangLongTime", func() { util.Hang(pctx, time.Hour) })
 
 		err := s.statistics.RecordBatchExecution(func() (int, error) {
 			tx, err := s.db.BeginTx(pctx, nil)

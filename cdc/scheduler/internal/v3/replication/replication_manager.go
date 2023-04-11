@@ -36,6 +36,7 @@ const (
 	defaultSlowTableHeapSize  = 4
 	logSlowTablesLagThreshold = 30 * time.Second
 	logSlowTablesInterval     = 1 * time.Minute
+	logMissingTableInterval   = 30 * time.Second
 )
 
 // Callback is invoked when something is done.
@@ -108,6 +109,8 @@ type Manager struct { //nolint:revive
 
 	slowTableHeap         SetHeap
 	lastLogSlowTablesTime time.Time
+	lastMissTableID       tablepb.TableID
+	lastLogMissTime       time.Time
 }
 
 // NewReplicationManager returns a new replication manager.
@@ -545,17 +548,24 @@ func (r *Manager) AdvanceCheckpoint(
 			})
 		if !tableSpanFound || !tableSpanStartFound || !tableSpanEndFound || tableHasHole {
 			// Can not advance checkpoint there is a span missing.
-			log.Warn("schedulerv3: cannot advance checkpoint since missing span",
-				zap.String("namespace", r.changefeedID.Namespace),
-				zap.String("changefeed", r.changefeedID.ID),
-				zap.Bool("tableSpanFound", tableSpanFound),
-				zap.Bool("tableSpanStartFound", tableSpanStartFound),
-				zap.Bool("tableSpanEndFound", tableSpanEndFound),
-				zap.Bool("tableHasHole", tableHasHole),
-				zap.Int64("tableID", tableID))
+			now := time.Now()
+			if r.lastMissTableID != 0 && r.lastMissTableID == tableID &&
+				now.Sub(r.lastLogMissTime) > logMissingTableInterval {
+				log.Warn("schedulerv3: cannot advance checkpoint since missing span",
+					zap.String("namespace", r.changefeedID.Namespace),
+					zap.String("changefeed", r.changefeedID.ID),
+					zap.Bool("tableSpanFound", tableSpanFound),
+					zap.Bool("tableSpanStartFound", tableSpanStartFound),
+					zap.Bool("tableSpanEndFound", tableSpanEndFound),
+					zap.Bool("tableHasHole", tableHasHole),
+					zap.Int64("tableID", tableID))
+				r.lastLogMissTime = now
+			}
+			r.lastMissTableID = tableID
 			cannotProceed = true
 			return false
 		}
+		r.lastMissTableID = 0
 		return true
 	})
 	if cannotProceed {

@@ -79,7 +79,7 @@ func createTableSinkWrapper(
 	tableState := tablepb.TableStatePreparing
 	sink := newMockSink()
 	innerTableSink := tablesink.New[*model.RowChangedEvent](
-		changefeedID, span,
+		changefeedID, span, model.Ts(0),
 		sink, &dmlsink.RowChangeEventAppender{}, prometheus.NewCounter(prometheus.CounterOpts{}))
 	wrapper := newTableSinkWrapper(
 		changefeedID,
@@ -309,4 +309,20 @@ func TestGetUpperBoundTs(t *testing.T) {
 
 	wrapper.barrierTs.Store(uint64(12))
 	require.Equal(t, uint64(11), wrapper.getUpperBoundTs())
+}
+
+func TestNewTableSinkWrapper(t *testing.T) {
+	t.Parallel()
+	wrapper := newTableSinkWrapper(
+		model.DefaultChangeFeedID("1"),
+		spanz.TableIDToComparableSpan(1),
+		nil,
+		tablepb.TableStatePrepared,
+		model.Ts(10),
+		model.Ts(20),
+	)
+	require.NotNil(t, wrapper)
+	require.Equal(t, uint64(10), wrapper.getUpperBoundTs())
+	require.Equal(t, uint64(10), wrapper.getReceivedSorterResolvedTs())
+	require.Equal(t, uint64(10), wrapper.checkpointTs.Load())
 }

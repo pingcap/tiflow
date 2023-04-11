@@ -57,6 +57,7 @@ const (
 type processor struct {
 	changefeedID model.ChangeFeedID
 	captureInfo  *model.CaptureInfo
+	globalVars   *cdcContext.GlobalVars
 	changefeed   *orchestrator.ChangefeedReactorState
 
 	upstream      *upstream.Upstream
@@ -324,11 +325,6 @@ func (p *processor) IsRemoveTableSpanFinished(span tablepb.Span) (model.Ts, bool
 	return stats.CheckpointTs, true
 }
 
-// GetTableSpanCount implements TableExecutor interface.
-func (p *processor) GetTableSpanCount() int {
-	return len(p.sinkManager.GetAllCurrentTableSpans())
-}
-
 // GetTableSpanStatus implements TableExecutor interface
 func (p *processor) GetTableSpanStatus(span tablepb.Span, collectStat bool) tablepb.TableStatus {
 	state, exist := p.sinkManager.GetTableState(span)
@@ -461,6 +457,8 @@ func isProcessorIgnorableError(err error) bool {
 // the `state` parameter is sent by the etcd worker, the `state` must be a snapshot of KVs in etcd
 // The main logic of processor is in this function, including the calculation of many kinds of ts,
 // maintain table pipeline, error handling, etc.
+//
+// It can be called in etcd ticks, so it should never be blocked.
 func (p *processor) Tick(ctx cdcContext.Context) error {
 	// check upstream error first
 	if err := p.upstream.Error(); err != nil {
@@ -607,6 +605,9 @@ func (p *processor) lazyInitImpl(ctx cdcContext.Context) error {
 	if p.initialized {
 		return nil
 	}
+
+	p.globalVars = ctx.GlobalVars()
+
 	ctx, cancel := cdcContext.WithCancel(ctx)
 	p.cancel = cancel
 	// We don't close this error channel, since it is only safe to close channel
@@ -783,6 +784,15 @@ func (p *processor) createAndDriveSchemaStorage(ctx cdcContext.Context) (entry.S
 	stdCtx := contextutil.PutTableInfoInCtx(ctx, -1, puller.DDLPullerTableName)
 	stdCtx = contextutil.PutChangefeedIDInCtx(stdCtx, p.changefeedID)
 	stdCtx = contextutil.PutRoleInCtx(stdCtx, util.RoleProcessor)
+	meta, err := kv.GetSnapshotMeta(kvStorage, ddlStartTs)
+	if err != nil {
+		return nil, errors.Trace(err)
+	}
+	schemaStorage, err := entry.NewSchemaStorage(meta, ddlStartTs,
+		p.changefeed.Info.Config.ForceReplicate, p.changefeedID, util.RoleProcessor)
+	if err != nil {
+		return nil, errors.Trace(err)
+	}
 	ddlPuller, err := puller.NewDDLJobPuller(
 		stdCtx,
 		p.upstream.PDClient,
@@ -794,24 +804,18 @@ func (p *processor) createAndDriveSchemaStorage(ctx cdcContext.Context) (entry.S
 		kvCfg,
 		p.changefeed.Info.Config,
 		p.changefeedID,
+		schemaStorage,
 	)
-	if err != nil {
-		return nil, errors.Trace(err)
-	}
-	meta, err := kv.GetSnapshotMeta(kvStorage, ddlStartTs)
-	if err != nil {
-		return nil, errors.Trace(err)
-	}
-	schemaStorage, err := entry.NewSchemaStorage(meta, ddlStartTs,
-		p.changefeed.Info.Config.ForceReplicate, p.changefeedID)
 	if err != nil {
 		return nil, errors.Trace(err)
 	}
 	p.wg.Add(1)
 	go func() {
 		defer p.wg.Done()
+		// ddlPuller will update the schemaStorage.
 		p.sendError(ddlPuller.Run(stdCtx))
 	}()
+
 	p.wg.Add(1)
 	go func() {
 		defer p.wg.Done()
@@ -826,20 +830,14 @@ func (p *processor) createAndDriveSchemaStorage(ctx cdcContext.Context) (entry.S
 			if jobEntry.OpType == model.OpTypeResolved {
 				schemaStorage.AdvanceResolvedTs(jobEntry.CRTs)
 			}
-			job, err := jobEntry.Job, jobEntry.Err
+			err := jobEntry.Err
 			if err != nil {
-				p.sendError(errors.Trace(err))
-				return
-			}
-			if job == nil {
-				continue
-			}
-			if err := schemaStorage.HandleDDLJob(job); err != nil {
 				p.sendError(errors.Trace(err))
 				return
 			}
 		}
 	}()
+
 	return schemaStorage, nil
 }
 
@@ -946,14 +944,14 @@ func (p *processor) refreshMetrics() {
 	if !p.initialized {
 		return
 	}
-	tableSpans := p.sinkManager.GetAllCurrentTableSpans()
-	p.metricSyncTableNumGauge.Set(float64(len(tableSpans)))
+	p.metricSyncTableNumGauge.Set(float64(p.sinkManager.GetAllCurrentTableSpansCount()))
 	sortEngineReceivedEvents := p.sourceManager.ReceivedEvents()
 	tableSinksReceivedEvents := p.sinkManager.ReceivedEvents()
 	p.metricRemainKVEventGauge.Set(float64(sortEngineReceivedEvents - tableSinksReceivedEvents))
 }
 
-func (p *processor) Close(ctx cdcContext.Context) error {
+// Close the processor. It can be called in etcd ticks, so it should never be blocked.
+func (p *processor) Close() error {
 	log.Info("processor closing ...",
 		zap.String("namespace", p.changefeedID.Namespace),
 		zap.String("changefeed", p.changefeedID.ID))
@@ -990,9 +988,8 @@ func (p *processor) Close(ctx cdcContext.Context) error {
 			zap.String("changefeed", p.changefeedID.ID))
 		p.sourceManager = nil
 	}
-	engineFactory := ctx.GlobalVars().SortEngineFactory
-	if engineFactory != nil {
-		if err := engineFactory.Drop(p.changefeedID); err != nil {
+	if p.globalVars != nil && p.globalVars.SortEngineFactory != nil {
+		if err := p.globalVars.SortEngineFactory.Drop(p.changefeedID); err != nil {
 			log.Error("drop event sort engine fail",
 				zap.String("namespace", p.changefeedID.Namespace),
 				zap.String("changefeed", p.changefeedID.ID),
