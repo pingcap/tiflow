@@ -199,9 +199,10 @@ func TestAndWriteExampleReplicaTOML(t *testing.T) {
 			Delimiter:  string(config.Comma),
 			NullString: config.NULL,
 		},
-		Terminator:    "\r\n",
-		DateSeparator: config.DateSeparatorNone.String(),
-		Protocol:      "open-protocol",
+		Terminator:               "\r\n",
+		DateSeparator:            config.DateSeparatorNone.String(),
+		EnablePartitionSeparator: true,
+		Protocol:                 "open-protocol",
 	}, cfg.Sink)
 }
 
@@ -213,9 +214,10 @@ func TestAndWriteStorageSinkTOML(t *testing.T) {
 	err = cfg.ValidateAndAdjust(nil)
 	require.Nil(t, err)
 	require.Equal(t, &config.SinkConfig{
-		EncoderConcurrency: 16,
-		Terminator:         "\r\n",
-		DateSeparator:      "day",
+		EncoderConcurrency:       16,
+		Terminator:               "\r\n",
+		DateSeparator:            "day",
+		EnablePartitionSeparator: true,
 		CSVConfig: &config.CSVConfig{
 			Delimiter:       ",",
 			Quote:           "\"",
