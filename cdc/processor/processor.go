@@ -604,12 +604,13 @@ func (p *processor) lazyInitImpl(etcdCtx cdcContext.Context) (err error) {
 		return nil
 	}
 
-	p.globalVars = etcdCtx.GlobalVars()
 	prcCtx := cdcContext.NewContext(context.Background(), etcdCtx.GlobalVars())
 	prcCtx = cdcContext.WithChangefeedVars(prcCtx, etcdCtx.ChangefeedVars())
-	stdCtx := contextutil.PutChangefeedIDInCtx(prcCtx, p.changefeedID)
+	stdCtx := contextutil.PutTimezoneInCtx(prcCtx, contextutil.TimezoneFromCtx(etcdCtx))
+	stdCtx = contextutil.PutChangefeedIDInCtx(prcCtx, p.changefeedID)
 	stdCtx = contextutil.PutRoleInCtx(stdCtx, util.RoleProcessor)
 	stdCtx = contextutil.PutCaptureAddrInCtx(stdCtx, prcCtx.GlobalVars().CaptureInfo.AdvertiseAddr)
+	p.globalVars = prcCtx.GlobalVars()
 
 	tz := contextutil.TimezoneFromCtx(stdCtx)
 	p.filter, err = filter.NewFilter(p.changefeed.Info.Config, util.GetTimeZoneName(tz))
