@@ -237,6 +237,9 @@ func newJSONMessageForDML(
 				out.RawString(",\"_row_level_checksum_old\":")
 				out.String(strconv.FormatUint(preChecksum, 10))
 			}
+
+			out.RawString(",\"_corrupted\":")
+			out.Bool(e.Corrupted)
 		}
 
 		out.RawByte('}')

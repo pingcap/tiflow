@@ -136,8 +136,8 @@ func (c *Config) Apply(sinkURI *url.URL, config *config.ReplicaConfig) error {
 		}
 	}
 
-	if config.Integrity.Enabled() {
-		c.EnableRowChecksum = true
+	if config.Integrity != nil {
+		c.EnableRowChecksum = config.Integrity.Enabled()
 	}
 
 	return nil
@@ -188,8 +188,8 @@ func (c *Config) Validate() error {
 		}
 
 		if c.EnableRowChecksum {
-			if !c.EnableTiDBExtension || c.AvroDecimalHandlingMode != DecimalHandlingModeString ||
-				c.AvroBigintUnsignedHandlingMode != BigintUnsignedHandlingModeString {
+			if !(c.EnableTiDBExtension && c.AvroDecimalHandlingMode == DecimalHandlingModeString &&
+				c.AvroBigintUnsignedHandlingMode == BigintUnsignedHandlingModeString) {
 				return cerror.ErrCodecInvalidConfig.GenWithStack(
 					`Avro protocol with row level checksum,
 					should set "%s" to "%s", and set "%s" to "%s" and "%s" to "%s"`,
