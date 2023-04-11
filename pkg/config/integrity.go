@@ -35,6 +35,7 @@ const (
 	IntegrityCheckLevelCorrectness IntegrityCheckLevelType = "correctness"
 )
 
+// CorruptionHandleLevelType is the level of the corruption handle level's type.
 type CorruptionHandleLevelType string
 
 const (
@@ -63,6 +64,7 @@ func (t CorruptionHandleLevelType) valid() bool {
 	return false
 }
 
+// Validate the integrity config.
 func (c *IntegrityConfig) Validate() error {
 	if !c.IntegrityCheckLevel.valid() {
 		return cerror.ErrInvalidReplicaConfig.GenWithStackByArgs()
@@ -80,10 +82,12 @@ func (c *IntegrityConfig) Validate() error {
 	return nil
 }
 
+// Enabled returns true if the integrity check is enabled.
 func (c *IntegrityConfig) Enabled() bool {
 	return c.IntegrityCheckLevel == IntegrityCheckLevelCorrectness
 }
 
+// ErrorHandle returns true if the corruption handle level is error.
 func (c *IntegrityConfig) ErrorHandle() bool {
 	return c.CorruptionHandleLevel == CorruptionHandleLevelError
 }
