@@ -604,6 +604,7 @@ func (p *processor) lazyInitImpl(etcdCtx cdcContext.Context) (err error) {
 		return nil
 	}
 
+	// TODO: maybe put all things into global vars or changefeed vars is better.
 	prcCtx := cdcContext.NewContext(context.Background(), etcdCtx.GlobalVars())
 	prcCtx = cdcContext.WithChangefeedVars(prcCtx, etcdCtx.ChangefeedVars())
 	stdCtx := contextutil.PutTimezoneInCtx(prcCtx, contextutil.TimezoneFromCtx(etcdCtx))
@@ -862,8 +863,7 @@ func (p *processor) refreshMetrics() {
 	if !p.initialized {
 		return
 	}
-	tableSpans := p.sinkManager.r.GetAllCurrentTableSpans()
-	p.metricSyncTableNumGauge.Set(float64(len(tableSpans)))
+	p.metricSyncTableNumGauge.Set(float64(p.sinkManager.r.GetAllCurrentTableSpansCount()))
 	sortEngineReceivedEvents := p.sourceManager.r.ReceivedEvents()
 	tableSinksReceivedEvents := p.sinkManager.r.ReceivedEvents()
 	p.metricRemainKVEventGauge.Set(float64(sortEngineReceivedEvents - tableSinksReceivedEvents))
