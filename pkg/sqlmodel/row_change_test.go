@@ -270,6 +270,30 @@ func (s *dpanicSuite) TestGenUpdate() {
 	})
 }
 
+func (s *dpanicSuite) TestExpressionIndex() {
+	source := &cdcmodel.TableName{Schema: "db", Table: "tb1"}
+	sql := `CREATE TABLE tb1 (
+    	id INT PRIMARY KEY,
+    	j JSON,
+    	KEY j_index ((cast(json_extract(j,'$[*]') as signed array)), id)
+)`
+	ti := mockTableInfo(s.T(), sql)
+	change := NewRowChange(source, nil, nil, []interface{}{1, `[1,2,3]`}, ti, nil, nil)
+	sql, args := change.GenSQL(DMLInsert)
+	s.Equal("INSERT INTO `db`.`tb1` (`id`,`j`) VALUES (?,?)", sql)
+	s.Equal([]interface{}{1, `[1,2,3]`}, args)
+	require.Equal(s.T(), 2, change.ColumnCount())
+	change2 := NewRowChange(source, nil, []interface{}{1, `[1,2,3]`}, []interface{}{1, `[1,2,3,4]`}, ti, nil, nil)
+	sql, args = change2.GenSQL(DMLUpdate)
+	s.Equal("UPDATE `db`.`tb1` SET `id` = ?, `j` = ? WHERE `id` = ? LIMIT 1", sql)
+	s.Equal([]interface{}{1, `[1,2,3,4]`, 1}, args)
+
+	change2.Reduce(change)
+	sql, args = change2.GenSQL(DMLInsert)
+	s.Equal("INSERT INTO `db`.`tb1` (`id`,`j`) VALUES (?,?)", sql)
+	s.Equal([]interface{}{1, `[1,2,3,4]`}, args)
+}
+
 func TestGenInsert(t *testing.T) {
 	t.Parallel()
 

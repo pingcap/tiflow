@@ -13,3 +13,11 @@ drop database if exists `ignore_db`;
 create database `ignore_db`;
 use `ignore_db`;
 create table `ignore_table`(id int);
+
+use `all_mode`;
+CREATE TABLE t3 (
+    id INT PRIMARY KEY,
+    j JSON,
+    KEY j_index ((cast(json_extract(j,_utf8mb4'$[*]') as signed array)), id)
+);
+INSERT INTO t3 VALUES (1, '[1,2,3]'), (2, '[2,3,4]'), (3, '[3,4,5]');
