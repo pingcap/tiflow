@@ -593,8 +593,8 @@ type ChangefeedSchedulerConfig struct {
 // IntegrityConfig is the config for integrity check
 // This is a duplicate of config.IntegrityConfig
 type IntegrityConfig struct {
-	IntegrityCheckLevel   string `toml:"integrity_check_level" json:"integrity_check_level"`
-	CorruptionHandleLevel string `toml:"corruption_handle_level" json:"corruption_handle_level"`
+	IntegrityCheckLevel   string `json:"integrity_check_level"`
+	CorruptionHandleLevel string `json:"corruption_handle_level"`
 }
 
 // EtcdData contains key/value pair of etcd data
