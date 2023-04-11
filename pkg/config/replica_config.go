@@ -73,6 +73,10 @@ var defaultReplicaConfig = &ReplicaConfig{
 		RegionThreshold:        100_000,
 		WriteKeyThreshold:      0,
 	},
+	Integrity: &IntegrityConfig{
+		IntegrityCheckLevel:   IntegrityCheckLevelNone,
+		CorruptionHandleLevel: CorruptionHandleLevelWarn,
+	},
 }
 
 // GetDefaultReplicaConfig returns the default replica config.
@@ -114,6 +118,7 @@ type replicaConfig struct {
 	Consistent         *ConsistentConfig `toml:"consistent" json:"consistent"`
 	// Scheduler is the configuration for scheduler.
 	Scheduler *ChangefeedSchedulerConfig `toml:"scheduler" json:"scheduler"`
+	Integrity *IntegrityConfig           `toml:"integrity" json:"integrity"`
 }
 
 // Marshal returns the json marshal format of a ReplicationConfig
@@ -213,6 +218,12 @@ func (c *ReplicaConfig) ValidateAndAdjust(sinkURI *url.URL) error {
 	// TODO: Remove the hack once span replication is compatible with all sinks.
 	if !isSinkCompatibleWithSpanReplication(sinkURI) {
 		c.Scheduler.EnableTableAcrossNodes = false
+	}
+
+	if c.Integrity != nil {
+		if err := c.Integrity.Validate(); err != nil {
+			return err
+		}
 	}
 
 	return nil
