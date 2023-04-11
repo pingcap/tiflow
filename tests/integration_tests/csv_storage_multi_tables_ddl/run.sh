@@ -8,38 +8,6 @@ WORK_DIR=$OUT_DIR/$TEST_NAME
 CDC_BINARY=cdc.test
 SINK_TYPE=$1
 
-# start the s3 server
-export MINIO_ACCESS_KEY=cdcs3accesskey
-export MINIO_SECRET_KEY=cdcs3secretkey
-export MINIO_BROWSER=off
-export AWS_ACCESS_KEY_ID=$MINIO_ACCESS_KEY
-export AWS_SECRET_ACCESS_KEY=$MINIO_SECRET_KEY
-export S3_ENDPOINT=127.0.0.1:24927
-rm -rf "$WORK_DIR"
-mkdir -p "$WORK_DIR"
-pkill -9 minio || true
-bin/minio server --address $S3_ENDPOINT "$WORK_DIR/s3" &
-MINIO_PID=$!
-i=0
-while ! curl -o /dev/null -v -s "http://$S3_ENDPOINT/"; do
-	i=$(($i + 1))
-	if [ $i -gt 30 ]; then
-		echo 'Failed to start minio'
-		exit 1
-	fi
-	sleep 2
-done
-
-stop_minio() {
-	kill -2 $MINIO_PID
-}
-
-stop() {
-	stop_minio
-	stop_tidb_cluster
-}
-s3cmd --access_key=$MINIO_ACCESS_KEY --secret_key=$MINIO_SECRET_KEY --host=$S3_ENDPOINT --host-bucket=$S3_ENDPOINT --no-ssl mb s3://logbucket
-
 function run() {
 	# Now, we run the storage tests in mysql sink tests.
 	# It's a temporary solution, we will move it to a new test pipeline later.
@@ -47,6 +15,7 @@ function run() {
 		return
 	fi
 
+	rm -rf $WORK_DIR && mkdir -p $WORK_DIR
 	start_tidb_cluster --workdir $WORK_DIR
 	cd $WORK_DIR
 
@@ -59,26 +28,22 @@ function run() {
 	TOPIC_NAME_2="ticdc-multi-tables-ddl-test-error-1-$RANDOM"
 	TOPIC_NAME_3="ticdc-multi-tables-ddl-test-error-2-$RANDOM"
 
-	case $SINK_TYPE in
-	*) ;;
-	esac
-
 	cf_normal="test-normal"
 	cf_err1="test-error-1"
 	cf_err2="test-error-2"
 
 	run_sql "create database multi_tables_ddl_test" ${DOWN_TIDB_HOST} ${DOWN_TIDB_PORT}
-	SINK_URI="s3://logbucket/$TOPIC_NAME_1?flush-interval=5s&endpoint=http://127.0.0.1:24927&protocol=csv"
-	cdc cli changefeed create -c=$cf_normal --start-ts=$start_ts --sink-uri="$SINK_URI" --config="$CUR/conf/normal.toml"
+	SINK_URI1="file://$WORK_DIR/storage_test/$TOPIC_NAME_1?flush-interval=5s&protocol=csv"
+	cdc cli changefeed create -c=$cf_normal --start-ts=$start_ts --sink-uri="$SINK_URI1" --config="$CUR/conf/normal.toml"
 
-	SINK_URI="s3://logbucket/$TOPIC_NAME_2?flush-interval=5s&endpoint=http://127.0.0.1:24927&protocol=csv"
-	cdc cli changefeed create -c=$cf_err1 --start-ts=$start_ts --sink-uri="$SINK_URI" --config="$CUR/conf/error-1.toml"
+	SINK_URI2="file://$WORK_DIR/storage_test/$TOPIC_NAME_2?flush-interval=5s&protocol=csv"
+	cdc cli changefeed create -c=$cf_err1 --start-ts=$start_ts --sink-uri="$SINK_URI2" --config="$CUR/conf/error-1.toml"
 
-	SINK_URI="s3://logbucket/$TOPIC_NAME_3?flush-interval=5s&endpoint=http://127.0.0.1:24927&protocol=csv"
-	cdc cli changefeed create -c=$cf_err2 --start-ts=$start_ts --sink-uri="$SINK_URI" --config="$CUR/conf/error-2.toml"
-	run_storage_consumer $WORK_DIR "s3://logbucket/$TOPIC_NAME_1?endpoint=http://127.0.0.1:24927&protocol=csv" "$CUR/conf/normal.toml" 1
-	run_storage_consumer $WORK_DIR "s3://logbucket/$TOPIC_NAME_2?endpoint=http://127.0.0.1:24927&protocol=csv" "$CUR/conf/error-1.toml" 2
-	run_storage_consumer $WORK_DIR "s3://logbucket/$TOPIC_NAME_3?endpoint=http://127.0.0.1:24927&protocol=csv" "$CUR/conf/error-2.toml" 3
+	SINK_URI3="file://$WORK_DIR/storage_test/$TOPIC_NAME_3?flush-interval=5s&protocol=csv"
+	cdc cli changefeed create -c=$cf_err2 --start-ts=$start_ts --sink-uri="$SINK_URI3" --config="$CUR/conf/error-2.toml"
+	run_storage_consumer $WORK_DIR $SINK_URI1 "$CUR/conf/normal.toml" 1
+	run_storage_consumer $WORK_DIR $SINK_URI2 "$CUR/conf/error-1.toml" 2
+	run_storage_consumer $WORK_DIR $SINK_URI3 "$CUR/conf/error-2.toml" 3
 
 	run_sql_file $CUR/data/test.sql ${UP_TIDB_HOST} ${UP_TIDB_PORT}
 	check_table_exists multi_tables_ddl_test.t55 ${DOWN_TIDB_HOST} ${DOWN_TIDB_PORT}
@@ -101,7 +66,7 @@ function run() {
 	cleanup_process $CDC_BINARY
 }
 
-trap stop EXIT
+trap stop_tidb_cluster EXIT
 run $*
 check_logs $WORK_DIR
 echo "[$(date)] <<<<<< run test case $TEST_NAME success! >>>>>>"
