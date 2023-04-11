@@ -70,7 +70,7 @@ func TestEncodeEvents(t *testing.T) {
 		},
 	}
 	err := worker.encodeEvents(eventFragment{
-		versionedTable: cloudstorage.VersionedTable{
+		versionedTable: cloudstorage.VersionedTableName{
 			TableNameWithPhysicTableID: model.TableName{
 				Schema:  "test",
 				Table:   "table1",
@@ -158,7 +158,7 @@ func TestEncodingWorkerRun(t *testing.T) {
 
 	for i := 0; i < 3; i++ {
 		frag := eventFragment{
-			versionedTable: cloudstorage.VersionedTable{
+			versionedTable: cloudstorage.VersionedTableName{
 				TableNameWithPhysicTableID: table,
 			},
 			seqNumber: uint64(i + 1),

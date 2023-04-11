@@ -606,6 +606,8 @@ type DDLEvent struct {
 	PreTableInfo *TableInfo       `msg:"-"`
 	Type         model.ActionType `msg:"-"`
 	Done         bool             `msg:"-"`
+	Charset      string           `msg:"-"`
+	Collate      string           `msg:"-"`
 }
 
 // FromJob fills the values with DDLEvent from DDL job
@@ -636,6 +638,9 @@ func (d *DDLEvent) FromJob(job *model.Job, preTableInfo *TableInfo, tableInfo *T
 	d.Type = job.Type
 	d.PreTableInfo = preTableInfo
 	d.TableInfo = tableInfo
+
+	d.Charset = job.Charset
+	d.Collate = job.Collate
 	// rebuild the query if necessary
 	rebuildQuery()
 }
@@ -658,6 +663,9 @@ func (d *DDLEvent) FromRenameTablesJob(job *model.Job,
 	d.Type = model.ActionRenameTable
 	d.PreTableInfo = preTableInfo
 	d.TableInfo = tableInfo
+
+	d.Charset = job.Charset
+	d.Collate = job.Collate
 }
 
 // SingleTableTxn represents a transaction which includes many row events in a single table
@@ -666,9 +674,15 @@ func (d *DDLEvent) FromRenameTablesJob(job *model.Job,
 type SingleTableTxn struct {
 	Table     *TableName
 	TableInfo *TableInfo
-	StartTs   uint64
-	CommitTs  uint64
-	Rows      []*RowChangedEvent
+	// TableInfoVersion is the version of the table info, it is used to generate data path
+	// in storage sink. Generally, TableInfoVersion equals to `SingleTableTxn.TableInfo.Version`.
+	// Besides, if one table is just scheduled to a new processor, the TableInfoVersion should be
+	// greater than or equal to the startTs of table sink.
+	TableInfoVersion uint64
+
+	StartTs  uint64
+	CommitTs uint64
+	Rows     []*RowChangedEvent
 
 	// control fields of SingleTableTxn
 	// FinishWg is a barrier txn, after this txn is received, the worker must
