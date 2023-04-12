@@ -50,7 +50,7 @@ var defaultAPIConfig = &ReplicaConfig{
 		EncoderConcurrency:       16,
 		Terminator:               config.CRLF,
 		DateSeparator:            config.DateSeparatorNone.String(),
-		EnablePartitionSeparator: false,
+		EnablePartitionSeparator: true,
 	},
 	Consistent: &ConsistentConfig{
 		Level:             "none",
