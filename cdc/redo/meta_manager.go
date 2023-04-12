@@ -156,6 +156,10 @@ func (m *metaManager) Run(ctx context.Context) error {
 	return eg.Wait()
 }
 
+func (m *metaManager) WaitForReady(_ context.Context) {}
+
+func (m *metaManager) Close() {}
+
 // UpdateMeta updates meta.
 func (m *metaManager) UpdateMeta(checkpointTs, resolvedTs model.Ts) {
 	if ok := m.metaResolvedTs.checkAndSetUnflushed(resolvedTs); !ok {
