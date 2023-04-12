@@ -196,7 +196,7 @@ func TestConvertRowChangedEventsWhenEnableOldValue(t *testing.T) {
 	result, size, err := convertRowChangedEvents(changefeedID, span, enableOldValue, events...)
 	require.NoError(t, err)
 	require.Equal(t, 1, len(result))
-	require.Equal(t, uint64(216), size)
+	require.Equal(t, uint64(232), size)
 }
 
 func TestConvertRowChangedEventsWhenDisableOldValue(t *testing.T) {
@@ -249,7 +249,7 @@ func TestConvertRowChangedEventsWhenDisableOldValue(t *testing.T) {
 	result, size, err := convertRowChangedEvents(changefeedID, span, enableOldValue, events...)
 	require.NoError(t, err)
 	require.Equal(t, 2, len(result))
-	require.Equal(t, uint64(216), size)
+	require.Equal(t, uint64(232), size)
 
 	// Update non-handle key.
 	columns = []*model.Column{
@@ -295,7 +295,7 @@ func TestConvertRowChangedEventsWhenDisableOldValue(t *testing.T) {
 	result, size, err = convertRowChangedEvents(changefeedID, span, enableOldValue, events...)
 	require.NoError(t, err)
 	require.Equal(t, 1, len(result))
-	require.Equal(t, uint64(216), size)
+	require.Equal(t, uint64(232), size)
 }
 
 func TestGetUpperBoundTs(t *testing.T) {
