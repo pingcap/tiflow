@@ -341,13 +341,10 @@ func (m *SinkManager) generateSinkTasks() error {
 	getUpperBound := func(
 		tableSinkUpperBoundTs model.Ts,
 	) engine.Position {
-		// If a task carries events after schemaResolvedTs, mounter group threads
-		// can be blocked on waiting schemaResolvedTs get advanced.
 		schemaTs := m.schemaStorage.ResolvedTs()
 		if tableSinkUpperBoundTs > schemaTs+1 {
 			tableSinkUpperBoundTs = schemaTs + 1
 		}
-
 		return engine.Position{StartTs: tableSinkUpperBoundTs - 1, CommitTs: tableSinkUpperBoundTs}
 	}
 
@@ -676,7 +673,7 @@ func (m *SinkManager) AddTable(span tablepb.Span, startTs model.Ts, targetTs mod
 	sinkWrapper := newTableSinkWrapper(
 		m.changefeedID,
 		span,
-		m.sinkFactory.CreateTableSink(m.changefeedID, span, m.metricsTableSinkTotalRows),
+		m.sinkFactory.CreateTableSink(m.changefeedID, span, startTs, m.metricsTableSinkTotalRows),
 		tablepb.TableStatePreparing,
 		startTs,
 		targetTs,
@@ -809,7 +806,7 @@ func (m *SinkManager) RemoveTable(span tablepb.Span) {
 	}
 }
 
-// GetAllCurrentTableSpans returns all spans in the sink manager.
+// GetAllCurrentTableSpans returns all spans in the sinkManager.
 func (m *SinkManager) GetAllCurrentTableSpans() []tablepb.Span {
 	var spans []tablepb.Span
 	m.tableSinks.Range(func(key tablepb.Span, value interface{}) bool {
@@ -817,6 +814,16 @@ func (m *SinkManager) GetAllCurrentTableSpans() []tablepb.Span {
 		return true
 	})
 	return spans
+}
+
+// GetAllCurrentTableSpansCount returns the table spans count in the sinkManager.
+func (m *SinkManager) GetAllCurrentTableSpansCount() int {
+	res := 0
+	m.tableSinks.Range(func(key tablepb.Span, value interface{}) bool {
+		res++
+		return true
+	})
+	return res
 }
 
 // GetTableState returns the table(TableSink) state.
