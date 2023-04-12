@@ -35,7 +35,7 @@ import (
 
 // testEventSize is the size of a test event.
 // It is used to calculate the memory quota.
-const testEventSize = 218
+const testEventSize = 234
 
 //nolint:unparam
 func genPolymorphicEventWithNilRow(startTs,
