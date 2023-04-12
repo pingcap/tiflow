@@ -228,7 +228,7 @@ func (s *ddlSinkImpl) run(ctx context.Context) {
 
 			case ddl := <-s.ddlCh:
 				var err error
-				ddl.Query, err = addSpecialComment(ddl.Query)
+				ddl.Query, err = s.addSpecialComment(ddl)
 				if err != nil {
 					log.Error("Add special comment failed",
 						zap.String("namespace", s.changefeedID.Namespace),
@@ -384,13 +384,16 @@ func (s *ddlSinkImpl) isInitialized() bool {
 }
 
 // addSpecialComment translate tidb feature to comment
-func addSpecialComment(ddlQuery string) (string, error) {
-	stms, _, err := parser.New().ParseSQL(ddlQuery)
+func (s *ddlSinkImpl) addSpecialComment(ddl *model.DDLEvent) (string, error) {
+	stms, _, err := parser.New().Parse(ddl.Query, ddl.Charset, ddl.Collate)
 	if err != nil {
 		return "", errors.Trace(err)
 	}
 	if len(stms) != 1 {
-		log.Panic("invalid ddlQuery statement size", zap.String("ddlQuery", ddlQuery))
+		log.Panic("invalid ddlQuery statement size",
+			zap.String("namespace", s.changefeedID.Namespace),
+			zap.String("changefeed", s.changefeedID.ID),
+			zap.String("ddlQuery", ddl.Query))
 	}
 	var sb strings.Builder
 	// translate TiDB feature to special comment
@@ -406,5 +409,15 @@ func addSpecialComment(ddlQuery string) (string, error) {
 	if err = stms[0].Restore(format.NewRestoreCtx(restoreFlags, &sb)); err != nil {
 		return "", errors.Trace(err)
 	}
-	return sb.String(), nil
+
+	result := sb.String()
+	log.Info("add special comment to DDL",
+		zap.String("namespace", s.changefeedID.Namespace),
+		zap.String("changefeed", s.changefeedID.ID),
+		zap.String("DDL", ddl.Query),
+		zap.String("charset", ddl.Charset),
+		zap.String("collate", ddl.Collate),
+		zap.String("result", result))
+
+	return result, nil
 }
