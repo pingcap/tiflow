@@ -753,8 +753,20 @@ func (m *SinkManager) StartTable(span tablepb.Span, startTs model.Ts) error {
 }
 
 // AsyncStopTable sets the table(TableSink) state to stopped.
+// This function should be called only once for each table(TableSink).
 func (m *SinkManager) AsyncStopTable(span tablepb.Span) {
 	m.wg.Add(1)
+	tableSink, ok := m.tableSinks.Load(span)
+	if !ok {
+		// Just warn here as this function's caller did.
+		log.Warn("Table sink not found when removing table",
+			zap.String("namespace", m.changefeedID.Namespace),
+			zap.String("changefeed", m.changefeedID.ID),
+			zap.Stringer("span", &span))
+	}
+	// Set it to stopping state to avoid the AsyncStopTable function being called twice.
+	tableSink.(*tableSinkWrapper).state.Store(tablepb.TableStateStopping)
+
 	go func() {
 		defer m.wg.Done()
 		log.Info("Async stop table sink",
@@ -762,15 +774,7 @@ func (m *SinkManager) AsyncStopTable(span tablepb.Span) {
 			zap.String("changefeed", m.changefeedID.ID),
 			zap.Stringer("span", &span),
 		)
-		tableSink, ok := m.tableSinks.Load(span)
-		if !ok {
-			// Just warn, because the table sink may be removed by another goroutine.
-			// This logic is the same as this function's caller.
-			log.Warn("Table sink not found when removing table",
-				zap.String("namespace", m.changefeedID.Namespace),
-				zap.String("changefeed", m.changefeedID.ID),
-				zap.Stringer("span", &span))
-		}
+
 		tableSink.(*tableSinkWrapper).close()
 		cleanedBytes := m.sinkMemQuota.Clean(span)
 		cleanedBytes += m.redoMemQuota.Clean(span)
