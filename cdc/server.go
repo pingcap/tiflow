@@ -145,7 +145,7 @@ func (s *Server) Run(ctx context.Context) error {
 		},
 	})
 	if err != nil {
-		return errors.Annotate(cerror.WrapError(cerror.ErrNewCaptureFailed, err), "new etcd client")
+		return errors.Trace(err)
 	}
 
 	cdcEtcdClient := etcd.NewCDCEtcdClient(ctx, etcdCli)

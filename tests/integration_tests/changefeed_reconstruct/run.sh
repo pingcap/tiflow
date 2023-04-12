@@ -53,7 +53,7 @@ function run() {
 
 	run_sql "CREATE DATABASE changefeed_reconstruct;" ${UP_TIDB_HOST} ${UP_TIDB_PORT}
 	go-ycsb load mysql -P $CUR/conf/workload -p mysql.host=${UP_TIDB_HOST} -p mysql.port=${UP_TIDB_PORT} -p mysql.user=root -p mysql.db=changefeed_reconstruct
-	check_table_exists "changefeed_reconstruct.USERTABLE" ${DOWN_TIDB_HOST} ${DOWN_TIDB_PORT}
+	check_table_exists "changefeed_reconstruct.usertable" ${DOWN_TIDB_HOST} ${DOWN_TIDB_PORT}
 	check_sync_diff $WORK_DIR $CUR/conf/diff_config.toml
 
 	# kill capture
@@ -74,7 +74,7 @@ function run() {
 
 	run_sql "CREATE DATABASE changefeed_reconstruct;" ${UP_TIDB_HOST} ${UP_TIDB_PORT}
 	go-ycsb load mysql -P $CUR/conf/workload -p mysql.host=${UP_TIDB_HOST} -p mysql.port=${UP_TIDB_PORT} -p mysql.user=root -p mysql.db=changefeed_reconstruct
-	check_table_exists "changefeed_reconstruct.USERTABLE" ${DOWN_TIDB_HOST} ${DOWN_TIDB_PORT}
+	check_table_exists "changefeed_reconstruct.usertable" ${DOWN_TIDB_HOST} ${DOWN_TIDB_PORT}
 	check_sync_diff $WORK_DIR $CUR/conf/diff_config.toml
 
 	cleanup_process $CDC_BINARY

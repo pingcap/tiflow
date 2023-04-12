@@ -596,11 +596,6 @@ error = '''
 MySQL worker panic
 '''
 
-["CDC:ErrNewCaptureFailed"]
-error = '''
-new capture failed
-'''
-
 ["CDC:ErrNewProcessorFailed"]
 error = '''
 new processor failed
