@@ -482,8 +482,6 @@ func TestAddSpecialComment(t *testing.T) {
 			},
 			result: "",
 		},
-<<<<<<< HEAD
-=======
 		{
 			event: &model.DDLEvent{
 				Query: "CREATE TABLE t1(t datetime) TTL=`t` + INTERVAL 1 DAY",
@@ -546,7 +544,6 @@ func TestAddSpecialComment(t *testing.T) {
 			result: "ALTER TABLE `t` ADD INDEX `j`((CAST(JSON_EXTRACT(`j`, _UTF8MB4'$.number[*]') " +
 				"AS SIGNED ARRAY)))",
 		},
->>>>>>> 4ab802a50e (ddl(ticdc): add charset and collate to ddl event (#8723))
 	}
 
 	s := &ddlSinkImpl{}

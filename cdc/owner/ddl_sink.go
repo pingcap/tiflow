@@ -228,7 +228,7 @@ func (s *ddlSinkImpl) run(ctx context.Context) {
 
 			case ddl := <-s.ddlCh:
 				var err error
-				ddl.Query, err = addSpecialComment(ddl)
+				ddl.Query, err = s.addSpecialComment(ddl)
 				if err != nil {
 					log.Error("Add special comment failed",
 						zap.String("namespace", s.changefeedID.Namespace),
