@@ -169,6 +169,7 @@ type ReplicaConfig struct {
 	Sink       *SinkConfig                `json:"sink"`
 	Consistent *ConsistentConfig          `json:"consistent"`
 	Scheduler  *ChangefeedSchedulerConfig `json:"scheduler"`
+	Integrity  *IntegrityConfig           `json:"integrity"`
 }
 
 // ToInternalReplicaConfig coverts *v2.ReplicaConfig into *config.ReplicaConfig
@@ -294,6 +295,12 @@ func (c *ReplicaConfig) toInternalReplicaConfigWithOriginConfig(
 			WriteKeyThreshold:      c.Scheduler.WriteKeyThreshold,
 		}
 	}
+	if c.Integrity != nil {
+		res.Integrity = &config.IntegrityConfig{
+			IntegrityCheckLevel:   c.Integrity.IntegrityCheckLevel,
+			CorruptionHandleLevel: c.Integrity.CorruptionHandleLevel,
+		}
+	}
 	return res
 }
 
@@ -414,6 +421,14 @@ func ToAPIReplicaConfig(c *config.ReplicaConfig) *ReplicaConfig {
 			WriteKeyThreshold:      cloned.Scheduler.WriteKeyThreshold,
 		}
 	}
+
+	if cloned.Integrity != nil {
+		res.Integrity = &IntegrityConfig{
+			IntegrityCheckLevel:   cloned.Integrity.IntegrityCheckLevel,
+			CorruptionHandleLevel: cloned.Integrity.CorruptionHandleLevel,
+		}
+	}
+
 	return res
 }
 
@@ -573,6 +588,13 @@ type ChangefeedSchedulerConfig struct {
 	RegionThreshold int `toml:"region_threshold" json:"region_threshold"`
 	// WriteKeyThreshold is the written keys threshold of splitting a table.
 	WriteKeyThreshold int `toml:"write_key_threshold" json:"write_key_threshold"`
+}
+
+// IntegrityConfig is the config for integrity check
+// This is a duplicate of config.IntegrityConfig
+type IntegrityConfig struct {
+	IntegrityCheckLevel   string `json:"integrity_check_level"`
+	CorruptionHandleLevel string `json:"corruption_handle_level"`
 }
 
 // EtcdData contains key/value pair of etcd data

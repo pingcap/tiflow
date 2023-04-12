@@ -29,6 +29,7 @@ func TestConfigApply(t *testing.T) {
 	expected.FlushInterval = 10 * time.Second
 	expected.FileSize = 16 * 1024 * 1024
 	expected.DateSeparator = config.DateSeparatorNone.String()
+	expected.EnablePartitionSeparator = true
 	uri := "s3://bucket/prefix?worker-count=32&flush-interval=10s&file-size=16777216"
 	sinkURI, err := url.Parse(uri)
 	require.Nil(t, err)

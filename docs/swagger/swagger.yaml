@@ -480,6 +480,13 @@ definitions:
           type: string
         type: array
     type: object
+  v2.IntegrityConfig:
+    properties:
+      corruption_handle_level:
+        type: string
+      integrity_check_level:
+        type: string
+    type: object
   v2.LogLevelReq:
     properties:
       log_level:
@@ -527,6 +534,8 @@ definitions:
         type: boolean
       ignore_ineligible_table:
         type: boolean
+      integrity:
+        $ref: '#/definitions/v2.IntegrityConfig'
       memory_quota:
         type: integer
       mounter:
