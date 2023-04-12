@@ -44,23 +44,17 @@ const (
 // Assert EventSink[E event.TableEvent] implementation
 var _ eventsink.EventSink[*model.SingleTableTxn] = (*dmlSink)(nil)
 
-// versionedTable is used to wrap TableName with a version
-type versionedTable struct {
-	model.TableName
-	version uint64
-}
-
 // eventFragment is used to attach a sequence number to TxnCallbackableEvent.
-// The sequence number is mainly useful for TxnCallbackableEvent defragmentation.
-// e.g. TxnCallbackableEvent 1~5 are dispatched to a group of encoding workers, but the
-// encoding completion time varies. Let's say the final completion sequence are 1,3,2,5,4,
-// we can use the sequence numbers to do defragmentation so that the events can arrive
-// at dmlWorker sequentially.
 type eventFragment struct {
-	// event sequence number
+	event          *eventsink.TxnCallbackableEvent
+	versionedTable cloudstorage.VersionedTableName
+
+	// The sequence number is mainly useful for TxnCallbackableEvent defragmentation.
+	// e.g. TxnCallbackableEvent 1~5 are dispatched to a group of encoding workers, but the
+	// encoding completion time varies. Let's say the final completion sequence are 1,3,2,5,4,
+	// we can use the sequence numbers to do defragmentation so that the events can arrive
+	// at dmlWorker sequentially.
 	seqNumber uint64
-	versionedTable
-	event *eventsink.TxnCallbackableEvent
 	// encodedMsgs denote the encoded messages after the event is handled in encodingWorker.
 	encodedMsgs []*common.Message
 }
@@ -81,16 +75,20 @@ type dmlSink struct {
 	statistics *metrics.Statistics
 	// last sequence number
 	lastSeqNum uint64
-	wg         sync.WaitGroup
+
+	cancel func()
+	wg     sync.WaitGroup
+	dead   chan struct{}
+	isDead atomic.Bool
 }
 
 // NewCloudStorageSink creates a cloud storage sink.
-func NewCloudStorageSink(ctx context.Context,
+func NewCloudStorageSink(
+	ctx context.Context,
 	sinkURI *url.URL,
 	replicaConfig *config.ReplicaConfig,
 	errCh chan error,
 ) (*dmlSink, error) {
-	s := &dmlSink{}
 	// create cloud storage config and then apply the params of sinkURI to it.
 	cfg := cloudstorage.NewConfig()
 	err := cfg.Apply(ctx, sinkURI, replicaConfig)
@@ -120,28 +118,39 @@ func NewCloudStorageSink(ctx context.Context,
 	}
 	encoderBuilder, err := builder.NewEventBatchEncoderBuilder(ctx, encoderConfig)
 	if err != nil {
-		return nil, cerror.WrapError(cerror.ErrCloudStorageInvalidConfig, err)
+		return nil, cerror.WrapError(cerror.ErrStorageSinkInvalidConfig, err)
 	}
 
-	s.changefeedID = contextutil.ChangefeedIDFromCtx(ctx)
-	s.msgCh = make(chan eventFragment, defaultChannelSize)
-	s.defragmenter = newDefragmenter(ctx)
-	orderedCh := s.defragmenter.orderedOut()
-	s.statistics = metrics.NewStatistics(ctx, sink.TxnSink)
-	s.writer = newDMLWriter(s.changefeedID, storage, cfg, ext, s.statistics, orderedCh, errCh)
-	s.encodingWorkers = make([]*encodingWorker, 0, defaultEncodingConcurrency)
+	wgCtx, wgCancel := context.WithCancel(ctx)
+	s := &dmlSink{
+		changefeedID:    contextutil.ChangefeedIDFromCtx(wgCtx),
+		msgCh:           make(chan eventFragment, defaultChannelSize),
+		encodingWorkers: make([]*encodingWorker, 0, defaultEncodingConcurrency),
+		defragmenter:    newDefragmenter(wgCtx),
+		statistics:      metrics.NewStatistics(wgCtx, sink.TxnSink),
+		cancel:          wgCancel,
+		dead:            make(chan struct{}),
+	}
 	// create a group of encoding workers.
 	for i := 0; i < defaultEncodingConcurrency; i++ {
 		encoder := encoderBuilder.Build()
 		w := newEncodingWorker(i, s.changefeedID, encoder, s.msgCh, s.defragmenter)
 		s.encodingWorkers = append(s.encodingWorkers, w)
 	}
+	orderedCh := s.defragmenter.orderedOut()
+	s.writer = newDMLWriter(s.changefeedID, storage, cfg, ext, s.statistics, orderedCh, errCh)
 
 	s.wg.Add(1)
 	go func() {
 		defer s.wg.Done()
-		if err := s.run(ctx); err != nil && errors.Cause(err) != context.Canceled {
-			errCh <- err
+		err := s.run(wgCtx)
+		s.isDead.Store(true)
+		close(s.dead)
+		if err != nil && errors.Cause(err) != context.Canceled {
+			select {
+			case <-wgCtx.Done():
+			case errCh <- err:
+			}
 		}
 	}()
 
@@ -168,7 +177,9 @@ func (s *dmlSink) run(ctx context.Context) error {
 
 // WriteEvents write events to cloud storage sink.
 func (s *dmlSink) WriteEvents(txns ...*eventsink.CallbackableEvent[*model.SingleTableTxn]) error {
-	var tbl versionedTable
+	if s.isDead.Load() {
+		return errors.Trace(errors.New("dead dmlSink"))
+	}
 
 	for _, txn := range txns {
 		if txn.GetTableSinkState() != state.TableSinkSinking {
@@ -178,9 +189,9 @@ func (s *dmlSink) WriteEvents(txns ...*eventsink.CallbackableEvent[*model.Single
 			continue
 		}
 
-		tbl = versionedTable{
-			TableName: txn.Event.TableInfo.TableName,
-			version:   txn.Event.TableInfo.Version,
+		tbl := cloudstorage.VersionedTableName{
+			TableNameWithPhysicTableID: *txn.Event.Table,
+			TableInfoVersion:           txn.Event.TableInfoVersion,
 		}
 		seq := atomic.AddUint64(&s.lastSeqNum, 1)
 		// emit a TxnCallbackableEvent encoupled with a sequence number starting from one.
@@ -195,8 +206,16 @@ func (s *dmlSink) WriteEvents(txns ...*eventsink.CallbackableEvent[*model.Single
 }
 
 // Close closes the cloud storage sink.
-func (s *dmlSink) Close() error {
-	s.defragmenter.close()
+func (s *dmlSink) Close() {
+	if s.cancel != nil {
+		s.cancel()
+	}
+	s.wg.Wait()
+
+	if s.defragmenter != nil {
+		s.defragmenter.close()
+	}
+
 	for _, w := range s.encodingWorkers {
 		w.close()
 	}
@@ -204,6 +223,9 @@ func (s *dmlSink) Close() error {
 	if s.statistics != nil {
 		s.statistics.Close()
 	}
-	s.wg.Wait()
-	return nil
+}
+
+// Dead checks whether it's dead or not.
+func (s *dmlSink) Dead() <-chan struct{} {
+	return s.dead
 }

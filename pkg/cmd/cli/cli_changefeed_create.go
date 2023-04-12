@@ -244,7 +244,6 @@ func (o *createChangefeedOptions) getChangefeedConfig() *v2.ChangefeedConfig {
 		StartTs:       o.startTs,
 		TargetTs:      o.commonChangefeedOptions.targetTs,
 		SinkURI:       o.commonChangefeedOptions.sinkURI,
-		Engine:        o.commonChangefeedOptions.sortEngine,
 		ReplicaConfig: replicaConfig,
 		PDConfig:      upstreamConfig.PDConfig,
 	}

@@ -226,6 +226,7 @@ func (s *EventSorter) FetchByTable(
 			zap.String("changefeed", s.changefeedID.ID),
 			zap.Int64("tableID", tableID),
 			zap.Uint64("upperBound", upperBound.CommitTs),
+			zap.Uint64("lowerBound", lowerBound.CommitTs),
 			zap.Uint64("resolved", sortedResolved))
 	}
 

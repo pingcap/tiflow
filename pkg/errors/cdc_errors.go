@@ -413,7 +413,7 @@ var (
 		errors.RFCCodeText("CDC:ErrMessageTooLarge"),
 	)
 	ErrStorageSinkInvalidDateSeparator = errors.Normalize(
-		"date separator in cloud storage sink is invalid",
+		"date separator in storage sink is invalid",
 		errors.RFCCodeText("CDC:ErrStorageSinkInvalidDateSeparator"),
 	)
 	ErrCSVEncodeFailed = errors.Normalize(
@@ -424,9 +424,13 @@ var (
 		"csv decode failed",
 		errors.RFCCodeText("CDC:ErrCSVDecodeFailed"),
 	)
-	ErrCloudStorageInvalidConfig = errors.Normalize(
-		"cloud storage config invalid",
-		errors.RFCCodeText("CDC:ErrCloudStorageInvalidConfig"),
+	ErrStorageSinkInvalidConfig = errors.Normalize(
+		"storage sink config invalid",
+		errors.RFCCodeText("CDC:ErrStorageSinkInvalidConfig"),
+	)
+	ErrStorageSinkInvalidFileName = errors.Normalize(
+		"filename in storage sink is invalid",
+		errors.RFCCodeText("CDC:ErrStorageSinkInvalidFileName"),
 	)
 	ErrCloudStorageDefragmentFailed = errors.Normalize(
 		"cloud storage defragment encoded messages failed",
@@ -481,6 +485,10 @@ var (
 	ErrDiskFull = errors.Normalize(
 		"failed to preallocate file because disk is full",
 		errors.RFCCodeText("CDC:ErrDiskFull"))
+	ErrWaitFreeMemoryTimeout = errors.Normalize(
+		"wait free memory timeout",
+		errors.RFCCodeText("CDC:ErrWaitFreeMemoryTimeout"),
+	)
 
 	// encode/decode, data format and data integrity errors
 	ErrInvalidRecordKey = errors.Normalize(
@@ -596,10 +604,6 @@ var (
 	ErrCaptureSuicide = errors.Normalize(
 		"capture suicide",
 		errors.RFCCodeText("CDC:ErrCaptureSuicide"),
-	)
-	ErrNewCaptureFailed = errors.Normalize(
-		"new capture failed",
-		errors.RFCCodeText("CDC:ErrNewCaptureFailed"),
 	)
 	ErrCaptureRegister = errors.Normalize(
 		"capture register to etcd failed",

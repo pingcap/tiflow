@@ -132,7 +132,10 @@ func newStatusProvider() *mockStatusProvider {
 		Return(map[model.CaptureID]*model.TaskStatus{captureID: {}}, nil)
 
 	statusProvider.On("GetChangeFeedInfo", mock.Anything).
-		Return(&model.ChangeFeedInfo{State: model.StateNormal}, nil)
+		Return(&model.ChangeFeedInfo{
+			State:          model.StateNormal,
+			CreatorVersion: "v6.5.1",
+		}, nil)
 
 	statusProvider.On("GetProcessors", mock.Anything).
 		Return([]*model.ProcInfoSnap{{CfID: changeFeedID, CaptureID: captureID}}, nil)
@@ -206,6 +209,7 @@ func TestGetChangefeed(t *testing.T) {
 	err := json.NewDecoder(w.Body).Decode(&resp)
 	require.Nil(t, err)
 	require.Equal(t, model.StateNormal, resp.FeedState)
+	require.Equal(t, "v6.5.1", resp.CreatorVersion)
 
 	// test get changefeed failed
 	api = testCase{
@@ -817,7 +821,7 @@ func TestServerStatusLiveness(t *testing.T) {
 	cp.EXPECT().IsOwner().DoAndReturn(func() bool {
 		return true
 	}).AnyTimes()
-	cp.EXPECT().GetEtcdClient().Return(etcdClient, nil).AnyTimes()
+	cp.EXPECT().GetEtcdClient().Return(etcdClient).AnyTimes()
 
 	// Alive.
 	alive := cp.EXPECT().Liveness().DoAndReturn(func() model.Liveness {

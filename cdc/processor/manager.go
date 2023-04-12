@@ -37,9 +37,6 @@ const (
 	commandTpUnknown commandTp = iota
 	commandTpClose
 	commandTpWriteDebugInfo
-	// Query the number of tables in the manager.
-	// command payload is a buffer channel of int, make(chan int, 1).
-	commandTpQueryTableCount
 	processorLogsWarnDuration = 1 * time.Second
 )
 
@@ -52,7 +49,6 @@ type command struct {
 // Manager is a manager of processor, which maintains the state and behavior of processors
 type Manager interface {
 	orchestrator.Reactor
-	QueryTableCount(ctx context.Context, tableCh chan int, done chan<- error)
 	WriteDebugInfo(ctx context.Context, w io.Writer, done chan<- error)
 	AsyncClose()
 }
@@ -71,6 +67,7 @@ type managerImpl struct {
 		model.ChangeFeedID,
 		*upstream.Upstream,
 		*model.Liveness,
+		uint64,
 	) *processor
 
 	metricProcessorCloseDuration prometheus.Observer
@@ -110,6 +107,7 @@ func (m *managerImpl) Tick(stdCtx context.Context, state orchestrator.ReactorSta
 			m.closeProcessor(changefeedID, ctx)
 			continue
 		}
+		currentChangefeedEpoch := changefeedState.Info.Epoch
 		p, exist := m.processors[changefeedID]
 		if !exist {
 			up, ok := m.upstreamManager.Get(changefeedState.Info.UpstreamID)
@@ -118,13 +116,20 @@ func (m *managerImpl) Tick(stdCtx context.Context, state orchestrator.ReactorSta
 				up = m.upstreamManager.AddUpstream(upstreamInfo)
 			}
 			failpoint.Inject("processorManagerHandleNewChangefeedDelay", nil)
-			p = m.newProcessor(changefeedState, m.captureInfo, changefeedID, up, m.liveness)
+			p = m.newProcessor(
+				changefeedState, m.captureInfo, changefeedID, up, m.liveness,
+				currentChangefeedEpoch)
 			m.processors[changefeedID] = p
 		}
 		ctx := cdcContext.WithChangefeedVars(ctx, &cdcContext.ChangefeedVars{
 			ID:   changefeedID,
 			Info: changefeedState.Info,
 		})
+		if currentChangefeedEpoch != p.changefeedEpoch {
+			// Changefeed has restarted due to error, the processor is stale.
+			m.closeProcessor(changefeedID, ctx)
+			continue
+		}
 		if err := p.Tick(ctx); err != nil {
 			// processor have already patched its error to tell the owner
 			// manager can just close the processor and continue to tick other processors
@@ -183,16 +188,6 @@ func (m *managerImpl) AsyncClose() {
 	}
 }
 
-// QueryTableCount query the number of tables in the manager.
-func (m *managerImpl) QueryTableCount(
-	ctx context.Context, tableCh chan int, done chan<- error,
-) {
-	err := m.sendCommand(ctx, commandTpQueryTableCount, tableCh, done)
-	if err != nil {
-		log.Warn("send command commandTpQueryTableCount failed", zap.Error(err))
-	}
-}
-
 // WriteDebugInfo write the debug info to Writer
 func (m *managerImpl) WriteDebugInfo(
 	ctx context.Context, w io.Writer, done chan<- error,
@@ -239,15 +234,6 @@ func (m *managerImpl) handleCommand(ctx cdcContext.Context) error {
 		err := m.writeDebugInfo(w)
 		if err != nil {
 			cmd.done <- err
-		}
-	case commandTpQueryTableCount:
-		count := 0
-		for _, p := range m.processors {
-			count += len(p.GetAllCurrentTables())
-		}
-		select {
-		case cmd.payload.(chan int) <- count:
-		default:
 		}
 	default:
 		log.Warn("Unknown command in processor manager", zap.Any("command", cmd))

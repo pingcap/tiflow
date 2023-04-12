@@ -91,15 +91,44 @@ func New(ctx context.Context,
 	return s, nil
 }
 
-// CreateTableSink creates a TableSink by schema.
-func (s *SinkFactory) CreateTableSink(changefeedID model.ChangeFeedID, tableID model.TableID, totalRowsCounter prometheus.Counter) tablesink.TableSink {
+// CreateTableSinkForConsumer creates a TableSink by schema for consumer.
+// The difference between CreateTableSink and CreateTableSinkForConsumer is that
+// CreateTableSinkForConsumer will not create a new sink for each table.
+// NOTICE: This only used for the consumer. Please do not use it in the processor.
+func (s *SinkFactory) CreateTableSinkForConsumer(
+	changefeedID model.ChangeFeedID,
+	tableID model.TableID, startTs model.Ts,
+	totalRowsCounter prometheus.Counter,
+) tablesink.TableSink {
 	switch s.sinkType {
 	case sink.RowSink:
 		// We have to indicate the type here, otherwise it can not be compiled.
-		return tablesink.New[*model.RowChangedEvent](changefeedID, tableID,
+		return tablesink.New[*model.RowChangedEvent](changefeedID, tableID, startTs,
 			s.rowSink, &eventsink.RowChangeEventAppender{}, totalRowsCounter)
 	case sink.TxnSink:
-		return tablesink.New[*model.SingleTableTxn](changefeedID, tableID,
+		return tablesink.New[*model.SingleTableTxn](changefeedID, tableID, startTs, s.txnSink,
+			// IgnoreStartTs is true because the consumer can
+			// **not** get the start ts of the row changed event.
+			&eventsink.TxnEventAppender{TableSinkStartTs: startTs, IgnoreStartTs: true},
+			totalRowsCounter)
+	default:
+		panic("unknown sink type")
+	}
+}
+
+// CreateTableSink creates a TableSink by schema.
+func (s *SinkFactory) CreateTableSink(
+	changefeedID model.ChangeFeedID,
+	tableID model.TableID, startTs model.Ts,
+	totalRowsCounter prometheus.Counter,
+) tablesink.TableSink {
+	switch s.sinkType {
+	case sink.RowSink:
+		// We have to indicate the type here, otherwise it can not be compiled.
+		return tablesink.New[*model.RowChangedEvent](changefeedID, tableID, startTs,
+			s.rowSink, &eventsink.RowChangeEventAppender{}, totalRowsCounter)
+	case sink.TxnSink:
+		return tablesink.New[*model.SingleTableTxn](changefeedID, tableID, startTs,
 			s.txnSink, &eventsink.TxnEventAppender{}, totalRowsCounter)
 	default:
 		panic("unknown sink type")
@@ -107,12 +136,12 @@ func (s *SinkFactory) CreateTableSink(changefeedID model.ChangeFeedID, tableID m
 }
 
 // Close closes the sink.
-func (s *SinkFactory) Close() error {
+func (s *SinkFactory) Close() {
 	switch s.sinkType {
 	case sink.RowSink:
-		return s.rowSink.Close()
+		s.rowSink.Close()
 	case sink.TxnSink:
-		return s.txnSink.Close()
+		s.txnSink.Close()
 	default:
 		panic("unknown sink type")
 	}

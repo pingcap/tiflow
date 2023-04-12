@@ -521,7 +521,7 @@ function DM_EXEC_ERROR_SKIP_CASE() {
 
 	run_dm_ctl_with_retry $WORK_DIR "127.0.0.1:$MASTER_PORT" \
 		"query-status test" \
-		"Error 1062 (23000): Duplicate " 1
+		"Error 1062: Duplicate " 1
 
 	run_sql_tidb "insert into ${db}.${tb} values(5,3,3);"
 	run_sql_tidb "insert into ${db}.${tb} values(6,4,4);"

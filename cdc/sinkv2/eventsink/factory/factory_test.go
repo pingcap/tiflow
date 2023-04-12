@@ -106,9 +106,8 @@ func TestSinkFactory(t *testing.T) {
 	require.NotNil(t, sinkFactory.rowSink)
 
 	tableSink := sinkFactory.CreateTableSink(model.DefaultChangeFeedID("1"),
-		1, prometheus.NewCounter(prometheus.CounterOpts{}))
+		1, 0, prometheus.NewCounter(prometheus.CounterOpts{}))
 	require.NotNil(t, tableSink, "table sink can be created")
 
-	err = sinkFactory.Close()
-	require.Nil(t, err, "sink factory can be closed")
+	sinkFactory.Close()
 }

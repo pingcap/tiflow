@@ -60,6 +60,25 @@ message DispatchTableResponse {
     }
 }
 
+message TableBarrier {
+    int64 table_id = 1 [
+        (gogoproto.casttype) = "github.com/pingcap/tiflow/cdc/model.TableID",
+        (gogoproto.customname) = "TableID"
+    ];
+    // The barrier timestamp of the table.
+    uint64 barrier_ts = 2 [
+        (gogoproto.casttype) = "github.com/pingcap/tiflow/cdc/model.Ts"];
+}
+
+// Barrier contains the barrierTs of those tables that have
+// ddl jobs that need to be replicated. The Scheduler will
+// broadcast the barrierTs to all captures through the Heartbeat.
+message Barrier {
+    repeated TableBarrier table_barriers = 1;
+    uint64  global_barrier_ts = 2 [
+        (gogoproto.casttype) = "github.com/pingcap/tiflow/cdc/model.Ts"];
+}
+
 message Heartbeat {
     repeated int64 table_ids = 1 [
         (gogoproto.casttype) = "github.com/pingcap/tiflow/cdc/model.TableID",
@@ -70,6 +89,7 @@ message Heartbeat {
 
     // "spans" and tag 3 are used since v6.6.0
     // repeated processor.tablepb.Span spans = 3 [(gogoproto.nullable) = false];
+    Barrier barrier = 5;
 }
 
 message HeartbeatResponse {
@@ -89,12 +109,15 @@ message OwnerRevision { int64 revision = 1; }
 
 message ProcessorEpoch { string epoch = 1; }
 
+message ChangefeedEpoch { uint64 epoch = 1; }
+
 message Message {
     message Header {
         // The semantic version of the node that sent this message.
         string version = 1;
         OwnerRevision owner_revision = 2 [(gogoproto.nullable) = false];
         ProcessorEpoch processor_epoch = 3 [(gogoproto.nullable) = false];
+        ChangefeedEpoch changefeed_epoch = 4 [(gogoproto.nullable) = false];
     }
     Header header = 1;
     MessageType msg_type = 2;

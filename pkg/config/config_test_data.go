@@ -58,7 +58,8 @@ const (
     "level": "none",
     "max-log-size": 64,
     "flush-interval": 2000,
-    "storage": ""
+    "storage": "",
+    "use-file-backend": false
   }
 }`
 
@@ -142,7 +143,8 @@ const (
     },
     "enable-new-sink": true
   },
-  "cluster-id": "default"
+  "cluster-id": "default",
+  "max-memory-percentage": 70
 }`
 
 	testCfgTestReplicaConfigMarshal1 = `{
@@ -196,7 +198,8 @@ const (
     "level": "none",
     "max-log-size": 64,
     "flush-interval": 2000,
-    "storage": ""
+    "storage": "",
+    "use-file-backend": false
   }
 }`
 
@@ -248,7 +251,8 @@ const (
     "level": "none",
     "max-log-size": 64,
     "flush-interval": 2000,
-    "storage": ""
+    "storage": "",
+    "use-file-backend": false
   }
 }`
 )

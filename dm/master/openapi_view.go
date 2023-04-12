@@ -114,7 +114,7 @@ func (s *Server) GetDocJSON(c *gin.Context) {
 	if info, err := s.getClusterInfo(c.Request.Context()); err != nil {
 		_ = c.Error(err)
 		return
-	} else if info.Topology.MasterTopologyList != nil && len(*info.Topology.MasterTopologyList) > 0 {
+	} else if info.Topology != nil && info.Topology.MasterTopologyList != nil && len(*info.Topology.MasterTopologyList) > 0 {
 		masterTopos := *info.Topology.MasterTopologyList
 		protocol := "http"
 		if useTLS.Load() {

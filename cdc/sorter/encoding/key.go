@@ -21,6 +21,12 @@ import (
 	"go.uber.org/zap"
 )
 
+const (
+	typeDelete = iota + 1
+	typeUpdate
+	typeInsert
+)
+
 // DecodeKey decodes a key to uniqueID, tableID, startTs, CRTs.
 func DecodeKey(key []byte) (uniqueID uint32, tableID uint64, startTs, CRTs uint64) {
 	// uniqueID, tableID, CRTs, startTs, Key, Put/Delete
@@ -80,9 +86,19 @@ func EncodeKey(uniqueID uint32, tableID uint64, event *model.PolymorphicEvent) [
 	// startTs
 	binary.BigEndian.PutUint64(uint64Buf[:], event.StartTs)
 	buf = append(buf, uint64Buf[:]...)
-	// Let Delete < Put
-	binary.BigEndian.PutUint16(uint64Buf[:], ^uint16(event.RawKV.OpType))
+	// Let Delete < Update < Insert
+	binary.BigEndian.PutUint16(uint64Buf[:], getDMLOrder(event.RawKV))
 	buf = append(buf, uint64Buf[:2]...)
 	// key
 	return append(buf, event.RawKV.Key...)
+}
+
+// getDMLOrder returns the order of the dml types: delete<update<insert
+func getDMLOrder(rowKV *model.RawKVEntry) uint16 {
+	if rowKV.OpType == model.OpTypeDelete {
+		return typeDelete
+	} else if rowKV.OldValue != nil {
+		return typeUpdate
+	}
+	return typeInsert
 }

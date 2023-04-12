@@ -135,8 +135,8 @@ func (m *mounter) unmarshalAndMountRowChanged(ctx context.Context, raw *model.Ra
 		PhysicalTableID: physicalTableID,
 		Delete:          raw.OpType == model.OpTypeDelete,
 	}
-	// when async commit is enabled, the commitTs of DMLs may be equals with DDL finishedTs
-	// a DML whose commitTs is equal to a DDL finishedTs using the schema info before the DDL
+	// When async commit is enabled, the commitTs of DMLs may be equals with DDL finishedTs.
+	// A DML whose commitTs is equal to a DDL finishedTs should use the schema info before the DDL.
 	snap, err := m.schemaStorage.GetSnapshot(ctx, raw.CRTs-1)
 	if err != nil {
 		return nil, errors.Trace(err)
@@ -455,7 +455,15 @@ func formatColVal(datum types.Datum, col *timodel.ColumnInfo) (
 			b = emptyBytes
 		}
 		return b, sizeOfBytes(b), "", nil
-	case mysql.TypeFloat, mysql.TypeDouble:
+	case mysql.TypeFloat:
+		v := datum.GetFloat32()
+		if math.IsNaN(float64(v)) || math.IsInf(float64(v), 1) || math.IsInf(float64(v), -1) {
+			warn = fmt.Sprintf("the value is invalid in column: %f", v)
+			v = 0
+		}
+		const sizeOfV = unsafe.Sizeof(v)
+		return v, int(sizeOfV), warn, nil
+	case mysql.TypeDouble:
 		v := datum.GetFloat64()
 		if math.IsNaN(v) || math.IsInf(v, 1) || math.IsInf(v, -1) {
 			warn = fmt.Sprintf("the value is invalid in column: %f", v)

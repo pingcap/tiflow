@@ -26,7 +26,7 @@ import (
 	"github.com/pingcap/tiflow/pkg/config"
 	cerror "github.com/pingcap/tiflow/pkg/errors"
 	"github.com/prometheus/client_golang/prometheus"
-	"github.com/tikv/pd/pkg/utils/tempurl"
+	"github.com/tikv/pd/pkg/tempurl"
 	"go.etcd.io/etcd/api/v3/mvccpb"
 	"go.etcd.io/etcd/api/v3/v3rpc/rpctypes"
 	clientv3 "go.etcd.io/etcd/client/v3"
@@ -154,8 +154,6 @@ type CDCEtcdClient interface {
 	DeleteCaptureInfo(context.Context, model.CaptureID) error
 
 	CheckMultipleCDCClusterExist(ctx context.Context) error
-
-	Close() error
 }
 
 // CDCEtcdClientImpl is a wrap of etcd client

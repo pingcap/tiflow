@@ -53,7 +53,7 @@ type sinkNode struct {
 	changefeed model.ChangeFeedID
 
 	flowController tableFlowController
-	redoManager    redo.LogManager
+	redoDMLMgr     redo.DMLManager
 	logLimiter     *rate.Limiter
 	enableOldValue bool
 	splitTxn       bool
@@ -65,7 +65,7 @@ func newSinkNode(
 	sinkV2 sinkv2.TableSink,
 	startTs model.Ts, targetTs model.Ts,
 	flowController tableFlowController,
-	redoManager redo.LogManager,
+	redoDMLMgr redo.DMLManager,
 	state *tablepb.TableState,
 	changefeed model.ChangeFeedID,
 	enableOldValue bool,
@@ -80,7 +80,7 @@ func newSinkNode(
 		barrierTs:      startTs,
 		changefeed:     changefeed,
 		flowController: flowController,
-		redoManager:    redoManager,
+		redoDMLMgr:     redoDMLMgr,
 		enableOldValue: enableOldValue,
 		splitTxn:       splitTxn,
 		logLimiter:     rate.NewLimiter(rate.Every(logInterval), logBurst),
@@ -134,11 +134,11 @@ func (n *sinkNode) flushSink(ctx context.Context, resolved model.ResolvedTs) (er
 		resolved = model.NewResolvedTs(n.targetTs)
 	}
 
-	if n.redoManager != nil && n.redoManager.Enabled() {
+	if n.redoDMLMgr != nil && n.redoDMLMgr.Enabled() {
 		// redo log do not support batch resolve mode, hence we
 		// use `ResolvedMark` to restore a normal resolved ts
 		resolved = model.NewResolvedTs(resolved.ResolvedMark())
-		err = n.redoManager.UpdateResolvedTs(ctx, n.tableID, resolved.Ts)
+		err = n.redoDMLMgr.UpdateResolvedTs(ctx, n.tableID, resolved.Ts)
 	}
 
 	// Flush sink with barrierTs, which is broadcast by owner.
@@ -146,8 +146,8 @@ func (n *sinkNode) flushSink(ctx context.Context, resolved model.ResolvedTs) (er
 	if resolved.Ts > barrierTs {
 		resolved = model.NewResolvedTs(barrierTs)
 	}
-	if n.redoManager != nil && n.redoManager.Enabled() {
-		redoFlushed := n.redoManager.GetResolvedTs(n.tableID)
+	if n.redoDMLMgr != nil && n.redoDMLMgr.Enabled() {
+		redoFlushed := n.redoDMLMgr.GetResolvedTs(n.tableID)
 		if barrierTs > redoFlushed {
 			// NOTE: How can barrierTs be greater than redoFlushed?
 			// When scheduler moves a table from one place to another place, the table
@@ -207,8 +207,8 @@ func (n *sinkNode) emitRowToSink(ctx context.Context, event *model.PolymorphicEv
 	})
 
 	emitRows := func(rows ...*model.RowChangedEvent) error {
-		if n.redoManager != nil && n.redoManager.Enabled() {
-			err := n.redoManager.EmitRowChangedEvents(ctx, n.tableID, nil, rows...)
+		if n.redoDMLMgr != nil && n.redoDMLMgr.Enabled() {
+			err := n.redoDMLMgr.EmitRowChangedEvents(ctx, n.tableID, nil, rows...)
 			if err != nil {
 				return err
 			}
@@ -391,7 +391,7 @@ func (n *sinkNode) closeTableSink(ctx context.Context) (err error) {
 		err = cerror.ErrTableProcessorStoppedSafely.GenWithStackByArgs()
 		return
 	}
-	n.sinkV2.Close(ctx)
+	n.sinkV2.Close()
 	log.Info("sinkV2 is closed",
 		zap.Int64("tableID", n.tableID),
 		zap.String("namespace", n.changefeed.Namespace),

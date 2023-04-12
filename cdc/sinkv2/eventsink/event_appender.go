@@ -43,7 +43,15 @@ func (r *RowChangeEventAppender) Append(
 var _ Appender[*model.SingleTableTxn] = (*TxnEventAppender)(nil)
 
 // TxnEventAppender is the appender for SingleTableTxn.
-type TxnEventAppender struct{}
+type TxnEventAppender struct {
+	// TableSinkStartTs is the startTs of the table sink.
+	TableSinkStartTs model.Ts
+	// IgnoreStartTs indicates whether to ignore the startTs of the row.
+	// This is used by consumer to keep compatibility with the old version.
+	// Most of our protocols are ignoring the startTs of the row, so we
+	// can not use the startTs to identify a transaction.
+	IgnoreStartTs bool
+}
 
 // Append appends the given rows to the given txn buffer.
 // The callers of this function should **make sure** that
@@ -64,12 +72,7 @@ func (t *TxnEventAppender) Append(
 	for _, row := range rows {
 		// This means no txn is in the buffer.
 		if len(buffer) == 0 {
-			txn := &model.SingleTableTxn{
-				StartTs:   row.StartTs,
-				CommitTs:  row.CommitTs,
-				Table:     row.Table,
-				TableInfo: row.TableInfo,
-			}
+			txn := t.createSingleTableTxn(row)
 			txn.Append(row)
 			buffer = append(buffer, txn)
 			continue
@@ -91,17 +94,37 @@ func (t *TxnEventAppender) Append(
 
 		// Split on big transactions or a new one. For 2 transactions,
 		// their commitTs can be same but startTs will be never same.
-		if row.SplitTxn || lastTxn.StartTs != row.StartTs {
-			buffer = append(buffer, &model.SingleTableTxn{
-				StartTs:   row.StartTs,
-				CommitTs:  row.CommitTs,
-				Table:     row.Table,
-				TableInfo: row.TableInfo,
-			})
+		normalBoundary := row.SplitTxn || lastTxn.StartTs != row.StartTs
+		// NOTICE: This is a special case for compatibility with old version.
+		// In our lots of protocols, we are ignoring the startTs of the row,
+		// so we can not use the startTs to identify a transaction.
+		ignoreStartTsBoundary := t.IgnoreStartTs && lastCommitTs != row.CommitTs
+		if normalBoundary || ignoreStartTsBoundary {
+			buffer = append(buffer, t.createSingleTableTxn(row))
 		}
 
 		buffer[len(buffer)-1].Append(row)
 	}
 
 	return buffer
+}
+
+func (t *TxnEventAppender) createSingleTableTxn(
+	row *model.RowChangedEvent,
+) *model.SingleTableTxn {
+	txn := &model.SingleTableTxn{
+		StartTs:   row.StartTs,
+		CommitTs:  row.CommitTs,
+		Table:     row.Table,
+		TableInfo: row.TableInfo,
+	}
+	if row.TableInfo != nil {
+		txn.TableInfoVersion = row.TableInfo.Version
+	}
+	// If one table is just scheduled to a new processor, the txn.TableInfoVersion should be
+	// greater than or equal to the startTs of table sink.
+	if txn.TableInfoVersion < t.TableSinkStartTs {
+		txn.TableInfoVersion = t.TableSinkStartTs
+	}
+	return txn
 }

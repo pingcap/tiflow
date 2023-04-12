@@ -22,6 +22,7 @@ import (
 	"github.com/pingcap/log"
 	"github.com/pingcap/tiflow/cdc/model"
 	"github.com/pingcap/tiflow/cdc/scheduler/internal"
+	"github.com/pingcap/tiflow/cdc/scheduler/internal/v3/compat"
 	"github.com/pingcap/tiflow/cdc/scheduler/internal/v3/member"
 	"github.com/pingcap/tiflow/cdc/scheduler/internal/v3/replication"
 	"github.com/pingcap/tiflow/cdc/scheduler/internal/v3/scheduler"
@@ -47,14 +48,16 @@ type coordinator struct {
 	// internal.Scheduler and internal.InfoProvider API.
 	mu sync.Mutex
 
-	version      string
-	revision     schedulepb.OwnerRevision
-	captureID    model.CaptureID
-	trans        transport.Transport
-	replicationM *replication.Manager
-	captureM     *member.CaptureManager
-	schedulerM   *scheduler.Manager
-	pdClock      pdutil.Clock
+	version         string
+	revision        schedulepb.OwnerRevision
+	changefeedEpoch uint64
+	captureID       model.CaptureID
+	trans           transport.Transport
+	replicationM    *replication.Manager
+	captureM        *member.CaptureManager
+	schedulerM      *scheduler.Manager
+	compat          *compat.Compat
+	pdClock         pdutil.Clock
 
 	lastCollectTime time.Time
 	changefeedID    model.ChangeFeedID
@@ -68,6 +71,7 @@ func NewCoordinator(
 	messageServer *p2p.MessageServer,
 	messageRouter p2p.MessageRouter,
 	ownerRevision int64,
+	changefeedEpoch uint64,
 	cfg *config.SchedulerConfig,
 	pdClock pdutil.Clock,
 ) (internal.Scheduler, error) {
@@ -79,6 +83,7 @@ func NewCoordinator(
 	coord := newCoordinator(captureID, changefeedID, ownerRevision, cfg)
 	coord.trans = trans
 	coord.pdClock = pdClock
+	coord.changefeedEpoch = changefeedEpoch
 	return coord, nil
 }
 
@@ -99,6 +104,7 @@ func newCoordinator(
 		captureM:     member.NewCaptureManager(captureID, changefeedID, revision, cfg),
 		schedulerM:   scheduler.NewSchedulerManager(changefeedID, cfg),
 		changefeedID: changefeedID,
+		compat:       compat.New(map[model.CaptureID]*model.CaptureInfo{}),
 	}
 }
 
@@ -111,11 +117,12 @@ func (c *coordinator) Tick(
 	currentTables []model.TableID,
 	// All captures that are alive according to the latest Etcd states.
 	aliveCaptures map[model.CaptureID]*model.CaptureInfo,
+	barrier *schedulepb.Barrier,
 ) (newCheckpointTs, newResolvedTs model.Ts, err error) {
 	c.mu.Lock()
 	defer c.mu.Unlock()
 
-	return c.poll(ctx, checkpointTs, currentTables, aliveCaptures)
+	return c.poll(ctx, checkpointTs, currentTables, aliveCaptures, barrier)
 }
 
 // MoveTable implement the scheduler interface
@@ -242,8 +249,13 @@ func (c *coordinator) poll(
 	checkpointTs model.Ts,
 	currentTables []model.TableID,
 	aliveCaptures map[model.CaptureID]*model.CaptureInfo,
+	barrier *schedulepb.Barrier,
 ) (newCheckpointTs, newResolvedTs model.Ts, err error) {
 	c.maybeCollectMetrics()
+	if c.compat.UpdateCaptureInfo(aliveCaptures) {
+		log.Info("schedulerv3: compat update capture info",
+			zap.Any("captures", aliveCaptures))
+	}
 
 	recvMsgs, err := c.recvMsgs(ctx)
 	if err != nil {
@@ -252,7 +264,8 @@ func (c *coordinator) poll(
 
 	var msgBuf []*schedulepb.Message
 	c.captureM.HandleMessage(recvMsgs)
-	msgs := c.captureM.Tick(c.replicationM.ReplicationSets(), c.schedulerM.DrainingTarget())
+	msgs := c.captureM.Tick(c.replicationM.ReplicationSets(),
+		c.schedulerM.DrainingTarget(), barrier)
 	msgBuf = append(msgBuf, msgs...)
 	msgs = c.captureM.HandleAliveCaptureUpdate(aliveCaptures)
 	msgBuf = append(msgBuf, msgs...)
@@ -321,12 +334,20 @@ func (c *coordinator) recvMsgs(ctx context.Context) ([]*schedulepb.Message, erro
 	}
 
 	n := 0
-	for _, val := range recvMsgs {
+	for _, msg := range recvMsgs {
 		// Filter stale messages and lost messages.
-		if val.Header.OwnerRevision == c.revision && val.To == c.captureID {
-			recvMsgs[n] = val
-			n++
+		if msg.Header.OwnerRevision != c.revision || msg.To != c.captureID {
+			// Owner revision must match and capture ID must match.
+			continue
 		}
+		if c.compat.CheckChangefeedEpochEnabled(msg.From) {
+			if msg.Header.ChangefeedEpoch.Epoch != c.changefeedEpoch {
+				// Changefeed epoch must match.
+				continue
+			}
+		}
+		recvMsgs[n] = msg
+		n++
 	}
 	return recvMsgs[:n], nil
 }
@@ -350,6 +371,9 @@ func (c *coordinator) sendMsgs(ctx context.Context, msgs []*schedulepb.Message) 
 			Version:        c.version,
 			OwnerRevision:  c.revision,
 			ProcessorEpoch: epoch,
+			ChangefeedEpoch: schedulepb.ChangefeedEpoch{
+				Epoch: c.changefeedEpoch,
+			},
 		}
 		m.From = c.captureID
 
