@@ -214,6 +214,7 @@ func (t *tableSinkWrapper) getUpperBoundTs() model.Ts {
 }
 
 func (t *tableSinkWrapper) close() {
+	t.state.Store(tablepb.TableStateStopping)
 	// table stopped state must be set after underlying sink is closed
 	defer t.state.Store(tablepb.TableStateStopped)
 	t.tableSink.Close()
