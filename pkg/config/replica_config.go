@@ -57,7 +57,7 @@ var defaultReplicaConfig = &ReplicaConfig{
 		EncoderConcurrency:       16,
 		Terminator:               CRLF,
 		DateSeparator:            DateSeparatorNone.String(),
-		EnablePartitionSeparator: false,
+		EnablePartitionSeparator: true,
 		TiDBSourceID:             1,
 	},
 	Consistent: &ConsistentConfig{
