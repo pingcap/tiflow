@@ -228,7 +228,7 @@ func (s *ddlSinkImpl) run(ctx context.Context) {
 
 			case ddl := <-s.ddlCh:
 				var err error
-				ddl.Query, err = addSpecialComment(ddl.Query)
+				ddl.Query, err = addSpecialComment(ddl)
 				if err != nil {
 					log.Error("Add special comment failed",
 						zap.String("namespace", s.changefeedID.Namespace),
@@ -331,23 +331,6 @@ func (s *ddlSinkImpl) emitDDLEvent(ctx context.Context, ddl *model.DDLEvent) (bo
 		// the DDL event is executing and not finished yet, return false
 		return false, nil
 	}
-<<<<<<< HEAD
-=======
-
-	query, err := s.addSpecialComment(ddl)
-	if err != nil {
-		log.Error("Add special comment failed",
-			zap.String("namespace", s.changefeedID.Namespace),
-			zap.String("changefeed", s.changefeedID.ID),
-			zap.Error(err),
-			zap.Any("ddl", ddl))
-		s.mu.Unlock()
-		return false, errors.Trace(err)
-	}
-	ddl.Query = query
-	s.mu.Unlock()
-
->>>>>>> 4ab802a50e (ddl(ticdc): add charset and collate to ddl event (#8723))
 	select {
 	case <-ctx.Done():
 		return false, errors.Trace(ctx.Err())
