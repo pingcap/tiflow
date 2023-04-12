@@ -51,6 +51,7 @@ var defaultAPIConfig = &ReplicaConfig{
 		Terminator:               config.CRLF,
 		DateSeparator:            config.DateSeparatorNone.String(),
 		EnablePartitionSeparator: false,
+		EnableKafkaSinkV2:        false,
 	},
 	Consistent: &ConsistentConfig{
 		Level:             "none",
