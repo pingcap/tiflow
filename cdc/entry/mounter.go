@@ -82,8 +82,7 @@ type mounter struct {
 	integrity *config.IntegrityConfig
 
 	// decoder and preDecoder are used to decode the raw value, also used to extract checksum,
-	// they should not be nil for the new row format v2,
-	// and should be reset after decode each one event.
+	// they should not be nil after decode at least one event in the row format v2.
 	decoder    *rowcodec.DatumMapDecoder
 	preDecoder *rowcodec.DatumMapDecoder
 

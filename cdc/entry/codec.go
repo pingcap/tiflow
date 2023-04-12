@@ -164,7 +164,7 @@ func decodeMetaKey(ek []byte) (meta, error) {
 	return nil, cerror.ErrUnknownMetaType.GenWithStackByArgs(rawTp)
 }
 
-// decodeRow decodes a byte slice into datums with a existing row map.
+// decodeRow decodes a byte slice into datums with an existing row map.
 func decodeRow(b []byte, recordID kv.Handle, tableInfo *model.TableInfo, tz *time.Location) (map[int64]types.Datum, error) {
 	if len(b) == 0 {
 		return map[int64]types.Datum{}, nil
