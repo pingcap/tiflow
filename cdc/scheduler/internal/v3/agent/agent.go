@@ -23,6 +23,7 @@ import (
 	"github.com/pingcap/tiflow/cdc/model"
 	"github.com/pingcap/tiflow/cdc/processor/tablepb"
 	"github.com/pingcap/tiflow/cdc/scheduler/internal"
+	"github.com/pingcap/tiflow/cdc/scheduler/internal/v3/compat"
 	"github.com/pingcap/tiflow/cdc/scheduler/internal/v3/transport"
 	"github.com/pingcap/tiflow/cdc/scheduler/schedulepb"
 	cerror "github.com/pingcap/tiflow/pkg/errors"
@@ -37,7 +38,8 @@ var _ internal.Agent = (*agent)(nil)
 
 type agent struct {
 	agentInfo
-	trans transport.Transport
+	trans  transport.Transport
+	compat *compat.Compat
 
 	tableM *tableManager
 
@@ -51,22 +53,26 @@ type agent struct {
 }
 
 type agentInfo struct {
-	Version      string
-	CaptureID    model.CaptureID
-	ChangeFeedID model.ChangeFeedID
-	Epoch        schedulepb.ProcessorEpoch
+	Version         string
+	CaptureID       model.CaptureID
+	ChangeFeedID    model.ChangeFeedID
+	Epoch           schedulepb.ProcessorEpoch
+	changefeedEpoch uint64
 }
 
 func (a agentInfo) resetEpoch() {
 	a.Epoch = schedulepb.ProcessorEpoch{Epoch: uuid.New().String()}
 }
 
-func newAgentInfo(changefeedID model.ChangeFeedID, captureID model.CaptureID) agentInfo {
+func newAgentInfo(
+	changefeedID model.ChangeFeedID, captureID model.CaptureID, changefeedEpoch uint64,
+) agentInfo {
 	result := agentInfo{
-		Version:      version.ReleaseSemver(),
-		CaptureID:    captureID,
-		ChangeFeedID: changefeedID,
-		Epoch:        schedulepb.ProcessorEpoch{},
+		Version:         version.ReleaseSemver(),
+		CaptureID:       captureID,
+		ChangeFeedID:    changefeedID,
+		Epoch:           schedulepb.ProcessorEpoch{},
+		changefeedEpoch: changefeedEpoch,
 	}
 	result.resetEpoch()
 
@@ -86,11 +92,13 @@ func newAgent(
 	changeFeedID model.ChangeFeedID,
 	etcdClient etcd.CDCEtcdClient,
 	tableExecutor internal.TableExecutor,
+	changefeedEpoch uint64,
 ) (internal.Agent, error) {
 	result := &agent{
-		agentInfo: newAgentInfo(changeFeedID, captureID),
+		agentInfo: newAgentInfo(changeFeedID, captureID, changefeedEpoch),
 		tableM:    newTableManager(changeFeedID, tableExecutor),
 		liveness:  liveness,
+		compat:    compat.New(map[model.CaptureID]*model.CaptureInfo{}),
 	}
 
 	etcdCliCtx, cancel := context.WithTimeout(ctx, 5*time.Second)
@@ -151,9 +159,10 @@ func NewAgent(ctx context.Context,
 	messageRouter p2p.MessageRouter,
 	etcdClient etcd.CDCEtcdClient,
 	tableExecutor internal.TableExecutor,
+	changefeedEpoch uint64,
 ) (internal.Agent, error) {
 	result, err := newAgent(
-		ctx, captureID, liveness, changeFeedID, etcdClient, tableExecutor)
+		ctx, captureID, liveness, changeFeedID, etcdClient, tableExecutor, changefeedEpoch)
 	if err != nil {
 		return nil, errors.Trace(err)
 	}
@@ -393,6 +402,12 @@ func (a *agent) handleOwnerInfo(id model.CaptureID, revision int64, version stri
 
 		a.resetEpoch()
 
+		a.compat.UpdateCaptureInfo(map[model.CaptureID]*model.CaptureInfo{
+			id: {
+				Version: a.ownerInfo.Version,
+				ID:      a.ownerInfo.CaptureID,
+			},
+		})
 		log.Info("schedulerv3: new owner in power",
 			zap.String("capture", a.CaptureID),
 			zap.String("namespace", a.ChangeFeedID.Namespace),
@@ -423,12 +438,17 @@ func (a *agent) recvMsgs(ctx context.Context) ([]*schedulepb.Message, error) {
 	}
 
 	n := 0
-	for _, val := range messages {
+	for _, msg := range messages {
 		// only receive not staled messages
-		if !a.handleOwnerInfo(val.From, val.Header.OwnerRevision.Revision, val.Header.Version) {
+		if !a.handleOwnerInfo(msg.From, msg.Header.OwnerRevision.Revision, msg.Header.Version) {
 			continue
 		}
-		messages[n] = val
+		// Check changefeed epoch, drop message if mismatch.
+		if a.compat.CheckChangefeedEpochEnabled(msg.From) &&
+			msg.Header.ChangefeedEpoch.Epoch != a.changefeedEpoch {
+			continue
+		}
+		messages[n] = msg
 		n++
 	}
 	return messages[:n], nil
@@ -448,6 +468,9 @@ func (a *agent) sendMsgs(ctx context.Context, msgs []*schedulepb.Message) error 
 			Version:        a.Version,
 			OwnerRevision:  a.ownerInfo.Revision,
 			ProcessorEpoch: a.Epoch,
+			ChangefeedEpoch: schedulepb.ChangefeedEpoch{
+				Epoch: a.changefeedEpoch,
+			},
 		}
 		m.From = a.CaptureID
 		m.To = a.ownerInfo.CaptureID

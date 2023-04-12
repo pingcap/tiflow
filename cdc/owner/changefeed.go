@@ -43,7 +43,7 @@ import (
 // newSchedulerFromCtx creates a new scheduler from context.
 // This function is factored out to facilitate unit testing.
 func newSchedulerFromCtx(
-	ctx cdcContext.Context, pdClock pdutil.Clock,
+	ctx cdcContext.Context, pdClock pdutil.Clock, epoch uint64,
 ) (ret scheduler.Scheduler, err error) {
 	changeFeedID := ctx.ChangefeedVars().ID
 	messageServer := ctx.GlobalVars().MessageServer
@@ -53,15 +53,16 @@ func newSchedulerFromCtx(
 	cfg := config.GetGlobalServerConfig().Debug
 	ret, err = scheduler.NewScheduler(
 		ctx, captureID, changeFeedID,
-		messageServer, messageRouter, ownerRev, cfg.Scheduler, pdClock)
+		messageServer, messageRouter, ownerRev, epoch, cfg.Scheduler, pdClock)
 	return ret, errors.Trace(err)
 }
 
 func newScheduler(
 	ctx cdcContext.Context,
 	pdClock pdutil.Clock,
+	epoch uint64,
 ) (scheduler.Scheduler, error) {
-	return newSchedulerFromCtx(ctx, pdClock)
+	return newSchedulerFromCtx(ctx, pdClock, epoch)
 }
 
 type changefeed struct {
@@ -122,7 +123,9 @@ type changefeed struct {
 	) (puller.DDLPuller, error)
 
 	newSink      func(changefeedID model.ChangeFeedID, info *model.ChangeFeedInfo, reportErr func(error)) DDLSink
-	newScheduler func(ctx cdcContext.Context, pdClock pdutil.Clock) (scheduler.Scheduler, error)
+	newScheduler func(
+		ctx cdcContext.Context, pdClock pdutil.Clock, epoch uint64,
+	) (scheduler.Scheduler, error)
 
 	lastDDLTs uint64 // Timestamp of the last executed DDL. Only used for tests.
 }
@@ -138,7 +141,7 @@ func newChangefeed(
 		// The scheduler will be created lazily.
 		scheduler:        nil,
 		barriers:         newBarriers(),
-		feedStateManager: newFeedStateManager(),
+		feedStateManager: newFeedStateManager(up),
 		upstream:         up,
 
 		errCh:  make(chan error, defaultErrChSize),
@@ -161,7 +164,9 @@ func newChangefeed4Test(
 		schemaStorage entry.SchemaStorage,
 	) (puller.DDLPuller, error),
 	newSink func(changefeedID model.ChangeFeedID, info *model.ChangeFeedInfo, reportErr func(err error)) DDLSink,
-	newScheduler func(ctx cdcContext.Context, pdClock pdutil.Clock) (scheduler.Scheduler, error),
+	newScheduler func(
+		ctx cdcContext.Context, pdClock pdutil.Clock, epoch uint64,
+	) (scheduler.Scheduler, error),
 ) *changefeed {
 	c := newChangefeed(id, state, up)
 	c.newDDLPuller = newDDLPuller
@@ -596,7 +601,8 @@ LOOP:
 		c.state.Info.Config.BDRMode)
 
 	// create scheduler
-	c.scheduler, err = c.newScheduler(ctx, c.upstream.PDClock)
+	epoch := c.state.Info.Epoch
+	c.scheduler, err = c.newScheduler(ctx, c.upstream.PDClock, epoch)
 	if err != nil {
 		return errors.Trace(err)
 	}
@@ -607,6 +613,7 @@ LOOP:
 	log.Info("changefeed initialized",
 		zap.String("namespace", c.state.ID.Namespace),
 		zap.String("changefeed", c.state.ID.ID),
+		zap.Uint64("changefeedEpoch", epoch),
 		zap.Uint64("checkpointTs", checkpointTs),
 		zap.Uint64("resolvedTs", resolvedTs),
 		zap.Stringer("info", c.state.Info))

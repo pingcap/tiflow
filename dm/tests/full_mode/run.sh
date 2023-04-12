@@ -53,8 +53,8 @@ function fail_acquire_global_lock() {
 	run_dm_ctl_with_retry $WORK_DIR "127.0.0.1:$MASTER_PORT" \
 		"query-status test" \
 		"\"stage\": \"Paused\"" 2 \
-		"LOCK TABLES \`full_mode\`.\`t1\` READ: Error 1044 (42000): Access denied" 1 \
-		"LOCK TABLES \`full_mode\`.\`t2\` READ: Error 1044 (42000): Access denied" 1
+		"LOCK TABLES \`full_mode\`.\`t1\` READ: Error 1044: Access denied" 1 \
+		"LOCK TABLES \`full_mode\`.\`t2\` READ: Error 1044: Access denied" 1
 
 	cleanup_process $*
 	cleanup_data full_mode
