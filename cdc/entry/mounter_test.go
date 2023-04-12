@@ -1024,8 +1024,7 @@ func TestDecodeRow(t *testing.T) {
 		helper.Tk().MustExec(`update student set age = 27 where id = 1`)
 
 		ctx := context.Background()
-		decodeAndCheckRowInTable := func(tableID int64, f func(key []byte, value []byte) *model.RawKVEntry) int {
-			var rows int
+		decodeAndCheckRowInTable := func(tableID int64, f func(key []byte, value []byte) *model.RawKVEntry) {
 			walkTableSpanInStore(t, helper.Storage(), tableID, func(key []byte, value []byte) {
 				rawKV := f(key, value)
 
@@ -1041,7 +1040,6 @@ func TestDecodeRow(t *testing.T) {
 					require.NotNil(t, mounter.preDecoder)
 				}
 			})
-			return rows
 		}
 
 		toRawKV := func(key []byte, value []byte) *model.RawKVEntry {
