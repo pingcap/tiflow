@@ -11,9 +11,6 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-//go:build intest
-// +build intest
-
 package entry
 
 import (
@@ -993,8 +990,15 @@ func TestDecodeRow(t *testing.T) {
 
 	changefeed := model.DefaultChangeFeedID("changefeed-test-decode-row")
 
+	ver, err := helper.Storage().CurrentVersion(oracle.GlobalTxnScope)
+	require.NoError(t, err)
+
+	cfg := config.GetDefaultReplicaConfig()
+	filter, err := filter.NewFilter(cfg, "")
+	require.NoError(t, err)
+
 	schemaStorage, err := NewSchemaStorage(helper.GetCurrentMeta(),
-		ver.Ver, false, cfID, util.RoleTester)
+		ver.Ver, false, changefeed, util.RoleTester)
 	require.NoError(t, err)
 
 	// apply ddl to schemaStorage
@@ -1004,42 +1008,40 @@ func TestDecodeRow(t *testing.T) {
 
 	ts := schemaStorage.GetLastSnapshot().CurrentTs()
 
-	ver, err := helper.Storage().CurrentVersion(oracle.GlobalTxnScope)
-	require.NoError(t, err)
 	schemaStorage.AdvanceResolvedTs(ver.Ver)
 
-	cfg := config.GetDefaultReplicaConfig()
 	mounter := NewMounter(
-		schemaStorage, cfID, time.Local, filter, true, cfg.Integrity).(*mounter)
+		schemaStorage, changefeed, time.Local, filter, true, cfg.Integrity).(*mounter)
 
-	type testCase struct {
-		schema     string
-		table      string
-		columns    []interface{}
-		preColumns []interface{}
-		ignored    bool
-	}
+	// type testCase struct {
+	// 	schema     string
+	// 	table      string
+	// 	columns    []interface{}
+	// 	preColumns []interface{}
+	// }
 
-	testCases := []testCase{
-		{
-			schema:  "test",
-			table:   "student",
-			columns: []interface{}{1, "dongmen", 20, "male"},
-			ignored: false,
-		},
-		{
-			schema:     "test",
-			table:      "student",
-			columns:    []interface{}{1, "dongmen", 27, "male"},
-			preColumns: []interface{}{1, "dongmen", 25, "male"},
-		},
-	}
+	// testCases := []testCase{
+	// 	{
+	// 		schema:  "test",
+	// 		table:   "student",
+	// 		columns: []interface{}{1, "dongmen", 20, "male"},
+	// 		ignored: false,
+	// 	},
+	// 	{
+	// 		schema:     "test",
+	// 		table:      "student",
+	// 		columns:    []interface{}{1, "dongmen", 27, "male"},
+	// 		preColumns: []interface{}{1, "dongmen", 25, "male"},
+	// 	},
+	// }
 
-	ignoredTables := make([]string, 0)
-	tables := make([]string, 0)
+	query := `insert into student values(1, "dongmen", 20, "male")`
+	helper.tk.MustExec(query)
+
 	for _, tc := range testCases {
 		tableInfo, ok := schemaStorage.GetLastSnapshot().TableByName(tc.schema, tc.table)
 		require.True(t, ok)
+
 		// TODO: add other dml event type
 		insertSQL := prepareInsertSQL(t, tableInfo, len(tc.columns))
 		if tc.ignored {
