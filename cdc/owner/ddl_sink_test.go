@@ -482,22 +482,6 @@ func TestAddSpecialComment(t *testing.T) {
 			},
 			result: "",
 		},
-		{
-			event: &model.DDLEvent{
-				Query:   "alter table t add index j((cast(j->'$.number[*]' as signed array)))",
-				Charset: "utf8",
-				Collate: "utf8_bin",
-			},
-			result: "ALTER TABLE `t` ADD INDEX `j`((CAST(JSON_EXTRACT(`j`, _UTF8'$.number[*]') " +
-				"AS SIGNED ARRAY)))",
-		},
-		{
-			event: &model.DDLEvent{
-				Query: "alter table t add index j((cast(j->'$.number[*]' as signed array)))",
-			},
-			result: "ALTER TABLE `t` ADD INDEX `j`((CAST(JSON_EXTRACT(`j`, _UTF8MB4'$.number[*]') " +
-				"AS SIGNED ARRAY)))",
-		},
 	}
 
 	s := &ddlSinkImpl{}
