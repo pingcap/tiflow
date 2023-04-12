@@ -653,7 +653,8 @@ func (p *processor) lazyInitImpl(ctx cdcContext.Context) error {
 	p.mg = entry.NewMounterGroup(p.schemaStorage,
 		p.changefeed.Info.Config.Mounter.WorkerNum,
 		p.changefeed.Info.Config.EnableOldValue,
-		p.filter, tz, p.changefeedID)
+		p.filter, tz, p.changefeedID,
+		p.changefeed.Info.Config.Integrity)
 
 	p.wg.Add(1)
 	go func() {

@@ -19,6 +19,7 @@ import (
 
 	"github.com/pingcap/errors"
 	"github.com/pingcap/tiflow/cdc/model"
+	"github.com/pingcap/tiflow/pkg/config"
 	"github.com/pingcap/tiflow/pkg/filter"
 	"golang.org/x/sync/errgroup"
 )
@@ -36,6 +37,7 @@ type mounterGroup struct {
 	tz             *time.Location
 	filter         filter.Filter
 	enableOldValue bool
+	integrity      *config.IntegrityConfig
 
 	workerNum int
 
@@ -56,6 +58,7 @@ func NewMounterGroup(
 	filter filter.Filter,
 	tz *time.Location,
 	changefeedID model.ChangeFeedID,
+	integrity *config.IntegrityConfig,
 ) *mounterGroup {
 	if workerNum <= 0 {
 		workerNum = defaultMounterWorkerNum
@@ -66,6 +69,8 @@ func NewMounterGroup(
 		enableOldValue: enableOldValue,
 		filter:         filter,
 		tz:             tz,
+
+		integrity: integrity,
 
 		workerNum: workerNum,
 
@@ -100,7 +105,8 @@ func (m *mounterGroup) Run(ctx context.Context) error {
 }
 
 func (m *mounterGroup) runWorker(ctx context.Context) error {
-	mounter := NewMounter(m.schemaStorage, m.changefeedID, m.tz, m.filter, m.enableOldValue)
+	mounter := NewMounter(m.schemaStorage, m.changefeedID, m.tz, m.filter,
+		m.enableOldValue, m.integrity)
 	for {
 		select {
 		case <-ctx.Done():
