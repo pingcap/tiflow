@@ -143,8 +143,7 @@ const (
       "max-task-concurrency": 10,
       "check-balance-interval": 60000000000,
       "add-table-batch-size": 50
-    },
-    "enable-kafka-sink-v2": false
+    }
   },
   "cluster-id": "default",
   "max-memory-percentage": 70
@@ -195,7 +194,8 @@ const (
     "transaction-atomicity": "",
     "terminator": "",
     "date-separator": "month",
-    "enable-partition-separator": true
+    "enable-partition-separator": true,
+    "enable-kafka-sink-v2": true
   },
   "consistent": {
     "level": "none",
@@ -259,7 +259,8 @@ const (
     },
     "terminator": "",
     "date-separator": "month",
-    "enable-partition-separator": true
+    "enable-partition-separator": true,
+	"enable-kafka-sink-v2": true
   },
   "consistent": {
     "level": "none",
