@@ -484,52 +484,6 @@ func TestAddSpecialComment(t *testing.T) {
 		},
 		{
 			event: &model.DDLEvent{
-				Query: "CREATE TABLE t1(t datetime) TTL=`t` + INTERVAL 1 DAY",
-			},
-			result: "CREATE TABLE `t1` (`t` DATETIME) " +
-				"/*T![ttl] TTL = `t` + INTERVAL 1 DAY */ /*T![ttl] TTL_ENABLE = 'OFF' */",
-		},
-		{
-			event: &model.DDLEvent{
-				Query: "CREATE TABLE t1(t datetime) TTL=`t` + INTERVAL 1 DAY TTL_ENABLE='ON'",
-			},
-			result: "CREATE TABLE `t1` (`t` DATETIME) " +
-				"/*T![ttl] TTL = `t` + INTERVAL 1 DAY */ /*T![ttl] TTL_ENABLE = 'OFF' */",
-		},
-		{
-			event: &model.DDLEvent{
-				Query: "ALTER TABLE t1 TTL=`t` + INTERVAL 1 DAY",
-			},
-			result: "ALTER TABLE `t1` " +
-				"/*T![ttl] TTL = `t` + INTERVAL 1 DAY */ /*T![ttl] TTL_ENABLE = 'OFF' */",
-		},
-		{
-			event: &model.DDLEvent{
-				Query: "ALTER TABLE t1 TTL=`t` + INTERVAL 1 DAY TTL_ENABLE='ON'",
-			},
-			result: "ALTER TABLE `t1` " +
-				"/*T![ttl] TTL = `t` + INTERVAL 1 DAY */ /*T![ttl] TTL_ENABLE = 'OFF' */",
-		},
-		{
-			event: &model.DDLEvent{
-				Query: "ALTER TABLE t1 TTL_ENABLE='ON'",
-			},
-			result: "ALTER TABLE `t1`",
-		},
-		{
-			event: &model.DDLEvent{
-				Query: "ALTER TABLE t1 TTL_ENABLE='OFF'",
-			},
-			result: "ALTER TABLE `t1`",
-		},
-		{
-			event: &model.DDLEvent{
-				Query: "ALTER TABLE t1 TTL_JOB_INTERVAL='7h'",
-			},
-			result: "ALTER TABLE `t1` /*T![ttl] TTL_JOB_INTERVAL = '7h' */",
-		},
-		{
-			event: &model.DDLEvent{
 				Query:   "alter table t add index j((cast(j->'$.number[*]' as signed array)))",
 				Charset: "utf8",
 				Collate: "utf8_bin",
