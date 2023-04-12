@@ -25,9 +25,6 @@ type DebugConfig struct {
 
 	// Scheduler is the configuration of the two-phase scheduler.
 	Scheduler *SchedulerConfig `toml:"scheduler" json:"scheduler"`
-
-	// EnableKafkaSinkV2 enable the new kafka sink, which is implemented based on kafka-go client.
-	EnableKafkaSinkV2 bool `toml:"enable-kafka-sink-v2" json:"enable-kafka-sink-v2"`
 }
 
 // ValidateAndAdjust validates and adjusts the debug configuration

@@ -53,6 +53,7 @@ func TestReplicaConfigMarshal(t *testing.T) {
 	conf.Sink.Terminator = ""
 	conf.Sink.DateSeparator = "month"
 	conf.Sink.EnablePartitionSeparator = true
+	conf.Sink.EnableKafkaSinkV2 = true
 	conf.Scheduler.EnableTableAcrossNodes = true
 	conf.Scheduler.RegionThreshold = 100001
 	conf.Scheduler.WriteKeyThreshold = 100001
