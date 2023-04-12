@@ -14,6 +14,7 @@
 package sourcemanager
 
 import (
+	"context"
 	"time"
 
 	"github.com/pingcap/log"
@@ -24,8 +25,6 @@ import (
 	pullerwrapper "github.com/pingcap/tiflow/cdc/processor/sourcemanager/puller"
 	"github.com/pingcap/tiflow/cdc/processor/tablepb"
 	"github.com/pingcap/tiflow/cdc/puller"
-	cdccontext "github.com/pingcap/tiflow/pkg/context"
-	cerrors "github.com/pingcap/tiflow/pkg/errors"
 	"github.com/pingcap/tiflow/pkg/spanz"
 	"github.com/pingcap/tiflow/pkg/upstream"
 	"go.uber.org/zap"
@@ -35,6 +34,9 @@ const defaultMaxBatchSize = 256
 
 // SourceManager is the manager of the source engine and puller.
 type SourceManager struct {
+	ctx   context.Context
+	ready chan struct{}
+
 	// changefeedID is the changefeed ID.
 	// We use it to create the puller and log.
 	changefeedID model.ChangeFeedID
@@ -46,7 +48,7 @@ type SourceManager struct {
 	engine engine.SortEngine
 	// pullers is the puller wrapper map.
 	pullers spanz.SyncMap
-	// Used to report the error to the processor.
+	// Used to collect errors in running.
 	errChan chan error
 	// Used to indicate whether the changefeed is in BDR mode.
 	bdrMode bool
@@ -67,15 +69,15 @@ func New(
 	up *upstream.Upstream,
 	mg entry.MounterGroup,
 	engine engine.SortEngine,
-	errChan chan error,
 	bdrMode bool,
 ) *SourceManager {
 	return &SourceManager{
+		ready:                make(chan struct{}),
 		changefeedID:         changefeedID,
 		up:                   up,
 		mg:                   mg,
 		engine:               engine,
-		errChan:              errChan,
+		errChan:              make(chan error, 16),
 		bdrMode:              bdrMode,
 		pullerWrapperCreator: pullerwrapper.NewPullerWrapper,
 	}
@@ -87,28 +89,26 @@ func NewForTest(
 	up *upstream.Upstream,
 	mg entry.MounterGroup,
 	engine engine.SortEngine,
-	errChan chan error,
 	bdrMode bool,
 ) *SourceManager {
 	return &SourceManager{
+		ready:                make(chan struct{}),
 		changefeedID:         changefeedID,
 		up:                   up,
 		mg:                   mg,
 		engine:               engine,
-		errChan:              errChan,
+		errChan:              make(chan error, 16),
 		bdrMode:              bdrMode,
 		pullerWrapperCreator: pullerwrapper.NewPullerWrapperForTest,
 	}
 }
 
 // AddTable adds a table to the source manager. Start puller and register table to the engine.
-func (m *SourceManager) AddTable(
-	ctx cdccontext.Context, span tablepb.Span, tableName string, startTs model.Ts,
-) {
+func (m *SourceManager) AddTable(span tablepb.Span, tableName string, startTs model.Ts) {
 	// Add table to the engine first, so that the engine can receive the events from the puller.
 	m.engine.AddTable(span)
 	p := m.pullerWrapperCreator(m.changefeedID, span, tableName, startTs, m.bdrMode)
-	p.Start(ctx, m.up, m.engine, m.errChan)
+	p.Start(m.ctx, m.up, m.engine, m.errChan)
 	m.pullers.Store(span, p)
 }
 
@@ -167,8 +167,29 @@ func (m *SourceManager) ReceivedEvents() int64 {
 	return m.engine.ReceivedEvents()
 }
 
+// Run implements util.Runnable.
+func (m *SourceManager) Run(ctx context.Context) error {
+	m.ctx = ctx
+	close(m.ready)
+	select {
+	case err := <-m.errChan:
+		return err
+	case <-m.ctx.Done():
+		return m.ctx.Err()
+	}
+}
+
+// WaitForReady implements util.Runnable.
+func (m *SourceManager) WaitForReady(ctx context.Context) {
+	select {
+	case <-ctx.Done():
+	case <-m.ready:
+	}
+}
+
 // Close closes the source manager. Stop all pullers and close the engine.
-func (m *SourceManager) Close() error {
+// It also implements util.Runnable.
+func (m *SourceManager) Close() {
 	log.Info("Closing source manager",
 		zap.String("namespace", m.changefeedID.Namespace),
 		zap.String("changefeed", m.changefeedID.ID))
@@ -182,13 +203,15 @@ func (m *SourceManager) Close() error {
 		zap.String("changefeed", m.changefeedID.ID),
 		zap.Duration("cost", time.Since(start)))
 	if err := m.engine.Close(); err != nil {
-		return cerrors.Trace(err)
+		log.Panic("Fail to close sort engine",
+			zap.String("namespace", m.changefeedID.Namespace),
+			zap.String("changefeed", m.changefeedID.ID),
+			zap.Error(err))
 	}
 	log.Info("Closed source manager",
 		zap.String("namespace", m.changefeedID.Namespace),
 		zap.String("changefeed", m.changefeedID.ID),
 		zap.Duration("cost", time.Since(start)))
-	return nil
 }
 
 // Add adds events to the engine. It is used for testing.
