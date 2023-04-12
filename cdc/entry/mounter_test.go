@@ -986,6 +986,108 @@ func TestGetDefaultZeroValue(t *testing.T) {
 	}
 }
 
+func TestDecodeRow(t *testing.T) {
+	helper := NewSchemaTestHelper(t)
+	defer helper.Close()
+	helper.Tk().MustExec("use test;")
+
+	changefeed := model.DefaultChangeFeedID("changefeed-test-decode-row")
+
+	schemaStorage, err := NewSchemaStorage(helper.GetCurrentMeta(),
+		ver.Ver, false, cfID, util.RoleTester)
+	require.NoError(t, err)
+
+	// apply ddl to schemaStorage
+	job := helper.DDL2Job("create table test.student(id int primary key, name char(50), age int, gender char(10))")
+	err = schemaStorage.HandleDDLJob(job)
+	require.NoError(t, err)
+
+	ts := schemaStorage.GetLastSnapshot().CurrentTs()
+
+	ver, err := helper.Storage().CurrentVersion(oracle.GlobalTxnScope)
+	require.NoError(t, err)
+	schemaStorage.AdvanceResolvedTs(ver.Ver)
+
+	cfg := config.GetDefaultReplicaConfig()
+	mounter := NewMounter(
+		schemaStorage, cfID, time.Local, filter, true, cfg.Integrity).(*mounter)
+
+	type testCase struct {
+		schema     string
+		table      string
+		columns    []interface{}
+		preColumns []interface{}
+		ignored    bool
+	}
+
+	testCases := []testCase{
+		{
+			schema:  "test",
+			table:   "student",
+			columns: []interface{}{1, "dongmen", 20, "male"},
+			ignored: false,
+		},
+		{
+			schema:     "test",
+			table:      "student",
+			columns:    []interface{}{1, "dongmen", 27, "male"},
+			preColumns: []interface{}{1, "dongmen", 25, "male"},
+		},
+	}
+
+	ignoredTables := make([]string, 0)
+	tables := make([]string, 0)
+	for _, tc := range testCases {
+		tableInfo, ok := schemaStorage.GetLastSnapshot().TableByName(tc.schema, tc.table)
+		require.True(t, ok)
+		// TODO: add other dml event type
+		insertSQL := prepareInsertSQL(t, tableInfo, len(tc.columns))
+		if tc.ignored {
+			ignoredTables = append(ignoredTables, tc.table)
+		} else {
+			tables = append(tables, tc.table)
+		}
+		helper.tk.MustExec(insertSQL, tc.columns...)
+	}
+	ctx := context.Background()
+
+	decodeAndCheckRowInTable := func(tableID int64, f func(key []byte, value []byte) *model.RawKVEntry) int {
+		var rows int
+		walkTableSpanInStore(t, helper.Storage(), tableID, func(key []byte, value []byte) {
+			rawKV := f(key, value)
+			pEvent := model.NewPolymorphicEvent(rawKV)
+			err := mounter.DecodeEvent(ctx, pEvent)
+			require.Nil(t, err)
+			if pEvent.Row == nil {
+				return
+			}
+			row := pEvent.Row
+			rows++
+			require.Equal(t, row.Table.Schema, "test")
+			// Now we only allow filter dml event by table, so we only check row's table.
+			require.NotContains(t, ignoredTables, row.Table.Table)
+			require.Contains(t, tables, row.Table.Table)
+		})
+		return rows
+	}
+
+	toRawKV := func(key []byte, value []byte) *model.RawKVEntry {
+		return &model.RawKVEntry{
+			OpType:  model.OpTypePut,
+			Key:     key,
+			Value:   value,
+			StartTs: ts - 1,
+			CRTs:    ts + 1,
+		}
+	}
+
+	for _, tc := range testCases {
+		tableInfo, ok := schemaStorage.GetLastSnapshot().TableByName(tc.schema, tc.table)
+		require.True(t, ok)
+		decodeAndCheckRowInTable(tableInfo.ID, toRawKV)
+	}
+}
+
 // TestDecodeEventIgnoreRow tests a PolymorphicEvent.Row is nil
 // if this event should be filter out by filter.
 func TestDecodeEventIgnoreRow(t *testing.T) {

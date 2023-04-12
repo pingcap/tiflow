@@ -134,6 +134,10 @@ func (m *mounter) DecodeEvent(ctx context.Context, event *model.PolymorphicEvent
 	event.Row = row
 	event.RawKV.Value = nil
 	event.RawKV.OldValue = nil
+
+	m.decoder = nil
+	m.preDecoder = nil
+
 	return nil
 }
 
