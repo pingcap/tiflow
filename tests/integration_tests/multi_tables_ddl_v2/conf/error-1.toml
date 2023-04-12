@@ -1,0 +1,6 @@
+[filter]
+rules = ["multi_tables_ddl_test.t5", "multi_tables_ddl_test.t6", "multi_tables_ddl_test.t7", "multi_tables_ddl_test.t8"]
+
+[sink]
+# Enable the kafka sink v2, the kafka-go client implementation
+enable-kafka-sink-v2 = true

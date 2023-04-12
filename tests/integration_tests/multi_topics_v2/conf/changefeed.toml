@@ -1,0 +1,8 @@
+[sink]
+dispatchers = [
+    { matcher = ['test.*'], topic = "{schema}_{table}" },
+]
+
+[sink]
+# Enable the kafka sink v2, the kafka-go client implementation
+enable-kafka-sink-v2 = true

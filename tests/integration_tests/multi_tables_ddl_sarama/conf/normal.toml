@@ -1,2 +1,0 @@
-[filter]
-rules = ["multi_tables_ddl_test.t1", "multi_tables_ddl_test.t2", "multi_tables_ddl_test.t3", "multi_tables_ddl_test.t4" ,"multi_tables_ddl_test.t1_7","multi_tables_ddl_test.t2_7", "multi_tables_ddl_test.finish_mark"]
