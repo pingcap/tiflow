@@ -139,7 +139,6 @@ const (
       "check-balance-interval": 60000000000,
       "add-table-batch-size": 50
     },
-    "enable-kafka-sink-v2": true
   },
   "cluster-id": "default",
   "max-memory-percentage": 70

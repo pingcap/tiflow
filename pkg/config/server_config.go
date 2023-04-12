@@ -137,8 +137,7 @@ var defaultServerConfig = &ServerConfig{
 		},
 		Messages: defaultMessageConfig.Clone(),
 
-		Scheduler:         NewDefaultSchedulerConfig(),
-		EnableKafkaSinkV2: true,
+		Scheduler: NewDefaultSchedulerConfig(),
 	},
 	ClusterID:           "default",
 	MaxMemoryPercentage: DefaultMaxMemoryPercentage,
