@@ -761,7 +761,9 @@ func (m *SinkManager) AsyncStopTable(span tablepb.Span) {
 		)
 		tableSink, ok := m.tableSinks.Load(span)
 		if !ok {
-			log.Panic("Table sink not found when removing table",
+			// Just warn, because the table sink may be removed by another goroutine.
+			// This logic is the same as this function's caller.
+			log.Warn("Table sink not found when removing table",
 				zap.String("namespace", m.changefeedID.Namespace),
 				zap.String("changefeed", m.changefeedID.ID),
 				zap.Stringer("span", &span))
