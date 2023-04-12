@@ -74,7 +74,7 @@ function check_print_status() {
 
 	# check load unit print status
 	status_file=$WORK_DIR/worker1/log/loader_status.log
-	grep -oP "\[unit=lightning-load\] \[IsCanceled=false\] \[finished_bytes=59674\] \[total_bytes=59674\] \[progress=.*\]" $WORK_DIR/worker1/log/dm-worker.log >$status_file
+	grep -oP "\[unit=lightning-load\] \[IsCanceled=false\] \[finished_bytes=59637\] \[total_bytes=59637\] \[progress=.*\]" $WORK_DIR/worker1/log/dm-worker.log >$status_file
 	status_count=$(wc -l $status_file | awk '{print $1}')
 	[ $status_count -eq 1 ]
 	# must have a non-zero speed in log
