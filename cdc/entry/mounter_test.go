@@ -986,6 +986,7 @@ func TestGetDefaultZeroValue(t *testing.T) {
 func TestDecodeRow(t *testing.T) {
 	helper := NewSchemaTestHelper(t)
 	defer helper.Close()
+	helper.Tk().MustExec("set @@tidb_enable_clustered_index=1;")
 	helper.Tk().MustExec("use test;")
 
 	changefeed := model.DefaultChangeFeedID("changefeed-test-decode-row")
@@ -994,99 +995,74 @@ func TestDecodeRow(t *testing.T) {
 	require.NoError(t, err)
 
 	cfg := config.GetDefaultReplicaConfig()
-	filter, err := filter.NewFilter(cfg, "")
-	require.NoError(t, err)
 
-	schemaStorage, err := NewSchemaStorage(helper.GetCurrentMeta(),
-		ver.Ver, false, changefeed, util.RoleTester)
-	require.NoError(t, err)
+	cfgWithChecksumEnabled := config.GetDefaultReplicaConfig()
+	cfgWithChecksumEnabled.Integrity.IntegrityCheckLevel = config.IntegrityCheckLevelCorrectness
 
-	// apply ddl to schemaStorage
-	job := helper.DDL2Job("create table test.student(id int primary key, name char(50), age int, gender char(10))")
-	err = schemaStorage.HandleDDLJob(job)
-	require.NoError(t, err)
+	for _, c := range []*config.ReplicaConfig{cfg, cfgWithChecksumEnabled} {
+		filter, err := filter.NewFilter(c, "")
+		require.NoError(t, err)
 
-	ts := schemaStorage.GetLastSnapshot().CurrentTs()
+		schemaStorage, err := NewSchemaStorage(helper.GetCurrentMeta(),
+			ver.Ver, false, changefeed, util.RoleTester)
+		require.NoError(t, err)
 
-	schemaStorage.AdvanceResolvedTs(ver.Ver)
+		// apply ddl to schemaStorage
+		ddl := "create table test.student(id int primary key, name char(50), age int, gender char(10))"
+		job := helper.DDL2Job(ddl)
+		err = schemaStorage.HandleDDLJob(job)
+		require.NoError(t, err)
 
-	mounter := NewMounter(
-		schemaStorage, changefeed, time.Local, filter, true, cfg.Integrity).(*mounter)
+		ts := schemaStorage.GetLastSnapshot().CurrentTs()
 
-	// type testCase struct {
-	// 	schema     string
-	// 	table      string
-	// 	columns    []interface{}
-	// 	preColumns []interface{}
-	// }
+		schemaStorage.AdvanceResolvedTs(ver.Ver)
 
-	// testCases := []testCase{
-	// 	{
-	// 		schema:  "test",
-	// 		table:   "student",
-	// 		columns: []interface{}{1, "dongmen", 20, "male"},
-	// 		ignored: false,
-	// 	},
-	// 	{
-	// 		schema:     "test",
-	// 		table:      "student",
-	// 		columns:    []interface{}{1, "dongmen", 27, "male"},
-	// 		preColumns: []interface{}{1, "dongmen", 25, "male"},
-	// 	},
-	// }
+		mounter := NewMounter(
+			schemaStorage, changefeed, time.Local, filter, true, cfg.Integrity).(*mounter)
 
-	query := `insert into student values(1, "dongmen", 20, "male")`
-	helper.tk.MustExec(query)
+		helper.Tk().MustExec(`insert into student values(1, "dongmen", 20, "male")`)
+		helper.Tk().MustExec(`update student set age = 27 where id = 1`)
 
-	for _, tc := range testCases {
-		tableInfo, ok := schemaStorage.GetLastSnapshot().TableByName(tc.schema, tc.table)
-		require.True(t, ok)
+		ctx := context.Background()
+		decodeAndCheckRowInTable := func(tableID int64, f func(key []byte, value []byte) *model.RawKVEntry) int {
+			var rows int
+			walkTableSpanInStore(t, helper.Storage(), tableID, func(key []byte, value []byte) {
+				rawKV := f(key, value)
 
-		// TODO: add other dml event type
-		insertSQL := prepareInsertSQL(t, tableInfo, len(tc.columns))
-		if tc.ignored {
-			ignoredTables = append(ignoredTables, tc.table)
-		} else {
-			tables = append(tables, tc.table)
+				row, err := mounter.unmarshalAndMountRowChanged(ctx, rawKV)
+				require.NoError(t, err)
+				require.NotNil(t, row)
+
+				if row.Columns != nil {
+					require.NotNil(t, mounter.decoder)
+				}
+
+				if row.PreColumns != nil {
+					require.NotNil(t, mounter.preDecoder)
+				}
+			})
+			return rows
 		}
-		helper.tk.MustExec(insertSQL, tc.columns...)
-	}
-	ctx := context.Background()
 
-	decodeAndCheckRowInTable := func(tableID int64, f func(key []byte, value []byte) *model.RawKVEntry) int {
-		var rows int
-		walkTableSpanInStore(t, helper.Storage(), tableID, func(key []byte, value []byte) {
-			rawKV := f(key, value)
-			pEvent := model.NewPolymorphicEvent(rawKV)
-			err := mounter.DecodeEvent(ctx, pEvent)
-			require.Nil(t, err)
-			if pEvent.Row == nil {
-				return
+		toRawKV := func(key []byte, value []byte) *model.RawKVEntry {
+			return &model.RawKVEntry{
+				OpType:  model.OpTypePut,
+				Key:     key,
+				Value:   value,
+				StartTs: ts - 1,
+				CRTs:    ts + 1,
 			}
-			row := pEvent.Row
-			rows++
-			require.Equal(t, row.Table.Schema, "test")
-			// Now we only allow filter dml event by table, so we only check row's table.
-			require.NotContains(t, ignoredTables, row.Table.Table)
-			require.Contains(t, tables, row.Table.Table)
-		})
-		return rows
-	}
-
-	toRawKV := func(key []byte, value []byte) *model.RawKVEntry {
-		return &model.RawKVEntry{
-			OpType:  model.OpTypePut,
-			Key:     key,
-			Value:   value,
-			StartTs: ts - 1,
-			CRTs:    ts + 1,
 		}
-	}
 
-	for _, tc := range testCases {
-		tableInfo, ok := schemaStorage.GetLastSnapshot().TableByName(tc.schema, tc.table)
+		tableInfo, ok := schemaStorage.GetLastSnapshot().TableByName("test", "student")
 		require.True(t, ok)
+
 		decodeAndCheckRowInTable(tableInfo.ID, toRawKV)
+		decodeAndCheckRowInTable(tableInfo.ID, toRawKV)
+
+		job = helper.DDL2Job("drop table student")
+		err = schemaStorage.HandleDDLJob(job)
+		require.NoError(t, err)
 	}
 }
 
