@@ -281,6 +281,10 @@ func (info *ChangeFeedInfo) VerifyAndComplete() error {
 		info.Config.Scheduler = defaultConfig.Scheduler
 	}
 
+	if info.Config.Integrity == nil {
+		info.Config.Integrity = defaultConfig.Integrity
+	}
+
 	return nil
 }
 
