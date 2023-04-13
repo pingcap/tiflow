@@ -282,6 +282,7 @@ func (c *ReplicaConfig) toInternalReplicaConfigWithOriginConfig(
 			DateSeparator:            c.Sink.DateSeparator,
 			EnablePartitionSeparator: c.Sink.EnablePartitionSeparator,
 			EnableKafkaSinkV2:        c.Sink.EnableKafkaSinkV2,
+			OnlyOutputUpdatedColumns: c.Sink.OnlyOutputUpdatedColumns,
 		}
 	}
 	if c.Mounter != nil {
@@ -400,6 +401,7 @@ func ToAPIReplicaConfig(c *config.ReplicaConfig) *ReplicaConfig {
 			DateSeparator:            cloned.Sink.DateSeparator,
 			EnablePartitionSeparator: cloned.Sink.EnablePartitionSeparator,
 			EnableKafkaSinkV2:        cloned.Sink.EnableKafkaSinkV2,
+			OnlyOutputUpdatedColumns: cloned.Sink.OnlyOutputUpdatedColumns,
 		}
 	}
 	if cloned.Consistent != nil {
@@ -545,6 +547,7 @@ type SinkConfig struct {
 	DateSeparator            string            `json:"date_separator"`
 	EnablePartitionSeparator bool              `json:"enable_partition_separator"`
 	EnableKafkaSinkV2        bool              `json:"enable_kafka_sink_v_2"`
+	OnlyOutputUpdatedColumns bool              `json:"only_output_updated_columns"`
 }
 
 // CSVConfig denotes the csv config
