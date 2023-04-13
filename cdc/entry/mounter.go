@@ -339,7 +339,7 @@ func datum2Column(
 ) ([]*model.Column, []types.Datum, []int64, error) {
 	cols := make([]*model.Column, len(tableInfo.RowColumnsOffset))
 	rawCols := make([]types.Datum, len(tableInfo.RowColumnsOffset))
-	columnIDs := make([]int64, 0, len(tableInfo.RowColumnsOffset))
+	columnIDs := make([]int64, len(tableInfo.RowColumnsOffset))
 
 	for _, colInfo := range tableInfo.Columns {
 		colSize := 0
