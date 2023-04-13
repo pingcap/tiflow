@@ -195,7 +195,7 @@ const (
     "terminator": "",
     "date-separator": "month",
     "enable-partition-separator": true,
-    "only-output-updated-columns": false
+    "only-output-updated-columns": false,
     "enable-kafka-sink-v2": true
   },
   "consistent": {
@@ -261,7 +261,7 @@ const (
     "terminator": "",
     "date-separator": "month",
     "enable-partition-separator": true,
-    "only-output-updated-columns": false
+    "only-output-updated-columns": false,
 	"enable-kafka-sink-v2": true
   },
   "consistent": {
