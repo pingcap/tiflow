@@ -59,11 +59,12 @@ func TestRedoLogWorkerSuite(t *testing.T) {
 
 //nolint:unparam
 func (suite *redoLogWorkerSuite) createWorker(
-	memQuota uint64,
+	ctx context.Context, memQuota uint64,
 ) (*redoWorker, engine.SortEngine, *mockRedoDMLManager) {
 	sortEngine := memory.New(context.Background())
 	sm := sourcemanager.New(suite.testChangefeedID, upstream.NewUpstream4Test(&MockPD{}),
-		&entry.MockMountGroup{}, sortEngine, make(chan error, 1), false)
+		&entry.MockMountGroup{}, sortEngine, false)
+	go func() { _ = sm.Run(ctx) }()
 
 	// To avoid refund or release panics.
 	quota := memquota.NewMemQuota(suite.testChangefeedID, memQuota, "sink")
@@ -101,7 +102,7 @@ func (suite *redoLogWorkerSuite) TestHandleTaskGotSomeFilteredEvents() {
 
 	// Only for three events.
 	eventSize := uint64(testEventSize * 3)
-	w, e, m := suite.createWorker(eventSize)
+	w, e, m := suite.createWorker(ctx, eventSize)
 	defer w.memQuota.Close()
 	suite.addEventsToSortEngine(events, e)
 
@@ -151,7 +152,7 @@ func (suite *redoLogWorkerSuite) TestHandleTaskAbortWhenNoMemAndOneTxnFinished()
 
 	// Only for three events.
 	eventSize := uint64(testEventSize * 3)
-	w, e, m := suite.createWorker(eventSize)
+	w, e, m := suite.createWorker(ctx, eventSize)
 	defer w.memQuota.Close()
 	suite.addEventsToSortEngine(events, e)
 
@@ -200,7 +201,7 @@ func (suite *redoLogWorkerSuite) TestHandleTaskAbortWhenNoMemAndBlocked() {
 	}
 	// Only for three events.
 	eventSize := uint64(testEventSize * 3)
-	w, e, m := suite.createWorker(eventSize)
+	w, e, m := suite.createWorker(ctx, eventSize)
 	suite.addEventsToSortEngine(events, e)
 
 	taskChan := make(chan *redoTask)
@@ -245,7 +246,7 @@ func (suite *redoLogWorkerSuite) TestHandleTaskWithSplitTxnAndAdvanceIfNoWorkloa
 	}
 	// Only for three events.
 	eventSize := uint64(testEventSize * 3)
-	w, e, m := suite.createWorker(eventSize)
+	w, e, m := suite.createWorker(ctx, eventSize)
 	defer w.memQuota.Close()
 	suite.addEventsToSortEngine(events, e)
 

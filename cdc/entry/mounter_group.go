@@ -21,12 +21,14 @@ import (
 	"github.com/pingcap/tiflow/cdc/model"
 	"github.com/pingcap/tiflow/pkg/config"
 	"github.com/pingcap/tiflow/pkg/filter"
+	"github.com/pingcap/tiflow/pkg/util"
 	"golang.org/x/sync/errgroup"
 )
 
 // MounterGroup is a group of mounter workers
 type MounterGroup interface {
-	Run(ctx context.Context) error
+	util.Runnable
+
 	AddEvent(ctx context.Context, event *model.PolymorphicEvent) error
 	TryAddEvent(ctx context.Context, event *model.PolymorphicEvent) (bool, error)
 }
@@ -104,6 +106,10 @@ func (m *mounterGroup) Run(ctx context.Context) error {
 	return g.Wait()
 }
 
+func (m *mounterGroup) WaitForReady(_ context.Context) {}
+
+func (m *mounterGroup) Close() {}
+
 func (m *mounterGroup) runWorker(ctx context.Context) error {
 	mounter := NewMounter(m.schemaStorage, m.changefeedID, m.tz, m.filter,
 		m.enableOldValue, m.integrity)
@@ -150,10 +156,16 @@ type MockMountGroup struct {
 	IsFull bool
 }
 
-// Run implements MountGroup.
+// Run implements util.Runnable.
 func (m *MockMountGroup) Run(ctx context.Context) error {
 	return nil
 }
+
+// WaitForReady implements util.Runnable.
+func (m *MockMountGroup) WaitForReady(_ context.Context) {}
+
+// Close implements util.Runnable.
+func (m *MockMountGroup) Close() {}
 
 // AddEvent implements MountGroup.
 func (m *MockMountGroup) AddEvent(ctx context.Context, event *model.PolymorphicEvent) error {
