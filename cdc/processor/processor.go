@@ -789,7 +789,7 @@ func (p *processor) createAndDriveSchemaStorage(ctx cdcContext.Context) (entry.S
 	}
 	f, err := filter.NewFilter(p.changefeed.Info.Config, "")
 	if err != nil {
-		return nil, errors.Trace(err)
+		return errors.Trace(err)
 	}
 	schemaStorage, err := entry.NewSchemaStorage(meta, ddlStartTs,
 		p.changefeed.Info.Config.ForceReplicate, p.changefeedID, util.RoleProcessor, f)
