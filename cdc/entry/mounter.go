@@ -485,7 +485,7 @@ func (m *mounter) mountRowKVEntry(tableInfo *model.TableInfo, row *rowKVEntry, d
 		}
 
 		if !matched {
-			log.Error("pre columns checksum mismatch",
+			log.Error("previous columns checksum mismatch",
 				zap.Uint32("checksum", preChecksum),
 				zap.Any("tableInfo", tableInfo),
 				zap.Any("row", row))
