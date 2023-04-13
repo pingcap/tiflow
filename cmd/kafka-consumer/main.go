@@ -626,6 +626,7 @@ func (c *Consumer) ConsumeClaim(session sarama.ConsumerGroupSession, claim saram
 							sink.tableSinksMap.Store(tableID, c.sinkFactory.CreateTableSinkForConsumer(
 								model.DefaultChangeFeedID("kafka-consumer"),
 								spanz.TableIDToComparableSpan(tableID),
+								events[0].CommitTs,
 								prometheus.NewCounter(prometheus.CounterOpts{}),
 							))
 						}

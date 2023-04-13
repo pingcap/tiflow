@@ -55,6 +55,14 @@ func (m *mockRedoDMLManager) Run(ctx context.Context) error {
 	panic("unreachable")
 }
 
+func (m *mockRedoDMLManager) WaitForReady(_ context.Context) {
+	panic("unreachable")
+}
+
+func (m *mockRedoDMLManager) Close() {
+	panic("unreachable")
+}
+
 func (m *mockRedoDMLManager) AddTable(span tablepb.Span, startTs uint64) {
 	panic("unreachable")
 }

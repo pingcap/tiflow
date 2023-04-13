@@ -100,6 +100,10 @@ var customReplicaConfig = &ReplicaConfig{
 		EnableTableAcrossNodes: false,
 		RegionThreshold:        13,
 	},
+	Integrity: &IntegrityConfig{
+		IntegrityCheckLevel:   "none",
+		CorruptionHandleLevel: "warn",
+	},
 }
 
 // defaultReplicaConfig check if the default values is changed
@@ -126,7 +130,7 @@ var defaultReplicaConfig = &ReplicaConfig{
 		EncoderConcurrency:       16,
 		Terminator:               "\r\n",
 		DateSeparator:            "none",
-		EnablePartitionSeparator: false,
+		EnablePartitionSeparator: true,
 	},
 	Consistent: &ConsistentConfig{
 		Level:             "none",
@@ -138,6 +142,10 @@ var defaultReplicaConfig = &ReplicaConfig{
 	Scheduler: &ChangefeedSchedulerConfig{
 		EnableTableAcrossNodes: false,
 		RegionThreshold:        100_000,
+	},
+	Integrity: &IntegrityConfig{
+		IntegrityCheckLevel:   "none",
+		CorruptionHandleLevel: "warn",
 	},
 }
 

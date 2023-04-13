@@ -953,7 +953,8 @@ func (s *snapshot) exchangePartition(targetTable *model.TableInfo, currentTS uin
 		return errors.Trace(err)
 	}
 
-	newSourceTable := sourceTable.Clone()
+	newSourceTable := model.WrapTableInfo(sourceTable.SchemaID, sourceTable.TableName.Schema,
+		targetTable.Version, sourceTable.TableInfo.Clone())
 	// 5.update the sourceTable
 	err = s.dropTable(sourceTable.ID, currentTS)
 	if err != nil {

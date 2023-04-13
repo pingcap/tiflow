@@ -1381,6 +1381,10 @@ var doc = `{
                         "$ref": "#/definitions/config.DispatchRule"
                     }
                 },
+                "enable-kafka-sink-v2": {
+                    "description": "EnableKafkaSinkV2 enabled then the kafka-go sink will be used.",
+                    "type": "boolean"
+                },
                 "enable-partition-separator": {
                     "type": "boolean"
                 },
@@ -2008,6 +2012,17 @@ var doc = `{
                 }
             }
         },
+        "v2.IntegrityConfig": {
+            "type": "object",
+            "properties": {
+                "corruption_handle_level": {
+                    "type": "string"
+                },
+                "integrity_check_level": {
+                    "type": "string"
+                }
+            }
+        },
         "v2.LogLevelReq": {
             "type": "object",
             "properties": {
@@ -2079,6 +2094,9 @@ var doc = `{
                 },
                 "ignore_ineligible_table": {
                     "type": "boolean"
+                },
+                "integrity": {
+                    "$ref": "#/definitions/v2.IntegrityConfig"
                 },
                 "memory_quota": {
                     "type": "integer"
@@ -2189,6 +2207,9 @@ var doc = `{
                     "items": {
                         "$ref": "#/definitions/v2.DispatchRule"
                     }
+                },
+                "enable_kafka_sink_v_2": {
+                    "type": "boolean"
                 },
                 "enable_partition_separator": {
                     "type": "boolean"

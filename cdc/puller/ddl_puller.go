@@ -58,8 +58,8 @@ const (
 // DDLJobPuller is used to pull ddl job from TiKV.
 // It's used by processor and ddlPullerImpl.
 type DDLJobPuller interface {
-	// Run starts the DDLJobPuller.
-	Run(ctx context.Context) error
+	util.Runnable
+
 	// Output the DDL job entry, it contains the DDL job and the error.
 	Output() <-chan *model.DDLJobEntry
 }
@@ -145,6 +145,12 @@ func (p *ddlJobPullerImpl) Run(ctx context.Context) error {
 		})
 	return eg.Wait()
 }
+
+// WaitForReady implements util.Runnable.
+func (p *ddlJobPullerImpl) WaitForReady(_ context.Context) {}
+
+// Close implements util.Runnable.
+func (p *ddlJobPullerImpl) Close() {}
 
 // Output the DDL job entry, it contains the DDL job and the error.
 func (p *ddlJobPullerImpl) Output() <-chan *model.DDLJobEntry {
