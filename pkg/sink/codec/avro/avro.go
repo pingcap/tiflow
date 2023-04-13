@@ -45,7 +45,9 @@ type BatchEncoder struct {
 	valueSchemaManager *schemaManager
 	result             []*common.Message
 
-	enableTiDBExtension        bool
+	enableTiDBExtension bool
+	enableRowChecksum   bool
+
 	decimalHandlingMode        string
 	bigintUnsignedHandlingMode string
 }
@@ -143,20 +145,23 @@ func (a *BatchEncoder) avroEncode(
 	isKey bool,
 ) (*avroEncodeResult, error) {
 	var (
-		cols                []*model.Column
-		colInfos            []rowcodec.ColInfo
-		enableTiDBExtension bool
-		schemaManager       *schemaManager
-		operation           string
+		cols                   []*model.Column
+		colInfos               []rowcodec.ColInfo
+		enableTiDBExtension    bool
+		enableRowLevelChecksum bool
+		schemaManager          *schemaManager
+		operation              string
 	)
 	if isKey {
 		cols, colInfos = e.HandleKeyColInfos()
 		enableTiDBExtension = false
+		enableRowLevelChecksum = false
 		schemaManager = a.keySchemaManager
 	} else {
 		cols = e.Columns
 		colInfos = e.ColInfos
 		enableTiDBExtension = a.enableTiDBExtension
+		enableRowLevelChecksum = a.enableRowChecksum
 		schemaManager = a.valueSchemaManager
 		if e.IsInsert() {
 			operation = insertOperation
@@ -181,6 +186,7 @@ func (a *BatchEncoder) avroEncode(
 			cols,
 			colInfos,
 			enableTiDBExtension,
+			enableRowLevelChecksum,
 			a.decimalHandlingMode,
 			a.bigintUnsignedHandlingMode,
 		)
@@ -239,6 +245,10 @@ const (
 	tidbOp           = "_tidb_op"
 	tidbCommitTs     = "_tidb_commit_ts"
 	tidbPhysicalTime = "_tidb_commit_physical_time"
+
+	// row level checksum related fields
+	tidbRowLevelChecksum = "_tidb_row_level_checksum"
+	tidbCorrupted        = "_tidb_corrupted"
 )
 
 var type2TiDBType = map[byte]string{
@@ -355,6 +365,7 @@ func rowToAvroSchema(
 	columnInfo []*model.Column,
 	colInfos []rowcodec.ColInfo,
 	enableTiDBExtension bool,
+	enableRowLevelChecksum bool,
 	decimalHandlingMode string,
 	bigintUnsignedHandlingMode string,
 ) (string, error) {
@@ -434,6 +445,19 @@ func rowToAvroSchema(
 				"type": "long",
 			},
 		)
+
+		if enableRowLevelChecksum {
+			top.Fields = append(top.Fields,
+				map[string]interface{}{
+					"name": tidbRowLevelChecksum,
+					"type": "string",
+				},
+				map[string]interface{}{
+					"name": tidbCorrupted,
+					"type": "boolean",
+				})
+		}
+
 	}
 
 	str, err := json.Marshal(&top)
@@ -846,6 +870,7 @@ func (b *batchEncoderBuilder) Build() codec.RowEventEncoder {
 	encoder.valueSchemaManager = b.valueSchemaManager
 	encoder.result = make([]*common.Message, 0, 1024)
 	encoder.enableTiDBExtension = b.config.EnableTiDBExtension
+	encoder.enableRowChecksum = b.config.EnableRowChecksum
 	encoder.decimalHandlingMode = b.config.AvroDecimalHandlingMode
 	encoder.bigintUnsignedHandlingMode = b.config.AvroBigintUnsignedHandlingMode
 

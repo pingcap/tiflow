@@ -15,6 +15,7 @@ package canal
 
 import (
 	"context"
+	"strconv"
 	"time"
 
 	"github.com/goccy/go-json"
@@ -32,6 +33,7 @@ import (
 func newJSONMessageForDML(
 	builder *canalEntryBuilder,
 	enableTiDBExtension bool,
+	rowLevelChecksumEnabled bool,
 	e *model.RowChangedEvent,
 ) ([]byte, error) {
 	isDelete := e.IsDelete()
@@ -189,18 +191,22 @@ func newJSONMessageForDML(
 		}
 	}
 
+	var checksum, preChecksum uint64
+
 	if e.IsDelete() {
 		out.RawString(",\"old\":null")
 		out.RawString(",\"data\":")
 		if err := filling(e.PreColumns, out); err != nil {
 			return nil, err
 		}
+		checksum = uint64(e.PreChecksum)
 	} else if e.IsInsert() {
 		out.RawString(",\"old\":null")
 		out.RawString(",\"data\":")
 		if err := filling(e.Columns, out); err != nil {
 			return nil, err
 		}
+		checksum = uint64(e.Checksum)
 	} else if e.IsUpdate() {
 		out.RawString(",\"old\":")
 		if err := filling(e.PreColumns, out); err != nil {
@@ -210,6 +216,8 @@ func newJSONMessageForDML(
 		if err := filling(e.Columns, out); err != nil {
 			return nil, err
 		}
+		checksum = uint64(e.Checksum)
+		preChecksum = uint64(e.PreChecksum)
 	} else {
 		log.Panic("unreachable event type", zap.Any("event", e))
 	}
@@ -220,6 +228,20 @@ func newJSONMessageForDML(
 		out.RawByte('{')
 		out.RawString("\"commitTs\":")
 		out.Uint64(e.CommitTs)
+
+		if rowLevelChecksumEnabled {
+			out.RawString(",\"_row_level_checksum\":")
+			out.String(strconv.FormatUint(checksum, 10))
+
+			if e.IsUpdate() {
+				out.RawString(",\"_row_level_checksum_old\":")
+				out.String(strconv.FormatUint(preChecksum, 10))
+			}
+
+			out.RawString(",\"_corrupted\":")
+			out.Bool(e.Corrupted)
+		}
+
 		out.RawByte('}')
 	}
 	out.RawByte('}')
@@ -244,8 +266,10 @@ type JSONRowEventEncoder struct {
 	// When it is true, canal-json would generate TiDB extension information
 	// which, at the moment, only includes `tidbWaterMarkType` and `_tidb` fields.
 	enableTiDBExtension bool
-	maxMessageBytes     int
-	messages            []*common.Message
+	enableRowChecksum   bool
+
+	maxMessageBytes int
+	messages        []*common.Message
 }
 
 // newJSONRowEventEncoder creates a new JSONRowEventEncoder
@@ -253,6 +277,7 @@ func newJSONRowEventEncoder(config *common.Config) codec.RowEventEncoder {
 	encoder := &JSONRowEventEncoder{
 		builder:             newCanalEntryBuilder(),
 		enableTiDBExtension: config.EnableTiDBExtension,
+		enableRowChecksum:   config.EnableRowChecksum,
 		messages:            make([]*common.Message, 0, 1),
 		maxMessageBytes:     config.MaxMessageBytes,
 	}
@@ -317,7 +342,7 @@ func (c *JSONRowEventEncoder) AppendRowChangedEvent(
 	e *model.RowChangedEvent,
 	callback func(),
 ) error {
-	value, err := newJSONMessageForDML(c.builder, c.enableTiDBExtension, e)
+	value, err := newJSONMessageForDML(c.builder, c.enableTiDBExtension, c.enableRowChecksum, e)
 	if err != nil {
 		return errors.Trace(err)
 	}
