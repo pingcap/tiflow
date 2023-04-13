@@ -1372,6 +1372,9 @@
                 "encoder-concurrency": {
                     "type": "integer"
                 },
+                "only-output-updated-columns": {
+                    "type": "boolean"
+                },
                 "protocol": {
                     "type": "string"
                 },
@@ -2197,6 +2200,9 @@
                 },
                 "encoder_concurrency": {
                     "type": "integer"
+                },
+                "only_output_updated_columns": {
+                    "type": "boolean"
                 },
                 "protocol": {
                     "type": "string"
