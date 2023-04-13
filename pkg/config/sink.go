@@ -110,6 +110,9 @@ type SinkConfig struct {
 	DateSeparator            string            `toml:"date-separator" json:"date-separator"`
 	EnablePartitionSeparator bool              `toml:"enable-partition-separator" json:"enable-partition-separator"`
 
+	// EnableKafkaSinkV2 enabled then the kafka-go sink will be used.
+	EnableKafkaSinkV2 bool `toml:"enable-kafka-sink-v2" json:"enable-kafka-sink-v2"`
+
 	OnlyOutputUpdatedColumns bool `toml:"only-output-updated-columns" json:"only-output-updated-columns"`
 
 	// TiDBSourceID is the source ID of the upstream TiDB,

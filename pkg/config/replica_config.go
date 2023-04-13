@@ -59,6 +59,7 @@ var defaultReplicaConfig = &ReplicaConfig{
 		Terminator:               CRLF,
 		DateSeparator:            DateSeparatorNone.String(),
 		EnablePartitionSeparator: true,
+		EnableKafkaSinkV2:        false,
 		TiDBSourceID:             1,
 	},
 	Consistent: &ConsistentConfig{
