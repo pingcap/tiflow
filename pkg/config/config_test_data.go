@@ -52,6 +52,7 @@ const (
         "rule": "r2"
       }
     ],
+    "enable-partition-separator": true,
     "protocol": "open-protocol"
   },
   "consistent": {
@@ -64,7 +65,11 @@ const (
   "scheduler": {
     "enable-table-across-nodes": false,
     "region-threshold": 100000
-  }
+  },
+  "integrity": {
+    "integrity-check-level": "none",
+    "corruption-handle-level": "warn"
+ }
 }`
 
 	testCfgTestServerConfigMarshal = `{
@@ -138,8 +143,7 @@ const (
       "max-task-concurrency": 10,
       "check-balance-interval": 60000000000,
       "add-table-batch-size": 50
-    },
-    "enable-kafka-sink-v2": false
+    }
   },
   "cluster-id": "default",
   "max-memory-percentage": 70
@@ -190,7 +194,9 @@ const (
     "transaction-atomicity": "",
     "terminator": "",
     "date-separator": "month",
-    "enable-partition-separator": true
+    "enable-partition-separator": true,
+    "only-output-updated-columns": false,
+    "enable-kafka-sink-v2": true
   },
   "consistent": {
     "level": "none",
@@ -203,7 +209,12 @@ const (
     "enable-table-across-nodes": true,
     "region-per-span": 0,
     "region-threshold": 100001,
-    "write-key-threshold": 100001
+    "write-key-threshold": 100001,
+    "region-per-span": 0
+  },
+  "integrity": {
+    "integrity-check-level": "none",
+    "corruption-handle-level": "warn"
   }
 }`
 
@@ -249,7 +260,9 @@ const (
     },
     "terminator": "",
     "date-separator": "month",
-    "enable-partition-separator": true
+    "enable-partition-separator": true,
+    "only-output-updated-columns": false,
+	"enable-kafka-sink-v2": true
   },
   "consistent": {
     "level": "none",
@@ -262,6 +275,10 @@ const (
     "enable-table-across-nodes": true,
     "region-threshold": 100001,
     "write-key-threshold": 100001
+  },
+  "integrity": {
+    "integrity-check-level": "none",
+    "corruption-handle-level": "warn"
   }
 }`
 )

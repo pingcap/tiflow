@@ -50,7 +50,8 @@ var defaultAPIConfig = &ReplicaConfig{
 		EncoderConcurrency:       16,
 		Terminator:               config.CRLF,
 		DateSeparator:            config.DateSeparatorNone.String(),
-		EnablePartitionSeparator: false,
+		EnablePartitionSeparator: true,
+		EnableKafkaSinkV2:        false,
 	},
 	Consistent: &ConsistentConfig{
 		Level:             "none",
@@ -67,6 +68,10 @@ var defaultAPIConfig = &ReplicaConfig{
 		WriteKeyThreshold: config.GetDefaultReplicaConfig().
 			Scheduler.WriteKeyThreshold,
 	},
+	Integrity: &IntegrityConfig{
+		IntegrityCheckLevel:   config.GetDefaultReplicaConfig().Integrity.IntegrityCheckLevel,
+		CorruptionHandleLevel: config.GetDefaultReplicaConfig().Integrity.CorruptionHandleLevel,
+	},
 }
 
 func TestDefaultReplicaConfig(t *testing.T) {
@@ -74,6 +79,7 @@ func TestDefaultReplicaConfig(t *testing.T) {
 	require.Equal(t, defaultAPIConfig, GetDefaultReplicaConfig())
 	cfg := GetDefaultReplicaConfig()
 	require.NotNil(t, cfg.Scheduler)
+	require.NotNil(t, cfg.Integrity)
 	cfg2 := cfg.toInternalReplicaConfigWithOriginConfig(&config.ReplicaConfig{})
 	require.Equal(t, config.GetDefaultReplicaConfig(), cfg2)
 	cfg3 := ToAPIReplicaConfig(config.GetDefaultReplicaConfig())

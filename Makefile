@@ -134,7 +134,8 @@ format-makefiles: $(MAKE_FILES)
 bank:
 	$(GOBUILD) -ldflags '$(LDFLAGS)' -o bin/bank ./tests/bank/bank.go ./tests/bank/case.go
 
-build-failpoint: check_failpoint_ctl
+build-cdc-with-failpoint: check_failpoint_ctl
+build-cdc-with-failpoint: ## Build cdc with failpoint enabled.
 	$(FAILPOINT_ENABLE)
 	$(GOBUILD) -ldflags '$(LDFLAGS)' -o bin/cdc ./cmd/cdc/main.go
 	$(FAILPOINT_DISABLE)
@@ -147,10 +148,6 @@ kafka_consumer:
 
 storage_consumer:
 	$(GOBUILD) -ldflags '$(LDFLAGS)' -o bin/cdc_storage_consumer ./cmd/storage-consumer/main.go
-
-cdc_test_image: 
-	@which docker || (echo "docker not found in ${PATH}"; exit 1)
-	docker build --platform linux/amd64 -f deployments/ticdc/docker/test.Dockerfile -t cdc:test ./ 
 
 install:
 	go install ./...

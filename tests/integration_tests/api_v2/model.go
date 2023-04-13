@@ -180,6 +180,7 @@ type ReplicaConfig struct {
 	Sink       *SinkConfig                `json:"sink"`
 	Consistent *ConsistentConfig          `json:"consistent"`
 	Scheduler  *ChangefeedSchedulerConfig `json:"scheduler"`
+	Integrity  *IntegrityConfig           `json:"integrity"`
 }
 
 // FilterConfig represents filter config for a changefeed
@@ -289,6 +290,13 @@ type ChangefeedSchedulerConfig struct {
 	RegionThreshold int `toml:"region_threshold" json:"region_threshold"`
 	// WriteKeyThreshold is the written keys threshold of splitting a table.
 	WriteKeyThreshold int `toml:"write_key_threshold" json:"write_key_threshold"`
+}
+
+// IntegrityConfig is the config for integrity check
+// This is a duplicate of config.IntegrityConfig
+type IntegrityConfig struct {
+	IntegrityCheckLevel   string `json:"integrity_check_level"`
+	CorruptionHandleLevel string `json:"corruption_handle_level"`
 }
 
 // ChangeFeedInfo describes the detail of a ChangeFeed

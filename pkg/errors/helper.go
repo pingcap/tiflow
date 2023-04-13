@@ -76,6 +76,7 @@ var changefeedUnRetryableErrors = []*errors.Error{
 	ErrSchemaSnapshotNotFound,
 	ErrSyncRenameTableFailed,
 	ErrChangefeedUnretryable,
+	ErrCorruptedDataMutation,
 }
 
 // IsChangefeedUnRetryableError returns true if an error is a changefeed not retry error.

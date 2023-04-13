@@ -18,13 +18,13 @@ import (
 	"math"
 	"testing"
 
+	"github.com/pingcap/errors"
 	"github.com/pingcap/tiflow/cdc/entry"
 	"github.com/pingcap/tiflow/cdc/model"
 	"github.com/pingcap/tiflow/cdc/processor/sourcemanager"
 	"github.com/pingcap/tiflow/cdc/processor/sourcemanager/engine"
 	"github.com/pingcap/tiflow/cdc/processor/sourcemanager/engine/memory"
 	"github.com/pingcap/tiflow/pkg/upstream"
-	"github.com/stretchr/testify/require"
 	pd "github.com/tikv/pd/client"
 )
 
@@ -51,15 +51,43 @@ func CreateManagerWithMemEngine(
 	changefeedInfo *model.ChangeFeedInfo,
 	errChan chan error,
 ) (*SinkManager, *sourcemanager.SourceManager, engine.SortEngine) {
+	handleError := func(err error) {
+		if err != nil && errors.Cause(err) != context.Canceled {
+			select {
+			case errChan <- err:
+			case <-ctx.Done():
+			}
+		}
+	}
+
 	sortEngine := memory.New(context.Background())
 	up := upstream.NewUpstream4Test(&MockPD{})
-	sm := sourcemanager.NewForTest(changefeedID, up, &entry.MockMountGroup{},
-		sortEngine, errChan, false)
-	manager, err := New(
-		ctx, changefeedID, changefeedInfo, up,
-		&entry.MockSchemaStorage{Resolved: math.MaxUint64},
-		nil, sm,
-		errChan)
-	require.NoError(t, err)
-	return manager, sm, sortEngine
+	mg := &entry.MockMountGroup{}
+	schemaStorage := &entry.MockSchemaStorage{Resolved: math.MaxUint64}
+
+	sourceManager := sourcemanager.NewForTest(changefeedID, up, mg, sortEngine, false)
+	go func() { handleError(sourceManager.Run(ctx)) }()
+	sourceManager.WaitForReady(ctx)
+
+	sinkManager := New(changefeedID, changefeedInfo, up, schemaStorage, nil, sourceManager)
+	go func() { handleError(sinkManager.Run(ctx)) }()
+	sinkManager.WaitForReady(ctx)
+
+	return sinkManager, sourceManager, sortEngine
+}
+
+// nolint:revive
+// In test it is ok move the ctx to the second parameter.
+func NewManagerWithMemEngine(
+	t *testing.T,
+	changefeedID model.ChangeFeedID,
+	changefeedInfo *model.ChangeFeedInfo,
+) (*SinkManager, *sourcemanager.SourceManager, engine.SortEngine) {
+	sortEngine := memory.New(context.Background())
+	up := upstream.NewUpstream4Test(&MockPD{})
+	mg := &entry.MockMountGroup{}
+	schemaStorage := &entry.MockSchemaStorage{Resolved: math.MaxUint64}
+	sourceManager := sourcemanager.NewForTest(changefeedID, up, mg, sortEngine, false)
+	sinkManager := New(changefeedID, changefeedInfo, up, schemaStorage, nil, sourceManager)
+	return sinkManager, sourceManager, sortEngine
 }

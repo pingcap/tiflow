@@ -11,6 +11,9 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
+//go:build intest
+// +build intest
+
 package entry
 
 import (
@@ -20,6 +23,7 @@ import (
 	"testing"
 
 	"github.com/pingcap/errors"
+	"github.com/pingcap/log"
 	ticonfig "github.com/pingcap/tidb/config"
 	"github.com/pingcap/tidb/ddl"
 	"github.com/pingcap/tidb/domain"
@@ -35,9 +39,12 @@ import (
 	"github.com/pingcap/tiflow/cdc/entry/schema"
 	"github.com/pingcap/tiflow/cdc/kv"
 	"github.com/pingcap/tiflow/cdc/model"
+	"github.com/pingcap/tiflow/pkg/config"
+	"github.com/pingcap/tiflow/pkg/filter"
 	"github.com/pingcap/tiflow/pkg/util"
 	"github.com/stretchr/testify/require"
 	"github.com/tikv/client-go/v2/oracle"
+	"go.uber.org/zap"
 )
 
 func TestSchema(t *testing.T) {
@@ -540,7 +547,9 @@ func TestMultiVersionStorage(t *testing.T) {
 	}
 
 	jobs = append(jobs, job)
-	storage, err := NewSchemaStorage(nil, 0, false, dummyChangeFeedID, util.RoleTester)
+	f, err := filter.NewFilter(config.GetDefaultReplicaConfig(), "")
+	require.Nil(t, err)
+	storage, err := NewSchemaStorage(nil, 0, false, dummyChangeFeedID, util.RoleTester, f)
 	require.Nil(t, err)
 	for _, job := range jobs {
 		err := storage.HandleDDLJob(job)
@@ -619,8 +628,7 @@ func TestMultiVersionStorage(t *testing.T) {
 	require.False(t, exist)
 
 	lastSchemaTs := storage.DoGC(0)
-	// Snapshot.InitPreExistingTables will create a schema with ts = 1
-	require.Equal(t, uint64(1), lastSchemaTs)
+	require.Equal(t, uint64(0), lastSchemaTs)
 
 	snap, err = storage.GetSnapshot(ctx, 100)
 	require.Nil(t, err)
@@ -685,7 +693,9 @@ func TestCreateSnapFromMeta(t *testing.T) {
 	require.Nil(t, err)
 	meta, err := kv.GetSnapshotMeta(store, ver.Ver)
 	require.Nil(t, err)
-	snap, err := schema.NewSnapshotFromMeta(meta, ver.Ver, false)
+	f, err := filter.NewFilter(config.GetDefaultReplicaConfig(), "")
+	require.Nil(t, err)
+	snap, err := schema.NewSnapshotFromMeta(meta, ver.Ver, false, f)
 	require.Nil(t, err)
 	_, ok := snap.TableByName("test", "simple_test1")
 	require.True(t, ok)
@@ -721,13 +731,15 @@ func TestExplicitTables(t *testing.T) {
 	require.Nil(t, err)
 	meta1, err := kv.GetSnapshotMeta(store, ver1.Ver)
 	require.Nil(t, err)
-	snap1, err := schema.NewSnapshotFromMeta(meta1, ver1.Ver, true /* forceReplicate */)
+	f, err := filter.NewFilter(config.GetDefaultReplicaConfig(), "")
+	require.Nil(t, err)
+	snap1, err := schema.NewSnapshotFromMeta(meta1, ver1.Ver, true /* forceReplicate */, f)
 	require.Nil(t, err)
 	meta2, err := kv.GetSnapshotMeta(store, ver2.Ver)
 	require.Nil(t, err)
-	snap2, err := schema.NewSnapshotFromMeta(meta2, ver2.Ver, false /* forceReplicate */)
+	snap2, err := schema.NewSnapshotFromMeta(meta2, ver2.Ver, false /* forceReplicate */, f)
 	require.Nil(t, err)
-	snap3, err := schema.NewSnapshotFromMeta(meta2, ver2.Ver, true /* forceReplicate */)
+	snap3, err := schema.NewSnapshotFromMeta(meta2, ver2.Ver, true /* forceReplicate */, f)
 	require.Nil(t, err)
 
 	// we don't need to count system tables since TiCDC
@@ -865,9 +877,13 @@ func TestSchemaStorage(t *testing.T) {
 			tk.MustExec(ddlSQL)
 		}
 
-		jobs, err := getAllHistoryDDLJob(store)
+		f, err := filter.NewFilter(config.GetDefaultReplicaConfig(), "")
 		require.Nil(t, err)
-		schemaStorage, err := NewSchemaStorage(nil, 0, false, dummyChangeFeedID, util.RoleTester)
+
+		jobs, err := getAllHistoryDDLJob(store, f)
+		require.Nil(t, err)
+
+		schemaStorage, err := NewSchemaStorage(nil, 0, false, dummyChangeFeedID, util.RoleTester, f)
 		require.Nil(t, err)
 		for _, job := range jobs {
 			err := schemaStorage.HandleDDLJob(job)
@@ -878,7 +894,7 @@ func TestSchemaStorage(t *testing.T) {
 			ts := job.BinlogInfo.FinishedTS
 			meta, err := kv.GetSnapshotMeta(store, ts)
 			require.Nil(t, err)
-			snapFromMeta, err := schema.NewSnapshotFromMeta(meta, ts, false)
+			snapFromMeta, err := schema.NewSnapshotFromMeta(meta, ts, false, f)
 			require.Nil(t, err)
 			snapFromSchemaStore, err := schemaStorage.GetSnapshot(ctx, ts)
 			require.Nil(t, err)
@@ -894,7 +910,7 @@ func TestSchemaStorage(t *testing.T) {
 	}
 }
 
-func getAllHistoryDDLJob(storage tidbkv.Storage) ([]*timodel.Job, error) {
+func getAllHistoryDDLJob(storage tidbkv.Storage, f filter.Filter) ([]*timodel.Job, error) {
 	s, err := session.CreateSession(storage)
 	if err != nil {
 		return nil, errors.Trace(err)
@@ -913,14 +929,22 @@ func getAllHistoryDDLJob(storage tidbkv.Storage) ([]*timodel.Job, error) {
 	txnMeta := timeta.NewMeta(txn)
 
 	jobs, err := ddl.GetAllHistoryDDLJobs(txnMeta)
+	res := make([]*timodel.Job, 0)
 	if err != nil {
 		return nil, errors.Trace(err)
 	}
-	for i := range jobs {
+	for i, job := range jobs {
+		ignoreSchema := f.ShouldIgnoreSchema(job.SchemaName)
+		ignoreTable := f.ShouldIgnoreTable(job.SchemaName, job.TableName)
+		if ignoreSchema || ignoreTable {
+			log.Info("Ignore ddl job", zap.Stringer("job", job))
+			continue
+		}
 		// Set State from Synced to Done.
 		// Because jobs are put to history queue after TiDB alter its state from
 		// Done to Synced.
 		jobs[i].State = timodel.JobStateDone
+		res = append(res, job)
 	}
 	return jobs, nil
 }
@@ -951,7 +975,9 @@ func TestHandleKey(t *testing.T) {
 	require.Nil(t, err)
 	meta, err := kv.GetSnapshotMeta(store, ver.Ver)
 	require.Nil(t, err)
-	snap, err := schema.NewSnapshotFromMeta(meta, ver.Ver, false)
+	f, err := filter.NewFilter(config.GetDefaultReplicaConfig(), "")
+	require.Nil(t, err)
+	snap, err := schema.NewSnapshotFromMeta(meta, ver.Ver, false, f)
 	require.Nil(t, err)
 	tb1, ok := snap.TableByName("test", "simple_test1")
 	require.True(t, ok)

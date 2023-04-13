@@ -1,12 +1,9 @@
 FROM golang:1.20-alpine as builder
-RUN apk add --no-cache git make bash gcc musl-dev
+RUN apk add --no-cache git make bash findutils gcc musl-dev
 WORKDIR /go/src/github.com/pingcap/tiflow
 COPY . .
-ENV CDC_ENABLE_VENDOR=1
-RUN go mod vendor
-RUN make failpoint-enable
-RUN make cdc
-RUN make failpoint-disable
+
+RUN --mount=type=cache,target=/root/.cache/go-build,target=/go/pkg/mod make build-cdc-with-failpoint
 
 FROM alpine:3.15
 RUN apk add --no-cache tzdata bash curl socat

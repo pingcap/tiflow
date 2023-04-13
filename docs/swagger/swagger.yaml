@@ -56,10 +56,15 @@ definitions:
         items:
           $ref: '#/definitions/config.DispatchRule'
         type: array
+      enable-kafka-sink-v2:
+        description: EnableKafkaSinkV2 enabled then the kafka-go sink will be used.
+        type: boolean
       enable-partition-separator:
         type: boolean
       encoder-concurrency:
         type: integer
+      only-output-updated-columns:
+        type: boolean
       protocol:
         type: string
       schema-registry:
@@ -480,6 +485,13 @@ definitions:
           type: string
         type: array
     type: object
+  v2.IntegrityConfig:
+    properties:
+      corruption_handle_level:
+        type: string
+      integrity_check_level:
+        type: string
+    type: object
   v2.LogLevelReq:
     properties:
       log_level:
@@ -527,6 +539,8 @@ definitions:
         type: boolean
       ignore_ineligible_table:
         type: boolean
+      integrity:
+        $ref: '#/definitions/v2.IntegrityConfig'
       memory_quota:
         type: integer
       mounter:
@@ -599,10 +613,14 @@ definitions:
         items:
           $ref: '#/definitions/v2.DispatchRule'
         type: array
+      enable_kafka_sink_v_2:
+        type: boolean
       enable_partition_separator:
         type: boolean
       encoder_concurrency:
         type: integer
+      only_output_updated_columns:
+        type: boolean
       protocol:
         type: string
       schema_registry:

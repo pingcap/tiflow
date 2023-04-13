@@ -58,8 +58,8 @@ const (
 // DDLJobPuller is used to pull ddl job from TiKV.
 // It's used by processor and ddlPullerImpl.
 type DDLJobPuller interface {
-	// Run starts the DDLJobPuller.
-	Run(ctx context.Context) error
+	util.Runnable
+
 	// Output the DDL job entry, it contains the DDL job and the error.
 	Output() <-chan *model.DDLJobEntry
 }
@@ -145,6 +145,12 @@ func (p *ddlJobPullerImpl) Run(ctx context.Context) error {
 		})
 	return eg.Wait()
 }
+
+// WaitForReady implements util.Runnable.
+func (p *ddlJobPullerImpl) WaitForReady(_ context.Context) {}
+
+// Close implements util.Runnable.
+func (p *ddlJobPullerImpl) Close() {}
 
 // Output the DDL job entry, it contains the DDL job and the error.
 func (p *ddlJobPullerImpl) Output() <-chan *model.DDLJobEntry {
@@ -459,21 +465,17 @@ func NewDDLJobPuller(
 	pdClock pdutil.Clock,
 	checkpointTs uint64,
 	cfg *config.KVClientConfig,
-	replicaConfig *config.ReplicaConfig,
 	changefeed model.ChangeFeedID,
 	schemaStorage entry.SchemaStorage,
+	filter filter.Filter,
 ) (DDLJobPuller, error) {
-	f, err := filter.NewFilter(replicaConfig, "")
-	if err != nil {
-		return nil, errors.Trace(err)
-	}
 	spans := spanz.GetAllDDLSpan()
 	for i := range spans {
 		spans[i].TableID = -1
 	}
 	return &ddlJobPullerImpl{
 		changefeedID:  changefeed,
-		filter:        f,
+		filter:        filter,
 		schemaStorage: schemaStorage,
 		puller: New(
 			ctx,
@@ -531,6 +533,7 @@ func NewDDLPuller(ctx context.Context,
 	startTs uint64,
 	changefeed model.ChangeFeedID,
 	schemaStorage entry.SchemaStorage,
+	filter filter.Filter,
 ) (DDLPuller, error) {
 	// add "_ddl_puller" to make it different from table pullers.
 	changefeed.ID += "_ddl_puller"
@@ -549,9 +552,9 @@ func NewDDLPuller(ctx context.Context,
 			up.PDClock,
 			startTs,
 			config.GetGlobalServerConfig().KVClient,
-			replicaConfig,
 			changefeed,
 			schemaStorage,
+			filter,
 		)
 		if err != nil {
 			return nil, errors.Trace(err)

@@ -37,7 +37,7 @@ func VerifyTables(
 	if err != nil {
 		return nil, nil, nil, errors.Trace(err)
 	}
-	snap, err := schema.NewSingleSnapshotFromMeta(meta, startTs, false /* explicitTables */)
+	snap, err := schema.NewSingleSnapshotFromMeta(meta, startTs, false /* explicitTables */, f)
 	if err != nil {
 		return nil, nil, nil, errors.Trace(err)
 	}

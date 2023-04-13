@@ -11,6 +11,9 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
+//go:build intest
+// +build intest
+
 package entry
 
 import (
@@ -278,9 +281,12 @@ func testMounterDisableOldValue(t *testing.T, tc struct {
 
 	tk.MustExec(tc.createTableDDL)
 
-	jobs, err := getAllHistoryDDLJob(store)
+	f, err := filter.NewFilter(config.GetDefaultReplicaConfig(), "")
 	require.Nil(t, err)
-	scheamStorage, err := NewSchemaStorage(nil, 0, false, dummyChangeFeedID, util.RoleTester)
+	jobs, err := getAllHistoryDDLJob(store, f)
+	require.Nil(t, err)
+
+	scheamStorage, err := NewSchemaStorage(nil, 0, false, dummyChangeFeedID, util.RoleTester, f)
 	require.Nil(t, err)
 	for _, job := range jobs {
 		err := scheamStorage.HandleDDLJob(job)
@@ -307,7 +313,8 @@ func testMounterDisableOldValue(t *testing.T, tc struct {
 	require.Nil(t, err)
 	mounter := NewMounter(scheamStorage,
 		model.DefaultChangeFeedID("c1"),
-		time.UTC, filter, false).(*mounter)
+		time.UTC, filter, false,
+		config.Integrity).(*mounter)
 	mounter.tz = time.Local
 	ctx := context.Background()
 
@@ -982,6 +989,87 @@ func TestGetDefaultZeroValue(t *testing.T) {
 	}
 }
 
+func TestDecodeRow(t *testing.T) {
+	helper := NewSchemaTestHelper(t)
+	defer helper.Close()
+	helper.Tk().MustExec("set @@tidb_enable_clustered_index=1;")
+	helper.Tk().MustExec("use test;")
+
+	changefeed := model.DefaultChangeFeedID("changefeed-test-decode-row")
+
+	ver, err := helper.Storage().CurrentVersion(oracle.GlobalTxnScope)
+	require.NoError(t, err)
+
+	cfg := config.GetDefaultReplicaConfig()
+
+	cfgWithChecksumEnabled := config.GetDefaultReplicaConfig()
+	cfgWithChecksumEnabled.Integrity.IntegrityCheckLevel = config.IntegrityCheckLevelCorrectness
+
+	for _, c := range []*config.ReplicaConfig{cfg, cfgWithChecksumEnabled} {
+		filter, err := filter.NewFilter(c, "")
+		require.NoError(t, err)
+
+		schemaStorage, err := NewSchemaStorage(helper.GetCurrentMeta(),
+			ver.Ver, false, changefeed, util.RoleTester, filter)
+		require.NoError(t, err)
+
+		// apply ddl to schemaStorage
+		ddl := "create table test.student(id int primary key, name char(50), age int, gender char(10))"
+		job := helper.DDL2Job(ddl)
+		err = schemaStorage.HandleDDLJob(job)
+		require.NoError(t, err)
+
+		ts := schemaStorage.GetLastSnapshot().CurrentTs()
+
+		schemaStorage.AdvanceResolvedTs(ver.Ver)
+
+		mounter := NewMounter(
+			schemaStorage, changefeed, time.Local, filter, true, cfg.Integrity).(*mounter)
+
+		helper.Tk().MustExec(`insert into student values(1, "dongmen", 20, "male")`)
+		helper.Tk().MustExec(`update student set age = 27 where id = 1`)
+
+		ctx := context.Background()
+		decodeAndCheckRowInTable := func(tableID int64, f func(key []byte, value []byte) *model.RawKVEntry) {
+			walkTableSpanInStore(t, helper.Storage(), tableID, func(key []byte, value []byte) {
+				rawKV := f(key, value)
+
+				row, err := mounter.unmarshalAndMountRowChanged(ctx, rawKV)
+				require.NoError(t, err)
+				require.NotNil(t, row)
+
+				if row.Columns != nil {
+					require.NotNil(t, mounter.decoder)
+				}
+
+				if row.PreColumns != nil {
+					require.NotNil(t, mounter.preDecoder)
+				}
+			})
+		}
+
+		toRawKV := func(key []byte, value []byte) *model.RawKVEntry {
+			return &model.RawKVEntry{
+				OpType:  model.OpTypePut,
+				Key:     key,
+				Value:   value,
+				StartTs: ts - 1,
+				CRTs:    ts + 1,
+			}
+		}
+
+		tableInfo, ok := schemaStorage.GetLastSnapshot().TableByName("test", "student")
+		require.True(t, ok)
+
+		decodeAndCheckRowInTable(tableInfo.ID, toRawKV)
+		decodeAndCheckRowInTable(tableInfo.ID, toRawKV)
+
+		job = helper.DDL2Job("drop table student")
+		err = schemaStorage.HandleDDLJob(job)
+		require.NoError(t, err)
+	}
+}
+
 // TestDecodeEventIgnoreRow tests a PolymorphicEvent.Row is nil
 // if this event should be filter out by filter.
 func TestDecodeEventIgnoreRow(t *testing.T) {
@@ -999,12 +1087,13 @@ func TestDecodeEventIgnoreRow(t *testing.T) {
 
 	cfg := config.GetDefaultReplicaConfig()
 	cfg.Filter.Rules = []string{"test.student", "test.computer"}
-	filter, err := filter.NewFilter(cfg, "")
+	f, err := filter.NewFilter(cfg, "")
 	require.Nil(t, err)
 	ver, err := helper.Storage().CurrentVersion(oracle.GlobalTxnScope)
 	require.Nil(t, err)
+
 	schemaStorage, err := NewSchemaStorage(helper.GetCurrentMeta(),
-		ver.Ver, false, cfID, util.RoleTester)
+		ver.Ver, false, cfID, util.RoleTester, f)
 	require.Nil(t, err)
 	// apply ddl to schemaStorage
 	for _, ddl := range ddls {
@@ -1015,7 +1104,7 @@ func TestDecodeEventIgnoreRow(t *testing.T) {
 
 	ts := schemaStorage.GetLastSnapshot().CurrentTs()
 	schemaStorage.AdvanceResolvedTs(ver.Ver)
-	mounter := NewMounter(schemaStorage, cfID, time.Local, filter, true).(*mounter)
+	mounter := NewMounter(schemaStorage, cfID, time.Local, f, true, cfg.Integrity).(*mounter)
 
 	type testCase struct {
 		schema  string
@@ -1192,7 +1281,7 @@ func TestBuildTableInfo(t *testing.T) {
 		originTI, err := ddl.BuildTableInfoFromAST(stmt.(*ast.CreateTableStmt))
 		require.NoError(t, err)
 		cdcTableInfo := model.WrapTableInfo(0, "test", 0, originTI)
-		cols, _, err := datum2Column(cdcTableInfo, map[int64]types.Datum{}, true)
+		cols, _, _, err := datum2Column(cdcTableInfo, map[int64]types.Datum{}, true)
 		require.NoError(t, err)
 		recoveredTI := model.BuildTiDBTableInfo(cols, cdcTableInfo.IndexColumnsOffset)
 		handle := sqlmodel.GetWhereHandle(recoveredTI, recoveredTI)

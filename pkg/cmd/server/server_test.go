@@ -167,7 +167,6 @@ func TestParseCfg(t *testing.T) {
 			RegionRetryDuration: config.TomlDuration(time.Minute),
 		},
 		Debug: &config.DebugConfig{
-			EnableKafkaSinkV2: false,
 			DB: &config.DBConfig{
 				Count:                       8,
 				Concurrency:                 128,
@@ -238,7 +237,6 @@ sort-dir = "/tmp/just_a_test"
 region-retry-duration = "3s"
 
 [debug]
-enable-kafka-sink-v2 = true
 [debug.db]
 count = 5
 concurrency = 6
@@ -313,7 +311,6 @@ check-balance-interval = "10s"
 			RegionRetryDuration: config.TomlDuration(3 * time.Second),
 		},
 		Debug: &config.DebugConfig{
-			EnableKafkaSinkV2: true,
 			DB: &config.DBConfig{
 				Count:                       5,
 				Concurrency:                 6,
@@ -445,7 +442,6 @@ cert-allowed-cn = ["dd","ee"]
 			RegionRetryDuration: config.TomlDuration(time.Minute),
 		},
 		Debug: &config.DebugConfig{
-			EnableKafkaSinkV2: false,
 			DB: &config.DBConfig{
 				Count:                       8,
 				Concurrency:                 128,
@@ -484,7 +480,7 @@ cert-allowed-cn = ["dd","ee"]
 	}, o.serverConfig)
 }
 
-func TestDecodeUnkownDebugCfg(t *testing.T) {
+func TestDecodeUnknownDebugCfg(t *testing.T) {
 	tmpDir := t.TempDir()
 	configPath := filepath.Join(tmpDir, "ticdc.toml")
 	configContent := `
@@ -507,7 +503,6 @@ unknown3 = 3
 	err = o.validate()
 	require.Nil(t, err)
 	require.Equal(t, &config.DebugConfig{
-		EnableKafkaSinkV2: false,
 		DB: &config.DBConfig{
 			Count:                       8,
 			Concurrency:                 128,

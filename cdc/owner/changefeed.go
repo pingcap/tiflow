@@ -33,6 +33,7 @@ import (
 	"github.com/pingcap/tiflow/pkg/config"
 	cdcContext "github.com/pingcap/tiflow/pkg/context"
 	cerror "github.com/pingcap/tiflow/pkg/errors"
+	"github.com/pingcap/tiflow/pkg/filter"
 	"github.com/pingcap/tiflow/pkg/orchestrator"
 	"github.com/pingcap/tiflow/pkg/pdutil"
 	redoCfg "github.com/pingcap/tiflow/pkg/redo"
@@ -125,6 +126,7 @@ type changefeed struct {
 		startTs uint64,
 		changefeed model.ChangeFeedID,
 		schemaStorage entry.SchemaStorage,
+		filter filter.Filter,
 	) (puller.DDLPuller, error)
 
 	newSink      func(changefeedID model.ChangeFeedID, info *model.ChangeFeedInfo, reportErr func(error)) DDLSink
@@ -175,6 +177,7 @@ func newChangefeed4Test(
 		startTs uint64,
 		changefeed model.ChangeFeedID,
 		schemaStorage entry.SchemaStorage,
+		filter filter.Filter,
 	) (puller.DDLPuller, error),
 	newSink func(changefeedID model.ChangeFeedID, info *model.ChangeFeedInfo, reportErr func(err error)) DDLSink,
 	newScheduler func(
@@ -312,7 +315,16 @@ func (c *changefeed) tick(ctx cdcContext.Context, captures map[model.CaptureID]*
 	// Note: There may be some tableBarrierTs larger than otherBarrierTs,
 	// but we can ignore them because they will be handled in the processor.
 	if barrier.GlobalBarrierTs > otherBarrierTs {
+		log.Debug("There are other barriers less than ddl barrier, wait for them",
+			zap.Uint64("otherBarrierTs", otherBarrierTs),
+			zap.Uint64("ddlBarrierTs", barrier.GlobalBarrierTs))
 		barrier.GlobalBarrierTs = otherBarrierTs
+	}
+
+	if minTableBarrierTs > otherBarrierTs {
+		log.Debug("There are other barriers less than min table barrier, wait for them",
+			zap.Uint64("otherBarrierTs", otherBarrierTs),
+			zap.Uint64("ddlBarrierTs", barrier.GlobalBarrierTs))
 		minTableBarrierTs = otherBarrierTs
 	}
 
@@ -526,7 +538,16 @@ LOOP:
 	}
 	c.barriers.Update(finishBarrier, c.state.Info.GetTargetTs())
 
-	c.schema, err = newSchemaWrap4Owner(c.upstream.KVStorage, ddlStartTs, c.state.Info.Config, c.id)
+	filter, err := filter.NewFilter(c.state.Info.Config, "")
+	if err != nil {
+		return errors.Trace(err)
+	}
+	c.schema, err = newSchemaWrap4Owner(
+		c.upstream.KVStorage,
+		ddlStartTs,
+		c.state.Info.Config,
+		c.id,
+		filter)
 	if err != nil {
 		return errors.Trace(err)
 	}
@@ -552,7 +573,8 @@ LOOP:
 		c.state.Info.Config,
 		c.upstream, ddlStartTs,
 		c.id,
-		c.schema)
+		c.schema,
+		filter)
 	if err != nil {
 		return errors.Trace(err)
 	}
