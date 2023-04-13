@@ -34,12 +34,15 @@ func TestBuildCanalJSONRowEventEncoder(t *testing.T) {
 	encoder, ok := builder.Build().(*JSONRowEventEncoder)
 	require.True(t, ok)
 	require.False(t, encoder.enableTiDBExtension)
+	require.False(t, encoder.enableRowChecksum)
 
 	cfg.EnableTiDBExtension = true
+	cfg.EnableRowChecksum = true
 	builder = &jsonRowEventEncoderBuilder{config: cfg}
 	encoder, ok = builder.Build().(*JSONRowEventEncoder)
 	require.True(t, ok)
 	require.True(t, encoder.enableTiDBExtension)
+	require.True(t, encoder.enableRowChecksum)
 }
 
 func TestNewCanalJSONMessage4DML(t *testing.T) {
@@ -53,7 +56,8 @@ func TestNewCanalJSONMessage4DML(t *testing.T) {
 	encoder, ok := e.(*JSONRowEventEncoder)
 	require.True(t, ok)
 
-	data, err := newJSONMessageForDML(encoder.builder, encoder.enableTiDBExtension, testCaseInsert)
+	data, err := newJSONMessageForDML(encoder.builder,
+		encoder.enableTiDBExtension, encoder.enableRowChecksum, testCaseInsert)
 	require.Nil(t, err)
 	var msg canalJSONMessageInterface = &JSONMessage{}
 	err = json.Unmarshal(data, msg)
@@ -96,7 +100,8 @@ func TestNewCanalJSONMessage4DML(t *testing.T) {
 		require.Equal(t, item.expectedEncodedValue, obtainedValue)
 	}
 
-	data, err = newJSONMessageForDML(encoder.builder, encoder.enableTiDBExtension, testCaseUpdate)
+	data, err = newJSONMessageForDML(encoder.builder,
+		encoder.enableTiDBExtension, encoder.enableRowChecksum, testCaseUpdate)
 	require.Nil(t, err)
 	jsonMsg = &JSONMessage{}
 	err = json.Unmarshal(data, jsonMsg)
@@ -105,7 +110,8 @@ func TestNewCanalJSONMessage4DML(t *testing.T) {
 	require.NotNil(t, jsonMsg.Old)
 	require.Equal(t, "UPDATE", jsonMsg.EventType)
 
-	data, err = newJSONMessageForDML(encoder.builder, encoder.enableTiDBExtension, testCaseDelete)
+	data, err = newJSONMessageForDML(encoder.builder,
+		encoder.enableTiDBExtension, encoder.enableRowChecksum, testCaseDelete)
 	require.Nil(t, err)
 	jsonMsg = &JSONMessage{}
 	err = json.Unmarshal(data, jsonMsg)
@@ -122,7 +128,8 @@ func TestNewCanalJSONMessage4DML(t *testing.T) {
 
 	encoder, ok = e.(*JSONRowEventEncoder)
 	require.True(t, ok)
-	data, err = newJSONMessageForDML(encoder.builder, encoder.enableTiDBExtension, testCaseUpdate)
+	data, err = newJSONMessageForDML(encoder.builder,
+		encoder.enableTiDBExtension, encoder.enableRowChecksum, testCaseUpdate)
 	require.Nil(t, err)
 
 	withExtension := &canalJSONMessageWithTiDBExtension{}

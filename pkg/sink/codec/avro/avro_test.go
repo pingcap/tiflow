@@ -657,6 +657,7 @@ func TestRowToAvroSchema(t *testing.T) {
 		cols,
 		colInfos,
 		false,
+		false,
 		"precise",
 		"long",
 	)
@@ -671,6 +672,7 @@ func TestRowToAvroSchema(t *testing.T) {
 		cols,
 		colInfos,
 		true,
+		false,
 		"precise",
 		"long",
 	)
@@ -785,6 +787,7 @@ func TestAvroEncode(t *testing.T) {
 		keyCols,
 		keyColInfos,
 		false,
+		false,
 		"precise",
 		"long",
 	)
@@ -809,6 +812,7 @@ func TestAvroEncode(t *testing.T) {
 		cols,
 		colInfos,
 		true,
+		false,
 		"precise",
 		"long",
 	)

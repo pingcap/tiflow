@@ -33,6 +33,7 @@ func TestBuildOpenProtocolBatchEncoder(t *testing.T) {
 	require.True(t, ok)
 	require.Equal(t, config.MaxBatchSize, encoder.MaxBatchSize)
 	require.Equal(t, config.MaxMessageBytes, encoder.MaxMessageBytes)
+	require.Equal(t, config.EnableTiDBExtension, encoder.enableRowChecksum)
 }
 
 func TestMaxMessageBytes(t *testing.T) {
