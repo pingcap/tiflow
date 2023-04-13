@@ -339,7 +339,7 @@ func datum2Column(
 ) ([]*model.Column, []types.Datum, []int64, error) {
 	cols := make([]*model.Column, len(tableInfo.RowColumnsOffset))
 	rawCols := make([]types.Datum, len(tableInfo.RowColumnsOffset))
-	columnIDs := make([]int64, 0, len(tableInfo.Columns))
+	columnIDs := make([]int64, len(tableInfo.RowColumnsOffset))
 
 	for _, colInfo := range tableInfo.Columns {
 		colSize := 0
@@ -383,7 +383,7 @@ func datum2Column(
 			// ApproximateBytes = column data size + column struct size
 			ApproximateBytes: colSize + sizeOfEmptyColumn,
 		}
-		columnIDs = append(columnIDs, colInfo.ID)
+		columnIDs[tableInfo.RowColumnsOffset[colInfo.ID]] = colInfo.ID
 	}
 	return cols, rawCols, columnIDs, nil
 }
@@ -395,6 +395,11 @@ func (m *mounter) verifyChecksum(
 	columnIDs []int64, rawColumns []types.Datum, isPreRow bool,
 ) (uint32, bool, error) {
 	if !m.integrity.Enabled() {
+		return 0, true, nil
+	}
+
+	// when the old value is not enabled, no previous columns so that no need to verify the checksum.
+	if isPreRow && !m.enableOldValue {
 		return 0, true, nil
 	}
 
