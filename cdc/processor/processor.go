@@ -751,7 +751,7 @@ func (p *processor) initDDLHandler(ctx context.Context) error {
 	}
 	f, err := filter.NewFilter(p.changefeed.Info.Config, "")
 	if err != nil {
-		return nil, errors.Trace(err)
+		return errors.Trace(err)
 	}
 	schemaStorage, err := entry.NewSchemaStorage(meta, ddlStartTs,
 		forceReplicate, p.changefeedID, util.RoleProcessor, f)
