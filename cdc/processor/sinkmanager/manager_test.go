@@ -154,6 +154,10 @@ func TestRemoveTable(t *testing.T) {
 		return manager.sinkMemQuota.GetUsedBytes() == 872
 	}, 5*time.Second, 10*time.Millisecond)
 
+	// Call this function times to test the idempotence.
+	manager.AsyncStopTable(span)
+	manager.AsyncStopTable(span)
+	manager.AsyncStopTable(span)
 	manager.AsyncStopTable(span)
 	require.Eventually(t, func() bool {
 		state, ok := manager.GetTableState(span)
