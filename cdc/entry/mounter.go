@@ -383,7 +383,7 @@ func datum2Column(
 			// ApproximateBytes = column data size + column struct size
 			ApproximateBytes: colSize + sizeOfEmptyColumn,
 		}
-		columnIDs = append(columnIDs, colInfo.ID)
+		columnIDs[tableInfo.RowColumnsOffset[colInfo.ID]] = colInfo.ID
 	}
 	return cols, rawCols, columnIDs, nil
 }
