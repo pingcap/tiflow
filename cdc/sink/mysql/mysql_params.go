@@ -54,6 +54,14 @@ const (
 	defaultTxnIsolationRC      = "READ-COMMITTED"
 	defaultCharacterSet        = "utf8mb4"
 	defaultBatchDMLEnable      = true
+	// defaultMaxBatchUpdateRowCount is the default max number of rows in a
+	// single batch update SQL.
+	defaultMaxBatchUpdateRowCount = 40
+	maxMaxBatchUpdateRowCount     = 1024
+	// defaultMaxBatchUpdateRowSize(1KB) defines the default value of single row.
+	// When the average row size is larger defaultMaxBatchUpdateRowSize,
+	// disable batch update, otherwise enable batch update.
+	defaultMaxBatchUpdateRowSize = 1024
 )
 
 var (
@@ -72,6 +80,7 @@ var defaultParams = &sinkParams{
 	dialTimeout:         defaultDialTimeout,
 	safeMode:            defaultSafeMode,
 	batchDMLEnable:      defaultBatchDMLEnable,
+	batchUpdateRowCount: defaultMaxBatchUpdateRowCount,
 }
 
 var validSchemes = map[string]bool{
@@ -97,6 +106,8 @@ type sinkParams struct {
 	timezone            string
 	tls                 string
 	batchDMLEnable      bool
+	batchUpdateRowCount int
+	isTiDB              bool
 }
 
 func (s *sinkParams) Clone() *sinkParams {
@@ -264,6 +275,24 @@ func parseSinkURIToParams(ctx context.Context,
 			return nil, cerror.WrapError(cerror.ErrMySQLInvalidConfig, err)
 		}
 		params.batchDMLEnable = enable
+	}
+
+	s = sinkURI.Query().Get("max-multi-update-row")
+	if s != "" {
+		c, err := strconv.Atoi(s)
+		if err != nil {
+			return nil, cerror.WrapError(cerror.ErrMySQLInvalidConfig, err)
+		}
+		if c <= 0 {
+			return nil, cerror.WrapError(cerror.ErrMySQLInvalidConfig,
+				fmt.Errorf("invalid max-multi-update-row %d, which must be greater than 0", c))
+		}
+		if c > maxMaxBatchUpdateRowCount {
+			log.Warn("max-multi-update-row too large",
+				zap.Int("original", c), zap.Int("override", maxMaxBatchUpdateRowCount))
+			c = maxMaxBatchUpdateRowCount
+		}
+		params.batchUpdateRowCount = c
 	}
 
 	return params, nil

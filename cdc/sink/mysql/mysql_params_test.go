@@ -45,6 +45,7 @@ func TestSinkParamsClone(t *testing.T) {
 		dialTimeout:         defaultDialTimeout,
 		safeMode:            defaultSafeMode,
 		batchDMLEnable:      defaultBatchDMLEnable,
+		batchUpdateRowCount: defaultMaxBatchUpdateRowCount,
 	}, param1)
 	require.Equal(t, &sinkParams{
 		changefeedID:        model.DefaultChangeFeedID("123"),
@@ -58,6 +59,7 @@ func TestSinkParamsClone(t *testing.T) {
 		dialTimeout:         defaultDialTimeout,
 		safeMode:            defaultSafeMode,
 		batchDMLEnable:      defaultBatchDMLEnable,
+		batchUpdateRowCount: defaultMaxBatchUpdateRowCount,
 	}, param2)
 }
 
@@ -211,9 +213,11 @@ func TestParseSinkURIToParams(t *testing.T) {
 	expected.changefeedID = model.DefaultChangeFeedID("cf-id")
 	expected.captureAddr = "127.0.0.1:8300"
 	expected.tidbTxnMode = "pessimistic"
+	expected.batchUpdateRowCount = 80
 	uriStr := "mysql://127.0.0.1:3306/?worker-count=64&max-txn-row=20" +
 		"&batch-replace-enable=true&batch-replace-size=50&safe-mode=false" +
-		"&tidb-txn-mode=pessimistic"
+		"&tidb-txn-mode=pessimistic" +
+		"&max-multi-update-row=80"
 	opts := map[string]string{
 		metrics.OptCaptureAddr: expected.captureAddr,
 	}
@@ -256,22 +260,29 @@ func TestParseSinkURIOverride(t *testing.T) {
 	cases := []struct {
 		uri     string
 		checker func(*sinkParams)
-	}{{
-		uri: "mysql://127.0.0.1:3306/?worker-count=2147483648", // int32 max
-		checker: func(sp *sinkParams) {
-			require.EqualValues(t, sp.workerCount, maxWorkerCount)
+	}{
+		{
+			uri: "mysql://127.0.0.1:3306/?worker-count=2147483648", // int32 max
+			checker: func(sp *sinkParams) {
+				require.EqualValues(t, sp.workerCount, maxWorkerCount)
+			},
+		}, {
+			uri: "mysql://127.0.0.1:3306/?max-txn-row=2147483648", // int32 max
+			checker: func(sp *sinkParams) {
+				require.EqualValues(t, sp.maxTxnRow, maxMaxTxnRow)
+			},
+		}, {
+			uri: "mysql://127.0.0.1:3306/?tidb-txn-mode=badmode",
+			checker: func(sp *sinkParams) {
+				require.EqualValues(t, sp.tidbTxnMode, defaultTiDBTxnMode)
+			},
+		}, {
+			uri: "mysql://127.0.0.1:3306/?max-multi-update-row=2147483648", // int32 max
+			checker: func(sp *sinkParams) {
+				require.EqualValues(t, sp.batchUpdateRowCount, maxMaxBatchUpdateRowCount)
+			},
 		},
-	}, {
-		uri: "mysql://127.0.0.1:3306/?max-txn-row=2147483648", // int32 max
-		checker: func(sp *sinkParams) {
-			require.EqualValues(t, sp.maxTxnRow, maxMaxTxnRow)
-		},
-	}, {
-		uri: "mysql://127.0.0.1:3306/?tidb-txn-mode=badmode",
-		checker: func(sp *sinkParams) {
-			require.EqualValues(t, sp.tidbTxnMode, defaultTiDBTxnMode)
-		},
-	}}
+	}
 	ctx := context.TODO()
 	var uri *url.URL
 	var err error

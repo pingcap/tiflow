@@ -20,6 +20,7 @@ import (
 	"testing"
 
 	"github.com/DATA-DOG/go-sqlmock"
+	dmysql "github.com/go-sql-driver/mysql"
 	"github.com/phayes/freeport"
 	"github.com/pingcap/tiflow/cdc/model"
 	"github.com/pingcap/tiflow/cdc/redo/common"
@@ -149,6 +150,10 @@ func TestApplyDMLs(t *testing.T) {
 				"where character_set_name = 'gbk';").WillReturnRows(
 				sqlmock.NewRows([]string{"character_set_name"}).AddRow("gbk"),
 			)
+			mock.ExpectQuery("select tidb_version()").WillReturnError(&dmysql.MySQLError{
+				Number:  1305,
+				Message: "FUNCTION test.tidb_version does not exist",
+			})
 			mock.ExpectClose()
 			return db, nil
 		}
