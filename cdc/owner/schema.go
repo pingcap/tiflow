@@ -44,6 +44,7 @@ type schemaWrap4Owner struct {
 func newSchemaWrap4Owner(
 	kvStorage tidbkv.Storage, startTs model.Ts,
 	config *config.ReplicaConfig, id model.ChangeFeedID,
+	filter filter.Filter,
 ) (*schemaWrap4Owner, error) {
 	var meta *timeta.Meta
 
@@ -56,18 +57,15 @@ func newSchemaWrap4Owner(
 	}
 
 	schemaStorage, err := entry.NewSchemaStorage(
-		meta, startTs, config.ForceReplicate, id, util.RoleOwner)
+		meta, startTs, config.ForceReplicate, id, util.RoleOwner, filter)
 	if err != nil {
 		return nil, errors.Trace(err)
 	}
 	// It is no matter to use an empty as timezone here because schemaWrap4Owner
 	// doesn't use expression filter's method.
-	f, err := filter.NewFilter(config, "")
-	if err != nil {
-		return nil, errors.Trace(err)
-	}
+
 	schema := &schemaWrap4Owner{
-		filter: f,
+		filter: filter,
 		config: config,
 		id:     id,
 		metricIgnoreDDLEventCounter: changefeedIgnoredDDLEventCounter.
