@@ -398,6 +398,11 @@ func (m *mounter) verifyChecksum(
 		return 0, true, nil
 	}
 
+	// when the old value is not enabled, no previous columns so that no need to verify the checksum.
+	if isPreRow && !m.enableOldValue {
+		return 0, true, nil
+	}
+
 	var decoder *rowcodec.DatumMapDecoder
 	if isPreRow {
 		decoder = m.preDecoder
