@@ -32,6 +32,114 @@ func TestNewConfig(t *testing.T) {
 	require.Equal(t, "precise", c.AvroDecimalHandlingMode)
 	require.Equal(t, "long", c.AvroBigintUnsignedHandlingMode)
 	require.Equal(t, "", c.AvroSchemaRegistry)
+	require.False(t, c.EnableRowChecksum)
+}
+
+func TestConfigApplyValidate4EnableRowChecksum(t *testing.T) {
+	t.Parallel()
+
+	// enable the row level checksum
+	replicaConfig := config.GetDefaultReplicaConfig()
+	replicaConfig.Integrity.IntegrityCheckLevel = config.IntegrityCheckLevelCorrectness
+
+	// open-protocol
+	uri := "kafka://127.0.0.1:9092/abc?protocol=open-protocol"
+	sinkURI, err := url.Parse(uri)
+	require.NoError(t, err)
+
+	protocol := sinkURI.Query().Get("protocol")
+	p, err := config.ParseSinkProtocolFromString(protocol)
+	require.NoError(t, err)
+	c := NewConfig(p)
+
+	err = c.Apply(sinkURI, replicaConfig)
+	require.NoError(t, err)
+	require.True(t, c.EnableRowChecksum)
+
+	err = c.Validate()
+	require.NoError(t, err)
+
+	// canal-json, enable-tidb-extension is not set, should return error
+	uri = "kafka://127.0.0.1:9092/abc?protocol=canal-json"
+	sinkURI, err = url.Parse(uri)
+	require.NoError(t, err)
+
+	protocol = sinkURI.Query().Get("protocol")
+	p, err = config.ParseSinkProtocolFromString(protocol)
+	require.NoError(t, err)
+	c = NewConfig(p)
+
+	err = c.Apply(sinkURI, replicaConfig)
+	require.NoError(t, err)
+	require.True(t, c.EnableRowChecksum)
+
+	err = c.Validate()
+	require.Error(t, err)
+
+	// canal-json, enable-tidb-extension enabled
+	uri = "kafka://127.0.0.1:9092/abc?protocol=canal-json&enable-tidb-extension=true"
+	sinkURI, err = url.Parse(uri)
+	require.NoError(t, err)
+
+	protocol = sinkURI.Query().Get("protocol")
+	p, err = config.ParseSinkProtocolFromString(protocol)
+	require.NoError(t, err)
+	c = NewConfig(p)
+
+	err = c.Apply(sinkURI, replicaConfig)
+	require.NoError(t, err)
+	require.True(t, c.EnableRowChecksum)
+
+	err = c.Validate()
+	require.NoError(t, err)
+
+	// avro, all requirement satisfied, should return no error
+	replicaConfig.Sink.SchemaRegistry = "some-schema-registry"
+
+	uri = "kafka://127.0.0.1:9092/abc?protocol=avro&enable-tidb-extension=true&" +
+		"avro-decimal-handling-mode=string&avro-bigint-unsigned-handling-mode=string"
+	sinkURI, err = url.Parse(uri)
+	require.NoError(t, err)
+
+	protocol = sinkURI.Query().Get("protocol")
+	p, err = config.ParseSinkProtocolFromString(protocol)
+	require.NoError(t, err)
+	c = NewConfig(p)
+
+	err = c.Apply(sinkURI, replicaConfig)
+	require.NoError(t, err)
+
+	err = c.Validate()
+	require.NoError(t, err)
+
+	// avo, not all requirement satisfied, return error
+
+	invalidSinkURI := []string{
+		"kafka://127.0.0.1:9092/abc?protocol=avro",
+		"kafka://127.0.0.1:9092/abc?protocol=avro&enable-tidb-extension=true",
+
+		"kafka://127.0.0.1:9092/abc?protocol=avro&enable-tidb-extension=true&" +
+			"avro-decimal-handling-mode=string",
+
+		"kafka://127.0.0.1:9092/abc?protocol=avro&enable-tidb-extension=true&" +
+			"avro-bigint-unsigned-handling-mode=string",
+	}
+
+	for _, uri := range invalidSinkURI {
+		sinkURI, err = url.Parse(uri)
+		require.NoError(t, err)
+
+		protocol = sinkURI.Query().Get("protocol")
+		p, err = config.ParseSinkProtocolFromString(protocol)
+		require.NoError(t, err)
+		c = NewConfig(p)
+
+		err = c.Apply(sinkURI, replicaConfig)
+		require.NoError(t, err)
+
+		err = c.Validate()
+		require.Error(t, err)
+	}
 }
 
 func TestConfigApplyValidate(t *testing.T) {
