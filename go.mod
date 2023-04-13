@@ -28,7 +28,7 @@ require (
 	github.com/gin-gonic/gin v1.8.1
 	github.com/glebarez/go-sqlite v1.17.3
 	github.com/glebarez/sqlite v1.4.6
-	github.com/go-mysql-org/go-mysql v1.7.1-0.20230225054854-e3201442601e
+	github.com/go-mysql-org/go-mysql v1.7.1-0.20230412110536-f8546806eee3
 	github.com/go-ozzo/ozzo-validation/v4 v4.3.0
 	github.com/go-sql-driver/mysql v1.7.0
 	github.com/goccy/go-json v0.9.11

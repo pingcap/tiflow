@@ -372,6 +372,8 @@ github.com/go-logfmt/logfmt v0.5.1 h1:otpy5pqBCBZ1ng9RQ0dPu4PN7ba75Y/aA+UpowDyNV
 github.com/go-martini/martini v0.0.0-20170121215854-22fa46961aab/go.mod h1:/P9AEU963A2AYjv4d1V5eVL1CQbEJq6aCNHDDjibzu8=
 github.com/go-mysql-org/go-mysql v1.7.1-0.20230225054854-e3201442601e h1:lxqVBPvs+xWanED5t6kft8zlYtTuIe5QHqxTPHKXrrg=
 github.com/go-mysql-org/go-mysql v1.7.1-0.20230225054854-e3201442601e/go.mod h1:aVVbOuEMDV7U2F6plDugSfNbEyjDO4LOX/Nu8xC1G8I=
+github.com/go-mysql-org/go-mysql v1.7.1-0.20230412110536-f8546806eee3 h1:1joMXjGRJS2sWIB70hLMJvQ59g8E5FA40fh7kaboZ2Q=
+github.com/go-mysql-org/go-mysql v1.7.1-0.20230412110536-f8546806eee3/go.mod h1:E5KnbIqG4DFYMpPnc/zE1g9xLBa8376PdP/mNdmUOo0=
 github.com/go-ole/go-ole v1.2.6 h1:/Fpf6oFPoeFik9ty7siob0G6Ke8QvQEuVcuChpwXzpY=
 github.com/go-ole/go-ole v1.2.6/go.mod h1:pprOEPIfldk/42T2oK7lQ4v4JSDwmV0As9GaiUsvbm0=
 github.com/go-openapi/jsonpointer v0.17.0/go.mod h1:cOnomiV+CVVwFLk0A/MExoFMjwdsUdVpsRhURCKh+3M=
