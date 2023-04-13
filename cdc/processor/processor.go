@@ -749,8 +749,12 @@ func (p *processor) initDDLHandler(ctx context.Context) error {
 	if err != nil {
 		return errors.Trace(err)
 	}
+	f, err := filter.NewFilter(p.changefeed.Info.Config, "")
+	if err != nil {
+		return errors.Trace(err)
+	}
 	schemaStorage, err := entry.NewSchemaStorage(meta, ddlStartTs,
-		forceReplicate, p.changefeedID, util.RoleProcessor)
+		forceReplicate, p.changefeedID, util.RoleProcessor, f)
 	if err != nil {
 		return errors.Trace(err)
 	}
@@ -766,9 +770,9 @@ func (p *processor) initDDLHandler(ctx context.Context) error {
 		p.upstream.PDClock,
 		ddlStartTs,
 		kvCfg,
-		p.changefeed.Info.Config,
 		p.changefeedID,
 		schemaStorage,
+		f,
 	)
 	if err != nil {
 		return errors.Trace(err)
