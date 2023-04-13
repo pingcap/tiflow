@@ -948,8 +948,16 @@ func (p *processor) createAndDriveSchemaStorage(ctx cdcContext.Context) (entry.S
 	if err != nil {
 		return nil, errors.Trace(err)
 	}
+	f, err := filter.NewFilter(p.changefeed.Info.Config, "")
+	if err != nil {
+		return errors.Trace(err)
+	}
 	schemaStorage, err := entry.NewSchemaStorage(meta, ddlStartTs,
+<<<<<<< HEAD
 		p.changefeed.Info.Config.ForceReplicate, p.changefeedID, util.RoleProcessor)
+=======
+		forceReplicate, p.changefeedID, util.RoleProcessor, f)
+>>>>>>> 3a8ddff5b6 (schemaStorage (ticdc): Filter out schema information that is irrelevant to changefeed. (#8697))
 	if err != nil {
 		return nil, errors.Trace(err)
 	}
@@ -962,9 +970,9 @@ func (p *processor) createAndDriveSchemaStorage(ctx cdcContext.Context) (entry.S
 		p.upstream.PDClock,
 		ddlStartTs,
 		kvCfg,
-		p.changefeed.Info.Config,
 		p.changefeedID,
 		schemaStorage,
+		f,
 	)
 	if err != nil {
 		return nil, errors.Trace(err)

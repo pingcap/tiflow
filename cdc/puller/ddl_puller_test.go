@@ -134,12 +134,15 @@ func newMockDDLJobPuller(
 		ts := helper.GetCurrentMeta().StartTS
 		meta, err := kv.GetSnapshotMeta(kvStorage, ts)
 		require.Nil(t, err)
+		f, err := filter.NewFilter(config.GetDefaultReplicaConfig(), "")
+		require.Nil(t, err)
 		schemaStorage, err := entry.NewSchemaStorage(
 			meta,
 			ts,
 			false,
 			model.DefaultChangeFeedID("test"),
-			util.RoleTester)
+			util.RoleTester,
+			f)
 		require.Nil(t, err)
 		res.schemaStorage = schemaStorage
 		res.kvStorage = kvStorage
@@ -505,15 +508,22 @@ func TestDDLPuller(t *testing.T) {
 	mockPuller := newMockPuller(t, startTs)
 	ctx := cdcContext.NewBackendContext4Test(true)
 	up := upstream.NewUpstream4Test(nil)
+	f, err := filter.NewFilter(ctx.ChangefeedVars().Info.Config, "")
+	require.Nil(t, err)
 	schemaStorage, err := entry.NewSchemaStorage(nil,
 		startTs,
 		ctx.ChangefeedVars().Info.Config.ForceReplicate,
 		ctx.ChangefeedVars().ID,
 		util.RoleTester,
+		f,
 	)
 	require.Nil(t, err)
 	p, err := NewDDLPuller(
-		ctx, ctx.ChangefeedVars().Info.Config, up, startTs, ctx.ChangefeedVars().ID, schemaStorage)
+		ctx, ctx.ChangefeedVars().Info.Config,
+		up, startTs,
+		ctx.ChangefeedVars().ID,
+		schemaStorage,
+		f)
 	require.Nil(t, err)
 	p.(*ddlPullerImpl).ddlJobPuller, _ = newMockDDLJobPuller(t, mockPuller, false)
 
@@ -628,15 +638,22 @@ func TestResolvedTsStuck(t *testing.T) {
 	mockPuller := newMockPuller(t, startTs)
 	ctx := cdcContext.NewBackendContext4Test(true)
 	up := upstream.NewUpstream4Test(nil)
+	f, err := filter.NewFilter(config.GetDefaultReplicaConfig(), "")
+	require.Nil(t, err)
 	schemaStorage, err := entry.NewSchemaStorage(nil,
 		startTs,
-		true,
+		ctx.ChangefeedVars().Info.Config.ForceReplicate,
 		ctx.ChangefeedVars().ID,
 		util.RoleTester,
+		f,
 	)
 	require.Nil(t, err)
 	p, err := NewDDLPuller(
-		ctx, ctx.ChangefeedVars().Info.Config, up, startTs, ctx.ChangefeedVars().ID, schemaStorage)
+		ctx, ctx.ChangefeedVars().Info.Config,
+		up, startTs,
+		ctx.ChangefeedVars().ID,
+		schemaStorage,
+		f)
 	require.Nil(t, err)
 
 	mockClock := clock.NewMock()

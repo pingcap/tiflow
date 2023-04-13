@@ -22,15 +22,11 @@ import (
 	"github.com/google/btree"
 	"github.com/pingcap/errors"
 	"github.com/pingcap/log"
-	"github.com/pingcap/tidb/ddl"
 	timeta "github.com/pingcap/tidb/meta"
-	"github.com/pingcap/tidb/parser"
-	"github.com/pingcap/tidb/parser/ast"
 	timodel "github.com/pingcap/tidb/parser/model"
-	"github.com/pingcap/tidb/parser/mysql"
-	"github.com/pingcap/tidb/session"
 	"github.com/pingcap/tiflow/cdc/model"
 	cerror "github.com/pingcap/tiflow/pkg/errors"
+	"github.com/pingcap/tiflow/pkg/filter"
 	"go.uber.org/zap"
 )
 
@@ -117,19 +113,32 @@ func GetSchemaVersion(meta *timeta.Meta) (int64, error) {
 }
 
 // NewSingleSnapshotFromMeta creates a new single schema snapshot from a tidb meta
-func NewSingleSnapshotFromMeta(meta *timeta.Meta, currentTs uint64, forceReplicate bool) (*Snapshot, error) {
+func NewSingleSnapshotFromMeta(
+	meta *timeta.Meta,
+	currentTs uint64,
+	forceReplicate bool,
+	filter filter.Filter,
+) (*Snapshot, error) {
 	// meta is nil only in unit tests
 	if meta == nil {
 		snap := NewEmptySnapshot(forceReplicate)
+<<<<<<< HEAD
 		snap.InitConcurrentDDLTables()
+=======
+>>>>>>> 3a8ddff5b6 (schemaStorage (ticdc): Filter out schema information that is irrelevant to changefeed. (#8697))
 		snap.inner.currentTs = currentTs
 		return snap, nil
 	}
-	return NewSnapshotFromMeta(meta, currentTs, forceReplicate)
+	return NewSnapshotFromMeta(meta, currentTs, forceReplicate, filter)
 }
 
 // NewSnapshotFromMeta creates a schema snapshot from meta.
-func NewSnapshotFromMeta(meta *timeta.Meta, currentTs uint64, forceReplicate bool) (*Snapshot, error) {
+func NewSnapshotFromMeta(
+	meta *timeta.Meta,
+	currentTs uint64,
+	forceReplicate bool,
+	filter filter.Filter,
+) (*Snapshot, error) {
 	snap := NewEmptySnapshot(forceReplicate)
 	dbinfos, err := meta.ListDatabases()
 	if err != nil {
@@ -139,6 +148,10 @@ func NewSnapshotFromMeta(meta *timeta.Meta, currentTs uint64, forceReplicate boo
 	tag := negative(currentTs)
 
 	for _, dbinfo := range dbinfos {
+		if filter.ShouldIgnoreSchema(dbinfo.Name.O) {
+			log.Debug("ignore database", zap.String("db", dbinfo.Name.O))
+			continue
+		}
 		vid := newVersionedID(dbinfo.ID, tag)
 		vid.target = dbinfo
 		snap.inner.schemas.ReplaceOrInsert(vid)
@@ -153,6 +166,10 @@ func NewSnapshotFromMeta(meta *timeta.Meta, currentTs uint64, forceReplicate boo
 		}
 		for _, tableInfo := range tableInfos {
 			tableInfo := model.WrapTableInfo(dbinfo.ID, dbinfo.Name.O, currentTs, tableInfo)
+			if filter.ShouldIgnoreTable(tableInfo.TableName.Schema, tableInfo.TableName.Table) {
+				log.Debug("ignore table", zap.String("table", tableInfo.TableName.String()))
+				continue
+			}
 			snap.inner.tables.ReplaceOrInsert(versionedID{
 				id:     tableInfo.ID,
 				tag:    tag,
@@ -181,7 +198,6 @@ func NewSnapshotFromMeta(meta *timeta.Meta, currentTs uint64, forceReplicate boo
 			}
 		}
 	}
-
 	snap.inner.currentTs = currentTs
 	return snap, nil
 }
@@ -203,6 +219,7 @@ func NewEmptySnapshot(forceReplicate bool) *Snapshot {
 	return &Snapshot{inner: inner, rwlock: new(sync.RWMutex)}
 }
 
+<<<<<<< HEAD
 // these constants imitate TiDB's session.InitDDLJobTables in an empty Snapshot.
 const (
 	mysqlDBID      = int64(1)
@@ -243,6 +260,8 @@ func (s *Snapshot) InitConcurrentDDLTables() {
 	_ = s.inner.createTable(wrapped, dummyTS)
 }
 
+=======
+>>>>>>> 3a8ddff5b6 (schemaStorage (ticdc): Filter out schema information that is irrelevant to changefeed. (#8697))
 // Copy creates a new schema snapshot based on the given one. The copied one shares same internal
 // data structures with the old one to save memory usage.
 func (s *Snapshot) Copy() *Snapshot {

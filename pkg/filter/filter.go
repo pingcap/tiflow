@@ -71,6 +71,8 @@ type Filter interface {
 	ShouldDiscardDDL(ddlType timodel.ActionType, schema, table string) bool
 	// ShouldIgnoreTable returns true if the table should be ignored.
 	ShouldIgnoreTable(schema, table string) bool
+	// ShouldIgnoreSchema returns true if the schema should be ignored.
+	ShouldIgnoreSchema(schema string) bool
 	// Verify should only be called by create changefeed OpenAPI.
 	// Its purpose is to verify the expression filter config.
 	Verify(tableInfos []*model.TableInfo) error
@@ -197,13 +199,18 @@ func (f *filter) ShouldDiscardDDL(ddlType timodel.ActionType, schema, table stri
 	return
 }
 
-// ShouldIgnoreTable returns true if the specified table should be ignored by this change feed.
+// ShouldIgnoreTable returns true if the specified table should be ignored by this changefeed.
 // NOTICE: Set `tbl` to an empty string to test against the whole database.
 func (f *filter) ShouldIgnoreTable(db, tbl string) bool {
 	if isSysSchema(db) {
 		return true
 	}
 	return !f.tableFilter.MatchTable(db, tbl)
+}
+
+// ShouldIgnoreSchema returns true if the specified schema should be ignored by this changefeed.
+func (f *filter) ShouldIgnoreSchema(schema string) bool {
+	return isSysSchema(schema) || !f.tableFilter.MatchSchema(schema)
 }
 
 func (f *filter) Verify(tableInfos []*model.TableInfo) error {
