@@ -15,27 +15,23 @@ package puller
 
 import (
 	"context"
-	"sync"
 
 	"github.com/pingcap/failpoint"
-	"github.com/pingcap/log"
-	"github.com/pingcap/tiflow/cdc/contextutil"
 	"github.com/pingcap/tiflow/cdc/model"
 	"github.com/pingcap/tiflow/cdc/processor/sourcemanager/engine"
 	"github.com/pingcap/tiflow/cdc/processor/tablepb"
 	"github.com/pingcap/tiflow/cdc/puller"
 	"github.com/pingcap/tiflow/pkg/config"
-	cdccontext "github.com/pingcap/tiflow/pkg/context"
 	cerrors "github.com/pingcap/tiflow/pkg/errors"
 	"github.com/pingcap/tiflow/pkg/upstream"
-	"github.com/pingcap/tiflow/pkg/util"
-	"go.uber.org/zap"
+	"golang.org/x/sync/errgroup"
 )
 
 // Wrapper is a wrapper of puller used by source manager.
 type Wrapper interface {
+	// Start the puller and send internal errors into `errChan`.
 	Start(
-		ctx cdccontext.Context,
+		ctx context.Context,
 		up *upstream.Upstream,
 		eventSortEngine engine.SortEngine,
 		errChan chan<- error,
@@ -51,11 +47,12 @@ type WrapperImpl struct {
 	tableName  string // quoted schema and table, used in metircs only
 	p          puller.Puller
 	startTs    model.Ts
+	bdrMode    bool
+
 	// cancel is used to cancel the puller when remove or close the table.
 	cancel context.CancelFunc
-	// wg is used to wait the puller to exit.
-	wg      sync.WaitGroup
-	bdrMode bool
+	// eg is used to wait the puller to exit.
+	eg *errgroup.Group
 }
 
 // NewPullerWrapper creates a new puller wrapper.
@@ -78,22 +75,27 @@ func NewPullerWrapper(
 // Start the puller wrapper.
 // We use cdc context to put capture info and role into context.
 func (n *WrapperImpl) Start(
-	ctx cdccontext.Context,
+	ctx context.Context,
 	up *upstream.Upstream,
 	eventSortEngine engine.SortEngine,
 	errChan chan<- error,
 ) {
+	ctx, n.cancel = context.WithCancel(ctx)
+	errorHandler := func(err error) {
+		select {
+		case <-ctx.Done():
+		case errChan <- err:
+		}
+	}
+
 	failpoint.Inject("ProcessorAddTableError", func() {
-		errChan <- cerrors.New("processor add table injected error")
+		errorHandler(cerrors.New("processor add table injected error"))
 	})
-	ctxC, cancel := context.WithCancel(ctx)
-	ctxC = contextutil.PutCaptureAddrInCtx(ctxC, ctx.GlobalVars().CaptureInfo.AdvertiseAddr)
-	ctxC = contextutil.PutRoleInCtx(ctxC, util.RoleProcessor)
-	kvCfg := config.GetGlobalServerConfig().KVClient
+
 	// NOTICE: always pull the old value internally
 	// See also: https://github.com/pingcap/tiflow/issues/2301.
 	n.p = puller.New(
-		ctxC,
+		ctx,
 		up.PDClient,
 		up.GrpcPool,
 		up.RegionCache,
@@ -101,38 +103,26 @@ func (n *WrapperImpl) Start(
 		up.PDClock,
 		n.startTs,
 		[]tablepb.Span{n.span},
-		kvCfg,
+		config.GetGlobalServerConfig().KVClient,
 		n.changefeed,
 		n.span.TableID,
 		n.tableName,
 		n.bdrMode,
 		false,
 	)
-	n.wg.Add(1)
-	go func() {
-		defer n.wg.Done()
-		err := n.p.Run(ctxC)
-		if err != nil && !cerrors.Is(err, context.Canceled) {
-			select {
-			case errChan <- err:
-				// Do not block sending error, because the err channel
-				// might be full and no goroutine receives.
-			default:
-				log.Warn("puller fail to send error",
-					zap.String("namespace", n.changefeed.Namespace),
-					zap.String("changefeed", n.changefeed.ID),
-					zap.String("table", n.tableName),
-					zap.Error(err))
-			}
-		}
-	}()
-	n.wg.Add(1)
-	go func() {
-		defer n.wg.Done()
+
+	// Use errgroup to ensure all sub goroutines can exit without calling Close.
+	n.eg, ctx = errgroup.WithContext(ctx)
+	n.eg.Go(func() error {
+		err := n.p.Run(ctx)
+		errorHandler(err)
+		return err
+	})
+	n.eg.Go(func() error {
 		for {
 			select {
-			case <-ctxC.Done():
-				return
+			case <-ctx.Done():
+				return nil
 			case rawKV := <-n.p.Output():
 				if rawKV == nil {
 					continue
@@ -141,8 +131,7 @@ func (n *WrapperImpl) Start(
 				eventSortEngine.Add(n.span, pEvent)
 			}
 		}
-	}()
-	n.cancel = cancel
+	})
 }
 
 // GetStats returns the puller stats.
@@ -152,6 +141,11 @@ func (n *WrapperImpl) GetStats() puller.Stats {
 
 // Close the puller wrapper.
 func (n *WrapperImpl) Close() {
+	if n.cancel == nil {
+		return
+	}
 	n.cancel()
-	n.wg.Wait()
+	n.cancel = nil
+	// The returned error can be ignored because the table is in removing.
+	_ = n.eg.Wait()
 }

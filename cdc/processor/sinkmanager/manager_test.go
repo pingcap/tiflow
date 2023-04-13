@@ -100,15 +100,14 @@ func TestAddTable(t *testing.T) {
 	t.Parallel()
 
 	ctx, cancel := context.WithCancel(context.Background())
-	defer cancel()
-
 	changefeedInfo := getChangefeedInfo()
 	manager, _, _ := CreateManagerWithMemEngine(t, ctx, model.DefaultChangeFeedID("1"),
 		changefeedInfo, make(chan error, 1))
 	defer func() {
-		err := manager.Close()
-		require.NoError(t, err)
+		cancel()
+		manager.Close()
 	}()
+
 	span := spanz.TableIDToComparableSpan(1)
 	manager.AddTable(span, 1, 100)
 	tableSink, ok := manager.tableSinks.Load(span)
@@ -129,15 +128,14 @@ func TestRemoveTable(t *testing.T) {
 	t.Parallel()
 
 	ctx, cancel := context.WithCancel(context.Background())
-	defer cancel()
-
 	changefeedInfo := getChangefeedInfo()
 	manager, _, e := CreateManagerWithMemEngine(t, ctx, model.DefaultChangeFeedID("1"),
 		changefeedInfo, make(chan error, 1))
 	defer func() {
-		err := manager.Close()
-		require.NoError(t, err)
+		cancel()
+		manager.Close()
 	}()
+
 	span := spanz.TableIDToComparableSpan(1)
 	manager.AddTable(span, 1, 100)
 	tableSink, ok := manager.tableSinks.Load(span)
@@ -176,15 +174,14 @@ func TestGenerateTableSinkTaskWithBarrierTs(t *testing.T) {
 	t.Parallel()
 
 	ctx, cancel := context.WithCancel(context.Background())
-	defer cancel()
-
 	changefeedInfo := getChangefeedInfo()
 	manager, _, e := CreateManagerWithMemEngine(t, ctx, model.DefaultChangeFeedID("1"),
 		changefeedInfo, make(chan error, 1))
 	defer func() {
-		err := manager.Close()
-		require.NoError(t, err)
+		cancel()
+		manager.Close()
 	}()
+
 	span := spanz.TableIDToComparableSpan(1)
 	manager.AddTable(span, 1, 100)
 	addTableAndAddEventsToSortEngine(t, e, span)
@@ -206,15 +203,14 @@ func TestGenerateTableSinkTaskWithResolvedTs(t *testing.T) {
 	t.Parallel()
 
 	ctx, cancel := context.WithCancel(context.Background())
-	defer cancel()
-
 	changefeedInfo := getChangefeedInfo()
 	manager, _, e := CreateManagerWithMemEngine(t, ctx, model.DefaultChangeFeedID("1"),
 		changefeedInfo, make(chan error, 1))
 	defer func() {
-		err := manager.Close()
-		require.NoError(t, err)
+		cancel()
+		manager.Close()
 	}()
+
 	span := spanz.TableIDToComparableSpan(1)
 	manager.AddTable(span, 1, 100)
 	addTableAndAddEventsToSortEngine(t, e, span)
@@ -238,15 +234,14 @@ func TestGetTableStatsToReleaseMemQuota(t *testing.T) {
 	t.Parallel()
 
 	ctx, cancel := context.WithCancel(context.Background())
-	defer cancel()
-
 	changefeedInfo := getChangefeedInfo()
 	manager, _, e := CreateManagerWithMemEngine(t, ctx, model.DefaultChangeFeedID("1"),
 		changefeedInfo, make(chan error, 1))
 	defer func() {
-		err := manager.Close()
-		require.NoError(t, err)
+		cancel()
+		manager.Close()
 	}()
+
 	span := spanz.TableIDToComparableSpan(1)
 	manager.AddTable(span, 1, 100)
 	addTableAndAddEventsToSortEngine(t, e, span)
@@ -267,15 +262,14 @@ func TestDoNotGenerateTableSinkTaskWhenTableIsNotReplicating(t *testing.T) {
 	t.Parallel()
 
 	ctx, cancel := context.WithCancel(context.Background())
-	defer cancel()
-
 	changefeedInfo := getChangefeedInfo()
 	manager, _, e := CreateManagerWithMemEngine(t, ctx, model.DefaultChangeFeedID("1"),
 		changefeedInfo, make(chan error, 1))
 	defer func() {
-		err := manager.Close()
-		require.NoError(t, err)
+		cancel()
+		manager.Close()
 	}()
+
 	span := spanz.TableIDToComparableSpan(1)
 	manager.AddTable(span, 1, 100)
 	addTableAndAddEventsToSortEngine(t, e, span)
@@ -299,8 +293,8 @@ func TestClose(t *testing.T) {
 	manager, _, _ := CreateManagerWithMemEngine(t, ctx, model.DefaultChangeFeedID("1"),
 		changefeedInfo, make(chan error, 1))
 
-	err := manager.Close()
-	require.NoError(t, err)
+	cancel()
+	manager.Close()
 }
 
 // This could happen when closing the sink manager and source manager.
@@ -310,14 +304,12 @@ func TestUpdateReceivedSorterResolvedTsOfNonExistTable(t *testing.T) {
 	t.Parallel()
 
 	ctx, cancel := context.WithCancel(context.Background())
-	defer cancel()
-
 	changefeedInfo := getChangefeedInfo()
 	manager, _, _ := CreateManagerWithMemEngine(t, ctx, model.DefaultChangeFeedID("1"),
 		changefeedInfo, make(chan error, 1))
 	defer func() {
-		err := manager.Close()
-		require.NoError(t, err)
+		cancel()
+		manager.Close()
 	}()
 
 	manager.UpdateReceivedSorterResolvedTs(spanz.TableIDToComparableSpan(1), 1)
