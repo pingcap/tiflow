@@ -315,6 +315,13 @@ type RowChangedEvent struct {
 	PreColumns   []*Column `json:"pre-columns" msg:"pre-columns"`
 	IndexColumns [][]int   `json:"-" msg:"index-columns"`
 
+	// Checksum corresponds to the checksum of the Columns
+	Checksum uint32 `json:"-" msg:"-"`
+	// PreChecksum corresponds to the checksum of the PreColumns
+	PreChecksum uint32 `json:"-" msg:"-"`
+	// Corrupted indicates whether the event is corrupted by the checksum mismatch.
+	Corrupted bool `json:"-" msg:"-"`
+
 	// ApproximateDataSize is the approximate size of protobuf binary
 	// representation of this event.
 	ApproximateDataSize int64 `json:"-" msg:"-"`
