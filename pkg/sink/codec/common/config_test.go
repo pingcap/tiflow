@@ -113,7 +113,6 @@ func TestConfigApplyValidate4EnableRowChecksum(t *testing.T) {
 	require.NoError(t, err)
 
 	// avo, not all requirement satisfied, return error
-
 	invalidSinkURI := []string{
 		"kafka://127.0.0.1:9092/abc?protocol=avro",
 		"kafka://127.0.0.1:9092/abc?protocol=avro&enable-tidb-extension=true",

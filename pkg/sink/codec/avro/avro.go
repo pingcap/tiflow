@@ -254,8 +254,8 @@ const (
 
 	// row level checksum related fields
 	tidbRowLevelChecksum = "_tidb_row_level_checksum"
-	tidbCorrupted        = "_tidb_corrupted"
 	tidbChecksumVersion  = "_tidb_checksum_version"
+	tidbCorrupted        = "_tidb_corrupted"
 )
 
 var type2TiDBType = map[byte]string{

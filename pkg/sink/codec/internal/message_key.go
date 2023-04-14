@@ -30,8 +30,8 @@ type MessageKey struct {
 
 	Checksum        string `json:"checksum,omitempty"`
 	OldChecksum     string `json:"checksum_old,omitempty"`
-	Corrupted       bool   `json:"corrupted,omitempty"`
 	ChecksumVersion int    `json:"checksum_version,omitempty"`
+	Corrupted       bool   `json:"corrupted,omitempty"`
 
 	Type model.MessageType `json:"t"`
 }

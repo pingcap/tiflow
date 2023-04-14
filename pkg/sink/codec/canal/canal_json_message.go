@@ -135,8 +135,8 @@ type tidbExtension struct {
 	WatermarkTs     uint64 `json:"watermarkTs,omitempty"`
 	Checksum        string `json:"_row_level_checksum,omitempty"`
 	OldChecksum     string `json:"_row_level_checksum_old,omitempty"`
-	Corrupted       bool   `json:"_corrupted,omitempty"`
 	ChecksumVersion int    `json:"_checksum_version,omitempty"`
+	Corrupted       bool   `json:"_corrupted,omitempty"`
 }
 
 type canalJSONMessageWithTiDBExtension struct {
