@@ -136,6 +136,7 @@ func (m *feedStateManager) Tick(state *orchestrator.ChangefeedReactorState) (adm
 	case model.StateError:
 		if m.state.Info.Error.IsChangefeedUnRetryableError() {
 			m.shouldBeRunning = false
+			m.patchState(model.StateFailed)
 			return
 		}
 	}

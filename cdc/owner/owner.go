@@ -711,7 +711,13 @@ func (o *ownerImpl) ignoreFailedChangeFeedWhenGC(
 		log.Warn("upstream not found", zap.Uint64("ID", upID))
 		return false
 	}
-	return us.GCManager.IgnoreFailedChangeFeed(state.Status.CheckpointTs)
+	// in case the changefeed failed right after it is created
+	// and the status is not initialized yet.
+	ts := state.Info.StartTs
+	if state.Status != nil {
+		ts = state.Status.CheckpointTs
+	}
+	return us.GCManager.IgnoreFailedChangeFeed(ts)
 }
 
 // calculateGCSafepoint calculates GCSafepoint for different upstream.
