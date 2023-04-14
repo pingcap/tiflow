@@ -35,8 +35,8 @@ type Config struct {
 	MaxMessageBytes int
 	MaxBatchSize    int
 
-	// canal-json only
 	EnableTiDBExtension bool
+	EnableRowChecksum   bool
 
 	// avro only
 	AvroSchemaRegistry             string
@@ -63,6 +63,7 @@ func NewConfig(protocol config.Protocol) *Config {
 		MaxBatchSize:    defaultMaxBatchSize,
 
 		EnableTiDBExtension:            false,
+		EnableRowChecksum:              false,
 		AvroSchemaRegistry:             "",
 		AvroDecimalHandlingMode:        "precise",
 		AvroBigintUnsignedHandlingMode: "long",
@@ -156,6 +157,10 @@ func (c *Config) Apply(sinkURI *url.URL, config *config.ReplicaConfig) error {
 		)
 	}
 
+	if config.Integrity != nil {
+		c.EnableRowChecksum = config.Integrity.Enabled()
+	}
+
 	return nil
 }
 
@@ -201,6 +206,18 @@ func (c *Config) Validate() error {
 				BigintUnsignedHandlingModeLong,
 				BigintUnsignedHandlingModeString,
 			)
+		}
+
+		if c.EnableRowChecksum {
+			if !(c.EnableTiDBExtension && c.AvroDecimalHandlingMode == DecimalHandlingModeString &&
+				c.AvroBigintUnsignedHandlingMode == BigintUnsignedHandlingModeString) {
+				return cerror.ErrCodecInvalidConfig.GenWithStack(
+					`Avro protocol with row level checksum,
+					should set "%s" to "%s", and set "%s" to "%s" and "%s" to "%s"`,
+					codecOPTEnableTiDBExtension, "true",
+					codecOPTAvroDecimalHandlingMode, DecimalHandlingModeString,
+					codecOPTAvroBigintUnsignedHandlingMode, BigintUnsignedHandlingModeString)
+			}
 		}
 	}
 
