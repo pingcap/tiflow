@@ -24,6 +24,7 @@ import (
 	"github.com/pingcap/tiflow/cdc/scheduler/schedulepb"
 	config2 "github.com/pingcap/tiflow/pkg/config"
 	cdcContext "github.com/pingcap/tiflow/pkg/context"
+	"github.com/pingcap/tiflow/pkg/filter"
 	"github.com/stretchr/testify/require"
 )
 
@@ -33,7 +34,9 @@ func createDDLManagerForTest(t *testing.T) *ddlManager {
 	ddlSink := &mockDDLSink{}
 	ddlPuller := &mockDDLPuller{}
 	cfg := config2.GetDefaultReplicaConfig()
-	schema, err := newSchemaWrap4Owner(nil, startTs, cfg, changefeedID)
+	f, err := filter.NewFilter(cfg, "")
+	require.Nil(t, err)
+	schema, err := newSchemaWrap4Owner(nil, startTs, cfg, changefeedID, f)
 	require.Equal(t, nil, err)
 	res := newDDLManager(
 		changefeedID,
@@ -164,9 +167,10 @@ func TestExecRenameTablesDDL(t *testing.T) {
 	execCreateStmt := func(tp, actualDDL, expectedDDL string) {
 		mockDDLSink.ddlDone = false
 		job := helper.DDL2Job(actualDDL)
-		events, err := dm.schema.BuildDDLEvents(job)
+		dm.schema.AdvanceResolvedTs(job.BinlogInfo.FinishedTS - 1)
+		events, err := dm.schema.BuildDDLEvents(ctx, job)
 		require.Nil(t, err)
-		err = dm.schema.HandleDDL(job)
+		err = dm.schema.HandleDDLJob(job)
 		require.Nil(t, err)
 
 		for _, event := range events {
@@ -225,7 +229,8 @@ func TestExecRenameTablesDDL(t *testing.T) {
 
 	mockDDLSink.recordDDLHistory = true
 	mockDDLSink.ddlDone = false
-	events, err := dm.schema.BuildDDLEvents(job)
+	dm.schema.AdvanceResolvedTs(job.BinlogInfo.FinishedTS - 1)
+	events, err := dm.schema.BuildDDLEvents(ctx, job)
 	require.Nil(t, err)
 	for _, event := range events {
 		done, err := dm.ddlSink.emitDDLEvent(ctx, event)
@@ -258,9 +263,10 @@ func TestExecDropTablesDDL(t *testing.T) {
 
 	execCreateStmt := func(actualDDL, expectedDDL string) {
 		job := helper.DDL2Job(actualDDL)
-		events, err := dm.schema.BuildDDLEvents(job)
+		dm.schema.AdvanceResolvedTs(job.BinlogInfo.FinishedTS - 1)
+		events, err := dm.schema.BuildDDLEvents(ctx, job)
 		require.Nil(t, err)
-		err = dm.schema.HandleDDL(job)
+		err = dm.schema.HandleDDLJob(job)
 		require.Nil(t, err)
 		mockDDLSink.ddlDone = false
 
@@ -289,9 +295,10 @@ func TestExecDropTablesDDL(t *testing.T) {
 	require.Len(t, jobs, 2)
 
 	execDropStmt := func(job *timodel.Job, expectedDDL string) {
-		events, err := dm.schema.BuildDDLEvents(job)
+		dm.schema.AdvanceResolvedTs(job.BinlogInfo.FinishedTS - 1)
+		events, err := dm.schema.BuildDDLEvents(ctx, job)
 		require.Nil(t, err)
-		err = dm.schema.HandleDDL(job)
+		err = dm.schema.HandleDDLJob(job)
 		require.Nil(t, err)
 		mockDDLSink.ddlDone = false
 
@@ -320,9 +327,10 @@ func TestExecDropViewsDDL(t *testing.T) {
 
 	execCreateStmt := func(actualDDL, expectedDDL string) {
 		job := helper.DDL2Job(actualDDL)
-		events, err := dm.schema.BuildDDLEvents(job)
+		dm.schema.AdvanceResolvedTs(job.BinlogInfo.FinishedTS - 1)
+		events, err := dm.schema.BuildDDLEvents(ctx, job)
 		require.Nil(t, err)
-		err = dm.schema.HandleDDL(job)
+		err = dm.schema.HandleDDLJob(job)
 		require.Nil(t, err)
 		mockDDLSink.ddlDone = false
 		for _, event := range events {
@@ -356,9 +364,10 @@ func TestExecDropViewsDDL(t *testing.T) {
 	require.Len(t, jobs, 2)
 
 	execDropStmt := func(job *timodel.Job, expectedDDL string) {
-		events, err := dm.schema.BuildDDLEvents(job)
+		dm.schema.AdvanceResolvedTs(job.BinlogInfo.FinishedTS - 1)
+		events, err := dm.schema.BuildDDLEvents(ctx, job)
 		require.Nil(t, err)
-		err = dm.schema.HandleDDL(job)
+		err = dm.schema.HandleDDLJob(job)
 		require.Nil(t, err)
 		mockDDLSink.ddlDone = false
 		for _, event := range events {

@@ -18,8 +18,10 @@ import (
 	"strconv"
 
 	"github.com/pingcap/errors"
+	"github.com/pingcap/log"
 	"github.com/pingcap/tiflow/pkg/config"
 	cerror "github.com/pingcap/tiflow/pkg/errors"
+	"go.uber.org/zap"
 )
 
 // defaultMaxBatchSize sets the default value for max-batch-size
@@ -47,6 +49,9 @@ type Config struct {
 	NullString      string
 	IncludeCommitTs bool
 	Terminator      string
+
+	// for open protocol
+	OnlyOutputUpdatedColumns bool
 }
 
 // NewConfig return a Config for codec
@@ -61,6 +66,8 @@ func NewConfig(protocol config.Protocol) *Config {
 		AvroSchemaRegistry:             "",
 		AvroDecimalHandlingMode:        "precise",
 		AvroBigintUnsignedHandlingMode: "long",
+
+		OnlyOutputUpdatedColumns: false,
 	}
 }
 
@@ -71,6 +78,7 @@ const (
 	codecOPTAvroDecimalHandlingMode        = "avro-decimal-handling-mode"
 	codecOPTAvroBigintUnsignedHandlingMode = "avro-bigint-unsigned-handling-mode"
 	codecOPTAvroSchemaRegistry             = "schema-registry"
+	codecOPTOnlyOutputUpdatedColumns       = "only-output-updated-columns"
 )
 
 const (
@@ -131,6 +139,21 @@ func (c *Config) Apply(sinkURI *url.URL, config *config.ReplicaConfig) error {
 			c.NullString = config.Sink.CSVConfig.NullString
 			c.IncludeCommitTs = config.Sink.CSVConfig.IncludeCommitTs
 		}
+
+		c.OnlyOutputUpdatedColumns = config.Sink.OnlyOutputUpdatedColumns
+	}
+	if s := params.Get(codecOPTOnlyOutputUpdatedColumns); s != "" {
+		a, err := strconv.ParseBool(s)
+		if err != nil {
+			return err
+		}
+		c.OnlyOutputUpdatedColumns = a
+	}
+	if c.OnlyOutputUpdatedColumns && !config.EnableOldValue {
+		return cerror.ErrCodecInvalidConfig.GenWithStack(
+			`old value must be enabled when configuration "%s" is true.`,
+			codecOPTOnlyOutputUpdatedColumns,
+		)
 	}
 
 	return nil
@@ -146,9 +169,10 @@ func (c *Config) WithMaxMessageBytes(bytes int) *Config {
 func (c *Config) Validate() error {
 	if c.EnableTiDBExtension &&
 		!(c.Protocol == config.ProtocolCanalJSON || c.Protocol == config.ProtocolAvro) {
-		return cerror.ErrCodecInvalidConfig.GenWithStack(
-			`enable-tidb-extension only supports canal-json/avro protocol`,
-		)
+		log.Warn("ignore invalid config, enable-tidb-extension"+
+			"only supports canal-json/avro protocol",
+			zap.Bool("enableTidbExtension", c.EnableTiDBExtension),
+			zap.String("protocol", c.Protocol.String()))
 	}
 
 	if c.Protocol == config.ProtocolAvro {

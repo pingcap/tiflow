@@ -31,9 +31,41 @@ type messageRow struct {
 	Delete     map[string]internal.Column `json:"d,omitempty"`
 }
 
-func (m *messageRow) encode() ([]byte, error) {
+func (m *messageRow) encode(outputOnlyUpdatedColumn bool) ([]byte, error) {
+	// check if the column is updated, if not do not output it
+	if outputOnlyUpdatedColumn && len(m.PreColumns) > 0 {
+		for col, value := range m.Update {
+			oldValue, ok := m.PreColumns[col]
+			if !ok {
+				continue
+			}
+			// sql type is not equal
+			if value.Type != oldValue.Type {
+				continue
+			}
+			// not equal
+			if isColumnValueEqual(oldValue.Value, value.Value) {
+				delete(m.PreColumns, col)
+			}
+		}
+	}
 	data, err := json.Marshal(m)
 	return data, cerror.WrapError(cerror.ErrMarshalFailed, err)
+}
+
+func isColumnValueEqual(preValue, updatedValue interface{}) bool {
+	if preValue == nil || updatedValue == nil {
+		return preValue == updatedValue
+	}
+
+	preValueBytes, ok1 := preValue.([]byte)
+	updatedValueBytes, ok2 := updatedValue.([]byte)
+	if ok1 && ok2 {
+		return bytes.Equal(preValueBytes, updatedValueBytes)
+	}
+	// mounter use the same table info to parse the value,
+	// the value type should be the same
+	return preValue == updatedValue
 }
 
 func (m *messageRow) decode(data []byte) error {

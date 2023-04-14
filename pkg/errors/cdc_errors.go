@@ -494,6 +494,11 @@ var (
 		errors.RFCCodeText("CDC:ErrExchangePartition"),
 	)
 
+	ErrCorruptedDataMutation = errors.Normalize(
+		"Changefeed %s.%s stopped due to corrupted data mutation received. "+
+			"Corrupted mutation detail information %+v",
+		errors.RFCCodeText("CDC:ErrCorruptedDataMutation"))
+
 	// server related errors
 	ErrCaptureSuicide = errors.Normalize(
 		"capture suicide",
