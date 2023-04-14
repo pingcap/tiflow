@@ -54,6 +54,7 @@ func (d *BatchEncoder) AppendRowChangedEvent(
 	if d.enableRowChecksum {
 		keyMsg.Checksum = strconv.FormatUint(uint64(e.Checksum), 10)
 		keyMsg.OldChecksum = strconv.FormatUint(uint64(e.PreChecksum), 10)
+		keyMsg.ChecksumVersion = e.ChecksumVersion
 		keyMsg.Corrupted = e.Corrupted
 	}
 

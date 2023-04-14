@@ -131,11 +131,12 @@ func (c *JSONMessage) pkNameSet() map[string]struct{} {
 }
 
 type tidbExtension struct {
-	CommitTs    uint64 `json:"commitTs,omitempty"`
-	WatermarkTs uint64 `json:"watermarkTs,omitempty"`
-	Checksum    string `json:"_row_level_checksum,omitempty"`
-	OldChecksum string `json:"_row_level_checksum_old,omitempty"`
-	Corrupted   bool   `json:"_corrupted,omitempty"`
+	CommitTs        uint64 `json:"commitTs,omitempty"`
+	WatermarkTs     uint64 `json:"watermarkTs,omitempty"`
+	Checksum        string `json:"_row_level_checksum,omitempty"`
+	OldChecksum     string `json:"_row_level_checksum_old,omitempty"`
+	Corrupted       bool   `json:"_corrupted,omitempty"`
+	ChecksumVersion int    `json:"_checksum_version,omitempty"`
 }
 
 type canalJSONMessageWithTiDBExtension struct {

@@ -28,9 +28,10 @@ type MessageKey struct {
 	RowID     int64  `json:"rid,omitempty"`
 	Partition *int64 `json:"ptn,omitempty"`
 
-	Checksum    string `json:"checksum,omitempty"`
-	OldChecksum string `json:"checksum_old,omitempty"`
-	Corrupted   bool   `json:"corrupted,omitempty"`
+	Checksum        string `json:"checksum,omitempty"`
+	OldChecksum     string `json:"checksum_old,omitempty"`
+	Corrupted       bool   `json:"corrupted,omitempty"`
+	ChecksumVersion int    `json:"checksum_version,omitempty"`
 
 	Type model.MessageType `json:"t"`
 }

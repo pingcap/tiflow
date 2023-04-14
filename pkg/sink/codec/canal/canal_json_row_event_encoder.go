@@ -192,7 +192,6 @@ func newJSONMessageForDML(
 	}
 
 	var checksum, preChecksum uint64
-
 	if e.IsDelete() {
 		out.RawString(",\"old\":null")
 		out.RawString(",\"data\":")
@@ -240,6 +239,9 @@ func newJSONMessageForDML(
 
 			out.RawString(",\"_corrupted\":")
 			out.Bool(e.Corrupted)
+
+			out.RawString(",\"_checksum_version\":")
+			out.Int(e.ChecksumVersion)
 		}
 
 		out.RawByte('}')

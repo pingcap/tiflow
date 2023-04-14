@@ -322,7 +322,7 @@ type RowChangedEvent struct {
 	// Corrupted indicates whether the event is corrupted by the checksum mismatch.
 	Corrupted bool `json:"-" msg:"-"`
 	// ChecksumVersion is the version of the checksum
-	ChecksumVersion uint32 `json:"-" msg:"-"`
+	ChecksumVersion int `json:"-" msg:"-"`
 
 	// ApproximateDataSize is the approximate size of protobuf binary
 	// representation of this event.

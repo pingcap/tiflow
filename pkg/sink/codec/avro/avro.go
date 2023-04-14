@@ -221,6 +221,12 @@ func (a *BatchEncoder) avroEncode(
 		return nil, errors.Trace(err)
 	}
 
+	if enableRowLevelChecksum && enableTiDBExtension {
+		native[tidbRowLevelChecksum] = strconv.FormatUint(uint64(e.Checksum), 10)
+		native[tidbCorrupted] = e.Corrupted
+		native[tidbChecksumVersion] = e.ChecksumVersion
+	}
+
 	bin, err := avroCodec.BinaryFromNative(nil, native)
 	if err != nil {
 		log.Error("AvroEventBatchEncoder: converting to Avro binary failed", zap.Error(err))
@@ -249,6 +255,7 @@ const (
 	// row level checksum related fields
 	tidbRowLevelChecksum = "_tidb_row_level_checksum"
 	tidbCorrupted        = "_tidb_corrupted"
+	tidbChecksumVersion  = "_tidb_checksum_version"
 )
 
 var type2TiDBType = map[byte]string{
@@ -455,6 +462,10 @@ func rowToAvroSchema(
 				map[string]interface{}{
 					"name": tidbCorrupted,
 					"type": "boolean",
+				},
+				map[string]interface{}{
+					"name": tidbChecksumVersion,
+					"type": "int",
 				})
 		}
 
