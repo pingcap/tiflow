@@ -19,6 +19,7 @@ import (
 	"encoding/binary"
 	"encoding/json"
 	"math/big"
+	"sort"
 	"strconv"
 	"strings"
 
@@ -364,6 +365,10 @@ func rowToAvroSchema(
 		Namespace: namespace,
 		Fields:    nil,
 	}
+
+	sort.Slice(colInfos[:], func(i, j int) bool {
+		return colInfos[i].ID < colInfos[j].ID
+	})
 
 	for i, col := range columnInfo {
 		avroType, err := columnToAvroSchema(
