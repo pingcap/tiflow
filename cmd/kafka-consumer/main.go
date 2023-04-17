@@ -78,6 +78,8 @@ var (
 	logLevel      string
 	timezone      string
 	ca, cert, key string
+
+	schemaRegistry string
 )
 
 func init() {
@@ -95,6 +97,7 @@ func init() {
 	flag.StringVar(&ca, "ca", "", "CA certificate path for Kafka SSL connection")
 	flag.StringVar(&cert, "cert", "", "Certificate path for Kafka SSL connection")
 	flag.StringVar(&key, "key", "", "Private key path for Kafka SSL connection")
+	flag.StringVar(&schemaRegistry, "schema-registry", "", "Schema registry address")
 	flag.Parse()
 
 	err := logutil.InitLogger(&logutil.Config{

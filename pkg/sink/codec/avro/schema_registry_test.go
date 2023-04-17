@@ -113,7 +113,7 @@ func startHTTPInterceptForTestingRegistry() {
 			var respData lookupResponse
 			respData.Schema = item.content
 			respData.Name = subject
-			respData.RegistryID = item.ID
+			respData.ID = item.ID
 
 			return httpmock.NewJsonResponse(200, &respData)
 		})
