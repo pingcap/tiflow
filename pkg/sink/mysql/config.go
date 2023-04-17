@@ -26,10 +26,12 @@ import (
 	"github.com/pingcap/log"
 	"github.com/pingcap/tiflow/cdc/contextutil"
 	"github.com/pingcap/tiflow/cdc/model"
+	cmdcontext "github.com/pingcap/tiflow/pkg/cmd/context"
 	"github.com/pingcap/tiflow/pkg/config"
 	cerror "github.com/pingcap/tiflow/pkg/errors"
 	"github.com/pingcap/tiflow/pkg/security"
 	"github.com/pingcap/tiflow/pkg/sink"
+	"github.com/pingcap/tiflow/pkg/util"
 	"go.uber.org/zap"
 )
 
@@ -156,7 +158,7 @@ func (c *Config) Apply(
 	if err = getSafeMode(query, &c.SafeMode); err != nil {
 		return err
 	}
-	if err = getTimezone(ctx, query, &c.Timezone); err != nil {
+	if err = getTimezone(query, &c.Timezone); err != nil {
 		return err
 	}
 	if err = getDuration(query, "read-timeout", &c.ReadTimeout); err != nil {
@@ -330,9 +332,14 @@ func getSafeMode(values url.Values, safeMode *bool) error {
 	return nil
 }
 
-func getTimezone(ctx context.Context, values url.Values, timezone *string) error {
+func getTimezone(values url.Values, timezone *string) error {
 	if _, ok := values["time-zone"]; !ok {
-		tz := contextutil.TimezoneFromCtx(ctx)
+		// If time-zone is not specified, use the timezone of the server.
+		tz := contextutil.TimezoneFromCtx(cmdcontext.GetDefaultContext())
+		log.Warn("Because time-zone is not specified, the timezone of the TiCDC server will be used. "+
+			"We recommend that you specify the time-zone explicitly. "+
+			"Please make sure that the timezone of the TiCDC server, sink-uri and the downstream database are consistent.",
+			zap.String("time-zone", tz.String()))
 		*timezone = fmt.Sprintf(`"%s"`, tz.String())
 		return nil
 	}
@@ -340,14 +347,12 @@ func getTimezone(ctx context.Context, values url.Values, timezone *string) error
 	s := values.Get("time-zone")
 	if len(s) == 0 {
 		*timezone = ""
+		log.Warn("Because time-zone is empty, the timezone of the downstream database will be used. " +
+			"We recommend that you specify the time-zone explicitly. ")
 		return nil
 	}
 
-	value, err := url.QueryUnescape(s)
-	if err != nil {
-		return cerror.WrapError(cerror.ErrMySQLInvalidConfig, err)
-	}
-	_, err = time.LoadLocation(value)
+	_, err := util.GetTimezone(s)
 	if err != nil {
 		return cerror.WrapError(cerror.ErrMySQLInvalidConfig, err)
 	}
