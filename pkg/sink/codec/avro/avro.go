@@ -170,7 +170,7 @@ func (a *BatchEncoder) avroEncode(
 			log.Error("unknown operation", zap.Any("rowChangedEvent", e))
 			return nil, cerror.ErrAvroEncodeFailed.GenWithStack("unknown operation")
 		}
-		
+
 		if enableRowLevelChecksum {
 			sort.Sort(e)
 		}

@@ -442,7 +442,6 @@ func (r *RowChangedEvent) ApproximateBytes() int {
 	return size
 }
 
-// row changed event also implement the
 func (r *RowChangedEvent) Less(i, j int) bool {
 	return r.ColInfos[i].ID < r.ColInfos[j].ID
 }

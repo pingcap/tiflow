@@ -349,7 +349,8 @@ func datum2Column(
 		}
 
 		colName := colInfo.Name.O
-		colDatums, exist := datums[colInfo.ID]
+		colID := colInfo.ID
+		colDatums, exist := datums[colID]
 		if !exist && !fillWithDefaultValue {
 			log.Debug("column value is not found",
 				zap.String("table", tableInfo.Name.O), zap.String("column", colName))
@@ -371,11 +372,12 @@ func datum2Column(
 			return nil, nil, nil, errors.Trace(err)
 		}
 		if warn != "" {
-			log.Warn(warn, zap.String("table", tableInfo.TableName.String()), zap.String("column", colInfo.Name.String()))
+			log.Warn(warn, zap.String("table", tableInfo.TableName.String()),
+				zap.String("column", colInfo.Name.String()))
 		}
 
 		defaultValue := getDDLDefaultDefinition(colInfo)
-		offset := tableInfo.RowColumnsOffset[colInfo.ID]
+		offset := tableInfo.RowColumnsOffset[colID]
 		rawCols[offset] = colDatums
 		cols[offset] = &model.Column{
 			Name:    colName,
@@ -383,11 +385,11 @@ func datum2Column(
 			Charset: colInfo.GetCharset(),
 			Value:   colValue,
 			Default: defaultValue,
-			Flag:    tableInfo.ColumnsFlag[colInfo.ID],
+			Flag:    tableInfo.ColumnsFlag[colID],
 			// ApproximateBytes = column data size + column struct size
 			ApproximateBytes: size + sizeOfEmptyColumn,
 		}
-		columnIDs[offset] = colInfo.ID
+		columnIDs[offset] = colID
 	}
 	return cols, rawCols, columnIDs, nil
 }
