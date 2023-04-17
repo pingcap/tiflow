@@ -442,6 +442,20 @@ func (r *RowChangedEvent) ApproximateBytes() int {
 	return size
 }
 
+// row changed event also implement the
+func (r *RowChangedEvent) Less(i, j int) bool {
+	return r.ColInfos[i].ID < r.ColInfos[j].ID
+}
+
+func (r *RowChangedEvent) Len() int {
+	return len(r.Columns)
+}
+
+func (r *RowChangedEvent) Swap(i, j int) {
+	r.ColInfos[i], r.ColInfos[j] = r.ColInfos[j], r.ColInfos[i]
+	r.Columns[i], r.Columns[j] = r.Columns[j], r.Columns[i]
+}
+
 // Column represents a column value in row changed event
 type Column struct {
 	Name    string         `json:"name" msg:"name"`

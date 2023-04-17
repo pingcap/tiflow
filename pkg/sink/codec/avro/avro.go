@@ -19,6 +19,7 @@ import (
 	"encoding/binary"
 	"encoding/json"
 	"math/big"
+	"sort"
 	"strconv"
 	"strings"
 
@@ -158,8 +159,6 @@ func (a *BatchEncoder) avroEncode(
 		enableRowLevelChecksum = false
 		schemaManager = a.keySchemaManager
 	} else {
-		cols = e.Columns
-		colInfos = e.ColInfos
 		enableTiDBExtension = a.enableTiDBExtension
 		enableRowLevelChecksum = a.enableRowChecksum
 		schemaManager = a.valueSchemaManager
@@ -171,6 +170,12 @@ func (a *BatchEncoder) avroEncode(
 			log.Error("unknown operation", zap.Any("rowChangedEvent", e))
 			return nil, cerror.ErrAvroEncodeFailed.GenWithStack("unknown operation")
 		}
+		
+		if enableRowLevelChecksum {
+			sort.Sort(e)
+		}
+		cols = e.Columns
+		colInfos = e.ColInfos
 	}
 
 	if len(cols) == 0 {
