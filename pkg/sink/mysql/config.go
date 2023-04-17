@@ -336,14 +336,14 @@ func getTimezone(values url.Values, timezone *string) error {
 	const pleaseSpecifyTimezone = "We recommend that you specify the time-zone explicitly. " +
 		"Please make sure that the timezone of the TiCDC server, " +
 		"sink-uri and the downstream database are consistent."
+	serverTimezone := contextutil.TimezoneFromCtx(cmdcontext.GetDefaultContext())
 	if _, ok := values["time-zone"]; !ok {
 		// If time-zone is not specified, use the timezone of the server.
-		tz := contextutil.TimezoneFromCtx(cmdcontext.GetDefaultContext())
 		log.Warn("Because time-zone is not specified, "+
 			"the timezone of the TiCDC server will be used. "+
 			pleaseSpecifyTimezone,
-			zap.String("timezone", tz.String()))
-		*timezone = fmt.Sprintf(`"%s"`, tz.String())
+			zap.String("timezone", serverTimezone.String()))
+		*timezone = fmt.Sprintf(`"%s"`, serverTimezone.String())
 		return nil
 	}
 
@@ -356,11 +356,22 @@ func getTimezone(values url.Values, timezone *string) error {
 		return nil
 	}
 
-	_, err := util.GetTimezone(s)
+	changefeedTimezone, err := util.GetTimezone(s)
 	if err != nil {
 		return cerror.WrapError(cerror.ErrMySQLInvalidConfig, err)
 	}
 	*timezone = fmt.Sprintf(`"%s"`, s)
+	// We need to check whether the timezone of the TiCDC server and the sink-uri are consistent.
+	// If they are inconsistent, it may cause the data to be inconsistent.
+	if changefeedTimezone.String() != serverTimezone.String() {
+		return cerror.WrapError(cerror.ErrMySQLInvalidConfig, errors.Errorf(
+			"the timezone of the TiCDC server and the sink-uri are inconsistent. "+
+				"TiCDC server timezone: %s, sink-uri timezone: %s. "+
+				"Please make sure that the timezone of the TiCDC server, "+
+				"sink-uri and the downstream database are consistent.",
+			serverTimezone.String(), changefeedTimezone.String()))
+	}
+
 	return nil
 }
 
