@@ -34,6 +34,19 @@ import (
 	"go.uber.org/zap"
 )
 
+type SchemaRegistry interface {
+	// GetCachedOrRegister get the cached schema by the tableVersion
+	// if not found, use schemaGen to get the new schema and register it.
+	GetCachedOrRegister(
+		ctx context.Context,
+		topicName string,
+		tableVersion uint64,
+		schemaGen SchemaGenerator,
+	) (*goavro.Codec, int, error)
+
+	Lookup(ctx context.Context, topicName string, schemaID int) (*goavro.Codec, int, error)
+}
+
 // schemaManager is used to register Avro Schemas to the Registry server,
 // look up local cache according to the table's name, and fetch from the Registry
 // in cache the local cache entry is missing.
@@ -117,11 +130,11 @@ func NewAvroSchemaManager(
 func (m *schemaManager) Register(
 	ctx context.Context,
 	topicName string,
-	codec *goavro.Codec,
+	schema string,
 ) (int, error) {
 	// The Schema Registry expects the JSON to be without newline characters
 	buffer := new(bytes.Buffer)
-	err := json.Compact(buffer, []byte(codec.Schema()))
+	err := json.Compact(buffer, []byte(schema))
 	if err != nil {
 		log.Error("Could not compact schema", zap.Error(err))
 		return 0, cerror.WrapError(cerror.ErrAvroSchemaAPIError, err)
@@ -205,18 +218,21 @@ func (m *schemaManager) Register(
 // RESTful request to the Registry.
 // Returns (codec, registry schema ID, error)
 // NOT USED for now, reserved for future use.
+
+//Lookup(ctx context.Context, topicName string, schemaID int) (*goavro.Codec, int, error)
+
 func (m *schemaManager) Lookup(
 	ctx context.Context,
 	topicName string,
-	tableVersion uint64,
+	schemaID int,
 ) (*goavro.Codec, int, error) {
 	key := m.topicNameToSchemaSubject(topicName)
 	m.cacheRWLock.RLock()
-	if entry, exists := m.cache[key]; exists && entry.tableVersion == tableVersion {
+	entry, exists := m.cache[key]
+	if exists && entry.schemaID == schemaID {
 		log.Info("Avro schema lookup cache hit",
 			zap.String("key", key),
-			zap.Uint64("tableVersion", tableVersion),
-			zap.Int("schemaID", entry.schemaID))
+			zap.Int("schemaID", schemaID))
 		m.cacheRWLock.RUnlock()
 		return entry.codec, entry.schemaID, nil
 	}
@@ -224,7 +240,8 @@ func (m *schemaManager) Lookup(
 
 	log.Info("Avro schema lookup cache miss",
 		zap.String("key", key),
-		zap.Uint64("tableVersion", tableVersion))
+		zap.Int("expectedSchemaID", schemaID),
+		zap.Int("obtainedSchemaID", entry.schemaID))
 
 	uri := m.registryURL + "/subjects/" + url.QueryEscape(key) + "/versions/latest"
 	log.Debug("Querying for latest schema", zap.String("uri", uri))
@@ -340,9 +357,11 @@ func (m *schemaManager) GetCachedOrRegister(
 		return nil, 0, cerror.WrapError(cerror.ErrAvroSchemaAPIError, err)
 	}
 
-	id, err := m.Register(ctx, topicName, codec)
+	id, err := m.Register(ctx, topicName, schema)
 	if err != nil {
-		log.Error("GetCachedOrRegister: Could not register schema", zap.Error(err))
+		log.Error("GetCachedOrRegister: Could not register schema",
+			zap.Error(err),
+			zap.String("schema", schema))
 		return nil, 0, errors.Trace(err)
 	}
 
