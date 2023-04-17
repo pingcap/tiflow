@@ -19,11 +19,14 @@ import (
 	"net/url"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/DATA-DOG/go-sqlmock"
 	dmysql "github.com/go-sql-driver/mysql"
+	"github.com/pingcap/tiflow/cdc/contextutil"
 	"github.com/pingcap/tiflow/cdc/model"
 	"github.com/pingcap/tiflow/pkg/config"
+	"github.com/pingcap/tiflow/pkg/util"
 	"github.com/stretchr/testify/require"
 )
 
@@ -340,4 +343,81 @@ func TestCheckTiDBVariable(t *testing.T) {
 	_, err = checkTiDBVariable(context.TODO(), db, "version", "5.7.25-TiDB-v4.0.0")
 	require.NotNil(t, err)
 	require.Regexp(t, ".*"+sql.ErrConnDone.Error(), err.Error())
+}
+
+func TestApplyTimezone(t *testing.T) {
+	localTimezone, err := util.GetTimezone("Local")
+	require.Nil(t, err)
+
+	tests := []struct {
+		name                 string
+		noChangefeedTimezone bool
+		changefeedTimezone   string
+		serverTimezone       *time.Location
+		expected             string
+		expectedHasErr       bool
+		expectedErr          string
+	}{
+		{
+			name:                 "no changefeed timezone",
+			noChangefeedTimezone: true,
+			serverTimezone:       time.UTC,
+			expected:             "\"UTC\"",
+			expectedHasErr:       false,
+		},
+		{
+			name:                 "empty changefeed timezone",
+			noChangefeedTimezone: false,
+			changefeedTimezone:   "",
+			serverTimezone:       time.UTC,
+			expected:             "",
+			expectedHasErr:       false,
+		},
+		{
+			name:                 "normal changefeed timezone",
+			noChangefeedTimezone: false,
+			changefeedTimezone:   "UTC",
+			serverTimezone:       time.UTC,
+			expected:             "\"UTC\"",
+			expectedHasErr:       false,
+		},
+		{
+			name:                 "local timezone",
+			noChangefeedTimezone: false,
+			changefeedTimezone:   "Local",
+			serverTimezone:       localTimezone,
+			expected:             "\"" + localTimezone.String() + "\"",
+			expectedHasErr:       false,
+		},
+		{
+			name:                 "sink-uri timezone different from server timezone",
+			noChangefeedTimezone: false,
+			changefeedTimezone:   "UTC",
+			serverTimezone:       localTimezone,
+			expectedHasErr:       true,
+			expectedErr:          ".*Please make sure that the timezone of the TiCDC server.*",
+		},
+	}
+
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			cfg := NewConfig()
+			ctx := contextutil.PutTimezoneInCtx(context.Background(), test.serverTimezone)
+			sinkURI := "mysql://127.0.0.1:3306"
+			if !test.noChangefeedTimezone {
+				sinkURI = sinkURI + "?time-zone=" + test.changefeedTimezone
+			}
+			uri, err := url.Parse(sinkURI)
+			require.Nil(t, err)
+			err = cfg.Apply(ctx,
+				model.DefaultChangeFeedID("changefeed-01"), uri, config.GetDefaultReplicaConfig())
+			if test.expectedHasErr {
+				require.NotNil(t, err)
+				require.Regexp(t, test.expectedErr, err.Error())
+			} else {
+				require.Nil(t, err)
+				require.Equal(t, test.expected, cfg.Timezone)
+			}
+		})
+	}
 }
