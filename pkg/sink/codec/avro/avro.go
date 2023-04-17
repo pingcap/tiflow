@@ -53,6 +53,24 @@ type BatchEncoder struct {
 	bigintUnsignedHandlingMode string
 }
 
+type avroEncodeInput struct {
+	columns  []*model.Column
+	colInfos []rowcodec.ColInfo
+}
+
+func (r *avroEncodeInput) Less(i, j int) bool {
+	return r.colInfos[i].ID < r.colInfos[j].ID
+}
+
+func (r *avroEncodeInput) Len() int {
+	return len(r.columns)
+}
+
+func (r *avroEncodeInput) Swap(i, j int) {
+	r.colInfos[i], r.colInfos[j] = r.colInfos[j], r.colInfos[i]
+	r.columns[i], r.columns[j] = r.columns[j], r.columns[i]
+}
+
 type avroEncodeResult struct {
 	data       []byte
 	registryID int
@@ -146,6 +164,8 @@ func (a *BatchEncoder) avroEncode(
 	isKey bool,
 ) (*avroEncodeResult, error) {
 	var (
+		input *avroEncodeInput
+
 		cols                   []*model.Column
 		colInfos               []rowcodec.ColInfo
 		enableTiDBExtension    bool
@@ -155,10 +175,19 @@ func (a *BatchEncoder) avroEncode(
 	)
 	if isKey {
 		cols, colInfos = e.HandleKeyColInfos()
+		input = &avroEncodeInput{
+			columns:  cols,
+			colInfos: colInfos,
+		}
 		enableTiDBExtension = false
 		enableRowLevelChecksum = false
 		schemaManager = a.keySchemaManager
 	} else {
+		input = &avroEncodeInput{
+			columns:  e.Columns,
+			colInfos: e.ColInfos,
+		}
+
 		enableTiDBExtension = a.enableTiDBExtension
 		enableRowLevelChecksum = a.enableRowChecksum
 		schemaManager = a.valueSchemaManager
@@ -170,12 +199,6 @@ func (a *BatchEncoder) avroEncode(
 			log.Error("unknown operation", zap.Any("rowChangedEvent", e))
 			return nil, cerror.ErrAvroEncodeFailed.GenWithStack("unknown operation")
 		}
-
-		if enableRowLevelChecksum {
-			sort.Sort(e)
-		}
-		cols = e.Columns
-		colInfos = e.ColInfos
 	}
 
 	if len(cols) == 0 {
@@ -188,8 +211,7 @@ func (a *BatchEncoder) avroEncode(
 		schema, err := rowToAvroSchema(
 			namespace,
 			e.Table.Table,
-			cols,
-			colInfos,
+			input,
 			enableTiDBExtension,
 			enableRowLevelChecksum,
 			a.decimalHandlingMode,
@@ -213,8 +235,7 @@ func (a *BatchEncoder) avroEncode(
 	}
 
 	native, err := rowToAvroData(
-		cols,
-		colInfos,
+		input,
 		e.CommitTs,
 		operation,
 		enableTiDBExtension,
@@ -374,13 +395,16 @@ type avroLogicalTypeSchema struct {
 func rowToAvroSchema(
 	namespace string,
 	name string,
-	columnInfo []*model.Column,
-	colInfos []rowcodec.ColInfo,
+	input *avroEncodeInput,
 	enableTiDBExtension bool,
 	enableRowLevelChecksum bool,
 	decimalHandlingMode string,
 	bigintUnsignedHandlingMode string,
 ) (string, error) {
+	if enableRowLevelChecksum {
+		sort.Sort(input)
+	}
+
 	top := avroSchemaTop{
 		Tp:        "record",
 		Name:      sanitizeName(name),
@@ -388,10 +412,10 @@ func rowToAvroSchema(
 		Fields:    nil,
 	}
 
-	for i, col := range columnInfo {
+	for i, col := range input.columns {
 		avroType, err := columnToAvroSchema(
 			col,
-			colInfos[i].Ft,
+			input.colInfos[i].Ft,
 			decimalHandlingMode,
 			bigintUnsignedHandlingMode,
 		)
@@ -405,7 +429,7 @@ func rowToAvroSchema(
 		copy.Value = copy.Default
 		defaultValue, _, err := columnToAvroData(
 			&copy,
-			colInfos[i].Ft,
+			input.colInfos[i].Ft,
 			decimalHandlingMode,
 			bigintUnsignedHandlingMode,
 		)
@@ -485,22 +509,21 @@ func rowToAvroSchema(
 }
 
 func rowToAvroData(
-	cols []*model.Column,
-	colInfos []rowcodec.ColInfo,
+	input *avroEncodeInput,
 	commitTs uint64,
 	operation string,
 	enableTiDBExtension bool,
 	decimalHandlingMode string,
 	bigintUnsignedHandlingMode string,
 ) (map[string]interface{}, error) {
-	ret := make(map[string]interface{}, len(cols))
-	for i, col := range cols {
+	ret := make(map[string]interface{}, len(input.columns))
+	for i, col := range input.columns {
 		if col == nil {
 			continue
 		}
 		data, str, err := columnToAvroData(
 			col,
-			colInfos[i].Ft,
+			input.colInfos[i].Ft,
 			decimalHandlingMode,
 			bigintUnsignedHandlingMode,
 		)
