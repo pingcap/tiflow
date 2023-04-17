@@ -498,7 +498,6 @@ func (m *mounter) mountRowKVEntry(tableInfo *model.TableInfo, row *rowKVEntry, d
 				return nil, rawRow, cerror.ErrCorruptedDataMutation.
 					GenWithStackByArgs(m.changefeedID.Namespace, m.changefeedID.ID, row)
 			}
-
 			corrupted = true
 		}
 
