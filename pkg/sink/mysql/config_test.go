@@ -329,7 +329,7 @@ func TestApplyTimezone(t *testing.T) {
 	localTimezone, err := util.GetTimezone("Local")
 	require.Nil(t, err)
 
-	tests := []struct {
+	for _, test := range []struct {
 		name                 string
 		noChangefeedTimezone bool
 		changefeedTimezone   string
@@ -385,28 +385,27 @@ func TestApplyTimezone(t *testing.T) {
 			expectedHasErr:       true,
 			expectedErr:          "unknown time zone +08:00",
 		},
-	}
-
-	for _, test := range tests {
-		t.Run(test.name, func(t *testing.T) {
+	} {
+		tc := test
+		t.Run(tc.name, func(t *testing.T) {
 			t.Parallel()
 
 			cfg := NewConfig()
-			ctx := contextutil.PutTimezoneInCtx(context.Background(), test.serverTimezone)
+			ctx := contextutil.PutTimezoneInCtx(context.Background(), tc.serverTimezone)
 			sinkURI := "mysql://127.0.0.1:3306"
-			if !test.noChangefeedTimezone {
-				sinkURI = sinkURI + "?time-zone=" + test.changefeedTimezone
+			if !tc.noChangefeedTimezone {
+				sinkURI = sinkURI + "?time-zone=" + tc.changefeedTimezone
 			}
 			uri, err := url.Parse(sinkURI)
 			require.Nil(t, err)
 			err = cfg.Apply(ctx,
 				model.DefaultChangeFeedID("changefeed-01"), uri, config.GetDefaultReplicaConfig())
-			if test.expectedHasErr {
+			if tc.expectedHasErr {
 				require.NotNil(t, err)
-				require.Contains(t, err.Error(), test.expectedErr)
+				require.Contains(t, err.Error(), tc.expectedErr)
 			} else {
 				require.Nil(t, err)
-				require.Equal(t, test.expected, cfg.Timezone)
+				require.Equal(t, tc.expected, cfg.Timezone)
 			}
 		})
 	}
