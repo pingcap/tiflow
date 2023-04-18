@@ -504,7 +504,10 @@ func rowToAvroSchema(
 	if err != nil {
 		return "", cerror.WrapError(cerror.ErrAvroMarshalFailed, err)
 	}
-	log.Debug("rowToAvroSchema", zap.ByteString("schema", str))
+	log.Info("rowToAvroSchema",
+		zap.ByteString("schema", str),
+		zap.Bool("enableTiDBExtension", enableTiDBExtension),
+		zap.Bool("enableRowLevelChecksum", enableRowLevelChecksum))
 	return string(str), nil
 }
 

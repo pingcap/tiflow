@@ -18,7 +18,10 @@ import (
 	"context"
 	"encoding/json"
 	"math/big"
+	"math/rand"
+	"sort"
 	"testing"
+	"time"
 
 	"github.com/linkedin/goavro/v2"
 	"github.com/pingcap/tidb/parser/mysql"
@@ -627,6 +630,60 @@ func indentJSON(j string) string {
 	var buf bytes.Buffer
 	_ = json.Indent(&buf, []byte(j), "", "  ")
 	return buf.String()
+}
+
+func TestRowToAvroSchemaEnableChecksum(t *testing.T) {
+	t.Parallel()
+
+	table := model.TableName{
+		Schema: "testdb",
+		Table:  "rowtoavroschema",
+	}
+	namespace := getAvroNamespace(model.DefaultNamespace, &table)
+	cols := make([]*model.Column, 0)
+	colInfos := make([]rowcodec.ColInfo, 0)
+
+	for _, v := range avroTestColumns {
+		cols = append(cols, &v.col)
+		colInfos = append(colInfos, v.colInfo)
+
+		colNew := v.col
+		colNew.Name = colNew.Name + "nullable"
+		colNew.Value = nil
+		colNew.Flag.SetIsNullable()
+
+		colInfoNew := v.colInfo
+		colInfoNew.ID += int64(len(avroTestColumns))
+
+		cols = append(cols, &colNew)
+		colInfos = append(colInfos, colInfoNew)
+	}
+
+	input := &avroEncodeInput{
+		cols,
+		colInfos,
+	}
+
+	rand.New(rand.NewSource(time.Now().Unix())).Shuffle(len(input.columns), func(i, j int) {
+		input.columns[i], input.columns[j] = input.columns[j], input.columns[i]
+		input.colInfos[i], input.colInfos[j] = input.colInfos[j], input.colInfos[i]
+	})
+
+	schema, err := rowToAvroSchema(
+		namespace,
+		table.Table,
+		input,
+		true,
+		true,
+		"string",
+		"string",
+	)
+	require.NoError(t, err)
+	require.Equal(t, expectedSchemaWithExtensionEnableChecksum, indentJSON(schema))
+	_, err = goavro.NewCodec(schema)
+	require.NoError(t, err)
+
+	require.True(t, sort.IsSorted(input))
 }
 
 func TestRowToAvroSchema(t *testing.T) {
