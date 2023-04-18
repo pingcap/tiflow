@@ -334,7 +334,9 @@ func getSafeMode(values url.Values, safeMode *bool) error {
 func getTimezone(ctxWithTimezone context.Context, values url.Values, timezone *string) error {
 	const pleaseSpecifyTimezone = "We recommend that you specify the time-zone explicitly. " +
 		"Please make sure that the timezone of the TiCDC server, " +
-		"sink-uri and the downstream database are consistent."
+		"sink-uri and the downstream database are consistent. " +
+		"If the downstream database does not load the timezone information, " +
+		"you can refer to https://dev.mysql.com/doc/refman/8.0/en/mysql-tzinfo-to-sql.html."
 	serverTimezone := contextutil.TimezoneFromCtx(ctxWithTimezone)
 	if _, ok := values["time-zone"]; !ok {
 		// If time-zone is not specified, use the timezone of the server.
