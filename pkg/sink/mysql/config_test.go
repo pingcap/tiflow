@@ -205,32 +205,6 @@ func TestApplySinkURIParamsToConfig(t *testing.T) {
 	require.Equal(t, expected, cfg)
 }
 
-func TestParseSinkURITimezone(t *testing.T) {
-	t.Parallel()
-
-	uris := []string{
-		"mysql://127.0.0.1:3306/?time-zone=Asia/Shanghai&worker-count=32",
-		"mysql://127.0.0.1:3306/?time-zone=&worker-count=32",
-		"mysql://127.0.0.1:3306/?worker-count=32",
-	}
-	expected := []string{
-		"\"Asia/Shanghai\"",
-		"",
-		"\"UTC\"",
-	}
-	ctx := context.TODO()
-	for i, uriStr := range uris {
-		uri, err := url.Parse(uriStr)
-		require.Nil(t, err)
-		cfg := NewConfig()
-		err = cfg.Apply(ctx,
-			model.DefaultChangeFeedID("cf"),
-			uri, config.GetDefaultReplicaConfig())
-		require.Nil(t, err)
-		require.Equal(t, expected[i], cfg.Timezone)
-	}
-}
-
 func TestParseSinkURIOverride(t *testing.T) {
 	t.Parallel()
 
@@ -350,6 +324,8 @@ func TestCheckTiDBVariable(t *testing.T) {
 }
 
 func TestApplyTimezone(t *testing.T) {
+	t.Parallel()
+
 	localTimezone, err := util.GetTimezone("Local")
 	require.Nil(t, err)
 
@@ -405,6 +381,8 @@ func TestApplyTimezone(t *testing.T) {
 
 	for _, test := range tests {
 		t.Run(test.name, func(t *testing.T) {
+			t.Parallel()
+
 			cfg := NewConfig()
 			ctx := contextutil.PutTimezoneInCtx(context.Background(), test.serverTimezone)
 			sinkURI := "mysql://127.0.0.1:3306"
