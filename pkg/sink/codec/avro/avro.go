@@ -201,7 +201,7 @@ func (a *BatchEncoder) avroEncode(
 		}
 	}
 
-	if len(cols) == 0 {
+	if len(input.columns) == 0 {
 		return nil, nil
 	}
 
