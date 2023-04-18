@@ -22,6 +22,7 @@ import (
 	"testing"
 
 	"github.com/pingcap/errors"
+	"github.com/pingcap/failpoint"
 	"github.com/pingcap/tiflow/cdc/contextutil"
 	"github.com/pingcap/tiflow/cdc/entry"
 	"github.com/pingcap/tiflow/cdc/entry/schema"
@@ -606,6 +607,37 @@ func TestProcessorLiveness(t *testing.T) {
 	// Force set liveness to alive.
 	*p.agent.(*mockAgent).liveness = model.LivenessCaptureAlive
 	require.Equal(t, model.LivenessCaptureAlive, p.liveness.Load())
+
+	require.Nil(t, p.Close())
+	tester.MustApplyPatches()
+}
+
+func TestProcessorDostNotStuckInInit(t *testing.T) {
+	_ = failpoint.
+		Enable("github.com/pingcap/tiflow/cdc/processor/sinkmanager/SinkManagerRunError",
+			"1*return(true)")
+	defer func() {
+		_ = failpoint.
+			Disable("github.com/pingcap/tiflow/cdc/processor/sinkmanager/SinkManagerRunError")
+	}()
+
+	ctx := cdcContext.NewBackendContext4Test(true)
+	liveness := model.LivenessCaptureAlive
+	p, tester := initProcessor4Test(ctx, t, &liveness)
+
+	// First tick for creating position.
+	err := p.Tick(ctx)
+	require.Nil(t, err)
+	tester.MustApplyPatches()
+
+	// Second tick for init.
+	err = p.Tick(ctx)
+	require.Nil(t, err)
+
+	// Third tick for handle error.
+	err = p.Tick(ctx)
+	require.NotNil(t, err)
+	require.Contains(t, err.Error(), "SinkManagerRunError")
 
 	require.Nil(t, p.Close())
 	tester.MustApplyPatches()
