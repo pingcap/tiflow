@@ -371,7 +371,15 @@ func TestApplyTimezone(t *testing.T) {
 			changefeedTimezone:   "UTC",
 			serverTimezone:       localTimezone,
 			expectedHasErr:       true,
-			expectedErr:          ".*Please make sure that the timezone of the TiCDC server.*",
+			expectedErr:          "Please make sure that the timezone of the TiCDC server",
+		},
+		{
+			name:                 "unsupported timezone format",
+			noChangefeedTimezone: false,
+			changefeedTimezone:   "%2B08%3A00", // +08:00
+			serverTimezone:       time.UTC,
+			expectedHasErr:       true,
+			expectedErr:          "unknown time zone +08:00",
 		},
 	}
 
@@ -391,7 +399,7 @@ func TestApplyTimezone(t *testing.T) {
 				model.DefaultChangeFeedID("changefeed-01"), uri, config.GetDefaultReplicaConfig())
 			if test.expectedHasErr {
 				require.NotNil(t, err)
-				require.Regexp(t, test.expectedErr, err.Error())
+				require.Contains(t, err.Error(), test.expectedErr)
 			} else {
 				require.Nil(t, err)
 				require.Equal(t, test.expected, cfg.Timezone)
