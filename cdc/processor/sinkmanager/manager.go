@@ -19,6 +19,7 @@ import (
 	"time"
 
 	"github.com/pingcap/errors"
+	"github.com/pingcap/failpoint"
 	"github.com/pingcap/log"
 	"github.com/pingcap/tiflow/cdc/entry"
 	"github.com/pingcap/tiflow/cdc/model"
@@ -182,7 +183,15 @@ func (m *SinkManager) Run(ctx context.Context) (err error) {
 		m.changefeedInfo.SinkURI,
 		m.changefeedInfo.Config,
 		managerErrors)
+	log.Warn("before failpoint SinkManagerRunError injected")
+	failpoint.Inject("SinkManagerRunError", func() {
+		log.Info("failpoint SinkManagerRunError injected",
+			zap.String("changefeed", m.changefeedID.ID))
+		err = errors.New("SinkManagerRunError")
+	})
+
 	if err != nil {
+		close(m.ready)
 		return errors.Trace(err)
 	}
 
