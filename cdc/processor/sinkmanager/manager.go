@@ -183,7 +183,6 @@ func (m *SinkManager) Run(ctx context.Context) (err error) {
 		m.changefeedInfo.SinkURI,
 		m.changefeedInfo.Config,
 		managerErrors)
-	log.Warn("before failpoint SinkManagerRunError injected")
 	failpoint.Inject("SinkManagerRunError", func() {
 		log.Info("failpoint SinkManagerRunError injected",
 			zap.String("changefeed", m.changefeedID.ID))
