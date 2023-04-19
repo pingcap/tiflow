@@ -469,32 +469,38 @@ func rowToAvroSchema(
 	if enableTiDBExtension {
 		top.Fields = append(top.Fields,
 			map[string]interface{}{
-				"name": tidbOp,
-				"type": "string",
+				"name":    tidbOp,
+				"type":    "string",
+				"default": "",
 			},
 			map[string]interface{}{
-				"name": tidbCommitTs,
-				"type": "long",
+				"name":    tidbCommitTs,
+				"type":    "long",
+				"default": 0,
 			},
 			map[string]interface{}{
-				"name": tidbPhysicalTime,
-				"type": "long",
+				"name":    tidbPhysicalTime,
+				"type":    "long",
+				"default": 0,
 			},
 		)
 
 		if enableRowLevelChecksum {
 			top.Fields = append(top.Fields,
 				map[string]interface{}{
-					"name": tidbRowLevelChecksum,
-					"type": "string",
+					"name":    tidbRowLevelChecksum,
+					"type":    "string",
+					"default": "",
 				},
 				map[string]interface{}{
-					"name": tidbCorrupted,
-					"type": "boolean",
+					"name":    tidbCorrupted,
+					"type":    "boolean",
+					"default": false,
 				},
 				map[string]interface{}{
-					"name": tidbChecksumVersion,
-					"type": "int",
+					"name":    tidbChecksumVersion,
+					"type":    "int",
+					"default": 0,
 				})
 		}
 
