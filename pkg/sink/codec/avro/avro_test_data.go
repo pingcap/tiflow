@@ -1635,14 +1635,17 @@ var expectedSchemaWithExtension = `{
       ]
     },
     {
+      "default": "",
       "name": "_tidb_op",
       "type": "string"
     },
     {
+      "default": 0,
       "name": "_tidb_commit_ts",
       "type": "long"
     },
     {
+      "default": 0,
       "name": "_tidb_commit_physical_time",
       "type": "long"
     }
@@ -2453,26 +2456,32 @@ var expectedSchemaWithExtensionEnableChecksum = `{
       ]
     },
     {
+      "default": "",
       "name": "_tidb_op",
       "type": "string"
     },
     {
+      "default": 0,
       "name": "_tidb_commit_ts",
       "type": "long"
     },
     {
+      "default": 0,
       "name": "_tidb_commit_physical_time",
       "type": "long"
     },
     {
+      "default": "",
       "name": "_tidb_row_level_checksum",
       "type": "string"
     },
     {
+      "default": false,
       "name": "_tidb_corrupted",
       "type": "boolean"
     },
     {
+      "default": 0,
       "name": "_tidb_checksum_version",
       "type": "int"
     }
