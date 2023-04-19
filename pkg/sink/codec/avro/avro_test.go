@@ -18,7 +18,10 @@ import (
 	"context"
 	"encoding/json"
 	"math/big"
+	"math/rand"
+	"sort"
 	"testing"
+	"time"
 
 	"github.com/linkedin/goavro/v2"
 	"github.com/pingcap/tidb/parser/mysql"
@@ -629,6 +632,60 @@ func indentJSON(j string) string {
 	return buf.String()
 }
 
+func TestRowToAvroSchemaEnableChecksum(t *testing.T) {
+	t.Parallel()
+
+	table := model.TableName{
+		Schema: "testdb",
+		Table:  "rowtoavroschema",
+	}
+	namespace := getAvroNamespace(model.DefaultNamespace, &table)
+	cols := make([]*model.Column, 0)
+	colInfos := make([]rowcodec.ColInfo, 0)
+
+	for _, v := range avroTestColumns {
+		cols = append(cols, &v.col)
+		colInfos = append(colInfos, v.colInfo)
+
+		colNew := v.col
+		colNew.Name = colNew.Name + "nullable"
+		colNew.Value = nil
+		colNew.Flag.SetIsNullable()
+
+		colInfoNew := v.colInfo
+		colInfoNew.ID += int64(len(avroTestColumns))
+
+		cols = append(cols, &colNew)
+		colInfos = append(colInfos, colInfoNew)
+	}
+
+	input := &avroEncodeInput{
+		cols,
+		colInfos,
+	}
+
+	rand.New(rand.NewSource(time.Now().Unix())).Shuffle(len(input.columns), func(i, j int) {
+		input.columns[i], input.columns[j] = input.columns[j], input.columns[i]
+		input.colInfos[i], input.colInfos[j] = input.colInfos[j], input.colInfos[i]
+	})
+
+	schema, err := rowToAvroSchema(
+		namespace,
+		table.Table,
+		input,
+		true,
+		true,
+		"string",
+		"string",
+	)
+	require.NoError(t, err)
+	require.Equal(t, expectedSchemaWithExtensionEnableChecksum, indentJSON(schema))
+	_, err = goavro.NewCodec(schema)
+	require.NoError(t, err)
+
+	require.True(t, sort.IsSorted(input))
+}
+
 func TestRowToAvroSchema(t *testing.T) {
 	t.Parallel()
 
@@ -654,8 +711,10 @@ func TestRowToAvroSchema(t *testing.T) {
 	schema, err := rowToAvroSchema(
 		namespace,
 		table.Table,
-		cols,
-		colInfos,
+		&avroEncodeInput{
+			cols,
+			colInfos,
+		},
 		false,
 		false,
 		"precise",
@@ -669,8 +728,10 @@ func TestRowToAvroSchema(t *testing.T) {
 	schema, err = rowToAvroSchema(
 		namespace,
 		table.Table,
-		cols,
-		colInfos,
+		&avroEncodeInput{
+			cols,
+			colInfos,
+		},
 		true,
 		false,
 		"precise",
@@ -699,7 +760,7 @@ func TestRowToAvroData(t *testing.T) {
 		colInfos = append(colInfos, v.colInfo)
 	}
 
-	data, err := rowToAvroData(cols, colInfos, 417318403368288260, "c", false, "precise", "long")
+	data, err := rowToAvroData(&avroEncodeInput{cols, colInfos}, 417318403368288260, "c", false, "precise", "long")
 	require.NoError(t, err)
 	_, exists := data["_tidb_commit_ts"]
 	require.False(t, exists)
@@ -708,7 +769,7 @@ func TestRowToAvroData(t *testing.T) {
 	_, exists = data["_tidb_commit_physical_time"]
 	require.False(t, exists)
 
-	data, err = rowToAvroData(cols, colInfos, 417318403368288260, "c", true, "precise", "long")
+	data, err = rowToAvroData(&avroEncodeInput{cols, colInfos}, 417318403368288260, "c", true, "precise", "long")
 	require.NoError(t, err)
 	v, exists := data["_tidb_commit_ts"]
 	require.True(t, exists)
@@ -784,8 +845,10 @@ func TestAvroEncode(t *testing.T) {
 	keySchema, err := rowToAvroSchema(
 		namespace,
 		event.Table.Table,
-		keyCols,
-		keyColInfos,
+		&avroEncodeInput{
+			keyCols,
+			keyColInfos,
+		},
 		false,
 		false,
 		"precise",
@@ -809,8 +872,9 @@ func TestAvroEncode(t *testing.T) {
 	valueSchema, err := rowToAvroSchema(
 		namespace,
 		event.Table.Table,
-		cols,
-		colInfos,
+		&avroEncodeInput{
+			cols, colInfos,
+		},
 		true,
 		false,
 		"precise",
