@@ -168,7 +168,7 @@ done
 if [[ "$tikv_config" != "" ]]; then
 	cat $tikv_config >$OUT_DIR/tikv-config.toml
 else
-  cat - >"$OUT_DIR/tikv-config.toml" <<EOF
+	cat - >"$OUT_DIR/tikv-config.toml" <<EOF
 [storage]
 # Disable creating a large temp file.
 reserve-space = "0MB"
