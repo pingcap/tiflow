@@ -63,7 +63,7 @@ while [ $i -le $retry_times ]; do
 		start_tidb_cluster_impl --workdir ${OUT_DIR} --multiple-upstream-pd ${multiple_upstream_pd} --tidb-config ${tidb_config}
 	elif [[ "$pd_config" != "" ]]; then
 		start_tidb_cluster_impl --workdir ${OUT_DIR} --multiple-upstream-pd ${multiple_upstream_pd} --pd-config ${pd_config}
-	elif [[ "$pd_config" != "" ]]; then
+	elif [[ "$tikv_config" != "" ]]; then
   	start_tidb_cluster_impl --workdir ${OUT_DIR} --multiple-upstream-pd ${multiple_upstream_pd} --tikv-config ${tikv_config}
 	else
 		start_tidb_cluster_impl --workdir ${OUT_DIR} --multiple-upstream-pd ${multiple_upstream_pd}
