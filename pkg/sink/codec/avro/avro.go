@@ -46,6 +46,11 @@ type BatchEncoder struct {
 	valueSchemaManager *schemaManager
 	result             []*common.Message
 
+	*Options
+}
+
+// Options is used to initialize the encoder, control the encoding behavior.
+type Options struct {
 	enableTiDBExtension bool
 	enableRowChecksum   bool
 

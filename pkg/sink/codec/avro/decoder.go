@@ -56,6 +56,10 @@ func NewDecoder(key, value []byte,
 	}
 }
 
+func (d *decoder) binary2Native(binary []byte) {
+
+}
+
 func (d *decoder) HasNext() (model.MessageType, bool, error) {
 	if d.key == nil {
 		return model.MessageTypeUnknown, false, nil
@@ -150,23 +154,4 @@ func GetBinaryDataFromEnvelope(data []byte) ([]byte, error) {
 		return nil, errors.ErrAvroInvalidMessage.FastGenByArgs()
 	}
 	return data[5:], nil
-}
-
-type builder struct {
-}
-
-func NewDecoderBuilder() *builder {
-	return &builder{}
-}
-
-func (b *builder) Build() codec.RowEventDecoder {
-	return &decoder{
-		topic:                  "",
-		key:                    nil,
-		value:                  nil,
-		enableTiDBExtension:    false,
-		enableRowLevelChecksum: false,
-		keySchemaM:             nil,
-		valueSchemaM:           nil,
-	}
 }

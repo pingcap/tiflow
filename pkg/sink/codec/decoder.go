@@ -30,7 +30,3 @@ type RowEventDecoder interface {
 	// NextDDLEvent returns the next DDL event if exists
 	NextDDLEvent() (*model.DDLEvent, error)
 }
-
-type RowEventDecoderBuilder interface {
-	Build() RowEventDecoder
-}
