@@ -165,8 +165,8 @@ while [ -z "$(curl http://${DOWN_PD_HOST}:${DOWN_PD_PORT}/pd/api/v1/health 2>/de
 done
 
 # Tries to limit the max number of open files under the system limit
-if [[ "$tidb_config" != "" ]]; then
-	cat $tidb_config >$OUT_DIR/tidb-config.toml
+if [[ "$tikv_config" != "" ]]; then
+	cat $tikv_config >$OUT_DIR/tikv-config.toml
 else
   cat - >"$OUT_DIR/tikv-config.toml" <<EOF
 [storage]
