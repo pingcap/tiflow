@@ -17,9 +17,11 @@ import (
 	"bytes"
 	"context"
 	"encoding/json"
+	"fmt"
 	"io"
 	"net/http"
 	"net/url"
+	"strconv"
 	"strings"
 	"sync"
 	"time"
@@ -44,6 +46,7 @@ type SchemaRegistry interface {
 		schemaGen SchemaGenerator,
 	) (*goavro.Codec, int, error)
 
+	// Lookup the schema by the schemaID, it should be used by the avro message consumer.
 	Lookup(ctx context.Context, topicName string, schemaID int) (*goavro.Codec, int, error)
 }
 
@@ -221,6 +224,7 @@ func (m *schemaManager) Register(
 
 //Lookup(ctx context.Context, topicName string, schemaID int) (*goavro.Codec, int, error)
 
+// Lookup the cached schema entry first, if not found, fetch from the Registry server.
 func (m *schemaManager) Lookup(
 	ctx context.Context,
 	topicName string,
@@ -230,7 +234,7 @@ func (m *schemaManager) Lookup(
 	m.cacheRWLock.RLock()
 	entry, exists := m.cache[key]
 	if exists && entry.schemaID == schemaID {
-		log.Info("Avro schema lookup cache hit",
+		log.Debug("Avro schema lookup cache hit",
 			zap.String("key", key),
 			zap.Int("schemaID", schemaID))
 		m.cacheRWLock.RUnlock()
@@ -243,7 +247,7 @@ func (m *schemaManager) Lookup(
 		zap.Int("expectedSchemaID", schemaID),
 		zap.Int("obtainedSchemaID", entry.schemaID))
 
-	uri := m.registryURL + "/subjects/" + url.QueryEscape(key) + "/versions/latest"
+	uri := m.registryURL + "/subjects/" + url.QueryEscape(key) + "/versions/" + strconv.Itoa(schemaID)
 	log.Debug("Querying for latest schema", zap.String("uri", uri))
 
 	req, err := http.NewRequestWithContext(ctx, "GET", uri, nil)
@@ -282,7 +286,7 @@ func (m *schemaManager) Lookup(
 	if resp.StatusCode == 404 {
 		log.Warn("Specified schema not found in Registry",
 			zap.String("key", key),
-			zap.Uint64("tableVersion", tableVersion))
+			zap.Int("schemaID", schemaID))
 		return nil, 0, cerror.ErrAvroSchemaAPIError.GenWithStackByArgs(
 			"Schema not found in Registry",
 		)
@@ -295,6 +299,12 @@ func (m *schemaManager) Lookup(
 		return nil, 0, cerror.WrapError(cerror.ErrAvroSchemaAPIError, err)
 	}
 
+	if jsonResp.ID != schemaID {
+		return nil, 0, cerror.WrapError(cerror.ErrAvroSchemaAPIError,
+			fmt.Errorf("avro schema id mismatch, expected = %+v, obtained = %+v",
+				schemaID, jsonResp.ID))
+	}
+
 	cacheEntry := new(schemaCacheEntry)
 	cacheEntry.codec, err = goavro.NewCodec(jsonResp.Schema)
 	if err != nil {
@@ -302,8 +312,7 @@ func (m *schemaManager) Lookup(
 		return nil, 0, cerror.WrapError(cerror.ErrAvroSchemaAPIError, err)
 	}
 	cacheEntry.schemaID = jsonResp.ID
-	cacheEntry.tableVersion = tableVersion
-
+	
 	m.cacheRWLock.Lock()
 	m.cache[key] = cacheEntry
 	m.cacheRWLock.Unlock()

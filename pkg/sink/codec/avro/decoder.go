@@ -58,7 +58,7 @@ func (d *decoder) HasNext() (model.MessageType, bool, error) {
 		return model.MessageTypeUnknown, false, errors.Trace(err)
 	}
 
-	keyCodec, schemaID, err := d.keySchemaM.Lookup(ctx, d.topic, uint64(schemaID))
+	keyCodec, schemaID, err := d.keySchemaM.Lookup(ctx, d.topic, schemaID)
 	if err != nil {
 		return model.MessageTypeUnknown, false, errors.Trace(err)
 	}
@@ -78,7 +78,7 @@ func (d *decoder) HasNext() (model.MessageType, bool, error) {
 
 // NextResolvedEvent returns the next resolved event if exists
 func (d *decoder) NextResolvedEvent() (uint64, error) {
-	return 0, nil
+
 }
 
 // NextRowChangedEvent returns the next row changed event if exists

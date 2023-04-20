@@ -72,7 +72,8 @@ func (r *avroEncodeInput) Swap(i, j int) {
 }
 
 type avroEncodeResult struct {
-	data     []byte
+	data []byte
+	// schemaID is encoded into the avro message, consumer should use this to fetch the schema.
 	schemaID int
 }
 
