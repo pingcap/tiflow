@@ -9,6 +9,7 @@ set -e
 OUT_DIR=
 tidb_config=
 pd_config=
+tikv_config=
 multiple_upstream_pd=
 random_file_name=
 
@@ -37,6 +38,10 @@ while [[ ${1} ]]; do
 		;;
 	--pd-config)
 		pd_config=${2}
+		shift
+		;;
+	--tikv-config)
+		tikv_config=${2}
 		shift
 		;;
 	--multiple-upstream-pd)
@@ -160,7 +165,10 @@ while [ -z "$(curl http://${DOWN_PD_HOST}:${DOWN_PD_PORT}/pd/api/v1/health 2>/de
 done
 
 # Tries to limit the max number of open files under the system limit
-cat - >"$OUT_DIR/tikv-config.toml" <<EOF
+if [[ "$tidb_config" != "" ]]; then
+	cat $tidb_config >$OUT_DIR/tidb-config.toml
+else
+  cat - >"$OUT_DIR/tikv-config.toml" <<EOF
 [storage]
 # Disable creating a large temp file.
 reserve-space = "0MB"
@@ -174,6 +182,7 @@ sync-log = false
 [cdc]
 hibernate-regions-compatible = true
 EOF
+fi
 
 # tidb server config file
 if [[ "$tidb_config" != "" ]]; then
