@@ -16,6 +16,7 @@ package avro
 import (
 	"context"
 	"encoding/binary"
+	"fmt"
 
 	"github.com/pingcap/log"
 	"github.com/pingcap/tiflow/cdc/model"
@@ -119,11 +120,12 @@ func (d *decoder) NextRowChangedEvent() (*model.RowChangedEvent, error) {
 		log.Error("raw avro message is not a map")
 		return nil, errors.New("raw avro message is not a map")
 	}
+	fmt.Printf("key: %+v", rawKey)
 
 	result := new(model.RowChangedEvent)
-	for name, col := range rawKey {
-
-	}
+	//for name, col := range rawKey {
+	//
+	//}
 
 	return result, nil
 }
