@@ -559,7 +559,6 @@ func (m *mounter) mountRowKVEntry(tableInfo *model.TableInfo, row *rowKVEntry, d
 			}
 			corrupted = true
 		}
-		checksumVersion = m.encoder.ChecksumVersion()
 	}
 
 	schemaName := tableInfo.TableName.Schema
