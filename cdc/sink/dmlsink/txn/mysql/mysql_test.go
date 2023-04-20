@@ -1898,9 +1898,9 @@ func TestBackendGenUpdateSQL(t *testing.T) {
 			ms.cfg.MaxMultiUpdateRowCount,
 			[]string{
 				"UPDATE `db`.`tb1` SET " +
-					"`id`=CASE WHEN `id`=? THEN ? WHEN `id`=? THEN ? END, " +
-					"`name`=CASE WHEN `id`=? THEN ? WHEN `id`=? THEN ? END " +
-					"WHERE `id` IN (?,?)",
+					"`id`=CASE WHEN `id` = ? THEN ? WHEN `id` = ? THEN ? END, " +
+					"`name`=CASE WHEN `id` = ? THEN ? WHEN `id` = ? THEN ? END " +
+					"WHERE (`id` = ?) OR (`id` = ?)",
 			},
 			[][]interface{}{
 				{1, 1, 2, 2, 1, "aa", 2, "bb", 1, 2},
