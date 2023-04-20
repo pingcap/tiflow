@@ -215,15 +215,6 @@ func (m *schemaManager) Register(
 	return jsonResp.ID, nil
 }
 
-// Lookup the latest schema and the Registry designated ID for that schema.
-// TiSchemaId is only used to trigger fetching from the Registry server.
-// Calling this method with a tableVersion other than that used last time will invariably trigger a
-// RESTful request to the Registry.
-// Returns (codec, registry schema ID, error)
-// NOT USED for now, reserved for future use.
-
-//Lookup(ctx context.Context, topicName string, schemaID int) (*goavro.Codec, int, error)
-
 // Lookup the cached schema entry first, if not found, fetch from the Registry server.
 func (m *schemaManager) Lookup(
 	ctx context.Context,
@@ -312,7 +303,7 @@ func (m *schemaManager) Lookup(
 		return nil, 0, cerror.WrapError(cerror.ErrAvroSchemaAPIError, err)
 	}
 	cacheEntry.schemaID = jsonResp.ID
-	
+
 	m.cacheRWLock.Lock()
 	m.cache[key] = cacheEntry
 	m.cacheRWLock.Unlock()
