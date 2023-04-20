@@ -25,7 +25,12 @@ import (
 )
 
 func TestDecodeEvent(t *testing.T) {
-	encoder, err := setupEncoderAndSchemaRegistry(true, "precise", "long")
+	o := &Options{
+		enableTiDBExtension:        true,
+		decimalHandlingMode:        "precise",
+		bigintUnsignedHandlingMode: "long",
+	}
+	encoder, err := setupEncoderAndSchemaRegistry(o)
 	require.NoError(t, err)
 	defer teardownEncoderAndSchemaRegistry()
 
@@ -90,64 +95,19 @@ func TestDecodeEvent(t *testing.T) {
 	require.Len(t, messages, 1)
 	message := messages[0]
 
-	decoder, err := NewDecoder(message.Key, message.Value)
+	// todo: share the schema manager used by the encoder at the moment
+	// for the decoder, should use a new schema manager
+	keySchemaM := encoder.keySchemaManager
+	valueSchemaM := encoder.valueSchemaManager
 
-	//keyCols, keyColInfos := event.HandleKeyColInfos()
-	//namespace := getAvroNamespace(encoder.namespace, event.Table)
+	decoder := NewDecoder(message.Key, message.Value, o, keySchemaM, valueSchemaM)
 
-	//keySchema, err := rowToAvroSchema(
-	//	namespace,
-	//	event.Table.Table,
-	//	&avroEncodeInput{
-	//		keyCols,
-	//		keyColInfos,
-	//	},
-	//	false,
-	//	false,
-	//	"precise",
-	//	"long",
-	//)
-	//require.NoError(t, err)
-	//avroKeyCodec, err := goavro.NewCodec(keySchema)
-	//require.NoError(t, err)
+	messageType, exist, err := decoder.HasNext()
+	require.NoError(t, err)
+	require.True(t, exist)
+	require.Equal(t, model.MessageTypeRow, messageType)
 
-	//r, err := encoder.avroEncode(ctx, event, "default", true)
-	//require.NoError(t, err)
-	//res, _, err := avroKeyCodec.NativeFromBinary(r.data)
-	//require.NoError(t, err)
-	//require.NotNil(t, res)
-	//for k := range res.(map[string]interface{}) {
-	//	if k == "_tidb_commit_ts" || k == "_tidb_op" || k == "_tidb_commit_physical_time" {
-	//		require.Fail(t, "key shall not include extension fields")
-	//	}
-	//}
-	//
-	//valueSchema, err := rowToAvroSchema(
-	//	namespace,
-	//	event.Table.Table,
-	//	&avroEncodeInput{
-	//		cols, colInfos,
-	//	},
-	//	true,
-	//	false,
-	//	"precise",
-	//	"long",
-	//)
-	//require.NoError(t, err)
-	//avroValueCodec, err := goavro.NewCodec(valueSchema)
-	//require.NoError(t, err)
-	//
-	//r, err = encoder.avroEncode(ctx, event, "default", false)
-	//require.NoError(t, err)
-	//res, _, err = avroValueCodec.NativeFromBinary(r.data)
-	//require.NoError(t, err)
-	//require.NotNil(t, res)
-	//for k, v := range res.(map[string]interface{}) {
-	//	if k == "_tidb_op" {
-	//		require.Equal(t, "c", v.(string))
-	//	}
-	//	if k == "float" {
-	//		require.Equal(t, float32(3.14), v)
-	//	}
-	//}
+	decodedEvent, err := decoder.NextRowChangedEvent()
+	require.NoError(t, err)
+	require.NotNil(t, decodedEvent)
 }

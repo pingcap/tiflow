@@ -29,8 +29,7 @@ type decoder struct {
 	key   []byte
 	value []byte
 
-	enableTiDBExtension    bool
-	enableRowLevelChecksum bool
+	*Options
 
 	keySchemaM   *schemaManager
 	valueSchemaM *schemaManager
@@ -40,16 +39,14 @@ type decoder struct {
 }
 
 func NewDecoder(key, value []byte,
-	enableTiDBExtension bool,
-	enableRowLevelChecksum bool,
+	o *Options,
 	keySchemaM *schemaManager,
 	valueSchemaM *schemaManager,
 ) codec.RowEventDecoder {
 	return &decoder{
-		key:                    key,
-		value:                  value,
-		enableTiDBExtension:    enableTiDBExtension,
-		enableRowLevelChecksum: enableRowLevelChecksum,
+		key:     key,
+		value:   value,
+		Options: o,
 
 		keySchemaM:   keySchemaM,
 		valueSchemaM: valueSchemaM,
