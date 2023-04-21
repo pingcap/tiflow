@@ -328,6 +328,61 @@ func getTiDBTypeFromColumn(col *model.Column) string {
 	return tt
 }
 
+func mysqlTypeFromTiDBType(tp string) (byte, model.ColumnFlagType) {
+	var (
+		result byte
+		flag   model.ColumnFlagType
+	)
+	switch tp {
+	case "INT":
+		// maybe mysql.TypeTiny / mysql.TypeShort / mysql.TypeInt24 / mysql.TypeLong
+		// we don't know the exact type, so we use mysql.TypeLong
+		result = mysql.TypeLong
+	case "INT UNSIGNED":
+		flag.SetIsUnsigned()
+		result = mysql.TypeLong
+	case "BIGINT":
+		result = mysql.TypeLonglong
+	case "BIGINT UNSIGNED":
+		flag.SetIsUnsigned()
+		result = mysql.TypeLonglong
+	case "FLOAT":
+		result = mysql.TypeFloat
+	case "DOUBLE":
+		result = mysql.TypeDouble
+	case "BIT":
+		result = mysql.TypeBit
+	case "DECIMAL":
+		result = mysql.TypeNewDecimal
+	case "TEXT":
+		result = mysql.TypeVarchar
+	case "BLOB":
+		// maybe mysql.TypeTinyBlob / mysql.TypeMediumBlob / mysql.TypeBlob / mysql.TypeLongBlob
+		// we don't know the exact type, so we use mysql.TypeLongBlob
+		flag.SetIsBinary()
+		result = mysql.TypeLongBlob
+	case "ENUM":
+		result = mysql.TypeEnum
+	case "SET":
+		result = mysql.TypeSet
+	case "JSON":
+		result = mysql.TypeJSON
+	case "DATE":
+		result = mysql.TypeDate
+	case "DATETIME":
+		result = mysql.TypeDatetime
+	case "TIMESTAMP":
+		result = mysql.TypeTimestamp
+	case "TIME":
+		result = mysql.TypeDuration
+	case "YEAR":
+		result = mysql.TypeYear
+	default:
+		log.Panic("this should not happen, unknown TiDB type", zap.String("type", tp))
+	}
+	return result, flag
+}
+
 const (
 	replacementChar = "_"
 	numberPrefix    = "_"

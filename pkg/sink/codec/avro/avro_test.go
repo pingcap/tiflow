@@ -31,12 +31,7 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
-func setupEncoderAndSchemaRegistry(
-	ctx context.Context,
-	o *Options,
-) (*BatchEncoder, error) {
-	startHTTPInterceptForTestingRegistry()
-
+func newSchemaManager4Test(ctx context.Context) (*schemaManager, *schemaManager, error) {
 	keyManager, err := NewAvroSchemaManager(
 		ctx,
 		nil,
@@ -44,7 +39,7 @@ func setupEncoderAndSchemaRegistry(
 		"-key",
 	)
 	if err != nil {
-		return nil, err
+		return nil, nil, err
 	}
 
 	valueManager, err := NewAvroSchemaManager(
@@ -53,6 +48,20 @@ func setupEncoderAndSchemaRegistry(
 		"http://127.0.0.1:8081",
 		"-value",
 	)
+	if err != nil {
+		return nil, nil, err
+	}
+
+	return keyManager, valueManager, nil
+}
+
+func setupEncoderAndSchemaRegistry(
+	ctx context.Context,
+	o *Options,
+) (*BatchEncoder, error) {
+	startHTTPInterceptForTestingRegistry()
+
+	keyManager, valueManager, err := newSchemaManager4Test(ctx)
 	if err != nil {
 		return nil, err
 	}

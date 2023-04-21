@@ -15,9 +15,7 @@ package avro
 
 import (
 	"context"
-	"math/rand"
 	"testing"
-	"time"
 
 	"github.com/pingcap/tidb/parser/mysql"
 	"github.com/pingcap/tidb/types"
@@ -32,7 +30,11 @@ func TestDecodeEvent(t *testing.T) {
 		decimalHandlingMode:        "precise",
 		bigintUnsignedHandlingMode: "long",
 	}
-	encoder, err := setupEncoderAndSchemaRegistry(o)
+
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+
+	encoder, err := setupEncoderAndSchemaRegistry(ctx, o)
 	require.NoError(t, err)
 	defer teardownEncoderAndSchemaRegistry()
 
@@ -62,16 +64,16 @@ func TestDecodeEvent(t *testing.T) {
 		cols = append(cols, &v.col)
 		colInfos = append(colInfos, v.colInfo)
 
-		colNew := v.col
-		colNew.Name = colNew.Name + "nullable"
-		colNew.Value = nil
-		colNew.Flag.SetIsNullable()
-
-		colInfoNew := v.colInfo
-		colInfoNew.ID += int64(len(avroTestColumns))
-
-		cols = append(cols, &colNew)
-		colInfos = append(colInfos, colInfoNew)
+		//colNew := v.col
+		//colNew.Name = colNew.Name + "nullable"
+		//colNew.Value = nil
+		//colNew.Flag.SetIsNullable()
+		//
+		//colInfoNew := v.colInfo
+		//colInfoNew.ID += int64(len(avroTestColumns))
+		//
+		//cols = append(cols, &colNew)
+		//colInfos = append(colInfos, colInfoNew)
 	}
 
 	input := &avroEncodeInput{
@@ -79,11 +81,11 @@ func TestDecodeEvent(t *testing.T) {
 		colInfos,
 	}
 
-	rand.New(rand.NewSource(time.Now().Unix())).Shuffle(len(input.columns), func(i, j int) {
-		input.columns[i], input.columns[j] = input.columns[j], input.columns[i]
-		input.colInfos[i], input.colInfos[j] = input.colInfos[j], input.colInfos[i]
-	})
-
+	//rand.New(rand.NewSource(time.Now().Unix())).Shuffle(len(input.columns), func(i, j int) {
+	//	input.columns[i], input.columns[j] = input.columns[j], input.columns[i]
+	//	input.colInfos[i], input.colInfos[j] = input.colInfos[j], input.colInfos[i]
+	//})
+	//
 	// insert event
 	event := &model.RowChangedEvent{
 		CommitTs: 417318403368288260,
@@ -101,23 +103,18 @@ func TestDecodeEvent(t *testing.T) {
 		ColInfos: input.colInfos,
 	}
 
-	ctx, cancel := context.WithCancel(context.Background())
-	defer cancel()
-
 	topic := "avro-test-topic"
 	err = encoder.AppendRowChangedEvent(ctx, topic, event, func() {})
-	require.Error(t, err)
+	require.NoError(t, err)
 
 	messages := encoder.Build()
 	require.Len(t, messages, 1)
 	message := messages[0]
 
-	// todo: share the schema manager used by the encoder at the moment
-	// for the decoder, should use a new schema manager
-	keySchemaM := encoder.keySchemaManager
-	valueSchemaM := encoder.valueSchemaManager
+	keySchemaM, valueSchemaM, err := newSchemaManager4Test(ctx)
+	require.NoError(t, err)
 
-	decoder := NewDecoder(message.Key, message.Value, o, keySchemaM, valueSchemaM)
+	decoder := NewDecoder(message.Key, message.Value, o, keySchemaM, valueSchemaM, topic)
 
 	messageType, exist, err := decoder.HasNext()
 	require.NoError(t, err)

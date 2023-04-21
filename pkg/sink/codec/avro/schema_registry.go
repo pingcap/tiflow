@@ -235,8 +235,7 @@ func (m *schemaManager) Lookup(
 
 	log.Info("Avro schema lookup cache miss",
 		zap.String("key", key),
-		zap.Int("expectedSchemaID", schemaID),
-		zap.Int("obtainedSchemaID", entry.schemaID))
+		zap.Int("schemaID", schemaID))
 
 	uri := m.registryURL + "/subjects/" + url.QueryEscape(key) + "/versions/" + strconv.Itoa(schemaID)
 	log.Debug("Querying for latest schema", zap.String("uri", uri))
