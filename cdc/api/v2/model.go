@@ -546,7 +546,7 @@ type SinkConfig struct {
 	Terminator               string            `json:"terminator"`
 	DateSeparator            string            `json:"date_separator"`
 	EnablePartitionSeparator bool              `json:"enable_partition_separator"`
-	EnableKafkaSinkV2        bool              `json:"enable_kafka_sink_v_2"`
+	EnableKafkaSinkV2        bool              `json:"enable_kafka_sink_v2"`
 	OnlyOutputUpdatedColumns bool              `json:"only_output_updated_columns"`
 }
 

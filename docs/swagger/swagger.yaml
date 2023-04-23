@@ -613,7 +613,7 @@ definitions:
         items:
           $ref: '#/definitions/v2.DispatchRule'
         type: array
-      enable_kafka_sink_v_2:
+      enable_kafka_sink_v2:
         type: boolean
       enable_partition_separator:
         type: boolean
