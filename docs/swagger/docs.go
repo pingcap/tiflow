@@ -2211,7 +2211,7 @@ var doc = `{
                         "$ref": "#/definitions/v2.DispatchRule"
                     }
                 },
-                "enable_kafka_sink_v_2": {
+                "enable_kafka_sink_v2": {
                     "type": "boolean"
                 },
                 "enable_partition_separator": {
