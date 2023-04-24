@@ -973,15 +973,17 @@ func NewBatchEncoderBuilder(ctx context.Context,
 
 // Build an AvroEventBatchEncoder.
 func (b *batchEncoderBuilder) Build() codec.RowEventEncoder {
-	encoder := &BatchEncoder{}
-	encoder.namespace = b.namespace
-	encoder.keySchemaManager = b.keySchemaManager
-	encoder.valueSchemaManager = b.valueSchemaManager
-	encoder.result = make([]*common.Message, 0, 1024)
-	encoder.enableTiDBExtension = b.config.EnableTiDBExtension
-	encoder.enableRowChecksum = b.config.EnableRowChecksum
-	encoder.decimalHandlingMode = b.config.AvroDecimalHandlingMode
-	encoder.bigintUnsignedHandlingMode = b.config.AvroBigintUnsignedHandlingMode
-
+	encoder := &BatchEncoder{
+		namespace:          b.namespace,
+		keySchemaManager:   b.keySchemaManager,
+		valueSchemaManager: b.valueSchemaManager,
+		result:             make([]*common.Message, 0, 1),
+		Options: &Options{
+			enableTiDBExtension:        b.config.EnableTiDBExtension,
+			enableRowChecksum:          b.config.EnableRowChecksum,
+			decimalHandlingMode:        b.config.AvroDecimalHandlingMode,
+			bigintUnsignedHandlingMode: b.config.AvroBigintUnsignedHandlingMode,
+		},
+	}
 	return encoder
 }
