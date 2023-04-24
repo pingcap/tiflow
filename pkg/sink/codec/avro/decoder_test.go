@@ -15,7 +15,9 @@ package avro
 
 import (
 	"context"
+	"math/rand"
 	"testing"
+	"time"
 
 	"github.com/pingcap/tidb/parser/mysql"
 	"github.com/pingcap/tidb/types"
@@ -64,16 +66,16 @@ func TestDecodeEvent(t *testing.T) {
 		cols = append(cols, &v.col)
 		colInfos = append(colInfos, v.colInfo)
 
-		//colNew := v.col
-		//colNew.Name = colNew.Name + "nullable"
-		//colNew.Value = nil
-		//colNew.Flag.SetIsNullable()
-		//
-		//colInfoNew := v.colInfo
-		//colInfoNew.ID += int64(len(avroTestColumns))
-		//
-		//cols = append(cols, &colNew)
-		//colInfos = append(colInfos, colInfoNew)
+		colNew := v.col
+		colNew.Name = colNew.Name + "nullable"
+		colNew.Value = nil
+		colNew.Flag.SetIsNullable()
+
+		colInfoNew := v.colInfo
+		colInfoNew.ID += int64(len(avroTestColumns))
+
+		cols = append(cols, &colNew)
+		colInfos = append(colInfos, colInfoNew)
 	}
 
 	input := &avroEncodeInput{
@@ -81,11 +83,11 @@ func TestDecodeEvent(t *testing.T) {
 		colInfos,
 	}
 
-	//rand.New(rand.NewSource(time.Now().Unix())).Shuffle(len(input.columns), func(i, j int) {
-	//	input.columns[i], input.columns[j] = input.columns[j], input.columns[i]
-	//	input.colInfos[i], input.colInfos[j] = input.colInfos[j], input.colInfos[i]
-	//})
-	//
+	rand.New(rand.NewSource(time.Now().Unix())).Shuffle(len(input.columns), func(i, j int) {
+		input.columns[i], input.columns[j] = input.columns[j], input.columns[i]
+		input.colInfos[i], input.colInfos[j] = input.colInfos[j], input.colInfos[i]
+	})
+
 	// insert event
 	event := &model.RowChangedEvent{
 		CommitTs: 417318403368288260,

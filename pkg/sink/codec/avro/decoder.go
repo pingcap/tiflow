@@ -100,8 +100,18 @@ func (d *decoder) HasNext() (model.MessageType, bool, error) {
 		if colName == tidbOp {
 			break
 		}
-		types := field["type"].(map[string]interface{})
-		tidbType := types["connect.parameters"].(map[string]interface{})["tidb_type"].(string)
+
+		var tidbType string
+		typeInfo := field["type"]
+		switch ty := typeInfo.(type) {
+		case []interface{}:
+			tidbType = ty[1].(map[string]interface{})["connect.parameters"].(map[string]interface{})["tidb_type"].(string)
+		case map[string]interface{}:
+			tidbType = ty["connect.parameters"].(map[string]interface{})["tidb_type"].(string)
+		default:
+			log.Panic("type info is anything else", zap.Any("typeInfo", typeInfo))
+		}
+
 		mysqlType, flag := mysqlAndFlagTypeFromTiDBType(tidbType)
 		if _, ok := key[colName]; ok {
 			flag.SetIsHandleKey()
