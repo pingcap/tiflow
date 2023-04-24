@@ -278,8 +278,6 @@ func newSaramaConfig(o *options) (*sarama.Config, error) {
 func main() {
 	o := newOptions()
 
-	log.Info("start the kafka consumer ...", zap.Any("options", o))
-
 	err := logutil.InitLogger(&logutil.Config{
 		Level: o.logLevel,
 		File:  o.logPath,
@@ -296,6 +294,10 @@ func main() {
 		log.Panic("creating sarama config failed", zap.Error(err))
 	}
 
+	if o.topic == "" {
+		log.Panic("no topic found in upstream-uri")
+	}
+
 	err = waitTopicCreated(o.kafkaAddrs, o.topic, saramaConfig)
 	if err != nil {
 		log.Panic("wait topic created failed", zap.Error(err))
@@ -308,6 +310,8 @@ func main() {
 		}
 		o.partitionNum = partitionNum
 	}
+
+	log.Info("start the kafka consumer ...", zap.Any("options", o))
 
 	/**
 	 * Setup a new Sarama consumer group
@@ -328,7 +332,7 @@ func main() {
 
 	topics := []string{o.topic}
 
-	wg := &sync.WaitGroup{}
+	var wg sync.WaitGroup
 	wg.Add(1)
 	go func() {
 		defer wg.Done()
