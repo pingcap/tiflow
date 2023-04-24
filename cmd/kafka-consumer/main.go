@@ -49,6 +49,7 @@ import (
 	"github.com/pingcap/tiflow/pkg/sink/codec"
 	"github.com/pingcap/tiflow/pkg/sink/codec/avro"
 	"github.com/pingcap/tiflow/pkg/sink/codec/canal"
+	"github.com/pingcap/tiflow/pkg/sink/codec/common"
 	"github.com/pingcap/tiflow/pkg/sink/codec/open"
 	"github.com/pingcap/tiflow/pkg/spanz"
 	"github.com/pingcap/tiflow/pkg/util"
@@ -57,25 +58,16 @@ import (
 )
 
 type options struct {
-	upstreamURI string
-
-	kafkaAddrs []string
-
+	*common.Config
+	// kafka related fields
+	upstreamURI  string
+	kafkaAddrs   []string
 	topic        string
 	partitionNum int32
 	groupID      string
 	version      string
 
-	maxMessageBytes int
-	maxBatchSize    int
-
 	downstreamAddr string
-
-	protocol                   config.Protocol
-	enableTiDBExtension        bool
-	enableRowChecksum          bool
-	decimalHandlingMode        string
-	bigintUnsignedHandlingMode string
 
 	// eventRouterReplicaConfig only used to initialize the consumer's eventRouter
 	// which then can be used to check RowChangedEvent dispatched correctness
@@ -86,8 +78,6 @@ type options struct {
 	timezone      string
 	ca, cert, key string
 
-	schemaRegistry string
-
 	configFile string
 }
 
@@ -96,8 +86,8 @@ func newOptions() *options {
 		groupID: fmt.Sprintf("ticdc_kafka_consumer_%s", uuid.New().String()),
 		version: "2.4.0",
 
-		maxMessageBytes: math.MaxInt64,
-		maxBatchSize:    math.MaxInt64,
+		// default to use open-protocol
+		Config: common.NewConfig(config.ProtocolOpen),
 	}
 
 	flag.StringVar(&o.upstreamURI, "upstream-uri", "", "Kafka uri")
@@ -109,7 +99,7 @@ func newOptions() *options {
 	flag.StringVar(&o.ca, "ca", "", "CA certificate path for Kafka SSL connection")
 	flag.StringVar(&o.cert, "cert", "", "Certificate path for Kafka SSL connection")
 	flag.StringVar(&o.key, "key", "", "Private key path for Kafka SSL connection")
-	flag.StringVar(&o.schemaRegistry, "schema-registry", "", "Schema registry address")
+	flag.StringVar(&o.AvroSchemaRegistry, "schema-registry", "", "Schema registry address")
 	flag.Parse()
 
 	upstreamURI, err := url.Parse(o.upstreamURI)
@@ -150,7 +140,7 @@ func newOptions() *options {
 		if err != nil {
 			log.Panic("invalid max-message-bytes of upstream-uri")
 		}
-		o.maxMessageBytes = c
+		o.MaxMessageBytes = c
 	}
 
 	s = upstreamURI.Query().Get("max-batch-size")
@@ -159,7 +149,7 @@ func newOptions() *options {
 		if err != nil {
 			log.Panic("invalid max-batch-size of upstream-uri")
 		}
-		o.maxBatchSize = c
+		o.MaxBatchSize = c
 	}
 
 	s = upstreamURI.Query().Get("protocol")
@@ -168,7 +158,7 @@ func newOptions() *options {
 		if err != nil {
 			log.Panic("invalid protocol", zap.Error(err), zap.String("protocol", s))
 		}
-		o.protocol = protocol
+		o.Protocol = protocol
 	}
 
 	s = upstreamURI.Query().Get("enable-tidb-extension")
@@ -177,9 +167,9 @@ func newOptions() *options {
 		if err != nil {
 			log.Panic("invalid enable-tidb-extension of upstream-uri")
 		}
-		o.enableTiDBExtension = b
-		if o.enableTiDBExtension {
-			switch o.protocol {
+		o.EnableTiDBExtension = b
+		if o.EnableTiDBExtension {
+			switch o.Protocol {
 			case config.ProtocolCanalJSON, config.ProtocolAvro:
 			default:
 				log.Panic("enable-tidb-extension only work with canal-json, avro")
@@ -189,7 +179,7 @@ func newOptions() *options {
 
 	if o.configFile != "" {
 		replicaConfig := config.GetDefaultReplicaConfig()
-		replicaConfig.Sink.Protocol = o.protocol.String()
+		replicaConfig.Sink.Protocol = o.Protocol.String()
 		err := cmdUtil.StrictDecodeFile(o.configFile, "kafka consumer", replicaConfig)
 		if err != nil {
 			log.Panic("invalid config file for kafka consumer",
@@ -540,31 +530,36 @@ func (c *Consumer) ConsumeClaim(session sarama.ConsumerGroupSession, claim saram
 		panic("sink should initialized")
 	}
 
+	var (
+		decoder codec.RowEventDecoder
+		err     error
+	)
+	switch c.Protocol {
+	case config.ProtocolOpen, config.ProtocolDefault:
+		decoder = open.NewBatchDecoder()
+	case config.ProtocolCanalJSON:
+		decoder = canal.NewBatchDecoder(c.EnableTiDBExtension, "")
+	case config.ProtocolAvro:
+		o := &avro.Options{
+			EnableTiDBExtension:        c.EnableTiDBExtension,
+			EnableRowChecksum:          c.EnableRowChecksum,
+			DecimalHandlingMode:        c.AvroDecimalHandlingMode,
+			BigintUnsignedHandlingMode: c.AvroBigintUnsignedHandlingMode,
+		}
+		decoder = avro.NewDecoder(o, c.keySchemaM, c.valueSchemaM, c.topic)
+	default:
+		log.Panic("Protocol not supported", zap.Any("Protocol", c.Protocol))
+	}
+	if err != nil {
+		return errors.Trace(err)
+	}
+
 	eventGroups := make(map[int64]*eventsGroup)
 	for message := range claim.Messages() {
-		var (
-			decoder codec.RowEventDecoder
-			err     error
-		)
-		switch c.protocol {
-		case config.ProtocolOpen, config.ProtocolDefault:
-			decoder, err = open.NewBatchDecoder(message.Key, message.Value)
-		case config.ProtocolCanalJSON:
-			decoder = canal.NewBatchDecoder(message.Value, c.enableTiDBExtension, "")
-		case config.ProtocolAvro:
-			decoder = avro.NewDecoder(message.Key, message.Value, &avro.Options{
-				EnableTiDBExtension:        c.enableTiDBExtension,
-				EnableRowChecksum:          c.enableRowChecksum,
-				DecimalHandlingMode:        c.decimalHandlingMode,
-				BigintUnsignedHandlingMode: c.bigintUnsignedHandlingMode,
-			}, c.keySchemaM, c.valueSchemaM, c.topic)
-		default:
-			log.Panic("Protocol not supported", zap.Any("Protocol", c.protocol))
-		}
-		if err != nil {
+		if err := decoder.AddKeyValue(message.Key, message.Value); err != nil {
+			log.Info("add key value to the decoder failed", zap.Error(err))
 			return errors.Trace(err)
 		}
-
 		counter := 0
 		for {
 			tp, hasNext, err := decoder.HasNext()
@@ -577,8 +572,8 @@ func (c *Consumer) ConsumeClaim(session sarama.ConsumerGroupSession, claim saram
 
 			counter++
 			// If the message containing only one event exceeds the length limit, CDC will allow it and issue a warning.
-			if len(message.Key)+len(message.Value) > c.maxMessageBytes && counter > 1 {
-				log.Panic("kafka max-messages-bytes exceeded", zap.Int("max-message-bytes", c.maxMessageBytes),
+			if len(message.Key)+len(message.Value) > c.MaxMessageBytes && counter > 1 {
+				log.Panic("kafka max-messages-bytes exceeded", zap.Int("max-message-bytes", c.MaxMessageBytes),
 					zap.Int("receivedBytes", len(message.Key)+len(message.Value)))
 			}
 
@@ -684,8 +679,8 @@ func (c *Consumer) ConsumeClaim(session sarama.ConsumerGroupSession, claim saram
 			session.MarkMessage(message, "")
 		}
 
-		if counter > c.maxBatchSize {
-			log.Panic("Open Protocol max-batch-size exceeded", zap.Int("max-batch-size", c.maxBatchSize),
+		if counter > c.MaxBatchSize {
+			log.Panic("Open Protocol max-batch-size exceeded", zap.Int("max-batch-size", c.MaxBatchSize),
 				zap.Int("actual-batch-size", counter))
 		}
 	}

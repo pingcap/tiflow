@@ -10,6 +10,7 @@
 // distributed under the License is distributed on an "AS IS" BASIS,
 // See the License for the specific language governing permissions and
 // limitations under the License.
+
 package internal
 
 import (
@@ -20,6 +21,7 @@ import (
 	"github.com/pingcap/tidb/parser/mysql"
 	"github.com/pingcap/tiflow/cdc/model"
 	"github.com/pingcap/tiflow/pkg/sink/codec"
+	"github.com/pingcap/tiflow/pkg/sink/codec/open"
 	"github.com/stretchr/testify/require"
 )
 
@@ -227,7 +229,6 @@ func NewDefaultBatchTester() *BatchTester {
 func (s *BatchTester) TestBatchCodec(
 	t *testing.T,
 	encoderBuilder codec.RowEventEncoderBuilder,
-	newDecoder func(key []byte, value []byte) (codec.RowEventDecoder, error),
 ) {
 	checkRowDecoder := func(decoder codec.RowEventDecoder, cs []*model.RowChangedEvent) {
 		index := 0
@@ -288,8 +289,9 @@ func (s *BatchTester) TestBatchCodec(
 			res := encoder.Build()
 			require.Len(t, res, 1)
 			require.Equal(t, len(cs), res[0].GetRowsCount())
-			decoder, err := newDecoder(res[0].Key, res[0].Value)
-			require.Nil(t, err)
+			decoder := open.NewBatchDecoder()
+			err := decoder.AddKeyValue(res[0].Key, res[0].Value)
+			require.NoError(t, err)
 			checkRowDecoder(decoder, cs)
 		}
 	}
@@ -297,10 +299,13 @@ func (s *BatchTester) TestBatchCodec(
 		encoder := encoderBuilder.Build()
 		for i, ddl := range cs {
 			msg, err := encoder.EncodeDDLEvent(ddl)
-			require.Nil(t, err)
+			require.NoError(t, err)
 			require.NotNil(t, msg)
-			decoder, err := newDecoder(msg.Key, msg.Value)
-			require.Nil(t, err)
+
+			decoder := open.NewBatchDecoder()
+			err = decoder.AddKeyValue(msg.Key, msg.Value)
+			require.NoError(t, err)
+
 			checkDDLDecoder(decoder, cs[i:i+1])
 
 		}
@@ -310,10 +315,13 @@ func (s *BatchTester) TestBatchCodec(
 		encoder := encoderBuilder.Build()
 		for i, ts := range cs {
 			msg, err := encoder.EncodeCheckpointEvent(ts)
-			require.Nil(t, err)
+			require.NoError(t, err)
 			require.NotNil(t, msg)
-			decoder, err := newDecoder(msg.Key, msg.Value)
-			require.Nil(t, err)
+
+			decoder := open.NewBatchDecoder()
+			err = decoder.AddKeyValue(msg.Key, msg.Value)
+			require.NoError(t, err)
+
 			checkTSDecoder(decoder, cs[i:i+1])
 		}
 	}

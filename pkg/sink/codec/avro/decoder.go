@@ -45,7 +45,7 @@ type decoder struct {
 }
 
 // NewDecoder return an avro decoder
-func NewDecoder(key, value []byte,
+func NewDecoder(
 	o *Options,
 	keySchemaM *SchemaManager,
 	valueSchemaM *SchemaManager,
@@ -56,10 +56,13 @@ func NewDecoder(key, value []byte,
 		topic:        topic,
 		keySchemaM:   keySchemaM,
 		valueSchemaM: valueSchemaM,
-
-		key:   key,
-		value: value,
 	}
+}
+
+func (d *decoder) AddKeyValue(key, value []byte) error {
+	d.key = key
+	d.value = value
+	return nil
 }
 
 func (d *decoder) HasNext() (model.MessageType, bool, error) {

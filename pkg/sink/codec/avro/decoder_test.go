@@ -116,7 +116,10 @@ func TestDecodeEvent(t *testing.T) {
 	keySchemaM, valueSchemaM, err := newSchemaManager4Test(ctx)
 	require.NoError(t, err)
 
-	decoder := NewDecoder(message.Key, message.Value, o, keySchemaM, valueSchemaM, topic)
+	decoder := NewDecoder(o, keySchemaM, valueSchemaM, topic)
+
+	err = decoder.AddKeyValue(message.Key, message.Value)
+	require.NoError(t, err)
 
 	messageType, exist, err := decoder.HasNext()
 	require.NoError(t, err)
