@@ -32,7 +32,7 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
-func newSchemaManager4Test(ctx context.Context) (*schemaManager, *schemaManager, error) {
+func newSchemaManager4Test(ctx context.Context) (*SchemaManager, *SchemaManager, error) {
 	keyManager, err := NewAvroSchemaManager(
 		ctx,
 		nil,
@@ -790,10 +790,10 @@ func TestRowToAvroData(t *testing.T) {
 
 func TestAvroEncode(t *testing.T) {
 	o := &Options{
-		enableTiDBExtension:        true,
-		enableRowChecksum:          false,
-		decimalHandlingMode:        "precise",
-		bigintUnsignedHandlingMode: "long",
+		EnableTiDBExtension:        true,
+		EnableRowChecksum:          false,
+		DecimalHandlingMode:        "precise",
+		BigintUnsignedHandlingMode: "long",
 	}
 
 	ctx, cancel := context.WithCancel(context.Background())
@@ -992,10 +992,10 @@ func TestArvoAppendRowChangedEventWithCallback(t *testing.T) {
 	t.Parallel()
 
 	o := &Options{
-		enableTiDBExtension:        true,
-		enableRowChecksum:          false,
-		decimalHandlingMode:        "precise",
-		bigintUnsignedHandlingMode: "long",
+		EnableTiDBExtension:        true,
+		EnableRowChecksum:          false,
+		DecimalHandlingMode:        "precise",
+		BigintUnsignedHandlingMode: "long",
 	}
 
 	ctx, cancel := context.WithCancel(context.Background())

@@ -38,8 +38,8 @@ type decoder struct {
 	key   []byte
 	value []byte
 
-	keySchemaM   *schemaManager
-	valueSchemaM *schemaManager
+	keySchemaM   *SchemaManager
+	valueSchemaM *SchemaManager
 
 	nextEvent *model.RowChangedEvent
 }
@@ -47,8 +47,8 @@ type decoder struct {
 // NewDecoder return an avro decoder
 func NewDecoder(key, value []byte,
 	o *Options,
-	keySchemaM *schemaManager,
-	valueSchemaM *schemaManager,
+	keySchemaM *SchemaManager,
+	valueSchemaM *SchemaManager,
 	topic string,
 ) codec.RowEventDecoder {
 	return &decoder{

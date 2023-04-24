@@ -47,6 +47,7 @@ import (
 	"github.com/pingcap/tiflow/pkg/quotes"
 	"github.com/pingcap/tiflow/pkg/security"
 	"github.com/pingcap/tiflow/pkg/sink/codec"
+	"github.com/pingcap/tiflow/pkg/sink/codec/avro"
 	"github.com/pingcap/tiflow/pkg/sink/codec/canal"
 	"github.com/pingcap/tiflow/pkg/sink/codec/open"
 	"github.com/pingcap/tiflow/pkg/spanz"
@@ -70,8 +71,11 @@ type options struct {
 
 	downstreamAddr string
 
-	protocol            config.Protocol
-	enableTiDBExtension bool
+	protocol                   config.Protocol
+	enableTiDBExtension        bool
+	enableRowChecksum          bool
+	decimalHandlingMode        string
+	bigintUnsignedHandlingMode string
 
 	// eventRouterReplicaConfig only used to initialize the consumer's eventRouter
 	// which then can be used to check RowChangedEvent dispatched correctness
@@ -405,6 +409,10 @@ type Consumer struct {
 	globalResolvedTs uint64
 
 	eventRouter *dispatcher.EventRouter
+
+	// avro schema registry
+	keySchemaM   *avro.SchemaManager
+	valueSchemaM *avro.SchemaManager
 }
 
 // NewConsumer creates a new cdc kafka consumer
@@ -416,12 +424,10 @@ func NewConsumer(ctx context.Context, o *options) (*Consumer, error) {
 	}
 	ctx = contextutil.PutTimezoneInCtx(ctx, tz)
 
-	c := new(Consumer)
+	c := &Consumer{options: o}
 	c.fakeTableIDGenerator = &fakeTableIDGenerator{
 		tableIDs: make(map[string]int64),
 	}
-	c.protocol = o.protocol
-	c.enableTiDBExtension = o.enableTiDBExtension
 
 	// this means user has input config file to enable dispatcher check
 	// some protocol does not provide enough information to check the
@@ -545,6 +551,13 @@ func (c *Consumer) ConsumeClaim(session sarama.ConsumerGroupSession, claim saram
 			decoder, err = open.NewBatchDecoder(message.Key, message.Value)
 		case config.ProtocolCanalJSON:
 			decoder = canal.NewBatchDecoder(message.Value, c.enableTiDBExtension, "")
+		case config.ProtocolAvro:
+			decoder = avro.NewDecoder(message.Key, message.Value, &avro.Options{
+				EnableTiDBExtension:        c.enableTiDBExtension,
+				EnableRowChecksum:          c.enableRowChecksum,
+				DecimalHandlingMode:        c.decimalHandlingMode,
+				BigintUnsignedHandlingMode: c.bigintUnsignedHandlingMode,
+			}, c.keySchemaM, c.valueSchemaM, c.topic)
 		default:
 			log.Panic("Protocol not supported", zap.Any("Protocol", c.protocol))
 		}

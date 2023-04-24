@@ -28,9 +28,9 @@ import (
 
 func TestDecodeEvent(t *testing.T) {
 	o := &Options{
-		enableTiDBExtension:        true,
-		decimalHandlingMode:        "precise",
-		bigintUnsignedHandlingMode: "long",
+		EnableTiDBExtension:        true,
+		DecimalHandlingMode:        "precise",
+		BigintUnsignedHandlingMode: "long",
 	}
 
 	ctx, cancel := context.WithCancel(context.Background())

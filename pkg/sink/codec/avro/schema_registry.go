@@ -50,10 +50,10 @@ type SchemaRegistry interface {
 	Lookup(ctx context.Context, topicName string, schemaID int) (*goavro.Codec, int, error)
 }
 
-// schemaManager is used to register Avro Schemas to the Registry server,
+// SchemaManager is used to register Avro Schemas to the Registry server,
 // look up local cache according to the table's name, and fetch from the Registry
 // in cache the local cache entry is missing.
-type schemaManager struct {
+type SchemaManager struct {
 	registryURL   string
 	subjectSuffix string
 
@@ -89,10 +89,10 @@ type lookupResponse struct {
 	Schema string `json:"schema"`
 }
 
-// NewAvroSchemaManager creates a new schemaManager and test connectivity to the schema registry
+// NewAvroSchemaManager creates a new SchemaManager and test connectivity to the schema registry
 func NewAvroSchemaManager(
 	ctx context.Context, credential *security.Credential, registryURL string, subjectSuffix string,
-) (*schemaManager, error) {
+) (*SchemaManager, error) {
 	registryURL = strings.TrimRight(registryURL, "/")
 	httpCli, err := httputil.NewClient(credential)
 	if err != nil {
@@ -122,7 +122,7 @@ func NewAvroSchemaManager(
 		zap.String("registryURL", registryURL),
 	)
 
-	return &schemaManager{
+	return &SchemaManager{
 		registryURL:   registryURL,
 		cache:         make(map[string]*schemaCacheEntry, 1),
 		subjectSuffix: subjectSuffix,
@@ -130,7 +130,7 @@ func NewAvroSchemaManager(
 }
 
 // Register a schema in schema registry, no cache
-func (m *schemaManager) Register(
+func (m *SchemaManager) Register(
 	ctx context.Context,
 	topicName string,
 	schema string,
@@ -216,7 +216,7 @@ func (m *schemaManager) Register(
 }
 
 // Lookup the cached schema entry first, if not found, fetch from the Registry server.
-func (m *schemaManager) Lookup(
+func (m *SchemaManager) Lookup(
 	ctx context.Context,
 	topicName string,
 	schemaID int,
@@ -323,7 +323,7 @@ type SchemaGenerator func() (string, error)
 // If not, a new schema is generated, registered and cached.
 // Re-registering an existing schema shall return the same id(and version), so even if the
 // cache is out-of-sync with schema registry, we could reload it.
-func (m *schemaManager) GetCachedOrRegister(
+func (m *SchemaManager) GetCachedOrRegister(
 	ctx context.Context,
 	topicName string,
 	tableVersion uint64,
@@ -384,7 +384,7 @@ func (m *schemaManager) GetCachedOrRegister(
 // ClearRegistry clears the Registry subject for the given table. Should be idempotent.
 // Exported for testing.
 // NOT USED for now, reserved for future use.
-func (m *schemaManager) ClearRegistry(ctx context.Context, topicName string) error {
+func (m *SchemaManager) ClearRegistry(ctx context.Context, topicName string) error {
 	uri := m.registryURL + "/subjects/" + url.QueryEscape(
 		m.topicNameToSchemaSubject(topicName),
 	)
@@ -482,6 +482,6 @@ func httpRetry(
 }
 
 // TopicNameStrategy, ksqlDB only supports this
-func (m *schemaManager) topicNameToSchemaSubject(topicName string) string {
+func (m *SchemaManager) topicNameToSchemaSubject(topicName string) string {
 	return topicName + m.subjectSuffix
 }

@@ -42,8 +42,8 @@ import (
 // BatchEncoder converts the events to binary Avro data
 type BatchEncoder struct {
 	namespace          string
-	keySchemaManager   *schemaManager
-	valueSchemaManager *schemaManager
+	keySchemaManager   *SchemaManager
+	valueSchemaManager *SchemaManager
 	result             []*common.Message
 
 	*Options
@@ -51,11 +51,11 @@ type BatchEncoder struct {
 
 // Options is used to initialize the encoder, control the encoding behavior.
 type Options struct {
-	enableTiDBExtension bool
-	enableRowChecksum   bool
+	EnableTiDBExtension bool
+	EnableRowChecksum   bool
 
-	decimalHandlingMode        string
-	bigintUnsignedHandlingMode string
+	DecimalHandlingMode        string
+	BigintUnsignedHandlingMode string
 }
 
 type avroEncodeInput struct {
@@ -176,7 +176,7 @@ func (a *BatchEncoder) avroEncode(
 		colInfos               []rowcodec.ColInfo
 		enableTiDBExtension    bool
 		enableRowLevelChecksum bool
-		schemaManager          *schemaManager
+		schemaManager          *SchemaManager
 		operation              string
 	)
 	if isKey {
@@ -194,8 +194,8 @@ func (a *BatchEncoder) avroEncode(
 			colInfos: e.ColInfos,
 		}
 
-		enableTiDBExtension = a.enableTiDBExtension
-		enableRowLevelChecksum = a.enableRowChecksum
+		enableTiDBExtension = a.EnableTiDBExtension
+		enableRowLevelChecksum = a.EnableRowChecksum
 		schemaManager = a.valueSchemaManager
 		if e.IsInsert() {
 			operation = insertOperation
@@ -220,8 +220,8 @@ func (a *BatchEncoder) avroEncode(
 			input,
 			enableTiDBExtension,
 			enableRowLevelChecksum,
-			a.decimalHandlingMode,
-			a.bigintUnsignedHandlingMode,
+			a.DecimalHandlingMode,
+			a.BigintUnsignedHandlingMode,
 		)
 		if err != nil {
 			log.Error("AvroEventBatchEncoder: generating schema failed", zap.Error(err))
@@ -245,8 +245,8 @@ func (a *BatchEncoder) avroEncode(
 		e.CommitTs,
 		operation,
 		enableTiDBExtension,
-		a.decimalHandlingMode,
-		a.bigintUnsignedHandlingMode,
+		a.DecimalHandlingMode,
+		a.BigintUnsignedHandlingMode,
 	)
 	if err != nil {
 		log.Error("AvroEventBatchEncoder: converting to native failed", zap.Error(err))
@@ -930,8 +930,8 @@ func (r *avroEncodeResult) toEnvelope() ([]byte, error) {
 type batchEncoderBuilder struct {
 	namespace          string
 	config             *common.Config
-	keySchemaManager   *schemaManager
-	valueSchemaManager *schemaManager
+	keySchemaManager   *SchemaManager
+	valueSchemaManager *SchemaManager
 }
 
 const (
@@ -979,10 +979,10 @@ func (b *batchEncoderBuilder) Build() codec.RowEventEncoder {
 		valueSchemaManager: b.valueSchemaManager,
 		result:             make([]*common.Message, 0, 1),
 		Options: &Options{
-			enableTiDBExtension:        b.config.EnableTiDBExtension,
-			enableRowChecksum:          b.config.EnableRowChecksum,
-			decimalHandlingMode:        b.config.AvroDecimalHandlingMode,
-			bigintUnsignedHandlingMode: b.config.AvroBigintUnsignedHandlingMode,
+			EnableTiDBExtension:        b.config.EnableTiDBExtension,
+			EnableRowChecksum:          b.config.EnableRowChecksum,
+			DecimalHandlingMode:        b.config.AvroDecimalHandlingMode,
+			BigintUnsignedHandlingMode: b.config.AvroBigintUnsignedHandlingMode,
 		},
 	}
 	return encoder
