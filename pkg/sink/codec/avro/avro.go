@@ -328,7 +328,7 @@ func getTiDBTypeFromColumn(col *model.Column) string {
 	return tt
 }
 
-func mysqlTypeFromTiDBType(tp string) (byte, model.ColumnFlagType) {
+func mysqlAndFlagTypeFromTiDBType(tp string) (byte, model.ColumnFlagType) {
 	var (
 		result byte
 		flag   model.ColumnFlagType

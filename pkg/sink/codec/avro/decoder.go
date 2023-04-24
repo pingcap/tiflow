@@ -17,9 +17,13 @@ import (
 	"context"
 	"encoding/binary"
 	"encoding/json"
+	"strconv"
 	"strings"
 
 	"github.com/pingcap/log"
+	timodel "github.com/pingcap/tidb/parser/model"
+	"github.com/pingcap/tidb/types"
+	"github.com/pingcap/tidb/util/rowcodec"
 	"github.com/pingcap/tiflow/cdc/model"
 	"github.com/pingcap/tiflow/pkg/errors"
 	"github.com/pingcap/tiflow/pkg/sink/codec"
@@ -98,9 +102,8 @@ func (d *decoder) HasNext() (model.MessageType, bool, error) {
 		}
 		types := field["type"].(map[string]interface{})
 		tidbType := types["connect.parameters"].(map[string]interface{})["tidb_type"].(string)
-		mysqlType, flag := mysqlTypeFromTiDBType(tidbType)
+		mysqlType, flag := mysqlAndFlagTypeFromTiDBType(tidbType)
 		if _, ok := key[colName]; ok {
-			// todo: handle key or primary key ?
 			flag.SetIsHandleKey()
 		}
 		col := &model.Column{
@@ -126,14 +129,25 @@ func (d *decoder) HasNext() (model.MessageType, bool, error) {
 	}
 	commitTs := o.(int64)
 
-	if d.Options.enableRowChecksum {
-		o, ok := valueMap[tidbRowLevelChecksum]
-		if !ok {
-			return model.MessageTypeRow, false, errors.New("cannot found row level checksum")
+	o, ok = valueMap[tidbRowLevelChecksum]
+	if ok {
+		checksum := o.(string)
+		expected, err := strconv.ParseUint(checksum, 10, 64)
+		if err != nil {
+			return model.MessageTypeRow, false, errors.Trace(err)
 		}
-		checksum := o.(int64)
-		if verifyChecksum(columns, uint64(checksum)) {
-			return model.MessageTypeRow, false, errors.New("row level checksum mismatch")
+
+		if o, ok := valueMap[tidbCorrupted]; ok {
+			corrupted := o.(bool)
+			if corrupted {
+				log.Warn("row data is corrupted",
+					zap.String("topic", d.topic),
+					zap.String("checksum", checksum))
+			}
+		}
+
+		if err := verifyChecksum(columns, expected); err != nil {
+			return model.MessageTypeRow, false, errors.Trace(err)
 		}
 	}
 
@@ -159,10 +173,6 @@ func (d *decoder) HasNext() (model.MessageType, bool, error) {
 
 	d.nextEvent = event
 	return model.MessageTypeRow, true, nil
-}
-
-func verifyChecksum(columns []*model.Column, expected uint64) bool {
-	return false
 }
 
 // NextResolvedEvent returns the next resolved event if exists
@@ -214,9 +224,10 @@ func (d *decoder) decodeKey(ctx context.Context) (map[string]interface{}, error)
 
 	result, ok := native.(map[string]interface{})
 	if !ok {
-		log.Error("raw avro message is not a map")
 		return nil, errors.New("raw avro message is not a map")
 	}
+	d.key = nil
+
 	return result, nil
 }
 
@@ -237,8 +248,39 @@ func (d *decoder) decodeValue(ctx context.Context) (map[string]interface{}, stri
 
 	result, ok := native.(map[string]interface{})
 	if !ok {
-		log.Error("raw avro message is not a map")
 		return nil, "", errors.New("raw avro message is not a map")
 	}
+	d.value = nil
+
 	return result, codec.Schema(), nil
+}
+
+func verifyChecksum(columns []*model.Column, expected uint64) error {
+	calculator := rowcodec.RowData{
+		Cols: make([]rowcodec.ColData, 0, len(columns)),
+		Data: make([]byte, 0),
+	}
+	for _, col := range columns {
+		info := &timodel.ColumnInfo{
+			FieldType: *types.NewFieldType(col.Type),
+		}
+		data := types.NewDatum(col.Value)
+		calculator.Cols = append(calculator.Cols, rowcodec.ColData{
+			ColumnInfo: info,
+			Datum:      &data,
+		})
+	}
+	checksum, err := calculator.Checksum()
+	if err != nil {
+		return errors.Trace(err)
+	}
+
+	if uint64(checksum) != expected {
+		log.Error("checksum mismatch",
+			zap.Uint64("expected", expected),
+			zap.Uint32("actual", checksum))
+		return errors.New("checksum mismatch")
+	}
+
+	return nil
 }
