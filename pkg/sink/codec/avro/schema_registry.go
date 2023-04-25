@@ -117,11 +117,11 @@ func NewAvroSchemaManager(
 func (m *schemaManager) Register(
 	ctx context.Context,
 	topicName string,
-	codec *goavro.Codec,
+	schema string,
 ) (int, error) {
 	// The Schema Registry expects the JSON to be without newline characters
 	buffer := new(bytes.Buffer)
-	err := json.Compact(buffer, []byte(codec.Schema()))
+	err := json.Compact(buffer, []byte(schema))
 	if err != nil {
 		log.Error("Could not compact schema", zap.Error(err))
 		return 0, cerror.WrapError(cerror.ErrAvroSchemaAPIError, err)
@@ -208,14 +208,14 @@ func (m *schemaManager) Register(
 func (m *schemaManager) Lookup(
 	ctx context.Context,
 	topicName string,
-	tiSchemaID uint64,
+	tableVersion uint64,
 ) (*goavro.Codec, int, error) {
 	key := m.topicNameToSchemaSubject(topicName)
 	m.cacheRWLock.RLock()
-	if entry, exists := m.cache[key]; exists && entry.tableVersion == tiSchemaID {
+	if entry, exists := m.cache[key]; exists && entry.tableVersion == tableVersion {
 		log.Info("Avro schema lookup cache hit",
 			zap.String("key", key),
-			zap.Uint64("tableVersion", tiSchemaID),
+			zap.Uint64("tableVersion", tableVersion),
 			zap.Int("schemaID", entry.schemaID))
 		m.cacheRWLock.RUnlock()
 		return entry.codec, entry.schemaID, nil
@@ -224,7 +224,7 @@ func (m *schemaManager) Lookup(
 
 	log.Info("Avro schema lookup cache miss",
 		zap.String("key", key),
-		zap.Uint64("tableVersion", tiSchemaID))
+		zap.Uint64("tableVersion", tableVersion))
 
 	uri := m.registryURL + "/subjects/" + url.QueryEscape(key) + "/versions/latest"
 	log.Debug("Querying for latest schema", zap.String("uri", uri))
@@ -265,7 +265,7 @@ func (m *schemaManager) Lookup(
 	if resp.StatusCode == 404 {
 		log.Warn("Specified schema not found in Registry",
 			zap.String("key", key),
-			zap.Uint64("tableVersion", tiSchemaID))
+			zap.Uint64("tableVersion", tableVersion))
 		return nil, 0, cerror.ErrAvroSchemaAPIError.GenWithStackByArgs(
 			"Schema not found in Registry",
 		)
@@ -285,7 +285,7 @@ func (m *schemaManager) Lookup(
 		return nil, 0, cerror.WrapError(cerror.ErrAvroSchemaAPIError, err)
 	}
 	cacheEntry.schemaID = jsonResp.ID
-	cacheEntry.tableVersion = tiSchemaID
+	cacheEntry.tableVersion = tableVersion
 
 	m.cacheRWLock.Lock()
 	m.cache[key] = cacheEntry
@@ -340,7 +340,7 @@ func (m *schemaManager) GetCachedOrRegister(
 		return nil, 0, cerror.WrapError(cerror.ErrAvroSchemaAPIError, err)
 	}
 
-	id, err := m.Register(ctx, topicName, codec)
+	id, err := m.Register(ctx, topicName, codec.Schema())
 	if err != nil {
 		log.Error("GetCachedOrRegister: Could not register schema", zap.Error(err))
 		return nil, 0, errors.Trace(err)
