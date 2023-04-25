@@ -216,12 +216,14 @@ func TestAndWriteStorageSinkTOML(t *testing.T) {
 	err := StrictDecodeFile("changefeed_storage_sink.toml", "cdc", &cfg)
 	require.NoError(t, err)
 
-	sinkURL, err := url.Parse("kafka://127.0.0.1:9092")
+	sinkURL, err := url.Parse("s3://127.0.0.1:9092")
 	require.NoError(t, err)
 
+	cfg.Sink.Protocol = config.ProtocolCanalJSON.String()
 	err = cfg.ValidateAndAdjust(sinkURL)
 	require.NoError(t, err)
 	require.Equal(t, &config.SinkConfig{
+		Protocol:                 config.ProtocolCanalJSON.String(),
 		EncoderConcurrency:       16,
 		Terminator:               "\r\n",
 		DateSeparator:            "day",
