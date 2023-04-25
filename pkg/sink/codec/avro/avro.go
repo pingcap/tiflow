@@ -44,8 +44,8 @@ type BatchEncoder struct {
 	*Options
 
 	namespace          string
-	keySchemaManager   *schemaManager
-	valueSchemaManager *schemaManager
+	keySchemaManager   *SchemaManager
+	valueSchemaManager *SchemaManager
 	result             []*common.Message
 }
 
@@ -211,7 +211,7 @@ func (a *BatchEncoder) avroEncode(
 		colInfos               []rowcodec.ColInfo
 		enableTiDBExtension    bool
 		enableRowLevelChecksum bool
-		schemaManager          *schemaManager
+		schemaManager          *SchemaManager
 		operation              string
 	)
 	if isKey {
@@ -361,6 +361,61 @@ func getTiDBTypeFromColumn(col *model.Column) string {
 		return "BLOB"
 	}
 	return tt
+}
+
+func mysqlAndFlagTypeFromTiDBType(tp string) (byte, model.ColumnFlagType) {
+	var (
+		result byte
+		flag   model.ColumnFlagType
+	)
+	switch tp {
+	case "INT":
+		// maybe mysql.TypeTiny / mysql.TypeShort / mysql.TypeInt24 / mysql.TypeLong
+		// we don't know the exact type, so we use mysql.TypeLong
+		result = mysql.TypeLong
+	case "INT UNSIGNED":
+		flag.SetIsUnsigned()
+		result = mysql.TypeLong
+	case "BIGINT":
+		result = mysql.TypeLonglong
+	case "BIGINT UNSIGNED":
+		flag.SetIsUnsigned()
+		result = mysql.TypeLonglong
+	case "FLOAT":
+		result = mysql.TypeFloat
+	case "DOUBLE":
+		result = mysql.TypeDouble
+	case "BIT":
+		result = mysql.TypeBit
+	case "DECIMAL":
+		result = mysql.TypeNewDecimal
+	case "TEXT":
+		result = mysql.TypeVarchar
+	case "BLOB":
+		// maybe mysql.TypeTinyBlob / mysql.TypeMediumBlob / mysql.TypeBlob / mysql.TypeLongBlob
+		// we don't know the exact type, so we use mysql.TypeLongBlob
+		flag.SetIsBinary()
+		result = mysql.TypeLongBlob
+	case "ENUM":
+		result = mysql.TypeEnum
+	case "SET":
+		result = mysql.TypeSet
+	case "JSON":
+		result = mysql.TypeJSON
+	case "DATE":
+		result = mysql.TypeDate
+	case "DATETIME":
+		result = mysql.TypeDatetime
+	case "TIMESTAMP":
+		result = mysql.TypeTimestamp
+	case "TIME":
+		result = mysql.TypeDuration
+	case "YEAR":
+		result = mysql.TypeYear
+	default:
+		log.Panic("this should not happen, unknown TiDB type", zap.String("type", tp))
+	}
+	return result, flag
 }
 
 const (
@@ -553,7 +608,7 @@ func rowToAvroSchema(
 	}
 	log.Info("rowToAvroSchema",
 		zap.ByteString("schema", str),
-		zap.Bool("enableTiDBExtension", enableTiDBExtension),
+		zap.Bool("EnableTiDBExtension", enableTiDBExtension),
 		zap.Bool("enableRowLevelChecksum", enableRowLevelChecksum))
 	return string(str), nil
 }
@@ -679,7 +734,7 @@ func columnToAvroSchema(
 				Scale:       displayDecimal,
 			}, nil
 		}
-		// decimalHandlingMode == string
+		// DecimalHandlingMode == string
 		return avroSchema{
 			Type:       "string",
 			Parameters: map[string]string{tidbType: tt},
@@ -797,7 +852,7 @@ func columnToAvroData(
 			if bigintUnsignedHandlingMode == common.BigintUnsignedHandlingModeLong {
 				return int64(col.Value.(uint64)), "long", nil
 			}
-			// bigintUnsignedHandlingMode == "string"
+			// BigintUnsignedHandlingMode == "string"
 			return strconv.FormatUint(col.Value.(uint64), 10), "string", nil
 		}
 		return col.Value.(int64), "long", nil
@@ -834,7 +889,7 @@ func columnToAvroData(
 			}
 			return v, "bytes.decimal", nil
 		}
-		// decimalHandlingMode == "string"
+		// DecimalHandlingMode == "string"
 		return col.Value.(string), "string", nil
 	case mysql.TypeVarchar,
 		mysql.TypeString,
@@ -919,8 +974,8 @@ func (r *avroEncodeResult) toEnvelope() ([]byte, error) {
 type batchEncoderBuilder struct {
 	namespace          string
 	config             *common.Config
-	keySchemaManager   *schemaManager
-	valueSchemaManager *schemaManager
+	keySchemaManager   *SchemaManager
+	valueSchemaManager *SchemaManager
 }
 
 const (
@@ -975,6 +1030,5 @@ func (b *batchEncoderBuilder) Build() codec.RowEventEncoder {
 			BigintUnsignedHandlingMode: b.config.AvroBigintUnsignedHandlingMode,
 		},
 	}
-
 	return encoder
 }

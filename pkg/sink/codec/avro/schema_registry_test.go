@@ -17,6 +17,7 @@ import (
 	"bytes"
 	"context"
 	"encoding/json"
+	"fmt"
 	"io"
 	"net/http"
 	"sync"
@@ -96,7 +97,7 @@ func startHTTPInterceptForTestingRegistry() {
 			return httpmock.NewJsonResponse(200, &respData)
 		})
 
-	httpmock.RegisterResponder("GET", `=~^http://127.0.0.1:8081/subjects/(.+)/versions/latest`,
+	httpmock.RegisterResponder("GET", `=~^http://127.0.0.1:8081/subjects/(.+)/versions/(.+)`,
 		func(req *http.Request) (*http.Response, error) {
 			subject, err := httpmock.GetSubmatch(req, 1)
 			if err != nil {
@@ -108,6 +109,17 @@ func startHTTPInterceptForTestingRegistry() {
 			registry.mu.Unlock()
 			if !exists {
 				return httpmock.NewStringResponse(404, ""), nil
+			}
+
+			id, err := httpmock.GetSubmatchAsInt(req, 2)
+			if err != nil {
+				return httpmock.NewStringResponse(500, "Internal Server Error"), err
+			}
+
+			if item.ID != int(id) {
+				return httpmock.NewStringResponse(500, "Internal Server Error"),
+					fmt.Errorf("schema id does not match, expected = %+v, obtained = %+v",
+						id, item.ID)
 			}
 
 			var respData lookupResponse
@@ -176,7 +188,7 @@ func TestSchemaRegistry(t *testing.T) {
 	err = manager.ClearRegistry(getTestingContext(), topic)
 	require.NoError(t, err)
 
-	_, _, err = manager.Lookup(getTestingContext(), topic, 1)
+	_, err = manager.Lookup(getTestingContext(), topic, 1)
 	require.Regexp(t, `.*not\sfound.*`, err)
 
 	codec, err := goavro.NewCodec(`{
@@ -195,11 +207,9 @@ func TestSchemaRegistry(t *testing.T) {
 	_, err = manager.Register(getTestingContext(), topic, codec.Schema())
 	require.NoError(t, err)
 
-	var id int
 	for i := 0; i < 2; i++ {
-		_, id, err = manager.Lookup(getTestingContext(), topic, 1)
+		_, err = manager.Lookup(getTestingContext(), topic, 1)
 		require.NoError(t, err)
-		require.Greater(t, id, 0)
 	}
 
 	codec, err = goavro.NewCodec(`{
@@ -225,9 +235,8 @@ func TestSchemaRegistry(t *testing.T) {
 	_, err = manager.Register(getTestingContext(), topic, codec.Schema())
 	require.NoError(t, err)
 
-	codec2, id2, err := manager.Lookup(getTestingContext(), topic, 999)
+	codec2, err := manager.Lookup(getTestingContext(), topic, 999)
 	require.NoError(t, err)
-	require.NotEqual(t, id, id2)
 	require.Equal(t, codec.CanonicalSchema(), codec2.CanonicalSchema())
 }
 

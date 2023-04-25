@@ -32,29 +32,37 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
-func setupEncoderAndSchemaRegistry(
-	enableTiDBExtension bool,
-	decimalHandlingMode string,
-	bigintUnsignedHandlingMode string,
-) (*BatchEncoder, error) {
-	startHTTPInterceptForTestingRegistry()
-
+func newSchemaManager4Test(ctx context.Context) (*SchemaManager, *SchemaManager, error) {
 	keyManager, err := NewAvroSchemaManager(
-		context.Background(),
+		ctx,
 		nil,
 		"http://127.0.0.1:8081",
 		"-key",
 	)
 	if err != nil {
-		return nil, err
+		return nil, nil, err
 	}
 
 	valueManager, err := NewAvroSchemaManager(
-		context.Background(),
+		ctx,
 		nil,
 		"http://127.0.0.1:8081",
 		"-value",
 	)
+	if err != nil {
+		return nil, nil, err
+	}
+
+	return keyManager, valueManager, nil
+}
+
+func setupEncoderAndSchemaRegistry(
+	ctx context.Context,
+	o *Options,
+) (*BatchEncoder, error) {
+	startHTTPInterceptForTestingRegistry()
+
+	keyManager, valueManager, err := newSchemaManager4Test(ctx)
 	if err != nil {
 		return nil, err
 	}
@@ -64,11 +72,7 @@ func setupEncoderAndSchemaRegistry(
 		valueSchemaManager: valueManager,
 		keySchemaManager:   keyManager,
 		result:             make([]*common.Message, 0, 1),
-		Options: &Options{
-			EnableTiDBExtension:        enableTiDBExtension,
-			DecimalHandlingMode:        decimalHandlingMode,
-			BigintUnsignedHandlingMode: bigintUnsignedHandlingMode,
-		},
+		Options:            o,
 	}, nil
 }
 
@@ -785,7 +789,16 @@ func TestRowToAvroData(t *testing.T) {
 }
 
 func TestAvroEncode(t *testing.T) {
-	encoder, err := setupEncoderAndSchemaRegistry(true, "precise", "long")
+	o := &Options{
+		EnableTiDBExtension:        true,
+		EnableRowChecksum:          false,
+		DecimalHandlingMode:        "precise",
+		BigintUnsignedHandlingMode: "long",
+	}
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+
+	encoder, err := setupEncoderAndSchemaRegistry(ctx, o)
 	require.NoError(t, err)
 	defer teardownEncoderAndSchemaRegistry()
 
@@ -837,9 +850,6 @@ func TestAvroEncode(t *testing.T) {
 		Columns:  cols,
 		ColInfos: colInfos,
 	}
-
-	ctx, cancel := context.WithCancel(context.Background())
-	defer cancel()
 
 	keyCols, keyColInfos := event.HandleKeyColInfos()
 	namespace := getAvroNamespace(encoder.namespace, event.Table)
@@ -980,7 +990,17 @@ func TestGetAvroNamespace(t *testing.T) {
 func TestArvoAppendRowChangedEventWithCallback(t *testing.T) {
 	t.Parallel()
 
-	encoder, err := setupEncoderAndSchemaRegistry(true, "precise", "long")
+	o := &Options{
+		EnableTiDBExtension:        true,
+		EnableRowChecksum:          false,
+		DecimalHandlingMode:        "precise",
+		BigintUnsignedHandlingMode: "long",
+	}
+
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+
+	encoder, err := setupEncoderAndSchemaRegistry(ctx, o)
 	require.NoError(t, err)
 	defer teardownEncoderAndSchemaRegistry()
 
@@ -1005,7 +1025,6 @@ func TestArvoAppendRowChangedEventWithCallback(t *testing.T) {
 		}},
 	}
 
-	ctx := context.Background()
 	expected := 0
 	count := 0
 	for i := 0; i < 5; i++ {
