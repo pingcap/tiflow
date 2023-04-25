@@ -321,10 +321,14 @@ func (o *createChangefeedOptions) run(ctx context.Context, cmd *cobra.Command) e
 	ignoreIneligibleTables := false
 	if len(tables.IneligibleTables) != 0 {
 		if o.cfg.ForceReplicate {
-			cmd.Printf("[WARN] force to replicate some ineligible tables, %#v\n",
+			cmd.Printf("[WARN] Force to replicate some ineligible tables, "+
+				"these tables do not have a primary key or a not-null unique key: %#v\n"+
+				"[WARN] This may cause data redundancy, "+
+				"please refer to the official documentation for details.\n",
 				tables.IneligibleTables)
 		} else {
-			cmd.Printf("[WARN] some tables are not eligible to replicate, %#v\n",
+			cmd.Printf("[WARN] Some tables are not eligible to replicate, "+
+				"because they do not have a primary key or a not-null unique key: %#v\n",
 				tables.IneligibleTables)
 			if !o.commonChangefeedOptions.noConfirm {
 				ignoreIneligibleTables, err = confirmIgnoreIneligibleTables(cmd)
