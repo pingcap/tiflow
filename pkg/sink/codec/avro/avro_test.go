@@ -60,13 +60,15 @@ func setupEncoderAndSchemaRegistry(
 	}
 
 	return &BatchEncoder{
-		namespace:                  model.DefaultNamespace,
-		valueSchemaManager:         valueManager,
-		keySchemaManager:           keyManager,
-		result:                     make([]*common.Message, 0, 1),
-		enableTiDBExtension:        enableTiDBExtension,
-		decimalHandlingMode:        decimalHandlingMode,
-		bigintUnsignedHandlingMode: bigintUnsignedHandlingMode,
+		namespace:          model.DefaultNamespace,
+		valueSchemaManager: valueManager,
+		keySchemaManager:   keyManager,
+		result:             make([]*common.Message, 0, 1),
+		Options: &Options{
+			enableTiDBExtension:        enableTiDBExtension,
+			decimalHandlingMode:        decimalHandlingMode,
+			bigintUnsignedHandlingMode: bigintUnsignedHandlingMode,
+		},
 	}, nil
 }
 
