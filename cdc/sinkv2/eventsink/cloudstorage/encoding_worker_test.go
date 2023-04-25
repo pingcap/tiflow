@@ -19,16 +19,24 @@ import (
 	"sync"
 	"testing"
 
+	"github.com/pingcap/tidb/parser/mysql"
+	"github.com/pingcap/tidb/parser/types"
+	"github.com/pingcap/tidb/util/rowcodec"
 	"github.com/pingcap/tiflow/cdc/model"
 	"github.com/pingcap/tiflow/cdc/sink/codec/builder"
 	"github.com/pingcap/tiflow/cdc/sinkv2/eventsink"
+	dmlsink "github.com/pingcap/tiflow/cdc/sinkv2/eventsink"
 	"github.com/pingcap/tiflow/cdc/sinkv2/util"
+	"github.com/pingcap/tiflow/pkg/chann"
 	"github.com/pingcap/tiflow/pkg/config"
 	"github.com/pingcap/tiflow/pkg/sink/cloudstorage"
 	"github.com/stretchr/testify/require"
+	"golang.org/x/sync/errgroup"
 )
 
-func testEncodingWorker(ctx context.Context, t *testing.T) (*encodingWorker, func()) {
+func testEncodingWorker(
+	t *testing.T,
+) (*encodingWorker, chan eventFragment, chan eventFragment) {
 	uri := fmt.Sprintf("file:///%s", t.TempDir())
 	sinkURI, err := url.Parse(uri)
 	require.Nil(t, err)
@@ -40,19 +48,38 @@ func testEncodingWorker(ctx context.Context, t *testing.T) (*encodingWorker, fun
 	encoder := encoderBuilder.Build()
 	changefeedID := model.DefaultChangeFeedID("test-encode")
 
+	encodedCh := make(chan eventFragment)
 	msgCh := make(chan eventFragment, 1024)
-	defragmenter := newDefragmenter(ctx)
-	worker := newEncodingWorker(1, changefeedID, encoder, msgCh, defragmenter)
-	return worker, func() {
-		defragmenter.close()
-	}
+	return newEncodingWorker(1, changefeedID, encoder, msgCh, encodedCh), msgCh, encodedCh
 }
 
 func TestEncodeEvents(t *testing.T) {
+	t.Parallel()
+
+	encodingWorker, _, encodedCh := testEncodingWorker(t)
 	ctx, cancel := context.WithCancel(context.Background())
-	worker, fn := testEncodingWorker(ctx, t)
-	defer fn()
-	err := worker.encodeEvents(ctx, eventFragment{
+	eg, egCtx := errgroup.WithContext(ctx)
+	outputChs := []*chann.DrainableChann[eventFragment]{chann.NewDrainableChann[eventFragment]()}
+	defragmenter := newDefragmenter(encodedCh, outputChs)
+	eg.Go(func() error {
+		return defragmenter.run(egCtx)
+	})
+
+	colInfos := []rowcodec.ColInfo{
+		{
+			ID:            1,
+			IsPKHandle:    false,
+			VirtualGenCol: false,
+			Ft:            types.NewFieldType(mysql.TypeLong),
+		},
+		{
+			ID:            2,
+			IsPKHandle:    false,
+			VirtualGenCol: false,
+			Ft:            types.NewFieldType(mysql.TypeString),
+		},
+	}
+	err := encodingWorker.encodeEvents(ctx, eventFragment{
 		versionedTable: cloudstorage.VersionedTableName{
 			TableNameWithPhysicTableID: model.TableName{
 				Schema:  "test",
@@ -61,7 +88,7 @@ func TestEncodeEvents(t *testing.T) {
 			},
 		},
 		seqNumber: 1,
-		event: &eventsink.TxnCallbackableEvent{
+		event: &dmlsink.TxnCallbackableEvent{
 			Event: &model.SingleTableTxn{
 				TableInfo: &model.TableInfo{
 					TableName: model.TableName{
@@ -81,6 +108,7 @@ func TestEncodeEvents(t *testing.T) {
 							{Name: "c1", Value: 100},
 							{Name: "c2", Value: "hello world"},
 						},
+						ColInfos: colInfos,
 					},
 					{
 						Table: &model.TableName{
@@ -92,6 +120,7 @@ func TestEncodeEvents(t *testing.T) {
 							{Name: "c1", Value: 200},
 							{Name: "c2", Value: "你好，世界"},
 						},
+						ColInfos: colInfos,
 					},
 				},
 			},
@@ -99,12 +128,21 @@ func TestEncodeEvents(t *testing.T) {
 	})
 	require.Nil(t, err)
 	cancel()
+	require.ErrorIs(t, eg.Wait(), context.Canceled)
 }
 
 func TestEncodingWorkerRun(t *testing.T) {
+	t.Parallel()
+
+	encodingWorker, msgCh, encodedCh := testEncodingWorker(t)
 	ctx, cancel := context.WithCancel(context.Background())
-	worker, fn := testEncodingWorker(ctx, t)
-	defer fn()
+	eg, egCtx := errgroup.WithContext(ctx)
+	outputChs := []*chann.DrainableChann[eventFragment]{chann.NewDrainableChann[eventFragment]()}
+	defragmenter := newDefragmenter(encodedCh, outputChs)
+	eg.Go(func() error {
+		return defragmenter.run(egCtx)
+	})
+
 	table := model.TableName{
 		Schema:  "test",
 		Table:   "table1",
@@ -143,17 +181,17 @@ func TestEncodingWorkerRun(t *testing.T) {
 				Event: event,
 			},
 		}
-		worker.inputCh <- frag
+		msgCh <- frag
 	}
 
 	var wg sync.WaitGroup
 	wg.Add(1)
 	go func() {
 		defer wg.Done()
-		_ = worker.run(ctx)
+		_ = encodingWorker.run(ctx)
 	}()
 
 	cancel()
-	worker.close()
+	encodingWorker.close()
 	wg.Wait()
 }
