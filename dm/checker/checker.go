@@ -25,7 +25,15 @@ import (
 	"time"
 
 	_ "github.com/go-sql-driver/mysql" // for mysql
+<<<<<<< HEAD
 	"github.com/pingcap/tidb/br/pkg/lightning/restore"
+=======
+	"github.com/pingcap/tidb/br/pkg/lightning/checkpoints"
+	"github.com/pingcap/tidb/br/pkg/lightning/importer"
+	"github.com/pingcap/tidb/br/pkg/lightning/importer/opts"
+	"github.com/pingcap/tidb/br/pkg/lightning/mydump"
+	"github.com/pingcap/tidb/br/pkg/lightning/precheck"
+>>>>>>> 65217445e8 (makefile(all): add new cases to run_group and check cases in makefile (#8794))
 	"github.com/pingcap/tidb/dumpling/export"
 	"github.com/pingcap/tidb/parser/mysql"
 	"github.com/pingcap/tidb/util/dbutil"
@@ -355,26 +363,48 @@ func (c *Checker) Init(ctx context.Context) (err error) {
 			return err
 		}
 		if _, ok := c.checkingItems[config.LightningEmptyRegionChecking]; ok {
+<<<<<<< HEAD
 			lChecker, err := builder.BuildPrecheckItem(restore.CheckTargetClusterEmptyRegion)
+=======
+			lChecker, err := builder.BuildPrecheckItem(precheck.CheckTargetClusterEmptyRegion)
+>>>>>>> 65217445e8 (makefile(all): add new cases to run_group and check cases in makefile (#8794))
 			if err != nil {
 				return err
 			}
 			c.checkList = append(c.checkList, checker.NewLightningEmptyRegionChecker(lChecker))
 		}
 		if _, ok := c.checkingItems[config.LightningRegionDistributionChecking]; ok {
+<<<<<<< HEAD
 			lChecker, err := builder.BuildPrecheckItem(restore.CheckTargetClusterRegionDist)
+=======
+			lChecker, err := builder.BuildPrecheckItem(precheck.CheckTargetClusterRegionDist)
+>>>>>>> 65217445e8 (makefile(all): add new cases to run_group and check cases in makefile (#8794))
 			if err != nil {
 				return err
 			}
 			c.checkList = append(c.checkList, checker.NewLightningRegionDistributionChecker(lChecker))
 		}
 		if _, ok := c.checkingItems[config.LightningDownstreamVersionChecking]; ok {
+<<<<<<< HEAD
 			lChecker, err := builder.BuildPrecheckItem(restore.CheckTargetClusterVersion)
+=======
+			lChecker, err := builder.BuildPrecheckItem(precheck.CheckTargetClusterVersion)
+>>>>>>> 65217445e8 (makefile(all): add new cases to run_group and check cases in makefile (#8794))
 			if err != nil {
 				return err
 			}
 			c.checkList = append(c.checkList, checker.NewLightningClusterVersionChecker(lChecker))
 		}
+<<<<<<< HEAD
+=======
+		if _, ok := c.checkingItems[config.LightningMutexFeatureChecking]; ok {
+			lChecker, err := builder.BuildPrecheckItem(precheck.CheckTargetUsingCDCPITR)
+			if err != nil {
+				return err
+			}
+			c.checkList = append(c.checkList, checker.NewLightningCDCPiTRChecker(lChecker))
+		}
+>>>>>>> 65217445e8 (makefile(all): add new cases to run_group and check cases in makefile (#8794))
 	}
 
 	c.tctx.Logger.Info(c.displayCheckingItems())

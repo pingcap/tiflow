@@ -17,7 +17,11 @@ import (
 	"context"
 	"testing"
 
+<<<<<<< HEAD
 	"github.com/pingcap/tidb/br/pkg/lightning/restore"
+=======
+	"github.com/pingcap/tidb/br/pkg/lightning/precheck"
+>>>>>>> 65217445e8 (makefile(all): add new cases to run_group and check cases in makefile (#8794))
 	"github.com/pingcap/tiflow/pkg/errors"
 	"github.com/stretchr/testify/require"
 )
@@ -28,17 +32,29 @@ type mockPrecheckItem struct {
 	msg  string
 }
 
+<<<<<<< HEAD
 func (m mockPrecheckItem) Check(ctx context.Context) (*restore.CheckResult, error) {
 	if m.err != nil {
 		return nil, m.err
 	}
 	return &restore.CheckResult{
+=======
+func (m mockPrecheckItem) Check(ctx context.Context) (*precheck.CheckResult, error) {
+	if m.err != nil {
+		return nil, m.err
+	}
+	return &precheck.CheckResult{
+>>>>>>> 65217445e8 (makefile(all): add new cases to run_group and check cases in makefile (#8794))
 		Passed:  m.pass,
 		Message: m.msg,
 	}, nil
 }
 
+<<<<<<< HEAD
 func (m mockPrecheckItem) GetCheckItemID() restore.CheckItemID {
+=======
+func (m mockPrecheckItem) GetCheckItemID() precheck.CheckItemID {
+>>>>>>> 65217445e8 (makefile(all): add new cases to run_group and check cases in makefile (#8794))
 	return "mock"
 }
 

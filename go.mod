@@ -56,6 +56,7 @@ require (
 	github.com/modern-go/reflect2 v1.0.2
 	github.com/phayes/freeport v0.0.0-20180830031419-95f893ade6f2
 	github.com/pingcap/check v0.0.0-20211026125417-57bd13f7b5f0
+<<<<<<< HEAD
 	github.com/pingcap/errors v0.11.5-0.20220729040631-518f63d66278
 	github.com/pingcap/failpoint v0.0.0-20220423142525-ae43b7f4e5c3
 	github.com/pingcap/kvproto v0.0.0-20221130022225-6c56ac56fe5f
@@ -65,6 +66,17 @@ require (
 	github.com/pingcap/tidb/parser v0.0.0-20230412065101-c24a1cda6d26
 	github.com/prometheus/client_golang v1.13.0
 	github.com/prometheus/client_model v0.2.0
+=======
+	github.com/pingcap/errors v0.11.5-0.20221009092201-b66cddb77c32
+	github.com/pingcap/failpoint v0.0.0-20220801062533-2eaa32854a6c
+	github.com/pingcap/kvproto v0.0.0-20230419072653-dc3cd8784a19
+	github.com/pingcap/log v1.1.1-0.20230317032135-a0d097d16e22
+	github.com/pingcap/tidb v1.1.0-beta.0.20230420065519-eb77d3928398
+	github.com/pingcap/tidb-tools v7.0.0+incompatible
+	github.com/pingcap/tidb/parser v0.0.0-20230420065519-eb77d3928398
+	github.com/prometheus/client_golang v1.15.0
+	github.com/prometheus/client_model v0.3.0
+>>>>>>> 65217445e8 (makefile(all): add new cases to run_group and check cases in makefile (#8794))
 	github.com/r3labs/diff v1.1.0
 	github.com/rcrowley/go-metrics v0.0.0-20201227073835-cf1acfcdf475
 	github.com/shirou/gopsutil/v3 v3.23.1
@@ -77,9 +89,15 @@ require (
 	github.com/swaggo/gin-swagger v1.2.0
 	github.com/swaggo/swag v1.6.6-0.20200529100950-7c765ddd0476
 	github.com/syndtr/goleveldb v1.0.1-0.20210305035536-64b5b1c73954
+<<<<<<< HEAD
 	github.com/tikv/client-go/v2 v2.0.4-0.20230131081004-cd83d1507d70
 	github.com/tikv/pd v1.1.0-beta.0.20220303060546-3695d8164800
 	github.com/tikv/pd/client v0.0.0-20221031025758-80f0d8ca4d07
+=======
+	github.com/tikv/client-go/v2 v2.0.8-0.20230419123920-35c1ee47c4f9
+	github.com/tikv/pd v1.1.0-beta.0.20230203015356-248b3f0be132
+	github.com/tikv/pd/client v0.0.0-20230419153320-f1d1a80feb95
+>>>>>>> 65217445e8 (makefile(all): add new cases to run_group and check cases in makefile (#8794))
 	github.com/tinylib/msgp v1.1.6
 	github.com/uber-go/atomic v1.4.0
 	github.com/vmihailenco/msgpack/v5 v5.3.5
@@ -100,12 +118,21 @@ require (
 	golang.org/x/exp v0.0.0-20221023144134-a1e5550cf13e
 	golang.org/x/net v0.2.0
 	golang.org/x/sync v0.1.0
+<<<<<<< HEAD
 	golang.org/x/sys v0.4.0
 	golang.org/x/text v0.4.0
 	golang.org/x/time v0.2.0
 	google.golang.org/genproto v0.0.0-20221201164419-0e50fba7f41c
 	google.golang.org/grpc v1.50.1
 	google.golang.org/protobuf v1.28.1
+=======
+	golang.org/x/sys v0.7.0
+	golang.org/x/text v0.9.0
+	golang.org/x/time v0.3.0
+	google.golang.org/genproto v0.0.0-20230410155749-daa745c078e1
+	google.golang.org/grpc v1.54.0
+	google.golang.org/protobuf v1.30.0
+>>>>>>> 65217445e8 (makefile(all): add new cases to run_group and check cases in makefile (#8794))
 	gopkg.in/yaml.v2 v2.4.0
 	gorm.io/driver/mysql v1.3.3
 	gorm.io/gorm v1.23.8
@@ -195,7 +222,7 @@ require (
 	github.com/json-iterator/go v1.1.12 // indirect
 	github.com/klauspost/compress v1.15.9 // indirect
 	github.com/klauspost/cpuid v1.3.1 // indirect
-	github.com/kr/pretty v0.3.0 // indirect
+	github.com/kr/pretty v0.3.1 // indirect
 	github.com/kr/text v0.2.0 // indirect
 	github.com/labstack/echo/v4 v4.2.1 // indirect
 	github.com/leodido/go-urn v1.2.1 // indirect
@@ -228,9 +255,15 @@ require (
 	github.com/pkg/browser v0.0.0-20180916011732-0a3d74bf9ce4 // indirect
 	github.com/pkg/errors v0.9.1 // indirect
 	github.com/pmezard/go-difflib v1.0.0 // indirect
+<<<<<<< HEAD
 	github.com/power-devops/perfstat v0.0.0-20210106213030-5aafc221ea8c // indirect
 	github.com/prometheus/common v0.37.0 // indirect
 	github.com/prometheus/procfs v0.8.0 // indirect
+=======
+	github.com/power-devops/perfstat v0.0.0-20221212215047-62379fc7944b // indirect
+	github.com/prometheus/common v0.42.0 // indirect
+	github.com/prometheus/procfs v0.9.0 // indirect
+>>>>>>> 65217445e8 (makefile(all): add new cases to run_group and check cases in makefile (#8794))
 	github.com/remyoudompheng/bigfft v0.0.0-20220927061507-ef77025ab5aa // indirect
 	github.com/rivo/uniseg v0.4.2 // indirect
 	github.com/rogpeppe/go-internal v1.9.0 // indirect
