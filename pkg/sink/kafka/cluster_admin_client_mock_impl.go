@@ -91,6 +91,17 @@ func NewClusterAdminClientMockImpl() *ClusterAdminClientMockImpl {
 	}
 }
 
+// GetTopicsPartitions all topics' number of partitions.
+func (c *ClusterAdminClientMockImpl) GetTopicsPartitions(
+	_ context.Context,
+) (map[string]int32, error) {
+	result := make(map[string]int32)
+	for topic, detail := range c.topics {
+		result[topic] = detail.NumPartitions
+	}
+	return result, nil
+}
+
 // GetAllTopicsMeta returns all topics directly.
 func (c *ClusterAdminClientMockImpl) GetAllTopicsMeta(
 	context.Context,

@@ -85,12 +85,12 @@ func (m *kafkaTopicManager) GetPartitionNum(
 // tryRefreshMeta try to refresh the topics' information maintained by manager.
 func (m *kafkaTopicManager) tryRefreshMeta(ctx context.Context) error {
 	if time.Since(time.Unix(m.lastMetadataRefresh.Load(), 0)) > time.Minute {
-		topics, err := m.admin.GetAllTopicsMeta(ctx)
+		topics, err := m.admin.GetTopicsPartitions(ctx)
 		if err != nil {
 			return err
 		}
-		for topic, detail := range topics {
-			m.tryUpdatePartitionsAndLogging(topic, detail.NumPartitions)
+		for topic, numPartitions := range topics {
+			m.tryUpdatePartitionsAndLogging(topic, numPartitions)
 		}
 		m.lastMetadataRefresh.Store(time.Now().Unix())
 	}
@@ -188,7 +188,8 @@ func (m *kafkaTopicManager) waitUntilTopicVisible(
 // listTopics is used to do an initial metadata fetching.
 func (m *kafkaTopicManager) listTopics(ctx context.Context) error {
 	start := time.Now()
-	topics, err := m.admin.GetAllTopicsMeta(ctx)
+
+	topics, err := m.admin.GetTopicsPartitions(ctx)
 	if err != nil {
 		log.Error(
 			"Kafka admin client list topics failed",
@@ -204,8 +205,8 @@ func (m *kafkaTopicManager) listTopics(ctx context.Context) error {
 
 	// Now that we have access to the latest topics' information,
 	// we need to update it here immediately.
-	for topic, detail := range topics {
-		m.tryUpdatePartitionsAndLogging(topic, detail.NumPartitions)
+	for topic, numPartitions := range topics {
+		m.tryUpdatePartitionsAndLogging(topic, numPartitions)
 	}
 	m.lastMetadataRefresh.Store(time.Now().Unix())
 

@@ -46,6 +46,9 @@ type ClusterAdminClient interface {
 	// which available in the cluster with the default options.
 	GetAllTopicsMeta(ctx context.Context) (map[string]TopicDetail, error)
 
+	// GetTopicsPartitions return all topics number of partitions.
+	GetTopicsPartitions(ctx context.Context) (map[string]int32, error)
+
 	// GetTopicsMeta return all target topics' metadata
 	// if `ignoreTopicError` is true, ignore the topic error and return the metadata of valid topics
 	GetTopicsMeta(ctx context.Context,
