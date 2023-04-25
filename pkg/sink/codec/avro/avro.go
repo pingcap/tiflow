@@ -41,11 +41,16 @@ import (
 
 // BatchEncoder converts the events to binary Avro data
 type BatchEncoder struct {
+	*Options
+
 	namespace          string
 	keySchemaManager   *schemaManager
 	valueSchemaManager *schemaManager
 	result             []*common.Message
+}
 
+// Options is used to initialize the encoder, control the encoding behavior.
+type Options struct {
 	enableTiDBExtension bool
 	enableRowChecksum   bool
 
@@ -72,8 +77,9 @@ func (r *avroEncodeInput) Swap(i, j int) {
 }
 
 type avroEncodeResult struct {
-	data       []byte
-	registryID int
+	data []byte
+	// schemaID is encoded into the avro message, consumer should use this to fetch the schema.
+	schemaID int
 }
 
 // AppendRowChangedEvent appends a row change event to the encoder
@@ -224,7 +230,7 @@ func (a *BatchEncoder) avroEncode(
 		return schema, nil
 	}
 
-	avroCodec, registryID, err := schemaManager.GetCachedOrRegister(
+	avroCodec, schemaID, err := schemaManager.GetCachedOrRegister(
 		ctx,
 		topic,
 		e.TableInfo.Version,
@@ -260,8 +266,8 @@ func (a *BatchEncoder) avroEncode(
 	}
 
 	return &avroEncodeResult{
-		data:       bin,
-		registryID: registryID,
+		data:     bin,
+		schemaID: schemaID,
 	}, nil
 }
 
@@ -856,7 +862,7 @@ const magicByte = uint8(0)
 // -and-ksqldb-viewing-kafka-messages-bytes-as-hex/
 func (r *avroEncodeResult) toEnvelope() ([]byte, error) {
 	buf := new(bytes.Buffer)
-	data := []interface{}{magicByte, int32(r.registryID), r.data}
+	data := []interface{}{magicByte, int32(r.schemaID), r.data}
 	for _, v := range data {
 		err := binary.Write(buf, binary.BigEndian, v)
 		if err != nil {
@@ -912,15 +918,18 @@ func NewBatchEncoderBuilder(ctx context.Context,
 
 // Build an AvroEventBatchEncoder.
 func (b *batchEncoderBuilder) Build() codec.RowEventEncoder {
-	encoder := &BatchEncoder{}
-	encoder.namespace = b.namespace
-	encoder.keySchemaManager = b.keySchemaManager
-	encoder.valueSchemaManager = b.valueSchemaManager
-	encoder.result = make([]*common.Message, 0, 1024)
-	encoder.enableTiDBExtension = b.config.EnableTiDBExtension
-	encoder.enableRowChecksum = b.config.EnableRowChecksum
-	encoder.decimalHandlingMode = b.config.AvroDecimalHandlingMode
-	encoder.bigintUnsignedHandlingMode = b.config.AvroBigintUnsignedHandlingMode
+	encoder := &BatchEncoder{
+		namespace:          b.namespace,
+		keySchemaManager:   b.keySchemaManager,
+		valueSchemaManager: b.valueSchemaManager,
+		result:             make([]*common.Message, 0, 1),
+		Options: &Options{
+			enableTiDBExtension:        b.config.EnableTiDBExtension,
+			enableRowChecksum:          b.config.EnableRowChecksum,
+			decimalHandlingMode:        b.config.AvroDecimalHandlingMode,
+			bigintUnsignedHandlingMode: b.config.AvroBigintUnsignedHandlingMode,
+		},
+	}
 
 	return encoder
 }

@@ -212,7 +212,7 @@ func (m *schemaManager) Lookup(
 		log.Info("Avro schema lookup cache hit",
 			zap.String("key", key),
 			zap.Uint64("tiSchemaID", tiSchemaID),
-			zap.Int("registryID", entry.registryID))
+			zap.Int("schemaID", entry.registryID))
 		m.cacheRWLock.RUnlock()
 		return entry.codec, entry.registryID, nil
 	}
@@ -289,7 +289,7 @@ func (m *schemaManager) Lookup(
 
 	log.Info("Avro schema lookup successful with cache miss",
 		zap.Uint64("tiSchemaID", cacheEntry.tiSchemaID),
-		zap.Int("registryID", cacheEntry.registryID),
+		zap.Int("schemaID", cacheEntry.registryID),
 		zap.String("schema", cacheEntry.codec.Schema()))
 
 	return cacheEntry.codec, cacheEntry.registryID, nil
@@ -315,7 +315,7 @@ func (m *schemaManager) GetCachedOrRegister(
 		log.Debug("Avro schema GetCachedOrRegister cache hit",
 			zap.String("key", key),
 			zap.Uint64("tiSchemaID", tiSchemaID),
-			zap.Int("registryID", entry.registryID))
+			zap.Int("schemaID", entry.registryID))
 		m.cacheRWLock.RUnlock()
 		return entry.codec, entry.registryID, nil
 	}
@@ -353,7 +353,7 @@ func (m *schemaManager) GetCachedOrRegister(
 
 	log.Info("Avro schema GetCachedOrRegister successful with cache miss",
 		zap.Uint64("tiSchemaID", cacheEntry.tiSchemaID),
-		zap.Int("registryID", cacheEntry.registryID),
+		zap.Int("schemaID", cacheEntry.registryID),
 		zap.String("schema", cacheEntry.codec.Schema()))
 
 	return codec, id, nil

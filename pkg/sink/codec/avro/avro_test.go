@@ -920,8 +920,8 @@ func TestAvroEnvelope(t *testing.T) {
 	require.NoError(t, err)
 
 	res := avroEncodeResult{
-		data:       bin,
-		registryID: 7,
+		data:     bin,
+		schemaID: 7,
 	}
 
 	evlp, err := res.toEnvelope()
