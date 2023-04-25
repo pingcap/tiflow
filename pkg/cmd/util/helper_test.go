@@ -16,6 +16,7 @@ package util
 import (
 	"bytes"
 	"fmt"
+	"net/url"
 	"os"
 	"path/filepath"
 	"syscall"
@@ -182,8 +183,12 @@ func TestAndWriteExampleReplicaTOML(t *testing.T) {
 	require.Equal(t, &config.MounterConfig{
 		WorkerNum: 16,
 	}, cfg.Mounter)
-	err = cfg.ValidateAndAdjust(nil)
-	require.Nil(t, err)
+
+	sinkURL, err := url.Parse("kafka://127.0.0.1:9092")
+	require.NoError(t, err)
+
+	err = cfg.ValidateAndAdjust(sinkURL)
+	require.NoError(t, err)
 	require.Equal(t, &config.SinkConfig{
 		EncoderConcurrency: 16,
 		DispatchRules: []*config.DispatchRule{
@@ -209,10 +214,13 @@ func TestAndWriteExampleReplicaTOML(t *testing.T) {
 func TestAndWriteStorageSinkTOML(t *testing.T) {
 	cfg := config.GetDefaultReplicaConfig()
 	err := StrictDecodeFile("changefeed_storage_sink.toml", "cdc", &cfg)
-	require.Nil(t, err)
+	require.NoError(t, err)
 
-	err = cfg.ValidateAndAdjust(nil)
-	require.Nil(t, err)
+	sinkURL, err := url.Parse("kafka://127.0.0.1:9092")
+	require.NoError(t, err)
+
+	err = cfg.ValidateAndAdjust(sinkURL)
+	require.NoError(t, err)
 	require.Equal(t, &config.SinkConfig{
 		EncoderConcurrency:       16,
 		Terminator:               "\r\n",
