@@ -81,15 +81,15 @@ func startHTTPInterceptForTestingRegistry() {
 					ID:      registry.newID,
 				}
 				registry.subjects[subject] = item
-				respData.ID = registry.newID
+				respData.SchemaID = registry.newID
 			} else {
 				if item.content == reqData.Schema {
-					respData.ID = item.ID
+					respData.SchemaID = item.ID
 				} else {
 					item.content = reqData.Schema
 					item.version++
 					item.ID = registry.newID
-					respData.ID = registry.newID
+					respData.SchemaID = registry.newID
 				}
 			}
 			registry.newID++
@@ -125,7 +125,7 @@ func startHTTPInterceptForTestingRegistry() {
 			var respData lookupResponse
 			respData.Schema = item.content
 			respData.Name = subject
-			respData.ID = item.ID
+			respData.SchemaID = item.ID
 
 			return httpmock.NewJsonResponse(200, &respData)
 		})

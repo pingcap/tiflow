@@ -52,7 +52,7 @@ type schemaCacheEntry struct {
 	// tableVersion is the table's version which the message associated with.
 	// encoder use it as the cache key.
 	tableVersion uint64
-	// schemaID is the schema ID in the schema registry
+	// schemaID is the unique identifier of a schema in schema registry.
 	// for each message should carry this id to allow the decoder fetch the corresponding schema
 	// decoder use it as the cache key.
 	schemaID int
@@ -67,13 +67,13 @@ type registerRequest struct {
 }
 
 type registerResponse struct {
-	ID int `json:"id"`
+	SchemaID int `json:"id"`
 }
 
 type lookupResponse struct {
-	Name   string `json:"name"`
-	ID     int    `json:"id"`
-	Schema string `json:"schema"`
+	Name     string `json:"name"`
+	SchemaID int    `json:"id"`
+	Schema   string `json:"schema"`
 }
 
 // NewAvroSchemaManager creates a new SchemaManager and test connectivity to the schema registry
@@ -187,19 +187,19 @@ func (m *SchemaManager) Register(
 		return 0, cerror.WrapError(cerror.ErrAvroSchemaAPIError, err)
 	}
 
-	if jsonResp.ID == 0 {
+	if jsonResp.SchemaID == 0 {
 		return 0, cerror.ErrAvroSchemaAPIError.GenWithStack(
 			"Illegal schema ID returned from Registry %d",
-			jsonResp.ID,
+			jsonResp.SchemaID,
 		)
 	}
 
 	log.Info("Registered schema successfully",
-		zap.Int("id", jsonResp.ID),
+		zap.Int("schemaID", jsonResp.SchemaID),
 		zap.String("uri", uri),
 		zap.ByteString("body", body))
 
-	return jsonResp.ID, nil
+	return jsonResp.SchemaID, nil
 }
 
 // Lookup the cached schema entry first, if not found, fetch from the Registry server.
@@ -283,7 +283,7 @@ func (m *SchemaManager) Lookup(
 		log.Error("Creating Avro codec failed", zap.Error(err))
 		return nil, cerror.WrapError(cerror.ErrAvroSchemaAPIError, err)
 	}
-	cacheEntry.schemaID = jsonResp.ID
+	cacheEntry.schemaID = jsonResp.SchemaID
 
 	m.cacheRWLock.Lock()
 	m.cache[key] = cacheEntry
