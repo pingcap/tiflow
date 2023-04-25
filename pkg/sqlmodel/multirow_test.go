@@ -37,34 +37,29 @@ func TestGenDeleteMultiRows(t *testing.T) {
 	change2 := NewRowChange(source2, target, []interface{}{3, 4}, nil, sourceTI2, targetTI, nil)
 	sql, args := GenDeleteSQL(change1, change2)
 
-	require.Equal(t, "DELETE FROM `db`.`tb` WHERE (`c`) IN ((?),(?))", sql)
+	require.Equal(t, "DELETE FROM `db`.`tb` WHERE (`c` = ?) OR (`c` = ?)", sql)
 	require.Equal(t, []interface{}{1, 3}, args)
 }
 
 func TestGenUpdateMultiRows(t *testing.T) {
 	t.Parallel()
 	testGenUpdateMultiRows(t, GenUpdateSQL)
-	testGenUpdateMultiRows(t, GenUpdateSQLFast)
 }
 
 func TestGenUpdateMultiRowsOneColPK(t *testing.T) {
 	t.Parallel()
 	testGenUpdateMultiRowsOneColPK(t, GenUpdateSQL)
-	testGenUpdateMultiRowsOneColPK(t, GenUpdateSQLFast)
 }
 
 func TestGenUpdateMultiRowsWithVirtualGeneratedColumn(t *testing.T) {
 	t.Parallel()
 	testGenUpdateMultiRowsWithVirtualGeneratedColumn(t, GenUpdateSQL)
-	testGenUpdateMultiRowsWithVirtualGeneratedColumn(t, GenUpdateSQLFast)
 	testGenUpdateMultiRowsWithVirtualGeneratedColumns(t, GenUpdateSQL)
-	testGenUpdateMultiRowsWithVirtualGeneratedColumns(t, GenUpdateSQLFast)
 }
 
 func TestGenUpdateMultiRowsWithStoredGeneratedColumn(t *testing.T) {
 	t.Parallel()
 	testGenUpdateMultiRowsWithStoredGeneratedColumn(t, GenUpdateSQL)
-	testGenUpdateMultiRowsWithStoredGeneratedColumn(t, GenUpdateSQLFast)
 }
 
 func testGenUpdateMultiRows(t *testing.T, genUpdate genSQLFunc) {
@@ -72,19 +67,19 @@ func testGenUpdateMultiRows(t *testing.T, genUpdate genSQLFunc) {
 	source2 := &cdcmodel.TableName{Schema: "db", Table: "tb2"}
 	target := &cdcmodel.TableName{Schema: "db", Table: "tb"}
 
-	sourceTI1 := mockTableInfo(t, "CREATE TABLE tb1 (c INT, c2 INT, c3 INT, PRIMARY KEY (c, c2))")
-	sourceTI2 := mockTableInfo(t, "CREATE TABLE tb2 (c INT, c2 INT, c3 INT, PRIMARY KEY (c, c2))")
-	targetTI := mockTableInfo(t, "CREATE TABLE tb (c INT, c2 INT, c3 INT, PRIMARY KEY (c, c2))")
+	sourceTI1 := mockTableInfo(t, "CREATE TABLE tb1 (c INT, c2 INT, c3 INT, UNIQUE KEY (c, c2))")
+	sourceTI2 := mockTableInfo(t, "CREATE TABLE tb2 (c INT, c2 INT, c3 INT, UNIQUE KEY (c, c2))")
+	targetTI := mockTableInfo(t, "CREATE TABLE tb (c INT, c2 INT, c3 INT, UNIQUE KEY (c, c2))")
 
 	change1 := NewRowChange(source1, target, []interface{}{1, 2, 3}, []interface{}{10, 20, 30}, sourceTI1, targetTI, nil)
 	change2 := NewRowChange(source2, target, []interface{}{4, 5, 6}, []interface{}{40, 50, 60}, sourceTI2, targetTI, nil)
 	sql, args := genUpdate(change1, change2)
 
 	expectedSQL := "UPDATE `db`.`tb` SET " +
-		"`c`=CASE WHEN ROW(`c`,`c2`)=ROW(?,?) THEN ? WHEN ROW(`c`,`c2`)=ROW(?,?) THEN ? END, " +
-		"`c2`=CASE WHEN ROW(`c`,`c2`)=ROW(?,?) THEN ? WHEN ROW(`c`,`c2`)=ROW(?,?) THEN ? END, " +
-		"`c3`=CASE WHEN ROW(`c`,`c2`)=ROW(?,?) THEN ? WHEN ROW(`c`,`c2`)=ROW(?,?) THEN ? END " +
-		"WHERE ROW(`c`,`c2`) IN (ROW(?,?),ROW(?,?))"
+		"`c`=CASE WHEN `c` = ? AND `c2` = ? THEN ? WHEN `c` = ? AND `c2` = ? THEN ? END, " +
+		"`c2`=CASE WHEN `c` = ? AND `c2` = ? THEN ? WHEN `c` = ? AND `c2` = ? THEN ? END, " +
+		"`c3`=CASE WHEN `c` = ? AND `c2` = ? THEN ? WHEN `c` = ? AND `c2` = ? THEN ? END " +
+		"WHERE (`c` = ? AND `c2` = ?) OR (`c` = ? AND `c2` = ?)"
 	expectedArgs := []interface{}{
 		1, 2, 10, 4, 5, 40,
 		1, 2, 20, 4, 5, 50,
@@ -110,10 +105,10 @@ func testGenUpdateMultiRowsOneColPK(t *testing.T, genUpdate genSQLFunc) {
 	sql, args := genUpdate(change1, change2)
 
 	expectedSQL := "UPDATE `db`.`tb` SET " +
-		"`c`=CASE WHEN `c`=? THEN ? WHEN `c`=? THEN ? END, " +
-		"`c2`=CASE WHEN `c`=? THEN ? WHEN `c`=? THEN ? END, " +
-		"`c3`=CASE WHEN `c`=? THEN ? WHEN `c`=? THEN ? END " +
-		"WHERE `c` IN (?,?)"
+		"`c`=CASE WHEN `c` = ? THEN ? WHEN `c` = ? THEN ? END, " +
+		"`c2`=CASE WHEN `c` = ? THEN ? WHEN `c` = ? THEN ? END, " +
+		"`c3`=CASE WHEN `c` = ? THEN ? WHEN `c` = ? THEN ? END " +
+		"WHERE (`c` = ?) OR (`c` = ?)"
 	expectedArgs := []interface{}{
 		1, 10, 4, 40,
 		1, 20, 4, 50,
@@ -138,10 +133,10 @@ func testGenUpdateMultiRowsWithVirtualGeneratedColumn(t *testing.T, genUpdate ge
 	sql, args := genUpdate(change1, change2, change3)
 
 	expectedSQL := "UPDATE `db`.`tb` SET " +
-		"`c`=CASE WHEN `c`=? THEN ? WHEN `c`=? THEN ? WHEN `c`=? THEN ? END, " +
-		"`c2`=CASE WHEN `c`=? THEN ? WHEN `c`=? THEN ? WHEN `c`=? THEN ? END, " +
-		"`c3`=CASE WHEN `c`=? THEN ? WHEN `c`=? THEN ? WHEN `c`=? THEN ? END " +
-		"WHERE `c` IN (?,?,?)"
+		"`c`=CASE WHEN `c` = ? THEN ? WHEN `c` = ? THEN ? WHEN `c` = ? THEN ? END, " +
+		"`c2`=CASE WHEN `c` = ? THEN ? WHEN `c` = ? THEN ? WHEN `c` = ? THEN ? END, " +
+		"`c3`=CASE WHEN `c` = ? THEN ? WHEN `c` = ? THEN ? WHEN `c` = ? THEN ? END " +
+		"WHERE (`c` = ?) OR (`c` = ?) OR (`c` = ?)"
 	expectedArgs := []interface{}{
 		1, 10, 4, 40, 7, 70,
 		1, 20, 4, 50, 7, 80,
@@ -169,10 +164,10 @@ func testGenUpdateMultiRowsWithVirtualGeneratedColumns(t *testing.T, genUpdate g
 	sql, args := genUpdate(change1, change2, change3)
 
 	expectedSQL := "UPDATE `db`.`tb` SET " +
-		"`c2`=CASE WHEN `c4`=? THEN ? WHEN `c4`=? THEN ? WHEN `c4`=? THEN ? END, " +
-		"`c3`=CASE WHEN `c4`=? THEN ? WHEN `c4`=? THEN ? WHEN `c4`=? THEN ? END, " +
-		"`c4`=CASE WHEN `c4`=? THEN ? WHEN `c4`=? THEN ? WHEN `c4`=? THEN ? END " +
-		"WHERE `c4` IN (?,?,?)"
+		"`c2`=CASE WHEN `c4` = ? THEN ? WHEN `c4` = ? THEN ? WHEN `c4` = ? THEN ? END, " +
+		"`c3`=CASE WHEN `c4` = ? THEN ? WHEN `c4` = ? THEN ? WHEN `c4` = ? THEN ? END, " +
+		"`c4`=CASE WHEN `c4` = ? THEN ? WHEN `c4` = ? THEN ? WHEN `c4` = ? THEN ? END " +
+		"WHERE (`c4` = ?) OR (`c4` = ?) OR (`c4` = ?)"
 	expectedArgs := []interface{}{
 		1, 20, 4, 50, 7, 80,
 		1, 30, 4, 60, 7, 90,
@@ -197,10 +192,10 @@ func testGenUpdateMultiRowsWithStoredGeneratedColumn(t *testing.T, genUpdate gen
 	sql, args := genUpdate(change1, change2, change3)
 
 	expectedSQL := "UPDATE `db`.`tb` SET " +
-		"`c`=CASE WHEN `c1`=? THEN ? WHEN `c1`=? THEN ? WHEN `c1`=? THEN ? END, " +
-		"`c2`=CASE WHEN `c1`=? THEN ? WHEN `c1`=? THEN ? WHEN `c1`=? THEN ? END, " +
-		"`c3`=CASE WHEN `c1`=? THEN ? WHEN `c1`=? THEN ? WHEN `c1`=? THEN ? END " +
-		"WHERE `c1` IN (?,?,?)"
+		"`c`=CASE WHEN `c1` = ? THEN ? WHEN `c1` = ? THEN ? WHEN `c1` = ? THEN ? END, " +
+		"`c2`=CASE WHEN `c1` = ? THEN ? WHEN `c1` = ? THEN ? WHEN `c1` = ? THEN ? END, " +
+		"`c3`=CASE WHEN `c1` = ? THEN ? WHEN `c1` = ? THEN ? WHEN `c1` = ? THEN ? END " +
+		"WHERE (`c1` = ?) OR (`c1` = ?) OR (`c1` = ?)"
 	expectedArgs := []interface{}{
 		101, 10, 104, 40, 107, 70,
 		101, 20, 104, 50, 107, 80,

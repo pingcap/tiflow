@@ -308,8 +308,8 @@ check-static: tools/bin/golangci-lint
 	cd dm && ../tools/bin/golangci-lint run --timeout 10m0s
 
 check: check-copyright generate_mock go-generate fmt check-static tidy terror_check errdoc \
-	check-merge-conflicts check-ticdc-dashboard check-diff-line-width \
-	swagger-spec check-makefiles check_engine_integration_test
+	check-merge-conflicts check-ticdc-dashboard check-diff-line-width swagger-spec check-makefiles \
+	check_cdc_integration_test check_dm_integration_test check_engine_integration_test 
 	@git --no-pager diff --exit-code || (echo "Please add changed files!" && false)
 
 integration_test_coverage: tools/bin/gocovmerge tools/bin/goveralls
@@ -529,6 +529,13 @@ check_third_party_binary_for_engine:
 
 check_engine_integration_test:
 	./engine/test/utils/check_case.sh
+	./engine/test/integration_tests/run_group.sh "check others"
+
+check_dm_integration_test:
+	./dm/tests/run_group.sh "check others"
+
+check_cdc_integration_test:
+	./tests/integration_tests/run_group.sh check "others"
 
 bin/mc:
 	./scripts/download-mc.sh

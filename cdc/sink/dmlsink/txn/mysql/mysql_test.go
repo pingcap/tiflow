@@ -1225,10 +1225,10 @@ func TestPrepareBatchDMLs(t *testing.T) {
 			},
 			expected: &preparedDMLs{
 				startTs:         []model.Ts{418658114257813514},
-				sqls:            []string{"DELETE FROM `common_1`.`uk_without_pk` WHERE (`a1`,`a3`) IN ((?,?),(?,?))"},
+				sqls:            []string{"DELETE FROM `common_1`.`uk_without_pk` WHERE (`a1` = ? AND `a3` = ?) OR (`a1` = ? AND `a3` = ?)"},
 				values:          [][]interface{}{{1, "你好", 2, "世界"}},
 				rowCount:        2,
-				approximateSize: 93,
+				approximateSize: 115,
 			},
 		},
 		{ // insert event
@@ -1355,17 +1355,16 @@ func TestPrepareBatchDMLs(t *testing.T) {
 			},
 			expected: &preparedDMLs{
 				startTs: []model.Ts{418658114257813516},
-				sqls: []string{"UPDATE `common_1`.`uk_without_pk` SET `a1`=CASE " +
-					"WHEN ROW(`a1`,`a3`)=ROW(?,?) THEN ? WHEN ROW(`a1`,`a3`)=ROW(?,?) " +
-					"THEN ? END, `a3`=CASE WHEN ROW(`a1`,`a3`)=ROW(?,?) " +
-					"THEN ? WHEN ROW(`a1`,`a3`)=ROW(?,?) THEN ? END WHERE " +
-					"ROW(`a1`,`a3`) IN (ROW(?,?),ROW(?,?))"},
+				sqls: []string{"UPDATE `common_1`.`uk_without_pk` " +
+					"SET `a1`=CASE WHEN `a1` = ? AND `a3` = ? THEN ? WHEN `a1` = ? AND `a3` = ? THEN ? END, " +
+					"`a3`=CASE WHEN `a1` = ? AND `a3` = ? THEN ? WHEN `a1` = ? AND `a3` = ? THEN ? END " +
+					"WHERE (`a1` = ? AND `a3` = ?) OR (`a1` = ? AND `a3` = ?)"},
 				values: [][]interface{}{{
 					1, "开发", 2, 3, "纽约", 4, 1, "开发", "测试", 3,
 					"纽约", "北京", 1, "开发", 3, "纽约",
 				}},
 				rowCount:        2,
-				approximateSize: 278,
+				approximateSize: 283,
 			},
 		},
 		// mixed event, and test delete， update, insert are ordered
@@ -1502,12 +1501,11 @@ func TestPrepareBatchDMLs(t *testing.T) {
 			expected: &preparedDMLs{
 				startTs: []model.Ts{418658114257813514},
 				sqls: []string{
-					"DELETE FROM `common_1`.`uk_without_pk` WHERE (`a1`,`a3`) IN ((?,?),(?,?))",
-					"UPDATE `common_1`.`uk_without_pk` SET `a1`=CASE " +
-						"WHEN ROW(`a1`,`a3`)=ROW(?,?) THEN ? WHEN ROW(`a1`,`a3`)=ROW(?,?) " +
-						"THEN ? END, `a3`=CASE WHEN ROW(`a1`,`a3`)=ROW(?,?) " +
-						"THEN ? WHEN ROW(`a1`,`a3`)=ROW(?,?) THEN ? END WHERE " +
-						"ROW(`a1`,`a3`) IN (ROW(?,?),ROW(?,?))",
+					"DELETE FROM `common_1`.`uk_without_pk` WHERE (`a1` = ? AND `a3` = ?) OR (`a1` = ? AND `a3` = ?)",
+					"UPDATE `common_1`.`uk_without_pk` " +
+						"SET `a1`=CASE WHEN `a1` = ? AND `a3` = ? THEN ? WHEN `a1` = ? AND `a3` = ? THEN ? END, " +
+						"`a3`=CASE WHEN `a1` = ? AND `a3` = ? THEN ? WHEN `a1` = ? AND `a3` = ? THEN ? END " +
+						"WHERE (`a1` = ? AND `a3` = ?) OR (`a1` = ? AND `a3` = ?)",
 					"INSERT INTO `common_1`.`uk_without_pk` (`a1`,`a3`) VALUES (?,?)",
 				},
 				values: [][]interface{}{
@@ -1519,7 +1517,7 @@ func TestPrepareBatchDMLs(t *testing.T) {
 					{2, "你好"},
 				},
 				rowCount:        5,
-				approximateSize: 440,
+				approximateSize: 467,
 			},
 		},
 		// update event and downstream is mysql and without pk
@@ -1900,9 +1898,9 @@ func TestBackendGenUpdateSQL(t *testing.T) {
 			ms.cfg.MaxMultiUpdateRowCount,
 			[]string{
 				"UPDATE `db`.`tb1` SET " +
-					"`id`=CASE WHEN `id`=? THEN ? WHEN `id`=? THEN ? END, " +
-					"`name`=CASE WHEN `id`=? THEN ? WHEN `id`=? THEN ? END " +
-					"WHERE `id` IN (?,?)",
+					"`id`=CASE WHEN `id` = ? THEN ? WHEN `id` = ? THEN ? END, " +
+					"`name`=CASE WHEN `id` = ? THEN ? WHEN `id` = ? THEN ? END " +
+					"WHERE (`id` = ?) OR (`id` = ?)",
 			},
 			[][]interface{}{
 				{1, 1, 2, 2, 1, "aa", 2, "bb", 1, 2},

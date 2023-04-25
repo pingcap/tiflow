@@ -1,5 +1,5 @@
 ---
-name: load_task1
+name: load_task2
 task-mode: all
 is-sharding: false
 meta-schema: "dm_meta"
@@ -19,15 +19,9 @@ mysql-instances:
     loader-config-name: "global"
     syncer-config-name: "global"
 
-  - source-id: "mysql-replica-02"
-    block-allow-list:  "instance"
-    mydumper-config-name: "global"
-    loader-config-name: "global"
-    syncer-config-name: "global"
-
 block-allow-list:
   instance:
-    do-dbs: ["load_task1"]
+    do-dbs: ["load_task2"]
 
 mydumpers:
   global:

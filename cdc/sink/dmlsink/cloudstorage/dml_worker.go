@@ -44,6 +44,7 @@ type dmlWorker struct {
 	config       *cloudstorage.Config
 	// flushNotifyCh is used to notify that several tables can be flushed.
 	flushNotifyCh chan flushTask
+	inputCh       *chann.DrainableChann[eventFragment]
 	// tableEvents maintains a mapping of <table, []eventFragment>.
 	tableEvents *tableEventsMap
 	// fileSize maintains a mapping of <table, file size>.
@@ -83,6 +84,7 @@ func newDMLWorker(
 	storage storage.ExternalStorage,
 	config *cloudstorage.Config,
 	extension string,
+	inputCh *chann.DrainableChann[eventFragment],
 	clock clock.Clock,
 	statistics *metrics.Statistics,
 ) *dmlWorker {
@@ -91,6 +93,7 @@ func newDMLWorker(
 		changeFeedID:      changefeedID,
 		storage:           storage,
 		config:            config,
+		inputCh:           inputCh,
 		tableEvents:       newTableEventsMap(),
 		flushNotifyCh:     make(chan flushTask, 1),
 		fileSize:          make(map[cloudstorage.VersionedTableName]uint64),
@@ -108,13 +111,8 @@ func newDMLWorker(
 	return d
 }
 
-// setClock is used for unit test
-func (d *dmlWorker) setClock(clock clock.Clock) {
-	d.filePathGenerator.SetClock(clock)
-}
-
 // run creates a set of background goroutines.
-func (d *dmlWorker) run(ctx context.Context, ch *chann.DrainableChann[eventFragment]) error {
+func (d *dmlWorker) run(ctx context.Context) error {
 	log.Debug("dml worker started", zap.Int("workerID", d.id),
 		zap.String("namespace", d.changeFeedID.Namespace),
 		zap.String("changefeed", d.changeFeedID.ID))
@@ -125,7 +123,7 @@ func (d *dmlWorker) run(ctx context.Context, ch *chann.DrainableChann[eventFragm
 	})
 
 	eg.Go(func() error {
-		return d.dispatchFlushTasks(ctx, ch)
+		return d.dispatchFlushTasks(ctx, d.inputCh)
 	})
 
 	return eg.Wait()
