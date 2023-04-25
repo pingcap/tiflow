@@ -241,6 +241,7 @@ func getDDLStatusFromTiDB(tctx *tcontext.Context, db *dbconn.DBConn, ddl string,
 	for {
 		// every attempt try 10 history jobs
 		showJobs := fmt.Sprintf("ADMIN SHOW DDL JOBS %d", rowNum)
+		//nolint:rowserrcheck
 		jobsRows, err := db.QuerySQL(tctx, nil, showJobs)
 		if err != nil {
 			return "", err
@@ -275,6 +276,7 @@ func getDDLStatusFromTiDB(tctx *tcontext.Context, db *dbconn.DBConn, ddl string,
 						// jobID does not exist, expand queryMap for deeper search
 						showJobsLimitNext := fmt.Sprintf("ADMIN SHOW DDL JOB QUERIES LIMIT 10 OFFSET %d", rowOffset)
 						var rowsLimitNext *sql.Rows
+						//nolint:rowserrcheck
 						rowsLimitNext, err = db.QuerySQL(tctx, nil, showJobsLimitNext)
 						if err != nil {
 							return "", err
