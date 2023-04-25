@@ -51,15 +51,17 @@ func testDMLWorker(ctx context.Context, t *testing.T, dir string) *dmlWorker {
 
 	statistics := metrics.NewStatistics(ctx, sink.TxnSink)
 	d := newDMLWorker(1, model.DefaultChangeFeedID("dml-worker-test"), storage,
-		cfg, ".json", clock.New(), statistics)
+		cfg, ".json", chann.NewAutoDrainChann[eventFragment](), clock.New(), statistics)
 	return d
 }
 
 func TestDMLWorkerRun(t *testing.T) {
+	t.Parallel()
+
 	ctx, cancel := context.WithCancel(context.Background())
 	parentDir := t.TempDir()
 	d := testDMLWorker(ctx, t, parentDir)
-	fragCh := chann.NewAutoDrainChann[eventFragment]()
+	fragCh := d.inputCh
 	table1Dir := path.Join(parentDir, "test/table1/99")
 	// assume table1 and table2 are dispatched to the same DML worker
 	table1 := model.TableName{
@@ -120,7 +122,7 @@ func TestDMLWorkerRun(t *testing.T) {
 	wg.Add(1)
 	go func() {
 		defer wg.Done()
-		_ = d.run(ctx, fragCh)
+		_ = d.run(ctx)
 	}()
 
 	time.Sleep(4 * time.Second)

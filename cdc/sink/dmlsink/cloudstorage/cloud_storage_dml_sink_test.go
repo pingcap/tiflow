@@ -34,6 +34,12 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
+func setClock(s *DMLSink, clock clock.Clock) {
+	for _, w := range s.workers {
+		w.filePathGenerator.SetClock(clock)
+	}
+}
+
 func generateTxnEvents(
 	cnt *uint64,
 	batch int,
@@ -89,6 +95,8 @@ func generateTxnEvents(
 }
 
 func TestCloudStorageWriteEventsWithoutDateSeparator(t *testing.T) {
+	t.Parallel()
+
 	ctx, cancel := context.WithCancel(context.Background())
 	parentDir := t.TempDir()
 	uri := fmt.Sprintf("file:///%s?flush-interval=2s", parentDir)
@@ -163,6 +171,8 @@ func TestCloudStorageWriteEventsWithoutDateSeparator(t *testing.T) {
 }
 
 func TestCloudStorageWriteEventsWithDateSeparator(t *testing.T) {
+	t.Parallel()
+
 	ctx, cancel := context.WithCancel(context.Background())
 	parentDir := t.TempDir()
 	uri := fmt.Sprintf("file:///%s?flush-interval=2s", parentDir)
@@ -178,7 +188,7 @@ func TestCloudStorageWriteEventsWithDateSeparator(t *testing.T) {
 	s, err := NewDMLSink(ctx, sinkURI, replicaConfig, errCh)
 	require.Nil(t, err)
 	mockClock := clock.NewMock()
-	s.writer.setClock(mockClock)
+	setClock(s, mockClock)
 
 	var cnt uint64 = 0
 	batch := 100
@@ -210,7 +220,8 @@ func TestCloudStorageWriteEventsWithDateSeparator(t *testing.T) {
 
 	// test date (day) is NOT changed.
 	mockClock.Set(time.Date(2023, 3, 8, 23, 59, 59, 0, time.UTC))
-	s.writer.setClock(mockClock)
+	setClock(s, mockClock)
+
 	err = s.WriteEvents(txns...)
 	require.Nil(t, err)
 	time.Sleep(3 * time.Second)
@@ -234,7 +245,8 @@ func TestCloudStorageWriteEventsWithDateSeparator(t *testing.T) {
 
 	// test date (day) is changed.
 	mockClock.Set(time.Date(2023, 3, 9, 0, 0, 10, 0, time.UTC))
-	s.writer.setClock(mockClock)
+	setClock(s, mockClock)
+
 	err = s.WriteEvents(txns...)
 	require.Nil(t, err)
 	time.Sleep(3 * time.Second)
@@ -266,7 +278,8 @@ func TestCloudStorageWriteEventsWithDateSeparator(t *testing.T) {
 	require.Nil(t, err)
 	mockClock = clock.NewMock()
 	mockClock.Set(time.Date(2023, 3, 9, 0, 1, 10, 0, time.UTC))
-	s.writer.setClock(mockClock)
+	setClock(s, mockClock)
+
 	err = s.WriteEvents(txns...)
 	require.Nil(t, err)
 	time.Sleep(3 * time.Second)
