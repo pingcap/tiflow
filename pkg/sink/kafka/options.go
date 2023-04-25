@@ -16,12 +16,15 @@ package kafka
 import (
 	"context"
 	"fmt"
+	"net/http"
 	"net/url"
 	"regexp"
 	"strconv"
 	"strings"
 	"time"
 
+	"github.com/gin-gonic/gin/binding"
+	"github.com/imdario/mergo"
 	"github.com/pingcap/errors"
 	"github.com/pingcap/log"
 	"github.com/pingcap/tiflow/cdc/contextutil"
@@ -103,6 +106,35 @@ func requireAcksFromString(acks string) (RequiredAcks, error) {
 	}
 }
 
+type urlConfig struct {
+	PartitionNum                 *int32  `form:"partition-num"`
+	ReplicationFactor            *int16  `form:"replication-factor"`
+	KafkaVersion                 *string `form:"kafka-version"`
+	MaxMessageBytes              *int    `form:"max-message-bytes"`
+	Compression                  *string `form:"compression"`
+	KafkaClientID                *string `form:"kafka-client-id"`
+	AutoCreateTopic              *bool   `form:"auto-create-topic"`
+	DialTimeout                  *string `form:"dial-timeout"`
+	WriteTimeout                 *string `form:"write-timeout"`
+	ReadTimeout                  *string `form:"read-timeout"`
+	RequiredAcks                 *string `form:"required-acks"`
+	SASLUser                     *string `form:"sasl-user"`
+	SASLPassword                 *string `form:"sasl-password"`
+	SASLMechanism                *string `form:"sasl-mechanism"`
+	SASLGssAPIAuthType           *string `form:"sasl-gss-api-auth-type"`
+	SASLGssAPIKeytabPath         *string `form:"sasl-gss-api-keytab-path"`
+	SASLGssAPIKerberosConfigPath *string `form:"sasl-gss-api-kerberos-config-path"`
+	SASLGssAPIServiceName        *string `form:"sasl-gss-api-service-name"`
+	SASLGssAPIUser               *string `form:"sasl-gss-api-user"`
+	SASLGssAPIPassword           *string `form:"sasl-gss-api-password"`
+	SASLGssAPIRealm              *string `form:"sasl-gss-api-realm"`
+	SASLGssAPIDisablePafxfast    *bool   `form:"sasl-gss-api-disable-pafxfast"`
+	EnableTLS                    *bool   `form:"enable-tls"`
+	CA                           *string `form:"ca"`
+	Cert                         *string `form:"cert"`
+	Key                          *string `form:"key"`
+}
+
 // Options stores user specified configurations
 type Options struct {
 	BrokerEndpoints []string
@@ -180,109 +212,97 @@ func (o *Options) SetPartitionNum(realPartitionCount int32) error {
 }
 
 // Apply the sinkURI to update Options
-func (o *Options) Apply(ctx context.Context, sinkURI *url.URL) error {
+func (o *Options) Apply(ctx context.Context,
+	sinkURI *url.URL, replicaConfig *config.ReplicaConfig) error {
 	o.BrokerEndpoints = strings.Split(sinkURI.Host, ",")
-	params := sinkURI.Query()
-	s := params.Get("partition-num")
-	if s != "" {
-		a, err := strconv.ParseInt(s, 10, 32)
-		if err != nil {
-			return err
-		}
-		o.PartitionNum = int32(a)
+
+	var err error
+	req := &http.Request{URL: sinkURI}
+	urlParameter := &urlConfig{}
+	if err := binding.Query.Bind(req, urlParameter); err != nil {
+		return cerror.WrapError(cerror.ErrMySQLInvalidConfig, err)
+	}
+	if urlParameter, err = mergeUrlConfigToConfigFileValues(replicaConfig, urlParameter); err != nil {
+		return err
+	}
+	if urlParameter.PartitionNum != nil {
+		o.PartitionNum = *urlParameter.PartitionNum
 		if o.PartitionNum <= 0 {
 			return cerror.ErrKafkaInvalidPartitionNum.GenWithStackByArgs(o.PartitionNum)
 		}
 	}
 
-	s = params.Get("replication-factor")
-	if s != "" {
-		a, err := strconv.ParseInt(s, 10, 16)
-		if err != nil {
-			return err
-		}
-		o.ReplicationFactor = int16(a)
+	if urlParameter.ReplicationFactor != nil {
+		o.ReplicationFactor = *urlParameter.ReplicationFactor
 	}
 
-	s = params.Get("kafka-version")
-	if s != "" {
-		o.Version = s
+	if urlParameter.KafkaVersion != nil {
+		o.Version = *urlParameter.KafkaVersion
 	}
 
-	s = params.Get("max-message-bytes")
-	if s != "" {
-		a, err := strconv.Atoi(s)
-		if err != nil {
-			return err
-		}
-		o.MaxMessageBytes = a
+	if urlParameter.MaxMessageBytes != nil {
+		o.MaxMessageBytes = *urlParameter.MaxMessageBytes
 	}
 
-	s = params.Get("compression")
-	if s != "" {
-		o.Compression = s
+	if urlParameter.Compression != nil {
+		o.Compression = *urlParameter.Compression
 	}
 
+	var kafkaClientID string
+	if urlParameter.KafkaClientID != nil {
+		kafkaClientID = *urlParameter.KafkaClientID
+	}
 	clientID, err := NewKafkaClientID(
 		contextutil.CaptureAddrFromCtx(ctx),
 		contextutil.ChangefeedIDFromCtx(ctx),
-		params.Get("kafka-client-id"))
+		kafkaClientID)
 	if err != nil {
 		return err
 	}
 	o.ClientID = clientID
 
-	s = params.Get("auto-create-topic")
-	if s != "" {
-		autoCreate, err := strconv.ParseBool(s)
-		if err != nil {
-			return err
-		}
-		o.AutoCreate = autoCreate
+	if urlParameter.AutoCreateTopic != nil {
+		o.AutoCreate = *urlParameter.AutoCreateTopic
 	}
 
-	s = params.Get("dial-timeout")
-	if s != "" {
-		a, err := time.ParseDuration(s)
+	if urlParameter.DialTimeout != nil && *urlParameter.DialTimeout != "" {
+		a, err := time.ParseDuration(*urlParameter.DialTimeout)
 		if err != nil {
 			return err
 		}
 		o.DialTimeout = a
 	}
 
-	s = params.Get("write-timeout")
-	if s != "" {
-		a, err := time.ParseDuration(s)
+	if urlParameter.WriteTimeout != nil && *urlParameter.WriteTimeout != "" {
+		a, err := time.ParseDuration(*urlParameter.WriteTimeout)
 		if err != nil {
 			return err
 		}
 		o.WriteTimeout = a
 	}
 
-	s = params.Get("read-timeout")
-	if s != "" {
-		a, err := time.ParseDuration(s)
+	if urlParameter.ReadTimeout != nil && *urlParameter.ReadTimeout != "" {
+		a, err := time.ParseDuration(*urlParameter.ReadTimeout)
 		if err != nil {
 			return err
 		}
 		o.ReadTimeout = a
 	}
 
-	s = params.Get("required-acks")
-	if s != "" {
-		r, err := requireAcksFromString(s)
+	if urlParameter.RequiredAcks != nil && *urlParameter.RequiredAcks != "" {
+		r, err := requireAcksFromString(*urlParameter.RequiredAcks)
 		if err != nil {
 			return err
 		}
 		o.RequiredAcks = r
 	}
 
-	err = o.applySASL(params)
+	err = o.applySASL(urlParameter)
 	if err != nil {
 		return err
 	}
 
-	err = o.applyTLS(params)
+	err = o.applyTLS(urlParameter)
 	if err != nil {
 		return err
 	}
@@ -290,20 +310,55 @@ func (o *Options) Apply(ctx context.Context, sinkURI *url.URL) error {
 	return nil
 }
 
-func (o *Options) applyTLS(params url.Values) error {
-	s := params.Get("ca")
-	if s != "" {
-		o.Credential.CAPath = s
+func mergeUrlConfigToConfigFileValues(
+	replicaConfig *config.ReplicaConfig,
+	urlParameters *urlConfig) (*urlConfig, error) {
+	configParameter := &urlConfig{}
+	if replicaConfig.Sink != nil && replicaConfig.Sink.KafkaConfig != nil {
+		configParameter.PartitionNum = replicaConfig.Sink.KafkaConfig.PartitionNum
+		configParameter.ReplicationFactor = replicaConfig.Sink.KafkaConfig.ReplicationFactor
+		configParameter.KafkaVersion = replicaConfig.Sink.KafkaConfig.KafkaVersion
+		configParameter.MaxMessageBytes = replicaConfig.Sink.KafkaConfig.MaxMessageBytes
+		configParameter.Compression = replicaConfig.Sink.KafkaConfig.Compression
+		configParameter.KafkaClientID = replicaConfig.Sink.KafkaConfig.KafkaClientID
+		configParameter.AutoCreateTopic = replicaConfig.Sink.KafkaConfig.AutoCreateTopic
+		configParameter.DialTimeout = replicaConfig.Sink.KafkaConfig.DialTimeout
+		configParameter.WriteTimeout = replicaConfig.Sink.KafkaConfig.WriteTimeout
+		configParameter.ReadTimeout = replicaConfig.Sink.KafkaConfig.ReadTimeout
+		configParameter.RequiredAcks = replicaConfig.Sink.KafkaConfig.RequiredAcks
+		configParameter.SASLUser = replicaConfig.Sink.KafkaConfig.SASLUser
+		configParameter.SASLPassword = replicaConfig.Sink.KafkaConfig.SASLPassword
+		configParameter.SASLMechanism = replicaConfig.Sink.KafkaConfig.SASLMechanism
+		configParameter.SASLGssAPIDisablePafxfast = replicaConfig.Sink.KafkaConfig.SASLGssAPIDisablePafxfast
+		configParameter.SASLGssAPIAuthType = replicaConfig.Sink.KafkaConfig.SASLGssAPIAuthType
+		configParameter.SASLGssAPIKeytabPath = replicaConfig.Sink.KafkaConfig.SASLGssAPIKeytabPath
+		configParameter.SASLGssAPIServiceName = replicaConfig.Sink.KafkaConfig.SASLGssAPIServiceName
+		configParameter.SASLGssAPIKerberosConfigPath = replicaConfig.Sink.KafkaConfig.SASLGssAPIKerberosConfigPath
+		configParameter.SASLGssAPIRealm = replicaConfig.Sink.KafkaConfig.SASLGssAPIRealm
+		configParameter.SASLGssAPIUser = replicaConfig.Sink.KafkaConfig.SASLGssAPIUser
+		configParameter.SASLGssAPIPassword = replicaConfig.Sink.KafkaConfig.SASLGssAPIPassword
+		configParameter.EnableTLS = replicaConfig.Sink.KafkaConfig.EnableTLS
+		configParameter.CA = replicaConfig.Sink.KafkaConfig.CA
+		configParameter.Cert = replicaConfig.Sink.KafkaConfig.Cert
+		configParameter.Key = replicaConfig.Sink.KafkaConfig.Key
+	}
+	if err := mergo.Merge(configParameter, urlParameters); err != nil {
+		return nil, err
+	}
+	return configParameter, nil
+}
+
+func (o *Options) applyTLS(params *urlConfig) error {
+	if params.CA != nil && *params.CA != "" {
+		o.Credential.CAPath = *params.CA
 	}
 
-	s = params.Get("cert")
-	if s != "" {
-		o.Credential.CertPath = s
+	if params.Cert != nil && *params.Cert != "" {
+		o.Credential.CertPath = *params.Cert
 	}
 
-	s = params.Get("key")
-	if s != "" {
-		o.Credential.KeyPath = s
+	if params.Key != nil && *params.Key != "" {
+		o.Credential.KeyPath = *params.Key
 	}
 
 	if o.Credential != nil && !o.Credential.IsEmpty() &&
@@ -318,12 +373,8 @@ func (o *Options) applyTLS(params url.Values) error {
 	//	  then tls should be enabled, and the trusted CA certificate on OS is used.
 	// if enable-tls is set to false, and credential files are set,
 	//	  then an error is returned.
-	s = params.Get("enable-tls")
-	if s != "" {
-		enableTLS, err := strconv.ParseBool(s)
-		if err != nil {
-			return err
-		}
+	if params.EnableTLS != nil {
+		enableTLS := *params.EnableTLS
 
 		if o.Credential != nil && o.Credential.IsTLSEnabled() && !enableTLS {
 			return cerror.WrapError(cerror.ErrKafkaInvalidConfig,
@@ -339,72 +390,57 @@ func (o *Options) applyTLS(params url.Values) error {
 	return nil
 }
 
-func (o *Options) applySASL(params url.Values) error {
-	s := params.Get("sasl-user")
-	if s != "" {
-		o.SASL.SASLUser = s
+func (o *Options) applySASL(params *urlConfig) error {
+	if params.SASLUser != nil && *params.SASLUser != "" {
+		o.SASL.SASLUser = *params.SASLUser
 	}
 
-	s = params.Get("sasl-password")
-	if s != "" {
-		o.SASL.SASLPassword = s
+	if params.SASLPassword != nil && *params.SASLPassword != "" {
+		o.SASL.SASLPassword = *params.SASLPassword
 	}
 
-	s = params.Get("sasl-mechanism")
-	if s != "" {
-		mechanism, err := security.SASLMechanismFromString(s)
+	if params.SASLMechanism != nil && *params.SASLMechanism != "" {
+		mechanism, err := security.SASLMechanismFromString(*params.SASLMechanism)
 		if err != nil {
 			return cerror.WrapError(cerror.ErrKafkaInvalidConfig, err)
 		}
 		o.SASL.SASLMechanism = mechanism
 	}
 
-	s = params.Get("sasl-gssapi-auth-type")
-	if s != "" {
-		authType, err := security.AuthTypeFromString(s)
+	if params.SASLGssAPIAuthType != nil && *params.SASLGssAPIAuthType != "" {
+		authType, err := security.AuthTypeFromString(*params.SASLGssAPIAuthType)
 		if err != nil {
 			return cerror.WrapError(cerror.ErrKafkaInvalidConfig, err)
 		}
 		o.SASL.GSSAPI.AuthType = authType
 	}
 
-	s = params.Get("sasl-gssapi-keytab-path")
-	if s != "" {
-		o.SASL.GSSAPI.KeyTabPath = s
+	if params.SASLGssAPIKeytabPath != nil && *params.SASLGssAPIKeytabPath != "" {
+		o.SASL.GSSAPI.KeyTabPath = *params.SASLGssAPIKeytabPath
 	}
 
-	s = params.Get("sasl-gssapi-kerberos-config-path")
-	if s != "" {
-		o.SASL.GSSAPI.KerberosConfigPath = s
+	if params.SASLGssAPIKerberosConfigPath != nil && *params.SASLGssAPIKerberosConfigPath != "" {
+		o.SASL.GSSAPI.KerberosConfigPath = *params.SASLGssAPIKerberosConfigPath
 	}
 
-	s = params.Get("sasl-gssapi-service-name")
-	if s != "" {
-		o.SASL.GSSAPI.ServiceName = s
+	if params.SASLGssAPIServiceName != nil && *params.SASLGssAPIServiceName != "" {
+		o.SASL.GSSAPI.ServiceName = *params.SASLGssAPIServiceName
 	}
 
-	s = params.Get("sasl-gssapi-user")
-	if s != "" {
-		o.SASL.GSSAPI.Username = s
+	if params.SASLGssAPIUser != nil && *params.SASLGssAPIUser != "" {
+		o.SASL.GSSAPI.Username = *params.SASLGssAPIUser
 	}
 
-	s = params.Get("sasl-gssapi-password")
-	if s != "" {
-		o.SASL.GSSAPI.Password = s
+	if params.SASLGssAPIPassword != nil && *params.SASLGssAPIPassword != "" {
+		o.SASL.GSSAPI.Password = *params.SASLGssAPIPassword
 	}
 
-	s = params.Get("sasl-gssapi-realm")
-	if s != "" {
-		o.SASL.GSSAPI.Realm = s
+	if params.SASLGssAPIRealm != nil && *params.SASLGssAPIRealm != "" {
+		o.SASL.GSSAPI.Realm = *params.SASLGssAPIRealm
 	}
 
-	s = params.Get("sasl-gssapi-disable-pafxfast")
-	if s != "" {
-		disablePAFXFAST, err := strconv.ParseBool(s)
-		if err != nil {
-			return err
-		}
-		o.SASL.GSSAPI.DisablePAFXFAST = disablePAFXFAST
+	if params.SASLGssAPIDisablePafxfast != nil {
+		o.SASL.GSSAPI.DisablePAFXFAST = *params.SASLGssAPIDisablePafxfast
 	}
 
 	return nil

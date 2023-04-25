@@ -14,9 +14,11 @@
 package common
 
 import (
+	"net/http"
 	"net/url"
-	"strconv"
 
+	"github.com/gin-gonic/gin/binding"
+	"github.com/imdario/mergo"
 	"github.com/pingcap/errors"
 	"github.com/pingcap/log"
 	"github.com/pingcap/tiflow/pkg/config"
@@ -93,39 +95,45 @@ const (
 	BigintUnsignedHandlingModeLong = "long"
 )
 
+type urlConfig struct {
+	EnableTiDBExtension            *bool   `form:"enable-tidb-extension"`
+	MaxBatchSize                   *int    `form:"max-batch-size"`
+	MaxMessageBytes                *int    `form:"max-message-bytes"`
+	AvroDecimalHandlingMode        *string `form:"avro-decimal-handling-mode"`
+	AvroBigintUnsignedHandlingMode *string `form:"avro-bigint-unsigned-handling-mode"`
+	AvroSchemaRegistry             string  `form:"schema-registry"`
+	OnlyOutputUpdatedColumns       *bool   `form:"only-output-updated-columns"`
+}
+
 // Apply fill the Config
 func (c *Config) Apply(sinkURI *url.URL, config *config.ReplicaConfig) error {
-	params := sinkURI.Query()
-	if s := params.Get(codecOPTEnableTiDBExtension); s != "" {
-		b, err := strconv.ParseBool(s)
-		if err != nil {
-			return err
-		}
-		c.EnableTiDBExtension = b
+	req := &http.Request{URL: sinkURI}
+	var err error
+	urlParameter := &urlConfig{}
+	if err := binding.Query.Bind(req, urlParameter); err != nil {
+		return cerror.WrapError(cerror.ErrMySQLInvalidConfig, err)
+	}
+	if urlParameter, err = mergeUrlConfigToConfigFileValues(config, urlParameter); err != nil {
+		return err
 	}
 
-	if s := params.Get(codecOPTMaxBatchSize); s != "" {
-		a, err := strconv.Atoi(s)
-		if err != nil {
-			return err
-		}
-		c.MaxBatchSize = a
+	if urlParameter.EnableTiDBExtension != nil {
+		c.EnableTiDBExtension = *urlParameter.EnableTiDBExtension
 	}
 
-	if s := params.Get(codecOPTMaxMessageBytes); s != "" {
-		a, err := strconv.Atoi(s)
-		if err != nil {
-			return err
-		}
-		c.MaxMessageBytes = a
+	if urlParameter.MaxBatchSize != nil {
+		c.MaxBatchSize = *urlParameter.MaxBatchSize
 	}
 
-	if s := params.Get(codecOPTAvroDecimalHandlingMode); s != "" {
-		c.AvroDecimalHandlingMode = s
+	if urlParameter.MaxMessageBytes != nil {
+		c.MaxMessageBytes = *urlParameter.MaxMessageBytes
 	}
 
-	if s := params.Get(codecOPTAvroBigintUnsignedHandlingMode); s != "" {
-		c.AvroBigintUnsignedHandlingMode = s
+	if urlParameter.AvroDecimalHandlingMode != nil && *urlParameter.AvroBigintUnsignedHandlingMode != "" {
+		c.AvroDecimalHandlingMode = *urlParameter.AvroDecimalHandlingMode
+	}
+	if urlParameter.AvroBigintUnsignedHandlingMode != nil && *urlParameter.AvroBigintUnsignedHandlingMode != "" {
+		c.AvroBigintUnsignedHandlingMode = *urlParameter.AvroBigintUnsignedHandlingMode
 	}
 
 	if config.Sink != nil && config.Sink.SchemaRegistry != "" {
@@ -140,15 +148,9 @@ func (c *Config) Apply(sinkURI *url.URL, config *config.ReplicaConfig) error {
 			c.NullString = config.Sink.CSVConfig.NullString
 			c.IncludeCommitTs = config.Sink.CSVConfig.IncludeCommitTs
 		}
-
-		c.OnlyOutputUpdatedColumns = config.Sink.OnlyOutputUpdatedColumns
 	}
-	if s := params.Get(codecOPTOnlyOutputUpdatedColumns); s != "" {
-		a, err := strconv.ParseBool(s)
-		if err != nil {
-			return err
-		}
-		c.OnlyOutputUpdatedColumns = a
+	if urlParameter.OnlyOutputUpdatedColumns != nil {
+		c.OnlyOutputUpdatedColumns = *urlParameter.OnlyOutputUpdatedColumns
 	}
 	if c.OnlyOutputUpdatedColumns && !config.EnableOldValue {
 		return cerror.ErrCodecInvalidConfig.GenWithStack(
@@ -162,6 +164,27 @@ func (c *Config) Apply(sinkURI *url.URL, config *config.ReplicaConfig) error {
 	}
 
 	return nil
+}
+
+func mergeUrlConfigToConfigFileValues(
+	replicaConfig *config.ReplicaConfig,
+	urlParameters *urlConfig) (*urlConfig, error) {
+	configParameter := &urlConfig{}
+	if replicaConfig.Sink != nil {
+		configParameter.AvroSchemaRegistry = replicaConfig.Sink.SchemaRegistry
+		configParameter.OnlyOutputUpdatedColumns = replicaConfig.Sink.OnlyOutputUpdatedColumns
+		if replicaConfig.Sink.KafkaConfig != nil && replicaConfig.Sink.KafkaConfig.CodecConfig != nil {
+			configParameter.EnableTiDBExtension = replicaConfig.Sink.KafkaConfig.CodecConfig.EnableTiDBExtension
+			configParameter.MaxBatchSize = replicaConfig.Sink.KafkaConfig.CodecConfig.MaxBatchSize
+			configParameter.MaxMessageBytes = replicaConfig.Sink.KafkaConfig.CodecConfig.MaxMessageBytes
+			configParameter.AvroDecimalHandlingMode = replicaConfig.Sink.KafkaConfig.CodecConfig.AvroDecimalHandlingMode
+			configParameter.AvroBigintUnsignedHandlingMode = replicaConfig.Sink.KafkaConfig.CodecConfig.AvroBigintUnsignedHandlingMode
+		}
+	}
+	if err := mergo.Merge(configParameter, urlParameters); err != nil {
+		return nil, err
+	}
+	return configParameter, nil
 }
 
 // WithMaxMessageBytes set the `maxMessageBytes`
