@@ -81,8 +81,8 @@ func BenchmarkGenUpdate(b *testing.B) {
 			prepare: prepareDataOneColoumnPK,
 		},
 		{
-			name:    "OneColumnPK-GenUpdateSQLFast",
-			fn:      GenUpdateSQLFast,
+			name:    "OneColumnPK-GenUpdateSQL",
+			fn:      GenUpdateSQL,
 			prepare: prepareDataOneColoumnPK,
 		},
 		{
@@ -91,8 +91,8 @@ func BenchmarkGenUpdate(b *testing.B) {
 			prepare: prepareDataMultiColumnsPK,
 		},
 		{
-			name:    "MultiColumnsPK-GenUpdateSQLFast",
-			fn:      GenUpdateSQLFast,
+			name:    "MultiColumnsPK-GenUpdateSQL",
+			fn:      GenUpdateSQL,
 			prepare: prepareDataMultiColumnsPK,
 		},
 	}
