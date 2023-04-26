@@ -299,7 +299,8 @@ func BenchmarkCraftDecoding(b *testing.B) {
 func BenchmarkJsonDecoding(b *testing.B) {
 	for i := 0; i < b.N; i++ {
 		for _, message := range codecJSONEncodedRowChanges {
-			if decoder, err := open.NewBatchDecoder(message.Key, message.Value); err != nil {
+			decoder := open.NewBatchDecoder()
+			if err := decoder.AddKeyValue(message.Key, message.Value); err != nil {
 				panic(err)
 			} else {
 				for {

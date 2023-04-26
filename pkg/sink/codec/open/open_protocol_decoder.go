@@ -249,10 +249,6 @@ func (b *BatchDecoder) AddKeyValue(key, value []byte) error {
 
 }
 
-func NewBatchMixedDecoder() codec.RowEventDecoder {
-	return &BatchMixedDecoder{}
-}
-
 // AddKeyValue implements the RowEventDecoder interface
 func (b *BatchMixedDecoder) AddKeyValue(key, value []byte) error {
 	if key != nil || value != nil {
