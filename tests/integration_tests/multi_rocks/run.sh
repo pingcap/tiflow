@@ -27,13 +27,13 @@ function run() {
 		run_kafka_consumer $WORK_DIR "kafka://127.0.0.1:9092/$TOPIC_NAME?protocol=open-protocol&partition-num=4&version=${KAFKA_VERSION}&max-message-bytes=10485760"
 	fi
 
-  run_sql "create database multi_rocks;" ${UP_TIDB_HOST} ${UP_TIDB_PORT}
+	run_sql "create database multi_rocks;" ${UP_TIDB_HOST} ${UP_TIDB_PORT}
 
-	go-ycsb load mysql -P $CUR/conf/workload  -p mysql.host=${UP_TIDB_HOST} -p mysql.port=${UP_TIDB_PORT} -p mysql.user=root -p mysql.db=multi_rocks -p table=a1
-	go-ycsb load mysql -P $CUR/conf/workload  -p mysql.host=${UP_TIDB_HOST} -p mysql.port=${UP_TIDB_PORT} -p mysql.user=root -p mysql.db=multi_rocks -p table=a2
-	go-ycsb load mysql -P $CUR/conf/workload  -p mysql.host=${UP_TIDB_HOST} -p mysql.port=${UP_TIDB_PORT} -p mysql.user=root -p mysql.db=multi_rocks -p table=a3
-	go-ycsb load mysql -P $CUR/conf/workload  -p mysql.host=${UP_TIDB_HOST} -p mysql.port=${UP_TIDB_PORT} -p mysql.user=root -p mysql.db=multi_rocks -p table=a4
-	go-ycsb load mysql -P $CUR/conf/workload  -p mysql.host=${UP_TIDB_HOST} -p mysql.port=${UP_TIDB_PORT} -p mysql.user=root -p mysql.db=multi_rocks -p table=a5
+	go-ycsb load mysql -P $CUR/conf/workload -p mysql.host=${UP_TIDB_HOST} -p mysql.port=${UP_TIDB_PORT} -p mysql.user=root -p mysql.db=multi_rocks -p table=a1
+	go-ycsb load mysql -P $CUR/conf/workload -p mysql.host=${UP_TIDB_HOST} -p mysql.port=${UP_TIDB_PORT} -p mysql.user=root -p mysql.db=multi_rocks -p table=a2
+	go-ycsb load mysql -P $CUR/conf/workload -p mysql.host=${UP_TIDB_HOST} -p mysql.port=${UP_TIDB_PORT} -p mysql.user=root -p mysql.db=multi_rocks -p table=a3
+	go-ycsb load mysql -P $CUR/conf/workload -p mysql.host=${UP_TIDB_HOST} -p mysql.port=${UP_TIDB_PORT} -p mysql.user=root -p mysql.db=multi_rocks -p table=a4
+	go-ycsb load mysql -P $CUR/conf/workload -p mysql.host=${UP_TIDB_HOST} -p mysql.port=${UP_TIDB_PORT} -p mysql.user=root -p mysql.db=multi_rocks -p table=a5
 
 	# sync_diff can't check non-exist table, so we check expected tables are created in downstream first
 	run_sql "drop table multi_rocks.a4;" ${UP_TIDB_HOST} ${UP_TIDB_PORT}
