@@ -43,6 +43,8 @@ type Config struct {
 	AvroDecimalHandlingMode        string
 	AvroBigintUnsignedHandlingMode string
 
+	AvroEnableWatermark bool
+
 	// for sinking to cloud storage
 	Delimiter       string
 	Quote           string
@@ -79,7 +81,11 @@ const (
 	codecOPTAvroDecimalHandlingMode        = "avro-decimal-handling-mode"
 	codecOPTAvroBigintUnsignedHandlingMode = "avro-bigint-unsigned-handling-mode"
 	codecOPTAvroSchemaRegistry             = "schema-registry"
-	codecOPTOnlyOutputUpdatedColumns       = "only-output-updated-columns"
+
+	// codecOPTAvroEnableWatermark is the option for enabling watermark in avro protocol
+	// only used for internal testing, do not expose it to the outside users.
+	codecOPTAvroEnableWatermark      = "avro-enable-watermark"
+	codecOPTOnlyOutputUpdatedColumns = "only-output-updated-columns"
 )
 
 const (
@@ -94,7 +100,7 @@ const (
 )
 
 // Apply fill the Config
-func (c *Config) Apply(sinkURI *url.URL, config *config.ReplicaConfig) error {
+func (c *Config) Apply(sinkURI *url.URL, replicaConfig *config.ReplicaConfig) error {
 	params := sinkURI.Query()
 	if s := params.Get(codecOPTEnableTiDBExtension); s != "" {
 		b, err := strconv.ParseBool(s)
@@ -128,20 +134,30 @@ func (c *Config) Apply(sinkURI *url.URL, config *config.ReplicaConfig) error {
 		c.AvroBigintUnsignedHandlingMode = s
 	}
 
-	if config.Sink != nil && config.Sink.SchemaRegistry != "" {
-		c.AvroSchemaRegistry = config.Sink.SchemaRegistry
+	if s := params.Get(codecOPTAvroEnableWatermark); s != "" {
+		if c.EnableTiDBExtension && c.Protocol == config.ProtocolAvro {
+			b, err := strconv.ParseBool(s)
+			if err != nil {
+				return err
+			}
+			c.AvroEnableWatermark = b
+		}
 	}
 
-	if config.Sink != nil {
-		c.Terminator = config.Sink.Terminator
-		if config.Sink.CSVConfig != nil {
-			c.Delimiter = config.Sink.CSVConfig.Delimiter
-			c.Quote = config.Sink.CSVConfig.Quote
-			c.NullString = config.Sink.CSVConfig.NullString
-			c.IncludeCommitTs = config.Sink.CSVConfig.IncludeCommitTs
+	if replicaConfig.Sink != nil && replicaConfig.Sink.SchemaRegistry != "" {
+		c.AvroSchemaRegistry = replicaConfig.Sink.SchemaRegistry
+	}
+
+	if replicaConfig.Sink != nil {
+		c.Terminator = replicaConfig.Sink.Terminator
+		if replicaConfig.Sink.CSVConfig != nil {
+			c.Delimiter = replicaConfig.Sink.CSVConfig.Delimiter
+			c.Quote = replicaConfig.Sink.CSVConfig.Quote
+			c.NullString = replicaConfig.Sink.CSVConfig.NullString
+			c.IncludeCommitTs = replicaConfig.Sink.CSVConfig.IncludeCommitTs
 		}
 
-		c.OnlyOutputUpdatedColumns = config.Sink.OnlyOutputUpdatedColumns
+		c.OnlyOutputUpdatedColumns = replicaConfig.Sink.OnlyOutputUpdatedColumns
 	}
 	if s := params.Get(codecOPTOnlyOutputUpdatedColumns); s != "" {
 		a, err := strconv.ParseBool(s)
@@ -150,15 +166,15 @@ func (c *Config) Apply(sinkURI *url.URL, config *config.ReplicaConfig) error {
 		}
 		c.OnlyOutputUpdatedColumns = a
 	}
-	if c.OnlyOutputUpdatedColumns && !config.EnableOldValue {
+	if c.OnlyOutputUpdatedColumns && !replicaConfig.EnableOldValue {
 		return cerror.ErrCodecInvalidConfig.GenWithStack(
 			`old value must be enabled when configuration "%s" is true.`,
 			codecOPTOnlyOutputUpdatedColumns,
 		)
 	}
 
-	if config.Integrity != nil {
-		c.EnableRowChecksum = config.Integrity.Enabled()
+	if replicaConfig.Integrity != nil {
+		c.EnableRowChecksum = replicaConfig.Integrity.Enabled()
 	}
 
 	return nil
