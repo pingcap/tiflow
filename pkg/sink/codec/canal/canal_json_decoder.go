@@ -33,16 +33,22 @@ type batchDecoder struct {
 }
 
 // NewBatchDecoder return a decoder for canal-json
-func NewBatchDecoder(data []byte,
+func NewBatchDecoder(
 	enableTiDBExtension bool,
 	terminator string,
 ) codec.RowEventDecoder {
 	return &batchDecoder{
-		data:                data,
-		msg:                 nil,
 		enableTiDBExtension: enableTiDBExtension,
 		terminator:          terminator,
+
+		msg: nil,
 	}
+}
+
+// AddKeyValue implements the RowEventDecoder interface
+func (b *batchDecoder) AddKeyValue(_, value []byte) error {
+	b.data = value
+	return nil
 }
 
 // HasNext implements the RowEventDecoder interface

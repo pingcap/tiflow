@@ -142,3 +142,7 @@ func NewBatchDecoderWithAllocator(
 		allocator: allocator,
 	}, nil
 }
+
+func (b *batchDecoder) AddKeyValue(_, _ []byte) error {
+	return nil
+}
