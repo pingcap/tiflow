@@ -118,32 +118,33 @@ func (b *batchDecoder) NextDDLEvent() (*model.DDLEvent, error) {
 	return event, nil
 }
 
-// newBatchDecoder creates a new batchDecoder.
 func newBatchDecoder(bits []byte) (codec.RowEventDecoder, error) {
-	return NewBatchDecoderWithAllocator(bits, NewSliceAllocator(64))
+	decoder := NewBatchDecoderWithAllocator(NewSliceAllocator(64))
+	err := decoder.AddKeyValue(nil, bits)
+	return decoder, err
 }
 
 // NewBatchDecoderWithAllocator creates a new batchDecoder with given allocator.
 func NewBatchDecoderWithAllocator(
-	bits []byte, allocator *SliceAllocator,
-) (codec.RowEventDecoder, error) {
-	decoder, err := NewMessageDecoder(bits, allocator)
-	if err != nil {
-		return nil, errors.Trace(err)
-	}
-	headers, err := decoder.Headers()
-	if err != nil {
-		return nil, errors.Trace(err)
-	}
-
+	allocator *SliceAllocator,
+) codec.RowEventDecoder {
 	return &batchDecoder{
-		headers:   headers,
-		decoder:   decoder,
 		allocator: allocator,
-	}, nil
+	}
 }
 
 // AddKeyValue implements the RowEventDecoder interface
-func (b *batchDecoder) AddKeyValue(_, _ []byte) error {
+func (b *batchDecoder) AddKeyValue(_, value []byte) error {
+	decoder, err := NewMessageDecoder(value, b.allocator)
+	if err != nil {
+		return errors.Trace(err)
+	}
+	headers, err := decoder.Headers()
+	if err != nil {
+		return errors.Trace(err)
+	}
+	b.decoder = decoder
+	b.headers = headers
+
 	return nil
 }
