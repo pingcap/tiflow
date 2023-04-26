@@ -454,6 +454,8 @@ func TestSyncPoint(t *testing.T) {
 	ctx := cdcContext.NewBackendContext4Test(true)
 	ctx.ChangefeedVars().Info.Config.EnableSyncPoint = util.AddressOf(true)
 	ctx.ChangefeedVars().Info.Config.SyncPointInterval = util.AddressOf(1 * time.Second)
+	// SyncPoint option is only available for MySQL compatible database.
+	ctx.ChangefeedVars().Info.SinkURI = "mysql://"
 	cf, captures, tester := createChangefeed4Test(ctx, t)
 	defer cf.Close(ctx)
 
@@ -594,6 +596,7 @@ func TestBarrierAdvance(t *testing.T) {
 			ctx.ChangefeedVars().Info.Config.EnableSyncPoint = util.AddressOf(true)
 			ctx.ChangefeedVars().Info.Config.SyncPointInterval = util.AddressOf(100 * time.Second)
 		}
+		ctx.ChangefeedVars().Info.SinkURI = "mysql://"
 
 		cf, captures, tester := createChangefeed4Test(ctx, t)
 		defer cf.Close(ctx)
@@ -604,7 +607,6 @@ func TestBarrierAdvance(t *testing.T) {
 			CheckpointTs:      cf.state.Info.StartTs,
 			MinTableBarrierTs: cf.state.Info.StartTs,
 		}
-
 		// Do the preflightCheck and initialize the changefeed.
 		cf.Tick(ctx, captures)
 		tester.MustApplyPatches()
