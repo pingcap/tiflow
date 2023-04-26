@@ -231,7 +231,7 @@ func NewBatchDecoder() codec.RowEventDecoder {
 
 // AddKeyValue implements the RowEventDecoder interface
 func (b *BatchDecoder) AddKeyValue(key, value []byte) error {
-	if b.keyBytes != nil || b.valueBytes != nil {
+	if len(b.keyBytes) != 0 || len(b.valueBytes) != 0 {
 		return cerror.ErrOpenProtocolCodecInvalidData.
 			GenWithStack("decoder key and value not nil")
 	}
