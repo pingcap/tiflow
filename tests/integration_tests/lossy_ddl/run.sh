@@ -10,21 +10,23 @@ SINK_TYPE=$1
 
 MAX_RETRIES=10
 
+# Because we want the lossy DDL to not cause any data updates, so we can check the
+# data in the blackhole sink to see if any row is updated.
 function check_lossy_ddl() {
-  # Check finish_mark is written to the log.
-  is_finish_mark_exist=$(grep "BlackHoleSink: DDL Event" "$1/cdc.log" | grep -c "finish_mark")
-  if [[ "$is_finish_mark_exist" -ne 1 ]]; then
-    echo "can't found finish mark"
-    exit 1
-  fi
+	# Check finish_mark is written to the log.
+	is_finish_mark_exist=$(grep "BlackHoleSink: DDL Event" "$1/cdc.log" | grep -c "finish_mark")
+	if [[ "$is_finish_mark_exist" -ne 1 ]]; then
+		echo "can't found finish mark"
+		exit 1
+	fi
 
 	row_logs=$(grep "BlackHoleSink: WriteEvents" "$1/cdc.log")
 	echo $row_logs
 	row_logs_count=$(grep "BlackHoleSink: WriteEvents" -c "$1/cdc.log")
 	if [[ "$row_logs_count" -ne 16 ]]; then
-    echo "can't found 16 row logs, got $row_logs_count"
-    exit 1
-  fi
+		echo "can't found 16 row logs, got $row_logs_count"
+		exit 1
+	fi
 }
 
 export -f check_lossy_ddl
