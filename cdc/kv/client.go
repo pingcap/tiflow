@@ -74,13 +74,6 @@ const (
 	// don't need to force reload region anymore.
 	regionScheduleReload = false
 
-	// defaultRegionChanSize is the default channel size for region channel, including
-	// range request, region request and region error.
-	// Note the producer of region error channel, and the consumer of range request
-	// channel work in an asynchronous way, the larger channel can decrease the
-	// frequency of creating new goroutine.
-	defaultRegionChanSize = 16 * 1024
-
 	// initial size for region rate limit queue.
 	defaultRegionRateLimitQueueSize = 128
 	// Interval of check region retry rate limit queue.
@@ -132,33 +125,13 @@ var (
 type regionErrorInfo struct {
 	singleRegionInfo
 	err error
-
-	retryLimitTime       *time.Time
-	logRateLimitDuration time.Duration
 }
 
 func newRegionErrorInfo(info singleRegionInfo, err error) regionErrorInfo {
 	return regionErrorInfo{
 		singleRegionInfo: info,
 		err:              err,
-
-		logRateLimitDuration: defaultLogRegionRateLimitDuration,
 	}
-}
-
-func (r *regionErrorInfo) logRateLimitedHint() bool {
-	now := time.Now()
-	if r.retryLimitTime == nil {
-		// Caller should log on the first rate limited.
-		r.retryLimitTime = &now
-		return true
-	}
-	if now.Sub(*r.retryLimitTime) > r.logRateLimitDuration {
-		// Caller should log if it lasts too long.
-		r.retryLimitTime = &now
-		return true
-	}
-	return false
 }
 
 type regionEventFeedLimiters struct {
