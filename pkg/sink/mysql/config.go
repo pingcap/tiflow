@@ -205,7 +205,8 @@ func (c *Config) Apply(
 
 func mergeUrlConfigToConfigFileValues(
 	replicaConfig *config.ReplicaConfig,
-	urlParameters *urlConfig) (*urlConfig, error) {
+	urlParameters *urlConfig,
+) (*urlConfig, error) {
 	configParameter := &urlConfig{}
 	configParameter.SafeMode = replicaConfig.Sink.SafeMode
 	if replicaConfig.Sink != nil && replicaConfig.Sink.MySQLConfig != nil {

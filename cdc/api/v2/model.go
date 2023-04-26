@@ -271,16 +271,64 @@ func (c *ReplicaConfig) toInternalReplicaConfigWithOriginConfig(
 		}
 		var kafkaConfig *config.KafkaConfig
 		if c.Sink.KafkaConfig != nil {
+			var codeConfig *config.CodecConfig
+			if c.Sink.KafkaConfig.CodecConfig != nil {
+				codeConfig = &config.CodecConfig{
+					EnableTiDBExtension:            c.Sink.KafkaConfig.CodecConfig.EnableTiDBExtension,
+					MaxBatchSize:                   c.Sink.KafkaConfig.CodecConfig.MaxBatchSize,
+					MaxMessageBytes:                c.Sink.KafkaConfig.CodecConfig.MaxMessageBytes,
+					AvroDecimalHandlingMode:        c.Sink.KafkaConfig.CodecConfig.AvroDecimalHandlingMode,
+					AvroBigintUnsignedHandlingMode: c.Sink.KafkaConfig.CodecConfig.AvroBigintUnsignedHandlingMode,
+				}
+			}
 			kafkaConfig = &config.KafkaConfig{
-				MaxMessageBytes: c.Sink.KafkaConfig.MaxMessageBytes,
-				Compression:     c.Sink.KafkaConfig.Compression,
-				RequiredAcks:    c.Sink.KafkaConfig.RequiredAcks,
+				PartitionNum:                 c.Sink.KafkaConfig.PartitionNum,
+				ReplicationFactor:            c.Sink.KafkaConfig.ReplicationFactor,
+				KafkaVersion:                 c.Sink.KafkaConfig.KafkaVersion,
+				MaxMessageBytes:              c.Sink.KafkaConfig.MaxMessageBytes,
+				Compression:                  c.Sink.KafkaConfig.Compression,
+				KafkaClientID:                c.Sink.KafkaConfig.KafkaClientID,
+				AutoCreateTopic:              c.Sink.KafkaConfig.AutoCreateTopic,
+				DialTimeout:                  c.Sink.KafkaConfig.DialTimeout,
+				WriteTimeout:                 c.Sink.KafkaConfig.WriteTimeout,
+				ReadTimeout:                  c.Sink.KafkaConfig.ReadTimeout,
+				RequiredAcks:                 c.Sink.KafkaConfig.RequiredAcks,
+				SASLUser:                     c.Sink.KafkaConfig.SASLUser,
+				SASLPassword:                 c.Sink.KafkaConfig.SASLPassword,
+				SASLMechanism:                c.Sink.KafkaConfig.SASLMechanism,
+				SASLGssAPIAuthType:           c.Sink.KafkaConfig.SASLGssAPIAuthType,
+				SASLGssAPIKeytabPath:         c.Sink.KafkaConfig.SASLGssAPIKeytabPath,
+				SASLGssAPIKerberosConfigPath: c.Sink.KafkaConfig.SASLGssAPIKerberosConfigPath,
+				SASLGssAPIServiceName:        c.Sink.KafkaConfig.SASLGssAPIServiceName,
+				SASLGssAPIUser:               c.Sink.KafkaConfig.SASLGssAPIUser,
+				SASLGssAPIPassword:           c.Sink.KafkaConfig.SASLGssAPIPassword,
+				SASLGssAPIRealm:              c.Sink.KafkaConfig.SASLGssAPIRealm,
+				SASLGssAPIDisablePafxfast:    c.Sink.KafkaConfig.SASLGssAPIDisablePafxfast,
+				EnableTLS:                    c.Sink.KafkaConfig.EnableTLS,
+				CA:                           c.Sink.KafkaConfig.CA,
+				Cert:                         c.Sink.KafkaConfig.Cert,
+				Key:                          c.Sink.KafkaConfig.Key,
+				CodecConfig:                  codeConfig,
 			}
 		}
 		var mysqlConfig *config.MySQLConfig
 		if c.Sink.MySQLConfig != nil {
 			mysqlConfig = &config.MySQLConfig{
-				WorkerCount: c.Sink.MySQLConfig.WorkerCount,
+				WorkerCount:                  c.Sink.MySQLConfig.WorkerCount,
+				MaxTxnRow:                    c.Sink.MySQLConfig.MaxTxnRow,
+				MaxMultiUpdateRowSize:        c.Sink.MySQLConfig.MaxMultiUpdateRowSize,
+				MaxMultiUpdateRowCount:       c.Sink.MySQLConfig.MaxMultiUpdateRowCount,
+				TiDBTxnMode:                  c.Sink.MySQLConfig.TiDBTxnMode,
+				SSLCa:                        c.Sink.MySQLConfig.SSLCa,
+				SSLCert:                      c.Sink.MySQLConfig.SSLCert,
+				SSLKey:                       c.Sink.MySQLConfig.SSLKey,
+				TimeZone:                     c.Sink.MySQLConfig.TimeZone,
+				WriteTimeout:                 c.Sink.MySQLConfig.WriteTimeout,
+				ReadTimeout:                  c.Sink.MySQLConfig.ReadTimeout,
+				Timeout:                      c.Sink.MySQLConfig.Timeout,
+				EnableBatchDML:               c.Sink.MySQLConfig.EnableBatchDML,
+				EnableMultiStatement:         c.Sink.MySQLConfig.EnableMultiStatement,
+				EnableCachePreparedStatement: c.Sink.MySQLConfig.EnableCachePreparedStatement,
 			}
 		}
 		var cloudStorageConfig *config.CloudStorageConfig
@@ -416,16 +464,64 @@ func ToAPIReplicaConfig(c *config.ReplicaConfig) *ReplicaConfig {
 		}
 		var kafkaConfig *KafkaConfig
 		if cloned.Sink.KafkaConfig != nil {
+			var codeConfig *CodecConfig
+			if cloned.Sink.KafkaConfig.CodecConfig != nil {
+				codeConfig = &CodecConfig{
+					EnableTiDBExtension:            cloned.Sink.KafkaConfig.CodecConfig.EnableTiDBExtension,
+					MaxBatchSize:                   cloned.Sink.KafkaConfig.CodecConfig.MaxBatchSize,
+					MaxMessageBytes:                cloned.Sink.KafkaConfig.CodecConfig.MaxMessageBytes,
+					AvroDecimalHandlingMode:        cloned.Sink.KafkaConfig.CodecConfig.AvroDecimalHandlingMode,
+					AvroBigintUnsignedHandlingMode: cloned.Sink.KafkaConfig.CodecConfig.AvroBigintUnsignedHandlingMode,
+				}
+			}
 			kafkaConfig = &KafkaConfig{
-				MaxMessageBytes: cloned.Sink.KafkaConfig.MaxMessageBytes,
-				Compression:     cloned.Sink.KafkaConfig.Compression,
-				RequiredAcks:    cloned.Sink.KafkaConfig.RequiredAcks,
+				PartitionNum:                 cloned.Sink.KafkaConfig.PartitionNum,
+				ReplicationFactor:            cloned.Sink.KafkaConfig.ReplicationFactor,
+				KafkaVersion:                 cloned.Sink.KafkaConfig.KafkaVersion,
+				MaxMessageBytes:              cloned.Sink.KafkaConfig.MaxMessageBytes,
+				Compression:                  cloned.Sink.KafkaConfig.Compression,
+				KafkaClientID:                cloned.Sink.KafkaConfig.KafkaClientID,
+				AutoCreateTopic:              cloned.Sink.KafkaConfig.AutoCreateTopic,
+				DialTimeout:                  cloned.Sink.KafkaConfig.DialTimeout,
+				WriteTimeout:                 cloned.Sink.KafkaConfig.WriteTimeout,
+				ReadTimeout:                  cloned.Sink.KafkaConfig.ReadTimeout,
+				RequiredAcks:                 cloned.Sink.KafkaConfig.RequiredAcks,
+				SASLUser:                     cloned.Sink.KafkaConfig.SASLUser,
+				SASLPassword:                 cloned.Sink.KafkaConfig.SASLPassword,
+				SASLMechanism:                cloned.Sink.KafkaConfig.SASLMechanism,
+				SASLGssAPIAuthType:           cloned.Sink.KafkaConfig.SASLGssAPIAuthType,
+				SASLGssAPIKeytabPath:         cloned.Sink.KafkaConfig.SASLGssAPIKeytabPath,
+				SASLGssAPIKerberosConfigPath: cloned.Sink.KafkaConfig.SASLGssAPIKerberosConfigPath,
+				SASLGssAPIServiceName:        cloned.Sink.KafkaConfig.SASLGssAPIServiceName,
+				SASLGssAPIUser:               cloned.Sink.KafkaConfig.SASLGssAPIUser,
+				SASLGssAPIPassword:           cloned.Sink.KafkaConfig.SASLGssAPIPassword,
+				SASLGssAPIRealm:              cloned.Sink.KafkaConfig.SASLGssAPIRealm,
+				SASLGssAPIDisablePafxfast:    cloned.Sink.KafkaConfig.SASLGssAPIDisablePafxfast,
+				EnableTLS:                    cloned.Sink.KafkaConfig.EnableTLS,
+				CA:                           cloned.Sink.KafkaConfig.CA,
+				Cert:                         cloned.Sink.KafkaConfig.Cert,
+				Key:                          cloned.Sink.KafkaConfig.Key,
+				CodecConfig:                  codeConfig,
 			}
 		}
 		var mysqlConfig *MySQLConfig
 		if cloned.Sink.MySQLConfig != nil {
 			mysqlConfig = &MySQLConfig{
-				WorkerCount: cloned.Sink.MySQLConfig.WorkerCount,
+				WorkerCount:                  cloned.Sink.MySQLConfig.WorkerCount,
+				MaxTxnRow:                    cloned.Sink.MySQLConfig.MaxTxnRow,
+				MaxMultiUpdateRowSize:        cloned.Sink.MySQLConfig.MaxMultiUpdateRowSize,
+				MaxMultiUpdateRowCount:       cloned.Sink.MySQLConfig.MaxMultiUpdateRowCount,
+				TiDBTxnMode:                  cloned.Sink.MySQLConfig.TiDBTxnMode,
+				SSLCa:                        cloned.Sink.MySQLConfig.SSLCa,
+				SSLCert:                      cloned.Sink.MySQLConfig.SSLCert,
+				SSLKey:                       cloned.Sink.MySQLConfig.SSLKey,
+				TimeZone:                     cloned.Sink.MySQLConfig.TimeZone,
+				WriteTimeout:                 cloned.Sink.MySQLConfig.WriteTimeout,
+				ReadTimeout:                  cloned.Sink.MySQLConfig.ReadTimeout,
+				Timeout:                      cloned.Sink.MySQLConfig.Timeout,
+				EnableBatchDML:               cloned.Sink.MySQLConfig.EnableBatchDML,
+				EnableMultiStatement:         cloned.Sink.MySQLConfig.EnableMultiStatement,
+				EnableCachePreparedStatement: cloned.Sink.MySQLConfig.EnableCachePreparedStatement,
 			}
 		}
 		var cloudStorageConfig *CloudStorageConfig
@@ -600,10 +696,10 @@ type SinkConfig struct {
 	EnablePartitionSeparator bool                `json:"enable_partition_separator"`
 	EnableKafkaSinkV2        bool                `json:"enable_kafka_sink_v2"`
 	OnlyOutputUpdatedColumns *bool               `json:"only_output_updated_columns"`
-	SafeMode                 *bool               `json:"safe-mode,omitempty"`
-	KafkaConfig              *KafkaConfig        `json:"kafka-config,omitempty"`
-	MySQLConfig              *MySQLConfig        `json:"mysql-config,omitempty"`
-	CloudStorageConfig       *CloudStorageConfig `json:"cloud-storage-config,omitempty"`
+	SafeMode                 *bool               `json:"safe_mode,omitempty"`
+	KafkaConfig              *KafkaConfig        `json:"kafka_config,omitempty"`
+	MySQLConfig              *MySQLConfig        `json:"mysql_config,omitempty"`
+	CloudStorageConfig       *CloudStorageConfig `json:"cloud_storage_config,omitempty"`
 }
 
 // CSVConfig denotes the csv config
@@ -780,66 +876,66 @@ type Capture struct {
 
 // CodecConfig represents a MQ codec configuration
 type CodecConfig struct {
-	EnableTiDBExtension            *bool   `json:"enable-tidb-extension,omitempty"`
-	MaxBatchSize                   *int    `json:"max-batch-size,omitempty"`
-	MaxMessageBytes                *int    `json:"max-message-bytes,omitempty"`
-	AvroDecimalHandlingMode        *string `json:"avro-decimal-handling-mode,omitempty"`
-	AvroBigintUnsignedHandlingMode *string `json:"avro-bigint-unsigned-handling-mode,omitempty"`
+	EnableTiDBExtension            *bool   `json:"enable_tidb_extension,omitempty"`
+	MaxBatchSize                   *int    `json:"max_batch_size,omitempty"`
+	MaxMessageBytes                *int    `json:"max_message_bytes,omitempty"`
+	AvroDecimalHandlingMode        *string `json:"avro_decimal_handling_mode,omitempty"`
+	AvroBigintUnsignedHandlingMode *string `json:"avro_bigint_unsigned_handling_mode,omitempty"`
 }
 
 // KafkaConfig represents a kafka sink configuration
 type KafkaConfig struct {
-	PartitionNum                 *int32       `json:"partition-num,omitempty"`
-	ReplicationFactor            *int16       `json:"replication-factor,omitempty"`
-	KafkaVersion                 *string      `json:"kafka-version,omitempty"`
-	MaxMessageBytes              *int         `json:"max-message-bytes,omitempty"`
+	PartitionNum                 *int32       `json:"partition_num,omitempty"`
+	ReplicationFactor            *int16       `json:"replication_factor,omitempty"`
+	KafkaVersion                 *string      `json:"kafka_version,omitempty"`
+	MaxMessageBytes              *int         `json:"max_message_bytes,omitempty"`
 	Compression                  *string      `json:"compression,omitempty"`
-	KafkaClientID                *string      `json:"kafka-client-id,omitempty"`
-	AutoCreateTopic              *bool        `json:"auto-create-topic,omitempty"`
-	DialTimeout                  *string      `json:"dial-timeout,omitempty"`
-	WriteTimeout                 *string      `json:"write-timeout,omitempty"`
-	ReadTimeout                  *string      `json:"read-timeout,omitempty"`
-	RequiredAcks                 *string      `json:"required-acks,omitempty"`
-	SASLUser                     *string      `json:"sasl-user,omitempty"`
-	SASLPassword                 *string      `json:"sasl-password,omitempty"`
-	SASLMechanism                *string      `json:"sasl-mechanism,omitempty"`
-	SASLGssAPIAuthType           *string      `json:"sasl-gss-api-auth-type,omitempty"`
-	SASLGssAPIKeytabPath         *string      `json:"sasl-gss-api-keytab-path,omitempty"`
-	SASLGssAPIKerberosConfigPath *string      `json:"sasl-gss-api-kerberos-config-path,omitempty"`
-	SASLGssAPIServiceName        *string      `json:"sasl-gss-api-service-name,omitempty"`
-	SASLGssAPIUser               *string      `json:"sasl-gss-api-user,omitempty"`
-	SASLGssAPIPassword           *string      `json:"sasl-gss-api-password,omitempty"`
-	SASLGssAPIRealm              *string      `json:"sasl-gss-api-realm,omitempty"`
-	SASLGssAPIDisablePafxfast    *bool        `json:"sasl-gss-api-disable-pafxfast,omitempty"`
-	EnableTLS                    *bool        `json:"enable-tls,omitempty"`
+	KafkaClientID                *string      `json:"kafka_client_id,omitempty"`
+	AutoCreateTopic              *bool        `json:"auto_create_topic,omitempty"`
+	DialTimeout                  *string      `json:"dial_timeout,omitempty"`
+	WriteTimeout                 *string      `json:"write_timeout,omitempty"`
+	ReadTimeout                  *string      `json:"read_timeout,omitempty"`
+	RequiredAcks                 *string      `json:"required_acks,omitempty"`
+	SASLUser                     *string      `json:"sasl_user,omitempty"`
+	SASLPassword                 *string      `json:"sasl_password,omitempty"`
+	SASLMechanism                *string      `json:"sasl_mechanism,omitempty"`
+	SASLGssAPIAuthType           *string      `json:"sasl_gss_api_auth_type,omitempty"`
+	SASLGssAPIKeytabPath         *string      `json:"sasl_gss_api_keytab_path,omitempty"`
+	SASLGssAPIKerberosConfigPath *string      `json:"sasl_gss_api_kerberos_config_path,omitempty"`
+	SASLGssAPIServiceName        *string      `json:"sasl_gss_api_service_name,omitempty"`
+	SASLGssAPIUser               *string      `json:"sasl_gss_api_user,omitempty"`
+	SASLGssAPIPassword           *string      `json:"sasl_gss_api_password,omitempty"`
+	SASLGssAPIRealm              *string      `json:"sasl_gss_api_realm,omitempty"`
+	SASLGssAPIDisablePafxfast    *bool        `json:"sasl_gss_api_disable_pafxfast,omitempty"`
+	EnableTLS                    *bool        `json:"enable_tls,omitempty"`
 	CA                           *string      `json:"ca,omitempty"`
 	Cert                         *string      `json:"cert,omitempty"`
 	Key                          *string      `json:"key,omitempty"`
-	CodecConfig                  *CodecConfig `json:"codec-config,omitempty"`
+	CodecConfig                  *CodecConfig `json:"codec_config,omitempty"`
 }
 
 // MySQLConfig represents a MySQL sink configuration
 type MySQLConfig struct {
-	WorkerCount                  *int    `json:"worker-count,omitempty"`
-	MaxTxnRow                    *int    `json:"max-txn-row,omitempty"`
-	MaxMultiUpdateRowSize        *int    `json:"max-multi-update-row-size,omitempty"`
-	MaxMultiUpdateRowCount       *int    `json:"max-multi-update-row,omitempty"`
-	TiDBTxnMode                  *string `json:"tidb-txn-mode,omitempty"`
-	SSLCa                        *string `json:"ssl-ca,omitempty"`
-	SSLCert                      *string `json:"ssl-cert,omitempty"`
-	SSLKey                       *string `json:"ssl-key,omitempty"`
-	TimeZone                     *string `json:"time-zone,omitempty"`
-	WriteTimeout                 *string `json:"write-timeout,omitempty"`
-	ReadTimeout                  *string `json:"read-timeout,omitempty"`
+	WorkerCount                  *int    `json:"worker_count,omitempty"`
+	MaxTxnRow                    *int    `json:"max_txn_row,omitempty"`
+	MaxMultiUpdateRowSize        *int    `json:"max_multi_update_row_size,omitempty"`
+	MaxMultiUpdateRowCount       *int    `json:"max_multi_update_row_count,omitempty"`
+	TiDBTxnMode                  *string `json:"tidb_txn_mode,omitempty"`
+	SSLCa                        *string `json:"ssl_ca,omitempty"`
+	SSLCert                      *string `json:"ssl_cert,omitempty"`
+	SSLKey                       *string `json:"ssl_key,omitempty"`
+	TimeZone                     *string `json:"time_zone,omitempty"`
+	WriteTimeout                 *string `json:"write_timeout,omitempty"`
+	ReadTimeout                  *string `json:"read_timeout,omitempty"`
 	Timeout                      *string `json:"timeout,omitempty"`
-	EnableBatchDML               *bool   `json:"enable-batch-dml,omitempty"`
-	EnableMultiStatement         *bool   `json:"enable-multi-statement,omitempty"`
-	EnableCachePreparedStatement *bool   `json:"enable-cache-prepared-statement,omitempty"`
+	EnableBatchDML               *bool   `json:"enable_batch_dml,omitempty"`
+	EnableMultiStatement         *bool   `json:"enable_multi_statement,omitempty"`
+	EnableCachePreparedStatement *bool   `json:"enable_cache_prepared_statement,omitempty"`
 }
 
 // CloudStorageConfig represents a cloud storage sink configuration
 type CloudStorageConfig struct {
-	WorkerCount   *int    `json:"worker-coun,omitempty"`
-	FlushInterval *string `json:"flush-interval,omitempty"`
-	FileSize      *int    `json:"file-size,omitempty"`
+	WorkerCount   *int    `json:"worker_count,omitempty"`
+	FlushInterval *string `json:"flush_interval,omitempty"`
+	FileSize      *int    `json:"file_size,omitempty"`
 }

@@ -168,7 +168,8 @@ func (c *Config) Apply(sinkURI *url.URL, config *config.ReplicaConfig) error {
 
 func mergeUrlConfigToConfigFileValues(
 	replicaConfig *config.ReplicaConfig,
-	urlParameters *urlConfig) (*urlConfig, error) {
+	urlParameters *urlConfig,
+) (*urlConfig, error) {
 	configParameter := &urlConfig{}
 	if replicaConfig.Sink != nil {
 		configParameter.AvroSchemaRegistry = replicaConfig.Sink.SchemaRegistry

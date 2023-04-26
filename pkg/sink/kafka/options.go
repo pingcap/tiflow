@@ -213,7 +213,8 @@ func (o *Options) SetPartitionNum(realPartitionCount int32) error {
 
 // Apply the sinkURI to update Options
 func (o *Options) Apply(ctx context.Context,
-	sinkURI *url.URL, replicaConfig *config.ReplicaConfig) error {
+	sinkURI *url.URL, replicaConfig *config.ReplicaConfig,
+) error {
 	o.BrokerEndpoints = strings.Split(sinkURI.Host, ",")
 
 	var err error
@@ -312,7 +313,8 @@ func (o *Options) Apply(ctx context.Context,
 
 func mergeUrlConfigToConfigFileValues(
 	replicaConfig *config.ReplicaConfig,
-	urlParameters *urlConfig) (*urlConfig, error) {
+	urlParameters *urlConfig,
+) (*urlConfig, error) {
 	configParameter := &urlConfig{}
 	if replicaConfig.Sink != nil && replicaConfig.Sink.KafkaConfig != nil {
 		configParameter.PartitionNum = replicaConfig.Sink.KafkaConfig.PartitionNum

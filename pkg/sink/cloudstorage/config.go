@@ -117,7 +117,8 @@ func (c *Config) Apply(
 
 func mergeUrlConfigToConfigFileValues(
 	replicaConfig *config.ReplicaConfig,
-	urlParameters *urlConfig) (*urlConfig, error) {
+	urlParameters *urlConfig,
+) (*urlConfig, error) {
 	configParameter := &urlConfig{}
 	if replicaConfig.Sink != nil && replicaConfig.Sink.CloudStorageConfig != nil {
 		configParameter.WorkerCount = replicaConfig.Sink.CloudStorageConfig.WorkerCount
