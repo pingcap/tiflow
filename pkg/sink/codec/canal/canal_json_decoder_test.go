@@ -43,7 +43,6 @@ func TestNewCanalJSONBatchDecoder4RowMessage(t *testing.T) {
 
 		for _, decodeEnable := range []bool{false, true} {
 			decoder := NewBatchDecoder(decodeEnable, "")
-
 			err := decoder.AddKeyValue(msg.Key, msg.Value)
 			require.NoError(t, err)
 
@@ -99,7 +98,6 @@ func TestNewCanalJSONBatchDecoder4DDLMessage(t *testing.T) {
 
 		for _, decodeEnable := range []bool{false, true} {
 			decoder := NewBatchDecoder(decodeEnable, "")
-
 			err := decoder.AddKeyValue(nil, result.Value)
 			require.NoError(t, err)
 
@@ -138,7 +136,6 @@ func TestCanalJSONBatchDecoderWithTerminator(t *testing.T) {
 {"id":0,"database":"test","table":"employee","pkNames":["id"],"isDdl":false,"type":"DELETE","es":1668067230388,"ts":1668067231725,"sql":"","sqlType":{"FirstName":12,"HireDate":91,"LastName":12,"OfficeLocation":12,"id":4},"mysqlType":{"FirstName":"varchar","HireDate":"date","LastName":"varchar","OfficeLocation":"varchar","id":"int"},"data":[{"FirstName":"Bob","HireDate":"2015-10-08","LastName":"Smith","OfficeLocation":"Los Angeles","id":"101"}],"old":null}`
 
 	decoder := NewBatchDecoder(false, "\n")
-
 	err := decoder.AddKeyValue(nil, []byte(encodedValue))
 	require.NoError(t, err)
 

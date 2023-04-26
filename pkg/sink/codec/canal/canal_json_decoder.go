@@ -40,8 +40,6 @@ func NewBatchDecoder(
 	return &batchDecoder{
 		enableTiDBExtension: enableTiDBExtension,
 		terminator:          terminator,
-
-		msg: nil,
 	}
 }
 

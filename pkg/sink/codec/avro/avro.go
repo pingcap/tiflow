@@ -518,7 +518,7 @@ func rowToAvroSchema(
 	}
 	log.Info("rowToAvroSchema",
 		zap.ByteString("schema", str),
-		zap.Bool("EnableTiDBExtension", enableTiDBExtension),
+		zap.Bool("enableTiDBExtension", enableTiDBExtension),
 		zap.Bool("enableRowLevelChecksum", enableRowLevelChecksum))
 	return string(str), nil
 }
@@ -644,7 +644,7 @@ func columnToAvroSchema(
 				Scale:       displayDecimal,
 			}, nil
 		}
-		// DecimalHandlingMode == string
+		// decimalHandlingMode == string
 		return avroSchema{
 			Type:       "string",
 			Parameters: map[string]string{tidbType: tt},
@@ -762,7 +762,7 @@ func columnToAvroData(
 			if bigintUnsignedHandlingMode == common.BigintUnsignedHandlingModeLong {
 				return int64(col.Value.(uint64)), "long", nil
 			}
-			// BigintUnsignedHandlingMode == "string"
+			// bigintUnsignedHandlingMode == "string"
 			return strconv.FormatUint(col.Value.(uint64), 10), "string", nil
 		}
 		return col.Value.(int64), "long", nil
@@ -799,7 +799,7 @@ func columnToAvroData(
 			}
 			return v, "bytes.decimal", nil
 		}
-		// DecimalHandlingMode == "string"
+		// decimalHandlingMode == "string"
 		return col.Value.(string), "string", nil
 	case mysql.TypeVarchar,
 		mysql.TypeString,

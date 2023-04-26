@@ -20,6 +20,7 @@ import (
 	"github.com/pingcap/tidb/parser/mysql"
 	"github.com/pingcap/tiflow/cdc/model"
 	"github.com/pingcap/tiflow/pkg/config"
+	"github.com/pingcap/tiflow/pkg/sink/codec"
 	"github.com/pingcap/tiflow/pkg/sink/codec/common"
 	"github.com/pingcap/tiflow/pkg/sink/codec/internal"
 	"github.com/stretchr/testify/require"
@@ -208,5 +209,10 @@ func TestOpenProtocolBatchCodec(t *testing.T) {
 	config := common.NewConfig(config.ProtocolOpen).WithMaxMessageBytes(8192)
 	config.MaxBatchSize = 64
 	tester := internal.NewDefaultBatchTester()
-	tester.TestBatchCodec(t, NewBatchEncoderBuilder(config))
+	tester.TestBatchCodec(t, NewBatchEncoderBuilder(config),
+		func(key []byte, value []byte) (codec.RowEventDecoder, error) {
+			decoder := NewBatchDecoder()
+			err := decoder.AddKeyValue(key, value)
+			return decoder, err
+		})
 }

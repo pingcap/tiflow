@@ -21,7 +21,6 @@ import (
 	"github.com/pingcap/tidb/parser/mysql"
 	"github.com/pingcap/tiflow/cdc/model"
 	"github.com/pingcap/tiflow/pkg/sink/codec"
-	"github.com/pingcap/tiflow/pkg/sink/codec/open"
 	"github.com/stretchr/testify/require"
 )
 
@@ -229,6 +228,7 @@ func NewDefaultBatchTester() *BatchTester {
 func (s *BatchTester) TestBatchCodec(
 	t *testing.T,
 	encoderBuilder codec.RowEventEncoderBuilder,
+	newDecoder func(key []byte, value []byte) (codec.RowEventDecoder, error),
 ) {
 	checkRowDecoder := func(decoder codec.RowEventDecoder, cs []*model.RowChangedEvent) {
 		index := 0
@@ -290,8 +290,7 @@ func (s *BatchTester) TestBatchCodec(
 			require.Len(t, res, 1)
 			require.Equal(t, len(cs), res[0].GetRowsCount())
 
-			decoder := open.NewBatchDecoder()
-			err := decoder.AddKeyValue(res[0].Key, res[0].Value)
+			decoder, err := newDecoder(res[0].Key, res[0].Value)
 			require.NoError(t, err)
 
 			checkRowDecoder(decoder, cs)
@@ -304,8 +303,7 @@ func (s *BatchTester) TestBatchCodec(
 			require.Nil(t, err)
 			require.NotNil(t, msg)
 
-			decoder := open.NewBatchDecoder()
-			err = decoder.AddKeyValue(msg.Key, msg.Value)
+			decoder, err := newDecoder(msg.Key, msg.Value)
 			require.NoError(t, err)
 
 			checkDDLDecoder(decoder, cs[i:i+1])
@@ -320,11 +318,9 @@ func (s *BatchTester) TestBatchCodec(
 			require.Nil(t, err)
 			require.NotNil(t, msg)
 
-			decoder := open.NewBatchDecoder()
-			err = decoder.AddKeyValue(msg.Key, msg.Value)
+			decoder, err := newDecoder(msg.Key, msg.Value)
 			require.NoError(t, err)
 
-			require.Nil(t, err)
 			checkTSDecoder(decoder, cs[i:i+1])
 		}
 	}
