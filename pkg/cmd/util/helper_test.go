@@ -209,6 +209,7 @@ func TestAndWriteExampleReplicaTOML(t *testing.T) {
 		DateSeparator:            config.DateSeparatorNone.String(),
 		EnablePartitionSeparator: util.AddressOf(true),
 		EnableKafkaSinkV2:        util.AddressOf(false),
+		OnlyOutputUpdatedColumns: util.AddressOf(false),
 		Protocol:                 "open-protocol",
 	}, cfg.Sink)
 }
@@ -238,6 +239,7 @@ func TestAndWriteStorageSinkTOML(t *testing.T) {
 			NullString:      "\\N",
 			IncludeCommitTs: false,
 		},
+		OnlyOutputUpdatedColumns: util.AddressOf(false),
 	}, cfg.Sink)
 }
 

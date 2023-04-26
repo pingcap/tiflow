@@ -532,6 +532,9 @@ func TestRemovePausedChangefeed(t *testing.T) {
 	info := ctx.ChangefeedVars().Info
 	info.State = model.StateStopped
 	dir := t.TempDir()
+	// Field `Consistent` is valid only when the downstream
+	// is MySQL compatible  Database
+	info.SinkURI = "mysql://"
 	info.Config.Consistent = &config.ConsistentConfig{
 		Level:             "eventual",
 		Storage:           filepath.Join("nfs://", dir),

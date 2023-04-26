@@ -286,15 +286,15 @@ func (info *ChangeFeedInfo) VerifyAndComplete() error {
 		info.Config.Integrity = defaultConfig.Integrity
 	}
 
-	info.rmUnusedFields()
+	info.RmUnusedFields()
 
 	return nil
 }
 
-// rmUnusedFields removes unnecessary fields based on the downstream type and
+// RmUnusedFields removes unnecessary fields based on the downstream type and
 // the protocol. Since we utilize a common changefeed configuration template,
 // certain fields may not be utilized for certain protocols.
-func (info *ChangeFeedInfo) rmUnusedFields() {
+func (info *ChangeFeedInfo) RmUnusedFields() {
 	uri, err := url.Parse(info.SinkURI)
 	if err != nil {
 		log.Warn(

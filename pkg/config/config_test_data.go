@@ -22,6 +22,7 @@ const (
   "ignore-ineligible-table":false,
   "check-gc-safe-point": true,
   "enable-sync-point": false,
+  "bdr-mode": false,
   "sync-point-interval": 600000000000,
   "sync-point-retention": 86400000000000,
   "filter": {
@@ -54,7 +55,9 @@ const (
       }
     ],
     "enable-partition-separator": true,
-    "protocol": "open-protocol"
+    "protocol": "open-protocol",
+	"enable-kafka-sink-v2": false,
+	"only-output-updated-columns": false
   },
   "consistent": {
     "level": "none",
