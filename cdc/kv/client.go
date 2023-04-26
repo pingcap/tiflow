@@ -173,9 +173,8 @@ type CDCClient struct {
 
 	grpcPool GrpcPool
 
-	regionCache    *tikv.RegionCache
-	pdClock        pdutil.Clock
-	regionLimiters *regionEventFeedLimiters
+	regionCache *tikv.RegionCache
+	pdClock     pdutil.Clock
 
 	changefeed model.ChangeFeedID
 	tableID    model.TableID
@@ -208,13 +207,12 @@ func NewCDCClient(
 	clusterID := pd.GetClusterID(ctx)
 
 	c = &CDCClient{
-		clusterID:      clusterID,
-		config:         cfg,
-		pd:             pd,
-		grpcPool:       grpcPool,
-		regionCache:    regionCache,
-		pdClock:        pdClock,
-		regionLimiters: defaultRegionEventFeedLimiters,
+		clusterID:   clusterID,
+		config:      cfg,
+		pd:          pd,
+		grpcPool:    grpcPool,
+		regionCache: regionCache,
+		pdClock:     pdClock,
 
 		changefeed: changefeed,
 		tableID:    tableID,
@@ -382,10 +380,6 @@ func newEventFeedSession(
 		client:            client,
 		totalSpan:         totalSpan,
 		eventCh:           eventCh,
-		regionRouter:      chann.NewAutoDrainChann[singleRegionInfo](),
-		regionCh:          chann.NewAutoDrainChann[singleRegionInfo](),
-		errCh:             chann.NewAutoDrainChann[regionErrorInfo](),
-		requestRangeCh:    chann.NewAutoDrainChann[rangeRequestTask](),
 		rangeLock:         rangeLock,
 		lockResolver:      lockResolver,
 		id:                id,
@@ -409,6 +403,11 @@ func newEventFeedSession(
 }
 
 func (s *eventFeedSession) eventFeed(ctx context.Context, ts uint64, regionCount *int64) error {
+	s.requestRangeCh = chann.NewAutoDrainChann[rangeRequestTask]()
+	s.regionCh = chann.NewAutoDrainChann[singleRegionInfo]()
+	s.regionRouter = chann.NewAutoDrainChann[singleRegionInfo]()
+	s.errCh = chann.NewAutoDrainChann[regionErrorInfo]()
+
 	eventFeedGauge.Inc()
 	defer func() {
 		eventFeedGauge.Dec()
