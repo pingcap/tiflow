@@ -207,10 +207,8 @@ func TestSchemaRegistry(t *testing.T) {
 	_, err = manager.Register(getTestingContext(), topic, codec.Schema())
 	require.NoError(t, err)
 
-	for i := 0; i < 2; i++ {
-		_, err = manager.Lookup(getTestingContext(), topic, 1)
-		require.NoError(t, err)
-	}
+	_, err = manager.Lookup(getTestingContext(), topic, 1)
+	require.NoError(t, err)
 
 	codec, err = goavro.NewCodec(`{
        "type": "record",
@@ -235,7 +233,7 @@ func TestSchemaRegistry(t *testing.T) {
 	_, err = manager.Register(getTestingContext(), topic, codec.Schema())
 	require.NoError(t, err)
 
-	codec2, err := manager.Lookup(getTestingContext(), topic, 999)
+	codec2, err := manager.Lookup(getTestingContext(), topic, 2)
 	require.NoError(t, err)
 	require.Equal(t, codec.CanonicalSchema(), codec2.CanonicalSchema())
 }
