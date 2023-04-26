@@ -39,7 +39,7 @@ groups=(
 	["G21"]='event_filter generate_column syncpoint sequence processor_resolved_ts_fallback'
 	["G22"]='big_txn csv_storage_basic changefeed_finish sink_hang canal_json_storage_basic'
 	["G23"]='multi_topics new_ci_collation_with_old_value batch_add_table multi_changefeed'
-	["G24"]='consistent_replicate_nfs owner_resign api_v2'
+	["G24"]='consistent_replicate_nfs owner_resign api_v2 multi_rocks'
 )
 
 # Get other cases not in groups, to avoid missing any case
