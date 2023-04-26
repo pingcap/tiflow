@@ -143,6 +143,7 @@ func NewBatchDecoderWithAllocator(
 	}, nil
 }
 
+// AddKeyValue implements the RowEventDecoder interface
 func (b *batchDecoder) AddKeyValue(_, _ []byte) error {
 	return nil
 }

@@ -100,7 +100,6 @@ func TestMaxBatchSize(t *testing.T) {
 	}
 
 	messages := encoder.Build()
-
 	decoder := NewBatchDecoder()
 	sum := 0
 	for _, msg := range messages {
