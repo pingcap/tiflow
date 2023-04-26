@@ -73,13 +73,6 @@ const (
 	// failed region will be reloaded via `BatchLoadRegionsWithKeyRange` API. So we
 	// don't need to force reload region anymore.
 	regionScheduleReload = false
-
-	// initial size for region rate limit queue.
-	defaultRegionRateLimitQueueSize = 128
-	// Interval of check region retry rate limit queue.
-	defaultCheckRegionRateLimitInterval = 50 * time.Millisecond
-	// Duration of warning region retry rate limited too long.
-	defaultLogRegionRateLimitDuration = 10 * time.Second
 )
 
 // time interval to force kv client to terminate gRPC stream and reconnect
@@ -142,22 +135,6 @@ type regionEventFeedLimiters struct {
 
 var defaultRegionEventFeedLimiters = &regionEventFeedLimiters{
 	limiters: make(map[uint64]*rate.Limiter),
-}
-
-func (rl *regionEventFeedLimiters) getLimiter(regionID uint64) *rate.Limiter {
-	var limiter *rate.Limiter
-	var ok bool
-
-	rl.Lock()
-	limiter, ok = rl.limiters[regionID]
-	if !ok {
-		// In most cases, region replica count is 3.
-		replicaCount := 3
-		limiter = rate.NewLimiter(rate.Every(100*time.Millisecond), replicaCount)
-		rl.limiters[regionID] = limiter
-	}
-	rl.Unlock()
-	return limiter
 }
 
 // eventFeedStream stores an EventFeed stream and pointer to the underlying gRPC connection
@@ -253,10 +230,6 @@ func NewCDCClient(
 	return
 }
 
-func (c *CDCClient) getRegionLimiter(regionID uint64) *rate.Limiter {
-	return c.regionLimiters.getLimiter(regionID)
-}
-
 func (c *CDCClient) newStream(ctx context.Context, addr string, storeID uint64) (stream *eventFeedStream, newStreamErr error) {
 	newStreamErr = retry.Do(ctx, func() (err error) {
 		var conn *sharedConn
@@ -309,7 +282,7 @@ func (c *CDCClient) EventFeed(
 	c.regionCounts.counts.PushBack(&regionCount)
 	c.regionCounts.Unlock()
 	s := newEventFeedSession(
-		ctx, c, span, lockResolver, ts, eventCh, c.changefeed, c.tableID, c.tableName)
+		c, span, lockResolver, ts, eventCh, c.changefeed, c.tableID, c.tableName)
 	return s.eventFeed(ctx, ts, &regionCount)
 }
 
@@ -392,7 +365,6 @@ type rangeRequestTask struct {
 }
 
 func newEventFeedSession(
-	ctx context.Context,
 	client *CDCClient,
 	totalSpan tablepb.Span,
 	lockResolver txnutil.LockResolver,
@@ -479,14 +451,10 @@ func (s *eventFeedSession) eventFeed(ctx context.Context, ts uint64, regionCount
 	})
 
 	g.Go(func() error {
-		timer := time.NewTimer(defaultCheckRegionRateLimitInterval)
-		defer timer.Stop()
 		for {
 			select {
 			case <-ctx.Done():
 				return ctx.Err()
-			case <-timer.C:
-				timer.Reset(defaultCheckRegionRateLimitInterval)
 			case errInfo := <-s.errCh.Out():
 				s.errChSizeGauge.Dec()
 				if err := s.handleError(ctx, errInfo); err != nil {
