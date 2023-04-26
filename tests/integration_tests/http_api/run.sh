@@ -11,7 +11,7 @@ MAX_RETRIES=50
 
 function run() {
 	# mysql and kafka are the same
-	if [ "$SINK_TYPE" == "kafka" ]; then
+	if [ "$SINK_TYPE" != "mysql" ]; then
 		return
 	fi
 

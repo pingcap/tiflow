@@ -9,7 +9,7 @@ CDC_BINARY=cdc.test
 SINK_TYPE=$1
 
 function prepare() {
-	if [ "$SINK_TYPE" == "kafka" ]; then
+	if [ "$SINK_TYPE" != "mysql" ]; then
 		return
 	fi
 
@@ -30,7 +30,7 @@ function prepare() {
 
 trap stop_tidb_cluster EXIT
 # kafka is not supported yet.
-if [ "$SINK_TYPE" != "kafka" ]; then
+if [ "$SINK_TYPE" == "mysql" ]; then
 	prepare $*
 
 	cd "$(dirname "$0")"

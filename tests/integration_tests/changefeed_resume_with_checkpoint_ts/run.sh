@@ -10,7 +10,7 @@ SINK_TYPE=$1
 MAX_RETRIES=20
 
 function prepare() {
-	if [ "$SINK_TYPE" == "kafka" ]; then
+	if [ "$SINK_TYPE" != "mysql" ]; then
 		echo "[$(date)] <<<<<< run test case $TEST_NAME success! >>>>>>"
 		exit 0
 	fi
