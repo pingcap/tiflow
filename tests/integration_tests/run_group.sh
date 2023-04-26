@@ -7,15 +7,15 @@ CUR=$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)
 sink_type=$1
 group=$2
 
-# Other tests that only support mysql: batch_update_to_no_batch ddl_reentrant  
+# Other tests that only support mysql: batch_update_to_no_batch ddl_reentrant
 # changefeed_fast_fail changefeed_resume_with_checkpoint_ts sequence
 # multi_cdc_cluster capture_suicide_while_balance_table
 mysql_only="bdr_mode capture_suicide_while_balance_table syncpoint"
 mysql_only_http="http_api http_api_tls api_v2"
 mysql_only_consistent_replicate="consistent_replicate_ddl consistent_replicate_gbk consistent_replicate_nfs consistent_replicate_storage_file consistent_replicate_storage_s3"
 
-# Tests that need to support kafka: bank kill_owner_with_ddl owner_remove_table_error 
-# owner_resign processor_etcd_worker_delay processor_resolved_ts_fallback 
+# Tests that need to support kafka: bank kill_owner_with_ddl owner_remove_table_error
+# owner_resign processor_etcd_worker_delay processor_resolved_ts_fallback
 # multi_changefeed clustered_index sink_hang
 kafka_only="kafka_big_messages kafka_compression kafka_messages kafka_sink_error_resume"
 kafka_only_protocol="canal_json_adapter_compatibility canal_json_basic multi_topics"
