@@ -62,7 +62,7 @@ func CreateClient(endpoints []string, tlsCfg *tls.Config) (*clientv3.Client, err
 	return clientv3.New(clientv3.Config{
 		Endpoints:        endpoints,
 		DialTimeout:      DefaultDialTimeout,
-		AutoSyncInterval: 3 * time.Second,
+		AutoSyncInterval: 30 * time.Second,
 		TLS:              tlsCfg,
 	})
 }
