@@ -492,7 +492,7 @@ func (s *mysqlBackend) genUpdateSQL(rows ...*sqlmodel.RowChange) ([]string, [][]
 	}
 	if size < s.cfg.MaxMultiUpdateRowSize*count {
 		// use multi update in one SQL
-		sql, value := sqlmodel.GenUpdateSQLFast(rows...)
+		sql, value := sqlmodel.GenUpdateSQL(rows...)
 		return []string{sql}, [][]interface{}{value}
 	}
 	// each row has one independent update SQL.

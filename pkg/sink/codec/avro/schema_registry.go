@@ -48,9 +48,13 @@ type schemaManager struct {
 }
 
 type schemaCacheEntry struct {
-	tiSchemaID uint64
-	registryID int
-	codec      *goavro.Codec
+	// tableVersion is the table's version which the message associated with.
+	tableVersion uint64
+	// schemaID is the schema ID in the schema registry
+	// for each message should carry this id to allow the decoder fetch the corresponding schema
+	schemaID int
+	// codec is associated with the schemaID, used to decode the message
+	codec *goavro.Codec
 }
 
 type registerRequest struct {
@@ -64,9 +68,9 @@ type registerResponse struct {
 }
 
 type lookupResponse struct {
-	Name       string `json:"name"`
-	RegistryID int    `json:"id"`
-	Schema     string `json:"schema"`
+	Name   string `json:"name"`
+	ID     int    `json:"id"`
+	Schema string `json:"schema"`
 }
 
 // NewAvroSchemaManager creates a new schemaManager and test connectivity to the schema registry
@@ -113,11 +117,11 @@ func NewAvroSchemaManager(
 func (m *schemaManager) Register(
 	ctx context.Context,
 	topicName string,
-	codec *goavro.Codec,
+	schema string,
 ) (int, error) {
 	// The Schema Registry expects the JSON to be without newline characters
 	buffer := new(bytes.Buffer)
-	err := json.Compact(buffer, []byte(codec.Schema()))
+	err := json.Compact(buffer, []byte(schema))
 	if err != nil {
 		log.Error("Could not compact schema", zap.Error(err))
 		return 0, cerror.WrapError(cerror.ErrAvroSchemaAPIError, err)
@@ -197,30 +201,30 @@ func (m *schemaManager) Register(
 
 // Lookup the latest schema and the Registry designated ID for that schema.
 // TiSchemaId is only used to trigger fetching from the Registry server.
-// Calling this method with a tiSchemaID other than that used last time will invariably trigger a
+// Calling this method with a tableVersion other than that used last time will invariably trigger a
 // RESTful request to the Registry.
 // Returns (codec, registry schema ID, error)
 // NOT USED for now, reserved for future use.
 func (m *schemaManager) Lookup(
 	ctx context.Context,
 	topicName string,
-	tiSchemaID uint64,
+	tableVersion uint64,
 ) (*goavro.Codec, int, error) {
 	key := m.topicNameToSchemaSubject(topicName)
 	m.cacheRWLock.RLock()
-	if entry, exists := m.cache[key]; exists && entry.tiSchemaID == tiSchemaID {
+	if entry, exists := m.cache[key]; exists && entry.tableVersion == tableVersion {
 		log.Info("Avro schema lookup cache hit",
 			zap.String("key", key),
-			zap.Uint64("tiSchemaID", tiSchemaID),
-			zap.Int("registryID", entry.registryID))
+			zap.Uint64("tableVersion", tableVersion),
+			zap.Int("schemaID", entry.schemaID))
 		m.cacheRWLock.RUnlock()
-		return entry.codec, entry.registryID, nil
+		return entry.codec, entry.schemaID, nil
 	}
 	m.cacheRWLock.RUnlock()
 
 	log.Info("Avro schema lookup cache miss",
 		zap.String("key", key),
-		zap.Uint64("tiSchemaID", tiSchemaID))
+		zap.Uint64("tableVersion", tableVersion))
 
 	uri := m.registryURL + "/subjects/" + url.QueryEscape(key) + "/versions/latest"
 	log.Debug("Querying for latest schema", zap.String("uri", uri))
@@ -261,7 +265,7 @@ func (m *schemaManager) Lookup(
 	if resp.StatusCode == 404 {
 		log.Warn("Specified schema not found in Registry",
 			zap.String("key", key),
-			zap.Uint64("tiSchemaID", tiSchemaID))
+			zap.Uint64("tableVersion", tableVersion))
 		return nil, 0, cerror.ErrAvroSchemaAPIError.GenWithStackByArgs(
 			"Schema not found in Registry",
 		)
@@ -280,19 +284,19 @@ func (m *schemaManager) Lookup(
 		log.Error("Creating Avro codec failed", zap.Error(err))
 		return nil, 0, cerror.WrapError(cerror.ErrAvroSchemaAPIError, err)
 	}
-	cacheEntry.registryID = jsonResp.RegistryID
-	cacheEntry.tiSchemaID = tiSchemaID
+	cacheEntry.schemaID = jsonResp.ID
+	cacheEntry.tableVersion = tableVersion
 
 	m.cacheRWLock.Lock()
 	m.cache[key] = cacheEntry
 	m.cacheRWLock.Unlock()
 
 	log.Info("Avro schema lookup successful with cache miss",
-		zap.Uint64("tiSchemaID", cacheEntry.tiSchemaID),
-		zap.Int("registryID", cacheEntry.registryID),
+		zap.Uint64("tableVersion", cacheEntry.tableVersion),
+		zap.Int("schemaID", cacheEntry.schemaID),
 		zap.String("schema", cacheEntry.codec.Schema()))
 
-	return cacheEntry.codec, cacheEntry.registryID, nil
+	return cacheEntry.codec, cacheEntry.schemaID, nil
 }
 
 // SchemaGenerator represents a function that returns an Avro schema in JSON.
@@ -306,24 +310,24 @@ type SchemaGenerator func() (string, error)
 func (m *schemaManager) GetCachedOrRegister(
 	ctx context.Context,
 	topicName string,
-	tiSchemaID uint64,
+	tableVersion uint64,
 	schemaGen SchemaGenerator,
 ) (*goavro.Codec, int, error) {
 	key := m.topicNameToSchemaSubject(topicName)
 	m.cacheRWLock.RLock()
-	if entry, exists := m.cache[key]; exists && entry.tiSchemaID == tiSchemaID {
+	if entry, exists := m.cache[key]; exists && entry.tableVersion == tableVersion {
 		log.Debug("Avro schema GetCachedOrRegister cache hit",
 			zap.String("key", key),
-			zap.Uint64("tiSchemaID", tiSchemaID),
-			zap.Int("registryID", entry.registryID))
+			zap.Uint64("tableVersion", tableVersion),
+			zap.Int("schemaID", entry.schemaID))
 		m.cacheRWLock.RUnlock()
-		return entry.codec, entry.registryID, nil
+		return entry.codec, entry.schemaID, nil
 	}
 	m.cacheRWLock.RUnlock()
 
 	log.Info("Avro schema lookup cache miss",
 		zap.String("key", key),
-		zap.Uint64("tiSchemaID", tiSchemaID))
+		zap.Uint64("tableVersion", tableVersion))
 
 	schema, err := schemaGen()
 	if err != nil {
@@ -336,7 +340,7 @@ func (m *schemaManager) GetCachedOrRegister(
 		return nil, 0, cerror.WrapError(cerror.ErrAvroSchemaAPIError, err)
 	}
 
-	id, err := m.Register(ctx, topicName, codec)
+	id, err := m.Register(ctx, topicName, codec.Schema())
 	if err != nil {
 		log.Error("GetCachedOrRegister: Could not register schema", zap.Error(err))
 		return nil, 0, errors.Trace(err)
@@ -344,16 +348,16 @@ func (m *schemaManager) GetCachedOrRegister(
 
 	cacheEntry := new(schemaCacheEntry)
 	cacheEntry.codec = codec
-	cacheEntry.registryID = id
-	cacheEntry.tiSchemaID = tiSchemaID
+	cacheEntry.schemaID = id
+	cacheEntry.tableVersion = tableVersion
 
 	m.cacheRWLock.Lock()
 	m.cache[key] = cacheEntry
 	m.cacheRWLock.Unlock()
 
 	log.Info("Avro schema GetCachedOrRegister successful with cache miss",
-		zap.Uint64("tiSchemaID", cacheEntry.tiSchemaID),
-		zap.Int("registryID", cacheEntry.registryID),
+		zap.Uint64("tableVersion", cacheEntry.tableVersion),
+		zap.Int("schemaID", cacheEntry.schemaID),
 		zap.String("schema", cacheEntry.codec.Schema()))
 
 	return codec, id, nil

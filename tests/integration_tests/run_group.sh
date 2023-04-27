@@ -18,8 +18,8 @@ groups=(
 	["G00"]='changefeed_error ddl_sequence force_replicate_table'
 	["G01"]='multi_capture kafka_big_messages cdc'
 	["G02"]='drop_many_tables multi_cdc_cluster processor_stop_delay'
-	["G03"]='capture_suicide_while_balance_table row_format'
-	["G04"]='foreign_key canal_json_basic ddl_puller_lag'
+	["G03"]='capture_suicide_while_balance_table row_format ddl_only_block_related_table ddl_manager'
+	["G04"]='foreign_key canal_json_basic ddl_puller_lag owner_resign'
 	["G05"]='partition_table changefeed_auto_stop'
 	["G06"]='charset_gbk owner_remove_table_error bdr_mode'
 	["G07"]='clustered_index multi_tables_ddl big_txn_v2'
@@ -39,7 +39,8 @@ groups=(
 	["G21"]='event_filter generate_column syncpoint sequence processor_resolved_ts_fallback'
 	["G22"]='big_txn csv_storage_basic changefeed_finish sink_hang canal_json_storage_basic'
 	["G23"]='multi_topics new_ci_collation_with_old_value batch_add_table multi_changefeed'
-	["G24"]='consistent_replicate_nfs owner_resign api_v2'
+	["G24"]='consistent_replicate_nfs consistent_replicate_ddl owner_resign api_v2'
+	["G25"]='canal_json_storage_partition_table csv_storage_partition_table csv_storage_multi_tables_ddl'
 )
 
 # Get other cases not in groups, to avoid missing any case
@@ -52,20 +53,21 @@ for script in "$CUR"/*/run.sh; do
 	fi
 done
 
-# Get test names
-test_names=""
-# shellcheck disable=SC2076
 if [[ "$group" == "others" ]]; then
-	test_names="${others[*]}"
+	if [[ -z $others ]]; then
+		echo "All CDC integration test cases are added to groups"
+		exit 0
+	fi
+	echo "Error: "$others" is not added to any group in tests/integration_tests/run_group.sh"
+	exit 1
 elif [[ " ${!groups[*]} " =~ " ${group} " ]]; then
 	test_names="${groups[${group}]}"
+	# Run test cases
+	if [[ -n $test_names ]]; then
+		echo "Run cases: ${test_names}"
+		"${CUR}"/run.sh "${sink_type}" "${test_names}"
+	fi
 else
 	echo "Error: invalid group name: ${group}"
 	exit 1
-fi
-
-# Run test cases
-if [[ -n $test_names ]]; then
-	echo "Run cases: ${test_names}"
-	"${CUR}"/run.sh "${sink_type}" "${test_names}"
 fi

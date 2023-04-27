@@ -31,23 +31,23 @@ type encodingWorker struct {
 	changeFeedID model.ChangeFeedID
 	encoder      codec.TxnEventEncoder
 	isClosed     uint64
-	inputCh      chan eventFragment
-	defragmenter *defragmenter
+	inputCh      <-chan eventFragment
+	outputCh     chan<- eventFragment
 }
 
 func newEncodingWorker(
 	workerID int,
 	changefeedID model.ChangeFeedID,
 	encoder codec.TxnEventEncoder,
-	inputCh chan eventFragment,
-	defragmenter *defragmenter,
+	inputCh <-chan eventFragment,
+	outputCh chan<- eventFragment,
 ) *encodingWorker {
 	return &encodingWorker{
 		id:           workerID,
 		changeFeedID: changefeedID,
 		encoder:      encoder,
 		inputCh:      inputCh,
-		defragmenter: defragmenter,
+		outputCh:     outputCh,
 	}
 }
 
@@ -84,7 +84,7 @@ func (w *encodingWorker) encodeEvents(frag eventFragment) error {
 	}
 	msgs := w.encoder.Build()
 	frag.encodedMsgs = msgs
-	w.defragmenter.registerFrag(frag)
+	w.outputCh <- frag
 
 	return nil
 }

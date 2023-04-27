@@ -25,6 +25,7 @@ import (
 	"github.com/pingcap/tiflow/pkg/config/outdated"
 	cerror "github.com/pingcap/tiflow/pkg/errors"
 	"github.com/pingcap/tiflow/pkg/redo"
+	"github.com/pingcap/tiflow/pkg/sink"
 	"go.uber.org/zap"
 )
 
@@ -222,6 +223,15 @@ func (c *ReplicaConfig) ValidateAndAdjust(sinkURI *url.URL) error {
 	}
 
 	if c.Integrity != nil {
+		switch strings.ToLower(sinkURI.Scheme) {
+		case sink.KafkaScheme, sink.KafkaSSLScheme:
+		default:
+			if c.Integrity.Enabled() {
+				log.Warn("integrity checksum only support kafka sink now, disable integrity")
+				c.Integrity.IntegrityCheckLevel = IntegrityCheckLevelNone
+			}
+		}
+
 		if err := c.Integrity.Validate(); err != nil {
 			return err
 		}

@@ -81,7 +81,9 @@ func confirmOverwriteCheckpointTs(
 // confirmIgnoreIneligibleTables confirm if user need to ignore ineligible tables.
 // If ignore it will return true.
 func confirmIgnoreIneligibleTables(cmd *cobra.Command) (bool, error) {
-	cmd.Printf("Could you agree to ignore those tables, and continue to replicate [Y/N]\n")
+	cmd.Printf("Could you agree to ignore those tables, and continue to replicate [Y/N]\n" +
+		"Note: If you don't want to ignore those tables, please set `force-replicate to` true " +
+		"in the changefeed config file.\n")
 	confirmed := readInput(cmd)
 	if !confirmed {
 		cmd.Printf("No changefeed is created because you don't want to ignore some tables.\n")

@@ -74,17 +74,6 @@ if [ "$test_case" == "*" ]; then
 	should_run=1
 elif [ "$test_case" == "compatibility" ]; then
 	should_run=1
-elif [ "$test_case" == "others" ]; then
-	test_case=$(cat $CUR/others_integration_1.txt)
-	should_run=1
-elif [ "$test_case" == "others_2" ]; then
-	test_case=$(cat $CUR/others_integration_2.txt)
-	should_run=1
-elif [ "$test_case" == "others_3" ]; then
-	test_case=$(cat $CUR/others_integration_3.txt)
-	if [ ! -z "$test_case" ]; then
-		should_run=1
-	fi
 else
 	exist_case=""
 	for one_case in $test_case; do
