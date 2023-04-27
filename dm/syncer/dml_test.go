@@ -271,7 +271,7 @@ func TestGenDMLWithSameOp(t *testing.T) {
 		"REPLACE INTO `db1`.`tb1` (`id`,`col1`,`name`) VALUES (?,?,?)",
 		"DELETE FROM `db1`.`tb1` WHERE `id` = ? LIMIT 1",
 		"REPLACE INTO `db1`.`tb1` (`id`,`col1`,`name`) VALUES (?,?,?)",
-		"DELETE FROM `db1`.`tb1` WHERE (`id`) IN ((?),(?),(?))",
+		"DELETE FROM `db1`.`tb1` WHERE (`id` = ?) OR (`id` = ?) OR (`id` = ?)",
 
 		// table2
 		"REPLACE INTO `db2`.`tb2` (`id`,`col2`,`name`) VALUES (?,?,?)",
@@ -281,12 +281,12 @@ func TestGenDMLWithSameOp(t *testing.T) {
 		"INSERT INTO `db2`.`tb2` (`id`,`col3`,`name`) VALUES (?,?,?) ON DUPLICATE KEY UPDATE `id`=VALUES(`id`),`col3`=VALUES(`col3`),`name`=VALUES(`name`)",
 		"INSERT INTO `db2`.`tb2` (`id`,`col2`,`name`) VALUES (?,?,?),(?,?,?) ON DUPLICATE KEY UPDATE `id`=VALUES(`id`),`col2`=VALUES(`col2`),`name`=VALUES(`name`)",
 		"INSERT INTO `db2`.`tb2` (`id`,`col3`,`name`) VALUES (?,?,?) ON DUPLICATE KEY UPDATE `id`=VALUES(`id`),`col3`=VALUES(`col3`),`name`=VALUES(`name`)",
-		"UPDATE `db2`.`tb2` SET `id`=CASE WHEN `id`=? THEN ? WHEN `id`=? THEN ? END, `col2`=CASE WHEN `id`=? THEN ? WHEN `id`=? THEN ? END, `name`=CASE WHEN `id`=? THEN ? WHEN `id`=? THEN ? END WHERE `id` IN (?,?)",
-		"UPDATE `db2`.`tb2` SET `id`=CASE WHEN `id`=? THEN ? END, `col3`=CASE WHEN `id`=? THEN ? END, `name`=CASE WHEN `id`=? THEN ? END WHERE `id` IN (?)",
-		"DELETE FROM `db2`.`tb2` WHERE (`id`) IN ((?),(?),(?))",
+		"UPDATE `db2`.`tb2` SET `id`=CASE WHEN `id` = ? THEN ? WHEN `id` = ? THEN ? END, `col2`=CASE WHEN `id` = ? THEN ? WHEN `id` = ? THEN ? END, `name`=CASE WHEN `id` = ? THEN ? WHEN `id` = ? THEN ? END WHERE (`id` = ?) OR (`id` = ?)",
+		"UPDATE `db2`.`tb2` SET `id`=CASE WHEN `id` = ? THEN ? END, `col3`=CASE WHEN `id` = ? THEN ? END, `name`=CASE WHEN `id` = ? THEN ? END WHERE (`id` = ?)",
+		"DELETE FROM `db2`.`tb2` WHERE (`id` = ?) OR (`id` = ?) OR (`id` = ?)",
 
 		// table1
-		"DELETE FROM `db1`.`tb1` WHERE (`id`) IN ((?),(?),(?))",
+		"DELETE FROM `db1`.`tb1` WHERE (`id` = ?) OR (`id` = ?) OR (`id` = ?)",
 	}
 
 	expectArgs := [][]interface{}{

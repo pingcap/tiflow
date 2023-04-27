@@ -27,6 +27,7 @@ import java.io.IOException;
 import java.net.URL;
 import java.nio.file.Files;
 import java.util.ArrayList;
+import java.util.Arrays;
 import java.util.List;
 
 public class TicdcEventDecoderTest {
@@ -69,6 +70,8 @@ public class TicdcEventDecoderTest {
         Assert.assertNotNull(keyFiles);
         Assert.assertNotNull(valueFiles);
         Assert.assertEquals(keyFiles.length, valueFiles.length);
+        Arrays.sort(keyFiles);
+        Arrays.sort(valueFiles);
 
         for (int i = 0; i < keyFiles.length; i++) {
             File kf = keyFiles[i];
