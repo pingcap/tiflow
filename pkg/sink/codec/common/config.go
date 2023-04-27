@@ -83,7 +83,8 @@ const (
 	codecOPTAvroSchemaRegistry             = "schema-registry"
 
 	// codecOPTAvroEnableWatermark is the option for enabling watermark in avro protocol
-	// only used for internal testing, do not expose it to the outside users.
+	// only used for internal testing, do not set this in the production environment since the
+	// confluent official consumer cannot handle watermark.
 	codecOPTAvroEnableWatermark      = "avro-enable-watermark"
 	codecOPTOnlyOutputUpdatedColumns = "only-output-updated-columns"
 )

@@ -54,8 +54,9 @@ type Options struct {
 	EnableTiDBExtension bool
 	EnableRowChecksum   bool
 
-	// EnableWatermarkEvent enabled, then the DDL and watermark event will be
-	// sent to downstream kafka, it's only used for testing purpose, should not be
+	// EnableWatermarkEvent set to true, avro encode DDL and checkpoint event
+	// and send to the downstream kafka, they cannot be consumed by the confluent official consumer
+	// and would cause error, so this is only used for ticdc internal testing purpose, should not be
 	// exposed to the outside users.
 	EnableWatermarkEvent bool
 
