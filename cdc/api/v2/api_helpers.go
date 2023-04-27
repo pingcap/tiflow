@@ -483,11 +483,10 @@ func (h APIV2HelpersImpl) getEtcdClient(
 	logConfig.Level = zap.NewAtomicLevelAt(zapcore.ErrorLevel)
 	return clientv3.New(
 		clientv3.Config{
-			Endpoints:        pdAddrs,
-			TLS:              tlsCfg,
-			LogConfig:        logConfig,
-			DialTimeout:      5 * time.Second,
-			AutoSyncInterval: 3 * time.Second,
+			Endpoints:   pdAddrs,
+			TLS:         tlsCfg,
+			LogConfig:   logConfig,
+			DialTimeout: 5 * time.Second,
 			DialOptions: []grpc.DialOption{
 				grpcTLSOption,
 				grpc.WithBlock(),

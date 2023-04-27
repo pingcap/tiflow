@@ -110,12 +110,11 @@ func (f *factoryImpl) EtcdClient() (*etcd.CDCEtcdClientImpl, error) {
 	pdEndpoints := strings.Split(pdAddr, ",")
 
 	etcdClient, err := clientv3.New(clientv3.Config{
-		Context:          ctx,
-		Endpoints:        pdEndpoints,
-		TLS:              tlsConfig,
-		LogConfig:        &logConfig,
-		DialTimeout:      30 * time.Second,
-		AutoSyncInterval: 3 * time.Second,
+		Context:     ctx,
+		Endpoints:   pdEndpoints,
+		TLS:         tlsConfig,
+		LogConfig:   &logConfig,
+		DialTimeout: 30 * time.Second,
 		// TODO(hi-rustin): add gRPC metrics to Options.
 		// See also: https://github.com/pingcap/tiflow/pull/2341#discussion_r673018537.
 		DialOptions: []grpc.DialOption{
