@@ -11,7 +11,7 @@ SINK_TYPE=$1
 function run() {
 	rm -rf $WORK_DIR && mkdir -p $WORK_DIR
 
-	start_tidb_cluster --workdir $WORK_DIR --tikv_config $CUR/conf/tikv_config.toml
+	start_tidb_cluster --workdir $WORK_DIR --tikv-config $CUR/conf/tikv_config.toml
 
 	cd $WORK_DIR
 
