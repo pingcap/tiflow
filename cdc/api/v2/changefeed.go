@@ -686,6 +686,45 @@ func (h *OpenAPIV2) pauseChangefeed(c *gin.Context) {
 	c.JSON(http.StatusOK, &EmptyResponse{})
 }
 
+func (h *OpenAPIV2) status(c *gin.Context) {
+	ctx := c.Request.Context()
+
+	changefeedID := model.DefaultChangeFeedID(c.Param(apiOpVarChangefeedID))
+	if err := model.ValidateChangefeedID(changefeedID.ID); err != nil {
+		_ = c.Error(cerror.ErrAPIInvalidParam.GenWithStack("invalid changefeed_id: %s",
+			changefeedID.ID))
+		return
+	}
+	info, err := h.capture.StatusProvider().GetChangeFeedInfo(ctx, changefeedID)
+	if err != nil {
+		_ = c.Error(err)
+		return
+	}
+	status, err := h.capture.StatusProvider().GetChangeFeedStatus(
+		ctx,
+		changefeedID,
+	)
+	if err != nil {
+		_ = c.Error(err)
+		return
+	}
+	var lastError *RunningError
+	if info.Error != nil {
+		lastError = &RunningError{
+			Time:    &info.Error.Time,
+			Addr:    info.Error.Addr,
+			Code:    info.Error.Code,
+			Message: info.Error.Message,
+		}
+	}
+	c.JSON(http.StatusOK, &ChangefeedStatus{
+		State:        string(info.State),
+		CheckpointTs: status.CheckpointTs,
+		ResolvedTs:   status.ResolvedTs,
+		LastError:    lastError,
+	})
+}
+
 func toAPIModel(
 	info *model.ChangeFeedInfo,
 	resolvedTs uint64,

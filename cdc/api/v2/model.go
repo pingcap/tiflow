@@ -600,9 +600,10 @@ type ChangeFeedInfo struct {
 // RunningError represents some running error from cdc components,
 // such as processor.
 type RunningError struct {
-	Addr    string `json:"addr"`
-	Code    string `json:"code"`
-	Message string `json:"message"`
+	Time    *time.Time `json:"time,omitempty"`
+	Addr    string     `json:"addr"`
+	Code    string     `json:"code"`
+	Message string     `json:"message"`
 }
 
 // toCredential generates a security.Credential from a PDConfig
@@ -677,4 +678,11 @@ type Capture struct {
 	IsOwner       bool   `json:"is_owner"`
 	AdvertiseAddr string `json:"address"`
 	ClusterID     string `json:"cluster_id"`
+}
+
+type ChangefeedStatus struct {
+	State        string        `json:"state,omitempty"`
+	ResolvedTs   uint64        `json:"resolved_ts"`
+	CheckpointTs uint64        `json:"checkpoint_ts"`
+	LastError    *RunningError `json:"last_error,omitempty"`
 }
