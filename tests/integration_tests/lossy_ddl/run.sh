@@ -29,8 +29,6 @@ function check_lossy_ddl() {
 	fi
 }
 
-export -f check_lossy_ddl
-
 function run() {
 	# Use blackhole sink to check if the DDL is lossy.
 	# So no need to run this test for other sinks.
