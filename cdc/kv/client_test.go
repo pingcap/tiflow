@@ -3558,10 +3558,7 @@ func TestPrewriteNotMatchError(t *testing.T) {
 
 func createFakeEventFeedSession() *eventFeedSession {
 	return newEventFeedSession(
-		&CDCClient{
-			regionLimiters: defaultRegionEventFeedLimiters,
-			config:         config.GetDefaultServerConfig().KVClient,
-		},
+		&CDCClient{config: config.GetDefaultServerConfig().KVClient},
 		tablepb.Span{StartKey: []byte("a"), EndKey: []byte("b")},
 		nil, /*lockResolver*/
 		100, /*startTs*/
