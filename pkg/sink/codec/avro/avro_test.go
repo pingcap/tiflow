@@ -65,9 +65,9 @@ func setupEncoderAndSchemaRegistry(
 		keySchemaManager:   keyManager,
 		result:             make([]*common.Message, 0, 1),
 		Options: &Options{
-			enableTiDBExtension:        enableTiDBExtension,
-			decimalHandlingMode:        decimalHandlingMode,
-			bigintUnsignedHandlingMode: bigintUnsignedHandlingMode,
+			EnableTiDBExtension:        enableTiDBExtension,
+			DecimalHandlingMode:        decimalHandlingMode,
+			BigintUnsignedHandlingMode: bigintUnsignedHandlingMode,
 		},
 	}, nil
 }
