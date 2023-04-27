@@ -9,6 +9,7 @@ set -e
 OUT_DIR=
 tidb_config=
 pd_config=
+tikv_config=
 retry_times=3
 multiple_upstream_pd="false"
 
@@ -24,6 +25,10 @@ while [[ ${1} ]]; do
 		;;
 	--pd-config)
 		pd_config=${2}
+		shift
+		;;
+	--tikv-config)
+		tikv_config=${2}
 		shift
 		;;
 	--retry)
@@ -58,6 +63,8 @@ while [ $i -le $retry_times ]; do
 		start_tidb_cluster_impl --workdir ${OUT_DIR} --multiple-upstream-pd ${multiple_upstream_pd} --tidb-config ${tidb_config}
 	elif [[ "$pd_config" != "" ]]; then
 		start_tidb_cluster_impl --workdir ${OUT_DIR} --multiple-upstream-pd ${multiple_upstream_pd} --pd-config ${pd_config}
+	elif [[ "$tikv_config" != "" ]]; then
+		start_tidb_cluster_impl --workdir ${OUT_DIR} --multiple-upstream-pd ${multiple_upstream_pd} --tikv-config ${tikv_config}
 	else
 		start_tidb_cluster_impl --workdir ${OUT_DIR} --multiple-upstream-pd ${multiple_upstream_pd}
 	fi
