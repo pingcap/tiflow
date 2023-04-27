@@ -102,6 +102,8 @@ func completeSSLConfig(options *pkafka.Options) (*tls.Config, error) {
 			tlsConfig, err := options.Credential.ToTLSConfig()
 			return tlsConfig, errors.Trace(err)
 		}
+
+		tlsConfig.InsecureSkipVerify = options.InsecureSkipVerify
 		return tlsConfig, nil
 	}
 	return nil, nil

@@ -149,9 +149,10 @@ type Options struct {
 	MaxMessages int
 
 	// Credential is used to connect to kafka cluster.
-	EnableTLS  bool
-	Credential *security.Credential
-	SASL       *security.SASL
+	EnableTLS          bool
+	Credential         *security.Credential
+	InsecureSkipVerify bool
+	SASL               *security.SASL
 
 	// Timeout for network configurations, default to `10s`
 	DialTimeout  time.Duration
@@ -164,16 +165,17 @@ func NewOptions() *Options {
 	return &Options{
 		Version: "2.4.0",
 		// MaxMessageBytes will be used to initialize producer
-		MaxMessageBytes:   config.DefaultMaxMessageBytes,
-		ReplicationFactor: 1,
-		Compression:       "none",
-		RequiredAcks:      WaitForAll,
-		Credential:        &security.Credential{},
-		SASL:              &security.SASL{},
-		AutoCreate:        true,
-		DialTimeout:       10 * time.Second,
-		WriteTimeout:      10 * time.Second,
-		ReadTimeout:       10 * time.Second,
+		MaxMessageBytes:    config.DefaultMaxMessageBytes,
+		ReplicationFactor:  1,
+		Compression:        "none",
+		RequiredAcks:       WaitForAll,
+		Credential:         &security.Credential{},
+		InsecureSkipVerify: true,
+		SASL:               &security.SASL{},
+		AutoCreate:         true,
+		DialTimeout:        10 * time.Second,
+		WriteTimeout:       10 * time.Second,
+		ReadTimeout:        10 * time.Second,
 	}
 }
 
