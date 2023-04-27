@@ -124,6 +124,7 @@ func (tp *TaskPosition) Clone() *TaskPosition {
 	}
 	if tp.Error != nil {
 		ret.Error = &RunningError{
+			Time:    tp.Error.Time,
 			Addr:    tp.Error.Addr,
 			Code:    tp.Error.Code,
 			Message: tp.Error.Message,
