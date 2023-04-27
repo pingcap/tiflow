@@ -20,6 +20,7 @@ import (
 	"github.com/pingcap/tidb/parser/mysql"
 	"github.com/pingcap/tiflow/cdc/model"
 	"github.com/pingcap/tiflow/pkg/config"
+	"github.com/pingcap/tiflow/pkg/sink/codec"
 	"github.com/pingcap/tiflow/pkg/sink/codec/common"
 	"github.com/pingcap/tiflow/pkg/sink/codec/internal"
 	"github.com/stretchr/testify/require"
@@ -99,10 +100,11 @@ func TestMaxBatchSize(t *testing.T) {
 	}
 
 	messages := encoder.Build()
+	decoder := NewBatchDecoder()
 	sum := 0
 	for _, msg := range messages {
-		decoder, err := NewBatchDecoder(msg.Key, msg.Value)
-		require.Nil(t, err)
+		err := decoder.AddKeyValue(msg.Key, msg.Value)
+		require.NoError(t, err)
 		count := 0
 		for {
 			v, hasNext, err := decoder.HasNext()
@@ -206,5 +208,10 @@ func TestOpenProtocolBatchCodec(t *testing.T) {
 	config := common.NewConfig(config.ProtocolOpen).WithMaxMessageBytes(8192)
 	config.MaxBatchSize = 64
 	tester := internal.NewDefaultBatchTester()
-	tester.TestBatchCodec(t, NewBatchEncoderBuilder(config), NewBatchDecoder)
+	tester.TestBatchCodec(t, NewBatchEncoderBuilder(config),
+		func(key []byte, value []byte) (codec.RowEventDecoder, error) {
+			decoder := NewBatchDecoder()
+			err := decoder.AddKeyValue(key, value)
+			return decoder, err
+		})
 }

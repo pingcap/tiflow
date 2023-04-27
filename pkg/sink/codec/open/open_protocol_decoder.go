@@ -224,20 +224,44 @@ func (b *BatchDecoder) decodeNextKey() error {
 }
 
 // NewBatchDecoder creates a new BatchDecoder.
-func NewBatchDecoder(key []byte, value []byte) (codec.RowEventDecoder, error) {
+func NewBatchDecoder() codec.RowEventDecoder {
+	return &BatchDecoder{}
+
+}
+
+// AddKeyValue implements the RowEventDecoder interface
+func (b *BatchDecoder) AddKeyValue(key, value []byte) error {
+	if len(b.keyBytes) != 0 || len(b.valueBytes) != 0 {
+		return cerror.ErrOpenProtocolCodecInvalidData.
+			GenWithStack("decoder key and value not nil")
+	}
 	version := binary.BigEndian.Uint64(key[:8])
 	key = key[8:]
 	if version != codec.BatchVersion1 {
-		return nil, cerror.ErrOpenProtocolCodecInvalidData.GenWithStack("unexpected key format version")
+		return cerror.ErrOpenProtocolCodecInvalidData.
+			GenWithStack("unexpected key format version")
 	}
-	// if only decode one byte slice, we choose MixedDecoder
-	if len(key) > 0 && len(value) == 0 {
-		return &BatchMixedDecoder{
-			mixedBytes: key,
-		}, nil
+
+	b.keyBytes = key
+	b.valueBytes = value
+
+	return nil
+
+}
+
+// AddKeyValue implements the RowEventDecoder interface
+func (b *BatchMixedDecoder) AddKeyValue(key, value []byte) error {
+	if key != nil || value != nil {
+		return cerror.ErrOpenProtocolCodecInvalidData.
+			GenWithStack("decoder key and value not nil")
 	}
-	return &BatchDecoder{
-		keyBytes:   key,
-		valueBytes: value,
-	}, nil
+	version := binary.BigEndian.Uint64(key[:8])
+	key = key[8:]
+	if version != codec.BatchVersion1 {
+		return cerror.ErrOpenProtocolCodecInvalidData.
+			GenWithStack("unexpected key format version")
+	}
+
+	b.mixedBytes = key
+	return nil
 }
