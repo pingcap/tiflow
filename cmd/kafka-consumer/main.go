@@ -512,21 +512,26 @@ func (c *Consumer) ConsumeClaim(session sarama.ConsumerGroupSession, claim saram
 		panic("sink should initialized")
 	}
 
+	var (
+		decoder codec.RowEventDecoder
+		err     error
+	)
+	switch c.protocol {
+	case config.ProtocolOpen, config.ProtocolDefault:
+		decoder = open.NewBatchDecoder()
+	case config.ProtocolCanalJSON:
+		decoder = canal.NewBatchDecoder(c.enableTiDBExtension, "")
+	default:
+		log.Panic("Protocol not supported", zap.Any("Protocol", c.protocol))
+	}
+	if err != nil {
+		return errors.Trace(err)
+	}
+
 	eventGroups := make(map[int64]*eventsGroup)
 	for message := range claim.Messages() {
-		var (
-			decoder codec.RowEventDecoder
-			err     error
-		)
-		switch c.protocol {
-		case config.ProtocolOpen, config.ProtocolDefault:
-			decoder, err = open.NewBatchDecoder(message.Key, message.Value)
-		case config.ProtocolCanalJSON:
-			decoder = canal.NewBatchDecoder(message.Value, c.enableTiDBExtension, "")
-		default:
-			log.Panic("Protocol not supported", zap.Any("Protocol", c.protocol))
-		}
-		if err != nil {
+		if err := decoder.AddKeyValue(message.Key, message.Value); err != nil {
+			log.Error("add key value to the decoder failed", zap.Error(err))
 			return errors.Trace(err)
 		}
 
