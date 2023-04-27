@@ -11,7 +11,7 @@ TLS_DIR=$(cd $CUR/../_certificates && pwd)
 MAX_RETRIES=20
 
 function run() {
-	# mysql and kafka are the same
+	# storage and kafka are the same as mysql
 	if [ "$SINK_TYPE" != "mysql" ]; then
 		return
 	fi
