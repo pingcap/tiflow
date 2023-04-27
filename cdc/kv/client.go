@@ -47,7 +47,6 @@ import (
 	pd "github.com/tikv/pd/client"
 	"go.uber.org/zap"
 	"golang.org/x/sync/errgroup"
-	"golang.org/x/time/rate"
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/status"
 )
@@ -125,16 +124,6 @@ func newRegionErrorInfo(info singleRegionInfo, err error) regionErrorInfo {
 		singleRegionInfo: info,
 		err:              err,
 	}
-}
-
-type regionEventFeedLimiters struct {
-	sync.Mutex
-	// TODO replace with a LRU cache.
-	limiters map[uint64]*rate.Limiter
-}
-
-var defaultRegionEventFeedLimiters = &regionEventFeedLimiters{
-	limiters: make(map[uint64]*rate.Limiter),
 }
 
 // eventFeedStream stores an EventFeed stream and pointer to the underlying gRPC connection
