@@ -1,0 +1,13 @@
+[storage]
+# Disable creating a large temp file.
+reserve-space = "0MB"
+engine = "partitioned-raft-kv"
+[rocksdb]
+max-open-files = 4096
+[raftdb]
+max-open-files = 4096
+[raftstore]
+# true (default value) for high reliability, this can prevent data loss when power failure.
+sync-log = false
+[cdc]
+hibernate-regions-compatible = true
