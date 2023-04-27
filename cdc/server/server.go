@@ -151,7 +151,7 @@ func (s *server) prepare(ctx context.Context) error {
 		TLS:              tlsConfig,
 		LogConfig:        &logConfig,
 		DialTimeout:      5 * time.Second,
-		AutoSyncInterval: 3 * time.Second,
+		AutoSyncInterval: 30 * time.Second,
 		DialOptions: []grpc.DialOption{
 			grpcTLSOption,
 			grpc.WithBlock(),
