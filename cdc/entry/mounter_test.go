@@ -1355,7 +1355,7 @@ func TestNewDMRowChange(t *testing.T) {
 		require.Equal(t, []interface{}{1, 2}, argsGot)
 
 		sqlGot, argsGot = sqlmodel.GenDeleteSQL(rowChange, rowChange)
-		require.Equal(t, "DELETE FROM `db`.`t1` WHERE (`a1`,`a3`) IN ((?,?),(?,?))", sqlGot)
+		require.Equal(t, "DELETE FROM `db`.`t1` WHERE (`a1` = ? AND `a3` = ?) OR (`a1` = ? AND `a3` = ?)", sqlGot)
 		require.Equal(t, []interface{}{1, 2, 1, 2}, argsGot)
 	}
 }

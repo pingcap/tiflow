@@ -275,7 +275,7 @@ func (s *dpanicSuite) TestExpressionIndex() {
 	sql := `CREATE TABLE tb1 (
     	id INT PRIMARY KEY,
     	j JSON,
-    	KEY j_index ((cast(json_extract(j,'$[*]') as signed array)), id)
+    	UNIQUE KEY j_index ((cast(json_extract(j,'$[*]') as signed array)), id)
 )`
 	ti := mockTableInfo(s.T(), sql)
 	change := NewRowChange(source, nil, nil, []interface{}{1, `[1,2,3]`}, ti, nil, nil)
@@ -283,6 +283,10 @@ func (s *dpanicSuite) TestExpressionIndex() {
 	s.Equal("INSERT INTO `db`.`tb1` (`id`,`j`) VALUES (?,?)", sql)
 	s.Equal([]interface{}{1, `[1,2,3]`}, args)
 	require.Equal(s.T(), 2, change.ColumnCount())
+	keys := change.CausalityKeys()
+	// TODO: need change it after future fix
+	require.Equal(s.T(), []string{"1.id.db.tb1"}, keys)
+
 	change2 := NewRowChange(source, nil, []interface{}{1, `[1,2,3]`}, []interface{}{1, `[1,2,3,4]`}, ti, nil, nil)
 	sql, args = change2.GenSQL(DMLUpdate)
 	s.Equal("UPDATE `db`.`tb1` SET `id` = ?, `j` = ? WHERE `id` = ? LIMIT 1", sql)

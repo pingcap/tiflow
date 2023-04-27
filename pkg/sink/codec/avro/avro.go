@@ -19,6 +19,7 @@ import (
 	"encoding/binary"
 	"encoding/json"
 	"math/big"
+	"sort"
 	"strconv"
 	"strings"
 
@@ -40,21 +41,45 @@ import (
 
 // BatchEncoder converts the events to binary Avro data
 type BatchEncoder struct {
+	*Options
+
 	namespace          string
 	keySchemaManager   *schemaManager
 	valueSchemaManager *schemaManager
 	result             []*common.Message
+}
 
-	enableTiDBExtension bool
-	enableRowChecksum   bool
+// Options is used to initialize the encoder, control the encoding behavior.
+type Options struct {
+	EnableTiDBExtension bool
+	EnableRowChecksum   bool
 
-	decimalHandlingMode        string
-	bigintUnsignedHandlingMode string
+	DecimalHandlingMode        string
+	BigintUnsignedHandlingMode string
+}
+
+type avroEncodeInput struct {
+	columns  []*model.Column
+	colInfos []rowcodec.ColInfo
+}
+
+func (r *avroEncodeInput) Less(i, j int) bool {
+	return r.colInfos[i].ID < r.colInfos[j].ID
+}
+
+func (r *avroEncodeInput) Len() int {
+	return len(r.columns)
+}
+
+func (r *avroEncodeInput) Swap(i, j int) {
+	r.colInfos[i], r.colInfos[j] = r.colInfos[j], r.colInfos[i]
+	r.columns[i], r.columns[j] = r.columns[j], r.columns[i]
 }
 
 type avroEncodeResult struct {
-	data       []byte
-	registryID int
+	data []byte
+	// schemaID is encoded into the avro message, consumer should use this to fetch the schema.
+	schemaID int
 }
 
 // AppendRowChangedEvent appends a row change event to the encoder
@@ -145,6 +170,8 @@ func (a *BatchEncoder) avroEncode(
 	isKey bool,
 ) (*avroEncodeResult, error) {
 	var (
+		input *avroEncodeInput
+
 		cols                   []*model.Column
 		colInfos               []rowcodec.ColInfo
 		enableTiDBExtension    bool
@@ -154,14 +181,21 @@ func (a *BatchEncoder) avroEncode(
 	)
 	if isKey {
 		cols, colInfos = e.HandleKeyColInfos()
+		input = &avroEncodeInput{
+			columns:  cols,
+			colInfos: colInfos,
+		}
 		enableTiDBExtension = false
 		enableRowLevelChecksum = false
 		schemaManager = a.keySchemaManager
 	} else {
-		cols = e.Columns
-		colInfos = e.ColInfos
-		enableTiDBExtension = a.enableTiDBExtension
-		enableRowLevelChecksum = a.enableRowChecksum
+		input = &avroEncodeInput{
+			columns:  e.Columns,
+			colInfos: e.ColInfos,
+		}
+
+		enableTiDBExtension = a.EnableTiDBExtension
+		enableRowLevelChecksum = a.EnableRowChecksum
 		schemaManager = a.valueSchemaManager
 		if e.IsInsert() {
 			operation = insertOperation
@@ -173,7 +207,7 @@ func (a *BatchEncoder) avroEncode(
 		}
 	}
 
-	if len(cols) == 0 {
+	if len(input.columns) == 0 {
 		return nil, nil
 	}
 
@@ -183,12 +217,11 @@ func (a *BatchEncoder) avroEncode(
 		schema, err := rowToAvroSchema(
 			namespace,
 			e.Table.Table,
-			cols,
-			colInfos,
+			input,
 			enableTiDBExtension,
 			enableRowLevelChecksum,
-			a.decimalHandlingMode,
-			a.bigintUnsignedHandlingMode,
+			a.DecimalHandlingMode,
+			a.BigintUnsignedHandlingMode,
 		)
 		if err != nil {
 			log.Error("AvroEventBatchEncoder: generating schema failed", zap.Error(err))
@@ -197,7 +230,7 @@ func (a *BatchEncoder) avroEncode(
 		return schema, nil
 	}
 
-	avroCodec, registryID, err := schemaManager.GetCachedOrRegister(
+	avroCodec, schemaID, err := schemaManager.GetCachedOrRegister(
 		ctx,
 		topic,
 		e.TableInfo.Version,
@@ -208,13 +241,12 @@ func (a *BatchEncoder) avroEncode(
 	}
 
 	native, err := rowToAvroData(
-		cols,
-		colInfos,
+		input,
 		e.CommitTs,
 		operation,
 		enableTiDBExtension,
-		a.decimalHandlingMode,
-		a.bigintUnsignedHandlingMode,
+		a.DecimalHandlingMode,
+		a.BigintUnsignedHandlingMode,
 	)
 	if err != nil {
 		log.Error("AvroEventBatchEncoder: converting to native failed", zap.Error(err))
@@ -234,8 +266,8 @@ func (a *BatchEncoder) avroEncode(
 	}
 
 	return &avroEncodeResult{
-		data:       bin,
-		registryID: registryID,
+		data:     bin,
+		schemaID: schemaID,
 	}, nil
 }
 
@@ -369,13 +401,16 @@ type avroLogicalTypeSchema struct {
 func rowToAvroSchema(
 	namespace string,
 	name string,
-	columnInfo []*model.Column,
-	colInfos []rowcodec.ColInfo,
+	input *avroEncodeInput,
 	enableTiDBExtension bool,
 	enableRowLevelChecksum bool,
 	decimalHandlingMode string,
 	bigintUnsignedHandlingMode string,
 ) (string, error) {
+	if enableRowLevelChecksum {
+		sort.Sort(input)
+	}
+
 	top := avroSchemaTop{
 		Tp:        "record",
 		Name:      sanitizeName(name),
@@ -383,10 +418,10 @@ func rowToAvroSchema(
 		Fields:    nil,
 	}
 
-	for i, col := range columnInfo {
+	for i, col := range input.columns {
 		avroType, err := columnToAvroSchema(
 			col,
-			colInfos[i].Ft,
+			input.colInfos[i].Ft,
 			decimalHandlingMode,
 			bigintUnsignedHandlingMode,
 		)
@@ -400,7 +435,7 @@ func rowToAvroSchema(
 		copy.Value = copy.Default
 		defaultValue, _, err := columnToAvroData(
 			&copy,
-			colInfos[i].Ft,
+			input.colInfos[i].Ft,
 			decimalHandlingMode,
 			bigintUnsignedHandlingMode,
 		)
@@ -440,32 +475,38 @@ func rowToAvroSchema(
 	if enableTiDBExtension {
 		top.Fields = append(top.Fields,
 			map[string]interface{}{
-				"name": tidbOp,
-				"type": "string",
+				"name":    tidbOp,
+				"type":    "string",
+				"default": "",
 			},
 			map[string]interface{}{
-				"name": tidbCommitTs,
-				"type": "long",
+				"name":    tidbCommitTs,
+				"type":    "long",
+				"default": 0,
 			},
 			map[string]interface{}{
-				"name": tidbPhysicalTime,
-				"type": "long",
+				"name":    tidbPhysicalTime,
+				"type":    "long",
+				"default": 0,
 			},
 		)
 
 		if enableRowLevelChecksum {
 			top.Fields = append(top.Fields,
 				map[string]interface{}{
-					"name": tidbRowLevelChecksum,
-					"type": "string",
+					"name":    tidbRowLevelChecksum,
+					"type":    "string",
+					"default": "",
 				},
 				map[string]interface{}{
-					"name": tidbCorrupted,
-					"type": "boolean",
+					"name":    tidbCorrupted,
+					"type":    "boolean",
+					"default": false,
 				},
 				map[string]interface{}{
-					"name": tidbChecksumVersion,
-					"type": "int",
+					"name":    tidbChecksumVersion,
+					"type":    "int",
+					"default": 0,
 				})
 		}
 
@@ -475,27 +516,29 @@ func rowToAvroSchema(
 	if err != nil {
 		return "", cerror.WrapError(cerror.ErrAvroMarshalFailed, err)
 	}
-	log.Debug("rowToAvroSchema", zap.ByteString("schema", str))
+	log.Info("rowToAvroSchema",
+		zap.ByteString("schema", str),
+		zap.Bool("enableTiDBExtension", enableTiDBExtension),
+		zap.Bool("enableRowLevelChecksum", enableRowLevelChecksum))
 	return string(str), nil
 }
 
 func rowToAvroData(
-	cols []*model.Column,
-	colInfos []rowcodec.ColInfo,
+	input *avroEncodeInput,
 	commitTs uint64,
 	operation string,
 	enableTiDBExtension bool,
 	decimalHandlingMode string,
 	bigintUnsignedHandlingMode string,
 ) (map[string]interface{}, error) {
-	ret := make(map[string]interface{}, len(cols))
-	for i, col := range cols {
+	ret := make(map[string]interface{}, len(input.columns))
+	for i, col := range input.columns {
 		if col == nil {
 			continue
 		}
 		data, str, err := columnToAvroData(
 			col,
-			colInfos[i].Ft,
+			input.colInfos[i].Ft,
 			decimalHandlingMode,
 			bigintUnsignedHandlingMode,
 		)
@@ -819,7 +862,7 @@ const magicByte = uint8(0)
 // -and-ksqldb-viewing-kafka-messages-bytes-as-hex/
 func (r *avroEncodeResult) toEnvelope() ([]byte, error) {
 	buf := new(bytes.Buffer)
-	data := []interface{}{magicByte, int32(r.registryID), r.data}
+	data := []interface{}{magicByte, int32(r.schemaID), r.data}
 	for _, v := range data {
 		err := binary.Write(buf, binary.BigEndian, v)
 		if err != nil {
@@ -875,15 +918,18 @@ func NewBatchEncoderBuilder(ctx context.Context,
 
 // Build an AvroEventBatchEncoder.
 func (b *batchEncoderBuilder) Build() codec.RowEventEncoder {
-	encoder := &BatchEncoder{}
-	encoder.namespace = b.namespace
-	encoder.keySchemaManager = b.keySchemaManager
-	encoder.valueSchemaManager = b.valueSchemaManager
-	encoder.result = make([]*common.Message, 0, 1024)
-	encoder.enableTiDBExtension = b.config.EnableTiDBExtension
-	encoder.enableRowChecksum = b.config.EnableRowChecksum
-	encoder.decimalHandlingMode = b.config.AvroDecimalHandlingMode
-	encoder.bigintUnsignedHandlingMode = b.config.AvroBigintUnsignedHandlingMode
+	encoder := &BatchEncoder{
+		namespace:          b.namespace,
+		keySchemaManager:   b.keySchemaManager,
+		valueSchemaManager: b.valueSchemaManager,
+		result:             make([]*common.Message, 0, 1),
+		Options: &Options{
+			EnableTiDBExtension:        b.config.EnableTiDBExtension,
+			EnableRowChecksum:          b.config.EnableRowChecksum,
+			DecimalHandlingMode:        b.config.AvroDecimalHandlingMode,
+			BigintUnsignedHandlingMode: b.config.AvroBigintUnsignedHandlingMode,
+		},
+	}
 
 	return encoder
 }

@@ -10,7 +10,7 @@ SINK_TYPE=$1
 
 function run() {
 	# test kafka sink only in this case
-	if [ "$SINK_TYPE" == "mysql" ]; then
+	if [ "$SINK_TYPE" != "kafka" ]; then
 		return
 	fi
 	rm -rf $WORK_DIR && mkdir -p $WORK_DIR
