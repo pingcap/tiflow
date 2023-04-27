@@ -11,7 +11,7 @@ SINK_TYPE=$1
 # use canal-adapter to sync data from kafka to mysql,
 # make sure that `canal-json` output can be consumed by the canal-adapter.
 function run() {
-	if [ "$SINK_TYPE" == "mysql" ]; then
+	if [ "$SINK_TYPE" != "kafka" ]; then
 		return
 	fi
 
