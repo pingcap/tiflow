@@ -12,7 +12,8 @@ CDC_COUNT=3
 DB_COUNT=4
 
 function run() {
-	if [ "$SINK_TYPE" == "mysql" ]; then
+	# test kafka sink only in this case
+	if [ "$SINK_TYPE" != "kafka" ]; then
 		return
 	fi
 	rm -rf $WORK_DIR && mkdir -p $WORK_DIR

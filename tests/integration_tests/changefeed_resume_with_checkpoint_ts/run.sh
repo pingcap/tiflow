@@ -10,11 +10,6 @@ SINK_TYPE=$1
 MAX_RETRIES=20
 
 function prepare() {
-	if [ "$SINK_TYPE" == "kafka" ]; then
-		echo "[$(date)] <<<<<< run test case $TEST_NAME success! >>>>>>"
-		exit 0
-	fi
-
 	rm -rf $WORK_DIR && mkdir -p $WORK_DIR
 	start_tidb_cluster --workdir $WORK_DIR
 	cd $WORK_DIR
@@ -132,9 +127,11 @@ function resume_changefeed_in_failed_state() {
 }
 
 trap stop_tidb_cluster EXIT
-prepare
-resume_changefeed_in_stopped_state $*
-resume_changefeed_in_failed_state $*
 
-check_logs $WORK_DIR
+if [ "$SINK_TYPE" == "mysql" ]; then
+	prepare
+	resume_changefeed_in_stopped_state $*
+	resume_changefeed_in_failed_state $*
+	check_logs $WORK_DIR
+fi
 echo "[$(date)] <<<<<< run test case $TEST_NAME success! >>>>>>"
