@@ -64,11 +64,13 @@ func NewConfig(protocol config.Protocol) *Config {
 		MaxMessageBytes: config.DefaultMaxMessageBytes,
 		MaxBatchSize:    defaultMaxBatchSize,
 
-		EnableTiDBExtension:            false,
-		EnableRowChecksum:              false,
+		EnableTiDBExtension: false,
+		EnableRowChecksum:   false,
+
 		AvroSchemaRegistry:             "",
 		AvroDecimalHandlingMode:        "precise",
 		AvroBigintUnsignedHandlingMode: "long",
+		AvroEnableWatermark:            false,
 
 		OnlyOutputUpdatedColumns: false,
 	}
