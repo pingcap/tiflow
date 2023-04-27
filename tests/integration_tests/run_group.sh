@@ -19,7 +19,7 @@ mysql_only_consistent_replicate="consistent_replicate_ddl consistent_replicate_g
 # multi_changefeed clustered_index sink_hang
 kafka_only="kafka_big_messages kafka_compression kafka_messages kafka_sink_error_resume"
 kafka_only_protocol="canal_json_adapter_compatibility canal_json_basic multi_topics"
-kafka_only_v2="big_txn_v2 kafka_big_messages_v2 multi_tables_ddl_v2 multi_topics_v2"
+kafka_only_v2="kafka_big_txn_v2 kafka_big_messages_v2 multi_tables_ddl_v2 multi_topics_v2"
 
 storage_only_csv="csv_storage_basic csv_storage_multi_tables_ddl csv_storage_partition_table"
 storage_only_canal_json="canal_json_storage_basic canal_json_storage_partition_table"
@@ -36,9 +36,9 @@ groups=(
 	["G01"]="$mysql_only_http $kafka_only_protocol $storage_only_canal_json"
 	["G02"]="$mysql_only_consistent_replicate $kafka_only_v2"
 	["G03"]='row_format drop_many_tables processor_stop_delay'
-	["G04"]='foreign_key ddl_puller_lag'
+	["G04"]='foreign_key ddl_puller_lag ddl_only_block_related_table'
 	["G05"]='partition_table changefeed_auto_stop'
-	["G06"]='charset_gbk owner_remove_table_error'
+	["G06"]='charset_gbk owner_remove_table_error ddl_manager'
 	["G07"]='clustered_index multi_tables_ddl'
 	["G08"]='bank multi_source multi_capture'
 	["G09"]='ddl_reentrant multi_cdc_cluster'
