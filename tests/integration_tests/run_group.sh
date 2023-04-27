@@ -56,7 +56,7 @@ groups=(
 	["G20"]='changefeed_reconstruct http_proxies savepoint'
 	["G21"]='event_filter generate_column sequence processor_resolved_ts_fallback'
 	["G22"]='big_txn changefeed_finish sink_hang'
-	["G23"]='new_ci_collation_with_old_value batch_add_table '
+	["G23"]='new_ci_collation_with_old_value batch_add_table lossy_ddl'
 	["G24"]='owner_resign force_replicate_table multi_changefeed'
 )
 
