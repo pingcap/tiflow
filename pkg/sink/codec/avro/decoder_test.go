@@ -28,8 +28,6 @@ import (
 )
 
 func TestDecodeEvent(t *testing.T) {
-	t.Parallel()
-
 	o := &Options{
 		EnableTiDBExtension:        true,
 		DecimalHandlingMode:        "precise",

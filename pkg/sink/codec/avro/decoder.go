@@ -126,12 +126,10 @@ func (d *decoder) NextRowChangedEvent() (*model.RowChangedEvent, error) {
 			flag.SetIsHandleKey()
 		}
 		col := &model.Column{
-			Name:    colName,
-			Type:    mysqlType,
-			Charset: "",
-			Flag:    flag,
-			Value:   value,
-			Default: nil,
+			Name:  colName,
+			Type:  mysqlType,
+			Flag:  flag,
+			Value: value,
 		}
 		columns = append(columns, col)
 	}
@@ -220,10 +218,10 @@ func (d *decoder) NextDDLEvent() (*model.DDLEvent, error) {
 	return result, nil
 }
 
-// GetSchemaIDAndBinaryData return the schema ID and the encoded binary data
+// return the schema ID and the encoded binary data
 // schemaID can be used to fetch the corresponding schema from schema registry,
 // which should be used to decode the binary data.
-func GetSchemaIDAndBinaryData(data []byte) (int, []byte, error) {
+func extractSchemaIDAndBinaryData(data []byte) (int, []byte, error) {
 	if len(data) < 5 {
 		return 0, nil, errors.ErrAvroInvalidMessage.FastGenByArgs()
 	}
@@ -234,7 +232,7 @@ func GetSchemaIDAndBinaryData(data []byte) (int, []byte, error) {
 }
 
 func (d *decoder) decodeKey(ctx context.Context) (map[string]interface{}, error) {
-	schemaID, binary, err := GetSchemaIDAndBinaryData(d.key)
+	schemaID, binary, err := extractSchemaIDAndBinaryData(d.key)
 	if err != nil {
 		return nil, err
 	}
@@ -258,7 +256,7 @@ func (d *decoder) decodeKey(ctx context.Context) (map[string]interface{}, error)
 }
 
 func (d *decoder) decodeValue(ctx context.Context) (map[string]interface{}, string, error) {
-	schemaID, binary, err := GetSchemaIDAndBinaryData(d.value)
+	schemaID, binary, err := extractSchemaIDAndBinaryData(d.value)
 	if err != nil {
 		return nil, "", err
 	}

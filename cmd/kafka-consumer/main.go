@@ -400,9 +400,8 @@ type Consumer struct {
 
 	// avro only
 	// key and value schema manager, only used by the avro protocol to fetch schema.
-	keySchemaM          *avro.SchemaManager
-	valueSchemaM        *avro.SchemaManager
-	avroEnableWatermark bool
+	keySchemaM   *avro.SchemaManager
+	valueSchemaM *avro.SchemaManager
 }
 
 // NewConsumer creates a new cdc kafka consumer
@@ -545,9 +544,10 @@ func (c *Consumer) ConsumeClaim(session sarama.ConsumerGroupSession, claim saram
 		decoder = canal.NewBatchDecoder(c.enableTiDBExtension, "")
 	case config.ProtocolAvro:
 		decoder = avro.NewDecoder(&avro.Options{
-			EnableTiDBExtension:  c.enableTiDBExtension,
-			EnableRowChecksum:    c.enableRowChecksum,
-			EnableWatermarkEvent: c.avroEnableWatermark,
+			EnableTiDBExtension: c.enableTiDBExtension,
+			EnableRowChecksum:   c.enableRowChecksum,
+			// avro must set this to true to make the consumer works.
+			EnableWatermarkEvent: true,
 		}, c.keySchemaM, c.valueSchemaM, kafkaTopic)
 	default:
 		log.Panic("Protocol not supported", zap.Any("Protocol", c.protocol))
