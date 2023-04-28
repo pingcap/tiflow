@@ -47,6 +47,7 @@ import (
 	"github.com/pingcap/tiflow/pkg/quotes"
 	"github.com/pingcap/tiflow/pkg/security"
 	"github.com/pingcap/tiflow/pkg/sink/codec"
+	"github.com/pingcap/tiflow/pkg/sink/codec/avro"
 	"github.com/pingcap/tiflow/pkg/sink/codec/canal"
 	"github.com/pingcap/tiflow/pkg/sink/codec/open"
 	"github.com/pingcap/tiflow/pkg/spanz"
@@ -69,6 +70,7 @@ var (
 
 	protocol            config.Protocol
 	enableTiDBExtension bool
+	enableRowChecksum   bool
 
 	// eventRouterReplicaConfig only used to initialize the consumer's eventRouter
 	// which then can be used to check RowChangedEvent dispatched correctness
@@ -190,6 +192,18 @@ func init() {
 		}
 
 		enableTiDBExtension = b
+	}
+
+	s = upstreamURI.Query().Get("enable-row-checksum")
+	if s != "" {
+		b, err := strconv.ParseBool(s)
+		if err != nil {
+			log.Panic("invalid enable-row-checksum of upstream-uri")
+		}
+		if protocol != config.ProtocolAvro && b {
+			log.Panic("enable-row-checksum only work with avro")
+		}
+		enableRowChecksum = b
 	}
 
 	if configFile != "" {
@@ -380,8 +394,15 @@ type Consumer struct {
 
 	protocol            config.Protocol
 	enableTiDBExtension bool
+	enableRowChecksum   bool
 
 	eventRouter *dispatcher.EventRouter
+
+	// avro only
+	// key and value schema manager, only used by the avro protocol to fetch schema.
+	keySchemaM          *avro.SchemaManager
+	valueSchemaM        *avro.SchemaManager
+	avroEnableWatermark bool
 }
 
 // NewConsumer creates a new cdc kafka consumer
@@ -399,6 +420,7 @@ func NewConsumer(ctx context.Context) (*Consumer, error) {
 	}
 	c.protocol = protocol
 	c.enableTiDBExtension = enableTiDBExtension
+	c.enableRowChecksum = enableRowChecksum
 
 	// this means user has input config file to enable dispatcher check
 	// some protocol does not provide enough information to check the
@@ -521,6 +543,12 @@ func (c *Consumer) ConsumeClaim(session sarama.ConsumerGroupSession, claim saram
 		decoder = open.NewBatchDecoder()
 	case config.ProtocolCanalJSON:
 		decoder = canal.NewBatchDecoder(c.enableTiDBExtension, "")
+	case config.ProtocolAvro:
+		decoder = avro.NewDecoder(&avro.Options{
+			EnableTiDBExtension:  c.enableTiDBExtension,
+			EnableRowChecksum:    c.enableRowChecksum,
+			EnableWatermarkEvent: c.avroEnableWatermark,
+		}, c.keySchemaM, c.valueSchemaM, kafkaTopic)
 	default:
 		log.Panic("Protocol not supported", zap.Any("Protocol", c.protocol))
 	}

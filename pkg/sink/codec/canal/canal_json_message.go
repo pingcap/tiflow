@@ -17,10 +17,10 @@ import (
 	"sort"
 	"strings"
 
+	timodel "github.com/pingcap/tidb/parser/model"
 	"github.com/pingcap/tidb/parser/types"
 	"github.com/pingcap/tiflow/cdc/model"
 	cerrors "github.com/pingcap/tiflow/pkg/errors"
-	"github.com/pingcap/tiflow/pkg/sink/codec"
 	"github.com/pingcap/tiflow/pkg/sink/codec/internal"
 	canal "github.com/pingcap/tiflow/proto/canal"
 )
@@ -237,6 +237,20 @@ func canalJSONMessage2DDLEvent(msg canalJSONMessageInterface) *model.DDLEvent {
 
 	// hack the DDL Type to be compatible with MySQL sink's logic
 	// see https://github.com/pingcap/tiflow/blob/0578db337d/cdc/sink/mysql.go#L362-L370
-	result.Type = codec.GetDDLActionType(result.Query)
+	result.Type = getDDLActionType(result.Query)
 	return result
+}
+
+// return DDL ActionType by the prefix
+// see https://github.com/pingcap/tidb/blob/6dbf2de2f/parser/model/ddl.go#L101-L102
+func getDDLActionType(query string) timodel.ActionType {
+	query = strings.ToLower(query)
+	if strings.HasPrefix(query, "create schema") || strings.HasPrefix(query, "create database") {
+		return timodel.ActionCreateSchema
+	}
+	if strings.HasPrefix(query, "drop schema") || strings.HasPrefix(query, "drop database") {
+		return timodel.ActionDropSchema
+	}
+
+	return timodel.ActionNone
 }
