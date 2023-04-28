@@ -117,7 +117,7 @@ func TestDecodeEvent(t *testing.T) {
 	require.Len(t, messages, 1)
 	message := messages[0]
 
-	keySchemaM, valueSchemaM, err := newSchemaManager4Test(ctx)
+	keySchemaM, valueSchemaM, err = newSchemaManager4Test(ctx)
 	require.NoError(t, err)
 
 	decoder := NewDecoder(o, keySchemaM, valueSchemaM, topic)
