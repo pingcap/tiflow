@@ -40,8 +40,7 @@ func TestDecodeEvent(t *testing.T) {
 	keySchemaM, valueSchemaM, err := newSchemaManager4Test(ctx)
 	require.NoError(t, err)
 
-	encoder, err := setupEncoderAndSchemaRegistry(o, keySchemaM, valueSchemaM)
-	require.NoError(t, err)
+	encoder := setupEncoderAndSchemaRegistry(o, keySchemaM, valueSchemaM)
 	defer teardownEncoderAndSchemaRegistry()
 
 	cols := make([]*model.Column, 0)
@@ -142,8 +141,7 @@ func TestDecodeDDLEvent(t *testing.T) {
 		EnableWatermarkEvent: true,
 	}
 
-	encoder, err := setupEncoderAndSchemaRegistry(o, nil, nil)
-	require.NoError(t, err)
+	encoder := setupEncoderAndSchemaRegistry(o, nil, nil)
 	defer teardownEncoderAndSchemaRegistry()
 
 	message, err := encoder.EncodeDDLEvent(&model.DDLEvent{
@@ -194,8 +192,7 @@ func TestDecodeResolvedEvent(t *testing.T) {
 		EnableWatermarkEvent: true,
 	}
 
-	encoder, err := setupEncoderAndSchemaRegistry(o, nil, nil)
-	require.NoError(t, err)
+	encoder := setupEncoderAndSchemaRegistry(o, nil, nil)
 	defer teardownEncoderAndSchemaRegistry()
 
 	resolvedTs := uint64(1591943372224)

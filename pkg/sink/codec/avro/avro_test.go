@@ -60,7 +60,7 @@ func setupEncoderAndSchemaRegistry(
 	o *Options,
 	keySchemeM *SchemaManager,
 	valueSchemaM *SchemaManager,
-) (*BatchEncoder, error) {
+) *BatchEncoder {
 	if keySchemeM != nil && valueSchemaM != nil {
 		startHTTPInterceptForTestingRegistry()
 	}
@@ -71,7 +71,7 @@ func setupEncoderAndSchemaRegistry(
 		keySchemaManager:   keySchemeM,
 		result:             make([]*common.Message, 0, 1),
 		Options:            o,
-	}, nil
+	}
 }
 
 func teardownEncoderAndSchemaRegistry() {
@@ -799,8 +799,7 @@ func TestAvroEncode(t *testing.T) {
 	keySchemaM, valueSchemaM, err := newSchemaManager4Test(ctx)
 	require.NoError(t, err)
 
-	encoder, err := setupEncoderAndSchemaRegistry(o, keySchemaM, valueSchemaM)
-	require.NoError(t, err)
+	encoder := setupEncoderAndSchemaRegistry(o, keySchemaM, valueSchemaM)
 	defer teardownEncoderAndSchemaRegistry()
 
 	cols := make([]*model.Column, 0)
@@ -1001,8 +1000,7 @@ func TestArvoAppendRowChangedEventWithCallback(t *testing.T) {
 	keySchemaM, valueSchemaM, err := newSchemaManager4Test(ctx)
 	require.NoError(t, err)
 
-	encoder, err := setupEncoderAndSchemaRegistry(o, keySchemaM, valueSchemaM)
-	require.NoError(t, err)
+	encoder := setupEncoderAndSchemaRegistry(o, keySchemaM, valueSchemaM)
 	defer teardownEncoderAndSchemaRegistry()
 
 	// Empty build makes sure that the callback build logic not broken.
