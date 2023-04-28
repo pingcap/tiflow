@@ -331,7 +331,8 @@ func TestCheckTiDBVariable(t *testing.T) {
 	require.Equal(t, "1", val)
 
 	// If it is not existed, return the "".
-	mock.ExpectQuery("select @@no_exist_variable;").WillReturnError(sql.ErrNoRows)
+	mock.ExpectQuery("select @@no_exist_variable;").WillReturnError(sql.ErrConnDone)
+	mock.ExpectQuery("show session variables like 'no_exist_variable';").WillReturnError(sql.ErrNoRows)
 	val, err = checkTiDBVariable(context.TODO(), db, "no_exist_variable", "0")
 	require.Nil(t, err)
 	require.Equal(t, "", val)
