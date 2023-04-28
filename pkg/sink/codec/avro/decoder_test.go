@@ -19,6 +19,7 @@ import (
 	"testing"
 	"time"
 
+	timodel "github.com/pingcap/tidb/parser/model"
 	"github.com/pingcap/tidb/parser/mysql"
 	"github.com/pingcap/tidb/types"
 	"github.com/pingcap/tidb/util/rowcodec"
@@ -27,6 +28,8 @@ import (
 )
 
 func TestDecodeEvent(t *testing.T) {
+	t.Parallel()
+
 	o := &Options{
 		EnableTiDBExtension:        true,
 		DecimalHandlingMode:        "precise",
@@ -126,4 +129,96 @@ func TestDecodeEvent(t *testing.T) {
 	decodedEvent, err := decoder.NextRowChangedEvent()
 	require.NoError(t, err)
 	require.NotNil(t, decodedEvent)
+}
+
+func TestDecodeDDLEvent(t *testing.T) {
+	t.Parallel()
+
+	o := &Options{
+		EnableTiDBExtension:  true,
+		EnableWatermarkEvent: true,
+	}
+
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+
+	encoder, err := setupEncoderAndSchemaRegistry(ctx, o)
+	require.NoError(t, err)
+	defer teardownEncoderAndSchemaRegistry()
+
+	message, err := encoder.EncodeDDLEvent(&model.DDLEvent{
+		StartTs:  1020,
+		CommitTs: 1030,
+		TableInfo: &model.TableInfo{
+			TableName: model.TableName{
+				Schema:      "test",
+				Table:       "t1",
+				TableID:     0,
+				IsPartition: false,
+			},
+		},
+		Type:  timodel.ActionAddColumn,
+		Query: "ALTER TABLE test.t1 ADD COLUMN a int",
+	})
+	require.NoError(t, err)
+	require.NotNil(t, message)
+
+	keySchemaM, valueSchemaM, err := newSchemaManager4Test(ctx)
+	require.NoError(t, err)
+
+	topic := "test-topic"
+	decoder := NewDecoder(message.Key, message.Value, o, keySchemaM, valueSchemaM, topic)
+
+	messageType, exist, err := decoder.HasNext()
+	require.NoError(t, err)
+	require.True(t, exist)
+	require.Equal(t, model.MessageTypeDDL, messageType)
+
+	decodedEvent, err := decoder.NextDDLEvent()
+	require.NoError(t, err)
+	require.NotNil(t, decodedEvent)
+	require.Equal(t, uint64(1020), decodedEvent.StartTs)
+	require.Equal(t, uint64(1030), decodedEvent.CommitTs)
+	require.Equal(t, timodel.ActionAddColumn, decodedEvent.Type)
+	require.Equal(t, "ALTER TABLE test.t1 ADD COLUMN a int", decodedEvent.Query)
+	require.Equal(t, "test", decodedEvent.TableInfo.TableName.Schema)
+	require.Equal(t, "t1", decodedEvent.TableInfo.TableName.Table)
+	require.Equal(t, int64(0), decodedEvent.TableInfo.TableName.TableID)
+	require.False(t, decodedEvent.TableInfo.TableName.IsPartition)
+}
+
+func TestDecodeResolvedEvent(t *testing.T) {
+	t.Parallel()
+
+	o := &Options{
+		EnableTiDBExtension:  true,
+		EnableWatermarkEvent: true,
+	}
+
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+
+	encoder, err := setupEncoderAndSchemaRegistry(ctx, o)
+	require.NoError(t, err)
+	defer teardownEncoderAndSchemaRegistry()
+
+	resolvedTs := uint64(1591943372224)
+	message, err := encoder.EncodeCheckpointEvent(resolvedTs)
+	require.NoError(t, err)
+	require.NotNil(t, message)
+
+	keySchemaM, valueSchemaM, err := newSchemaManager4Test(ctx)
+	require.NoError(t, err)
+
+	topic := "test-topic"
+	decoder := NewDecoder(message.Key, message.Value, o, keySchemaM, valueSchemaM, topic)
+
+	messageType, exist, err := decoder.HasNext()
+	require.NoError(t, err)
+	require.True(t, exist)
+	require.Equal(t, model.MessageTypeResolved, messageType)
+
+	obtained, err := decoder.NextResolvedEvent()
+	require.NoError(t, err)
+	require.Equal(t, resolvedTs, obtained)
 }
