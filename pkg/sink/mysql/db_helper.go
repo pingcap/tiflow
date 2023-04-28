@@ -215,10 +215,14 @@ func checkCharsetSupport(ctx context.Context, db *sql.DB, charsetName string) (b
 func checkTiDBVariable(ctx context.Context, db *sql.DB, variableName, defaultValue string) (string, error) {
 	var name string
 	var value string
-	querySQL := fmt.Sprintf("show session variables like '%s';", variableName)
-	err := db.QueryRowContext(ctx, querySQL).Scan(&name, &value)
+	// SAFETY: variableName is a constant string, so it is safe to use it.
+	//nolint:gosec
+	querySQL := fmt.Sprintf("select @@%s;", variableName)
+	err := db.QueryRowContext(ctx, querySQL).Scan(&value)
 	if err != nil && err != sql.ErrNoRows {
-		err = db.QueryRowContext(ctx, "select @@?;", variableName).Scan(&value)
+		querySQL := fmt.Sprintf("show session variables like '%s';", variableName)
+		// Please do not shadow err, because we check the value of err outside the if block.
+		err = db.QueryRowContext(ctx, querySQL).Scan(&name, &value)
 		if err != nil && err != sql.ErrNoRows {
 			errMsg := "fail to query session variable " + variableName
 			return "", cerror.ErrMySQLQueryError.Wrap(err).GenWithStack(errMsg)

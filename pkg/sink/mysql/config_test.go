@@ -303,20 +303,41 @@ func TestCheckTiDBVariable(t *testing.T) {
 	db, mock, err := sqlmock.New()
 	require.Nil(t, err)
 	defer db.Close() //nolint:errcheck
-	columns := []string{"Variable_name", "Value"}
 
-	mock.ExpectQuery("show session variables like 'allow_auto_random_explicit_insert';").WillReturnRows(
-		sqlmock.NewRows(columns).AddRow("allow_auto_random_explicit_insert", "0"),
+	// If it is existed, return the default value.
+	mock.ExpectQuery("select @@allow_auto_random_explicit_insert;").WillReturnRows(
+		sqlmock.NewRows([]string{"@@allow_auto_random_explicit_insert"}).AddRow("1"),
 	)
 	val, err := checkTiDBVariable(context.TODO(), db, "allow_auto_random_explicit_insert", "1")
 	require.Nil(t, err)
 	require.Equal(t, "1", val)
 
-	mock.ExpectQuery("show session variables like 'no_exist_variable';").WillReturnError(sql.ErrNoRows)
+	// If it is existed, return the default value.
+	mock.ExpectQuery("select @@allow_auto_random_explicit_insert;").WillReturnRows(
+		sqlmock.NewRows([]string{"@@allow_auto_random_explicit_insert"}).AddRow("0"),
+	)
+	val, err = checkTiDBVariable(context.TODO(), db, "allow_auto_random_explicit_insert", "1")
+	require.Nil(t, err)
+	require.Equal(t, "1", val)
+
+	// Try different ways to get the variable.
+	mock.ExpectQuery("select @@test;").WillReturnError(sql.ErrConnDone)
+	columns := []string{"Variable_name", "Value"}
+	mock.ExpectQuery("show session variables like 'test';").WillReturnRows(
+		sqlmock.NewRows(columns).AddRow("test", "0"),
+	)
+	val, err = checkTiDBVariable(context.TODO(), db, "test", "1")
+	require.Nil(t, err)
+	require.Equal(t, "1", val)
+
+	// If it is not existed, return the "".
+	mock.ExpectQuery("select @@no_exist_variable;").WillReturnError(sql.ErrNoRows)
 	val, err = checkTiDBVariable(context.TODO(), db, "no_exist_variable", "0")
 	require.Nil(t, err)
 	require.Equal(t, "", val)
 
+	// Return error which is not ErrNoRows.
+	mock.ExpectQuery("select @@version;").WillReturnError(sql.ErrConnDone)
 	mock.ExpectQuery("show session variables like 'version';").WillReturnError(sql.ErrConnDone)
 	_, err = checkTiDBVariable(context.TODO(), db, "version", "5.7.25-TiDB-v4.0.0")
 	require.NotNil(t, err)
