@@ -220,7 +220,7 @@ func checkTiDBVariable(ctx context.Context, db *sql.DB, variableName, defaultVal
 	// we try to use `show session variables like '%s'` instead.
 	// SAFETY: variableName is a constant string, so it is safe to use it.
 	//nolint:gosec
-	querySQL := fmt.Sprintf("select @@%s;", variableName)
+	querySQL := fmt.Sprintf("select @%s;", variableName)
 	err := db.QueryRowContext(ctx, querySQL).Scan(&value)
 	if err != nil {
 		log.Warn("Fail to select session variable, try to use show session variable instead",
