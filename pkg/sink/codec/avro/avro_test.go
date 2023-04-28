@@ -57,20 +57,18 @@ func newSchemaManager4Test(ctx context.Context) (*SchemaManager, *SchemaManager,
 }
 
 func setupEncoderAndSchemaRegistry(
-	ctx context.Context,
 	o *Options,
+	keySchemeM *SchemaManager,
+	valueSchemaM *SchemaManager,
 ) (*BatchEncoder, error) {
-	startHTTPInterceptForTestingRegistry()
-
-	keyManager, valueManager, err := newSchemaManager4Test(ctx)
-	if err != nil {
-		return nil, err
+	if keySchemeM != nil && valueSchemaM != nil {
+		startHTTPInterceptForTestingRegistry()
 	}
 
 	return &BatchEncoder{
 		namespace:          model.DefaultNamespace,
-		valueSchemaManager: valueManager,
-		keySchemaManager:   keyManager,
+		valueSchemaManager: valueSchemaM,
+		keySchemaManager:   keySchemeM,
 		result:             make([]*common.Message, 0, 1),
 		Options:            o,
 	}, nil
@@ -798,7 +796,10 @@ func TestAvroEncode(t *testing.T) {
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 
-	encoder, err := setupEncoderAndSchemaRegistry(ctx, o)
+	keySchemaM, valueSchemaM, err := newSchemaManager4Test(ctx)
+	require.NoError(t, err)
+
+	encoder, err := setupEncoderAndSchemaRegistry(o, keySchemaM, valueSchemaM)
 	require.NoError(t, err)
 	defer teardownEncoderAndSchemaRegistry()
 
@@ -988,8 +989,6 @@ func TestGetAvroNamespace(t *testing.T) {
 }
 
 func TestArvoAppendRowChangedEventWithCallback(t *testing.T) {
-	t.Parallel()
-
 	o := &Options{
 		EnableTiDBExtension:        true,
 		EnableRowChecksum:          false,
@@ -999,7 +998,10 @@ func TestArvoAppendRowChangedEventWithCallback(t *testing.T) {
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 
-	encoder, err := setupEncoderAndSchemaRegistry(ctx, o)
+	keySchemaM, valueSchemaM, err := newSchemaManager4Test(ctx)
+	require.NoError(t, err)
+
+	encoder, err := setupEncoderAndSchemaRegistry(o, keySchemaM, valueSchemaM)
 	require.NoError(t, err)
 	defer teardownEncoderAndSchemaRegistry()
 

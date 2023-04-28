@@ -37,7 +37,10 @@ func TestDecodeEvent(t *testing.T) {
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 
-	encoder, err := setupEncoderAndSchemaRegistry(ctx, o)
+	keySchemaM, valueSchemaM, err := newSchemaManager4Test(ctx)
+	require.NoError(t, err)
+
+	encoder, err := setupEncoderAndSchemaRegistry(o, keySchemaM, valueSchemaM)
 	require.NoError(t, err)
 	defer teardownEncoderAndSchemaRegistry()
 
@@ -139,10 +142,7 @@ func TestDecodeDDLEvent(t *testing.T) {
 		EnableWatermarkEvent: true,
 	}
 
-	ctx, cancel := context.WithCancel(context.Background())
-	defer cancel()
-
-	encoder, err := setupEncoderAndSchemaRegistry(ctx, o)
+	encoder, err := setupEncoderAndSchemaRegistry(o, nil, nil)
 	require.NoError(t, err)
 	defer teardownEncoderAndSchemaRegistry()
 
@@ -194,10 +194,7 @@ func TestDecodeResolvedEvent(t *testing.T) {
 		EnableWatermarkEvent: true,
 	}
 
-	ctx, cancel := context.WithCancel(context.Background())
-	defer cancel()
-
-	encoder, err := setupEncoderAndSchemaRegistry(ctx, o)
+	encoder, err := setupEncoderAndSchemaRegistry(o, nil, nil)
 	require.NoError(t, err)
 	defer teardownEncoderAndSchemaRegistry()
 
