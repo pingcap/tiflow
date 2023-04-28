@@ -100,12 +100,11 @@ func TestGenerateDSNByConfig(t *testing.T) {
 		db, mock, err := sqlmock.New()
 		require.Nil(t, err)
 		defer db.Close() // nolint:errcheck
-		columns := []string{"Variable_name", "Value"}
-		mock.ExpectQuery("show session variables like 'allow_auto_random_explicit_insert';").WillReturnRows(
-			sqlmock.NewRows(columns).AddRow("allow_auto_random_explicit_insert", "0"),
+		mock.ExpectQuery("select @@allow_auto_random_explicit_insert;").WillReturnRows(
+			sqlmock.NewRows([]string{"@@allow_auto_random_explicit_insert"}).AddRow("0"),
 		)
-		mock.ExpectQuery("show session variables like 'tidb_txn_mode';").WillReturnRows(
-			sqlmock.NewRows(columns).AddRow("tidb_txn_mode", "pessimistic"),
+		mock.ExpectQuery("select @@tidb_txn_mode;").WillReturnRows(
+			sqlmock.NewRows([]string{"@@tidb_txn_mode"}).AddRow("pessimistic"),
 		)
 		// simulate error
 		dsn, err := dmysql.ParseDSN("root:123456@tcp(127.0.0.1:4000)/")
@@ -116,22 +115,23 @@ func TestGenerateDSNByConfig(t *testing.T) {
 		require.Error(t, err)
 
 		// simulate no transaction_isolation
-		mock.ExpectQuery("show session variables like 'allow_auto_random_explicit_insert';").WillReturnRows(
-			sqlmock.NewRows(columns).AddRow("allow_auto_random_explicit_insert", "0"),
+		mock.ExpectQuery("select @@allow_auto_random_explicit_insert;").WillReturnRows(
+			sqlmock.NewRows([]string{"@@allow_auto_random_explicit_insert"}).AddRow("0"),
 		)
-		mock.ExpectQuery("show session variables like 'tidb_txn_mode';").WillReturnRows(
-			sqlmock.NewRows(columns).AddRow("tidb_txn_mode", "pessimistic"),
+		mock.ExpectQuery("select @@tidb_txn_mode;").WillReturnRows(
+			sqlmock.NewRows([]string{"@@tidb_txn_mode"}).AddRow("pessimistic"),
 		)
+		mock.ExpectQuery("select @@transaction_isolation;").WillReturnError(sql.ErrNoRows)
 		mock.ExpectQuery("show session variables like 'transaction_isolation';").WillReturnError(sql.ErrNoRows)
-		mock.ExpectQuery("show session variables like 'tidb_placement_mode';").
+		mock.ExpectQuery("select @@tidb_placement_mode;").
 			WillReturnRows(
-				sqlmock.NewRows(columns).
-					AddRow("tidb_placement_mode", "IGNORE"),
+				sqlmock.NewRows([]string{"@@tidb_placement_mode"}).
+					AddRow("IGNORE"),
 			)
-		mock.ExpectQuery("show session variables like 'tidb_enable_external_ts_read';").
+		mock.ExpectQuery("select @@tidb_enable_external_ts_read;").
 			WillReturnRows(
-				sqlmock.NewRows(columns).
-					AddRow("tidb_enable_external_ts_read", "OFF"),
+				sqlmock.NewRows([]string{"@@tidb_enable_external_ts_read"}).
+					AddRow("OFF"),
 			)
 		dsnStr, err = generateDSNByConfig(context.TODO(), dsn, cfg, db)
 		require.Nil(t, err)
@@ -143,24 +143,24 @@ func TestGenerateDSNByConfig(t *testing.T) {
 		}
 
 		// simulate transaction_isolation
-		mock.ExpectQuery("show session variables like 'allow_auto_random_explicit_insert';").WillReturnRows(
-			sqlmock.NewRows(columns).AddRow("allow_auto_random_explicit_insert", "0"),
+		mock.ExpectQuery("select @@allow_auto_random_explicit_insert;").WillReturnRows(
+			sqlmock.NewRows([]string{"@@allow_auto_random_explicit_insert"}).AddRow("0"),
 		)
-		mock.ExpectQuery("show session variables like 'tidb_txn_mode';").WillReturnRows(
-			sqlmock.NewRows(columns).AddRow("tidb_txn_mode", "pessimistic"),
+		mock.ExpectQuery("select @@tidb_txn_mode;").WillReturnRows(
+			sqlmock.NewRows([]string{"@@tidb_txn_mode"}).AddRow("pessimistic"),
 		)
-		mock.ExpectQuery("show session variables like 'transaction_isolation';").WillReturnRows(
-			sqlmock.NewRows(columns).AddRow("transaction_isolation", "REPEATED-READ"),
+		mock.ExpectQuery("select @@transaction_isolation;").WillReturnRows(
+			sqlmock.NewRows([]string{"@@transaction_isolation"}).AddRow("REPEATED-READ"),
 		)
-		mock.ExpectQuery("show session variables like 'tidb_placement_mode';").
+		mock.ExpectQuery("select @@tidb_placement_mode;").
 			WillReturnRows(
-				sqlmock.NewRows(columns).
-					AddRow("tidb_placement_mode", "IGNORE"),
+				sqlmock.NewRows([]string{"@@tidb_placement_mode"}).
+					AddRow("IGNORE"),
 			)
-		mock.ExpectQuery("show session variables like 'tidb_enable_external_ts_read';").
+		mock.ExpectQuery("select @@tidb_enable_external_ts_read;").
 			WillReturnRows(
-				sqlmock.NewRows(columns).
-					AddRow("tidb_enable_external_ts_read", "OFF"),
+				sqlmock.NewRows([]string{"@@tidb_enable_external_ts_read"}).
+					AddRow("OFF"),
 			)
 		dsnStr, err = generateDSNByConfig(context.TODO(), dsn, cfg, db)
 		require.Nil(t, err)

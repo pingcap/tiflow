@@ -32,25 +32,24 @@ func MockTestDB(adjustSQLMode bool) (*sql.DB, error) {
 				AddRow("ONLY_FULL_GROUP_BY,STRICT_TRANS_TABLES,NO_ZERO_IN_DATE,NO_ZERO_DATE"))
 	}
 
-	columns := []string{"Variable_name", "Value"}
-	mock.ExpectQuery("show session variables like 'allow_auto_random_explicit_insert';").WillReturnRows(
-		sqlmock.NewRows(columns).AddRow("allow_auto_random_explicit_insert", "0"),
+	mock.ExpectQuery("select @@allow_auto_random_explicit_insert;").WillReturnRows(
+		sqlmock.NewRows([]string{"@@allow_auto_random_explicit_insert"}).AddRow("0"),
 	)
-	mock.ExpectQuery("show session variables like 'tidb_txn_mode';").WillReturnRows(
-		sqlmock.NewRows(columns).AddRow("tidb_txn_mode", "pessimistic"),
+	mock.ExpectQuery("select @@tidb_txn_mode;").WillReturnRows(
+		sqlmock.NewRows([]string{"@@tidb_txn_mode"}).AddRow("pessimistic"),
 	)
-	mock.ExpectQuery("show session variables like 'transaction_isolation';").WillReturnRows(
-		sqlmock.NewRows(columns).AddRow("transaction_isolation", "REPEATED-READ"),
+	mock.ExpectQuery("select @@transaction_isolation;").WillReturnRows(
+		sqlmock.NewRows([]string{"@@transaction_isolation"}).AddRow("REPEATED-READ"),
 	)
-	mock.ExpectQuery("show session variables like 'tidb_placement_mode';").
+	mock.ExpectQuery("select @@tidb_placement_mode;").
 		WillReturnRows(
-			sqlmock.NewRows(columns).
-				AddRow("tidb_placement_mode", "IGNORE"),
+			sqlmock.NewRows([]string{"@@tidb_placement_mode"}).
+				AddRow("IGNORE"),
 		)
-	mock.ExpectQuery("show session variables like 'tidb_enable_external_ts_read';").
+	mock.ExpectQuery("select @@tidb_enable_external_ts_read;").
 		WillReturnRows(
-			sqlmock.NewRows(columns).
-				AddRow("tidb_enable_external_ts_read", "OFF"),
+			sqlmock.NewRows([]string{"@@tidb_enable_external_ts_read"}).
+				AddRow("OFF"),
 		)
 	mock.ExpectQuery("select character_set_name from information_schema.character_sets " +
 		"where character_set_name = 'gbk';").WillReturnRows(
