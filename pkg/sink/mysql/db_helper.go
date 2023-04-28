@@ -236,9 +236,13 @@ func checkTiDBVariable(ctx context.Context, db *sql.DB, variableName, defaultVal
 	}
 	// session variable works, use given default value
 	if err == nil {
+		log.Info("Session variable works", zap.String("variableName", variableName),
+			zap.String("value", value),
+			zap.String("defaultValue", defaultValue))
 		return defaultValue, nil
 	}
 	// session variable not exists, return "" to ignore it
+	log.Info("Session variable not exists", zap.String("variableName", variableName))
 	return "", nil
 }
 
