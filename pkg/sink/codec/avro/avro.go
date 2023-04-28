@@ -171,7 +171,7 @@ func (a *BatchEncoder) EncodeCheckpointEvent(ts uint64) (*common.Message, error)
 func (a *BatchEncoder) EncodeDDLEvent(e *model.DDLEvent) (*common.Message, error) {
 	if a.EnableTiDBExtension && a.EnableWatermarkEvent {
 		buf := new(bytes.Buffer)
-		binary.Write(buf, binary.BigEndian, ddlByte)
+		_ = binary.Write(buf, binary.BigEndian, ddlByte)
 
 		bytes, err := json.Marshal(e)
 		if err != nil {
