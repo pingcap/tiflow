@@ -13,7 +13,12 @@
 
 package codec
 
-import "github.com/pingcap/tiflow/cdc/model"
+import (
+	"strings"
+
+	timodel "github.com/pingcap/tidb/parser/model"
+	"github.com/pingcap/tiflow/cdc/model"
+)
 
 // RowEventDecoder is an abstraction for events decoder
 // this interface is only for testing now
@@ -34,4 +39,18 @@ type RowEventDecoder interface {
 	NextRowChangedEvent() (*model.RowChangedEvent, error)
 	// NextDDLEvent returns the next DDL event if exists
 	NextDDLEvent() (*model.DDLEvent, error)
+}
+
+// GetDDLActionType return DDL ActionType by the prefix
+// see https://github.com/pingcap/tidb/blob/6dbf2de2f/parser/model/ddl.go#L101-L102
+func GetDDLActionType(query string) timodel.ActionType {
+	query = strings.ToLower(query)
+	if strings.HasPrefix(query, "create schema") || strings.HasPrefix(query, "create database") {
+		return timodel.ActionCreateSchema
+	}
+	if strings.HasPrefix(query, "drop schema") || strings.HasPrefix(query, "drop database") {
+		return timodel.ActionDropSchema
+	}
+
+	return timodel.ActionNone
 }

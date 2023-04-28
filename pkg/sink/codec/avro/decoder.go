@@ -17,6 +17,7 @@ import (
 	"context"
 	"encoding/binary"
 	"encoding/json"
+	"fmt"
 	"strconv"
 	"strings"
 
@@ -32,16 +33,13 @@ import (
 
 type decoder struct {
 	*Options
-
 	topic string
-
-	key   []byte
-	value []byte
 
 	keySchemaM   *SchemaManager
 	valueSchemaM *SchemaManager
 
-	nextEvent *model.RowChangedEvent
+	key   []byte
+	value []byte
 }
 
 // NewDecoder return an avro decoder
@@ -63,37 +61,53 @@ func NewDecoder(
 	}
 }
 
-func (d *decoder) HasNext() (model.MessageType, bool, error) {
-	if d.key == nil {
-		return model.MessageTypeUnknown, false, nil
+// AddKeyValue implements the RowEventDecoder interface
+func (d *decoder) AddKeyValue(key, value []byte) error {
+	if d.key != nil || d.value != nil {
+		return errors.New("key and value not empty")
 	}
+	d.key = key
+	d.value = value
+	return nil
+}
 
+// HasNext implements the RowEventDecoder interface
+func (d *decoder) HasNext() (model.MessageType, bool, error) {
+	eventType, err := extractEventType(d.value)
+	if err != nil {
+		return model.MessageTypeUnknown, false, errors.Trace(err)
+	}
+	return eventType, true, nil
+}
+
+// NextRowChangedEvent returns the next row changed event if exists
+func (d *decoder) NextRowChangedEvent() (*model.RowChangedEvent, error) {
 	ctx := context.Background()
 	key, err := d.decodeKey(ctx)
 	if err != nil {
-		return model.MessageTypeUnknown, false, errors.Trace(err)
+		return nil, errors.Trace(err)
 	}
 
 	valueMap, rawSchema, err := d.decodeValue(ctx)
 	if err != nil {
-		return model.MessageTypeUnknown, false, errors.Trace(err)
+		return nil, errors.Trace(err)
 	}
 
 	schema := make(map[string]interface{})
 	if err := json.Unmarshal([]byte(rawSchema), &schema); err != nil {
-		return model.MessageTypeUnknown, false, errors.Trace(err)
+		return nil, errors.Trace(err)
 	}
 
 	fields, ok := schema["fields"].([]interface{})
 	if !ok {
-		return model.MessageTypeUnknown, false, errors.New("schema fields should be a map")
+		return nil, errors.Trace(err)
 	}
 
 	columns := make([]*model.Column, 0, len(valueMap))
 	for _, value := range fields {
 		field, ok := value.(map[string]interface{})
 		if !ok {
-			return model.MessageTypeRow, false, errors.New("schema field should be a map")
+			return nil, errors.Trace(err)
 		}
 
 		// `tidbOp` is the first extension field in the schema, so we can break here.
@@ -130,13 +144,13 @@ func (d *decoder) HasNext() (model.MessageType, bool, error) {
 
 	o, ok := valueMap[tidbOp]
 	if !ok {
-		return model.MessageTypeRow, false, errors.New("operation not found")
+		return nil, errors.Trace(err)
 	}
 	operation := o.(string)
 
 	o, ok = valueMap[tidbCommitTs]
 	if !ok {
-		return model.MessageTypeRow, false, errors.New("commit ts not found")
+		return nil, errors.Trace(err)
 	}
 	commitTs := o.(int64)
 
@@ -145,7 +159,7 @@ func (d *decoder) HasNext() (model.MessageType, bool, error) {
 		checksum := o.(string)
 		expected, err := strconv.ParseUint(checksum, 10, 64)
 		if err != nil {
-			return model.MessageTypeRow, false, errors.Trace(err)
+			return nil, errors.Trace(err)
 		}
 
 		if o, ok := valueMap[tidbCorrupted]; ok {
@@ -158,7 +172,7 @@ func (d *decoder) HasNext() (model.MessageType, bool, error) {
 		}
 
 		if err := verifyChecksum(columns, expected); err != nil {
-			return model.MessageTypeRow, false, errors.Trace(err)
+			return nil, errors.Trace(err)
 		}
 	}
 
@@ -182,30 +196,50 @@ func (d *decoder) HasNext() (model.MessageType, bool, error) {
 		log.Panic("unsupported operation type", zap.String("operation", operation))
 	}
 
-	d.nextEvent = event
-	return model.MessageTypeRow, true, nil
-}
-
-// NextResolvedEvent returns the next resolved event if exists
-func (d *decoder) NextResolvedEvent() (uint64, error) {
-	return 0, nil
-}
-
-// NextRowChangedEvent returns the next row changed event if exists
-func (d *decoder) NextRowChangedEvent() (*model.RowChangedEvent, error) {
-	if d.nextEvent != nil {
-		result := d.nextEvent
-		d.nextEvent = nil
-		return result, nil
-	}
-
-	log.Info("next event not found")
-	return nil, errors.New("next event not found")
+	return event, nil
 }
 
 // NextDDLEvent returns the next DDL event if exists
 func (d *decoder) NextDDLEvent() (*model.DDLEvent, error) {
-	return nil, nil
+	if len(d.value) == 0 {
+		return nil, errors.New("value should not be empty")
+	}
+	if d.value[0] != ddlByte {
+		return nil, fmt.Errorf("first byte is not the ddl byte, but got: %+v", d.value[0])
+	}
+
+	result := new(model.DDLEvent)
+	data := d.value[1:]
+
+	err := json.Unmarshal(data, &result)
+	if err != nil {
+		return nil, errors.WrapError(errors.ErrDecodeFailed, err)
+	}
+	return result, nil
+}
+
+// NextResolvedEvent returns the next resolved event if exists
+func (d *decoder) NextResolvedEvent() (uint64, error) {
+	if len(d.value) == 0 {
+		return 0, errors.New("value should not be empty")
+	}
+	ts := binary.BigEndian.Uint64(d.value[1:])
+	return ts, nil
+}
+
+func extractEventType(data []byte) (model.MessageType, error) {
+	if len(data) < 1 {
+		return model.MessageTypeUnknown, errors.ErrAvroInvalidMessage.FastGenByArgs()
+	}
+	switch data[0] {
+	case magicByte:
+		return model.MessageTypeRow, nil
+	case ddlByte:
+		return model.MessageTypeDDL, nil
+	case checkpointByte:
+		return model.MessageTypeResolved, nil
+	}
+	return model.MessageTypeUnknown, errors.ErrAvroInvalidMessage.FastGenByArgs()
 }
 
 // GetSchemaIDAndBinaryData return the schema ID and the encoded binary data

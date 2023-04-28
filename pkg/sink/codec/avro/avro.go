@@ -171,13 +171,13 @@ func (a *BatchEncoder) EncodeCheckpointEvent(ts uint64) (*common.Message, error)
 func (a *BatchEncoder) EncodeDDLEvent(e *model.DDLEvent) (*common.Message, error) {
 	if a.EnableTiDBExtension && a.EnableWatermarkEvent {
 		buf := new(bytes.Buffer)
-		data := []interface{}{ddlByte, e.Query}
-		for _, v := range data {
-			err := binary.Write(buf, binary.BigEndian, v)
-			if err != nil {
-				return nil, cerror.WrapError(cerror.ErrAvroToEnvelopeError, err)
-			}
+		binary.Write(buf, binary.BigEndian, ddlByte)
+
+		bytes, err := json.Marshal(e)
+		if err != nil {
+			return nil, cerror.WrapError(cerror.ErrAvroToEnvelopeError, err)
 		}
+		buf.Write(bytes)
 
 		value := buf.Bytes()
 		return common.NewDDLMsg(config.ProtocolAvro, nil, value, e), nil
@@ -608,7 +608,7 @@ func rowToAvroSchema(
 	}
 	log.Info("rowToAvroSchema",
 		zap.ByteString("schema", str),
-		zap.Bool("EnableTiDBExtension", enableTiDBExtension),
+		zap.Bool("enableTiDBExtension", enableTiDBExtension),
 		zap.Bool("enableRowLevelChecksum", enableRowLevelChecksum))
 	return string(str), nil
 }
@@ -734,7 +734,7 @@ func columnToAvroSchema(
 				Scale:       displayDecimal,
 			}, nil
 		}
-		// DecimalHandlingMode == string
+		// decimalHandlingMode == string
 		return avroSchema{
 			Type:       "string",
 			Parameters: map[string]string{tidbType: tt},
@@ -852,7 +852,7 @@ func columnToAvroData(
 			if bigintUnsignedHandlingMode == common.BigintUnsignedHandlingModeLong {
 				return int64(col.Value.(uint64)), "long", nil
 			}
-			// BigintUnsignedHandlingMode == "string"
+			// bigintUnsignedHandlingMode == "string"
 			return strconv.FormatUint(col.Value.(uint64), 10), "string", nil
 		}
 		return col.Value.(int64), "long", nil
@@ -889,7 +889,7 @@ func columnToAvroData(
 			}
 			return v, "bytes.decimal", nil
 		}
-		// DecimalHandlingMode == "string"
+		// decimalHandlingMode == "string"
 		return col.Value.(string), "string", nil
 	case mysql.TypeVarchar,
 		mysql.TypeString,

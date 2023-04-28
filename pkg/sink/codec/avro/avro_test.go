@@ -996,7 +996,6 @@ func TestArvoAppendRowChangedEventWithCallback(t *testing.T) {
 		DecimalHandlingMode:        "precise",
 		BigintUnsignedHandlingMode: "long",
 	}
-
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 
