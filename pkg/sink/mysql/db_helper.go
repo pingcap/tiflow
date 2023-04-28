@@ -216,7 +216,7 @@ func checkTiDBVariable(ctx context.Context, db *sql.DB, variableName, defaultVal
 	var name string
 	var value string
 	// Some database may only support `select @@variable_name` to get the value of session variable.
-	// So we try to use `select @@variable_name` first, if it fails,
+	// So we try to use `select @variable_name` first, if it fails,
 	// we try to use `show session variables like '%s'` instead.
 	// SAFETY: variableName is a constant string, so it is safe to use it.
 	//nolint:gosec
