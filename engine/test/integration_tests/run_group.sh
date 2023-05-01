@@ -30,22 +30,23 @@ for script in "$CUR"/*/run.sh; do
 	fi
 done
 
-# Get test names
-test_names=""
-# shellcheck disable=SC2076
-if [[ "$group" == "others" ]]; then
-	test_names="${others[*]}"
+if [[ "$group" == "check others" ]]; then
+	if [[ -z $others ]]; then
+		echo "All engine integration test cases are added to groups"
+		exit 0
+	fi
+	echo "Error: "$others" is not added to any group in engine/test/integration_tests/run_group.sh"
+	exit 1
 elif [[ " ${!groups[*]} " =~ " ${group} " ]]; then
 	test_names="${groups[${group}]}"
+	# Run test cases
+	if [[ -n $test_names ]]; then
+		echo "Run cases: ${test_names}"
+		mkdir -p /tmp/tiflow_engine_test
+		"${CUR}"/run.sh "${test_names}" 2>&1 | tee /tmp/tiflow_engine_test/engine_it.log
+		./engine/test/utils/check_log.sh
+	fi
 else
 	echo "Error: invalid group name: ${group}"
 	exit 1
-fi
-
-# Run test cases
-if [[ -n $test_names ]]; then
-	echo "Run cases: ${test_names}"
-	mkdir -p /tmp/tiflow_engine_test
-	"${CUR}"/run.sh "${test_names}" 2>&1 | tee /tmp/tiflow_engine_test/engine_it.log
-	./engine/test/utils/check_log.sh
 fi

@@ -18,6 +18,11 @@ import "github.com/pingcap/tiflow/cdc/model"
 // RowEventDecoder is an abstraction for events decoder
 // this interface is only for testing now
 type RowEventDecoder interface {
+	// AddKeyValue add the received key and values to the decoder,
+	// should be called before `HasNext`
+	// decoder decode the key and value into the event format.
+	AddKeyValue(key, value []byte) error
+
 	// HasNext returns
 	//     1. the type of the next event
 	//     2. a bool if the next event is exist

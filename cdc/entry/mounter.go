@@ -336,29 +336,33 @@ func parseJob(v []byte, startTs, CRTs uint64) (*timodel.Job, error) {
 
 func datum2Column(
 	tableInfo *model.TableInfo, datums map[int64]types.Datum, fillWithDefaultValue bool,
-) ([]*model.Column, []types.Datum, []int64, error) {
+) ([]*model.Column, []types.Datum, []*timodel.ColumnInfo, error) {
 	cols := make([]*model.Column, len(tableInfo.RowColumnsOffset))
 	rawCols := make([]types.Datum, len(tableInfo.RowColumnsOffset))
-	columnIDs := make([]int64, len(tableInfo.RowColumnsOffset))
+	columnInfos := make([]*timodel.ColumnInfo, len(tableInfo.RowColumnsOffset))
 
 	for _, colInfo := range tableInfo.Columns {
-		colSize := 0
 		if !model.IsColCDCVisible(colInfo) {
 			log.Debug("skip the column which is not visible",
 				zap.String("table", tableInfo.Name.O), zap.String("column", colInfo.Name.O))
 			continue
 		}
+
 		colName := colInfo.Name.O
-		colDatums, exist := datums[colInfo.ID]
-		var colValue interface{}
+		colID := colInfo.ID
+		colDatums, exist := datums[colID]
 		if !exist && !fillWithDefaultValue {
 			log.Debug("column value is not found",
 				zap.String("table", tableInfo.Name.O), zap.String("column", colName))
 			continue
 		}
-		var err error
-		var warn string
-		var size int
+
+		var (
+			colValue interface{}
+			size     int
+			warn     string
+			err      error
+		)
 		if exist {
 			colValue, size, warn, err = formatColVal(colDatums, colInfo)
 		} else if fillWithDefaultValue {
@@ -368,39 +372,41 @@ func datum2Column(
 			return nil, nil, nil, errors.Trace(err)
 		}
 		if warn != "" {
-			log.Warn(warn, zap.String("table", tableInfo.TableName.String()), zap.String("column", colInfo.Name.String()))
+			log.Warn(warn, zap.String("table", tableInfo.TableName.String()),
+				zap.String("column", colInfo.Name.String()))
 		}
+
 		defaultValue := getDDLDefaultDefinition(colInfo)
-		colSize += size
-		rawCols[tableInfo.RowColumnsOffset[colInfo.ID]] = colDatums
-		cols[tableInfo.RowColumnsOffset[colInfo.ID]] = &model.Column{
+		offset := tableInfo.RowColumnsOffset[colID]
+		rawCols[offset] = colDatums
+		cols[offset] = &model.Column{
 			Name:    colName,
 			Type:    colInfo.GetType(),
 			Charset: colInfo.GetCharset(),
 			Value:   colValue,
 			Default: defaultValue,
-			Flag:    tableInfo.ColumnsFlag[colInfo.ID],
+			Flag:    tableInfo.ColumnsFlag[colID],
 			// ApproximateBytes = column data size + column struct size
-			ApproximateBytes: colSize + sizeOfEmptyColumn,
+			ApproximateBytes: size + sizeOfEmptyColumn,
 		}
-		columnIDs[tableInfo.RowColumnsOffset[colInfo.ID]] = colInfo.ID
+		columnInfos[offset] = colInfo
 	}
-	return cols, rawCols, columnIDs, nil
+	return cols, rawCols, columnInfos, nil
 }
 
 // return error if cannot get the expected checksum from the decoder
 // return false if the checksum is not matched
 // return true if the checksum is matched and the checksum is the matched one.
 func (m *mounter) verifyChecksum(
-	columnIDs []int64, rawColumns []types.Datum, isPreRow bool,
-) (uint32, bool, error) {
+	columnInfos []*timodel.ColumnInfo, rawColumns []types.Datum, isPreRow bool,
+) (uint32, int, bool, error) {
 	if !m.integrity.Enabled() {
-		return 0, true, nil
+		return 0, 0, true, nil
 	}
 
 	// when the old value is not enabled, no previous columns so that no need to verify the checksum.
 	if isPreRow && !m.enableOldValue {
-		return 0, true, nil
+		return 0, 0, true, nil
 	}
 
 	var decoder *rowcodec.DatumMapDecoder
@@ -410,25 +416,37 @@ func (m *mounter) verifyChecksum(
 		decoder = m.decoder
 	}
 	if decoder == nil {
-		return 0, false, errors.New("cannot found the decoder to get the checksum")
+		return 0, 0, false, errors.New("cannot found the decoder to get the checksum")
 	}
 
+	version := decoder.ChecksumVersion()
 	// if the checksum cannot be found, which means the upstream TiDB checksum is not enabled,
 	// so return matched as true to skip check the event.
 	first, ok := decoder.GetChecksum()
 	if !ok {
-		return 0, true, nil
+		return 0, version, true, nil
 	}
 
-	checksum, err := m.encoder.Checksum(m.sctx, columnIDs, rawColumns)
+	columns := make([]rowcodec.ColData, 0, len(rawColumns))
+	for idx, col := range columnInfos {
+		columns = append(columns, rowcodec.ColData{
+			ColumnInfo: col,
+			Datum:      &rawColumns[idx],
+		})
+	}
+	calculator := rowcodec.RowData{
+		Cols: columns,
+		Data: make([]byte, 0),
+	}
+	checksum, err := calculator.Checksum()
 	if err != nil {
 		log.Error("failed to calculate the checksum", zap.Error(err))
-		return 0, false, errors.Trace(err)
+		return 0, version, false, errors.Trace(err)
 	}
 
 	// the first checksum matched, it hits in the most case.
 	if checksum == first {
-		return checksum, true, nil
+		return checksum, version, true, nil
 	}
 
 	extra, ok := decoder.GetExtraChecksum()
@@ -437,7 +455,8 @@ func (m *mounter) verifyChecksum(
 			zap.Uint32("checksum", checksum),
 			zap.Uint32("first", first),
 			zap.Uint32("extra", extra))
-		return checksum, false, errors.New("cannot found the extra checksum from the event")
+		return checksum, version,
+			false, errors.New("cannot found the extra checksum from the event")
 	}
 
 	if checksum == extra {
@@ -445,24 +464,25 @@ func (m *mounter) verifyChecksum(
 			"execution phase",
 			zap.Uint32("checksum", checksum),
 			zap.Uint32("extra", extra))
-		return checksum, true, nil
+		return checksum, version, true, nil
 	}
 
 	log.Error("checksum mismatch",
 		zap.Uint32("checksum", checksum),
 		zap.Uint32("first", first),
 		zap.Uint32("extra", extra))
-	return checksum, false, nil
+	return checksum, version, false, nil
 }
 
 func (m *mounter) mountRowKVEntry(tableInfo *model.TableInfo, row *rowKVEntry, dataSize int64) (*model.RowChangedEvent, model.RowChangedDatums, error) {
 	var (
-		rawRow    model.RowChangedDatums
-		columnIDs []int64
-		matched   bool
-		err       error
+		rawRow      model.RowChangedDatums
+		columnInfos []*timodel.ColumnInfo
+		matched     bool
+		err         error
 
-		corrupted bool
+		corrupted       bool
+		checksumVersion int
 	)
 
 	// Decode previous columns.
@@ -479,12 +499,12 @@ func (m *mounter) mountRowKVEntry(tableInfo *model.TableInfo, row *rowKVEntry, d
 	if row.PreRowExist {
 		// FIXME(leoppro): using pre table info to mounter pre column datum
 		// the pre column and current column in one event may using different table info
-		preCols, preRawCols, columnIDs, err = datum2Column(tableInfo, row.PreRow, m.enableOldValue)
+		preCols, preRawCols, columnInfos, err = datum2Column(tableInfo, row.PreRow, m.enableOldValue)
 		if err != nil {
 			return nil, rawRow, errors.Trace(err)
 		}
 
-		preChecksum, matched, err = m.verifyChecksum(columnIDs, preRawCols, true)
+		preChecksum, checksumVersion, matched, err = m.verifyChecksum(columnInfos, preRawCols, true)
 		if err != nil {
 			return nil, rawRow, errors.Trace(err)
 		}
@@ -498,7 +518,6 @@ func (m *mounter) mountRowKVEntry(tableInfo *model.TableInfo, row *rowKVEntry, d
 				return nil, rawRow, cerror.ErrCorruptedDataMutation.
 					GenWithStackByArgs(m.changefeedID.Namespace, m.changefeedID.ID, row)
 			}
-
 			corrupted = true
 		}
 
@@ -520,19 +539,19 @@ func (m *mounter) mountRowKVEntry(tableInfo *model.TableInfo, row *rowKVEntry, d
 		checksum uint32
 	)
 	if row.RowExist {
-		cols, rawCols, columnIDs, err = datum2Column(tableInfo, row.Row, true)
+		cols, rawCols, columnInfos, err = datum2Column(tableInfo, row.Row, true)
 		if err != nil {
 			return nil, rawRow, errors.Trace(err)
 		}
 
-		checksum, matched, err = m.verifyChecksum(columnIDs, rawCols, false)
+		checksum, checksumVersion, matched, err = m.verifyChecksum(columnInfos, rawCols, false)
 		if err != nil {
 			return nil, rawRow, errors.Trace(err)
 		}
 		if !matched {
 			log.Error("columns checksum mismatch",
 				zap.Uint32("checksum", preChecksum),
-				zap.Int64s("columnIDs", columnIDs),
+				zap.Any("tableInfo", tableInfo),
 				zap.Any("rawCols", rawCols))
 			if m.integrity.ErrorHandle() {
 				return nil, rawRow, cerror.ErrCorruptedDataMutation.
@@ -567,9 +586,10 @@ func (m *mounter) mountRowKVEntry(tableInfo *model.TableInfo, row *rowKVEntry, d
 		Columns:    cols,
 		PreColumns: preCols,
 
-		Checksum:    checksum,
-		PreChecksum: preChecksum,
-		Corrupted:   corrupted,
+		Checksum:        checksum,
+		PreChecksum:     preChecksum,
+		Corrupted:       corrupted,
+		ChecksumVersion: checksumVersion,
 
 		IndexColumns:        tableInfo.IndexColumnsOffset,
 		ApproximateDataSize: dataSize,

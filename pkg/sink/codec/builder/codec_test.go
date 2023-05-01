@@ -277,9 +277,9 @@ func BenchmarkProtobuf2Encoding(b *testing.B) {
 func BenchmarkCraftDecoding(b *testing.B) {
 	allocator := craft.NewSliceAllocator(128)
 	for i := 0; i < b.N; i++ {
+		decoder := craft.NewBatchDecoderWithAllocator(allocator)
 		for _, message := range codecCraftEncodedRowChanges {
-			if decoder, err := craft.NewBatchDecoderWithAllocator(
-				message.Value, allocator); err != nil {
+			if err := decoder.AddKeyValue(message.Key, message.Value); err != nil {
 				panic(err)
 			} else {
 				for {
@@ -299,7 +299,8 @@ func BenchmarkCraftDecoding(b *testing.B) {
 func BenchmarkJsonDecoding(b *testing.B) {
 	for i := 0; i < b.N; i++ {
 		for _, message := range codecJSONEncodedRowChanges {
-			if decoder, err := open.NewBatchDecoder(message.Key, message.Value); err != nil {
+			decoder := open.NewBatchDecoder()
+			if err := decoder.AddKeyValue(message.Key, message.Value); err != nil {
 				panic(err)
 			} else {
 				for {

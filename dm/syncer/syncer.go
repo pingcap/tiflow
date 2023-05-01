@@ -1420,7 +1420,8 @@ func (s *Syncer) syncDDL(queueBucket string, db *dbconn.DBConn, ddlJobChan chan 
 					}
 				}
 				//nolint:sqlclosecheck
-				row.Close()
+				_ = row.Close()
+				_ = row.Err()
 			}
 			affected, err = db.ExecuteSQLWithIgnore(s.syncCtx, s.metricsProxies, errorutil.IsIgnorableMySQLDDLError, ddlJob.ddls)
 			failpoint.Inject("TestHandleSpecialDDLError", func() {

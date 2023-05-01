@@ -113,7 +113,7 @@ func startHTTPInterceptForTestingRegistry() {
 			var respData lookupResponse
 			respData.Schema = item.content
 			respData.Name = subject
-			respData.RegistryID = item.ID
+			respData.ID = item.ID
 
 			return httpmock.NewJsonResponse(200, &respData)
 		})
@@ -192,7 +192,7 @@ func TestSchemaRegistry(t *testing.T) {
      }`)
 	require.NoError(t, err)
 
-	_, err = manager.Register(getTestingContext(), topic, codec)
+	_, err = manager.Register(getTestingContext(), topic, codec.Schema())
 	require.NoError(t, err)
 
 	var id int
@@ -222,7 +222,7 @@ func TestSchemaRegistry(t *testing.T) {
           ]
      }`)
 	require.NoError(t, err)
-	_, err = manager.Register(getTestingContext(), topic, codec)
+	_, err = manager.Register(getTestingContext(), topic, codec.Schema())
 	require.NoError(t, err)
 
 	codec2, id2, err := manager.Lookup(getTestingContext(), topic, 999)
@@ -284,7 +284,7 @@ func TestSchemaRegistryIdempotent(t *testing.T) {
 
 	id := 0
 	for i := 0; i < 20; i++ {
-		id1, err := manager.Register(getTestingContext(), topic, codec)
+		id1, err := manager.Register(getTestingContext(), topic, codec.Schema())
 		require.NoError(t, err)
 		require.True(t, id == 0 || id == id1)
 		id = id1
