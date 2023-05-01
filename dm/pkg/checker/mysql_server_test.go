@@ -34,6 +34,7 @@ func TestMysqlVersion(t *testing.T) {
 		{"5.7.0-log", true},
 		{"5.8.0-log", true}, // although it does not exist
 		{"8.0.1-log", false},
+		{"8.0.20", false},
 		{"5.5.50-MariaDB-1~wheezy", false},
 		{"10.1.1-MariaDB-1~wheezy", false},
 		{"10.1.2-MariaDB-1~wheezy", false},
