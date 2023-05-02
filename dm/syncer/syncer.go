@@ -2351,7 +2351,7 @@ func (s *Syncer) Run(ctx context.Context) (err error) {
 				case *replication.RowsEvent:
 					eventIndex++
 					s.metricsProxies.Metrics.BinlogEventRowHistogram.Observe(float64(len(tpevt.Rows)))
-					ec.header.EventType = replication.WRITE_ROWS_EVENTv2 // FIXME
+					ec.header.EventType = tpev.Header.EventType
 					sourceTable, err2 = s.handleRowsEvent(tpevt, ec)
 					if sourceTable != nil && err2 == nil && s.cfg.EnableGTID {
 						if _, ok := affectedSourceTables[sourceTable.Schema]; !ok {
