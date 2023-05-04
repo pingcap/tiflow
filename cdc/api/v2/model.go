@@ -723,6 +723,7 @@ type Capture struct {
 	ClusterID     string `json:"cluster_id"`
 }
 
+// ChangefeedStatus holds common information of a changefeed in cdc
 type ChangefeedStatus struct {
 	State        string        `json:"state,omitempty"`
 	ResolvedTs   uint64        `json:"resolved_ts"`
