@@ -15,6 +15,7 @@ package cloudstorage
 
 import (
 	"context"
+	"github.com/aws/aws-sdk-go/aws"
 	"net/url"
 	"testing"
 	"time"
@@ -121,4 +122,38 @@ func TestVerifySinkURIParams(t *testing.T) {
 			require.Regexp(t, tc.expectedErr, err)
 		}
 	}
+}
+
+func TestMergeConfig(t *testing.T) {
+	uri := "s3://bucket/prefix"
+	sinkURI, err := url.Parse(uri)
+	require.NoError(t, err)
+	replicaConfig := config.GetDefaultReplicaConfig()
+	replicaConfig.Sink.CloudStorageConfig = &config.CloudStorageConfig{
+		WorkerCount:   aws.Int(12),
+		FileSize:      aws.Int(1485760),
+		FlushInterval: aws.String("1m2s"),
+	}
+	c := NewConfig()
+	err = c.Apply(context.TODO(), sinkURI, replicaConfig)
+	require.NoError(t, err)
+	require.Equal(t, 12, c.WorkerCount)
+	require.Equal(t, 1485760, c.FileSize)
+	require.Equal(t, "1m2s", c.FlushInterval.String())
+
+	// test override
+	uri = "s3://bucket/prefix?worker-count=64&flush-interval=2m2s&file-size=33554432"
+	sinkURI, err = url.Parse(uri)
+	require.NoError(t, err)
+	replicaConfig.Sink.CloudStorageConfig = &config.CloudStorageConfig{
+		WorkerCount:   aws.Int(12),
+		FileSize:      aws.Int(10485760),
+		FlushInterval: aws.String("1m2s"),
+	}
+	c = NewConfig()
+	err = c.Apply(context.TODO(), sinkURI, replicaConfig)
+	require.NoError(t, err)
+	require.Equal(t, 64, c.WorkerCount)
+	require.Equal(t, 33554432, c.FileSize)
+	require.Equal(t, "2m2s", c.FlushInterval.String())
 }

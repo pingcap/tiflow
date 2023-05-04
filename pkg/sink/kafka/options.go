@@ -88,13 +88,8 @@ const (
 	Unknown RequiredAcks = 2
 )
 
-func requireAcksFromString(acks string) (RequiredAcks, error) {
-	i, err := strconv.Atoi(acks)
-	if err != nil {
-		return Unknown, err
-	}
-
-	switch i {
+func requireAcksFromString(acks int) (RequiredAcks, error) {
+	switch acks {
 	case int(WaitForAll):
 		return WaitForAll, nil
 	case int(WaitForLocal):
@@ -102,7 +97,7 @@ func requireAcksFromString(acks string) (RequiredAcks, error) {
 	case int(NoResponse):
 		return NoResponse, nil
 	default:
-		return Unknown, cerror.ErrKafkaInvalidRequiredAcks.GenWithStackByArgs(i)
+		return Unknown, cerror.ErrKafkaInvalidRequiredAcks.GenWithStackByArgs(acks)
 	}
 }
 
@@ -117,18 +112,18 @@ type urlConfig struct {
 	DialTimeout                  *string `form:"dial-timeout"`
 	WriteTimeout                 *string `form:"write-timeout"`
 	ReadTimeout                  *string `form:"read-timeout"`
-	RequiredAcks                 *string `form:"required-acks"`
+	RequiredAcks                 *int    `form:"required-acks"`
 	SASLUser                     *string `form:"sasl-user"`
 	SASLPassword                 *string `form:"sasl-password"`
 	SASLMechanism                *string `form:"sasl-mechanism"`
-	SASLGssAPIAuthType           *string `form:"sasl-gss-api-auth-type"`
-	SASLGssAPIKeytabPath         *string `form:"sasl-gss-api-keytab-path"`
-	SASLGssAPIKerberosConfigPath *string `form:"sasl-gss-api-kerberos-config-path"`
-	SASLGssAPIServiceName        *string `form:"sasl-gss-api-service-name"`
-	SASLGssAPIUser               *string `form:"sasl-gss-api-user"`
-	SASLGssAPIPassword           *string `form:"sasl-gss-api-password"`
-	SASLGssAPIRealm              *string `form:"sasl-gss-api-realm"`
-	SASLGssAPIDisablePafxfast    *bool   `form:"sasl-gss-api-disable-pafxfast"`
+	SASLGssAPIAuthType           *string `form:"sasl-gssapi-auth-type"`
+	SASLGssAPIKeytabPath         *string `form:"sasl-gssapi-keytab-path"`
+	SASLGssAPIKerberosConfigPath *string `form:"sasl-gssapi-kerberos-config-path"`
+	SASLGssAPIServiceName        *string `form:"sasl-gssapi-service-name"`
+	SASLGssAPIUser               *string `form:"sasl-gssapi-user"`
+	SASLGssAPIPassword           *string `form:"sasl-gssapi-password"`
+	SASLGssAPIRealm              *string `form:"sasl-gssapi-realm"`
+	SASLGssAPIDisablePafxfast    *bool   `form:"sasl-gssapi-disable-pafxfast"`
 	EnableTLS                    *bool   `form:"enable-tls"`
 	CA                           *string `form:"ca"`
 	Cert                         *string `form:"cert"`
@@ -290,7 +285,7 @@ func (o *Options) Apply(ctx context.Context,
 		o.ReadTimeout = a
 	}
 
-	if urlParameter.RequiredAcks != nil && *urlParameter.RequiredAcks != "" {
+	if urlParameter.RequiredAcks != nil {
 		r, err := requireAcksFromString(*urlParameter.RequiredAcks)
 		if err != nil {
 			return err

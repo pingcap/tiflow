@@ -897,18 +897,18 @@ type KafkaConfig struct {
 	DialTimeout                  *string      `json:"dial_timeout,omitempty"`
 	WriteTimeout                 *string      `json:"write_timeout,omitempty"`
 	ReadTimeout                  *string      `json:"read_timeout,omitempty"`
-	RequiredAcks                 *string      `json:"required_acks,omitempty"`
+	RequiredAcks                 *int         `json:"required_acks,omitempty"`
 	SASLUser                     *string      `json:"sasl_user,omitempty"`
 	SASLPassword                 *string      `json:"sasl_password,omitempty"`
 	SASLMechanism                *string      `json:"sasl_mechanism,omitempty"`
-	SASLGssAPIAuthType           *string      `json:"sasl_gss_api_auth_type,omitempty"`
-	SASLGssAPIKeytabPath         *string      `json:"sasl_gss_api_keytab_path,omitempty"`
-	SASLGssAPIKerberosConfigPath *string      `json:"sasl_gss_api_kerberos_config_path,omitempty"`
-	SASLGssAPIServiceName        *string      `json:"sasl_gss_api_service_name,omitempty"`
-	SASLGssAPIUser               *string      `json:"sasl_gss_api_user,omitempty"`
-	SASLGssAPIPassword           *string      `json:"sasl_gss_api_password,omitempty"`
-	SASLGssAPIRealm              *string      `json:"sasl_gss_api_realm,omitempty"`
-	SASLGssAPIDisablePafxfast    *bool        `json:"sasl_gss_api_disable_pafxfast,omitempty"`
+	SASLGssAPIAuthType           *string      `json:"sasl_gssapi_auth_type,omitempty"`
+	SASLGssAPIKeytabPath         *string      `json:"sasl_gssapi_keytab_path,omitempty"`
+	SASLGssAPIKerberosConfigPath *string      `json:"sasl_gssapi_kerberos_config_path,omitempty"`
+	SASLGssAPIServiceName        *string      `json:"sasl_gssapi_service_name,omitempty"`
+	SASLGssAPIUser               *string      `json:"sasl_gssapi_user,omitempty"`
+	SASLGssAPIPassword           *string      `json:"sasl_gssapi_password,omitempty"`
+	SASLGssAPIRealm              *string      `json:"sasl_gssapi_realm,omitempty"`
+	SASLGssAPIDisablePafxfast    *bool        `json:"sasl_gssapi_disable_pafxfast,omitempty"`
 	EnableTLS                    *bool        `json:"enable_tls,omitempty"`
 	CA                           *string      `json:"ca,omitempty"`
 	Cert                         *string      `json:"cert,omitempty"`

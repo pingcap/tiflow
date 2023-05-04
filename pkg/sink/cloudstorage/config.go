@@ -125,7 +125,7 @@ func mergeConfig(
 		dest.FlushInterval = replicaConfig.Sink.CloudStorageConfig.FlushInterval
 		dest.FileSize = replicaConfig.Sink.CloudStorageConfig.FileSize
 	}
-	if err := mergo.Merge(dest, urlParameters); err != nil {
+	if err := mergo.Merge(dest, urlParameters, mergo.WithOverride); err != nil {
 		return nil, err
 	}
 	return dest, nil

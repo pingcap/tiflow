@@ -118,7 +118,8 @@ type SinkConfig struct {
 	// TiDBSourceID is the source ID of the upstream TiDB,
 	// which is used to set the `tidb_cdc_write_source` session variable.
 	// Note: This field is only used internally and only used in the MySQL sink.
-	TiDBSourceID       uint64              `toml:"-" json:"-"`
+	TiDBSourceID uint64 `toml:"-" json:"-"`
+
 	SafeMode           *bool               `toml:"safe-mode" json:"safe-mode,omitempty"`
 	KafkaConfig        *KafkaConfig        `toml:"kafka-config" json:"kafka-config,omitempty"`
 	MySQLConfig        *MySQLConfig        `toml:"mysql-config" json:"mysql-config,omitempty"`
@@ -219,18 +220,18 @@ type KafkaConfig struct {
 	DialTimeout                  *string      `toml:"dial-timeout" json:"dial-timeout,omitempty"`
 	WriteTimeout                 *string      `toml:"write-timeout" json:"write-timeout,omitempty"`
 	ReadTimeout                  *string      `toml:"read-timeout" json:"read-timeout,omitempty"`
-	RequiredAcks                 *string      `toml:"required-acks" json:"required-acks,omitempty"`
+	RequiredAcks                 *int         `toml:"required-acks" json:"required-acks,omitempty"`
 	SASLUser                     *string      `toml:"sasl-user" json:"sasl-user,omitempty"`
 	SASLPassword                 *string      `toml:"sasl-password" json:"sasl-password,omitempty"`
 	SASLMechanism                *string      `toml:"sasl-mechanism" json:"sasl-mechanism,omitempty"`
-	SASLGssAPIAuthType           *string      `toml:"sasl-gss-api-auth-type" json:"sasl-gss-api-auth-type,omitempty"`
-	SASLGssAPIKeytabPath         *string      `toml:"sasl-gss-api-keytab-path" json:"sasl-gss-api-keytab-path,omitempty"`
-	SASLGssAPIKerberosConfigPath *string      `toml:"sasl-gss-api-kerberos-config-path" json:"sasl-gss-api-kerberos-config-path,omitempty"`
-	SASLGssAPIServiceName        *string      `toml:"sasl-gss-api-service-name" json:"sasl-gss-api-service-name,omitempty"`
-	SASLGssAPIUser               *string      `toml:"sasl-gss-api-user" json:"sasl-gss-api-user,omitempty"`
-	SASLGssAPIPassword           *string      `toml:"sasl-gss-api-password" json:"sasl-gss-api-password,omitempty"`
-	SASLGssAPIRealm              *string      `toml:"sasl-gss-api-realm" json:"sasl-gss-api-realm,omitempty"`
-	SASLGssAPIDisablePafxfast    *bool        `toml:"sasl-gss-api-disable-pafxfast" json:"sasl-gss-api-disable-pafxfast,omitempty"`
+	SASLGssAPIAuthType           *string      `toml:"sasl-gssapi-auth-type" json:"sasl-gssapi-auth-type,omitempty"`
+	SASLGssAPIKeytabPath         *string      `toml:"sasl-gssapi-keytab-path" json:"sasl-gssapi-keytab-path,omitempty"`
+	SASLGssAPIKerberosConfigPath *string      `toml:"sasl-gssapi-kerberos-config-path" json:"sasl-gssapi-kerberos-config-path,omitempty"`
+	SASLGssAPIServiceName        *string      `toml:"sasl-gssapi-service-name" json:"sasl-gssapi-service-name,omitempty"`
+	SASLGssAPIUser               *string      `toml:"sasl-gssapi-user" json:"sasl-gssapi-user,omitempty"`
+	SASLGssAPIPassword           *string      `toml:"sasl-gssapi-password" json:"sasl-gssapi-password,omitempty"`
+	SASLGssAPIRealm              *string      `toml:"sasl-gssapi-realm" json:"sasl-gssapi-realm,omitempty"`
+	SASLGssAPIDisablePafxfast    *bool        `toml:"sasl-gssapi-disable-pafxfast" json:"sasl-gssapi-disable-pafxfast,omitempty"`
 	EnableTLS                    *bool        `toml:"enable-tls" json:"enable-tls,omitempty"`
 	CA                           *string      `toml:"ca" json:"ca,omitempty"`
 	Cert                         *string      `toml:"cert" json:"cert,omitempty"`
