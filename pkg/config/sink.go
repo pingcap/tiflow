@@ -202,7 +202,7 @@ type ColumnSelector struct {
 type CodecConfig struct {
 	EnableTiDBExtension            *bool   `toml:"enable-tidb-extension" json:"enable-tidb-extension,omitempty"`
 	MaxBatchSize                   *int    `toml:"max-batch-size" json:"max-batch-size,omitempty"`
-	MaxMessageBytes                *int    `toml:"max-message-bytes" json:"max-message-bytes,omitempty"`
+	AvroEnableWatermark            *bool   `toml:"avro-enable-watermark" form:"avro-enable-watermark"`
 	AvroDecimalHandlingMode        *string `toml:"avro-decimal-handling-mode" json:"avro-decimal-handling-mode,omitempty"`
 	AvroBigintUnsignedHandlingMode *string `toml:"avro-bigint-unsigned-handling-mode" json:"avro-bigint-unsigned-handling-mode,omitempty"`
 }

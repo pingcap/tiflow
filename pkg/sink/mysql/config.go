@@ -226,7 +226,7 @@ func mergeUrlConfigToConfigFileValues(
 		configParameter.EnableMultiStatement = replicaConfig.Sink.MySQLConfig.EnableMultiStatement
 		configParameter.EnableCachePreparedStatement = replicaConfig.Sink.MySQLConfig.EnableCachePreparedStatement
 	}
-	if err := mergo.Merge(configParameter, urlParameters); err != nil {
+	if err := mergo.Merge(configParameter, urlParameters, mergo.WithOverride); err != nil {
 		return nil, err
 	}
 	return configParameter, nil

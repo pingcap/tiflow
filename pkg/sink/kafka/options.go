@@ -344,7 +344,7 @@ func mergeUrlConfigToConfigFileValues(
 		configParameter.Cert = replicaConfig.Sink.KafkaConfig.Cert
 		configParameter.Key = replicaConfig.Sink.KafkaConfig.Key
 	}
-	if err := mergo.Merge(configParameter, urlParameters); err != nil {
+	if err := mergo.Merge(configParameter, urlParameters, mergo.WithOverride); err != nil {
 		return nil, err
 	}
 	return configParameter, nil
