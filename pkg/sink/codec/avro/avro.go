@@ -988,7 +988,7 @@ func NewBatchEncoderBuilder(ctx context.Context,
 	config *common.Config,
 ) (codec.RowEventEncoderBuilder, error) {
 	keySchemaManager, valueSchemaManager, err := NewKeyAndValueSchemaManagers(
-		ctx, nil, config.AvroSchemaRegistry)
+		ctx, config.AvroSchemaRegistry, nil)
 	if err != nil {
 		return nil, errors.Trace(err)
 	}

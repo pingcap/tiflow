@@ -429,7 +429,7 @@ func NewConsumer(ctx context.Context) (*Consumer, error) {
 
 	if c.protocol == config.ProtocolAvro {
 		keySchemaM, valueSchemaM, err := avro.NewKeyAndValueSchemaManagers(
-			ctx, nil, schemaRegistryURL)
+			ctx, schemaRegistryURL, nil)
 		if err != nil {
 			return nil, errors.Trace(err)
 		}

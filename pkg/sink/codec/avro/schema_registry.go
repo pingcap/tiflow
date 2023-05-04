@@ -80,25 +80,15 @@ type lookupResponse struct {
 // and test connectivity to the schema registry
 func NewKeyAndValueSchemaManagers(
 	ctx context.Context,
-	credential *security.Credential,
 	registryURL string,
+	credential *security.Credential,
 ) (*SchemaManager, *SchemaManager, error) {
-	keyManager, err := newAvroSchemaManager(
-		ctx,
-		credential,
-		registryURL,
-		keySchemaSuffix,
-	)
+	keyManager, err := newAvroSchemaManager(ctx, registryURL, keySchemaSuffix, credential)
 	if err != nil {
 		return nil, nil, err
 	}
 
-	valueManager, err := newAvroSchemaManager(
-		ctx,
-		credential,
-		registryURL,
-		valueSchemaSuffix,
-	)
+	valueManager, err := newAvroSchemaManager(ctx, registryURL, valueSchemaSuffix, credential)
 	if err != nil {
 		return nil, nil, err
 	}
@@ -107,7 +97,10 @@ func NewKeyAndValueSchemaManagers(
 }
 
 func newAvroSchemaManager(
-	ctx context.Context, credential *security.Credential, registryURL string, subjectSuffix string,
+	ctx context.Context,
+	registryURL string,
+	subjectSuffix string,
+	credential *security.Credential,
 ) (*SchemaManager, error) {
 	registryURL = strings.TrimRight(registryURL, "/")
 	httpCli, err := httputil.NewClient(credential)

@@ -176,11 +176,7 @@ func TestSchemaRegistry(t *testing.T) {
 	defer stopHTTPInterceptForTestingRegistry()
 
 	manager, err := newAvroSchemaManager(
-		getTestingContext(),
-		nil,
-		"http://127.0.0.1:8081",
-		"-value",
-	)
+		getTestingContext(), "http://127.0.0.1:8081", "-value", nil)
 	require.NoError(t, err)
 
 	topic := "cdctest"
@@ -242,10 +238,12 @@ func TestSchemaRegistryBad(t *testing.T) {
 	startHTTPInterceptForTestingRegistry()
 	defer stopHTTPInterceptForTestingRegistry()
 
-	_, err := newAvroSchemaManager(getTestingContext(), nil, "http://127.0.0.1:808", "-value")
+	_, err := newAvroSchemaManager(
+		getTestingContext(), "http://127.0.0.1:808", "-value", nil)
 	require.NotNil(t, err)
 
-	_, err = newAvroSchemaManager(getTestingContext(), nil, "https://127.0.0.1:8080", "-value")
+	_, err = newAvroSchemaManager(
+		getTestingContext(), "https://127.0.0.1:8080", "-value", nil)
 	require.NotNil(t, err)
 }
 
@@ -254,11 +252,7 @@ func TestSchemaRegistryIdempotent(t *testing.T) {
 	defer stopHTTPInterceptForTestingRegistry()
 
 	manager, err := newAvroSchemaManager(
-		getTestingContext(),
-		nil,
-		"http://127.0.0.1:8081",
-		"-value",
-	)
+		getTestingContext(), "http://127.0.0.1:8081", "-value", nil)
 	require.NoError(t, err)
 
 	topic := "cdctest"
@@ -303,11 +297,7 @@ func TestGetCachedOrRegister(t *testing.T) {
 	defer stopHTTPInterceptForTestingRegistry()
 
 	manager, err := newAvroSchemaManager(
-		getTestingContext(),
-		nil,
-		"http://127.0.0.1:8081",
-		"-value",
-	)
+		getTestingContext(), "http://127.0.0.1:8081", "-value", nil)
 	require.NoError(t, err)
 
 	called := 0

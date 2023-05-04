@@ -772,7 +772,8 @@ func TestAvroEncode(t *testing.T) {
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 
-	keySchemaM, valueSchemaM, err := NewKeyAndValueSchemaManagers(ctx, nil, "127.0.0.1:8081")
+	keySchemaM, valueSchemaM, err := NewKeyAndValueSchemaManagers(
+		ctx, "http://127.0.0.1:8081", nil)
 	require.NoError(t, err)
 
 	encoder := setupEncoderAndSchemaRegistry(o, keySchemaM, valueSchemaM)
@@ -973,7 +974,8 @@ func TestArvoAppendRowChangedEventWithCallback(t *testing.T) {
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 
-	keySchemaM, valueSchemaM, err := NewKeyAndValueSchemaManagers(ctx, nil, "127.0.0.1:8081")
+	keySchemaM, valueSchemaM, err := NewKeyAndValueSchemaManagers(
+		ctx, "http://127.0.0.1:8081", nil)
 	require.NoError(t, err)
 
 	encoder := setupEncoderAndSchemaRegistry(o, keySchemaM, valueSchemaM)
