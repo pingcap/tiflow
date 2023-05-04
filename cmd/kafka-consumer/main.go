@@ -80,6 +80,9 @@ var (
 	logLevel      string
 	timezone      string
 	ca, cert, key string
+
+	// avro schema registry url should be set if the encoding protocol is avro
+	schemaRegistryURL string
 )
 
 func init() {
@@ -90,6 +93,7 @@ func init() {
 
 	flag.StringVar(&upstreamURIStr, "upstream-uri", "", "Kafka uri")
 	flag.StringVar(&downstreamURIStr, "downstream-uri", "", "downstream sink uri")
+	flag.StringVar(&schemaRegistryURL, "schema-registry-url", "", "schema registry url")
 	flag.StringVar(&configFile, "config", "", "config file for changefeed")
 	flag.StringVar(&logPath, "log-file", "cdc_kafka_consumer.log", "log file path")
 	flag.StringVar(&logLevel, "log-level", "info", "log file path")
@@ -312,13 +316,15 @@ func main() {
 	/**
 	 * Setup a new Sarama consumer group
 	 */
-	log.Info("Starting a new TiCDC consumer", zap.String("GroupID", kafkaGroupID), zap.Any("protocol", protocol))
-	consumer, err := NewConsumer(context.TODO())
+	log.Info("Starting a new TiCDC consumer",
+		zap.String("GroupID", kafkaGroupID), zap.Any("protocol", protocol))
+
+	ctx, cancel := context.WithCancel(context.Background())
+	consumer, err := NewConsumer(ctx)
 	if err != nil {
 		log.Panic("Error creating consumer", zap.Error(err))
 	}
 
-	ctx, cancel := context.WithCancel(context.Background())
 	client, err := sarama.NewConsumerGroup(kafkaAddrs, kafkaGroupID, config)
 	if err != nil {
 		log.Panic("Error creating consumer group client", zap.Error(err))
@@ -420,6 +426,16 @@ func NewConsumer(ctx context.Context) (*Consumer, error) {
 	c.protocol = protocol
 	c.enableTiDBExtension = enableTiDBExtension
 	c.enableRowChecksum = enableRowChecksum
+
+	if c.protocol == config.ProtocolAvro {
+		keySchemaM, valueSchemaM, err := avro.NewKeyAndValueSchemaManagers(
+			ctx, nil, schemaRegistryURL)
+		if err != nil {
+			return nil, errors.Trace(err)
+		}
+		c.keySchemaM = keySchemaM
+		c.valueSchemaM = valueSchemaM
+	}
 
 	// this means user has input config file to enable dispatcher check
 	// some protocol does not provide enough information to check the

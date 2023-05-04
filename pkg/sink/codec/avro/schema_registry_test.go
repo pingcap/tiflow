@@ -175,7 +175,7 @@ func TestSchemaRegistry(t *testing.T) {
 	startHTTPInterceptForTestingRegistry()
 	defer stopHTTPInterceptForTestingRegistry()
 
-	manager, err := NewAvroSchemaManager(
+	manager, err := newAvroSchemaManager(
 		getTestingContext(),
 		nil,
 		"http://127.0.0.1:8081",
@@ -242,10 +242,10 @@ func TestSchemaRegistryBad(t *testing.T) {
 	startHTTPInterceptForTestingRegistry()
 	defer stopHTTPInterceptForTestingRegistry()
 
-	_, err := NewAvroSchemaManager(getTestingContext(), nil, "http://127.0.0.1:808", "-value")
+	_, err := newAvroSchemaManager(getTestingContext(), nil, "http://127.0.0.1:808", "-value")
 	require.NotNil(t, err)
 
-	_, err = NewAvroSchemaManager(getTestingContext(), nil, "https://127.0.0.1:8080", "-value")
+	_, err = newAvroSchemaManager(getTestingContext(), nil, "https://127.0.0.1:8080", "-value")
 	require.NotNil(t, err)
 }
 
@@ -253,7 +253,7 @@ func TestSchemaRegistryIdempotent(t *testing.T) {
 	startHTTPInterceptForTestingRegistry()
 	defer stopHTTPInterceptForTestingRegistry()
 
-	manager, err := NewAvroSchemaManager(
+	manager, err := newAvroSchemaManager(
 		getTestingContext(),
 		nil,
 		"http://127.0.0.1:8081",
@@ -302,7 +302,7 @@ func TestGetCachedOrRegister(t *testing.T) {
 	startHTTPInterceptForTestingRegistry()
 	defer stopHTTPInterceptForTestingRegistry()
 
-	manager, err := NewAvroSchemaManager(
+	manager, err := newAvroSchemaManager(
 		getTestingContext(),
 		nil,
 		"http://127.0.0.1:8081",

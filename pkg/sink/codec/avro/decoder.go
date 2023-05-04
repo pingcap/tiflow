@@ -110,16 +110,16 @@ func (d *decoder) NextRowChangedEvent() (*model.RowChangedEvent, error) {
 			break
 		}
 
-		var tidbType string
-		typeInfo := field["type"]
-		switch ty := typeInfo.(type) {
+		var holder map[string]interface{}
+		switch ty := field["type"].(type) {
 		case []interface{}:
-			tidbType = ty[1].(map[string]interface{})["connect.parameters"].(map[string]interface{})["tidb_type"].(string)
+			holder = ty[1].(map[string]interface{})["connect.parameters"].(map[string]interface{})
 		case map[string]interface{}:
-			tidbType = ty["connect.parameters"].(map[string]interface{})["tidb_type"].(string)
+			holder = ty["connect.parameters"].(map[string]interface{})
 		default:
-			log.Panic("type info is anything else", zap.Any("typeInfo", typeInfo))
+			log.Panic("type info is anything else", zap.Any("typeInfo", field["type"]))
 		}
+		tidbType := holder["tidb_type"].(string)
 
 		mysqlType, flag := mysqlAndFlagTypeFromTiDBType(tidbType)
 		if _, ok := key[colName]; ok {

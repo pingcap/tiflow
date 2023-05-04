@@ -37,7 +37,7 @@ func TestDecodeEvent(t *testing.T) {
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 
-	keySchemaM, valueSchemaM, err := newSchemaManager4Test(ctx)
+	keySchemaM, valueSchemaM, err := NewKeyAndValueSchemaManagers(ctx, nil, "127.0.0.1:8081")
 	require.NoError(t, err)
 
 	encoder := setupEncoderAndSchemaRegistry(o, keySchemaM, valueSchemaM)
@@ -116,7 +116,7 @@ func TestDecodeEvent(t *testing.T) {
 	require.Len(t, messages, 1)
 	message := messages[0]
 
-	keySchemaM, valueSchemaM, err = newSchemaManager4Test(ctx)
+	keySchemaM, valueSchemaM, err = NewKeyAndValueSchemaManagers(ctx, nil, "127.0.0.1:8081")
 	require.NoError(t, err)
 
 	decoder := NewDecoder(o, keySchemaM, valueSchemaM, topic)

@@ -76,8 +76,37 @@ type lookupResponse struct {
 	Schema   string `json:"schema"`
 }
 
-// NewAvroSchemaManager creates a new SchemaManager and test connectivity to the schema registry
-func NewAvroSchemaManager(
+// NewKeyAndValueSchemaManagers create key and value schema managers respectively,
+// and test connectivity to the schema registry
+func NewKeyAndValueSchemaManagers(
+	ctx context.Context,
+	credential *security.Credential,
+	registryURL string,
+) (*SchemaManager, *SchemaManager, error) {
+	keyManager, err := newAvroSchemaManager(
+		ctx,
+		credential,
+		registryURL,
+		keySchemaSuffix,
+	)
+	if err != nil {
+		return nil, nil, err
+	}
+
+	valueManager, err := newAvroSchemaManager(
+		ctx,
+		credential,
+		registryURL,
+		valueSchemaSuffix,
+	)
+	if err != nil {
+		return nil, nil, err
+	}
+
+	return keyManager, valueManager, nil
+}
+
+func newAvroSchemaManager(
 	ctx context.Context, credential *security.Credential, registryURL string, subjectSuffix string,
 ) (*SchemaManager, error) {
 	registryURL = strings.TrimRight(registryURL, "/")

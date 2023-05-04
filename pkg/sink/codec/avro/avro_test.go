@@ -32,30 +32,6 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
-func newSchemaManager4Test(ctx context.Context) (*SchemaManager, *SchemaManager, error) {
-	keyManager, err := NewAvroSchemaManager(
-		ctx,
-		nil,
-		"http://127.0.0.1:8081",
-		"-key",
-	)
-	if err != nil {
-		return nil, nil, err
-	}
-
-	valueManager, err := NewAvroSchemaManager(
-		ctx,
-		nil,
-		"http://127.0.0.1:8081",
-		"-value",
-	)
-	if err != nil {
-		return nil, nil, err
-	}
-
-	return keyManager, valueManager, nil
-}
-
 func setupEncoderAndSchemaRegistry(
 	o *Options,
 	keySchemeM *SchemaManager,
@@ -796,7 +772,7 @@ func TestAvroEncode(t *testing.T) {
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 
-	keySchemaM, valueSchemaM, err := newSchemaManager4Test(ctx)
+	keySchemaM, valueSchemaM, err := NewKeyAndValueSchemaManagers(ctx, nil, "127.0.0.1:8081")
 	require.NoError(t, err)
 
 	encoder := setupEncoderAndSchemaRegistry(o, keySchemaM, valueSchemaM)
@@ -997,7 +973,7 @@ func TestArvoAppendRowChangedEventWithCallback(t *testing.T) {
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 
-	keySchemaM, valueSchemaM, err := newSchemaManager4Test(ctx)
+	keySchemaM, valueSchemaM, err := NewKeyAndValueSchemaManagers(ctx, nil, "127.0.0.1:8081")
 	require.NoError(t, err)
 
 	encoder := setupEncoderAndSchemaRegistry(o, keySchemaM, valueSchemaM)
