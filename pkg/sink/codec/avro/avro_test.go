@@ -28,26 +28,31 @@ import (
 	"github.com/pingcap/tidb/types"
 	"github.com/pingcap/tidb/util/rowcodec"
 	"github.com/pingcap/tiflow/cdc/model"
+	"github.com/pingcap/tiflow/pkg/errors"
+	"github.com/pingcap/tiflow/pkg/security"
 	"github.com/pingcap/tiflow/pkg/sink/codec/common"
 	"github.com/stretchr/testify/require"
 )
 
 func setupEncoderAndSchemaRegistry(
+	ctx context.Context,
+	registryURL string,
+	credential *security.Credential,
 	o *Options,
-	keySchemeM *SchemaManager,
-	valueSchemaM *SchemaManager,
-) *BatchEncoder {
-	if keySchemeM != nil && valueSchemaM != nil {
-		startHTTPInterceptForTestingRegistry()
+) (*BatchEncoder, error) {
+	startHTTPInterceptForTestingRegistry()
+	keySchemaM, valueSchemaM, err := NewKeyAndValueSchemaManagers(ctx, registryURL, credential)
+	if err != nil {
+		return nil, errors.Trace(err)
 	}
 
 	return &BatchEncoder{
 		namespace:          model.DefaultNamespace,
 		valueSchemaManager: valueSchemaM,
-		keySchemaManager:   keySchemeM,
+		keySchemaManager:   keySchemaM,
 		result:             make([]*common.Message, 0, 1),
 		Options:            o,
-	}
+	}, nil
 }
 
 func teardownEncoderAndSchemaRegistry() {
@@ -772,12 +777,11 @@ func TestAvroEncode(t *testing.T) {
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 
-	keySchemaM, valueSchemaM, err := NewKeyAndValueSchemaManagers(
-		ctx, "http://127.0.0.1:8081", nil)
-	require.NoError(t, err)
-
-	encoder := setupEncoderAndSchemaRegistry(o, keySchemaM, valueSchemaM)
+	encoder, err := setupEncoderAndSchemaRegistry(
+		ctx, "http://127.0.0.1:8081", nil, o)
 	defer teardownEncoderAndSchemaRegistry()
+	require.NoError(t, err)
+	require.NotNil(t, encoder)
 
 	cols := make([]*model.Column, 0)
 	colInfos := make([]rowcodec.ColInfo, 0)
@@ -974,12 +978,11 @@ func TestArvoAppendRowChangedEventWithCallback(t *testing.T) {
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 
-	keySchemaM, valueSchemaM, err := NewKeyAndValueSchemaManagers(
-		ctx, "http://127.0.0.1:8081", nil)
-	require.NoError(t, err)
-
-	encoder := setupEncoderAndSchemaRegistry(o, keySchemaM, valueSchemaM)
+	encoder, err := setupEncoderAndSchemaRegistry(
+		ctx, "http://127.0.0.1:8081", nil, o)
 	defer teardownEncoderAndSchemaRegistry()
+	require.NoError(t, err)
+	require.NotNil(t, encoder)
 
 	// Empty build makes sure that the callback build logic not broken.
 	msgs := encoder.Build()

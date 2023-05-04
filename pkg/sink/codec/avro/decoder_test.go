@@ -24,6 +24,7 @@ import (
 	"github.com/pingcap/tidb/types"
 	"github.com/pingcap/tidb/util/rowcodec"
 	"github.com/pingcap/tiflow/cdc/model"
+	"github.com/pingcap/tiflow/pkg/sink/codec/common"
 	"github.com/stretchr/testify/require"
 )
 
@@ -37,12 +38,11 @@ func TestDecodeEvent(t *testing.T) {
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 
-	keySchemaM, valueSchemaM, err := NewKeyAndValueSchemaManagers(
-		ctx, "http://127.0.0.1:8081", nil)
-	require.NoError(t, err)
-
-	encoder := setupEncoderAndSchemaRegistry(o, keySchemaM, valueSchemaM)
+	encoder, err := setupEncoderAndSchemaRegistry(
+		ctx, "http://127.0.0.1:8081", nil, o)
 	defer teardownEncoderAndSchemaRegistry()
+	require.NoError(t, err)
+	require.NotNil(t, encoder)
 
 	cols := make([]*model.Column, 0)
 	colInfos := make([]rowcodec.ColInfo, 0)
@@ -117,7 +117,7 @@ func TestDecodeEvent(t *testing.T) {
 	require.Len(t, messages, 1)
 	message := messages[0]
 
-	keySchemaM, valueSchemaM, err = NewKeyAndValueSchemaManagers(
+	keySchemaM, valueSchemaM, err := NewKeyAndValueSchemaManagers(
 		ctx, "http://127.0.0.1:8081", nil)
 	require.NoError(t, err)
 
@@ -143,8 +143,11 @@ func TestDecodeDDLEvent(t *testing.T) {
 		EnableWatermarkEvent: true,
 	}
 
-	encoder := setupEncoderAndSchemaRegistry(o, nil, nil)
-	defer teardownEncoderAndSchemaRegistry()
+	encoder := &BatchEncoder{
+		namespace: model.DefaultNamespace,
+		result:    make([]*common.Message, 0, 1),
+		Options:   o,
+	}
 
 	message, err := encoder.EncodeDDLEvent(&model.DDLEvent{
 		StartTs:  1020,
@@ -194,8 +197,11 @@ func TestDecodeResolvedEvent(t *testing.T) {
 		EnableWatermarkEvent: true,
 	}
 
-	encoder := setupEncoderAndSchemaRegistry(o, nil, nil)
-	defer teardownEncoderAndSchemaRegistry()
+	encoder := &BatchEncoder{
+		namespace: model.DefaultNamespace,
+		Options:   o,
+		result:    make([]*common.Message, 0, 1),
+	}
 
 	resolvedTs := uint64(1591943372224)
 	message, err := encoder.EncodeCheckpointEvent(resolvedTs)
