@@ -15,11 +15,11 @@ package cloudstorage
 
 import (
 	"context"
-	"github.com/aws/aws-sdk-go/aws"
 	"net/url"
 	"testing"
 	"time"
 
+	"github.com/aws/aws-sdk-go/aws"
 	"github.com/pingcap/tiflow/pkg/config"
 	"github.com/stretchr/testify/require"
 )

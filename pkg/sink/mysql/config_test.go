@@ -16,13 +16,13 @@ package mysql
 import (
 	"context"
 	"database/sql"
-	"github.com/aws/aws-sdk-go/aws"
 	"net/url"
 	"strings"
 	"testing"
 	"time"
 
 	"github.com/DATA-DOG/go-sqlmock"
+	"github.com/aws/aws-sdk-go/aws"
 	dmysql "github.com/go-sql-driver/mysql"
 	"github.com/pingcap/tiflow/cdc/contextutil"
 	"github.com/pingcap/tiflow/cdc/model"
