@@ -246,8 +246,7 @@ func (m *SchemaManager) Lookup(
 		zap.String("key", key),
 		zap.Int("schemaID", schemaID))
 
-	uri := m.registryURL + "/subjects/" + url.QueryEscape(key) + "/versions/" +
-		strconv.Itoa(schemaID)
+	uri := m.registryURL + "/schemas/ids/" + strconv.Itoa(schemaID)
 	log.Debug("Querying for latest schema", zap.String("uri", uri))
 
 	req, err := http.NewRequestWithContext(ctx, "GET", uri, nil)

@@ -17,7 +17,6 @@ import (
 	"bytes"
 	"context"
 	"encoding/json"
-	"fmt"
 	"io"
 	"net/http"
 	"sync"
@@ -97,37 +96,24 @@ func startHTTPInterceptForTestingRegistry() {
 			return httpmock.NewJsonResponse(200, &respData)
 		})
 
-	httpmock.RegisterResponder("GET", `=~^http://127.0.0.1:8081/subjects/(.+)/versions/(.+)`,
+	httpmock.RegisterResponder("GET", `=~^http://127.0.0.1:8081/schemas/ids/(.+)`,
 		func(req *http.Request) (*http.Response, error) {
-			subject, err := httpmock.GetSubmatch(req, 1)
+			id, err := httpmock.GetSubmatchAsInt(req, 1)
 			if err != nil {
 				return httpmock.NewStringResponse(500, "Internal Server Error"), err
 			}
 
-			registry.mu.Lock()
-			item, exists := registry.subjects[subject]
-			registry.mu.Unlock()
-			if !exists {
-				return httpmock.NewStringResponse(404, ""), nil
+			for key, item := range registry.subjects {
+				if item.ID == int(id) {
+					var respData lookupResponse
+					respData.Schema = item.content
+					respData.Name = key
+					respData.SchemaID = item.ID
+					return httpmock.NewJsonResponse(200, &respData)
+				}
 			}
 
-			id, err := httpmock.GetSubmatchAsInt(req, 2)
-			if err != nil {
-				return httpmock.NewStringResponse(500, "Internal Server Error"), err
-			}
-
-			if item.ID != int(id) {
-				return httpmock.NewStringResponse(500, "Internal Server Error"),
-					fmt.Errorf("schema id does not match, expected = %+v, obtained = %+v",
-						id, item.ID)
-			}
-
-			var respData lookupResponse
-			respData.Schema = item.content
-			respData.Name = subject
-			respData.SchemaID = item.ID
-
-			return httpmock.NewJsonResponse(200, &respData)
+			return httpmock.NewStringResponse(404, "Not Found"), nil
 		})
 
 	httpmock.RegisterResponder("DELETE", `=~^http://127.0.0.1:8081/subjects/(.+)`,
@@ -200,11 +186,12 @@ func TestSchemaRegistry(t *testing.T) {
      }`)
 	require.NoError(t, err)
 
-	_, err = manager.Register(getTestingContext(), topic, codec.Schema())
+	schemaID, err := manager.Register(getTestingContext(), topic, codec.Schema())
 	require.NoError(t, err)
 
-	_, err = manager.Lookup(getTestingContext(), topic, 1)
+	codec2, err := manager.Lookup(getTestingContext(), topic, schemaID)
 	require.NoError(t, err)
+	require.Equal(t, codec.CanonicalSchema(), codec2.CanonicalSchema())
 
 	codec, err = goavro.NewCodec(`{
        "type": "record",
@@ -226,10 +213,10 @@ func TestSchemaRegistry(t *testing.T) {
           ]
      }`)
 	require.NoError(t, err)
-	_, err = manager.Register(getTestingContext(), topic, codec.Schema())
+	schemaID, err = manager.Register(getTestingContext(), topic, codec.Schema())
 	require.NoError(t, err)
 
-	codec2, err := manager.Lookup(getTestingContext(), topic, 2)
+	codec2, err = manager.Lookup(getTestingContext(), topic, schemaID)
 	require.NoError(t, err)
 	require.Equal(t, codec.CanonicalSchema(), codec2.CanonicalSchema())
 }

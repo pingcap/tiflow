@@ -606,7 +606,9 @@ func (c *Consumer) ConsumeClaim(session sarama.ConsumerGroupSession, claim saram
 				// but all DDL event messages should be consumed.
 				ddl, err := decoder.NextDDLEvent()
 				if err != nil {
-					log.Panic("decode message value failed", zap.ByteString("value", message.Value))
+					log.Panic("decode message value failed",
+						zap.ByteString("value", message.Value),
+						zap.Error(err))
 				}
 				if partition == 0 {
 					c.appendDDL(ddl)
@@ -614,7 +616,9 @@ func (c *Consumer) ConsumeClaim(session sarama.ConsumerGroupSession, claim saram
 			case model.MessageTypeRow:
 				row, err := decoder.NextRowChangedEvent()
 				if err != nil {
-					log.Panic("decode message value failed", zap.ByteString("value", message.Value))
+					log.Panic("decode message value failed",
+						zap.ByteString("value", message.Value),
+						zap.Error(err))
 				}
 
 				if c.eventRouter != nil {
@@ -655,7 +659,9 @@ func (c *Consumer) ConsumeClaim(session sarama.ConsumerGroupSession, claim saram
 			case model.MessageTypeResolved:
 				ts, err := decoder.NextResolvedEvent()
 				if err != nil {
-					log.Panic("decode message value failed", zap.ByteString("value", message.Value))
+					log.Panic("decode message value failed",
+						zap.ByteString("value", message.Value),
+						zap.Error(err))
 				}
 				resolvedTs := atomic.LoadUint64(&sink.resolvedTs)
 				// `resolvedTs` should be monotonically increasing, it's allowed to receive redundant one.
