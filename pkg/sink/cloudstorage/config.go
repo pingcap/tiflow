@@ -94,7 +94,7 @@ func (c *Config) Apply(
 	if err := binding.Query.Bind(req, urlParameter); err != nil {
 		return cerror.WrapError(cerror.ErrMySQLInvalidConfig, err)
 	}
-	if urlParameter, err = mergeUrlConfigToConfigFileValues(replicaConfig, urlParameter); err != nil {
+	if urlParameter, err = mergeConfig(replicaConfig, urlParameter); err != nil {
 		return err
 	}
 	if err = getWorkerCount(urlParameter, &c.WorkerCount); err != nil {
@@ -115,20 +115,20 @@ func (c *Config) Apply(
 	return nil
 }
 
-func mergeUrlConfigToConfigFileValues(
+func mergeConfig(
 	replicaConfig *config.ReplicaConfig,
 	urlParameters *urlConfig,
 ) (*urlConfig, error) {
-	configParameter := &urlConfig{}
+	dest := &urlConfig{}
 	if replicaConfig.Sink != nil && replicaConfig.Sink.CloudStorageConfig != nil {
-		configParameter.WorkerCount = replicaConfig.Sink.CloudStorageConfig.WorkerCount
-		configParameter.FlushInterval = replicaConfig.Sink.CloudStorageConfig.FlushInterval
-		configParameter.FileSize = replicaConfig.Sink.CloudStorageConfig.FileSize
+		dest.WorkerCount = replicaConfig.Sink.CloudStorageConfig.WorkerCount
+		dest.FlushInterval = replicaConfig.Sink.CloudStorageConfig.FlushInterval
+		dest.FileSize = replicaConfig.Sink.CloudStorageConfig.FileSize
 	}
-	if err := mergo.Merge(configParameter, urlParameters); err != nil {
+	if err := mergo.Merge(dest, urlParameters); err != nil {
 		return nil, err
 	}
-	return configParameter, nil
+	return dest, nil
 }
 
 func getWorkerCount(values *urlConfig, workerCount *int) error {

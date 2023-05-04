@@ -14,10 +14,10 @@
 package common
 
 import (
-	"github.com/aws/aws-sdk-go/aws"
 	"net/url"
 	"testing"
 
+	"github.com/aws/aws-sdk-go/aws"
 	"github.com/pingcap/tiflow/pkg/config"
 	"github.com/stretchr/testify/require"
 )

@@ -273,12 +273,13 @@ func (c *ReplicaConfig) toInternalReplicaConfigWithOriginConfig(
 		if c.Sink.KafkaConfig != nil {
 			var codeConfig *config.CodecConfig
 			if c.Sink.KafkaConfig.CodecConfig != nil {
+				oldConfig := c.Sink.KafkaConfig.CodecConfig
 				codeConfig = &config.CodecConfig{
-					EnableTiDBExtension:            c.Sink.KafkaConfig.CodecConfig.EnableTiDBExtension,
-					MaxBatchSize:                   c.Sink.KafkaConfig.CodecConfig.MaxBatchSize,
-					MaxMessageBytes:                c.Sink.KafkaConfig.CodecConfig.MaxMessageBytes,
-					AvroDecimalHandlingMode:        c.Sink.KafkaConfig.CodecConfig.AvroDecimalHandlingMode,
-					AvroBigintUnsignedHandlingMode: c.Sink.KafkaConfig.CodecConfig.AvroBigintUnsignedHandlingMode,
+					EnableTiDBExtension:            oldConfig.EnableTiDBExtension,
+					MaxBatchSize:                   oldConfig.MaxBatchSize,
+					AvroEnableWatermark:            oldConfig.AvroEnableWatermark,
+					AvroDecimalHandlingMode:        oldConfig.AvroDecimalHandlingMode,
+					AvroBigintUnsignedHandlingMode: oldConfig.AvroBigintUnsignedHandlingMode,
 				}
 			}
 			kafkaConfig = &config.KafkaConfig{
@@ -466,12 +467,13 @@ func ToAPIReplicaConfig(c *config.ReplicaConfig) *ReplicaConfig {
 		if cloned.Sink.KafkaConfig != nil {
 			var codeConfig *CodecConfig
 			if cloned.Sink.KafkaConfig.CodecConfig != nil {
+				oldConfig := cloned.Sink.KafkaConfig.CodecConfig
 				codeConfig = &CodecConfig{
-					EnableTiDBExtension:            cloned.Sink.KafkaConfig.CodecConfig.EnableTiDBExtension,
-					MaxBatchSize:                   cloned.Sink.KafkaConfig.CodecConfig.MaxBatchSize,
-					MaxMessageBytes:                cloned.Sink.KafkaConfig.CodecConfig.MaxMessageBytes,
-					AvroDecimalHandlingMode:        cloned.Sink.KafkaConfig.CodecConfig.AvroDecimalHandlingMode,
-					AvroBigintUnsignedHandlingMode: cloned.Sink.KafkaConfig.CodecConfig.AvroBigintUnsignedHandlingMode,
+					EnableTiDBExtension:            oldConfig.EnableTiDBExtension,
+					MaxBatchSize:                   oldConfig.MaxBatchSize,
+					AvroEnableWatermark:            oldConfig.AvroEnableWatermark,
+					AvroDecimalHandlingMode:        oldConfig.AvroDecimalHandlingMode,
+					AvroBigintUnsignedHandlingMode: oldConfig.AvroBigintUnsignedHandlingMode,
 				}
 			}
 			kafkaConfig = &KafkaConfig{
@@ -878,7 +880,7 @@ type Capture struct {
 type CodecConfig struct {
 	EnableTiDBExtension            *bool   `json:"enable_tidb_extension,omitempty"`
 	MaxBatchSize                   *int    `json:"max_batch_size,omitempty"`
-	MaxMessageBytes                *int    `json:"max_message_bytes,omitempty"`
+	AvroEnableWatermark            *bool   `json:"avro_enable_watermark"`
 	AvroDecimalHandlingMode        *string `json:"avro_decimal_handling_mode,omitempty"`
 	AvroBigintUnsignedHandlingMode *string `json:"avro_bigint_unsigned_handling_mode,omitempty"`
 }

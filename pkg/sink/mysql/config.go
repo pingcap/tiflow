@@ -161,7 +161,7 @@ func (c *Config) Apply(
 	if err := binding.Query.Bind(req, urlParameter); err != nil {
 		return cerror.WrapError(cerror.ErrMySQLInvalidConfig, err)
 	}
-	if urlParameter, err = mergeUrlConfigToConfigFileValues(replicaConfig, urlParameter); err != nil {
+	if urlParameter, err = mergeConfig(replicaConfig, urlParameter); err != nil {
 		return err
 	}
 	if err = getWorkerCount(urlParameter, &c.WorkerCount); err != nil {
@@ -203,33 +203,34 @@ func (c *Config) Apply(
 	return nil
 }
 
-func mergeUrlConfigToConfigFileValues(
+func mergeConfig(
 	replicaConfig *config.ReplicaConfig,
 	urlParameters *urlConfig,
 ) (*urlConfig, error) {
-	configParameter := &urlConfig{}
-	configParameter.SafeMode = replicaConfig.Sink.SafeMode
+	dest := &urlConfig{}
+	dest.SafeMode = replicaConfig.Sink.SafeMode
 	if replicaConfig.Sink != nil && replicaConfig.Sink.MySQLConfig != nil {
-		configParameter.WorkerCount = replicaConfig.Sink.MySQLConfig.WorkerCount
-		configParameter.MaxTxnRow = replicaConfig.Sink.MySQLConfig.MaxTxnRow
-		configParameter.MaxMultiUpdateRowCount = replicaConfig.Sink.MySQLConfig.MaxMultiUpdateRowCount
-		configParameter.MaxMultiUpdateRowSize = replicaConfig.Sink.MySQLConfig.MaxMultiUpdateRowSize
-		configParameter.TiDBTxnMode = replicaConfig.Sink.MySQLConfig.TiDBTxnMode
-		configParameter.SSLCa = replicaConfig.Sink.MySQLConfig.SSLCa
-		configParameter.SSLCert = replicaConfig.Sink.MySQLConfig.SSLCert
-		configParameter.SSLKey = replicaConfig.Sink.MySQLConfig.SSLKey
-		configParameter.TimeZone = replicaConfig.Sink.MySQLConfig.TimeZone
-		configParameter.WriteTimeout = replicaConfig.Sink.MySQLConfig.WriteTimeout
-		configParameter.ReadTimeout = replicaConfig.Sink.MySQLConfig.ReadTimeout
-		configParameter.Timeout = replicaConfig.Sink.MySQLConfig.Timeout
-		configParameter.EnableBatchDML = replicaConfig.Sink.MySQLConfig.EnableBatchDML
-		configParameter.EnableMultiStatement = replicaConfig.Sink.MySQLConfig.EnableMultiStatement
-		configParameter.EnableCachePreparedStatement = replicaConfig.Sink.MySQLConfig.EnableCachePreparedStatement
+		mConfig := replicaConfig.Sink.MySQLConfig
+		dest.WorkerCount = mConfig.WorkerCount
+		dest.MaxTxnRow = mConfig.MaxTxnRow
+		dest.MaxMultiUpdateRowCount = mConfig.MaxMultiUpdateRowCount
+		dest.MaxMultiUpdateRowSize = mConfig.MaxMultiUpdateRowSize
+		dest.TiDBTxnMode = mConfig.TiDBTxnMode
+		dest.SSLCa = mConfig.SSLCa
+		dest.SSLCert = mConfig.SSLCert
+		dest.SSLKey = mConfig.SSLKey
+		dest.TimeZone = mConfig.TimeZone
+		dest.WriteTimeout = mConfig.WriteTimeout
+		dest.ReadTimeout = mConfig.ReadTimeout
+		dest.Timeout = mConfig.Timeout
+		dest.EnableBatchDML = mConfig.EnableBatchDML
+		dest.EnableMultiStatement = mConfig.EnableMultiStatement
+		dest.EnableCachePreparedStatement = mConfig.EnableCachePreparedStatement
 	}
-	if err := mergo.Merge(configParameter, urlParameters, mergo.WithOverride); err != nil {
+	if err := mergo.Merge(dest, urlParameters, mergo.WithOverride); err != nil {
 		return nil, err
 	}
-	return configParameter, nil
+	return dest, nil
 }
 
 func getWorkerCount(values *urlConfig, workerCount *int) error {

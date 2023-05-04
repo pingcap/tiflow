@@ -223,7 +223,7 @@ func (o *Options) Apply(ctx context.Context,
 	if err := binding.Query.Bind(req, urlParameter); err != nil {
 		return cerror.WrapError(cerror.ErrMySQLInvalidConfig, err)
 	}
-	if urlParameter, err = mergeUrlConfigToConfigFileValues(replicaConfig, urlParameter); err != nil {
+	if urlParameter, err = mergeConfig(replicaConfig, urlParameter); err != nil {
 		return err
 	}
 	if urlParameter.PartitionNum != nil {
@@ -311,43 +311,44 @@ func (o *Options) Apply(ctx context.Context,
 	return nil
 }
 
-func mergeUrlConfigToConfigFileValues(
+func mergeConfig(
 	replicaConfig *config.ReplicaConfig,
 	urlParameters *urlConfig,
 ) (*urlConfig, error) {
-	configParameter := &urlConfig{}
+	dest := &urlConfig{}
 	if replicaConfig.Sink != nil && replicaConfig.Sink.KafkaConfig != nil {
-		configParameter.PartitionNum = replicaConfig.Sink.KafkaConfig.PartitionNum
-		configParameter.ReplicationFactor = replicaConfig.Sink.KafkaConfig.ReplicationFactor
-		configParameter.KafkaVersion = replicaConfig.Sink.KafkaConfig.KafkaVersion
-		configParameter.MaxMessageBytes = replicaConfig.Sink.KafkaConfig.MaxMessageBytes
-		configParameter.Compression = replicaConfig.Sink.KafkaConfig.Compression
-		configParameter.KafkaClientID = replicaConfig.Sink.KafkaConfig.KafkaClientID
-		configParameter.AutoCreateTopic = replicaConfig.Sink.KafkaConfig.AutoCreateTopic
-		configParameter.DialTimeout = replicaConfig.Sink.KafkaConfig.DialTimeout
-		configParameter.WriteTimeout = replicaConfig.Sink.KafkaConfig.WriteTimeout
-		configParameter.ReadTimeout = replicaConfig.Sink.KafkaConfig.ReadTimeout
-		configParameter.RequiredAcks = replicaConfig.Sink.KafkaConfig.RequiredAcks
-		configParameter.SASLUser = replicaConfig.Sink.KafkaConfig.SASLUser
-		configParameter.SASLPassword = replicaConfig.Sink.KafkaConfig.SASLPassword
-		configParameter.SASLMechanism = replicaConfig.Sink.KafkaConfig.SASLMechanism
-		configParameter.SASLGssAPIDisablePafxfast = replicaConfig.Sink.KafkaConfig.SASLGssAPIDisablePafxfast
-		configParameter.SASLGssAPIAuthType = replicaConfig.Sink.KafkaConfig.SASLGssAPIAuthType
-		configParameter.SASLGssAPIKeytabPath = replicaConfig.Sink.KafkaConfig.SASLGssAPIKeytabPath
-		configParameter.SASLGssAPIServiceName = replicaConfig.Sink.KafkaConfig.SASLGssAPIServiceName
-		configParameter.SASLGssAPIKerberosConfigPath = replicaConfig.Sink.KafkaConfig.SASLGssAPIKerberosConfigPath
-		configParameter.SASLGssAPIRealm = replicaConfig.Sink.KafkaConfig.SASLGssAPIRealm
-		configParameter.SASLGssAPIUser = replicaConfig.Sink.KafkaConfig.SASLGssAPIUser
-		configParameter.SASLGssAPIPassword = replicaConfig.Sink.KafkaConfig.SASLGssAPIPassword
-		configParameter.EnableTLS = replicaConfig.Sink.KafkaConfig.EnableTLS
-		configParameter.CA = replicaConfig.Sink.KafkaConfig.CA
-		configParameter.Cert = replicaConfig.Sink.KafkaConfig.Cert
-		configParameter.Key = replicaConfig.Sink.KafkaConfig.Key
+		fileConifg := replicaConfig.Sink.KafkaConfig
+		dest.PartitionNum = fileConifg.PartitionNum
+		dest.ReplicationFactor = fileConifg.ReplicationFactor
+		dest.KafkaVersion = fileConifg.KafkaVersion
+		dest.MaxMessageBytes = fileConifg.MaxMessageBytes
+		dest.Compression = fileConifg.Compression
+		dest.KafkaClientID = fileConifg.KafkaClientID
+		dest.AutoCreateTopic = fileConifg.AutoCreateTopic
+		dest.DialTimeout = fileConifg.DialTimeout
+		dest.WriteTimeout = fileConifg.WriteTimeout
+		dest.ReadTimeout = fileConifg.ReadTimeout
+		dest.RequiredAcks = fileConifg.RequiredAcks
+		dest.SASLUser = fileConifg.SASLUser
+		dest.SASLPassword = fileConifg.SASLPassword
+		dest.SASLMechanism = fileConifg.SASLMechanism
+		dest.SASLGssAPIDisablePafxfast = fileConifg.SASLGssAPIDisablePafxfast
+		dest.SASLGssAPIAuthType = fileConifg.SASLGssAPIAuthType
+		dest.SASLGssAPIKeytabPath = fileConifg.SASLGssAPIKeytabPath
+		dest.SASLGssAPIServiceName = fileConifg.SASLGssAPIServiceName
+		dest.SASLGssAPIKerberosConfigPath = fileConifg.SASLGssAPIKerberosConfigPath
+		dest.SASLGssAPIRealm = fileConifg.SASLGssAPIRealm
+		dest.SASLGssAPIUser = fileConifg.SASLGssAPIUser
+		dest.SASLGssAPIPassword = fileConifg.SASLGssAPIPassword
+		dest.EnableTLS = fileConifg.EnableTLS
+		dest.CA = fileConifg.CA
+		dest.Cert = fileConifg.Cert
+		dest.Key = fileConifg.Key
 	}
-	if err := mergo.Merge(configParameter, urlParameters, mergo.WithOverride); err != nil {
+	if err := mergo.Merge(dest, urlParameters, mergo.WithOverride); err != nil {
 		return nil, err
 	}
-	return configParameter, nil
+	return dest, nil
 }
 
 func (o *Options) applyTLS(params *urlConfig) error {

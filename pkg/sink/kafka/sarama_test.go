@@ -142,6 +142,7 @@ func TestApplySASL(t *testing.T) {
 			t.Parallel()
 			options := NewOptions()
 			sinkURI, err := url.Parse(test.URI)
+			require.NoError(t, err)
 			req := &http.Request{URL: sinkURI}
 			urlParameter := &urlConfig{}
 			err = binding.Query.Bind(req, urlParameter)
@@ -211,6 +212,7 @@ func TestApplyTLS(t *testing.T) {
 			t.Parallel()
 			options := NewOptions()
 			sinkURI, err := url.Parse(test.URI)
+			require.NoError(t, err)
 			req := &http.Request{URL: sinkURI}
 			urlParameter := &urlConfig{}
 			err = binding.Query.Bind(req, urlParameter)
