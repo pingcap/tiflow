@@ -81,8 +81,8 @@ var (
 	timezone      string
 	ca, cert, key string
 
-	// avro schema registry url should be set if the encoding protocol is avro
-	schemaRegistryURL string
+	// avro schema registry uri should be set if the encoding protocol is avro
+	schemaRegistryURI string
 )
 
 func init() {
@@ -93,7 +93,7 @@ func init() {
 
 	flag.StringVar(&upstreamURIStr, "upstream-uri", "", "Kafka uri")
 	flag.StringVar(&downstreamURIStr, "downstream-uri", "", "downstream sink uri")
-	flag.StringVar(&schemaRegistryURL, "schema-registry-url", "", "schema registry url")
+	flag.StringVar(&schemaRegistryURI, "schema-registry-uri", "", "schema registry uri")
 	flag.StringVar(&configFile, "config", "", "config file for changefeed")
 	flag.StringVar(&logPath, "log-file", "cdc_kafka_consumer.log", "log file path")
 	flag.StringVar(&logLevel, "log-level", "info", "log file path")
@@ -429,7 +429,7 @@ func NewConsumer(ctx context.Context) (*Consumer, error) {
 
 	if c.protocol == config.ProtocolAvro {
 		keySchemaM, valueSchemaM, err := avro.NewKeyAndValueSchemaManagers(
-			ctx, schemaRegistryURL, nil)
+			ctx, schemaRegistryURI, nil)
 		if err != nil {
 			return nil, errors.Trace(err)
 		}
