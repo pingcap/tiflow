@@ -10,7 +10,7 @@ SINK_TYPE=$1
 
 function run() {
 	# No need to test kafka.
-	if [ "$SINK_TYPE" == "kafka" ]; then
+	if [ "$SINK_TYPE" != "mysql" ]; then
 		return
 	fi
 

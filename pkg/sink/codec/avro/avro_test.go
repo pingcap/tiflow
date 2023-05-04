@@ -60,13 +60,15 @@ func setupEncoderAndSchemaRegistry(
 	}
 
 	return &BatchEncoder{
-		namespace:                  model.DefaultNamespace,
-		valueSchemaManager:         valueManager,
-		keySchemaManager:           keyManager,
-		result:                     make([]*common.Message, 0, 1),
-		enableTiDBExtension:        enableTiDBExtension,
-		decimalHandlingMode:        decimalHandlingMode,
-		bigintUnsignedHandlingMode: bigintUnsignedHandlingMode,
+		namespace:          model.DefaultNamespace,
+		valueSchemaManager: valueManager,
+		keySchemaManager:   keyManager,
+		result:             make([]*common.Message, 0, 1),
+		Options: &Options{
+			EnableTiDBExtension:        enableTiDBExtension,
+			DecimalHandlingMode:        decimalHandlingMode,
+			BigintUnsignedHandlingMode: bigintUnsignedHandlingMode,
+		},
 	}, nil
 }
 
@@ -920,8 +922,8 @@ func TestAvroEnvelope(t *testing.T) {
 	require.NoError(t, err)
 
 	res := avroEncodeResult{
-		data:       bin,
-		registryID: 7,
+		data:     bin,
+		schemaID: 7,
 	}
 
 	evlp, err := res.toEnvelope()
