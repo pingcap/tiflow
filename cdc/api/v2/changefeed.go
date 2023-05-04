@@ -788,7 +788,8 @@ func (h *OpenAPIV2) status(c *gin.Context) {
 		return
 	}
 	var lastError *RunningError
-	if info.Error != nil {
+	if info.Error != nil &&
+		oracle.GetTimeFromTS(status.CheckpointTs).Before(info.Error.Time) {
 		lastError = &RunningError{
 			Time:    &info.Error.Time,
 			Addr:    info.Error.Addr,
