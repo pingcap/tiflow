@@ -16,11 +16,11 @@ package config
 import (
 	"bytes"
 	"encoding/json"
-	"github.com/aws/aws-sdk-go/aws"
 	"net/url"
 	"testing"
 	"time"
 
+	"github.com/aws/aws-sdk-go/aws"
 	"github.com/stretchr/testify/require"
 )
 
