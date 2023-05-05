@@ -17,6 +17,7 @@ import (
 	"context"
 	"fmt"
 	"io"
+	"strings"
 	"sync"
 	"time"
 
@@ -417,11 +418,11 @@ func (c *captureImpl) campaignOwner(ctx cdcContext.Context) error {
 		}
 		// Campaign to be the owner, it blocks until it been elected.
 		if err := c.campaign(ctx); err != nil {
-			switch errors.Cause(err) {
-			case context.Canceled:
+
+			rootErr := errors.Cause(err)
+			if rootErr == context.Canceled {
 				return nil
-			case mvcc.ErrCompacted:
-				// the revision we requested is compacted, just retry
+			} else if rootErr == mvcc.ErrCompacted || isErrCompacted(rootErr) {
 				continue
 			}
 			log.Warn("campaign owner failed",
@@ -564,9 +565,10 @@ func (c *captureImpl) GetOwner() (owner.Owner, error) {
 
 // campaign to be an owner.
 func (c *captureImpl) campaign(ctx context.Context) error {
-	failpoint.Inject("capture-campaign-compacted-error", func() {
-		failpoint.Return(errors.Trace(mvcc.ErrCompacted))
-	})
+	//failpoint.Inject("capture-campaign-compacted-error", func() {
+	//	failpoint.Return(errors.Trace(mvcc.ErrCompacted))
+	//})
+
 	// TODO: `Campaign` will get stuck when send SIGSTOP to pd leader.
 	// For `Campaign`, when send SIGSTOP to pd leader, cdc maybe call `cancel`
 	// (cause by `processor routine` exit). And inside `Campaign`, the routine
@@ -727,4 +729,8 @@ func (c *captureImpl) StatusProvider() owner.StatusProvider {
 
 func (c *captureImpl) IsReady() bool {
 	return c.migrator.IsMigrateDone()
+}
+
+func isErrCompacted(err error) bool {
+	return strings.Contains(err.Error(), "required revision has been compacted")
 }
