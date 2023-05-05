@@ -137,6 +137,7 @@ function test_owner_cleanup_stale_tasks() {
 function test_owner_retryable_error() {
 	echo "run test case test_owner_retryable_error"
 	export GO_FAILPOINTS='github.com/pingcap/tiflow/cdc/capture/capture-campaign-compacted-error=1*return(true)'
+
 	# start a capture server
 	run_cdc_server --workdir $WORK_DIR --binary $CDC_BINARY --logsuffix test_owner_retryable_error.server1
 	# ensure the server become the owner
