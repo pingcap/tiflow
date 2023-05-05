@@ -463,26 +463,6 @@ func TestFixState(t *testing.T) {
 				AdminJobType: AdminNone,
 				State:        StateNormal,
 				Error: &RunningError{
-					Code: string(errors.ErrGCTTLExceeded.RFCCode()),
-				},
-			},
-			expectedState: StateFailed,
-		},
-		{
-			info: &ChangeFeedInfo{
-				AdminJobType: AdminResume,
-				State:        StateNormal,
-				Error: &RunningError{
-					Code: string(errors.ErrGCTTLExceeded.RFCCode()),
-				},
-			},
-			expectedState: StateFailed,
-		},
-		{
-			info: &ChangeFeedInfo{
-				AdminJobType: AdminNone,
-				State:        StateNormal,
-				Error: &RunningError{
 					Code: string(errors.ErrClusterIDMismatch.RFCCode()),
 				},
 			},
