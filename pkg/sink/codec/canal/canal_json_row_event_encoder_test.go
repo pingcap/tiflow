@@ -236,7 +236,10 @@ func TestEncodeCheckpointEvent(t *testing.T) {
 		}
 
 		require.NotNil(t, msg)
-		decoder := NewBatchDecoder(msg.Value, enable, "")
+		decoder := NewBatchDecoder(enable, "")
+
+		err = decoder.AddKeyValue(msg.Key, msg.Value)
+		require.NoError(t, err)
 
 		ty, hasNext, err := decoder.HasNext()
 		require.Nil(t, err)

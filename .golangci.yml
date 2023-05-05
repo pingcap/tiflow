@@ -46,7 +46,7 @@ linters-settings:
       - name: var-naming
       - name: package-comments
       - name: range
-        # - name: receiver-naming TODO: disable it because it can't handle generics
+      - name: receiver-naming
       - name: indent-error-flow
       - name: superfluous-else
       - name: modifies-parameter
