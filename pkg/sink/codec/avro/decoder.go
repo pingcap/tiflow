@@ -140,11 +140,11 @@ func (d *decoder) NextRowChangedEvent() (*model.RowChangedEvent, error) {
 			return nil, errors.New("value not found")
 		}
 
-		switch value.(type) {
+		switch t := value.(type) {
 		// for nullable columns, the value is encoded as a map with one pair.
 		// key is the encoded type, value is the encoded value, only care about the value here.
 		case map[string]interface{}:
-			for _, v := range value.(map[string]interface{}) {
+			for _, v := range t {
 				value = v
 			}
 		}
