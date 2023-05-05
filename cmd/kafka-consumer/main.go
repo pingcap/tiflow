@@ -409,6 +409,8 @@ type Consumer struct {
 	// key and value schema manager, only used by the avro protocol to fetch schema.
 	keySchemaM   *avro.SchemaManager
 	valueSchemaM *avro.SchemaManager
+
+	tz *time.Location
 }
 
 // NewConsumer creates a new cdc kafka consumer
@@ -421,6 +423,7 @@ func NewConsumer(ctx context.Context) (*Consumer, error) {
 	ctx = contextutil.PutTimezoneInCtx(ctx, tz)
 
 	c := new(Consumer)
+	c.tz = tz
 	c.fakeTableIDGenerator = &fakeTableIDGenerator{
 		tableIDs: make(map[string]int64),
 	}
@@ -565,7 +568,7 @@ func (c *Consumer) ConsumeClaim(session sarama.ConsumerGroupSession, claim saram
 			EnableRowChecksum:   c.enableRowChecksum,
 			// avro must set this to true to make the consumer works.
 			EnableWatermarkEvent: true,
-		}, c.keySchemaM, c.valueSchemaM, kafkaTopic)
+		}, c.keySchemaM, c.valueSchemaM, kafkaTopic, c.tz)
 	default:
 		log.Panic("Protocol not supported", zap.Any("Protocol", c.protocol))
 	}

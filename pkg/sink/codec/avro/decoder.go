@@ -20,10 +20,12 @@ import (
 	"fmt"
 	"strconv"
 	"strings"
+	"time"
 
 	"github.com/pingcap/log"
 	timodel "github.com/pingcap/tidb/parser/model"
 	"github.com/pingcap/tidb/parser/mysql"
+	"github.com/pingcap/tidb/sessionctx/stmtctx"
 	"github.com/pingcap/tidb/types"
 	"github.com/pingcap/tidb/util/rowcodec"
 	"github.com/pingcap/tiflow/cdc/model"
@@ -35,6 +37,7 @@ import (
 type decoder struct {
 	*Options
 	topic string
+	sc    *stmtctx.StatementContext
 
 	keySchemaM   *SchemaManager
 	valueSchemaM *SchemaManager
@@ -49,12 +52,14 @@ func NewDecoder(
 	keySchemaM *SchemaManager,
 	valueSchemaM *SchemaManager,
 	topic string,
+	tz *time.Location,
 ) codec.RowEventDecoder {
 	return &decoder{
 		Options:      o,
 		topic:        topic,
 		keySchemaM:   keySchemaM,
 		valueSchemaM: valueSchemaM,
+		sc:           &stmtctx.StatementContext{TimeZone: tz},
 	}
 }
 
@@ -205,7 +210,7 @@ func (d *decoder) NextRowChangedEvent() (*model.RowChangedEvent, error) {
 			}
 		}
 
-		if err := verifyChecksum(columns, expected); err != nil {
+		if err := d.verifyChecksum(columns, expected); err != nil {
 			return nil, errors.Trace(err)
 		}
 	}
@@ -336,7 +341,7 @@ func extractEventType(data []byte) (model.MessageType, error) {
 	return model.MessageTypeUnknown, errors.ErrAvroInvalidMessage.FastGenByArgs()
 }
 
-func verifyChecksum(columns []*model.Column, expected uint64) error {
+func (d *decoder) verifyChecksum(columns []*model.Column, expected uint64) error {
 	calculator := rowcodec.RowData{
 		Cols: make([]rowcodec.ColData, 0, len(columns)),
 		Data: make([]byte, 0),
@@ -346,7 +351,7 @@ func verifyChecksum(columns []*model.Column, expected uint64) error {
 			FieldType: *types.NewFieldType(col.Type),
 		}
 
-		data, err := buildDatum(col.Value, col.Type)
+		data, err := d.buildDatum(col.Value, col.Type)
 		if err != nil {
 			return errors.Trace(err)
 		}
@@ -373,33 +378,52 @@ func verifyChecksum(columns []*model.Column, expected uint64) error {
 	return nil
 }
 
-func buildDatum(value interface{}, typ byte) (types.Datum, error) {
+func (d *decoder) buildDatum(value interface{}, typ byte) (types.Datum, error) {
 	if value == nil {
 		return types.NewDatum(value), nil
 	}
 	switch typ {
-	case mysql.TypeTiny, mysql.TypeShort, mysql.TypeLong, mysql.TypeLonglong, mysql.TypeInt24, mysql.TypeYear:
-		switch value.(type) {
+	case mysql.TypeTiny, mysql.TypeShort, mysql.TypeLong,
+		mysql.TypeLonglong, mysql.TypeInt24, mysql.TypeYear:
+		switch a := value.(type) {
 		case int32:
-			return types.NewIntDatum(int64(value.(int32))), nil
+			return types.NewIntDatum(int64(a)), nil
 		case uint32:
-			return types.NewUintDatum(uint64(value.(uint32))), nil
+			return types.NewUintDatum(uint64(a)), nil
 		case int64:
-			return types.NewIntDatum(value.(int64)), nil
+			return types.NewIntDatum(a), nil
 		case uint64:
-			return types.NewUintDatum(value.(uint64)), nil
+			return types.NewUintDatum(a), nil
+		case string:
+			v, err := strconv.ParseUint(a, 10, 64)
+			if err != nil {
+				return types.Datum{}, errors.Trace(err)
+			}
+			return types.NewUintDatum(v), nil
 		default:
 			log.Panic("unknown golang type for the mysql Types",
 				zap.Any("mysqlType", typ), zap.Any("value", value))
 		}
-	case mysql.TypeTimestamp, mysql.TypeDatetime, mysql.TypeDate, mysql.TypeNewDate:
-		mysqlTime, err := types.ParseTimestamp(nil, value.(string))
+	case mysql.TypeTimestamp:
+		mysqlTime, err := types.ParseTimestamp(d.sc, value.(string))
+		if err != nil {
+			return types.Datum{}, errors.Trace(err)
+		}
+		return types.NewTimeDatum(mysqlTime), nil
+	case mysql.TypeDatetime:
+		mysqlTime, err := types.ParseDatetime(d.sc, value.(string))
+		if err != nil {
+			return types.Datum{}, errors.Trace(err)
+		}
+		return types.NewTimeDatum(mysqlTime), nil
+	case mysql.TypeDate, mysql.TypeNewDate:
+		mysqlTime, err := types.ParseDate(d.sc, value.(string))
 		if err != nil {
 			return types.Datum{}, errors.Trace(err)
 		}
 		return types.NewTimeDatum(mysqlTime), nil
 	case mysql.TypeDuration:
-		duration, ok, err := types.ParseDuration(nil, value.(string), 0)
+		duration, ok, err := types.ParseDuration(d.sc, value.(string), 0)
 		if err != nil {
 			return types.Datum{}, errors.Trace(err)
 		}

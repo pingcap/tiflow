@@ -25,6 +25,7 @@ import (
 	"github.com/pingcap/tidb/util/rowcodec"
 	"github.com/pingcap/tiflow/cdc/model"
 	"github.com/pingcap/tiflow/pkg/sink/codec/common"
+	"github.com/pingcap/tiflow/pkg/util"
 	"github.com/stretchr/testify/require"
 )
 
@@ -121,7 +122,9 @@ func TestDecodeEvent(t *testing.T) {
 		ctx, "http://127.0.0.1:8081", nil)
 	require.NoError(t, err)
 
-	decoder := NewDecoder(o, keySchemaM, valueSchemaM, topic)
+	tz, err := util.GetLocalTimezone()
+	require.NoError(t, err)
+	decoder := NewDecoder(o, keySchemaM, valueSchemaM, topic, tz)
 	err = decoder.AddKeyValue(message.Key, message.Value)
 	require.NoError(t, err)
 
@@ -167,7 +170,9 @@ func TestDecodeDDLEvent(t *testing.T) {
 	require.NotNil(t, message)
 
 	topic := "test-topic"
-	decoder := NewDecoder(o, nil, nil, topic)
+	tz, err := util.GetLocalTimezone()
+	require.NoError(t, err)
+	decoder := NewDecoder(o, nil, nil, topic, tz)
 	err = decoder.AddKeyValue(message.Key, message.Value)
 	require.NoError(t, err)
 
@@ -209,7 +214,9 @@ func TestDecodeResolvedEvent(t *testing.T) {
 	require.NotNil(t, message)
 
 	topic := "test-topic"
-	decoder := NewDecoder(o, nil, nil, topic)
+	tz, err := util.GetLocalTimezone()
+	require.NoError(t, err)
+	decoder := NewDecoder(o, nil, nil, topic, tz)
 	err = decoder.AddKeyValue(message.Key, message.Value)
 	require.NoError(t, err)
 
