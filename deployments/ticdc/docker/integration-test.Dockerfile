@@ -2,6 +2,9 @@
 # otherwise it will not work correctly on other architectures.
 FROM amd64/centos:centos7 as downloader
 
+ARG COMMUNITY
+ENV COMMUNITY=$COMMUNITY
+
 USER root
 WORKDIR /root/download
 
@@ -10,7 +13,7 @@ RUN yum install -y \
 	wget
 COPY ./scripts/download-integration-test-binaries.sh .
 # Download all binaries into bin dir.
-RUN ./download-integration-test-binaries.sh master
+RUN ./download-integration-test-binaries.sh master $COMMUNITY
 RUN ls ./bin
 
 # Download go into /usr/local dir.

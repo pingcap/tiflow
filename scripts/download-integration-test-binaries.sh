@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Copyright 2021 PingCAP, Inc.
+# Copyright 2023 PingCAP, Inc.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -20,8 +20,15 @@
 # it downloads files for linux platform. We only use it in docker-compose.
 
 set -o errexit
-set -o nounset
 set -o pipefail
+
+# Specify if download the community version
+community=${2:-false}
+
+set -o nounset
+
+# Specify the download branch.
+branch=$1
 
 # See https://misc.flogisoft.com/bash/tip_colors_and_formatting.
 color-green() { # Green
@@ -38,31 +45,113 @@ function download() {
 	fi
 	echo ">>>"
 	echo "download ${file_name} from ${url}"
-	wget --no-verbose --retry-connrefused --waitretry=1 -t 3 -O "${file_path}" "${url}"
+    curl --retry 3 --retry-delay 1 -o "${file_path}" "${url}"
 }
 
-# Specify the download branch.
-branch=$1
+# download_community_version will try to download required binaries from the 
+# public accessible community version  
+function download_community_binaries() {
+    set +u
+    local ver=${1:-v6.5.2}
+    local os=${2:-linux}
+    local arch=${3:-amd64}
+    set -u
+    local dist="${ver}-${os}-${arch}"
+    local tidb_file_name="tidb-community-server-$dist" 
+    local tidb_tar_name="${tidb_file_name}.tar.gz" 
+    local tidb_url="https://download.pingcap.org/$tidb_tar_name"
+    local toolkit_file_name="tidb-community-toolkit-$dist"
+    local toolkit_tar_name="${toolkit_file_name}.tar.gz"
+    local toolkit_url="https://download.pingcap.org/$toolkit_tar_name"
+    
+    color-green "Download community binaries..."
+    download "$tidb_url" "$tidb_tar_name" "tmp/$tidb_tar_name"
+    download "$toolkit_url" "$toolkit_tar_name" "tmp/$toolkit_tar_name"
+    # extract the tidb community version binaries
+    tar -xz -C tmp -f tmp/$tidb_tar_name
+    # extract the pd server
+    tar -xz -C third_bin -f tmp/$tidb_file_name/pd-${dist}.tar.gz
+    # extract the tikv server
+    tar -xz -C third_bin -f tmp/$tidb_file_name/tikv-${dist}.tar.gz
+    # extract the tidb server 
+    tar -xz -C third_bin -f tmp/$tidb_file_name/tidb-${dist}.tar.gz
+    # extract the tiflash 
+    tar -xz -C third_bin -f tmp/$tidb_file_name/tiflash-${dist}.tar.gz \
+        && mv third_bin/tiflash third_bin/_tiflash \
+        && mv third_bin/_tiflash/* third_bin && rm -rf third_bin/_tiflash
+    # extract the pd-ctl
+    tar -xz -C third_bin pd-ctl -f tmp/$tidb_file_name/ctl-${dist}.tar.gz
+    # extract the toolkit community version binaries, get the etcdctl and 
+    # the sync_diff_inspector
+    tar -xz -C third_bin \
+        $toolkit_file_name/etcdctl $toolkit_file_name/sync_diff_inspector \
+        -f tmp/$toolkit_tar_name \
+        && mv third_bin/$toolkit_file_name/* third_bin \
+        && rm -rf third_bin/$toolkit_file_name
 
-# PingCAP file server URL.
-file_server_url="http://fileserver.pingcap.net"
+    # ycsb
+    local ycsb_file_name="go-ycsb-${dist}" 
+    local ycsb_tar_name="${ycsb_file_name}.tar.gz" 
+    local ycsb_url="https://github.com/pingcap/go-ycsb/releases/download/v1.0.0/go-ycsb-linux-amd64.tar.gz"
+    download "$ycsb_url" "ycsb_file_name" "tmp/$ycsb_tar_name"
+    tar -xz -C third_bin -f tmp/$ycsb_tar_name
 
-# Get sha1 based on branch name.
-tidb_sha1=$(curl "${file_server_url}/download/refs/pingcap/tidb/${branch}/sha1")
-tikv_sha1=$(curl "${file_server_url}/download/refs/pingcap/tikv/${branch}/sha1")
-pd_sha1=$(curl "${file_server_url}/download/refs/pingcap/pd/${branch}/sha1")
-tiflash_sha1=$(curl "${file_server_url}/download/refs/pingcap/tiflash/${branch}/sha1")
+    # minio
+    local minio_url="https://dl.min.io/server/minio/release/linux-amd64/minio"
+    download "$minio_url" "minio" "third_bin/minio"
 
-# All download links.
-tidb_download_url="${file_server_url}/download/builds/pingcap/tidb/${tidb_sha1}/centos7/tidb-server.tar.gz"
-tikv_download_url="${file_server_url}/download/builds/pingcap/tikv/${tikv_sha1}/centos7/tikv-server.tar.gz"
-pd_download_url="${file_server_url}/download/builds/pingcap/pd/${pd_sha1}/centos7/pd-server.tar.gz"
-tiflash_download_url="${file_server_url}/download/builds/pingcap/tiflash/${branch}/${tiflash_sha1}/centos7/tiflash.tar.gz"
-minio_download_url="${file_server_url}/download/minio.tar.gz"
-go_ycsb_download_url="${file_server_url}/download/builds/pingcap/go-ycsb/test-br/go-ycsb"
-etcd_download_url="${file_server_url}/download/builds/pingcap/cdc/etcd-v3.4.7-linux-amd64.tar.gz"
-sync_diff_inspector_url="${file_server_url}/download/builds/pingcap/cdc/sync_diff_inspector_hash-00998a9a_linux-amd64.tar.gz"
-jq_download_url="${file_server_url}/download/builds/pingcap/test/jq-1.6/jq-linux64"
+    # jq
+    local jq_url="https://github.com/stedolan/jq/releases/download/jq-1.6/jq-linux64"
+    download "$jq_url" "jq" "third_bin/jq"
+
+    chmod a+x third_bin/*
+}
+
+function download_binaries() {
+    color-green "Download binaries..."
+    # PingCAP file server URL.
+    file_server_url="http://fileserver.pingcap.net"
+    
+    # Get sha1 based on branch name.
+    tidb_sha1=$(curl "${file_server_url}/download/refs/pingcap/tidb/${branch}/sha1")
+    tikv_sha1=$(curl "${file_server_url}/download/refs/pingcap/tikv/${branch}/sha1")
+    pd_sha1=$(curl "${file_server_url}/download/refs/pingcap/pd/${branch}/sha1")
+    tiflash_sha1=$(curl "${file_server_url}/download/refs/pingcap/tiflash/${branch}/sha1")
+    
+    # All download links.
+    tidb_download_url="${file_server_url}/download/builds/pingcap/tidb/${tidb_sha1}/centos7/tidb-server.tar.gz"
+    tikv_download_url="${file_server_url}/download/builds/pingcap/tikv/${tikv_sha1}/centos7/tikv-server.tar.gz"
+    pd_download_url="${file_server_url}/download/builds/pingcap/pd/${pd_sha1}/centos7/pd-server.tar.gz"
+    tiflash_download_url="${file_server_url}/download/builds/pingcap/tiflash/${branch}/${tiflash_sha1}/centos7/tiflash.tar.gz"
+    minio_download_url="${file_server_url}/download/minio.tar.gz"
+    go_ycsb_download_url="${file_server_url}/download/builds/pingcap/go-ycsb/test-br/go-ycsb"
+    etcd_download_url="${file_server_url}/download/builds/pingcap/cdc/etcd-v3.4.7-linux-amd64.tar.gz"
+    sync_diff_inspector_url="${file_server_url}/download/builds/pingcap/cdc/sync_diff_inspector_hash-00998a9a_linux-amd64.tar.gz"
+    jq_download_url="${file_server_url}/download/builds/pingcap/test/jq-1.6/jq-linux64"
+    
+    download "$tidb_download_url" "tidb-server.tar.gz" "tmp/tidb-server.tar.gz"
+    tar -xz -C third_bin bin/tidb-server -f tmp/tidb-server.tar.gz && mv third_bin/bin/tidb-server third_bin/
+    download "$pd_download_url" "pd-server.tar.gz" "tmp/pd-server.tar.gz"
+    tar -xz -C third_bin 'bin/*' -f tmp/pd-server.tar.gz && mv third_bin/bin/* third_bin/
+    download "$tikv_download_url" "tikv-server.tar.gz" "tmp/tikv-server.tar.gz"
+    tar -xz -C third_bin bin/tikv-server -f tmp/tikv-server.tar.gz && mv third_bin/bin/tikv-server third_bin/
+    download "$tiflash_download_url" "tiflash.tar.gz" "tmp/tiflash.tar.gz"
+    tar -xz -C third_bin -f tmp/tiflash.tar.gz
+    mv third_bin/tiflash third_bin/_tiflash
+    mv third_bin/_tiflash/* third_bin && rm -rf third_bin/_tiflash
+    download "$minio_download_url" "minio.tar.gz" "tmp/minio.tar.gz"
+    tar -xz -C third_bin -f tmp/minio.tar.gz
+    
+    download "$go_ycsb_download_url" "go-ycsb" "third_bin/go-ycsb"
+    download "$jq_download_url" "jq" "third_bin/jq"
+    download "$etcd_download_url" "etcd.tar.gz" "tmp/etcd.tar.gz"
+    tar -xz -C third_bin etcd-v3.4.7-linux-amd64/etcdctl -f tmp/etcd.tar.gz
+    mv third_bin/etcd-v3.4.7-linux-amd64/etcdctl third_bin/ && rm -rf third_bin/etcd-v3.4.7-linux-amd64
+    download "$sync_diff_inspector_url" "sync_diff_inspector.tar.gz" "tmp/sync_diff_inspector.tar.gz"
+    tar -xz -C third_bin -f tmp/sync_diff_inspector.tar.gz
+    
+    chmod a+x third_bin/*
+}
 
 # Some temporary dir.
 rm -rf tmp
@@ -72,29 +161,7 @@ mkdir -p third_bin
 mkdir -p tmp
 mkdir -p bin
 
-color-green "Download binaries..."
-download "$tidb_download_url" "tidb-server.tar.gz" "tmp/tidb-server.tar.gz"
-tar -xz -C third_bin bin/tidb-server -f tmp/tidb-server.tar.gz && mv third_bin/bin/tidb-server third_bin/
-download "$pd_download_url" "pd-server.tar.gz" "tmp/pd-server.tar.gz"
-tar -xz -C third_bin 'bin/*' -f tmp/pd-server.tar.gz && mv third_bin/bin/* third_bin/
-download "$tikv_download_url" "tikv-server.tar.gz" "tmp/tikv-server.tar.gz"
-tar -xz -C third_bin bin/tikv-server -f tmp/tikv-server.tar.gz && mv third_bin/bin/tikv-server third_bin/
-download "$tiflash_download_url" "tiflash.tar.gz" "tmp/tiflash.tar.gz"
-tar -xz -C third_bin -f tmp/tiflash.tar.gz
-mv third_bin/tiflash third_bin/_tiflash
-mv third_bin/_tiflash/* third_bin && rm -rf third_bin/_tiflash
-download "$minio_download_url" "minio.tar.gz" "tmp/minio.tar.gz"
-tar -xz -C third_bin -f tmp/minio.tar.gz
-
-download "$go_ycsb_download_url" "go-ycsb" "third_bin/go-ycsb"
-download "$jq_download_url" "jq" "third_bin/jq"
-download "$etcd_download_url" "etcd.tar.gz" "tmp/etcd.tar.gz"
-tar -xz -C third_bin etcd-v3.4.7-linux-amd64/etcdctl -f tmp/etcd.tar.gz
-mv third_bin/etcd-v3.4.7-linux-amd64/etcdctl third_bin/ && rm -rf third_bin/etcd-v3.4.7-linux-amd64
-download "$sync_diff_inspector_url" "sync_diff_inspector.tar.gz" "tmp/sync_diff_inspector.tar.gz"
-tar -xz -C third_bin -f tmp/sync_diff_inspector.tar.gz
-
-chmod a+x third_bin/*
+[ $community == true ] && download_community_binaries || download_binaries
 
 # Copy it to the bin directory in the root directory.
 rm -rf tmp

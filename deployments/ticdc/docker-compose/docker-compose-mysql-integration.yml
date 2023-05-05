@@ -5,6 +5,8 @@ services:
     build:
       context: ../../../
       dockerfile: ./deployments/ticdc/docker/integration-test.Dockerfile
+      args:
+        COMMUNITY: ${COMMUNITY}
     command:
       - bash
       - -c
