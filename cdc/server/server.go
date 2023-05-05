@@ -29,6 +29,7 @@ import (
 	"github.com/pingcap/tidb/util/gctuner"
 	"github.com/pingcap/tiflow/cdc"
 	"github.com/pingcap/tiflow/cdc/capture"
+	"github.com/pingcap/tiflow/cdc/contextutil"
 	"github.com/pingcap/tiflow/cdc/kv"
 	"github.com/pingcap/tiflow/cdc/processor/sourcemanager/engine/factory"
 	"github.com/pingcap/tiflow/pkg/config"
@@ -239,23 +240,23 @@ func (s *server) createSortEngineFactory() error {
 }
 
 // Run runs the server.
-func (s *server) Run(ctx context.Context) error {
-	if err := s.prepare(ctx); err != nil {
+func (s *server) Run(serverCtx context.Context) error {
+	if err := s.prepare(serverCtx); err != nil {
 		return err
 	}
 
-	err := s.startStatusHTTP(s.tcpServer.HTTP1Listener())
+	err := s.startStatusHTTP(serverCtx, s.tcpServer.HTTP1Listener())
 	if err != nil {
 		return err
 	}
 
-	return s.run(ctx)
+	return s.run(serverCtx)
 }
 
 // startStatusHTTP starts the HTTP server.
 // `lis` is a listener that gives us plain-text HTTP requests.
 // TODO: can we decouple the HTTP server from the capture server?
-func (s *server) startStatusHTTP(lis net.Listener) error {
+func (s *server) startStatusHTTP(serverCtx context.Context, lis net.Listener) error {
 	// LimitListener returns a Listener that accepts at most n simultaneous
 	// connections from the provided Listener. Connections that exceed the
 	// limit will wait in a queue and no new goroutines will be created until
@@ -279,6 +280,10 @@ func (s *server) startStatusHTTP(lis net.Listener) error {
 		Handler:      router,
 		ReadTimeout:  httpConnectionTimeout,
 		WriteTimeout: httpConnectionTimeout,
+		BaseContext: func(listener net.Listener) context.Context {
+			return contextutil.PutTimezoneInCtx(context.Background(),
+				contextutil.TimezoneFromCtx(serverCtx))
+		},
 	}
 
 	go func() {
