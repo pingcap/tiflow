@@ -409,6 +409,8 @@ func (c *captureImpl) campaignOwner(ctx cdcContext.Context) error {
 			if rootErr == context.Canceled {
 				return nil
 			} else if rootErr == mvcc.ErrCompacted || isErrCompacted(rootErr) {
+				log.Warn("campaign owner failed due to etcd revision "+
+					"has been compacted, retry later", zap.Error(err))
 				continue
 			}
 			log.Warn("campaign owner failed",
@@ -551,10 +553,6 @@ func (c *captureImpl) GetOwner() (owner.Owner, error) {
 
 // campaign to be an owner.
 func (c *captureImpl) campaign(ctx context.Context) error {
-	//failpoint.Inject("capture-campaign-compacted-error", func() {
-	//	failpoint.Return(errors.Trace(mvcc.ErrCompacted))
-	//})
-
 	// TODO: `Campaign` will get stuck when send SIGSTOP to pd leader.
 	// For `Campaign`, when send SIGSTOP to pd leader, cdc maybe call `cancel`
 	// (cause by `processor routine` exit). And inside `Campaign`, the routine
