@@ -15,11 +15,11 @@ package capture
 
 import (
 	"context"
+
 	"github.com/pingcap/errors"
 	"github.com/pingcap/failpoint"
-	"go.etcd.io/etcd/server/v3/mvcc"
-
 	"go.etcd.io/etcd/client/v3/concurrency"
+	"go.etcd.io/etcd/server/v3/mvcc"
 )
 
 // election wraps the owner election methods.
