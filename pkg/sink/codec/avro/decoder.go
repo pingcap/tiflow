@@ -23,6 +23,7 @@ import (
 
 	"github.com/pingcap/log"
 	timodel "github.com/pingcap/tidb/parser/model"
+	"github.com/pingcap/tidb/parser/mysql"
 	"github.com/pingcap/tidb/types"
 	"github.com/pingcap/tidb/util/rowcodec"
 	"github.com/pingcap/tiflow/cdc/model"
@@ -138,6 +139,29 @@ func (d *decoder) NextRowChangedEvent() (*model.RowChangedEvent, error) {
 			for _, v := range value.(map[string]interface{}) {
 				value = v
 			}
+		}
+
+		switch mysqlType {
+		case mysql.TypeEnum:
+			// enum type is encoded as string,
+			// we need to convert it to int by the order of the enum values definition.
+			allowed := strings.Split(holder["allowed"].(string), ",")
+			valueStr := value.(string)
+			enum, err := types.ParseEnum(allowed, valueStr, "")
+			if err != nil {
+				return nil, errors.Trace(err)
+			}
+			value = enum.Value
+		case mysql.TypeSet:
+			// set type is encoded as string,
+			// we need to convert it to the binary format.
+			elems := strings.Split(holder["allowed"].(string), ",")
+			valueStr := value.(string)
+			s, err := types.ParseSet(elems, valueStr, "")
+			if err != nil {
+				return nil, errors.Trace(err)
+			}
+			value = s.Value
 		}
 
 		col := &model.Column{
@@ -318,7 +342,11 @@ func verifyChecksum(columns []*model.Column, expected uint64) error {
 		info := &timodel.ColumnInfo{
 			FieldType: *types.NewFieldType(col.Type),
 		}
-		data := types.NewDatum(col.Value)
+
+		data, err := buildDatum(col.Value, col.Type)
+		if err != nil {
+			return errors.Trace(err)
+		}
 		calculator.Cols = append(calculator.Cols, rowcodec.ColData{
 			ColumnInfo: info,
 			Datum:      &data,
@@ -337,4 +365,81 @@ func verifyChecksum(columns []*model.Column, expected uint64) error {
 	}
 
 	return nil
+}
+
+func buildDatum(value interface{}, typ byte) (types.Datum, error) {
+	switch typ {
+	case mysql.TypeTiny, mysql.TypeShort, mysql.TypeLong, mysql.TypeLonglong, mysql.TypeInt24, mysql.TypeYear:
+		switch value.(type) {
+		case int32:
+			return types.NewIntDatum(int64(value.(int32))), nil
+		case uint32:
+			return types.NewUintDatum(uint64(value.(uint32))), nil
+		case int64:
+			return types.NewIntDatum(value.(int64)), nil
+		case uint64:
+			return types.NewUintDatum(value.(uint64)), nil
+		default:
+			log.Panic("unknown golang type for the mysql Types",
+				zap.Any("mysqlType", typ), zap.Any("value", value))
+		}
+	case mysql.TypeTimestamp, mysql.TypeDatetime, mysql.TypeDate, mysql.TypeNewDate:
+		mysqlTime, err := types.ParseTimestamp(nil, value.(string))
+		if err != nil {
+			return types.Datum{}, errors.Trace(err)
+		}
+		return types.NewTimeDatum(mysqlTime), nil
+	case mysql.TypeDuration:
+		duration, ok, err := types.ParseDuration(nil, value.(string), 0)
+		if err != nil {
+			return types.Datum{}, errors.Trace(err)
+		}
+		if ok {
+			return types.Datum{}, errors.New("parse duration failed")
+		}
+		return types.NewDurationDatum(duration), nil
+	case mysql.TypeNewDecimal:
+		dec := new(types.MyDecimal)
+		err := dec.FromString([]byte(value.(string)))
+		if err != nil {
+			return types.Datum{}, errors.Trace(err)
+		}
+		return types.NewDecimalDatum(dec), nil
+	case mysql.TypeEnum:
+		e := types.Enum{
+			Name:  "",
+			Value: value.(uint64),
+		}
+		return types.NewMysqlEnumDatum(e), nil
+	case mysql.TypeSet:
+		s := types.Set{
+			Name:  "",
+			Value: value.(uint64),
+		}
+		return types.NewMysqlSetDatum(s, ""), nil
+	case mysql.TypeJSON:
+		// original json string convert to map, and then marshal it to binary,
+		// to follow the tidb json logic.
+		var m map[string]interface{}
+		err := json.Unmarshal([]byte(value.(string)), &m)
+		if err != nil {
+			return types.Datum{}, errors.Trace(err)
+		}
+
+		binary, err := json.Marshal(m)
+		if err != nil {
+			return types.Datum{}, errors.Trace(err)
+		}
+		var bj types.BinaryJSON
+		err = bj.UnmarshalJSON(binary)
+		if err != nil {
+			return types.Datum{}, errors.Trace(err)
+		}
+
+		return types.NewJSONDatum(bj), nil
+	case mysql.TypeBit:
+		return types.NewBinaryLiteralDatum(value.([]byte)), nil
+	default:
+	}
+	return types.NewDatum(value), nil
 }
