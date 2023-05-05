@@ -68,6 +68,9 @@ func (d *decoder) AddKeyValue(key, value []byte) error {
 }
 
 func (d *decoder) HasNext() (model.MessageType, bool, error) {
+	if d.key == nil || d.value == nil {
+		return model.MessageTypeUnknown, false, nil
+	}
 	eventType, err := extractEventType(d.value)
 	if err != nil {
 		return model.MessageTypeUnknown, false, errors.Trace(err)
@@ -364,10 +367,16 @@ func verifyChecksum(columns []*model.Column, expected uint64) error {
 		return errors.New("checksum mismatch")
 	}
 
+	log.Info("checksum passed",
+		zap.Uint64("expected", expected), zap.Uint32("actual", checksum))
+
 	return nil
 }
 
 func buildDatum(value interface{}, typ byte) (types.Datum, error) {
+	if value == nil {
+		return types.NewDatum(value), nil
+	}
 	switch typ {
 	case mysql.TypeTiny, mysql.TypeShort, mysql.TypeLong, mysql.TypeLonglong, mysql.TypeInt24, mysql.TypeYear:
 		switch value.(type) {
