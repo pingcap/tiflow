@@ -32,7 +32,7 @@ function run() {
 	changefeedid="changefeed-fast-fail"
 	run_cdc_cli changefeed create --start-ts=$start_ts --sink-uri="$SINK_URI" -c $changefeedid
 
-	ensure $MAX_RETRIES check_changefeed_state http://${UP_PD_HOST_1}:${UP_PD_PORT_1} ${changefeedid} "failed" "ErrGCTTLExceeded" ""
+	ensure $MAX_RETRIES check_changefeed_state http://${UP_PD_HOST_1}:${UP_PD_PORT_1} ${changefeedid} "failed" "ErrStartTsBeforeGC" ""
 
 	# test changefeed remove
 	result=$(cdc cli changefeed remove -c $changefeedid)
