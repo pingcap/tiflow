@@ -259,6 +259,9 @@ func queryMetrics[T metricColumnImpl, F metricColumnIface[T]](
 		if err := rows.Close(); err != nil {
 			log.Warn("query metrics close rows failed", zap.Error(err))
 		}
+		if rows.Err() != nil {
+			log.Warn("query metrics rows has error", zap.Error(rows.Err()))
+		}
 	}()
 	for rows.Next() {
 		var m F = new(T)

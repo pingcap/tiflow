@@ -66,7 +66,10 @@ func (c *connNumberChecker) check(ctx context.Context, checkerName string, neede
 		markCheckError(result, err)
 		return result
 	}
-	defer rows.Close()
+	defer func() {
+		_ = rows.Close()
+		_ = rows.Err()
+	}()
 	var (
 		maxConn  int
 		variable string
@@ -103,7 +106,10 @@ func (c *connNumberChecker) check(ctx context.Context, checkerName string, neede
 			markCheckError(result, err)
 			return result
 		}
-		defer processRows.Close()
+		defer func() {
+			_ = processRows.Close()
+			_ = processRows.Err()
+		}()
 		for processRows.Next() {
 			usedConn++
 		}

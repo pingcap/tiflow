@@ -41,19 +41,19 @@ type mockPDClient struct {
 }
 
 // UpdateServiceGCSafePoint mocks the corresponding method of a real PDClient
-func (m *mockPDClient) UpdateServiceGCSafePoint(ctx context.Context,
+func (c *mockPDClient) UpdateServiceGCSafePoint(ctx context.Context,
 	serviceID string, ttl int64, safePoint uint64,
 ) (uint64, error) {
 	return safePoint, nil
 }
 
 // GetTS of mockPDClient returns a mock tso
-func (m *mockPDClient) GetTS(ctx context.Context) (int64, int64, error) {
-	return m.logicTime, m.timestamp, nil
+func (c *mockPDClient) GetTS(ctx context.Context) (int64, int64, error) {
+	return c.logicTime, c.timestamp, nil
 }
 
 // GetClusterID of mockPDClient returns a mock ClusterID
-func (m *mockPDClient) GetClusterID(ctx context.Context) uint64 {
+func (c *mockPDClient) GetClusterID(ctx context.Context) uint64 {
 	return 123
 }
 
