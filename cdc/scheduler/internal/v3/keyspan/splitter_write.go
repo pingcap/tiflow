@@ -25,6 +25,8 @@ import (
 	"go.uber.org/zap"
 )
 
+const regionWrittenKeyBase = 5
+
 type writeSplitter struct {
 	changefeedID model.ChangeFeedID
 	pdAPIClient  pdutil.PDAPIClient
@@ -84,6 +86,7 @@ type splitRegionsInfo struct {
 }
 
 // splitRegionsByWrittenKeys returns a slice of regions that evenly split the range by write keys.
+// pages is the number of splits to make, actually it is the number of captures.
 func splitRegionsByWrittenKeys(
 	tableID model.TableID, regions []pdutil.RegionInfo, writeKeyThreshold int, pages int,
 ) *splitRegionsInfo {
@@ -96,8 +99,8 @@ func splitRegionsByWrittenKeys(
 	for i := range regions {
 		totalWrite += regions[i].WrittenKeys
 		// Override 0 to 1 to reflect the baseline cost of a region.
-		// Also it makes split evenly when there is no write.
-		regions[i].WrittenKeys++
+		// Also, it makes split evenly when there is no write.
+		regions[i].WrittenKeys += regionWrittenKeyBase
 		totalWriteNormalized += regions[i].WrittenKeys
 	}
 	if totalWrite < uint64(writeKeyThreshold) {
@@ -118,12 +121,16 @@ func splitRegionsByWrittenKeys(
 	spans := make([]tablepb.Span, 0, pages)
 	accWrittenKeys, pageWrittenKeys := uint64(0), uint64(0)
 	pageStartIdx, pageLastIdx := 0, 0
+	// split the table into pages-1 spans, each span has writtenKeysPerPage written keys.
 	for i := 1; i < pages; i++ {
 		for idx := pageStartIdx; idx < len(regions); idx++ {
 			restPages := pages - i
 			restRegions := len(regions) - idx
 			pageLastIdx = idx
 			currentWrittenKeys := regions[idx].WrittenKeys
+			// If there is at least one region, and the rest regions can't fill the rest pages or
+			// the accWrittenKeys plus currentWrittenKeys is larger than writtenKeysPerPage,
+			// then use the region from pageStartIdx to idx-1 to as a span and start a new page.
 			if (idx > pageStartIdx) &&
 				((restPages >= restRegions) ||
 					(accWrittenKeys+currentWrittenKeys > writtenKeysPerPage)) {
@@ -136,6 +143,8 @@ func splitRegionsByWrittenKeys(
 				weights = append(weights, int(pageWrittenKeys))
 				pageWrittenKeys = 0
 				pageStartIdx = idx
+				// update writtenKeysPerPage to make the rest regions evenly split
+				// to the rest pages.
 				writtenKeysPerPage = (totalWriteNormalized - accWrittenKeys) / uint64(restPages)
 				accWrittenKeys = 0
 				break
@@ -144,7 +153,8 @@ func splitRegionsByWrittenKeys(
 			accWrittenKeys += currentWrittenKeys
 		}
 	}
-	// Always end with the last region.
+
+	// The last span contains the rest regions.
 	spans = append(spans, tablepb.Span{
 		TableID:  tableID,
 		StartKey: tablepb.Key(decodeKey(regions[pageLastIdx].StartKey)),
