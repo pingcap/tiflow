@@ -273,17 +273,17 @@ type RedoDDLEvent struct {
 }
 
 // ToRedoLog converts row changed event to redo log
-func (row *RowChangedEvent) ToRedoLog() *RedoLog {
+func (r *RowChangedEvent) ToRedoLog() *RedoLog {
 	return &RedoLog{
-		RedoRow: RedoRowChangedEvent{Row: row},
+		RedoRow: RedoRowChangedEvent{Row: r},
 		Type:    RedoLogTypeRow,
 	}
 }
 
 // ToRedoLog converts ddl event to redo log
-func (ddl *DDLEvent) ToRedoLog() *RedoLog {
+func (d *DDLEvent) ToRedoLog() *RedoLog {
 	return &RedoLog{
-		RedoDDL: RedoDDLEvent{DDL: ddl},
+		RedoDDL: RedoDDLEvent{DDL: d},
 		Type:    RedoLogTypeDDL,
 	}
 }

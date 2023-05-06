@@ -119,7 +119,7 @@ function ddl_test() {
 
 function run() {
 	# don't test kafka in this case
-	if [ "$SINK_TYPE" == "kafka" ]; then
+	if [ "$SINK_TYPE" != "mysql" ]; then
 		return
 	fi
 
