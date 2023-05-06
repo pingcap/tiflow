@@ -94,15 +94,28 @@ func splitRegionsByWrittenKeys(
 		key, _ := hex.DecodeString(hexkey)
 		return key
 	}
+
 	totalWriteNormalized := uint64(0)
 	totalWrite := totalWriteNormalized
+
+	nonZeroRegionsCount := uint64(0)
+	for i := range regions {
+		if regions[i].WrittenKeys != 0 {
+			nonZeroRegionsCount++
+			totalWrite += regions[i].WrittenKeys
+		}
+	}
+
+	base := totalWrite / nonZeroRegionsCount
+
 	for i := range regions {
 		totalWrite += regions[i].WrittenKeys
-		// Override 0 to 1 to reflect the baseline cost of a region.
+		// Override 0 to base to reflect the baseline cost of a region.
 		// Also, it makes split evenly when there is no write.
-		regions[i].WrittenKeys += regionWrittenKeyBase
+		regions[i].WrittenKeys += base
 		totalWriteNormalized += regions[i].WrittenKeys
 	}
+
 	if totalWrite < uint64(writeKeyThreshold) {
 		return &splitRegionsInfo{
 			Counts:  []int{len(regions)},
