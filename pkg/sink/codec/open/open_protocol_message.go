@@ -22,6 +22,7 @@ import (
 	timodel "github.com/pingcap/tidb/parser/model"
 	"github.com/pingcap/tiflow/cdc/model"
 	cerror "github.com/pingcap/tiflow/pkg/errors"
+	"github.com/pingcap/tiflow/pkg/sink/codec"
 	"github.com/pingcap/tiflow/pkg/sink/codec/internal"
 )
 
@@ -43,29 +44,14 @@ func (m *messageRow) encode(outputOnlyUpdatedColumn bool) ([]byte, error) {
 			if value.Type != oldValue.Type {
 				continue
 			}
-			// not equal
-			if isColumnValueEqual(oldValue.Value, value.Value) {
+			// value equal
+			if codec.IsColumnValueEqual(oldValue.Value, value.Value) {
 				delete(m.PreColumns, col)
 			}
 		}
 	}
 	data, err := json.Marshal(m)
 	return data, cerror.WrapError(cerror.ErrMarshalFailed, err)
-}
-
-func isColumnValueEqual(preValue, updatedValue interface{}) bool {
-	if preValue == nil || updatedValue == nil {
-		return preValue == updatedValue
-	}
-
-	preValueBytes, ok1 := preValue.([]byte)
-	updatedValueBytes, ok2 := updatedValue.([]byte)
-	if ok1 && ok2 {
-		return bytes.Equal(preValueBytes, updatedValueBytes)
-	}
-	// mounter use the same table info to parse the value,
-	// the value type should be the same
-	return preValue == updatedValue
 }
 
 func (m *messageRow) decode(data []byte) error {
