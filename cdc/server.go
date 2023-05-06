@@ -125,11 +125,19 @@ func (s *Server) Run(ctx context.Context) error {
 	logConfig.Level = zap.NewAtomicLevelAt(zapcore.ErrorLevel)
 
 	etcdCli, err := clientv3.New(clientv3.Config{
+<<<<<<< HEAD:cdc/server.go
 		Endpoints:   s.pdEndpoints,
 		TLS:         tlsConfig,
 		Context:     ctx,
 		LogConfig:   &logConfig,
 		DialTimeout: 5 * time.Second,
+=======
+		Endpoints:        s.pdEndpoints,
+		TLS:              tlsConfig,
+		LogConfig:        &logConfig,
+		DialTimeout:      5 * time.Second,
+		AutoSyncInterval: 30 * time.Second,
+>>>>>>> 58b465a9d0 (Etcd (ticdc, dm):add AutoSyncInterval for Etcd client (#8813)):cdc/server/server.go
 		DialOptions: []grpc.DialOption{
 			grpcTLSOption,
 			grpc.WithBlock(),
