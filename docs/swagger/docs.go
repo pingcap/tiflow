@@ -1344,7 +1344,7 @@ var doc = `{
                 "avro-decimal-handling-mode": {
                     "type": "string"
                 },
-                "avroEnableWatermark": {
+                "avro-enable-watermark": {
                     "type": "boolean"
                 },
                 "enable-tidb-extension": {
@@ -1440,30 +1440,30 @@ var doc = `{
                     "type": "integer"
                 },
                 "required-acks": {
+                    "type": "integer"
+                },
+                "sasl-gssapi-auth-type": {
                     "type": "string"
                 },
-                "sasl-gss-api-auth-type": {
-                    "type": "string"
-                },
-                "sasl-gss-api-disable-pafxfast": {
+                "sasl-gssapi-disable-pafxfast": {
                     "type": "boolean"
                 },
-                "sasl-gss-api-kerberos-config-path": {
+                "sasl-gssapi-kerberos-config-path": {
                     "type": "string"
                 },
-                "sasl-gss-api-keytab-path": {
+                "sasl-gssapi-keytab-path": {
                     "type": "string"
                 },
-                "sasl-gss-api-password": {
+                "sasl-gssapi-password": {
                     "type": "string"
                 },
-                "sasl-gss-api-realm": {
+                "sasl-gssapi-realm": {
                     "type": "string"
                 },
-                "sasl-gss-api-service-name": {
+                "sasl-gssapi-service-name": {
                     "type": "string"
                 },
-                "sasl-gss-api-user": {
+                "sasl-gssapi-user": {
                     "type": "string"
                 },
                 "sasl-mechanism": {
@@ -2288,30 +2288,30 @@ var doc = `{
                     "type": "integer"
                 },
                 "required_acks": {
+                    "type": "integer"
+                },
+                "sasl_gssapi_auth_type": {
                     "type": "string"
                 },
-                "sasl_gss_api_auth_type": {
-                    "type": "string"
-                },
-                "sasl_gss_api_disable_pafxfast": {
+                "sasl_gssapi_disable_pafxfast": {
                     "type": "boolean"
                 },
-                "sasl_gss_api_kerberos_config_path": {
+                "sasl_gssapi_kerberos_config_path": {
                     "type": "string"
                 },
-                "sasl_gss_api_keytab_path": {
+                "sasl_gssapi_keytab_path": {
                     "type": "string"
                 },
-                "sasl_gss_api_password": {
+                "sasl_gssapi_password": {
                     "type": "string"
                 },
-                "sasl_gss_api_realm": {
+                "sasl_gssapi_realm": {
                     "type": "string"
                 },
-                "sasl_gss_api_service_name": {
+                "sasl_gssapi_service_name": {
                     "type": "string"
                 },
-                "sasl_gss_api_user": {
+                "sasl_gssapi_user": {
                     "type": "string"
                 },
                 "sasl_mechanism": {
