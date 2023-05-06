@@ -98,23 +98,8 @@ func TestIsRetryableError(t *testing.T) {
 
 func TestChangefeedFastFailError(t *testing.T) {
 	t.Parallel()
-	err := ErrGCTTLExceeded.FastGenByArgs()
+	err := ErrSnapshotLostByGC.FastGenByArgs()
 	rfcCode, _ := RFCCode(err)
-	require.Equal(t, true, IsChangefeedFastFailError(err))
-	require.Equal(t, true, IsChangefeedFastFailErrorCode(rfcCode))
-
-	err = ErrGCTTLExceeded.GenWithStack("aa")
-	rfcCode, _ = RFCCode(err)
-	require.Equal(t, true, IsChangefeedFastFailError(err))
-	require.Equal(t, true, IsChangefeedFastFailErrorCode(rfcCode))
-
-	err = ErrGCTTLExceeded.Wrap(errors.New("aa"))
-	rfcCode, _ = RFCCode(err)
-	require.Equal(t, true, IsChangefeedFastFailError(err))
-	require.Equal(t, true, IsChangefeedFastFailErrorCode(rfcCode))
-
-	err = ErrSnapshotLostByGC.FastGenByArgs()
-	rfcCode, _ = RFCCode(err)
 	require.Equal(t, true, IsChangefeedFastFailError(err))
 	require.Equal(t, true, IsChangefeedFastFailErrorCode(rfcCode))
 
