@@ -33,6 +33,8 @@ type JSONTxnEventEncoder struct {
 	// When it is true, canal-json would generate TiDB extension information
 	// which, at the moment, only includes `tidbWaterMarkType` and `_tidb` fields.
 	enableTiDBExtension bool
+
+	onlyOutputUpdatedColumns bool
 	// the symbol separating two lines
 	terminator      []byte
 	maxMessageBytes int
@@ -52,7 +54,8 @@ func (j *JSONTxnEventEncoder) AppendTxnEvent(
 	callback func(),
 ) error {
 	for _, row := range txn.Rows {
-		value, err := newJSONMessageForDML(j.builder, j.enableTiDBExtension, row)
+		value, err := newJSONMessageForDML(j.builder,
+			j.enableTiDBExtension, row, j.onlyOutputUpdatedColumns)
 		if err != nil {
 			return errors.Trace(err)
 		}
@@ -100,11 +103,12 @@ func (j *JSONTxnEventEncoder) Build() []*common.Message {
 // newJSONTxnEventEncoder creates a new JSONTxnEventEncoder
 func newJSONTxnEventEncoder(config *common.Config) codec.TxnEventEncoder {
 	encoder := &JSONTxnEventEncoder{
-		builder:             newCanalEntryBuilder(),
-		enableTiDBExtension: config.EnableTiDBExtension,
-		valueBuf:            &bytes.Buffer{},
-		terminator:          []byte(config.Terminator),
-		maxMessageBytes:     config.MaxMessageBytes,
+		builder:                  newCanalEntryBuilder(),
+		enableTiDBExtension:      config.EnableTiDBExtension,
+		onlyOutputUpdatedColumns: config.OnlyOutputUpdatedColumns,
+		valueBuf:                 &bytes.Buffer{},
+		terminator:               []byte(config.Terminator),
+		maxMessageBytes:          config.MaxMessageBytes,
 	}
 	return encoder
 }

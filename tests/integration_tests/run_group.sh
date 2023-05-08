@@ -21,6 +21,7 @@ kafka_only="kafka_big_messages kafka_compression kafka_messages kafka_sink_error
 kafka_only_protocol="canal_json_adapter_compatibility canal_json_basic multi_topics"
 kafka_only_v2="kafka_big_txn_v2 kafka_big_messages_v2 multi_tables_ddl_v2 multi_topics_v2"
 
+storage_only="lossy_ddl"
 storage_only_csv="csv_storage_basic csv_storage_multi_tables_ddl csv_storage_partition_table"
 storage_only_canal_json="canal_json_storage_basic canal_json_storage_partition_table"
 
@@ -32,9 +33,10 @@ storage_only_canal_json="canal_json_storage_basic canal_json_storage_partition_t
 # Putting multiple light tests together and heavy tests in a separate group.
 declare -A groups
 groups=(
-	["G00"]="$mysql_only $kafka_only $storage_only_csv"
+	# Note: only the tests in the first three groups are running in storage sink pipeline.
+	["G00"]="$mysql_only $kafka_only $storage_only"
 	["G01"]="$mysql_only_http $kafka_only_protocol $storage_only_canal_json"
-	["G02"]="$mysql_only_consistent_replicate $kafka_only_v2"
+	["G02"]="$mysql_only_consistent_replicate $kafka_only_v2 $storage_only_csv"
 	["G03"]='row_format drop_many_tables processor_stop_delay'
 	["G04"]='foreign_key ddl_puller_lag ddl_only_block_related_table'
 	["G05"]='partition_table changefeed_auto_stop'
@@ -47,7 +49,7 @@ groups=(
 	["G12"]='changefeed_fast_fail tidb_mysql_test server_config_compatibility'
 	["G13"]='resourcecontrol processor_etcd_worker_delay'
 	["G14"]='batch_update_to_no_batch gc_safepoint changefeed_pause_resume'
-	["G15"]='cli simple cdc_server_tips changefeed_resume_with_checkpoint_ts lossy_ddl'
+	["G15"]='cli simple cdc_server_tips changefeed_resume_with_checkpoint_ts'
 	["G16"]='processor_err_chan resolve_lock move_table autorandom'
 	["G17"]='ddl_attributes many_pk_or_uk capture_session_done_during_task'
 	["G18"]='tiflash new_ci_collation_without_old_value region_merge common_1'
