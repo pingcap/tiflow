@@ -76,24 +76,47 @@ func (d *decoder) HasNext() (model.MessageType, bool, error) {
 	if d.key == nil && d.value == nil {
 		return model.MessageTypeUnknown, false, nil
 	}
-	eventType, err := extractEventType(d.value)
-	if err != nil {
-		return model.MessageTypeUnknown, false, errors.Trace(err)
+
+	// it must a row event.
+	if d.key != nil {
+		return model.MessageTypeRow, true, nil
 	}
-	return eventType, true, nil
+	if len(d.value) < 1 {
+		return model.MessageTypeUnknown, false, errors.ErrAvroInvalidMessage.FastGenByArgs()
+	}
+	switch d.value[0] {
+	case magicByte:
+		return model.MessageTypeRow, true, nil
+	case ddlByte:
+		return model.MessageTypeDDL, true, nil
+	case checkpointByte:
+		return model.MessageTypeResolved, true, nil
+	}
+	return model.MessageTypeUnknown, false, errors.ErrAvroInvalidMessage.FastGenByArgs()
 }
 
 // NextRowChangedEvent returns the next row changed event if exists
 func (d *decoder) NextRowChangedEvent() (*model.RowChangedEvent, error) {
+	var (
+		valueMap  map[string]interface{}
+		rawSchema string
+		err       error
+	)
+
 	ctx := context.Background()
-	key, err := d.decodeKey(ctx)
+	key, rawSchema, err := d.decodeKey(ctx)
 	if err != nil {
 		return nil, errors.Trace(err)
 	}
 
-	valueMap, rawSchema, err := d.decodeValue(ctx)
-	if err != nil {
-		return nil, errors.Trace(err)
+	isDelete := len(d.value) == 0
+	if isDelete {
+		valueMap = key
+	} else {
+		valueMap, rawSchema, err = d.decodeValue(ctx)
+		if err != nil {
+			return nil, errors.Trace(err)
+		}
 	}
 
 	schema := make(map[string]interface{})
@@ -189,37 +212,43 @@ func (d *decoder) NextRowChangedEvent() (*model.RowChangedEvent, error) {
 		columns = append(columns, col)
 	}
 
-	o, ok := valueMap[tidbOp]
-	if !ok {
-		return nil, errors.New("operation not found")
-	}
-	operation := o.(string)
-
-	o, ok = valueMap[tidbCommitTs]
-	if !ok {
-		return nil, errors.New("commit ts not found")
-	}
-	commitTs := o.(int64)
-
-	o, ok = valueMap[tidbRowLevelChecksum]
-	if ok {
-		checksum := o.(string)
-		expected, err := strconv.ParseUint(checksum, 10, 64)
-		if err != nil {
-			return nil, errors.Trace(err)
+	var (
+		operation string
+		commitTs  int64
+	)
+	if !isDelete {
+		o, ok := valueMap[tidbOp]
+		if !ok {
+			return nil, errors.New("operation not found")
 		}
+		operation = o.(string)
 
-		if o, ok := valueMap[tidbCorrupted]; ok {
-			corrupted := o.(bool)
-			if corrupted {
-				log.Warn("row data is corrupted",
-					zap.String("topic", d.topic),
-					zap.String("checksum", checksum))
+		o, ok = valueMap[tidbCommitTs]
+		if !ok {
+			return nil, errors.New("commit ts not found")
+		}
+		commitTs = o.(int64)
+
+		o, ok = valueMap[tidbRowLevelChecksum]
+		if ok {
+			checksum := o.(string)
+			expected, err := strconv.ParseUint(checksum, 10, 64)
+			if err != nil {
+				return nil, errors.Trace(err)
 			}
-		}
 
-		if err := d.verifyChecksum(columns, expected); err != nil {
-			return nil, errors.Trace(err)
+			if o, ok := valueMap[tidbCorrupted]; ok {
+				corrupted := o.(bool)
+				if corrupted {
+					log.Warn("row data is corrupted",
+						zap.String("topic", d.topic),
+						zap.String("checksum", checksum))
+				}
+			}
+
+			if err := d.verifyChecksum(columns, expected); err != nil {
+				return nil, errors.Trace(err)
+			}
 		}
 	}
 
@@ -234,13 +263,11 @@ func (d *decoder) NextRowChangedEvent() (*model.RowChangedEvent, error) {
 		Schema: schemaName,
 		Table:  tableName,
 	}
-	switch operation {
-	case insertOperation:
+
+	if operation == insertOperation {
 		event.Columns = columns
-	case updateOperation:
+	} else {
 		event.PreColumns = columns
-	default:
-		log.Panic("unsupported operation type", zap.String("operation", operation))
 	}
 	return event, nil
 }
@@ -286,28 +313,28 @@ func extractSchemaIDAndBinaryData(data []byte) (int, []byte, error) {
 	return int(binary.BigEndian.Uint32(data[1:5])), data[5:], nil
 }
 
-func (d *decoder) decodeKey(ctx context.Context) (map[string]interface{}, error) {
+func (d *decoder) decodeKey(ctx context.Context) (map[string]interface{}, string, error) {
 	schemaID, binary, err := extractSchemaIDAndBinaryData(d.key)
 	if err != nil {
-		return nil, err
+		return nil, "", err
 	}
 
 	codec, err := d.keySchemaM.Lookup(ctx, d.topic, schemaID)
 	if err != nil {
-		return nil, err
+		return nil, "", err
 	}
 	native, _, err := codec.NativeFromBinary(binary)
 	if err != nil {
-		return nil, err
+		return nil, "", err
 	}
 
 	result, ok := native.(map[string]interface{})
 	if !ok {
-		return nil, errors.New("raw avro message is not a map")
+		return nil, "", errors.New("raw avro message is not a map")
 	}
 	d.key = nil
 
-	return result, nil
+	return result, codec.Schema(), nil
 }
 
 func (d *decoder) decodeValue(ctx context.Context) (map[string]interface{}, string, error) {
@@ -332,21 +359,6 @@ func (d *decoder) decodeValue(ctx context.Context) (map[string]interface{}, stri
 	d.value = nil
 
 	return result, codec.Schema(), nil
-}
-
-func extractEventType(data []byte) (model.MessageType, error) {
-	if len(data) < 1 {
-		return model.MessageTypeUnknown, errors.ErrAvroInvalidMessage.FastGenByArgs()
-	}
-	switch data[0] {
-	case magicByte:
-		return model.MessageTypeRow, nil
-	case ddlByte:
-		return model.MessageTypeDDL, nil
-	case checkpointByte:
-		return model.MessageTypeResolved, nil
-	}
-	return model.MessageTypeUnknown, errors.ErrAvroInvalidMessage.FastGenByArgs()
 }
 
 func (d *decoder) verifyChecksum(columns []*model.Column, expected uint64) error {
