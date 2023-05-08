@@ -32,7 +32,7 @@ import (
 const (
 	defaultTableDefinitionVersion = 1
 	marshalPrefix                 = ""
-	MarshalIndent                 = "    "
+	marshalIndent                 = "    "
 )
 
 // TableCol denotes the column info for a table definition.
@@ -262,7 +262,7 @@ func (t *TableDefinition) IsTableSchema() bool {
 
 // MarshalWithQuery marshals TableDefinition with Query field.
 func (t *TableDefinition) MarshalWithQuery() ([]byte, error) {
-	data, err := json.MarshalIndent(t, marshalPrefix, MarshalIndent)
+	data, err := json.MarshalIndent(t, marshalPrefix, marshalIndent)
 	if err != nil {
 		return nil, errors.WrapError(errors.ErrMarshalFailed, err)
 	}
@@ -285,7 +285,7 @@ func (t *TableDefinition) marshalWithoutQuery() ([]byte, error) {
 		TotalColumns: t.TotalColumns,
 	}
 
-	data, err := json.MarshalIndent(defWithoutQuery, marshalPrefix, MarshalIndent)
+	data, err := json.MarshalIndent(defWithoutQuery, marshalPrefix, marshalIndent)
 	if err != nil {
 		return nil, errors.WrapError(errors.ErrMarshalFailed, err)
 	}

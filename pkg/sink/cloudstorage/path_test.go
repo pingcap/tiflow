@@ -45,6 +45,8 @@ func testFilePathGenerator(ctx context.Context, t *testing.T, dir string) *FileP
 }
 
 func TestGenerateDataFilePath(t *testing.T) {
+	t.Parallel()
+
 	ctx, cancel := context.WithCancel(context.TODO())
 	defer cancel()
 
@@ -142,6 +144,8 @@ func TestGenerateDataFilePath(t *testing.T) {
 }
 
 func TestFetchIndexFromFileName(t *testing.T) {
+	t.Parallel()
+
 	ctx, cancel := context.WithCancel(context.TODO())
 	defer cancel()
 
@@ -188,6 +192,8 @@ func TestFetchIndexFromFileName(t *testing.T) {
 }
 
 func TestGenerateDataFilePathWithIndexFile(t *testing.T) {
+	t.Parallel()
+
 	ctx, cancel := context.WithCancel(context.TODO())
 	defer cancel()
 
@@ -267,12 +273,3 @@ func TestIsSchemaFile(t *testing.T) {
 			"testCase: %s, path: %v", tt.name, tt.path)
 	}
 }
-
-// func TestGenerateSchemaFilePath(t *testing.T) {
-// 	var tableDef TableDefinition
-// 	err := json.Unmarshal([]byte(defData), &tableDef)
-// 	require.NoError(t, err)
-// 	s, err := GenerateSchemaFilePath(tableDef)
-// 	require.NoError(t, err)
-// 	_ = s
-// }
