@@ -445,3 +445,7 @@ func TestTableDefinition(t *testing.T) {
 	require.Equal(t, timodel.ActionAddColumn, event.Type)
 	require.Equal(t, uint64(100), event.CommitTs)
 }
+
+func TestTableDefinitionSum32(t *testing.T) {
+	// TODO: add sum32 tests
+}

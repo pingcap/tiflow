@@ -107,59 +107,66 @@ func init() {
 	}
 }
 
-type schemaPathKey struct {
-	schema  string
-	table   string
-	version int64
+// SchemaPathKey is the key of schema path.
+type SchemaPathKey struct {
+	Schema       string
+	Table        string
+	TableVersion uint64
 }
 
-func (s schemaPathKey) generagteSchemaFilePath() string {
-	return fmt.Sprintf("%s/%s/%d/schema.json", s.schema, s.table, s.version)
+func (s *SchemaPathKey) getKey() string {
+	return quotes.QuoteSchema(s.Schema, s.Table)
 }
 
-func (s *schemaPathKey) parseSchemaFilePath(path string) error {
-	str := `(\w+)\/(\w+)\/(\d+)\/schema.json`
-	pathRE, err := regexp.Compile(str)
-	if err != nil {
-		return err
+func (s *SchemaPathKey) parseSchemaFilePath(path string) (uint32, error) {
+	// For <schema>/<table>/meta/schema_{tableVersion}_{checksum}.json, the parts
+	// should be ["<schema>", "<table>", "meta", "schema_{tableVersion}_{checksum}.json"].
+	matches := strings.Split(path, "/")
+
+	var schema, table string
+	schema = matches[0]
+	switch len(matches) {
+	case 3:
+		table = ""
+	case 4:
+		table = matches[1]
+	default:
+		return 0, errors.Trace(fmt.Errorf("cannot match schema path pattern for %s", path))
 	}
 
-	matches := pathRE.FindStringSubmatch(path)
-	if len(matches) != 4 {
-		return fmt.Errorf("cannot match schema path pattern for %s", path)
+	if matches[len(matches)-2] != "meta" {
+		return 0, errors.Trace(fmt.Errorf("cannot match schema path pattern for %s", path))
 	}
 
-	version, err := strconv.ParseUint(matches[3], 10, 64)
-	if err != nil {
-		return err
-	}
+	schemaFileName := matches[len(matches)-1]
+	version, checksum := cloudstorage.MustParseSchemaName(schemaFileName)
 
-	*s = schemaPathKey{
-		schema:  matches[1],
-		table:   matches[2],
-		version: int64(version),
+	*s = SchemaPathKey{
+		Schema:       schema,
+		Table:        table,
+		TableVersion: version,
 	}
-	return nil
+	return checksum, nil
 }
 
 type dmlPathKey struct {
-	schemaPathKey
-	partitionNum int64
-	date         string
+	SchemaPathKey
+	PartitionNum int64
+	Date         string
 }
 
 func (d *dmlPathKey) generateDMLFilePath(idx uint64, extension string) string {
 	var elems []string
 
-	elems = append(elems, d.schema)
-	elems = append(elems, d.table)
-	elems = append(elems, fmt.Sprintf("%d", d.version))
+	elems = append(elems, d.Schema)
+	elems = append(elems, d.Table)
+	elems = append(elems, fmt.Sprintf("%d", d.TableVersion))
 
-	if d.partitionNum != 0 {
-		elems = append(elems, fmt.Sprintf("%d", d.partitionNum))
+	if d.PartitionNum != 0 {
+		elems = append(elems, fmt.Sprintf("%d", d.PartitionNum))
 	}
-	if len(d.date) != 0 {
-		elems = append(elems, d.date)
+	if len(d.Date) != 0 {
+		elems = append(elems, d.Date)
 	}
 	elems = append(elems, fmt.Sprintf("CDC%06d%s", idx, extension))
 
@@ -194,7 +201,7 @@ func (d *dmlPathKey) parseDMLFilePath(dateSeparator, path string) (uint64, error
 		return 0, fmt.Errorf("cannot match dml path pattern for %s", path)
 	}
 
-	version, err := strconv.ParseInt(matches[3], 10, 64)
+	version, err := strconv.ParseUint(matches[3], 10, 64)
 	if err != nil {
 		return 0, err
 	}
@@ -211,13 +218,13 @@ func (d *dmlPathKey) parseDMLFilePath(dateSeparator, path string) (uint64, error
 	}
 
 	*d = dmlPathKey{
-		schemaPathKey: schemaPathKey{
-			schema:  matches[1],
-			table:   matches[2],
-			version: version,
+		SchemaPathKey: SchemaPathKey{
+			Schema:       matches[1],
+			Table:        matches[2],
+			TableVersion: version,
 		},
-		partitionNum: partitionNum,
-		date:         matches[5],
+		PartitionNum: partitionNum,
+		Date:         matches[5],
 	}
 
 	return fileIdx, nil
@@ -240,6 +247,8 @@ type consumer struct {
 	tableDMLIdxMap map[dmlPathKey]uint64
 	// tableTsMap maintains a map of <TableID, max commit ts>
 	tableTsMap map[model.TableID]model.ResolvedTs
+	// tableDefMap maintains a map of <`schema`.`table`, tableDef slice sorted by TableVersion>
+	tableDefMap map[string]map[uint64]*cloudstorage.TableDefinition
 	// tableSinkMap maintains a map of <TableID, TableSink>
 	tableSinkMap     map[model.TableID]tablesink.TableSink
 	tableIDGenerator *fakeTableIDGenerator
@@ -324,6 +333,7 @@ func newConsumer(ctx context.Context) (*consumer, error) {
 		errCh:           errCh,
 		tableDMLIdxMap:  make(map[dmlPathKey]uint64),
 		tableTsMap:      make(map[model.TableID]model.ResolvedTs),
+		tableDefMap:     make(map[string]map[uint64]*cloudstorage.TableDefinition),
 		tableSinkMap:    make(map[model.TableID]tablesink.TableSink),
 		tableIDGenerator: &fakeTableIDGenerator{
 			tableIDs: make(map[string]int64),
@@ -362,38 +372,15 @@ func (c *consumer) getNewFiles(ctx context.Context) (map[dmlPathKey]fileIndexRan
 	}
 
 	err := c.externalStorage.WalkDir(ctx, opt, func(path string, size int64) error {
-		var dmlkey dmlPathKey
-		var schemaKey schemaPathKey
-		var fileIdx uint64
-		var err error
-
-		if strings.HasSuffix(path, "schema.json") {
-			err = schemaKey.parseSchemaFilePath(path)
+		if cloudstorage.IsSchemaFile(path) {
+			err := c.parseSchemaFilePath(ctx, path)
 			if err != nil {
 				log.Error("failed to parse schema file path", zap.Error(err))
 				// skip handling this file
 				return nil
 			}
-			// fake a dml key for schema.json file, which is useful for putting DDL
-			// in front of the DML files when sorting.
-			// e.g, for the partitioned table:
-			//
-			// test/test1/439972354120482843/schema.json					(partitionNum = -1)
-			// test/test1/439972354120482843/55/2023-03-09/CDC000001.csv	(partitionNum = 55)
-			// test/test1/439972354120482843/66/2023-03-09/CDC000001.csv	(partitionNum = 66)
-			//
-			// and for the non-partitioned table:
-			// test/test2/439972354120482843/schema.json				(partitionNum = -1)
-			// test/test2/439972354120482843/2023-03-09/CDC000001.csv	(partitionNum = 0)
-			// test/test2/439972354120482843/2023-03-09/CDC000002.csv	(partitionNum = 0)
-			//
-			// the DDL event recorded in schema.json should be executed first, then the DML events
-			// in csv files can be executed.
-			dmlkey.schemaPathKey = schemaKey
-			dmlkey.partitionNum = fakePartitionNumForSchemaFile
-			dmlkey.date = ""
 		} else if strings.HasSuffix(path, c.fileExtension) {
-			fileIdx, err = dmlkey.parseDMLFilePath(c.replicationCfg.Sink.DateSeparator, path)
+			err := c.parseDMLFilePath(ctx, path)
 			if err != nil {
 				log.Error("failed to parse dml file path", zap.Error(err))
 				// skip handling this file
@@ -401,13 +388,7 @@ func (c *consumer) getNewFiles(ctx context.Context) (map[dmlPathKey]fileIndexRan
 			}
 		} else {
 			log.Debug("ignore handling file", zap.String("path", path))
-			return nil
 		}
-
-		if _, ok := c.tableDMLIdxMap[dmlkey]; !ok || fileIdx >= c.tableDMLIdxMap[dmlkey] {
-			c.tableDMLIdxMap[dmlkey] = fileIdx
-		}
-
 		return nil
 	})
 	if err != nil {
@@ -498,9 +479,9 @@ func (c *consumer) emitDMLEvents(
 			filteredCnt++
 		}
 	}
-	log.Info("decode success", zap.String("schema", pathKey.schema),
-		zap.String("table", pathKey.table),
-		zap.Int64("version", pathKey.version),
+	log.Info("decode success", zap.String("schema", pathKey.Schema),
+		zap.String("table", pathKey.Table),
+		zap.Uint64("version", pathKey.TableVersion),
 		zap.Int("decodeRowsCnt", cnt),
 		zap.Int("filteredRowsCnt", filteredCnt))
 
@@ -544,7 +525,7 @@ func (c *consumer) syncExecDMLEvents(
 		return errors.Trace(err)
 	}
 	tableID := c.tableIDGenerator.generateFakeTableID(
-		key.schema, key.table, key.partitionNum)
+		key.Schema, key.Table, key.PartitionNum)
 	err = c.emitDMLEvents(ctx, tableID, tableDef, key, content)
 	if err != nil {
 		return errors.Trace(err)
@@ -563,24 +544,112 @@ func (c *consumer) syncExecDMLEvents(
 	return nil
 }
 
-func (c *consumer) getTableDefFromFile(
-	ctx context.Context,
-	schemaKey schemaPathKey,
-) (cloudstorage.TableDefinition, error) {
-	var tableDef cloudstorage.TableDefinition
-
-	schemaFilePath := schemaKey.generagteSchemaFilePath()
-	schemaContent, err := c.externalStorage.ReadFile(ctx, schemaFilePath)
+func (c *consumer) parseDMLFilePath(_ context.Context, path string) error {
+	var dmlkey dmlPathKey
+	fileIdx, err := dmlkey.parseDMLFilePath(c.replicationCfg.Sink.DateSeparator, path)
 	if err != nil {
-		return tableDef, errors.Trace(err)
+		return errors.Trace(err)
 	}
 
+	if _, ok := c.tableDMLIdxMap[dmlkey]; !ok || fileIdx >= c.tableDMLIdxMap[dmlkey] {
+		c.tableDMLIdxMap[dmlkey] = fileIdx
+	}
+	return nil
+}
+
+func (c *consumer) parseSchemaFilePath(ctx context.Context, path string) error {
+	var schemaKey SchemaPathKey
+	checksumInFile, err := schemaKey.parseSchemaFilePath(path)
+	if err != nil {
+		return errors.Trace(err)
+	}
+	key := schemaKey.getKey()
+	if tableDefs, ok := c.tableDefMap[key]; ok {
+		if _, ok := tableDefs[schemaKey.TableVersion]; ok {
+			// Skip if tableDef already exists.
+			return nil
+		}
+	} else {
+		c.tableDefMap[key] = make(map[uint64]*cloudstorage.TableDefinition)
+	}
+
+	// Read tableDef from schema file and check checksum.
+	var tableDef cloudstorage.TableDefinition
+	schemaContent, err := c.externalStorage.ReadFile(ctx, path)
+	if err != nil {
+		return errors.Trace(err)
+	}
 	err = json.Unmarshal(schemaContent, &tableDef)
 	if err != nil {
-		return tableDef, errors.Trace(err)
+		return errors.Trace(err)
+	}
+	checksumInMem, err := tableDef.Sum32(nil)
+	if err != nil {
+		return errors.Trace(err)
+	}
+	if checksumInMem != checksumInFile || schemaKey.TableVersion != tableDef.TableVersion {
+		log.Panic("checksum mismatch",
+			zap.Uint32("checksumInMem", checksumInMem),
+			zap.Uint32("checksumInFile", checksumInFile),
+			zap.Uint64("tableversionInMem", schemaKey.TableVersion),
+			zap.Uint64("tableversionInFile", tableDef.TableVersion),
+			zap.String("path", path))
 	}
 
-	return tableDef, nil
+	// Update tableDefMap.
+	c.tableDefMap[key][tableDef.TableVersion] = &tableDef
+
+	// Fake a dml key for schema.json file, which is useful for putting DDL
+	// in front of the DML files when sorting.
+	// e.g, for the partitioned table:
+	//
+	// test/test1/439972354120482843/schema.json					(partitionNum = -1)
+	// test/test1/439972354120482843/55/2023-03-09/CDC000001.csv	(partitionNum = 55)
+	// test/test1/439972354120482843/66/2023-03-09/CDC000001.csv	(partitionNum = 66)
+	//
+	// and for the non-partitioned table:
+	// test/test2/439972354120482843/schema.json				(partitionNum = -1)
+	// test/test2/439972354120482843/2023-03-09/CDC000001.csv	(partitionNum = 0)
+	// test/test2/439972354120482843/2023-03-09/CDC000002.csv	(partitionNum = 0)
+	//
+	// the DDL event recorded in schema.json should be executed first, then the DML events
+	// in csv files can be executed.
+	dmlkey := dmlPathKey{
+		SchemaPathKey: schemaKey,
+		PartitionNum:  fakePartitionNumForSchemaFile,
+		Date:          "",
+	}
+	if _, ok := c.tableDMLIdxMap[dmlkey]; !ok {
+		c.tableDMLIdxMap[dmlkey] = 0
+	} else {
+		// duplicate table schema file found, this should not happen.
+		log.Panic("duplicate schema file found",
+			zap.String("path", path), zap.Any("tableDef", tableDef),
+			zap.Any("schemaKey", schemaKey), zap.Any("dmlkey", dmlkey))
+	}
+	return nil
+}
+
+func (c *consumer) mustGetTableDef(key SchemaPathKey) cloudstorage.TableDefinition {
+	var tableDef *cloudstorage.TableDefinition
+	if tableDefs, ok := c.tableDefMap[key.getKey()]; ok {
+		tableDef = tableDefs[key.TableVersion]
+	}
+	if tableDef == nil {
+		log.Panic("tableDef not found", zap.Any("key", key), zap.Any("tableDefMap", c.tableDefMap))
+	}
+	return *tableDef
+}
+
+func (c *consumer) clenaupTableDef(key SchemaPathKey) {
+	// if tableDefs, ok := c.tableDefMap[key.getKey()]; ok {
+	// 	for k := range tableDefs {
+	// 		if k < key.TableVersion {
+	// 			delete(tableDefs, k)
+	// 		}
+	// 	}
+	// }
+	// Do nothin for now. we may need to cleanup tableDefMap in the future.
 }
 
 func (c *consumer) handleNewFiles(
@@ -596,30 +665,27 @@ func (c *consumer) handleNewFiles(
 		return nil
 	}
 	sort.Slice(keys, func(i, j int) bool {
-		if keys[i].version != keys[j].version {
-			return keys[i].version < keys[j].version
+		if keys[i].TableVersion != keys[j].TableVersion {
+			return keys[i].TableVersion < keys[j].TableVersion
 		}
-		if keys[i].partitionNum != keys[j].partitionNum {
-			return keys[i].partitionNum < keys[j].partitionNum
+		if keys[i].PartitionNum != keys[j].PartitionNum {
+			return keys[i].PartitionNum < keys[j].PartitionNum
 		}
-		if keys[i].date != keys[j].date {
-			return keys[i].date < keys[j].date
+		if keys[i].Date != keys[j].Date {
+			return keys[i].Date < keys[j].Date
 		}
-		if keys[i].schema != keys[j].schema {
-			return keys[i].schema < keys[j].schema
+		if keys[i].Schema != keys[j].Schema {
+			return keys[i].Schema < keys[j].Schema
 		}
-		return keys[i].table < keys[j].table
+		return keys[i].Table < keys[j].Table
 	})
 
 	for _, key := range keys {
-		tableDef, err := c.getTableDefFromFile(ctx, key.schemaPathKey)
-		if err != nil {
-			return err
-		}
+		tableDef := c.mustGetTableDef(key.SchemaPathKey)
 		// if the key is a fake dml path key which is mainly used for
 		// sorting schema.json file before the dml files, then execute the ddl query.
-		if key.partitionNum == fakePartitionNumForSchemaFile &&
-			len(key.date) == 0 && len(tableDef.Query) > 0 {
+		if key.PartitionNum == fakePartitionNumForSchemaFile &&
+			len(key.Date) == 0 && len(tableDef.Query) > 0 {
 			ddlEvent, err := tableDef.ToDDLEvent()
 			if err != nil {
 				return err
@@ -627,6 +693,7 @@ func (c *consumer) handleNewFiles(
 			if err := c.ddlSink.WriteDDLEvent(ctx, ddlEvent); err != nil {
 				return errors.Trace(err)
 			}
+			c.clenaupTableDef(key.SchemaPathKey)
 			log.Info("execute ddl event successfully", zap.String("query", tableDef.Query))
 			continue
 		}

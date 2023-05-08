@@ -58,6 +58,7 @@ func TestGenerateDataFilePath(t *testing.T) {
 
 	dir := t.TempDir()
 	f := testFilePathGenerator(ctx, t, dir)
+	f.versionMap[table] = table.TableInfoVersion
 	date := f.GenerateDateStr()
 	// date-separator: none
 	path, err := f.GenerateDataFilePath(ctx, table, date)
@@ -70,6 +71,7 @@ func TestGenerateDataFilePath(t *testing.T) {
 	// date-separator: year
 	mockClock := clock.NewMock()
 	f = testFilePathGenerator(ctx, t, dir)
+	f.versionMap[table] = table.TableInfoVersion
 	f.config.DateSeparator = config.DateSeparatorYear.String()
 	f.clock = mockClock
 	mockClock.Set(time.Date(2022, 12, 31, 23, 59, 59, 0, time.UTC))
@@ -93,6 +95,7 @@ func TestGenerateDataFilePath(t *testing.T) {
 	// date-separator: month
 	mockClock = clock.NewMock()
 	f = testFilePathGenerator(ctx, t, dir)
+	f.versionMap[table] = table.TableInfoVersion
 	f.config.DateSeparator = config.DateSeparatorMonth.String()
 	f.clock = mockClock
 	mockClock.Set(time.Date(2022, 12, 31, 23, 59, 59, 0, time.UTC))
@@ -116,6 +119,7 @@ func TestGenerateDataFilePath(t *testing.T) {
 	// date-separator: day
 	mockClock = clock.NewMock()
 	f = testFilePathGenerator(ctx, t, dir)
+	f.versionMap[table] = table.TableInfoVersion
 	f.config.DateSeparator = config.DateSeparatorDay.String()
 	f.clock = mockClock
 	mockClock.Set(time.Date(2022, 12, 31, 23, 59, 59, 0, time.UTC))
@@ -200,6 +204,7 @@ func TestGenerateDataFilePathWithIndexFile(t *testing.T) {
 		},
 		TableInfoVersion: 5,
 	}
+	f.versionMap[table] = table.TableInfoVersion
 	date := f.GenerateDateStr()
 	indexFilePath := f.GenerateIndexFilePath(table, date)
 	err := f.storage.WriteFile(ctx, indexFilePath, []byte("CDC000005.json\n"))
@@ -228,3 +233,46 @@ func TestGenerateDataFilePathWithIndexFile(t *testing.T) {
 	require.NoError(t, err)
 	require.Equal(t, "test/table1/5/2023-03-09/CDC000006.json", dataFilePath)
 }
+
+func TestIsSchemaFile(t *testing.T) {
+	t.Parallel()
+
+	tests := []struct {
+		name   string
+		path   string
+		expect bool
+	}{
+		{
+			"valid database schema <schema>/meta/",
+			"schema2/meta/schema_123_0123456789.json", true,
+		},
+		{
+			"valid table schema <schema>/<table>/meta/",
+			"schema1/table1/meta/schema_123_0123456789.json", true,
+		},
+		{"valid special prefix", "meta/meta/schema_123_0123456789.json", true},
+		{"valid schema1", "meta/schema_123_0123456789.json", true},
+		{"missing field1", "meta/schema_012345678_.json", false},
+		{"missing field2", "meta/schema_012345678.json", false},
+		{"invalid checksum1", "meta/schema_123_012345678.json", false},
+		{"invalid checksum2", "meta/schema_123_012a4567c9.json", false},
+		{"invalid table version", "meta/schema_abc_0123456789.json", false},
+		{"invalid extension1", "meta/schema_123_0123456789.txt", false},
+		{"invalid extension2", "meta/schema_123_0123456789.json ", false},
+		{"invalid path", "meta/schema1/schema_123_0123456789.json", false},
+	}
+
+	for _, tt := range tests {
+		require.Equal(t, tt.expect, IsSchemaFile(tt.path),
+			"testCase: %s, path: %v", tt.name, tt.path)
+	}
+}
+
+// func TestGenerateSchemaFilePath(t *testing.T) {
+// 	var tableDef TableDefinition
+// 	err := json.Unmarshal([]byte(defData), &tableDef)
+// 	require.NoError(t, err)
+// 	s, err := GenerateSchemaFilePath(tableDef)
+// 	require.NoError(t, err)
+// 	_ = s
+// }
