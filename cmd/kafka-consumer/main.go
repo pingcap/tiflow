@@ -352,7 +352,9 @@ func main() {
 
 	go func() {
 		if err := consumer.Run(ctx); err != nil {
-			log.Panic("Error running consumer", zap.Error(err))
+			if err != context.Canceled {
+				log.Panic("Error running consumer", zap.Error(err))
+			}
 		}
 	}()
 
