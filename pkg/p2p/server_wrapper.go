@@ -16,6 +16,7 @@ package p2p
 import (
 	"context"
 	"sync"
+	"time"
 
 	"github.com/modern-go/reflect2"
 	"github.com/pingcap/failpoint"
@@ -24,6 +25,7 @@ import (
 	"go.uber.org/zap"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/codes"
+	"google.golang.org/grpc/keepalive"
 	gRPCPeer "google.golang.org/grpc/peer"
 	"google.golang.org/grpc/status"
 )
@@ -69,7 +71,14 @@ func NewServerWrapper(cfg *MessageServerConfig) *ServerWrapper {
 
 // ServerOptions returns server option for creating grpc servers.
 func (s *ServerWrapper) ServerOptions() []grpc.ServerOption {
-	return []grpc.ServerOption{grpc.MaxRecvMsgSize(s.cfg.MaxRecvMsgSize)}
+	keepaliveParams := keepalive.ServerParameters{
+		Time:    3 * time.Second,
+		Timeout: 2 * time.Second,
+	}
+	return []grpc.ServerOption{
+		grpc.MaxRecvMsgSize(s.cfg.MaxRecvMsgSize),
+		grpc.KeepaliveParams(keepaliveParams),
+	}
 }
 
 // SendMessage implements p2p.CDCPeerToPeerServer
