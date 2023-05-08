@@ -15,6 +15,7 @@ package cloudstorage
 import (
 	"encoding/json"
 	"math"
+	"math/rand"
 	"testing"
 
 	"github.com/pingcap/tidb/parser/charset"
@@ -25,7 +26,46 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
+func generateTableDef() (TableDefinition, *model.TableInfo) {
+	var columns []*timodel.ColumnInfo
+	ft := types.NewFieldType(mysql.TypeLong)
+	ft.SetFlag(mysql.PriKeyFlag | mysql.NotNullFlag)
+	col := &timodel.ColumnInfo{Name: timodel.NewCIStr("Id"), FieldType: *ft}
+	columns = append(columns, col)
+
+	ft = types.NewFieldType(mysql.TypeVarchar)
+	ft.SetFlag(mysql.NotNullFlag)
+	ft.SetFlen(128)
+	col = &timodel.ColumnInfo{Name: timodel.NewCIStr("LastName"), FieldType: *ft}
+	columns = append(columns, col)
+
+	ft = types.NewFieldType(mysql.TypeVarchar)
+	ft.SetFlen(64)
+	col = &timodel.ColumnInfo{Name: timodel.NewCIStr("FirstName"), FieldType: *ft}
+	columns = append(columns, col)
+
+	ft = types.NewFieldType(mysql.TypeDatetime)
+	col = &timodel.ColumnInfo{Name: timodel.NewCIStr("Birthday"), FieldType: *ft}
+	columns = append(columns, col)
+
+	tableInfo := &model.TableInfo{
+		TableInfo: &timodel.TableInfo{Columns: columns},
+		Version:   100,
+		TableName: model.TableName{
+			Schema:  "test",
+			Table:   "table1",
+			TableID: 20,
+		},
+	}
+
+	var def TableDefinition
+	def.FromTableInfo(tableInfo, tableInfo.Version)
+	return def, tableInfo
+}
+
 func TestTableCol(t *testing.T) {
+	t.Parallel()
+
 	testCases := []struct {
 		name      string
 		filedType byte
@@ -323,39 +363,9 @@ func TestTableCol(t *testing.T) {
 }
 
 func TestTableDefinition(t *testing.T) {
-	var columns []*timodel.ColumnInfo
-	var def TableDefinition
+	t.Parallel()
 
-	tableInfo := &model.TableInfo{
-		Version: 100,
-		TableName: model.TableName{
-			Schema:  "test",
-			Table:   "table1",
-			TableID: 20,
-		},
-	}
-	ft := types.NewFieldType(mysql.TypeLong)
-	ft.SetFlag(mysql.PriKeyFlag | mysql.NotNullFlag)
-	col := &timodel.ColumnInfo{Name: timodel.NewCIStr("Id"), FieldType: *ft}
-	columns = append(columns, col)
-
-	ft = types.NewFieldType(mysql.TypeVarchar)
-	ft.SetFlag(mysql.NotNullFlag)
-	ft.SetFlen(128)
-	col = &timodel.ColumnInfo{Name: timodel.NewCIStr("LastName"), FieldType: *ft}
-	columns = append(columns, col)
-
-	ft = types.NewFieldType(mysql.TypeVarchar)
-	ft.SetFlen(64)
-	col = &timodel.ColumnInfo{Name: timodel.NewCIStr("FirstName"), FieldType: *ft}
-	columns = append(columns, col)
-
-	ft = types.NewFieldType(mysql.TypeDatetime)
-	col = &timodel.ColumnInfo{Name: timodel.NewCIStr("Birthday"), FieldType: *ft}
-	columns = append(columns, col)
-
-	tableInfo.TableInfo = &timodel.TableInfo{Columns: columns}
-	def.FromTableInfo(tableInfo, tableInfo.Version)
+	def, tableInfo := generateTableDef()
 	encodedDef, err := json.MarshalIndent(def, "", "    ")
 	require.NoError(t, err)
 	require.JSONEq(t, `{
@@ -447,5 +457,26 @@ func TestTableDefinition(t *testing.T) {
 }
 
 func TestTableDefinitionSum32(t *testing.T) {
-	// TODO: add sum32 tests
+	t.Parallel()
+
+	def, _ := generateTableDef()
+	checksum1, err := def.Sum32(nil)
+	require.NoError(t, err)
+	checksum2, err := def.Sum32(nil)
+	require.NoError(t, err)
+	require.Equal(t, checksum1, checksum2)
+
+	n := len(def.Columns)
+	newCol := make([]TableCol, n)
+	copy(newCol, def.Columns)
+	newDef := def
+	newDef.Columns = newCol
+
+	for i := 0; i < n; i++ {
+		target := rand.Intn(n)
+		newDef.Columns[i], newDef.Columns[target] = newDef.Columns[target], newDef.Columns[i]
+		newChecksum, err := newDef.Sum32(nil)
+		require.NoError(t, err)
+		require.Equal(t, checksum1, newChecksum)
+	}
 }

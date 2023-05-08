@@ -64,7 +64,6 @@ func TestWriteDDLEvent(t *testing.T) {
 		},
 	}
 	tableDir := path.Join(parentDir, "test/table1/meta/")
-	// os.MkdirAll(tableDir, 0o755)
 	err = sink.WriteDDLEvent(ctx, ddlEvent)
 	require.Nil(t, err)
 
@@ -124,8 +123,6 @@ func TestWriteCheckpointTs(t *testing.T) {
 			},
 		},
 	}
-	table1Dir := path.Join(parentDir, "test/table1/100")
-	os.MkdirAll(table1Dir, 0o755)
 
 	err = sink.WriteCheckpointTs(ctx, 100, tables)
 	require.Nil(t, err)
