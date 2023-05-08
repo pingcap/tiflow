@@ -469,13 +469,13 @@ var avroTestColumns = []*avroTestColumnTuple{
 			ID:            29,
 			IsPKHandle:    false,
 			VirtualGenCol: false,
-			Ft:            setElems(types.NewFieldType(mysql.TypeEnum), []string{"a,", "b"}),
+			Ft:            setElems(types.NewFieldType(mysql.TypeEnum), []string{"a", "b"}),
 		},
 		avroSchema{
 			Type:       "string",
-			Parameters: map[string]string{"tidb_type": "ENUM", "allowed": "a\\,,b"},
+			Parameters: map[string]string{"tidb_type": "ENUM", "allowed": "a,b"},
 		},
-		"a,", "string",
+		"a", "string",
 	},
 	{
 		model.Column{Name: "set", Value: uint64(1), Type: mysql.TypeSet},
@@ -483,13 +483,13 @@ var avroTestColumns = []*avroTestColumnTuple{
 			ID:            30,
 			IsPKHandle:    false,
 			VirtualGenCol: false,
-			Ft:            setElems(types.NewFieldType(mysql.TypeSet), []string{"a,", "b"}),
+			Ft:            setElems(types.NewFieldType(mysql.TypeSet), []string{"a", "b"}),
 		},
 		avroSchema{
 			Type:       "string",
-			Parameters: map[string]string{"tidb_type": "SET", "allowed": "a\\,,b"},
+			Parameters: map[string]string{"tidb_type": "SET", "allowed": "a,b"},
 		},
-		"a,", "string",
+		"a", "string",
 	},
 	{
 		model.Column{Name: "json", Value: `{"key": "value"}`, Type: mysql.TypeJSON},

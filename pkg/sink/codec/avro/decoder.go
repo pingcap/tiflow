@@ -73,7 +73,7 @@ func (d *decoder) AddKeyValue(key, value []byte) error {
 }
 
 func (d *decoder) HasNext() (model.MessageType, bool, error) {
-	if d.key == nil || d.value == nil {
+	if d.key == nil && d.value == nil {
 		return model.MessageTypeUnknown, false, nil
 	}
 	eventType, err := extractEventType(d.value)
@@ -154,22 +154,30 @@ func (d *decoder) NextRowChangedEvent() (*model.RowChangedEvent, error) {
 			// enum type is encoded as string,
 			// we need to convert it to int by the order of the enum values definition.
 			allowed := strings.Split(holder["allowed"].(string), ",")
-			valueStr := value.(string)
-			enum, err := types.ParseEnum(allowed, valueStr, "")
-			if err != nil {
-				return nil, errors.Trace(err)
+			switch t := value.(type) {
+			case string:
+				enum, err := types.ParseEnum(allowed, t, "")
+				if err != nil {
+					return nil, errors.Trace(err)
+				}
+				value = enum.Value
+			case nil:
+				value = nil
 			}
-			value = enum.Value
 		case mysql.TypeSet:
 			// set type is encoded as string,
 			// we need to convert it to the binary format.
 			elems := strings.Split(holder["allowed"].(string), ",")
-			valueStr := value.(string)
-			s, err := types.ParseSet(elems, valueStr, "")
-			if err != nil {
-				return nil, errors.Trace(err)
+			switch t := value.(type) {
+			case string:
+				s, err := types.ParseSet(elems, t, "")
+				if err != nil {
+					return nil, errors.Trace(err)
+				}
+				value = s.Value
+			case nil:
+				value = nil
 			}
-			value = s.Value
 		}
 
 		col := &model.Column{
