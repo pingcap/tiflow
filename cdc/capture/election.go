@@ -16,7 +16,10 @@ package capture
 import (
 	"context"
 
+	"github.com/pingcap/errors"
+	"github.com/pingcap/failpoint"
 	"go.etcd.io/etcd/client/v3/concurrency"
+	"go.etcd.io/etcd/server/v3/mvcc"
 )
 
 // election wraps the owner election methods.
@@ -37,6 +40,9 @@ func newElection(sess *concurrency.Session, key string) election {
 }
 
 func (e *electionImpl) campaign(ctx context.Context, key string) error {
+	failpoint.Inject("capture-campaign-compacted-error", func() {
+		failpoint.Return(errors.Trace(mvcc.ErrCompacted))
+	})
 	return e.election.Campaign(ctx, key)
 }
 
