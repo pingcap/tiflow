@@ -96,8 +96,9 @@ func (d *DmlPathKey) GenerateDMLFilePath(idx uint64, extension string) string {
 
 // ParseDMLFilePath parses the dml file path and returns the max file index.
 // DML file path pattern is as follows:
-// {schema}/{table}/{table-version-separator}/{partition-separator}/{date-separator}/CDC{num}.extension,
-// where partition-separator and date-separator could be empty.
+// {schema}/{table}/{table-version-separator}/{partition-separator}/{date-separator}/, where
+// partition-separator and date-separator could be empty.
+// DML file name pattern is as follows: CDC{num}.extension.
 func (d *DmlPathKey) ParseDMLFilePath(dateSeparator, path string) (uint64, error) {
 	var partitionNum int64
 
