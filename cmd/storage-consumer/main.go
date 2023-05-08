@@ -217,7 +217,9 @@ func newConsumer(ctx context.Context) (*consumer, error) {
 }
 
 // map1 - map2
-func diffDMLMaps(map1, map2 map[cloudstorage.DmlPathKey]uint64) map[cloudstorage.DmlPathKey]fileIndexRange {
+func diffDMLMaps(
+	map1, map2 map[cloudstorage.DmlPathKey]uint64,
+) map[cloudstorage.DmlPathKey]fileIndexRange {
 	resMap := make(map[cloudstorage.DmlPathKey]fileIndexRange)
 	for k, v := range map1 {
 		if _, ok := map2[k]; !ok {
@@ -237,7 +239,9 @@ func diffDMLMaps(map1, map2 map[cloudstorage.DmlPathKey]uint64) map[cloudstorage
 }
 
 // getNewFiles returns newly created dml files in specific ranges
-func (c *consumer) getNewFiles(ctx context.Context) (map[cloudstorage.DmlPathKey]fileIndexRange, error) {
+func (c *consumer) getNewFiles(
+	ctx context.Context,
+) (map[cloudstorage.DmlPathKey]fileIndexRange, error) {
 	tableDMLMap := make(map[cloudstorage.DmlPathKey]fileIndexRange)
 	opt := &storage.WalkOption{SubDir: ""}
 
