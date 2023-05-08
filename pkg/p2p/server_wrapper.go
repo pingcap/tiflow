@@ -16,7 +16,6 @@ package p2p
 import (
 	"context"
 	"sync"
-	"time"
 
 	"github.com/modern-go/reflect2"
 	"github.com/pingcap/failpoint"
@@ -72,8 +71,8 @@ func NewServerWrapper(cfg *MessageServerConfig) *ServerWrapper {
 // ServerOptions returns server option for creating grpc servers.
 func (s *ServerWrapper) ServerOptions() []grpc.ServerOption {
 	keepaliveParams := keepalive.ServerParameters{
-		Time:    3 * time.Second,
-		Timeout: 2 * time.Second,
+		Time:    s.cfg.KeepAliveTime,
+		Timeout: s.cfg.KeepAliveTimeout,
 	}
 	return []grpc.ServerOption{
 		grpc.MaxRecvMsgSize(s.cfg.MaxRecvMsgSize),
