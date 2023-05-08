@@ -19,6 +19,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"math"
+	"sort"
 	"time"
 	"unsafe"
 
@@ -404,11 +405,6 @@ func (m *mounter) verifyChecksum(
 		return 0, 0, true, nil
 	}
 
-	// when the old value is not enabled, no previous columns so that no need to verify the checksum.
-	if isPreRow && !m.enableOldValue {
-		return 0, 0, true, nil
-	}
-
 	var decoder *rowcodec.DatumMapDecoder
 	if isPreRow {
 		decoder = m.preDecoder
@@ -434,10 +430,14 @@ func (m *mounter) verifyChecksum(
 			Datum:      &rawColumns[idx],
 		})
 	}
+	sort.Slice(columns, func(i, j int) bool {
+		return columns[i].ID < columns[j].ID
+	})
 	calculator := rowcodec.RowData{
 		Cols: columns,
 		Data: make([]byte, 0),
 	}
+
 	checksum, err := calculator.Checksum()
 	if err != nil {
 		log.Error("failed to calculate the checksum", zap.Error(err))
@@ -446,6 +446,8 @@ func (m *mounter) verifyChecksum(
 
 	// the first checksum matched, it hits in the most case.
 	if checksum == first {
+		log.Info("checksum matched",
+			zap.Uint32("checksum", checksum), zap.Uint32("first", first))
 		return checksum, version, true, nil
 	}
 
