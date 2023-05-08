@@ -191,7 +191,7 @@ func init() {
 		if err != nil {
 			log.Panic("invalid enable-tidb-extension of upstream-uri")
 		}
-		if enableRowChecksum {
+		if enableTiDBExtension {
 			if protocol != config.ProtocolCanalJSON && protocol != config.ProtocolAvro {
 				log.Panic("enable-tidb-extension only work with canal-json / avro")
 			}
