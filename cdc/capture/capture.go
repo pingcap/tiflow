@@ -51,7 +51,7 @@ const cleanMetaDuration = 10 * time.Second
 // information in etcd and schedules Task on it.
 type Capture interface {
 	Run(ctx context.Context) error
-	AsyncClose()
+	Close()
 	Drain() <-chan struct{}
 	Liveness() model.Liveness
 
@@ -307,7 +307,7 @@ func (c *captureImpl) run(stdCtx context.Context) error {
 	}()
 
 	defer func() {
-		c.AsyncClose()
+		c.Close()
 		c.grpcService.Reset(nil)
 	}()
 
@@ -584,9 +584,10 @@ func (c *captureImpl) register(ctx context.Context) error {
 	return nil
 }
 
-// AsyncClose closes the capture by deregister it from etcd
+// Close closes the capture by deregister it from etcd,
+// it also closes the owner and processorManager
 // Note: this function should be reentrant
-func (c *captureImpl) AsyncClose() {
+func (c *captureImpl) Close() {
 	defer c.cancel()
 	// Safety: Here we mainly want to stop the owner
 	// and ignore it if the owner does not exist or is not set.
