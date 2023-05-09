@@ -470,6 +470,11 @@ func (c *captureImpl) campaignOwner(ctx cdcContext.Context) error {
 		})
 		globalState.SetOnCaptureRemoved(func(captureID model.CaptureID) {
 			c.MessageRouter.RemovePeer(captureID)
+			if err := c.MessageServer.ScheduleDeregisterPeerTask(ctx, captureID); err != nil {
+				log.Warn("deregister peer failed",
+					zap.String("captureID", captureID),
+					zap.Error(err))
+			}
 		})
 
 		err = c.runEtcdWorker(ownerCtx, owner,
