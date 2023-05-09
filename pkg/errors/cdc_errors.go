@@ -296,6 +296,10 @@ var (
 		"schema manager API error",
 		errors.RFCCodeText("CDC:ErrAvroSchemaAPIError"),
 	)
+	ErrAvroInvalidMessage = errors.Normalize(
+		"avro invalid message format",
+		errors.RFCCodeText("CDC:ErrAvroInvalidMessage"),
+	)
 	ErrMaxwellEncodeFailed = errors.Normalize(
 		"maxwell encode failed",
 		errors.RFCCodeText("CDC:ErrMaxwellEncodeFailed"),

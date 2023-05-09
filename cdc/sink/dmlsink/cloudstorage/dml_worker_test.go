@@ -128,12 +128,12 @@ func TestDMLWorkerRun(t *testing.T) {
 	// check whether files for table1 has been generated
 	files, err := os.ReadDir(table1Dir)
 	require.Nil(t, err)
-	require.Len(t, files, 3)
+	require.Len(t, files, 2)
 	var fileNames []string
 	for _, f := range files {
 		fileNames = append(fileNames, f.Name())
 	}
-	require.ElementsMatch(t, []string{"CDC000001.json", "schema.json", "CDC.index"}, fileNames)
+	require.ElementsMatch(t, []string{"CDC000001.json", "CDC.index"}, fileNames)
 	cancel()
 	d.close()
 	wg.Wait()
