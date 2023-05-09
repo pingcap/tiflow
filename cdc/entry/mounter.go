@@ -446,7 +446,7 @@ func (m *mounter) verifyChecksum(
 
 	// the first checksum matched, it hits in the most case.
 	if checksum == first {
-		log.Info("checksum matched",
+		log.Debug("checksum matched",
 			zap.Uint32("checksum", checksum), zap.Uint32("first", first))
 		return checksum, version, true, nil
 	}
@@ -576,6 +576,8 @@ func (m *mounter) mountRowKVEntry(tableInfo *model.TableInfo, row *rowKVEntry, d
 	rawRow.PreRowDatums = preRawCols
 	rawRow.RowDatums = rawCols
 
+	// if both are 0, it means the checksum is not enabled
+	// so the checksum is nil to reduce memory allocation.
 	if preChecksum != 0 || current != 0 {
 		checksum = &model.Checksum{
 			Current:   current,
