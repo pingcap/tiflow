@@ -17,7 +17,6 @@ import (
 	"context"
 	"strings"
 	"sync"
-	"sync/atomic"
 	"time"
 
 	"github.com/pingcap/errors"
@@ -56,7 +55,6 @@ type DDLSink interface {
 	emitSyncPoint(ctx context.Context, checkpointTs uint64) error
 	// close the ddlsink, cancel running goroutine.
 	close(ctx context.Context) error
-	isInitialized() bool
 }
 
 type ddlSinkImpl struct {
@@ -74,7 +72,6 @@ type ddlSinkImpl struct {
 	ddlSentTsMap map[*model.DDLEvent]model.Ts
 
 	ddlCh chan *model.DDLEvent
-	errCh chan error
 
 	sink ddlsink.Sink
 	// `sinkInitHandler` can be helpful in unit testing.
@@ -83,10 +80,6 @@ type ddlSinkImpl struct {
 	// cancel would be used to cancel the goroutine start by `run`
 	cancel context.CancelFunc
 	wg     sync.WaitGroup
-	// we use `initialized` to indicate whether the sink has been initialized.
-	// the caller before calling any method of ddl sink
-	// should check `initialized` first
-	initialized atomic.Value
 
 	changefeedID model.ChangeFeedID
 	info         *model.ChangeFeedInfo
@@ -104,10 +97,8 @@ func newDDLSink(changefeedID model.ChangeFeedID, info *model.ChangeFeedInfo, rep
 		changefeedID: changefeedID,
 		info:         info,
 
-		errCh:     make(chan error, defaultErrChSize),
 		reportErr: reportErr,
 	}
-	res.initialized.Store(false)
 	return res
 }
 
@@ -143,6 +134,97 @@ func ddlSinkInitializer(ctx context.Context, a *ddlSinkImpl) error {
 	return nil
 }
 
+func (s *ddlSinkImpl) makeSinkReady(ctx context.Context) error {
+	if s.sink == nil {
+		if err := s.sinkInitHandler(ctx, s); err != nil {
+			log.Warn("ddl sink initialize failed",
+				zap.String("namespace", s.changefeedID.Namespace),
+				zap.String("changefeed", s.changefeedID.ID),
+				zap.Error(err))
+			return errors.New("ddlSink not ready")
+		}
+	}
+	return nil
+}
+
+// retry the given action with 5s interval. Before every retry, s.sink will be re-initialized.
+func (s *ddlSinkImpl) retrySinkActionWithErrorReport(ctx context.Context, action func() error) (err error) {
+	for {
+		if err = action(); err == nil {
+			return nil
+		}
+		s.sink = nil
+		s.reportErr(model.NewComponentError(err, model.OwnerDDLSink))
+
+		timer := time.NewTimer(5 * time.Second)
+		select {
+		case <-ctx.Done():
+			if !timer.Stop() {
+				<-timer.C
+			}
+			return ctx.Err()
+		case <-timer.C:
+		}
+	}
+}
+
+func (s *ddlSinkImpl) writeCheckpointTs(ctx context.Context, lastCheckpointTs *model.Ts) error {
+	doWrite := func() (err error) {
+		s.mu.Lock()
+		checkpointTs := s.mu.checkpointTs
+		if checkpointTs == 0 || checkpointTs <= *lastCheckpointTs {
+			s.mu.Unlock()
+			return
+		}
+		tables := make([]*model.TableInfo, 0, len(s.mu.currentTables))
+		for _, t := range s.mu.currentTables {
+			tables = append(tables, t)
+		}
+		s.mu.Unlock()
+
+		if err = s.makeSinkReady(ctx); err == nil {
+			err = s.sink.WriteCheckpointTs(ctx, checkpointTs, tables)
+		}
+		if err == nil {
+			*lastCheckpointTs = checkpointTs
+		}
+		return
+	}
+
+	return s.retrySinkActionWithErrorReport(ctx, doWrite)
+}
+
+func (s *ddlSinkImpl) writeDDLEvent(ctx context.Context, ddl *model.DDLEvent) error {
+	log.Info("begin emit ddl event",
+		zap.String("namespace", s.changefeedID.Namespace),
+		zap.String("changefeed", s.changefeedID.ID),
+		zap.Any("DDL", ddl))
+
+	doWrite := func() (err error) {
+		if err = s.makeSinkReady(ctx); err == nil {
+			err = s.sink.WriteDDLEvent(ctx, ddl)
+			failpoint.Inject("InjectChangefeedDDLError", func() {
+				err = cerror.ErrExecDDLFailed.GenWithStackByArgs()
+			})
+		}
+		if err != nil {
+			log.Error("Execute DDL failed",
+				zap.String("namespace", s.changefeedID.Namespace),
+				zap.String("changefeed", s.changefeedID.ID),
+				zap.Any("DDL", ddl),
+				zap.Error(err))
+		} else {
+			ddl.Done = true
+			log.Info("Execute DDL succeeded",
+				zap.String("namespace", s.changefeedID.Namespace),
+				zap.String("changefeed", s.changefeedID.ID),
+				zap.Any("DDL", ddl))
+		}
+		return
+	}
+	return s.retrySinkActionWithErrorReport(ctx, doWrite)
+}
+
 func (s *ddlSinkImpl) run(ctx context.Context) {
 	ctx, s.cancel = context.WithCancel(ctx)
 
@@ -150,104 +232,31 @@ func (s *ddlSinkImpl) run(ctx context.Context) {
 	go func() {
 		defer s.wg.Done()
 
-		start := time.Now()
-		if err := s.sinkInitHandler(ctx, s); err != nil {
-			log.Warn("ddl sink initialize failed",
-				zap.String("namespace", s.changefeedID.Namespace),
-				zap.String("changefeed", s.changefeedID.ID),
-				zap.Duration("duration", time.Since(start)))
-			s.reportErr(err)
-			return
-		}
-		s.initialized.Store(true)
-		log.Info("ddl sink initialized, start processing...",
-			zap.String("namespace", s.changefeedID.Namespace),
-			zap.String("changefeed", s.changefeedID.ID),
-			zap.Duration("duration", time.Since(start)))
-
 		// TODO make the tick duration configurable
 		ticker := time.NewTicker(time.Second)
 		defer ticker.Stop()
 		var lastCheckpointTs model.Ts
+		var err error
 		for {
-			select {
-			case <-ctx.Done():
-				return
-			case err := <-s.errCh:
-				s.reportErr(err)
-				return
-			default:
-			}
 			// `ticker.C` and `ddlCh` may can be triggered at the same time, it
 			// does not matter which one emit first, since TiCDC allow DDL with
 			// CommitTs equal to the last CheckpointTs be emitted later.
 			select {
 			case <-ctx.Done():
 				return
-			case err := <-s.errCh:
-				s.reportErr(err)
-				return
 			case <-ticker.C:
-				s.mu.Lock()
-				checkpointTs := s.mu.checkpointTs
-				if checkpointTs == 0 || checkpointTs <= lastCheckpointTs {
-					s.mu.Unlock()
-					continue
-				}
-				tables := s.mu.currentTables
-				s.mu.Unlock()
-				lastCheckpointTs = checkpointTs
-
-				if err := s.sink.WriteCheckpointTs(ctx,
-					checkpointTs, tables); err != nil {
-					s.reportErr(err)
+				if err = s.writeCheckpointTs(ctx, &lastCheckpointTs); err != nil {
 					return
 				}
-
 			case ddl := <-s.ddlCh:
-				log.Info("begin emit ddl event",
-					zap.String("namespace", s.changefeedID.Namespace),
-					zap.String("changefeed", s.changefeedID.ID),
-					zap.Any("DDL", ddl))
-
-				err := s.sink.WriteDDLEvent(ctx, ddl)
-				failpoint.Inject("InjectChangefeedDDLError", func() {
-					err = cerror.ErrExecDDLFailed.GenWithStackByArgs()
-				})
-				if err == nil {
-					log.Info("Execute DDL succeeded",
-						zap.String("namespace", s.changefeedID.Namespace),
-						zap.String("changefeed", s.changefeedID.ID),
-						zap.Bool("ignored", err != nil),
-						zap.Any("ddl", ddl))
-					// Force emitting checkpoint ts when a ddl event is finished.
-					// Otherwise, a kafka consumer may not execute that ddl event.
-					s.mu.Lock()
-					ddl.Done = true
-					checkpointTs := s.mu.checkpointTs
-					if checkpointTs == 0 || checkpointTs <= lastCheckpointTs {
-						s.mu.Unlock()
-						continue
-					}
-					tables := s.mu.currentTables
-					s.mu.Unlock()
-					lastCheckpointTs = checkpointTs
-					if err := s.sink.WriteCheckpointTs(ctx,
-						checkpointTs, tables); err != nil {
-						s.reportErr(err)
-						return
-					}
-					continue
+				if err = s.writeDDLEvent(ctx, ddl); err != nil {
+					return
 				}
-				// If DDL executing failed, and the error can not be ignored,
-				// throw an error and pause the changefeed
-				log.Error("Execute DDL failed",
-					zap.String("namespace", s.changefeedID.Namespace),
-					zap.String("changefeed", s.changefeedID.ID),
-					zap.Error(err),
-					zap.Any("ddl", ddl))
-				s.reportErr(err)
-				return
+				// Force emitting checkpoint ts when a ddl event is finished.
+				// Otherwise, a kafka consumer may not execute that ddl event.
+				if err = s.writeCheckpointTs(ctx, &lastCheckpointTs); err != nil {
+					return
+				}
 			}
 		}
 	}()
@@ -345,10 +354,6 @@ func (s *ddlSinkImpl) close(ctx context.Context) (err error) {
 		return err
 	}
 	return nil
-}
-
-func (s *ddlSinkImpl) isInitialized() bool {
-	return s.initialized.Load().(bool)
 }
 
 // addSpecialComment translate tidb feature to comment

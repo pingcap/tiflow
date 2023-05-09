@@ -15,15 +15,15 @@ package owner
 
 import (
 	"context"
-	"fmt"
-	"strings"
+	// "fmt"
+	// "strings"
 	"sync"
 	"time"
 
 	"github.com/pingcap/errors"
 	"github.com/pingcap/failpoint"
 	"github.com/pingcap/log"
-	"github.com/pingcap/tidb/errno"
+	// "github.com/pingcap/tidb/errno"
 	"github.com/pingcap/tiflow/cdc/contextutil"
 	"github.com/pingcap/tiflow/cdc/entry"
 	"github.com/pingcap/tiflow/cdc/model"
@@ -236,6 +236,16 @@ func (c *changefeed) handleErr(ctx cdcContext.Context, err error) {
 	log.Error("an error occurred in Owner",
 		zap.String("namespace", c.id.Namespace),
 		zap.String("changefeed", c.id.ID), zap.Error(err))
+
+	switch innerErr := errors.Cause(err).(type) {
+	case model.ComponentError:
+		switch innerErr.Component {
+		case model.OwnerDDLSink:
+			// TODO: report the error but keep owner and processor alive.
+			return
+		}
+	}
+
 	var code string
 	if rfcCode, ok := cerror.RFCCode(err); ok {
 		code = string(rfcCode)
@@ -296,11 +306,7 @@ func (c *changefeed) tick(ctx cdcContext.Context, captures map[model.CaptureID]*
 		return errors.Trace(err)
 	default:
 	}
-	// we need to wait ddl ddlSink to be ready before we do the other things
-	// otherwise, we may cause a nil pointer panic when we try to write to the ddl ddlSink.
-	if !c.ddlSink.isInitialized() {
-		return nil
-	}
+
 	// TODO: pass table checkpointTs when we support concurrent process ddl
 	allPhysicalTables, minTableBarrierTs, barrier, err := c.ddlManager.tick(ctx, checkpointTs, nil)
 	if err != nil {
@@ -586,11 +592,11 @@ LOOP:
 		ctx.Throw(c.ddlPuller.Run(cancelCtx))
 	}()
 
-	c.downstreamObserver, err = c.newDownstreamObserver(
-		ctx, c.state.Info.SinkURI, c.state.Info.Config)
-	if err != nil {
-		return err
-	}
+	// c.downstreamObserver, err = c.newDownstreamObserver(
+	// 	ctx, c.state.Info.SinkURI, c.state.Info.Config)
+	// if err != nil {
+	// 	return err
+	// }
 	c.observerLastTick = atomic.NewTime(time.Time{})
 
 	stdCtx := contextutil.PutChangefeedIDInCtx(cancelCtx, c.id)
@@ -1009,16 +1015,16 @@ func (c *changefeed) tickDownstreamObserver(ctx context.Context) {
 		default:
 		}
 		go func() {
-			cctx, cancel := context.WithTimeout(ctx, time.Second*5)
-			defer cancel()
-			if err := c.downstreamObserver.Tick(cctx); err != nil {
-				// Prometheus is not deployed, it happens in non production env.
-				if strings.Contains(err.Error(),
-					fmt.Sprintf(":%d", errno.ErrPrometheusAddrIsNotSet)) {
-					return
-				}
-				log.Warn("backend observer tick error", zap.Error(err))
-			}
+			// cctx, cancel := context.WithTimeout(ctx, time.Second*5)
+			// defer cancel()
+			// if err := c.downstreamObserver.Tick(cctx); err != nil {
+			// 	// Prometheus is not deployed, it happens in non production env.
+			// 	if strings.Contains(err.Error(),
+			// 		fmt.Sprintf(":%d", errno.ErrPrometheusAddrIsNotSet)) {
+			// 		return
+			// 	}
+			// 	log.Warn("backend observer tick error", zap.Error(err))
+			// }
 		}()
 	}
 }

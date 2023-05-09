@@ -102,9 +102,29 @@ func (w *sinkWorker) handleTasks(ctx context.Context, taskChan <-chan *sinkTask)
 		case <-ctx.Done():
 			return ctx.Err()
 		case task := <-taskChan:
-			err := w.handleTask(ctx, task)
-			if err != nil {
-				return err
+			// TODO: if it's a sink error, don't break the loop.
+			if err := w.handleTask(ctx, task); err != nil {
+				shouldExit := true
+				switch innerErr := errors.Cause(err).(type) {
+				case model.ComponentError:
+					switch innerErr.Component {
+					case model.ProcessorSink:
+						// NOTE: the table sink must have been closed if error happens.
+						ckpt := task.tableSink.getCheckpointTs().ResolvedMark()
+						task.callback(engine.Position{StartTs: ckpt - 1, CommitTs: ckpt})
+						shouldExit = false
+					default:
+					}
+				default:
+				}
+				log.Info("Sink worker handle task fails",
+					zap.String("namespace", w.changefeedID.Namespace),
+					zap.String("changefeed", w.changefeedID.ID),
+					zap.Bool("shouldExit", shouldExit),
+					zap.Error(err))
+				if shouldExit {
+					return err
+				}
 			}
 		}
 	}

@@ -41,8 +41,13 @@ type tableSinkWrapper struct {
 	changefeed model.ChangeFeedID
 	// tableSpan used for logging.
 	span tablepb.Span
+
+	tableSinkCreater func() tablesink.TableSink
+
 	// tableSink is the underlying sink.
-	tableSink tablesink.TableSink
+	tableSink   tablesink.TableSink
+	tableSinkMu sync.Mutex
+
 	// state used to control the lifecycle of the table.
 	state *tablepb.TableState
 	// startTs is the start ts of the table.
@@ -63,8 +68,6 @@ type tableSinkWrapper struct {
 	receivedEventCount atomic.Int64
 	// lastCleanTime indicates the last time the table has been cleaned.
 	lastCleanTime time.Time
-	// checkpointTs is the checkpoint ts of the table sink.
-	checkpointTs atomic.Uint64
 
 	// rangeEventCounts is for clean the table engine.
 	// If rangeEventCounts[i].events is greater than 0, it means there must be
@@ -91,21 +94,20 @@ func newRangeEventCount(pos engine.Position, events int) rangeEventCount {
 func newTableSinkWrapper(
 	changefeed model.ChangeFeedID,
 	span tablepb.Span,
-	tableSink tablesink.TableSink,
+	tableSinkCreater func() tablesink.TableSink,
 	state tablepb.TableState,
 	startTs model.Ts,
 	targetTs model.Ts,
 ) *tableSinkWrapper {
 	res := &tableSinkWrapper{
-		version:    atomic.AddUint64(&version, 1),
-		changefeed: changefeed,
-		span:       span,
-		tableSink:  tableSink,
-		state:      &state,
-		startTs:    startTs,
-		targetTs:   targetTs,
+		version:          atomic.AddUint64(&version, 1),
+		changefeed:       changefeed,
+		span:             span,
+		tableSinkCreater: tableSinkCreater,
+		state:            &state,
+		startTs:          startTs,
+		targetTs:         targetTs,
 	}
-	res.checkpointTs.Store(startTs)
 	res.receivedSorterResolvedTs.Store(startTs)
 	res.barrierTs.Store(startTs)
 	return res
@@ -132,7 +134,6 @@ func (t *tableSinkWrapper) start(startTs model.Ts, replicateTs model.Ts) {
 	// This start ts maybe greater than the initial start ts of the table sink.
 	// Because in two phase scheduling, the table sink may be advanced to a later ts.
 	// And we can just continue to replicate the table sink from the new start ts.
-	t.checkpointTs.Store(startTs)
 	for {
 		old := t.receivedSorterResolvedTs.Load()
 		if startTs <= old || t.receivedSorterResolvedTs.CompareAndSwap(old, startTs) {
@@ -144,6 +145,8 @@ func (t *tableSinkWrapper) start(startTs model.Ts, replicateTs model.Ts) {
 }
 
 func (t *tableSinkWrapper) appendRowChangedEvents(events ...*model.RowChangedEvent) {
+	t.tableSinkMu.Lock()
+	defer t.tableSinkMu.Unlock()
 	t.tableSink.AppendRowChangedEvents(events...)
 }
 
@@ -169,19 +172,29 @@ func (t *tableSinkWrapper) updateReceivedSorterCommitTs(ts model.Ts) {
 }
 
 func (t *tableSinkWrapper) updateResolvedTs(ts model.ResolvedTs) error {
+	t.tableSinkMu.Lock()
+	defer t.tableSinkMu.Unlock()
 	if err := t.tableSink.UpdateResolvedTs(ts); err != nil {
+		err = model.NewComponentError(err, model.ProcessorSink)
+		t.tableSink.Close()
+		t.tableSink = nil
 		return errors.Trace(err)
 	}
 	return nil
 }
 
 func (t *tableSinkWrapper) getCheckpointTs() model.ResolvedTs {
-	currentCheckpointTs := t.checkpointTs.Load()
-	newCheckpointTs := t.tableSink.GetCheckpointTs()
-	if currentCheckpointTs > newCheckpointTs.ResolvedMark() {
-		return model.NewResolvedTs(currentCheckpointTs)
+	t.tableSinkMu.Lock()
+	defer t.tableSinkMu.Unlock()
+	if t.tableSink == nil {
+		return model.NewResolvedTs(t.startTs)
 	}
-	return newCheckpointTs
+
+	checkpointTs := t.tableSink.GetCheckpointTs()
+	if t.startTs > checkpointTs.ResolvedMark() {
+		return model.NewResolvedTs(t.startTs)
+	}
+	return checkpointTs
 }
 
 func (t *tableSinkWrapper) getReceivedSorterResolvedTs() model.Ts {
@@ -218,11 +231,28 @@ func (t *tableSinkWrapper) close() {
 	t.state.Store(tablepb.TableStateStopping)
 	// table stopped state must be set after underlying sink is closed
 	defer t.state.Store(tablepb.TableStateStopped)
-	t.tableSink.Close()
+
+	t.tableSinkMu.Lock()
+	defer t.tableSinkMu.Unlock()
+	if t.tableSink != nil {
+		t.tableSink.Close()
+	}
+
 	log.Info("Sink is closed",
 		zap.Stringer("span", &t.span),
 		zap.String("namespace", t.changefeed.Namespace),
 		zap.String("changefeed", t.changefeed.ID))
+}
+
+// Return true means the internal table sink has been initialized.
+func (t *tableSinkWrapper) initTableSink() bool {
+	t.tableSinkMu.Lock()
+	defer t.tableSinkMu.Unlock()
+	if t.tableSink == nil {
+		t.tableSink = t.tableSinkCreater()
+		return t.tableSink != nil
+	}
+	return true
 }
 
 func (t *tableSinkWrapper) updateRangeEventCounts(eventCount rangeEventCount) {
