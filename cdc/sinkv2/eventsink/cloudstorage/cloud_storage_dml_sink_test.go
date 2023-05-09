@@ -25,8 +25,9 @@ import (
 	timodel "github.com/pingcap/tidb/parser/model"
 	"github.com/pingcap/tidb/parser/mysql"
 	"github.com/pingcap/tidb/parser/types"
+	"github.com/pingcap/tidb/util/rowcodec"
 	"github.com/pingcap/tiflow/cdc/model"
-	"github.com/pingcap/tiflow/cdc/sinkv2/eventsink"
+	dmlsink "github.com/pingcap/tiflow/cdc/sinkv2/eventsink"
 	"github.com/pingcap/tiflow/cdc/sinkv2/tablesink/state"
 	"github.com/pingcap/tiflow/engine/pkg/clock"
 	"github.com/pingcap/tiflow/pkg/config"
@@ -39,16 +40,34 @@ func setClock(s *dmlSink, clock clock.Clock) {
 	}
 }
 
+func getTableFiles(t *testing.T, tableDir string) []string {
+	files, err := os.ReadDir(tableDir)
+	require.Nil(t, err)
+
+	fileNames := []string{}
+	for _, f := range files {
+		fileName := f.Name()
+		if f.IsDir() {
+			metaFiles, err := os.ReadDir(path.Join(tableDir, f.Name()))
+			require.Nil(t, err)
+			require.Len(t, metaFiles, 1)
+			fileName = metaFiles[0].Name()
+		}
+		fileNames = append(fileNames, fileName)
+	}
+	return fileNames
+}
+
 func generateTxnEvents(
 	cnt *uint64,
 	batch int,
 	tableStatus *state.TableSinkState,
-) []*eventsink.TxnCallbackableEvent {
+) []*dmlsink.TxnCallbackableEvent {
 	// assume we have a large transaction and it is splitted into 10 small transactions
-	txns := make([]*eventsink.TxnCallbackableEvent, 0, 10)
+	txns := make([]*dmlsink.TxnCallbackableEvent, 0, 10)
 
 	for i := 0; i < 10; i++ {
-		txn := &eventsink.TxnCallbackableEvent{
+		txn := &dmlsink.TxnCallbackableEvent{
 			Event: &model.SingleTableTxn{
 				CommitTs:         100,
 				Table:            &model.TableName{Schema: "test", Table: "table1"},
@@ -80,6 +99,10 @@ func generateTxnEvents(
 					{Name: "c1", Value: i*batch + j},
 					{Name: "c2", Value: "hello world"},
 				},
+				ColInfos: []rowcodec.ColInfo{
+					{ID: 1, Ft: types.NewFieldType(mysql.TypeLong)},
+					{ID: 2, Ft: types.NewFieldType(mysql.TypeVarchar)},
+				},
 			}
 			txn.Event.Rows = append(txn.Event.Rows, row)
 		}
@@ -99,8 +122,7 @@ func TestCloudStorageWriteEventsWithoutDateSeparator(t *testing.T) {
 	require.Nil(t, err)
 
 	replicaConfig := config.GetDefaultReplicaConfig()
-	replicaConfig.Sink.Protocol = config.ProtocolOpen.String()
-
+	replicaConfig.Sink.Protocol = config.ProtocolCsv.String()
 	errCh := make(chan error, 5)
 	s, err := NewCloudStorageSink(ctx, sinkURI, replicaConfig, errCh)
 	require.Nil(t, err)
@@ -110,26 +132,26 @@ func TestCloudStorageWriteEventsWithoutDateSeparator(t *testing.T) {
 
 	// generating one dml file.
 	txns := generateTxnEvents(&cnt, batch, &tableStatus)
-	tableDir := path.Join(parentDir, "test/table1/33")
 	err = s.WriteEvents(txns...)
 	require.Nil(t, err)
 	time.Sleep(3 * time.Second)
 
-	files, err := os.ReadDir(tableDir)
+	metaDir := path.Join(parentDir, "test/table1/meta")
+	files, err := os.ReadDir(metaDir)
 	require.Nil(t, err)
-	require.Len(t, files, 3)
-	var fileNames []string
-	for _, f := range files {
-		fileNames = append(fileNames, f.Name())
-	}
-	require.ElementsMatch(t, []string{"CDC000001.json", "schema.json", "CDC.index"}, fileNames)
-	content, err := os.ReadFile(path.Join(tableDir, "CDC000001.json"))
+	require.Len(t, files, 1)
+
+	tableDir := path.Join(parentDir, "test/table1/33")
+	fileNames := getTableFiles(t, tableDir)
+	require.Len(t, fileNames, 2)
+	require.ElementsMatch(t, []string{"CDC000001.csv", "CDC.index"}, fileNames)
+	content, err := os.ReadFile(path.Join(tableDir, "CDC000001.csv"))
 	require.Nil(t, err)
 	require.Greater(t, len(content), 0)
 
-	content, err = os.ReadFile(path.Join(tableDir, "CDC.index"))
+	content, err = os.ReadFile(path.Join(tableDir, "meta/CDC.index"))
 	require.Nil(t, err)
-	require.Equal(t, "CDC000001.json\n", string(content))
+	require.Equal(t, "CDC000001.csv\n", string(content))
 	require.Equal(t, uint64(1000), atomic.LoadUint64(&cnt))
 
 	// generating another dml file.
@@ -137,24 +159,18 @@ func TestCloudStorageWriteEventsWithoutDateSeparator(t *testing.T) {
 	require.Nil(t, err)
 	time.Sleep(3 * time.Second)
 
-	files, err = os.ReadDir(tableDir)
-	require.Nil(t, err)
-	require.Len(t, files, 4)
-	fileNames = nil
-	for _, f := range files {
-		fileNames = append(fileNames, f.Name())
-	}
+	fileNames = getTableFiles(t, tableDir)
+	require.Len(t, fileNames, 3)
 	require.ElementsMatch(t, []string{
-		"CDC000001.json", "CDC000002.json",
-		"schema.json", "CDC.index",
+		"CDC000001.csv", "CDC000002.csv", "CDC.index",
 	}, fileNames)
-	content, err = os.ReadFile(path.Join(tableDir, "CDC000002.json"))
+	content, err = os.ReadFile(path.Join(tableDir, "CDC000002.csv"))
 	require.Nil(t, err)
 	require.Greater(t, len(content), 0)
 
-	content, err = os.ReadFile(path.Join(tableDir, "CDC.index"))
+	content, err = os.ReadFile(path.Join(tableDir, "meta/CDC.index"))
 	require.Nil(t, err)
-	require.Equal(t, "CDC000002.json\n", string(content))
+	require.Equal(t, "CDC000002.csv\n", string(content))
 	require.Equal(t, uint64(2000), atomic.LoadUint64(&cnt))
 
 	cancel()
@@ -171,7 +187,7 @@ func TestCloudStorageWriteEventsWithDateSeparator(t *testing.T) {
 	require.Nil(t, err)
 
 	replicaConfig := config.GetDefaultReplicaConfig()
-	replicaConfig.Sink.Protocol = config.ProtocolOpen.String()
+	replicaConfig.Sink.Protocol = config.ProtocolCsv.String()
 	replicaConfig.Sink.DateSeparator = config.DateSeparatorDay.String()
 
 	errCh := make(chan error, 5)
@@ -191,21 +207,16 @@ func TestCloudStorageWriteEventsWithDateSeparator(t *testing.T) {
 	require.Nil(t, err)
 	time.Sleep(3 * time.Second)
 
-	files, err := os.ReadDir(tableDir)
-	require.Nil(t, err)
-	require.Len(t, files, 2)
-	var fileNames []string
-	for _, f := range files {
-		fileNames = append(fileNames, f.Name())
-	}
-	require.ElementsMatch(t, []string{"CDC000001.json", "CDC.index"}, fileNames)
-	content, err := os.ReadFile(path.Join(tableDir, "CDC000001.json"))
+	fileNames := getTableFiles(t, tableDir)
+	require.Len(t, fileNames, 2)
+	require.ElementsMatch(t, []string{"CDC000001.csv", "CDC.index"}, fileNames)
+	content, err := os.ReadFile(path.Join(tableDir, "CDC000001.csv"))
 	require.Nil(t, err)
 	require.Greater(t, len(content), 0)
 
-	content, err = os.ReadFile(path.Join(tableDir, "CDC.index"))
+	content, err = os.ReadFile(path.Join(tableDir, "meta/CDC.index"))
 	require.Nil(t, err)
-	require.Equal(t, "CDC000001.json\n", string(content))
+	require.Equal(t, "CDC000001.csv\n", string(content))
 	require.Equal(t, uint64(1000), atomic.LoadUint64(&cnt))
 
 	// test date (day) is NOT changed.
@@ -216,21 +227,16 @@ func TestCloudStorageWriteEventsWithDateSeparator(t *testing.T) {
 	require.Nil(t, err)
 	time.Sleep(3 * time.Second)
 
-	files, err = os.ReadDir(tableDir)
-	require.Nil(t, err)
-	require.Len(t, files, 3)
-	fileNames = nil
-	for _, f := range files {
-		fileNames = append(fileNames, f.Name())
-	}
-	require.ElementsMatch(t, []string{"CDC000001.json", "CDC000002.json", "CDC.index"}, fileNames)
-	content, err = os.ReadFile(path.Join(tableDir, "CDC000002.json"))
+	fileNames = getTableFiles(t, tableDir)
+	require.Len(t, fileNames, 3)
+	require.ElementsMatch(t, []string{"CDC000001.csv", "CDC000002.csv", "CDC.index"}, fileNames)
+	content, err = os.ReadFile(path.Join(tableDir, "CDC000002.csv"))
 	require.Nil(t, err)
 	require.Greater(t, len(content), 0)
 
-	content, err = os.ReadFile(path.Join(tableDir, "CDC.index"))
+	content, err = os.ReadFile(path.Join(tableDir, "meta/CDC.index"))
 	require.Nil(t, err)
-	require.Equal(t, "CDC000002.json\n", string(content))
+	require.Equal(t, "CDC000002.csv\n", string(content))
 	require.Equal(t, uint64(2000), atomic.LoadUint64(&cnt))
 
 	// test date (day) is changed.
@@ -242,21 +248,16 @@ func TestCloudStorageWriteEventsWithDateSeparator(t *testing.T) {
 	time.Sleep(3 * time.Second)
 
 	tableDir = path.Join(parentDir, "test/table1/33/2023-03-09")
-	files, err = os.ReadDir(tableDir)
-	require.Nil(t, err)
-	require.Len(t, files, 2)
-	fileNames = nil
-	for _, f := range files {
-		fileNames = append(fileNames, f.Name())
-	}
-	require.ElementsMatch(t, []string{"CDC000001.json", "CDC.index"}, fileNames)
-	content, err = os.ReadFile(path.Join(tableDir, "CDC000001.json"))
+	fileNames = getTableFiles(t, tableDir)
+	require.Len(t, fileNames, 2)
+	require.ElementsMatch(t, []string{"CDC000001.csv", "CDC.index"}, fileNames)
+	content, err = os.ReadFile(path.Join(tableDir, "CDC000001.csv"))
 	require.Nil(t, err)
 	require.Greater(t, len(content), 0)
 
-	content, err = os.ReadFile(path.Join(tableDir, "CDC.index"))
+	content, err = os.ReadFile(path.Join(tableDir, "meta/CDC.index"))
 	require.Nil(t, err)
-	require.Equal(t, "CDC000001.json\n", string(content))
+	require.Equal(t, "CDC000001.csv\n", string(content))
 	require.Equal(t, uint64(3000), atomic.LoadUint64(&cnt))
 	cancel()
 	s.Close()
@@ -274,21 +275,16 @@ func TestCloudStorageWriteEventsWithDateSeparator(t *testing.T) {
 	require.Nil(t, err)
 	time.Sleep(3 * time.Second)
 
-	files, err = os.ReadDir(tableDir)
-	require.Nil(t, err)
-	require.Len(t, files, 3)
-	fileNames = nil
-	for _, f := range files {
-		fileNames = append(fileNames, f.Name())
-	}
-	require.ElementsMatch(t, []string{"CDC000001.json", "CDC000002.json", "CDC.index"}, fileNames)
-	content, err = os.ReadFile(path.Join(tableDir, "CDC000002.json"))
+	fileNames = getTableFiles(t, tableDir)
+	require.Len(t, fileNames, 3)
+	require.ElementsMatch(t, []string{"CDC000001.csv", "CDC000002.csv", "CDC.index"}, fileNames)
+	content, err = os.ReadFile(path.Join(tableDir, "CDC000002.csv"))
 	require.Nil(t, err)
 	require.Greater(t, len(content), 0)
 
-	content, err = os.ReadFile(path.Join(tableDir, "CDC.index"))
+	content, err = os.ReadFile(path.Join(tableDir, "meta/CDC.index"))
 	require.Nil(t, err)
-	require.Equal(t, "CDC000002.json\n", string(content))
+	require.Equal(t, "CDC000002.csv\n", string(content))
 	require.Equal(t, uint64(1000), atomic.LoadUint64(&cnt))
 
 	cancel()
