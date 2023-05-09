@@ -31,6 +31,11 @@ error = '''
 encode to binray from native
 '''
 
+["CDC:ErrAvroInvalidMessage"]
+error = '''
+avro invalid message format
+'''
+
 ["CDC:ErrAvroMarshalFailed"]
 error = '''
 json marshal failed
