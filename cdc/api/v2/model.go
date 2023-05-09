@@ -797,9 +797,10 @@ type ChangeFeedInfo struct {
 // RunningError represents some running error from cdc components,
 // such as processor.
 type RunningError struct {
-	Addr    string `json:"addr"`
-	Code    string `json:"code"`
-	Message string `json:"message"`
+	Time    *time.Time `json:"time,omitempty"`
+	Addr    string     `json:"addr"`
+	Code    string     `json:"code"`
+	Message string     `json:"message"`
 }
 
 // toCredential generates a security.Credential from a PDConfig
@@ -940,4 +941,12 @@ type CloudStorageConfig struct {
 	WorkerCount   *int    `json:"worker_count,omitempty"`
 	FlushInterval *string `json:"flush_interval,omitempty"`
 	FileSize      *int    `json:"file_size,omitempty"`
+}
+
+// ChangefeedStatus holds common information of a changefeed in cdc
+type ChangefeedStatus struct {
+	State        string        `json:"state,omitempty"`
+	ResolvedTs   uint64        `json:"resolved_ts"`
+	CheckpointTs uint64        `json:"checkpoint_ts"`
+	LastError    *RunningError `json:"last_error,omitempty"`
 }
