@@ -56,8 +56,8 @@ var defaultMessageConfig = &MessagesConfig{
 	ServerAckInterval:            TomlDuration(time.Millisecond * 100),
 	ServerWorkerPoolSize:         4,
 	MaxRecvMsgSize:               defaultMaxRecvMsgSize,
-	KeepAliveTime:                TomlDuration(time.Second * 3),
-	KeepAliveTimeout:             TomlDuration(time.Second * 2),
+	KeepAliveTime:                TomlDuration(time.Second * 30),
+	KeepAliveTimeout:             TomlDuration(time.Second * 10),
 }
 
 const (

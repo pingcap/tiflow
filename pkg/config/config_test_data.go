@@ -136,8 +136,8 @@ const (
       "server-ack-interval": 100000000,
       "server-worker-pool-size": 4,
       "max-recv-msg-size": 268435456,
-      "keep-alive-time": 3000000000,
-      "keep-alive-timeout": 2000000000
+      "keep-alive-time": 30000000000,
+      "keep-alive-timeout": 10000000000
     },
     "scheduler": {
       "heartbeat-tick": 2,
