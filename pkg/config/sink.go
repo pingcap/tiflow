@@ -260,7 +260,7 @@ type MySQLConfig struct {
 
 // CloudStorageConfig represents a cloud storage sink configuration
 type CloudStorageConfig struct {
-	WorkerCount   *int    `toml:"worker-count" json:"worker-coun,omitempty"`
+	WorkerCount   *int    `toml:"worker-count" json:"worker-count,omitempty"`
 	FlushInterval *string `toml:"flush-interval" json:"flush-interval,omitempty"`
 	FileSize      *int    `toml:"file-size" json:"file-size,omitempty"`
 }

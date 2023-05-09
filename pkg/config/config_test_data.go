@@ -252,7 +252,7 @@ const (
       "enable-cache-prepared-statement": true
     },
     "cloud-storage-config": {
-      "worker-coun": 8,
+      "worker-count": 8,
       "flush-interval": "1m",
       "file-size": 1024
     }
@@ -377,7 +377,7 @@ const (
       "enable-cache-prepared-statement": true
     },
     "cloud-storage-config": {
-      "worker-coun": 8,˚
+      "worker-count": 8,
       "flush-interval": "1m",
       "file-size": 1024
     }
