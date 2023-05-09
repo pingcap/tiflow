@@ -1643,6 +1643,9 @@ var doc = `{
                 },
                 "message": {
                     "type": "string"
+                },
+                "time": {
+                    "type": "string"
                 }
             }
         },
@@ -2160,6 +2163,9 @@ var doc = `{
                     "type": "string"
                 },
                 "message": {
+                    "type": "string"
+                },
+                "time": {
                     "type": "string"
                 }
             }
