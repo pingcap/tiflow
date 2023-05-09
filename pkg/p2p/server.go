@@ -292,7 +292,7 @@ func (m *MessageServer) run(ctx context.Context) error {
 					return errors.Trace(err)
 				}
 			case taskOnDeregisterPeer:
-				log.Debug("taskOnDeregisterPeer", zap.String("peerID", task.peerID))
+				log.Info("taskOnDeregisterPeer", zap.String("peerID", task.peerID))
 				m.deregisterPeerByID(ctx, task.peerID)
 			case taskDebugDelay:
 				log.Info("taskDebugDelay started")
