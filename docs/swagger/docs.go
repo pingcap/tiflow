@@ -1330,7 +1330,7 @@ var doc = `{
                 "flush-interval": {
                     "type": "string"
                 },
-                "worker-coun": {
+                "worker-count": {
                     "type": "integer"
                 }
             }

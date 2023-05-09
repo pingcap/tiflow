@@ -20,7 +20,7 @@ definitions:
         type: integer
       flush-interval:
         type: string
-      worker-coun:
+      worker-count:
         type: integer
     type: object
   config.CodecConfig:
