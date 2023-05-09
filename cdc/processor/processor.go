@@ -526,6 +526,7 @@ func (p *processor) handleErr(err error) error {
 				position = &model.TaskPosition{}
 			}
 			position.Error = &model.RunningError{
+				Time:    time.Now(),
 				Addr:    p.captureInfo.AdvertiseAddr,
 				Code:    code,
 				Message: err.Error(),
