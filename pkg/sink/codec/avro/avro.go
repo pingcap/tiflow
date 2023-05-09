@@ -44,8 +44,8 @@ type BatchEncoder struct {
 	*Options
 
 	namespace          string
-	keySchemaManager   *schemaManager
-	valueSchemaManager *schemaManager
+	keySchemaManager   *SchemaManager
+	valueSchemaManager *SchemaManager
 	result             []*common.Message
 }
 
@@ -85,6 +85,7 @@ func (r *avroEncodeInput) Swap(i, j int) {
 type avroEncodeResult struct {
 	data []byte
 	// schemaID is encoded into the avro message, consumer should use this to fetch the schema.
+	// it's the global schema id for all schema in the registry.
 	schemaID int
 }
 
@@ -171,13 +172,13 @@ func (a *BatchEncoder) EncodeCheckpointEvent(ts uint64) (*common.Message, error)
 func (a *BatchEncoder) EncodeDDLEvent(e *model.DDLEvent) (*common.Message, error) {
 	if a.EnableTiDBExtension && a.EnableWatermarkEvent {
 		buf := new(bytes.Buffer)
-		data := []interface{}{ddlByte, e.Query}
-		for _, v := range data {
-			err := binary.Write(buf, binary.BigEndian, v)
-			if err != nil {
-				return nil, cerror.WrapError(cerror.ErrAvroToEnvelopeError, err)
-			}
+		_ = binary.Write(buf, binary.BigEndian, ddlByte)
+
+		bytes, err := json.Marshal(e)
+		if err != nil {
+			return nil, cerror.WrapError(cerror.ErrAvroToEnvelopeError, err)
 		}
+		buf.Write(bytes)
 
 		value := buf.Bytes()
 		return common.NewDDLMsg(config.ProtocolAvro, nil, value, e), nil
@@ -211,7 +212,7 @@ func (a *BatchEncoder) avroEncode(
 		colInfos               []rowcodec.ColInfo
 		enableTiDBExtension    bool
 		enableRowLevelChecksum bool
-		schemaManager          *schemaManager
+		schemaManager          *SchemaManager
 		operation              string
 	)
 	if isKey {
@@ -361,6 +362,61 @@ func getTiDBTypeFromColumn(col *model.Column) string {
 		return "BLOB"
 	}
 	return tt
+}
+
+func mysqlAndFlagTypeFromTiDBType(tp string) (byte, model.ColumnFlagType) {
+	var (
+		result byte
+		flag   model.ColumnFlagType
+	)
+	switch tp {
+	case "INT":
+		// maybe mysql.TypeTiny / mysql.TypeShort / mysql.TypeInt24 / mysql.TypeLong
+		// we don't know the exact type, so we use mysql.TypeLong
+		result = mysql.TypeLong
+	case "INT UNSIGNED":
+		flag.SetIsUnsigned()
+		result = mysql.TypeLong
+	case "BIGINT":
+		result = mysql.TypeLonglong
+	case "BIGINT UNSIGNED":
+		flag.SetIsUnsigned()
+		result = mysql.TypeLonglong
+	case "FLOAT":
+		result = mysql.TypeFloat
+	case "DOUBLE":
+		result = mysql.TypeDouble
+	case "BIT":
+		result = mysql.TypeBit
+	case "DECIMAL":
+		result = mysql.TypeNewDecimal
+	case "TEXT":
+		result = mysql.TypeVarchar
+	case "BLOB":
+		// maybe mysql.TypeTinyBlob / mysql.TypeMediumBlob / mysql.TypeBlob / mysql.TypeLongBlob
+		// we don't know the exact type, so we use mysql.TypeLongBlob
+		flag.SetIsBinary()
+		result = mysql.TypeLongBlob
+	case "ENUM":
+		result = mysql.TypeEnum
+	case "SET":
+		result = mysql.TypeSet
+	case "JSON":
+		result = mysql.TypeJSON
+	case "DATE":
+		result = mysql.TypeDate
+	case "DATETIME":
+		result = mysql.TypeDatetime
+	case "TIMESTAMP":
+		result = mysql.TypeTimestamp
+	case "TIME":
+		result = mysql.TypeDuration
+	case "YEAR":
+		result = mysql.TypeYear
+	default:
+		log.Panic("this should not happen, unknown TiDB type", zap.String("type", tp))
+	}
+	return result, flag
 }
 
 const (
@@ -919,8 +975,8 @@ func (r *avroEncodeResult) toEnvelope() ([]byte, error) {
 type batchEncoderBuilder struct {
 	namespace          string
 	config             *common.Config
-	keySchemaManager   *schemaManager
-	valueSchemaManager *schemaManager
+	keySchemaManager   *SchemaManager
+	valueSchemaManager *SchemaManager
 }
 
 const (
@@ -932,22 +988,8 @@ const (
 func NewBatchEncoderBuilder(ctx context.Context,
 	config *common.Config,
 ) (codec.RowEventEncoderBuilder, error) {
-	keySchemaManager, err := NewAvroSchemaManager(
-		ctx,
-		nil,
-		config.AvroSchemaRegistry,
-		keySchemaSuffix,
-	)
-	if err != nil {
-		return nil, errors.Trace(err)
-	}
-
-	valueSchemaManager, err := NewAvroSchemaManager(
-		ctx,
-		nil,
-		config.AvroSchemaRegistry,
-		valueSchemaSuffix,
-	)
+	keySchemaManager, valueSchemaManager, err := NewKeyAndValueSchemaManagers(
+		ctx, config.AvroSchemaRegistry, nil)
 	if err != nil {
 		return nil, errors.Trace(err)
 	}
@@ -975,6 +1017,5 @@ func (b *batchEncoderBuilder) Build() codec.RowEventEncoder {
 			BigintUnsignedHandlingMode: b.config.AvroBigintUnsignedHandlingMode,
 		},
 	}
-
 	return encoder
 }
