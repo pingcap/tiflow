@@ -147,10 +147,11 @@ func (s *server) prepare(ctx context.Context) error {
 	// then cause the new owner cannot be elected immediately after the old owner offline.
 	// see https://github.com/etcd-io/etcd/blob/525d53bd41/client/v3/concurrency/election.go#L98
 	etcdCli, err := clientv3.New(clientv3.Config{
-		Endpoints:   s.pdEndpoints,
-		TLS:         tlsConfig,
-		LogConfig:   &logConfig,
-		DialTimeout: 5 * time.Second,
+		Endpoints:        s.pdEndpoints,
+		TLS:              tlsConfig,
+		LogConfig:        &logConfig,
+		DialTimeout:      5 * time.Second,
+		AutoSyncInterval: 30 * time.Second,
 		DialOptions: []grpc.DialOption{
 			grpcTLSOption,
 			grpc.WithBlock(),
