@@ -1564,6 +1564,9 @@ var doc = `{
                 "encoder-concurrency": {
                     "type": "integer"
                 },
+                "file-index-digit": {
+                    "type": "integer"
+                },
                 "kafka-config": {
                     "$ref": "#/definitions/config.KafkaConfig"
                 },
@@ -2579,6 +2582,9 @@ var doc = `{
                     "type": "boolean"
                 },
                 "encoder_concurrency": {
+                    "type": "integer"
+                },
+                "file_index_width": {
                     "type": "integer"
                 },
                 "kafka_config": {
