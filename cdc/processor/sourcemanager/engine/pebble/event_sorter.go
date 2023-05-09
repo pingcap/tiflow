@@ -149,10 +149,6 @@ func (s *EventSorter) RemoveTable(span tablepb.Span) {
 func (s *EventSorter) Add(span tablepb.Span, events ...*model.PolymorphicEvent) {
 	s.mu.RLock()
 	state, exists := s.tables.Get(span)
-	if s.isClosed {
-		s.mu.RUnlock()
-		return
-	}
 	s.mu.RUnlock()
 
 	if !exists {
@@ -324,17 +320,21 @@ func (s *EventSorter) ReceivedEvents() int64 {
 // Close implements engine.SortEngine.
 func (s *EventSorter) Close() error {
 	s.mu.Lock()
-	defer s.mu.Unlock()
 	if s.isClosed {
+		s.mu.Unlock()
 		return nil
 	}
 	s.isClosed = true
+	s.mu.Unlock()
 
 	close(s.closed)
 	s.wg.Wait()
 	for _, ch := range s.channs {
 		ch.CloseAndDrain()
 	}
+
+	s.mu.RLock()
+	defer s.mu.RUnlock()
 
 	var err error
 	s.tables.Range(func(span tablepb.Span, state *tableState) bool {
