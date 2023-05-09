@@ -54,6 +54,12 @@ type Options struct {
 	EnableTiDBExtension bool
 	EnableRowChecksum   bool
 
+	// EnableWatermarkEvent set to true, avro encode DDL and checkpoint event
+	// and send to the downstream kafka, they cannot be consumed by the confluent official consumer
+	// and would cause error, so this is only used for ticdc internal testing purpose, should not be
+	// exposed to the outside users.
+	EnableWatermarkEvent bool
+
 	DecimalHandlingMode        string
 	BigintUnsignedHandlingMode string
 }
@@ -141,13 +147,42 @@ func (a *BatchEncoder) AppendRowChangedEvent(
 	return nil
 }
 
-// EncodeCheckpointEvent is no-op for now
+// EncodeCheckpointEvent only encode checkpoint event if the watermark event is enabled
+// it's only used for the testing purpose.
 func (a *BatchEncoder) EncodeCheckpointEvent(ts uint64) (*common.Message, error) {
+	if a.EnableTiDBExtension && a.EnableWatermarkEvent {
+		buf := new(bytes.Buffer)
+		data := []interface{}{checkpointByte, ts}
+		for _, v := range data {
+			err := binary.Write(buf, binary.BigEndian, v)
+			if err != nil {
+				return nil, cerror.WrapError(cerror.ErrAvroToEnvelopeError, err)
+			}
+		}
+
+		value := buf.Bytes()
+		return common.NewResolvedMsg(config.ProtocolAvro, nil, value, ts), nil
+	}
 	return nil, nil
 }
 
-// EncodeDDLEvent is no-op now
+// EncodeDDLEvent only encode DDL event if the watermark event is enabled
+// it's only used for the testing purpose.
 func (a *BatchEncoder) EncodeDDLEvent(e *model.DDLEvent) (*common.Message, error) {
+	if a.EnableTiDBExtension && a.EnableWatermarkEvent {
+		buf := new(bytes.Buffer)
+		data := []interface{}{ddlByte, e.Query}
+		for _, v := range data {
+			err := binary.Write(buf, binary.BigEndian, v)
+			if err != nil {
+				return nil, cerror.WrapError(cerror.ErrAvroToEnvelopeError, err)
+			}
+		}
+
+		value := buf.Bytes()
+		return common.NewDDLMsg(config.ProtocolAvro, nil, value, e), nil
+	}
+
 	return nil, nil
 }
 
@@ -855,7 +890,16 @@ func columnToAvroData(
 	}
 }
 
-const magicByte = uint8(0)
+const (
+	// confluent avro wire format, the first byte is always 0
+	// https://docs.confluent.io/platform/current/schema-registry/fundamentals/serdes-develop/index.html#wire-format
+	magicByte = uint8(0)
+
+	// avro does not send ddl and checkpoint message, the following 2 field is used to distinguish
+	// TiCDC DDL event and checkpoint event, only used for testing purpose, not for production
+	ddlByte        = uint8(1)
+	checkpointByte = uint8(2)
+)
 
 // confluent avro wire format, confluent avro is not same as apache avro
 // https://rmoff.net/2020/07/03/why-json-isnt-the-same-as-json-schema-in-kafka-connect-converters \
@@ -926,6 +970,7 @@ func (b *batchEncoderBuilder) Build() codec.RowEventEncoder {
 		Options: &Options{
 			EnableTiDBExtension:        b.config.EnableTiDBExtension,
 			EnableRowChecksum:          b.config.EnableRowChecksum,
+			EnableWatermarkEvent:       b.config.AvroEnableWatermark,
 			DecimalHandlingMode:        b.config.AvroDecimalHandlingMode,
 			BigintUnsignedHandlingMode: b.config.AvroBigintUnsignedHandlingMode,
 		},
