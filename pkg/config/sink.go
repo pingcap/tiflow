@@ -113,12 +113,17 @@ type SinkConfig struct {
 	// EnableKafkaSinkV2 enabled then the kafka-go sink will be used.
 	EnableKafkaSinkV2 bool `toml:"enable-kafka-sink-v2" json:"enable-kafka-sink-v2"`
 
-	OnlyOutputUpdatedColumns bool `toml:"only-output-updated-columns" json:"only-output-updated-columns"`
+	OnlyOutputUpdatedColumns *bool `toml:"only-output-updated-columns" json:"only-output-updated-columns"`
 
 	// TiDBSourceID is the source ID of the upstream TiDB,
 	// which is used to set the `tidb_cdc_write_source` session variable.
 	// Note: This field is only used internally and only used in the MySQL sink.
 	TiDBSourceID uint64 `toml:"-" json:"-"`
+
+	SafeMode           *bool               `toml:"safe-mode" json:"safe-mode,omitempty"`
+	KafkaConfig        *KafkaConfig        `toml:"kafka-config" json:"kafka-config,omitempty"`
+	MySQLConfig        *MySQLConfig        `toml:"mysql-config" json:"mysql-config,omitempty"`
+	CloudStorageConfig *CloudStorageConfig `toml:"cloud-storage-config" json:"cloud-storage-config,omitempty"`
 }
 
 // CSVConfig defines a series of configuration items for csv codec.
@@ -192,6 +197,72 @@ type DispatchRule struct {
 type ColumnSelector struct {
 	Matcher []string `toml:"matcher" json:"matcher"`
 	Columns []string `toml:"columns" json:"columns"`
+}
+
+// CodecConfig represents a MQ codec configuration
+type CodecConfig struct {
+	EnableTiDBExtension            *bool   `toml:"enable-tidb-extension" json:"enable-tidb-extension,omitempty"`
+	MaxBatchSize                   *int    `toml:"max-batch-size" json:"max-batch-size,omitempty"`
+	AvroEnableWatermark            *bool   `toml:"avro-enable-watermark" json:"avro-enable-watermark"`
+	AvroDecimalHandlingMode        *string `toml:"avro-decimal-handling-mode" json:"avro-decimal-handling-mode,omitempty"`
+	AvroBigintUnsignedHandlingMode *string `toml:"avro-bigint-unsigned-handling-mode" json:"avro-bigint-unsigned-handling-mode,omitempty"`
+}
+
+// KafkaConfig represents a kafka sink configuration
+type KafkaConfig struct {
+	PartitionNum                 *int32       `toml:"partition-num" json:"partition-num,omitempty"`
+	ReplicationFactor            *int16       `toml:"replication-factor" json:"replication-factor,omitempty"`
+	KafkaVersion                 *string      `toml:"kafka-version" json:"kafka-version,omitempty"`
+	MaxMessageBytes              *int         `toml:"max-message-bytes" json:"max-message-bytes,omitempty"`
+	Compression                  *string      `toml:"compression" json:"compression,omitempty"`
+	KafkaClientID                *string      `toml:"kafka-client-id" json:"kafka-client-id,omitempty"`
+	AutoCreateTopic              *bool        `toml:"auto-create-topic" json:"auto-create-topic,omitempty"`
+	DialTimeout                  *string      `toml:"dial-timeout" json:"dial-timeout,omitempty"`
+	WriteTimeout                 *string      `toml:"write-timeout" json:"write-timeout,omitempty"`
+	ReadTimeout                  *string      `toml:"read-timeout" json:"read-timeout,omitempty"`
+	RequiredAcks                 *int         `toml:"required-acks" json:"required-acks,omitempty"`
+	SASLUser                     *string      `toml:"sasl-user" json:"sasl-user,omitempty"`
+	SASLPassword                 *string      `toml:"sasl-password" json:"sasl-password,omitempty"`
+	SASLMechanism                *string      `toml:"sasl-mechanism" json:"sasl-mechanism,omitempty"`
+	SASLGssAPIAuthType           *string      `toml:"sasl-gssapi-auth-type" json:"sasl-gssapi-auth-type,omitempty"`
+	SASLGssAPIKeytabPath         *string      `toml:"sasl-gssapi-keytab-path" json:"sasl-gssapi-keytab-path,omitempty"`
+	SASLGssAPIKerberosConfigPath *string      `toml:"sasl-gssapi-kerberos-config-path" json:"sasl-gssapi-kerberos-config-path,omitempty"`
+	SASLGssAPIServiceName        *string      `toml:"sasl-gssapi-service-name" json:"sasl-gssapi-service-name,omitempty"`
+	SASLGssAPIUser               *string      `toml:"sasl-gssapi-user" json:"sasl-gssapi-user,omitempty"`
+	SASLGssAPIPassword           *string      `toml:"sasl-gssapi-password" json:"sasl-gssapi-password,omitempty"`
+	SASLGssAPIRealm              *string      `toml:"sasl-gssapi-realm" json:"sasl-gssapi-realm,omitempty"`
+	SASLGssAPIDisablePafxfast    *bool        `toml:"sasl-gssapi-disable-pafxfast" json:"sasl-gssapi-disable-pafxfast,omitempty"`
+	EnableTLS                    *bool        `toml:"enable-tls" json:"enable-tls,omitempty"`
+	CA                           *string      `toml:"ca" json:"ca,omitempty"`
+	Cert                         *string      `toml:"cert" json:"cert,omitempty"`
+	Key                          *string      `toml:"key" json:"key,omitempty"`
+	CodecConfig                  *CodecConfig `toml:"codec-config" json:"codec-config,omitempty"`
+}
+
+// MySQLConfig represents a MySQL sink configuration
+type MySQLConfig struct {
+	WorkerCount                  *int    `toml:"worker-count" json:"worker-count,omitempty"`
+	MaxTxnRow                    *int    `toml:"max-txn-row" json:"max-txn-row,omitempty"`
+	MaxMultiUpdateRowSize        *int    `toml:"max-multi-update-row-size" json:"max-multi-update-row-size,omitempty"`
+	MaxMultiUpdateRowCount       *int    `toml:"max-multi-update-row" json:"max-multi-update-row,omitempty"`
+	TiDBTxnMode                  *string `toml:"tidb-txn-mode" json:"tidb-txn-mode,omitempty"`
+	SSLCa                        *string `toml:"ssl-ca" json:"ssl-ca,omitempty"`
+	SSLCert                      *string `toml:"ssl-cert" json:"ssl-cert,omitempty"`
+	SSLKey                       *string `toml:"ssl-key" json:"ssl-key,omitempty"`
+	TimeZone                     *string `toml:"time-zone" json:"time-zone,omitempty"`
+	WriteTimeout                 *string `toml:"write-timeout" json:"write-timeout,omitempty"`
+	ReadTimeout                  *string `toml:"read-timeout" json:"read-timeout,omitempty"`
+	Timeout                      *string `toml:"timeout" json:"timeout,omitempty"`
+	EnableBatchDML               *bool   `toml:"enable-batch-dml" json:"enable-batch-dml,omitempty"`
+	EnableMultiStatement         *bool   `toml:"enable-multi-statement" json:"enable-multi-statement,omitempty"`
+	EnableCachePreparedStatement *bool   `toml:"enable-cache-prepared-statement" json:"enable-cache-prepared-statement,omitempty"`
+}
+
+// CloudStorageConfig represents a cloud storage sink configuration
+type CloudStorageConfig struct {
+	WorkerCount   *int    `toml:"worker-count" json:"worker-count,omitempty"`
+	FlushInterval *string `toml:"flush-interval" json:"flush-interval,omitempty"`
+	FileSize      *int    `toml:"file-size" json:"file-size,omitempty"`
 }
 
 func (s *SinkConfig) validateAndAdjust(sinkURI *url.URL, enableOldValue bool) error {

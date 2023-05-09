@@ -14,10 +14,12 @@
 package kafka
 
 import (
+	"net/http"
 	"net/url"
 	"testing"
 
 	"github.com/Shopify/sarama"
+	"github.com/gin-gonic/gin/binding"
 	"github.com/pingcap/errors"
 	"github.com/pingcap/tiflow/pkg/security"
 	"github.com/stretchr/testify/require"
@@ -141,10 +143,14 @@ func TestApplySASL(t *testing.T) {
 			options := NewOptions()
 			sinkURI, err := url.Parse(test.URI)
 			require.NoError(t, err)
+			req := &http.Request{URL: sinkURI}
+			urlParameter := &urlConfig{}
+			err = binding.Query.Bind(req, urlParameter)
+			require.NoError(t, err)
 			if test.exceptErr == "" {
-				require.Nil(t, options.applySASL(sinkURI.Query()))
+				require.Nil(t, options.applySASL(urlParameter))
 			} else {
-				require.Regexp(t, test.exceptErr, options.applySASL(sinkURI.Query()).Error())
+				require.Regexp(t, test.exceptErr, options.applySASL(urlParameter).Error())
 			}
 		})
 	}
@@ -207,10 +213,14 @@ func TestApplyTLS(t *testing.T) {
 			options := NewOptions()
 			sinkURI, err := url.Parse(test.URI)
 			require.NoError(t, err)
+			req := &http.Request{URL: sinkURI}
+			urlParameter := &urlConfig{}
+			err = binding.Query.Bind(req, urlParameter)
+			require.NoError(t, err)
 			if test.exceptErr == "" {
-				require.Nil(t, options.applyTLS(sinkURI.Query()))
+				require.Nil(t, options.applyTLS(urlParameter))
 			} else {
-				require.Regexp(t, test.exceptErr, options.applyTLS(sinkURI.Query()).Error())
+				require.Regexp(t, test.exceptErr, options.applyTLS(urlParameter).Error())
 			}
 			require.Equal(t, test.tlsEnabled, options.EnableTLS)
 		})
