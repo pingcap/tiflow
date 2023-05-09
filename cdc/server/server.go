@@ -384,8 +384,8 @@ func (s *server) Close() {
 	if s.capture != nil {
 		s.capture.AsyncClose()
 	}
-	// Close sort engine factory after capture to avoid puller send data to sort engine
-	// after sort engine was closed.
+	// Close the sort engine factory after capture closed to avoid
+	// puller send data to closed sort engine.
 	s.closeSortEngineFactory()
 
 	if s.statusServer != nil {
