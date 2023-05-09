@@ -14,9 +14,11 @@
 package common
 
 import (
+	"net/http"
 	"net/url"
-	"strconv"
 
+	"github.com/gin-gonic/gin/binding"
+	"github.com/imdario/mergo"
 	"github.com/pingcap/errors"
 	"github.com/pingcap/log"
 	"github.com/pingcap/tiflow/pkg/config"
@@ -78,16 +80,10 @@ func NewConfig(protocol config.Protocol) *Config {
 
 const (
 	codecOPTEnableTiDBExtension            = "enable-tidb-extension"
-	codecOPTMaxBatchSize                   = "max-batch-size"
-	codecOPTMaxMessageBytes                = "max-message-bytes"
 	codecOPTAvroDecimalHandlingMode        = "avro-decimal-handling-mode"
 	codecOPTAvroBigintUnsignedHandlingMode = "avro-bigint-unsigned-handling-mode"
 	codecOPTAvroSchemaRegistry             = "schema-registry"
 
-	// codecOPTAvroEnableWatermark is the option for enabling watermark in avro protocol
-	// only used for internal testing, do not set this in the production environment since the
-	// confluent official consumer cannot handle watermark.
-	codecOPTAvroEnableWatermark      = "avro-enable-watermark"
 	codecOPTOnlyOutputUpdatedColumns = "only-output-updated-columns"
 )
 
@@ -102,53 +98,62 @@ const (
 	BigintUnsignedHandlingModeLong = "long"
 )
 
+type urlConfig struct {
+	EnableTiDBExtension            *bool   `form:"enable-tidb-extension"`
+	MaxBatchSize                   *int    `form:"max-batch-size"`
+	MaxMessageBytes                *int    `form:"max-message-bytes"`
+	AvroDecimalHandlingMode        *string `form:"avro-decimal-handling-mode"`
+	AvroBigintUnsignedHandlingMode *string `form:"avro-bigint-unsigned-handling-mode"`
+
+	// AvroEnableWatermark is the option for enabling watermark in avro protocol
+	// only used for internal testing, do not set this in the production environment since the
+	// confluent official consumer cannot handle watermark.
+	AvroEnableWatermark *bool `form:"avro-enable-watermark"`
+
+	AvroSchemaRegistry       string `form:"schema-registry"`
+	OnlyOutputUpdatedColumns *bool  `form:"only-output-updated-columns"`
+}
+
 // Apply fill the Config
 func (c *Config) Apply(sinkURI *url.URL, replicaConfig *config.ReplicaConfig) error {
-	params := sinkURI.Query()
-	if s := params.Get(codecOPTEnableTiDBExtension); s != "" {
-		b, err := strconv.ParseBool(s)
-		if err != nil {
-			return err
-		}
-		c.EnableTiDBExtension = b
+	req := &http.Request{URL: sinkURI}
+	var err error
+	urlParameter := &urlConfig{}
+	if err := binding.Query.Bind(req, urlParameter); err != nil {
+		return cerror.WrapError(cerror.ErrMySQLInvalidConfig, err)
+	}
+	if urlParameter, err = mergeConfig(replicaConfig, urlParameter); err != nil {
+		return err
 	}
 
-	if s := params.Get(codecOPTMaxBatchSize); s != "" {
-		a, err := strconv.Atoi(s)
-		if err != nil {
-			return err
-		}
-		c.MaxBatchSize = a
+	if urlParameter.EnableTiDBExtension != nil {
+		c.EnableTiDBExtension = *urlParameter.EnableTiDBExtension
 	}
 
-	if s := params.Get(codecOPTMaxMessageBytes); s != "" {
-		a, err := strconv.Atoi(s)
-		if err != nil {
-			return err
-		}
-		c.MaxMessageBytes = a
+	if urlParameter.MaxBatchSize != nil {
+		c.MaxBatchSize = *urlParameter.MaxBatchSize
 	}
 
-	if s := params.Get(codecOPTAvroDecimalHandlingMode); s != "" {
-		c.AvroDecimalHandlingMode = s
+	if urlParameter.MaxMessageBytes != nil {
+		c.MaxMessageBytes = *urlParameter.MaxMessageBytes
 	}
 
-	if s := params.Get(codecOPTAvroBigintUnsignedHandlingMode); s != "" {
-		c.AvroBigintUnsignedHandlingMode = s
+	if urlParameter.AvroDecimalHandlingMode != nil &&
+		*urlParameter.AvroDecimalHandlingMode != "" {
+		c.AvroDecimalHandlingMode = *urlParameter.AvroDecimalHandlingMode
 	}
-
-	if s := params.Get(codecOPTAvroEnableWatermark); s != "" {
+	if urlParameter.AvroBigintUnsignedHandlingMode != nil &&
+		*urlParameter.AvroBigintUnsignedHandlingMode != "" {
+		c.AvroBigintUnsignedHandlingMode = *urlParameter.AvroBigintUnsignedHandlingMode
+	}
+	if urlParameter.AvroEnableWatermark != nil {
 		if c.EnableTiDBExtension && c.Protocol == config.ProtocolAvro {
-			b, err := strconv.ParseBool(s)
-			if err != nil {
-				return err
-			}
-			c.AvroEnableWatermark = b
+			c.AvroEnableWatermark = *urlParameter.AvroEnableWatermark
 		}
 	}
 
-	if replicaConfig.Sink != nil && replicaConfig.Sink.SchemaRegistry != "" {
-		c.AvroSchemaRegistry = replicaConfig.Sink.SchemaRegistry
+	if urlParameter.AvroSchemaRegistry != "" {
+		c.AvroSchemaRegistry = urlParameter.AvroSchemaRegistry
 	}
 
 	if replicaConfig.Sink != nil {
@@ -159,15 +164,9 @@ func (c *Config) Apply(sinkURI *url.URL, replicaConfig *config.ReplicaConfig) er
 			c.NullString = replicaConfig.Sink.CSVConfig.NullString
 			c.IncludeCommitTs = replicaConfig.Sink.CSVConfig.IncludeCommitTs
 		}
-
-		c.OnlyOutputUpdatedColumns = replicaConfig.Sink.OnlyOutputUpdatedColumns
 	}
-	if s := params.Get(codecOPTOnlyOutputUpdatedColumns); s != "" {
-		a, err := strconv.ParseBool(s)
-		if err != nil {
-			return err
-		}
-		c.OnlyOutputUpdatedColumns = a
+	if urlParameter.OnlyOutputUpdatedColumns != nil {
+		c.OnlyOutputUpdatedColumns = *urlParameter.OnlyOutputUpdatedColumns
 	}
 	if c.OnlyOutputUpdatedColumns && !replicaConfig.EnableOldValue {
 		return cerror.ErrCodecInvalidConfig.GenWithStack(
@@ -181,6 +180,32 @@ func (c *Config) Apply(sinkURI *url.URL, replicaConfig *config.ReplicaConfig) er
 	}
 
 	return nil
+}
+
+func mergeConfig(
+	replicaConfig *config.ReplicaConfig,
+	urlParameters *urlConfig,
+) (*urlConfig, error) {
+	dest := &urlConfig{}
+	if replicaConfig.Sink != nil {
+		dest.AvroSchemaRegistry = replicaConfig.Sink.SchemaRegistry
+		dest.OnlyOutputUpdatedColumns = replicaConfig.Sink.OnlyOutputUpdatedColumns
+		if replicaConfig.Sink.KafkaConfig != nil {
+			dest.MaxMessageBytes = replicaConfig.Sink.KafkaConfig.MaxMessageBytes
+			if replicaConfig.Sink.KafkaConfig.CodecConfig != nil {
+				codecConfig := replicaConfig.Sink.KafkaConfig.CodecConfig
+				dest.EnableTiDBExtension = codecConfig.EnableTiDBExtension
+				dest.MaxBatchSize = codecConfig.MaxBatchSize
+				dest.AvroEnableWatermark = codecConfig.AvroEnableWatermark
+				dest.AvroDecimalHandlingMode = codecConfig.AvroDecimalHandlingMode
+				dest.AvroBigintUnsignedHandlingMode = codecConfig.AvroBigintUnsignedHandlingMode
+			}
+		}
+	}
+	if err := mergo.Merge(dest, urlParameters, mergo.WithOverride); err != nil {
+		return nil, err
+	}
+	return dest, nil
 }
 
 // WithMaxMessageBytes set the `maxMessageBytes`
