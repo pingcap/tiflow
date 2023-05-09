@@ -1624,6 +1624,9 @@
                 },
                 "message": {
                     "type": "string"
+                },
+                "time": {
+                    "type": "string"
                 }
             }
         },
@@ -2141,6 +2144,9 @@
                     "type": "string"
                 },
                 "message": {
+                    "type": "string"
+                },
+                "time": {
                     "type": "string"
                 }
             }
