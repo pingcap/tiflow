@@ -288,6 +288,14 @@ func (d *DDLEvent) ToRedoLog() *RedoLog {
 	}
 }
 
+// Checksum represent checksum for an RowChangedEvent
+type Checksum struct {
+	Current   uint32
+	Previous  uint32
+	Corrupted bool
+	Version   int
+}
+
 // RowChangedEvent represents a row changed event
 type RowChangedEvent struct {
 	StartTs  uint64 `json:"start-ts" msg:"start-ts"`
@@ -315,14 +323,9 @@ type RowChangedEvent struct {
 	PreColumns   []*Column `json:"pre-columns" msg:"pre-columns"`
 	IndexColumns [][]int   `json:"-" msg:"index-columns"`
 
-	// Checksum corresponds to the checksum of the Columns
-	Checksum uint32 `json:"-" msg:"-"`
-	// PreChecksum corresponds to the checksum of the PreColumns
-	PreChecksum uint32 `json:"-" msg:"-"`
-	// Corrupted indicates whether the event is corrupted by the checksum mismatch.
-	Corrupted bool `json:"-" msg:"-"`
-	// ChecksumVersion is the version of the checksum
-	ChecksumVersion int `json:"-" msg:"-"`
+	// Checksum for the event, only not nil if the upstream TiDB enable the row level checksum
+	// and TiCDC set the integrity check level to the correctness.
+	Checksum *Checksum `json:"-" msg:"-"`
 
 	// ApproximateDataSize is the approximate size of protobuf binary
 	// representation of this event.

@@ -483,8 +483,10 @@ func (m *mounter) mountRowKVEntry(tableInfo *model.TableInfo, row *rowKVEntry, d
 		matched     bool
 		err         error
 
-		corrupted       bool
+		checksum *model.Checksum
+
 		checksumVersion int
+		corrupted       bool
 	)
 
 	// Decode previous columns.
@@ -536,9 +538,9 @@ func (m *mounter) mountRowKVEntry(tableInfo *model.TableInfo, row *rowKVEntry, d
 	}
 
 	var (
-		cols     []*model.Column
-		rawCols  []types.Datum
-		checksum uint32
+		cols    []*model.Column
+		rawCols []types.Datum
+		current uint32
 	)
 	if row.RowExist {
 		cols, rawCols, columnInfos, err = datum2Column(tableInfo, row.Row, true)
@@ -546,7 +548,7 @@ func (m *mounter) mountRowKVEntry(tableInfo *model.TableInfo, row *rowKVEntry, d
 			return nil, rawRow, errors.Trace(err)
 		}
 
-		checksum, checksumVersion, matched, err = m.verifyChecksum(columnInfos, rawCols, false)
+		current, checksumVersion, matched, err = m.verifyChecksum(columnInfos, rawCols, false)
 		if err != nil {
 			return nil, rawRow, errors.Trace(err)
 		}
@@ -573,6 +575,16 @@ func (m *mounter) mountRowKVEntry(tableInfo *model.TableInfo, row *rowKVEntry, d
 	_, _, colInfos := tableInfo.GetRowColInfos()
 	rawRow.PreRowDatums = preRawCols
 	rawRow.RowDatums = rawCols
+
+	if preChecksum != 0 || current != 0 {
+		checksum = &model.Checksum{
+			Current:   current,
+			Previous:  preChecksum,
+			Corrupted: corrupted,
+			Version:   checksumVersion,
+		}
+	}
+
 	return &model.RowChangedEvent{
 		StartTs:  row.StartTs,
 		CommitTs: row.CRTs,
@@ -588,10 +600,7 @@ func (m *mounter) mountRowKVEntry(tableInfo *model.TableInfo, row *rowKVEntry, d
 		Columns:    cols,
 		PreColumns: preCols,
 
-		Checksum:        checksum,
-		PreChecksum:     preChecksum,
-		Corrupted:       corrupted,
-		ChecksumVersion: checksumVersion,
+		Checksum: checksum,
 
 		IndexColumns:        tableInfo.IndexColumnsOffset,
 		ApproximateDataSize: dataSize,
