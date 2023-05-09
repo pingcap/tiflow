@@ -33,6 +33,7 @@ import (
 	"github.com/pingcap/tiflow/cdc/kv/regionlock"
 	"github.com/pingcap/tiflow/cdc/model"
 	"github.com/pingcap/tiflow/cdc/processor/tablepb"
+	"github.com/pingcap/tiflow/pkg/chann"
 	"github.com/pingcap/tiflow/pkg/config"
 	cerror "github.com/pingcap/tiflow/pkg/errors"
 	"github.com/pingcap/tiflow/pkg/pdutil"
@@ -46,7 +47,6 @@ import (
 	pd "github.com/tikv/pd/client"
 	"go.uber.org/zap"
 	"golang.org/x/sync/errgroup"
-	"golang.org/x/time/rate"
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/status"
 )
@@ -72,20 +72,6 @@ const (
 	// failed region will be reloaded via `BatchLoadRegionsWithKeyRange` API. So we
 	// don't need to force reload region anymore.
 	regionScheduleReload = false
-
-	// defaultRegionChanSize is the default channel size for region channel, including
-	// range request, region request and region error.
-	// Note the producer of region error channel, and the consumer of range request
-	// channel work in an asynchronous way, the larger channel can decrease the
-	// frequency of creating new goroutine.
-	defaultRegionChanSize = 128
-
-	// initial size for region rate limit queue.
-	defaultRegionRateLimitQueueSize = 128
-	// Interval of check region retry rate limit queue.
-	defaultCheckRegionRateLimitInterval = 50 * time.Millisecond
-	// Duration of warning region retry rate limited too long.
-	defaultLogRegionRateLimitDuration = 10 * time.Second
 )
 
 // time interval to force kv client to terminate gRPC stream and reconnect
@@ -131,59 +117,13 @@ var (
 type regionErrorInfo struct {
 	singleRegionInfo
 	err error
-
-	retryLimitTime       *time.Time
-	logRateLimitDuration time.Duration
 }
 
 func newRegionErrorInfo(info singleRegionInfo, err error) regionErrorInfo {
 	return regionErrorInfo{
 		singleRegionInfo: info,
 		err:              err,
-
-		logRateLimitDuration: defaultLogRegionRateLimitDuration,
 	}
-}
-
-func (r *regionErrorInfo) logRateLimitedHint() bool {
-	now := time.Now()
-	if r.retryLimitTime == nil {
-		// Caller should log on the first rate limited.
-		r.retryLimitTime = &now
-		return true
-	}
-	if now.Sub(*r.retryLimitTime) > r.logRateLimitDuration {
-		// Caller should log if it lasts too long.
-		r.retryLimitTime = &now
-		return true
-	}
-	return false
-}
-
-type regionEventFeedLimiters struct {
-	sync.Mutex
-	// TODO replace with a LRU cache.
-	limiters map[uint64]*rate.Limiter
-}
-
-var defaultRegionEventFeedLimiters = &regionEventFeedLimiters{
-	limiters: make(map[uint64]*rate.Limiter),
-}
-
-func (rl *regionEventFeedLimiters) getLimiter(regionID uint64) *rate.Limiter {
-	var limiter *rate.Limiter
-	var ok bool
-
-	rl.Lock()
-	limiter, ok = rl.limiters[regionID]
-	if !ok {
-		// In most cases, region replica count is 3.
-		replicaCount := 3
-		limiter = rate.NewLimiter(rate.Every(100*time.Millisecond), replicaCount)
-		rl.limiters[regionID] = limiter
-	}
-	rl.Unlock()
-	return limiter
 }
 
 // eventFeedStream stores an EventFeed stream and pointer to the underlying gRPC connection
@@ -222,9 +162,8 @@ type CDCClient struct {
 
 	grpcPool GrpcPool
 
-	regionCache    *tikv.RegionCache
-	pdClock        pdutil.Clock
-	regionLimiters *regionEventFeedLimiters
+	regionCache *tikv.RegionCache
+	pdClock     pdutil.Clock
 
 	changefeed model.ChangeFeedID
 	tableID    model.TableID
@@ -257,13 +196,12 @@ func NewCDCClient(
 	clusterID := pd.GetClusterID(ctx)
 
 	c = &CDCClient{
-		clusterID:      clusterID,
-		config:         cfg,
-		pd:             pd,
-		grpcPool:       grpcPool,
-		regionCache:    regionCache,
-		pdClock:        pdClock,
-		regionLimiters: defaultRegionEventFeedLimiters,
+		clusterID:   clusterID,
+		config:      cfg,
+		pd:          pd,
+		grpcPool:    grpcPool,
+		regionCache: regionCache,
+		pdClock:     pdClock,
 
 		changefeed: changefeed,
 		tableID:    tableID,
@@ -277,10 +215,6 @@ func NewCDCClient(
 		filterLoop: filterLoop,
 	}
 	return
-}
-
-func (c *CDCClient) getRegionLimiter(regionID uint64) *rate.Limiter {
-	return c.regionLimiters.getLimiter(regionID)
 }
 
 func (c *CDCClient) newStream(ctx context.Context, addr string, storeID uint64) (stream *eventFeedStream, newStreamErr error) {
@@ -335,7 +269,7 @@ func (c *CDCClient) EventFeed(
 	c.regionCounts.counts.PushBack(&regionCount)
 	c.regionCounts.Unlock()
 	s := newEventFeedSession(
-		ctx, c, span, lockResolver, ts, eventCh, c.changefeed, c.tableID, c.tableName)
+		c, span, lockResolver, ts, eventCh, c.changefeed, c.tableID, c.tableName)
 	return s.eventFeed(ctx, ts, &regionCount)
 }
 
@@ -381,19 +315,15 @@ type eventFeedSession struct {
 	totalSpan tablepb.Span
 
 	// The channel to send the processed events.
-	eventCh chan<- model.RegionFeedEvent
-	// The token based region router, it controls the uninitialized regions with
-	// a given size limit.
-	regionRouter LimitRegionRouter
+	eventCh      chan<- model.RegionFeedEvent
+	regionRouter *chann.DrainableChann[singleRegionInfo]
 	// The channel to put the region that will be sent requests.
-	regionCh chan singleRegionInfo
+	regionCh *chann.DrainableChann[singleRegionInfo]
 	// The channel to notify that an error is happening, so that the error will be handled and the affected region
 	// will be re-requested.
-	errCh chan regionErrorInfo
+	errCh *chann.DrainableChann[regionErrorInfo]
 	// The channel to schedule scanning and requesting regions in a specified range.
-	requestRangeCh chan rangeRequestTask
-	// The queue is used to store region that reaches limit
-	rateLimitQueue []regionErrorInfo
+	requestRangeCh *chann.DrainableChann[rangeRequestTask]
 
 	rangeLock *regionlock.RegionRangeLock
 
@@ -422,7 +352,6 @@ type rangeRequestTask struct {
 }
 
 func newEventFeedSession(
-	ctx context.Context,
 	client *CDCClient,
 	totalSpan tablepb.Span,
 	lockResolver txnutil.LockResolver,
@@ -440,11 +369,6 @@ func newEventFeedSession(
 		client:            client,
 		totalSpan:         totalSpan,
 		eventCh:           eventCh,
-		regionRouter:      NewSizedRegionRouter(ctx, client.config.RegionScanLimit),
-		regionCh:          make(chan singleRegionInfo, defaultRegionChanSize),
-		errCh:             make(chan regionErrorInfo, defaultRegionChanSize),
-		requestRangeCh:    make(chan rangeRequestTask, defaultRegionChanSize),
-		rateLimitQueue:    make([]regionErrorInfo, 0, defaultRegionRateLimitQueueSize),
 		rangeLock:         rangeLock,
 		lockResolver:      lockResolver,
 		id:                id,
@@ -468,8 +392,19 @@ func newEventFeedSession(
 }
 
 func (s *eventFeedSession) eventFeed(ctx context.Context, ts uint64, regionCount *int64) error {
+	s.requestRangeCh = chann.NewAutoDrainChann[rangeRequestTask]()
+	s.regionCh = chann.NewAutoDrainChann[singleRegionInfo]()
+	s.regionRouter = chann.NewAutoDrainChann[singleRegionInfo]()
+	s.errCh = chann.NewAutoDrainChann[regionErrorInfo]()
+
 	eventFeedGauge.Inc()
-	defer eventFeedGauge.Dec()
+	defer func() {
+		eventFeedGauge.Dec()
+		s.regionRouter.CloseAndDrain()
+		s.regionCh.CloseAndDrain()
+		s.errCh.CloseAndDrain()
+		s.requestRangeCh.CloseAndDrain()
+	}()
 
 	g, ctx := errgroup.WithContext(ctx)
 
@@ -486,7 +421,7 @@ func (s *eventFeedSession) eventFeed(ctx context.Context, ts uint64, regionCount
 			select {
 			case <-ctx.Done():
 				return ctx.Err()
-			case task := <-s.requestRangeCh:
+			case task := <-s.requestRangeCh.Out():
 				s.rangeChSizeGauge.Dec()
 				// divideAndSendEventFeedToRegions could be blocked for some time,
 				// since it must wait for the region lock available. In order to
@@ -504,53 +439,21 @@ func (s *eventFeedSession) eventFeed(ctx context.Context, ts uint64, regionCount
 	})
 
 	g.Go(func() error {
-		timer := time.NewTimer(defaultCheckRegionRateLimitInterval)
-		defer timer.Stop()
 		for {
 			select {
 			case <-ctx.Done():
 				return ctx.Err()
-			case <-timer.C:
-				s.handleRateLimit(ctx)
-				timer.Reset(defaultCheckRegionRateLimitInterval)
-			case errInfo := <-s.errCh:
+			case errInfo := <-s.errCh.Out():
 				s.errChSizeGauge.Dec()
-				allowed := s.checkRateLimit(errInfo.singleRegionInfo.verID.GetID())
-				if allowed {
-					if err := s.handleError(ctx, errInfo); err != nil {
-						return err
-					}
-					continue
+				if err := s.handleError(ctx, errInfo); err != nil {
+					return err
 				}
-				if errInfo.logRateLimitedHint() {
-					zapFieldAddr := zap.Skip()
-					if errInfo.singleRegionInfo.rpcCtx != nil {
-						// rpcCtx may be nil if we failed to get region info
-						// from pd. It could cause by pd down or the region
-						// has been merged.
-						zapFieldAddr = zap.String("addr", errInfo.singleRegionInfo.rpcCtx.Addr)
-					}
-					log.Info("EventFeed retry rate limited",
-						zap.String("namespace", s.changefeed.Namespace),
-						zap.String("changefeed", s.changefeed.ID),
-						zap.Int64("tableID", s.tableID),
-						zap.String("tableName", s.tableName),
-						zap.Uint64("regionID", errInfo.singleRegionInfo.verID.GetID()),
-						zap.Uint64("resolvedTs", errInfo.singleRegionInfo.resolvedTs),
-						zap.Error(errInfo.err),
-						zapFieldAddr)
-				}
-				// rate limit triggers, add the error info to the rate limit queue.
-				s.rateLimitQueue = append(s.rateLimitQueue, errInfo)
+				continue
 			}
 		}
 	})
 
-	g.Go(func() error {
-		return s.regionRouter.Run(ctx)
-	})
-
-	s.requestRangeCh <- rangeRequestTask{span: s.totalSpan, ts: ts}
+	s.requestRangeCh.In() <- rangeRequestTask{span: s.totalSpan, ts: ts}
 	s.rangeChSizeGauge.Inc()
 
 	log.Info("event feed started",
@@ -571,7 +474,7 @@ func (s *eventFeedSession) scheduleDivideRegionAndRequest(
 ) {
 	task := rangeRequestTask{span: span, ts: ts}
 	select {
-	case s.requestRangeCh <- task:
+	case s.requestRangeCh.In() <- task:
 		s.rangeChSizeGauge.Inc()
 	case <-ctx.Done():
 	}
@@ -585,7 +488,7 @@ func (s *eventFeedSession) scheduleRegionRequest(ctx context.Context, sri single
 		case regionlock.LockRangeStatusSuccess:
 			sri.resolvedTs = res.CheckpointTs
 			select {
-			case s.regionCh <- sri:
+			case s.regionCh.In() <- sri:
 				s.regionChSizeGauge.Inc()
 			case <-ctx.Done():
 			}
@@ -641,12 +544,9 @@ func (s *eventFeedSession) scheduleRegionRequest(ctx context.Context, sri single
 // onRegionFail handles a region's failure, which means, unlock the region's range and send the error to the errCh for
 // error handling. This function is non-blocking even if error channel is full.
 // CAUTION: Note that this should only be called in a context that the region has locked its range.
-func (s *eventFeedSession) onRegionFail(ctx context.Context, errorInfo regionErrorInfo, revokeToken bool) {
+func (s *eventFeedSession) onRegionFail(ctx context.Context, errorInfo regionErrorInfo) {
 	s.rangeLock.UnlockRange(errorInfo.span.StartKey, errorInfo.span.EndKey,
 		errorInfo.verID.GetID(), errorInfo.verID.GetVer(), errorInfo.resolvedTs)
-	if revokeToken {
-		s.regionRouter.Release(errorInfo.rpcCtx.Addr)
-	}
 	s.enqueueError(ctx, errorInfo)
 }
 
@@ -678,7 +578,7 @@ func (s *eventFeedSession) requestRegionToStore(
 		select {
 		case <-ctx.Done():
 			return errors.Trace(ctx.Err())
-		case sri = <-s.regionRouter.Chan():
+		case sri = <-s.regionRouter.Out():
 		}
 		requestID := allocID()
 
@@ -736,7 +636,7 @@ func (s *eventFeedSession) requestRegionToStore(
 				bo := tikv.NewBackoffer(ctx, tikvRequestMaxBackoff)
 				s.client.regionCache.OnSendFail(bo, rpcCtx, regionScheduleReload, err)
 				errInfo := newRegionErrorInfo(sri, &connectToStoreErr{})
-				s.onRegionFail(ctx, errInfo, false /* revokeToken */)
+				s.onRegionFail(ctx, errInfo)
 				continue
 			}
 			s.addStream(storeAddr, stream, streamCancel)
@@ -817,16 +717,11 @@ func (s *eventFeedSession) requestRegionToStore(
 			// `receiveFromStream`, so no need to retry here.
 			_, ok := pendingRegions.takeByRequestID(requestID)
 			if !ok {
-				// since this pending region has been removed, the token has been
-				// released in advance, re-add one token here.
-				s.regionRouter.Acquire(storeAddr)
 				continue
 			}
 
 			errInfo := newRegionErrorInfo(sri, &sendRequestToStoreErr{})
-			s.onRegionFail(ctx, errInfo, false /* revokeToken */)
-		} else {
-			s.regionRouter.Acquire(storeAddr)
+			s.onRegionFail(ctx, errInfo)
 		}
 	}
 }
@@ -845,7 +740,7 @@ func (s *eventFeedSession) dispatchRequest(ctx context.Context) error {
 		select {
 		case <-ctx.Done():
 			return errors.Trace(ctx.Err())
-		case sri = <-s.regionCh:
+		case sri = <-s.regionCh.Out():
 			s.regionChSizeGauge.Dec()
 		}
 
@@ -891,11 +786,11 @@ func (s *eventFeedSession) dispatchRequest(ctx context.Context) error {
 				zap.Stringer("span", &sri.span),
 				zap.Uint64("resolvedTs", sri.resolvedTs))
 			errInfo := newRegionErrorInfo(sri, &rpcCtxUnavailableErr{verID: sri.verID})
-			s.onRegionFail(ctx, errInfo, false /* revokeToken */)
+			s.onRegionFail(ctx, errInfo)
 			continue
 		}
 		sri.rpcCtx = rpcCtx
-		s.regionRouter.AddRegion(sri)
+		s.regionRouter.In() <- sri
 	}
 }
 
@@ -969,48 +864,10 @@ func (s *eventFeedSession) divideAndSendEventFeedToRegions(
 // TODO: refactor enqueueError to avoid too many goroutines spawned when a lot of regions meet error.
 func (s *eventFeedSession) enqueueError(ctx context.Context, errorInfo regionErrorInfo) {
 	select {
-	case s.errCh <- errorInfo:
+	case s.errCh.In() <- errorInfo:
 		s.errChSizeGauge.Inc()
-	default:
-		go func() {
-			select {
-			case s.errCh <- errorInfo:
-				s.errChSizeGauge.Inc()
-			case <-ctx.Done():
-			}
-		}()
+	case <-ctx.Done():
 	}
-}
-
-func (s *eventFeedSession) handleRateLimit(ctx context.Context) {
-	var (
-		i       int
-		errInfo regionErrorInfo
-	)
-	if len(s.rateLimitQueue) == 0 {
-		return
-	}
-	for i, errInfo = range s.rateLimitQueue {
-		s.enqueueError(ctx, errInfo)
-		// to avoid too many goroutines spawn, since if the error region count
-		// exceeds the size of errCh, new goroutine will be spawned
-		if i == defaultRegionChanSize-1 {
-			break
-		}
-	}
-	if i == len(s.rateLimitQueue)-1 {
-		s.rateLimitQueue = make([]regionErrorInfo, 0, defaultRegionRateLimitQueueSize)
-	} else {
-		s.rateLimitQueue = append(make([]regionErrorInfo, 0, len(s.rateLimitQueue)-i-1), s.rateLimitQueue[i+1:]...)
-	}
-}
-
-// checkRateLimit checks whether a region can be reconnected based on its rate limiter
-func (s *eventFeedSession) checkRateLimit(regionID uint64) bool {
-	limiter := s.client.getRegionLimiter(regionID)
-	// use Limiter.Allow here since if exceed the rate limit, we skip this region
-	// and try it later.
-	return limiter.Allow()
 }
 
 // handleError handles error returned by a region. If some new EventFeed connection should be established, the region
@@ -1122,7 +979,7 @@ func (s *eventFeedSession) receiveFromStream(
 		remainingRegions := pendingRegions.takeAll()
 		for _, state := range remainingRegions {
 			errInfo := newRegionErrorInfo(state.sri, cerror.ErrPendingRegionCancel.FastGenByArgs())
-			s.onRegionFail(ctx, errInfo, true /* revokeToken */)
+			s.onRegionFail(ctx, errInfo)
 		}
 	}()
 
