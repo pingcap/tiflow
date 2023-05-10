@@ -23,6 +23,7 @@ import (
 	"github.com/pingcap/tiflow/cdc/model"
 	"github.com/pingcap/tiflow/pkg/config"
 	cerror "github.com/pingcap/tiflow/pkg/errors"
+	"github.com/pingcap/tiflow/pkg/integrity"
 	"github.com/pingcap/tiflow/pkg/security"
 )
 
@@ -298,7 +299,7 @@ func (c *ReplicaConfig) toInternalReplicaConfigWithOriginConfig(
 		}
 	}
 	if c.Integrity != nil {
-		res.Integrity = &config.IntegrityConfig{
+		res.Integrity = &integrity.Config{
 			IntegrityCheckLevel:   c.Integrity.IntegrityCheckLevel,
 			CorruptionHandleLevel: c.Integrity.CorruptionHandleLevel,
 		}
@@ -597,7 +598,7 @@ type ChangefeedSchedulerConfig struct {
 }
 
 // IntegrityConfig is the config for integrity check
-// This is a duplicate of config.IntegrityConfig
+// This is a duplicate of Integrity.Config
 type IntegrityConfig struct {
 	IntegrityCheckLevel   string `json:"integrity_check_level"`
 	CorruptionHandleLevel string `json:"corruption_handle_level"`
