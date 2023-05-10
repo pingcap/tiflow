@@ -25,15 +25,14 @@ import (
 	"go.uber.org/zap"
 )
 
-// DefaultMaxMessageBytes sets the default value for max-message-bytes.
-const DefaultMaxMessageBytes = 10 * 1024 * 1024 // 10M
-
 const (
+	// DefaultMaxMessageBytes sets the default value for max-message-bytes.
+	DefaultMaxMessageBytes = 10 * 1024 * 1024 // 10M
+
 	// TxnAtomicityKey specifies the key of the transaction-atomicity in the SinkURI.
 	TxnAtomicityKey = "transaction-atomicity"
 	// defaultTxnAtomicity is the default atomicity level.
 	defaultTxnAtomicity = noneTxnAtomicity
-
 	// unknownTxnAtomicity is an invalid atomicity level and will be treated as
 	// defaultTxnAtomicity when initializing sink in processor.
 	unknownTxnAtomicity AtomicityLevel = ""
@@ -41,9 +40,7 @@ const (
 	noneTxnAtomicity AtomicityLevel = "none"
 	// tableTxnAtomicity means atomicity of single table transactions is guaranteed.
 	tableTxnAtomicity AtomicityLevel = "table"
-)
 
-const (
 	// Comma is a constant for ','
 	Comma = ","
 	// CR is an abbreviation for carriage return
@@ -58,6 +55,13 @@ const (
 	Backslash = '\\'
 	// NULL is a constant for '\N'
 	NULL = "\\N"
+
+	// MinFileIndexWidth is the minimum width of file index.
+	MinFileIndexWidth = 6 // enough for 2^19 files
+	// MaxFileIndexWidth is the maximum width of file index.
+	MaxFileIndexWidth = 20 // enough for 2^64 files
+	// DefaultFileIndexWidth is the default width of file index.
+	DefaultFileIndexWidth = MaxFileIndexWidth
 )
 
 // AtomicityLevel represents the atomicity level of a changefeed.
@@ -109,6 +113,7 @@ type SinkConfig struct {
 	Terminator               string            `toml:"terminator" json:"terminator"`
 	DateSeparator            string            `toml:"date-separator" json:"date-separator"`
 	EnablePartitionSeparator bool              `toml:"enable-partition-separator" json:"enable-partition-separator"`
+	FileIndexWidth           int               `toml:"file-index-digit,omitempty" json:"file-index-digit,omitempty"`
 
 	// EnableKafkaSinkV2 enabled then the kafka-go sink will be used.
 	EnableKafkaSinkV2 bool `toml:"enable-kafka-sink-v2" json:"enable-kafka-sink-v2"`
@@ -136,6 +141,42 @@ type CSVConfig struct {
 	NullString string `toml:"null" json:"null"`
 	// whether to include commit ts
 	IncludeCommitTs bool `toml:"include-commit-ts" json:"include-commit-ts"`
+}
+
+func (c *CSVConfig) validateAndAdjust() error {
+	if c == nil {
+		return nil
+	}
+
+	// validate quote
+	if len(c.Quote) > 1 {
+		return cerror.WrapError(cerror.ErrSinkInvalidConfig,
+			errors.New("csv config quote contains more than one character"))
+	}
+	if len(c.Quote) == 1 {
+		quote := c.Quote[0]
+		if quote == CR || quote == LF {
+			return cerror.WrapError(cerror.ErrSinkInvalidConfig,
+				errors.New("csv config quote cannot be line break character"))
+		}
+	}
+
+	// validate delimiter
+	if len(c.Delimiter) == 0 {
+		return cerror.WrapError(cerror.ErrSinkInvalidConfig,
+			errors.New("csv config delimiter cannot be empty"))
+	}
+	if strings.ContainsRune(c.Delimiter, CR) ||
+		strings.ContainsRune(c.Delimiter, LF) {
+		return cerror.WrapError(cerror.ErrSinkInvalidConfig,
+			errors.New("csv config delimiter contains line break characters"))
+	}
+	if len(c.Quote) > 0 && strings.Contains(c.Delimiter, c.Quote) {
+		return cerror.WrapError(cerror.ErrSinkInvalidConfig,
+			errors.New("csv config quote and delimiter cannot be the same"))
+	}
+
+	return nil
 }
 
 // DateSeparator specifies the date separator in storage destination path
@@ -306,48 +347,27 @@ func (s *SinkConfig) validateAndAdjust(sinkURI *url.URL, enableOldValue bool) er
 		s.Terminator = CRLF
 	}
 
-	// validate date separator
-	if len(s.DateSeparator) > 0 {
-		var separator DateSeparator
-		if err := separator.FromString(s.DateSeparator); err != nil {
-			return cerror.WrapError(cerror.ErrSinkInvalidConfig, err)
+	// validate storage sink related config
+	if sinkURI != nil && sink.IsStorageScheme(sinkURI.Scheme) {
+		// validate date separator
+		if len(s.DateSeparator) > 0 {
+			var separator DateSeparator
+			if err := separator.FromString(s.DateSeparator); err != nil {
+				return cerror.WrapError(cerror.ErrSinkInvalidConfig, err)
+			}
 		}
-	}
 
-	if s.CSVConfig != nil {
-		return s.validateAndAdjustCSVConfig()
-	}
-
-	return nil
-}
-
-func (s *SinkConfig) validateAndAdjustCSVConfig() error {
-	// validate quote
-	if len(s.CSVConfig.Quote) > 1 {
-		return cerror.WrapError(cerror.ErrSinkInvalidConfig,
-			errors.New("csv config quote contains more than one character"))
-	}
-	if len(s.CSVConfig.Quote) == 1 {
-		quote := s.CSVConfig.Quote[0]
-		if quote == CR || quote == LF {
-			return cerror.WrapError(cerror.ErrSinkInvalidConfig,
-				errors.New("csv config quote cannot be line break character"))
+		// File index width should be in [minFileIndexWidth, maxFileIndexWidth].
+		// In most scenarios, the user does not need to change this configuration,
+		// so the default value of this parameter is not set and just make silent
+		// adjustments here.
+		if s.FileIndexWidth < MinFileIndexWidth || s.FileIndexWidth > MaxFileIndexWidth {
+			s.FileIndexWidth = DefaultFileIndexWidth
 		}
-	}
 
-	// validate delimiter
-	if len(s.CSVConfig.Delimiter) == 0 {
-		return cerror.WrapError(cerror.ErrSinkInvalidConfig,
-			errors.New("csv config delimiter cannot be empty"))
-	}
-	if strings.ContainsRune(s.CSVConfig.Delimiter, CR) ||
-		strings.ContainsRune(s.CSVConfig.Delimiter, LF) {
-		return cerror.WrapError(cerror.ErrSinkInvalidConfig,
-			errors.New("csv config delimiter contains line break characters"))
-	}
-	if len(s.CSVConfig.Quote) > 0 && strings.Contains(s.CSVConfig.Delimiter, s.CSVConfig.Quote) {
-		return cerror.WrapError(cerror.ErrSinkInvalidConfig,
-			errors.New("csv config quote and delimiter cannot be the same"))
+		if err := s.CSVConfig.validateAndAdjust(); err != nil {
+			return err
+		}
 	}
 
 	return nil
