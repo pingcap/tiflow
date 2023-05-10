@@ -459,6 +459,15 @@ func (c *captureImpl) campaignOwner(ctx cdcContext.Context) error {
 		})
 		globalState.SetOnCaptureRemoved(func(captureID model.CaptureID) {
 			c.MessageRouter.RemovePeer(captureID)
+			// If an owner is killed by "kill -19", other CDC nodes will remove that capture,
+			// but the peer in the message server will not be removed, so the message server still sends
+			// ack message to that peer, until the write buffer is full. So we need to deregister the peer
+			// when the capture is removed.
+			if err := c.MessageServer.ScheduleDeregisterPeerTask(ctx, captureID); err != nil {
+				log.Warn("deregister peer failed",
+					zap.String("captureID", captureID),
+					zap.Error(err))
+			}
 		})
 
 		err = c.runEtcdWorker(ownerCtx, owner,
