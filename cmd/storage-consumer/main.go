@@ -63,6 +63,7 @@ var (
 	logFile          string
 	logLevel         string
 	flushInterval    time.Duration
+	fileIndexWidth   int
 	enableProfiling  bool
 	timezone         string
 )
@@ -80,6 +81,8 @@ func init() {
 	flag.StringVar(&logFile, "log-file", "", "log file path")
 	flag.StringVar(&logLevel, "log-level", "info", "log level")
 	flag.DurationVar(&flushInterval, "flush-interval", 10*time.Second, "flush interval")
+	flag.IntVar(&fileIndexWidth, "file-index-width",
+		config.DefaultFileIndexWidth, "file index width")
 	flag.BoolVar(&enableProfiling, "enable-profiling", false, "whether to enable profiling")
 	flag.StringVar(&timezone, "tz", "System", "Specify time zone of storage consumer")
 	flag.Parse()
@@ -532,7 +535,11 @@ func (c *consumer) syncExecDMLEvents(
 	key dmlPathKey,
 	fileIdx uint64,
 ) error {
+<<<<<<< HEAD
 	filePath := key.generateDMLFilePath(fileIdx, c.fileExtension)
+=======
+	filePath := key.GenerateDMLFilePath(fileIdx, c.fileExtension, fileIndexWidth)
+>>>>>>> 19277542cd (sink(ticdc): add index config to storage sink (#8918))
 	log.Debug("read from dml file path", zap.String("path", filePath))
 	content, err := c.externalStorage.ReadFile(ctx, filePath)
 	if err != nil {

@@ -279,6 +279,16 @@ func (c *ReplicaConfig) toInternalReplicaConfigWithOriginConfig(
 			Terminator:               c.Sink.Terminator,
 			DateSeparator:            c.Sink.DateSeparator,
 			EnablePartitionSeparator: c.Sink.EnablePartitionSeparator,
+<<<<<<< HEAD
+=======
+			FileIndexWidth:           c.Sink.FileIndexWidth,
+			EnableKafkaSinkV2:        c.Sink.EnableKafkaSinkV2,
+			OnlyOutputUpdatedColumns: c.Sink.OnlyOutputUpdatedColumns,
+			KafkaConfig:              kafkaConfig,
+			MySQLConfig:              mysqlConfig,
+			CloudStorageConfig:       cloudStorageConfig,
+			SafeMode:                 c.Sink.SafeMode,
+>>>>>>> 19277542cd (sink(ticdc): add index config to storage sink (#8918))
 		}
 	}
 	if c.Mounter != nil {
@@ -383,6 +393,16 @@ func ToAPIReplicaConfig(c *config.ReplicaConfig) *ReplicaConfig {
 			Terminator:               cloned.Sink.Terminator,
 			DateSeparator:            cloned.Sink.DateSeparator,
 			EnablePartitionSeparator: cloned.Sink.EnablePartitionSeparator,
+<<<<<<< HEAD
+=======
+			FileIndexWidth:           cloned.Sink.FileIndexWidth,
+			EnableKafkaSinkV2:        cloned.Sink.EnableKafkaSinkV2,
+			OnlyOutputUpdatedColumns: cloned.Sink.OnlyOutputUpdatedColumns,
+			KafkaConfig:              kafkaConfig,
+			MySQLConfig:              mysqlConfig,
+			CloudStorageConfig:       cloudStorageConfig,
+			SafeMode:                 cloned.Sink.SafeMode,
+>>>>>>> 19277542cd (sink(ticdc): add index config to storage sink (#8918))
 		}
 	}
 	if cloned.Consistent != nil {
@@ -502,6 +522,7 @@ type Table struct {
 // SinkConfig represents sink config for a changefeed
 // This is a duplicate of config.SinkConfig
 type SinkConfig struct {
+<<<<<<< HEAD
 	Protocol                 string            `json:"protocol"`
 	SchemaRegistry           string            `json:"schema_registry"`
 	CSVConfig                *CSVConfig        `json:"csv"`
@@ -512,6 +533,25 @@ type SinkConfig struct {
 	Terminator               string            `json:"terminator"`
 	DateSeparator            string            `json:"date_separator"`
 	EnablePartitionSeparator bool              `json:"enable_partition_separator"`
+=======
+	Protocol                 string              `json:"protocol"`
+	SchemaRegistry           string              `json:"schema_registry"`
+	CSVConfig                *CSVConfig          `json:"csv"`
+	DispatchRules            []*DispatchRule     `json:"dispatchers,omitempty"`
+	ColumnSelectors          []*ColumnSelector   `json:"column_selectors"`
+	TxnAtomicity             string              `json:"transaction_atomicity"`
+	EncoderConcurrency       int                 `json:"encoder_concurrency"`
+	Terminator               string              `json:"terminator"`
+	DateSeparator            string              `json:"date_separator"`
+	EnablePartitionSeparator bool                `json:"enable_partition_separator"`
+	FileIndexWidth           int                 `json:"file_index_width"`
+	EnableKafkaSinkV2        bool                `json:"enable_kafka_sink_v2"`
+	OnlyOutputUpdatedColumns *bool               `json:"only_output_updated_columns"`
+	SafeMode                 *bool               `json:"safe_mode,omitempty"`
+	KafkaConfig              *KafkaConfig        `json:"kafka_config,omitempty"`
+	MySQLConfig              *MySQLConfig        `json:"mysql_config,omitempty"`
+	CloudStorageConfig       *CloudStorageConfig `json:"cloud_storage_config,omitempty"`
+>>>>>>> 19277542cd (sink(ticdc): add index config to storage sink (#8918))
 }
 
 // CSVConfig denotes the csv config

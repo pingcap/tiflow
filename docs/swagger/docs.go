@@ -1271,6 +1271,21 @@ var doc = `{
                 "encoder-concurrency": {
                     "type": "integer"
                 },
+<<<<<<< HEAD
+=======
+                "file-index-digit": {
+                    "type": "integer"
+                },
+                "kafka-config": {
+                    "$ref": "#/definitions/config.KafkaConfig"
+                },
+                "mysql-config": {
+                    "$ref": "#/definitions/config.MySQLConfig"
+                },
+                "only-output-updated-columns": {
+                    "type": "boolean"
+                },
+>>>>>>> 19277542cd (sink(ticdc): add index config to storage sink (#8918))
                 "protocol": {
                     "type": "string"
                 },
@@ -1976,6 +1991,21 @@ var doc = `{
                 "encoder_concurrency": {
                     "type": "integer"
                 },
+<<<<<<< HEAD
+=======
+                "file_index_width": {
+                    "type": "integer"
+                },
+                "kafka_config": {
+                    "$ref": "#/definitions/v2.KafkaConfig"
+                },
+                "mysql_config": {
+                    "$ref": "#/definitions/v2.MySQLConfig"
+                },
+                "only_output_updated_columns": {
+                    "type": "boolean"
+                },
+>>>>>>> 19277542cd (sink(ticdc): add index config to storage sink (#8918))
                 "protocol": {
                     "type": "string"
                 },

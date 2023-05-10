@@ -36,6 +36,7 @@ func testFilePathGenerator(ctx context.Context, t *testing.T, dir string) *FileP
 	require.NoError(t, err)
 	replicaConfig := config.GetDefaultReplicaConfig()
 	replicaConfig.Sink.Protocol = config.ProtocolOpen.String()
+	replicaConfig.Sink.FileIndexWidth = 6
 	cfg := NewConfig()
 	err = cfg.Apply(ctx, sinkURI, replicaConfig)
 	require.NoError(t, err)

@@ -91,8 +91,13 @@ func TestCloudStorageWriteEventsWithoutDateSeparator(t *testing.T) {
 	require.Nil(t, err)
 
 	replicaConfig := config.GetDefaultReplicaConfig()
+<<<<<<< HEAD:cdc/sinkv2/eventsink/cloudstorage/cloud_storage_dml_sink_test.go
 	replicaConfig.Sink.Protocol = config.ProtocolOpen.String()
 
+=======
+	replicaConfig.Sink.Protocol = config.ProtocolCsv.String()
+	replicaConfig.Sink.FileIndexWidth = 6
+>>>>>>> 19277542cd (sink(ticdc): add index config to storage sink (#8918)):cdc/sink/dmlsink/cloudstorage/cloud_storage_dml_sink_test.go
 	errCh := make(chan error, 5)
 	s, err := NewCloudStorageSink(ctx, sinkURI, replicaConfig, errCh)
 	require.Nil(t, err)
@@ -163,6 +168,7 @@ func TestCloudStorageWriteEventsWithDateSeparator(t *testing.T) {
 	replicaConfig := config.GetDefaultReplicaConfig()
 	replicaConfig.Sink.Protocol = config.ProtocolOpen.String()
 	replicaConfig.Sink.DateSeparator = config.DateSeparatorDay.String()
+	replicaConfig.Sink.FileIndexWidth = 6
 
 	errCh := make(chan error, 5)
 	s, err := NewCloudStorageSink(ctx, sinkURI, replicaConfig, errCh)
