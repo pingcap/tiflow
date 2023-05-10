@@ -116,7 +116,11 @@ func (e *EventTableSink[E, P]) UpdateResolvedTs(resolvedTs model.ResolvedTs) err
 	}
 	// Do not forget to add the resolvedTs to progressTracker.
 	e.progressTracker.addResolvedTs(resolvedTs)
-	return e.backendSink.WriteEvents(resolvedCallbackableEvents...)
+
+	if err := e.backendSink.WriteEvents(resolvedCallbackableEvents...); err != nil {
+		return model.NewWarning(err, model.ComponentProcessorSink)
+	}
+	return nil
 }
 
 // GetCheckpointTs returns the checkpoint ts of the table sink.

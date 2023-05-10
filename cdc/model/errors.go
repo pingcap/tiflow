@@ -15,30 +15,17 @@ package model
 
 import (
 	"errors"
-	"fmt"
 	"time"
 
 	cerror "github.com/pingcap/tiflow/pkg/errors"
 )
 
-type ComponentType int
-
-const (
-	Processor ComponentType = iota + 1
-	ProcessorSink
-	ProcessorRedo
-
-	Owner
-	OwnerDDLSink
-)
-
-// RunningError represents some running error from cdc components, such as processor.
+// RunningError represents some running errors from cdc components, such as processor.
 type RunningError struct {
-	Time      time.Time `json:"time"`
-	Addr      string    `json:"addr"`
-	Code      string    `json:"code"`
-	Message   string    `json:"message"`
-	Component int       `json:"component"`
+	Time    time.Time `json:"time"`
+	Addr    string    `json:"addr"`
+	Code    string    `json:"code"`
+	Message string    `json:"message"`
 }
 
 // IsChangefeedUnRetryableError return true if a running error contains a changefeed not retry error.
@@ -46,28 +33,24 @@ func (r RunningError) IsChangefeedUnRetryableError() bool {
 	return cerror.IsChangefeedUnRetryableError(errors.New(r.Message + r.Code))
 }
 
-type ComponentError struct {
-	error
-	Component ComponentType
+const (
+	ComponentProcessorSink string = "processor/sink"
+	ComponentOwnerSink     string = "owner/sink"
+)
+
+// Warning is like an error, but has one difference:
+// generally an error will stop and restart a changefeed, but a warning won't.
+type Warning struct {
+	err       error
+	Component string
 }
 
-func (e ComponentError) Error() string {
-	var comp string
-	switch e.Component {
-	case Processor:
-		comp = "Processor"
-	case ProcessorSink:
-		comp = "ProcessorSink"
-	case ProcessorRedo:
-		comp = "ProcessorRedo"
-	case Owner:
-		comp = "Owner"
-	case OwnerDDLSink:
-		comp = "OwnerDDLSink"
-	}
-	return fmt.Sprintf("%s(component=%s)", e.error.Error(), comp)
+// Error implements builtin `error` interface.
+func (e Warning) Error() string {
+	return e.err.Error()
 }
 
-func NewComponentError(e error, component ComponentType) ComponentError {
-	return ComponentError{e, component}
+// NewWarning creates a Warning.
+func NewWarning(e error, component string) Warning {
+	return Warning{e, component}
 }

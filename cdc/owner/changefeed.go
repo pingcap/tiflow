@@ -15,15 +15,15 @@ package owner
 
 import (
 	"context"
-	// "fmt"
-	// "strings"
+	"fmt"
+	"strings"
 	"sync"
 	"time"
 
 	"github.com/pingcap/errors"
 	"github.com/pingcap/failpoint"
 	"github.com/pingcap/log"
-	// "github.com/pingcap/tidb/errno"
+	"github.com/pingcap/tidb/errno"
 	"github.com/pingcap/tiflow/cdc/contextutil"
 	"github.com/pingcap/tiflow/cdc/entry"
 	"github.com/pingcap/tiflow/cdc/model"
@@ -236,39 +236,26 @@ func (c *changefeed) handleErr(ctx cdcContext.Context, err error) {
 	log.Error("an error occurred in Owner",
 		zap.String("namespace", c.id.Namespace),
 		zap.String("changefeed", c.id.ID), zap.Error(err))
-
 	var code string
 	if rfcCode, ok := cerror.RFCCode(err); ok {
 		code = string(rfcCode)
 	} else {
 		code = string(cerror.ErrOwnerUnknown.RFCCode())
 	}
-	runningErr := &model.RunningError{
+
+	switch errors.Cause(err).(type) {
+	case model.Warning:
+		// TODO: patch it into changefeed info.
+		return
+	default:
+	}
+
+	c.feedStateManager.handleError(&model.RunningError{
 		Time:    time.Now(),
 		Addr:    contextutil.CaptureAddrFromCtx(ctx),
 		Code:    code,
 		Message: err.Error(),
-	}
-
-	switch innerErr := errors.Cause(err).(type) {
-	case model.ComponentError:
-		runningErr.Component = int(innerErr.Component)
-		switch innerErr.Component {
-		case model.OwnerDDLSink:
-			// `PatchInfo` will put the error into changefeed info, but won't stop it.
-			c.feedStateManager.state.PatchInfo(
-				func(info *model.ChangeFeedInfo) (*model.ChangeFeedInfo, bool, error) {
-					if info == nil {
-						return nil, false, nil
-					}
-					info.Error = runningErr
-					return info, true, nil
-				})
-			return
-		}
-	}
-
-	c.feedStateManager.handleError(runningErr)
+	})
 	c.releaseResources(ctx)
 }
 
@@ -584,7 +571,13 @@ LOOP:
 		zap.String("changefeed", c.id.ID),
 	)
 
-	c.ddlSink = c.newSink(c.id, c.state.Info, ctx.Throw)
+	c.ddlSink = c.newSink(c.id, c.state.Info, func(err error) {
+		// TODO(qupeng): report the warning.
+		log.Info("ddlSink internal error",
+			zap.String("namespace", c.id.Namespace),
+			zap.String("changefeed", c.id.ID),
+			zap.Error(err))
+	})
 	c.ddlSink.run(cancelCtx)
 
 	c.ddlPuller, err = c.newDDLPuller(cancelCtx,
@@ -603,11 +596,10 @@ LOOP:
 		ctx.Throw(c.ddlPuller.Run(cancelCtx))
 	}()
 
-	// c.downstreamObserver, err = c.newDownstreamObserver(
-	// 	ctx, c.state.Info.SinkURI, c.state.Info.Config)
-	// if err != nil {
-	// 	return err
-	// }
+	c.downstreamObserver, err = c.newDownstreamObserver(ctx, c.state.Info.SinkURI, c.state.Info.Config)
+	if err != nil {
+		return err
+	}
 	c.observerLastTick = atomic.NewTime(time.Time{})
 
 	stdCtx := contextutil.PutChangefeedIDInCtx(cancelCtx, c.id)
@@ -1026,16 +1018,16 @@ func (c *changefeed) tickDownstreamObserver(ctx context.Context) {
 		default:
 		}
 		go func() {
-			// cctx, cancel := context.WithTimeout(ctx, time.Second*5)
-			// defer cancel()
-			// if err := c.downstreamObserver.Tick(cctx); err != nil {
-			// 	// Prometheus is not deployed, it happens in non production env.
-			// 	if strings.Contains(err.Error(),
-			// 		fmt.Sprintf(":%d", errno.ErrPrometheusAddrIsNotSet)) {
-			// 		return
-			// 	}
-			// 	log.Warn("backend observer tick error", zap.Error(err))
-			// }
+			cctx, cancel := context.WithTimeout(ctx, time.Second*5)
+			defer cancel()
+			if err := c.downstreamObserver.Tick(cctx); err != nil {
+				// Prometheus is not deployed, it happens in non production env.
+				noPrometheusMsg := fmt.Sprintf(":%d", errno.ErrPrometheusAddrIsNotSet)
+				if strings.Contains(err.Error(), noPrometheusMsg) {
+					return
+				}
+				log.Warn("backend observer tick error", zap.Error(err))
+			}
 		}()
 	}
 }

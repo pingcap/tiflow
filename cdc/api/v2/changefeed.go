@@ -15,7 +15,6 @@ package v2
 
 import (
 	"context"
-	"fmt"
 	"net/http"
 	"sort"
 	"strings"
@@ -254,8 +253,6 @@ func (h *OpenAPIV2) listChangeFeeds(c *gin.Context) {
 		if !exist {
 			continue
 		}
-		log.Info("QP cfInfo", zap.Any("cfInfo", cfInfo))
-		fmt.Printf("QP cfInfo: %v\n", *cfInfo)
 		cfStatus := statuses[cfID]
 
 		if !cfInfo.State.IsNeeded(state) {
@@ -275,9 +272,7 @@ func (h *OpenAPIV2) listChangeFeeds(c *gin.Context) {
 		// if the state is normal, we shall not return the error info
 		// because changefeed will is retrying. errors will confuse the users
 		if commonInfo.FeedState == model.StateNormal {
-			if commonInfo.RunningError != nil && commonInfo.RunningError.Component == 0 {
-				commonInfo.RunningError = nil
-			}
+			commonInfo.RunningError = nil
 		}
 
 		if cfStatus != nil {
@@ -822,7 +817,6 @@ func toAPIModel(
 	// if the state is normal, we shall not return the error info
 	// because changefeed will is retrying. errors will confuse the users
 	if info.State != model.StateNormal && info.Error != nil {
-		// FIXME: handle state normal.
 		runningError = &RunningError{
 			Addr:    info.Error.Addr,
 			Code:    info.Error.Code,
