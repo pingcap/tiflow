@@ -32,7 +32,6 @@ import (
 	tablesinkmetrics "github.com/pingcap/tiflow/cdc/sink/metrics/tablesink"
 	"github.com/pingcap/tiflow/cdc/sink/tablesink"
 	cerrors "github.com/pingcap/tiflow/pkg/errors"
-	"github.com/pingcap/tiflow/pkg/retry"
 	"github.com/pingcap/tiflow/pkg/spanz"
 	"github.com/pingcap/tiflow/pkg/upstream"
 	"github.com/prometheus/client_golang/prometheus"
@@ -195,7 +194,7 @@ func (m *SinkManager) Run(ctx context.Context) (err error) {
 	sinkErrors := make(chan error, 16)
 	redoErrors := make(chan error, 16)
 
-	// Some goroutines should never fail.
+	// SinkManager will restart some internal modules if necessasry.
 	m.backgroundGC(gcErrors)
 	for {
 		if err := m.initSinkFactory(sinkFactoryErrors); err != nil {
@@ -225,6 +224,7 @@ func (m *SinkManager) Run(ctx context.Context) (err error) {
 				}
 			}()
 		}
+
 		if m.redoDMLMgr != nil && m.redoEg == nil {
 			var redoCtx context.Context
 			m.redoEg, redoCtx = errgroup.WithContext(m.managerCtx)
@@ -246,22 +246,34 @@ func (m *SinkManager) Run(ctx context.Context) (err error) {
 			}()
 		}
 
+		isWarning := false
 		select {
 		case <-ctx.Done():
 			return errors.Trace(ctx.Err())
 		case err = <-gcErrors:
 			return errors.Trace(ctx.Err())
 		case err = <-sinkFactoryErrors:
+			switch errors.Cause(err).(type) {
+			case model.Warning:
+				isWarning = true
+			default:
+			}
 			log.Info("Sink manager backend sink fails",
 				zap.String("namespace", m.changefeedID.Namespace),
 				zap.String("changefeed", m.changefeedID.ID),
+				zap.Bool("isWarning", isWarning),
 				zap.Error(err))
-			m.clearSinkFactory()
-			sinkFactoryErrors = make(chan error, 16)
+			if isWarning {
+				// TODO(qupeng): report th warning.
+				m.clearSinkFactory()
+				sinkFactoryErrors = make(chan error, 16)
+			} else {
+				return errors.Trace(err)
+			}
 		case err = <-sinkErrors:
-			m.sinkEg = nil
+			return errors.Trace(err)
 		case err = <-redoErrors:
-			m.redoEg = nil
+			return errors.Trace(err)
 		}
 
 		// Use a 5 second backoff when re-establishing internal resources.
@@ -753,7 +765,11 @@ func (m *SinkManager) AddTable(span tablepb.Span, startTs model.Ts, targetTs mod
 		tablepb.TableStatePreparing,
 		startTs,
 		targetTs,
+		func(ctx context.Context) (model.Ts, error) {
+			return genReplicateTs(ctx, m.up.PDClient)
+		},
 	)
+
 	_, loaded := m.tableSinks.LoadOrStore(span, sinkWrapper)
 	if loaded {
 		log.Panic("Add an exists table sink",
@@ -787,29 +803,11 @@ func (m *SinkManager) StartTable(span tablepb.Span, startTs model.Ts) error {
 			zap.String("changefeed", m.changefeedID.ID),
 			zap.Stringer("span", &span))
 	}
-	backoffBaseDelayInMs := int64(100)
-	totalRetryDuration := 10 * time.Second
-	var replicateTs model.Ts
-	err := retry.Do(m.managerCtx, func() error {
-		phy, logic, err := m.up.PDClient.GetTS(m.managerCtx)
-		if err != nil {
-			return errors.Trace(err)
-		}
-		replicateTs = oracle.ComposeTS(phy, logic)
-		log.Debug("Set replicate ts",
-			zap.String("namespace", m.changefeedID.Namespace),
-			zap.String("changefeed", m.changefeedID.ID),
-			zap.Stringer("span", &span),
-			zap.Uint64("replicateTs", replicateTs),
-		)
-		return nil
-	}, retry.WithBackoffBaseDelay(backoffBaseDelayInMs),
-		retry.WithTotalRetryDuratoin(totalRetryDuration),
-		retry.WithIsRetryableErr(cerrors.IsRetryableError))
-	if err != nil {
-		return errors.Trace(err)
+
+	if err := tableSink.(*tableSinkWrapper).start(m.managerCtx, startTs); err != nil {
+		return err
 	}
-	tableSink.(*tableSinkWrapper).start(startTs, replicateTs)
+
 	m.sinkProgressHeap.push(&progress{
 		span:              span,
 		nextLowerBoundPos: engine.Position{StartTs: 0, CommitTs: startTs + 1},

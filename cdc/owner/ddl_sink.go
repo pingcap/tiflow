@@ -154,7 +154,7 @@ func (s *ddlSinkImpl) retrySinkActionWithErrorReport(ctx context.Context, action
 			return nil
 		}
 		s.sink = nil
-		s.reportErr(model.NewComponentError(err, model.OwnerDDLSink))
+		s.reportErr(model.NewWarning(err, model.ComponentOwnerSink))
 
 		timer := time.NewTimer(5 * time.Second)
 		select {
@@ -342,6 +342,8 @@ func (s *ddlSinkImpl) emitSyncPoint(ctx context.Context, checkpointTs uint64) er
 
 func (s *ddlSinkImpl) close(ctx context.Context) (err error) {
 	s.cancel()
+	s.wg.Wait()
+
 	// they will both be nil if changefeed return an error in initializing
 	if s.sink != nil {
 		s.sink.Close()
@@ -349,7 +351,6 @@ func (s *ddlSinkImpl) close(ctx context.Context) (err error) {
 	if s.syncPointStore != nil {
 		err = s.syncPointStore.Close()
 	}
-	s.wg.Wait()
 	if err != nil && errors.Cause(err) != context.Canceled {
 		return err
 	}

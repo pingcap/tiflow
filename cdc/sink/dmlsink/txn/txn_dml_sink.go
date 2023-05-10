@@ -73,6 +73,10 @@ func NewMySQLSink(
 	backendImpls, err := mysql.NewMySQLBackends(ctx, sinkURI, replicaConfig, GetDBConnImpl, statistics)
 	if err != nil {
 		cancel()
+		if errors.Cause(err) != context.Canceled {
+			// It's ok to treat all sink errors as warnings.
+			err = model.NewWarning(err, model.ComponentProcessorSink)
+		}
 		return nil, err
 	}
 
@@ -111,6 +115,8 @@ func newSink(ctx context.Context, backends []backend,
 		sink.isDead.Store(true)
 		close(sink.dead)
 		if err != nil && errors.Cause(err) != context.Canceled {
+			// It's ok to treat all sink errors as warnings.
+			err = model.NewWarning(err, model.ComponentProcessorSink)
 			select {
 			case <-ctx.Done():
 			case errCh <- err:

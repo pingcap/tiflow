@@ -102,29 +102,9 @@ func (w *sinkWorker) handleTasks(ctx context.Context, taskChan <-chan *sinkTask)
 		case <-ctx.Done():
 			return ctx.Err()
 		case task := <-taskChan:
-			// TODO: if it's a sink error, don't break the loop.
-			if err := w.handleTask(ctx, task); err != nil {
-				shouldExit := true
-				switch innerErr := errors.Cause(err).(type) {
-				case model.ComponentError:
-					switch innerErr.Component {
-					case model.ProcessorSink:
-						// NOTE: the table sink must have been closed if error happens.
-						ckpt := task.tableSink.getCheckpointTs().ResolvedMark()
-						task.callback(engine.Position{StartTs: ckpt - 1, CommitTs: ckpt})
-						shouldExit = false
-					default:
-					}
-				default:
-				}
-				log.Info("Sink worker handle task fails",
-					zap.String("namespace", w.changefeedID.Namespace),
-					zap.String("changefeed", w.changefeedID.ID),
-					zap.Bool("shouldExit", shouldExit),
-					zap.Error(err))
-				if shouldExit {
-					return err
-				}
+			err := w.handleTask(ctx, task)
+			if err != nil {
+				return err
 			}
 		}
 	}
@@ -192,6 +172,26 @@ func (w *sinkWorker) handleTask(ctx context.Context, task *sinkTask) (finalErr e
 		// Otherwise we can't ensure all events before `lastPos` are emitted.
 		if finalErr == nil {
 			task.callback(advancer.lastPos)
+		} else {
+			switch errors.Cause(finalErr).(type) {
+			// If it's a warning, close the table sink and wait all pending
+			// events have been reported. Then we can continue the table
+			// at the checkpoint position.
+			case model.Warning:
+				task.tableSink.clearTableSink()
+				// Restart the table sink based on the checkpoint position.
+				if finalErr = task.tableSink.restart(ctx); finalErr == nil {
+					ckpt := task.tableSink.getCheckpointTs().ResolvedMark()
+					lastWrittenPos := engine.Position{StartTs: ckpt - 1, CommitTs: ckpt}
+					task.callback(lastWrittenPos)
+					log.Info("table sink has been restarted",
+						zap.String("namespace", w.changefeedID.Namespace),
+						zap.String("changefeed", w.changefeedID.ID),
+						zap.Stringer("span", &task.span),
+						zap.Any("lastWrittenPos", lastWrittenPos))
+				}
+			default:
+			}
 		}
 	}()
 
