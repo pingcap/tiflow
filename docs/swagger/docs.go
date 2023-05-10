@@ -1564,16 +1564,14 @@ var doc = `{
                 "encoder-concurrency": {
                     "type": "integer"
                 },
-<<<<<<< HEAD
                 "file-index-digit": {
                     "type": "integer"
-=======
+                },
                 "kafka-config": {
                     "$ref": "#/definitions/config.KafkaConfig"
                 },
                 "mysql-config": {
                     "$ref": "#/definitions/config.MySQLConfig"
->>>>>>> 90070487c2 (sink(ticdc): move changefeed uri parameter to config file (#8855))
                 },
                 "only-output-updated-columns": {
                     "type": "boolean"
@@ -2571,7 +2569,7 @@ var doc = `{
                         "$ref": "#/definitions/v2.DispatchRule"
                     }
                 },
-                "enable_kafka_sink_v_2": {
+                "enable_kafka_sink_v2": {
                     "type": "boolean"
                 },
                 "enable_partition_separator": {
@@ -2580,16 +2578,14 @@ var doc = `{
                 "encoder_concurrency": {
                     "type": "integer"
                 },
-<<<<<<< HEAD
-                "file_index_width": {
+                "file_index_digit": {
                     "type": "integer"
-=======
+                },
                 "kafka_config": {
                     "$ref": "#/definitions/v2.KafkaConfig"
                 },
                 "mysql_config": {
                     "$ref": "#/definitions/v2.MySQLConfig"
->>>>>>> 90070487c2 (sink(ticdc): move changefeed uri parameter to config file (#8855))
                 },
                 "only_output_updated_columns": {
                     "type": "boolean"
