@@ -35,6 +35,14 @@ type MessagesConfig struct {
 
 	// MaxRecvMsgSize is the maximum message size in bytes TiCDC can receive.
 	MaxRecvMsgSize int `toml:"max-recv-msg-size" json:"max-recv-msg-size"`
+
+	// After a duration of this time if the server doesn't see any activity it
+	// pings the client to see if the transport is still alive.
+	KeepAliveTime TomlDuration `toml:"keep-alive-time" json:"keep-alive-time"`
+	// After having pinged for keepalive check, the server waits for a duration
+	// of Timeout and if no activity is seen even after that the connection is
+	// closed.
+	KeepAliveTimeout TomlDuration `toml:"keep-alive-timeout" json:"keep-alive-timeout"`
 }
 
 // read only
@@ -48,6 +56,8 @@ var defaultMessageConfig = &MessagesConfig{
 	ServerAckInterval:            TomlDuration(time.Millisecond * 100),
 	ServerWorkerPoolSize:         4,
 	MaxRecvMsgSize:               defaultMaxRecvMsgSize,
+	KeepAliveTime:                TomlDuration(time.Second * 30),
+	KeepAliveTimeout:             TomlDuration(time.Second * 10),
 }
 
 const (
@@ -115,6 +125,12 @@ func (c *MessagesConfig) ValidateAndAdjust() error {
 	if c.ServerAckInterval == 0 {
 		c.ServerAckInterval = defaultMessageConfig.ServerAckInterval
 	}
+	if c.KeepAliveTime == 0 {
+		c.KeepAliveTime = defaultMessageConfig.KeepAliveTime
+	}
+	if c.KeepAliveTimeout == 0 {
+		c.KeepAliveTimeout = defaultMessageConfig.KeepAliveTimeout
+	}
 	if time.Duration(c.ServerAckInterval) > 10*time.Second {
 		return cerrors.ErrInvalidServerOption.GenWithStackByArgs("server-ack-interval is larger than 10s")
 	}
@@ -149,6 +165,8 @@ func (c *MessagesConfig) Clone() *MessagesConfig {
 		ServerAckInterval:            c.ServerAckInterval,
 		ServerWorkerPoolSize:         c.ServerWorkerPoolSize,
 		MaxRecvMsgSize:               c.MaxRecvMsgSize,
+		KeepAliveTime:                c.KeepAliveTime,
+		KeepAliveTimeout:             c.KeepAliveTimeout,
 	}
 }
 
@@ -177,5 +195,7 @@ func (c *MessagesConfig) ToMessageServerConfig() *p2p.MessageServerConfig {
 		WaitUnregisterHandleTimeoutThreshold: unregisterHandleTimeout,
 		SendRateLimitPerStream:               serverSendRateLimit,
 		MaxRecvMsgSize:                       c.MaxRecvMsgSize,
+		KeepAliveTimeout:                     time.Duration(c.KeepAliveTimeout),
+		KeepAliveTime:                        time.Duration(c.KeepAliveTime),
 	}
 }
