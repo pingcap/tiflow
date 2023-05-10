@@ -18,6 +18,7 @@ import (
 	"testing"
 
 	"github.com/pingcap/tiflow/pkg/config"
+	"github.com/pingcap/tiflow/pkg/integrity"
 	"github.com/stretchr/testify/require"
 )
 
@@ -40,7 +41,7 @@ func TestConfigApplyValidate4EnableRowChecksum(t *testing.T) {
 
 	// enable the row level checksum
 	replicaConfig := config.GetDefaultReplicaConfig()
-	replicaConfig.Integrity.IntegrityCheckLevel = config.IntegrityCheckLevelCorrectness
+	replicaConfig.Integrity.IntegrityCheckLevel = integrity.CheckLevelCorrectness
 
 	// avro, all requirement satisfied, should return no error
 	replicaConfig.Sink.SchemaRegistry = "some-schema-registry"

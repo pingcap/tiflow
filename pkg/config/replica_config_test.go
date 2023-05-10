@@ -20,6 +20,11 @@ import (
 	"testing"
 	"time"
 
+<<<<<<< HEAD
+=======
+	"github.com/aws/aws-sdk-go/aws"
+	"github.com/pingcap/tiflow/pkg/integrity"
+>>>>>>> dca55d4705 (integrity(ticdc): add integrity package and move some files, reorder columns at the mounter (#8917))
 	"github.com/stretchr/testify/require"
 )
 
@@ -182,9 +187,9 @@ func TestValidateAndAdjust(t *testing.T) {
 
 	// enable the checksum verification, but use blackhole sink
 	cfg = GetDefaultReplicaConfig()
-	cfg.Integrity.IntegrityCheckLevel = IntegrityCheckLevelCorrectness
+	cfg.Integrity.IntegrityCheckLevel = integrity.CheckLevelCorrectness
 	require.NoError(t, cfg.ValidateAndAdjust(sinkURL))
-	require.Equal(t, IntegrityCheckLevelNone, cfg.Integrity.IntegrityCheckLevel)
+	require.Equal(t, integrity.CheckLevelNone, cfg.Integrity.IntegrityCheckLevel)
 }
 
 func TestIsSinkCompatibleWithSpanReplication(t *testing.T) {

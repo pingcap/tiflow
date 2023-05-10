@@ -42,6 +42,7 @@ import (
 	"github.com/pingcap/tiflow/cdc/model"
 	"github.com/pingcap/tiflow/pkg/config"
 	"github.com/pingcap/tiflow/pkg/filter"
+	"github.com/pingcap/tiflow/pkg/integrity"
 	"github.com/pingcap/tiflow/pkg/spanz"
 	"github.com/pingcap/tiflow/pkg/sqlmodel"
 	"github.com/pingcap/tiflow/pkg/util"
@@ -1003,7 +1004,7 @@ func TestDecodeRow(t *testing.T) {
 	cfg := config.GetDefaultReplicaConfig()
 
 	cfgWithChecksumEnabled := config.GetDefaultReplicaConfig()
-	cfgWithChecksumEnabled.Integrity.IntegrityCheckLevel = config.IntegrityCheckLevelCorrectness
+	cfgWithChecksumEnabled.Integrity.IntegrityCheckLevel = integrity.CheckLevelCorrectness
 
 	for _, c := range []*config.ReplicaConfig{cfg, cfgWithChecksumEnabled} {
 		filter, err := filter.NewFilter(c, "")
