@@ -20,8 +20,8 @@ import (
 	"testing"
 	"time"
 
-	"github.com/pingcap/tiflow/pkg/integrity"
 	"github.com/aws/aws-sdk-go/aws"
+	"github.com/pingcap/tiflow/pkg/integrity"
 	"github.com/stretchr/testify/require"
 )
 
