@@ -16,7 +16,7 @@ stop() {
 
 function run() {
 	# we only support eventually consistent replication with MySQL sink
-	if [ "$SINK_TYPE" == "kafka" ]; then
+	if [ "$SINK_TYPE" != "mysql" ]; then
 		return
 	fi
 
