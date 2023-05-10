@@ -9,27 +9,28 @@ CDC_BINARY=cdc.test
 SINK_TYPE=$1
 
 if [ "$SINK_TYPE" != "kafka" ]; then
-  return
+	return
 fi
 
-./schema-registry/bin/schema-registry-start -daemon etc/schema-registry/schema-registry.properties & SCHEMA_REGISTRY_PID=$!
+./schema-registry/bin/schema-registry-start -daemon etc/schema-registry/schema-registry.properties &
+SCHEMA_REGISTRY_PID=$!
 i = 0
 while ! curl -o /dev/null -v -s "http://127.0.0.1:8081/"; do
-  i=$(($i + 1))
-  if [ $i -gt 30 ]; then
-    echo 'Failed to start schema registry'
-    exit 1
-  fi
-  sleep 2
+	i=$(($i + 1))
+	if [ $i -gt 30 ]; then
+		echo 'Failed to start schema registry'
+		exit 1
+	fi
+	sleep 2
 done
 
 stop_schema_registry() {
-  kill -2 $SCHEMA_REGISTRY_PID
+	kill -2 $SCHEMA_REGISTRY_PID
 }
 
 stop() {
-  stop_tidb_cluster
-  stop_schema_registry
+	stop_tidb_cluster
+	stop_schema_registry
 }
 
 # use kafka-consumer with avro decoder to sync data from kafka to mysql
@@ -54,7 +55,7 @@ function run() {
 
 	run_cdc_cli changefeed create --start-ts=$start_ts --sink-uri="$SINK_URI"
 
-  run_kafka_consumer $WORK_DIR "kafka://127.0.0.1:9092/$TOPIC_NAME?protocol=avro&enable-tidb-extension=true"
+	run_kafka_consumer $WORK_DIR "kafka://127.0.0.1:9092/$TOPIC_NAME?protocol=avro&enable-tidb-extension=true"
 
 	run_sql_file $CUR/data/data.sql ${UP_TIDB_HOST} ${UP_TIDB_PORT}
 
