@@ -1372,6 +1372,9 @@
                 "encoder-concurrency": {
                     "type": "integer"
                 },
+                "file-index-digit": {
+                    "type": "integer"
+                },
                 "only-output-updated-columns": {
                     "type": "boolean"
                 },
@@ -2199,6 +2202,9 @@
                     "type": "boolean"
                 },
                 "encoder_concurrency": {
+                    "type": "integer"
+                },
+                "file_index_width": {
                     "type": "integer"
                 },
                 "only_output_updated_columns": {
