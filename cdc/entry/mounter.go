@@ -19,6 +19,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"math"
+	"sort"
 	"time"
 	"unsafe"
 
@@ -33,9 +34,9 @@ import (
 	"github.com/pingcap/tidb/types"
 	"github.com/pingcap/tidb/util/rowcodec"
 	"github.com/pingcap/tiflow/cdc/model"
-	"github.com/pingcap/tiflow/pkg/config"
 	cerror "github.com/pingcap/tiflow/pkg/errors"
 	pfilter "github.com/pingcap/tiflow/pkg/filter"
+	"github.com/pingcap/tiflow/pkg/integrity"
 	"github.com/prometheus/client_golang/prometheus"
 	"go.uber.org/zap"
 )
@@ -79,7 +80,7 @@ type mounter struct {
 	metricTotalRows              prometheus.Gauge
 	metricIgnoredDMLEventCounter prometheus.Counter
 
-	integrity *config.IntegrityConfig
+	integrity *integrity.Config
 
 	// decoder and preDecoder are used to decode the raw value, also used to extract checksum,
 	// they should not be nil after decode at least one event in the row format v2.
@@ -98,7 +99,7 @@ func NewMounter(schemaStorage SchemaStorage,
 	tz *time.Location,
 	filter pfilter.Filter,
 	enableOldValue bool,
-	integrity *config.IntegrityConfig,
+	integrity *integrity.Config,
 ) Mounter {
 	return &mounter{
 		schemaStorage:  schemaStorage,
@@ -404,11 +405,6 @@ func (m *mounter) verifyChecksum(
 		return 0, 0, true, nil
 	}
 
-	// when the old value is not enabled, no previous columns so that no need to verify the checksum.
-	if isPreRow && !m.enableOldValue {
-		return 0, 0, true, nil
-	}
-
 	var decoder *rowcodec.DatumMapDecoder
 	if isPreRow {
 		decoder = m.preDecoder
@@ -434,10 +430,14 @@ func (m *mounter) verifyChecksum(
 			Datum:      &rawColumns[idx],
 		})
 	}
+	sort.Slice(columns, func(i, j int) bool {
+		return columns[i].ID < columns[j].ID
+	})
 	calculator := rowcodec.RowData{
 		Cols: columns,
 		Data: make([]byte, 0),
 	}
+
 	checksum, err := calculator.Checksum()
 	if err != nil {
 		log.Error("failed to calculate the checksum", zap.Error(err))
@@ -446,6 +446,8 @@ func (m *mounter) verifyChecksum(
 
 	// the first checksum matched, it hits in the most case.
 	if checksum == first {
+		log.Debug("checksum matched",
+			zap.Uint32("checksum", checksum), zap.Uint32("first", first))
 		return checksum, version, true, nil
 	}
 
@@ -460,7 +462,7 @@ func (m *mounter) verifyChecksum(
 	}
 
 	if checksum == extra {
-		log.Warn("extra checksum matched, this may happen the upstream TiDB is during the DDL"+
+		log.Debug("extra checksum matched, this may happen the upstream TiDB is during the DDL"+
 			"execution phase",
 			zap.Uint32("checksum", checksum),
 			zap.Uint32("extra", extra))
@@ -481,8 +483,10 @@ func (m *mounter) mountRowKVEntry(tableInfo *model.TableInfo, row *rowKVEntry, d
 		matched     bool
 		err         error
 
-		corrupted       bool
+		checksum *integrity.Checksum
+
 		checksumVersion int
+		corrupted       bool
 	)
 
 	// Decode previous columns.
@@ -534,9 +538,9 @@ func (m *mounter) mountRowKVEntry(tableInfo *model.TableInfo, row *rowKVEntry, d
 	}
 
 	var (
-		cols     []*model.Column
-		rawCols  []types.Datum
-		checksum uint32
+		cols    []*model.Column
+		rawCols []types.Datum
+		current uint32
 	)
 	if row.RowExist {
 		cols, rawCols, columnInfos, err = datum2Column(tableInfo, row.Row, true)
@@ -544,7 +548,7 @@ func (m *mounter) mountRowKVEntry(tableInfo *model.TableInfo, row *rowKVEntry, d
 			return nil, rawRow, errors.Trace(err)
 		}
 
-		checksum, checksumVersion, matched, err = m.verifyChecksum(columnInfos, rawCols, false)
+		current, checksumVersion, matched, err = m.verifyChecksum(columnInfos, rawCols, false)
 		if err != nil {
 			return nil, rawRow, errors.Trace(err)
 		}
@@ -571,6 +575,18 @@ func (m *mounter) mountRowKVEntry(tableInfo *model.TableInfo, row *rowKVEntry, d
 	_, _, colInfos := tableInfo.GetRowColInfos()
 	rawRow.PreRowDatums = preRawCols
 	rawRow.RowDatums = rawCols
+
+	// if both are 0, it means the checksum is not enabled
+	// so the checksum is nil to reduce memory allocation.
+	if preChecksum != 0 || current != 0 {
+		checksum = &integrity.Checksum{
+			Current:   current,
+			Previous:  preChecksum,
+			Corrupted: corrupted,
+			Version:   checksumVersion,
+		}
+	}
+
 	return &model.RowChangedEvent{
 		StartTs:  row.StartTs,
 		CommitTs: row.CRTs,
@@ -586,10 +602,7 @@ func (m *mounter) mountRowKVEntry(tableInfo *model.TableInfo, row *rowKVEntry, d
 		Columns:    cols,
 		PreColumns: preCols,
 
-		Checksum:        checksum,
-		PreChecksum:     preChecksum,
-		Corrupted:       corrupted,
-		ChecksumVersion: checksumVersion,
+		Checksum: checksum,
 
 		IndexColumns:        tableInfo.IndexColumnsOffset,
 		ApproximateDataSize: dataSize,
