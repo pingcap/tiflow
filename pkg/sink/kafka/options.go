@@ -128,6 +128,7 @@ type urlConfig struct {
 	CA                           *string `form:"ca"`
 	Cert                         *string `form:"cert"`
 	Key                          *string `form:"key"`
+	InsecureSkipVerify           *bool   `form:"insecure-skip-verify"`
 }
 
 // Options stores user specified configurations
@@ -170,7 +171,7 @@ func NewOptions() *Options {
 		Compression:        "none",
 		RequiredAcks:       WaitForAll,
 		Credential:         &security.Credential{},
-		InsecureSkipVerify: true,
+		InsecureSkipVerify: false,
 		SASL:               &security.SASL{},
 		AutoCreate:         true,
 		DialTimeout:        10 * time.Second,
@@ -341,6 +342,7 @@ func mergeConfig(
 		dest.CA = fileConifg.CA
 		dest.Cert = fileConifg.Cert
 		dest.Key = fileConifg.Key
+		dest.InsecureSkipVerify = fileConifg.InsecureSkipVerify
 	}
 	if err := mergo.Merge(dest, urlParameters, mergo.WithOverride); err != nil {
 		return nil, err
@@ -385,6 +387,11 @@ func (o *Options) applyTLS(params *urlConfig) error {
 		if o.Credential != nil && o.Credential.IsTLSEnabled() {
 			o.EnableTLS = true
 		}
+	}
+
+	// Only set InsecureSkipVerify when enable the TLS.
+	if o.EnableTLS {
+		o.InsecureSkipVerify = *params.InsecureSkipVerify
 	}
 
 	return nil
