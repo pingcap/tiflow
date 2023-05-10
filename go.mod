@@ -60,12 +60,12 @@ require (
 	github.com/pingcap/check v0.0.0-20211026125417-57bd13f7b5f0
 	github.com/pingcap/errors v0.11.5-0.20221009092201-b66cddb77c32
 	github.com/pingcap/failpoint v0.0.0-20220801062533-2eaa32854a6c
-	github.com/pingcap/kvproto v0.0.0-20230407040905-68d0eebd564a
+	github.com/pingcap/kvproto v0.0.0-20230419072653-dc3cd8784a19
 	github.com/pingcap/log v1.1.1-0.20230317032135-a0d097d16e22
-	github.com/pingcap/tidb v1.1.0-beta.0.20230418111328-47e7432054a1
-	github.com/pingcap/tidb-tools v6.5.1-0.20230208065359-62b90e1e24a7+incompatible
-	github.com/pingcap/tidb/parser v0.0.0-20230417161919-627110332165
-	github.com/prometheus/client_golang v1.14.0
+	github.com/pingcap/tidb v1.1.0-beta.0.20230420065519-eb77d3928398
+	github.com/pingcap/tidb-tools v7.0.0+incompatible
+	github.com/pingcap/tidb/parser v0.0.0-20230420065519-eb77d3928398
+	github.com/prometheus/client_golang v1.15.0
 	github.com/prometheus/client_model v0.3.0
 	github.com/r3labs/diff v1.1.0
 	github.com/rcrowley/go-metrics v0.0.0-20201227073835-cf1acfcdf475
@@ -80,9 +80,9 @@ require (
 	github.com/swaggo/gin-swagger v1.2.0
 	github.com/swaggo/swag v1.8.3
 	github.com/syndtr/goleveldb v1.0.1-0.20210305035536-64b5b1c73954
-	github.com/tikv/client-go/v2 v2.0.8-0.20230417065328-92db9f7b151f
+	github.com/tikv/client-go/v2 v2.0.8-0.20230419123920-35c1ee47c4f9
 	github.com/tikv/pd v1.1.0-beta.0.20230203015356-248b3f0be132
-	github.com/tikv/pd/client v0.0.0-20230329114254-1948c247c2b1
+	github.com/tikv/pd/client v0.0.0-20230419153320-f1d1a80feb95
 	github.com/tinylib/msgp v1.1.6
 	github.com/uber-go/atomic v1.4.0
 	github.com/vmihailenco/msgpack/v5 v5.3.5
@@ -106,7 +106,7 @@ require (
 	golang.org/x/sys v0.7.0
 	golang.org/x/text v0.9.0
 	golang.org/x/time v0.3.0
-	google.golang.org/genproto v0.0.0-20230403163135-c38d8f061ccd
+	google.golang.org/genproto v0.0.0-20230410155749-daa745c078e1
 	google.golang.org/grpc v1.54.0
 	google.golang.org/protobuf v1.30.0
 	gopkg.in/yaml.v2 v2.4.0
@@ -200,7 +200,7 @@ require (
 	github.com/json-iterator/go v1.1.12 // indirect
 	github.com/klauspost/compress v1.15.13 // indirect
 	github.com/klauspost/cpuid v1.3.1 // indirect
-	github.com/kr/pretty v0.3.0 // indirect
+	github.com/kr/pretty v0.3.1 // indirect
 	github.com/kr/text v0.2.0 // indirect
 	github.com/labstack/echo/v4 v4.2.1 // indirect
 	github.com/leodido/go-urn v1.2.1 // indirect
@@ -237,7 +237,7 @@ require (
 	github.com/pkg/errors v0.9.1 // indirect
 	github.com/pmezard/go-difflib v1.0.0 // indirect
 	github.com/power-devops/perfstat v0.0.0-20221212215047-62379fc7944b // indirect
-	github.com/prometheus/common v0.39.0 // indirect
+	github.com/prometheus/common v0.42.0 // indirect
 	github.com/prometheus/procfs v0.9.0 // indirect
 	github.com/remyoudompheng/bigfft v0.0.0-20220927061507-ef77025ab5aa // indirect
 	github.com/rivo/uniseg v0.4.4 // indirect

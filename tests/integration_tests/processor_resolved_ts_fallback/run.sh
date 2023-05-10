@@ -10,7 +10,7 @@ SINK_TYPE=$1
 
 function run() {
 	# TODO: kafka sink has bug with this case, remove this after bug is fixed
-	if [ "$SINK_TYPE" == "kafka" ]; then
+	if [ "$SINK_TYPE" != "mysql" ]; then
 		return
 	fi
 

@@ -28,6 +28,7 @@ import (
 	"github.com/pingcap/tidb/br/pkg/lightning/importer"
 	"github.com/pingcap/tidb/br/pkg/lightning/importer/opts"
 	"github.com/pingcap/tidb/br/pkg/lightning/mydump"
+	"github.com/pingcap/tidb/br/pkg/lightning/precheck"
 	"github.com/pingcap/tidb/dumpling/export"
 	"github.com/pingcap/tidb/parser/mysql"
 	"github.com/pingcap/tidb/types"
@@ -477,28 +478,28 @@ func (c *Checker) Init(ctx context.Context) (err error) {
 				info.totalDataSize.Load(), targetInfoGetter))
 		}
 		if _, ok := c.checkingItems[config.LightningEmptyRegionChecking]; ok {
-			lChecker, err := builder.BuildPrecheckItem(importer.CheckTargetClusterEmptyRegion)
+			lChecker, err := builder.BuildPrecheckItem(precheck.CheckTargetClusterEmptyRegion)
 			if err != nil {
 				return err
 			}
 			c.checkList = append(c.checkList, checker.NewLightningEmptyRegionChecker(lChecker))
 		}
 		if _, ok := c.checkingItems[config.LightningRegionDistributionChecking]; ok {
-			lChecker, err := builder.BuildPrecheckItem(importer.CheckTargetClusterRegionDist)
+			lChecker, err := builder.BuildPrecheckItem(precheck.CheckTargetClusterRegionDist)
 			if err != nil {
 				return err
 			}
 			c.checkList = append(c.checkList, checker.NewLightningRegionDistributionChecker(lChecker))
 		}
 		if _, ok := c.checkingItems[config.LightningDownstreamVersionChecking]; ok {
-			lChecker, err := builder.BuildPrecheckItem(importer.CheckTargetClusterVersion)
+			lChecker, err := builder.BuildPrecheckItem(precheck.CheckTargetClusterVersion)
 			if err != nil {
 				return err
 			}
 			c.checkList = append(c.checkList, checker.NewLightningClusterVersionChecker(lChecker))
 		}
 		if _, ok := c.checkingItems[config.LightningMutexFeatureChecking]; ok {
-			lChecker, err := builder.BuildPrecheckItem(importer.CheckTargetUsingCDCPITR)
+			lChecker, err := builder.BuildPrecheckItem(precheck.CheckTargetUsingCDCPITR)
 			if err != nil {
 				return err
 			}
