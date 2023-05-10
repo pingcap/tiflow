@@ -21,7 +21,7 @@ import (
 	"time"
 
 	"github.com/aws/aws-sdk-go/aws"
-  "github.com/pingcap/tiflow/pkg/integrity"
+	"github.com/pingcap/tiflow/pkg/integrity"
 	"github.com/stretchr/testify/require"
 )
 
