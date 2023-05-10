@@ -40,7 +40,7 @@ services:
       DB_NAME: test
       DOWNSTREAM_DB_HOST: 127.0.0.1
       DOWNSTREAM_DB_PORT: 3306
-      USE_FLAT_MESSAGE: true
+      USE_FLAT_MESSAGE: "true"
     network_mode: "service:kafka"
     volumes:
       - ./logs/tidb_cdc_test:/root/logs

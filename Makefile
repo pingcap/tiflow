@@ -194,6 +194,7 @@ check_third_party_binary:
 	@which bin/etcdctl
 	@which bin/jq
 	@which bin/minio
+	@which bin/schema-registry
 
 integration_test_build: check_failpoint_ctl storage_consumer kafka_consumer
 	$(FAILPOINT_ENABLE)
