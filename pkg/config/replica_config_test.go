@@ -20,11 +20,7 @@ import (
 	"testing"
 	"time"
 
-<<<<<<< HEAD
-=======
-	"github.com/aws/aws-sdk-go/aws"
 	"github.com/pingcap/tiflow/pkg/integrity"
->>>>>>> dca55d4705 (integrity(ticdc): add integrity package and move some files, reorder columns at the mounter (#8917))
 	"github.com/stretchr/testify/require"
 )
 
