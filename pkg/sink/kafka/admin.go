@@ -179,16 +179,21 @@ func (a *saramaAdminClient) GetBrokerConfig(
 		return "", err
 	}
 
-	if len(configEntries) == 0 || configEntries[0].Name != configName {
-		log.Warn("Kafka config item not found",
-			zap.String("namespace", a.changefeed.Namespace),
-			zap.String("changefeed", a.changefeed.ID),
-			zap.String("configName", configName))
-		return "", cerror.ErrKafkaBrokerConfigNotFound.GenWithStack(
-			"cannot find the `%s` from the broker's configuration", configName)
+	// For compatibility with KOP, we checked all return values.
+	// 1. Kafka only returns requested configs.
+	// 2. Kop returns all configs.
+	for _, entry := range configEntries {
+		if entry.Name == configName {
+			return entry.Value, nil
+		}
 	}
 
-	return configEntries[0].Value, nil
+	log.Warn("Kafka config item not found",
+		zap.String("namespace", a.changefeed.Namespace),
+		zap.String("changefeed", a.changefeed.ID),
+		zap.String("configName", configName))
+	return "", cerror.ErrKafkaBrokerConfigNotFound.GenWithStack(
+		"cannot find the `%s` from the broker's configuration", configName)
 }
 
 func (a *saramaAdminClient) GetTopicsPartitions(_ context.Context) (map[string]int32, error) {
