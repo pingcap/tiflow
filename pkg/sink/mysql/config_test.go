@@ -22,6 +22,7 @@ import (
 	"time"
 
 	"github.com/DATA-DOG/go-sqlmock"
+	"github.com/aws/aws-sdk-go/aws"
 	dmysql "github.com/go-sql-driver/mysql"
 	"github.com/pingcap/tiflow/cdc/contextutil"
 	"github.com/pingcap/tiflow/cdc/model"
@@ -409,4 +410,89 @@ func TestApplyTimezone(t *testing.T) {
 			}
 		})
 	}
+}
+
+func TestMergeConfig(t *testing.T) {
+	uri := "mysql://topic"
+	sinkURI, err := url.Parse(uri)
+	require.NoError(t, err)
+	replicaConfig := config.GetDefaultReplicaConfig()
+	replicaConfig.Sink.MySQLConfig = &config.MySQLConfig{
+		WorkerCount:                  aws.Int(13),
+		MaxTxnRow:                    aws.Int(100),
+		MaxMultiUpdateRowSize:        aws.Int(102),
+		MaxMultiUpdateRowCount:       aws.Int(103),
+		TiDBTxnMode:                  aws.String("pessimistic"),
+		TimeZone:                     aws.String("Asia/Shanghai"),
+		WriteTimeout:                 aws.String("1m1s"),
+		ReadTimeout:                  aws.String("1m2s"),
+		Timeout:                      aws.String("1m3s"),
+		EnableBatchDML:               aws.Bool(true),
+		EnableMultiStatement:         aws.Bool(true),
+		EnableCachePreparedStatement: aws.Bool(true),
+	}
+	c := NewConfig()
+	tz, _ := time.LoadLocation("Asia/Shanghai")
+	ctx := contextutil.PutTimezoneInCtx(context.Background(), tz)
+	err = c.Apply(ctx, model.DefaultChangeFeedID("test"), sinkURI, replicaConfig)
+	require.NoError(t, err)
+	require.Equal(t, 13, c.WorkerCount)
+	require.Equal(t, 100, c.MaxTxnRow)
+	require.Equal(t, 102, c.MaxMultiUpdateRowSize)
+	require.Equal(t, 103, c.MaxMultiUpdateRowCount)
+	require.Equal(t, "pessimistic", c.tidbTxnMode)
+	require.Equal(t, "\"Asia/Shanghai\"", c.Timezone)
+	require.Equal(t, "1m1s", c.WriteTimeout)
+	require.Equal(t, "1m2s", c.ReadTimeout)
+	require.Equal(t, "1m3s", c.DialTimeout)
+	require.Equal(t, true, c.BatchDMLEnable)
+	require.Equal(t, true, c.MultiStmtEnable)
+	require.Equal(t, true, c.CachePrepStmts)
+
+	uri = "mysql://topic?" +
+		"worker-count=13&" +
+		"max-txn-row=100&" +
+		"max-multi-update-row-size=102&" +
+		"max-multi-update-row=103&" +
+		"tidb-txn-mode=pessimistic&" +
+		"time-zone=Asia/Shanghai&" +
+		"write-timeout=1m1s&" +
+		"read-timeout=1m2s&" +
+		"timeout=1m3s&" +
+		"batch-dml-enable=true&" +
+		"multi-stmt-enable=true&" +
+		"cache-prep-stmts=true"
+	sinkURI, err = url.Parse(uri)
+	require.NoError(t, err)
+	replicaConfig = config.GetDefaultReplicaConfig()
+	replicaConfig.Sink.MySQLConfig = &config.MySQLConfig{
+		WorkerCount:                  aws.Int(11),
+		MaxTxnRow:                    aws.Int(130),
+		MaxMultiUpdateRowSize:        aws.Int(142),
+		MaxMultiUpdateRowCount:       aws.Int(153),
+		TiDBTxnMode:                  aws.String("optimistic"),
+		TimeZone:                     aws.String("utc"),
+		WriteTimeout:                 aws.String("2m1s"),
+		ReadTimeout:                  aws.String("3m2s"),
+		Timeout:                      aws.String("4m3s"),
+		EnableBatchDML:               aws.Bool(false),
+		EnableMultiStatement:         aws.Bool(false),
+		EnableCachePreparedStatement: aws.Bool(false),
+	}
+	c = NewConfig()
+	ctx = contextutil.PutTimezoneInCtx(context.Background(), tz)
+	err = c.Apply(ctx, model.DefaultChangeFeedID("test"), sinkURI, replicaConfig)
+	require.NoError(t, err)
+	require.Equal(t, 13, c.WorkerCount)
+	require.Equal(t, 100, c.MaxTxnRow)
+	require.Equal(t, 102, c.MaxMultiUpdateRowSize)
+	require.Equal(t, 103, c.MaxMultiUpdateRowCount)
+	require.Equal(t, "pessimistic", c.tidbTxnMode)
+	require.Equal(t, "\"Asia/Shanghai\"", c.Timezone)
+	require.Equal(t, "1m1s", c.WriteTimeout)
+	require.Equal(t, "1m2s", c.ReadTimeout)
+	require.Equal(t, "1m3s", c.DialTimeout)
+	require.Equal(t, true, c.BatchDMLEnable)
+	require.Equal(t, true, c.MultiStmtEnable)
+	require.Equal(t, true, c.CachePrepStmts)
 }

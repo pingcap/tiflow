@@ -46,6 +46,7 @@ func testDMLWorker(ctx context.Context, t *testing.T, dir string) *dmlWorker {
 	require.Nil(t, err)
 	cfg := cloudstorage.NewConfig()
 	err = cfg.Apply(context.TODO(), sinkURI, config.GetDefaultReplicaConfig())
+	cfg.FileIndexWidth = 6
 	require.Nil(t, err)
 
 	statistics := metrics.NewStatistics(ctx, sink.TxnSink)
