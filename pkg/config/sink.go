@@ -277,6 +277,7 @@ type KafkaConfig struct {
 	CA                           *string      `toml:"ca" json:"ca,omitempty"`
 	Cert                         *string      `toml:"cert" json:"cert,omitempty"`
 	Key                          *string      `toml:"key" json:"key,omitempty"`
+	InsecureSkipVerify           *bool        `toml:"insecure-skip-verify" json:"insecure-skip-verify,omitempty"`
 	CodecConfig                  *CodecConfig `toml:"codec-config" json:"codec-config,omitempty"`
 }
 
