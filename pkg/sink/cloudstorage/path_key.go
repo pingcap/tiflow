@@ -58,7 +58,7 @@ func (s *SchemaPathKey) ParseSchemaFilePath(path string) (uint32, error) {
 	}
 
 	schemaFileName := matches[len(matches)-1]
-	version, checksum := MustParseSchemaName(schemaFileName)
+	version, checksum := mustParseSchemaName(schemaFileName)
 
 	*s = SchemaPathKey{
 		Schema:       schema,
@@ -76,7 +76,9 @@ type DmlPathKey struct {
 }
 
 // GenerateDMLFilePath generates the dml file path.
-func (d *DmlPathKey) GenerateDMLFilePath(idx uint64, extension string) string {
+func (d *DmlPathKey) GenerateDMLFilePath(
+	idx uint64, extension string, fileIndexWidth int,
+) string {
 	var elems []string
 
 	elems = append(elems, d.Schema)
@@ -89,7 +91,7 @@ func (d *DmlPathKey) GenerateDMLFilePath(idx uint64, extension string) string {
 	if len(d.Date) != 0 {
 		elems = append(elems, d.Date)
 	}
-	elems = append(elems, fmt.Sprintf("CDC%06d%s", idx, extension))
+	elems = append(elems, generateDataFileName(idx, extension, fileIndexWidth))
 
 	return strings.Join(elems, "/")
 }
