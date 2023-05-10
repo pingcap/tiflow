@@ -23,6 +23,7 @@ import (
 	"github.com/pingcap/tidb/parser/model"
 	"github.com/pingcap/tidb/parser/mysql"
 	"github.com/pingcap/tidb/util/rowcodec"
+	"github.com/pingcap/tiflow/pkg/integrity"
 	"github.com/pingcap/tiflow/pkg/quotes"
 	"github.com/pingcap/tiflow/pkg/util"
 	"go.uber.org/zap"
@@ -288,14 +289,6 @@ func (d *DDLEvent) ToRedoLog() *RedoLog {
 	}
 }
 
-// Checksum represent checksum for an RowChangedEvent
-type Checksum struct {
-	Current   uint32
-	Previous  uint32
-	Corrupted bool
-	Version   int
-}
-
 // RowChangedEvent represents a row changed event
 type RowChangedEvent struct {
 	StartTs  uint64 `json:"start-ts" msg:"start-ts"`
@@ -325,7 +318,7 @@ type RowChangedEvent struct {
 
 	// Checksum for the event, only not nil if the upstream TiDB enable the row level checksum
 	// and TiCDC set the integrity check level to the correctness.
-	Checksum *Checksum `json:"-" msg:"-"`
+	Checksum *integrity.Checksum `json:"-" msg:"-"`
 
 	// ApproximateDataSize is the approximate size of protobuf binary
 	// representation of this event.

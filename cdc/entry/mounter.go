@@ -37,6 +37,7 @@ import (
 	"github.com/pingcap/tiflow/pkg/config"
 	cerror "github.com/pingcap/tiflow/pkg/errors"
 	pfilter "github.com/pingcap/tiflow/pkg/filter"
+	"github.com/pingcap/tiflow/pkg/integrity"
 	"github.com/prometheus/client_golang/prometheus"
 	"go.uber.org/zap"
 )
@@ -483,7 +484,7 @@ func (m *mounter) mountRowKVEntry(tableInfo *model.TableInfo, row *rowKVEntry, d
 		matched     bool
 		err         error
 
-		checksum *model.Checksum
+		checksum *integrity.Checksum
 
 		checksumVersion int
 		corrupted       bool
@@ -579,7 +580,7 @@ func (m *mounter) mountRowKVEntry(tableInfo *model.TableInfo, row *rowKVEntry, d
 	// if both are 0, it means the checksum is not enabled
 	// so the checksum is nil to reduce memory allocation.
 	if preChecksum != 0 || current != 0 {
-		checksum = &model.Checksum{
+		checksum = &integrity.Checksum{
 			Current:   current,
 			Previous:  preChecksum,
 			Corrupted: corrupted,
