@@ -390,7 +390,7 @@ func (o *Options) applyTLS(params *urlConfig) error {
 	}
 
 	// Only set InsecureSkipVerify when enable the TLS.
-	if o.EnableTLS {
+	if o.EnableTLS && params.InsecureSkipVerify != nil {
 		o.InsecureSkipVerify = *params.InsecureSkipVerify
 	}
 
