@@ -79,12 +79,8 @@ const (
 	codecOPTAvroDecimalHandlingMode        = "avro-decimal-handling-mode"
 	codecOPTAvroBigintUnsignedHandlingMode = "avro-bigint-unsigned-handling-mode"
 	codecOPTAvroSchemaRegistry             = "schema-registry"
-<<<<<<< HEAD
-	codecOPTOnlyOutputUpdatedColumns       = "only-output-updated-columns"
-=======
 
 	codecOPTOnlyOutputUpdatedColumns = "only-output-updated-columns"
->>>>>>> 90070487c2 (sink(ticdc): move changefeed uri parameter to config file (#8855))
 )
 
 const (
@@ -105,26 +101,11 @@ type urlConfig struct {
 	AvroDecimalHandlingMode        *string `form:"avro-decimal-handling-mode"`
 	AvroBigintUnsignedHandlingMode *string `form:"avro-bigint-unsigned-handling-mode"`
 
-	// AvroEnableWatermark is the option for enabling watermark in avro protocol
-	// only used for internal testing, do not set this in the production environment since the
-	// confluent official consumer cannot handle watermark.
-	AvroEnableWatermark *bool `form:"avro-enable-watermark"`
-
 	AvroSchemaRegistry       string `form:"schema-registry"`
 	OnlyOutputUpdatedColumns *bool  `form:"only-output-updated-columns"`
 }
 
 // Apply fill the Config
-<<<<<<< HEAD
-func (c *Config) Apply(sinkURI *url.URL, config *config.ReplicaConfig) error {
-	params := sinkURI.Query()
-	if s := params.Get(codecOPTEnableTiDBExtension); s != "" {
-		b, err := strconv.ParseBool(s)
-		if err != nil {
-			return err
-		}
-		c.EnableTiDBExtension = b
-=======
 func (c *Config) Apply(sinkURI *url.URL, replicaConfig *config.ReplicaConfig) error {
 	req := &http.Request{URL: sinkURI}
 	var err error
@@ -134,7 +115,6 @@ func (c *Config) Apply(sinkURI *url.URL, replicaConfig *config.ReplicaConfig) er
 	}
 	if urlParameter, err = mergeConfig(replicaConfig, urlParameter); err != nil {
 		return err
->>>>>>> 90070487c2 (sink(ticdc): move changefeed uri parameter to config file (#8855))
 	}
 
 	if urlParameter.EnableTiDBExtension != nil {
@@ -153,31 +133,9 @@ func (c *Config) Apply(sinkURI *url.URL, replicaConfig *config.ReplicaConfig) er
 		*urlParameter.AvroDecimalHandlingMode != "" {
 		c.AvroDecimalHandlingMode = *urlParameter.AvroDecimalHandlingMode
 	}
-<<<<<<< HEAD
-
-	if config.Sink != nil && config.Sink.SchemaRegistry != "" {
-		c.AvroSchemaRegistry = config.Sink.SchemaRegistry
-	}
-
-	if config.Sink != nil {
-		c.Terminator = config.Sink.Terminator
-		if config.Sink.CSVConfig != nil {
-			c.Delimiter = config.Sink.CSVConfig.Delimiter
-			c.Quote = config.Sink.CSVConfig.Quote
-			c.NullString = config.Sink.CSVConfig.NullString
-			c.IncludeCommitTs = config.Sink.CSVConfig.IncludeCommitTs
-		}
-
-		c.OnlyOutputUpdatedColumns = config.Sink.OnlyOutputUpdatedColumns
-=======
 	if urlParameter.AvroBigintUnsignedHandlingMode != nil &&
 		*urlParameter.AvroBigintUnsignedHandlingMode != "" {
 		c.AvroBigintUnsignedHandlingMode = *urlParameter.AvroBigintUnsignedHandlingMode
-	}
-	if urlParameter.AvroEnableWatermark != nil {
-		if c.EnableTiDBExtension && c.Protocol == config.ProtocolAvro {
-			c.AvroEnableWatermark = *urlParameter.AvroEnableWatermark
-		}
 	}
 
 	if urlParameter.AvroSchemaRegistry != "" {
@@ -192,20 +150,19 @@ func (c *Config) Apply(sinkURI *url.URL, replicaConfig *config.ReplicaConfig) er
 			c.NullString = replicaConfig.Sink.CSVConfig.NullString
 			c.IncludeCommitTs = replicaConfig.Sink.CSVConfig.IncludeCommitTs
 		}
->>>>>>> 90070487c2 (sink(ticdc): move changefeed uri parameter to config file (#8855))
 	}
 	if urlParameter.OnlyOutputUpdatedColumns != nil {
 		c.OnlyOutputUpdatedColumns = *urlParameter.OnlyOutputUpdatedColumns
 	}
-	if c.OnlyOutputUpdatedColumns && !config.EnableOldValue {
+	if c.OnlyOutputUpdatedColumns && !replicaConfig.EnableOldValue {
 		return cerror.ErrCodecInvalidConfig.GenWithStack(
 			`old value must be enabled when configuration "%s" is true.`,
 			codecOPTOnlyOutputUpdatedColumns,
 		)
 	}
 
-	if config.Integrity != nil {
-		c.EnableRowChecksum = config.Integrity.Enabled()
+	if replicaConfig.Integrity != nil {
+		c.EnableRowChecksum = replicaConfig.Integrity.Enabled()
 	}
 
 	return nil
@@ -225,7 +182,6 @@ func mergeConfig(
 				codecConfig := replicaConfig.Sink.KafkaConfig.CodecConfig
 				dest.EnableTiDBExtension = codecConfig.EnableTiDBExtension
 				dest.MaxBatchSize = codecConfig.MaxBatchSize
-				dest.AvroEnableWatermark = codecConfig.AvroEnableWatermark
 				dest.AvroDecimalHandlingMode = codecConfig.AvroDecimalHandlingMode
 				dest.AvroBigintUnsignedHandlingMode = codecConfig.AvroBigintUnsignedHandlingMode
 			}

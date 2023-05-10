@@ -688,21 +688,6 @@ type Table struct {
 // SinkConfig represents sink config for a changefeed
 // This is a duplicate of config.SinkConfig
 type SinkConfig struct {
-<<<<<<< HEAD
-	Protocol                 string            `json:"protocol"`
-	SchemaRegistry           string            `json:"schema_registry"`
-	CSVConfig                *CSVConfig        `json:"csv"`
-	DispatchRules            []*DispatchRule   `json:"dispatchers,omitempty"`
-	ColumnSelectors          []*ColumnSelector `json:"column_selectors"`
-	TxnAtomicity             string            `json:"transaction_atomicity"`
-	EncoderConcurrency       int               `json:"encoder_concurrency"`
-	Terminator               string            `json:"terminator"`
-	DateSeparator            string            `json:"date_separator"`
-	EnablePartitionSeparator bool              `json:"enable_partition_separator"`
-	FileIndexWidth           int               `json:"file_index_width"`
-	EnableKafkaSinkV2        bool              `json:"enable_kafka_sink_v_2"`
-	OnlyOutputUpdatedColumns bool              `json:"only_output_updated_columns"`
-=======
 	Protocol                 string              `json:"protocol"`
 	SchemaRegistry           string              `json:"schema_registry"`
 	CSVConfig                *CSVConfig          `json:"csv"`
@@ -713,13 +698,13 @@ type SinkConfig struct {
 	Terminator               string              `json:"terminator"`
 	DateSeparator            string              `json:"date_separator"`
 	EnablePartitionSeparator bool                `json:"enable_partition_separator"`
+	FileIndexWidth           int                 `json:"file_index_digit"`
 	EnableKafkaSinkV2        bool                `json:"enable_kafka_sink_v2"`
 	OnlyOutputUpdatedColumns *bool               `json:"only_output_updated_columns"`
 	SafeMode                 *bool               `json:"safe_mode,omitempty"`
 	KafkaConfig              *KafkaConfig        `json:"kafka_config,omitempty"`
 	MySQLConfig              *MySQLConfig        `json:"mysql_config,omitempty"`
 	CloudStorageConfig       *CloudStorageConfig `json:"cloud_storage_config,omitempty"`
->>>>>>> 90070487c2 (sink(ticdc): move changefeed uri parameter to config file (#8855))
 }
 
 // CSVConfig denotes the csv config
@@ -893,8 +878,6 @@ type Capture struct {
 	AdvertiseAddr string `json:"address"`
 	ClusterID     string `json:"cluster_id"`
 }
-<<<<<<< HEAD
-=======
 
 // CodecConfig represents a MQ codec configuration
 type CodecConfig struct {
@@ -969,4 +952,3 @@ type ChangefeedStatus struct {
 	CheckpointTs uint64        `json:"checkpoint_ts"`
 	LastError    *RunningError `json:"last_error,omitempty"`
 }
->>>>>>> 90070487c2 (sink(ticdc): move changefeed uri parameter to config file (#8855))
