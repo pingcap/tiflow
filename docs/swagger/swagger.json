@@ -1399,6 +1399,9 @@
                 "enable-tls": {
                     "type": "boolean"
                 },
+                "insecure-skip-verify": {
+                    "type": "boolean"
+                },
                 "kafka-client-id": {
                     "type": "string"
                 },
@@ -2251,6 +2254,9 @@
                     "type": "string"
                 },
                 "enable_tls": {
+                    "type": "boolean"
+                },
+                "insecure_skip_verify": {
                     "type": "boolean"
                 },
                 "kafka_client_id": {
