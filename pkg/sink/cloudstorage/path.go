@@ -34,7 +34,7 @@ import (
 const (
 	// 3 is the length of "CDC", and the file number contains
 	// at least 6 digits (e.g. CDC000001.csv).
-	minFileNamePrefixLen = 9
+	minFileNamePrefixLen = 3 + config.MinFileIndexWidth
 	defaultIndexFileName = "CDC.index"
 
 	// The following constants are used to generate file paths.
@@ -54,8 +54,8 @@ func IsSchemaFile(path string) bool {
 	return schemaRE.MatchString(path)
 }
 
-// MustParseSchemaName parses the version from the schema file name.
-func MustParseSchemaName(path string) (uint64, uint32) {
+// mustParseSchemaName parses the version from the schema file name.
+func mustParseSchemaName(path string) (uint64, uint32) {
 	reportErr := func(err error) {
 		log.Panic("failed to parse schema file name",
 			zap.String("schemaPath", path),
@@ -97,6 +97,11 @@ func generateSchemaFilePath(
 	// Generate table schema file path.
 	return fmt.Sprintf(tableSchemaPrefix+schemaFileNameFormat,
 		schema, table, tableVersion, checksum)
+}
+
+func generateDataFileName(index uint64, extension string, fileIndexWidth int) string {
+	indexFmt := "%0" + strconv.Itoa(fileIndexWidth) + "d"
+	return fmt.Sprintf("CDC"+indexFmt+"%s", index, extension)
 }
 
 type indexWithDate struct {
@@ -180,7 +185,7 @@ func (f *FilePathGenerator) CheckOrWriteSchema(
 	}
 
 	// walk the table meta path to find the last schema file
-	_, checksum := MustParseSchemaName(tblSchemaFile)
+	_, checksum := mustParseSchemaName(tblSchemaFile)
 	schemaFileCnt := 0
 	lastVersion := uint64(0)
 	prefix := fmt.Sprintf(tableSchemaPrefix+"schema_", def.Schema, def.Table)
@@ -191,7 +196,7 @@ func (f *FilePathGenerator) CheckOrWriteSchema(
 			if !strings.HasSuffix(path, checksumSuffix) {
 				return nil
 			}
-			version, parsedChecksum := MustParseSchemaName(path)
+			version, parsedChecksum := mustParseSchemaName(path)
 			if parsedChecksum != checksum {
 				// TODO: parsedChecksum should be ignored, remove this panic
 				// after the new path protocol is verified.
@@ -254,6 +259,25 @@ func (f *FilePathGenerator) GenerateDateStr() string {
 	return dateStr
 }
 
+// GenerateIndexFilePath generates a canonical path for index file.
+func (f *FilePathGenerator) GenerateIndexFilePath(tbl VersionedTableName, date string) string {
+	dir := f.generateDataDirPath(tbl, date)
+	name := defaultIndexFileName
+	return strings.Join([]string{dir, name}, "/")
+}
+
+// GenerateDataFilePath generates a canonical path for data file.
+func (f *FilePathGenerator) GenerateDataFilePath(
+	ctx context.Context, tbl VersionedTableName, date string,
+) (string, error) {
+	dir := f.generateDataDirPath(tbl, date)
+	name, err := f.generateDataFileName(ctx, tbl, date)
+	if err != nil {
+		return "", err
+	}
+	return strings.Join([]string{dir, name}, "/"), nil
+}
+
 func (f *FilePathGenerator) generateDataDirPath(tbl VersionedTableName, date string) string {
 	var elems []string
 
@@ -272,34 +296,9 @@ func (f *FilePathGenerator) generateDataDirPath(tbl VersionedTableName, date str
 	return strings.Join(elems, "/")
 }
 
-func (f *FilePathGenerator) fetchIndexFromFileName(fileName string) (uint64, error) {
-	var fileIdx uint64
-	var err error
-
-	if len(fileName) < minFileNamePrefixLen+len(f.extension) ||
-		!strings.HasPrefix(fileName, "CDC") ||
-		!strings.HasSuffix(fileName, f.extension) {
-		return 0, errors.WrapError(errors.ErrStorageSinkInvalidFileName,
-			fmt.Errorf("'%s' is a invalid file name", fileName))
-	}
-
-	extIdx := strings.Index(fileName, f.extension)
-	fileIdxStr := fileName[3:extIdx]
-	if fileIdx, err = strconv.ParseUint(fileIdxStr, 10, 64); err != nil {
-		return 0, errors.WrapError(errors.ErrStorageSinkInvalidFileName, err)
-	}
-
-	return fileIdx, nil
-}
-
-// GenerateDataFilePath generates a canonical path for data file.
-func (f *FilePathGenerator) GenerateDataFilePath(
-	ctx context.Context,
-	tbl VersionedTableName,
-	date string,
+func (f *FilePathGenerator) generateDataFileName(
+	ctx context.Context, tbl VersionedTableName, date string,
 ) (string, error) {
-	var elems []string
-	elems = append(elems, f.generateDataDirPath(tbl, date))
 	if idx, ok := f.fileIndex[tbl]; !ok {
 		fileIdx, err := f.getNextFileIdxFromIndexFile(ctx, tbl, date)
 		if err != nil {
@@ -320,19 +319,7 @@ func (f *FilePathGenerator) GenerateDataFilePath(
 		f.fileIndex[tbl].index = 0
 	}
 	f.fileIndex[tbl].index++
-	elems = append(elems, fmt.Sprintf("CDC%06d%s", f.fileIndex[tbl].index, f.extension))
-
-	return strings.Join(elems, "/"), nil
-}
-
-// GenerateIndexFilePath generates a canonical path for index file.
-func (f *FilePathGenerator) GenerateIndexFilePath(tbl VersionedTableName, date string) string {
-	var elems []string
-
-	elems = append(elems, f.generateDataDirPath(tbl, date))
-	elems = append(elems, defaultIndexFileName)
-
-	return strings.Join(elems, "/")
+	return generateDataFileName(f.fileIndex[tbl].index, f.extension, f.config.FileIndexWidth), nil
 }
 
 func (f *FilePathGenerator) getNextFileIdxFromIndexFile(
@@ -358,8 +345,8 @@ func (f *FilePathGenerator) getNextFileIdxFromIndexFile(
 	}
 
 	lastFilePath := strings.Join([]string{
-		f.generateDataDirPath(tbl, date),                  // file dir
-		fmt.Sprintf("CDC%06d%s", maxFileIdx, f.extension), // file name
+		f.generateDataDirPath(tbl, date),                                       // file dir
+		generateDataFileName(maxFileIdx, f.extension, f.config.FileIndexWidth), // file name
 	}, "/")
 
 	var lastFileExists, lastFileIsEmpty bool
@@ -390,5 +377,25 @@ func (f *FilePathGenerator) getNextFileIdxFromIndexFile(
 		// Reuse the old index number if the last file does not exist.
 		fileIdx = maxFileIdx - 1
 	}
+	return fileIdx, nil
+}
+
+func (f *FilePathGenerator) fetchIndexFromFileName(fileName string) (uint64, error) {
+	var fileIdx uint64
+	var err error
+
+	if len(fileName) < minFileNamePrefixLen+len(f.extension) ||
+		!strings.HasPrefix(fileName, "CDC") ||
+		!strings.HasSuffix(fileName, f.extension) {
+		return 0, errors.WrapError(errors.ErrStorageSinkInvalidFileName,
+			fmt.Errorf("'%s' is a invalid file name", fileName))
+	}
+
+	extIdx := strings.Index(fileName, f.extension)
+	fileIdxStr := fileName[3:extIdx]
+	if fileIdx, err = strconv.ParseUint(fileIdxStr, 10, 64); err != nil {
+		return 0, errors.WrapError(errors.ErrStorageSinkInvalidFileName, err)
+	}
+
 	return fileIdx, nil
 }

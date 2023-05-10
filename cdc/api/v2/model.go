@@ -353,6 +353,7 @@ func (c *ReplicaConfig) toInternalReplicaConfigWithOriginConfig(
 			Terminator:               c.Sink.Terminator,
 			DateSeparator:            c.Sink.DateSeparator,
 			EnablePartitionSeparator: c.Sink.EnablePartitionSeparator,
+			FileIndexWidth:           c.Sink.FileIndexWidth,
 			EnableKafkaSinkV2:        c.Sink.EnableKafkaSinkV2,
 			OnlyOutputUpdatedColumns: c.Sink.OnlyOutputUpdatedColumns,
 			KafkaConfig:              kafkaConfig,
@@ -548,6 +549,7 @@ func ToAPIReplicaConfig(c *config.ReplicaConfig) *ReplicaConfig {
 			Terminator:               cloned.Sink.Terminator,
 			DateSeparator:            cloned.Sink.DateSeparator,
 			EnablePartitionSeparator: cloned.Sink.EnablePartitionSeparator,
+			FileIndexWidth:           cloned.Sink.FileIndexWidth,
 			EnableKafkaSinkV2:        cloned.Sink.EnableKafkaSinkV2,
 			OnlyOutputUpdatedColumns: cloned.Sink.OnlyOutputUpdatedColumns,
 			KafkaConfig:              kafkaConfig,
@@ -698,6 +700,7 @@ type SinkConfig struct {
 	Terminator               string              `json:"terminator"`
 	DateSeparator            string              `json:"date_separator"`
 	EnablePartitionSeparator bool                `json:"enable_partition_separator"`
+	FileIndexWidth           int                 `json:"file_index_width"`
 	EnableKafkaSinkV2        bool                `json:"enable_kafka_sink_v2"`
 	OnlyOutputUpdatedColumns *bool               `json:"only_output_updated_columns"`
 	SafeMode                 *bool               `json:"safe_mode,omitempty"`
