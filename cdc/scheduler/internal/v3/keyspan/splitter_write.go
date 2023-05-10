@@ -25,7 +25,7 @@ import (
 	"go.uber.org/zap"
 )
 
-const regionWrittenKeyBase = 5
+const regionWrittenKeyBase = 2
 
 type writeSplitter struct {
 	changefeedID model.ChangeFeedID
