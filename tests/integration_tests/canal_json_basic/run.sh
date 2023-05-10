@@ -10,7 +10,7 @@ SINK_TYPE=$1
 
 # use kafka-consumer with canal-json decoder to sync data from kafka to mysql
 function run() {
-	if [ "$SINK_TYPE" == "mysql" ]; then
+	if [ "$SINK_TYPE" != "kafka" ]; then
 		return
 	fi
 
