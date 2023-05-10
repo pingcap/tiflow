@@ -106,21 +106,25 @@ func TestReplicaConfigOutDated(t *testing.T) {
 func TestReplicaConfigValidate(t *testing.T) {
 	t.Parallel()
 	conf := GetDefaultReplicaConfig()
-	require.Nil(t, conf.ValidateAndAdjust(nil))
+
+	sinkURL, err := url.Parse("blackhole://")
+	require.NoError(t, err)
+
+	require.Nil(t, conf.ValidateAndAdjust(sinkURL))
 
 	// Incorrect sink configuration.
 	conf = GetDefaultReplicaConfig()
 	conf.Sink.Protocol = "canal"
 	conf.EnableOldValue = false
 	require.Regexp(t, ".*canal protocol requires old value to be enabled.*",
-		conf.ValidateAndAdjust(nil))
+		conf.ValidateAndAdjust(sinkURL))
 
 	conf = GetDefaultReplicaConfig()
 	conf.Sink.DispatchRules = []*DispatchRule{
 		{Matcher: []string{"a.b"}, DispatcherRule: "d1", PartitionRule: "r1"},
 	}
 	require.Regexp(t, ".*dispatcher and partition cannot be configured both.*",
-		conf.ValidateAndAdjust(nil))
+		conf.ValidateAndAdjust(sinkURL))
 
 	// Correct sink configuration.
 	conf = GetDefaultReplicaConfig()
@@ -129,8 +133,8 @@ func TestReplicaConfigValidate(t *testing.T) {
 		{Matcher: []string{"a.c"}, PartitionRule: "p1"},
 		{Matcher: []string{"a.d"}},
 	}
-	err := conf.ValidateAndAdjust(nil)
-	require.Nil(t, err)
+	err = conf.ValidateAndAdjust(sinkURL)
+	require.NoError(t, err)
 	rules := conf.Sink.DispatchRules
 	require.Equal(t, "d1", rules[0].PartitionRule)
 	require.Equal(t, "p1", rules[1].PartitionRule)
@@ -139,12 +143,12 @@ func TestReplicaConfigValidate(t *testing.T) {
 	// Test memory quota can be adjusted
 	conf = GetDefaultReplicaConfig()
 	conf.MemoryQuota = 0
-	err = conf.ValidateAndAdjust(nil)
+	err = conf.ValidateAndAdjust(sinkURL)
 	require.NoError(t, err)
 	require.Equal(t, uint64(DefaultChangefeedMemoryQuota), conf.MemoryQuota)
 
 	conf.MemoryQuota = uint64(1024)
-	err = conf.ValidateAndAdjust(nil)
+	err = conf.ValidateAndAdjust(sinkURL)
 	require.NoError(t, err)
 	require.Equal(t, uint64(1024), conf.MemoryQuota)
 }
@@ -152,25 +156,35 @@ func TestReplicaConfigValidate(t *testing.T) {
 func TestValidateAndAdjust(t *testing.T) {
 	cfg := GetDefaultReplicaConfig()
 	require.False(t, cfg.EnableSyncPoint)
-	require.NoError(t, cfg.ValidateAndAdjust(nil))
+
+	sinkURL, err := url.Parse("blackhole://")
+	require.NoError(t, err)
+
+	require.NoError(t, cfg.ValidateAndAdjust(sinkURL))
 
 	cfg.EnableSyncPoint = true
-	require.NoError(t, cfg.ValidateAndAdjust(nil))
+	require.NoError(t, cfg.ValidateAndAdjust(sinkURL))
 
 	cfg.SyncPointInterval = time.Second * 29
-	require.Error(t, cfg.ValidateAndAdjust(nil))
+	require.Error(t, cfg.ValidateAndAdjust(sinkURL))
 
 	cfg.SyncPointInterval = time.Second * 30
 	cfg.SyncPointRetention = time.Minute * 10
-	require.Error(t, cfg.ValidateAndAdjust(nil))
+	require.Error(t, cfg.ValidateAndAdjust(sinkURL))
 
 	cfg.Sink.EncoderConcurrency = -1
-	require.Error(t, cfg.ValidateAndAdjust(nil))
+	require.Error(t, cfg.ValidateAndAdjust(sinkURL))
 
 	cfg = GetDefaultReplicaConfig()
 	cfg.Scheduler = nil
-	require.Nil(t, cfg.ValidateAndAdjust(nil))
+	require.Nil(t, cfg.ValidateAndAdjust(sinkURL))
 	require.False(t, cfg.Scheduler.EnableTableAcrossNodes)
+
+	// enable the checksum verification, but use blackhole sink
+	cfg = GetDefaultReplicaConfig()
+	cfg.Integrity.IntegrityCheckLevel = IntegrityCheckLevelCorrectness
+	require.NoError(t, cfg.ValidateAndAdjust(sinkURL))
+	require.Equal(t, IntegrityCheckLevelNone, cfg.Integrity.IntegrityCheckLevel)
 }
 
 func TestIsSinkCompatibleWithSpanReplication(t *testing.T) {
