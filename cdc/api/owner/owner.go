@@ -16,6 +16,7 @@ package owner
 import (
 	"context"
 	"encoding/json"
+	"fmt"
 	"io"
 	"net/http"
 	"strconv"
@@ -64,7 +65,10 @@ func (c ChangefeedResp) MarshalJSON() ([]byte, error) {
 	// alias the original type to prevent recursive call of MarshalJSON
 	type Alias ChangefeedResp
 	if c.FeedState == string(model.StateNormal) {
-		c.RunningError = nil
+		// FIXME: should expose the error, although cdc is trying to recover.
+		if c.RunningError != nil && c.RunningError.Component == 0 {
+			c.RunningError = nil
+		}
 	}
 	return json.Marshal(struct {
 		Alias
@@ -241,6 +245,8 @@ func (h *ownerAPI) handleChangefeedQuery(w http.ResponseWriter, req *http.Reques
 
 	resp := &ChangefeedResp{}
 	if cfInfo != nil {
+		log.Info("QP cfInfo", zap.Any("cfInfo", cfInfo))
+		fmt.Printf("QP cfInfo: %v\n", *cfInfo)
 		resp.FeedState = string(cfInfo.State)
 		resp.RunningError = cfInfo.Error
 	}

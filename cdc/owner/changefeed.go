@@ -237,27 +237,38 @@ func (c *changefeed) handleErr(ctx cdcContext.Context, err error) {
 		zap.String("namespace", c.id.Namespace),
 		zap.String("changefeed", c.id.ID), zap.Error(err))
 
-	switch innerErr := errors.Cause(err).(type) {
-	case model.ComponentError:
-		switch innerErr.Component {
-		case model.OwnerDDLSink:
-			// TODO: report the error but keep owner and processor alive.
-			return
-		}
-	}
-
 	var code string
 	if rfcCode, ok := cerror.RFCCode(err); ok {
 		code = string(rfcCode)
 	} else {
 		code = string(cerror.ErrOwnerUnknown.RFCCode())
 	}
-	c.feedStateManager.handleError(&model.RunningError{
+	runningErr := &model.RunningError{
 		Time:    time.Now(),
 		Addr:    contextutil.CaptureAddrFromCtx(ctx),
 		Code:    code,
 		Message: err.Error(),
-	})
+	}
+
+	switch innerErr := errors.Cause(err).(type) {
+	case model.ComponentError:
+		runningErr.Component = int(innerErr.Component)
+		switch innerErr.Component {
+		case model.OwnerDDLSink:
+			// `PatchInfo` will put the error into changefeed info, but won't stop it.
+			c.feedStateManager.state.PatchInfo(
+				func(info *model.ChangeFeedInfo) (*model.ChangeFeedInfo, bool, error) {
+					if info == nil {
+						return nil, false, nil
+					}
+					info.Error = runningErr
+					return info, true, nil
+				})
+			return
+		}
+	}
+
+	c.feedStateManager.handleError(runningErr)
 	c.releaseResources(ctx)
 }
 
