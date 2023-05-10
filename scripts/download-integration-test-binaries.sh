@@ -24,6 +24,9 @@ set -o pipefail
 
 # Specify if download the community version
 community=${2:-false}
+ver=${3:-v6.5.2}
+os=${4:-linux}
+arch=${5:-amd64}
 
 set -o nounset
 
@@ -51,11 +54,6 @@ function download() {
 # download_community_version will try to download required binaries from the
 # public accessible community version
 function download_community_binaries() {
-	set +u
-	local ver=${1:-v6.5.2}
-	local os=${2:-linux}
-	local arch=${3:-amd64}
-	set -u
 	local dist="${ver}-${os}-${arch}"
 	local tidb_file_name="tidb-community-server-$dist"
 	local tidb_tar_name="${tidb_file_name}.tar.gz"
