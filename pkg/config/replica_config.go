@@ -24,6 +24,7 @@ import (
 	"github.com/pingcap/log"
 	"github.com/pingcap/tiflow/pkg/config/outdated"
 	cerror "github.com/pingcap/tiflow/pkg/errors"
+	"github.com/pingcap/tiflow/pkg/integrity"
 	"github.com/pingcap/tiflow/pkg/redo"
 	"github.com/pingcap/tiflow/pkg/sink"
 	"go.uber.org/zap"
@@ -75,9 +76,9 @@ var defaultReplicaConfig = &ReplicaConfig{
 		RegionThreshold:        100_000,
 		WriteKeyThreshold:      0,
 	},
-	Integrity: &IntegrityConfig{
-		IntegrityCheckLevel:   IntegrityCheckLevelNone,
-		CorruptionHandleLevel: CorruptionHandleLevelWarn,
+	Integrity: &integrity.Config{
+		IntegrityCheckLevel:   integrity.CheckLevelNone,
+		CorruptionHandleLevel: integrity.CorruptionHandleLevelWarn,
 	},
 }
 
@@ -120,7 +121,7 @@ type replicaConfig struct {
 	Consistent         *ConsistentConfig `toml:"consistent" json:"consistent"`
 	// Scheduler is the configuration for scheduler.
 	Scheduler *ChangefeedSchedulerConfig `toml:"scheduler" json:"scheduler"`
-	Integrity *IntegrityConfig           `toml:"integrity" json:"integrity"`
+	Integrity *integrity.Config          `toml:"integrity" json:"integrity"`
 }
 
 // Marshal returns the json marshal format of a ReplicationConfig
@@ -228,7 +229,7 @@ func (c *ReplicaConfig) ValidateAndAdjust(sinkURI *url.URL) error {
 		default:
 			if c.Integrity.Enabled() {
 				log.Warn("integrity checksum only support kafka sink now, disable integrity")
-				c.Integrity.IntegrityCheckLevel = IntegrityCheckLevelNone
+				c.Integrity.IntegrityCheckLevel = integrity.CheckLevelNone
 			}
 		}
 
