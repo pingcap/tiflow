@@ -20,6 +20,7 @@ import (
 	"io"
 	"net/http"
 	"net/url"
+	"strconv"
 	"strings"
 	"sync"
 	"time"
@@ -34,10 +35,10 @@ import (
 	"go.uber.org/zap"
 )
 
-// schemaManager is used to register Avro Schemas to the Registry server,
+// SchemaManager is used to register Avro Schemas to the Registry server,
 // look up local cache according to the table's name, and fetch from the Registry
 // in cache the local cache entry is missing.
-type schemaManager struct {
+type SchemaManager struct {
 	registryURL   string
 	subjectSuffix string
 
@@ -49,9 +50,11 @@ type schemaManager struct {
 
 type schemaCacheEntry struct {
 	// tableVersion is the table's version which the message associated with.
+	// encoder use it as the cache key.
 	tableVersion uint64
-	// schemaID is the schema ID in the schema registry
+	// schemaID is the unique identifier of a schema in schema registry.
 	// for each message should carry this id to allow the decoder fetch the corresponding schema
+	// decoder use it as the cache key.
 	schemaID int
 	// codec is associated with the schemaID, used to decode the message
 	codec *goavro.Codec
@@ -64,19 +67,41 @@ type registerRequest struct {
 }
 
 type registerResponse struct {
-	ID int `json:"id"`
+	SchemaID int `json:"id"`
 }
 
 type lookupResponse struct {
-	Name   string `json:"name"`
-	ID     int    `json:"id"`
-	Schema string `json:"schema"`
+	Name     string `json:"name"`
+	SchemaID int    `json:"id"`
+	Schema   string `json:"schema"`
 }
 
-// NewAvroSchemaManager creates a new schemaManager and test connectivity to the schema registry
-func NewAvroSchemaManager(
-	ctx context.Context, credential *security.Credential, registryURL string, subjectSuffix string,
-) (*schemaManager, error) {
+// NewKeyAndValueSchemaManagers create key and value schema managers respectively,
+// and test connectivity to the schema registry
+func NewKeyAndValueSchemaManagers(
+	ctx context.Context,
+	registryURL string,
+	credential *security.Credential,
+) (*SchemaManager, *SchemaManager, error) {
+	keyManager, err := newAvroSchemaManager(ctx, registryURL, keySchemaSuffix, credential)
+	if err != nil {
+		return nil, nil, err
+	}
+
+	valueManager, err := newAvroSchemaManager(ctx, registryURL, valueSchemaSuffix, credential)
+	if err != nil {
+		return nil, nil, err
+	}
+
+	return keyManager, valueManager, nil
+}
+
+func newAvroSchemaManager(
+	ctx context.Context,
+	registryURL string,
+	subjectSuffix string,
+	credential *security.Credential,
+) (*SchemaManager, error) {
 	registryURL = strings.TrimRight(registryURL, "/")
 	httpCli, err := httputil.NewClient(credential)
 	if err != nil {
@@ -106,7 +131,7 @@ func NewAvroSchemaManager(
 		zap.String("registryURL", registryURL),
 	)
 
-	return &schemaManager{
+	return &SchemaManager{
 		registryURL:   registryURL,
 		cache:         make(map[string]*schemaCacheEntry, 1),
 		subjectSuffix: subjectSuffix,
@@ -114,7 +139,7 @@ func NewAvroSchemaManager(
 }
 
 // Register a schema in schema registry, no cache
-func (m *schemaManager) Register(
+func (m *SchemaManager) Register(
 	ctx context.Context,
 	topicName string,
 	schema string,
@@ -184,55 +209,50 @@ func (m *schemaManager) Register(
 		return 0, cerror.WrapError(cerror.ErrAvroSchemaAPIError, err)
 	}
 
-	if jsonResp.ID == 0 {
+	if jsonResp.SchemaID == 0 {
 		return 0, cerror.ErrAvroSchemaAPIError.GenWithStack(
 			"Illegal schema ID returned from Registry %d",
-			jsonResp.ID,
+			jsonResp.SchemaID,
 		)
 	}
 
 	log.Info("Registered schema successfully",
-		zap.Int("id", jsonResp.ID),
+		zap.Int("schemaID", jsonResp.SchemaID),
 		zap.String("uri", uri),
 		zap.ByteString("body", body))
 
-	return jsonResp.ID, nil
+	return jsonResp.SchemaID, nil
 }
 
-// Lookup the latest schema and the Registry designated ID for that schema.
-// TiSchemaId is only used to trigger fetching from the Registry server.
-// Calling this method with a tableVersion other than that used last time will invariably trigger a
-// RESTful request to the Registry.
-// Returns (codec, registry schema ID, error)
-// NOT USED for now, reserved for future use.
-func (m *schemaManager) Lookup(
+// Lookup the cached schema entry first, if not found, fetch from the Registry server.
+func (m *SchemaManager) Lookup(
 	ctx context.Context,
 	topicName string,
-	tableVersion uint64,
-) (*goavro.Codec, int, error) {
+	schemaID int,
+) (*goavro.Codec, error) {
 	key := m.topicNameToSchemaSubject(topicName)
 	m.cacheRWLock.RLock()
-	if entry, exists := m.cache[key]; exists && entry.tableVersion == tableVersion {
-		log.Info("Avro schema lookup cache hit",
+	entry, exists := m.cache[key]
+	if exists && entry.schemaID == schemaID {
+		log.Debug("Avro schema lookup cache hit",
 			zap.String("key", key),
-			zap.Uint64("tableVersion", tableVersion),
 			zap.Int("schemaID", entry.schemaID))
 		m.cacheRWLock.RUnlock()
-		return entry.codec, entry.schemaID, nil
+		return entry.codec, nil
 	}
 	m.cacheRWLock.RUnlock()
 
 	log.Info("Avro schema lookup cache miss",
 		zap.String("key", key),
-		zap.Uint64("tableVersion", tableVersion))
+		zap.Int("schemaID", schemaID))
 
-	uri := m.registryURL + "/subjects/" + url.QueryEscape(key) + "/versions/latest"
+	uri := m.registryURL + "/schemas/ids/" + strconv.Itoa(schemaID)
 	log.Debug("Querying for latest schema", zap.String("uri", uri))
 
 	req, err := http.NewRequestWithContext(ctx, "GET", uri, nil)
 	if err != nil {
 		log.Error("Error constructing request for Registry lookup", zap.Error(err))
-		return nil, 0, cerror.WrapError(cerror.ErrAvroSchemaAPIError, err)
+		return nil, cerror.WrapError(cerror.ErrAvroSchemaAPIError, err)
 	}
 	req.Header.Add(
 		"Accept",
@@ -242,14 +262,14 @@ func (m *schemaManager) Lookup(
 
 	resp, err := httpRetry(ctx, m.credential, req)
 	if err != nil {
-		return nil, 0, err
+		return nil, err
 	}
 	defer resp.Body.Close()
 
 	body, err := io.ReadAll(resp.Body)
 	if err != nil {
 		log.Error("Failed to parse result from Registry", zap.Error(err))
-		return nil, 0, cerror.WrapError(cerror.ErrAvroSchemaAPIError, err)
+		return nil, cerror.WrapError(cerror.ErrAvroSchemaAPIError, err)
 	}
 
 	if resp.StatusCode != 200 && resp.StatusCode != 404 {
@@ -257,7 +277,7 @@ func (m *schemaManager) Lookup(
 			zap.Int("status", resp.StatusCode),
 			zap.String("uri", uri),
 			zap.ByteString("responseBody", body))
-		return nil, 0, cerror.ErrAvroSchemaAPIError.GenWithStack(
+		return nil, cerror.ErrAvroSchemaAPIError.GenWithStack(
 			"Failed to query schema from the Registry, HTTP error",
 		)
 	}
@@ -265,8 +285,8 @@ func (m *schemaManager) Lookup(
 	if resp.StatusCode == 404 {
 		log.Warn("Specified schema not found in Registry",
 			zap.String("key", key),
-			zap.Uint64("tableVersion", tableVersion))
-		return nil, 0, cerror.ErrAvroSchemaAPIError.GenWithStackByArgs(
+			zap.Int("schemaID", schemaID))
+		return nil, cerror.ErrAvroSchemaAPIError.GenWithStackByArgs(
 			"Schema not found in Registry",
 		)
 	}
@@ -275,28 +295,26 @@ func (m *schemaManager) Lookup(
 	err = json.Unmarshal(body, &jsonResp)
 	if err != nil {
 		log.Error("Failed to parse result from Registry", zap.Error(err))
-		return nil, 0, cerror.WrapError(cerror.ErrAvroSchemaAPIError, err)
+		return nil, cerror.WrapError(cerror.ErrAvroSchemaAPIError, err)
 	}
 
 	cacheEntry := new(schemaCacheEntry)
 	cacheEntry.codec, err = goavro.NewCodec(jsonResp.Schema)
 	if err != nil {
 		log.Error("Creating Avro codec failed", zap.Error(err))
-		return nil, 0, cerror.WrapError(cerror.ErrAvroSchemaAPIError, err)
+		return nil, cerror.WrapError(cerror.ErrAvroSchemaAPIError, err)
 	}
-	cacheEntry.schemaID = jsonResp.ID
-	cacheEntry.tableVersion = tableVersion
+	cacheEntry.schemaID = jsonResp.SchemaID
 
 	m.cacheRWLock.Lock()
 	m.cache[key] = cacheEntry
 	m.cacheRWLock.Unlock()
 
 	log.Info("Avro schema lookup successful with cache miss",
-		zap.Uint64("tableVersion", cacheEntry.tableVersion),
 		zap.Int("schemaID", cacheEntry.schemaID),
 		zap.String("schema", cacheEntry.codec.Schema()))
 
-	return cacheEntry.codec, cacheEntry.schemaID, nil
+	return cacheEntry.codec, nil
 }
 
 // SchemaGenerator represents a function that returns an Avro schema in JSON.
@@ -307,7 +325,7 @@ type SchemaGenerator func() (string, error)
 // If not, a new schema is generated, registered and cached.
 // Re-registering an existing schema shall return the same id(and version), so even if the
 // cache is out-of-sync with schema registry, we could reload it.
-func (m *schemaManager) GetCachedOrRegister(
+func (m *SchemaManager) GetCachedOrRegister(
 	ctx context.Context,
 	topicName string,
 	tableVersion uint64,
@@ -366,7 +384,7 @@ func (m *schemaManager) GetCachedOrRegister(
 // ClearRegistry clears the Registry subject for the given table. Should be idempotent.
 // Exported for testing.
 // NOT USED for now, reserved for future use.
-func (m *schemaManager) ClearRegistry(ctx context.Context, topicName string) error {
+func (m *SchemaManager) ClearRegistry(ctx context.Context, topicName string) error {
 	uri := m.registryURL + "/subjects/" + url.QueryEscape(
 		m.topicNameToSchemaSubject(topicName),
 	)
@@ -464,6 +482,6 @@ func httpRetry(
 }
 
 // TopicNameStrategy, ksqlDB only supports this
-func (m *schemaManager) topicNameToSchemaSubject(topicName string) string {
+func (m *SchemaManager) topicNameToSchemaSubject(topicName string) string {
 	return topicName + m.subjectSuffix
 }

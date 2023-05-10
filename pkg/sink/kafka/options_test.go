@@ -18,10 +18,12 @@ import (
 	"fmt"
 	"net/url"
 	"strconv"
+	"strings"
 	"testing"
 	"time"
 
 	"github.com/Shopify/sarama"
+	"github.com/aws/aws-sdk-go/aws"
 	"github.com/pingcap/errors"
 	"github.com/pingcap/tiflow/cdc/model"
 	"github.com/pingcap/tiflow/pkg/config"
@@ -43,7 +45,7 @@ func TestCompleteOptions(t *testing.T) {
 	require.NoError(t, err)
 
 	ctx := context.Background()
-	err = options.Apply(ctx, sinkURI)
+	err = options.Apply(ctx, sinkURI, config.GetDefaultReplicaConfig())
 	require.NoError(t, err)
 	require.Equal(t, int32(1), options.PartitionNum)
 	require.Equal(t, int16(3), options.ReplicationFactor)
@@ -56,7 +58,7 @@ func TestCompleteOptions(t *testing.T) {
 	sinkURI, err = url.Parse(uri)
 	require.NoError(t, err)
 	options = NewOptions()
-	err = options.Apply(ctx, sinkURI)
+	err = options.Apply(ctx, sinkURI, config.GetDefaultReplicaConfig())
 	require.NoError(t, err)
 	require.Len(t, options.BrokerEndpoints, 3)
 
@@ -65,7 +67,7 @@ func TestCompleteOptions(t *testing.T) {
 	sinkURI, err = url.Parse(uri)
 	require.NoError(t, err)
 	options = NewOptions()
-	err = options.Apply(ctx, sinkURI)
+	err = options.Apply(ctx, sinkURI, config.GetDefaultReplicaConfig())
 	require.Regexp(t, ".*invalid syntax.*", errors.Cause(err))
 
 	// Illegal max-message-bytes.
@@ -73,7 +75,7 @@ func TestCompleteOptions(t *testing.T) {
 	sinkURI, err = url.Parse(uri)
 	require.NoError(t, err)
 	options = NewOptions()
-	err = options.Apply(ctx, sinkURI)
+	err = options.Apply(ctx, sinkURI, config.GetDefaultReplicaConfig())
 	require.Regexp(t, ".*invalid syntax.*", errors.Cause(err))
 
 	// Illegal partition-num.
@@ -81,7 +83,7 @@ func TestCompleteOptions(t *testing.T) {
 	sinkURI, err = url.Parse(uri)
 	require.NoError(t, err)
 	options = NewOptions()
-	err = options.Apply(ctx, sinkURI)
+	err = options.Apply(ctx, sinkURI, config.GetDefaultReplicaConfig())
 	require.Regexp(t, ".*invalid syntax.*", errors.Cause(err))
 
 	// Out of range partition-num.
@@ -89,7 +91,7 @@ func TestCompleteOptions(t *testing.T) {
 	sinkURI, err = url.Parse(uri)
 	require.NoError(t, err)
 	options = NewOptions()
-	err = options.Apply(ctx, sinkURI)
+	err = options.Apply(ctx, sinkURI, config.GetDefaultReplicaConfig())
 	require.Regexp(t, ".*invalid partition num.*", errors.Cause(err))
 
 	// Unknown required-acks.
@@ -97,7 +99,7 @@ func TestCompleteOptions(t *testing.T) {
 	sinkURI, err = url.Parse(uri)
 	require.NoError(t, err)
 	options = NewOptions()
-	err = options.Apply(ctx, sinkURI)
+	err = options.Apply(ctx, sinkURI, config.GetDefaultReplicaConfig())
 	require.Regexp(t, ".*invalid required acks 3.*", errors.Cause(err))
 
 	// invalid kafka client id
@@ -105,7 +107,7 @@ func TestCompleteOptions(t *testing.T) {
 	sinkURI, err = url.Parse(uri)
 	require.NoError(t, err)
 	options = NewOptions()
-	err = options.Apply(ctx, sinkURI)
+	err = options.Apply(ctx, sinkURI, config.GetDefaultReplicaConfig())
 	require.True(t, cerror.ErrKafkaInvalidClientID.Equal(err))
 }
 
@@ -182,7 +184,7 @@ func TestTimeout(t *testing.T) {
 	require.NoError(t, err)
 
 	ctx := context.Background()
-	err = options.Apply(ctx, sinkURI)
+	err = options.Apply(ctx, sinkURI, config.GetDefaultReplicaConfig())
 	require.NoError(t, err)
 
 	require.Equal(t, 5*time.Second, options.DialTimeout)
@@ -593,7 +595,7 @@ func TestConfigurationCombinations(t *testing.T) {
 
 		ctx := context.Background()
 		options := NewOptions()
-		err = options.Apply(ctx, sinkURI)
+		err = options.Apply(ctx, sinkURI, config.GetDefaultReplicaConfig())
 		require.Nil(t, err)
 
 		changefeed := model.DefaultChangeFeedID("changefeed-test")
@@ -626,4 +628,145 @@ func TestConfigurationCombinations(t *testing.T) {
 
 		adminClient.Close()
 	}
+}
+
+func TestMerge(t *testing.T) {
+	uri := "kafka://topic/prefix"
+	sinkURI, err := url.Parse(uri)
+	require.NoError(t, err)
+	replicaConfig := config.GetDefaultReplicaConfig()
+	replicaConfig.Sink.KafkaConfig = &config.KafkaConfig{
+		PartitionNum:              aws.Int32(12),
+		ReplicationFactor:         aws.Int16(5),
+		KafkaVersion:              aws.String("3.1.2"),
+		MaxMessageBytes:           aws.Int(1024 * 1024),
+		Compression:               aws.String("gzip"),
+		KafkaClientID:             aws.String("test-id"),
+		AutoCreateTopic:           aws.Bool(true),
+		DialTimeout:               aws.String("1m1s"),
+		WriteTimeout:              aws.String("2m1s"),
+		RequiredAcks:              aws.Int(1),
+		SASLUser:                  aws.String("abc"),
+		SASLPassword:              aws.String("123"),
+		SASLMechanism:             aws.String("plain"),
+		SASLGssAPIAuthType:        aws.String("keytab"),
+		SASLGssAPIKeytabPath:      aws.String("SASLGssAPIKeytabPath"),
+		SASLGssAPIServiceName:     aws.String("service"),
+		SASLGssAPIUser:            aws.String("user"),
+		SASLGssAPIPassword:        aws.String("pass"),
+		SASLGssAPIRealm:           aws.String("realm"),
+		SASLGssAPIDisablePafxfast: aws.Bool(true),
+		EnableTLS:                 aws.Bool(true),
+		CA:                        aws.String("ca.pem"),
+		Cert:                      aws.String("cert.pem"),
+		Key:                       aws.String("key.pem"),
+	}
+	c := NewOptions()
+	err = c.Apply(context.TODO(), sinkURI, replicaConfig)
+	require.NoError(t, err)
+	require.Equal(t, int32(12), c.PartitionNum)
+	require.Equal(t, int16(5), c.ReplicationFactor)
+	require.Equal(t, "3.1.2", c.Version)
+	require.Equal(t, 1024*1024, c.MaxMessageBytes)
+	require.Equal(t, "gzip", c.Compression)
+	require.Equal(t, "test-id", c.ClientID)
+	require.Equal(t, true, c.AutoCreate)
+	require.Equal(t, time.Minute+time.Second, c.DialTimeout)
+	require.Equal(t, 2*time.Minute+time.Second, c.WriteTimeout)
+	require.Equal(t, 1, int(c.RequiredAcks))
+	require.Equal(t, "abc", c.SASL.SASLUser)
+	require.Equal(t, "123", c.SASL.SASLPassword)
+	require.Equal(t, "plain", strings.ToLower(string(c.SASL.SASLMechanism)))
+	require.Equal(t, 2, int(c.SASL.GSSAPI.AuthType))
+	require.Equal(t, "SASLGssAPIKeytabPath", c.SASL.GSSAPI.KeyTabPath)
+	require.Equal(t, "service", c.SASL.GSSAPI.ServiceName)
+	require.Equal(t, "user", c.SASL.GSSAPI.Username)
+	require.Equal(t, "pass", c.SASL.GSSAPI.Password)
+	require.Equal(t, "realm", c.SASL.GSSAPI.Realm)
+	require.Equal(t, true, c.SASL.GSSAPI.DisablePAFXFAST)
+	require.Equal(t, true, c.EnableTLS)
+	require.Equal(t, "ca.pem", c.Credential.CAPath)
+	require.Equal(t, "cert.pem", c.Credential.CertPath)
+	require.Equal(t, "key.pem", c.Credential.KeyPath)
+
+	// test override
+	uri = "kafka://topic?partition-num=12" +
+		"&replication-factor=5" +
+		"&kafka-version=3.1.2" +
+		"&max-message-bytes=1048576" +
+		"&compression=gzip" +
+		"&kafka-client-id=test-id" +
+		"&auto-create-topic=true" +
+		"&dial-timeout=1m1s" +
+		"&write-timeout=2m1s" +
+		"&required-acks=1" +
+		"&sasl-user=abc" +
+		"&sasl-password=123" +
+		"&sasl-mechanism=plain" +
+		"&sasl-gssapi-auth-type=keytab" +
+		"&sasl-gssapi-keytab-path=SASLGssAPIKeytabPath" +
+		"&sasl-gssapi-service-name=service" +
+		"&sasl-gssapi-user=user" +
+		"&sasl-gssapi-password=pass" +
+		"&sasl-gssapi-realm=realm" +
+		"&sasl-gssapi-disable-pafxfast=true" +
+		"&enable-tls=true" +
+		"&ca=ca.pem" +
+		"&cert=cert.pem" +
+		"&key=key.pem"
+	sinkURI, err = url.Parse(uri)
+	require.NoError(t, err)
+	replicaConfig.Sink.KafkaConfig = &config.KafkaConfig{
+		PartitionNum:              aws.Int32(11),
+		ReplicationFactor:         aws.Int16(3),
+		KafkaVersion:              aws.String("3.2.2"),
+		MaxMessageBytes:           aws.Int(1023 * 1024),
+		Compression:               aws.String("none"),
+		KafkaClientID:             aws.String("test2-id"),
+		AutoCreateTopic:           aws.Bool(false),
+		DialTimeout:               aws.String("1m2s"),
+		WriteTimeout:              aws.String("2m3s"),
+		RequiredAcks:              aws.Int(-1),
+		SASLUser:                  aws.String("abcd"),
+		SASLPassword:              aws.String("1234"),
+		SASLMechanism:             aws.String("plain"),
+		SASLGssAPIAuthType:        aws.String("user"),
+		SASLGssAPIKeytabPath:      aws.String("path"),
+		SASLGssAPIServiceName:     aws.String("service2"),
+		SASLGssAPIUser:            aws.String("usera"),
+		SASLGssAPIPassword:        aws.String("pass2"),
+		SASLGssAPIRealm:           aws.String("realm2"),
+		SASLGssAPIDisablePafxfast: aws.Bool(false),
+		EnableTLS:                 aws.Bool(false),
+		CA:                        aws.String("ca2.pem"),
+		Cert:                      aws.String("cert2.pem"),
+		Key:                       aws.String("key2.pem"),
+	}
+	c = NewOptions()
+	err = c.Apply(context.TODO(), sinkURI, replicaConfig)
+	require.NoError(t, err)
+	require.Equal(t, int32(12), c.PartitionNum)
+	require.Equal(t, int16(5), c.ReplicationFactor)
+	require.Equal(t, "3.1.2", c.Version)
+	require.Equal(t, 1024*1024, c.MaxMessageBytes)
+	require.Equal(t, "gzip", c.Compression)
+	require.Equal(t, "test-id", c.ClientID)
+	require.Equal(t, true, c.AutoCreate)
+	require.Equal(t, time.Minute+time.Second, c.DialTimeout)
+	require.Equal(t, 2*time.Minute+time.Second, c.WriteTimeout)
+	require.Equal(t, 1, int(c.RequiredAcks))
+	require.Equal(t, "abc", c.SASL.SASLUser)
+	require.Equal(t, "123", c.SASL.SASLPassword)
+	require.Equal(t, "plain", strings.ToLower(string(c.SASL.SASLMechanism)))
+	require.Equal(t, 2, int(c.SASL.GSSAPI.AuthType))
+	require.Equal(t, "SASLGssAPIKeytabPath", c.SASL.GSSAPI.KeyTabPath)
+	require.Equal(t, "service", c.SASL.GSSAPI.ServiceName)
+	require.Equal(t, "user", c.SASL.GSSAPI.Username)
+	require.Equal(t, "pass", c.SASL.GSSAPI.Password)
+	require.Equal(t, "realm", c.SASL.GSSAPI.Realm)
+	require.Equal(t, true, c.SASL.GSSAPI.DisablePAFXFAST)
+	require.Equal(t, true, c.EnableTLS)
+	require.Equal(t, "ca.pem", c.Credential.CAPath)
+	require.Equal(t, "cert.pem", c.Credential.CertPath)
+	require.Equal(t, "key.pem", c.Credential.KeyPath)
 }

@@ -647,7 +647,7 @@ var expectedSchemaWithoutExtension = `{
       "type": {
         "type": "string",
         "connect.parameters": {
-          "allowed": "a\\,,b",
+          "allowed": "a,b",
           "tidb_type": "ENUM"
         }
       }
@@ -660,7 +660,7 @@ var expectedSchemaWithoutExtension = `{
         {
           "type": "string",
           "connect.parameters": {
-            "allowed": "a\\,,b",
+            "allowed": "a,b",
             "tidb_type": "ENUM"
           }
         }
@@ -671,7 +671,7 @@ var expectedSchemaWithoutExtension = `{
       "type": {
         "type": "string",
         "connect.parameters": {
-          "allowed": "a\\,,b",
+          "allowed": "a,b",
           "tidb_type": "SET"
         }
       }
@@ -684,7 +684,7 @@ var expectedSchemaWithoutExtension = `{
         {
           "type": "string",
           "connect.parameters": {
-            "allowed": "a\\,,b",
+            "allowed": "a,b",
             "tidb_type": "SET"
           }
         }
@@ -1459,7 +1459,7 @@ var expectedSchemaWithExtension = `{
       "type": {
         "type": "string",
         "connect.parameters": {
-          "allowed": "a\\,,b",
+          "allowed": "a,b",
           "tidb_type": "ENUM"
         }
       }
@@ -1472,7 +1472,7 @@ var expectedSchemaWithExtension = `{
         {
           "type": "string",
           "connect.parameters": {
-            "allowed": "a\\,,b",
+            "allowed": "a,b",
             "tidb_type": "ENUM"
           }
         }
@@ -1483,7 +1483,7 @@ var expectedSchemaWithExtension = `{
       "type": {
         "type": "string",
         "connect.parameters": {
-          "allowed": "a\\,,b",
+          "allowed": "a,b",
           "tidb_type": "SET"
         }
       }
@@ -1496,7 +1496,7 @@ var expectedSchemaWithExtension = `{
         {
           "type": "string",
           "connect.parameters": {
-            "allowed": "a\\,,b",
+            "allowed": "a,b",
             "tidb_type": "SET"
           }
         }
@@ -1915,7 +1915,7 @@ var expectedSchemaWithExtensionEnableChecksum = `{
       "type": {
         "type": "string",
         "connect.parameters": {
-          "allowed": "a\\,,b",
+          "allowed": "a,b",
           "tidb_type": "ENUM"
         }
       }
@@ -1925,7 +1925,7 @@ var expectedSchemaWithExtensionEnableChecksum = `{
       "type": {
         "type": "string",
         "connect.parameters": {
-          "allowed": "a\\,,b",
+          "allowed": "a,b",
           "tidb_type": "SET"
         }
       }
@@ -2357,7 +2357,7 @@ var expectedSchemaWithExtensionEnableChecksum = `{
         {
           "type": "string",
           "connect.parameters": {
-            "allowed": "a\\,,b",
+            "allowed": "a,b",
             "tidb_type": "ENUM"
           }
         }
@@ -2371,7 +2371,7 @@ var expectedSchemaWithExtensionEnableChecksum = `{
         {
           "type": "string",
           "connect.parameters": {
-            "allowed": "a\\,,b",
+            "allowed": "a,b",
             "tidb_type": "SET"
           }
         }

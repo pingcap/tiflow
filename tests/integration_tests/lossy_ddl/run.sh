@@ -23,11 +23,13 @@ function check_lossy_ddl() {
 	row_logs=$(grep "BlackHoleSink: WriteEvents" "$1/cdc.log")
 	echo $row_logs
 	row_logs_count=$(grep "BlackHoleSink: WriteEvents" -c "$1/cdc.log")
-	if [[ "$row_logs_count" -ne 16 ]]; then
-		echo "can't found 16 row logs, got $row_logs_count"
+	if [[ "$row_logs_count" -ne 18 ]]; then
+		echo "can't found 18 row logs, got $row_logs_count"
 		exit 1
 	fi
 }
+
+export -f check_lossy_ddl
 
 function run() {
 	# Use blackhole sink to check if the DDL is lossy.

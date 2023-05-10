@@ -46,6 +46,7 @@ func testDMLWorker(ctx context.Context, t *testing.T, dir string) *dmlWorker {
 	require.Nil(t, err)
 	cfg := cloudstorage.NewConfig()
 	err = cfg.Apply(context.TODO(), sinkURI, config.GetDefaultReplicaConfig())
+	cfg.FileIndexWidth = 6
 	require.Nil(t, err)
 
 	statistics := metrics.NewStatistics(ctx, sink.TxnSink)
@@ -128,12 +129,12 @@ func TestDMLWorkerRun(t *testing.T) {
 	// check whether files for table1 has been generated
 	files, err := os.ReadDir(table1Dir)
 	require.Nil(t, err)
-	require.Len(t, files, 3)
+	require.Len(t, files, 2)
 	var fileNames []string
 	for _, f := range files {
 		fileNames = append(fileNames, f.Name())
 	}
-	require.ElementsMatch(t, []string{"CDC000001.json", "schema.json", "CDC.index"}, fileNames)
+	require.ElementsMatch(t, []string{"CDC000001.json", "CDC.index"}, fileNames)
 	cancel()
 	d.close()
 	wg.Wait()

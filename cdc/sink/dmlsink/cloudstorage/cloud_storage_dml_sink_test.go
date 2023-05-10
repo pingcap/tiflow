@@ -105,7 +105,7 @@ func TestCloudStorageWriteEventsWithoutDateSeparator(t *testing.T) {
 
 	replicaConfig := config.GetDefaultReplicaConfig()
 	replicaConfig.Sink.Protocol = config.ProtocolCsv.String()
-
+	replicaConfig.Sink.FileIndexWidth = 6
 	errCh := make(chan error, 5)
 	s, err := NewDMLSink(ctx, sinkURI, replicaConfig, errCh)
 	require.Nil(t, err)
@@ -115,19 +115,24 @@ func TestCloudStorageWriteEventsWithoutDateSeparator(t *testing.T) {
 
 	// generating one dml file.
 	txns := generateTxnEvents(&cnt, batch, &tableStatus)
-	tableDir := path.Join(parentDir, "test/table1/33")
 	err = s.WriteEvents(txns...)
 	require.Nil(t, err)
 	time.Sleep(3 * time.Second)
 
-	files, err := os.ReadDir(tableDir)
+	metaDir := path.Join(parentDir, "test/table1/meta")
+	files, err := os.ReadDir(metaDir)
 	require.Nil(t, err)
-	require.Len(t, files, 3)
+	require.Len(t, files, 1)
+
+	tableDir := path.Join(parentDir, "test/table1/33")
+	files, err = os.ReadDir(tableDir)
+	require.Nil(t, err)
+	require.Len(t, files, 2)
 	var fileNames []string
 	for _, f := range files {
 		fileNames = append(fileNames, f.Name())
 	}
-	require.ElementsMatch(t, []string{"CDC000001.csv", "schema.json", "CDC.index"}, fileNames)
+	require.ElementsMatch(t, []string{"CDC000001.csv", "CDC.index"}, fileNames)
 	content, err := os.ReadFile(path.Join(tableDir, "CDC000001.csv"))
 	require.Nil(t, err)
 	require.Greater(t, len(content), 0)
@@ -144,14 +149,13 @@ func TestCloudStorageWriteEventsWithoutDateSeparator(t *testing.T) {
 
 	files, err = os.ReadDir(tableDir)
 	require.Nil(t, err)
-	require.Len(t, files, 4)
+	require.Len(t, files, 3)
 	fileNames = nil
 	for _, f := range files {
 		fileNames = append(fileNames, f.Name())
 	}
 	require.ElementsMatch(t, []string{
-		"CDC000001.csv", "CDC000002.csv",
-		"schema.json", "CDC.index",
+		"CDC000001.csv", "CDC000002.csv", "CDC.index",
 	}, fileNames)
 	content, err = os.ReadFile(path.Join(tableDir, "CDC000002.csv"))
 	require.Nil(t, err)
@@ -178,6 +182,7 @@ func TestCloudStorageWriteEventsWithDateSeparator(t *testing.T) {
 	replicaConfig := config.GetDefaultReplicaConfig()
 	replicaConfig.Sink.Protocol = config.ProtocolCsv.String()
 	replicaConfig.Sink.DateSeparator = config.DateSeparatorDay.String()
+	replicaConfig.Sink.FileIndexWidth = 6
 
 	errCh := make(chan error, 5)
 	s, err := NewDMLSink(ctx, sinkURI, replicaConfig, errCh)

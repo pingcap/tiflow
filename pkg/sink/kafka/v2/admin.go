@@ -96,21 +96,25 @@ func (a *admin) GetBrokerConfig(ctx context.Context, configName string) (string,
 	}
 
 	if len(resp.Resources) == 0 || len(resp.Resources[0].ConfigEntries) == 0 {
-		log.Warn("kafka config item not found",
+		log.Warn("Kafka config item not found",
 			zap.String("configName", configName))
 		return "", errors.ErrKafkaBrokerConfigNotFound.GenWithStack(
 			"cannot find the `%s` from the broker's configuration", configName)
 	}
 
-	entry := resp.Resources[0].ConfigEntries[0]
-	if entry.ConfigName != configName {
-		log.Warn("kafka config item not found",
-			zap.String("configName", configName))
-		return "", errors.ErrKafkaBrokerConfigNotFound.GenWithStack(
-			"cannot find the `%s` from the broker's configuration", configName)
+	// For compatibility with KOP, we checked all return values.
+	// 1. Kafka only returns requested configs.
+	// 2. Kop returns all configs.
+	for _, entry := range resp.Resources[0].ConfigEntries {
+		if entry.ConfigName == configName {
+			return entry.ConfigValue, nil
+		}
 	}
 
-	return entry.ConfigValue, nil
+	log.Warn("Kafka config item not found",
+		zap.String("configName", configName))
+	return "", errors.ErrKafkaBrokerConfigNotFound.GenWithStack(
+		"cannot find the `%s` from the broker's configuration", configName)
 }
 
 func (a *admin) GetTopicsPartitions(ctx context.Context) (map[string]int32, error) {
