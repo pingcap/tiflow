@@ -12,11 +12,6 @@ CDC_COUNT=3
 DB_COUNT=4
 
 function run_length_limit() {
-	# test kafka sink only in this case
-	if [ "$SINK_TYPE" == "mysql" ]; then
-		return
-	fi
-
 	rm -rf $WORK_DIR && mkdir -p $WORK_DIR
 
 	start_tidb_cluster --workdir $WORK_DIR
@@ -71,11 +66,6 @@ function run_length_limit() {
 }
 
 function run_batch_size_limit() {
-	# test kafka sink only in this case
-	if [ "$SINK_TYPE" == "mysql" ]; then
-		return
-	fi
-
 	rm -rf $WORK_DIR && mkdir -p $WORK_DIR
 
 	start_tidb_cluster --workdir $WORK_DIR
@@ -126,8 +116,16 @@ function run_batch_size_limit() {
 	stop_tidb_cluster
 }
 
+function run() {
+	# test kafka sink only in this case
+	if [ "$SINK_TYPE" != "kafka" ]; then
+		return
+	fi
+
+	run_length_limit $*
+	run_batch_size_limit $*
+}
+
 trap stop_tidb_cluster EXIT
-run_length_limit $*
-run_batch_size_limit $*
 check_logs $WORK_DIR
 echo "[$(date)] <<<<<< run test case $TEST_NAME success! >>>>>>"

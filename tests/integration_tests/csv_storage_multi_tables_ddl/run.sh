@@ -11,7 +11,7 @@ SINK_TYPE=$1
 function run() {
 	# Now, we run the storage tests in mysql sink tests.
 	# It's a temporary solution, we will move it to a new test pipeline later.
-	if [ "$SINK_TYPE" != "mysql" ]; then
+	if [ "$SINK_TYPE" != "storage" ]; then
 		return
 	fi
 
@@ -58,7 +58,7 @@ function run() {
 
 	check_changefeed_state "http://${UP_PD_HOST_1}:${UP_PD_PORT_1}" $cf_normal "normal" "null" ""
 	check_changefeed_state "http://${UP_PD_HOST_1}:${UP_PD_PORT_1}" $cf_err1 "normal" "null" ""
-	check_changefeed_state "http://${UP_PD_HOST_1}:${UP_PD_PORT_1}" $cf_err2 "error" "ErrSyncRenameTableFailed" ""
+	check_changefeed_state "http://${UP_PD_HOST_1}:${UP_PD_PORT_1}" $cf_err2 "failed" "ErrSyncRenameTableFailed" ""
 
 	check_sync_diff $WORK_DIR $CUR/conf/diff_config.toml 100
 
