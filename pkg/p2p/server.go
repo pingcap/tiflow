@@ -60,6 +60,15 @@ type MessageServerConfig struct {
 	// MaxRecvMsgSize is the maximum message size in bytes TiCDC can receive.
 	MaxRecvMsgSize int
 
+	// After a duration of this time if the server doesn't see any activity it
+	// pings the client to see if the transport is still alive.
+	KeepAliveTime time.Duration
+
+	// After having pinged for keepalive check, the server waits for a duration
+	// of Timeout and if no activity is seen even after that the connection is
+	// closed.
+	KeepAliveTimeout time.Duration
+
 	// The maximum time duration to wait before forcefully removing a handler.
 	//
 	// waitUnregisterHandleTimeout specifies how long to wait for
