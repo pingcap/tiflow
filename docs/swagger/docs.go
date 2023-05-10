@@ -1391,6 +1391,9 @@ var doc = `{
                 "encoder-concurrency": {
                     "type": "integer"
                 },
+                "file-index-digit": {
+                    "type": "integer"
+                },
                 "only-output-updated-columns": {
                     "type": "boolean"
                 },
@@ -2218,6 +2221,9 @@ var doc = `{
                     "type": "boolean"
                 },
                 "encoder_concurrency": {
+                    "type": "integer"
+                },
+                "file_index_width": {
                     "type": "integer"
                 },
                 "only_output_updated_columns": {
