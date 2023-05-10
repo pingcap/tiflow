@@ -1271,6 +1271,9 @@ var doc = `{
                 "encoder-concurrency": {
                     "type": "integer"
                 },
+                "file-index-digit": {
+                    "type": "integer"
+                },
                 "protocol": {
                     "type": "string"
                 },
@@ -1974,6 +1977,9 @@ var doc = `{
                     "type": "boolean"
                 },
                 "encoder_concurrency": {
+                    "type": "integer"
+                },
+                "file_index_width": {
                     "type": "integer"
                 },
                 "protocol": {
