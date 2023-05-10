@@ -309,6 +309,7 @@ func (c *ReplicaConfig) toInternalReplicaConfigWithOriginConfig(
 				CA:                           c.Sink.KafkaConfig.CA,
 				Cert:                         c.Sink.KafkaConfig.Cert,
 				Key:                          c.Sink.KafkaConfig.Key,
+				InsecureSkipVerify:           c.Sink.KafkaConfig.InsecureSkipVerify,
 				CodecConfig:                  codeConfig,
 			}
 		}
@@ -504,6 +505,7 @@ func ToAPIReplicaConfig(c *config.ReplicaConfig) *ReplicaConfig {
 				CA:                           cloned.Sink.KafkaConfig.CA,
 				Cert:                         cloned.Sink.KafkaConfig.Cert,
 				Key:                          cloned.Sink.KafkaConfig.Key,
+				InsecureSkipVerify:           cloned.Sink.KafkaConfig.InsecureSkipVerify,
 				CodecConfig:                  codeConfig,
 			}
 		}
@@ -917,6 +919,7 @@ type KafkaConfig struct {
 	CA                           *string      `json:"ca,omitempty"`
 	Cert                         *string      `json:"cert,omitempty"`
 	Key                          *string      `json:"key,omitempty"`
+	InsecureSkipVerify           *bool        `json:"insecure_skip_verify,omitempty"`
 	CodecConfig                  *CodecConfig `json:"codec_config,omitempty"`
 }
 
