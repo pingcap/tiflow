@@ -63,6 +63,7 @@ go_ycsb_download_url="${file_server_url}/download/builds/pingcap/go-ycsb/test-br
 etcd_download_url="${file_server_url}/download/builds/pingcap/cdc/etcd-v3.4.7-linux-amd64.tar.gz"
 sync_diff_inspector_url="${file_server_url}/download/builds/pingcap/cdc/sync_diff_inspector_hash-00998a9a_linux-amd64.tar.gz"
 jq_download_url="${file_server_url}/download/builds/pingcap/test/jq-1.6/jq-linux64"
+schema_registry_url="${file_server_url}/download/builds/pingcap/cdc/schema-registry.tar.gz"
 
 # Some temporary dir.
 rm -rf tmp
@@ -85,6 +86,9 @@ mv third_bin/tiflash third_bin/_tiflash
 mv third_bin/_tiflash/* third_bin && rm -rf third_bin/_tiflash
 download "$minio_download_url" "minio.tar.gz" "tmp/minio.tar.gz"
 tar -xz -C third_bin -f tmp/minio.tar.gz
+
+download "$schema_registry_url" "schema-registry.tar.gz" "tmp/schema-registry.tar.gz"
+tar -xz -C third_bin -f tmp/schema-registry.tar.gz
 
 download "$go_ycsb_download_url" "go-ycsb" "third_bin/go-ycsb"
 download "$jq_download_url" "jq" "third_bin/jq"
