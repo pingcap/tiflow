@@ -12,8 +12,7 @@ if [ "$SINK_TYPE" != "kafka" ]; then
 	return
 fi
 
-ls -alh
-
+echo 'Starting schema registry...'
 bin/schema-registry/bin/schema-registry-start -daemon bin/schema-registry/etc/schema-registry/schema-registry.properties &
 SCHEMA_REGISTRY_PID=$!
 i=0
@@ -24,6 +23,7 @@ while ! curl -o /dev/null -v -s "http://127.0.0.1:8081/"; do
 		exit 1
 	fi
 	sleep 2
+	echo 'Success to start schema registry'
 done
 
 stop_schema_registry() {
@@ -55,9 +55,9 @@ function run() {
 
 	SINK_URI="kafka://127.0.0.1:9092/$TOPIC_NAME?protocol=avro&enable-tidb-extension=true&avro-enable-watermark=true&avro-decimal-handling-mode=string&avro-bigint-unsigned-handling-mode=string"
 
-	run_cdc_cli changefeed create --start-ts=$start_ts --sink-uri="$SINK_URI" --config="$CUR/conf/changefeed.toml"
+	run_cdc_cli changefeed create --start-ts=$start_ts --sink-uri="$SINK_URI" --config="$CUR/conf/changefeed.toml" --schema-registry=http://127.0.0.1:8081
 
-	run_kafka_consumer $WORK_DIR "kafka://127.0.0.1:9092/$TOPIC_NAME?protocol=avro&enable-tidb-extension=true&enable-row-checksum=true"
+	run_kafka_consumer $WORK_DIR "kafka://127.0.0.1:9092/$TOPIC_NAME?protocol=avro&enable-tidb-extension=true&enable-row-checksum=true" "" "http://127.0.0.1:8081"
 
 	run_sql_file $CUR/data/data.sql ${UP_TIDB_HOST} ${UP_TIDB_PORT}
 
