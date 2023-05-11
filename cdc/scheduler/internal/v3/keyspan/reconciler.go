@@ -149,14 +149,28 @@ func (m *Reconciler) Reconcile(
 				zap.String("foundEnd", coveredSpans[len(coveredSpans)-1].String()))
 			spans := make([]tablepb.Span, 0, len(coveredSpans)+len(holes))
 			spans = append(spans, coveredSpans...)
+
+			// fill tableID for holes spans
 			for _, s := range holes {
-				spans = append(spans, tablepb.Span{
-					TableID:  tableID,
-					StartKey: s.StartKey,
-					EndKey:   s.EndKey,
-				})
-				// TODO: maybe we should split holes too.
+				s.TableID = tableID
 			}
+
+			var splittedHoles []tablepb.Span
+			// we should also split the hole span
+			if compat.CheckSpanReplicationEnabled() {
+				for _, s := range holes {
+					for _, splitter := range m.splitter {
+						splittedHoles = splitter.split(ctx, s, len(aliveCaptures), m.config)
+						if len(spans) > 1 {
+							break
+						}
+					}
+				}
+				spans = append(spans, splittedHoles...)
+			} else {
+				spans = append(spans, holes...)
+			}
+
 			m.tableSpans[tableID] = splittedSpans{
 				byAddTable: false,
 				spans:      spans,
