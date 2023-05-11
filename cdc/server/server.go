@@ -382,11 +382,13 @@ func (s *server) Drain() <-chan struct{} {
 
 // Close closes the server.
 func (s *server) Close() {
+	if s.capture != nil {
+		s.capture.Close()
+	}
+	// Close the sort engine factory after capture closed to avoid
+	// puller send data to closed sort engine.
 	s.closeSortEngineFactory()
 
-	if s.capture != nil {
-		s.capture.AsyncClose()
-	}
 	if s.statusServer != nil {
 		err := s.statusServer.Close()
 		if err != nil {
