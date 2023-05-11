@@ -266,7 +266,7 @@ func TestVerifyAndComplete(t *testing.T) {
 		SinkURI: "blackhole://",
 		Config:  defaultConfig,
 	}
-	info2.rmUnusedFields()
+	info2.RmUnusedFields()
 	marshalConfig2, err := defaultConfig.Marshal()
 	require.Nil(t, err)
 	require.Equal(t, marshalConfig2, marshalConfig1)
