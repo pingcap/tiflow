@@ -33,6 +33,33 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
+<<<<<<< HEAD:cdc/sinkv2/eventsink/cloudstorage/cloud_storage_dml_sink_test.go
+=======
+func setClock(s *DMLSink, clock clock.Clock) {
+	for _, w := range s.workers {
+		w.filePathGenerator.SetClock(clock)
+	}
+}
+
+func getTableFiles(t *testing.T, tableDir string) []string {
+	files, err := os.ReadDir(tableDir)
+	require.Nil(t, err)
+
+	fileNames := []string{}
+	for _, f := range files {
+		fileName := f.Name()
+		if f.IsDir() {
+			metaFiles, err := os.ReadDir(path.Join(tableDir, f.Name()))
+			require.Nil(t, err)
+			require.Len(t, metaFiles, 1)
+			fileName = metaFiles[0].Name()
+		}
+		fileNames = append(fileNames, fileName)
+	}
+	return fileNames
+}
+
+>>>>>>> 7f5309eaf2 (sink(ticdc): add meta separator index path in storage sink (#8948)):cdc/sink/dmlsink/cloudstorage/cloud_storage_dml_sink_test.go
 func generateTxnEvents(
 	cnt *uint64,
 	batch int,
@@ -109,6 +136,7 @@ func TestCloudStorageWriteEventsWithoutDateSeparator(t *testing.T) {
 
 	files, err := os.ReadDir(tableDir)
 	require.Nil(t, err)
+<<<<<<< HEAD:cdc/sinkv2/eventsink/cloudstorage/cloud_storage_dml_sink_test.go
 	require.Len(t, files, 3)
 	var fileNames []string
 	for _, f := range files {
@@ -116,10 +144,19 @@ func TestCloudStorageWriteEventsWithoutDateSeparator(t *testing.T) {
 	}
 	require.ElementsMatch(t, []string{"CDC000001.json", "schema.json", "CDC.index"}, fileNames)
 	content, err := os.ReadFile(path.Join(tableDir, "CDC000001.json"))
+=======
+	require.Len(t, files, 1)
+
+	tableDir := path.Join(parentDir, "test/table1/33")
+	fileNames := getTableFiles(t, tableDir)
+	require.Len(t, fileNames, 2)
+	require.ElementsMatch(t, []string{"CDC000001.csv", "CDC.index"}, fileNames)
+	content, err := os.ReadFile(path.Join(tableDir, "CDC000001.csv"))
+>>>>>>> 7f5309eaf2 (sink(ticdc): add meta separator index path in storage sink (#8948)):cdc/sink/dmlsink/cloudstorage/cloud_storage_dml_sink_test.go
 	require.Nil(t, err)
 	require.Greater(t, len(content), 0)
 
-	content, err = os.ReadFile(path.Join(tableDir, "CDC.index"))
+	content, err = os.ReadFile(path.Join(tableDir, "meta/CDC.index"))
 	require.Nil(t, err)
 	require.Equal(t, "CDC000001.json\n", string(content))
 	require.Equal(t, uint64(1000), atomic.LoadUint64(&cnt))
@@ -129,6 +166,7 @@ func TestCloudStorageWriteEventsWithoutDateSeparator(t *testing.T) {
 	require.Nil(t, err)
 	time.Sleep(3 * time.Second)
 
+<<<<<<< HEAD:cdc/sinkv2/eventsink/cloudstorage/cloud_storage_dml_sink_test.go
 	files, err = os.ReadDir(tableDir)
 	require.Nil(t, err)
 	require.Len(t, files, 4)
@@ -136,6 +174,10 @@ func TestCloudStorageWriteEventsWithoutDateSeparator(t *testing.T) {
 	for _, f := range files {
 		fileNames = append(fileNames, f.Name())
 	}
+=======
+	fileNames = getTableFiles(t, tableDir)
+	require.Len(t, fileNames, 3)
+>>>>>>> 7f5309eaf2 (sink(ticdc): add meta separator index path in storage sink (#8948)):cdc/sink/dmlsink/cloudstorage/cloud_storage_dml_sink_test.go
 	require.ElementsMatch(t, []string{
 		"CDC000001.json", "CDC000002.json",
 		"schema.json", "CDC.index",
@@ -144,7 +186,7 @@ func TestCloudStorageWriteEventsWithoutDateSeparator(t *testing.T) {
 	require.Nil(t, err)
 	require.Greater(t, len(content), 0)
 
-	content, err = os.ReadFile(path.Join(tableDir, "CDC.index"))
+	content, err = os.ReadFile(path.Join(tableDir, "meta/CDC.index"))
 	require.Nil(t, err)
 	require.Equal(t, "CDC000002.json\n", string(content))
 	require.Equal(t, uint64(2000), atomic.LoadUint64(&cnt))
@@ -181,6 +223,7 @@ func TestCloudStorageWriteEventsWithDateSeparator(t *testing.T) {
 	require.Nil(t, err)
 	time.Sleep(3 * time.Second)
 
+<<<<<<< HEAD:cdc/sinkv2/eventsink/cloudstorage/cloud_storage_dml_sink_test.go
 	files, err := os.ReadDir(tableDir)
 	require.Nil(t, err)
 	require.Len(t, files, 2)
@@ -190,10 +233,16 @@ func TestCloudStorageWriteEventsWithDateSeparator(t *testing.T) {
 	}
 	require.ElementsMatch(t, []string{"CDC000001.json", "CDC.index"}, fileNames)
 	content, err := os.ReadFile(path.Join(tableDir, "CDC000001.json"))
+=======
+	fileNames := getTableFiles(t, tableDir)
+	require.Len(t, fileNames, 2)
+	require.ElementsMatch(t, []string{"CDC000001.csv", "CDC.index"}, fileNames)
+	content, err := os.ReadFile(path.Join(tableDir, "CDC000001.csv"))
+>>>>>>> 7f5309eaf2 (sink(ticdc): add meta separator index path in storage sink (#8948)):cdc/sink/dmlsink/cloudstorage/cloud_storage_dml_sink_test.go
 	require.Nil(t, err)
 	require.Greater(t, len(content), 0)
 
-	content, err = os.ReadFile(path.Join(tableDir, "CDC.index"))
+	content, err = os.ReadFile(path.Join(tableDir, "meta/CDC.index"))
 	require.Nil(t, err)
 	require.Equal(t, "CDC000001.json\n", string(content))
 	require.Equal(t, uint64(1000), atomic.LoadUint64(&cnt))
@@ -205,6 +254,7 @@ func TestCloudStorageWriteEventsWithDateSeparator(t *testing.T) {
 	require.Nil(t, err)
 	time.Sleep(3 * time.Second)
 
+<<<<<<< HEAD:cdc/sinkv2/eventsink/cloudstorage/cloud_storage_dml_sink_test.go
 	files, err = os.ReadDir(tableDir)
 	require.Nil(t, err)
 	require.Len(t, files, 3)
@@ -214,10 +264,16 @@ func TestCloudStorageWriteEventsWithDateSeparator(t *testing.T) {
 	}
 	require.ElementsMatch(t, []string{"CDC000001.json", "CDC000002.json", "CDC.index"}, fileNames)
 	content, err = os.ReadFile(path.Join(tableDir, "CDC000002.json"))
+=======
+	fileNames = getTableFiles(t, tableDir)
+	require.Len(t, fileNames, 3)
+	require.ElementsMatch(t, []string{"CDC000001.csv", "CDC000002.csv", "CDC.index"}, fileNames)
+	content, err = os.ReadFile(path.Join(tableDir, "CDC000002.csv"))
+>>>>>>> 7f5309eaf2 (sink(ticdc): add meta separator index path in storage sink (#8948)):cdc/sink/dmlsink/cloudstorage/cloud_storage_dml_sink_test.go
 	require.Nil(t, err)
 	require.Greater(t, len(content), 0)
 
-	content, err = os.ReadFile(path.Join(tableDir, "CDC.index"))
+	content, err = os.ReadFile(path.Join(tableDir, "meta/CDC.index"))
 	require.Nil(t, err)
 	require.Equal(t, "CDC000002.json\n", string(content))
 	require.Equal(t, uint64(2000), atomic.LoadUint64(&cnt))
@@ -230,6 +286,7 @@ func TestCloudStorageWriteEventsWithDateSeparator(t *testing.T) {
 	time.Sleep(3 * time.Second)
 
 	tableDir = path.Join(parentDir, "test/table1/33/2023-03-09")
+<<<<<<< HEAD:cdc/sinkv2/eventsink/cloudstorage/cloud_storage_dml_sink_test.go
 	files, err = os.ReadDir(tableDir)
 	require.Nil(t, err)
 	require.Len(t, files, 2)
@@ -239,10 +296,16 @@ func TestCloudStorageWriteEventsWithDateSeparator(t *testing.T) {
 	}
 	require.ElementsMatch(t, []string{"CDC000001.json", "CDC.index"}, fileNames)
 	content, err = os.ReadFile(path.Join(tableDir, "CDC000001.json"))
+=======
+	fileNames = getTableFiles(t, tableDir)
+	require.Len(t, fileNames, 2)
+	require.ElementsMatch(t, []string{"CDC000001.csv", "CDC.index"}, fileNames)
+	content, err = os.ReadFile(path.Join(tableDir, "CDC000001.csv"))
+>>>>>>> 7f5309eaf2 (sink(ticdc): add meta separator index path in storage sink (#8948)):cdc/sink/dmlsink/cloudstorage/cloud_storage_dml_sink_test.go
 	require.Nil(t, err)
 	require.Greater(t, len(content), 0)
 
-	content, err = os.ReadFile(path.Join(tableDir, "CDC.index"))
+	content, err = os.ReadFile(path.Join(tableDir, "meta/CDC.index"))
 	require.Nil(t, err)
 	require.Equal(t, "CDC000001.json\n", string(content))
 	require.Equal(t, uint64(3000), atomic.LoadUint64(&cnt))
@@ -261,6 +324,7 @@ func TestCloudStorageWriteEventsWithDateSeparator(t *testing.T) {
 	require.Nil(t, err)
 	time.Sleep(3 * time.Second)
 
+<<<<<<< HEAD:cdc/sinkv2/eventsink/cloudstorage/cloud_storage_dml_sink_test.go
 	files, err = os.ReadDir(tableDir)
 	require.Nil(t, err)
 	require.Len(t, files, 3)
@@ -270,10 +334,16 @@ func TestCloudStorageWriteEventsWithDateSeparator(t *testing.T) {
 	}
 	require.ElementsMatch(t, []string{"CDC000001.json", "CDC000002.json", "CDC.index"}, fileNames)
 	content, err = os.ReadFile(path.Join(tableDir, "CDC000002.json"))
+=======
+	fileNames = getTableFiles(t, tableDir)
+	require.Len(t, fileNames, 3)
+	require.ElementsMatch(t, []string{"CDC000001.csv", "CDC000002.csv", "CDC.index"}, fileNames)
+	content, err = os.ReadFile(path.Join(tableDir, "CDC000002.csv"))
+>>>>>>> 7f5309eaf2 (sink(ticdc): add meta separator index path in storage sink (#8948)):cdc/sink/dmlsink/cloudstorage/cloud_storage_dml_sink_test.go
 	require.Nil(t, err)
 	require.Greater(t, len(content), 0)
 
-	content, err = os.ReadFile(path.Join(tableDir, "CDC.index"))
+	content, err = os.ReadFile(path.Join(tableDir, "meta/CDC.index"))
 	require.Nil(t, err)
 	require.Equal(t, "CDC000002.json\n", string(content))
 	require.Equal(t, uint64(1000), atomic.LoadUint64(&cnt))

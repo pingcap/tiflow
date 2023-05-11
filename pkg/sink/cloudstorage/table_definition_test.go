@@ -25,6 +25,46 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
+<<<<<<< HEAD
+=======
+func generateTableDef() (TableDefinition, *model.TableInfo) {
+	var columns []*timodel.ColumnInfo
+	ft := types.NewFieldType(mysql.TypeLong)
+	ft.SetFlag(mysql.PriKeyFlag | mysql.NotNullFlag)
+	col := &timodel.ColumnInfo{Name: timodel.NewCIStr("Id"), FieldType: *ft}
+	columns = append(columns, col)
+
+	ft = types.NewFieldType(mysql.TypeVarchar)
+	ft.SetFlag(mysql.NotNullFlag)
+	ft.SetFlen(128)
+	col = &timodel.ColumnInfo{Name: timodel.NewCIStr("LastName"), FieldType: *ft}
+	columns = append(columns, col)
+
+	ft = types.NewFieldType(mysql.TypeVarchar)
+	ft.SetFlen(64)
+	col = &timodel.ColumnInfo{Name: timodel.NewCIStr("FirstName"), FieldType: *ft}
+	columns = append(columns, col)
+
+	ft = types.NewFieldType(mysql.TypeDatetime)
+	col = &timodel.ColumnInfo{Name: timodel.NewCIStr("Birthday"), FieldType: *ft}
+	columns = append(columns, col)
+
+	tableInfo := &model.TableInfo{
+		TableInfo: &timodel.TableInfo{Columns: columns},
+		Version:   100,
+		TableName: model.TableName{
+			Schema:  "schema1",
+			Table:   "table1",
+			TableID: 20,
+		},
+	}
+
+	var def TableDefinition
+	def.FromTableInfo(tableInfo, tableInfo.Version)
+	return def, tableInfo
+}
+
+>>>>>>> 7f5309eaf2 (sink(ticdc): add meta separator index path in storage sink (#8948))
 func TestTableCol(t *testing.T) {
 	testCases := []struct {
 		name      string
@@ -360,7 +400,7 @@ func TestTableDefinition(t *testing.T) {
 	require.NoError(t, err)
 	require.JSONEq(t, `{
 		"Table": "table1",
-		"Schema": "test",
+		"Schema": "schema1",
 		"Version": 1,
 		"TableVersion": 100,
 		"Query": "",
@@ -396,7 +436,7 @@ func TestTableDefinition(t *testing.T) {
 	event := &model.DDLEvent{
 		CommitTs:  tableInfo.Version,
 		Type:      timodel.ActionAddColumn,
-		Query:     "alter table test.table1 add Birthday date",
+		Query:     "alter table schema1.table1 add Birthday date",
 		TableInfo: tableInfo,
 	}
 	def.FromDDLEvent(event)
@@ -404,10 +444,10 @@ func TestTableDefinition(t *testing.T) {
 	require.NoError(t, err)
 	require.JSONEq(t, `{
 		"Table": "table1",
-		"Schema": "test",
+		"Schema": "schema1",
 		"Version": 1,
 		"TableVersion": 100,
-		"Query": "alter table test.table1 add Birthday date",
+		"Query": "alter table schema1.table1 add Birthday date",
 		"Type": 5,
 		"TableColumns": [
 			{
@@ -445,3 +485,49 @@ func TestTableDefinition(t *testing.T) {
 	require.Equal(t, timodel.ActionAddColumn, event.Type)
 	require.Equal(t, uint64(100), event.CommitTs)
 }
+<<<<<<< HEAD
+=======
+
+func TestTableDefinitionGenFilePath(t *testing.T) {
+	t.Parallel()
+
+	schemaDef := &TableDefinition{
+		Schema:       "schema1",
+		Version:      defaultTableDefinitionVersion,
+		TableVersion: 100,
+	}
+	schemaPath, err := schemaDef.GenerateSchemaFilePath()
+	require.NoError(t, err)
+	require.Equal(t, "schema1/meta/schema_100_3233644819.json", schemaPath)
+
+	def, _ := generateTableDef()
+	tablePath, err := def.GenerateSchemaFilePath()
+	require.NoError(t, err)
+	require.Equal(t, "schema1/table1/meta/schema_100_0785427252.json", tablePath)
+}
+
+func TestTableDefinitionSum32(t *testing.T) {
+	t.Parallel()
+
+	def, _ := generateTableDef()
+	checksum1, err := def.Sum32(nil)
+	require.NoError(t, err)
+	checksum2, err := def.Sum32(nil)
+	require.NoError(t, err)
+	require.Equal(t, checksum1, checksum2)
+
+	n := len(def.Columns)
+	newCol := make([]TableCol, n)
+	copy(newCol, def.Columns)
+	newDef := def
+	newDef.Columns = newCol
+
+	for i := 0; i < n; i++ {
+		target := rand.Intn(n)
+		newDef.Columns[i], newDef.Columns[target] = newDef.Columns[target], newDef.Columns[i]
+		newChecksum, err := newDef.Sum32(nil)
+		require.NoError(t, err)
+		require.Equal(t, checksum1, newChecksum)
+	}
+}
+>>>>>>> 7f5309eaf2 (sink(ticdc): add meta separator index path in storage sink (#8948))

@@ -16,7 +16,6 @@ import (
 	"context"
 	"fmt"
 	"net/url"
-	"os"
 	"path"
 	"sync"
 	"testing"
@@ -124,6 +123,7 @@ func TestDMLWorkerRun(t *testing.T) {
 
 	time.Sleep(4 * time.Second)
 	// check whether files for table1 has been generated
+<<<<<<< HEAD:cdc/sinkv2/eventsink/cloudstorage/dml_worker_test.go
 	files, err := os.ReadDir(table1Dir)
 	require.Nil(t, err)
 	require.Len(t, files, 3)
@@ -132,6 +132,11 @@ func TestDMLWorkerRun(t *testing.T) {
 		fileNames = append(fileNames, f.Name())
 	}
 	require.ElementsMatch(t, []string{"CDC000001.json", "schema.json", "CDC.index"}, fileNames)
+=======
+	fileNames := getTableFiles(t, table1Dir)
+	require.Len(t, fileNames, 2)
+	require.ElementsMatch(t, []string{"CDC000001.json", "CDC.index"}, fileNames)
+>>>>>>> 7f5309eaf2 (sink(ticdc): add meta separator index path in storage sink (#8948)):cdc/sink/dmlsink/cloudstorage/dml_worker_test.go
 	cancel()
 	d.close()
 	wg.Wait()

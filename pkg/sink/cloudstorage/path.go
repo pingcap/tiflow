@@ -17,6 +17,11 @@ import (
 	"context"
 	"fmt"
 	"io"
+<<<<<<< HEAD
+=======
+	"path"
+	"regexp"
+>>>>>>> 7f5309eaf2 (sink(ticdc): add meta separator index path in storage sink (#8948))
 	"strconv"
 	"strings"
 
@@ -30,6 +35,7 @@ import (
 const (
 	// 3 is the length of "CDC", and the file number contains
 	// at least 6 digits (e.g. CDC000001.csv).
+<<<<<<< HEAD
 	minFileNamePrefixLen = 9
 	defaultIndexFileName = "CDC.index"
 )
@@ -37,6 +43,79 @@ const (
 // GenerateSchemaFilePath generates schema file path based on the table definition.
 func GenerateSchemaFilePath(def TableDefinition) string {
 	return fmt.Sprintf("%s/%s/%d/schema.json", def.Schema, def.Table, def.TableVersion)
+=======
+	minFileNamePrefixLen = 3 + config.MinFileIndexWidth
+	defaultIndexFileName = "meta/CDC.index"
+
+	// The following constants are used to generate file paths.
+	schemaFileNameFormat = "schema_%d_%010d.json"
+	// The database schema is stored in the following path:
+	// <schema>/meta/schema_{tableVersion}_{checksum}.json
+	dbSchemaPrefix = "%s/meta/"
+	// The table schema is stored in the following path:
+	// <schema>/<table>/meta/schema_{tableVersion}_{checksum}.json
+	tableSchemaPrefix = "%s/%s/meta/"
+)
+
+var schemaRE = regexp.MustCompile(`meta/schema_\d+_\d{10}\.json$`)
+
+// IsSchemaFile checks whether the file is a schema file.
+func IsSchemaFile(path string) bool {
+	return schemaRE.MatchString(path)
+}
+
+// mustParseSchemaName parses the version from the schema file name.
+func mustParseSchemaName(path string) (uint64, uint32) {
+	reportErr := func(err error) {
+		log.Panic("failed to parse schema file name",
+			zap.String("schemaPath", path),
+			zap.Any("error", err))
+	}
+
+	// For <schema>/<table>/meta/schema_{tableVersion}_{checksum}.json, the parts
+	// should be ["<schema>/<table>/meta/schema", "{tableVersion}", "{checksum}.json"].
+	parts := strings.Split(path, "_")
+	if len(parts) < 3 {
+		reportErr(errors.New("invalid path format"))
+	}
+
+	checksum := strings.TrimSuffix(parts[len(parts)-1], ".json")
+	tableChecksum, err := strconv.ParseUint(checksum, 10, 64)
+	if err != nil {
+		reportErr(err)
+	}
+	version := parts[len(parts)-2]
+	tableVersion, err := strconv.ParseUint(version, 10, 64)
+	if err != nil {
+		reportErr(err)
+	}
+	return tableVersion, uint32(tableChecksum)
+}
+
+func generateSchemaFilePath(
+	schema, table string, tableVersion uint64, checksum uint32,
+) string {
+	if schema == "" || tableVersion == 0 {
+		log.Panic("invalid schema or tableVersion",
+			zap.String("schema", schema), zap.Uint64("tableVersion", tableVersion))
+	}
+
+	var dir string
+	if table == "" {
+		// Generate db schema file path.
+		dir = fmt.Sprintf(dbSchemaPrefix, schema)
+	} else {
+		// Generate table schema file path.
+		dir = fmt.Sprintf(tableSchemaPrefix, schema, table)
+	}
+	name := fmt.Sprintf(schemaFileNameFormat, tableVersion, checksum)
+	return path.Join(dir, name)
+}
+
+func generateDataFileName(index uint64, extension string, fileIndexWidth int) string {
+	indexFmt := "%0" + strconv.Itoa(fileIndexWidth) + "d"
+	return fmt.Sprintf("CDC"+indexFmt+"%s", index, extension)
+>>>>>>> 7f5309eaf2 (sink(ticdc): add meta separator index path in storage sink (#8948))
 }
 
 type indexWithDate struct {
@@ -111,6 +190,28 @@ func (f *FilePathGenerator) GenerateDateStr() string {
 	return dateStr
 }
 
+<<<<<<< HEAD
+=======
+// GenerateIndexFilePath generates a canonical path for index file.
+func (f *FilePathGenerator) GenerateIndexFilePath(tbl VersionedTableName, date string) string {
+	dir := f.generateDataDirPath(tbl, date)
+	name := defaultIndexFileName
+	return path.Join(dir, name)
+}
+
+// GenerateDataFilePath generates a canonical path for data file.
+func (f *FilePathGenerator) GenerateDataFilePath(
+	ctx context.Context, tbl VersionedTableName, date string,
+) (string, error) {
+	dir := f.generateDataDirPath(tbl, date)
+	name, err := f.generateDataFileName(ctx, tbl, date)
+	if err != nil {
+		return "", err
+	}
+	return path.Join(dir, name), nil
+}
+
+>>>>>>> 7f5309eaf2 (sink(ticdc): add meta separator index path in storage sink (#8948))
 func (f *FilePathGenerator) generateDataDirPath(tbl VersionedTableName, date string) string {
 	var elems []string
 
@@ -126,7 +227,7 @@ func (f *FilePathGenerator) generateDataDirPath(tbl VersionedTableName, date str
 		elems = append(elems, date)
 	}
 
-	return strings.Join(elems, "/")
+	return path.Join(elems...)
 }
 
 func (f *FilePathGenerator) fetchIndexFromFileName(fileName string) (uint64, error) {
@@ -214,11 +315,18 @@ func (f *FilePathGenerator) getNextFileIdxFromIndexFile(
 		return 0, err
 	}
 
+<<<<<<< HEAD
 	lastFilePath := strings.Join([]string{
 		f.generateDataDirPath(tbl, date),                  // file dir
 		fmt.Sprintf("CDC%06d%s", maxFileIdx, f.extension), // file name
 	}, "/")
 
+=======
+	lastFilePath := path.Join(
+		f.generateDataDirPath(tbl, date),                                       // file dir
+		generateDataFileName(maxFileIdx, f.extension, f.config.FileIndexWidth), // file name
+	)
+>>>>>>> 7f5309eaf2 (sink(ticdc): add meta separator index path in storage sink (#8948))
 	var lastFileExists, lastFileIsEmpty bool
 	lastFileExists, err = f.storage.FileExists(ctx, lastFilePath)
 	if err != nil {
