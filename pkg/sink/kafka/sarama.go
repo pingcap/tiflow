@@ -113,6 +113,8 @@ func NewSaramaConfig(o *Options) (*sarama.Config, error) {
 				return nil, errors.Trace(err)
 			}
 		}
+
+		config.Net.TLS.Config.InsecureSkipVerify = o.InsecureSkipVerify
 	}
 
 	completeSaramaSASLConfig(config, o)
