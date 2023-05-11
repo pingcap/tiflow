@@ -446,7 +446,7 @@ func (m *mounter) verifyChecksum(
 
 	// the first checksum matched, it hits in the most case.
 	if checksum == first {
-		log.Debug("checksum matched",
+		log.Info("checksum matched",
 			zap.Uint32("checksum", checksum), zap.Uint32("first", first))
 		return checksum, version, true, nil
 	}
