@@ -70,7 +70,7 @@ func New(
 		s.txnSink = txnSink
 	case sink.KafkaScheme, sink.KafkaSSLScheme:
 		factoryCreator := kafka.NewSaramaFactory
-		if util.GetValueOrDefault(cfg.Sink.EnableKafkaSinkV2) {
+		if util.GetOrZero(cfg.Sink.EnableKafkaSinkV2) {
 			factoryCreator = v2.NewFactory
 		}
 		mqs, err := mq.NewKafkaDMLSink(ctx, sinkURI, cfg, errCh,

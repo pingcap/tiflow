@@ -77,7 +77,6 @@ func TestRmUnusedField(t *testing.T) {
 		err := strCf.VerifyAndComplete()
 		require.Nil(t, err)
 		require.Equal(t, "", strCf.Config.Sink.SchemaRegistry)
-		require.Equal(t, "", strCf.Config.Sink.Protocol)
 		require.NotNil(t, strCf.Config.Sink.CSVConfig)
 	}
 

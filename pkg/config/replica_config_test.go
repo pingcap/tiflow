@@ -219,7 +219,7 @@ func TestReplicaConfigValidate(t *testing.T) {
 func TestValidateAndAdjust(t *testing.T) {
 	cfg := GetDefaultReplicaConfig()
 
-	require.False(t, util.GetValueOrDefault(cfg.EnableSyncPoint))
+	require.False(t, util.GetOrZero(cfg.EnableSyncPoint))
 	sinkURL, err := url.Parse("blackhole://")
 	require.NoError(t, err)
 

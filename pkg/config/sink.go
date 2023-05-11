@@ -104,21 +104,33 @@ var ForceEnableOldValueProtocols = []string{
 // SinkConfig represents sink config for a changefeed
 type SinkConfig struct {
 	TxnAtomicity AtomicityLevel `toml:"transaction-atomicity" json:"transaction-atomicity"`
-	Protocol     string         `toml:"protocol" json:"protocol,omitempty"`
+	// Protocol is NOT available when the downstream is DB.
+	Protocol string `toml:"protocol" json:"protocol,omitempty"`
 
-	DispatchRules            []*DispatchRule   `toml:"dispatchers" json:"dispatchers,omitempty"`
-	CSVConfig                *CSVConfig        `toml:"csv" json:"csv"`
-	ColumnSelectors          []*ColumnSelector `toml:"column-selectors" json:"column-selectors"`
-	SchemaRegistry           string            `toml:"schema-registry" json:"schema-registry,omitempty"`
-	EncoderConcurrency       *int              `toml:"encoder-concurrency" json:"encoder-concurrency,omitempty"`
-	Terminator               string            `toml:"terminator" json:"terminator"`
-	DateSeparator            string            `toml:"date-separator" json:"date-separator,omitempty"`
-	EnablePartitionSeparator *bool             `toml:"enable-partition-separator" json:"enable-partition-separator,omitempty"`
-	FileIndexWidth           int               `toml:"file-index-digit,omitempty" json:"file-index-digit,omitempty"`
+	// DispatchRules is only available when the downstream is MQ.
+	DispatchRules []*DispatchRule `toml:"dispatchers" json:"dispatchers,omitempty"`
+	// CSVConfig is only available when the downstream is Storage.
+	CSVConfig *CSVConfig `toml:"csv" json:"csv,omitempty"`
+	// ColumnSelectors is Deprecated.
+	ColumnSelectors []*ColumnSelector `toml:"column-selectors" json:"column-selectors,omitempty"`
+	// SchemaRegistry is only available when the downstream is MQ using avro protocol.
+	SchemaRegistry string `toml:"schema-registry" json:"schema-registry,omitempty"`
+	// EncoderConcurrency is only available when the downstream is MQ.
+	EncoderConcurrency *int `toml:"encoder-concurrency" json:"encoder-concurrency,omitempty"`
+	// Terminator is NOT available when the downstream is DB.
+	Terminator string `toml:"terminator" json:"terminator,omitempty"`
+	// DateSeparator is only available when the downstream is Storage.
+	DateSeparator string `toml:"date-separator" json:"date-separator,omitempty"`
+	// EnablePartitionSeparator is only available when the downstream is Storage.
+	EnablePartitionSeparator *bool `toml:"enable-partition-separator" json:"enable-partition-separator,omitempty"`
+	// FileIndexWidth is only available when the downstream is Storage
+	FileIndexWidth *int `toml:"file-index-digit,omitempty" json:"file-index-digit,omitempty"`
 
 	// EnableKafkaSinkV2 enabled then the kafka-go sink will be used.
+	// It is only available when the downstream is MQ.
 	EnableKafkaSinkV2 *bool `toml:"enable-kafka-sink-v2" json:"enable-kafka-sink-v2,omitempty"`
 
+	// OnlyOutputUpdatedColumns is only available when the downstream is MQ.
 	OnlyOutputUpdatedColumns *bool `toml:"only-output-updated-columns" json:"only-output-updated-columns,omitempty"`
 
 	// TiDBSourceID is the source ID of the upstream TiDB,
@@ -126,6 +138,7 @@ type SinkConfig struct {
 	// Note: This field is only used internally and only used in the MySQL sink.
 	TiDBSourceID uint64 `toml:"-" json:"-"`
 
+	// SafeMode is only available when the downstream is DB.
 	SafeMode           *bool               `toml:"safe-mode" json:"safe-mode,omitempty"`
 	KafkaConfig        *KafkaConfig        `toml:"kafka-config" json:"kafka-config,omitempty"`
 	MySQLConfig        *MySQLConfig        `toml:"mysql-config" json:"mysql-config,omitempty"`
@@ -345,7 +358,7 @@ func (s *SinkConfig) validateAndAdjust(sinkURI *url.URL, enableOldValue bool) er
 		}
 	}
 
-	if util.GetValueOrDefault(s.EncoderConcurrency) < 0 {
+	if util.GetOrZero(s.EncoderConcurrency) < 0 {
 		return cerror.ErrSinkInvalidConfig.GenWithStack(
 			"encoder-concurrency should greater than 0, but got %d", s.EncoderConcurrency)
 	}
@@ -369,8 +382,9 @@ func (s *SinkConfig) validateAndAdjust(sinkURI *url.URL, enableOldValue bool) er
 		// In most scenarios, the user does not need to change this configuration,
 		// so the default value of this parameter is not set and just make silent
 		// adjustments here.
-		if s.FileIndexWidth < MinFileIndexWidth || s.FileIndexWidth > MaxFileIndexWidth {
-			s.FileIndexWidth = DefaultFileIndexWidth
+		if util.GetOrZero(s.FileIndexWidth) < MinFileIndexWidth ||
+			util.GetOrZero(s.FileIndexWidth) > MaxFileIndexWidth {
+			s.FileIndexWidth = util.AddressOf(DefaultFileIndexWidth)
 		}
 
 		if err := s.CSVConfig.validateAndAdjust(); err != nil {

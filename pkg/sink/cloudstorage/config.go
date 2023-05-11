@@ -112,8 +112,8 @@ func (c *Config) Apply(
 	}
 
 	c.DateSeparator = replicaConfig.Sink.DateSeparator
-	c.EnablePartitionSeparator = util.GetValueOrDefault(replicaConfig.Sink.EnablePartitionSeparator)
-	c.FileIndexWidth = replicaConfig.Sink.FileIndexWidth
+	c.EnablePartitionSeparator = util.GetOrZero(replicaConfig.Sink.EnablePartitionSeparator)
+	c.FileIndexWidth = util.GetOrZero(replicaConfig.Sink.FileIndexWidth)
 
 	if c.FileIndexWidth < config.MinFileIndexWidth || c.FileIndexWidth > config.MaxFileIndexWidth {
 		c.FileIndexWidth = config.DefaultFileIndexWidth

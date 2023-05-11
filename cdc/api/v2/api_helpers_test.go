@@ -129,7 +129,7 @@ func TestVerifyUpdateChangefeedConfig(t *testing.T) {
 	newCfInfo.Config.Sink.TxnAtomicity = ""
 	require.Equal(t, uint64(0), newCfInfo.StartTs)
 	require.Equal(t, uint64(10), newCfInfo.TargetTs)
-	require.Equal(t, 30*time.Second, util.GetValueOrDefault(newCfInfo.Config.SyncPointInterval))
+	require.Equal(t, 30*time.Second, util.GetOrZero(newCfInfo.Config.SyncPointInterval))
 	require.Equal(t, cfg.ReplicaConfig.ToInternalReplicaConfig(), newCfInfo.Config)
 	require.Equal(t, "a,b", newUpInfo.PDEndpoints)
 	require.Equal(t, "p1", newUpInfo.CertPath)

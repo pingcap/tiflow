@@ -403,8 +403,8 @@ func ToAPIReplicaConfig(c *config.ReplicaConfig) *ReplicaConfig {
 		IgnoreIneligibleTable: cloned.IgnoreIneligibleTable,
 		CheckGCSafePoint:      cloned.CheckGCSafePoint,
 		EnableSyncPoint:       cloned.EnableSyncPoint,
-		SyncPointInterval:     &JSONDuration{util.GetValueOrDefault(cloned.SyncPointInterval)},
-		SyncPointRetention:    &JSONDuration{util.GetValueOrDefault(cloned.SyncPointRetention)},
+		SyncPointInterval:     &JSONDuration{util.GetOrZero(cloned.SyncPointInterval)},
+		SyncPointRetention:    &JSONDuration{util.GetOrZero(cloned.SyncPointRetention)},
 		BDRMode:               cloned.BDRMode,
 	}
 
@@ -712,10 +712,10 @@ type SinkConfig struct {
 	ColumnSelectors          []*ColumnSelector   `json:"column_selectors,omitempty"`
 	TxnAtomicity             string              `json:"transaction_atomicity"`
 	EncoderConcurrency       *int                `json:"encoder_concurrency,omitempty"`
-	Terminator               string              `json:"terminator"`
+	Terminator               string              `json:"terminator,omitempty"`
 	DateSeparator            string              `json:"date_separator,omitempty"`
 	EnablePartitionSeparator *bool               `json:"enable_partition_separator,omitempty"`
-	FileIndexWidth           int                 `json:"file_index_width"`
+	FileIndexWidth           *int                `json:"file_index_width,omitempty"`
 	EnableKafkaSinkV2        *bool               `json:"enable_kafka_sink_v2,omitempty"`
 	OnlyOutputUpdatedColumns *bool               `json:"only_output_updated_columns,omitempty"`
 	SafeMode                 *bool               `json:"safe_mode,omitempty"`

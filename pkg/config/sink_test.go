@@ -17,6 +17,7 @@ import (
 	"net/url"
 	"testing"
 
+	"github.com/pingcap/tiflow/pkg/util"
 	"github.com/stretchr/testify/require"
 )
 
@@ -417,14 +418,14 @@ func TestValidateAndAdjustStorageConfig(t *testing.T) {
 	s := GetDefaultReplicaConfig()
 	err = s.ValidateAndAdjust(sinkURI)
 	require.NoError(t, err)
-	require.Equal(t, DefaultFileIndexWidth, s.Sink.FileIndexWidth)
+	require.Equal(t, DefaultFileIndexWidth, util.GetOrZero(s.Sink.FileIndexWidth))
 
 	err = s.ValidateAndAdjust(sinkURI)
 	require.NoError(t, err)
-	require.Equal(t, DefaultFileIndexWidth, s.Sink.FileIndexWidth)
+	require.Equal(t, DefaultFileIndexWidth, util.GetOrZero(s.Sink.FileIndexWidth))
 
-	s.Sink.FileIndexWidth = 16
+	s.Sink.FileIndexWidth = util.AddressOf(16)
 	err = s.ValidateAndAdjust(sinkURI)
 	require.NoError(t, err)
-	require.Equal(t, 16, s.Sink.FileIndexWidth)
+	require.Equal(t, 16, util.GetOrZero(s.Sink.FileIndexWidth))
 }

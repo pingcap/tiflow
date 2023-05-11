@@ -46,7 +46,7 @@ func New(
 	switch scheme {
 	case sink.KafkaScheme, sink.KafkaSSLScheme:
 		factoryCreator := kafka.NewSaramaFactory
-		if util.GetValueOrDefault(cfg.Sink.EnableKafkaSinkV2) {
+		if util.GetOrZero(cfg.Sink.EnableKafkaSinkV2) {
 			factoryCreator = kafkav2.NewFactory
 		}
 		return mq.NewKafkaDDLSink(ctx, sinkURI, cfg,

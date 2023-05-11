@@ -116,7 +116,7 @@ func NewKafkaDMLSink(
 	s, err := newDMLSink(
 		ctx, p, adminClient, topicManager,
 		eventRouter, encoderConfig,
-		tiflowutil.GetValueOrDefault(replicaConfig.Sink.EncoderConcurrency),
+		tiflowutil.GetOrZero(replicaConfig.Sink.EncoderConcurrency),
 		errCh,
 	)
 	if err != nil {

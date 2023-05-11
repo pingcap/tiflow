@@ -320,22 +320,29 @@ func (info *ChangeFeedInfo) RmUnusedFields() {
 
 	if !sink.IsMySQLCompatibleScheme(uri.Scheme) {
 		info.rmDBOnlyFields()
+	} else {
+		// remove fields only being used by MQ and Storage downstream
+		info.Config.Sink.Protocol = ""
+		info.Config.Sink.Terminator = ""
 	}
 }
 
 func (info *ChangeFeedInfo) rmMQOnlyFields() {
-	info.Config.Sink.Protocol = ""
 	info.Config.Sink.DispatchRules = nil
 	info.Config.Sink.SchemaRegistry = ""
 	info.Config.Sink.EncoderConcurrency = nil
 	info.Config.Sink.EnableKafkaSinkV2 = nil
+	info.Config.Sink.OnlyOutputUpdatedColumns = nil
+	info.Config.Sink.KafkaConfig = nil
+	info.Config.Integrity = nil
 }
 
 func (info *ChangeFeedInfo) rmStorageOnlyFields() {
 	info.Config.Sink.CSVConfig = nil
 	info.Config.Sink.DateSeparator = ""
 	info.Config.Sink.EnablePartitionSeparator = nil
-	info.Config.Sink.OnlyOutputUpdatedColumns = nil
+	info.Config.Sink.FileIndexWidth = nil
+	info.Config.Sink.CloudStorageConfig = nil
 }
 
 func (info *ChangeFeedInfo) rmDBOnlyFields() {
@@ -344,6 +351,8 @@ func (info *ChangeFeedInfo) rmDBOnlyFields() {
 	info.Config.SyncPointInterval = nil
 	info.Config.SyncPointRetention = nil
 	info.Config.Consistent = nil
+	info.Config.Sink.SafeMode = nil
+	info.Config.Sink.MySQLConfig = nil
 }
 
 // FixIncompatible fixes incompatible changefeed meta info.

@@ -111,23 +111,29 @@ type replicaConfig struct {
 	EnableOldValue   bool   `toml:"enable-old-value" json:"enable-old-value"`
 	ForceReplicate   bool   `toml:"force-replicate" json:"force-replicate"`
 	CheckGCSafePoint bool   `toml:"check-gc-safe-point" json:"check-gc-safe-point"`
-	EnableSyncPoint  *bool  `toml:"enable-sync-point" json:"enable-sync-point,omitempty"`
+	// EnableSyncPoint is only available when the downstream is a Database.
+	EnableSyncPoint *bool `toml:"enable-sync-point" json:"enable-sync-point,omitempty"`
 	// IgnoreIneligibleTable is used to store the user's config when creating a changefeed.
 	// not used in the changefeed's lifecycle.
 	IgnoreIneligibleTable bool `toml:"ignore-ineligible-table" json:"ignore-ineligible-table"`
+
 	// BDR(Bidirectional Replication) is a feature that allows users to
 	// replicate data of same tables from TiDB-1 to TiDB-2 and vice versa.
 	// This feature is only available for TiDB.
-	BDRMode            *bool             `toml:"bdr-mode" json:"bdr-mode,omitempty"`
-	SyncPointInterval  *time.Duration    `toml:"sync-point-interval" json:"sync-point-interval,omitempty"`
-	SyncPointRetention *time.Duration    `toml:"sync-point-retention" json:"sync-point-retention,omitempty"`
-	Filter             *FilterConfig     `toml:"filter" json:"filter"`
-	Mounter            *MounterConfig    `toml:"mounter" json:"mounter"`
-	Sink               *SinkConfig       `toml:"sink" json:"sink"`
-	Consistent         *ConsistentConfig `toml:"consistent" json:"consistent,omitempty"`
+	BDRMode *bool `toml:"bdr-mode" json:"bdr-mode,omitempty"`
+	// SyncPointInterval is only available when the downstream is DB.
+	SyncPointInterval *time.Duration `toml:"sync-point-interval" json:"sync-point-interval,omitempty"`
+	// SyncPointRetention is only available when the downstream is DB.
+	SyncPointRetention *time.Duration `toml:"sync-point-retention" json:"sync-point-retention,omitempty"`
+	Filter             *FilterConfig  `toml:"filter" json:"filter"`
+	Mounter            *MounterConfig `toml:"mounter" json:"mounter"`
+	Sink               *SinkConfig    `toml:"sink" json:"sink"`
+	// Consistent is only available for DB downstream with redo feature enabled.
+	Consistent *ConsistentConfig `toml:"consistent" json:"consistent,omitempty"`
 	// Scheduler is the configuration for scheduler.
 	Scheduler *ChangefeedSchedulerConfig `toml:"scheduler" json:"scheduler"`
-	Integrity *integrity.Config          `toml:"integrity" json:"integrity"`
+	// Integrity is only available when the downstream is MQ.
+	Integrity *integrity.Config `toml:"integrity" json:"integrity"`
 }
 
 // Marshal returns the json marshal format of a ReplicationConfig
@@ -202,7 +208,7 @@ func (c *ReplicaConfig) ValidateAndAdjust(sinkURI *url.URL) error {
 	}
 
 	// check sync point config
-	if util.GetValueOrDefault(c.EnableSyncPoint) {
+	if util.GetOrZero(c.EnableSyncPoint) {
 		if c.SyncPointInterval != nil &&
 			*c.SyncPointInterval < minSyncPointInterval {
 			return cerror.ErrInvalidReplicaConfig.

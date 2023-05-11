@@ -198,7 +198,6 @@ const (
       "include-commit-ts": true
     },
     "transaction-atomicity": "",
-    "terminator": "",
     "date-separator": "month",
     "enable-partition-separator": true,
     "only-output-updated-columns": false,

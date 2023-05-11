@@ -13,9 +13,9 @@
 
 package util
 
-// GetValueOrDefault returns the value pointed to by p, or a zero value of
+// GetOrZero returns the value pointed to by p, or a zero value of
 // its type if p is nil.
-func GetValueOrDefault[T any](p *T) T {
+func GetOrZero[T any](p *T) T {
 	var val T
 	if p == nil {
 		return val

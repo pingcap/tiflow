@@ -116,7 +116,6 @@ func TestChangefeedStateUpdate(t *testing.T) {
 						Filter:           &config.FilterConfig{Rules: []string{"*.*"}},
 						Mounter:          &config.MounterConfig{WorkerNum: 16},
 						Scheduler:        config.GetDefaultReplicaConfig().Scheduler,
-						Integrity:        config.GetDefaultReplicaConfig().Integrity,
 						Sink: &config.SinkConfig{
 							Terminator: config.CRLF,
 						},
@@ -170,7 +169,6 @@ func TestChangefeedStateUpdate(t *testing.T) {
 							Terminator: config.CRLF,
 						},
 						Scheduler: config.GetDefaultReplicaConfig().Scheduler,
-						Integrity: config.GetDefaultReplicaConfig().Integrity,
 					},
 				},
 				Status: &model.ChangeFeedStatus{CheckpointTs: 421980719742451713, ResolvedTs: 421980720003809281},
@@ -226,7 +224,6 @@ func TestChangefeedStateUpdate(t *testing.T) {
 							Terminator: config.CRLF,
 						},
 						Scheduler: config.GetDefaultReplicaConfig().Scheduler,
-						Integrity: config.GetDefaultReplicaConfig().Integrity,
 					},
 				},
 				Status: &model.ChangeFeedStatus{CheckpointTs: 421980719742451713, ResolvedTs: 421980720003809281},

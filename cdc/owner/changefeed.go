@@ -600,7 +600,7 @@ LOOP2:
 	}
 
 	c.barriers = newBarriers()
-	if util.GetValueOrDefault(c.state.Info.Config.EnableSyncPoint) {
+	if util.GetOrZero(c.state.Info.Config.EnableSyncPoint) {
 		// preResolvedTs model.Ts
 		c.barriers.Update(syncPointBarrier, resolvedTs)
 	}
@@ -711,7 +711,7 @@ LOOP2:
 		c.redoDDLMgr,
 		c.redoMetaMgr,
 		downstreamType,
-		util.GetValueOrDefault(c.state.Info.Config.BDRMode),
+		util.GetOrZero(c.state.Info.Config.BDRMode),
 	)
 
 	// create scheduler
@@ -968,7 +968,6 @@ func (c *changefeed) handleBarrier(ctx cdcContext.Context) (uint64, error) {
 	switch barrierTp {
 	case syncPointBarrier:
 		nextSyncPointTs := oracle.GoTimeToTS(oracle.GetTimeFromTS(barrierTs).Add(c.state.Info.Config.SyncPointInterval))
-
 		if err := c.ddlSink.emitSyncPoint(ctx, barrierTs); err != nil {
 			return 0, errors.Trace(err)
 		}
