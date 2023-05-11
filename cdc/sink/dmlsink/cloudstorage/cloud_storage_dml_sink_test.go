@@ -34,6 +34,30 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
+func setClock(s *DMLSink, clock clock.Clock) {
+	for _, w := range s.workers {
+		w.filePathGenerator.SetClock(clock)
+	}
+}
+
+func getTableFiles(t *testing.T, tableDir string) []string {
+	files, err := os.ReadDir(tableDir)
+	require.Nil(t, err)
+
+	fileNames := []string{}
+	for _, f := range files {
+		fileName := f.Name()
+		if f.IsDir() {
+			metaFiles, err := os.ReadDir(path.Join(tableDir, f.Name()))
+			require.Nil(t, err)
+			require.Len(t, metaFiles, 1)
+			fileName = metaFiles[0].Name()
+		}
+		fileNames = append(fileNames, fileName)
+	}
+	return fileNames
+}
+
 func generateTxnEvents(
 	cnt *uint64,
 	batch int,
@@ -89,6 +113,8 @@ func generateTxnEvents(
 }
 
 func TestCloudStorageWriteEventsWithoutDateSeparator(t *testing.T) {
+	t.Parallel()
+
 	ctx, cancel := context.WithCancel(context.Background())
 	parentDir := t.TempDir()
 	uri := fmt.Sprintf("file:///%s?flush-interval=2s", parentDir)
@@ -117,19 +143,14 @@ func TestCloudStorageWriteEventsWithoutDateSeparator(t *testing.T) {
 	require.Len(t, files, 1)
 
 	tableDir := path.Join(parentDir, "test/table1/33")
-	files, err = os.ReadDir(tableDir)
-	require.Nil(t, err)
-	require.Len(t, files, 2)
-	var fileNames []string
-	for _, f := range files {
-		fileNames = append(fileNames, f.Name())
-	}
+	fileNames := getTableFiles(t, tableDir)
+	require.Len(t, fileNames, 2)
 	require.ElementsMatch(t, []string{"CDC000001.csv", "CDC.index"}, fileNames)
 	content, err := os.ReadFile(path.Join(tableDir, "CDC000001.csv"))
 	require.Nil(t, err)
 	require.Greater(t, len(content), 0)
 
-	content, err = os.ReadFile(path.Join(tableDir, "CDC.index"))
+	content, err = os.ReadFile(path.Join(tableDir, "meta/CDC.index"))
 	require.Nil(t, err)
 	require.Equal(t, "CDC000001.csv\n", string(content))
 	require.Equal(t, uint64(1000), atomic.LoadUint64(&cnt))
@@ -139,13 +160,8 @@ func TestCloudStorageWriteEventsWithoutDateSeparator(t *testing.T) {
 	require.Nil(t, err)
 	time.Sleep(3 * time.Second)
 
-	files, err = os.ReadDir(tableDir)
-	require.Nil(t, err)
-	require.Len(t, files, 3)
-	fileNames = nil
-	for _, f := range files {
-		fileNames = append(fileNames, f.Name())
-	}
+	fileNames = getTableFiles(t, tableDir)
+	require.Len(t, fileNames, 3)
 	require.ElementsMatch(t, []string{
 		"CDC000001.csv", "CDC000002.csv", "CDC.index",
 	}, fileNames)
@@ -153,7 +169,7 @@ func TestCloudStorageWriteEventsWithoutDateSeparator(t *testing.T) {
 	require.Nil(t, err)
 	require.Greater(t, len(content), 0)
 
-	content, err = os.ReadFile(path.Join(tableDir, "CDC.index"))
+	content, err = os.ReadFile(path.Join(tableDir, "meta/CDC.index"))
 	require.Nil(t, err)
 	require.Equal(t, "CDC000002.csv\n", string(content))
 	require.Equal(t, uint64(2000), atomic.LoadUint64(&cnt))
@@ -163,6 +179,8 @@ func TestCloudStorageWriteEventsWithoutDateSeparator(t *testing.T) {
 }
 
 func TestCloudStorageWriteEventsWithDateSeparator(t *testing.T) {
+	t.Parallel()
+
 	ctx, cancel := context.WithCancel(context.Background())
 	parentDir := t.TempDir()
 	uri := fmt.Sprintf("file:///%s?flush-interval=2s", parentDir)
@@ -178,7 +196,7 @@ func TestCloudStorageWriteEventsWithDateSeparator(t *testing.T) {
 	s, err := NewDMLSink(ctx, sinkURI, replicaConfig, errCh)
 	require.Nil(t, err)
 	mockClock := clock.NewMock()
-	s.writer.setClock(mockClock)
+	setClock(s, mockClock)
 
 	var cnt uint64 = 0
 	batch := 100
@@ -191,68 +209,55 @@ func TestCloudStorageWriteEventsWithDateSeparator(t *testing.T) {
 	require.Nil(t, err)
 	time.Sleep(3 * time.Second)
 
-	files, err := os.ReadDir(tableDir)
-	require.Nil(t, err)
-	require.Len(t, files, 2)
-	var fileNames []string
-	for _, f := range files {
-		fileNames = append(fileNames, f.Name())
-	}
+	fileNames := getTableFiles(t, tableDir)
+	require.Len(t, fileNames, 2)
 	require.ElementsMatch(t, []string{"CDC000001.csv", "CDC.index"}, fileNames)
 	content, err := os.ReadFile(path.Join(tableDir, "CDC000001.csv"))
 	require.Nil(t, err)
 	require.Greater(t, len(content), 0)
 
-	content, err = os.ReadFile(path.Join(tableDir, "CDC.index"))
+	content, err = os.ReadFile(path.Join(tableDir, "meta/CDC.index"))
 	require.Nil(t, err)
 	require.Equal(t, "CDC000001.csv\n", string(content))
 	require.Equal(t, uint64(1000), atomic.LoadUint64(&cnt))
 
 	// test date (day) is NOT changed.
 	mockClock.Set(time.Date(2023, 3, 8, 23, 59, 59, 0, time.UTC))
-	s.writer.setClock(mockClock)
+	setClock(s, mockClock)
+
 	err = s.WriteEvents(txns...)
 	require.Nil(t, err)
 	time.Sleep(3 * time.Second)
 
-	files, err = os.ReadDir(tableDir)
-	require.Nil(t, err)
-	require.Len(t, files, 3)
-	fileNames = nil
-	for _, f := range files {
-		fileNames = append(fileNames, f.Name())
-	}
+	fileNames = getTableFiles(t, tableDir)
+	require.Len(t, fileNames, 3)
 	require.ElementsMatch(t, []string{"CDC000001.csv", "CDC000002.csv", "CDC.index"}, fileNames)
 	content, err = os.ReadFile(path.Join(tableDir, "CDC000002.csv"))
 	require.Nil(t, err)
 	require.Greater(t, len(content), 0)
 
-	content, err = os.ReadFile(path.Join(tableDir, "CDC.index"))
+	content, err = os.ReadFile(path.Join(tableDir, "meta/CDC.index"))
 	require.Nil(t, err)
 	require.Equal(t, "CDC000002.csv\n", string(content))
 	require.Equal(t, uint64(2000), atomic.LoadUint64(&cnt))
 
 	// test date (day) is changed.
 	mockClock.Set(time.Date(2023, 3, 9, 0, 0, 10, 0, time.UTC))
-	s.writer.setClock(mockClock)
+	setClock(s, mockClock)
+
 	err = s.WriteEvents(txns...)
 	require.Nil(t, err)
 	time.Sleep(3 * time.Second)
 
 	tableDir = path.Join(parentDir, "test/table1/33/2023-03-09")
-	files, err = os.ReadDir(tableDir)
-	require.Nil(t, err)
-	require.Len(t, files, 2)
-	fileNames = nil
-	for _, f := range files {
-		fileNames = append(fileNames, f.Name())
-	}
+	fileNames = getTableFiles(t, tableDir)
+	require.Len(t, fileNames, 2)
 	require.ElementsMatch(t, []string{"CDC000001.csv", "CDC.index"}, fileNames)
 	content, err = os.ReadFile(path.Join(tableDir, "CDC000001.csv"))
 	require.Nil(t, err)
 	require.Greater(t, len(content), 0)
 
-	content, err = os.ReadFile(path.Join(tableDir, "CDC.index"))
+	content, err = os.ReadFile(path.Join(tableDir, "meta/CDC.index"))
 	require.Nil(t, err)
 	require.Equal(t, "CDC000001.csv\n", string(content))
 	require.Equal(t, uint64(3000), atomic.LoadUint64(&cnt))
@@ -266,24 +271,20 @@ func TestCloudStorageWriteEventsWithDateSeparator(t *testing.T) {
 	require.Nil(t, err)
 	mockClock = clock.NewMock()
 	mockClock.Set(time.Date(2023, 3, 9, 0, 1, 10, 0, time.UTC))
-	s.writer.setClock(mockClock)
+	setClock(s, mockClock)
+
 	err = s.WriteEvents(txns...)
 	require.Nil(t, err)
 	time.Sleep(3 * time.Second)
 
-	files, err = os.ReadDir(tableDir)
-	require.Nil(t, err)
-	require.Len(t, files, 3)
-	fileNames = nil
-	for _, f := range files {
-		fileNames = append(fileNames, f.Name())
-	}
+	fileNames = getTableFiles(t, tableDir)
+	require.Len(t, fileNames, 3)
 	require.ElementsMatch(t, []string{"CDC000001.csv", "CDC000002.csv", "CDC.index"}, fileNames)
 	content, err = os.ReadFile(path.Join(tableDir, "CDC000002.csv"))
 	require.Nil(t, err)
 	require.Greater(t, len(content), 0)
 
-	content, err = os.ReadFile(path.Join(tableDir, "CDC.index"))
+	content, err = os.ReadFile(path.Join(tableDir, "meta/CDC.index"))
 	require.Nil(t, err)
 	require.Equal(t, "CDC000002.csv\n", string(content))
 	require.Equal(t, uint64(1000), atomic.LoadUint64(&cnt))
