@@ -65,11 +65,18 @@ func (m *regionCountSplitter) split(
 		return []tablepb.Span{span}
 	}
 
+	pages := totalCaptures
+
 	totalRegions := len(regions)
 	if totalRegions == 0 {
-		totalCaptures = 1
+		pages = 1
 	}
-	stepper := newEvenlySplitStepper(totalCaptures, totalRegions)
+
+	if totalRegions/config.RegionThreshold > pages {
+		pages = totalRegions / config.RegionThreshold
+	}
+
+	stepper := newEvenlySplitStepper(pages, totalRegions)
 	spans := make([]tablepb.Span, 0, stepper.SpanCount())
 	start, end := 0, stepper.Step()
 	for {
