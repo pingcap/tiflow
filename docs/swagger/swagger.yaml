@@ -355,6 +355,8 @@ definitions:
         type: string
       message:
         type: string
+      time:
+        type: string
     type: object
   model.ServerStatus:
     properties:
@@ -818,6 +820,8 @@ definitions:
       code:
         type: string
       message:
+        type: string
+      time:
         type: string
     type: object
   v2.ServerStatus:
