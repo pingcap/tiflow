@@ -163,6 +163,7 @@ func splitRegionsByWrittenKeys(
 				// to the rest pages.
 				writtenKeysPerPage = (totalWriteNormalized - accWrittenKeys) / uint64(restPages)
 				accWrittenKeys = 0
+				pageRegionsCount = 0
 				break
 			}
 			pageWrittenKeys += currentWrittenKeys
