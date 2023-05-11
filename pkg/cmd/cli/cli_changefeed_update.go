@@ -162,7 +162,8 @@ func (o *updateChangefeedOptions) applyChanges(oldInfo *v2.ChangeFeedInfo,
 			}
 			newInfo.Config = v2.ToAPIReplicaConfig(cfg)
 		case "schema-registry":
-			newInfo.Config.Sink.SchemaRegistry = o.commonChangefeedOptions.schemaRegistry
+			newInfo.Config.Sink.SchemaRegistry = new(string)
+			*newInfo.Config.Sink.SchemaRegistry = o.commonChangefeedOptions.schemaRegistry
 		case "sort-engine":
 		case "sort-dir":
 			log.Warn("this flag cannot be updated and will be ignored", zap.String("flagName", flag.Name))

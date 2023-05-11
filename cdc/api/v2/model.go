@@ -705,10 +705,10 @@ type Table struct {
 // This is a duplicate of config.SinkConfig
 type SinkConfig struct {
 	Protocol                 string              `json:"protocol"`
-	SchemaRegistry           string              `json:"schema_registry"`
-	CSVConfig                *CSVConfig          `json:"csv"`
+	SchemaRegistry           *string             `json:"schema_registry,omitempty"`
+	CSVConfig                *CSVConfig          `json:"csv,omitempty"`
 	DispatchRules            []*DispatchRule     `json:"dispatchers,omitempty"`
-	ColumnSelectors          []*ColumnSelector   `json:"column_selectors"`
+	ColumnSelectors          []*ColumnSelector   `json:"column_selectors,omitempty"`
 	TxnAtomicity             string              `json:"transaction_atomicity"`
 	EncoderConcurrency       int                 `json:"encoder_concurrency"`
 	Terminator               string              `json:"terminator"`

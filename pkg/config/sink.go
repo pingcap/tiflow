@@ -106,9 +106,9 @@ type SinkConfig struct {
 	Protocol     string         `toml:"protocol" json:"protocol"`
 
 	DispatchRules            []*DispatchRule   `toml:"dispatchers" json:"dispatchers"`
-	CSVConfig                *CSVConfig        `toml:"csv" json:"csv"`
+	CSVConfig                *CSVConfig        `toml:"csv" json:"csv,omitempty"`
 	ColumnSelectors          []*ColumnSelector `toml:"column-selectors" json:"column-selectors"`
-	SchemaRegistry           string            `toml:"schema-registry" json:"schema-registry"`
+	SchemaRegistry           *string           `toml:"schema-registry" json:"schema-registry,omitempty"`
 	EncoderConcurrency       int               `toml:"encoder-concurrency" json:"encoder-concurrency"`
 	Terminator               string            `toml:"terminator" json:"terminator"`
 	DateSeparator            string            `toml:"date-separator" json:"date-separator"`

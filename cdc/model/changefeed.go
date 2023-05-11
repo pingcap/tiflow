@@ -286,7 +286,43 @@ func (info *ChangeFeedInfo) VerifyAndComplete() error {
 		info.Config.Integrity = defaultConfig.Integrity
 	}
 
+	info.rmUnusedFields()
+
 	return nil
+}
+
+// rmUnusedFields removes unnecessary fields based on the downstream type and
+// the protocol. Since we utilize a common changefeed configuration template,
+// certain fields may not be utilized for certain protocols.
+func (info *ChangeFeedInfo) rmUnusedFields() {
+	dt, err := info.DownstreamType()
+	if err != nil {
+		log.Warn(
+			"failed to get the downstream type",
+			zap.Error(err),
+			zap.Any("sinkUri", info.SinkURI),
+		)
+		return
+	}
+	switch dt {
+	case MQ:
+		info.rmMQUnusedFields()
+	case DB:
+		// TODO(charleszheng44): remove unused fields if downstream is DB.
+	case Storage:
+		// TODO(charleszheng44): remove unused fields for downstream is Storage.
+	}
+}
+
+func (info *ChangeFeedInfo) rmMQUnusedFields() {
+	// CSVConfig is only used when downstream type is storage
+	info.Config.Sink.CSVConfig = nil
+	switch info.Config.Sink.Protocol {
+	case config.ProtocolCanal.String():
+		info.Config.Sink.SchemaRegistry = nil
+	case config.ProtocolOpen.String():
+		info.Config.Sink.SchemaRegistry = nil
+	}
 }
 
 // FixIncompatible fixes incompatible changefeed meta info.
