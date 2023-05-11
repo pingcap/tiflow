@@ -12,9 +12,11 @@ if [ "$SINK_TYPE" != "kafka" ]; then
 	return
 fi
 
-./schema-registry/bin/schema-registry-start -daemon etc/schema-registry/schema-registry.properties &
+ls -alh
+
+bin/schema-registry/bin/schema-registry-start -daemon bin/schema-registry/etc/schema-registry/schema-registry.properties &
 SCHEMA_REGISTRY_PID=$!
-i = 0
+i=0
 while ! curl -o /dev/null -v -s "http://127.0.0.1:8081/"; do
 	i=$(($i + 1))
 	if [ $i -gt 30 ]; then
