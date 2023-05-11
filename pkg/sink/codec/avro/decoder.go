@@ -145,7 +145,13 @@ func (d *decoder) NextRowChangedEvent() (*model.RowChangedEvent, error) {
 		var holder map[string]interface{}
 		switch ty := field["type"].(type) {
 		case []interface{}:
-			holder = ty[1].(map[string]interface{})["connect.parameters"].(map[string]interface{})
+			if m, ok := ty[0].(map[string]interface{}); ok {
+				holder = m["connect.parameters"].(map[string]interface{})
+			} else if m, ok := ty[1].(map[string]interface{}); ok {
+				holder = m["connect.parameters"].(map[string]interface{})
+			} else {
+				log.Panic("type info is anything else", zap.Any("typeInfo", field["type"]))
+			}
 		case map[string]interface{}:
 			holder = ty["connect.parameters"].(map[string]interface{})
 		default:
