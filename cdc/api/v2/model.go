@@ -803,9 +803,10 @@ type ChangeFeedInfo struct {
 // RunningError represents some running error from cdc components,
 // such as processor.
 type RunningError struct {
-	Addr    string `json:"addr"`
-	Code    string `json:"code"`
-	Message string `json:"message"`
+	Time    *time.Time `json:"time,omitempty"`
+	Addr    string     `json:"addr"`
+	Code    string     `json:"code"`
+	Message string     `json:"message"`
 }
 
 // toCredential generates a security.Credential from a PDConfig
