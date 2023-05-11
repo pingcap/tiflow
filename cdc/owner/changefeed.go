@@ -245,7 +245,7 @@ func (c *changefeed) handleErr(ctx cdcContext.Context, err error) {
 
 	switch errors.Cause(err).(type) {
 	case model.Warning:
-		// TODO: patch it into changefeed info.
+		// TODO(qupeng): patch it into changefeed info.
 		return
 	default:
 	}
