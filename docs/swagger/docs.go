@@ -1418,6 +1418,9 @@ var doc = `{
                 "enable-tls": {
                     "type": "boolean"
                 },
+                "insecure-skip-verify": {
+                    "type": "boolean"
+                },
                 "kafka-client-id": {
                     "type": "string"
                 },
@@ -2270,6 +2273,9 @@ var doc = `{
                     "type": "string"
                 },
                 "enable_tls": {
+                    "type": "boolean"
+                },
+                "insecure_skip_verify": {
                     "type": "boolean"
                 },
                 "kafka_client_id": {
