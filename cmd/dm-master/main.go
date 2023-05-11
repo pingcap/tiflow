@@ -17,6 +17,8 @@ import (
 	"context"
 	"flag"
 	"fmt"
+	"github.com/gin-gonic/gin"
+	"github.com/justinas/nosurf"
 	"os"
 	"os/signal"
 	"strings"
@@ -33,6 +35,8 @@ import (
 )
 
 func main() {
+	fmt.Println(nosurf.MaxAge)
+	fmt.Println(gin.DebugMode)
 	// 1. parse config
 	cfg := master.NewConfig()
 	err := cfg.Parse(os.Args[1:])
