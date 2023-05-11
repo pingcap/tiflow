@@ -87,9 +87,6 @@ mv third_bin/_tiflash/* third_bin && rm -rf third_bin/_tiflash
 download "$minio_download_url" "minio.tar.gz" "tmp/minio.tar.gz"
 tar -xz -C third_bin -f tmp/minio.tar.gz
 
-download "$schema_registry_url" "schema-registry.tar.gz" "tmp/schema-registry.tar.gz"
-tar -xz -C third_bin -f tmp/schema-registry.tar.gz
-
 download "$go_ycsb_download_url" "go-ycsb" "third_bin/go-ycsb"
 download "$jq_download_url" "jq" "third_bin/jq"
 download "$etcd_download_url" "etcd.tar.gz" "tmp/etcd.tar.gz"
@@ -97,6 +94,9 @@ tar -xz -C third_bin etcd-v3.4.7-linux-amd64/etcdctl -f tmp/etcd.tar.gz
 mv third_bin/etcd-v3.4.7-linux-amd64/etcdctl third_bin/ && rm -rf third_bin/etcd-v3.4.7-linux-amd64
 download "$sync_diff_inspector_url" "sync_diff_inspector.tar.gz" "tmp/sync_diff_inspector.tar.gz"
 tar -xz -C third_bin -f tmp/sync_diff_inspector.tar.gz
+
+download "$schema_registry_url" "schema-registry.tar.gz" "tmp/schema-registry.tar.gz"
+tar -xz -C third_bin -f tmp/schema-registry.tar.gz
 
 chmod a+x third_bin/*
 
