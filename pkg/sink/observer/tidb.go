@@ -104,7 +104,7 @@ var (
 	) b ON a.instance = b.instance AND a.type = b.type AND a.time = b.time;`
 )
 
-// TiDBObserver is a tidb performance observer
+// TiDBObserver is a tidb performance observer. It's not thread-safe.
 type TiDBObserver struct {
 	db *sql.DB
 }

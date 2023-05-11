@@ -14,6 +14,8 @@
 package sinkmanager
 
 import (
+	"context"
+	"math"
 	"sync"
 	"testing"
 
@@ -84,11 +86,13 @@ func createTableSinkWrapper(
 	wrapper := newTableSinkWrapper(
 		changefeedID,
 		span,
-		innerTableSink,
+		func() tablesink.TableSink { return innerTableSink },
 		tableState,
 		0,
 		100,
+		func(_ context.Context) (model.Ts, error) { return math.MaxUint64, nil },
 	)
+	wrapper.tableSink = wrapper.tableSinkCreater()
 	return wrapper, sink
 }
 
@@ -320,9 +324,10 @@ func TestNewTableSinkWrapper(t *testing.T) {
 		tablepb.TableStatePrepared,
 		model.Ts(10),
 		model.Ts(20),
+		func(_ context.Context) (model.Ts, error) { return math.MaxUint64, nil },
 	)
 	require.NotNil(t, wrapper)
 	require.Equal(t, uint64(10), wrapper.getUpperBoundTs())
 	require.Equal(t, uint64(10), wrapper.getReceivedSorterResolvedTs())
-	require.Equal(t, uint64(10), wrapper.checkpointTs.Load())
+	require.Equal(t, uint64(10), wrapper.getCheckpointTs().ResolvedMark())
 }
