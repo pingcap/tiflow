@@ -69,6 +69,7 @@ func NewReconciler(
 		changefeedID: changefeedID,
 		config:       config,
 		splitter: []splitter{
+			// write splitter has the highest priority.
 			newWriteSplitter(changefeedID, pdapi),
 			newRegionCountSplitter(changefeedID, up.RegionCache),
 		},
