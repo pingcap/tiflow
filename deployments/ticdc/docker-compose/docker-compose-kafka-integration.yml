@@ -53,10 +53,10 @@ services:
       context: ../../../
       dockerfile: ./deployments/ticdc/docker/integration-test.Dockerfile
       args:
-        community: ${COMMUNITY}
-        version: ${VERSION} 
-        os: ${OS}
-        arch: ${ARCH}
+        COMMUNITY: ${COMMUNITY}
+        VERSION: ${VERSION} 
+        OS: ${SYS}
+        ARCH: ${ARCH}
     depends_on:
       - "zookeeper"
       - "kafka"

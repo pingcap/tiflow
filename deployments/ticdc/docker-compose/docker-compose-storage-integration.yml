@@ -5,6 +5,11 @@ services:
     build:
       context: ../../../
       dockerfile: ./deployments/ticdc/docker/integration-test.Dockerfile
+      args:
+        COMMUNITY: ${COMMUNITY}
+        VERSION: ${VERSION} 
+        OS: ${SYS}
+        ARCH: ${ARCH}
     command:
       - bash
       - -c
