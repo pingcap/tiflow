@@ -146,23 +146,25 @@ type evenlySplitStepper struct {
 	remain             int
 }
 
-func newEvenlySplitStepper(totalCaptures int, totalRegion int) evenlySplitStepper {
+func newEvenlySplitStepper(pages int, totalRegion int) evenlySplitStepper {
 	extraRegionPerSpan := 0
-	regionPerSpan, remain := totalRegion/totalCaptures, totalRegion%totalCaptures
+	regionPerSpan, remain := totalRegion/pages, totalRegion%pages
 	if regionPerSpan == 0 {
 		regionPerSpan = 1
 		extraRegionPerSpan = 0
-		totalCaptures = totalRegion
+		pages = totalRegion
 	} else if remain != 0 {
 		// Evenly distributes the remaining regions.
-		extraRegionPerSpan = int(math.Ceil(float64(remain) / float64(totalCaptures)))
+		extraRegionPerSpan = int(math.Ceil(float64(remain) / float64(pages)))
 	}
-	return evenlySplitStepper{
+	res := evenlySplitStepper{
 		regionPerSpan:      regionPerSpan,
-		spanCount:          totalCaptures,
+		spanCount:          pages,
 		extraRegionPerSpan: extraRegionPerSpan,
 		remain:             remain,
 	}
+	log.Info("schedulerv3: evenly split stepper", zap.Any("evenlySplitStepper", res))
+	return res
 }
 
 func (e *evenlySplitStepper) SpanCount() int {
