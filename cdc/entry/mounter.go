@@ -463,6 +463,7 @@ func (m *mounter) verifyChecksum(
 		log.Warn("extra checksum matched, this may happen the upstream TiDB is during the DDL"+
 			"execution phase",
 			zap.Uint32("checksum", checksum),
+			zap.Uint32("first", first),
 			zap.Uint32("extra", extra))
 		return checksum, version, true, nil
 	}
