@@ -278,6 +278,7 @@ func (d *decoder) NextResolvedEvent() (uint64, error) {
 		return 0, errors.New("value should not be empty")
 	}
 	ts := binary.BigEndian.Uint64(d.value[1:])
+	d.value = nil
 	return ts, nil
 }
 
@@ -297,6 +298,7 @@ func (d *decoder) NextDDLEvent() (*model.DDLEvent, error) {
 	if err != nil {
 		return nil, errors.WrapError(errors.ErrDecodeFailed, err)
 	}
+	d.value = nil
 	return result, nil
 }
 
