@@ -128,6 +128,7 @@ type urlConfig struct {
 	CA                           *string `form:"ca"`
 	Cert                         *string `form:"cert"`
 	Key                          *string `form:"key"`
+	InsecureSkipVerify           *bool   `form:"insecure-skip-verify"`
 }
 
 // Options stores user specified configurations
@@ -149,9 +150,10 @@ type Options struct {
 	MaxMessages int
 
 	// Credential is used to connect to kafka cluster.
-	EnableTLS  bool
-	Credential *security.Credential
-	SASL       *security.SASL
+	EnableTLS          bool
+	Credential         *security.Credential
+	InsecureSkipVerify bool
+	SASL               *security.SASL
 
 	// Timeout for network configurations, default to `10s`
 	DialTimeout  time.Duration
@@ -164,16 +166,17 @@ func NewOptions() *Options {
 	return &Options{
 		Version: "2.4.0",
 		// MaxMessageBytes will be used to initialize producer
-		MaxMessageBytes:   config.DefaultMaxMessageBytes,
-		ReplicationFactor: 1,
-		Compression:       "none",
-		RequiredAcks:      WaitForAll,
-		Credential:        &security.Credential{},
-		SASL:              &security.SASL{},
-		AutoCreate:        true,
-		DialTimeout:       10 * time.Second,
-		WriteTimeout:      10 * time.Second,
-		ReadTimeout:       10 * time.Second,
+		MaxMessageBytes:    config.DefaultMaxMessageBytes,
+		ReplicationFactor:  1,
+		Compression:        "none",
+		RequiredAcks:       WaitForAll,
+		Credential:         &security.Credential{},
+		InsecureSkipVerify: false,
+		SASL:               &security.SASL{},
+		AutoCreate:         true,
+		DialTimeout:        10 * time.Second,
+		WriteTimeout:       10 * time.Second,
+		ReadTimeout:        10 * time.Second,
 	}
 }
 
@@ -339,6 +342,7 @@ func mergeConfig(
 		dest.CA = fileConifg.CA
 		dest.Cert = fileConifg.Cert
 		dest.Key = fileConifg.Key
+		dest.InsecureSkipVerify = fileConifg.InsecureSkipVerify
 	}
 	if err := mergo.Merge(dest, urlParameters, mergo.WithOverride); err != nil {
 		return nil, err
@@ -383,6 +387,11 @@ func (o *Options) applyTLS(params *urlConfig) error {
 		if o.Credential != nil && o.Credential.IsTLSEnabled() {
 			o.EnableTLS = true
 		}
+	}
+
+	// Only set InsecureSkipVerify when enable the TLS.
+	if o.EnableTLS && params.InsecureSkipVerify != nil {
+		o.InsecureSkipVerify = *params.InsecureSkipVerify
 	}
 
 	return nil
