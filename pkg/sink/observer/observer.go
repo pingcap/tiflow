@@ -59,7 +59,7 @@ func NewObserver(
 	replCfg *config.ReplicaConfig,
 	opts ...NewObserverOption,
 ) (Observer, error) {
-	creater := func() (Observer, error) {
+	creator := func() (Observer, error) {
 		options := &NewObserverOpt{dbConnFactory: pmysql.CreateMySQLDBConn}
 		for _, opt := range opts {
 			opt(options)
@@ -103,11 +103,11 @@ func NewObserver(
 		_ = db.Close()
 		return NewDummyObserver(), nil
 	}
-	return &ObserverAgent{creater: creater}, nil
+	return &observerAgent{creator: creator}, nil
 }
 
-type ObserverAgent struct {
-	creater func() (Observer, error)
+type observerAgent struct {
+	creator func() (Observer, error)
 
 	mu struct {
 		sync.Mutex
@@ -116,7 +116,8 @@ type ObserverAgent struct {
 	}
 }
 
-func (o *ObserverAgent) Tick(ctx context.Context) error {
+// Tick implements Observer interface.
+func (o *observerAgent) Tick(ctx context.Context) error {
 	o.mu.Lock()
 	if o.mu.inner != nil {
 		defer o.mu.Unlock()
@@ -128,7 +129,7 @@ func (o *ObserverAgent) Tick(ctx context.Context) error {
 	}
 	o.mu.Unlock()
 
-	inner, err := o.creater()
+	inner, err := o.creator()
 	if err != nil {
 		return errors.Trace(model.NewWarning(err, model.ComponentOwnerSink))
 	}
@@ -142,7 +143,8 @@ func (o *ObserverAgent) Tick(ctx context.Context) error {
 	return nil
 }
 
-func (o *ObserverAgent) Close() error {
+// Close implements Observer interface.
+func (o *observerAgent) Close() error {
 	o.mu.Lock()
 	defer o.mu.Unlock()
 	if o.mu.inner != nil {

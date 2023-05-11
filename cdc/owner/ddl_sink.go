@@ -177,9 +177,7 @@ func (s *ddlSinkImpl) writeCheckpointTs(ctx context.Context, lastCheckpointTs *m
 			return
 		}
 		tables := make([]*model.TableInfo, 0, len(s.mu.currentTables))
-		for _, t := range s.mu.currentTables {
-			tables = append(tables, t)
-		}
+		tables = append(tables, s.mu.currentTables...)
 		s.mu.Unlock()
 
 		if err = s.makeSinkReady(ctx); err == nil {

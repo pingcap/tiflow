@@ -34,8 +34,10 @@ func (r RunningError) IsChangefeedUnRetryableError() bool {
 }
 
 const (
+	// ComponentProcessorSink indicates the sink module in processor.
 	ComponentProcessorSink string = "processor/sink"
-	ComponentOwnerSink     string = "owner/sink"
+	// ComponentOwnerSink indicates the sink module in owner.
+	ComponentOwnerSink string = "owner/sink"
 )
 
 // Warning is like an error, but has one difference:
