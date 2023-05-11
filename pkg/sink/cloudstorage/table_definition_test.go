@@ -52,7 +52,7 @@ func generateTableDef() (TableDefinition, *model.TableInfo) {
 		TableInfo: &timodel.TableInfo{Columns: columns},
 		Version:   100,
 		TableName: model.TableName{
-			Schema:  "test",
+			Schema:  "schema1",
 			Table:   "table1",
 			TableID: 20,
 		},
@@ -370,7 +370,7 @@ func TestTableDefinition(t *testing.T) {
 	require.NoError(t, err)
 	require.JSONEq(t, `{
 		"Table": "table1",
-		"Schema": "test",
+		"Schema": "schema1",
 		"Version": 1,
 		"TableVersion": 100,
 		"Query": "",
@@ -406,7 +406,7 @@ func TestTableDefinition(t *testing.T) {
 	event := &model.DDLEvent{
 		CommitTs:  tableInfo.Version,
 		Type:      timodel.ActionAddColumn,
-		Query:     "alter table test.table1 add Birthday date",
+		Query:     "alter table schema1.table1 add Birthday date",
 		TableInfo: tableInfo,
 	}
 	def.FromDDLEvent(event)
@@ -414,10 +414,10 @@ func TestTableDefinition(t *testing.T) {
 	require.NoError(t, err)
 	require.JSONEq(t, `{
 		"Table": "table1",
-		"Schema": "test",
+		"Schema": "schema1",
 		"Version": 1,
 		"TableVersion": 100,
-		"Query": "alter table test.table1 add Birthday date",
+		"Query": "alter table schema1.table1 add Birthday date",
 		"Type": 5,
 		"TableColumns": [
 			{
@@ -454,6 +454,24 @@ func TestTableDefinition(t *testing.T) {
 	require.NoError(t, err)
 	require.Equal(t, timodel.ActionAddColumn, event.Type)
 	require.Equal(t, uint64(100), event.CommitTs)
+}
+
+func TestTableDefinitionGenFilePath(t *testing.T) {
+	t.Parallel()
+
+	schemaDef := &TableDefinition{
+		Schema:       "schema1",
+		Version:      defaultTableDefinitionVersion,
+		TableVersion: 100,
+	}
+	schemaPath, err := schemaDef.GenerateSchemaFilePath()
+	require.NoError(t, err)
+	require.Equal(t, "schema1/meta/schema_100_3233644819.json", schemaPath)
+
+	def, _ := generateTableDef()
+	tablePath, err := def.GenerateSchemaFilePath()
+	require.NoError(t, err)
+	require.Equal(t, "schema1/table1/meta/schema_100_0785427252.json", tablePath)
 }
 
 func TestTableDefinitionSum32(t *testing.T) {

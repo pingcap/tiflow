@@ -16,7 +16,6 @@ import (
 	"context"
 	"fmt"
 	"net/url"
-	"os"
 	"path"
 	"sync"
 	"testing"
@@ -127,13 +126,8 @@ func TestDMLWorkerRun(t *testing.T) {
 
 	time.Sleep(4 * time.Second)
 	// check whether files for table1 has been generated
-	files, err := os.ReadDir(table1Dir)
-	require.Nil(t, err)
-	require.Len(t, files, 2)
-	var fileNames []string
-	for _, f := range files {
-		fileNames = append(fileNames, f.Name())
-	}
+	fileNames := getTableFiles(t, table1Dir)
+	require.Len(t, fileNames, 2)
 	require.ElementsMatch(t, []string{"CDC000001.json", "CDC.index"}, fileNames)
 	cancel()
 	d.close()
