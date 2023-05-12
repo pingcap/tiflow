@@ -76,6 +76,9 @@ func (m *regionCountSplitter) split(
 		pages = totalRegions / config.RegionThreshold
 	}
 
+	log.Info("schedulerv3: fizz split span by region count",
+		zap.Int("regions", totalRegions), zap.Int("pages", pages))
+
 	stepper := newEvenlySplitStepper(pages, totalRegions)
 	spans := make([]tablepb.Span, 0, stepper.SpanCount())
 	start, end := 0, stepper.Step()
