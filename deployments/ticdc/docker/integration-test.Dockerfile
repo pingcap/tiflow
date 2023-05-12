@@ -38,7 +38,8 @@ RUN yum install -y \
     musl-dev \
 	sudo \
 	python3 \
-    psmisc
+    psmisc \
+    procps
 RUN wget http://dl.fedoraproject.org/pub/epel/epel-release-latest-7.noarch.rpm
 RUN yum install -y epel-release-latest-7.noarch.rpm
 RUN yum --enablerepo=epel install -y s3cmd
