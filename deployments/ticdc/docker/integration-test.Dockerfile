@@ -58,9 +58,6 @@ ENV PATH $GOPATH/bin:$GOROOT/bin:$PATH
 WORKDIR /go/src/github.com/pingcap/tiflow
 COPY . .
 
-# Clean bin dir and build TiCDC.
-# We always need to clean before we build, please don't adjust its order.
-RUN make clean
 RUN --mount=type=cache,target=/root/.cache/go-build,target=/go/pkg/mod make integration_test_build cdc
 COPY --from=downloader /root/download/bin/* ./bin/
 RUN --mount=type=cache,target=/root/.cache/go-build,target=/go/pkg/mod make check_third_party_binary
