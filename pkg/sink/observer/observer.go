@@ -20,7 +20,6 @@ import (
 	"sync"
 
 	"github.com/pingcap/tiflow/cdc/contextutil"
-	"github.com/pingcap/tiflow/cdc/model"
 	"github.com/pingcap/tiflow/pkg/config"
 	"github.com/pingcap/tiflow/pkg/errors"
 	cerror "github.com/pingcap/tiflow/pkg/errors"
@@ -131,7 +130,7 @@ func (o *observerAgent) Tick(ctx context.Context) error {
 
 	inner, err := o.creator()
 	if err != nil {
-		return errors.Trace(model.NewWarning(err, model.ComponentOwnerSink))
+		return errors.Trace(err)
 	}
 
 	o.mu.Lock()
