@@ -169,12 +169,6 @@ func New(
 
 // Run implements util.Runnable.
 func (m *SinkManager) Run(ctx context.Context) (err error) {
-	close(m.ready)
-	log.Info("Sink manager is created",
-		zap.String("namespace", m.changefeedID.Namespace),
-		zap.String("changefeed", m.changefeedID.ID),
-		zap.Bool("withRedoEnabled", m.redoDMLMgr != nil))
-
 	var managerCancel context.CancelFunc
 	m.managerCtx, managerCancel = context.WithCancel(ctx)
 	defer func() {
@@ -194,8 +188,55 @@ func (m *SinkManager) Run(ctx context.Context) (err error) {
 	sinkErrors := make(chan error, 16)
 	redoErrors := make(chan error, 16)
 
-	// SinkManager will restart some internal modules if necessasry.
 	m.backgroundGC(gcErrors)
+	if m.sinkEg == nil {
+		var sinkCtx context.Context
+		m.sinkEg, sinkCtx = errgroup.WithContext(m.managerCtx)
+		m.startSinkWorkers(sinkCtx, splitTxn, enableOldValue)
+		m.sinkEg.Go(func() error { return m.generateSinkTasks(sinkCtx) })
+		m.wg.Add(1)
+		go func() {
+			defer m.wg.Done()
+			if err := m.sinkEg.Wait(); err != nil && !cerror.Is(err, context.Canceled) {
+				log.Error("Worker handles or generates sink task failed",
+					zap.String("namespace", m.changefeedID.Namespace),
+					zap.String("changefeed", m.changefeedID.ID),
+					zap.Error(err))
+				select {
+				case sinkErrors <- err:
+				case <-m.managerCtx.Done():
+				}
+			}
+		}()
+	}
+	if m.redoDMLMgr != nil && m.redoEg == nil {
+		var redoCtx context.Context
+		m.redoEg, redoCtx = errgroup.WithContext(m.managerCtx)
+		m.startRedoWorkers(redoCtx, enableOldValue)
+		m.redoEg.Go(func() error { return m.generateRedoTasks(redoCtx) })
+		m.wg.Add(1)
+		go func() {
+			defer m.wg.Done()
+			if err := m.redoEg.Wait(); err != nil && !cerror.Is(err, context.Canceled) {
+				log.Error("Worker handles or generates redo task failed",
+					zap.String("namespace", m.changefeedID.Namespace),
+					zap.String("changefeed", m.changefeedID.ID),
+					zap.Error(err))
+				select {
+				case redoErrors <- err:
+				case <-m.managerCtx.Done():
+				}
+			}
+		}()
+	}
+
+	close(m.ready)
+	log.Info("Sink manager is created",
+		zap.String("namespace", m.changefeedID.Namespace),
+		zap.String("changefeed", m.changefeedID.ID),
+		zap.Bool("withRedoEnabled", m.redoDMLMgr != nil))
+
+	// SinkManager will restart some internal modules if necessasry.
 	for {
 		if err := m.initSinkFactory(sinkFactoryErrors); err != nil {
 			select {
@@ -204,53 +245,15 @@ func (m *SinkManager) Run(ctx context.Context) (err error) {
 			}
 		}
 
-		if m.sinkEg == nil {
-			var sinkCtx context.Context
-			m.sinkEg, sinkCtx = errgroup.WithContext(m.managerCtx)
-			m.startSinkWorkers(sinkCtx, splitTxn, enableOldValue)
-			m.sinkEg.Go(func() error { return m.generateSinkTasks(sinkCtx) })
-			m.wg.Add(1)
-			go func() {
-				defer m.wg.Done()
-				if err := m.sinkEg.Wait(); err != nil && !cerror.Is(err, context.Canceled) {
-					log.Error("Worker handles or generates sink task failed",
-						zap.String("namespace", m.changefeedID.Namespace),
-						zap.String("changefeed", m.changefeedID.ID),
-						zap.Error(err))
-					select {
-					case sinkErrors <- err:
-					case <-m.managerCtx.Done():
-					}
-				}
-			}()
-		}
-
-		if m.redoDMLMgr != nil && m.redoEg == nil {
-			var redoCtx context.Context
-			m.redoEg, redoCtx = errgroup.WithContext(m.managerCtx)
-			m.startRedoWorkers(redoCtx, enableOldValue)
-			m.redoEg.Go(func() error { return m.generateRedoTasks(redoCtx) })
-			m.wg.Add(1)
-			go func() {
-				defer m.wg.Done()
-				if err := m.redoEg.Wait(); err != nil && !cerror.Is(err, context.Canceled) {
-					log.Error("Worker handles or generates redo task failed",
-						zap.String("namespace", m.changefeedID.Namespace),
-						zap.String("changefeed", m.changefeedID.ID),
-						zap.Error(err))
-					select {
-					case redoErrors <- err:
-					case <-m.managerCtx.Done():
-					}
-				}
-			}()
-		}
-
 		select {
 		case <-ctx.Done():
 			return errors.Trace(ctx.Err())
 		case err = <-gcErrors:
-			return errors.Trace(ctx.Err())
+			return errors.Trace(err)
+		case err = <-sinkErrors:
+			return errors.Trace(err)
+		case err = <-redoErrors:
+			return errors.Trace(err)
 		case err = <-sinkFactoryErrors:
 			log.Info("Sink manager backend sink fails",
 				zap.String("namespace", m.changefeedID.Namespace),
@@ -258,10 +261,6 @@ func (m *SinkManager) Run(ctx context.Context) (err error) {
 				zap.Error(err))
 			m.clearSinkFactory()
 			sinkFactoryErrors = make(chan error, 16)
-		case err = <-sinkErrors:
-			return errors.Trace(err)
-		case err = <-redoErrors:
-			return errors.Trace(err)
 		}
 
 		if !cerror.IsChangefeedUnRetryableError(err) && errors.Cause(err) != context.Canceled {
