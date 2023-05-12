@@ -158,23 +158,23 @@ func (m *Reconciler) Reconcile(
 
 			var splittedHoles []tablepb.Span
 			// we should also split the hole span
-			if compat.CheckSpanReplicationEnabled() {
-				log.Info("schedulerv3: fizz find hole, trigger hole split",
-					zap.Int("holes len", len(holes)),
-					zap.Int("aliveCaptures len", len(aliveCaptures)),
-					zap.Int("splitter len", len(m.splitter)),
-				)
-				for _, s := range holes {
-					for _, splitter := range m.splitter {
-						tempSpans := splitter.split(ctx, s, len(aliveCaptures), m.config)
-						if len(tempSpans) > 1 {
-							log.Info("schedulerv3: fizz split holes spans", zap.Int("tempSpans len", len(tempSpans)))
-							splittedHoles = append(splittedHoles, tempSpans...)
-							break
-						}
-					}
-				}
-			}
+			//if compat.CheckSpanReplicationEnabled() {
+			//	log.Info("schedulerv3: fizz find hole, trigger hole split",
+			//		zap.Int("holes len", len(holes)),
+			//		zap.Int("aliveCaptures len", len(aliveCaptures)),
+			//		zap.Int("splitter len", len(m.splitter)),
+			//	)
+			//	for _, s := range holes {
+			//		for _, splitter := range m.splitter {
+			//			tempSpans := splitter.split(ctx, s, len(aliveCaptures), m.config)
+			//			if len(tempSpans) > 1 {
+			//				log.Info("schedulerv3: fizz split holes spans", zap.Int("tempSpans len", len(tempSpans)))
+			//				splittedHoles = append(splittedHoles, tempSpans...)
+			//				break
+			//			}
+			//		}
+			//	}
+			//}
 
 			if len(splittedHoles) > 0 {
 				log.Info("schedulerv3: fizz split holes spans",
