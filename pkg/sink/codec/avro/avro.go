@@ -521,6 +521,7 @@ func rowToAvroSchema(
 		}
 		field := make(map[string]interface{})
 		field["name"] = sanitizeName(col.Name)
+		field["columnID"] = input.colInfos[i].ID
 
 		copy := *col
 		copy.Value = copy.Default
