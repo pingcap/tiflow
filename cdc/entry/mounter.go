@@ -446,8 +446,6 @@ func (m *mounter) verifyChecksum(
 
 	// the first checksum matched, it hits in the most case.
 	if checksum == first {
-		log.Info("checksum matched",
-			zap.Uint32("checksum", checksum), zap.Uint32("first", first))
 		return checksum, version, true, nil
 	}
 
@@ -585,6 +583,8 @@ func (m *mounter) mountRowKVEntry(tableInfo *model.TableInfo, row *rowKVEntry, d
 			Corrupted: corrupted,
 			Version:   checksumVersion,
 		}
+		log.Info("checksum matched", zap.Any("current", current),
+			zap.Uint64("tableVersion", tableInfo.Version))
 	}
 
 	return &model.RowChangedEvent{

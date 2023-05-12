@@ -394,14 +394,7 @@ func (d *decoder) verifyChecksum(columns []*model.Column, expected uint64) error
 	}
 
 	if uint64(checksum) != expected {
-		log.Error("checksum mismatch",
-			zap.Uint64("expected", expected),
-			zap.Uint32("actual", checksum),
-			zap.Any("calculator", calculator))
-		//return errors.New("checksum mismatch")
-	} else {
-		log.Info("checksum passed",
-			zap.Uint64("expected", expected), zap.Uint32("actual", checksum))
+		return errors.New("checksum mismatch")
 	}
 
 	return nil
