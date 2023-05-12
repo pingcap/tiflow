@@ -31,7 +31,7 @@ import (
 	"github.com/pingcap/tiflow/cdc/sink/dmlsink/factory"
 	tablesinkmetrics "github.com/pingcap/tiflow/cdc/sink/metrics/tablesink"
 	"github.com/pingcap/tiflow/cdc/sink/tablesink"
-	cerrors "github.com/pingcap/tiflow/pkg/errors"
+	cerror "github.com/pingcap/tiflow/pkg/errors"
 	"github.com/pingcap/tiflow/pkg/spanz"
 	"github.com/pingcap/tiflow/pkg/upstream"
 	"github.com/prometheus/client_golang/prometheus"
@@ -212,7 +212,7 @@ func (m *SinkManager) Run(ctx context.Context) (err error) {
 			m.wg.Add(1)
 			go func() {
 				defer m.wg.Done()
-				if err := m.sinkEg.Wait(); err != nil && !cerrors.Is(err, context.Canceled) {
+				if err := m.sinkEg.Wait(); err != nil && !cerror.Is(err, context.Canceled) {
 					log.Error("Worker handles or generates sink task failed",
 						zap.String("namespace", m.changefeedID.Namespace),
 						zap.String("changefeed", m.changefeedID.ID),
@@ -233,7 +233,7 @@ func (m *SinkManager) Run(ctx context.Context) (err error) {
 			m.wg.Add(1)
 			go func() {
 				defer m.wg.Done()
-				if err := m.redoEg.Wait(); err != nil && !cerrors.Is(err, context.Canceled) {
+				if err := m.redoEg.Wait(); err != nil && !cerror.Is(err, context.Canceled) {
 					log.Error("Worker handles or generates redo task failed",
 						zap.String("namespace", m.changefeedID.Namespace),
 						zap.String("changefeed", m.changefeedID.ID),
@@ -246,45 +246,39 @@ func (m *SinkManager) Run(ctx context.Context) (err error) {
 			}()
 		}
 
-		isWarning := false
 		select {
 		case <-ctx.Done():
 			return errors.Trace(ctx.Err())
 		case err = <-gcErrors:
 			return errors.Trace(ctx.Err())
 		case err = <-sinkFactoryErrors:
-			switch errors.Cause(err).(type) {
-			case model.Warning:
-				isWarning = true
-			default:
-			}
 			log.Info("Sink manager backend sink fails",
 				zap.String("namespace", m.changefeedID.Namespace),
 				zap.String("changefeed", m.changefeedID.ID),
-				zap.Bool("isWarning", isWarning),
 				zap.Error(err))
-			if isWarning {
-				// TODO(qupeng): report th warning.
-				m.clearSinkFactory()
-				sinkFactoryErrors = make(chan error, 16)
-			} else {
-				return errors.Trace(err)
-			}
+			m.clearSinkFactory()
+			sinkFactoryErrors = make(chan error, 16)
 		case err = <-sinkErrors:
 			return errors.Trace(err)
 		case err = <-redoErrors:
 			return errors.Trace(err)
 		}
 
-		// Use a 5 second backoff when re-establishing internal resources.
-		timer := time.NewTimer(5 * time.Second)
-		select {
-		case <-ctx.Done():
-			if !timer.Stop() {
-				<-timer.C
+		if !cerror.IsChangefeedUnRetryableError(err) && errors.Cause(err) != context.Canceled {
+			// TODO(qupeng): report th warning.
+
+			// Use a 5 second backoff when re-establishing internal resources.
+			timer := time.NewTimer(5 * time.Second)
+			select {
+			case <-ctx.Done():
+				if !timer.Stop() {
+					<-timer.C
+				}
+				return errors.Trace(ctx.Err())
+			case <-timer.C:
 			}
-			return errors.Trace(ctx.Err())
-		case <-timer.C:
+		} else {
+			return errors.Trace(err)
 		}
 	}
 }

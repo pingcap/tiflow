@@ -61,7 +61,7 @@ func (m *mockSink) GetDDL() *model.DDLEvent {
 
 func newDDLSink4Test(reportErr func(err error)) (DDLSink, *mockSink) {
 	mockSink := &mockSink{}
-	ddlSink := newDDLSink(model.DefaultChangeFeedID("changefeed-test"), &model.ChangeFeedInfo{}, reportErr)
+	ddlSink := newDDLSink(model.DefaultChangeFeedID("changefeed-test"), &model.ChangeFeedInfo{}, reportErr, nil)
 	ddlSink.(*ddlSinkImpl).sinkInitHandler = func(ctx context.Context, s *ddlSinkImpl) error {
 		s.sink = mockSink
 		return nil

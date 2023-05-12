@@ -84,10 +84,14 @@ type ddlSinkImpl struct {
 	changefeedID model.ChangeFeedID
 	info         *model.ChangeFeedInfo
 
-	reportErr func(err error)
+	reportError   func(err error)
+	reportWarning func(err error)
 }
 
-func newDDLSink(changefeedID model.ChangeFeedID, info *model.ChangeFeedInfo, reportErr func(err error)) DDLSink {
+func newDDLSink(
+	changefeedID model.ChangeFeedID, info *model.ChangeFeedInfo,
+	reportError func(err error), reportWarning func(err error),
+) DDLSink {
 	res := &ddlSinkImpl{
 		ddlSentTsMap:    make(map[*model.DDLEvent]uint64),
 		ddlCh:           make(chan *model.DDLEvent, 1),
@@ -97,7 +101,8 @@ func newDDLSink(changefeedID model.ChangeFeedID, info *model.ChangeFeedInfo, rep
 		changefeedID: changefeedID,
 		info:         info,
 
-		reportErr: reportErr,
+		reportError:   reportError,
+		reportWarning: reportWarning,
 	}
 	return res
 }
@@ -154,7 +159,12 @@ func (s *ddlSinkImpl) retrySinkActionWithErrorReport(ctx context.Context, action
 			return nil
 		}
 		s.sink = nil
-		s.reportErr(model.NewWarning(err, model.ComponentOwnerSink))
+		if !cerror.IsChangefeedUnRetryableError(err) && errors.Cause(err) != context.Canceled {
+			s.reportWarning(model.NewWarning(err, model.ComponentOwnerSink))
+		} else {
+			s.reportError(err)
+			return err
+		}
 
 		timer := time.NewTimer(5 * time.Second)
 		select {

@@ -18,6 +18,7 @@ import (
 	"net/url"
 	"strings"
 
+	"github.com/pingcap/errors"
 	"github.com/pingcap/log"
 	"github.com/pingcap/tiflow/cdc/model"
 	"github.com/pingcap/tiflow/cdc/processor/tablepb"
@@ -64,6 +65,9 @@ func New(
 	case sink.MySQLScheme, sink.MySQLSSLScheme, sink.TiDBScheme, sink.TiDBSSLScheme:
 		txnSink, err := txn.NewMySQLSink(ctx, sinkURI, cfg, errCh, txn.DefaultConflictDetectorSlots)
 		if err != nil {
+			if !cerror.IsChangefeedUnRetryableError(err) && errors.Cause(err) != context.Canceled {
+				return nil, model.NewWarning(err, model.ComponentProcessorSink)
+			}
 			return nil, err
 		}
 		s.txnSink = txnSink
@@ -75,12 +79,18 @@ func New(
 		mqs, err := mq.NewKafkaDMLSink(ctx, sinkURI, cfg, errCh,
 			factoryCreator, dmlproducer.NewKafkaDMLProducer)
 		if err != nil {
+			if !cerror.IsChangefeedUnRetryableError(err) && errors.Cause(err) != context.Canceled {
+				return nil, model.NewWarning(err, model.ComponentProcessorSink)
+			}
 			return nil, err
 		}
 		s.rowSink = mqs
 	case sink.S3Scheme, sink.FileScheme, sink.GCSScheme, sink.GSScheme, sink.AzblobScheme, sink.AzureScheme, sink.CloudStorageNoopScheme:
 		storageSink, err := cloudstorage.NewDMLSink(ctx, sinkURI, cfg, errCh)
 		if err != nil {
+			if !cerror.IsChangefeedUnRetryableError(err) && errors.Cause(err) != context.Canceled {
+				return nil, model.NewWarning(err, model.ComponentProcessorSink)
+			}
 			return nil, err
 		}
 		s.txnSink = storageSink
