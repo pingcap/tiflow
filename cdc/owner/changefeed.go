@@ -129,7 +129,11 @@ type changefeed struct {
 		filter filter.Filter,
 	) (puller.DDLPuller, error)
 
-	newSink      func(changefeedID model.ChangeFeedID, info *model.ChangeFeedInfo, reportErr func(error)) DDLSink
+	newSink func(
+		changefeedID model.ChangeFeedID, info *model.ChangeFeedInfo,
+		reportError func(err error), reportWarning func(err error),
+	) DDLSink
+
 	newScheduler func(
 		ctx cdcContext.Context, up *upstream.Upstream, epoch uint64, cfg *config.SchedulerConfig,
 	) (scheduler.Scheduler, error)
@@ -179,7 +183,10 @@ func newChangefeed4Test(
 		schemaStorage entry.SchemaStorage,
 		filter filter.Filter,
 	) (puller.DDLPuller, error),
-	newSink func(changefeedID model.ChangeFeedID, info *model.ChangeFeedInfo, reportErr func(err error)) DDLSink,
+	newSink func(
+		changefeedID model.ChangeFeedID, info *model.ChangeFeedInfo,
+		reportError func(err error), reportWarning func(err error),
+	) DDLSink,
 	newScheduler func(
 		ctx cdcContext.Context, up *upstream.Upstream, epoch uint64, cfg *config.SchedulerConfig,
 	) (scheduler.Scheduler, error),
@@ -571,7 +578,7 @@ LOOP:
 		zap.String("changefeed", c.id.ID),
 	)
 
-	c.ddlSink = c.newSink(c.id, c.state.Info, func(err error) {
+	c.ddlSink = c.newSink(c.id, c.state.Info, ctx.Throw, func(err error) {
 		// TODO(qupeng): report the warning.
 		log.Info("ddlSink internal error",
 			zap.String("namespace", c.id.Namespace),
