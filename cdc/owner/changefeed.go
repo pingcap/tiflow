@@ -249,14 +249,6 @@ func (c *changefeed) handleErr(ctx cdcContext.Context, err error) {
 	} else {
 		code = string(cerror.ErrOwnerUnknown.RFCCode())
 	}
-
-	switch errors.Cause(err).(type) {
-	case model.Warning:
-		// TODO(qupeng): patch it into changefeed info.
-		return
-	default:
-	}
-
 	c.feedStateManager.handleError(&model.RunningError{
 		Time:    time.Now(),
 		Addr:    contextutil.CaptureAddrFromCtx(ctx),
