@@ -343,6 +343,8 @@ func (m *SchemaManager) GetCachedOrRegister(
 	}
 	m.cacheRWLock.RUnlock()
 
+	m.cacheRWLock.Lock()
+	defer m.cacheRWLock.Unlock()
 	log.Info("Avro schema lookup cache miss",
 		zap.String("key", key),
 		zap.Uint64("tableVersion", tableVersion))
@@ -364,14 +366,12 @@ func (m *SchemaManager) GetCachedOrRegister(
 		return nil, 0, errors.Trace(err)
 	}
 
-	cacheEntry := new(schemaCacheEntry)
-	cacheEntry.codec = codec
-	cacheEntry.schemaID = id
-	cacheEntry.tableVersion = tableVersion
-
-	m.cacheRWLock.Lock()
+	cacheEntry := &schemaCacheEntry{
+		tableVersion: tableVersion,
+		schemaID:     id,
+		codec:        codec,
+	}
 	m.cache[key] = cacheEntry
-	m.cacheRWLock.Unlock()
 
 	log.Info("Avro schema GetCachedOrRegister successful with cache miss",
 		zap.Uint64("tableVersion", cacheEntry.tableVersion),
