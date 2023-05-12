@@ -164,6 +164,10 @@ func TestIsChangefeedUnRetryableError(t *testing.T) {
 			err:      WrapError(ErrStorageSinkInvalidConfig, errors.New("test")),
 			expected: true,
 		},
+		{
+			err:      errors.Trace(WrapError(ErrStorageSinkInvalidConfig, errors.New("test"))),
+			expected: true,
+		},
 	}
 
 	for _, c := range cases {

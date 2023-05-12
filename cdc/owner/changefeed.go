@@ -572,7 +572,7 @@ LOOP:
 
 	c.ddlSink = c.newSink(c.id, c.state.Info, ctx.Throw, func(err error) {
 		// TODO(qupeng): report the warning.
-		log.Info("ddlSink internal error",
+		log.Warn("ddlSink internal error",
 			zap.String("namespace", c.id.Namespace),
 			zap.String("changefeed", c.id.ID),
 			zap.Error(err))
