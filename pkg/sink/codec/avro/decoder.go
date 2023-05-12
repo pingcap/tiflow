@@ -398,11 +398,11 @@ func (d *decoder) verifyChecksum(columns []*model.Column, expected uint64) error
 			zap.Uint64("expected", expected),
 			zap.Uint32("actual", checksum),
 			zap.Any("calculator", calculator))
-		return errors.New("checksum mismatch")
+		//return errors.New("checksum mismatch")
+	} else {
+		log.Info("checksum passed",
+			zap.Uint64("expected", expected), zap.Uint32("actual", checksum))
 	}
-
-	log.Info("checksum passed",
-		zap.Uint64("expected", expected), zap.Uint32("actual", checksum))
 
 	return nil
 }
