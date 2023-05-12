@@ -222,7 +222,7 @@ func (s *ddlSinkImpl) writeDDLEvent(ctx context.Context, ddl *model.DDLEvent) er
 				zap.Any("DDL", ddl),
 				zap.Error(err))
 		} else {
-			ddl.Done = true
+			ddl.Done.Store(true)
 			log.Info("Execute DDL succeeded",
 				zap.String("namespace", s.changefeedID.Namespace),
 				zap.String("changefeed", s.changefeedID.ID),
@@ -283,7 +283,7 @@ func (s *ddlSinkImpl) emitCheckpointTs(ts uint64, tables []*model.TableInfo) {
 // from a map in order to check whether that event is finished or not.
 func (s *ddlSinkImpl) emitDDLEvent(ctx context.Context, ddl *model.DDLEvent) (bool, error) {
 	s.mu.Lock()
-	if ddl.Done {
+	if ddl.Done.Load() {
 		// the DDL event is executed successfully, and done is true
 		log.Info("ddl already executed, skip it",
 			zap.String("namespace", s.changefeedID.Namespace),
