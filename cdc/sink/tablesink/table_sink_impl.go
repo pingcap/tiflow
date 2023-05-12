@@ -118,7 +118,7 @@ func (e *EventTableSink[E, P]) UpdateResolvedTs(resolvedTs model.ResolvedTs) err
 	e.progressTracker.addResolvedTs(resolvedTs)
 
 	if err := e.backendSink.WriteEvents(resolvedCallbackableEvents...); err != nil {
-		return model.NewWarning(err, model.ComponentProcessorSink)
+		return SinkInternalError{err}
 	}
 	return nil
 }

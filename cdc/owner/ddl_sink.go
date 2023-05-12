@@ -160,7 +160,7 @@ func (s *ddlSinkImpl) retrySinkActionWithErrorReport(ctx context.Context, action
 		}
 		s.sink = nil
 		if !cerror.IsChangefeedUnRetryableError(err) && errors.Cause(err) != context.Canceled {
-			s.reportWarning(model.NewWarning(err, model.ComponentOwnerSink))
+			s.reportWarning(err)
 		} else {
 			s.reportError(err)
 			return err

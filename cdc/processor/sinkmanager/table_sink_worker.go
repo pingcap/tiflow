@@ -23,6 +23,7 @@ import (
 	"github.com/pingcap/tiflow/cdc/processor/memquota"
 	"github.com/pingcap/tiflow/cdc/processor/sourcemanager"
 	"github.com/pingcap/tiflow/cdc/processor/sourcemanager/engine"
+	"github.com/pingcap/tiflow/cdc/sink/tablesink"
 	"github.com/prometheus/client_golang/prometheus"
 	"go.uber.org/zap"
 )
@@ -177,7 +178,7 @@ func (w *sinkWorker) handleTask(ctx context.Context, task *sinkTask) (finalErr e
 			// If it's a warning, close the table sink and wait all pending
 			// events have been reported. Then we can continue the table
 			// at the checkpoint position.
-			case model.Warning:
+			case tablesink.SinkInternalError:
 				task.tableSink.clearTableSink()
 				// Restart the table sink based on the checkpoint position.
 				if finalErr = task.tableSink.restart(ctx); finalErr == nil {
