@@ -255,7 +255,7 @@ func (m *SinkManager) Run(ctx context.Context) (err error) {
 		case err = <-redoErrors:
 			return errors.Trace(err)
 		case err = <-sinkFactoryErrors:
-			log.Info("Sink manager backend sink fails",
+			log.Warn("Sink manager backend sink fails",
 				zap.String("namespace", m.changefeedID.Namespace),
 				zap.String("changefeed", m.changefeedID.ID),
 				zap.Error(err))

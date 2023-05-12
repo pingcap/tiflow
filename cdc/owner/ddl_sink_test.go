@@ -70,7 +70,7 @@ func newDDLSink4Test(reportErr func(err error), reportWarn func(err error)) (DDL
 }
 
 func TestCheckpoint(t *testing.T) {
-	ddlSink, mSink := newDDLSink4Test(func(err error) {}, func(err error))
+	ddlSink, mSink := newDDLSink4Test(func(err error) {}, func(err error) {})
 
 	ctx, cancel := context.WithCancel(context.Background())
 	defer func() {
