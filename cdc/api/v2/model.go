@@ -23,6 +23,7 @@ import (
 	"github.com/pingcap/tiflow/cdc/model"
 	"github.com/pingcap/tiflow/pkg/config"
 	cerror "github.com/pingcap/tiflow/pkg/errors"
+	"github.com/pingcap/tiflow/pkg/integrity"
 	"github.com/pingcap/tiflow/pkg/security"
 )
 
@@ -309,6 +310,7 @@ func (c *ReplicaConfig) toInternalReplicaConfigWithOriginConfig(
 				CA:                           c.Sink.KafkaConfig.CA,
 				Cert:                         c.Sink.KafkaConfig.Cert,
 				Key:                          c.Sink.KafkaConfig.Key,
+				InsecureSkipVerify:           c.Sink.KafkaConfig.InsecureSkipVerify,
 				CodecConfig:                  codeConfig,
 			}
 		}
@@ -374,7 +376,7 @@ func (c *ReplicaConfig) toInternalReplicaConfigWithOriginConfig(
 		}
 	}
 	if c.Integrity != nil {
-		res.Integrity = &config.IntegrityConfig{
+		res.Integrity = &integrity.Config{
 			IntegrityCheckLevel:   c.Integrity.IntegrityCheckLevel,
 			CorruptionHandleLevel: c.Integrity.CorruptionHandleLevel,
 		}
@@ -504,6 +506,7 @@ func ToAPIReplicaConfig(c *config.ReplicaConfig) *ReplicaConfig {
 				CA:                           cloned.Sink.KafkaConfig.CA,
 				Cert:                         cloned.Sink.KafkaConfig.Cert,
 				Key:                          cloned.Sink.KafkaConfig.Key,
+				InsecureSkipVerify:           cloned.Sink.KafkaConfig.InsecureSkipVerify,
 				CodecConfig:                  codeConfig,
 			}
 		}
@@ -754,7 +757,7 @@ type ChangefeedSchedulerConfig struct {
 }
 
 // IntegrityConfig is the config for integrity check
-// This is a duplicate of config.IntegrityConfig
+// This is a duplicate of Integrity.Config
 type IntegrityConfig struct {
 	IntegrityCheckLevel   string `json:"integrity_check_level"`
 	CorruptionHandleLevel string `json:"corruption_handle_level"`
@@ -917,6 +920,7 @@ type KafkaConfig struct {
 	CA                           *string      `json:"ca,omitempty"`
 	Cert                         *string      `json:"cert,omitempty"`
 	Key                          *string      `json:"key,omitempty"`
+	InsecureSkipVerify           *bool        `json:"insecure_skip_verify,omitempty"`
 	CodecConfig                  *CodecConfig `json:"codec_config,omitempty"`
 }
 

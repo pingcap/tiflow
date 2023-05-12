@@ -912,3 +912,56 @@ func TestServerDataLossAfterUnregisterHandle(t *testing.T) {
 	cancel()
 	wg.Wait()
 }
+
+func TestServerDeregisterPeer(t *testing.T) {
+	ctx, cancel := context.WithTimeout(context.TODO(), defaultTimeout)
+	defer cancel()
+
+	server, newClient, closer := newServerForTesting(t, "test-server-2")
+	defer closer()
+
+	// Avoids server returning error due to congested topic.
+	server.config.MaxPendingMessageCountPerTopic = math.MaxInt64
+
+	var wg sync.WaitGroup
+	wg.Add(1)
+	go func() {
+		defer wg.Done()
+		err := server.Run(ctx)
+		require.Regexp(t, ".*context canceled.*", err)
+	}()
+
+	var sendGroup sync.WaitGroup
+	sendGroup.Add(1)
+	client, closeClient := newClient()
+	go func() {
+		defer sendGroup.Done()
+		stream, err := client.SendMessage(ctx)
+		require.NoError(t, err)
+
+		err = stream.Send(&p2p.MessagePacket{
+			Meta: &p2p.StreamMeta{
+				SenderId:   "test-client-1",
+				ReceiverId: "test-server-2",
+				Epoch:      0,
+			},
+		})
+		require.NoError(t, err)
+	}()
+	sendGroup.Wait()
+	time.Sleep(1 * time.Second)
+
+	server.peerLock.Lock()
+	require.Equal(t, 1, len(server.peers))
+	server.peerLock.Unlock()
+	require.Nil(t, server.ScheduleDeregisterPeerTask(ctx, "test-client-1"))
+	time.Sleep(1 * time.Second)
+	server.peerLock.Lock()
+	require.Equal(t, 0, len(server.peers))
+	server.peerLock.Unlock()
+
+	closeClient()
+	closer()
+	cancel()
+	wg.Wait()
+}
