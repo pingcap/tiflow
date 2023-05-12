@@ -91,6 +91,7 @@ func (m *Reconciler) Reconcile(
 	aliveCaptures map[model.CaptureID]*member.CaptureStatus,
 	compat *compat.Compat,
 ) []tablepb.Span {
+	log.Info("fizz start reconciler", zap.Int("aliveCaptures", len(aliveCaptures)))
 	tablesLenEqual := currentTables.Len() == len(m.tableSpans)
 	allTablesFound := true
 	updateCache := false
@@ -166,6 +167,9 @@ func (m *Reconciler) Reconcile(
 						}
 					}
 				}
+				log.Info("schedulerv3: fizz split holes spans",
+					zap.Any("holes len", len(holes)),
+					zap.Any("splittedHoles len", len(splittedHoles)))
 				spans = append(spans, splittedHoles...)
 			} else {
 				spans = append(spans, holes...)
