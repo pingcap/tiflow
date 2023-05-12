@@ -158,7 +158,7 @@ storage_consumer:
 install:
 	go install ./...
 
-unit_test: check_failpoint_ctl
+unit_test: check_failpoint_ctl generate_mock go-generate generate-protobuf
 	mkdir -p "$(TEST_DIR)"
 	$(FAILPOINT_ENABLE)
 	@export log_level=error;\
