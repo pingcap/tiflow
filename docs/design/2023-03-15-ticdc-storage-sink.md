@@ -53,19 +53,24 @@ This section describes the storage path structure of data change records, metada
 Using the csv protocol as an example, files containing row change events should be organized as follows:
 
 ```
-s3://bucket/prefix1/prefix2                 <prefix>
+s3://bucket/prefix1/prefix2                                   <prefix>
 ├── metadata
-└── schema1                                 <schema>
-    └── table1                              <table>
-        ├── 10000                           <table-version-separator>
-            ├── 13                          <partition-separator, optional>
-            │   ├── 2023-03-23              <date-separator, optional>
-            │   │   ├── CDC000001.csv
-            │   │   └── CDC.index
-            │   └── 2023-03-24              <date-separator, optional>
-            │       ├── CDC000001.csv
-            │       └── CDC.index
-            └── schema.json
+└── schema1                                                   <schema>
+    ├── meta
+    │   └── schema_441349361156227000_3233644819.json         [database schema file]
+    └── table1                                                <table>
+        ├── 441349361156227074                                <table-version-separator>
+        │   └── 13                                            <partition-separator, optional>
+        │       ├── 2023-05-09                                <date-separator, optional>
+        │       │   ├── CDC00000000000000000001.csv
+        │       │   └── meta
+        │       │       └── CDC.index
+        │       └── 2023-05-10                                <date-separator, optional>
+        │           ├── CDC00000000000000000001.csv
+        │           └── meta
+        │               └── CDC.index
+        └── meta
+            └── schema_441349361156227074_3131721815.json     [table schema file]
 ```
 
 #### Data change records
@@ -80,29 +85,26 @@ Data change records are saved to the following path:
 - `prefix`: specifies the user-defined parent directory, for example, <code>s3://**bucket/prefix1/prefix2**</code>.
 - `schema`: specifies the schema name, for example, <code>s3://bucket/prefix1/prefix2/**schema1**</code>.
 - `table`: specifies the table name, for example, <code>s3://bucket/prefix1/prefix2/schema1/**table1**</code>.
-- `table-version-separator`: specifies the separator that separates the path by the table version, for example, <code>s3://bucket/prefix1/prefix2/schema1/table1/**9999**</code>.
-- `partition-separator`: specifies the separator that separates the path by the table partition, for example, <code>s3://bucket/prefix1/prefix2/schema1/table1/9999/**20**</code>.
+- `table-version-separator`: specifies the separator that separates the path by the table version, for example, <code>s3://bucket/prefix1/prefix2/schema1/table1/**441349361156227074**</code>.
+- `partition-separator`: specifies the separator that separates the path by the table partition, for example, <code>s3://bucket/prefix1/prefix2/schema1/table1/441349361156227074/**13**</code>.
 - `date-separator`: classifies the files by the transaction commit date. Value options are:
-  - `none`: no `date-separator`. For example, all files with `test.table1` version being `9999` are saved to `s3://bucket/prefix1/prefix2/schema1/table1/9999`.
-  - `year`: the separator is the year of the transaction commit date, for example, <code>s3://bucket/prefix1/prefix2/schema1/table1/9999/**2022**</code>.
-  - `month`: the separator is the year and month of the transaction commit date, for example, <code>s3://bucket/prefix1/prefix2/schema1/table1/9999/**2022-01**</code>.
-  - `day`: the separator is the year, month, and day of the transaction commit date, for example, <code>s3://bucket/prefix1/prefix2/schema1/table1/9999/**2022-01-02**</code>.
-- `num`: saves the serial number of the file that records the data change, for example, <code>s3://bucket/prefix1/prefix2/schema1/table1/9999/2022-01-02/CDC**000005**.csv</code>.
+  - `none`: no `date-separator`. For example, all files with `test.table1` version being `441349361156227074` are saved to `s3://bucket/prefix1/prefix2/schema1/table1/441349361156227074`.
+  - `year`: the separator is the year of the transaction commit date, for example, <code>s3://bucket/prefix1/prefix2/schema1/table1/441349361156227074/**2022**</code>.
+  - `month`: the separator is the year and month of the transaction commit date, for example, <code>s3://bucket/prefix1/prefix2/schema1/table1/441349361156227074/**2022-05**</code>.
+  - `day`: the separator is the year, month, and day of the transaction commit date, for example, <code>s3://bucket/prefix1/prefix2/schema1/table1/441349361156227074/**2022-05-09**</code>.
+- `num`: saves the serial number of the file that records the data change, for example, <code>s3://bucket/prefix1/prefix2/schema1/table1/441349361156227074/2022-01-02/CDC**000001**.csv</code>.
 - `extension`: specifies the extension of the file. TiDB v6.5.0 supports the CSV and Canal-JSON formats.
 
 > **Note:**
 >
-> The table version changes in the following two cases:
->
-> - After a DDL operation is performed, the table version is the TSO when the DDL is executed in the upstream TiDB. However, the change of the table version does not mean the change of the table schema. For example, adding a comment to a column does not cause the `schema.json` file content to change.
-> - The changefeed process restarts. The table version is the checkpoint TSO when the process restarts. When there are many tables and the process restarts, it takes a long time to traverse all directories and find the position where each table was written last time. Therefore, data is written to a new directory with the version being the checkpoint TSO, instead of to the earlier directory.
+> The table version changes only after a DDL operation is performed, the table version is the TSO when the DDL is executed in the upstream TiDB. However, the change of the table version does not mean the change of the table schema. For example, adding a comment to a column does not cause the schema file content to change.
 
 #### Index files
 
 An index file is used to prevent written data from being overwritten by mistake. It is stored in the same path as the data change record.
 
 ```shell
-{scheme}://{prefix}/{schema}/{table}/{table-version-separator}/{partition-separator}/{date-separator}/CDC.index
+{scheme}://{prefix}/{schema}/{table}/{table-version-separator}/{partition-separator}/{date-separator}/meta/CDC.index
 ```
 
 An index file records the largest file name used in the current directory. For example:
@@ -133,23 +135,25 @@ Metadata is a JSON-formatted file, for example:
 
 #### DDL events
 
-When DDL events cause the table version to change, TiCDC switches to a new path to write data change records. For example, when the version of `test.table1` changes from `9999` to `10000`, data will be written to the path `s3://bucket/prefix1/prefix2/schema1/table1/10000/2022-01-02/CDC000001.csv`. In addition, when DDL events occur, TiCDC generates a `schema.json` file to save the table schema information.
+##### Table DDL events
+When DDL events cause the table version to change, TiCDC switches to a new path to write data change records. For example, when the version of `test.table1` changes to `441349361156227074`, data will be written to the path `s3://bucket/prefix1/prefix2/schema1/table1/441349361156227074/2022-01-02/CDC000001.csv`. In addition, when DDL events occur, TiCDC generates a file to save the table schema information.
 
 Table schema information is saved in the following path:
 
 ```shell
-{scheme}://{prefix}/{schema}/{table}/{table-version-separator}/schema.json
+{scheme}://{prefix}/{schema}/{table}/meta/schema_{table-version}_{hash}.json
 ```
 
-The following is a `schema.json` file:
+The following is a table schema file named `schema_441349361156227074_3131721815.json`:
 
 ```json
 {
   "Table": "table1",
-  "Schema": "test",
+  "Schema": "schema1",
   "Version": 1,
-  "TableVersion": 10000,
-  "Query": "ALTER TABLE test.table1 ADD OfficeLocation blob(20)",
+  "TableVersion": 441349361156227074,
+  "Query": "ALTER TABLE schema1.table1 ADD OfficeLocation blob(20)",
+  "Type": 5,
   "TableColumns": [
     {
       "ColumnName": "Id",
@@ -186,6 +190,7 @@ The following is a `schema.json` file:
 - `Version`: Protocol version of the storage sink.
 - `TableVersion`: Table version.
 - `Query`：DDL statement.
+- `Type`: Type of DDL event.
 - `TableColumns`: An array of one or more maps, each of which describes a column in the source table.
   - `ColumnName`: Column name.
   - `ColumnType`: Column type. For details, see [Data type](#data-type).
@@ -196,9 +201,32 @@ The following is a `schema.json` file:
   - `ColumnIsPk`: The column is part of the primary key when the value of this option is `true`.
 - `TableColumnsTotal`: The size of the `TableColumns` array.
 
+##### Schema DDL events
+
+Database schema information is saved in the following path:
+
+```shell
+{scheme}://{prefix}/{schema}/meta/schema_{table-version}_{hash}.json
+```
+
+The following is a database schema file named `schema_441349361156227000_3131721815.json`:
+
+```json
+{
+  "Table": "",
+  "Schema": "schema1",
+  "Version": 1,
+  "TableVersion": 441349361156227000,
+  "Query": "CREATE DATABASE `schema1`",
+  "Type": 1,
+  "TableColumns": null,
+  "TableColumnsTotal": 0
+}
+```
+
 ### Data type in schema
 
-This section describes the data types used in the `schema.json` file. The data types are defined as `T(M[, D])`.
+This section describes the data types used in the schema file. The data types are defined as `T(M[, D])`.
 
 #### Integer types
 
@@ -207,7 +235,7 @@ Integer types in TiDB are defined as `IT[(M)] [UNSIGNED]`, where
 - `IT` is the integer type, which can be `TINYINT`, `SMALLINT`, `MEDIUMINT`, `INT`, `BIGINT`, or `BIT`.
 - `M` is the display width of the type.
 
-Integer types are defined as follows in `schema.json`:
+Integer types are defined as follows in schema:
 
 ```json
 {
@@ -225,7 +253,7 @@ Decimal types in TiDB are defined as `DT[(M,D)][UNSIGNED]`, where
 - `M` is the precision of the data type, or the total number of digits.
 - `D` is the number of digits following the decimal point.
 
-Decimal types are defined as follows in `schema.json`:
+Decimal types are defined as follows in schema file:
 
 ```json
 {
@@ -242,7 +270,7 @@ Date types in TiDB are defined as `DT`, where
 
 - `DT` is the date type, which can be `DATE` or `YEAR`.
 
-The date types are defined as follows in `schema.json`:
+The date types are defined as follows in schema file:
 
 ```json
 {
@@ -256,7 +284,7 @@ The time types in TiDB are defined as `TT[(M)]`, where
 - `TT` is the time type, which can be `TIME`, `DATETIME`, or `TIMESTAMP`.
 - `M` is the precision of seconds in the range from 0 to 6.
 
-The time types are defined as follows in `schema.json`:
+The time types are defined as follows in schema file:
 
 ```json
 {
@@ -273,7 +301,7 @@ The string types in TiDB are defined as `ST[(M)]`, where
 - `ST` is the string type, which can be `CHAR`, `VARCHAR`, `TEXT`, `BINARY`, `BLOB`, or `JSON`.
 - `M` is the maximum length of the string.
 
-The string types are defined as follows in `schema.json`:
+The string types are defined as follows in schema file:
 
 ```json
 {
@@ -285,7 +313,7 @@ The string types are defined as follows in `schema.json`:
 
 #### Enum and Set types
 
-The Enum and Set types are defined as follows in `schema.json`:
+The Enum and Set types are defined as follows in schema file:
 
 ```json
 {
