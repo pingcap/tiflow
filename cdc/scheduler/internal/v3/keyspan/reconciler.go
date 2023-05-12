@@ -161,8 +161,10 @@ func (m *Reconciler) Reconcile(
 			if compat.CheckSpanReplicationEnabled() {
 				for _, s := range holes {
 					for _, splitter := range m.splitter {
-						splittedHoles = splitter.split(ctx, s, len(aliveCaptures), m.config)
+						tempSpans := splitter.split(ctx, s, len(aliveCaptures), m.config)
 						if len(spans) > 1 {
+							log.Info("schedulerv3: fizz split holes spans", zap.Int("tempSpans len", len(tempSpans)))
+							splittedHoles = append(splittedHoles, tempSpans...)
 							break
 						}
 					}
