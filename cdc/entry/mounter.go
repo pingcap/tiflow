@@ -423,12 +423,16 @@ func (m *mounter) verifyChecksum(
 		return 0, version, true, nil
 	}
 
+	var billHourColumnId int64
 	columns := make([]rowcodec.ColData, 0, len(rawColumns))
 	for idx, col := range columnInfos {
 		columns = append(columns, rowcodec.ColData{
 			ColumnInfo: col,
 			Datum:      &rawColumns[idx],
 		})
+		if col.Name.O == "bill_hour" {
+			billHourColumnId = col.ID
+		}
 	}
 	sort.Slice(columns, func(i, j int) bool {
 		return columns[i].ID < columns[j].ID
@@ -454,7 +458,8 @@ func (m *mounter) verifyChecksum(
 		log.Error("cannot found the extra checksum, the first checksum mismatched",
 			zap.Uint32("checksum", checksum),
 			zap.Uint32("first", first),
-			zap.Uint32("extra", extra))
+			zap.Uint32("extra", extra),
+			zap.Int64("bill_hour_column_id", billHourColumnId))
 		return checksum, version,
 			false, errors.New("cannot found the extra checksum from the event")
 	}
@@ -463,14 +468,16 @@ func (m *mounter) verifyChecksum(
 		log.Warn("extra checksum matched, this may happen the upstream TiDB is during the DDL execution phase",
 			zap.Uint32("checksum", checksum),
 			zap.Uint32("first", first),
-			zap.Uint32("extra", extra))
+			zap.Uint32("extra", extra),
+			zap.Int64("bill_hour_column_id", billHourColumnId))
 		return checksum, version, true, nil
 	}
 
 	log.Error("checksum mismatch",
 		zap.Uint32("checksum", checksum),
 		zap.Uint32("first", first),
-		zap.Uint32("extra", extra))
+		zap.Uint32("extra", extra),
+		zap.Int64("bill_hour_column_id", billHourColumnId))
 	return checksum, version, false, nil
 }
 
