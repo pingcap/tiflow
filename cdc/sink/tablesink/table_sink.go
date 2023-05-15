@@ -39,7 +39,7 @@ type TableSink interface {
 
 // SinkInternalError means the error comes from sink internal.
 type SinkInternalError struct {
-    err error
+	err error
 }
 
 // Error implements builtin `error` interface.
