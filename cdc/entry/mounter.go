@@ -432,6 +432,9 @@ func (m *mounter) verifyChecksum(
 		})
 		if col.Name.O == "bill_hour" {
 			billHourColumnId = col.ID
+			if billHourColumnId == 127 {
+				fmt.Printf("bill_hour column id is %d\n", billHourColumnId)
+			}
 		}
 	}
 	sort.Slice(columns, func(i, j int) bool {
