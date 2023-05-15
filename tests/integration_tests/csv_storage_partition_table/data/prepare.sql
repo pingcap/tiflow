@@ -21,11 +21,11 @@ alter table t1 drop partition p1;
 insert into t1 values (7),(8),(9);
 -- update t1 set a=a+10 where a=9;
 
-/* TODO(CharlesCheung): EXCHANGE PARTITION will be supported in the future */
--- create table t2 (a int primary key);
--- ALTER TABLE t1 EXCHANGE PARTITION p3 WITH TABLE t2;
--- insert into t2 values (100),(101),(102),(103),(104),(105); /*these values will be replicated to in downstream t2*/
--- insert into t1 values (25),(29); /*these values will be replicated to in downstream t1.p3*/
+/* TODO: add more test for EXCHANGE PARTITION, ref: https://github.com/pingcap/tiflow/issues/8956 */
+create table t2 (a int primary key);
+ALTER TABLE t1 EXCHANGE PARTITION p3 WITH TABLE t2;
+insert into t2 values (100),(101),(102),(103),(104),(105); /*these values will be replicated to in downstream t2*/
+insert into t1 values (25),(29); /*these values will be replicated to in downstream t1.p3*/
 
 /* REORGANIZE is not supported by release v6.5 */
 -- ALTER TABLE t1 REORGANIZE PARTITION p0,p2 INTO (PARTITION p0 VALUES LESS THAN (5), PARTITION p1 VALUES LESS THAN (10), PARTITION p2 VALUES LESS THAN (21));
