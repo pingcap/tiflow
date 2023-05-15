@@ -400,10 +400,9 @@ func datum2Column(
 // return true if the checksum is matched and the checksum is the matched one.
 func (m *mounter) verifyChecksum(
 	columnInfos []*timodel.ColumnInfo, rawColumns []types.Datum, isPreRow bool,
-) (uint32, int, int64, bool, error) {
-	var billHourColumnId int64
+) (uint32, int, bool, error) {
 	if !m.integrity.Enabled() {
-		return 0, 0, billHourColumnId, true, nil
+		return 0, 0, true, nil
 	}
 
 	var decoder *rowcodec.DatumMapDecoder
@@ -413,7 +412,7 @@ func (m *mounter) verifyChecksum(
 		decoder = m.decoder
 	}
 	if decoder == nil {
-		return 0, 0, billHourColumnId, false, errors.New("cannot found the decoder to get the checksum")
+		return 0, 0, false, errors.New("cannot found the decoder to get the checksum")
 	}
 
 	version := decoder.ChecksumVersion()
@@ -421,7 +420,7 @@ func (m *mounter) verifyChecksum(
 	// so return matched as true to skip check the event.
 	first, ok := decoder.GetChecksum()
 	if !ok {
-		return 0, version, billHourColumnId, true, nil
+		return 0, version, true, nil
 	}
 
 	columns := make([]rowcodec.ColData, 0, len(rawColumns))
@@ -431,9 +430,8 @@ func (m *mounter) verifyChecksum(
 			Datum:      &rawColumns[idx],
 		})
 		if col.Name.O == "bill_hour" {
-			billHourColumnId = col.ID
-			if billHourColumnId == 127 {
-				fmt.Printf("bill_hour column id is %d\n", billHourColumnId)
+			if col.ID == 127 {
+				fmt.Printf("bill_hour column id is %d\n", col.ID)
 			}
 		}
 	}
@@ -448,12 +446,12 @@ func (m *mounter) verifyChecksum(
 	checksum, err := calculator.Checksum()
 	if err != nil {
 		log.Error("failed to calculate the checksum", zap.Error(err))
-		return 0, version, billHourColumnId, false, errors.Trace(err)
+		return 0, version, false, errors.Trace(err)
 	}
 
 	// the first checksum matched, it hits in the most case.
 	if checksum == first {
-		return checksum, version, billHourColumnId, true, nil
+		return checksum, version, true, nil
 	}
 
 	extra, ok := decoder.GetExtraChecksum()
@@ -461,27 +459,25 @@ func (m *mounter) verifyChecksum(
 		log.Error("cannot found the extra checksum, the first checksum mismatched",
 			zap.Uint32("checksum", checksum),
 			zap.Uint32("first", first),
-			zap.Uint32("extra", extra),
-			zap.Int64("bill_hour_column_id", billHourColumnId))
-		return checksum, version, billHourColumnId,
+			zap.Uint32("extra", extra))
+		return checksum, version,
 			false, errors.New("cannot found the extra checksum from the event")
 	}
 
 	if checksum == extra {
-		log.Warn("extra checksum matched, this may happen the upstream TiDB is during the DDL execution phase",
+		log.Warn("extra checksum matched, "+
+			"this may happen the upstream TiDB is during the DDL execution phase",
 			zap.Uint32("checksum", checksum),
 			zap.Uint32("first", first),
-			zap.Uint32("extra", extra),
-			zap.Int64("bill_hour_column_id", billHourColumnId))
-		return checksum, version, billHourColumnId, true, nil
+			zap.Uint32("extra", extra))
+		return checksum, version, true, nil
 	}
 
 	log.Error("checksum mismatch",
 		zap.Uint32("checksum", checksum),
 		zap.Uint32("first", first),
-		zap.Uint32("extra", extra),
-		zap.Int64("bill_hour_column_id", billHourColumnId))
-	return checksum, version, billHourColumnId, false, nil
+		zap.Uint32("extra", extra))
+	return checksum, version, false, nil
 }
 
 func (m *mounter) mountRowKVEntry(tableInfo *model.TableInfo, row *rowKVEntry, dataSize int64) (*model.RowChangedEvent, model.RowChangedDatums, error) {
@@ -495,9 +491,12 @@ func (m *mounter) mountRowKVEntry(tableInfo *model.TableInfo, row *rowKVEntry, d
 
 		checksumVersion int
 		corrupted       bool
-
-		billHourColumnId int64
 	)
+
+	_, _, colInfos := tableInfo.GetRowColInfos()
+	if colInfos[len(colInfos)-1].ID == 127 {
+		log.Info("hit the break point")
+	}
 
 	// Decode previous columns.
 	var (
@@ -518,7 +517,7 @@ func (m *mounter) mountRowKVEntry(tableInfo *model.TableInfo, row *rowKVEntry, d
 			return nil, rawRow, errors.Trace(err)
 		}
 
-		preChecksum, checksumVersion, billHourColumnId, matched, err = m.verifyChecksum(columnInfos, preRawCols, true)
+		preChecksum, checksumVersion, matched, err = m.verifyChecksum(columnInfos, preRawCols, true)
 		if err != nil {
 			return nil, rawRow, errors.Trace(err)
 		}
@@ -558,7 +557,7 @@ func (m *mounter) mountRowKVEntry(tableInfo *model.TableInfo, row *rowKVEntry, d
 			return nil, rawRow, errors.Trace(err)
 		}
 
-		current, checksumVersion, billHourColumnId, matched, err = m.verifyChecksum(columnInfos, rawCols, false)
+		current, checksumVersion, matched, err = m.verifyChecksum(columnInfos, rawCols, false)
 		if err != nil {
 			return nil, rawRow, errors.Trace(err)
 		}
@@ -582,7 +581,6 @@ func (m *mounter) mountRowKVEntry(tableInfo *model.TableInfo, row *rowKVEntry, d
 		intRowID = row.RecordID.IntValue()
 	}
 
-	_, _, colInfos := tableInfo.GetRowColInfos()
 	rawRow.PreRowDatums = preRawCols
 	rawRow.RowDatums = rawCols
 
@@ -595,9 +593,6 @@ func (m *mounter) mountRowKVEntry(tableInfo *model.TableInfo, row *rowKVEntry, d
 			Corrupted: corrupted,
 			Version:   checksumVersion,
 		}
-		log.Info("checksum matched", zap.Any("current", current),
-			zap.Uint64("tableVersion", tableInfo.Version),
-			zap.Int64("bill_hour_column_id", billHourColumnId))
 	}
 
 	return &model.RowChangedEvent{
