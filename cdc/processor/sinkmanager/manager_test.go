@@ -191,15 +191,7 @@ func TestRemoveTable(t *testing.T) {
 		return manager.sinkMemQuota.GetUsedBytes() == 872
 	}, 5*time.Second, 10*time.Millisecond)
 
-<<<<<<< HEAD
 	manager.AsyncStopTable(tableID)
-=======
-	// Call this function times to test the idempotence.
-	manager.AsyncStopTable(span)
-	manager.AsyncStopTable(span)
-	manager.AsyncStopTable(span)
-	manager.AsyncStopTable(span)
->>>>>>> 114b4affb7 (processor (ticdc): fix a panic in sinkManager when removing a table. (#8782))
 	require.Eventually(t, func() bool {
 		state, ok := manager.GetTableState(tableID)
 		require.True(t, ok)
