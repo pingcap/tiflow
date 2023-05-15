@@ -400,9 +400,10 @@ func datum2Column(
 // return true if the checksum is matched and the checksum is the matched one.
 func (m *mounter) verifyChecksum(
 	columnInfos []*timodel.ColumnInfo, rawColumns []types.Datum, isPreRow bool,
-) (uint32, int, bool, error) {
+) (uint32, int, int64, bool, error) {
+	var billHourColumnId int64
 	if !m.integrity.Enabled() {
-		return 0, 0, true, nil
+		return 0, 0, billHourColumnId, true, nil
 	}
 
 	var decoder *rowcodec.DatumMapDecoder
@@ -412,7 +413,7 @@ func (m *mounter) verifyChecksum(
 		decoder = m.decoder
 	}
 	if decoder == nil {
-		return 0, 0, false, errors.New("cannot found the decoder to get the checksum")
+		return 0, 0, billHourColumnId, false, errors.New("cannot found the decoder to get the checksum")
 	}
 
 	version := decoder.ChecksumVersion()
@@ -420,10 +421,9 @@ func (m *mounter) verifyChecksum(
 	// so return matched as true to skip check the event.
 	first, ok := decoder.GetChecksum()
 	if !ok {
-		return 0, version, true, nil
+		return 0, version, billHourColumnId, true, nil
 	}
 
-	var billHourColumnId int64
 	columns := make([]rowcodec.ColData, 0, len(rawColumns))
 	for idx, col := range columnInfos {
 		columns = append(columns, rowcodec.ColData{
@@ -445,12 +445,12 @@ func (m *mounter) verifyChecksum(
 	checksum, err := calculator.Checksum()
 	if err != nil {
 		log.Error("failed to calculate the checksum", zap.Error(err))
-		return 0, version, false, errors.Trace(err)
+		return 0, version, billHourColumnId, false, errors.Trace(err)
 	}
 
 	// the first checksum matched, it hits in the most case.
 	if checksum == first {
-		return checksum, version, true, nil
+		return checksum, version, billHourColumnId, true, nil
 	}
 
 	extra, ok := decoder.GetExtraChecksum()
@@ -460,7 +460,7 @@ func (m *mounter) verifyChecksum(
 			zap.Uint32("first", first),
 			zap.Uint32("extra", extra),
 			zap.Int64("bill_hour_column_id", billHourColumnId))
-		return checksum, version,
+		return checksum, version, billHourColumnId,
 			false, errors.New("cannot found the extra checksum from the event")
 	}
 
@@ -470,7 +470,7 @@ func (m *mounter) verifyChecksum(
 			zap.Uint32("first", first),
 			zap.Uint32("extra", extra),
 			zap.Int64("bill_hour_column_id", billHourColumnId))
-		return checksum, version, true, nil
+		return checksum, version, billHourColumnId, true, nil
 	}
 
 	log.Error("checksum mismatch",
@@ -478,7 +478,7 @@ func (m *mounter) verifyChecksum(
 		zap.Uint32("first", first),
 		zap.Uint32("extra", extra),
 		zap.Int64("bill_hour_column_id", billHourColumnId))
-	return checksum, version, false, nil
+	return checksum, version, billHourColumnId, false, nil
 }
 
 func (m *mounter) mountRowKVEntry(tableInfo *model.TableInfo, row *rowKVEntry, dataSize int64) (*model.RowChangedEvent, model.RowChangedDatums, error) {
@@ -492,6 +492,8 @@ func (m *mounter) mountRowKVEntry(tableInfo *model.TableInfo, row *rowKVEntry, d
 
 		checksumVersion int
 		corrupted       bool
+
+		billHourColumnId int64
 	)
 
 	// Decode previous columns.
@@ -513,7 +515,7 @@ func (m *mounter) mountRowKVEntry(tableInfo *model.TableInfo, row *rowKVEntry, d
 			return nil, rawRow, errors.Trace(err)
 		}
 
-		preChecksum, checksumVersion, matched, err = m.verifyChecksum(columnInfos, preRawCols, true)
+		preChecksum, checksumVersion, billHourColumnId, matched, err = m.verifyChecksum(columnInfos, preRawCols, true)
 		if err != nil {
 			return nil, rawRow, errors.Trace(err)
 		}
@@ -553,7 +555,7 @@ func (m *mounter) mountRowKVEntry(tableInfo *model.TableInfo, row *rowKVEntry, d
 			return nil, rawRow, errors.Trace(err)
 		}
 
-		current, checksumVersion, matched, err = m.verifyChecksum(columnInfos, rawCols, false)
+		current, checksumVersion, billHourColumnId, matched, err = m.verifyChecksum(columnInfos, rawCols, false)
 		if err != nil {
 			return nil, rawRow, errors.Trace(err)
 		}
@@ -591,7 +593,8 @@ func (m *mounter) mountRowKVEntry(tableInfo *model.TableInfo, row *rowKVEntry, d
 			Version:   checksumVersion,
 		}
 		log.Info("checksum matched", zap.Any("current", current),
-			zap.Uint64("tableVersion", tableInfo.Version))
+			zap.Uint64("tableVersion", tableInfo.Version),
+			zap.Int64("bill_hour_column_id", billHourColumnId))
 	}
 
 	return &model.RowChangedEvent{
