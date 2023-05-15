@@ -55,6 +55,10 @@ func (s *Snapshot) PreTableInfo(job *timodel.Job) (*model.TableInfo, error) {
 	case timodel.ActionRenameTables:
 		// DDL on multiple tables, ignore pre table info
 		return nil, nil
+	case timodel.ActionExchangeTablePartition:
+		// get the table will be exchanged
+		table, _, err := s.inner.getSourceTable(job.BinlogInfo.TableInfo)
+		return table, err
 	default:
 		binlogInfo := job.BinlogInfo
 		if binlogInfo == nil {
@@ -885,26 +889,21 @@ func (s *snapshot) updatePartition(tbInfo *model.TableInfo, currentTs uint64) er
 	return nil
 }
 
-// exchangePartition find the partition's id in the old table info of targetTable,
-// and find the sourceTable's id in the new table info of targetTable.
-// Then set sourceTable's id to the partition's id, which make the exchange happen in snapshot.
-// Finally, update both the targetTable's info and the sourceTable's info in snapshot.
-func (s *snapshot) exchangePartition(targetTable *model.TableInfo, currentTS uint64) error {
-	var sourceTable *model.TableInfo
+func (s *snapshot) getSourceTable(targetTable *timodel.TableInfo) (*model.TableInfo, int64, error) {
 	oldTable, ok := s.physicalTableByID(targetTable.ID)
 	if !ok {
-		return cerror.ErrSnapshotTableNotFound.GenWithStackByArgs(targetTable.ID)
+		return nil, 0, cerror.ErrSnapshotTableNotFound.GenWithStackByArgs(targetTable.ID)
 	}
 
 	oldPartitions := oldTable.GetPartitionInfo()
 	if oldPartitions == nil {
-		return cerror.ErrSnapshotTableNotFound.
+		return nil, 0, cerror.ErrSnapshotTableNotFound.
 			GenWithStack("table %d is not a partitioned table", oldTable.ID)
 	}
 
 	newPartitions := targetTable.GetPartitionInfo()
 	if newPartitions == nil {
-		return cerror.ErrSnapshotTableNotFound.
+		return nil, 0, cerror.ErrSnapshotTableNotFound.
 			GenWithStack("table %d is not a partitioned table", targetTable.ID)
 	}
 
@@ -926,14 +925,13 @@ func (s *snapshot) exchangePartition(targetTable *model.TableInfo, currentTS uin
 		}
 	}
 	if len(diff) != 1 {
-		return cerror.ErrExchangePartition.
+		return nil, 0, cerror.ErrExchangePartition.
 			GenWithStackByArgs(fmt.Sprintf("The exchanged source table number must be 1, but found %v", diff))
 	}
-	sourceTable, ok = s.physicalTableByID(diff[0])
+	sourceTable, ok := s.physicalTableByID(diff[0])
 	if !ok {
-		return cerror.ErrSnapshotTableNotFound.GenWithStackByArgs(diff[0])
+		return nil, 0, cerror.ErrSnapshotTableNotFound.GenWithStackByArgs(diff[0])
 	}
-
 	// 3.find the exchanged partition info
 	diff = diff[:0]
 	for id := range oldIDs {
@@ -942,13 +940,26 @@ func (s *snapshot) exchangePartition(targetTable *model.TableInfo, currentTS uin
 		}
 	}
 	if len(diff) != 1 {
-		return cerror.ErrExchangePartition.
+		return nil, 0, cerror.ErrExchangePartition.
 			GenWithStackByArgs(fmt.Sprintf("The exchanged source table number must be 1, but found %v", diff))
 	}
 
 	exchangedPartitionID := diff[0]
+	return sourceTable, exchangedPartitionID, nil
+}
+
+// exchangePartition find the partition's id in the old table info of targetTable,
+// and find the sourceTable's id in the new table info of targetTable.
+// Then set sourceTable's id to the partition's id, which make the exchange happen in snapshot.
+// Finally, update both the targetTable's info and the sourceTable's info in snapshot.
+func (s *snapshot) exchangePartition(targetTable *model.TableInfo, currentTS uint64) error {
+	var sourceTable *model.TableInfo
+	sourceTable, exchangedPartitionID, err := s.getSourceTable(targetTable.TableInfo)
+	if err != nil {
+		return errors.Trace(err)
+	}
 	// 4.update the targetTable
-	err := s.updatePartition(targetTable, currentTS)
+	err = s.updatePartition(targetTable, currentTS)
 	if err != nil {
 		return errors.Trace(err)
 	}
