@@ -17,10 +17,7 @@ mysql_only_consistent_replicate="consistent_replicate_ddl consistent_replicate_g
 # Tests that need to support kafka: bank kill_owner_with_ddl owner_remove_table_error
 # owner_resign processor_etcd_worker_delay processor_resolved_ts_fallback
 # multi_changefeed clustered_index sink_hang
-
-# TODO(qupeng): fix broken cases
-# kafka_only="kafka_big_messages kafka_compression kafka_messages kafka_sink_error_resume"
-kafka_only="kafka_big_messages kafka_compression kafka_messages"
+kafka_only="kafka_big_messages kafka_compression kafka_messages kafka_sink_error_resume"
 kafka_only_protocol="canal_json_adapter_compatibility canal_json_basic multi_topics"
 kafka_only_v2="kafka_big_txn_v2 kafka_big_messages_v2 multi_tables_ddl_v2 multi_topics_v2"
 
