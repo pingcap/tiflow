@@ -327,10 +327,8 @@ func (p *ddlJobPullerImpl) handleJob(job *timodel.Job) (skip bool, err error) {
 	if p.schemaStorage == nil {
 		return false, nil
 	}
-<<<<<<< HEAD
+
 	snap := p.schemaStorage.GetLastSnapshot()
-=======
->>>>>>> f18cca7fa8 (ddl_puller(ticdc): fix flashback ddl error (#8054))
 	// Do this first to fill the schema name to its origin schema name.
 	if err := snap.FillSchemaName(job); err != nil {
 		// If we can't find a job's schema, check if it's been filtered.
