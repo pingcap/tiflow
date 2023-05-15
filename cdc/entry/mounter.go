@@ -354,7 +354,6 @@ func datum2Column(
 				zap.String("table", tableInfo.Name.O), zap.String("column", colInfo.Name.O))
 			continue
 		}
-		extend := extendColumnInfos[idx]
 
 		colName := colInfo.Name.O
 		colID := colInfo.ID
@@ -398,7 +397,7 @@ func datum2Column(
 			ApproximateBytes: size + sizeOfEmptyColumn,
 		}
 		columnInfos[offset] = colInfo
-		rowColumnInfos[offset] = extend
+		rowColumnInfos[offset] = extendColumnInfos[idx]
 	}
 	return cols, rawCols, columnInfos, rowColumnInfos, nil
 }
@@ -497,7 +496,7 @@ func (m *mounter) mountRowKVEntry(tableInfo *model.TableInfo, row *rowKVEntry, d
 		checksumVersion int
 		corrupted       bool
 	)
-	
+
 	// Decode previous columns.
 	var (
 		preCols     []*model.Column
