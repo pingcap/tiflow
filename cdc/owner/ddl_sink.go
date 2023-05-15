@@ -123,18 +123,24 @@ func ddlSinkInitializer(ctx context.Context, a *ddlSinkImpl) error {
 	if !a.info.Config.EnableSyncPoint {
 		return nil
 	}
-	syncPointStore, err := syncpointstore.NewSyncPointStore(
-		ctx, a.changefeedID, a.info.SinkURI, a.info.Config.SyncPointRetention)
-	if err != nil {
-		return errors.Trace(err)
-	}
-	failpoint.Inject("DDLSinkInitializeSlowly", func() {
-		time.Sleep(time.Second * 5)
-	})
-	a.syncPointStore = syncPointStore
+	return nil
+}
 
-	if err := a.syncPointStore.CreateSyncTable(ctx); err != nil {
-		return errors.Trace(err)
+func (s *ddlSinkImpl) makeSyncPointStoreReady(ctx context.Context) error {
+	if s.info.Config.EnableSyncPoint && s.syncPointStore == nil {
+		syncPointStore, err := syncpointstore.NewSyncPointStore(
+			ctx, s.changefeedID, s.info.SinkURI, s.info.Config.SyncPointRetention)
+		if err != nil {
+			return errors.Trace(err)
+		}
+		failpoint.Inject("DDLSinkInitializeSlowly", func() {
+			time.Sleep(time.Second * 5)
+		})
+		s.syncPointStore = syncPointStore
+
+		if err := s.syncPointStore.CreateSyncTable(ctx); err != nil {
+			return errors.Trace(err)
+		}
 	}
 	return nil
 }
@@ -339,13 +345,31 @@ func (s *ddlSinkImpl) emitDDLEvent(ctx context.Context, ddl *model.DDLEvent) (bo
 	return false, nil
 }
 
-func (s *ddlSinkImpl) emitSyncPoint(ctx context.Context, checkpointTs uint64) error {
+func (s *ddlSinkImpl) emitSyncPoint(ctx context.Context, checkpointTs uint64) (err error) {
 	if checkpointTs == s.lastSyncPoint {
 		return nil
 	}
 	s.lastSyncPoint = checkpointTs
-	// TODO implement async sink syncPoint
-	return s.syncPointStore.SinkSyncPoint(ctx, s.changefeedID, checkpointTs)
+
+	for {
+		if err = s.makeSyncPointStoreReady(ctx); err == nil {
+			// TODO implement async sink syncPoint
+			err = s.syncPointStore.SinkSyncPoint(ctx, s.changefeedID, checkpointTs)
+		}
+		if err == nil {
+			return nil
+		}
+		if !cerror.IsChangefeedUnRetryableError(err) && errors.Cause(err) != context.Canceled {
+			s.reportWarning(err)
+			if s.syncPointStore != nil {
+				_ = s.syncPointStore.Close()
+				s.syncPointStore = nil
+			}
+			continue
+		}
+		s.reportError(err)
+		return err
+	}
 }
 
 func (s *ddlSinkImpl) close(ctx context.Context) (err error) {
