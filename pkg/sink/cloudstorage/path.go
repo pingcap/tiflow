@@ -17,6 +17,7 @@ import (
 	"context"
 	"fmt"
 	"io"
+	"path"
 	"regexp"
 	"strconv"
 	"strings"
@@ -35,7 +36,7 @@ const (
 	// 3 is the length of "CDC", and the file number contains
 	// at least 6 digits (e.g. CDC000001.csv).
 	minFileNamePrefixLen = 3 + config.MinFileIndexWidth
-	defaultIndexFileName = "CDC.index"
+	defaultIndexFileName = "meta/CDC.index"
 
 	// The following constants are used to generate file paths.
 	schemaFileNameFormat = "schema_%d_%010d.json"
@@ -89,14 +90,17 @@ func generateSchemaFilePath(
 		log.Panic("invalid schema or tableVersion",
 			zap.String("schema", schema), zap.Uint64("tableVersion", tableVersion))
 	}
+
+	var dir string
 	if table == "" {
 		// Generate db schema file path.
-		return fmt.Sprintf(dbSchemaPrefix+schemaFileNameFormat,
-			schema, tableVersion, checksum)
+		dir = fmt.Sprintf(dbSchemaPrefix, schema)
+	} else {
+		// Generate table schema file path.
+		dir = fmt.Sprintf(tableSchemaPrefix, schema, table)
 	}
-	// Generate table schema file path.
-	return fmt.Sprintf(tableSchemaPrefix+schemaFileNameFormat,
-		schema, table, tableVersion, checksum)
+	name := fmt.Sprintf(schemaFileNameFormat, tableVersion, checksum)
+	return path.Join(dir, name)
 }
 
 func generateDataFileName(index uint64, extension string, fileIndexWidth int) string {
@@ -263,7 +267,7 @@ func (f *FilePathGenerator) GenerateDateStr() string {
 func (f *FilePathGenerator) GenerateIndexFilePath(tbl VersionedTableName, date string) string {
 	dir := f.generateDataDirPath(tbl, date)
 	name := defaultIndexFileName
-	return strings.Join([]string{dir, name}, "/")
+	return path.Join(dir, name)
 }
 
 // GenerateDataFilePath generates a canonical path for data file.
@@ -275,7 +279,7 @@ func (f *FilePathGenerator) GenerateDataFilePath(
 	if err != nil {
 		return "", err
 	}
-	return strings.Join([]string{dir, name}, "/"), nil
+	return path.Join(dir, name), nil
 }
 
 func (f *FilePathGenerator) generateDataDirPath(tbl VersionedTableName, date string) string {
@@ -293,7 +297,7 @@ func (f *FilePathGenerator) generateDataDirPath(tbl VersionedTableName, date str
 		elems = append(elems, date)
 	}
 
-	return strings.Join(elems, "/")
+	return path.Join(elems...)
 }
 
 func (f *FilePathGenerator) generateDataFileName(
@@ -344,11 +348,10 @@ func (f *FilePathGenerator) getNextFileIdxFromIndexFile(
 		return 0, err
 	}
 
-	lastFilePath := strings.Join([]string{
+	lastFilePath := path.Join(
 		f.generateDataDirPath(tbl, date),                                       // file dir
 		generateDataFileName(maxFileIdx, f.extension, f.config.FileIndexWidth), // file name
-	}, "/")
-
+	)
 	var lastFileExists, lastFileIsEmpty bool
 	lastFileExists, err = f.storage.FileExists(ctx, lastFilePath)
 	if err != nil {
