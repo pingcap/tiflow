@@ -497,7 +497,7 @@ func (m *mounter) mountRowKVEntry(tableInfo *model.TableInfo, row *rowKVEntry, d
 		checksumVersion int
 		corrupted       bool
 	)
-
+	
 	// Decode previous columns.
 	var (
 		preCols     []*model.Column
