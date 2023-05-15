@@ -91,7 +91,6 @@ func (m *Reconciler) Reconcile(
 	aliveCaptures map[model.CaptureID]*member.CaptureStatus,
 	compat *compat.Compat,
 ) []tablepb.Span {
-	log.Info("fizz start reconciler", zap.Int("aliveCaptures", len(aliveCaptures)))
 	tablesLenEqual := currentTables.Len() == len(m.tableSpans)
 	allTablesFound := true
 	updateCache := false
@@ -156,36 +155,7 @@ func (m *Reconciler) Reconcile(
 				s.TableID = tableID
 			}
 
-			var splittedHoles []tablepb.Span
-			// we should also split the hole span
-			//if compat.CheckSpanReplicationEnabled() {
-			//	log.Info("schedulerv3: fizz find hole, trigger hole split",
-			//		zap.Int("holes len", len(holes)),
-			//		zap.Int("aliveCaptures len", len(aliveCaptures)),
-			//		zap.Int("splitter len", len(m.splitter)),
-			//	)
-			//	for _, s := range holes {
-			//		for _, splitter := range m.splitter {
-			//			tempSpans := splitter.split(ctx, s, len(aliveCaptures), m.config)
-			//			if len(tempSpans) > 1 {
-			//				log.Info("schedulerv3: fizz split holes spans", zap.Int("tempSpans len", len(tempSpans)))
-			//				splittedHoles = append(splittedHoles, tempSpans...)
-			//				break
-			//			}
-			//		}
-			//	}
-			//}
-
-			if len(splittedHoles) > 0 {
-				log.Info("schedulerv3: fizz split holes spans",
-					zap.Any("holes len", len(holes)),
-					zap.Any("splittedHoles len", len(splittedHoles)))
-				spans = append(spans, splittedHoles...)
-			} else {
-				log.Info("schedulerv3: fizz none split holes spans", zap.Any("holes len", len(holes)),
-					zap.Any("splittedHoles len", len(splittedHoles)))
-				spans = append(spans, holes...)
-			}
+			spans = append(spans, holes...)
 
 			m.tableSpans[tableID] = splittedSpans{
 				byAddTable: false,

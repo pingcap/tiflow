@@ -64,9 +64,6 @@ func (m *writeSplitter) split(
 		pages = len(regions) / config.RegionThreshold
 	}
 
-	log.Info("schedulerv3: fizz split span by written key",
-		zap.Int("regions", len(regions)), zap.Int("pages", pages))
-
 	if pages <= 1 {
 		log.Warn("schedulerv3: only one capture and the regions number less than"+
 			" the maxSpanRegionLimit, skip split span",
