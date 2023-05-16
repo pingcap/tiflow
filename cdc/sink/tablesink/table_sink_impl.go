@@ -95,7 +95,13 @@ func (e *EventTableSink[E, P]) UpdateResolvedTs(resolvedTs model.ResolvedTs) err
 	})
 	// Despite the lack of data, we have to move forward with progress.
 	if i == 0 {
+		// WriteEvents must be called to check whether the backend sink is dead
+		// or not, even if there is no more events. So if the backend is dead
+		// and re-initialized, we can know it and re-build a table sink.
 		e.progressTracker.addResolvedTs(resolvedTs)
+		if err := e.backendSink.WriteEvents(); err != nil {
+			return SinkInternalError{err}
+		}
 		return nil
 	}
 	resolvedEvents := e.eventBuffer[:i]
@@ -114,9 +120,13 @@ func (e *EventTableSink[E, P]) UpdateResolvedTs(resolvedTs model.ResolvedTs) err
 		}
 		resolvedCallbackableEvents = append(resolvedCallbackableEvents, ce)
 	}
+
 	// Do not forget to add the resolvedTs to progressTracker.
 	e.progressTracker.addResolvedTs(resolvedTs)
-	return e.backendSink.WriteEvents(resolvedCallbackableEvents...)
+	if err := e.backendSink.WriteEvents(resolvedCallbackableEvents...); err != nil {
+		return SinkInternalError{err}
+	}
+	return nil
 }
 
 // GetCheckpointTs returns the checkpoint ts of the table sink.
