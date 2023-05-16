@@ -168,7 +168,8 @@ func (w *sinkWorker) handleTask(ctx context.Context, task *sinkTask) (finalErr e
 			zap.Any("lowerBound", lowerBound),
 			zap.Any("upperBound", upperBound),
 			zap.Bool("splitTxn", w.splitTxn),
-			zap.Any("lastPos", advancer.lastPos))
+			zap.Any("lastPos", advancer.lastPos),
+			zap.Error(finalErr))
 
 		// Otherwise we can't ensure all events before `lastPos` are emitted.
 		if finalErr == nil {
