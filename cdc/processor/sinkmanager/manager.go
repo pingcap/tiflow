@@ -27,9 +27,17 @@ import (
 	"github.com/pingcap/tiflow/cdc/processor/sourcemanager/engine"
 	"github.com/pingcap/tiflow/cdc/processor/tablepb"
 	"github.com/pingcap/tiflow/cdc/redo"
+<<<<<<< HEAD
 	"github.com/pingcap/tiflow/cdc/sinkv2/eventsink/factory"
 	cerrors "github.com/pingcap/tiflow/pkg/errors"
 	"github.com/pingcap/tiflow/pkg/retry"
+=======
+	"github.com/pingcap/tiflow/cdc/sink/dmlsink/factory"
+	tablesinkmetrics "github.com/pingcap/tiflow/cdc/sink/metrics/tablesink"
+	"github.com/pingcap/tiflow/cdc/sink/tablesink"
+	cerror "github.com/pingcap/tiflow/pkg/errors"
+	"github.com/pingcap/tiflow/pkg/spanz"
+>>>>>>> 659435573d (sink(cdc): handle sink errors more fast and light (#8949))
 	"github.com/pingcap/tiflow/pkg/upstream"
 	"github.com/prometheus/client_golang/prometheus"
 	"github.com/tikv/client-go/v2/oracle"
@@ -82,7 +90,9 @@ type SinkManager struct {
 	sourceManager *sourcemanager.SourceManager
 
 	// sinkFactory used to create table sink.
-	sinkFactory *factory.SinkFactory
+	sinkFactory   *factory.SinkFactory
+	sinkFactoryMu sync.Mutex
+
 	// tableSinks is a map from tableID to tableSink.
 	tableSinks sync.Map
 
@@ -148,7 +158,12 @@ func New(
 		sinkTaskChan:        make(chan *sinkTask),
 		sinkWorkerAvailable: make(chan struct{}, 1),
 
+<<<<<<< HEAD
 		metricsTableSinkTotalRows: metricsTableSinkTotalRows,
+=======
+		metricsTableSinkTotalRows: tablesinkmetrics.TotalRowsCountCounter.
+			WithLabelValues(changefeedID.Namespace, changefeedID.ID),
+>>>>>>> 659435573d (sink(cdc): handle sink errors more fast and light (#8949))
 	}
 
 	if redoDMLMgr != nil && redoDMLMgr.Enabled() {
@@ -168,20 +183,178 @@ func New(
 		m.redoMemQuota = memquota.NewMemQuota(changefeedID, 0, "redo")
 	}
 
+<<<<<<< HEAD
 	m.startWorkers(changefeedInfo.Config.Sink.TxnAtomicity.ShouldSplitTxn(), changefeedInfo.Config.EnableOldValue)
 	m.startGenerateTasks()
 	m.backgroundGC()
 
+=======
+	m.ready = make(chan struct{})
+	return m
+}
+
+// Run implements util.Runnable.
+func (m *SinkManager) Run(ctx context.Context) (err error) {
+	var managerCancel context.CancelFunc
+	m.managerCtx, managerCancel = context.WithCancel(ctx)
+	defer func() {
+		managerCancel()
+		m.wg.Wait()
+		log.Info("Sink manager exists",
+			zap.String("namespace", m.changefeedID.Namespace),
+			zap.String("changefeed", m.changefeedID.ID),
+			zap.Error(err))
+	}()
+
+	splitTxn := m.changefeedInfo.Config.Sink.TxnAtomicity.ShouldSplitTxn()
+	enableOldValue := m.changefeedInfo.Config.EnableOldValue
+
+	gcErrors := make(chan error, 16)
+	sinkFactoryErrors := make(chan error, 16)
+	sinkErrors := make(chan error, 16)
+	redoErrors := make(chan error, 16)
+
+	m.backgroundGC(gcErrors)
+	if m.sinkEg == nil {
+		var sinkCtx context.Context
+		m.sinkEg, sinkCtx = errgroup.WithContext(m.managerCtx)
+		m.startSinkWorkers(sinkCtx, splitTxn, enableOldValue)
+		m.sinkEg.Go(func() error { return m.generateSinkTasks(sinkCtx) })
+		m.wg.Add(1)
+		go func() {
+			defer m.wg.Done()
+			if err := m.sinkEg.Wait(); err != nil && !cerror.Is(err, context.Canceled) {
+				log.Error("Worker handles or generates sink task failed",
+					zap.String("namespace", m.changefeedID.Namespace),
+					zap.String("changefeed", m.changefeedID.ID),
+					zap.Error(err))
+				select {
+				case sinkErrors <- err:
+				case <-m.managerCtx.Done():
+				}
+			}
+		}()
+	}
+	if m.redoDMLMgr != nil && m.redoEg == nil {
+		var redoCtx context.Context
+		m.redoEg, redoCtx = errgroup.WithContext(m.managerCtx)
+		m.startRedoWorkers(redoCtx, enableOldValue)
+		m.redoEg.Go(func() error { return m.generateRedoTasks(redoCtx) })
+		m.wg.Add(1)
+		go func() {
+			defer m.wg.Done()
+			if err := m.redoEg.Wait(); err != nil && !cerror.Is(err, context.Canceled) {
+				log.Error("Worker handles or generates redo task failed",
+					zap.String("namespace", m.changefeedID.Namespace),
+					zap.String("changefeed", m.changefeedID.ID),
+					zap.Error(err))
+				select {
+				case redoErrors <- err:
+				case <-m.managerCtx.Done():
+				}
+			}
+		}()
+	}
+
+	close(m.ready)
+>>>>>>> 659435573d (sink(cdc): handle sink errors more fast and light (#8949))
 	log.Info("Sink manager is created",
 		zap.String("namespace", changefeedID.Namespace),
 		zap.String("changefeed", changefeedID.ID),
 		zap.Bool("withRedoEnabled", m.redoDMLMgr != nil))
 
+<<<<<<< HEAD
 	return m, nil
 }
 
 // start all workers and report the error to the error channel.
 func (m *SinkManager) startWorkers(splitTxn bool, enableOldValue bool) {
+=======
+	// SinkManager will restart some internal modules if necessasry.
+	for {
+		if err := m.initSinkFactory(sinkFactoryErrors); err != nil {
+			select {
+			case <-m.managerCtx.Done():
+			case sinkFactoryErrors <- err:
+			}
+		}
+
+		select {
+		case <-ctx.Done():
+			return errors.Trace(ctx.Err())
+		case err = <-gcErrors:
+			return errors.Trace(err)
+		case err = <-sinkErrors:
+			return errors.Trace(err)
+		case err = <-redoErrors:
+			return errors.Trace(err)
+		case err = <-sinkFactoryErrors:
+			log.Warn("Sink manager backend sink fails",
+				zap.String("namespace", m.changefeedID.Namespace),
+				zap.String("changefeed", m.changefeedID.ID),
+				zap.Error(err))
+			m.clearSinkFactory()
+			sinkFactoryErrors = make(chan error, 16)
+		}
+
+		if !cerror.IsChangefeedUnRetryableError(err) && errors.Cause(err) != context.Canceled {
+			// TODO(qupeng): report th warning.
+
+			// Use a 5 second backoff when re-establishing internal resources.
+			timer := time.NewTimer(5 * time.Second)
+			select {
+			case <-ctx.Done():
+				if !timer.Stop() {
+					<-timer.C
+				}
+				return errors.Trace(ctx.Err())
+			case <-timer.C:
+			}
+		} else {
+			return errors.Trace(err)
+		}
+	}
+}
+
+func (m *SinkManager) initSinkFactory(errCh chan error) error {
+	m.sinkFactoryMu.Lock()
+	defer m.sinkFactoryMu.Unlock()
+	if m.sinkFactory != nil {
+		return nil
+	}
+	uri := m.changefeedInfo.SinkURI
+	cfg := m.changefeedInfo.Config
+
+	var err error = nil
+	failpoint.Inject("SinkManagerRunError", func() {
+		log.Info("failpoint SinkManagerRunError injected", zap.String("changefeed", m.changefeedID.ID))
+		err = errors.New("SinkManagerRunError")
+	})
+	if err != nil {
+		return errors.Trace(err)
+	}
+
+	if m.sinkFactory, err = factory.New(m.managerCtx, uri, cfg, errCh); err == nil {
+		log.Info("Sink manager inits sink factory success",
+			zap.String("namespace", m.changefeedID.Namespace),
+			zap.String("changefeed", m.changefeedID.ID))
+		return nil
+	}
+	return errors.Trace(err)
+}
+
+func (m *SinkManager) clearSinkFactory() {
+	m.sinkFactoryMu.Lock()
+	defer m.sinkFactoryMu.Unlock()
+	if m.sinkFactory != nil {
+		m.sinkFactory.Close()
+		m.sinkFactory = nil
+	}
+}
+
+func (m *SinkManager) startSinkWorkers(ctx context.Context, splitTxn bool, enableOldValue bool) {
+	eg, ctx := errgroup.WithContext(ctx)
+>>>>>>> 659435573d (sink(cdc): handle sink errors more fast and light (#8949))
 	for i := 0; i < sinkWorkerNum; i++ {
 		w := newSinkWorker(m.changefeedID, m.sourceManager,
 			m.sinkMemQuota, m.redoMemQuota,
@@ -278,8 +451,13 @@ func (m *SinkManager) backgroundGC() {
 		defer ticker.Stop()
 		for {
 			select {
+<<<<<<< HEAD
 			case <-m.ctx.Done():
 				log.Info("Background GC is stooped because context is canceled",
+=======
+			case <-m.managerCtx.Done():
+				log.Info("Background GC is stoped because context is canceled",
+>>>>>>> 659435573d (sink(cdc): handle sink errors more fast and light (#8949))
 					zap.String("namespace", m.changefeedID.Namespace),
 					zap.String("changefeed", m.changefeedID.ID))
 				return
@@ -396,6 +574,11 @@ func (m *SinkManager) generateSinkTasks() error {
 			upperBound := getUpperBound(tableSink.getUpperBoundTs())
 			// The table has no available progress.
 			if lowerBound.Compare(upperBound) >= 0 {
+				m.sinkProgressHeap.push(slowestTableProgress)
+				continue
+			}
+			// The table hasn't been attached to a sink.
+			if !tableSink.initTableSink() {
 				m.sinkProgressHeap.push(slowestTableProgress)
 				continue
 			}
@@ -670,13 +853,34 @@ func (m *SinkManager) UpdateBarrierTs(
 func (m *SinkManager) AddTable(tableID model.TableID, startTs model.Ts, targetTs model.Ts) {
 	sinkWrapper := newTableSinkWrapper(
 		m.changefeedID,
+<<<<<<< HEAD
 		tableID,
 		m.sinkFactory.CreateTableSink(m.changefeedID, tableID, startTs, m.metricsTableSinkTotalRows),
+=======
+		span,
+		func() tablesink.TableSink {
+			if m.sinkFactoryMu.TryLock() {
+				defer m.sinkFactoryMu.Unlock()
+				if m.sinkFactory != nil {
+					return m.sinkFactory.CreateTableSink(m.changefeedID, span, startTs, m.metricsTableSinkTotalRows)
+				}
+			}
+			return nil
+		},
+>>>>>>> 659435573d (sink(cdc): handle sink errors more fast and light (#8949))
 		tablepb.TableStatePreparing,
 		startTs,
 		targetTs,
+		func(ctx context.Context) (model.Ts, error) {
+			return genReplicateTs(ctx, m.up.PDClient)
+		},
 	)
+<<<<<<< HEAD
 	_, loaded := m.tableSinks.LoadOrStore(tableID, sinkWrapper)
+=======
+
+	_, loaded := m.tableSinks.LoadOrStore(span, sinkWrapper)
+>>>>>>> 659435573d (sink(cdc): handle sink errors more fast and light (#8949))
 	if loaded {
 		log.Panic("Add an exists table sink",
 			zap.String("namespace", m.changefeedID.Namespace),
@@ -709,6 +913,7 @@ func (m *SinkManager) StartTable(tableID model.TableID, startTs model.Ts) error 
 			zap.String("changefeed", m.changefeedID.ID),
 			zap.Int64("tableID", tableID))
 	}
+<<<<<<< HEAD
 	backoffBaseDelayInMs := int64(100)
 	totalRetryDuration := 10 * time.Second
 	var replicateTs model.Ts
@@ -730,8 +935,13 @@ func (m *SinkManager) StartTable(tableID model.TableID, startTs model.Ts) error 
 		retry.WithIsRetryableErr(cerrors.IsRetryableError))
 	if err != nil {
 		return errors.Trace(err)
+=======
+
+	if err := tableSink.(*tableSinkWrapper).start(m.managerCtx, startTs); err != nil {
+		return err
+>>>>>>> 659435573d (sink(cdc): handle sink errors more fast and light (#8949))
 	}
-	tableSink.(*tableSinkWrapper).start(startTs, replicateTs)
+
 	m.sinkProgressHeap.push(&progress{
 		tableID:           tableID,
 		nextLowerBoundPos: engine.Position{StartTs: 0, CommitTs: startTs + 1},
@@ -900,6 +1110,7 @@ func (m *SinkManager) Close() error {
 		}
 		return true
 	})
+<<<<<<< HEAD
 	m.wg.Wait()
 	log.Info("All table sinks closed",
 		zap.String("namespace", m.changefeedID.Namespace),
@@ -909,6 +1120,10 @@ func (m *SinkManager) Close() error {
 	// Make sure all sink workers exited before closing the sink factory.
 	// Otherwise, it would panic in the sink when you try to write some data to a closed sink.
 	m.sinkFactory.Close()
+=======
+	m.clearSinkFactory()
+
+>>>>>>> 659435573d (sink(cdc): handle sink errors more fast and light (#8949))
 	log.Info("Closed sink manager",
 		zap.String("namespace", m.changefeedID.Namespace),
 		zap.String("changefeed", m.changefeedID.ID),

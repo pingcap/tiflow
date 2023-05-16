@@ -14,6 +14,8 @@
 package sinkmanager
 
 import (
+	"context"
+	"math"
 	"sync"
 	"testing"
 
@@ -71,12 +73,19 @@ func createTableSinkWrapper(changefeedID model.ChangeFeedID, tableID model.Table
 		sink, &eventsink.RowChangeEventAppender{}, prometheus.NewCounter(prometheus.CounterOpts{}))
 	wrapper := newTableSinkWrapper(
 		changefeedID,
+<<<<<<< HEAD
 		tableID,
 		innerTableSink,
+=======
+		span,
+		func() tablesink.TableSink { return innerTableSink },
+>>>>>>> 659435573d (sink(cdc): handle sink errors more fast and light (#8949))
 		tableState,
 		0,
 		100,
+		func(_ context.Context) (model.Ts, error) { return math.MaxUint64, nil },
 	)
+	wrapper.tableSink = wrapper.tableSinkCreater()
 	return wrapper, sink
 }
 
@@ -296,3 +305,23 @@ func TestGetUpperBoundTs(t *testing.T) {
 	wrapper.barrierTs.Store(uint64(12))
 	require.Equal(t, uint64(11), wrapper.getUpperBoundTs())
 }
+<<<<<<< HEAD
+=======
+
+func TestNewTableSinkWrapper(t *testing.T) {
+	t.Parallel()
+	wrapper := newTableSinkWrapper(
+		model.DefaultChangeFeedID("1"),
+		spanz.TableIDToComparableSpan(1),
+		nil,
+		tablepb.TableStatePrepared,
+		model.Ts(10),
+		model.Ts(20),
+		func(_ context.Context) (model.Ts, error) { return math.MaxUint64, nil },
+	)
+	require.NotNil(t, wrapper)
+	require.Equal(t, uint64(10), wrapper.getUpperBoundTs())
+	require.Equal(t, uint64(10), wrapper.getReceivedSorterResolvedTs())
+	require.Equal(t, uint64(10), wrapper.getCheckpointTs().ResolvedMark())
+}
+>>>>>>> 659435573d (sink(cdc): handle sink errors more fast and light (#8949))

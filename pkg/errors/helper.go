@@ -76,6 +76,15 @@ var changefeedUnRetryableErrors = []*errors.Error{
 	ErrSchemaSnapshotNotFound,
 	ErrSyncRenameTableFailed,
 	ErrChangefeedUnretryable,
+<<<<<<< HEAD
+=======
+	ErrCorruptedDataMutation,
+
+	ErrSinkURIInvalid,
+	ErrKafkaInvalidConfig,
+	ErrMySQLInvalidConfig,
+	ErrStorageSinkInvalidConfig,
+>>>>>>> 659435573d (sink(cdc): handle sink errors more fast and light (#8949))
 }
 
 // IsChangefeedUnRetryableError returns true if an error is a changefeed not retry error.

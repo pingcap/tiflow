@@ -82,8 +82,17 @@ func (c *Config) Apply(
 		return cerror.ErrStorageSinkInvalidConfig.GenWithStack(
 			"can't create cloud storage sink with unsupported scheme: %s", scheme)
 	}
+<<<<<<< HEAD
 	query := sinkURI.Query()
 	if err = getWorkerCount(query, &c.WorkerCount); err != nil {
+=======
+	req := &http.Request{URL: sinkURI}
+	urlParameter := &urlConfig{}
+	if err := binding.Query.Bind(req, urlParameter); err != nil {
+		return cerror.WrapError(cerror.ErrStorageSinkInvalidConfig, err)
+	}
+	if urlParameter, err = mergeConfig(replicaConfig, urlParameter); err != nil {
+>>>>>>> 659435573d (sink(cdc): handle sink errors more fast and light (#8949))
 		return err
 	}
 	err = getFlushInterval(query, &c.FlushInterval)
@@ -106,9 +115,30 @@ func (c *Config) Apply(
 	return nil
 }
 
+<<<<<<< HEAD
 func getWorkerCount(values url.Values, workerCount *int) error {
 	s := values.Get("worker-count")
 	if len(s) == 0 {
+=======
+func mergeConfig(
+	replicaConfig *config.ReplicaConfig,
+	urlParameters *urlConfig,
+) (*urlConfig, error) {
+	dest := &urlConfig{}
+	if replicaConfig.Sink != nil && replicaConfig.Sink.CloudStorageConfig != nil {
+		dest.WorkerCount = replicaConfig.Sink.CloudStorageConfig.WorkerCount
+		dest.FlushInterval = replicaConfig.Sink.CloudStorageConfig.FlushInterval
+		dest.FileSize = replicaConfig.Sink.CloudStorageConfig.FileSize
+	}
+	if err := mergo.Merge(dest, urlParameters, mergo.WithOverride); err != nil {
+		return nil, cerror.WrapError(cerror.ErrStorageSinkInvalidConfig, err)
+	}
+	return dest, nil
+}
+
+func getWorkerCount(values *urlConfig, workerCount *int) error {
+	if values.WorkerCount == nil {
+>>>>>>> 659435573d (sink(cdc): handle sink errors more fast and light (#8949))
 		return nil
 	}
 

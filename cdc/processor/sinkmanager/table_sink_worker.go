@@ -22,7 +22,11 @@ import (
 	"github.com/pingcap/tiflow/cdc/processor/memquota"
 	"github.com/pingcap/tiflow/cdc/processor/sourcemanager"
 	"github.com/pingcap/tiflow/cdc/processor/sourcemanager/engine"
+<<<<<<< HEAD
 	metrics "github.com/pingcap/tiflow/cdc/sorter"
+=======
+	"github.com/pingcap/tiflow/cdc/sink/tablesink"
+>>>>>>> 659435573d (sink(cdc): handle sink errors more fast and light (#8949))
 	"github.com/prometheus/client_golang/prometheus"
 	"github.com/tikv/client-go/v2/oracle"
 	"go.uber.org/zap"
@@ -290,9 +294,15 @@ func (w *sinkWorker) handleTask(ctx context.Context, task *sinkTask) (finalErr e
 			zap.Any("lowerBound", lowerBound),
 			zap.Any("upperBound", upperBound),
 			zap.Bool("splitTxn", w.splitTxn),
+<<<<<<< HEAD
 			zap.Any("lastPos", lastPos))
+=======
+			zap.Any("lastPos", advancer.lastPos),
+			zap.Error(finalErr))
+>>>>>>> 659435573d (sink(cdc): handle sink errors more fast and light (#8949))
 
 		if finalErr == nil {
+<<<<<<< HEAD
 			// Otherwise we can't ensure all events before `lastPos` are emitted.
 			task.callback(lastPos)
 		}
@@ -305,6 +315,29 @@ func (w *sinkWorker) handleTask(ctx context.Context, task *sinkTask) (finalErr e
 				zap.String("changefeed", w.changefeedID.ID),
 				zap.Int64("tableID", task.tableID),
 				zap.Uint64("memory", availableMem-usedMem))
+=======
+			task.callback(advancer.lastPos)
+		} else {
+			switch errors.Cause(finalErr).(type) {
+			// If it's a warning, close the table sink and wait all pending
+			// events have been reported. Then we can continue the table
+			// at the checkpoint position.
+			case tablesink.SinkInternalError:
+				task.tableSink.clearTableSink()
+				// Restart the table sink based on the checkpoint position.
+				if finalErr = task.tableSink.restart(ctx); finalErr == nil {
+					ckpt := task.tableSink.getCheckpointTs().ResolvedMark()
+					lastWrittenPos := engine.Position{StartTs: ckpt - 1, CommitTs: ckpt}
+					task.callback(lastWrittenPos)
+					log.Info("table sink has been restarted",
+						zap.String("namespace", w.changefeedID.Namespace),
+						zap.String("changefeed", w.changefeedID.ID),
+						zap.Stringer("span", &task.span),
+						zap.Any("lastWrittenPos", lastWrittenPos))
+				}
+			default:
+			}
+>>>>>>> 659435573d (sink(cdc): handle sink errors more fast and light (#8949))
 		}
 	}()
 

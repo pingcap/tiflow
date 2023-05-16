@@ -129,12 +129,12 @@ func (c *Config) Apply(
 	replicaConfig *config.ReplicaConfig,
 ) (err error) {
 	if sinkURI == nil {
-		return cerror.ErrMySQLConnectionError.GenWithStack("fail to open MySQL sink, empty SinkURI")
+		return cerror.ErrMySQLInvalidConfig.GenWithStack("fail to open MySQL sink, empty SinkURI")
 	}
 
 	scheme := strings.ToLower(sinkURI.Scheme)
 	if !sink.IsMySQLCompatibleScheme(scheme) {
-		return cerror.ErrMySQLConnectionError.GenWithStack("can't create MySQL sink with unsupported scheme: %s", scheme)
+		return cerror.ErrMySQLInvalidConfig.GenWithStack("can't create MySQL sink with unsupported scheme: %s", scheme)
 	}
 	query := sinkURI.Query()
 	if err = getWorkerCount(query, &c.WorkerCount); err != nil {
@@ -186,9 +186,44 @@ func (c *Config) Apply(
 	return nil
 }
 
+<<<<<<< HEAD
 func getWorkerCount(values url.Values, workerCount *int) error {
 	s := values.Get("worker-count")
 	if len(s) == 0 {
+=======
+func mergeConfig(
+	replicaConfig *config.ReplicaConfig,
+	urlParameters *urlConfig,
+) (*urlConfig, error) {
+	dest := &urlConfig{}
+	dest.SafeMode = replicaConfig.Sink.SafeMode
+	if replicaConfig.Sink != nil && replicaConfig.Sink.MySQLConfig != nil {
+		mConfig := replicaConfig.Sink.MySQLConfig
+		dest.WorkerCount = mConfig.WorkerCount
+		dest.MaxTxnRow = mConfig.MaxTxnRow
+		dest.MaxMultiUpdateRowCount = mConfig.MaxMultiUpdateRowCount
+		dest.MaxMultiUpdateRowSize = mConfig.MaxMultiUpdateRowSize
+		dest.TiDBTxnMode = mConfig.TiDBTxnMode
+		dest.SSLCa = mConfig.SSLCa
+		dest.SSLCert = mConfig.SSLCert
+		dest.SSLKey = mConfig.SSLKey
+		dest.TimeZone = mConfig.TimeZone
+		dest.WriteTimeout = mConfig.WriteTimeout
+		dest.ReadTimeout = mConfig.ReadTimeout
+		dest.Timeout = mConfig.Timeout
+		dest.EnableBatchDML = mConfig.EnableBatchDML
+		dest.EnableMultiStatement = mConfig.EnableMultiStatement
+		dest.EnableCachePreparedStatement = mConfig.EnableCachePreparedStatement
+	}
+	if err := mergo.Merge(dest, urlParameters, mergo.WithOverride); err != nil {
+		return nil, cerror.WrapError(cerror.ErrMySQLInvalidConfig, err)
+	}
+	return dest, nil
+}
+
+func getWorkerCount(values *urlConfig, workerCount *int) error {
+	if values.WorkerCount == nil {
+>>>>>>> 659435573d (sink(cdc): handle sink errors more fast and light (#8949))
 		return nil
 	}
 
