@@ -24,6 +24,7 @@ import (
 	"github.com/pingcap/tiflow/cdc/scheduler/schedulepb"
 	config2 "github.com/pingcap/tiflow/pkg/config"
 	cdcContext "github.com/pingcap/tiflow/pkg/context"
+	"github.com/pingcap/tiflow/pkg/filter"
 	"github.com/stretchr/testify/require"
 )
 
@@ -33,7 +34,9 @@ func createDDLManagerForTest(t *testing.T) *ddlManager {
 	ddlSink := &mockDDLSink{}
 	ddlPuller := &mockDDLPuller{}
 	cfg := config2.GetDefaultReplicaConfig()
-	schema, err := newSchemaWrap4Owner(nil, startTs, cfg, changefeedID)
+	f, err := filter.NewFilter(cfg, "")
+	require.Nil(t, err)
+	schema, err := newSchemaWrap4Owner(nil, startTs, cfg, changefeedID, f)
 	require.Equal(t, nil, err)
 	res := newDDLManager(
 		changefeedID,
