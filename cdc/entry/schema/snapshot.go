@@ -487,8 +487,8 @@ func (s *Snapshot) DoHandleDDL(job *timodel.Job) error {
 
 // TableCount counts tables in the snapshot. It's only for tests.
 func (s *Snapshot) TableCount(includeIneligible bool,
-	filter func(schema, table string) bool) (count int) {
-
+	filter func(schema, table string) bool,
+) (count int) {
 	s.IterTables(includeIneligible, func(i *model.TableInfo) {
 		if filter(i.TableName.Schema, i.TableName.Table) {
 			count++
