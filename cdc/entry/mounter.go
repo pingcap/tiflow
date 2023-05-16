@@ -236,10 +236,27 @@ func UnmarshalDDL(raw *model.RawKVEntry) (*timodel.Job, error) {
 	return job, nil
 }
 
+<<<<<<< HEAD
 func datum2Column(tableInfo *model.TableInfo, datums map[int64]types.Datum, fillWithDefaultValue bool) ([]*model.Column, error) {
 	cols := make([]*model.Column, len(tableInfo.RowColumnsOffset))
 	for _, colInfo := range tableInfo.Columns {
 		colSize := 0
+=======
+func datum2Column(
+	tableInfo *model.TableInfo, datums map[int64]types.Datum, fillWithDefaultValue bool,
+) ([]*model.Column, []types.Datum, []*timodel.ColumnInfo, []rowcodec.ColInfo, error) {
+	cols := make([]*model.Column, len(tableInfo.RowColumnsOffset))
+	rawCols := make([]types.Datum, len(tableInfo.RowColumnsOffset))
+
+	// columnInfos and rowColumnInfos hold different column metadata,
+	// they should have the same length and order.
+	columnInfos := make([]*timodel.ColumnInfo, len(tableInfo.RowColumnsOffset))
+	rowColumnInfos := make([]rowcodec.ColInfo, len(tableInfo.RowColumnsOffset))
+
+	_, _, extendColumnInfos := tableInfo.GetRowColInfos()
+
+	for idx, colInfo := range tableInfo.Columns {
+>>>>>>> 3b66572361 (mounter(ticdc): fix extend column info order to match the columns info (#8960))
 		if !model.IsColCDCVisible(colInfo) {
 			log.Debug("skip the column which is not visible",
 				zap.String("table", tableInfo.Name.O), zap.String("column", colInfo.Name.O))
@@ -262,7 +279,11 @@ func datum2Column(tableInfo *model.TableInfo, datums map[int64]types.Datum, fill
 			colValue, size, warn, err = getDefaultOrZeroValue(colInfo)
 		}
 		if err != nil {
+<<<<<<< HEAD
 			return nil, errors.Trace(err)
+=======
+			return nil, nil, nil, nil, errors.Trace(err)
+>>>>>>> 3b66572361 (mounter(ticdc): fix extend column info order to match the columns info (#8960))
 		}
 		if warn != "" {
 			log.Warn(warn, zap.String("table", tableInfo.TableName.String()), zap.String("column", colInfo.Name.String()))
@@ -279,12 +300,116 @@ func datum2Column(tableInfo *model.TableInfo, datums map[int64]types.Datum, fill
 			// ApproximateBytes = column data size + column struct size
 			ApproximateBytes: colSize + sizeOfEmptyColumn,
 		}
+<<<<<<< HEAD
 	}
 	return cols, nil
 }
 
 func (m *mounter) mountRowKVEntry(tableInfo *model.TableInfo, row *rowKVEntry, dataSize int64) (*model.RowChangedEvent, error) {
 	var err error
+=======
+		columnInfos[offset] = colInfo
+		rowColumnInfos[offset] = extendColumnInfos[idx]
+	}
+	return cols, rawCols, columnInfos, rowColumnInfos, nil
+}
+
+// return error if cannot get the expected checksum from the decoder
+// return false if the checksum is not matched
+// return true if the checksum is matched and the checksum is the matched one.
+func (m *mounter) verifyChecksum(
+	columnInfos []*timodel.ColumnInfo, rawColumns []types.Datum, isPreRow bool,
+) (uint32, int, bool, error) {
+	if !m.integrity.Enabled() {
+		return 0, 0, true, nil
+	}
+
+	var decoder *rowcodec.DatumMapDecoder
+	if isPreRow {
+		decoder = m.preDecoder
+	} else {
+		decoder = m.decoder
+	}
+	if decoder == nil {
+		return 0, 0, false, errors.New("cannot found the decoder to get the checksum")
+	}
+
+	version := decoder.ChecksumVersion()
+	// if the checksum cannot be found, which means the upstream TiDB checksum is not enabled,
+	// so return matched as true to skip check the event.
+	first, ok := decoder.GetChecksum()
+	if !ok {
+		return 0, version, true, nil
+	}
+
+	columns := make([]rowcodec.ColData, 0, len(rawColumns))
+	for idx, col := range columnInfos {
+		columns = append(columns, rowcodec.ColData{
+			ColumnInfo: col,
+			Datum:      &rawColumns[idx],
+		})
+	}
+	sort.Slice(columns, func(i, j int) bool {
+		return columns[i].ID < columns[j].ID
+	})
+	calculator := rowcodec.RowData{
+		Cols: columns,
+		Data: make([]byte, 0),
+	}
+
+	checksum, err := calculator.Checksum()
+	if err != nil {
+		log.Error("failed to calculate the checksum", zap.Error(err))
+		return 0, version, false, errors.Trace(err)
+	}
+
+	// the first checksum matched, it hits in the most case.
+	if checksum == first {
+		log.Debug("checksum matched",
+			zap.Uint32("checksum", checksum), zap.Uint32("first", first))
+		return checksum, version, true, nil
+	}
+
+	extra, ok := decoder.GetExtraChecksum()
+	if !ok {
+		log.Error("cannot found the extra checksum, the first checksum mismatched",
+			zap.Uint32("checksum", checksum),
+			zap.Uint32("first", first),
+			zap.Uint32("extra", extra))
+		return checksum, version,
+			false, errors.New("cannot found the extra checksum from the event")
+	}
+
+	if checksum == extra {
+		log.Debug("extra checksum matched, this may happen the upstream TiDB is during the DDL"+
+			"execution phase",
+			zap.Uint32("checksum", checksum),
+			zap.Uint32("extra", extra))
+		return checksum, version, true, nil
+	}
+
+	log.Error("checksum mismatch",
+		zap.Uint32("checksum", checksum),
+		zap.Uint32("first", first),
+		zap.Uint32("extra", extra))
+	return checksum, version, false, nil
+}
+
+func (m *mounter) mountRowKVEntry(tableInfo *model.TableInfo, row *rowKVEntry, dataSize int64) (*model.RowChangedEvent, model.RowChangedDatums, error) {
+	var (
+		rawRow            model.RowChangedDatums
+		columnInfos       []*timodel.ColumnInfo
+		extendColumnInfos []rowcodec.ColInfo
+		matched           bool
+		err               error
+
+		checksum *integrity.Checksum
+
+		checksumVersion int
+		corrupted       bool
+	)
+
+>>>>>>> 3b66572361 (mounter(ticdc): fix extend column info order to match the columns info (#8960))
 	// Decode previous columns.
 	var preCols []*model.Column
 	// Since we now always use old value internally,
@@ -295,7 +420,11 @@ func (m *mounter) mountRowKVEntry(tableInfo *model.TableInfo, row *rowKVEntry, d
 	if row.PreRowExist {
 		// FIXME(leoppro): using pre table info to mounter pre column datum
 		// the pre column and current column in one event may using different table info
+<<<<<<< HEAD
 		preCols, err = datum2Column(tableInfo, row.PreRow, m.enableOldValue)
+=======
+		preCols, preRawCols, columnInfos, extendColumnInfos, err = datum2Column(tableInfo, row.PreRow, m.enableOldValue)
+>>>>>>> 3b66572361 (mounter(ticdc): fix extend column info order to match the columns info (#8960))
 		if err != nil {
 			return nil, errors.Trace(err)
 		}
@@ -314,7 +443,11 @@ func (m *mounter) mountRowKVEntry(tableInfo *model.TableInfo, row *rowKVEntry, d
 
 	var cols []*model.Column
 	if row.RowExist {
+<<<<<<< HEAD
 		cols, err = datum2Column(tableInfo, row.Row, true)
+=======
+		cols, rawCols, columnInfos, extendColumnInfos, err = datum2Column(tableInfo, row.Row, true)
+>>>>>>> 3b66572361 (mounter(ticdc): fix extend column info order to match the columns info (#8960))
 		if err != nil {
 			return nil, errors.Trace(err)
 		}
@@ -327,12 +460,27 @@ func (m *mounter) mountRowKVEntry(tableInfo *model.TableInfo, row *rowKVEntry, d
 		intRowID = row.RecordID.IntValue()
 	}
 
+<<<<<<< HEAD
 	var tableInfoVersion uint64
 	// Align with the old format if old value disabled.
 	if row.Delete && !m.enableOldValue {
 		tableInfoVersion = 0
 	} else {
 		tableInfoVersion = tableInfo.TableInfoVersion
+=======
+	rawRow.PreRowDatums = preRawCols
+	rawRow.RowDatums = rawCols
+
+	// if both are 0, it means the checksum is not enabled
+	// so the checksum is nil to reduce memory allocation.
+	if preChecksum != 0 || current != 0 {
+		checksum = &integrity.Checksum{
+			Current:   current,
+			Previous:  preChecksum,
+			Corrupted: corrupted,
+			Version:   checksumVersion,
+		}
+>>>>>>> 3b66572361 (mounter(ticdc): fix extend column info order to match the columns info (#8960))
 	}
 
 	_, _, colInfos := tableInfo.GetRowColInfos()
@@ -348,9 +496,19 @@ func (m *mounter) mountRowKVEntry(tableInfo *model.TableInfo, row *rowKVEntry, d
 			TableID:     row.PhysicalTableID,
 			IsPartition: tableInfo.GetPartitionInfo() != nil,
 		},
+<<<<<<< HEAD
 		ColInfos:            colInfos,
 		Columns:             cols,
 		PreColumns:          preCols,
+=======
+		ColInfos:   extendColumnInfos,
+		TableInfo:  tableInfo,
+		Columns:    cols,
+		PreColumns: preCols,
+
+		Checksum: checksum,
+
+>>>>>>> 3b66572361 (mounter(ticdc): fix extend column info order to match the columns info (#8960))
 		IndexColumns:        tableInfo.IndexColumnsOffset,
 		ApproximateDataSize: dataSize,
 	}, nil
