@@ -284,7 +284,7 @@ func decodeHeaders(bits []byte, numHeaders int, allocator *SliceAllocator, dict 
 	}, nil
 }
 
-/// Column group in columnar layout
+// / Column group in columnar layout
 type columnGroup struct {
 	ty     byte
 	names  []string

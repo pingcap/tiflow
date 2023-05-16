@@ -48,10 +48,10 @@ func init() {
 // It tries different techniques employed by different operating systems,
 // returning the first valid address it finds, or an empty string.
 //
-// * /run/user/<uid>/bus           if this exists, it *is* the bus socket. present on
-//                                 Ubuntu 18.04
-// * /run/user/<uid>/dbus-session: if this exists, it can be parsed for the bus
-//                                 address. present on Ubuntu 16.04
+//   - /run/user/<uid>/bus           if this exists, it *is* the bus socket. present on
+//     Ubuntu 18.04
+//   - /run/user/<uid>/dbus-session: if this exists, it can be parsed for the bus
+//     address. present on Ubuntu 16.04
 //
 // See https://dbus.freedesktop.org/doc/dbus-launch.1.html
 func canDiscoverDbusSessionBusAddress() bool {

@@ -32,6 +32,7 @@ import (
 )
 
 // SampleConfigFile is sample config file of dm-worker.
+//
 //go:embed dm-worker.toml
 var SampleConfigFile string
 

@@ -1150,10 +1150,10 @@ func (s *eventFeedSession) getRPCContextForRegion(ctx context.Context, id tikv.R
 // receiveFromStream receives gRPC messages from a stream continuously and sends
 // messages to region worker, if `stream.Recv` meets error, this routine will exit
 // silently. As for regions managed by this routine, there are two situations:
-// 1. established regions: a `nil` event will be sent to region worker, and region
-//    worker call `s.onRegionFail` to re-establish these regions.
-// 2. pending regions: call `s.onRegionFail` for each pending region before this
-//    routine exits to establish these regions.
+//  1. established regions: a `nil` event will be sent to region worker, and region
+//     worker call `s.onRegionFail` to re-establish these regions.
+//  2. pending regions: call `s.onRegionFail` for each pending region before this
+//     routine exits to establish these regions.
 func (s *eventFeedSession) receiveFromStream(
 	ctx context.Context,
 	g *errgroup.Group,

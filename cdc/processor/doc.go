@@ -23,14 +23,13 @@ The TablePipeline listens to the kv change logs of a specified table(with its ma
 The relationship between the three module is as follows:
 
 One Capture(with processor role)  -> Processor Manager -> Processor(changefeed1) -> TablePipeline(tableA)
-                                                      ╲                         ╲
-                                                       ╲                         -> TablePipeline(tableB)
-                                                        ╲
-                                                         ╲
-                                                          -> Processor(changefeed2) -> TablePipeline(tableC)
-                                                                                    ╲
-                                                                                     -> TablePipeline(tableD)
 
-
+	╲                         ╲
+	 ╲                         -> TablePipeline(tableB)
+	  ╲
+	   ╲
+	    -> Processor(changefeed2) -> TablePipeline(tableC)
+	                              ╲
+	                               -> TablePipeline(tableD)
 */
 package processor

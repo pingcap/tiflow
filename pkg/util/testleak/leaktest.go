@@ -96,14 +96,16 @@ var (
 // It's used for check.Suite.SetUpSuite() function.
 // Now it's only used in the tidb_test.go.
 // Note: it's not accurate, consider the following function:
-// func loop() {
-//   for {
-//     select {
-//       case <-ticker.C:
-//         DoSomething()
-//     }
-//   }
-// }
+//
+//	func loop() {
+//	  for {
+//	    select {
+//	      case <-ticker.C:
+//	        DoSomething()
+//	    }
+//	  }
+//	}
+//
 // If this loop step into DoSomething() during BeforeTest(), the stack for this goroutine will contain DoSomething().
 // Then if this loop jumps out of DoSomething during AfterTest(), the stack for this goroutine will not contain DoSomething().
 // Resulting in false-positive leak reports.

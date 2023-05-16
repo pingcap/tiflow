@@ -23,9 +23,9 @@ import (
 )
 
 // FileAllocator has two functionalities:
-// 1. create new file or reuse the existing file (the existing tmp file will be cleared)
-//    beforehand for file write.
-// 2. pre-allocate disk space to mitigate the overhead of file metadata updating.
+//  1. create new file or reuse the existing file (the existing tmp file will be cleared)
+//     beforehand for file write.
+//  2. pre-allocate disk space to mitigate the overhead of file metadata updating.
 //
 // ref: https://github.com/etcd-io/etcd/pull/4785
 type FileAllocator struct {

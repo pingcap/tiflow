@@ -86,7 +86,7 @@ func encodeString(bits []byte, data string) []byte {
 	return append(bits, data...)
 }
 
-/// Chunk encoders
+// / Chunk encoders
 func encodeStringChunk(bits []byte, data []string) []byte {
 	for _, s := range data {
 		bits = encodeUvarint(bits, uint64(len(s)))

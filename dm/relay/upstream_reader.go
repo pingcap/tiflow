@@ -36,8 +36,9 @@ type RResult struct {
 // Reader reads binlog events from a upstream master server.
 // The read binlog events should be send to a transformer.
 // The reader should support:
-//   1. handle expected errors
-//   2. do retry if possible
+//  1. handle expected errors
+//  2. do retry if possible
+//
 // NOTE: some errors still need to be handled in the outer caller.
 type Reader interface {
 	// Start starts the reading process.

@@ -712,8 +712,8 @@ func (s *snapshot) doDropTable(tbInfo *model.TableInfo, currentTs uint64) {
 
 // truncateTable truncate the table with the given ID, and replace it with a new `tbInfo`.
 // NOTE: after a table is truncated:
-//   * physicalTableByID(id) will return nil;
-//   * IsTruncateTableID(id) should return true.
+//   - physicalTableByID(id) will return nil;
+//   - IsTruncateTableID(id) should return true.
 func (s *snapshot) truncateTable(id int64, tbInfo *model.TableInfo, currentTs uint64) (err error) {
 	old, ok := s.physicalTableByID(id)
 	if !ok {

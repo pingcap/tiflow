@@ -137,7 +137,7 @@ func FullOpFunc(cmps []clientv3.Cmp, opsThen, opsElse []clientv3.Op) EtcdOpFunc 
 }
 
 // IsRetryableError returns true if the etcd error is retryable to write ** repeatable **.
-//// https://github.com/etcd-io/etcd/blob/v3.5.2/client/v3/retry.go#L53
+// // https://github.com/etcd-io/etcd/blob/v3.5.2/client/v3/retry.go#L53
 func IsRetryableError(err error) bool {
 	err = errors.Cause(err)
 	switch err {

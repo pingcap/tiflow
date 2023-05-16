@@ -32,8 +32,9 @@ import (
 	"go.uber.org/zap"
 )
 
-//go:generate mockery --name=RedoLogReader --inpackage
 // RedoLogReader is a reader abstraction for redo log storage layer
+//
+//go:generate mockery --name=RedoLogReader --inpackage
 type RedoLogReader interface {
 	io.Closer
 

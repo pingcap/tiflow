@@ -50,16 +50,19 @@ type ResumeStrategy int
 // in task status checker.
 // operation of different strategies:
 // ResumeIgnore:
-//	1. check duration since latestPausedTime, if larger than backoff rollback, rollback backoff once
+//  1. check duration since latestPausedTime, if larger than backoff rollback, rollback backoff once
+//
 // ResumeNoSense:
-//	1. update latestPausedTime
-//	2. update latestBlockTime
+//  1. update latestPausedTime
+//  2. update latestBlockTime
+//
 // ResumeSkip:
-//	1. update latestPausedTime
+//  1. update latestPausedTime
+//
 // ResumeDispatch:
-//	1. update latestPausedTime
-//	2. dispatch auto resume task
-//	3. if step2 successes, update latestResumeTime, forward backoff
+//  1. update latestPausedTime
+//  2. dispatch auto resume task
+//  3. if step2 successes, update latestResumeTime, forward backoff
 const (
 	// When a task is not in paused state, or paused by manually, or we can't get enough information from worker
 	// to determine whether this task is paused because of some error, we will apply ResumeIgnore strategy, and

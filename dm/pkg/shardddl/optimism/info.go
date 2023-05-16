@@ -167,13 +167,15 @@ func infoFromJSON(s string) (i Info, err error) {
 
 // PutInfo puts the shard DDL info into etcd.
 // NOTE:
-//   In some cases before the lock resolved, the same DDL info may be PUT multiple times:
-//     1. start-task after stop-task.
-//     2. resume-task after paused manually or automatically.
-//     3. the task scheduled to another DM-worker instance (just like case-1).
-//   Then we need to ensure re-PUT is safe:
-//     1. DM-master can construct the lock and do the coordination correctly.
-//     2. DM-worker can re-PUT and comply with the coordination correctly.
+//
+//	In some cases before the lock resolved, the same DDL info may be PUT multiple times:
+//	  1. start-task after stop-task.
+//	  2. resume-task after paused manually or automatically.
+//	  3. the task scheduled to another DM-worker instance (just like case-1).
+//	Then we need to ensure re-PUT is safe:
+//	  1. DM-master can construct the lock and do the coordination correctly.
+//	  2. DM-worker can re-PUT and comply with the coordination correctly.
+//
 // This function should often be called by DM-worker.
 func PutInfo(cli *clientv3.Client, info Info) (int64, error) {
 	op, err := putInfoOp(info)
