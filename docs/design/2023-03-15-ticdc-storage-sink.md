@@ -59,18 +59,18 @@ s3://bucket/prefix1/prefix2                                   <prefix>
     ├── meta
     │   └── schema_441349361156227000_3233644819.json         [database schema file]
     └── table1                                                <table>
-        ├── 441349361156227074                                <table-version-separator>
-        │   └── 13                                            <partition-separator, optional>
-        │       ├── 2023-05-09                                <date-separator, optional>
-        │       │   ├── CDC00000000000000000001.csv
-        │       │   └── meta
-        │       │       └── CDC.index
-        │       └── 2023-05-10                                <date-separator, optional>
-        │           ├── CDC00000000000000000001.csv
-        │           └── meta
-        │               └── CDC.index
-        └── meta
-            └── schema_441349361156227074_3131721815.json     [table schema file]
+        │── meta
+        │   └── schema_441349361156227074_3131721815.json     [table schema file]
+        └── 441349361156227074                                <table-version-separator>
+            └── 13                                            <partition-separator, optional>
+                ├── 2023-05-09                                <date-separator, optional>
+                │   ├── CDC00000000000000000001.csv
+                │   └── meta
+                │       └── CDC.index
+                └── 2023-05-10                                <date-separator, optional>
+                    ├── CDC00000000000000000001.csv
+                    └── meta
+                       └── CDC.index
 ```
 
 #### Data change records
