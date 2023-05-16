@@ -739,12 +739,21 @@ func TestExplicitTables(t *testing.T) {
 	snap3, err := schema.NewSnapshotFromMeta(meta2, ver2.Ver, true /* forceReplicate */, f)
 	require.Nil(t, err)
 
-	require.Equal(t, snap2.TableCount(true)-snap1.TableCount(true), 5)
-	// some system tables are also ineligible
-	require.GreaterOrEqual(t, snap2.TableCount(false), 4)
+	// we don't need to count system tables since TiCDC
+	// don't replicate them and TiDB change them frequently,
+	// so we don't need to consider them in the table count
+	systemTablesFilter := func(dbName, tableName string) bool {
+		return dbName != "mysql" && dbName != "information_schema"
+	}
+	require.Equal(t, 5, snap2.TableCount(true,
+		systemTablesFilter)-snap1.TableCount(true, systemTablesFilter))
+	// only test simple_test1 included
+	require.Equal(t, 1, snap2.TableCount(false, systemTablesFilter))
 
-	require.Equal(t, snap3.TableCount(true)-snap1.TableCount(true), 5)
-	require.Equal(t, snap3.TableCount(false), 47)
+	require.Equal(t, 5, snap3.TableCount(true,
+		systemTablesFilter)-snap1.TableCount(true, systemTablesFilter))
+	// since we create a snapshot from meta2 and forceReplicate is true, so all tables are included
+	require.Equal(t, 5, snap3.TableCount(false, systemTablesFilter))
 }
 
 /*
