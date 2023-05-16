@@ -145,7 +145,13 @@ func (d *decoder) NextRowChangedEvent() (*model.RowChangedEvent, error) {
 		var holder map[string]interface{}
 		switch ty := field["type"].(type) {
 		case []interface{}:
-			holder = ty[1].(map[string]interface{})["connect.parameters"].(map[string]interface{})
+			if m, ok := ty[0].(map[string]interface{}); ok {
+				holder = m["connect.parameters"].(map[string]interface{})
+			} else if m, ok := ty[1].(map[string]interface{}); ok {
+				holder = m["connect.parameters"].(map[string]interface{})
+			} else {
+				log.Panic("type info is anything else", zap.Any("typeInfo", field["type"]))
+			}
 		case map[string]interface{}:
 			holder = ty["connect.parameters"].(map[string]interface{})
 		default:
@@ -278,6 +284,7 @@ func (d *decoder) NextResolvedEvent() (uint64, error) {
 		return 0, errors.New("value should not be empty")
 	}
 	ts := binary.BigEndian.Uint64(d.value[1:])
+	d.value = nil
 	return ts, nil
 }
 
@@ -297,6 +304,7 @@ func (d *decoder) NextDDLEvent() (*model.DDLEvent, error) {
 	if err != nil {
 		return nil, errors.WrapError(errors.ErrDecodeFailed, err)
 	}
+	d.value = nil
 	return result, nil
 }
 
@@ -391,9 +399,6 @@ func (d *decoder) verifyChecksum(columns []*model.Column, expected uint64) error
 			zap.Uint32("actual", checksum))
 		return errors.New("checksum mismatch")
 	}
-
-	log.Debug("checksum passed",
-		zap.Uint64("expected", expected), zap.Uint32("actual", checksum))
 
 	return nil
 }
