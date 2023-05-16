@@ -1216,13 +1216,7 @@ func (p *processor) Close(ctx cdcContext.Context) error {
 			log.Info("Processor try to close sink manager",
 				zap.String("namespace", p.changefeedID.Namespace),
 				zap.String("changefeed", p.changefeedID.ID))
-			if err := p.sinkManager.Close(); err != nil {
-				log.Error("Failed to close sink manager",
-					zap.String("namespace", p.changefeedID.Namespace),
-					zap.String("changefeed", p.changefeedID.ID),
-					zap.Error(err))
-				return errors.Trace(err)
-			}
+			p.sinkManager.Close()
 			log.Info("Processor closed sink manager successfully",
 				zap.String("namespace", p.changefeedID.Namespace),
 				zap.String("changefeed", p.changefeedID.ID))

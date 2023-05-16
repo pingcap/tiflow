@@ -125,7 +125,11 @@ type changefeed struct {
 		filter filter.Filter,
 	) (puller.DDLPuller, error)
 
-	newSink      func(changefeedID model.ChangeFeedID, info *model.ChangeFeedInfo, reportErr func(error)) DDLSink
+	newSink func(
+		changefeedID model.ChangeFeedID, info *model.ChangeFeedInfo,
+		reportError func(err error), reportWarning func(err error),
+	) DDLSink
+
 	newScheduler func(
 		ctx cdcContext.Context, pdClock pdutil.Clock, epoch uint64,
 	) (scheduler.Scheduler, error)
@@ -167,7 +171,10 @@ func newChangefeed4Test(
 		schemaStorage entry.SchemaStorage,
 		filter filter.Filter,
 	) (puller.DDLPuller, error),
-	newSink func(changefeedID model.ChangeFeedID, info *model.ChangeFeedInfo, reportErr func(err error)) DDLSink,
+	newSink func(
+		changefeedID model.ChangeFeedID, info *model.ChangeFeedInfo,
+		reportError func(err error), reportWarning func(err error),
+	) DDLSink,
 	newScheduler func(
 		ctx cdcContext.Context, pdClock pdutil.Clock, epoch uint64,
 	) (scheduler.Scheduler, error),
@@ -278,11 +285,7 @@ func (c *changefeed) tick(ctx cdcContext.Context, captures map[model.CaptureID]*
 		return errors.Trace(err)
 	default:
 	}
-	// we need to wait ddl ddlSink to be ready before we do the other things
-	// otherwise, we may cause a nil pointer panic when we try to write to the ddl ddlSink.
-	if !c.ddlSink.isInitialized() {
-		return nil
-	}
+
 	// TODO: pass table checkpointTs when we support concurrent process ddl
 	allPhysicalTables, barrier, err := c.ddlManager.tick(ctx, preCheckpointTs, nil)
 	if err != nil {
@@ -566,7 +569,13 @@ LOOP:
 		zap.String("changefeed", c.id.ID),
 	)
 
-	c.ddlSink = c.newSink(c.id, c.state.Info, ctx.Throw)
+	c.ddlSink = c.newSink(c.id, c.state.Info, ctx.Throw, func(err error) {
+		// TODO(qupeng): report the warning.
+		log.Warn("ddlSink internal error",
+			zap.String("namespace", c.id.Namespace),
+			zap.String("changefeed", c.id.ID),
+			zap.Error(err))
+	})
 	c.ddlSink.run(cancelCtx)
 
 	c.ddlPuller, err = c.newDDLPuller(cancelCtx,

@@ -167,6 +167,26 @@ func TestIsChangefeedUnRetryableError(t *testing.T) {
 			err:      WrapChangefeedUnretryableErr(errors.New("whatever")),
 			expected: true,
 		},
+		{
+			err:      WrapError(ErrSinkURIInvalid, errors.New("test")),
+			expected: true,
+		},
+		{
+			err:      WrapError(ErrKafkaInvalidConfig, errors.New("test")),
+			expected: true,
+		},
+		{
+			err:      WrapError(ErrMySQLInvalidConfig, errors.New("test")),
+			expected: true,
+		},
+		{
+			err:      WrapError(ErrStorageSinkInvalidConfig, errors.New("test")),
+			expected: true,
+		},
+		{
+			err:      errors.Trace(WrapError(ErrStorageSinkInvalidConfig, errors.New("test"))),
+			expected: true,
+		},
 	}
 
 	for _, c := range cases {
