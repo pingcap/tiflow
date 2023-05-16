@@ -280,8 +280,12 @@ func (m *schemaManager) Lookup(
 		log.Error("Creating Avro codec failed", zap.Error(err))
 		return nil, 0, cerror.WrapError(cerror.ErrAvroSchemaAPIError, err)
 	}
+<<<<<<< HEAD:cdc/sink/codec/avro/schema_registry.go
 	cacheEntry.registryID = jsonResp.RegistryID
 	cacheEntry.tiSchemaID = tiSchemaID
+=======
+	cacheEntry.schemaID = schemaID
+>>>>>>> 3b66572361 (mounter(ticdc): fix extend column info order to match the columns info (#8960)):pkg/sink/codec/avro/schema_registry.go
 
 	m.cacheRWLock.Lock()
 	m.cache[key] = cacheEntry
