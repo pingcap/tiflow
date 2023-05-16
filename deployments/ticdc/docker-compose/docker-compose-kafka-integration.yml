@@ -53,6 +53,7 @@ services:
       context: ../../../
       dockerfile: ./deployments/ticdc/docker/integration-test.Dockerfile
       args:
+        BRANCH: ${BRANCH}
         COMMUNITY: ${COMMUNITY}
         VERSION: ${VERSION} 
         OS: ${SYS}

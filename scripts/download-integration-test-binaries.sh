@@ -22,16 +22,22 @@
 set -o errexit
 set -o pipefail
 
-# Specify if download the community version
+# Specify which branch to be utilized for executing the test, which is
+# exclusively accessible when obtaining binaries from
+# http://fileserver.pingcap.net.
+branch=${1:-master}
+# Specify whether to download the community version of binaries, the following
+# four arguments are applicable only when utilizing the community version of
+# binaries.
 community=${2:-false}
+# Specify which version of the community binaries that will be utilized.
 ver=${3:-v6.5.2}
+# Specify which os that will be used to pack the binaries.
 os=${4:-linux}
+# Specify which architecture that will be used to pack the binaries.
 arch=${5:-amd64}
 
 set -o nounset
-
-# Specify the download branch.
-branch=$1
 
 # See https://misc.flogisoft.com/bash/tip_colors_and_formatting.
 color-green() { # Green
