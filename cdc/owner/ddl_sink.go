@@ -360,12 +360,9 @@ func (s *ddlSinkImpl) emitSyncPoint(ctx context.Context, checkpointTs uint64) (e
 			return nil
 		}
 		if !cerror.IsChangefeedUnRetryableError(err) && errors.Cause(err) != context.Canceled {
-			s.reportWarning(err)
-			if s.syncPointStore != nil {
-				_ = s.syncPointStore.Close()
-				s.syncPointStore = nil
-			}
-			continue
+			// TODO(qupeng): retry it internally after async sink syncPoint is ready.
+			s.reportError(err)
+			return err
 		}
 		s.reportError(err)
 		return err
