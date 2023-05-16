@@ -60,8 +60,8 @@ func (m *writeSplitter) split(
 	}
 
 	pages := totalCaptures
-	if len(regions)/config.RegionThreshold > pages {
-		pages = len(regions) / config.RegionThreshold
+	if len(regions)/spanRegionLimit > pages {
+		pages = len(regions) / spanRegionLimit
 	}
 
 	if pages <= 1 {
@@ -78,7 +78,7 @@ func (m *writeSplitter) split(
 		regions,
 		config.WriteKeyThreshold,
 		pages,
-		config.RegionThreshold)
+		spanRegionLimit)
 
 	log.Info("schedulerv3: split span by written keys",
 		zap.String("namespace", m.changefeedID.Namespace),
@@ -88,7 +88,8 @@ func (m *writeSplitter) split(
 		zap.Ints("weights", info.Weights),
 		zap.Int("spans", len(info.Spans)),
 		zap.Int("totalCaptures", totalCaptures),
-		zap.Int("writeKeyThreshold", config.WriteKeyThreshold))
+		zap.Int("writeKeyThreshold", config.WriteKeyThreshold),
+		zap.Int("spanRegionLimit", spanRegionLimit))
 	return info.Spans
 }
 
@@ -102,7 +103,7 @@ type splitRegionsInfo struct {
 // pages is the number of splits to make, actually it is the number of captures.
 func splitRegionsByWrittenKeys(
 	tableID model.TableID, regions []pdutil.RegionInfo,
-	writeKeyThreshold int, pages int, regionThreshold int,
+	writeKeyThreshold int, pages int, spanRegionLimit int,
 ) *splitRegionsInfo {
 	decodeKey := func(hexkey string) []byte {
 		key, _ := hex.DecodeString(hexkey)
@@ -149,7 +150,7 @@ func splitRegionsByWrittenKeys(
 			if (idx > pageStartIdx) &&
 				((restPages >= restRegions) ||
 					(accWrittenKeys+currentWrittenKeys > writtenKeysPerPage) ||
-					pageRegionsCount >= regionThreshold) {
+					pageRegionsCount >= spanRegionLimit) {
 				spans = append(spans, tablepb.Span{
 					TableID:  tableID,
 					StartKey: tablepb.Key(decodeKey(regions[pageStartIdx].StartKey)),

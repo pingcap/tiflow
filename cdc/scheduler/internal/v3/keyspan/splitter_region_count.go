@@ -72,10 +72,10 @@ func (m *regionCountSplitter) split(
 		pages = 1
 	}
 
-	if totalRegions/config.RegionThreshold > pages {
-		pages = totalRegions / config.RegionThreshold
+	if totalRegions/spanRegionLimit > pages {
+		pages = totalRegions / spanRegionLimit
 	}
-	
+
 	stepper := newEvenlySplitStepper(pages, totalRegions)
 	spans := make([]tablepb.Span, 0, stepper.SpanCount())
 	start, end := 0, stepper.Step()
@@ -135,7 +135,8 @@ func (m *regionCountSplitter) split(
 		zap.Int("spans", len(spans)),
 		zap.Int("totalCaptures", totalCaptures),
 		zap.Int("regionCount", len(regions)),
-		zap.Int("regionThreshold", config.RegionThreshold))
+		zap.Int("regionThreshold", config.RegionThreshold),
+		zap.Int("spanRegionLimit", spanRegionLimit))
 	return spans
 }
 

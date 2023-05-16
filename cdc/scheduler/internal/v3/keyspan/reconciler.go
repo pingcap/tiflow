@@ -30,6 +30,8 @@ import (
 	"go.uber.org/zap"
 )
 
+const spanRegionLimit = 50000
+
 type splitter interface {
 	split(
 		ctx context.Context, span tablepb.Span, totalCaptures int,
@@ -149,14 +151,14 @@ func (m *Reconciler) Reconcile(
 				zap.String("foundEnd", coveredSpans[len(coveredSpans)-1].String()))
 			spans := make([]tablepb.Span, 0, len(coveredSpans)+len(holes))
 			spans = append(spans, coveredSpans...)
-
-			// fill tableID for holes spans
 			for _, s := range holes {
-				s.TableID = tableID
+				spans = append(spans, tablepb.Span{
+					TableID:  tableID,
+					StartKey: s.StartKey,
+					EndKey:   s.EndKey,
+				})
+				// TODO: maybe we should split holes too.
 			}
-
-			spans = append(spans, holes...)
-
 			m.tableSpans[tableID] = splittedSpans{
 				byAddTable: false,
 				spans:      spans,
