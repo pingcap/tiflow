@@ -26,13 +26,14 @@ import (
 	"github.com/pingcap/errors"
 	"github.com/pingcap/failpoint"
 	"github.com/pingcap/log"
+	"go.uber.org/zap"
+
 	"github.com/pingcap/tiflow/cdc/contextutil"
 	"github.com/pingcap/tiflow/cdc/model"
 	"github.com/pingcap/tiflow/cdc/sink/mq/codec"
 	cerror "github.com/pingcap/tiflow/pkg/errors"
 	"github.com/pingcap/tiflow/pkg/kafka"
 	"github.com/pingcap/tiflow/pkg/util"
-	"go.uber.org/zap"
 )
 
 const (
@@ -555,13 +556,18 @@ func getBrokerConfig(admin kafka.ClusterAdminClient, brokerConfigName string) (s
 		return "", err
 	}
 
-	if len(configEntries) == 0 || configEntries[0].Name != brokerConfigName {
-		log.Warn("Kafka config item not found", zap.String("configName", brokerConfigName))
-		return "", cerror.ErrKafkaBrokerConfigNotFound.GenWithStack(
-			"cannot find the `%s` from the broker's configuration", brokerConfigName)
+	// For compatibility with KOP, we checked all return values.
+	// 1. Kafka only returns requested configs.
+	// 2. Kop returns all configs.
+	for _, entry := range configEntries {
+		if entry.Name == brokerConfigName {
+			return entry.Value, nil
+		}
 	}
-
-	return configEntries[0].Value, nil
+	log.Warn("Kafka config item not found",
+		zap.String("configName", brokerConfigName))
+	return "", cerror.ErrKafkaBrokerConfigNotFound.GenWithStack(
+		"cannot find the `%s` from the broker's configuration", brokerConfigName)
 }
 
 // getTopicConfig gets topic config by name.
