@@ -20,6 +20,7 @@ import (
 	"testing"
 
 	"github.com/pingcap/errors"
+	"github.com/pingcap/log"
 	ticonfig "github.com/pingcap/tidb/config"
 	"github.com/pingcap/tidb/ddl"
 	"github.com/pingcap/tidb/domain"
@@ -35,9 +36,12 @@ import (
 	"github.com/pingcap/tiflow/cdc/entry/schema"
 	"github.com/pingcap/tiflow/cdc/kv"
 	"github.com/pingcap/tiflow/cdc/model"
+	"github.com/pingcap/tiflow/pkg/config"
+	"github.com/pingcap/tiflow/pkg/filter"
 	"github.com/pingcap/tiflow/pkg/util"
 	"github.com/stretchr/testify/require"
 	"github.com/tikv/client-go/v2/oracle"
+	"go.uber.org/zap"
 )
 
 func TestSchema(t *testing.T) {
@@ -540,7 +544,9 @@ func TestMultiVersionStorage(t *testing.T) {
 	}
 
 	jobs = append(jobs, job)
-	storage, err := NewSchemaStorage(nil, 0, false, dummyChangeFeedID, util.RoleTester)
+	f, err := filter.NewFilter(config.GetDefaultReplicaConfig(), "")
+	require.Nil(t, err)
+	storage, err := NewSchemaStorage(nil, 0, false, dummyChangeFeedID, util.RoleTester, f)
 	require.Nil(t, err)
 	for _, job := range jobs {
 		err := storage.HandleDDLJob(job)
@@ -619,9 +625,8 @@ func TestMultiVersionStorage(t *testing.T) {
 	require.False(t, exist)
 
 	lastSchemaTs := storage.DoGC(0)
-	// Snapshot.InitConcurrentDDLTables will create a schema with ts = 1
-	require.Equal(t, uint64(1), lastSchemaTs)
 
+	require.Equal(t, uint64(0), lastSchemaTs)
 	snap, err = storage.GetSnapshot(ctx, 100)
 	require.Nil(t, err)
 	_, exist = snap.SchemaByID(11)
@@ -685,7 +690,9 @@ func TestCreateSnapFromMeta(t *testing.T) {
 	require.Nil(t, err)
 	meta, err := kv.GetSnapshotMeta(store, ver.Ver)
 	require.Nil(t, err)
-	snap, err := schema.NewSnapshotFromMeta(meta, ver.Ver, false)
+	f, err := filter.NewFilter(config.GetDefaultReplicaConfig(), "")
+	require.Nil(t, err)
+	snap, err := schema.NewSnapshotFromMeta(meta, ver.Ver, false, f)
 	require.Nil(t, err)
 	_, ok := snap.TableByName("test", "simple_test1")
 	require.True(t, ok)
@@ -721,21 +728,32 @@ func TestExplicitTables(t *testing.T) {
 	require.Nil(t, err)
 	meta1, err := kv.GetSnapshotMeta(store, ver1.Ver)
 	require.Nil(t, err)
-	snap1, err := schema.NewSnapshotFromMeta(meta1, ver1.Ver, true /* forceReplicate */)
+	f, err := filter.NewFilter(config.GetDefaultReplicaConfig(), "")
+	require.Nil(t, err)
+	snap1, err := schema.NewSnapshotFromMeta(meta1, ver1.Ver, true /* forceReplicate */, f)
 	require.Nil(t, err)
 	meta2, err := kv.GetSnapshotMeta(store, ver2.Ver)
 	require.Nil(t, err)
-	snap2, err := schema.NewSnapshotFromMeta(meta2, ver2.Ver, false /* forceReplicate */)
+	snap2, err := schema.NewSnapshotFromMeta(meta2, ver2.Ver, false /* forceReplicate */, f)
 	require.Nil(t, err)
-	snap3, err := schema.NewSnapshotFromMeta(meta2, ver2.Ver, true /* forceReplicate */)
+	snap3, err := schema.NewSnapshotFromMeta(meta2, ver2.Ver, true /* forceReplicate */, f)
 	require.Nil(t, err)
 
-	require.Equal(t, snap2.TableCount(true)-snap1.TableCount(true), 5)
-	// some system tables are also ineligible
-	require.GreaterOrEqual(t, snap2.TableCount(false), 4)
+	// we don't need to count system tables since TiCDC
+	// don't replicate them and TiDB change them frequently,
+	// so we don't need to consider them in the table count
+	systemTablesFilter := func(dbName, tableName string) bool {
+		return dbName != "mysql" && dbName != "information_schema"
+	}
+	require.Equal(t, 5, snap2.TableCount(true,
+		systemTablesFilter)-snap1.TableCount(true, systemTablesFilter))
+	// only test simple_test1 included
+	require.Equal(t, 1, snap2.TableCount(false, systemTablesFilter))
 
-	require.Equal(t, snap3.TableCount(true)-snap1.TableCount(true), 5)
-	require.Equal(t, snap3.TableCount(false), 47)
+	require.Equal(t, 5, snap3.TableCount(true,
+		systemTablesFilter)-snap1.TableCount(true, systemTablesFilter))
+	// since we create a snapshot from meta2 and forceReplicate is true, so all tables are included
+	require.Equal(t, 5, snap3.TableCount(false, systemTablesFilter))
 }
 
 /*
@@ -854,9 +872,13 @@ func TestSchemaStorage(t *testing.T) {
 			tk.MustExec(ddlSQL)
 		}
 
-		jobs, err := getAllHistoryDDLJob(store)
+		f, err := filter.NewFilter(config.GetDefaultReplicaConfig(), "")
 		require.Nil(t, err)
-		schemaStorage, err := NewSchemaStorage(nil, 0, false, dummyChangeFeedID, util.RoleTester)
+
+		jobs, err := getAllHistoryDDLJob(store, f)
+		require.Nil(t, err)
+
+		schemaStorage, err := NewSchemaStorage(nil, 0, false, dummyChangeFeedID, util.RoleTester, f)
 		require.Nil(t, err)
 		for _, job := range jobs {
 			err := schemaStorage.HandleDDLJob(job)
@@ -867,7 +889,7 @@ func TestSchemaStorage(t *testing.T) {
 			ts := job.BinlogInfo.FinishedTS
 			meta, err := kv.GetSnapshotMeta(store, ts)
 			require.Nil(t, err)
-			snapFromMeta, err := schema.NewSnapshotFromMeta(meta, ts, false)
+			snapFromMeta, err := schema.NewSnapshotFromMeta(meta, ts, false, f)
 			require.Nil(t, err)
 			snapFromSchemaStore, err := schemaStorage.GetSnapshot(ctx, ts)
 			require.Nil(t, err)
@@ -883,7 +905,7 @@ func TestSchemaStorage(t *testing.T) {
 	}
 }
 
-func getAllHistoryDDLJob(storage tidbkv.Storage) ([]*timodel.Job, error) {
+func getAllHistoryDDLJob(storage tidbkv.Storage, f filter.Filter) ([]*timodel.Job, error) {
 	s, err := session.CreateSession(storage)
 	if err != nil {
 		return nil, errors.Trace(err)
@@ -905,5 +927,81 @@ func getAllHistoryDDLJob(storage tidbkv.Storage) ([]*timodel.Job, error) {
 	if err != nil {
 		return nil, errors.Trace(err)
 	}
-	return jobs, nil
+
+	res := make([]*timodel.Job, 0)
+	for i, job := range jobs {
+		ignoreSchema := f.ShouldIgnoreSchema(job.SchemaName)
+		ignoreTable := f.ShouldIgnoreTable(job.SchemaName, job.TableName)
+		if ignoreSchema || ignoreTable {
+			log.Info("Ignore ddl job", zap.Stringer("job", job))
+			continue
+		}
+		// Set State from Synced to Done.
+		// Because jobs are put to history queue after TiDB alter its state from
+		// Done to Synced.
+		jobs[i].State = timodel.JobStateDone
+		res = append(res, job)
+	}
+	return res, nil
+}
+
+// This test is used to show how the schemaStorage choose a handleKey of a table.
+// The handleKey is chosen by the following rules:
+// 1. If the table has a primary key, the handleKey is the first column of the primary key.
+// 2. If the table has not null unique key, the handleKey is the first column of the unique key.
+// 3. If the table has no primary key and no not null unique key, it has no handleKey.
+func TestHandleKey(t *testing.T) {
+	store, err := mockstore.NewMockStore()
+	require.Nil(t, err)
+	defer store.Close() //nolint:errcheck
+
+	session.SetSchemaLease(0)
+	session.DisableStats4Test()
+	domain, err := session.BootstrapSession(store)
+	require.Nil(t, err)
+	defer domain.Close()
+	domain.SetStatsUpdating(true)
+	tk := testkit.NewTestKit(t, store)
+	tk.MustExec("create database test2")
+	tk.MustExec("create table test.simple_test1 (id bigint primary key)")
+	tk.MustExec("create table test.simple_test2 (id bigint, age int NOT NULL, " +
+		"name char NOT NULL, UNIQUE KEY(age, name))")
+	tk.MustExec("create table test.simple_test3 (id bigint, age int)")
+	ver, err := store.CurrentVersion(oracle.GlobalTxnScope)
+	require.Nil(t, err)
+	meta, err := kv.GetSnapshotMeta(store, ver.Ver)
+	require.Nil(t, err)
+	f, err := filter.NewFilter(config.GetDefaultReplicaConfig(), "")
+	require.Nil(t, err)
+	snap, err := schema.NewSnapshotFromMeta(meta, ver.Ver, false, f)
+	require.Nil(t, err)
+	tb1, ok := snap.TableByName("test", "simple_test1")
+	require.True(t, ok)
+	require.Equal(t, int64(-1), tb1.HandleIndexID) // pk is handleKey
+	columnID := int64(1)
+	flag := tb1.ColumnsFlag[columnID]
+	require.True(t, flag.IsHandleKey())
+	for _, column := range tb1.Columns {
+		if column.ID == columnID {
+			require.True(t, column.Name.O == "id")
+		}
+	}
+
+	// unique key is handleKey
+	tb2, ok := snap.TableByName("test", "simple_test2")
+	require.True(t, ok)
+	require.Equal(t, int64(1), tb2.HandleIndexID)
+	columnID = int64(2)
+	flag = tb2.ColumnsFlag[columnID]
+	require.True(t, flag.IsHandleKey())
+	for _, column := range tb2.Columns {
+		if column.ID == columnID {
+			require.True(t, column.Name.O == "age")
+		}
+	}
+
+	// has no handleKey
+	tb3, ok := snap.TableByName("test", "simple_test3")
+	require.True(t, ok)
+	require.Equal(t, int64(-2), tb3.HandleIndexID)
 }
