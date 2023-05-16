@@ -122,10 +122,6 @@ func NewSingleSnapshotFromMeta(
 	// meta is nil only in unit tests
 	if meta == nil {
 		snap := NewEmptySnapshot(forceReplicate)
-<<<<<<< HEAD
-		snap.InitConcurrentDDLTables()
-=======
->>>>>>> 3a8ddff5b6 (schemaStorage (ticdc): Filter out schema information that is irrelevant to changefeed. (#8697))
 		snap.inner.currentTs = currentTs
 		return snap, nil
 	}
@@ -219,49 +215,6 @@ func NewEmptySnapshot(forceReplicate bool) *Snapshot {
 	return &Snapshot{inner: inner, rwlock: new(sync.RWMutex)}
 }
 
-<<<<<<< HEAD
-// these constants imitate TiDB's session.InitDDLJobTables in an empty Snapshot.
-const (
-	mysqlDBID      = int64(1)
-	dummyTS        = uint64(1)
-	mdlCreateTable = "create table mysql.tidb_mdl_info(job_id BIGINT NOT NULL PRIMARY KEY, version BIGINT NOT NULL, table_ids text(65535));"
-)
-
-// InitConcurrentDDLTables imitates the creating table logic for concurrent DDL.
-// Since v6.2.0, tables of concurrent DDL will be directly written as meta KV in
-// TiKV, without being written to history DDL jobs. So the Snapshot which is not
-// build from meta needs this method to handle history DDL.
-func (s *Snapshot) InitConcurrentDDLTables() {
-	tableIDs := [...]int64{ddl.JobTableID, ddl.ReorgTableID, ddl.HistoryTableID}
-
-	mysqlDBInfo := &timodel.DBInfo{
-		ID:      mysqlDBID,
-		Name:    timodel.NewCIStr(mysql.SystemDB),
-		Charset: mysql.UTF8MB4Charset,
-		Collate: mysql.UTF8MB4DefaultCollation,
-		State:   timodel.StatePublic,
-	}
-	_ = s.inner.createSchema(mysqlDBInfo, dummyTS)
-
-	p := parser.New()
-	for i, table := range session.DDLJobTables {
-		stmt, _ := p.ParseOneStmt(table.SQL, "", "")
-		tblInfo, _ := ddl.BuildTableInfoFromAST(stmt.(*ast.CreateTableStmt))
-		tblInfo.State = timodel.StatePublic
-		tblInfo.ID = tableIDs[i]
-		wrapped := model.WrapTableInfo(mysqlDBID, mysql.SystemDB, dummyTS, tblInfo)
-		_ = s.inner.createTable(wrapped, dummyTS)
-	}
-	stmt, _ := p.ParseOneStmt(mdlCreateTable, "", "")
-	tblInfo, _ := ddl.BuildTableInfoFromAST(stmt.(*ast.CreateTableStmt))
-	tblInfo.State = timodel.StatePublic
-	tblInfo.ID = ddl.MDLTableID
-	wrapped := model.WrapTableInfo(mysqlDBID, mysql.SystemDB, dummyTS, tblInfo)
-	_ = s.inner.createTable(wrapped, dummyTS)
-}
-
-=======
->>>>>>> 3a8ddff5b6 (schemaStorage (ticdc): Filter out schema information that is irrelevant to changefeed. (#8697))
 // Copy creates a new schema snapshot based on the given one. The copied one shares same internal
 // data structures with the old one to save memory usage.
 func (s *Snapshot) Copy() *Snapshot {

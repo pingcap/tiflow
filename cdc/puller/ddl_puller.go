@@ -464,16 +464,6 @@ func NewDDLJobPuller(
 	schemaStorage entry.SchemaStorage,
 	filter filter.Filter,
 ) (DDLJobPuller, error) {
-<<<<<<< HEAD
-	f, err := filter.NewFilter(replicaConfig, "")
-	if err != nil {
-		return nil, errors.Trace(err)
-=======
-	spans := spanz.GetAllDDLSpan()
-	for i := range spans {
-		spans[i].TableID = -1
->>>>>>> 3a8ddff5b6 (schemaStorage (ticdc): Filter out schema information that is irrelevant to changefeed. (#8697))
-	}
 	return &ddlJobPullerImpl{
 		changefeedID:  changefeed,
 		filter:        filter,

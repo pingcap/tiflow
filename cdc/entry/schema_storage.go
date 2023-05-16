@@ -79,10 +79,6 @@ func NewSchemaStorage(
 	)
 	if meta == nil {
 		snap = schema.NewEmptySnapshot(forceReplicate)
-<<<<<<< HEAD
-		snap.InitConcurrentDDLTables()
-=======
->>>>>>> 3a8ddff5b6 (schemaStorage (ticdc): Filter out schema information that is irrelevant to changefeed. (#8697))
 	} else {
 		snap, err = schema.NewSnapshotFromMeta(meta, startTs, forceReplicate, filter)
 		if err != nil {
@@ -207,10 +203,6 @@ func (s *schemaStorageImpl) HandleDDLJob(job *timodel.Job) error {
 		snap = lastSnap.Copy()
 	} else {
 		snap = schema.NewEmptySnapshot(s.forceReplicate)
-<<<<<<< HEAD
-		snap.InitConcurrentDDLTables()
-=======
->>>>>>> 3a8ddff5b6 (schemaStorage (ticdc): Filter out schema information that is irrelevant to changefeed. (#8697))
 	}
 	if err := snap.HandleDDL(job); err != nil {
 		log.Error("handle DDL failed",

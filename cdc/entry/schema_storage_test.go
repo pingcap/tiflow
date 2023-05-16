@@ -625,13 +625,8 @@ func TestMultiVersionStorage(t *testing.T) {
 	require.False(t, exist)
 
 	lastSchemaTs := storage.DoGC(0)
-<<<<<<< HEAD
-	// Snapshot.InitConcurrentDDLTables will create a schema with ts = 1
-	require.Equal(t, uint64(1), lastSchemaTs)
-=======
-	require.Equal(t, uint64(0), lastSchemaTs)
->>>>>>> 3a8ddff5b6 (schemaStorage (ticdc): Filter out schema information that is irrelevant to changefeed. (#8697))
 
+	require.Equal(t, uint64(0), lastSchemaTs)
 	snap, err = storage.GetSnapshot(ctx, 100)
 	require.Nil(t, err)
 	_, exist = snap.SchemaByID(11)
@@ -920,14 +915,11 @@ func getAllHistoryDDLJob(storage tidbkv.Storage, f filter.Filter) ([]*timodel.Jo
 	txnMeta := timeta.NewMeta(txn)
 
 	jobs, err := ddl.GetAllHistoryDDLJobs(txnMeta)
-	res := make([]*timodel.Job, 0)
 	if err != nil {
 		return nil, errors.Trace(err)
 	}
-<<<<<<< HEAD
-	return jobs, nil
-}
-=======
+
+	res := make([]*timodel.Job, 0)
 	for i, job := range jobs {
 		ignoreSchema := f.ShouldIgnoreSchema(job.SchemaName)
 		ignoreTable := f.ShouldIgnoreTable(job.SchemaName, job.TableName)
@@ -941,7 +933,7 @@ func getAllHistoryDDLJob(storage tidbkv.Storage, f filter.Filter) ([]*timodel.Jo
 		jobs[i].State = timodel.JobStateDone
 		res = append(res, job)
 	}
-	return jobs, nil
+	return res, nil
 }
 
 // This test is used to show how the schemaStorage choose a handleKey of a table.
@@ -1004,4 +996,3 @@ func TestHandleKey(t *testing.T) {
 	require.True(t, ok)
 	require.Equal(t, int64(-2), tb3.HandleIndexID)
 }
->>>>>>> 3a8ddff5b6 (schemaStorage (ticdc): Filter out schema information that is irrelevant to changefeed. (#8697))
