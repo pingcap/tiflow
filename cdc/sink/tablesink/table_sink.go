@@ -36,3 +36,13 @@ type TableSink interface {
 	// We should make sure this method is cancellable.
 	Close()
 }
+
+// SinkInternalError means the error comes from sink internal.
+type SinkInternalError struct {
+	err error
+}
+
+// Error implements builtin `error` interface.
+func (e SinkInternalError) Error() string {
+	return e.err.Error()
+}
