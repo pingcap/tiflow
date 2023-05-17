@@ -900,25 +900,19 @@ func (c *changefeed) handleBarrier(ctx cdcContext.Context) (uint64, error) {
 	//   1. All data before the barrierTs was sent to downstream.
 	//   2. No more data after barrierTs was sent to downstream.
 	checkpointReachBarrier := barrierTs == c.state.Status.CheckpointTs
-
-	// TODO: To check if we can remove the `barrierTs == c.state.Status.ResolvedTs` condition.
-	fullyBlocked := checkpointReachBarrier && barrierTs == c.state.Status.ResolvedTs
+	if !checkpointReachBarrier {
+		return barrierTs, nil
+	}
 
 	switch barrierTp {
 	case syncPointBarrier:
-		if !fullyBlocked {
-			return barrierTs, nil
-		}
 		nextSyncPointTs := oracle.GoTimeToTS(oracle.GetTimeFromTS(barrierTs).Add(c.state.Info.Config.SyncPointInterval))
 		if err := c.ddlSink.emitSyncPoint(ctx, barrierTs); err != nil {
 			return 0, errors.Trace(err)
 		}
 		c.barriers.Update(syncPointBarrier, nextSyncPointTs)
 	case finishBarrier:
-		if fullyBlocked {
-			c.feedStateManager.MarkFinished()
-		}
-		return barrierTs, nil
+		c.feedStateManager.MarkFinished()
 	default:
 		log.Panic("Unknown barrier type", zap.Int("barrierType", int(barrierTp)))
 	}
