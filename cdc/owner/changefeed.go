@@ -16,6 +16,7 @@ package owner
 import (
 	"context"
 	"fmt"
+	"math"
 	"strings"
 	"sync"
 	"time"
@@ -305,7 +306,7 @@ func (c *changefeed) tick(ctx cdcContext.Context, captures map[model.CaptureID]*
 	}
 
 	// TODO: pass table checkpointTs when we support concurrent process ddl
-	allPhysicalTables, minTableBarrierTs, barrier, err := c.ddlManager.tick(ctx, checkpointTs, nil)
+	allPhysicalTables, barrier, err := c.ddlManager.tick(ctx, checkpointTs, nil)
 	if err != nil {
 		return errors.Trace(err)
 	}
@@ -325,11 +326,11 @@ func (c *changefeed) tick(ctx cdcContext.Context, captures map[model.CaptureID]*
 		barrier.GlobalBarrierTs = otherBarrierTs
 	}
 
-	if minTableBarrierTs > otherBarrierTs {
+	if barrier.minTableBarrierTs > otherBarrierTs {
 		log.Debug("There are other barriers less than min table barrier, wait for them",
 			zap.Uint64("otherBarrierTs", otherBarrierTs),
 			zap.Uint64("ddlBarrierTs", barrier.GlobalBarrierTs))
-		minTableBarrierTs = otherBarrierTs
+		barrier.minTableBarrierTs = otherBarrierTs
 	}
 
 	log.Debug("owner handles barrier",
@@ -338,7 +339,7 @@ func (c *changefeed) tick(ctx cdcContext.Context, captures map[model.CaptureID]*
 		zap.Uint64("checkpointTs", checkpointTs),
 		zap.Uint64("resolvedTs", c.state.Status.ResolvedTs),
 		zap.Uint64("globalBarrierTs", barrier.GlobalBarrierTs),
-		zap.Uint64("minTableBarrierTs", minTableBarrierTs),
+		zap.Uint64("minTableBarrierTs", barrier.minTableBarrierTs),
 		zap.Any("tableBarrier", barrier.TableBarriers))
 
 	if barrier.GlobalBarrierTs < checkpointTs {
@@ -350,7 +351,7 @@ func (c *changefeed) tick(ctx cdcContext.Context, captures map[model.CaptureID]*
 
 	startTime := time.Now()
 	newCheckpointTs, newResolvedTs, err := c.scheduler.Tick(
-		ctx, checkpointTs, allPhysicalTables, captures, barrier)
+		ctx, checkpointTs, allPhysicalTables, captures, barrier.Barrier)
 	// metricsResolvedTs to store the min resolved ts among all tables and show it in metrics
 	metricsResolvedTs := newResolvedTs
 	costTime := time.Since(startTime)
@@ -379,19 +380,22 @@ func (c *changefeed) tick(ctx cdcContext.Context, captures map[model.CaptureID]*
 
 	// If the owner is just initialized, the newResolvedTs may be max uint64.
 	// In this case, we should not update the resolved ts.
-	if newResolvedTs > barrier.GlobalBarrierTs {
-		newResolvedTs = barrier.GlobalBarrierTs
+	if newResolvedTs == math.MaxUint64 {
+		newResolvedTs = c.state.Status.ResolvedTs
 	}
 
 	// If the owner is just initialized, minTableBarrierTs can be `checkpointTs-1`.
 	// In such case the `newCheckpointTs` may be larger than the minTableBarrierTs,
 	// but it shouldn't be, so we need to handle it here.
-	if newCheckpointTs > minTableBarrierTs {
-		newCheckpointTs = minTableBarrierTs
+	if newCheckpointTs > barrier.minTableBarrierTs {
+		newCheckpointTs = barrier.minTableBarrierTs
 	}
 
 	prevResolvedTs := c.state.Status.ResolvedTs
 	if c.redoMetaMgr.Enabled() {
+		if newResolvedTs > barrier.physicalTableBarrierTs {
+			newResolvedTs = barrier.physicalTableBarrierTs
+		}
 		// newResolvedTs can never exceed the barrier timestamp boundary. If redo is enabled,
 		// we can only upload it to etcd after it has been flushed into redo meta.
 		// NOTE: `UpdateMeta` handles regressed checkpointTs and resolvedTs internally.
@@ -428,8 +432,8 @@ func (c *changefeed) tick(ctx cdcContext.Context, captures map[model.CaptureID]*
 	}
 
 	// MinTableBarrierTs should never regress
-	if minTableBarrierTs < c.state.Status.MinTableBarrierTs {
-		minTableBarrierTs = c.state.Status.MinTableBarrierTs
+	if barrier.minTableBarrierTs < c.state.Status.MinTableBarrierTs {
+		barrier.minTableBarrierTs = c.state.Status.MinTableBarrierTs
 	}
 
 	failpoint.Inject("ChangefeedOwnerDontUpdateCheckpoint", func() {
@@ -443,7 +447,7 @@ func (c *changefeed) tick(ctx cdcContext.Context, captures map[model.CaptureID]*
 		}
 	})
 
-	c.updateStatus(newCheckpointTs, newResolvedTs, minTableBarrierTs)
+	c.updateStatus(newCheckpointTs, newResolvedTs, barrier.minTableBarrierTs)
 	c.updateMetrics(currentTs, newCheckpointTs, metricsResolvedTs)
 	c.tickDownstreamObserver(ctx)
 

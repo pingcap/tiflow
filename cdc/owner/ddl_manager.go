@@ -34,6 +34,21 @@ import (
 // of tableBarrier in a single barrier.
 const tableBarrierNumberLimit = 256
 
+// The ddls below is globalDDLs, they affect all tables in the changefeed.
+// we need to wait all tables checkpointTs reach the DDL commitTs
+// before we can execute the DDL.
+//timodel.ActionCreateSchema
+//timodel.ActionDropSchema
+//timodel.ActionModifySchemaCharsetAndCollate
+//// We treat create table ddl as a global ddl, because before we execute the ddl,
+//// there is no a tablePipeline for the new table. So we can't prevent the checkpointTs
+//// from advancing. To solve this problem, we just treat create table ddl as a global ddl here.
+//// TODO: Find a better way to handle create table ddl.
+//timodel.ActionCreateTable
+//timodel.ActionRenameTable
+//timodel.ActionRenameTables
+//timodel.ActionExchangeTablePartition
+
 // nonGlobalDDLs are the DDLs that only affect related table
 // so that we should only block related table before execute them.
 var nonGlobalDDLs = map[timodel.ActionType]struct{}{
@@ -64,20 +79,24 @@ var nonGlobalDDLs = map[timodel.ActionType]struct{}{
 	timodel.ActionAlterTTLRemove:               {},
 }
 
-// The ddls below is globalDDLs, they affect all tables in the changefeed.
-// we need to wait all tables checkpointTs reach the DDL commitTs
-// before we can execute the DDL.
-//timodel.ActionCreateSchema
-//timodel.ActionDropSchema
-//timodel.ActionModifySchemaCharsetAndCollate
-//// We treat create table ddl as a global ddl, because before we execute the ddl,
-//// there is no a tablePipeline for the new table. So we can't prevent the checkpointTs
-//// from advancing. To solve this problem, we just treat create table ddl as a global ddl here.
-//// TODO: Find a better way to handle create table ddl.
-//timodel.ActionCreateTable
-//timodel.ActionRenameTable
-//timodel.ActionRenameTables
-//timodel.ActionExchangeTablePartition
+var redoBarrierDDLs = map[timodel.ActionType]struct{}{
+	timodel.ActionCreateTable:            {},
+	timodel.ActionTruncateTable:          {},
+	timodel.ActionAddTablePartition:      {},
+	timodel.ActionTruncateTablePartition: {},
+	timodel.ActionRecoverTable:           {},
+}
+
+type ddlBarrier struct {
+	*schedulepb.Barrier
+	// minTableBarrierTs is the minimum table barrier timestamp of all tables.
+	// It is only used when a changefeed is started to check whether there was
+	// a table's DDL job that had not finished when the changefeed was stopped.
+	minTableBarrierTs model.Ts
+	// physicalTableBarrierTs is the minimum ts of all ddl events that create
+	// a new physical table.
+	physicalTableBarrierTs model.Ts
+}
 
 // ddlManager holds the pending DDL events of all tables and responsible for
 // executing them to downstream.
@@ -169,16 +188,13 @@ func (m *ddlManager) tick(
 	ctx context.Context,
 	checkpointTs model.Ts,
 	tableCheckpoint map[model.TableName]model.Ts,
-) ([]model.TableID, model.Ts, *schedulepb.Barrier, error) {
-	minTableBarrierTs := model.Ts(0)
-	var barrier *schedulepb.Barrier
+) ([]model.TableID, *ddlBarrier, error) {
 	m.justSentDDL = nil
-
 	m.updateCheckpointTs(checkpointTs, tableCheckpoint)
 
 	currentTables, err := m.allTables(ctx)
 	if err != nil {
-		return nil, minTableBarrierTs, barrier, errors.Trace(err)
+		return nil, nil, errors.Trace(err)
 	}
 
 	if m.executingDDL == nil {
@@ -187,7 +203,7 @@ func (m *ddlManager) tick(
 
 	tableIDs, err := m.allPhysicalTables(ctx)
 	if err != nil {
-		return nil, minTableBarrierTs, barrier, errors.Trace(err)
+		return nil, nil, errors.Trace(err)
 	}
 
 	// drain all ddl jobs from ddlPuller
@@ -209,7 +225,7 @@ func (m *ddlManager) tick(
 			)
 			events, err := m.schema.BuildDDLEvents(ctx, job)
 			if err != nil {
-				return nil, minTableBarrierTs, barrier, err
+				return nil, nil, err
 			}
 
 			for _, event := range events {
@@ -238,7 +254,7 @@ func (m *ddlManager) tick(
 				for _, event := range events {
 					err := m.redoDDLManager.EmitDDLEvent(ctx, event)
 					if err != nil {
-						return nil, minTableBarrierTs, barrier, err
+						return nil, nil, err
 					}
 				}
 			}
@@ -251,7 +267,7 @@ func (m *ddlManager) tick(
 	if m.redoDDLManager.Enabled() {
 		err := m.redoDDLManager.UpdateResolvedTs(ctx, ddlRts)
 		if err != nil {
-			return nil, minTableBarrierTs, barrier, err
+			return nil, nil, err
 		}
 		redoFlushedDDLRts := m.redoDDLManager.GetResolvedTs()
 		if redoFlushedDDLRts < ddlRts {
@@ -288,14 +304,12 @@ func (m *ddlManager) tick(
 
 			err := m.executeDDL(ctx)
 			if err != nil {
-				return nil, minTableBarrierTs, barrier, err
+				return nil, nil, err
 			}
 		}
 	}
 
-	minTableBarrierTs, barrier = m.barrier()
-
-	return tableIDs, minTableBarrierTs, barrier, nil
+	return tableIDs, m.barrier(), nil
 }
 
 func (m *ddlManager) shouldExecDDL(nextDDL *model.DDLEvent) bool {
@@ -423,22 +437,34 @@ func (m *ddlManager) getAllTableNextDDL() []*model.DDLEvent {
 }
 
 // barrier returns ddlResolvedTs and tableBarrier
-func (m *ddlManager) barrier() (model.Ts, *schedulepb.Barrier) {
+func (m *ddlManager) barrier() *ddlBarrier {
+	barrier := &ddlBarrier{
+		Barrier: &schedulepb.Barrier{
+			GlobalBarrierTs: m.ddlResolvedTs,
+		},
+		minTableBarrierTs:      m.ddlResolvedTs,
+		physicalTableBarrierTs: m.ddlResolvedTs,
+	}
 	tableBarrierMap := make(map[model.TableID]model.Ts)
-	var tableBarrier []*schedulepb.TableBarrier
-	minTableBarrierTs := m.ddlResolvedTs
-	globalBarrierTs := m.ddlResolvedTs
-
 	ddls := m.getAllTableNextDDL()
 	if m.justSentDDL != nil {
 		ddls = append(ddls, m.justSentDDL)
 	}
 	for _, ddl := range ddls {
+		if m.redoMetaManager.Enabled() && isRedoBerrierDDL(ddl) {
+			// The pipeline for a new table does not exist until the ddl is successfully
+			// executed, so the table's resolvedTs will not be calculated in redo.
+			// To solve this problem, resovedTs of redoDMLManager should not be greater
+			// than the min commitTs of create table DDL.
+			if ddl.CommitTs < barrier.physicalTableBarrierTs {
+				barrier.physicalTableBarrierTs = ddl.CommitTs
+			}
+		}
 		// When there is a global DDL, we need to wait all tables
 		// checkpointTs reach its commitTs before we can execute it.
 		if isGlobalDDL(ddl) {
-			if ddl.CommitTs < globalBarrierTs {
-				globalBarrierTs = ddl.CommitTs
+			if ddl.CommitTs < barrier.GlobalBarrierTs {
+				barrier.GlobalBarrierTs = ddl.CommitTs
 			}
 		} else {
 			ids := getPhysicalTableIDs(ddl)
@@ -450,17 +476,18 @@ func (m *ddlManager) barrier() (model.Ts, *schedulepb.Barrier) {
 		// minTableBarrierTs is the min commitTs of all tables DDLs,
 		// it is used to prevent the checkpointTs from advancing too fast
 		// when a changefeed is just resumed.
-		if ddl.CommitTs < minTableBarrierTs {
-			minTableBarrierTs = ddl.CommitTs
+		if ddl.CommitTs < barrier.minTableBarrierTs {
+			barrier.minTableBarrierTs = ddl.CommitTs
 		}
 	}
 
 	for tb, barrierTs := range tableBarrierMap {
-		if barrierTs > globalBarrierTs {
+		if barrierTs > barrier.GlobalBarrierTs {
 			delete(tableBarrierMap, tb)
 		}
 	}
 
+	var tableBarrier []*schedulepb.TableBarrier
 	for tb, barrierTs := range tableBarrierMap {
 		tableBarrier = append(tableBarrier, &schedulepb.TableBarrier{
 			TableID:   tb,
@@ -474,15 +501,13 @@ func (m *ddlManager) barrier() (model.Ts, *schedulepb.Barrier) {
 		return tableBarrier[i].BarrierTs < tableBarrier[j].BarrierTs
 	})
 	if len(tableBarrier) > tableBarrierNumberLimit {
-		globalBarrierTs = tableBarrier[tableBarrierNumberLimit].BarrierTs
+		barrier.GlobalBarrierTs = tableBarrier[tableBarrierNumberLimit].BarrierTs
 		tableBarrier = tableBarrier[:tableBarrierNumberLimit]
 	}
 
 	m.justSentDDL = nil
-	return minTableBarrierTs, &schedulepb.Barrier{
-		TableBarriers:   tableBarrier,
-		GlobalBarrierTs: globalBarrierTs,
-	}
+	barrier.TableBarriers = tableBarrier
+	return barrier
 }
 
 // allTables returns all tables in the schema that
@@ -599,4 +624,9 @@ func getPhysicalTableIDs(ddl *model.DDLEvent) []model.TableID {
 func isGlobalDDL(ddl *model.DDLEvent) bool {
 	_, ok := nonGlobalDDLs[ddl.Type]
 	return !ok
+}
+
+func isRedoBerrierDDL(ddl *model.DDLEvent) bool {
+	_, ok := redoBarrierDDLs[ddl.Type]
+	return ok
 }
