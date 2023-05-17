@@ -326,11 +326,11 @@ func (c *changefeed) tick(ctx cdcContext.Context, captures map[model.CaptureID]*
 		barrier.GlobalBarrierTs = otherBarrierTs
 	}
 
-	if barrier.minTableBarrierTs > otherBarrierTs {
+	if barrier.minDDLBarrierTs > otherBarrierTs {
 		log.Debug("There are other barriers less than min table barrier, wait for them",
 			zap.Uint64("otherBarrierTs", otherBarrierTs),
 			zap.Uint64("ddlBarrierTs", barrier.GlobalBarrierTs))
-		barrier.minTableBarrierTs = otherBarrierTs
+		barrier.minDDLBarrierTs = otherBarrierTs
 	}
 
 	log.Debug("owner handles barrier",
@@ -339,7 +339,7 @@ func (c *changefeed) tick(ctx cdcContext.Context, captures map[model.CaptureID]*
 		zap.Uint64("checkpointTs", checkpointTs),
 		zap.Uint64("resolvedTs", c.state.Status.ResolvedTs),
 		zap.Uint64("globalBarrierTs", barrier.GlobalBarrierTs),
-		zap.Uint64("minTableBarrierTs", barrier.minTableBarrierTs),
+		zap.Uint64("minTableBarrierTs", barrier.minDDLBarrierTs),
 		zap.Any("tableBarrier", barrier.TableBarriers))
 
 	if barrier.GlobalBarrierTs < checkpointTs {
@@ -352,8 +352,6 @@ func (c *changefeed) tick(ctx cdcContext.Context, captures map[model.CaptureID]*
 	startTime := time.Now()
 	newCheckpointTs, newResolvedTs, err := c.scheduler.Tick(
 		ctx, checkpointTs, allPhysicalTables, captures, barrier.Barrier)
-	// metricsResolvedTs to store the min resolved ts among all tables and show it in metrics
-	metricsResolvedTs := newResolvedTs
 	costTime := time.Since(startTime)
 	if costTime > schedulerLogsWarnDuration {
 		log.Warn("scheduler tick took too long",
@@ -387,14 +385,14 @@ func (c *changefeed) tick(ctx cdcContext.Context, captures map[model.CaptureID]*
 	// If the owner is just initialized, minTableBarrierTs can be `checkpointTs-1`.
 	// In such case the `newCheckpointTs` may be larger than the minTableBarrierTs,
 	// but it shouldn't be, so we need to handle it here.
-	if newCheckpointTs > barrier.minTableBarrierTs {
-		newCheckpointTs = barrier.minTableBarrierTs
+	if newCheckpointTs > barrier.minDDLBarrierTs {
+		newCheckpointTs = barrier.minDDLBarrierTs
 	}
 
 	prevResolvedTs := c.state.Status.ResolvedTs
 	if c.redoMetaMgr.Enabled() {
-		if newResolvedTs > barrier.physicalTableBarrierTs {
-			newResolvedTs = barrier.physicalTableBarrierTs
+		if newResolvedTs > barrier.redoBarrierTs {
+			newResolvedTs = barrier.redoBarrierTs
 		}
 		// newResolvedTs can never exceed the barrier timestamp boundary. If redo is enabled,
 		// we can only upload it to etcd after it has been flushed into redo meta.
@@ -416,7 +414,6 @@ func (c *changefeed) tick(ctx cdcContext.Context, captures map[model.CaptureID]*
 		} else {
 			newResolvedTs = prevResolvedTs
 		}
-		metricsResolvedTs = newResolvedTs
 	}
 	log.Debug("owner prepares to update status",
 		zap.Uint64("prevResolvedTs", prevResolvedTs),
@@ -428,12 +425,11 @@ func (c *changefeed) tick(ctx cdcContext.Context, captures map[model.CaptureID]*
 	// been decreased when the owner is initialized.
 	if newResolvedTs < prevResolvedTs {
 		newResolvedTs = prevResolvedTs
-		metricsResolvedTs = newResolvedTs
 	}
 
 	// MinTableBarrierTs should never regress
-	if barrier.minTableBarrierTs < c.state.Status.MinTableBarrierTs {
-		barrier.minTableBarrierTs = c.state.Status.MinTableBarrierTs
+	if barrier.minDDLBarrierTs < c.state.Status.MinTableBarrierTs {
+		barrier.minDDLBarrierTs = c.state.Status.MinTableBarrierTs
 	}
 
 	failpoint.Inject("ChangefeedOwnerDontUpdateCheckpoint", func() {
@@ -447,8 +443,8 @@ func (c *changefeed) tick(ctx cdcContext.Context, captures map[model.CaptureID]*
 		}
 	})
 
-	c.updateStatus(newCheckpointTs, newResolvedTs, barrier.minTableBarrierTs)
-	c.updateMetrics(currentTs, newCheckpointTs, metricsResolvedTs)
+	c.updateStatus(newCheckpointTs, newResolvedTs, barrier.minDDLBarrierTs)
+	c.updateMetrics(currentTs, newCheckpointTs, newResolvedTs)
 	c.tickDownstreamObserver(ctx)
 
 	return nil
