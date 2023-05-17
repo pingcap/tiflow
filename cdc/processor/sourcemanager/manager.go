@@ -168,7 +168,7 @@ func (m *SourceManager) ReceivedEvents() int64 {
 }
 
 // Run implements util.Runnable.
-func (m *SourceManager) Run(ctx context.Context) error {
+func (m *SourceManager) Run(ctx context.Context, _ ...chan<- error) error {
 	m.ctx = ctx
 	close(m.ready)
 	select {
