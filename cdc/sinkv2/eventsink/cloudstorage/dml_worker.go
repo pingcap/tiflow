@@ -15,7 +15,6 @@ package cloudstorage
 import (
 	"bytes"
 	"context"
-	"encoding/json"
 	"path"
 	"sync"
 	"sync/atomic"
@@ -152,7 +151,7 @@ func (d *dmlWorker) flushMessages(ctx context.Context) error {
 				}
 
 				// generate scheme.json file before generating the first data file if necessary
-				err := d.writeSchemaFile(ctx, table, tbl.tableInfo)
+				err := d.filePathGenerator.CheckOrWriteSchema(ctx, table, tbl.tableInfo)
 				if err != nil {
 					log.Error("failed to write schema file to external storage",
 						zap.Int("workerID", d.id),
@@ -216,42 +215,6 @@ func (d *dmlWorker) flushMessages(ctx context.Context) error {
 			}
 		}
 	}
-}
-
-// In order to avoid spending so much time lookuping directory and getting last write point
-// (i.e. which dir and which file) when the changefeed is restarted, we'd rather switch to
-// a new dir and start writing. In this case, schema file should be created in the new dir
-// if it hasn't been created when a DDL event was executed.
-func (d *dmlWorker) writeSchemaFile(
-	ctx context.Context,
-	table cloudstorage.VersionedTableName,
-	tableInfo *model.TableInfo,
-) error {
-	if ok := d.filePathGenerator.Contains(table); !ok {
-		var tableDetail cloudstorage.TableDefinition
-		tableDetail.FromTableInfo(tableInfo, table.TableInfoVersion)
-		path := cloudstorage.GenerateSchemaFilePath(tableDetail)
-		// the file may have been created when a DDL event was executed.
-		exist, err := d.storage.FileExists(ctx, path)
-		if err != nil {
-			return err
-		}
-		if exist {
-			return nil
-		}
-
-		encodedDetail, err := json.MarshalIndent(tableDetail, "", "    ")
-		if err != nil {
-			return err
-		}
-
-		err = d.storage.WriteFile(ctx, path, encodedDetail)
-		if err != nil {
-			return err
-		}
-	}
-
-	return nil
 }
 
 func (d *dmlWorker) writeIndexFile(ctx context.Context, path, content string) error {
