@@ -51,6 +51,7 @@ import (
 	"github.com/pingcap/tiflow/pkg/sink/codec/open"
 	"github.com/pingcap/tiflow/pkg/spanz"
 	"github.com/pingcap/tiflow/pkg/util"
+	"github.com/pingcap/tiflow/pkg/version"
 	"github.com/prometheus/client_golang/prometheus"
 	"go.uber.org/zap"
 )
@@ -81,6 +82,7 @@ var (
 )
 
 func init() {
+	version.LogVersionInfo("kafka consumer")
 	var (
 		upstreamURIStr string
 		configFile     string
