@@ -50,6 +50,7 @@ import (
 	"github.com/pingcap/tiflow/pkg/sink/codec/csv"
 	"github.com/pingcap/tiflow/pkg/spanz"
 	putil "github.com/pingcap/tiflow/pkg/util"
+	"github.com/pingcap/tiflow/pkg/version"
 	"github.com/prometheus/client_golang/prometheus"
 	"go.uber.org/zap"
 )
@@ -74,6 +75,7 @@ const (
 )
 
 func init() {
+	version.LogVersionInfo("storage consumer")
 	flag.StringVar(&upstreamURIStr, "upstream-uri", "", "storage uri")
 	flag.StringVar(&downstreamURIStr, "downstream-uri", "", "downstream sink uri")
 	flag.StringVar(&configFile, "config", "", "changefeed configuration file")
