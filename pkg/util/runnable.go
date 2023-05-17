@@ -34,7 +34,9 @@ type Runnable interface {
 	// descriptors, channels or memory buffers. Those resources may be still
 	// necessary by other components after this Runnable is returned. We can use
 	// Close to release them.
-	Run(ctx context.Context) error
+    //
+    // `warnings` is used to retrieve internal warnings generated when running.
+	Run(ctx context.Context, warnings ...chan<- error) error
 	// WaitForReady blocks the current goroutine until `Run` initializes itself.
 	WaitForReady(ctx context.Context)
 	// Close all internal resources synchronously.
