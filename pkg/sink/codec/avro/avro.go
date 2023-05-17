@@ -18,13 +18,11 @@ import (
 	"context"
 	"encoding/binary"
 	"encoding/json"
-	"fmt"
 	"math/big"
 	"sort"
 	"strconv"
 	"strings"
 
-	"github.com/linkedin/goavro/v2"
 	"github.com/pingcap/errors"
 	"github.com/pingcap/log"
 	"github.com/pingcap/tidb/parser/mysql"
@@ -109,12 +107,6 @@ func (a *BatchEncoder) AppendRowChangedEvent(
 	)
 	message.Callback = callback
 	topic = sanitizeTopic(topic)
-
-	for _, colInfo := range e.ColInfos {
-		if colInfo.ID == 127 {
-			fmt.Printf("bill_hour column id is %d\n", colInfo.ID)
-		}
-	}
 
 	if !e.IsDelete() {
 		res, err := a.avroEncode(ctx, e, topic, false)
@@ -517,9 +509,6 @@ func rowToAvroSchema(
 	}
 
 	for i, col := range input.columns {
-		if col.Name == "bill_hour" && input.colInfos[i].ID == 121 {
-			fmt.Println("hit the break point")
-		}
 		avroType, err := columnToAvroSchema(
 			col,
 			input.colInfos[i].Ft,
@@ -531,7 +520,6 @@ func rowToAvroSchema(
 		}
 		field := make(map[string]interface{})
 		field["name"] = sanitizeName(col.Name)
-		field["columnID"] = input.colInfos[i].ID
 
 		copy := *col
 		copy.Value = copy.Default

@@ -429,11 +429,6 @@ func (m *mounter) verifyChecksum(
 			ColumnInfo: col,
 			Datum:      &rawColumns[idx],
 		})
-		if col.Name.O == "bill_hour" {
-			if col.ID == 127 {
-				fmt.Printf("bill_hour column id is %d\n", col.ID)
-			}
-		}
 	}
 	sort.Slice(columns, func(i, j int) bool {
 		return columns[i].ID < columns[j].ID
@@ -465,8 +460,7 @@ func (m *mounter) verifyChecksum(
 	}
 
 	if checksum == extra {
-		log.Warn("extra checksum matched, "+
-			"this may happen the upstream TiDB is during the DDL execution phase",
+		log.Debug("extra checksum matched, this may happen the upstream TiDB is during the DDL execution phase",
 			zap.Uint32("checksum", checksum),
 			zap.Uint32("first", first),
 			zap.Uint32("extra", extra))
@@ -492,11 +486,6 @@ func (m *mounter) mountRowKVEntry(tableInfo *model.TableInfo, row *rowKVEntry, d
 		checksumVersion int
 		corrupted       bool
 	)
-
-	_, _, colInfos := tableInfo.GetRowColInfos()
-	if colInfos[len(colInfos)-1].ID == 127 {
-		log.Info("hit the break point")
-	}
 
 	// Decode previous columns.
 	var (
