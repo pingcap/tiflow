@@ -39,13 +39,14 @@ type Config struct {
 	// User should make sure that `replication-factor` not greater than the number of kafka brokers.
 	ReplicationFactor int16
 
-	Version         string
-	MaxMessageBytes int
-	Compression     string
-	ClientID        string
-	EnableTLS       bool
-	Credential      *security.Credential
-	SASL            *security.SASL
+	Version            string
+	MaxMessageBytes    int
+	Compression        string
+	ClientID           string
+	EnableTLS          bool
+	Credential         *security.Credential
+	InsecureSkipVerify bool
+	SASL               *security.SASL
 	// control whether to create topic
 	AutoCreate bool
 
@@ -60,15 +61,16 @@ func NewConfig() *Config {
 	return &Config{
 		Version: "2.4.0",
 		// MaxMessageBytes will be used to initialize producer
-		MaxMessageBytes:   config.DefaultMaxMessageBytes,
-		ReplicationFactor: 1,
-		Compression:       "none",
-		Credential:        &security.Credential{},
-		SASL:              &security.SASL{},
-		AutoCreate:        true,
-		DialTimeout:       10 * time.Second,
-		WriteTimeout:      10 * time.Second,
-		ReadTimeout:       10 * time.Second,
+		MaxMessageBytes:    config.DefaultMaxMessageBytes,
+		ReplicationFactor:  1,
+		Compression:        "none",
+		Credential:         &security.Credential{},
+		InsecureSkipVerify: false,
+		SASL:               &security.SASL{},
+		AutoCreate:         true,
+		DialTimeout:        10 * time.Second,
+		WriteTimeout:       10 * time.Second,
+		ReadTimeout:        10 * time.Second,
 	}
 }
 
@@ -240,6 +242,15 @@ func (c *Config) applyTLS(params url.Values) error {
 		if c.Credential != nil && c.Credential.IsTLSEnabled() {
 			c.EnableTLS = true
 		}
+	}
+
+	insecureSkipVerify := params.Get("insecure-skip-verify")
+	if insecureSkipVerify != "" {
+		skip, err := strconv.ParseBool(insecureSkipVerify)
+		if err != nil {
+			return err
+		}
+		c.InsecureSkipVerify = skip
 	}
 
 	return nil
@@ -430,6 +441,8 @@ func NewSaramaConfig(ctx context.Context, c *Config) (*sarama.Config, error) {
 				return nil, errors.Trace(err)
 			}
 		}
+
+		config.Net.TLS.Config.InsecureSkipVerify = c.InsecureSkipVerify
 	}
 
 	completeSaramaSASLConfig(config, c)
