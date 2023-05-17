@@ -221,10 +221,12 @@ func (s *schemaWrap4Owner) BuildDDLEvents(
 		if job.BinlogInfo != nil && job.BinlogInfo.TableInfo != nil {
 			tableInfo = model.WrapTableInfo(job.SchemaID, job.SchemaName, job.BinlogInfo.FinishedTS, job.BinlogInfo.TableInfo)
 		} else {
-			// for an invalid DDL job or a DDL job that does not contain TableInfo,
-			// just retrieve the schema name.
+			// Just retrieve the schema name for a DDL job that does not contain TableInfo.
+			// Currently supported by cdc are: ActionCreateSchema, ActionDropSchema,
+			// and ActionModifySchemaCharsetAndCollate.
 			tableInfo = &model.TableInfo{
 				TableName: model.TableName{Schema: job.SchemaName},
+				Version:   job.BinlogInfo.FinishedTS,
 			}
 		}
 		event.FromJob(job, preTableInfo, tableInfo)
