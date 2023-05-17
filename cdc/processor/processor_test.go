@@ -636,10 +636,9 @@ func TestProcessorDostNotStuckInInit(t *testing.T) {
 	err = p.Tick(ctx)
 	require.Nil(t, err)
 
-	// Third tick for handle error.
+	// TODO(qupeng): third tick for handle a warning.
 	err = p.Tick(ctx)
-	require.NotNil(t, err)
-	require.Contains(t, err.Error(), "SinkManagerRunError")
+	require.Nil(t, err)
 
 	require.Nil(t, p.Close())
 	tester.MustApplyPatches()

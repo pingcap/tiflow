@@ -17,9 +17,11 @@ import (
 	"context"
 	"net/url"
 	"strings"
+	"sync"
 
 	"github.com/pingcap/tiflow/cdc/contextutil"
 	"github.com/pingcap/tiflow/pkg/config"
+	"github.com/pingcap/tiflow/pkg/errors"
 	cerror "github.com/pingcap/tiflow/pkg/errors"
 	"github.com/pingcap/tiflow/pkg/sink"
 	pmysql "github.com/pingcap/tiflow/pkg/sink/mysql"
@@ -56,46 +58,97 @@ func NewObserver(
 	replCfg *config.ReplicaConfig,
 	opts ...NewObserverOption,
 ) (Observer, error) {
-	options := &NewObserverOpt{dbConnFactory: pmysql.CreateMySQLDBConn}
-	for _, opt := range opts {
-		opt(options)
-	}
+	creator := func() (Observer, error) {
+		options := &NewObserverOpt{dbConnFactory: pmysql.CreateMySQLDBConn}
+		for _, opt := range opts {
+			opt(options)
+		}
 
-	sinkURI, err := url.Parse(sinkURIStr)
-	if err != nil {
-		return nil, cerror.WrapError(cerror.ErrSinkURIInvalid, err)
-	}
+		sinkURI, err := url.Parse(sinkURIStr)
+		if err != nil {
+			return nil, cerror.WrapError(cerror.ErrSinkURIInvalid, err)
+		}
 
-	scheme := strings.ToLower(sinkURI.Scheme)
-	if !sink.IsMySQLCompatibleScheme(scheme) {
+		scheme := strings.ToLower(sinkURI.Scheme)
+		if !sink.IsMySQLCompatibleScheme(scheme) {
+			return NewDummyObserver(), nil
+		}
+
+		changefeedID := contextutil.ChangefeedIDFromCtx(ctx)
+		cfg := pmysql.NewConfig()
+		err = cfg.Apply(ctx, changefeedID, sinkURI, replCfg)
+		if err != nil {
+			return nil, err
+		}
+
+		dsnStr, err := pmysql.GenerateDSN(ctx, sinkURI, cfg, options.dbConnFactory)
+		if err != nil {
+			return nil, err
+		}
+		db, err := options.dbConnFactory(ctx, dsnStr)
+		if err != nil {
+			return nil, err
+		}
+		db.SetMaxIdleConns(2)
+		db.SetMaxOpenConns(2)
+
+		isTiDB, err := pmysql.CheckIsTiDB(ctx, db)
+		if err != nil {
+			return nil, err
+		}
+		if isTiDB {
+			return NewTiDBObserver(db), nil
+		}
+		_ = db.Close()
 		return NewDummyObserver(), nil
 	}
+	return &observerAgent{creator: creator}, nil
+}
 
-	changefeedID := contextutil.ChangefeedIDFromCtx(ctx)
-	cfg := pmysql.NewConfig()
-	err = cfg.Apply(ctx, changefeedID, sinkURI, replCfg)
+type observerAgent struct {
+	creator func() (Observer, error)
+
+	mu struct {
+		sync.Mutex
+		inner  Observer
+		closed bool
+	}
+}
+
+// Tick implements Observer interface.
+func (o *observerAgent) Tick(ctx context.Context) error {
+	o.mu.Lock()
+	if o.mu.inner != nil {
+		defer o.mu.Unlock()
+		return o.mu.inner.Tick(ctx)
+	}
+	if o.mu.closed {
+		defer o.mu.Unlock()
+		return nil
+	}
+	o.mu.Unlock()
+
+	inner, err := o.creator()
 	if err != nil {
-		return nil, err
+		return errors.Trace(err)
 	}
 
-	dsnStr, err := pmysql.GenerateDSN(ctx, sinkURI, cfg, options.dbConnFactory)
-	if err != nil {
-		return nil, err
+	o.mu.Lock()
+	defer o.mu.Unlock()
+	if !o.mu.closed {
+		o.mu.inner = inner
+		return o.mu.inner.Tick(ctx)
 	}
-	db, err := options.dbConnFactory(ctx, dsnStr)
-	if err != nil {
-		return nil, err
-	}
-	db.SetMaxIdleConns(2)
-	db.SetMaxOpenConns(2)
+	return nil
+}
 
-	isTiDB, err := pmysql.CheckIsTiDB(ctx, db)
-	if err != nil {
-		return nil, err
+// Close implements Observer interface.
+func (o *observerAgent) Close() error {
+	o.mu.Lock()
+	defer o.mu.Unlock()
+	if o.mu.inner != nil {
+		o.mu.closed = true
+		return o.mu.inner.Close()
 	}
-	if isTiDB {
-		return NewTiDBObserver(db), nil
-	}
-	_ = db.Close()
-	return NewDummyObserver(), nil
+	return nil
 }
