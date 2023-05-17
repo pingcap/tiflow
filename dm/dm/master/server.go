@@ -1738,22 +1738,28 @@ func extractWorkerError(result *pb.ProcessResult) error {
 
 // waitOperationOk calls QueryStatus internally to implement a declarative API. It will determine operation is OK by
 // Source:
-//   OperateSource:
-//     * StartSource, UpdateSource: sourceID = Source
-//     * StopSource: return resp.Result = false && resp.Msg = “worker has not started”.
+//
+//	OperateSource:
+//	  * StartSource, UpdateSource: sourceID = Source
+//	  * StopSource: return resp.Result = false && resp.Msg = “worker has not started”.
+//
 // Task:
-//   StartTask, UpdateTask: query status and related subTask stage is running
-//   OperateTask:
-//     * pause: related task status is paused
-//     * resume: related task status is running
-//     * stop: related task can't be found in worker's result
+//
+//	StartTask, UpdateTask: query status and related subTask stage is running
+//	OperateTask:
+//	  * pause: related task status is paused
+//	  * resume: related task status is running
+//	  * stop: related task can't be found in worker's result
+//
 // Relay:
-//   OperateRelay:
-//     * start: related relay status is running
-//     * stop: related relay status can't be found in worker's result
-//   OperateWorkerRelay:
-//     * pause: related relay status is paused
-//     * resume: related relay status is running
+//
+//	OperateRelay:
+//	  * start: related relay status is running
+//	  * stop: related relay status can't be found in worker's result
+//	OperateWorkerRelay:
+//	  * pause: related relay status is paused
+//	  * resume: related relay status is running
+//
 // returns OK, error message of QueryStatusResponse, raw QueryStatusResponse, error that not from QueryStatusResponse.
 func (s *Server) waitOperationOk(
 	ctx context.Context,

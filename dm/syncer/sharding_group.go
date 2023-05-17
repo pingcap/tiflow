@@ -139,10 +139,10 @@ func NewShardingGroup(sourceID, shardMetaSchema, shardMetaTable string, sources 
 
 // Merge merges new sources to exists
 // used cases
-//   * add a new table to exists sharding group
-//   * add new table(s) to parent database's sharding group
-//  if group is in sequence sharding, return error directly
-//  otherwise add it in source, set it false and increment remain
+//   - add a new table to exists sharding group
+//   - add new table(s) to parent database's sharding group
+//     if group is in sequence sharding, return error directly
+//     otherwise add it in source, set it false and increment remain
 func (sg *ShardingGroup) Merge(sources []string) (bool, bool, int, error) {
 	sg.Lock()
 	defer sg.Unlock()
@@ -166,8 +166,8 @@ func (sg *ShardingGroup) Merge(sources []string) (bool, bool, int, error) {
 // Leave leaves from sharding group
 // it, doesn't affect in syncing process
 // used cases
-//   * drop a database
-//   * drop table
+//   - drop a database
+//   - drop table
 func (sg *ShardingGroup) Leave(sources []string) error {
 	sg.Lock()
 	defer sg.Unlock()
@@ -204,9 +204,10 @@ func (sg *ShardingGroup) Reset() {
 
 // TrySync tries to sync the sharding group
 // returns
-//   synced: whether the source table's sharding group synced
-//   active: whether the DDL will be processed in this round
-//   remain: remain un-synced source table's count
+//
+//	synced: whether the source table's sharding group synced
+//	active: whether the DDL will be processed in this round
+//	remain: remain un-synced source table's count
 func (sg *ShardingGroup) TrySync(source string, location, endLocation binlog.Location, ddls []string) (bool, bool, int, error) {
 	sg.Lock()
 	defer sg.Unlock()
@@ -231,7 +232,8 @@ func (sg *ShardingGroup) TrySync(source string, location, endLocation binlog.Loc
 
 // CheckSyncing checks the source table syncing status
 // returns
-//   beforeActiveDDL: whether the position is before active DDL
+//
+//	beforeActiveDDL: whether the position is before active DDL
 func (sg *ShardingGroup) CheckSyncing(source string, location binlog.Location) (beforeActiveDDL bool) {
 	sg.RLock()
 	defer sg.RUnlock()
@@ -506,11 +508,12 @@ func (k *ShardingGroupKeeper) LeaveGroup(targetTable *filter.Table, sources []st
 
 // TrySync tries to sync the sharding group
 // returns
-//   isSharding: whether the source table is in a sharding group
-//   group: the sharding group
-//   synced: whether the source table's sharding group synced
-//   active: whether is active DDL in sequence sharding DDL
-//   remain: remain un-synced source table's count
+//
+//	isSharding: whether the source table is in a sharding group
+//	group: the sharding group
+//	synced: whether the source table's sharding group synced
+//	active: whether is active DDL in sequence sharding DDL
+//	remain: remain un-synced source table's count
 func (k *ShardingGroupKeeper) TrySync(
 	sourceTable, targetTable *filter.Table, location, endLocation binlog.Location, ddls []string) (
 	needShardingHandle bool, group *ShardingGroup, synced, active bool, remain int, err error,
@@ -543,8 +546,10 @@ func (k *ShardingGroupKeeper) InSyncing(sourceTable, targetTable *filter.Table, 
 }
 
 // UnresolvedTables returns
-//   all `target-schema.target-table` that has unresolved sharding DDL,
-//   all source tables which with DDLs are un-resolved
+//
+//	all `target-schema.target-table` that has unresolved sharding DDL,
+//	all source tables which with DDLs are un-resolved
+//
 // NOTE: this func only ensure the returned tables are current un-resolved
 // if passing the returned tables to other func (like checkpoint),
 // must ensure their sync state not changed in this progress.

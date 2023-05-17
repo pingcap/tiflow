@@ -172,9 +172,10 @@ func (l *Lock) FetchTableInfos(task, source, schema, table string) (*model.Table
 // NOTE: now, DDLs (not empty) returned when resolved the conflict, but in fact these DDLs should not be replicated to the downstream.
 // NOTE: now, `TrySync` can detect and resolve conflicts in both of the following modes:
 //   - non-intrusive: update the schema of non-conflict tables to match the conflict tables.
-//                      data from conflict tables are non-intrusive.
+//     data from conflict tables are non-intrusive.
 //   - intrusive: revert the schema of the conflict tables to match the non-conflict tables.
-//                  data from conflict tables are intrusive.
+//     data from conflict tables are intrusive.
+//
 // TODO: but both of these modes are difficult to be implemented in DM-worker now, try to do that later.
 // for non-intrusive, a broadcast mechanism needed to notify conflict tables after the conflict has resolved, or even a block mechanism needed.
 // for intrusive, a DML prune or transform mechanism needed for two different schemas (before and after the conflict resolved).
@@ -967,7 +968,9 @@ func (l *Lock) joinTables(tp tableType) (schemacmp.Table, error) {
 // this function make sure all tables that need to be judged become part of smaller.
 // e.g. `ALTER TABLE RENAME a TO b`, this function check whether all tables do not contain `a`.
 // Prove:
-//    Compare(joined,prev_tbk) == error
+//
+//	Compare(joined,prev_tbk) == error
+//
 // => Joined ⊇ prev_tbk-{a}+{b} && Joined ⊅ prev_tbk
 // => a ∉ Joined.
 func (l *Lock) allTableSmaller(tp tableType) bool {
@@ -1005,7 +1008,9 @@ func (l *Lock) allTableSmaller(tp tableType) bool {
 // this function make sure all the tables that need to be judged become part of larger.
 // e.g `ALTER TABLE RENAME a TO b`, this function check whether all tables contain `b`.
 // Prove:
-//    Compare(Join(prev_tbx,tabley),post_tbx)>=0
+//
+//	Compare(Join(prev_tbx,tabley),post_tbx)>=0
+//
 // => Compare(Join(prev_tbk,tabley),prev_tbk-{a}+{b})>=0
 // => Join(prev_tbk,tabley) ⊇ prev_tbk-{a}+{b}
 // => b ∈ tabley.

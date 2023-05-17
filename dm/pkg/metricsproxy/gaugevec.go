@@ -45,7 +45,8 @@ func NewGaugeVec(opts prometheus.GaugeOpts, labelNames []string) *GaugeVecProxy 
 // WithLabelValues works as GetMetricWithLabelValues, but panics where
 // GetMetricWithLabelValues would have returned an error. Not returning an
 // error allows shortcuts like
-//     myVec.WithLabelValues("404", "GET").Add(42)
+//
+//	myVec.WithLabelValues("404", "GET").Add(42)
 func (c *GaugeVecProxy) WithLabelValues(lvs ...string) prometheus.Gauge {
 	if len(lvs) > 0 {
 		noteLabelsInMetricsProxy(c, lvs)
@@ -55,7 +56,8 @@ func (c *GaugeVecProxy) WithLabelValues(lvs ...string) prometheus.Gauge {
 
 // With works as GetMetricWith, but panics where GetMetricWithLabels would have
 // returned an error. Not returning an error allows shortcuts like
-//     myVec.With(prometheus.Labels{"code": "404", "method": "GET"}).Add(42)
+//
+//	myVec.With(prometheus.Labels{"code": "404", "method": "GET"}).Add(42)
 func (c *GaugeVecProxy) With(labels prometheus.Labels) prometheus.Gauge {
 	if len(labels) > 0 {
 		values := make([]string, len(labels))

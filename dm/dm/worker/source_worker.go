@@ -299,6 +299,7 @@ func (w *SourceWorker) updateSourceStatus(ctx context.Context, needLock bool) er
 //   - when DM-worker Server watches a SourceBound change, which is to turn a free source worker to bound or notify a
 //     bound worker that source config has changed
 //   - when DM-worker Server fails watching and recovers from a snapshot
+//
 // - UpstreamRelayWorkerKeyAdapter
 //   - when DM-worker Server.Start
 //   - when DM-worker Server watches a UpstreamRelayWorkerKeyAdapter change
@@ -408,6 +409,7 @@ func (w *SourceWorker) EnableRelay(startBySourceCfg bool) (err error) {
 //   - when DM-worker Server watches a SourceBound change, which is to notify that source config has changed, and the
 //     worker has started relay by that bound
 //   - when the source worker is unbound and has started relay by that bound
+//
 // - UpstreamRelayWorkerKeyAdapter no longer valid
 //   - when DM-worker Server watches a UpstreamRelayWorkerKeyAdapter change
 //   - when DM-worker Server fails watching and recovers from a snapshot

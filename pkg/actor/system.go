@@ -50,15 +50,15 @@ var (
 
 // procState is the state of a proc.
 //
-//   ┌---------┐  Actor.Close()
-//   | Running |-----------------┐
-//   └--+------┘                 v
-//      |                    ┌--------┐
-//      | System.Close()     | Closed |
-//      v                    └--------┘
-//   ┌---------------┐           ^
-//   | MailboxClosed |-----------┘
-//   └---------------┘ Mailbox Empty
+//	┌---------┐  Actor.Close()
+//	| Running |-----------------┐
+//	└--+------┘                 v
+//	   |                    ┌--------┐
+//	   | System.Close()     | Closed |
+//	   v                    └--------┘
+//	┌---------------┐           ^
+//	| MailboxClosed |-----------┘
+//	└---------------┘ Mailbox Empty
 type procState uint64
 
 const (

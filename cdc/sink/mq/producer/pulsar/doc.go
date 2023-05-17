@@ -24,8 +24,8 @@
 // 1. All option in url queries start with lowercase chars, e.g. `tlsAllowInsecureConnection`, `maxConnectionsPerBroker`.
 // 2. Use `auth` to config authentication plugin type, `auth.*` to config auth params.
 // See:
-//   1. https://pulsar.apache.org/docs/en/reference-cli-tools/#pulsar-client
-//   2. https://github.com/apache/pulsar-client-go/tree/master/pulsar/internal/auth
+//  1. https://pulsar.apache.org/docs/en/reference-cli-tools/#pulsar-client
+//  2. https://github.com/apache/pulsar-client-go/tree/master/pulsar/internal/auth
 //
 // For example:
 // pulsar://{host}/{topic}?auth=token&auth.token={token}
