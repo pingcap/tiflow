@@ -89,13 +89,12 @@ var redoBarrierDDLs = map[timodel.ActionType]struct{}{
 
 type ddlBarrier struct {
 	*schedulepb.Barrier
-	// minTableBarrierTs is the minimum table barrier timestamp of all tables.
-	// It is only used when a changefeed is started to check whether there was
-	// a table's DDL job that had not finished when the changefeed was stopped.
-	minTableBarrierTs model.Ts
-	// physicalTableBarrierTs is the minimum ts of all ddl events that create
-	// a new physical table.
-	physicalTableBarrierTs model.Ts
+	// minDDLBarrierTs is the minimum commitTs of all DDL events and is only
+	// used to check whether there is a pending DDL job at the checkpointTs when
+	// initializing the changefeed.
+	minDDLBarrierTs model.Ts
+	// redoBarrierTs is the minimum ts of ddl events that create a new physical table.
+	redoBarrierTs model.Ts
 }
 
 // ddlManager holds the pending DDL events of all tables and responsible for
@@ -442,71 +441,66 @@ func (m *ddlManager) barrier() *ddlBarrier {
 		Barrier: &schedulepb.Barrier{
 			GlobalBarrierTs: m.ddlResolvedTs,
 		},
-		minTableBarrierTs:      m.ddlResolvedTs,
-		physicalTableBarrierTs: m.ddlResolvedTs,
+		minDDLBarrierTs: m.ddlResolvedTs,
+		redoBarrierTs:   m.ddlResolvedTs,
 	}
 	tableBarrierMap := make(map[model.TableID]model.Ts)
 	ddls := m.getAllTableNextDDL()
 	if m.justSentDDL != nil {
 		ddls = append(ddls, m.justSentDDL)
 	}
+
 	for _, ddl := range ddls {
-		if m.redoMetaManager.Enabled() && isRedoBerrierDDL(ddl) {
+		if ddl.CommitTs < barrier.minDDLBarrierTs {
+			barrier.minDDLBarrierTs = ddl.CommitTs
+		}
+		if m.redoMetaManager.Enabled() && isRedoBarrierDDL(ddl) {
 			// The pipeline for a new table does not exist until the ddl is successfully
 			// executed, so the table's resolvedTs will not be calculated in redo.
-			// To solve this problem, resovedTs of redoDMLManager should not be greater
-			// than the min commitTs of create table DDL.
-			if ddl.CommitTs < barrier.physicalTableBarrierTs {
-				barrier.physicalTableBarrierTs = ddl.CommitTs
+			// To solve this problem, resovedTs of redo manager should not be greater
+			// than the min commitTs of ddls that create a new physical table.
+			if ddl.CommitTs < barrier.redoBarrierTs {
+				barrier.redoBarrierTs = ddl.CommitTs
 			}
 		}
-		// When there is a global DDL, we need to wait all tables
-		// checkpointTs reach its commitTs before we can execute it.
 		if isGlobalDDL(ddl) {
+			// When there is a global DDL, we need to wait all tables
+			// checkpointTs reach its commitTs before we can execute it.
 			if ddl.CommitTs < barrier.GlobalBarrierTs {
 				barrier.GlobalBarrierTs = ddl.CommitTs
 			}
 		} else {
-			ids := getPhysicalTableIDs(ddl)
+			// barrier related physical tables
+			ids := getRelatedPhysicalTableIDs(ddl)
 			for _, id := range ids {
 				tableBarrierMap[id] = ddl.CommitTs
 			}
 		}
-
-		// minTableBarrierTs is the min commitTs of all tables DDLs,
-		// it is used to prevent the checkpointTs from advancing too fast
-		// when a changefeed is just resumed.
-		if ddl.CommitTs < barrier.minTableBarrierTs {
-			barrier.minTableBarrierTs = ddl.CommitTs
-		}
 	}
 
-	for tb, barrierTs := range tableBarrierMap {
-		if barrierTs > barrier.GlobalBarrierTs {
-			delete(tableBarrierMap, tb)
+	// calculate tableBarriers
+	var tableBarriers []*schedulepb.TableBarrier
+	for tableID, tableBarrierTs := range tableBarrierMap {
+		if tableBarrierTs > barrier.GlobalBarrierTs {
+			continue
 		}
-	}
-
-	var tableBarrier []*schedulepb.TableBarrier
-	for tb, barrierTs := range tableBarrierMap {
-		tableBarrier = append(tableBarrier, &schedulepb.TableBarrier{
-			TableID:   tb,
-			BarrierTs: barrierTs,
+		tableBarriers = append(tableBarriers, &schedulepb.TableBarrier{
+			TableID:   tableID,
+			BarrierTs: tableBarrierTs,
 		})
 	}
-
 	// Limit the tableBarrier size to avoid too large barrier. Since it will
 	// cause the scheduler to be slow.
-	sort.Slice(tableBarrier, func(i, j int) bool {
-		return tableBarrier[i].BarrierTs < tableBarrier[j].BarrierTs
+	sort.Slice(tableBarriers, func(i, j int) bool {
+		return tableBarriers[i].BarrierTs < tableBarriers[j].BarrierTs
 	})
-	if len(tableBarrier) > tableBarrierNumberLimit {
-		barrier.GlobalBarrierTs = tableBarrier[tableBarrierNumberLimit].BarrierTs
-		tableBarrier = tableBarrier[:tableBarrierNumberLimit]
+	if len(tableBarriers) > tableBarrierNumberLimit {
+		barrier.GlobalBarrierTs = tableBarriers[tableBarrierNumberLimit].BarrierTs
+		tableBarriers = tableBarriers[:tableBarrierNumberLimit]
 	}
 
 	m.justSentDDL = nil
-	barrier.TableBarriers = tableBarrier
+	barrier.TableBarriers = tableBarriers
 	return barrier
 }
 
@@ -597,9 +591,9 @@ func (m *ddlManager) cleanCache() {
 	m.physicalTablesCache = nil
 }
 
-// getPhysicalTableIDs get all related physical table ids of a ddl event.
+// getRelatedPhysicalTableIDs get all related physical table ids of a ddl event.
 // It is a helper function to calculate tableBarrier.
-func getPhysicalTableIDs(ddl *model.DDLEvent) []model.TableID {
+func getRelatedPhysicalTableIDs(ddl *model.DDLEvent) []model.TableID {
 	res := make([]model.TableID, 0, 1)
 	table := ddl.TableInfo
 	if ddl.PreTableInfo != nil {
@@ -626,7 +620,7 @@ func isGlobalDDL(ddl *model.DDLEvent) bool {
 	return !ok
 }
 
-func isRedoBerrierDDL(ddl *model.DDLEvent) bool {
+func isRedoBarrierDDL(ddl *model.DDLEvent) bool {
 	_, ok := redoBarrierDDLs[ddl.Type]
 	return ok
 }
