@@ -266,7 +266,7 @@ func (m *SinkManager) Run(ctx context.Context, warnings ...chan<- error) (err er
 
 		if !cerror.IsChangefeedUnRetryableError(err) && errors.Cause(err) != context.Canceled {
 			select {
-			case <-ctx.Done():
+			case <-m.managerCtx.Done():
 			case warnings[0] <- err:
 			}
 		} else {

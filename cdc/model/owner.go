@@ -95,7 +95,7 @@ type TaskPosition struct {
 	// Error when changefeed error happens
 	Error *RunningError `json:"error"`
 	// Warning when module error happens
-	Warning *RunningError `json:"error"`
+	Warning *RunningError `json:"warning"`
 }
 
 // Marshal returns the json marshal format of a TaskStatus

@@ -403,7 +403,8 @@ func (m *feedStateManager) errorsReportedByProcessors() []*model.RunningError {
 			log.Error("processor reports an error",
 				zap.String("namespace", m.state.ID.Namespace),
 				zap.String("changefeed", m.state.ID.ID),
-				zap.String("captureID", captureID), zap.Any("error", position.Error))
+				zap.String("captureID", captureID),
+				zap.Any("error", position.Error))
 			m.state.PatchTaskPosition(captureID, func(position *model.TaskPosition) (*model.TaskPosition, bool, error) {
 				if position == nil {
 					return nil, false, nil
@@ -434,7 +435,8 @@ func (m *feedStateManager) warningsReportedByProcessors() []*model.RunningError 
 			log.Warn("processor reports a warning",
 				zap.String("namespace", m.state.ID.Namespace),
 				zap.String("changefeed", m.state.ID.ID),
-				zap.String("captureID", captureID), zap.Any("error", position.Warning))
+				zap.String("captureID", captureID),
+				zap.Any("warning", position.Warning))
 			m.state.PatchTaskPosition(captureID, func(position *model.TaskPosition) (*model.TaskPosition, bool, error) {
 				if position == nil {
 					return nil, false, nil
