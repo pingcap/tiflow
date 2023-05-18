@@ -180,7 +180,7 @@ func (w *sinkWorker) handleTask(ctx context.Context, task *sinkTask) (finalErr e
 			// events have been reported. Then we can continue the table
 			// at the checkpoint position.
 			case tablesink.SinkInternalError:
-				task.tableSink.clearTableSink(false)
+				task.tableSink.clearTableSink()
 				// Restart the table sink based on the checkpoint position.
 				if finalErr = task.tableSink.restart(ctx); finalErr == nil {
 					ckpt := task.tableSink.getCheckpointTs().ResolvedMark()
