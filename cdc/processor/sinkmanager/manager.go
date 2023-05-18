@@ -817,39 +817,32 @@ func (m *SinkManager) StartTable(span tablepb.Span, startTs model.Ts) error {
 }
 
 // AsyncStopTable sets the table(TableSink) state to stopped.
-func (m *SinkManager) AsyncStopTable(span tablepb.Span) {
-	m.wg.Add(1)
-	go func() {
-		defer m.wg.Done()
-		log.Info("Async stop table sink",
+func (m *SinkManager) AsyncStopTable(span tablepb.Span) bool {
+	log.Info("Async stop table sink",
+		zap.String("namespace", m.changefeedID.Namespace),
+		zap.String("changefeed", m.changefeedID.ID),
+		zap.Stringer("span", &span))
+
+	tableSink, ok := m.tableSinks.Load(span)
+	if !ok {
+		// Just warn, because the table sink may be removed by another goroutine.
+		// This logic is the same as this function's caller.
+		log.Warn("Table sink not found when removing table",
 			zap.String("namespace", m.changefeedID.Namespace),
 			zap.String("changefeed", m.changefeedID.ID),
-			zap.Stringer("span", &span),
-		)
-		tableSink, ok := m.tableSinks.Load(span)
-		if !ok {
-			// Just warn, because the table sink may be removed by another goroutine.
-			// This logic is the same as this function's caller.
-			log.Warn("Table sink not found when removing table",
-				zap.String("namespace", m.changefeedID.Namespace),
-				zap.String("changefeed", m.changefeedID.ID),
-				zap.Stringer("span", &span))
-		}
-		tableSink.(*tableSinkWrapper).close()
+			zap.Stringer("span", &span))
+	}
+	if tableSink.(*tableSinkWrapper).asyncClose() {
 		cleanedBytes := m.sinkMemQuota.Clean(span)
 		cleanedBytes += m.redoMemQuota.Clean(span)
 		log.Debug("MemoryQuotaTracing: Clean up memory quota for table sink task when removing table",
 			zap.String("namespace", m.changefeedID.Namespace),
 			zap.String("changefeed", m.changefeedID.ID),
 			zap.Stringer("span", &span),
-			zap.Uint64("memory", cleanedBytes),
-		)
-		log.Info("Table sink closed asynchronously",
-			zap.String("namespace", m.changefeedID.Namespace),
-			zap.String("changefeed", m.changefeedID.ID),
-			zap.Stringer("span", &span),
-		)
-	}()
+			zap.Uint64("memory", cleanedBytes))
+		return true
+	}
+	return false
 }
 
 // RemoveTable removes a table(TableSink) from the sink manager.
@@ -965,8 +958,9 @@ func (m *SinkManager) Close() {
 
 	start := time.Now()
 	m.wg.Wait()
-	m.sinkMemQuota.Close()
-	m.redoMemQuota.Close()
+	// sinkFactory is closed before all table sinks. So if the backend
+	// sinkFactory is busy on something, `Close` can still return quickly.
+	m.clearSinkFactory()
 	m.tableSinks.Range(func(_ tablepb.Span, value interface{}) bool {
 		sink := value.(*tableSinkWrapper)
 		sink.close()
@@ -975,7 +969,9 @@ func (m *SinkManager) Close() {
 		}
 		return true
 	})
-	m.clearSinkFactory()
+
+	m.sinkMemQuota.Close()
+	m.redoMemQuota.Close()
 
 	log.Info("Closed sink manager",
 		zap.String("namespace", m.changefeedID.Namespace),
