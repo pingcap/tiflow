@@ -990,7 +990,7 @@ func TestGetDefaultZeroValue(t *testing.T) {
 	}
 }
 
-func TestDecodeRow(t *testing.T) {
+func TestDecodeRowEnableChecksum(t *testing.T) {
 	helper := NewSchemaTestHelper(t)
 	defer helper.Close()
 
@@ -1002,7 +1002,31 @@ func TestDecodeRow(t *testing.T) {
 	tk.MustExec("create table t (id int primary key, a int)")
 
 	// row with 1 checksum
-	tk.Session().GetSessionVars().enablech = true
+	tk.Session().GetSessionVars().EnableRowLevelChecksum = true
+
+	tk.MustExec("insert into t values (1, 10)")
+
+	replicaConfig := config.GetDefaultReplicaConfig()
+	replicaConfig.Integrity.IntegrityCheckLevel = integrity.CheckLevelCorrectness
+
+	filter, err := filter.NewFilter(replicaConfig, "")
+	require.NoError(t, err)
+
+	ver, err := helper.Storage().CurrentVersion(oracle.GlobalTxnScope)
+	require.NoError(t, err)
+
+	changefeed := model.DefaultChangeFeedID("changefeed-test-decode-row")
+	schemaStorage, err := NewSchemaStorage(helper.GetCurrentMeta(),
+		ver.Ver, false, changefeed, util.RoleTester, filter)
+	require.NoError(t, err)
+	require.NotNil(t, schemaStorage)
+
+	// apply ddl to
+}
+
+func TestDecodeRow(t *testing.T) {
+	helper := NewSchemaTestHelper(t)
+	defer helper.Close()
 
 	changefeed := model.DefaultChangeFeedID("changefeed-test-decode-row")
 
@@ -1011,72 +1035,68 @@ func TestDecodeRow(t *testing.T) {
 
 	cfg := config.GetDefaultReplicaConfig()
 
-	cfgWithChecksumEnabled := config.GetDefaultReplicaConfig()
-	cfgWithChecksumEnabled.Integrity.IntegrityCheckLevel = integrity.CheckLevelCorrectness
+	filter, err := filter.NewFilter(c, "")
+	require.NoError(t, err)
 
-	for _, c := range []*config.ReplicaConfig{cfg, cfgWithChecksumEnabled} {
-		filter, err := filter.NewFilter(c, "")
-		require.NoError(t, err)
+	schemaStorage, err := NewSchemaStorage(helper.GetCurrentMeta(),
+		ver.Ver, false, changefeed, util.RoleTester, filter)
+	require.NoError(t, err)
 
-		schemaStorage, err := NewSchemaStorage(helper.GetCurrentMeta(),
-			ver.Ver, false, changefeed, util.RoleTester, filter)
-		require.NoError(t, err)
+	// apply ddl to schemaStorage
+	ddl := "create table test.student(id int primary key, name char(50), age int, gender char(10))"
+	job := helper.DDL2Job(ddl)
+	err = schemaStorage.HandleDDLJob(job)
+	require.NoError(t, err)
 
-		// apply ddl to schemaStorage
-		ddl := "create table test.student(id int primary key, name char(50), age int, gender char(10))"
-		job := helper.DDL2Job(ddl)
-		err = schemaStorage.HandleDDLJob(job)
-		require.NoError(t, err)
+	ts := schemaStorage.GetLastSnapshot().CurrentTs()
 
-		ts := schemaStorage.GetLastSnapshot().CurrentTs()
+	schemaStorage.AdvanceResolvedTs(ver.Ver)
 
-		schemaStorage.AdvanceResolvedTs(ver.Ver)
+	mounter := NewMounter(
+		schemaStorage, changefeed, time.Local, filter, true, cfg.Integrity).(*mounter)
 
-		mounter := NewMounter(
-			schemaStorage, changefeed, time.Local, filter, true, cfg.Integrity).(*mounter)
+	helper.Tk().MustExec(`insert into student values(1, "dongmen", 20, "male")`)
+	helper.Tk().MustExec(`update student set age = 27 where id = 1`)
 
-		helper.Tk().MustExec(`insert into student values(1, "dongmen", 20, "male")`)
-		helper.Tk().MustExec(`update student set age = 27 where id = 1`)
+	ctx := context.Background()
+	decodeAndCheckRowInTable := func(tableID int64, f func(key []byte, value []byte) *model.RawKVEntry) {
+		walkTableSpanInStore(t, helper.Storage(), tableID, func(key []byte, value []byte) {
+			rawKV := f(key, value)
 
-		ctx := context.Background()
-		decodeAndCheckRowInTable := func(tableID int64, f func(key []byte, value []byte) *model.RawKVEntry) {
-			walkTableSpanInStore(t, helper.Storage(), tableID, func(key []byte, value []byte) {
-				rawKV := f(key, value)
+			row, err := mounter.unmarshalAndMountRowChanged(ctx, rawKV)
+			require.NoError(t, err)
+			require.NotNil(t, row)
 
-				row, err := mounter.unmarshalAndMountRowChanged(ctx, rawKV)
-				require.NoError(t, err)
-				require.NotNil(t, row)
-
-				if row.Columns != nil {
-					require.NotNil(t, mounter.decoder)
-				}
-
-				if row.PreColumns != nil {
-					require.NotNil(t, mounter.preDecoder)
-				}
-			})
-		}
-
-		toRawKV := func(key []byte, value []byte) *model.RawKVEntry {
-			return &model.RawKVEntry{
-				OpType:  model.OpTypePut,
-				Key:     key,
-				Value:   value,
-				StartTs: ts - 1,
-				CRTs:    ts + 1,
+			if row.Columns != nil {
+				require.NotNil(t, mounter.decoder)
 			}
-		}
 
-		tableInfo, ok := schemaStorage.GetLastSnapshot().TableByName("test", "student")
-		require.True(t, ok)
-
-		decodeAndCheckRowInTable(tableInfo.ID, toRawKV)
-		decodeAndCheckRowInTable(tableInfo.ID, toRawKV)
-
-		job = helper.DDL2Job("drop table student")
-		err = schemaStorage.HandleDDLJob(job)
-		require.NoError(t, err)
+			if row.PreColumns != nil {
+				require.NotNil(t, mounter.preDecoder)
+			}
+		})
 	}
+
+	toRawKV := func(key []byte, value []byte) *model.RawKVEntry {
+		return &model.RawKVEntry{
+			OpType:  model.OpTypePut,
+			Key:     key,
+			Value:   value,
+			StartTs: ts - 1,
+			CRTs:    ts + 1,
+		}
+	}
+
+	tableInfo, ok := schemaStorage.GetLastSnapshot().TableByName("test", "student")
+	require.True(t, ok)
+
+	decodeAndCheckRowInTable(tableInfo.ID, toRawKV)
+	decodeAndCheckRowInTable(tableInfo.ID, toRawKV)
+
+	job = helper.DDL2Job("drop table student")
+	err = schemaStorage.HandleDDLJob(job)
+	require.NoError(t, err)
+
 }
 
 // TestDecodeEventIgnoreRow tests a PolymorphicEvent.Row is nil
