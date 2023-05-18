@@ -162,6 +162,10 @@ type taskOnRegisterPeer struct {
 	clientAddr string // for logging
 }
 
+type taskOnDeregisterPeer struct {
+	peerID string
+}
+
 type taskOnRegisterHandler struct {
 	topic   string
 	handler workerpool.EventHandle
@@ -287,6 +291,9 @@ func (m *MessageServer) run(ctx context.Context) error {
 					}
 					return errors.Trace(err)
 				}
+			case taskOnDeregisterPeer:
+				log.Info("taskOnDeregisterPeer", zap.String("peerID", task.peerID))
+				m.deregisterPeerByID(ctx, task.peerID)
 			case taskDebugDelay:
 				log.Info("taskDebugDelay started")
 				select {
@@ -354,6 +361,21 @@ func (m *MessageServer) deregisterPeer(ctx context.Context, peer *cdcPeer, err e
 	if err != nil {
 		peer.abort(ctx, err)
 	}
+}
+
+func (m *MessageServer) deregisterPeerByID(ctx context.Context, peerID string) {
+	m.peerLock.Lock()
+	peer, ok := m.peers[peerID]
+	m.peerLock.Unlock()
+	if !ok {
+		log.Warn("peer not found", zap.String("peerID", peerID))
+	}
+	m.deregisterPeer(ctx, peer, nil)
+}
+
+// ScheduleDeregisterPeerTask schedules a task to deregister a peer.
+func (m *MessageServer) ScheduleDeregisterPeerTask(ctx context.Context, peerID string) error {
+	return m.scheduleTask(ctx, taskOnDeregisterPeer{peerID: peerID})
 }
 
 // We use an empty interface to hold the information on the type of the object
