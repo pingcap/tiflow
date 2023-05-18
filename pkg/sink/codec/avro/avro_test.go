@@ -767,6 +767,107 @@ func TestRowToAvroData(t *testing.T) {
 	require.Equal(t, "c", v.(string))
 }
 
+func TestAvroEncode4EnableChecksum(t *testing.T) {
+	o := &Options{
+		EnableTiDBExtension:        true,
+		EnableRowChecksum:          true,
+		DecimalHandlingMode:        "string",
+		BigintUnsignedHandlingMode: "string	",
+	}
+
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+
+	encoder, err := setupEncoderAndSchemaRegistry(
+		ctx, "http://127.0.0.1:8081", nil, o)
+	defer teardownEncoderAndSchemaRegistry()
+	require.NoError(t, err)
+	require.NotNil(t, encoder)
+
+	cols := make([]*model.Column, 0)
+	colInfos := make([]rowcodec.ColInfo, 0)
+
+	cols = append(
+		cols,
+		&model.Column{
+			Name:  "id",
+			Value: int64(1),
+			Type:  mysql.TypeLong,
+			Flag:  model.HandleKeyFlag,
+		},
+	)
+	colInfos = append(
+		colInfos,
+		rowcodec.ColInfo{
+			ID:            1000,
+			IsPKHandle:    true,
+			VirtualGenCol: false,
+			Ft:            types.NewFieldType(mysql.TypeLong),
+		},
+	)
+
+	for _, v := range avroTestColumns {
+		cols = append(cols, &v.col)
+		colInfos = append(colInfos, v.colInfo)
+		colNew := v.col
+		colNew.Name = colNew.Name + "nullable"
+		colNew.Value = nil
+		colNew.Flag.SetIsNullable()
+		cols = append(cols, &colNew)
+		colInfos = append(colInfos, v.colInfo)
+	}
+
+	event := &model.RowChangedEvent{
+		CommitTs: 417318403368288260,
+		Table: &model.TableName{
+			Schema: "testdb",
+			Table:  "avroencode",
+		},
+		TableInfo: &model.TableInfo{
+			TableName: model.TableName{
+				Schema: "testdb",
+				Table:  "avroencode",
+			},
+		},
+		Columns:  cols,
+		ColInfos: colInfos,
+	}
+
+	namespace := getAvroNamespace(encoder.namespace, event.Table)
+	valueSchema, err := rowToAvroSchema(
+		namespace,
+		event.Table.Table,
+		&avroEncodeInput{
+			cols, colInfos,
+		},
+		true,
+		false,
+		"string",
+		"string",
+	)
+	require.NoError(t, err)
+	avroValueCodec, err := goavro.NewCodec(valueSchema)
+	require.NoError(t, err)
+
+	r, err := encoder.avroEncode(ctx, event, "default", false)
+	require.NoError(t, err)
+	res, _, err := avroValueCodec.NativeFromBinary(r.data)
+	require.NoError(t, err)
+	require.NotNil(t, res)
+
+	m, ok := res.(map[string]interface{})
+	require.True(t, ok)
+
+	_, found := m[tidbRowLevelChecksum]
+	require.True(t, found)
+
+	_, found = m[tidbCorrupted]
+	require.True(t, found)
+
+	_, found = m[tidbChecksumVersion]
+	require.True(t, found)
+}
+
 func TestAvroEncode(t *testing.T) {
 	o := &Options{
 		EnableTiDBExtension:        true,
