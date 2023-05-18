@@ -68,6 +68,13 @@ type metaManager struct {
 	metricFlushLogDuration prometheus.Observer
 }
 
+// NewDisabledMetaManager creates a disabled Meta Manager.
+func NewDisabledMetaManager() *metaManager {
+	return &metaManager{
+		enabled: false,
+	}
+}
+
 // NewMetaManagerWithInit creates a new Manager and initializes the meta.
 func NewMetaManagerWithInit(
 	ctx context.Context, cfg *config.ConsistentConfig, startTs model.Ts,
