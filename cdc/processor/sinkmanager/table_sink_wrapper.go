@@ -266,7 +266,7 @@ func (t *tableSinkWrapper) markAsClosed() (modified bool) {
 
 func (t *tableSinkWrapper) asyncClose() bool {
 	t.markAsClosing()
-	if t.clearTableSink(false) {
+	if t.clearTableSink(true) {
 		if t.markAsClosed() {
 			log.Info("Sink is closed",
 				zap.String("namespace", t.changefeed.Namespace),
@@ -280,7 +280,7 @@ func (t *tableSinkWrapper) asyncClose() bool {
 
 func (t *tableSinkWrapper) close() {
 	t.markAsClosing()
-	t.clearTableSink(true)
+	t.clearTableSink(false)
 	if t.markAsClosed() {
 		log.Info("Sink is closed",
 			zap.String("namespace", t.changefeed.Namespace),
