@@ -748,6 +748,7 @@ func (m *SinkManager) StartTable(tableID model.TableID, startTs model.Ts) error 
 }
 
 // AsyncStopTable sets the table(TableSink) state to stopped.
+<<<<<<< HEAD
 func (m *SinkManager) AsyncStopTable(tableID model.TableID) {
 	m.wg.Add(1)
 	go func() {
@@ -781,6 +782,34 @@ func (m *SinkManager) AsyncStopTable(tableID model.TableID) {
 			zap.Int64("tableID", tableID),
 		)
 	}()
+=======
+func (m *SinkManager) AsyncStopTable(span tablepb.Span) bool {
+	log.Info("Async stop table sink",
+		zap.String("namespace", m.changefeedID.Namespace),
+		zap.String("changefeed", m.changefeedID.ID),
+		zap.Stringer("span", &span))
+
+	tableSink, ok := m.tableSinks.Load(span)
+	if !ok {
+		// Just warn, because the table sink may be removed by another goroutine.
+		// This logic is the same as this function's caller.
+		log.Warn("Table sink not found when removing table",
+			zap.String("namespace", m.changefeedID.Namespace),
+			zap.String("changefeed", m.changefeedID.ID),
+			zap.Stringer("span", &span))
+	}
+	if tableSink.(*tableSinkWrapper).asyncClose() {
+		cleanedBytes := m.sinkMemQuota.Clean(span)
+		cleanedBytes += m.redoMemQuota.Clean(span)
+		log.Debug("MemoryQuotaTracing: Clean up memory quota for table sink task when removing table",
+			zap.String("namespace", m.changefeedID.Namespace),
+			zap.String("changefeed", m.changefeedID.ID),
+			zap.Stringer("span", &span),
+			zap.Uint64("memory", cleanedBytes))
+		return true
+	}
+	return false
+>>>>>>> e5caa489d1 ((sink/cdc): fix stop table dead lock introduced in #8949 (#8989))
 }
 
 // RemoveTable removes a table(TableSink) from the sink manager.

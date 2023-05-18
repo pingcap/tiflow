@@ -36,6 +36,7 @@ func (s *TableState) Store(new TableState) {
 	atomic.StoreInt32((*int32)(s), int32(new))
 }
 
+<<<<<<< HEAD
 // TablePipeline is a pipeline which capture the change log from tikv in a table
 type TablePipeline interface {
 	// ID returns the ID of source table and mark table
@@ -50,6 +51,17 @@ type TablePipeline interface {
 	UpdateBarrierTs(ts model.Ts)
 	// AsyncStop tells the pipeline to stop, and returns true is the pipeline is already stopped.
 	AsyncStop() bool
+=======
+// CompareAndSwap is just like sync/atomic.Atomic*.CompareAndSwap.
+func (s *TableState) CompareAndSwap(old, new TableState) bool {
+	oldx := int32(old)
+	newx := int32(new)
+	return atomic.CompareAndSwapInt32((*int32)(s), oldx, newx)
+}
+
+// TableID is the ID of the table
+type TableID = int64
+>>>>>>> e5caa489d1 ((sink/cdc): fix stop table dead lock introduced in #8949 (#8989))
 
 	// Start the sink consume data from the given `ts`
 	Start(ts model.Ts)
