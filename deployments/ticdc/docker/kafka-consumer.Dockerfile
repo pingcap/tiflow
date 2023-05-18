@@ -1,5 +1,5 @@
 FROM golang:1.19.1-alpine3.15 as builder
-RUN apk add --no-cache make bash
+RUN apk add --no-cache make bash git
 WORKDIR /go/src/github.com/pingcap/tiflow
 COPY . .
 
