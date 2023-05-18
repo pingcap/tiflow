@@ -461,6 +461,23 @@ func walkTableSpanInStore(t *testing.T, store tidbkv.Storage, tableID int64, f f
 	}
 }
 
+func getLastKeyValueInStore(t *testing.T, store tidbkv.Storage, tableID int64) (key, value []byte) {
+	txn, err := store.Begin()
+	require.NoError(t, err)
+	defer txn.Rollback() //nolint:errcheck
+	startKey, endKey := spanz.GetTableRange(tableID)
+	kvIter, err := txn.Iter(startKey, endKey)
+	require.NoError(t, err)
+	defer kvIter.Close()
+	for kvIter.Valid() {
+		key = kvIter.Key()
+		value = kvIter.Value()
+		err = kvIter.Next()
+		require.NoError(t, err)
+	}
+	return key, value
+}
+
 // We use OriginDefaultValue instead of DefaultValue in the ut, pls ref to
 // https://github.com/pingcap/tiflow/issues/4048
 // FIXME: OriginDefaultValue seems always to be string, and test more corner case
@@ -999,16 +1016,8 @@ func TestDecodeRowEnableChecksum(t *testing.T) {
 	tk.MustExec("set global tidb_enable_row_level_checksum = 1")
 	helper.Tk().MustExec("use test")
 
-	tk.MustExec("create table t (id int primary key, a int)")
-
-	// row with 1 checksum
-	tk.Session().GetSessionVars().EnableRowLevelChecksum = true
-
-	tk.MustExec("insert into t values (1, 10)")
-
 	replicaConfig := config.GetDefaultReplicaConfig()
 	replicaConfig.Integrity.IntegrityCheckLevel = integrity.CheckLevelCorrectness
-
 	filter, err := filter.NewFilter(replicaConfig, "")
 	require.NoError(t, err)
 
@@ -1021,7 +1030,98 @@ func TestDecodeRowEnableChecksum(t *testing.T) {
 	require.NoError(t, err)
 	require.NotNil(t, schemaStorage)
 
-	// apply ddl to
+	createTableDDL := "create table t (id int primary key, a int)"
+	job := helper.DDL2Job(createTableDDL)
+	err = schemaStorage.HandleDDLJob(job)
+	require.NoError(t, err)
+
+	ts := schemaStorage.GetLastSnapshot().CurrentTs()
+	schemaStorage.AdvanceResolvedTs(ver.Ver)
+
+	mounter := NewMounter(schemaStorage, changefeed, time.Local,
+		filter, true, replicaConfig.Integrity).(*mounter)
+
+	ctx := context.Background()
+
+	tableInfo, ok := schemaStorage.GetLastSnapshot().TableByName("test", "t")
+	require.True(t, ok)
+
+	// row without checksum
+	tk.Session().GetSessionVars().EnableRowLevelChecksum = false
+	tk.MustExec("insert into t values (1, 10)")
+
+	key, value := getLastKeyValueInStore(t, helper.Storage(), tableInfo.ID)
+	rawKV := &model.RawKVEntry{
+		OpType:  model.OpTypePut,
+		Key:     key,
+		Value:   value,
+		StartTs: ts - 1,
+		CRTs:    ts + 1,
+	}
+
+	row, err := mounter.unmarshalAndMountRowChanged(ctx, rawKV)
+	require.NoError(t, err)
+	require.NotNil(t, row)
+	// the upstream tidb does not enable checksum, so the checksum is nil
+	require.Nil(t, row.Checksum)
+
+	// 	row with one checksum
+	tk.Session().GetSessionVars().EnableRowLevelChecksum = true
+	tk.MustExec("insert into t values (2, 20)")
+
+	key, value = getLastKeyValueInStore(t, helper.Storage(), tableInfo.ID)
+	rawKV = &model.RawKVEntry{
+		OpType:  model.OpTypePut,
+		Key:     key,
+		Value:   value,
+		StartTs: ts - 1,
+		CRTs:    ts + 1,
+	}
+	row, err = mounter.unmarshalAndMountRowChanged(ctx, rawKV)
+	require.NoError(t, err)
+	require.NotNil(t, row)
+	require.NotNil(t, row.Checksum)
+
+	expected, ok := mounter.decoder.GetChecksum()
+	require.True(t, ok)
+	require.Equal(t, expected, row.Checksum.Current)
+	require.False(t, row.Checksum.Corrupted)
+
+	// row with 2 checksum
+	tk.MustExec("insert into t values (3, 30)")
+	job = helper.DDL2Job("alter table t change column a a varchar(10)")
+	err = schemaStorage.HandleDDLJob(job)
+	require.NoError(t, err)
+
+	key, value = getLastKeyValueInStore(t, helper.Storage(), tableInfo.ID)
+	rawKV = &model.RawKVEntry{
+		OpType:  model.OpTypePut,
+		Key:     key,
+		Value:   value,
+		StartTs: ts - 1,
+		CRTs:    ts + 1,
+	}
+	row, err = mounter.unmarshalAndMountRowChanged(ctx, rawKV)
+	require.NoError(t, err)
+	require.NotNil(t, row)
+	require.NotNil(t, row.Checksum)
+
+	first, ok := mounter.decoder.GetChecksum()
+	require.True(t, ok)
+
+	extra, ok := mounter.decoder.GetExtraChecksum()
+	require.True(t, ok)
+
+	if row.Checksum.Current != first {
+		require.Equal(t, extra, row.Checksum.Current)
+	} else {
+		require.Equal(t, first, row.Checksum.Current)
+	}
+	require.False(t, row.Checksum.Corrupted)
+
+	job = helper.DDL2Job("drop table t")
+	err = schemaStorage.HandleDDLJob(job)
+	require.NoError(t, err)
 }
 
 func TestDecodeRow(t *testing.T) {
@@ -1035,7 +1135,7 @@ func TestDecodeRow(t *testing.T) {
 
 	cfg := config.GetDefaultReplicaConfig()
 
-	filter, err := filter.NewFilter(c, "")
+	filter, err := filter.NewFilter(cfg, "")
 	require.NoError(t, err)
 
 	schemaStorage, err := NewSchemaStorage(helper.GetCurrentMeta(),
@@ -1096,7 +1196,6 @@ func TestDecodeRow(t *testing.T) {
 	job = helper.DDL2Job("drop table student")
 	err = schemaStorage.HandleDDLJob(job)
 	require.NoError(t, err)
-
 }
 
 // TestDecodeEventIgnoreRow tests a PolymorphicEvent.Row is nil
