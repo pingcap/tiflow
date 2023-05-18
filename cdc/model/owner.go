@@ -262,9 +262,9 @@ func (p ProcessorsInfos) String() string {
 type ChangeFeedStatus struct {
 	ResolvedTs   uint64 `json:"resolved-ts"`
 	CheckpointTs uint64 `json:"checkpoint-ts"`
-	// MinTableBarrierTs is the minimum table barrier timestamp of all tables.
-	// It is only used when a changefeed is started to check whether there was
-	// a table's DDL job that had not finished when the changefeed was stopped.
+	// minTableBarrierTs is the minimum commitTs of all DDL events and is only
+	// used to check whether there is a pending DDL job at the checkpointTs when
+	// initializing the changefeed.
 	MinTableBarrierTs uint64       `json:"min-table-barrier-ts"`
 	AdminJobType      AdminJobType `json:"admin-job-type"`
 }
