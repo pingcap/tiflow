@@ -23,6 +23,7 @@ import (
 	"strconv"
 	"strings"
 
+	"github.com/linkedin/goavro/v2"
 	"github.com/pingcap/errors"
 	"github.com/pingcap/log"
 	"github.com/pingcap/tidb/parser/mysql"

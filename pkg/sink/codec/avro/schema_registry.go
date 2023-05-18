@@ -372,6 +372,7 @@ func (m *SchemaManager) GetCachedOrRegister(
 	m.cacheRWLock.Lock()
 	m.cache[key] = cacheEntry
 	m.cacheRWLock.Unlock()
+	
 	log.Info("Avro schema GetCachedOrRegister successful with cache miss",
 		zap.Uint64("tableVersion", cacheEntry.tableVersion),
 		zap.Int("schemaID", cacheEntry.schemaID),
