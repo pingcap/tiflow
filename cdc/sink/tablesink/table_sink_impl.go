@@ -15,7 +15,6 @@ package tablesink
 
 import (
 	"sort"
-	"time"
 
 	"github.com/pingcap/log"
 	"github.com/pingcap/tiflow/cdc/model"
@@ -137,8 +136,6 @@ func (e *EventTableSink[E, P]) GetCheckpointTs() model.ResolvedTs {
 // After it returns, no more events will be sent out from this capture.
 func (e *EventTableSink[E, P]) Close() {
 	e.freeze()
-
-	start := time.Now()
 	e.progressTracker.waitClosed(e.backendSink.Dead())
 	e.markAsClosed()
 }
@@ -146,7 +143,6 @@ func (e *EventTableSink[E, P]) Close() {
 // AsyncClose closes the table sink asynchronously. Returns true if it's closed.
 func (e *EventTableSink[E, P]) AsyncClose() bool {
 	e.freeze()
-
 	if e.progressTracker.checkClosed(e.backendSink.Dead()) {
 		e.markAsClosed()
 		return true

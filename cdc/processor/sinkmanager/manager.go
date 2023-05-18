@@ -958,9 +958,8 @@ func (m *SinkManager) Close() {
 
 	start := time.Now()
 	m.wg.Wait()
-	// sinkFactory is closed before all table sinks. So if the backend
-	// sinkFactory is busy on something, `Close` can still return quickly.
-	m.clearSinkFactory()
+	m.sinkMemQuota.Close()
+	m.redoMemQuota.Close()
 	m.tableSinks.Range(func(_ tablepb.Span, value interface{}) bool {
 		sink := value.(*tableSinkWrapper)
 		sink.close()
@@ -969,9 +968,7 @@ func (m *SinkManager) Close() {
 		}
 		return true
 	})
-
-	m.sinkMemQuota.Close()
-	m.redoMemQuota.Close()
+	m.clearSinkFactory()
 
 	log.Info("Closed sink manager",
 		zap.String("namespace", m.changefeedID.Namespace),
