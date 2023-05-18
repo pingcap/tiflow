@@ -41,6 +41,7 @@ import (
 	"github.com/pingcap/tidb/util/mock"
 	"github.com/pingcap/tiflow/cdc/model"
 	"github.com/pingcap/tiflow/pkg/config"
+	cerror "github.com/pingcap/tiflow/pkg/errors"
 	"github.com/pingcap/tiflow/pkg/filter"
 	"github.com/pingcap/tiflow/pkg/integrity"
 	"github.com/pingcap/tiflow/pkg/spanz"
@@ -1118,6 +1119,20 @@ func TestDecodeRowEnableChecksum(t *testing.T) {
 		require.Equal(t, first, row.Checksum.Current)
 	}
 	require.False(t, row.Checksum.Corrupted)
+
+	// hack the table info to make the checksum corrupted
+	tableInfo.Columns[0].ID = 3
+
+	// corrupt-handle-level default to warn, so no error, but the checksum is corrupted
+	row, err = mounter.unmarshalAndMountRowChanged(ctx, rawKV)
+	require.NoError(t, err)
+	require.NotNil(t, row.Checksum)
+	require.True(t, row.Checksum.Corrupted)
+
+	mounter.integrity.CorruptionHandleLevel = integrity.CorruptionHandleLevelError
+	_, err = mounter.unmarshalAndMountRowChanged(ctx, rawKV)
+	require.Error(t, err)
+	require.ErrorIs(t, err, cerror.ErrCorruptedDataMutation)
 
 	job = helper.DDL2Job("drop table t")
 	err = schemaStorage.HandleDDLJob(job)
