@@ -15,7 +15,6 @@ package cloudstorage
 import (
 	"bytes"
 	"context"
-	"encoding/json"
 	"path"
 	"sync"
 	"sync/atomic"
@@ -44,10 +43,11 @@ type dmlWorker struct {
 	config       *cloudstorage.Config
 	// flushNotifyCh is used to notify that several tables can be flushed.
 	flushNotifyCh chan flushTask
+	inputCh       *chann.DrainableChann[eventFragment]
 	// tableEvents maintains a mapping of <table, []eventFragment>.
 	tableEvents *tableEventsMap
 	// fileSize maintains a mapping of <table, file size>.
-	fileSize          map[cloudstorage.VersionedTable]uint64
+	fileSize          map[cloudstorage.VersionedTableName]uint64
 	isClosed          uint64
 	statistics        *metrics.Statistics
 	filePathGenerator *cloudstorage.FilePathGenerator
@@ -58,17 +58,17 @@ type dmlWorker struct {
 
 type tableEventsMap struct {
 	mu        sync.Mutex
-	fragments map[cloudstorage.VersionedTable][]eventFragment
+	fragments map[cloudstorage.VersionedTableName][]eventFragment
 }
 
 func newTableEventsMap() *tableEventsMap {
 	return &tableEventsMap{
-		fragments: make(map[cloudstorage.VersionedTable][]eventFragment),
+		fragments: make(map[cloudstorage.VersionedTableName][]eventFragment),
 	}
 }
 
 type wrappedTable struct {
-	tableName model.TableName
+	cloudstorage.VersionedTableName
 	tableInfo *model.TableInfo
 }
 
@@ -83,6 +83,7 @@ func newDMLWorker(
 	storage storage.ExternalStorage,
 	config *cloudstorage.Config,
 	extension string,
+	inputCh *chann.DrainableChann[eventFragment],
 	clock clock.Clock,
 	statistics *metrics.Statistics,
 ) *dmlWorker {
@@ -91,9 +92,10 @@ func newDMLWorker(
 		changeFeedID:      changefeedID,
 		storage:           storage,
 		config:            config,
+		inputCh:           inputCh,
 		tableEvents:       newTableEventsMap(),
 		flushNotifyCh:     make(chan flushTask, 1),
-		fileSize:          make(map[cloudstorage.VersionedTable]uint64),
+		fileSize:          make(map[cloudstorage.VersionedTableName]uint64),
 		statistics:        statistics,
 		filePathGenerator: cloudstorage.NewFilePathGenerator(config, storage, extension, clock),
 		bufferPool: sync.Pool{
@@ -108,13 +110,8 @@ func newDMLWorker(
 	return d
 }
 
-// setClock is used for unit test
-func (d *dmlWorker) setClock(clock clock.Clock) {
-	d.filePathGenerator.SetClock(clock)
-}
-
 // run creates a set of background goroutines.
-func (d *dmlWorker) run(ctx context.Context, ch *chann.DrainableChann[eventFragment]) error {
+func (d *dmlWorker) run(ctx context.Context) error {
 	log.Debug("dml worker started", zap.Int("workerID", d.id),
 		zap.String("namespace", d.changeFeedID.Namespace),
 		zap.String("changefeed", d.changeFeedID.ID))
@@ -125,7 +122,7 @@ func (d *dmlWorker) run(ctx context.Context, ch *chann.DrainableChann[eventFragm
 	})
 
 	eg.Go(func() error {
-		return d.dispatchFlushTasks(ctx, ch)
+		return d.dispatchFlushTasks(ctx, d.inputCh)
 	})
 
 	return eg.Wait()
@@ -143,10 +140,7 @@ func (d *dmlWorker) flushMessages(ctx context.Context) error {
 				return nil
 			}
 			for _, tbl := range task.targetTables {
-				table := cloudstorage.VersionedTable{
-					TableNameWithPhysicTableID: tbl.tableName,
-					Version:                    tbl.tableInfo.Version,
-				}
+				table := tbl.VersionedTableName
 				d.tableEvents.mu.Lock()
 				events := make([]eventFragment, len(d.tableEvents.fragments[table]))
 				copy(events, d.tableEvents.fragments[table])
@@ -157,7 +151,7 @@ func (d *dmlWorker) flushMessages(ctx context.Context) error {
 				}
 
 				// generate scheme.json file before generating the first data file if necessary
-				err := d.writeSchemaFile(ctx, table, tbl.tableInfo)
+				err := d.filePathGenerator.CheckOrWriteSchema(ctx, table, tbl.tableInfo)
 				if err != nil {
 					log.Error("failed to write schema file to external storage",
 						zap.Int("workerID", d.id),
@@ -184,7 +178,7 @@ func (d *dmlWorker) flushMessages(ctx context.Context) error {
 				indexFilePath := d.filePathGenerator.GenerateIndexFilePath(table, date)
 
 				// first write the index file to external storage.
-				// the file content is simply the last elemement of the data file path
+				// the file content is simply the last element of the data file path
 				err = d.writeIndexFile(ctx, indexFilePath, path.Base(dataFilePath)+"\n")
 				if err != nil {
 					log.Error("failed to write index file to external storage",
@@ -221,42 +215,6 @@ func (d *dmlWorker) flushMessages(ctx context.Context) error {
 			}
 		}
 	}
-}
-
-// In order to avoid spending so much time lookuping directory and getting last write point
-// (i.e. which dir and which file) when the changefeed is restarted, we'd rather switch to
-// a new dir and start writing. In this case, schema file should be created in the new dir
-// if it hasn't been created when a DDL event was executed.
-func (d *dmlWorker) writeSchemaFile(
-	ctx context.Context,
-	table cloudstorage.VersionedTable,
-	tableInfo *model.TableInfo,
-) error {
-	if ok := d.filePathGenerator.Contains(table); !ok {
-		var tableDetail cloudstorage.TableDefinition
-		tableDetail.FromTableInfo(tableInfo)
-		path := cloudstorage.GenerateSchemaFilePath(tableDetail)
-		// the file may have been created when a DDL event was executed.
-		exist, err := d.storage.FileExists(ctx, path)
-		if err != nil {
-			return err
-		}
-		if exist {
-			return nil
-		}
-
-		encodedDetail, err := json.MarshalIndent(tableDetail, "", "    ")
-		if err != nil {
-			return err
-		}
-
-		err = d.storage.WriteFile(ctx, path, encodedDetail)
-		if err != nil {
-			return err
-		}
-	}
-
-	return nil
 }
 
 func (d *dmlWorker) writeIndexFile(ctx context.Context, path, content string) error {
@@ -336,10 +294,7 @@ func (d *dmlWorker) dispatchFlushTasks(ctx context.Context,
 				log.Debug("flush task is emitted successfully when flush interval exceeds",
 					zap.Any("tables", task.targetTables))
 				for elem := range tableSet {
-					tbl := cloudstorage.VersionedTable{
-						TableNameWithPhysicTableID: elem.tableName,
-						Version:                    elem.tableInfo.Version,
-					}
+					tbl := elem.VersionedTableName
 					d.fileSize[tbl] = 0
 				}
 				tableSet = make(map[wrappedTable]struct{})
@@ -355,8 +310,8 @@ func (d *dmlWorker) dispatchFlushTasks(ctx context.Context,
 			d.tableEvents.mu.Unlock()
 
 			key := wrappedTable{
-				tableName: frag.versionedTable.TableNameWithPhysicTableID,
-				tableInfo: frag.event.Event.TableInfo,
+				VersionedTableName: table,
+				tableInfo:          frag.event.Event.TableInfo,
 			}
 
 			tableSet[key] = struct{}{}

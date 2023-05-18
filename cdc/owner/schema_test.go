@@ -26,6 +26,7 @@ import (
 	"github.com/pingcap/tiflow/cdc/entry"
 	"github.com/pingcap/tiflow/cdc/model"
 	"github.com/pingcap/tiflow/pkg/config"
+	"github.com/pingcap/tiflow/pkg/filter"
 	"github.com/stretchr/testify/require"
 	"github.com/tikv/client-go/v2/oracle"
 )
@@ -37,8 +38,10 @@ func TestAllPhysicalTables(t *testing.T) {
 	defer helper.Close()
 	ver, err := helper.Storage().CurrentVersion(oracle.GlobalTxnScope)
 	require.Nil(t, err)
+	f, err := filter.NewFilter(config.GetDefaultReplicaConfig(), "")
+	require.Nil(t, err)
 	schema, err := newSchemaWrap4Owner(helper.Storage(), ver.Ver,
-		config.GetDefaultReplicaConfig(), dummyChangeFeedID)
+		config.GetDefaultReplicaConfig(), dummyChangeFeedID, f)
 	require.Nil(t, err)
 	tableIDs, err := schema.AllPhysicalTables(context.Background(), ver.Ver)
 	require.Nil(t, err)
@@ -93,8 +96,10 @@ func TestAllTables(t *testing.T) {
 	defer helper.Close()
 	ver, err := helper.Storage().CurrentVersion(oracle.GlobalTxnScope)
 	require.Nil(t, err)
+	f, err := filter.NewFilter(config.GetDefaultReplicaConfig(), "")
+	require.Nil(t, err)
 	schema, err := newSchemaWrap4Owner(helper.Storage(), ver.Ver,
-		config.GetDefaultReplicaConfig(), dummyChangeFeedID)
+		config.GetDefaultReplicaConfig(), dummyChangeFeedID, f)
 	require.Nil(t, err)
 	tableInfos, err := schema.AllTables(context.Background(), ver.Ver)
 	require.Nil(t, err)
@@ -109,7 +114,7 @@ func TestAllTables(t *testing.T) {
 	require.Equal(t, tableName, model.TableName{
 		Schema:  "test",
 		Table:   "t1",
-		TableID: 84,
+		TableID: 88,
 	})
 	// add ineligible table
 	job = helper.DDL2Job("create table test.t2(id int)")
@@ -121,7 +126,7 @@ func TestAllTables(t *testing.T) {
 	require.Equal(t, tableName, model.TableName{
 		Schema:  "test",
 		Table:   "t1",
-		TableID: 84,
+		TableID: 88,
 	})
 }
 
@@ -130,8 +135,10 @@ func TestIsIneligibleTableID(t *testing.T) {
 	defer helper.Close()
 	ver, err := helper.Storage().CurrentVersion(oracle.GlobalTxnScope)
 	require.Nil(t, err)
+	f, err := filter.NewFilter(config.GetDefaultReplicaConfig(), "")
+	require.Nil(t, err)
 	schema, err := newSchemaWrap4Owner(helper.Storage(), ver.Ver,
-		config.GetDefaultReplicaConfig(), dummyChangeFeedID)
+		config.GetDefaultReplicaConfig(), dummyChangeFeedID, f)
 	require.Nil(t, err)
 	// add normal table
 	job := helper.DDL2Job("create table test.t1(id int primary key)")
@@ -163,8 +170,10 @@ func TestBuildDDLEventsFromSingleTableDDL(t *testing.T) {
 	defer helper.Close()
 	ver, err := helper.Storage().CurrentVersion(oracle.GlobalTxnScope)
 	require.Nil(t, err)
+	f, err := filter.NewFilter(config.GetDefaultReplicaConfig(), "")
+	require.Nil(t, err)
 	schema, err := newSchemaWrap4Owner(helper.Storage(), ver.Ver,
-		config.GetDefaultReplicaConfig(), dummyChangeFeedID)
+		config.GetDefaultReplicaConfig(), dummyChangeFeedID, f)
 	require.Nil(t, err)
 	// add normal table
 	ctx := context.Background()
@@ -237,8 +246,10 @@ func TestBuildDDLEventsFromRenameTablesDDL(t *testing.T) {
 
 	ver, err := helper.Storage().CurrentVersion(oracle.GlobalTxnScope)
 	require.Nil(t, err)
+	f, err := filter.NewFilter(config.GetDefaultReplicaConfig(), "")
+	require.Nil(t, err)
 	schema, err := newSchemaWrap4Owner(helper.Storage(), ver.Ver,
-		config.GetDefaultReplicaConfig(), dummyChangeFeedID)
+		config.GetDefaultReplicaConfig(), dummyChangeFeedID, f)
 	require.Nil(t, err)
 	ctx := context.Background()
 	job := helper.DDL2Job("create database test1")
@@ -363,8 +374,10 @@ func TestBuildDDLEventsFromDropTablesDDL(t *testing.T) {
 
 	ver, err := helper.Storage().CurrentVersion(oracle.GlobalTxnScope)
 	require.Nil(t, err)
+	f, err := filter.NewFilter(config.GetDefaultReplicaConfig(), "")
+	require.Nil(t, err)
 	schema, err := newSchemaWrap4Owner(helper.Storage(), ver.Ver,
-		config.GetDefaultReplicaConfig(), dummyChangeFeedID)
+		config.GetDefaultReplicaConfig(), dummyChangeFeedID, f)
 	require.Nil(t, err)
 	// add test.t1
 	ctx := context.Background()
@@ -464,8 +477,10 @@ func TestBuildDDLEventsFromDropViewsDDL(t *testing.T) {
 
 	ver, err := helper.Storage().CurrentVersion(oracle.GlobalTxnScope)
 	require.Nil(t, err)
+	f, err := filter.NewFilter(config.GetDefaultReplicaConfig(), "")
+	require.Nil(t, err)
 	schema, err := newSchemaWrap4Owner(helper.Storage(), ver.Ver,
-		config.GetDefaultReplicaConfig(), dummyChangeFeedID)
+		config.GetDefaultReplicaConfig(), dummyChangeFeedID, f)
 	require.Nil(t, err)
 	ctx := context.Background()
 	// add test.tb1
@@ -586,8 +601,10 @@ func TestBuildIgnoredDDLJob(t *testing.T) {
 	cfg := config.GetDefaultReplicaConfig()
 	// only replicate ddl event of test.tb1 and test.tb2
 	cfg.Filter.Rules = []string{"test.tb1", "test.tb2"}
+	f, err := filter.NewFilter(cfg, "")
+	require.Nil(t, err)
 	schema, err := newSchemaWrap4Owner(helper.Storage(), ver.Ver,
-		cfg, dummyChangeFeedID)
+		cfg, dummyChangeFeedID, f)
 	require.Nil(t, err)
 	ctx := context.Background()
 	// test case 1: Will not filter out create test.tb1 ddl.

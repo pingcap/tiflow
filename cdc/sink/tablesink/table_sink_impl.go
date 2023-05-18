@@ -35,8 +35,11 @@ var (
 
 // EventTableSink is a table sink that can write events.
 type EventTableSink[E dmlsink.TableEvent, P dmlsink.Appender[E]] struct {
-	changefeedID    model.ChangeFeedID
-	span            tablepb.Span
+	changefeedID model.ChangeFeedID
+	span         tablepb.Span
+	// startTs is the initial checkpointTs of the table sink.
+	startTs model.Ts
+
 	maxResolvedTs   model.ResolvedTs
 	backendSink     dmlsink.EventSink[E]
 	progressTracker *progressTracker
@@ -53,6 +56,7 @@ type EventTableSink[E dmlsink.TableEvent, P dmlsink.Appender[E]] struct {
 func New[E dmlsink.TableEvent, P dmlsink.Appender[E]](
 	changefeedID model.ChangeFeedID,
 	span tablepb.Span,
+	startTs model.Ts,
 	backendSink dmlsink.EventSink[E],
 	appender P,
 	totalRowsCounter prometheus.Counter,
@@ -60,6 +64,7 @@ func New[E dmlsink.TableEvent, P dmlsink.Appender[E]](
 	return &EventTableSink[E, P]{
 		changefeedID:              changefeedID,
 		span:                      span,
+		startTs:                   startTs,
 		maxResolvedTs:             model.NewResolvedTs(0),
 		backendSink:               backendSink,
 		progressTracker:           newProgressTracker(span, defaultBufferSize),
@@ -90,7 +95,13 @@ func (e *EventTableSink[E, P]) UpdateResolvedTs(resolvedTs model.ResolvedTs) err
 	})
 	// Despite the lack of data, we have to move forward with progress.
 	if i == 0 {
+		// WriteEvents must be called to check whether the backend sink is dead
+		// or not, even if there is no more events. So if the backend is dead
+		// and re-initialized, we can know it and re-build a table sink.
 		e.progressTracker.addResolvedTs(resolvedTs)
+		if err := e.backendSink.WriteEvents(); err != nil {
+			return SinkInternalError{err}
+		}
 		return nil
 	}
 	resolvedEvents := e.eventBuffer[:i]
@@ -109,9 +120,13 @@ func (e *EventTableSink[E, P]) UpdateResolvedTs(resolvedTs model.ResolvedTs) err
 		}
 		resolvedCallbackableEvents = append(resolvedCallbackableEvents, ce)
 	}
+
 	// Do not forget to add the resolvedTs to progressTracker.
 	e.progressTracker.addResolvedTs(resolvedTs)
-	return e.backendSink.WriteEvents(resolvedCallbackableEvents...)
+	if err := e.backendSink.WriteEvents(resolvedCallbackableEvents...); err != nil {
+		return SinkInternalError{err}
+	}
+	return nil
 }
 
 // GetCheckpointTs returns the checkpoint ts of the table sink.

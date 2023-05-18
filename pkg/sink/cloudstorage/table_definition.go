@@ -13,18 +13,27 @@
 package cloudstorage
 
 import (
+	"encoding/json"
+	"sort"
 	"strconv"
 	"strings"
 
-	"github.com/pingcap/errors"
+	"github.com/pingcap/log"
 	"github.com/pingcap/tidb/parser/charset"
 	timodel "github.com/pingcap/tidb/parser/model"
 	"github.com/pingcap/tidb/parser/mysql"
 	"github.com/pingcap/tidb/parser/types"
 	"github.com/pingcap/tiflow/cdc/model"
+	"github.com/pingcap/tiflow/pkg/errors"
+	"github.com/pingcap/tiflow/pkg/hash"
+	"go.uber.org/zap"
 )
 
-const defaultTableDefinitionVersion = 1
+const (
+	defaultTableDefinitionVersion = 1
+	marshalPrefix                 = ""
+	marshalIndent                 = "    "
+)
 
 // TableCol denotes the column info for a table definition.
 type TableCol struct {
@@ -154,6 +163,7 @@ func (t *TableCol) ToTiColumnInfo() (*timodel.ColumnInfo, error) {
 }
 
 // TableDefinition is the detailed table definition used for cloud storage sink.
+// TODO: find a better name for this struct.
 type TableDefinition struct {
 	Table        string             `json:"Table"`
 	Schema       string             `json:"Schema"`
@@ -165,9 +175,24 @@ type TableDefinition struct {
 	TotalColumns int                `json:"TableColumnsTotal"`
 }
 
+// tableDefWithoutQuery is the table definition without query, which ignores the
+// Query, Type and TableVersion field.
+type tableDefWithoutQuery struct {
+	Table        string     `json:"Table"`
+	Schema       string     `json:"Schema"`
+	Version      uint64     `json:"Version"`
+	Columns      []TableCol `json:"TableColumns"`
+	TotalColumns int        `json:"TableColumnsTotal"`
+}
+
 // FromDDLEvent converts from DDLEvent to TableDefinition.
 func (t *TableDefinition) FromDDLEvent(event *model.DDLEvent) {
-	t.FromTableInfo(event.TableInfo)
+	if event.CommitTs != event.TableInfo.Version {
+		log.Panic("commit ts and table info version should be equal",
+			zap.Any("event", event), zap.Any("tableInfo", event.TableInfo),
+		)
+	}
+	t.FromTableInfo(event.TableInfo, event.TableInfo.Version)
 	t.Query = event.Query
 	t.Type = event.Type
 }
@@ -188,11 +213,15 @@ func (t *TableDefinition) ToDDLEvent() (*model.DDLEvent, error) {
 }
 
 // FromTableInfo converts from TableInfo to TableDefinition.
-func (t *TableDefinition) FromTableInfo(info *model.TableInfo) {
-	t.Table = info.TableName.Table
-	t.Schema = info.TableName.Schema
+func (t *TableDefinition) FromTableInfo(info *model.TableInfo, tableInfoVersion model.Ts) {
 	t.Version = defaultTableDefinitionVersion
-	t.TableVersion = info.Version
+	t.TableVersion = tableInfoVersion
+
+	t.Schema = info.TableName.Schema
+	if info.TableInfo == nil {
+		return
+	}
+	t.Table = info.TableName.Table
 	t.TotalColumns = len(info.Columns)
 	for _, col := range info.Columns {
 		var tableCol TableCol
@@ -221,4 +250,71 @@ func (t *TableDefinition) ToTableInfo() (*model.TableInfo, error) {
 	}
 
 	return info, nil
+}
+
+// IsTableSchema returns whether the TableDefinition is a table schema.
+func (t *TableDefinition) IsTableSchema() bool {
+	if len(t.Columns) != t.TotalColumns {
+		log.Panic("invalid table definition", zap.Any("tableDef", t))
+	}
+	return t.TotalColumns != 0
+}
+
+// MarshalWithQuery marshals TableDefinition with Query field.
+func (t *TableDefinition) MarshalWithQuery() ([]byte, error) {
+	data, err := json.MarshalIndent(t, marshalPrefix, marshalIndent)
+	if err != nil {
+		return nil, errors.WrapError(errors.ErrMarshalFailed, err)
+	}
+	return data, nil
+}
+
+// marshalWithoutQuery marshals TableDefinition without Query field.
+func (t *TableDefinition) marshalWithoutQuery() ([]byte, error) {
+	// sort columns by name
+	sortedColumns := make([]TableCol, len(t.Columns))
+	copy(sortedColumns, t.Columns)
+	sort.Slice(sortedColumns, func(i, j int) bool {
+		return sortedColumns[i].Name < sortedColumns[j].Name
+	})
+
+	defWithoutQuery := tableDefWithoutQuery{
+		Table:        t.Table,
+		Schema:       t.Schema,
+		Columns:      sortedColumns,
+		TotalColumns: t.TotalColumns,
+	}
+
+	data, err := json.MarshalIndent(defWithoutQuery, marshalPrefix, marshalIndent)
+	if err != nil {
+		return nil, errors.WrapError(errors.ErrMarshalFailed, err)
+	}
+	return data, nil
+}
+
+// Sum32 returns the 32-bits hash value of TableDefinition.
+func (t *TableDefinition) Sum32(hasher *hash.PositionInertia) (uint32, error) {
+	if hasher == nil {
+		hasher = hash.NewPositionInertia()
+	}
+	hasher.Reset()
+	data, err := t.marshalWithoutQuery()
+	if err != nil {
+		return 0, err
+	}
+
+	hasher.Write(data)
+	return hasher.Sum32(), nil
+}
+
+// GenerateSchemaFilePath generates the schema file path for TableDefinition.
+func (t *TableDefinition) GenerateSchemaFilePath() (string, error) {
+	checksum, err := t.Sum32(nil)
+	if err != nil {
+		return "", err
+	}
+	if !t.IsTableSchema() && t.Table != "" {
+		log.Panic("invalid table definition", zap.Any("tableDef", t))
+	}
+	return generateSchemaFilePath(t.Schema, t.Table, t.TableVersion, checksum), nil
 }

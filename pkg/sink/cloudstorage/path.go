@@ -17,26 +17,95 @@ import (
 	"context"
 	"fmt"
 	"io"
+	"path"
+	"regexp"
 	"strconv"
 	"strings"
 
+	"github.com/pingcap/log"
 	"github.com/pingcap/tidb/br/pkg/storage"
 	"github.com/pingcap/tiflow/cdc/model"
 	"github.com/pingcap/tiflow/engine/pkg/clock"
 	"github.com/pingcap/tiflow/pkg/config"
-	cerror "github.com/pingcap/tiflow/pkg/errors"
+	"github.com/pingcap/tiflow/pkg/errors"
+	"github.com/pingcap/tiflow/pkg/hash"
+	"go.uber.org/zap"
 )
 
 const (
 	// 3 is the length of "CDC", and the file number contains
 	// at least 6 digits (e.g. CDC000001.csv).
-	minFileNamePrefixLen = 9
-	defaultIndexFileName = "CDC.index"
+	minFileNamePrefixLen = 3 + config.MinFileIndexWidth
+	defaultIndexFileName = "meta/CDC.index"
+
+	// The following constants are used to generate file paths.
+	schemaFileNameFormat = "schema_%d_%010d.json"
+	// The database schema is stored in the following path:
+	// <schema>/meta/schema_{tableVersion}_{checksum}.json
+	dbSchemaPrefix = "%s/meta/"
+	// The table schema is stored in the following path:
+	// <schema>/<table>/meta/schema_{tableVersion}_{checksum}.json
+	tableSchemaPrefix = "%s/%s/meta/"
 )
 
-// GenerateSchemaFilePath generates schema file path based on the table definition.
-func GenerateSchemaFilePath(def TableDefinition) string {
-	return fmt.Sprintf("%s/%s/%d/schema.json", def.Schema, def.Table, def.TableVersion)
+var schemaRE = regexp.MustCompile(`meta/schema_\d+_\d{10}\.json$`)
+
+// IsSchemaFile checks whether the file is a schema file.
+func IsSchemaFile(path string) bool {
+	return schemaRE.MatchString(path)
+}
+
+// mustParseSchemaName parses the version from the schema file name.
+func mustParseSchemaName(path string) (uint64, uint32) {
+	reportErr := func(err error) {
+		log.Panic("failed to parse schema file name",
+			zap.String("schemaPath", path),
+			zap.Any("error", err))
+	}
+
+	// For <schema>/<table>/meta/schema_{tableVersion}_{checksum}.json, the parts
+	// should be ["<schema>/<table>/meta/schema", "{tableVersion}", "{checksum}.json"].
+	parts := strings.Split(path, "_")
+	if len(parts) < 3 {
+		reportErr(errors.New("invalid path format"))
+	}
+
+	checksum := strings.TrimSuffix(parts[len(parts)-1], ".json")
+	tableChecksum, err := strconv.ParseUint(checksum, 10, 64)
+	if err != nil {
+		reportErr(err)
+	}
+	version := parts[len(parts)-2]
+	tableVersion, err := strconv.ParseUint(version, 10, 64)
+	if err != nil {
+		reportErr(err)
+	}
+	return tableVersion, uint32(tableChecksum)
+}
+
+func generateSchemaFilePath(
+	schema, table string, tableVersion uint64, checksum uint32,
+) string {
+	if schema == "" || tableVersion == 0 {
+		log.Panic("invalid schema or tableVersion",
+			zap.String("schema", schema), zap.Uint64("tableVersion", tableVersion))
+	}
+
+	var dir string
+	if table == "" {
+		// Generate db schema file path.
+		dir = fmt.Sprintf(dbSchemaPrefix, schema)
+	} else {
+		// Generate table schema file path.
+		dir = fmt.Sprintf(tableSchemaPrefix, schema, table)
+	}
+	name := fmt.Sprintf(schemaFileNameFormat, tableVersion, checksum)
+	return path.Join(dir, name)
+}
+
+func generateDataFileName(index uint64, extension string, fileIndexWidth int) string {
+	indexFmt := "%0" + strconv.Itoa(fileIndexWidth) + "d"
+	return fmt.Sprintf("CDC"+indexFmt+"%s", index, extension)
 }
 
 type indexWithDate struct {
@@ -44,16 +113,16 @@ type indexWithDate struct {
 	currDate, prevDate string
 }
 
-// VersionedTable is used to wrap TableNameWithPhysicTableID with a version.
-type VersionedTable struct {
+// VersionedTableName is used to wrap TableNameWithPhysicTableID with a version.
+type VersionedTableName struct {
 	// Because we need to generate different file paths for different
 	// tables, we need to use the physical table ID instead of the
 	// logical table ID.(Especially when the table is a partitioned table).
 	TableNameWithPhysicTableID model.TableName
-	// Version is consistent with the version of TableInfo recorded in
+	// TableInfoVersion is consistent with the version of TableInfo recorded in
 	// schema storage. It can either be finished ts of a DDL event,
 	// or be the checkpoint ts when processor is restarted.
-	Version uint64
+	TableInfoVersion uint64
 }
 
 // FilePathGenerator is used to generate data file path and index file path.
@@ -62,7 +131,10 @@ type FilePathGenerator struct {
 	config    *Config
 	clock     clock.Clock
 	storage   storage.ExternalStorage
-	fileIndex map[VersionedTable]*indexWithDate
+	fileIndex map[VersionedTableName]*indexWithDate
+
+	hasher     *hash.PositionInertia
+	versionMap map[VersionedTableName]uint64
 }
 
 // NewFilePathGenerator creates a FilePathGenerator.
@@ -73,23 +145,103 @@ func NewFilePathGenerator(
 	clock clock.Clock,
 ) *FilePathGenerator {
 	return &FilePathGenerator{
-		config:    config,
-		extension: extension,
-		storage:   storage,
-		clock:     clock,
-		fileIndex: make(map[VersionedTable]*indexWithDate),
+		config:     config,
+		extension:  extension,
+		storage:    storage,
+		clock:      clock,
+		fileIndex:  make(map[VersionedTableName]*indexWithDate),
+		hasher:     hash.NewPositionInertia(),
+		versionMap: make(map[VersionedTableName]uint64),
 	}
+}
+
+// CheckOrWriteSchema checks whether the schema file exists in the storage and
+// write scheme.json if necessary.
+func (f *FilePathGenerator) CheckOrWriteSchema(
+	ctx context.Context,
+	table VersionedTableName,
+	tableInfo *model.TableInfo,
+) error {
+	if _, ok := f.versionMap[table]; ok {
+		return nil
+	}
+
+	var def TableDefinition
+	def.FromTableInfo(tableInfo, table.TableInfoVersion)
+	if !def.IsTableSchema() {
+		// only check schema for table
+		log.Panic("invalid table schema", zap.Any("versionedTableName", table),
+			zap.Any("tableInfo", tableInfo))
+	}
+
+	// Case 1: point check if the schema file exists.
+	tblSchemaFile, err := def.GenerateSchemaFilePath()
+	if err != nil {
+		return err
+	}
+	exist, err := f.storage.FileExists(ctx, tblSchemaFile)
+	if err != nil {
+		return err
+	}
+	if exist {
+		f.versionMap[table] = table.TableInfoVersion
+		return nil
+	}
+
+	// walk the table meta path to find the last schema file
+	_, checksum := mustParseSchemaName(tblSchemaFile)
+	schemaFileCnt := 0
+	lastVersion := uint64(0)
+	prefix := fmt.Sprintf(tableSchemaPrefix+"schema_", def.Schema, def.Table)
+	checksumSuffix := fmt.Sprintf("%010d.json", checksum)
+	err = f.storage.WalkDir(ctx, &storage.WalkOption{ObjPrefix: prefix},
+		func(path string, _ int64) error {
+			schemaFileCnt++
+			if !strings.HasSuffix(path, checksumSuffix) {
+				return nil
+			}
+			version, parsedChecksum := mustParseSchemaName(path)
+			if parsedChecksum != checksum {
+				// TODO: parsedChecksum should be ignored, remove this panic
+				// after the new path protocol is verified.
+				log.Panic("invalid schema file name",
+					zap.String("path", path), zap.Any("checksum", checksum))
+			}
+			if version > lastVersion {
+				lastVersion = version
+			}
+			return nil
+		},
+	)
+	if err != nil {
+		return err
+	}
+
+	// Case 2: the table meta path is not empty.
+	if schemaFileCnt != 0 {
+		if lastVersion == 0 {
+			log.Panic("no table schema file found in an non-empty meta path",
+				zap.Any("versionedTableName", table),
+				zap.Uint32("checksum", checksum))
+		}
+		f.versionMap[table] = lastVersion
+		return nil
+	}
+
+	// Case 3: the table meta path is empty, which only happens when the table is
+	// existed before changefeed started. We need to write schema file to external
+	// storage.
+	encodedDetail, err := def.MarshalWithQuery()
+	if err != nil {
+		return err
+	}
+	f.versionMap[table] = table.TableInfoVersion
+	return f.storage.WriteFile(ctx, tblSchemaFile, encodedDetail)
 }
 
 // SetClock is used for unit test
 func (f *FilePathGenerator) SetClock(clock clock.Clock) {
 	f.clock = clock
-}
-
-// Contains checks if a VersionedTable is cached by FilePathGenerator before.
-func (f *FilePathGenerator) Contains(tbl VersionedTable) bool {
-	_, ok := f.fileIndex[tbl]
-	return ok
 }
 
 // GenerateDateStr generates a date string base on current time
@@ -111,12 +263,31 @@ func (f *FilePathGenerator) GenerateDateStr() string {
 	return dateStr
 }
 
-func (f *FilePathGenerator) generateDataDirPath(tbl VersionedTable, date string) string {
+// GenerateIndexFilePath generates a canonical path for index file.
+func (f *FilePathGenerator) GenerateIndexFilePath(tbl VersionedTableName, date string) string {
+	dir := f.generateDataDirPath(tbl, date)
+	name := defaultIndexFileName
+	return path.Join(dir, name)
+}
+
+// GenerateDataFilePath generates a canonical path for data file.
+func (f *FilePathGenerator) GenerateDataFilePath(
+	ctx context.Context, tbl VersionedTableName, date string,
+) (string, error) {
+	dir := f.generateDataDirPath(tbl, date)
+	name, err := f.generateDataFileName(ctx, tbl, date)
+	if err != nil {
+		return "", err
+	}
+	return path.Join(dir, name), nil
+}
+
+func (f *FilePathGenerator) generateDataDirPath(tbl VersionedTableName, date string) string {
 	var elems []string
 
 	elems = append(elems, tbl.TableNameWithPhysicTableID.Schema)
 	elems = append(elems, tbl.TableNameWithPhysicTableID.Table)
-	elems = append(elems, fmt.Sprintf("%d", tbl.Version))
+	elems = append(elems, fmt.Sprintf("%d", f.versionMap[tbl]))
 
 	if f.config.EnablePartitionSeparator && tbl.TableNameWithPhysicTableID.IsPartition {
 		elems = append(elems, fmt.Sprintf("%d", tbl.TableNameWithPhysicTableID.TableID))
@@ -126,37 +297,12 @@ func (f *FilePathGenerator) generateDataDirPath(tbl VersionedTable, date string)
 		elems = append(elems, date)
 	}
 
-	return strings.Join(elems, "/")
+	return path.Join(elems...)
 }
 
-func (f *FilePathGenerator) fetchIndexFromFileName(fileName string) (uint64, error) {
-	var fileIdx uint64
-	var err error
-
-	if len(fileName) < minFileNamePrefixLen+len(f.extension) ||
-		!strings.HasPrefix(fileName, "CDC") ||
-		!strings.HasSuffix(fileName, f.extension) {
-		return 0, cerror.WrapError(cerror.ErrStorageSinkInvalidFileName,
-			fmt.Errorf("'%s' is a invalid file name", fileName))
-	}
-
-	extIdx := strings.Index(fileName, f.extension)
-	fileIdxStr := fileName[3:extIdx]
-	if fileIdx, err = strconv.ParseUint(fileIdxStr, 10, 64); err != nil {
-		return 0, cerror.WrapError(cerror.ErrStorageSinkInvalidFileName, err)
-	}
-
-	return fileIdx, nil
-}
-
-// GenerateDataFilePath generates a canonical path for data file.
-func (f *FilePathGenerator) GenerateDataFilePath(
-	ctx context.Context,
-	tbl VersionedTable,
-	date string,
+func (f *FilePathGenerator) generateDataFileName(
+	ctx context.Context, tbl VersionedTableName, date string,
 ) (string, error) {
-	var elems []string
-	elems = append(elems, f.generateDataDirPath(tbl, date))
 	if idx, ok := f.fileIndex[tbl]; !ok {
 		fileIdx, err := f.getNextFileIdxFromIndexFile(ctx, tbl, date)
 		if err != nil {
@@ -177,23 +323,11 @@ func (f *FilePathGenerator) GenerateDataFilePath(
 		f.fileIndex[tbl].index = 0
 	}
 	f.fileIndex[tbl].index++
-	elems = append(elems, fmt.Sprintf("CDC%06d%s", f.fileIndex[tbl].index, f.extension))
-
-	return strings.Join(elems, "/"), nil
-}
-
-// GenerateIndexFilePath generates a canonical path for index file.
-func (f *FilePathGenerator) GenerateIndexFilePath(tbl VersionedTable, date string) string {
-	var elems []string
-
-	elems = append(elems, f.generateDataDirPath(tbl, date))
-	elems = append(elems, defaultIndexFileName)
-
-	return strings.Join(elems, "/")
+	return generateDataFileName(f.fileIndex[tbl].index, f.extension, f.config.FileIndexWidth), nil
 }
 
 func (f *FilePathGenerator) getNextFileIdxFromIndexFile(
-	ctx context.Context, tbl VersionedTable, date string,
+	ctx context.Context, tbl VersionedTableName, date string,
 ) (uint64, error) {
 	indexFile := f.GenerateIndexFilePath(tbl, date)
 	exist, err := f.storage.FileExists(ctx, indexFile)
@@ -214,11 +348,10 @@ func (f *FilePathGenerator) getNextFileIdxFromIndexFile(
 		return 0, err
 	}
 
-	lastFilePath := strings.Join([]string{
-		f.generateDataDirPath(tbl, date),                  // file dir
-		fmt.Sprintf("CDC%06d%s", maxFileIdx, f.extension), // file name
-	}, "/")
-
+	lastFilePath := path.Join(
+		f.generateDataDirPath(tbl, date),                                       // file dir
+		generateDataFileName(maxFileIdx, f.extension, f.config.FileIndexWidth), // file name
+	)
 	var lastFileExists, lastFileIsEmpty bool
 	lastFileExists, err = f.storage.FileExists(ctx, lastFilePath)
 	if err != nil {
@@ -247,5 +380,25 @@ func (f *FilePathGenerator) getNextFileIdxFromIndexFile(
 		// Reuse the old index number if the last file does not exist.
 		fileIdx = maxFileIdx - 1
 	}
+	return fileIdx, nil
+}
+
+func (f *FilePathGenerator) fetchIndexFromFileName(fileName string) (uint64, error) {
+	var fileIdx uint64
+	var err error
+
+	if len(fileName) < minFileNamePrefixLen+len(f.extension) ||
+		!strings.HasPrefix(fileName, "CDC") ||
+		!strings.HasSuffix(fileName, f.extension) {
+		return 0, errors.WrapError(errors.ErrStorageSinkInvalidFileName,
+			fmt.Errorf("'%s' is a invalid file name", fileName))
+	}
+
+	extIdx := strings.Index(fileName, f.extension)
+	fileIdxStr := fileName[3:extIdx]
+	if fileIdx, err = strconv.ParseUint(fileIdxStr, 10, 64); err != nil {
+		return 0, errors.WrapError(errors.ErrStorageSinkInvalidFileName, err)
+	}
+
 	return fileIdx, nil
 }

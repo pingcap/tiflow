@@ -24,7 +24,9 @@ import (
 	"github.com/pingcap/log"
 	"github.com/pingcap/tiflow/pkg/config/outdated"
 	cerror "github.com/pingcap/tiflow/pkg/errors"
+	"github.com/pingcap/tiflow/pkg/integrity"
 	"github.com/pingcap/tiflow/pkg/redo"
+	"github.com/pingcap/tiflow/pkg/sink"
 	"go.uber.org/zap"
 )
 
@@ -58,7 +60,8 @@ var defaultReplicaConfig = &ReplicaConfig{
 		EncoderConcurrency:       16,
 		Terminator:               CRLF,
 		DateSeparator:            DateSeparatorNone.String(),
-		EnablePartitionSeparator: false,
+		EnablePartitionSeparator: true,
+		EnableKafkaSinkV2:        false,
 		TiDBSourceID:             1,
 	},
 	Consistent: &ConsistentConfig{
@@ -72,6 +75,10 @@ var defaultReplicaConfig = &ReplicaConfig{
 		EnableTableAcrossNodes: false,
 		RegionThreshold:        100_000,
 		WriteKeyThreshold:      0,
+	},
+	Integrity: &integrity.Config{
+		IntegrityCheckLevel:   integrity.CheckLevelNone,
+		CorruptionHandleLevel: integrity.CorruptionHandleLevelWarn,
 	},
 }
 
@@ -114,6 +121,7 @@ type replicaConfig struct {
 	Consistent         *ConsistentConfig `toml:"consistent" json:"consistent"`
 	// Scheduler is the configuration for scheduler.
 	Scheduler *ChangefeedSchedulerConfig `toml:"scheduler" json:"scheduler"`
+	Integrity *integrity.Config          `toml:"integrity" json:"integrity"`
 }
 
 // Marshal returns the json marshal format of a ReplicationConfig
@@ -213,6 +221,21 @@ func (c *ReplicaConfig) ValidateAndAdjust(sinkURI *url.URL) error {
 	// TODO: Remove the hack once span replication is compatible with all sinks.
 	if !isSinkCompatibleWithSpanReplication(sinkURI) {
 		c.Scheduler.EnableTableAcrossNodes = false
+	}
+
+	if c.Integrity != nil {
+		switch strings.ToLower(sinkURI.Scheme) {
+		case sink.KafkaScheme, sink.KafkaSSLScheme:
+		default:
+			if c.Integrity.Enabled() {
+				log.Warn("integrity checksum only support kafka sink now, disable integrity")
+				c.Integrity.IntegrityCheckLevel = integrity.CheckLevelNone
+			}
+		}
+
+		if err := c.Integrity.Validate(); err != nil {
+			return err
+		}
 	}
 
 	return nil

@@ -17,12 +17,14 @@ import (
 	"fmt"
 	"strconv"
 	"sync"
+	"sync/atomic"
 	"unsafe"
 
 	"github.com/pingcap/log"
 	"github.com/pingcap/tidb/parser/model"
 	"github.com/pingcap/tidb/parser/mysql"
 	"github.com/pingcap/tidb/util/rowcodec"
+	"github.com/pingcap/tiflow/pkg/integrity"
 	"github.com/pingcap/tiflow/pkg/quotes"
 	"github.com/pingcap/tiflow/pkg/util"
 	"go.uber.org/zap"
@@ -273,17 +275,17 @@ type RedoDDLEvent struct {
 }
 
 // ToRedoLog converts row changed event to redo log
-func (row *RowChangedEvent) ToRedoLog() *RedoLog {
+func (r *RowChangedEvent) ToRedoLog() *RedoLog {
 	return &RedoLog{
-		RedoRow: RedoRowChangedEvent{Row: row},
+		RedoRow: RedoRowChangedEvent{Row: r},
 		Type:    RedoLogTypeRow,
 	}
 }
 
 // ToRedoLog converts ddl event to redo log
-func (ddl *DDLEvent) ToRedoLog() *RedoLog {
+func (d *DDLEvent) ToRedoLog() *RedoLog {
 	return &RedoLog{
-		RedoDDL: RedoDDLEvent{DDL: ddl},
+		RedoDDL: RedoDDLEvent{DDL: d},
 		Type:    RedoLogTypeDDL,
 	}
 }
@@ -314,6 +316,10 @@ type RowChangedEvent struct {
 	Columns      []*Column `json:"columns" msg:"columns"`
 	PreColumns   []*Column `json:"pre-columns" msg:"pre-columns"`
 	IndexColumns [][]int   `json:"-" msg:"index-columns"`
+
+	// Checksum for the event, only not nil if the upstream TiDB enable the row level checksum
+	// and TiCDC set the integrity check level to the correctness.
+	Checksum *integrity.Checksum `json:"-" msg:"-"`
 
 	// ApproximateDataSize is the approximate size of protobuf binary
 	// representation of this event.
@@ -605,7 +611,9 @@ type DDLEvent struct {
 	TableInfo    *TableInfo       `msg:"-"`
 	PreTableInfo *TableInfo       `msg:"-"`
 	Type         model.ActionType `msg:"-"`
-	Done         bool             `msg:"-"`
+	Done         atomic.Bool      `msg:"-"`
+	Charset      string           `msg:"-"`
+	Collate      string           `msg:"-"`
 }
 
 // FromJob fills the values with DDLEvent from DDL job
@@ -636,6 +644,9 @@ func (d *DDLEvent) FromJob(job *model.Job, preTableInfo *TableInfo, tableInfo *T
 	d.Type = job.Type
 	d.PreTableInfo = preTableInfo
 	d.TableInfo = tableInfo
+
+	d.Charset = job.Charset
+	d.Collate = job.Collate
 	// rebuild the query if necessary
 	rebuildQuery()
 }
@@ -658,6 +669,9 @@ func (d *DDLEvent) FromRenameTablesJob(job *model.Job,
 	d.Type = model.ActionRenameTable
 	d.PreTableInfo = preTableInfo
 	d.TableInfo = tableInfo
+
+	d.Charset = job.Charset
+	d.Collate = job.Collate
 }
 
 // SingleTableTxn represents a transaction which includes many row events in a single table
@@ -666,9 +680,15 @@ func (d *DDLEvent) FromRenameTablesJob(job *model.Job,
 type SingleTableTxn struct {
 	Table     *TableName
 	TableInfo *TableInfo
-	StartTs   uint64
-	CommitTs  uint64
-	Rows      []*RowChangedEvent
+	// TableInfoVersion is the version of the table info, it is used to generate data path
+	// in storage sink. Generally, TableInfoVersion equals to `SingleTableTxn.TableInfo.Version`.
+	// Besides, if one table is just scheduled to a new processor, the TableInfoVersion should be
+	// greater than or equal to the startTs of table sink.
+	TableInfoVersion uint64
+
+	StartTs  uint64
+	CommitTs uint64
+	Rows     []*RowChangedEvent
 
 	// control fields of SingleTableTxn
 	// FinishWg is a barrier txn, after this txn is received, the worker must

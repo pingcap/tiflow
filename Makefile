@@ -140,7 +140,8 @@ format-makefiles: $(MAKE_FILES)
 bank:
 	$(GOBUILD) -ldflags '$(LDFLAGS)' -o bin/bank ./tests/bank/bank.go ./tests/bank/case.go
 
-build-failpoint: check_failpoint_ctl
+build-cdc-with-failpoint: check_failpoint_ctl
+build-cdc-with-failpoint: ## Build cdc with failpoint enabled.
 	$(FAILPOINT_ENABLE)
 	$(GOBUILD) -ldflags '$(LDFLAGS)' -o bin/cdc ./cmd/cdc/main.go
 	$(FAILPOINT_DISABLE)
@@ -154,9 +155,12 @@ kafka_consumer:
 storage_consumer:
 	$(GOBUILD) -ldflags '$(LDFLAGS)' -o bin/cdc_storage_consumer ./cmd/storage-consumer/main.go
 
-cdc_test_image: 
+kafka_consumer_image: 
 	@which docker || (echo "docker not found in ${PATH}"; exit 1)
-	docker build --platform linux/amd64 -f deployments/ticdc/docker/test.Dockerfile -t cdc:test ./ 
+	DOCKER_BUILDKIT=1 docker build -f ./deployments/ticdc/docker/kafka-consumer.Dockerfile . -t ticdc:kafka-consumer  --platform linux/amd64
+storage_consumer_image: 
+	@which docker || (echo "docker not found in ${PATH}"; exit 1)
+	DOCKER_BUILDKIT=1 docker build -f ./deployments/ticdc/docker/storage-consumer.Dockerfile . -t ticdc:storage-consumer  --platform linux/amd64
 
 install:
 	go install ./...
@@ -227,6 +231,9 @@ build_mysql_integration_test_images: clean_integration_test_containers
 
 integration_test_kafka: check_third_party_binary
 	tests/integration_tests/run.sh kafka "$(CASE)" "$(START_AT)"
+
+integration_test_storage:
+	tests/integration_tests/run.sh storage "$(CASE)" "$(START_AT)"
 
 kafka_docker_integration_test: ## Run TiCDC Kafka all integration tests in Docker.
 kafka_docker_integration_test: clean_integration_test_containers
@@ -311,8 +318,13 @@ check-static: tools/bin/golangci-lint
 	cd dm && ../tools/bin/golangci-lint run --timeout 10m0s
 
 check: check-copyright generate_mock go-generate fmt check-static tidy terror_check errdoc \
-	check-merge-conflicts check-ticdc-dashboard check-diff-line-width \
-	swagger-spec check-makefiles check_engine_integration_test
+	check-merge-conflicts check-ticdc-dashboard check-diff-line-width swagger-spec check-makefiles \
+	check_cdc_integration_test check_dm_integration_test check_engine_integration_test 
+	@git --no-pager diff --exit-code || (echo "Please add changed files!" && false)
+
+fast_check: check-copyright fmt check-static tidy terror_check errdoc \
+	check-merge-conflicts check-ticdc-dashboard check-diff-line-width swagger-spec check-makefiles \
+	check_cdc_integration_test check_dm_integration_test check_engine_integration_test 
 	@git --no-pager diff --exit-code || (echo "Please add changed files!" && false)
 
 integration_test_coverage: tools/bin/gocovmerge tools/bin/goveralls
@@ -532,6 +544,13 @@ check_third_party_binary_for_engine:
 
 check_engine_integration_test:
 	./engine/test/utils/check_case.sh
+	./engine/test/integration_tests/run_group.sh "check others"
+
+check_dm_integration_test:
+	./dm/tests/run_group.sh "check others"
+
+check_cdc_integration_test:
+	./tests/integration_tests/run_group.sh check "others"
 
 bin/mc:
 	./scripts/download-mc.sh

@@ -260,7 +260,6 @@ func TestApplyParameterBySinkURI(t *testing.T) {
 		} else {
 			require.ErrorContains(t, err, tc.expectedErr)
 		}
-
 	}
 }
 
@@ -333,6 +332,7 @@ func TestCheckCompatibilityWithSinkURI(t *testing.T) {
 }
 
 func TestValidateAndAdjustCSVConfig(t *testing.T) {
+	t.Parallel()
 	tests := []struct {
 		name    string
 		config  *CSVConfig
@@ -393,16 +393,38 @@ func TestValidateAndAdjustCSVConfig(t *testing.T) {
 			wantErr: "csv config quote and delimiter cannot be the same",
 		},
 	}
-	for _, tc := range tests {
+	for _, c := range tests {
+		tc := c
 		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
 			s := &SinkConfig{
 				CSVConfig: tc.config,
 			}
 			if tc.wantErr == "" {
-				require.Nil(t, s.validateAndAdjustCSVConfig())
+				require.Nil(t, s.CSVConfig.validateAndAdjust())
 			} else {
-				require.Regexp(t, tc.wantErr, s.validateAndAdjustCSVConfig())
+				require.Regexp(t, tc.wantErr, s.CSVConfig.validateAndAdjust())
 			}
 		})
 	}
+}
+
+func TestValidateAndAdjustStorageConfig(t *testing.T) {
+	t.Parallel()
+
+	sinkURI, err := url.Parse("s3://bucket?protocol=csv")
+	require.NoError(t, err)
+	s := GetDefaultReplicaConfig()
+	err = s.ValidateAndAdjust(sinkURI)
+	require.NoError(t, err)
+	require.Equal(t, DefaultFileIndexWidth, s.Sink.FileIndexWidth)
+
+	err = s.ValidateAndAdjust(sinkURI)
+	require.NoError(t, err)
+	require.Equal(t, DefaultFileIndexWidth, s.Sink.FileIndexWidth)
+
+	s.Sink.FileIndexWidth = 16
+	err = s.ValidateAndAdjust(sinkURI)
+	require.NoError(t, err)
+	require.Equal(t, 16, s.Sink.FileIndexWidth)
 }

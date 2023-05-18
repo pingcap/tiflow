@@ -10,11 +10,6 @@ SINK_TYPE=$1
 MAX_RETRIES=20
 
 function prepare() {
-	if [ "$SINK_TYPE" == "kafka" ]; then
-		echo "[$(date)] <<<<<< run test case $TEST_NAME success! >>>>>>"
-		exit 0
-	fi
-
 	rm -rf $WORK_DIR && mkdir -p $WORK_DIR
 	start_tidb_cluster --workdir $WORK_DIR
 	cd $WORK_DIR
@@ -87,7 +82,7 @@ function resume_changefeed_in_failed_state() {
 	pd_addr="http://$UP_PD_HOST_1:$UP_PD_PORT_1"
 	SINK_URI="mysql://normal:123456@127.0.0.1:3306/?max-txn-row=1"
 	run_cdc_server --workdir $WORK_DIR --binary $CDC_BINARY --pd $pd_addr
-	ensure $MAX_RETRIES check_changefeed_state http://${UP_PD_HOST_1}:${UP_PD_PORT_1} $changefeed_id "failed" "ErrGCTTLExceeded" ""
+	ensure $MAX_RETRIES check_changefeed_state http://${UP_PD_HOST_1}:${UP_PD_PORT_1} $changefeed_id "failed" "ErrStartTsBeforeGC" ""
 
 	cdc cli changefeed resume --changefeed-id=$changefeed_id --pd=$pd_addr --overwrite-checkpoint-ts=now --no-confirm=true
 	ensure $MAX_RETRIES check_changefeed_state http://${UP_PD_HOST_1}:${UP_PD_PORT_1} $changefeed_id "normal" "null" ""
@@ -132,9 +127,11 @@ function resume_changefeed_in_failed_state() {
 }
 
 trap stop_tidb_cluster EXIT
-prepare
-resume_changefeed_in_stopped_state $*
-resume_changefeed_in_failed_state $*
 
-check_logs $WORK_DIR
+if [ "$SINK_TYPE" == "mysql" ]; then
+	prepare
+	resume_changefeed_in_stopped_state $*
+	resume_changefeed_in_failed_state $*
+	check_logs $WORK_DIR
+fi
 echo "[$(date)] <<<<<< run test case $TEST_NAME success! >>>>>>"

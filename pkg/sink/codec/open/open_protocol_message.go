@@ -22,6 +22,7 @@ import (
 	timodel "github.com/pingcap/tidb/parser/model"
 	"github.com/pingcap/tiflow/cdc/model"
 	cerror "github.com/pingcap/tiflow/pkg/errors"
+	"github.com/pingcap/tiflow/pkg/sink/codec"
 	"github.com/pingcap/tiflow/pkg/sink/codec/internal"
 )
 
@@ -31,7 +32,24 @@ type messageRow struct {
 	Delete     map[string]internal.Column `json:"d,omitempty"`
 }
 
-func (m *messageRow) encode() ([]byte, error) {
+func (m *messageRow) encode(outputOnlyUpdatedColumn bool) ([]byte, error) {
+	// check if the column is updated, if not do not output it
+	if outputOnlyUpdatedColumn && len(m.PreColumns) > 0 {
+		for col, value := range m.Update {
+			oldValue, ok := m.PreColumns[col]
+			if !ok {
+				continue
+			}
+			// sql type is not equal
+			if value.Type != oldValue.Type {
+				continue
+			}
+			// value equal
+			if codec.IsColumnValueEqual(oldValue.Value, value.Value) {
+				delete(m.PreColumns, col)
+			}
+		}
+	}
 	data, err := json.Marshal(m)
 	return data, cerror.WrapError(cerror.ErrMarshalFailed, err)
 }

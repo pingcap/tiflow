@@ -20,6 +20,8 @@ import (
 	"testing"
 	"time"
 
+	"github.com/aws/aws-sdk-go/aws"
+	"github.com/pingcap/tiflow/pkg/integrity"
 	"github.com/stretchr/testify/require"
 )
 
@@ -53,9 +55,70 @@ func TestReplicaConfigMarshal(t *testing.T) {
 	conf.Sink.Terminator = ""
 	conf.Sink.DateSeparator = "month"
 	conf.Sink.EnablePartitionSeparator = true
+	conf.Sink.EnableKafkaSinkV2 = true
 	conf.Scheduler.EnableTableAcrossNodes = true
 	conf.Scheduler.RegionThreshold = 100001
 	conf.Scheduler.WriteKeyThreshold = 100001
+
+	conf.Sink.OnlyOutputUpdatedColumns = aws.Bool(true)
+	conf.Sink.SafeMode = aws.Bool(true)
+	conf.Sink.KafkaConfig = &KafkaConfig{
+		PartitionNum:                 aws.Int32(1),
+		ReplicationFactor:            aws.Int16(1),
+		KafkaVersion:                 aws.String("version"),
+		MaxMessageBytes:              aws.Int(1),
+		Compression:                  aws.String("gzip"),
+		KafkaClientID:                aws.String("client-id"),
+		AutoCreateTopic:              aws.Bool(true),
+		DialTimeout:                  aws.String("1m"),
+		WriteTimeout:                 aws.String("1m"),
+		ReadTimeout:                  aws.String("1m"),
+		RequiredAcks:                 aws.Int(1),
+		SASLUser:                     aws.String("user"),
+		SASLPassword:                 aws.String("password"),
+		SASLMechanism:                aws.String("mechanism"),
+		SASLGssAPIAuthType:           aws.String("type"),
+		SASLGssAPIKeytabPath:         aws.String("path"),
+		SASLGssAPIKerberosConfigPath: aws.String("path"),
+		SASLGssAPIServiceName:        aws.String("service"),
+		SASLGssAPIUser:               aws.String("user"),
+		SASLGssAPIPassword:           aws.String("password"),
+		SASLGssAPIRealm:              aws.String("realm"),
+		SASLGssAPIDisablePafxfast:    aws.Bool(true),
+		EnableTLS:                    aws.Bool(true),
+		CA:                           aws.String("ca"),
+		Cert:                         aws.String("cert"),
+		Key:                          aws.String("key"),
+		CodecConfig: &CodecConfig{
+			EnableTiDBExtension:            aws.Bool(true),
+			MaxBatchSize:                   aws.Int(100000),
+			AvroEnableWatermark:            aws.Bool(true),
+			AvroDecimalHandlingMode:        aws.String("string"),
+			AvroBigintUnsignedHandlingMode: aws.String("string"),
+		},
+	}
+	conf.Sink.MySQLConfig = &MySQLConfig{
+		WorkerCount:                  aws.Int(8),
+		MaxTxnRow:                    aws.Int(100000),
+		MaxMultiUpdateRowSize:        aws.Int(100000),
+		MaxMultiUpdateRowCount:       aws.Int(100000),
+		TiDBTxnMode:                  aws.String("pessimistic"),
+		SSLCa:                        aws.String("ca"),
+		SSLCert:                      aws.String("cert"),
+		SSLKey:                       aws.String("key"),
+		TimeZone:                     aws.String("UTC"),
+		WriteTimeout:                 aws.String("1m"),
+		ReadTimeout:                  aws.String("1m"),
+		Timeout:                      aws.String("1m"),
+		EnableBatchDML:               aws.Bool(true),
+		EnableMultiStatement:         aws.Bool(true),
+		EnableCachePreparedStatement: aws.Bool(true),
+	}
+	conf.Sink.CloudStorageConfig = &CloudStorageConfig{
+		WorkerCount:   aws.Int(8),
+		FlushInterval: aws.String("1m"),
+		FileSize:      aws.Int(1024),
+	}
 
 	b, err := conf.Marshal()
 	require.Nil(t, err)
@@ -105,21 +168,25 @@ func TestReplicaConfigOutDated(t *testing.T) {
 func TestReplicaConfigValidate(t *testing.T) {
 	t.Parallel()
 	conf := GetDefaultReplicaConfig()
-	require.Nil(t, conf.ValidateAndAdjust(nil))
+
+	sinkURL, err := url.Parse("blackhole://")
+	require.NoError(t, err)
+
+	require.Nil(t, conf.ValidateAndAdjust(sinkURL))
 
 	// Incorrect sink configuration.
 	conf = GetDefaultReplicaConfig()
 	conf.Sink.Protocol = "canal"
 	conf.EnableOldValue = false
 	require.Regexp(t, ".*canal protocol requires old value to be enabled.*",
-		conf.ValidateAndAdjust(nil))
+		conf.ValidateAndAdjust(sinkURL))
 
 	conf = GetDefaultReplicaConfig()
 	conf.Sink.DispatchRules = []*DispatchRule{
 		{Matcher: []string{"a.b"}, DispatcherRule: "d1", PartitionRule: "r1"},
 	}
 	require.Regexp(t, ".*dispatcher and partition cannot be configured both.*",
-		conf.ValidateAndAdjust(nil))
+		conf.ValidateAndAdjust(sinkURL))
 
 	// Correct sink configuration.
 	conf = GetDefaultReplicaConfig()
@@ -128,8 +195,8 @@ func TestReplicaConfigValidate(t *testing.T) {
 		{Matcher: []string{"a.c"}, PartitionRule: "p1"},
 		{Matcher: []string{"a.d"}},
 	}
-	err := conf.ValidateAndAdjust(nil)
-	require.Nil(t, err)
+	err = conf.ValidateAndAdjust(sinkURL)
+	require.NoError(t, err)
 	rules := conf.Sink.DispatchRules
 	require.Equal(t, "d1", rules[0].PartitionRule)
 	require.Equal(t, "p1", rules[1].PartitionRule)
@@ -138,12 +205,12 @@ func TestReplicaConfigValidate(t *testing.T) {
 	// Test memory quota can be adjusted
 	conf = GetDefaultReplicaConfig()
 	conf.MemoryQuota = 0
-	err = conf.ValidateAndAdjust(nil)
+	err = conf.ValidateAndAdjust(sinkURL)
 	require.NoError(t, err)
 	require.Equal(t, uint64(DefaultChangefeedMemoryQuota), conf.MemoryQuota)
 
 	conf.MemoryQuota = uint64(1024)
-	err = conf.ValidateAndAdjust(nil)
+	err = conf.ValidateAndAdjust(sinkURL)
 	require.NoError(t, err)
 	require.Equal(t, uint64(1024), conf.MemoryQuota)
 }
@@ -151,25 +218,35 @@ func TestReplicaConfigValidate(t *testing.T) {
 func TestValidateAndAdjust(t *testing.T) {
 	cfg := GetDefaultReplicaConfig()
 	require.False(t, cfg.EnableSyncPoint)
-	require.NoError(t, cfg.ValidateAndAdjust(nil))
+
+	sinkURL, err := url.Parse("blackhole://")
+	require.NoError(t, err)
+
+	require.NoError(t, cfg.ValidateAndAdjust(sinkURL))
 
 	cfg.EnableSyncPoint = true
-	require.NoError(t, cfg.ValidateAndAdjust(nil))
+	require.NoError(t, cfg.ValidateAndAdjust(sinkURL))
 
 	cfg.SyncPointInterval = time.Second * 29
-	require.Error(t, cfg.ValidateAndAdjust(nil))
+	require.Error(t, cfg.ValidateAndAdjust(sinkURL))
 
 	cfg.SyncPointInterval = time.Second * 30
 	cfg.SyncPointRetention = time.Minute * 10
-	require.Error(t, cfg.ValidateAndAdjust(nil))
+	require.Error(t, cfg.ValidateAndAdjust(sinkURL))
 
 	cfg.Sink.EncoderConcurrency = -1
-	require.Error(t, cfg.ValidateAndAdjust(nil))
+	require.Error(t, cfg.ValidateAndAdjust(sinkURL))
 
 	cfg = GetDefaultReplicaConfig()
 	cfg.Scheduler = nil
-	require.Nil(t, cfg.ValidateAndAdjust(nil))
+	require.Nil(t, cfg.ValidateAndAdjust(sinkURL))
 	require.False(t, cfg.Scheduler.EnableTableAcrossNodes)
+
+	// enable the checksum verification, but use blackhole sink
+	cfg = GetDefaultReplicaConfig()
+	cfg.Integrity.IntegrityCheckLevel = integrity.CheckLevelCorrectness
+	require.NoError(t, cfg.ValidateAndAdjust(sinkURL))
+	require.Equal(t, integrity.CheckLevelNone, cfg.Integrity.IntegrityCheckLevel)
 }
 
 func TestIsSinkCompatibleWithSpanReplication(t *testing.T) {

@@ -31,6 +31,11 @@ error = '''
 encode to binray from native
 '''
 
+["CDC:ErrAvroInvalidMessage"]
+error = '''
+avro invalid message format
+'''
+
 ["CDC:ErrAvroMarshalFailed"]
 error = '''
 json marshal failed
@@ -186,6 +191,11 @@ error = '''
 failed to convert ddl '%s' to filter event type
 '''
 
+["CDC:ErrCorruptedDataMutation"]
+error = '''
+Changefeed %s.%s stopped due to corrupted data mutation received. Corrupted mutation detail information %+v
+'''
+
 ["CDC:ErrCraftCodecInvalidData"]
 error = '''
 craft codec invalid data
@@ -294,11 +304,6 @@ filter rule is invalid %v
 ["CDC:ErrFlowControllerAborted"]
 error = '''
 flow controller is aborted
-'''
-
-["CDC:ErrGCTTLExceeded"]
-error = '''
-the checkpoint-ts(%d) lag of the changefeed(%s) has exceeded the GC TTL
 '''
 
 ["CDC:ErrGRPCDialFailed"]

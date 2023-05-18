@@ -44,6 +44,7 @@ type schemaWrap4Owner struct {
 func newSchemaWrap4Owner(
 	kvStorage tidbkv.Storage, startTs model.Ts,
 	config *config.ReplicaConfig, id model.ChangeFeedID,
+	filter filter.Filter,
 ) (*schemaWrap4Owner, error) {
 	var meta *timeta.Meta
 
@@ -56,18 +57,15 @@ func newSchemaWrap4Owner(
 	}
 
 	schemaStorage, err := entry.NewSchemaStorage(
-		meta, startTs, config.ForceReplicate, id, util.RoleOwner)
+		meta, startTs, config.ForceReplicate, id, util.RoleOwner, filter)
 	if err != nil {
 		return nil, errors.Trace(err)
 	}
 	// It is no matter to use an empty as timezone here because schemaWrap4Owner
 	// doesn't use expression filter's method.
-	f, err := filter.NewFilter(config, "")
-	if err != nil {
-		return nil, errors.Trace(err)
-	}
+
 	schema := &schemaWrap4Owner{
-		filter: f,
+		filter: filter,
 		config: config,
 		id:     id,
 		metricIgnoreDDLEventCounter: changefeedIgnoredDDLEventCounter.
@@ -223,10 +221,12 @@ func (s *schemaWrap4Owner) BuildDDLEvents(
 		if job.BinlogInfo != nil && job.BinlogInfo.TableInfo != nil {
 			tableInfo = model.WrapTableInfo(job.SchemaID, job.SchemaName, job.BinlogInfo.FinishedTS, job.BinlogInfo.TableInfo)
 		} else {
-			// for an invalid DDL job or a DDL job that does not contain TableInfo,
-			// just retrieve the schema name.
+			// Just retrieve the schema name for a DDL job that does not contain TableInfo.
+			// Currently supported by cdc are: ActionCreateSchema, ActionDropSchema,
+			// and ActionModifySchemaCharsetAndCollate.
 			tableInfo = &model.TableInfo{
 				TableName: model.TableName{Schema: job.SchemaName},
+				Version:   job.BinlogInfo.FinishedTS,
 			}
 		}
 		event.FromJob(job, preTableInfo, tableInfo)

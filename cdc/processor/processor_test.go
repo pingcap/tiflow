@@ -22,6 +22,8 @@ import (
 	"testing"
 
 	"github.com/pingcap/errors"
+	"github.com/pingcap/failpoint"
+	"github.com/pingcap/tiflow/cdc/contextutil"
 	"github.com/pingcap/tiflow/cdc/entry"
 	"github.com/pingcap/tiflow/cdc/entry/schema"
 	"github.com/pingcap/tiflow/cdc/model"
@@ -53,30 +55,37 @@ func newProcessor4Test(
 		state,
 		captureInfo,
 		changefeedID, up, liveness, 0, cfg)
-	errChan := make(chan error, 20)
+	// Some cases want to send errors to the processor without initializing it.
+	p.sinkManager.errors = make(chan error, 16)
 	p.lazyInit = func(ctx cdcContext.Context) error {
 		if p.initialized {
 			return nil
 		}
+
+		stdCtx := contextutil.PutChangefeedIDInCtx(ctx, changefeedID)
 		p.agent = &mockAgent{executor: p, liveness: liveness}
-		sinkManager, sourceManger, _ := sinkmanager.CreateManagerWithMemEngine(
-			t,
-			ctx,
-			changefeedID,
-			state.Info,
-			errChan,
-		)
-		p.sinkManager = sinkManager
-		p.sourceManager = sourceManger
+		p.sinkManager.r, p.sourceManager.r, _ = sinkmanager.NewManagerWithMemEngine(
+			t, changefeedID, state.Info)
+		p.sinkManager.name = "SinkManager"
+		p.sinkManager.spawn(stdCtx)
+		p.sourceManager.name = "SourceManager"
+		p.sourceManager.spawn(stdCtx)
+
 		// NOTICE: we have to bind the sourceManager to the sinkManager
 		// otherwise the sinkManager will not receive the resolvedTs.
-		p.sourceManager.OnResolve(p.sinkManager.UpdateReceivedSorterResolvedTs)
+		p.sourceManager.r.OnResolve(p.sinkManager.r.UpdateReceivedSorterResolvedTs)
+
+		p.redo.r = redo.NewDisabledDMLManager()
+		p.redo.name = "RedoManager"
+		p.redo.spawn(stdCtx)
+
 		p.initialized = true
 		return nil
 	}
 
-	p.redoDMLMgr = redo.NewDisabledDMLManager()
-	p.schemaStorage = &mockSchemaStorage{t: t, resolvedTs: math.MaxUint64}
+	p.ddlHandler.r = &ddlHandler{
+		schemaStorage: &mockSchemaStorage{t: t, resolvedTs: math.MaxUint64},
+	}
 	return p
 }
 
@@ -207,23 +216,23 @@ func TestTableExecutorAddingTableIndirectly(t *testing.T) {
 	ok, err := p.AddTableSpan(ctx, span, 20, true)
 	require.NoError(t, err)
 	require.True(t, ok)
-	p.sinkManager.UpdateBarrierTs(20, nil)
-	stats := p.sinkManager.GetTableStats(span)
+	p.sinkManager.r.UpdateBarrierTs(20, nil)
+	stats := p.sinkManager.r.GetTableStats(span)
 	require.Equal(t, model.Ts(20), stats.CheckpointTs)
 	require.Equal(t, model.Ts(20), stats.BarrierTs)
 	require.Equal(t, model.Ts(0), stats.ReceivedMaxCommitTs)
 	require.Equal(t, model.Ts(20), stats.ReceivedMaxResolvedTs)
-	require.Len(t, p.sinkManager.GetAllCurrentTableSpans(), 1)
-	require.Equal(t, 1, p.sinkManager.GetAllCurrentTableSpansCount())
+	require.Len(t, p.sinkManager.r.GetAllCurrentTableSpans(), 1)
+	require.Equal(t, 1, p.sinkManager.r.GetAllCurrentTableSpansCount())
 
 	done := p.IsAddTableSpanFinished(spanz.TableIDToComparableSpan(1), true)
 	require.False(t, done)
-	state, ok := p.sinkManager.GetTableState(span)
+	state, ok := p.sinkManager.r.GetTableState(span)
 	require.True(t, ok)
 	require.Equal(t, tablepb.TableStatePreparing, state)
 
 	// Push the resolved ts, mock that sorterNode receive first resolved event.
-	p.sourceManager.Add(
+	p.sourceManager.r.Add(
 		span,
 		[]*model.PolymorphicEvent{{
 			CRTs: 101,
@@ -240,14 +249,14 @@ func TestTableExecutorAddingTableIndirectly(t *testing.T) {
 
 	done = p.IsAddTableSpanFinished(span, true)
 	require.True(t, done)
-	state, ok = p.sinkManager.GetTableState(span)
+	state, ok = p.sinkManager.r.GetTableState(span)
 	require.True(t, ok)
 	require.Equal(t, tablepb.TableStatePrepared, state)
 
 	ok, err = p.AddTableSpan(ctx, spanz.TableIDToComparableSpan(1), 30, true)
 	require.NoError(t, err)
 	require.True(t, ok)
-	stats = p.sinkManager.GetTableStats(span)
+	stats = p.sinkManager.r.GetTableStats(span)
 	require.Equal(t, model.Ts(20), stats.CheckpointTs)
 	require.Equal(t, model.Ts(20), stats.BarrierTs)
 	require.Equal(t, model.Ts(0), stats.ReceivedMaxCommitTs)
@@ -263,7 +272,7 @@ func TestTableExecutorAddingTableIndirectly(t *testing.T) {
 	tester.MustApplyPatches()
 
 	// table-1: `prepared` -> `replicating`
-	state, ok = p.sinkManager.GetTableState(span)
+	state, ok = p.sinkManager.r.GetTableState(span)
 	require.True(t, ok)
 	require.Equal(t, tablepb.TableStateReplicating, state)
 
@@ -282,12 +291,13 @@ func TestProcessorError(t *testing.T) {
 	tester.MustApplyPatches()
 
 	// send a abnormal error
-	p.sendError(cerror.ErrSinkURIInvalid)
+	p.sinkManager.errors <- cerror.ErrSinkURIInvalid
 	err = p.Tick(ctx)
 	tester.MustApplyPatches()
 	require.Error(t, err)
 	require.Equal(t, p.changefeed.TaskPositions[p.captureInfo.ID], &model.TaskPosition{
 		Error: &model.RunningError{
+			Time:    p.changefeed.TaskPositions[p.captureInfo.ID].Error.Time,
 			Addr:    "127.0.0.1:0000",
 			Code:    "CDC:ErrSinkURIInvalid",
 			Message: "[CDC:ErrSinkURIInvalid]sink uri invalid '%s'",
@@ -301,7 +311,7 @@ func TestProcessorError(t *testing.T) {
 	tester.MustApplyPatches()
 
 	// send a normal error
-	p.sendError(context.Canceled)
+	p.sinkManager.errors <- context.Canceled
 	err = p.Tick(ctx)
 	tester.MustApplyPatches()
 	require.True(t, cerror.ErrReactorFinished.Equal(errors.Cause(err)))
@@ -373,8 +383,8 @@ func TestProcessorClose(t *testing.T) {
 
 	require.Nil(t, p.Close())
 	tester.MustApplyPatches()
-	require.Nil(t, p.sinkManager)
-	require.Nil(t, p.sourceManager)
+	require.Nil(t, p.sinkManager.r)
+	require.Nil(t, p.sourceManager.r)
 	require.Nil(t, p.agent)
 
 	p, tester = initProcessor4Test(ctx, t, &liveness)
@@ -400,7 +410,7 @@ func TestProcessorClose(t *testing.T) {
 	tester.MustApplyPatches()
 
 	// send error
-	p.sendError(cerror.ErrSinkURIInvalid)
+	p.sinkManager.errors <- cerror.ErrSinkURIInvalid
 	err = p.Tick(ctx)
 	require.Error(t, err)
 	tester.MustApplyPatches()
@@ -408,12 +418,13 @@ func TestProcessorClose(t *testing.T) {
 	require.Nil(t, p.Close())
 	tester.MustApplyPatches()
 	require.Equal(t, p.changefeed.TaskPositions[p.captureInfo.ID].Error, &model.RunningError{
+		Time:    p.changefeed.TaskPositions[p.captureInfo.ID].Error.Time,
 		Addr:    "127.0.0.1:0000",
 		Code:    "CDC:ErrSinkURIInvalid",
 		Message: "[CDC:ErrSinkURIInvalid]sink uri invalid '%s'",
 	})
-	require.Nil(t, p.sinkManager)
-	require.Nil(t, p.sourceManager)
+	require.Nil(t, p.sinkManager.r)
+	require.Nil(t, p.sourceManager.r)
 	require.Nil(t, p.agent)
 }
 
@@ -477,7 +488,7 @@ func TestSchemaGC(t *testing.T) {
 	tester.MustApplyPatches()
 
 	// GC Ts should be (checkpoint - 1).
-	require.Equal(t, p.schemaStorage.(*mockSchemaStorage).lastGcTs, uint64(49))
+	require.Equal(t, p.ddlHandler.r.schemaStorage.(*mockSchemaStorage).lastGcTs, uint64(49))
 	require.Equal(t, p.lastSchemaTs, uint64(49))
 
 	require.Nil(t, p.Close())
@@ -530,7 +541,7 @@ func TestUpdateBarrierTs(t *testing.T) {
 		status.ResolvedTs = 10
 		return status, true, nil
 	})
-	p.schemaStorage.(*mockSchemaStorage).resolvedTs = 10
+	p.ddlHandler.r.schemaStorage.(*mockSchemaStorage).resolvedTs = 10
 
 	// init tick
 	err := p.Tick(ctx)
@@ -560,16 +571,16 @@ func TestUpdateBarrierTs(t *testing.T) {
 	require.Nil(t, err)
 	tester.MustApplyPatches()
 	p.updateBarrierTs(&schedulepb.Barrier{GlobalBarrierTs: 20, TableBarriers: nil})
-	status := p.sinkManager.GetTableStats(span)
+	status := p.sinkManager.r.GetTableStats(span)
 	require.Equal(t, uint64(10), status.BarrierTs)
 
 	// Schema storage has advanced too.
-	p.schemaStorage.(*mockSchemaStorage).resolvedTs = 15
+	p.ddlHandler.r.schemaStorage.(*mockSchemaStorage).resolvedTs = 15
 	err = p.Tick(ctx)
 	require.Nil(t, err)
 	tester.MustApplyPatches()
 	p.updateBarrierTs(&schedulepb.Barrier{GlobalBarrierTs: 20, TableBarriers: nil})
-	status = p.sinkManager.GetTableStats(span)
+	status = p.sinkManager.r.GetTableStats(span)
 	require.Equal(t, uint64(15), status.BarrierTs)
 
 	require.Nil(t, p.Close())
@@ -598,6 +609,36 @@ func TestProcessorLiveness(t *testing.T) {
 	// Force set liveness to alive.
 	*p.agent.(*mockAgent).liveness = model.LivenessCaptureAlive
 	require.Equal(t, model.LivenessCaptureAlive, p.liveness.Load())
+
+	require.Nil(t, p.Close())
+	tester.MustApplyPatches()
+}
+
+func TestProcessorDostNotStuckInInit(t *testing.T) {
+	_ = failpoint.
+		Enable("github.com/pingcap/tiflow/cdc/processor/sinkmanager/SinkManagerRunError",
+			"1*return(true)")
+	defer func() {
+		_ = failpoint.
+			Disable("github.com/pingcap/tiflow/cdc/processor/sinkmanager/SinkManagerRunError")
+	}()
+
+	ctx := cdcContext.NewBackendContext4Test(true)
+	liveness := model.LivenessCaptureAlive
+	p, tester := initProcessor4Test(ctx, t, &liveness)
+
+	// First tick for creating position.
+	err := p.Tick(ctx)
+	require.Nil(t, err)
+	tester.MustApplyPatches()
+
+	// Second tick for init.
+	err = p.Tick(ctx)
+	require.Nil(t, err)
+
+	// TODO(qupeng): third tick for handle a warning.
+	err = p.Tick(ctx)
+	require.Nil(t, err)
 
 	require.Nil(t, p.Close())
 	tester.MustApplyPatches()

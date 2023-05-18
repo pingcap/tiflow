@@ -1,10 +1,16 @@
-version: '2.1'
+version: '3.5'
 
 services:
   storage_integration_test:
     build:
       context: ../../../
       dockerfile: ./deployments/ticdc/docker/integration-test.Dockerfile
+      args:
+        BRANCH: ${BRANCH}
+        COMMUNITY: ${COMMUNITY}
+        VERSION: ${VERSION} 
+        OS: ${SYS}
+        ARCH: ${ARCH}
     command:
       - bash
       - -c

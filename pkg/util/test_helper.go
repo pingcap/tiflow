@@ -53,3 +53,11 @@ func HandleErrWithErrGroup(ctx context.Context, errCh <-chan error, errFn func(e
 	})
 	return errg
 }
+
+// Must panics if err is not nil.
+func Must[T any](v T, err error) T {
+	if err != nil {
+		panic(err)
+	}
+	return v
+}

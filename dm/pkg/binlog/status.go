@@ -50,7 +50,10 @@ func GetBinaryLogs(ctx *tcontext.Context, db *conn.BaseDB) (FileSizes, error) {
 	if err != nil {
 		return nil, terror.DBErrorAdapt(err, db.Scope, terror.ErrDBDriverError)
 	}
-	defer rows.Close()
+	defer func() {
+		_ = rows.Close()
+		_ = rows.Err()
+	}()
 	files := make([]binlogSize, 0, 10)
 	var rowsResult [][]string
 	rowsResult, err = export.GetSpecifiedColumnValuesAndClose(rows, "Log_name", "File_size")

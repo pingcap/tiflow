@@ -25,13 +25,17 @@ import (
 	"github.com/pingcap/tiflow/cdc/model"
 	"github.com/pingcap/tiflow/cdc/sink/dmlsink"
 	"github.com/pingcap/tiflow/cdc/sink/util"
+	"github.com/pingcap/tiflow/pkg/chann"
 	"github.com/pingcap/tiflow/pkg/config"
 	"github.com/pingcap/tiflow/pkg/sink/cloudstorage"
 	"github.com/pingcap/tiflow/pkg/sink/codec/builder"
 	"github.com/stretchr/testify/require"
+	"golang.org/x/sync/errgroup"
 )
 
-func testEncodingWorker(ctx context.Context, t *testing.T) (*encodingWorker, func()) {
+func testEncodingWorker(
+	t *testing.T,
+) (*encodingWorker, chan eventFragment, chan eventFragment) {
 	uri := fmt.Sprintf("file:///%s", t.TempDir())
 	sinkURI, err := url.Parse(uri)
 	require.Nil(t, err)
@@ -43,18 +47,23 @@ func testEncodingWorker(ctx context.Context, t *testing.T) (*encodingWorker, fun
 	encoder := encoderBuilder.Build()
 	changefeedID := model.DefaultChangeFeedID("test-encode")
 
+	encodedCh := make(chan eventFragment)
 	msgCh := make(chan eventFragment, 1024)
-	defragmenter := newDefragmenter(ctx)
-	worker := newEncodingWorker(1, changefeedID, encoder, msgCh, defragmenter)
-	return worker, func() {
-		defragmenter.close()
-	}
+	return newEncodingWorker(1, changefeedID, encoder, msgCh, encodedCh), msgCh, encodedCh
 }
 
 func TestEncodeEvents(t *testing.T) {
+	t.Parallel()
+
+	encodingWorker, _, encodedCh := testEncodingWorker(t)
 	ctx, cancel := context.WithCancel(context.Background())
-	worker, fn := testEncodingWorker(ctx, t)
-	defer fn()
+	eg, egCtx := errgroup.WithContext(ctx)
+	outputChs := []*chann.DrainableChann[eventFragment]{chann.NewAutoDrainChann[eventFragment]()}
+	defragmenter := newDefragmenter(encodedCh, outputChs)
+	eg.Go(func() error {
+		return defragmenter.run(egCtx)
+	})
+
 	colInfos := []rowcodec.ColInfo{
 		{
 			ID:            1,
@@ -69,8 +78,8 @@ func TestEncodeEvents(t *testing.T) {
 			Ft:            types.NewFieldType(mysql.TypeString),
 		},
 	}
-	err := worker.encodeEvents(eventFragment{
-		versionedTable: cloudstorage.VersionedTable{
+	err := encodingWorker.encodeEvents(eventFragment{
+		versionedTable: cloudstorage.VersionedTableName{
 			TableNameWithPhysicTableID: model.TableName{
 				Schema:  "test",
 				Table:   "table1",
@@ -118,12 +127,21 @@ func TestEncodeEvents(t *testing.T) {
 	})
 	require.Nil(t, err)
 	cancel()
+	require.ErrorIs(t, eg.Wait(), context.Canceled)
 }
 
 func TestEncodingWorkerRun(t *testing.T) {
+	t.Parallel()
+
+	encodingWorker, msgCh, encodedCh := testEncodingWorker(t)
 	ctx, cancel := context.WithCancel(context.Background())
-	worker, fn := testEncodingWorker(ctx, t)
-	defer fn()
+	eg, egCtx := errgroup.WithContext(ctx)
+	outputChs := []*chann.DrainableChann[eventFragment]{chann.NewAutoDrainChann[eventFragment]()}
+	defragmenter := newDefragmenter(encodedCh, outputChs)
+	eg.Go(func() error {
+		return defragmenter.run(egCtx)
+	})
+
 	table := model.TableName{
 		Schema:  "test",
 		Table:   "table1",
@@ -158,7 +176,7 @@ func TestEncodingWorkerRun(t *testing.T) {
 
 	for i := 0; i < 3; i++ {
 		frag := eventFragment{
-			versionedTable: cloudstorage.VersionedTable{
+			versionedTable: cloudstorage.VersionedTableName{
 				TableNameWithPhysicTableID: table,
 			},
 			seqNumber: uint64(i + 1),
@@ -166,17 +184,17 @@ func TestEncodingWorkerRun(t *testing.T) {
 				Event: event,
 			},
 		}
-		worker.inputCh <- frag
+		msgCh <- frag
 	}
 
 	var wg sync.WaitGroup
 	wg.Add(1)
 	go func() {
 		defer wg.Done()
-		_ = worker.run(ctx)
+		_ = encodingWorker.run(ctx)
 	}()
 
 	cancel()
-	worker.close()
+	encodingWorker.close()
 	wg.Wait()
 }

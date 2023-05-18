@@ -16,6 +16,7 @@ package util
 import (
 	"bytes"
 	"fmt"
+	"net/url"
 	"os"
 	"path/filepath"
 	"syscall"
@@ -182,8 +183,12 @@ func TestAndWriteExampleReplicaTOML(t *testing.T) {
 	require.Equal(t, &config.MounterConfig{
 		WorkerNum: 16,
 	}, cfg.Mounter)
-	err = cfg.ValidateAndAdjust(nil)
-	require.Nil(t, err)
+
+	sinkURL, err := url.Parse("kafka://127.0.0.1:9092")
+	require.NoError(t, err)
+
+	err = cfg.ValidateAndAdjust(sinkURL)
+	require.NoError(t, err)
 	require.Equal(t, &config.SinkConfig{
 		EncoderConcurrency: 16,
 		DispatchRules: []*config.DispatchRule{
@@ -199,23 +204,31 @@ func TestAndWriteExampleReplicaTOML(t *testing.T) {
 			Delimiter:  string(config.Comma),
 			NullString: config.NULL,
 		},
-		Terminator:    "\r\n",
-		DateSeparator: config.DateSeparatorNone.String(),
-		Protocol:      "open-protocol",
+		Terminator:               "\r\n",
+		DateSeparator:            config.DateSeparatorNone.String(),
+		EnablePartitionSeparator: true,
+		Protocol:                 "open-protocol",
 	}, cfg.Sink)
 }
 
 func TestAndWriteStorageSinkTOML(t *testing.T) {
 	cfg := config.GetDefaultReplicaConfig()
 	err := StrictDecodeFile("changefeed_storage_sink.toml", "cdc", &cfg)
-	require.Nil(t, err)
+	require.NoError(t, err)
 
-	err = cfg.ValidateAndAdjust(nil)
-	require.Nil(t, err)
+	sinkURL, err := url.Parse("s3://127.0.0.1:9092")
+	require.NoError(t, err)
+
+	cfg.Sink.Protocol = config.ProtocolCanalJSON.String()
+	err = cfg.ValidateAndAdjust(sinkURL)
+	require.NoError(t, err)
 	require.Equal(t, &config.SinkConfig{
-		EncoderConcurrency: 16,
-		Terminator:         "\r\n",
-		DateSeparator:      "day",
+		Protocol:                 config.ProtocolCanalJSON.String(),
+		EncoderConcurrency:       16,
+		Terminator:               "\r\n",
+		DateSeparator:            "day",
+		EnablePartitionSeparator: true,
+		FileIndexWidth:           config.DefaultFileIndexWidth,
 		CSVConfig: &config.CSVConfig{
 			Delimiter:       ",",
 			Quote:           "\"",

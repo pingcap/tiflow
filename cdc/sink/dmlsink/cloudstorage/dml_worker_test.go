@@ -16,7 +16,6 @@ import (
 	"context"
 	"fmt"
 	"net/url"
-	"os"
 	"path"
 	"sync"
 	"testing"
@@ -46,19 +45,22 @@ func testDMLWorker(ctx context.Context, t *testing.T, dir string) *dmlWorker {
 	require.Nil(t, err)
 	cfg := cloudstorage.NewConfig()
 	err = cfg.Apply(context.TODO(), sinkURI, config.GetDefaultReplicaConfig())
+	cfg.FileIndexWidth = 6
 	require.Nil(t, err)
 
 	statistics := metrics.NewStatistics(ctx, sink.TxnSink)
 	d := newDMLWorker(1, model.DefaultChangeFeedID("dml-worker-test"), storage,
-		cfg, ".json", clock.New(), statistics)
+		cfg, ".json", chann.NewAutoDrainChann[eventFragment](), clock.New(), statistics)
 	return d
 }
 
 func TestDMLWorkerRun(t *testing.T) {
+	t.Parallel()
+
 	ctx, cancel := context.WithCancel(context.Background())
 	parentDir := t.TempDir()
 	d := testDMLWorker(ctx, t, parentDir)
-	fragCh := chann.NewAutoDrainChann[eventFragment]()
+	fragCh := d.inputCh
 	table1Dir := path.Join(parentDir, "test/table1/99")
 	// assume table1 and table2 are dispatched to the same DML worker
 	table1 := model.TableName{
@@ -82,9 +84,9 @@ func TestDMLWorkerRun(t *testing.T) {
 	for i := 0; i < 5; i++ {
 		frag := eventFragment{
 			seqNumber: uint64(i),
-			versionedTable: cloudstorage.VersionedTable{
+			versionedTable: cloudstorage.VersionedTableName{
 				TableNameWithPhysicTableID: table1,
-				Version:                    99,
+				TableInfoVersion:           99,
 			},
 			event: &dmlsink.TxnCallbackableEvent{
 				Event: &model.SingleTableTxn{
@@ -119,19 +121,14 @@ func TestDMLWorkerRun(t *testing.T) {
 	wg.Add(1)
 	go func() {
 		defer wg.Done()
-		_ = d.run(ctx, fragCh)
+		_ = d.run(ctx)
 	}()
 
 	time.Sleep(4 * time.Second)
 	// check whether files for table1 has been generated
-	files, err := os.ReadDir(table1Dir)
-	require.Nil(t, err)
-	require.Len(t, files, 3)
-	var fileNames []string
-	for _, f := range files {
-		fileNames = append(fileNames, f.Name())
-	}
-	require.ElementsMatch(t, []string{"CDC000001.json", "schema.json", "CDC.index"}, fileNames)
+	fileNames := getTableFiles(t, table1Dir)
+	require.Len(t, fileNames, 2)
+	require.ElementsMatch(t, []string{"CDC000001.json", "CDC.index"}, fileNames)
 	cancel()
 	d.close()
 	wg.Wait()

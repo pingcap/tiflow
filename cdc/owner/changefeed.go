@@ -33,6 +33,7 @@ import (
 	"github.com/pingcap/tiflow/pkg/config"
 	cdcContext "github.com/pingcap/tiflow/pkg/context"
 	cerror "github.com/pingcap/tiflow/pkg/errors"
+	"github.com/pingcap/tiflow/pkg/filter"
 	"github.com/pingcap/tiflow/pkg/orchestrator"
 	"github.com/pingcap/tiflow/pkg/pdutil"
 	redoCfg "github.com/pingcap/tiflow/pkg/redo"
@@ -125,9 +126,14 @@ type changefeed struct {
 		startTs uint64,
 		changefeed model.ChangeFeedID,
 		schemaStorage entry.SchemaStorage,
+		filter filter.Filter,
 	) (puller.DDLPuller, error)
 
-	newSink      func(changefeedID model.ChangeFeedID, info *model.ChangeFeedInfo, reportErr func(error)) DDLSink
+	newSink func(
+		changefeedID model.ChangeFeedID, info *model.ChangeFeedInfo,
+		reportError func(err error), reportWarning func(err error),
+	) DDLSink
+
 	newScheduler func(
 		ctx cdcContext.Context, up *upstream.Upstream, epoch uint64, cfg *config.SchedulerConfig,
 	) (scheduler.Scheduler, error)
@@ -175,8 +181,12 @@ func newChangefeed4Test(
 		startTs uint64,
 		changefeed model.ChangeFeedID,
 		schemaStorage entry.SchemaStorage,
+		filter filter.Filter,
 	) (puller.DDLPuller, error),
-	newSink func(changefeedID model.ChangeFeedID, info *model.ChangeFeedInfo, reportErr func(err error)) DDLSink,
+	newSink func(
+		changefeedID model.ChangeFeedID, info *model.ChangeFeedInfo,
+		reportError func(err error), reportWarning func(err error),
+	) DDLSink,
 	newScheduler func(
 		ctx cdcContext.Context, up *upstream.Upstream, epoch uint64, cfg *config.SchedulerConfig,
 	) (scheduler.Scheduler, error),
@@ -240,6 +250,7 @@ func (c *changefeed) handleErr(ctx cdcContext.Context, err error) {
 		code = string(cerror.ErrOwnerUnknown.RFCCode())
 	}
 	c.feedStateManager.handleError(&model.RunningError{
+		Time:    time.Now(),
 		Addr:    contextutil.CaptureAddrFromCtx(ctx),
 		Code:    code,
 		Message: err.Error(),
@@ -251,7 +262,7 @@ func (c *changefeed) checkStaleCheckpointTs(ctx cdcContext.Context, checkpointTs
 	state := c.state.Info.State
 	if state == model.StateNormal || state == model.StateStopped || state == model.StateError {
 		failpoint.Inject("InjectChangefeedFastFailError", func() error {
-			return cerror.ErrGCTTLExceeded.FastGen("InjectChangefeedFastFailError")
+			return cerror.ErrStartTsBeforeGC.FastGen("InjectChangefeedFastFailError")
 		})
 		if err := c.upstream.GCManager.CheckStaleCheckpointTs(ctx, c.id, checkpointTs); err != nil {
 			return errors.Trace(err)
@@ -292,11 +303,7 @@ func (c *changefeed) tick(ctx cdcContext.Context, captures map[model.CaptureID]*
 		return errors.Trace(err)
 	default:
 	}
-	// we need to wait ddl ddlSink to be ready before we do the other things
-	// otherwise, we may cause a nil pointer panic when we try to write to the ddl ddlSink.
-	if !c.ddlSink.isInitialized() {
-		return nil
-	}
+
 	// TODO: pass table checkpointTs when we support concurrent process ddl
 	allPhysicalTables, minTableBarrierTs, barrier, err := c.ddlManager.tick(ctx, checkpointTs, nil)
 	if err != nil {
@@ -312,7 +319,16 @@ func (c *changefeed) tick(ctx cdcContext.Context, captures map[model.CaptureID]*
 	// Note: There may be some tableBarrierTs larger than otherBarrierTs,
 	// but we can ignore them because they will be handled in the processor.
 	if barrier.GlobalBarrierTs > otherBarrierTs {
+		log.Debug("There are other barriers less than ddl barrier, wait for them",
+			zap.Uint64("otherBarrierTs", otherBarrierTs),
+			zap.Uint64("ddlBarrierTs", barrier.GlobalBarrierTs))
 		barrier.GlobalBarrierTs = otherBarrierTs
+	}
+
+	if minTableBarrierTs > otherBarrierTs {
+		log.Debug("There are other barriers less than min table barrier, wait for them",
+			zap.Uint64("otherBarrierTs", otherBarrierTs),
+			zap.Uint64("ddlBarrierTs", barrier.GlobalBarrierTs))
 		minTableBarrierTs = otherBarrierTs
 	}
 
@@ -526,7 +542,16 @@ LOOP:
 	}
 	c.barriers.Update(finishBarrier, c.state.Info.GetTargetTs())
 
-	c.schema, err = newSchemaWrap4Owner(c.upstream.KVStorage, ddlStartTs, c.state.Info.Config, c.id)
+	filter, err := filter.NewFilter(c.state.Info.Config, "")
+	if err != nil {
+		return errors.Trace(err)
+	}
+	c.schema, err = newSchemaWrap4Owner(
+		c.upstream.KVStorage,
+		ddlStartTs,
+		c.state.Info.Config,
+		c.id,
+		filter)
 	if err != nil {
 		return errors.Trace(err)
 	}
@@ -545,14 +570,21 @@ LOOP:
 		zap.String("changefeed", c.id.ID),
 	)
 
-	c.ddlSink = c.newSink(c.id, c.state.Info, ctx.Throw)
+	c.ddlSink = c.newSink(c.id, c.state.Info, ctx.Throw, func(err error) {
+		// TODO(qupeng): report the warning.
+		log.Warn("ddlSink internal error",
+			zap.String("namespace", c.id.Namespace),
+			zap.String("changefeed", c.id.ID),
+			zap.Error(err))
+	})
 	c.ddlSink.run(cancelCtx)
 
 	c.ddlPuller, err = c.newDDLPuller(cancelCtx,
 		c.state.Info.Config,
 		c.upstream, ddlStartTs,
 		c.id,
-		c.schema)
+		c.schema,
+		filter)
 	if err != nil {
 		return errors.Trace(err)
 	}
@@ -563,8 +595,7 @@ LOOP:
 		ctx.Throw(c.ddlPuller.Run(cancelCtx))
 	}()
 
-	c.downstreamObserver, err = c.newDownstreamObserver(
-		ctx, c.state.Info.SinkURI, c.state.Info.Config)
+	c.downstreamObserver, err = c.newDownstreamObserver(ctx, c.state.Info.SinkURI, c.state.Info.Config)
 	if err != nil {
 		return err
 	}
@@ -990,8 +1021,8 @@ func (c *changefeed) tickDownstreamObserver(ctx context.Context) {
 			defer cancel()
 			if err := c.downstreamObserver.Tick(cctx); err != nil {
 				// Prometheus is not deployed, it happens in non production env.
-				if strings.Contains(err.Error(),
-					fmt.Sprintf(":%d", errno.ErrPrometheusAddrIsNotSet)) {
+				noPrometheusMsg := fmt.Sprintf(":%d", errno.ErrPrometheusAddrIsNotSet)
+				if strings.Contains(err.Error(), noPrometheusMsg) {
 					return
 				}
 				log.Warn("backend observer tick error", zap.Error(err))
