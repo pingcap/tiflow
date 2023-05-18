@@ -34,6 +34,12 @@ func (s *TableState) Store(new TableState) {
 	atomic.StoreInt32((*int32)(s), int32(new))
 }
 
+func (s *TableState) CompareAndSwap(old, new TableState) bool {
+	oldx := int32(old)
+	newx := int32(new)
+	return atomic.CompareAndSwapInt32((*int32)(s), oldx, newx)
+}
+
 // TableID is the ID of the table
 type TableID = int64
 
