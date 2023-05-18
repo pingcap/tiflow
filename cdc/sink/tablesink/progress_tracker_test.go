@@ -133,7 +133,7 @@ func TestCloseTracker(t *testing.T) {
 	wg.Add(1)
 	go func() {
 		tracker.freezeProcess()
-		tracker.close(make(chan struct{}))
+		tracker.waitClosed(make(chan struct{}))
 		wg.Done()
 	}()
 
@@ -168,7 +168,7 @@ func TestCloseTrackerCancellable(t *testing.T) {
 	wg.Add(1)
 	go func() {
 		tracker.freezeProcess()
-		tracker.close(dead)
+		tracker.waitClosed(dead)
 		wg.Done()
 	}()
 	wg.Wait()
@@ -221,16 +221,14 @@ func TestClosedTrackerDoNotAdvanceCheckpointTs(t *testing.T) {
 
 	var wg sync.WaitGroup
 	wg.Add(1)
+	freezed := make(chan struct{})
 	go func() {
 		tracker.freezeProcess()
-		tracker.close(make(chan struct{}))
+		close(freezed)
+		tracker.waitClosed(make(chan struct{}))
 		wg.Done()
 	}()
-	require.Eventually(t, func() bool {
-		tracker.mu.Lock()
-		defer tracker.mu.Unlock()
-		return tracker.closed
-	}, 3*time.Second, 100*time.Millisecond, "state of tracker should be closed")
+	<-freezed
 	currentTs := tracker.advance()
 	cb1()
 	cb2()

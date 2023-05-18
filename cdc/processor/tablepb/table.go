@@ -34,6 +34,7 @@ func (s *TableState) Store(new TableState) {
 	atomic.StoreInt32((*int32)(s), int32(new))
 }
 
+// CompareAndSwap is just like sync/atomic.Atomic*.CompareAndSwap.
 func (s *TableState) CompareAndSwap(old, new TableState) bool {
 	oldx := int32(old)
 	newx := int32(new)
