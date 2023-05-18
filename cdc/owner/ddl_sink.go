@@ -76,7 +76,7 @@ type ddlSinkImpl struct {
 	ddlCh chan *model.DDLEvent
 
 	sinkV1 sinkv1.Sink
-    errCh chan error
+	errCh  chan error
 
 	sinkV2 sinkv2.DDLEventSink
 
@@ -107,7 +107,7 @@ func newDDLSink(
 		changefeedID: changefeedID,
 		info:         info,
 
-		errCh:     make(chan error, defaultErrChSize),
+		errCh:         make(chan error, defaultErrChSize),
 		reportError:   reportError,
 		reportWarning: reportWarning,
 	}
@@ -144,8 +144,8 @@ func ddlSinkInitializer(ctx context.Context, a *ddlSinkImpl) error {
 
 func (s *ddlSinkImpl) makeSyncPointStoreReady(ctx context.Context) error {
 	if s.info.Config.EnableSyncPoint && s.syncPointStore == nil {
-        syncPointStore, err := mysql.NewSyncPointStore(
-            ctx, s.changefeedID, s.info.SinkURI, s.info.Config.SyncPointRetention)
+		syncPointStore, err := mysql.NewSyncPointStore(
+			ctx, s.changefeedID, s.info.SinkURI, s.info.Config.SyncPointRetention)
 		if err != nil {
 			return errors.Trace(err)
 		}
@@ -162,7 +162,7 @@ func (s *ddlSinkImpl) makeSyncPointStoreReady(ctx context.Context) error {
 }
 
 func (s *ddlSinkImpl) makeSinkReady(ctx context.Context) error {
-    if s.sinkV1 == nil && s.sinkV2 == nil {
+	if s.sinkV1 == nil && s.sinkV2 == nil {
 		if err := s.sinkInitHandler(ctx, s); err != nil {
 			log.Warn("ddl sink initialize failed",
 				zap.String("namespace", s.changefeedID.Namespace),
@@ -181,7 +181,7 @@ func (s *ddlSinkImpl) retrySinkActionWithErrorReport(ctx context.Context, action
 			return nil
 		}
 		s.sinkV1 = nil
-        s.sinkV2 = nil
+		s.sinkV2 = nil
 		if !cerror.IsChangefeedUnRetryableError(err) && errors.Cause(err) != context.Canceled {
 			s.reportWarning(err)
 		} else {
@@ -214,11 +214,11 @@ func (s *ddlSinkImpl) writeCheckpointTs(ctx context.Context, lastCheckpointTs *m
 		s.mu.Unlock()
 
 		if err = s.makeSinkReady(ctx); err == nil {
-            if s.sinkV1 != nil {
-                err = s.sinkV1.EmitCheckpointTs(ctx, checkpointTs, tables)
-            } else {
-                err = s.sinkV2.WriteCheckpointTs(ctx, checkpointTs, tables)
-            }
+			if s.sinkV1 != nil {
+				err = s.sinkV1.EmitCheckpointTs(ctx, checkpointTs, tables)
+			} else {
+				err = s.sinkV2.WriteCheckpointTs(ctx, checkpointTs, tables)
+			}
 		}
 		if err == nil {
 			*lastCheckpointTs = checkpointTs
@@ -237,11 +237,11 @@ func (s *ddlSinkImpl) writeDDLEvent(ctx context.Context, ddl *model.DDLEvent) er
 
 	doWrite := func() (err error) {
 		if err = s.makeSinkReady(ctx); err == nil {
-            if s.sinkV1 != nil {
-                err = s.sinkV1.EmitDDLEvent(ctx, ddl)
-            } else {
-                err = s.sinkV2.WriteDDLEvent(ctx, ddl)
-            }
+			if s.sinkV1 != nil {
+				err = s.sinkV1.EmitDDLEvent(ctx, ddl)
+			} else {
+				err = s.sinkV2.WriteDDLEvent(ctx, ddl)
+			}
 			failpoint.Inject("InjectChangefeedDDLError", func() {
 				err = cerror.ErrExecDDLFailed.GenWithStackByArgs()
 			})
@@ -400,8 +400,8 @@ func (s *ddlSinkImpl) close(ctx context.Context) (err error) {
 
 	// they will both be nil if changefeed return an error in initializing
 	if s.sinkV1 != nil {
-        _ = s.sinkV1.Close(ctx)
-    } else if s.sinkV2 != nil {
+		_ = s.sinkV1.Close(ctx)
+	} else if s.sinkV2 != nil {
 		_ = s.sinkV2.Close()
 	}
 	if s.syncPointStore != nil {

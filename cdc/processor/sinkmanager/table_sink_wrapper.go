@@ -43,7 +43,7 @@ type tableSinkWrapper struct {
 
 	// changefeed used for logging.
 	changefeed model.ChangeFeedID
-	tableID model.TableID
+	tableID    model.TableID
 
 	tableSinkCreater func() tablesink.TableSink
 
@@ -110,7 +110,7 @@ func newTableSinkWrapper(
 	res := &tableSinkWrapper{
 		version:          atomic.AddUint64(&version, 1),
 		changefeed:       changefeed,
-		tableID:    tableID,
+		tableID:          tableID,
 		tableSinkCreater: tableSinkCreater,
 		state:            &state,
 		startTs:          startTs,
@@ -163,7 +163,10 @@ func (t *tableSinkWrapper) start(ctx context.Context, startTs model.Ts) (err err
 func (t *tableSinkWrapper) appendRowChangedEvents(events ...*model.RowChangedEvent) {
 	t.tableSinkMu.Lock()
 	defer t.tableSinkMu.Unlock()
-	t.tableSink.AppendRowChangedEvents(events...)
+	// If it's nil it means it's closed.
+	if t.tableSink != nil {
+		t.tableSink.AppendRowChangedEvents(events...)
+	}
 }
 
 func (t *tableSinkWrapper) updateReceivedSorterResolvedTs(ts model.Ts) {
@@ -190,8 +193,11 @@ func (t *tableSinkWrapper) updateReceivedSorterCommitTs(ts model.Ts) {
 func (t *tableSinkWrapper) updateResolvedTs(ts model.ResolvedTs) error {
 	t.tableSinkMu.Lock()
 	defer t.tableSinkMu.Unlock()
-	if err := t.tableSink.UpdateResolvedTs(ts); err != nil {
-		return errors.Trace(err)
+	// If it's nil it means it's closed.
+	if t.tableSink != nil {
+		if err := t.tableSink.UpdateResolvedTs(ts); err != nil {
+			return errors.Trace(err)
+		}
 	}
 	return nil
 }
@@ -238,17 +244,54 @@ func (t *tableSinkWrapper) getUpperBoundTs() model.Ts {
 	return resolvedTs
 }
 
+func (t *tableSinkWrapper) markAsClosing() {
+	for {
+		curr := t.state.Load()
+		if curr == tablepb.TableStateStopping || curr == tablepb.TableStateStopped {
+			break
+		}
+		if t.state.CompareAndSwap(curr, tablepb.TableStateStopping) {
+			break
+		}
+	}
+}
+
+func (t *tableSinkWrapper) markAsClosed() (modified bool) {
+	for {
+		curr := t.state.Load()
+		if curr == tablepb.TableStateStopped {
+			return
+		}
+		if t.state.CompareAndSwap(curr, tablepb.TableStateStopped) {
+			modified = true
+			return
+		}
+	}
+}
+
+func (t *tableSinkWrapper) asyncClose() bool {
+	t.markAsClosing()
+	if t.asyncClearTableSink() {
+		if t.markAsClosed() {
+			log.Info("Sink is closed",
+				zap.String("namespace", t.changefeed.Namespace),
+				zap.String("changefeed", t.changefeed.ID),
+				zap.Int64("tableID", t.tableID))
+		}
+		return true
+	}
+	return false
+}
+
 func (t *tableSinkWrapper) close() {
-	t.state.Store(tablepb.TableStateStopping)
-	// table stopped state must be set after underlying sink is closed
-	defer t.state.Store(tablepb.TableStateStopped)
-
+	t.markAsClosing()
 	t.clearTableSink()
-
-	log.Info("Sink is closed",
-		zap.Int64("tableID", t.tableID),
-		zap.String("namespace", t.changefeed.Namespace),
-		zap.String("changefeed", t.changefeed.ID))
+	if t.markAsClosed() {
+		log.Info("Sink is closed",
+			zap.String("namespace", t.changefeed.Namespace),
+			zap.String("changefeed", t.changefeed.ID),
+			zap.Int64("tableID", t.tableID))
+	}
 }
 
 // Return true means the internal table sink has been initialized.
@@ -258,6 +301,22 @@ func (t *tableSinkWrapper) initTableSink() bool {
 	if t.tableSink == nil {
 		t.tableSink = t.tableSinkCreater()
 		return t.tableSink != nil
+	}
+	return true
+}
+
+func (t *tableSinkWrapper) asyncClearTableSink() bool {
+	t.tableSinkMu.Lock()
+	defer t.tableSinkMu.Unlock()
+	if t.tableSink != nil {
+		if !t.tableSink.AsyncClose() {
+			return false
+		}
+		checkpointTs := t.tableSink.GetCheckpointTs()
+		if t.tableSinkCheckpointTs.Less(checkpointTs) {
+			t.tableSinkCheckpointTs = checkpointTs
+		}
+		t.tableSink = nil
 	}
 	return true
 }
@@ -346,8 +405,8 @@ func (t *tableSinkWrapper) cleanRangeEventCounts(upperBound engine.Position, min
 // It will deal with the old value compatibility.
 func convertRowChangedEvents(
 	changefeed model.ChangeFeedID,
-    tableID model.TableID,
-    enableOldValue bool,
+	tableID model.TableID,
+	enableOldValue bool,
 	events ...*model.PolymorphicEvent,
 ) ([]*model.RowChangedEvent, uint64, error) {
 	size := 0

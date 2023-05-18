@@ -14,9 +14,7 @@
 package tablesink
 
 import (
-	"fmt"
 	"sort"
-	"time"
 
 	"github.com/pingcap/log"
 	"github.com/pingcap/tiflow/cdc/model"
@@ -134,40 +132,63 @@ func (e *EventTableSink[E]) GetCheckpointTs() model.ResolvedTs {
 	return e.progressTracker.advance()
 }
 
-// Close the table sink and wait for all callbacks be called.
-// Notice: It will be blocked until all callbacks be called.
+// Close closes the table sink.
+// After it returns, no more events will be sent out from this capture.
 func (e *EventTableSink[E]) Close() {
-	currentState := e.state.Load()
-	if currentState == state.TableSinkStopping ||
-		currentState == state.TableSinkStopped {
-		log.Warn(fmt.Sprintf("Table sink is already %s", currentState.String()),
-			zap.String("namespace", e.changefeedID.Namespace),
-			zap.String("changefeed", e.changefeedID.ID),
-			zap.Uint64("tableID", uint64(e.tableID)))
-		return
-	}
+	e.freeze()
+	e.progressTracker.waitClosed(e.backendSink.Dead())
+	e.markAsClosed()
+}
 
+// AsyncClose closes the table sink asynchronously. Returns true if it's closed.
+func (e *EventTableSink[E]) AsyncClose() bool {
+	e.freeze()
+	if e.progressTracker.checkClosed(e.backendSink.Dead()) {
+		e.markAsClosed()
+		return true
+	}
+	return false
+}
+
+func (e *EventTableSink[E]) freeze() {
 	// Notice: We have to set the state to stopping first,
 	// otherwise the progressTracker may be advanced incorrectly.
 	// For example, if we do not freeze it and set the state to stooping
 	// then the progressTracker may be advanced to the checkpointTs
 	// because backend sink drops some events.
 	e.progressTracker.freezeProcess()
-	start := time.Now()
-	e.state.Store(state.TableSinkStopping)
-	stoppingCheckpointTs := e.GetCheckpointTs()
-	log.Info("Stopping table sink",
-		zap.String("namespace", e.changefeedID.Namespace),
-		zap.String("changefeed", e.changefeedID.ID),
-		zap.Int64("tableID", e.tableID),
-		zap.Uint64("checkpointTs", stoppingCheckpointTs.Ts))
-	e.progressTracker.close(e.backendSink.Dead())
-	e.state.Store(state.TableSinkStopped)
-	stoppedCheckpointTs := e.GetCheckpointTs()
-	log.Info("Table sink stopped",
-		zap.String("namespace", e.changefeedID.Namespace),
-		zap.String("changefeed", e.changefeedID.ID),
-		zap.Int64("tableID", e.tableID),
-		zap.Uint64("checkpointTs", stoppedCheckpointTs.Ts),
-		zap.Duration("duration", time.Since(start)))
+
+	for {
+		currentState := e.state.Load()
+		if currentState == state.TableSinkStopping || currentState == state.TableSinkStopped {
+			break
+		}
+		if e.state.CompareAndSwap(currentState, state.TableSinkStopping) {
+			stoppingCheckpointTs := e.GetCheckpointTs()
+			log.Info("Stopping table sink",
+				zap.String("namespace", e.changefeedID.Namespace),
+				zap.String("changefeed", e.changefeedID.ID),
+				zap.Uint64("tableID", uint64(e.tableID)),
+				zap.Uint64("checkpointTs", stoppingCheckpointTs.Ts))
+			break
+		}
+	}
+}
+
+func (e *EventTableSink[E]) markAsClosed() (modified bool) {
+	for {
+		currentState := e.state.Load()
+		if currentState == state.TableSinkStopped {
+			return
+		}
+		if e.state.CompareAndSwap(currentState, state.TableSinkStopped) {
+			stoppedCheckpointTs := e.GetCheckpointTs()
+			log.Info("Table sink stopped",
+				zap.String("namespace", e.changefeedID.Namespace),
+				zap.String("changefeed", e.changefeedID.ID),
+				zap.Uint64("tableID", uint64(e.tableID)),
+				zap.Uint64("checkpointTs", stoppedCheckpointTs.Ts))
+			return true
+		}
+	}
 }
