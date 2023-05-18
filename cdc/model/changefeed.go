@@ -334,7 +334,6 @@ func (info *ChangeFeedInfo) rmMQOnlyFields() {
 	info.Config.Sink.EnableKafkaSinkV2 = nil
 	info.Config.Sink.OnlyOutputUpdatedColumns = nil
 	info.Config.Sink.KafkaConfig = nil
-	info.Config.Integrity = nil
 }
 
 func (info *ChangeFeedInfo) rmStorageOnlyFields() {

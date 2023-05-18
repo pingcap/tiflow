@@ -967,7 +967,10 @@ func (c *changefeed) handleBarrier(ctx cdcContext.Context) (uint64, error) {
 
 	switch barrierTp {
 	case syncPointBarrier:
-		nextSyncPointTs := oracle.GoTimeToTS(oracle.GetTimeFromTS(barrierTs).Add(c.state.Info.Config.SyncPointInterval))
+		nextSyncPointTs := oracle.GoTimeToTS(
+			oracle.GetTimeFromTS(barrierTs).
+				Add(util.GetOrZero(c.state.Info.Config.SyncPointInterval)),
+		)
 		if err := c.ddlSink.emitSyncPoint(ctx, barrierTs); err != nil {
 			return 0, errors.Trace(err)
 		}
