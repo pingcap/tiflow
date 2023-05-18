@@ -272,7 +272,7 @@ func (t *tableSinkWrapper) markAsClosed() (modified bool) {
 
 func (t *tableSinkWrapper) asyncClose() bool {
 	t.markAsClosing()
-	if t.clearTableSink(true) {
+	if t.asyncClearTableSink() {
 		if t.markAsClosed() {
 			log.Info("Sink is closed",
 				zap.String("namespace", t.changefeed.Namespace),
@@ -286,7 +286,7 @@ func (t *tableSinkWrapper) asyncClose() bool {
 
 func (t *tableSinkWrapper) close() {
 	t.markAsClosing()
-	t.clearTableSink(false)
+	t.clearTableSink()
 	if t.markAsClosed() {
 		log.Info("Sink is closed",
 			zap.String("namespace", t.changefeed.Namespace),
@@ -306,25 +306,33 @@ func (t *tableSinkWrapper) initTableSink() bool {
 	return true
 }
 
-func (t *tableSinkWrapper) clearTableSink(async bool) bool {
+func (t *tableSinkWrapper) asyncClearTableSink() bool {
 	t.tableSinkMu.Lock()
 	defer t.tableSinkMu.Unlock()
-	if t.tableSink == nil {
-		return true
+	if t.tableSink != nil {
+		if !t.tableSink.AsyncClose() {
+			return false
+		}
+		checkpointTs := t.tableSink.GetCheckpointTs()
+		if t.tableSinkCheckpointTs.Less(checkpointTs) {
+			t.tableSinkCheckpointTs = checkpointTs
+		}
+		t.tableSink = nil
 	}
-
-	if !async {
-		t.tableSink.Close()
-	} else if !t.tableSink.AsyncClose() {
-		return false
-	}
-
-	checkpointTs := t.tableSink.GetCheckpointTs()
-	if t.tableSinkCheckpointTs.Less(checkpointTs) {
-		t.tableSinkCheckpointTs = checkpointTs
-	}
-	t.tableSink = nil
 	return true
+}
+
+func (t *tableSinkWrapper) clearTableSink() {
+	t.tableSinkMu.Lock()
+	defer t.tableSinkMu.Unlock()
+	if t.tableSink != nil {
+		t.tableSink.Close()
+		checkpointTs := t.tableSink.GetCheckpointTs()
+		if t.tableSinkCheckpointTs.Less(checkpointTs) {
+			t.tableSinkCheckpointTs = checkpointTs
+		}
+		t.tableSink = nil
+	}
 }
 
 // When the attached sink fail, there can be some events that have already been
