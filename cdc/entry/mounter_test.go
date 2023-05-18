@@ -993,8 +993,16 @@ func TestGetDefaultZeroValue(t *testing.T) {
 func TestDecodeRow(t *testing.T) {
 	helper := NewSchemaTestHelper(t)
 	defer helper.Close()
-	helper.Tk().MustExec("set @@tidb_enable_clustered_index=1;")
-	helper.Tk().MustExec("use test;")
+
+	tk := helper.Tk()
+
+	tk.MustExec("set global tidb_enable_row_level_checksum = 1")
+	helper.Tk().MustExec("use test")
+
+	tk.MustExec("create table t (id int primary key, a int)")
+
+	// row with 1 checksum
+	tk.Session().GetSessionVars().enablech = true
 
 	changefeed := model.DefaultChangeFeedID("changefeed-test-decode-row")
 
