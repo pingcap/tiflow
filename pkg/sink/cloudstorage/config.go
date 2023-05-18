@@ -52,6 +52,7 @@ type Config struct {
 	WorkerCount              int
 	FlushInterval            time.Duration
 	FileSize                 int
+	FileIndexWidth           int
 	DateSeparator            string
 	EnablePartitionSeparator bool
 }
@@ -96,6 +97,11 @@ func (c *Config) Apply(
 
 	c.DateSeparator = replicaConfig.Sink.DateSeparator
 	c.EnablePartitionSeparator = replicaConfig.Sink.EnablePartitionSeparator
+	c.FileIndexWidth = replicaConfig.Sink.FileIndexWidth
+
+	if c.FileIndexWidth < config.MinFileIndexWidth || c.FileIndexWidth > config.MaxFileIndexWidth {
+		c.FileIndexWidth = config.DefaultFileIndexWidth
+	}
 
 	return nil
 }
