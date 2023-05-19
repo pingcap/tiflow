@@ -1143,6 +1143,9 @@ func TestDecodeRow(t *testing.T) {
 	helper := NewSchemaTestHelper(t)
 	defer helper.Close()
 
+	helper.Tk().MustExec("set @@tidb_enable_clustered_index=1;")
+	helper.Tk().MustExec("use test;")
+
 	changefeed := model.DefaultChangeFeedID("changefeed-test-decode-row")
 
 	ver, err := helper.Storage().CurrentVersion(oracle.GlobalTxnScope)
