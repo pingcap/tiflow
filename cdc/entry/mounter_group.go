@@ -80,7 +80,7 @@ func NewMounterGroup(
 	}
 }
 
-func (m *mounterGroup) Run(ctx context.Context) error {
+func (m *mounterGroup) Run(ctx context.Context, _ ...chan<- error) error {
 	defer func() {
 		mounterGroupInputChanSizeGauge.DeleteLabelValues(m.changefeedID.Namespace, m.changefeedID.ID)
 	}()
@@ -157,7 +157,7 @@ type MockMountGroup struct {
 }
 
 // Run implements util.Runnable.
-func (m *MockMountGroup) Run(ctx context.Context) error {
+func (m *MockMountGroup) Run(ctx context.Context, _ ...chan<- error) error {
 	return nil
 }
 
