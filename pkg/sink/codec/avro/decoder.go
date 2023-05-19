@@ -240,6 +240,9 @@ func (d *decoder) NextRowChangedEvent() (*model.RowChangedEvent, error) {
 			checksum := o.(string)
 			expected, err := strconv.ParseUint(checksum, 10, 64)
 			if err != nil {
+				log.Error("parse checksum failed",
+					zap.String("checksum", checksum),
+					zap.Error(err))
 				return nil, errors.Trace(err)
 			}
 
