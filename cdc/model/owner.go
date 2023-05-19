@@ -92,8 +92,10 @@ type TaskPosition struct {
 	// Deprecated: only used in API. TODO: remove API usage.
 	Count uint64 `json:"count"`
 
-	// Error when error happens
+	// Error when changefeed error happens
 	Error *RunningError `json:"error"`
+	// Warning when module error happens
+	Warning *RunningError `json:"warning"`
 }
 
 // Marshal returns the json marshal format of a TaskStatus
@@ -128,6 +130,14 @@ func (tp *TaskPosition) Clone() *TaskPosition {
 			Addr:    tp.Error.Addr,
 			Code:    tp.Error.Code,
 			Message: tp.Error.Message,
+		}
+	}
+	if tp.Warning != nil {
+		ret.Warning = &RunningError{
+			Time:    tp.Warning.Time,
+			Addr:    tp.Warning.Addr,
+			Code:    tp.Warning.Code,
+			Message: tp.Warning.Message,
 		}
 	}
 	return ret

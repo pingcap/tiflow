@@ -956,4 +956,5 @@ type ChangefeedStatus struct {
 	ResolvedTs   uint64        `json:"resolved_ts"`
 	CheckpointTs uint64        `json:"checkpoint_ts"`
 	LastError    *RunningError `json:"last_error,omitempty"`
+	LastWarning  *RunningError `json:"last_warning,omitempty"`
 }
