@@ -156,7 +156,7 @@ function download_binaries() {
 	tar -xz -C third_bin -f tmp/sync_diff_inspector.tar.gz
 
 	download "$schema_registry_url" "schema-registry.tar.gz" "tmp/schema-registry.tar.gz"
-	tar -xz -C third_bin -f tmp/schema-registry.tar.gz
+	tar -xz -C third_bin -f tmp/schema-registry.tar.gz && mv third_bin/bin/* third_bin/
 
 	chmod a+x third_bin/*
 }
