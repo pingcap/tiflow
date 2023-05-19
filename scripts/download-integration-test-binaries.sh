@@ -159,8 +159,6 @@ function download_binaries() {
 
 	download "$schema_registry_url" "schema-registry.tar.gz" "tmp/schema-registry.tar.gz"
 	tar -xz -C third_bin -f tmp/schema-registry.tar.gz
-	mv third_bin/schema-registry third_bin/_schema
-	mv third_bin/_schema/* third_bin && rm -rf third_bin/_schema
 
 	chmod a+x third_bin/*
 }
