@@ -39,8 +39,7 @@ func TestDecodeEvent(t *testing.T) {
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 
-	encoder, err := setupEncoderAndSchemaRegistry(
-		ctx, "http://127.0.0.1:8081", nil, o)
+	encoder, err := setupEncoderAndSchemaRegistry(ctx, o)
 	defer teardownEncoderAndSchemaRegistry()
 	require.NoError(t, err)
 	require.NotNil(t, encoder)

@@ -29,19 +29,16 @@ import (
 	"github.com/pingcap/tidb/util/rowcodec"
 	"github.com/pingcap/tiflow/cdc/model"
 	"github.com/pingcap/tiflow/pkg/errors"
-	"github.com/pingcap/tiflow/pkg/security"
 	"github.com/pingcap/tiflow/pkg/sink/codec/common"
 	"github.com/stretchr/testify/require"
 )
 
 func setupEncoderAndSchemaRegistry(
 	ctx context.Context,
-	registryURL string,
-	credential *security.Credential,
 	o *Options,
 ) (*BatchEncoder, error) {
 	startHTTPInterceptForTestingRegistry()
-	keySchemaM, valueSchemaM, err := NewKeyAndValueSchemaManagers(ctx, registryURL, credential)
+	keySchemaM, valueSchemaM, err := NewKeyAndValueSchemaManagers(ctx, "http://127.0.0.1:8081", nil)
 	if err != nil {
 		return nil, errors.Trace(err)
 	}
@@ -778,8 +775,7 @@ func TestAvroEncode4EnableChecksum(t *testing.T) {
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 
-	encoder, err := setupEncoderAndSchemaRegistry(
-		ctx, "http://127.0.0.1:8081", nil, o)
+	encoder, err := setupEncoderAndSchemaRegistry(ctx, o)
 	defer teardownEncoderAndSchemaRegistry()
 	require.NoError(t, err)
 	require.NotNil(t, encoder)
@@ -878,8 +874,7 @@ func TestAvroEncode(t *testing.T) {
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 
-	encoder, err := setupEncoderAndSchemaRegistry(
-		ctx, "http://127.0.0.1:8081", nil, o)
+	encoder, err := setupEncoderAndSchemaRegistry(ctx, o)
 	defer teardownEncoderAndSchemaRegistry()
 	require.NoError(t, err)
 	require.NotNil(t, encoder)
@@ -1079,8 +1074,7 @@ func TestArvoAppendRowChangedEventWithCallback(t *testing.T) {
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 
-	encoder, err := setupEncoderAndSchemaRegistry(
-		ctx, "http://127.0.0.1:8081", nil, o)
+	encoder, err := setupEncoderAndSchemaRegistry(ctx, o)
 	defer teardownEncoderAndSchemaRegistry()
 	require.NoError(t, err)
 	require.NotNil(t, encoder)
