@@ -142,6 +142,8 @@ func (m *feedStateManager) Tick(state *orchestrator.ChangefeedReactorState) (adm
 	}
 	errs := m.errorsReportedByProcessors()
 	m.handleError(errs...)
+	warnings := m.warningsReportedByProcessors()
+	m.handleWarning(warnings...)
 	return
 }
 
@@ -200,7 +202,6 @@ func (m *feedStateManager) handleAdminJob() (jobsPending bool) {
 		jobsPending = true
 		m.patchState(model.StateStopped)
 	case model.AdminRemove:
-
 		switch m.state.Info.State {
 		case model.StateNormal, model.StateError, model.StateFailed,
 			model.StateStopped, model.StateFinished, model.StateRemoved:
@@ -399,10 +400,11 @@ func (m *feedStateManager) errorsReportedByProcessors() []*model.RunningError {
 				runningErrors = make(map[string]*model.RunningError)
 			}
 			runningErrors[position.Error.Code] = position.Error
-			log.Error("processor report an error",
+			log.Error("processor reports an error",
 				zap.String("namespace", m.state.ID.Namespace),
 				zap.String("changefeed", m.state.ID.ID),
-				zap.String("captureID", captureID), zap.Any("error", position.Error))
+				zap.String("captureID", captureID),
+				zap.Any("error", position.Error))
 			m.state.PatchTaskPosition(captureID, func(position *model.TaskPosition) (*model.TaskPosition, bool, error) {
 				if position == nil {
 					return nil, false, nil
@@ -417,6 +419,38 @@ func (m *feedStateManager) errorsReportedByProcessors() []*model.RunningError {
 	}
 	result := make([]*model.RunningError, 0, len(runningErrors))
 	for _, err := range runningErrors {
+		result = append(result, err)
+	}
+	return result
+}
+
+func (m *feedStateManager) warningsReportedByProcessors() []*model.RunningError {
+	var runningWarnings map[string]*model.RunningError
+	for captureID, position := range m.state.TaskPositions {
+		if position.Warning != nil {
+			if runningWarnings == nil {
+				runningWarnings = make(map[string]*model.RunningError)
+			}
+			runningWarnings[position.Warning.Code] = position.Warning
+			log.Warn("processor reports a warning",
+				zap.String("namespace", m.state.ID.Namespace),
+				zap.String("changefeed", m.state.ID.ID),
+				zap.String("captureID", captureID),
+				zap.Any("warning", position.Warning))
+			m.state.PatchTaskPosition(captureID, func(position *model.TaskPosition) (*model.TaskPosition, bool, error) {
+				if position == nil {
+					return nil, false, nil
+				}
+				position.Warning = nil
+				return position, true, nil
+			})
+		}
+	}
+	if runningWarnings == nil {
+		return nil
+	}
+	result := make([]*model.RunningError, 0, len(runningWarnings))
+	for _, err := range runningWarnings {
 		result = append(result, err)
 	}
 	return result
@@ -529,6 +563,18 @@ func (m *feedStateManager) handleError(errs ...*model.RunningError) {
 			zap.Duration("oldInterval", oldBackoffInterval),
 			zap.Duration("newInterval", m.backoffInterval))
 	}
+}
+
+func (m *feedStateManager) handleWarning(errs ...*model.RunningError) {
+	m.state.PatchInfo(func(info *model.ChangeFeedInfo) (*model.ChangeFeedInfo, bool, error) {
+		if info == nil {
+			return nil, false, nil
+		}
+		for _, err := range errs {
+			info.Warning = err
+		}
+		return info, len(errs) > 0, nil
+	})
 }
 
 // GenerateChangefeedEpoch generates a unique changefeed epoch.

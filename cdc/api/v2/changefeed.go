@@ -797,11 +797,23 @@ func (h *OpenAPIV2) status(c *gin.Context) {
 			Message: info.Error.Message,
 		}
 	}
+	var lastWarning *RunningError
+	if info.Warning != nil &&
+		oracle.GetTimeFromTS(status.CheckpointTs).Before(info.Warning.Time) {
+		lastWarning = &RunningError{
+			Time:    &info.Warning.Time,
+			Addr:    info.Warning.Addr,
+			Code:    info.Warning.Code,
+			Message: info.Warning.Message,
+		}
+	}
+
 	c.JSON(http.StatusOK, &ChangefeedStatus{
 		State:        string(info.State),
 		CheckpointTs: status.CheckpointTs,
 		ResolvedTs:   status.ResolvedTs,
 		LastError:    lastError,
+		LastWarning:  lastWarning,
 	})
 }
 

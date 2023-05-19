@@ -38,7 +38,7 @@ type SorterConfig struct {
 
 // ValidateAndAdjust validates and adjusts the sorter configuration
 func (c *SorterConfig) ValidateAndAdjust() error {
-	if c.MaxMemoryPercentage <= 0 || c.MaxMemoryPercentage > 80 {
+	if c.MaxMemoryPercentage < 0 || c.MaxMemoryPercentage > 80 {
 		return errors.ErrIllegalSorterParameter.GenWithStackByArgs(
 			"max-memory-percentage should be a percentage and within (0, 80]")
 	}

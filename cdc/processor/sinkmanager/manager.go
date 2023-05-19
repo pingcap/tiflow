@@ -34,6 +34,7 @@ import (
 	cerror "github.com/pingcap/tiflow/pkg/errors"
 	"github.com/pingcap/tiflow/pkg/spanz"
 	"github.com/pingcap/tiflow/pkg/upstream"
+	"github.com/pingcap/tiflow/pkg/util"
 	"github.com/prometheus/client_golang/prometheus"
 	"github.com/tikv/client-go/v2/oracle"
 	"go.uber.org/zap"
@@ -168,7 +169,7 @@ func New(
 }
 
 // Run implements util.Runnable.
-func (m *SinkManager) Run(ctx context.Context) (err error) {
+func (m *SinkManager) Run(ctx context.Context, warnings ...chan<- error) (err error) {
 	var managerCancel context.CancelFunc
 	m.managerCtx, managerCancel = context.WithCancel(ctx)
 	defer func() {
@@ -246,7 +247,7 @@ func (m *SinkManager) Run(ctx context.Context) (err error) {
 		}
 
 		select {
-		case <-ctx.Done():
+		case <-m.managerCtx.Done():
 			return errors.Trace(ctx.Err())
 		case err = <-gcErrors:
 			return errors.Trace(err)
@@ -264,19 +265,15 @@ func (m *SinkManager) Run(ctx context.Context) (err error) {
 		}
 
 		if !cerror.IsChangefeedUnRetryableError(err) && errors.Cause(err) != context.Canceled {
-			// TODO(qupeng): report th warning.
-
-			// Use a 5 second backoff when re-establishing internal resources.
-			timer := time.NewTimer(5 * time.Second)
 			select {
-			case <-ctx.Done():
-				if !timer.Stop() {
-					<-timer.C
-				}
-				return errors.Trace(ctx.Err())
-			case <-timer.C:
+			case <-m.managerCtx.Done():
+			case warnings[0] <- err:
 			}
 		} else {
+			return errors.Trace(err)
+		}
+		// Use a 5 second backoff when re-establishing internal resources.
+		if err = util.Hang(m.managerCtx, 5*time.Second); err != nil {
 			return errors.Trace(err)
 		}
 	}
@@ -817,39 +814,32 @@ func (m *SinkManager) StartTable(span tablepb.Span, startTs model.Ts) error {
 }
 
 // AsyncStopTable sets the table(TableSink) state to stopped.
-func (m *SinkManager) AsyncStopTable(span tablepb.Span) {
-	m.wg.Add(1)
-	go func() {
-		defer m.wg.Done()
-		log.Info("Async stop table sink",
+func (m *SinkManager) AsyncStopTable(span tablepb.Span) bool {
+	log.Info("Async stop table sink",
+		zap.String("namespace", m.changefeedID.Namespace),
+		zap.String("changefeed", m.changefeedID.ID),
+		zap.Stringer("span", &span))
+
+	tableSink, ok := m.tableSinks.Load(span)
+	if !ok {
+		// Just warn, because the table sink may be removed by another goroutine.
+		// This logic is the same as this function's caller.
+		log.Warn("Table sink not found when removing table",
 			zap.String("namespace", m.changefeedID.Namespace),
 			zap.String("changefeed", m.changefeedID.ID),
-			zap.Stringer("span", &span),
-		)
-		tableSink, ok := m.tableSinks.Load(span)
-		if !ok {
-			// Just warn, because the table sink may be removed by another goroutine.
-			// This logic is the same as this function's caller.
-			log.Warn("Table sink not found when removing table",
-				zap.String("namespace", m.changefeedID.Namespace),
-				zap.String("changefeed", m.changefeedID.ID),
-				zap.Stringer("span", &span))
-		}
-		tableSink.(*tableSinkWrapper).close()
+			zap.Stringer("span", &span))
+	}
+	if tableSink.(*tableSinkWrapper).asyncClose() {
 		cleanedBytes := m.sinkMemQuota.Clean(span)
 		cleanedBytes += m.redoMemQuota.Clean(span)
 		log.Debug("MemoryQuotaTracing: Clean up memory quota for table sink task when removing table",
 			zap.String("namespace", m.changefeedID.Namespace),
 			zap.String("changefeed", m.changefeedID.ID),
 			zap.Stringer("span", &span),
-			zap.Uint64("memory", cleanedBytes),
-		)
-		log.Info("Table sink closed asynchronously",
-			zap.String("namespace", m.changefeedID.Namespace),
-			zap.String("changefeed", m.changefeedID.ID),
-			zap.Stringer("span", &span),
-		)
-	}()
+			zap.Uint64("memory", cleanedBytes))
+		return true
+	}
+	return false
 }
 
 // RemoveTable removes a table(TableSink) from the sink manager.

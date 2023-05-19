@@ -51,7 +51,7 @@ func (m *mockRedoDMLManager) Enabled() bool {
 	panic("unreachable")
 }
 
-func (m *mockRedoDMLManager) Run(ctx context.Context) error {
+func (m *mockRedoDMLManager) Run(ctx context.Context, _ ...chan<- error) error {
 	panic("unreachable")
 }
 

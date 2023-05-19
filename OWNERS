@@ -1,0 +1,46 @@
+# See the OWNERS docs at https://go.k8s.io/owners
+approvers:
+  # - migration-maintainers
+  - amyangfei
+  - kennytm
+  - lance6716
+  # - migration-committers
+  - 3AceShowHand
+  - 3pointer
+  - asddongmen
+  - CharlesCheung96
+  - csuzhangxc
+  - D3Hunter
+  - dsdashun
+  - Ehco1996
+  - glorv
+  - GMHDBJD
+  - gozssky
+  - hi-rustin
+  - hicqu
+  - IANTHEREAL
+  - Leavrth
+  - lichunzhu
+  - Little-Wallace
+  - niubell
+  - okJiang
+  - overvenus
+  - sdojjy
+  - suzaku
+  - YuJuncen
+reviewers:
+  # - migration-reviewers
+  - 3AceShowHand
+  - asddongmen
+  - ben1009
+  - CharlesCheung96
+  - D3Hunter
+  - gozssky
+  - hicqu
+  - iamxy
+  - joccau
+  - niubell
+  - nongfushanquan
+  - okJiang
+  - sdojjy
+  - tiancaiamao
