@@ -1671,12 +1671,27 @@ func (s *Server) generateSubTask(
 	}
 
 	var firstMode config.LoadMode
-	for _, stCfg := range stCfgs {
+	for i, stCfg := range stCfgs {
 		if firstMode == "" {
 			firstMode = stCfg.LoaderConfig.ImportMode
 		} else if firstMode != stCfg.LoaderConfig.ImportMode {
 			return nil, nil, terror.ErrConfigInvalidLoadMode.Generatef("found two import-mode %s and %s in task config, DM only supports one value", firstMode, stCfg.LoaderConfig.ImportMode)
 		}
+		if sourceCfg, ok := sourceCfgs[stCfg.SourceID]; ok {
+			stCfgs[i].Flavor = sourceCfg.Flavor
+			stCfgs[i].ServerID = sourceCfg.ServerID
+			stCfgs[i].EnableGTID = sourceCfg.EnableGTID
+
+			if sourceCfg.EnableRelay {
+				stCfgs[i].UseRelay = true
+				continue // skip the following check
+			}
+		}
+		workers, err := s.scheduler.GetRelayWorkers(stCfg.SourceID)
+		if err != nil {
+			return nil, nil, err
+		}
+		stCfgs[i].UseRelay = len(workers) > 0
 	}
 	return cfg, stCfgs, nil
 }

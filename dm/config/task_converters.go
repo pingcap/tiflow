@@ -273,6 +273,9 @@ func OpenAPITaskToSubTaskConfigs(task *openapi.Task, toDBCfg *dbconfig.DBConfig,
 		if task.IgnoreCheckingItems != nil && len(*task.IgnoreCheckingItems) != 0 {
 			subTaskCfg.IgnoreCheckingItems = *task.IgnoreCheckingItems
 		}
+		// TODO: remove this after relay only supports configure in source config
+		// ignore check MetaPositionChecking first because we can't make sure whether relay is enabled
+		subTaskCfg.IgnoreCheckingItems = append(subTaskCfg.IgnoreCheckingItems, MetaPositionChecking)
 		// adjust sub task config
 		if err := subTaskCfg.Adjust(true); err != nil {
 			return nil, terror.Annotatef(err, "source name %s", sourceCfg.SourceName)

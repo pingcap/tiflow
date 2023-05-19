@@ -341,6 +341,13 @@ func (c *Checker) Init(ctx context.Context) (err error) {
 					c.dumpWholeInstance,
 				))
 			}
+		} else if !instance.cfg.UseRelay {
+			if _, ok := c.checkingItems[config.MetaPositionChecking]; ok {
+				c.checkList = append(c.checkList, checker.NewMetaPositionChecker(instance.sourceDB,
+					instance.cfg.From,
+					instance.cfg.EnableGTID,
+					instance.cfg.Meta))
+			}
 		}
 		if instance.cfg.Mode != config.ModeFull {
 			// full mode needn't check follows
