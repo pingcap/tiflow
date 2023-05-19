@@ -57,6 +57,13 @@ type DDLManager interface {
 	GetResolvedTs() model.Ts
 }
 
+// NewDisabledDDLManager creates a disabled ddl Manager.
+func NewDisabledDDLManager() *ddlManager {
+	return &ddlManager{
+		logManager: &logManager{enabled: false},
+	}
+}
+
 // NewDDLManager creates a new ddl Manager.
 func NewDDLManager(
 	ctx context.Context, cfg *config.ConsistentConfig, ddlStartTs model.Ts,
