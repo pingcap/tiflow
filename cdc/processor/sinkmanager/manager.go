@@ -34,6 +34,7 @@ import (
 	cerror "github.com/pingcap/tiflow/pkg/errors"
 	"github.com/pingcap/tiflow/pkg/spanz"
 	"github.com/pingcap/tiflow/pkg/upstream"
+	"github.com/pingcap/tiflow/pkg/util"
 	"github.com/prometheus/client_golang/prometheus"
 	"github.com/tikv/client-go/v2/oracle"
 	"go.uber.org/zap"
@@ -168,7 +169,7 @@ func New(
 }
 
 // Run implements util.Runnable.
-func (m *SinkManager) Run(ctx context.Context) (err error) {
+func (m *SinkManager) Run(ctx context.Context, warnings ...chan<- error) (err error) {
 	var managerCancel context.CancelFunc
 	m.managerCtx, managerCancel = context.WithCancel(ctx)
 	defer func() {
@@ -246,7 +247,7 @@ func (m *SinkManager) Run(ctx context.Context) (err error) {
 		}
 
 		select {
-		case <-ctx.Done():
+		case <-m.managerCtx.Done():
 			return errors.Trace(ctx.Err())
 		case err = <-gcErrors:
 			return errors.Trace(err)
@@ -264,19 +265,15 @@ func (m *SinkManager) Run(ctx context.Context) (err error) {
 		}
 
 		if !cerror.IsChangefeedUnRetryableError(err) && errors.Cause(err) != context.Canceled {
-			// TODO(qupeng): report th warning.
-
-			// Use a 5 second backoff when re-establishing internal resources.
-			timer := time.NewTimer(5 * time.Second)
 			select {
-			case <-ctx.Done():
-				if !timer.Stop() {
-					<-timer.C
-				}
-				return errors.Trace(ctx.Err())
-			case <-timer.C:
+			case <-m.managerCtx.Done():
+			case warnings[0] <- err:
 			}
 		} else {
+			return errors.Trace(err)
+		}
+		// Use a 5 second backoff when re-establishing internal resources.
+		if err = util.Hang(m.managerCtx, 5*time.Second); err != nil {
 			return errors.Trace(err)
 		}
 	}

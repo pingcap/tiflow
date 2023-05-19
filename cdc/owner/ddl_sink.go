@@ -172,14 +172,9 @@ func (s *ddlSinkImpl) retrySinkActionWithErrorReport(ctx context.Context, action
 			return err
 		}
 
-		timer := time.NewTimer(5 * time.Second)
-		select {
-		case <-ctx.Done():
-			if !timer.Stop() {
-				<-timer.C
-			}
-			return ctx.Err()
-		case <-timer.C:
+		// Use a 5 second backoff when re-establishing internal resources.
+		if err = util.Hang(ctx, 5*time.Second); err != nil {
+			return errors.Trace(err)
 		}
 	}
 }
