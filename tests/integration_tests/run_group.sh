@@ -22,7 +22,7 @@ kafka_only_protocol="canal_json_adapter_compatibility canal_json_basic multi_top
 kafka_only_v2="kafka_big_txn_v2 kafka_big_messages_v2 multi_tables_ddl_v2 multi_topics_v2"
 
 storage_only_csv="csv_storage_basic csv_storage_multi_tables_ddl csv_storage_partition_table"
-storage_only_canal_json="canal_json_storage_basic canal_json_storage_partition_table"
+storage_only_canal_json="canal_json_storage_basic canal_json_storage_partition_table lossy_ddl"
 
 # Define groups
 # Note: If new group is added, the group name must also be added to CI
@@ -48,7 +48,7 @@ groups=(
 	["G12"]='changefeed_fast_fail tidb_mysql_test server_config_compatibility'
 	["G13"]='resourcecontrol processor_etcd_worker_delay'
 	["G14"]='batch_update_to_no_batch gc_safepoint changefeed_pause_resume'
-	["G15"]='cli simple cdc_server_tips changefeed_resume_with_checkpoint_ts lossy_ddl'
+	["G15"]='cli simple cdc_server_tips changefeed_resume_with_checkpoint_ts'
 	["G16"]='processor_err_chan resolve_lock move_table autorandom'
 	["G17"]='ddl_attributes many_pk_or_uk capture_session_done_during_task'
 	["G18"]='tiflash new_ci_collation_without_old_value region_merge common_1'
