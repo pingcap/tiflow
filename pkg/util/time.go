@@ -1,4 +1,4 @@
-// Copyright 2022 PingCAP, Inc.
+// Copyright 2023 PingCAP, Inc.
 //
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -11,18 +11,13 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-package sink
+package util
 
 import (
-	"testing"
-
-	"github.com/pingcap/tiflow/pkg/leakutil"
+	"context"
+	"time"
 )
 
-<<<<<<< HEAD:cdc/sink/main_test.go
-func TestMain(m *testing.M) {
-	leakutil.SetUpLeakTest(m)
-=======
 // Hang will block the goroutine for a given duration, or return when `ctx` is done.
 func Hang(ctx context.Context, dur time.Duration) error {
 	timer := time.NewTimer(dur)
@@ -35,5 +30,4 @@ func Hang(ctx context.Context, dur time.Duration) error {
 	case <-timer.C:
 		return nil
 	}
->>>>>>> d5f608d68 ((processor/cdc): report module internal warnings (#8983)):pkg/util/time.go
 }

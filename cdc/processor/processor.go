@@ -85,6 +85,7 @@ type processor struct {
 
 	initialized bool
 	errCh       chan error
+	warnCh      chan error
 	cancel      context.CancelFunc
 	wg          sync.WaitGroup
 
@@ -523,6 +524,7 @@ func newProcessor(
 		upstream:        up,
 		tables:          make(map[model.TableID]tablepb.TablePipeline),
 		errCh:           make(chan error, 1),
+		warnCh:          make(chan error, 1),
 		changefeedID:    changefeedID,
 		captureInfo:     captureInfo,
 		cancel:          func() {},
@@ -663,6 +665,28 @@ func (p *processor) handleErr(err error) error {
 	return err
 }
 
+func (p *processor) handleWarn(err error) {
+	var code string
+	if rfcCode, ok := cerror.RFCCode(err); ok {
+		code = string(rfcCode)
+	} else {
+		code = string(cerror.ErrProcessorUnknown.RFCCode())
+	}
+	p.changefeed.PatchTaskPosition(p.captureInfo.ID,
+		func(position *model.TaskPosition) (*model.TaskPosition, bool, error) {
+			if position == nil {
+				position = &model.TaskPosition{}
+			}
+			position.Warning = &model.RunningError{
+				Time:    time.Now(),
+				Addr:    p.captureInfo.AdvertiseAddr,
+				Code:    code,
+				Message: err.Error(),
+			}
+			return position, true, nil
+		})
+}
+
 func (p *processor) tick(ctx cdcContext.Context) error {
 	if !p.checkChangefeedNormal() {
 		return cerror.ErrAdminStopProcessor.GenWithStackByArgs()
@@ -671,6 +695,13 @@ func (p *processor) tick(ctx cdcContext.Context) error {
 	if p.createTaskPosition() {
 		return nil
 	}
+
+	select {
+	case err := <-p.warnCh:
+		p.handleWarn(err)
+	default:
+	}
+
 	if err := p.handleErrorCh(); err != nil {
 		return errors.Trace(err)
 	}
@@ -820,7 +851,7 @@ func (p *processor) lazyInitImpl(ctx cdcContext.Context) error {
 		p.sinkManager, err = sinkmanager.New(stdCtx, p.changefeedID,
 			p.changefeed.Info, p.upstream, p.schemaStorage,
 			p.redoDMLMgr, p.sourceManager,
-			p.errCh, p.metricsTableSinkTotalRows)
+			p.errCh, p.warnCh, p.metricsTableSinkTotalRows)
 		if err != nil {
 			log.Info("Processor creates sink manager fail",
 				zap.String("namespace", p.changefeedID.Namespace),
