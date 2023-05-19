@@ -33,8 +33,9 @@ import (
 )
 
 const (
-	// DefaultConflictDetectorSlots indicates the default slot count of conflict detector.
-	DefaultConflictDetectorSlots uint64 = 16 * 1024
+	// defaultConflictDetectorSlots indicates the default slot count of conflict detector.
+	// it's not configurable for users but can be adjusted by tests.
+	defaultConflictDetectorSlots uint64 = 16 * 1024
 )
 
 // Assert EventSink[E event.TableEvent] implementation
@@ -65,7 +66,6 @@ func NewMySQLSink(
 	sinkURI *url.URL,
 	replicaConfig *config.ReplicaConfig,
 	errCh chan<- error,
-	conflictDetectorSlots uint64,
 ) (*dmlSink, error) {
 	ctx, cancel := context.WithCancel(ctx)
 	statistics := metrics.NewStatistics(ctx, psink.TxnSink)
@@ -80,7 +80,7 @@ func NewMySQLSink(
 	for _, impl := range backendImpls {
 		backends = append(backends, impl)
 	}
-	sink := newSink(ctx, backends, errCh, conflictDetectorSlots)
+	sink := newSink(ctx, backends, errCh, defaultConflictDetectorSlots)
 	sink.statistics = statistics
 	sink.cancel = cancel
 
@@ -118,7 +118,11 @@ func newSink(ctx context.Context, backends []backend,
 		}
 	}()
 
-	sink.conflictDetector = causality.NewConflictDetector[*worker, *txnEvent](sink.workers, conflictDetectorSlots)
+	sink.conflictDetector = causality.NewConflictDetector[*worker, *txnEvent](sink.workers, causality.Config{
+		// TODO: use SingleConflictDispatchSerialize if batch dml across txns is enabled.
+		OnSingleConflict: causality.SingleConflictDispatchPipeline,
+		NumSlots:         conflictDetectorSlots,
+	})
 	return sink
 }
 

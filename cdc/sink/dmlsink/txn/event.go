@@ -35,7 +35,7 @@ func newTxnEvent(event *dmlsink.TxnCallbackableEvent) *txnEvent {
 	return &txnEvent{TxnCallbackableEvent: event, start: time.Now()}
 }
 
-func (e *txnEvent) OnConflictResolved() {
+func (e *txnEvent) OnConflictResolved(_serialized bool) {
 	e.conflictResolved = time.Now()
 }
 

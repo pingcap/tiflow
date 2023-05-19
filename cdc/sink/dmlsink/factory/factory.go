@@ -62,7 +62,7 @@ func New(
 	schema := strings.ToLower(sinkURI.Scheme)
 	switch schema {
 	case sink.MySQLScheme, sink.MySQLSSLScheme, sink.TiDBScheme, sink.TiDBSSLScheme:
-		txnSink, err := txn.NewMySQLSink(ctx, sinkURI, cfg, errCh, txn.DefaultConflictDetectorSlots)
+		txnSink, err := txn.NewMySQLSink(ctx, sinkURI, cfg, errCh)
 		if err != nil {
 			return nil, err
 		}
