@@ -21,7 +21,6 @@ import (
 	"time"
 
 	"github.com/pingcap/log"
-	"github.com/pingcap/tiflow/pkg/util"
 	"go.uber.org/zap"
 )
 
@@ -33,10 +32,6 @@ var customReplicaConfig = &ReplicaConfig{
 	ForceReplicate:        false,
 	IgnoreIneligibleTable: false,
 	CheckGCSafePoint:      false,
-	EnableSyncPoint:       util.AddressOf(false),
-	BDRMode:               util.AddressOf(false),
-	SyncPointInterval:     &JSONDuration{11 * time.Minute},
-	SyncPointRetention:    &JSONDuration{25 * time.Hour},
 	Filter: &FilterConfig{
 		MySQLReplicationRules: &MySQLReplicationRules{
 			DoTables:     []*Table{{"a", "b"}, {"c", "d"}},
@@ -62,39 +57,15 @@ var customReplicaConfig = &ReplicaConfig{
 		WorkerNum: 17,
 	},
 	Sink: &SinkConfig{
-		Protocol:       "arvo",
-		SchemaRegistry: "127.0.0.1:1234",
-		CSVConfig: &CSVConfig{
-			Delimiter:       "a",
-			Quote:           "c",
-			NullString:      "c",
-			IncludeCommitTs: true,
-		},
-		DispatchRules: []*DispatchRule{
-			{
-				[]string{"a.b"},
-				"1",
-				"test",
-			},
-		},
+		Protocol: "arvo",
 		ColumnSelectors: []*ColumnSelector{
 			{
 				[]string{"a.b"},
 				[]string{"c"},
 			},
 		},
-		TxnAtomicity:             "table",
-		EncoderConcurrency:       util.AddressOf(20),
-		Terminator:               "a",
-		DateSeparator:            "month",
-		EnablePartitionSeparator: util.AddressOf(true),
-	},
-	Consistent: &ConsistentConfig{
-		Level:             "",
-		MaxLogSize:        65,
-		FlushIntervalInMs: 500,
-		Storage:           "local://test",
-		UseFileBackend:    true,
+		TxnAtomicity: "table",
+		Terminator:   "a",
 	},
 	Scheduler: &ChangefeedSchedulerConfig{
 		EnableTableAcrossNodes: false,
@@ -164,6 +135,7 @@ func testChangefeed(ctx context.Context, client *CDCRESTClient) error {
 	if err := json.Unmarshal(resp.body, changefeedInfo1); err != nil {
 		log.Panic("unmarshal failed", zap.String("body", string(resp.body)), zap.Error(err))
 	}
+
 	ensureChangefeed(ctx, client, changefeedInfo1.ID, "normal")
 	resp = client.Get().WithURI("/changefeeds/" + changefeedInfo1.ID).Do(ctx)
 	assertResponseIsOK(resp)

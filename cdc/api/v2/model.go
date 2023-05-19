@@ -25,7 +25,6 @@ import (
 	cerror "github.com/pingcap/tiflow/pkg/errors"
 	"github.com/pingcap/tiflow/pkg/integrity"
 	"github.com/pingcap/tiflow/pkg/security"
-	"github.com/pingcap/tiflow/pkg/util"
 )
 
 // EmptyResponse return empty {} to http client
@@ -395,6 +394,7 @@ func (c *ReplicaConfig) toInternalReplicaConfigWithOriginConfig(
 // ToAPIReplicaConfig coverts *config.ReplicaConfig into *v2.ReplicaConfig
 func ToAPIReplicaConfig(c *config.ReplicaConfig) *ReplicaConfig {
 	cloned := c.Clone()
+
 	res := &ReplicaConfig{
 		MemoryQuota:           cloned.MemoryQuota,
 		CaseSensitive:         cloned.CaseSensitive,
@@ -403,9 +403,15 @@ func ToAPIReplicaConfig(c *config.ReplicaConfig) *ReplicaConfig {
 		IgnoreIneligibleTable: cloned.IgnoreIneligibleTable,
 		CheckGCSafePoint:      cloned.CheckGCSafePoint,
 		EnableSyncPoint:       cloned.EnableSyncPoint,
-		SyncPointInterval:     &JSONDuration{util.GetOrZero(cloned.SyncPointInterval)},
-		SyncPointRetention:    &JSONDuration{util.GetOrZero(cloned.SyncPointRetention)},
 		BDRMode:               cloned.BDRMode,
+	}
+
+	if cloned.SyncPointInterval != nil {
+		res.SyncPointInterval = &JSONDuration{*cloned.SyncPointInterval}
+	}
+
+	if cloned.SyncPointRetention != nil {
+		res.SyncPointRetention = &JSONDuration{*cloned.SyncPointRetention}
 	}
 
 	if cloned.Filter != nil {
