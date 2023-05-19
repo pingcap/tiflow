@@ -681,3 +681,82 @@ type Capture struct {
 	AdvertiseAddr string `json:"address"`
 	ClusterID     string `json:"cluster_id"`
 }
+<<<<<<< HEAD
+=======
+
+// CodecConfig represents a MQ codec configuration
+type CodecConfig struct {
+	EnableTiDBExtension            *bool   `json:"enable_tidb_extension,omitempty"`
+	MaxBatchSize                   *int    `json:"max_batch_size,omitempty"`
+	AvroEnableWatermark            *bool   `json:"avro_enable_watermark"`
+	AvroDecimalHandlingMode        *string `json:"avro_decimal_handling_mode,omitempty"`
+	AvroBigintUnsignedHandlingMode *string `json:"avro_bigint_unsigned_handling_mode,omitempty"`
+}
+
+// KafkaConfig represents a kafka sink configuration
+type KafkaConfig struct {
+	PartitionNum                 *int32       `json:"partition_num,omitempty"`
+	ReplicationFactor            *int16       `json:"replication_factor,omitempty"`
+	KafkaVersion                 *string      `json:"kafka_version,omitempty"`
+	MaxMessageBytes              *int         `json:"max_message_bytes,omitempty"`
+	Compression                  *string      `json:"compression,omitempty"`
+	KafkaClientID                *string      `json:"kafka_client_id,omitempty"`
+	AutoCreateTopic              *bool        `json:"auto_create_topic,omitempty"`
+	DialTimeout                  *string      `json:"dial_timeout,omitempty"`
+	WriteTimeout                 *string      `json:"write_timeout,omitempty"`
+	ReadTimeout                  *string      `json:"read_timeout,omitempty"`
+	RequiredAcks                 *int         `json:"required_acks,omitempty"`
+	SASLUser                     *string      `json:"sasl_user,omitempty"`
+	SASLPassword                 *string      `json:"sasl_password,omitempty"`
+	SASLMechanism                *string      `json:"sasl_mechanism,omitempty"`
+	SASLGssAPIAuthType           *string      `json:"sasl_gssapi_auth_type,omitempty"`
+	SASLGssAPIKeytabPath         *string      `json:"sasl_gssapi_keytab_path,omitempty"`
+	SASLGssAPIKerberosConfigPath *string      `json:"sasl_gssapi_kerberos_config_path,omitempty"`
+	SASLGssAPIServiceName        *string      `json:"sasl_gssapi_service_name,omitempty"`
+	SASLGssAPIUser               *string      `json:"sasl_gssapi_user,omitempty"`
+	SASLGssAPIPassword           *string      `json:"sasl_gssapi_password,omitempty"`
+	SASLGssAPIRealm              *string      `json:"sasl_gssapi_realm,omitempty"`
+	SASLGssAPIDisablePafxfast    *bool        `json:"sasl_gssapi_disable_pafxfast,omitempty"`
+	EnableTLS                    *bool        `json:"enable_tls,omitempty"`
+	CA                           *string      `json:"ca,omitempty"`
+	Cert                         *string      `json:"cert,omitempty"`
+	Key                          *string      `json:"key,omitempty"`
+	InsecureSkipVerify           *bool        `json:"insecure_skip_verify,omitempty"`
+	CodecConfig                  *CodecConfig `json:"codec_config,omitempty"`
+}
+
+// MySQLConfig represents a MySQL sink configuration
+type MySQLConfig struct {
+	WorkerCount                  *int    `json:"worker_count,omitempty"`
+	MaxTxnRow                    *int    `json:"max_txn_row,omitempty"`
+	MaxMultiUpdateRowSize        *int    `json:"max_multi_update_row_size,omitempty"`
+	MaxMultiUpdateRowCount       *int    `json:"max_multi_update_row_count,omitempty"`
+	TiDBTxnMode                  *string `json:"tidb_txn_mode,omitempty"`
+	SSLCa                        *string `json:"ssl_ca,omitempty"`
+	SSLCert                      *string `json:"ssl_cert,omitempty"`
+	SSLKey                       *string `json:"ssl_key,omitempty"`
+	TimeZone                     *string `json:"time_zone,omitempty"`
+	WriteTimeout                 *string `json:"write_timeout,omitempty"`
+	ReadTimeout                  *string `json:"read_timeout,omitempty"`
+	Timeout                      *string `json:"timeout,omitempty"`
+	EnableBatchDML               *bool   `json:"enable_batch_dml,omitempty"`
+	EnableMultiStatement         *bool   `json:"enable_multi_statement,omitempty"`
+	EnableCachePreparedStatement *bool   `json:"enable_cache_prepared_statement,omitempty"`
+}
+
+// CloudStorageConfig represents a cloud storage sink configuration
+type CloudStorageConfig struct {
+	WorkerCount   *int    `json:"worker_count,omitempty"`
+	FlushInterval *string `json:"flush_interval,omitempty"`
+	FileSize      *int    `json:"file_size,omitempty"`
+}
+
+// ChangefeedStatus holds common information of a changefeed in cdc
+type ChangefeedStatus struct {
+	State        string        `json:"state,omitempty"`
+	ResolvedTs   uint64        `json:"resolved_ts"`
+	CheckpointTs uint64        `json:"checkpoint_ts"`
+	LastError    *RunningError `json:"last_error,omitempty"`
+	LastWarning  *RunningError `json:"last_warning,omitempty"`
+}
+>>>>>>> d5f608d68c ((processor/cdc): report module internal warnings (#8983))

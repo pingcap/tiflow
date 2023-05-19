@@ -134,6 +134,29 @@ func (m *SourceManager) ReceivedEvents() int64 {
 	return m.engine.ReceivedEvents()
 }
 
+<<<<<<< HEAD
+=======
+// Run implements util.Runnable.
+func (m *SourceManager) Run(ctx context.Context, _ ...chan<- error) error {
+	m.ctx = ctx
+	close(m.ready)
+	select {
+	case err := <-m.errChan:
+		return err
+	case <-m.ctx.Done():
+		return m.ctx.Err()
+	}
+}
+
+// WaitForReady implements util.Runnable.
+func (m *SourceManager) WaitForReady(ctx context.Context) {
+	select {
+	case <-ctx.Done():
+	case <-m.ready:
+	}
+}
+
+>>>>>>> d5f608d68c ((processor/cdc): report module internal warnings (#8983))
 // Close closes the source manager. Stop all pullers and close the engine.
 func (m *SourceManager) Close() error {
 	log.Info("Closing source manager",

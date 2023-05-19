@@ -73,7 +73,7 @@ func NewMounterGroup(
 	}
 }
 
-func (m *mounterGroup) Run(ctx context.Context) error {
+func (m *mounterGroup) Run(ctx context.Context, _ ...chan<- error) error {
 	defer func() {
 		mounterGroupInputChanSizeGauge.DeleteLabelValues(m.changefeedID.Namespace, m.changefeedID.ID)
 	}()
@@ -144,8 +144,13 @@ type MockMountGroup struct {
 	IsFull bool
 }
 
+<<<<<<< HEAD
 // Run implements MountGroup.
 func (m *MockMountGroup) Run(ctx context.Context) error {
+=======
+// Run implements util.Runnable.
+func (m *MockMountGroup) Run(ctx context.Context, _ ...chan<- error) error {
+>>>>>>> d5f608d68c ((processor/cdc): report module internal warnings (#8983))
 	return nil
 }
 

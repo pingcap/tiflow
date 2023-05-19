@@ -662,6 +662,38 @@ func (p *processor) handleErr(err error) error {
 	return err
 }
 
+func (p *processor) handleWarnings() {
+	var err error
+	select {
+	case err = <-p.ddlHandler.warnings:
+	case err = <-p.mg.warnings:
+	case err = <-p.redo.warnings:
+	case err = <-p.sourceManager.warnings:
+	case err = <-p.sinkManager.warnings:
+	default:
+		return
+	}
+	var code string
+	if rfcCode, ok := cerror.RFCCode(err); ok {
+		code = string(rfcCode)
+	} else {
+		code = string(cerror.ErrProcessorUnknown.RFCCode())
+	}
+	p.changefeed.PatchTaskPosition(p.captureInfo.ID,
+		func(position *model.TaskPosition) (*model.TaskPosition, bool, error) {
+			if position == nil {
+				position = &model.TaskPosition{}
+			}
+			position.Warning = &model.RunningError{
+				Time:    time.Now(),
+				Addr:    p.captureInfo.AdvertiseAddr,
+				Code:    code,
+				Message: err.Error(),
+			}
+			return position, true, nil
+		})
+}
+
 func (p *processor) tick(ctx cdcContext.Context) error {
 	if !p.checkChangefeedNormal() {
 		return cerror.ErrAdminStopProcessor.GenWithStackByArgs()
@@ -670,6 +702,9 @@ func (p *processor) tick(ctx cdcContext.Context) error {
 	if p.createTaskPosition() {
 		return nil
 	}
+
+	p.handleWarnings()
+
 	if err := p.handleErrorCh(); err != nil {
 		return errors.Trace(err)
 	}
@@ -1369,3 +1404,96 @@ func (p *processor) calculateTableBarrierTs(
 	}
 	return tableBarrierTs
 }
+<<<<<<< HEAD
+=======
+
+type component[R util.Runnable] struct {
+	r        R
+	name     string
+	ctx      context.Context
+	cancel   context.CancelFunc
+	errors   chan error
+	warnings chan error
+	wg       sync.WaitGroup
+}
+
+func (c *component[R]) spawn(ctx context.Context) {
+	c.ctx, c.cancel = context.WithCancel(ctx)
+	c.errors = make(chan error, 16)
+	c.warnings = make(chan error, 16)
+
+	changefeedID := contextutil.ChangefeedIDFromCtx(c.ctx)
+	c.wg.Add(1)
+	go func() {
+		defer c.wg.Done()
+		err := c.r.Run(c.ctx, c.warnings)
+		if err != nil && errors.Cause(err) != context.Canceled {
+			log.Error("processor sub-component fails",
+				zap.String("namespace", changefeedID.Namespace),
+				zap.String("changefeed", changefeedID.ID),
+				zap.String("name", c.name),
+				zap.Error(err))
+			select {
+			case <-c.ctx.Done():
+			case c.errors <- err:
+			}
+		}
+	}()
+	c.r.WaitForReady(ctx)
+	log.Info("processor sub-component starts",
+		zap.String("namespace", changefeedID.Namespace),
+		zap.String("changefeed", changefeedID.ID),
+		zap.String("name", c.name))
+}
+
+func (c *component[R]) stop(changefeedID model.ChangeFeedID) {
+	if c.cancel == nil {
+		log.Info("processor sub-component isn't started",
+			zap.String("namespace", changefeedID.Namespace),
+			zap.String("changefeed", changefeedID.ID),
+			zap.String("name", c.name))
+		return
+	}
+	log.Info("processor sub-component is in stopping",
+		zap.String("namespace", changefeedID.Namespace),
+		zap.String("changefeed", changefeedID.ID),
+		zap.String("name", c.name))
+	c.cancel()
+	c.wg.Wait()
+	c.r.Close()
+}
+
+type ddlHandler struct {
+	puller        puller.DDLJobPuller
+	schemaStorage entry.SchemaStorage
+}
+
+func (d *ddlHandler) Run(ctx context.Context, _ ...chan<- error) error {
+	g, ctx := errgroup.WithContext(ctx)
+	// d.puller will update the schemaStorage.
+	g.Go(func() error { return d.puller.Run(ctx) })
+	g.Go(func() error {
+		for {
+			var jobEntry *model.DDLJobEntry
+			select {
+			case <-ctx.Done():
+				return nil
+			case jobEntry = <-d.puller.Output():
+			}
+			failpoint.Inject("processorDDLResolved", nil)
+			if jobEntry.OpType == model.OpTypeResolved {
+				d.schemaStorage.AdvanceResolvedTs(jobEntry.CRTs)
+			}
+			err := jobEntry.Err
+			if err != nil {
+				return errors.Trace(err)
+			}
+		}
+	})
+	return g.Wait()
+}
+
+func (d *ddlHandler) WaitForReady(_ context.Context) {}
+
+func (d *ddlHandler) Close() {}
+>>>>>>> d5f608d68c ((processor/cdc): report module internal warnings (#8983))

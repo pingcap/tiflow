@@ -19,6 +19,21 @@ import (
 	"github.com/pingcap/tiflow/pkg/leakutil"
 )
 
+<<<<<<< HEAD:cdc/sink/main_test.go
 func TestMain(m *testing.M) {
 	leakutil.SetUpLeakTest(m)
+=======
+// Hang will block the goroutine for a given duration, or return when `ctx` is done.
+func Hang(ctx context.Context, dur time.Duration) error {
+	timer := time.NewTimer(dur)
+	select {
+	case <-ctx.Done():
+		if !timer.Stop() {
+			<-timer.C
+		}
+		return ctx.Err()
+	case <-timer.C:
+		return nil
+	}
+>>>>>>> d5f608d68c ((processor/cdc): report module internal warnings (#8983)):pkg/util/time.go
 }

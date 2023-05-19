@@ -246,9 +246,19 @@ func newLogManager(
 	return m, nil
 }
 
+<<<<<<< HEAD
 func (m *logManager) Run(ctx context.Context) error {
 	defer m.close()
 	return m.bgUpdateLog(ctx)
+=======
+// Run implements pkg/util.Runnable.
+func (m *logManager) Run(ctx context.Context, _ ...chan<- error) error {
+	if m.Enabled() {
+		defer m.close()
+		return m.bgUpdateLog(ctx)
+	}
+	return nil
+>>>>>>> d5f608d68c ((processor/cdc): report module internal warnings (#8983))
 }
 
 // Enabled returns whether this log manager is enabled

@@ -685,9 +685,13 @@ func (s *mysqlBackend) execDMLWithMaxRetries(pctx context.Context, dmls *prepare
 			err := logDMLTxnErr(errors.Trace(driver.ErrBadConn), start, s.changefeed, "failpoint", 0, nil)
 			failpoint.Return(err)
 		})
+<<<<<<< HEAD:cdc/sinkv2/eventsink/txn/mysql/mysql.go
 		failpoint.Inject("MySQLSinkHangLongTime", func() {
 			time.Sleep(time.Hour)
 		})
+=======
+		failpoint.Inject("MySQLSinkHangLongTime", func() { _ = util.Hang(pctx, time.Hour) })
+>>>>>>> d5f608d68c ((processor/cdc): report module internal warnings (#8983)):cdc/sink/dmlsink/txn/mysql/mysql.go
 
 		err := s.statistics.RecordBatchExecution(func() (int, error) {
 			tx, err := s.db.BeginTx(pctx, nil)

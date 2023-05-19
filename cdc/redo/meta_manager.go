@@ -140,7 +140,7 @@ func (m *metaManager) Enabled() bool {
 }
 
 // Run runs bgFlushMeta and bgGC.
-func (m *metaManager) Run(ctx context.Context) error {
+func (m *metaManager) Run(ctx context.Context, _ ...chan<- error) error {
 	if m.extStorage == nil {
 		log.Warn("extStorage of redo meta manager is nil, skip running")
 		return nil

@@ -158,6 +158,98 @@ func ddlSinkInitializer(ctx context.Context, a *ddlSinkImpl) error {
 	return nil
 }
 
+<<<<<<< HEAD
+=======
+func (s *ddlSinkImpl) makeSinkReady(ctx context.Context) error {
+	if s.sink == nil {
+		if err := s.sinkInitHandler(ctx, s); err != nil {
+			log.Warn("ddl sink initialize failed",
+				zap.String("namespace", s.changefeedID.Namespace),
+				zap.String("changefeed", s.changefeedID.ID),
+				zap.Error(err))
+			return errors.New("ddlSink not ready")
+		}
+	}
+	return nil
+}
+
+// retry the given action with 5s interval. Before every retry, s.sink will be re-initialized.
+func (s *ddlSinkImpl) retrySinkActionWithErrorReport(ctx context.Context, action func() error) (err error) {
+	for {
+		if err = action(); err == nil {
+			return nil
+		}
+		s.sink = nil
+		if !cerror.IsChangefeedUnRetryableError(err) && errors.Cause(err) != context.Canceled {
+			s.reportWarning(err)
+		} else {
+			s.reportError(err)
+			return err
+		}
+
+		// Use a 5 second backoff when re-establishing internal resources.
+		if err = util.Hang(ctx, 5*time.Second); err != nil {
+			return errors.Trace(err)
+		}
+	}
+}
+
+func (s *ddlSinkImpl) writeCheckpointTs(ctx context.Context, lastCheckpointTs *model.Ts) error {
+	doWrite := func() (err error) {
+		s.mu.Lock()
+		checkpointTs := s.mu.checkpointTs
+		if checkpointTs == 0 || checkpointTs <= *lastCheckpointTs {
+			s.mu.Unlock()
+			return
+		}
+		tables := make([]*model.TableInfo, 0, len(s.mu.currentTables))
+		tables = append(tables, s.mu.currentTables...)
+		s.mu.Unlock()
+
+		if err = s.makeSinkReady(ctx); err == nil {
+			err = s.sink.WriteCheckpointTs(ctx, checkpointTs, tables)
+		}
+		if err == nil {
+			*lastCheckpointTs = checkpointTs
+		}
+		return
+	}
+
+	return s.retrySinkActionWithErrorReport(ctx, doWrite)
+}
+
+func (s *ddlSinkImpl) writeDDLEvent(ctx context.Context, ddl *model.DDLEvent) error {
+	log.Info("begin emit ddl event",
+		zap.String("namespace", s.changefeedID.Namespace),
+		zap.String("changefeed", s.changefeedID.ID),
+		zap.Any("DDL", ddl))
+
+	doWrite := func() (err error) {
+		if err = s.makeSinkReady(ctx); err == nil {
+			err = s.sink.WriteDDLEvent(ctx, ddl)
+			failpoint.Inject("InjectChangefeedDDLError", func() {
+				err = cerror.ErrExecDDLFailed.GenWithStackByArgs()
+			})
+		}
+		if err != nil {
+			log.Error("Execute DDL failed",
+				zap.String("namespace", s.changefeedID.Namespace),
+				zap.String("changefeed", s.changefeedID.ID),
+				zap.Any("DDL", ddl),
+				zap.Error(err))
+		} else {
+			ddl.Done.Store(true)
+			log.Info("Execute DDL succeeded",
+				zap.String("namespace", s.changefeedID.Namespace),
+				zap.String("changefeed", s.changefeedID.ID),
+				zap.Any("DDL", ddl))
+		}
+		return
+	}
+	return s.retrySinkActionWithErrorReport(ctx, doWrite)
+}
+
+>>>>>>> d5f608d68c ((processor/cdc): report module internal warnings (#8983))
 func (s *ddlSinkImpl) run(ctx context.Context) {
 	ctx, s.cancel = context.WithCancel(ctx)
 

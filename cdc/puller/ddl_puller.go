@@ -84,7 +84,7 @@ type ddlJobPullerImpl struct {
 }
 
 // Run starts the DDLJobPuller.
-func (p *ddlJobPullerImpl) Run(ctx context.Context) error {
+func (p *ddlJobPullerImpl) Run(ctx context.Context, _ ...chan<- error) error {
 	eg, ctx := errgroup.WithContext(ctx)
 
 	eg.Go(func() error {

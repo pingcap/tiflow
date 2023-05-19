@@ -31,6 +31,7 @@ import (
 	cerrors "github.com/pingcap/tiflow/pkg/errors"
 	"github.com/pingcap/tiflow/pkg/retry"
 	"github.com/pingcap/tiflow/pkg/upstream"
+	"github.com/pingcap/tiflow/pkg/util"
 	"github.com/prometheus/client_golang/prometheus"
 	"github.com/tikv/client-go/v2/oracle"
 	"go.uber.org/zap"
@@ -172,12 +173,122 @@ func New(
 	m.startGenerateTasks()
 	m.backgroundGC()
 
+<<<<<<< HEAD
+=======
+// Run implements util.Runnable.
+func (m *SinkManager) Run(ctx context.Context, warnings ...chan<- error) (err error) {
+	var managerCancel context.CancelFunc
+	m.managerCtx, managerCancel = context.WithCancel(ctx)
+	defer func() {
+		managerCancel()
+		m.wg.Wait()
+		log.Info("Sink manager exists",
+			zap.String("namespace", m.changefeedID.Namespace),
+			zap.String("changefeed", m.changefeedID.ID),
+			zap.Error(err))
+	}()
+
+	splitTxn := m.changefeedInfo.Config.Sink.TxnAtomicity.ShouldSplitTxn()
+	enableOldValue := m.changefeedInfo.Config.EnableOldValue
+
+	gcErrors := make(chan error, 16)
+	sinkFactoryErrors := make(chan error, 16)
+	sinkErrors := make(chan error, 16)
+	redoErrors := make(chan error, 16)
+
+	m.backgroundGC(gcErrors)
+	if m.sinkEg == nil {
+		var sinkCtx context.Context
+		m.sinkEg, sinkCtx = errgroup.WithContext(m.managerCtx)
+		m.startSinkWorkers(sinkCtx, splitTxn, enableOldValue)
+		m.sinkEg.Go(func() error { return m.generateSinkTasks(sinkCtx) })
+		m.wg.Add(1)
+		go func() {
+			defer m.wg.Done()
+			if err := m.sinkEg.Wait(); err != nil && !cerror.Is(err, context.Canceled) {
+				log.Error("Worker handles or generates sink task failed",
+					zap.String("namespace", m.changefeedID.Namespace),
+					zap.String("changefeed", m.changefeedID.ID),
+					zap.Error(err))
+				select {
+				case sinkErrors <- err:
+				case <-m.managerCtx.Done():
+				}
+			}
+		}()
+	}
+	if m.redoDMLMgr != nil && m.redoEg == nil {
+		var redoCtx context.Context
+		m.redoEg, redoCtx = errgroup.WithContext(m.managerCtx)
+		m.startRedoWorkers(redoCtx, enableOldValue)
+		m.redoEg.Go(func() error { return m.generateRedoTasks(redoCtx) })
+		m.wg.Add(1)
+		go func() {
+			defer m.wg.Done()
+			if err := m.redoEg.Wait(); err != nil && !cerror.Is(err, context.Canceled) {
+				log.Error("Worker handles or generates redo task failed",
+					zap.String("namespace", m.changefeedID.Namespace),
+					zap.String("changefeed", m.changefeedID.ID),
+					zap.Error(err))
+				select {
+				case redoErrors <- err:
+				case <-m.managerCtx.Done():
+				}
+			}
+		}()
+	}
+
+	close(m.ready)
+>>>>>>> d5f608d68c ((processor/cdc): report module internal warnings (#8983))
 	log.Info("Sink manager is created",
 		zap.String("namespace", changefeedID.Namespace),
 		zap.String("changefeed", changefeedID.ID),
 		zap.Bool("withRedoEnabled", m.redoDMLMgr != nil))
 
+<<<<<<< HEAD
 	return m, nil
+=======
+	// SinkManager will restart some internal modules if necessasry.
+	for {
+		if err := m.initSinkFactory(sinkFactoryErrors); err != nil {
+			select {
+			case <-m.managerCtx.Done():
+			case sinkFactoryErrors <- err:
+			}
+		}
+
+		select {
+		case <-m.managerCtx.Done():
+			return errors.Trace(ctx.Err())
+		case err = <-gcErrors:
+			return errors.Trace(err)
+		case err = <-sinkErrors:
+			return errors.Trace(err)
+		case err = <-redoErrors:
+			return errors.Trace(err)
+		case err = <-sinkFactoryErrors:
+			log.Warn("Sink manager backend sink fails",
+				zap.String("namespace", m.changefeedID.Namespace),
+				zap.String("changefeed", m.changefeedID.ID),
+				zap.Error(err))
+			m.clearSinkFactory()
+			sinkFactoryErrors = make(chan error, 16)
+		}
+
+		if !cerror.IsChangefeedUnRetryableError(err) && errors.Cause(err) != context.Canceled {
+			select {
+			case <-m.managerCtx.Done():
+			case warnings[0] <- err:
+			}
+		} else {
+			return errors.Trace(err)
+		}
+		// Use a 5 second backoff when re-establishing internal resources.
+		if err = util.Hang(m.managerCtx, 5*time.Second); err != nil {
+			return errors.Trace(err)
+		}
+	}
+>>>>>>> d5f608d68c ((processor/cdc): report module internal warnings (#8983))
 }
 
 // start all workers and report the error to the error channel.
