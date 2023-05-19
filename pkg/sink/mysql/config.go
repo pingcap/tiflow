@@ -149,12 +149,12 @@ func (c *Config) Apply(
 	replicaConfig *config.ReplicaConfig,
 ) (err error) {
 	if sinkURI == nil {
-		return cerror.ErrMySQLConnectionError.GenWithStack("fail to open MySQL sink, empty SinkURI")
+		return cerror.ErrMySQLInvalidConfig.GenWithStack("fail to open MySQL sink, empty SinkURI")
 	}
 
 	scheme := strings.ToLower(sinkURI.Scheme)
 	if !sink.IsMySQLCompatibleScheme(scheme) {
-		return cerror.ErrMySQLConnectionError.GenWithStack("can't create MySQL sink with unsupported scheme: %s", scheme)
+		return cerror.ErrMySQLInvalidConfig.GenWithStack("can't create MySQL sink with unsupported scheme: %s", scheme)
 	}
 	req := &http.Request{URL: sinkURI}
 	urlParameter := &urlConfig{}
@@ -228,7 +228,7 @@ func mergeConfig(
 		dest.EnableCachePreparedStatement = mConfig.EnableCachePreparedStatement
 	}
 	if err := mergo.Merge(dest, urlParameters, mergo.WithOverride); err != nil {
-		return nil, err
+		return nil, cerror.WrapError(cerror.ErrMySQLInvalidConfig, err)
 	}
 	return dest, nil
 }

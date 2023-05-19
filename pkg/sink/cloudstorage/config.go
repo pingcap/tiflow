@@ -93,7 +93,7 @@ func (c *Config) Apply(
 	req := &http.Request{URL: sinkURI}
 	urlParameter := &urlConfig{}
 	if err := binding.Query.Bind(req, urlParameter); err != nil {
-		return cerror.WrapError(cerror.ErrMySQLInvalidConfig, err)
+		return cerror.WrapError(cerror.ErrStorageSinkInvalidConfig, err)
 	}
 	if urlParameter, err = mergeConfig(replicaConfig, urlParameter); err != nil {
 		return err
@@ -114,6 +114,10 @@ func (c *Config) Apply(
 	c.EnablePartitionSeparator = replicaConfig.Sink.EnablePartitionSeparator
 	c.FileIndexWidth = replicaConfig.Sink.FileIndexWidth
 
+	if c.FileIndexWidth < config.MinFileIndexWidth || c.FileIndexWidth > config.MaxFileIndexWidth {
+		c.FileIndexWidth = config.DefaultFileIndexWidth
+	}
+
 	return nil
 }
 
@@ -128,7 +132,7 @@ func mergeConfig(
 		dest.FileSize = replicaConfig.Sink.CloudStorageConfig.FileSize
 	}
 	if err := mergo.Merge(dest, urlParameters, mergo.WithOverride); err != nil {
-		return nil, err
+		return nil, cerror.WrapError(cerror.ErrStorageSinkInvalidConfig, err)
 	}
 	return dest, nil
 }

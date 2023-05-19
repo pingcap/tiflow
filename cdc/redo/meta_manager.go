@@ -68,6 +68,13 @@ type metaManager struct {
 	metricFlushLogDuration prometheus.Observer
 }
 
+// NewDisabledMetaManager creates a disabled Meta Manager.
+func NewDisabledMetaManager() *metaManager {
+	return &metaManager{
+		enabled: false,
+	}
+}
+
 // NewMetaManagerWithInit creates a new Manager and initializes the meta.
 func NewMetaManagerWithInit(
 	ctx context.Context, cfg *config.ConsistentConfig, startTs model.Ts,
@@ -140,7 +147,7 @@ func (m *metaManager) Enabled() bool {
 }
 
 // Run runs bgFlushMeta and bgGC.
-func (m *metaManager) Run(ctx context.Context) error {
+func (m *metaManager) Run(ctx context.Context, _ ...chan<- error) error {
 	if m.extStorage == nil {
 		log.Warn("extStorage of redo meta manager is nil, skip running")
 		return nil

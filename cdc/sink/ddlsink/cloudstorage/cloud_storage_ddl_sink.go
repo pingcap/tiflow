@@ -21,6 +21,7 @@ import (
 	"github.com/pingcap/errors"
 	"github.com/pingcap/log"
 	"github.com/pingcap/tidb/br/pkg/storage"
+	timodel "github.com/pingcap/tidb/parser/model"
 	"github.com/pingcap/tiflow/cdc/contextutil"
 	"github.com/pingcap/tiflow/cdc/model"
 	"github.com/pingcap/tiflow/cdc/sink/ddlsink"
@@ -62,29 +63,41 @@ func NewDDLSink(ctx context.Context, sinkURI *url.URL) (*DDLSink, error) {
 
 // WriteDDLEvent writes the ddl event to the cloud storage.
 func (d *DDLSink) WriteDDLEvent(ctx context.Context, ddl *model.DDLEvent) error {
-	var def cloudstorage.TableDefinition
-	def.FromDDLEvent(ddl)
-	encodedDef, err := def.MarshalWithQuery()
-	if err != nil {
-		return errors.Trace(err)
-	}
-
-	path, err := def.GenerateSchemaFilePath()
-	if err != nil {
-		return errors.Trace(err)
-	}
-	log.Debug("write ddl event to external storage",
-		zap.String("path", path), zap.Any("ddl", ddl))
-	err = d.statistics.RecordDDLExecution(func() error {
-		err1 := d.storage.WriteFile(ctx, path, encodedDef)
-		if err1 != nil {
-			return err1
+	writeFile := func(def cloudstorage.TableDefinition) error {
+		encodedDef, err := def.MarshalWithQuery()
+		if err != nil {
+			return errors.Trace(err)
 		}
 
-		return nil
-	})
+		path, err := def.GenerateSchemaFilePath()
+		if err != nil {
+			return errors.Trace(err)
+		}
+		log.Debug("write ddl event to external storage",
+			zap.String("path", path), zap.Any("ddl", ddl))
+		return d.statistics.RecordDDLExecution(func() error {
+			err1 := d.storage.WriteFile(ctx, path, encodedDef)
+			if err1 != nil {
+				return err1
+			}
 
-	return errors.Trace(err)
+			return nil
+		})
+	}
+
+	var def cloudstorage.TableDefinition
+	def.FromDDLEvent(ddl)
+	if err := writeFile(def); err != nil {
+		return errors.Trace(err)
+	}
+
+	if ddl.Type == timodel.ActionExchangeTablePartition {
+		// For exchange partition, we need to write the schema of the source table.
+		var sourceTableDef cloudstorage.TableDefinition
+		sourceTableDef.FromTableInfo(ddl.PreTableInfo, ddl.TableInfo.Version)
+		return writeFile(sourceTableDef)
+	}
+	return nil
 }
 
 // WriteCheckpointTs writes the checkpoint ts to the cloud storage.
