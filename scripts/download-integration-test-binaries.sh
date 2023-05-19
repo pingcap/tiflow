@@ -140,10 +140,12 @@ function download_binaries() {
 	tar -xz -C third_bin 'bin/*' -f tmp/pd-server.tar.gz && mv third_bin/bin/* third_bin/
 	download "$tikv_download_url" "tikv-server.tar.gz" "tmp/tikv-server.tar.gz"
 	tar -xz -C third_bin bin/tikv-server -f tmp/tikv-server.tar.gz && mv third_bin/bin/tikv-server third_bin/
+
 	download "$tiflash_download_url" "tiflash.tar.gz" "tmp/tiflash.tar.gz"
 	tar -xz -C third_bin -f tmp/tiflash.tar.gz
 	mv third_bin/tiflash third_bin/_tiflash
 	mv third_bin/_tiflash/* third_bin && rm -rf third_bin/_tiflash
+
 	download "$minio_download_url" "minio.tar.gz" "tmp/minio.tar.gz"
 	tar -xz -C third_bin -f tmp/minio.tar.gz
 
@@ -157,8 +159,8 @@ function download_binaries() {
 
 	download "$schema_registry_url" "schema-registry.tar.gz" "tmp/schema-registry.tar.gz"
 	tar -xz -C third_bin -f tmp/schema-registry.tar.gz
-	mv third_bin/schema-registry/* third_bin/
-	rm -rf third_bin/schema-registry
+	mv third_bin/schema-registry third_bin/_schema
+	mv third_bin/_schema/* third_bin && rm -rf third_bin/_schema
 
 	chmod a+x third_bin/*
 }
