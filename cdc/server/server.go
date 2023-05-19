@@ -327,6 +327,8 @@ func (s *server) etcdHealthChecker(ctx context.Context) error {
 				if err := pc.Healthy(ctx, endpoint); err != nil {
 					log.Warn("etcd health check error",
 						zap.String("endpoint", endpoint), zap.Error(err))
+				} else {
+					etcdHealthCheckSuccessCounter.WithLabelValues(endpoint).Inc()
 				}
 				etcdHealthCheckDuration.WithLabelValues(endpoint).
 					Observe(time.Since(start).Seconds())

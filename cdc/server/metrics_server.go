@@ -31,6 +31,14 @@ var (
 			Buckets:   prometheus.ExponentialBuckets(0.0001 /* 0.1ms */, 2, 18),
 		}, []string{"pd"})
 
+	etcdHealthCheckSuccessCounter = prometheus.NewCounterVec(
+		prometheus.CounterOpts{
+			Namespace: "ticdc",
+			Subsystem: "server",
+			Name:      "etcd_health_check_success_count",
+			Help:      "The number of error return by etcd health check",
+		}, []string{"pd"})
+
 	goGC = prometheus.NewGauge(
 		prometheus.GaugeOpts{
 			Namespace: "ticdc",
@@ -66,4 +74,5 @@ func initServerMetrics(registry *prometheus.Registry) {
 	registry.MustRegister(etcdHealthCheckDuration)
 	registry.MustRegister(goGC)
 	registry.MustRegister(goMaxProcs)
+	registry.MustRegister(etcdHealthCheckSuccessCounter)
 }
