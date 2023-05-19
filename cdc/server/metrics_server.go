@@ -36,7 +36,7 @@ var (
 			Namespace: "ticdc",
 			Subsystem: "server",
 			Name:      "etcd_health_check_success_count",
-			Help:      "The number of error return by etcd health check",
+			Help:      "The number of successful request by etcd health check",
 		}, []string{"pd"})
 
 	goGC = prometheus.NewGauge(

@@ -146,36 +146,36 @@ groups:
       summary: TiCDC heap memory usage is over 10 GB
 
   - alert: ticdc_server_can_not_connect_to_pd
-    expr: changes(ticdc_server_etcd_health_check_success_count[30s]) < 0
+    expr: sum(increase(ticdc_server_etcd_health_check_success_count[30s])) < 0
     for: 30s
     labels:
       env: ENV_LABELS_ENV
-      level: critical
-      expr: changes(ticdc_server_etcd_health_check_success_count[30s]) < 0
+      level: warning
+      expr: sum(increase(ticdc_server_etcd_health_check_success_count[30s])) < 0
     annotations:
       description: 'cluster: ENV_LABELS_ENV, instance: {{ $labels.instance }}, values: {{ $value }}'
       value: '{{ $value }}'
       summary: cdc can not connect to pd
 
   - alert: ticdc_kvclient_can_not_connect_to_tikv
-    expr: changes(ticdc_kvclient_event_feed_error_count{type="ConnectToStore"}[1m]) > 10
+    expr: sum(increase(ticdc_kvclient_event_feed_error_count{type="ConnectToStore"}[1m])) > 10
     for: 1m
     labels:
       env: ENV_LABELS_ENV
-      level: critical
-      expr: changes(ticdc_kvclient_event_feed_error_count{type="ConnectToStore"}[1m]) > 10
+      level: warning
+      expr: sum(increase(ticdc_kvclient_event_feed_error_count{type="ConnectToStore"}[1m])) > 10
     annotations:
       description: 'cluster: ENV_LABELS_ENV, instance: {{ $labels.instance }}, values: {{ $value }}'
       value: '{{ $value }}'
       summary: cdc can no connet to tikv
 
   - alert: ticdc_capture_can_not_connect_peer
-    expr: changes(ticdc_message_server[30s]) < 1
+    expr: sum(increase(ticdc_message_server[30s])) < 1
     for: 30s
     labels:
       env: ENV_LABELS_ENV
-      level: critical
-      expr: changes(ticdc_message_server[30s]) < 1
+      level: warning
+      expr: sum(increase(ticdc_message_server[30s])) < 1
     annotations:
       description: 'cluster: ENV_LABELS_ENV, instance: {{ $labels.instance }}, values: {{ $value }}'
       value: '{{ $value }}'
