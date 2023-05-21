@@ -109,8 +109,9 @@ type SinkManager struct {
 	redoMemQuota *memquota.MemQuota
 
 	// To control lifetime of all sub-goroutines.
-	managerCtx context.Context
-	ready      chan struct{}
+	managerCtx    context.Context
+	managerCancel context.CancelFunc
+	ready         chan struct{}
 
 	// To control lifetime of sink and redo tasks.
 	sinkEg *errgroup.Group
@@ -171,10 +172,11 @@ func New(
 
 // Run implements util.Runnable.
 func (m *SinkManager) Run(ctx context.Context, warnings ...chan<- error) (err error) {
-	var managerCancel context.CancelFunc
-	m.managerCtx, managerCancel = context.WithCancel(ctx)
+	m.managerCtx, m.managerCancel = context.WithCancel(ctx)
+	m.wg.Add(1) // So `SinkManager.Close` will also wait the function.
 	defer func() {
-		managerCancel()
+		m.managerCancel()
+		m.wg.Done()
 		m.wg.Wait()
 		log.Info("Sink manager exists",
 			zap.String("namespace", m.changefeedID.Namespace),
@@ -249,7 +251,7 @@ func (m *SinkManager) Run(ctx context.Context, warnings ...chan<- error) (err er
 
 		select {
 		case <-m.managerCtx.Done():
-			return errors.Trace(ctx.Err())
+			return errors.Trace(m.managerCtx.Err())
 		case err = <-gcErrors:
 			return errors.Trace(err)
 		case err = <-sinkErrors:
@@ -310,24 +312,23 @@ func (m *SinkManager) initSinkFactory(errCh chan error) error {
 func (m *SinkManager) clearSinkFactory() {
 	m.sinkFactoryMu.Lock()
 	defer m.sinkFactoryMu.Unlock()
-	if !m.sinkFactory.IsDead() {
-		log.Panic("clearSinkFactory while it's alive",
+	if m.sinkFactory != nil {
+		log.Info("Sink manager closing sink factory",
 			zap.String("namespace", m.changefeedID.Namespace),
 			zap.String("changefeed", m.changefeedID.ID))
-	}
 
-	// Firstly replace m.sinkFactory to nil so new added tables won't use it.
-	// Then clear all table sinks so dmlsink.EventSink.WriteEvents won't be called any more.
-	// Finally close the sinkFactory.
-	sinkFactory := m.sinkFactory
-	m.sinkFactory = nil
-	if sinkFactory != nil {
+		// Firstly clear all table sinks so dmlsink.EventSink.WriteEvents won't be called any more.
+		// Then dmlsink.EventSink.Close can be closed safety.
 		m.tableSinks.Range(func(_ tablepb.Span, value interface{}) bool {
-			wrapper := value.(*tableSinkWrapper)
-			wrapper.clearTableSink()
+			value.(*tableSinkWrapper).clearTableSink()
 			return true
 		})
-		sinkFactory.Close()
+		m.sinkFactory.Close()
+		m.sinkFactory = nil
+
+		log.Info("Sink manager has closed sink factory",
+			zap.String("namespace", m.changefeedID.Namespace),
+			zap.String("changefeed", m.changefeedID.ID))
 	}
 }
 
@@ -969,6 +970,7 @@ func (m *SinkManager) Close() {
 		zap.String("changefeed", m.changefeedID.ID))
 
 	start := time.Now()
+	m.managerCancel()
 	m.wg.Wait()
 	m.sinkMemQuota.Close()
 	m.redoMemQuota.Close()

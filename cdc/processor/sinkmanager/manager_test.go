@@ -20,6 +20,7 @@ import (
 	"time"
 
 	"github.com/pingcap/failpoint"
+	"github.com/pingcap/log"
 	"github.com/pingcap/tiflow/cdc/model"
 	"github.com/pingcap/tiflow/cdc/processor/sourcemanager/engine"
 	"github.com/pingcap/tiflow/cdc/processor/tablepb"
@@ -343,5 +344,15 @@ func TestSinkManagerRunWithErrors(t *testing.T) {
 	source.Add(span, model.NewResolvedPolymorphicEvent(0, 101))
 	manager.UpdateReceivedSorterResolvedTs(span, 101)
 	manager.UpdateBarrierTs(101, nil)
-	<-errCh
+
+	timer := time.NewTimer(5 * time.Second)
+	select {
+	case <-errCh:
+		if !timer.Stop() {
+			<-timer.C
+		}
+		return
+	case <-timer.C:
+		log.Panic("must get an error instead of a timeout")
+	}
 }

@@ -131,24 +131,6 @@ func (s *SinkFactory) CreateTableSinkForConsumer(
 		&dmlsink.RowChangeEventAppender{}, totalRowsCounter)
 }
 
-// IsDead checks whether the sink factory is dead or not.
-func (s *SinkFactory) IsDead() bool {
-	var deadCheckCh <-chan struct{}
-	if s.rowSink != nil {
-		deadCheckCh = s.rowSink.Dead()
-	} else if s.txnSink != nil {
-		deadCheckCh = s.txnSink.Dead()
-	} else {
-		return true
-	}
-	select {
-	case <-deadCheckCh:
-		return true
-	default:
-		return false
-	}
-}
-
 // Close closes the sink.
 func (s *SinkFactory) Close() {
 	if s.rowSink != nil && s.txnSink != nil {
