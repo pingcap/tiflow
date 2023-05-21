@@ -310,9 +310,24 @@ func (m *SinkManager) initSinkFactory(errCh chan error) error {
 func (m *SinkManager) clearSinkFactory() {
 	m.sinkFactoryMu.Lock()
 	defer m.sinkFactoryMu.Unlock()
-	if m.sinkFactory != nil {
-		m.sinkFactory.Close()
-		m.sinkFactory = nil
+	if !m.sinkFactory.IsDead() {
+		log.Panic("clearSinkFactory while it's alive",
+			zap.String("namespace", m.changefeedID.Namespace),
+			zap.String("changefeed", m.changefeedID.ID))
+	}
+
+	// Firstly replace m.sinkFactory to nil so new added tables won't use it.
+	// Then clear all table sinks so dmlsink.EventSink.WriteEvents won't be called any more.
+	// Finally close the sinkFactory.
+	sinkFactory := m.sinkFactory
+	m.sinkFactory = nil
+	if sinkFactory != nil {
+		m.tableSinks.Range(func(_ tablepb.Span, value interface{}) bool {
+			wrapper := value.(*tableSinkWrapper)
+			wrapper.clearTableSink()
+			return true
+		})
+		sinkFactory.Close()
 	}
 }
 

@@ -317,6 +317,7 @@ func TestUpdateReceivedSorterResolvedTsOfNonExistTable(t *testing.T) {
 	manager.UpdateReceivedSorterResolvedTs(spanz.TableIDToComparableSpan(1), 1)
 }
 
+// Sink worker errors should cancel the sink manager correctly.
 func TestSinkManagerRunWithErrors(t *testing.T) {
 	t.Parallel()
 
@@ -342,5 +343,5 @@ func TestSinkManagerRunWithErrors(t *testing.T) {
 	source.Add(span, model.NewResolvedPolymorphicEvent(0, 101))
 	manager.UpdateReceivedSorterResolvedTs(span, 101)
 	manager.UpdateBarrierTs(101, nil)
-	err := <-errCh
+	<-errCh
 }
