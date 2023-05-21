@@ -15,9 +15,11 @@ package sinkmanager
 
 import (
 	"context"
+	"math"
 	"testing"
 	"time"
 
+	"github.com/pingcap/failpoint"
 	"github.com/pingcap/tiflow/cdc/model"
 	"github.com/pingcap/tiflow/cdc/processor/sourcemanager/engine"
 	"github.com/pingcap/tiflow/cdc/processor/tablepb"
@@ -313,4 +315,32 @@ func TestUpdateReceivedSorterResolvedTsOfNonExistTable(t *testing.T) {
 	}()
 
 	manager.UpdateReceivedSorterResolvedTs(spanz.TableIDToComparableSpan(1), 1)
+}
+
+func TestSinkManagerRunWithErrors(t *testing.T) {
+	t.Parallel()
+
+	ctx, cancel := context.WithCancel(context.Background())
+	errCh := make(chan error, 16)
+	changefeedInfo := getChangefeedInfo()
+	manager, source, _ := CreateManagerWithMemEngine(t, ctx, model.DefaultChangeFeedID("1"), changefeedInfo, errCh)
+	defer func() {
+		cancel()
+		manager.Close()
+	}()
+
+	_ = failpoint.Enable("github.com/pingcap/tiflow/cdc/processor/sinkmanager/SinkWorkerTaskError", "return")
+	defer func() {
+		_ = failpoint.Disable("github.com/pingcap/tiflow/cdc/processor/sinkmanager/SinkWorkerTaskError")
+	}()
+
+	span := spanz.TableIDToComparableSpan(1)
+
+	source.AddTable(span, "test", 100)
+	manager.AddTable(span, 100, math.MaxUint64)
+	manager.StartTable(span, 100)
+	source.Add(span, model.NewResolvedPolymorphicEvent(0, 101))
+	manager.UpdateReceivedSorterResolvedTs(span, 101)
+	manager.UpdateBarrierTs(101, nil)
+	err := <-errCh
 }

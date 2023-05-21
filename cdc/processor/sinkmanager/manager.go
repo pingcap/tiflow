@@ -15,6 +15,7 @@ package sinkmanager
 
 import (
 	"context"
+	"math"
 	"sync"
 	"time"
 
@@ -193,7 +194,7 @@ func (m *SinkManager) Run(ctx context.Context, warnings ...chan<- error) (err er
 	if m.sinkEg == nil {
 		var sinkCtx context.Context
 		m.sinkEg, sinkCtx = errgroup.WithContext(m.managerCtx)
-		m.startSinkWorkers(sinkCtx, splitTxn, enableOldValue)
+		m.startSinkWorkers(sinkCtx, m.sinkEg, splitTxn, enableOldValue)
 		m.sinkEg.Go(func() error { return m.generateSinkTasks(sinkCtx) })
 		m.wg.Add(1)
 		go func() {
@@ -213,7 +214,7 @@ func (m *SinkManager) Run(ctx context.Context, warnings ...chan<- error) (err er
 	if m.redoDMLMgr != nil && m.redoEg == nil {
 		var redoCtx context.Context
 		m.redoEg, redoCtx = errgroup.WithContext(m.managerCtx)
-		m.startRedoWorkers(redoCtx, enableOldValue)
+		m.startRedoWorkers(redoCtx, m.redoEg, enableOldValue)
 		m.redoEg.Go(func() error { return m.generateRedoTasks(redoCtx) })
 		m.wg.Add(1)
 		go func() {
@@ -315,8 +316,7 @@ func (m *SinkManager) clearSinkFactory() {
 	}
 }
 
-func (m *SinkManager) startSinkWorkers(ctx context.Context, splitTxn bool, enableOldValue bool) {
-	eg, ctx := errgroup.WithContext(ctx)
+func (m *SinkManager) startSinkWorkers(ctx context.Context, eg *errgroup.Group, splitTxn bool, enableOldValue bool) {
 	for i := 0; i < sinkWorkerNum; i++ {
 		w := newSinkWorker(m.changefeedID, m.sourceManager,
 			m.sinkMemQuota, m.redoMemQuota,
@@ -326,8 +326,7 @@ func (m *SinkManager) startSinkWorkers(ctx context.Context, splitTxn bool, enabl
 	}
 }
 
-func (m *SinkManager) startRedoWorkers(ctx context.Context, enableOldValue bool) {
-	eg, ctx := errgroup.WithContext(ctx)
+func (m *SinkManager) startRedoWorkers(ctx context.Context, eg *errgroup.Group, enableOldValue bool) {
 	for i := 0; i < redoWorkerNum; i++ {
 		w := newRedoWorker(m.changefeedID, m.sourceManager, m.redoMemQuota,
 			m.redoDMLMgr, m.eventCache, enableOldValue)
@@ -407,7 +406,8 @@ func (m *SinkManager) generateSinkTasks(ctx context.Context) error {
 		tableSinkUpperBoundTs model.Ts,
 	) engine.Position {
 		schemaTs := m.schemaStorage.ResolvedTs()
-		if tableSinkUpperBoundTs > schemaTs+1 {
+		if schemaTs != math.MaxUint64 && tableSinkUpperBoundTs > schemaTs+1 {
+			// schemaTs == math.MaxUint64 means it's in tests.
 			tableSinkUpperBoundTs = schemaTs + 1
 		}
 		return engine.Position{StartTs: tableSinkUpperBoundTs - 1, CommitTs: tableSinkUpperBoundTs}
