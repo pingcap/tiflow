@@ -263,8 +263,10 @@ func (r *progressTracker) trackingCount() int {
 func (r *progressTracker) freezeProcess() {
 	r.mu.Lock()
 	defer r.mu.Unlock()
-	r.frozen = true
-	r.lastCheckClosed.Store(time.Now().Unix())
+	if !r.frozen {
+		r.frozen = true
+		r.lastCheckClosed.Store(time.Now().Unix())
+	}
 }
 
 // close is used to close the progress tracker.
