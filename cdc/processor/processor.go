@@ -255,6 +255,7 @@ func (p *processor) RemoveTable(tableID model.TableID) bool {
 			zap.Int64("tableID", tableID))
 		return true
 	}
+<<<<<<< HEAD
 	if !table.AsyncStop() {
 		// We use a Debug log because it is conceivable for the pipeline to block for a legitimate reason,
 		// and we do not want to alarm the user.
@@ -267,6 +268,9 @@ func (p *processor) RemoveTable(tableID model.TableID) bool {
 		return false
 	}
 	return true
+=======
+	return p.sinkManager.r.AsyncStopTable(span)
+>>>>>>> fbb363a6a2 ((sink/cdc): fix some bugs introduced by #8949 (#9010))
 }
 
 // IsAddTableFinished implements TableExecutor interface.

@@ -15,7 +15,7 @@ package mq
 
 import (
 	"context"
-	"sync/atomic"
+	"sync"
 
 	"github.com/pingcap/errors"
 	"github.com/pingcap/tiflow/cdc/contextutil"
@@ -45,17 +45,22 @@ type dmlSink struct {
 	// protocol indicates the protocol used by this sink.
 	protocol config.Protocol
 
-	worker *worker
-	// eventRouter used to route events to the right topic and partition.
-	eventRouter *dispatcher.EventRouter
-	// topicManager used to manage topics.
-	// It is also responsible for creating topics.
-	topicManager manager.TopicManager
+	alive struct {
+		sync.RWMutex
+		// eventRouter used to route events to the right topic and partition.
+		eventRouter *dispatcher.EventRouter
+		// topicManager used to manage topics.
+		// It is also responsible for creating topics.
+		topicManager manager.TopicManager
+		worker       *worker
+		isDead       bool
+	}
 
 	ctx    context.Context
 	cancel context.CancelFunc
-	dead   chan struct{}
-	isDead atomic.Bool
+
+	wg   sync.WaitGroup
+	dead chan struct{}
 }
 
 func newSink(ctx context.Context,
@@ -77,7 +82,9 @@ func newSink(ctx context.Context,
 	statistics := metrics.NewStatistics(ctx, sink.RowSink)
 	worker := newWorker(changefeedID, encoderConfig.Protocol,
 		encoderBuilder, encoderConcurrency, producer, statistics)
+
 	s := &dmlSink{
+<<<<<<< HEAD:cdc/sinkv2/eventsink/mq/mq_dml_sink.go
 		id:           changefeedID,
 		protocol:     encoderConfig.Protocol,
 		worker:       worker,
@@ -87,13 +94,31 @@ func newSink(ctx context.Context,
 		ctx:    ctx,
 		cancel: cancel,
 		dead:   make(chan struct{}),
+=======
+		id:          changefeedID,
+		protocol:    encoderConfig.Protocol,
+		adminClient: adminClient,
+		ctx:         ctx,
+		cancel:      cancel,
+		dead:        make(chan struct{}),
+>>>>>>> fbb363a6a2 ((sink/cdc): fix some bugs introduced by #8949 (#9010)):cdc/sink/dmlsink/mq/mq_dml_sink.go
 	}
+	s.alive.eventRouter = eventRouter
+	s.alive.topicManager = topicManager
+	s.alive.worker = worker
 
 	// Spawn a goroutine to send messages by the worker.
+	s.wg.Add(1)
 	go func() {
-		err := s.worker.run(ctx)
-		s.isDead.Store(true)
+		defer s.wg.Done()
+		err := s.alive.worker.run(ctx)
+
+		s.alive.Lock()
+		s.alive.isDead = true
+		s.alive.worker.close()
+		s.alive.Unlock()
 		close(s.dead)
+
 		if err != nil && errors.Cause(err) != context.Canceled {
 			select {
 			case <-ctx.Done():
@@ -107,8 +132,15 @@ func newSink(ctx context.Context,
 
 // WriteEvents writes events to the sink.
 // This is an asynchronously and thread-safe method.
+<<<<<<< HEAD:cdc/sinkv2/eventsink/mq/mq_dml_sink.go
 func (s *dmlSink) WriteEvents(rows ...*eventsink.RowChangeCallbackableEvent) error {
 	if s.isDead.Load() {
+=======
+func (s *dmlSink) WriteEvents(rows ...*dmlsink.RowChangeCallbackableEvent) error {
+	s.alive.RLock()
+	defer s.alive.RUnlock()
+	if s.alive.isDead {
+>>>>>>> fbb363a6a2 ((sink/cdc): fix some bugs introduced by #8949 (#9010)):cdc/sink/dmlsink/mq/mq_dml_sink.go
 		return errors.Trace(errors.New("dead dmlSink"))
 	}
 
@@ -119,15 +151,25 @@ func (s *dmlSink) WriteEvents(rows ...*eventsink.RowChangeCallbackableEvent) err
 			row.Callback()
 			continue
 		}
+<<<<<<< HEAD:cdc/sinkv2/eventsink/mq/mq_dml_sink.go
 		topic := s.eventRouter.GetTopicForRowChange(row.Event)
 		partitionNum, err := s.topicManager.GetPartitionNum(topic)
+=======
+		topic := s.alive.eventRouter.GetTopicForRowChange(row.Event)
+		partitionNum, err := s.alive.topicManager.GetPartitionNum(s.ctx, topic)
+>>>>>>> fbb363a6a2 ((sink/cdc): fix some bugs introduced by #8949 (#9010)):cdc/sink/dmlsink/mq/mq_dml_sink.go
 		if err != nil {
 			return errors.Trace(err)
 		}
-		partition := s.eventRouter.GetPartitionForRowChange(row.Event, partitionNum)
+		partition := s.alive.eventRouter.GetPartitionForRowChange(row.Event, partitionNum)
 		// This never be blocked because this is an unbounded channel.
+<<<<<<< HEAD:cdc/sinkv2/eventsink/mq/mq_dml_sink.go
 		s.worker.msgChan.In() <- mqEvent{
 			key: mqv1.TopicPartitionKey{
+=======
+		s.alive.worker.msgChan.In() <- mqEvent{
+			key: TopicPartitionKey{
+>>>>>>> fbb363a6a2 ((sink/cdc): fix some bugs introduced by #8949 (#9010)):cdc/sink/dmlsink/mq/mq_dml_sink.go
 				Topic: topic, Partition: partition,
 			},
 			rowEvent: row,
@@ -142,9 +184,15 @@ func (s *dmlSink) Close() {
 	if s.cancel != nil {
 		s.cancel()
 	}
+	s.wg.Wait()
 
+<<<<<<< HEAD:cdc/sinkv2/eventsink/mq/mq_dml_sink.go
 	if s.worker != nil {
 		s.worker.close()
+=======
+	if s.adminClient != nil {
+		s.adminClient.Close()
+>>>>>>> fbb363a6a2 ((sink/cdc): fix some bugs introduced by #8949 (#9010)):cdc/sink/dmlsink/mq/mq_dml_sink.go
 	}
 }
 

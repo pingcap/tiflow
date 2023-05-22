@@ -228,8 +228,15 @@ func (w *redoWorker) handleTask(ctx context.Context, task *redoTask) (finalErr e
 			zap.Int64("tableID", task.tableID),
 			zap.Any("lowerBound", lowerBound),
 			zap.Any("upperBound", upperBound),
+<<<<<<< HEAD
 			zap.Any("lastPos", lastPos),
 			zap.Float64("lag", time.Since(oracle.GetTimeFromTS(lastPos.CommitTs)).Seconds()))
+=======
+			zap.Any("lastPos", advancer.lastPos),
+			zap.Float64("lag", time.Since(oracle.GetTimeFromTS(advancer.lastPos.CommitTs)).Seconds()),
+			zap.Error(finalErr))
+
+>>>>>>> fbb363a6a2 ((sink/cdc): fix some bugs introduced by #8949 (#9010))
 		if finalErr == nil {
 			// Otherwise we can't ensure all events before `lastPos` are emitted.
 			task.callback(lastPos)
@@ -303,5 +310,9 @@ func (w *redoWorker) handleTask(ctx context.Context, task *redoTask) (finalErr e
 	}
 	// Even if task is canceled we still call this again, to avoid somethings
 	// are left and leak forever.
+<<<<<<< HEAD
 	return doEmitBatchEvents()
+=======
+	return advancer.advance(ctx, cachedSize)
+>>>>>>> fbb363a6a2 ((sink/cdc): fix some bugs introduced by #8949 (#9010))
 }

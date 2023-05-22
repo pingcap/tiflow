@@ -15,8 +15,14 @@ package sinkmanager
 
 import (
 	"context"
+<<<<<<< HEAD
+=======
+	"sync/atomic"
+	"time"
+>>>>>>> fbb363a6a2 ((sink/cdc): fix some bugs introduced by #8949 (#9010))
 
 	"github.com/pingcap/errors"
+	"github.com/pingcap/failpoint"
 	"github.com/pingcap/log"
 	"github.com/pingcap/tiflow/cdc/model"
 	"github.com/pingcap/tiflow/cdc/processor/memquota"
@@ -75,6 +81,9 @@ func (w *sinkWorker) handleTasks(ctx context.Context, taskChan <-chan *sinkTask)
 			return ctx.Err()
 		case task := <-taskChan:
 			err := w.handleTask(ctx, task)
+			failpoint.Inject("SinkWorkerTaskError", func() {
+				err = errors.New("SinkWorkerTaskError")
+			})
 			if err != nil {
 				return err
 			}
@@ -290,7 +299,14 @@ func (w *sinkWorker) handleTask(ctx context.Context, task *sinkTask) (finalErr e
 			zap.Any("lowerBound", lowerBound),
 			zap.Any("upperBound", upperBound),
 			zap.Bool("splitTxn", w.splitTxn),
+<<<<<<< HEAD
 			zap.Any("lastPos", lastPos))
+=======
+			zap.Int("receivedEvents", allEventCount),
+			zap.Any("lastPos", advancer.lastPos),
+			zap.Float64("lag", time.Since(oracle.GetTimeFromTS(advancer.lastPos.CommitTs)).Seconds()),
+			zap.Error(finalErr))
+>>>>>>> fbb363a6a2 ((sink/cdc): fix some bugs introduced by #8949 (#9010))
 
 		if finalErr == nil {
 			// Otherwise we can't ensure all events before `lastPos` are emitted.
@@ -378,7 +394,9 @@ func (w *sinkWorker) fetchFromCache(
 				"kv",
 			).Add(float64(popRes.pushCount))
 			w.metricRedoEventCacheHit.Add(float64(popRes.size))
-			task.tableSink.appendRowChangedEvents(popRes.events...)
+			if err = task.tableSink.appendRowChangedEvents(popRes.events...); err != nil {
+				return
+			}
 		}
 
 		// Get a resolvedTs so that we can record it into sink memory quota.

@@ -67,8 +67,6 @@ type dmlSink struct {
 	changefeedID model.ChangeFeedID
 	// last sequence number
 	lastSeqNum uint64
-	// msgCh is a channel to hold eventFragment.
-	msgCh chan eventFragment
 	// encodingWorkers defines a group of workers for encoding events.
 	encodingWorkers []*encodingWorker
 	// defragmenter is used to defragment the out-of-order encoded messages and
@@ -77,12 +75,18 @@ type dmlSink struct {
 	// workers defines a group of workers for writing events to external storage.
 	workers []*dmlWorker
 
+	alive struct {
+		sync.RWMutex
+		// msgCh is a channel to hold eventFragment.
+		msgCh  chan eventFragment
+		isDead bool
+	}
+
 	statistics *metrics.Statistics
 
 	cancel func()
 	wg     sync.WaitGroup
 	dead   chan struct{}
-	isDead atomic.Bool
 }
 
 // NewCloudStorageSink creates a cloud storage sink.
@@ -127,20 +131,21 @@ func NewCloudStorageSink(
 	wgCtx, wgCancel := context.WithCancel(ctx)
 	s := &dmlSink{
 		changefeedID:    contextutil.ChangefeedIDFromCtx(wgCtx),
-		msgCh:           make(chan eventFragment, defaultChannelSize),
 		encodingWorkers: make([]*encodingWorker, defaultEncodingConcurrency),
 		workers:         make([]*dmlWorker, cfg.WorkerCount),
 		statistics:      metrics.NewStatistics(wgCtx, sink.TxnSink),
 		cancel:          wgCancel,
 		dead:            make(chan struct{}),
 	}
+	s.alive.msgCh = make(chan eventFragment, defaultChannelSize)
+
 	encodedCh := make(chan eventFragment, defaultChannelSize)
 	workerChannels := make([]*chann.DrainableChann[eventFragment], cfg.WorkerCount)
 
 	// create a group of encoding workers.
 	for i := 0; i < defaultEncodingConcurrency; i++ {
 		encoder := encoderBuilder.Build()
-		s.encodingWorkers[i] = newEncodingWorker(i, s.changefeedID, encoder, s.msgCh, encodedCh)
+		s.encodingWorkers[i] = newEncodingWorker(i, s.changefeedID, encoder, s.alive.msgCh, encodedCh)
 	}
 	// create defragmenter.
 	s.defragmenter = newDefragmenter(encodedCh, workerChannels)
@@ -157,8 +162,13 @@ func NewCloudStorageSink(
 	go func() {
 		defer s.wg.Done()
 		err := s.run(wgCtx)
-		s.isDead.Store(true)
+
+		s.alive.Lock()
+		s.alive.isDead = true
+		close(s.alive.msgCh)
+		s.alive.Unlock()
 		close(s.dead)
+
 		if err != nil && errors.Cause(err) != context.Canceled {
 			select {
 			case <-wgCtx.Done():
@@ -198,8 +208,15 @@ func (s *dmlSink) run(ctx context.Context) error {
 }
 
 // WriteEvents write events to cloud storage sink.
+<<<<<<< HEAD:cdc/sinkv2/eventsink/cloudstorage/cloud_storage_dml_sink.go
 func (s *dmlSink) WriteEvents(txns ...*eventsink.CallbackableEvent[*model.SingleTableTxn]) error {
 	if s.isDead.Load() {
+=======
+func (s *DMLSink) WriteEvents(txns ...*dmlsink.CallbackableEvent[*model.SingleTableTxn]) error {
+	s.alive.RLock()
+	defer s.alive.RUnlock()
+	if s.alive.isDead {
+>>>>>>> fbb363a6a2 ((sink/cdc): fix some bugs introduced by #8949 (#9010)):cdc/sink/dmlsink/cloudstorage/cloud_storage_dml_sink.go
 		return errors.Trace(errors.New("dead dmlSink"))
 	}
 
@@ -217,7 +234,7 @@ func (s *dmlSink) WriteEvents(txns ...*eventsink.CallbackableEvent[*model.Single
 		}
 		seq := atomic.AddUint64(&s.lastSeqNum, 1)
 		// emit a TxnCallbackableEvent encoupled with a sequence number starting from one.
-		s.msgCh <- eventFragment{
+		s.alive.msgCh <- eventFragment{
 			seqNumber:      seq,
 			versionedTable: tbl,
 			event:          txn,

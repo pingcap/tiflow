@@ -84,12 +84,21 @@ const (
   "owner-flush-interval": 50000000,
   "processor-flush-interval": 50000000,
   "sorter": {
+<<<<<<< HEAD
     "num-concurrent-worker": 4,
     "chunk-size-limit": 999,
     "max-memory-percentage": 10,
     "max-memory-consumption": 17179869184,
     "num-workerpool-goroutine": 16,
     "sort-dir": "/tmp/sorter"
+=======
+    "max-memory-percentage": 10,
+    "sort-dir": "/tmp/sorter",
+    "max-memory-consumption": 0,
+    "num-workerpool-goroutine": 0,
+    "num-concurrent-worker": 0,
+    "chunk-size-limit": 0
+>>>>>>> fbb363a6a2 ((sink/cdc): fix some bugs introduced by #8949 (#9010))
   },
   "security": {
     "ca-path": "",

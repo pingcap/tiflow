@@ -144,8 +144,22 @@ func (t *tableSinkWrapper) start(startTs model.Ts, replicateTs model.Ts) {
 	t.state.Store(tablepb.TableStateReplicating)
 }
 
+<<<<<<< HEAD
 func (t *tableSinkWrapper) appendRowChangedEvents(events ...*model.RowChangedEvent) {
 	t.tableSink.AppendRowChangedEvents(events...)
+=======
+func (t *tableSinkWrapper) appendRowChangedEvents(events ...*model.RowChangedEvent) error {
+	t.tableSinkMu.Lock()
+	defer t.tableSinkMu.Unlock()
+	// If it's nil it means it's closed.
+	if t.tableSink != nil {
+		t.tableSink.AppendRowChangedEvents(events...)
+	} else {
+		// If it's nil it means it's closed.
+		return tablesink.NewSinkInternalError(errors.New("table sink cleared"))
+	}
+	return nil
+>>>>>>> fbb363a6a2 ((sink/cdc): fix some bugs introduced by #8949 (#9010))
 }
 
 func (t *tableSinkWrapper) updateReceivedSorterResolvedTs(ts model.Ts) {
@@ -170,8 +184,20 @@ func (t *tableSinkWrapper) updateReceivedSorterCommitTs(ts model.Ts) {
 }
 
 func (t *tableSinkWrapper) updateResolvedTs(ts model.ResolvedTs) error {
+<<<<<<< HEAD
 	if err := t.tableSink.UpdateResolvedTs(ts); err != nil {
 		return errors.Trace(err)
+=======
+	t.tableSinkMu.Lock()
+	defer t.tableSinkMu.Unlock()
+	if t.tableSink != nil {
+		if err := t.tableSink.UpdateResolvedTs(ts); err != nil {
+			return errors.Trace(err)
+		}
+	} else {
+		// If it's nil it means it's closed.
+		return tablesink.NewSinkInternalError(errors.New("table sink cleared"))
+>>>>>>> fbb363a6a2 ((sink/cdc): fix some bugs introduced by #8949 (#9010))
 	}
 	return nil
 }
@@ -215,6 +241,7 @@ func (t *tableSinkWrapper) getUpperBoundTs() model.Ts {
 	return resolvedTs
 }
 
+<<<<<<< HEAD
 func (t *tableSinkWrapper) close() {
 	t.state.Store(tablepb.TableStateStopping)
 	// table stopped state must be set after underlying sink is closed
@@ -222,6 +249,103 @@ func (t *tableSinkWrapper) close() {
 	t.tableSink.Close()
 	log.Info("Sink is closed",
 		zap.Int64("tableID", t.tableID),
+=======
+func (t *tableSinkWrapper) markAsClosing() {
+	for {
+		curr := t.state.Load()
+		if curr == tablepb.TableStateStopping || curr == tablepb.TableStateStopped {
+			break
+		}
+		if t.state.CompareAndSwap(curr, tablepb.TableStateStopping) {
+			log.Info("Sink is closing",
+				zap.String("namespace", t.changefeed.Namespace),
+				zap.String("changefeed", t.changefeed.ID),
+				zap.Stringer("span", &t.span))
+			break
+		}
+	}
+}
+
+func (t *tableSinkWrapper) markAsClosed() {
+	for {
+		curr := t.state.Load()
+		if curr == tablepb.TableStateStopped {
+			return
+		}
+		if t.state.CompareAndSwap(curr, tablepb.TableStateStopped) {
+			log.Info("Sink is closed",
+				zap.String("namespace", t.changefeed.Namespace),
+				zap.String("changefeed", t.changefeed.ID),
+				zap.Stringer("span", &t.span))
+			return
+		}
+	}
+}
+
+func (t *tableSinkWrapper) asyncClose() bool {
+	t.markAsClosing()
+	if t.asyncClearTableSink() {
+		t.markAsClosed()
+		return true
+	}
+	return false
+}
+
+func (t *tableSinkWrapper) close() {
+	t.markAsClosing()
+	t.clearTableSink()
+	t.markAsClosed()
+}
+
+// Return true means the internal table sink has been initialized.
+func (t *tableSinkWrapper) initTableSink() bool {
+	t.tableSinkMu.Lock()
+	defer t.tableSinkMu.Unlock()
+	if t.tableSink == nil {
+		t.tableSink = t.tableSinkCreater()
+		return t.tableSink != nil
+	}
+	return true
+}
+
+func (t *tableSinkWrapper) asyncClearTableSink() bool {
+	t.tableSinkMu.Lock()
+	defer t.tableSinkMu.Unlock()
+	if t.tableSink != nil {
+		if !t.tableSink.AsyncClose() {
+			return false
+		}
+		checkpointTs := t.tableSink.GetCheckpointTs()
+		if t.tableSinkCheckpointTs.Less(checkpointTs) {
+			t.tableSinkCheckpointTs = checkpointTs
+		}
+		t.tableSink = nil
+	}
+	return true
+}
+
+func (t *tableSinkWrapper) clearTableSink() {
+	t.tableSinkMu.Lock()
+	defer t.tableSinkMu.Unlock()
+	if t.tableSink != nil {
+		t.tableSink.Close()
+		checkpointTs := t.tableSink.GetCheckpointTs()
+		if t.tableSinkCheckpointTs.Less(checkpointTs) {
+			t.tableSinkCheckpointTs = checkpointTs
+		}
+		t.tableSink = nil
+	}
+}
+
+// When the attached sink fail, there can be some events that have already been
+// committed at downstream but we don't know. So we need to update `replicateTs`
+// of the table so that we can re-send those events later.
+func (t *tableSinkWrapper) restart(ctx context.Context) (err error) {
+	if t.replicateTs, err = t.genReplicateTs(ctx); err != nil {
+		return errors.Trace(err)
+	}
+	log.Info("Sink is restarted",
+>>>>>>> fbb363a6a2 ((sink/cdc): fix some bugs introduced by #8949 (#9010))
 		zap.String("namespace", t.changefeed.Namespace),
 		zap.String("changefeed", t.changefeed.ID))
 }

@@ -15,6 +15,7 @@ package sinkmanager
 
 import (
 	"context"
+	"math"
 	"sync"
 	"time"
 
@@ -102,6 +103,18 @@ type SinkManager struct {
 	// redoMemQuota is used to control the total memory usage of the redo.
 	redoMemQuota *memquota.MemQuota
 
+<<<<<<< HEAD
+=======
+	// To control lifetime of all sub-goroutines.
+	managerCtx    context.Context
+	managerCancel context.CancelFunc
+	ready         chan struct{}
+
+	// To control lifetime of sink and redo tasks.
+	sinkEg *errgroup.Group
+	redoEg *errgroup.Group
+
+>>>>>>> fbb363a6a2 ((sink/cdc): fix some bugs introduced by #8949 (#9010))
 	// wg is used to wait for all workers to exit.
 	wg sync.WaitGroup
 
@@ -172,16 +185,172 @@ func New(
 	m.startGenerateTasks()
 	m.backgroundGC()
 
+<<<<<<< HEAD
+=======
+// Run implements util.Runnable.
+func (m *SinkManager) Run(ctx context.Context, warnings ...chan<- error) (err error) {
+	m.managerCtx, m.managerCancel = context.WithCancel(ctx)
+	m.wg.Add(1) // So `SinkManager.Close` will also wait the function.
+	defer func() {
+		m.managerCancel()
+		m.wg.Done()
+		m.wg.Wait()
+		log.Info("Sink manager exists",
+			zap.String("namespace", m.changefeedID.Namespace),
+			zap.String("changefeed", m.changefeedID.ID),
+			zap.Error(err))
+	}()
+
+	splitTxn := m.changefeedInfo.Config.Sink.TxnAtomicity.ShouldSplitTxn()
+	enableOldValue := m.changefeedInfo.Config.EnableOldValue
+
+	gcErrors := make(chan error, 16)
+	sinkFactoryErrors := make(chan error, 16)
+	sinkErrors := make(chan error, 16)
+	redoErrors := make(chan error, 16)
+
+	m.backgroundGC(gcErrors)
+	if m.sinkEg == nil {
+		var sinkCtx context.Context
+		m.sinkEg, sinkCtx = errgroup.WithContext(m.managerCtx)
+		m.startSinkWorkers(sinkCtx, m.sinkEg, splitTxn, enableOldValue)
+		m.sinkEg.Go(func() error { return m.generateSinkTasks(sinkCtx) })
+		m.wg.Add(1)
+		go func() {
+			defer m.wg.Done()
+			if err := m.sinkEg.Wait(); err != nil && !cerror.Is(err, context.Canceled) {
+				log.Error("Worker handles or generates sink task failed",
+					zap.String("namespace", m.changefeedID.Namespace),
+					zap.String("changefeed", m.changefeedID.ID),
+					zap.Error(err))
+				select {
+				case sinkErrors <- err:
+				case <-m.managerCtx.Done():
+				}
+			}
+		}()
+	}
+	if m.redoDMLMgr != nil && m.redoEg == nil {
+		var redoCtx context.Context
+		m.redoEg, redoCtx = errgroup.WithContext(m.managerCtx)
+		m.startRedoWorkers(redoCtx, m.redoEg, enableOldValue)
+		m.redoEg.Go(func() error { return m.generateRedoTasks(redoCtx) })
+		m.wg.Add(1)
+		go func() {
+			defer m.wg.Done()
+			if err := m.redoEg.Wait(); err != nil && !cerror.Is(err, context.Canceled) {
+				log.Error("Worker handles or generates redo task failed",
+					zap.String("namespace", m.changefeedID.Namespace),
+					zap.String("changefeed", m.changefeedID.ID),
+					zap.Error(err))
+				select {
+				case redoErrors <- err:
+				case <-m.managerCtx.Done():
+				}
+			}
+		}()
+	}
+
+	close(m.ready)
+>>>>>>> fbb363a6a2 ((sink/cdc): fix some bugs introduced by #8949 (#9010))
 	log.Info("Sink manager is created",
 		zap.String("namespace", changefeedID.Namespace),
 		zap.String("changefeed", changefeedID.ID),
 		zap.Bool("withRedoEnabled", m.redoDMLMgr != nil))
 
+<<<<<<< HEAD
 	return m, nil
 }
 
 // start all workers and report the error to the error channel.
 func (m *SinkManager) startWorkers(splitTxn bool, enableOldValue bool) {
+=======
+	// SinkManager will restart some internal modules if necessasry.
+	for {
+		if err := m.initSinkFactory(sinkFactoryErrors); err != nil {
+			select {
+			case <-m.managerCtx.Done():
+			case sinkFactoryErrors <- err:
+			}
+		}
+
+		select {
+		case <-m.managerCtx.Done():
+			return errors.Trace(m.managerCtx.Err())
+		case err = <-gcErrors:
+			return errors.Trace(err)
+		case err = <-sinkErrors:
+			return errors.Trace(err)
+		case err = <-redoErrors:
+			return errors.Trace(err)
+		case err = <-sinkFactoryErrors:
+			log.Warn("Sink manager backend sink fails",
+				zap.String("namespace", m.changefeedID.Namespace),
+				zap.String("changefeed", m.changefeedID.ID),
+				zap.Error(err))
+			m.clearSinkFactory()
+			sinkFactoryErrors = make(chan error, 16)
+		}
+
+		if !cerror.IsChangefeedUnRetryableError(err) && errors.Cause(err) != context.Canceled {
+			select {
+			case <-m.managerCtx.Done():
+			case warnings[0] <- err:
+			}
+		} else {
+			return errors.Trace(err)
+		}
+		// Use a 5 second backoff when re-establishing internal resources.
+		if err = util.Hang(m.managerCtx, 5*time.Second); err != nil {
+			return errors.Trace(err)
+		}
+	}
+}
+
+func (m *SinkManager) initSinkFactory(errCh chan error) error {
+	m.sinkFactoryMu.Lock()
+	defer m.sinkFactoryMu.Unlock()
+	if m.sinkFactory != nil {
+		return nil
+	}
+	uri := m.changefeedInfo.SinkURI
+	cfg := m.changefeedInfo.Config
+
+	var err error = nil
+	failpoint.Inject("SinkManagerRunError", func() {
+		log.Info("failpoint SinkManagerRunError injected", zap.String("changefeed", m.changefeedID.ID))
+		err = errors.New("SinkManagerRunError")
+	})
+	if err != nil {
+		return errors.Trace(err)
+	}
+
+	if m.sinkFactory, err = factory.New(m.managerCtx, uri, cfg, errCh); err == nil {
+		log.Info("Sink manager inits sink factory success",
+			zap.String("namespace", m.changefeedID.Namespace),
+			zap.String("changefeed", m.changefeedID.ID))
+		return nil
+	}
+	return errors.Trace(err)
+}
+
+func (m *SinkManager) clearSinkFactory() {
+	m.sinkFactoryMu.Lock()
+	defer m.sinkFactoryMu.Unlock()
+	if m.sinkFactory != nil {
+		log.Info("Sink manager closing sink factory",
+			zap.String("namespace", m.changefeedID.Namespace),
+			zap.String("changefeed", m.changefeedID.ID))
+		m.sinkFactory.Close()
+		m.sinkFactory = nil
+		log.Info("Sink manager has closed sink factory",
+			zap.String("namespace", m.changefeedID.Namespace),
+			zap.String("changefeed", m.changefeedID.ID))
+	}
+}
+
+func (m *SinkManager) startSinkWorkers(ctx context.Context, eg *errgroup.Group, splitTxn bool, enableOldValue bool) {
+>>>>>>> fbb363a6a2 ((sink/cdc): fix some bugs introduced by #8949 (#9010))
 	for i := 0; i < sinkWorkerNum; i++ {
 		w := newSinkWorker(m.changefeedID, m.sourceManager,
 			m.sinkMemQuota, m.redoMemQuota,
@@ -230,6 +399,7 @@ func (m *SinkManager) startWorkers(splitTxn bool, enableOldValue bool) {
 	}
 }
 
+<<<<<<< HEAD
 // start generate table task and report error to the error channel.
 func (m *SinkManager) startGenerateTasks() {
 	m.wg.Add(1)
@@ -250,6 +420,14 @@ func (m *SinkManager) startGenerateTasks() {
 
 	if m.redoDMLMgr == nil {
 		return
+=======
+func (m *SinkManager) startRedoWorkers(ctx context.Context, eg *errgroup.Group, enableOldValue bool) {
+	for i := 0; i < redoWorkerNum; i++ {
+		w := newRedoWorker(m.changefeedID, m.sourceManager, m.redoMemQuota,
+			m.redoDMLMgr, m.eventCache, enableOldValue)
+		m.redoWorkers = append(m.redoWorkers, w)
+		eg.Go(func() error { return w.handleTasks(ctx, m.redoTaskChan) })
+>>>>>>> fbb363a6a2 ((sink/cdc): fix some bugs introduced by #8949 (#9010))
 	}
 
 	m.wg.Add(1)
@@ -340,7 +518,8 @@ func (m *SinkManager) generateSinkTasks() error {
 		tableSinkUpperBoundTs model.Ts,
 	) engine.Position {
 		schemaTs := m.schemaStorage.ResolvedTs()
-		if tableSinkUpperBoundTs > schemaTs+1 {
+		if schemaTs != math.MaxUint64 && tableSinkUpperBoundTs > schemaTs+1 {
+			// schemaTs == math.MaxUint64 means it's in tests.
 			tableSinkUpperBoundTs = schemaTs + 1
 		}
 		return engine.Position{StartTs: tableSinkUpperBoundTs - 1, CommitTs: tableSinkUpperBoundTs}
@@ -748,11 +927,20 @@ func (m *SinkManager) StartTable(tableID model.TableID, startTs model.Ts) error 
 }
 
 // AsyncStopTable sets the table(TableSink) state to stopped.
+<<<<<<< HEAD
 func (m *SinkManager) AsyncStopTable(tableID model.TableID) {
 	m.wg.Add(1)
 	go func() {
 		defer m.wg.Done()
 		log.Info("Async stop table sink",
+=======
+func (m *SinkManager) AsyncStopTable(span tablepb.Span) bool {
+	tableSink, ok := m.tableSinks.Load(span)
+	if !ok {
+		// Just warn, because the table sink may be removed by another goroutine.
+		// This logic is the same as this function's caller.
+		log.Warn("Table sink not found when removing table",
+>>>>>>> fbb363a6a2 ((sink/cdc): fix some bugs introduced by #8949 (#9010))
 			zap.String("namespace", m.changefeedID.Namespace),
 			zap.String("changefeed", m.changefeedID.ID),
 			zap.Int64("tableID", tableID),
@@ -826,8 +1014,13 @@ func (m *SinkManager) GetAllTableCount() (count int) {
 }
 
 // GetTableState returns the table(TableSink) state.
+<<<<<<< HEAD
 func (m *SinkManager) GetTableState(tableID model.TableID) (tablepb.TableState, bool) {
 	tableSink, ok := m.tableSinks.Load(tableID)
+=======
+func (m *SinkManager) GetTableState(span tablepb.Span) (tablepb.TableState, bool) {
+	wrapper, ok := m.tableSinks.Load(span)
+>>>>>>> fbb363a6a2 ((sink/cdc): fix some bugs introduced by #8949 (#9010))
 	if !ok {
 		log.Debug("Table sink not found when getting table state",
 			zap.String("namespace", m.changefeedID.Namespace),
@@ -835,7 +1028,21 @@ func (m *SinkManager) GetTableState(tableID model.TableID) (tablepb.TableState, 
 			zap.Int64("tableID", tableID))
 		return tablepb.TableStateAbsent, false
 	}
-	return tableSink.(*tableSinkWrapper).getState(), true
+
+	// NOTE(qupeng): I'm not sure whether `SinkManager.AsyncStopTable` will be called
+	// again or not if it returns false. So we must retry `tableSink.asyncClose` here
+	// if necessary. It's better to remove the dirty logic in the future.
+	tableSink := wrapper.(*tableSinkWrapper)
+	if tableSink.getState() == tablepb.TableStateStopping && tableSink.asyncClose() {
+		cleanedBytes := m.sinkMemQuota.Clean(span)
+		cleanedBytes += m.redoMemQuota.Clean(span)
+		log.Debug("MemoryQuotaTracing: Clean up memory quota for table sink task when removing table",
+			zap.String("namespace", m.changefeedID.Namespace),
+			zap.String("changefeed", m.changefeedID.ID),
+			zap.Stringer("span", &span),
+			zap.Uint64("memory", cleanedBytes))
+	}
+	return tableSink.getState(), true
 }
 
 // GetTableStats returns the state of the table.
@@ -886,10 +1093,15 @@ func (m *SinkManager) Close() error {
 		zap.String("namespace", m.changefeedID.Namespace),
 		zap.String("changefeed", m.changefeedID.ID))
 	start := time.Now()
+<<<<<<< HEAD
 	if m.cancel != nil {
 		m.cancel()
 		m.cancel = nil
 	}
+=======
+	m.managerCancel()
+	m.wg.Wait()
+>>>>>>> fbb363a6a2 ((sink/cdc): fix some bugs introduced by #8949 (#9010))
 	m.sinkMemQuota.Close()
 	m.redoMemQuota.Close()
 	m.tableSinks.Range(func(key, value interface{}) bool {

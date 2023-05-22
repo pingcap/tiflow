@@ -111,12 +111,19 @@ var defaultServerConfig = &ServerConfig{
 	OwnerFlushInterval:     TomlDuration(50 * time.Millisecond),
 	ProcessorFlushInterval: TomlDuration(50 * time.Millisecond),
 	Sorter: &SorterConfig{
+<<<<<<< HEAD
 		NumConcurrentWorker:    4,
 		ChunkSizeLimit:         128 * 1024 * 1024,       // 128MB
 		MaxMemoryPercentage:    10,                      // 10% is safe on machines with memory capacity <= 16GB
 		MaxMemoryConsumption:   16 * 1024 * 1024 * 1024, // 16GB
 		NumWorkerPoolGoroutine: 16,
 		SortDir:                DefaultSortDir,
+=======
+		// Disable block-cache by default. TiCDC only scans events instead of
+		// accessing them randomly, so block-cache is unnecessary.
+		MaxMemoryPercentage: 10,
+		SortDir:             DefaultSortDir,
+>>>>>>> fbb363a6a2 ((sink/cdc): fix some bugs introduced by #8949 (#9010))
 	},
 	Security:            &SecurityConfig{},
 	PerTableMemoryQuota: DefaultTableMemoryQuota,

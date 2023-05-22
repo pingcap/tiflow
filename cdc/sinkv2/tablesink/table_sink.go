@@ -36,3 +36,8 @@ type TableSink interface {
 	// We should make sure this method is cancellable.
 	Close()
 }
+
+// NewSinkInternalError creates a SinkInternalError.
+func NewSinkInternalError(err error) SinkInternalError {
+	return SinkInternalError{err}
+}
