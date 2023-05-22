@@ -1192,11 +1192,7 @@ func TestBuildTableInfo(t *testing.T) {
 		originTI, err := ddl.BuildTableInfoFromAST(stmt.(*ast.CreateTableStmt))
 		require.NoError(t, err)
 		cdcTableInfo := model.WrapTableInfo(0, "test", 0, originTI)
-<<<<<<< HEAD
-		cols, _, err := datum2Column(cdcTableInfo, map[int64]types.Datum{}, true)
-=======
-		cols, _, _, _, err := datum2Column(cdcTableInfo, map[int64]types.Datum{}, true)
->>>>>>> 3b66572361 (mounter(ticdc): fix extend column info order to match the columns info (#8960))
+		cols, _, _, err := datum2Column(cdcTableInfo, map[int64]types.Datum{}, true)
 		require.NoError(t, err)
 		recoveredTI := model.BuildTiDBTableInfo(cols, cdcTableInfo.IndexColumnsOffset)
 		handle := sqlmodel.GetWhereHandle(recoveredTI, recoveredTI)
