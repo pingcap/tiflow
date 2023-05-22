@@ -20,6 +20,8 @@ import (
 	"testing"
 	"time"
 
+	"github.com/aws/aws-sdk-go/aws"
+	"github.com/pingcap/tiflow/pkg/integrity"
 	"github.com/stretchr/testify/require"
 )
 
@@ -57,6 +59,66 @@ func TestReplicaConfigMarshal(t *testing.T) {
 	conf.Scheduler.EnableTableAcrossNodes = true
 	conf.Scheduler.RegionThreshold = 100001
 	conf.Scheduler.WriteKeyThreshold = 100001
+
+	conf.Sink.OnlyOutputUpdatedColumns = aws.Bool(true)
+	conf.Sink.SafeMode = aws.Bool(true)
+	conf.Sink.KafkaConfig = &KafkaConfig{
+		PartitionNum:                 aws.Int32(1),
+		ReplicationFactor:            aws.Int16(1),
+		KafkaVersion:                 aws.String("version"),
+		MaxMessageBytes:              aws.Int(1),
+		Compression:                  aws.String("gzip"),
+		KafkaClientID:                aws.String("client-id"),
+		AutoCreateTopic:              aws.Bool(true),
+		DialTimeout:                  aws.String("1m"),
+		WriteTimeout:                 aws.String("1m"),
+		ReadTimeout:                  aws.String("1m"),
+		RequiredAcks:                 aws.Int(1),
+		SASLUser:                     aws.String("user"),
+		SASLPassword:                 aws.String("password"),
+		SASLMechanism:                aws.String("mechanism"),
+		SASLGssAPIAuthType:           aws.String("type"),
+		SASLGssAPIKeytabPath:         aws.String("path"),
+		SASLGssAPIKerberosConfigPath: aws.String("path"),
+		SASLGssAPIServiceName:        aws.String("service"),
+		SASLGssAPIUser:               aws.String("user"),
+		SASLGssAPIPassword:           aws.String("password"),
+		SASLGssAPIRealm:              aws.String("realm"),
+		SASLGssAPIDisablePafxfast:    aws.Bool(true),
+		EnableTLS:                    aws.Bool(true),
+		CA:                           aws.String("ca"),
+		Cert:                         aws.String("cert"),
+		Key:                          aws.String("key"),
+		CodecConfig: &CodecConfig{
+			EnableTiDBExtension:            aws.Bool(true),
+			MaxBatchSize:                   aws.Int(100000),
+			AvroEnableWatermark:            aws.Bool(true),
+			AvroDecimalHandlingMode:        aws.String("string"),
+			AvroBigintUnsignedHandlingMode: aws.String("string"),
+		},
+	}
+	conf.Sink.MySQLConfig = &MySQLConfig{
+		WorkerCount:                  aws.Int(8),
+		MaxTxnRow:                    aws.Int(100000),
+		MaxMultiUpdateRowSize:        aws.Int(100000),
+		MaxMultiUpdateRowCount:       aws.Int(100000),
+		TiDBTxnMode:                  aws.String("pessimistic"),
+		SSLCa:                        aws.String("ca"),
+		SSLCert:                      aws.String("cert"),
+		SSLKey:                       aws.String("key"),
+		TimeZone:                     aws.String("UTC"),
+		WriteTimeout:                 aws.String("1m"),
+		ReadTimeout:                  aws.String("1m"),
+		Timeout:                      aws.String("1m"),
+		EnableBatchDML:               aws.Bool(true),
+		EnableMultiStatement:         aws.Bool(true),
+		EnableCachePreparedStatement: aws.Bool(true),
+	}
+	conf.Sink.CloudStorageConfig = &CloudStorageConfig{
+		WorkerCount:   aws.Int(8),
+		FlushInterval: aws.String("1m"),
+		FileSize:      aws.Int(1024),
+	}
 
 	b, err := conf.Marshal()
 	require.Nil(t, err)
@@ -182,9 +244,9 @@ func TestValidateAndAdjust(t *testing.T) {
 
 	// enable the checksum verification, but use blackhole sink
 	cfg = GetDefaultReplicaConfig()
-	cfg.Integrity.IntegrityCheckLevel = IntegrityCheckLevelCorrectness
+	cfg.Integrity.IntegrityCheckLevel = integrity.CheckLevelCorrectness
 	require.NoError(t, cfg.ValidateAndAdjust(sinkURL))
-	require.Equal(t, IntegrityCheckLevelNone, cfg.Integrity.IntegrityCheckLevel)
+	require.Equal(t, integrity.CheckLevelNone, cfg.Integrity.IntegrityCheckLevel)
 }
 
 func TestIsSinkCompatibleWithSpanReplication(t *testing.T) {

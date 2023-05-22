@@ -11,7 +11,7 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-package config
+package integrity
 
 import (
 	"github.com/pingcap/log"
@@ -19,17 +19,17 @@ import (
 	"go.uber.org/zap"
 )
 
-// IntegrityConfig represents integrity check config for a changefeed.
-type IntegrityConfig struct {
+// Config represents integrity check config for a changefeed.
+type Config struct {
 	IntegrityCheckLevel   string `toml:"integrity-check-level" json:"integrity-check-level"`
 	CorruptionHandleLevel string `toml:"corruption-handle-level" json:"corruption-handle-level"`
 }
 
 const (
-	// IntegrityCheckLevelNone means no integrity check, the default value.
-	IntegrityCheckLevelNone string = "none"
-	// IntegrityCheckLevelCorrectness means check each row data correctness.
-	IntegrityCheckLevelCorrectness string = "correctness"
+	// CheckLevelNone means no integrity check, the default value.
+	CheckLevelNone string = "none"
+	// CheckLevelCorrectness means check each row data correctness.
+	CheckLevelCorrectness string = "correctness"
 )
 
 const (
@@ -41,9 +41,9 @@ const (
 )
 
 // Validate the integrity config.
-func (c *IntegrityConfig) Validate() error {
-	if c.IntegrityCheckLevel != IntegrityCheckLevelNone &&
-		c.IntegrityCheckLevel != IntegrityCheckLevelCorrectness {
+func (c *Config) Validate() error {
+	if c.IntegrityCheckLevel != CheckLevelNone &&
+		c.IntegrityCheckLevel != CheckLevelCorrectness {
 		return cerror.ErrInvalidReplicaConfig.GenWithStackByArgs()
 	}
 	if c.CorruptionHandleLevel != CorruptionHandleLevelWarn &&
@@ -61,11 +61,11 @@ func (c *IntegrityConfig) Validate() error {
 }
 
 // Enabled returns true if the integrity check is enabled.
-func (c *IntegrityConfig) Enabled() bool {
-	return c.IntegrityCheckLevel == IntegrityCheckLevelCorrectness
+func (c *Config) Enabled() bool {
+	return c.IntegrityCheckLevel == CheckLevelCorrectness
 }
 
 // ErrorHandle returns true if the corruption handle level is error.
-func (c *IntegrityConfig) ErrorHandle() bool {
+func (c *Config) ErrorHandle() bool {
 	return c.CorruptionHandleLevel == CorruptionHandleLevelError
 }

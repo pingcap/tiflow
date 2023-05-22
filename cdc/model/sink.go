@@ -17,12 +17,14 @@ import (
 	"fmt"
 	"strconv"
 	"sync"
+	"sync/atomic"
 	"unsafe"
 
 	"github.com/pingcap/log"
 	"github.com/pingcap/tidb/parser/model"
 	"github.com/pingcap/tidb/parser/mysql"
 	"github.com/pingcap/tidb/util/rowcodec"
+	"github.com/pingcap/tiflow/pkg/integrity"
 	"github.com/pingcap/tiflow/pkg/quotes"
 	"github.com/pingcap/tiflow/pkg/util"
 	"go.uber.org/zap"
@@ -315,14 +317,9 @@ type RowChangedEvent struct {
 	PreColumns   []*Column `json:"pre-columns" msg:"pre-columns"`
 	IndexColumns [][]int   `json:"-" msg:"index-columns"`
 
-	// Checksum corresponds to the checksum of the Columns
-	Checksum uint32 `json:"-" msg:"-"`
-	// PreChecksum corresponds to the checksum of the PreColumns
-	PreChecksum uint32 `json:"-" msg:"-"`
-	// Corrupted indicates whether the event is corrupted by the checksum mismatch.
-	Corrupted bool `json:"-" msg:"-"`
-	// ChecksumVersion is the version of the checksum
-	ChecksumVersion int `json:"-" msg:"-"`
+	// Checksum for the event, only not nil if the upstream TiDB enable the row level checksum
+	// and TiCDC set the integrity check level to the correctness.
+	Checksum *integrity.Checksum `json:"-" msg:"-"`
 
 	// ApproximateDataSize is the approximate size of protobuf binary
 	// representation of this event.
@@ -614,7 +611,7 @@ type DDLEvent struct {
 	TableInfo    *TableInfo       `msg:"-"`
 	PreTableInfo *TableInfo       `msg:"-"`
 	Type         model.ActionType `msg:"-"`
-	Done         bool             `msg:"-"`
+	Done         atomic.Bool      `msg:"-"`
 	Charset      string           `msg:"-"`
 	Collate      string           `msg:"-"`
 }

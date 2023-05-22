@@ -31,6 +31,11 @@ error = '''
 encode to binray from native
 '''
 
+["CDC:ErrAvroInvalidMessage"]
+error = '''
+avro invalid message format
+'''
+
 ["CDC:ErrAvroMarshalFailed"]
 error = '''
 json marshal failed
@@ -299,11 +304,6 @@ filter rule is invalid %v
 ["CDC:ErrFlowControllerAborted"]
 error = '''
 flow controller is aborted
-'''
-
-["CDC:ErrGCTTLExceeded"]
-error = '''
-the checkpoint-ts(%d) lag of the changefeed(%s) has exceeded the GC TTL
 '''
 
 ["CDC:ErrGRPCDialFailed"]

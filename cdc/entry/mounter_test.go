@@ -42,6 +42,7 @@ import (
 	"github.com/pingcap/tiflow/cdc/model"
 	"github.com/pingcap/tiflow/pkg/config"
 	"github.com/pingcap/tiflow/pkg/filter"
+	"github.com/pingcap/tiflow/pkg/integrity"
 	"github.com/pingcap/tiflow/pkg/spanz"
 	"github.com/pingcap/tiflow/pkg/sqlmodel"
 	"github.com/pingcap/tiflow/pkg/util"
@@ -1003,7 +1004,7 @@ func TestDecodeRow(t *testing.T) {
 	cfg := config.GetDefaultReplicaConfig()
 
 	cfgWithChecksumEnabled := config.GetDefaultReplicaConfig()
-	cfgWithChecksumEnabled.Integrity.IntegrityCheckLevel = config.IntegrityCheckLevelCorrectness
+	cfgWithChecksumEnabled.Integrity.IntegrityCheckLevel = integrity.CheckLevelCorrectness
 
 	for _, c := range []*config.ReplicaConfig{cfg, cfgWithChecksumEnabled} {
 		filter, err := filter.NewFilter(c, "")
@@ -1281,7 +1282,7 @@ func TestBuildTableInfo(t *testing.T) {
 		originTI, err := ddl.BuildTableInfoFromAST(stmt.(*ast.CreateTableStmt))
 		require.NoError(t, err)
 		cdcTableInfo := model.WrapTableInfo(0, "test", 0, originTI)
-		cols, _, _, err := datum2Column(cdcTableInfo, map[int64]types.Datum{}, true)
+		cols, _, _, _, err := datum2Column(cdcTableInfo, map[int64]types.Datum{}, true)
 		require.NoError(t, err)
 		recoveredTI := model.BuildTiDBTableInfo(cols, cdcTableInfo.IndexColumnsOffset)
 		handle := sqlmodel.GetWhereHandle(recoveredTI, recoveredTI)

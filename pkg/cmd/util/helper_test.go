@@ -228,6 +228,7 @@ func TestAndWriteStorageSinkTOML(t *testing.T) {
 		Terminator:               "\r\n",
 		DateSeparator:            "day",
 		EnablePartitionSeparator: true,
+		FileIndexWidth:           config.DefaultFileIndexWidth,
 		CSVConfig: &config.CSVConfig{
 			Delimiter:       ",",
 			Quote:           "\"",

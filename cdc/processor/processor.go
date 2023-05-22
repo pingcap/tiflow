@@ -210,8 +210,7 @@ func (p *processor) RemoveTableSpan(span tablepb.Span) bool {
 			zap.Stringer("span", &span))
 		return true
 	}
-	p.sinkManager.r.AsyncStopTable(span)
-	return true
+	return p.sinkManager.r.AsyncStopTable(span)
 }
 
 // IsAddTableSpanFinished implements TableExecutor interface.
@@ -526,6 +525,7 @@ func (p *processor) handleErr(err error) error {
 				position = &model.TaskPosition{}
 			}
 			position.Error = &model.RunningError{
+				Time:    time.Now(),
 				Addr:    p.captureInfo.AdvertiseAddr,
 				Code:    code,
 				Message: err.Error(),
@@ -540,6 +540,38 @@ func (p *processor) handleErr(err error) error {
 	return err
 }
 
+func (p *processor) handleWarnings() {
+	var err error
+	select {
+	case err = <-p.ddlHandler.warnings:
+	case err = <-p.mg.warnings:
+	case err = <-p.redo.warnings:
+	case err = <-p.sourceManager.warnings:
+	case err = <-p.sinkManager.warnings:
+	default:
+		return
+	}
+	var code string
+	if rfcCode, ok := cerror.RFCCode(err); ok {
+		code = string(rfcCode)
+	} else {
+		code = string(cerror.ErrProcessorUnknown.RFCCode())
+	}
+	p.changefeed.PatchTaskPosition(p.captureInfo.ID,
+		func(position *model.TaskPosition) (*model.TaskPosition, bool, error) {
+			if position == nil {
+				position = &model.TaskPosition{}
+			}
+			position.Warning = &model.RunningError{
+				Time:    time.Now(),
+				Addr:    p.captureInfo.AdvertiseAddr,
+				Code:    code,
+				Message: err.Error(),
+			}
+			return position, true, nil
+		})
+}
+
 func (p *processor) tick(ctx cdcContext.Context) error {
 	if !p.checkChangefeedNormal() {
 		return cerror.ErrAdminStopProcessor.GenWithStackByArgs()
@@ -548,6 +580,9 @@ func (p *processor) tick(ctx cdcContext.Context) error {
 	if p.createTaskPosition() {
 		return nil
 	}
+
+	p.handleWarnings()
+
 	if err := p.handleErrorCh(); err != nil {
 		return errors.Trace(err)
 	}
@@ -963,23 +998,25 @@ func (p *processor) calculateTableBarrierTs(
 }
 
 type component[R util.Runnable] struct {
-	r      R
-	name   string
-	ctx    context.Context
-	cancel context.CancelFunc
-	errors chan error
-	wg     sync.WaitGroup
+	r        R
+	name     string
+	ctx      context.Context
+	cancel   context.CancelFunc
+	errors   chan error
+	warnings chan error
+	wg       sync.WaitGroup
 }
 
 func (c *component[R]) spawn(ctx context.Context) {
 	c.ctx, c.cancel = context.WithCancel(ctx)
 	c.errors = make(chan error, 16)
+	c.warnings = make(chan error, 16)
 
 	changefeedID := contextutil.ChangefeedIDFromCtx(c.ctx)
 	c.wg.Add(1)
 	go func() {
 		defer c.wg.Done()
-		err := c.r.Run(c.ctx)
+		err := c.r.Run(c.ctx, c.warnings)
 		if err != nil && errors.Cause(err) != context.Canceled {
 			log.Error("processor sub-component fails",
 				zap.String("namespace", changefeedID.Namespace),
@@ -1021,7 +1058,7 @@ type ddlHandler struct {
 	schemaStorage entry.SchemaStorage
 }
 
-func (d *ddlHandler) Run(ctx context.Context) error {
+func (d *ddlHandler) Run(ctx context.Context, _ ...chan<- error) error {
 	g, ctx := errgroup.WithContext(ctx)
 	// d.puller will update the schemaStorage.
 	g.Go(func() error { return d.puller.Run(ctx) })
