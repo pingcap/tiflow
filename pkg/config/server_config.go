@@ -106,13 +106,7 @@ var defaultServerConfig = &ServerConfig{
 	OwnerFlushInterval:     TomlDuration(50 * time.Millisecond),
 	ProcessorFlushInterval: TomlDuration(50 * time.Millisecond),
 	Sorter: &SorterConfig{
-<<<<<<< HEAD
 		MaxMemoryPercentage: 10, // 10% is safe on machines with memory capacity <= 16GB
-=======
-		// Disable block-cache by default. TiCDC only scans events instead of
-		// accessing them randomly, so block-cache is unnecessary.
-		MaxMemoryPercentage: 10,
->>>>>>> fbb363a6a2 ((sink/cdc): fix some bugs introduced by #8949 (#9010))
 		SortDir:             DefaultSortDir,
 	},
 	Security: &SecurityConfig{},
