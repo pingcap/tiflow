@@ -1,3 +1,0 @@
-[integrity]
-integrity-check-level = "correctness"
-corruption-handle-level = "warn"
