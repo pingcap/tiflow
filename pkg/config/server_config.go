@@ -108,7 +108,7 @@ var defaultServerConfig = &ServerConfig{
 	Sorter: &SorterConfig{
 		// Disable block-cache by default. TiCDC only scans events instead of
 		// accessing them randomly, so block-cache is unnecessary.
-		MaxMemoryPercentage: 0,
+		MaxMemoryPercentage: 10,
 		SortDir:             DefaultSortDir,
 	},
 	Security: &SecurityConfig{},

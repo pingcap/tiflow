@@ -17,7 +17,6 @@ import (
 	"context"
 	"net/url"
 	"sync"
-	"sync/atomic"
 
 	"github.com/pingcap/errors"
 	"github.com/pingcap/tiflow/cdc/model"
@@ -42,13 +41,17 @@ var _ dmlsink.EventSink[*model.SingleTableTxn] = (*dmlSink)(nil)
 
 // dmlSink is the dmlSink for SingleTableTxn.
 type dmlSink struct {
-	conflictDetector *causality.ConflictDetector[*worker, *txnEvent]
-	workers          []*worker
-	cancel           func()
+	alive struct {
+		sync.RWMutex
+		conflictDetector *causality.ConflictDetector[*worker, *txnEvent]
+		isDead           bool
+	}
 
-	wg     sync.WaitGroup
-	dead   chan struct{}
-	isDead atomic.Bool
+	workers []*worker
+	cancel  func()
+
+	wg   sync.WaitGroup
+	dead chan struct{}
 
 	statistics *metrics.Statistics
 }
@@ -104,12 +107,19 @@ func newSink(ctx context.Context, backends []backend,
 		sink.workers = append(sink.workers, w)
 	}
 
+	sink.alive.conflictDetector = causality.NewConflictDetector[*worker, *txnEvent](sink.workers, conflictDetectorSlots)
+
 	sink.wg.Add(1)
 	go func() {
 		defer sink.wg.Done()
 		err := g.Wait()
-		sink.isDead.Store(true)
+
+		sink.alive.Lock()
+		sink.alive.isDead = true
+		sink.alive.conflictDetector.Close()
+		sink.alive.Unlock()
 		close(sink.dead)
+
 		if err != nil && errors.Cause(err) != context.Canceled {
 			select {
 			case <-ctx.Done():
@@ -118,13 +128,14 @@ func newSink(ctx context.Context, backends []backend,
 		}
 	}()
 
-	sink.conflictDetector = causality.NewConflictDetector[*worker, *txnEvent](sink.workers, conflictDetectorSlots)
 	return sink
 }
 
 // WriteEvents writes events to the dmlSink.
 func (s *dmlSink) WriteEvents(txnEvents ...*dmlsink.TxnCallbackableEvent) error {
-	if s.isDead.Load() {
+	s.alive.RLock()
+	defer s.alive.RUnlock()
+	if s.alive.isDead {
 		return errors.Trace(errors.New("dead dmlSink"))
 	}
 
@@ -135,8 +146,7 @@ func (s *dmlSink) WriteEvents(txnEvents ...*dmlsink.TxnCallbackableEvent) error 
 			txn.Callback()
 			continue
 		}
-
-		s.conflictDetector.Add(newTxnEvent(txn))
+		s.alive.conflictDetector.Add(newTxnEvent(txn))
 	}
 	return nil
 }
@@ -151,10 +161,6 @@ func (s *dmlSink) Close() {
 	for _, w := range s.workers {
 		w.close()
 	}
-	// workers could call callback, which will send data to channel in conflict
-	// detector, so we can't close conflict detector until all workers are closed.
-	s.conflictDetector.Close()
-
 	if s.statistics != nil {
 		s.statistics.Close()
 	}
