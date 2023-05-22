@@ -120,7 +120,7 @@ func TestBarriers(t *testing.T) {
 	// advance the ddlResolvedTs
 	dm.ddlResolvedTs = 6
 	ddlBarrier := dm.barrier()
-	minTableBarrierTs, barrier := ddlBarrier.minDDLBarrierTs, ddlBarrier.Barrier
+	minTableBarrierTs, barrier := ddlBarrier.MinTableBarrierTs, ddlBarrier.Barrier
 	require.Equal(t, expectedMinTableBarrier, minTableBarrierTs)
 	require.Equal(t, expectedBarrier, barrier)
 
@@ -134,7 +134,7 @@ func TestBarriers(t *testing.T) {
 			newFakeDDLEvent(tableID, tableName.Table, timodel.ActionAddColumn, uint64(i)))
 	}
 	ddlBarrier = dm.barrier()
-	minTableBarrierTs, barrier = ddlBarrier.minDDLBarrierTs, ddlBarrier.Barrier
+	minTableBarrierTs, barrier = ddlBarrier.MinTableBarrierTs, ddlBarrier.Barrier
 	require.Equal(t, uint64(0), minTableBarrierTs)
 	require.Equal(t, uint64(256), barrier.GlobalBarrierTs)
 	require.Equal(t, 256, len(barrier.TableBarriers))

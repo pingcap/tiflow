@@ -163,7 +163,7 @@ func (m *mockScheduler) Tick(
 	checkpointTs model.Ts,
 	currentTables []model.TableID,
 	captures map[model.CaptureID]*model.CaptureInfo,
-	barrier *schedulepb.Barrier,
+	barrier schedulepb.BarrierWithMinTs,
 ) (newCheckpointTs, newResolvedTs model.Ts, err error) {
 	m.currentTables = currentTables
 	return model.Ts(math.MaxUint64), model.Ts(math.MaxUint64), nil
