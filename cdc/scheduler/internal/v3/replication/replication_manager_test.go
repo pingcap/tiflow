@@ -609,13 +609,13 @@ func TestReplicationManagerAdvanceCheckpoint(t *testing.T) {
 	// all tables are replicating
 	currentTables := &TableRanges{}
 	currentTables.UpdateTables([]model.TableID{1, 2})
-	checkpoint, resolved := r.AdvanceCheckpoint(currentTables, time.Now())
+	checkpoint, resolved := r.AdvanceCheckpoint(currentTables, time.Now(), schedulepb.NewBarrierWithMinTs(0))
 	require.Equal(t, model.Ts(10), checkpoint)
 	require.Equal(t, model.Ts(20), resolved)
 
 	// some table not exist yet.
 	currentTables.UpdateTables([]model.TableID{1, 2, 3})
-	checkpoint, resolved = r.AdvanceCheckpoint(currentTables, time.Now())
+	checkpoint, resolved = r.AdvanceCheckpoint(currentTables, time.Now(), schedulepb.NewBarrierWithMinTs(0))
 	require.Equal(t, checkpointCannotProceed, checkpoint)
 	require.Equal(t, checkpointCannotProceed, resolved)
 
@@ -641,7 +641,7 @@ func TestReplicationManagerAdvanceCheckpoint(t *testing.T) {
 		}, model.ChangeFeedID{})
 	require.NoError(t, err)
 	r.spans.ReplaceOrInsert(span3, rs)
-	checkpoint, resolved = r.AdvanceCheckpoint(currentTables, time.Now())
+	checkpoint, resolved = r.AdvanceCheckpoint(currentTables, time.Now(), schedulepb.NewBarrierWithMinTs(0))
 	require.Equal(t, model.Ts(5), checkpoint)
 	require.Equal(t, model.Ts(20), resolved)
 
@@ -660,7 +660,7 @@ func TestReplicationManagerAdvanceCheckpoint(t *testing.T) {
 		}, model.ChangeFeedID{})
 	require.NoError(t, err)
 	r.spans.ReplaceOrInsert(span4, rs)
-	checkpoint, resolved = r.AdvanceCheckpoint(currentTables, time.Now())
+	checkpoint, resolved = r.AdvanceCheckpoint(currentTables, time.Now(), schedulepb.NewBarrierWithMinTs(0))
 	require.Equal(t, model.Ts(3), checkpoint)
 	require.Equal(t, model.Ts(10), resolved)
 
@@ -685,20 +685,20 @@ func TestReplicationManagerAdvanceCheckpoint(t *testing.T) {
 		require.NoError(t, err)
 		r.spans.ReplaceOrInsert(span, rs)
 	}
-	checkpoint, resolved = r.AdvanceCheckpoint(currentTables, time.Now())
+	checkpoint, resolved = r.AdvanceCheckpoint(currentTables, time.Now(), schedulepb.NewBarrierWithMinTs(0))
 	require.Equal(t, model.Ts(3), checkpoint)
 	require.Equal(t, model.Ts(10), resolved)
 
 	// The start span is missing
 	rs5_1, _ := r.spans.Delete(span5_1)
-	checkpoint, resolved = r.AdvanceCheckpoint(currentTables, time.Now())
+	checkpoint, resolved = r.AdvanceCheckpoint(currentTables, time.Now(), schedulepb.NewBarrierWithMinTs(0))
 	require.Equal(t, checkpointCannotProceed, checkpoint)
 	require.Equal(t, checkpointCannotProceed, resolved)
 
 	// The end span is missing
 	r.spans.ReplaceOrInsert(span5_1, rs5_1)
 	r.spans.Delete(span5_2)
-	checkpoint, resolved = r.AdvanceCheckpoint(currentTables, time.Now())
+	checkpoint, resolved = r.AdvanceCheckpoint(currentTables, time.Now(), schedulepb.NewBarrierWithMinTs(0))
 	require.Equal(t, checkpointCannotProceed, checkpoint)
 	require.Equal(t, checkpointCannotProceed, resolved)
 }

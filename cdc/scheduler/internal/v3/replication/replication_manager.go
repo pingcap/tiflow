@@ -16,7 +16,6 @@ package replication
 import (
 	"bytes"
 	"container/heap"
-	"math"
 	"time"
 
 	"github.com/pingcap/errors"
@@ -506,9 +505,13 @@ func (r *Manager) RunningTasks() *spanz.BtreeMap[*ScheduleTask] {
 
 // AdvanceCheckpoint tries to advance checkpoint and returns current checkpoint.
 func (r *Manager) AdvanceCheckpoint(
-	currentTables *TableRanges, currentPDTime time.Time,
+	currentTables *TableRanges,
+	currentPDTime time.Time,
+	barrier schedulepb.BarrierWithMinTs,
 ) (newCheckpointTs, newResolvedTs model.Ts) {
-	newCheckpointTs, newResolvedTs = math.MaxUint64, math.MaxUint64
+	// If currentTables is empty, we should advance newResolvedTs to global barrier ts and
+	// advance newCheckpointTs to min table barrier ts.
+	newCheckpointTs, newResolvedTs = barrier.MinTableBarrierTs, barrier.GlobalBarrierTs
 	slowestRange := tablepb.Span{}
 	cannotProceed := false
 	lastSpan := tablepb.Span{}
