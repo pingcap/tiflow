@@ -60,6 +60,15 @@ type MessageServerConfig struct {
 	// MaxRecvMsgSize is the maximum message size in bytes TiCDC can receive.
 	MaxRecvMsgSize int
 
+	// After a duration of this time if the server doesn't see any activity it
+	// pings the client to see if the transport is still alive.
+	KeepAliveTime time.Duration
+
+	// After having pinged for keepalive check, the server waits for a duration
+	// of Timeout and if no activity is seen even after that the connection is
+	// closed.
+	KeepAliveTimeout time.Duration
+
 	// The maximum time duration to wait before forcefully removing a handler.
 	//
 	// waitUnregisterHandleTimeout specifies how long to wait for
@@ -160,6 +169,10 @@ type taskOnMessageBatch struct {
 type taskOnRegisterPeer struct {
 	sender     *streamHandle
 	clientAddr string // for logging
+}
+
+type taskOnDeregisterPeer struct {
+	peerID string
 }
 
 type taskOnRegisterHandler struct {
@@ -287,6 +300,9 @@ func (m *MessageServer) run(ctx context.Context) error {
 					}
 					return errors.Trace(err)
 				}
+			case taskOnDeregisterPeer:
+				log.Info("taskOnDeregisterPeer", zap.String("peerID", task.peerID))
+				m.deregisterPeerByID(ctx, task.peerID)
 			case taskDebugDelay:
 				log.Info("taskDebugDelay started")
 				select {
@@ -354,6 +370,21 @@ func (m *MessageServer) deregisterPeer(ctx context.Context, peer *cdcPeer, err e
 	if err != nil {
 		peer.abort(ctx, err)
 	}
+}
+
+func (m *MessageServer) deregisterPeerByID(ctx context.Context, peerID string) {
+	m.peerLock.Lock()
+	peer, ok := m.peers[peerID]
+	m.peerLock.Unlock()
+	if !ok {
+		log.Warn("peer not found", zap.String("peerID", peerID))
+	}
+	m.deregisterPeer(ctx, peer, nil)
+}
+
+// ScheduleDeregisterPeerTask schedules a task to deregister a peer.
+func (m *MessageServer) ScheduleDeregisterPeerTask(ctx context.Context, peerID string) error {
+	return m.scheduleTask(ctx, taskOnDeregisterPeer{peerID: peerID})
 }
 
 // We use an empty interface to hold the information on the type of the object

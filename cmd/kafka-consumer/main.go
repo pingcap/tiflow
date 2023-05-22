@@ -47,6 +47,7 @@ import (
 	"github.com/pingcap/tiflow/pkg/quotes"
 	"github.com/pingcap/tiflow/pkg/security"
 	"github.com/pingcap/tiflow/pkg/util"
+	"github.com/pingcap/tiflow/pkg/version"
 	"go.uber.org/zap"
 )
 
@@ -76,6 +77,7 @@ var (
 )
 
 func init() {
+	version.LogVersionInfo("kafka consumer")
 	var (
 		upstreamURIStr string
 		configFile     string
