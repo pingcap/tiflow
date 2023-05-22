@@ -210,8 +210,7 @@ func (p *processor) RemoveTableSpan(span tablepb.Span) bool {
 			zap.Stringer("span", &span))
 		return true
 	}
-	p.sinkManager.r.AsyncStopTable(span)
-	return true
+	return p.sinkManager.r.AsyncStopTable(span)
 }
 
 // IsAddTableSpanFinished implements TableExecutor interface.
