@@ -161,7 +161,7 @@ insert into t values (
  );
 
 alter table t drop column c_smallint;
-insert into tp_int(c_tinyint, c_mediumint, c_int, c_bigint, a) values (4, 5, 6, 7, 8);
+insert into t(c_tinyint, c_mediumint, c_int, c_bigint, a) values (4, 5, 6, 7, 8);
 
 alter table t modify c_mediumint varchar(10) null;
 insert into t(c_tinyint, c_mediumint, c_int, c_bigint, a) values (5, "234", 6, 7, 8);
