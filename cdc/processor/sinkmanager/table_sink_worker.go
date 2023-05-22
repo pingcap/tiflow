@@ -174,6 +174,7 @@ func (w *sinkWorker) handleTask(ctx context.Context, task *sinkTask) (finalErr e
 			zap.Any("lowerBound", lowerBound),
 			zap.Any("upperBound", upperBound),
 			zap.Bool("splitTxn", w.splitTxn),
+			zap.Int("receivedEvents", allEventCount),
 			zap.Any("lastPos", advancer.lastPos),
 			zap.Float64("lag", time.Since(oracle.GetTimeFromTS(advancer.lastPos.CommitTs)).Seconds()),
 			zap.Error(finalErr))
@@ -271,7 +272,9 @@ func (w *sinkWorker) fetchFromCache(
 			task.tableSink.receivedEventCount.Add(int64(popRes.pushCount))
 			w.metricOutputEventCountKV.Add(float64(popRes.pushCount))
 			w.metricRedoEventCacheHit.Add(float64(popRes.size))
-			task.tableSink.appendRowChangedEvents(popRes.events...)
+			if err = task.tableSink.appendRowChangedEvents(popRes.events...); err != nil {
+				return
+			}
 		}
 
 		// Get a resolvedTs so that we can record it into sink memory quota.

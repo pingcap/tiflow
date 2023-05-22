@@ -316,16 +316,8 @@ func (m *SinkManager) clearSinkFactory() {
 		log.Info("Sink manager closing sink factory",
 			zap.String("namespace", m.changefeedID.Namespace),
 			zap.String("changefeed", m.changefeedID.ID))
-
-		// Firstly clear all table sinks so dmlsink.EventSink.WriteEvents won't be called any more.
-		// Then dmlsink.EventSink.Close can be closed safety.
-		m.tableSinks.Range(func(_ tablepb.Span, value interface{}) bool {
-			value.(*tableSinkWrapper).clearTableSink()
-			return true
-		})
 		m.sinkFactory.Close()
 		m.sinkFactory = nil
-
 		log.Info("Sink manager has closed sink factory",
 			zap.String("namespace", m.changefeedID.Namespace),
 			zap.String("changefeed", m.changefeedID.ID))

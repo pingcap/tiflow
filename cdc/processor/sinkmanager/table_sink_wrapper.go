@@ -161,13 +161,17 @@ func (t *tableSinkWrapper) start(ctx context.Context, startTs model.Ts) (err err
 	return nil
 }
 
-func (t *tableSinkWrapper) appendRowChangedEvents(events ...*model.RowChangedEvent) {
+func (t *tableSinkWrapper) appendRowChangedEvents(events ...*model.RowChangedEvent) error {
 	t.tableSinkMu.Lock()
 	defer t.tableSinkMu.Unlock()
 	// If it's nil it means it's closed.
 	if t.tableSink != nil {
 		t.tableSink.AppendRowChangedEvents(events...)
+	} else {
+		// If it's nil it means it's closed.
+		return tablesink.NewSinkInternalError(errors.New("table sink cleared"))
 	}
+	return nil
 }
 
 func (t *tableSinkWrapper) updateReceivedSorterResolvedTs(ts model.Ts) {
@@ -194,11 +198,13 @@ func (t *tableSinkWrapper) updateReceivedSorterCommitTs(ts model.Ts) {
 func (t *tableSinkWrapper) updateResolvedTs(ts model.ResolvedTs) error {
 	t.tableSinkMu.Lock()
 	defer t.tableSinkMu.Unlock()
-	// If it's nil it means it's closed.
 	if t.tableSink != nil {
 		if err := t.tableSink.UpdateResolvedTs(ts); err != nil {
 			return errors.Trace(err)
 		}
+	} else {
+		// If it's nil it means it's closed.
+		return tablesink.NewSinkInternalError(errors.New("table sink cleared"))
 	}
 	return nil
 }
