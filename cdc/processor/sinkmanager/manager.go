@@ -823,11 +823,6 @@ func (m *SinkManager) StartTable(span tablepb.Span, startTs model.Ts) error {
 
 // AsyncStopTable sets the table(TableSink) state to stopped.
 func (m *SinkManager) AsyncStopTable(span tablepb.Span) bool {
-	log.Info("Async stop table sink",
-		zap.String("namespace", m.changefeedID.Namespace),
-		zap.String("changefeed", m.changefeedID.ID),
-		zap.Stringer("span", &span))
-
 	tableSink, ok := m.tableSinks.Load(span)
 	if !ok {
 		// Just warn, because the table sink may be removed by another goroutine.
@@ -895,7 +890,7 @@ func (m *SinkManager) GetAllCurrentTableSpansCount() int {
 
 // GetTableState returns the table(TableSink) state.
 func (m *SinkManager) GetTableState(span tablepb.Span) (tablepb.TableState, bool) {
-	tableSink, ok := m.tableSinks.Load(span)
+	wrapper, ok := m.tableSinks.Load(span)
 	if !ok {
 		log.Debug("Table sink not found when getting table state",
 			zap.String("namespace", m.changefeedID.Namespace),
@@ -903,7 +898,21 @@ func (m *SinkManager) GetTableState(span tablepb.Span) (tablepb.TableState, bool
 			zap.Stringer("span", &span))
 		return tablepb.TableStateAbsent, false
 	}
-	return tableSink.(*tableSinkWrapper).getState(), true
+
+	// NOTE(qupeng): I'm not sure whether `SinkManager.AsyncStopTable` will be called
+	// again or not if it returns false. So we must retry `tableSink.asyncClose` here
+	// if necessary. It's better to remove the dirty logic in the future.
+	tableSink := wrapper.(*tableSinkWrapper)
+	if tableSink.getState() == tablepb.TableStateStopping && tableSink.asyncClose() {
+		cleanedBytes := m.sinkMemQuota.Clean(span)
+		cleanedBytes += m.redoMemQuota.Clean(span)
+		log.Debug("MemoryQuotaTracing: Clean up memory quota for table sink task when removing table",
+			zap.String("namespace", m.changefeedID.Namespace),
+			zap.String("changefeed", m.changefeedID.ID),
+			zap.Stringer("span", &span),
+			zap.Uint64("memory", cleanedBytes))
+	}
+	return tableSink.getState(), true
 }
 
 // GetTableStats returns the state of the table.
