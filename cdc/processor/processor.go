@@ -244,8 +244,7 @@ func (p *processor) RemoveTable(tableID model.TableID) bool {
 				zap.Int64("tableID", tableID))
 			return true
 		}
-		p.sinkManager.AsyncStopTable(tableID)
-		return true
+		return p.sinkManager.AsyncStopTable(tableID)
 	}
 	table, ok := p.tables[tableID]
 	if !ok {
@@ -256,18 +255,7 @@ func (p *processor) RemoveTable(tableID model.TableID) bool {
 			zap.Int64("tableID", tableID))
 		return true
 	}
-	if !table.AsyncStop() {
-		// We use a Debug log because it is conceivable for the pipeline to block for a legitimate reason,
-		// and we do not want to alarm the user.
-		log.Debug("async stop the table failed, due to a full pipeline",
-			zap.String("capture", p.captureInfo.ID),
-			zap.String("namespace", p.changefeedID.Namespace),
-			zap.String("changefeed", p.changefeedID.ID),
-			zap.Uint64("checkpointTs", table.CheckpointTs()),
-			zap.Int64("tableID", tableID))
-		return false
-	}
-	return true
+	return table.AsyncStop()
 }
 
 // IsAddTableFinished implements TableExecutor interface.

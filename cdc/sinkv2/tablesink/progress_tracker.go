@@ -29,7 +29,7 @@ const (
 	// It used for closing the table sink.
 	waitingInterval = 100 * time.Millisecond
 	// warnDuration is the duration to warn the progress tracker is not closed.
-	warnDuration = 1 * time.Minute
+	warnDuration = 30 * time.Second
 	// A progressTracker contains several internal fixed-length buffers.
 	// NOTICE: the buffer size must be aligned to 8 bytes.
 	// It shouldn't be too large, otherwise it will consume too much memory.
@@ -83,6 +83,8 @@ type progressTracker struct {
 	resolvedTsCache []pendingResolvedTs
 
 	lastMinResolvedTs model.ResolvedTs
+
+	lastCheckClosed atomic.Int64
 }
 
 // newProgressTracker is used to create a new progress tracker.
@@ -260,13 +262,14 @@ func (r *progressTracker) trackingCount() int {
 func (r *progressTracker) freezeProcess() {
 	r.mu.Lock()
 	defer r.mu.Unlock()
-	r.frozen = true
+	if !r.frozen {
+		r.frozen = true
+		r.lastCheckClosed.Store(time.Now().Unix())
+	}
 }
 
 // close is used to close the progress tracker.
 func (r *progressTracker) waitClosed(backendDead <-chan struct{}) {
-	blockTicker := time.NewTicker(warnDuration)
-	defer blockTicker.Stop()
 	waitingTicker := time.NewTicker(waitingInterval)
 	defer waitingTicker.Stop()
 	for {
@@ -275,15 +278,9 @@ func (r *progressTracker) waitClosed(backendDead <-chan struct{}) {
 			r.advance()
 			return
 		case <-waitingTicker.C:
-			r.advance()
-			if r.trackingCount() == 0 {
+			if r.doCheckClosed() {
 				return
 			}
-		case <-blockTicker.C:
-			log.Warn("Close process doesn't return in time, may be stuck",
-				zap.Int64("tableID", r.tableID),
-				zap.Int("trackingCount", r.trackingCount()),
-				zap.Any("lastMinResolvedTs", r.advance()))
 		}
 	}
 }
@@ -294,7 +291,28 @@ func (r *progressTracker) checkClosed(backendDead <-chan struct{}) bool {
 		r.advance()
 		return true
 	default:
-		r.advance()
-		return r.trackingCount() == 0
+		return r.doCheckClosed()
 	}
+}
+
+func (r *progressTracker) doCheckClosed() bool {
+	resolvedTs := r.advance()
+	trackingCount := r.trackingCount()
+	if trackingCount == 0 {
+		return true
+	}
+
+	now := time.Now().Unix()
+	lastCheck := r.lastCheckClosed.Load()
+	for now > lastCheck+int64(warnDuration.Seconds()) {
+		if r.lastCheckClosed.CompareAndSwap(lastCheck, now) {
+			log.Warn("Close table doesn't return in time, may be stuck",
+				zap.Int64("tableID", r.tableID),
+				zap.Int("trackingCount", trackingCount),
+				zap.Any("lastMinResolvedTs", resolvedTs))
+			break
+		}
+		lastCheck = r.lastCheckClosed.Load()
+	}
+	return false
 }

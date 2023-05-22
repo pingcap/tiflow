@@ -19,6 +19,8 @@ import (
 	"testing"
 	"time"
 
+	"github.com/pingcap/failpoint"
+	"github.com/pingcap/log"
 	"github.com/pingcap/tiflow/cdc/entry"
 	"github.com/pingcap/tiflow/cdc/model"
 	"github.com/pingcap/tiflow/cdc/processor/sourcemanager"
@@ -348,4 +350,43 @@ func TestUpdateReceivedSorterResolvedTsOfNonExistTable(t *testing.T) {
 	}()
 
 	manager.UpdateReceivedSorterResolvedTs(model.TableID(1), 1)
+}
+
+// Sink worker errors should cancel the sink manager correctly.
+func TestSinkManagerRunWithErrors(t *testing.T) {
+	t.Parallel()
+
+	ctx, cancel := context.WithCancel(context.Background())
+	errCh := make(chan error, 16)
+	changefeedInfo := getChangefeedInfo()
+	manager, source, _ := CreateManagerWithMemEngine(t, ctx, model.DefaultChangeFeedID("1"), changefeedInfo, errCh)
+	defer func() {
+		cancel()
+		manager.Close()
+	}()
+
+	_ = failpoint.Enable("github.com/pingcap/tiflow/cdc/processor/sinkmanager/SinkWorkerTaskError", "return")
+	defer func() {
+		_ = failpoint.Disable("github.com/pingcap/tiflow/cdc/processor/sinkmanager/SinkWorkerTaskError")
+	}()
+
+	span := spanz.TableIDToComparableSpan(1)
+
+	source.AddTable(span, "test", 100)
+	manager.AddTable(span, 100, math.MaxUint64)
+	manager.StartTable(span, 100)
+	source.Add(span, model.NewResolvedPolymorphicEvent(0, 101))
+	manager.UpdateReceivedSorterResolvedTs(span, 101)
+	manager.UpdateBarrierTs(101, nil)
+
+	timer := time.NewTimer(5 * time.Second)
+	select {
+	case <-errCh:
+		if !timer.Stop() {
+			<-timer.C
+		}
+		return
+	case <-timer.C:
+		log.Panic("must get an error instead of a timeout")
+	}
 }
