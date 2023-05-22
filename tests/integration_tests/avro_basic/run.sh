@@ -13,8 +13,7 @@ if [ "$SINK_TYPE" != "kafka" ]; then
 fi
 
 echo 'Starting schema registry...'
-./bin/schema-registry/bin/schema-registry-start -daemon ./bin/schema-registry/etc/schema-registry/schema-registry.properties &
-SCHEMA_REGISTRY_PID=$!
+./bin/schema-registry/bin/schema-registry-start -daemon ./bin/schema-registry/etc/schema-registry/schema-registry.properties
 i=0
 while ! curl -o /dev/null -v -s "http://127.0.0.1:8081/"; do
 	i=$(($i + 1))
@@ -24,15 +23,6 @@ while ! curl -o /dev/null -v -s "http://127.0.0.1:8081/"; do
 	fi
 	sleep 2
 done
-
-stop_schema_registry() {
-	kill -2 $SCHEMA_REGISTRY_PID
-}
-
-stop() {
-	stop_tidb_cluster
-	stop_schema_registry
-}
 
 # use kafka-consumer with avro decoder to sync data from kafka to mysql
 function run() {
@@ -74,7 +64,7 @@ function run() {
 	cleanup_process $CDC_BINARY
 }
 
-trap stop EXIT
+trap stop_tidb_cluster EXIT
 run $*
 check_logs $WORK_DIR
 echo "[$(date)] <<<<<< run test case $TEST_NAME success! >>>>>>"
