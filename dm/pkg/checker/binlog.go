@@ -284,7 +284,7 @@ type MetaPositionChecker struct {
 
 // NewBinlogDBChecker returns a RealChecker.
 func NewMetaPositionChecker(db *conn.BaseDB, sourceCfg dbconfig.DBConfig, enableGTID bool, meta *config.Meta) RealChecker {
-	return &MetaPositionChecker{db: db, sourceCfg: sourceCfg, meta: meta}
+	return &MetaPositionChecker{db: db, sourceCfg: sourceCfg, enableGTID: enableGTID, meta: meta}
 }
 
 // Check implements the RealChecker interface.
