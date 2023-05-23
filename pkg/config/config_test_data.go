@@ -85,7 +85,8 @@ const (
   "processor-flush-interval": 50000000,
   "sorter": {
     "sort-dir": "/tmp/sorter",
-    "max-memory-percentage": 0,
+    "cache-size-in-mb": 128,
+    "max-memory-percentage": 10,
     "num-concurrent-worker": 4,
     "chunk-size-limit": 999,
     "max-memory-consumption": 17179869184,
