@@ -48,3 +48,8 @@ type SinkInternalError struct {
 func (e SinkInternalError) Error() string {
 	return e.err.Error()
 }
+
+// NewSinkInternalError creates a SinkInternalError.
+func NewSinkInternalError(err error) SinkInternalError {
+	return SinkInternalError{err}
+}
