@@ -152,7 +152,7 @@ func TestParseCfg(t *testing.T) {
 		ProcessorFlushInterval: config.TomlDuration(150 * time.Millisecond),
 		Sorter: &config.SorterConfig{
 			SortDir:             config.DefaultSortDir,
-			CacheSize:           128,
+			CacheSizeInMB:       128,
 			MaxMemoryPercentage: 10,
 		},
 		Security: &config.SecurityConfig{
@@ -233,7 +233,7 @@ max-backups = 1
 
 [sorter]
 sort-dir = "/tmp/just_a_test"
-cache-size = 8
+cache-size-in-mb = 8
 max-memory-percentage = 3
 
 [kv-client]
@@ -304,7 +304,7 @@ check-balance-interval = "10s"
 		ProcessorFlushInterval: config.TomlDuration(600 * time.Millisecond),
 		Sorter: &config.SorterConfig{
 			SortDir:             config.DefaultSortDir,
-			CacheSize:           8,
+			CacheSizeInMB:       8,
 			MaxMemoryPercentage: 3,
 		},
 		Security: &config.SecurityConfig{},
@@ -380,7 +380,7 @@ max-backups = 1
 
 [sorter]
 sort-dir = "/tmp/just_a_test"
-cache-size = 8
+cache-size-in-mb = 8
 max-memory-percentage = 3
 
 [security]
@@ -434,7 +434,7 @@ cert-allowed-cn = ["dd","ee"]
 		ProcessorFlushInterval: config.TomlDuration(150 * time.Millisecond),
 		Sorter: &config.SorterConfig{
 			SortDir:             config.DefaultSortDir,
-			CacheSize:           8,
+			CacheSizeInMB:       8,
 			MaxMemoryPercentage: 3,
 		},
 		Security: &config.SecurityConfig{

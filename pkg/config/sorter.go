@@ -25,10 +25,10 @@ type SorterConfig struct {
 	SortDir string `toml:"sort-dir" json:"sort-dir"`
 
 	// Cache size of sorter in MB.
-	CacheSize uint64 `toml:"cache-size" json:"cache-size"`
+	CacheSizeInMB uint64 `toml:"cache-size-in-mb" json:"cache-size-in-mb"`
 
 	// the maximum memory use percentage that allows in-memory sorting
-	// Deprecated: use CacheSize instead.
+	// Deprecated: use CacheSizeInMB instead.
 	MaxMemoryPercentage int `toml:"max-memory-percentage" json:"max-memory-percentage"`
 
 	// the maximum memory consumption allowed for in-memory sorting
@@ -47,8 +47,8 @@ type SorterConfig struct {
 
 // ValidateAndAdjust validates and adjusts the sorter configuration
 func (c *SorterConfig) ValidateAndAdjust() error {
-	if c.CacheSize < 8 || c.CacheSize*uint64(1<<20) > uint64(math.MaxInt64) {
-		return errors.ErrIllegalSorterParameter.GenWithStackByArgs("cache-size should be greater than 8(MB)")
+	if c.CacheSizeInMB < 8 || c.CacheSizeInMB*uint64(1<<20) > uint64(math.MaxInt64) {
+		return errors.ErrIllegalSorterParameter.GenWithStackByArgs("cache-size-in-mb should be greater than 8(MB)")
 	}
 	return nil
 }

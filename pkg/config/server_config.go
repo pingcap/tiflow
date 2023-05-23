@@ -107,7 +107,7 @@ var defaultServerConfig = &ServerConfig{
 	ProcessorFlushInterval: TomlDuration(50 * time.Millisecond),
 	Sorter: &SorterConfig{
 		SortDir:             DefaultSortDir,
-		CacheSize:           128, // By default use 128M memory as sorter cache.
+		CacheSizeInMB:       128, // By default use 128M memory as sorter cache.
 		MaxMemoryPercentage: 10,  // Deprecated.
 	},
 	Security: &SecurityConfig{},
