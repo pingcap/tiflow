@@ -92,8 +92,9 @@ const (
   "owner-flush-interval": 50000000,
   "processor-flush-interval": 50000000,
   "sorter": {
-    "max-memory-percentage": 10,
     "sort-dir": "/tmp/sorter",
+    "cache-size": 128,
+    "max-memory-percentage": 10,
     "max-memory-consumption": 0,
     "num-workerpool-goroutine": 0,
     "num-concurrent-worker": 0,

@@ -89,7 +89,7 @@ func iterTable(
 // OpenPebble opens a pebble.
 func OpenPebble(
 	id int, path string, cfg *config.DBConfig,
-	cacheSize uint64,
+	cache *pebble.Cache,
 	adjusts ...func(*pebble.Options),
 ) (db *pebble.DB, err error) {
 	dbDir := filepath.Join(path, fmt.Sprintf("%04d", id))
@@ -99,11 +99,7 @@ func OpenPebble(
 	}
 
 	opts := buildPebbleOption(cfg)
-	if cacheSize > 0 {
-		opts.Cache = pebble.NewCache(int64(cacheSize))
-		defer opts.Cache.Unref()
-	}
-
+	opts.Cache = cache
 	for _, adjust := range adjusts {
 		adjust(opts)
 	}

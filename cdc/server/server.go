@@ -225,12 +225,7 @@ func (s *server) createSortEngineFactory() error {
 	// Sorter dir has been set and checked when server starts.
 	// See https://github.com/pingcap/tiflow/blob/9dad09/cdc/server.go#L275
 	sortDir := config.GetGlobalServerConfig().Sorter.SortDir
-	totalMemory, err := util.GetMemoryLimit()
-	if err != nil {
-		return errors.Trace(err)
-	}
-	memPercentage := float64(conf.Sorter.MaxMemoryPercentage) / 100
-	memInBytes := uint64(float64(totalMemory) * memPercentage)
+	memInBytes := conf.Sorter.CacheSize * uint64(1<<20)
 	s.sortEngineFactory = factory.NewForPebble(sortDir, memInBytes, conf.Debug.DB)
 	log.Info("sorter engine memory limit",
 		zap.Uint64("bytes", memInBytes),

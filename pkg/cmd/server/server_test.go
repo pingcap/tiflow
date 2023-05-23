@@ -124,7 +124,6 @@ func TestParseCfg(t *testing.T) {
 		"--cert", "bb",
 		"--key", "cc",
 		"--cert-allowed-cn", "dd,ee",
-		"--sorter-max-memory-percentage", "70",
 		"--sort-dir", "/tmp/just_a_test",
 	}))
 
@@ -152,8 +151,9 @@ func TestParseCfg(t *testing.T) {
 		OwnerFlushInterval:     config.TomlDuration(150 * time.Millisecond),
 		ProcessorFlushInterval: config.TomlDuration(150 * time.Millisecond),
 		Sorter: &config.SorterConfig{
-			MaxMemoryPercentage: 70,
 			SortDir:             config.DefaultSortDir,
+			CacheSize:           128,
+			MaxMemoryPercentage: 10,
 		},
 		Security: &config.SecurityConfig{
 			CertPath:      "bb",
@@ -232,8 +232,9 @@ max-days = 1
 max-backups = 1
 
 [sorter]
-max-memory-percentage = 3
 sort-dir = "/tmp/just_a_test"
+cache-size = 8
+max-memory-percentage = 3
 
 [kv-client]
 region-retry-duration = "3s"
@@ -302,8 +303,9 @@ check-balance-interval = "10s"
 		OwnerFlushInterval:     config.TomlDuration(600 * time.Millisecond),
 		ProcessorFlushInterval: config.TomlDuration(600 * time.Millisecond),
 		Sorter: &config.SorterConfig{
-			MaxMemoryPercentage: 3,
 			SortDir:             config.DefaultSortDir,
+			CacheSize:           8,
+			MaxMemoryPercentage: 3,
 		},
 		Security: &config.SecurityConfig{},
 		KVClient: &config.KVClientConfig{
@@ -377,8 +379,9 @@ max-days = 1
 max-backups = 1
 
 [sorter]
-max-memory-percentage = 3
 sort-dir = "/tmp/just_a_test"
+cache-size = 8
+max-memory-percentage = 3
 
 [security]
 ca-path = "aa"
@@ -403,7 +406,6 @@ cert-allowed-cn = ["dd","ee"]
 		"--owner-flush-interval", "150ms",
 		"--processor-flush-interval", "150ms",
 		"--ca", "",
-		"--sorter-max-memory-percentage", "70",
 		"--config", configPath,
 	}))
 
@@ -431,8 +433,9 @@ cert-allowed-cn = ["dd","ee"]
 		OwnerFlushInterval:     config.TomlDuration(150 * time.Millisecond),
 		ProcessorFlushInterval: config.TomlDuration(150 * time.Millisecond),
 		Sorter: &config.SorterConfig{
-			MaxMemoryPercentage: 70,
 			SortDir:             config.DefaultSortDir,
+			CacheSize:           8,
+			MaxMemoryPercentage: 3,
 		},
 		Security: &config.SecurityConfig{
 			CertPath:      "bb",

@@ -106,10 +106,9 @@ var defaultServerConfig = &ServerConfig{
 	OwnerFlushInterval:     TomlDuration(50 * time.Millisecond),
 	ProcessorFlushInterval: TomlDuration(50 * time.Millisecond),
 	Sorter: &SorterConfig{
-		// Disable block-cache by default. TiCDC only scans events instead of
-		// accessing them randomly, so block-cache is unnecessary.
-		MaxMemoryPercentage: 10,
 		SortDir:             DefaultSortDir,
+		CacheSize:           128, // By default use 128M memory as sorter cache.
+		MaxMemoryPercentage: 10,  // Deprecated.
 	},
 	Security: &SecurityConfig{},
 	KVClient: &KVClientConfig{
