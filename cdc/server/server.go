@@ -181,9 +181,7 @@ func (s *server) prepare(ctx context.Context) error {
 		return errors.Trace(err)
 	}
 
-	if err := s.createSortEngineFactory(); err != nil {
-		return errors.Trace(err)
-	}
+	s.createSortEngineFactory()
 
 	if err := s.setMemoryLimit(); err != nil {
 		return errors.Trace(err)
@@ -213,7 +211,7 @@ func (s *server) setMemoryLimit() error {
 	return nil
 }
 
-func (s *server) createSortEngineFactory() error {
+func (s *server) createSortEngineFactory() {
 	conf := config.GetGlobalServerConfig()
 	if s.sortEngineFactory != nil {
 		if err := s.sortEngineFactory.Close(); err != nil {
@@ -231,8 +229,6 @@ func (s *server) createSortEngineFactory() error {
 		zap.Uint64("bytes", memInBytes),
 		zap.String("memory", humanize.IBytes(memInBytes)),
 	)
-
-	return nil
 }
 
 // Run runs the server.
