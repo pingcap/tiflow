@@ -27,6 +27,23 @@ definitions:
       topic:
         type: string
     type: object
+  config.KafkaConfig:
+    properties:
+      sasl-mechanism:
+        type: string
+      sasl-oauth-client-id:
+        type: string
+      sasl-oauth-client-secret:
+        type: string
+      sasl-oauth-grant-type:
+        type: string
+      sasl-oauth-scopes:
+        items:
+          type: string
+        type: array
+      sasl-oauth-token-url:
+        type: string
+    type: object
   config.SinkConfig:
     properties:
       column-selectors:
@@ -39,6 +56,8 @@ definitions:
         type: array
       encoder-concurrency:
         type: integer
+      kafka-config:
+        $ref: '#/definitions/config.KafkaConfig'
       protocol:
         type: string
       schema-registry:

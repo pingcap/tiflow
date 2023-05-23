@@ -24,7 +24,7 @@ WARN_THRESHOLD=80
 ERROR_THRESHOLD=100
 
 git --no-pager diff $BASE_HASH -U0 -- cdc pkg cmd -- ':(exclude)*_gen.go' -- ':(exclude)*_gen_test.go' |
-	grep -E '^\+' | grep -vE '^\+\+\+' |
+	grep -E '^\+' | grep -vE '^\+\+\+' | grep -vE 'json:' | grep -vE 'toml:' |
 	sed 's/\t/    /g' |
 	awk "
 {
