@@ -272,7 +272,7 @@ function run() {
 	# stop DM task.
 	run_dm_ctl $WORK_DIR "127.0.0.1:$MASTER_PORT" \
 		"stop-task $WORK_DIR/dm-task.yaml"
-	
+
 	run_dm_ctl_with_retry $WORK_DIR "127.0.0.1:$MASTER_PORT" \
 		"stop-relay -s $worker1bound worker1" \
 		"\"result\": true" 2
