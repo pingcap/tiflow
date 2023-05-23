@@ -129,6 +129,9 @@ func (e *EventTableSink[E, P]) UpdateResolvedTs(resolvedTs model.ResolvedTs) err
 
 // GetCheckpointTs returns the checkpoint ts of the table sink.
 func (e *EventTableSink[E, P]) GetCheckpointTs() model.ResolvedTs {
+	if e.state.Load() == state.TableSinkStopping {
+		e.progressTracker.checkClosed(e.backendSink.Dead())
+	}
 	return e.progressTracker.advance()
 }
 
