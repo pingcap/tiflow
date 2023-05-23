@@ -35,6 +35,8 @@ const (
 	SCRAM512Mechanism SASLMechanism = sarama.SASLTypeSCRAMSHA512
 	// GSSAPIMechanism means the SASL mechanism is GSSAPI.
 	GSSAPIMechanism SASLMechanism = sarama.SASLTypeGSSAPI
+	// OAuthMechanism means the SASL mechanism is OAuth2.
+	OAuthMechanism SASLMechanism = sarama.SASLTypeOAuth
 )
 
 // SASLMechanismFromString converts the string to SASL mechanism.
@@ -48,6 +50,8 @@ func SASLMechanismFromString(s string) (SASLMechanism, error) {
 		return SCRAM512Mechanism, nil
 	case "gssapi":
 		return GSSAPIMechanism, nil
+	case "oauthbearer":
+		return OAuthMechanism, nil
 	default:
 		return UnknownMechanism, errors.Errorf("unknown %s SASL mechanism", s)
 	}

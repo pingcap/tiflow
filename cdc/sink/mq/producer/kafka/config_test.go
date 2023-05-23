@@ -497,7 +497,7 @@ func TestApplySASL(t *testing.T) {
 				"&partition-num=0&sasl-mechanism=OAUTHBEARER",
 			replicaConfig: func() *config.ReplicaConfig {
 				cfg := config.GetDefaultReplicaConfig()
-				oauthMechanism := string(sarama.SASLTypeOAuth)
+				oauthMechanism := string(security.OAuthMechanism)
 				clientID := "client_id"
 				clientSecret := "Y2xpZW50X3NlY3JldA==" // base64(client_secret)
 				tokenURL := "127.0.0.1:9093/token"
@@ -517,7 +517,7 @@ func TestApplySASL(t *testing.T) {
 				"&partition-num=0&sasl-mechanism=OAUTHBEARER",
 			replicaConfig: func() *config.ReplicaConfig {
 				cfg := config.GetDefaultReplicaConfig()
-				oauthMechanism := string(sarama.SASLTypeOAuth)
+				oauthMechanism := string(security.OAuthMechanism)
 				clientSecret := "Y2xpZW50X3NlY3JldA==" // base64(client_secret)
 				tokenURL := "127.0.0.1:9093/token"
 				cfg.Sink.KafkaConfig = &config.KafkaConfig{
@@ -535,7 +535,7 @@ func TestApplySASL(t *testing.T) {
 				"&partition-num=0&sasl-mechanism=OAUTHBEARER",
 			replicaConfig: func() *config.ReplicaConfig {
 				cfg := config.GetDefaultReplicaConfig()
-				oauthMechanism := string(sarama.SASLTypeOAuth)
+				oauthMechanism := string(security.OAuthMechanism)
 				clientID := "client_id"
 				tokenURL := "127.0.0.1:9093/token"
 				cfg.Sink.KafkaConfig = &config.KafkaConfig{
@@ -553,7 +553,7 @@ func TestApplySASL(t *testing.T) {
 				"&partition-num=0&sasl-mechanism=OAUTHBEARER",
 			replicaConfig: func() *config.ReplicaConfig {
 				cfg := config.GetDefaultReplicaConfig()
-				oauthMechanism := string(sarama.SASLTypeOAuth)
+				oauthMechanism := string(security.OAuthMechanism)
 				clientID := "client_id"
 				clientSecret := "Y2xpZW50X3NlY3JldA==" // base64(client_secret)
 				cfg.Sink.KafkaConfig = &config.KafkaConfig{
@@ -571,7 +571,7 @@ func TestApplySASL(t *testing.T) {
 				"&partition-num=0&sasl-mechanism=OAUTHBEARER",
 			replicaConfig: func() *config.ReplicaConfig {
 				cfg := config.GetDefaultReplicaConfig()
-				oauthMechanism := string(sarama.SASLTypeOAuth)
+				oauthMechanism := string(security.OAuthMechanism)
 				clientID := "client_id"
 				clientSecret := "client_secret"
 				tokenURL := "127.0.0.1:9093/token"
@@ -591,7 +591,7 @@ func TestApplySASL(t *testing.T) {
 				"&partition-num=0&sasl-mechanism=GSSAPI",
 			replicaConfig: func() *config.ReplicaConfig {
 				cfg := config.GetDefaultReplicaConfig()
-				oauthMechanism := string(sarama.SASLTypeOAuth)
+				oauthMechanism := string(security.OAuthMechanism)
 				clientID := "client_id"
 				clientSecret := "Y2xpZW50X3NlY3JldA==" // base64(client_secret)
 				tokenURL := "127.0.0.1:9093/token"

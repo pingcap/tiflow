@@ -264,6 +264,12 @@ func (c *Config) applySASL(params url.Values, replicaConfig *config.ReplicaConfi
 			return cerror.WrapError(cerror.ErrKafkaInvalidConfig, err)
 		}
 		c.SASL.SASLMechanism = mechanism
+	} else if replicaConfig != nil && replicaConfig.Sink != nil && replicaConfig.Sink.KafkaConfig != nil && replicaConfig.Sink.KafkaConfig.SASLMechanism != nil {
+		mechanism, err := security.SASLMechanismFromString(*replicaConfig.Sink.KafkaConfig.SASLMechanism)
+		if err != nil {
+			return cerror.WrapError(cerror.ErrKafkaInvalidConfig, err)
+		}
+		c.SASL.SASLMechanism = mechanism
 	}
 
 	s = params.Get("sasl-gssapi-auth-type")
@@ -350,7 +356,7 @@ func (c *Config) applySASL(params url.Values, replicaConfig *config.ReplicaConfi
 		}
 
 		if c.SASL.OAuth2.IsEnable() {
-			if c.SASL.SASLMechanism != sarama.SASLTypeOAuth {
+			if c.SASL.SASLMechanism != security.OAuthMechanism {
 				return cerror.ErrKafkaInvalidConfig.GenWithStack(
 					"OAuth2 is only supported with SASL mechanism type OAUTHBEARER, but got %s",
 					c.SASL.SASLMechanism)
