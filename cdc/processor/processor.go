@@ -695,9 +695,7 @@ func (p *processor) lazyInitImpl(etcdCtx cdcContext.Context) (err error) {
 
 	p.sourceManager.r = sourcemanager.New(
 		p.changefeedID, p.upstream, p.mg.r,
-		sortEngine,
-		util.GetValueOrDefault(p.changefeed.Info.Config.BDRMode),
-	)
+		sortEngine, util.GetValueOrDefault(p.changefeed.Info.Config.BDRMode))
 	p.sourceManager.name = "SourceManager"
 	p.sourceManager.spawn(stdCtx)
 

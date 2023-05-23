@@ -21,7 +21,7 @@ import (
 	"time"
 
 	"github.com/pingcap/log"
-	"github.com/pingcap/tiflow/pkg/redo"
+	"github.com/pingcap/tiflow/pkg/util"
 	"go.uber.org/zap"
 )
 
@@ -33,8 +33,8 @@ var customReplicaConfig = &ReplicaConfig{
 	ForceReplicate:        false,
 	IgnoreIneligibleTable: false,
 	CheckGCSafePoint:      false,
-	EnableSyncPoint:       false,
-	BDRMode:               false,
+	EnableSyncPoint:       util.AddressOf(false),
+	BDRMode:               util.AddressOf(false),
 	SyncPointInterval:     &JSONDuration{11 * time.Minute},
 	SyncPointRetention:    &JSONDuration{25 * time.Hour},
 	Filter: &FilterConfig{
@@ -84,10 +84,10 @@ var customReplicaConfig = &ReplicaConfig{
 			},
 		},
 		TxnAtomicity:             "table",
-		EncoderConcurrency:       20,
+		EncoderConcurrency:       util.AddressOf(20),
 		Terminator:               "a",
 		DateSeparator:            "month",
-		EnablePartitionSeparator: true,
+		EnablePartitionSeparator: util.AddressOf(true),
 	},
 	Consistent: &ConsistentConfig{
 		Level:             "",
@@ -108,13 +108,10 @@ var customReplicaConfig = &ReplicaConfig{
 
 // defaultReplicaConfig check if the default values is changed
 var defaultReplicaConfig = &ReplicaConfig{
-	MemoryQuota:        1024 * 1024 * 1024,
-	CaseSensitive:      true,
-	EnableOldValue:     true,
-	CheckGCSafePoint:   true,
-	EnableSyncPoint:    false,
-	SyncPointInterval:  &JSONDuration{time.Minute * 10},
-	SyncPointRetention: &JSONDuration{time.Hour * 24},
+	MemoryQuota:      1024 * 1024 * 1024,
+	CaseSensitive:    true,
+	EnableOldValue:   true,
+	CheckGCSafePoint: true,
 	Filter: &FilterConfig{
 		Rules: []string{"*.*"},
 	},
@@ -122,22 +119,7 @@ var defaultReplicaConfig = &ReplicaConfig{
 		WorkerNum: 16,
 	},
 	Sink: &SinkConfig{
-		CSVConfig: &CSVConfig{
-			Quote:      string("\""),
-			Delimiter:  ",",
-			NullString: "\\N",
-		},
-		EncoderConcurrency:       16,
-		Terminator:               "\r\n",
-		DateSeparator:            "day",
-		EnablePartitionSeparator: true,
-	},
-	Consistent: &ConsistentConfig{
-		Level:             "none",
-		MaxLogSize:        redo.DefaultMaxLogSize,
-		FlushIntervalInMs: redo.DefaultFlushIntervalInMs,
-		Storage:           "",
-		UseFileBackend:    false,
+		Terminator: "\r\n",
 	},
 	Scheduler: &ChangefeedSchedulerConfig{
 		EnableTableAcrossNodes: false,
