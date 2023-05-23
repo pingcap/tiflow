@@ -137,10 +137,17 @@ func (m *DDLSink) execDDLWithMaxRetries(ctx context.Context, ddl *model.DDLEvent
 }
 
 func (m *DDLSink) execDDL(pctx context.Context, ddl *model.DDLEvent) error {
-	writeTimeout, _ := time.ParseDuration(m.cfg.WriteTimeout)
-	writeTimeout += networkDriftDuration
-	ctx, cancelFunc := context.WithTimeout(pctx, writeTimeout)
-	defer cancelFunc()
+	ctx := pctx
+	// When executing Reorg and Partition DDLs in TiDB, there is no timeout
+	// mechanism by default. Instead, the system will wait for the DDL operation
+	// to be executed or completed before proceeding.
+	if ddl.Type != timodel.ActionReorganizePartition {
+		writeTimeout, _ := time.ParseDuration(m.cfg.WriteTimeout)
+		writeTimeout += networkDriftDuration
+		var cancelFunc func()
+		ctx, cancelFunc = context.WithTimeout(pctx, writeTimeout)
+		defer cancelFunc()
+	}
 
 	shouldSwitchDB := needSwitchDB(ddl)
 
