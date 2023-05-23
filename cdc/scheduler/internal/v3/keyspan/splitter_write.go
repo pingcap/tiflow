@@ -25,6 +25,8 @@ import (
 	"go.uber.org/zap"
 )
 
+const regionWrittenKeyBase = 1
+
 type writeSplitter struct {
 	changefeedID model.ChangeFeedID
 	pdAPIClient  pdutil.PDAPIClient
@@ -56,15 +58,28 @@ func (m *writeSplitter) split(
 			zap.Error(err))
 		return nil
 	}
-	if totalCaptures <= 1 {
-		log.Warn("schedulerv3: only one capture, skip split span",
+
+	pages := totalCaptures
+	if len(regions)/spanRegionLimit > pages {
+		pages = len(regions) / spanRegionLimit
+	}
+
+	if pages <= 1 {
+		log.Warn("schedulerv3: only one capture and the regions number less than"+
+			" the maxSpanRegionLimit, skip split span",
 			zap.String("namespace", m.changefeedID.Namespace),
 			zap.String("changefeed", m.changefeedID.ID),
 			zap.String("span", span.String()),
 			zap.Error(err))
 		return []tablepb.Span{span}
 	}
-	info := splitRegionsByWrittenKeys(span.TableID, regions, config.WriteKeyThreshold, totalCaptures)
+
+	info := splitRegionsByWrittenKeys(span.TableID,
+		regions,
+		config.WriteKeyThreshold,
+		pages,
+		spanRegionLimit)
+
 	log.Info("schedulerv3: split span by written keys",
 		zap.String("namespace", m.changefeedID.Namespace),
 		zap.String("changefeed", m.changefeedID.ID),
@@ -73,7 +88,8 @@ func (m *writeSplitter) split(
 		zap.Ints("weights", info.Weights),
 		zap.Int("spans", len(info.Spans)),
 		zap.Int("totalCaptures", totalCaptures),
-		zap.Int("writeKeyThreshold", config.WriteKeyThreshold))
+		zap.Int("writeKeyThreshold", config.WriteKeyThreshold),
+		zap.Int("spanRegionLimit", spanRegionLimit))
 	return info.Spans
 }
 
@@ -84,8 +100,10 @@ type splitRegionsInfo struct {
 }
 
 // splitRegionsByWrittenKeys returns a slice of regions that evenly split the range by write keys.
+// pages is the number of splits to make, actually it is the number of captures.
 func splitRegionsByWrittenKeys(
-	tableID model.TableID, regions []pdutil.RegionInfo, writeKeyThreshold int, pages int,
+	tableID model.TableID, regions []pdutil.RegionInfo,
+	writeKeyThreshold int, pages int, spanRegionLimit int,
 ) *splitRegionsInfo {
 	decodeKey := func(hexkey string) []byte {
 		key, _ := hex.DecodeString(hexkey)
@@ -96,8 +114,8 @@ func splitRegionsByWrittenKeys(
 	for i := range regions {
 		totalWrite += regions[i].WrittenKeys
 		// Override 0 to 1 to reflect the baseline cost of a region.
-		// Also it makes split evenly when there is no write.
-		regions[i].WrittenKeys++
+		// Also, it makes split evenly when there is no write.
+		regions[i].WrittenKeys += regionWrittenKeyBase
 		totalWriteNormalized += regions[i].WrittenKeys
 	}
 	if totalWrite < uint64(writeKeyThreshold) {
@@ -118,15 +136,21 @@ func splitRegionsByWrittenKeys(
 	spans := make([]tablepb.Span, 0, pages)
 	accWrittenKeys, pageWrittenKeys := uint64(0), uint64(0)
 	pageStartIdx, pageLastIdx := 0, 0
+	pageRegionsCount := 0
+	// split the table into pages-1 spans, each span has writtenKeysPerPage written keys.
 	for i := 1; i < pages; i++ {
 		for idx := pageStartIdx; idx < len(regions); idx++ {
 			restPages := pages - i
 			restRegions := len(regions) - idx
 			pageLastIdx = idx
 			currentWrittenKeys := regions[idx].WrittenKeys
+			// If there is at least one region, and the rest regions can't fill the rest pages or
+			// the accWrittenKeys plus currentWrittenKeys is larger than writtenKeysPerPage,
+			// then use the region from pageStartIdx to idx-1 to as a span and start a new page.
 			if (idx > pageStartIdx) &&
 				((restPages >= restRegions) ||
-					(accWrittenKeys+currentWrittenKeys > writtenKeysPerPage)) {
+					(accWrittenKeys+currentWrittenKeys > writtenKeysPerPage) ||
+					pageRegionsCount >= spanRegionLimit) {
 				spans = append(spans, tablepb.Span{
 					TableID:  tableID,
 					StartKey: tablepb.Key(decodeKey(regions[pageStartIdx].StartKey)),
@@ -136,15 +160,20 @@ func splitRegionsByWrittenKeys(
 				weights = append(weights, int(pageWrittenKeys))
 				pageWrittenKeys = 0
 				pageStartIdx = idx
+				// update writtenKeysPerPage to make the rest regions evenly split
+				// to the rest pages.
 				writtenKeysPerPage = (totalWriteNormalized - accWrittenKeys) / uint64(restPages)
 				accWrittenKeys = 0
+				pageRegionsCount = 0
 				break
 			}
 			pageWrittenKeys += currentWrittenKeys
 			accWrittenKeys += currentWrittenKeys
+			pageRegionsCount++
 		}
 	}
-	// Always end with the last region.
+
+	// The last span contains the rest regions.
 	spans = append(spans, tablepb.Span{
 		TableID:  tableID,
 		StartKey: tablepb.Key(decodeKey(regions[pageLastIdx].StartKey)),
