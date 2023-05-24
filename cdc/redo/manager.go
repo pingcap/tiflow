@@ -259,7 +259,7 @@ func newLogManager(
 }
 
 // Run implements pkg/util.Runnable.
-func (m *logManager) Run(ctx context.Context) error {
+func (m *logManager) Run(ctx context.Context, _ ...chan<- error) error {
 	if m.Enabled() {
 		defer m.close()
 		return m.bgUpdateLog(ctx)

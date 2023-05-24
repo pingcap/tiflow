@@ -141,9 +141,10 @@ type ChangeFeedInfo struct {
 	// but can be fetched for backward compatibility
 	SortDir string `json:"sort-dir"`
 
-	Config *config.ReplicaConfig `json:"config"`
-	State  FeedState             `json:"state"`
-	Error  *RunningError         `json:"error"`
+	Config  *config.ReplicaConfig `json:"config"`
+	State   FeedState             `json:"state"`
+	Error   *RunningError         `json:"error"`
+	Warning *RunningError         `json:"warning"`
 
 	CreatorVersion string `json:"creator-version"`
 	// Epoch is the epoch of a changefeed, changes on every restart.
