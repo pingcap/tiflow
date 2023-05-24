@@ -85,9 +85,8 @@ function run() {
 	changefeedid_1="changefeed-error-1"
 	run_cdc_cli changefeed create --start-ts=$start_ts --sink-uri="$SINK_URI" -c $changefeedid_1
 
-	# TODO(qupeng): add a warning flag to check.
-	# run_sql "CREATE table changefeed_error.DDLERROR(id int primary key, val int);"
-	# ensure $MAX_RETRIES check_changefeed_state http://${UP_PD_HOST_1}:${UP_PD_PORT_1} ${changefeedid_1} "error" "[CDC:ErrExecDDLFailed]exec DDL failed" ""
+	run_sql "CREATE table changefeed_error.DDLERROR(id int primary key, val int);"
+	ensure $MAX_RETRIES check_changefeed_status 127.0.0.1:8300 $changefeedid_1 normal last_warning ErrExecDDLFailed
 
 	run_cdc_cli changefeed remove -c $changefeedid_1
 	cleanup_process $CDC_BINARY

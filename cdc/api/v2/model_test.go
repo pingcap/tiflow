@@ -49,7 +49,7 @@ var defaultAPIConfig = &ReplicaConfig{
 		},
 		EncoderConcurrency:       16,
 		Terminator:               config.CRLF,
-		DateSeparator:            config.DateSeparatorNone.String(),
+		DateSeparator:            config.DateSeparatorDay.String(),
 		EnablePartitionSeparator: true,
 		EnableKafkaSinkV2:        false,
 	},
