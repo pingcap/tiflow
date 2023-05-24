@@ -89,7 +89,7 @@ func iterTable(
 // OpenPebble opens a pebble.
 func OpenPebble(
 	id int, path string, cfg *config.DBConfig,
-	cacheSize uint64,
+	cache *pebble.Cache,
 	adjusts ...func(*pebble.Options),
 ) (db *pebble.DB, err error) {
 	dbDir := filepath.Join(path, fmt.Sprintf("%04d", id))
@@ -99,11 +99,7 @@ func OpenPebble(
 	}
 
 	opts := buildPebbleOption(cfg)
-	if cacheSize > 0 {
-		opts.Cache = pebble.NewCache(int64(cacheSize))
-		defer opts.Cache.Unref()
-	}
-
+	opts.Cache = cache
 	for _, adjust := range adjusts {
 		adjust(opts)
 	}
@@ -136,10 +132,14 @@ func buildPebbleOption(cfg *config.DBConfig) (opts *pebble.Options) {
 		l.IndexBlockSize = 256 << 10 // 256 KB
 		l.FilterPolicy = bloom.FilterPolicy(10)
 		l.FilterType = pebble.TableFilter
-		if i == 0 {
-			l.TargetFileSize = 8 << 20 // 8 MB
-		} else if i < 4 {
-			l.TargetFileSize = opts.Levels[i-1].TargetFileSize * 2
+		// 8M is large enough because generally Sorter won't carry too much data.
+		// Avoiding large targe file is helpful to reduce write-amplification.
+		l.TargetFileSize = 8 << 20 // 8 MB
+		switch cfg.Compression {
+		case "none":
+			l.Compression = pebble.NoCompression
+		case "snappy":
+			l.Compression = pebble.SnappyCompression
 		}
 		l.EnsureDefaults()
 	}
