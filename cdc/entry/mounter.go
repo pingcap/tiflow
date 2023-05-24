@@ -756,6 +756,7 @@ func getDefaultOrZeroValue(col *timodel.ColumnInfo) (types.Datum, any, int, stri
 	return d, v, size, warn, err
 }
 
+// GetDDLDefaultDefinition returns the default definition of a column.
 func GetDDLDefaultDefinition(col *timodel.ColumnInfo) interface{} {
 	defaultValue := col.GetDefaultValue()
 	if defaultValue == nil {
