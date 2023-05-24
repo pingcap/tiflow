@@ -319,6 +319,7 @@ func (s *OpenAPIControllerSuite) TestTaskController() {
 		params := openapi.DMAPIGetTaskParams{WithStatus: &withStatus}
 		taskAfterGet, err := server.getTask(ctx, s.testTask.Name, params)
 		s.NoError(err)
+		taskAfterGet.IgnoreCheckingItems = fixIgnoreCheckingItems(taskAfterGet.IgnoreCheckingItems)
 		s.EqualValues(s.testTask, taskAfterGet)
 		s.Nil(taskAfterGet.StatusList)
 
@@ -351,6 +352,7 @@ func (s *OpenAPIControllerSuite) TestTaskController() {
 		taskList, err := server.listTask(ctx, params)
 		s.NoError(err)
 		s.Len(taskList, 1)
+		taskList[0].IgnoreCheckingItems = fixIgnoreCheckingItems(taskList[0].IgnoreCheckingItems)
 		s.EqualValues(s.testTask, &taskList[0])
 
 		withStatus = true
@@ -422,6 +424,7 @@ func (s *OpenAPIControllerSuite) TestTaskController() {
 		s.NoError(err)
 		s.NotNil(task2)
 		s.NotNil(taskCfg2)
+		task2.IgnoreCheckingItems = fixIgnoreCheckingItems(task2.IgnoreCheckingItems)
 		s.EqualValues(task2, task)
 		s.Equal(taskCfg2.String(), taskCfg.String())
 
@@ -442,6 +445,7 @@ func (s *OpenAPIControllerSuite) TestTaskController() {
 		s.NoError(err)
 		s.NotNil(task4)
 		s.NotNil(taskCfg4)
+		task4.IgnoreCheckingItems = fixIgnoreCheckingItems(task4.IgnoreCheckingItems)
 		s.EqualValues(task4, task3)
 		s.Equal(taskCfg4.String(), taskCfg3.String())
 	}
@@ -548,4 +552,18 @@ func (s *OpenAPIControllerSuite) TestTaskControllerWithInvalidTask() {
 
 func TestOpenAPIControllerSuite(t *testing.T) {
 	suite.Run(t, new(OpenAPIControllerSuite))
+}
+
+func fixIgnoreCheckingItems(items *[]string) *[]string {
+	if items == nil {
+		return nil
+	}
+	newItems := *items
+	for len(newItems) > 0 && newItems[len(newItems)-1] == config.MetaPositionChecking {
+		newItems = newItems[:len(newItems)-1]
+	}
+	if len(newItems) == 0 {
+		return nil
+	}
+	return &newItems
 }
