@@ -274,7 +274,7 @@ func (c *BinlogDBChecker) Name() string {
 	return "binlog_do_db/binlog_ignore_db check"
 }
 
-// MetaPositionChecker checks if meta position for given source database is valid
+// MetaPositionChecker checks if meta position for given source database is valid.
 type MetaPositionChecker struct {
 	db         *conn.BaseDB
 	sourceCfg  dbconfig.DBConfig
