@@ -12,6 +12,12 @@ if [ "$SINK_TYPE" != "kafka" ]; then
 	return
 fi
 
+echo 'Show the bin directory'
+ls ./bin
+
+echo 'Show the schema-registry directory'
+ls ./bin/schema-registry
+
 echo 'Starting schema registry...'
 ./bin/schema-registry/bin/schema-registry-start -daemon ./bin/schema-registry/etc/schema-registry/schema-registry.properties
 sleep 3
