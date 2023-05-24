@@ -106,8 +106,9 @@ var defaultServerConfig = &ServerConfig{
 	OwnerFlushInterval:     TomlDuration(50 * time.Millisecond),
 	ProcessorFlushInterval: TomlDuration(50 * time.Millisecond),
 	Sorter: &SorterConfig{
-		MaxMemoryPercentage: 10, // 10% is safe on machines with memory capacity <= 16GB
 		SortDir:             DefaultSortDir,
+		CacheSizeInMB:       128, // By default use 128M memory as sorter cache.
+		MaxMemoryPercentage: 10,  // Deprecated.
 	},
 	Security: &SecurityConfig{},
 	KVClient: &KVClientConfig{
