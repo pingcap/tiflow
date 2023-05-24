@@ -37,6 +37,9 @@ function run() {
 
 	cd $WORK_DIR
 
+	# adjust schema registry compatibility level to the none, to allow the schema evolution caused by the TiDB DDL execution.
+	curl -X PUT -H "Content-Type: application/vnd.schemaregistry.v1+json" --data '{"compatibility": "NONE"}' http://127.0.0.1:8081/config
+
 	# upstream tidb cluster enable row level checksum
 	run_sql "set global tidb_enable_row_level_checksum=true" ${UP_TIDB_HOST} ${UP_TIDB_PORT}
 
