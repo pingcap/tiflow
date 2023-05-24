@@ -311,6 +311,7 @@ func (c *ReplicaConfig) toInternalReplicaConfigWithOriginConfig(
 				SASLOAuthTokenURL:            c.Sink.KafkaConfig.SASLOAuthTokenURL,
 				SASLOAuthScopes:              c.Sink.KafkaConfig.SASLOAuthScopes,
 				SASLOAuthGrantType:           c.Sink.KafkaConfig.SASLOAuthGrantType,
+				SASLOAuthAudience:            c.Sink.KafkaConfig.SASLOAuthAudience,
 				EnableTLS:                    c.Sink.KafkaConfig.EnableTLS,
 				CA:                           c.Sink.KafkaConfig.CA,
 				Cert:                         c.Sink.KafkaConfig.Cert,
@@ -512,6 +513,7 @@ func ToAPIReplicaConfig(c *config.ReplicaConfig) *ReplicaConfig {
 				SASLOAuthTokenURL:            cloned.Sink.KafkaConfig.SASLOAuthTokenURL,
 				SASLOAuthScopes:              cloned.Sink.KafkaConfig.SASLOAuthScopes,
 				SASLOAuthGrantType:           cloned.Sink.KafkaConfig.SASLOAuthGrantType,
+				SASLOAuthAudience:            cloned.Sink.KafkaConfig.SASLOAuthAudience,
 				EnableTLS:                    cloned.Sink.KafkaConfig.EnableTLS,
 				CA:                           cloned.Sink.KafkaConfig.CA,
 				Cert:                         cloned.Sink.KafkaConfig.Cert,
@@ -931,6 +933,7 @@ type KafkaConfig struct {
 	SASLOAuthTokenURL            *string      `json:"sasl_oauth_token_url,omitempty"`
 	SASLOAuthScopes              []string     `json:"sasl_oauth_scopes,omitempty"`
 	SASLOAuthGrantType           *string      `json:"sasl_oauth_grant_type,omitempty"`
+	SASLOAuthAudience            *string      `json:"sasl_oauth_audience,omitempty"`
 	EnableTLS                    *bool        `json:"enable_tls,omitempty"`
 	CA                           *string      `json:"ca,omitempty"`
 	Cert                         *string      `json:"cert,omitempty"`

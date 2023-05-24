@@ -509,6 +509,10 @@ func (o *Options) applySASL(urlParameter *urlConfig, replicaConfig *config.Repli
 		if replicaConfig.Sink.KafkaConfig.SASLOAuthGrantType != nil {
 			o.SASL.OAuth2.GrantType = *replicaConfig.Sink.KafkaConfig.SASLOAuthGrantType
 		}
+
+		if replicaConfig.Sink.KafkaConfig.SASLOAuthAudience != nil {
+			o.SASL.OAuth2.Audience = *replicaConfig.Sink.KafkaConfig.SASLOAuthAudience
+		}
 	}
 
 	return nil

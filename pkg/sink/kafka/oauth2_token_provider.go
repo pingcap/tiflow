@@ -57,7 +57,19 @@ func newTokenProvider(ctx context.Context, o *Options) (sarama.AccessTokenProvid
 	// auth server implementations may want a custom type
 	var endpointParams url.Values
 	if o.SASL.OAuth2.GrantType != "" {
-		endpointParams = url.Values{"grant_type": {o.SASL.OAuth2.GrantType}}
+		if endpointParams == nil {
+			endpointParams = url.Values{}
+		}
+		endpointParams.Set("grant_type", o.SASL.OAuth2.GrantType)
+	}
+
+	// audience is an optional parameter that can be used to specify the
+	// intended audience of the token.
+	if o.SASL.OAuth2.Audience != "" {
+		if endpointParams == nil {
+			endpointParams = url.Values{}
+		}
+		endpointParams.Set("audience", o.SASL.OAuth2.Audience)
 	}
 
 	tokenURL, err := url.Parse(o.SASL.OAuth2.TokenURL)

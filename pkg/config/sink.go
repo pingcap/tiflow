@@ -278,6 +278,7 @@ type KafkaConfig struct {
 	SASLOAuthTokenURL            *string      `toml:"sasl-oauth-token-url" json:"sasl-oauth-token-url,omitempty"`
 	SASLOAuthScopes              []string     `toml:"sasl-oauth-scopes" json:"sasl-oauth-scopes,omitempty"`
 	SASLOAuthGrantType           *string      `toml:"sasl-oauth-grant-type" json:"sasl-oauth-grant-type,omitempty"`
+	SASLOAuthAudience            *string      `toml:"sasl-oauth-audience" json:"sasl-oauth-audience,omitempty"`
 	EnableTLS                    *bool        `toml:"enable-tls" json:"enable-tls,omitempty"`
 	CA                           *string      `toml:"ca" json:"ca,omitempty"`
 	Cert                         *string      `toml:"cert" json:"cert,omitempty"`

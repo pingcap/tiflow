@@ -1472,6 +1472,9 @@ var doc = `{
                 "sasl-mechanism": {
                     "type": "string"
                 },
+                "sasl-oauth-audience": {
+                    "type": "string"
+                },
                 "sasl-oauth-client-id": {
                     "type": "string"
                 },
@@ -2345,6 +2348,9 @@ var doc = `{
                     "type": "string"
                 },
                 "sasl_mechanism": {
+                    "type": "string"
+                },
+                "sasl_oauth_audience": {
                     "type": "string"
                 },
                 "sasl_oauth_client_id": {
