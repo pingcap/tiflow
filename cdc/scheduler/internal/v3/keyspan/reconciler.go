@@ -30,6 +30,8 @@ import (
 	"go.uber.org/zap"
 )
 
+const spanRegionLimit = 50000
+
 type splitter interface {
 	split(
 		ctx context.Context, span tablepb.Span, totalCaptures int,
@@ -69,6 +71,7 @@ func NewReconciler(
 		changefeedID: changefeedID,
 		config:       config,
 		splitter: []splitter{
+			// write splitter has the highest priority.
 			newWriteSplitter(changefeedID, pdapi),
 			newRegionCountSplitter(changefeedID, up.RegionCache),
 		},

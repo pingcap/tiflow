@@ -19,13 +19,15 @@ import (
 )
 
 // Hang will block the goroutine for a given duration, or return when `ctx` is done.
-func Hang(ctx context.Context, dur time.Duration) {
+func Hang(ctx context.Context, dur time.Duration) error {
 	timer := time.NewTimer(dur)
 	select {
 	case <-ctx.Done():
 		if !timer.Stop() {
 			<-timer.C
 		}
+		return ctx.Err()
 	case <-timer.C:
+		return nil
 	}
 }

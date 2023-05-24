@@ -33,8 +33,10 @@ type TableSink interface {
 	// This is a thread-safe method.
 	GetCheckpointTs() model.ResolvedTs
 	// Close closes the table sink.
-	// We should make sure this method is cancellable.
+	// After it returns, no more events will be sent out from this capture.
 	Close()
+	// AsyncClose closes the table sink asynchronously. Returns true if it's closed.
+	AsyncClose() bool
 }
 
 // SinkInternalError means the error comes from sink internal.
@@ -45,4 +47,9 @@ type SinkInternalError struct {
 // Error implements builtin `error` interface.
 func (e SinkInternalError) Error() string {
 	return e.err.Error()
+}
+
+// NewSinkInternalError creates a SinkInternalError.
+func NewSinkInternalError(err error) SinkInternalError {
+	return SinkInternalError{err}
 }

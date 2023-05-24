@@ -76,7 +76,9 @@ func newTableSinkAdvancer(
 func (a *tableSinkAdvancer) advance(isLastTime bool) (err error) {
 	// Append the events to the table sink first.
 	if len(a.events) > 0 {
-		a.task.tableSink.appendRowChangedEvents(a.events...)
+		if err = a.task.tableSink.appendRowChangedEvents(a.events...); err != nil {
+			return
+		}
 		a.events = a.events[:0]
 		if cap(a.events) > bufferSize {
 			a.events = make([]*model.RowChangedEvent, 0, bufferSize)
