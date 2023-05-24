@@ -45,6 +45,11 @@ type ChangeFeedID struct {
 	ID        string
 }
 
+// String implements fmt.Stringer interface
+func (c ChangeFeedID) String() string {
+	return c.Namespace + "/" + c.ID
+}
+
 // DefaultChangeFeedID returns `ChangeFeedID` with default namespace
 func DefaultChangeFeedID(id string) ChangeFeedID {
 	return ChangeFeedID{

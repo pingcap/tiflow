@@ -43,7 +43,7 @@ import (
 )
 
 var (
-	changeFeedID  = model.DefaultChangeFeedID("test-changeFeed")
+	changeFeedID  = model.ChangeFeedID{Namespace: "abc", ID: "test-changeFeed"}
 	blackholeSink = "blackhole://"
 	mysqlSink     = "mysql://root:123456@127.0.0.1:3306"
 )
@@ -77,13 +77,15 @@ func TestCreateChangefeed(t *testing.T) {
 
 	// case 1: json format mismatches with the spec.
 	errConfig := struct {
-		ID      string `json:"changefeed_id"`
-		SinkURI string `json:"sink_uri"`
-		PDAddrs string `json:"pd_addrs"` // should be an array
+		ID        string `json:"changefeed_id"`
+		Namespace string `json:"namespace"`
+		SinkURI   string `json:"sink_uri"`
+		PDAddrs   string `json:"pd_addrs"` // should be an array
 	}{
-		ID:      changeFeedID.ID,
-		SinkURI: blackholeSink,
-		PDAddrs: "http://127.0.0.1:2379",
+		ID:        changeFeedID.ID,
+		Namespace: changeFeedID.Namespace,
+		SinkURI:   blackholeSink,
+		PDAddrs:   "http://127.0.0.1:2379",
 	}
 	bodyErr, err := json.Marshal(&errConfig)
 	require.Nil(t, err)
@@ -98,13 +100,15 @@ func TestCreateChangefeed(t *testing.T) {
 	require.Contains(t, respErr.Code, "ErrAPIInvalidParam")
 
 	cfConfig := struct {
-		ID      string   `json:"changefeed_id"`
-		SinkURI string   `json:"sink_uri"`
-		PDAddrs []string `json:"pd_addrs"`
+		ID        string   `json:"changefeed_id"`
+		Namespace string   `json:"namespace"`
+		SinkURI   string   `json:"sink_uri"`
+		PDAddrs   []string `json:"pd_addrs"`
 	}{
-		ID:      changeFeedID.ID,
-		SinkURI: blackholeSink,
-		PDAddrs: []string{},
+		ID:        changeFeedID.ID,
+		Namespace: changeFeedID.Namespace,
+		SinkURI:   blackholeSink,
+		PDAddrs:   []string{},
 	}
 	body, err := json.Marshal(&cfConfig)
 	require.Nil(t, err)
@@ -187,10 +191,12 @@ func TestCreateChangefeed(t *testing.T) {
 			kvStorage tidbkv.Storage,
 		) (*model.ChangeFeedInfo, error) {
 			require.EqualValues(t, cfg.ID, changeFeedID.ID)
+			require.EqualValues(t, cfg.Namespace, changeFeedID.Namespace)
 			require.EqualValues(t, cfg.SinkURI, mysqlSink)
 			return &model.ChangeFeedInfo{
 				UpstreamID: 1,
 				ID:         cfg.ID,
+				Namespace:  cfg.Namespace,
 				SinkURI:    cfg.SinkURI,
 			}, nil
 		}).AnyTimes()
@@ -227,6 +233,7 @@ func TestCreateChangefeed(t *testing.T) {
 	err = json.NewDecoder(w.Body).Decode(&resp)
 	require.Nil(t, err)
 	require.Equal(t, cfConfig.ID, resp.ID)
+	require.Equal(t, cfConfig.Namespace, resp.Namespace)
 	mysqlSink, err = util.MaskSinkURI(mysqlSink)
 	require.Nil(t, err)
 	require.Equal(t, mysqlSink, resp.SinkURI)
@@ -236,7 +243,7 @@ func TestCreateChangefeed(t *testing.T) {
 func TestGetChangeFeed(t *testing.T) {
 	t.Parallel()
 
-	cfInfo := testCase{url: "/api/v2/changefeeds/%s", method: "GET"}
+	cfInfo := testCase{url: "/api/v2/changefeeds/%s?namespace=%s", method: "GET"}
 	statusProvider := &mockStatusProvider{}
 	cp := mock_capture.NewMockCapture(gomock.NewController(t))
 	cp.EXPECT().IsReady().Return(true).AnyTimes()
@@ -250,7 +257,7 @@ func TestGetChangeFeed(t *testing.T) {
 	invalidID := "@^Invalid"
 	req, _ := http.NewRequestWithContext(
 		context.Background(),
-		cfInfo.method, fmt.Sprintf(cfInfo.url, invalidID),
+		cfInfo.method, fmt.Sprintf(cfInfo.url, invalidID, "test"),
 		nil,
 	)
 	router.ServeHTTP(w, req)
@@ -268,7 +275,7 @@ func TestGetChangeFeed(t *testing.T) {
 	req, _ = http.NewRequestWithContext(
 		context.Background(),
 		cfInfo.method,
-		fmt.Sprintf(cfInfo.url, validID),
+		fmt.Sprintf(cfInfo.url, validID, "test"),
 		nil,
 	)
 	router.ServeHTTP(w, req)
@@ -281,7 +288,8 @@ func TestGetChangeFeed(t *testing.T) {
 	// valid but changefeed contains runtime error
 	statusProvider.err = nil
 	statusProvider.changefeedInfo = &model.ChangeFeedInfo{
-		ID: validID,
+		ID:        validID,
+		Namespace: "abc",
 		Error: &model.RunningError{
 			Code: string(cerrors.ErrStartTsBeforeGC.RFCCode()),
 		},
@@ -291,13 +299,14 @@ func TestGetChangeFeed(t *testing.T) {
 	}
 	w = httptest.NewRecorder()
 	req, _ = http.NewRequestWithContext(context.Background(),
-		cfInfo.method, fmt.Sprintf(cfInfo.url, validID), nil)
+		cfInfo.method, fmt.Sprintf(cfInfo.url, validID, "abc"), nil)
 	router.ServeHTTP(w, req)
 	require.Equal(t, http.StatusOK, w.Code)
 	resp := ChangeFeedInfo{}
 	err = json.NewDecoder(w.Body).Decode(&resp)
 	require.Nil(t, err)
 	require.Equal(t, resp.ID, validID)
+	require.Equal(t, resp.Namespace, "abc")
 	require.Contains(t, resp.Error.Code, "ErrStartTsBeforeGC")
 
 	// success
@@ -306,7 +315,7 @@ func TestGetChangeFeed(t *testing.T) {
 	req, _ = http.NewRequestWithContext(
 		context.Background(),
 		cfInfo.method,
-		fmt.Sprintf(cfInfo.url, validID),
+		fmt.Sprintf(cfInfo.url, validID, "abc"),
 		nil,
 	)
 	router.ServeHTTP(w, req)
