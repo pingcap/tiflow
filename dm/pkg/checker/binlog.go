@@ -347,6 +347,7 @@ func (c *MetaPositionChecker) Check(ctx context.Context) *Result {
 	}
 
 	syncer := replication.NewBinlogSyncer(syncCfg)
+	defer syncer.Close()
 	var streamer *replication.BinlogStreamer
 	if c.enableGTID {
 		gtidSet, err2 := gtid.ParserGTID(flavor, c.meta.BinLogGTID)
