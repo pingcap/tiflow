@@ -143,6 +143,10 @@ type CDCKVClient interface {
 
 	// RegionCount returns the number of captured regions.
 	RegionCount() uint64
+	// ResolvedTs returns the current ingress resolved ts.
+	ResolvedTs() model.Ts
+	// CommitTs returns the current ingress commit ts.
+	CommitTs() model.Ts
 }
 
 // NewCDCKVClient is the constructor of CDC KV client
@@ -164,15 +168,21 @@ type CDCClient struct {
 	tableID    model.TableID
 	tableName  string
 
-	regionCounts struct {
-		sync.Mutex
-		// map[table_id/store_id] -> count.
-		counts map[string]*atomic.Uint64
+	tableStoreStats struct {
+		sync.RWMutex
+		// map[table_id/store_id] -> *tableStoreStat.
+		v map[string]*tableStoreStat
 	}
 
 	// filterLoop is used in BDR mode, when it is true, tikv cdc component
 	// will filter data that are written by another TiCDC.
 	filterLoop bool
+}
+
+type tableStoreStat struct {
+	regionCount atomic.Uint64
+	resolvedTs  atomic.Uint64
+	commitTs    atomic.Uint64
 }
 
 // NewCDCClient creates a CDCClient instance
@@ -203,7 +213,7 @@ func NewCDCClient(
 		tableName:  tableName,
 		filterLoop: filterLoop,
 	}
-	c.regionCounts.counts = make(map[string]*atomic.Uint64)
+	c.tableStoreStats.v = make(map[string]*tableStoreStat)
 	return c
 }
 
@@ -260,12 +270,40 @@ func (c *CDCClient) EventFeed(
 
 // RegionCount returns the number of captured regions.
 func (c *CDCClient) RegionCount() (totalCount uint64) {
-	c.regionCounts.Lock()
-	defer c.regionCounts.Unlock()
-	for _, v := range c.regionCounts.counts {
-		totalCount += v.Load()
+	c.tableStoreStats.RLock()
+	defer c.tableStoreStats.RUnlock()
+	for _, v := range c.tableStoreStats.v {
+		totalCount += v.regionCount.Load()
 	}
 	return totalCount
+}
+
+// ResolvedTs returns the current ingress resolved ts.
+func (c *CDCClient) ResolvedTs() model.Ts {
+	c.tableStoreStats.RLock()
+	defer c.tableStoreStats.RUnlock()
+	ingressResolvedTs := uint64(0)
+	for _, v := range c.tableStoreStats.v {
+		curr := v.resolvedTs.Load()
+		if curr > ingressResolvedTs {
+			ingressResolvedTs = curr
+		}
+	}
+	return ingressResolvedTs
+}
+
+// CommitTs returns the current ingress commit ts.
+func (c *CDCClient) CommitTs() model.Ts {
+	c.tableStoreStats.RLock()
+	defer c.tableStoreStats.RUnlock()
+	ingressCommitTs := uint64(0)
+	for _, v := range c.tableStoreStats.v {
+		curr := v.commitTs.Load()
+		if curr > ingressCommitTs {
+			ingressCommitTs = curr
+		}
+	}
+	return ingressCommitTs
 }
 
 var currentID uint64 = 0
@@ -931,15 +969,14 @@ func (s *eventFeedSession) receiveFromStream(
 	stream cdcpb.ChangeData_EventFeedClient,
 	pendingRegions *syncRegionFeedStateMap,
 ) error {
-	var regionCount *atomic.Uint64
-	s.client.regionCounts.Lock()
+	var tsStat *tableStoreStat
+	s.client.tableStoreStats.Lock()
 	key := fmt.Sprintf("%d_%d", s.totalSpan.TableID, storeID)
-	if regionCount, ok := s.client.regionCounts.counts[key]; !ok {
-		regionCount = new(atomic.Uint64)
-		regionCount.Store(0)
-		s.client.regionCounts.counts[key] = regionCount
+	if tsStat, ok := s.client.tableStoreStats.v[key]; !ok {
+		tsStat = new(tableStoreStat)
+		s.client.tableStoreStats.v[key] = tsStat
 	}
-	s.client.regionCounts.Unlock()
+	s.client.tableStoreStats.Unlock()
 
 	// Cancel the pending regions if the stream failed.
 	// Otherwise, it will remain unhandled in the pendingRegions list
@@ -1065,9 +1102,18 @@ func (s *eventFeedSession) receiveFromStream(
 			if err != nil {
 				return err
 			}
+			// NOTE(qupeng): what if all regions are removed from the store?
 			// TiKV send resolved ts events every second by default.
 			// We check and update region count here to save CPU.
-			regionCount.Store(uint64(worker.statesManager.regionCount()))
+			tsStat.regionCount.Store(uint64(worker.statesManager.regionCount()))
+			tsStat.resolvedTs.Store(cevent.ResolvedTs.Ts)
+			if maxCommitTs == 0 {
+				// In case, there is no write for the table,
+				// we use resolved ts as maxCommitTs to make the stats meaningful.
+				tsStat.commitTs.Store(cevent.ResolvedTs.Ts)
+			} else {
+				tsStat.commitTs.Store(maxCommitTs)
+			}
 		}
 	}
 }
