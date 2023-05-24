@@ -972,7 +972,7 @@ func (s *eventFeedSession) receiveFromStream(
 	var tsStat *tableStoreStat
 	s.client.tableStoreStats.Lock()
 	key := fmt.Sprintf("%d_%d", s.totalSpan.TableID, storeID)
-	if tsStat, ok := s.client.tableStoreStats.v[key]; !ok {
+	if tsStat = s.client.tableStoreStats.v[key]; tsStat == nil {
 		tsStat = new(tableStoreStat)
 		s.client.tableStoreStats.v[key] = tsStat
 	}
