@@ -47,7 +47,27 @@ function run() {
 	cleanup_process $CDC_BINARY
 	export GO_FAILPOINTS='github.com/pingcap/tiflow/cdc/sink/dmlsink/txn/mysql/MySQLSinkHangLongTime=return(true);github.com/pingcap/tiflow/cdc/sink/ddlsink/mysql/MySQLSinkExecDDLDelay=return(true)'
 	run_cdc_server --workdir $WORK_DIR --binary $CDC_BINARY
+<<<<<<< HEAD
 	run_sql "insert into consistent_replicate_ddl.usertable2 select * from consistent_replicate_ddl.usertable" ${UP_TIDB_HOST} ${UP_TIDB_PORT}
+=======
+
+	# case 1:
+	# global ddl tests -> ActionRenameTable
+	# table ddl tests -> ActionDropTable
+	run_sql "DROP TABLE consistent_replicate_ddl.usertable1" ${UP_TIDB_HOST} ${UP_TIDB_PORT}
+	run_sql "RENAME TABLE consistent_replicate_ddl.usertable_bak TO consistent_replicate_ddl.usertable1" ${UP_TIDB_HOST} ${UP_TIDB_PORT}
+	run_sql "INSERT INTO consistent_replicate_ddl.usertable1 SELECT * FROM consistent_replicate_ddl.usertable limit 10" ${UP_TIDB_HOST} ${UP_TIDB_PORT}
+	run_sql "RENAME TABLE consistent_replicate_ddl.usertable1 TO consistent_replicate_ddl.usertable1_1" ${UP_TIDB_HOST} ${UP_TIDB_PORT}
+	run_sql "INSERT IGNORE INTO consistent_replicate_ddl.usertable1_1 SELECT * FROM consistent_replicate_ddl.usertable" ${UP_TIDB_HOST} ${UP_TIDB_PORT}
+
+	# case 2:
+	# global ddl tests -> ActionCreateSchema, ActionModifySchemaCharsetAndCollate
+	# table ddl tests -> ActionMultiSchemaChange, ActionAddColumn, ActionDropColumn, ActionModifyTableCharsetAndCollate
+	run_sql "CREATE DATABASE consistent_replicate_ddl1" ${UP_TIDB_HOST} ${UP_TIDB_PORT}
+	run_sql "ALTER DATABASE consistent_replicate_ddl CHARACTER SET utf8mb4 COLLATE utf8mb4_bin;" ${UP_TIDB_HOST} ${UP_TIDB_PORT}
+	run_sql "ALTER TABLE consistent_replicate_ddl.usertable2 CHARACTER SET utf8mb4 COLLATE utf8mb4_bin" ${UP_TIDB_HOST} ${UP_TIDB_PORT}
+	run_sql "INSERT INTO consistent_replicate_ddl.usertable2 SELECT * FROM consistent_replicate_ddl.usertable limit 20" ${UP_TIDB_HOST} ${UP_TIDB_PORT}
+>>>>>>> eeb6b9f69e (owner(ticdc): fix the issue of resolvedTs may stuck when no table is synchronized  (#9022))
 	run_sql "ALTER TABLE consistent_replicate_ddl.usertable2 DROP COLUMN FIELD0" ${UP_TIDB_HOST} ${UP_TIDB_PORT}
 	run_sql "ALTER TABLE consistent_replicate_ddl.usertable2 ADD COLUMN dummy varchar(30)" ${UP_TIDB_HOST} ${UP_TIDB_PORT}
 	run_sql "insert into consistent_replicate_ddl.usertable3 select * from consistent_replicate_ddl.usertable" ${UP_TIDB_HOST} ${UP_TIDB_PORT}
@@ -71,7 +91,13 @@ function run() {
 	cdc redo apply --tmp-dir="$tmp_download_path/apply" \
 		--storage="$storage_path" \
 		--sink-uri="mysql://normal:123456@127.0.0.1:3306/"
+<<<<<<< HEAD
 	check_sync_diff $WORK_DIR $CUR/conf/diff_config.toml
+=======
+
+	check_table_exists "consistent_replicate_ddl.check1" ${DOWN_TIDB_HOST} ${DOWN_TIDB_PORT} 120
+	check_sync_diff $WORK_DIR $WORK_DIR/diff_config.toml
+>>>>>>> eeb6b9f69e (owner(ticdc): fix the issue of resolvedTs may stuck when no table is synchronized  (#9022))
 }
 
 trap stop EXIT
