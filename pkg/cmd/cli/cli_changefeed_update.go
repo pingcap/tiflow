@@ -35,6 +35,7 @@ type updateChangefeedOptions struct {
 
 	commonChangefeedOptions *changefeedCommonOptions
 	changefeedID            string
+	namespace               string
 }
 
 // newUpdateChangefeedOptions creates new options for the `cli changefeed update` command.
@@ -48,6 +49,7 @@ func newUpdateChangefeedOptions(commonChangefeedOptions *changefeedCommonOptions
 // flags related to template printing to it.
 func (o *updateChangefeedOptions) addFlags(cmd *cobra.Command) {
 	o.commonChangefeedOptions.addFlags(cmd)
+	cmd.PersistentFlags().StringVarP(&o.namespace, "namespace", "n", "default", "Replication task (changefeed) Namespace")
 	cmd.PersistentFlags().StringVarP(&o.changefeedID, "changefeed-id", "c", "", "Replication task (changefeed) ID")
 	_ = cmd.MarkPersistentFlagRequired("changefeed-id")
 }
@@ -90,7 +92,7 @@ func (o *updateChangefeedOptions) complete(f factory.Factory) error {
 func (o *updateChangefeedOptions) run(cmd *cobra.Command) error {
 	ctx := cmdcontext.GetDefaultContext()
 
-	old, err := o.apiV2Client.Changefeeds().Get(ctx, o.changefeedID)
+	old, err := o.apiV2Client.Changefeeds().Get(ctx, o.namespace, o.changefeedID)
 	if err != nil {
 		return err
 	}
@@ -126,7 +128,7 @@ func (o *updateChangefeedOptions) run(cmd *cobra.Command) error {
 	}
 
 	changefeedConfig := o.getChangefeedConfig(cmd, newInfo)
-	info, err := o.apiV2Client.Changefeeds().Update(ctx, changefeedConfig, o.changefeedID)
+	info, err := o.apiV2Client.Changefeeds().Update(ctx, changefeedConfig, o.namespace, o.changefeedID)
 	if err != nil {
 		return err
 	}

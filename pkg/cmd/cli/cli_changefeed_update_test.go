@@ -104,20 +104,20 @@ func TestChangefeedUpdateCli(t *testing.T) {
 	o := newUpdateChangefeedOptions(newChangefeedCommonOptions())
 	o.complete(f)
 	cmd := newCmdUpdateChangefeed(f)
-	f.changefeeds.EXPECT().Get(gomock.Any(), "abc").Return(nil, errors.New("test"))
+	f.changefeeds.EXPECT().Get(gomock.Any(), gomock.Any(), "abc").Return(nil, errors.New("test"))
 	os.Args = []string{"update", "--no-confirm=true", "--changefeed-id=abc"}
 	o.commonChangefeedOptions.noConfirm = true
 	o.changefeedID = "abc"
 	require.NotNil(t, o.run(cmd))
 
-	f.changefeeds.EXPECT().Get(gomock.Any(), "abc").
+	f.changefeeds.EXPECT().Get(gomock.Any(), gomock.Any(), "abc").
 		Return(&v2.ChangeFeedInfo{
 			ID: "abc",
 			Config: &v2.ReplicaConfig{
 				Sink: &v2.SinkConfig{},
 			},
 		}, nil)
-	f.changefeeds.EXPECT().Update(gomock.Any(), gomock.Any(), "abc").
+	f.changefeeds.EXPECT().Update(gomock.Any(), gomock.Any(), "ns", "abc").
 		Return(&v2.ChangeFeedInfo{}, nil)
 	dir := t.TempDir()
 	configPath := filepath.Join(dir, "cf.toml")
@@ -132,6 +132,7 @@ func TestChangefeedUpdateCli(t *testing.T) {
 		"--schema-registry=a",
 		"--sort-engine=memory",
 		"--changefeed-id=abc",
+		"--namespace=ns",
 		"--sort-dir=a",
 		"--upstream-pd=pd",
 		"--upstream-ca=ca",
@@ -153,16 +154,17 @@ func TestChangefeedUpdateCli(t *testing.T) {
 
 	// no diff
 	cmd = newCmdUpdateChangefeed(f)
-	f.changefeeds.EXPECT().Get(gomock.Any(), "abc").
+	f.changefeeds.EXPECT().Get(gomock.Any(), gomock.Any(), "abc").
 		Return(&v2.ChangeFeedInfo{}, nil)
 	os.Args = []string{"update", "--no-confirm=true", "-c", "abc"}
 	require.Nil(t, cmd.Execute())
 
 	cmd = newCmdUpdateChangefeed(f)
-	f.changefeeds.EXPECT().Get(gomock.Any(), "abcd").
+	f.changefeeds.EXPECT().Get(gomock.Any(), "ns", "abcd").
 		Return(&v2.ChangeFeedInfo{ID: "abcd"}, errors.New("test"))
 	o.commonChangefeedOptions.noConfirm = true
 	o.commonChangefeedOptions.sortEngine = "unified"
 	o.changefeedID = "abcd"
+	o.namespace = "ns"
 	require.NotNil(t, o.run(cmd))
 }

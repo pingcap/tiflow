@@ -38,7 +38,8 @@ type changefeedCommonInfo struct {
 type listChangefeedOptions struct {
 	apiClient v2.APIV2Interface
 
-	listAll bool
+	listAll   bool
+	namespace string
 }
 
 // newListChangefeedOptions creates new options for the `cli changefeed list` command.
@@ -49,6 +50,7 @@ func newListChangefeedOptions() *listChangefeedOptions {
 // addFlags receives a *cobra.Command reference and binds
 // flags related to template printing to it.
 func (o *listChangefeedOptions) addFlags(cmd *cobra.Command) {
+	cmd.PersistentFlags().StringVarP(&o.namespace, "namespace", "n", "default", "Replication task (changefeed) Namespace")
 	cmd.PersistentFlags().BoolVarP(&o.listAll, "all", "a", false, "List all replication tasks(including removed and finished)")
 }
 
@@ -66,7 +68,7 @@ func (o *listChangefeedOptions) complete(f factory.Factory) error {
 func (o *listChangefeedOptions) run(cmd *cobra.Command) error {
 	ctx := context.GetDefaultContext()
 
-	raw, err := o.apiClient.Changefeeds().List(ctx, "all")
+	raw, err := o.apiClient.Changefeeds().List(ctx, o.namespace, "all")
 	if err != nil {
 		return err
 	}

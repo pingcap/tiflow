@@ -38,6 +38,7 @@ type statisticsChangefeedOptions struct {
 	apiClient apiv2client.APIV2Interface
 
 	changefeedID string
+	namespace    string
 	interval     uint
 }
 
@@ -49,6 +50,7 @@ func newStatisticsChangefeedOptions() *statisticsChangefeedOptions {
 // addFlags receives a *cobra.Command reference and binds
 // flags related to template printing to it.
 func (o *statisticsChangefeedOptions) addFlags(cmd *cobra.Command) {
+	cmd.PersistentFlags().StringVarP(&o.namespace, "namespace", "n", "default", "Replication task (changefeed) Namespace")
 	cmd.PersistentFlags().UintVarP(&o.interval, "interval", "I", 10, "Interval for outputing the latest statistics")
 	cmd.PersistentFlags().StringVarP(&o.changefeedID, "changefeed-id", "c", "", "Replication task (changefeed) ID")
 	_ = cmd.MarkPersistentFlagRequired("changefeed-id")
@@ -69,7 +71,7 @@ func (o *statisticsChangefeedOptions) runCliWithAPIClient(ctx context.Context, c
 	now := time.Now()
 	var count uint64
 
-	changefeed, err := o.apiClient.Changefeeds().Get(ctx, o.changefeedID)
+	changefeed, err := o.apiClient.Changefeeds().Get(ctx, o.namespace, o.changefeedID)
 	if err != nil {
 		return err
 	}
