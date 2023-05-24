@@ -31,11 +31,7 @@ import (
 	"github.com/pingcap/kvproto/pkg/metapb"
 	"github.com/pingcap/log"
 	"github.com/pingcap/tiflow/cdc/model"
-<<<<<<< HEAD
-=======
-	"github.com/pingcap/tiflow/cdc/processor/tablepb"
 	"github.com/pingcap/tiflow/pkg/chann"
->>>>>>> 5e06aa72e7 (kvclient(cdc): remove rate limiter for scanning and error handling (#8860))
 	"github.com/pingcap/tiflow/pkg/config"
 	cerror "github.com/pingcap/tiflow/pkg/errors"
 	"github.com/pingcap/tiflow/pkg/pdutil"
@@ -394,10 +390,10 @@ func newEventFeedSession(
 }
 
 func (s *eventFeedSession) eventFeed(ctx context.Context, ts uint64, regionCount *int64) error {
-	s.requestRangeCh = chann.NewAutoDrainChann[rangeRequestTask]()
-	s.regionCh = chann.NewAutoDrainChann[singleRegionInfo]()
-	s.regionRouter = chann.NewAutoDrainChann[singleRegionInfo]()
-	s.errCh = chann.NewAutoDrainChann[regionErrorInfo]()
+	s.requestRangeCh = chann.NewDrainableChann[rangeRequestTask]()
+	s.regionCh = chann.NewDrainableChann[singleRegionInfo]()
+	s.regionRouter = chann.NewDrainableChann[singleRegionInfo]()
+	s.errCh = chann.NewDrainableChann[regionErrorInfo]()
 
 	eventFeedGauge.Inc()
 	defer func() {
@@ -544,13 +540,8 @@ func (s *eventFeedSession) scheduleRegionRequest(ctx context.Context, sri single
 // onRegionFail handles a region's failure, which means, unlock the region's range and send the error to the errCh for
 // error handling. This function is non-blocking even if error channel is full.
 // CAUTION: Note that this should only be called in a context that the region has locked its range.
-<<<<<<< HEAD
-func (s *eventFeedSession) onRegionFail(ctx context.Context, errorInfo regionErrorInfo, revokeToken bool) {
-	s.rangeLock.UnlockRange(errorInfo.span.Start, errorInfo.span.End,
-=======
 func (s *eventFeedSession) onRegionFail(ctx context.Context, errorInfo regionErrorInfo) {
-	s.rangeLock.UnlockRange(errorInfo.span.StartKey, errorInfo.span.EndKey,
->>>>>>> 5e06aa72e7 (kvclient(cdc): remove rate limiter for scanning and error handling (#8860))
+	s.rangeLock.UnlockRange(errorInfo.span.Start, errorInfo.span.End,
 		errorInfo.verID.GetID(), errorInfo.verID.GetVer(), errorInfo.resolvedTs)
 	s.enqueueError(ctx, errorInfo)
 }

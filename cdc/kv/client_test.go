@@ -3556,20 +3556,10 @@ func TestPrewriteNotMatchError(t *testing.T) {
 	cancel()
 }
 
-<<<<<<< HEAD
-func createFakeEventFeedSession(ctx context.Context) *eventFeedSession {
-	return newEventFeedSession(ctx,
-		&CDCClient{
-			regionLimiters: defaultRegionEventFeedLimiters,
-			config:         config.GetDefaultServerConfig().KVClient,
-		},
-		regionspan.ComparableSpan{Start: []byte("a"), End: []byte("b")},
-=======
 func createFakeEventFeedSession() *eventFeedSession {
 	return newEventFeedSession(
 		&CDCClient{config: config.GetDefaultServerConfig().KVClient},
-		tablepb.Span{StartKey: []byte("a"), EndKey: []byte("b")},
->>>>>>> 5e06aa72e7 (kvclient(cdc): remove rate limiter for scanning and error handling (#8860))
+		regionspan.ComparableSpan{Start: []byte("a"), End: []byte("b")},
 		nil, /*lockResolver*/
 		100, /*startTs*/
 		nil, /*eventCh*/
