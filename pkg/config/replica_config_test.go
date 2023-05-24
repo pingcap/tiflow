@@ -53,7 +53,7 @@ func TestReplicaConfigMarshal(t *testing.T) {
 		NullString:      `\N`,
 		IncludeCommitTs: true,
 	}
-	conf.Sink.Terminator = util.AddressOf("")
+	conf.Sink.TxnAtomicity = util.AddressOf(unknownTxnAtomicity)
 	conf.Sink.DateSeparator = util.AddressOf("month")
 	conf.Sink.EnablePartitionSeparator = util.AddressOf(true)
 	conf.Sink.EnableKafkaSinkV2 = util.AddressOf(true)
@@ -160,8 +160,6 @@ func TestReplicaConfigOutDated(t *testing.T) {
 		{Matcher: []string{"a.c"}, DispatcherRule: "r2"},
 		{Matcher: []string{"a.d"}, DispatcherRule: "r2"},
 	}
-	conf.Sink.TxnAtomicity = util.AddressOf(unknownTxnAtomicity)
-	conf.Sink.DateSeparator = util.AddressOf("")
 	conf.Sink.CSVConfig = nil
 	require.Equal(t, conf, conf2)
 }

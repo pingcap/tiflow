@@ -370,7 +370,7 @@ func (c *ReplicaConfig) toInternalReplicaConfigWithOriginConfig(
 			SafeMode:                 c.Sink.SafeMode,
 		}
 
-		if res.Sink.TxnAtomicity != nil {
+		if c.Sink.TxnAtomicity != nil {
 			res.Sink.TxnAtomicity = util.AddressOf(config.AtomicityLevel(*c.Sink.TxnAtomicity))
 		}
 

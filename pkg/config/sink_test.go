@@ -196,7 +196,7 @@ func TestValidateProtocol(t *testing.T) {
 		parsedSinkURI, err := url.Parse(c.sinkURI)
 		require.Nil(t, err)
 		c.sinkConfig.validateAndAdjustSinkURI(parsedSinkURI)
-		require.Equal(t, c.result, c.sinkConfig.Protocol)
+		require.Equal(t, c.result, util.GetOrZero(c.sinkConfig.Protocol))
 	}
 }
 
@@ -254,8 +254,8 @@ func TestApplyParameterBySinkURI(t *testing.T) {
 		require.Nil(t, err)
 		err = tc.sinkConfig.applyParameterBySinkURI(parsedSinkURI)
 
-		require.Equal(t, tc.expectedProtocol, tc.sinkConfig.Protocol)
-		require.Equal(t, tc.expectedTxnAtomicity, tc.sinkConfig.TxnAtomicity)
+		require.Equal(t, util.AddressOf(tc.expectedProtocol), tc.sinkConfig.Protocol)
+		require.Equal(t, util.AddressOf(tc.expectedTxnAtomicity), tc.sinkConfig.TxnAtomicity)
 		if tc.expectedErr == "" {
 			require.NoError(t, err)
 		} else {
@@ -271,16 +271,16 @@ func TestCheckCompatibilityWithSinkURI(t *testing.T) {
 		oldSinkConfig        *SinkConfig
 		newsinkURI           string
 		expectedErr          string
-		expectedProtocol     string
-		expectedTxnAtomicity AtomicityLevel
+		expectedProtocol     *string
+		expectedTxnAtomicity *AtomicityLevel
 	}{
 		// test no update
 		{
 			newSinkConfig:        &SinkConfig{},
 			oldSinkConfig:        &SinkConfig{},
 			newsinkURI:           "kafka://",
-			expectedProtocol:     "",
-			expectedTxnAtomicity: unknownTxnAtomicity,
+			expectedProtocol:     nil,
+			expectedTxnAtomicity: nil,
 		},
 		// test update config return err
 		{
@@ -292,8 +292,8 @@ func TestCheckCompatibilityWithSinkURI(t *testing.T) {
 			},
 			newsinkURI:           "kafka://127.0.0.1:9092?transaction-atomicity=none",
 			expectedErr:          "incompatible configuration in sink uri",
-			expectedProtocol:     "",
-			expectedTxnAtomicity: noneTxnAtomicity,
+			expectedProtocol:     nil,
+			expectedTxnAtomicity: util.AddressOf(noneTxnAtomicity),
 		},
 		// test update compatible config
 		{
@@ -304,8 +304,8 @@ func TestCheckCompatibilityWithSinkURI(t *testing.T) {
 				TxnAtomicity: util.AddressOf(noneTxnAtomicity),
 			},
 			newsinkURI:           "kafka://127.0.0.1:9092?transaction-atomicity=none",
-			expectedProtocol:     "canal",
-			expectedTxnAtomicity: noneTxnAtomicity,
+			expectedProtocol:     util.AddressOf("canal"),
+			expectedTxnAtomicity: util.AddressOf(noneTxnAtomicity),
 		},
 		// test update sinkuri
 		{
@@ -316,8 +316,8 @@ func TestCheckCompatibilityWithSinkURI(t *testing.T) {
 				TxnAtomicity: util.AddressOf(noneTxnAtomicity),
 			},
 			newsinkURI:           "kafka://127.0.0.1:9092?transaction-atomicity=table",
-			expectedProtocol:     "",
-			expectedTxnAtomicity: tableTxnAtomicity,
+			expectedProtocol:     nil,
+			expectedTxnAtomicity: util.AddressOf(tableTxnAtomicity),
 		},
 	}
 	for _, tc := range testCases {

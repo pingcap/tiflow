@@ -37,6 +37,7 @@ const (
   "sink": {
     "encoder-concurrency": 16,
     "terminator": "\r\n",
+	"date-separator": "none",
     "dispatch-rules": [
       {
         "db-name": "a",
@@ -197,13 +198,14 @@ const (
       "null": "\\N",
       "include-commit-ts": true
     },
-    "transaction-atomicity": "",
     "date-separator": "month",
     "enable-partition-separator": true,
     "only-output-updated-columns": false,
     "enable-kafka-sink-v2": true,
     "only-output-updated-columns": true,
     "safe-mode": true,
+	"terminator": "\r\n",
+	"transaction-atomicity": "",
     "kafka-config": {
       "partition-num": 1,
       "replication-factor": 1,
@@ -323,7 +325,8 @@ const (
       "null": "\\N",
       "include-commit-ts": true
     },
-    "terminator": "",
+    "terminator": "\r\n",
+	"transaction-atomicity": "",
     "date-separator": "month",
     "enable-partition-separator": true,
     "only-output-updated-columns": false,
