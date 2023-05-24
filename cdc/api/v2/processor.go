@@ -30,6 +30,7 @@ import (
 // @Success 200 {object} ProcessorDetail
 // @Failure 500,400 {object} model.HTTPError
 // @Param   changefeed_id   path    string  true  "changefeed ID"
+// @Param   namespace      query string false "default"
 // @Param   capture_id   path    string  true  "capture ID"
 // @Router	/api/v2/processors/{changefeed_id}/{capture_id} [get]
 func (h *OpenAPIV2) getProcessor(c *gin.Context) {
