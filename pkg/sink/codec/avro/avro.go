@@ -169,11 +169,11 @@ func (a *BatchEncoder) EncodeCheckpointEvent(ts uint64) (*common.Message, error)
 }
 
 type DDLEvent struct {
-	Query    string             `query`
-	Type     timodel.ActionType `type`
-	Schema   string             `schema`
-	Table    string             `table`
-	CommitTs uint64             `commit_ts`
+	Query    string             `json:"query"`
+	Type     timodel.ActionType `json:"type"`
+	Schema   string             `json:"schema"`
+	Table    string             `json:"table"`
+	CommitTs uint64             `json:"commitTs"`
 }
 
 // EncodeDDLEvent only encode DDL event if the watermark event is enabled

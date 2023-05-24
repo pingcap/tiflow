@@ -13,7 +13,8 @@ if [ "$SINK_TYPE" != "kafka" ]; then
 fi
 
 echo 'Starting schema registry...'
-./bin/schema-registry/bin/schema-registry-start -daemon ./bin/schema-registry/etc/schema-registry/schema-registry.properties
+./bin/bin/schema-registry-start -daemon ./bin/etc/schema-registry/schema-registry.properties
+sleep 3
 i=0
 while ! curl -o /dev/null -v -s "http://127.0.0.1:8081/"; do
 	i=$(($i + 1))
