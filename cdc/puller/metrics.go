@@ -17,15 +17,13 @@ import (
 	"github.com/prometheus/client_golang/prometheus"
 )
 
-var (
-	PullerEventCounter = prometheus.NewCounterVec(
-		prometheus.CounterOpts{
-			Namespace: "ticdc",
-			Subsystem: "puller",
-			Name:      "txn_collect_event_count", // keep the old name for compatibility
-			Help:      "The number of events received by a puller",
-		}, []string{"namespace", "changefeed", "type"})
-)
+var PullerEventCounter = prometheus.NewCounterVec(
+	prometheus.CounterOpts{
+		Namespace: "ticdc",
+		Subsystem: "puller",
+		Name:      "txn_collect_event_count", // keep the old name for compatibility
+		Help:      "The number of events received by a puller",
+	}, []string{"namespace", "changefeed", "type"})
 
 // InitMetrics registers all metrics in this file
 func InitMetrics(registry *prometheus.Registry) {
