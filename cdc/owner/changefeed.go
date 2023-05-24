@@ -812,6 +812,10 @@ func (c *changefeed) cleanupMetrics() {
 
 	changefeedBarrierTsGauge.DeleteLabelValues(c.id.Namespace, c.id.ID)
 	c.metricsChangefeedBarrierTsGauge = nil
+
+	//NOTE: shall we delete the puller event counter metrics?
+	puller.PullerEventCounter.DeleteLabelValues(c.id.Namespace, c.id.ID, "kv")
+	puller.PullerEventCounter.DeleteLabelValues(c.id.Namespace, c.id.ID, "resolved")
 }
 
 // cleanup redo logs if changefeed is removed and redo log is enabled
