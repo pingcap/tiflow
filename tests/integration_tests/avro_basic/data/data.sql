@@ -61,8 +61,6 @@ create table t (
    image tinyblob
 );
 
-insert into t() values ();
-
 insert into t values (
      2,
      1, 2, 3, 4, 5,
