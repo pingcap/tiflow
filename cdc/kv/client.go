@@ -14,7 +14,6 @@
 package kv
 
 import (
-	"container/list"
 	"context"
 	"fmt"
 	"io"
@@ -144,10 +143,6 @@ type CDCKVClient interface {
 
 	// RegionCount returns the number of captured regions.
 	RegionCount() uint64
-	// ResolvedTs returns the current ingress resolved ts.
-	ResolvedTs() model.Ts
-	// CommitTs returns the current ingress commit ts.
-	CommitTs() model.Ts
 }
 
 // NewCDCKVClient is the constructor of CDC KV client
@@ -171,10 +166,10 @@ type CDCClient struct {
 
 	regionCounts struct {
 		sync.Mutex
-		counts *list.List
+		// map[table_id/store_id] -> count.
+		counts map[string]*atomic.Uint64
 	}
-	ingressCommitTs   model.Ts
-	ingressResolvedTs model.Ts
+
 	// filterLoop is used in BDR mode, when it is true, tikv cdc component
 	// will filter data that are written by another TiCDC.
 	filterLoop bool
@@ -192,10 +187,10 @@ func NewCDCClient(
 	tableID model.TableID,
 	tableName string,
 	filterLoop bool,
-) (c CDCKVClient) {
+) CDCKVClient {
 	clusterID := pd.GetClusterID(ctx)
 
-	c = &CDCClient{
+	c := &CDCClient{
 		clusterID:   clusterID,
 		config:      cfg,
 		pd:          pd,
@@ -206,15 +201,10 @@ func NewCDCClient(
 		changefeed: changefeed,
 		tableID:    tableID,
 		tableName:  tableName,
-		regionCounts: struct {
-			sync.Mutex
-			counts *list.List
-		}{
-			counts: list.New(),
-		},
 		filterLoop: filterLoop,
 	}
-	return
+	c.regionCounts.counts = make(map[string]*atomic.Uint64)
+	return c
 }
 
 func (c *CDCClient) newStream(ctx context.Context, addr string, storeID uint64) (stream *eventFeedStream, newStreamErr error) {
@@ -264,35 +254,18 @@ func (c *CDCClient) EventFeed(
 	lockResolver txnutil.LockResolver,
 	eventCh chan<- model.RegionFeedEvent,
 ) error {
-	c.regionCounts.Lock()
-	regionCount := int64(0)
-	c.regionCounts.counts.PushBack(&regionCount)
-	c.regionCounts.Unlock()
-	s := newEventFeedSession(
-		c, span, lockResolver, ts, eventCh, c.changefeed, c.tableID, c.tableName)
-	return s.eventFeed(ctx, ts, &regionCount)
+	s := newEventFeedSession(c, span, lockResolver, ts, eventCh)
+	return s.eventFeed(ctx, ts)
 }
 
 // RegionCount returns the number of captured regions.
-func (c *CDCClient) RegionCount() uint64 {
+func (c *CDCClient) RegionCount() (totalCount uint64) {
 	c.regionCounts.Lock()
 	defer c.regionCounts.Unlock()
-
-	totalCount := uint64(0)
-	for e := c.regionCounts.counts.Front(); e != nil; e = e.Next() {
-		totalCount += uint64(atomic.LoadInt64(e.Value.(*int64)))
+	for _, v := range c.regionCounts.counts {
+		totalCount += v.Load()
 	}
 	return totalCount
-}
-
-// ResolvedTs returns the current ingress resolved ts.
-func (c *CDCClient) ResolvedTs() model.Ts {
-	return atomic.LoadUint64(&c.ingressResolvedTs)
-}
-
-// CommitTs returns the current ingress commit ts.
-func (c *CDCClient) CommitTs() model.Ts {
-	return atomic.LoadUint64(&c.ingressCommitTs)
 }
 
 var currentID uint64 = 0
@@ -307,7 +280,10 @@ func currentRequestID() uint64 {
 }
 
 type eventFeedSession struct {
-	client *CDCClient
+	client     *CDCClient
+	changefeed model.ChangeFeedID
+	tableID    model.TableID
+	tableName  string
 
 	lockResolver txnutil.LockResolver
 
@@ -337,10 +313,6 @@ type eventFeedSession struct {
 	streamsLock      sync.RWMutex
 	streamsCanceller map[string]context.CancelFunc
 
-	changefeed model.ChangeFeedID
-	tableID    model.TableID
-	tableName  string
-
 	// use sync.Pool to store resolved ts event only, because resolved ts event
 	// has the same size and generate cycle.
 	resolvedTsPool sync.Pool
@@ -357,16 +329,17 @@ func newEventFeedSession(
 	lockResolver txnutil.LockResolver,
 	startTs uint64,
 	eventCh chan<- model.RegionFeedEvent,
-	changefeed model.ChangeFeedID,
-	tableID model.TableID,
-	tableName string,
 ) *eventFeedSession {
 	id := strconv.FormatUint(allocID(), 10)
 	rangeLock := regionlock.NewRegionRangeLock(
 		totalSpan.StartKey, totalSpan.EndKey, startTs,
-		changefeed.Namespace+"."+changefeed.ID)
+		client.changefeed.Namespace+"."+client.changefeed.ID)
 	return &eventFeedSession{
-		client:            client,
+		client:     client,
+		changefeed: client.changefeed,
+		tableID:    client.tableID,
+		tableName:  client.tableName,
+
 		totalSpan:         totalSpan,
 		eventCh:           eventCh,
 		rangeLock:         rangeLock,
@@ -384,14 +357,10 @@ func newEventFeedSession(
 				}
 			},
 		},
-
-		changefeed: changefeed,
-		tableID:    tableID,
-		tableName:  tableName,
 	}
 }
 
-func (s *eventFeedSession) eventFeed(ctx context.Context, ts uint64, regionCount *int64) error {
+func (s *eventFeedSession) eventFeed(ctx context.Context, ts uint64) error {
 	s.requestRangeCh = chann.NewAutoDrainChann[rangeRequestTask]()
 	s.regionCh = chann.NewAutoDrainChann[singleRegionInfo]()
 	s.regionRouter = chann.NewAutoDrainChann[singleRegionInfo]()
@@ -413,7 +382,7 @@ func (s *eventFeedSession) eventFeed(ctx context.Context, ts uint64, regionCount
 	})
 
 	g.Go(func() error {
-		return s.requestRegionToStore(ctx, g, regionCount)
+		return s.requestRegionToStore(ctx, g)
 	})
 
 	g.Go(func() error {
@@ -559,7 +528,6 @@ func (s *eventFeedSession) onRegionFail(ctx context.Context, errorInfo regionErr
 func (s *eventFeedSession) requestRegionToStore(
 	ctx context.Context,
 	g *errgroup.Group,
-	regionCount *int64,
 ) error {
 	// Stores pending regions info for each stream. After sending a new request, the region info wil be put to the map,
 	// and it will be loaded by the receiver thread when it receives the first response from that region. We need this
@@ -650,8 +618,7 @@ func (s *eventFeedSession) requestRegionToStore(
 
 			g.Go(func() error {
 				defer s.deleteStream(storeAddr)
-				return s.receiveFromStream(
-					ctx, g, storeAddr, storeID, stream.client, pendingRegions, regionCount)
+				return s.receiveFromStream(ctx, g, storeAddr, storeID, stream.client, pendingRegions)
 			})
 		}
 
@@ -963,8 +930,17 @@ func (s *eventFeedSession) receiveFromStream(
 	storeID uint64,
 	stream cdcpb.ChangeData_EventFeedClient,
 	pendingRegions *syncRegionFeedStateMap,
-	regionCount *int64,
 ) error {
+	var regionCount *atomic.Uint64
+	s.client.regionCounts.Lock()
+	key := fmt.Sprintf("%d_%d", s.totalSpan.TableID, storeID)
+	if regionCount, ok := s.client.regionCounts.counts[key]; !ok {
+		regionCount = new(atomic.Uint64)
+		regionCount.Store(0)
+		s.client.regionCounts.counts[key] = regionCount
+	}
+	s.client.regionCounts.Unlock()
+
 	// Cancel the pending regions if the stream failed.
 	// Otherwise, it will remain unhandled in the pendingRegions list
 	// however not registered in the new reconnected stream.
@@ -1091,15 +1067,7 @@ func (s *eventFeedSession) receiveFromStream(
 			}
 			// TiKV send resolved ts events every second by default.
 			// We check and update region count here to save CPU.
-			atomic.StoreInt64(regionCount, worker.statesManager.regionCount())
-			atomic.StoreUint64(&s.client.ingressResolvedTs, cevent.ResolvedTs.Ts)
-			if maxCommitTs == 0 {
-				// In case, there is no write for the table,
-				// we use resolved ts as maxCommitTs to make the stats meaningful.
-				atomic.StoreUint64(&s.client.ingressCommitTs, cevent.ResolvedTs.Ts)
-			} else {
-				atomic.StoreUint64(&s.client.ingressCommitTs, maxCommitTs)
-			}
+			regionCount.Store(uint64(worker.statesManager.regionCount()))
 		}
 	}
 }
