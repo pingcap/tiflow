@@ -300,14 +300,25 @@ func (d *decoder) NextDDLEvent() (*model.DDLEvent, error) {
 		return nil, fmt.Errorf("first byte is not the ddl byte, but got: %+v", d.value[0])
 	}
 
-	result := new(model.DDLEvent)
 	data := d.value[1:]
 
-	err := json.Unmarshal(data, &result)
+	var baseDDLEvent DDLEvent
+	err := json.Unmarshal(data, &baseDDLEvent)
 	if err != nil {
 		return nil, errors.WrapError(errors.ErrDecodeFailed, err)
 	}
 	d.value = nil
+
+	result := new(model.DDLEvent)
+	result.TableInfo = new(model.TableInfo)
+	result.CommitTs = baseDDLEvent.CommitTs
+	result.TableInfo.TableName = model.TableName{
+		Schema: baseDDLEvent.Schema,
+		Table:  baseDDLEvent.Table,
+	}
+	result.Type = baseDDLEvent.Type
+	result.Query = baseDDLEvent.Query
+
 	return result, nil
 }
 
