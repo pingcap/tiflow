@@ -30,6 +30,7 @@ import (
 	"github.com/pingcap/tiflow/pkg/config"
 	cdcContext "github.com/pingcap/tiflow/pkg/context"
 	cerror "github.com/pingcap/tiflow/pkg/errors"
+	"github.com/pingcap/tiflow/pkg/filter"
 	"github.com/pingcap/tiflow/pkg/orchestrator"
 	"github.com/pingcap/tiflow/pkg/pdutil"
 	redoCfg "github.com/pingcap/tiflow/pkg/redo"
@@ -120,6 +121,7 @@ type changefeed struct {
 		startTs uint64,
 		changefeed model.ChangeFeedID,
 		schemaStorage entry.SchemaStorage,
+		filter filter.Filter,
 	) (puller.DDLPuller, error)
 
 	newSink      func(changefeedID model.ChangeFeedID, info *model.ChangeFeedInfo, reportErr func(error)) DDLSink
@@ -162,6 +164,7 @@ func newChangefeed4Test(
 		startTs uint64,
 		changefeed model.ChangeFeedID,
 		schemaStorage entry.SchemaStorage,
+		filter filter.Filter,
 	) (puller.DDLPuller, error),
 	newSink func(changefeedID model.ChangeFeedID, info *model.ChangeFeedInfo, reportErr func(err error)) DDLSink,
 	newScheduler func(
@@ -515,7 +518,16 @@ LOOP:
 	}
 	c.barriers.Update(finishBarrier, c.state.Info.GetTargetTs())
 
-	c.schema, err = newSchemaWrap4Owner(c.upstream.KVStorage, ddlStartTs, c.state.Info.Config, c.id)
+	filter, err := filter.NewFilter(c.state.Info.Config, "")
+	if err != nil {
+		return errors.Trace(err)
+	}
+	c.schema, err = newSchemaWrap4Owner(
+		c.upstream.KVStorage,
+		ddlStartTs,
+		c.state.Info.Config,
+		c.id,
+		filter)
 	if err != nil {
 		return errors.Trace(err)
 	}
@@ -541,7 +553,8 @@ LOOP:
 		c.state.Info.Config,
 		c.upstream, ddlStartTs,
 		c.id,
-		c.schema)
+		c.schema,
+		filter)
 	if err != nil {
 		return errors.Trace(err)
 	}

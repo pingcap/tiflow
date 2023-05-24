@@ -18,8 +18,10 @@ import (
 	"strings"
 	"time"
 
+	"github.com/pingcap/log"
 	"github.com/pingcap/tidb/util/timeutil"
 	cerror "github.com/pingcap/tiflow/pkg/errors"
+	"go.uber.org/zap"
 )
 
 // GetTimezone returns the timezone specified by the name
@@ -28,9 +30,19 @@ func GetTimezone(name string) (tz *time.Location, err error) {
 	case "", "system", "local":
 		tz, err = GetLocalTimezone()
 		err = cerror.WrapError(cerror.ErrLoadTimezone, err)
+		if err == nil {
+			log.Info("Use the timezone of the TiCDC server machine",
+				zap.String("timezoneName", name),
+				zap.String("timezone", tz.String()))
+		}
 	default:
 		tz, err = time.LoadLocation(name)
 		err = cerror.WrapError(cerror.ErrLoadTimezone, err)
+		if err == nil {
+			log.Info("Load the timezone specified by the user",
+				zap.String("timezoneName", name),
+				zap.String("timezone", tz.String()))
+		}
 	}
 	return
 }

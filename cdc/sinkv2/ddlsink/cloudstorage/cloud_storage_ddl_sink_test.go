@@ -63,12 +63,11 @@ func TestWriteDDLEvent(t *testing.T) {
 			},
 		},
 	}
-	tableDir := path.Join(parentDir, "test/table1/100")
-	os.MkdirAll(tableDir, 0o755)
+	tableDir := path.Join(parentDir, "test/table1/meta/")
 	err = sink.WriteDDLEvent(ctx, ddlEvent)
 	require.Nil(t, err)
 
-	tableSchema, err := os.ReadFile(path.Join(tableDir, "schema.json"))
+	tableSchema, err := os.ReadFile(path.Join(tableDir, "schema_100_4192708364.json"))
 	require.Nil(t, err)
 	require.JSONEq(t, `{
 		"Table": "table1",
@@ -124,8 +123,6 @@ func TestWriteCheckpointTs(t *testing.T) {
 			},
 		},
 	}
-	table1Dir := path.Join(parentDir, "test/table1/100")
-	os.MkdirAll(table1Dir, 0o755)
 
 	err = sink.WriteCheckpointTs(ctx, 100, tables)
 	require.Nil(t, err)

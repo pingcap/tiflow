@@ -30,6 +30,7 @@ import (
 	"github.com/pingcap/tidb/util/gctuner"
 	"github.com/pingcap/tiflow/cdc"
 	"github.com/pingcap/tiflow/cdc/capture"
+	"github.com/pingcap/tiflow/cdc/contextutil"
 	"github.com/pingcap/tiflow/cdc/kv"
 	"github.com/pingcap/tiflow/cdc/processor/pipeline/system"
 	"github.com/pingcap/tiflow/cdc/processor/sourcemanager/engine/factory"
@@ -160,10 +161,11 @@ func (s *server) prepare(ctx context.Context) error {
 	// then cause the new owner cannot be elected immediately after the old owner offline.
 	// see https://github.com/etcd-io/etcd/blob/525d53bd41/client/v3/concurrency/election.go#L98
 	etcdCli, err := clientv3.New(clientv3.Config{
-		Endpoints:   s.pdEndpoints,
-		TLS:         tlsConfig,
-		LogConfig:   &logConfig,
-		DialTimeout: 5 * time.Second,
+		Endpoints:        s.pdEndpoints,
+		TLS:              tlsConfig,
+		LogConfig:        &logConfig,
+		DialTimeout:      5 * time.Second,
+		AutoSyncInterval: 30 * time.Second,
 		DialOptions: []grpc.DialOption{
 			grpcTLSOption,
 			grpc.WithBlock(),
@@ -281,23 +283,23 @@ func (s *server) startActorSystems(ctx context.Context) error {
 }
 
 // Run runs the server.
-func (s *server) Run(ctx context.Context) error {
-	if err := s.prepare(ctx); err != nil {
+func (s *server) Run(serverCtx context.Context) error {
+	if err := s.prepare(serverCtx); err != nil {
 		return err
 	}
 
-	err := s.startStatusHTTP(s.tcpServer.HTTP1Listener())
+	err := s.startStatusHTTP(serverCtx, s.tcpServer.HTTP1Listener())
 	if err != nil {
 		return err
 	}
 
-	return s.run(ctx)
+	return s.run(serverCtx)
 }
 
 // startStatusHTTP starts the HTTP server.
 // `lis` is a listener that gives us plain-text HTTP requests.
 // TODO: can we decouple the HTTP server from the capture server?
-func (s *server) startStatusHTTP(lis net.Listener) error {
+func (s *server) startStatusHTTP(serverCtx context.Context, lis net.Listener) error {
 	// LimitListener returns a Listener that accepts at most n simultaneous
 	// connections from the provided Listener. Connections that exceed the
 	// limit will wait in a queue and no new goroutines will be created until
@@ -321,6 +323,10 @@ func (s *server) startStatusHTTP(lis net.Listener) error {
 		Handler:      router,
 		ReadTimeout:  httpConnectionTimeout,
 		WriteTimeout: httpConnectionTimeout,
+		BaseContext: func(listener net.Listener) context.Context {
+			return contextutil.PutTimezoneInCtx(context.Background(),
+				contextutil.TimezoneFromCtx(serverCtx))
+		},
 	}
 
 	go func() {

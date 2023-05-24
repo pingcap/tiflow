@@ -206,6 +206,8 @@ func TestParseCfg(t *testing.T) {
 				ServerAckInterval:            config.TomlDuration(time.Millisecond * 100),
 				ServerWorkerPoolSize:         4,
 				MaxRecvMsgSize:               256 * 1024 * 1024,
+				KeepAliveTimeout:             config.TomlDuration(time.Second * 10),
+				KeepAliveTime:                config.TomlDuration(time.Second * 30),
 			},
 			Scheduler: &config.SchedulerConfig{
 				HeartbeatTick:        2,
@@ -367,6 +369,8 @@ check-balance-interval = "10s"
 				ServerAckInterval:            config.TomlDuration(1 * time.Second),
 				ServerWorkerPoolSize:         16,
 				MaxRecvMsgSize:               4,
+				KeepAliveTimeout:             config.TomlDuration(time.Second * 10),
+				KeepAliveTime:                config.TomlDuration(time.Second * 30),
 			},
 			Scheduler: &config.SchedulerConfig{
 				HeartbeatTick:        3,
@@ -518,6 +522,8 @@ cert-allowed-cn = ["dd","ee"]
 				ServerAckInterval:            config.TomlDuration(time.Millisecond * 100),
 				ServerWorkerPoolSize:         4,
 				MaxRecvMsgSize:               256 * 1024 * 1024,
+				KeepAliveTimeout:             config.TomlDuration(time.Second * 10),
+				KeepAliveTime:                config.TomlDuration(time.Second * 30),
 			},
 			Scheduler: &config.SchedulerConfig{
 				HeartbeatTick:        2,
@@ -586,6 +592,8 @@ unknown3 = 3
 			ServerAckInterval:            config.TomlDuration(time.Millisecond * 100),
 			ServerWorkerPoolSize:         4,
 			MaxRecvMsgSize:               256 * 1024 * 1024,
+			KeepAliveTimeout:             config.TomlDuration(time.Second * 10),
+			KeepAliveTime:                config.TomlDuration(time.Second * 30),
 		},
 		Scheduler: &config.SchedulerConfig{
 			HeartbeatTick:        2,

@@ -124,6 +124,7 @@ func (p *ddlJobPullerImpl) Run(ctx context.Context) error {
 					if err != nil {
 						return errors.Trace(err)
 					}
+					log.Info("handle job", zap.Stringer("job", job), zap.Bool("skip", skip))
 					if skip {
 						continue
 					}
@@ -326,11 +327,13 @@ func (p *ddlJobPullerImpl) handleJob(job *timodel.Job) (skip bool, err error) {
 	if p.schemaStorage == nil {
 		return false, nil
 	}
+
 	snap := p.schemaStorage.GetLastSnapshot()
 	// Do this first to fill the schema name to its origin schema name.
 	if err := snap.FillSchemaName(job); err != nil {
 		// If we can't find a job's schema, check if it's been filtered.
-		if p.filter.ShouldIgnoreTable(job.SchemaName, job.TableName) {
+		if p.filter.ShouldIgnoreTable(job.SchemaName, job.TableName) ||
+			p.filter.ShouldDiscardDDL(job.Type, job.SchemaName, job.TableName) {
 			return true, nil
 		}
 		return true, errors.Trace(err)
@@ -457,17 +460,13 @@ func NewDDLJobPuller(
 	pdClock pdutil.Clock,
 	checkpointTs uint64,
 	cfg *config.KVClientConfig,
-	replicaConfig *config.ReplicaConfig,
 	changefeed model.ChangeFeedID,
 	schemaStorage entry.SchemaStorage,
+	filter filter.Filter,
 ) (DDLJobPuller, error) {
-	f, err := filter.NewFilter(replicaConfig, "")
-	if err != nil {
-		return nil, errors.Trace(err)
-	}
 	return &ddlJobPullerImpl{
 		changefeedID:  changefeed,
-		filter:        f,
+		filter:        filter,
 		schemaStorage: schemaStorage,
 		puller: New(
 			ctx,
@@ -524,6 +523,7 @@ func NewDDLPuller(ctx context.Context,
 	startTs uint64,
 	changefeed model.ChangeFeedID,
 	schemaStorage entry.SchemaStorage,
+	filter filter.Filter,
 ) (DDLPuller, error) {
 	// add "_ddl_puller" to make it different from table pullers.
 	changefeed.ID += "_ddl_puller"
@@ -542,9 +542,9 @@ func NewDDLPuller(ctx context.Context,
 			up.PDClock,
 			startTs,
 			config.GetGlobalServerConfig().KVClient,
-			replicaConfig,
 			changefeed,
 			schemaStorage,
+			filter,
 		)
 		if err != nil {
 			return nil, errors.Trace(err)
