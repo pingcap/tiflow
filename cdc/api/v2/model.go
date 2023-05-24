@@ -25,6 +25,7 @@ import (
 	cerror "github.com/pingcap/tiflow/pkg/errors"
 	"github.com/pingcap/tiflow/pkg/integrity"
 	"github.com/pingcap/tiflow/pkg/security"
+	"github.com/pingcap/tiflow/pkg/util"
 )
 
 // EmptyResponse return empty {} to http client
@@ -354,7 +355,6 @@ func (c *ReplicaConfig) toInternalReplicaConfigWithOriginConfig(
 			DispatchRules:            dispatchRules,
 			Protocol:                 c.Sink.Protocol,
 			CSVConfig:                csvConfig,
-			TxnAtomicity:             config.AtomicityLevel(c.Sink.TxnAtomicity),
 			ColumnSelectors:          columnSelectors,
 			SchemaRegistry:           c.Sink.SchemaRegistry,
 			EncoderConcurrency:       c.Sink.EncoderConcurrency,
@@ -369,6 +369,11 @@ func (c *ReplicaConfig) toInternalReplicaConfigWithOriginConfig(
 			CloudStorageConfig:       cloudStorageConfig,
 			SafeMode:                 c.Sink.SafeMode,
 		}
+
+		if res.Sink.TxnAtomicity != nil {
+			res.Sink.TxnAtomicity = util.AddressOf(config.AtomicityLevel(*c.Sink.TxnAtomicity))
+		}
+
 	}
 	if c.Mounter != nil {
 		res.Mounter = &config.MounterConfig{
@@ -565,7 +570,6 @@ func ToAPIReplicaConfig(c *config.ReplicaConfig) *ReplicaConfig {
 			DispatchRules:            dispatchRules,
 			CSVConfig:                csvConfig,
 			ColumnSelectors:          columnSelectors,
-			TxnAtomicity:             string(cloned.Sink.TxnAtomicity),
 			EncoderConcurrency:       cloned.Sink.EncoderConcurrency,
 			Terminator:               cloned.Sink.Terminator,
 			DateSeparator:            cloned.Sink.DateSeparator,
@@ -577,6 +581,10 @@ func ToAPIReplicaConfig(c *config.ReplicaConfig) *ReplicaConfig {
 			MySQLConfig:              mysqlConfig,
 			CloudStorageConfig:       cloudStorageConfig,
 			SafeMode:                 cloned.Sink.SafeMode,
+		}
+
+		if cloned.Sink.TxnAtomicity != nil {
+			res.Sink.TxnAtomicity = util.AddressOf(string(*cloned.Sink.TxnAtomicity))
 		}
 	}
 	if cloned.Consistent != nil {
@@ -711,15 +719,15 @@ type Table struct {
 // SinkConfig represents sink config for a changefeed
 // This is a duplicate of config.SinkConfig
 type SinkConfig struct {
-	Protocol                 string              `json:"protocol,omitempty"`
-	SchemaRegistry           string              `json:"schema_registry,omitempty"`
+	Protocol                 *string             `json:"protocol,omitempty"`
+	SchemaRegistry           *string             `json:"schema_registry,omitempty"`
 	CSVConfig                *CSVConfig          `json:"csv,omitempty"`
 	DispatchRules            []*DispatchRule     `json:"dispatchers,omitempty"`
 	ColumnSelectors          []*ColumnSelector   `json:"column_selectors,omitempty"`
-	TxnAtomicity             string              `json:"transaction_atomicity"`
+	TxnAtomicity             *string             `json:"transaction_atomicity,omitempty"`
 	EncoderConcurrency       *int                `json:"encoder_concurrency,omitempty"`
-	Terminator               string              `json:"terminator,omitempty"`
-	DateSeparator            string              `json:"date_separator,omitempty"`
+	Terminator               *string             `json:"terminator,omitempty"`
+	DateSeparator            *string             `json:"date_separator,omitempty"`
 	EnablePartitionSeparator *bool               `json:"enable_partition_separator,omitempty"`
 	FileIndexWidth           *int                `json:"file_index_width,omitempty"`
 	EnableKafkaSinkV2        *bool               `json:"enable_kafka_sink_v2,omitempty"`

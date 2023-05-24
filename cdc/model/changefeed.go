@@ -309,8 +309,8 @@ func (info *ChangeFeedInfo) RmUnusedFields() {
 	} else {
 		// remove schema registry for MQ downstream with
 		// protocol other than avro
-		if info.Config.Sink.Protocol != config.ProtocolAvro.String() {
-			info.Config.Sink.SchemaRegistry = ""
+		if util.GetOrZero(info.Config.Sink.Protocol) != config.ProtocolAvro.String() {
+			info.Config.Sink.SchemaRegistry = nil
 		}
 	}
 
@@ -322,14 +322,14 @@ func (info *ChangeFeedInfo) RmUnusedFields() {
 		info.rmDBOnlyFields()
 	} else {
 		// remove fields only being used by MQ and Storage downstream
-		info.Config.Sink.Protocol = ""
-		info.Config.Sink.Terminator = ""
+		info.Config.Sink.Protocol = nil
+		info.Config.Sink.Terminator = nil
 	}
 }
 
 func (info *ChangeFeedInfo) rmMQOnlyFields() {
 	info.Config.Sink.DispatchRules = nil
-	info.Config.Sink.SchemaRegistry = ""
+	info.Config.Sink.SchemaRegistry = nil
 	info.Config.Sink.EncoderConcurrency = nil
 	info.Config.Sink.EnableKafkaSinkV2 = nil
 	info.Config.Sink.OnlyOutputUpdatedColumns = nil
@@ -338,7 +338,7 @@ func (info *ChangeFeedInfo) rmMQOnlyFields() {
 
 func (info *ChangeFeedInfo) rmStorageOnlyFields() {
 	info.Config.Sink.CSVConfig = nil
-	info.Config.Sink.DateSeparator = ""
+	info.Config.Sink.DateSeparator = nil
 	info.Config.Sink.EnablePartitionSeparator = nil
 	info.Config.Sink.FileIndexWidth = nil
 	info.Config.Sink.CloudStorageConfig = nil
@@ -443,7 +443,7 @@ func (info *ChangeFeedInfo) fixMySQLSinkProtocol() {
 
 	query := uri.Query()
 	protocolStr := query.Get(config.ProtocolKey)
-	if protocolStr != "" || info.Config.Sink.Protocol != "" {
+	if protocolStr != "" || info.Config.Sink.Protocol != nil {
 		maskedSinkURI, _ := util.MaskSinkURI(info.SinkURI)
 		log.Warn("sink URI or sink config contains protocol, but scheme is not mq",
 			zap.String("sinkURI", maskedSinkURI),
@@ -486,11 +486,11 @@ func (info *ChangeFeedInfo) fixMQSinkProtocol() {
 		return
 	}
 
-	if needsFix(info.Config.Sink.Protocol) {
+	if needsFix(util.GetOrZero(info.Config.Sink.Protocol)) {
 		log.Info("handle incompatible protocol from sink config",
-			zap.String("oldProtocol", info.Config.Sink.Protocol),
+			zap.String("oldProtocol", util.GetOrZero(info.Config.Sink.Protocol)),
 			zap.String("fixedProtocol", openProtocol))
-		info.Config.Sink.Protocol = openProtocol
+		info.Config.Sink.Protocol = util.AddressOf(openProtocol)
 	}
 }
 
@@ -504,7 +504,7 @@ func (info *ChangeFeedInfo) updateSinkURIAndConfigProtocol(uri *url.URL, newProt
 	uri.RawQuery = newRawQuery
 	fixedSinkURI := uri.String()
 	info.SinkURI = fixedSinkURI
-	info.Config.Sink.Protocol = newProtocol
+	info.Config.Sink.Protocol = util.AddressOf(newProtocol)
 }
 
 // DownstreamType returns the type of the downstream.

@@ -111,7 +111,7 @@ func (c *Config) Apply(
 		return err
 	}
 
-	c.DateSeparator = replicaConfig.Sink.DateSeparator
+	c.DateSeparator = util.GetOrZero(replicaConfig.Sink.DateSeparator)
 	c.EnablePartitionSeparator = util.GetOrZero(replicaConfig.Sink.EnablePartitionSeparator)
 	c.FileIndexWidth = util.GetOrZero(replicaConfig.Sink.FileIndexWidth)
 

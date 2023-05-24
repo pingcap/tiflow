@@ -73,7 +73,9 @@ func NewKafkaDMLSink(
 		return nil, cerror.WrapError(cerror.ErrKafkaNewProducer, err)
 	}
 
-	protocol, err := util.GetProtocol(replicaConfig.Sink.Protocol)
+	protocol, err := util.GetProtocol(
+		tiflowutil.GetOrZero(replicaConfig.Sink.Protocol),
+	)
 	if err != nil {
 		return nil, errors.Trace(err)
 	}

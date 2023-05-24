@@ -103,9 +103,9 @@ var ForceEnableOldValueProtocols = []string{
 
 // SinkConfig represents sink config for a changefeed
 type SinkConfig struct {
-	TxnAtomicity AtomicityLevel `toml:"transaction-atomicity" json:"transaction-atomicity"`
+	TxnAtomicity *AtomicityLevel `toml:"transaction-atomicity" json:"transaction-atomicity,omitempty"`
 	// Protocol is NOT available when the downstream is DB.
-	Protocol string `toml:"protocol" json:"protocol,omitempty"`
+	Protocol *string `toml:"protocol" json:"protocol,omitempty"`
 
 	// DispatchRules is only available when the downstream is MQ.
 	DispatchRules []*DispatchRule `toml:"dispatchers" json:"dispatchers,omitempty"`
@@ -114,13 +114,13 @@ type SinkConfig struct {
 	// ColumnSelectors is Deprecated.
 	ColumnSelectors []*ColumnSelector `toml:"column-selectors" json:"column-selectors,omitempty"`
 	// SchemaRegistry is only available when the downstream is MQ using avro protocol.
-	SchemaRegistry string `toml:"schema-registry" json:"schema-registry,omitempty"`
+	SchemaRegistry *string `toml:"schema-registry" json:"schema-registry,omitempty"`
 	// EncoderConcurrency is only available when the downstream is MQ.
 	EncoderConcurrency *int `toml:"encoder-concurrency" json:"encoder-concurrency,omitempty"`
 	// Terminator is NOT available when the downstream is DB.
-	Terminator string `toml:"terminator" json:"terminator,omitempty"`
+	Terminator *string `toml:"terminator" json:"terminator,omitempty"`
 	// DateSeparator is only available when the downstream is Storage.
-	DateSeparator string `toml:"date-separator" json:"date-separator,omitempty"`
+	DateSeparator *string `toml:"date-separator" json:"date-separator,omitempty"`
 	// EnablePartitionSeparator is only available when the downstream is Storage.
 	EnablePartitionSeparator *bool `toml:"enable-partition-separator" json:"enable-partition-separator,omitempty"`
 	// FileIndexWidth is only available when the downstream is Storage
@@ -334,11 +334,11 @@ func (s *SinkConfig) validateAndAdjust(sinkURI *url.URL, enableOldValue bool) er
 
 	if !enableOldValue {
 		for _, protocolStr := range ForceEnableOldValueProtocols {
-			if protocolStr == s.Protocol {
+			if protocolStr == util.GetOrZero(s.Protocol) {
 				log.Error(fmt.Sprintf("Old value is not enabled when using `%s` protocol. "+
-					"Please update changefeed config", s.Protocol))
+					"Please update changefeed config", util.GetOrZero(s.Protocol)))
 				return cerror.WrapError(cerror.ErrKafkaInvalidConfig,
-					errors.New(fmt.Sprintf("%s protocol requires old value to be enabled", s.Protocol)))
+					errors.New(fmt.Sprintf("%s protocol requires old value to be enabled", util.GetOrZero(s.Protocol))))
 			}
 		}
 	}
@@ -364,16 +364,16 @@ func (s *SinkConfig) validateAndAdjust(sinkURI *url.URL, enableOldValue bool) er
 	}
 
 	// validate terminator
-	if len(s.Terminator) == 0 {
-		s.Terminator = CRLF
+	if s.Terminator == nil {
+		s.Terminator = util.AddressOf(CRLF)
 	}
 
 	// validate storage sink related config
 	if sinkURI != nil && sink.IsStorageScheme(sinkURI.Scheme) {
 		// validate date separator
-		if len(s.DateSeparator) > 0 {
+		if len(util.GetOrZero(s.DateSeparator)) > 0 {
 			var separator DateSeparator
-			if err := separator.FromString(s.DateSeparator); err != nil {
+			if err := separator.FromString(util.GetOrZero(s.DateSeparator)); err != nil {
 				return cerror.WrapError(cerror.ErrSinkInvalidConfig, err)
 			}
 		}
@@ -413,25 +413,25 @@ func (s *SinkConfig) validateAndAdjustSinkURI(sinkURI *url.URL) error {
 	}
 
 	// validate that TxnAtomicity is valid and compatible with the scheme.
-	if err := s.TxnAtomicity.validate(sinkURI.Scheme); err != nil {
+	if err := util.GetOrZero(s.TxnAtomicity).validate(sinkURI.Scheme); err != nil {
 		return err
 	}
 
 	// Validate that protocol is compatible with the scheme. For testing purposes,
 	// any protocol should be legal for blackhole.
 	if sink.IsMQScheme(sinkURI.Scheme) || sink.IsStorageScheme(sinkURI.Scheme) {
-		_, err := ParseSinkProtocolFromString(s.Protocol)
+		_, err := ParseSinkProtocolFromString(util.GetOrZero(s.Protocol))
 		if err != nil {
 			return err
 		}
-	} else if sink.IsMySQLCompatibleScheme(sinkURI.Scheme) && s.Protocol != "" {
+	} else if sink.IsMySQLCompatibleScheme(sinkURI.Scheme) && s.Protocol != nil {
 		return cerror.ErrSinkURIInvalid.GenWithStackByArgs(fmt.Sprintf("protocol %s "+
-			"is incompatible with %s scheme", s.Protocol, sinkURI.Scheme))
+			"is incompatible with %s scheme", util.GetOrZero(s.Protocol), sinkURI.Scheme))
 	}
 
 	log.Info("succeed to parse parameter from sink uri",
-		zap.String("protocol", s.Protocol),
-		zap.String("txnAtomicity", string(s.TxnAtomicity)))
+		zap.String("protocol", util.GetOrZero(s.Protocol)),
+		zap.String("txnAtomicity", string(util.GetOrZero(s.TxnAtomicity))))
 	return nil
 }
 
@@ -449,20 +449,20 @@ func (s *SinkConfig) applyParameterBySinkURI(sinkURI *url.URL) error {
 
 	txnAtomicityFromURI := AtomicityLevel(params.Get(TxnAtomicityKey))
 	if txnAtomicityFromURI != unknownTxnAtomicity {
-		if s.TxnAtomicity != unknownTxnAtomicity && s.TxnAtomicity != txnAtomicityFromURI {
+		if util.GetOrZero(s.TxnAtomicity) != unknownTxnAtomicity && util.GetOrZero(s.TxnAtomicity) != txnAtomicityFromURI {
 			cfgInSinkURI[TxnAtomicityKey] = string(txnAtomicityFromURI)
-			cfgInFile[TxnAtomicityKey] = string(s.TxnAtomicity)
+			cfgInFile[TxnAtomicityKey] = string(util.GetOrZero(s.TxnAtomicity))
 		}
-		s.TxnAtomicity = txnAtomicityFromURI
+		s.TxnAtomicity = util.AddressOf(txnAtomicityFromURI)
 	}
 
 	protocolFromURI := params.Get(ProtocolKey)
 	if protocolFromURI != "" {
-		if s.Protocol != "" && s.Protocol != protocolFromURI {
+		if s.Protocol != nil && util.GetOrZero(s.Protocol) != protocolFromURI {
 			cfgInSinkURI[ProtocolKey] = protocolFromURI
-			cfgInFile[ProtocolKey] = s.Protocol
+			cfgInFile[ProtocolKey] = util.GetOrZero(s.Protocol)
 		}
-		s.Protocol = protocolFromURI
+		s.Protocol = util.AddressOf(protocolFromURI)
 	}
 
 	getError := func() error {

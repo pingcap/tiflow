@@ -205,12 +205,12 @@ func TestAndWriteExampleReplicaTOML(t *testing.T) {
 			Delimiter:  string(config.Comma),
 			NullString: config.NULL,
 		},
-		Terminator:               "\r\n",
-		DateSeparator:            config.DateSeparatorNone.String(),
+		Terminator:               util.AddressOf("\r\n"),
+		DateSeparator:            util.AddressOf(config.DateSeparatorNone.String()),
 		EnablePartitionSeparator: util.AddressOf(true),
 		EnableKafkaSinkV2:        util.AddressOf(false),
 		OnlyOutputUpdatedColumns: util.AddressOf(false),
-		Protocol:                 "open-protocol",
+		Protocol:                 util.AddressOf("open-protocol"),
 	}, cfg.Sink)
 }
 
@@ -222,14 +222,15 @@ func TestAndWriteStorageSinkTOML(t *testing.T) {
 	sinkURL, err := url.Parse("s3://127.0.0.1:9092")
 	require.NoError(t, err)
 
-	cfg.Sink.Protocol = config.ProtocolCanalJSON.String()
+	cfg.Sink.Protocol = util.AddressOf(config.ProtocolCanalJSON.String())
 	err = cfg.ValidateAndAdjust(sinkURL)
 	require.NoError(t, err)
 	require.Equal(t, &config.SinkConfig{
-		Protocol:                 config.ProtocolCanalJSON.String(),
+		Protocol:                 util.AddressOf(config.ProtocolCanalJSON.String()),
 		EncoderConcurrency:       util.AddressOf(16),
-		Terminator:               "\r\n",
-		DateSeparator:            "day",
+		Terminator:               util.AddressOf(config.CRLF),
+		TxnAtomicity:             util.AddressOf(config.AtomicityLevel("")),
+		DateSeparator:            util.AddressOf("day"),
 		EnablePartitionSeparator: util.AddressOf(true),
 		FileIndexWidth:           util.AddressOf(config.DefaultFileIndexWidth),
 		EnableKafkaSinkV2:        util.AddressOf(false),

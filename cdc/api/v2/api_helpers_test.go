@@ -126,7 +126,7 @@ func TestVerifyUpdateChangefeedConfig(t *testing.T) {
 	newCfInfo, newUpInfo, err = h.verifyUpdateChangefeedConfig(ctx, cfg, oldInfo, oldUpInfo, storage, 0)
 	require.Nil(t, err)
 	// startTs can not be updated
-	newCfInfo.Config.Sink.TxnAtomicity = ""
+	newCfInfo.Config.Sink.TxnAtomicity = util.AddressOf(config.AtomicityLevel(""))
 	require.Equal(t, uint64(0), newCfInfo.StartTs)
 	require.Equal(t, uint64(10), newCfInfo.TargetTs)
 	require.Equal(t, 30*time.Second, util.GetOrZero(newCfInfo.Config.SyncPointInterval))

@@ -40,7 +40,7 @@ func TestReplicaConfigMarshal(t *testing.T) {
 	conf.ForceReplicate = true
 	conf.Filter.Rules = []string{"1.1"}
 	conf.Mounter.WorkerNum = 3
-	conf.Sink.Protocol = "open-protocol"
+	conf.Sink.Protocol = util.AddressOf("open-protocol")
 	conf.Sink.ColumnSelectors = []*ColumnSelector{
 		{
 			Matcher: []string{"1.1"},
@@ -53,8 +53,8 @@ func TestReplicaConfigMarshal(t *testing.T) {
 		NullString:      `\N`,
 		IncludeCommitTs: true,
 	}
-	conf.Sink.Terminator = ""
-	conf.Sink.DateSeparator = "month"
+	conf.Sink.Terminator = util.AddressOf("")
+	conf.Sink.DateSeparator = util.AddressOf("month")
 	conf.Sink.EnablePartitionSeparator = util.AddressOf(true)
 	conf.Sink.EnableKafkaSinkV2 = util.AddressOf(true)
 	conf.Scheduler.EnableTableAcrossNodes = true
@@ -154,14 +154,14 @@ func TestReplicaConfigOutDated(t *testing.T) {
 	conf.ForceReplicate = true
 	conf.Filter.Rules = []string{"1.1"}
 	conf.Mounter.WorkerNum = 3
-	conf.Sink.Protocol = "open-protocol"
+	conf.Sink.Protocol = util.AddressOf("open-protocol")
 	conf.Sink.DispatchRules = []*DispatchRule{
 		{Matcher: []string{"a.b"}, DispatcherRule: "r1"},
 		{Matcher: []string{"a.c"}, DispatcherRule: "r2"},
 		{Matcher: []string{"a.d"}, DispatcherRule: "r2"},
 	}
-	conf.Sink.TxnAtomicity = unknownTxnAtomicity
-	conf.Sink.DateSeparator = ""
+	conf.Sink.TxnAtomicity = util.AddressOf(unknownTxnAtomicity)
+	conf.Sink.DateSeparator = util.AddressOf("")
 	conf.Sink.CSVConfig = nil
 	require.Equal(t, conf, conf2)
 }
@@ -177,7 +177,7 @@ func TestReplicaConfigValidate(t *testing.T) {
 
 	// Incorrect sink configuration.
 	conf = GetDefaultReplicaConfig()
-	conf.Sink.Protocol = "canal"
+	conf.Sink.Protocol = util.AddressOf("canal")
 	conf.EnableOldValue = false
 	require.Regexp(t, ".*canal protocol requires old value to be enabled.*",
 		conf.ValidateAndAdjust(sinkURL))

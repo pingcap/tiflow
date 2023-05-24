@@ -50,8 +50,8 @@ var defaultAPIConfig = &ReplicaConfig{
 			NullString: config.NULL,
 		},
 		EncoderConcurrency:       util.AddressOf(16),
-		Terminator:               config.CRLF,
-		DateSeparator:            config.DateSeparatorNone.String(),
+		Terminator:               util.AddressOf(config.CRLF),
+		DateSeparator:            util.AddressOf(config.DateSeparatorNone.String()),
 		EnablePartitionSeparator: util.AddressOf(true),
 		EnableKafkaSinkV2:        util.AddressOf(false),
 		OnlyOutputUpdatedColumns: util.AddressOf(false),
@@ -102,15 +102,15 @@ func TestToAPIReplicaConfig(t *testing.T) {
 				TopicRule:      "topic",
 			},
 		},
-		Protocol: "aaa",
+		Protocol: util.AddressOf("aaa"),
 		ColumnSelectors: []*config.ColumnSelector{
 			{
 				Matcher: []string{"a", "b", "c"},
 				Columns: []string{"a", "b"},
 			},
 		},
-		SchemaRegistry: "bbb",
-		TxnAtomicity:   "aa",
+		SchemaRegistry: util.AddressOf("bbb"),
+		TxnAtomicity:   util.AddressOf(config.AtomicityLevel("aa")),
 	}
 	cfg.Consistent = &config.ConsistentConfig{
 		Level:             "1",

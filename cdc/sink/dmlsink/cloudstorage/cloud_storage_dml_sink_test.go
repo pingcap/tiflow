@@ -123,8 +123,8 @@ func TestCloudStorageWriteEventsWithoutDateSeparator(t *testing.T) {
 	require.Nil(t, err)
 
 	replicaConfig := config.GetDefaultReplicaConfig()
-	replicaConfig.Sink.DateSeparator = config.DateSeparatorNone.String()
-	replicaConfig.Sink.Protocol = config.ProtocolCsv.String()
+	replicaConfig.Sink.DateSeparator = util.AddressOf(config.DateSeparatorNone.String())
+	replicaConfig.Sink.Protocol = util.AddressOf(config.ProtocolCsv.String())
 	replicaConfig.Sink.FileIndexWidth = util.AddressOf(6)
 	errCh := make(chan error, 5)
 	s, err := NewDMLSink(ctx, sinkURI, replicaConfig, errCh)
@@ -190,8 +190,8 @@ func TestCloudStorageWriteEventsWithDateSeparator(t *testing.T) {
 	require.Nil(t, err)
 
 	replicaConfig := config.GetDefaultReplicaConfig()
-	replicaConfig.Sink.Protocol = config.ProtocolCsv.String()
-	replicaConfig.Sink.DateSeparator = config.DateSeparatorDay.String()
+	replicaConfig.Sink.Protocol = util.AddressOf(config.ProtocolCsv.String())
+	replicaConfig.Sink.DateSeparator = util.AddressOf(config.DateSeparatorDay.String())
 	replicaConfig.Sink.FileIndexWidth = util.AddressOf(6)
 
 	errCh := make(chan error, 5)

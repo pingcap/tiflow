@@ -25,6 +25,7 @@ import (
 	"github.com/pingcap/tiflow/pkg/config"
 	"github.com/pingcap/tiflow/pkg/etcd"
 	"github.com/pingcap/tiflow/pkg/orchestrator/util"
+	putil "github.com/pingcap/tiflow/pkg/util"
 	"github.com/stretchr/testify/require"
 )
 
@@ -117,7 +118,7 @@ func TestChangefeedStateUpdate(t *testing.T) {
 						Mounter:          &config.MounterConfig{WorkerNum: 16},
 						Scheduler:        config.GetDefaultReplicaConfig().Scheduler,
 						Sink: &config.SinkConfig{
-							Terminator: config.CRLF,
+							Terminator: putil.AddressOf(config.CRLF),
 						},
 						Integrity: config.GetDefaultReplicaConfig().Integrity,
 					},
@@ -167,7 +168,7 @@ func TestChangefeedStateUpdate(t *testing.T) {
 						Filter:           &config.FilterConfig{Rules: []string{"*.*"}},
 						Mounter:          &config.MounterConfig{WorkerNum: 16},
 						Sink: &config.SinkConfig{
-							Terminator: config.CRLF,
+							Terminator: putil.AddressOf(config.CRLF),
 						},
 						Scheduler: config.GetDefaultReplicaConfig().Scheduler,
 						Integrity: config.GetDefaultReplicaConfig().Integrity,
@@ -223,7 +224,7 @@ func TestChangefeedStateUpdate(t *testing.T) {
 						Filter:           &config.FilterConfig{Rules: []string{"*.*"}},
 						Mounter:          &config.MounterConfig{WorkerNum: 16},
 						Sink: &config.SinkConfig{
-							Terminator: config.CRLF,
+							Terminator: putil.AddressOf(config.CRLF),
 						},
 						Scheduler: config.GetDefaultReplicaConfig().Scheduler,
 						Integrity: config.GetDefaultReplicaConfig().Integrity,
