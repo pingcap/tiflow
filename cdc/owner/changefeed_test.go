@@ -39,6 +39,7 @@ import (
 	"github.com/pingcap/tiflow/pkg/sink/observer"
 	"github.com/pingcap/tiflow/pkg/txnutil/gc"
 	"github.com/pingcap/tiflow/pkg/upstream"
+	"github.com/pingcap/tiflow/pkg/util"
 	"github.com/stretchr/testify/require"
 	"github.com/tikv/client-go/v2/oracle"
 )
@@ -201,7 +202,6 @@ func createChangefeed4Test(ctx cdcContext.Context, t *testing.T,
 		info = ctx.ChangefeedVars().Info
 		return info, true, nil
 	})
-
 	cf := newChangefeed4Test(ctx.ChangefeedVars().ID, state, up,
 		// new ddl puller
 		func(ctx context.Context,
@@ -452,8 +452,8 @@ func TestEmitCheckpointTs(t *testing.T) {
 
 func TestSyncPoint(t *testing.T) {
 	ctx := cdcContext.NewBackendContext4Test(true)
-	ctx.ChangefeedVars().Info.Config.EnableSyncPoint = true
-	ctx.ChangefeedVars().Info.Config.SyncPointInterval = 1 * time.Second
+	ctx.ChangefeedVars().Info.Config.EnableSyncPoint = util.AddressOf(true)
+	ctx.ChangefeedVars().Info.Config.SyncPointInterval = util.AddressOf(1 * time.Second)
 	cf, captures, tester := createChangefeed4Test(ctx, t)
 	defer cf.Close(ctx)
 
@@ -513,6 +513,7 @@ func TestRemoveChangefeed(t *testing.T) {
 	ctx := cdcContext.NewContext4Test(baseCtx, true)
 	info := ctx.ChangefeedVars().Info
 	dir := t.TempDir()
+	info.SinkURI = "mysql://"
 	info.Config.Consistent = &config.ConsistentConfig{
 		Level:             "eventual",
 		Storage:           filepath.Join("nfs://", dir),
@@ -587,8 +588,8 @@ func TestBarrierAdvance(t *testing.T) {
 	for i := 0; i < 2; i++ {
 		ctx := cdcContext.NewBackendContext4Test(true)
 		if i == 1 {
-			ctx.ChangefeedVars().Info.Config.EnableSyncPoint = true
-			ctx.ChangefeedVars().Info.Config.SyncPointInterval = 100 * time.Second
+			ctx.ChangefeedVars().Info.Config.EnableSyncPoint = util.AddressOf(true)
+			ctx.ChangefeedVars().Info.Config.SyncPointInterval = util.AddressOf(100 * time.Second)
 		}
 
 		cf, captures, tester := createChangefeed4Test(ctx, t)

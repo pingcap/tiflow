@@ -120,7 +120,7 @@ func ddlSinkInitializer(ctx context.Context, a *ddlSinkImpl) error {
 	}
 	a.sink = s
 
-	if !a.info.Config.EnableSyncPoint {
+	if !util.GetValueOrDefault(a.info.Config.EnableSyncPoint) {
 		return nil
 	}
 	return nil

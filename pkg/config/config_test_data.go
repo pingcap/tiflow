@@ -176,7 +176,6 @@ const (
   },
   "sink": {
   	"encoder-concurrency": 16,
-    "dispatchers": null,
     "protocol": "open-protocol",
     "column-selectors": [
       {
@@ -189,7 +188,6 @@ const (
         ]
       }
     ],
-    "schema-registry": "",
     "csv": {
       "delimiter": ",",
       "quote": "\"",

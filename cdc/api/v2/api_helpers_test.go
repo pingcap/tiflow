@@ -22,6 +22,7 @@ import (
 	"github.com/pingcap/tiflow/cdc/model"
 	"github.com/pingcap/tiflow/pkg/config"
 	cerror "github.com/pingcap/tiflow/pkg/errors"
+	"github.com/pingcap/tiflow/pkg/util"
 	"github.com/stretchr/testify/require"
 )
 
@@ -128,7 +129,7 @@ func TestVerifyUpdateChangefeedConfig(t *testing.T) {
 	newCfInfo.Config.Sink.TxnAtomicity = ""
 	require.Equal(t, uint64(0), newCfInfo.StartTs)
 	require.Equal(t, uint64(10), newCfInfo.TargetTs)
-	require.Equal(t, 30*time.Second, newCfInfo.Config.SyncPointInterval)
+	require.Equal(t, 30*time.Second, util.GetValueOrDefault(newCfInfo.Config.SyncPointInterval))
 	require.Equal(t, cfg.ReplicaConfig.ToInternalReplicaConfig(), newCfInfo.Config)
 	require.Equal(t, "a,b", newUpInfo.PDEndpoints)
 	require.Equal(t, "p1", newUpInfo.CertPath)

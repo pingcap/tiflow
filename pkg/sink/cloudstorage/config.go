@@ -27,6 +27,7 @@ import (
 	"github.com/pingcap/tiflow/pkg/config"
 	cerror "github.com/pingcap/tiflow/pkg/errors"
 	psink "github.com/pingcap/tiflow/pkg/sink"
+	"github.com/pingcap/tiflow/pkg/util"
 	"go.uber.org/zap"
 )
 
@@ -111,7 +112,7 @@ func (c *Config) Apply(
 	}
 
 	c.DateSeparator = replicaConfig.Sink.DateSeparator
-	c.EnablePartitionSeparator = replicaConfig.Sink.EnablePartitionSeparator
+	c.EnablePartitionSeparator = util.GetValueOrDefault(replicaConfig.Sink.EnablePartitionSeparator)
 	c.FileIndexWidth = replicaConfig.Sink.FileIndexWidth
 
 	if c.FileIndexWidth < config.MinFileIndexWidth || c.FileIndexWidth > config.MaxFileIndexWidth {

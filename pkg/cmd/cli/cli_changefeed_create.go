@@ -187,8 +187,7 @@ func (o *createChangefeedOptions) completeReplicaCfg(
 	}
 
 	if o.commonChangefeedOptions.schemaRegistry != "" {
-		cfg.Sink.SchemaRegistry = new(string)
-		*cfg.Sink.SchemaRegistry = o.commonChangefeedOptions.schemaRegistry
+		cfg.Sink.SchemaRegistry = o.commonChangefeedOptions.schemaRegistry
 	}
 
 	switch o.commonChangefeedOptions.sortEngine {

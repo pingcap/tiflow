@@ -23,9 +23,110 @@ import (
 	filter "github.com/pingcap/tidb/util/table-filter"
 	"github.com/pingcap/tiflow/pkg/config"
 	"github.com/pingcap/tiflow/pkg/errors"
+	"github.com/pingcap/tiflow/pkg/util"
 	"github.com/stretchr/testify/require"
 	"github.com/tikv/client-go/v2/oracle"
 )
+
+func TestRmUnusedField(t *testing.T) {
+	t.Parallel()
+	const (
+		defaultRegistry string = "default-schema-registry"
+		defaultProtocol string = "default-protocol"
+	)
+
+	// 1. mysql downstream
+	{
+		mysqlCf := &ChangeFeedInfo{
+			SinkURI: "mysql://",
+			Config: &config.ReplicaConfig{
+				Sink: &config.SinkConfig{
+					SchemaRegistry: defaultRegistry,
+					Protocol:       defaultProtocol,
+					CSVConfig: &config.CSVConfig{
+						Quote:      string(config.DoubleQuoteChar),
+						Delimiter:  config.Comma,
+						NullString: config.NULL,
+					},
+				},
+			},
+		}
+		err := mysqlCf.VerifyAndComplete()
+		require.Nil(t, err)
+		require.Equal(t, "", mysqlCf.Config.Sink.SchemaRegistry)
+		require.Equal(t, "", mysqlCf.Config.Sink.Protocol)
+		require.Nil(t, mysqlCf.Config.Sink.CSVConfig)
+	}
+
+	// 2. storage downstream
+	{
+		strCf := &ChangeFeedInfo{
+			SinkURI: "s3://",
+			Config: &config.ReplicaConfig{
+				Sink: &config.SinkConfig{
+					SchemaRegistry: defaultRegistry,
+					Protocol:       defaultProtocol,
+					CSVConfig: &config.CSVConfig{
+						Quote:      string(config.DoubleQuoteChar),
+						Delimiter:  config.Comma,
+						NullString: config.NULL,
+					},
+				},
+			},
+		}
+		err := strCf.VerifyAndComplete()
+		require.Nil(t, err)
+		require.Equal(t, "", strCf.Config.Sink.SchemaRegistry)
+		require.Equal(t, "", strCf.Config.Sink.Protocol)
+		require.NotNil(t, strCf.Config.Sink.CSVConfig)
+	}
+
+	// 3. kafka downstream using avro
+	{
+		kaCf := &ChangeFeedInfo{
+			SinkURI: "kafka://",
+			Config: &config.ReplicaConfig{
+				Sink: &config.SinkConfig{
+					Protocol:       config.ProtocolAvro.String(),
+					SchemaRegistry: defaultRegistry,
+					CSVConfig: &config.CSVConfig{
+						Quote:      string(config.DoubleQuoteChar),
+						Delimiter:  config.Comma,
+						NullString: config.NULL,
+					},
+				},
+			},
+		}
+		err := kaCf.VerifyAndComplete()
+		require.Nil(t, err)
+		require.Equal(t, defaultRegistry, kaCf.Config.Sink.SchemaRegistry)
+		require.Equal(t, config.ProtocolAvro.String(), kaCf.Config.Sink.Protocol)
+		require.Nil(t, kaCf.Config.Sink.CSVConfig)
+	}
+
+	// 4. kafka downstream using canal-json
+	{
+		kcCf := &ChangeFeedInfo{
+			SinkURI: "kafka://",
+			Config: &config.ReplicaConfig{
+				Sink: &config.SinkConfig{
+					Protocol:       config.ProtocolCanal.String(),
+					SchemaRegistry: defaultRegistry,
+					CSVConfig: &config.CSVConfig{
+						Quote:      string(config.DoubleQuoteChar),
+						Delimiter:  config.Comma,
+						NullString: config.NULL,
+					},
+				},
+			},
+		}
+		err := kcCf.VerifyAndComplete()
+		require.Nil(t, err)
+		require.Equal(t, "", kcCf.Config.Sink.SchemaRegistry)
+		require.Equal(t, config.ProtocolCanal.String(), kcCf.Config.Sink.Protocol)
+		require.Nil(t, kcCf.Config.Sink.CSVConfig)
+	}
+}
 
 func TestFillV1(t *testing.T) {
 	t.Parallel()
@@ -149,8 +250,8 @@ func TestVerifyAndComplete(t *testing.T) {
 			CaseSensitive:      true,
 			EnableOldValue:     true,
 			CheckGCSafePoint:   true,
-			SyncPointInterval:  time.Minute * 10,
-			SyncPointRetention: time.Hour * 24,
+			SyncPointInterval:  util.AddressOf(time.Minute * 10),
+			SyncPointRetention: util.AddressOf(time.Hour * 24),
 		},
 	}
 
@@ -161,6 +262,11 @@ func TestVerifyAndComplete(t *testing.T) {
 	marshalConfig1, err := info.Config.Marshal()
 	require.Nil(t, err)
 	defaultConfig := config.GetDefaultReplicaConfig()
+	info2 := &ChangeFeedInfo{
+		SinkURI: "blackhole://",
+		Config:  defaultConfig,
+	}
+	info2.rmUnusedFields()
 	marshalConfig2, err := defaultConfig.Marshal()
 	require.Nil(t, err)
 	require.Equal(t, marshalConfig2, marshalConfig1)

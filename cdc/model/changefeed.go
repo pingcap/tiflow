@@ -295,34 +295,55 @@ func (info *ChangeFeedInfo) VerifyAndComplete() error {
 // the protocol. Since we utilize a common changefeed configuration template,
 // certain fields may not be utilized for certain protocols.
 func (info *ChangeFeedInfo) rmUnusedFields() {
-	dt, err := info.DownstreamType()
+	uri, err := url.Parse(info.SinkURI)
 	if err != nil {
 		log.Warn(
-			"failed to get the downstream type",
+			"failed to parse the sink uri",
 			zap.Error(err),
 			zap.Any("sinkUri", info.SinkURI),
 		)
 		return
 	}
-	switch dt {
-	case MQ:
-		info.rmMQUnusedFields()
-	case DB:
-		// TODO(charleszheng44): remove unused fields if downstream is DB.
-	case Storage:
-		// TODO(charleszheng44): remove unused fields for downstream is Storage.
+	if !sink.IsMQScheme(uri.Scheme) {
+		info.rmMQOnlyFields()
+	} else {
+		// remove schema registry for MQ downstream with
+		// protocol other than avro
+		if info.Config.Sink.Protocol != config.ProtocolAvro.String() {
+			info.Config.Sink.SchemaRegistry = ""
+		}
+	}
+
+	if !sink.IsStorageScheme(uri.Scheme) {
+		info.rmStorageOnlyFields()
+	}
+
+	if !sink.IsMySQLCompatibleScheme(uri.Scheme) {
+		info.rmDBOnlyFields()
 	}
 }
 
-func (info *ChangeFeedInfo) rmMQUnusedFields() {
-	// CSVConfig is only used when downstream type is storage
+func (info *ChangeFeedInfo) rmMQOnlyFields() {
+	info.Config.Sink.Protocol = ""
+	info.Config.Sink.DispatchRules = nil
+	info.Config.Sink.SchemaRegistry = ""
+	info.Config.Sink.EncoderConcurrency = nil
+	info.Config.Sink.EnableKafkaSinkV2 = nil
+}
+
+func (info *ChangeFeedInfo) rmStorageOnlyFields() {
 	info.Config.Sink.CSVConfig = nil
-	switch info.Config.Sink.Protocol {
-	case config.ProtocolCanal.String():
-		info.Config.Sink.SchemaRegistry = nil
-	case config.ProtocolOpen.String():
-		info.Config.Sink.SchemaRegistry = nil
-	}
+	info.Config.Sink.DateSeparator = ""
+	info.Config.Sink.EnablePartitionSeparator = nil
+	info.Config.Sink.OnlyOutputUpdatedColumns = nil
+}
+
+func (info *ChangeFeedInfo) rmDBOnlyFields() {
+	info.Config.EnableSyncPoint = nil
+	info.Config.BDRMode = nil
+	info.Config.SyncPointInterval = nil
+	info.Config.SyncPointRetention = nil
+	info.Config.Consistent = nil
 }
 
 // FixIncompatible fixes incompatible changefeed meta info.

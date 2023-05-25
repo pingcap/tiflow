@@ -22,6 +22,7 @@ import (
 	"github.com/pingcap/log"
 	cerror "github.com/pingcap/tiflow/pkg/errors"
 	"github.com/pingcap/tiflow/pkg/sink"
+	"github.com/pingcap/tiflow/pkg/util"
 	"go.uber.org/zap"
 )
 
@@ -103,22 +104,22 @@ var ForceEnableOldValueProtocols = []string{
 // SinkConfig represents sink config for a changefeed
 type SinkConfig struct {
 	TxnAtomicity AtomicityLevel `toml:"transaction-atomicity" json:"transaction-atomicity"`
-	Protocol     string         `toml:"protocol" json:"protocol"`
+	Protocol     string         `toml:"protocol" json:"protocol,omitempty"`
 
-	DispatchRules            []*DispatchRule   `toml:"dispatchers" json:"dispatchers"`
-	CSVConfig                *CSVConfig        `toml:"csv" json:"csv,omitempty"`
+	DispatchRules            []*DispatchRule   `toml:"dispatchers" json:"dispatchers,omitempty"`
+	CSVConfig                *CSVConfig        `toml:"csv" json:"csv"`
 	ColumnSelectors          []*ColumnSelector `toml:"column-selectors" json:"column-selectors"`
-	SchemaRegistry           *string           `toml:"schema-registry" json:"schema-registry,omitempty"`
-	EncoderConcurrency       int               `toml:"encoder-concurrency" json:"encoder-concurrency"`
+	SchemaRegistry           string            `toml:"schema-registry" json:"schema-registry,omitempty"`
+	EncoderConcurrency       *int              `toml:"encoder-concurrency" json:"encoder-concurrency,omitempty"`
 	Terminator               string            `toml:"terminator" json:"terminator"`
-	DateSeparator            string            `toml:"date-separator" json:"date-separator"`
-	EnablePartitionSeparator bool              `toml:"enable-partition-separator" json:"enable-partition-separator"`
+	DateSeparator            string            `toml:"date-separator" json:"date-separator,omitempty"`
+	EnablePartitionSeparator *bool             `toml:"enable-partition-separator" json:"enable-partition-separator,omitempty"`
 	FileIndexWidth           int               `toml:"file-index-digit,omitempty" json:"file-index-digit,omitempty"`
 
 	// EnableKafkaSinkV2 enabled then the kafka-go sink will be used.
-	EnableKafkaSinkV2 bool `toml:"enable-kafka-sink-v2" json:"enable-kafka-sink-v2"`
+	EnableKafkaSinkV2 *bool `toml:"enable-kafka-sink-v2" json:"enable-kafka-sink-v2,omitempty"`
 
-	OnlyOutputUpdatedColumns *bool `toml:"only-output-updated-columns" json:"only-output-updated-columns"`
+	OnlyOutputUpdatedColumns *bool `toml:"only-output-updated-columns" json:"only-output-updated-columns,omitempty"`
 
 	// TiDBSourceID is the source ID of the upstream TiDB,
 	// which is used to set the `tidb_cdc_write_source` session variable.
@@ -344,7 +345,7 @@ func (s *SinkConfig) validateAndAdjust(sinkURI *url.URL, enableOldValue bool) er
 		}
 	}
 
-	if s.EncoderConcurrency < 0 {
+	if util.GetValueOrDefault(s.EncoderConcurrency) < 0 {
 		return cerror.ErrSinkInvalidConfig.GenWithStack(
 			"encoder-concurrency should greater than 0, but got %d", s.EncoderConcurrency)
 	}

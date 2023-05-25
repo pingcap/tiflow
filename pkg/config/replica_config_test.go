@@ -22,6 +22,7 @@ import (
 
 	"github.com/aws/aws-sdk-go/aws"
 	"github.com/pingcap/tiflow/pkg/integrity"
+	"github.com/pingcap/tiflow/pkg/util"
 	"github.com/stretchr/testify/require"
 )
 
@@ -54,8 +55,8 @@ func TestReplicaConfigMarshal(t *testing.T) {
 	}
 	conf.Sink.Terminator = ""
 	conf.Sink.DateSeparator = "month"
-	conf.Sink.EnablePartitionSeparator = true
-	conf.Sink.EnableKafkaSinkV2 = true
+	conf.Sink.EnablePartitionSeparator = util.AddressOf(true)
+	conf.Sink.EnableKafkaSinkV2 = util.AddressOf(true)
 	conf.Scheduler.EnableTableAcrossNodes = true
 	conf.Scheduler.RegionThreshold = 100001
 	conf.Scheduler.WriteKeyThreshold = 100001
@@ -217,24 +218,24 @@ func TestReplicaConfigValidate(t *testing.T) {
 
 func TestValidateAndAdjust(t *testing.T) {
 	cfg := GetDefaultReplicaConfig()
-	require.False(t, cfg.EnableSyncPoint)
 
+	require.False(t, util.GetValueOrDefault(cfg.EnableSyncPoint))
 	sinkURL, err := url.Parse("blackhole://")
 	require.NoError(t, err)
 
 	require.NoError(t, cfg.ValidateAndAdjust(sinkURL))
 
-	cfg.EnableSyncPoint = true
+	cfg.EnableSyncPoint = util.AddressOf(true)
 	require.NoError(t, cfg.ValidateAndAdjust(sinkURL))
 
-	cfg.SyncPointInterval = time.Second * 29
+	cfg.SyncPointInterval = util.AddressOf(time.Second * 29)
 	require.Error(t, cfg.ValidateAndAdjust(sinkURL))
 
-	cfg.SyncPointInterval = time.Second * 30
-	cfg.SyncPointRetention = time.Minute * 10
+	cfg.SyncPointInterval = util.AddressOf(time.Second * 30)
+	cfg.SyncPointRetention = util.AddressOf(time.Minute * 10)
 	require.Error(t, cfg.ValidateAndAdjust(sinkURL))
 
-	cfg.Sink.EncoderConcurrency = -1
+	cfg.Sink.EncoderConcurrency = util.AddressOf(-1)
 	require.Error(t, cfg.ValidateAndAdjust(sinkURL))
 
 	cfg = GetDefaultReplicaConfig()
