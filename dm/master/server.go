@@ -511,7 +511,11 @@ func (s *Server) StartTask(ctx context.Context, req *pb.StartTaskRequest) (*pb.S
 	if err != nil {
 		return respWithErr(err)
 	}
-	msg, err := checker.CheckSyncConfigFunc(ctx, stCfgs, ctlcommon.DefaultErrorCnt, ctlcommon.DefaultWarnCnt)
+	stCfgsForCheck, err := s.generateSubTasksForCheck(cfg, stCfgs)
+	if err != nil {
+		return respWithErr(err)
+	}
+	msg, err := checker.CheckSyncConfigFunc(ctx, stCfgsForCheck, ctlcommon.DefaultErrorCnt, ctlcommon.DefaultWarnCnt)
 	if err != nil {
 		resp.CheckResult = terror.WithClass(err, terror.ClassDMMaster).Error()
 		return resp, nil
@@ -729,8 +733,14 @@ func (s *Server) UpdateTask(ctx context.Context, req *pb.UpdateTaskRequest) (*pb
 		// nolint:nilerr
 		return resp, nil
 	}
+	stCfgsForCheck, err := s.generateSubTasksForCheck(cfg, stCfgs)
+	if err != nil {
+		resp.Msg = err.Error()
+		// nolint:nilerr
+		return resp, nil
+	}
 
-	msg, err := checker.CheckSyncConfigFunc(ctx, stCfgs, ctlcommon.DefaultErrorCnt, ctlcommon.DefaultWarnCnt)
+	msg, err := checker.CheckSyncConfigFunc(ctx, stCfgsForCheck, ctlcommon.DefaultErrorCnt, ctlcommon.DefaultWarnCnt)
 	if err != nil {
 		resp.CheckResult = terror.WithClass(err, terror.ClassDMMaster).Error()
 		return resp, nil
@@ -1308,14 +1318,20 @@ func (s *Server) CheckTask(ctx context.Context, req *pb.CheckTaskRequest) (*pb.C
 		}, nil
 	}
 	resp := &pb.CheckTaskResponse{}
-	_, stCfgs, err := s.generateSubTask(ctx, req.Task, &cliArgs)
+	cfg, stCfgs, err := s.generateSubTask(ctx, req.Task, &cliArgs)
+	if err != nil {
+		resp.Msg = err.Error()
+		// nolint:nilerr
+		return resp, nil
+	}
+	stCfgsForCheck, err := s.generateSubTasksForCheck(cfg, stCfgs)
 	if err != nil {
 		resp.Msg = err.Error()
 		// nolint:nilerr
 		return resp, nil
 	}
 
-	msg, err := checker.CheckSyncConfigFunc(ctx, stCfgs, req.ErrCnt, req.WarnCnt)
+	msg, err := checker.CheckSyncConfigFunc(ctx, stCfgsForCheck, req.ErrCnt, req.WarnCnt)
 	if err != nil {
 		resp.Msg = terror.WithClass(err, terror.ClassDMMaster).Error()
 		return resp, nil
@@ -1671,29 +1687,42 @@ func (s *Server) generateSubTask(
 	}
 
 	var firstMode config.LoadMode
-	for i, stCfg := range stCfgs {
+	for _, stCfg := range stCfgs {
 		if firstMode == "" {
 			firstMode = stCfg.LoaderConfig.ImportMode
 		} else if firstMode != stCfg.LoaderConfig.ImportMode {
 			return nil, nil, terror.ErrConfigInvalidLoadMode.Generatef("found two import-mode %s and %s in task config, DM only supports one value", firstMode, stCfg.LoaderConfig.ImportMode)
 		}
-		if sourceCfg, ok := sourceCfgs[stCfg.SourceID]; ok {
-			stCfgs[i].Flavor = sourceCfg.Flavor
-			stCfgs[i].ServerID = sourceCfg.ServerID
-			stCfgs[i].EnableGTID = sourceCfg.EnableGTID
+	}
+	return cfg, stCfgs, nil
+}
+
+func (s *Server) generateSubTasksForCheck(cfg *config.TaskConfig, stCfgs []*config.SubTaskConfig) ([]*config.SubTaskConfig, error) {
+	sourceCfgs := s.getSourceConfigs(cfg.MySQLInstances)
+	stCfgsForCheck := make([]*config.SubTaskConfig, 0, len(stCfgs))
+	for i, stCfg := range stCfgs {
+		stCfgForCheck, err := stCfg.Clone()
+		if err != nil {
+			return nil, err
+		}
+		stCfgsForCheck = append(stCfgsForCheck, stCfgForCheck)
+		if sourceCfg, ok := sourceCfgs[stCfgForCheck.SourceID]; ok {
+			stCfgsForCheck[i].Flavor = sourceCfg.Flavor
+			stCfgsForCheck[i].ServerID = sourceCfg.ServerID
+			stCfgsForCheck[i].EnableGTID = sourceCfg.EnableGTID
 
 			if sourceCfg.EnableRelay {
-				stCfgs[i].UseRelay = true
+				stCfgsForCheck[i].UseRelay = true
 				continue // skip the following check
 			}
 		}
-		workers, err := s.scheduler.GetRelayWorkers(stCfg.SourceID)
+		workers, err := s.scheduler.GetRelayWorkers(stCfgForCheck.SourceID)
 		if err != nil {
-			return nil, nil, err
+			return nil, err
 		}
-		stCfgs[i].UseRelay = len(workers) > 0
+		stCfgsForCheck[i].UseRelay = len(workers) > 0
 	}
-	return cfg, stCfgs, nil
+	return stCfgsForCheck, nil
 }
 
 func setUseTLS(tlsCfg *security.Security) {
