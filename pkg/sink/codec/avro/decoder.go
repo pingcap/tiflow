@@ -218,18 +218,9 @@ func (d *decoder) NextRowChangedEvent() (*model.RowChangedEvent, error) {
 		columns = append(columns, col)
 	}
 
-	var (
-		operation string
-		commitTs  int64
-	)
+	var commitTs int64
 	if !isDelete {
-		o, ok := valueMap[tidbOp]
-		if !ok {
-			return nil, errors.New("operation not found")
-		}
-		operation = o.(string)
-
-		o, ok = valueMap[tidbCommitTs]
+		o, ok := valueMap[tidbCommitTs]
 		if !ok {
 			return nil, errors.New("commit ts not found")
 		}
@@ -281,12 +272,8 @@ func (d *decoder) NextRowChangedEvent() (*model.RowChangedEvent, error) {
 		Schema: schemaName,
 		Table:  tableName,
 	}
+	event.Columns = columns
 
-	if operation == insertOperation {
-		event.Columns = columns
-	} else {
-		event.PreColumns = columns
-	}
 	return event, nil
 }
 
