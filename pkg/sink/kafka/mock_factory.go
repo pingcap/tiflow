@@ -39,13 +39,13 @@ func NewMockFactory(
 }
 
 // AdminClient return a mocked admin client
-func (f *MockFactory) AdminClient() (ClusterAdminClient, error) {
+func (f *MockFactory) AdminClient(_ context.Context) (ClusterAdminClient, error) {
 	return NewClusterAdminClientMockImpl(), nil
 }
 
 // SyncProducer creates a sync producer
-func (f *MockFactory) SyncProducer() (SyncProducer, error) {
-	return f.helper.SyncProducer()
+func (f *MockFactory) SyncProducer(ctx context.Context) (SyncProducer, error) {
+	return f.helper.SyncProducer(ctx)
 }
 
 // AsyncProducer creates an async producer
