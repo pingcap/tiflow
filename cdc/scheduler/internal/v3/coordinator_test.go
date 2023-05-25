@@ -470,7 +470,7 @@ func TestCoordinatorAdvanceCheckpoint(t *testing.T) {
 			},
 		},
 	})
-	cts, rts, err := coord.poll(ctx, 0, currentTables, aliveCaptures, schedulepb.NewBarrierWithMinTs(0))
+	cts, rts, err := coord.poll(ctx, 0, currentTables, aliveCaptures, schedulepb.NewBarrierWithMinTs(5))
 	require.Nil(t, err)
 	require.True(t, coord.captureM.CheckAllCaptureInitialized())
 	require.EqualValues(t, 2, cts)
@@ -505,7 +505,7 @@ func TestCoordinatorAdvanceCheckpoint(t *testing.T) {
 			},
 		},
 	})
-	cts, rts, err = coord.poll(ctx, 0, currentTables, aliveCaptures, schedulepb.NewBarrierWithMinTs(0))
+	cts, rts, err = coord.poll(ctx, 0, currentTables, aliveCaptures, schedulepb.NewBarrierWithMinTs(5))
 	require.Nil(t, err)
 	require.False(t, coord.captureM.CheckAllCaptureInitialized())
 	require.EqualValues(t, 3, cts)
