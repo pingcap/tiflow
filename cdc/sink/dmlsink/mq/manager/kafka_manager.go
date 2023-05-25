@@ -24,9 +24,10 @@ import (
 	cerror "github.com/pingcap/tiflow/pkg/errors"
 	"github.com/pingcap/tiflow/pkg/retry"
 	"github.com/pingcap/tiflow/pkg/sink/kafka"
-	"go.uber.org/atomic"
 	"go.uber.org/zap"
 )
+
+const metaRefreshInterval = 10 * time.Minute
 
 // kafkaTopicManager is a manager for kafka topics.
 type kafkaTopicManager struct {
@@ -36,7 +37,9 @@ type kafkaTopicManager struct {
 
 	topics sync.Map
 
-	lastMetadataRefresh atomic.Int64
+	metaRefreshTicker *time.Ticker
+
+	cancel context.CancelFunc
 }
 
 // NewKafkaTopicManager creates a new topic manager.
@@ -46,15 +49,14 @@ func NewKafkaTopicManager(
 	cfg *kafka.AutoCreateTopicConfig,
 ) (*kafkaTopicManager, error) {
 	mgr := &kafkaTopicManager{
-		admin: admin,
-		cfg:   cfg,
+		admin:             admin,
+		cfg:               cfg,
+		metaRefreshTicker: time.NewTicker(metaRefreshInterval),
 	}
 
-	// do an initial metadata fetching using ListTopics
-	err := mgr.listTopics(ctx)
-	if err != nil {
-		return nil, err
-	}
+	ctx, mgr.cancel = context.WithCancel(ctx)
+	// Background refresh metadata.
+	go mgr.backgroundRefreshMeta(ctx)
 
 	return mgr, nil
 }
@@ -65,15 +67,11 @@ func (m *kafkaTopicManager) GetPartitionNum(
 	ctx context.Context,
 	topic string,
 ) (int32, error) {
-	err := m.tryRefreshMeta(ctx)
-	if err != nil {
-		return 0, errors.Trace(err)
-	}
-
 	if partitions, ok := m.topics.Load(topic); ok {
 		return partitions.(int32), nil
 	}
 
+	// If the topic is not in the metadata, we try to create the topic.
 	partitionNum, err := m.CreateTopicAndWaitUntilVisible(ctx, topic)
 	if err != nil {
 		return 0, errors.Trace(err)
@@ -82,20 +80,26 @@ func (m *kafkaTopicManager) GetPartitionNum(
 	return partitionNum, nil
 }
 
-// tryRefreshMeta try to refresh the topics' information maintained by manager.
-func (m *kafkaTopicManager) tryRefreshMeta(ctx context.Context) error {
-	if time.Since(time.Unix(m.lastMetadataRefresh.Load(), 0)) > time.Minute {
-		topics, err := m.admin.GetTopicsPartitions(ctx)
-		if err != nil {
-			return err
-		}
-		for topic, numPartitions := range topics {
-			m.tryUpdatePartitionsAndLogging(topic, numPartitions)
-		}
-		m.lastMetadataRefresh.Store(time.Now().Unix())
-	}
+func (m *kafkaTopicManager) backgroundRefreshMeta(ctx context.Context) {
+	// ticker
+	for {
+		select {
+		case <-ctx.Done():
+			return
+		case <-m.metaRefreshTicker.C:
+			topicMetaList, err := m.getMetadataOfTopics(ctx)
+			// We ignore the error here, because the error may be caused by the
+			// network problem, and we can try to get the metadata next time.
+			if err != nil {
+				log.Warn("get metadata of topics failed", zap.Error(err))
+			}
 
-	return nil
+			for topic, detail := range topicMetaList {
+				m.tryUpdatePartitionsAndLogging(topic, detail.NumPartitions)
+			}
+
+		}
+	}
 }
 
 // tryUpdatePartitionsAndLogging try to update the partitions of the topic.
@@ -185,60 +189,12 @@ func (m *kafkaTopicManager) waitUntilTopicVisible(
 	return err
 }
 
-// listTopics is used to do an initial metadata fetching.
-func (m *kafkaTopicManager) listTopics(ctx context.Context) error {
-	start := time.Now()
-
-	topics, err := m.admin.GetTopicsPartitions(ctx)
-	if err != nil {
-		log.Error(
-			"Kafka admin client list topics failed",
-			zap.Error(err),
-			zap.Duration("duration", time.Since(start)),
-		)
-		return errors.Trace(err)
-	}
-	log.Info(
-		"Kafka admin client list topics success",
-		zap.Duration("duration", time.Since(start)),
-	)
-
-	// Now that we have access to the latest topics' information,
-	// we need to update it here immediately.
-	for topic, numPartitions := range topics {
-		m.tryUpdatePartitionsAndLogging(topic, numPartitions)
-	}
-	m.lastMetadataRefresh.Store(time.Now().Unix())
-
-	return nil
-}
-
 // createTopic creates a topic with the given name
 // and returns the number of partitions.
 func (m *kafkaTopicManager) createTopic(
 	ctx context.Context,
 	topicName string,
 ) (int32, error) {
-	topicMetaList, err := m.getMetadataOfTopics(ctx)
-	if err != nil {
-		return 0, errors.Trace(err)
-	}
-
-	// Now that we have access to the latest topics' information,
-	// we need to update it here immediately.
-	for topic, detail := range topicMetaList {
-		m.tryUpdatePartitionsAndLogging(topic, detail.NumPartitions)
-	}
-
-	detail, targetTopicFound := topicMetaList[topicName]
-	if targetTopicFound {
-		log.Info(
-			"topic already exists and the cached information has expired",
-			zap.String("topic", topicName),
-		)
-		return detail.NumPartitions, nil
-	}
-
 	if !m.cfg.AutoCreate {
 		return 0, cerror.ErrKafkaInvalidConfig.GenWithStack(
 			fmt.Sprintf("`auto-create-topic` is false, "+
@@ -246,7 +202,7 @@ func (m *kafkaTopicManager) createTopic(
 	}
 
 	start := time.Now()
-	err = m.admin.CreateTopic(ctx, &kafka.TopicDetail{
+	err := m.admin.CreateTopic(ctx, &kafka.TopicDetail{
 		Name:              topicName,
 		NumPartitions:     m.cfg.PartitionNum,
 		ReplicationFactor: m.cfg.ReplicationFactor,
@@ -280,6 +236,16 @@ func (m *kafkaTopicManager) CreateTopicAndWaitUntilVisible(
 	ctx context.Context,
 	topicName string,
 ) (int32, error) {
+	// If the topic is not in the cache, we try to get the metadata of the topic.
+	topicDetails, err := m.admin.GetTopicsMeta(ctx, []string{topicName}, false)
+	if err != nil {
+		return 0, errors.Trace(err)
+	}
+	if detail, ok := topicDetails[topicName]; ok {
+		m.tryUpdatePartitionsAndLogging(topicName, detail.NumPartitions)
+		return detail.NumPartitions, nil
+	}
+
 	partitionNum, err := m.createTopic(ctx, topicName)
 	if err != nil {
 		return 0, errors.Trace(err)
@@ -291,4 +257,9 @@ func (m *kafkaTopicManager) CreateTopicAndWaitUntilVisible(
 	}
 
 	return partitionNum, nil
+}
+
+// Close exits the background goroutine.
+func (m *kafkaTopicManager) Close() {
+	m.cancel()
 }
