@@ -54,7 +54,7 @@ func NewKafkaDMLSink(
 		return nil, cerror.WrapError(cerror.ErrKafkaNewProducer, err)
 	}
 
-	adminClient, err := factory.AdminClient()
+	adminClient, err := factory.AdminClient(ctx)
 	if err != nil {
 		return nil, cerror.WrapError(cerror.ErrKafkaNewProducer, err)
 	}
