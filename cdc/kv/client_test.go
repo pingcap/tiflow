@@ -3563,5 +3563,5 @@ func createFakeEventFeedSession() *eventFeedSession {
 		nil, /*lockResolver*/
 		100, /*startTs*/
 		nil, /*eventCh*/
-		model.DefaultChangeFeedID("changefeed-test"), 0, "")
+	)
 }
