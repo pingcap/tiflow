@@ -24,10 +24,14 @@ import (
 	cerror "github.com/pingcap/tiflow/pkg/errors"
 	"github.com/pingcap/tiflow/pkg/retry"
 	"github.com/pingcap/tiflow/pkg/sink/kafka"
+	"go.uber.org/ratelimit"
 	"go.uber.org/zap"
 )
 
-const metaRefreshInterval = 10 * time.Minute
+const (
+	metaRefreshInterval            = 10 * time.Minute
+	createTopicLimitationPerSecond = 1
+)
 
 // kafkaTopicManager is a manager for kafka topics.
 type kafkaTopicManager struct {
@@ -39,6 +43,8 @@ type kafkaTopicManager struct {
 
 	metaRefreshTicker *time.Ticker
 
+	createTopicLimiter ratelimit.Limiter
+
 	cancel context.CancelFunc
 }
 
@@ -49,9 +55,10 @@ func NewKafkaTopicManager(
 	cfg *kafka.AutoCreateTopicConfig,
 ) (*kafkaTopicManager, error) {
 	mgr := &kafkaTopicManager{
-		admin:             admin,
-		cfg:               cfg,
-		metaRefreshTicker: time.NewTicker(metaRefreshInterval),
+		admin:              admin,
+		cfg:                cfg,
+		metaRefreshTicker:  time.NewTicker(metaRefreshInterval),
+		createTopicLimiter: ratelimit.New(createTopicLimitationPerSecond),
 	}
 
 	ctx, mgr.cancel = context.WithCancel(ctx)
@@ -236,6 +243,7 @@ func (m *kafkaTopicManager) CreateTopicAndWaitUntilVisible(
 	ctx context.Context,
 	topicName string,
 ) (int32, error) {
+	m.createTopicLimiter.Take()
 	// If the topic is not in the cache, we try to get the metadata of the topic.
 	topicDetails, err := m.admin.GetTopicsMeta(ctx, []string{topicName}, false)
 	if err != nil {
