@@ -48,7 +48,7 @@ type kafkaDDLProducer struct {
 func NewKafkaDDLProducer(ctx context.Context, factory kafka.Factory) (DDLProducer, error) {
 	changefeedID := contextutil.ChangefeedIDFromCtx(ctx)
 
-	syncProducer, err := factory.SyncProducer()
+	syncProducer, err := factory.SyncProducer(ctx)
 	if err != nil {
 		return nil, cerror.WrapError(cerror.ErrKafkaNewProducer, err)
 	}
