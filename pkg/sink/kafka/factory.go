@@ -227,8 +227,14 @@ func (p *saramaAsyncProducer) AsyncRunCallback(
 	for {
 		select {
 		case <-ctx.Done():
+			log.Info("async producer exit since context is done",
+				zap.String("namespace", p.changefeedID.Namespace),
+				zap.String("changefeed", p.changefeedID.ID))
 			return errors.Trace(ctx.Err())
 		case <-p.closedChan:
+			log.Info("async producer exit since receive closed signal",
+				zap.String("namespace", p.changefeedID.Namespace),
+				zap.String("changefeed", p.changefeedID.ID))
 			return nil
 		case err := <-p.failpointCh:
 			log.Warn("Receive from failpoint chan in kafka "+
