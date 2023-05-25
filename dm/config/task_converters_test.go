@@ -116,10 +116,7 @@ func testNoShardTaskToSubTaskConfigs(c *check.C) {
 	}
 	c.Assert(subTaskConfig.BAList, check.DeepEquals, bAListFromOpenAPITask)
 	// check ignore check items
-	c.Assert(subTaskConfig.IgnoreCheckingItems, check.HasLen, 1)
-	c.Assert(subTaskConfig.IgnoreCheckingItems[0], check.Equals, MetaPositionChecking)
-	ignoreCheckingItems := fixIgnoreCheckingItems(&subTaskConfig.IgnoreCheckingItems)
-	c.Assert(ignoreCheckingItems, check.IsNil)
+	c.Assert(subTaskConfig.IgnoreCheckingItems, check.IsNil)
 }
 
 func testShardAndFilterTaskToSubTaskConfigs(c *check.C) {
@@ -208,8 +205,7 @@ func testShardAndFilterTaskToSubTaskConfigs(c *check.C) {
 	}
 	c.Assert(subTask1Config.BAList, check.DeepEquals, bAListFromOpenAPITask)
 	// check ignore check items
-	ignoreCheckingItems := fixIgnoreCheckingItems(&subTask1Config.IgnoreCheckingItems)
-	c.Assert(ignoreCheckingItems, check.IsNil)
+	c.Assert(subTask1Config.IgnoreCheckingItems, check.IsNil)
 
 	// check sub task 2
 	subTask2Config := subTaskConfigList[1]
@@ -258,8 +254,7 @@ func testShardAndFilterTaskToSubTaskConfigs(c *check.C) {
 	}
 	c.Assert(subTask2Config.BAList, check.DeepEquals, bAListFromOpenAPITask)
 	// check ignore check items
-	ignoreCheckingItems = fixIgnoreCheckingItems(&subTask2Config.IgnoreCheckingItems)
-	c.Assert(ignoreCheckingItems, check.IsNil)
+	c.Assert(subTask2Config.IgnoreCheckingItems, check.IsNil)
 }
 
 func (t *testConfig) TestSubTaskConfigsToOpenAPITask(c *check.C) {
@@ -293,7 +288,6 @@ func testNoShardSubTaskConfigsToOpenAPITask(c *check.C) {
 	taskList := SubTaskConfigsToOpenAPITaskList(subTaskConfigMap)
 	c.Assert(taskList, check.HasLen, 1)
 	newTask := taskList[0]
-	newTask.IgnoreCheckingItems = fixIgnoreCheckingItems(newTask.IgnoreCheckingItems)
 	c.Assert(&task, check.DeepEquals, newTask)
 }
 
@@ -349,7 +343,6 @@ func testShardAndFilterSubTaskConfigsToOpenAPITask(c *check.C) {
 		task.TableMigrateRule[0], task.TableMigrateRule[1] = task.TableMigrateRule[1], task.TableMigrateRule[0]
 	}
 
-	newTask.IgnoreCheckingItems = fixIgnoreCheckingItems(newTask.IgnoreCheckingItems)
 	c.Assert(&task, check.DeepEquals, newTask)
 }
 
@@ -381,7 +374,6 @@ func TestConvertWithIgnoreCheckItems(t *testing.T) {
 	taskList := SubTaskConfigsToOpenAPITaskList(subTaskConfigMap)
 	require.Equal(t, 1, len(taskList))
 	newTask := taskList[0]
-	newTask.IgnoreCheckingItems = fixIgnoreCheckingItems(newTask.IgnoreCheckingItems)
 	require.Equal(t, *newTask.IgnoreCheckingItems, ignoreCheckingItems)
 	require.Equal(t, *newTask, task)
 }
@@ -403,7 +395,6 @@ func TestConvertBetweenOpenAPITaskAndTaskConfig(t *testing.T) {
 	task1, err := TaskConfigToOpenAPITask(taskCfg, sourceCfgMap)
 	require.NoError(t, err)
 	require.NotNil(t, task1)
-	task1.IgnoreCheckingItems = fixIgnoreCheckingItems(task1.IgnoreCheckingItems)
 	require.EqualValues(t, task1, &task)
 
 	// test update some fields in task
@@ -473,7 +464,6 @@ func TestConvertBetweenOpenAPITaskAndTaskConfig(t *testing.T) {
 		taskAfterConvert, err2 := TaskConfigToOpenAPITask(taskCfg, sourceCfgMap)
 		require.NoError(t, err2)
 		require.NotNil(t, taskAfterConvert)
-		taskAfterConvert.IgnoreCheckingItems = fixIgnoreCheckingItems(taskAfterConvert.IgnoreCheckingItems)
 		require.EqualValues(t, taskAfterConvert, &task)
 
 		// only route table will meet error
@@ -533,7 +523,6 @@ func TestConvertBetweenOpenAPITaskAndTaskConfig(t *testing.T) {
 		taskAfterConvert, err = TaskConfigToOpenAPITask(taskCfg, sourceCfgMap)
 		require.NoError(t, err)
 		require.NotNil(t, taskAfterConvert)
-		taskAfterConvert.IgnoreCheckingItems = fixIgnoreCheckingItems(taskAfterConvert.IgnoreCheckingItems)
 		require.EqualValues(t, taskAfterConvert, &task)
 
 		// no route and only sync one table
@@ -551,7 +540,6 @@ func TestConvertBetweenOpenAPITaskAndTaskConfig(t *testing.T) {
 		taskAfterConvert, err = TaskConfigToOpenAPITask(taskCfg, sourceCfgMap)
 		require.NoError(t, err)
 		require.NotNil(t, taskAfterConvert)
-		taskAfterConvert.IgnoreCheckingItems = fixIgnoreCheckingItems(taskAfterConvert.IgnoreCheckingItems)
 		require.EqualValues(t, taskAfterConvert, &task)
 
 		// no route and sync one schema
@@ -576,7 +564,6 @@ func TestConvertBetweenOpenAPITaskAndTaskConfig(t *testing.T) {
 		taskAfterConvert, err = TaskConfigToOpenAPITask(taskCfg, sourceCfgMap)
 		require.NoError(t, err)
 		require.NotNil(t, taskAfterConvert)
-		taskAfterConvert.IgnoreCheckingItems = fixIgnoreCheckingItems(taskAfterConvert.IgnoreCheckingItems)
 		require.EqualValues(t, taskAfterConvert, &task)
 	}
 
@@ -589,7 +576,6 @@ func TestConvertBetweenOpenAPITaskAndTaskConfig(t *testing.T) {
 		taskAfterConvert, err := TaskConfigToOpenAPITask(taskCfg, sourceCfgMap)
 		require.NoError(t, err)
 		require.NotNil(t, taskAfterConvert)
-		taskAfterConvert.IgnoreCheckingItems = fixIgnoreCheckingItems(taskAfterConvert.IgnoreCheckingItems)
 		require.EqualValues(t, taskAfterConvert, &task)
 
 		// filter both
@@ -622,7 +608,6 @@ func TestConvertBetweenOpenAPITaskAndTaskConfig(t *testing.T) {
 		taskAfterConvert, err = TaskConfigToOpenAPITask(taskCfg, sourceCfgMap)
 		require.NoError(t, err)
 		require.NotNil(t, taskAfterConvert)
-		taskAfterConvert.IgnoreCheckingItems = fixIgnoreCheckingItems(taskAfterConvert.IgnoreCheckingItems)
 		require.EqualValues(t, taskAfterConvert, &task)
 
 		// only filter events
@@ -639,21 +624,6 @@ func TestConvertBetweenOpenAPITaskAndTaskConfig(t *testing.T) {
 		require.Nil(t, ruleAfterConvert.IgnoreSql)
 		require.NoError(t, err)
 		require.NotNil(t, taskAfterConvert)
-		taskAfterConvert.IgnoreCheckingItems = fixIgnoreCheckingItems(taskAfterConvert.IgnoreCheckingItems)
 		require.EqualValues(t, taskAfterConvert, &task)
 	}
-}
-
-func fixIgnoreCheckingItems(items *[]string) *[]string {
-	if items == nil {
-		return nil
-	}
-	newItems := *items
-	for len(newItems) > 0 && newItems[len(newItems)-1] == MetaPositionChecking {
-		newItems = newItems[:len(newItems)-1]
-	}
-	if len(newItems) == 0 {
-		return nil
-	}
-	return &newItems
 }
