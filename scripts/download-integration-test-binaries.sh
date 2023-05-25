@@ -54,7 +54,7 @@ function download() {
 	fi
 	echo ">>>"
 	echo "download ${file_name} from ${url}"
-	curl --retry 3 --retry-delay 1 -o "${file_path}" "${url}"
+	wget --no-verbose --retry-connrefused --waitretry=1 -t 3 -O "${file_path}" "${url}"
 }
 
 # download_community_version will try to download required binaries from the
@@ -94,10 +94,10 @@ function download_community_binaries() {
 		rm -rf third_bin/$toolkit_file_name
 
 	# ycsb
-	local ycsb_file_name="go-ycsb-${dist}"
+	local ycsb_file_name="go-ycsb-${os}-${arch}"
 	local ycsb_tar_name="${ycsb_file_name}.tar.gz"
-	local ycsb_url="https://github.com/pingcap/go-ycsb/releases/download/v1.0.0/go-ycsb-linux-amd64.tar.gz"
-	download "$ycsb_url" "ycsb_file_name" "tmp/$ycsb_tar_name"
+	local ycsb_url="https://github.com/pingcap/go-ycsb/releases/download/v1.0.0/${ycsb_tar_name}"
+	wget -O "tmp/$ycsb_tar_name" "$ycsb_url"
 	tar -xz -C third_bin -f tmp/$ycsb_tar_name
 
 	# minio
@@ -106,7 +106,7 @@ function download_community_binaries() {
 
 	# jq
 	local jq_url="https://github.com/stedolan/jq/releases/download/jq-1.6/jq-linux64"
-	download "$jq_url" "jq" "third_bin/jq"
+	wget -O third_bin/jq "$jq_url"
 
 	chmod a+x third_bin/*
 }

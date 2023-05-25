@@ -19,6 +19,11 @@ function get_binlog_name() {
 	echo $binlog_name
 }
 
+function get_latest_name() {
+	binlog_name=$(echo "SHOW BINARY LOGS;" | MYSQL_PWD=123456 mysql -uroot -h$1 -P$2 | awk 'END{print $1}')
+	echo $binlog_name
+}
+
 ######################################################
 #   		this test also used by binlog 999999 test
 ######################################################
@@ -264,6 +269,61 @@ function run() {
 	fi
 
 	export GO_FAILPOINTS=''
+	# stop DM task.
+	run_dm_ctl $WORK_DIR "127.0.0.1:$MASTER_PORT" \
+		"stop-task $WORK_DIR/dm-task.yaml"
+
+	run_dm_ctl_with_retry $WORK_DIR "127.0.0.1:$MASTER_PORT" \
+		"stop-relay -s $worker1bound worker1" \
+		"\"result\": true" 2
+	run_dm_ctl_with_retry $WORK_DIR "127.0.0.1:$MASTER_PORT" \
+		"stop-relay -s $worker2bound worker2" \
+		"\"result\": true" 2
+
+	# test rotate binlog, after rotate purge some binlogs. check whether dm can do precheck correctly
+	uuid=($(get_uuid $MYSQL_HOST1 $MYSQL_PORT1)) # get uuid before truncate
+	binlog_name=($(get_latest_name $MYSQL_HOST2 $MYSQL_PORT2))
+
+	run_sql "flush logs;" $MYSQL_PORT1 $MYSQL_PASSWORD1
+	run_sql "flush logs;" $MYSQL_PORT2 $MYSQL_PASSWORD2
+	new_binlog_name1=($(get_latest_name $MYSQL_HOST1 $MYSQL_PORT1))
+	new_binlog_name2=($(get_latest_name $MYSQL_HOST2 $MYSQL_PORT2))
+
+	sed "s/binlog-gtid-placeholder-1/$uuid:0/g" $cur/conf/dm-task.yaml >$WORK_DIR/dm-task.yaml
+	sed -i "s/binlog-name-placeholder-2/$new_binlog_name2/g" $WORK_DIR/dm-task.yaml
+	sed -i "s/binlog-pos-placeholder-2/4/g" $WORK_DIR/dm-task.yaml
+	# precheck DM task.
+	run_dm_ctl $WORK_DIR "127.0.0.1:$MASTER_PORT" \
+		"check-task $WORK_DIR/dm-task.yaml" \
+		"\"name\": \"meta position check\"" 0
+
+	run_sql "purge binary logs to '$new_binlog_name2'" $MYSQL_PORT2 $MYSQL_PASSWORD2
+	run_sql "truncate table incremental_mode.t1;" $MYSQL_PORT1 $MYSQL_PASSWORD1
+	run_sql "truncate table incremental_mode.t2;" $MYSQL_PORT2 $MYSQL_PASSWORD2
+
+	sed "s/binlog-gtid-placeholder-1/$uuid:0/g" $cur/conf/dm-task.yaml >$WORK_DIR/dm-task.yaml
+	sed -i "s/binlog-name-placeholder-2/$binlog_name/g" $WORK_DIR/dm-task.yaml
+	sed -i "s/binlog-pos-placeholder-2/4/g" $WORK_DIR/dm-task.yaml
+
+	# precheck DM task.
+	run_dm_ctl $WORK_DIR "127.0.0.1:$MASTER_PORT" \
+		"check-task $WORK_DIR/dm-task.yaml" \
+		"\"name\": \"meta position check\"" 1
+
+	run_sql "purge binary logs to '$new_binlog_name1'" $MYSQL_PORT1 $MYSQL_PASSWORD1
+	sed "s/binlog-gtid-placeholder-1/$uuid:0/g" $cur/conf/dm-task.yaml >$WORK_DIR/dm-task.yaml
+	sed -i "s/binlog-name-placeholder-2/$new_binlog_name2/g" $WORK_DIR/dm-task.yaml
+	sed -i "s/binlog-pos-placeholder-2/4/g" $WORK_DIR/dm-task.yaml
+
+	# precheck DM task.
+	run_dm_ctl $WORK_DIR "127.0.0.1:$MASTER_PORT" \
+		"check-task $WORK_DIR/dm-task.yaml" \
+		"\"name\": \"meta position check\"" 1
+
+	# start DM task.
+	run_dm_ctl $WORK_DIR "127.0.0.1:$MASTER_PORT" \
+		"start-task $WORK_DIR/dm-task.yaml --remove-meta" \
+		"\"name\": \"meta position check\"" 1
 }
 
 cleanup_data $TEST_NAME
