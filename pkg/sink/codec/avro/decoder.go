@@ -237,23 +237,35 @@ func (d *decoder) NextRowChangedEvent() (*model.RowChangedEvent, error) {
 
 		o, ok = valueMap[tidbRowLevelChecksum]
 		if ok {
+			var expected uint64
 			checksum := o.(string)
-			expected, err := strconv.ParseUint(checksum, 10, 64)
-			if err != nil {
-				return nil, errors.Trace(err)
-			}
-
-			if o, ok := valueMap[tidbCorrupted]; ok {
-				corrupted := o.(bool)
-				if corrupted {
-					log.Warn("row data is corrupted",
-						zap.String("topic", d.topic),
-						zap.String("checksum", checksum))
+			if checksum != "" {
+				expected, err = strconv.ParseUint(checksum, 10, 64)
+				if err != nil {
+					return nil, errors.Trace(err)
 				}
-			}
+				if o, ok := valueMap[tidbCorrupted]; ok {
+					corrupted := o.(bool)
+					if corrupted {
+						log.Warn("row data is corrupted",
+							zap.String("topic", d.topic),
+							zap.String("checksum", checksum))
+						for _, col := range columns {
+							log.Info("data corrupted, print each column for debugging",
+								zap.String("name", col.Name),
+								zap.Any("type", col.Type),
+								zap.Any("charset", col.Charset),
+								zap.Any("flag", col.Flag),
+								zap.Any("value", col.Value),
+								zap.Any("default", col.Default),
+							)
+						}
+					}
+				}
 
-			if err := d.verifyChecksum(columns, expected); err != nil {
-				return nil, errors.Trace(err)
+				if err := d.verifyChecksum(columns, expected); err != nil {
+					return nil, errors.Trace(err)
+				}
 			}
 		}
 	}
