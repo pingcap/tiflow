@@ -696,6 +696,34 @@ func TestSameTargetTableDetection(t *testing.T) {
 func TestMetaPositionChecking(t *testing.T) {
 	cfgs := []*config.SubTaskConfig{
 		{
+			Mode:                config.ModeIncrement,
+			UseRelay:            false,
+			Meta:                nil,
+			IgnoreCheckingItems: ignoreExcept(map[string]struct{}{config.MetaPositionChecking: {}}),
+		},
+	}
+	checkHappyPath(t, func() {
+		_ = initMockDB(t)
+	}, cfgs)
+
+	cfgs = []*config.SubTaskConfig{
+		{
+			Mode:                config.ModeIncrement,
+			UseRelay:            false,
+			SyncerConfig:        config.SyncerConfig{EnableGTID: true},
+			Meta:                &config.Meta{},
+			IgnoreCheckingItems: ignoreExcept(map[string]struct{}{config.MetaPositionChecking: {}}),
+		},
+	}
+	checkHappyPath(t, func() {
+		_ = initMockDB(t)
+	}, cfgs)
+
+	cfgs = []*config.SubTaskConfig{
+		{
+			Mode:                config.ModeIncrement,
+			UseRelay:            false,
+			Meta:                &config.Meta{BinLogGTID: "938bc44f-4acc-11ed-a147-0242ac110003:1-8"},
 			IgnoreCheckingItems: ignoreExcept(map[string]struct{}{config.MetaPositionChecking: {}}),
 		},
 	}
