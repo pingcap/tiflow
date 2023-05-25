@@ -218,9 +218,7 @@ func (d *decoder) NextRowChangedEvent() (*model.RowChangedEvent, error) {
 		columns = append(columns, col)
 	}
 
-	var (
-		commitTs int64
-	)
+	var commitTs int64
 	if !isDelete {
 		o, ok := valueMap[tidbCommitTs]
 		if !ok {

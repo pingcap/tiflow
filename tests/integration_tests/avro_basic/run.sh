@@ -12,17 +12,11 @@ if [ "$SINK_TYPE" != "kafka" ]; then
 	return
 fi
 
-echo 'Show the bin directory'
-ls ./bin
-
-echo 'Show the schema-registry directory'
-ls ./bin/schema-registry
-
 echo 'Starting schema registry...'
 ./bin/schema-registry/bin/schema-registry-start -daemon ./bin/schema-registry/etc/schema-registry/schema-registry.properties
 sleep 3
 i=0
-while ! curl -o /dev/null -v -s "http://127.0.0.1:8081/"; do
+while ! curl -o /dev/null -vsL "http://127.0.0.1:8081/"; do
 	i=$(($i + 1))
 	if [ $i -gt 30 ]; then
 		echo 'Failed to start schema registry'
@@ -69,6 +63,10 @@ function run() {
 
 	cleanup_process $CDC_BINARY
 }
+
+echo "show schema-registry log"
+
+cat ./bin/schema-registry/logs/schema-registry.log
 
 trap stop_tidb_cluster EXIT
 run $*
