@@ -64,11 +64,20 @@ function run() {
 	cleanup_process $CDC_BINARY
 }
 
-echo "show schema-registry log"
-
-cat ./bin/schema-registry/logs/schema-registry.log
-
 trap stop_tidb_cluster EXIT
 run $*
 check_logs $WORK_DIR
+
+echo "show the bin directory"
+ls -al ./bin
+
+echo "show the schema-registry directory"
+ls -al ./bin/schema-registry
+
+echo "show the schema-registry log directory"
+ls -al ./bin/schema-registry/logs
+
+echo "show schema-registry log"
+cat ./bin/schema-registry/logs/schema-registry.log
+
 echo "[$(date)] <<<<<< run test case $TEST_NAME success! >>>>>>"
