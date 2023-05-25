@@ -342,13 +342,8 @@ func (c *Checker) Init(ctx context.Context) (err error) {
 				))
 			}
 		} else if !instance.cfg.UseRelay && instance.cfg.Meta != nil {
-			checkMetaPos := false
-			if instance.cfg.EnableGTID {
-				// when GTID is not specified syncer will try using binlogName to adjust
-				checkMetaPos = len(instance.cfg.Meta.BinLogGTID) > 0 || len(instance.cfg.Meta.BinLogName) > 0
-			} else {
-				checkMetaPos = len(instance.cfg.Meta.BinLogName) > 0
-			}
+			checkMetaPos := len(instance.cfg.Meta.BinLogName) > 0 ||
+				(instance.cfg.EnableGTID && len(instance.cfg.Meta.BinLogGTID) > 0)
 			if _, ok := c.checkingItems[config.MetaPositionChecking]; checkMetaPos && ok {
 				c.checkList = append(c.checkList, checker.NewMetaPositionChecker(instance.sourceDB,
 					instance.cfg.From,
