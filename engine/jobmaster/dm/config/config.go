@@ -290,7 +290,16 @@ func (c *TaskCfg) ToDMSubTaskCfg(jobID string) *dmconfig.SubTaskConfig {
 	cfg.IgnoreCheckingItems = c.IgnoreCheckingItems
 	// TODO: remove this after relay only supports configure in source config
 	// ignore check MetaPositionChecking first because we can't make sure whether relay is enabled
-	cfg.IgnoreCheckingItems = append(c.IgnoreCheckingItems, config.MetaPositionChecking)
+	needIgnoreMetaChecking := true
+	for _, ignoreCheckingItem := range cfg.IgnoreCheckingItems {
+		if ignoreCheckingItem == config.MetaPositionChecking || ignoreCheckingItem == config.AllChecking {
+			needIgnoreMetaChecking = false
+			break
+		}
+	}
+	if needIgnoreMetaChecking {
+		cfg.IgnoreCheckingItems = append(c.IgnoreCheckingItems, config.MetaPositionChecking)
+	}
 	cfg.MetaSchema = c.MetaSchema
 	cfg.Timezone = c.Timezone
 	cfg.To = *c.TargetDB
