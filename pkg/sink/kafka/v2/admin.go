@@ -117,63 +117,6 @@ func (a *admin) GetBrokerConfig(ctx context.Context, configName string) (string,
 		"cannot find the `%s` from the broker's configuration", configName)
 }
 
-func (a *admin) GetTopicsPartitions(ctx context.Context) (map[string]int32, error) {
-	response, err := a.clusterMetadata(ctx)
-	if err != nil {
-		return nil, errors.Trace(err)
-	}
-	result := make(map[string]int32, len(response.Topics))
-	for _, topic := range response.Topics {
-		result[topic.Name] = int32(len(topic.Partitions))
-	}
-	return result, nil
-}
-
-func (a *admin) GetAllTopicsMeta(ctx context.Context) (map[string]pkafka.TopicDetail, error) {
-	response, err := a.clusterMetadata(ctx)
-	if err != nil {
-		return nil, errors.Trace(err)
-	}
-
-	describeTopicConfigsRequest := &kafka.DescribeConfigsRequest{
-		Resources: []kafka.DescribeConfigRequestResource{},
-	}
-	result := make(map[string]pkafka.TopicDetail, len(response.Topics))
-	for _, topic := range response.Topics {
-		result[topic.Name] = pkafka.TopicDetail{
-			Name:              topic.Name,
-			NumPartitions:     int32(len(topic.Partitions)),
-			ReplicationFactor: int16(len(topic.Partitions[0].Replicas)),
-		}
-		describeTopicConfigsRequest.Resources = append(describeTopicConfigsRequest.Resources,
-			kafka.DescribeConfigRequestResource{
-				ResourceType: kafka.ResourceTypeTopic,
-				ResourceName: topic.Name,
-			})
-	}
-
-	describeTopicConfigsResponse, err := a.client.DescribeConfigs(ctx, describeTopicConfigsRequest)
-	if err != nil {
-		return nil, errors.Trace(err)
-	}
-	for _, resource := range describeTopicConfigsResponse.Resources {
-		topicDetails, ok := result[resource.ResourceName]
-		if !ok {
-			return nil, errors.New("undesired topic found from the response")
-		}
-		topicDetails.ConfigEntries = make(map[string]string, len(resource.ConfigEntries))
-		for _, entry := range resource.ConfigEntries {
-			if entry.IsDefault || entry.IsSensitive {
-				continue
-			}
-			topicDetails.ConfigEntries[entry.ConfigName] = entry.ConfigValue
-		}
-		result[resource.ResourceName] = topicDetails
-	}
-
-	return result, nil
-}
-
 func (a *admin) GetTopicsMeta(
 	ctx context.Context,
 	topics []string,
