@@ -499,7 +499,7 @@ func AdjustOptions(
 	options *Options,
 	topic string,
 ) error {
-	topics, err := admin.GetAllTopicsMeta(ctx)
+	topics, err := admin.GetTopicsMeta(ctx, []string{topic}, false)
 	if err != nil {
 		return errors.Trace(err)
 	}
