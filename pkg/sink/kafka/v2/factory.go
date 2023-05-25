@@ -152,6 +152,10 @@ func completeSASLConfig(o *pkafka.Options) (sasl.Mechanism, error) {
 			}
 			return Gokrb5v8(&gokrb5v8ClientImpl{clnt},
 				o.SASL.GSSAPI.ServiceName), nil
+
+		case pkafka.SASLTypeOAuth:
+			return nil, errors.ErrKafkaInvalidConfig.GenWithStack(
+				"OAuth is not yet supported in Kafka sink v2")
 		}
 	}
 	return nil, nil
@@ -196,12 +200,12 @@ func (f *factory) newWriter(async bool) *kafka.Writer {
 	return w
 }
 
-func (f *factory) AdminClient() (pkafka.ClusterAdminClient, error) {
+func (f *factory) AdminClient(_ context.Context) (pkafka.ClusterAdminClient, error) {
 	return newClusterAdminClient(f.options.BrokerEndpoints, f.transport, f.changefeedID), nil
 }
 
 // SyncProducer creates a sync producer to writer message to kafka
-func (f *factory) SyncProducer() (pkafka.SyncProducer, error) {
+func (f *factory) SyncProducer(_ context.Context) (pkafka.SyncProducer, error) {
 	w := f.newWriter(false)
 	// set batch size to 1 to make sure the message is sent immediately
 	w.BatchTimeout = time.Millisecond
