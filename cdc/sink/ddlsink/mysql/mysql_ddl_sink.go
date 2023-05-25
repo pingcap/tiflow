@@ -136,12 +136,30 @@ func (m *DDLSink) execDDLWithMaxRetries(ctx context.Context, ddl *model.DDLEvent
 		retry.WithIsRetryableErr(errorutil.IsRetryableDDLError))
 }
 
+// isReorgOrPartitionDDL returns true if given ddl type is reorg ddl or
+// partition ddl.
+func isReorgOrPartitionDDL(t timodel.ActionType) bool {
+	// partition related ddl
+	return t == timodel.ActionAddTablePartition ||
+		t == timodel.ActionDropTablePartition ||
+		t == timodel.ActionTruncateTablePartition ||
+		t == timodel.ActionExchangeTablePartition ||
+		t == timodel.ActionReorganizePartition ||
+		// reorg ddls
+		t == timodel.ActionAddIndex ||
+		t == timodel.ActionAddColumn ||
+		t == timodel.ActionAddColumns ||
+		t == timodel.ActionDropColumn ||
+		t == timodel.ActionDropColumns ||
+		t == timodel.ActionModifyColumn
+}
+
 func (m *DDLSink) execDDL(pctx context.Context, ddl *model.DDLEvent) error {
 	ctx := pctx
 	// When executing Reorg and Partition DDLs in TiDB, there is no timeout
 	// mechanism by default. Instead, the system will wait for the DDL operation
 	// to be executed or completed before proceeding.
-	if ddl.Type != timodel.ActionReorganizePartition {
+	if !isReorgOrPartitionDDL(ddl.Type) {
 		writeTimeout, _ := time.ParseDuration(m.cfg.WriteTimeout)
 		writeTimeout += networkDriftDuration
 		var cancelFunc func()
