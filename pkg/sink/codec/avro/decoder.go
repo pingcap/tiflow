@@ -301,7 +301,7 @@ func (d *decoder) NextDDLEvent() (*model.DDLEvent, error) {
 
 	data := d.value[1:]
 
-	var baseDDLEvent DDLEvent
+	var baseDDLEvent ddlEvent
 	err := json.Unmarshal(data, &baseDDLEvent)
 	if err != nil {
 		return nil, errors.WrapError(errors.ErrDecodeFailed, err)

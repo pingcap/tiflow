@@ -168,7 +168,7 @@ func (a *BatchEncoder) EncodeCheckpointEvent(ts uint64) (*common.Message, error)
 	return nil, nil
 }
 
-type DDLEvent struct {
+type ddlEvent struct {
 	Query    string             `json:"query"`
 	Type     timodel.ActionType `json:"type"`
 	Schema   string             `json:"schema"`
@@ -183,7 +183,7 @@ func (a *BatchEncoder) EncodeDDLEvent(e *model.DDLEvent) (*common.Message, error
 		buf := new(bytes.Buffer)
 		_ = binary.Write(buf, binary.BigEndian, ddlByte)
 
-		event := &DDLEvent{
+		event := &ddlEvent{
 			Query:    e.Query,
 			Type:     e.Type,
 			Schema:   e.TableInfo.TableName.Schema,
