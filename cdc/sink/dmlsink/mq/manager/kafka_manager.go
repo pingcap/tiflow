@@ -245,7 +245,7 @@ func (m *kafkaTopicManager) CreateTopicAndWaitUntilVisible(
 ) (int32, error) {
 	m.createTopicLimiter.Take()
 	// If the topic is not in the cache, we try to get the metadata of the topic.
-	topicDetails, err := m.admin.GetTopicsMeta(ctx, []string{topicName}, false)
+	topicDetails, err := m.admin.GetTopicsMeta(ctx, []string{topicName}, true)
 	if err != nil {
 		return 0, errors.Trace(err)
 	}
