@@ -387,8 +387,12 @@ func (s *Server) checkOpenAPITaskBeforeOperate(ctx context.Context, task *openap
 	if err != nil {
 		return nil, "", err
 	}
+	stCfgsForCheck, err := s.generateSubTasksForCheck(subTaskConfigList)
+	if err != nil {
+		return nil, "", err
+	}
 	// check subtask config
-	msg, err := s.checkTask(ctx, subTaskConfigList, common.DefaultErrorCnt, common.DefaultWarnCnt)
+	msg, err := s.checkTask(ctx, stCfgsForCheck, common.DefaultErrorCnt, common.DefaultWarnCnt)
 	if err != nil {
 		return nil, "", terror.WithClass(err, terror.ClassDMMaster)
 	}

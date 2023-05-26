@@ -35,6 +35,7 @@ const (
 	ShardAutoIncrementIDChecking = "auto_increment_ID"
 	OnlineDDLChecking            = "online_ddl"
 	BinlogDBChecking             = "binlog_db"
+	MetaPositionChecking         = "meta_position"
 	ConnNumberChecking           = "conn_number"
 	TargetDBPrivilegeChecking    = "target_privilege"
 	// lighting prechecks.
@@ -60,6 +61,7 @@ var AllCheckingItems = map[string]string{
 	ShardAutoIncrementIDChecking: "conflict auto increment ID of shard tables checking item",
 	OnlineDDLChecking:            "online ddl checking item",
 	BinlogDBChecking:             "binlog db checking item",
+	MetaPositionChecking:         "meta position valid checking item",
 	ConnNumberChecking:           "connection number checking item",
 	TargetDBPrivilegeChecking:    "privileges of target DB checking item",
 	// lightning prechecks
