@@ -187,14 +187,13 @@ func (c *captureImpl) GetEtcdClient() etcd.CDCEtcdClient {
 
 // reset the capture before run it.
 func (c *captureImpl) reset(ctx context.Context) error {
-	c.captureMu.Lock()
-	if c.EtcdClient == nil {
-		etcdClient, err := c.newEtcdClient()
-		if err != nil {
-			return errors.Trace(err)
-		}
-		c.EtcdClient = etcdClient
+	etcdClient, err := c.newEtcdClient()
+	if err != nil {
+		return errors.Trace(err)
 	}
+
+	c.captureMu.Lock()
+	c.EtcdClient = etcdClient
 	c.captureMu.Unlock()
 
 	lease, err := c.EtcdClient.GetEtcdClient().Grant(ctx, int64(c.config.CaptureSessionTTL))
@@ -303,12 +302,6 @@ func (c *captureImpl) Run(ctx context.Context) error {
 }
 
 func (c *captureImpl) run(stdCtx context.Context) error {
-	// set the etcd client to nil when the capture exited.
-	defer func() {
-		c.captureMu.Lock()
-		c.EtcdClient = nil
-		c.captureMu.Unlock()
-	}()
 
 	err := c.reset(stdCtx)
 	if err != nil {
