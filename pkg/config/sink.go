@@ -22,6 +22,7 @@ import (
 	"github.com/pingcap/log"
 	cerror "github.com/pingcap/tiflow/pkg/errors"
 	"github.com/pingcap/tiflow/pkg/sink"
+	"github.com/pingcap/tiflow/pkg/util"
 	"go.uber.org/zap"
 )
 
@@ -102,29 +103,42 @@ var ForceEnableOldValueProtocols = []string{
 
 // SinkConfig represents sink config for a changefeed
 type SinkConfig struct {
-	TxnAtomicity AtomicityLevel `toml:"transaction-atomicity" json:"transaction-atomicity"`
-	Protocol     string         `toml:"protocol" json:"protocol"`
+	TxnAtomicity *AtomicityLevel `toml:"transaction-atomicity" json:"transaction-atomicity,omitempty"`
+	// Protocol is NOT available when the downstream is DB.
+	Protocol *string `toml:"protocol" json:"protocol,omitempty"`
 
-	DispatchRules            []*DispatchRule   `toml:"dispatchers" json:"dispatchers"`
-	CSVConfig                *CSVConfig        `toml:"csv" json:"csv"`
-	ColumnSelectors          []*ColumnSelector `toml:"column-selectors" json:"column-selectors"`
-	SchemaRegistry           string            `toml:"schema-registry" json:"schema-registry"`
-	EncoderConcurrency       int               `toml:"encoder-concurrency" json:"encoder-concurrency"`
-	Terminator               string            `toml:"terminator" json:"terminator"`
-	DateSeparator            string            `toml:"date-separator" json:"date-separator"`
-	EnablePartitionSeparator bool              `toml:"enable-partition-separator" json:"enable-partition-separator"`
-	FileIndexWidth           int               `toml:"file-index-digit,omitempty" json:"file-index-digit,omitempty"`
+	// DispatchRules is only available when the downstream is MQ.
+	DispatchRules []*DispatchRule `toml:"dispatchers" json:"dispatchers,omitempty"`
+	// CSVConfig is only available when the downstream is Storage.
+	CSVConfig *CSVConfig `toml:"csv" json:"csv,omitempty"`
+	// ColumnSelectors is Deprecated.
+	ColumnSelectors []*ColumnSelector `toml:"column-selectors" json:"column-selectors,omitempty"`
+	// SchemaRegistry is only available when the downstream is MQ using avro protocol.
+	SchemaRegistry *string `toml:"schema-registry" json:"schema-registry,omitempty"`
+	// EncoderConcurrency is only available when the downstream is MQ.
+	EncoderConcurrency *int `toml:"encoder-concurrency" json:"encoder-concurrency,omitempty"`
+	// Terminator is NOT available when the downstream is DB.
+	Terminator *string `toml:"terminator" json:"terminator,omitempty"`
+	// DateSeparator is only available when the downstream is Storage.
+	DateSeparator *string `toml:"date-separator" json:"date-separator,omitempty"`
+	// EnablePartitionSeparator is only available when the downstream is Storage.
+	EnablePartitionSeparator *bool `toml:"enable-partition-separator" json:"enable-partition-separator,omitempty"`
+	// FileIndexWidth is only available when the downstream is Storage
+	FileIndexWidth *int `toml:"file-index-digit,omitempty" json:"file-index-digit,omitempty"`
 
 	// EnableKafkaSinkV2 enabled then the kafka-go sink will be used.
-	EnableKafkaSinkV2 bool `toml:"enable-kafka-sink-v2" json:"enable-kafka-sink-v2"`
+	// It is only available when the downstream is MQ.
+	EnableKafkaSinkV2 *bool `toml:"enable-kafka-sink-v2" json:"enable-kafka-sink-v2,omitempty"`
 
-	OnlyOutputUpdatedColumns *bool `toml:"only-output-updated-columns" json:"only-output-updated-columns"`
+	// OnlyOutputUpdatedColumns is only available when the downstream is MQ.
+	OnlyOutputUpdatedColumns *bool `toml:"only-output-updated-columns" json:"only-output-updated-columns,omitempty"`
 
 	// TiDBSourceID is the source ID of the upstream TiDB,
 	// which is used to set the `tidb_cdc_write_source` session variable.
 	// Note: This field is only used internally and only used in the MySQL sink.
 	TiDBSourceID uint64 `toml:"-" json:"-"`
 
+	// SafeMode is only available when the downstream is DB.
 	SafeMode           *bool               `toml:"safe-mode" json:"safe-mode,omitempty"`
 	KafkaConfig        *KafkaConfig        `toml:"kafka-config" json:"kafka-config,omitempty"`
 	MySQLConfig        *MySQLConfig        `toml:"mysql-config" json:"mysql-config,omitempty"`
@@ -314,11 +328,11 @@ func (s *SinkConfig) validateAndAdjust(sinkURI *url.URL, enableOldValue bool) er
 
 	if !enableOldValue {
 		for _, protocolStr := range ForceEnableOldValueProtocols {
-			if protocolStr == s.Protocol {
+			if protocolStr == util.GetOrZero(s.Protocol) {
 				log.Error(fmt.Sprintf("Old value is not enabled when using `%s` protocol. "+
-					"Please update changefeed config", s.Protocol))
+					"Please update changefeed config", util.GetOrZero(s.Protocol)))
 				return cerror.WrapError(cerror.ErrKafkaInvalidConfig,
-					errors.New(fmt.Sprintf("%s protocol requires old value to be enabled", s.Protocol)))
+					errors.New(fmt.Sprintf("%s protocol requires old value to be enabled", util.GetOrZero(s.Protocol))))
 			}
 		}
 	}
@@ -338,22 +352,22 @@ func (s *SinkConfig) validateAndAdjust(sinkURI *url.URL, enableOldValue bool) er
 		}
 	}
 
-	if s.EncoderConcurrency < 0 {
+	if util.GetOrZero(s.EncoderConcurrency) < 0 {
 		return cerror.ErrSinkInvalidConfig.GenWithStack(
 			"encoder-concurrency should greater than 0, but got %d", s.EncoderConcurrency)
 	}
 
 	// validate terminator
-	if len(s.Terminator) == 0 {
-		s.Terminator = CRLF
+	if s.Terminator == nil {
+		s.Terminator = util.AddressOf(CRLF)
 	}
 
 	// validate storage sink related config
 	if sinkURI != nil && sink.IsStorageScheme(sinkURI.Scheme) {
 		// validate date separator
-		if len(s.DateSeparator) > 0 {
+		if len(util.GetOrZero(s.DateSeparator)) > 0 {
 			var separator DateSeparator
-			if err := separator.FromString(s.DateSeparator); err != nil {
+			if err := separator.FromString(util.GetOrZero(s.DateSeparator)); err != nil {
 				return cerror.WrapError(cerror.ErrSinkInvalidConfig, err)
 			}
 		}
@@ -362,8 +376,9 @@ func (s *SinkConfig) validateAndAdjust(sinkURI *url.URL, enableOldValue bool) er
 		// In most scenarios, the user does not need to change this configuration,
 		// so the default value of this parameter is not set and just make silent
 		// adjustments here.
-		if s.FileIndexWidth < MinFileIndexWidth || s.FileIndexWidth > MaxFileIndexWidth {
-			s.FileIndexWidth = DefaultFileIndexWidth
+		if util.GetOrZero(s.FileIndexWidth) < MinFileIndexWidth ||
+			util.GetOrZero(s.FileIndexWidth) > MaxFileIndexWidth {
+			s.FileIndexWidth = util.AddressOf(DefaultFileIndexWidth)
 		}
 
 		if err := s.CSVConfig.validateAndAdjust(); err != nil {
@@ -392,25 +407,25 @@ func (s *SinkConfig) validateAndAdjustSinkURI(sinkURI *url.URL) error {
 	}
 
 	// validate that TxnAtomicity is valid and compatible with the scheme.
-	if err := s.TxnAtomicity.validate(sinkURI.Scheme); err != nil {
+	if err := util.GetOrZero(s.TxnAtomicity).validate(sinkURI.Scheme); err != nil {
 		return err
 	}
 
 	// Validate that protocol is compatible with the scheme. For testing purposes,
 	// any protocol should be legal for blackhole.
 	if sink.IsMQScheme(sinkURI.Scheme) || sink.IsStorageScheme(sinkURI.Scheme) {
-		_, err := ParseSinkProtocolFromString(s.Protocol)
+		_, err := ParseSinkProtocolFromString(util.GetOrZero(s.Protocol))
 		if err != nil {
 			return err
 		}
-	} else if sink.IsMySQLCompatibleScheme(sinkURI.Scheme) && s.Protocol != "" {
+	} else if sink.IsMySQLCompatibleScheme(sinkURI.Scheme) && s.Protocol != nil {
 		return cerror.ErrSinkURIInvalid.GenWithStackByArgs(fmt.Sprintf("protocol %s "+
-			"is incompatible with %s scheme", s.Protocol, sinkURI.Scheme))
+			"is incompatible with %s scheme", util.GetOrZero(s.Protocol), sinkURI.Scheme))
 	}
 
 	log.Info("succeed to parse parameter from sink uri",
-		zap.String("protocol", s.Protocol),
-		zap.String("txnAtomicity", string(s.TxnAtomicity)))
+		zap.String("protocol", util.GetOrZero(s.Protocol)),
+		zap.String("txnAtomicity", string(util.GetOrZero(s.TxnAtomicity))))
 	return nil
 }
 
@@ -428,20 +443,20 @@ func (s *SinkConfig) applyParameterBySinkURI(sinkURI *url.URL) error {
 
 	txnAtomicityFromURI := AtomicityLevel(params.Get(TxnAtomicityKey))
 	if txnAtomicityFromURI != unknownTxnAtomicity {
-		if s.TxnAtomicity != unknownTxnAtomicity && s.TxnAtomicity != txnAtomicityFromURI {
+		if util.GetOrZero(s.TxnAtomicity) != unknownTxnAtomicity && util.GetOrZero(s.TxnAtomicity) != txnAtomicityFromURI {
 			cfgInSinkURI[TxnAtomicityKey] = string(txnAtomicityFromURI)
-			cfgInFile[TxnAtomicityKey] = string(s.TxnAtomicity)
+			cfgInFile[TxnAtomicityKey] = string(util.GetOrZero(s.TxnAtomicity))
 		}
-		s.TxnAtomicity = txnAtomicityFromURI
+		s.TxnAtomicity = util.AddressOf(txnAtomicityFromURI)
 	}
 
 	protocolFromURI := params.Get(ProtocolKey)
 	if protocolFromURI != "" {
-		if s.Protocol != "" && s.Protocol != protocolFromURI {
+		if s.Protocol != nil && util.GetOrZero(s.Protocol) != protocolFromURI {
 			cfgInSinkURI[ProtocolKey] = protocolFromURI
-			cfgInFile[ProtocolKey] = s.Protocol
+			cfgInFile[ProtocolKey] = util.GetOrZero(s.Protocol)
 		}
-		s.Protocol = protocolFromURI
+		s.Protocol = util.AddressOf(protocolFromURI)
 	}
 
 	getError := func() error {
