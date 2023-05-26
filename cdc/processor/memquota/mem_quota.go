@@ -14,6 +14,7 @@
 package memquota
 
 import (
+	"context"
 	"sort"
 	"sync"
 	"sync/atomic"
@@ -21,7 +22,12 @@ import (
 
 	"github.com/pingcap/log"
 	"github.com/pingcap/tiflow/cdc/model"
+<<<<<<< HEAD
 	cerrors "github.com/pingcap/tiflow/pkg/errors"
+=======
+	"github.com/pingcap/tiflow/cdc/processor/tablepb"
+	"github.com/pingcap/tiflow/pkg/spanz"
+>>>>>>> 488515a327 (sink(cdc): close MemoryQuota to stop SinkManager correctly (#9074))
 	"github.com/prometheus/client_golang/prometheus"
 	"go.uber.org/zap"
 )
@@ -122,7 +128,7 @@ func (m *MemQuota) ForceAcquire(nBytes uint64) {
 func (m *MemQuota) BlockAcquire(nBytes uint64) error {
 	for {
 		if m.isClosed.Load() {
-			return cerrors.ErrFlowControllerAborted.GenWithStackByArgs()
+			return context.Canceled
 		}
 		usedBytes := m.usedBytes.Load()
 		if usedBytes+nBytes > m.totalBytes {

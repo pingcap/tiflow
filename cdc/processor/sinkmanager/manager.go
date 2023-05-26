@@ -172,6 +172,74 @@ func New(
 	m.startGenerateTasks()
 	m.backgroundGC()
 
+<<<<<<< HEAD
+=======
+// Run implements util.Runnable.
+// When it returns, all sub-goroutines should be closed.
+func (m *SinkManager) Run(ctx context.Context, warnings ...chan<- error) (err error) {
+	m.managerCtx, m.managerCancel = context.WithCancel(ctx)
+	m.wg.Add(1) // So `SinkManager.Close` will also wait the function.
+	defer func() {
+		m.wg.Done()
+		m.waitSubroutines()
+		log.Info("Sink manager exists",
+			zap.String("namespace", m.changefeedID.Namespace),
+			zap.String("changefeed", m.changefeedID.ID),
+			zap.Error(err))
+	}()
+
+	splitTxn := util.GetOrZero(m.changefeedInfo.Config.Sink.TxnAtomicity).ShouldSplitTxn()
+	enableOldValue := m.changefeedInfo.Config.EnableOldValue
+
+	gcErrors := make(chan error, 16)
+	sinkFactoryErrors := make(chan error, 16)
+	sinkErrors := make(chan error, 16)
+	redoErrors := make(chan error, 16)
+
+	m.backgroundGC(gcErrors)
+	if m.sinkEg == nil {
+		var sinkCtx context.Context
+		m.sinkEg, sinkCtx = errgroup.WithContext(m.managerCtx)
+		m.startSinkWorkers(sinkCtx, m.sinkEg, splitTxn, enableOldValue)
+		m.sinkEg.Go(func() error { return m.generateSinkTasks(sinkCtx) })
+		m.wg.Add(1)
+		go func() {
+			defer m.wg.Done()
+			if err := m.sinkEg.Wait(); err != nil && !cerror.Is(err, context.Canceled) {
+				log.Error("Worker handles or generates sink task failed",
+					zap.String("namespace", m.changefeedID.Namespace),
+					zap.String("changefeed", m.changefeedID.ID),
+					zap.Error(err))
+				select {
+				case sinkErrors <- err:
+				case <-m.managerCtx.Done():
+				}
+			}
+		}()
+	}
+	if m.redoDMLMgr != nil && m.redoEg == nil {
+		var redoCtx context.Context
+		m.redoEg, redoCtx = errgroup.WithContext(m.managerCtx)
+		m.startRedoWorkers(redoCtx, m.redoEg, enableOldValue)
+		m.redoEg.Go(func() error { return m.generateRedoTasks(redoCtx) })
+		m.wg.Add(1)
+		go func() {
+			defer m.wg.Done()
+			if err := m.redoEg.Wait(); err != nil && !cerror.Is(err, context.Canceled) {
+				log.Error("Worker handles or generates redo task failed",
+					zap.String("namespace", m.changefeedID.Namespace),
+					zap.String("changefeed", m.changefeedID.ID),
+					zap.Error(err))
+				select {
+				case redoErrors <- err:
+				case <-m.managerCtx.Done():
+				}
+			}
+		}()
+	}
+
+	close(m.ready)
+>>>>>>> 488515a327 (sink(cdc): close MemoryQuota to stop SinkManager correctly (#9074))
 	log.Info("Sink manager is created",
 		zap.String("namespace", changefeedID.Namespace),
 		zap.String("changefeed", changefeedID.ID),
@@ -880,12 +948,37 @@ func (m *SinkManager) ReceivedEvents() int64 {
 	return totalReceivedEvents
 }
 
+<<<<<<< HEAD
 // Close closes all workers.
 func (m *SinkManager) Close() error {
+=======
+// WaitForReady implements pkg/util.Runnable.
+func (m *SinkManager) WaitForReady(ctx context.Context) {
+	select {
+	case <-ctx.Done():
+	case <-m.ready:
+	}
+}
+
+// wait all sub-routines associated with `m.wg` returned.
+func (m *SinkManager) waitSubroutines() {
+	m.managerCancel()
+	// Sink workers and redo workers can be blocked on MemQuota.BlockAcquire,
+	// which doesn't watch m.managerCtx. So we must close these 2 MemQuotas
+	// before wait them.
+	m.sinkMemQuota.Close()
+	m.redoMemQuota.Close()
+	m.wg.Wait()
+}
+
+// Close closes the manager. Must be called after `Run` returned.
+func (m *SinkManager) Close() {
+>>>>>>> 488515a327 (sink(cdc): close MemoryQuota to stop SinkManager correctly (#9074))
 	log.Info("Closing sink manager",
 		zap.String("namespace", m.changefeedID.Namespace),
 		zap.String("changefeed", m.changefeedID.ID))
 	start := time.Now()
+<<<<<<< HEAD
 	if m.cancel != nil {
 		m.cancel()
 		m.cancel = nil
@@ -893,6 +986,10 @@ func (m *SinkManager) Close() error {
 	m.sinkMemQuota.Close()
 	m.redoMemQuota.Close()
 	m.tableSinks.Range(func(key, value interface{}) bool {
+=======
+	m.waitSubroutines()
+	m.tableSinks.Range(func(_ tablepb.Span, value interface{}) bool {
+>>>>>>> 488515a327 (sink(cdc): close MemoryQuota to stop SinkManager correctly (#9074))
 		sink := value.(*tableSinkWrapper)
 		sink.close()
 		if m.eventCache != nil {
