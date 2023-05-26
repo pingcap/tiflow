@@ -183,9 +183,8 @@ func New(
 func (m *SinkManager) run(ctx context.Context, warnings ...chan<- error) (err error) {
 	m.managerCtx, m.managerCancel = context.WithCancel(ctx)
 	defer func() {
-		m.managerCancel()
 		m.wg.Done()
-		m.wg.Wait()
+		m.waitSubroutines()
 		log.Info("Sink manager exists",
 			zap.String("namespace", m.changefeedID.Namespace),
 			zap.String("changefeed", m.changefeedID.ID),
@@ -964,17 +963,25 @@ func (m *SinkManager) ReceivedEvents() int64 {
 	return totalReceivedEvents
 }
 
-// Close closes all workers.
+// wait all sub-routines associated with `m.wg` returned.
+func (m *SinkManager) waitSubroutines() {
+	m.managerCancel()
+	// Sink workers and redo workers can be blocked on MemQuota.BlockAcquire,
+	// which doesn't watch m.managerCtx. So we must close these 2 MemQuotas
+	// before wait them.
+	m.sinkMemQuota.Close()
+	m.redoMemQuota.Close()
+	m.wg.Wait()
+}
+
+// Close closes the manager. Must be called after `Run` returned.
 func (m *SinkManager) Close() {
 	log.Info("Closing sink manager",
 		zap.String("namespace", m.changefeedID.Namespace),
 		zap.String("changefeed", m.changefeedID.ID))
 	start := time.Now()
-	m.managerCancel()
-	m.wg.Wait()
-	m.sinkMemQuota.Close()
-	m.redoMemQuota.Close()
-	m.tableSinks.Range(func(key, value interface{}) bool {
+	m.waitSubroutines()
+	m.tableSinks.Range(func(_, value interface{}) bool {
 		sink := value.(*tableSinkWrapper)
 		sink.close()
 		if m.eventCache != nil {
