@@ -151,7 +151,7 @@ func TestConvertEmptyRowChangedEvents(t *testing.T) {
 	require.Equal(t, uint64(0), size)
 }
 
-func TestConvertRowChangedEventsWhenEnableOldValue(t *testing.T) {
+func TestConvertRowChangedEventsShouldNotSplitUpdate(t *testing.T) {
 	t.Parallel()
 
 	columns := []*model.Column{
@@ -203,7 +203,7 @@ func TestConvertRowChangedEventsWhenEnableOldValue(t *testing.T) {
 	require.Equal(t, uint64(224), size)
 }
 
-func TestConvertRowChangedEventsWhenDisableOldValue(t *testing.T) {
+func TestConvertRowChangedEventsShouldSplitUpdate(t *testing.T) {
 	t.Parallel()
 
 	// Update handle key.
