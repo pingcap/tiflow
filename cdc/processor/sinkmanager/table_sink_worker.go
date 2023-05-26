@@ -66,6 +66,11 @@ type sinkWorker struct {
 	// splitTxn indicates whether to split the transaction into multiple batches.
 	splitTxn bool
 
+	// shouldSplitUpdate indicates whether to split the update event.
+	// At the moment, it can be true in the following cases:
+	// 1. user disable the old value manually in the configuration, in the such case split the
+	// update event to be compatible with the old data format.
+	// 2. avro or csv is used as the encoding protocol for the kafka sink or the storage sink.
 	shouldSplitUpdate bool
 
 	// Metrics.
