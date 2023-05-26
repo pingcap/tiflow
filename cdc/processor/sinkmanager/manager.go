@@ -188,10 +188,7 @@ func (m *SinkManager) Run(ctx context.Context, warnings ...chan<- error) (err er
 	splitTxn := util.GetOrZero(m.changefeedInfo.Config.Sink.TxnAtomicity).ShouldSplitTxn()
 
 	var shouldSplitUpdate bool
-	protocol, err := config.ParseSinkProtocolFromString(util.GetOrZero(m.changefeedInfo.Config.Sink.Protocol))
-	if err != nil {
-		return errors.Trace(err)
-	}
+	protocol, _ := config.ParseSinkProtocolFromString(util.GetOrZero(m.changefeedInfo.Config.Sink.Protocol))
 	if !m.changefeedInfo.Config.EnableOldValue || protocol.ShouldSplitUpdate() {
 		shouldSplitUpdate = true
 	}
