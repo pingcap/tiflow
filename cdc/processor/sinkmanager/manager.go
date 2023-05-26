@@ -186,11 +186,15 @@ func (m *SinkManager) Run(ctx context.Context, warnings ...chan<- error) (err er
 	}()
 
 	splitTxn := util.GetOrZero(m.changefeedInfo.Config.Sink.TxnAtomicity).ShouldSplitTxn()
-	enableOldValue := m.changefeedInfo.Config.EnableOldValue
 
+	var shouldSplitUpdate bool
+	
 	protocol, err := config.ParseSinkProtocolFromString(util.GetOrZero(m.changefeedInfo.Config.Sink.Protocol))
 	if err != nil {
 		return errors.Trace(err)
+	}
+	if !m.changefeedInfo.Config.EnableOldValue || protocol.ShouldSplitUpdate() {
+		shouldSplitUpdate = true
 	}
 
 	gcErrors := make(chan error, 16)
@@ -202,7 +206,7 @@ func (m *SinkManager) Run(ctx context.Context, warnings ...chan<- error) (err er
 	if m.sinkEg == nil {
 		var sinkCtx context.Context
 		m.sinkEg, sinkCtx = errgroup.WithContext(m.managerCtx)
-		m.startSinkWorkers(sinkCtx, m.sinkEg, splitTxn, enableOldValue, protocol.ShouldSplitUpdate())
+		m.startSinkWorkers(sinkCtx, m.sinkEg, splitTxn, shouldSplitUpdate)
 		m.sinkEg.Go(func() error { return m.generateSinkTasks(sinkCtx) })
 		m.wg.Add(1)
 		go func() {
@@ -222,7 +226,7 @@ func (m *SinkManager) Run(ctx context.Context, warnings ...chan<- error) (err er
 	if m.redoDMLMgr != nil && m.redoEg == nil {
 		var redoCtx context.Context
 		m.redoEg, redoCtx = errgroup.WithContext(m.managerCtx)
-		m.startRedoWorkers(redoCtx, m.redoEg, enableOldValue, protocol.ShouldSplitUpdate())
+		m.startRedoWorkers(redoCtx, m.redoEg, shouldSplitUpdate)
 		m.redoEg.Go(func() error { return m.generateRedoTasks(redoCtx) })
 		m.wg.Add(1)
 		go func() {
@@ -330,20 +334,20 @@ func (m *SinkManager) clearSinkFactory() {
 	}
 }
 
-func (m *SinkManager) startSinkWorkers(ctx context.Context, eg *errgroup.Group, splitTxn bool, enableOldValue bool, splitUpdate4KafkaAvroAndCSV bool) {
+func (m *SinkManager) startSinkWorkers(ctx context.Context, eg *errgroup.Group, splitTxn bool, shouldSplitUpdate bool) {
 	for i := 0; i < sinkWorkerNum; i++ {
 		w := newSinkWorker(m.changefeedID, m.sourceManager,
 			m.sinkMemQuota, m.redoMemQuota,
-			m.eventCache, splitTxn, enableOldValue, splitUpdate4KafkaAvroAndCSV)
+			m.eventCache, splitTxn, shouldSplitUpdate)
 		m.sinkWorkers = append(m.sinkWorkers, w)
 		eg.Go(func() error { return w.handleTasks(ctx, m.sinkTaskChan) })
 	}
 }
 
-func (m *SinkManager) startRedoWorkers(ctx context.Context, eg *errgroup.Group, enableOldValue bool, shouldSplitUpdate bool) {
+func (m *SinkManager) startRedoWorkers(ctx context.Context, eg *errgroup.Group, shouldSplitUpdate bool) {
 	for i := 0; i < redoWorkerNum; i++ {
 		w := newRedoWorker(m.changefeedID, m.sourceManager, m.redoMemQuota,
-			m.redoDMLMgr, m.eventCache, enableOldValue, shouldSplitUpdate)
+			m.redoDMLMgr, m.eventCache, shouldSplitUpdate)
 		m.redoWorkers = append(m.redoWorkers, w)
 		eg.Go(func() error { return w.handleTasks(ctx, m.redoTaskChan) })
 	}

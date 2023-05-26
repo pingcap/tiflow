@@ -408,8 +408,8 @@ func (t *tableSinkWrapper) cleanRangeEventCounts(upperBound engine.Position, min
 // convertRowChangedEvents uses to convert RowChangedEvents to TableSinkRowChangedEvents.
 // It will deal with the old value compatibility.
 func convertRowChangedEvents(
-	changefeed model.ChangeFeedID, span tablepb.Span, enableOldValue bool,
-	splitUpdate4KafkaAvroAndCSV bool,
+	changefeed model.ChangeFeedID, span tablepb.Span,
+	shouldSplitUpdate bool,
 	events ...*model.PolymorphicEvent,
 ) ([]*model.RowChangedEvent, uint64, error) {
 	size := 0
@@ -440,22 +440,20 @@ func convertRowChangedEvents(
 
 		size += e.Row.ApproximateBytes()
 
-		if e.Row.IsUpdate() {
-			// TiCDC always pull old value, but old value can be disabled in the configuration.
-			// in the such case, handle the update event to be compatible with the old format.
-			if !enableOldValue || splitUpdate4KafkaAvroAndCSV {
-				if shouldSplitUpdateEvent(e) {
-					deleteEvent, insertEvent, err := splitUpdateEvent(e)
-					if err != nil {
-						return nil, 0, errors.Trace(err)
-					}
-					// NOTICE: Please do not change the order, the delete event always comes before the insert event.
-					rowChangedEvents = append(rowChangedEvents, deleteEvent.Row, insertEvent.Row)
-				} else {
-					// If the handle key columns are not updated, PreColumns is directly ignored.
-					e.Row.PreColumns = nil
-					rowChangedEvents = append(rowChangedEvents, e.Row)
+		// TiCDC always pull old value, but old value can be disabled in the configuration.
+		// in the such case, handle the update event to be compatible with the old format.
+		if e.Row.IsUpdate() && shouldSplitUpdate {
+			if shouldSplitUpdateEvent(e) {
+				deleteEvent, insertEvent, err := splitUpdateEvent(e)
+				if err != nil {
+					return nil, 0, errors.Trace(err)
 				}
+				// NOTICE: Please do not change the order, the delete event always comes before the insert event.
+				rowChangedEvents = append(rowChangedEvents, deleteEvent.Row, insertEvent.Row)
+			} else {
+				// If the handle key columns are not updated, PreColumns is directly ignored.
+				e.Row.PreColumns = nil
+				rowChangedEvents = append(rowChangedEvents, e.Row)
 			}
 		} else {
 			rowChangedEvents = append(rowChangedEvents, e.Row)
