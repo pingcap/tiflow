@@ -13,7 +13,7 @@ if [ "$SINK_TYPE" != "kafka" ]; then
 fi
 
 echo 'Starting schema registry...'
-./bin/schema-registry/bin/schema-registry-start -daemon ./bin/schema-registry/etc/schema-registry/schema-registry.properties
+./bin/bin/schema-registry-start -daemon ./bin/etc/schema-registry/schema-registry.properties
 curl_status_cmd="curl -vsL --max-time 20 http://127.0.0.1:8081/"
 for ((i = 0; i <= 50; i++)); do
 	res=$($curl_status_cmd)
