@@ -141,8 +141,8 @@ func NewCapture(pdEndpoints []string,
 		newOwner:            owner.NewOwner,
 		info:                &model.CaptureInfo{},
 		sortEngineFactory:   sortEngineMangerFactory,
-
-		migrator: migrate.NewMigrator(etcdClient, pdEndpoints, conf),
+		newEtcdClient:       newEtcdClient,
+		migrator:            migrate.NewMigrator(etcdClient, pdEndpoints, conf),
 	}
 }
 
