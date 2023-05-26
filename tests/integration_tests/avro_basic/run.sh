@@ -28,6 +28,9 @@ for ((i = 0; i <= 50; i++)); do
 	sleep 2
 done
 
+mv bin/logs/* /tmp/tidb_cdc_test
+
+
 # use kafka-consumer with avro decoder to sync data from kafka to mysql
 function run() {
 	if [ "$SINK_TYPE" != "kafka" ]; then
@@ -69,8 +72,6 @@ function run() {
 
 trap stop_tidb_cluster EXIT
 run $*
-
-mv bin/logs/* /tmp/tidb_cdc_test
 
 check_logs $WORK_DIR
 
