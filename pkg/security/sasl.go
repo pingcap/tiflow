@@ -73,6 +73,7 @@ type OAuth2 struct {
 	TokenURL     string
 	Scopes       []string
 	GrantType    string
+	Audience     string
 }
 
 // Validate validates the parameters of OAuth2.

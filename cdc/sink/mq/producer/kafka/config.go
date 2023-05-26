@@ -375,6 +375,10 @@ func (c *Config) applySASL(params url.Values, replicaConfig *config.ReplicaConfi
 		if replicaConfig.Sink.KafkaConfig.SASLOAuthGrantType != nil {
 			c.SASL.OAuth2.GrantType = *replicaConfig.Sink.KafkaConfig.SASLOAuthGrantType
 		}
+
+		if replicaConfig.Sink.KafkaConfig.SASLOAuthAudience != nil {
+			c.SASL.OAuth2.Audience = *replicaConfig.Sink.KafkaConfig.SASLOAuthAudience
+		}
 	}
 
 	return nil
