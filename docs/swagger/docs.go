@@ -747,6 +747,9 @@ var doc = `{
                 "sasl-mechanism": {
                     "type": "string"
                 },
+                "sasl-oauth-audience": {
+                    "type": "string"
+                },
                 "sasl-oauth-client-id": {
                     "type": "string"
                 },
