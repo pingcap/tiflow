@@ -309,7 +309,7 @@ func datum2Column(
 		if warn != "" {
 			log.Warn(warn, zap.String("table", tableInfo.TableName.String()), zap.String("column", colInfo.Name.String()))
 		}
-		defaultValue := getDDLDefaultDefinition(colInfo)
+		defaultValue := GetDDLDefaultDefinition(colInfo)
 		offset := tableInfo.RowColumnsOffset[colInfo.ID]
 		rawCols[offset] = colDatums
 		cols[offset] = &model.Column{
@@ -536,7 +536,8 @@ func getDefaultOrZeroValue(col *timodel.ColumnInfo) (types.Datum, any, int, stri
 	return d, v, size, warn, err
 }
 
-func getDDLDefaultDefinition(col *timodel.ColumnInfo) interface{} {
+// GetDDLDefaultDefinition returns the default definition of a column.
+func GetDDLDefaultDefinition(col *timodel.ColumnInfo) interface{} {
 	defaultValue := col.GetDefaultValue()
 	if defaultValue == nil {
 		defaultValue = col.GetOriginDefaultValue()
