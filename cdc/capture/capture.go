@@ -48,6 +48,8 @@ import (
 
 const cleanMetaDuration = 10 * time.Second
 
+type newEtcdClientFunc func() (etcd.CDCEtcdClient, error)
+
 // Capture represents a Capture server, it monitors the changefeed
 // information in etcd and schedules Task on it.
 type Capture interface {
@@ -116,12 +118,14 @@ type captureImpl struct {
 		liveness *model.Liveness,
 		cfg *config.SchedulerConfig,
 	) processor.Manager
-	newOwner func(upstreamManager *upstream.Manager, cfg *config.SchedulerConfig) owner.Owner
+	newOwner      func(upstreamManager *upstream.Manager, cfg *config.SchedulerConfig) owner.Owner
+	newEtcdClient newEtcdClientFunc
 }
 
 // NewCapture returns a new Capture instance
 func NewCapture(pdEndpoints []string,
 	etcdClient etcd.CDCEtcdClient,
+	newEtcdClient newEtcdClientFunc,
 	grpcService *p2p.ServerWrapper,
 	sortEngineMangerFactory *factory.SortEngineFactory,
 ) Capture {
@@ -176,11 +180,23 @@ func (c *captureImpl) GetUpstreamManager() (*upstream.Manager, error) {
 }
 
 func (c *captureImpl) GetEtcdClient() etcd.CDCEtcdClient {
+	c.captureMu.Lock()
+	defer c.captureMu.Unlock()
 	return c.EtcdClient
 }
 
 // reset the capture before run it.
 func (c *captureImpl) reset(ctx context.Context) error {
+	c.captureMu.Lock()
+	if c.EtcdClient == nil {
+		etcdClient, err := c.newEtcdClient()
+		if err != nil {
+			return errors.Trace(err)
+		}
+		c.EtcdClient = etcdClient
+	}
+	c.captureMu.Unlock()
+
 	lease, err := c.EtcdClient.GetEtcdClient().Grant(ctx, int64(c.config.CaptureSessionTTL))
 	if err != nil {
 		return errors.Trace(err)
@@ -279,7 +295,7 @@ func (c *captureImpl) Run(ctx context.Context) error {
 		if cerror.ErrCaptureSuicide.Equal(err) ||
 			context.Canceled == errors.Cause(err) ||
 			context.DeadlineExceeded == errors.Cause(err) {
-			log.Info("capture recovered", zap.String("captureID", c.info.ID))
+			log.Info("capture recovered", zap.String("captureID", c.info.ID), zap.Error(err))
 			continue
 		}
 		return errors.Trace(err)
@@ -287,6 +303,13 @@ func (c *captureImpl) Run(ctx context.Context) error {
 }
 
 func (c *captureImpl) run(stdCtx context.Context) error {
+	// set the etcd client to nil when the capture exited.
+	defer func() {
+		c.captureMu.Lock()
+		c.EtcdClient = nil
+		c.captureMu.Unlock()
+	}()
+
 	err := c.reset(stdCtx)
 	if err != nil {
 		log.Error("reset capture failed", zap.Error(err))
