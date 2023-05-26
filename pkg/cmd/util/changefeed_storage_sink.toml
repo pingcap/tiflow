@@ -1,7 +1,7 @@
 [sink]
 transaction-atomicity = ""
 # Line terminator. Empty value means "\r\n" (CRLF) is line terminators. The default value is empty.
-terminator = ''
+terminator = "\r\n"
 # Directory date separator, Optional values are `none`, `year`, `month`, `date`. The default value is none.
 date-separator = 'day'
 

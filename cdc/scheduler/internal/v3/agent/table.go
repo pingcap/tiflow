@@ -61,7 +61,7 @@ func (t *tableSpan) getAndUpdateTableSpanState() (tablepb.TableState, bool) {
 		log.Debug("schedulerv3: table state changed",
 			zap.String("namespace", t.changefeedID.Namespace),
 			zap.String("changefeed", t.changefeedID.ID),
-			zap.Int64("tableID", t.span.TableID),
+			zap.Any("tableSpan", t.span),
 			zap.Stringer("oldState", oldState),
 			zap.Stringer("state", t.state))
 		return t.state, true
@@ -112,7 +112,7 @@ func (t *tableSpan) handleRemoveTableTask() *schedulepb.Message {
 			log.Warn("schedulerv3: remove table, but table is absent",
 				zap.String("namespace", t.changefeedID.Namespace),
 				zap.String("changefeed", t.changefeedID.ID),
-				zap.Int64("tableID", t.span.TableID))
+				zap.Any("tableSpan", t.span))
 			t.task = nil
 			return newRemoveTableResponseMessage(t.getTableSpanStatus(false))
 		case tablepb.TableStateStopping, // stopping now is useless
@@ -145,7 +145,7 @@ func (t *tableSpan) handleRemoveTableTask() *schedulepb.Message {
 			log.Panic("schedulerv3: unknown table state",
 				zap.String("namespace", t.changefeedID.Namespace),
 				zap.String("changefeed", t.changefeedID.ID),
-				zap.Int64("tableID", t.span.TableID), zap.Stringer("state", state))
+				zap.Any("tableSpan", t.span), zap.Stringer("state", state))
 		}
 	}
 	return nil
@@ -164,7 +164,7 @@ func (t *tableSpan) handleAddTableTask(
 				log.Warn("schedulerv3: agent add table failed",
 					zap.String("namespace", t.changefeedID.Namespace),
 					zap.String("changefeed", t.changefeedID.ID),
-					zap.Int64("tableID", t.span.TableID), zap.Any("task", t.task),
+					zap.Any("tableSpan", t.span), zap.Any("task", t.task),
 					zap.Error(err))
 				status := t.getTableSpanStatus(false)
 				return newAddTableResponseMessage(status), errors.Trace(err)
@@ -174,7 +174,7 @@ func (t *tableSpan) handleAddTableTask(
 			log.Info("schedulerv3: table is replicating",
 				zap.String("namespace", t.changefeedID.Namespace),
 				zap.String("changefeed", t.changefeedID.ID),
-				zap.Int64("tableID", t.span.TableID), zap.Stringer("state", state))
+				zap.Any("tableSpan", t.span), zap.Stringer("state", state))
 			t.task = nil
 			status := t.getTableSpanStatus(false)
 			return newAddTableResponseMessage(status), nil
@@ -184,7 +184,7 @@ func (t *tableSpan) handleAddTableTask(
 				log.Info("schedulerv3: table is prepared",
 					zap.String("namespace", t.changefeedID.Namespace),
 					zap.String("changefeed", t.changefeedID.ID),
-					zap.Int64("tableID", t.span.TableID), zap.Stringer("state", state))
+					zap.Any("tableSpan", t.span), zap.Stringer("state", state))
 				t.task = nil
 				return newAddTableResponseMessage(t.getTableSpanStatus(false)), nil
 			}
@@ -195,7 +195,7 @@ func (t *tableSpan) handleAddTableTask(
 					log.Warn("schedulerv3: agent add table failed",
 						zap.String("namespace", t.changefeedID.Namespace),
 						zap.String("changefeed", t.changefeedID.ID),
-						zap.Int64("tableID", t.span.TableID), zap.Stringer("state", state),
+						zap.Any("tableSpan", t.span), zap.Stringer("state", state),
 						zap.Error(err))
 					status := t.getTableSpanStatus(false)
 					return newAddTableResponseMessage(status), errors.Trace(err)
@@ -219,20 +219,20 @@ func (t *tableSpan) handleAddTableTask(
 			log.Info("schedulerv3: add table finished",
 				zap.String("namespace", t.changefeedID.Namespace),
 				zap.String("changefeed", t.changefeedID.ID),
-				zap.Int64("tableID", t.span.TableID), zap.Stringer("state", state))
+				zap.Any("tableSpan", t.span), zap.Stringer("state", state))
 		case tablepb.TableStateStopping,
 			tablepb.TableStateStopped:
 			log.Warn("schedulerv3: ignore add table",
 				zap.String("namespace", t.changefeedID.Namespace),
 				zap.String("changefeed", t.changefeedID.ID),
-				zap.Int64("tableID", t.span.TableID))
+				zap.Any("tableSpan", t.span))
 			t.task = nil
 			return newAddTableResponseMessage(t.getTableSpanStatus(false)), nil
 		default:
 			log.Panic("schedulerv3: unknown table state",
 				zap.String("namespace", t.changefeedID.Namespace),
 				zap.String("changefeed", t.changefeedID.ID),
-				zap.Int64("tableID", t.span.TableID))
+				zap.Any("tableSpan", t.span))
 		}
 	}
 
@@ -244,14 +244,14 @@ func (t *tableSpan) injectDispatchTableTask(task *dispatchTableTask) {
 		log.Panic("schedulerv3: tableID not match",
 			zap.String("namespace", t.changefeedID.Namespace),
 			zap.String("changefeed", t.changefeedID.ID),
-			zap.Int64("tableID", t.span.TableID),
+			zap.Any("tableSpan", t.span),
 			zap.Stringer("task.TableID", &task.Span))
 	}
 	if t.task == nil {
 		log.Info("schedulerv3: table found new task",
 			zap.String("namespace", t.changefeedID.Namespace),
 			zap.String("changefeed", t.changefeedID.ID),
-			zap.Int64("tableID", t.span.TableID),
+			zap.Any("tableSpan", t.span),
 			zap.Any("task", task))
 		t.task = task
 		return
@@ -260,7 +260,7 @@ func (t *tableSpan) injectDispatchTableTask(task *dispatchTableTask) {
 		"since there is one not finished yet",
 		zap.String("namespace", t.changefeedID.Namespace),
 		zap.String("changefeed", t.changefeedID.ID),
-		zap.Int64("tableID", t.span.TableID),
+		zap.Any("tableSpan", t.span),
 		zap.Any("nowTask", t.task),
 		zap.Any("ignoredTask", task))
 }

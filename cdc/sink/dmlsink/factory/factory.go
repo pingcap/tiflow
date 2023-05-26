@@ -33,6 +33,7 @@ import (
 	"github.com/pingcap/tiflow/pkg/sink"
 	"github.com/pingcap/tiflow/pkg/sink/kafka"
 	v2 "github.com/pingcap/tiflow/pkg/sink/kafka/v2"
+	"github.com/pingcap/tiflow/pkg/util"
 	"github.com/prometheus/client_golang/prometheus"
 )
 
@@ -69,7 +70,7 @@ func New(
 		s.txnSink = txnSink
 	case sink.KafkaScheme, sink.KafkaSSLScheme:
 		factoryCreator := kafka.NewSaramaFactory
-		if cfg.Sink.EnableKafkaSinkV2 {
+		if util.GetOrZero(cfg.Sink.EnableKafkaSinkV2) {
 			factoryCreator = v2.NewFactory
 		}
 		mqs, err := mq.NewKafkaDMLSink(ctx, sinkURI, cfg, errCh,

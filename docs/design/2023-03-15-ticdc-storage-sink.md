@@ -136,6 +136,7 @@ Metadata is a JSON-formatted file, for example:
 #### DDL events
 
 ##### Table DDL events
+
 When DDL events cause the table version to change, TiCDC switches to a new path to write data change records. For example, when the version of `test.table1` changes to `441349361156227074`, data will be written to the path `s3://bucket/prefix1/prefix2/schema1/table1/441349361156227074/2022-01-02/CDC000001.csv`. In addition, when DDL events occur, TiCDC generates a file to save the table schema information.
 
 Table schema information is saved in the following path:

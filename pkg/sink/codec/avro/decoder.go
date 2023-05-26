@@ -233,12 +233,8 @@ func (d *decoder) NextRowChangedEvent() (*model.RowChangedEvent, error) {
 			if checksum != "" {
 				expected, err = strconv.ParseUint(checksum, 10, 64)
 				if err != nil {
-					log.Error("parse checksum failed",
-						zap.String("checksum", checksum),
-						zap.Error(err))
 					return nil, errors.Trace(err)
 				}
-
 				if o, ok := valueMap[tidbCorrupted]; ok {
 					corrupted := o.(bool)
 					if corrupted {
@@ -277,6 +273,7 @@ func (d *decoder) NextRowChangedEvent() (*model.RowChangedEvent, error) {
 		Table:  tableName,
 	}
 	event.Columns = columns
+
 	return event, nil
 }
 
@@ -300,7 +297,6 @@ func (d *decoder) NextDDLEvent() (*model.DDLEvent, error) {
 	}
 
 	data := d.value[1:]
-
 	var baseDDLEvent ddlEvent
 	err := json.Unmarshal(data, &baseDDLEvent)
 	if err != nil {
