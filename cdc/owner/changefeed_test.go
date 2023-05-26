@@ -35,7 +35,11 @@ import (
 	"github.com/pingcap/tiflow/pkg/orchestrator"
 	"github.com/pingcap/tiflow/pkg/txnutil/gc"
 	"github.com/pingcap/tiflow/pkg/upstream"
+<<<<<<< HEAD
 	"github.com/pingcap/tiflow/pkg/version"
+=======
+	"github.com/pingcap/tiflow/pkg/util"
+>>>>>>> c601a1adb6 (pkg/config(ticdc): hide fields that are not required for specific protocols (#8836))
 	"github.com/stretchr/testify/require"
 	"github.com/tikv/client-go/v2/oracle"
 )
@@ -202,7 +206,50 @@ func createChangefeed4Test(ctx cdcContext.Context, t *testing.T) (
 		info = ctx.ChangefeedVars().Info
 		return info, true, nil
 	})
+<<<<<<< HEAD
 	tester.MustUpdate("/tidb/cdc/capture/"+ctx.GlobalVars().CaptureInfo.ID, []byte(`{"id":"`+ctx.GlobalVars().CaptureInfo.ID+`","address":"127.0.0.1:8300"}`))
+=======
+	cf := newChangefeed4Test(ctx.ChangefeedVars().ID, state, up,
+		// new ddl puller
+		func(ctx context.Context,
+			replicaConfig *config.ReplicaConfig,
+			up *upstream.Upstream,
+			startTs uint64,
+			changefeed model.ChangeFeedID,
+			schemaStorage entry.SchemaStorage,
+			filter filter.Filter,
+		) (puller.DDLPuller, error) {
+			return &mockDDLPuller{resolvedTs: startTs - 1, schemaStorage: schemaStorage}, nil
+		},
+		// new ddl ddlSink
+		func(_ model.ChangeFeedID, _ *model.ChangeFeedInfo, _ func(error), _ func(error)) DDLSink {
+			return &mockDDLSink{
+				resetDDLDone:     true,
+				recordDDLHistory: false,
+			}
+		},
+		// new scheduler
+		func(
+			ctx cdcContext.Context, up *upstream.Upstream, epoch uint64,
+			cfg *config.SchedulerConfig,
+		) (scheduler.Scheduler, error) {
+			return &mockScheduler{}, nil
+		},
+		// new downstream observer
+		func(
+			ctx context.Context, sinkURIStr string, replCfg *config.ReplicaConfig,
+			opts ...observer.NewObserverOption,
+		) (observer.Observer, error) {
+			return observer.NewDummyObserver(), nil
+		},
+	)
+
+	cf.upstream = up
+
+	tester.MustUpdate(fmt.Sprintf("%s/capture/%s",
+		etcd.DefaultClusterAndMetaPrefix, ctx.GlobalVars().CaptureInfo.ID),
+		[]byte(`{"id":"`+ctx.GlobalVars().CaptureInfo.ID+`","address":"127.0.0.1:8300"}`))
+>>>>>>> c601a1adb6 (pkg/config(ticdc): hide fields that are not required for specific protocols (#8836))
 	tester.MustApplyPatches()
 	captures := map[model.CaptureID]*model.CaptureInfo{ctx.GlobalVars().CaptureInfo.ID: ctx.GlobalVars().CaptureInfo}
 	return cf, state, captures, tester
@@ -425,9 +472,17 @@ func TestEmitCheckpointTs(t *testing.T) {
 
 func TestSyncPoint(t *testing.T) {
 	ctx := cdcContext.NewBackendContext4Test(true)
+<<<<<<< HEAD
 	ctx.ChangefeedVars().Info.SyncPointEnabled = true
 	ctx.ChangefeedVars().Info.SyncPointInterval = 1 * time.Second
 	cf, state, captures, tester := createChangefeed4Test(ctx, t)
+=======
+	ctx.ChangefeedVars().Info.Config.EnableSyncPoint = util.AddressOf(true)
+	ctx.ChangefeedVars().Info.Config.SyncPointInterval = util.AddressOf(1 * time.Second)
+	// SyncPoint option is only available for MySQL compatible database.
+	ctx.ChangefeedVars().Info.SinkURI = "mysql://"
+	cf, captures, tester := createChangefeed4Test(ctx, t)
+>>>>>>> c601a1adb6 (pkg/config(ticdc): hide fields that are not required for specific protocols (#8836))
 	defer cf.Close(ctx)
 
 	// pre check
@@ -484,9 +539,14 @@ func TestRemoveChangefeed(t *testing.T) {
 	baseCtx, cancel := context.WithCancel(context.Background())
 	ctx := cdcContext.NewContext4Test(baseCtx, true)
 	info := ctx.ChangefeedVars().Info
+<<<<<<< HEAD
 	dir, err := ioutil.TempDir("", "remove-changefeed-test")
 	require.NoError(t, err)
 	defer os.RemoveAll(dir)
+=======
+	dir := t.TempDir()
+	info.SinkURI = "mysql://"
+>>>>>>> c601a1adb6 (pkg/config(ticdc): hide fields that are not required for specific protocols (#8836))
 	info.Config.Consistent = &config.ConsistentConfig{
 		Level:             "eventual",
 		Storage:           filepath.Join("nfs://", dir),
@@ -504,9 +564,16 @@ func TestRemovePausedChangefeed(t *testing.T) {
 	ctx := cdcContext.NewContext4Test(baseCtx, true)
 	info := ctx.ChangefeedVars().Info
 	info.State = model.StateStopped
+<<<<<<< HEAD
 	dir, err := ioutil.TempDir("", "remove-paused-changefeed-test")
 	require.NoError(t, err)
 	defer os.RemoveAll(dir)
+=======
+	dir := t.TempDir()
+	// Field `Consistent` is valid only when the downstream
+	// is MySQL compatible  Database
+	info.SinkURI = "mysql://"
+>>>>>>> c601a1adb6 (pkg/config(ticdc): hide fields that are not required for specific protocols (#8836))
 	info.Config.Consistent = &config.ConsistentConfig{
 		Level:   "eventual",
 		Storage: filepath.Join("nfs://", dir),
@@ -997,9 +1064,15 @@ func TestBarrierAdvance(t *testing.T) {
 	for i := 0; i < 2; i++ {
 		ctx := cdcContext.NewBackendContext4Test(true)
 		if i == 1 {
+<<<<<<< HEAD
 			ctx.ChangefeedVars().Info.SyncPointEnabled = true
 			ctx.ChangefeedVars().Info.SyncPointInterval = 100 * time.Second
+=======
+			ctx.ChangefeedVars().Info.Config.EnableSyncPoint = util.AddressOf(true)
+			ctx.ChangefeedVars().Info.Config.SyncPointInterval = util.AddressOf(100 * time.Second)
+>>>>>>> c601a1adb6 (pkg/config(ticdc): hide fields that are not required for specific protocols (#8836))
 		}
+		ctx.ChangefeedVars().Info.SinkURI = "mysql://"
 
 		cf, state, captures, tester := createChangefeed4Test(ctx, t)
 		defer cf.Close(ctx)
@@ -1013,7 +1086,6 @@ func TestBarrierAdvance(t *testing.T) {
 			ResolvedTs:   cf.state.Info.StartTs + 10,
 			CheckpointTs: cf.state.Info.StartTs,
 		}
-
 		// Do the preflightCheck and initialize the changefeed.
 		cf.Tick(ctx, state, captures)
 		tester.MustApplyPatches()

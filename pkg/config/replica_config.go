@@ -23,13 +23,31 @@ import (
 	"github.com/pingcap/errors"
 	"github.com/pingcap/log"
 	cerror "github.com/pingcap/tiflow/pkg/errors"
+<<<<<<< HEAD
+=======
+	"github.com/pingcap/tiflow/pkg/integrity"
+	"github.com/pingcap/tiflow/pkg/redo"
+	"github.com/pingcap/tiflow/pkg/sink"
+	"github.com/pingcap/tiflow/pkg/util"
+>>>>>>> c601a1adb6 (pkg/config(ticdc): hide fields that are not required for specific protocols (#8836))
 	"go.uber.org/zap"
 )
 
 var defaultReplicaConfig = &ReplicaConfig{
+<<<<<<< HEAD
 	CaseSensitive:    true,
 	EnableOldValue:   true,
 	CheckGCSafePoint: true,
+=======
+	MemoryQuota:        DefaultChangefeedMemoryQuota,
+	CaseSensitive:      true,
+	EnableOldValue:     true,
+	CheckGCSafePoint:   true,
+	EnableSyncPoint:    util.AddressOf(false),
+	SyncPointInterval:  util.AddressOf(10 * time.Minute),
+	SyncPointRetention: util.AddressOf(24 * time.Hour),
+	BDRMode:            util.AddressOf(false),
+>>>>>>> c601a1adb6 (pkg/config(ticdc): hide fields that are not required for specific protocols (#8836))
 	Filter: &FilterConfig{
 		Rules: []string{"*.*"},
 	},
@@ -37,10 +55,25 @@ var defaultReplicaConfig = &ReplicaConfig{
 		WorkerNum: 16,
 	},
 	Sink: &SinkConfig{
+<<<<<<< HEAD
 		EncoderConcurrency: 16,
 	},
 	Cyclic: &CyclicConfig{
 		Enable: false,
+=======
+		CSVConfig: &CSVConfig{
+			Quote:      string(DoubleQuoteChar),
+			Delimiter:  Comma,
+			NullString: NULL,
+		},
+		EncoderConcurrency:       util.AddressOf(16),
+		Terminator:               util.AddressOf(CRLF),
+		DateSeparator:            util.AddressOf(DateSeparatorNone.String()),
+		EnablePartitionSeparator: util.AddressOf(true),
+		EnableKafkaSinkV2:        util.AddressOf(false),
+		OnlyOutputUpdatedColumns: util.AddressOf(false),
+		TiDBSourceID:             1,
+>>>>>>> c601a1adb6 (pkg/config(ticdc): hide fields that are not required for specific protocols (#8836))
 	},
 	Consistent: &ConsistentConfig{
 		Level:             "none",
@@ -54,6 +87,7 @@ var defaultReplicaConfig = &ReplicaConfig{
 type ReplicaConfig replicaConfig
 
 type replicaConfig struct {
+<<<<<<< HEAD
 	CaseSensitive    bool              `toml:"case-sensitive" json:"case-sensitive"`
 	EnableOldValue   bool              `toml:"enable-old-value" json:"enable-old-value"`
 	ForceReplicate   bool              `toml:"force-replicate" json:"force-replicate"`
@@ -63,6 +97,36 @@ type replicaConfig struct {
 	Sink             *SinkConfig       `toml:"sink" json:"sink"`
 	Cyclic           *CyclicConfig     `toml:"cyclic-replication" json:"cyclic-replication"`
 	Consistent       *ConsistentConfig `toml:"consistent" json:"consistent"`
+=======
+	MemoryQuota      uint64 `toml:"memory-quota" json:"memory-quota"`
+	CaseSensitive    bool   `toml:"case-sensitive" json:"case-sensitive"`
+	EnableOldValue   bool   `toml:"enable-old-value" json:"enable-old-value"`
+	ForceReplicate   bool   `toml:"force-replicate" json:"force-replicate"`
+	CheckGCSafePoint bool   `toml:"check-gc-safe-point" json:"check-gc-safe-point"`
+	// EnableSyncPoint is only available when the downstream is a Database.
+	EnableSyncPoint *bool `toml:"enable-sync-point" json:"enable-sync-point,omitempty"`
+	// IgnoreIneligibleTable is used to store the user's config when creating a changefeed.
+	// not used in the changefeed's lifecycle.
+	IgnoreIneligibleTable bool `toml:"ignore-ineligible-table" json:"ignore-ineligible-table"`
+
+	// BDR(Bidirectional Replication) is a feature that allows users to
+	// replicate data of same tables from TiDB-1 to TiDB-2 and vice versa.
+	// This feature is only available for TiDB.
+	BDRMode *bool `toml:"bdr-mode" json:"bdr-mode,omitempty"`
+	// SyncPointInterval is only available when the downstream is DB.
+	SyncPointInterval *time.Duration `toml:"sync-point-interval" json:"sync-point-interval,omitempty"`
+	// SyncPointRetention is only available when the downstream is DB.
+	SyncPointRetention *time.Duration `toml:"sync-point-retention" json:"sync-point-retention,omitempty"`
+	Filter             *FilterConfig  `toml:"filter" json:"filter"`
+	Mounter            *MounterConfig `toml:"mounter" json:"mounter"`
+	Sink               *SinkConfig    `toml:"sink" json:"sink"`
+	// Consistent is only available for DB downstream with redo feature enabled.
+	Consistent *ConsistentConfig `toml:"consistent" json:"consistent,omitempty"`
+	// Scheduler is the configuration for scheduler.
+	Scheduler *ChangefeedSchedulerConfig `toml:"scheduler" json:"scheduler"`
+	// Integrity is only available when the downstream is MQ.
+	Integrity *integrity.Config `toml:"integrity" json:"integrity"`
+>>>>>>> c601a1adb6 (pkg/config(ticdc): hide fields that are not required for specific protocols (#8836))
 }
 
 // Marshal returns the json marshal format of a ReplicationConfig
@@ -139,6 +203,55 @@ func (c *ReplicaConfig) ValidateAndAdjust(sinkURI *url.URL) error {
 			return err
 		}
 	}
+<<<<<<< HEAD
+=======
+
+	// check sync point config
+	if util.GetOrZero(c.EnableSyncPoint) {
+		if c.SyncPointInterval != nil &&
+			*c.SyncPointInterval < minSyncPointInterval {
+			return cerror.ErrInvalidReplicaConfig.
+				FastGenByArgs(
+					fmt.Sprintf("The SyncPointInterval:%s must be larger than %s",
+						c.SyncPointInterval.String(),
+						minSyncPointInterval.String()))
+		}
+		if c.SyncPointRetention != nil &&
+			*c.SyncPointRetention < minSyncPointRetention {
+			return cerror.ErrInvalidReplicaConfig.
+				FastGenByArgs(
+					fmt.Sprintf("The SyncPointRetention:%s must be larger than %s",
+						c.SyncPointRetention.String(),
+						minSyncPointRetention.String()))
+		}
+	}
+	if c.MemoryQuota == uint64(0) {
+		c.FixMemoryQuota()
+	}
+	if c.Scheduler == nil {
+		c.FixScheduler(false)
+	}
+	// TODO: Remove the hack once span replication is compatible with all sinks.
+	if !isSinkCompatibleWithSpanReplication(sinkURI) {
+		c.Scheduler.EnableTableAcrossNodes = false
+	}
+
+	if c.Integrity != nil {
+		switch strings.ToLower(sinkURI.Scheme) {
+		case sink.KafkaScheme, sink.KafkaSSLScheme:
+		default:
+			if c.Integrity.Enabled() {
+				log.Warn("integrity checksum only support kafka sink now, disable integrity")
+				c.Integrity.IntegrityCheckLevel = integrity.CheckLevelNone
+			}
+		}
+
+		if err := c.Integrity.Validate(); err != nil {
+			return err
+		}
+	}
+
+>>>>>>> c601a1adb6 (pkg/config(ticdc): hide fields that are not required for specific protocols (#8836))
 	return nil
 }
 

@@ -115,7 +115,11 @@ func ddlSinkInitializer(ctx cdcContext.Context, a *ddlSinkImpl, id model.ChangeF
 	}
 	a.sink = s
 
+<<<<<<< HEAD
 	if !info.SyncPointEnabled {
+=======
+	if !util.GetOrZero(a.info.Config.EnableSyncPoint) {
+>>>>>>> c601a1adb6 (pkg/config(ticdc): hide fields that are not required for specific protocols (#8836))
 		return nil
 	}
 	syncPointStore, err := mysql.NewSyncpointStore(stdCtx, id, info.SinkURI)
@@ -127,8 +131,26 @@ func ddlSinkInitializer(ctx cdcContext.Context, a *ddlSinkImpl, id model.ChangeF
 	})
 	a.syncPointStore = syncPointStore
 
+<<<<<<< HEAD
 	if err := a.syncPointStore.CreateSynctable(stdCtx); err != nil {
 		return errors.Trace(err)
+=======
+func (s *ddlSinkImpl) makeSyncPointStoreReady(ctx context.Context) error {
+	if util.GetOrZero(s.info.Config.EnableSyncPoint) && s.syncPointStore == nil {
+		syncPointStore, err := syncpointstore.NewSyncPointStore(
+			ctx, s.changefeedID, s.info.SinkURI, util.GetOrZero(s.info.Config.SyncPointRetention))
+		if err != nil {
+			return errors.Trace(err)
+		}
+		failpoint.Inject("DDLSinkInitializeSlowly", func() {
+			time.Sleep(time.Second * 5)
+		})
+		s.syncPointStore = syncPointStore
+
+		if err := s.syncPointStore.CreateSyncTable(ctx); err != nil {
+			return errors.Trace(err)
+		}
+>>>>>>> c601a1adb6 (pkg/config(ticdc): hide fields that are not required for specific protocols (#8836))
 	}
 	return nil
 }

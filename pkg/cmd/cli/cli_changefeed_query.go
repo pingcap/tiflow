@@ -31,10 +31,30 @@ import (
 
 // cfMeta holds changefeed info and changefeed status.
 type cfMeta struct {
+<<<<<<< HEAD
 	Info       *model.ChangeFeedInfo     `json:"info"`
 	Status     *model.ChangeFeedStatus   `json:"status"`
 	Count      uint64                    `json:"count"`
 	TaskStatus []model.CaptureTaskStatus `json:"task-status"`
+=======
+	UpstreamID     uint64                    `json:"upstream_id"`
+	Namespace      string                    `json:"namespace"`
+	ID             string                    `json:"id"`
+	SinkURI        string                    `json:"sink_uri"`
+	Config         *v2.ReplicaConfig         `json:"config"`
+	CreateTime     model.JSONTime            `json:"create_time"`
+	StartTs        uint64                    `json:"start_ts"`
+	ResolvedTs     uint64                    `json:"resolved_ts"`
+	TargetTs       uint64                    `json:"target_ts"`
+	CheckpointTSO  uint64                    `json:"checkpoint_tso"`
+	CheckpointTime model.JSONTime            `json:"checkpoint_time"`
+	Engine         model.SortEngine          `json:"sort_engine,omitempty"`
+	FeedState      model.FeedState           `json:"state"`
+	RunningError   *v2.RunningError          `json:"error,omitempty"`
+	ErrorHis       []int64                   `json:"error_history,omitempty"`
+	CreatorVersion string                    `json:"creator_version"`
+	TaskStatus     []model.CaptureTaskStatus `json:"task_status,omitempty"`
+>>>>>>> c601a1adb6 (pkg/config(ticdc): hide fields that are not required for specific protocols (#8836))
 }
 
 // queryChangefeedOptions defines flags for the `cli changefeed query` command.

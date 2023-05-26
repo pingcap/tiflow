@@ -19,6 +19,13 @@ const (
   "enable-old-value": true,
   "force-replicate": true,
   "check-gc-safe-point": true,
+<<<<<<< HEAD
+=======
+  "enable-sync-point": false,
+  "bdr-mode": false,
+  "sync-point-interval": 600000000000,
+  "sync-point-retention": 86400000000000,
+>>>>>>> c601a1adb6 (pkg/config(ticdc): hide fields that are not required for specific protocols (#8836))
   "filter": {
     "rules": [
       "1.1"
@@ -31,6 +38,11 @@ const (
   },
   "sink": {
     "encoder-concurrency": 16,
+<<<<<<< HEAD
+=======
+    "terminator": "\r\n",
+	"date-separator": "none",
+>>>>>>> c601a1adb6 (pkg/config(ticdc): hide fields that are not required for specific protocols (#8836))
     "dispatch-rules": [
       {
         "db-name": "a",
@@ -48,7 +60,14 @@ const (
         "rule": "r2"
       }
     ],
+<<<<<<< HEAD
     "protocol": "open-protocol"
+=======
+    "enable-partition-separator": true,
+    "protocol": "open-protocol",
+	"enable-kafka-sink-v2": false,
+	"only-output-updated-columns": false
+>>>>>>> c601a1adb6 (pkg/config(ticdc): hide fields that are not required for specific protocols (#8836))
   },
   "cyclic-replication": {
     "enable": false,
@@ -157,7 +176,11 @@ const (
     "worker-num": 3
   },
   "sink": {
+<<<<<<< HEAD
     "transaction-atomicity": "",
+=======
+  	"encoder-concurrency": 16,
+>>>>>>> c601a1adb6 (pkg/config(ticdc): hide fields that are not required for specific protocols (#8836))
     "protocol": "open-protocol",
     "dispatchers": null,
     "column-selectors": [
@@ -171,6 +194,7 @@ const (
         ]
       }
     ],
+<<<<<<< HEAD
     "schema-registry": "",
     "encoder-concurrency": 16
   },
@@ -180,6 +204,79 @@ const (
     "filter-replica-ids": null,
     "id-buckets": 0,
     "sync-ddl": false
+=======
+    "csv": {
+      "delimiter": ",",
+      "quote": "\"",
+      "null": "\\N",
+      "include-commit-ts": true
+    },
+    "date-separator": "month",
+    "enable-partition-separator": true,
+    "only-output-updated-columns": false,
+    "enable-kafka-sink-v2": true,
+    "only-output-updated-columns": true,
+    "safe-mode": true,
+	"terminator": "\r\n",
+	"transaction-atomicity": "",
+    "kafka-config": {
+      "partition-num": 1,
+      "replication-factor": 1,
+      "kafka-version": "version",
+      "max-message-bytes": 1,
+      "compression": "gzip",
+      "kafka-client-id": "client-id",
+      "auto-create-topic": true,
+      "dial-timeout": "1m",
+      "write-timeout": "1m",
+      "read-timeout": "1m",
+      "required-acks": 1,
+      "sasl-user": "user",
+      "sasl-password": "password",
+      "sasl-mechanism": "mechanism",
+      "sasl-gssapi-auth-type": "type",
+      "sasl-gssapi-keytab-path": "path",
+      "sasl-gssapi-kerberos-config-path": "path",
+      "sasl-gssapi-service-name": "service",
+      "sasl-gssapi-user": "user",
+      "sasl-gssapi-password": "password",
+      "sasl-gssapi-realm": "realm",
+      "sasl-gssapi-disable-pafxfast": true,
+      "enable-tls": true,
+      "ca": "ca",
+      "cert": "cert",
+      "key": "key",
+      "codec-config": {
+        "enable-tidb-extension": true,
+        "max-batch-size": 100000,
+        "avro-enable-watermark": true,
+        "avro-decimal-handling-mode": "string",
+        "avro-bigint-unsigned-handling-mode": "string"
+      }
+    },
+    "mysql-config": {
+      "worker-count": 8,
+      "max-txn-row": 100000,
+      "max-multi-update-row-size": 100000,
+      "max-multi-update-row": 100000,
+      "tidb-txn-mode": "pessimistic",
+      "ssl-ca": "ca",
+      "ssl-cert": "cert",
+      "ssl-key": "key",
+      "time-zone": "UTC",
+      "write-timeout": "1m",
+      "read-timeout": "1m",
+      "timeout": "1m",
+      "enable-batch-dml": true,
+      "enable-multi-statement": true,
+      "enable-cache-prepared-statement": true
+    },
+    "cloud-storage-config": {
+      "worker-count": 8,
+      "flush-interval": "1m",
+      "file-size": 1024
+    }
+>>>>>>> c601a1adb6 (pkg/config(ticdc): hide fields that are not required for specific protocols (#8836))
   },
   "consistent": {
     "level": "none",
@@ -217,6 +314,7 @@ const (
           "b"
         ]
       }
+<<<<<<< HEAD
     ]
   },
   "cyclic-replication": {
@@ -225,6 +323,80 @@ const (
     "filter-replica-ids": null,
     "id-buckets": 0,
     "sync-ddl": false
+=======
+    ],
+    "csv": {
+      "delimiter": ",",
+      "quote": "\"",
+      "null": "\\N",
+      "include-commit-ts": true
+    },
+    "terminator": "\r\n",
+	"transaction-atomicity": "",
+    "date-separator": "month",
+    "enable-partition-separator": true,
+    "only-output-updated-columns": false,
+	"enable-kafka-sink-v2": true,
+    "only-output-updated-columns": true,
+    "safe-mode": true,
+    "kafka-config": {
+      "partition-num": 1,
+      "replication-factor": 1,
+      "kafka-version": "version",
+      "max-message-bytes": 1,
+      "compression": "gzip",
+      "kafka-client-id": "client-id",
+      "auto-create-topic": true,
+      "dial-timeout": "1m",
+      "write-timeout": "1m",
+      "read-timeout": "1m",
+      "required-acks": 1,
+      "sasl-user": "user",
+      "sasl-password": "password",
+      "sasl-mechanism": "mechanism",
+      "sasl-gssapi-auth-type": "type",
+      "sasl-gssapi-keytab-path": "path",
+      "sasl-gssapi-kerberos-config-path": "path",
+      "sasl-gssapi-service-name": "service",
+      "sasl-gssapi-user": "user",
+      "sasl-gssapi-password": "password",
+      "sasl-gssapi-realm": "realm",
+      "sasl-gssapi-disable-pafxfast": true,
+      "enable-tls": true,
+      "ca": "ca",
+      "cert": "cert",
+      "key": "key",
+      "codec-config": {
+        "enable-tidb-extension": true,
+        "max-batch-size": 100000,
+        "avro-enable-watermark": true,
+        "avro-decimal-handling-mode": "string",
+        "avro-bigint-unsigned-handling-mode": "string"
+      }
+    },
+    "mysql-config": {
+      "worker-count": 8,
+      "max-txn-row": 100000,
+      "max-multi-update-row-size": 100000,
+      "max-multi-update-row": 100000,
+      "tidb-txn-mode": "pessimistic",
+      "ssl-ca": "ca",
+      "ssl-cert": "cert",
+      "ssl-key": "key",
+      "time-zone": "UTC",
+      "write-timeout": "1m",
+      "read-timeout": "1m",
+      "timeout": "1m",
+      "enable-batch-dml": true,
+      "enable-multi-statement": true,
+      "enable-cache-prepared-statement": true
+    },
+    "cloud-storage-config": {
+      "worker-count": 8,
+      "flush-interval": "1m",
+      "file-size": 1024
+    }
+>>>>>>> c601a1adb6 (pkg/config(ticdc): hide fields that are not required for specific protocols (#8836))
   },
   "consistent": {
     "level": "none",

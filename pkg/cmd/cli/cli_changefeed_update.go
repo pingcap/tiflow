@@ -21,9 +21,14 @@ import (
 	"github.com/pingcap/tiflow/cdc/model"
 	cmdcontext "github.com/pingcap/tiflow/pkg/cmd/context"
 	"github.com/pingcap/tiflow/pkg/cmd/factory"
+<<<<<<< HEAD
 	cerror "github.com/pingcap/tiflow/pkg/errors"
 	"github.com/pingcap/tiflow/pkg/etcd"
 	"github.com/pingcap/tiflow/pkg/security"
+=======
+	"github.com/pingcap/tiflow/pkg/cmd/util"
+	putil "github.com/pingcap/tiflow/pkg/util"
+>>>>>>> c601a1adb6 (pkg/config(ticdc): hide fields that are not required for specific protocols (#8836))
 	"github.com/r3labs/diff"
 	"github.com/spf13/cobra"
 	"github.com/spf13/pflag"
@@ -157,6 +162,7 @@ func (o *updateChangefeedOptions) applyChanges(oldInfo *model.ChangeFeedInfo, cm
 				log.Error("decode config file error", zap.Error(err))
 			}
 		case "schema-registry":
+<<<<<<< HEAD
 			newInfo.Config.Sink.SchemaRegistry = o.commonChangefeedOptions.schemaRegistry
 		case "opts":
 			for _, opt := range o.commonChangefeedOptions.opts {
@@ -175,6 +181,9 @@ func (o *updateChangefeedOptions) applyChanges(oldInfo *model.ChangeFeedInfo, cm
 				newInfo.Opts[key] = value
 			}
 
+=======
+			newInfo.Config.Sink.SchemaRegistry = putil.AddressOf(o.commonChangefeedOptions.schemaRegistry)
+>>>>>>> c601a1adb6 (pkg/config(ticdc): hide fields that are not required for specific protocols (#8836))
 		case "sort-engine":
 			newInfo.Engine = o.commonChangefeedOptions.sortEngine
 		case "cyclic-replica-id":

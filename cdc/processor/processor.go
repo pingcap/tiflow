@@ -525,7 +525,26 @@ func (p *processor) lazyInitImpl(ctx cdcContext.Context) error {
 		zap.String("namespace", p.changefeedID.Namespace),
 		zap.String("changefeed", p.changefeedID.ID))
 
+<<<<<<< HEAD
 	p.agent, err = p.newAgent(ctx)
+=======
+	p.sourceManager.r = sourcemanager.New(
+		p.changefeedID, p.upstream, p.mg.r,
+		sortEngine, util.GetOrZero(p.changefeed.Info.Config.BDRMode))
+	p.sourceManager.name = "SourceManager"
+	p.sourceManager.spawn(stdCtx)
+
+	p.sinkManager.r = sinkmanager.New(
+		p.changefeedID, p.changefeed.Info, p.upstream,
+		p.ddlHandler.r.schemaStorage, p.redo.r, p.sourceManager.r)
+	p.sinkManager.name = "SinkManager"
+	p.sinkManager.spawn(stdCtx)
+
+	// Bind them so that sourceManager can notify sinkManager.r.
+	p.sourceManager.r.OnResolve(p.sinkManager.r.UpdateReceivedSorterResolvedTs)
+
+	p.agent, err = p.newAgent(stdCtx, p.liveness, p.changefeedEpoch, p.cfg)
+>>>>>>> c601a1adb6 (pkg/config(ticdc): hide fields that are not required for specific protocols (#8836))
 	if err != nil {
 		return err
 	}

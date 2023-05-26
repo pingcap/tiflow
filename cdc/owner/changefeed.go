@@ -35,6 +35,7 @@ import (
 	redoCfg "github.com/pingcap/tiflow/pkg/redo"
 	"github.com/pingcap/tiflow/pkg/txnutil/gc"
 	"github.com/pingcap/tiflow/pkg/upstream"
+	"github.com/pingcap/tiflow/pkg/util"
 	"github.com/prometheus/client_golang/prometheus"
 	"github.com/tikv/client-go/v2/oracle"
 	"go.uber.org/zap"
@@ -421,8 +422,13 @@ LOOP:
 	}
 
 	c.barriers = newBarriers()
+<<<<<<< HEAD
 
 	if c.state.Info.SyncPointEnabled {
+=======
+	if util.GetOrZero(c.state.Info.Config.EnableSyncPoint) {
+		// preResolvedTs model.Ts
+>>>>>>> c601a1adb6 (pkg/config(ticdc): hide fields that are not required for specific protocols (#8836))
 		c.barriers.Update(syncPointBarrier, resolvedTs)
 	}
 	c.barriers.Update(ddlJobBarrier, ddlStartTs)
@@ -470,9 +476,54 @@ LOOP:
 		zap.String("namespace", c.id.Namespace),
 		zap.String("changefeed", c.id.ID))
 
+<<<<<<< HEAD
 	// init metrics
 	c.metricsChangefeedBarrierTsGauge = changefeedBarrierTsGauge.
 		WithLabelValues(c.id.Namespace, c.id.ID)
+=======
+	downstreamType, err := c.state.Info.DownstreamType()
+	if err != nil {
+		return errors.Trace(err)
+	}
+
+	c.ddlManager = newDDLManager(
+		c.id,
+		ddlStartTs,
+		c.state.Status.CheckpointTs,
+		c.ddlSink,
+		c.ddlPuller,
+		c.schema,
+		c.redoDDLMgr,
+		c.redoMetaMgr,
+		downstreamType,
+		util.GetOrZero(c.state.Info.Config.BDRMode),
+	)
+
+	// create scheduler
+	cfg := *c.cfg
+	cfg.ChangefeedSettings = c.state.Info.Config.Scheduler
+	epoch := c.state.Info.Epoch
+	c.scheduler, err = c.newScheduler(ctx, c.upstream, epoch, &cfg)
+	if err != nil {
+		return errors.Trace(err)
+	}
+
+	c.initMetrics()
+
+	c.initialized = true
+	log.Info("changefeed initialized",
+		zap.String("namespace", c.state.ID.Namespace),
+		zap.String("changefeed", c.state.ID.ID),
+		zap.Uint64("changefeedEpoch", epoch),
+		zap.Uint64("checkpointTs", checkpointTs),
+		zap.Uint64("resolvedTs", resolvedTs),
+		zap.Stringer("info", c.state.Info))
+
+	return nil
+}
+
+func (c *changefeed) initMetrics() {
+>>>>>>> c601a1adb6 (pkg/config(ticdc): hide fields that are not required for specific protocols (#8836))
 	c.metricsChangefeedCheckpointTsGauge = changefeedCheckpointTsGauge.
 		WithLabelValues(c.id.Namespace, c.id.ID)
 	c.metricsChangefeedCheckpointTsLagGauge = changefeedCheckpointTsLagGauge.
@@ -678,11 +729,19 @@ func (c *changefeed) handleBarrier(ctx cdcContext.Context) (uint64, error) {
 		newDDLResolvedTs, _ := c.ddlPuller.FrontDDL()
 		c.barriers.Update(ddlJobBarrier, newDDLResolvedTs)
 	case syncPointBarrier:
+<<<<<<< HEAD
 		if !blocked {
 			return barrierTs, nil
 		}
 		nextSyncPointTs := oracle.GoTimeToTS(oracle.GetTimeFromTS(barrierTs).Add(c.state.Info.SyncPointInterval))
 		if err := c.sink.emitSyncPoint(ctx, barrierTs); err != nil {
+=======
+		nextSyncPointTs := oracle.GoTimeToTS(
+			oracle.GetTimeFromTS(barrierTs).
+				Add(util.GetOrZero(c.state.Info.Config.SyncPointInterval)),
+		)
+		if err := c.ddlSink.emitSyncPoint(ctx, barrierTs); err != nil {
+>>>>>>> c601a1adb6 (pkg/config(ticdc): hide fields that are not required for specific protocols (#8836))
 			return 0, errors.Trace(err)
 		}
 		c.barriers.Update(syncPointBarrier, nextSyncPointTs)

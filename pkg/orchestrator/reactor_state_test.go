@@ -25,6 +25,7 @@ import (
 	"github.com/pingcap/tiflow/pkg/config"
 	"github.com/pingcap/tiflow/pkg/etcd"
 	"github.com/pingcap/tiflow/pkg/orchestrator/util"
+	putil "github.com/pingcap/tiflow/pkg/util"
 	"github.com/stretchr/testify/require"
 )
 
@@ -64,6 +65,7 @@ func TestChangefeedStateUpdate(t *testing.T) {
         },
         "mounter": {
             "worker-num": 16
+<<<<<<< HEAD
         },
         "sink": {
             "dispatchers": null,
@@ -79,6 +81,8 @@ func TestChangefeedStateUpdate(t *testing.T) {
         "consistent": {
             "level": "normal",
             "storage": "local"
+=======
+>>>>>>> c601a1adb6 (pkg/config(ticdc): hide fields that are not required for specific protocols (#8836))
         }
     },
     "state": "normal",
@@ -129,9 +133,17 @@ func TestChangefeedStateUpdate(t *testing.T) {
 						CheckGCSafePoint: true,
 						Filter:           &config.FilterConfig{Rules: []string{"*.*"}},
 						Mounter:          &config.MounterConfig{WorkerNum: 16},
+<<<<<<< HEAD
 						Sink:             &config.SinkConfig{Protocol: "open-protocol"},
 						Cyclic:           &config.CyclicConfig{},
 						Consistent:       &config.ConsistentConfig{Level: "normal", Storage: "local"},
+=======
+						Scheduler:        config.GetDefaultReplicaConfig().Scheduler,
+						Sink: &config.SinkConfig{
+							Terminator: putil.AddressOf(config.CRLF),
+						},
+						Integrity: config.GetDefaultReplicaConfig().Integrity,
+>>>>>>> c601a1adb6 (pkg/config(ticdc): hide fields that are not required for specific protocols (#8836))
 					},
 				},
 				Status: &model.ChangeFeedStatus{CheckpointTs: 421980719742451713, ResolvedTs: 421980720003809281},
@@ -189,9 +201,17 @@ func TestChangefeedStateUpdate(t *testing.T) {
 						CheckGCSafePoint: true,
 						Filter:           &config.FilterConfig{Rules: []string{"*.*"}},
 						Mounter:          &config.MounterConfig{WorkerNum: 16},
+<<<<<<< HEAD
 						Sink:             &config.SinkConfig{Protocol: "open-protocol"},
 						Cyclic:           &config.CyclicConfig{},
 						Consistent:       &config.ConsistentConfig{Level: "normal", Storage: "local"},
+=======
+						Sink: &config.SinkConfig{
+							Terminator: putil.AddressOf(config.CRLF),
+						},
+						Scheduler: config.GetDefaultReplicaConfig().Scheduler,
+						Integrity: config.GetDefaultReplicaConfig().Integrity,
+>>>>>>> c601a1adb6 (pkg/config(ticdc): hide fields that are not required for specific protocols (#8836))
 					},
 				},
 				Status: &model.ChangeFeedStatus{CheckpointTs: 421980719742451713, ResolvedTs: 421980720003809281},
@@ -256,9 +276,17 @@ func TestChangefeedStateUpdate(t *testing.T) {
 						CheckGCSafePoint: true,
 						Filter:           &config.FilterConfig{Rules: []string{"*.*"}},
 						Mounter:          &config.MounterConfig{WorkerNum: 16},
+<<<<<<< HEAD
 						Sink:             &config.SinkConfig{Protocol: "open-protocol"},
 						Cyclic:           &config.CyclicConfig{},
 						Consistent:       &config.ConsistentConfig{Level: "normal", Storage: "local"},
+=======
+						Sink: &config.SinkConfig{
+							Terminator: putil.AddressOf(config.CRLF),
+						},
+						Scheduler: config.GetDefaultReplicaConfig().Scheduler,
+						Integrity: config.GetDefaultReplicaConfig().Integrity,
+>>>>>>> c601a1adb6 (pkg/config(ticdc): hide fields that are not required for specific protocols (#8836))
 					},
 				},
 				Status: &model.ChangeFeedStatus{CheckpointTs: 421980719742451713, ResolvedTs: 421980720003809281},
@@ -362,7 +390,10 @@ func TestChangefeedStateUpdate(t *testing.T) {
 			err = state.Update(util.NewEtcdKey(k), value, false)
 			require.Nil(t, err)
 		}
-		require.True(t, cmp.Equal(state, &tc.expected, cmpopts.IgnoreUnexported(ChangefeedReactorState{})),
+		require.True(t, cmp.Equal(
+			state, &tc.expected,
+			cmpopts.IgnoreUnexported(ChangefeedReactorState{}),
+		),
 			fmt.Sprintf("%d,%s", i, cmp.Diff(state, &tc.expected, cmpopts.IgnoreUnexported(ChangefeedReactorState{}))))
 	}
 }
@@ -376,7 +407,7 @@ func TestPatchInfo(t *testing.T) {
 	})
 	stateTester.MustApplyPatches()
 	defaultConfig := config.GetDefaultReplicaConfig()
-	require.Equal(t, state.Info, &model.ChangeFeedInfo{
+	cfInfo := &model.ChangeFeedInfo{
 		SinkURI: "123",
 		Engine:  model.SortUnified,
 		Config: &config.ReplicaConfig{
@@ -386,13 +417,16 @@ func TestPatchInfo(t *testing.T) {
 			Cyclic:     defaultConfig.Cyclic,
 			Consistent: defaultConfig.Consistent,
 		},
-	})
+	}
+	cfInfo.RmUnusedFields()
+	require.Equal(t, state.Info, cfInfo)
+
 	state.PatchInfo(func(info *model.ChangeFeedInfo) (*model.ChangeFeedInfo, bool, error) {
 		info.StartTs = 6
 		return info, true, nil
 	})
 	stateTester.MustApplyPatches()
-	require.Equal(t, state.Info, &model.ChangeFeedInfo{
+	cfInfo = &model.ChangeFeedInfo{
 		SinkURI: "123",
 		StartTs: 6,
 		Engine:  model.SortUnified,
@@ -403,7 +437,10 @@ func TestPatchInfo(t *testing.T) {
 			Cyclic:     defaultConfig.Cyclic,
 			Consistent: defaultConfig.Consistent,
 		},
-	})
+	}
+	cfInfo.RmUnusedFields()
+	require.Equal(t, state.Info, cfInfo)
+
 	state.PatchInfo(func(info *model.ChangeFeedInfo) (*model.ChangeFeedInfo, bool, error) {
 		return nil, true, nil
 	})

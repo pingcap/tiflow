@@ -185,7 +185,7 @@ func init() {
 
 	if configFile != "" {
 		eventRouterReplicaConfig = config.GetDefaultReplicaConfig()
-		eventRouterReplicaConfig.Sink.Protocol = protocol.String()
+		eventRouterReplicaConfig.Sink.Protocol = util.AddressOf(protocol.String())
 		err := cmdUtil.StrictDecodeFile(configFile, "kafka consumer", eventRouterReplicaConfig)
 		if err != nil {
 			log.Panic("invalid config file for kafka consumer",

@@ -34,10 +34,14 @@ import (
 	cerror "github.com/pingcap/tiflow/pkg/errors"
 	"github.com/pingcap/tiflow/pkg/etcd"
 	"github.com/pingcap/tiflow/pkg/filter"
+<<<<<<< HEAD
 	"github.com/pingcap/tiflow/pkg/security"
 	"github.com/pingcap/tiflow/pkg/txnutil/gc"
 	ticdcutil "github.com/pingcap/tiflow/pkg/util"
 	"github.com/pingcap/tiflow/pkg/version"
+=======
+	putil "github.com/pingcap/tiflow/pkg/util"
+>>>>>>> c601a1adb6 (pkg/config(ticdc): hide fields that are not required for specific protocols (#8836))
 	"github.com/spf13/cobra"
 	"github.com/tikv/client-go/v2/oracle"
 	pd "github.com/tikv/pd/client"
@@ -205,11 +209,11 @@ func (o *createChangefeedOptions) completeCfg(
 
 		protocol := sinkURIParsed.Query().Get(config.ProtocolKey)
 		if protocol != "" {
-			cfg.Sink.Protocol = protocol
+			cfg.Sink.Protocol = putil.AddressOf(protocol)
 		}
 		for _, fp := range config.ForceEnableOldValueProtocols {
-			if cfg.Sink.Protocol == fp {
-				log.Warn("Attempting to replicate without old value enabled. CDC will enable old value and continue.", zap.String("protocol", cfg.Sink.Protocol))
+			if putil.GetOrZero(cfg.Sink.Protocol) == fp {
+				log.Warn("Attempting to replicate without old value enabled. CDC will enable old value and continue.", zap.String("protocol", putil.GetOrZero(cfg.Sink.Protocol)))
 				cfg.EnableOldValue = true
 				break
 			}
@@ -233,7 +237,7 @@ func (o *createChangefeedOptions) completeCfg(
 	}
 
 	if o.commonChangefeedOptions.schemaRegistry != "" {
-		cfg.Sink.SchemaRegistry = o.commonChangefeedOptions.schemaRegistry
+		cfg.Sink.SchemaRegistry = putil.AddressOf(o.commonChangefeedOptions.schemaRegistry)
 	}
 
 	switch o.commonChangefeedOptions.sortEngine {

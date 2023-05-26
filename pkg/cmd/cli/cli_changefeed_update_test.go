@@ -22,7 +22,12 @@ import (
 	"github.com/pingcap/log"
 	"github.com/pingcap/tiflow/cdc/model"
 	"github.com/pingcap/tiflow/pkg/config"
+<<<<<<< HEAD
 	"github.com/pingcap/tiflow/pkg/util/testleak"
+=======
+	putil "github.com/pingcap/tiflow/pkg/util"
+	"github.com/stretchr/testify/require"
+>>>>>>> c601a1adb6 (pkg/config(ticdc): hide fields that are not required for specific protocols (#8836))
 )
 
 type changefeedUpdateSuite struct{}
@@ -75,6 +80,7 @@ func (s *changefeedUpdateSuite) TestApplyChanges(c *check.C) {
 	)
 
 	// Test schema registry update
+<<<<<<< HEAD
 	oldInfo = &model.ChangeFeedInfo{Config: config.GetDefaultReplicaConfig()}
 	c.Assert(oldInfo.Config.Sink.SchemaRegistry, check.Equals, "")
 	c.Assert(
@@ -88,6 +94,16 @@ func (s *changefeedUpdateSuite) TestApplyChanges(c *check.C) {
 		check.Equals,
 		"https://username:password@localhost:8081",
 	)
+=======
+	oldInfo = &v2.ChangeFeedInfo{Config: v2.ToAPIReplicaConfig(config.GetDefaultReplicaConfig())}
+	require.True(t, oldInfo.Config.Sink.SchemaRegistry == nil)
+	require.Nil(t, cmd.ParseFlags([]string{"--schema-registry=https://username:password@localhost:8081"}))
+	newInfo, err = o.applyChanges(oldInfo, cmd)
+	require.Nil(t, err)
+	require.Equal(t,
+		putil.AddressOf("https://username:password@localhost:8081"),
+		newInfo.Config.Sink.SchemaRegistry)
+>>>>>>> c601a1adb6 (pkg/config(ticdc): hide fields that are not required for specific protocols (#8836))
 }
 
 func initTestLogger(filename string) (func(), error) {
