@@ -184,7 +184,7 @@ func (m *SinkManager) Run(ctx context.Context, warnings ...chan<- error) (err er
 			zap.Error(err))
 	}()
 
-	splitTxn := m.changefeedInfo.Config.Sink.TxnAtomicity.ShouldSplitTxn()
+	splitTxn := util.GetOrZero(m.changefeedInfo.Config.Sink.TxnAtomicity).ShouldSplitTxn()
 	enableOldValue := m.changefeedInfo.Config.EnableOldValue
 
 	gcErrors := make(chan error, 16)

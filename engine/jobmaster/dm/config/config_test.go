@@ -106,6 +106,7 @@ func TestTaskCfg(t *testing.T) {
 		// don't check uuid's value
 		expectCfg.UUID = subTaskCfg.UUID
 		expectCfg.DumpUUID = subTaskCfg.DumpUUID
+		expectCfg.IgnoreCheckingItems = append(taskCfg.IgnoreCheckingItems, dmconfig.MetaPositionChecking)
 		require.EqualValues(t, expectCfg, subTaskCfg)
 	}
 }

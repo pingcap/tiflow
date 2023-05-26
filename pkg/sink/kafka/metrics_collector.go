@@ -80,6 +80,9 @@ func (m *saramaMetricsCollector) Run(ctx context.Context) {
 	for {
 		select {
 		case <-ctx.Done():
+			log.Info("Kafka metrics collector stopped",
+				zap.String("namespace", m.changefeedID.Namespace),
+				zap.String("changefeed", m.changefeedID.ID))
 			return
 		case <-ticker.C:
 			m.updateBrokers(ctx)

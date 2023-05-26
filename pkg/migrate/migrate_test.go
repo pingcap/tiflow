@@ -32,6 +32,7 @@ import (
 	"github.com/pingcap/tiflow/pkg/pdutil"
 	"github.com/pingcap/tiflow/pkg/security"
 	"github.com/pingcap/tiflow/pkg/txnutil/gc"
+	"github.com/pingcap/tiflow/pkg/util"
 	"github.com/stretchr/testify/require"
 	"github.com/tikv/client-go/v2/oracle"
 	pd "github.com/tikv/pd/client"
@@ -95,15 +96,15 @@ func TestMigration(t *testing.T) {
 				TopicRule:      "topic",
 			},
 		},
-		Protocol: "aaa",
+		Protocol: util.AddressOf("aaa"),
 		ColumnSelectors: []*config.ColumnSelector{
 			{
 				Matcher: []string{"a", "b", "c"},
 				Columns: []string{"a", "b"},
 			},
 		},
-		SchemaRegistry: "bbb",
-		TxnAtomicity:   "aa",
+		SchemaRegistry: util.AddressOf("bbb"),
+		TxnAtomicity:   util.AddressOf(config.AtomicityLevel("aa")),
 	}
 	cfg.Consistent = &config.ConsistentConfig{
 		Level:             "1",
