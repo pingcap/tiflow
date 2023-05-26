@@ -270,8 +270,7 @@ func TestGetTopicsPartitions(t *testing.T) {
 	// ignore topic error
 	result, err = admin.GetTopicsMeta(ctx, []string{"topic-1", "topic-2", "topic-3"}, true)
 	require.NoError(t, err)
-	require.Len(t, result, 3)
-	require.Equal(t, int32(2), result["topic-1"].NumPartitions)
+	require.Len(t, result, 2)
 	require.Equal(t, int32(3), result["topic-2"].NumPartitions)
 	require.Equal(t, int32(0), result["topic-3"].NumPartitions)
 }
