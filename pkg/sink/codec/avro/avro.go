@@ -26,6 +26,7 @@ import (
 	"github.com/linkedin/goavro/v2"
 	"github.com/pingcap/errors"
 	"github.com/pingcap/log"
+	timodel "github.com/pingcap/tidb/parser/model"
 	"github.com/pingcap/tidb/parser/mysql"
 	"github.com/pingcap/tidb/types"
 	"github.com/pingcap/tidb/util/rowcodec"
@@ -167,6 +168,14 @@ func (a *BatchEncoder) EncodeCheckpointEvent(ts uint64) (*common.Message, error)
 	return nil, nil
 }
 
+type ddlEvent struct {
+	Query    string             `json:"query"`
+	Type     timodel.ActionType `json:"type"`
+	Schema   string             `json:"schema"`
+	Table    string             `json:"table"`
+	CommitTs uint64             `json:"commitTs"`
+}
+
 // EncodeDDLEvent only encode DDL event if the watermark event is enabled
 // it's only used for the testing purpose.
 func (a *BatchEncoder) EncodeDDLEvent(e *model.DDLEvent) (*common.Message, error) {
@@ -174,7 +183,14 @@ func (a *BatchEncoder) EncodeDDLEvent(e *model.DDLEvent) (*common.Message, error
 		buf := new(bytes.Buffer)
 		_ = binary.Write(buf, binary.BigEndian, ddlByte)
 
-		bytes, err := json.Marshal(e)
+		event := &ddlEvent{
+			Query:    e.Query,
+			Type:     e.Type,
+			Schema:   e.TableInfo.TableName.Schema,
+			Table:    e.TableInfo.TableName.Table,
+			CommitTs: e.CommitTs,
+		}
+		bytes, err := json.Marshal(event)
 		if err != nil {
 			return nil, cerror.WrapError(cerror.ErrAvroToEnvelopeError, err)
 		}
