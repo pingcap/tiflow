@@ -2102,6 +2102,7 @@ func TestResolveLock(t *testing.T) {
 }
 
 func testEventCommitTsFallback(t *testing.T, events []*cdcpb.ChangeDataEvent) {
+	InitWorkerPool()
 	ctx, cancel := context.WithCancel(context.Background())
 	wg := &sync.WaitGroup{}
 
@@ -2187,31 +2188,6 @@ func TestCommittedFallback(t *testing.T) {
 							OpType:   cdcpb.Event_Row_PUT,
 							Key:      []byte("a"),
 							Value:    []byte("committed with commit ts before resolved ts"),
-							StartTs:  92,
-							CommitTs: 98,
-						}},
-					},
-				},
-			},
-		}},
-	}
-	testEventCommitTsFallback(t, events)
-}
-
-// TestCommitFallback tests kv client should panic when receiving a fallback commit event
-func TestCommitFallback(t *testing.T) {
-	events := []*cdcpb.ChangeDataEvent{
-		mockInitializedEvent(3, currentRequestID()),
-		{Events: []*cdcpb.Event{
-			{
-				RegionId:  3,
-				RequestId: currentRequestID(),
-				Event: &cdcpb.Event_Entries_{
-					Entries: &cdcpb.Event_Entries{
-						Entries: []*cdcpb.Event_Row{{
-							Type:     cdcpb.Event_COMMIT,
-							OpType:   cdcpb.Event_Row_PUT,
-							Key:      []byte("a-commit-event-ts-fallback"),
 							StartTs:  92,
 							CommitTs: 98,
 						}},

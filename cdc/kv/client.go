@@ -436,7 +436,15 @@ func currentRequestID() uint64 {
 }
 
 type eventFeedSession struct {
+<<<<<<< HEAD
 	client *CDCClient
+=======
+	client     *CDCClient
+	startTs    model.Ts
+	changefeed model.ChangeFeedID
+	tableID    model.TableID
+	tableName  string
+>>>>>>> ed1f451ce7 (cdc: region worker should handle stale events correctly (#9078))
 
 	lockResolver txnutil.LockResolver
 	isPullerInit PullerInitialization
@@ -491,7 +499,16 @@ func newEventFeedSession(
 		totalSpan.Start, totalSpan.End, startTs,
 		client.changefeed.Namespace+"-"+client.changefeed.ID)
 	return &eventFeedSession{
+<<<<<<< HEAD
 		client:            client,
+=======
+		client:     client,
+		startTs:    startTs,
+		changefeed: client.changefeed,
+		tableID:    client.tableID,
+		tableName:  client.tableName,
+
+>>>>>>> ed1f451ce7 (cdc: region worker should handle stale events correctly (#9078))
 		totalSpan:         totalSpan,
 		eventCh:           eventCh,
 		regionRouter:      NewSizedRegionRouter(ctx, client.config.RegionScanLimit),
