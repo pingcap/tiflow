@@ -137,6 +137,7 @@ func (a *admin) GetTopicsMeta(
 			}
 			log.Warn("fetch topic meta failed",
 				zap.String("topic", topic.Name), zap.Error(topic.Error))
+			continue
 		}
 		result[topic.Name] = pkafka.TopicDetail{
 			Name:          topic.Name,
