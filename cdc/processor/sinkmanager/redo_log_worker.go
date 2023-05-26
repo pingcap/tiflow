@@ -28,12 +28,13 @@ import (
 )
 
 type redoWorker struct {
-	changefeedID   model.ChangeFeedID
-	sourceManager  *sourcemanager.SourceManager
-	memQuota       *memquota.MemQuota
-	redoDMLManager redo.DMLManager
-	eventCache     *redoEventCache
-	enableOldValue bool
+	changefeedID      model.ChangeFeedID
+	sourceManager     *sourcemanager.SourceManager
+	memQuota          *memquota.MemQuota
+	redoDMLManager    redo.DMLManager
+	eventCache        *redoEventCache
+	enableOldValue    bool
+	shouldSplitUpdate bool
 }
 
 func newRedoWorker(
@@ -43,14 +44,16 @@ func newRedoWorker(
 	redoDMLMgr redo.DMLManager,
 	eventCache *redoEventCache,
 	enableOldValue bool,
+	shouldSplitUpdate bool,
 ) *redoWorker {
 	return &redoWorker{
-		changefeedID:   changefeedID,
-		sourceManager:  sourceManager,
-		memQuota:       quota,
-		redoDMLManager: redoDMLMgr,
-		eventCache:     eventCache,
-		enableOldValue: enableOldValue,
+		changefeedID:      changefeedID,
+		sourceManager:     sourceManager,
+		memQuota:          quota,
+		redoDMLManager:    redoDMLMgr,
+		eventCache:        eventCache,
+		enableOldValue:    enableOldValue,
+		shouldSplitUpdate: shouldSplitUpdate,
 	}
 }
 
@@ -149,7 +152,7 @@ func (w *redoWorker) handleTask(ctx context.Context, task *redoTask) (finalErr e
 		if e.Row != nil {
 			// For all events, we add table replicate ts, so mysql sink can determine safe-mode.
 			e.Row.ReplicatingTs = task.tableSink.replicateTs
-			x, size, err = convertRowChangedEvents(w.changefeedID, task.span, w.enableOldValue, e)
+			x, size, err = convertRowChangedEvents(w.changefeedID, task.span, w.enableOldValue, w.shouldSplitUpdate, e)
 			if err != nil {
 				return errors.Trace(err)
 			}
