@@ -317,6 +317,7 @@ func currentRequestID() uint64 {
 
 type eventFeedSession struct {
 	client     *CDCClient
+	startTs    model.Ts
 	changefeed model.ChangeFeedID
 	tableID    model.TableID
 	tableName  string
@@ -369,9 +370,10 @@ func newEventFeedSession(
 	id := strconv.FormatUint(allocID(), 10)
 	rangeLock := regionspan.NewRegionRangeLock(
 		totalSpan.Start, totalSpan.End, startTs,
-		changefeed.Namespace+"."+changefeed.ID)
+		client.changefeed.Namespace+"."+client.changefeed.ID)
 	return &eventFeedSession{
 		client:     client,
+		startTs:    startTs,
 		changefeed: client.changefeed,
 		tableID:    client.tableID,
 		tableName:  client.tableName,
@@ -965,7 +967,7 @@ func (s *eventFeedSession) receiveFromStream(
 ) error {
 	var tsStat *tableStoreStat
 	s.client.tableStoreStats.Lock()
-	key := fmt.Sprintf("%d_%d", s.totalSpan.TableID, storeID)
+	key := fmt.Sprintf("%d_%d", s.client.tableID, storeID)
 	if tsStat = s.client.tableStoreStats.v[key]; tsStat == nil {
 		tsStat = new(tableStoreStat)
 		s.client.tableStoreStats.v[key] = tsStat
