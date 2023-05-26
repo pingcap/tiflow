@@ -14,22 +14,30 @@ fi
 
 echo 'Starting schema registry...'
 ./bin/bin/schema-registry-start -daemon ./bin/etc/schema-registry/schema-registry.properties
-curl_status_cmd="curl -vsL --max-time 20 http://127.0.0.1:8081/"
-for ((i = 0; i <= 50; i++)); do
-	res=$($curl_status_cmd)
-  if (! echo "$res" | grep -q "200 OK"); then
-      break
-  fi
-
-	if [ "$i" -eq 50 ]; then
+i=0
+while ! curl -o /dev/null -v -s "http://127.0.0.1:8081"; do
+	i=$(($i + 1))
+	if [ $i -gt 30 ]; then
 		echo 'Failed to start schema registry'
 		exit 1
 	fi
 	sleep 2
 done
 
-mv bin/logs/* /tmp/tidb_cdc_test
+echo "show the bin directory"
+ls -al bin
+echo "----------------------"
 
+echo "show the bin/etc directory"
+ls -al bin/etc
+echo "----------------------"
+
+echo "show the bin/logs directory"
+ls -al bin/logs
+echo "----------------------"
+
+echo "cat the bin/logs/schema-registry.log"
+cat bin/logs/schema-registry.log
 
 # use kafka-consumer with avro decoder to sync data from kafka to mysql
 function run() {
