@@ -16,6 +16,11 @@ package sink
 import (
 	"testing"
 
+<<<<<<< HEAD:cdc/sink/validator_test.go
+=======
+	"github.com/pingcap/tiflow/pkg/config"
+	"github.com/pingcap/tiflow/pkg/util"
+>>>>>>> c601a1adb6 (pkg/config(ticdc): hide fields that are not required for specific protocols (#8836)):cdc/sink/validator/validator_test.go
 	"github.com/stretchr/testify/require"
 )
 
@@ -87,3 +92,42 @@ func TestPreCheckSinkURI(t *testing.T) {
 		})
 	}
 }
+<<<<<<< HEAD:cdc/sink/validator_test.go
+=======
+
+func TestValidateSink(t *testing.T) {
+	t.Parallel()
+	ctx := context.Background()
+	ctx, cancel := context.WithCancel(ctx)
+	defer cancel()
+	replicateConfig := config.GetDefaultReplicaConfig()
+
+	// test sink uri error
+	sinkURI := "mysql://root:111@127.0.0.1:3306/"
+	err := Validate(ctx, sinkURI, replicateConfig)
+	require.NotNil(t, err)
+	require.Contains(t, err.Error(), "fail to open MySQL connection")
+
+	// test sink uri right
+	sinkURI = "blackhole://"
+	err = Validate(ctx, sinkURI, replicateConfig)
+	require.Nil(t, err)
+
+	// test bdr mode error
+	replicateConfig.BDRMode = util.AddressOf(true)
+	sinkURI = "blackhole://"
+	err = Validate(ctx, sinkURI, replicateConfig)
+	require.NotNil(t, err)
+	require.Contains(t, err.Error(), "sink uri scheme is not supported in BDR mode")
+
+	// test sink-scheme/syncpoint error
+	replicateConfig.EnableSyncPoint = util.AddressOf(true)
+	sinkURI = "kafka://"
+	err = Validate(ctx, sinkURI, replicateConfig)
+	require.NotNil(t, err)
+	require.Contains(
+		t, err.Error(),
+		"sink uri scheme is not supported with syncpoint enabled",
+	)
+}
+>>>>>>> c601a1adb6 (pkg/config(ticdc): hide fields that are not required for specific protocols (#8836)):cdc/sink/validator/validator_test.go

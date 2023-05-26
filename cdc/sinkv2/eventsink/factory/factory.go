@@ -29,6 +29,11 @@ import (
 	cerror "github.com/pingcap/tiflow/pkg/errors"
 	"github.com/pingcap/tiflow/pkg/sink"
 	"github.com/pingcap/tiflow/pkg/sink/kafka"
+<<<<<<< HEAD:cdc/sinkv2/eventsink/factory/factory.go
+=======
+	v2 "github.com/pingcap/tiflow/pkg/sink/kafka/v2"
+	"github.com/pingcap/tiflow/pkg/util"
+>>>>>>> c601a1adb6 (pkg/config(ticdc): hide fields that are not required for specific protocols (#8836)):cdc/sink/dmlsink/factory/factory.go
 	"github.com/prometheus/client_golang/prometheus"
 )
 
@@ -65,6 +70,13 @@ func New(ctx context.Context,
 		s.txnSink = txnSink
 		s.sinkType = sink.TxnSink
 	case sink.KafkaScheme, sink.KafkaSSLScheme:
+<<<<<<< HEAD:cdc/sinkv2/eventsink/factory/factory.go
+=======
+		factoryCreator := kafka.NewSaramaFactory
+		if util.GetOrZero(cfg.Sink.EnableKafkaSinkV2) {
+			factoryCreator = v2.NewFactory
+		}
+>>>>>>> c601a1adb6 (pkg/config(ticdc): hide fields that are not required for specific protocols (#8836)):cdc/sink/dmlsink/factory/factory.go
 		mqs, err := mq.NewKafkaDMLSink(ctx, sinkURI, cfg, errCh,
 			kafka.NewSaramaAdminClient, dmlproducer.NewKafkaDMLProducer)
 		if err != nil {

@@ -1248,39 +1248,76 @@ var doc = `{
             "type": "object",
             "properties": {
                 "column-selectors": {
+                    "description": "ColumnSelectors is Deprecated.",
                     "type": "array",
                     "items": {
                         "$ref": "#/definitions/config.ColumnSelector"
                     }
                 },
                 "csv": {
+                    "description": "CSVConfig is only available when the downstream is Storage.",
                     "$ref": "#/definitions/config.CSVConfig"
                 },
                 "date-separator": {
+                    "description": "DateSeparator is only available when the downstream is Storage.",
                     "type": "string"
                 },
                 "dispatchers": {
+                    "description": "DispatchRules is only available when the downstream is MQ.",
                     "type": "array",
                     "items": {
                         "$ref": "#/definitions/config.DispatchRule"
                     }
                 },
+<<<<<<< HEAD
+=======
+                "enable-kafka-sink-v2": {
+                    "description": "EnableKafkaSinkV2 enabled then the kafka-go sink will be used.\nIt is only available when the downstream is MQ.",
+                    "type": "boolean"
+                },
+>>>>>>> c601a1adb6 (pkg/config(ticdc): hide fields that are not required for specific protocols (#8836))
                 "enable-partition-separator": {
+                    "description": "EnablePartitionSeparator is only available when the downstream is Storage.",
                     "type": "boolean"
                 },
                 "encoder-concurrency": {
+                    "description": "EncoderConcurrency is only available when the downstream is MQ.",
                     "type": "integer"
                 },
                 "file-index-digit": {
+                    "description": "FileIndexWidth is only available when the downstream is Storage",
                     "type": "integer"
                 },
+<<<<<<< HEAD
+=======
+                "kafka-config": {
+                    "$ref": "#/definitions/config.KafkaConfig"
+                },
+                "mysql-config": {
+                    "$ref": "#/definitions/config.MySQLConfig"
+                },
+                "only-output-updated-columns": {
+                    "description": "OnlyOutputUpdatedColumns is only available when the downstream is MQ.",
+                    "type": "boolean"
+                },
+>>>>>>> c601a1adb6 (pkg/config(ticdc): hide fields that are not required for specific protocols (#8836))
                 "protocol": {
+                    "description": "Protocol is NOT available when the downstream is DB.",
                     "type": "string"
                 },
+<<<<<<< HEAD
+=======
+                "safe-mode": {
+                    "description": "SafeMode is only available when the downstream is DB.",
+                    "type": "boolean"
+                },
+>>>>>>> c601a1adb6 (pkg/config(ticdc): hide fields that are not required for specific protocols (#8836))
                 "schema-registry": {
+                    "description": "SchemaRegistry is only available when the downstream is MQ using avro protocol.",
                     "type": "string"
                 },
                 "terminator": {
+                    "description": "Terminator is NOT available when the downstream is DB.",
                     "type": "string"
                 },
                 "transaction-atomicity": {

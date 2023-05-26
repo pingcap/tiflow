@@ -37,6 +37,7 @@ import (
 	redoCfg "github.com/pingcap/tiflow/pkg/redo"
 	"github.com/pingcap/tiflow/pkg/txnutil/gc"
 	"github.com/pingcap/tiflow/pkg/upstream"
+	"github.com/pingcap/tiflow/pkg/util"
 	"github.com/prometheus/client_golang/prometheus"
 	"github.com/tikv/client-go/v2/oracle"
 	"go.uber.org/zap"
@@ -531,8 +532,8 @@ LOOP:
 	}
 
 	c.barriers = newBarriers()
-	if c.state.Info.Config.EnableSyncPoint { // preResolvedTs model.Ts
-
+	if util.GetOrZero(c.state.Info.Config.EnableSyncPoint) {
+		// preResolvedTs model.Ts
 		c.barriers.Update(syncPointBarrier, resolvedTs)
 	}
 	c.barriers.Update(finishBarrier, c.state.Info.GetTargetTs())
@@ -620,6 +621,7 @@ LOOP:
 	if err != nil {
 		return errors.Trace(err)
 	}
+
 	c.ddlManager = newDDLManager(
 		c.id,
 		ddlStartTs,
@@ -630,7 +632,8 @@ LOOP:
 		c.redoDDLMgr,
 		c.redoMetaMgr,
 		downstreamType,
-		c.state.Info.Config.BDRMode)
+		util.GetOrZero(c.state.Info.Config.BDRMode),
+	)
 
 	// create scheduler
 	epoch := c.state.Info.Epoch
@@ -880,7 +883,10 @@ func (c *changefeed) handleBarrier(ctx cdcContext.Context) (uint64, error) {
 
 	switch barrierTp {
 	case syncPointBarrier:
-		nextSyncPointTs := oracle.GoTimeToTS(oracle.GetTimeFromTS(barrierTs).Add(c.state.Info.Config.SyncPointInterval))
+		nextSyncPointTs := oracle.GoTimeToTS(
+			oracle.GetTimeFromTS(barrierTs).
+				Add(util.GetOrZero(c.state.Info.Config.SyncPointInterval)),
+		)
 		if err := c.ddlSink.emitSyncPoint(ctx, barrierTs); err != nil {
 			return 0, errors.Trace(err)
 		}

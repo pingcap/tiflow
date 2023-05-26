@@ -24,6 +24,11 @@ import (
 	"github.com/pingcap/tiflow/pkg/config/outdated"
 	cerror "github.com/pingcap/tiflow/pkg/errors"
 	"github.com/pingcap/tiflow/pkg/redo"
+<<<<<<< HEAD
+=======
+	"github.com/pingcap/tiflow/pkg/sink"
+	"github.com/pingcap/tiflow/pkg/util"
+>>>>>>> c601a1adb6 (pkg/config(ticdc): hide fields that are not required for specific protocols (#8836))
 	"go.uber.org/zap"
 )
 
@@ -39,9 +44,10 @@ var defaultReplicaConfig = &ReplicaConfig{
 	CaseSensitive:      true,
 	EnableOldValue:     true,
 	CheckGCSafePoint:   true,
-	EnableSyncPoint:    false,
-	SyncPointInterval:  time.Minute * 10,
-	SyncPointRetention: time.Hour * 24,
+	EnableSyncPoint:    util.AddressOf(false),
+	SyncPointInterval:  util.AddressOf(10 * time.Minute),
+	SyncPointRetention: util.AddressOf(24 * time.Hour),
+	BDRMode:            util.AddressOf(false),
 	Filter: &FilterConfig{
 		Rules: []string{"*.*"},
 	},
@@ -54,10 +60,19 @@ var defaultReplicaConfig = &ReplicaConfig{
 			Delimiter:  Comma,
 			NullString: NULL,
 		},
+<<<<<<< HEAD
 		EncoderConcurrency:       16,
 		Terminator:               CRLF,
 		DateSeparator:            DateSeparatorDay.String(),
 		EnablePartitionSeparator: true,
+=======
+		EncoderConcurrency:       util.AddressOf(16),
+		Terminator:               util.AddressOf(CRLF),
+		DateSeparator:            util.AddressOf(DateSeparatorNone.String()),
+		EnablePartitionSeparator: util.AddressOf(true),
+		EnableKafkaSinkV2:        util.AddressOf(false),
+		OnlyOutputUpdatedColumns: util.AddressOf(false),
+>>>>>>> c601a1adb6 (pkg/config(ticdc): hide fields that are not required for specific protocols (#8836))
 		TiDBSourceID:             1,
 	},
 	Consistent: &ConsistentConfig{
@@ -95,6 +110,7 @@ type replicaConfig struct {
 	EnableOldValue   bool   `toml:"enable-old-value" json:"enable-old-value"`
 	ForceReplicate   bool   `toml:"force-replicate" json:"force-replicate"`
 	CheckGCSafePoint bool   `toml:"check-gc-safe-point" json:"check-gc-safe-point"`
+<<<<<<< HEAD
 	EnableSyncPoint  bool   `toml:"enable-sync-point" json:"enable-sync-point"`
 	// BDR(Bidirectional Replication) is a feature that allows users to
 	// replicate data of same tables from TiDB-1 to TiDB-2 and vice versa.
@@ -106,6 +122,31 @@ type replicaConfig struct {
 	Mounter            *MounterConfig    `toml:"mounter" json:"mounter"`
 	Sink               *SinkConfig       `toml:"sink" json:"sink"`
 	Consistent         *ConsistentConfig `toml:"consistent" json:"consistent"`
+=======
+	// EnableSyncPoint is only available when the downstream is a Database.
+	EnableSyncPoint *bool `toml:"enable-sync-point" json:"enable-sync-point,omitempty"`
+	// IgnoreIneligibleTable is used to store the user's config when creating a changefeed.
+	// not used in the changefeed's lifecycle.
+	IgnoreIneligibleTable bool `toml:"ignore-ineligible-table" json:"ignore-ineligible-table"`
+
+	// BDR(Bidirectional Replication) is a feature that allows users to
+	// replicate data of same tables from TiDB-1 to TiDB-2 and vice versa.
+	// This feature is only available for TiDB.
+	BDRMode *bool `toml:"bdr-mode" json:"bdr-mode,omitempty"`
+	// SyncPointInterval is only available when the downstream is DB.
+	SyncPointInterval *time.Duration `toml:"sync-point-interval" json:"sync-point-interval,omitempty"`
+	// SyncPointRetention is only available when the downstream is DB.
+	SyncPointRetention *time.Duration `toml:"sync-point-retention" json:"sync-point-retention,omitempty"`
+	Filter             *FilterConfig  `toml:"filter" json:"filter"`
+	Mounter            *MounterConfig `toml:"mounter" json:"mounter"`
+	Sink               *SinkConfig    `toml:"sink" json:"sink"`
+	// Consistent is only available for DB downstream with redo feature enabled.
+	Consistent *ConsistentConfig `toml:"consistent" json:"consistent,omitempty"`
+	// Scheduler is the configuration for scheduler.
+	Scheduler *ChangefeedSchedulerConfig `toml:"scheduler" json:"scheduler"`
+	// Integrity is only available when the downstream is MQ.
+	Integrity *integrity.Config `toml:"integrity" json:"integrity"`
+>>>>>>> c601a1adb6 (pkg/config(ticdc): hide fields that are not required for specific protocols (#8836))
 }
 
 // Marshal returns the json marshal format of a ReplicationConfig
@@ -180,15 +221,17 @@ func (c *ReplicaConfig) ValidateAndAdjust(sinkURI *url.URL) error {
 	}
 
 	// check sync point config
-	if c.EnableSyncPoint {
-		if c.SyncPointInterval < minSyncPointInterval {
+	if util.GetOrZero(c.EnableSyncPoint) {
+		if c.SyncPointInterval != nil &&
+			*c.SyncPointInterval < minSyncPointInterval {
 			return cerror.ErrInvalidReplicaConfig.
 				FastGenByArgs(
 					fmt.Sprintf("The SyncPointInterval:%s must be larger than %s",
 						c.SyncPointInterval.String(),
 						minSyncPointInterval.String()))
 		}
-		if c.SyncPointRetention < minSyncPointRetention {
+		if c.SyncPointRetention != nil &&
+			*c.SyncPointRetention < minSyncPointRetention {
 			return cerror.ErrInvalidReplicaConfig.
 				FastGenByArgs(
 					fmt.Sprintf("The SyncPointRetention:%s must be larger than %s",

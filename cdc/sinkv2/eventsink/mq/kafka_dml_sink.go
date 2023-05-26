@@ -26,7 +26,12 @@ import (
 	"github.com/pingcap/tiflow/cdc/sinkv2/util"
 	"github.com/pingcap/tiflow/pkg/config"
 	cerror "github.com/pingcap/tiflow/pkg/errors"
+<<<<<<< HEAD:cdc/sinkv2/eventsink/mq/kafka_dml_sink.go
 	pkafka "github.com/pingcap/tiflow/pkg/sink/kafka"
+=======
+	"github.com/pingcap/tiflow/pkg/sink/kafka"
+	tiflowutil "github.com/pingcap/tiflow/pkg/util"
+>>>>>>> c601a1adb6 (pkg/config(ticdc): hide fields that are not required for specific protocols (#8836)):cdc/sink/dmlsink/mq/kafka_dml_sink.go
 	"go.uber.org/zap"
 )
 
@@ -72,7 +77,9 @@ func NewKafkaDMLSink(
 		return nil, cerror.WrapError(cerror.ErrKafkaNewSaramaProducer, err)
 	}
 
-	protocol, err := util.GetProtocol(replicaConfig.Sink.Protocol)
+	protocol, err := util.GetProtocol(
+		tiflowutil.GetOrZero(replicaConfig.Sink.Protocol),
+	)
 	if err != nil {
 		return nil, errors.Trace(err)
 	}
@@ -117,8 +124,17 @@ func NewKafkaDMLSink(
 		return nil, errors.Trace(err)
 	}
 
+<<<<<<< HEAD:cdc/sinkv2/eventsink/mq/kafka_dml_sink.go
 	s, err := newSink(ctx, p, topicManager, eventRouter, encoderConfig,
 		replicaConfig.Sink.EncoderConcurrency, errCh)
+=======
+	s, err := newDMLSink(
+		ctx, p, adminClient, topicManager,
+		eventRouter, encoderConfig,
+		tiflowutil.GetOrZero(replicaConfig.Sink.EncoderConcurrency),
+		errCh,
+	)
+>>>>>>> c601a1adb6 (pkg/config(ticdc): hide fields that are not required for specific protocols (#8836)):cdc/sink/dmlsink/mq/kafka_dml_sink.go
 	if err != nil {
 		return nil, errors.Trace(err)
 	}

@@ -24,6 +24,7 @@ import (
 	"github.com/pingcap/tiflow/pkg/config"
 	cerror "github.com/pingcap/tiflow/pkg/errors"
 	"github.com/pingcap/tiflow/pkg/security"
+	"github.com/pingcap/tiflow/pkg/util"
 )
 
 // EmptyResponse return empty {} to http client
@@ -158,16 +159,25 @@ type ReplicaConfig struct {
 	ForceReplicate        bool   `json:"force_replicate"`
 	IgnoreIneligibleTable bool   `json:"ignore_ineligible_table"`
 	CheckGCSafePoint      bool   `json:"check_gc_safe_point"`
-	EnableSyncPoint       bool   `json:"enable_sync_point"`
-	BDRMode               bool   `json:"bdr_mode"`
+	EnableSyncPoint       *bool  `json:"enable_sync_point,omitempty"`
+	BDRMode               *bool  `json:"bdr_mode,omitempty"`
 
-	SyncPointInterval  *JSONDuration `json:"sync_point_interval" swaggertype:"string"`
-	SyncPointRetention *JSONDuration `json:"sync_point_retention" swaggertype:"string"`
+	SyncPointInterval  *JSONDuration `json:"sync_point_interval,omitempty" swaggertype:"string"`
+	SyncPointRetention *JSONDuration `json:"sync_point_retention,omitempty" swaggertype:"string"`
 
+<<<<<<< HEAD
 	Filter     *FilterConfig     `json:"filter"`
 	Mounter    *MounterConfig    `json:"mounter"`
 	Sink       *SinkConfig       `json:"sink"`
 	Consistent *ConsistentConfig `json:"consistent"`
+=======
+	Filter     *FilterConfig              `json:"filter"`
+	Mounter    *MounterConfig             `json:"mounter"`
+	Sink       *SinkConfig                `json:"sink"`
+	Consistent *ConsistentConfig          `json:"consistent,omitempty"`
+	Scheduler  *ChangefeedSchedulerConfig `json:"scheduler"`
+	Integrity  *IntegrityConfig           `json:"integrity"`
+>>>>>>> c601a1adb6 (pkg/config(ticdc): hide fields that are not required for specific protocols (#8836))
 }
 
 // ToInternalReplicaConfig coverts *v2.ReplicaConfig into *config.ReplicaConfig
@@ -186,10 +196,10 @@ func (c *ReplicaConfig) toInternalReplicaConfigWithOriginConfig(
 	res.CheckGCSafePoint = c.CheckGCSafePoint
 	res.EnableSyncPoint = c.EnableSyncPoint
 	if c.SyncPointInterval != nil {
-		res.SyncPointInterval = c.SyncPointInterval.duration
+		res.SyncPointInterval = &c.SyncPointInterval.duration
 	}
 	if c.SyncPointRetention != nil {
-		res.SyncPointRetention = c.SyncPointRetention.duration
+		res.SyncPointRetention = &c.SyncPointRetention.duration
 	}
 	res.BDRMode = c.BDRMode
 
@@ -272,7 +282,6 @@ func (c *ReplicaConfig) toInternalReplicaConfigWithOriginConfig(
 			DispatchRules:            dispatchRules,
 			Protocol:                 c.Sink.Protocol,
 			CSVConfig:                csvConfig,
-			TxnAtomicity:             config.AtomicityLevel(c.Sink.TxnAtomicity),
 			ColumnSelectors:          columnSelectors,
 			SchemaRegistry:           c.Sink.SchemaRegistry,
 			EncoderConcurrency:       c.Sink.EncoderConcurrency,
@@ -281,6 +290,11 @@ func (c *ReplicaConfig) toInternalReplicaConfigWithOriginConfig(
 			EnablePartitionSeparator: c.Sink.EnablePartitionSeparator,
 			FileIndexWidth:           c.Sink.FileIndexWidth,
 		}
+
+		if c.Sink.TxnAtomicity != nil {
+			res.Sink.TxnAtomicity = util.AddressOf(config.AtomicityLevel(*c.Sink.TxnAtomicity))
+		}
+
 	}
 	if c.Mounter != nil {
 		res.Mounter = &config.MounterConfig{
@@ -293,6 +307,7 @@ func (c *ReplicaConfig) toInternalReplicaConfigWithOriginConfig(
 // ToAPIReplicaConfig coverts *config.ReplicaConfig into *v2.ReplicaConfig
 func ToAPIReplicaConfig(c *config.ReplicaConfig) *ReplicaConfig {
 	cloned := c.Clone()
+
 	res := &ReplicaConfig{
 		MemoryQuota:           cloned.MemoryQuota,
 		CaseSensitive:         cloned.CaseSensitive,
@@ -301,9 +316,15 @@ func ToAPIReplicaConfig(c *config.ReplicaConfig) *ReplicaConfig {
 		IgnoreIneligibleTable: false,
 		CheckGCSafePoint:      cloned.CheckGCSafePoint,
 		EnableSyncPoint:       cloned.EnableSyncPoint,
-		SyncPointInterval:     &JSONDuration{cloned.SyncPointInterval},
-		SyncPointRetention:    &JSONDuration{cloned.SyncPointRetention},
 		BDRMode:               cloned.BDRMode,
+	}
+
+	if cloned.SyncPointInterval != nil {
+		res.SyncPointInterval = &JSONDuration{*cloned.SyncPointInterval}
+	}
+
+	if cloned.SyncPointRetention != nil {
+		res.SyncPointRetention = &JSONDuration{*cloned.SyncPointRetention}
 	}
 
 	if cloned.Filter != nil {
@@ -379,12 +400,15 @@ func ToAPIReplicaConfig(c *config.ReplicaConfig) *ReplicaConfig {
 			DispatchRules:            dispatchRules,
 			CSVConfig:                csvConfig,
 			ColumnSelectors:          columnSelectors,
-			TxnAtomicity:             string(cloned.Sink.TxnAtomicity),
 			EncoderConcurrency:       cloned.Sink.EncoderConcurrency,
 			Terminator:               cloned.Sink.Terminator,
 			DateSeparator:            cloned.Sink.DateSeparator,
 			EnablePartitionSeparator: cloned.Sink.EnablePartitionSeparator,
 			FileIndexWidth:           cloned.Sink.FileIndexWidth,
+		}
+
+		if cloned.Sink.TxnAtomicity != nil {
+			res.Sink.TxnAtomicity = util.AddressOf(string(*cloned.Sink.TxnAtomicity))
 		}
 	}
 	if cloned.Consistent != nil {
@@ -415,7 +439,7 @@ type FilterConfig struct {
 	*MySQLReplicationRules
 	Rules            []string          `json:"rules,omitempty"`
 	IgnoreTxnStartTs []uint64          `json:"ignore_txn_start_ts,omitempty"`
-	EventFilters     []EventFilterRule `json:"event_filters"`
+	EventFilters     []EventFilterRule `json:"event_filters,omitempty"`
 }
 
 // MounterConfig represents mounter config for a changefeed
@@ -504,6 +528,7 @@ type Table struct {
 // SinkConfig represents sink config for a changefeed
 // This is a duplicate of config.SinkConfig
 type SinkConfig struct {
+<<<<<<< HEAD
 	Protocol                 string            `json:"protocol"`
 	SchemaRegistry           string            `json:"schema_registry"`
 	CSVConfig                *CSVConfig        `json:"csv"`
@@ -515,6 +540,25 @@ type SinkConfig struct {
 	DateSeparator            string            `json:"date_separator"`
 	EnablePartitionSeparator bool              `json:"enable_partition_separator"`
 	FileIndexWidth           int               `json:"file_index_width"`
+=======
+	Protocol                 *string             `json:"protocol,omitempty"`
+	SchemaRegistry           *string             `json:"schema_registry,omitempty"`
+	CSVConfig                *CSVConfig          `json:"csv,omitempty"`
+	DispatchRules            []*DispatchRule     `json:"dispatchers,omitempty"`
+	ColumnSelectors          []*ColumnSelector   `json:"column_selectors,omitempty"`
+	TxnAtomicity             *string             `json:"transaction_atomicity,omitempty"`
+	EncoderConcurrency       *int                `json:"encoder_concurrency,omitempty"`
+	Terminator               *string             `json:"terminator,omitempty"`
+	DateSeparator            *string             `json:"date_separator,omitempty"`
+	EnablePartitionSeparator *bool               `json:"enable_partition_separator,omitempty"`
+	FileIndexWidth           *int                `json:"file_index_width,omitempty"`
+	EnableKafkaSinkV2        *bool               `json:"enable_kafka_sink_v2,omitempty"`
+	OnlyOutputUpdatedColumns *bool               `json:"only_output_updated_columns,omitempty"`
+	SafeMode                 *bool               `json:"safe_mode,omitempty"`
+	KafkaConfig              *KafkaConfig        `json:"kafka_config,omitempty"`
+	MySQLConfig              *MySQLConfig        `json:"mysql_config,omitempty"`
+	CloudStorageConfig       *CloudStorageConfig `json:"cloud_storage_config,omitempty"`
+>>>>>>> c601a1adb6 (pkg/config(ticdc): hide fields that are not required for specific protocols (#8836))
 }
 
 // CSVConfig denotes the csv config
@@ -544,10 +588,10 @@ type ColumnSelector struct {
 // ConsistentConfig represents replication consistency config for a changefeed
 // This is a duplicate of config.ConsistentConfig
 type ConsistentConfig struct {
-	Level             string `json:"level"`
+	Level             string `json:"level,omitempty"`
 	MaxLogSize        int64  `json:"max_log_size"`
 	FlushIntervalInMs int64  `json:"flush_interval"`
-	Storage           string `json:"storage"`
+	Storage           string `json:"storage,omitempty"`
 	UseFileBackend    bool   `json:"use_file_backend"`
 }
 

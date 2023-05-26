@@ -27,7 +27,12 @@ import (
 	"github.com/pingcap/tiflow/cdc/sinkv2/util"
 	"github.com/pingcap/tiflow/pkg/config"
 	cerror "github.com/pingcap/tiflow/pkg/errors"
+<<<<<<< HEAD:cdc/sinkv2/ddlsink/mq/kafka_ddl_sink.go
 	pkafka "github.com/pingcap/tiflow/pkg/sink/kafka"
+=======
+	"github.com/pingcap/tiflow/pkg/sink/kafka"
+	cdcutil "github.com/pingcap/tiflow/pkg/util"
+>>>>>>> c601a1adb6 (pkg/config(ticdc): hide fields that are not required for specific protocols (#8836)):cdc/sink/ddlsink/mq/kafka_ddl_sink.go
 	"go.uber.org/zap"
 )
 
@@ -72,7 +77,9 @@ func NewKafkaDDLSink(
 		return nil, cerror.WrapError(cerror.ErrKafkaNewSaramaProducer, err)
 	}
 
-	protocol, err := util.GetProtocol(replicaConfig.Sink.Protocol)
+	protocol, err := util.GetProtocol(
+		cdcutil.GetOrZero(replicaConfig.Sink.Protocol),
+	)
 	if err != nil {
 		return nil, errors.Trace(err)
 	}

@@ -23,6 +23,7 @@ import (
 	"github.com/pingcap/tiflow/cdc/sink/mq/dispatcher/topic"
 	"github.com/pingcap/tiflow/pkg/config"
 	cerror "github.com/pingcap/tiflow/pkg/errors"
+	"github.com/pingcap/tiflow/pkg/util"
 	"go.uber.org/zap"
 )
 
@@ -103,7 +104,7 @@ func NewEventRouter(cfg *config.ReplicaConfig, defaultTopic string) (*EventRoute
 		}
 
 		d := getPartitionDispatcher(ruleConfig, cfg.EnableOldValue)
-		t, err := getTopicDispatcher(ruleConfig, defaultTopic, cfg.Sink.Protocol)
+		t, err := getTopicDispatcher(ruleConfig, defaultTopic, util.GetOrZero(cfg.Sink.Protocol))
 		if err != nil {
 			return nil, err
 		}

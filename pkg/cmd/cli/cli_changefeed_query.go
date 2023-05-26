@@ -42,8 +42,13 @@ type cfMeta struct {
 	CheckpointTime model.JSONTime            `json:"checkpoint_time"`
 	Engine         model.SortEngine          `json:"sort_engine,omitempty"`
 	FeedState      model.FeedState           `json:"state"`
+<<<<<<< HEAD
 	RunningError   *model.RunningError       `json:"error"`
 	ErrorHis       []int64                   `json:"error_history"`
+=======
+	RunningError   *v2.RunningError          `json:"error,omitempty"`
+	ErrorHis       []int64                   `json:"error_history,omitempty"`
+>>>>>>> c601a1adb6 (pkg/config(ticdc): hide fields that are not required for specific protocols (#8836))
 	CreatorVersion string                    `json:"creator_version"`
 	TaskStatus     []model.CaptureTaskStatus `json:"task_status,omitempty"`
 }

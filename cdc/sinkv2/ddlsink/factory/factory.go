@@ -27,6 +27,12 @@ import (
 	"github.com/pingcap/tiflow/pkg/config"
 	cerror "github.com/pingcap/tiflow/pkg/errors"
 	"github.com/pingcap/tiflow/pkg/sink"
+<<<<<<< HEAD:cdc/sinkv2/ddlsink/factory/factory.go
+=======
+	"github.com/pingcap/tiflow/pkg/sink/kafka"
+	kafkav2 "github.com/pingcap/tiflow/pkg/sink/kafka/v2"
+	"github.com/pingcap/tiflow/pkg/util"
+>>>>>>> c601a1adb6 (pkg/config(ticdc): hide fields that are not required for specific protocols (#8836)):cdc/sink/ddlsink/factory/factory.go
 )
 
 // New creates a new ddlsink.DDLEventSink by schema.
@@ -42,6 +48,13 @@ func New(
 	schema := strings.ToLower(sinkURI.Scheme)
 	switch schema {
 	case sink.KafkaScheme, sink.KafkaSSLScheme:
+<<<<<<< HEAD:cdc/sinkv2/ddlsink/factory/factory.go
+=======
+		factoryCreator := kafka.NewSaramaFactory
+		if util.GetOrZero(cfg.Sink.EnableKafkaSinkV2) {
+			factoryCreator = kafkav2.NewFactory
+		}
+>>>>>>> c601a1adb6 (pkg/config(ticdc): hide fields that are not required for specific protocols (#8836)):cdc/sink/ddlsink/factory/factory.go
 		return mq.NewKafkaDDLSink(ctx, sinkURI, cfg,
 			kafka.NewAdminClientImpl, ddlproducer.NewKafkaDDLProducer)
 	case sink.BlackHoleScheme:

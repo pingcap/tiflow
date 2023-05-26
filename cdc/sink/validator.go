@@ -37,8 +37,13 @@ func Validate(ctx context.Context, sinkURI string, cfg *config.ReplicaConfig) er
 		return err
 	}
 
+<<<<<<< HEAD:cdc/sink/validator.go
 	if cfg.BDRMode {
 		err = checkBDRMode(ctx, uri, cfg)
+=======
+	if util.GetOrZero(cfg.BDRMode) {
+		err := checkBDRMode(ctx, uri, cfg)
+>>>>>>> c601a1adb6 (pkg/config(ticdc): hide fields that are not required for specific protocols (#8836)):cdc/sink/validator/validator.go
 		if err != nil {
 			return err
 		}
@@ -71,12 +76,34 @@ func Validate(ctx context.Context, sinkURI string, cfg *config.ReplicaConfig) er
 	if err != nil {
 		return err
 	}
+<<<<<<< HEAD:cdc/sink/validator.go
 	select {
 	case err = <-errCh:
 		if err != nil {
 			return err
 		}
 	default:
+=======
+	cancel()
+	s.Close()
+
+	return nil
+}
+
+// checkSyncPointSchemeCompatibility checks if the sink scheme is compatible
+// with the syncpoint feature.
+func checkSyncPointSchemeCompatibility(
+	uri *url.URL,
+	cfg *config.ReplicaConfig,
+) error {
+	if util.GetOrZero(cfg.EnableSyncPoint) &&
+		!sink.IsMySQLCompatibleScheme(uri.Scheme) {
+		return cerror.ErrSinkURIInvalid.
+			GenWithStack(
+				"sink uri scheme is not supported with syncpoint enabled"+
+					"sink uri: %s", uri,
+			)
+>>>>>>> c601a1adb6 (pkg/config(ticdc): hide fields that are not required for specific protocols (#8836)):cdc/sink/validator/validator.go
 	}
 	return nil
 }
