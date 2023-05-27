@@ -60,7 +60,8 @@ const (
 	// maxHTTPConnection is used to limit the max concurrent connections of http server.
 	maxHTTPConnection = 1000
 	// httpConnectionTimeout is used to limit a connection max alive time of http server.
-	httpConnectionTimeout = 10 * time.Minute
+	httpConnectionTimeout           = 10 * time.Minute
+	etcdHealthCheckerErrorThreshold = 5
 )
 
 // Server is the interface for the TiCDC server
@@ -311,6 +312,8 @@ func (s *server) etcdHealthChecker(ctx context.Context) error {
 	}
 	defer pc.Close()
 
+	errorCounter := 0
+	contextTimeout := 5 * time.Second
 	for {
 		select {
 		case <-ctx.Done():
@@ -323,18 +326,36 @@ func (s *server) etcdHealthChecker(ctx context.Context) error {
 			}
 			for _, endpoint := range endpoints {
 				start := time.Now()
-				ctx, cancel := context.WithTimeout(ctx, 5*time.Second)
+				ctx, cancel := context.WithTimeout(ctx, contextTimeout)
 				if err := pc.Healthy(ctx, endpoint); err != nil {
 					log.Warn("etcd health check error, try to sync etcd cluster endpoint",
 						zap.String("endpoint", endpoint), zap.Error(err))
-					// try to sync etcd cluster endpoint
-					ctx, cancel := context.WithTimeout(ctx, 5*time.Second)
+
+					// try to sync etcd cluster endpoints
+					ctx, cancel := context.WithTimeout(ctx, contextTimeout)
 					err = s.etcdClient.GetEtcdClient().Unwrap().Sync(ctx)
 					if err != nil {
 						log.Warn("etcd sync error", zap.Error(err))
 					}
 					cancel()
+
+					// try to get captures from etcd to double check if the etcd is healthy
+					ctx, cancel = context.WithTimeout(ctx, contextTimeout)
+					_, _, err = s.etcdClient.GetCaptures(ctx)
+					if err != nil {
+						log.Warn("fail to get captures info from ectd, the etcd may unhealthy",
+							zap.Int("times", errorCounter),
+							zap.Error(err))
+						errorCounter++
+					}
+					cancel()
 				}
+
+				if errorCounter > etcdHealthCheckerErrorThreshold {
+					log.Fatal("etcd health error counter exceeds threshold, restart cdc server to recover",
+						zap.Int("errorThreshold", etcdHealthCheckerErrorThreshold), zap.Error(err))
+				}
+
 				etcdHealthCheckDuration.WithLabelValues(endpoint).
 					Observe(time.Since(start).Seconds())
 				cancel()

@@ -180,7 +180,6 @@ func (c *captureImpl) GetEtcdClient() etcd.CDCEtcdClient {
 
 // reset the capture before run it.
 func (c *captureImpl) reset(ctx context.Context) error {
-
 	lease, err := c.EtcdClient.GetEtcdClient().Grant(ctx, int64(c.config.CaptureSessionTTL))
 	if err != nil {
 		return errors.Trace(err)
@@ -287,7 +286,6 @@ func (c *captureImpl) Run(ctx context.Context) error {
 }
 
 func (c *captureImpl) run(stdCtx context.Context) error {
-
 	err := c.reset(stdCtx)
 	if err != nil {
 		log.Error("reset capture failed", zap.Error(err))
@@ -296,6 +294,7 @@ func (c *captureImpl) run(stdCtx context.Context) error {
 
 	err = c.register(stdCtx)
 	if err != nil {
+		log.Error("register capture failed", zap.Error(err))
 		return errors.Trace(err)
 	}
 	defer func() {

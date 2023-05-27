@@ -173,6 +173,9 @@ func (c *Client) Grant(
 		resp, inErr = c.cli.Grant(grantCtx, ttl)
 		return inErr
 	})
+	if err != nil {
+		log.Error("etcd grant failed", zap.Error(err))
+	}
 	return
 }
 
