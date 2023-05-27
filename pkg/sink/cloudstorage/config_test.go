@@ -21,6 +21,7 @@ import (
 
 	"github.com/aws/aws-sdk-go/aws"
 	"github.com/pingcap/tiflow/pkg/config"
+	"github.com/pingcap/tiflow/pkg/util"
 	"github.com/stretchr/testify/require"
 )
 
@@ -37,7 +38,7 @@ func TestConfigApply(t *testing.T) {
 	require.Nil(t, err)
 
 	replicaConfig := config.GetDefaultReplicaConfig()
-	replicaConfig.Sink.DateSeparator = config.DateSeparatorNone.String()
+	replicaConfig.Sink.DateSeparator = util.AddressOf(config.DateSeparatorNone.String())
 	err = replicaConfig.ValidateAndAdjust(sinkURI)
 	require.NoError(t, err)
 	cfg := NewConfig()

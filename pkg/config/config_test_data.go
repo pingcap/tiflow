@@ -22,6 +22,7 @@ const (
   "ignore-ineligible-table":false,
   "check-gc-safe-point": true,
   "enable-sync-point": false,
+  "bdr-mode": false,
   "sync-point-interval": 600000000000,
   "sync-point-retention": 86400000000000,
   "filter": {
@@ -36,6 +37,7 @@ const (
   "sink": {
     "encoder-concurrency": 16,
     "terminator": "\r\n",
+	"date-separator": "none",
     "dispatch-rules": [
       {
         "db-name": "a",
@@ -54,7 +56,9 @@ const (
       }
     ],
     "enable-partition-separator": true,
-    "protocol": "open-protocol"
+    "protocol": "open-protocol",
+	"enable-kafka-sink-v2": false,
+	"only-output-updated-columns": false
   },
   "consistent": {
     "level": "none",
@@ -176,7 +180,6 @@ const (
   },
   "sink": {
   	"encoder-concurrency": 16,
-    "dispatchers": null,
     "protocol": "open-protocol",
     "column-selectors": [
       {
@@ -189,21 +192,20 @@ const (
         ]
       }
     ],
-    "schema-registry": "",
     "csv": {
       "delimiter": ",",
       "quote": "\"",
       "null": "\\N",
       "include-commit-ts": true
     },
-    "transaction-atomicity": "",
-    "terminator": "",
     "date-separator": "month",
     "enable-partition-separator": true,
     "only-output-updated-columns": false,
     "enable-kafka-sink-v2": true,
     "only-output-updated-columns": true,
     "safe-mode": true,
+	"terminator": "\r\n",
+	"transaction-atomicity": "",
     "kafka-config": {
       "partition-num": 1,
       "replication-factor": 1,
@@ -323,7 +325,8 @@ const (
       "null": "\\N",
       "include-commit-ts": true
     },
-    "terminator": "",
+    "terminator": "\r\n",
+	"transaction-atomicity": "",
     "date-separator": "month",
     "enable-partition-separator": true,
     "only-output-updated-columns": false,
