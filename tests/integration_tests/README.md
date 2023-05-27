@@ -71,10 +71,14 @@ We recommend that you provide docker with at least 6+ cores and 8G+ memory. Of c
 
 > **Warning:**
 > These scripts and files may not work under the arm architecture,
-> and we have not tested against it.
-> Also, we currently use the PingCAP intranet address in our download scripts,
-> so if you do not have access to the PingCAP intranet you will not be able to use these scripts.
-> We will try to resolve these issues as soon as possible.
+> and we have not tested against it. We will try to resolve it as soon as possible.
+>
+> The script is designed to download necessary binaries from the PingCAP 
+> intranet by default, requiring access to the PingCAP intranet. However, 
+> if you want to download the community version, you can specify it through 
+> the `COMMUNITY` environment variable. For instance, you can use the following 
+> command as an example:
+> `BRANCH=master COMMUNITY=true VERSION=v7.0.0 START_AT="clustered_index" make kafka_docker_integration_test_with_build`
 
 1. If you want to run kafka tests,
    run `START_AT="clustered_index" make kafka_docker_integration_test_with_build`

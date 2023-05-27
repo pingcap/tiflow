@@ -51,11 +51,14 @@ func ignoreExcept(itemMap map[string]struct{}) []string {
 		config.ShardAutoIncrementIDChecking,
 		config.OnlineDDLChecking,
 		config.BinlogDBChecking,
+		config.MetaPositionChecking,
+		config.ConnNumberChecking,
 		config.TargetDBPrivilegeChecking,
-		config.LightningFreeSpaceChecking,
-		config.LightningDownstreamVersionChecking,
-		config.LightningRegionDistributionChecking,
 		config.LightningEmptyRegionChecking,
+		config.LightningRegionDistributionChecking,
+		config.LightningDownstreamVersionChecking,
+		config.LightningFreeSpaceChecking,
+		config.LightningMutexFeatureChecking,
 	}
 	ignoreCheckingItems := make([]string, 0, len(items)-len(itemMap))
 	for _, i := range items {
@@ -688,6 +691,69 @@ func TestSameTargetTableDetection(t *testing.T) {
 	mock.ExpectQuery("SHOW CREATE TABLE .*").WillReturnRows(sqlmock.NewRows([]string{"Table", "Create Table"}).AddRow(tb1, fmt.Sprintf(createTable1, tb2)))
 	_, err = RunCheckOnConfigs(context.Background(), cfgs, false)
 	require.ErrorContains(t, err, "same table name in case-insensitive")
+}
+
+func TestMetaPositionChecking(t *testing.T) {
+	cfgs := []*config.SubTaskConfig{
+		{
+			Mode:                config.ModeIncrement,
+			UseRelay:            false,
+			Meta:                nil,
+			IgnoreCheckingItems: ignoreExcept(map[string]struct{}{config.MetaPositionChecking: {}}),
+		},
+	}
+	checkHappyPath(t, func() {
+		_ = initMockDB(t)
+	}, cfgs)
+
+	cfgs = []*config.SubTaskConfig{
+		{
+			Mode:                config.ModeIncrement,
+			UseRelay:            false,
+			SyncerConfig:        config.SyncerConfig{EnableGTID: true},
+			Meta:                &config.Meta{},
+			IgnoreCheckingItems: ignoreExcept(map[string]struct{}{config.MetaPositionChecking: {}}),
+		},
+	}
+	checkHappyPath(t, func() {
+		_ = initMockDB(t)
+	}, cfgs)
+
+	cfgs = []*config.SubTaskConfig{
+		{
+			Mode:                config.ModeIncrement,
+			UseRelay:            false,
+			Meta:                &config.Meta{BinLogGTID: "938bc44f-4acc-11ed-a147-0242ac110003:1-8"},
+			IgnoreCheckingItems: ignoreExcept(map[string]struct{}{config.MetaPositionChecking: {}}),
+		},
+	}
+	checkHappyPath(t, func() {
+		_ = initMockDB(t)
+	}, cfgs)
+
+	cfgs = []*config.SubTaskConfig{
+		{
+			Mode:                config.ModeIncrement,
+			UseRelay:            true,
+			Meta:                &config.Meta{BinLogName: "mysql-bin.000001", BinLogPos: 123},
+			IgnoreCheckingItems: ignoreExcept(map[string]struct{}{config.MetaPositionChecking: {}}),
+		},
+	}
+	checkHappyPath(t, func() {
+		_ = initMockDB(t)
+	}, cfgs)
+
+	cfgs = []*config.SubTaskConfig{
+		{
+			Mode:                config.ModeAll,
+			UseRelay:            false,
+			Meta:                &config.Meta{BinLogName: "mysql-bin.000001", BinLogPos: 123},
+			IgnoreCheckingItems: ignoreExcept(map[string]struct{}{config.MetaPositionChecking: {}}),
+		},
+	}
+	checkHappyPath(t, func() {
+		_ = initMockDB(t)
+	}, cfgs)
 }
 
 func initMockDB(t *testing.T) sqlmock.Sqlmock {

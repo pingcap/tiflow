@@ -59,7 +59,7 @@ var defaultReplicaConfig = &ReplicaConfig{
 		},
 		EncoderConcurrency:       16,
 		Terminator:               CRLF,
-		DateSeparator:            DateSeparatorNone.String(),
+		DateSeparator:            DateSeparatorDay.String(),
 		EnablePartitionSeparator: true,
 		EnableKafkaSinkV2:        false,
 		TiDBSourceID:             1,
@@ -109,6 +109,9 @@ type replicaConfig struct {
 	ForceReplicate   bool   `toml:"force-replicate" json:"force-replicate"`
 	CheckGCSafePoint bool   `toml:"check-gc-safe-point" json:"check-gc-safe-point"`
 	EnableSyncPoint  bool   `toml:"enable-sync-point" json:"enable-sync-point"`
+	// IgnoreIneligibleTable is used to store the user's config when creating a changefeed.
+	// not used in the changefeed's lifecycle.
+	IgnoreIneligibleTable bool `toml:"ignore-ineligible-table" json:"ignore-ineligible-table"`
 	// BDR(Bidirectional Replication) is a feature that allows users to
 	// replicate data of same tables from TiDB-1 to TiDB-2 and vice versa.
 	// This feature is only available for TiDB.
