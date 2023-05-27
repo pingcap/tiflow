@@ -294,6 +294,7 @@ func (o *ownerImpl) Query(query *Query, done chan<- error) {
 
 // AsyncStop stops the owner asynchronously
 func (o *ownerImpl) AsyncStop() {
+	log.Info("got AsyncStop signal, owner is stopping")
 	atomic.StoreInt32(&o.closed, 1)
 	// Must be called after setting closed.
 	o.cleanupOwnerJob()

@@ -48,8 +48,6 @@ import (
 
 const cleanMetaDuration = 10 * time.Second
 
-type newEtcdClientFunc func() (etcd.CDCEtcdClient, error)
-
 // Capture represents a Capture server, it monitors the changefeed
 // information in etcd and schedules Task on it.
 type Capture interface {
@@ -118,14 +116,12 @@ type captureImpl struct {
 		liveness *model.Liveness,
 		cfg *config.SchedulerConfig,
 	) processor.Manager
-	newOwner      func(upstreamManager *upstream.Manager, cfg *config.SchedulerConfig) owner.Owner
-	newEtcdClient newEtcdClientFunc
+	newOwner func(upstreamManager *upstream.Manager, cfg *config.SchedulerConfig) owner.Owner
 }
 
 // NewCapture returns a new Capture instance
 func NewCapture(pdEndpoints []string,
 	etcdClient etcd.CDCEtcdClient,
-	newEtcdClient newEtcdClientFunc,
 	grpcService *p2p.ServerWrapper,
 	sortEngineMangerFactory *factory.SortEngineFactory,
 ) Capture {
@@ -141,7 +137,6 @@ func NewCapture(pdEndpoints []string,
 		newOwner:            owner.NewOwner,
 		info:                &model.CaptureInfo{},
 		sortEngineFactory:   sortEngineMangerFactory,
-		newEtcdClient:       newEtcdClient,
 		migrator:            migrate.NewMigrator(etcdClient, pdEndpoints, conf),
 	}
 }
@@ -180,21 +175,11 @@ func (c *captureImpl) GetUpstreamManager() (*upstream.Manager, error) {
 }
 
 func (c *captureImpl) GetEtcdClient() etcd.CDCEtcdClient {
-	c.captureMu.Lock()
-	defer c.captureMu.Unlock()
 	return c.EtcdClient
 }
 
 // reset the capture before run it.
 func (c *captureImpl) reset(ctx context.Context) error {
-	etcdClient, err := c.newEtcdClient()
-	if err != nil {
-		return errors.Trace(err)
-	}
-
-	c.captureMu.Lock()
-	c.EtcdClient = etcdClient
-	c.captureMu.Unlock()
 
 	lease, err := c.EtcdClient.GetEtcdClient().Grant(ctx, int64(c.config.CaptureSessionTTL))
 	if err != nil {

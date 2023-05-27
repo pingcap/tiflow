@@ -198,7 +198,7 @@ func (s *server) prepare(ctx context.Context) error {
 	}
 
 	s.capture = capture.NewCapture(
-		s.pdEndpoints, cdcEtcdClient, newEtcdClient, s.grpcService, s.sortEngineFactory)
+		s.pdEndpoints, cdcEtcdClient, s.grpcService, s.sortEngineFactory)
 
 	return nil
 }
@@ -334,8 +334,15 @@ func (s *server) etcdHealthChecker(ctx context.Context) error {
 				start := time.Now()
 				ctx, cancel := context.WithTimeout(ctx, 5*time.Second)
 				if err := pc.Healthy(ctx, endpoint); err != nil {
-					log.Warn("etcd health check error",
+					log.Warn("etcd health check error, try to sync etcd cluster endpoint",
 						zap.String("endpoint", endpoint), zap.Error(err))
+					// try to sync etcd cluster endpoint
+					ctx, cancel := context.WithTimeout(ctx, 5*time.Second)
+					err = s.etcdClient.GetEtcdClient().Unwrap().Sync(ctx)
+					if err != nil {
+						log.Warn("etcd sync error", zap.Error(err))
+					}
+					cancel()
 				}
 				etcdHealthCheckDuration.WithLabelValues(endpoint).
 					Observe(time.Since(start).Seconds())
