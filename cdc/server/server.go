@@ -139,50 +139,43 @@ func (s *server) prepare(ctx context.Context) error {
 	logConfig := logutil.DefaultZapLoggerConfig
 	logConfig.Level = zap.NewAtomicLevelAt(zapcore.ErrorLevel)
 
-	newEtcdClient := func() (etcd.CDCEtcdClient, error) {
-		// we do not pass a `context` to the etcd client,
-		// to prevent it's cancelled when the server is closing.
-		// For example, when the non-owner node goes offline,
-		// it would resign the campaign key which was put by call `campaign`,
-		// if this is not done due to the passed context cancelled,
-		// the key will be kept for the lease TTL, which is 10 seconds,
-		// then cause the new owner cannot be elected immediately after the old owner offline.
-		// see https://github.com/etcd-io/etcd/blob/525d53bd41/client/v3/concurrency/election.go#L98
-		etcdCli, err := clientv3.New(clientv3.Config{
-			Endpoints:        s.pdEndpoints,
-			TLS:              tlsConfig,
-			LogConfig:        &logConfig,
-			DialTimeout:      5 * time.Second,
-			AutoSyncInterval: 5 * time.Second,
-			DialOptions: []grpc.DialOption{
-				grpcTLSOption,
-				grpc.WithBlock(),
-				grpc.WithConnectParams(grpc.ConnectParams{
-					Backoff: backoff.Config{
-						BaseDelay:  time.Second,
-						Multiplier: 1.1,
-						Jitter:     0.1,
-						MaxDelay:   3 * time.Second,
-					},
-					MinConnectTimeout: 3 * time.Second,
-				}),
-			},
-		})
-		if err != nil {
-			return nil, err
-		}
-		cdcEtcdClient, err := etcd.NewCDCEtcdClient(ctx, etcdCli, conf.ClusterID)
-		if err != nil {
-			etcdCli.Close()
-			return nil, err
-		}
-		return cdcEtcdClient, nil
+	// we do not pass a `context` to the etcd client,
+	// to prevent it's cancelled when the server is closing.
+	// For example, when the non-owner node goes offline,
+	// it would resign the campaign key which was put by call `campaign`,
+	// if this is not done due to the passed context cancelled,
+	// the key will be kept for the lease TTL, which is 10 seconds,
+	// then cause the new owner cannot be elected immediately after the old owner offline.
+	// see https://github.com/etcd-io/etcd/blob/525d53bd41/client/v3/concurrency/election.go#L98
+	etcdCli, err := clientv3.New(clientv3.Config{
+		Endpoints:        s.pdEndpoints,
+		TLS:              tlsConfig,
+		LogConfig:        &logConfig,
+		DialTimeout:      5 * time.Second,
+		AutoSyncInterval: 5 * time.Second,
+		DialOptions: []grpc.DialOption{
+			grpcTLSOption,
+			grpc.WithBlock(),
+			grpc.WithConnectParams(grpc.ConnectParams{
+				Backoff: backoff.Config{
+					BaseDelay:  time.Second,
+					Multiplier: 1.1,
+					Jitter:     0.1,
+					MaxDelay:   3 * time.Second,
+				},
+				MinConnectTimeout: 3 * time.Second,
+			}),
+		},
+	})
+	if err != nil {
+		return errors.Trace(err)
+	}
+	cdcEtcdClient, err := etcd.NewCDCEtcdClient(ctx, etcdCli, conf.ClusterID)
+	if err != nil {
+		etcdCli.Close()
+		return errors.Trace(err)
 	}
 
-	cdcEtcdClient, err := newEtcdClient()
-	if err != nil {
-		return err
-	}
 	s.etcdClient = cdcEtcdClient
 
 	err = s.initDir(ctx)
@@ -367,6 +360,10 @@ func (s *server) etcdHealthChecker(ctx context.Context) error {
 }
 
 func (s *server) run(ctx context.Context) (err error) {
+	defer func() {
+		log.Info("cdc server is exited", zap.Error(err))
+	}()
+
 	ctx, cancel := context.WithCancel(ctx)
 	defer cancel()
 
