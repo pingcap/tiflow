@@ -368,7 +368,7 @@ func (c *changefeed) tick(ctx cdcContext.Context, captures map[model.CaptureID]*
 		barrier.minDDLBarrierTs = otherBarrierTs
 	}
 
-	log.Debug("owner handles barrier",
+	log.Info("owner handles barrier",
 		zap.String("namespace", c.id.Namespace),
 		zap.String("changefeed", c.id.ID),
 		zap.Uint64("checkpointTs", preCheckpointTs),
@@ -469,7 +469,7 @@ func (c *changefeed) tick(ctx cdcContext.Context, captures map[model.CaptureID]*
 			}
 		}
 	}
-	log.Debug("owner prepares to update status",
+	log.Info("owner prepares to update status",
 		zap.Uint64("prevResolvedTs", prevResolvedTs),
 		zap.Uint64("newResolvedTs", newResolvedTs),
 		zap.Uint64("newCheckpointTs", newCheckpointTs),

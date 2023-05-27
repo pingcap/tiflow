@@ -834,7 +834,7 @@ func (p *processor) updateBarrierTs(barrier *schedulepb.Barrier) {
 		// may pile up in memory, as they have to wait DDL.
 		globalBarrierTs = schemaResolvedTs
 	}
-	log.Debug("update barrierTs",
+	log.Info("update barrierTs",
 		zap.Any("tableBarriers", barrier.GetTableBarriers()),
 		zap.Uint64("globalBarrierTs", globalBarrierTs))
 
