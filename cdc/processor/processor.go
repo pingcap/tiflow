@@ -339,6 +339,17 @@ func (p *processor) GetTableSpanStatus(span tablepb.Span, collectStat bool) tabl
 	if collectStat {
 		stats = p.getStatsFromSourceManagerAndSinkManager(span, sinkStats)
 	}
+
+	if sinkStats.CheckpointTs > sinkStats.ResolvedTs {
+		log.Panic("fizz:checkpointTs must be less than or equal to resolvedTs",
+			zap.String("captureID", p.captureInfo.ID),
+			zap.String("namespace", p.changefeedID.Namespace),
+			zap.String("changefeed", p.changefeedID.ID),
+			zap.Stringer("span", &span),
+			zap.Uint64("checkpointTs", sinkStats.CheckpointTs),
+			zap.Uint64("resolvedTs", sinkStats.ResolvedTs))
+	}
+
 	return tablepb.TableStatus{
 		TableID: span.TableID,
 		Span:    span,
