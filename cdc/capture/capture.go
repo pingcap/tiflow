@@ -180,6 +180,7 @@ func (c *captureImpl) GetEtcdClient() etcd.CDCEtcdClient {
 
 // reset the capture before run it.
 func (c *captureImpl) reset(ctx context.Context) error {
+	// c.EtcdClient = etcd.NewCDCEtcdClient(ctx, c.pdEndpoints)
 	lease, err := c.EtcdClient.GetEtcdClient().Grant(ctx, int64(c.config.CaptureSessionTTL))
 	if err != nil {
 		return errors.Trace(err)

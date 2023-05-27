@@ -354,6 +354,8 @@ func (s *server) etcdHealthChecker(ctx context.Context) error {
 				if errorCounter > etcdHealthCheckerErrorThreshold {
 					log.Fatal("etcd health error counter exceeds threshold, restart cdc server to recover",
 						zap.Int("errorThreshold", etcdHealthCheckerErrorThreshold), zap.Error(err))
+					cancel()
+					return errors.Trace(err)
 				}
 
 				etcdHealthCheckDuration.WithLabelValues(endpoint).
