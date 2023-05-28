@@ -340,7 +340,7 @@ func (p *processor) GetTableSpanStatus(span tablepb.Span, collectStat bool) tabl
 		stats = p.getStatsFromSourceManagerAndSinkManager(span, sinkStats)
 	}
 
-	if sinkStats.CheckpointTs > sinkStats.ResolvedTs {
+	if sinkStats.CheckpointTs > sinkStats.ResolvedTs && sinkStats.ResolvedTs != 0 {
 		log.Panic("fizz:checkpointTs must be less than or equal to resolvedTs",
 			zap.String("captureID", p.captureInfo.ID),
 			zap.String("namespace", p.changefeedID.Namespace),

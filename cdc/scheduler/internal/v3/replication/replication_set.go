@@ -841,6 +841,7 @@ func (r *ReplicationSet) handleMoveTable(
 		return nil, nil
 	}
 	oldState := r.State
+	// 为啥是这样的？
 	r.State = ReplicationSetStatePrepare
 	err := r.setCapture(dest, RoleSecondary)
 	if err != nil {
