@@ -22,7 +22,6 @@ import (
 	timeta "github.com/pingcap/tidb/meta"
 	timodel "github.com/pingcap/tidb/parser/model"
 	"github.com/pingcap/tiflow/cdc/entry"
-	"github.com/pingcap/tiflow/cdc/entry/schema"
 	"github.com/pingcap/tiflow/cdc/kv"
 	"github.com/pingcap/tiflow/cdc/model"
 	"github.com/pingcap/tiflow/pkg/config"
@@ -131,17 +130,16 @@ func (s *schemaWrap4Owner) IsIneligibleTableID(tableID model.TableID) bool {
 	return s.GetLastSnapshot().IsIneligibleTableID(tableID)
 }
 
-// parseRenameTables gets a list of DDLEvent from a rename tables DDL job.
-func (s *schemaWrap4Owner) parseRenameTables(
-	snap *schema.Snapshot,
-	job *timodel.Job,
+// TODO: find a better way to refactor this function.
+// buildRenameEvents gets a list of DDLEvent from a rename tables DDL job.
+func (s *schemaWrap4Owner) buildRenameEvents(
+	ctx context.Context, job *timodel.Job,
 ) ([]*model.DDLEvent, error) {
 	var (
 		oldSchemaIDs, newSchemaIDs, oldTableIDs []int64
 		newTableNames, oldSchemaNames           []*timodel.CIStr
 		ddlEvents                               []*model.DDLEvent
 	)
-
 	err := job.DecodeArgs(&oldSchemaIDs, &newSchemaIDs,
 		&newTableNames, &oldTableIDs, &oldSchemaNames)
 	if err != nil {
@@ -157,8 +155,13 @@ func (s *schemaWrap4Owner) parseRenameTables(
 		return nil, cerror.ErrInvalidDDLJob.GenWithStackByArgs(job.ID)
 	}
 
+	preSnap, err := s.GetSnapshot(ctx, job.BinlogInfo.FinishedTS-1)
+	if err != nil {
+		return nil, errors.Trace(err)
+	}
+
 	for i, tableInfo := range multiTableInfos {
-		newSchema, ok := snap.SchemaByID(newSchemaIDs[i])
+		newSchema, ok := preSnap.SchemaByID(newSchemaIDs[i])
 		if !ok {
 			return nil, cerror.ErrSnapshotSchemaNotFound.GenWithStackByArgs(
 				newSchemaIDs[i])
@@ -166,16 +169,15 @@ func (s *schemaWrap4Owner) parseRenameTables(
 		newSchemaName := newSchema.Name.O
 		oldSchemaName := oldSchemaNames[i].O
 		event := new(model.DDLEvent)
-		preTableInfo, ok := snap.PhysicalTableByID(tableInfo.ID)
+		preTableInfo, ok := preSnap.PhysicalTableByID(tableInfo.ID)
 		if !ok {
 			return nil, cerror.ErrSchemaStorageTableMiss.GenWithStackByArgs(
 				job.TableID)
 		}
 
-		event.FromRenameTablesJob(job, oldSchemaName,
-			newSchemaName, preTableInfo,
-			model.WrapTableInfo(newSchemaIDs[i], newSchemaName,
-				job.BinlogInfo.FinishedTS, tableInfo))
+		tableInfo := model.WrapTableInfo(newSchemaIDs[i], newSchemaName,
+			job.BinlogInfo.FinishedTS, tableInfo)
+		event.FromJobWithArgs(job, preTableInfo, tableInfo, oldSchemaName, newSchemaName)
 		ddlEvents = append(ddlEvents, event)
 	}
 
@@ -183,43 +185,51 @@ func (s *schemaWrap4Owner) parseRenameTables(
 }
 
 // BuildDDLEvents builds ddl events from a DDL job.
-// The result contains more than one DDLEvent for a rename tables job.
 // Note: If BuildDDLEvents return (nil, nil), it means the DDL Job should be ignored.
 func (s *schemaWrap4Owner) BuildDDLEvents(
 	ctx context.Context,
 	job *timodel.Job,
-) ([]*model.DDLEvent, error) {
-	var err error
-	var preTableInfo *model.TableInfo
-	var tableInfo *model.TableInfo
-	ddlEvents := make([]*model.DDLEvent, 0)
-
-	// Note: Need to build ddl event from the snapshot before the DDL job is executed.
-	snap, err := s.GetSnapshot(ctx, job.BinlogInfo.FinishedTS-1)
-	if err != nil {
-		return nil, errors.Trace(err)
-	}
-
+) (ddlEvents []*model.DDLEvent, err error) {
 	switch job.Type {
 	case timodel.ActionRenameTables:
-		ddlEvents, err = s.parseRenameTables(snap, job)
+		// The result contains more than one DDLEvent for a rename tables job.
+		ddlEvents, err = s.buildRenameEvents(ctx, job)
 		if err != nil {
 			return nil, errors.Trace(err)
 		}
 	default:
-		event := new(model.DDLEvent)
-		preTableInfo, err = snap.PreTableInfo(job)
-		if err != nil {
-			log.Error("build DDL event fail",
-				zap.Any("job", job), zap.Error(err))
-			return nil, errors.Trace(err)
-		}
-		err = snap.FillSchemaName(job)
+		// parse preTableInfo
+		preSnap, err := s.GetSnapshot(ctx, job.BinlogInfo.FinishedTS-1)
 		if err != nil {
 			return nil, errors.Trace(err)
 		}
+		preTableInfo, err := preSnap.PreTableInfo(job)
+		if err != nil {
+			return nil, errors.Trace(err)
+		}
+
+		// parse tableInfo
+		var tableInfo *model.TableInfo
+		err = preSnap.FillSchemaName(job)
+		if err != nil {
+			log.Error("build DDL event fail", zap.Any("job", job), zap.Error(err))
+			return nil, errors.Trace(err)
+		}
+		// TODO: find a better way to refactor this. For example, drop table job should not
+		// have table info.
 		if job.BinlogInfo != nil && job.BinlogInfo.TableInfo != nil {
 			tableInfo = model.WrapTableInfo(job.SchemaID, job.SchemaName, job.BinlogInfo.FinishedTS, job.BinlogInfo.TableInfo)
+
+			// TODO: remove this after job is fixed by TiDB.
+			// ref: https://github.com/pingcap/tidb/issues/43819
+			if job.Type == timodel.ActionExchangeTablePartition {
+				oldTableInfo, ok := preSnap.PhysicalTableByID(job.BinlogInfo.TableInfo.ID)
+				if !ok {
+					return nil, cerror.ErrSchemaStorageTableMiss.GenWithStackByArgs(job.TableID)
+				}
+				tableInfo.SchemaID = oldTableInfo.SchemaID
+				tableInfo.TableName = oldTableInfo.TableName
+			}
 		} else {
 			// Just retrieve the schema name for a DDL job that does not contain TableInfo.
 			// Currently supported by cdc are: ActionCreateSchema, ActionDropSchema,
@@ -229,10 +239,14 @@ func (s *schemaWrap4Owner) BuildDDLEvents(
 				Version:   job.BinlogInfo.FinishedTS,
 			}
 		}
+		event := new(model.DDLEvent)
 		event.FromJob(job, preTableInfo, tableInfo)
 		ddlEvents = append(ddlEvents, event)
 	}
-	// filter out ddl here
+	return s.filterDDLEvents(ddlEvents)
+}
+
+func (s *schemaWrap4Owner) filterDDLEvents(ddlEvents []*model.DDLEvent) ([]*model.DDLEvent, error) {
 	res := make([]*model.DDLEvent, 0, len(ddlEvents))
 	for _, event := range ddlEvents {
 		ignored, err := s.filter.ShouldIgnoreDDLEvent(event)
