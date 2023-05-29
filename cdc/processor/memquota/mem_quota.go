@@ -14,6 +14,7 @@
 package memquota
 
 import (
+	"context"
 	"sort"
 	"sync"
 	"sync/atomic"
@@ -22,7 +23,6 @@ import (
 	"github.com/pingcap/log"
 	"github.com/pingcap/tiflow/cdc/model"
 	"github.com/pingcap/tiflow/cdc/processor/tablepb"
-	cerrors "github.com/pingcap/tiflow/pkg/errors"
 	"github.com/pingcap/tiflow/pkg/spanz"
 	"github.com/prometheus/client_golang/prometheus"
 	"go.uber.org/zap"
@@ -124,7 +124,7 @@ func (m *MemQuota) ForceAcquire(nBytes uint64) {
 func (m *MemQuota) BlockAcquire(nBytes uint64) error {
 	for {
 		if m.isClosed.Load() {
-			return cerrors.ErrFlowControllerAborted.GenWithStackByArgs()
+			return context.Canceled
 		}
 		usedBytes := m.usedBytes.Load()
 		if usedBytes+nBytes > m.totalBytes {
@@ -221,12 +221,27 @@ func (m *MemQuota) Release(span tablepb.Span, resolved model.ResolvedTs) {
 	}
 }
 
-// Clean all records of the table.
+// RemoveTable clears all records of the table and remove the table.
 // Return the cleaned memory quota.
-func (m *MemQuota) Clean(span tablepb.Span) uint64 {
+func (m *MemQuota) RemoveTable(span tablepb.Span) uint64 {
 	m.mu.Lock()
-	defer m.mu.Unlock()
+	cleaned := m.clear(span)
+	m.tableMemory.Delete(span)
+	m.mu.Unlock()
+	return cleaned
+}
 
+// ClearTable is like RemoveTable but only clear the memory usage records but doesn't
+// remove the table.
+func (m *MemQuota) ClearTable(span tablepb.Span) uint64 {
+	m.mu.Lock()
+	cleaned := m.clear(span)
+	m.tableMemory.ReplaceOrInsert(span, make([]*MemConsumeRecord, 0, 2))
+	m.mu.Unlock()
+	return cleaned
+}
+
+func (m *MemQuota) clear(span tablepb.Span) uint64 {
 	if _, ok := m.tableMemory.Get(span); !ok {
 		// This can happen when the table has no data and never been recorded.
 		log.Warn("Table consumed memory records not found",
@@ -241,7 +256,6 @@ func (m *MemQuota) Clean(span tablepb.Span) uint64 {
 	for _, record := range records {
 		cleaned += record.Size
 	}
-	m.tableMemory.Delete(span)
 
 	if m.usedBytes.Add(^(cleaned - 1)) < m.totalBytes {
 		m.blockAcquireCond.Broadcast()
