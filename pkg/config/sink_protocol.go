@@ -47,7 +47,7 @@ func (p Protocol) IsBatchEncode() bool {
 
 // ShouldSplitUpdate returns whether the protocol should split update event
 // Avro and CSV does not output the old value for the update event in all scenarios
-// so need to split the update event into delete and insert event to prevent
+// so update events need to be split into delete and insert events to prevent old value from being discarded.
 // that the old value is lost.
 func (p Protocol) ShouldSplitUpdate() bool {
 	switch p {
