@@ -26,6 +26,7 @@ import (
 	"github.com/pingcap/tiflow/pkg/config"
 	cerror "github.com/pingcap/tiflow/pkg/errors"
 	"github.com/pingcap/tiflow/pkg/sink/kafka"
+	tiflowutil "github.com/pingcap/tiflow/pkg/util"
 	"go.uber.org/zap"
 )
 
@@ -72,7 +73,9 @@ func NewKafkaDMLSink(
 		return nil, cerror.WrapError(cerror.ErrKafkaNewProducer, err)
 	}
 
-	protocol, err := util.GetProtocol(replicaConfig.Sink.Protocol)
+	protocol, err := util.GetProtocol(
+		tiflowutil.GetOrZero(replicaConfig.Sink.Protocol),
+	)
 	if err != nil {
 		return nil, errors.Trace(err)
 	}
@@ -112,8 +115,12 @@ func NewKafkaDMLSink(
 		return nil, errors.Trace(err)
 	}
 
-	s, err := newDMLSink(ctx, p, adminClient, topicManager, eventRouter, encoderConfig,
-		replicaConfig.Sink.EncoderConcurrency, errCh)
+	s, err := newDMLSink(
+		ctx, p, adminClient, topicManager,
+		eventRouter, encoderConfig,
+		tiflowutil.GetOrZero(replicaConfig.Sink.EncoderConcurrency),
+		errCh,
+	)
 	if err != nil {
 		return nil, errors.Trace(err)
 	}

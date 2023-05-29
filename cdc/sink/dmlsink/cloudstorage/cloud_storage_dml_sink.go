@@ -110,7 +110,9 @@ func NewDMLSink(ctx context.Context,
 	}
 
 	// fetch protocol from replicaConfig defined by changefeed config file.
-	protocol, err := util.GetProtocol(replicaConfig.Sink.Protocol)
+	protocol, err := util.GetProtocol(
+		putil.GetOrZero(replicaConfig.Sink.Protocol),
+	)
 	if err != nil {
 		return nil, errors.Trace(err)
 	}

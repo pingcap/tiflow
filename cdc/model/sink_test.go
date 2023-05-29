@@ -184,7 +184,7 @@ func TestDDLEventFromJob(t *testing.T) {
 	require.Nil(t, event.PreTableInfo)
 }
 
-func TestDDLEventFromRenameTablesJob(t *testing.T) {
+func TestRenameTables(t *testing.T) {
 	ft := types.NewFieldType(mysql.TypeUnspecified)
 	ft.SetFlag(mysql.PriKeyFlag | mysql.UniqueFlag)
 	job := &timodel.Job{
@@ -266,7 +266,7 @@ func TestDDLEventFromRenameTablesJob(t *testing.T) {
 	}
 
 	event := &DDLEvent{}
-	event.FromRenameTablesJob(job, "test1", "test1", preTableInfo, tableInfo)
+	event.FromJobWithArgs(job, preTableInfo, tableInfo, "test1", "test1")
 	require.Equal(t, event.PreTableInfo.TableName.TableID, int64(67))
 	require.Equal(t, event.PreTableInfo.TableName.Table, "t1")
 	require.Len(t, event.PreTableInfo.TableInfo.Columns, 1)
@@ -274,6 +274,7 @@ func TestDDLEventFromRenameTablesJob(t *testing.T) {
 	require.Equal(t, event.TableInfo.TableName.Table, "t10")
 	require.Len(t, event.TableInfo.TableInfo.Columns, 1)
 	require.Equal(t, event.Query, "RENAME TABLE `test1`.`t1` TO `test1`.`t10`")
+	require.Equal(t, event.Type, timodel.ActionRenameTable)
 
 	preTableInfo = &TableInfo{
 		TableName: TableName{
@@ -316,7 +317,7 @@ func TestDDLEventFromRenameTablesJob(t *testing.T) {
 	}
 
 	event = &DDLEvent{}
-	event.FromRenameTablesJob(job, "test1", "test1", preTableInfo, tableInfo)
+	event.FromJobWithArgs(job, preTableInfo, tableInfo, "test1", "test1")
 	require.Equal(t, event.PreTableInfo.TableName.TableID, int64(69))
 	require.Equal(t, event.PreTableInfo.TableName.Table, "t2")
 	require.Len(t, event.PreTableInfo.TableInfo.Columns, 1)
@@ -324,4 +325,74 @@ func TestDDLEventFromRenameTablesJob(t *testing.T) {
 	require.Equal(t, event.TableInfo.TableName.Table, "t20")
 	require.Len(t, event.TableInfo.TableInfo.Columns, 1)
 	require.Equal(t, event.Query, "RENAME TABLE `test1`.`t2` TO `test1`.`t20`")
+	require.Equal(t, event.Type, timodel.ActionRenameTable)
+}
+
+func TestExchangeTablePartition(t *testing.T) {
+	ft := types.NewFieldType(mysql.TypeUnspecified)
+	ft.SetFlag(mysql.PriKeyFlag | mysql.UniqueFlag)
+	job := &timodel.Job{
+		ID:         71,
+		TableID:    69,
+		SchemaName: "test1",
+		Type:       timodel.ActionExchangeTablePartition,
+		StartTS:    432853521879007233,
+		Query:      "alter table t1 exchange partition p0 with table t2",
+		BinlogInfo: &timodel.HistoryInfo{
+			FinishedTS: 432853521879007238,
+		},
+	}
+
+	// source table
+	preTableInfo := &TableInfo{
+		TableName: TableName{
+			Schema:  "test2",
+			Table:   "t2",
+			TableID: 67,
+		},
+		TableInfo: &timodel.TableInfo{
+			ID:   67,
+			Name: timodel.CIStr{O: "t1"},
+			Columns: []*timodel.ColumnInfo{
+				{
+					ID:        1,
+					Name:      timodel.CIStr{O: "id"},
+					FieldType: *ft,
+					State:     timodel.StatePublic,
+				},
+			},
+		},
+	}
+
+	// target table
+	tableInfo := &TableInfo{
+		TableName: TableName{
+			Schema:  "test1",
+			Table:   "t1",
+			TableID: 69,
+		},
+		TableInfo: &timodel.TableInfo{
+			ID:   69,
+			Name: timodel.CIStr{O: "t10"},
+			Columns: []*timodel.ColumnInfo{
+				{
+					ID:        1,
+					Name:      timodel.CIStr{O: "id"},
+					FieldType: *ft,
+					State:     timodel.StatePublic,
+				},
+			},
+		},
+	}
+
+	event := &DDLEvent{}
+	event.FromJob(job, preTableInfo, tableInfo)
+	require.Equal(t, event.PreTableInfo.TableName.TableID, int64(67))
+	require.Equal(t, event.PreTableInfo.TableName.Table, "t2")
+	require.Len(t, event.PreTableInfo.TableInfo.Columns, 1)
+	require.Equal(t, event.TableInfo.TableName.TableID, int64(69))
+	require.Equal(t, event.TableInfo.TableName.Table, "t1")
+	require.Len(t, event.TableInfo.TableInfo.Columns, 1)
+	require.Equal(t, "ALTER TABLE `test1`.`t1` EXCHANGE PARTITION `p0` WITH TABLE `test2`.`t2`", event.Query)
+	require.Equal(t, event.Type, timodel.ActionExchangeTablePartition)
 }

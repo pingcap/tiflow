@@ -34,6 +34,7 @@ import (
 	"github.com/pingcap/tiflow/pkg/filter"
 	"github.com/pingcap/tiflow/pkg/security"
 	"github.com/pingcap/tiflow/pkg/txnutil/gc"
+	"github.com/pingcap/tiflow/pkg/util"
 	"github.com/pingcap/tiflow/pkg/version"
 	"github.com/r3labs/diff"
 	"github.com/tikv/client-go/v2/oracle"
@@ -213,14 +214,18 @@ func (APIV2HelpersImpl) verifyCreateChangefeedConfig(
 
 		protocol := sinkURIParsed.Query().Get(config.ProtocolKey)
 		if protocol != "" {
-			replicaCfg.Sink.Protocol = protocol
+			replicaCfg.Sink.Protocol = util.AddressOf(protocol)
 		}
 		for _, fp := range config.ForceEnableOldValueProtocols {
-			if replicaCfg.Sink.Protocol == fp {
+			if util.GetOrZero(replicaCfg.Sink.Protocol) == fp {
 				log.Warn(
 					"Attempting to replicate without old value enabled. "+
 						"CDC will enable old value and continue.",
-					zap.String("protocol", replicaCfg.Sink.Protocol))
+					zap.String(
+						"protocol",
+						util.GetOrZero(replicaCfg.Sink.Protocol),
+					),
+				)
 				replicaCfg.EnableOldValue = true
 				break
 			}

@@ -19,6 +19,7 @@ import (
 
 	"github.com/pingcap/tiflow/cdc/model"
 	"github.com/pingcap/tiflow/pkg/config"
+	"github.com/pingcap/tiflow/pkg/util"
 	"github.com/stretchr/testify/require"
 )
 
@@ -39,7 +40,7 @@ func TestVerifyUpdateChangefeedConfig(t *testing.T) {
 	// test no change error
 	changefeedConfig = model.ChangefeedConfig{SinkURI: "blackhole://"}
 	oldInfo.SinkURI = "blackhole://"
-	oldInfo.Config.Sink.TxnAtomicity = "none"
+	oldInfo.Config.Sink.TxnAtomicity = util.AddressOf(config.AtomicityLevel("none"))
 	newInfo, err = VerifyUpdateChangefeedConfig(ctx, changefeedConfig, oldInfo)
 	require.NotNil(t, err)
 	require.Regexp(t, ".*changefeed config is the same with the old one.*", err)

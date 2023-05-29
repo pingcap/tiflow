@@ -24,6 +24,7 @@ import (
 	"github.com/pingcap/log"
 	v2 "github.com/pingcap/tiflow/cdc/api/v2"
 	"github.com/pingcap/tiflow/pkg/config"
+	putil "github.com/pingcap/tiflow/pkg/util"
 	"github.com/stretchr/testify/require"
 )
 
@@ -70,11 +71,13 @@ func TestApplyChanges(t *testing.T) {
 
 	// Test schema registry update
 	oldInfo = &v2.ChangeFeedInfo{Config: v2.ToAPIReplicaConfig(config.GetDefaultReplicaConfig())}
-	require.Equal(t, "", oldInfo.Config.Sink.SchemaRegistry)
+	require.True(t, oldInfo.Config.Sink.SchemaRegistry == nil)
 	require.Nil(t, cmd.ParseFlags([]string{"--schema-registry=https://username:password@localhost:8081"}))
 	newInfo, err = o.applyChanges(oldInfo, cmd)
 	require.Nil(t, err)
-	require.Equal(t, "https://username:password@localhost:8081", newInfo.Config.Sink.SchemaRegistry)
+	require.Equal(t,
+		putil.AddressOf("https://username:password@localhost:8081"),
+		newInfo.Config.Sink.SchemaRegistry)
 }
 
 func initTestLogger(filename string) (func(), error) {
