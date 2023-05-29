@@ -243,7 +243,14 @@ func TestMemQuotaRecordAndClean(t *testing.T) {
 	require.False(t, m.hasAvailable(1))
 
 	// clean the all memory.
+<<<<<<< HEAD
 	cleanedBytes := m.Clean(1)
+=======
+	cleanedBytes := m.ClearTable(span)
+>>>>>>> bbdcc9ba9f (sink(cdc): clear memquota when restart a table sink (#9091))
 	require.Equal(t, uint64(300), cleanedBytes)
 	require.True(t, m.hasAvailable(100))
+
+	cleanedBytes = m.RemoveTable(span)
+	require.Equal(t, uint64(0), cleanedBytes)
 }

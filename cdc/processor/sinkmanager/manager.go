@@ -755,6 +755,7 @@ func (m *SinkManager) AsyncStopTable(tableID model.TableID) {
 		log.Info("Async stop table sink",
 			zap.String("namespace", m.changefeedID.Namespace),
 			zap.String("changefeed", m.changefeedID.ID),
+<<<<<<< HEAD
 			zap.Int64("tableID", tableID),
 		)
 		tableSink, ok := m.tableSinks.Load(tableID)
@@ -769,6 +770,13 @@ func (m *SinkManager) AsyncStopTable(tableID model.TableID) {
 		tableSink.(*tableSinkWrapper).close()
 		cleanedBytes := m.sinkMemQuota.Clean(tableID)
 		cleanedBytes += m.redoMemQuota.Clean(tableID)
+=======
+			zap.Stringer("span", &span))
+	}
+	if tableSink.(*tableSinkWrapper).asyncClose() {
+		cleanedBytes := m.sinkMemQuota.RemoveTable(span)
+		cleanedBytes += m.redoMemQuota.RemoveTable(span)
+>>>>>>> bbdcc9ba9f (sink(cdc): clear memquota when restart a table sink (#9091))
 		log.Debug("MemoryQuotaTracing: Clean up memory quota for table sink task when removing table",
 			zap.String("namespace", m.changefeedID.Namespace),
 			zap.String("changefeed", m.changefeedID.ID),
@@ -835,7 +843,25 @@ func (m *SinkManager) GetTableState(tableID model.TableID) (tablepb.TableState, 
 			zap.Int64("tableID", tableID))
 		return tablepb.TableStateAbsent, false
 	}
+<<<<<<< HEAD
 	return tableSink.(*tableSinkWrapper).getState(), true
+=======
+
+	// NOTE(qupeng): I'm not sure whether `SinkManager.AsyncStopTable` will be called
+	// again or not if it returns false. So we must retry `tableSink.asyncClose` here
+	// if necessary. It's better to remove the dirty logic in the future.
+	tableSink := wrapper.(*tableSinkWrapper)
+	if tableSink.getState() == tablepb.TableStateStopping && tableSink.asyncClose() {
+		cleanedBytes := m.sinkMemQuota.RemoveTable(span)
+		cleanedBytes += m.redoMemQuota.RemoveTable(span)
+		log.Debug("MemoryQuotaTracing: Clean up memory quota for table sink task when removing table",
+			zap.String("namespace", m.changefeedID.Namespace),
+			zap.String("changefeed", m.changefeedID.ID),
+			zap.Stringer("span", &span),
+			zap.Uint64("memory", cleanedBytes))
+	}
+	return tableSink.getState(), true
+>>>>>>> bbdcc9ba9f (sink(cdc): clear memquota when restart a table sink (#9091))
 }
 
 // GetTableStats returns the state of the table.
