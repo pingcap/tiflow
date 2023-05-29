@@ -228,10 +228,6 @@ func (m *MemQuota) RemoveTable(span tablepb.Span) uint64 {
 	cleaned := m.clear(span)
 	m.tableMemory.Delete(span)
 	m.mu.Unlock()
-
-	if m.usedBytes.Add(^(cleaned - 1)) < m.totalBytes {
-		m.blockAcquireCond.Broadcast()
-	}
 	return cleaned
 }
 
@@ -242,10 +238,6 @@ func (m *MemQuota) ClearTable(span tablepb.Span) uint64 {
 	cleaned := m.clear(span)
 	m.tableMemory.ReplaceOrInsert(span, make([]*MemConsumeRecord, 0, 2))
 	m.mu.Unlock()
-
-	if m.usedBytes.Add(^(cleaned - 1)) < m.totalBytes {
-		m.blockAcquireCond.Broadcast()
-	}
 	return cleaned
 }
 
@@ -263,6 +255,10 @@ func (m *MemQuota) clear(span tablepb.Span) uint64 {
 	records := m.tableMemory.GetV(span)
 	for _, record := range records {
 		cleaned += record.Size
+	}
+
+	if m.usedBytes.Add(^(cleaned - 1)) < m.totalBytes {
+		m.blockAcquireCond.Broadcast()
 	}
 	return cleaned
 }
