@@ -136,6 +136,27 @@ type replicaConfig struct {
 	Integrity *integrity.Config `toml:"integrity" json:"integrity"`
 }
 
+// ShouldSplitUpdate turn true in the following cases:
+// 1. enableOldValue is set to false by user manually
+// 2. Kafka or storage sink with avro or csv encoding protocol.
+func (c *ReplicaConfig) ShouldSplitUpdate() bool {
+	if !c.EnableOldValue {
+		log.Warn("enable-old-value is set to false, TiCDC will split the update event into delete and insert events",
+			zap.Bool("enableOldValue", c.EnableOldValue))
+		return true
+	}
+
+	// if the downstream is DB, `c.sink.Protocol` is nil, protocol is ProtocolUnknown, returns false here.
+	// the error can only be ErrSinkUnknownProtocol and can be ignored
+	protocol, _ := ParseSinkProtocolFromString(util.GetOrZero(c.Sink.Protocol))
+	if protocol.ShouldSplitUpdate() {
+		log.Warn("update event will be split into delete and insert events, by the user specified encoding protocol",
+			zap.String("protocol", protocol.String()))
+		return true
+	}
+	return false
+}
+
 // Marshal returns the json marshal format of a ReplicationConfig
 func (c *ReplicaConfig) Marshal() (string, error) {
 	cfg, err := json.Marshal(c)

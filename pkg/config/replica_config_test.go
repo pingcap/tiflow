@@ -214,6 +214,28 @@ func TestReplicaConfigValidate(t *testing.T) {
 	require.Equal(t, uint64(1024), conf.MemoryQuota)
 }
 
+func TestReplicaConfigShouldSplitUpdate(t *testing.T) {
+	t.Parallel()
+
+	// default to true, and no protocol specified, should return false.
+	config := GetDefaultReplicaConfig()
+	require.False(t, config.ShouldSplitUpdate())
+
+	config.Sink.Protocol = util.AddressOf("avro")
+	require.True(t, config.ShouldSplitUpdate())
+
+	config.Sink.Protocol = util.AddressOf("csv")
+	require.True(t, config.ShouldSplitUpdate())
+
+	config.Sink.Protocol = util.AddressOf("canal-json")
+	require.False(t, config.ShouldSplitUpdate())
+
+	// enable old value is manually set to false, should return true,
+	// no matter sink type or the protocol
+	config.EnableOldValue = false
+	require.True(t, config.ShouldSplitUpdate())
+}
+
 func TestValidateAndAdjust(t *testing.T) {
 	cfg := GetDefaultReplicaConfig()
 

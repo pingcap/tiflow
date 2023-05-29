@@ -32,7 +32,6 @@ import (
 	"github.com/pingcap/tiflow/cdc/sink/dmlsink/factory"
 	tablesinkmetrics "github.com/pingcap/tiflow/cdc/sink/metrics/tablesink"
 	"github.com/pingcap/tiflow/cdc/sink/tablesink"
-	"github.com/pingcap/tiflow/pkg/config"
 	cerror "github.com/pingcap/tiflow/pkg/errors"
 	"github.com/pingcap/tiflow/pkg/spanz"
 	"github.com/pingcap/tiflow/pkg/upstream"
@@ -186,12 +185,7 @@ func (m *SinkManager) Run(ctx context.Context, warnings ...chan<- error) (err er
 	}()
 
 	splitTxn := util.GetOrZero(m.changefeedInfo.Config.Sink.TxnAtomicity).ShouldSplitTxn()
-
-	var shouldSplitUpdate bool
-	protocol, _ := config.ParseSinkProtocolFromString(util.GetOrZero(m.changefeedInfo.Config.Sink.Protocol))
-	if !m.changefeedInfo.Config.EnableOldValue || protocol.ShouldSplitUpdate() {
-		shouldSplitUpdate = true
-	}
+	shouldSplitUpdate := m.changefeedInfo.Config.ShouldSplitUpdate()
 
 	gcErrors := make(chan error, 16)
 	sinkFactoryErrors := make(chan error, 16)
@@ -281,7 +275,7 @@ func (m *SinkManager) Run(ctx context.Context, warnings ...chan<- error) (err er
 		} else {
 			return errors.Trace(err)
 		}
-		// Use a 5 second backoff when re-establishing internal resources.
+		// Use a 5 seconds backoff when re-establishing internal resources.
 		if err = util.Hang(m.managerCtx, 5*time.Second); err != nil {
 			return errors.Trace(err)
 		}
