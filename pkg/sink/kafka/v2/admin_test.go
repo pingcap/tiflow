@@ -208,6 +208,12 @@ func TestGetTopicMeta(t *testing.T) {
 					Partitions: []kafka.Partition{
 						{}, {}, // 2 partitions
 					},
+				},
+				{
+					Name: "topic-2",
+					Partitions: []kafka.Partition{
+						{}, {}, // 2 partitions
+					},
 					Error: errors.New("topic error found"),
 				},
 			},
@@ -217,7 +223,7 @@ func TestGetTopicMeta(t *testing.T) {
 	require.NoError(t, err)
 	require.Len(t, result, 1)
 	require.Equal(t, "topic-1", result[targetTopic].Name)
-	require.Equal(t, int32(2), result["topic-1"].NumPartitions)
+	require.Equal(t, int32(2), result[targetTopic].NumPartitions)
 
 	// not ignore topic error
 	result, err = admin.GetTopicsMeta(ctx, []string{targetTopic}, false)
