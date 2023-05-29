@@ -15,7 +15,7 @@ fi
 echo 'Starting schema registry...'
 ./bin/bin/schema-registry-start -daemon ./bin/etc/schema-registry/schema-registry.properties
 i=0
-while ! curl -o /dev/null -v -s "http://127.0.0.1:8081"; do
+while ! curl -o /dev/null -v -s "http://127.0.0.1:8088"; do
 	i=$(($i + 1))
 	if [ $i -gt 30 ]; then
 		echo 'Failed to start schema registry'
@@ -32,7 +32,7 @@ echo "show the bin/logs directory"
 ls -al bin/logs
 echo "----------------------"
 
-echo "cat the bin/logs/schema-registry.log"
+echo "cat the bin/logs/schemaRegistry.out"
 cat bin/logs/schemaRegistry.out
 
 sleep 5
@@ -52,7 +52,7 @@ function run() {
 	cd $WORK_DIR
 
 	# adjust schema registry compatibility level to the none, to allow the schema evolution caused by the TiDB DDL execution.
-	curl -X PUT -H "Content-Type: application/vnd.schemaregistry.v1+json" --data '{"compatibility": "NONE"}' http://127.0.0.1:8081/config
+	curl -X PUT -H "Content-Type: application/vnd.schemaregistry.v1+json" --data '{"compatibility": "NONE"}' http://127.0.0.1:8088/config
 
 	# upstream tidb cluster enable row level checksum
 	run_sql "set global tidb_enable_row_level_checksum=true" ${UP_TIDB_HOST} ${UP_TIDB_PORT}
@@ -65,9 +65,9 @@ function run() {
 
 	SINK_URI="kafka://127.0.0.1:9092/$TOPIC_NAME?protocol=avro&enable-tidb-extension=true&avro-enable-watermark=true&avro-decimal-handling-mode=string&avro-bigint-unsigned-handling-mode=string"
 
-	run_cdc_cli changefeed create --start-ts=$start_ts --sink-uri="$SINK_URI" --config="$CUR/conf/changefeed.toml" --schema-registry=http://127.0.0.1:8081
+	run_cdc_cli changefeed create --start-ts=$start_ts --sink-uri="$SINK_URI" --config="$CUR/conf/changefeed.toml" --schema-registry=http://127.0.0.1:8088
 
-	run_kafka_consumer $WORK_DIR "kafka://127.0.0.1:9092/$TOPIC_NAME?protocol=avro&enable-tidb-extension=true&enable-row-checksum=true" "" "http://127.0.0.1:8081"
+	run_kafka_consumer $WORK_DIR "kafka://127.0.0.1:9092/$TOPIC_NAME?protocol=avro&enable-tidb-extension=true&enable-row-checksum=true" "" "http://127.0.0.1:8088"
 
 	run_sql_file $CUR/data/data.sql ${UP_TIDB_HOST} ${UP_TIDB_PORT}
 
