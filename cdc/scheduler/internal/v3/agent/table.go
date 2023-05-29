@@ -74,6 +74,11 @@ func (t *tableSpan) getTableSpanStatus(collectStat bool) tablepb.TableStatus {
 }
 
 func newAddTableResponseMessage(status tablepb.TableStatus) *schedulepb.Message {
+	if status.Checkpoint.ResolvedTs < status.Checkpoint.CheckpointTs {
+		log.Panic("schedulerv3: resolved ts should not less than checkpoint ts",
+			zap.Any("checkpoint", status.Checkpoint.CheckpointTs),
+			zap.Any("resolved", status.Checkpoint.ResolvedTs))
+	}
 	return &schedulepb.Message{
 		MsgType: schedulepb.MsgDispatchTableResponse,
 		DispatchTableResponse: &schedulepb.DispatchTableResponse{
@@ -88,6 +93,16 @@ func newAddTableResponseMessage(status tablepb.TableStatus) *schedulepb.Message 
 }
 
 func newRemoveTableResponseMessage(status tablepb.TableStatus) *schedulepb.Message {
+	if status.Checkpoint.ResolvedTs < status.Checkpoint.CheckpointTs {
+		if status.Checkpoint.ResolvedTs == 0 {
+			// Advance resolved ts to checkpoint ts if table is removed.
+			status.Checkpoint.ResolvedTs = status.Checkpoint.CheckpointTs
+		} else {
+			log.Panic("schedulerv3: resolved ts should not less than checkpoint ts",
+				zap.Any("checkpoint", status.Checkpoint.CheckpointTs),
+				zap.Any("resolved", status.Checkpoint.ResolvedTs))
+		}
+	}
 	message := &schedulepb.Message{
 		MsgType: schedulepb.MsgDispatchTableResponse,
 		DispatchTableResponse: &schedulepb.DispatchTableResponse{
