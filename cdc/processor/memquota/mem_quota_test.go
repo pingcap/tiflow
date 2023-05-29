@@ -250,7 +250,10 @@ func TestMemQuotaRecordAndClean(t *testing.T) {
 	require.False(t, m.hasAvailable(1))
 
 	// clean the all memory.
-	cleanedBytes := m.Clean(span)
+	cleanedBytes := m.ClearTable(span)
 	require.Equal(t, uint64(300), cleanedBytes)
 	require.True(t, m.hasAvailable(100))
+
+	cleanedBytes = m.RemoveTable(span)
+	require.Equal(t, uint64(0), cleanedBytes)
 }
