@@ -24,21 +24,6 @@ while ! curl -o /dev/null -v -s "http://127.0.0.1:8088"; do
 	sleep 2
 done
 
-echo "show the bin/etc/schema-registry directory"
-ls -al bin/etc/schema-registry
-echo "----------------------"
-
-echo "show the bin/logs directory"
-ls -al bin/logs
-echo "----------------------"
-
-echo "cat the bin/logs/schemaRegistry.out"
-cat bin/logs/schemaRegistry.out
-
-sleep 5
-mv bin/logs/* /tmp/tidb_cdc_test/
-
-
 # use kafka-consumer with avro decoder to sync data from kafka to mysql
 function run() {
 	if [ "$SINK_TYPE" != "kafka" ]; then
