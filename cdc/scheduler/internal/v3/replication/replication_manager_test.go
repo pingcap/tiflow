@@ -522,7 +522,10 @@ func TestReplicationManagerBurstBalanceMoveTables(t *testing.T) {
 				AddTable: &schedulepb.AddTableRequest{
 					Span:        span2,
 					IsSecondary: true,
-					Checkpoint:  tablepb.Checkpoint{CheckpointTs: 1},
+					Checkpoint: tablepb.Checkpoint{
+						CheckpointTs: 1,
+						ResolvedTs:   1,
+					},
 				},
 			},
 		},
