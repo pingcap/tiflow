@@ -303,6 +303,30 @@ func (w *sinkWorker) handleTask(ctx context.Context, task *sinkTask) (finalErr e
 		if finalErr == nil {
 			// Otherwise we can't ensure all events before `lastPos` are emitted.
 			task.callback(lastPos)
+		} else {
+			switch errors.Cause(finalErr).(type) {
+			// If it's a warning, close the table sink and wait all pending
+			// events have been reported. Then we can continue the table
+			// at the checkpoint position.
+			case tablesink.SinkInternalError:
+				task.tableSink.clearTableSink()
+				// After the table sink is cleared all pending events are sent out or dropped.
+				// So we can re-add the table into sinkMemQuota.
+				w.sinkMemQuota.ClearTable(task.tableSink.tableID)
+
+				// Restart the table sink based on the checkpoint position.
+				if finalErr = task.tableSink.restart(ctx); finalErr == nil {
+					ckpt := task.tableSink.getCheckpointTs().ResolvedMark()
+					lastWrittenPos := engine.Position{StartTs: ckpt - 1, CommitTs: ckpt}
+					task.callback(lastWrittenPos)
+					log.Info("table sink has been restarted",
+						zap.String("namespace", w.changefeedID.Namespace),
+						zap.String("changefeed", w.changefeedID.ID),
+						zap.Int64("tableID", task.tableID),
+						zap.Any("lastWrittenPos", lastWrittenPos))
+				}
+			default:
+			}
 		}
 
 		// The task is finished and some required memory isn't used.
