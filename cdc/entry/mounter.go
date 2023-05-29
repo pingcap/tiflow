@@ -30,6 +30,7 @@ import (
 	"github.com/pingcap/tidb/table"
 	"github.com/pingcap/tidb/tablecodec"
 	"github.com/pingcap/tidb/types"
+	"github.com/pingcap/tidb/util/rowcodec"
 	"github.com/pingcap/tiflow/cdc/model"
 	cerror "github.com/pingcap/tiflow/pkg/errors"
 	pfilter "github.com/pingcap/tiflow/pkg/filter"
@@ -269,11 +270,18 @@ func parseJob(v []byte, startTs, CRTs uint64) (*timodel.Job, error) {
 	return job, nil
 }
 
-func datum2Column(tableInfo *model.TableInfo, datums map[int64]types.Datum, fillWithDefaultValue bool) ([]*model.Column, []types.Datum, error) {
+func datum2Column(
+	tableInfo *model.TableInfo, datums map[int64]types.Datum, fillWithDefaultValue bool,
+) ([]*model.Column, []types.Datum, []rowcodec.ColInfo, error) {
 	cols := make([]*model.Column, len(tableInfo.RowColumnsOffset))
 	rawCols := make([]types.Datum, len(tableInfo.RowColumnsOffset))
-	for _, colInfo := range tableInfo.Columns {
-		colSize := 0
+
+	// columnInfos and rowColumnInfos hold different column metadata,
+	// they should have the same length and order.
+	rowColumnInfos := make([]rowcodec.ColInfo, len(tableInfo.RowColumnsOffset))
+	_, _, extendColumnInfos := tableInfo.GetRowColInfos()
+
+	for idx, colInfo := range tableInfo.Columns {
 		if !model.IsColCDCVisible(colInfo) {
 			log.Debug("skip the column which is not visible",
 				zap.String("table", tableInfo.Name.O), zap.String("column", colInfo.Name.O))
@@ -296,15 +304,15 @@ func datum2Column(tableInfo *model.TableInfo, datums map[int64]types.Datum, fill
 			colDatums, colValue, size, warn, err = getDefaultOrZeroValue(colInfo)
 		}
 		if err != nil {
-			return nil, nil, errors.Trace(err)
+			return nil, nil, nil, errors.Trace(err)
 		}
 		if warn != "" {
 			log.Warn(warn, zap.String("table", tableInfo.TableName.String()), zap.String("column", colInfo.Name.String()))
 		}
 		defaultValue := getDDLDefaultDefinition(colInfo)
-		colSize += size
-		rawCols[tableInfo.RowColumnsOffset[colInfo.ID]] = colDatums
-		cols[tableInfo.RowColumnsOffset[colInfo.ID]] = &model.Column{
+		offset := tableInfo.RowColumnsOffset[colInfo.ID]
+		rawCols[offset] = colDatums
+		cols[offset] = &model.Column{
 			Name:    colName,
 			Type:    colInfo.GetType(),
 			Charset: colInfo.GetCharset(),
@@ -312,10 +320,11 @@ func datum2Column(tableInfo *model.TableInfo, datums map[int64]types.Datum, fill
 			Default: defaultValue,
 			Flag:    tableInfo.ColumnsFlag[colInfo.ID],
 			// ApproximateBytes = column data size + column struct size
-			ApproximateBytes: colSize + sizeOfEmptyColumn,
+			ApproximateBytes: size + sizeOfEmptyColumn,
 		}
+		rowColumnInfos[offset] = extendColumnInfos[idx]
 	}
-	return cols, rawCols, nil
+	return cols, rawCols, rowColumnInfos, nil
 }
 
 func (m *mounter) mountRowKVEntry(tableInfo *model.TableInfo, row *rowKVEntry, dataSize int64) (*model.RowChangedEvent, model.RowChangedDatums, error) {
@@ -324,6 +333,7 @@ func (m *mounter) mountRowKVEntry(tableInfo *model.TableInfo, row *rowKVEntry, d
 	var preCols []*model.Column
 	var preRawCols []types.Datum
 	var rawRow model.RowChangedDatums
+	var extendColumnInfos []rowcodec.ColInfo
 	// Since we now always use old value internally,
 	// we need to control the output(sink will use the PreColumns field to determine whether to output old value).
 	// Normally old value is output when only enableOldValue is on,
@@ -332,7 +342,7 @@ func (m *mounter) mountRowKVEntry(tableInfo *model.TableInfo, row *rowKVEntry, d
 	if row.PreRowExist {
 		// FIXME(leoppro): using pre table info to mounter pre column datum
 		// the pre column and current column in one event may using different table info
-		preCols, preRawCols, err = datum2Column(tableInfo, row.PreRow, m.enableOldValue)
+		preCols, preRawCols, extendColumnInfos, err = datum2Column(tableInfo, row.PreRow, m.enableOldValue)
 		if err != nil {
 			return nil, rawRow, errors.Trace(err)
 		}
@@ -352,7 +362,7 @@ func (m *mounter) mountRowKVEntry(tableInfo *model.TableInfo, row *rowKVEntry, d
 	var cols []*model.Column
 	var rawCols []types.Datum
 	if row.RowExist {
-		cols, rawCols, err = datum2Column(tableInfo, row.Row, true)
+		cols, rawCols, extendColumnInfos, err = datum2Column(tableInfo, row.Row, true)
 		if err != nil {
 			return nil, rawRow, errors.Trace(err)
 		}
@@ -365,7 +375,6 @@ func (m *mounter) mountRowKVEntry(tableInfo *model.TableInfo, row *rowKVEntry, d
 		intRowID = row.RecordID.IntValue()
 	}
 
-	_, _, colInfos := tableInfo.GetRowColInfos()
 	rawRow.PreRowDatums = preRawCols
 	rawRow.RowDatums = rawCols
 	return &model.RowChangedEvent{
@@ -378,7 +387,7 @@ func (m *mounter) mountRowKVEntry(tableInfo *model.TableInfo, row *rowKVEntry, d
 			TableID:     row.PhysicalTableID,
 			IsPartition: tableInfo.GetPartitionInfo() != nil,
 		},
-		ColInfos:            colInfos,
+		ColInfos:            extendColumnInfos,
 		TableInfo:           tableInfo,
 		Columns:             cols,
 		PreColumns:          preCols,

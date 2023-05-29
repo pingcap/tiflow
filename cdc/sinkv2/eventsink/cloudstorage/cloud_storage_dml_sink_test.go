@@ -122,6 +122,7 @@ func TestCloudStorageWriteEventsWithoutDateSeparator(t *testing.T) {
 	require.Nil(t, err)
 
 	replicaConfig := config.GetDefaultReplicaConfig()
+	replicaConfig.Sink.DateSeparator = config.DateSeparatorNone.String()
 	replicaConfig.Sink.Protocol = config.ProtocolCsv.String()
 	replicaConfig.Sink.FileIndexWidth = 6
 	errCh := make(chan error, 5)

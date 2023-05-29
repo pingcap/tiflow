@@ -121,7 +121,7 @@ var defaultReplicaConfig = &ReplicaConfig{
 		},
 		EncoderConcurrency:       16,
 		Terminator:               "\r\n",
-		DateSeparator:            "none",
+		DateSeparator:            "day",
 		EnablePartitionSeparator: true,
 	},
 	Consistent: &ConsistentConfig{
