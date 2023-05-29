@@ -51,7 +51,7 @@ type tableSinkWrapper struct {
 	// tableSink is the underlying sink.
 	tableSink             tablesink.TableSink
 	tableSinkCheckpointTs model.ResolvedTs
-	tableSinkMu           sync.Mutex
+	tableSinkMu           sync.RWMutex
 
 	// state used to control the lifecycle of the table.
 	state *tablepb.TableState
@@ -162,8 +162,8 @@ func (t *tableSinkWrapper) start(ctx context.Context, startTs model.Ts) (err err
 }
 
 func (t *tableSinkWrapper) appendRowChangedEvents(events ...*model.RowChangedEvent) error {
-	t.tableSinkMu.Lock()
-	defer t.tableSinkMu.Unlock()
+	t.tableSinkMu.RLock()
+	defer t.tableSinkMu.RUnlock()
 	// If it's nil it means it's closed.
 	if t.tableSink != nil {
 		t.tableSink.AppendRowChangedEvents(events...)
@@ -196,8 +196,8 @@ func (t *tableSinkWrapper) updateReceivedSorterCommitTs(ts model.Ts) {
 }
 
 func (t *tableSinkWrapper) updateResolvedTs(ts model.ResolvedTs) error {
-	t.tableSinkMu.Lock()
-	defer t.tableSinkMu.Unlock()
+	t.tableSinkMu.RLock()
+	defer t.tableSinkMu.RUnlock()
 	if t.tableSink != nil {
 		if err := t.tableSink.UpdateResolvedTs(ts); err != nil {
 			return errors.Trace(err)
@@ -210,8 +210,8 @@ func (t *tableSinkWrapper) updateResolvedTs(ts model.ResolvedTs) error {
 }
 
 func (t *tableSinkWrapper) getCheckpointTs() model.ResolvedTs {
-	t.tableSinkMu.Lock()
-	defer t.tableSinkMu.Unlock()
+	t.tableSinkMu.RLock()
+	defer t.tableSinkMu.RUnlock()
 	if t.tableSink != nil {
 		checkpointTs := t.tableSink.GetCheckpointTs()
 		if t.tableSinkCheckpointTs.Less(checkpointTs) {

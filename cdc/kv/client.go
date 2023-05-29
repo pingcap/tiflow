@@ -319,6 +319,7 @@ func currentRequestID() uint64 {
 
 type eventFeedSession struct {
 	client     *CDCClient
+	startTs    model.Ts
 	changefeed model.ChangeFeedID
 	tableID    model.TableID
 	tableName  string
@@ -374,6 +375,7 @@ func newEventFeedSession(
 		client.changefeed.Namespace+"."+client.changefeed.ID)
 	return &eventFeedSession{
 		client:     client,
+		startTs:    startTs,
 		changefeed: client.changefeed,
 		tableID:    client.tableID,
 		tableName:  client.tableName,
