@@ -16,6 +16,7 @@ package util
 import (
 	"bytes"
 	"fmt"
+	"net/url"
 	"os"
 	"path/filepath"
 	"syscall"
@@ -200,7 +201,7 @@ func TestAndWriteExampleReplicaTOML(t *testing.T) {
 			NullString: config.NULL,
 		},
 		Terminator:               "\r\n",
-		DateSeparator:            config.DateSeparatorNone.String(),
+		DateSeparator:            config.DateSeparatorDay.String(),
 		EnablePartitionSeparator: true,
 		Protocol:                 "open-protocol",
 	}, cfg.Sink)
@@ -211,13 +212,19 @@ func TestAndWriteStorageSinkTOML(t *testing.T) {
 	err := StrictDecodeFile("changefeed_storage_sink.toml", "cdc", &cfg)
 	require.Nil(t, err)
 
-	err = cfg.ValidateAndAdjust(nil)
+	sinkURL, err := url.Parse("s3://127.0.0.1:9092")
+	require.NoError(t, err)
+
+	cfg.Sink.Protocol = config.ProtocolCanalJSON.String()
+	err = cfg.ValidateAndAdjust(sinkURL)
 	require.Nil(t, err)
 	require.Equal(t, &config.SinkConfig{
+		Protocol:                 config.ProtocolCanalJSON.String(),
 		EncoderConcurrency:       16,
 		Terminator:               "\r\n",
 		DateSeparator:            "day",
 		EnablePartitionSeparator: true,
+		FileIndexWidth:           config.DefaultFileIndexWidth,
 		CSVConfig: &config.CSVConfig{
 			Delimiter:       ",",
 			Quote:           "\"",

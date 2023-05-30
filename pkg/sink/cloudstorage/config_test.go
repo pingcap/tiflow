@@ -28,13 +28,19 @@ func TestConfigApply(t *testing.T) {
 	expected.WorkerCount = 32
 	expected.FlushInterval = 10 * time.Second
 	expected.FileSize = 16 * 1024 * 1024
+	expected.FileIndexWidth = config.DefaultFileIndexWidth
 	expected.DateSeparator = config.DateSeparatorNone.String()
 	expected.EnablePartitionSeparator = true
-	uri := "s3://bucket/prefix?worker-count=32&flush-interval=10s&file-size=16777216"
+	uri := "s3://bucket/prefix?worker-count=32&flush-interval=10s&file-size=16777216&protocol=csv"
 	sinkURI, err := url.Parse(uri)
 	require.Nil(t, err)
+
+	replicaConfig := config.GetDefaultReplicaConfig()
+	replicaConfig.Sink.DateSeparator = config.DateSeparatorNone.String()
+	err = replicaConfig.ValidateAndAdjust(sinkURI)
+	require.NoError(t, err)
 	cfg := NewConfig()
-	err = cfg.Apply(context.TODO(), sinkURI, config.GetDefaultReplicaConfig())
+	err = cfg.Apply(context.TODO(), sinkURI, replicaConfig)
 	require.Nil(t, err)
 	require.Equal(t, expected, cfg)
 }

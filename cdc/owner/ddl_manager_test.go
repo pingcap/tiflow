@@ -21,9 +21,11 @@ import (
 	timodel "github.com/pingcap/tidb/parser/model"
 	"github.com/pingcap/tiflow/cdc/entry"
 	"github.com/pingcap/tiflow/cdc/model"
+	"github.com/pingcap/tiflow/cdc/redo"
 	"github.com/pingcap/tiflow/cdc/scheduler/schedulepb"
 	config2 "github.com/pingcap/tiflow/pkg/config"
 	cdcContext "github.com/pingcap/tiflow/pkg/context"
+	"github.com/pingcap/tiflow/pkg/filter"
 	"github.com/stretchr/testify/require"
 )
 
@@ -33,7 +35,9 @@ func createDDLManagerForTest(t *testing.T) *ddlManager {
 	ddlSink := &mockDDLSink{}
 	ddlPuller := &mockDDLPuller{}
 	cfg := config2.GetDefaultReplicaConfig()
-	schema, err := newSchemaWrap4Owner(nil, startTs, cfg, changefeedID)
+	f, err := filter.NewFilter(cfg, "")
+	require.Nil(t, err)
+	schema, err := newSchemaWrap4Owner(nil, startTs, cfg, changefeedID, f)
 	require.Equal(t, nil, err)
 	res := newDDLManager(
 		changefeedID,
@@ -42,7 +46,8 @@ func createDDLManagerForTest(t *testing.T) *ddlManager {
 		ddlSink,
 		ddlPuller,
 		schema,
-		nil, nil,
+		redo.NewDisabledDDLManager(),
+		redo.NewDisabledMetaManager(),
 		model.DB, false)
 	return res
 }
@@ -114,7 +119,8 @@ func TestBarriers(t *testing.T) {
 	}
 	// advance the ddlResolvedTs
 	dm.ddlResolvedTs = 6
-	minTableBarrierTs, barrier := dm.barrier()
+	ddlBarrier := dm.barrier()
+	minTableBarrierTs, barrier := ddlBarrier.minDDLBarrierTs, ddlBarrier.Barrier
 	require.Equal(t, expectedMinTableBarrier, minTableBarrierTs)
 	require.Equal(t, expectedBarrier, barrier)
 
@@ -127,7 +133,8 @@ func TestBarriers(t *testing.T) {
 		dm.pendingDDLs[tableName] = append(dm.pendingDDLs[tableName],
 			newFakeDDLEvent(tableID, tableName.Table, timodel.ActionAddColumn, uint64(i)))
 	}
-	minTableBarrierTs, barrier = dm.barrier()
+	ddlBarrier = dm.barrier()
+	minTableBarrierTs, barrier = ddlBarrier.minDDLBarrierTs, ddlBarrier.Barrier
 	require.Equal(t, uint64(0), minTableBarrierTs)
 	require.Equal(t, uint64(256), barrier.GlobalBarrierTs)
 	require.Equal(t, 256, len(barrier.TableBarriers))
