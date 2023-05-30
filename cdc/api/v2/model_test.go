@@ -51,7 +51,7 @@ var defaultAPIConfig = &ReplicaConfig{
 		},
 		EncoderConcurrency:       util.AddressOf(16),
 		Terminator:               util.AddressOf(config.CRLF),
-		DateSeparator:            util.AddressOf(config.DateSeparatorNone.String()),
+		DateSeparator:            util.AddressOf(config.DateSeparatorDay.String()),
 		EnablePartitionSeparator: util.AddressOf(true),
 		EnableKafkaSinkV2:        util.AddressOf(false),
 		OnlyOutputUpdatedColumns: util.AddressOf(false),
