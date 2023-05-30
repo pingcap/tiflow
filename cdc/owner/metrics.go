@@ -127,7 +127,6 @@ const (
 	// should print a warning log, and if necessary, the timeout should be exposed externally through
 	// monitor.
 	changefeedLogsWarnDuration = 1 * time.Second
-	schedulerLogsWarnDuration  = 1 * time.Second
 )
 
 // InitMetrics registers all metrics used in owner
