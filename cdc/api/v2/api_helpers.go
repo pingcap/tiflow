@@ -340,6 +340,11 @@ func (APIV2HelpersImpl) verifyUpdateChangefeedConfig(
 		newInfo.SinkURI = cfg.SinkURI
 	}
 
+	if err := newInfo.Config.AdjustEnableOldValue(newInfo.SinkURI); err != nil {
+		return nil, nil, cerror.ErrChangefeedUpdateRefused.
+			GenWithStackByArgs(errors.Cause(err).Error())
+	}
+
 	// verify changefeed info
 	f, err := filter.NewFilter(newInfo.Config, "")
 	if err != nil {
