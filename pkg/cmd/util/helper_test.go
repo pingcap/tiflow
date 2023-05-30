@@ -200,10 +200,19 @@ func TestAndWriteExampleReplicaTOML(t *testing.T) {
 			Delimiter:  string(config.Comma),
 			NullString: config.NULL,
 		},
+<<<<<<< HEAD
 		Terminator:               "\r\n",
 		DateSeparator:            config.DateSeparatorDay.String(),
 		EnablePartitionSeparator: true,
 		Protocol:                 "open-protocol",
+=======
+		Terminator:               util.AddressOf("\r\n"),
+		DateSeparator:            util.AddressOf(config.DateSeparatorDay.String()),
+		EnablePartitionSeparator: util.AddressOf(true),
+		EnableKafkaSinkV2:        util.AddressOf(false),
+		OnlyOutputUpdatedColumns: util.AddressOf(false),
+		Protocol:                 util.AddressOf("open-protocol"),
+>>>>>>> edda949d87 (config(ticdc): fix deafult setting of DateSeparator (#9090))
 	}, cfg.Sink)
 }
 

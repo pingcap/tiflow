@@ -35,6 +35,10 @@ const (
   "sink": {
     "encoder-concurrency": 16,
     "terminator": "\r\n",
+<<<<<<< HEAD
+=======
+	"date-separator": "day",
+>>>>>>> edda949d87 (config(ticdc): fix deafult setting of DateSeparator (#9090))
     "dispatch-rules": [
       {
         "db-name": "a",

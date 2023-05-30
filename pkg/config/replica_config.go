@@ -54,10 +54,19 @@ var defaultReplicaConfig = &ReplicaConfig{
 			Delimiter:  Comma,
 			NullString: NULL,
 		},
+<<<<<<< HEAD
 		EncoderConcurrency:       16,
 		Terminator:               CRLF,
 		DateSeparator:            DateSeparatorDay.String(),
 		EnablePartitionSeparator: true,
+=======
+		EncoderConcurrency:       util.AddressOf(16),
+		Terminator:               util.AddressOf(CRLF),
+		DateSeparator:            util.AddressOf(DateSeparatorDay.String()),
+		EnablePartitionSeparator: util.AddressOf(true),
+		EnableKafkaSinkV2:        util.AddressOf(false),
+		OnlyOutputUpdatedColumns: util.AddressOf(false),
+>>>>>>> edda949d87 (config(ticdc): fix deafult setting of DateSeparator (#9090))
 		TiDBSourceID:             1,
 	},
 	Consistent: &ConsistentConfig{
