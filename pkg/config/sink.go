@@ -338,22 +338,23 @@ func (s *SinkConfig) validateAndAdjust(sinkURI *url.URL, enableOldValue bool) er
 		return err
 	}
 
+	protocol := util.GetOrZero(s.Protocol)
 	if !enableOldValue {
 		for _, protocolStr := range ForceEnableOldValueProtocols {
-			if protocolStr == util.GetOrZero(s.Protocol) {
+			if protocolStr == protocol {
 				log.Error(fmt.Sprintf("Old value is not enabled when using `%s` protocol. "+
-					"Please update changefeed config", util.GetOrZero(s.Protocol)))
+					"Please update changefeed config", protocol))
 				return cerror.WrapError(cerror.ErrKafkaInvalidConfig,
-					errors.New(fmt.Sprintf("%s protocol requires old value to be enabled", util.GetOrZero(s.Protocol))))
+					errors.New(fmt.Sprintf("%s protocol requires old value to be enabled", protocol)))
 			}
 		}
 	} else {
 		for _, fp := range ForceDisableOldValueProtocols {
-			if fp == util.GetOrZero(s.Protocol) {
+			if fp == protocol {
 				log.Warn(fmt.Sprintf("Old value is enabled when using `%s` protocol. "+
-					"Please update changefeed config", util.GetOrZero(s.Protocol)))
+					"Please update changefeed config", protocol))
 				return cerror.WrapError(cerror.ErrKafkaInvalidConfig,
-					errors.New(fmt.Sprintf("%s protocol requires old value to be disabled", util.GetOrZero(s.Protocol))))
+					errors.New(fmt.Sprintf("%s protocol requires old value to be disabled", protocol)))
 			}
 		}
 	}

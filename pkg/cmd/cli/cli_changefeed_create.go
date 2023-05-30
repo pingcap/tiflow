@@ -150,8 +150,7 @@ func (o *createChangefeedOptions) completeReplicaCfg(
 		}
 	}
 
-	if err := cfg.AdjustEnabl
-	eOldValue(o.commonChangefeedOptions.sinkURI); err != nil {
+	if err := cfg.AdjustEnableOldValue(o.commonChangefeedOptions.sinkURI); err != nil {
 		return err
 	}
 
