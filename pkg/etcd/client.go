@@ -83,7 +83,15 @@ var maxTries uint64 = 8
 type Client struct {
 	endpoints []string
 	cli       *clientV3.Client
-	metrics   map[string]prometheus.Counter
+	// pdCli works well in such situation:
+	// 1. pd leader is network isolated with other pd followers
+	// 2. pd leader is io hang
+	// 3. pd leader is send kill -19 signal and not recover
+	// 4. pd leader is killed and not recover
+	// but the etcd client will not work well in these situations
+	// so we use pdCli to reset etcd client when we found the etcd client is not working
+	pdCli   pdutil.PDAPIClient
+	metrics map[string]prometheus.Counter
 	// clock is for making it easier to mock time-related data structures in unit tests
 	clock  clock.Clock
 	cancel context.CancelFunc
@@ -93,11 +101,41 @@ type Client struct {
 // NewClient warps a clientV3.Client that provides etcd APIs required by TiCDC.
 func NewClient(pdEndpoints []string, metrics map[string]prometheus.Counter) *Client {
 	ctx, cancel := context.WithCancel(context.Background())
-	cli, err := newBaseEtcdClient(pdEndpoints)
+	conf := config.GetGlobalServerConfig()
+
+	grpcClient, err := pd.NewClientWithContext(ctx, pdEndpoints, conf.Security.PDSecurityOption())
+	if err != nil {
+		log.Fatal("new pd grpc client failed", zap.Error(err))
+	}
+	pdClient, err := pdutil.NewPDAPIClient(grpcClient, conf.Security)
+	if err != nil {
+		log.Fatal("new pd grpc client failed", zap.Error(err))
+	}
+
+	apiCtx, apiCancel := context.WithTimeout(ctx, 10*time.Second)
+	defer apiCancel()
+	//TODO: should we retry here?
+	realPDEndpoints, err := pdClient.CollectMemberEndpoints(apiCtx)
+	if err != nil {
+		log.Fatal("cannot collect all members", zap.Error(err))
+	}
+	if len(realPDEndpoints) > len(pdEndpoints) {
+		log.Info("collect more endpoints than configured, update configured endpoints",
+			zap.Strings("configured", pdEndpoints),
+			zap.Strings("collected", realPDEndpoints))
+		pdEndpoints = realPDEndpoints
+	}
+
+	log.Info("create etcd client with endpoints", zap.Strings("endpoints", pdEndpoints))
+	cli, err := newBaseEtcdClient(realPDEndpoints)
 	if err != nil {
 		log.Fatal("new etcd client failed", zap.Error(err))
 	}
-	res := &Client{cli: cli, metrics: metrics,
+
+	res := &Client{
+		cli:       cli,
+		pdCli:     pdClient,
+		metrics:   metrics,
 		clock:     clock.New(),
 		cancel:    cancel,
 		endpoints: pdEndpoints}
@@ -110,23 +148,12 @@ func (c *Client) checkEndpointsChange(ctx context.Context, pdEndpoints []string)
 	ticker := time.NewTicker(time.Second * 3)
 	defer ticker.Stop()
 
-	conf := config.GetGlobalServerConfig()
-	grpcClient, err := pd.NewClientWithContext(ctx, pdEndpoints, conf.Security.PDSecurityOption())
-	if err != nil {
-		return errors.Trace(err)
-	}
-	pc, err := pdutil.NewPDAPIClient(grpcClient, conf.Security)
-	if err != nil {
-		return errors.Trace(err)
-	}
-	defer pc.Close()
-
 	for {
 		select {
 		case <-ctx.Done():
 			return ctx.Err()
 		case <-ticker.C:
-			endpoints, err := pc.CollectMemberEndpoints(ctx)
+			endpoints, err := c.pdCli.CollectMemberEndpoints(ctx)
 			if err != nil {
 				log.Warn("cannot collect all members", zap.Error(err))
 				continue
@@ -135,7 +162,7 @@ func (c *Client) checkEndpointsChange(ctx context.Context, pdEndpoints []string)
 			healthEndpoints := make([]string, 0, len(endpoints))
 			for _, endpoint := range endpoints {
 				ctx, cancel := context.WithTimeout(ctx, 5*time.Second)
-				if err := pc.Healthy(ctx, endpoint); err != nil {
+				if err := c.pdCli.Healthy(ctx, endpoint); err != nil {
 					log.Warn("pd health check error",
 						zap.String("endpoint", endpoint), zap.Error(err))
 				} else {
@@ -144,21 +171,33 @@ func (c *Client) checkEndpointsChange(ctx context.Context, pdEndpoints []string)
 				cancel()
 			}
 
-			if !reflect.DeepEqual(c.endpoints, healthEndpoints) {
+			// we only reset the etcd client when the endpoints number are reduced
+			// and the endpoints are not equal to the previous endpoints
+			if !reflect.DeepEqual(c.endpoints, healthEndpoints) &&
+				len(healthEndpoints) <= len(c.endpoints) {
 				log.Info("pd endpoints changed",
 					zap.Strings("old", c.endpoints),
 					zap.Strings("new", healthEndpoints))
-				c.endpoints = healthEndpoints
-				baseCli, err := newBaseEtcdClient(c.endpoints)
+				// double check if we can still connect to the etcd cluster by
+				// the old etcd client, if so, there is no need to reset the etcd client.
+				_, err := c.cli.MemberList(ctx)
 				if err != nil {
-					log.Warn("new etcd client failed", zap.Error(err))
-					continue
+					log.Warn("etcd member list failed, update the endpoints and reset the etcd client",
+						zap.Strings("old", c.endpoints),
+						zap.Strings("new", healthEndpoints),
+						zap.Error(err))
+					c.endpoints = healthEndpoints
+					// TODO: fizz add retry logic to make it more robust
+					baseCli, err := newBaseEtcdClient(c.endpoints)
+					if err != nil {
+						log.Warn("reset etcd client failed", zap.Error(err))
+						continue
+					}
+					c.rwLock.Lock()
+					c.cli.Close()
+					c.cli = baseCli
+					c.rwLock.Unlock()
 				}
-
-				c.rwLock.Lock()
-				c.cli.Close()
-				c.cli = baseCli
-				c.rwLock.Unlock()
 			}
 		}
 	}
@@ -175,6 +214,7 @@ func (c *Client) Close() error {
 	c.cancel()
 	c.rwLock.Lock()
 	defer c.rwLock.Unlock()
+	c.pdCli.Close()
 	return c.cli.Close()
 }
 
