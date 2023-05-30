@@ -287,8 +287,8 @@ func (info *ChangeFeedInfo) VerifyAndComplete() error {
 	}
 
 	info.RmUnusedFields()
-
-	return nil
+	err := info.Config.AdjustEnableOldValue(info.SinkURI)
+	return errors.Trace(err)
 }
 
 // RmUnusedFields removes unnecessary fields based on the downstream type and
