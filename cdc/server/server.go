@@ -20,6 +20,7 @@ import (
 	"net/http"
 	"os"
 	"path/filepath"
+	"reflect"
 	"time"
 
 	"github.com/dustin/go-humanize"
@@ -60,8 +61,7 @@ const (
 	// maxHTTPConnection is used to limit the max concurrent connections of http server.
 	maxHTTPConnection = 1000
 	// httpConnectionTimeout is used to limit a connection max alive time of http server.
-	httpConnectionTimeout           = 10 * time.Minute
-	etcdHealthCheckerErrorThreshold = 5
+	httpConnectionTimeout = 10 * time.Minute
 )
 
 // Server is the interface for the TiCDC server
@@ -290,7 +290,7 @@ func (s *server) startStatusHTTP(serverCtx context.Context, lis net.Listener) er
 	return nil
 }
 
-func (s *server) etcdHealthChecker(ctx context.Context) error {
+func (s *server) pdHealthChecker(ctx context.Context) error {
 	ticker := time.NewTicker(time.Second * 3)
 	defer ticker.Stop()
 
@@ -305,8 +305,11 @@ func (s *server) etcdHealthChecker(ctx context.Context) error {
 	}
 	defer pc.Close()
 
-	errorCounter := 0
-	contextTimeout := 5 * time.Second
+	lastEndpoints, err := pc.CollectMemberEndpoints(ctx)
+	if err != nil {
+		log.Warn("pd health check: cannot collect all members", zap.Error(err))
+	}
+
 	for {
 		select {
 		case <-ctx.Done():
@@ -314,45 +317,39 @@ func (s *server) etcdHealthChecker(ctx context.Context) error {
 		case <-ticker.C:
 			endpoints, err := pc.CollectMemberEndpoints(ctx)
 			if err != nil {
-				log.Warn("etcd health check: cannot collect all members", zap.Error(err))
+				log.Warn("pd health check: cannot collect all members", zap.Error(err))
 				continue
 			}
+
+			healthEndpoints := make([]string, 0, len(endpoints))
 			for _, endpoint := range endpoints {
 				start := time.Now()
-				ctx, cancel := context.WithTimeout(ctx, contextTimeout)
+				ctx, cancel := context.WithTimeout(ctx, 5*time.Second)
 				if err := pc.Healthy(ctx, endpoint); err != nil {
-					log.Warn("etcd health check error, try to sync etcd cluster endpoint",
+					log.Warn("pd health check error",
 						zap.String("endpoint", endpoint), zap.Error(err))
-
-					// try to sync etcd cluster endpoints
-					ctx, cancel := context.WithTimeout(ctx, contextTimeout)
-					err = s.etcdClient.GetEtcdClient().Unwrap().Sync(ctx)
-					if err != nil {
-						log.Warn("etcd sync error", zap.Error(err))
-					}
-					cancel()
-
-					// try to get captures from etcd to double check if the etcd is healthy
-					ctx, cancel = context.WithTimeout(ctx, contextTimeout)
-					_, _, err = s.etcdClient.GetCaptures(ctx)
-					if err != nil {
-						log.Warn("fail to get captures info from ectd, the etcd may unhealthy",
-							zap.Int("times", errorCounter),
-							zap.Error(err))
-						errorCounter++
-					}
-					cancel()
+				} else {
+					healthEndpoints = append(healthEndpoints, endpoint)
 				}
-
-				if errorCounter > etcdHealthCheckerErrorThreshold {
-					log.Fatal("etcd health error counter exceeds threshold, restart cdc server to recover",
-						zap.Int("errorThreshold", etcdHealthCheckerErrorThreshold), zap.Error(err))
-					cancel()
-					return errors.Trace(err)
-				}
-
 				etcdHealthCheckDuration.WithLabelValues(endpoint).
 					Observe(time.Since(start).Seconds())
+				cancel()
+			}
+
+			if !reflect.DeepEqual(healthEndpoints, lastEndpoints) {
+				log.Info("pd health endpoints changed",
+					zap.Strings("old", lastEndpoints),
+					zap.Strings("new", healthEndpoints))
+				lastEndpoints = endpoints
+
+				// when pd health endpoints changed, and we can get infos by the etcd client,
+				// we should reset the etcd client endpoints.
+				ctx, cancel := context.WithTimeout(ctx, 30*time.Second)
+				_, _, err := s.etcdClient.GetCaptures(ctx)
+				if err != nil {
+					log.Warn("etcd health check error, try to reset etcdClient endpoints", zap.Error(err))
+					s.etcdClient.GetEtcdClient().Unwrap().SetEndpoints(healthEndpoints...)
+				}
 				cancel()
 			}
 		}
@@ -374,7 +371,7 @@ func (s *server) run(ctx context.Context) (err error) {
 	})
 
 	wg.Go(func() error {
-		return s.etcdHealthChecker(cctx)
+		return s.pdHealthChecker(cctx)
 	})
 
 	wg.Go(func() error {

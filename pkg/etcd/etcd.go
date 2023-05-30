@@ -182,6 +182,7 @@ func NewCDCEtcdClient(ctx context.Context,
 	if err != nil {
 		return nil, errors.Trace(err)
 	}
+	log.Info("new etcd client", zap.Any("members", resp.Members))
 	return &CDCEtcdClientImpl{
 		etcdClusterID: resp.Header.ClusterId,
 		Client:        Wrap(cli, metrics),
