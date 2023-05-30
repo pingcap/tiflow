@@ -170,13 +170,14 @@ func New(
 	m.ready = make(chan struct{})
 	m.wg.Add(1) // So `SinkManager.Close` will also wait the subroutine.
 	go func() {
-		if err := m.run(ctx, warnChan); err != nil {
+		if err := m.run(ctx, warnChan); err != nil && errors.Cause(err) != context.Canceled {
 			select {
 			case <-ctx.Done():
 			case errChan <- err:
 			}
 		}
 	}()
+	<-m.ready
 	return m, nil
 }
 

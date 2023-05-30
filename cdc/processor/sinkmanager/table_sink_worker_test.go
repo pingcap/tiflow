@@ -25,7 +25,6 @@ import (
 	"github.com/pingcap/tiflow/cdc/processor/sourcemanager"
 	"github.com/pingcap/tiflow/cdc/processor/sourcemanager/engine"
 	"github.com/pingcap/tiflow/cdc/processor/sourcemanager/engine/memory"
-	cerrors "github.com/pingcap/tiflow/pkg/errors"
 	"github.com/pingcap/tiflow/pkg/upstream"
 	"github.com/stretchr/testify/require"
 	"github.com/stretchr/testify/suite"
@@ -394,7 +393,7 @@ func (suite *workerSuite) TestHandleTaskWithSplitTxnAndAbortWhenNoMemAndBlocked(
 	go func() {
 		defer wg.Done()
 		err := w.handleTasks(ctx, taskChan)
-		require.ErrorIs(suite.T(), err, cerrors.ErrFlowControllerAborted)
+		require.ErrorIs(suite.T(), err, context.Canceled)
 	}()
 
 	wrapper, sink := createTableSinkWrapper(changefeedID, tableID)

@@ -338,7 +338,7 @@ func TestSinkManagerRunWithErrors(t *testing.T) {
 
 	errCh := make(chan error, 16)
 	changefeedInfo := getChangefeedInfo()
-	manager, source, _ := createManagerWithMemEngine(t, ctx, model.DefaultChangeFeedID("1"), changefeedInfo, errCh)
+	manager, source := createManagerWithMemEngine(t, ctx, model.DefaultChangeFeedID("1"), changefeedInfo, errCh)
 	defer func() { manager.Close() }()
 
 	_ = failpoint.Enable("github.com/pingcap/tiflow/cdc/processor/sinkmanager/SinkWorkerTaskError", "return")
@@ -346,13 +346,11 @@ func TestSinkManagerRunWithErrors(t *testing.T) {
 		_ = failpoint.Disable("github.com/pingcap/tiflow/cdc/processor/sinkmanager/SinkWorkerTaskError")
 	}()
 
-	span := spanz.TableIDToComparableSpan(1)
-
-	source.AddTable(span, "test", 100)
-	manager.AddTable(span, 100, math.MaxUint64)
-	manager.StartTable(span, 100)
-	source.Add(span, model.NewResolvedPolymorphicEvent(0, 101))
-	manager.UpdateReceivedSorterResolvedTs(span, 101)
+	source.AddTable(1)
+	manager.AddTable(1, 100, math.MaxUint64)
+	manager.StartTable(1, 100)
+	source.Add(1, model.NewResolvedPolymorphicEvent(0, 101))
+	manager.UpdateReceivedSorterResolvedTs(1, 101)
 	manager.UpdateBarrierTs(101, nil)
 
 	timer := time.NewTimer(5 * time.Second)

@@ -154,7 +154,9 @@ func (w *sinkWorker) handleTask(ctx context.Context, task *sinkTask) (finalErr e
 	}
 	doEmitAndAdvance := func(isLastTime bool) (err error) {
 		if len(events) > 0 {
-			task.tableSink.appendRowChangedEvents(events...)
+			if err = task.tableSink.appendRowChangedEvents(events...); err != nil {
+				return errors.Trace(err)
+			}
 			events = events[:0]
 			if cap(events) > 1024 {
 				events = make([]*model.RowChangedEvent, 0, 1024)
