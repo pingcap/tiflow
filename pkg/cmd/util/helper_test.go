@@ -206,7 +206,7 @@ func TestAndWriteExampleReplicaTOML(t *testing.T) {
 			NullString: config.NULL,
 		},
 		Terminator:               util.AddressOf("\r\n"),
-		DateSeparator:            util.AddressOf(config.DateSeparatorNone.String()),
+		DateSeparator:            util.AddressOf(config.DateSeparatorDay.String()),
 		EnablePartitionSeparator: util.AddressOf(true),
 		EnableKafkaSinkV2:        util.AddressOf(false),
 		OnlyOutputUpdatedColumns: util.AddressOf(false),
