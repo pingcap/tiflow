@@ -909,11 +909,27 @@ func (r *ReplicationSet) handleCaptureShutdown(
 func (r *ReplicationSet) updateCheckpointAndStats(
 	checkpoint tablepb.Checkpoint, stats tablepb.Stats,
 ) {
+	if checkpoint.ResolvedTs < checkpoint.CheckpointTs {
+		log.Warn("schedulerv3: resolved ts should not less than checkpoint ts",
+			zap.Any("replicationSet", r),
+			zap.Any("checkpoint", checkpoint))
+
+		// TODO: resolvedTs should not be zero, but we have to handle it for now.
+		if checkpoint.ResolvedTs == 0 {
+			checkpoint.ResolvedTs = checkpoint.CheckpointTs
+		}
+	}
 	if r.Checkpoint.CheckpointTs < checkpoint.CheckpointTs {
 		r.Checkpoint.CheckpointTs = checkpoint.CheckpointTs
 	}
 	if r.Checkpoint.ResolvedTs < checkpoint.ResolvedTs {
 		r.Checkpoint.ResolvedTs = checkpoint.ResolvedTs
+	}
+	if r.Checkpoint.ResolvedTs < r.Checkpoint.CheckpointTs {
+		log.Panic("schedulerv3: resolved ts should not less than checkpoint ts",
+			zap.Any("replicationSet", r),
+			zap.Any("checkpoint", r.Checkpoint.ResolvedTs),
+			zap.Any("resolved", r.Checkpoint.CheckpointTs))
 	}
 	r.Stats = stats
 }

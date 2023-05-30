@@ -369,7 +369,7 @@ func (p *processor) IsRemoveTableFinished(tableID model.TableID) (model.Ts, bool
 	}
 
 	if !alreadyExist {
-		log.Warn("table should be removing but not found",
+		log.Warn("table has been stopped",
 			zap.String("captureID", p.captureInfo.ID),
 			zap.String("namespace", p.changefeedID.Namespace),
 			zap.String("changefeed", p.changefeedID.ID),
@@ -648,6 +648,7 @@ func (p *processor) handleErr(err error) error {
 				position = &model.TaskPosition{}
 			}
 			position.Error = &model.RunningError{
+				Time:    time.Now(),
 				Addr:    p.captureInfo.AdvertiseAddr,
 				Code:    code,
 				Message: err.Error(),
