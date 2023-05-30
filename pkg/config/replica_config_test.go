@@ -22,6 +22,7 @@ import (
 
 	"github.com/aws/aws-sdk-go/aws"
 	"github.com/pingcap/tiflow/pkg/integrity"
+	"github.com/pingcap/tiflow/pkg/util"
 	"github.com/stretchr/testify/require"
 )
 
@@ -39,7 +40,7 @@ func TestReplicaConfigMarshal(t *testing.T) {
 	conf.ForceReplicate = true
 	conf.Filter.Rules = []string{"1.1"}
 	conf.Mounter.WorkerNum = 3
-	conf.Sink.Protocol = "open-protocol"
+	conf.Sink.Protocol = util.AddressOf("open-protocol")
 	conf.Sink.ColumnSelectors = []*ColumnSelector{
 		{
 			Matcher: []string{"1.1"},
@@ -52,10 +53,10 @@ func TestReplicaConfigMarshal(t *testing.T) {
 		NullString:      `\N`,
 		IncludeCommitTs: true,
 	}
-	conf.Sink.Terminator = ""
-	conf.Sink.DateSeparator = "month"
-	conf.Sink.EnablePartitionSeparator = true
-	conf.Sink.EnableKafkaSinkV2 = true
+	conf.Sink.TxnAtomicity = util.AddressOf(unknownTxnAtomicity)
+	conf.Sink.DateSeparator = util.AddressOf("month")
+	conf.Sink.EnablePartitionSeparator = util.AddressOf(true)
+	conf.Sink.EnableKafkaSinkV2 = util.AddressOf(true)
 	conf.Scheduler.EnableTableAcrossNodes = true
 	conf.Scheduler.RegionThreshold = 100001
 	conf.Scheduler.WriteKeyThreshold = 100001
@@ -153,14 +154,12 @@ func TestReplicaConfigOutDated(t *testing.T) {
 	conf.ForceReplicate = true
 	conf.Filter.Rules = []string{"1.1"}
 	conf.Mounter.WorkerNum = 3
-	conf.Sink.Protocol = "open-protocol"
+	conf.Sink.Protocol = util.AddressOf("open-protocol")
 	conf.Sink.DispatchRules = []*DispatchRule{
 		{Matcher: []string{"a.b"}, DispatcherRule: "r1"},
 		{Matcher: []string{"a.c"}, DispatcherRule: "r2"},
 		{Matcher: []string{"a.d"}, DispatcherRule: "r2"},
 	}
-	conf.Sink.TxnAtomicity = unknownTxnAtomicity
-	conf.Sink.DateSeparator = ""
 	conf.Sink.CSVConfig = nil
 	require.Equal(t, conf, conf2)
 }
@@ -176,7 +175,7 @@ func TestReplicaConfigValidate(t *testing.T) {
 
 	// Incorrect sink configuration.
 	conf = GetDefaultReplicaConfig()
-	conf.Sink.Protocol = "canal"
+	conf.Sink.Protocol = util.AddressOf("canal")
 	conf.EnableOldValue = false
 	require.Regexp(t, ".*canal protocol requires old value to be enabled.*",
 		conf.ValidateAndAdjust(sinkURL))
@@ -217,24 +216,24 @@ func TestReplicaConfigValidate(t *testing.T) {
 
 func TestValidateAndAdjust(t *testing.T) {
 	cfg := GetDefaultReplicaConfig()
-	require.False(t, cfg.EnableSyncPoint)
 
+	require.False(t, util.GetOrZero(cfg.EnableSyncPoint))
 	sinkURL, err := url.Parse("blackhole://")
 	require.NoError(t, err)
 
 	require.NoError(t, cfg.ValidateAndAdjust(sinkURL))
 
-	cfg.EnableSyncPoint = true
+	cfg.EnableSyncPoint = util.AddressOf(true)
 	require.NoError(t, cfg.ValidateAndAdjust(sinkURL))
 
-	cfg.SyncPointInterval = time.Second * 29
+	cfg.SyncPointInterval = util.AddressOf(time.Second * 29)
 	require.Error(t, cfg.ValidateAndAdjust(sinkURL))
 
-	cfg.SyncPointInterval = time.Second * 30
-	cfg.SyncPointRetention = time.Minute * 10
+	cfg.SyncPointInterval = util.AddressOf(time.Second * 30)
+	cfg.SyncPointRetention = util.AddressOf(time.Minute * 10)
 	require.Error(t, cfg.ValidateAndAdjust(sinkURL))
 
-	cfg.Sink.EncoderConcurrency = -1
+	cfg.Sink.EncoderConcurrency = util.AddressOf(-1)
 	require.Error(t, cfg.ValidateAndAdjust(sinkURL))
 
 	cfg = GetDefaultReplicaConfig()

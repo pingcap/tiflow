@@ -16,8 +16,10 @@ package sinkmanager
 import (
 	"context"
 	"sync/atomic"
+	"time"
 
 	"github.com/pingcap/errors"
+	"github.com/pingcap/failpoint"
 	"github.com/pingcap/log"
 	"github.com/pingcap/tiflow/cdc/model"
 	"github.com/pingcap/tiflow/cdc/processor/memquota"
@@ -25,6 +27,7 @@ import (
 	"github.com/pingcap/tiflow/cdc/processor/sourcemanager/engine"
 	"github.com/pingcap/tiflow/cdc/sink/tablesink"
 	"github.com/prometheus/client_golang/prometheus"
+	"github.com/tikv/client-go/v2/oracle"
 	"go.uber.org/zap"
 )
 
@@ -104,6 +107,9 @@ func (w *sinkWorker) handleTasks(ctx context.Context, taskChan <-chan *sinkTask)
 			return ctx.Err()
 		case task := <-taskChan:
 			err := w.handleTask(ctx, task)
+			failpoint.Inject("SinkWorkerTaskError", func() {
+				err = errors.New("SinkWorkerTaskError")
+			})
 			if err != nil {
 				return err
 			}
@@ -168,7 +174,9 @@ func (w *sinkWorker) handleTask(ctx context.Context, task *sinkTask) (finalErr e
 			zap.Any("lowerBound", lowerBound),
 			zap.Any("upperBound", upperBound),
 			zap.Bool("splitTxn", w.splitTxn),
+			zap.Int("receivedEvents", allEventCount),
 			zap.Any("lastPos", advancer.lastPos),
+			zap.Float64("lag", time.Since(oracle.GetTimeFromTS(advancer.lastPos.CommitTs)).Seconds()),
 			zap.Error(finalErr))
 
 		// Otherwise we can't ensure all events before `lastPos` are emitted.
@@ -181,6 +189,10 @@ func (w *sinkWorker) handleTask(ctx context.Context, task *sinkTask) (finalErr e
 			// at the checkpoint position.
 			case tablesink.SinkInternalError:
 				task.tableSink.clearTableSink()
+				// After the table sink is cleared all pending events are sent out or dropped.
+				// So we can re-add the table into sinkMemQuota.
+				w.sinkMemQuota.ClearTable(task.tableSink.span)
+
 				// Restart the table sink based on the checkpoint position.
 				if finalErr = task.tableSink.restart(ctx); finalErr == nil {
 					ckpt := task.tableSink.getCheckpointTs().ResolvedMark()
@@ -264,7 +276,9 @@ func (w *sinkWorker) fetchFromCache(
 			task.tableSink.receivedEventCount.Add(int64(popRes.pushCount))
 			w.metricOutputEventCountKV.Add(float64(popRes.pushCount))
 			w.metricRedoEventCacheHit.Add(float64(popRes.size))
-			task.tableSink.appendRowChangedEvents(popRes.events...)
+			if err = task.tableSink.appendRowChangedEvents(popRes.events...); err != nil {
+				return
+			}
 		}
 
 		// Get a resolvedTs so that we can record it into sink memory quota.

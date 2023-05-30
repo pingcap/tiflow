@@ -21,7 +21,6 @@ import (
 	"time"
 
 	"github.com/pingcap/log"
-	"github.com/pingcap/tiflow/pkg/redo"
 	"go.uber.org/zap"
 )
 
@@ -33,10 +32,6 @@ var customReplicaConfig = &ReplicaConfig{
 	ForceReplicate:        false,
 	IgnoreIneligibleTable: false,
 	CheckGCSafePoint:      false,
-	EnableSyncPoint:       false,
-	BDRMode:               false,
-	SyncPointInterval:     &JSONDuration{11 * time.Minute},
-	SyncPointRetention:    &JSONDuration{25 * time.Hour},
 	Filter: &FilterConfig{
 		MySQLReplicationRules: &MySQLReplicationRules{
 			DoTables:     []*Table{{"a", "b"}, {"c", "d"}},
@@ -62,39 +57,15 @@ var customReplicaConfig = &ReplicaConfig{
 		WorkerNum: 17,
 	},
 	Sink: &SinkConfig{
-		Protocol:       "arvo",
-		SchemaRegistry: "127.0.0.1:1234",
-		CSVConfig: &CSVConfig{
-			Delimiter:       "a",
-			Quote:           "c",
-			NullString:      "c",
-			IncludeCommitTs: true,
-		},
-		DispatchRules: []*DispatchRule{
-			{
-				[]string{"a.b"},
-				"1",
-				"test",
-			},
-		},
+		Protocol: "arvo",
 		ColumnSelectors: []*ColumnSelector{
 			{
 				[]string{"a.b"},
 				[]string{"c"},
 			},
 		},
-		TxnAtomicity:             "table",
-		EncoderConcurrency:       20,
-		Terminator:               "a",
-		DateSeparator:            "month",
-		EnablePartitionSeparator: true,
-	},
-	Consistent: &ConsistentConfig{
-		Level:             "",
-		MaxLogSize:        65,
-		FlushIntervalInMs: 500,
-		Storage:           "local://test",
-		UseFileBackend:    true,
+		TxnAtomicity: "table",
+		Terminator:   "a",
 	},
 	Scheduler: &ChangefeedSchedulerConfig{
 		EnableTableAcrossNodes: false,
@@ -108,13 +79,10 @@ var customReplicaConfig = &ReplicaConfig{
 
 // defaultReplicaConfig check if the default values is changed
 var defaultReplicaConfig = &ReplicaConfig{
-	MemoryQuota:        1024 * 1024 * 1024,
-	CaseSensitive:      true,
-	EnableOldValue:     true,
-	CheckGCSafePoint:   true,
-	EnableSyncPoint:    false,
-	SyncPointInterval:  &JSONDuration{time.Minute * 10},
-	SyncPointRetention: &JSONDuration{time.Hour * 24},
+	MemoryQuota:      1024 * 1024 * 1024,
+	CaseSensitive:    true,
+	EnableOldValue:   true,
+	CheckGCSafePoint: true,
 	Filter: &FilterConfig{
 		Rules: []string{"*.*"},
 	},
@@ -122,22 +90,7 @@ var defaultReplicaConfig = &ReplicaConfig{
 		WorkerNum: 16,
 	},
 	Sink: &SinkConfig{
-		CSVConfig: &CSVConfig{
-			Quote:      string("\""),
-			Delimiter:  ",",
-			NullString: "\\N",
-		},
-		EncoderConcurrency:       16,
-		Terminator:               "\r\n",
-		DateSeparator:            "none",
-		EnablePartitionSeparator: true,
-	},
-	Consistent: &ConsistentConfig{
-		Level:             "none",
-		MaxLogSize:        redo.DefaultMaxLogSize,
-		FlushIntervalInMs: redo.DefaultFlushIntervalInMs,
-		Storage:           "",
-		UseFileBackend:    false,
+		Terminator: "\r\n",
 	},
 	Scheduler: &ChangefeedSchedulerConfig{
 		EnableTableAcrossNodes: false,
@@ -183,6 +136,7 @@ func testChangefeed(ctx context.Context, client *CDCRESTClient) error {
 	if err := json.Unmarshal(resp.body, changefeedInfo1); err != nil {
 		log.Panic("unmarshal failed", zap.String("body", string(resp.body)), zap.Error(err))
 	}
+
 	ensureChangefeed(ctx, client, changefeedInfo1.ID, "normal")
 	resp = client.Get().WithURI("/changefeeds/" + changefeedInfo1.ID + "?namespace=test").Do(ctx)
 	assertResponseIsOK(resp)

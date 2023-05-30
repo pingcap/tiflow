@@ -15,6 +15,7 @@ package sinkmanager
 
 import (
 	"context"
+	"math"
 	"sync"
 	"time"
 
@@ -108,8 +109,9 @@ type SinkManager struct {
 	redoMemQuota *memquota.MemQuota
 
 	// To control lifetime of all sub-goroutines.
-	managerCtx context.Context
-	ready      chan struct{}
+	managerCtx    context.Context
+	managerCancel context.CancelFunc
+	ready         chan struct{}
 
 	// To control lifetime of sink and redo tasks.
 	sinkEg *errgroup.Group
@@ -169,19 +171,20 @@ func New(
 }
 
 // Run implements util.Runnable.
+// When it returns, all sub-goroutines should be closed.
 func (m *SinkManager) Run(ctx context.Context, warnings ...chan<- error) (err error) {
-	var managerCancel context.CancelFunc
-	m.managerCtx, managerCancel = context.WithCancel(ctx)
+	m.managerCtx, m.managerCancel = context.WithCancel(ctx)
+	m.wg.Add(1) // So `SinkManager.Close` will also wait the function.
 	defer func() {
-		managerCancel()
-		m.wg.Wait()
+		m.wg.Done()
+		m.waitSubroutines()
 		log.Info("Sink manager exists",
 			zap.String("namespace", m.changefeedID.Namespace),
 			zap.String("changefeed", m.changefeedID.ID),
 			zap.Error(err))
 	}()
 
-	splitTxn := m.changefeedInfo.Config.Sink.TxnAtomicity.ShouldSplitTxn()
+	splitTxn := util.GetOrZero(m.changefeedInfo.Config.Sink.TxnAtomicity).ShouldSplitTxn()
 	enableOldValue := m.changefeedInfo.Config.EnableOldValue
 
 	gcErrors := make(chan error, 16)
@@ -193,7 +196,7 @@ func (m *SinkManager) Run(ctx context.Context, warnings ...chan<- error) (err er
 	if m.sinkEg == nil {
 		var sinkCtx context.Context
 		m.sinkEg, sinkCtx = errgroup.WithContext(m.managerCtx)
-		m.startSinkWorkers(sinkCtx, splitTxn, enableOldValue)
+		m.startSinkWorkers(sinkCtx, m.sinkEg, splitTxn, enableOldValue)
 		m.sinkEg.Go(func() error { return m.generateSinkTasks(sinkCtx) })
 		m.wg.Add(1)
 		go func() {
@@ -213,7 +216,7 @@ func (m *SinkManager) Run(ctx context.Context, warnings ...chan<- error) (err er
 	if m.redoDMLMgr != nil && m.redoEg == nil {
 		var redoCtx context.Context
 		m.redoEg, redoCtx = errgroup.WithContext(m.managerCtx)
-		m.startRedoWorkers(redoCtx, enableOldValue)
+		m.startRedoWorkers(redoCtx, m.redoEg, enableOldValue)
 		m.redoEg.Go(func() error { return m.generateRedoTasks(redoCtx) })
 		m.wg.Add(1)
 		go func() {
@@ -248,7 +251,7 @@ func (m *SinkManager) Run(ctx context.Context, warnings ...chan<- error) (err er
 
 		select {
 		case <-m.managerCtx.Done():
-			return errors.Trace(ctx.Err())
+			return errors.Trace(m.managerCtx.Err())
 		case err = <-gcErrors:
 			return errors.Trace(err)
 		case err = <-sinkErrors:
@@ -310,13 +313,18 @@ func (m *SinkManager) clearSinkFactory() {
 	m.sinkFactoryMu.Lock()
 	defer m.sinkFactoryMu.Unlock()
 	if m.sinkFactory != nil {
+		log.Info("Sink manager closing sink factory",
+			zap.String("namespace", m.changefeedID.Namespace),
+			zap.String("changefeed", m.changefeedID.ID))
 		m.sinkFactory.Close()
 		m.sinkFactory = nil
+		log.Info("Sink manager has closed sink factory",
+			zap.String("namespace", m.changefeedID.Namespace),
+			zap.String("changefeed", m.changefeedID.ID))
 	}
 }
 
-func (m *SinkManager) startSinkWorkers(ctx context.Context, splitTxn bool, enableOldValue bool) {
-	eg, ctx := errgroup.WithContext(ctx)
+func (m *SinkManager) startSinkWorkers(ctx context.Context, eg *errgroup.Group, splitTxn bool, enableOldValue bool) {
 	for i := 0; i < sinkWorkerNum; i++ {
 		w := newSinkWorker(m.changefeedID, m.sourceManager,
 			m.sinkMemQuota, m.redoMemQuota,
@@ -326,8 +334,7 @@ func (m *SinkManager) startSinkWorkers(ctx context.Context, splitTxn bool, enabl
 	}
 }
 
-func (m *SinkManager) startRedoWorkers(ctx context.Context, enableOldValue bool) {
-	eg, ctx := errgroup.WithContext(ctx)
+func (m *SinkManager) startRedoWorkers(ctx context.Context, eg *errgroup.Group, enableOldValue bool) {
 	for i := 0; i < redoWorkerNum; i++ {
 		w := newRedoWorker(m.changefeedID, m.sourceManager, m.redoMemQuota,
 			m.redoDMLMgr, m.eventCache, enableOldValue)
@@ -407,7 +414,8 @@ func (m *SinkManager) generateSinkTasks(ctx context.Context) error {
 		tableSinkUpperBoundTs model.Ts,
 	) engine.Position {
 		schemaTs := m.schemaStorage.ResolvedTs()
-		if tableSinkUpperBoundTs > schemaTs+1 {
+		if schemaTs != math.MaxUint64 && tableSinkUpperBoundTs > schemaTs+1 {
+			// schemaTs == math.MaxUint64 means it's in tests.
 			tableSinkUpperBoundTs = schemaTs + 1
 		}
 		return engine.Position{StartTs: tableSinkUpperBoundTs - 1, CommitTs: tableSinkUpperBoundTs}
@@ -815,11 +823,6 @@ func (m *SinkManager) StartTable(span tablepb.Span, startTs model.Ts) error {
 
 // AsyncStopTable sets the table(TableSink) state to stopped.
 func (m *SinkManager) AsyncStopTable(span tablepb.Span) bool {
-	log.Info("Async stop table sink",
-		zap.String("namespace", m.changefeedID.Namespace),
-		zap.String("changefeed", m.changefeedID.ID),
-		zap.Stringer("span", &span))
-
 	tableSink, ok := m.tableSinks.Load(span)
 	if !ok {
 		// Just warn, because the table sink may be removed by another goroutine.
@@ -830,8 +833,8 @@ func (m *SinkManager) AsyncStopTable(span tablepb.Span) bool {
 			zap.Stringer("span", &span))
 	}
 	if tableSink.(*tableSinkWrapper).asyncClose() {
-		cleanedBytes := m.sinkMemQuota.Clean(span)
-		cleanedBytes += m.redoMemQuota.Clean(span)
+		cleanedBytes := m.sinkMemQuota.RemoveTable(span)
+		cleanedBytes += m.redoMemQuota.RemoveTable(span)
 		log.Debug("MemoryQuotaTracing: Clean up memory quota for table sink task when removing table",
 			zap.String("namespace", m.changefeedID.Namespace),
 			zap.String("changefeed", m.changefeedID.ID),
@@ -887,7 +890,7 @@ func (m *SinkManager) GetAllCurrentTableSpansCount() int {
 
 // GetTableState returns the table(TableSink) state.
 func (m *SinkManager) GetTableState(span tablepb.Span) (tablepb.TableState, bool) {
-	tableSink, ok := m.tableSinks.Load(span)
+	wrapper, ok := m.tableSinks.Load(span)
 	if !ok {
 		log.Debug("Table sink not found when getting table state",
 			zap.String("namespace", m.changefeedID.Namespace),
@@ -895,7 +898,21 @@ func (m *SinkManager) GetTableState(span tablepb.Span) (tablepb.TableState, bool
 			zap.Stringer("span", &span))
 		return tablepb.TableStateAbsent, false
 	}
-	return tableSink.(*tableSinkWrapper).getState(), true
+
+	// NOTE(qupeng): I'm not sure whether `SinkManager.AsyncStopTable` will be called
+	// again or not if it returns false. So we must retry `tableSink.asyncClose` here
+	// if necessary. It's better to remove the dirty logic in the future.
+	tableSink := wrapper.(*tableSinkWrapper)
+	if tableSink.getState() == tablepb.TableStateStopping && tableSink.asyncClose() {
+		cleanedBytes := m.sinkMemQuota.RemoveTable(span)
+		cleanedBytes += m.redoMemQuota.RemoveTable(span)
+		log.Debug("MemoryQuotaTracing: Clean up memory quota for table sink task when removing table",
+			zap.String("namespace", m.changefeedID.Namespace),
+			zap.String("changefeed", m.changefeedID.ID),
+			zap.Stringer("span", &span),
+			zap.Uint64("memory", cleanedBytes))
+	}
+	return tableSink.getState(), true
 }
 
 // GetTableStats returns the state of the table.
@@ -947,6 +964,17 @@ func (m *SinkManager) WaitForReady(ctx context.Context) {
 	}
 }
 
+// wait all sub-routines associated with `m.wg` returned.
+func (m *SinkManager) waitSubroutines() {
+	m.managerCancel()
+	// Sink workers and redo workers can be blocked on MemQuota.BlockAcquire,
+	// which doesn't watch m.managerCtx. So we must close these 2 MemQuotas
+	// before wait them.
+	m.sinkMemQuota.Close()
+	m.redoMemQuota.Close()
+	m.wg.Wait()
+}
+
 // Close closes the manager. Must be called after `Run` returned.
 func (m *SinkManager) Close() {
 	log.Info("Closing sink manager",
@@ -954,9 +982,7 @@ func (m *SinkManager) Close() {
 		zap.String("changefeed", m.changefeedID.ID))
 
 	start := time.Now()
-	m.wg.Wait()
-	m.sinkMemQuota.Close()
-	m.redoMemQuota.Close()
+	m.waitSubroutines()
 	m.tableSinks.Range(func(_ tablepb.Span, value interface{}) bool {
 		sink := value.(*tableSinkWrapper)
 		sink.close()

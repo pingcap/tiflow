@@ -495,7 +495,7 @@ func TestReplicationManagerBurstBalanceMoveTables(t *testing.T) {
 	table2, err := NewReplicationSet(span2, 0, map[string]*tablepb.TableStatus{
 		"1": {
 			Span: span2, State: tablepb.TableStateReplicating,
-			Checkpoint: tablepb.Checkpoint{CheckpointTs: 1},
+			Checkpoint: tablepb.Checkpoint{CheckpointTs: 1, ResolvedTs: 1},
 		},
 	}, model.ChangeFeedID{})
 	require.Nil(t, err)
@@ -522,7 +522,10 @@ func TestReplicationManagerBurstBalanceMoveTables(t *testing.T) {
 				AddTable: &schedulepb.AddTableRequest{
 					Span:        span2,
 					IsSecondary: true,
-					Checkpoint:  tablepb.Checkpoint{CheckpointTs: 1},
+					Checkpoint: tablepb.Checkpoint{
+						CheckpointTs: 1,
+						ResolvedTs:   1,
+					},
 				},
 			},
 		},
@@ -606,16 +609,22 @@ func TestReplicationManagerAdvanceCheckpoint(t *testing.T) {
 	require.NoError(t, err)
 	r.spans.ReplaceOrInsert(span2, rs)
 
-	// all tables are replicating
+	// no tables are replicating, resolvedTs should be advanced to globalBarrierTs and checkpoint
+	// should be advanced to minTableBarrierTs.
 	currentTables := &TableRanges{}
+	checkpoint, resolved := r.AdvanceCheckpoint(currentTables, time.Now(), schedulepb.NewBarrierWithMinTs(5))
+	require.Equal(t, model.Ts(5), checkpoint)
+	require.Equal(t, model.Ts(5), resolved)
+
+	// all tables are replicating
 	currentTables.UpdateTables([]model.TableID{1, 2})
-	checkpoint, resolved := r.AdvanceCheckpoint(currentTables, time.Now())
+	checkpoint, resolved = r.AdvanceCheckpoint(currentTables, time.Now(), schedulepb.NewBarrierWithMinTs(30))
 	require.Equal(t, model.Ts(10), checkpoint)
 	require.Equal(t, model.Ts(20), resolved)
 
 	// some table not exist yet.
 	currentTables.UpdateTables([]model.TableID{1, 2, 3})
-	checkpoint, resolved = r.AdvanceCheckpoint(currentTables, time.Now())
+	checkpoint, resolved = r.AdvanceCheckpoint(currentTables, time.Now(), schedulepb.NewBarrierWithMinTs(30))
 	require.Equal(t, checkpointCannotProceed, checkpoint)
 	require.Equal(t, checkpointCannotProceed, resolved)
 
@@ -641,7 +650,7 @@ func TestReplicationManagerAdvanceCheckpoint(t *testing.T) {
 		}, model.ChangeFeedID{})
 	require.NoError(t, err)
 	r.spans.ReplaceOrInsert(span3, rs)
-	checkpoint, resolved = r.AdvanceCheckpoint(currentTables, time.Now())
+	checkpoint, resolved = r.AdvanceCheckpoint(currentTables, time.Now(), schedulepb.NewBarrierWithMinTs(30))
 	require.Equal(t, model.Ts(5), checkpoint)
 	require.Equal(t, model.Ts(20), resolved)
 
@@ -660,7 +669,7 @@ func TestReplicationManagerAdvanceCheckpoint(t *testing.T) {
 		}, model.ChangeFeedID{})
 	require.NoError(t, err)
 	r.spans.ReplaceOrInsert(span4, rs)
-	checkpoint, resolved = r.AdvanceCheckpoint(currentTables, time.Now())
+	checkpoint, resolved = r.AdvanceCheckpoint(currentTables, time.Now(), schedulepb.NewBarrierWithMinTs(30))
 	require.Equal(t, model.Ts(3), checkpoint)
 	require.Equal(t, model.Ts(10), resolved)
 
@@ -685,20 +694,20 @@ func TestReplicationManagerAdvanceCheckpoint(t *testing.T) {
 		require.NoError(t, err)
 		r.spans.ReplaceOrInsert(span, rs)
 	}
-	checkpoint, resolved = r.AdvanceCheckpoint(currentTables, time.Now())
+	checkpoint, resolved = r.AdvanceCheckpoint(currentTables, time.Now(), schedulepb.NewBarrierWithMinTs(30))
 	require.Equal(t, model.Ts(3), checkpoint)
 	require.Equal(t, model.Ts(10), resolved)
 
 	// The start span is missing
 	rs5_1, _ := r.spans.Delete(span5_1)
-	checkpoint, resolved = r.AdvanceCheckpoint(currentTables, time.Now())
+	checkpoint, resolved = r.AdvanceCheckpoint(currentTables, time.Now(), schedulepb.NewBarrierWithMinTs(30))
 	require.Equal(t, checkpointCannotProceed, checkpoint)
 	require.Equal(t, checkpointCannotProceed, resolved)
 
 	// The end span is missing
 	r.spans.ReplaceOrInsert(span5_1, rs5_1)
 	r.spans.Delete(span5_2)
-	checkpoint, resolved = r.AdvanceCheckpoint(currentTables, time.Now())
+	checkpoint, resolved = r.AdvanceCheckpoint(currentTables, time.Now(), schedulepb.NewBarrierWithMinTs(30))
 	require.Equal(t, checkpointCannotProceed, checkpoint)
 	require.Equal(t, checkpointCannotProceed, resolved)
 }

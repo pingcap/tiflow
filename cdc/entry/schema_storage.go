@@ -36,9 +36,9 @@ import (
 
 // SchemaStorage stores the schema information with multi-version
 type SchemaStorage interface {
-	// GetSnapshot returns the snapshot which currentTs is less than(but most close to)
-	// or equal to the ts.
-	// It may block caller when ts is larger than SchemaStorage ResolvedTs.
+	// GetSnapshot returns the nearest snapshot which currentTs is less than or
+	// equal to the ts.
+	// It may block caller when ts is larger than the resolvedTs of SchemaStorage.
 	GetSnapshot(ctx context.Context, ts uint64) (*schema.Snapshot, error)
 	// GetLastSnapshot returns the last snapshot
 	GetLastSnapshot() *schema.Snapshot

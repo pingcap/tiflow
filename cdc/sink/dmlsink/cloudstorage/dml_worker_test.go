@@ -44,7 +44,9 @@ func testDMLWorker(ctx context.Context, t *testing.T, dir string) *dmlWorker {
 	sinkURI, err := url.Parse(uri)
 	require.Nil(t, err)
 	cfg := cloudstorage.NewConfig()
-	err = cfg.Apply(context.TODO(), sinkURI, config.GetDefaultReplicaConfig())
+	replicaConfig := config.GetDefaultReplicaConfig()
+	replicaConfig.Sink.DateSeparator = util.AddressOf(config.DateSeparatorNone.String())
+	err = cfg.Apply(context.TODO(), sinkURI, replicaConfig)
 	cfg.FileIndexWidth = 6
 	require.Nil(t, err)
 
