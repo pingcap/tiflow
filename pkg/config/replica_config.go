@@ -37,10 +37,25 @@ var defaultReplicaConfig = &ReplicaConfig{
 		WorkerNum: 16,
 	},
 	Sink: &SinkConfig{
+<<<<<<< HEAD
 		EncoderConcurrency: 16,
 	},
 	Cyclic: &CyclicConfig{
 		Enable: false,
+=======
+		CSVConfig: &CSVConfig{
+			Quote:      string(DoubleQuoteChar),
+			Delimiter:  Comma,
+			NullString: NULL,
+		},
+		EncoderConcurrency:       util.AddressOf(16),
+		Terminator:               util.AddressOf(CRLF),
+		DateSeparator:            util.AddressOf(DateSeparatorDay.String()),
+		EnablePartitionSeparator: util.AddressOf(true),
+		EnableKafkaSinkV2:        util.AddressOf(false),
+		OnlyOutputUpdatedColumns: util.AddressOf(false),
+		TiDBSourceID:             1,
+>>>>>>> edda949d87 (config(ticdc): fix deafult setting of DateSeparator (#9090))
 	},
 	Consistent: &ConsistentConfig{
 		Level:             "none",
