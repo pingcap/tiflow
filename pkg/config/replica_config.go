@@ -300,3 +300,47 @@ func isSinkCompatibleWithSpanReplication(u *url.URL) bool {
 	return u != nil &&
 		(strings.Contains(u.Scheme, "kafka") || strings.Contains(u.Scheme, "blackhole"))
 }
+
+// AdjustEnableOldValue adjust the old value configuration by the sink scheme and encoding protocol
+func (c *ReplicaConfig) AdjustEnableOldValue(uri string) error {
+	sinkURI, err := url.Parse(uri)
+	if err != nil {
+		return cerror.WrapError(cerror.ErrSinkURIInvalid, err)
+	}
+
+	switch strings.ToLower(sinkURI.Scheme) {
+	case sink.MySQLScheme, sink.MySQLSSLScheme, sink.TiDBScheme, sink.TiDBSSLScheme:
+	default:
+		protocol := sinkURI.Query().Get(ProtocolKey)
+		if protocol != "" {
+			c.Sink.Protocol = util.AddressOf(protocol)
+		}
+		protocol = util.GetOrZero(c.Sink.Protocol)
+
+		if c.EnableOldValue {
+			for _, fp := range ForceDisableOldValueProtocols {
+				if protocol == fp {
+					log.Warn("Attempting to replicate with old value enabled. CDC will disable old value and continue.",
+						zap.String("protocol", protocol))
+					c.EnableOldValue = false
+					break
+				}
+			}
+		} else {
+			for _, fp := range ForceEnableOldValueProtocols {
+				if protocol == fp {
+					log.Warn("Attempting to replicate without old value enabled. CDC will enable old value and continue.",
+						zap.String("protocol", protocol))
+					c.EnableOldValue = true
+					break
+				}
+			}
+		}
+	}
+
+	if c.ForceReplicate && !c.EnableOldValue {
+		log.Error("if use force replicate, old value feature must be enabled")
+		return cerror.ErrOldValueNotEnabled.GenWithStackByArgs()
+	}
+	return nil
+}
