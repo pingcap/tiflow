@@ -17,9 +17,11 @@ import (
 	"context"
 	"time"
 
+	"github.com/pingcap/log"
 	"github.com/pingcap/tiflow/cdc/model"
 	pkafka "github.com/pingcap/tiflow/pkg/sink/kafka"
 	"github.com/pingcap/tiflow/pkg/util"
+	"go.uber.org/zap"
 )
 
 // MetricsCollector is the kafka metrics collector based on kafka-go library.
@@ -53,6 +55,9 @@ func (m *MetricsCollector) Run(ctx context.Context) {
 	for {
 		select {
 		case <-ctx.Done():
+			log.Info("Kafka metrics collector stopped",
+				zap.String("namespace", m.changefeedID.Namespace),
+				zap.String("changefeed", m.changefeedID.ID))
 			return
 		case <-ticker.C:
 			m.collectMetrics()

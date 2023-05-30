@@ -218,18 +218,9 @@ func (d *decoder) NextRowChangedEvent() (*model.RowChangedEvent, error) {
 		columns = append(columns, col)
 	}
 
-	var (
-		operation string
-		commitTs  int64
-	)
+	var commitTs int64
 	if !isDelete {
-		o, ok := valueMap[tidbOp]
-		if !ok {
-			return nil, errors.New("operation not found")
-		}
-		operation = o.(string)
-
-		o, ok = valueMap[tidbCommitTs]
+		o, ok := valueMap[tidbCommitTs]
 		if !ok {
 			return nil, errors.New("commit ts not found")
 		}
@@ -237,23 +228,35 @@ func (d *decoder) NextRowChangedEvent() (*model.RowChangedEvent, error) {
 
 		o, ok = valueMap[tidbRowLevelChecksum]
 		if ok {
+			var expected uint64
 			checksum := o.(string)
-			expected, err := strconv.ParseUint(checksum, 10, 64)
-			if err != nil {
-				return nil, errors.Trace(err)
-			}
-
-			if o, ok := valueMap[tidbCorrupted]; ok {
-				corrupted := o.(bool)
-				if corrupted {
-					log.Warn("row data is corrupted",
-						zap.String("topic", d.topic),
-						zap.String("checksum", checksum))
+			if checksum != "" {
+				expected, err = strconv.ParseUint(checksum, 10, 64)
+				if err != nil {
+					return nil, errors.Trace(err)
 				}
-			}
+				if o, ok := valueMap[tidbCorrupted]; ok {
+					corrupted := o.(bool)
+					if corrupted {
+						log.Warn("row data is corrupted",
+							zap.String("topic", d.topic),
+							zap.String("checksum", checksum))
+						for _, col := range columns {
+							log.Info("data corrupted, print each column for debugging",
+								zap.String("name", col.Name),
+								zap.Any("type", col.Type),
+								zap.Any("charset", col.Charset),
+								zap.Any("flag", col.Flag),
+								zap.Any("value", col.Value),
+								zap.Any("default", col.Default),
+							)
+						}
+					}
+				}
 
-			if err := d.verifyChecksum(columns, expected); err != nil {
-				return nil, errors.Trace(err)
+				if err := d.verifyChecksum(columns, expected); err != nil {
+					return nil, errors.Trace(err)
+				}
 			}
 		}
 	}
@@ -269,12 +272,8 @@ func (d *decoder) NextRowChangedEvent() (*model.RowChangedEvent, error) {
 		Schema: schemaName,
 		Table:  tableName,
 	}
+	event.Columns = columns
 
-	if operation == insertOperation {
-		event.Columns = columns
-	} else {
-		event.PreColumns = columns
-	}
 	return event, nil
 }
 
@@ -297,14 +296,24 @@ func (d *decoder) NextDDLEvent() (*model.DDLEvent, error) {
 		return nil, fmt.Errorf("first byte is not the ddl byte, but got: %+v", d.value[0])
 	}
 
-	result := new(model.DDLEvent)
 	data := d.value[1:]
-
-	err := json.Unmarshal(data, &result)
+	var baseDDLEvent ddlEvent
+	err := json.Unmarshal(data, &baseDDLEvent)
 	if err != nil {
 		return nil, errors.WrapError(errors.ErrDecodeFailed, err)
 	}
 	d.value = nil
+
+	result := new(model.DDLEvent)
+	result.TableInfo = new(model.TableInfo)
+	result.CommitTs = baseDDLEvent.CommitTs
+	result.TableInfo.TableName = model.TableName{
+		Schema: baseDDLEvent.Schema,
+		Table:  baseDDLEvent.Table,
+	}
+	result.Type = baseDDLEvent.Type
+	result.Query = baseDDLEvent.Query
+
 	return result, nil
 }
 

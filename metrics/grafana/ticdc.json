@@ -951,7 +951,7 @@
           "steppedLine": false,
           "targets": [
             {
-              "expr": "histogram_quantile(0.999, sum(rate(ticdc_sink_txn_exec_duration_bucket{tidb_cluster=\"$tidb_cluster\", instance=~\"$ticdc_instance\"}[1m])) by (le, changefeed))",
+              "expr": "histogram_quantile(0.999, sum(rate(ticdc_sink_txn_worker_flush_duration{tidb_cluster=\"$tidb_cluster\", instance=~\"$ticdc_instance\"}[1m])) by (le, changefeed))",
               "format": "time_series",
               "intervalFactor": 2,
               "legendFormat": "{{changefeed}}",

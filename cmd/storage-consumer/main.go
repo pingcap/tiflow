@@ -156,15 +156,17 @@ func newConsumer(ctx context.Context) (*consumer, error) {
 		return nil, err
 	}
 
-	switch replicaConfig.Sink.Protocol {
+	switch putil.GetOrZero(replicaConfig.Sink.Protocol) {
 	case config.ProtocolCsv.String():
 	case config.ProtocolCanalJSON.String():
 	default:
-		return nil, fmt.Errorf("data encoded in protocol %s is not supported yet",
-			replicaConfig.Sink.Protocol)
+		return nil, fmt.Errorf(
+			"data encoded in protocol %s is not supported yet",
+			putil.GetOrZero(replicaConfig.Sink.Protocol),
+		)
 	}
 
-	protocol, err := config.ParseSinkProtocolFromString(replicaConfig.Sink.Protocol)
+	protocol, err := config.ParseSinkProtocolFromString(putil.GetOrZero(replicaConfig.Sink.Protocol))
 	if err != nil {
 		return nil, err
 	}
@@ -430,7 +432,10 @@ func (c *consumer) syncExecDMLEvents(
 
 func (c *consumer) parseDMLFilePath(_ context.Context, path string) error {
 	var dmlkey cloudstorage.DmlPathKey
-	fileIdx, err := dmlkey.ParseDMLFilePath(c.replicationCfg.Sink.DateSeparator, path)
+	fileIdx, err := dmlkey.ParseDMLFilePath(
+		putil.GetOrZero(c.replicationCfg.Sink.DateSeparator),
+		path,
+	)
 	if err != nil {
 		return errors.Trace(err)
 	}

@@ -23,6 +23,7 @@ import (
 	"github.com/pingcap/log"
 	"github.com/pingcap/tiflow/pkg/config"
 	cerror "github.com/pingcap/tiflow/pkg/errors"
+	"github.com/pingcap/tiflow/pkg/util"
 	"go.uber.org/zap"
 )
 
@@ -157,7 +158,7 @@ func (c *Config) Apply(sinkURI *url.URL, replicaConfig *config.ReplicaConfig) er
 	}
 
 	if replicaConfig.Sink != nil {
-		c.Terminator = replicaConfig.Sink.Terminator
+		c.Terminator = util.GetOrZero(replicaConfig.Sink.Terminator)
 		if replicaConfig.Sink.CSVConfig != nil {
 			c.Delimiter = replicaConfig.Sink.CSVConfig.Delimiter
 			c.Quote = replicaConfig.Sink.CSVConfig.Quote
@@ -188,7 +189,7 @@ func mergeConfig(
 ) (*urlConfig, error) {
 	dest := &urlConfig{}
 	if replicaConfig.Sink != nil {
-		dest.AvroSchemaRegistry = replicaConfig.Sink.SchemaRegistry
+		dest.AvroSchemaRegistry = util.GetOrZero(replicaConfig.Sink.SchemaRegistry)
 		dest.OnlyOutputUpdatedColumns = replicaConfig.Sink.OnlyOutputUpdatedColumns
 		if replicaConfig.Sink.KafkaConfig != nil {
 			dest.MaxMessageBytes = replicaConfig.Sink.KafkaConfig.MaxMessageBytes
