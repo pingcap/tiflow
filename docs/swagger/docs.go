@@ -1270,6 +1270,12 @@ var doc = `{
                     },
                     {
                         "type": "string",
+                        "description": "default",
+                        "name": "namespace",
+                        "in": "query"
+                    },
+                    {
+                        "type": "string",
                         "description": "capture ID",
                         "name": "capture_id",
                         "in": "path",

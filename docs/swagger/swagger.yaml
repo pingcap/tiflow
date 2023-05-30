@@ -1715,6 +1715,10 @@ paths:
         name: changefeed_id
         required: true
         type: string
+      - description: default
+        in: query
+        name: namespace
+        type: string
       - description: capture ID
         in: path
         name: capture_id
