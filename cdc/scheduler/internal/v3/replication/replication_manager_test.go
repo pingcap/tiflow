@@ -480,7 +480,7 @@ func TestReplicationManagerBurstBalanceMoveTables(t *testing.T) {
 	r.tables[2], err = NewReplicationSet(2, 0, map[string]*tablepb.TableStatus{
 		"1": {
 			TableID: 2, State: tablepb.TableStateReplicating,
-			Checkpoint: tablepb.Checkpoint{CheckpointTs: 1},
+			Checkpoint: tablepb.Checkpoint{CheckpointTs: 1, ResolvedTs: 1},
 		},
 	}, model.ChangeFeedID{})
 	require.Nil(t, err)
@@ -506,7 +506,10 @@ func TestReplicationManagerBurstBalanceMoveTables(t *testing.T) {
 				AddTable: &schedulepb.AddTableRequest{
 					TableID:     2,
 					IsSecondary: true,
-					Checkpoint:  tablepb.Checkpoint{CheckpointTs: 1},
+					Checkpoint: tablepb.Checkpoint{
+						CheckpointTs: 1,
+						ResolvedTs:   1,
+					},
 				},
 			},
 		},
