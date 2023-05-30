@@ -37,7 +37,7 @@ const (
   "sink": {
     "encoder-concurrency": 16,
     "terminator": "\r\n",
-	"date-separator": "none",
+	"date-separator": "day",
     "dispatch-rules": [
       {
         "db-name": "a",
