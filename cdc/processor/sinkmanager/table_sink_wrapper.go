@@ -409,7 +409,7 @@ func (t *tableSinkWrapper) cleanRangeEventCounts(upperBound engine.Position, min
 // It will deal with the old value compatibility.
 func convertRowChangedEvents(
 	changefeed model.ChangeFeedID, span tablepb.Span,
-	shouldSplitUpdate bool,
+	enableOldValue bool,
 	events ...*model.PolymorphicEvent,
 ) ([]*model.RowChangedEvent, uint64, error) {
 	size := 0
@@ -442,7 +442,7 @@ func convertRowChangedEvents(
 
 		// TiCDC always pull old value, but old value can be disabled in the configuration.
 		// in the such case, handle the update event to be compatible with the old format.
-		if e.Row.IsUpdate() && shouldSplitUpdate {
+		if e.Row.IsUpdate() && !enableOldValue {
 			if shouldSplitUpdateEvent(e) {
 				deleteEvent, insertEvent, err := splitUpdateEvent(e)
 				if err != nil {

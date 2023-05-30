@@ -185,7 +185,7 @@ func (m *SinkManager) Run(ctx context.Context, warnings ...chan<- error) (err er
 	}()
 
 	splitTxn := util.GetOrZero(m.changefeedInfo.Config.Sink.TxnAtomicity).ShouldSplitTxn()
-	shouldSplitUpdate := m.changefeedInfo.Config.ShouldSplitUpdate()
+	enableOldValue := m.changefeedInfo.Config.EnableOldValue
 
 	gcErrors := make(chan error, 16)
 	sinkFactoryErrors := make(chan error, 16)
@@ -196,7 +196,7 @@ func (m *SinkManager) Run(ctx context.Context, warnings ...chan<- error) (err er
 	if m.sinkEg == nil {
 		var sinkCtx context.Context
 		m.sinkEg, sinkCtx = errgroup.WithContext(m.managerCtx)
-		m.startSinkWorkers(sinkCtx, m.sinkEg, splitTxn, shouldSplitUpdate)
+		m.startSinkWorkers(sinkCtx, m.sinkEg, splitTxn, enableOldValue)
 		m.sinkEg.Go(func() error { return m.generateSinkTasks(sinkCtx) })
 		m.wg.Add(1)
 		go func() {
@@ -216,7 +216,7 @@ func (m *SinkManager) Run(ctx context.Context, warnings ...chan<- error) (err er
 	if m.redoDMLMgr != nil && m.redoEg == nil {
 		var redoCtx context.Context
 		m.redoEg, redoCtx = errgroup.WithContext(m.managerCtx)
-		m.startRedoWorkers(redoCtx, m.redoEg, shouldSplitUpdate)
+		m.startRedoWorkers(redoCtx, m.redoEg, enableOldValue)
 		m.redoEg.Go(func() error { return m.generateRedoTasks(redoCtx) })
 		m.wg.Add(1)
 		go func() {
@@ -324,11 +324,11 @@ func (m *SinkManager) clearSinkFactory() {
 	}
 }
 
-func (m *SinkManager) startSinkWorkers(ctx context.Context, eg *errgroup.Group, splitTxn bool, shouldSplitUpdate bool) {
+func (m *SinkManager) startSinkWorkers(ctx context.Context, eg *errgroup.Group, splitTxn bool, enableOldValue bool) {
 	for i := 0; i < sinkWorkerNum; i++ {
 		w := newSinkWorker(m.changefeedID, m.sourceManager,
 			m.sinkMemQuota, m.redoMemQuota,
-			m.eventCache, splitTxn, shouldSplitUpdate)
+			m.eventCache, splitTxn, enableOldValue)
 		m.sinkWorkers = append(m.sinkWorkers, w)
 		eg.Go(func() error { return w.handleTasks(ctx, m.sinkTaskChan) })
 	}

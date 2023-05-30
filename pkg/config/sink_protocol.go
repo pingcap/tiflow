@@ -45,18 +45,6 @@ func (p Protocol) IsBatchEncode() bool {
 	return p == ProtocolOpen || p == ProtocolCanal || p == ProtocolMaxwell || p == ProtocolCraft
 }
 
-// ShouldSplitUpdate returns whether the protocol should split update event
-// Avro and CSV does not output the old value for the update event in all scenarios
-// so update events need to be split into delete and insert events to prevent old value from being discarded.
-// that the old value is lost.
-func (p Protocol) ShouldSplitUpdate() bool {
-	switch p {
-	case ProtocolAvro, ProtocolCsv:
-		return true
-	}
-	return false
-}
-
 // ParseSinkProtocolFromString converts the protocol from string to Protocol enum type.
 func ParseSinkProtocolFromString(protocol string) (Protocol, error) {
 	switch strings.ToLower(protocol) {

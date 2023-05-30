@@ -66,12 +66,7 @@ type sinkWorker struct {
 	// splitTxn indicates whether to split the transaction into multiple batches.
 	splitTxn bool
 
-	// shouldSplitUpdate indicates whether to split the update event.
-	// At the moment, it can be true in the following cases:
-	// 1. user disable the old value manually in the configuration, in the such case split the
-	// update event to be compatible with the old data format.
-	// 2. avro or csv is used as the encoding protocol for the kafka sink or the storage sink.
-	shouldSplitUpdate bool
+	enableOldValue bool
 
 	// Metrics.
 	metricRedoEventCacheHit  prometheus.Counter
@@ -87,16 +82,16 @@ func newSinkWorker(
 	redoQuota *memquota.MemQuota,
 	eventCache *redoEventCache,
 	splitTxn bool,
-	shouldSplitUpdate bool,
+	enableOldValue bool,
 ) *sinkWorker {
 	return &sinkWorker{
-		changefeedID:      changefeedID,
-		sourceManager:     sourceManager,
-		sinkMemQuota:      sinkQuota,
-		redoMemQuota:      redoQuota,
-		eventCache:        eventCache,
-		splitTxn:          splitTxn,
-		shouldSplitUpdate: shouldSplitUpdate,
+		changefeedID:   changefeedID,
+		sourceManager:  sourceManager,
+		sinkMemQuota:   sinkQuota,
+		redoMemQuota:   redoQuota,
+		eventCache:     eventCache,
+		splitTxn:       splitTxn,
+		enableOldValue: enableOldValue,
 
 		metricRedoEventCacheHit:  RedoEventCacheAccess.WithLabelValues(changefeedID.Namespace, changefeedID.ID, "hit"),
 		metricRedoEventCacheMiss: RedoEventCacheAccess.WithLabelValues(changefeedID.Namespace, changefeedID.ID, "miss"),
@@ -237,7 +232,7 @@ func (w *sinkWorker) handleTask(ctx context.Context, task *sinkTask) (finalErr e
 		if e.Row != nil {
 			// For all rows, we add table replicate ts, so mysql sink can determine safe-mode.
 			e.Row.ReplicatingTs = task.tableSink.replicateTs
-			x, size, err := convertRowChangedEvents(w.changefeedID, task.span, w.shouldSplitUpdate, e)
+			x, size, err := convertRowChangedEvents(w.changefeedID, task.span, w.enableOldValue, e)
 			if err != nil {
 				return err
 			}
