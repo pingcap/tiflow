@@ -334,10 +334,10 @@ func (m *SinkManager) startSinkWorkers(ctx context.Context, eg *errgroup.Group, 
 	}
 }
 
-func (m *SinkManager) startRedoWorkers(ctx context.Context, eg *errgroup.Group, shouldSplitUpdate bool) {
+func (m *SinkManager) startRedoWorkers(ctx context.Context, eg *errgroup.Group, enableOldValue bool) {
 	for i := 0; i < redoWorkerNum; i++ {
 		w := newRedoWorker(m.changefeedID, m.sourceManager, m.redoMemQuota,
-			m.redoDMLMgr, m.eventCache, shouldSplitUpdate)
+			m.redoDMLMgr, m.eventCache, enableOldValue)
 		m.redoWorkers = append(m.redoWorkers, w)
 		eg.Go(func() error { return w.handleTasks(ctx, m.redoTaskChan) })
 	}

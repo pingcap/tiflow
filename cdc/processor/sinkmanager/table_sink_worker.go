@@ -65,7 +65,8 @@ type sinkWorker struct {
 	eventCache    *redoEventCache
 	// splitTxn indicates whether to split the transaction into multiple batches.
 	splitTxn bool
-
+	// enableOldValue indicates whether to enable the old value feature.
+	// If it is enabled, we need to deal with the compatibility of the data format.
 	enableOldValue bool
 
 	// Metrics.

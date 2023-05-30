@@ -440,8 +440,9 @@ func convertRowChangedEvents(
 
 		size += e.Row.ApproximateBytes()
 
-		// TiCDC always pull old value, but old value can be disabled in the configuration.
-		// in the such case, handle the update event to be compatible with the old format.
+		// This indicates that it is an update event,
+		// and after enable old value internally by default(but disable in the configuration).
+		// We need to handle the update event to be compatible with the old format.
 		if e.Row.IsUpdate() && !enableOldValue {
 			if shouldSplitUpdateEvent(e) {
 				deleteEvent, insertEvent, err := splitUpdateEvent(e)
