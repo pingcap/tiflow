@@ -34,6 +34,8 @@ func createPebbleDBs(
 	dbs := make([]*pebble.DB, 0, cfg.Count)
 	writeStalls := make([]writeStall, cfg.Count)
 
+	cache := pebble.NewCache(int64(memQuotaInBytes))
+	defer cache.Unref()
 	for id := 0; id < cfg.Count; id++ {
 		ws := writeStalls[id]
 		adjust := func(opts *pebble.Options) {
@@ -57,7 +59,7 @@ func createPebbleDBs(
 			}
 		}
 
-		db, err := epebble.OpenPebble(id, dir, cfg, memQuotaInBytes/uint64(cfg.Count), adjust)
+		db, err := epebble.OpenPebble(id, dir, cfg, cache, adjust)
 		if err != nil {
 			log.Error("create pebble fails", zap.String("dir", dir), zap.Int("id", id), zap.Error(err))
 			for _, db := range dbs {
@@ -67,7 +69,7 @@ func createPebbleDBs(
 		}
 		log.Info("create pebble instance success",
 			zap.Int("id", id+1),
-			zap.Uint64("cacheSize", memQuotaInBytes/uint64(cfg.Count)))
+			zap.Uint64("sharedCacheSize", memQuotaInBytes))
 		dbs = append(dbs, db)
 	}
 	return dbs, writeStalls, nil
