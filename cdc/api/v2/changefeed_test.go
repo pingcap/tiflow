@@ -679,7 +679,7 @@ func TestVerifyTable(t *testing.T) {
 }
 
 func TestResumeChangefeed(t *testing.T) {
-	resume := testCase{url: "/api/v2/changefeeds/%s/resume", method: "POST"}
+	resume := testCase{url: "/api/v2/changefeeds/%s/resume?namespace=abc", method: "POST"}
 	helpers := NewMockAPIV2Helpers(gomock.NewController(t))
 	cp := mock_capture.NewMockCapture(gomock.NewController(t))
 	owner := mock_owner.NewMockOwner(gomock.NewController(t))
@@ -790,7 +790,7 @@ func TestResumeChangefeed(t *testing.T) {
 }
 
 func TestDeleteChangefeed(t *testing.T) {
-	remove := testCase{url: "/api/v2/changefeeds/%s", method: "DELETE"}
+	remove := testCase{url: "/api/v2/changefeeds/%s?namespace=abc", method: "DELETE"}
 	helpers := NewMockAPIV2Helpers(gomock.NewController(t))
 	cp := mock_capture.NewMockCapture(gomock.NewController(t))
 	owner := mock_owner.NewMockOwner(gomock.NewController(t))
@@ -877,7 +877,7 @@ func TestDeleteChangefeed(t *testing.T) {
 }
 
 func TestPauseChangefeed(t *testing.T) {
-	resume := testCase{url: "/api/v2/changefeeds/%s/pause", method: "POST"}
+	resume := testCase{url: "/api/v2/changefeeds/%s/pause?namespace=abc", method: "POST"}
 	helpers := NewMockAPIV2Helpers(gomock.NewController(t))
 	cp := mock_capture.NewMockCapture(gomock.NewController(t))
 	owner := mock_owner.NewMockOwner(gomock.NewController(t))
