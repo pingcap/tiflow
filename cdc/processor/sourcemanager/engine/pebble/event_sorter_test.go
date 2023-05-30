@@ -28,7 +28,7 @@ import (
 
 func TestTableOperations(t *testing.T) {
 	dbPath := filepath.Join(t.TempDir(), t.Name())
-	db, err := OpenPebble(1, dbPath, &config.DBConfig{Count: 1}, 1024*1024*10)
+	db, err := OpenPebble(1, dbPath, &config.DBConfig{Count: 1}, nil)
 	require.Nil(t, err)
 	defer func() { _ = db.Close() }()
 
@@ -50,7 +50,7 @@ func TestTableOperations(t *testing.T) {
 // TestNoResolvedTs tests resolved timestamps shouldn't be emitted.
 func TestNoResolvedTs(t *testing.T) {
 	dbPath := filepath.Join(t.TempDir(), t.Name())
-	db, err := OpenPebble(1, dbPath, &config.DBConfig{Count: 1}, 1024*1024*10)
+	db, err := OpenPebble(1, dbPath, &config.DBConfig{Count: 1}, nil)
 	require.Nil(t, err)
 	defer func() { _ = db.Close() }()
 
@@ -80,7 +80,7 @@ func TestNoResolvedTs(t *testing.T) {
 // TestEventFetch tests events can be sorted correctly.
 func TestEventFetch(t *testing.T) {
 	dbPath := filepath.Join(t.TempDir(), t.Name())
-	db, err := OpenPebble(1, dbPath, &config.DBConfig{Count: 1}, 1024*1024*10)
+	db, err := OpenPebble(1, dbPath, &config.DBConfig{Count: 1}, nil)
 	require.Nil(t, err)
 	defer func() { _ = db.Close() }()
 
@@ -161,7 +161,7 @@ func TestEventFetch(t *testing.T) {
 
 func TestCleanData(t *testing.T) {
 	dbPath := filepath.Join(t.TempDir(), t.Name())
-	db, err := OpenPebble(1, dbPath, &config.DBConfig{Count: 1}, 1024*1024*10)
+	db, err := OpenPebble(1, dbPath, &config.DBConfig{Count: 1}, nil)
 	require.Nil(t, err)
 	defer func() { _ = db.Close() }()
 

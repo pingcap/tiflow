@@ -255,12 +255,7 @@ func (s *server) startActorSystems(ctx context.Context) error {
 	sortDir := config.GetGlobalServerConfig().Sorter.SortDir
 
 	if s.useEventSortEngine {
-		totalMemory, err := util.GetMemoryLimit()
-		if err != nil {
-			return errors.Trace(err)
-		}
-		memPercentage := float64(conf.Sorter.MaxMemoryPercentage) / 100
-		memInBytes := uint64(float64(totalMemory) * memPercentage)
+		memInBytes := conf.Sorter.CacheSizeInMB * (1 << 20)
 		if config.GetGlobalServerConfig().Debug.EnableDBSorter {
 			s.sortEngineFactory = factory.NewForPebble(sortDir, memInBytes, conf.Debug.DB)
 		} else {
