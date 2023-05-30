@@ -225,6 +225,7 @@ func (c *changefeed) handleErr(ctx cdcContext.Context, err error) {
 		code = string(cerror.ErrOwnerUnknown.RFCCode())
 	}
 	c.feedStateManager.handleError(&model.RunningError{
+		Time:    time.Now(),
 		Addr:    contextutil.CaptureAddrFromCtx(ctx),
 		Code:    code,
 		Message: err.Error(),
