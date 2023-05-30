@@ -31,6 +31,7 @@ import (
 	"github.com/pingcap/tiflow/pkg/config"
 	cerror "github.com/pingcap/tiflow/pkg/errors"
 	"github.com/pingcap/tiflow/pkg/filter"
+	"github.com/pingcap/tiflow/pkg/sink"
 	putil "github.com/pingcap/tiflow/pkg/util"
 	"github.com/spf13/cobra"
 	"github.com/tikv/client-go/v2/oracle"
@@ -141,6 +142,54 @@ func (o *createChangefeedOptions) complete(f factory.Factory, cmd *cobra.Command
 	return o.completeReplicaCfg(cmd)
 }
 
+func (o *createChangefeedOptions) adjustReplicaConfig(cfg *config.ReplicaConfig) error {
+	sinkURI, err := url.Parse(o.commonChangefeedOptions.sinkURI)
+	if err != nil {
+		return cerror.WrapError(cerror.ErrSinkURIInvalid, err)
+	}
+
+	switch strings.ToLower(sinkURI.Scheme) {
+	case sink.MySQLScheme, sink.MySQLSSLScheme, sink.TiDBScheme, sink.TiDBSSLScheme:
+		if cfg.ForceReplicate && !cfg.EnableOldValue {
+			log.Error("if use force replicate, old value feature must be enabled")
+			return cerror.ErrOldValueNotEnabled.GenWithStackByArgs()
+		}
+		return nil
+	default:
+		protocol := sinkURI.Query().Get(config.ProtocolKey)
+		if protocol != "" {
+			cfg.Sink.Protocol = putil.AddressOf(protocol)
+		}
+		protocol = putil.GetOrZero(cfg.Sink.Protocol)
+
+		if cfg.EnableOldValue {
+			for _, fp := range config.ForceDisableOldValueProtocols {
+				if protocol == fp {
+					log.Warn("Attempting to replicate with old value enabled. CDC will disable old value and continue.",
+						zap.String("protocol", putil.GetOrZero(cfg.Sink.Protocol)))
+					cfg.EnableOldValue = false
+					break
+				}
+			}
+		} else {
+			for _, fp := range config.ForceEnableOldValueProtocols {
+				if protocol == fp {
+					log.Warn("Attempting to replicate without old value enabled. CDC will enable old value and continue.",
+						zap.String("protocol", putil.GetOrZero(cfg.Sink.Protocol)))
+					cfg.EnableOldValue = true
+					break
+				}
+			}
+		}
+	}
+
+	if cfg.ForceReplicate && !cfg.EnableOldValue {
+		log.Error("if use force replicate, old value feature must be enabled")
+		return cerror.ErrOldValueNotEnabled.GenWithStackByArgs()
+	}
+	return nil
+}
+
 // completeCfg complete the replica config from file and cmd flags.
 func (o *createChangefeedOptions) completeReplicaCfg(
 	cmd *cobra.Command,
@@ -152,28 +201,8 @@ func (o *createChangefeedOptions) completeReplicaCfg(
 		}
 	}
 
-	if !cfg.EnableOldValue {
-		sinkURIParsed, err := url.Parse(o.commonChangefeedOptions.sinkURI)
-		if err != nil {
-			return cerror.WrapError(cerror.ErrSinkURIInvalid, err)
-		}
-
-		protocol := sinkURIParsed.Query().Get(config.ProtocolKey)
-		if protocol != "" {
-			cfg.Sink.Protocol = putil.AddressOf(protocol)
-		}
-		for _, fp := range config.ForceEnableOldValueProtocols {
-			if putil.GetOrZero(cfg.Sink.Protocol) == fp {
-				log.Warn("Attempting to replicate without old value enabled. CDC will enable old value and continue.", zap.String("protocol", putil.GetOrZero(cfg.Sink.Protocol)))
-				cfg.EnableOldValue = true
-				break
-			}
-		}
-
-		if cfg.ForceReplicate {
-			log.Error("if use force replicate, old value feature must be enabled")
-			return cerror.ErrOldValueNotEnabled.GenWithStackByArgs()
-		}
+	if err := o.adjustReplicaConfig(cfg); err != nil {
+		return err
 	}
 
 	for _, rules := range cfg.Sink.DispatchRules {

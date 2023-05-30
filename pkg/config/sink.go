@@ -101,6 +101,12 @@ var ForceEnableOldValueProtocols = []string{
 	ProtocolMaxwell.String(),
 }
 
+// ForceDisableOldValueProtocols specifies protocols need to be forced to disable old value.
+var ForceDisableOldValueProtocols = []string{
+	ProtocolAvro.String(),
+	ProtocolCsv.String(),
+}
+
 // SinkConfig represents sink config for a changefeed
 type SinkConfig struct {
 	TxnAtomicity *AtomicityLevel `toml:"transaction-atomicity" json:"transaction-atomicity,omitempty"`
