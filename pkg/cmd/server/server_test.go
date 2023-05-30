@@ -151,9 +151,9 @@ func TestParseCfg(t *testing.T) {
 		OwnerFlushInterval:     config.TomlDuration(150 * time.Millisecond),
 		ProcessorFlushInterval: config.TomlDuration(150 * time.Millisecond),
 		Sorter: &config.SorterConfig{
-			SortDir:                config.DefaultSortDir,
-			CacheSizeInMB:          128,
-			MaxMemoryPercentage:    10,
+			SortDir:             config.DefaultSortDir,
+			CacheSizeInMB:       128,
+			MaxMemoryPercentage: 10,
 
 			NumConcurrentWorker:    4,
 			ChunkSizeLimit:         128 * 1024 * 1024,
@@ -316,9 +316,9 @@ check-balance-interval = "10s"
 		OwnerFlushInterval:     config.TomlDuration(600 * time.Millisecond),
 		ProcessorFlushInterval: config.TomlDuration(600 * time.Millisecond),
 		Sorter: &config.SorterConfig{
-			SortDir:                config.DefaultSortDir,
-			CacheSizeInMB:          128,
-			MaxMemoryPercentage:    10,
+			SortDir:             config.DefaultSortDir,
+			CacheSizeInMB:       128,
+			MaxMemoryPercentage: 10,
 
 			NumConcurrentWorker:    4,
 			ChunkSizeLimit:         128 * 1024 * 1024,
@@ -457,9 +457,9 @@ cert-allowed-cn = ["dd","ee"]
 		OwnerFlushInterval:     config.TomlDuration(150 * time.Millisecond),
 		ProcessorFlushInterval: config.TomlDuration(150 * time.Millisecond),
 		Sorter: &config.SorterConfig{
-			SortDir:                config.DefaultSortDir,
-			CacheSizeInMB:          128,
-			MaxMemoryPercentage:    10,
+			SortDir:             config.DefaultSortDir,
+			CacheSizeInMB:       128,
+			MaxMemoryPercentage: 10,
 
 			NumConcurrentWorker:    4,
 			ChunkSizeLimit:         128 * 1024 * 1024,
