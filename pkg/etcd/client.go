@@ -97,9 +97,12 @@ func NewClient(pdEndpoints []string, metrics map[string]prometheus.Counter) *Cli
 	if err != nil {
 		log.Fatal("new etcd client failed", zap.Error(err))
 	}
-	res := &Client{cli: cli, metrics: metrics, clock: clock.New(), cancel: cancel}
-	// TODO: fizz pass pd endpoints
+	res := &Client{cli: cli, metrics: metrics,
+		clock:     clock.New(),
+		cancel:    cancel,
+		endpoints: pdEndpoints}
 	go res.checkEndpointsChange(ctx, pdEndpoints)
+
 	return res
 }
 

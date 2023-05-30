@@ -92,12 +92,12 @@ func CheckClusterVersion(
 			return checkPDVersion(ctx, pdAddr, credential)
 		}, retry.WithBackoffBaseDelay(time.Millisecond.Milliseconds()*10),
 			retry.WithBackoffMaxDelay(time.Second.Milliseconds()),
-			retry.WithMaxTries(5))
+			retry.WithMaxTries(5),
+			retry.WithIsRetryableErr(cerror.IsRetryableError))
 		if err == nil {
 			break
 		}
 	}
-
 	return err
 }
 
@@ -144,7 +144,9 @@ func checkPDVersion(ctx context.Context, pdAddr string, credential *security.Cre
 	if err != nil {
 		return err
 	}
-
+	// TODO: fizz find a better way to set timeout
+	ctx, cancel := context.WithTimeout(ctx, 10*time.Second)
+	defer cancel()
 	resp, err := httpClient.Get(ctx, fmt.Sprintf("%s/pd/api/v1/version", pdAddr))
 	if err != nil {
 		return cerror.ErrCheckClusterVersionFromPD.GenWithStackByArgs(err)
