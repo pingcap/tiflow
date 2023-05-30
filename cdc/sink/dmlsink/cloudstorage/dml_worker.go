@@ -300,7 +300,6 @@ func (d *dmlWorker) dispatchFlushTasks(ctx context.Context,
 					log.Debug("flush task is emitted successfully when file size exceeds",
 						zap.Any("table", table),
 						zap.Any("eventsLenth", len(task.tasks[table].msgs)))
-				default:
 				}
 			}
 		}
