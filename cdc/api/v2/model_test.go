@@ -47,11 +47,20 @@ var defaultAPIConfig = &ReplicaConfig{
 			Delimiter:  config.Comma,
 			NullString: config.NULL,
 		},
+<<<<<<< HEAD
 		EncoderConcurrency:       16,
 		Terminator:               config.CRLF,
 		DateSeparator:            config.DateSeparatorDay.String(),
 		EnablePartitionSeparator: true,
 		EnableKafkaSinkV2:        false,
+=======
+		EncoderConcurrency:       util.AddressOf(16),
+		Terminator:               util.AddressOf(config.CRLF),
+		DateSeparator:            util.AddressOf(config.DateSeparatorDay.String()),
+		EnablePartitionSeparator: util.AddressOf(true),
+		EnableKafkaSinkV2:        util.AddressOf(false),
+		OnlyOutputUpdatedColumns: util.AddressOf(false),
+>>>>>>> edda949d87 (config(ticdc): fix deafult setting of DateSeparator (#9090))
 	},
 	Consistent: &ConsistentConfig{
 		Level:             "none",
