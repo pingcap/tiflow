@@ -167,7 +167,7 @@ var _ CDCEtcdClient = (*CDCEtcdClientImpl)(nil)
 
 // NewCDCEtcdClient returns a new CDCEtcdClient
 func NewCDCEtcdClient(ctx context.Context,
-	cli *clientv3.Client,
+	endpoints []string,
 	clusterID string,
 ) (*CDCEtcdClientImpl, error) {
 	metrics := map[string]prometheus.Counter{
@@ -178,21 +178,24 @@ func NewCDCEtcdClient(ctx context.Context,
 		EtcdGrant:  etcdRequestCounter.WithLabelValues(EtcdGrant),
 		EtcdRevoke: etcdRequestCounter.WithLabelValues(EtcdRevoke),
 	}
-	resp, err := cli.MemberList(ctx)
+
+	cli := NewClient(endpoints, metrics)
+	// TODO: fizz use a better way
+	resp, err := cli.cli.MemberList(ctx)
 	if err != nil {
-		return nil, errors.Trace(err)
+		return nil, cerror.WrapError(cerror.ErrPDEtcdAPIError, err)
 	}
-	log.Info("new etcd client", zap.Any("members", resp.Members))
+
 	return &CDCEtcdClientImpl{
 		etcdClusterID: resp.Header.ClusterId,
-		Client:        Wrap(cli, metrics),
+		Client:        cli,
 		ClusterID:     clusterID,
 	}, nil
 }
 
 // Close releases resources in CDCEtcdClient
 func (c *CDCEtcdClientImpl) Close() error {
-	return c.Client.Unwrap().Close()
+	return c.Client.Close()
 }
 
 // ClearAllCDCInfo delete all keys created by CDC

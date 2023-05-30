@@ -54,8 +54,13 @@ func (s *Tester) SetUpTest(t *testing.T) {
 		LogConfig:   &logConfig,
 	})
 	require.NoError(t, err)
+	cdcEtcdCli := &CDCEtcdClientImpl{
+		Client:        &Client{cli: client},
+		ClusterID:     DefaultCDCClusterID,
+		etcdClusterID: 0,
+	}
 
-	s.client, err = NewCDCEtcdClient(context.TODO(), client, DefaultCDCClusterID)
+	s.client = cdcEtcdCli
 	require.Nil(t, err)
 	s.ctx, s.cancel = context.WithCancel(context.Background())
 	s.errg = util.HandleErrWithErrGroup(s.ctx, s.etcd.Err(), func(e error) { t.Log(e) })

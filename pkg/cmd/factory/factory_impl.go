@@ -28,9 +28,6 @@ import (
 	"github.com/pingcap/tiflow/pkg/security"
 	"github.com/pingcap/tiflow/pkg/version"
 	pd "github.com/tikv/pd/client"
-	etcdlogutil "go.etcd.io/etcd/client/pkg/v3/logutil"
-	clientv3 "go.etcd.io/etcd/client/v3"
-	"go.uber.org/zap"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/backoff"
 )
@@ -89,54 +86,11 @@ func (f *factoryImpl) GetCredential() *security.Credential {
 // EtcdClient creates new cdc etcd client.
 func (f *factoryImpl) EtcdClient() (*etcd.CDCEtcdClientImpl, error) {
 	ctx := cmdconetxt.GetDefaultContext()
-	tlsConfig, err := f.ToTLSConfig()
-	if err != nil {
-		return nil, err
-	}
-	grpcTLSOption, err := f.ToGRPCDialOption()
-	if err != nil {
-		return nil, err
-	}
-
-	logConfig := etcdlogutil.DefaultZapLoggerConfig
-	logLevel := zap.NewAtomicLevel()
-	err = logLevel.UnmarshalText([]byte(f.GetLogLevel()))
-	if err != nil {
-		return nil, err
-	}
-	logConfig.Level = logLevel
 
 	pdAddr := f.GetPdAddr()
 	pdEndpoints := strings.Split(pdAddr, ",")
 
-	etcdClient, err := clientv3.New(clientv3.Config{
-		Context:     ctx,
-		Endpoints:   pdEndpoints,
-		TLS:         tlsConfig,
-		LogConfig:   &logConfig,
-		DialTimeout: 30 * time.Second,
-		// TODO(hi-rustin): add gRPC metrics to Options.
-		// See also: https://github.com/pingcap/tiflow/pull/2341#discussion_r673018537.
-		DialOptions: []grpc.DialOption{
-			grpcTLSOption,
-			grpc.WithBlock(),
-			grpc.WithConnectParams(grpc.ConnectParams{
-				Backoff: backoff.Config{
-					BaseDelay:  time.Second,
-					Multiplier: 1.1,
-					Jitter:     0.1,
-					MaxDelay:   3 * time.Second,
-				},
-				MinConnectTimeout: 3 * time.Second,
-			}),
-		},
-	})
-	if err != nil {
-		return nil, errors.Annotatef(err,
-			"Fail to open PD client. Please check the pd address(es) \"%s\"", pdAddr)
-	}
-
-	client, err := etcd.NewCDCEtcdClient(ctx, etcdClient, etcd.DefaultCDCClusterID)
+	client, err := etcd.NewCDCEtcdClient(ctx, pdEndpoints, etcd.DefaultCDCClusterID)
 	if err != nil {
 		return nil, cerror.ErrEtcdAPIError.GenWithStack(
 			"Etcd operation error. Please check the cluster's status " +

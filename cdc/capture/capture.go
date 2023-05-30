@@ -185,8 +185,8 @@ func (c *captureImpl) reset(ctx context.Context) error {
 	if err != nil {
 		return errors.Trace(err)
 	}
-	sess, err := concurrency.NewSession(
-		c.EtcdClient.GetEtcdClient().Unwrap(), concurrency.WithLease(lease.ID))
+
+	sess, err := c.EtcdClient.GetEtcdClient().GetSession(lease.ID)
 	if err != nil {
 		return errors.Trace(err)
 	}

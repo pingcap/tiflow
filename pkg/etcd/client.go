@@ -15,19 +15,31 @@ package etcd
 
 import (
 	"context"
+	"reflect"
+	"sync"
 	"time"
 
 	"github.com/benbjohnson/clock"
 	"github.com/pingcap/errors"
 	"github.com/pingcap/log"
+	"github.com/pingcap/tiflow/pkg/config"
 	cerror "github.com/pingcap/tiflow/pkg/errors"
 	"github.com/pingcap/tiflow/pkg/errorutil"
+	"github.com/pingcap/tiflow/pkg/pdutil"
 	"github.com/pingcap/tiflow/pkg/retry"
 	"github.com/prometheus/client_golang/prometheus"
+	pd "github.com/tikv/pd/client"
 	v3rpc "go.etcd.io/etcd/api/v3/v3rpc/rpctypes"
+	"go.etcd.io/etcd/client/pkg/v3/logutil"
 	clientV3 "go.etcd.io/etcd/client/v3"
+	clientv3 "go.etcd.io/etcd/client/v3"
+	"go.etcd.io/etcd/client/v3/concurrency"
 	"go.uber.org/zap"
+	"go.uber.org/zap/zapcore"
+	"google.golang.org/grpc"
+	"google.golang.org/grpc/backoff"
 	"google.golang.org/grpc/codes"
+	"google.golang.org/grpc/keepalive"
 )
 
 // etcd operation names
@@ -69,41 +81,98 @@ var maxTries uint64 = 8
 
 // Client is a simple wrapper that adds retry to etcd RPC
 type Client struct {
-	cli     *clientV3.Client
-	metrics map[string]prometheus.Counter
+	endpoints []string
+	cli       *clientV3.Client
+	metrics   map[string]prometheus.Counter
 	// clock is for making it easier to mock time-related data structures in unit tests
-	clock clock.Clock
+	clock  clock.Clock
+	cancel context.CancelFunc
+	rwLock sync.RWMutex
 }
 
-// Wrap warps a clientV3.Client that provides etcd APIs required by TiCDC.
-func Wrap(cli *clientV3.Client, metrics map[string]prometheus.Counter) *Client {
-	return &Client{cli: cli, metrics: metrics, clock: clock.New()}
+// NewClient warps a clientV3.Client that provides etcd APIs required by TiCDC.
+func NewClient(pdEndpoints []string, metrics map[string]prometheus.Counter) *Client {
+	ctx, cancel := context.WithCancel(context.Background())
+	cli, err := newBaseEtcdClient(pdEndpoints)
+	if err != nil {
+		log.Fatal("new etcd client failed", zap.Error(err))
+	}
+	res := &Client{cli: cli, metrics: metrics, clock: clock.New(), cancel: cancel}
+	// TODO: fizz pass pd endpoints
+	go res.checkEndpointsChange(ctx, pdEndpoints)
+	return res
+}
+
+func (c *Client) checkEndpointsChange(ctx context.Context, pdEndpoints []string) error {
+	ticker := time.NewTicker(time.Second * 3)
+	defer ticker.Stop()
+
+	conf := config.GetGlobalServerConfig()
+	grpcClient, err := pd.NewClientWithContext(ctx, pdEndpoints, conf.Security.PDSecurityOption())
+	if err != nil {
+		return errors.Trace(err)
+	}
+	pc, err := pdutil.NewPDAPIClient(grpcClient, conf.Security)
+	if err != nil {
+		return errors.Trace(err)
+	}
+	defer pc.Close()
+
+	for {
+		select {
+		case <-ctx.Done():
+			return ctx.Err()
+		case <-ticker.C:
+			endpoints, err := pc.CollectMemberEndpoints(ctx)
+			if err != nil {
+				log.Warn("cannot collect all members", zap.Error(err))
+				continue
+			}
+
+			healthEndpoints := make([]string, 0, len(endpoints))
+			for _, endpoint := range endpoints {
+				ctx, cancel := context.WithTimeout(ctx, 5*time.Second)
+				if err := pc.Healthy(ctx, endpoint); err != nil {
+					log.Warn("pd health check error",
+						zap.String("endpoint", endpoint), zap.Error(err))
+				} else {
+					healthEndpoints = append(healthEndpoints, endpoint)
+				}
+				cancel()
+			}
+
+			if !reflect.DeepEqual(c.endpoints, healthEndpoints) {
+				log.Info("pd endpoints changed",
+					zap.Strings("old", c.endpoints),
+					zap.Strings("new", healthEndpoints))
+				c.endpoints = healthEndpoints
+				baseCli, err := newBaseEtcdClient(c.endpoints)
+				if err != nil {
+					log.Warn("new etcd client failed", zap.Error(err))
+					continue
+				}
+
+				c.rwLock.Lock()
+				c.cli.Close()
+				c.cli = baseCli
+				c.rwLock.Unlock()
+			}
+		}
+	}
 }
 
 // Unwrap returns a clientV3.Client
+// TODO: fizz 移除掉所有的 unwrap，提供一个直接获取 lease 和 session 的方法，并用内部的 client 维护 session
+// 避免 session 掉线。
 func (c *Client) Unwrap() *clientV3.Client {
 	return c.cli
 }
 
-func retryRPC(rpcName string, metric prometheus.Counter, etcdRPC func() error) error {
-	// By default, PD etcd sets [3s, 6s) for election timeout.
-	// Some rpc could fail due to etcd errors, like "proposal dropped".
-	// Retry at least two election timeout to handle the case that two PDs restarted
-	// (the first election maybe failed).
-	// 16s = \sum_{n=0}^{6} 0.5*1.5^n
-	return retry.Do(context.Background(), func() error {
-		err := etcdRPC()
-		if err != nil && errors.Cause(err) != context.Canceled {
-			log.Warn("etcd RPC failed", zap.String("RPC", rpcName), zap.Error(err))
-		}
-		if metric != nil {
-			metric.Inc()
-		}
-		return err
-	}, retry.WithBackoffBaseDelay(backoffBaseDelayInMs),
-		retry.WithBackoffMaxDelay(backoffMaxDelayInMs),
-		retry.WithMaxTries(maxTries),
-		retry.WithIsRetryableErr(isRetryableError(rpcName)))
+func (c *Client) Close() error {
+	c.cancel()
+	c.rwLock.Lock()
+	defer c.rwLock.Unlock()
+	return c.cli.Close()
 }
 
 // Put delegates request to clientV3.KV.Put
@@ -114,7 +183,9 @@ func (c *Client) Put(
 	defer cancel()
 	err = retryRPC(EtcdPut, c.metrics[EtcdPut], func() error {
 		var inErr error
+		c.rwLock.RLock()
 		resp, inErr = c.cli.Put(putCtx, key, val, opts...)
+		c.rwLock.RUnlock()
 		return inErr
 	})
 	return
@@ -128,7 +199,9 @@ func (c *Client) Get(
 	defer cancel()
 	err = retryRPC(EtcdGet, c.metrics[EtcdGet], func() error {
 		var inErr error
+		c.rwLock.RLock()
 		resp, inErr = c.cli.Get(getCtx, key, opts...)
+		c.rwLock.RUnlock()
 		return inErr
 	})
 	return
@@ -143,6 +216,8 @@ func (c *Client) Delete(
 	}
 	delCtx, cancel := context.WithTimeout(ctx, etcdClientTimeoutDuration)
 	defer cancel()
+	c.rwLock.RLock()
+	defer c.rwLock.RUnlock()
 	// We don't retry on delete operation. It's dangerous.
 	return c.cli.Delete(delCtx, key, opts...)
 }
@@ -156,7 +231,9 @@ func (c *Client) Txn(
 	defer cancel()
 	err = retryRPC(EtcdTxn, c.metrics[EtcdTxn], func() error {
 		var inErr error
+		c.rwLock.RLock()
 		resp, inErr = c.cli.Txn(txnCtx).If(cmps...).Then(opsThen...).Else(opsElse...).Commit()
+		c.rwLock.RUnlock()
 		return inErr
 	})
 	return
@@ -170,7 +247,9 @@ func (c *Client) Grant(
 	defer cancel()
 	err = retryRPC(EtcdGrant, c.metrics[EtcdGrant], func() error {
 		var inErr error
+		c.rwLock.RLock()
 		resp, inErr = c.cli.Grant(grantCtx, ttl)
+		c.rwLock.RUnlock()
 		return inErr
 	})
 	if err != nil {
@@ -187,7 +266,9 @@ func (c *Client) Revoke(
 	defer cancel()
 	err = retryRPC(EtcdRevoke, c.metrics[EtcdRevoke], func() error {
 		var inErr error
+		c.rwLock.RLock()
 		resp, inErr = c.cli.Revoke(revokeCtx, id)
+		c.rwLock.RUnlock()
 		return inErr
 	})
 	return
@@ -201,7 +282,9 @@ func (c *Client) TimeToLive(
 	defer cancel()
 	err = retryRPC(EtcdRevoke, c.metrics[EtcdRevoke], func() error {
 		var inErr error
+		c.rwLock.RLock()
 		resp, inErr = c.cli.TimeToLive(timeToLiveCtx, lease, opts...)
+		c.rwLock.RUnlock()
 		return inErr
 	})
 	return
@@ -224,7 +307,10 @@ func (c *Client) WatchWithChan(
 	// get initial revision from opts to avoid revision fall back
 	lastRevision := getRevisionFromWatchOpts(opts...)
 	watchCtx, cancel := context.WithCancel(ctx)
+
+	c.rwLock.RLock()
 	watchCh := c.cli.Watch(watchCtx, key, opts...)
+	c.rwLock.RUnlock()
 
 	ticker := c.clock.Ticker(etcdRequestProgressDuration)
 	lastReceivedResponseTime := c.clock.Now()
@@ -281,8 +367,10 @@ func (c *Client) WatchWithChan(
 				watchCtx, cancel = context.WithCancel(ctx)
 				// to avoid possible context leak warning from govet
 				_ = cancel
+				c.rwLock.RLock()
 				watchCh = c.cli.Watch(watchCtx, key,
 					clientV3.WithPrefix(), clientV3.WithRev(lastRevision))
+				c.rwLock.RUnlock()
 				// we need to reset lastReceivedResponseTime after reset Watch
 				lastReceivedResponseTime = c.clock.Now()
 			}
@@ -292,7 +380,94 @@ func (c *Client) WatchWithChan(
 
 // RequestProgress requests a progress notify response be sent in all watch channels.
 func (c *Client) RequestProgress(ctx context.Context) error {
+	c.rwLock.RLock()
+	defer c.rwLock.RUnlock()
 	return c.cli.RequestProgress(ctx)
+}
+
+func (c *Client) GetSession(leaseID clientV3.LeaseID) (*concurrency.Session, error) {
+	sess, err := concurrency.NewSession(
+		c.cli, concurrency.WithLease(leaseID))
+	if err != nil {
+		return nil, errors.Trace(err)
+	}
+	return sess, nil
+}
+
+// newBaseEtcdClient creates a new etcd client with default configurations.
+func newBaseEtcdClient(endpoints []string) (*clientV3.Client, error) {
+	conf := config.GetGlobalServerConfig()
+
+	grpcTLSOption, err := conf.Security.ToGRPCDialOption()
+	if err != nil {
+		return nil, errors.Trace(err)
+	}
+
+	tlsConfig, err := conf.Security.ToTLSConfig()
+	if err != nil {
+		return nil, errors.Trace(err)
+	}
+
+	logConfig := logutil.DefaultZapLoggerConfig
+	logConfig.Level = zap.NewAtomicLevelAt(zapcore.ErrorLevel)
+
+	// we do not pass a `context` to the etcd client,
+	// to prevent it's cancelled when the server is closing.
+	// For example, when the non-owner node goes offline,
+	// it would resign the campaign key which was put by call `campaign`,
+	// if this is not done due to the passed context cancelled,
+	// the key will be kept for the lease TTL, which is 10 seconds,
+	// then cause the new owner cannot be elected immediately after the old owner offline.
+	// see https://github.com/etcd-io/etcd/blob/525d53bd41/client/v3/concurrency/election.go#L98
+	etcdCli, err := clientv3.New(clientv3.Config{
+		Endpoints:        endpoints,
+		TLS:              tlsConfig,
+		LogConfig:        &logConfig,
+		DialTimeout:      5 * time.Second,
+		AutoSyncInterval: 30 * time.Second,
+		DialOptions: []grpc.DialOption{
+			grpcTLSOption,
+			grpc.WithBlock(),
+			grpc.WithConnectParams(grpc.ConnectParams{
+				Backoff: backoff.Config{
+					BaseDelay:  time.Second,
+					Multiplier: 1.1,
+					Jitter:     0.1,
+					MaxDelay:   3 * time.Second,
+				},
+				MinConnectTimeout: 3 * time.Second,
+			}),
+			grpc.WithKeepaliveParams(keepalive.ClientParameters{
+				Time:    10 * time.Second,
+				Timeout: 20 * time.Second,
+			}),
+		},
+	})
+	if err != nil {
+		return nil, errors.Trace(err)
+	}
+	return etcdCli, nil
+}
+
+func retryRPC(rpcName string, metric prometheus.Counter, etcdRPC func() error) error {
+	// By default, PD etcd sets [3s, 6s) for election timeout.
+	// Some rpc could fail due to etcd errors, like "proposal dropped".
+	// Retry at least two election timeout to handle the case that two PDs restarted
+	// (the first election maybe failed).
+	// 16s = \sum_{n=0}^{6} 0.5*1.5^n
+	return retry.Do(context.Background(), func() error {
+		err := etcdRPC()
+		if err != nil && errors.Cause(err) != context.Canceled {
+			log.Warn("etcd RPC failed", zap.String("RPC", rpcName), zap.Error(err))
+		}
+		if metric != nil {
+			metric.Inc()
+		}
+		return err
+	}, retry.WithBackoffBaseDelay(backoffBaseDelayInMs),
+		retry.WithBackoffMaxDelay(backoffMaxDelayInMs),
+		retry.WithMaxTries(maxTries),
+		retry.WithIsRetryableErr(isRetryableError(rpcName)))
 }
 
 func isRetryableError(rpcName string) retry.IsRetryable {
