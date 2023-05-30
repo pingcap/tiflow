@@ -221,12 +221,27 @@ func (m *MemQuota) Release(span tablepb.Span, resolved model.ResolvedTs) {
 	}
 }
 
-// Clean all records of the table.
+// RemoveTable clears all records of the table and remove the table.
 // Return the cleaned memory quota.
-func (m *MemQuota) Clean(span tablepb.Span) uint64 {
+func (m *MemQuota) RemoveTable(span tablepb.Span) uint64 {
 	m.mu.Lock()
-	defer m.mu.Unlock()
+	cleaned := m.clear(span)
+	m.tableMemory.Delete(span)
+	m.mu.Unlock()
+	return cleaned
+}
 
+// ClearTable is like RemoveTable but only clear the memory usage records but doesn't
+// remove the table.
+func (m *MemQuota) ClearTable(span tablepb.Span) uint64 {
+	m.mu.Lock()
+	cleaned := m.clear(span)
+	m.tableMemory.ReplaceOrInsert(span, make([]*MemConsumeRecord, 0, 2))
+	m.mu.Unlock()
+	return cleaned
+}
+
+func (m *MemQuota) clear(span tablepb.Span) uint64 {
 	if _, ok := m.tableMemory.Get(span); !ok {
 		// This can happen when the table has no data and never been recorded.
 		log.Warn("Table consumed memory records not found",
@@ -241,7 +256,6 @@ func (m *MemQuota) Clean(span tablepb.Span) uint64 {
 	for _, record := range records {
 		cleaned += record.Size
 	}
-	m.tableMemory.Delete(span)
 
 	if m.usedBytes.Add(^(cleaned - 1)) < m.totalBytes {
 		m.blockAcquireCond.Broadcast()

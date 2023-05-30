@@ -281,15 +281,9 @@ func (p *processor) IsRemoveTableSpanFinished(span tablepb.Span) (model.Ts, bool
 		return 0, false
 	}
 
-	var tableCheckpointTs uint64
-	state, alreadyExist := p.sinkManager.r.GetTableState(span)
-	if alreadyExist {
-		stats := p.sinkManager.r.GetTableStats(span)
-		tableCheckpointTs = stats.CheckpointTs
-	}
-
-	if !alreadyExist {
-		log.Warn("table should be removing but not found",
+	state, ok := p.sinkManager.r.GetTableState(span)
+	if !ok {
+		log.Warn("table has been stopped",
 			zap.String("captureID", p.captureInfo.ID),
 			zap.String("namespace", p.changefeedID.Namespace),
 			zap.String("changefeed", p.changefeedID.ID),
@@ -297,18 +291,18 @@ func (p *processor) IsRemoveTableSpanFinished(span tablepb.Span) (model.Ts, bool
 		return 0, true
 	}
 
+	stats := p.sinkManager.r.GetTableStats(span)
 	if state != tablepb.TableStateStopped {
 		log.Debug("table is still not stopped",
 			zap.String("captureID", p.captureInfo.ID),
 			zap.String("namespace", p.changefeedID.Namespace),
 			zap.String("changefeed", p.changefeedID.ID),
-			zap.Uint64("checkpointTs", tableCheckpointTs),
+			zap.Uint64("checkpointTs", stats.CheckpointTs),
 			zap.Stringer("span", &span),
 			zap.Any("tableStatus", state))
 		return 0, false
 	}
 
-	stats := p.sinkManager.r.GetTableStats(span)
 	if p.redo.r.Enabled() {
 		p.redo.r.RemoveTable(span)
 	}

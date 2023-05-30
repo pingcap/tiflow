@@ -833,8 +833,8 @@ func (m *SinkManager) AsyncStopTable(span tablepb.Span) bool {
 			zap.Stringer("span", &span))
 	}
 	if tableSink.(*tableSinkWrapper).asyncClose() {
-		cleanedBytes := m.sinkMemQuota.Clean(span)
-		cleanedBytes += m.redoMemQuota.Clean(span)
+		cleanedBytes := m.sinkMemQuota.RemoveTable(span)
+		cleanedBytes += m.redoMemQuota.RemoveTable(span)
 		log.Debug("MemoryQuotaTracing: Clean up memory quota for table sink task when removing table",
 			zap.String("namespace", m.changefeedID.Namespace),
 			zap.String("changefeed", m.changefeedID.ID),
@@ -904,8 +904,8 @@ func (m *SinkManager) GetTableState(span tablepb.Span) (tablepb.TableState, bool
 	// if necessary. It's better to remove the dirty logic in the future.
 	tableSink := wrapper.(*tableSinkWrapper)
 	if tableSink.getState() == tablepb.TableStateStopping && tableSink.asyncClose() {
-		cleanedBytes := m.sinkMemQuota.Clean(span)
-		cleanedBytes += m.redoMemQuota.Clean(span)
+		cleanedBytes := m.sinkMemQuota.RemoveTable(span)
+		cleanedBytes += m.redoMemQuota.RemoveTable(span)
 		log.Debug("MemoryQuotaTracing: Clean up memory quota for table sink task when removing table",
 			zap.String("namespace", m.changefeedID.Namespace),
 			zap.String("changefeed", m.changefeedID.ID),
