@@ -99,25 +99,25 @@ type Client struct {
 }
 
 // NewClient warps a clientV3.Client that provides etcd APIs required by TiCDC.
-func NewClient(pdEndpoints []string, metrics map[string]prometheus.Counter) *Client {
+func NewClient(pdEndpoints []string, metrics map[string]prometheus.Counter) (*Client, error) {
 	ctx, cancel := context.WithCancel(context.Background())
 	conf := config.GetGlobalServerConfig()
 
 	grpcClient, err := pd.NewClientWithContext(ctx, pdEndpoints, conf.Security.PDSecurityOption())
 	if err != nil {
-		log.Fatal("new pd grpc client failed", zap.Error(err))
+		return nil, errors.Trace(err)
 	}
 	pdClient, err := pdutil.NewPDAPIClient(grpcClient, conf.Security)
 	if err != nil {
-		log.Fatal("new pd grpc client failed", zap.Error(err))
+		return nil, errors.Trace(err)
 	}
 
 	apiCtx, apiCancel := context.WithTimeout(ctx, 10*time.Second)
 	defer apiCancel()
-	//TODO: should we retry here?
+
 	realPDEndpoints, err := pdClient.CollectMemberEndpoints(apiCtx)
 	if err != nil {
-		log.Fatal("cannot collect all members", zap.Error(err))
+		return nil, errors.Trace(err)
 	}
 	if len(realPDEndpoints) > len(pdEndpoints) {
 		log.Info("collect more endpoints than configured, update configured endpoints",
@@ -129,7 +129,7 @@ func NewClient(pdEndpoints []string, metrics map[string]prometheus.Counter) *Cli
 	log.Info("create etcd client with endpoints", zap.Strings("endpoints", pdEndpoints))
 	cli, err := newBaseEtcdClient(realPDEndpoints)
 	if err != nil {
-		log.Fatal("new etcd client failed", zap.Error(err))
+		return nil, errors.Trace(err)
 	}
 
 	res := &Client{
@@ -139,9 +139,10 @@ func NewClient(pdEndpoints []string, metrics map[string]prometheus.Counter) *Cli
 		clock:     clock.New(),
 		cancel:    cancel,
 		endpoints: pdEndpoints}
+
 	go res.checkEndpointsChange(ctx, pdEndpoints)
 
-	return res
+	return res, nil
 }
 
 func (c *Client) checkEndpointsChange(ctx context.Context, pdEndpoints []string) error {
@@ -151,6 +152,7 @@ func (c *Client) checkEndpointsChange(ctx context.Context, pdEndpoints []string)
 	for {
 		select {
 		case <-ctx.Done():
+			log.Info("checkEndpointsChange exited")
 			return ctx.Err()
 		case <-ticker.C:
 			endpoints, err := c.pdCli.CollectMemberEndpoints(ctx)
@@ -201,13 +203,6 @@ func (c *Client) checkEndpointsChange(ctx context.Context, pdEndpoints []string)
 			}
 		}
 	}
-}
-
-// Unwrap returns a clientV3.Client
-// TODO: fizz 移除掉所有的 unwrap，提供一个直接获取 lease 和 session 的方法，并用内部的 client 维护 session
-// 避免 session 掉线。
-func (c *Client) Unwrap() *clientV3.Client {
-	return c.cli
 }
 
 func (c *Client) Close() error {
@@ -428,6 +423,7 @@ func (c *Client) RequestProgress(ctx context.Context) error {
 	return c.cli.RequestProgress(ctx)
 }
 
+// GetSession creates a new session with leaseID.
 func (c *Client) GetSession(leaseID clientV3.LeaseID) (*concurrency.Session, error) {
 	sess, err := concurrency.NewSession(
 		c.cli, concurrency.WithLease(leaseID))

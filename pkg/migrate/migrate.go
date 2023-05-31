@@ -412,11 +412,16 @@ func (m *migrator) migrateGcServiceSafePoint(ctx context.Context,
 }
 
 func (m *migrator) campaignOldOwner(ctx context.Context) error {
-	sess, err := concurrency.NewSession(m.cli.GetEtcdClient().Unwrap(),
-		concurrency.WithTTL(etcdSessionTTL))
+	lease, err := m.cli.GetEtcdClient().Grant(ctx, etcdSessionTTL)
 	if err != nil {
 		return errors.Trace(err)
 	}
+
+	sess, err := m.cli.GetEtcdClient().GetSession(lease.ID)
+	if err != nil {
+		return errors.Trace(err)
+	}
+
 	election := concurrency.NewElection(sess, m.oldOwnerKey)
 	defer func() {
 		_ = sess.Close()
