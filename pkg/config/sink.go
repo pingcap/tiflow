@@ -333,7 +333,7 @@ type CloudStorageConfig struct {
 	FileSize      *int    `toml:"file-size" json:"file-size,omitempty"`
 }
 
-func (s *SinkConfig) validateAndAdjust(sinkURI *url.URL, enableOldValue bool) error {
+func (s *SinkConfig) validateAndAdjust(sinkURI *url.URL) error {
 	if err := s.validateAndAdjustSinkURI(sinkURI); err != nil {
 		return err
 	}

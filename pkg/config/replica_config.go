@@ -195,7 +195,7 @@ func (c *replicaConfig) fillFromV1(v1 *outdated.ReplicaConfigV1) {
 func (c *ReplicaConfig) ValidateAndAdjust(sinkURI *url.URL) error {
 	// check sink uri
 	if c.Sink != nil {
-		err := c.Sink.validateAndAdjust(sinkURI, c.EnableOldValue)
+		err := c.Sink.validateAndAdjust(sinkURI)
 		if err != nil {
 			return err
 		}
