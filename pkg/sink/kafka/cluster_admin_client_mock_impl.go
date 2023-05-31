@@ -64,7 +64,7 @@ type ClusterAdminClientMockImpl struct {
 	// Cluster controller ID.
 	controllerID  int
 	brokerConfigs map[string]string
-	topicConfigs  map[string]string
+	topicConfigs  map[string]map[string]string
 }
 
 // NewClusterAdminClientMockImpl news a ClusterAdminClientMockImpl struct with default configurations.
@@ -82,9 +82,10 @@ func NewClusterAdminClientMockImpl() *ClusterAdminClientMockImpl {
 	brokerConfigs[BrokerMessageMaxBytesConfigName] = BrokerMessageMaxBytes
 	brokerConfigs[MinInsyncReplicasConfigName] = MinInSyncReplicas
 
-	topicConfigs := make(map[string]string)
-	topicConfigs[TopicMaxMessageBytesConfigName] = TopicMaxMessageBytes
-	topicConfigs[MinInsyncReplicasConfigName] = MinInSyncReplicas
+	topicConfigs := make(map[string]map[string]string)
+	topicConfigs[DefaultMockTopicName] = make(map[string]string)
+	topicConfigs[DefaultMockTopicName][TopicMaxMessageBytesConfigName] = TopicMaxMessageBytes
+	topicConfigs[DefaultMockTopicName][MinInsyncReplicasConfigName] = MinInSyncReplicas
 
 	return &ClusterAdminClientMockImpl{
 		topics:        topics,
@@ -119,7 +120,10 @@ func (c *ClusterAdminClientMockImpl) GetBrokerConfig(
 
 // GetTopicConfig implement the ClusterAdminClient interface
 func (c *ClusterAdminClientMockImpl) GetTopicConfig(ctx context.Context, topicName string, configName string) (string, error) {
-	value, ok := c.topicConfigs[configName]
+	if _, ok := c.topics[topicName]; !ok {
+		return "", errors.ErrKafkaConfigNotFound.GenWithStack("cannot find the `%s` from the topic's configuration", topicName)
+	}
+	value, ok := c.topicConfigs[topicName][configName]
 	if !ok {
 		return "", errors.ErrKafkaConfigNotFound.GenWithStack(
 			"cannot find the `%s` from the topic's configuration", configName)
@@ -196,7 +200,7 @@ func (c *ClusterAdminClientMockImpl) Close() {}
 
 // SetMinInsyncReplicas sets the MinInsyncReplicas for broker and default topic.
 func (c *ClusterAdminClientMockImpl) SetMinInsyncReplicas(minInsyncReplicas string) {
-	c.topicConfigs[MinInsyncReplicasConfigName] = minInsyncReplicas
+	c.topicConfigs[DefaultMockTopicName][MinInsyncReplicasConfigName] = minInsyncReplicas
 	c.brokerConfigs[MinInsyncReplicasConfigName] = minInsyncReplicas
 }
 
