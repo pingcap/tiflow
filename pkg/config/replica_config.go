@@ -287,10 +287,11 @@ func (c *ReplicaConfig) AdjustEnableOldValue(uri string) error {
 		return cerror.WrapError(cerror.ErrSinkURIInvalid, err)
 	}
 
+	var protocol string
 	switch strings.ToLower(sinkURI.Scheme) {
 	case sink.MySQLScheme, sink.MySQLSSLScheme, sink.TiDBScheme, sink.TiDBSSLScheme:
 	default:
-		protocol := sinkURI.Query().Get(ProtocolKey)
+		protocol = sinkURI.Query().Get(ProtocolKey)
 		if protocol != "" {
 			c.Sink.Protocol = util.AddressOf(protocol)
 		}
@@ -318,7 +319,8 @@ func (c *ReplicaConfig) AdjustEnableOldValue(uri string) error {
 	}
 
 	if c.ForceReplicate && !c.EnableOldValue {
-		log.Error("if use force replicate, old value feature must be enabled")
+		log.Error("if use force replicate, old value feature must be enabled",
+			zap.String("protocol", protocol))
 		return cerror.ErrOldValueNotEnabled.GenWithStackByArgs()
 	}
 	return nil

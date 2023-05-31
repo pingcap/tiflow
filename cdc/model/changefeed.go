@@ -463,8 +463,9 @@ func (info *ChangeFeedInfo) fixEnableOldValue() {
 	err := info.Config.AdjustEnableOldValue(info.SinkURI)
 	if err != nil {
 		// err can only happen in the 2 case now:
-		// 1. the sink uri parse failed, it's almost impossible to happen since the changefeed registered successfully.
-		// 2. the ForceReplicate is set to true but the `enable-old-value` is adjusted to false.
+		// 1. the sink uri parse failed, it's impossible to happen since the changefeed registered successfully.
+		// 2. the ForceReplicate is set to true but the `enable-old-value` is adjusted to false,
+		// check the `ForceReplicate` and `EnableOldValue` when initialize the changefeed.
 		log.Warn("failed to adjust enable old value", zap.Error(err))
 	}
 }
