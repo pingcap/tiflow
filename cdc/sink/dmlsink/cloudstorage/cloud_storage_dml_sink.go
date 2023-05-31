@@ -230,6 +230,8 @@ func (s *DMLSink) WriteEvents(txns ...*dmlsink.CallbackableEvent[*model.SingleTa
 			TableInfoVersion:           txn.Event.TableInfoVersion,
 		}
 		seq := atomic.AddUint64(&s.lastSeqNum, 1)
+
+		s.statistics.ObserveRows(txn.Event.Rows...)
 		// emit a TxnCallbackableEvent encoupled with a sequence number starting from one.
 		s.alive.msgCh <- eventFragment{
 			seqNumber:      seq,
