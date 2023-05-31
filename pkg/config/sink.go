@@ -338,27 +338,6 @@ func (s *SinkConfig) validateAndAdjust(sinkURI *url.URL, enableOldValue bool) er
 		return err
 	}
 
-	protocol := util.GetOrZero(s.Protocol)
-	if !enableOldValue {
-		for _, protocolStr := range ForceEnableOldValueProtocols {
-			if protocolStr == protocol {
-				log.Error(fmt.Sprintf("Old value is not enabled when using `%s` protocol. "+
-					"Please update changefeed config", protocol))
-				return cerror.WrapError(cerror.ErrKafkaInvalidConfig,
-					errors.New(fmt.Sprintf("%s protocol requires old value to be enabled", protocol)))
-			}
-		}
-	} else {
-		for _, fp := range ForceDisableOldValueProtocols {
-			if fp == protocol {
-				log.Warn(fmt.Sprintf("Old value is enabled when using `%s` protocol. "+
-					"Please update changefeed config", protocol))
-				return cerror.WrapError(cerror.ErrKafkaInvalidConfig,
-					errors.New(fmt.Sprintf("%s protocol requires old value to be disabled", protocol)))
-			}
-		}
-	}
-
 	for _, rule := range s.DispatchRules {
 		if rule.DispatcherRule != "" && rule.PartitionRule != "" {
 			log.Error("dispatcher and partition cannot be configured both", zap.Any("rule", rule))
