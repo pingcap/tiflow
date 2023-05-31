@@ -150,10 +150,6 @@ func (m *mockDDLSink) close(ctx context.Context) error {
 	return nil
 }
 
-func (m *mockDDLSink) isInitialized() bool {
-	return true
-}
-
 func (m *mockDDLSink) Barrier(ctx context.Context) error {
 	return nil
 }
@@ -219,7 +215,7 @@ func createChangefeed4Test(ctx cdcContext.Context, t *testing.T,
 			return &mockDDLPuller{resolvedTs: startTs - 1, schemaStorage: schemaStorage}, nil
 		},
 		// new ddl ddlSink
-		func(_ model.ChangeFeedID, _ *model.ChangeFeedInfo, _ func(err error)) DDLSink {
+		func(_ model.ChangeFeedID, _ *model.ChangeFeedInfo, _ func(error), _ func(error)) DDLSink {
 			return &mockDDLSink{
 				resetDDLDone:     true,
 				recordDDLHistory: false,

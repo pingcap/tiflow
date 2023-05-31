@@ -1,4 +1,4 @@
-// Copyright 2022 PingCAP, Inc.
+// Copyright 2023 PingCAP, Inc.
 //
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -11,15 +11,23 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-package eventsink
+package util
 
-// EventSink is the interface for event sink.
-type EventSink[E TableEvent] interface {
-	// WriteEvents writes events to the sink.
-	// This is an asynchronously and thread-safe method.
-	WriteEvents(events ...*CallbackableEvent[E]) error
-	// Close closes the sink. Can be called with `WriteEvents` concurrently.
-	Close()
-	// The EventSink meets internal errors and has been dead already.
-	Dead() <-chan struct{}
+import (
+	"context"
+	"time"
+)
+
+// Hang will block the goroutine for a given duration, or return when `ctx` is done.
+func Hang(ctx context.Context, dur time.Duration) error {
+	timer := time.NewTimer(dur)
+	select {
+	case <-ctx.Done():
+		if !timer.Stop() {
+			<-timer.C
+		}
+		return ctx.Err()
+	case <-timer.C:
+		return nil
+	}
 }

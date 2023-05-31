@@ -84,12 +84,13 @@ const (
   "owner-flush-interval": 50000000,
   "processor-flush-interval": 50000000,
   "sorter": {
+    "sort-dir": "/tmp/sorter",
+    "cache-size-in-mb": 128,
+    "max-memory-percentage": 10,
     "num-concurrent-worker": 4,
     "chunk-size-limit": 999,
-    "max-memory-percentage": 10,
     "max-memory-consumption": 17179869184,
-    "num-workerpool-goroutine": 16,
-    "sort-dir": "/tmp/sorter"
+    "num-workerpool-goroutine": 16
   },
   "security": {
     "ca-path": "",
