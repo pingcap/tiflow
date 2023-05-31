@@ -288,9 +288,7 @@ func (c *ReplicaConfig) AdjustEnableOldValue(uri string) error {
 	}
 
 	var protocol string
-	switch strings.ToLower(sinkURI.Scheme) {
-	case sink.MySQLScheme, sink.MySQLSSLScheme, sink.TiDBScheme, sink.TiDBSSLScheme:
-	default:
+	if !sink.IsMySQLCompatibleScheme(strings.ToLower(sinkURI.Scheme)) {
 		protocol = sinkURI.Query().Get(ProtocolKey)
 		if protocol != "" {
 			c.Sink.Protocol = util.AddressOf(protocol)
