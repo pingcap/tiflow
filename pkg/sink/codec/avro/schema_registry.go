@@ -121,6 +121,7 @@ func newAvroSchemaManager(
 	}
 
 	if string(text[:]) != "{}" {
+		log.Error("Unexpected response from Schema Registry", zap.ByteString("response", text))
 		return nil, cerror.ErrAvroSchemaAPIError.GenWithStack(
 			"Unexpected response from Schema Registry",
 		)
