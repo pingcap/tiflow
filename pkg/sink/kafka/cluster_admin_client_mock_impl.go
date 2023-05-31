@@ -73,6 +73,7 @@ func NewClusterAdminClientMockImpl() *ClusterAdminClientMockImpl {
 	topics[DefaultMockTopicName] = &topicDetail{
 		fetchesRemainingUntilVisible: 0,
 		TopicDetail: TopicDetail{
+			Name:          DefaultMockTopicName,
 			NumPartitions: 3,
 		},
 	}
@@ -118,7 +119,7 @@ func (c *ClusterAdminClientMockImpl) GetBrokerConfig(
 
 // GetTopicConfig implement the ClusterAdminClient interface
 func (c *ClusterAdminClientMockImpl) GetTopicConfig(ctx context.Context, topicName string, configName string) (string, error) {
-	value, ok := c.brokerConfigs[configName]
+	value, ok := c.topicConfigs[configName]
 	if !ok {
 		return "", errors.ErrKafkaConfigNotFound.GenWithStack(
 			"cannot find the `%s` from the topic's configuration", configName)
