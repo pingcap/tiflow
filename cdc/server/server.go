@@ -51,6 +51,7 @@ import (
 	"golang.org/x/sync/errgroup"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/backoff"
+	"google.golang.org/grpc/keepalive"
 )
 
 const (
@@ -150,6 +151,7 @@ func (s *server) prepare(ctx context.Context) error {
 	s.pdClient = pc
 	apiCtx, cancel := context.WithTimeout(ctx, time.Second*5)
 	defer cancel()
+
 	endpoints, err := s.pdClient.CollectMemberEndpoints(apiCtx)
 	if err != nil {
 		return errors.Trace(err)
@@ -184,8 +186,13 @@ func (s *server) prepare(ctx context.Context) error {
 				},
 				MinConnectTimeout: 3 * time.Second,
 			}),
+			grpc.WithKeepaliveParams(keepalive.ClientParameters{
+				Time:    10 * time.Second,
+				Timeout: 20 * time.Second,
+			}),
 		},
 	})
+
 	if err != nil {
 		return errors.Trace(err)
 	}
