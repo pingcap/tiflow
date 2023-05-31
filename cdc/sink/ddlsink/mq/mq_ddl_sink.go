@@ -184,6 +184,9 @@ func (k *DDLSink) Close() {
 	if k.producer != nil {
 		k.producer.Close()
 	}
+	if k.topicManager != nil {
+		k.topicManager.Close()
+	}
 	if k.admin != nil {
 		k.admin.Close()
 	}
