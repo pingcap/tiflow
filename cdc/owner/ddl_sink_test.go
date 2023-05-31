@@ -63,9 +63,9 @@ func (m *mockSink) GetDDL() *model.DDLEvent {
 	return m.ddl
 }
 
-func newDDLSink4Test(reportErr func(err error)) (DDLSink, *mockSink) {
+func newDDLSink4Test(reportErr func(err error), reportWarn func(err error)) (DDLSink, *mockSink) {
 	mockSink := &mockSink{}
-	ddlSink := newDDLSink(model.DefaultChangeFeedID("changefeed-test"), &model.ChangeFeedInfo{}, reportErr)
+	ddlSink := newDDLSink(model.DefaultChangeFeedID("changefeed-test"), &model.ChangeFeedInfo{}, reportErr, reportWarn)
 	ddlSink.(*ddlSinkImpl).sinkInitHandler = func(ctx context.Context, s *ddlSinkImpl) error {
 		s.sinkV1 = mockSink
 		return nil
@@ -74,7 +74,7 @@ func newDDLSink4Test(reportErr func(err error)) (DDLSink, *mockSink) {
 }
 
 func TestCheckpoint(t *testing.T) {
-	ddlSink, mSink := newDDLSink4Test(func(err error) {})
+	ddlSink, mSink := newDDLSink4Test(func(err error) {}, func(err error) {})
 
 	ctx, cancel := context.WithCancel(context.Background())
 	defer func() {
@@ -98,7 +98,7 @@ func TestCheckpoint(t *testing.T) {
 }
 
 func TestExecDDLEvents(t *testing.T) {
-	ddlSink, mSink := newDDLSink4Test(func(err error) {})
+	ddlSink, mSink := newDDLSink4Test(func(err error) {}, func(err error) {})
 
 	ctx, cancel := context.WithCancel(context.Background())
 	defer func() {
@@ -136,11 +136,13 @@ func TestExecDDLError(t *testing.T) {
 		return resultErr
 	}
 
-	ddlSink, mSink := newDDLSink4Test(func(err error) {
+	reportFunc := func(err error) {
 		resultErrMu.Lock()
 		defer resultErrMu.Unlock()
 		resultErr = err
-	})
+	}
+
+	ddlSink, mSink := newDDLSink4Test(reportFunc, reportFunc)
 
 	ctx, cancel := context.WithCancel(context.Background())
 	defer func() {
