@@ -671,7 +671,7 @@ function test_start_task_with_condition() {
 	run_sql_source1 "CREATE TABLE openapi.t1(i TINYINT, j INT UNIQUE KEY);"
 	run_sql_source2 "CREATE TABLE openapi.t2(i TINYINT, j INT UNIQUE KEY);"
 
-	openapi_task_check "create_incremental_task_with_gitd_success" $task_name "" "" "" "" "" ""
+	openapi_task_check "create_incremental_task_with_gtid_success" $task_name "" "" "" "" "" ""
 	run_dm_ctl_with_retry $WORK_DIR "127.0.0.1:$MASTER_PORT" \
 		"query-status $task_name" \
 		"\"stage\": \"Stopped\"" 2
@@ -690,7 +690,7 @@ function test_start_task_with_condition() {
 
 	master_status1=($(get_master_status $MYSQL_HOST1 $MYSQL_PORT1))
 	master_status2=($(get_master_status $MYSQL_HOST2 $MYSQL_PORT2))
-	openapi_task_check "create_incremental_task_with_gitd_success" $task_name ${master_status1[0]} ${master_status1[1]} ${master_status1[2]} ${master_status2[0]} ${master_status2[1]} ${master_status2[2]}
+	openapi_task_check "create_incremental_task_with_gtid_success" $task_name ${master_status1[0]} ${master_status1[1]} ${master_status1[2]} ${master_status2[0]} ${master_status2[1]} ${master_status2[2]}
 	run_dm_ctl_with_retry $WORK_DIR "127.0.0.1:$MASTER_PORT" \
 		"query-status $task_name" \
 		"\"stage\": \"Stopped\"" 2
@@ -718,7 +718,7 @@ function test_start_task_with_condition() {
 	run_sql_source1 "CREATE TABLE openapi.t1(i TINYINT, j INT UNIQUE KEY);"
 	run_sql_source2 "CREATE TABLE openapi.t2(i TINYINT, j INT UNIQUE KEY);"
 
-	openapi_task_check "create_incremental_task_with_gitd_success" $task_name "" "" "" "" "" ""
+	openapi_task_check "create_incremental_task_with_gtid_success" $task_name "" "" "" "" "" ""
 	run_dm_ctl_with_retry $WORK_DIR "127.0.0.1:$MASTER_PORT" \
 		"query-status $task_name" \
 		"\"stage\": \"Stopped\"" 2
@@ -751,7 +751,7 @@ function test_start_task_with_condition() {
 	run_sql_source1 "CREATE TABLE openapi.t1(i TINYINT, j INT UNIQUE KEY);"
 	run_sql_source2 "CREATE TABLE openapi.t2(i TINYINT, j INT UNIQUE KEY);"
 
-	openapi_task_check "create_incremental_task_with_gitd_success" $task_name "" "" "" "" "" ""
+	openapi_task_check "create_incremental_task_with_gtid_success" $task_name "" "" "" "" "" ""
 	run_dm_ctl_with_retry $WORK_DIR "127.0.0.1:$MASTER_PORT" \
 		"query-status $task_name" \
 		"\"stage\": \"Stopped\"" 2
@@ -781,7 +781,7 @@ function test_start_task_with_condition() {
 	run_sql_source2 "CREATE TABLE openapi.t2(i TINYINT, j INT UNIQUE KEY);"
 	master_status1=($(get_master_status $MYSQL_HOST1 $MYSQL_PORT1))
 	master_status2=($(get_master_status $MYSQL_HOST2 $MYSQL_PORT2))
-	openapi_task_check "create_incremental_task_with_gitd_success" $task_name ${master_status1[0]} ${master_status1[1]} ${master_status1[2]} ${master_status2[0]} ${master_status2[1]} ${master_status2[2]}
+	openapi_task_check "create_incremental_task_with_gtid_success" $task_name ${master_status1[0]} ${master_status1[1]} ${master_status1[2]} ${master_status2[0]} ${master_status2[1]} ${master_status2[2]}
 	run_dm_ctl_with_retry $WORK_DIR "127.0.0.1:$MASTER_PORT" \
 		"query-status $task_name" \
 		"\"stage\": \"Stopped\"" 2
@@ -847,7 +847,7 @@ function test_start_task_with_condition() {
 	run_sql_tidb "INSERT INTO openapi.t1(i,j) VALUES (1, 2);"
 	run_sql_tidb "INSERT INTO openapi.t2(i,j) VALUES (1, 2);"
 
-	openapi_task_check "create_incremental_task_with_gitd_success" $task_name "" "" "" "" "" ""
+	openapi_task_check "create_incremental_task_with_gtid_success" $task_name "" "" "" "" "" ""
 	run_dm_ctl_with_retry $WORK_DIR "127.0.0.1:$MASTER_PORT" \
 		"query-status $task_name" \
 		"\"stage\": \"Stopped\"" 2

@@ -24,6 +24,7 @@ import (
 	"github.com/pingcap/tidb-tools/pkg/column-mapping"
 	"github.com/pingcap/tidb/util/filter"
 	router "github.com/pingcap/tidb/util/table-router"
+	"github.com/pingcap/tiflow/dm/config"
 	dmconfig "github.com/pingcap/tiflow/dm/config"
 	"github.com/pingcap/tiflow/dm/config/dbconfig"
 	"github.com/pingcap/tiflow/dm/master"
@@ -287,6 +288,18 @@ func (c *TaskCfg) ToDMSubTaskCfg(jobID string) *dmconfig.SubTaskConfig {
 	cfg.Name = jobID
 	cfg.Mode = c.TaskMode
 	cfg.IgnoreCheckingItems = c.IgnoreCheckingItems
+	// TODO: remove this after relay only supports configure in source config
+	// ignore check MetaPositionChecking first because we can't make sure whether relay is enabled
+	needIgnoreMetaChecking := true
+	for _, ignoreCheckingItem := range cfg.IgnoreCheckingItems {
+		if ignoreCheckingItem == config.MetaPositionChecking || ignoreCheckingItem == config.AllChecking {
+			needIgnoreMetaChecking = false
+			break
+		}
+	}
+	if needIgnoreMetaChecking {
+		cfg.IgnoreCheckingItems = append(c.IgnoreCheckingItems, config.MetaPositionChecking)
+	}
 	cfg.MetaSchema = c.MetaSchema
 	cfg.Timezone = c.Timezone
 	cfg.To = *c.TargetDB

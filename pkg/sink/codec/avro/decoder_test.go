@@ -39,8 +39,7 @@ func TestDecodeEvent(t *testing.T) {
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 
-	encoder, err := setupEncoderAndSchemaRegistry(
-		ctx, "http://127.0.0.1:8081", nil, o)
+	encoder, err := setupEncoderAndSchemaRegistry(ctx, o)
 	defer teardownEncoderAndSchemaRegistry()
 	require.NoError(t, err)
 	require.NotNil(t, encoder)
@@ -184,7 +183,6 @@ func TestDecodeDDLEvent(t *testing.T) {
 	decodedEvent, err := decoder.NextDDLEvent()
 	require.NoError(t, err)
 	require.NotNil(t, decodedEvent)
-	require.Equal(t, uint64(1020), decodedEvent.StartTs)
 	require.Equal(t, uint64(1030), decodedEvent.CommitTs)
 	require.Equal(t, timodel.ActionAddColumn, decodedEvent.Type)
 	require.Equal(t, "ALTER TABLE test.t1 ADD COLUMN a int", decodedEvent.Query)

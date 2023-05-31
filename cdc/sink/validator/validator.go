@@ -40,7 +40,7 @@ func Validate(ctx context.Context, sinkURI string, cfg *config.ReplicaConfig) er
 		return err
 	}
 
-	if cfg.BDRMode {
+	if util.GetOrZero(cfg.BDRMode) {
 		err := checkBDRMode(ctx, uri, cfg)
 		if err != nil {
 			return err
@@ -65,7 +65,8 @@ func checkSyncPointSchemeCompatibility(
 	uri *url.URL,
 	cfg *config.ReplicaConfig,
 ) error {
-	if cfg.EnableSyncPoint && !sink.IsMySQLCompatibleScheme(uri.Scheme) {
+	if util.GetOrZero(cfg.EnableSyncPoint) &&
+		!sink.IsMySQLCompatibleScheme(uri.Scheme) {
 		return cerror.ErrSinkURIInvalid.
 			GenWithStack(
 				"sink uri scheme is not supported with syncpoint enabled"+
