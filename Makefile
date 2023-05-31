@@ -245,7 +245,17 @@ clean_integration_test_containers: ## Clean MySQL and Kafka integration test con
 	docker-compose -f $(TICDC_DOCKER_DEPLOYMENTS_DIR)/docker-compose-mysql-integration.yml down -v
 	docker-compose -f $(TICDC_DOCKER_DEPLOYMENTS_DIR)/docker-compose-kafka-integration.yml down -v
 
-fmt: tools/bin/gofumports tools/bin/shfmt tools/bin/gci
+fmt: tools/bin/gofumports tools/bin/shfmt tools/bin/gci generate_mock go-generate
+	@echo "run gci (format imports)"
+	tools/bin/gci write $(FILES) 2>&1 | $(FAIL_ON_STDOUT)
+	@echo "run gofumports"
+	tools/bin/gofumports -l -w $(FILES) 2>&1 | $(FAIL_ON_STDOUT)
+	@echo "run shfmt"
+	tools/bin/shfmt -d -w .
+	@echo "check log style"
+	scripts/check-log-style.sh
+
+fast_fmt: tools/bin/gofumports tools/bin/shfmt tools/bin/gci
 	@echo "run gci (format imports)"
 	tools/bin/gci write $(FILES) 2>&1 | $(FAIL_ON_STDOUT)
 	@echo "run gofumports"
