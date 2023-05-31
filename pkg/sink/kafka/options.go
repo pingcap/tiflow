@@ -685,7 +685,7 @@ func validateMinInsyncReplicas(
 	minInsyncReplicasStr, exists, err := minInsyncReplicasConfigGetter()
 	if err != nil {
 		// 'min.insync.replica' is invisible to us in Confluent Cloud Kafka.
-		if cerror.ErrKafkaBrokerConfigNotFound.Equal(err) {
+		if cerror.ErrKafkaConfigNotFound.Equal(err) {
 			log.Warn("TiCDC cannot find `min.insync.replicas` from broker's configuration, " +
 				"please make sure that the replication factor is greater than or equal " +
 				"to the minimum number of in-sync replicas" +
@@ -732,8 +732,8 @@ func getTopicConfig(
 	topicConfigName string,
 	brokerConfigName string,
 ) (string, error) {
-	if a, ok := detail.ConfigEntries[topicConfigName]; ok {
-		return a, nil
+	if c, err := admin.GetTopicConfig(ctx, detail.Name, topicConfigName); err == nil {
+		return c, nil
 	}
 
 	return admin.GetBrokerConfig(ctx, brokerConfigName)

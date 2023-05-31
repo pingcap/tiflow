@@ -138,7 +138,7 @@ func TestGetBrokerConfig(t *testing.T) {
 			Resources: []kafka.DescribeConfigResponseResource{},
 		}, nil)
 	result, err = admin.GetBrokerConfig(ctx, "test-config-name")
-	require.Error(t, err, errors.ErrKafkaBrokerConfigNotFound)
+	require.Error(t, err, errors.ErrKafkaConfigNotFound)
 	require.Equal(t, "", result)
 
 	// config is found
@@ -176,7 +176,7 @@ func TestGetBrokerConfig(t *testing.T) {
 			},
 		}, nil)
 	result, err = admin.GetBrokerConfig(ctx, "test-config-name")
-	require.Error(t, err, errors.ErrKafkaBrokerConfigNotFound)
+	require.Error(t, err, errors.ErrKafkaConfigNotFound)
 	require.Len(t, result, 0)
 }
 
@@ -293,7 +293,6 @@ func TestCreateTopic(t *testing.T) {
 		Name:              "topic-1",
 		NumPartitions:     1,
 		ReplicationFactor: 1,
-		ConfigEntries:     nil,
 	}, false)
 	require.Error(t, err)
 
@@ -308,7 +307,6 @@ func TestCreateTopic(t *testing.T) {
 		Name:              "topic-1",
 		NumPartitions:     1,
 		ReplicationFactor: 1,
-		ConfigEntries:     nil,
 	}, false)
 	require.Error(t, err, "topic-1 error")
 
@@ -318,7 +316,6 @@ func TestCreateTopic(t *testing.T) {
 		Name:              "topic-1",
 		NumPartitions:     1,
 		ReplicationFactor: 1,
-		ConfigEntries:     nil,
 	}, false)
 	require.NoError(t, err)
 }
