@@ -26,6 +26,7 @@ import (
 	"github.com/pingcap/tiflow/cdc/entry"
 	"github.com/pingcap/tiflow/cdc/model"
 	"github.com/pingcap/tiflow/pkg/config"
+	cerror "github.com/pingcap/tiflow/pkg/errors"
 	"github.com/pingcap/tiflow/pkg/filter"
 	"github.com/stretchr/testify/require"
 	"github.com/tikv/client-go/v2/oracle"
@@ -653,4 +654,22 @@ func TestBuildIgnoredDDLJob(t *testing.T) {
 	events, err = schema.BuildDDLEvents(ctx, job)
 	require.Nil(t, err)
 	require.Len(t, events, 0)
+}
+
+func TestNewSchemaWrap4Owner(t *testing.T) {
+	helper := entry.NewSchemaTestHelper(t)
+	defer helper.Close()
+	ver, err := helper.Storage().CurrentVersion(oracle.GlobalTxnScope)
+	require.Nil(t, err)
+	f, err := filter.NewFilter(config.GetDefaultReplicaConfig(), "")
+	require.Nil(t, err)
+
+	config := config.GetDefaultReplicaConfig()
+	config.EnableOldValue = false
+	config.ForceReplicate = true
+
+	schema, err := newSchemaWrap4Owner(
+		helper.Storage(), ver.Ver, config, dummyChangeFeedID, f)
+	require.Error(t, cerror.ErrOldValueNotEnabled, err)
+	require.Nil(t, schema)
 }

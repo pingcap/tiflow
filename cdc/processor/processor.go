@@ -764,6 +764,7 @@ func (p *processor) initDDLHandler(ctx context.Context) error {
 	checkpointTs := p.changefeed.Info.GetCheckpointTs(p.changefeed.Status)
 	resolvedTs := p.changefeed.Status.ResolvedTs
 	forceReplicate := p.changefeed.Info.Config.ForceReplicate
+	enableOldValue := p.changefeed.Info.Config.EnableOldValue
 
 	// if resolvedTs == checkpointTs it means owner can't tell whether the DDL on checkpointTs has
 	// been executed or not. So the DDL puller must start at checkpointTs-1.
@@ -782,6 +783,15 @@ func (p *processor) initDDLHandler(ctx context.Context) error {
 	if err != nil {
 		return errors.Trace(err)
 	}
+
+	if forceReplicate && !enableOldValue {
+		log.Error("for replicate table but the old value is not enabled",
+			zap.String("namespace", p.changefeedID.Namespace),
+			zap.String("changefeed", p.changefeedID.ID))
+		return cerror.ErrOldValueNotEnabled.GenWithStackByArgs(
+			"if use force replicate, old value feature must be enabled")
+	}
+
 	schemaStorage, err := entry.NewSchemaStorage(meta, ddlStartTs,
 		forceReplicate, p.changefeedID, util.RoleProcessor, f)
 	if err != nil {
