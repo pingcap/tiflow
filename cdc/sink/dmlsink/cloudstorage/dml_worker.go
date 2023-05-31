@@ -279,7 +279,7 @@ func (d *dmlWorker) dispatchFlushTasks(ctx context.Context,
 				return errors.Trace(ctx.Err())
 			case d.flushNotifyCh <- flushTask:
 				log.Debug("flush task is emitted successfully when flush interval exceeds",
-					zap.Any("events", flushTask.tasks))
+					zap.Int("tablesLength", len(flushTask.tasks)))
 				flushTask = newDMLTask()
 			default:
 			}
@@ -299,7 +299,7 @@ func (d *dmlWorker) dispatchFlushTasks(ctx context.Context,
 				case d.flushNotifyCh <- task:
 					log.Debug("flush task is emitted successfully when file size exceeds",
 						zap.Any("table", table),
-						zap.Any("eventsLenth", len(task.tasks[table].msgs)))
+						zap.Int("eventsLenth", len(task.tasks[table].msgs)))
 				}
 			}
 		}
