@@ -298,8 +298,8 @@ func (c *ReplicaConfig) AdjustEnableOldValue(uri string) error {
 		if c.EnableOldValue {
 			for _, fp := range ForceDisableOldValueProtocols {
 				if protocol == fp {
-					log.Warn("Attempting to replicate with old value enabled. CDC will disable old value and continue.",
-						zap.String("protocol", protocol))
+					log.Warn("Attempting to replicate with old value enabled, but the specified protocol must disable old value. "+
+						"CDC will disable old value and continue.", zap.String("protocol", protocol))
 					c.EnableOldValue = false
 					break
 				}
@@ -307,8 +307,8 @@ func (c *ReplicaConfig) AdjustEnableOldValue(uri string) error {
 		} else {
 			for _, fp := range ForceEnableOldValueProtocols {
 				if protocol == fp {
-					log.Warn("Attempting to replicate without old value enabled. CDC will enable old value and continue.",
-						zap.String("protocol", protocol))
+					log.Warn("Attempting to replicate without old value enabled, but the specified protocol must enable old value. "+
+						"CDC will enable old value and continue.", zap.String("protocol", protocol))
 					c.EnableOldValue = true
 					break
 				}
@@ -317,8 +317,7 @@ func (c *ReplicaConfig) AdjustEnableOldValue(uri string) error {
 	}
 
 	if c.ForceReplicate && !c.EnableOldValue {
-		log.Error("if use force replicate, old value feature must be enabled",
-			zap.String("protocol", protocol))
+		log.Error("force replicate, old value feature is disabled", zap.String("protocol", protocol))
 		return cerror.ErrOldValueNotEnabled.GenWithStackByArgs()
 	}
 	return nil
