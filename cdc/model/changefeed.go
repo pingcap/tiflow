@@ -261,7 +261,7 @@ func (info *ChangeFeedInfo) Clone() (*ChangeFeedInfo, error) {
 // VerifyAndComplete verifies changefeed info and may fill in some fields.
 // If a required field is not provided, return an error.
 // If some necessary filed is missing but can use a default value, fill in it.
-func (info *ChangeFeedInfo) VerifyAndComplete() error {
+func (info *ChangeFeedInfo) VerifyAndComplete() {
 	defaultConfig := config.GetDefaultReplicaConfig()
 	if info.Engine == "" {
 		info.Engine = SortUnified
@@ -287,8 +287,6 @@ func (info *ChangeFeedInfo) VerifyAndComplete() error {
 	}
 
 	info.RmUnusedFields()
-	err := info.Config.AdjustEnableOldValue(info.SinkURI)
-	return errors.Trace(err)
 }
 
 // RmUnusedFields removes unnecessary fields based on the downstream type and
