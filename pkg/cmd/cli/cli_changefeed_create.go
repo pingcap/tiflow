@@ -156,7 +156,13 @@ func (o *createChangefeedOptions) completeReplicaCfg(
 	if err != nil {
 		return err
 	}
-	cfg.AdjustEnableOldValue(uri)
+	protocol := uri.Query().Get(config.ProtocolKey)
+	if protocol != "" {
+		cfg.Sink.Protocol = putil.AddressOf(protocol)
+	}
+	protocol = putil.GetOrZero(cfg.Sink.Protocol)
+
+	cfg.AdjustEnableOldValueByProtocol(protocol)
 	if cfg.ForceReplicate && !cfg.EnableOldValue {
 		log.Error("force replicate, old value feature is disabled",
 			zap.String("protocol", putil.GetOrZero(cfg.Sink.Protocol)))

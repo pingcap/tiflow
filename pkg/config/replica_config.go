@@ -192,16 +192,26 @@ func (c *replicaConfig) fillFromV1(v1 *outdated.ReplicaConfigV1) {
 }
 
 // ValidateAndAdjust verifies and adjusts the replica configuration.
-func (c *ReplicaConfig) ValidateAndAdjust(sinkURI *url.URL) error {
-	c.AdjustEnableOldValue(sinkURI)
-
-	// check sink uri
+func (c *ReplicaConfig) ValidateAndAdjust(sinkURI *url.URL) error { // check sink uri
 	if c.Sink != nil {
 		err := c.Sink.validateAndAdjust(sinkURI)
 		if err != nil {
 			return err
 		}
+
+		protocol := sinkURI.Query().Get(ProtocolKey)
+		if protocol != "" {
+			c.Sink.Protocol = util.AddressOf(protocol)
+		}
+		protocol = util.GetOrZero(c.Sink.Protocol)
+		c.AdjustEnableOldValueByProtocol(protocol)
+		if c.ForceReplicate && !c.EnableOldValue {
+			log.Error("force replicate, old value feature is disabled",
+				zap.String("protocol", util.GetOrZero(c.Sink.Protocol)))
+			return cerror.ErrOldValueNotEnabled.GenWithStackByArgs()
+		}
 	}
+
 	if c.Consistent != nil {
 		err := c.Consistent.ValidateAndAdjust()
 		if err != nil {
@@ -282,18 +292,8 @@ func isSinkCompatibleWithSpanReplication(u *url.URL) bool {
 		(strings.Contains(u.Scheme, "kafka") || strings.Contains(u.Scheme, "blackhole"))
 }
 
-// AdjustEnableOldValue adjust the old value configuration by the sink scheme and encoding protocol
-func (c *ReplicaConfig) AdjustEnableOldValue(sinkURI *url.URL) {
-	if sink.IsMySQLCompatibleScheme(strings.ToLower(sinkURI.Scheme)) {
-		return
-	}
-
-	protocol := sinkURI.Query().Get(ProtocolKey)
-	if protocol != "" {
-		c.Sink.Protocol = util.AddressOf(protocol)
-	}
-	protocol = util.GetOrZero(c.Sink.Protocol)
-
+// AdjustEnableOldValueByProtocol adjust the old value configuration by the sink scheme and encoding protocol
+func (c *ReplicaConfig) AdjustEnableOldValueByProtocol(protocol string) {
 	if c.EnableOldValue {
 		for _, fp := range ForceDisableOldValueProtocols {
 			if protocol == fp {
