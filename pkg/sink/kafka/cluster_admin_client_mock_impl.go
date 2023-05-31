@@ -116,6 +116,7 @@ func (c *ClusterAdminClientMockImpl) GetBrokerConfig(
 	return value, nil
 }
 
+// GetTopicConfig implement the ClusterAdminClient interface
 func (c *ClusterAdminClientMockImpl) GetTopicConfig(ctx context.Context, topicName string, configName string) (string, error) {
 	value, ok := c.brokerConfigs[configName]
 	if !ok {
