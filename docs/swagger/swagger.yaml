@@ -1423,6 +1423,10 @@ paths:
         in: query
         name: state
         type: string
+      - description: default
+        in: query
+        name: namespace
+        type: string
       produces:
       - application/json
       responses:
@@ -1481,6 +1485,10 @@ paths:
         name: changefeed_id
         required: true
         type: string
+      - description: default
+        in: query
+        name: namespace
+        type: string
       produces:
       - application/json
       responses:
@@ -1510,6 +1518,10 @@ paths:
         name: changefeed_id
         required: true
         type: string
+      - description: default
+        in: query
+        name: namespace
+        type: string
       produces:
       - application/json
       responses:
@@ -1538,6 +1550,10 @@ paths:
         in: path
         name: changefeed_id
         required: true
+        type: string
+      - description: default
+        in: query
+        name: namespace
         type: string
       - description: changefeed config
         in: body
@@ -1575,6 +1591,10 @@ paths:
         name: changefeed_id
         required: true
         type: string
+      - description: default
+        in: query
+        name: namespace
+        type: string
       produces:
       - application/json
       responses:
@@ -1604,6 +1624,10 @@ paths:
         in: path
         name: changefeed_id
         required: true
+        type: string
+      - description: default
+        in: query
+        name: namespace
         type: string
       - description: resume config
         in: body
@@ -1735,6 +1759,10 @@ paths:
         in: path
         name: changefeed_id
         required: true
+        type: string
+      - description: default
+        in: query
+        name: namespace
         type: string
       - description: capture ID
         in: path

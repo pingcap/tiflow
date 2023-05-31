@@ -87,7 +87,8 @@ func (h *OpenAPIV2) ResolveLock(c *gin.Context) {
 	}
 
 	txnResolver := txnutil.NewLockerResolver(kvStorage.(tikv.Storage),
-		model.DefaultChangeFeedID("changefeed-client"),
+		// a fake changefeed id and namespace
+		model.ChangeFeedID{ID: "changefeed-client", Namespace: "default"},
 		util.RoleClient)
 	err = txnResolver.Resolve(c, resolveLockReq.RegionID, resolveLockReq.Ts)
 	if err != nil {
