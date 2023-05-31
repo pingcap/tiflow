@@ -14,11 +14,11 @@
 package memquota
 
 import (
+	"context"
 	"sync"
 	"testing"
 
 	"github.com/pingcap/tiflow/cdc/model"
-	cerrors "github.com/pingcap/tiflow/pkg/errors"
 	"github.com/pingcap/tiflow/pkg/spanz"
 	"github.com/stretchr/testify/require"
 )
@@ -92,7 +92,7 @@ func TestMemQuotaClose(t *testing.T) {
 		defer wg.Done()
 		err := m.BlockAcquire(50)
 		if err != nil {
-			require.ErrorIs(t, err, cerrors.ErrFlowControllerAborted)
+			require.ErrorIs(t, err, context.Canceled)
 		}
 	}()
 	wg.Add(1)
@@ -100,7 +100,7 @@ func TestMemQuotaClose(t *testing.T) {
 		defer wg.Done()
 		err := m.BlockAcquire(50)
 		if err != nil {
-			require.ErrorIs(t, err, cerrors.ErrFlowControllerAborted)
+			require.ErrorIs(t, err, context.Canceled)
 		}
 	}()
 	wg.Add(1)
@@ -108,7 +108,7 @@ func TestMemQuotaClose(t *testing.T) {
 		defer wg.Done()
 		err := m.BlockAcquire(50)
 		if err != nil {
-			require.ErrorIs(t, err, cerrors.ErrFlowControllerAborted)
+			require.ErrorIs(t, err, context.Canceled)
 		}
 	}()
 
@@ -250,7 +250,10 @@ func TestMemQuotaRecordAndClean(t *testing.T) {
 	require.False(t, m.hasAvailable(1))
 
 	// clean the all memory.
-	cleanedBytes := m.Clean(span)
+	cleanedBytes := m.ClearTable(span)
 	require.Equal(t, uint64(300), cleanedBytes)
 	require.True(t, m.hasAvailable(100))
+
+	cleanedBytes = m.RemoveTable(span)
+	require.Equal(t, uint64(0), cleanedBytes)
 }

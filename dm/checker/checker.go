@@ -341,6 +341,15 @@ func (c *Checker) Init(ctx context.Context) (err error) {
 					c.dumpWholeInstance,
 				))
 			}
+		} else if !instance.cfg.UseRelay && instance.cfg.Meta != nil {
+			checkMetaPos := len(instance.cfg.Meta.BinLogName) > 0 ||
+				(instance.cfg.EnableGTID && len(instance.cfg.Meta.BinLogGTID) > 0)
+			if _, ok := c.checkingItems[config.MetaPositionChecking]; checkMetaPos && ok {
+				c.checkList = append(c.checkList, checker.NewMetaPositionChecker(instance.sourceDB,
+					instance.cfg.From,
+					instance.cfg.EnableGTID,
+					instance.cfg.Meta))
+			}
 		}
 		if instance.cfg.Mode != config.ModeFull {
 			// full mode needn't check follows

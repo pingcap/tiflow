@@ -51,7 +51,7 @@ type tableSinkWrapper struct {
 	// tableSink is the underlying sink.
 	tableSink             tablesink.TableSink
 	tableSinkCheckpointTs model.ResolvedTs
-	tableSinkMu           sync.Mutex
+	tableSinkMu           sync.RWMutex
 
 	// state used to control the lifecycle of the table.
 	state *tablepb.TableState
@@ -161,13 +161,17 @@ func (t *tableSinkWrapper) start(ctx context.Context, startTs model.Ts) (err err
 	return nil
 }
 
-func (t *tableSinkWrapper) appendRowChangedEvents(events ...*model.RowChangedEvent) {
-	t.tableSinkMu.Lock()
-	defer t.tableSinkMu.Unlock()
+func (t *tableSinkWrapper) appendRowChangedEvents(events ...*model.RowChangedEvent) error {
+	t.tableSinkMu.RLock()
+	defer t.tableSinkMu.RUnlock()
 	// If it's nil it means it's closed.
 	if t.tableSink != nil {
 		t.tableSink.AppendRowChangedEvents(events...)
+	} else {
+		// If it's nil it means it's closed.
+		return tablesink.NewSinkInternalError(errors.New("table sink cleared"))
 	}
+	return nil
 }
 
 func (t *tableSinkWrapper) updateReceivedSorterResolvedTs(ts model.Ts) {
@@ -192,20 +196,22 @@ func (t *tableSinkWrapper) updateReceivedSorterCommitTs(ts model.Ts) {
 }
 
 func (t *tableSinkWrapper) updateResolvedTs(ts model.ResolvedTs) error {
-	t.tableSinkMu.Lock()
-	defer t.tableSinkMu.Unlock()
-	// If it's nil it means it's closed.
+	t.tableSinkMu.RLock()
+	defer t.tableSinkMu.RUnlock()
 	if t.tableSink != nil {
 		if err := t.tableSink.UpdateResolvedTs(ts); err != nil {
 			return errors.Trace(err)
 		}
+	} else {
+		// If it's nil it means it's closed.
+		return tablesink.NewSinkInternalError(errors.New("table sink cleared"))
 	}
 	return nil
 }
 
 func (t *tableSinkWrapper) getCheckpointTs() model.ResolvedTs {
-	t.tableSinkMu.Lock()
-	defer t.tableSinkMu.Unlock()
+	t.tableSinkMu.RLock()
+	defer t.tableSinkMu.RUnlock()
 	if t.tableSink != nil {
 		checkpointTs := t.tableSink.GetCheckpointTs()
 		if t.tableSinkCheckpointTs.Less(checkpointTs) {
@@ -252,19 +258,26 @@ func (t *tableSinkWrapper) markAsClosing() {
 			break
 		}
 		if t.state.CompareAndSwap(curr, tablepb.TableStateStopping) {
+			log.Info("Sink is closing",
+				zap.String("namespace", t.changefeed.Namespace),
+				zap.String("changefeed", t.changefeed.ID),
+				zap.Stringer("span", &t.span))
 			break
 		}
 	}
 }
 
-func (t *tableSinkWrapper) markAsClosed() (modified bool) {
+func (t *tableSinkWrapper) markAsClosed() {
 	for {
 		curr := t.state.Load()
 		if curr == tablepb.TableStateStopped {
 			return
 		}
 		if t.state.CompareAndSwap(curr, tablepb.TableStateStopped) {
-			modified = true
+			log.Info("Sink is closed",
+				zap.String("namespace", t.changefeed.Namespace),
+				zap.String("changefeed", t.changefeed.ID),
+				zap.Stringer("span", &t.span))
 			return
 		}
 	}
@@ -273,12 +286,7 @@ func (t *tableSinkWrapper) markAsClosed() (modified bool) {
 func (t *tableSinkWrapper) asyncClose() bool {
 	t.markAsClosing()
 	if t.asyncClearTableSink() {
-		if t.markAsClosed() {
-			log.Info("Sink is closed",
-				zap.String("namespace", t.changefeed.Namespace),
-				zap.String("changefeed", t.changefeed.ID),
-				zap.Stringer("span", &t.span))
-		}
+		t.markAsClosed()
 		return true
 	}
 	return false
@@ -287,12 +295,7 @@ func (t *tableSinkWrapper) asyncClose() bool {
 func (t *tableSinkWrapper) close() {
 	t.markAsClosing()
 	t.clearTableSink()
-	if t.markAsClosed() {
-		log.Info("Sink is closed",
-			zap.String("namespace", t.changefeed.Namespace),
-			zap.String("changefeed", t.changefeed.ID),
-			zap.Stringer("span", &t.span))
-	}
+	t.markAsClosed()
 }
 
 // Return true means the internal table sink has been initialized.

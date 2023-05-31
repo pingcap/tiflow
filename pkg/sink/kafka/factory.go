@@ -29,9 +29,9 @@ import (
 // Factory is used to produce all kafka components.
 type Factory interface {
 	// AdminClient return a kafka cluster admin client
-	AdminClient() (ClusterAdminClient, error)
+	AdminClient(ctx context.Context) (ClusterAdminClient, error)
 	// SyncProducer creates a sync producer to writer message to kafka
-	SyncProducer() (SyncProducer, error)
+	SyncProducer(ctx context.Context) (SyncProducer, error)
 	// AsyncProducer creates an async producer to writer message to kafka
 	AsyncProducer(ctx context.Context, closedChan chan struct{}, failpointCh chan error) (AsyncProducer, error)
 	// MetricsCollector returns the kafka metrics collector
@@ -227,8 +227,14 @@ func (p *saramaAsyncProducer) AsyncRunCallback(
 	for {
 		select {
 		case <-ctx.Done():
+			log.Info("async producer exit since context is done",
+				zap.String("namespace", p.changefeedID.Namespace),
+				zap.String("changefeed", p.changefeedID.ID))
 			return errors.Trace(ctx.Err())
 		case <-p.closedChan:
+			log.Info("async producer exit since receive closed signal",
+				zap.String("namespace", p.changefeedID.Namespace),
+				zap.String("changefeed", p.changefeedID.ID))
 			return nil
 		case err := <-p.failpointCh:
 			log.Warn("Receive from failpoint chan in kafka "+

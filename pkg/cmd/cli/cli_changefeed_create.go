@@ -31,6 +31,7 @@ import (
 	"github.com/pingcap/tiflow/pkg/config"
 	cerror "github.com/pingcap/tiflow/pkg/errors"
 	"github.com/pingcap/tiflow/pkg/filter"
+	putil "github.com/pingcap/tiflow/pkg/util"
 	"github.com/spf13/cobra"
 	"github.com/tikv/client-go/v2/oracle"
 	"go.uber.org/zap"
@@ -161,11 +162,11 @@ func (o *createChangefeedOptions) completeReplicaCfg(
 
 		protocol := sinkURIParsed.Query().Get(config.ProtocolKey)
 		if protocol != "" {
-			cfg.Sink.Protocol = protocol
+			cfg.Sink.Protocol = putil.AddressOf(protocol)
 		}
 		for _, fp := range config.ForceEnableOldValueProtocols {
-			if cfg.Sink.Protocol == fp {
-				log.Warn("Attempting to replicate without old value enabled. CDC will enable old value and continue.", zap.String("protocol", cfg.Sink.Protocol))
+			if putil.GetOrZero(cfg.Sink.Protocol) == fp {
+				log.Warn("Attempting to replicate without old value enabled. CDC will enable old value and continue.", zap.String("protocol", putil.GetOrZero(cfg.Sink.Protocol)))
 				cfg.EnableOldValue = true
 				break
 			}
@@ -189,7 +190,7 @@ func (o *createChangefeedOptions) completeReplicaCfg(
 	}
 
 	if o.commonChangefeedOptions.schemaRegistry != "" {
-		cfg.Sink.SchemaRegistry = o.commonChangefeedOptions.schemaRegistry
+		cfg.Sink.SchemaRegistry = putil.AddressOf(o.commonChangefeedOptions.schemaRegistry)
 	}
 
 	switch o.commonChangefeedOptions.sortEngine {

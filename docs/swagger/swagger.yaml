@@ -116,6 +116,20 @@ definitions:
         type: string
       sasl-mechanism:
         type: string
+      sasl-oauth-audience:
+        type: string
+      sasl-oauth-client-id:
+        type: string
+      sasl-oauth-client-secret:
+        type: string
+      sasl-oauth-grant-type:
+        type: string
+      sasl-oauth-scopes:
+        items:
+          type: string
+        type: array
+      sasl-oauth-token-url:
+        type: string
       sasl-password:
         type: string
       sasl-user:
@@ -161,39 +175,56 @@ definitions:
       cloud-storage-config:
         $ref: '#/definitions/config.CloudStorageConfig'
       column-selectors:
+        description: ColumnSelectors is Deprecated.
         items:
           $ref: '#/definitions/config.ColumnSelector'
         type: array
       csv:
         $ref: '#/definitions/config.CSVConfig'
+        description: CSVConfig is only available when the downstream is Storage.
       date-separator:
+        description: DateSeparator is only available when the downstream is Storage.
         type: string
       dispatchers:
+        description: DispatchRules is only available when the downstream is MQ.
         items:
           $ref: '#/definitions/config.DispatchRule'
         type: array
       enable-kafka-sink-v2:
-        description: EnableKafkaSinkV2 enabled then the kafka-go sink will be used.
+        description: |-
+          EnableKafkaSinkV2 enabled then the kafka-go sink will be used.
+          It is only available when the downstream is MQ.
         type: boolean
       enable-partition-separator:
+        description: EnablePartitionSeparator is only available when the downstream
+          is Storage.
         type: boolean
       encoder-concurrency:
+        description: EncoderConcurrency is only available when the downstream is MQ.
         type: integer
       file-index-digit:
+        description: FileIndexWidth is only available when the downstream is Storage
         type: integer
       kafka-config:
         $ref: '#/definitions/config.KafkaConfig'
       mysql-config:
         $ref: '#/definitions/config.MySQLConfig'
       only-output-updated-columns:
+        description: OnlyOutputUpdatedColumns is only available when the downstream
+          is MQ.
         type: boolean
       protocol:
+        description: Protocol is NOT available when the downstream is DB.
         type: string
       safe-mode:
+        description: SafeMode is only available when the downstream is DB.
         type: boolean
       schema-registry:
+        description: SchemaRegistry is only available when the downstream is MQ using
+          avro protocol.
         type: string
       terminator:
+        description: Terminator is NOT available when the downstream is DB.
         type: string
       transaction-atomicity:
         type: string
@@ -691,6 +722,20 @@ definitions:
       sasl_gssapi_user:
         type: string
       sasl_mechanism:
+        type: string
+      sasl_oauth_audience:
+        type: string
+      sasl_oauth_client_id:
+        type: string
+      sasl_oauth_client_secret:
+        type: string
+      sasl_oauth_grant_type:
+        type: string
+      sasl_oauth_scopes:
+        items:
+          type: string
+        type: array
+      sasl_oauth_token_url:
         type: string
       sasl_password:
         type: string
@@ -1714,6 +1759,10 @@ paths:
         in: path
         name: changefeed_id
         required: true
+        type: string
+      - description: default
+        in: query
+        name: namespace
         type: string
       - description: capture ID
         in: path

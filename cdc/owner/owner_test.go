@@ -36,6 +36,7 @@ import (
 	"github.com/pingcap/tiflow/pkg/sink/observer"
 	"github.com/pingcap/tiflow/pkg/txnutil/gc"
 	"github.com/pingcap/tiflow/pkg/upstream"
+	"github.com/pingcap/tiflow/pkg/util"
 	"github.com/pingcap/tiflow/pkg/version"
 	"github.com/stretchr/testify/require"
 	"github.com/tikv/client-go/v2/oracle"
@@ -315,7 +316,7 @@ func TestFixChangefeedSinkProtocol(t *testing.T) {
 		CreatorVersion: "5.3.0",
 		SinkURI:        "kafka://127.0.0.1:9092/ticdc-test2?protocol=random",
 		Config: &config.ReplicaConfig{
-			Sink: &config.SinkConfig{Protocol: config.ProtocolDefault.String()},
+			Sink: &config.SinkConfig{Protocol: util.AddressOf(config.ProtocolDefault.String())},
 		},
 	}
 	changefeedStr, err := changefeedInfo.Marshal()
