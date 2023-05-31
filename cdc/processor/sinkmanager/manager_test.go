@@ -19,6 +19,8 @@ import (
 	"testing"
 	"time"
 
+	"github.com/pingcap/failpoint"
+	"github.com/pingcap/log"
 	"github.com/pingcap/tiflow/cdc/entry"
 	"github.com/pingcap/tiflow/cdc/model"
 	"github.com/pingcap/tiflow/cdc/processor/sourcemanager"
@@ -60,7 +62,7 @@ func createManagerWithMemEngine(
 		ctx, changefeedID, changefeedInfo, up,
 		&entry.MockSchemaStorage{Resolved: math.MaxUint64},
 		nil, sm,
-		errChan, prometheus.NewCounter(prometheus.CounterOpts{}))
+		errChan, errChan, prometheus.NewCounter(prometheus.CounterOpts{}))
 	require.NoError(t, err)
 	return manager, sortEngine
 }
@@ -143,10 +145,7 @@ func TestAddTable(t *testing.T) {
 
 	changefeedInfo := getChangefeedInfo()
 	manager, _ := createManagerWithMemEngine(t, ctx, model.DefaultChangeFeedID("1"), changefeedInfo, make(chan error, 1))
-	defer func() {
-		err := manager.Close()
-		require.NoError(t, err)
-	}()
+	defer func() { manager.Close() }()
 	tableID := model.TableID(1)
 	manager.AddTable(tableID, 1, 100)
 	tableSink, ok := manager.tableSinks.Load(tableID)
@@ -171,10 +170,7 @@ func TestRemoveTable(t *testing.T) {
 
 	changefeedInfo := getChangefeedInfo()
 	manager, e := createManagerWithMemEngine(t, ctx, model.DefaultChangeFeedID("1"), changefeedInfo, make(chan error, 1))
-	defer func() {
-		err := manager.Close()
-		require.NoError(t, err)
-	}()
+	defer func() { manager.Close() }()
 	tableID := model.TableID(1)
 	manager.AddTable(tableID, 1, 100)
 	tableSink, ok := manager.tableSinks.Load(tableID)
@@ -213,10 +209,7 @@ func TestGenerateTableSinkTaskWithBarrierTs(t *testing.T) {
 
 	changefeedInfo := getChangefeedInfo()
 	manager, e := createManagerWithMemEngine(t, ctx, model.DefaultChangeFeedID("1"), changefeedInfo, make(chan error, 1))
-	defer func() {
-		err := manager.Close()
-		require.NoError(t, err)
-	}()
+	defer func() { manager.Close() }()
 	tableID := model.TableID(1)
 	manager.AddTable(tableID, 1, 100)
 	addTableAndAddEventsToSortEngine(t, e, tableID)
@@ -242,10 +235,7 @@ func TestGenerateTableSinkTaskWithResolvedTs(t *testing.T) {
 
 	changefeedInfo := getChangefeedInfo()
 	manager, e := createManagerWithMemEngine(t, ctx, model.DefaultChangeFeedID("1"), changefeedInfo, make(chan error, 1))
-	defer func() {
-		err := manager.Close()
-		require.NoError(t, err)
-	}()
+	defer func() { manager.Close() }()
 	tableID := model.TableID(1)
 	manager.AddTable(tableID, 1, 100)
 	addTableAndAddEventsToSortEngine(t, e, tableID)
@@ -273,10 +263,7 @@ func TestGetTableStatsToReleaseMemQuota(t *testing.T) {
 
 	changefeedInfo := getChangefeedInfo()
 	manager, e := createManagerWithMemEngine(t, ctx, model.DefaultChangeFeedID("1"), changefeedInfo, make(chan error, 1))
-	defer func() {
-		err := manager.Close()
-		require.NoError(t, err)
-	}()
+	defer func() { manager.Close() }()
 	tableID := model.TableID(1)
 	manager.AddTable(tableID, 1, 100)
 	addTableAndAddEventsToSortEngine(t, e, tableID)
@@ -301,10 +288,7 @@ func TestDoNotGenerateTableSinkTaskWhenTableIsNotReplicating(t *testing.T) {
 
 	changefeedInfo := getChangefeedInfo()
 	manager, e := createManagerWithMemEngine(t, ctx, model.DefaultChangeFeedID("1"), changefeedInfo, make(chan error, 1))
-	defer func() {
-		err := manager.Close()
-		require.NoError(t, err)
-	}()
+	defer func() { manager.Close() }()
 	tableID := model.TableID(1)
 	manager.AddTable(tableID, 1, 100)
 	addTableAndAddEventsToSortEngine(t, e, tableID)
@@ -327,8 +311,7 @@ func TestClose(t *testing.T) {
 	changefeedInfo := getChangefeedInfo()
 	manager, _ := createManagerWithMemEngine(t, ctx, model.DefaultChangeFeedID("1"), changefeedInfo, make(chan error, 1))
 
-	err := manager.Close()
-	require.NoError(t, err)
+	manager.Close()
 }
 
 // This could happen when closing the sink manager and source manager.
@@ -342,10 +325,42 @@ func TestUpdateReceivedSorterResolvedTsOfNonExistTable(t *testing.T) {
 
 	changefeedInfo := getChangefeedInfo()
 	manager, _ := createManagerWithMemEngine(t, ctx, model.DefaultChangeFeedID("1"), changefeedInfo, make(chan error, 1))
-	defer func() {
-		err := manager.Close()
-		require.NoError(t, err)
-	}()
+	defer func() { manager.Close() }()
 
 	manager.UpdateReceivedSorterResolvedTs(model.TableID(1), 1)
+}
+
+// Sink worker errors should cancel the sink manager correctly.
+func TestSinkManagerRunWithErrors(t *testing.T) {
+	t.Parallel()
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+
+	errCh := make(chan error, 16)
+	changefeedInfo := getChangefeedInfo()
+	manager, source := createManagerWithMemEngine(t, ctx, model.DefaultChangeFeedID("1"), changefeedInfo, errCh)
+	defer func() { manager.Close() }()
+
+	_ = failpoint.Enable("github.com/pingcap/tiflow/cdc/processor/sinkmanager/SinkWorkerTaskError", "return")
+	defer func() {
+		_ = failpoint.Disable("github.com/pingcap/tiflow/cdc/processor/sinkmanager/SinkWorkerTaskError")
+	}()
+
+	source.AddTable(1)
+	manager.AddTable(1, 100, math.MaxUint64)
+	manager.StartTable(1, 100)
+	source.Add(1, model.NewResolvedPolymorphicEvent(0, 101))
+	manager.UpdateReceivedSorterResolvedTs(1, 101)
+	manager.UpdateBarrierTs(101, nil)
+
+	timer := time.NewTimer(5 * time.Second)
+	select {
+	case <-errCh:
+		if !timer.Stop() {
+			<-timer.C
+		}
+		return
+	case <-timer.C:
+		log.Panic("must get an error instead of a timeout")
+	}
 }

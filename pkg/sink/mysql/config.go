@@ -129,12 +129,12 @@ func (c *Config) Apply(
 	replicaConfig *config.ReplicaConfig,
 ) (err error) {
 	if sinkURI == nil {
-		return cerror.ErrMySQLConnectionError.GenWithStack("fail to open MySQL sink, empty SinkURI")
+		return cerror.ErrMySQLInvalidConfig.GenWithStack("fail to open MySQL sink, empty SinkURI")
 	}
 
 	scheme := strings.ToLower(sinkURI.Scheme)
 	if !sink.IsMySQLCompatibleScheme(scheme) {
-		return cerror.ErrMySQLConnectionError.GenWithStack("can't create MySQL sink with unsupported scheme: %s", scheme)
+		return cerror.ErrMySQLInvalidConfig.GenWithStack("can't create MySQL sink with unsupported scheme: %s", scheme)
 	}
 	query := sinkURI.Query()
 	if err = getWorkerCount(query, &c.WorkerCount); err != nil {

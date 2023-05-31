@@ -100,6 +100,7 @@ type changefeed struct {
 	// in every tick. Such as the changefeed that is stopped or encountered an error.
 	isReleased bool
 	errCh      chan error
+	warningCh  chan error
 	// cancel the running goroutine start by `DDLPuller`
 	cancel context.CancelFunc
 
@@ -124,7 +125,11 @@ type changefeed struct {
 		filter filter.Filter,
 	) (puller.DDLPuller, error)
 
-	newSink      func(changefeedID model.ChangeFeedID, info *model.ChangeFeedInfo, reportErr func(error)) DDLSink
+	newSink func(
+		changefeedID model.ChangeFeedID, info *model.ChangeFeedInfo,
+		reportError func(err error), reportWarning func(err error),
+	) DDLSink
+
 	newScheduler func(
 		ctx cdcContext.Context, pdClock pdutil.Clock, epoch uint64,
 	) (scheduler.Scheduler, error)
@@ -146,8 +151,9 @@ func newChangefeed(
 		feedStateManager: newFeedStateManager(up),
 		upstream:         up,
 
-		errCh:  make(chan error, defaultErrChSize),
-		cancel: func() {},
+		errCh:     make(chan error, defaultErrChSize),
+		warningCh: make(chan error, defaultErrChSize),
+		cancel:    func() {},
 
 		newDDLPuller: puller.NewDDLPuller,
 		newSink:      newDDLSink,
@@ -166,7 +172,10 @@ func newChangefeed4Test(
 		schemaStorage entry.SchemaStorage,
 		filter filter.Filter,
 	) (puller.DDLPuller, error),
-	newSink func(changefeedID model.ChangeFeedID, info *model.ChangeFeedInfo, reportErr func(err error)) DDLSink,
+	newSink func(
+		changefeedID model.ChangeFeedID, info *model.ChangeFeedInfo,
+		reportError func(err error), reportWarning func(err error),
+	) DDLSink,
 	newScheduler func(
 		ctx cdcContext.Context, pdClock pdutil.Clock, epoch uint64,
 	) (scheduler.Scheduler, error),
@@ -181,6 +190,17 @@ func newChangefeed4Test(
 func (c *changefeed) Tick(ctx cdcContext.Context, captures map[model.CaptureID]*model.CaptureInfo) {
 	startTime := time.Now()
 
+	// Handle all internal warnings.
+	noMoreWarnings := false
+	for !noMoreWarnings {
+		select {
+		case err := <-c.warningCh:
+			c.handleWarning(ctx, err)
+		default:
+			noMoreWarnings = true
+		}
+	}
+
 	if skip, err := c.checkUpstream(); skip {
 		if err != nil {
 			c.handleErr(ctx, err)
@@ -189,7 +209,10 @@ func (c *changefeed) Tick(ctx cdcContext.Context, captures map[model.CaptureID]*
 	}
 
 	ctx = cdcContext.WithErrorHandler(ctx, func(err error) error {
-		c.errCh <- errors.Trace(err)
+		select {
+		case <-ctx.Done():
+		case c.errCh <- errors.Trace(err):
+		}
 		return nil
 	})
 	c.state.CheckCaptureAlive(ctx.GlobalVars().CaptureInfo.ID)
@@ -230,6 +253,25 @@ func (c *changefeed) handleErr(ctx cdcContext.Context, err error) {
 		Message: err.Error(),
 	})
 	c.releaseResources(ctx)
+}
+
+func (c *changefeed) handleWarning(ctx cdcContext.Context, err error) {
+	log.Warn("an warning occurred in Owner",
+		zap.String("namespace", c.id.Namespace),
+		zap.String("changefeed", c.id.ID), zap.Error(err))
+	var code string
+	if rfcCode, ok := cerror.RFCCode(err); ok {
+		code = string(rfcCode)
+	} else {
+		code = string(cerror.ErrOwnerUnknown.RFCCode())
+	}
+
+	c.feedStateManager.handleWarning(&model.RunningError{
+		Time:    time.Now(),
+		Addr:    contextutil.CaptureAddrFromCtx(ctx),
+		Code:    code,
+		Message: err.Error(),
+	})
 }
 
 func (c *changefeed) checkStaleCheckpointTs(ctx cdcContext.Context, checkpointTs uint64) error {
@@ -277,11 +319,7 @@ func (c *changefeed) tick(ctx cdcContext.Context, captures map[model.CaptureID]*
 		return errors.Trace(err)
 	default:
 	}
-	// we need to wait ddl ddlSink to be ready before we do the other things
-	// otherwise, we may cause a nil pointer panic when we try to write to the ddl ddlSink.
-	if !c.ddlSink.isInitialized() {
-		return nil
-	}
+
 	// TODO: pass table checkpointTs when we support concurrent process ddl
 	allPhysicalTables, barrier, err := c.ddlManager.tick(ctx, preCheckpointTs, nil)
 	if err != nil {
@@ -429,15 +467,24 @@ func (c *changefeed) initialize(ctx cdcContext.Context) (err error) {
 		return nil
 	}
 	c.isReleased = false
+
 	// clean the errCh
 	// When the changefeed is resumed after being stopped, the changefeed instance will be reused,
 	// So we should make sure that the errCh is empty when the changefeed is restarting
-LOOP:
+LOOP1:
 	for {
 		select {
 		case <-c.errCh:
 		default:
-			break LOOP
+			break LOOP1
+		}
+	}
+LOOP2:
+	for {
+		select {
+		case <-c.warningCh:
+		default:
+			break LOOP2
 		}
 	}
 
@@ -540,7 +587,12 @@ LOOP:
 		zap.String("changefeed", c.id.ID),
 	)
 
-	c.ddlSink = c.newSink(c.id, c.state.Info, ctx.Throw)
+	c.ddlSink = c.newSink(c.id, c.state.Info, ctx.Throw, func(err error) {
+		select {
+		case <-ctx.Done():
+		case c.warningCh <- err:
+		}
+	})
 	c.ddlSink.run(cancelCtx)
 
 	c.ddlPuller, err = c.newDDLPuller(cancelCtx,

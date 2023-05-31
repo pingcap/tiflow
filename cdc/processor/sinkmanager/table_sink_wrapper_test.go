@@ -14,6 +14,8 @@
 package sinkmanager
 
 import (
+	"context"
+	"math"
 	"sync"
 	"testing"
 
@@ -72,11 +74,13 @@ func createTableSinkWrapper(changefeedID model.ChangeFeedID, tableID model.Table
 	wrapper := newTableSinkWrapper(
 		changefeedID,
 		tableID,
-		innerTableSink,
+		func() tablesink.TableSink { return innerTableSink },
 		tableState,
 		0,
 		100,
+		func(_ context.Context) (model.Ts, error) { return math.MaxUint64, nil },
 	)
+	wrapper.tableSink = innerTableSink
 	return wrapper, sink
 }
 

@@ -15,13 +15,16 @@ package sinkmanager
 
 import (
 	"context"
+	"time"
 
 	"github.com/pingcap/errors"
+	"github.com/pingcap/failpoint"
 	"github.com/pingcap/log"
 	"github.com/pingcap/tiflow/cdc/model"
 	"github.com/pingcap/tiflow/cdc/processor/memquota"
 	"github.com/pingcap/tiflow/cdc/processor/sourcemanager"
 	"github.com/pingcap/tiflow/cdc/processor/sourcemanager/engine"
+	"github.com/pingcap/tiflow/cdc/sinkv2/tablesink"
 	metrics "github.com/pingcap/tiflow/cdc/sorter"
 	"github.com/prometheus/client_golang/prometheus"
 	"github.com/tikv/client-go/v2/oracle"
@@ -75,6 +78,9 @@ func (w *sinkWorker) handleTasks(ctx context.Context, taskChan <-chan *sinkTask)
 			return ctx.Err()
 		case task := <-taskChan:
 			err := w.handleTask(ctx, task)
+			failpoint.Inject("SinkWorkerTaskError", func() {
+				err = errors.New("SinkWorkerTaskError")
+			})
 			if err != nil {
 				return err
 			}
@@ -148,7 +154,9 @@ func (w *sinkWorker) handleTask(ctx context.Context, task *sinkTask) (finalErr e
 	}
 	doEmitAndAdvance := func(isLastTime bool) (err error) {
 		if len(events) > 0 {
-			task.tableSink.appendRowChangedEvents(events...)
+			if err = task.tableSink.appendRowChangedEvents(events...); err != nil {
+				return errors.Trace(err)
+			}
 			events = events[:0]
 			if cap(events) > 1024 {
 				events = make([]*model.RowChangedEvent, 0, 1024)
@@ -290,11 +298,38 @@ func (w *sinkWorker) handleTask(ctx context.Context, task *sinkTask) (finalErr e
 			zap.Any("lowerBound", lowerBound),
 			zap.Any("upperBound", upperBound),
 			zap.Bool("splitTxn", w.splitTxn),
-			zap.Any("lastPos", lastPos))
+			zap.Int("receivedEvents", allEventCount),
+			zap.Any("lastPos", lastPos),
+			zap.Float64("lag", time.Since(oracle.GetTimeFromTS(lastPos.CommitTs)).Seconds()),
+			zap.Error(finalErr))
 
 		if finalErr == nil {
 			// Otherwise we can't ensure all events before `lastPos` are emitted.
 			task.callback(lastPos)
+		} else {
+			switch errors.Cause(finalErr).(type) {
+			// If it's a warning, close the table sink and wait all pending
+			// events have been reported. Then we can continue the table
+			// at the checkpoint position.
+			case tablesink.SinkInternalError:
+				task.tableSink.clearTableSink()
+				// After the table sink is cleared all pending events are sent out or dropped.
+				// So we can re-add the table into sinkMemQuota.
+				w.sinkMemQuota.ClearTable(task.tableSink.tableID)
+
+				// Restart the table sink based on the checkpoint position.
+				if finalErr = task.tableSink.restart(ctx); finalErr == nil {
+					ckpt := task.tableSink.getCheckpointTs().ResolvedMark()
+					lastWrittenPos := engine.Position{StartTs: ckpt - 1, CommitTs: ckpt}
+					task.callback(lastWrittenPos)
+					log.Info("table sink has been restarted",
+						zap.String("namespace", w.changefeedID.Namespace),
+						zap.String("changefeed", w.changefeedID.ID),
+						zap.Int64("tableID", task.tableID),
+						zap.Any("lastWrittenPos", lastWrittenPos))
+				}
+			default:
+			}
 		}
 
 		// The task is finished and some required memory isn't used.
@@ -378,7 +413,9 @@ func (w *sinkWorker) fetchFromCache(
 				"kv",
 			).Add(float64(popRes.pushCount))
 			w.metricRedoEventCacheHit.Add(float64(popRes.size))
-			task.tableSink.appendRowChangedEvents(popRes.events...)
+			if err = task.tableSink.appendRowChangedEvents(popRes.events...); err != nil {
+				return
+			}
 		}
 
 		// Get a resolvedTs so that we can record it into sink memory quota.
