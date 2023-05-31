@@ -192,7 +192,6 @@ func (s *server) prepare(ctx context.Context) error {
 			}),
 		},
 	})
-
 	if err != nil {
 		return errors.Trace(err)
 	}
