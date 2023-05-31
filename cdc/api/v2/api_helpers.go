@@ -195,11 +195,6 @@ func (APIV2HelpersImpl) verifyCreateChangefeedConfig(
 
 	// fill replicaConfig
 	replicaCfg := cfg.ReplicaConfig.ToInternalReplicaConfig()
-
-	if err := replicaCfg.AdjustEnableOldValue(cfg.SinkURI); err != nil {
-		return nil, errors.Trace(err)
-	}
-
 	// verify replicaConfig
 	sinkURIParsed, err := url.Parse(cfg.SinkURI)
 	if err != nil {
@@ -313,11 +308,6 @@ func (APIV2HelpersImpl) verifyUpdateChangefeedConfig(
 	if cfg.SinkURI != "" {
 		sinkURIUpdated = true
 		newInfo.SinkURI = cfg.SinkURI
-	}
-
-	if err := newInfo.Config.AdjustEnableOldValue(newInfo.SinkURI); err != nil {
-		return nil, nil, cerror.ErrChangefeedUpdateRefused.
-			GenWithStackByArgs(errors.Cause(err).Error())
 	}
 
 	// verify changefeed info

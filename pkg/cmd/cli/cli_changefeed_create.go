@@ -16,6 +16,7 @@ package cli
 import (
 	"context"
 	"fmt"
+	"net/url"
 	"strings"
 
 	"github.com/fatih/color"
@@ -150,7 +151,11 @@ func (o *createChangefeedOptions) completeReplicaCfg(
 		}
 	}
 
-	if err := cfg.AdjustEnableOldValue(o.commonChangefeedOptions.sinkURI); err != nil {
+	uri, err := url.Parse(o.commonChangefeedOptions.sinkURI)
+	if err != nil {
+		return err
+	}
+	if err := cfg.AdjustEnableOldValue(uri); err != nil {
 		return err
 	}
 

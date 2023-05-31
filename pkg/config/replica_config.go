@@ -193,6 +193,10 @@ func (c *replicaConfig) fillFromV1(v1 *outdated.ReplicaConfigV1) {
 
 // ValidateAndAdjust verifies and adjusts the replica configuration.
 func (c *ReplicaConfig) ValidateAndAdjust(sinkURI *url.URL) error {
+	if err := c.AdjustEnableOldValue(sinkURI); err != nil {
+		return errors.Trace(err)
+	}
+
 	// check sink uri
 	if c.Sink != nil {
 		err := c.Sink.validateAndAdjust(sinkURI)
@@ -281,12 +285,7 @@ func isSinkCompatibleWithSpanReplication(u *url.URL) bool {
 }
 
 // AdjustEnableOldValue adjust the old value configuration by the sink scheme and encoding protocol
-func (c *ReplicaConfig) AdjustEnableOldValue(uri string) error {
-	sinkURI, err := url.Parse(uri)
-	if err != nil {
-		return cerror.WrapError(cerror.ErrSinkURIInvalid, err)
-	}
-
+func (c *ReplicaConfig) AdjustEnableOldValue(sinkURI *url.URL) error {
 	var protocol string
 	if !sink.IsMySQLCompatibleScheme(strings.ToLower(sinkURI.Scheme)) {
 		protocol = sinkURI.Query().Get(ProtocolKey)
