@@ -145,6 +145,11 @@ func (a *admin) GetTopicConfig(ctx context.Context, topicName string, configName
 	// 2. Kop returns all configs.
 	for _, entry := range resp.Resources[0].ConfigEntries {
 		if entry.ConfigName == configName {
+			log.Info("Kafka config item found",
+				zap.String("namespace", a.changefeedID.Namespace),
+				zap.String("changefeed", a.changefeedID.ID),
+				zap.String("configName", configName),
+				zap.String("configValue", entry.ConfigValue))
 			return entry.ConfigValue, nil
 		}
 	}

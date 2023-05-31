@@ -736,5 +736,7 @@ func getTopicConfig(
 		return c, nil
 	}
 
+	log.Info("TiCDC cannot find the configuration from topic, try to get it from broker",
+		zap.String("topic", detail.Name), zap.String("config", topicConfigName))
 	return admin.GetBrokerConfig(ctx, brokerConfigName)
 }

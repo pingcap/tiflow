@@ -201,7 +201,7 @@ func (a *saramaAdminClient) GetTopicConfig(ctx context.Context, topicName string
 	var err error
 	query := func() error {
 		configEntries, err = a.admin.DescribeConfig(sarama.ConfigResource{
-			Type:        sarama.BrokerResource,
+			Type:        sarama.TopicResource,
 			Name:        topicName,
 			ConfigNames: []string{configName},
 		})
@@ -217,6 +217,11 @@ func (a *saramaAdminClient) GetTopicConfig(ctx context.Context, topicName string
 	// 2. Kop returns all configs.
 	for _, entry := range configEntries {
 		if entry.Name == configName {
+			log.Info("Kafka config item found",
+				zap.String("namespace", a.changefeed.Namespace),
+				zap.String("changefeed", a.changefeed.ID),
+				zap.String("configName", configName),
+				zap.String("configValue", entry.Value))
 			return entry.Value, nil
 		}
 	}
