@@ -340,6 +340,12 @@ func (s *server) etcdHealthChecker(ctx context.Context) error {
 					Observe(time.Since(start).Seconds())
 				cancel()
 			}
+			ctx, cancel := context.WithTimeout(ctx, 5*time.Second)
+			_, err = s.etcdClient.GetEtcdClient().Unwrap().MemberList(ctx)
+			cancel()
+			if err != nil {
+				log.Warn("etcd health check error, fail to list etcd members", zap.Error(err))
+			}
 		}
 	}
 }
