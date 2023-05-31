@@ -762,6 +762,12 @@ var doc = `{
                         "description": "state",
                         "name": "state",
                         "in": "query"
+                    },
+                    {
+                        "type": "string",
+                        "description": "default",
+                        "name": "namespace",
+                        "in": "query"
                     }
                 ],
                 "responses": {
@@ -849,6 +855,12 @@ var doc = `{
                         "name": "changefeed_id",
                         "in": "path",
                         "required": true
+                    },
+                    {
+                        "type": "string",
+                        "description": "default",
+                        "name": "namespace",
+                        "in": "query"
                     }
                 ],
                 "responses": {
@@ -892,6 +904,12 @@ var doc = `{
                         "name": "changefeed_id",
                         "in": "path",
                         "required": true
+                    },
+                    {
+                        "type": "string",
+                        "description": "default",
+                        "name": "namespace",
+                        "in": "query"
                     },
                     {
                         "description": "changefeed config",
@@ -944,6 +962,12 @@ var doc = `{
                         "name": "changefeed_id",
                         "in": "path",
                         "required": true
+                    },
+                    {
+                        "type": "string",
+                        "description": "default",
+                        "name": "namespace",
+                        "in": "query"
                     }
                 ],
                 "responses": {
@@ -989,6 +1013,12 @@ var doc = `{
                         "name": "changefeed_id",
                         "in": "path",
                         "required": true
+                    },
+                    {
+                        "type": "string",
+                        "description": "default",
+                        "name": "namespace",
+                        "in": "query"
                     }
                 ],
                 "responses": {
@@ -1034,6 +1064,12 @@ var doc = `{
                         "name": "changefeed_id",
                         "in": "path",
                         "required": true
+                    },
+                    {
+                        "type": "string",
+                        "description": "default",
+                        "name": "namespace",
+                        "in": "query"
                     },
                     {
                         "description": "resume config",
@@ -1231,6 +1267,12 @@ var doc = `{
                         "name": "changefeed_id",
                         "in": "path",
                         "required": true
+                    },
+                    {
+                        "type": "string",
+                        "description": "default",
+                        "name": "namespace",
+                        "in": "query"
                     },
                     {
                         "type": "string",
