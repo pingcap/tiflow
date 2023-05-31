@@ -385,6 +385,12 @@ func (info *ChangeFeedInfo) FixIncompatible() {
 	inheritV66 := creatorVersionGate.ChangefeedInheritSchedulerConfigFromV66()
 	info.fixScheduler(inheritV66)
 	log.Info("Fix incompatible scheduler completed", zap.String("changefeed", info.String()))
+
+	if creatorVersionGate.ChangefeedAdjustEnableOldValueByProtocol() {
+		log.Info("Start fixing incompatible enable old value", zap.String("changefeed", info.String()))
+		info.fixEnableOldValue()
+		log.Info("Fix incompatible enable old value completed", zap.String("changefeed", info.String()))
+	}
 }
 
 // fixState attempts to fix state loss from upgrading the old owner to the new owner.
@@ -452,6 +458,16 @@ func (info *ChangeFeedInfo) fixMySQLSinkProtocol() {
 		// always set protocol of mysql sink to ""
 		query.Del(config.ProtocolKey)
 		info.updateSinkURIAndConfigProtocol(uri, "", query)
+	}
+}
+
+func (info *ChangeFeedInfo) fixEnableOldValue() {
+	err := info.Config.AdjustEnableOldValue(info.SinkURI)
+	if err != nil {
+		// err can only happen in the 2 case now:
+		// 1. the sink uri parse failed, it's almost impossible to happen since the changefeed registered successfully.
+		// 2. the ForceReplicate is set to true but the `enable-old-value` is adjusted to false.
+		log.Warn("failed to adjust enable old value", zap.Error(err))
 	}
 }
 
