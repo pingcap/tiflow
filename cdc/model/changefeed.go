@@ -465,14 +465,7 @@ func (info *ChangeFeedInfo) fixEnableOldValue() {
 		log.Warn("parse sink URI failed", zap.Error(err))
 		return
 	}
-	err = info.Config.AdjustEnableOldValue(uri)
-	if err != nil {
-		// err can only happen in the 2 case now:
-		// 1. the sink uri parse failed, it's impossible to happen since the changefeed registered successfully.
-		// 2. the ForceReplicate is set to true but the `enable-old-value` is adjusted to false,
-		// check the `ForceReplicate` and `EnableOldValue` when initialize the changefeed.
-		log.Warn("failed to adjust enable old value", zap.Error(err))
-	}
+	info.Config.AdjustEnableOldValue(uri)
 }
 
 func (info *ChangeFeedInfo) fixMQSinkProtocol() {

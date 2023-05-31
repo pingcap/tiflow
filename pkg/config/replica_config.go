@@ -193,9 +193,7 @@ func (c *replicaConfig) fillFromV1(v1 *outdated.ReplicaConfigV1) {
 
 // ValidateAndAdjust verifies and adjusts the replica configuration.
 func (c *ReplicaConfig) ValidateAndAdjust(sinkURI *url.URL) error {
-	if err := c.AdjustEnableOldValue(sinkURI); err != nil {
-		return errors.Trace(err)
-	}
+	c.AdjustEnableOldValue(sinkURI)
 
 	// check sink uri
 	if c.Sink != nil {
@@ -285,39 +283,36 @@ func isSinkCompatibleWithSpanReplication(u *url.URL) bool {
 }
 
 // AdjustEnableOldValue adjust the old value configuration by the sink scheme and encoding protocol
-func (c *ReplicaConfig) AdjustEnableOldValue(sinkURI *url.URL) error {
-	var protocol string
-	if !sink.IsMySQLCompatibleScheme(strings.ToLower(sinkURI.Scheme)) {
-		protocol = sinkURI.Query().Get(ProtocolKey)
-		if protocol != "" {
-			c.Sink.Protocol = util.AddressOf(protocol)
-		}
-		protocol = util.GetOrZero(c.Sink.Protocol)
+func (c *ReplicaConfig) AdjustEnableOldValue(sinkURI *url.URL) {
+	if sink.IsMySQLCompatibleScheme(strings.ToLower(sinkURI.Scheme)) {
+		return
+	}
 
-		if c.EnableOldValue {
-			for _, fp := range ForceDisableOldValueProtocols {
-				if protocol == fp {
-					log.Warn("Attempting to replicate with old value enabled, but the specified protocol must disable old value. "+
-						"CDC will disable old value and continue.", zap.String("protocol", protocol))
-					c.EnableOldValue = false
-					break
-				}
-			}
-		} else {
-			for _, fp := range ForceEnableOldValueProtocols {
-				if protocol == fp {
-					log.Warn("Attempting to replicate without old value enabled, but the specified protocol must enable old value. "+
-						"CDC will enable old value and continue.", zap.String("protocol", protocol))
-					c.EnableOldValue = true
-					break
-				}
+	protocol := sinkURI.Query().Get(ProtocolKey)
+	if protocol != "" {
+		c.Sink.Protocol = util.AddressOf(protocol)
+	}
+	protocol = util.GetOrZero(c.Sink.Protocol)
+
+	if c.EnableOldValue {
+		for _, fp := range ForceDisableOldValueProtocols {
+			if protocol == fp {
+				log.Warn("Attempting to replicate with old value enabled, but the specified protocol must disable old value. "+
+					"CDC will disable old value and continue.", zap.String("protocol", protocol))
+				c.EnableOldValue = false
+				return
 			}
 		}
 	}
 
-	if c.ForceReplicate && !c.EnableOldValue {
-		log.Error("force replicate, old value feature is disabled", zap.String("protocol", protocol))
-		return cerror.ErrOldValueNotEnabled.GenWithStackByArgs()
+	for _, fp := range ForceEnableOldValueProtocols {
+		if protocol == fp {
+			log.Warn("Attempting to replicate without old value enabled, but the specified protocol must enable old value. "+
+				"CDC will enable old value and continue.", zap.String("protocol", protocol))
+			c.EnableOldValue = true
+			return
+		}
 	}
-	return nil
+
+	return
 }
