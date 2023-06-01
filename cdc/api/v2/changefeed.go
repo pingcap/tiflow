@@ -42,6 +42,8 @@ const (
 	apiOpVarChangefeedState = "state"
 	// apiOpVarChangefeedID is the key of changefeed ID in HTTP API
 	apiOpVarChangefeedID = "changefeed_id"
+	// apiOpVarNamespace is the key of changefeed namespace in HTTP API
+	apiOpVarNamespace = "namespace"
 )
 
 // createChangefeed handles create changefeed request,
@@ -112,7 +114,7 @@ func (h *OpenAPIV2) createChangefeed(c *gin.Context) {
 			ctx,
 			pdClient,
 			h.capture.GetEtcdClient().GetEnsureGCServiceID(gc.EnsureGCServiceCreating),
-			model.DefaultChangeFeedID(cfg.ID),
+			model.ChangeFeedID{Namespace: cfg.Namespace, ID: cfg.ID},
 		)
 		if err != nil {
 			_ = c.Error(err)
@@ -159,7 +161,7 @@ func (h *OpenAPIV2) createChangefeed(c *gin.Context) {
 	err = h.capture.GetEtcdClient().CreateChangefeedInfo(ctx,
 		upstreamInfo,
 		info,
-		model.DefaultChangeFeedID(info.ID))
+		model.ChangeFeedID{Namespace: cfg.Namespace, ID: cfg.ID})
 	if err != nil {
 		needRemoveGCSafePoint = true
 		_ = c.Error(err)
@@ -216,6 +218,7 @@ func hasRunningImport(ctx context.Context, cli *clientv3.Client) error {
 // @Accept json
 // @Produce json
 // @Param state query string false "state"
+// @Param namespace query string false "default"
 // @Success 200 {array} ChangefeedCommonInfo
 // @Failure 500 {object} model.HTTPError
 // @Router /api/v2/changefeeds [get]
@@ -227,6 +230,7 @@ func (h *OpenAPIV2) listChangeFeeds(c *gin.Context) {
 		_ = c.Error(err)
 		return
 	}
+	namespace := getNamespaceValueWithDefault(c)
 
 	infos, err := h.capture.StatusProvider().GetAllChangeFeedInfo(ctx)
 	if err != nil {
@@ -238,7 +242,10 @@ func (h *OpenAPIV2) listChangeFeeds(c *gin.Context) {
 	changefeeds := make([]model.ChangeFeedID, 0)
 
 	for cfID := range statuses {
-		changefeeds = append(changefeeds, cfID)
+		// filter by namespace
+		if cfID.Namespace == namespace {
+			changefeeds = append(changefeeds, cfID)
+		}
 	}
 	sort.Slice(changefeeds, func(i, j int) bool {
 		if changefeeds[i].Namespace == changefeeds[j].Namespace {
@@ -289,6 +296,14 @@ func (h *OpenAPIV2) listChangeFeeds(c *gin.Context) {
 	}
 
 	c.JSON(http.StatusOK, resp)
+}
+
+func getNamespaceValueWithDefault(c *gin.Context) string {
+	namespace := c.Query(apiOpVarNamespace)
+	if namespace == "" {
+		namespace = "default"
+	}
+	return namespace
 }
 
 // verifyTable verify table, return ineligibleTables and EligibleTables.
@@ -351,6 +366,7 @@ func (h *OpenAPIV2) verifyTable(c *gin.Context) {
 // @Accept json
 // @Produce json
 // @Param changefeed_id  path  string  true  "changefeed_id"
+// @Param namespace query string false "default"
 // @Param changefeedConfig body ChangefeedConfig true "changefeed config"
 // @Success 200 {object} ChangeFeedInfo
 // @Failure 500,400 {object} model.HTTPError
@@ -358,7 +374,8 @@ func (h *OpenAPIV2) verifyTable(c *gin.Context) {
 func (h *OpenAPIV2) updateChangefeed(c *gin.Context) {
 	ctx := c.Request.Context()
 
-	changefeedID := model.DefaultChangeFeedID(c.Param(apiOpVarChangefeedID))
+	namespace := getNamespaceValueWithDefault(c)
+	changefeedID := model.ChangeFeedID{Namespace: namespace, ID: c.Param(apiOpVarChangefeedID)}
 	if err := model.ValidateChangefeedID(changefeedID.ID); err != nil {
 		_ = c.Error(cerror.ErrAPIInvalidParam.GenWithStack("invalid changefeed_id: %s",
 			changefeedID.ID))
@@ -460,12 +477,14 @@ func (h *OpenAPIV2) updateChangefeed(c *gin.Context) {
 // @Accept json
 // @Produce json
 // @Param changefeed_id  path  string  true  "changefeed_id"
+// @Param namespace query string false "default"
 // @Success 200 {object} ChangeFeedInfo
 // @Failure 500,400 {object} model.HTTPError
 // @Router /api/v2/changefeeds/{changefeed_id} [get]
 func (h *OpenAPIV2) getChangeFeed(c *gin.Context) {
 	ctx := c.Request.Context()
-	changefeedID := model.DefaultChangeFeedID(c.Param(apiOpVarChangefeedID))
+	namespace := getNamespaceValueWithDefault(c)
+	changefeedID := model.ChangeFeedID{Namespace: namespace, ID: c.Param(apiOpVarChangefeedID)}
 	if err := model.ValidateChangefeedID(changefeedID.ID); err != nil {
 		_ = c.Error(
 			cerror.ErrAPIInvalidParam.GenWithStack(
@@ -527,12 +546,14 @@ func (h *OpenAPIV2) getChangeFeed(c *gin.Context) {
 // @Accept json
 // @Produce json
 // @Param changefeed_id path string true "changefeed_id"
+// @Param namespace query string false "default"
 // @Success 200 {object} EmptyResponse
 // @Failure 500,400 {object} model.HTTPError
 // @Router	/api/v2/changefeeds/{changefeed_id} [delete]
 func (h *OpenAPIV2) deleteChangefeed(c *gin.Context) {
 	ctx := c.Request.Context()
-	changefeedID := model.DefaultChangeFeedID(c.Param(apiOpVarChangefeedID))
+	namespace := getNamespaceValueWithDefault(c)
+	changefeedID := model.ChangeFeedID{Namespace: namespace, ID: c.Param(apiOpVarChangefeedID)}
 	if err := model.ValidateChangefeedID(changefeedID.ID); err != nil {
 		_ = c.Error(cerror.ErrAPIInvalidParam.GenWithStack("invalid changefeed_id: %s",
 			changefeedID.ID))
@@ -586,7 +607,8 @@ func (h *OpenAPIV2) deleteChangefeed(c *gin.Context) {
 func (h *OpenAPIV2) getChangeFeedMetaInfo(c *gin.Context) {
 	ctx := c.Request.Context()
 
-	changefeedID := model.DefaultChangeFeedID(c.Param(apiOpVarChangefeedID))
+	namespace := getNamespaceValueWithDefault(c)
+	changefeedID := model.ChangeFeedID{Namespace: namespace, ID: c.Param(apiOpVarChangefeedID)}
 	if err := model.ValidateChangefeedID(changefeedID.ID); err != nil {
 		_ = c.Error(cerror.ErrAPIInvalidParam.GenWithStack("invalid changefeed_id: %s",
 			changefeedID.ID))
@@ -639,13 +661,15 @@ func (h *OpenAPIV2) getChangeFeedMetaInfo(c *gin.Context) {
 // @Accept json
 // @Produce json
 // @Param changefeed_id path string true "changefeed_id"
+// @Param namespace query string false "default"
 // @Param resumeConfig body ResumeChangefeedConfig true "resume config"
 // @Success 200 {object} EmptyResponse
 // @Failure 500,400 {object} model.HTTPError
 // @Router	/api/v2/changefeeds/{changefeed_id}/resume [post]
 func (h *OpenAPIV2) resumeChangefeed(c *gin.Context) {
 	ctx := c.Request.Context()
-	changefeedID := model.DefaultChangeFeedID(c.Param(apiOpVarChangefeedID))
+	namespace := getNamespaceValueWithDefault(c)
+	changefeedID := model.ChangeFeedID{Namespace: namespace, ID: c.Param(apiOpVarChangefeedID)}
 	err := model.ValidateChangefeedID(changefeedID.ID)
 	if err != nil {
 		_ = c.Error(cerror.ErrAPIInvalidParam.GenWithStack("invalid changefeed_id: %s",
@@ -734,13 +758,15 @@ func (h *OpenAPIV2) resumeChangefeed(c *gin.Context) {
 // @Accept json
 // @Produce json
 // @Param changefeed_id  path  string  true  "changefeed_id"
+// @Param namespace query string false "default"
 // @Success 200 {object} EmptyResponse
 // @Failure 500,400 {object} model.HTTPError
 // @Router /api/v2/changefeeds/{changefeed_id}/pause [post]
 func (h *OpenAPIV2) pauseChangefeed(c *gin.Context) {
 	ctx := c.Request.Context()
 
-	changefeedID := model.DefaultChangeFeedID(c.Param(apiOpVarChangefeedID))
+	namespace := getNamespaceValueWithDefault(c)
+	changefeedID := model.ChangeFeedID{Namespace: namespace, ID: c.Param(apiOpVarChangefeedID)}
 	if err := model.ValidateChangefeedID(changefeedID.ID); err != nil {
 		_ = c.Error(cerror.ErrAPIInvalidParam.GenWithStack("invalid changefeed_id: %s",
 			changefeedID.ID))
@@ -768,7 +794,8 @@ func (h *OpenAPIV2) pauseChangefeed(c *gin.Context) {
 func (h *OpenAPIV2) status(c *gin.Context) {
 	ctx := c.Request.Context()
 
-	changefeedID := model.DefaultChangeFeedID(c.Param(apiOpVarChangefeedID))
+	namespace := getNamespaceValueWithDefault(c)
+	changefeedID := model.ChangeFeedID{Namespace: namespace, ID: c.Param(apiOpVarChangefeedID)}
 	if err := model.ValidateChangefeedID(changefeedID.ID); err != nil {
 		_ = c.Error(cerror.ErrAPIInvalidParam.GenWithStack("invalid changefeed_id: %s",
 			changefeedID.ID))

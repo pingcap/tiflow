@@ -192,8 +192,46 @@ func (a *saramaAdminClient) GetBrokerConfig(
 		zap.String("namespace", a.changefeed.Namespace),
 		zap.String("changefeed", a.changefeed.ID),
 		zap.String("configName", configName))
-	return "", cerror.ErrKafkaBrokerConfigNotFound.GenWithStack(
+	return "", cerror.ErrKafkaConfigNotFound.GenWithStack(
 		"cannot find the `%s` from the broker's configuration", configName)
+}
+
+func (a *saramaAdminClient) GetTopicConfig(ctx context.Context, topicName string, configName string) (string, error) {
+	var configEntries []sarama.ConfigEntry
+	var err error
+	query := func() error {
+		configEntries, err = a.admin.DescribeConfig(sarama.ConfigResource{
+			Type:        sarama.TopicResource,
+			Name:        topicName,
+			ConfigNames: []string{configName},
+		})
+		return err
+	}
+	err = a.queryClusterWithRetry(ctx, query)
+	if err != nil {
+		return "", err
+	}
+
+	// For compatibility with KOP, we checked all return values.
+	// 1. Kafka only returns requested configs.
+	// 2. Kop returns all configs.
+	for _, entry := range configEntries {
+		if entry.Name == configName {
+			log.Info("Kafka config item found",
+				zap.String("namespace", a.changefeed.Namespace),
+				zap.String("changefeed", a.changefeed.ID),
+				zap.String("configName", configName),
+				zap.String("configValue", entry.Value))
+			return entry.Value, nil
+		}
+	}
+
+	log.Warn("Kafka config item not found",
+		zap.String("namespace", a.changefeed.Namespace),
+		zap.String("changefeed", a.changefeed.ID),
+		zap.String("configName", configName))
+	return "", cerror.ErrKafkaConfigNotFound.GenWithStack(
+		"cannot find the `%s` from the topic's configuration", configName)
 }
 
 func (a *saramaAdminClient) GetTopicsMeta(
