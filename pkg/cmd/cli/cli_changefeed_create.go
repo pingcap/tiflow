@@ -105,6 +105,7 @@ type createChangefeedOptions struct {
 	apiClient               apiv2client.APIV2Interface
 
 	changefeedID            string
+	namespace               string
 	disableGCSafePointCheck bool
 	startTs                 uint64
 	timezone                string
@@ -123,6 +124,7 @@ func newCreateChangefeedOptions(commonChangefeedOptions *changefeedCommonOptions
 // flags related to template printing to it.
 func (o *createChangefeedOptions) addFlags(cmd *cobra.Command) {
 	o.commonChangefeedOptions.addFlags(cmd)
+	cmd.PersistentFlags().StringVarP(&o.namespace, "namespace", "n", "default", "Replication task (changefeed) Namespace")
 	cmd.PersistentFlags().StringVarP(&o.changefeedID, "changefeed-id", "c", "", "Replication task (changefeed) ID")
 	cmd.PersistentFlags().BoolVarP(&o.disableGCSafePointCheck, "disable-gc-check", "", false, "Disable GC safe point check")
 	cmd.PersistentFlags().Uint64Var(&o.startTs, "start-ts", 0, "Start ts of changefeed")
@@ -242,6 +244,7 @@ func (o *createChangefeedOptions) getChangefeedConfig() *v2.ChangefeedConfig {
 	upstreamConfig := o.getUpstreamConfig()
 	return &v2.ChangefeedConfig{
 		ID:            o.changefeedID,
+		Namespace:     o.namespace,
 		StartTs:       o.startTs,
 		TargetTs:      o.commonChangefeedOptions.targetTs,
 		SinkURI:       o.commonChangefeedOptions.sinkURI,
