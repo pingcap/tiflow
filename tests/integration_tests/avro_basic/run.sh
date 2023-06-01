@@ -8,10 +8,6 @@ WORK_DIR=$OUT_DIR/$TEST_NAME
 CDC_BINARY=cdc.test
 SINK_TYPE=$1
 
-if [ "$SINK_TYPE" != "kafka" ]; then
-	return
-fi
-
 echo 'Starting schema registry...'
 ./bin/bin/schema-registry-start -daemon ./bin/etc/schema-registry/schema-registry.properties
 i=0
