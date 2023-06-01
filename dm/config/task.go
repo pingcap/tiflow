@@ -503,10 +503,11 @@ func defaultValidatorConfig() ValidatorConfig {
 type TaskConfig struct {
 	*flag.FlagSet `yaml:"-" toml:"-" json:"-"`
 
-	Name       string `yaml:"name" toml:"name" json:"name"`
-	TaskMode   string `yaml:"task-mode" toml:"task-mode" json:"task-mode"`
-	IsSharding bool   `yaml:"is-sharding" toml:"is-sharding" json:"is-sharding"`
-	ShardMode  string `yaml:"shard-mode" toml:"shard-mode" json:"shard-mode"` // when `shard-mode` set, we always enable sharding support.
+	Name                      string `yaml:"name" toml:"name" json:"name"`
+	TaskMode                  string `yaml:"task-mode" toml:"task-mode" json:"task-mode"`
+	IsSharding                bool   `yaml:"is-sharding" toml:"is-sharding" json:"is-sharding"`
+	ShardMode                 string `yaml:"shard-mode" toml:"shard-mode" json:"shard-mode"` // when `shard-mode` set, we always enable sharding support.
+	StrictOptimisticShardMode bool   `yaml:"strict-optimistic-shard-mode" toml:"strict-optimistic-shard-mode" json:"strict-optimistic-shard-mode"`
 	// treat it as hidden configuration
 	IgnoreCheckingItems []string `yaml:"ignore-checking-items" toml:"ignore-checking-items" json:"ignore-checking-items"`
 	// we store detail status in meta
@@ -681,6 +682,9 @@ func (c *TaskConfig) adjust() error {
 		return terror.ErrConfigShardModeNotSupport.Generate(c.ShardMode)
 	} else if c.ShardMode == "" && c.IsSharding {
 		c.ShardMode = ShardPessimistic // use the pessimistic mode as default for back compatible.
+	}
+	if c.StrictOptimisticShardMode && c.ShardMode != ShardOptimistic {
+		return terror.ErrConfigStrictOptimisticShardMode.Generate()
 	}
 
 	if len(c.ColumnMappings) > 0 {

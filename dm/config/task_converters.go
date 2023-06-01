@@ -42,6 +42,7 @@ func TaskConfigToSubTaskConfigs(c *TaskConfig, sources map[string]dbconfig.DBCon
 		cfg := NewSubTaskConfig()
 		cfg.IsSharding = c.IsSharding
 		cfg.ShardMode = c.ShardMode
+		cfg.StrictOptimisticShardMode = c.StrictOptimisticShardMode
 		cfg.OnlineDDL = c.OnlineDDL
 		cfg.TrashTableRules = c.TrashTableRules
 		cfg.ShadowTableRules = c.ShadowTableRules
@@ -314,6 +315,7 @@ func SubTaskConfigsToTaskConfig(stCfgs ...*SubTaskConfig) *TaskConfig {
 	c.TaskMode = stCfg0.Mode
 	c.IsSharding = stCfg0.IsSharding
 	c.ShardMode = stCfg0.ShardMode
+	c.StrictOptimisticShardMode = stCfg0.StrictOptimisticShardMode
 	c.IgnoreCheckingItems = stCfg0.IgnoreCheckingItems
 	c.MetaSchema = stCfg0.MetaSchema
 	c.EnableHeartbeat = stCfg0.EnableHeartbeat
