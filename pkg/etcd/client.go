@@ -101,6 +101,7 @@ type Client struct {
 // NewClient warps a clientV3.Client that provides etcd APIs required by TiCDC.
 func NewClient(pdEndpoints []string, metrics map[string]prometheus.Counter) (*Client, error) {
 	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
 	conf := config.GetGlobalServerConfig()
 
 	grpcClient, err := pd.NewClientWithContext(ctx, pdEndpoints, conf.Security.PDSecurityOption())
@@ -206,6 +207,7 @@ func (c *Client) checkEndpointsChange(ctx context.Context, pdEndpoints []string)
 }
 
 func (c *Client) Close() error {
+	log.Info("closing etcd client")
 	c.cancel()
 	c.rwLock.Lock()
 	defer c.rwLock.Unlock()

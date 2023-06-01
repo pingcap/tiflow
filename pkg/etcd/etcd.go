@@ -179,7 +179,10 @@ func NewCDCEtcdClient(ctx context.Context,
 		EtcdRevoke: etcdRequestCounter.WithLabelValues(EtcdRevoke),
 	}
 
-	cli := NewClient(endpoints, metrics)
+	cli, err := NewClient(endpoints, metrics)
+	if err != nil {
+		return nil, cerror.WrapError(cerror.ErrPDEtcdAPIError, err)
+	}
 	// TODO: fizz use a better way
 	resp, err := cli.cli.MemberList(ctx)
 	if err != nil {
