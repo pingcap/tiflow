@@ -182,6 +182,9 @@ func OpenAPITaskToSubTaskConfigs(task *openapi.Task, toDBCfg *dbconfig.DBConfig,
 		} else {
 			subTaskCfg.IsSharding = false
 		}
+		if task.StrictOptimisticShardMode != nil {
+			subTaskCfg.StrictOptimisticShardMode = *task.StrictOptimisticShardMode
+		}
 		// set online ddl plugin config
 		subTaskCfg.OnlineDDL = task.EnhanceOnlineSchemaChange
 		// set case sensitive from source
@@ -613,6 +616,7 @@ func SubTaskConfigsToOpenAPITask(subTaskConfigList []*SubTaskConfig) *openapi.Ta
 		taskShardMode := openapi.TaskShardMode(oneSubtaskConfig.ShardMode)
 		task.ShardMode = &taskShardMode
 	}
+	task.StrictOptimisticShardMode = &oneSubtaskConfig.StrictOptimisticShardMode
 	if len(filterMap) > 0 {
 		task.BinlogFilterRule = &filterRuleMap
 	}
