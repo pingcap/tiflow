@@ -140,7 +140,7 @@ func NewClient(pdEndpoints []string, metrics map[string]prometheus.Counter) (*Cl
 		cancel:    cancel,
 		endpoints: pdEndpoints}
 
-	go res.checkEndpointsChange(ctx, pdEndpoints)
+	//go res.checkEndpointsChange(ctx, pdEndpoints)
 
 	return res, nil
 }
