@@ -91,24 +91,40 @@ func TestCheckStaleCheckpointTs(t *testing.T) {
 	pdClock := pdutil.NewClock4Test()
 	gcManager := NewManager(etcd.GcServiceIDForTest(),
 		mockPDClient, pdClock).(*gcManager)
-	gcManager.isTiCDCBlockGC = true
 	ctx := context.Background()
 
 	time.Sleep(1 * time.Second)
 
 	cfID := model.DefaultChangeFeedID("cfID")
-	err := gcManager.CheckStaleCheckpointTs(ctx, cfID, 10)
-	require.True(t, cerror.ErrGCTTLExceeded.Equal(errors.Cause(err)))
-	require.True(t, cerror.IsChangefeedFastFailError(err))
-
-	err = gcManager.CheckStaleCheckpointTs(ctx, cfID, oracle.GoTimeToTS(time.Now()))
+	err := gcManager.CheckStaleCheckpointTs(ctx, cfID, oracle.GoTimeToTS(time.Now()))
 	require.Nil(t, err)
 
-	gcManager.isTiCDCBlockGC = false
 	gcManager.lastSafePointTs = 20
-
 	err = gcManager.CheckStaleCheckpointTs(ctx, cfID, 10)
-
 	require.True(t, cerror.ErrSnapshotLostByGC.Equal(errors.Cause(err)))
 	require.True(t, cerror.IsChangefeedFastFailError(err))
+}
+
+func TestIgnoreFailedFeed(t *testing.T) {
+	t.Parallel()
+
+	mockPDClient := &MockPDClient{}
+	pdClock := pdutil.NewClock4Test()
+	gcManager := NewManager(etcd.GcServiceIDForTest(),
+		mockPDClient, pdClock).(*gcManager)
+
+	// 5 hours ago
+	ts1 := oracle.GoTimeToTS(time.Now().Add(-time.Hour * 5))
+	ret1 := gcManager.IgnoreFailedChangeFeed(ts1)
+	require.False(t, ret1)
+
+	// 20 hours ago
+	ts2 := oracle.GoTimeToTS(time.Now().Add(-time.Hour * 20))
+	ret2 := gcManager.IgnoreFailedChangeFeed(ts2)
+	require.False(t, ret2)
+
+	// 25 hours ago
+	ts3 := oracle.GoTimeToTS(time.Now().Add(-time.Hour * 25))
+	ret3 := gcManager.IgnoreFailedChangeFeed(ts3)
+	require.True(t, ret3)
 }

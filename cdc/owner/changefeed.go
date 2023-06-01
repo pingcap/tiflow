@@ -278,7 +278,7 @@ func (c *changefeed) checkStaleCheckpointTs(ctx cdcContext.Context, checkpointTs
 	state := c.state.Info.State
 	if state == model.StateNormal || state == model.StateStopped || state == model.StateError {
 		failpoint.Inject("InjectChangefeedFastFailError", func() error {
-			return cerror.ErrGCTTLExceeded.FastGen("InjectChangefeedFastFailError")
+			return cerror.ErrStartTsBeforeGC.FastGen("InjectChangefeedFastFailError")
 		})
 		if err := c.upstream.GCManager.CheckStaleCheckpointTs(ctx, c.id, checkpointTs); err != nil {
 			return errors.Trace(err)
