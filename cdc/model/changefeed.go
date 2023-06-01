@@ -385,9 +385,11 @@ func (info *ChangeFeedInfo) FixIncompatible() {
 	log.Info("Fix incompatible scheduler completed", zap.String("changefeed", info.String()))
 
 	if creatorVersionGate.ChangefeedAdjustEnableOldValueByProtocol() {
-		log.Info("Start fixing incompatible enable old value", zap.String("changefeed", info.String()))
+		log.Info("Start fixing incompatible enable old value", zap.String("changefeed", info.String()),
+			zap.Bool("enableOldValue", info.Config.EnableOldValue))
 		info.fixEnableOldValue()
-		log.Info("Fix incompatible enable old value completed", zap.String("changefeed", info.String()))
+		log.Info("Fix incompatible enable old value completed", zap.String("changefeed", info.String()),
+			zap.Bool("enableOldValue", info.Config.EnableOldValue))
 	}
 }
 

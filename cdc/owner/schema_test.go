@@ -660,9 +660,9 @@ func TestNewSchemaWrap4Owner(t *testing.T) {
 	helper := entry.NewSchemaTestHelper(t)
 	defer helper.Close()
 	ver, err := helper.Storage().CurrentVersion(oracle.GlobalTxnScope)
-	require.Nil(t, err)
+	require.NoError(t, err)
 	f, err := filter.NewFilter(config.GetDefaultReplicaConfig(), "")
-	require.Nil(t, err)
+	require.NoError(t, err)
 
 	config := config.GetDefaultReplicaConfig()
 	config.EnableOldValue = false
