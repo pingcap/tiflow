@@ -71,6 +71,8 @@ func SanitizeVersion(v string) string {
 	return strings.TrimPrefix(v, "v")
 }
 
+var checkClusterVersionRetryTimes = 10
+
 // CheckClusterVersion check TiKV and PD version.
 // need only one PD alive and match the cdc version.
 func CheckClusterVersion(
@@ -92,7 +94,7 @@ func CheckClusterVersion(
 			return checkPDVersion(ctx, pdAddr, credential)
 		}, retry.WithBackoffBaseDelay(time.Millisecond.Milliseconds()*10),
 			retry.WithBackoffMaxDelay(time.Second.Milliseconds()),
-			retry.WithMaxTries(10),
+			retry.WithMaxTries(uint64(checkClusterVersionRetryTimes)),
 			retry.WithIsRetryableErr(cerror.IsRetryableError))
 		if err == nil {
 			break
