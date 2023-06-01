@@ -15,16 +15,16 @@ function run() {
 	fi
 
 	echo 'Starting schema registry...'
-  ./bin/bin/schema-registry-start -daemon ./bin/etc/schema-registry/schema-registry.properties
-  i=0
-  while ! curl -o /dev/null -v -s "http://127.0.0.1:8088"; do
-  	i=$(($i + 1))
-  	if [ $i -gt 30 ]; then
-  		echo 'Failed to start schema registry'
-  		exit 1
-  	fi
-  	sleep 2
-  done
+	./bin/bin/schema-registry-start -daemon ./bin/etc/schema-registry/schema-registry.properties
+	i=0
+	while ! curl -o /dev/null -v -s "http://127.0.0.1:8088"; do
+		i=$(($i + 1))
+		if [ $i -gt 30 ]; then
+			echo 'Failed to start schema registry'
+			exit 1
+		fi
+		sleep 2
+	done
 
 	rm -rf $WORK_DIR && mkdir -p $WORK_DIR
 
