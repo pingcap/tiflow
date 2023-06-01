@@ -15,7 +15,7 @@ package mq
 
 import (
 	"context"
-	"sync/atomic"
+	"sync"
 
 	"github.com/pingcap/errors"
 	"github.com/pingcap/tiflow/cdc/contextutil"
@@ -45,12 +45,16 @@ type dmlSink struct {
 	// protocol indicates the protocol used by this sink.
 	protocol config.Protocol
 
-	worker *worker
-	// eventRouter used to route events to the right topic and partition.
-	eventRouter *dispatcher.EventRouter
-	// topicManager used to manage topics.
-	// It is also responsible for creating topics.
-	topicManager manager.TopicManager
+	alive struct {
+		sync.RWMutex
+		// eventRouter used to route events to the right topic and partition.
+		eventRouter *dispatcher.EventRouter
+		// topicManager used to manage topics.
+		// It is also responsible for creating topics.
+		topicManager manager.TopicManager
+		worker       *worker
+		isDead       bool
+	}
 
 	// adminClient is used to query kafka cluster information, it's shared among
 	// multiple place, it's sink's responsibility to close it.
@@ -58,8 +62,9 @@ type dmlSink struct {
 
 	ctx    context.Context
 	cancel context.CancelFunc
-	dead   chan struct{}
-	isDead atomic.Bool
+
+	wg   sync.WaitGroup
+	dead chan struct{}
 }
 
 func newDMLSink(
@@ -83,23 +88,31 @@ func newDMLSink(
 	statistics := metrics.NewStatistics(ctx, sink.RowSink)
 	worker := newWorker(changefeedID, encoderConfig.Protocol,
 		encoderBuilder, encoderConcurrency, producer, statistics)
+
 	s := &dmlSink{
-		id:           changefeedID,
-		protocol:     encoderConfig.Protocol,
-		worker:       worker,
-		eventRouter:  eventRouter,
-		topicManager: topicManager,
-		adminClient:  adminClient,
-		ctx:          ctx,
-		cancel:       cancel,
-		dead:         make(chan struct{}),
+		id:          changefeedID,
+		protocol:    encoderConfig.Protocol,
+		adminClient: adminClient,
+		ctx:         ctx,
+		cancel:      cancel,
+		dead:        make(chan struct{}),
 	}
+	s.alive.eventRouter = eventRouter
+	s.alive.topicManager = topicManager
+	s.alive.worker = worker
 
 	// Spawn a goroutine to send messages by the worker.
+	s.wg.Add(1)
 	go func() {
-		err := s.worker.run(ctx)
-		s.isDead.Store(true)
+		defer s.wg.Done()
+		err := s.alive.worker.run(ctx)
+
+		s.alive.Lock()
+		s.alive.isDead = true
+		s.alive.worker.close()
+		s.alive.Unlock()
 		close(s.dead)
+
 		if err != nil && errors.Cause(err) != context.Canceled {
 			select {
 			case <-ctx.Done():
@@ -114,7 +127,9 @@ func newDMLSink(
 // WriteEvents writes events to the sink.
 // This is an asynchronously and thread-safe method.
 func (s *dmlSink) WriteEvents(rows ...*dmlsink.RowChangeCallbackableEvent) error {
-	if s.isDead.Load() {
+	s.alive.RLock()
+	defer s.alive.RUnlock()
+	if s.alive.isDead {
 		return errors.Trace(errors.New("dead dmlSink"))
 	}
 
@@ -125,14 +140,14 @@ func (s *dmlSink) WriteEvents(rows ...*dmlsink.RowChangeCallbackableEvent) error
 			row.Callback()
 			continue
 		}
-		topic := s.eventRouter.GetTopicForRowChange(row.Event)
-		partitionNum, err := s.topicManager.GetPartitionNum(s.ctx, topic)
+		topic := s.alive.eventRouter.GetTopicForRowChange(row.Event)
+		partitionNum, err := s.alive.topicManager.GetPartitionNum(s.ctx, topic)
 		if err != nil {
 			return errors.Trace(err)
 		}
-		partition := s.eventRouter.GetPartitionForRowChange(row.Event, partitionNum)
+		partition := s.alive.eventRouter.GetPartitionForRowChange(row.Event, partitionNum)
 		// This never be blocked because this is an unbounded channel.
-		s.worker.msgChan.In() <- mqEvent{
+		s.alive.worker.msgChan.In() <- mqEvent{
 			key: TopicPartitionKey{
 				Topic: topic, Partition: partition,
 			},
@@ -148,10 +163,14 @@ func (s *dmlSink) Close() {
 	if s.cancel != nil {
 		s.cancel()
 	}
+	s.wg.Wait()
 
-	if s.worker != nil {
-		s.worker.close()
+	s.alive.RLock()
+	if s.alive.topicManager != nil {
+		s.alive.topicManager.Close()
 	}
+	s.alive.RUnlock()
+
 	if s.adminClient != nil {
 		s.adminClient.Close()
 	}

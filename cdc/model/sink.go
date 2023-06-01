@@ -16,13 +16,16 @@ package model
 import (
 	"fmt"
 	"strconv"
+	"strings"
 	"sync"
+	"sync/atomic"
 	"unsafe"
 
 	"github.com/pingcap/log"
 	"github.com/pingcap/tidb/parser/model"
 	"github.com/pingcap/tidb/parser/mysql"
 	"github.com/pingcap/tidb/util/rowcodec"
+	"github.com/pingcap/tiflow/pkg/integrity"
 	"github.com/pingcap/tiflow/pkg/quotes"
 	"github.com/pingcap/tiflow/pkg/util"
 	"go.uber.org/zap"
@@ -273,17 +276,17 @@ type RedoDDLEvent struct {
 }
 
 // ToRedoLog converts row changed event to redo log
-func (row *RowChangedEvent) ToRedoLog() *RedoLog {
+func (r *RowChangedEvent) ToRedoLog() *RedoLog {
 	return &RedoLog{
-		RedoRow: RedoRowChangedEvent{Row: row},
+		RedoRow: RedoRowChangedEvent{Row: r},
 		Type:    RedoLogTypeRow,
 	}
 }
 
 // ToRedoLog converts ddl event to redo log
-func (ddl *DDLEvent) ToRedoLog() *RedoLog {
+func (d *DDLEvent) ToRedoLog() *RedoLog {
 	return &RedoLog{
-		RedoDDL: RedoDDLEvent{DDL: ddl},
+		RedoDDL: RedoDDLEvent{DDL: d},
 		Type:    RedoLogTypeDDL,
 	}
 }
@@ -314,6 +317,10 @@ type RowChangedEvent struct {
 	Columns      []*Column `json:"columns" msg:"columns"`
 	PreColumns   []*Column `json:"pre-columns" msg:"pre-columns"`
 	IndexColumns [][]int   `json:"-" msg:"index-columns"`
+
+	// Checksum for the event, only not nil if the upstream TiDB enable the row level checksum
+	// and TiCDC set the integrity check level to the correctness.
+	Checksum *integrity.Checksum `json:"-" msg:"-"`
 
 	// ApproximateDataSize is the approximate size of protobuf binary
 	// representation of this event.
@@ -605,59 +612,64 @@ type DDLEvent struct {
 	TableInfo    *TableInfo       `msg:"-"`
 	PreTableInfo *TableInfo       `msg:"-"`
 	Type         model.ActionType `msg:"-"`
-	Done         bool             `msg:"-"`
+	Done         atomic.Bool      `msg:"-"`
+	Charset      string           `msg:"-"`
+	Collate      string           `msg:"-"`
 }
 
 // FromJob fills the values with DDLEvent from DDL job
 func (d *DDLEvent) FromJob(job *model.Job, preTableInfo *TableInfo, tableInfo *TableInfo) {
-	// populating DDLEvent of an `rename tables` job is handled in `FromRenameTablesJob()`
-	if d.Type == model.ActionRenameTables {
-		return
-	}
+	d.FromJobWithArgs(job, preTableInfo, tableInfo, "", "")
+}
 
-	// The query for "DROP TABLE" and "DROP VIEW" statements need
-	// to be rebuilt. The reason is elaborated as follows:
-	// for a DDL statement like "DROP TABLE test1.table1, test2.table2",
-	// two DDL jobs will be generated. These two jobs can be differentiated
-	// from job.BinlogInfo.TableInfo whereas the job.Query are identical.
-	rebuildQuery := func() {
-		switch d.Type {
-		case model.ActionDropTable:
-			d.Query = fmt.Sprintf("DROP TABLE `%s`.`%s`", d.TableInfo.TableName.Schema, d.TableInfo.TableName.Table)
-		case model.ActionDropView:
-			d.Query = fmt.Sprintf("DROP VIEW `%s`.`%s`", d.TableInfo.TableName.Schema, d.TableInfo.TableName.Table)
-		default:
-			d.Query = job.Query
-		}
-	}
-
+// FromJobWithArgs fills the values with DDLEvent from DDL job
+func (d *DDLEvent) FromJobWithArgs(
+	job *model.Job,
+	preTableInfo, tableInfo *TableInfo,
+	oldSchemaName, newSchemaName string,
+) {
 	d.StartTs = job.StartTS
 	d.CommitTs = job.BinlogInfo.FinishedTS
 	d.Type = job.Type
 	d.PreTableInfo = preTableInfo
 	d.TableInfo = tableInfo
-	// rebuild the query if necessary
-	rebuildQuery()
-}
+	d.Charset = job.Charset
+	d.Collate = job.Collate
 
-// FromRenameTablesJob fills the values of DDLEvent from a rename tables DDL job
-func (d *DDLEvent) FromRenameTablesJob(job *model.Job,
-	oldSchemaName, newSchemaName string,
-	preTableInfo *TableInfo, tableInfo *TableInfo,
-) {
-	if job.Type != model.ActionRenameTables {
-		return
+	switch d.Type {
+	// The query for "DROP TABLE" and "DROP VIEW" statements need
+	// to be rebuilt. The reason is elaborated as follows:
+	// for a DDL statement like "DROP TABLE test1.table1, test2.table2",
+	// two DDL jobs will be generated. These two jobs can be differentiated
+	// from job.BinlogInfo.TableInfo whereas the job.Query are identical.
+	case model.ActionDropTable:
+		d.Query = fmt.Sprintf("DROP TABLE `%s`.`%s`",
+			d.TableInfo.TableName.Schema, d.TableInfo.TableName.Table)
+	case model.ActionDropView:
+		d.Query = fmt.Sprintf("DROP VIEW `%s`.`%s`",
+			d.TableInfo.TableName.Schema, d.TableInfo.TableName.Table)
+	case model.ActionRenameTables:
+		oldTableName := preTableInfo.Name.O
+		newTableName := tableInfo.Name.O
+		d.Query = fmt.Sprintf("RENAME TABLE `%s`.`%s` TO `%s`.`%s`",
+			oldSchemaName, oldTableName, newSchemaName, newTableName)
+		// Note that type is ActionRenameTable, not ActionRenameTables.
+		d.Type = model.ActionRenameTable
+	case model.ActionExchangeTablePartition:
+		// Parse idx of partition name from query.
+		upperQuery := strings.ToUpper(job.Query)
+		idx1 := strings.Index(upperQuery, "EXCHANGE PARTITION") + len("EXCHANGE PARTITION")
+		idx2 := strings.Index(upperQuery, "WITH TABLE")
+
+		// Note that partition name should be parsed from original query, not the upperQuery.
+		partName := strings.TrimSpace(job.Query[idx1:idx2])
+		// The tableInfo is the partition table, preTableInfo is non partition table.
+		d.Query = fmt.Sprintf("ALTER TABLE `%s`.`%s` EXCHANGE PARTITION `%s` WITH TABLE `%s`.`%s`",
+			tableInfo.TableName.Schema, tableInfo.TableName.Table, partName,
+			preTableInfo.TableName.Schema, preTableInfo.TableName.Table)
+	default:
+		d.Query = job.Query
 	}
-
-	d.StartTs = job.StartTS
-	d.CommitTs = job.BinlogInfo.FinishedTS
-	oldTableName := preTableInfo.Name.O
-	newTableName := tableInfo.Name.O
-	d.Query = fmt.Sprintf("RENAME TABLE `%s`.`%s` TO `%s`.`%s`",
-		oldSchemaName, oldTableName, newSchemaName, newTableName)
-	d.Type = model.ActionRenameTable
-	d.PreTableInfo = preTableInfo
-	d.TableInfo = tableInfo
 }
 
 // SingleTableTxn represents a transaction which includes many row events in a single table
@@ -666,9 +678,15 @@ func (d *DDLEvent) FromRenameTablesJob(job *model.Job,
 type SingleTableTxn struct {
 	Table     *TableName
 	TableInfo *TableInfo
-	StartTs   uint64
-	CommitTs  uint64
-	Rows      []*RowChangedEvent
+	// TableInfoVersion is the version of the table info, it is used to generate data path
+	// in storage sink. Generally, TableInfoVersion equals to `SingleTableTxn.TableInfo.Version`.
+	// Besides, if one table is just scheduled to a new processor, the TableInfoVersion should be
+	// greater than or equal to the startTs of table sink.
+	TableInfoVersion uint64
+
+	StartTs  uint64
+	CommitTs uint64
+	Rows     []*RowChangedEvent
 
 	// control fields of SingleTableTxn
 	// FinishWg is a barrier txn, after this txn is received, the worker must

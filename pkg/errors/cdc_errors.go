@@ -296,6 +296,10 @@ var (
 		"schema manager API error",
 		errors.RFCCodeText("CDC:ErrAvroSchemaAPIError"),
 	)
+	ErrAvroInvalidMessage = errors.Normalize(
+		"avro invalid message format",
+		errors.RFCCodeText("CDC:ErrAvroInvalidMessage"),
+	)
 	ErrMaxwellEncodeFailed = errors.Normalize(
 		"maxwell encode failed",
 		errors.RFCCodeText("CDC:ErrMaxwellEncodeFailed"),
@@ -494,6 +498,11 @@ var (
 		errors.RFCCodeText("CDC:ErrExchangePartition"),
 	)
 
+	ErrCorruptedDataMutation = errors.Normalize(
+		"Changefeed %s.%s stopped due to corrupted data mutation received. "+
+			"Corrupted mutation detail information %+v",
+		errors.RFCCodeText("CDC:ErrCorruptedDataMutation"))
+
 	// server related errors
 	ErrCaptureSuicide = errors.Normalize(
 		"capture suicide",
@@ -580,11 +589,6 @@ var (
 		"fail to create or maintain changefeed due to snapshot loss"+
 			" caused by GC. checkpoint-ts %d is earlier than or equal to GC safepoint at %d",
 		errors.RFCCodeText("CDC:ErrSnapshotLostByGC"),
-	)
-	ErrGCTTLExceeded = errors.Normalize(
-		"the checkpoint-ts(%d) lag of the changefeed(%s) "+
-			"has exceeded the GC TTL",
-		errors.RFCCodeText("CDC:ErrGCTTLExceeded"),
 	)
 	ErrNotOwner = errors.Normalize(
 		"this capture is not a owner",
@@ -786,6 +790,10 @@ var (
 	ErrUpstreamClosed = errors.Normalize(
 		"upstream has been closed",
 		errors.RFCCodeText("CDC:ErrUpstreamClosed"),
+	)
+	ErrUpstreamHasRunningImport = errors.Normalize(
+		"upstream has running import tasks, upstream-id: %d",
+		errors.RFCCodeText("CDC:ErrUpstreamHasRunningImport"),
 	)
 
 	// ReplicationSet error

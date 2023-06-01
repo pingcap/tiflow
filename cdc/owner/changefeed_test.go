@@ -33,32 +33,34 @@ import (
 	"github.com/pingcap/tiflow/pkg/config"
 	cdcContext "github.com/pingcap/tiflow/pkg/context"
 	"github.com/pingcap/tiflow/pkg/etcd"
+	"github.com/pingcap/tiflow/pkg/filter"
 	"github.com/pingcap/tiflow/pkg/orchestrator"
 	"github.com/pingcap/tiflow/pkg/redo"
 	"github.com/pingcap/tiflow/pkg/sink/observer"
 	"github.com/pingcap/tiflow/pkg/txnutil/gc"
 	"github.com/pingcap/tiflow/pkg/upstream"
+	"github.com/pingcap/tiflow/pkg/util"
 	"github.com/stretchr/testify/require"
 	"github.com/tikv/client-go/v2/oracle"
 )
 
+var _ puller.DDLPuller = (*mockDDLPuller)(nil)
+
 type mockDDLPuller struct {
 	// DDLPuller
-	resolvedTs model.Ts
-	ddlQueue   []*timodel.Job
-}
-
-func (m *mockDDLPuller) FrontDDL() (uint64, *timodel.Job) {
-	if len(m.ddlQueue) > 0 {
-		return m.ddlQueue[0].BinlogInfo.FinishedTS, m.ddlQueue[0]
-	}
-	return m.resolvedTs, nil
+	resolvedTs    model.Ts
+	ddlQueue      []*timodel.Job
+	schemaStorage entry.SchemaStorage
 }
 
 func (m *mockDDLPuller) PopFrontDDL() (uint64, *timodel.Job) {
 	if len(m.ddlQueue) > 0 {
 		job := m.ddlQueue[0]
 		m.ddlQueue = m.ddlQueue[1:]
+		err := m.schemaStorage.HandleDDLJob(job)
+		if err != nil {
+			panic(fmt.Sprintf("handle ddl job failed: %v", err))
+		}
 		return job.BinlogInfo.FinishedTS, job
 	}
 	return m.resolvedTs, nil
@@ -72,8 +74,10 @@ func (m *mockDDLPuller) Run(ctx context.Context) error {
 }
 
 func (m *mockDDLPuller) ResolvedTs() model.Ts {
-	ts, _ := m.FrontDDL()
-	return ts
+	if len(m.ddlQueue) > 0 {
+		return m.ddlQueue[0].BinlogInfo.FinishedTS
+	}
+	return m.resolvedTs
 }
 
 type mockDDLSink struct {
@@ -147,10 +151,6 @@ func (m *mockDDLSink) close(ctx context.Context) error {
 	return nil
 }
 
-func (m *mockDDLSink) isInitialized() bool {
-	return true
-}
-
 func (m *mockDDLSink) Barrier(ctx context.Context) error {
 	return nil
 }
@@ -164,10 +164,10 @@ func (m *mockScheduler) Tick(
 	checkpointTs model.Ts,
 	currentTables []model.TableID,
 	captures map[model.CaptureID]*model.CaptureInfo,
-	barrier *schedulepb.Barrier,
+	barrier schedulepb.BarrierWithMinTs,
 ) (newCheckpointTs, newResolvedTs model.Ts, err error) {
 	m.currentTables = currentTables
-	return model.Ts(math.MaxUint64), model.Ts(math.MaxUint64), nil
+	return barrier.MinTableBarrierTs, barrier.GlobalBarrierTs, nil
 }
 
 // MoveTable is used to trigger manual table moves.
@@ -202,7 +202,6 @@ func createChangefeed4Test(ctx cdcContext.Context, t *testing.T,
 		info = ctx.ChangefeedVars().Info
 		return info, true, nil
 	})
-
 	cf := newChangefeed4Test(ctx.ChangefeedVars().ID, state, up,
 		// new ddl puller
 		func(ctx context.Context,
@@ -210,11 +209,13 @@ func createChangefeed4Test(ctx cdcContext.Context, t *testing.T,
 			up *upstream.Upstream,
 			startTs uint64,
 			changefeed model.ChangeFeedID,
+			schemaStorage entry.SchemaStorage,
+			filter filter.Filter,
 		) (puller.DDLPuller, error) {
-			return &mockDDLPuller{resolvedTs: startTs - 1}, nil
+			return &mockDDLPuller{resolvedTs: startTs - 1, schemaStorage: schemaStorage}, nil
 		},
 		// new ddl ddlSink
-		func(_ model.ChangeFeedID, _ *model.ChangeFeedInfo, _ func(err error)) DDLSink {
+		func(_ model.ChangeFeedID, _ *model.ChangeFeedInfo, _ func(error), _ func(error)) DDLSink {
 			return &mockDDLSink{
 				resetDDLDone:     true,
 				recordDDLHistory: false,
@@ -423,6 +424,7 @@ func TestEmitCheckpointTs(t *testing.T) {
 	// ddl puller resolved ts grow up
 	mockDDLPuller := cf.ddlManager.ddlPuller.(*mockDDLPuller)
 	mockDDLPuller.resolvedTs = startTs + 1000
+	cf.ddlManager.schema.AdvanceResolvedTs(mockDDLPuller.resolvedTs)
 	cf.state.Status.CheckpointTs = mockDDLPuller.resolvedTs
 	job.BinlogInfo.FinishedTS = mockDDLPuller.resolvedTs
 	mockDDLPuller.ddlQueue = append(mockDDLPuller.ddlQueue, job)
@@ -431,8 +433,8 @@ func TestEmitCheckpointTs(t *testing.T) {
 	require.Equal(t, cf.state.Status.CheckpointTs, mockDDLPuller.resolvedTs)
 	tables, err = cf.ddlManager.allTables(ctx)
 	require.Nil(t, err)
-	// The ephemeral table should have left no trace in the schema cache
-	require.Len(t, tables, 0)
+	// The ephemeral table should only be deleted after the ddl is executed.
+	require.Len(t, tables, 1)
 	// We can't use the new schema because the ddl hasn't been executed yet.
 	ts, names = mockDDLSink.getCheckpointTsAndTableNames()
 	require.Equal(t, ts, mockDDLPuller.resolvedTs)
@@ -450,8 +452,10 @@ func TestEmitCheckpointTs(t *testing.T) {
 
 func TestSyncPoint(t *testing.T) {
 	ctx := cdcContext.NewBackendContext4Test(true)
-	ctx.ChangefeedVars().Info.Config.EnableSyncPoint = true
-	ctx.ChangefeedVars().Info.Config.SyncPointInterval = 1 * time.Second
+	ctx.ChangefeedVars().Info.Config.EnableSyncPoint = util.AddressOf(true)
+	ctx.ChangefeedVars().Info.Config.SyncPointInterval = util.AddressOf(1 * time.Second)
+	// SyncPoint option is only available for MySQL compatible database.
+	ctx.ChangefeedVars().Info.SinkURI = "mysql://"
 	cf, captures, tester := createChangefeed4Test(ctx, t)
 	defer cf.Close(ctx)
 
@@ -500,7 +504,8 @@ func TestFinished(t *testing.T) {
 		cf.Tick(ctx, captures)
 		tester.MustApplyPatches()
 	}
-
+	fmt.Println("checkpoint ts", cf.state.Status.CheckpointTs)
+	fmt.Println("target ts", cf.state.Info.TargetTs)
 	require.Equal(t, cf.state.Status.CheckpointTs, cf.state.Info.TargetTs)
 	require.Equal(t, cf.state.Info.State, model.StateFinished)
 }
@@ -510,6 +515,7 @@ func TestRemoveChangefeed(t *testing.T) {
 	ctx := cdcContext.NewContext4Test(baseCtx, true)
 	info := ctx.ChangefeedVars().Info
 	dir := t.TempDir()
+	info.SinkURI = "mysql://"
 	info.Config.Consistent = &config.ConsistentConfig{
 		Level:             "eventual",
 		Storage:           filepath.Join("nfs://", dir),
@@ -528,6 +534,9 @@ func TestRemovePausedChangefeed(t *testing.T) {
 	info := ctx.ChangefeedVars().Info
 	info.State = model.StateStopped
 	dir := t.TempDir()
+	// Field `Consistent` is valid only when the downstream
+	// is MySQL compatible  Database
+	info.SinkURI = "mysql://"
 	info.Config.Consistent = &config.ConsistentConfig{
 		Level:             "eventual",
 		Storage:           filepath.Join("nfs://", dir),
@@ -584,9 +593,10 @@ func TestBarrierAdvance(t *testing.T) {
 	for i := 0; i < 2; i++ {
 		ctx := cdcContext.NewBackendContext4Test(true)
 		if i == 1 {
-			ctx.ChangefeedVars().Info.Config.EnableSyncPoint = true
-			ctx.ChangefeedVars().Info.Config.SyncPointInterval = 100 * time.Second
+			ctx.ChangefeedVars().Info.Config.EnableSyncPoint = util.AddressOf(true)
+			ctx.ChangefeedVars().Info.Config.SyncPointInterval = util.AddressOf(100 * time.Second)
 		}
+		ctx.ChangefeedVars().Info.SinkURI = "mysql://"
 
 		cf, captures, tester := createChangefeed4Test(ctx, t)
 		defer cf.Close(ctx)
@@ -597,7 +607,6 @@ func TestBarrierAdvance(t *testing.T) {
 			CheckpointTs:      cf.state.Info.StartTs,
 			MinTableBarrierTs: cf.state.Info.StartTs,
 		}
-
 		// Do the preflightCheck and initialize the changefeed.
 		cf.Tick(ctx, captures)
 		tester.MustApplyPatches()

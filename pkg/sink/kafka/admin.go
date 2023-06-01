@@ -179,68 +179,21 @@ func (a *saramaAdminClient) GetBrokerConfig(
 		return "", err
 	}
 
-	if len(configEntries) == 0 || configEntries[0].Name != configName {
-		log.Warn("Kafka config item not found",
-			zap.String("namespace", a.changefeed.Namespace),
-			zap.String("changefeed", a.changefeed.ID),
-			zap.String("configName", configName))
-		return "", cerror.ErrKafkaBrokerConfigNotFound.GenWithStack(
-			"cannot find the `%s` from the broker's configuration", configName)
-	}
-
-	return configEntries[0].Value, nil
-}
-
-func (a *saramaAdminClient) GetTopicsPartitions(_ context.Context) (map[string]int32, error) {
-	topics, err := a.client.Topics()
-	if err != nil {
-		return nil, cerror.Trace(err)
-	}
-
-	result := make(map[string]int32, len(topics))
-	for _, topic := range topics {
-		partitions, err := a.client.Partitions(topic)
-		if err != nil {
-			return nil, cerror.Trace(err)
-		}
-		result[topic] = int32(len(partitions))
-	}
-
-	return result, nil
-}
-
-func (a *saramaAdminClient) GetAllTopicsMeta(ctx context.Context) (map[string]TopicDetail, error) {
-	var (
-		topics map[string]sarama.TopicDetail
-		err    error
-	)
-
-	query := func() error {
-		topics, err = a.admin.ListTopics()
-		return err
-	}
-	err = a.queryClusterWithRetry(ctx, query)
-	if err != nil {
-		return nil, err
-	}
-
-	result := make(map[string]TopicDetail, len(topics))
-	for topic, detail := range topics {
-		configEntries := make(map[string]string, len(detail.ConfigEntries))
-		for name, value := range detail.ConfigEntries {
-			if value != nil {
-				configEntries[name] = *value
-			}
-		}
-		result[topic] = TopicDetail{
-			Name:              topic,
-			NumPartitions:     detail.NumPartitions,
-			ReplicationFactor: detail.ReplicationFactor,
-			ConfigEntries:     configEntries,
+	// For compatibility with KOP, we checked all return values.
+	// 1. Kafka only returns requested configs.
+	// 2. Kop returns all configs.
+	for _, entry := range configEntries {
+		if entry.Name == configName {
+			return entry.Value, nil
 		}
 	}
 
-	return result, nil
+	log.Warn("Kafka config item not found",
+		zap.String("namespace", a.changefeed.Namespace),
+		zap.String("changefeed", a.changefeed.ID),
+		zap.String("configName", configName))
+	return "", cerror.ErrKafkaBrokerConfigNotFound.GenWithStack(
+		"cannot find the `%s` from the broker's configuration", configName)
 }
 
 func (a *saramaAdminClient) GetTopicsMeta(

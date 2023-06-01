@@ -20,6 +20,7 @@ import (
 	"fmt"
 	"net/http"
 	"net/http/httptest"
+	"path/filepath"
 	"sort"
 	"testing"
 
@@ -37,10 +38,12 @@ import (
 	"github.com/pingcap/tiflow/pkg/util"
 	"github.com/stretchr/testify/require"
 	pd "github.com/tikv/pd/client"
+	clientv3 "go.etcd.io/etcd/client/v3"
+	"go.etcd.io/etcd/tests/v3/integration"
 )
 
 var (
-	changeFeedID  = model.DefaultChangeFeedID("test-changeFeed")
+	changeFeedID  = model.ChangeFeedID{Namespace: "abc", ID: "test-changeFeed"}
 	blackholeSink = "blackhole://"
 	mysqlSink     = "mysql://root:123456@127.0.0.1:3306"
 )
@@ -55,6 +58,11 @@ func TestCreateChangefeed(t *testing.T) {
 	etcdClient := mock_etcd.NewMockCDCEtcdClient(gomock.NewController(t))
 	apiV2 := NewOpenAPIV2ForTest(cp, helpers)
 	router := newRouter(apiV2)
+	integration.BeforeTestExternal(t)
+	testEtcdCluster := integration.NewClusterV3(
+		t, &integration.ClusterConfig{Size: 2},
+	)
+	defer testEtcdCluster.Terminate(t)
 
 	mockUpManager := upstream.NewManager4Test(pdClient)
 	statusProvider := &mockStatusProvider{}
@@ -69,13 +77,15 @@ func TestCreateChangefeed(t *testing.T) {
 
 	// case 1: json format mismatches with the spec.
 	errConfig := struct {
-		ID      string `json:"changefeed_id"`
-		SinkURI string `json:"sink_uri"`
-		PDAddrs string `json:"pd_addrs"` // should be an array
+		ID        string `json:"changefeed_id"`
+		Namespace string `json:"namespace"`
+		SinkURI   string `json:"sink_uri"`
+		PDAddrs   string `json:"pd_addrs"` // should be an array
 	}{
-		ID:      changeFeedID.ID,
-		SinkURI: blackholeSink,
-		PDAddrs: "http://127.0.0.1:2379",
+		ID:        changeFeedID.ID,
+		Namespace: changeFeedID.Namespace,
+		SinkURI:   blackholeSink,
+		PDAddrs:   "http://127.0.0.1:2379",
 	}
 	bodyErr, err := json.Marshal(&errConfig)
 	require.Nil(t, err)
@@ -90,13 +100,15 @@ func TestCreateChangefeed(t *testing.T) {
 	require.Contains(t, respErr.Code, "ErrAPIInvalidParam")
 
 	cfConfig := struct {
-		ID      string   `json:"changefeed_id"`
-		SinkURI string   `json:"sink_uri"`
-		PDAddrs []string `json:"pd_addrs"`
+		ID        string   `json:"changefeed_id"`
+		Namespace string   `json:"namespace"`
+		SinkURI   string   `json:"sink_uri"`
+		PDAddrs   []string `json:"pd_addrs"`
 	}{
-		ID:      changeFeedID.ID,
-		SinkURI: blackholeSink,
-		PDAddrs: []string{},
+		ID:        changeFeedID.ID,
+		Namespace: changeFeedID.Namespace,
+		SinkURI:   blackholeSink,
+		PDAddrs:   []string{},
 	}
 	body, err := json.Marshal(&cfConfig)
 	require.Nil(t, err)
@@ -162,6 +174,9 @@ func TestCreateChangefeed(t *testing.T) {
 	require.Equal(t, http.StatusBadRequest, w.Code)
 
 	// case 5:
+	helpers.EXPECT().
+		getEtcdClient(gomock.Any(), gomock.Any()).
+		Return(testEtcdCluster.RandClient(), nil)
 	helpers.EXPECT().getVerfiedTables(gomock.Any(), gomock.Any(), gomock.Any()).
 		Return(nil, nil, nil).
 		AnyTimes()
@@ -176,10 +191,12 @@ func TestCreateChangefeed(t *testing.T) {
 			kvStorage tidbkv.Storage,
 		) (*model.ChangeFeedInfo, error) {
 			require.EqualValues(t, cfg.ID, changeFeedID.ID)
+			require.EqualValues(t, cfg.Namespace, changeFeedID.Namespace)
 			require.EqualValues(t, cfg.SinkURI, mysqlSink)
 			return &model.ChangeFeedInfo{
 				UpstreamID: 1,
 				ID:         cfg.ID,
+				Namespace:  cfg.Namespace,
 				SinkURI:    cfg.SinkURI,
 			}, nil
 		}).AnyTimes()
@@ -201,6 +218,9 @@ func TestCreateChangefeed(t *testing.T) {
 	require.Equal(t, http.StatusInternalServerError, w.Code)
 
 	// case 6: success
+	helpers.EXPECT().
+		getEtcdClient(gomock.Any(), gomock.Any()).
+		Return(testEtcdCluster.RandClient(), nil)
 	etcdClient.EXPECT().
 		CreateChangefeedInfo(gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any()).
 		Return(nil).
@@ -213,6 +233,7 @@ func TestCreateChangefeed(t *testing.T) {
 	err = json.NewDecoder(w.Body).Decode(&resp)
 	require.Nil(t, err)
 	require.Equal(t, cfConfig.ID, resp.ID)
+	require.Equal(t, cfConfig.Namespace, resp.Namespace)
 	mysqlSink, err = util.MaskSinkURI(mysqlSink)
 	require.Nil(t, err)
 	require.Equal(t, mysqlSink, resp.SinkURI)
@@ -222,7 +243,7 @@ func TestCreateChangefeed(t *testing.T) {
 func TestGetChangeFeed(t *testing.T) {
 	t.Parallel()
 
-	cfInfo := testCase{url: "/api/v2/changefeeds/%s", method: "GET"}
+	cfInfo := testCase{url: "/api/v2/changefeeds/%s?namespace=%s", method: "GET"}
 	statusProvider := &mockStatusProvider{}
 	cp := mock_capture.NewMockCapture(gomock.NewController(t))
 	cp.EXPECT().IsReady().Return(true).AnyTimes()
@@ -236,7 +257,7 @@ func TestGetChangeFeed(t *testing.T) {
 	invalidID := "@^Invalid"
 	req, _ := http.NewRequestWithContext(
 		context.Background(),
-		cfInfo.method, fmt.Sprintf(cfInfo.url, invalidID),
+		cfInfo.method, fmt.Sprintf(cfInfo.url, invalidID, "test"),
 		nil,
 	)
 	router.ServeHTTP(w, req)
@@ -254,7 +275,7 @@ func TestGetChangeFeed(t *testing.T) {
 	req, _ = http.NewRequestWithContext(
 		context.Background(),
 		cfInfo.method,
-		fmt.Sprintf(cfInfo.url, validID),
+		fmt.Sprintf(cfInfo.url, validID, "test"),
 		nil,
 	)
 	router.ServeHTTP(w, req)
@@ -267,9 +288,10 @@ func TestGetChangeFeed(t *testing.T) {
 	// valid but changefeed contains runtime error
 	statusProvider.err = nil
 	statusProvider.changefeedInfo = &model.ChangeFeedInfo{
-		ID: validID,
+		ID:        validID,
+		Namespace: "abc",
 		Error: &model.RunningError{
-			Code: string(cerrors.ErrGCTTLExceeded.RFCCode()),
+			Code: string(cerrors.ErrStartTsBeforeGC.RFCCode()),
 		},
 	}
 	statusProvider.changefeedStatus = &model.ChangeFeedStatus{
@@ -277,14 +299,15 @@ func TestGetChangeFeed(t *testing.T) {
 	}
 	w = httptest.NewRecorder()
 	req, _ = http.NewRequestWithContext(context.Background(),
-		cfInfo.method, fmt.Sprintf(cfInfo.url, validID), nil)
+		cfInfo.method, fmt.Sprintf(cfInfo.url, validID, "abc"), nil)
 	router.ServeHTTP(w, req)
 	require.Equal(t, http.StatusOK, w.Code)
 	resp := ChangeFeedInfo{}
 	err = json.NewDecoder(w.Body).Decode(&resp)
 	require.Nil(t, err)
 	require.Equal(t, resp.ID, validID)
-	require.Contains(t, resp.Error.Code, "ErrGCTTLExceeded")
+	require.Equal(t, resp.Namespace, "abc")
+	require.Contains(t, resp.Error.Code, "ErrStartTsBeforeGC")
 
 	// success
 	statusProvider.changefeedInfo = &model.ChangeFeedInfo{ID: validID}
@@ -292,7 +315,7 @@ func TestGetChangeFeed(t *testing.T) {
 	req, _ = http.NewRequestWithContext(
 		context.Background(),
 		cfInfo.method,
-		fmt.Sprintf(cfInfo.url, validID),
+		fmt.Sprintf(cfInfo.url, validID, "abc"),
 		nil,
 	)
 	router.ServeHTTP(w, req)
@@ -656,7 +679,7 @@ func TestVerifyTable(t *testing.T) {
 }
 
 func TestResumeChangefeed(t *testing.T) {
-	resume := testCase{url: "/api/v2/changefeeds/%s/resume", method: "POST"}
+	resume := testCase{url: "/api/v2/changefeeds/%s/resume?namespace=abc", method: "POST"}
 	helpers := NewMockAPIV2Helpers(gomock.NewController(t))
 	cp := mock_capture.NewMockCapture(gomock.NewController(t))
 	owner := mock_owner.NewMockOwner(gomock.NewController(t))
@@ -767,7 +790,7 @@ func TestResumeChangefeed(t *testing.T) {
 }
 
 func TestDeleteChangefeed(t *testing.T) {
-	remove := testCase{url: "/api/v2/changefeeds/%s", method: "DELETE"}
+	remove := testCase{url: "/api/v2/changefeeds/%s?namespace=abc", method: "DELETE"}
 	helpers := NewMockAPIV2Helpers(gomock.NewController(t))
 	cp := mock_capture.NewMockCapture(gomock.NewController(t))
 	owner := mock_owner.NewMockOwner(gomock.NewController(t))
@@ -854,7 +877,7 @@ func TestDeleteChangefeed(t *testing.T) {
 }
 
 func TestPauseChangefeed(t *testing.T) {
-	resume := testCase{url: "/api/v2/changefeeds/%s/pause", method: "POST"}
+	resume := testCase{url: "/api/v2/changefeeds/%s/pause?namespace=abc", method: "POST"}
 	helpers := NewMockAPIV2Helpers(gomock.NewController(t))
 	cp := mock_capture.NewMockCapture(gomock.NewController(t))
 	owner := mock_owner.NewMockOwner(gomock.NewController(t))
@@ -916,4 +939,32 @@ func TestPauseChangefeed(t *testing.T) {
 	router.ServeHTTP(w, req)
 	require.Equal(t, http.StatusOK, w.Code)
 	require.Equal(t, "{}", w.Body.String())
+}
+
+func TestHasRunningImport(t *testing.T) {
+	integration.BeforeTestExternal(t)
+	testEtcdCluster := integration.NewClusterV3(
+		t, &integration.ClusterConfig{Size: 1},
+	)
+	defer testEtcdCluster.Terminate(t)
+
+	ctx := context.Background()
+	client := testEtcdCluster.RandClient()
+	hasImport := hasRunningImport(ctx, client)
+	require.NoError(t, hasImport)
+
+	lease, err := client.Lease.Grant(ctx, 3*60)
+	require.NoError(t, err)
+
+	_, err = client.KV.Put(
+		ctx, filepath.Join(RegisterImportTaskPrefix, "pitr"),
+		"", clientv3.WithLease(lease.ID),
+	)
+	require.NoError(t, err)
+
+	hasImport = hasRunningImport(ctx, client)
+	require.NotNil(t, hasImport)
+	require.Contains(
+		t, hasImport.Error(), "There are lightning/restore tasks running",
+	)
 }

@@ -144,6 +144,11 @@ func (r *RowChange) getCausalityString(values []interface{}) []string {
 	ret := make([]string, 0, len(pkAndUks))
 
 	for _, indexCols := range pkAndUks {
+		// TODO: should not support multi value index and generate the value
+		// TODO: also fix https://github.com/pingcap/tiflow/issues/3286#issuecomment-971264282
+		if indexCols.MVIndex {
+			continue
+		}
 		cols, vals := getColsAndValuesOfIdx(r.sourceTableInfo.Columns, indexCols, values)
 		// handle prefix index
 		truncVals := truncateIndexValues(r.tiSessionCtx, r.sourceTableInfo, indexCols, cols, vals)

@@ -39,16 +39,16 @@ func (m *MockCapture) EXPECT() *MockCaptureMockRecorder {
 	return m.recorder
 }
 
-// AsyncClose mocks base method.
-func (m *MockCapture) AsyncClose() {
+// Close mocks base method.
+func (m *MockCapture) Close() {
 	m.ctrl.T.Helper()
-	m.ctrl.Call(m, "AsyncClose")
+	m.ctrl.Call(m, "Close")
 }
 
-// AsyncClose indicates an expected call of AsyncClose.
-func (mr *MockCaptureMockRecorder) AsyncClose() *gomock.Call {
+// Close indicates an expected call of Close.
+func (mr *MockCaptureMockRecorder) Close() *gomock.Call {
 	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "AsyncClose", reflect.TypeOf((*MockCapture)(nil).AsyncClose))
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "Close", reflect.TypeOf((*MockCapture)(nil).Close))
 }
 
 // Drain mocks base method.

@@ -974,8 +974,9 @@ func TestMysqlSinkSafeModeOff(t *testing.T) {
 					"UPDATE `common_1`.`uk_without_pk` SET `a1`=?,`a3`=? " +
 						"WHERE `a1`=? AND `a3`=? LIMIT 1",
 				},
-				values:   [][]interface{}{{3, 3, 2, 2}},
-				rowCount: 1,
+				values:          [][]interface{}{{3, 3, 2, 2}},
+				rowCount:        1,
+				approximateSize: 83,
 			},
 		}, {
 			name: "update with PK",
@@ -1013,8 +1014,9 @@ func TestMysqlSinkSafeModeOff(t *testing.T) {
 				startTs: []model.Ts{418658114257813516},
 				sqls: []string{"UPDATE `common_1`.`pk` SET `a1`=?,`a3`=? " +
 					"WHERE `a1`=? AND `a3`=? LIMIT 1"},
-				values:   [][]interface{}{{3, 3, 2, 2}},
-				rowCount: 1,
+				values:          [][]interface{}{{3, 3, 2, 2}},
+				rowCount:        1,
+				approximateSize: 72,
 			},
 		}, {
 			name: "batch insert with PK",
@@ -1197,7 +1199,8 @@ func TestPrepareBatchDMLs(t *testing.T) {
 							model.HandleKeyFlag | model.UniqueKeyFlag,
 						Value: []byte("你好"),
 					}},
-					IndexColumns: [][]int{{1, 2}},
+					IndexColumns:        [][]int{{1, 2}},
+					ApproximateDataSize: 10,
 				},
 				{
 					StartTs:  418658114257813514,
@@ -1216,14 +1219,16 @@ func TestPrepareBatchDMLs(t *testing.T) {
 							model.HandleKeyFlag | model.UniqueKeyFlag,
 						Value: []byte("世界"),
 					}},
-					IndexColumns: [][]int{{1, 2}},
+					IndexColumns:        [][]int{{1, 2}},
+					ApproximateDataSize: 10,
 				},
 			},
 			expected: &preparedDMLs{
-				startTs:  []model.Ts{418658114257813514},
-				sqls:     []string{"DELETE FROM `common_1`.`uk_without_pk` WHERE (`a1`,`a3`) IN ((?,?),(?,?))"},
-				values:   [][]interface{}{{1, "你好", 2, "世界"}},
-				rowCount: 2,
+				startTs:         []model.Ts{418658114257813514},
+				sqls:            []string{"DELETE FROM `common_1`.`uk_without_pk` WHERE (`a1` = ? AND `a3` = ?) OR (`a1` = ? AND `a3` = ?)"},
+				values:          [][]interface{}{{1, "你好", 2, "世界"}},
+				rowCount:        2,
+				approximateSize: 115,
 			},
 		},
 		{ // insert event
@@ -1245,7 +1250,8 @@ func TestPrepareBatchDMLs(t *testing.T) {
 						Flag:    model.BinaryFlag | model.MultipleKeyFlag | model.HandleKeyFlag,
 						Value:   "你好",
 					}},
-					IndexColumns: [][]int{{1, 1}},
+					IndexColumns:        [][]int{{1, 1}},
+					ApproximateDataSize: 10,
 				},
 				{
 					StartTs:  418658114257813516,
@@ -1264,14 +1270,16 @@ func TestPrepareBatchDMLs(t *testing.T) {
 							model.HandleKeyFlag | model.HandleKeyFlag,
 						Value: "世界",
 					}},
-					IndexColumns: [][]int{{2, 2}},
+					IndexColumns:        [][]int{{2, 2}},
+					ApproximateDataSize: 10,
 				},
 			},
 			expected: &preparedDMLs{
-				startTs:  []model.Ts{418658114257813516},
-				sqls:     []string{"INSERT INTO `common_1`.`uk_without_pk` (`a1`,`a3`) VALUES (?,?),(?,?)"},
-				values:   [][]interface{}{{1, "你好", 2, "世界"}},
-				rowCount: 2,
+				startTs:         []model.Ts{418658114257813516},
+				sqls:            []string{"INSERT INTO `common_1`.`uk_without_pk` (`a1`,`a3`) VALUES (?,?),(?,?)"},
+				values:          [][]interface{}{{1, "你好", 2, "世界"}},
+				rowCount:        2,
+				approximateSize: 89,
 			},
 		},
 		// update event
@@ -1308,7 +1316,8 @@ func TestPrepareBatchDMLs(t *testing.T) {
 							model.HandleKeyFlag | model.UniqueKeyFlag,
 						Value: []byte("测试"),
 					}},
-					IndexColumns: [][]int{{1, 2}},
+					IndexColumns:        [][]int{{1, 2}},
+					ApproximateDataSize: 12,
 				},
 				{
 					StartTs:  418658114257813516,
@@ -1340,21 +1349,22 @@ func TestPrepareBatchDMLs(t *testing.T) {
 							model.HandleKeyFlag | model.UniqueKeyFlag,
 						Value: []byte("北京"),
 					}},
-					IndexColumns: [][]int{{1, 2}},
+					IndexColumns:        [][]int{{1, 2}},
+					ApproximateDataSize: 12,
 				},
 			},
 			expected: &preparedDMLs{
 				startTs: []model.Ts{418658114257813516},
-				sqls: []string{"UPDATE `common_1`.`uk_without_pk` SET `a1`=CASE " +
-					"WHEN ROW(`a1`,`a3`)=ROW(?,?) THEN ? WHEN ROW(`a1`,`a3`)=ROW(?,?) " +
-					"THEN ? END, `a3`=CASE WHEN ROW(`a1`,`a3`)=ROW(?,?) " +
-					"THEN ? WHEN ROW(`a1`,`a3`)=ROW(?,?) THEN ? END WHERE " +
-					"ROW(`a1`,`a3`) IN (ROW(?,?),ROW(?,?))"},
+				sqls: []string{"UPDATE `common_1`.`uk_without_pk` " +
+					"SET `a1`=CASE WHEN `a1` = ? AND `a3` = ? THEN ? WHEN `a1` = ? AND `a3` = ? THEN ? END, " +
+					"`a3`=CASE WHEN `a1` = ? AND `a3` = ? THEN ? WHEN `a1` = ? AND `a3` = ? THEN ? END " +
+					"WHERE (`a1` = ? AND `a3` = ?) OR (`a1` = ? AND `a3` = ?)"},
 				values: [][]interface{}{{
 					1, "开发", 2, 3, "纽约", 4, 1, "开发", "测试", 3,
 					"纽约", "北京", 1, "开发", 3, "纽约",
 				}},
-				rowCount: 2,
+				rowCount:        2,
+				approximateSize: 283,
 			},
 		},
 		// mixed event, and test delete， update, insert are ordered
@@ -1378,8 +1388,8 @@ func TestPrepareBatchDMLs(t *testing.T) {
 							model.HandleKeyFlag | model.UniqueKeyFlag,
 						Value: []byte("你好"),
 					}},
-
-					IndexColumns: [][]int{{1, 2}},
+					IndexColumns:        [][]int{{1, 2}},
+					ApproximateDataSize: 10,
 				},
 				{
 					StartTs:  418658114257813514,
@@ -1398,7 +1408,8 @@ func TestPrepareBatchDMLs(t *testing.T) {
 							model.HandleKeyFlag | model.UniqueKeyFlag,
 						Value: []byte("世界"),
 					}},
-					IndexColumns: [][]int{{1, 2}},
+					IndexColumns:        [][]int{{1, 2}},
+					ApproximateDataSize: 10,
 				},
 				{
 					StartTs:  418658114257813514,
@@ -1417,7 +1428,8 @@ func TestPrepareBatchDMLs(t *testing.T) {
 							model.HandleKeyFlag | model.UniqueKeyFlag,
 						Value: "你好",
 					}},
-					IndexColumns: [][]int{{1, 2}},
+					IndexColumns:        [][]int{{1, 2}},
+					ApproximateDataSize: 10,
 				},
 				{
 					StartTs:  418658114257813516,
@@ -1449,7 +1461,8 @@ func TestPrepareBatchDMLs(t *testing.T) {
 							model.HandleKeyFlag | model.UniqueKeyFlag,
 						Value: []byte("测试"),
 					}},
-					IndexColumns: [][]int{{1, 2}},
+					IndexColumns:        [][]int{{1, 2}},
+					ApproximateDataSize: 10,
 				},
 				{
 					StartTs:  418658114257813516,
@@ -1481,18 +1494,18 @@ func TestPrepareBatchDMLs(t *testing.T) {
 							model.HandleKeyFlag | model.UniqueKeyFlag,
 						Value: []byte("北京"),
 					}},
-					IndexColumns: [][]int{{1, 2}},
+					IndexColumns:        [][]int{{1, 2}},
+					ApproximateDataSize: 10,
 				},
 			},
 			expected: &preparedDMLs{
 				startTs: []model.Ts{418658114257813514},
 				sqls: []string{
-					"DELETE FROM `common_1`.`uk_without_pk` WHERE (`a1`,`a3`) IN ((?,?),(?,?))",
-					"UPDATE `common_1`.`uk_without_pk` SET `a1`=CASE " +
-						"WHEN ROW(`a1`,`a3`)=ROW(?,?) THEN ? WHEN ROW(`a1`,`a3`)=ROW(?,?) " +
-						"THEN ? END, `a3`=CASE WHEN ROW(`a1`,`a3`)=ROW(?,?) " +
-						"THEN ? WHEN ROW(`a1`,`a3`)=ROW(?,?) THEN ? END WHERE " +
-						"ROW(`a1`,`a3`) IN (ROW(?,?),ROW(?,?))",
+					"DELETE FROM `common_1`.`uk_without_pk` WHERE (`a1` = ? AND `a3` = ?) OR (`a1` = ? AND `a3` = ?)",
+					"UPDATE `common_1`.`uk_without_pk` " +
+						"SET `a1`=CASE WHEN `a1` = ? AND `a3` = ? THEN ? WHEN `a1` = ? AND `a3` = ? THEN ? END, " +
+						"`a3`=CASE WHEN `a1` = ? AND `a3` = ? THEN ? WHEN `a1` = ? AND `a3` = ? THEN ? END " +
+						"WHERE (`a1` = ? AND `a3` = ?) OR (`a1` = ? AND `a3` = ?)",
 					"INSERT INTO `common_1`.`uk_without_pk` (`a1`,`a3`) VALUES (?,?)",
 				},
 				values: [][]interface{}{
@@ -1503,7 +1516,8 @@ func TestPrepareBatchDMLs(t *testing.T) {
 					},
 					{2, "你好"},
 				},
-				rowCount: 5,
+				rowCount:        5,
+				approximateSize: 467,
 			},
 		},
 		// update event and downstream is mysql and without pk
@@ -1546,7 +1560,8 @@ func TestPrepareBatchDMLs(t *testing.T) {
 							model.HandleKeyFlag | model.UniqueKeyFlag,
 						Value: []byte("测试"),
 					}},
-					IndexColumns: [][]int{{1, 2}},
+					IndexColumns:        [][]int{{1, 2}},
+					ApproximateDataSize: 10,
 				},
 				{
 					StartTs:  418658114257813516,
@@ -1583,7 +1598,8 @@ func TestPrepareBatchDMLs(t *testing.T) {
 							model.HandleKeyFlag | model.UniqueKeyFlag,
 						Value: []byte("北京"),
 					}},
-					IndexColumns: [][]int{{1, 2}},
+					IndexColumns:        [][]int{{1, 2}},
+					ApproximateDataSize: 10,
 				},
 			},
 			expected: &preparedDMLs{
@@ -1594,8 +1610,9 @@ func TestPrepareBatchDMLs(t *testing.T) {
 					"UPDATE `common_1`.`uk_without_pk` SET `a1` = ?, " +
 						"`a3` = ? WHERE `a1` = ? AND `a3` = ? LIMIT 1",
 				},
-				values:   [][]interface{}{{2, "测试", 1, "开发"}, {4, "北京", 3, "纽约"}},
-				rowCount: 2,
+				values:          [][]interface{}{{2, "测试", 1, "开发"}, {4, "北京", 3, "纽约"}},
+				rowCount:        2,
+				approximateSize: 204,
 			},
 		},
 	}
@@ -1881,9 +1898,9 @@ func TestBackendGenUpdateSQL(t *testing.T) {
 			ms.cfg.MaxMultiUpdateRowCount,
 			[]string{
 				"UPDATE `db`.`tb1` SET " +
-					"`id`=CASE WHEN `id`=? THEN ? WHEN `id`=? THEN ? END, " +
-					"`name`=CASE WHEN `id`=? THEN ? WHEN `id`=? THEN ? END " +
-					"WHERE `id` IN (?,?)",
+					"`id`=CASE WHEN `id` = ? THEN ? WHEN `id` = ? THEN ? END, " +
+					"`name`=CASE WHEN `id` = ? THEN ? WHEN `id` = ? THEN ? END " +
+					"WHERE (`id` = ?) OR (`id` = ?)",
 			},
 			[][]interface{}{
 				{1, 1, 2, 2, 1, "aa", 2, "bb", 1, 2},

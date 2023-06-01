@@ -26,6 +26,7 @@ import (
 	"github.com/pingcap/tiflow/cdc/entry"
 	"github.com/pingcap/tiflow/cdc/model"
 	"github.com/pingcap/tiflow/pkg/config"
+	"github.com/pingcap/tiflow/pkg/filter"
 	"github.com/stretchr/testify/require"
 	"github.com/tikv/client-go/v2/oracle"
 )
@@ -37,8 +38,10 @@ func TestAllPhysicalTables(t *testing.T) {
 	defer helper.Close()
 	ver, err := helper.Storage().CurrentVersion(oracle.GlobalTxnScope)
 	require.Nil(t, err)
+	f, err := filter.NewFilter(config.GetDefaultReplicaConfig(), "")
+	require.Nil(t, err)
 	schema, err := newSchemaWrap4Owner(helper.Storage(), ver.Ver,
-		config.GetDefaultReplicaConfig(), dummyChangeFeedID)
+		config.GetDefaultReplicaConfig(), dummyChangeFeedID, f)
 	require.Nil(t, err)
 	tableIDs, err := schema.AllPhysicalTables(context.Background(), ver.Ver)
 	require.Nil(t, err)
@@ -46,13 +49,13 @@ func TestAllPhysicalTables(t *testing.T) {
 	// add normal table
 	job := helper.DDL2Job("create table test.t1(id int primary key)")
 	tableIDT1 := job.BinlogInfo.TableInfo.ID
-	require.Nil(t, schema.HandleDDL(job))
+	require.Nil(t, schema.HandleDDLJob(job))
 	tableIDs, err = schema.AllPhysicalTables(context.Background(), job.BinlogInfo.FinishedTS)
 	require.Nil(t, err)
 	require.Equal(t, tableIDs, []model.TableID{tableIDT1})
 	// add ineligible table
 	job = helper.DDL2Job("create table test.t2(id int)")
-	require.Nil(t, schema.HandleDDL(job))
+	require.Nil(t, schema.HandleDDLJob(job))
 	tableIDs, err = schema.AllPhysicalTables(context.Background(), job.BinlogInfo.FinishedTS)
 	require.Nil(t, err)
 	require.Equal(t, tableIDs, []model.TableID{tableIDT1})
@@ -71,7 +74,7 @@ func TestAllPhysicalTables(t *testing.T) {
 			PARTITION p2 VALUES LESS THAN (15),
 			PARTITION p3 VALUES LESS THAN (20)
 		)`)
-	require.Nil(t, schema.HandleDDL(job))
+	require.Nil(t, schema.HandleDDLJob(job))
 	expectedTableIDs := []model.TableID{tableIDT1}
 	for _, p := range job.BinlogInfo.TableInfo.GetPartitionInfo().Definitions {
 		expectedTableIDs = append(expectedTableIDs, p.ID)
@@ -93,15 +96,17 @@ func TestAllTables(t *testing.T) {
 	defer helper.Close()
 	ver, err := helper.Storage().CurrentVersion(oracle.GlobalTxnScope)
 	require.Nil(t, err)
+	f, err := filter.NewFilter(config.GetDefaultReplicaConfig(), "")
+	require.Nil(t, err)
 	schema, err := newSchemaWrap4Owner(helper.Storage(), ver.Ver,
-		config.GetDefaultReplicaConfig(), dummyChangeFeedID)
+		config.GetDefaultReplicaConfig(), dummyChangeFeedID, f)
 	require.Nil(t, err)
 	tableInfos, err := schema.AllTables(context.Background(), ver.Ver)
 	require.Nil(t, err)
 	require.Len(t, tableInfos, 0)
 	// add normal table
 	job := helper.DDL2Job("create table test.t1(id int primary key)")
-	require.Nil(t, schema.HandleDDL(job))
+	require.Nil(t, schema.HandleDDLJob(job))
 	tableInfos, err = schema.AllTables(context.Background(), job.BinlogInfo.FinishedTS)
 	require.Nil(t, err)
 	require.Len(t, tableInfos, 1)
@@ -109,11 +114,11 @@ func TestAllTables(t *testing.T) {
 	require.Equal(t, tableName, model.TableName{
 		Schema:  "test",
 		Table:   "t1",
-		TableID: 84,
+		TableID: 88,
 	})
 	// add ineligible table
 	job = helper.DDL2Job("create table test.t2(id int)")
-	require.Nil(t, schema.HandleDDL(job))
+	require.Nil(t, schema.HandleDDLJob(job))
 	tableInfos, err = schema.AllTables(context.Background(), job.BinlogInfo.FinishedTS)
 	require.Nil(t, err)
 	require.Len(t, tableInfos, 1)
@@ -121,7 +126,7 @@ func TestAllTables(t *testing.T) {
 	require.Equal(t, tableName, model.TableName{
 		Schema:  "test",
 		Table:   "t1",
-		TableID: 84,
+		TableID: 88,
 	})
 }
 
@@ -130,18 +135,20 @@ func TestIsIneligibleTableID(t *testing.T) {
 	defer helper.Close()
 	ver, err := helper.Storage().CurrentVersion(oracle.GlobalTxnScope)
 	require.Nil(t, err)
+	f, err := filter.NewFilter(config.GetDefaultReplicaConfig(), "")
+	require.Nil(t, err)
 	schema, err := newSchemaWrap4Owner(helper.Storage(), ver.Ver,
-		config.GetDefaultReplicaConfig(), dummyChangeFeedID)
+		config.GetDefaultReplicaConfig(), dummyChangeFeedID, f)
 	require.Nil(t, err)
 	// add normal table
 	job := helper.DDL2Job("create table test.t1(id int primary key)")
 	tableIDT1 := job.BinlogInfo.TableInfo.ID
-	require.Nil(t, schema.HandleDDL(job))
+	require.Nil(t, schema.HandleDDLJob(job))
 	// add ineligible table
 	job = helper.DDL2Job("create table test.t2(id int)")
 	tableIDT2 := job.BinlogInfo.TableInfo.ID
 
-	require.Nil(t, schema.HandleDDL(job))
+	require.Nil(t, schema.HandleDDLJob(job))
 	require.False(t, schema.IsIneligibleTableID(tableIDT1))
 	require.True(t, schema.IsIneligibleTableID(tableIDT2))
 }
@@ -163,12 +170,16 @@ func TestBuildDDLEventsFromSingleTableDDL(t *testing.T) {
 	defer helper.Close()
 	ver, err := helper.Storage().CurrentVersion(oracle.GlobalTxnScope)
 	require.Nil(t, err)
+	f, err := filter.NewFilter(config.GetDefaultReplicaConfig(), "")
+	require.Nil(t, err)
 	schema, err := newSchemaWrap4Owner(helper.Storage(), ver.Ver,
-		config.GetDefaultReplicaConfig(), dummyChangeFeedID)
+		config.GetDefaultReplicaConfig(), dummyChangeFeedID, f)
 	require.Nil(t, err)
 	// add normal table
+	ctx := context.Background()
 	job := helper.DDL2Job("create table test.t1(id int primary key)")
-	events, err := schema.BuildDDLEvents(job)
+	schema.AdvanceResolvedTs(job.BinlogInfo.FinishedTS - 1)
+	events, err := schema.BuildDDLEvents(ctx, job)
 	require.Nil(t, err)
 	require.Len(t, events, 1)
 	compareEvents(t, events[0], &model.DDLEvent{
@@ -190,9 +201,10 @@ func TestBuildDDLEventsFromSingleTableDDL(t *testing.T) {
 		},
 		PreTableInfo: nil,
 	})
-	require.Nil(t, schema.HandleDDL(job))
+	require.Nil(t, schema.HandleDDLJob(job))
 	job = helper.DDL2Job("ALTER TABLE test.t1 ADD COLUMN c1 CHAR(16) NOT NULL")
-	events, err = schema.BuildDDLEvents(job)
+	schema.AdvanceResolvedTs(job.BinlogInfo.FinishedTS - 1)
+	events, err = schema.BuildDDLEvents(ctx, job)
 	require.Nil(t, err)
 	require.Len(t, events, 1)
 	compareEvents(t, events[0], &model.DDLEvent{
@@ -234,29 +246,35 @@ func TestBuildDDLEventsFromRenameTablesDDL(t *testing.T) {
 
 	ver, err := helper.Storage().CurrentVersion(oracle.GlobalTxnScope)
 	require.Nil(t, err)
-	schema, err := newSchemaWrap4Owner(helper.Storage(), ver.Ver,
-		config.GetDefaultReplicaConfig(), dummyChangeFeedID)
+	f, err := filter.NewFilter(config.GetDefaultReplicaConfig(), "")
 	require.Nil(t, err)
+	schema, err := newSchemaWrap4Owner(helper.Storage(), ver.Ver,
+		config.GetDefaultReplicaConfig(), dummyChangeFeedID, f)
+	require.Nil(t, err)
+	ctx := context.Background()
 	job := helper.DDL2Job("create database test1")
-	events, err := schema.BuildDDLEvents(job)
+	schema.AdvanceResolvedTs(job.BinlogInfo.FinishedTS - 1)
+	events, err := schema.BuildDDLEvents(ctx, job)
 	require.Nil(t, err)
 	require.Len(t, events, 1)
-	require.Nil(t, schema.HandleDDL(job))
+	require.Nil(t, schema.HandleDDLJob(job))
 	schemaID := job.SchemaID
 	// add test.t1
 	job = helper.DDL2Job("create table test1.t1(id int primary key)")
-	events, err = schema.BuildDDLEvents(job)
+	schema.AdvanceResolvedTs(job.BinlogInfo.FinishedTS - 1)
+	events, err = schema.BuildDDLEvents(ctx, job)
 	require.Nil(t, err)
 	require.Len(t, events, 1)
-	require.Nil(t, schema.HandleDDL(job))
+	require.Nil(t, schema.HandleDDLJob(job))
 	t1TableID := job.TableID
 
 	// add test.t2
 	job = helper.DDL2Job("create table test1.t2(id int primary key)")
-	events, err = schema.BuildDDLEvents(job)
+	schema.AdvanceResolvedTs(job.BinlogInfo.FinishedTS - 1)
+	events, err = schema.BuildDDLEvents(ctx, job)
 	require.Nil(t, err)
 	require.Len(t, events, 1)
-	require.Nil(t, schema.HandleDDL(job))
+	require.Nil(t, schema.HandleDDLJob(job))
 	t2TableID := job.TableID
 
 	// rename test.t1 and test.t2
@@ -282,8 +300,8 @@ func TestBuildDDLEventsFromRenameTablesDDL(t *testing.T) {
 	// the RawArgs field in job fetched from tidb snapshot meta is incorrent,
 	// so we manually construct `job.RawArgs` to do the workaround.
 	job.RawArgs = rawArgs
-
-	events, err = schema.BuildDDLEvents(job)
+	schema.AdvanceResolvedTs(job.BinlogInfo.FinishedTS - 1)
+	events, err = schema.BuildDDLEvents(ctx, job)
 	require.Nil(t, err)
 	require.Len(t, events, 2)
 	fmt.Printf("events[0]:%+v\n", events[0])
@@ -356,30 +374,36 @@ func TestBuildDDLEventsFromDropTablesDDL(t *testing.T) {
 
 	ver, err := helper.Storage().CurrentVersion(oracle.GlobalTxnScope)
 	require.Nil(t, err)
+	f, err := filter.NewFilter(config.GetDefaultReplicaConfig(), "")
+	require.Nil(t, err)
 	schema, err := newSchemaWrap4Owner(helper.Storage(), ver.Ver,
-		config.GetDefaultReplicaConfig(), dummyChangeFeedID)
+		config.GetDefaultReplicaConfig(), dummyChangeFeedID, f)
 	require.Nil(t, err)
 	// add test.t1
+	ctx := context.Background()
 	job := helper.DDL2Job("create table test.t1(id int primary key)")
-	events, err := schema.BuildDDLEvents(job)
+	schema.AdvanceResolvedTs(job.BinlogInfo.FinishedTS - 1)
+	events, err := schema.BuildDDLEvents(ctx, job)
 	require.Nil(t, err)
 	require.Len(t, events, 1)
-	require.Nil(t, schema.HandleDDL(job))
+	require.Nil(t, schema.HandleDDLJob(job))
 
 	// add test.t2
 	job = helper.DDL2Job("create table test.t2(id int primary key)")
-	events, err = schema.BuildDDLEvents(job)
+	schema.AdvanceResolvedTs(job.BinlogInfo.FinishedTS - 1)
+	events, err = schema.BuildDDLEvents(ctx, job)
 	require.Nil(t, err)
 	require.Len(t, events, 1)
-	require.Nil(t, schema.HandleDDL(job))
+	require.Nil(t, schema.HandleDDLJob(job))
 
 	jobs := helper.DDL2Jobs("drop table test.t1, test.t2", 2)
 	t1DropJob := jobs[1]
 	t2DropJob := jobs[0]
-	events, err = schema.BuildDDLEvents(t1DropJob)
+	schema.AdvanceResolvedTs(t1DropJob.BinlogInfo.FinishedTS - 1)
+	events, err = schema.BuildDDLEvents(ctx, t1DropJob)
 	require.Nil(t, err)
 	require.Len(t, events, 1)
-	require.Nil(t, schema.HandleDDL(t1DropJob))
+	require.Nil(t, schema.HandleDDLJob(t1DropJob))
 	compareEvents(t, events[0], &model.DDLEvent{
 		StartTs:  t1DropJob.StartTS,
 		CommitTs: t1DropJob.BinlogInfo.FinishedTS,
@@ -410,11 +434,11 @@ func TestBuildDDLEventsFromDropTablesDDL(t *testing.T) {
 			},
 		},
 	})
-
-	events, err = schema.BuildDDLEvents(t2DropJob)
+	schema.AdvanceResolvedTs(t2DropJob.BinlogInfo.FinishedTS - 1)
+	events, err = schema.BuildDDLEvents(ctx, t2DropJob)
 	require.Nil(t, err)
 	require.Len(t, events, 1)
-	require.Nil(t, schema.HandleDDL(t2DropJob))
+	require.Nil(t, schema.HandleDDLJob(t2DropJob))
 	compareEvents(t, events[0], &model.DDLEvent{
 		StartTs:  t2DropJob.StartTS,
 		CommitTs: t2DropJob.BinlogInfo.FinishedTS,
@@ -453,46 +477,54 @@ func TestBuildDDLEventsFromDropViewsDDL(t *testing.T) {
 
 	ver, err := helper.Storage().CurrentVersion(oracle.GlobalTxnScope)
 	require.Nil(t, err)
-	schema, err := newSchemaWrap4Owner(helper.Storage(), ver.Ver,
-		config.GetDefaultReplicaConfig(), dummyChangeFeedID)
+	f, err := filter.NewFilter(config.GetDefaultReplicaConfig(), "")
 	require.Nil(t, err)
+	schema, err := newSchemaWrap4Owner(helper.Storage(), ver.Ver,
+		config.GetDefaultReplicaConfig(), dummyChangeFeedID, f)
+	require.Nil(t, err)
+	ctx := context.Background()
 	// add test.tb1
 	job := helper.DDL2Job("create table test.tb1(id int primary key)")
-	events, err := schema.BuildDDLEvents(job)
+	schema.AdvanceResolvedTs(job.BinlogInfo.FinishedTS - 1)
+	events, err := schema.BuildDDLEvents(ctx, job)
 	require.Nil(t, err)
 	require.Len(t, events, 1)
-	require.Nil(t, schema.HandleDDL(job))
+	require.Nil(t, schema.HandleDDLJob(job))
 
 	// add test.tb2
 	job = helper.DDL2Job("create table test.tb2(id int primary key)")
-	events, err = schema.BuildDDLEvents(job)
+	schema.AdvanceResolvedTs(job.BinlogInfo.FinishedTS - 1)
+	events, err = schema.BuildDDLEvents(ctx, job)
 	require.Nil(t, err)
 	require.Len(t, events, 1)
-	require.Nil(t, schema.HandleDDL(job))
+	require.Nil(t, schema.HandleDDLJob(job))
 
 	// add test.view1
 	job = helper.DDL2Job(
 		"create view test.view1 as select * from test.tb1 where id > 100")
-	events, err = schema.BuildDDLEvents(job)
+	schema.AdvanceResolvedTs(job.BinlogInfo.FinishedTS - 1)
+	events, err = schema.BuildDDLEvents(ctx, job)
 	require.Nil(t, err)
 	require.Len(t, events, 1)
-	require.Nil(t, schema.HandleDDL(job))
+	require.Nil(t, schema.HandleDDLJob(job))
 
 	// add test.view2
 	job = helper.DDL2Job(
 		"create view test.view2 as select * from test.tb2 where id > 100")
-	events, err = schema.BuildDDLEvents(job)
+	schema.AdvanceResolvedTs(job.BinlogInfo.FinishedTS - 1)
+	events, err = schema.BuildDDLEvents(ctx, job)
 	require.Nil(t, err)
 	require.Len(t, events, 1)
-	require.Nil(t, schema.HandleDDL(job))
+	require.Nil(t, schema.HandleDDLJob(job))
 
 	jobs := helper.DDL2Jobs("drop view test.view1, test.view2", 2)
 	view1DropJob := jobs[1]
 	view2DropJob := jobs[0]
-	events, err = schema.BuildDDLEvents(view1DropJob)
+	schema.AdvanceResolvedTs(view1DropJob.BinlogInfo.FinishedTS - 1)
+	events, err = schema.BuildDDLEvents(ctx, view1DropJob)
 	require.Nil(t, err)
 	require.Len(t, events, 1)
-	require.Nil(t, schema.HandleDDL(view1DropJob))
+	require.Nil(t, schema.HandleDDLJob(view1DropJob))
 	compareEvents(t, events[0], &model.DDLEvent{
 		StartTs:  view1DropJob.StartTS,
 		CommitTs: view1DropJob.BinlogInfo.FinishedTS,
@@ -523,11 +555,11 @@ func TestBuildDDLEventsFromDropViewsDDL(t *testing.T) {
 			},
 		},
 	})
-
-	events, err = schema.BuildDDLEvents(view2DropJob)
+	schema.AdvanceResolvedTs(view2DropJob.BinlogInfo.FinishedTS - 1)
+	events, err = schema.BuildDDLEvents(ctx, view2DropJob)
 	require.Nil(t, err)
 	require.Len(t, events, 1)
-	require.Nil(t, schema.HandleDDL(view2DropJob))
+	require.Nil(t, schema.HandleDDLJob(view2DropJob))
 	compareEvents(t, events[0], &model.DDLEvent{
 		StartTs:  view2DropJob.StartTS,
 		CommitTs: view2DropJob.BinlogInfo.FinishedTS,
@@ -569,48 +601,56 @@ func TestBuildIgnoredDDLJob(t *testing.T) {
 	cfg := config.GetDefaultReplicaConfig()
 	// only replicate ddl event of test.tb1 and test.tb2
 	cfg.Filter.Rules = []string{"test.tb1", "test.tb2"}
-	schema, err := newSchemaWrap4Owner(helper.Storage(), ver.Ver,
-		cfg, dummyChangeFeedID)
+	f, err := filter.NewFilter(cfg, "")
 	require.Nil(t, err)
-
+	schema, err := newSchemaWrap4Owner(helper.Storage(), ver.Ver,
+		cfg, dummyChangeFeedID, f)
+	require.Nil(t, err)
+	ctx := context.Background()
 	// test case 1: Will not filter out create test.tb1 ddl.
 	job := helper.DDL2Job("create table test.tb1(id int primary key)")
-	events, err := schema.BuildDDLEvents(job)
+	schema.AdvanceResolvedTs(job.BinlogInfo.FinishedTS - 1)
+	events, err := schema.BuildDDLEvents(ctx, job)
 	require.Nil(t, err)
 	require.Len(t, events, 1)
-	require.Nil(t, schema.HandleDDL(job))
+	require.Nil(t, schema.HandleDDLJob(job))
 
 	// test case 2: Will not filter out create test.tb2 ddl.
 	job = helper.DDL2Job("create table test.tb2(id int primary key)")
-	events, err = schema.BuildDDLEvents(job)
+	schema.AdvanceResolvedTs(job.BinlogInfo.FinishedTS - 1)
+	events, err = schema.BuildDDLEvents(ctx, job)
 	require.Nil(t, err)
 	require.Len(t, events, 1)
-	require.Nil(t, schema.HandleDDL(job))
+	require.Nil(t, schema.HandleDDLJob(job))
 
 	// test case 3: Will not filter out alter test.tb1 ddl.
 	job = helper.DDL2Job("alter table test.tb1 add age int")
-	events, err = schema.BuildDDLEvents(job)
+	schema.AdvanceResolvedTs(job.BinlogInfo.FinishedTS - 1)
+	events, err = schema.BuildDDLEvents(ctx, job)
 	require.Nil(t, err)
 	require.Len(t, events, 1)
-	require.Nil(t, schema.HandleDDL(job))
+	require.Nil(t, schema.HandleDDLJob(job))
 
 	// test case 4: Will not filter out alter test.tb2 ddl.
 	job = helper.DDL2Job("alter table test.tb2 add name char(10)")
-	events, err = schema.BuildDDLEvents(job)
+	schema.AdvanceResolvedTs(job.BinlogInfo.FinishedTS - 1)
+	events, err = schema.BuildDDLEvents(ctx, job)
 	require.Nil(t, err)
 	require.Len(t, events, 1)
-	require.Nil(t, schema.HandleDDL(job))
+	require.Nil(t, schema.HandleDDLJob(job))
 
 	// test case 5: Will filter create test.tb3 ddl.
 	job = helper.DDL2Job("create table test.tb3(id int primary key)")
-	events, err = schema.BuildDDLEvents(job)
+	schema.AdvanceResolvedTs(job.BinlogInfo.FinishedTS - 1)
+	events, err = schema.BuildDDLEvents(ctx, job)
 	require.Nil(t, err)
 	require.Len(t, events, 0)
-	require.Nil(t, schema.HandleDDL(job))
+	require.Nil(t, schema.HandleDDLJob(job))
 
 	// test case 5: Will filter out drop test.tb3 ddl.
 	job = helper.DDL2Job("alter table test.tb3 add location char(100)")
-	events, err = schema.BuildDDLEvents(job)
+	schema.AdvanceResolvedTs(job.BinlogInfo.FinishedTS - 1)
+	events, err = schema.BuildDDLEvents(ctx, job)
 	require.Nil(t, err)
 	require.Len(t, events, 0)
 }

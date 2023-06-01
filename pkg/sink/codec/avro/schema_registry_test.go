@@ -80,15 +80,15 @@ func startHTTPInterceptForTestingRegistry() {
 					ID:      registry.newID,
 				}
 				registry.subjects[subject] = item
-				respData.ID = registry.newID
+				respData.SchemaID = registry.newID
 			} else {
 				if item.content == reqData.Schema {
-					respData.ID = item.ID
+					respData.SchemaID = item.ID
 				} else {
 					item.content = reqData.Schema
 					item.version++
 					item.ID = registry.newID
-					respData.ID = registry.newID
+					respData.SchemaID = registry.newID
 				}
 			}
 			registry.newID++
@@ -96,26 +96,24 @@ func startHTTPInterceptForTestingRegistry() {
 			return httpmock.NewJsonResponse(200, &respData)
 		})
 
-	httpmock.RegisterResponder("GET", `=~^http://127.0.0.1:8081/subjects/(.+)/versions/latest`,
+	httpmock.RegisterResponder("GET", `=~^http://127.0.0.1:8081/schemas/ids/(.+)`,
 		func(req *http.Request) (*http.Response, error) {
-			subject, err := httpmock.GetSubmatch(req, 1)
+			id, err := httpmock.GetSubmatchAsInt(req, 1)
 			if err != nil {
 				return httpmock.NewStringResponse(500, "Internal Server Error"), err
 			}
 
-			registry.mu.Lock()
-			item, exists := registry.subjects[subject]
-			registry.mu.Unlock()
-			if !exists {
-				return httpmock.NewStringResponse(404, ""), nil
+			for key, item := range registry.subjects {
+				if item.ID == int(id) {
+					var respData lookupResponse
+					respData.Schema = item.content
+					respData.Name = key
+					respData.SchemaID = item.ID
+					return httpmock.NewJsonResponse(200, &respData)
+				}
 			}
 
-			var respData lookupResponse
-			respData.Schema = item.content
-			respData.Name = subject
-			respData.RegistryID = item.ID
-
-			return httpmock.NewJsonResponse(200, &respData)
+			return httpmock.NewStringResponse(404, "Not Found"), nil
 		})
 
 	httpmock.RegisterResponder("DELETE", `=~^http://127.0.0.1:8081/subjects/(.+)`,
@@ -163,12 +161,8 @@ func TestSchemaRegistry(t *testing.T) {
 	startHTTPInterceptForTestingRegistry()
 	defer stopHTTPInterceptForTestingRegistry()
 
-	manager, err := NewAvroSchemaManager(
-		getTestingContext(),
-		nil,
-		"http://127.0.0.1:8081",
-		"-value",
-	)
+	manager, err := newAvroSchemaManager(
+		getTestingContext(), "http://127.0.0.1:8081", "-value", nil)
 	require.NoError(t, err)
 
 	topic := "cdctest"
@@ -176,7 +170,7 @@ func TestSchemaRegistry(t *testing.T) {
 	err = manager.ClearRegistry(getTestingContext(), topic)
 	require.NoError(t, err)
 
-	_, _, err = manager.Lookup(getTestingContext(), topic, 1)
+	_, err = manager.Lookup(getTestingContext(), topic, 1)
 	require.Regexp(t, `.*not\sfound.*`, err)
 
 	codec, err := goavro.NewCodec(`{
@@ -192,15 +186,12 @@ func TestSchemaRegistry(t *testing.T) {
      }`)
 	require.NoError(t, err)
 
-	_, err = manager.Register(getTestingContext(), topic, codec)
+	schemaID, err := manager.Register(getTestingContext(), topic, codec.Schema())
 	require.NoError(t, err)
 
-	var id int
-	for i := 0; i < 2; i++ {
-		_, id, err = manager.Lookup(getTestingContext(), topic, 1)
-		require.NoError(t, err)
-		require.Greater(t, id, 0)
-	}
+	codec2, err := manager.Lookup(getTestingContext(), topic, schemaID)
+	require.NoError(t, err)
+	require.Equal(t, codec.CanonicalSchema(), codec2.CanonicalSchema())
 
 	codec, err = goavro.NewCodec(`{
        "type": "record",
@@ -222,12 +213,11 @@ func TestSchemaRegistry(t *testing.T) {
           ]
      }`)
 	require.NoError(t, err)
-	_, err = manager.Register(getTestingContext(), topic, codec)
+	schemaID, err = manager.Register(getTestingContext(), topic, codec.Schema())
 	require.NoError(t, err)
 
-	codec2, id2, err := manager.Lookup(getTestingContext(), topic, 999)
+	codec2, err = manager.Lookup(getTestingContext(), topic, schemaID)
 	require.NoError(t, err)
-	require.NotEqual(t, id, id2)
 	require.Equal(t, codec.CanonicalSchema(), codec2.CanonicalSchema())
 }
 
@@ -235,10 +225,12 @@ func TestSchemaRegistryBad(t *testing.T) {
 	startHTTPInterceptForTestingRegistry()
 	defer stopHTTPInterceptForTestingRegistry()
 
-	_, err := NewAvroSchemaManager(getTestingContext(), nil, "http://127.0.0.1:808", "-value")
+	_, err := newAvroSchemaManager(
+		getTestingContext(), "http://127.0.0.1:808", "-value", nil)
 	require.NotNil(t, err)
 
-	_, err = NewAvroSchemaManager(getTestingContext(), nil, "https://127.0.0.1:8080", "-value")
+	_, err = newAvroSchemaManager(
+		getTestingContext(), "https://127.0.0.1:8080", "-value", nil)
 	require.NotNil(t, err)
 }
 
@@ -246,12 +238,8 @@ func TestSchemaRegistryIdempotent(t *testing.T) {
 	startHTTPInterceptForTestingRegistry()
 	defer stopHTTPInterceptForTestingRegistry()
 
-	manager, err := NewAvroSchemaManager(
-		getTestingContext(),
-		nil,
-		"http://127.0.0.1:8081",
-		"-value",
-	)
+	manager, err := newAvroSchemaManager(
+		getTestingContext(), "http://127.0.0.1:8081", "-value", nil)
 	require.NoError(t, err)
 
 	topic := "cdctest"
@@ -284,7 +272,7 @@ func TestSchemaRegistryIdempotent(t *testing.T) {
 
 	id := 0
 	for i := 0; i < 20; i++ {
-		id1, err := manager.Register(getTestingContext(), topic, codec)
+		id1, err := manager.Register(getTestingContext(), topic, codec.Schema())
 		require.NoError(t, err)
 		require.True(t, id == 0 || id == id1)
 		id = id1
@@ -295,12 +283,8 @@ func TestGetCachedOrRegister(t *testing.T) {
 	startHTTPInterceptForTestingRegistry()
 	defer stopHTTPInterceptForTestingRegistry()
 
-	manager, err := NewAvroSchemaManager(
-		getTestingContext(),
-		nil,
-		"http://127.0.0.1:8081",
-		"-value",
-	)
+	manager, err := newAvroSchemaManager(
+		getTestingContext(), "http://127.0.0.1:8081", "-value", nil)
 	require.NoError(t, err)
 
 	called := 0

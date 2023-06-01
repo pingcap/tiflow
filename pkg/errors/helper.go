@@ -39,7 +39,7 @@ func WrapError(rfcError *errors.Error, err error, args ...interface{}) error {
 // wants to replicate has been or will be GC. So it makes no sense to try to
 // resume the changefeed, and the changefeed should immediately be failed.
 var changeFeedFastFailError = []*errors.Error{
-	ErrGCTTLExceeded, ErrSnapshotLostByGC, ErrStartTsBeforeGC,
+	ErrSnapshotLostByGC, ErrStartTsBeforeGC,
 }
 
 // IsChangefeedFastFailError checks if an error is a ChangefeedFastFailError
@@ -76,6 +76,12 @@ var changefeedUnRetryableErrors = []*errors.Error{
 	ErrSchemaSnapshotNotFound,
 	ErrSyncRenameTableFailed,
 	ErrChangefeedUnretryable,
+	ErrCorruptedDataMutation,
+
+	ErrSinkURIInvalid,
+	ErrKafkaInvalidConfig,
+	ErrMySQLInvalidConfig,
+	ErrStorageSinkInvalidConfig,
 }
 
 // IsChangefeedUnRetryableError returns true if an error is a changefeed not retry error.

@@ -26,8 +26,10 @@ import (
 	"github.com/gin-gonic/gin"
 	"github.com/pingcap/errors"
 	"github.com/pingcap/log"
+	"github.com/pingcap/tidb/util/gctuner"
 	"github.com/pingcap/tiflow/cdc"
 	"github.com/pingcap/tiflow/cdc/capture"
+	"github.com/pingcap/tiflow/cdc/contextutil"
 	"github.com/pingcap/tiflow/cdc/kv"
 	"github.com/pingcap/tiflow/cdc/processor/sourcemanager/engine/factory"
 	"github.com/pingcap/tiflow/pkg/config"
@@ -145,10 +147,11 @@ func (s *server) prepare(ctx context.Context) error {
 	// then cause the new owner cannot be elected immediately after the old owner offline.
 	// see https://github.com/etcd-io/etcd/blob/525d53bd41/client/v3/concurrency/election.go#L98
 	etcdCli, err := clientv3.New(clientv3.Config{
-		Endpoints:   s.pdEndpoints,
-		TLS:         tlsConfig,
-		LogConfig:   &logConfig,
-		DialTimeout: 5 * time.Second,
+		Endpoints:        s.pdEndpoints,
+		TLS:              tlsConfig,
+		LogConfig:        &logConfig,
+		DialTimeout:      5 * time.Second,
+		AutoSyncInterval: 30 * time.Second,
 		DialOptions: []grpc.DialOption{
 			grpcTLSOption,
 			grpc.WithBlock(),
@@ -178,7 +181,9 @@ func (s *server) prepare(ctx context.Context) error {
 		return errors.Trace(err)
 	}
 
-	if err := s.createSortEngineFactory(); err != nil {
+	s.createSortEngineFactory()
+
+	if err := s.setMemoryLimit(); err != nil {
 		return errors.Trace(err)
 	}
 
@@ -188,7 +193,25 @@ func (s *server) prepare(ctx context.Context) error {
 	return nil
 }
 
-func (s *server) createSortEngineFactory() error {
+func (s *server) setMemoryLimit() error {
+	conf := config.GetGlobalServerConfig()
+	totalMemory, err := util.GetMemoryLimit()
+	if err != nil {
+		return errors.Trace(err)
+	}
+	if conf.MaxMemoryPercentage > 0 {
+		goMemLimit := totalMemory * uint64(conf.MaxMemoryPercentage) / 100
+		gctuner.EnableGOGCTuner.Store(true)
+		gctuner.Tuning(goMemLimit)
+		log.Info("enable gctuner, set memory limit",
+			zap.Uint64("bytes", goMemLimit),
+			zap.String("memory", humanize.IBytes(goMemLimit)),
+		)
+	}
+	return nil
+}
+
+func (s *server) createSortEngineFactory() {
 	conf := config.GetGlobalServerConfig()
 	if s.sortEngineFactory != nil {
 		if err := s.sortEngineFactory.Close(); err != nil {
@@ -200,36 +223,32 @@ func (s *server) createSortEngineFactory() error {
 	// Sorter dir has been set and checked when server starts.
 	// See https://github.com/pingcap/tiflow/blob/9dad09/cdc/server.go#L275
 	sortDir := config.GetGlobalServerConfig().Sorter.SortDir
-	totalMemory, err := util.GetMemoryLimit()
-	if err != nil {
-		return errors.Trace(err)
-	}
-	memPercentage := float64(conf.Sorter.MaxMemoryPercentage) / 100
-	memInBytes := uint64(float64(totalMemory) * memPercentage)
+	memInBytes := conf.Sorter.CacheSizeInMB * uint64(1<<20)
 	s.sortEngineFactory = factory.NewForPebble(sortDir, memInBytes, conf.Debug.DB)
-	log.Info("sorter engine memory limit", zap.String("memory", humanize.Bytes(memInBytes)))
-
-	return nil
+	log.Info("sorter engine memory limit",
+		zap.Uint64("bytes", memInBytes),
+		zap.String("memory", humanize.IBytes(memInBytes)),
+	)
 }
 
 // Run runs the server.
-func (s *server) Run(ctx context.Context) error {
-	if err := s.prepare(ctx); err != nil {
+func (s *server) Run(serverCtx context.Context) error {
+	if err := s.prepare(serverCtx); err != nil {
 		return err
 	}
 
-	err := s.startStatusHTTP(s.tcpServer.HTTP1Listener())
+	err := s.startStatusHTTP(serverCtx, s.tcpServer.HTTP1Listener())
 	if err != nil {
 		return err
 	}
 
-	return s.run(ctx)
+	return s.run(serverCtx)
 }
 
 // startStatusHTTP starts the HTTP server.
 // `lis` is a listener that gives us plain-text HTTP requests.
 // TODO: can we decouple the HTTP server from the capture server?
-func (s *server) startStatusHTTP(lis net.Listener) error {
+func (s *server) startStatusHTTP(serverCtx context.Context, lis net.Listener) error {
 	// LimitListener returns a Listener that accepts at most n simultaneous
 	// connections from the provided Listener. Connections that exceed the
 	// limit will wait in a queue and no new goroutines will be created until
@@ -253,6 +272,10 @@ func (s *server) startStatusHTTP(lis net.Listener) error {
 		Handler:      router,
 		ReadTimeout:  httpConnectionTimeout,
 		WriteTimeout: httpConnectionTimeout,
+		BaseContext: func(listener net.Listener) context.Context {
+			return contextutil.PutTimezoneInCtx(context.Background(),
+				contextutil.TimezoneFromCtx(serverCtx))
+		},
 	}
 
 	go func() {
@@ -350,11 +373,13 @@ func (s *server) Drain() <-chan struct{} {
 
 // Close closes the server.
 func (s *server) Close() {
+	if s.capture != nil {
+		s.capture.Close()
+	}
+	// Close the sort engine factory after capture closed to avoid
+	// puller send data to closed sort engine.
 	s.closeSortEngineFactory()
 
-	if s.capture != nil {
-		s.capture.AsyncClose()
-	}
 	if s.statusServer != nil {
 		err := s.statusServer.Close()
 		if err != nil {

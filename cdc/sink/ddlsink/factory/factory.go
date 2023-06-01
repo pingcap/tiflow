@@ -29,6 +29,7 @@ import (
 	"github.com/pingcap/tiflow/pkg/sink"
 	"github.com/pingcap/tiflow/pkg/sink/kafka"
 	kafkav2 "github.com/pingcap/tiflow/pkg/sink/kafka/v2"
+	"github.com/pingcap/tiflow/pkg/util"
 )
 
 // New creates a new ddlsink.Sink by scheme.
@@ -45,7 +46,7 @@ func New(
 	switch scheme {
 	case sink.KafkaScheme, sink.KafkaSSLScheme:
 		factoryCreator := kafka.NewSaramaFactory
-		if config.GetGlobalServerConfig().Debug.EnableKafkaSinkV2 {
+		if util.GetOrZero(cfg.Sink.EnableKafkaSinkV2) {
 			factoryCreator = kafkav2.NewFactory
 		}
 		return mq.NewKafkaDDLSink(ctx, sinkURI, cfg,

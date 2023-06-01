@@ -69,7 +69,10 @@ func getVariable(ctx *tcontext.Context, conn *BaseConn, variable string, isGloba
 	if err != nil {
 		return "", err
 	}
-	defer row.Close()
+	defer func() {
+		_ = row.Close()
+		_ = row.Err()
+	}()
 
 	// Show an example.
 	/*

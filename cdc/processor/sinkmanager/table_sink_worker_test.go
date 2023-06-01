@@ -26,7 +26,6 @@ import (
 	"github.com/pingcap/tiflow/cdc/processor/sourcemanager/engine"
 	"github.com/pingcap/tiflow/cdc/processor/sourcemanager/engine/memory"
 	"github.com/pingcap/tiflow/cdc/processor/tablepb"
-	cerrors "github.com/pingcap/tiflow/pkg/errors"
 	"github.com/pingcap/tiflow/pkg/spanz"
 	"github.com/pingcap/tiflow/pkg/upstream"
 	"github.com/stretchr/testify/require"
@@ -35,7 +34,7 @@ import (
 
 // testEventSize is the size of a test event.
 // It is used to calculate the memory quota.
-const testEventSize = 218
+const testEventSize = 226
 
 //nolint:unparam
 func genPolymorphicEventWithNilRow(startTs,
@@ -125,12 +124,12 @@ func (suite *tableSinkWorkerSuite) TearDownSuite() {
 }
 
 func (suite *tableSinkWorkerSuite) createWorker(
-	memQuota uint64,
-	splitTxn bool,
+	ctx context.Context, memQuota uint64, splitTxn bool,
 ) (*sinkWorker, engine.SortEngine) {
 	sortEngine := memory.New(context.Background())
 	sm := sourcemanager.New(suite.testChangefeedID, upstream.NewUpstream4Test(&MockPD{}),
-		&entry.MockMountGroup{}, sortEngine, make(chan error, 1), false)
+		&entry.MockMountGroup{}, sortEngine, false)
+	go func() { sm.Run(ctx) }()
 
 	// To avoid refund or release panics.
 	quota := memquota.NewMemQuota(suite.testChangefeedID, memQuota, "sink")
@@ -183,7 +182,7 @@ func (suite *tableSinkWorkerSuite) TestHandleTaskWithSplitTxnAndGotSomeFilteredE
 
 	// Only for three events.
 	eventSize := uint64(testEventSize * 3)
-	w, e := suite.createWorker(eventSize, true)
+	w, e := suite.createWorker(ctx, eventSize, true)
 	defer w.sinkMemQuota.Close()
 	suite.addEventsToSortEngine(events, e)
 
@@ -234,7 +233,7 @@ func (suite *tableSinkWorkerSuite) TestHandleTaskWithSplitTxnAndAbortWhenNoMemAn
 
 	// Only for three events.
 	eventSize := uint64(testEventSize * 3)
-	w, e := suite.createWorker(eventSize, true)
+	w, e := suite.createWorker(ctx, eventSize, true)
 	defer w.sinkMemQuota.Close()
 	suite.addEventsToSortEngine(events, e)
 
@@ -284,7 +283,7 @@ func (suite *tableSinkWorkerSuite) TestHandleTaskWithSplitTxnAndAbortWhenNoMemAn
 	}
 	// Only for three events.
 	eventSize := uint64(testEventSize * 3)
-	w, e := suite.createWorker(eventSize, true)
+	w, e := suite.createWorker(ctx, eventSize, true)
 	defer w.sinkMemQuota.Close()
 	suite.addEventsToSortEngine(events, e)
 
@@ -294,7 +293,7 @@ func (suite *tableSinkWorkerSuite) TestHandleTaskWithSplitTxnAndAbortWhenNoMemAn
 	go func() {
 		defer wg.Done()
 		err := w.handleTasks(ctx, taskChan)
-		require.ErrorIs(suite.T(), err, cerrors.ErrFlowControllerAborted)
+		require.ErrorIs(suite.T(), err, context.Canceled)
 	}()
 
 	wrapper, sink := createTableSinkWrapper(suite.testChangefeedID, suite.testSpan)
@@ -337,7 +336,7 @@ func (suite *tableSinkWorkerSuite) TestHandleTaskWithSplitTxnAndOnlyAdvanceWhenR
 	}
 	// For five events.
 	eventSize := uint64(testEventSize * 5)
-	w, e := suite.createWorker(eventSize, true)
+	w, e := suite.createWorker(ctx, eventSize, true)
 	defer w.sinkMemQuota.Close()
 	suite.addEventsToSortEngine(events, e)
 
@@ -392,7 +391,7 @@ func (suite *tableSinkWorkerSuite) TestHandleTaskWithoutSplitTxnAndAbortWhenNoMe
 	// Only for three events.
 	eventSize := uint64(testEventSize * 3)
 	// Disable split txn.
-	w, e := suite.createWorker(eventSize, false)
+	w, e := suite.createWorker(ctx, eventSize, false)
 	defer w.sinkMemQuota.Close()
 	suite.addEventsToSortEngine(events, e)
 
@@ -445,7 +444,7 @@ func (suite *tableSinkWorkerSuite) TestTaskWithoutSplitTxnOnlyAdvanceWhenReachMa
 	}
 	// Only for three events.
 	eventSize := uint64(testEventSize * 3)
-	w, e := suite.createWorker(eventSize, false)
+	w, e := suite.createWorker(ctx, eventSize, false)
 	defer w.sinkMemQuota.Close()
 	suite.addEventsToSortEngine(events, e)
 
@@ -494,7 +493,7 @@ func (suite *tableSinkWorkerSuite) TestHandleTaskWithSplitTxnAndAdvanceTableWhen
 	}
 	// Only for three events.
 	eventSize := uint64(testEventSize * 3)
-	w, e := suite.createWorker(eventSize, true)
+	w, e := suite.createWorker(ctx, eventSize, true)
 	defer w.sinkMemQuota.Close()
 	suite.addEventsToSortEngine(events, e)
 
@@ -546,7 +545,7 @@ func (suite *tableSinkWorkerSuite) TestHandleTaskWithSplitTxnAndAdvanceTableIfNo
 	}
 	// Only for three events.
 	eventSize := uint64(testEventSize * 3)
-	w, e := suite.createWorker(eventSize, true)
+	w, e := suite.createWorker(ctx, eventSize, true)
 	defer w.sinkMemQuota.Close()
 	suite.addEventsToSortEngine(events, e)
 
@@ -595,7 +594,7 @@ func (suite *tableSinkWorkerSuite) TestHandleTaskUseDifferentBatchIDEveryTime() 
 	}
 	// Only for three events.
 	eventSize := uint64(testEventSize * 3)
-	w, e := suite.createWorker(eventSize, true)
+	w, e := suite.createWorker(ctx, eventSize, true)
 	defer w.sinkMemQuota.Close()
 	suite.addEventsToSortEngine(events, e)
 

@@ -228,11 +228,10 @@ func (w *regionWorker) handleSingleRegionError(err error, state *regionFeedState
 		w.cancelStream(time.Second)
 	}
 
-	revokeToken := !state.isInitialized()
 	// since the context used in region worker will be cancelled after region
 	// worker exits, we must use the parent context to prevent regionErrorInfo loss.
 	errInfo := newRegionErrorInfo(state.getRegionInfo(), err)
-	w.session.onRegionFail(w.parentCtx, errInfo, revokeToken)
+	w.session.onRegionFail(w.parentCtx, errInfo)
 
 	return retErr
 }
@@ -618,7 +617,7 @@ func (w *regionWorker) handleEventEntry(
 	x *cdcpb.Event_Entries_,
 	state *regionFeedState,
 ) error {
-	regionID, regionSpan, startTime, storeAddr := state.getRegionMeta()
+	regionID, regionSpan, startTime, _ := state.getRegionMeta()
 	for _, entry := range x.Entries.GetEntries() {
 		// if a region with kv range [a, z), and we only want the get [b, c) from this region,
 		// tikv will return all key events in the region, although specified [b, c) int the request.
@@ -642,7 +641,6 @@ func (w *regionWorker) handleEventEntry(
 			w.metrics.metricPullEventInitializedCounter.Inc()
 
 			state.setInitialized()
-			w.session.regionRouter.Release(storeAddr)
 			// state is just initialized, so we know this must be true
 			cachedEvents := state.matcher.matchCachedRow(true)
 			for _, cachedEvent := range cachedEvents {
@@ -685,8 +683,11 @@ func (w *regionWorker) handleEventEntry(
 			state.matcher.putPrewriteRow(entry)
 		case cdcpb.Event_COMMIT:
 			w.metrics.metricPullEventCommitCounter.Inc()
+			// NOTE: state.getLastResolvedTs() will never less than session.startTs.
 			resolvedTs := state.getLastResolvedTs()
-			if entry.CommitTs <= resolvedTs {
+			// TiKV can send events with StartTs/CommitTs less than startTs.
+			isStaleEvent := entry.CommitTs <= w.session.startTs
+			if entry.CommitTs <= resolvedTs && !isStaleEvent {
 				logPanic("The CommitTs must be greater than the resolvedTs",
 					zap.String("EventType", "COMMIT"),
 					zap.Uint64("CommitTs", entry.CommitTs),
@@ -694,8 +695,8 @@ func (w *regionWorker) handleEventEntry(
 					zap.Uint64("regionID", regionID))
 				return errUnreachable
 			}
-			ok := state.matcher.matchRow(entry, state.isInitialized())
-			if !ok {
+
+			if !state.matcher.matchRow(entry, state.isInitialized()) {
 				if !state.isInitialized() {
 					state.matcher.cacheCommitRow(entry)
 					continue
@@ -706,16 +707,17 @@ func (w *regionWorker) handleEventEntry(
 					entry.GetType(), entry.GetOpType())
 			}
 
-			revent, err := assembleRowEvent(regionID, entry)
-			if err != nil {
-				return errors.Trace(err)
-			}
-
-			select {
-			case w.outputCh <- revent:
-				w.metrics.metricSendEventCommitCounter.Inc()
-			case <-ctx.Done():
-				return errors.Trace(ctx.Err())
+			if !isStaleEvent {
+				revent, err := assembleRowEvent(regionID, entry)
+				if err != nil {
+					return errors.Trace(err)
+				}
+				select {
+				case w.outputCh <- revent:
+					w.metrics.metricSendEventCommitCounter.Inc()
+				case <-ctx.Done():
+					return errors.Trace(ctx.Err())
+				}
 			}
 		case cdcpb.Event_ROLLBACK:
 			w.metrics.metricPullEventRollbackCounter.Inc()
@@ -814,13 +816,12 @@ func (w *regionWorker) evictAllRegions() {
 		for _, del := range deletes {
 			w.delRegionState(del.regionID)
 			del.regionState.setRegionInfoResolvedTs()
-			revokeToken := !del.regionState.isInitialized()
 			// since the context used in region worker will be cancelled after
 			// region worker exits, we must use the parent context to prevent
 			// regionErrorInfo loss.
 			errInfo := newRegionErrorInfo(
 				del.regionState.sri, cerror.ErrEventFeedAborted.FastGenByArgs())
-			w.session.onRegionFail(w.parentCtx, errInfo, revokeToken)
+			w.session.onRegionFail(w.parentCtx, errInfo)
 		}
 	}
 }

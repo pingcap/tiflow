@@ -23,6 +23,7 @@ import (
 	filter "github.com/pingcap/tidb/util/table-filter"
 	"github.com/pingcap/tiflow/pkg/config"
 	"github.com/pingcap/tiflow/pkg/redo"
+	"github.com/pingcap/tiflow/pkg/util"
 	"github.com/stretchr/testify/require"
 )
 
@@ -32,7 +33,8 @@ var defaultAPIConfig = &ReplicaConfig{
 	CaseSensitive:      true,
 	EnableOldValue:     true,
 	CheckGCSafePoint:   true,
-	EnableSyncPoint:    false,
+	BDRMode:            util.AddressOf(false),
+	EnableSyncPoint:    util.AddressOf(false),
 	SyncPointInterval:  &JSONDuration{10 * time.Minute},
 	SyncPointRetention: &JSONDuration{24 * time.Hour},
 	Filter: &FilterConfig{
@@ -47,10 +49,12 @@ var defaultAPIConfig = &ReplicaConfig{
 			Delimiter:  config.Comma,
 			NullString: config.NULL,
 		},
-		EncoderConcurrency:       16,
-		Terminator:               config.CRLF,
-		DateSeparator:            config.DateSeparatorNone.String(),
-		EnablePartitionSeparator: false,
+		EncoderConcurrency:       util.AddressOf(16),
+		Terminator:               util.AddressOf(config.CRLF),
+		DateSeparator:            util.AddressOf(config.DateSeparatorDay.String()),
+		EnablePartitionSeparator: util.AddressOf(true),
+		EnableKafkaSinkV2:        util.AddressOf(false),
+		OnlyOutputUpdatedColumns: util.AddressOf(false),
 	},
 	Consistent: &ConsistentConfig{
 		Level:             "none",
@@ -67,6 +71,10 @@ var defaultAPIConfig = &ReplicaConfig{
 		WriteKeyThreshold: config.GetDefaultReplicaConfig().
 			Scheduler.WriteKeyThreshold,
 	},
+	Integrity: &IntegrityConfig{
+		IntegrityCheckLevel:   config.GetDefaultReplicaConfig().Integrity.IntegrityCheckLevel,
+		CorruptionHandleLevel: config.GetDefaultReplicaConfig().Integrity.CorruptionHandleLevel,
+	},
 }
 
 func TestDefaultReplicaConfig(t *testing.T) {
@@ -74,6 +82,7 @@ func TestDefaultReplicaConfig(t *testing.T) {
 	require.Equal(t, defaultAPIConfig, GetDefaultReplicaConfig())
 	cfg := GetDefaultReplicaConfig()
 	require.NotNil(t, cfg.Scheduler)
+	require.NotNil(t, cfg.Integrity)
 	cfg2 := cfg.toInternalReplicaConfigWithOriginConfig(&config.ReplicaConfig{})
 	require.Equal(t, config.GetDefaultReplicaConfig(), cfg2)
 	cfg3 := ToAPIReplicaConfig(config.GetDefaultReplicaConfig())
@@ -93,15 +102,15 @@ func TestToAPIReplicaConfig(t *testing.T) {
 				TopicRule:      "topic",
 			},
 		},
-		Protocol: "aaa",
+		Protocol: util.AddressOf("aaa"),
 		ColumnSelectors: []*config.ColumnSelector{
 			{
 				Matcher: []string{"a", "b", "c"},
 				Columns: []string{"a", "b"},
 			},
 		},
-		SchemaRegistry: "bbb",
-		TxnAtomicity:   "aa",
+		SchemaRegistry: util.AddressOf("bbb"),
+		TxnAtomicity:   util.AddressOf(config.AtomicityLevel("aa")),
 	}
 	cfg.Consistent = &config.ConsistentConfig{
 		Level:             "1",

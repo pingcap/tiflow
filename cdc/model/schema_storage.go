@@ -66,8 +66,10 @@ type TableInfo struct {
 	HandleIndexID int64
 
 	IndexColumnsOffset [][]int
-	rowColInfos        []rowcodec.ColInfo
-	rowColFieldTps     map[int64]*types.FieldType
+	// rowColInfos extend the model.ColumnInfo with some extra information
+	// it's the same length and order with the model.TableInfo.Columns
+	rowColInfos    []rowcodec.ColInfo
+	rowColFieldTps map[int64]*types.FieldType
 }
 
 // WrapTableInfo creates a TableInfo from a timodel.TableInfo
@@ -265,7 +267,7 @@ func IsColCDCVisible(col *model.ColumnInfo) bool {
 	if col.IsGenerated() && !col.GeneratedStored {
 		return false
 	}
-	return col.State == model.StatePublic
+	return true
 }
 
 // ExistTableUniqueColumn returns whether the table has a unique column

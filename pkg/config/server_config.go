@@ -44,6 +44,10 @@ const (
 
 	// DefaultChangefeedMemoryQuota is the default memory quota for each changefeed.
 	DefaultChangefeedMemoryQuota = 1024 * 1024 * 1024 // 1GB.
+
+	// DefaultMaxMemoryPercentage is the default max memory percentage
+	// cdc server use 70% of total memory limit as soft limit by default.
+	DefaultMaxMemoryPercentage = 70
 )
 
 var (
@@ -102,8 +106,9 @@ var defaultServerConfig = &ServerConfig{
 	OwnerFlushInterval:     TomlDuration(50 * time.Millisecond),
 	ProcessorFlushInterval: TomlDuration(50 * time.Millisecond),
 	Sorter: &SorterConfig{
-		MaxMemoryPercentage: 10, // 10% is safe on machines with memory capacity <= 16GB
 		SortDir:             DefaultSortDir,
+		CacheSizeInMB:       128, // By default use 128M memory as sorter cache.
+		MaxMemoryPercentage: 10,  // Deprecated.
 	},
 	Security: &SecurityConfig{},
 	KVClient: &KVClientConfig{
@@ -133,10 +138,10 @@ var defaultServerConfig = &ServerConfig{
 		},
 		Messages: defaultMessageConfig.Clone(),
 
-		Scheduler:         NewDefaultSchedulerConfig(),
-		EnableKafkaSinkV2: false,
+		Scheduler: NewDefaultSchedulerConfig(),
 	},
-	ClusterID: "default",
+	ClusterID:           "default",
+	MaxMemoryPercentage: DefaultMaxMemoryPercentage,
 }
 
 // ServerConfig represents a config for server
@@ -166,6 +171,7 @@ type ServerConfig struct {
 	KVClient            *KVClientConfig `toml:"kv-client" json:"kv-client"`
 	Debug               *DebugConfig    `toml:"debug" json:"debug"`
 	ClusterID           string          `toml:"cluster-id" json:"cluster-id"`
+	MaxMemoryPercentage int             `toml:"max-memory-percentage" json:"max-memory-percentage"`
 }
 
 // Marshal returns the json marshal format of a ServerConfig
@@ -275,6 +281,10 @@ func (c *ServerConfig) ValidateAndAdjust() error {
 	}
 	if err = c.Debug.ValidateAndAdjust(); err != nil {
 		return errors.Trace(err)
+	}
+	if c.MaxMemoryPercentage >= 100 {
+		log.Warn("server max-memory-percentage must be less than 100, set to default value")
+		c.MaxMemoryPercentage = DefaultMaxMemoryPercentage
 	}
 
 	return nil

@@ -14,6 +14,7 @@
 package sinkmanager
 
 import (
+	"context"
 	"sort"
 	"sync"
 	"sync/atomic"
@@ -25,7 +26,10 @@ import (
 	"github.com/pingcap/tiflow/cdc/processor/sourcemanager/engine"
 	"github.com/pingcap/tiflow/cdc/processor/tablepb"
 	"github.com/pingcap/tiflow/cdc/sink/tablesink"
+	cerrors "github.com/pingcap/tiflow/pkg/errors"
+	"github.com/pingcap/tiflow/pkg/retry"
 	"github.com/tikv/client-go/v2/oracle"
+	pd "github.com/tikv/pd/client"
 	"go.uber.org/zap"
 )
 
@@ -41,16 +45,20 @@ type tableSinkWrapper struct {
 	changefeed model.ChangeFeedID
 	// tableSpan used for logging.
 	span tablepb.Span
+
+	tableSinkCreater func() tablesink.TableSink
+
 	// tableSink is the underlying sink.
-	tableSink tablesink.TableSink
+	tableSink             tablesink.TableSink
+	tableSinkCheckpointTs model.ResolvedTs
+	tableSinkMu           sync.RWMutex
+
 	// state used to control the lifecycle of the table.
 	state *tablepb.TableState
 	// startTs is the start ts of the table.
 	startTs model.Ts
 	// targetTs is the upper bound of the table sink.
 	targetTs model.Ts
-	// replicateTs is the ts that the table sink has started to replicate.
-	replicateTs model.Ts
 	// barrierTs is the barrier bound of the table sink.
 	barrierTs atomic.Uint64
 	// receivedSorterResolvedTs is the resolved ts received from the sorter.
@@ -61,10 +69,13 @@ type tableSinkWrapper struct {
 	receivedSorterCommitTs atomic.Uint64
 	// receivedEventCount is the number of events received from the sorter.
 	receivedEventCount atomic.Int64
+
+	// replicateTs is the ts that the table sink has started to replicate.
+	replicateTs    model.Ts
+	genReplicateTs func(ctx context.Context) (model.Ts, error)
+
 	// lastCleanTime indicates the last time the table has been cleaned.
 	lastCleanTime time.Time
-	// checkpointTs is the checkpoint ts of the table sink.
-	checkpointTs atomic.Uint64
 
 	// rangeEventCounts is for clean the table engine.
 	// If rangeEventCounts[i].events is greater than 0, it means there must be
@@ -91,59 +102,76 @@ func newRangeEventCount(pos engine.Position, events int) rangeEventCount {
 func newTableSinkWrapper(
 	changefeed model.ChangeFeedID,
 	span tablepb.Span,
-	tableSink tablesink.TableSink,
+	tableSinkCreater func() tablesink.TableSink,
 	state tablepb.TableState,
 	startTs model.Ts,
 	targetTs model.Ts,
+	genReplicateTs func(ctx context.Context) (model.Ts, error),
 ) *tableSinkWrapper {
 	res := &tableSinkWrapper{
-		version:    atomic.AddUint64(&version, 1),
-		changefeed: changefeed,
-		span:       span,
-		tableSink:  tableSink,
-		state:      &state,
-		startTs:    startTs,
-		targetTs:   targetTs,
+		version:          atomic.AddUint64(&version, 1),
+		changefeed:       changefeed,
+		span:             span,
+		tableSinkCreater: tableSinkCreater,
+		state:            &state,
+		startTs:          startTs,
+		targetTs:         targetTs,
+		genReplicateTs:   genReplicateTs,
 	}
-	res.checkpointTs.Store(startTs)
+	res.tableSinkCheckpointTs = model.NewResolvedTs(startTs)
 	res.receivedSorterResolvedTs.Store(startTs)
+	res.barrierTs.Store(startTs)
 	return res
 }
 
-func (t *tableSinkWrapper) start(startTs model.Ts, replicateTs model.Ts) {
+func (t *tableSinkWrapper) start(ctx context.Context, startTs model.Ts) (err error) {
 	if t.replicateTs != 0 {
 		log.Panic("The table sink has already started",
 			zap.String("namespace", t.changefeed.Namespace),
 			zap.String("changefeed", t.changefeed.ID),
 			zap.Stringer("span", &t.span),
 			zap.Uint64("startTs", startTs),
-			zap.Uint64("replicateTs", replicateTs),
 			zap.Uint64("oldReplicateTs", t.replicateTs),
 		)
 	}
+
+	// FIXME(qupeng): it can be re-fetched later instead of fails.
+	if t.replicateTs, err = t.genReplicateTs(ctx); err != nil {
+		return errors.Trace(err)
+	}
+
 	log.Info("Sink is started",
 		zap.String("namespace", t.changefeed.Namespace),
 		zap.String("changefeed", t.changefeed.ID),
 		zap.Stringer("span", &t.span),
 		zap.Uint64("startTs", startTs),
-		zap.Uint64("replicateTs", replicateTs),
+		zap.Uint64("replicateTs", t.replicateTs),
 	)
+
 	// This start ts maybe greater than the initial start ts of the table sink.
 	// Because in two phase scheduling, the table sink may be advanced to a later ts.
 	// And we can just continue to replicate the table sink from the new start ts.
-	t.checkpointTs.Store(startTs)
 	for {
 		old := t.receivedSorterResolvedTs.Load()
 		if startTs <= old || t.receivedSorterResolvedTs.CompareAndSwap(old, startTs) {
 			break
 		}
 	}
-	t.replicateTs = replicateTs
 	t.state.Store(tablepb.TableStateReplicating)
+	return nil
 }
 
-func (t *tableSinkWrapper) appendRowChangedEvents(events ...*model.RowChangedEvent) {
-	t.tableSink.AppendRowChangedEvents(events...)
+func (t *tableSinkWrapper) appendRowChangedEvents(events ...*model.RowChangedEvent) error {
+	t.tableSinkMu.RLock()
+	defer t.tableSinkMu.RUnlock()
+	// If it's nil it means it's closed.
+	if t.tableSink != nil {
+		t.tableSink.AppendRowChangedEvents(events...)
+	} else {
+		// If it's nil it means it's closed.
+		return tablesink.NewSinkInternalError(errors.New("table sink cleared"))
+	}
+	return nil
 }
 
 func (t *tableSinkWrapper) updateReceivedSorterResolvedTs(ts model.Ts) {
@@ -168,19 +196,29 @@ func (t *tableSinkWrapper) updateReceivedSorterCommitTs(ts model.Ts) {
 }
 
 func (t *tableSinkWrapper) updateResolvedTs(ts model.ResolvedTs) error {
-	if err := t.tableSink.UpdateResolvedTs(ts); err != nil {
-		return errors.Trace(err)
+	t.tableSinkMu.RLock()
+	defer t.tableSinkMu.RUnlock()
+	if t.tableSink != nil {
+		if err := t.tableSink.UpdateResolvedTs(ts); err != nil {
+			return errors.Trace(err)
+		}
+	} else {
+		// If it's nil it means it's closed.
+		return tablesink.NewSinkInternalError(errors.New("table sink cleared"))
 	}
 	return nil
 }
 
 func (t *tableSinkWrapper) getCheckpointTs() model.ResolvedTs {
-	currentCheckpointTs := t.checkpointTs.Load()
-	newCheckpointTs := t.tableSink.GetCheckpointTs()
-	if currentCheckpointTs > newCheckpointTs.ResolvedMark() {
-		return model.NewResolvedTs(currentCheckpointTs)
+	t.tableSinkMu.RLock()
+	defer t.tableSinkMu.RUnlock()
+	if t.tableSink != nil {
+		checkpointTs := t.tableSink.GetCheckpointTs()
+		if t.tableSinkCheckpointTs.Less(checkpointTs) {
+			t.tableSinkCheckpointTs = checkpointTs
+		}
 	}
-	return newCheckpointTs
+	return t.tableSinkCheckpointTs
 }
 
 func (t *tableSinkWrapper) getReceivedSorterResolvedTs() model.Ts {
@@ -213,15 +251,106 @@ func (t *tableSinkWrapper) getUpperBoundTs() model.Ts {
 	return resolvedTs
 }
 
+func (t *tableSinkWrapper) markAsClosing() {
+	for {
+		curr := t.state.Load()
+		if curr == tablepb.TableStateStopping || curr == tablepb.TableStateStopped {
+			break
+		}
+		if t.state.CompareAndSwap(curr, tablepb.TableStateStopping) {
+			log.Info("Sink is closing",
+				zap.String("namespace", t.changefeed.Namespace),
+				zap.String("changefeed", t.changefeed.ID),
+				zap.Stringer("span", &t.span))
+			break
+		}
+	}
+}
+
+func (t *tableSinkWrapper) markAsClosed() {
+	for {
+		curr := t.state.Load()
+		if curr == tablepb.TableStateStopped {
+			return
+		}
+		if t.state.CompareAndSwap(curr, tablepb.TableStateStopped) {
+			log.Info("Sink is closed",
+				zap.String("namespace", t.changefeed.Namespace),
+				zap.String("changefeed", t.changefeed.ID),
+				zap.Stringer("span", &t.span))
+			return
+		}
+	}
+}
+
+func (t *tableSinkWrapper) asyncClose() bool {
+	t.markAsClosing()
+	if t.asyncClearTableSink() {
+		t.markAsClosed()
+		return true
+	}
+	return false
+}
+
 func (t *tableSinkWrapper) close() {
-	t.state.Store(tablepb.TableStateStopping)
-	// table stopped state must be set after underlying sink is closed
-	defer t.state.Store(tablepb.TableStateStopped)
-	t.tableSink.Close()
-	log.Info("Sink is closed",
-		zap.Stringer("span", &t.span),
+	t.markAsClosing()
+	t.clearTableSink()
+	t.markAsClosed()
+}
+
+// Return true means the internal table sink has been initialized.
+func (t *tableSinkWrapper) initTableSink() bool {
+	t.tableSinkMu.Lock()
+	defer t.tableSinkMu.Unlock()
+	if t.tableSink == nil {
+		t.tableSink = t.tableSinkCreater()
+		return t.tableSink != nil
+	}
+	return true
+}
+
+func (t *tableSinkWrapper) asyncClearTableSink() bool {
+	t.tableSinkMu.Lock()
+	defer t.tableSinkMu.Unlock()
+	if t.tableSink != nil {
+		if !t.tableSink.AsyncClose() {
+			return false
+		}
+		checkpointTs := t.tableSink.GetCheckpointTs()
+		if t.tableSinkCheckpointTs.Less(checkpointTs) {
+			t.tableSinkCheckpointTs = checkpointTs
+		}
+		t.tableSink = nil
+	}
+	return true
+}
+
+func (t *tableSinkWrapper) clearTableSink() {
+	t.tableSinkMu.Lock()
+	defer t.tableSinkMu.Unlock()
+	if t.tableSink != nil {
+		t.tableSink.Close()
+		checkpointTs := t.tableSink.GetCheckpointTs()
+		if t.tableSinkCheckpointTs.Less(checkpointTs) {
+			t.tableSinkCheckpointTs = checkpointTs
+		}
+		t.tableSink = nil
+	}
+}
+
+// When the attached sink fail, there can be some events that have already been
+// committed at downstream but we don't know. So we need to update `replicateTs`
+// of the table so that we can re-send those events later.
+func (t *tableSinkWrapper) restart(ctx context.Context) (err error) {
+	if t.replicateTs, err = t.genReplicateTs(ctx); err != nil {
+		return errors.Trace(err)
+	}
+	log.Info("Sink is restarted",
 		zap.String("namespace", t.changefeed.Namespace),
-		zap.String("changefeed", t.changefeed.ID))
+		zap.String("changefeed", t.changefeed.ID),
+		zap.Stringer("span", &t.span),
+		zap.Uint64("replicateTs", t.replicateTs))
+	return nil
 }
 
 func (t *tableSinkWrapper) updateRangeEventCounts(eventCount rangeEventCount) {
@@ -395,4 +524,24 @@ func splitUpdateEvent(
 	insertEvent.Row.PreColumns = nil
 
 	return &deleteEvent, &insertEvent, nil
+}
+
+func genReplicateTs(ctx context.Context, pdClient pd.Client) (model.Ts, error) {
+	backoffBaseDelayInMs := int64(100)
+	totalRetryDuration := 10 * time.Second
+	var replicateTs model.Ts
+	err := retry.Do(ctx, func() error {
+		phy, logic, err := pdClient.GetTS(ctx)
+		if err != nil {
+			return errors.Trace(err)
+		}
+		replicateTs = oracle.ComposeTS(phy, logic)
+		return nil
+	}, retry.WithBackoffBaseDelay(backoffBaseDelayInMs),
+		retry.WithTotalRetryDuratoin(totalRetryDuration),
+		retry.WithIsRetryableErr(cerrors.IsRetryableError))
+	if err != nil {
+		return model.Ts(0), errors.Trace(err)
+	}
+	return replicateTs, nil
 }

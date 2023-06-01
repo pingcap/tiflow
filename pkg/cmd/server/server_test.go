@@ -124,7 +124,6 @@ func TestParseCfg(t *testing.T) {
 		"--cert", "bb",
 		"--key", "cc",
 		"--cert-allowed-cn", "dd,ee",
-		"--sorter-max-memory-percentage", "70",
 		"--sort-dir", "/tmp/just_a_test",
 	}))
 
@@ -152,8 +151,9 @@ func TestParseCfg(t *testing.T) {
 		OwnerFlushInterval:     config.TomlDuration(150 * time.Millisecond),
 		ProcessorFlushInterval: config.TomlDuration(150 * time.Millisecond),
 		Sorter: &config.SorterConfig{
-			MaxMemoryPercentage: 70,
 			SortDir:             config.DefaultSortDir,
+			CacheSizeInMB:       128,
+			MaxMemoryPercentage: 10,
 		},
 		Security: &config.SecurityConfig{
 			CertPath:      "bb",
@@ -167,7 +167,6 @@ func TestParseCfg(t *testing.T) {
 			RegionRetryDuration: config.TomlDuration(time.Minute),
 		},
 		Debug: &config.DebugConfig{
-			EnableKafkaSinkV2: false,
 			DB: &config.DBConfig{
 				Count:                       8,
 				Concurrency:                 128,
@@ -192,6 +191,8 @@ func TestParseCfg(t *testing.T) {
 				ServerAckInterval:            config.TomlDuration(time.Millisecond * 100),
 				ServerWorkerPoolSize:         4,
 				MaxRecvMsgSize:               256 * 1024 * 1024,
+				KeepAliveTimeout:             config.TomlDuration(time.Second * 10),
+				KeepAliveTime:                config.TomlDuration(time.Second * 30),
 			},
 			Scheduler: &config.SchedulerConfig{
 				HeartbeatTick:        2,
@@ -201,7 +202,8 @@ func TestParseCfg(t *testing.T) {
 				AddTableBatchSize:    50,
 			},
 		},
-		ClusterID: "default",
+		ClusterID:           "default",
+		MaxMemoryPercentage: config.DefaultMaxMemoryPercentage,
 	}, o.serverConfig)
 }
 
@@ -230,14 +232,14 @@ max-days = 1
 max-backups = 1
 
 [sorter]
-max-memory-percentage = 3
 sort-dir = "/tmp/just_a_test"
+cache-size-in-mb = 8
+max-memory-percentage = 3
 
 [kv-client]
 region-retry-duration = "3s"
 
 [debug]
-enable-kafka-sink-v2 = true
 [debug.db]
 count = 5
 concurrency = 6
@@ -301,8 +303,9 @@ check-balance-interval = "10s"
 		OwnerFlushInterval:     config.TomlDuration(600 * time.Millisecond),
 		ProcessorFlushInterval: config.TomlDuration(600 * time.Millisecond),
 		Sorter: &config.SorterConfig{
-			MaxMemoryPercentage: 3,
 			SortDir:             config.DefaultSortDir,
+			CacheSizeInMB:       8,
+			MaxMemoryPercentage: 3,
 		},
 		Security: &config.SecurityConfig{},
 		KVClient: &config.KVClientConfig{
@@ -312,7 +315,6 @@ check-balance-interval = "10s"
 			RegionRetryDuration: config.TomlDuration(3 * time.Second),
 		},
 		Debug: &config.DebugConfig{
-			EnableKafkaSinkV2: true,
 			DB: &config.DBConfig{
 				Count:                       5,
 				Concurrency:                 6,
@@ -336,6 +338,8 @@ check-balance-interval = "10s"
 				ServerAckInterval:            config.TomlDuration(1 * time.Second),
 				ServerWorkerPoolSize:         16,
 				MaxRecvMsgSize:               4,
+				KeepAliveTimeout:             config.TomlDuration(time.Second * 10),
+				KeepAliveTime:                config.TomlDuration(time.Second * 30),
 			},
 			Scheduler: &config.SchedulerConfig{
 				HeartbeatTick:        3,
@@ -345,7 +349,8 @@ check-balance-interval = "10s"
 				AddTableBatchSize:    50,
 			},
 		},
-		ClusterID: "default",
+		ClusterID:           "default",
+		MaxMemoryPercentage: config.DefaultMaxMemoryPercentage,
 	}, o.serverConfig)
 }
 
@@ -374,8 +379,9 @@ max-days = 1
 max-backups = 1
 
 [sorter]
-max-memory-percentage = 3
 sort-dir = "/tmp/just_a_test"
+cache-size-in-mb = 8
+max-memory-percentage = 3
 
 [security]
 ca-path = "aa"
@@ -400,7 +406,6 @@ cert-allowed-cn = ["dd","ee"]
 		"--owner-flush-interval", "150ms",
 		"--processor-flush-interval", "150ms",
 		"--ca", "",
-		"--sorter-max-memory-percentage", "70",
 		"--config", configPath,
 	}))
 
@@ -428,8 +433,9 @@ cert-allowed-cn = ["dd","ee"]
 		OwnerFlushInterval:     config.TomlDuration(150 * time.Millisecond),
 		ProcessorFlushInterval: config.TomlDuration(150 * time.Millisecond),
 		Sorter: &config.SorterConfig{
-			MaxMemoryPercentage: 70,
 			SortDir:             config.DefaultSortDir,
+			CacheSizeInMB:       8,
+			MaxMemoryPercentage: 3,
 		},
 		Security: &config.SecurityConfig{
 			CertPath:      "bb",
@@ -443,7 +449,6 @@ cert-allowed-cn = ["dd","ee"]
 			RegionRetryDuration: config.TomlDuration(time.Minute),
 		},
 		Debug: &config.DebugConfig{
-			EnableKafkaSinkV2: false,
 			DB: &config.DBConfig{
 				Count:                       8,
 				Concurrency:                 128,
@@ -468,6 +473,8 @@ cert-allowed-cn = ["dd","ee"]
 				ServerAckInterval:            config.TomlDuration(time.Millisecond * 100),
 				ServerWorkerPoolSize:         4,
 				MaxRecvMsgSize:               256 * 1024 * 1024,
+				KeepAliveTimeout:             config.TomlDuration(time.Second * 10),
+				KeepAliveTime:                config.TomlDuration(time.Second * 30),
 			},
 			Scheduler: &config.SchedulerConfig{
 				HeartbeatTick:        2,
@@ -477,11 +484,12 @@ cert-allowed-cn = ["dd","ee"]
 				AddTableBatchSize:    50,
 			},
 		},
-		ClusterID: "default",
+		ClusterID:           "default",
+		MaxMemoryPercentage: config.DefaultMaxMemoryPercentage,
 	}, o.serverConfig)
 }
 
-func TestDecodeUnkownDebugCfg(t *testing.T) {
+func TestDecodeUnknownDebugCfg(t *testing.T) {
 	tmpDir := t.TempDir()
 	configPath := filepath.Join(tmpDir, "ticdc.toml")
 	configContent := `
@@ -504,7 +512,6 @@ unknown3 = 3
 	err = o.validate()
 	require.Nil(t, err)
 	require.Equal(t, &config.DebugConfig{
-		EnableKafkaSinkV2: false,
 		DB: &config.DBConfig{
 			Count:                       8,
 			Concurrency:                 128,
@@ -529,6 +536,8 @@ unknown3 = 3
 			ServerAckInterval:            config.TomlDuration(time.Millisecond * 100),
 			ServerWorkerPoolSize:         4,
 			MaxRecvMsgSize:               256 * 1024 * 1024,
+			KeepAliveTimeout:             config.TomlDuration(time.Second * 10),
+			KeepAliveTime:                config.TomlDuration(time.Second * 30),
 		},
 		Scheduler: &config.SchedulerConfig{
 			HeartbeatTick:        2,

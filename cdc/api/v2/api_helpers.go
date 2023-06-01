@@ -15,6 +15,7 @@ package v2
 
 import (
 	"context"
+	"crypto/tls"
 	"net/url"
 	"strings"
 	"time"
@@ -33,14 +34,23 @@ import (
 	"github.com/pingcap/tiflow/pkg/filter"
 	"github.com/pingcap/tiflow/pkg/security"
 	"github.com/pingcap/tiflow/pkg/txnutil/gc"
+	"github.com/pingcap/tiflow/pkg/util"
 	"github.com/pingcap/tiflow/pkg/version"
 	"github.com/r3labs/diff"
 	"github.com/tikv/client-go/v2/oracle"
 	pd "github.com/tikv/pd/client"
+	"go.etcd.io/etcd/client/pkg/v3/logutil"
+	clientv3 "go.etcd.io/etcd/client/v3"
 	"go.uber.org/zap"
+	"go.uber.org/zap/zapcore"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/backoff"
 )
+
+// RegisterImportTaskPrefix denotes the key prefix associated with the entries
+// containning import/restore information in the embedded Etcd of the
+// upstream PD.
+const RegisterImportTaskPrefix = "/tidb/brie/import"
 
 // APIV2Helpers is a collections of helper functions of OpenAPIV2.
 // Defining it as an interface to make APIs more testable.
@@ -88,6 +98,13 @@ type APIV2Helpers interface {
 		pdAddrs []string,
 		credential *security.Credential,
 	) (pd.Client, error)
+
+	// getEtcdClient returns an Etcd client given the PD endpoints and
+	// tls config
+	getEtcdClient(
+		pdAddrs []string,
+		tlsConfig *tls.Config,
+	) (*clientv3.Client, error)
 
 	// getKVCreateTiStore wraps kv.createTiStore method to increase testability
 	createTiStore(
@@ -139,7 +156,7 @@ func (APIV2HelpersImpl) verifyCreateChangefeedConfig(
 	}
 
 	cfStatus, err := statusProvider.GetChangeFeedStatus(ctx,
-		model.DefaultChangeFeedID(cfg.ID))
+		model.ChangeFeedID{Namespace: cfg.Namespace, ID: cfg.ID})
 	if err != nil && cerror.ErrChangeFeedNotExists.NotEqual(err) {
 		return nil, err
 	}
@@ -163,7 +180,7 @@ func (APIV2HelpersImpl) verifyCreateChangefeedConfig(
 		ctx,
 		pdClient,
 		ensureGCServiceID,
-		model.DefaultChangeFeedID(cfg.ID),
+		model.ChangeFeedID{Namespace: cfg.Namespace, ID: cfg.ID},
 		ensureTTL, cfg.StartTs); err != nil {
 		if !cerror.ErrStartTsBeforeGC.Equal(err) {
 			return nil, cerror.ErrPDEtcdAPIError.Wrap(err)
@@ -197,14 +214,18 @@ func (APIV2HelpersImpl) verifyCreateChangefeedConfig(
 
 		protocol := sinkURIParsed.Query().Get(config.ProtocolKey)
 		if protocol != "" {
-			replicaCfg.Sink.Protocol = protocol
+			replicaCfg.Sink.Protocol = util.AddressOf(protocol)
 		}
 		for _, fp := range config.ForceEnableOldValueProtocols {
-			if replicaCfg.Sink.Protocol == fp {
+			if util.GetOrZero(replicaCfg.Sink.Protocol) == fp {
 				log.Warn(
 					"Attempting to replicate without old value enabled. "+
 						"CDC will enable old value and continue.",
-					zap.String("protocol", replicaCfg.Sink.Protocol))
+					zap.String(
+						"protocol",
+						util.GetOrZero(replicaCfg.Sink.Protocol),
+					),
+				)
 				replicaCfg.EnableOldValue = true
 				break
 			}
@@ -281,6 +302,7 @@ func (h APIV2HelpersImpl) verifyUpstream(ctx context.Context,
 		return cerror.ErrUpstreamMissMatch.
 			GenWithStackByArgs(cfInfo.UpstreamID, pdClient.GetClusterID(ctx))
 	}
+
 	return nil
 }
 
@@ -411,7 +433,7 @@ func (APIV2HelpersImpl) verifyResumeChangefeedConfig(ctx context.Context,
 		ctx,
 		pdClient,
 		gcServiceID,
-		model.DefaultChangeFeedID(changefeedID.ID),
+		changefeedID,
 		gcTTL, checkpointTs)
 	if err != nil {
 		if !cerror.ErrStartTsBeforeGC.Equal(err) {
@@ -452,6 +474,41 @@ func (APIV2HelpersImpl) getPDClient(ctx context.Context,
 		return nil, cerror.WrapError(cerror.ErrAPIGetPDClientFailed, errors.Trace(err))
 	}
 	return pdClient, nil
+}
+
+func (h APIV2HelpersImpl) getEtcdClient(
+	pdAddrs []string, tlsCfg *tls.Config,
+) (*clientv3.Client, error) {
+	conf := config.GetGlobalServerConfig()
+	grpcTLSOption, err := conf.Security.ToGRPCDialOption()
+	if err != nil {
+		return nil, err
+	}
+	logConfig := &logutil.DefaultZapLoggerConfig
+	logConfig.Level = zap.NewAtomicLevelAt(zapcore.ErrorLevel)
+	return clientv3.New(
+		clientv3.Config{
+			Endpoints:   pdAddrs,
+			TLS:         tlsCfg,
+			LogConfig:   logConfig,
+			DialTimeout: 5 * time.Second,
+			DialOptions: []grpc.DialOption{
+				grpcTLSOption,
+				grpc.WithBlock(),
+				grpc.WithConnectParams(
+					grpc.ConnectParams{
+						Backoff: backoff.Config{
+							BaseDelay:  time.Second,
+							Multiplier: 1.1,
+							Jitter:     0.1,
+							MaxDelay:   3 * time.Second,
+						},
+						MinConnectTimeout: 3 * time.Second,
+					},
+				),
+			},
+		},
+	)
 }
 
 // getTiStore wrap the kv.createTiStore method to increase testability

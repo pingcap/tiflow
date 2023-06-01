@@ -147,7 +147,7 @@ def create_noshard_task_success(task_name, tartget_table_name=""):
     print("create_noshard_task_success resp=", resp.json())
     assert resp.status_code == 201
 
-def create_incremental_task_with_gitd_success(task_name,binlog_name1,binlog_pos1,binlog_gtid1,binlog_name2,binlog_pos2,binlog_gtid2):
+def create_incremental_task_with_gtid_success(task_name,binlog_name1,binlog_pos1,binlog_gtid1,binlog_name2,binlog_pos2,binlog_gtid2):
     task = {
         "name": task_name,
         "task_mode": "incremental",
@@ -205,7 +205,7 @@ def create_incremental_task_with_gitd_success(task_name,binlog_name1,binlog_pos1
         }
 
     resp = requests.post(url=API_ENDPOINT, json={"task": task})
-    print("create_incremental_task_with_gitd_success resp=", resp.json())
+    print("create_incremental_task_with_gtid_success resp=", resp.json())
     assert resp.status_code == 201
 
 def create_shard_task_success():
@@ -703,7 +703,7 @@ if __name__ == "__main__":
         "create_task_failed": create_task_failed,
         "create_noshard_task_success": create_noshard_task_success,
         "create_shard_task_success": create_shard_task_success,
-        "create_incremental_task_with_gitd_success": create_incremental_task_with_gitd_success,
+        "create_incremental_task_with_gtid_success": create_incremental_task_with_gtid_success,
         "delete_task_failed": delete_task_failed,
         "delete_task_success": delete_task_success,
         "delete_task_with_force_success": delete_task_with_force_success,

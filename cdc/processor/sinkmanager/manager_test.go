@@ -15,9 +15,12 @@ package sinkmanager
 
 import (
 	"context"
+	"math"
 	"testing"
 	"time"
 
+	"github.com/pingcap/failpoint"
+	"github.com/pingcap/log"
 	"github.com/pingcap/tiflow/cdc/model"
 	"github.com/pingcap/tiflow/cdc/processor/sourcemanager/engine"
 	"github.com/pingcap/tiflow/cdc/processor/tablepb"
@@ -100,15 +103,14 @@ func TestAddTable(t *testing.T) {
 	t.Parallel()
 
 	ctx, cancel := context.WithCancel(context.Background())
-	defer cancel()
-
 	changefeedInfo := getChangefeedInfo()
 	manager, _, _ := CreateManagerWithMemEngine(t, ctx, model.DefaultChangeFeedID("1"),
 		changefeedInfo, make(chan error, 1))
 	defer func() {
-		err := manager.Close()
-		require.NoError(t, err)
+		cancel()
+		manager.Close()
 	}()
+
 	span := spanz.TableIDToComparableSpan(1)
 	manager.AddTable(span, 1, 100)
 	tableSink, ok := manager.tableSinks.Load(span)
@@ -129,15 +131,14 @@ func TestRemoveTable(t *testing.T) {
 	t.Parallel()
 
 	ctx, cancel := context.WithCancel(context.Background())
-	defer cancel()
-
 	changefeedInfo := getChangefeedInfo()
 	manager, _, e := CreateManagerWithMemEngine(t, ctx, model.DefaultChangeFeedID("1"),
 		changefeedInfo, make(chan error, 1))
 	defer func() {
-		err := manager.Close()
-		require.NoError(t, err)
+		cancel()
+		manager.Close()
 	}()
+
 	span := spanz.TableIDToComparableSpan(1)
 	manager.AddTable(span, 1, 100)
 	tableSink, ok := manager.tableSinks.Load(span)
@@ -148,12 +149,16 @@ func TestRemoveTable(t *testing.T) {
 	addTableAndAddEventsToSortEngine(t, e, span)
 	manager.UpdateBarrierTs(4, nil)
 	manager.UpdateReceivedSorterResolvedTs(span, 5)
-
+	manager.schemaStorage.AdvanceResolvedTs(5)
 	// Check all the events are sent to sink and record the memory usage.
 	require.Eventually(t, func() bool {
-		return manager.sinkMemQuota.GetUsedBytes() == 872
+		return manager.sinkMemQuota.GetUsedBytes() == 904
 	}, 5*time.Second, 10*time.Millisecond)
 
+	// Call this function times to test the idempotence.
+	manager.AsyncStopTable(span)
+	manager.AsyncStopTable(span)
+	manager.AsyncStopTable(span)
 	manager.AsyncStopTable(span)
 	require.Eventually(t, func() bool {
 		state, ok := manager.GetTableState(span)
@@ -172,20 +177,20 @@ func TestGenerateTableSinkTaskWithBarrierTs(t *testing.T) {
 	t.Parallel()
 
 	ctx, cancel := context.WithCancel(context.Background())
-	defer cancel()
-
 	changefeedInfo := getChangefeedInfo()
 	manager, _, e := CreateManagerWithMemEngine(t, ctx, model.DefaultChangeFeedID("1"),
 		changefeedInfo, make(chan error, 1))
 	defer func() {
-		err := manager.Close()
-		require.NoError(t, err)
+		cancel()
+		manager.Close()
 	}()
+
 	span := spanz.TableIDToComparableSpan(1)
 	manager.AddTable(span, 1, 100)
 	addTableAndAddEventsToSortEngine(t, e, span)
 	manager.UpdateBarrierTs(4, nil)
 	manager.UpdateReceivedSorterResolvedTs(span, 5)
+	manager.schemaStorage.AdvanceResolvedTs(5)
 	err := manager.StartTable(span, 0)
 	require.NoError(t, err)
 
@@ -201,15 +206,14 @@ func TestGenerateTableSinkTaskWithResolvedTs(t *testing.T) {
 	t.Parallel()
 
 	ctx, cancel := context.WithCancel(context.Background())
-	defer cancel()
-
 	changefeedInfo := getChangefeedInfo()
 	manager, _, e := CreateManagerWithMemEngine(t, ctx, model.DefaultChangeFeedID("1"),
 		changefeedInfo, make(chan error, 1))
 	defer func() {
-		err := manager.Close()
-		require.NoError(t, err)
+		cancel()
+		manager.Close()
 	}()
+
 	span := spanz.TableIDToComparableSpan(1)
 	manager.AddTable(span, 1, 100)
 	addTableAndAddEventsToSortEngine(t, e, span)
@@ -217,6 +221,7 @@ func TestGenerateTableSinkTaskWithResolvedTs(t *testing.T) {
 	// So there is possibility that the resolved ts is smaller than the global barrier ts.
 	manager.UpdateBarrierTs(4, nil)
 	manager.UpdateReceivedSorterResolvedTs(span, 3)
+	manager.schemaStorage.AdvanceResolvedTs(4)
 	err := manager.StartTable(span, 0)
 	require.NoError(t, err)
 
@@ -232,21 +237,21 @@ func TestGetTableStatsToReleaseMemQuota(t *testing.T) {
 	t.Parallel()
 
 	ctx, cancel := context.WithCancel(context.Background())
-	defer cancel()
-
 	changefeedInfo := getChangefeedInfo()
 	manager, _, e := CreateManagerWithMemEngine(t, ctx, model.DefaultChangeFeedID("1"),
 		changefeedInfo, make(chan error, 1))
 	defer func() {
-		err := manager.Close()
-		require.NoError(t, err)
+		cancel()
+		manager.Close()
 	}()
+
 	span := spanz.TableIDToComparableSpan(1)
 	manager.AddTable(span, 1, 100)
 	addTableAndAddEventsToSortEngine(t, e, span)
 
 	manager.UpdateBarrierTs(4, nil)
 	manager.UpdateReceivedSorterResolvedTs(span, 5)
+	manager.schemaStorage.AdvanceResolvedTs(5)
 	err := manager.StartTable(span, 0)
 	require.NoError(t, err)
 
@@ -260,15 +265,14 @@ func TestDoNotGenerateTableSinkTaskWhenTableIsNotReplicating(t *testing.T) {
 	t.Parallel()
 
 	ctx, cancel := context.WithCancel(context.Background())
-	defer cancel()
-
 	changefeedInfo := getChangefeedInfo()
 	manager, _, e := CreateManagerWithMemEngine(t, ctx, model.DefaultChangeFeedID("1"),
 		changefeedInfo, make(chan error, 1))
 	defer func() {
-		err := manager.Close()
-		require.NoError(t, err)
+		cancel()
+		manager.Close()
 	}()
+
 	span := spanz.TableIDToComparableSpan(1)
 	manager.AddTable(span, 1, 100)
 	addTableAndAddEventsToSortEngine(t, e, span)
@@ -292,8 +296,8 @@ func TestClose(t *testing.T) {
 	manager, _, _ := CreateManagerWithMemEngine(t, ctx, model.DefaultChangeFeedID("1"),
 		changefeedInfo, make(chan error, 1))
 
-	err := manager.Close()
-	require.NoError(t, err)
+	cancel()
+	manager.Close()
 }
 
 // This could happen when closing the sink manager and source manager.
@@ -303,15 +307,52 @@ func TestUpdateReceivedSorterResolvedTsOfNonExistTable(t *testing.T) {
 	t.Parallel()
 
 	ctx, cancel := context.WithCancel(context.Background())
-	defer cancel()
-
 	changefeedInfo := getChangefeedInfo()
 	manager, _, _ := CreateManagerWithMemEngine(t, ctx, model.DefaultChangeFeedID("1"),
 		changefeedInfo, make(chan error, 1))
 	defer func() {
-		err := manager.Close()
-		require.NoError(t, err)
+		cancel()
+		manager.Close()
 	}()
 
 	manager.UpdateReceivedSorterResolvedTs(spanz.TableIDToComparableSpan(1), 1)
+}
+
+// Sink worker errors should cancel the sink manager correctly.
+func TestSinkManagerRunWithErrors(t *testing.T) {
+	t.Parallel()
+
+	ctx, cancel := context.WithCancel(context.Background())
+	errCh := make(chan error, 16)
+	changefeedInfo := getChangefeedInfo()
+	manager, source, _ := CreateManagerWithMemEngine(t, ctx, model.DefaultChangeFeedID("1"), changefeedInfo, errCh)
+	defer func() {
+		cancel()
+		manager.Close()
+	}()
+
+	_ = failpoint.Enable("github.com/pingcap/tiflow/cdc/processor/sinkmanager/SinkWorkerTaskError", "return")
+	defer func() {
+		_ = failpoint.Disable("github.com/pingcap/tiflow/cdc/processor/sinkmanager/SinkWorkerTaskError")
+	}()
+
+	span := spanz.TableIDToComparableSpan(1)
+
+	source.AddTable(span, "test", 100)
+	manager.AddTable(span, 100, math.MaxUint64)
+	manager.StartTable(span, 100)
+	source.Add(span, model.NewResolvedPolymorphicEvent(0, 101))
+	manager.UpdateReceivedSorterResolvedTs(span, 101)
+	manager.UpdateBarrierTs(101, nil)
+
+	timer := time.NewTimer(5 * time.Second)
+	select {
+	case <-errCh:
+		if !timer.Stop() {
+			<-timer.C
+		}
+		return
+	case <-timer.C:
+		log.Panic("must get an error instead of a timeout")
+	}
 }

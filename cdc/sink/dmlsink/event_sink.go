@@ -18,7 +18,7 @@ type EventSink[E TableEvent] interface {
 	// WriteEvents writes events to the sink.
 	// This is an asynchronously and thread-safe method.
 	WriteEvents(events ...*CallbackableEvent[E]) error
-	// Close closes the sink.
+	// Close closes the sink. Can be called with `WriteEvents` concurrently.
 	Close()
 	// The EventSink meets internal errors and has been dead already.
 	Dead() <-chan struct{}

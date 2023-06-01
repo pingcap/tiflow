@@ -2,12 +2,30 @@
 # otherwise it will not work correctly on other architectures.
 FROM amd64/centos:centos7 as downloader
 
+ARG BRANCH
+ENV BRANCH=$BRANCH
+
+ARG COMMUNITY
+ENV COMMUNITY=$COMMUNITY
+
+ARG VERSION
+ENV VERSION=$VERSION
+
+ARG OS
+ENV OS=$OS
+
+ARG ARCH
+ENV ARCH=$ARCH
+
 USER root
 WORKDIR /root/download
 
+# Installing dependencies.
+RUN yum install -y \
+	wget
 COPY ./scripts/download-integration-test-binaries.sh .
 # Download all binaries into bin dir.
-RUN ./download-integration-test-binaries.sh master
+RUN ./download-integration-test-binaries.sh $BRANCH $COMMUNITY $VERSION $OS $ARCH
 RUN ls ./bin
 
 # Download go into /usr/local dir.
@@ -35,7 +53,8 @@ RUN yum install -y \
     musl-dev \
 	sudo \
 	python3 \
-    psmisc
+    psmisc \
+    procps
 RUN wget http://dl.fedoraproject.org/pub/epel/epel-release-latest-7.noarch.rpm
 RUN yum install -y epel-release-latest-7.noarch.rpm
 RUN yum --enablerepo=epel install -y s3cmd
@@ -44,6 +63,11 @@ RUN rpm -ivh https://repo.mysql.com/mysql57-community-release-el7-11.noarch.rpm
 # See: https://support.cpanel.net/hc/en-us/articles/4419382481815?input_string=gpg+keys+problem+with+mysql+5.7
 RUN rpm --import https://repo.mysql.com/RPM-GPG-KEY-mysql-2022
 RUN yum install mysql-community-client.x86_64 -y
+
+# install java to run the schema regsitry for the avro case.
+RUN yum install -y \
+    java-1.8.0-openjdk \
+    java-1.8.0-openjdk-devel
 
 # Copy go form downloader.
 COPY --from=downloader /usr/local/go /usr/local/go
@@ -54,9 +78,6 @@ ENV PATH $GOPATH/bin:$GOROOT/bin:$PATH
 WORKDIR /go/src/github.com/pingcap/tiflow
 COPY . .
 
-# Clean bin dir and build TiCDC.
-# We always need to clean before we build, please don't adjust its order.
-RUN make clean
-RUN make integration_test_build cdc
+RUN --mount=type=cache,target=/root/.cache/go-build,target=/go/pkg/mod make integration_test_build cdc
 COPY --from=downloader /root/download/bin/* ./bin/
-RUN make check_third_party_binary
+RUN --mount=type=cache,target=/root/.cache/go-build,target=/go/pkg/mod make check_third_party_binary

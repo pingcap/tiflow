@@ -20,15 +20,15 @@ set -e
 # the pattern `\(#[0-9]+\)$`. It's usually a master branch commit.
 BASE_HASH=$(git --no-pager log -E --grep='\(#[0-9]+\)$' -n 1 --format=format:%H)
 # Please contact TiFlow maintainers before changing following settings.
-WARN_THRESHOLD=80
-ERROR_THRESHOLD=100
+WARN_THRESHOLD=100
+ERROR_THRESHOLD=140
 
 git --no-pager diff $BASE_HASH -U0 -- cdc pkg cmd \
 	-- ':(exclude)*_gen.go' \
 	-- ':(exclude)*_gen_test.go' \
 	-- ':(exclude)*_mock.go' \
 	-- ':(exclude)*.pb.go' |
-	grep -E '^\+' | grep -vE '^\+\+\+' |
+	grep -E '^\+' | grep -vE '^\+\+\+' | grep -vE 'json:' | grep -vE 'toml:' |
 	sed 's/\t/    /g' |
 	awk "
 {

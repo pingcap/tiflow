@@ -32,6 +32,7 @@ import (
 	"github.com/pingcap/tiflow/pkg/errors"
 	"github.com/pingcap/tiflow/pkg/redo"
 	"github.com/pingcap/tiflow/pkg/spanz"
+	"github.com/pingcap/tiflow/pkg/util"
 	"github.com/prometheus/client_golang/prometheus"
 	"go.uber.org/zap"
 )
@@ -42,9 +43,10 @@ var (
 )
 
 type redoManager interface {
+	util.Runnable
+
 	// Enabled returns whether the manager is enabled
 	Enabled() bool
-	Run(ctx context.Context) error
 }
 
 // DDLManager defines an interface that is used to manage ddl logs in owner.
@@ -53,6 +55,13 @@ type DDLManager interface {
 	EmitDDLEvent(ctx context.Context, ddl *model.DDLEvent) error
 	UpdateResolvedTs(ctx context.Context, resolvedTs uint64) error
 	GetResolvedTs() model.Ts
+}
+
+// NewDisabledDDLManager creates a disabled ddl Manager.
+func NewDisabledDDLManager() *ddlManager {
+	return &ddlManager{
+		logManager: &logManager{enabled: false},
+	}
 }
 
 // NewDDLManager creates a new ddl Manager.
@@ -249,10 +258,20 @@ func newLogManager(
 	return m, nil
 }
 
-func (m *logManager) Run(ctx context.Context) error {
-	defer m.close()
-	return m.bgUpdateLog(ctx)
+// Run implements pkg/util.Runnable.
+func (m *logManager) Run(ctx context.Context, _ ...chan<- error) error {
+	if m.Enabled() {
+		defer m.close()
+		return m.bgUpdateLog(ctx)
+	}
+	return nil
 }
+
+// WaitForReady implements pkg/util.Runnable.
+func (m *logManager) WaitForReady(_ context.Context) {}
+
+// Close implements pkg/util.Runnable.
+func (m *logManager) Close() {}
 
 // Enabled returns whether this log manager is enabled
 func (m *logManager) Enabled() bool {

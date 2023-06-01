@@ -14,7 +14,7 @@ MAX_RETRIES=20
 
 function run() {
 	# test kafka sink only in this case
-	if [ "$SINK_TYPE" == "mysql" ]; then
+	if [ "$SINK_TYPE" != "kafka" ]; then
 		return
 	fi
 
@@ -38,9 +38,9 @@ function run() {
 	run_sql "CREATE table kafka_sink_error_resume.t2(id int primary key auto_increment, val int);" ${UP_TIDB_HOST} ${UP_TIDB_PORT}
 	run_sql "INSERT INTO kafka_sink_error_resume.t1 VALUES ();"
 
-	ensure $MAX_RETRIES check_changefeed_state $pd_addr $changefeed_id "error" "kafka sink injected error" ""
+	ensure $MAX_RETRIES check_changefeed_status 127.0.0.1:8300 $changefeed_id "normal" "last_warning" "kafka sink injected error"
 	cdc cli changefeed resume --changefeed-id=$changefeed_id --pd=$pd_addr
-	ensure $MAX_RETRIES check_changefeed_state $pd_addr $changefeed_id "normal" "null" ""
+	ensure $MAX_RETRIES check_changefeed_status 127.0.0.1:8300 $changefeed_id "normal"
 
 	check_table_exists "kafka_sink_error_resume.t1" ${DOWN_TIDB_HOST} ${DOWN_TIDB_PORT}
 	check_table_exists "kafka_sink_error_resume.t2" ${DOWN_TIDB_HOST} ${DOWN_TIDB_PORT}

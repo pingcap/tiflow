@@ -26,15 +26,27 @@ import (
 	"github.com/pingcap/tiflow/cdc/model"
 	"github.com/pingcap/tiflow/cdc/sink/dmlsink"
 	"github.com/pingcap/tiflow/cdc/sink/util"
+	"github.com/pingcap/tiflow/pkg/chann"
 	"github.com/pingcap/tiflow/pkg/config"
 	"github.com/pingcap/tiflow/pkg/sink/cloudstorage"
 	"github.com/pingcap/tiflow/pkg/sink/codec/builder"
 	"github.com/stretchr/testify/require"
+	"golang.org/x/sync/errgroup"
 )
 
 func TestDeframenter(t *testing.T) {
+	t.Parallel()
+
 	ctx, cancel := context.WithCancel(context.Background())
-	defrag := newDefragmenter(ctx)
+	eg, egCtx := errgroup.WithContext(ctx)
+
+	inputCh := make(chan eventFragment)
+	outputCh := chann.NewAutoDrainChann[eventFragment]()
+	defrag := newDefragmenter(inputCh, []*chann.DrainableChann[eventFragment]{outputCh})
+	eg.Go(func() error {
+		return defrag.run(egCtx)
+	})
+
 	uri := "file:///tmp/test"
 	txnCnt := 50
 	sinkURI, err := url.Parse(uri)
@@ -58,7 +70,7 @@ func TestDeframenter(t *testing.T) {
 		go func(seq uint64) {
 			encoder := encoderBuilder.Build()
 			frag := eventFragment{
-				versionedTable: cloudstorage.VersionedTable{
+				versionedTable: cloudstorage.VersionedTableName{
 					TableNameWithPhysicTableID: model.TableName{
 						Schema:  "test",
 						Table:   "table1",
@@ -108,7 +120,7 @@ func TestDeframenter(t *testing.T) {
 			for _, msg := range frag.encodedMsgs {
 				msg.Key = []byte(strconv.Itoa(int(seq)))
 			}
-			defrag.registerFrag(frag)
+			inputCh <- frag
 		}(uint64(i + 1))
 	}
 
@@ -116,7 +128,7 @@ func TestDeframenter(t *testing.T) {
 LOOP:
 	for {
 		select {
-		case frag := <-defrag.orderedOut():
+		case frag := <-outputCh.Out():
 			for _, msg := range frag.encodedMsgs {
 				curSeq, err := strconv.Atoi(string(msg.Key))
 				require.Nil(t, err)
@@ -128,5 +140,5 @@ LOOP:
 		}
 	}
 	cancel()
-	defrag.close()
+	require.ErrorIs(t, eg.Wait(), context.Canceled)
 }

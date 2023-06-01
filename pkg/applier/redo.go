@@ -98,14 +98,13 @@ func (rac *RedoApplierConfig) toLogReaderConfig() (string, *reader.LogReaderConf
 	if err != nil {
 		return "", nil, errors.WrapError(errors.ErrConsistentStorage, err)
 	}
-	cfg := &reader.LogReaderConfig{
-		Dir:                uri.Path,
-		UseExternalStorage: redo.IsExternalStorage(uri.Scheme),
+	if redo.IsLocalStorage(uri.Scheme) {
+		uri.Scheme = "file"
 	}
-	if cfg.UseExternalStorage {
-		cfg.URI = *uri
-		// If use external storage as backend, applier will download redo logs to local dir.
-		cfg.Dir = rac.Dir
+	cfg := &reader.LogReaderConfig{
+		URI:                *uri,
+		Dir:                rac.Dir,
+		UseExternalStorage: redo.IsExternalStorage(uri.Scheme),
 	}
 	return uri.Scheme, cfg, nil
 }
@@ -309,6 +308,7 @@ func (ra *RedoApplier) applyRow(
 		tableSink := ra.sinkFactory.CreateTableSink(
 			model.DefaultChangeFeedID(applierChangefeed),
 			spanz.TableIDToComparableSpan(tableID),
+			checkpointTs,
 			prometheus.NewCounter(prometheus.CounterOpts{}),
 		)
 		ra.tableSinks[tableID] = tableSink

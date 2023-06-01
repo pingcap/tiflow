@@ -26,6 +26,7 @@ type pauseChangefeedOptions struct {
 	apiClient apiv2client.APIV2Interface
 
 	changefeedID string
+	namespace    string
 }
 
 // newPauseChangefeedOptions creates new options for the `cli changefeed pause` command.
@@ -36,6 +37,7 @@ func newPauseChangefeedOptions() *pauseChangefeedOptions {
 // addFlags receives a *cobra.Command reference and binds
 // flags related to template printing to it.
 func (o *pauseChangefeedOptions) addFlags(cmd *cobra.Command) {
+	cmd.PersistentFlags().StringVarP(&o.namespace, "namespace", "n", "default", "Replication task (changefeed) Namespace")
 	cmd.PersistentFlags().StringVarP(&o.changefeedID, "changefeed-id", "c", "", "Replication task (changefeed) ID")
 	_ = cmd.MarkPersistentFlagRequired("changefeed-id")
 }
@@ -54,7 +56,7 @@ func (o *pauseChangefeedOptions) complete(f factory.Factory) error {
 // run the `cli changefeed pause` command.
 func (o *pauseChangefeedOptions) run() error {
 	ctx := context.GetDefaultContext()
-	return o.apiClient.Changefeeds().Pause(ctx, o.changefeedID)
+	return o.apiClient.Changefeeds().Pause(ctx, o.namespace, o.changefeedID)
 }
 
 // newCmdPauseChangefeed creates the `cli changefeed pause` command.

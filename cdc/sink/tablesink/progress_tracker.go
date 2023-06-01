@@ -30,7 +30,7 @@ const (
 	// It used for closing the table sink.
 	waitingInterval = 100 * time.Millisecond
 	// warnDuration is the duration to warn the progress tracker is not closed.
-	warnDuration = 3 * time.Minute
+	warnDuration = 30 * time.Second
 	// A progressTracker contains several internal fixed-length buffers.
 	// NOTICE: the buffer size must be aligned to 8 bytes.
 	// It shouldn't be too large, otherwise it will consume too much memory.
@@ -69,9 +69,6 @@ type progressTracker struct {
 	// It means we do not advance anymore.
 	frozen bool
 
-	// closed is used to indicate the progress tracker is closed.
-	closed bool
-
 	// Used to generate the next eventID.
 	nextEventID uint64
 
@@ -87,6 +84,8 @@ type progressTracker struct {
 	resolvedTsCache []pendingResolvedTs
 
 	lastMinResolvedTs model.ResolvedTs
+
+	lastCheckClosed atomic.Int64
 }
 
 // newProgressTracker is used to create a new progress tracker.
@@ -145,9 +144,9 @@ func (r *progressTracker) addResolvedTs(resolvedTs model.ResolvedTs) {
 	r.mu.Lock()
 	defer r.mu.Unlock()
 
-	// NOTICE: We should **NOT** update the `lastMinResolvedTs` when tracker is closed or frozened.
+	// NOTICE: We should **NOT** update the `lastMinResolvedTs` when tracker is frozen.
 	// So there is no need to try to append the resolved ts to `resolvedTsCache`.
-	if r.frozen || r.closed {
+	if r.frozen {
 		return
 	}
 
@@ -224,8 +223,8 @@ func (r *progressTracker) advance() model.ResolvedTs {
 		for len(r.resolvedTsCache) > 0 {
 			cached := r.resolvedTsCache[0]
 			if cached.offset <= r.nextToResolvePos-1 {
-				// NOTICE: We should **NOT** update the `lastMinResolvedTs` when tracker is closed or frozened.
-				if !r.frozen && !r.closed {
+				// NOTICE: We should **NOT** update the `lastMinResolvedTs` when tracker is frozen.
+				if !r.frozen {
 					r.lastMinResolvedTs = cached.resolvedTs
 				}
 				r.resolvedTsCache = r.resolvedTsCache[1:]
@@ -264,39 +263,57 @@ func (r *progressTracker) trackingCount() int {
 func (r *progressTracker) freezeProcess() {
 	r.mu.Lock()
 	defer r.mu.Unlock()
-	r.frozen = true
+	if !r.frozen {
+		r.frozen = true
+		r.lastCheckClosed.Store(time.Now().Unix())
+	}
 }
 
 // close is used to close the progress tracker.
-func (r *progressTracker) close(backendDead <-chan struct{}) {
-	r.mu.Lock()
-	if !r.frozen {
-		log.Panic("the progress tracker should be frozen before closing")
-	}
-	r.closed = true
-	r.mu.Unlock()
-
-	blockTicker := time.NewTicker(warnDuration)
-	defer blockTicker.Stop()
-	// Used to block for loop for a while to prevent CPU spin.
+func (r *progressTracker) waitClosed(backendDead <-chan struct{}) {
 	waitingTicker := time.NewTicker(waitingInterval)
 	defer waitingTicker.Stop()
 	for {
 		select {
 		case <-backendDead:
-			// The backend is dead, stop waiting.
 			r.advance()
 			return
 		case <-waitingTicker.C:
-			r.advance()
-			if r.trackingCount() == 0 {
+			if r.doCheckClosed() {
 				return
 			}
-		case <-blockTicker.C:
-			log.Warn("Close process doesn't return in time, may be stuck",
-				zap.Stringer("span", &r.span),
-				zap.Int("trackingCount", r.trackingCount()),
-				zap.Any("lastMinResolvedTs", r.advance()))
 		}
 	}
+}
+
+func (r *progressTracker) checkClosed(backendDead <-chan struct{}) bool {
+	select {
+	case <-backendDead:
+		r.advance()
+		return true
+	default:
+		return r.doCheckClosed()
+	}
+}
+
+func (r *progressTracker) doCheckClosed() bool {
+	resolvedTs := r.advance()
+	trackingCount := r.trackingCount()
+	if trackingCount == 0 {
+		return true
+	}
+
+	now := time.Now().Unix()
+	lastCheck := r.lastCheckClosed.Load()
+	for now > lastCheck+int64(warnDuration.Seconds()) {
+		if r.lastCheckClosed.CompareAndSwap(lastCheck, now) {
+			log.Warn("Close table doesn't return in time, may be stuck",
+				zap.Stringer("span", &r.span),
+				zap.Int("trackingCount", trackingCount),
+				zap.Any("lastMinResolvedTs", resolvedTs))
+			break
+		}
+		lastCheck = r.lastCheckClosed.Load()
+	}
+	return false
 }

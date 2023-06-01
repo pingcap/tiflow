@@ -14,6 +14,7 @@
 package kafka
 
 import (
+	"context"
 	"crypto/tls"
 	"strings"
 	"time"
@@ -27,7 +28,7 @@ import (
 )
 
 // NewSaramaConfig return the default config and set the according version and metrics
-func NewSaramaConfig(o *Options) (*sarama.Config, error) {
+func NewSaramaConfig(ctx context.Context, o *Options) (*sarama.Config, error) {
 	config := sarama.NewConfig()
 	config.ClientID = o.ClientID
 
@@ -113,14 +114,19 @@ func NewSaramaConfig(o *Options) (*sarama.Config, error) {
 				return nil, errors.Trace(err)
 			}
 		}
+
+		config.Net.TLS.Config.InsecureSkipVerify = o.InsecureSkipVerify
 	}
 
-	completeSaramaSASLConfig(config, o)
+	err = completeSaramaSASLConfig(ctx, config, o)
+	if err != nil {
+		return nil, cerror.WrapError(cerror.ErrKafkaInvalidConfig, err)
+	}
 
 	return config, err
 }
 
-func completeSaramaSASLConfig(config *sarama.Config, o *Options) {
+func completeSaramaSASLConfig(ctx context.Context, config *sarama.Config, o *Options) error {
 	if o.SASL != nil && o.SASL.SASLMechanism != "" {
 		config.Net.SASL.Enable = true
 		config.Net.SASL.Mechanism = sarama.SASLMechanism(o.SASL.SASLMechanism)
@@ -150,6 +156,15 @@ func completeSaramaSASLConfig(config *sarama.Config, o *Options) {
 			case security.KeyTabAuth:
 				config.Net.SASL.GSSAPI.KeyTabPath = o.SASL.GSSAPI.KeyTabPath
 			}
+
+		case SASLTypeOAuth:
+			p, err := newTokenProvider(ctx, o)
+			if err != nil {
+				return errors.Trace(err)
+			}
+			config.Net.SASL.TokenProvider = p
 		}
 	}
+
+	return nil
 }

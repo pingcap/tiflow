@@ -107,8 +107,8 @@ func (w *redoWorker) handleTask(ctx context.Context, task *redoTask) (finalErr e
 			zap.Any("lowerBound", lowerBound),
 			zap.Any("upperBound", upperBound),
 			zap.Any("lastPos", advancer.lastPos),
-			zap.Float64("lag", time.Since(
-				oracle.GetTimeFromTS(advancer.lastPos.CommitTs)).Seconds()))
+			zap.Float64("lag", time.Since(oracle.GetTimeFromTS(advancer.lastPos.CommitTs)).Seconds()),
+			zap.Error(finalErr))
 
 		if finalErr == nil {
 			// Otherwise we can't ensure all events before `lastPos` are emitted.
@@ -181,8 +181,5 @@ func (w *redoWorker) handleTask(ctx context.Context, task *redoTask) (finalErr e
 
 	// Even if task is canceled we still call this again, to avoid something
 	// are left and leak forever.
-	return advancer.advance(
-		ctx,
-		cachedSize,
-	)
+	return advancer.advance(ctx, cachedSize)
 }
