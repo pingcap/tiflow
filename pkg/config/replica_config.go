@@ -106,11 +106,15 @@ func (d *Duration) UnmarshalText(text []byte) error {
 type ReplicaConfig replicaConfig
 
 type replicaConfig struct {
-	MemoryQuota      uint64 `toml:"memory-quota" json:"memory-quota"`
-	CaseSensitive    bool   `toml:"case-sensitive" json:"case-sensitive"`
-	EnableOldValue   bool   `toml:"enable-old-value" json:"enable-old-value"`
-	ForceReplicate   bool   `toml:"force-replicate" json:"force-replicate"`
-	CheckGCSafePoint bool   `toml:"check-gc-safe-point" json:"check-gc-safe-point"`
+	MemoryQuota    uint64 `toml:"memory-quota" json:"memory-quota"`
+	CaseSensitive  bool   `toml:"case-sensitive" json:"case-sensitive"`
+	EnableOldValue bool   `toml:"enable-old-value" json:"enable-old-value"`
+
+	// ForceReplicate if set to true, should only work in the following case:
+	// 1. MySQL sink, and `EnableOldValue` is set to true.
+	// 2. Kafka / storage sink, `EnableOldValue` is correctly set by the using encoding protocol requirement.
+	ForceReplicate   bool `toml:"force-replicate" json:"force-replicate"`
+	CheckGCSafePoint bool `toml:"check-gc-safe-point" json:"check-gc-safe-point"`
 	// EnableSyncPoint is only available when the downstream is a Database.
 	EnableSyncPoint *bool `toml:"enable-sync-point" json:"enable-sync-point,omitempty"`
 	// IgnoreIneligibleTable is used to store the user's config when creating a changefeed.
@@ -198,11 +202,10 @@ func (c *ReplicaConfig) ValidateAndAdjust(sinkURI *url.URL) error { // check sin
 		if err != nil {
 			return err
 		}
-		c.AdjustEnableOldValue(sinkURI)
-		if c.ForceReplicate && !c.EnableOldValue {
-			log.Error("force replicate, old value feature is disabled",
-				zap.String("protocol", util.GetOrZero(c.Sink.Protocol)))
-			return cerror.ErrOldValueNotEnabled.GenWithStackByArgs()
+
+		err = c.AdjustEnableOldValueAndVerifyForceReplicate(sinkURI)
+		if err != nil {
+			return err
 		}
 	}
 
@@ -287,16 +290,10 @@ func isSinkCompatibleWithSpanReplication(u *url.URL) bool {
 }
 
 // AdjustEnableOldValue adjust the old value configuration by the sink scheme and encoding protocol
-func (c *ReplicaConfig) AdjustEnableOldValue(sinkURI *url.URL) {
-	if sink.IsMySQLCompatibleScheme(strings.ToLower(sinkURI.Scheme)) {
+func (c *ReplicaConfig) AdjustEnableOldValue(scheme, protocol string) {
+	if sink.IsMySQLCompatibleScheme(scheme) {
 		return
 	}
-
-	protocol := sinkURI.Query().Get(ProtocolKey)
-	if protocol != "" {
-		c.Sink.Protocol = util.AddressOf(protocol)
-	}
-	protocol = util.GetOrZero(c.Sink.Protocol)
 
 	if c.EnableOldValue {
 		_, ok := ForceDisableOldValueProtocols[protocol]
@@ -314,4 +311,27 @@ func (c *ReplicaConfig) AdjustEnableOldValue(sinkURI *url.URL) {
 			"CDC will enable old value and continue.", zap.String("protocol", protocol))
 		c.EnableOldValue = true
 	}
+}
+
+func (c *ReplicaConfig) AdjustEnableOldValueAndVerifyForceReplicate(sinkURI *url.URL) error {
+	scheme := strings.ToLower(sinkURI.Scheme)
+	protocol := sinkURI.Query().Get(ProtocolKey)
+	if protocol != "" {
+		c.Sink.Protocol = util.AddressOf(protocol)
+	}
+	protocol = util.GetOrZero(c.Sink.Protocol)
+	c.AdjustEnableOldValue(scheme, protocol)
+
+	if !c.ForceReplicate {
+		return nil
+	}
+
+	if sink.IsMySQLCompatibleScheme(scheme) {
+		if !c.EnableOldValue {
+			log.Error("force replicate, old value feature is disabled for the changefeed using mysql sink")
+			return cerror.ErrOldValueNotEnabled.GenWithStackByArgs()
+		}
+	}
+
+	return nil
 }

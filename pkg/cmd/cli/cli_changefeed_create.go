@@ -29,7 +29,6 @@ import (
 	"github.com/pingcap/tiflow/pkg/cmd/factory"
 	"github.com/pingcap/tiflow/pkg/cmd/util"
 	"github.com/pingcap/tiflow/pkg/config"
-	cerror "github.com/pingcap/tiflow/pkg/errors"
 	"github.com/pingcap/tiflow/pkg/filter"
 	putil "github.com/pingcap/tiflow/pkg/util"
 	"github.com/spf13/cobra"
@@ -156,12 +155,10 @@ func (o *createChangefeedOptions) completeReplicaCfg(
 	if err != nil {
 		return err
 	}
-	cfg.AdjustEnableOldValue(uri)
 
-	if cfg.ForceReplicate && !cfg.EnableOldValue {
-		log.Error("force replicate, old value feature is disabled",
-			zap.String("protocol", putil.GetOrZero(cfg.Sink.Protocol)))
-		return cerror.ErrOldValueNotEnabled.GenWithStackByArgs()
+	err = cfg.AdjustEnableOldValueAndVerifyForceReplicate(uri)
+	if err != nil {
+		return err
 	}
 
 	for _, rules := range cfg.Sink.DispatchRules {

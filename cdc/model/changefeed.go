@@ -18,6 +18,7 @@ import (
 	"math"
 	"net/url"
 	"regexp"
+	"strings"
 	"time"
 
 	"github.com/pingcap/errors"
@@ -468,7 +469,9 @@ func (info *ChangeFeedInfo) fixEnableOldValue() {
 		log.Warn("parse sink URI failed", zap.Error(err))
 		return
 	}
-	info.Config.AdjustEnableOldValue(uri)
+	scheme := strings.ToLower(uri.Scheme)
+	protocol := util.GetOrZero(info.Config.Sink.Protocol)
+	info.Config.AdjustEnableOldValue(scheme, protocol)
 }
 
 func (info *ChangeFeedInfo) fixMQSinkProtocol() {
