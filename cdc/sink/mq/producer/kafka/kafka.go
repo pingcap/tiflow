@@ -405,13 +405,14 @@ func AdjustConfig(
 	var info *sarama.TopicMetadata
 	var exists bool
 	for _, t := range topics {
-		if t.Err != sarama.ErrNoError {
+		if t.Err == sarama.ErrNoError {
+			if t.Name == topic {
+				info = t
+				exists = true
+				break
+			}
+		} else if t.Err != sarama.ErrUnknownTopicOrPartition {
 			return errors.Trace(t.Err)
-		}
-		if t.Name == topic {
-			info = t
-			exists = true
-			break
 		}
 	}
 
