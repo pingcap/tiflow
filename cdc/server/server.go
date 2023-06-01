@@ -84,7 +84,6 @@ type server struct {
 	grpcService       *p2p.ServerWrapper
 	statusServer      *http.Server
 	etcdClient        etcd.CDCEtcdClient
-	pdClient          pdutil.PDAPIClient
 	pdEndpoints       []string
 	sortEngineFactory *factory.SortEngineFactory
 }
@@ -140,25 +139,6 @@ func (s *server) prepare(ctx context.Context) error {
 	logConfig := logutil.DefaultZapLoggerConfig
 	logConfig.Level = zap.NewAtomicLevelAt(zapcore.ErrorLevel)
 
-	grpcClient, err := pd.NewClientWithContext(ctx, s.pdEndpoints, conf.Security.PDSecurityOption())
-	if err != nil {
-		return errors.Trace(err)
-	}
-	pc, err := pdutil.NewPDAPIClient(grpcClient, conf.Security)
-	if err != nil {
-		return errors.Trace(err)
-	}
-	s.pdClient = pc
-	apiCtx, cancel := context.WithTimeout(ctx, time.Second*5)
-	defer cancel()
-
-	endpoints, err := s.pdClient.CollectMemberEndpoints(apiCtx)
-	if err != nil {
-		return errors.Trace(err)
-	}
-	if len(endpoints) < len(s.pdEndpoints) {
-		endpoints = s.pdEndpoints
-	}
 	log.Info("create etcdCli", zap.Strings("endpoints", s.pdEndpoints))
 	// we do not pass a `context` to the etcd client,
 	// to prevent it's cancelled when the server is closing.
@@ -315,6 +295,17 @@ func (s *server) startStatusHTTP(serverCtx context.Context, lis net.Listener) er
 }
 
 func (s *server) etcdHealthChecker(ctx context.Context) error {
+	conf := config.GetGlobalServerConfig()
+	grpcClient, err := pd.NewClientWithContext(ctx, s.pdEndpoints, conf.Security.PDSecurityOption())
+	if err != nil {
+		return errors.Trace(err)
+	}
+	pc, err := pdutil.NewPDAPIClient(grpcClient, conf.Security)
+	if err != nil {
+		return errors.Trace(err)
+	}
+	defer pc.Close()
+
 	ticker := time.NewTicker(time.Second * 3)
 	defer ticker.Stop()
 
@@ -323,7 +314,7 @@ func (s *server) etcdHealthChecker(ctx context.Context) error {
 		case <-ctx.Done():
 			return ctx.Err()
 		case <-ticker.C:
-			endpoints, err := s.pdClient.CollectMemberEndpoints(ctx)
+			endpoints, err := pc.CollectMemberEndpoints(ctx)
 			if err != nil {
 				log.Warn("etcd health check: cannot collect all members", zap.Error(err))
 				continue
@@ -331,7 +322,7 @@ func (s *server) etcdHealthChecker(ctx context.Context) error {
 			for _, endpoint := range endpoints {
 				start := time.Now()
 				ctx, cancel := context.WithTimeout(ctx, 5*time.Second)
-				if err := s.pdClient.Healthy(ctx, endpoint); err != nil {
+				if err := pc.Healthy(ctx, endpoint); err != nil {
 					log.Warn("etcd health check error",
 						zap.String("endpoint", endpoint), zap.Error(err))
 				}
