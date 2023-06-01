@@ -603,6 +603,10 @@ var (
 			"if you want to ignore these tables, please set ignore_ineligible_table to true",
 		errors.RFCCodeText("CDC:ErrTableIneligible"),
 	)
+	ErrInvalidCheckpointTs = errors.Normalize(
+		"checkpointTs(%v) should not larger than resolvedTs(%v)",
+		errors.RFCCodeText("CDC:ErrInvalidCheckpointTs"),
+	)
 
 	// EtcdWorker related errors. Internal use only.
 	// ErrEtcdTryAgain is used by a PatchFunc to force a transaction abort.
