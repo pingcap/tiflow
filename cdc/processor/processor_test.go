@@ -653,6 +653,7 @@ func TestProcessorInitDDLHandler(t *testing.T) {
 
 	store, err := mockstore.NewMockStore()
 	require.NoError(t, err)
+	defer store.Close() //nolint:errcheck
 	p.upstream.KVStorage = store
 
 	p.changefeed.Info.Config.ForceReplicate = true

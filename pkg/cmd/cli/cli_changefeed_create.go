@@ -156,7 +156,7 @@ func (o *createChangefeedOptions) completeReplicaCfg(
 	if err != nil {
 		return err
 	}
-	cfg.AdjustEnableOldValueByProtocol(uri)
+	cfg.AdjustEnableOldValue(uri)
 
 	if cfg.ForceReplicate && !cfg.EnableOldValue {
 		log.Error("force replicate, old value feature is disabled",

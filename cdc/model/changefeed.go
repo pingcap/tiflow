@@ -468,7 +468,7 @@ func (info *ChangeFeedInfo) fixEnableOldValue() {
 		log.Warn("parse sink URI failed", zap.Error(err))
 		return
 	}
-	info.Config.AdjustEnableOldValueByProtocol(uri)
+	info.Config.AdjustEnableOldValue(uri)
 }
 
 func (info *ChangeFeedInfo) fixMQSinkProtocol() {

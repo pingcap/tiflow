@@ -306,3 +306,34 @@ func TestIsSinkCompatibleWithSpanReplication(t *testing.T) {
 		require.Equal(t, compatible, tt.compatible, tt.name)
 	}
 }
+
+func TestAdjustEnableOldValue(t *testing.T) {
+	t.Parallel()
+
+	config := GetDefaultReplicaConfig()
+	config.EnableOldValue = false
+
+	sinkURI, err := url.Parse("mysql://")
+	require.NoError(t, err)
+	// skip adjust for mysql sink
+	config.AdjustEnableOldValue(sinkURI)
+	require.False(t, config.EnableOldValue)
+
+	// canal require old value enabled
+	sinkURI, err = url.Parse("kafka://127.0.0.1:9092/test?protocol=canal")
+	require.NoError(t, err)
+
+	config.AdjustEnableOldValue(sinkURI)
+	require.True(t, config.EnableOldValue)
+
+	sinkURI, err = url.Parse("kafka://127.0.0.1:9092/test?protocol=avro")
+	require.NoError(t, err)
+	config.AdjustEnableOldValue(sinkURI)
+	require.False(t, config.EnableOldValue)
+
+	config.EnableOldValue = true
+	sinkURI, err = url.Parse("s3://xxx/yyy?protocol=csv")
+	require.NoError(t, err)
+	config.AdjustEnableOldValue(sinkURI)
+	require.False(t, config.EnableOldValue)
+}

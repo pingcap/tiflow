@@ -197,11 +197,11 @@ func (APIV2HelpersImpl) verifyCreateChangefeedConfig(
 	replicaCfg := cfg.ReplicaConfig.ToInternalReplicaConfig()
 
 	// verify replicaConfig
-	uri, err := url.Parse(cfg.SinkURI)
+	sinkURIParsed, err := url.Parse(cfg.SinkURI)
 	if err != nil {
 		return nil, cerror.WrapError(cerror.ErrSinkURIInvalid, err)
 	}
-	err = replicaCfg.ValidateAndAdjust(uri)
+	err = replicaCfg.ValidateAndAdjust(sinkURIParsed)
 	if err != nil {
 		return nil, err
 	}

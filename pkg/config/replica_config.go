@@ -198,7 +198,7 @@ func (c *ReplicaConfig) ValidateAndAdjust(sinkURI *url.URL) error { // check sin
 		if err != nil {
 			return err
 		}
-		c.AdjustEnableOldValueByProtocol(sinkURI)
+		c.AdjustEnableOldValue(sinkURI)
 		if c.ForceReplicate && !c.EnableOldValue {
 			log.Error("force replicate, old value feature is disabled",
 				zap.String("protocol", util.GetOrZero(c.Sink.Protocol)))
@@ -286,8 +286,8 @@ func isSinkCompatibleWithSpanReplication(u *url.URL) bool {
 		(strings.Contains(u.Scheme, "kafka") || strings.Contains(u.Scheme, "blackhole"))
 }
 
-// AdjustEnableOldValueByProtocol adjust the old value configuration by the sink scheme and encoding protocol
-func (c *ReplicaConfig) AdjustEnableOldValueByProtocol(sinkURI *url.URL) {
+// AdjustEnableOldValue adjust the old value configuration by the sink scheme and encoding protocol
+func (c *ReplicaConfig) AdjustEnableOldValue(sinkURI *url.URL) {
 	if sink.IsMySQLCompatibleScheme(strings.ToLower(sinkURI.Scheme)) {
 		return
 	}
