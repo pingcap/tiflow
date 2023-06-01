@@ -159,7 +159,7 @@ func (s *server) prepare(ctx context.Context) error {
 	if len(endpoints) < len(s.pdEndpoints) {
 		endpoints = s.pdEndpoints
 	}
-	log.Info("create etcdCli", zap.Strings("endpoints", endpoints))
+	log.Info("create etcdCli", zap.Strings("endpoints", s.pdEndpoints))
 	// we do not pass a `context` to the etcd client,
 	// to prevent it's cancelled when the server is closing.
 	// For example, when the non-owner node goes offline,
@@ -169,7 +169,7 @@ func (s *server) prepare(ctx context.Context) error {
 	// then cause the new owner cannot be elected immediately after the old owner offline.
 	// see https://github.com/etcd-io/etcd/blob/525d53bd41/client/v3/concurrency/election.go#L98
 	etcdCli, err := clientv3.New(clientv3.Config{
-		Endpoints:        endpoints,
+		Endpoints:        s.pdEndpoints,
 		TLS:              tlsConfig,
 		LogConfig:        &logConfig,
 		DialTimeout:      5 * time.Second,
