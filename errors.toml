@@ -546,9 +546,9 @@ error = '''
 kafka async send message failed
 '''
 
-["CDC:ErrKafkaBrokerConfigNotFound"]
+["CDC:ErrKafkaConfigNotFound"]
 error = '''
-kafka broker config item not found
+kafka config item not found
 '''
 
 ["CDC:ErrKafkaCreateTopic"]

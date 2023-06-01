@@ -60,21 +60,33 @@ type topicDetail struct {
 type ClusterAdminClientMockImpl struct {
 	topics map[string]*topicDetail
 	// Cluster controller ID.
+<<<<<<< HEAD
 	controllerID  int32
 	brokerConfigs []sarama.ConfigEntry
+=======
+	controllerID  int
+	brokerConfigs map[string]string
+	topicConfigs  map[string]map[string]string
+>>>>>>> 493c0f6b61 (pkg/sink(ticdc): add GetTopicConfig support (#9107))
 }
 
 // NewClusterAdminClientMockImpl news a ClusterAdminClientMockImpl struct with default configurations.
 func NewClusterAdminClientMockImpl() *ClusterAdminClientMockImpl {
 	topics := make(map[string]*topicDetail)
+<<<<<<< HEAD
 	configEntries := make(map[string]*string)
 	configEntries[TopicMaxMessageBytesConfigName] = &TopicMaxMessageBytes
 	configEntries[MinInsyncReplicasConfigName] = &MinInSyncReplicas
 	topics[DefaultMockTopicName] = &topicDetail{
 		fetchesRemainingUntilVisible: 0,
 		TopicDetail: sarama.TopicDetail{
+=======
+	topics[DefaultMockTopicName] = &topicDetail{
+		fetchesRemainingUntilVisible: 0,
+		TopicDetail: TopicDetail{
+			Name:          DefaultMockTopicName,
+>>>>>>> 493c0f6b61 (pkg/sink(ticdc): add GetTopicConfig support (#9107))
 			NumPartitions: 3,
-			ConfigEntries: configEntries,
 		},
 	}
 
@@ -89,18 +101,46 @@ func NewClusterAdminClientMockImpl() *ClusterAdminClientMockImpl {
 		},
 	}
 
+	topicConfigs := make(map[string]map[string]string)
+	topicConfigs[DefaultMockTopicName] = make(map[string]string)
+	topicConfigs[DefaultMockTopicName][TopicMaxMessageBytesConfigName] = TopicMaxMessageBytes
+	topicConfigs[DefaultMockTopicName][MinInsyncReplicasConfigName] = MinInSyncReplicas
+
 	return &ClusterAdminClientMockImpl{
 		topics:        topics,
 		controllerID:  defaultMockControllerID,
 		brokerConfigs: brokerConfigs,
+		topicConfigs:  topicConfigs,
 	}
 }
 
+<<<<<<< HEAD
 // ListTopics returns all topics directly.
 func (c *ClusterAdminClientMockImpl) ListTopics() (map[string]sarama.TopicDetail, error) {
 	topicsDetailsMap := make(map[string]sarama.TopicDetail)
 	for topic, detail := range c.topics {
 		topicsDetailsMap[topic] = detail.TopicDetail
+=======
+// GetAllBrokers implement the ClusterAdminClient interface
+func (c *ClusterAdminClientMockImpl) GetAllBrokers(context.Context) ([]Broker, error) {
+	return nil, nil
+}
+
+// GetCoordinator implement the ClusterAdminClient interface
+func (c *ClusterAdminClientMockImpl) GetCoordinator(context.Context) (int, error) {
+	return c.controllerID, nil
+}
+
+// GetBrokerConfig implement the ClusterAdminClient interface
+func (c *ClusterAdminClientMockImpl) GetBrokerConfig(
+	_ context.Context,
+	configName string,
+) (string, error) {
+	value, ok := c.brokerConfigs[configName]
+	if !ok {
+		return "", errors.ErrKafkaConfigNotFound.GenWithStack(
+			"cannot find the `%s` from the broker's configuration", configName)
+>>>>>>> 493c0f6b61 (pkg/sink(ticdc): add GetTopicConfig support (#9107))
 	}
 	return topicsDetailsMap, nil
 }
@@ -121,6 +161,19 @@ func (c *ClusterAdminClientMockImpl) DescribeConfig(resource sarama.ConfigResour
 		}
 	}
 	return result, nil
+}
+
+// GetTopicConfig implement the ClusterAdminClient interface
+func (c *ClusterAdminClientMockImpl) GetTopicConfig(ctx context.Context, topicName string, configName string) (string, error) {
+	if _, ok := c.topics[topicName]; !ok {
+		return "", errors.ErrKafkaConfigNotFound.GenWithStack("cannot find the `%s` from the topic's configuration", topicName)
+	}
+	value, ok := c.topicConfigs[topicName][configName]
+	if !ok {
+		return "", errors.ErrKafkaConfigNotFound.GenWithStack(
+			"cannot find the `%s` from the topic's configuration", configName)
+	}
+	return value, nil
 }
 
 // SetRemainingFetchesUntilTopicVisible is used to control the visibility of a specific topic.
@@ -207,6 +260,7 @@ func (c *ClusterAdminClientMockImpl) Close() error {
 
 // SetMinInsyncReplicas sets the MinInsyncReplicas for broker and default topic.
 func (c *ClusterAdminClientMockImpl) SetMinInsyncReplicas(minInsyncReplicas string) {
+<<<<<<< HEAD
 	c.topics[DefaultMockTopicName].ConfigEntries[MinInsyncReplicasConfigName] = &minInsyncReplicas
 
 	for i, config := range c.brokerConfigs {
@@ -214,6 +268,10 @@ func (c *ClusterAdminClientMockImpl) SetMinInsyncReplicas(minInsyncReplicas stri
 			c.brokerConfigs[i].Value = minInsyncReplicas
 		}
 	}
+=======
+	c.topicConfigs[DefaultMockTopicName][MinInsyncReplicasConfigName] = minInsyncReplicas
+	c.brokerConfigs[MinInsyncReplicasConfigName] = minInsyncReplicas
+>>>>>>> 493c0f6b61 (pkg/sink(ticdc): add GetTopicConfig support (#9107))
 }
 
 // GetDefaultMockTopicName returns the default topic name
