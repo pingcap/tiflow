@@ -170,22 +170,23 @@ func TestReplicaConfigValidate(t *testing.T) {
 
 	sinkURL, err := url.Parse("blackhole://")
 	require.NoError(t, err)
-
-	require.Nil(t, conf.ValidateAndAdjust(sinkURL))
+	require.NoError(t, conf.ValidateAndAdjust(sinkURL))
 
 	// Incorrect sink configuration.
 	conf = GetDefaultReplicaConfig()
 	conf.Sink.Protocol = util.AddressOf("canal")
 	conf.EnableOldValue = false
-	require.Regexp(t, ".*canal protocol requires old value to be enabled.*",
-		conf.ValidateAndAdjust(sinkURL))
+
+	err = conf.ValidateAndAdjust(sinkURL)
+	require.NoError(t, err)
+	require.True(t, conf.EnableOldValue)
 
 	conf = GetDefaultReplicaConfig()
 	conf.Sink.DispatchRules = []*DispatchRule{
 		{Matcher: []string{"a.b"}, DispatcherRule: "d1", PartitionRule: "r1"},
 	}
-	require.Regexp(t, ".*dispatcher and partition cannot be configured both.*",
-		conf.ValidateAndAdjust(sinkURL))
+	err = conf.ValidateAndAdjust(sinkURL)
+	require.Regexp(t, ".*dispatcher and partition cannot be configured both.*", err)
 
 	// Correct sink configuration.
 	conf = GetDefaultReplicaConfig()
