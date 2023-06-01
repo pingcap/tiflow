@@ -55,14 +55,6 @@ func newSchemaWrap4Owner(
 		}
 	}
 
-	if config.ForceReplicate && !config.EnableOldValue {
-		log.Error("for replicate table but the old value is not enabled",
-			zap.String("namespace", id.Namespace),
-			zap.String("changefeed", id.ID))
-		return nil, cerror.ErrOldValueNotEnabled.GenWithStackByArgs(
-			"if use force replicate, old value feature must be enabled")
-	}
-
 	schemaStorage, err := entry.NewSchemaStorage(
 		meta, startTs, config.ForceReplicate, id, util.RoleOwner, filter)
 	if err != nil {

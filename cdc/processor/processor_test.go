@@ -23,7 +23,6 @@ import (
 
 	"github.com/pingcap/errors"
 	"github.com/pingcap/failpoint"
-	"github.com/pingcap/tidb/store/mockstore"
 	"github.com/pingcap/tiflow/cdc/contextutil"
 	"github.com/pingcap/tiflow/cdc/entry"
 	"github.com/pingcap/tiflow/cdc/entry/schema"
@@ -643,22 +642,4 @@ func TestProcessorDostNotStuckInInit(t *testing.T) {
 
 	require.Nil(t, p.Close())
 	tester.MustApplyPatches()
-}
-
-func TestProcessorInitDDLHandler(t *testing.T) {
-	ctx := cdcContext.NewBackendContext4Test(true)
-	liveness := model.LivenessCaptureAlive
-	p, _ := initProcessor4Test(ctx, t, &liveness)
-	require.NotNil(t, p)
-
-	store, err := mockstore.NewMockStore()
-	require.NoError(t, err)
-	defer store.Close() //nolint:errcheck
-	p.upstream.KVStorage = store
-
-	p.changefeed.Info.Config.ForceReplicate = true
-	p.changefeed.Info.Config.EnableOldValue = false
-
-	err = p.initDDLHandler(ctx)
-	require.Error(t, cerror.ErrOldValueNotEnabled, err)
 }
