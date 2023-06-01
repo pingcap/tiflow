@@ -585,7 +585,7 @@ func AdjustOptions(
 	if exists {
 		// make sure that producer's `MaxMessageBytes` smaller than topic's `max.message.bytes`
 		topicMaxMessageBytesStr, err := getTopicConfig(
-			ctx, admin, info,
+			ctx, admin, info.Name,
 			TopicMaxMessageBytesConfigName,
 			BrokerMessageMaxBytesConfigName,
 		)
@@ -664,7 +664,7 @@ func validateMinInsyncReplicas(
 		info, exists := topics[topic]
 		if exists {
 			minInsyncReplicasStr, err := getTopicConfig(
-				ctx, admin, info,
+				ctx, admin, info.Name,
 				MinInsyncReplicasConfigName,
 				MinInsyncReplicasConfigName)
 			if err != nil {
@@ -685,7 +685,7 @@ func validateMinInsyncReplicas(
 	minInsyncReplicasStr, exists, err := minInsyncReplicasConfigGetter()
 	if err != nil {
 		// 'min.insync.replica' is invisible to us in Confluent Cloud Kafka.
-		if cerror.ErrKafkaBrokerConfigNotFound.Equal(err) {
+		if cerror.ErrKafkaConfigNotFound.Equal(err) {
 			log.Warn("TiCDC cannot find `min.insync.replicas` from broker's configuration, " +
 				"please make sure that the replication factor is greater than or equal " +
 				"to the minimum number of in-sync replicas" +
@@ -728,13 +728,15 @@ func validateMinInsyncReplicas(
 func getTopicConfig(
 	ctx context.Context,
 	admin ClusterAdminClient,
-	detail TopicDetail,
+	topicName string,
 	topicConfigName string,
 	brokerConfigName string,
 ) (string, error) {
-	if a, ok := detail.ConfigEntries[topicConfigName]; ok {
-		return a, nil
+	if c, err := admin.GetTopicConfig(ctx, topicName, topicConfigName); err == nil {
+		return c, nil
 	}
 
+	log.Info("TiCDC cannot find the configuration from topic, try to get it from broker",
+		zap.String("topic", topicName), zap.String("config", topicConfigName))
 	return admin.GetBrokerConfig(ctx, brokerConfigName)
 }

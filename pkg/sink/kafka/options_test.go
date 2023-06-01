@@ -278,8 +278,6 @@ func TestAdjustConfigTopicExist(t *testing.T) {
 	detail := &TopicDetail{
 		Name:          topicName,
 		NumPartitions: 3,
-		// Does not contain `max.message.bytes`.
-		ConfigEntries: make(map[string]string),
 	}
 	err = adminClient.CreateTopic(context.Background(), detail, false)
 	require.Nil(t, err)
