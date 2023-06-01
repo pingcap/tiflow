@@ -98,7 +98,7 @@ func (a *admin) GetBrokerConfig(ctx context.Context, configName string) (string,
 	if len(resp.Resources) == 0 || len(resp.Resources[0].ConfigEntries) == 0 {
 		log.Warn("Kafka config item not found",
 			zap.String("configName", configName))
-		return "", errors.ErrKafkaBrokerConfigNotFound.GenWithStack(
+		return "", errors.ErrKafkaConfigNotFound.GenWithStack(
 			"cannot find the `%s` from the broker's configuration", configName)
 	}
 
@@ -113,8 +113,51 @@ func (a *admin) GetBrokerConfig(ctx context.Context, configName string) (string,
 
 	log.Warn("Kafka config item not found",
 		zap.String("configName", configName))
-	return "", errors.ErrKafkaBrokerConfigNotFound.GenWithStack(
+	return "", errors.ErrKafkaConfigNotFound.GenWithStack(
 		"cannot find the `%s` from the broker's configuration", configName)
+}
+
+func (a *admin) GetTopicConfig(ctx context.Context, topicName string, configName string) (string, error) {
+	request := &kafka.DescribeConfigsRequest{
+		Resources: []kafka.DescribeConfigRequestResource{
+			{
+				ResourceType: kafka.ResourceTypeTopic,
+				ResourceName: topicName,
+				ConfigNames:  []string{configName},
+			},
+		},
+	}
+
+	resp, err := a.client.DescribeConfigs(ctx, request)
+	if err != nil {
+		return "", errors.Trace(err)
+	}
+
+	if len(resp.Resources) == 0 || len(resp.Resources[0].ConfigEntries) == 0 {
+		log.Warn("Kafka config item not found",
+			zap.String("configName", configName))
+		return "", errors.ErrKafkaConfigNotFound.GenWithStack(
+			"cannot find the `%s` from the topic's configuration", configName)
+	}
+
+	// For compatibility with KOP, we checked all return values.
+	// 1. Kafka only returns requested configs.
+	// 2. Kop returns all configs.
+	for _, entry := range resp.Resources[0].ConfigEntries {
+		if entry.ConfigName == configName {
+			log.Info("Kafka config item found",
+				zap.String("namespace", a.changefeedID.Namespace),
+				zap.String("changefeed", a.changefeedID.ID),
+				zap.String("configName", configName),
+				zap.String("configValue", entry.ConfigValue))
+			return entry.ConfigValue, nil
+		}
+	}
+
+	log.Warn("Kafka config item not found",
+		zap.String("configName", configName))
+	return "", errors.ErrKafkaConfigNotFound.GenWithStack(
+		"cannot find the `%s` from the topic's configuration", configName)
 }
 
 func (a *admin) GetTopicsMeta(
