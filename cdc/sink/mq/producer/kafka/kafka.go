@@ -402,20 +402,22 @@ func AdjustConfig(
 	if err != nil {
 		return errors.Trace(err)
 	}
-
-	err = validateMinInsyncReplicas(admin, topics, topic, int(config.ReplicationFactor))
-	if err != nil {
-		return errors.Trace(err)
-	}
-
 	var info *sarama.TopicMetadata
 	var exists bool
 	for _, t := range topics {
+		if t.Err != sarama.ErrNoError {
+			return errors.Trace(t.Err)
+		}
 		if t.Name == topic {
 			info = t
 			exists = true
 			break
 		}
+	}
+
+	err = validateMinInsyncReplicas(admin, topic, exists, int(config.ReplicationFactor))
+	if err != nil {
+		return errors.Trace(err)
 	}
 	// once we have found the topic, no matter `auto-create-topic`, make sure user input parameters are valid.
 	if exists {
@@ -484,20 +486,11 @@ func AdjustConfig(
 
 func validateMinInsyncReplicas(
 	admin kafka.ClusterAdminClient,
-	topics []*sarama.TopicMetadata, topic string, replicationFactor int,
+	topic string, topicExists bool, replicationFactor int,
 ) error {
 	minInsyncReplicasConfigGetter := func() (string, bool, error) {
-		var info *sarama.TopicMetadata
-		var exists bool
-		for _, t := range topics {
-			if t.Name == topic {
-				info = t
-				exists = true
-				break
-			}
-		}
-		if exists {
-			minInsyncReplicasStr, err := getTopicConfig(admin, info.Name,
+		if topicExists {
+			minInsyncReplicasStr, err := getTopicConfig(admin, topic,
 				kafka.MinInsyncReplicasConfigName,
 				kafka.MinInsyncReplicasConfigName)
 			if err != nil {
