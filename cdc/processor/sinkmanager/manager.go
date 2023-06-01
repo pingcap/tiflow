@@ -275,7 +275,7 @@ func (m *SinkManager) Run(ctx context.Context, warnings ...chan<- error) (err er
 		} else {
 			return errors.Trace(err)
 		}
-		// Use a 5 seconds backoff when re-establishing internal resources.
+		// Use a 5 second backoff when re-establishing internal resources.
 		if err = util.Hang(m.managerCtx, 5*time.Second); err != nil {
 			return errors.Trace(err)
 		}

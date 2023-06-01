@@ -464,6 +464,7 @@ func (info *ChangeFeedInfo) fixMySQLSinkProtocol() {
 func (info *ChangeFeedInfo) fixEnableOldValue() {
 	uri, err := url.Parse(info.SinkURI)
 	if err != nil {
+		// this is impossible to happen, since the changefeed registered successfully.
 		log.Warn("parse sink URI failed", zap.Error(err))
 		return
 	}
