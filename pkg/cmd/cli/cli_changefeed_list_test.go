@@ -36,7 +36,7 @@ func TestChangefeedListCli(t *testing.T) {
 	b := bytes.NewBufferString("")
 	cmd.SetOut(b)
 
-	cf.EXPECT().List(gomock.Any(), gomock.Any()).Return([]v2.ChangefeedCommonInfo{
+	cf.EXPECT().List(gomock.Any(), gomock.Any(), gomock.Any()).Return([]v2.ChangefeedCommonInfo{
 		{
 			UpstreamID:     1,
 			Namespace:      "default",
@@ -87,7 +87,7 @@ func TestChangefeedListCli(t *testing.T) {
 		},
 	}, nil).Times(2)
 	// when --all=false, should contains StateNormal, StateError, StateFailed, StateStopped changefeed
-	os.Args = []string{"list", "--all=false"}
+	os.Args = []string{"list", "--all=false", "--namespace=default"}
 	require.Nil(t, cmd.Execute())
 	out, err := io.ReadAll(b)
 	require.Nil(t, err)
@@ -97,7 +97,7 @@ func TestChangefeedListCli(t *testing.T) {
 	require.Contains(t, string(out), "failed-3")
 
 	// when --all=true, should contains all changefeed
-	os.Args = []string{"list", "--all=true"}
+	os.Args = []string{"list", "--all=true", "--namespace=default"}
 	require.Nil(t, cmd.Execute())
 	out, err = io.ReadAll(b)
 	require.Nil(t, err)
@@ -108,7 +108,8 @@ func TestChangefeedListCli(t *testing.T) {
 	require.Contains(t, string(out), "finished-5")
 	require.Contains(t, string(out), "stopped-6")
 
-	cf.EXPECT().List(gomock.Any(), gomock.Any()).Return(nil, errors.New("changefeed list test error"))
+	cf.EXPECT().List(gomock.Any(), gomock.Any(), gomock.Any()).
+		Return(nil, errors.New("changefeed list test error"))
 	o := newListChangefeedOptions()
 	require.NoError(t, o.complete(f))
 	require.Contains(t, o.run(cmd).Error(), "changefeed list test error")

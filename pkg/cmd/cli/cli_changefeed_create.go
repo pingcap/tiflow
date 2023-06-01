@@ -31,6 +31,7 @@ import (
 	"github.com/pingcap/tiflow/pkg/config"
 	cerror "github.com/pingcap/tiflow/pkg/errors"
 	"github.com/pingcap/tiflow/pkg/filter"
+	putil "github.com/pingcap/tiflow/pkg/util"
 	"github.com/spf13/cobra"
 	"github.com/tikv/client-go/v2/oracle"
 	"go.uber.org/zap"
@@ -104,6 +105,7 @@ type createChangefeedOptions struct {
 	apiClient               apiv2client.APIV2Interface
 
 	changefeedID            string
+	namespace               string
 	disableGCSafePointCheck bool
 	startTs                 uint64
 	timezone                string
@@ -122,6 +124,7 @@ func newCreateChangefeedOptions(commonChangefeedOptions *changefeedCommonOptions
 // flags related to template printing to it.
 func (o *createChangefeedOptions) addFlags(cmd *cobra.Command) {
 	o.commonChangefeedOptions.addFlags(cmd)
+	cmd.PersistentFlags().StringVarP(&o.namespace, "namespace", "n", "default", "Replication task (changefeed) Namespace")
 	cmd.PersistentFlags().StringVarP(&o.changefeedID, "changefeed-id", "c", "", "Replication task (changefeed) ID")
 	cmd.PersistentFlags().BoolVarP(&o.disableGCSafePointCheck, "disable-gc-check", "", false, "Disable GC safe point check")
 	cmd.PersistentFlags().Uint64Var(&o.startTs, "start-ts", 0, "Start ts of changefeed")
@@ -159,11 +162,11 @@ func (o *createChangefeedOptions) completeReplicaCfg(
 
 		protocol := sinkURIParsed.Query().Get(config.ProtocolKey)
 		if protocol != "" {
-			cfg.Sink.Protocol = protocol
+			cfg.Sink.Protocol = putil.AddressOf(protocol)
 		}
 		for _, fp := range config.ForceEnableOldValueProtocols {
-			if cfg.Sink.Protocol == fp {
-				log.Warn("Attempting to replicate without old value enabled. CDC will enable old value and continue.", zap.String("protocol", cfg.Sink.Protocol))
+			if putil.GetOrZero(cfg.Sink.Protocol) == fp {
+				log.Warn("Attempting to replicate without old value enabled. CDC will enable old value and continue.", zap.String("protocol", putil.GetOrZero(cfg.Sink.Protocol)))
 				cfg.EnableOldValue = true
 				break
 			}
@@ -187,7 +190,7 @@ func (o *createChangefeedOptions) completeReplicaCfg(
 	}
 
 	if o.commonChangefeedOptions.schemaRegistry != "" {
-		cfg.Sink.SchemaRegistry = o.commonChangefeedOptions.schemaRegistry
+		cfg.Sink.SchemaRegistry = putil.AddressOf(o.commonChangefeedOptions.schemaRegistry)
 	}
 
 	switch o.commonChangefeedOptions.sortEngine {
@@ -241,6 +244,7 @@ func (o *createChangefeedOptions) getChangefeedConfig() *v2.ChangefeedConfig {
 	upstreamConfig := o.getUpstreamConfig()
 	return &v2.ChangefeedConfig{
 		ID:            o.changefeedID,
+		Namespace:     o.namespace,
 		StartTs:       o.startTs,
 		TargetTs:      o.commonChangefeedOptions.targetTs,
 		SinkURI:       o.commonChangefeedOptions.sinkURI,

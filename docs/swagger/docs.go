@@ -762,6 +762,12 @@ var doc = `{
                         "description": "state",
                         "name": "state",
                         "in": "query"
+                    },
+                    {
+                        "type": "string",
+                        "description": "default",
+                        "name": "namespace",
+                        "in": "query"
                     }
                 ],
                 "responses": {
@@ -849,6 +855,12 @@ var doc = `{
                         "name": "changefeed_id",
                         "in": "path",
                         "required": true
+                    },
+                    {
+                        "type": "string",
+                        "description": "default",
+                        "name": "namespace",
+                        "in": "query"
                     }
                 ],
                 "responses": {
@@ -892,6 +904,12 @@ var doc = `{
                         "name": "changefeed_id",
                         "in": "path",
                         "required": true
+                    },
+                    {
+                        "type": "string",
+                        "description": "default",
+                        "name": "namespace",
+                        "in": "query"
                     },
                     {
                         "description": "changefeed config",
@@ -944,6 +962,12 @@ var doc = `{
                         "name": "changefeed_id",
                         "in": "path",
                         "required": true
+                    },
+                    {
+                        "type": "string",
+                        "description": "default",
+                        "name": "namespace",
+                        "in": "query"
                     }
                 ],
                 "responses": {
@@ -989,6 +1013,12 @@ var doc = `{
                         "name": "changefeed_id",
                         "in": "path",
                         "required": true
+                    },
+                    {
+                        "type": "string",
+                        "description": "default",
+                        "name": "namespace",
+                        "in": "query"
                     }
                 ],
                 "responses": {
@@ -1034,6 +1064,12 @@ var doc = `{
                         "name": "changefeed_id",
                         "in": "path",
                         "required": true
+                    },
+                    {
+                        "type": "string",
+                        "description": "default",
+                        "name": "namespace",
+                        "in": "query"
                     },
                     {
                         "description": "resume config",
@@ -1231,6 +1267,12 @@ var doc = `{
                         "name": "changefeed_id",
                         "in": "path",
                         "required": true
+                    },
+                    {
+                        "type": "string",
+                        "description": "default",
+                        "name": "namespace",
+                        "in": "query"
                     },
                     {
                         "type": "string",
@@ -1472,6 +1514,27 @@ var doc = `{
                 "sasl-mechanism": {
                     "type": "string"
                 },
+                "sasl-oauth-audience": {
+                    "type": "string"
+                },
+                "sasl-oauth-client-id": {
+                    "type": "string"
+                },
+                "sasl-oauth-client-secret": {
+                    "type": "string"
+                },
+                "sasl-oauth-grant-type": {
+                    "type": "string"
+                },
+                "sasl-oauth-scopes": {
+                    "type": "array",
+                    "items": {
+                        "type": "string"
+                    }
+                },
+                "sasl-oauth-token-url": {
+                    "type": "string"
+                },
                 "sasl-password": {
                     "type": "string"
                 },
@@ -1540,34 +1603,41 @@ var doc = `{
                     "$ref": "#/definitions/config.CloudStorageConfig"
                 },
                 "column-selectors": {
+                    "description": "ColumnSelectors is Deprecated.",
                     "type": "array",
                     "items": {
                         "$ref": "#/definitions/config.ColumnSelector"
                     }
                 },
                 "csv": {
+                    "description": "CSVConfig is only available when the downstream is Storage.",
                     "$ref": "#/definitions/config.CSVConfig"
                 },
                 "date-separator": {
+                    "description": "DateSeparator is only available when the downstream is Storage.",
                     "type": "string"
                 },
                 "dispatchers": {
+                    "description": "DispatchRules is only available when the downstream is MQ.",
                     "type": "array",
                     "items": {
                         "$ref": "#/definitions/config.DispatchRule"
                     }
                 },
                 "enable-kafka-sink-v2": {
-                    "description": "EnableKafkaSinkV2 enabled then the kafka-go sink will be used.",
+                    "description": "EnableKafkaSinkV2 enabled then the kafka-go sink will be used.\nIt is only available when the downstream is MQ.",
                     "type": "boolean"
                 },
                 "enable-partition-separator": {
+                    "description": "EnablePartitionSeparator is only available when the downstream is Storage.",
                     "type": "boolean"
                 },
                 "encoder-concurrency": {
+                    "description": "EncoderConcurrency is only available when the downstream is MQ.",
                     "type": "integer"
                 },
                 "file-index-digit": {
+                    "description": "FileIndexWidth is only available when the downstream is Storage",
                     "type": "integer"
                 },
                 "kafka-config": {
@@ -1577,18 +1647,23 @@ var doc = `{
                     "$ref": "#/definitions/config.MySQLConfig"
                 },
                 "only-output-updated-columns": {
+                    "description": "OnlyOutputUpdatedColumns is only available when the downstream is MQ.",
                     "type": "boolean"
                 },
                 "protocol": {
+                    "description": "Protocol is NOT available when the downstream is DB.",
                     "type": "string"
                 },
                 "safe-mode": {
+                    "description": "SafeMode is only available when the downstream is DB.",
                     "type": "boolean"
                 },
                 "schema-registry": {
+                    "description": "SchemaRegistry is only available when the downstream is MQ using avro protocol.",
                     "type": "string"
                 },
                 "terminator": {
+                    "description": "Terminator is NOT available when the downstream is DB.",
                     "type": "string"
                 },
                 "transaction-atomicity": {
@@ -2327,6 +2402,27 @@ var doc = `{
                     "type": "string"
                 },
                 "sasl_mechanism": {
+                    "type": "string"
+                },
+                "sasl_oauth_audience": {
+                    "type": "string"
+                },
+                "sasl_oauth_client_id": {
+                    "type": "string"
+                },
+                "sasl_oauth_client_secret": {
+                    "type": "string"
+                },
+                "sasl_oauth_grant_type": {
+                    "type": "string"
+                },
+                "sasl_oauth_scopes": {
+                    "type": "array",
+                    "items": {
+                        "type": "string"
+                    }
+                },
+                "sasl_oauth_token_url": {
                     "type": "string"
                 },
                 "sasl_password": {

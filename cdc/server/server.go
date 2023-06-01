@@ -51,6 +51,7 @@ import (
 	"golang.org/x/sync/errgroup"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/backoff"
+	"google.golang.org/grpc/keepalive"
 )
 
 const (
@@ -138,6 +139,7 @@ func (s *server) prepare(ctx context.Context) error {
 	logConfig := logutil.DefaultZapLoggerConfig
 	logConfig.Level = zap.NewAtomicLevelAt(zapcore.ErrorLevel)
 
+	log.Info("create etcdCli", zap.Strings("endpoints", s.pdEndpoints))
 	// we do not pass a `context` to the etcd client,
 	// to prevent it's cancelled when the server is closing.
 	// For example, when the non-owner node goes offline,
@@ -164,6 +166,10 @@ func (s *server) prepare(ctx context.Context) error {
 				},
 				MinConnectTimeout: 3 * time.Second,
 			}),
+			grpc.WithKeepaliveParams(keepalive.ClientParameters{
+				Time:    10 * time.Second,
+				Timeout: 20 * time.Second,
+			}),
 		},
 	})
 	if err != nil {
@@ -181,9 +187,7 @@ func (s *server) prepare(ctx context.Context) error {
 		return errors.Trace(err)
 	}
 
-	if err := s.createSortEngineFactory(); err != nil {
-		return errors.Trace(err)
-	}
+	s.createSortEngineFactory()
 
 	if err := s.setMemoryLimit(); err != nil {
 		return errors.Trace(err)
@@ -213,7 +217,7 @@ func (s *server) setMemoryLimit() error {
 	return nil
 }
 
-func (s *server) createSortEngineFactory() error {
+func (s *server) createSortEngineFactory() {
 	conf := config.GetGlobalServerConfig()
 	if s.sortEngineFactory != nil {
 		if err := s.sortEngineFactory.Close(); err != nil {
@@ -225,19 +229,12 @@ func (s *server) createSortEngineFactory() error {
 	// Sorter dir has been set and checked when server starts.
 	// See https://github.com/pingcap/tiflow/blob/9dad09/cdc/server.go#L275
 	sortDir := config.GetGlobalServerConfig().Sorter.SortDir
-	totalMemory, err := util.GetMemoryLimit()
-	if err != nil {
-		return errors.Trace(err)
-	}
-	memPercentage := float64(conf.Sorter.MaxMemoryPercentage) / 100
-	memInBytes := uint64(float64(totalMemory) * memPercentage)
+	memInBytes := conf.Sorter.CacheSizeInMB * uint64(1<<20)
 	s.sortEngineFactory = factory.NewForPebble(sortDir, memInBytes, conf.Debug.DB)
 	log.Info("sorter engine memory limit",
 		zap.Uint64("bytes", memInBytes),
 		zap.String("memory", humanize.IBytes(memInBytes)),
 	)
-
-	return nil
 }
 
 // Run runs the server.
@@ -298,9 +295,6 @@ func (s *server) startStatusHTTP(serverCtx context.Context, lis net.Listener) er
 }
 
 func (s *server) etcdHealthChecker(ctx context.Context) error {
-	ticker := time.NewTicker(time.Second * 3)
-	defer ticker.Stop()
-
 	conf := config.GetGlobalServerConfig()
 	grpcClient, err := pd.NewClientWithContext(ctx, s.pdEndpoints, conf.Security.PDSecurityOption())
 	if err != nil {
@@ -311,6 +305,9 @@ func (s *server) etcdHealthChecker(ctx context.Context) error {
 		return errors.Trace(err)
 	}
 	defer pc.Close()
+
+	ticker := time.NewTicker(time.Second * 3)
+	defer ticker.Stop()
 
 	for {
 		select {
@@ -332,6 +329,12 @@ func (s *server) etcdHealthChecker(ctx context.Context) error {
 				etcdHealthCheckDuration.WithLabelValues(endpoint).
 					Observe(time.Since(start).Seconds())
 				cancel()
+			}
+			ctx, cancel := context.WithTimeout(ctx, 5*time.Second)
+			_, err = s.etcdClient.GetEtcdClient().Unwrap().MemberList(ctx)
+			cancel()
+			if err != nil {
+				log.Warn("etcd health check error, fail to list etcd members", zap.Error(err))
 			}
 		}
 	}

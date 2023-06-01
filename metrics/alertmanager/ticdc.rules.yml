@@ -35,19 +35,7 @@ groups:
     annotations:
       description: 'cluster: ENV_LABELS_ENV, instance: {{ $labels.instance }}, values: {{ $value }}'
       value: '{{ $value }}'
-      summary: cdc processor checkpoint delay more than 10 minutes
-
-  - alert: ticdc_mounter_unmarshal_and_mount_time_more_than_1s
-    expr: histogram_quantile(0.9, rate(ticdc_mounter_unmarshal_and_mount_bucket[1m])) * 1000 > 1000
-    for: 1m
-    labels:
-      env: ENV_LABELS_ENV
-      level: warning
-      expr: histogram_quantile(0.9, rate(ticdc_mounter_unmarshal_and_mount_bucket[1m])) * 1000 > 1000
-    annotations:
-      description: 'cluster: ENV_LABELS_ENV, instance: {{ $labels.instance }}, values: {{ $value }}'
-      value: '{{ $value }}'
-      summary: cdc_mounter unmarshal and mount time more than 1s
+      summary: cdc owner checkpoint delay more than 10 minutes
 
   - alert: cdc_sink_execute_duration_time_more_than_10s
     expr: histogram_quantile(0.9, rate(ticdc_sink_txn_exec_duration_bucket[1m])) > 10

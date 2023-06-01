@@ -34,6 +34,7 @@ import (
 	"github.com/pingcap/tiflow/pkg/filter"
 	"github.com/pingcap/tiflow/pkg/security"
 	"github.com/pingcap/tiflow/pkg/txnutil/gc"
+	"github.com/pingcap/tiflow/pkg/util"
 	"github.com/pingcap/tiflow/pkg/version"
 	"github.com/r3labs/diff"
 	"github.com/tikv/client-go/v2/oracle"
@@ -155,7 +156,7 @@ func (APIV2HelpersImpl) verifyCreateChangefeedConfig(
 	}
 
 	cfStatus, err := statusProvider.GetChangeFeedStatus(ctx,
-		model.DefaultChangeFeedID(cfg.ID))
+		model.ChangeFeedID{Namespace: cfg.Namespace, ID: cfg.ID})
 	if err != nil && cerror.ErrChangeFeedNotExists.NotEqual(err) {
 		return nil, err
 	}
@@ -179,7 +180,7 @@ func (APIV2HelpersImpl) verifyCreateChangefeedConfig(
 		ctx,
 		pdClient,
 		ensureGCServiceID,
-		model.DefaultChangeFeedID(cfg.ID),
+		model.ChangeFeedID{Namespace: cfg.Namespace, ID: cfg.ID},
 		ensureTTL, cfg.StartTs); err != nil {
 		if !cerror.ErrStartTsBeforeGC.Equal(err) {
 			return nil, cerror.ErrPDEtcdAPIError.Wrap(err)
@@ -213,14 +214,18 @@ func (APIV2HelpersImpl) verifyCreateChangefeedConfig(
 
 		protocol := sinkURIParsed.Query().Get(config.ProtocolKey)
 		if protocol != "" {
-			replicaCfg.Sink.Protocol = protocol
+			replicaCfg.Sink.Protocol = util.AddressOf(protocol)
 		}
 		for _, fp := range config.ForceEnableOldValueProtocols {
-			if replicaCfg.Sink.Protocol == fp {
+			if util.GetOrZero(replicaCfg.Sink.Protocol) == fp {
 				log.Warn(
 					"Attempting to replicate without old value enabled. "+
 						"CDC will enable old value and continue.",
-					zap.String("protocol", replicaCfg.Sink.Protocol))
+					zap.String(
+						"protocol",
+						util.GetOrZero(replicaCfg.Sink.Protocol),
+					),
+				)
 				replicaCfg.EnableOldValue = true
 				break
 			}
@@ -428,7 +433,7 @@ func (APIV2HelpersImpl) verifyResumeChangefeedConfig(ctx context.Context,
 		ctx,
 		pdClient,
 		gcServiceID,
-		model.DefaultChangeFeedID(changefeedID.ID),
+		changefeedID,
 		gcTTL, checkpointTs)
 	if err != nil {
 		if !cerror.ErrStartTsBeforeGC.Equal(err) {

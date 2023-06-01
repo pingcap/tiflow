@@ -64,6 +64,11 @@ RUN rpm -ivh https://repo.mysql.com/mysql57-community-release-el7-11.noarch.rpm
 RUN rpm --import https://repo.mysql.com/RPM-GPG-KEY-mysql-2022
 RUN yum install mysql-community-client.x86_64 -y
 
+# install java to run the schema regsitry for the avro case.
+RUN yum install -y \
+    java-1.8.0-openjdk \
+    java-1.8.0-openjdk-devel
+
 # Copy go form downloader.
 COPY --from=downloader /usr/local/go /usr/local/go
 ENV GOPATH /go

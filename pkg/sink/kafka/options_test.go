@@ -203,7 +203,7 @@ func TestAdjustConfigTopicNotExist(t *testing.T) {
 	// topic not exist, `max-message-bytes` = `message.max.bytes`
 	options.MaxMessageBytes = adminClient.GetBrokerMessageMaxBytes()
 	ctx := context.Background()
-	saramaConfig, err := NewSaramaConfig(options)
+	saramaConfig, err := NewSaramaConfig(ctx, options)
 	require.Nil(t, err)
 
 	err = AdjustOptions(ctx, adminClient, options, "create-random1")
@@ -213,7 +213,7 @@ func TestAdjustConfigTopicNotExist(t *testing.T) {
 
 	// topic not exist, `max-message-bytes` > `message.max.bytes`
 	options.MaxMessageBytes = adminClient.GetBrokerMessageMaxBytes() + 1
-	saramaConfig, err = NewSaramaConfig(options)
+	saramaConfig, err = NewSaramaConfig(ctx, options)
 	require.Nil(t, err)
 	err = AdjustOptions(ctx, adminClient, options, "create-random2")
 	require.Nil(t, err)
@@ -222,7 +222,7 @@ func TestAdjustConfigTopicNotExist(t *testing.T) {
 
 	// topic not exist, `max-message-bytes` < `message.max.bytes`
 	options.MaxMessageBytes = adminClient.GetBrokerMessageMaxBytes() - 1
-	saramaConfig, err = NewSaramaConfig(options)
+	saramaConfig, err = NewSaramaConfig(ctx, options)
 	require.Nil(t, err)
 	err = AdjustOptions(ctx, adminClient, options, "create-random3")
 	require.Nil(t, err)
@@ -241,7 +241,7 @@ func TestAdjustConfigTopicExist(t *testing.T) {
 	options.MaxMessageBytes = adminClient.GetTopicMaxMessageBytes()
 
 	ctx := context.Background()
-	saramaConfig, err := NewSaramaConfig(options)
+	saramaConfig, err := NewSaramaConfig(ctx, options)
 	require.Nil(t, err)
 
 	err = AdjustOptions(ctx, adminClient, options, adminClient.GetDefaultMockTopicName())
@@ -252,7 +252,7 @@ func TestAdjustConfigTopicExist(t *testing.T) {
 
 	// topic exists, `max-message-bytes` > `max.message.bytes`
 	options.MaxMessageBytes = adminClient.GetTopicMaxMessageBytes() + 1
-	saramaConfig, err = NewSaramaConfig(options)
+	saramaConfig, err = NewSaramaConfig(ctx, options)
 	require.Nil(t, err)
 
 	err = AdjustOptions(ctx, adminClient, options, adminClient.GetDefaultMockTopicName())
@@ -263,7 +263,7 @@ func TestAdjustConfigTopicExist(t *testing.T) {
 
 	// topic exists, `max-message-bytes` < `max.message.bytes`
 	options.MaxMessageBytes = adminClient.GetTopicMaxMessageBytes() - 1
-	saramaConfig, err = NewSaramaConfig(options)
+	saramaConfig, err = NewSaramaConfig(ctx, options)
 	require.Nil(t, err)
 
 	err = AdjustOptions(ctx, adminClient, options, adminClient.GetDefaultMockTopicName())
@@ -278,14 +278,12 @@ func TestAdjustConfigTopicExist(t *testing.T) {
 	detail := &TopicDetail{
 		Name:          topicName,
 		NumPartitions: 3,
-		// Does not contain `max.message.bytes`.
-		ConfigEntries: make(map[string]string),
 	}
 	err = adminClient.CreateTopic(context.Background(), detail, false)
 	require.Nil(t, err)
 
 	options.MaxMessageBytes = adminClient.GetBrokerMessageMaxBytes() - 1
-	saramaConfig, err = NewSaramaConfig(options)
+	saramaConfig, err = NewSaramaConfig(ctx, options)
 	require.Nil(t, err)
 
 	err = AdjustOptions(ctx, adminClient, options, topicName)
@@ -298,7 +296,7 @@ func TestAdjustConfigTopicExist(t *testing.T) {
 	// When the topic exists, but the topic doesn't have `max.message.bytes`
 	// `max-message-bytes` > `message.max.bytes`
 	options.MaxMessageBytes = adminClient.GetBrokerMessageMaxBytes() + 1
-	saramaConfig, err = NewSaramaConfig(options)
+	saramaConfig, err = NewSaramaConfig(ctx, options)
 	require.Nil(t, err)
 
 	err = AdjustOptions(ctx, adminClient, options, topicName)
@@ -387,7 +385,7 @@ func TestSkipAdjustConfigMinInsyncReplicasWhenRequiredAcksIsNotWailAll(t *testin
 func TestCreateProducerFailed(t *testing.T) {
 	options := NewOptions()
 	options.Version = "invalid"
-	saramaConfig, err := NewSaramaConfig(options)
+	saramaConfig, err := NewSaramaConfig(context.Background(), options)
 	require.Regexp(t, "invalid version.*", errors.Cause(err))
 	require.Nil(t, saramaConfig)
 }
@@ -602,7 +600,7 @@ func TestConfigurationCombinations(t *testing.T) {
 		factory, err := NewMockFactory(options, changefeed)
 		require.NoError(t, err)
 
-		adminClient, err := factory.AdminClient()
+		adminClient, err := factory.AdminClient(ctx)
 		require.NoError(t, err)
 
 		topic, ok := a.uriParams[0].(string)

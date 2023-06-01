@@ -41,8 +41,8 @@ type cfMeta struct {
 	CheckpointTime model.JSONTime            `json:"checkpoint_time"`
 	Engine         model.SortEngine          `json:"sort_engine,omitempty"`
 	FeedState      model.FeedState           `json:"state"`
-	RunningError   *v2.RunningError          `json:"error"`
-	ErrorHis       []int64                   `json:"error_history"`
+	RunningError   *v2.RunningError          `json:"error,omitempty"`
+	ErrorHis       []int64                   `json:"error_history,omitempty"`
 	CreatorVersion string                    `json:"creator_version"`
 	TaskStatus     []model.CaptureTaskStatus `json:"task_status,omitempty"`
 }
@@ -52,6 +52,7 @@ type queryChangefeedOptions struct {
 	apiClientV2  apiv2client.APIV2Interface
 	changefeedID string
 	simplified   bool
+	namespace    string
 }
 
 // newQueryChangefeedOptions creates new options for the `cli changefeed query` command.
@@ -62,6 +63,7 @@ func newQueryChangefeedOptions() *queryChangefeedOptions {
 // addFlags receives a *cobra.Command reference and binds
 // flags related to template printing to it.
 func (o *queryChangefeedOptions) addFlags(cmd *cobra.Command) {
+	cmd.PersistentFlags().StringVarP(&o.namespace, "namespace", "n", "default", "Replication task (changefeed) Namespace")
 	cmd.PersistentFlags().BoolVarP(&o.simplified, "simple", "s", false, "Output simplified replication status")
 	cmd.PersistentFlags().StringVarP(&o.changefeedID, "changefeed-id", "c", "", "Replication task (changefeed) ID")
 	_ = cmd.MarkPersistentFlagRequired("changefeed-id")
@@ -81,7 +83,7 @@ func (o *queryChangefeedOptions) complete(f factory.Factory) error {
 func (o *queryChangefeedOptions) run(cmd *cobra.Command) error {
 	ctx := context.Background()
 	if o.simplified {
-		infos, err := o.apiClientV2.Changefeeds().List(ctx, "all")
+		infos, err := o.apiClientV2.Changefeeds().List(ctx, o.namespace, "all")
 		if err != nil {
 			return errors.Trace(err)
 		}
@@ -93,7 +95,7 @@ func (o *queryChangefeedOptions) run(cmd *cobra.Command) error {
 		return cerror.ErrChangeFeedNotExists.GenWithStackByArgs(o.changefeedID)
 	}
 
-	detail, err := o.apiClientV2.Changefeeds().Get(ctx, o.changefeedID)
+	detail, err := o.apiClientV2.Changefeeds().Get(ctx, o.namespace, o.changefeedID)
 	if err != nil && cerror.ErrChangeFeedNotExists.NotEqual(err) {
 		return err
 	}

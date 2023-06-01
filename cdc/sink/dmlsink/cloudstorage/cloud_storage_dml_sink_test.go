@@ -31,6 +31,7 @@ import (
 	"github.com/pingcap/tiflow/cdc/sink/tablesink/state"
 	"github.com/pingcap/tiflow/engine/pkg/clock"
 	"github.com/pingcap/tiflow/pkg/config"
+	"github.com/pingcap/tiflow/pkg/util"
 	"github.com/stretchr/testify/require"
 )
 
@@ -122,8 +123,9 @@ func TestCloudStorageWriteEventsWithoutDateSeparator(t *testing.T) {
 	require.Nil(t, err)
 
 	replicaConfig := config.GetDefaultReplicaConfig()
-	replicaConfig.Sink.Protocol = config.ProtocolCsv.String()
-	replicaConfig.Sink.FileIndexWidth = 6
+	replicaConfig.Sink.DateSeparator = util.AddressOf(config.DateSeparatorNone.String())
+	replicaConfig.Sink.Protocol = util.AddressOf(config.ProtocolCsv.String())
+	replicaConfig.Sink.FileIndexWidth = util.AddressOf(6)
 	errCh := make(chan error, 5)
 	s, err := NewDMLSink(ctx, sinkURI, replicaConfig, errCh)
 	require.Nil(t, err)
@@ -188,9 +190,9 @@ func TestCloudStorageWriteEventsWithDateSeparator(t *testing.T) {
 	require.Nil(t, err)
 
 	replicaConfig := config.GetDefaultReplicaConfig()
-	replicaConfig.Sink.Protocol = config.ProtocolCsv.String()
-	replicaConfig.Sink.DateSeparator = config.DateSeparatorDay.String()
-	replicaConfig.Sink.FileIndexWidth = 6
+	replicaConfig.Sink.Protocol = util.AddressOf(config.ProtocolCsv.String())
+	replicaConfig.Sink.DateSeparator = util.AddressOf(config.DateSeparatorDay.String())
+	replicaConfig.Sink.FileIndexWidth = util.AddressOf(6)
 
 	errCh := make(chan error, 5)
 	s, err := NewDMLSink(ctx, sinkURI, replicaConfig, errCh)

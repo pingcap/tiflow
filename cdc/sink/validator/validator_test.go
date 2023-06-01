@@ -18,6 +18,7 @@ import (
 	"testing"
 
 	"github.com/pingcap/tiflow/pkg/config"
+	"github.com/pingcap/tiflow/pkg/util"
 	"github.com/stretchr/testify/require"
 )
 
@@ -109,14 +110,14 @@ func TestValidateSink(t *testing.T) {
 	require.Nil(t, err)
 
 	// test bdr mode error
-	replicateConfig.BDRMode = true
+	replicateConfig.BDRMode = util.AddressOf(true)
 	sinkURI = "blackhole://"
 	err = Validate(ctx, sinkURI, replicateConfig)
 	require.NotNil(t, err)
 	require.Contains(t, err.Error(), "sink uri scheme is not supported in BDR mode")
 
 	// test sink-scheme/syncpoint error
-	replicateConfig.EnableSyncPoint = true
+	replicateConfig.EnableSyncPoint = util.AddressOf(true)
 	sinkURI = "kafka://"
 	err = Validate(ctx, sinkURI, replicateConfig)
 	require.NotNil(t, err)
