@@ -70,6 +70,8 @@ func removeVAndHash(v string) string {
 	return strings.TrimPrefix(v, "v")
 }
 
+var checkClusterVersionRetryTimes = 10
+
 // CheckClusterVersion check TiKV and PD version.
 // need only one PD alive and match the cdc version.
 func CheckClusterVersion(
@@ -85,7 +87,18 @@ func CheckClusterVersion(
 	}
 
 	for _, pdAddr := range pdAddrs {
+<<<<<<< HEAD
 		err = CheckPDVersion(ctx, pdAddr, credential)
+=======
+		// check pd version with retry, if the pdAddr is a service or lb address
+		// the http client may connect to an unhealthy PD that returns 503
+		err = retry.Do(ctx, func() error {
+			return checkPDVersion(ctx, pdAddr, credential)
+		}, retry.WithBackoffBaseDelay(time.Millisecond.Milliseconds()*10),
+			retry.WithBackoffMaxDelay(time.Second.Milliseconds()),
+			retry.WithMaxTries(uint64(checkClusterVersionRetryTimes)),
+			retry.WithIsRetryableErr(cerror.IsRetryableError))
+>>>>>>> e1826b37cb (etcd (ticdc): add grpc keepalive params and add timeout for check pd version ctx. (#9106))
 		if err == nil {
 			break
 		}
@@ -106,6 +119,8 @@ func CheckPDVersion(ctx context.Context, pdAddr string, credential *security.Cre
 		return err
 	}
 
+	ctx, cancel := context.WithTimeout(ctx, 10*time.Second)
+	defer cancel()
 	resp, err := httpClient.Get(ctx, fmt.Sprintf("%s/pd/api/v1/version", pdAddr))
 	if err != nil {
 		return cerror.ErrCheckClusterVersionFromPD.GenWithStackByArgs(err)

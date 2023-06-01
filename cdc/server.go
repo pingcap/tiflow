@@ -46,6 +46,7 @@ import (
 	"golang.org/x/sync/errgroup"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/backoff"
+	"google.golang.org/grpc/keepalive"
 )
 
 const (
@@ -124,6 +125,18 @@ func (s *Server) Run(ctx context.Context) error {
 	logConfig := logutil.DefaultZapLoggerConfig
 	logConfig.Level = zap.NewAtomicLevelAt(zapcore.ErrorLevel)
 
+<<<<<<< HEAD:cdc/server.go
+=======
+	log.Info("create etcdCli", zap.Strings("endpoints", s.pdEndpoints))
+	// we do not pass a `context` to the etcd client,
+	// to prevent it's cancelled when the server is closing.
+	// For example, when the non-owner node goes offline,
+	// it would resign the campaign key which was put by call `campaign`,
+	// if this is not done due to the passed context cancelled,
+	// the key will be kept for the lease TTL, which is 10 seconds,
+	// then cause the new owner cannot be elected immediately after the old owner offline.
+	// see https://github.com/etcd-io/etcd/blob/525d53bd41/client/v3/concurrency/election.go#L98
+>>>>>>> e1826b37cb (etcd (ticdc): add grpc keepalive params and add timeout for check pd version ctx. (#9106)):cdc/server/server.go
 	etcdCli, err := clientv3.New(clientv3.Config{
 		Endpoints:   s.pdEndpoints,
 		TLS:         tlsConfig,
@@ -141,6 +154,10 @@ func (s *Server) Run(ctx context.Context) error {
 					MaxDelay:   3 * time.Second,
 				},
 				MinConnectTimeout: 3 * time.Second,
+			}),
+			grpc.WithKeepaliveParams(keepalive.ClientParameters{
+				Time:    10 * time.Second,
+				Timeout: 20 * time.Second,
 			}),
 		},
 	})
@@ -207,9 +224,13 @@ func (s *Server) startStatusHTTP(lis net.Listener) error {
 	return nil
 }
 
+<<<<<<< HEAD:cdc/server.go
 func (s *Server) etcdHealthChecker(ctx context.Context) error {
 	ticker := time.NewTicker(time.Second * 3)
 	defer ticker.Stop()
+=======
+func (s *server) etcdHealthChecker(ctx context.Context) error {
+>>>>>>> e1826b37cb (etcd (ticdc): add grpc keepalive params and add timeout for check pd version ctx. (#9106)):cdc/server/server.go
 	conf := config.GetGlobalServerConfig()
 
 	httpCli, err := httputil.NewClient(conf.Security)
@@ -221,6 +242,9 @@ func (s *Server) etcdHealthChecker(ctx context.Context) error {
 	for _, pdEndpoint := range s.pdEndpoints {
 		metrics[pdEndpoint] = etcdHealthCheckDuration.WithLabelValues(pdEndpoint)
 	}
+
+	ticker := time.NewTicker(time.Second * 3)
+	defer ticker.Stop()
 
 	for {
 		select {
@@ -239,6 +263,12 @@ func (s *Server) etcdHealthChecker(ctx context.Context) error {
 					metrics[pdEndpoint].Observe(float64(time.Since(start)) / float64(time.Second))
 				}
 				cancel()
+			}
+			ctx, cancel := context.WithTimeout(ctx, 5*time.Second)
+			_, err = s.etcdClient.GetEtcdClient().Unwrap().MemberList(ctx)
+			cancel()
+			if err != nil {
+				log.Warn("etcd health check error, fail to list etcd members", zap.Error(err))
 			}
 		}
 	}
