@@ -432,7 +432,7 @@ func NewKafkaSaramaSink(ctx context.Context, sinkURI *url.URL,
 	}
 
 	topicManager, err := manager.NewKafkaTopicManager(
-		client,
+		ctx,
 		adminClient,
 		baseConfig.DeriveTopicConfig(),
 	)
