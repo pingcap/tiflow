@@ -34,6 +34,7 @@ type queryProcessorOptions struct {
 	apiClient apiv2client.APIV2Interface
 
 	changefeedID string
+	namespace    string
 	captureID    string
 }
 
@@ -55,6 +56,7 @@ func (o *queryProcessorOptions) complete(f factory.Factory) error {
 // addFlags receives a *cobra.Command reference and binds
 // flags related to template printing to it.
 func (o *queryProcessorOptions) addFlags(cmd *cobra.Command) {
+	cmd.PersistentFlags().StringVarP(&o.namespace, "namespace", "n", "default", "Replication task (changefeed) Namespace")
 	cmd.PersistentFlags().StringVarP(&o.changefeedID, "changefeed-id", "c", "", "Replication task (changefeed) ID")
 	cmd.PersistentFlags().StringVarP(&o.captureID, "capture-id", "p", "", "capture ID")
 	_ = cmd.MarkPersistentFlagRequired("changefeed-id")
@@ -63,7 +65,7 @@ func (o *queryProcessorOptions) addFlags(cmd *cobra.Command) {
 
 // run cli cmd with api client
 func (o *queryProcessorOptions) runCliWithAPIClient(ctx context.Context, cmd *cobra.Command) error {
-	processor, err := o.apiClient.Processors().Get(ctx, o.changefeedID, o.captureID)
+	processor, err := o.apiClient.Processors().Get(ctx, o.namespace, o.changefeedID, o.captureID)
 	if err != nil {
 		return err
 	}

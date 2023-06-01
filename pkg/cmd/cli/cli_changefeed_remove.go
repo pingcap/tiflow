@@ -28,6 +28,7 @@ import (
 type removeChangefeedOptions struct {
 	apiClient    apiv2client.APIV2Interface
 	changefeedID string
+	namespace    string
 }
 
 // newRemoveChangefeedOptions creates new options for the `cli changefeed remove` command.
@@ -38,6 +39,7 @@ func newRemoveChangefeedOptions() *removeChangefeedOptions {
 // addFlags receives a *cobra.Command reference and binds
 // flags related to template printing to it.
 func (o *removeChangefeedOptions) addFlags(cmd *cobra.Command) {
+	cmd.PersistentFlags().StringVarP(&o.namespace, "namespace", "n", "default", "Replication task (changefeed) Namespace")
 	cmd.PersistentFlags().StringVarP(&o.changefeedID, "changefeed-id", "c", "", "Replication task (changefeed) ID")
 	_ = cmd.MarkPersistentFlagRequired("changefeed-id")
 }
@@ -56,7 +58,7 @@ func (o *removeChangefeedOptions) complete(f factory.Factory) error {
 func (o *removeChangefeedOptions) run(cmd *cobra.Command) error {
 	ctx := context.GetDefaultContext()
 
-	changefeedDetail, err := o.apiClient.Changefeeds().Get(ctx, o.changefeedID)
+	changefeedDetail, err := o.apiClient.Changefeeds().Get(ctx, o.namespace, o.changefeedID)
 	if err != nil {
 		if strings.Contains(err.Error(), "ErrChangeFeedNotExists") {
 			cmd.Printf("Changefeed not found.\nID: %s\n", o.changefeedID)
@@ -70,14 +72,14 @@ func (o *removeChangefeedOptions) run(cmd *cobra.Command) error {
 	checkpointTs := changefeedDetail.CheckpointTs
 	sinkURI := changefeedDetail.SinkURI
 
-	err = o.apiClient.Changefeeds().Delete(ctx, o.changefeedID)
+	err = o.apiClient.Changefeeds().Delete(ctx, o.namespace, o.changefeedID)
 	if err != nil {
 		cmd.Printf("Changefeed remove failed.\nID: %s\nError: %s\n", o.changefeedID,
 			err.Error())
 		return err
 	}
 
-	_, err = o.apiClient.Changefeeds().Get(ctx, o.changefeedID)
+	_, err = o.apiClient.Changefeeds().Get(ctx, o.namespace, o.changefeedID)
 	// Should never happen here. This checking is for defending.
 	// The reason is that changefeed query to owner is invoked in the subsequent owner
 	// Tick and in that Tick, the in-memory data structure and the metadata stored in
