@@ -20,7 +20,6 @@ import (
 	"github.com/pingcap/log"
 	"github.com/pingcap/tiflow/cdc/entry"
 	"github.com/pingcap/tiflow/cdc/kv"
-	"github.com/pingcap/tiflow/cdc/kv/clientxxx"
 	"github.com/pingcap/tiflow/cdc/model"
 	"github.com/pingcap/tiflow/cdc/processor/memquota"
 	"github.com/pingcap/tiflow/cdc/processor/sourcemanager/engine"
@@ -39,7 +38,7 @@ type SourceManager struct {
 	ctx   context.Context
 	ready chan struct{}
 
-    kvCli clientxxx.CDCKVClient
+	// kvCli *kv.SharedClient
 
 	// changefeedID is the changefeed ID.
 	// We use it to create the puller and log.
@@ -175,13 +174,15 @@ func (m *SourceManager) ReceivedEvents() int64 {
 // Run implements util.Runnable.
 func (m *SourceManager) Run(ctx context.Context, _ ...chan<- error) error {
 	m.ctx = ctx
-	m.kvCli = clientxxx.NewCDCKVClient(
-		ctx, m.up.PDClient,
-        m.up.GrpcPool,
-        m.up.RegionCache,
-        m.up.PDClock,
+	m.kvCli = kv.NewCDCKVClient(
+		m.changefeed,
 		config.GetGlobalServerConfig().KVClient,
-        changefeed, m.bdrMode)
+		m.bdrMode,
+		m.up.PDClient,
+		m.up.GrpcPool,
+		m.up.RegionCache,
+		m.up.PDClock,
+		nil)
 	close(m.ready)
 
 	select {

@@ -60,6 +60,10 @@ func newRangeTsMap(startKey, endKey []byte, startTs uint64) *rangeTsMap {
 	return m
 }
 
+func newEmptyRangeTsMap() *rangeTsMap {
+	return &rangeTsMap{m: btree.NewG(16, rangeTsEntryLess)}
+}
+
 // Set sets the corresponding ts of the given range to the specified value.
 func (m *rangeTsMap) Set(startKey, endKey []byte, ts uint64) {
 	if _, ok := m.m.Get(rangeTsEntryWithKey(endKey)); !ok {
@@ -164,6 +168,16 @@ func NewRegionRangeLock(
 	return &RegionRangeLock{
 		changefeedLogInfo: changefeedLogInfo,
 		rangeCheckpointTs: newRangeTsMap(startKey, endKey, startTs),
+		rangeLock:         btree.NewG(16, rangeLockEntryLess),
+		regionIDLock:      make(map[uint64]*rangeLockEntry),
+		id:                allocID(),
+	}
+}
+
+func NewEmptyRegionRangeLock(changefeedLogInfo string) *RegionRangeLock {
+	return &RegionRangeLock{
+		changefeedLogInfo: changefeedLogInfo,
+		rangeCheckpointTs: newEmptyRangeTsMap(),
 		rangeLock:         btree.NewG(16, rangeLockEntryLess),
 		regionIDLock:      make(map[uint64]*rangeLockEntry),
 		id:                allocID(),
