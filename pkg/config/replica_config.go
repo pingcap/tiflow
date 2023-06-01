@@ -110,9 +110,6 @@ type replicaConfig struct {
 	CaseSensitive  bool   `toml:"case-sensitive" json:"case-sensitive"`
 	EnableOldValue bool   `toml:"enable-old-value" json:"enable-old-value"`
 
-	// ForceReplicate if set to true, should only work in the following case:
-	// 1. MySQL sink, and `EnableOldValue` is set to true.
-	// 2. Kafka / storage sink, `EnableOldValue` is correctly set by the using encoding protocol requirement.
 	ForceReplicate   bool `toml:"force-replicate" json:"force-replicate"`
 	CheckGCSafePoint bool `toml:"check-gc-safe-point" json:"check-gc-safe-point"`
 	// EnableSyncPoint is only available when the downstream is a Database.
@@ -326,6 +323,7 @@ func (c *ReplicaConfig) AdjustEnableOldValueAndVerifyForceReplicate(sinkURI *url
 		return nil
 	}
 
+	// MySQL Sink require the old value feature must be enabled to allow delete event send to downstream.
 	if sink.IsMySQLCompatibleScheme(scheme) {
 		if !c.EnableOldValue {
 			log.Error("force replicate, old value feature is disabled for the changefeed using mysql sink")

@@ -782,7 +782,6 @@ func (p *processor) initDDLHandler(ctx context.Context) error {
 	if err != nil {
 		return errors.Trace(err)
 	}
-
 	schemaStorage, err := entry.NewSchemaStorage(meta, ddlStartTs,
 		forceReplicate, p.changefeedID, util.RoleProcessor, f)
 	if err != nil {
