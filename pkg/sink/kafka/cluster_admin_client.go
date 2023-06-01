@@ -22,7 +22,6 @@ type TopicDetail struct {
 	Name              string
 	NumPartitions     int32
 	ReplicationFactor int16
-	ConfigEntries     map[string]string
 }
 
 // Broker represents a Kafka broker.
@@ -41,6 +40,9 @@ type ClusterAdminClient interface {
 
 	// GetBrokerConfig return the broker level configuration with the `configName`
 	GetBrokerConfig(ctx context.Context, configName string) (string, error)
+
+	// GetTopicConfig return the topic level configuration with the `configName`
+	GetTopicConfig(ctx context.Context, topicName string, configName string) (string, error)
 
 	// GetTopicsMeta return all target topics' metadata
 	// if `ignoreTopicError` is true, ignore the topic error and return the metadata of valid topics

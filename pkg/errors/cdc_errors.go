@@ -199,9 +199,9 @@ var (
 		"invalid topic expression",
 		errors.RFCCodeText("CDC:ErrKafkaTopicExprInvalid"),
 	)
-	ErrKafkaBrokerConfigNotFound = errors.Normalize(
-		"kafka broker config item not found",
-		errors.RFCCodeText("CDC:ErrKafkaBrokerConfigNotFound"),
+	ErrKafkaConfigNotFound = errors.Normalize(
+		"kafka config item not found",
+		errors.RFCCodeText("CDC:ErrKafkaConfigNotFound"),
 	)
 	ErrRedoConfigInvalid = errors.Normalize(
 		"redo log config invalid",
