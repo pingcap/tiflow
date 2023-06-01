@@ -95,16 +95,16 @@ func (l AtomicityLevel) validate(scheme string) error {
 }
 
 // ForceEnableOldValueProtocols specifies which protocols need to be forced to enable old value.
-var ForceEnableOldValueProtocols = []string{
-	ProtocolCanal.String(),
-	ProtocolCanalJSON.String(),
-	ProtocolMaxwell.String(),
+var ForceEnableOldValueProtocols = map[string]struct{}{
+	ProtocolCanal.String():     {},
+	ProtocolCanalJSON.String(): {},
+	ProtocolMaxwell.String():   {},
 }
 
 // ForceDisableOldValueProtocols specifies protocols need to be forced to disable old value.
-var ForceDisableOldValueProtocols = []string{
-	ProtocolAvro.String(),
-	ProtocolCsv.String(),
+var ForceDisableOldValueProtocols = map[string]struct{}{
+	ProtocolAvro.String(): {},
+	ProtocolCsv.String():  {},
 }
 
 // SinkConfig represents sink config for a changefeed
