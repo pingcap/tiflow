@@ -106,12 +106,11 @@ func (d *Duration) UnmarshalText(text []byte) error {
 type ReplicaConfig replicaConfig
 
 type replicaConfig struct {
-	MemoryQuota    uint64 `toml:"memory-quota" json:"memory-quota"`
-	CaseSensitive  bool   `toml:"case-sensitive" json:"case-sensitive"`
-	EnableOldValue bool   `toml:"enable-old-value" json:"enable-old-value"`
-
-	ForceReplicate   bool `toml:"force-replicate" json:"force-replicate"`
-	CheckGCSafePoint bool `toml:"check-gc-safe-point" json:"check-gc-safe-point"`
+	MemoryQuota      uint64 `toml:"memory-quota" json:"memory-quota"`
+	CaseSensitive    bool   `toml:"case-sensitive" json:"case-sensitive"`
+	EnableOldValue   bool   `toml:"enable-old-value" json:"enable-old-value"`
+	ForceReplicate   bool   `toml:"force-replicate" json:"force-replicate"`
+	CheckGCSafePoint bool   `toml:"check-gc-safe-point" json:"check-gc-safe-point"`
 	// EnableSyncPoint is only available when the downstream is a Database.
 	EnableSyncPoint *bool `toml:"enable-sync-point" json:"enable-sync-point,omitempty"`
 	// IgnoreIneligibleTable is used to store the user's config when creating a changefeed.
