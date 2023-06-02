@@ -327,6 +327,7 @@ func (k *mqSink) Close(_ context.Context) error {
 	// NOTICE: We must close the resolved buffer before closing the flush worker.
 	// Otherwise, bgFlushTs method will panic.
 	k.flushWorker.close()
+	k.topicManager.Close()
 	// We need to close it asynchronously.
 	// Otherwise, we might get stuck with it in an unhealthy state of kafka.
 	go k.mqProducer.Close()
@@ -432,7 +433,7 @@ func NewKafkaSaramaSink(ctx context.Context, sinkURI *url.URL,
 	}
 
 	topicManager, err := manager.NewKafkaTopicManager(
-		client,
+		ctx,
 		adminClient,
 		baseConfig.DeriveTopicConfig(),
 	)

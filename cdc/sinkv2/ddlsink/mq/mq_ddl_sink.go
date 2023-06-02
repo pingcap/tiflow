@@ -172,6 +172,7 @@ func (k *ddlSink) WriteCheckpointTs(ctx context.Context,
 }
 
 func (k *ddlSink) Close() error {
+	k.topicManager.Close()
 	k.producer.Close()
 	return nil
 }
