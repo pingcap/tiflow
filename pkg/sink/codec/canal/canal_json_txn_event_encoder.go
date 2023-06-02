@@ -34,6 +34,8 @@ type JSONTxnEventEncoder struct {
 	// which, at the moment, only includes `tidbWaterMarkType` and `_tidb` fields.
 	enableTiDBExtension bool
 
+	onlyHandleKeyColumns bool
+
 	onlyOutputUpdatedColumns bool
 	// the symbol separating two lines
 	terminator      []byte
@@ -55,7 +57,7 @@ func (j *JSONTxnEventEncoder) AppendTxnEvent(
 ) error {
 	for _, row := range txn.Rows {
 		value, err := newJSONMessageForDML(j.builder,
-			j.enableTiDBExtension, row, j.onlyOutputUpdatedColumns)
+			j.enableTiDBExtension, row, j.onlyOutputUpdatedColumns, j.onlyHandleKeyColumns)
 		if err != nil {
 			return errors.Trace(err)
 		}
@@ -106,6 +108,7 @@ func newJSONTxnEventEncoder(config *common.Config) codec.TxnEventEncoder {
 		builder:                  newCanalEntryBuilder(),
 		enableTiDBExtension:      config.EnableTiDBExtension,
 		onlyOutputUpdatedColumns: config.OnlyOutputUpdatedColumns,
+		onlyHandleKeyColumns:     !config.EnableOldValue,
 		valueBuf:                 &bytes.Buffer{},
 		terminator:               []byte(config.Terminator),
 		maxMessageBytes:          config.MaxMessageBytes,

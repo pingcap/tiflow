@@ -31,6 +31,8 @@ type BatchEncoder struct {
 	valueBuf    *bytes.Buffer
 	callbackBuf []func()
 	batchSize   int
+
+	onlyHandleKeyColumns bool
 }
 
 // EncodeCheckpointEvent implements the RowEventEncoder interface
@@ -47,7 +49,7 @@ func (d *BatchEncoder) AppendRowChangedEvent(
 	e *model.RowChangedEvent,
 	callback func(),
 ) error {
-	_, valueMsg := rowChangeToMaxwellMsg(e)
+	_, valueMsg := rowChangeToMaxwellMsg(e, d.onlyHandleKeyColumns)
 	value, err := valueMsg.encode()
 	if err != nil {
 		return errors.Trace(err)
@@ -109,24 +111,29 @@ func (d *BatchEncoder) reset() {
 }
 
 // newBatchEncoder creates a new maxwell BatchEncoder.
-func newBatchEncoder() codec.RowEventEncoder {
+func newBatchEncoder(config *common.Config) codec.RowEventEncoder {
 	batch := &BatchEncoder{
-		keyBuf:      &bytes.Buffer{},
-		valueBuf:    &bytes.Buffer{},
-		callbackBuf: make([]func(), 0),
+		keyBuf:               &bytes.Buffer{},
+		valueBuf:             &bytes.Buffer{},
+		callbackBuf:          make([]func(), 0),
+		onlyHandleKeyColumns: !config.EnableOldValue,
 	}
 	batch.reset()
 	return batch
 }
 
-type batchEncoderBuilder struct{}
+type batchEncoderBuilder struct {
+	config *common.Config
+}
 
 // NewBatchEncoderBuilder creates a maxwell batchEncoderBuilder.
-func NewBatchEncoderBuilder() codec.RowEventEncoderBuilder {
-	return &batchEncoderBuilder{}
+func NewBatchEncoderBuilder(config *common.Config) codec.RowEventEncoderBuilder {
+	return &batchEncoderBuilder{
+		config: config,
+	}
 }
 
 // Build a `maxwellBatchEncoder`
 func (b *batchEncoderBuilder) Build() codec.RowEventEncoder {
-	return newBatchEncoder()
+	return newBatchEncoder(b.config)
 }

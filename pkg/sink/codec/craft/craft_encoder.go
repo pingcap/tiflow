@@ -32,6 +32,8 @@ type BatchEncoder struct {
 	MaxMessageBytes int
 	MaxBatchSize    int
 
+	onlyHandleKeyColumns bool
+
 	allocator *SliceAllocator
 }
 
@@ -49,7 +51,7 @@ func (e *BatchEncoder) AppendRowChangedEvent(
 	ev *model.RowChangedEvent,
 	callback func(),
 ) error {
-	rows, size := e.rowChangedBuffer.AppendRowChangedEvent(ev)
+	rows, size := e.rowChangedBuffer.AppendRowChangedEvent(ev, e.onlyHandleKeyColumns)
 	if callback != nil {
 		e.callbackBuf = append(e.callbackBuf, callback)
 	}
@@ -114,6 +116,7 @@ func (b *batchEncoderBuilder) Build() codec.RowEventEncoder {
 	encoder := NewBatchEncoder()
 	encoder.(*BatchEncoder).MaxMessageBytes = b.config.MaxMessageBytes
 	encoder.(*BatchEncoder).MaxBatchSize = b.config.MaxBatchSize
+	encoder.(*BatchEncoder).onlyHandleKeyColumns = !b.config.EnableOldValue
 	return encoder
 }
 
