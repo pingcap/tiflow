@@ -23,6 +23,7 @@ function run() {
 	# start a cluster with tls, but now master can't access the certificate so exit
 	start_engine_cluster $CONFIG
 	$COMPOSECMD -f ${seq[0]} stop server-master-0 server-master-1 server-master-2
+	$COMPOSECMD -f ${seq[0]} ps | grep "server-master-0"
 	$COMPOSECMD -f ${seq[0]} ps | grep "server-master-0" | grep -q "Exit"
 
 	# copy auto-generated certificates from MySQL to bypass permission
