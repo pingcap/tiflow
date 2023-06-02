@@ -299,13 +299,13 @@ func (m *kafkaTopicManager) CreateTopicAndWaitUntilVisible(topicName string) (in
 				m.tryUpdatePartitionsAndLogging(topicName, partitionNum)
 				return partitionNum, nil
 			}
-		} else {
+		} else if detail.Err != sarama.ErrUnknownTopicOrPartition {
 			log.Error("Kafka admin client describe topic failed",
 				zap.String("namespace", m.changefeedID.Namespace),
 				zap.String("changefeed", m.changefeedID.ID),
 				zap.String("topic", topicName),
-				zap.Error(err))
-			return 0, errors.Trace(err)
+				zap.Error(detail.Err))
+			return 0, errors.Trace(detail.Err)
 		}
 	}
 
