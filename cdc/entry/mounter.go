@@ -333,7 +333,7 @@ func parseJob(v []byte, startTs, CRTs uint64) (*timodel.Job, error) {
 }
 
 func datum2Column(
-	tableInfo *model.TableInfo, datums map[int64]types.Datum, fillWithDefaultValue bool,
+	tableInfo *model.TableInfo, datums map[int64]types.Datum,
 ) ([]*model.Column, []types.Datum, []*timodel.ColumnInfo, []rowcodec.ColInfo, error) {
 	cols := make([]*model.Column, len(tableInfo.RowColumnsOffset))
 	rawCols := make([]types.Datum, len(tableInfo.RowColumnsOffset))
@@ -355,7 +355,7 @@ func datum2Column(
 		colName := colInfo.Name.O
 		colID := colInfo.ID
 		colDatums, exist := datums[colID]
-		if !exist && !fillWithDefaultValue {
+		if !exist {
 			log.Debug("column value is not found",
 				zap.String("table", tableInfo.Name.O), zap.String("column", colName))
 			continue
@@ -369,7 +369,7 @@ func datum2Column(
 		)
 		if exist {
 			colValue, size, warn, err = formatColVal(colDatums, colInfo)
-		} else if fillWithDefaultValue {
+		} else {
 			colDatums, colValue, size, warn, err = getDefaultOrZeroValue(colInfo)
 		}
 		if err != nil {
@@ -508,7 +508,7 @@ func (m *mounter) mountRowKVEntry(tableInfo *model.TableInfo, row *rowKVEntry, d
 	if row.PreRowExist {
 		// FIXME(leoppro): using pre table info to mounter pre column datum
 		// the pre column and current column in one event may using different table info
-		preCols, preRawCols, columnInfos, extendColumnInfos, err = datum2Column(tableInfo, row.PreRow, true)
+		preCols, preRawCols, columnInfos, extendColumnInfos, err = datum2Column(tableInfo, row.PreRow)
 		if err != nil {
 			return nil, rawRow, errors.Trace(err)
 		}
@@ -537,7 +537,7 @@ func (m *mounter) mountRowKVEntry(tableInfo *model.TableInfo, row *rowKVEntry, d
 		current uint32
 	)
 	if row.RowExist {
-		cols, rawCols, columnInfos, extendColumnInfos, err = datum2Column(tableInfo, row.Row, true)
+		cols, rawCols, columnInfos, extendColumnInfos, err = datum2Column(tableInfo, row.Row)
 		if err != nil {
 			return nil, rawRow, errors.Trace(err)
 		}
