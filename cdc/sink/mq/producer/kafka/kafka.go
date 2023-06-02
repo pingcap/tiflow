@@ -409,9 +409,11 @@ func AdjustConfig(
 			if t.Name == topic {
 				info = t
 				exists = true
+				log.Info("topic already exists", zap.String("topic", topic))
 				break
 			}
 		} else if t.Err != sarama.ErrUnknownTopicOrPartition {
+			log.Warn("failed to describe topic", zap.String("topic", topic), zap.Error(t.Err))
 			return errors.Trace(t.Err)
 		}
 	}
