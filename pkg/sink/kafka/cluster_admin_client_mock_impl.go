@@ -61,6 +61,7 @@ type ClusterAdminClientMockImpl struct {
 	topics map[string]*topicDetail
 	// Cluster controller ID.
 	controllerID  int32
+	topicConfigs  map[string]map[string]string
 	brokerConfigs []sarama.ConfigEntry
 }
 
@@ -89,10 +90,16 @@ func NewClusterAdminClientMockImpl() *ClusterAdminClientMockImpl {
 		},
 	}
 
+	topicConfigs := make(map[string]map[string]string)
+	topicConfigs[DefaultMockTopicName] = make(map[string]string)
+	topicConfigs[DefaultMockTopicName][TopicMaxMessageBytesConfigName] = TopicMaxMessageBytes
+	topicConfigs[DefaultMockTopicName][MinInsyncReplicasConfigName] = MinInSyncReplicas
+
 	return &ClusterAdminClientMockImpl{
 		topics:        topics,
 		controllerID:  defaultMockControllerID,
 		brokerConfigs: brokerConfigs,
+		topicConfigs:  topicConfigs,
 	}
 }
 
@@ -113,10 +120,27 @@ func (c *ClusterAdminClientMockImpl) DescribeCluster() (brokers []*sarama.Broker
 // DescribeConfig return brokerConfigs directly.
 func (c *ClusterAdminClientMockImpl) DescribeConfig(resource sarama.ConfigResource) ([]sarama.ConfigEntry, error) {
 	var result []sarama.ConfigEntry
-	for _, name := range resource.ConfigNames {
-		for _, config := range c.brokerConfigs {
-			if name == config.Name {
-				result = append(result, config)
+	if resource.Type == sarama.TopicResource {
+		if _, ok := c.topics[resource.Name]; !ok {
+			return nil, fmt.Errorf("topic %s not found", resource.Name)
+		}
+		for _, name := range resource.ConfigNames {
+			for n, config := range c.topicConfigs[resource.Name] {
+				if name == n {
+					result = append(result, sarama.ConfigEntry{
+						Name:  n,
+						Value: config,
+					})
+				}
+			}
+		}
+
+	} else if resource.Type == sarama.BrokerResource {
+		for _, name := range resource.ConfigNames {
+			for _, config := range c.brokerConfigs {
+				if name == config.Name {
+					result = append(result, config)
+				}
 			}
 		}
 	}
@@ -207,7 +231,7 @@ func (c *ClusterAdminClientMockImpl) Close() error {
 
 // SetMinInsyncReplicas sets the MinInsyncReplicas for broker and default topic.
 func (c *ClusterAdminClientMockImpl) SetMinInsyncReplicas(minInsyncReplicas string) {
-	c.topics[DefaultMockTopicName].ConfigEntries[MinInsyncReplicasConfigName] = &minInsyncReplicas
+	c.topicConfigs[DefaultMockTopicName][MinInsyncReplicasConfigName] = minInsyncReplicas
 
 	for i, config := range c.brokerConfigs {
 		if config.Name == MinInsyncReplicasConfigName {
