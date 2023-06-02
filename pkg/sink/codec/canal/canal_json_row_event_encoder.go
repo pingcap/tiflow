@@ -34,12 +34,14 @@ func newJSONMessageForDML(
 	enableTiDBExtension bool,
 	e *model.RowChangedEvent,
 	onlyOutputUpdatedColumns bool,
+	onlyHandleKeyColumns bool,
 ) ([]byte, error) {
 	isDelete := e.IsDelete()
 	mysqlTypeMap := make(map[string]string, len(e.Columns))
 
 	filling := func(columns []*model.Column, out *jwriter.Writer,
 		onlyOutputUpdatedColumn bool,
+		onlyHandleKeyColumns bool,
 		newColumnMap map[string]*model.Column,
 	) error {
 		if len(columns) == 0 {
@@ -53,6 +55,9 @@ func newJSONMessageForDML(
 			if col != nil {
 				// column equal, do not output it
 				if onlyOutputUpdatedColumn && shouldIgnoreColumn(col, newColumnMap) {
+					continue
+				}
+				if onlyHandleKeyColumns && !col.Flag.IsHandleKey() {
 					continue
 				}
 				if isFirst {
@@ -152,6 +157,9 @@ func newJSONMessageForDML(
 		emptyColumn := true
 		for _, col := range columns {
 			if col != nil {
+				if isDelete && onlyHandleKeyColumns && !col.Flag.IsHandleKey() {
+					continue
+				}
 				if emptyColumn {
 					out.RawByte('{')
 					emptyColumn = false
@@ -200,13 +208,13 @@ func newJSONMessageForDML(
 	if e.IsDelete() {
 		out.RawString(",\"old\":null")
 		out.RawString(",\"data\":")
-		if err := filling(e.PreColumns, out, false, nil); err != nil {
+		if err := filling(e.PreColumns, out, false, onlyHandleKeyColumns, nil); err != nil {
 			return nil, err
 		}
 	} else if e.IsInsert() {
 		out.RawString(",\"old\":null")
 		out.RawString(",\"data\":")
-		if err := filling(e.Columns, out, false, nil); err != nil {
+		if err := filling(e.Columns, out, false, false, nil); err != nil {
 			return nil, err
 		}
 	} else if e.IsUpdate() {
@@ -218,11 +226,11 @@ func newJSONMessageForDML(
 			}
 		}
 		out.RawString(",\"old\":")
-		if err := filling(e.PreColumns, out, onlyOutputUpdatedColumns, newColsMap); err != nil {
+		if err := filling(e.PreColumns, out, onlyOutputUpdatedColumns, false, newColsMap); err != nil {
 			return nil, err
 		}
 		out.RawString(",\"data\":")
-		if err := filling(e.Columns, out, false, nil); err != nil {
+		if err := filling(e.Columns, out, false, false, nil); err != nil {
 			return nil, err
 		}
 	} else {
@@ -263,6 +271,9 @@ type JSONRowEventEncoder struct {
 	messages            []*common.Message
 
 	onlyOutputUpdatedColumns bool
+
+	// onlyHandleKeyColumns is true, for the delete event only output the handle key columns.
+	onlyHandleKeyColumns bool
 }
 
 // newJSONRowEventEncoder creates a new JSONRowEventEncoder
@@ -271,6 +282,7 @@ func newJSONRowEventEncoder(config *common.Config) codec.RowEventEncoder {
 		builder:                  newCanalEntryBuilder(),
 		enableTiDBExtension:      config.EnableTiDBExtension,
 		onlyOutputUpdatedColumns: config.OnlyOutputUpdatedColumns,
+		onlyHandleKeyColumns:     !config.EnableOldValue,
 		messages:                 make([]*common.Message, 0, 1),
 		maxMessageBytes:          config.MaxMessageBytes,
 	}
@@ -336,7 +348,7 @@ func (c *JSONRowEventEncoder) AppendRowChangedEvent(
 	callback func(),
 ) error {
 	value, err := newJSONMessageForDML(c.builder,
-		c.enableTiDBExtension, e, c.onlyOutputUpdatedColumns)
+		c.enableTiDBExtension, e, c.onlyOutputUpdatedColumns, c.onlyHandleKeyColumns)
 	if err != nil {
 		return errors.Trace(err)
 	}

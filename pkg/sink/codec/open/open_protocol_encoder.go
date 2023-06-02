@@ -39,8 +39,8 @@ type BatchEncoder struct {
 	MaxBatchSize             int
 	OnlyOutputUpdatedColumns bool
 
-	// OnlyPrimaryKeyColumns is true, for the delete event only output the primary key columns.
-	OnlyPrimaryKeyColumns bool
+	// onlyHandleKeyColumns is true, for the delete event only output the handle key columns.
+	onlyHandleKeyColumns bool
 }
 
 // AppendRowChangedEvent implements the RowEventEncoder interface
@@ -50,7 +50,7 @@ func (d *BatchEncoder) AppendRowChangedEvent(
 	e *model.RowChangedEvent,
 	callback func(),
 ) error {
-	keyMsg, valueMsg := rowChangeToMsg(e, d.OnlyPrimaryKeyColumns)
+	keyMsg, valueMsg := rowChangeToMsg(e, d.onlyHandleKeyColumns)
 	key, err := keyMsg.Encode()
 	if err != nil {
 		return errors.Trace(err)
@@ -200,7 +200,7 @@ func (b *batchEncoderBuilder) Build() codec.RowEventEncoder {
 	encoder.(*BatchEncoder).MaxMessageBytes = b.config.MaxMessageBytes
 	encoder.(*BatchEncoder).MaxBatchSize = b.config.MaxBatchSize
 	encoder.(*BatchEncoder).OnlyOutputUpdatedColumns = b.config.OnlyOutputUpdatedColumns
-	encoder.(*BatchEncoder).OnlyPrimaryKeyColumns = !b.config.EnableOldValue
+	encoder.(*BatchEncoder).onlyHandleKeyColumns = !b.config.EnableOldValue
 	return encoder
 }
 

@@ -34,6 +34,8 @@ const defaultMaxBatchSize int = 16
 type Config struct {
 	Protocol config.Protocol
 
+	EnableOldValue bool
+
 	// control batch behavior, only for `open-protocol` and `craft` at the moment.
 	MaxMessageBytes int
 	MaxBatchSize    int
@@ -179,6 +181,8 @@ func (c *Config) Apply(sinkURI *url.URL, replicaConfig *config.ReplicaConfig) er
 	if replicaConfig.Integrity != nil {
 		c.EnableRowChecksum = replicaConfig.Integrity.Enabled()
 	}
+
+	c.EnableOldValue = replicaConfig.EnableOldValue
 
 	return nil
 }
