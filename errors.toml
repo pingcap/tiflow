@@ -351,6 +351,11 @@ error = '''
 bad changefeed id, please match the pattern "^[a-zA-Z0-9]+(\-[a-zA-Z0-9]+)*$", the length should no more than %d, eg, "simple-changefeed-task",
 '''
 
+["CDC:ErrInvalidCheckpointTs"]
+error = '''
+checkpointTs(%v) should not larger than resolvedTs(%v)
+'''
+
 ["CDC:ErrInvalidDDLJob"]
 error = '''
 invalid ddl job(%d)
