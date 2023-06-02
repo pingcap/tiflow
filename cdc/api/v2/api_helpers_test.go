@@ -46,7 +46,8 @@ func TestVerifyCreateChangefeedConfig(t *testing.T) {
 	cfg.ReplicaConfig = GetDefaultReplicaConfig()
 	cfg.ReplicaConfig.ForceReplicate = true
 	cfg.ReplicaConfig.EnableOldValue = false
-	// disable old value but force replicate
+	cfg.SinkURI = "mysql://"
+	// disable old value but force replicate, and using mysql sink.
 	cfInfo, err = h.verifyCreateChangefeedConfig(ctx, cfg, pdClient, provider, "en", storage)
 	require.NotNil(t, err)
 	require.Nil(t, cfInfo)

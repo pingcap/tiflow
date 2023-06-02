@@ -182,8 +182,9 @@ func TestNewCanalJSONMessage4DML(t *testing.T) {
 
 func TestNewCanalJSONMessageFromDDL(t *testing.T) {
 	t.Parallel()
-	encoder := &JSONRowEventEncoder{builder: newCanalEntryBuilder()}
-	require.NotNil(t, encoder)
+
+	encoder, ok := newJSONRowEventEncoder(&common.Config{}).(*JSONRowEventEncoder)
+	require.True(t, ok)
 
 	message := encoder.newJSONMessageForDDL(testCaseDDL)
 	require.NotNil(t, message)
@@ -197,10 +198,10 @@ func TestNewCanalJSONMessageFromDDL(t *testing.T) {
 	require.Equal(t, testCaseDDL.Query, msg.Query)
 	require.Equal(t, "CREATE", msg.EventType)
 
-	config := &common.Config{
+	encoder, ok = newJSONRowEventEncoder(&common.Config{
 		EnableTiDBExtension: true,
-	}
-	encoder = &JSONRowEventEncoder{builder: newCanalEntryBuilder(), config: config}
+	}).(*JSONRowEventEncoder)
+	require.True(t, ok)
 
 	message = encoder.newJSONMessageForDDL(testCaseDDL)
 	require.NotNil(t, message)
