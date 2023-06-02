@@ -74,7 +74,6 @@ type Mounter interface {
 type mounter struct {
 	schemaStorage                SchemaStorage
 	tz                           *time.Location
-	enableOldValue               bool
 	changefeedID                 model.ChangeFeedID
 	filter                       pfilter.Filter
 	metricTotalRows              prometheus.Gauge
@@ -98,14 +97,12 @@ func NewMounter(schemaStorage SchemaStorage,
 	changefeedID model.ChangeFeedID,
 	tz *time.Location,
 	filter pfilter.Filter,
-	enableOldValue bool,
 	integrity *integrity.Config,
 ) Mounter {
 	return &mounter{
-		schemaStorage:  schemaStorage,
-		changefeedID:   changefeedID,
-		enableOldValue: enableOldValue,
-		filter:         filter,
+		schemaStorage: schemaStorage,
+		changefeedID:  changefeedID,
+		filter:        filter,
 		metricTotalRows: totalRowsCountGauge.
 			WithLabelValues(changefeedID.Namespace, changefeedID.ID),
 		metricIgnoredDMLEventCounter: ignoredDMLEventCounter.
@@ -511,7 +508,7 @@ func (m *mounter) mountRowKVEntry(tableInfo *model.TableInfo, row *rowKVEntry, d
 	if row.PreRowExist {
 		// FIXME(leoppro): using pre table info to mounter pre column datum
 		// the pre column and current column in one event may using different table info
-		preCols, preRawCols, columnInfos, extendColumnInfos, err = datum2Column(tableInfo, row.PreRow, m.enableOldValue)
+		preCols, preRawCols, columnInfos, extendColumnInfos, err = datum2Column(tableInfo, row.PreRow, true)
 		if err != nil {
 			return nil, rawRow, errors.Trace(err)
 		}

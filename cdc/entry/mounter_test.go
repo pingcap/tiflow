@@ -314,9 +314,7 @@ func testMounterDisableOldValue(t *testing.T, tc struct {
 	filter, err := filter.NewFilter(config, "")
 	require.Nil(t, err)
 	mounter := NewMounter(scheamStorage,
-		model.DefaultChangeFeedID("c1"),
-		time.UTC, filter, false,
-		config.Integrity).(*mounter)
+		model.DefaultChangeFeedID("c1"), time.UTC, filter, config.Integrity).(*mounter)
 	mounter.tz = time.Local
 	ctx := context.Background()
 
@@ -1039,8 +1037,7 @@ func TestDecodeRowEnableChecksum(t *testing.T) {
 	ts := schemaStorage.GetLastSnapshot().CurrentTs()
 	schemaStorage.AdvanceResolvedTs(ver.Ver)
 
-	mounter := NewMounter(schemaStorage, changefeed, time.Local,
-		filter, true, replicaConfig.Integrity).(*mounter)
+	mounter := NewMounter(schemaStorage, changefeed, time.Local, filter, replicaConfig.Integrity).(*mounter)
 
 	ctx := context.Background()
 
@@ -1170,8 +1167,7 @@ func TestDecodeRow(t *testing.T) {
 
 	schemaStorage.AdvanceResolvedTs(ver.Ver)
 
-	mounter := NewMounter(
-		schemaStorage, changefeed, time.Local, filter, true, cfg.Integrity).(*mounter)
+	mounter := NewMounter(schemaStorage, changefeed, time.Local, filter, cfg.Integrity).(*mounter)
 
 	helper.Tk().MustExec(`insert into student values(1, "dongmen", 20, "male")`)
 	helper.Tk().MustExec(`update student set age = 27 where id = 1`)
@@ -1250,7 +1246,7 @@ func TestDecodeEventIgnoreRow(t *testing.T) {
 
 	ts := schemaStorage.GetLastSnapshot().CurrentTs()
 	schemaStorage.AdvanceResolvedTs(ver.Ver)
-	mounter := NewMounter(schemaStorage, cfID, time.Local, f, true, cfg.Integrity).(*mounter)
+	mounter := NewMounter(schemaStorage, cfID, time.Local, f, cfg.Integrity).(*mounter)
 
 	type testCase struct {
 		schema  string
