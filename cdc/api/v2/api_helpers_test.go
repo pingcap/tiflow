@@ -53,6 +53,7 @@ func TestVerifyCreateChangefeedConfig(t *testing.T) {
 	require.Nil(t, cfInfo)
 	cfg.ReplicaConfig.ForceReplicate = false
 	cfg.ReplicaConfig.IgnoreIneligibleTable = true
+	cfg.SinkURI = "blackhole://"
 	cfInfo, err = h.verifyCreateChangefeedConfig(ctx, cfg, pdClient, provider, "en", storage)
 	require.Nil(t, err)
 	require.NotNil(t, cfInfo)
