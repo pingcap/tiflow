@@ -355,11 +355,6 @@ func datum2Column(
 		colName := colInfo.Name.O
 		colID := colInfo.ID
 		colDatums, exist := datums[colID]
-		if !exist {
-			log.Debug("column value is not found",
-				zap.String("table", tableInfo.Name.O), zap.String("column", colName))
-			continue
-		}
 
 		var (
 			colValue interface{}
