@@ -470,7 +470,7 @@ func (info *ChangeFeedInfo) fixEnableOldValue() {
 		return
 	}
 	scheme := strings.ToLower(uri.Scheme)
-	protocol := util.GetOrZero(info.Config.Sink.Protocol)
+	protocol := uri.Query().Get(config.ProtocolKey)
 	info.Config.AdjustEnableOldValue(scheme, protocol)
 }
 

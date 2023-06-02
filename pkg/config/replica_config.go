@@ -328,7 +328,7 @@ func (c *ReplicaConfig) AdjustEnableOldValueAndVerifyForceReplicate(sinkURI *url
 	if sink.IsMySQLCompatibleScheme(scheme) {
 		if !c.EnableOldValue {
 			log.Error("force replicate, old value feature is disabled for the changefeed using mysql sink")
-			return cerror.ErrOldValueNotEnabled.GenWithStackByArgs()
+			return cerror.ErrIncompatibleConfig.GenWithStackByArgs()
 		}
 	}
 
