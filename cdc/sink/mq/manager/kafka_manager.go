@@ -130,6 +130,8 @@ func (m *kafkaTopicManager) tryUpdatePartitionsAndLogging(topic string, partitio
 			m.topics.Store(topic, partitions)
 			log.Info(
 				"update topic partition number",
+				zap.String("namespace", m.changefeedID.Namespace),
+				zap.String("changefeed", m.changefeedID.ID),
 				zap.String("topic", topic),
 				zap.Int32("oldPartitionNumber", oldPartitions.(int32)),
 				zap.Int32("newPartitionNumber", partitions),
@@ -139,6 +141,8 @@ func (m *kafkaTopicManager) tryUpdatePartitionsAndLogging(topic string, partitio
 		m.topics.Store(topic, partitions)
 		log.Info(
 			"store topic partition number",
+			zap.String("namespace", m.changefeedID.Namespace),
+			zap.String("changefeed", m.changefeedID.ID),
 			zap.String("topic", topic),
 			zap.Int32("partitionNumber", partitions),
 		)
@@ -160,6 +164,8 @@ func (m *kafkaTopicManager) getMetadataOfTopics() ([]*sarama.TopicMetadata, erro
 	if err != nil {
 		log.Warn(
 			"Kafka admin client describe topics failed",
+			zap.String("namespace", m.changefeedID.Namespace),
+			zap.String("changefeed", m.changefeedID.ID),
 			zap.Error(err),
 			zap.Duration("duration", time.Since(start)),
 		)
@@ -168,6 +174,8 @@ func (m *kafkaTopicManager) getMetadataOfTopics() ([]*sarama.TopicMetadata, erro
 
 	log.Info(
 		"Kafka admin client describe topics success",
+		zap.String("namespace", m.changefeedID.Namespace),
+		zap.String("changefeed", m.changefeedID.ID),
 		zap.Duration("duration", time.Since(start)))
 
 	return topicMetaList, nil
@@ -184,6 +192,8 @@ func (m *kafkaTopicManager) waitUntilTopicVisible(topicName string) error {
 		topicMetaList, err := m.admin.DescribeTopics([]string{topicName})
 		if err != nil {
 			log.Error("Kafka admin client describe topic failed",
+				zap.String("namespace", m.changefeedID.Namespace),
+				zap.String("changefeed", m.changefeedID.ID),
 				zap.String("topic", topicName),
 				zap.Error(err),
 				zap.Duration("duration", time.Since(start)))
@@ -192,6 +202,8 @@ func (m *kafkaTopicManager) waitUntilTopicVisible(topicName string) error {
 
 		if len(topicMetaList) != 1 {
 			log.Error("topic metadata length is wrong.",
+				zap.String("namespace", m.changefeedID.Namespace),
+				zap.String("changefeed", m.changefeedID.ID),
 				zap.String("topic", topicName),
 				zap.Int("expected", 1),
 				zap.Int("actual", len(topicMetaList)))
@@ -202,12 +214,16 @@ func (m *kafkaTopicManager) waitUntilTopicVisible(topicName string) error {
 		meta := topicMetaList[0]
 		if meta.Err != sarama.ErrNoError {
 			log.Error("topic metadata is fetched with error",
+				zap.String("namespace", m.changefeedID.Namespace),
+				zap.String("changefeed", m.changefeedID.ID),
 				zap.String("topic", topicName),
 				zap.Error(meta.Err))
 			return meta.Err
 		}
 
 		log.Info("Kafka admin client describe topic success",
+			zap.String("namespace", m.changefeedID.Namespace),
+			zap.String("changefeed", m.changefeedID.ID),
 			zap.String("topic", topicName),
 			zap.Int("partitionNumber", len(meta.Partitions)),
 			zap.Duration("duration", time.Since(start)))
@@ -239,6 +255,8 @@ func (m *kafkaTopicManager) createTopic(topicName string) (int32, error) {
 	if err != nil && !strings.Contains(err.Error(), sarama.ErrTopicAlreadyExists.Error()) {
 		log.Error(
 			"Kafka admin client create the topic failed",
+			zap.String("namespace", m.changefeedID.Namespace),
+			zap.String("changefeed", m.changefeedID.ID),
 			zap.String("topic", topicName),
 			zap.Int32("partitionNumber", m.cfg.PartitionNum),
 			zap.Int16("replicationFactor", m.cfg.ReplicationFactor),
@@ -250,6 +268,8 @@ func (m *kafkaTopicManager) createTopic(topicName string) (int32, error) {
 
 	log.Info(
 		"Kafka admin client create the topic success",
+		zap.String("namespace", m.changefeedID.Namespace),
+		zap.String("changefeed", m.changefeedID.ID),
 		zap.String("topic", topicName),
 		zap.Int32("partitionNumber", m.cfg.PartitionNum),
 		zap.Int16("replicationFactor", m.cfg.ReplicationFactor),
@@ -270,11 +290,21 @@ func (m *kafkaTopicManager) CreateTopicAndWaitUntilVisible(topicName string) (in
 	for _, detail := range topicDetails {
 		if detail.Err == sarama.ErrNoError {
 			if detail.Name == topicName {
+				log.Info("Kafka topic already exists",
+					zap.String("namespace", m.changefeedID.Namespace),
+					zap.String("changefeed", m.changefeedID.ID),
+					zap.String("topic", topicName),
+					zap.Int32("partitionNumber", int32(len(detail.Partitions))))
 				partitionNum := int32(len(detail.Partitions))
 				m.tryUpdatePartitionsAndLogging(topicName, partitionNum)
 				return partitionNum, nil
 			}
-		} else if detail.Err != sarama.ErrUnknownTopicOrPartition {
+		} else {
+			log.Error("Kafka admin client describe topic failed",
+				zap.String("namespace", m.changefeedID.Namespace),
+				zap.String("changefeed", m.changefeedID.ID),
+				zap.String("topic", topicName),
+				zap.Error(err))
 			return 0, errors.Trace(err)
 		}
 	}
