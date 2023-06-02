@@ -1118,8 +1118,8 @@ func TestDecodeRowEnableChecksum(t *testing.T) {
 	require.False(t, row.Checksum.Corrupted)
 
 	// hack the table info to make the checksum corrupted
-	tableInfo.Columns[0].ID = 3
-
+	tableInfo.Columns[0].FieldType = *types.NewFieldType(mysql.TypeVarchar)
+	
 	// corrupt-handle-level default to warn, so no error, but the checksum is corrupted
 	row, err = mounter.unmarshalAndMountRowChanged(ctx, rawKV)
 	require.NoError(t, err)
