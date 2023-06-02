@@ -532,17 +532,6 @@ func (m *mounter) mountRowKVEntry(tableInfo *model.TableInfo, row *rowKVEntry, d
 			}
 			corrupted = true
 		}
-
-		// NOTICE: When the old Value feature is off,
-		// the Delete event only needs to keep the handle key column.
-		if row.Delete && !m.enableOldValue {
-			for i := range preCols {
-				col := preCols[i]
-				if col != nil && !col.Flag.IsHandleKey() {
-					preCols[i] = nil
-				}
-			}
-		}
 	}
 
 	var (

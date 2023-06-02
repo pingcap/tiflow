@@ -507,13 +507,6 @@ func splitUpdateEvent(
 	deleteEvent.RawKV = &deleteEventRowKV
 
 	deleteEvent.Row.Columns = nil
-	for i := range deleteEvent.Row.PreColumns {
-		// NOTICE: Only the handle key pre column is retained in the delete event.
-		if deleteEvent.Row.PreColumns[i] != nil &&
-			!deleteEvent.Row.PreColumns[i].Flag.IsHandleKey() {
-			deleteEvent.Row.PreColumns[i] = nil
-		}
-	}
 
 	insertEvent := *updateEvent
 	insertEventRow := *updateEvent.Row
