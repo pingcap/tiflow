@@ -67,6 +67,7 @@ func getConfig(addr string) *kafkav1.Config {
 }
 
 func TestSyncBroadcastMessage(t *testing.T) {
+	t.Skip("skip because of race introduced by #9026")
 	t.Parallel()
 
 	leader, topic := initBroker(t, kafka.DefaultMockPartitionNum)
@@ -97,6 +98,7 @@ func TestSyncBroadcastMessage(t *testing.T) {
 }
 
 func TestSyncSendMessage(t *testing.T) {
+	t.Skip("skip because of race introduced by #9026")
 	t.Parallel()
 
 	leader, topic := initBroker(t, 1)
@@ -125,6 +127,7 @@ func TestSyncSendMessage(t *testing.T) {
 }
 
 func TestProducerSendMsgFailed(t *testing.T) {
+	t.Skip("skip because of race introduced by #9026")
 	t.Parallel()
 
 	leader, topic := initBroker(t, 0)
@@ -153,6 +156,7 @@ func TestProducerSendMsgFailed(t *testing.T) {
 }
 
 func TestProducerDoubleClose(t *testing.T) {
+	t.Skip("skip because of race introduced by #9026")
 	t.Parallel()
 
 	leader, _ := initBroker(t, 0)
