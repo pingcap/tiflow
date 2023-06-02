@@ -62,6 +62,12 @@ func TestNewCanalJSONMessage4DML(t *testing.T) {
 	require.Equal(t, "person", jsonMsg.Table)
 	require.False(t, jsonMsg.IsDDL)
 
+	for _, col := range testCaseInsert.Columns {
+		require.Contains(t, jsonMsg.Data[0], col.Name)
+		require.Contains(t, jsonMsg.SQLType, col.Name)
+		require.Contains(t, jsonMsg.MySQLType, col.Name)
+	}
+
 	// check data is enough
 	obtainedDataMap := jsonMsg.getData()
 	require.NotNil(t, obtainedDataMap)
@@ -99,6 +105,15 @@ func TestNewCanalJSONMessage4DML(t *testing.T) {
 	require.NotNil(t, jsonMsg.Old)
 	require.Equal(t, "UPDATE", jsonMsg.EventType)
 
+	for _, col := range testCaseUpdate.Columns {
+		require.Contains(t, jsonMsg.Data[0], col.Name)
+		require.Contains(t, jsonMsg.SQLType, col.Name)
+		require.Contains(t, jsonMsg.MySQLType, col.Name)
+	}
+	for _, col := range testCaseUpdate.PreColumns {
+		require.Contains(t, jsonMsg.Old[0], col.Name)
+	}
+
 	data, err = newJSONMessageForDML(encoder.builder, testCaseDelete, encoder.config)
 	require.Nil(t, err)
 	jsonMsg = &JSONMessage{}
@@ -108,9 +123,34 @@ func TestNewCanalJSONMessage4DML(t *testing.T) {
 	require.Nil(t, jsonMsg.Old)
 	require.Equal(t, "DELETE", jsonMsg.EventType)
 
+	for _, col := range testCaseDelete.PreColumns {
+		require.Contains(t, jsonMsg.Data[0], col.Name)
+	}
+
+	data, err = newJSONMessageForDML(encoder.builder, testCaseDelete, &common.Config{OnlyHandleKeyColumns: true})
+	require.NoError(t, err)
+	jsonMsg = &JSONMessage{}
+	err = json.Unmarshal(data, jsonMsg)
+	require.NoError(t, err)
+	require.NotNil(t, jsonMsg.Data)
+	require.Nil(t, jsonMsg.Old)
+
+	for _, col := range testCaseDelete.PreColumns {
+		if col.Flag.IsHandleKey() {
+			require.Contains(t, jsonMsg.Data[0], col.Name)
+			require.Contains(t, jsonMsg.SQLType, col.Name)
+			require.Contains(t, jsonMsg.MySQLType, col.Name)
+		} else {
+			require.NotContains(t, jsonMsg.Data[0], col.Name)
+			require.NotContains(t, jsonMsg.SQLType, col.Name)
+			require.NotContains(t, jsonMsg.MySQLType, col.Name)
+		}
+	}
+
 	e = newJSONRowEventEncoder(&common.Config{
-		EnableTiDBExtension: true,
-		Terminator:          "",
+		EnableTiDBExtension:      true,
+		Terminator:               "",
+		OnlyOutputUpdatedColumns: true,
 	})
 	require.NotNil(t, e)
 

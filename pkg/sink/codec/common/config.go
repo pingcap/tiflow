@@ -184,7 +184,7 @@ func (c *Config) Apply(sinkURI *url.URL, replicaConfig *config.ReplicaConfig) er
 	}
 
 	c.OnlyHandleKeyColumns = !replicaConfig.EnableOldValue
-	
+
 	return nil
 }
 
