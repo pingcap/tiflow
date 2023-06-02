@@ -34,11 +34,12 @@ const defaultMaxBatchSize int = 16
 type Config struct {
 	Protocol config.Protocol
 
-	EnableOldValue bool
-
 	// control batch behavior, only for `open-protocol` and `craft` at the moment.
 	MaxMessageBytes int
 	MaxBatchSize    int
+
+	// onlyHandleKeyColumns is true, for the delete event only output the handle key columns.
+	OnlyHandleKeyColumns bool
 
 	EnableTiDBExtension bool
 	EnableRowChecksum   bool
@@ -182,7 +183,7 @@ func (c *Config) Apply(sinkURI *url.URL, replicaConfig *config.ReplicaConfig) er
 		c.EnableRowChecksum = replicaConfig.Integrity.Enabled()
 	}
 
-	c.EnableOldValue = replicaConfig.EnableOldValue
+	c.OnlyHandleKeyColumns = !replicaConfig.EnableOldValue
 
 	return nil
 }

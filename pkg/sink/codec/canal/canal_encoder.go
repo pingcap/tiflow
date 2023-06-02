@@ -35,7 +35,7 @@ type BatchEncoder struct {
 	packet       *canal.Packet
 	entryBuilder *canalEntryBuilder
 
-	onlyHandleKeyColumns bool
+	config *common.Config
 }
 
 // EncodeCheckpointEvent implements the RowEventEncoder interface
@@ -52,7 +52,7 @@ func (d *BatchEncoder) AppendRowChangedEvent(
 	e *model.RowChangedEvent,
 	callback func(),
 ) error {
-	entry, err := d.entryBuilder.fromRowEvent(e, d.onlyHandleKeyColumns)
+	entry, err := d.entryBuilder.fromRowEvent(e, d.config.OnlyHandleKeyColumns)
 	if err != nil {
 		return errors.Trace(err)
 	}
@@ -164,7 +164,7 @@ func newBatchEncoder(config *common.Config) codec.RowEventEncoder {
 		callbackBuf:  make([]func(), 0),
 		entryBuilder: newCanalEntryBuilder(),
 
-		onlyHandleKeyColumns: !config.EnableOldValue,
+		config: config,
 	}
 
 	encoder.resetPacket()

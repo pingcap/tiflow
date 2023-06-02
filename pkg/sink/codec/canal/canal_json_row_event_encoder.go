@@ -279,11 +279,12 @@ type JSONRowEventEncoder struct {
 // newJSONRowEventEncoder creates a new JSONRowEventEncoder
 func newJSONRowEventEncoder(config *common.Config) codec.RowEventEncoder {
 	encoder := &JSONRowEventEncoder{
-		builder:                  newCanalEntryBuilder(),
+		builder:  newCanalEntryBuilder(),
+		messages: make([]*common.Message, 0, 1),
+
 		enableTiDBExtension:      config.EnableTiDBExtension,
 		onlyOutputUpdatedColumns: config.OnlyOutputUpdatedColumns,
-		onlyHandleKeyColumns:     !config.EnableOldValue,
-		messages:                 make([]*common.Message, 0, 1),
+		onlyHandleKeyColumns:     config.OnlyHandleKeyColumns,
 		maxMessageBytes:          config.MaxMessageBytes,
 	}
 	return encoder

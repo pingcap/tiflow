@@ -105,12 +105,13 @@ func (j *JSONTxnEventEncoder) Build() []*common.Message {
 // newJSONTxnEventEncoder creates a new JSONTxnEventEncoder
 func newJSONTxnEventEncoder(config *common.Config) codec.TxnEventEncoder {
 	encoder := &JSONTxnEventEncoder{
-		builder:                  newCanalEntryBuilder(),
+		builder:    newCanalEntryBuilder(),
+		valueBuf:   &bytes.Buffer{},
+		terminator: []byte(config.Terminator),
+		
 		enableTiDBExtension:      config.EnableTiDBExtension,
 		onlyOutputUpdatedColumns: config.OnlyOutputUpdatedColumns,
-		onlyHandleKeyColumns:     !config.EnableOldValue,
-		valueBuf:                 &bytes.Buffer{},
-		terminator:               []byte(config.Terminator),
+		onlyHandleKeyColumns:     config.OnlyHandleKeyColumns,
 		maxMessageBytes:          config.MaxMessageBytes,
 	}
 	return encoder

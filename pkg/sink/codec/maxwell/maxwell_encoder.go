@@ -32,7 +32,7 @@ type BatchEncoder struct {
 	callbackBuf []func()
 	batchSize   int
 
-	onlyHandleKeyColumns bool
+	config *common.Config
 }
 
 // EncodeCheckpointEvent implements the RowEventEncoder interface
@@ -49,7 +49,7 @@ func (d *BatchEncoder) AppendRowChangedEvent(
 	e *model.RowChangedEvent,
 	callback func(),
 ) error {
-	_, valueMsg := rowChangeToMaxwellMsg(e, d.onlyHandleKeyColumns)
+	_, valueMsg := rowChangeToMaxwellMsg(e, d.config.OnlyHandleKeyColumns)
 	value, err := valueMsg.encode()
 	if err != nil {
 		return errors.Trace(err)
@@ -113,10 +113,10 @@ func (d *BatchEncoder) reset() {
 // newBatchEncoder creates a new maxwell BatchEncoder.
 func newBatchEncoder(config *common.Config) codec.RowEventEncoder {
 	batch := &BatchEncoder{
-		keyBuf:               &bytes.Buffer{},
-		valueBuf:             &bytes.Buffer{},
-		callbackBuf:          make([]func(), 0),
-		onlyHandleKeyColumns: !config.EnableOldValue,
+		keyBuf:      &bytes.Buffer{},
+		valueBuf:    &bytes.Buffer{},
+		callbackBuf: make([]func(), 0),
+		config:      config,
 	}
 	batch.reset()
 	return batch

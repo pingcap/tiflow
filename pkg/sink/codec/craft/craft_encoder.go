@@ -116,7 +116,7 @@ func (b *batchEncoderBuilder) Build() codec.RowEventEncoder {
 	encoder := NewBatchEncoder()
 	encoder.(*BatchEncoder).MaxMessageBytes = b.config.MaxMessageBytes
 	encoder.(*BatchEncoder).MaxBatchSize = b.config.MaxBatchSize
-	encoder.(*BatchEncoder).onlyHandleKeyColumns = !b.config.EnableOldValue
+	encoder.(*BatchEncoder).onlyHandleKeyColumns = b.config.OnlyHandleKeyColumns
 	return encoder
 }
 

@@ -111,8 +111,8 @@ func rowChangeToMsg(e *model.RowChangedEvent, onlyHandleKeyColumns bool) (*inter
 	if e.IsDelete() {
 		value.Delete = rowChangeColumns2CodecColumns(e.PreColumns, onlyHandleKeyColumns)
 	} else {
-		value.Update = rowChangeColumns2CodecColumns(e.Columns, true)
-		value.PreColumns = rowChangeColumns2CodecColumns(e.PreColumns, true)
+		value.Update = rowChangeColumns2CodecColumns(e.Columns, false)
+		value.PreColumns = rowChangeColumns2CodecColumns(e.PreColumns, false)
 	}
 	return key, value
 }
