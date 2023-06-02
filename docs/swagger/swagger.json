@@ -743,6 +743,12 @@
                         "description": "state",
                         "name": "state",
                         "in": "query"
+                    },
+                    {
+                        "type": "string",
+                        "description": "default",
+                        "name": "namespace",
+                        "in": "query"
                     }
                 ],
                 "responses": {
@@ -830,6 +836,12 @@
                         "name": "changefeed_id",
                         "in": "path",
                         "required": true
+                    },
+                    {
+                        "type": "string",
+                        "description": "default",
+                        "name": "namespace",
+                        "in": "query"
                     }
                 ],
                 "responses": {
@@ -873,6 +885,12 @@
                         "name": "changefeed_id",
                         "in": "path",
                         "required": true
+                    },
+                    {
+                        "type": "string",
+                        "description": "default",
+                        "name": "namespace",
+                        "in": "query"
                     },
                     {
                         "description": "changefeed config",
@@ -925,6 +943,12 @@
                         "name": "changefeed_id",
                         "in": "path",
                         "required": true
+                    },
+                    {
+                        "type": "string",
+                        "description": "default",
+                        "name": "namespace",
+                        "in": "query"
                     }
                 ],
                 "responses": {
@@ -970,6 +994,12 @@
                         "name": "changefeed_id",
                         "in": "path",
                         "required": true
+                    },
+                    {
+                        "type": "string",
+                        "description": "default",
+                        "name": "namespace",
+                        "in": "query"
                     }
                 ],
                 "responses": {
@@ -1015,6 +1045,12 @@
                         "name": "changefeed_id",
                         "in": "path",
                         "required": true
+                    },
+                    {
+                        "type": "string",
+                        "description": "default",
+                        "name": "namespace",
+                        "in": "query"
                     },
                     {
                         "description": "resume config",
@@ -1212,6 +1248,12 @@
                         "name": "changefeed_id",
                         "in": "path",
                         "required": true
+                    },
+                    {
+                        "type": "string",
+                        "description": "default",
+                        "name": "namespace",
+                        "in": "query"
                     },
                     {
                         "type": "string",

@@ -189,6 +189,10 @@ func (w *sinkWorker) handleTask(ctx context.Context, task *sinkTask) (finalErr e
 			// at the checkpoint position.
 			case tablesink.SinkInternalError:
 				task.tableSink.clearTableSink()
+				// After the table sink is cleared all pending events are sent out or dropped.
+				// So we can re-add the table into sinkMemQuota.
+				w.sinkMemQuota.ClearTable(task.tableSink.span)
+
 				// Restart the table sink based on the checkpoint position.
 				if finalErr = task.tableSink.restart(ctx); finalErr == nil {
 					ckpt := task.tableSink.getCheckpointTs().ResolvedMark()

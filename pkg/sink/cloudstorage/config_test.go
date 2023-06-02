@@ -21,7 +21,6 @@ import (
 
 	"github.com/aws/aws-sdk-go/aws"
 	"github.com/pingcap/tiflow/pkg/config"
-	"github.com/pingcap/tiflow/pkg/util"
 	"github.com/stretchr/testify/require"
 )
 
@@ -31,14 +30,13 @@ func TestConfigApply(t *testing.T) {
 	expected.FlushInterval = 10 * time.Second
 	expected.FileSize = 16 * 1024 * 1024
 	expected.FileIndexWidth = config.DefaultFileIndexWidth
-	expected.DateSeparator = config.DateSeparatorNone.String()
+	expected.DateSeparator = config.DateSeparatorDay.String()
 	expected.EnablePartitionSeparator = true
 	uri := "s3://bucket/prefix?worker-count=32&flush-interval=10s&file-size=16777216&protocol=csv"
 	sinkURI, err := url.Parse(uri)
 	require.Nil(t, err)
 
 	replicaConfig := config.GetDefaultReplicaConfig()
-	replicaConfig.Sink.DateSeparator = util.AddressOf(config.DateSeparatorNone.String())
 	err = replicaConfig.ValidateAndAdjust(sinkURI)
 	require.NoError(t, err)
 	cfg := NewConfig()

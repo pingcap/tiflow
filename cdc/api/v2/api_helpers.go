@@ -155,7 +155,7 @@ func (APIV2HelpersImpl) verifyCreateChangefeedConfig(
 	}
 
 	cfStatus, err := statusProvider.GetChangeFeedStatus(ctx,
-		model.DefaultChangeFeedID(cfg.ID))
+		model.ChangeFeedID{Namespace: cfg.Namespace, ID: cfg.ID})
 	if err != nil && cerror.ErrChangeFeedNotExists.NotEqual(err) {
 		return nil, err
 	}
@@ -179,7 +179,7 @@ func (APIV2HelpersImpl) verifyCreateChangefeedConfig(
 		ctx,
 		pdClient,
 		ensureGCServiceID,
-		model.DefaultChangeFeedID(cfg.ID),
+		model.ChangeFeedID{Namespace: cfg.Namespace, ID: cfg.ID},
 		ensureTTL, cfg.StartTs); err != nil {
 		if !cerror.ErrStartTsBeforeGC.Equal(err) {
 			return nil, cerror.ErrPDEtcdAPIError.Wrap(err)
@@ -403,7 +403,7 @@ func (APIV2HelpersImpl) verifyResumeChangefeedConfig(ctx context.Context,
 		ctx,
 		pdClient,
 		gcServiceID,
-		model.DefaultChangeFeedID(changefeedID.ID),
+		changefeedID,
 		gcTTL, checkpointTs)
 	if err != nil {
 		if !cerror.ErrStartTsBeforeGC.Equal(err) {

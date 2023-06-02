@@ -67,8 +67,7 @@ func (d *BatchEncoder) AppendRowChangedEvent(
 			zap.Int("maxMessageBytes", d.config.MaxMessageBytes),
 			zap.Int("length", length),
 			zap.Any("table", e.Table),
-			zap.Any("key", key),
-			zap.Any("value", value))
+			zap.Any("key", key))
 		return cerror.ErrMessageTooLarge.GenWithStackByArgs()
 	}
 

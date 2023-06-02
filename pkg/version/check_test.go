@@ -237,7 +237,7 @@ func TestCheckClusterVersion(t *testing.T) {
 	{
 		retryTimes := 0
 		mock.getStatusCode = func() int {
-			if retryTimes < 5 {
+			if retryTimes < checkClusterVersionRetryTimes {
 				retryTimes++
 				return http.StatusBadRequest
 			}

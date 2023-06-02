@@ -37,7 +37,7 @@ func TestChangefeedResumeCli(t *testing.T) {
 	cmd := newCmdResumeChangefeed(f)
 
 	// 1. test changefeed resume with non-nil changefeed get result, non-nil tso get result
-	f.changefeeds.EXPECT().Get(gomock.Any(), "abc").Return(&v2.ChangeFeedInfo{
+	f.changefeeds.EXPECT().Get(gomock.Any(), gomock.Any(), "abc").Return(&v2.ChangeFeedInfo{
 		UpstreamID:     1,
 		Namespace:      "default",
 		ID:             "abc",
@@ -49,19 +49,20 @@ func TestChangefeedResumeCli(t *testing.T) {
 	}, nil).AnyTimes()
 	f.changefeeds.EXPECT().Resume(gomock.Any(), &v2.ResumeChangefeedConfig{
 		OverwriteCheckpointTs: 0,
-	}, "abc").Return(nil)
-	os.Args = []string{"resume", "--no-confirm=true", "--changefeed-id=abc"}
+	}, "ns", "abc").Return(nil)
+	os.Args = []string{"resume", "--no-confirm=true", "--changefeed-id=abc", "--namespace=ns"}
 	require.Nil(t, cmd.Execute())
 
 	// 2. test changefeed resume with nil changfeed get result
-	f.changefeeds.EXPECT().Get(gomock.Any(), "abc").Return(&v2.ChangeFeedInfo{}, nil)
-	os.Args = []string{"resume", "--no-confirm=false", "--changefeed-id=abc"}
+	f.changefeeds.EXPECT().Get(gomock.Any(), "ns", "abc").Return(&v2.ChangeFeedInfo{}, nil)
+	os.Args = []string{"resume", "--no-confirm=false", "--changefeed-id=abc", "--namespace=ns"}
 	o.noConfirm = false
 	o.changefeedID = "abc"
+	o.namespace = "ns"
 	require.NotNil(t, o.run(cmd))
 
 	// 3. test changefeed resume with nil tso get result
-	f.changefeeds.EXPECT().Get(gomock.Any(), "abc").Return(&v2.ChangeFeedInfo{
+	f.changefeeds.EXPECT().Get(gomock.Any(), gomock.Any(), "abc").Return(&v2.ChangeFeedInfo{
 		UpstreamID:     1,
 		Namespace:      "default",
 		ID:             "abc",
@@ -73,7 +74,7 @@ func TestChangefeedResumeCli(t *testing.T) {
 
 	// 4. test changefeed resume with non-nil changefeed result, non-nil tso get result,
 	// and confirmation checking
-	f.changefeeds.EXPECT().Get(gomock.Any(), "abc").Return(&v2.ChangeFeedInfo{
+	f.changefeeds.EXPECT().Get(gomock.Any(), gomock.Any(), "abc").Return(&v2.ChangeFeedInfo{
 		UpstreamID:     1,
 		Namespace:      "default",
 		ID:             "abc",
@@ -108,7 +109,7 @@ func TestChangefeedResumeWithNewCheckpointTs(t *testing.T) {
 	cmd := newCmdResumeChangefeed(f)
 
 	// 1. test changefeed resume with valid overwritten checkpointTs
-	f.changefeeds.EXPECT().Get(gomock.Any(), "abc").Return(&v2.ChangeFeedInfo{
+	f.changefeeds.EXPECT().Get(gomock.Any(), gomock.Any(), "abc").Return(&v2.ChangeFeedInfo{
 		UpstreamID:     1,
 		Namespace:      "default",
 		ID:             "abc",
@@ -121,7 +122,7 @@ func TestChangefeedResumeWithNewCheckpointTs(t *testing.T) {
 	f.tso.EXPECT().Query(gomock.Any(), gomock.Any()).Return(tso, nil).AnyTimes()
 	f.changefeeds.EXPECT().Resume(gomock.Any(), &v2.ResumeChangefeedConfig{
 		OverwriteCheckpointTs: oracle.ComposeTS(tso.Timestamp, tso.LogicTime),
-	}, "abc").Return(nil)
+	}, gomock.Any(), "abc").Return(nil)
 	os.Args = []string{
 		"resume", "--no-confirm=true", "--changefeed-id=abc",
 		"--overwrite-checkpoint-ts=now",
@@ -129,7 +130,7 @@ func TestChangefeedResumeWithNewCheckpointTs(t *testing.T) {
 	require.Nil(t, cmd.Execute())
 
 	// 2. test changefeed resume with invalid overwritten checkpointTs
-	f.changefeeds.EXPECT().Get(gomock.Any(), "abc").Return(&v2.ChangeFeedInfo{
+	f.changefeeds.EXPECT().Get(gomock.Any(), gomock.Any(), "abc").Return(&v2.ChangeFeedInfo{
 		UpstreamID:     1,
 		Namespace:      "default",
 		ID:             "abc",
@@ -143,7 +144,7 @@ func TestChangefeedResumeWithNewCheckpointTs(t *testing.T) {
 	require.NotNil(t, o.run(cmd))
 
 	// 3. test changefeed resume with checkpointTs larger than current tso
-	f.changefeeds.EXPECT().Get(gomock.Any(), "abc").Return(&v2.ChangeFeedInfo{
+	f.changefeeds.EXPECT().Get(gomock.Any(), gomock.Any(), "abc").Return(&v2.ChangeFeedInfo{
 		UpstreamID:     1,
 		Namespace:      "default",
 		ID:             "abc",
@@ -155,7 +156,7 @@ func TestChangefeedResumeWithNewCheckpointTs(t *testing.T) {
 	require.NotNil(t, o.run(cmd))
 
 	// 4. test changefeed resume with checkpointTs smaller than gcSafePoint
-	f.changefeeds.EXPECT().Get(gomock.Any(), "abc").Return(&v2.ChangeFeedInfo{
+	f.changefeeds.EXPECT().Get(gomock.Any(), gomock.Any(), "abc").Return(&v2.ChangeFeedInfo{
 		UpstreamID:     1,
 		Namespace:      "default",
 		ID:             "abc",
@@ -168,7 +169,7 @@ func TestChangefeedResumeWithNewCheckpointTs(t *testing.T) {
 	f.tso.EXPECT().Query(gomock.Any(), gomock.Any()).Return(tso, nil).AnyTimes()
 	f.changefeeds.EXPECT().Resume(gomock.Any(), &v2.ResumeChangefeedConfig{
 		OverwriteCheckpointTs: 262144,
-	}, "abc").
+	}, gomock.Any(), "abc").
 		Return(cerror.ErrStartTsBeforeGC)
 	o.overwriteCheckpointTs = "262144"
 	require.NotNil(t, o.run(cmd))
