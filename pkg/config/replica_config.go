@@ -310,6 +310,8 @@ func (c *ReplicaConfig) AdjustEnableOldValue(scheme, protocol string) {
 	}
 }
 
+// AdjustEnableOldValueAndVerifyForceReplicate adjust the old value configuration by the sink scheme and encoding protocol
+// and then verify the force replicate.
 func (c *ReplicaConfig) AdjustEnableOldValueAndVerifyForceReplicate(sinkURI *url.URL) error {
 	scheme := strings.ToLower(sinkURI.Scheme)
 	protocol := sinkURI.Query().Get(ProtocolKey)

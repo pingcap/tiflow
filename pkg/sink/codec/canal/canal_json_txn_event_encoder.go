@@ -30,19 +30,13 @@ import (
 type JSONTxnEventEncoder struct {
 	builder *canalEntryBuilder
 
-	// When it is true, canal-json would generate TiDB extension information
-	// which, at the moment, only includes `tidbWaterMarkType` and `_tidb` fields.
-	enableTiDBExtension bool
+	config *common.Config
 
-	onlyHandleKeyColumns bool
-
-	onlyOutputUpdatedColumns bool
 	// the symbol separating two lines
-	terminator      []byte
-	maxMessageBytes int
-	valueBuf        *bytes.Buffer
-	batchSize       int
-	callback        func()
+	terminator []byte
+	valueBuf   *bytes.Buffer
+	batchSize  int
+	callback   func()
 
 	// Store some fields of the txn event.
 	txnCommitTs uint64
@@ -56,16 +50,15 @@ func (j *JSONTxnEventEncoder) AppendTxnEvent(
 	callback func(),
 ) error {
 	for _, row := range txn.Rows {
-		value, err := newJSONMessageForDML(j.builder,
-			j.enableTiDBExtension, row, j.onlyOutputUpdatedColumns, j.onlyHandleKeyColumns)
+		value, err := newJSONMessageForDML(j.builder, row, j.config)
 		if err != nil {
 			return errors.Trace(err)
 		}
 		length := len(value) + common.MaxRecordOverhead
 		// For single message that is longer than max-message-bytes, do not send it.
-		if length > j.maxMessageBytes {
+		if length > j.config.MaxMessageBytes {
 			log.Warn("Single message is too large for canal-json",
-				zap.Int("maxMessageBytes", j.maxMessageBytes),
+				zap.Int("maxMessageBytes", j.config.MaxMessageBytes),
 				zap.Int("length", length),
 				zap.Any("table", row.Table),
 				zap.Any("value", value))
@@ -109,10 +102,7 @@ func newJSONTxnEventEncoder(config *common.Config) codec.TxnEventEncoder {
 		valueBuf:   &bytes.Buffer{},
 		terminator: []byte(config.Terminator),
 
-		enableTiDBExtension:      config.EnableTiDBExtension,
-		onlyOutputUpdatedColumns: config.OnlyOutputUpdatedColumns,
-		onlyHandleKeyColumns:     config.OnlyHandleKeyColumns,
-		maxMessageBytes:          config.MaxMessageBytes,
+		config: config,
 	}
 	return encoder
 }
