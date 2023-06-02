@@ -103,15 +103,6 @@ func NewClusterAdminClientMockImpl() *ClusterAdminClientMockImpl {
 	}
 }
 
-// ListTopics returns all topics directly.
-func (c *ClusterAdminClientMockImpl) ListTopics() (map[string]sarama.TopicDetail, error) {
-	topicsDetailsMap := make(map[string]sarama.TopicDetail)
-	for topic, detail := range c.topics {
-		topicsDetailsMap[topic] = detail.TopicDetail
-	}
-	return topicsDetailsMap, nil
-}
-
 // DescribeCluster returns the controller ID.
 func (c *ClusterAdminClientMockImpl) DescribeCluster() (brokers []*sarama.Broker, controllerID int32, err error) {
 	return nil, c.controllerID, nil
