@@ -15,15 +15,17 @@ package model
 
 import (
 	"errors"
+	"time"
 
 	cerror "github.com/pingcap/tiflow/pkg/errors"
 )
 
 // RunningError represents some running error from cdc components, such as processor.
 type RunningError struct {
-	Addr    string `json:"addr"`
-	Code    string `json:"code"`
-	Message string `json:"message"`
+	Time    time.Time `json:"time"`
+	Addr    string    `json:"addr"`
+	Code    string    `json:"code"`
+	Message string    `json:"message"`
 }
 
 // IsChangefeedUnRetryableError return true if a running error contains a changefeed not retry error.

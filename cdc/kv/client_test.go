@@ -2063,6 +2063,7 @@ func TestResolveLock(t *testing.T) {
 }
 
 func testEventCommitTsFallback(t *testing.T, events []*cdcpb.ChangeDataEvent) {
+	InitWorkerPool()
 	ctx, cancel := context.WithCancel(context.Background())
 	wg := &sync.WaitGroup{}
 
@@ -2145,31 +2146,6 @@ func TestCommittedFallback(t *testing.T) {
 							OpType:   cdcpb.Event_Row_PUT,
 							Key:      []byte("a"),
 							Value:    []byte("committed with commit ts before resolved ts"),
-							StartTs:  92,
-							CommitTs: 98,
-						}},
-					},
-				},
-			},
-		}},
-	}
-	testEventCommitTsFallback(t, events)
-}
-
-// TestCommitFallback tests kv client should panic when receiving a fallback commit event
-func TestCommitFallback(t *testing.T) {
-	events := []*cdcpb.ChangeDataEvent{
-		mockInitializedEvent(3, currentRequestID()),
-		{Events: []*cdcpb.Event{
-			{
-				RegionId:  3,
-				RequestId: currentRequestID(),
-				Event: &cdcpb.Event_Entries_{
-					Entries: &cdcpb.Event_Entries{
-						Entries: []*cdcpb.Event_Row{{
-							Type:     cdcpb.Event_COMMIT,
-							OpType:   cdcpb.Event_Row_PUT,
-							Key:      []byte("a-commit-event-ts-fallback"),
 							StartTs:  92,
 							CommitTs: 98,
 						}},
@@ -3556,77 +3532,12 @@ func TestPrewriteNotMatchError(t *testing.T) {
 	cancel()
 }
 
-func createFakeEventFeedSession(ctx context.Context) *eventFeedSession {
-	return newEventFeedSession(ctx,
-		&CDCClient{
-			regionLimiters: defaultRegionEventFeedLimiters,
-			config:         config.GetDefaultServerConfig().KVClient,
-		},
+func createFakeEventFeedSession() *eventFeedSession {
+	return newEventFeedSession(
+		&CDCClient{config: config.GetDefaultServerConfig().KVClient},
 		regionspan.ComparableSpan{Start: []byte("a"), End: []byte("b")},
 		nil, /*lockResolver*/
 		100, /*startTs*/
 		nil, /*eventCh*/
-		model.DefaultChangeFeedID("changefeed-test"), 0, "")
-}
-
-func TestCheckRateLimit(t *testing.T) {
-	ctx, cancel := context.WithCancel(context.Background())
-	defer cancel()
-
-	session := createFakeEventFeedSession(ctx)
-	// to avoid execution too slow and enter dead loop
-	maxTrigger := 1000
-	trigger := 0
-	burst := 3
-	for trigger = 0; trigger < maxTrigger; trigger++ {
-		allowed := session.checkRateLimit(1)
-		if !allowed {
-			break
-		}
-	}
-	if trigger == maxTrigger {
-		require.Fail(t, "get rate limiter too slow")
-	}
-	require.GreaterOrEqual(t, trigger, burst)
-	time.Sleep(100 * time.Millisecond)
-	allowed := session.checkRateLimit(1)
-	require.True(t, allowed)
-}
-
-func TestHandleRateLimit(t *testing.T) {
-	ctx, cancel := context.WithCancel(context.Background())
-	defer cancel()
-
-	session := createFakeEventFeedSession(ctx)
-
-	// empty rate limit item, do nothing
-	session.handleRateLimit(ctx)
-	require.Len(t, session.rateLimitQueue, 0)
-	require.Equal(t, defaultRegionRateLimitQueueSize, cap(session.rateLimitQueue))
-
-	for i := 0; i < defaultRegionRateLimitQueueSize+1; i++ {
-		session.rateLimitQueue = append(session.rateLimitQueue, regionErrorInfo{})
-	}
-	session.handleRateLimit(ctx)
-	require.Len(t, session.rateLimitQueue, 1)
-	require.Equal(t, 1, cap(session.rateLimitQueue))
-	session.handleRateLimit(ctx)
-	require.Len(t, session.rateLimitQueue, 0)
-	require.Equal(t, 128, cap(session.rateLimitQueue))
-}
-
-func TestRegionErrorInfoLogRateLimitedHint(t *testing.T) {
-	t.Parallel()
-
-	errInfo := newRegionErrorInfo(singleRegionInfo{}, nil)
-	errInfo.logRateLimitDuration = time.Second
-
-	// True on the first rate limited.
-	require.True(t, errInfo.logRateLimitedHint())
-	require.False(t, errInfo.logRateLimitedHint())
-
-	// True if it lasts too long.
-	time.Sleep(2 * errInfo.logRateLimitDuration)
-	require.True(t, errInfo.logRateLimitedHint())
-	require.False(t, errInfo.logRateLimitedHint())
+	)
 }

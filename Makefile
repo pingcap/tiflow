@@ -255,6 +255,16 @@ fmt: tools/bin/gofumports tools/bin/shfmt tools/bin/gci generate_mock go-generat
 	@echo "check log style"
 	scripts/check-log-style.sh
 
+fast_fmt: tools/bin/gofumports tools/bin/shfmt tools/bin/gci
+	@echo "run gci (format imports)"
+	tools/bin/gci write $(FILES) 2>&1 | $(FAIL_ON_STDOUT)
+	@echo "run gofumports"
+	tools/bin/gofumports -l -w $(FILES) 2>&1 | $(FAIL_ON_STDOUT)
+	@echo "run shfmt"
+	tools/bin/shfmt -d -w .
+	@echo "check log style"
+	scripts/check-log-style.sh
+
 errdoc: tools/bin/errdoc-gen
 	@echo "generator errors.toml"
 	# check-errdoc will skip DM directory.
@@ -313,6 +323,11 @@ check-static: tools/bin/golangci-lint
 check: check-copyright fmt check-static tidy terror_check errdoc \
 	check-merge-conflicts check-ticdc-dashboard check-diff-line-width \
 	swagger-spec check-makefiles check_engine_integration_test
+	@git --no-pager diff --exit-code || (echo "Please add changed files!" && false)
+
+fast_check: check-copyright fmt check-static tidy terror_check errdoc \
+	check-merge-conflicts check-ticdc-dashboard check-diff-line-width swagger-spec check-makefiles \
+	check_cdc_integration_test check_dm_integration_test check_engine_integration_test 
 	@git --no-pager diff --exit-code || (echo "Please add changed files!" && false)
 
 integration_test_coverage: tools/bin/gocovmerge tools/bin/goveralls

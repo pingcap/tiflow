@@ -105,16 +105,25 @@ func TestNewReplicationSet(t *testing.T) {
 				Captures: map[string]Role{
 					"1": RoleSecondary, "2": RolePrimary,
 				},
-				Checkpoint: tablepb.Checkpoint{CheckpointTs: 2},
+				Checkpoint: tablepb.Checkpoint{
+					CheckpointTs: 2,
+					ResolvedTs:   2,
+				},
 			},
 			tableStatus: map[model.CaptureID]*tablepb.TableStatus{
 				"1": {
-					State:      tablepb.TableStatePreparing,
-					Checkpoint: tablepb.Checkpoint{CheckpointTs: 1},
+					State: tablepb.TableStatePreparing,
+					Checkpoint: tablepb.Checkpoint{
+						CheckpointTs: 1,
+						ResolvedTs:   1,
+					},
 				},
 				"2": {
-					State:      tablepb.TableStateReplicating,
-					Checkpoint: tablepb.Checkpoint{CheckpointTs: 2},
+					State: tablepb.TableStateReplicating,
+					Checkpoint: tablepb.Checkpoint{
+						CheckpointTs: 2,
+						ResolvedTs:   2,
+					},
 				},
 			},
 		},

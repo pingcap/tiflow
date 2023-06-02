@@ -45,7 +45,7 @@ func NewKafkaDMLSink(
 	}
 
 	baseConfig := kafka.NewConfig()
-	if err := baseConfig.Apply(sinkURI); err != nil {
+	if err := baseConfig.Apply(sinkURI, replicaConfig); err != nil {
 		return nil, cerror.WrapError(cerror.ErrKafkaInvalidConfig, err)
 	}
 	saramaConfig, err := kafka.NewSaramaConfig(ctx, baseConfig)

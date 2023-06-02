@@ -201,7 +201,7 @@ func TestAndWriteExampleReplicaTOML(t *testing.T) {
 			NullString: config.NULL,
 		},
 		Terminator:               "\r\n",
-		DateSeparator:            config.DateSeparatorNone.String(),
+		DateSeparator:            config.DateSeparatorDay.String(),
 		EnablePartitionSeparator: true,
 		Protocol:                 "open-protocol",
 	}, cfg.Sink)

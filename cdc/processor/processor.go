@@ -85,6 +85,7 @@ type processor struct {
 
 	initialized bool
 	errCh       chan error
+	warnCh      chan error
 	cancel      context.CancelFunc
 	wg          sync.WaitGroup
 
@@ -243,8 +244,7 @@ func (p *processor) RemoveTable(tableID model.TableID) bool {
 				zap.Int64("tableID", tableID))
 			return true
 		}
-		p.sinkManager.AsyncStopTable(tableID)
-		return true
+		return p.sinkManager.AsyncStopTable(tableID)
 	}
 	table, ok := p.tables[tableID]
 	if !ok {
@@ -255,18 +255,7 @@ func (p *processor) RemoveTable(tableID model.TableID) bool {
 			zap.Int64("tableID", tableID))
 		return true
 	}
-	if !table.AsyncStop() {
-		// We use a Debug log because it is conceivable for the pipeline to block for a legitimate reason,
-		// and we do not want to alarm the user.
-		log.Debug("async stop the table failed, due to a full pipeline",
-			zap.String("capture", p.captureInfo.ID),
-			zap.String("namespace", p.changefeedID.Namespace),
-			zap.String("changefeed", p.changefeedID.ID),
-			zap.Uint64("checkpointTs", table.CheckpointTs()),
-			zap.Int64("tableID", tableID))
-		return false
-	}
-	return true
+	return table.AsyncStop()
 }
 
 // IsAddTableFinished implements TableExecutor interface.
@@ -369,7 +358,7 @@ func (p *processor) IsRemoveTableFinished(tableID model.TableID) (model.Ts, bool
 	}
 
 	if !alreadyExist {
-		log.Warn("table should be removing but not found",
+		log.Warn("table has been stopped",
 			zap.String("captureID", p.captureInfo.ID),
 			zap.String("namespace", p.changefeedID.Namespace),
 			zap.String("changefeed", p.changefeedID.ID),
@@ -523,6 +512,7 @@ func newProcessor(
 		upstream:        up,
 		tables:          make(map[model.TableID]tablepb.TablePipeline),
 		errCh:           make(chan error, 1),
+		warnCh:          make(chan error, 1),
 		changefeedID:    changefeedID,
 		captureInfo:     captureInfo,
 		cancel:          func() {},
@@ -648,6 +638,7 @@ func (p *processor) handleErr(err error) error {
 				position = &model.TaskPosition{}
 			}
 			position.Error = &model.RunningError{
+				Time:    time.Now(),
 				Addr:    p.captureInfo.AdvertiseAddr,
 				Code:    code,
 				Message: err.Error(),
@@ -662,6 +653,28 @@ func (p *processor) handleErr(err error) error {
 	return err
 }
 
+func (p *processor) handleWarn(err error) {
+	var code string
+	if rfcCode, ok := cerror.RFCCode(err); ok {
+		code = string(rfcCode)
+	} else {
+		code = string(cerror.ErrProcessorUnknown.RFCCode())
+	}
+	p.changefeed.PatchTaskPosition(p.captureInfo.ID,
+		func(position *model.TaskPosition) (*model.TaskPosition, bool, error) {
+			if position == nil {
+				position = &model.TaskPosition{}
+			}
+			position.Warning = &model.RunningError{
+				Time:    time.Now(),
+				Addr:    p.captureInfo.AdvertiseAddr,
+				Code:    code,
+				Message: err.Error(),
+			}
+			return position, true, nil
+		})
+}
+
 func (p *processor) tick(ctx cdcContext.Context) error {
 	if !p.checkChangefeedNormal() {
 		return cerror.ErrAdminStopProcessor.GenWithStackByArgs()
@@ -670,6 +683,13 @@ func (p *processor) tick(ctx cdcContext.Context) error {
 	if p.createTaskPosition() {
 		return nil
 	}
+
+	select {
+	case err := <-p.warnCh:
+		p.handleWarn(err)
+	default:
+	}
+
 	if err := p.handleErrorCh(); err != nil {
 		return errors.Trace(err)
 	}
@@ -819,7 +839,7 @@ func (p *processor) lazyInitImpl(ctx cdcContext.Context) error {
 		p.sinkManager, err = sinkmanager.New(stdCtx, p.changefeedID,
 			p.changefeed.Info, p.upstream, p.schemaStorage,
 			p.redoDMLMgr, p.sourceManager,
-			p.errCh, p.metricsTableSinkTotalRows)
+			p.errCh, p.warnCh, p.metricsTableSinkTotalRows)
 		if err != nil {
 			log.Info("Processor creates sink manager fail",
 				zap.String("namespace", p.changefeedID.Namespace),
@@ -1215,13 +1235,7 @@ func (p *processor) Close(ctx cdcContext.Context) error {
 			log.Info("Processor try to close sink manager",
 				zap.String("namespace", p.changefeedID.Namespace),
 				zap.String("changefeed", p.changefeedID.ID))
-			if err := p.sinkManager.Close(); err != nil {
-				log.Error("Failed to close sink manager",
-					zap.String("namespace", p.changefeedID.Namespace),
-					zap.String("changefeed", p.changefeedID.ID),
-					zap.Error(err))
-				return errors.Trace(err)
-			}
+			p.sinkManager.Close()
 			log.Info("Processor closed sink manager successfully",
 				zap.String("namespace", p.changefeedID.Namespace),
 				zap.String("changefeed", p.changefeedID.ID))

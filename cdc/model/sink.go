@@ -17,6 +17,7 @@ import (
 	"fmt"
 	"strconv"
 	"sync"
+	"sync/atomic"
 	"unsafe"
 
 	"github.com/pingcap/log"
@@ -634,7 +635,7 @@ type DDLEvent struct {
 	TableInfo    *TableInfo       `msg:"-"`
 	PreTableInfo *TableInfo       `msg:"-"`
 	Type         model.ActionType `msg:"-"`
-	Done         bool             `msg:"-"`
+	Done         atomic.Bool      `msg:"-"`
 	Charset      string           `msg:"-"`
 	Collate      string           `msg:"-"`
 }
