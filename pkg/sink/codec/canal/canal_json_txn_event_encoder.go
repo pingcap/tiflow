@@ -108,7 +108,7 @@ func newJSONTxnEventEncoder(config *common.Config) codec.TxnEventEncoder {
 		builder:    newCanalEntryBuilder(),
 		valueBuf:   &bytes.Buffer{},
 		terminator: []byte(config.Terminator),
-		
+
 		enableTiDBExtension:      config.EnableTiDBExtension,
 		onlyOutputUpdatedColumns: config.OnlyOutputUpdatedColumns,
 		onlyHandleKeyColumns:     config.OnlyHandleKeyColumns,
