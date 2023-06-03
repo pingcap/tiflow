@@ -279,8 +279,6 @@ func (info *ChangeFeedInfo) VerifyAndComplete() {
 	if info.Config.Consistent == nil {
 		info.Config.Consistent = defaultConfig.Consistent
 	}
-
-	return nil
 }
 
 // FixIncompatible fixes incompatible changefeed meta info.

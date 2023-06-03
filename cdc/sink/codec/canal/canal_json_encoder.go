@@ -38,8 +38,8 @@ type JSONBatchEncoder struct {
 }
 
 // newJSONRowEventEncoder creates a new JSONRowEventEncoder
-func newJSONRowEventEncoder(config *common.Config) codec.RowEventEncoder {
-	encoder := &JSONRowEventEncoder{
+func newJSONRowEventEncoder(config *common.Config) codec.EventBatchEncoder {
+	encoder := &JSONBatchEncoder{
 		builder:  newCanalEntryBuilder(),
 		messages: make([]*common.Message, 0, 1),
 
@@ -172,7 +172,7 @@ func (c *JSONBatchEncoder) newJSONMessageForDML(e *model.RowChangedEvent) ([]byt
 		emptyColumn := true
 		for _, col := range columns {
 			if col != nil {
-				if isDelete && config.OnlyHandleKeyColumns && !col.Flag.IsHandleKey() {
+				if isDelete && c.config.OnlyHandleKeyColumns && !col.Flag.IsHandleKey() {
 					continue
 				}
 				if emptyColumn {
@@ -223,7 +223,7 @@ func (c *JSONBatchEncoder) newJSONMessageForDML(e *model.RowChangedEvent) ([]byt
 	if e.IsDelete() {
 		out.RawString(",\"old\":null")
 		out.RawString(",\"data\":")
-		if err := filling(e.PreColumns, out, config.OnlyHandleKeyColumns); err != nil {
+		if err := filling(e.PreColumns, out, c.config.OnlyHandleKeyColumns); err != nil {
 			return nil, err
 		}
 	} else if e.IsInsert() {
@@ -238,14 +238,14 @@ func (c *JSONBatchEncoder) newJSONMessageForDML(e *model.RowChangedEvent) ([]byt
 			return nil, err
 		}
 		out.RawString(",\"data\":")
-		if err := filling(e.Columns, out); err != nil {
+		if err := filling(e.Columns, out, false); err != nil {
 			return nil, err
 		}
 	} else {
 		log.Panic("unreachable event type", zap.Any("event", e))
 	}
 
-	if config.EnableTiDBExtension {
+	if c.config.EnableTiDBExtension {
 		const prefix string = ",\"_tidb\":"
 		out.RawString(prefix)
 		out.RawByte('{')
