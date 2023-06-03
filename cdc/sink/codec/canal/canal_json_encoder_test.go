@@ -169,7 +169,7 @@ func TestNewCanalJSONMessage4DML(t *testing.T) {
 func TestNewCanalJSONMessageFromDDL(t *testing.T) {
 	t.Parallel()
 
-	encoder, ok := newJSONRowEventEncoder(&common.Config{}).(*JSONRowEventEncoder)
+	encoder, ok := newJSONRowEventEncoder(&common.Config{}).(*JSONBatchEncoder)
 	require.True(t, ok)
 
 	message := encoder.newJSONMessageForDDL(testCaseDDL)
@@ -186,7 +186,7 @@ func TestNewCanalJSONMessageFromDDL(t *testing.T) {
 
 	encoder, ok = newJSONRowEventEncoder(&common.Config{
 		EnableTiDBExtension: true,
-	}).(*JSONRowEventEncoder)
+	}).(*JSONBatchEncoder)
 	require.True(t, ok)
 
 	message = encoder.newJSONMessageForDDL(testCaseDDL)
@@ -322,7 +322,7 @@ func TestCheckpointEventValueMarshal(t *testing.T) {
 
 func TestDDLEventWithExtensionValueMarshal(t *testing.T) {
 	t.Parallel()
-	encoder := &JSONRowEventEncoder{
+	encoder := &JSONBatchEncoder{
 		builder: newCanalEntryBuilder(),
 		config:  &common.Config{EnableTiDBExtension: true},
 	}
