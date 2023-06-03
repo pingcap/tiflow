@@ -37,11 +37,11 @@ func NewRowEventEncoderBuilder(
 	case config.ProtocolDefault, config.ProtocolOpen:
 		return open.NewBatchEncoderBuilder(c), nil
 	case config.ProtocolCanal:
-		return canal.NewBatchEncoderBuilder(), nil
+		return canal.NewBatchEncoderBuilder(c), nil
 	case config.ProtocolAvro:
 		return avro.NewBatchEncoderBuilder(ctx, c)
 	case config.ProtocolMaxwell:
-		return maxwell.NewBatchEncoderBuilder(), nil
+		return maxwell.NewBatchEncoderBuilder(c), nil
 	case config.ProtocolCanalJSON:
 		return canal.NewJSONRowEventEncoderBuilder(c), nil
 	case config.ProtocolCraft:

@@ -205,12 +205,8 @@ func (APIV2HelpersImpl) verifyCreateChangefeedConfig(
 	if err != nil {
 		return nil, err
 	}
-	if !replicaCfg.EnableOldValue {
-		sinkURIParsed, err := url.Parse(cfg.SinkURI)
-		if err != nil {
-			return nil, cerror.WrapError(cerror.ErrSinkURIInvalid, err)
-		}
 
+<<<<<<< HEAD
 		protocol := sinkURIParsed.Query().Get(config.ProtocolKey)
 		if protocol != "" {
 			replicaCfg.Sink.Protocol = protocol
@@ -231,6 +227,8 @@ func (APIV2HelpersImpl) verifyCreateChangefeedConfig(
 				"if use force replicate, old value feature must be enabled")
 		}
 	}
+=======
+>>>>>>> 6537ab8fbc (config(ticdc): enable-old-value always false if using avro or csv as the encoding protocol (#9079))
 	f, err := filter.NewFilter(replicaCfg, "")
 	if err != nil {
 		return nil, errors.Cause(err)
