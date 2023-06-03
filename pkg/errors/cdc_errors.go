@@ -400,6 +400,10 @@ var (
 		"old value is not enabled",
 		errors.RFCCodeText("CDC:ErrOldValueNotEnabled"),
 	)
+	ErrIncompatibleConfig = errors.Normalize(
+		"incompatible configuration",
+		errors.RFCCodeText("CDC:ErrIncompatibleConfig"),
+	)
 	ErrSinkInvalidConfig = errors.Normalize(
 		"sink config invalid",
 		errors.RFCCodeText("CDC:ErrSinkInvalidConfig"),

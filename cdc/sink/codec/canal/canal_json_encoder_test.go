@@ -33,6 +33,7 @@ func TestBuildJSONBatchEncoder(t *testing.T) {
 	builder := &jsonBatchEncoderBuilder{config: cfg}
 	encoder, ok := builder.Build().(*JSONBatchEncoder)
 	require.True(t, ok)
+<<<<<<< HEAD:cdc/sink/codec/canal/canal_json_encoder_test.go
 	require.False(t, encoder.enableTiDBExtension)
 
 	cfg.EnableTiDBExtension = true
@@ -40,6 +41,9 @@ func TestBuildJSONBatchEncoder(t *testing.T) {
 	encoder, ok = builder.Build().(*JSONBatchEncoder)
 	require.True(t, ok)
 	require.True(t, encoder.enableTiDBExtension)
+=======
+	require.NotNil(t, encoder.config)
+>>>>>>> 6537ab8fbc (config(ticdc): enable-old-value always false if using avro or csv as the encoding protocol (#9079)):pkg/sink/codec/canal/canal_json_row_event_encoder_test.go
 }
 
 func TestNewCanalJSONMessage4DML(t *testing.T) {
@@ -53,7 +57,11 @@ func TestNewCanalJSONMessage4DML(t *testing.T) {
 	encoder, ok := e.(*JSONBatchEncoder)
 	require.True(t, ok)
 
+<<<<<<< HEAD:cdc/sink/codec/canal/canal_json_encoder_test.go
 	data, err := encoder.newJSONMessageForDML(testCaseInsert)
+=======
+	data, err := newJSONMessageForDML(encoder.builder, testCaseInsert, encoder.config)
+>>>>>>> 6537ab8fbc (config(ticdc): enable-old-value always false if using avro or csv as the encoding protocol (#9079)):pkg/sink/codec/canal/canal_json_row_event_encoder_test.go
 	require.Nil(t, err)
 	var msg canalJSONMessageInterface = &JSONMessage{}
 	err = json.Unmarshal(data, msg)
@@ -67,6 +75,12 @@ func TestNewCanalJSONMessage4DML(t *testing.T) {
 	require.Equal(t, "cdc", jsonMsg.Schema)
 	require.Equal(t, "person", jsonMsg.Table)
 	require.False(t, jsonMsg.IsDDL)
+
+	for _, col := range testCaseInsert.Columns {
+		require.Contains(t, jsonMsg.Data[0], col.Name)
+		require.Contains(t, jsonMsg.SQLType, col.Name)
+		require.Contains(t, jsonMsg.MySQLType, col.Name)
+	}
 
 	// check data is enough
 	obtainedDataMap := jsonMsg.getData()
@@ -96,7 +110,11 @@ func TestNewCanalJSONMessage4DML(t *testing.T) {
 		require.Equal(t, item.expectedEncodedValue, obtainedValue)
 	}
 
+<<<<<<< HEAD:cdc/sink/codec/canal/canal_json_encoder_test.go
 	data, err = encoder.newJSONMessageForDML(testCaseUpdate)
+=======
+	data, err = newJSONMessageForDML(encoder.builder, testCaseUpdate, encoder.config)
+>>>>>>> 6537ab8fbc (config(ticdc): enable-old-value always false if using avro or csv as the encoding protocol (#9079)):pkg/sink/codec/canal/canal_json_row_event_encoder_test.go
 	require.Nil(t, err)
 	jsonMsg = &JSONMessage{}
 	err = json.Unmarshal(data, jsonMsg)
@@ -105,7 +123,20 @@ func TestNewCanalJSONMessage4DML(t *testing.T) {
 	require.NotNil(t, jsonMsg.Old)
 	require.Equal(t, "UPDATE", jsonMsg.EventType)
 
+<<<<<<< HEAD:cdc/sink/codec/canal/canal_json_encoder_test.go
 	data, err = encoder.newJSONMessageForDML(testCaseDelete)
+=======
+	for _, col := range testCaseUpdate.Columns {
+		require.Contains(t, jsonMsg.Data[0], col.Name)
+		require.Contains(t, jsonMsg.SQLType, col.Name)
+		require.Contains(t, jsonMsg.MySQLType, col.Name)
+	}
+	for _, col := range testCaseUpdate.PreColumns {
+		require.Contains(t, jsonMsg.Old[0], col.Name)
+	}
+
+	data, err = newJSONMessageForDML(encoder.builder, testCaseDelete, encoder.config)
+>>>>>>> 6537ab8fbc (config(ticdc): enable-old-value always false if using avro or csv as the encoding protocol (#9079)):pkg/sink/codec/canal/canal_json_row_event_encoder_test.go
 	require.Nil(t, err)
 	jsonMsg = &JSONMessage{}
 	err = json.Unmarshal(data, jsonMsg)
@@ -114,15 +145,50 @@ func TestNewCanalJSONMessage4DML(t *testing.T) {
 	require.Nil(t, jsonMsg.Old)
 	require.Equal(t, "DELETE", jsonMsg.EventType)
 
+<<<<<<< HEAD:cdc/sink/codec/canal/canal_json_encoder_test.go
 	e = newJSONBatchEncoder(&common.Config{
 		EnableTiDBExtension: true,
 		Terminator:          "",
+=======
+	for _, col := range testCaseDelete.PreColumns {
+		require.Contains(t, jsonMsg.Data[0], col.Name)
+	}
+
+	data, err = newJSONMessageForDML(encoder.builder, testCaseDelete, &common.Config{OnlyHandleKeyColumns: true})
+	require.NoError(t, err)
+	jsonMsg = &JSONMessage{}
+	err = json.Unmarshal(data, jsonMsg)
+	require.NoError(t, err)
+	require.NotNil(t, jsonMsg.Data)
+	require.Nil(t, jsonMsg.Old)
+
+	for _, col := range testCaseDelete.PreColumns {
+		if col.Flag.IsHandleKey() {
+			require.Contains(t, jsonMsg.Data[0], col.Name)
+			require.Contains(t, jsonMsg.SQLType, col.Name)
+			require.Contains(t, jsonMsg.MySQLType, col.Name)
+		} else {
+			require.NotContains(t, jsonMsg.Data[0], col.Name)
+			require.NotContains(t, jsonMsg.SQLType, col.Name)
+			require.NotContains(t, jsonMsg.MySQLType, col.Name)
+		}
+	}
+
+	e = newJSONRowEventEncoder(&common.Config{
+		EnableTiDBExtension:      true,
+		Terminator:               "",
+		OnlyOutputUpdatedColumns: true,
+>>>>>>> 6537ab8fbc (config(ticdc): enable-old-value always false if using avro or csv as the encoding protocol (#9079)):pkg/sink/codec/canal/canal_json_row_event_encoder_test.go
 	})
 	require.NotNil(t, e)
 
 	encoder, ok = e.(*JSONBatchEncoder)
 	require.True(t, ok)
+<<<<<<< HEAD:cdc/sink/codec/canal/canal_json_encoder_test.go
 	data, err = encoder.newJSONMessageForDML(testCaseUpdate)
+=======
+	data, err = newJSONMessageForDML(encoder.builder, testCaseUpdate, encoder.config)
+>>>>>>> 6537ab8fbc (config(ticdc): enable-old-value always false if using avro or csv as the encoding protocol (#9079)):pkg/sink/codec/canal/canal_json_row_event_encoder_test.go
 	require.Nil(t, err)
 
 	withExtension := &canalJSONMessageWithTiDBExtension{}
@@ -131,12 +197,34 @@ func TestNewCanalJSONMessage4DML(t *testing.T) {
 
 	require.NotNil(t, withExtension.Extensions)
 	require.Equal(t, testCaseUpdate.CommitTs, withExtension.Extensions.CommitTs)
+<<<<<<< HEAD:cdc/sink/codec/canal/canal_json_encoder_test.go
+=======
+
+	encoder, ok = e.(*JSONRowEventEncoder)
+	require.True(t, ok)
+	data, err = newJSONMessageForDML(encoder.builder, testCaseUpdate, encoder.config)
+	require.Nil(t, err)
+
+	withExtension = &canalJSONMessageWithTiDBExtension{}
+	err = json.Unmarshal(data, withExtension)
+	require.Nil(t, err)
+	require.Equal(t, 0, len(withExtension.JSONMessage.Old[0]))
+
+	require.NotNil(t, withExtension.Extensions)
+	require.Equal(t, testCaseUpdate.CommitTs, withExtension.Extensions.CommitTs)
+>>>>>>> 6537ab8fbc (config(ticdc): enable-old-value always false if using avro or csv as the encoding protocol (#9079)):pkg/sink/codec/canal/canal_json_row_event_encoder_test.go
 }
 
 func TestNewCanalJSONMessageFromDDL(t *testing.T) {
 	t.Parallel()
+<<<<<<< HEAD:cdc/sink/codec/canal/canal_json_encoder_test.go
 	encoder := &JSONBatchEncoder{builder: newCanalEntryBuilder()}
 	require.NotNil(t, encoder)
+=======
+
+	encoder, ok := newJSONRowEventEncoder(&common.Config{}).(*JSONRowEventEncoder)
+	require.True(t, ok)
+>>>>>>> 6537ab8fbc (config(ticdc): enable-old-value always false if using avro or csv as the encoding protocol (#9079)):pkg/sink/codec/canal/canal_json_row_event_encoder_test.go
 
 	message := encoder.newJSONMessageForDDL(testCaseDDL)
 	require.NotNil(t, message)
@@ -150,8 +238,15 @@ func TestNewCanalJSONMessageFromDDL(t *testing.T) {
 	require.Equal(t, testCaseDDL.Query, msg.Query)
 	require.Equal(t, "CREATE", msg.EventType)
 
+<<<<<<< HEAD:cdc/sink/codec/canal/canal_json_encoder_test.go
 	encoder = &JSONBatchEncoder{builder: newCanalEntryBuilder(), enableTiDBExtension: true}
 	require.NotNil(t, encoder)
+=======
+	encoder, ok = newJSONRowEventEncoder(&common.Config{
+		EnableTiDBExtension: true,
+	}).(*JSONRowEventEncoder)
+	require.True(t, ok)
+>>>>>>> 6537ab8fbc (config(ticdc): enable-old-value always false if using avro or csv as the encoding protocol (#9079)):pkg/sink/codec/canal/canal_json_row_event_encoder_test.go
 
 	message = encoder.newJSONMessageForDDL(testCaseDDL)
 	require.NotNil(t, message)
@@ -202,7 +297,18 @@ func TestEncodeCheckpointEvent(t *testing.T) {
 	t.Parallel()
 	var watermark uint64 = 2333
 	for _, enable := range []bool{false, true} {
+<<<<<<< HEAD:cdc/sink/codec/canal/canal_json_encoder_test.go
 		encoder := &JSONBatchEncoder{builder: newCanalEntryBuilder(), enableTiDBExtension: enable}
+=======
+		config := &common.Config{
+			EnableTiDBExtension: enable,
+		}
+		encoder := &JSONRowEventEncoder{
+			builder: newCanalEntryBuilder(),
+			config:  config,
+		}
+
+>>>>>>> 6537ab8fbc (config(ticdc): enable-old-value always false if using avro or csv as the encoding protocol (#9079)):pkg/sink/codec/canal/canal_json_row_event_encoder_test.go
 		require.NotNil(t, encoder)
 
 		msg, err := encoder.EncodeCheckpointEvent(watermark)
@@ -239,9 +345,15 @@ func TestEncodeCheckpointEvent(t *testing.T) {
 func TestCheckpointEventValueMarshal(t *testing.T) {
 	t.Parallel()
 	var watermark uint64 = 1024
+<<<<<<< HEAD:cdc/sink/codec/canal/canal_json_encoder_test.go
 	encoder := &JSONBatchEncoder{
 		builder:             newCanalEntryBuilder(),
 		enableTiDBExtension: true,
+=======
+	encoder := &JSONRowEventEncoder{
+		builder: newCanalEntryBuilder(),
+		config:  &common.Config{EnableTiDBExtension: true},
+>>>>>>> 6537ab8fbc (config(ticdc): enable-old-value always false if using avro or csv as the encoding protocol (#9079)):pkg/sink/codec/canal/canal_json_row_event_encoder_test.go
 	}
 	require.NotNil(t, encoder)
 	msg, err := encoder.EncodeCheckpointEvent(watermark)
@@ -286,7 +398,14 @@ func TestCheckpointEventValueMarshal(t *testing.T) {
 
 func TestDDLEventWithExtensionValueMarshal(t *testing.T) {
 	t.Parallel()
+<<<<<<< HEAD:cdc/sink/codec/canal/canal_json_encoder_test.go
 	encoder := &JSONBatchEncoder{builder: newCanalEntryBuilder(), enableTiDBExtension: true}
+=======
+	encoder := &JSONRowEventEncoder{
+		builder: newCanalEntryBuilder(),
+		config:  &common.Config{EnableTiDBExtension: true},
+	}
+>>>>>>> 6537ab8fbc (config(ticdc): enable-old-value always false if using avro or csv as the encoding protocol (#9079)):pkg/sink/codec/canal/canal_json_row_event_encoder_test.go
 	require.NotNil(t, encoder)
 
 	message := encoder.newJSONMessageForDDL(testCaseDDL)

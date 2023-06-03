@@ -94,10 +94,16 @@ func (l AtomicityLevel) validate(scheme string) error {
 }
 
 // ForceEnableOldValueProtocols specifies which protocols need to be forced to enable old value.
-var ForceEnableOldValueProtocols = []string{
-	ProtocolCanal.String(),
-	ProtocolCanalJSON.String(),
-	ProtocolMaxwell.String(),
+var ForceEnableOldValueProtocols = map[string]struct{}{
+	ProtocolCanal.String():     {},
+	ProtocolCanalJSON.String(): {},
+	ProtocolMaxwell.String():   {},
+}
+
+// ForceDisableOldValueProtocols specifies protocols need to be forced to disable old value.
+var ForceDisableOldValueProtocols = map[string]struct{}{
+	ProtocolAvro.String(): {},
+	ProtocolCsv.String():  {},
 }
 
 // SinkConfig represents sink config for a changefeed
@@ -243,11 +249,89 @@ type ColumnSelector struct {
 	Columns []string `toml:"columns" json:"columns"`
 }
 
+<<<<<<< HEAD
 func (s *SinkConfig) validateAndAdjust(sinkURI *url.URL, enableOldValue bool) error {
+=======
+// CodecConfig represents a MQ codec configuration
+type CodecConfig struct {
+	EnableTiDBExtension            *bool   `toml:"enable-tidb-extension" json:"enable-tidb-extension,omitempty"`
+	MaxBatchSize                   *int    `toml:"max-batch-size" json:"max-batch-size,omitempty"`
+	AvroEnableWatermark            *bool   `toml:"avro-enable-watermark" json:"avro-enable-watermark"`
+	AvroDecimalHandlingMode        *string `toml:"avro-decimal-handling-mode" json:"avro-decimal-handling-mode,omitempty"`
+	AvroBigintUnsignedHandlingMode *string `toml:"avro-bigint-unsigned-handling-mode" json:"avro-bigint-unsigned-handling-mode,omitempty"`
+}
+
+// KafkaConfig represents a kafka sink configuration
+type KafkaConfig struct {
+	PartitionNum                 *int32       `toml:"partition-num" json:"partition-num,omitempty"`
+	ReplicationFactor            *int16       `toml:"replication-factor" json:"replication-factor,omitempty"`
+	KafkaVersion                 *string      `toml:"kafka-version" json:"kafka-version,omitempty"`
+	MaxMessageBytes              *int         `toml:"max-message-bytes" json:"max-message-bytes,omitempty"`
+	Compression                  *string      `toml:"compression" json:"compression,omitempty"`
+	KafkaClientID                *string      `toml:"kafka-client-id" json:"kafka-client-id,omitempty"`
+	AutoCreateTopic              *bool        `toml:"auto-create-topic" json:"auto-create-topic,omitempty"`
+	DialTimeout                  *string      `toml:"dial-timeout" json:"dial-timeout,omitempty"`
+	WriteTimeout                 *string      `toml:"write-timeout" json:"write-timeout,omitempty"`
+	ReadTimeout                  *string      `toml:"read-timeout" json:"read-timeout,omitempty"`
+	RequiredAcks                 *int         `toml:"required-acks" json:"required-acks,omitempty"`
+	SASLUser                     *string      `toml:"sasl-user" json:"sasl-user,omitempty"`
+	SASLPassword                 *string      `toml:"sasl-password" json:"sasl-password,omitempty"`
+	SASLMechanism                *string      `toml:"sasl-mechanism" json:"sasl-mechanism,omitempty"`
+	SASLGssAPIAuthType           *string      `toml:"sasl-gssapi-auth-type" json:"sasl-gssapi-auth-type,omitempty"`
+	SASLGssAPIKeytabPath         *string      `toml:"sasl-gssapi-keytab-path" json:"sasl-gssapi-keytab-path,omitempty"`
+	SASLGssAPIKerberosConfigPath *string      `toml:"sasl-gssapi-kerberos-config-path" json:"sasl-gssapi-kerberos-config-path,omitempty"`
+	SASLGssAPIServiceName        *string      `toml:"sasl-gssapi-service-name" json:"sasl-gssapi-service-name,omitempty"`
+	SASLGssAPIUser               *string      `toml:"sasl-gssapi-user" json:"sasl-gssapi-user,omitempty"`
+	SASLGssAPIPassword           *string      `toml:"sasl-gssapi-password" json:"sasl-gssapi-password,omitempty"`
+	SASLGssAPIRealm              *string      `toml:"sasl-gssapi-realm" json:"sasl-gssapi-realm,omitempty"`
+	SASLGssAPIDisablePafxfast    *bool        `toml:"sasl-gssapi-disable-pafxfast" json:"sasl-gssapi-disable-pafxfast,omitempty"`
+	SASLOAuthClientID            *string      `toml:"sasl-oauth-client-id" json:"sasl-oauth-client-id,omitempty"`
+	SASLOAuthClientSecret        *string      `toml:"sasl-oauth-client-secret" json:"sasl-oauth-client-secret,omitempty"`
+	SASLOAuthTokenURL            *string      `toml:"sasl-oauth-token-url" json:"sasl-oauth-token-url,omitempty"`
+	SASLOAuthScopes              []string     `toml:"sasl-oauth-scopes" json:"sasl-oauth-scopes,omitempty"`
+	SASLOAuthGrantType           *string      `toml:"sasl-oauth-grant-type" json:"sasl-oauth-grant-type,omitempty"`
+	SASLOAuthAudience            *string      `toml:"sasl-oauth-audience" json:"sasl-oauth-audience,omitempty"`
+	EnableTLS                    *bool        `toml:"enable-tls" json:"enable-tls,omitempty"`
+	CA                           *string      `toml:"ca" json:"ca,omitempty"`
+	Cert                         *string      `toml:"cert" json:"cert,omitempty"`
+	Key                          *string      `toml:"key" json:"key,omitempty"`
+	InsecureSkipVerify           *bool        `toml:"insecure-skip-verify" json:"insecure-skip-verify,omitempty"`
+	CodecConfig                  *CodecConfig `toml:"codec-config" json:"codec-config,omitempty"`
+}
+
+// MySQLConfig represents a MySQL sink configuration
+type MySQLConfig struct {
+	WorkerCount                  *int    `toml:"worker-count" json:"worker-count,omitempty"`
+	MaxTxnRow                    *int    `toml:"max-txn-row" json:"max-txn-row,omitempty"`
+	MaxMultiUpdateRowSize        *int    `toml:"max-multi-update-row-size" json:"max-multi-update-row-size,omitempty"`
+	MaxMultiUpdateRowCount       *int    `toml:"max-multi-update-row" json:"max-multi-update-row,omitempty"`
+	TiDBTxnMode                  *string `toml:"tidb-txn-mode" json:"tidb-txn-mode,omitempty"`
+	SSLCa                        *string `toml:"ssl-ca" json:"ssl-ca,omitempty"`
+	SSLCert                      *string `toml:"ssl-cert" json:"ssl-cert,omitempty"`
+	SSLKey                       *string `toml:"ssl-key" json:"ssl-key,omitempty"`
+	TimeZone                     *string `toml:"time-zone" json:"time-zone,omitempty"`
+	WriteTimeout                 *string `toml:"write-timeout" json:"write-timeout,omitempty"`
+	ReadTimeout                  *string `toml:"read-timeout" json:"read-timeout,omitempty"`
+	Timeout                      *string `toml:"timeout" json:"timeout,omitempty"`
+	EnableBatchDML               *bool   `toml:"enable-batch-dml" json:"enable-batch-dml,omitempty"`
+	EnableMultiStatement         *bool   `toml:"enable-multi-statement" json:"enable-multi-statement,omitempty"`
+	EnableCachePreparedStatement *bool   `toml:"enable-cache-prepared-statement" json:"enable-cache-prepared-statement,omitempty"`
+}
+
+// CloudStorageConfig represents a cloud storage sink configuration
+type CloudStorageConfig struct {
+	WorkerCount   *int    `toml:"worker-count" json:"worker-count,omitempty"`
+	FlushInterval *string `toml:"flush-interval" json:"flush-interval,omitempty"`
+	FileSize      *int    `toml:"file-size" json:"file-size,omitempty"`
+}
+
+func (s *SinkConfig) validateAndAdjust(sinkURI *url.URL) error {
+>>>>>>> 6537ab8fbc (config(ticdc): enable-old-value always false if using avro or csv as the encoding protocol (#9079))
 	if err := s.validateAndAdjustSinkURI(sinkURI); err != nil {
 		return err
 	}
 
+<<<<<<< HEAD
 	if !enableOldValue {
 		for _, protocolStr := range ForceEnableOldValueProtocols {
 			if protocolStr == s.Protocol {
@@ -258,6 +342,8 @@ func (s *SinkConfig) validateAndAdjust(sinkURI *url.URL, enableOldValue bool) er
 			}
 		}
 	}
+=======
+>>>>>>> 6537ab8fbc (config(ticdc): enable-old-value always false if using avro or csv as the encoding protocol (#9079))
 	for _, rule := range s.DispatchRules {
 		if rule.DispatcherRule != "" && rule.PartitionRule != "" {
 			log.Error("dispatcher and partition cannot be configured both", zap.Any("rule", rule))

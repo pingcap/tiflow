@@ -144,7 +144,7 @@ func (b *canalEntryBuilder) buildColumn(c *model.Column, colName string, updated
 }
 
 // build the RowData of a canal entry
-func (b *canalEntryBuilder) buildRowData(e *model.RowChangedEvent) (*canal.RowData, error) {
+func (b *canalEntryBuilder) buildRowData(e *model.RowChangedEvent, onlyHandleKeyColumns bool) (*canal.RowData, error) {
 	var columns []*canal.Column
 	for _, column := range e.Columns {
 		if column == nil {
@@ -156,9 +156,14 @@ func (b *canalEntryBuilder) buildRowData(e *model.RowChangedEvent) (*canal.RowDa
 		}
 		columns = append(columns, c)
 	}
+
+	onlyHandleKeyColumns = onlyHandleKeyColumns && e.IsDelete()
 	var preColumns []*canal.Column
 	for _, column := range e.PreColumns {
 		if column == nil {
+			continue
+		}
+		if onlyHandleKeyColumns && !column.Flag.IsHandleKey() {
 			continue
 		}
 		c, err := b.buildColumn(column, column.Name, !e.IsDelete())
@@ -175,11 +180,11 @@ func (b *canalEntryBuilder) buildRowData(e *model.RowChangedEvent) (*canal.RowDa
 }
 
 // fromRowEvent builds canal entry from cdc RowChangedEvent
-func (b *canalEntryBuilder) fromRowEvent(e *model.RowChangedEvent) (*canal.Entry, error) {
+func (b *canalEntryBuilder) fromRowEvent(e *model.RowChangedEvent, onlyHandleKeyColumns bool) (*canal.Entry, error) {
 	eventType := convertRowEventType(e)
 	header := b.buildHeader(e.CommitTs, e.Table.Schema, e.Table.Table, eventType, 1)
 	isDdl := isCanalDDL(eventType) // false
-	rowData, err := b.buildRowData(e)
+	rowData, err := b.buildRowData(e, onlyHandleKeyColumns)
 	if err != nil {
 		return nil, errors.Trace(err)
 	}

@@ -104,8 +104,7 @@ func TestBuildCraftBatchEncoder(t *testing.T) {
 	builder := &batchEncoderBuilder{config: cfg}
 	encoder, ok := builder.Build().(*BatchEncoder)
 	require.True(t, ok)
-	require.Equal(t, cfg.MaxBatchSize, encoder.MaxBatchSize)
-	require.Equal(t, cfg.MaxMessageBytes, encoder.MaxMessageBytes)
+	require.NotNil(t, encoder.config)
 }
 
 func testBatchCodec(

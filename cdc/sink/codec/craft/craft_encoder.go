@@ -28,9 +28,7 @@ type BatchEncoder struct {
 	messageBuf       []*common.Message
 	callbackBuf      []func()
 
-	// configs
-	MaxMessageBytes int
-	MaxBatchSize    int
+	config *common.Config
 
 	allocator *SliceAllocator
 }
@@ -49,11 +47,11 @@ func (e *BatchEncoder) AppendRowChangedEvent(
 	ev *model.RowChangedEvent,
 	callback func(),
 ) error {
-	rows, size := e.rowChangedBuffer.AppendRowChangedEvent(ev)
+	rows, size := e.rowChangedBuffer.AppendRowChangedEvent(ev, e.config.OnlyHandleKeyColumns)
 	if callback != nil {
 		e.callbackBuf = append(e.callbackBuf, callback)
 	}
-	if size > e.MaxMessageBytes || rows >= e.MaxBatchSize {
+	if size > e.config.MaxMessageBytes || rows >= e.config.MaxBatchSize {
 		e.flush()
 	}
 	return nil
@@ -98,11 +96,15 @@ func (e *BatchEncoder) flush() {
 }
 
 // NewBatchEncoder creates a new BatchEncoder.
+<<<<<<< HEAD:cdc/sink/codec/craft/craft_encoder.go
 func NewBatchEncoder() codec.EventBatchEncoder {
+=======
+func NewBatchEncoder(config *common.Config) codec.RowEventEncoder {
+>>>>>>> 6537ab8fbc (config(ticdc): enable-old-value always false if using avro or csv as the encoding protocol (#9079)):pkg/sink/codec/craft/craft_encoder.go
 	// 64 is a magic number that come up with these assumptions and manual benchmark.
 	// 1. Most table will not have more than 64 columns
 	// 2. It only worth allocating slices in batch for slices that's small enough
-	return NewBatchEncoderWithAllocator(NewSliceAllocator(64))
+	return NewBatchEncoderWithAllocator(NewSliceAllocator(64), config)
 }
 
 type batchEncoderBuilder struct {
@@ -110,11 +112,16 @@ type batchEncoderBuilder struct {
 }
 
 // Build a BatchEncoder
+<<<<<<< HEAD:cdc/sink/codec/craft/craft_encoder.go
 func (b *batchEncoderBuilder) Build() codec.EventBatchEncoder {
 	encoder := NewBatchEncoder()
 	encoder.(*BatchEncoder).MaxMessageBytes = b.config.MaxMessageBytes
 	encoder.(*BatchEncoder).MaxBatchSize = b.config.MaxBatchSize
 	return encoder
+=======
+func (b *batchEncoderBuilder) Build() codec.RowEventEncoder {
+	return NewBatchEncoder(b.config)
+>>>>>>> 6537ab8fbc (config(ticdc): enable-old-value always false if using avro or csv as the encoding protocol (#9079)):pkg/sink/codec/craft/craft_encoder.go
 }
 
 // NewBatchEncoderBuilder creates a craft batchEncoderBuilder.
@@ -123,11 +130,16 @@ func NewBatchEncoderBuilder(config *common.Config) codec.EncoderBuilder {
 }
 
 // NewBatchEncoderWithAllocator creates a new BatchEncoder with given allocator.
+<<<<<<< HEAD:cdc/sink/codec/craft/craft_encoder.go
 func NewBatchEncoderWithAllocator(allocator *SliceAllocator) codec.EventBatchEncoder {
+=======
+func NewBatchEncoderWithAllocator(allocator *SliceAllocator, config *common.Config) codec.RowEventEncoder {
+>>>>>>> 6537ab8fbc (config(ticdc): enable-old-value always false if using avro or csv as the encoding protocol (#9079)):pkg/sink/codec/craft/craft_encoder.go
 	return &BatchEncoder{
 		allocator:        allocator,
 		messageBuf:       make([]*common.Message, 0, 2),
 		callbackBuf:      make([]func(), 0),
 		rowChangedBuffer: NewRowChangedEventBuffer(allocator),
+		config:           config,
 	}
 }

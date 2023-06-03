@@ -34,6 +34,8 @@ type BatchEncoder struct {
 	callbackBuf  []func()
 	packet       *canal.Packet
 	entryBuilder *canalEntryBuilder
+
+	config *common.Config
 }
 
 // EncodeCheckpointEvent implements the EventBatchEncoder interface
@@ -50,7 +52,7 @@ func (d *BatchEncoder) AppendRowChangedEvent(
 	e *model.RowChangedEvent,
 	callback func(),
 ) error {
-	entry, err := d.entryBuilder.fromRowEvent(e)
+	entry, err := d.entryBuilder.fromRowEvent(e, d.config.OnlyHandleKeyColumns)
 	if err != nil {
 		return errors.Trace(err)
 	}
@@ -156,20 +158,29 @@ func (d *BatchEncoder) resetPacket() {
 }
 
 // newBatchEncoder creates a new canalBatchEncoder.
+<<<<<<< HEAD:cdc/sink/codec/canal/canal_encoder.go
 func newBatchEncoder() codec.EventBatchEncoder {
+=======
+func newBatchEncoder(config *common.Config) codec.RowEventEncoder {
+>>>>>>> 6537ab8fbc (config(ticdc): enable-old-value always false if using avro or csv as the encoding protocol (#9079)):pkg/sink/codec/canal/canal_encoder.go
 	encoder := &BatchEncoder{
 		messages:     &canal.Messages{},
 		callbackBuf:  make([]func(), 0),
 		entryBuilder: newCanalEntryBuilder(),
+
+		config: config,
 	}
 
 	encoder.resetPacket()
 	return encoder
 }
 
-type batchEncoderBuilder struct{}
+type batchEncoderBuilder struct {
+	config *common.Config
+}
 
 // Build a `canalBatchEncoder`
+<<<<<<< HEAD:cdc/sink/codec/canal/canal_encoder.go
 func (b *batchEncoderBuilder) Build() codec.EventBatchEncoder {
 	return newBatchEncoder()
 }
@@ -177,4 +188,15 @@ func (b *batchEncoderBuilder) Build() codec.EventBatchEncoder {
 // NewBatchEncoderBuilder creates a canal batchEncoderBuilder.
 func NewBatchEncoderBuilder() codec.EncoderBuilder {
 	return &batchEncoderBuilder{}
+=======
+func (b *batchEncoderBuilder) Build() codec.RowEventEncoder {
+	return newBatchEncoder(b.config)
+}
+
+// NewBatchEncoderBuilder creates a canal batchEncoderBuilder.
+func NewBatchEncoderBuilder(config *common.Config) codec.RowEventEncoderBuilder {
+	return &batchEncoderBuilder{
+		config: config,
+	}
+>>>>>>> 6537ab8fbc (config(ticdc): enable-old-value always false if using avro or csv as the encoding protocol (#9079)):pkg/sink/codec/canal/canal_encoder.go
 }

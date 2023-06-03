@@ -31,6 +31,8 @@ type BatchEncoder struct {
 	valueBuf    *bytes.Buffer
 	callbackBuf []func()
 	batchSize   int
+
+	config *common.Config
 }
 
 // EncodeCheckpointEvent implements the EventBatchEncoder interface
@@ -47,7 +49,7 @@ func (d *BatchEncoder) AppendRowChangedEvent(
 	e *model.RowChangedEvent,
 	callback func(),
 ) error {
-	_, valueMsg := rowChangeToMaxwellMsg(e)
+	_, valueMsg := rowChangeToMaxwellMsg(e, d.config.OnlyHandleKeyColumns)
 	value, err := valueMsg.encode()
 	if err != nil {
 		return errors.Trace(err)
@@ -109,19 +111,27 @@ func (d *BatchEncoder) reset() {
 }
 
 // newBatchEncoder creates a new maxwell BatchEncoder.
+<<<<<<< HEAD:cdc/sink/codec/maxwell/maxwell_encoder.go
 func newBatchEncoder() codec.EventBatchEncoder {
+=======
+func newBatchEncoder(config *common.Config) codec.RowEventEncoder {
+>>>>>>> 6537ab8fbc (config(ticdc): enable-old-value always false if using avro or csv as the encoding protocol (#9079)):pkg/sink/codec/maxwell/maxwell_encoder.go
 	batch := &BatchEncoder{
 		keyBuf:      &bytes.Buffer{},
 		valueBuf:    &bytes.Buffer{},
 		callbackBuf: make([]func(), 0),
+		config:      config,
 	}
 	batch.reset()
 	return batch
 }
 
-type batchEncoderBuilder struct{}
+type batchEncoderBuilder struct {
+	config *common.Config
+}
 
 // NewBatchEncoderBuilder creates a maxwell batchEncoderBuilder.
+<<<<<<< HEAD:cdc/sink/codec/maxwell/maxwell_encoder.go
 func NewBatchEncoderBuilder() codec.EncoderBuilder {
 	return &batchEncoderBuilder{}
 }
@@ -129,4 +139,15 @@ func NewBatchEncoderBuilder() codec.EncoderBuilder {
 // Build a `maxwellBatchEncoder`
 func (b *batchEncoderBuilder) Build() codec.EventBatchEncoder {
 	return newBatchEncoder()
+=======
+func NewBatchEncoderBuilder(config *common.Config) codec.RowEventEncoderBuilder {
+	return &batchEncoderBuilder{
+		config: config,
+	}
+}
+
+// Build a `maxwellBatchEncoder`
+func (b *batchEncoderBuilder) Build() codec.RowEventEncoder {
+	return newBatchEncoder(b.config)
+>>>>>>> 6537ab8fbc (config(ticdc): enable-old-value always false if using avro or csv as the encoding protocol (#9079)):pkg/sink/codec/maxwell/maxwell_encoder.go
 }

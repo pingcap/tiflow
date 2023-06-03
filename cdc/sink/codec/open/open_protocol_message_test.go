@@ -90,3 +90,130 @@ func TestVarBinaryCol(t *testing.T) {
 	col2 := mqCol2.ToRowChangeColumn("test")
 	require.Equal(t, col, col2)
 }
+<<<<<<< HEAD:cdc/sink/codec/open/open_protocol_message_test.go
+=======
+
+func TestOnlyOutputUpdatedColumn(t *testing.T) {
+	t.Parallel()
+	cases := []struct {
+		pre     interface{}
+		updated interface{}
+		output  bool
+	}{
+		{
+			pre:     []byte{0x89, 0x50, 0x4E, 0x47, 0x0D, 0x0A, 0x1A, 0x0A},
+			updated: []byte{0x89, 0x50, 0x4E, 0x47, 0x0D, 0x0A, 0x1A, 0x0A},
+			output:  false,
+		},
+		{
+			pre:     uint64(1),
+			updated: uint64(1),
+			output:  false,
+		},
+		{
+			pre:     nil,
+			updated: nil,
+			output:  false,
+		},
+		{
+			pre:     float64(6.2),
+			updated: float32(6.2),
+			output:  true,
+		},
+		{
+			pre:     uint64(1),
+			updated: int64(1),
+			output:  true,
+		},
+		{
+			pre:     time.Time{},
+			updated: time.Time{},
+			output:  false,
+		},
+		{
+			pre:     "time.Time{}",
+			updated: time.Time{},
+			output:  true,
+		},
+		{
+			pre:     "time.Time{}",
+			updated: "time.Time{}",
+			output:  false,
+		},
+	}
+
+	for _, cs := range cases {
+		col := internal.Column{
+			Value: cs.pre,
+		}
+		col2 := internal.Column{
+			Value: cs.updated,
+		}
+		row := &messageRow{
+			Update:     map[string]internal.Column{"test": col2},
+			PreColumns: map[string]internal.Column{"test": col},
+		}
+		_, err := row.encode(true)
+		require.Nil(t, err)
+		_, ok := row.PreColumns["test"]
+		assert.Equal(t, cs.output, ok)
+	}
+}
+
+func TestRowChanged2MsgOnlyHandleKeyColumns(t *testing.T) {
+	t.Parallel()
+
+	insertEvent := &model.RowChangedEvent{
+		CommitTs: 417318403368288260,
+		Table: &model.TableName{
+			Schema: "schema",
+			Table:  "table",
+		},
+		Columns: []*model.Column{
+			{Name: "id", Flag: model.HandleKeyFlag, Type: mysql.TypeLonglong, Value: 1},
+			{Name: "a", Type: mysql.TypeLonglong, Value: 1},
+		},
+	}
+	_, value := rowChangeToMsg(insertEvent, true)
+	_, ok := value.Update["a"]
+	require.True(t, ok)
+
+	updateEvent := &model.RowChangedEvent{
+		CommitTs: 417318403368288260,
+		Table: &model.TableName{
+			Schema: "schema",
+			Table:  "table",
+		},
+		Columns: []*model.Column{
+			{Name: "id", Flag: model.HandleKeyFlag, Type: mysql.TypeLonglong, Value: 1},
+			{Name: "a", Type: mysql.TypeLonglong, Value: 2},
+		},
+		PreColumns: []*model.Column{
+			{Name: "id", Flag: model.HandleKeyFlag, Type: mysql.TypeLonglong, Value: 1},
+			{Name: "a", Type: mysql.TypeLonglong, Value: 1},
+		},
+	}
+	_, value = rowChangeToMsg(updateEvent, true)
+	_, ok = value.PreColumns["a"]
+	require.True(t, ok)
+
+	deleteEvent := &model.RowChangedEvent{
+		CommitTs: 417318403368288260,
+		Table: &model.TableName{
+			Schema: "schema",
+			Table:  "table",
+		},
+		PreColumns: []*model.Column{
+			{Name: "id", Flag: model.HandleKeyFlag, Type: mysql.TypeLonglong, Value: 1},
+			{Name: "a", Type: mysql.TypeLonglong, Value: 2},
+		},
+	}
+	_, value = rowChangeToMsg(deleteEvent, true)
+	_, ok = value.Delete["a"]
+	require.False(t, ok)
+
+	_, value = rowChangeToMsg(deleteEvent, false)
+	_, ok = value.Delete["a"]
+	require.True(t, ok)
+}
+>>>>>>> 6537ab8fbc (config(ticdc): enable-old-value always false if using avro or csv as the encoding protocol (#9079)):pkg/sink/codec/open/open_protocol_message_test.go

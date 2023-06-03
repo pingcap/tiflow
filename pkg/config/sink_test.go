@@ -20,6 +20,7 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
+<<<<<<< HEAD
 func TestValidateOldValue(t *testing.T) {
 	t.Parallel()
 	testCases := []struct {
@@ -81,6 +82,8 @@ func TestValidateOldValue(t *testing.T) {
 	}
 }
 
+=======
+>>>>>>> 6537ab8fbc (config(ticdc): enable-old-value always false if using avro or csv as the encoding protocol (#9079))
 func TestValidateTxnAtomicity(t *testing.T) {
 	t.Parallel()
 	testCases := []struct {
@@ -156,10 +159,15 @@ func TestValidateTxnAtomicity(t *testing.T) {
 		parsedSinkURI, err := url.Parse(tc.sinkURI)
 		require.Nil(t, err)
 		if tc.expectedErr == "" {
+<<<<<<< HEAD
 			require.Nil(t, cfg.validateAndAdjust(parsedSinkURI, true))
 			require.Equal(t, tc.shouldSplitTxn, cfg.TxnAtomicity.ShouldSplitTxn())
+=======
+			require.Nil(t, cfg.validateAndAdjust(parsedSinkURI))
+			require.Equal(t, tc.shouldSplitTxn, util.GetOrZero(cfg.TxnAtomicity).ShouldSplitTxn())
+>>>>>>> 6537ab8fbc (config(ticdc): enable-old-value always false if using avro or csv as the encoding protocol (#9079))
 		} else {
-			require.Regexp(t, tc.expectedErr, cfg.validateAndAdjust(parsedSinkURI, true))
+			require.Regexp(t, tc.expectedErr, cfg.validateAndAdjust(parsedSinkURI))
 		}
 	}
 }

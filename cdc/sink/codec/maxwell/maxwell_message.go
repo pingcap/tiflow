@@ -43,7 +43,7 @@ func (m *maxwellMessage) encode() ([]byte, error) {
 	return data, cerror.WrapError(cerror.ErrMaxwellEncodeFailed, err)
 }
 
-func rowChangeToMaxwellMsg(e *model.RowChangedEvent) (*internal.MessageKey, *maxwellMessage) {
+func rowChangeToMaxwellMsg(e *model.RowChangedEvent, onlyHandleKeyColumns bool) (*internal.MessageKey, *maxwellMessage) {
 	var partition *int64
 	if e.Table.IsPartition {
 		partition = &e.Table.TableID
@@ -68,6 +68,9 @@ func rowChangeToMaxwellMsg(e *model.RowChangedEvent) (*internal.MessageKey, *max
 	if e.IsDelete() {
 		value.Type = "delete"
 		for _, v := range e.PreColumns {
+			if onlyHandleKeyColumns && !v.Flag.IsHandleKey() {
+				continue
+			}
 			switch v.Type {
 			case mysql.TypeString, mysql.TypeVarString, mysql.TypeVarchar, mysql.TypeTinyBlob, mysql.TypeMediumBlob, mysql.TypeLongBlob, mysql.TypeBlob:
 				if v.Value == nil {
