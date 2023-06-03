@@ -29,28 +29,31 @@ import (
 	"go.uber.org/zap"
 )
 
-<<<<<<< HEAD:cdc/sink/codec/canal/canal_json_encoder.go
 // JSONBatchEncoder encodes Canal json messages in JSON format
 type JSONBatchEncoder struct {
-	builder *canalEntryBuilder
+	builder  *canalEntryBuilder
+	messages []*common.Message
 
-	// When it is true, canal-json would generate TiDB extension information
-	// which, at the moment, only includes `tidbWaterMarkType` and `_tidb` fields.
-	enableTiDBExtension bool
-	// the symbol separating two lines
-	terminator      []byte
-	maxMessageBytes int
-	messages        []*common.Message
+	config *common.Config
+}
+
+// newJSONRowEventEncoder creates a new JSONRowEventEncoder
+func newJSONRowEventEncoder(config *common.Config) codec.RowEventEncoder {
+	encoder := &JSONRowEventEncoder{
+		builder:  newCanalEntryBuilder(),
+		messages: make([]*common.Message, 0, 1),
+
+		config: config,
+	}
+	return encoder
 }
 
 // newJSONBatchEncoder creates a new JSONBatchEncoder
 func newJSONBatchEncoder(config *common.Config) codec.EventBatchEncoder {
 	encoder := &JSONBatchEncoder{
-		builder:             newCanalEntryBuilder(),
-		enableTiDBExtension: config.EnableTiDBExtension,
-		messages:            make([]*common.Message, 0, 1),
-		terminator:          []byte(config.Terminator),
-		maxMessageBytes:     config.MaxMessageBytes,
+		builder:  newCanalEntryBuilder(),
+		messages: make([]*common.Message, 0, 1),
+		config:   config,
 	}
 	return encoder
 }
@@ -59,22 +62,7 @@ func (c *JSONBatchEncoder) newJSONMessageForDML(e *model.RowChangedEvent) ([]byt
 	isDelete := e.IsDelete()
 	mysqlTypeMap := make(map[string]string, len(e.Columns))
 
-	filling := func(columns []*model.Column, out *jwriter.Writer) error {
-=======
-func newJSONMessageForDML(
-	builder *canalEntryBuilder,
-	e *model.RowChangedEvent,
-	config *common.Config,
-) ([]byte, error) {
-	isDelete := e.IsDelete()
-	mysqlTypeMap := make(map[string]string, len(e.Columns))
-
-	filling := func(columns []*model.Column, out *jwriter.Writer,
-		onlyOutputUpdatedColumn bool,
-		onlyHandleKeyColumns bool,
-		newColumnMap map[string]*model.Column,
-	) error {
->>>>>>> 6537ab8fbc (config(ticdc): enable-old-value always false if using avro or csv as the encoding protocol (#9079)):pkg/sink/codec/canal/canal_json_row_event_encoder.go
+	filling := func(columns []*model.Column, out *jwriter.Writer, onlyHandleKeyColumns bool) error {
 		if len(columns) == 0 {
 			out.RawString("null")
 			return nil
@@ -84,16 +72,9 @@ func newJSONMessageForDML(
 		isFirst := true
 		for _, col := range columns {
 			if col != nil {
-<<<<<<< HEAD:cdc/sink/codec/canal/canal_json_encoder.go
-=======
-				// column equal, do not output it
-				if onlyOutputUpdatedColumn && shouldIgnoreColumn(col, newColumnMap) {
-					continue
-				}
 				if onlyHandleKeyColumns && !col.Flag.IsHandleKey() {
 					continue
 				}
->>>>>>> 6537ab8fbc (config(ticdc): enable-old-value always false if using avro or csv as the encoding protocol (#9079)):pkg/sink/codec/canal/canal_json_row_event_encoder.go
 				if isFirst {
 					isFirst = false
 				} else {
@@ -242,57 +223,29 @@ func newJSONMessageForDML(
 	if e.IsDelete() {
 		out.RawString(",\"old\":null")
 		out.RawString(",\"data\":")
-<<<<<<< HEAD:cdc/sink/codec/canal/canal_json_encoder.go
-		if err := filling(e.PreColumns, out); err != nil {
-=======
-		if err := filling(e.PreColumns, out, false, config.OnlyHandleKeyColumns, nil); err != nil {
->>>>>>> 6537ab8fbc (config(ticdc): enable-old-value always false if using avro or csv as the encoding protocol (#9079)):pkg/sink/codec/canal/canal_json_row_event_encoder.go
+		if err := filling(e.PreColumns, out, config.OnlyHandleKeyColumns); err != nil {
 			return nil, err
 		}
 	} else if e.IsInsert() {
 		out.RawString(",\"old\":null")
 		out.RawString(",\"data\":")
-<<<<<<< HEAD:cdc/sink/codec/canal/canal_json_encoder.go
-		if err := filling(e.Columns, out); err != nil {
+		if err := filling(e.Columns, out, false); err != nil {
 			return nil, err
 		}
 	} else if e.IsUpdate() {
 		out.RawString(",\"old\":")
-		if err := filling(e.PreColumns, out); err != nil {
+		if err := filling(e.PreColumns, out, false); err != nil {
 			return nil, err
 		}
 		out.RawString(",\"data\":")
 		if err := filling(e.Columns, out); err != nil {
-=======
-		if err := filling(e.Columns, out, false, false, nil); err != nil {
-			return nil, err
-		}
-	} else if e.IsUpdate() {
-		var newColsMap map[string]*model.Column
-		if config.OnlyOutputUpdatedColumns {
-			newColsMap = make(map[string]*model.Column, len(e.Columns))
-			for _, col := range e.Columns {
-				newColsMap[col.Name] = col
-			}
-		}
-		out.RawString(",\"old\":")
-		if err := filling(e.PreColumns, out, config.OnlyOutputUpdatedColumns, false, newColsMap); err != nil {
-			return nil, err
-		}
-		out.RawString(",\"data\":")
-		if err := filling(e.Columns, out, false, false, nil); err != nil {
->>>>>>> 6537ab8fbc (config(ticdc): enable-old-value always false if using avro or csv as the encoding protocol (#9079)):pkg/sink/codec/canal/canal_json_row_event_encoder.go
 			return nil, err
 		}
 	} else {
 		log.Panic("unreachable event type", zap.Any("event", e))
 	}
 
-<<<<<<< HEAD:cdc/sink/codec/canal/canal_json_encoder.go
-	if c.enableTiDBExtension {
-=======
 	if config.EnableTiDBExtension {
->>>>>>> 6537ab8fbc (config(ticdc): enable-old-value always false if using avro or csv as the encoding protocol (#9079)):pkg/sink/codec/canal/canal_json_row_event_encoder.go
 		const prefix string = ",\"_tidb\":"
 		out.RawString(prefix)
 		out.RawByte('{')
@@ -315,30 +268,7 @@ func eventTypeString(e *model.RowChangedEvent) string {
 	return "UPDATE"
 }
 
-<<<<<<< HEAD:cdc/sink/codec/canal/canal_json_encoder.go
 func (c *JSONBatchEncoder) newJSONMessageForDDL(e *model.DDLEvent) canalJSONMessageInterface {
-=======
-// JSONRowEventEncoder encodes row event in JSON format
-type JSONRowEventEncoder struct {
-	builder  *canalEntryBuilder
-	messages []*common.Message
-
-	config *common.Config
-}
-
-// newJSONRowEventEncoder creates a new JSONRowEventEncoder
-func newJSONRowEventEncoder(config *common.Config) codec.RowEventEncoder {
-	encoder := &JSONRowEventEncoder{
-		builder:  newCanalEntryBuilder(),
-		messages: make([]*common.Message, 0, 1),
-
-		config: config,
-	}
-	return encoder
-}
-
-func (c *JSONRowEventEncoder) newJSONMessageForDDL(e *model.DDLEvent) canalJSONMessageInterface {
->>>>>>> 6537ab8fbc (config(ticdc): enable-old-value always false if using avro or csv as the encoding protocol (#9079)):pkg/sink/codec/canal/canal_json_row_event_encoder.go
 	msg := &JSONMessage{
 		ID:            0, // ignored by both Canal Adapter and Flink
 		Schema:        e.TableInfo.TableName.Schema,
@@ -373,15 +303,9 @@ func (c *JSONBatchEncoder) newJSONMessage4CheckpointEvent(ts uint64) *canalJSONM
 	}
 }
 
-<<<<<<< HEAD:cdc/sink/codec/canal/canal_json_encoder.go
 // EncodeCheckpointEvent implements the EventBatchEncoder interface
 func (c *JSONBatchEncoder) EncodeCheckpointEvent(ts uint64) (*common.Message, error) {
-	if !c.enableTiDBExtension {
-=======
-// EncodeCheckpointEvent implements the RowEventEncoder interface
-func (c *JSONRowEventEncoder) EncodeCheckpointEvent(ts uint64) (*common.Message, error) {
 	if !c.config.EnableTiDBExtension {
->>>>>>> 6537ab8fbc (config(ticdc): enable-old-value always false if using avro or csv as the encoding protocol (#9079)):pkg/sink/codec/canal/canal_json_row_event_encoder.go
 		return nil, nil
 	}
 
@@ -400,16 +324,9 @@ func (c *JSONBatchEncoder) AppendRowChangedEvent(
 	e *model.RowChangedEvent,
 	callback func(),
 ) error {
-<<<<<<< HEAD:cdc/sink/codec/canal/canal_json_encoder.go
 	value, err := c.newJSONMessageForDML(e)
-=======
-	value, err := newJSONMessageForDML(c.builder, e, c.config)
->>>>>>> 6537ab8fbc (config(ticdc): enable-old-value always false if using avro or csv as the encoding protocol (#9079)):pkg/sink/codec/canal/canal_json_row_event_encoder.go
 	if err != nil {
 		return errors.Trace(err)
-	}
-	if len(c.terminator) > 0 {
-		value = append(value, c.terminator...)
 	}
 
 	length := len(value) + common.MaxRecordOverhead

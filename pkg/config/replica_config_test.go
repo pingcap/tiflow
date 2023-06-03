@@ -16,16 +16,11 @@ package config
 import (
 	"bytes"
 	"encoding/json"
+	"net/url"
 	"testing"
 	"time"
 
-<<<<<<< HEAD
-=======
-	"github.com/aws/aws-sdk-go/aws"
 	cerror "github.com/pingcap/tiflow/pkg/errors"
-	"github.com/pingcap/tiflow/pkg/integrity"
-	"github.com/pingcap/tiflow/pkg/util"
->>>>>>> 6537ab8fbc (config(ticdc): enable-old-value always false if using avro or csv as the encoding protocol (#9079))
 	"github.com/stretchr/testify/require"
 )
 
@@ -108,40 +103,26 @@ func TestReplicaConfigOutDated(t *testing.T) {
 func TestReplicaConfigValidate(t *testing.T) {
 	t.Parallel()
 	conf := GetDefaultReplicaConfig()
-<<<<<<< HEAD
-	require.Nil(t, conf.ValidateAndAdjust(nil))
-=======
 
 	sinkURL, err := url.Parse("blackhole://")
 	require.NoError(t, err)
 	require.NoError(t, conf.ValidateAndAdjust(sinkURL))
->>>>>>> 6537ab8fbc (config(ticdc): enable-old-value always false if using avro or csv as the encoding protocol (#9079))
 
 	// Incorrect sink configuration.
 	conf = GetDefaultReplicaConfig()
 	conf.Sink.Protocol = "canal"
 	conf.EnableOldValue = false
-<<<<<<< HEAD
-	require.Regexp(t, ".*canal protocol requires old value to be enabled.*",
-		conf.ValidateAndAdjust(nil))
-=======
 
 	err = conf.ValidateAndAdjust(sinkURL)
 	require.NoError(t, err)
 	require.True(t, conf.EnableOldValue)
->>>>>>> 6537ab8fbc (config(ticdc): enable-old-value always false if using avro or csv as the encoding protocol (#9079))
 
 	conf = GetDefaultReplicaConfig()
 	conf.Sink.DispatchRules = []*DispatchRule{
 		{Matcher: []string{"a.b"}, DispatcherRule: "d1", PartitionRule: "r1"},
 	}
-<<<<<<< HEAD
-	require.Regexp(t, ".*dispatcher and partition cannot be configured both.*",
-		conf.ValidateAndAdjust(nil))
-=======
 	err = conf.ValidateAndAdjust(sinkURL)
 	require.Regexp(t, ".*dispatcher and partition cannot be configured both.*", err)
->>>>>>> 6537ab8fbc (config(ticdc): enable-old-value always false if using avro or csv as the encoding protocol (#9079))
 
 	// Correct sink configuration.
 	conf = GetDefaultReplicaConfig()
@@ -150,7 +131,7 @@ func TestReplicaConfigValidate(t *testing.T) {
 		{Matcher: []string{"a.c"}, PartitionRule: "p1"},
 		{Matcher: []string{"a.d"}},
 	}
-	err := conf.ValidateAndAdjust(nil)
+	err = conf.ValidateAndAdjust(nil)
 	require.Nil(t, err)
 	rules := conf.Sink.DispatchRules
 	require.Equal(t, "d1", rules[0].PartitionRule)

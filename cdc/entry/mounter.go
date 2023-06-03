@@ -82,11 +82,6 @@ func NewMounter(schemaStorage SchemaStorage,
 	changefeedID model.ChangeFeedID,
 	tz *time.Location,
 	filter pfilter.Filter,
-<<<<<<< HEAD
-	enableOldValue bool,
-=======
-	integrity *integrity.Config,
->>>>>>> 6537ab8fbc (config(ticdc): enable-old-value always false if using avro or csv as the encoding protocol (#9079))
 ) Mounter {
 	return &mounter{
 		schemaStorage: schemaStorage,
@@ -273,13 +268,8 @@ func parseJob(v []byte, startTs, CRTs uint64) (*timodel.Job, error) {
 }
 
 func datum2Column(
-<<<<<<< HEAD
-	tableInfo *model.TableInfo, datums map[int64]types.Datum, fillWithDefaultValue bool,
-) ([]*model.Column, []types.Datum, []rowcodec.ColInfo, error) {
-=======
 	tableInfo *model.TableInfo, datums map[int64]types.Datum,
-) ([]*model.Column, []types.Datum, []*timodel.ColumnInfo, []rowcodec.ColInfo, error) {
->>>>>>> 6537ab8fbc (config(ticdc): enable-old-value always false if using avro or csv as the encoding protocol (#9079))
+) ([]*model.Column, []types.Datum, []rowcodec.ColInfo, error) {
 	cols := make([]*model.Column, len(tableInfo.RowColumnsOffset))
 	rawCols := make([]types.Datum, len(tableInfo.RowColumnsOffset))
 
@@ -295,18 +285,6 @@ func datum2Column(
 			continue
 		}
 		colName := colInfo.Name.O
-<<<<<<< HEAD
-		colDatums, exist := datums[colInfo.ID]
-		var colValue interface{}
-		if !exist && !fillWithDefaultValue {
-			log.Debug("column value is not found",
-				zap.String("table", tableInfo.Name.O), zap.String("column", colName))
-			continue
-		}
-		var err error
-		var warn string
-		var size int
-=======
 		colID := colInfo.ID
 		colDatums, exist := datums[colID]
 
@@ -316,7 +294,6 @@ func datum2Column(
 			warn     string
 			err      error
 		)
->>>>>>> 6537ab8fbc (config(ticdc): enable-old-value always false if using avro or csv as the encoding protocol (#9079))
 		if exist {
 			colValue, size, warn, err = formatColVal(colDatums, colInfo)
 		} else {
@@ -361,53 +338,16 @@ func (m *mounter) mountRowKVEntry(tableInfo *model.TableInfo, row *rowKVEntry, d
 	if row.PreRowExist {
 		// FIXME(leoppro): using pre table info to mounter pre column datum
 		// the pre column and current column in one event may using different table info
-<<<<<<< HEAD
-		preCols, preRawCols, extendColumnInfos, err = datum2Column(tableInfo, row.PreRow, m.enableOldValue)
-=======
-		preCols, preRawCols, columnInfos, extendColumnInfos, err = datum2Column(tableInfo, row.PreRow)
->>>>>>> 6537ab8fbc (config(ticdc): enable-old-value always false if using avro or csv as the encoding protocol (#9079))
+		preCols, preRawCols, extendColumnInfos, err = datum2Column(tableInfo, row.PreRow)
 		if err != nil {
 			return nil, rawRow, errors.Trace(err)
-		}
-
-<<<<<<< HEAD
-		// NOTICE: When the old Value feature is off,
-		// the Delete event only needs to keep the handle key column.
-		if row.Delete && !m.enableOldValue {
-			for i := range preCols {
-				col := preCols[i]
-				if col != nil && !col.Flag.IsHandleKey() {
-					preCols[i] = nil
-				}
-			}
-=======
-		preChecksum, checksumVersion, matched, err = m.verifyChecksum(columnInfos, preRawCols, true)
-		if err != nil {
-			return nil, rawRow, errors.Trace(err)
-		}
-
-		if !matched {
-			log.Error("previous columns checksum mismatch",
-				zap.Uint32("checksum", preChecksum),
-				zap.Any("tableInfo", tableInfo),
-				zap.Any("row", row))
-			if m.integrity.ErrorHandle() {
-				return nil, rawRow, cerror.ErrCorruptedDataMutation.
-					GenWithStackByArgs(m.changefeedID.Namespace, m.changefeedID.ID, row)
-			}
-			corrupted = true
->>>>>>> 6537ab8fbc (config(ticdc): enable-old-value always false if using avro or csv as the encoding protocol (#9079))
 		}
 	}
 
 	var cols []*model.Column
 	var rawCols []types.Datum
 	if row.RowExist {
-<<<<<<< HEAD
-		cols, rawCols, extendColumnInfos, err = datum2Column(tableInfo, row.Row, true)
-=======
-		cols, rawCols, columnInfos, extendColumnInfos, err = datum2Column(tableInfo, row.Row)
->>>>>>> 6537ab8fbc (config(ticdc): enable-old-value always false if using avro or csv as the encoding protocol (#9079))
+		cols, rawCols, extendColumnInfos, err = datum2Column(tableInfo, row.Row)
 		if err != nil {
 			return nil, rawRow, errors.Trace(err)
 		}

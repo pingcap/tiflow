@@ -789,14 +789,7 @@ func (p *processor) lazyInitImpl(ctx cdcContext.Context) error {
 
 	p.mg = entry.NewMounterGroup(p.schemaStorage,
 		p.changefeed.Info.Config.Mounter.WorkerNum,
-<<<<<<< HEAD
-		p.changefeed.Info.Config.EnableOldValue,
 		p.filter, tz, p.changefeedID)
-=======
-		p.filter, tz, p.changefeedID, p.changefeed.Info.Config.Integrity)
-	p.mg.name = "MounterGroup"
-	p.mg.spawn(stdCtx)
->>>>>>> 6537ab8fbc (config(ticdc): enable-old-value always false if using avro or csv as the encoding protocol (#9079))
 
 	p.wg.Add(1)
 	go func() {

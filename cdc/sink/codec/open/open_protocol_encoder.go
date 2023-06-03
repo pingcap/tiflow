@@ -34,13 +34,7 @@ type BatchEncoder struct {
 	callbackBuff []func()
 	curBatchSize int
 
-<<<<<<< HEAD:cdc/sink/codec/open/open_protocol_encoder.go
-	// configs
-	MaxMessageBytes int
-	MaxBatchSize    int
-=======
 	config *common.Config
->>>>>>> 6537ab8fbc (config(ticdc): enable-old-value always false if using avro or csv as the encoding protocol (#9079)):pkg/sink/codec/open/open_protocol_encoder.go
 }
 
 // AppendRowChangedEvent implements the EventBatchEncoder interface
@@ -55,11 +49,7 @@ func (d *BatchEncoder) AppendRowChangedEvent(
 	if err != nil {
 		return errors.Trace(err)
 	}
-<<<<<<< HEAD:cdc/sink/codec/open/open_protocol_encoder.go
 	value, err := valueMsg.encode()
-=======
-	value, err := valueMsg.encode(d.config.OnlyOutputUpdatedColumns)
->>>>>>> 6537ab8fbc (config(ticdc): enable-old-value always false if using avro or csv as the encoding protocol (#9079)):pkg/sink/codec/open/open_protocol_encoder.go
 	if err != nil {
 		return errors.Trace(err)
 	}
@@ -197,17 +187,8 @@ type batchEncoderBuilder struct {
 }
 
 // Build a BatchEncoder
-<<<<<<< HEAD:cdc/sink/codec/open/open_protocol_encoder.go
 func (b *batchEncoderBuilder) Build() codec.EventBatchEncoder {
-	encoder := NewBatchEncoder()
-	encoder.(*BatchEncoder).MaxMessageBytes = b.config.MaxMessageBytes
-	encoder.(*BatchEncoder).MaxBatchSize = b.config.MaxBatchSize
-
-	return encoder
-=======
-func (b *batchEncoderBuilder) Build() codec.RowEventEncoder {
 	return NewBatchEncoder(b.config)
->>>>>>> 6537ab8fbc (config(ticdc): enable-old-value always false if using avro or csv as the encoding protocol (#9079)):pkg/sink/codec/open/open_protocol_encoder.go
 }
 
 // NewBatchEncoderBuilder creates an open-protocol batchEncoderBuilder.
@@ -216,14 +197,8 @@ func NewBatchEncoderBuilder(config *common.Config) codec.EncoderBuilder {
 }
 
 // NewBatchEncoder creates a new BatchEncoder.
-<<<<<<< HEAD:cdc/sink/codec/open/open_protocol_encoder.go
-func NewBatchEncoder() codec.EventBatchEncoder {
-	batch := &BatchEncoder{}
-	return batch
-=======
-func NewBatchEncoder(config *common.Config) codec.RowEventEncoder {
+func NewBatchEncoder(config *common.Config) codec.EventBatchEncoder {
 	return &BatchEncoder{
 		config: config,
 	}
->>>>>>> 6537ab8fbc (config(ticdc): enable-old-value always false if using avro or csv as the encoding protocol (#9079)):pkg/sink/codec/open/open_protocol_encoder.go
 }

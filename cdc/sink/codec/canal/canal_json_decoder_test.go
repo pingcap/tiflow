@@ -84,14 +84,10 @@ func TestNewCanalJSONBatchDecoder4RowMessage(t *testing.T) {
 func TestNewCanalJSONBatchDecoder4DDLMessage(t *testing.T) {
 	t.Parallel()
 	for _, encodeEnable := range []bool{false, true} {
-<<<<<<< HEAD:cdc/sink/codec/canal/canal_json_decoder_test.go
-		encoder := &JSONBatchEncoder{builder: newCanalEntryBuilder(), enableTiDBExtension: encodeEnable}
-=======
-		encoder := &JSONRowEventEncoder{
+		encoder := &JSONBatchEncoder{
 			builder: newCanalEntryBuilder(),
 			config:  &common.Config{EnableTiDBExtension: encodeEnable},
 		}
->>>>>>> 6537ab8fbc (config(ticdc): enable-old-value always false if using avro or csv as the encoding protocol (#9079)):pkg/sink/codec/canal/canal_json_decoder_test.go
 		require.NotNil(t, encoder)
 
 		result, err := encoder.EncodeDDLEvent(testCaseDDL)

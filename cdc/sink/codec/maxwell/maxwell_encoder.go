@@ -111,11 +111,7 @@ func (d *BatchEncoder) reset() {
 }
 
 // newBatchEncoder creates a new maxwell BatchEncoder.
-<<<<<<< HEAD:cdc/sink/codec/maxwell/maxwell_encoder.go
-func newBatchEncoder() codec.EventBatchEncoder {
-=======
-func newBatchEncoder(config *common.Config) codec.RowEventEncoder {
->>>>>>> 6537ab8fbc (config(ticdc): enable-old-value always false if using avro or csv as the encoding protocol (#9079)):pkg/sink/codec/maxwell/maxwell_encoder.go
+func newBatchEncoder(config *common.Config) codec.EventBatchEncoder {
 	batch := &BatchEncoder{
 		keyBuf:      &bytes.Buffer{},
 		valueBuf:    &bytes.Buffer{},
@@ -131,23 +127,13 @@ type batchEncoderBuilder struct {
 }
 
 // NewBatchEncoderBuilder creates a maxwell batchEncoderBuilder.
-<<<<<<< HEAD:cdc/sink/codec/maxwell/maxwell_encoder.go
-func NewBatchEncoderBuilder() codec.EncoderBuilder {
-	return &batchEncoderBuilder{}
-}
-
-// Build a `maxwellBatchEncoder`
-func (b *batchEncoderBuilder) Build() codec.EventBatchEncoder {
-	return newBatchEncoder()
-=======
-func NewBatchEncoderBuilder(config *common.Config) codec.RowEventEncoderBuilder {
+func NewBatchEncoderBuilder(config *common.Config) codec.EncoderBuilder {
 	return &batchEncoderBuilder{
 		config: config,
 	}
 }
 
 // Build a `maxwellBatchEncoder`
-func (b *batchEncoderBuilder) Build() codec.RowEventEncoder {
+func (b *batchEncoderBuilder) Build() codec.EventBatchEncoder {
 	return newBatchEncoder(b.config)
->>>>>>> 6537ab8fbc (config(ticdc): enable-old-value always false if using avro or csv as the encoding protocol (#9079)):pkg/sink/codec/maxwell/maxwell_encoder.go
 }

@@ -17,6 +17,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"net/url"
+	"strings"
 	"time"
 
 	"github.com/pingcap/errors"
@@ -24,6 +25,7 @@ import (
 	"github.com/pingcap/tiflow/pkg/config/outdated"
 	cerror "github.com/pingcap/tiflow/pkg/errors"
 	"github.com/pingcap/tiflow/pkg/redo"
+	"github.com/pingcap/tiflow/pkg/sink"
 	"go.uber.org/zap"
 )
 
@@ -259,10 +261,6 @@ func (c *ReplicaConfig) AdjustEnableOldValue(scheme, protocol string) {
 func (c *ReplicaConfig) AdjustEnableOldValueAndVerifyForceReplicate(sinkURI *url.URL) error {
 	scheme := strings.ToLower(sinkURI.Scheme)
 	protocol := sinkURI.Query().Get(ProtocolKey)
-	if protocol != "" {
-		c.Sink.Protocol = util.AddressOf(protocol)
-	}
-	protocol = util.GetOrZero(c.Sink.Protocol)
 	c.AdjustEnableOldValue(scheme, protocol)
 
 	if !c.ForceReplicate {

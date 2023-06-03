@@ -158,11 +158,7 @@ func (d *BatchEncoder) resetPacket() {
 }
 
 // newBatchEncoder creates a new canalBatchEncoder.
-<<<<<<< HEAD:cdc/sink/codec/canal/canal_encoder.go
-func newBatchEncoder() codec.EventBatchEncoder {
-=======
-func newBatchEncoder(config *common.Config) codec.RowEventEncoder {
->>>>>>> 6537ab8fbc (config(ticdc): enable-old-value always false if using avro or csv as the encoding protocol (#9079)):pkg/sink/codec/canal/canal_encoder.go
+func newBatchEncoder(config *common.Config) codec.EventBatchEncoder {
 	encoder := &BatchEncoder{
 		messages:     &canal.Messages{},
 		callbackBuf:  make([]func(), 0),
@@ -180,23 +176,13 @@ type batchEncoderBuilder struct {
 }
 
 // Build a `canalBatchEncoder`
-<<<<<<< HEAD:cdc/sink/codec/canal/canal_encoder.go
 func (b *batchEncoderBuilder) Build() codec.EventBatchEncoder {
-	return newBatchEncoder()
-}
-
-// NewBatchEncoderBuilder creates a canal batchEncoderBuilder.
-func NewBatchEncoderBuilder() codec.EncoderBuilder {
-	return &batchEncoderBuilder{}
-=======
-func (b *batchEncoderBuilder) Build() codec.RowEventEncoder {
 	return newBatchEncoder(b.config)
 }
 
 // NewBatchEncoderBuilder creates a canal batchEncoderBuilder.
-func NewBatchEncoderBuilder(config *common.Config) codec.RowEventEncoderBuilder {
+func NewBatchEncoderBuilder(config *common.Config) codec.EncoderBuilder {
 	return &batchEncoderBuilder{
 		config: config,
 	}
->>>>>>> 6537ab8fbc (config(ticdc): enable-old-value always false if using avro or csv as the encoding protocol (#9079)):pkg/sink/codec/canal/canal_encoder.go
 }

@@ -20,70 +20,6 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
-<<<<<<< HEAD
-func TestValidateOldValue(t *testing.T) {
-	t.Parallel()
-	testCases := []struct {
-		protocol       string
-		enableOldValue bool
-		expectedErr    string
-	}{
-		{
-			protocol:       "default",
-			enableOldValue: false,
-			expectedErr:    "",
-		},
-		{
-			protocol:       "default",
-			enableOldValue: true,
-			expectedErr:    "",
-		},
-		{
-			protocol:       "canal-json",
-			enableOldValue: false,
-			expectedErr:    ".*canal-json protocol requires old value to be enabled.*",
-		},
-		{
-			protocol:       "canal-json",
-			enableOldValue: true,
-			expectedErr:    "",
-		},
-		{
-			protocol:       "canal",
-			enableOldValue: false,
-			expectedErr:    ".*canal protocol requires old value to be enabled.*",
-		},
-		{
-			protocol:       "canal",
-			enableOldValue: true,
-			expectedErr:    "",
-		},
-		{
-			protocol:       "maxwell",
-			enableOldValue: false,
-			expectedErr:    ".*maxwell protocol requires old value to be enabled.*",
-		},
-		{
-			protocol:       "maxwell",
-			enableOldValue: true,
-			expectedErr:    "",
-		},
-	}
-
-	for _, tc := range testCases {
-		cfg := SinkConfig{
-			Protocol: tc.protocol,
-		}
-		if tc.expectedErr == "" {
-			require.Nil(t, cfg.validateAndAdjust(nil, tc.enableOldValue))
-		} else {
-			require.Regexp(t, tc.expectedErr, cfg.validateAndAdjust(nil, tc.enableOldValue))
-		}
-	}
-}
-
-=======
->>>>>>> 6537ab8fbc (config(ticdc): enable-old-value always false if using avro or csv as the encoding protocol (#9079))
 func TestValidateTxnAtomicity(t *testing.T) {
 	t.Parallel()
 	testCases := []struct {
@@ -159,13 +95,8 @@ func TestValidateTxnAtomicity(t *testing.T) {
 		parsedSinkURI, err := url.Parse(tc.sinkURI)
 		require.Nil(t, err)
 		if tc.expectedErr == "" {
-<<<<<<< HEAD
-			require.Nil(t, cfg.validateAndAdjust(parsedSinkURI, true))
-			require.Equal(t, tc.shouldSplitTxn, cfg.TxnAtomicity.ShouldSplitTxn())
-=======
 			require.Nil(t, cfg.validateAndAdjust(parsedSinkURI))
-			require.Equal(t, tc.shouldSplitTxn, util.GetOrZero(cfg.TxnAtomicity).ShouldSplitTxn())
->>>>>>> 6537ab8fbc (config(ticdc): enable-old-value always false if using avro or csv as the encoding protocol (#9079))
+			require.Equal(t, tc.shouldSplitTxn, cfg.TxnAtomicity.ShouldSplitTxn())
 		} else {
 			require.Regexp(t, tc.expectedErr, cfg.validateAndAdjust(parsedSinkURI))
 		}

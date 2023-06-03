@@ -279,20 +279,8 @@ func (info *ChangeFeedInfo) VerifyAndComplete() {
 	if info.Config.Consistent == nil {
 		info.Config.Consistent = defaultConfig.Consistent
 	}
-<<<<<<< HEAD
 
 	return nil
-=======
-	if info.Config.Scheduler == nil {
-		info.Config.Scheduler = defaultConfig.Scheduler
-	}
-
-	if info.Config.Integrity == nil {
-		info.Config.Integrity = defaultConfig.Integrity
-	}
-
-	info.RmUnusedFields()
->>>>>>> 6537ab8fbc (config(ticdc): enable-old-value always false if using avro or csv as the encoding protocol (#9079))
 }
 
 // FixIncompatible fixes incompatible changefeed meta info.
@@ -321,22 +309,6 @@ func (info *ChangeFeedInfo) FixIncompatible() {
 		info.fixMemoryQuota()
 		log.Info("Fix incompatible memory quota completed", zap.String("changefeed", info.String()))
 	}
-<<<<<<< HEAD
-=======
-
-	log.Info("Start fixing incompatible scheduler", zap.String("changefeed", info.String()))
-	inheritV66 := creatorVersionGate.ChangefeedInheritSchedulerConfigFromV66()
-	info.fixScheduler(inheritV66)
-	log.Info("Fix incompatible scheduler completed", zap.String("changefeed", info.String()))
-
-	if creatorVersionGate.ChangefeedAdjustEnableOldValueByProtocol() {
-		log.Info("Start fixing incompatible enable old value", zap.String("changefeed", info.String()),
-			zap.Bool("enableOldValue", info.Config.EnableOldValue))
-		info.fixEnableOldValue()
-		log.Info("Fix incompatible enable old value completed", zap.String("changefeed", info.String()),
-			zap.Bool("enableOldValue", info.Config.EnableOldValue))
-	}
->>>>>>> 6537ab8fbc (config(ticdc): enable-old-value always false if using avro or csv as the encoding protocol (#9079))
 }
 
 // fixState attempts to fix state loss from upgrading the old owner to the new owner.

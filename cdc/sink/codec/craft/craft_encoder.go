@@ -96,11 +96,7 @@ func (e *BatchEncoder) flush() {
 }
 
 // NewBatchEncoder creates a new BatchEncoder.
-<<<<<<< HEAD:cdc/sink/codec/craft/craft_encoder.go
-func NewBatchEncoder() codec.EventBatchEncoder {
-=======
-func NewBatchEncoder(config *common.Config) codec.RowEventEncoder {
->>>>>>> 6537ab8fbc (config(ticdc): enable-old-value always false if using avro or csv as the encoding protocol (#9079)):pkg/sink/codec/craft/craft_encoder.go
+func NewBatchEncoder(config *common.Config) codec.EventBatchEncoder {
 	// 64 is a magic number that come up with these assumptions and manual benchmark.
 	// 1. Most table will not have more than 64 columns
 	// 2. It only worth allocating slices in batch for slices that's small enough
@@ -112,16 +108,8 @@ type batchEncoderBuilder struct {
 }
 
 // Build a BatchEncoder
-<<<<<<< HEAD:cdc/sink/codec/craft/craft_encoder.go
 func (b *batchEncoderBuilder) Build() codec.EventBatchEncoder {
-	encoder := NewBatchEncoder()
-	encoder.(*BatchEncoder).MaxMessageBytes = b.config.MaxMessageBytes
-	encoder.(*BatchEncoder).MaxBatchSize = b.config.MaxBatchSize
-	return encoder
-=======
-func (b *batchEncoderBuilder) Build() codec.RowEventEncoder {
 	return NewBatchEncoder(b.config)
->>>>>>> 6537ab8fbc (config(ticdc): enable-old-value always false if using avro or csv as the encoding protocol (#9079)):pkg/sink/codec/craft/craft_encoder.go
 }
 
 // NewBatchEncoderBuilder creates a craft batchEncoderBuilder.
@@ -130,11 +118,7 @@ func NewBatchEncoderBuilder(config *common.Config) codec.EncoderBuilder {
 }
 
 // NewBatchEncoderWithAllocator creates a new BatchEncoder with given allocator.
-<<<<<<< HEAD:cdc/sink/codec/craft/craft_encoder.go
-func NewBatchEncoderWithAllocator(allocator *SliceAllocator) codec.EventBatchEncoder {
-=======
-func NewBatchEncoderWithAllocator(allocator *SliceAllocator, config *common.Config) codec.RowEventEncoder {
->>>>>>> 6537ab8fbc (config(ticdc): enable-old-value always false if using avro or csv as the encoding protocol (#9079)):pkg/sink/codec/craft/craft_encoder.go
+func NewBatchEncoderWithAllocator(allocator *SliceAllocator, config *common.Config) codec.EventBatchEncoder {
 	return &BatchEncoder{
 		allocator:        allocator,
 		messageBuf:       make([]*common.Message, 0, 2),

@@ -95,19 +95,6 @@ func (g *CreatorVersionGate) ChangefeedAcceptProtocolInMysqlSinURI() bool {
 	creatorVersion := semver.New(SanitizeVersion(g.version))
 	return creatorVersion.LessThan(changefeedAcceptProtocolInMysqlSinURI)
 }
-<<<<<<< HEAD
-=======
-
-// ChangefeedInheritSchedulerConfigFromV66 determines whether to inherit
-// changefeed scheduler config created by v6.6.0.
-func (g *CreatorVersionGate) ChangefeedInheritSchedulerConfigFromV66() bool {
-	if g.version == "" {
-		return false
-	}
-
-	creatorVersion := semver.New(SanitizeVersion(g.version))
-	return creatorVersion.Major == 6 && creatorVersion.Minor == 6
-}
 
 // ChangefeedAdjustEnableOldValueByProtocol determines whether to adjust
 // the `enable-old-value` configuration by the using encoding protocol.
@@ -119,4 +106,3 @@ func (g *CreatorVersionGate) ChangefeedAdjustEnableOldValueByProtocol() bool {
 	creatorVersion := semver.New(SanitizeVersion(g.version))
 	return creatorVersion.LessThan(changefeedAdjustEnableOldValueByProtocol)
 }
->>>>>>> 6537ab8fbc (config(ticdc): enable-old-value always false if using avro or csv as the encoding protocol (#9079))

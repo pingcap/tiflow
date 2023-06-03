@@ -308,13 +308,7 @@ func testMounterDisableOldValue(t *testing.T, tc struct {
 	config := config.GetDefaultReplicaConfig()
 	filter, err := filter.NewFilter(config, "")
 	require.Nil(t, err)
-	mounter := NewMounter(scheamStorage,
-<<<<<<< HEAD
-		model.DefaultChangeFeedID("c1"),
-		time.UTC, filter, false).(*mounter)
-=======
-		model.DefaultChangeFeedID("c1"), time.UTC, filter, config.Integrity).(*mounter)
->>>>>>> 6537ab8fbc (config(ticdc): enable-old-value always false if using avro or csv as the encoding protocol (#9079))
+	mounter := NewMounter(scheamStorage, model.DefaultChangeFeedID("c1"), time.UTC, filter).(*mounter)
 	mounter.tz = time.Local
 	ctx := context.Background()
 
@@ -989,215 +983,6 @@ func TestGetDefaultZeroValue(t *testing.T) {
 	}
 }
 
-<<<<<<< HEAD
-=======
-func TestDecodeRowEnableChecksum(t *testing.T) {
-	helper := NewSchemaTestHelper(t)
-	defer helper.Close()
-
-	tk := helper.Tk()
-
-	tk.MustExec("set global tidb_enable_row_level_checksum = 1")
-	helper.Tk().MustExec("use test")
-
-	replicaConfig := config.GetDefaultReplicaConfig()
-	replicaConfig.Integrity.IntegrityCheckLevel = integrity.CheckLevelCorrectness
-	filter, err := filter.NewFilter(replicaConfig, "")
-	require.NoError(t, err)
-
-	ver, err := helper.Storage().CurrentVersion(oracle.GlobalTxnScope)
-	require.NoError(t, err)
-
-	changefeed := model.DefaultChangeFeedID("changefeed-test-decode-row")
-	schemaStorage, err := NewSchemaStorage(helper.GetCurrentMeta(),
-		ver.Ver, false, changefeed, util.RoleTester, filter)
-	require.NoError(t, err)
-	require.NotNil(t, schemaStorage)
-
-	createTableDDL := "create table t (id int primary key, a int)"
-	job := helper.DDL2Job(createTableDDL)
-	err = schemaStorage.HandleDDLJob(job)
-	require.NoError(t, err)
-
-	ts := schemaStorage.GetLastSnapshot().CurrentTs()
-	schemaStorage.AdvanceResolvedTs(ver.Ver)
-
-	mounter := NewMounter(schemaStorage, changefeed, time.Local, filter, replicaConfig.Integrity).(*mounter)
-
-	ctx := context.Background()
-
-	tableInfo, ok := schemaStorage.GetLastSnapshot().TableByName("test", "t")
-	require.True(t, ok)
-
-	// row without checksum
-	tk.Session().GetSessionVars().EnableRowLevelChecksum = false
-	tk.MustExec("insert into t values (1, 10)")
-
-	key, value := getLastKeyValueInStore(t, helper.Storage(), tableInfo.ID)
-	rawKV := &model.RawKVEntry{
-		OpType:  model.OpTypePut,
-		Key:     key,
-		Value:   value,
-		StartTs: ts - 1,
-		CRTs:    ts + 1,
-	}
-
-	row, err := mounter.unmarshalAndMountRowChanged(ctx, rawKV)
-	require.NoError(t, err)
-	require.NotNil(t, row)
-	// the upstream tidb does not enable checksum, so the checksum is nil
-	require.Nil(t, row.Checksum)
-
-	// 	row with one checksum
-	tk.Session().GetSessionVars().EnableRowLevelChecksum = true
-	tk.MustExec("insert into t values (2, 20)")
-
-	key, value = getLastKeyValueInStore(t, helper.Storage(), tableInfo.ID)
-	rawKV = &model.RawKVEntry{
-		OpType:  model.OpTypePut,
-		Key:     key,
-		Value:   value,
-		StartTs: ts - 1,
-		CRTs:    ts + 1,
-	}
-	row, err = mounter.unmarshalAndMountRowChanged(ctx, rawKV)
-	require.NoError(t, err)
-	require.NotNil(t, row)
-	require.NotNil(t, row.Checksum)
-
-	expected, ok := mounter.decoder.GetChecksum()
-	require.True(t, ok)
-	require.Equal(t, expected, row.Checksum.Current)
-	require.False(t, row.Checksum.Corrupted)
-
-	// row with 2 checksum
-	tk.MustExec("insert into t values (3, 30)")
-	job = helper.DDL2Job("alter table t change column a a varchar(10)")
-	err = schemaStorage.HandleDDLJob(job)
-	require.NoError(t, err)
-
-	key, value = getLastKeyValueInStore(t, helper.Storage(), tableInfo.ID)
-	rawKV = &model.RawKVEntry{
-		OpType:  model.OpTypePut,
-		Key:     key,
-		Value:   value,
-		StartTs: ts - 1,
-		CRTs:    ts + 1,
-	}
-	row, err = mounter.unmarshalAndMountRowChanged(ctx, rawKV)
-	require.NoError(t, err)
-	require.NotNil(t, row)
-	require.NotNil(t, row.Checksum)
-
-	first, ok := mounter.decoder.GetChecksum()
-	require.True(t, ok)
-
-	extra, ok := mounter.decoder.GetExtraChecksum()
-	require.True(t, ok)
-
-	if row.Checksum.Current != first {
-		require.Equal(t, extra, row.Checksum.Current)
-	} else {
-		require.Equal(t, first, row.Checksum.Current)
-	}
-	require.False(t, row.Checksum.Corrupted)
-
-	// hack the table info to make the checksum corrupted
-	tableInfo.Columns[0].FieldType = *types.NewFieldType(mysql.TypeVarchar)
-
-	// corrupt-handle-level default to warn, so no error, but the checksum is corrupted
-	row, err = mounter.unmarshalAndMountRowChanged(ctx, rawKV)
-	require.NoError(t, err)
-	require.NotNil(t, row.Checksum)
-	require.True(t, row.Checksum.Corrupted)
-
-	mounter.integrity.CorruptionHandleLevel = integrity.CorruptionHandleLevelError
-	_, err = mounter.unmarshalAndMountRowChanged(ctx, rawKV)
-	require.Error(t, err)
-	require.ErrorIs(t, err, cerror.ErrCorruptedDataMutation)
-
-	job = helper.DDL2Job("drop table t")
-	err = schemaStorage.HandleDDLJob(job)
-	require.NoError(t, err)
-}
-
-func TestDecodeRow(t *testing.T) {
-	helper := NewSchemaTestHelper(t)
-	defer helper.Close()
-
-	helper.Tk().MustExec("set @@tidb_enable_clustered_index=1;")
-	helper.Tk().MustExec("use test;")
-
-	changefeed := model.DefaultChangeFeedID("changefeed-test-decode-row")
-
-	ver, err := helper.Storage().CurrentVersion(oracle.GlobalTxnScope)
-	require.NoError(t, err)
-
-	cfg := config.GetDefaultReplicaConfig()
-
-	filter, err := filter.NewFilter(cfg, "")
-	require.NoError(t, err)
-
-	schemaStorage, err := NewSchemaStorage(helper.GetCurrentMeta(),
-		ver.Ver, false, changefeed, util.RoleTester, filter)
-	require.NoError(t, err)
-
-	// apply ddl to schemaStorage
-	ddl := "create table test.student(id int primary key, name char(50), age int, gender char(10))"
-	job := helper.DDL2Job(ddl)
-	err = schemaStorage.HandleDDLJob(job)
-	require.NoError(t, err)
-
-	ts := schemaStorage.GetLastSnapshot().CurrentTs()
-
-	schemaStorage.AdvanceResolvedTs(ver.Ver)
-
-	mounter := NewMounter(schemaStorage, changefeed, time.Local, filter, cfg.Integrity).(*mounter)
-
-	helper.Tk().MustExec(`insert into student values(1, "dongmen", 20, "male")`)
-	helper.Tk().MustExec(`update student set age = 27 where id = 1`)
-
-	ctx := context.Background()
-	decodeAndCheckRowInTable := func(tableID int64, f func(key []byte, value []byte) *model.RawKVEntry) {
-		walkTableSpanInStore(t, helper.Storage(), tableID, func(key []byte, value []byte) {
-			rawKV := f(key, value)
-
-			row, err := mounter.unmarshalAndMountRowChanged(ctx, rawKV)
-			require.NoError(t, err)
-			require.NotNil(t, row)
-
-			if row.Columns != nil {
-				require.NotNil(t, mounter.decoder)
-			}
-
-			if row.PreColumns != nil {
-				require.NotNil(t, mounter.preDecoder)
-			}
-		})
-	}
-
-	toRawKV := func(key []byte, value []byte) *model.RawKVEntry {
-		return &model.RawKVEntry{
-			OpType:  model.OpTypePut,
-			Key:     key,
-			Value:   value,
-			StartTs: ts - 1,
-			CRTs:    ts + 1,
-		}
-	}
-
-	tableInfo, ok := schemaStorage.GetLastSnapshot().TableByName("test", "student")
-	require.True(t, ok)
-
-	decodeAndCheckRowInTable(tableInfo.ID, toRawKV)
-	decodeAndCheckRowInTable(tableInfo.ID, toRawKV)
-
-	job = helper.DDL2Job("drop table student")
-	err = schemaStorage.HandleDDLJob(job)
-	require.NoError(t, err)
-}
-
->>>>>>> 6537ab8fbc (config(ticdc): enable-old-value always false if using avro or csv as the encoding protocol (#9079))
 // TestDecodeEventIgnoreRow tests a PolymorphicEvent.Row is nil
 // if this event should be filter out by filter.
 func TestDecodeEventIgnoreRow(t *testing.T) {
@@ -1232,11 +1017,7 @@ func TestDecodeEventIgnoreRow(t *testing.T) {
 
 	ts := schemaStorage.GetLastSnapshot().CurrentTs()
 	schemaStorage.AdvanceResolvedTs(ver.Ver)
-<<<<<<< HEAD
-	mounter := NewMounter(schemaStorage, cfID, time.Local, f, true).(*mounter)
-=======
-	mounter := NewMounter(schemaStorage, cfID, time.Local, f, cfg.Integrity).(*mounter)
->>>>>>> 6537ab8fbc (config(ticdc): enable-old-value always false if using avro or csv as the encoding protocol (#9079))
+	mounter := NewMounter(schemaStorage, cfID, time.Local, f).(*mounter)
 
 	type testCase struct {
 		schema  string
@@ -1413,11 +1194,7 @@ func TestBuildTableInfo(t *testing.T) {
 		originTI, err := ddl.BuildTableInfoFromAST(stmt.(*ast.CreateTableStmt))
 		require.NoError(t, err)
 		cdcTableInfo := model.WrapTableInfo(0, "test", 0, originTI)
-<<<<<<< HEAD
-		cols, _, _, err := datum2Column(cdcTableInfo, map[int64]types.Datum{}, true)
-=======
-		cols, _, _, _, err := datum2Column(cdcTableInfo, map[int64]types.Datum{})
->>>>>>> 6537ab8fbc (config(ticdc): enable-old-value always false if using avro or csv as the encoding protocol (#9079))
+		cols, _, _, err := datum2Column(cdcTableInfo, map[int64]types.Datum{})
 		require.NoError(t, err)
 		recoveredTI := model.BuildTiDBTableInfo(cols, cdcTableInfo.IndexColumnsOffset)
 		handle := sqlmodel.GetWhereHandle(recoveredTI, recoveredTI)

@@ -31,21 +31,11 @@ type MounterGroup interface {
 }
 
 type mounterGroup struct {
-<<<<<<< HEAD
-	schemaStorage  SchemaStorage
-	inputCh        chan *model.PolymorphicEvent
-	tz             *time.Location
-	filter         filter.Filter
-	enableOldValue bool
-=======
 	schemaStorage SchemaStorage
 	inputCh       chan *model.PolymorphicEvent
 	tz            *time.Location
 	filter        filter.Filter
-	integrity     *integrity.Config
->>>>>>> 6537ab8fbc (config(ticdc): enable-old-value always false if using avro or csv as the encoding protocol (#9079))
-
-	workerNum int
+	workerNum     int
 
 	changefeedID model.ChangeFeedID
 }
@@ -106,11 +96,7 @@ func (m *mounterGroup) Run(ctx context.Context) error {
 }
 
 func (m *mounterGroup) runWorker(ctx context.Context) error {
-<<<<<<< HEAD
-	mounter := NewMounter(m.schemaStorage, m.changefeedID, m.tz, m.filter, m.enableOldValue)
-=======
-	mounter := NewMounter(m.schemaStorage, m.changefeedID, m.tz, m.filter, m.integrity)
->>>>>>> 6537ab8fbc (config(ticdc): enable-old-value always false if using avro or csv as the encoding protocol (#9079))
+	mounter := NewMounter(m.schemaStorage, m.changefeedID, m.tz, m.filter)
 	for {
 		select {
 		case <-ctx.Done():
