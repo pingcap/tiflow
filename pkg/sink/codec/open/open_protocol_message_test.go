@@ -159,3 +159,60 @@ func TestOnlyOutputUpdatedColumn(t *testing.T) {
 		assert.Equal(t, cs.output, ok)
 	}
 }
+
+func TestRowChanged2MsgOnlyHandleKeyColumns(t *testing.T) {
+	t.Parallel()
+
+	insertEvent := &model.RowChangedEvent{
+		CommitTs: 417318403368288260,
+		Table: &model.TableName{
+			Schema: "schema",
+			Table:  "table",
+		},
+		Columns: []*model.Column{
+			{Name: "id", Flag: model.HandleKeyFlag, Type: mysql.TypeLonglong, Value: 1},
+			{Name: "a", Type: mysql.TypeLonglong, Value: 1},
+		},
+	}
+	_, value := rowChangeToMsg(insertEvent, true)
+	_, ok := value.Update["a"]
+	require.True(t, ok)
+
+	updateEvent := &model.RowChangedEvent{
+		CommitTs: 417318403368288260,
+		Table: &model.TableName{
+			Schema: "schema",
+			Table:  "table",
+		},
+		Columns: []*model.Column{
+			{Name: "id", Flag: model.HandleKeyFlag, Type: mysql.TypeLonglong, Value: 1},
+			{Name: "a", Type: mysql.TypeLonglong, Value: 2},
+		},
+		PreColumns: []*model.Column{
+			{Name: "id", Flag: model.HandleKeyFlag, Type: mysql.TypeLonglong, Value: 1},
+			{Name: "a", Type: mysql.TypeLonglong, Value: 1},
+		},
+	}
+	_, value = rowChangeToMsg(updateEvent, true)
+	_, ok = value.PreColumns["a"]
+	require.True(t, ok)
+
+	deleteEvent := &model.RowChangedEvent{
+		CommitTs: 417318403368288260,
+		Table: &model.TableName{
+			Schema: "schema",
+			Table:  "table",
+		},
+		PreColumns: []*model.Column{
+			{Name: "id", Flag: model.HandleKeyFlag, Type: mysql.TypeLonglong, Value: 1},
+			{Name: "a", Type: mysql.TypeLonglong, Value: 2},
+		},
+	}
+	_, value = rowChangeToMsg(deleteEvent, true)
+	_, ok = value.Delete["a"]
+	require.False(t, ok)
+
+	_, value = rowChangeToMsg(deleteEvent, false)
+	_, ok = value.Delete["a"]
+	require.True(t, ok)
+}

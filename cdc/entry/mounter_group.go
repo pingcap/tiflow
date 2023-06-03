@@ -34,12 +34,11 @@ type MounterGroup interface {
 }
 
 type mounterGroup struct {
-	schemaStorage  SchemaStorage
-	inputCh        chan *model.PolymorphicEvent
-	tz             *time.Location
-	filter         filter.Filter
-	enableOldValue bool
-	integrity      *integrity.Config
+	schemaStorage SchemaStorage
+	inputCh       chan *model.PolymorphicEvent
+	tz            *time.Location
+	filter        filter.Filter
+	integrity     *integrity.Config
 
 	workerNum int
 
@@ -56,7 +55,6 @@ const (
 func NewMounterGroup(
 	schemaStorage SchemaStorage,
 	workerNum int,
-	enableOldValue bool,
 	filter filter.Filter,
 	tz *time.Location,
 	changefeedID model.ChangeFeedID,
@@ -66,11 +64,10 @@ func NewMounterGroup(
 		workerNum = defaultMounterWorkerNum
 	}
 	return &mounterGroup{
-		schemaStorage:  schemaStorage,
-		inputCh:        make(chan *model.PolymorphicEvent, defaultInputChanSize),
-		enableOldValue: enableOldValue,
-		filter:         filter,
-		tz:             tz,
+		schemaStorage: schemaStorage,
+		inputCh:       make(chan *model.PolymorphicEvent, defaultInputChanSize),
+		filter:        filter,
+		tz:            tz,
 
 		integrity: integrity,
 
@@ -111,8 +108,7 @@ func (m *mounterGroup) WaitForReady(_ context.Context) {}
 func (m *mounterGroup) Close() {}
 
 func (m *mounterGroup) runWorker(ctx context.Context) error {
-	mounter := NewMounter(m.schemaStorage, m.changefeedID, m.tz, m.filter,
-		m.enableOldValue, m.integrity)
+	mounter := NewMounter(m.schemaStorage, m.changefeedID, m.tz, m.filter, m.integrity)
 	for {
 		select {
 		case <-ctx.Done():
