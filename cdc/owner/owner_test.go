@@ -51,7 +51,7 @@ type mockManager struct {
 func (m *mockManager) CheckStaleCheckpointTs(
 	ctx context.Context, changefeedID model.ChangeFeedID, checkpointTs model.Ts,
 ) error {
-	return cerror.ErrGCTTLExceeded.GenWithStackByArgs()
+	return cerror.ErrStartTsBeforeGC.GenWithStackByArgs()
 }
 
 var _ gc.Manager = (*mockManager)(nil)
@@ -185,7 +185,7 @@ func TestCreateRemoveChangefeed(t *testing.T) {
 		Error: nil,
 	}
 
-	// this will make changefeed always meet ErrGCTTLExceeded
+	// this will make changefeed always meet ErrStartTsBeforeGC
 	up, _ := owner.upstreamManager.Get(changefeedInfo.UpstreamID)
 	mockedManager := &mockManager{Manager: up.GCManager}
 	up.GCManager = mockedManager

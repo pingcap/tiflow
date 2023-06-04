@@ -591,15 +591,22 @@ func TestReplicationManagerAdvanceCheckpoint(t *testing.T) {
 	require.NoError(t, err)
 	r.tables[model.TableID(2)] = rs
 
+	// no tables are replicating, resolvedTs should be advanced to globalBarrierTs and checkpoint
+	// should be advanced to minTableBarrierTs.
+	currentTables := []model.TableID{}
+	checkpoint, resolved := r.AdvanceCheckpoint(currentTables, time.Now(), schedulepb.NewBarrierWithMinTs(5))
+	require.Equal(t, model.Ts(5), checkpoint)
+	require.Equal(t, model.Ts(5), resolved)
+
 	// all table is replicating
-	currentTables := []model.TableID{1, 2}
-	checkpoint, resolved := r.AdvanceCheckpoint(currentTables, time.Now())
+	currentTables = []model.TableID{1, 2}
+	checkpoint, resolved = r.AdvanceCheckpoint(currentTables, time.Now(), schedulepb.NewBarrierWithMinTs(30))
 	require.Equal(t, model.Ts(10), checkpoint)
 	require.Equal(t, model.Ts(20), resolved)
 
 	// some table not exist yet.
 	currentTables = append(currentTables, 3)
-	checkpoint, resolved = r.AdvanceCheckpoint(currentTables, time.Now())
+	checkpoint, resolved = r.AdvanceCheckpoint(currentTables, time.Now(), schedulepb.NewBarrierWithMinTs(30))
 	require.Equal(t, checkpointCannotProceed, checkpoint)
 	require.Equal(t, checkpointCannotProceed, resolved)
 
@@ -624,7 +631,7 @@ func TestReplicationManagerAdvanceCheckpoint(t *testing.T) {
 		}, model.ChangeFeedID{})
 	require.NoError(t, err)
 	r.tables[model.TableID(3)] = rs
-	checkpoint, resolved = r.AdvanceCheckpoint(currentTables, time.Now())
+	checkpoint, resolved = r.AdvanceCheckpoint(currentTables, time.Now(), schedulepb.NewBarrierWithMinTs(30))
 	require.Equal(t, model.Ts(5), checkpoint)
 	require.Equal(t, model.Ts(20), resolved)
 
@@ -642,7 +649,7 @@ func TestReplicationManagerAdvanceCheckpoint(t *testing.T) {
 		}, model.ChangeFeedID{})
 	require.NoError(t, err)
 	r.tables[model.TableID(4)] = rs
-	checkpoint, resolved = r.AdvanceCheckpoint(currentTables, time.Now())
+	checkpoint, resolved = r.AdvanceCheckpoint(currentTables, time.Now(), schedulepb.NewBarrierWithMinTs(30))
 	require.Equal(t, model.Ts(3), checkpoint)
 	require.Equal(t, model.Ts(10), resolved)
 }

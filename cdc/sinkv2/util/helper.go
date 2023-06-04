@@ -14,10 +14,10 @@
 package util
 
 import (
+	"context"
 	"net/url"
 	"strings"
 
-	"github.com/Shopify/sarama"
 	"github.com/pingcap/tiflow/cdc/sink/codec/common"
 	"github.com/pingcap/tiflow/cdc/sink/mq/manager"
 	"github.com/pingcap/tiflow/cdc/sink/mq/producer/kafka"
@@ -89,13 +89,13 @@ func GetEncoderConfig(
 
 // GetTopicManagerAndTryCreateTopic returns the topic manager and try to create the topic.
 func GetTopicManagerAndTryCreateTopic(
+	ctx context.Context,
 	topic string,
 	topicCfg *kafka.AutoCreateTopicConfig,
-	client sarama.Client,
 	adminClient pkafka.ClusterAdminClient,
 ) (manager.TopicManager, error) {
 	topicManager, err := manager.NewKafkaTopicManager(
-		client,
+		ctx,
 		adminClient,
 		topicCfg,
 	)

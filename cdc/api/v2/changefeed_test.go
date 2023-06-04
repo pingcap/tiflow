@@ -272,7 +272,7 @@ func TestGetChangeFeed(t *testing.T) {
 	statusProvider.changefeedInfo = &model.ChangeFeedInfo{
 		ID: validID,
 		Error: &model.RunningError{
-			Code: string(cerrors.ErrGCTTLExceeded.RFCCode()),
+			Code: string(cerrors.ErrStartTsBeforeGC.RFCCode()),
 		},
 	}
 	statusProvider.changefeedStatus = &model.ChangeFeedStatus{
@@ -287,7 +287,7 @@ func TestGetChangeFeed(t *testing.T) {
 	err = json.NewDecoder(w.Body).Decode(&resp)
 	require.Nil(t, err)
 	require.Equal(t, resp.ID, validID)
-	require.Contains(t, resp.Error.Code, "ErrGCTTLExceeded")
+	require.Contains(t, resp.Error.Code, "ErrStartTsBeforeGC")
 
 	// success
 	statusProvider.changefeedInfo = &model.ChangeFeedInfo{ID: validID}
