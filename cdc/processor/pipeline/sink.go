@@ -302,6 +302,7 @@ func SplitUpdateEvent(updateEvent *model.PolymorphicEvent) (*model.PolymorphicEv
 	deleteEventRowKV := *updateEvent.RawKV
 	deleteEvent.Row = &deleteEventRow
 	deleteEvent.RawKV = &deleteEventRowKV
+	deleteEvent.Row.Columns = nil
 
 	insertEvent := *updateEvent
 	insertEventRow := *updateEvent.Row

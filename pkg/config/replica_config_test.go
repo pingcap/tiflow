@@ -104,7 +104,7 @@ func TestReplicaConfigValidate(t *testing.T) {
 	t.Parallel()
 	conf := GetDefaultReplicaConfig()
 
-	sinkURL, err := url.Parse("blackhole://")
+	sinkURL, err := url.Parse("blackhole://xxx?protocol=canal")
 	require.NoError(t, err)
 	require.NoError(t, conf.ValidateAndAdjust(sinkURL))
 
@@ -131,7 +131,7 @@ func TestReplicaConfigValidate(t *testing.T) {
 		{Matcher: []string{"a.c"}, PartitionRule: "p1"},
 		{Matcher: []string{"a.d"}},
 	}
-	err = conf.ValidateAndAdjust(nil)
+	err = conf.ValidateAndAdjust(sinkURL)
 	require.Nil(t, err)
 	rules := conf.Sink.DispatchRules
 	require.Equal(t, "d1", rules[0].PartitionRule)
@@ -141,12 +141,12 @@ func TestReplicaConfigValidate(t *testing.T) {
 	// Test memory quota can be adjusted
 	conf = GetDefaultReplicaConfig()
 	conf.MemoryQuota = 0
-	err = conf.ValidateAndAdjust(nil)
+	err = conf.ValidateAndAdjust(sinkURL)
 	require.NoError(t, err)
 	require.Equal(t, uint64(DefaultChangefeedMemoryQuota), conf.MemoryQuota)
 
 	conf.MemoryQuota = uint64(1024)
-	err = conf.ValidateAndAdjust(nil)
+	err = conf.ValidateAndAdjust(sinkURL)
 	require.NoError(t, err)
 	require.Equal(t, uint64(1024), conf.MemoryQuota)
 }
@@ -154,20 +154,24 @@ func TestReplicaConfigValidate(t *testing.T) {
 func TestValidateAndAdjust(t *testing.T) {
 	cfg := GetDefaultReplicaConfig()
 	require.False(t, cfg.EnableSyncPoint)
-	require.NoError(t, cfg.ValidateAndAdjust(nil))
+
+	sinkURL, err := url.Parse("blackhole://")
+	require.NoError(t, err)
+
+	require.NoError(t, cfg.ValidateAndAdjust(sinkURL))
 
 	cfg.EnableSyncPoint = true
-	require.NoError(t, cfg.ValidateAndAdjust(nil))
+	require.NoError(t, cfg.ValidateAndAdjust(sinkURL))
 
 	cfg.SyncPointInterval = time.Second * 29
-	require.Error(t, cfg.ValidateAndAdjust(nil))
+	require.Error(t, cfg.ValidateAndAdjust(sinkURL))
 
 	cfg.SyncPointInterval = time.Second * 30
 	cfg.SyncPointRetention = time.Minute * 10
-	require.Error(t, cfg.ValidateAndAdjust(nil))
+	require.Error(t, cfg.ValidateAndAdjust(sinkURL))
 
 	cfg.Sink.EncoderConcurrency = -1
-	require.Error(t, cfg.ValidateAndAdjust(nil))
+	require.Error(t, cfg.ValidateAndAdjust(sinkURL))
 }
 
 func TestAdjustEnableOldValueAndVerifyForceReplicate(t *testing.T) {

@@ -584,14 +584,6 @@ func TestSplitUpdateEventWhenDisableOldValue(t *testing.T) {
 	require.Len(t, sink.Received[deleteEventIndex].Row.PreColumns, 3)
 	nilColIndex := 0
 	require.Nil(t, sink.Received[deleteEventIndex].Row.PreColumns[nilColIndex])
-	nonHandleKeyColIndex := 1
-	handleKeyColIndex := 2
-	// NOTICE: When old value disabled, we only keep the handle key pre cols.
-	require.Nil(t, sink.Received[deleteEventIndex].Row.PreColumns[nonHandleKeyColIndex])
-	require.Equal(t, "col2", sink.Received[deleteEventIndex].Row.PreColumns[handleKeyColIndex].Name)
-	require.True(t,
-		sink.Received[deleteEventIndex].Row.PreColumns[handleKeyColIndex].Flag.IsHandleKey(),
-	)
 
 	insertEventIndex := 1
 	require.Len(t, sink.Received[insertEventIndex].Row.Columns, 3)

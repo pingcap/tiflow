@@ -183,7 +183,11 @@ func TestAndWriteExampleReplicaTOML(t *testing.T) {
 	require.Equal(t, &config.MounterConfig{
 		WorkerNum: 16,
 	}, cfg.Mounter)
-	err = cfg.ValidateAndAdjust(nil)
+
+	sinkURL, err := url.Parse("kafka://127.0.0.1:9092")
+	require.NoError(t, err)
+
+	err = cfg.ValidateAndAdjust(sinkURL)
 	require.Nil(t, err)
 	require.Equal(t, &config.SinkConfig{
 		EncoderConcurrency: 16,

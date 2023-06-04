@@ -136,6 +136,22 @@ func TestNewCanalJSONMessage4DML(t *testing.T) {
 	require.Nil(t, jsonMsg.Old)
 
 	for _, col := range testCaseDelete.PreColumns {
+		require.Contains(t, jsonMsg.Data[0], col.Name)
+		require.Contains(t, jsonMsg.SQLType, col.Name)
+		require.Contains(t, jsonMsg.MySQLType, col.Name)
+	}
+
+	encoder, ok = newJSONBatchEncoder(&common.Config{OnlyHandleKeyColumns: true}).(*JSONBatchEncoder)
+	require.True(t, ok)
+	data, err = encoder.newJSONMessageForDML(testCaseDelete)
+	require.NoError(t, err)
+	jsonMsg = &JSONMessage{}
+	err = json.Unmarshal(data, jsonMsg)
+	require.NoError(t, err)
+	require.NotNil(t, jsonMsg.Data)
+	require.Nil(t, jsonMsg.Old)
+
+	for _, col := range testCaseDelete.PreColumns {
 		if col.Flag.IsHandleKey() {
 			require.Contains(t, jsonMsg.Data[0], col.Name)
 			require.Contains(t, jsonMsg.SQLType, col.Name)
