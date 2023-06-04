@@ -27,6 +27,7 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
+//nolint:unused
 func initBroker(t *testing.T, withPartitionResponse int) (*sarama.MockBroker, string) {
 	topic := kafka.DefaultMockTopicName
 	leader := sarama.NewMockBroker(t, 2)
@@ -52,6 +53,7 @@ func initBroker(t *testing.T, withPartitionResponse int) (*sarama.MockBroker, st
 	return leader, topic
 }
 
+//nolint:unused
 func getConfig(addr string) *kafkav1.Config {
 	config := kafkav1.NewConfig()
 	// Because the sarama mock broker is not compatible with version larger than 1.0.0.
